@@ -66,16 +66,75 @@ function nif_spot(cone::Symbol; scale = 1.0)
     return SuperGaussianSpot(scale * s.major, scale * s.minor; order = s.order, angle = π / 2)
 end
 
+# Quad names of the NIF ports, read from the LMF chamber-geometry figures 3 (top quads)
+# and 4 (bottom quads), both top views with φ counterclockwise from Switchyard 1
+# (https://lmf.llnl.gov/for-users/experimental-capabilities/chamber-geometry, LLNL
+# 2012-040636 / 2012-040642). Each label was located by its projected radius (∝ sin θ,
+# separating the cones) and azimuth and assigned to the nearest port of that cone; all
+# 48 assignments are distinct and within 9° of the tabulated azimuth. The figure's
+# "FABS (130-186)_36B" label fixes the bottom view's orientation (Q36B = port 53).
+const NIF_QUAD_NAMES = Dict(
+    1 => "Q15T", 2 => "Q42T", 3 => "Q33T", 4 => "Q24T",
+    5 => "Q13T", 6 => "Q41T", 7 => "Q36T", 8 => "Q26T",
+    9 => "Q14T", 10 => "Q12T", 11 => "Q43T", 12 => "Q45T",
+    13 => "Q35T", 14 => "Q32T", 15 => "Q25T", 16 => "Q22T",
+    17 => "Q11T", 18 => "Q16T", 19 => "Q46T", 20 => "Q44T",
+    21 => "Q34T", 22 => "Q31T", 23 => "Q23T", 24 => "Q21T",
+    49 => "Q13B", 50 => "Q11B", 51 => "Q41B", 52 => "Q46B",
+    53 => "Q36B", 54 => "Q34B", 55 => "Q26B", 56 => "Q23B",
+    57 => "Q14B", 58 => "Q12B", 59 => "Q43B", 60 => "Q45B",
+    61 => "Q35B", 62 => "Q32B", 63 => "Q25B", 64 => "Q22B",
+    65 => "Q16B", 66 => "Q44B", 67 => "Q31B", 68 => "Q21B",
+    69 => "Q15B", 70 => "Q42B", 71 => "Q33B", 72 => "Q24B",
+)
+
+"""
+    nif_port(quad) -> Int
+
+Chamber port number of a NIF quad name such as `"Q31B"` (see `NIF_QUAD_NAMES`).
+"""
+function nif_port(quad::AbstractString)
+    for (p, q) in NIF_QUAD_NAMES
+        q == quad && return p
+    end
+    throw(KeyError(quad))
+end
+
+"""
+    nif_bundle(beam_or_quad) -> String
+
+Bundle of a NIF quad or beam: the cluster and bundle digits of its quad name, e.g.
+`"31"` for Q31T and Q31B. A bundle's two quads sit in opposite hemispheres and need
+not share a cone.
+"""
+nif_bundle(quad::AbstractString) = quad[2:3]
+nif_bundle(b::Beam) = nif_bundle(b.quad)
+
+"""
+    nif_bundles(beams) -> Dict{String,Vector{Int}}
+
+Indices of `beams` (NIF quads or beams) belonging to each bundle.
+"""
+function nif_bundles(beams::AbstractVector{<:Beam})
+    out = Dict{String,Vector{Int}}()
+    for (i, b) in enumerate(beams)
+        push!(get!(out, nif_bundle(b), Int[]), i)
+    end
+    return out
+end
+
 """
     nif_quads(; power = 8.0, fnumber = 7.9, spot = nif_spot)
 
 The 48 indirect-drive NIF quads as single beams (`power` in TW per quad, i.e. four
 beamlines). Port angles are the NIF User Guide table; `group` is the cone (`:inner23`,
-`:inner30`, `:outer44`, `:outer50`, shared by top and bottom) and `quad` is
-`"P<port>"`. `spot` maps a cone to its `SuperGaussianSpot`.
+`:inner30`, `:outer44`, `:outer50`, shared by top and bottom), and `name` and `quad` are
+the quad name (e.g. `"Q31B"`, see `NIF_QUAD_NAMES`; `nif_port`, `nif_bundle`). `spot`
+maps a cone to its `SuperGaussianSpot`.
 """
 function nif_quads(; power = 8.0, fnumber = 7.9, spot = nif_spot)
-    rows = [(name = "P$p", theta = θ, phi = φ, group = _nif_cone(θ), quad = "P$p",
+    rows = [(name = NIF_QUAD_NAMES[p], theta = θ, phi = φ, group = _nif_cone(θ),
+             quad = NIF_QUAD_NAMES[p],
              spot = spot(_nif_cone(θ))) for (p, θ, φ) in NIF_PORTS]
     return beams_from_table(rows; fnumber, power)
 end
@@ -86,7 +145,8 @@ end
 All 192 indirect-drive NIF beams, four per quad port. Within a quad the beams sit at
 `±dtheta` degrees in polar angle and `±darc` degrees of arc in azimuth about the port
 axis — derived from the published 63.2 cm (polar) × 55.7 cm (azimuthal) beam spacing and
-7.7 m focal length; per-beam tables are not public. Names are `"P<port><a|b|c|d>"`.
+7.7 m focal length; per-beam tables are not public. Names are the quad name plus
+`a`–`d` (e.g. `"Q31Ba"`); `quad` is the quad name.
 """
 function nif_beams(; power = 2.0, fnumber = 20.7, spot = nif_spot, dtheta = 2.35, darc = 2.07)
     rows = NamedTuple[]
@@ -95,7 +155,8 @@ function nif_beams(; power = 2.0, fnumber = 20.7, spot = nif_spot, dtheta = 2.35
         for (tag, sθ, sφ) in (("a", -1, -1), ("b", -1, 1), ("c", 1, -1), ("d", 1, 1))
             θb = θ + sθ * dtheta
             φb = φ + sφ * darc / sind(θ)
-            push!(rows, (name = "P$p$tag", theta = θb, phi = φb, group = cone, quad = "P$p",
+            push!(rows, (name = NIF_QUAD_NAMES[p] * tag, theta = θb, phi = φb, group = cone,
+                         quad = NIF_QUAD_NAMES[p],
                          spot = spot(cone)))
         end
     end

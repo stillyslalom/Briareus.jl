@@ -256,6 +256,23 @@ end
     θs = sort(unique(round.(first.(port_angles.(ob)); digits = 2)))
     @test θs ≈ [21.42, 42.02, 58.85, 81.25, 98.75, 121.15, 137.98, 158.58]
     @test length(omega_beams()) == 40
+    # quad names from the LMF chamber-geometry figures: a bijection onto the ports,
+    # every bundle one top and one bottom quad, FABS on Q31B (30°) and Q36B (130°, 186°)
+    @test length(unique(b.name for b in q)) == 48
+    bundles = nif_bundles(q)
+    @test length(bundles) == 24
+    @test all(sort([q[i].name[end] for i in v]) == ['B', 'T'] for v in values(bundles))
+    @test port_angles(q[findfirst(b -> b.name == "Q36B", q)])[1] ≈ 130
+    @test port_angles(q[findfirst(b -> b.name == "Q36B", q)])[2] ≈ 185.62
+    @test q[findfirst(b -> b.name == "Q31B", q)].group === :inner30
+    @test nif_port("Q11T") == 17 && nif_port("Q11B") == 50
+    kinds = Dict{Tuple{Bool,Bool},Int}()
+    for v in values(bundles)
+        inner = sort([q[i].group in (:inner23, :inner30) for i in v])
+        kinds[(inner[1], inner[2])] = get(kinds, (inner[1], inner[2]), 0) + 1
+    end
+    @test kinds == Dict((false, false) => 12, (false, true) => 8, (true, true) => 4)
+    @test all(nif_bundle(b) == nif_bundle(b.quad) for b in nif_beams())
 end
 
 @testset "foil optimization + imaging" begin
@@ -391,7 +408,7 @@ end
               a.fnumber == b.fnumber for (a, b) in zip(q, r))
     # a foreign, semicolon-separated pointing table in cm updates a template beam set
     f = tempname() * ".csv"
-    write(f, "# exported pointing\nBeam;X (cm);Z (cm)\nP1;0.01;0.42\n\"P5\";-0.02;0.36\n")
+    write(f, "# exported pointing\nBeam;X (cm);Z (cm)\nQ15T;0.01;0.42\n\"Q13T\";-0.02;0.36\n")
     fb = read_beam_table(f; columns = Dict(:name => "Beam", :aim_x => "X (cm)", :aim_z => "Z (cm)"),
                          scale = Dict(:aim_x => 10, :aim_z => 10), template = q)
     @test fb[1].aim ≈ Vec3(0.1, -0.2, 4.2)

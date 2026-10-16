@@ -136,6 +136,38 @@ The 1ω focus is 46 cm beyond the 3ω focus (MacFarlane 2003). **H**
 - Centroid offsets about 16 mm (1ω) and 9 mm (2ω), i.e. about 2.0 and 1.2 mrad.
 - The per-beam offset direction is not public.
 
+## NIF quad names and bundles
+
+Source: LMF chamber-geometry page,
+https://lmf.llnl.gov/for-users/experimental-capabilities/chamber-geometry.
+
+Naming:
+- Four beamlines form a quad and two quads form a bundle.
+- Quads are named by cluster digit, bundle digit and hemisphere, e.g. Q31T and Q31B.
+- φ is measured counterclockwise from the axis through TCC and Switchyard 1.
+
+How the quad-to-port mapping was extracted:
+- Figures 3 and 4 (LLNL 2012-040636 and 2012-040642) are top views labeling the top
+  and bottom quads.
+- Each label's projected radius (∝ sin θ, which separates the cones) and azimuth was
+  measured and assigned to the nearest port of its cone.
+- All 48 assignments are distinct and within 9° of the tabulated azimuths.
+- The figure's "FABS (130-186)_36B" label fixes the bottom view's orientation: Q36B is
+  port 53.
+
+The mapping is `NIF_QUAD_NAMES` in `src/facilities.jl`. **H** (*derived* from public
+figures)
+
+Structure of the mapping:
+- 12 bundles are outer–outer and pair the same cone top and bottom, 4 are
+  inner–inner, and 8 are mixed (30° in one hemisphere, 50° in the other).
+- The port set is symmetric under 180° rotations about x, y and z (D2), and under
+  nothing larger.
+- The outer bundles form three D2 orbits:
+  - {11, 23, 34, 46} at 50°;
+  - {12, 25, 32, 43} at 44.5°;
+  - {14, 22, 35, 45} at 44.5°.
+
 ## Pointing and alignment
 
 - NIF pointing: 50 µm rms per beam, specified and met (physics/0111104; Appl. Opt. 50,

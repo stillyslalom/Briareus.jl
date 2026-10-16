@@ -23,7 +23,7 @@ export AlbedoModel, ConstantAlbedo, TabulatedAlbedo, WallLossAlbedo, albedo, Mat
        Component, aperture, Target, nelements, elements, component_index, element_quadrature
 export hohlraum, foil, disk_foil
 export SuperGaussianSpot, Beam, port_vector, port_angles, direction, remake, intensity, wavelength,
-       beams_from_table, nif_quads, nif_beams, nif_spot, omega_ports, omega_beams, omega_spot
+       beams_from_table, nif_quads, nif_beams, nif_spot, NIF_QUAD_NAMES, nif_port, nif_bundle, nif_bundles, omega_ports, omega_beams, omega_spot
 export DepositionOperator, Deposition, deposit, raytrace_deposition, raytrace_component_power, laser_flux,
        component_power
 export view_factors, closure_error, enforce_closure!, RadiationModel, RadiationSolution, solve,
