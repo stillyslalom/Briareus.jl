@@ -15,7 +15,7 @@ Shot-review layer:
 - beam-table I/O;
 - backscatter, calibrated transfer, and a reduced kinetic CBET model with calibration.
 
-## Done (2026-10-17)
+## Done (2026-10-16, overnight)
 - **Facility data:** the LMF per-beam table, NIF quad names and bundles, and the
   measured CPP fits.
 - **Radiation on true curved surfaces:** sphere, cylinder and disk sectors, with
