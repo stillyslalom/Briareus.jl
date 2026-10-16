@@ -13,8 +13,8 @@ results mean different things.
   with the ray trace.
 - **Validation** asks whether the model reproduces an independent reference, either
   physical or analytic, for the intended use. Examples are the integrating-sphere
-  multiplier, Stokes-type analytic profiles, and, eventually, comparisons with VisRad
-  calculations and shot data.
+  multiplier, the exact convolution of a laser spot with its f-cone, and, eventually,
+  comparisons with VisRad calculations and shot data.
 - **Calibration** fits model parameters to reference data. The cross-beam energy
   transfer model is calibrated, not validated: its multiplier, flow and saturation
   clamp are fitted to measured transfer.
@@ -28,14 +28,17 @@ A tutorial states which of these it does in its closing section, "What this chec
 | BVH ray casting against brute force | code verification | `test/runtests.jl`, "ray casting" |
 | Coaxial-disk view factor, occlusion, point-to-polygon kernel | code verification | "view factors" |
 | Integrating sphere, energy balance, closure enforcement | validation, code verification | "radiosity"; [Integrating sphere](@ref) |
-| Beam power at any defocus; defocus second moments | code verification | "beam profile"; [Laser spot on a foil](@ref) |
-| Fast deposition against the ray trace, with shadowing | solution verification | "deposition vs ray trace"; [Laser spot on a foil](@ref) |
+| Beam power at any defocus; defocus second moments; oblique-incidence correction | code verification | "beam profile"; [Laser spot on a foil](@ref) |
+| Defocused footprint against the exact f-cone convolution | validation | [Laser spot on a foil](@ref) |
+| Fast deposition against the ray trace, with shadowing and at grazing incidence far from focus | solution verification | "deposition vs ray trace"; [Laser spot on a foil](@ref); [Freeing a bundle for radiography](@ref) |
 | Legendre and Y_lm recovery; facet integration | code verification | "mode analysis", "spherical harmonics and 3D symmetry" |
-| NIF D2 selection rule; superposition; influence matrix | code verification | "spherical harmonics and 3D symmetry"; [Dropped outer-cone bundle](@ref) |
-| Gradients against finite differences | code verification | "hohlraum + gradients", "CBET", [Dropped outer-cone bundle](@ref) |
+| NIF D2 selection rule; superposition; influence matrix | code verification | "spherical harmonics and 3D symmetry"; [Freeing a bundle for radiography](@ref) |
+| Gradients against finite differences | code verification | "hohlraum + gradients", "CBET" |
+| Optimizer against the closed-form least-squares solution | code verification | [Freeing a bundle for radiography](@ref) |
 | CBET coupling against an independent Im Γ computation | code verification | "CBET" |
 | CBET transfer against published points | calibration | `calibrate_cbet` |
 | Clearance envelopes, wings, worst-case formulas | code verification | "clearance" |
+| Differentiable entrance-hole keep-out against the clearance check | code verification | "clearance"; [Freeing a bundle for radiography](@ref) |
 
 ## Not yet established
 

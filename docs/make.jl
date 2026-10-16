@@ -68,7 +68,7 @@ tutorial_page(file) = joinpath("tutorials", splitext(file)[1] * ".md")
         "Tutorials" => [
             "Laser spot on a foil" => tutorial_page("laser_spot.jl"),
             "Integrating sphere" => tutorial_page("integrating_sphere.jl"),
-            "Dropped outer-cone bundle" => tutorial_page("dropped_bundle.jl"),
+            "Freeing a bundle for radiography" => tutorial_page("dropped_bundle.jl"),
         ],
         "Explanation" => [
             "Verification and validation" => "explanation/verification-validation.md",

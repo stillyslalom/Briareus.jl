@@ -7,10 +7,16 @@ for scope and [ROADMAP.md](ROADMAP.md) for the backlog.
 ## Commands
 
 ```bash
-julia --project=. -t auto -e 'using Pkg; Pkg.test()'    # full suite (~40 s)
+julia --project=. -t auto -e 'using Pkg; Pkg.test()'    # full suite (~2 min)
 julia --project=. -t auto examples/nif_hohlraum.jl       # NIF symmetry optimization
 julia --project=. -t auto examples/backlighter.jl        # OMEGA backlighter uniformity
+julia --project=docs -t auto docs/make.jl                # docs; runs every tutorial
+julia --project=docs -t auto docs/literate/<name>.jl     # one tutorial as a script
 ```
+
+Docs follow CompactLES.jl: Literate tutorials in `docs/literate/`, registered in
+`docs/make.jl`, each ending in "What this checks" with exact references. The docs
+environment has no ForwardDiff/Optim, and `Vec3` clashes with Makie there.
 
 ## Conventions
 
@@ -29,8 +35,20 @@ julia --project=. -t auto examples/backlighter.jl        # OMEGA backlighter uni
   per element); don't revert to centroid × A cosθ/R² — it leaks P0 into P2 at the
   0.5 % level on default capsule meshes.
 - View factors: near pairs use the exact point-to-polygon kernel over sub-triangle points
-  of the emitter, far pairs from both centroids, averaged for reciprocity. `closed = true`
-  (Sinkhorn balancing) only for closed enclosures.
+  of the emitter (adaptive toward shared edges), mid/far pairs fixed quadrature, averaged
+  for reciprocity. Components carrying a `CurvedSurface` (Sphere/Cylinder/DiskSurface)
+  are integrated on the true surface — hohlraums do this by default; ray casting always
+  uses the facets. `closed = true` (Sinkhorn balancing) only for closed enclosures.
+- Deposition (operator and ray trace) sums the best-focus profile over `ncone` (default
+  13) f-cone directions, each with its own incidence factor `|n·dⱼ|/(k·dⱼ)`. Don't use the
+  moment-matched `intensity` for deposition: it has the right second moment but the
+  wrong shape far from focus (2% excess power, 10% misplaced, on hohlraum walls). It
+  remains for envelopes.
+- Validate against independent references (exact convolutions, closed forms, ray
+  traces converged at nspot ≥ 121), never against the method under test; the ray trace
+  aliases against patch grids at coarse nspot.
+- Beam clearance is judged on the worst case over pointing, positioning and focus
+  errors (`clearance`); `ApertureKeepOut` puts the same worst case into objectives.
 - Facility data provenance is recorded in README; derived numbers (NIF per-beam offsets,
   OMEGA hohlraum frame) are labeled as such in docstrings.
 
@@ -45,7 +63,7 @@ directions) → `facilities.jl` (NIF ports/spots, OMEGA) → `deposition.jl`
 (solid angles, Legendre/Y_lm) → `imaging.jl` (OrthoCamera, render, line_of_sight_power)
 → `optimize.jl` (GroupPointing, Scenario, objectives, optimize_pointing, report) →
 `history.jl` (PulseShape, drive_history) → `clearance.jl` (envelopes, wings, worst-case
-clearance) → `lpi.jl` (LaserPlasmaModel, Backscatter, CalibratedTransfer) → `io.jl`
+clearance) → `keepout.jl` (differentiable entrance-hole keep-out) → `lpi.jl` (LaserPlasmaModel, Backscatter, CalibratedTransfer) → `io.jl`
 (CSV beam tables) → `cbet.jl` (reduced kinetic CBET, calibrate_cbet) → `unconverted.jl`.
 
 Physics defaults and their sources live in `reference/research-notes.md`. Keep each

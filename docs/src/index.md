@@ -34,8 +34,9 @@ counterclockwise from +x, which on NIF points to Switchyard 1.
 
 - **Learn by running a calculation.** [Laser spot on a foil](@ref) checks deposition
   and defocus against exact results. [Integrating sphere](@ref) checks the radiation
-  model against the sphere-multiplier formula. [Dropped outer-cone bundle](@ref) uses
-  both to restore drive symmetry on NIF after a bundle is lost.
+  model against the sphere-multiplier formula. [Freeing a bundle for radiography](@ref)
+  chooses a NIF bundle to drive a backlighter and restores the drive symmetry it costs,
+  within worst-case beam clearance.
 - **Understand what the checks establish.** [Verification and validation](@ref)
   separates the activities the tutorials and tests carry out.
 - **Look up exact behavior.** The reference pages document every exported name.
