@@ -64,8 +64,12 @@ Shot-review layer:
 - **Threaded deposition:** `deposit` hands out work units (element blocks, back-side
   pieces) dynamically; each unit owns its outputs, so results are bitwise independent
   of the thread count. Operator construction and the ray trace are balanced the same
-  way. 77% of `deposit`'s work on the NIF hohlraum is on the wall's outside, where
-  the beams' far wings land: the next lever if gradients need to be faster.
+  way.
+- **Back-side sampling:** the outside of a target (clipped power) is sampled for its
+  total, with Gauss rules graded toward open edges (LEH rims). Clipped power at 1e-4 of
+  a beam had been 10–60% low with spot-resolving sub-triangles; it now matches
+  converged ray traces to 1%, with 44% fewer operator points on the NIF hohlraum.
+  Element values are unchanged bit for bit.
 
 ## Next
 1. **Sombrero and backlighter geometry.** Model the LEH shield as a component (a

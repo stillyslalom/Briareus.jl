@@ -49,13 +49,16 @@ for the same workflow: target, beams, drive, optimization and shot review.
   - `DepositionOperator` + `deposit` — precomputed quadrature with per-direction
     visibility masks, refined where each beam can land. It is smooth in pointing,
     defocus, spot size and power, so ForwardDiff gradients flow through it; 48 quads on
-    a 3,000-element hohlraum take about 30 ms, and each beam's power is conserved to
-    1e-4.
+    a 3,000-element hohlraum take about 45 ms on one thread (5 ms on 24), and each
+    beam's power is conserved to 1e-4.
   - `raytrace_deposition` — an energy-conserving geometric ray trace, used as the
     reference.
 
   Power that hits the outside of a target (LEH clipping), misses it, or strikes the
-  capsule directly is accounted for separately.
+  capsule directly is accounted for separately. The operator samples a target's
+  outside only for its total, with Gauss rules graded toward the entrance-hole rims,
+  where clipped light concentrates; clipped power agrees with converged ray traces to
+  1% from 1e-4 to 5% of a beam.
 - **Radiation.** Occlusion-aware view factors `view_factors` (the exact point-to-polygon
   kernel near the emitter, adaptive toward shared edges; about 0.4 s for a
   3,000-element hohlraum) and gray diffuse radiosity `solve`. Wall albedo can be

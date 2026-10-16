@@ -55,6 +55,13 @@ environment has no ForwardDiff/Optim, and `Vec3` clashes with Makie there.
   moment-matched `intensity` for deposition: it has the right second moment but the
   wrong shape far from focus (2% excess power, 10% misplaced, on hohlraum walls). It
   remains for envelopes.
+- `DepositionOperator` samples unmodeled back sides (clipped power) only for their total:
+  one point per triangle away from the beam, graded Gauss rules toward open edges
+  (LEH rims) and their vertices, `resolution` within a spot semi-axis of them,
+  `backside_resolution` elsewhere. Clipped light at 1e-4 lies within ~1/50 of a spot of
+  the rim; uniform sub-triangles underestimated it by 10–60%. Element (front) points
+  never depend on the back-side keywords. Check clipped power at 1e-4 against ray
+  traces averaged over nspot 241–361: one nspot alone aliases by ±2% there.
 - Validate against independent references (exact convolutions, closed forms, ray
   traces converged at nspot ≥ 121), never against the method under test; the ray trace
   aliases against patch grids at coarse nspot.

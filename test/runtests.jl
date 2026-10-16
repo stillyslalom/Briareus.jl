@@ -224,6 +224,33 @@ end
         @test d.backside ≈ L rtol = 1e-14
         @test d.per_beam ≈ pb rtol = 1e-14
     end
+    # Back sides that only feed the clipped power are sampled for their total: the light an
+    # LEH lip clips from a beam's tail lies within ~1/50 of a spot of the rim, so the rule
+    # is graded toward open edges. Clipped power from 1e-4 to 1e-2 of a beam matches
+    # ray traces converged at nspot ≥ 241 (uniform 0.3-spot sub-triangles were 10–60% low),
+    # and element values do not depend on the back-side sampling at all.
+    q = nif_quads()
+    for (b, aim, rtol) in ((q[1], (-0.274, -1.378, 3.09), 0.03), (q[1], (-0.311, -1.562, 3.09), 0.01),
+                           (q[17], (0.456, 0.378, 5.01), 0.03), (q[17], (0.626, 0.519, 5.01), 0.01))
+        bb = remake(b; aim)
+        clip = sum(deposit(DepositionOperator(th, [bb]), [bb]).backside) / bb.power
+        ref = sum(sum(raytrace_deposition(th, [bb]; nspot = n).backside) for n in (241, 301)) / 2 / bb.power
+        @test 5e-5 < ref < 2e-2
+        @test clip ≈ ref rtol = rtol
+    end
+    bb = remake(q[1]; aim = (-0.289, -1.454, 3.09))
+    opb = DepositionOperator(th, [bb])
+    coarse = DepositionOperator(th, [bb]; backside_resolution = 3.0, edge_resolution = 0.1)
+    @test deposit(coarse, [bb]).element == deposit(opb, [bb]).element
+    @test sum(length, coarse.w) < sum(length, opb.w)
+    # clipped power is smooth in the aim: monotone along a sweep, AD = finite differences
+    φ = port_angles(bb)[2]
+    clipped(δ) = (d = deposit(opb, [remake(bb; aim = bb.aim .- δ .* (cosd(φ), sind(φ), 0.0))]);
+                  sum(d.backside) / d.delivered)
+    @test issorted(clipped.(range(-0.15, 0.15; length = 31)))
+    for δ in (-0.1, 0.0, 0.1)
+        @test ForwardDiff.derivative(clipped, δ) ≈ (clipped(δ + 1e-5) - clipped(δ - 1e-5)) / 2e-5 rtol = 1e-5
+    end
 end
 
 @testset "hohlraum + gradients" begin

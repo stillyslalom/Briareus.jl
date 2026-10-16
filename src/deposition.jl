@@ -35,18 +35,35 @@ end
 
 """
     DepositionOperator(target, beams; level = 1, ncone = 13, resolution = 0.3,
-                       reach = 2.0, maxlevel = 5, shadow = 0)
+                       reach = 2.0, maxlevel = 5, shadow = 0,
+                       backside_resolution = 1.0, edge_resolution = 0.01)
 
 Precomputed laser-deposition quadrature. For each beam, every opaque triangle side that
-faces the beam is sampled at `4^level` points, or more where the beam can land: a
-triangle within `reach` (mm) of the beam's footprint (2.5 spot semi-axes grown by the
-f-cone along the beam axis through the aim) is divided until its sub-triangles are no
-longer than `resolution` times the spot's smaller semi-axis, up to `4^maxlevel` points;
-with `shadow > 0`, such a triangle crossed by a shadow edge (its points see different
-cone directions) is divided `shadow` times more. `reach` is the aim motion the operator
-stays accurate for; beyond it, deposition is resolved only at `level`. The defaults
-conserve each beam's power to 1e-4 when nothing clips and to 2e-3 when an entrance-hole
-lip clips several percent of it, on fine and coarse hohlraum meshes alike.
+faces the beam and belongs to an element is sampled at `4^level` points, or more where
+the beam can land: a triangle within `reach` (mm) of the beam's footprint (2.5 spot
+semi-axes grown by the f-cone along the beam axis through the aim) is divided until its
+sub-triangles are no longer than `resolution` times the spot's smaller semi-axis, up to
+`4^maxlevel` points; with `shadow > 0`, such a triangle crossed by a shadow edge (its
+points see different cone directions) is divided `shadow` times more. `reach` is the aim
+motion the operator stays accurate for; beyond it, deposition is resolved only at
+`level`. The defaults conserve each beam's power to 1e-4 when nothing clips and to 2e-3
+when an entrance-hole lip clips several percent of it, on fine and coarse hohlraum
+meshes alike.
+
+Unmodeled back sides (the outside of a hohlraum, whose power is the clipped `backside`
+loss) need only their total per component, and that is set by the open edges the light
+passes: an entrance-hole lip clipping 1e-4 of a beam puts the clipped light within
+~1/50 of a spot semi-axis of the rim. Back sides are sampled at one point per triangle
+away from the beam; within `reach`,
+- a triangle on an open edge (an edge no other opaque triangle shares, such as an
+  entrance-hole rim) or touching one at a vertex gets a Gauss rule graded geometrically
+  toward it, from `resolution` down to `edge_resolution` spot semi-axes;
+- a triangle within one (larger) spot semi-axis of an open edge, where the shoulder of a
+  clipped spot lands, is divided down to `resolution`;
+- the rest are divided down to `backside_resolution`.
+On the NIF hohlraum, clipped power then matches ray traces (averaged over nspot
+241–361) to 1% from 1e-4 to 5% of a beam, 2.5% at 1e-6, and 0.6% up to 50%, and is
+smooth in the aim. Element values do not depend on these two keywords.
 
 Each point stores its area weight, the normal of the lit side and a bitmask of which of
 the `ncone` f-cone directions reach it from the lens without hitting another surface.
@@ -125,7 +142,8 @@ DepositionOperator(t::Target, ports, dirs, pts, w, normal, mask, dest) =
 
 function DepositionOperator(t::Target, beams::AbstractVector{<:Beam}; level::Integer = 1,
                             ncone::Integer = 13, resolution = 0.3, reach = 2.0,
-                            maxlevel::Integer = 5, shadow::Integer = 0)
+                            maxlevel::Integer = 5, shadow::Integer = 0,
+                            backside_resolution = 1.0, edge_resolution = 0.01)
     1 <= ncone <= 16 || throw(ArgumentError("ncone must be in 1:16"))
     maxlv = max(maxlevel, level)
     nb = length(beams)
@@ -133,6 +151,8 @@ function DepositionOperator(t::Target, beams::AbstractVector{<:Beam}; level::Int
     rules = [_bary_quadrature(l) for l in 0:maxlv]
     ε = _ray_eps(t)
     geo = [_operator_beam(b, ncone) for b in beams]
+    flags, rimdist = _open_boundary(t)
+    back = (; resolution, coarse = backside_resolution, edge = edge_resolution, flags, rimdist)
     # Work units are (beam, triangle range): beams differ in cost and the triangles near
     # a beam's footprint are refined, so units are small and handed out dynamically.
     # Each unit's points are stored apart and joined in order: the result does not
@@ -144,7 +164,7 @@ function DepositionOperator(t::Target, beams::AbstractVector{<:Beam}; level::Int
     _tforeach(nchunk * nb) do u
         ic, bi = mod1(u, nchunk), cld(u, nchunk)
         parts[ic, bi] = _operator_points(t, geo[bi], ranges[ic], rules, ε, level, maxlv,
-                                         resolution, reach, shadow)
+                                         resolution, reach, shadow, back)
     end
     ne = nelements(t)
     key(d) = d > 0 ? Int(d) : ne - Int(d)
@@ -183,7 +203,8 @@ function _operator_beam(b::Beam, ncone)
 end
 
 # Lit quadrature points of one beam on the triangles `tris`.
-function _operator_points(t::Target, g, tris, rules, ε, level, maxlevel, resolution, reach, shadow)
+function _operator_points(t::Target, g, tris, rules, ε, level, maxlevel, resolution, reach, shadow,
+                          back)
     (; k, ds, amin, extent, focus, cone) = g
     P, W, N, M, D = Vec3[], Float64[], Vec3[], UInt16[], Int32[]
     for tri in tris
@@ -202,7 +223,17 @@ function _operator_points(t::Target, g, tris, rules, ε, level, maxlevel, resolu
         d = cen - focus
         s = dot(d, k)
         near = norm(d - s * k) - rad <= extent + cone * abs(s) + reach
-        if near && L > resolution * amin * 2^level
+        if e <= 0
+            # unmodeled back side: only its total matters (see `_backside_points!`)
+            lv = 0
+            if near
+                _backside_points!(P, W, N, M, D, t, tri, back, amin, side_n, target_id, ds, ε) &&
+                    continue
+                # within a spot semi-axis of an open edge: the shoulder of a clipped spot lands here
+                res = back.rimdist[tri] <= extent / 2.5 ? back.resolution : back.coarse
+                lv = clamp(ceil(Int, log2(L / (res * amin))), 0, maxlevel)
+            end
+        elseif near && L > resolution * amin * 2^level
             lv = clamp(ceil(Int, log2(L / (resolution * amin))), level, maxlevel)
         end
         xs, ms = _visible_directions(t, rules[lv+1][1], v0, e1, e2, side_n, ds, ε)
@@ -236,6 +267,137 @@ function _visible_directions(t::Target, bary, v0, e1, e2, side_n, ds, ε)
         push!(ms, m)
     end
     return xs, ms
+end
+
+# Open boundary of the opaque surfaces: triangle edges that no other opaque triangle
+# shares (an entrance hole's rim, a foil's edge), and the vertices on them. Per triangle,
+# bit j-1 flags edge j (vertex j to j+1; vertices v0, v0+e1, v0+e2) and bit j+2 vertex j.
+function _open_boundary(t::Target)
+    tol = 1e-9 * max(t.scale, 1.0)
+    key(v) = (round(Int, v[1] / tol), round(Int, v[2] / tol), round(Int, v[3] / tol))
+    corners(tri) = (key(t.tri_v0[tri]), key(t.tri_v0[tri] + t.tri_e1[tri]),
+                    key(t.tri_v0[tri] + t.tri_e2[tri]))
+    ekey(a, b) = a < b ? (a, b) : (b, a)
+    opaque = findall(t.tri_opaque)
+    count = Dict{NTuple{2,NTuple{3,Int}},Int}()
+    for tri in opaque
+        c = corners(tri)
+        for j in 1:3
+            kk = ekey(c[j], c[mod1(j + 1, 3)])
+            count[kk] = get(count, kk, 0) + 1
+        end
+    end
+    onedge = Set{NTuple{3,Int}}()
+    for ((a, b), n) in count
+        n == 1 && (push!(onedge, a); push!(onedge, b))
+    end
+    flags = zeros(UInt8, length(t.tri_area))
+    for tri in opaque
+        c = corners(tri)
+        f = 0x00
+        for j in 1:3
+            count[ekey(c[j], c[mod1(j + 1, 3)])] == 1 && (f |= 0x01 << (j - 1))
+            c[j] in onedge && (f |= 0x01 << (j + 2))
+        end
+        flags[tri] = f
+    end
+    # distance of each triangle from the open boundary (lower bound)
+    segs = [(a, b) for ((a, b), n) in count if n == 1]
+    pos(kk) = Vec3(kk[1] * tol, kk[2] * tol, kk[3] * tol)
+    S = [(pos(a), pos(b)) for (a, b) in segs]
+    rimdist = fill(Inf, length(t.tri_area))
+    for tri in opaque
+        t.tri_front[tri] > 0 && t.tri_back[tri] > 0 && continue   # no unmodeled side
+        v0, e1, e2 = t.tri_v0[tri], t.tri_e1[tri], t.tri_e2[tri]
+        cen = v0 + (e1 + e2) / 3
+        rad = max(norm(v0 - cen), norm(v0 + e1 - cen), norm(v0 + e2 - cen))
+        dmin = Inf
+        for (a, b) in S
+            ab = b - a
+            λ = clamp(dot(cen - a, ab) / dot(ab, ab), 0.0, 1.0)
+            dmin = min(dmin, norm(cen - a - λ * ab))
+        end
+        rimdist[tri] = max(dmin - rad, 0.0)
+    end
+    return flags, rimdist
+end
+
+const _GL2 = (0.5 - sqrt(3) / 6, 0.5 + sqrt(3) / 6)
+
+# Panel ends on [0, 1]: `n` equal panels, the first (`lo`) and/or last (`hi`) divided
+# geometrically (ratio `q`) toward that end down to width `wmin`.
+function _graded_cuts(n, lo, hi, wmin, q)
+    n = max(n, lo && hi ? 2 : 1)
+    cuts = Float64[]
+    for i in 0:n
+        x = i / n
+        if lo && i == 1
+            m = max(0, ceil(Int, log(x / wmin) / log(1 / q)))
+            append!(cuts, x * q^j for j in m:-1:1)
+        end
+        push!(cuts, x)
+        if hi && i == n - 1
+            m = max(0, ceil(Int, log((1 - x) / wmin) / log(1 / q)))
+            append!(cuts, 1 - (1 - x) * q^j for j in 1:m)
+        end
+    end
+    return cuts
+end
+
+# Back-side points of a triangle on the open boundary. The light a back side intercepts
+# at an open edge (an entrance-hole lip clipping a beam's tail) lies within a few
+# e-folding lengths of the tail of the edge: ~1/50 of a spot semi-axis at 1e-4 clipped,
+# far finer than spot-resolving sub-triangles, whose centroids then miss most of it
+# (they underestimated 1e-4 clipping by 10–60%). The triangle is mapped from the unit
+# square, collapsing onto one vertex C (u from C to the opposite edge, v across), with
+# the coordinates that reach open edges and vertices graded geometrically (ratio 1/2)
+# toward them, down to `edge` spot semi-axes, and two Gauss points per panel. A vertex
+# on the rim needs this as much as an edge: the triangles fanning out from it hold a
+# share ~λ/L of the rim's light (λ the tail length, L the edge). Panels are `resolution`
+# spot semi-axes across the triangle and `coarse` along an open edge. Returns false (no
+# points added) for a triangle off the open boundary.
+function _backside_points!(P, W, N, M, D, t::Target, tri, back, amin, side_n, target_id, ds, ε)
+    f = back.flags[tri]
+    f == 0 && return false
+    E(j) = (f >> (mod1(j, 3) - 1)) & 0x1 == 0x1      # edge j: vertex j to j+1
+    V(j) = (f >> (mod1(j, 3) + 2)) & 0x1 == 0x1
+    nE = E(1) + E(2) + E(3)
+    C = nE >= 2 ? findfirst(j -> E(j) && E(j - 1), 1:3) :
+        nE == 1 ? mod1(findfirst(E, 1:3) + 2, 3) : findfirst(V, 1:3)
+    Pv, Qv = mod1(C + 1, 3), mod1(C + 2, 3)
+    ulo = V(C)
+    uhi = E(Pv) || (V(Pv) && !E(C)) || (V(Qv) && !E(Qv))
+    vlo = E(C) || (V(Pv) && !E(Pv))
+    vhi = E(Qv) || (V(Qv) && !E(Pv))
+    v0, e1, e2 = t.tri_v0[tri], t.tri_e1[tri], t.tri_e2[tri]
+    X = (v0, v0 + e1, v0 + e2)
+    B = ((0.0, 0.0), (1.0, 0.0), (0.0, 1.0))
+    Lu = max(norm(X[Pv] - X[C]), norm(X[Qv] - X[C]))
+    Lv = norm(X[Qv] - X[Pv])
+    h, halong, wmin = back.resolution * amin, back.coarse * amin, back.edge * amin
+    # two-point Gauss panels in u; in v, as many as the u panel's width across needs
+    ucuts = _graded_cuts(ceil(Int, Lu / (vlo || vhi ? halong : h)), ulo, uhi, wmin / Lu, 0.5)
+    hv = uhi ? halong : h
+    bary = Tuple{Float64,Float64}[]
+    wq = Float64[]
+    for k in 1:length(ucuts)-1
+        a, b = ucuts[k], ucuts[k+1]
+        vcuts = _graded_cuts(ceil(Int, b * Lv / hv), vlo, vhi, wmin / (b * Lv), 0.5)
+        for gu in _GL2, l in 1:length(vcuts)-1, gv in _GL2
+            u = a + gu * (b - a)
+            v = vcuts[l] + gv * (vcuts[l+1] - vcuts[l])
+            push!(bary, ntuple(i -> B[C][i] + u * ((1 - v) * (B[Pv][i] - B[C][i]) +
+                                                   v * (B[Qv][i] - B[C][i])), 2))
+            push!(wq, 2u * (b - a) / 2 * (vcuts[l+1] - vcuts[l]) / 2)
+        end
+    end
+    xs, ms = _visible_directions(t, bary, v0, e1, e2, side_n, ds, ε)
+    A = t.tri_area[tri]
+    for (x, m, w) in zip(xs, ms, wq)
+        m == 0 && continue
+        push!(P, x); push!(W, A * w); push!(N, side_n); push!(M, m); push!(D, target_id)
+    end
+    return true
 end
 
 function _bary_quadrature(level)
