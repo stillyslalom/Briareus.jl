@@ -14,7 +14,7 @@ using Printf
 using Random
 using StaticArrays
 using ForwardDiff
-using SpecialFunctions: gamma, gamma_inc_inv
+using SpecialFunctions: gamma, gamma_inc, gamma_inc_inv
 import Optim
 
 export Vec3, Mesh, add_polygon!, merge_meshes, transform, translate, rotation_to,
@@ -29,7 +29,8 @@ export DepositionOperator, Deposition, deposit, raytrace_deposition, raytrace_co
 export view_factors, closure_error, enforce_closure!, RadiationModel, RadiationSolution, solve,
        flux_response, energy_balance, radiation_temperature, to_Wcm2, SIGMA_SB, albedos
 export PulseShape, pulse_energy, with_pulses, drive_history
-export enclosed_radius, BeamEnvelope, envelope_distance, ClearanceRow, ClearanceReport, clearance,
+export enclosed_radius, envelope_radius, focal_profile, enclosed_fraction, with_axes,
+       BeamEnvelope, envelope_distance, ClearanceRow, ClearanceReport, clearance,
        beam_component_power, violations, min_clearance, write_clearance_csv
 export LaserPlasmaModel, apply_lpi, Backscatter, CalibratedTransfer, linear_transfer,
        tabulated_transfer, lpi_summary

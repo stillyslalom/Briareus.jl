@@ -315,13 +315,39 @@ end
     up = translate(Component(:up, disk_mesh(0.05, 0.0; nr = 1, nphi = 32), gold()), (1.05, 0, 2.0))
     down = translate(Component(:down, disk_mesh(0.05, 0.0; nr = 1, nphi = 32), gold()), (0.2, 0, -1.0))
     t = Target(foil(:f, (0, 0, 0), (0, 0, 1); width = 4.0, n = 8), up, down)
-    r = clearance(t, [b]; targets = (:f,), margin = 0.1)
+    r = clearance(t, [b]; targets = (:f,), enclosed = 0.99, margin = 0.1, pointing = 0.05,
+                  focus = 0.4)
     row(c) = only(x for x in r.rows if x.component === c)
-    expected = 1.0 - (enclosed_radius(4.0, 0.99) * 0.3 + 2.0 / 16 + 0.1)
-    @test row(:up).clearance ≈ expected atol = 1e-9
+    nominal = 1.0 - (enclosed_radius(4.0, 0.99) * 0.3 + 2.0 / 16 + 0.1)
+    @test row(:up).nominal ≈ nominal atol = 1e-9
+    @test row(:up).clearance ≈ nominal - 0.05 - 0.4 / 16 atol = 1e-9
     @test row(:up).s ≈ -2.0
     @test row(:down).clearance == Inf
     @test isempty(violations(r))
+    # intensity contours: the peak-fraction and absolute-intensity envelopes agree
+    I0 = focal_profile(spot, 1.0, 0.0)
+    ρ = envelope_radius(spot, 1.0; peak_fraction = 1e-6)
+    @test ρ ≈ log(1e6)^(1 / 4) rtol = 1e-9
+    @test envelope_radius(spot, 1.0; intensity = 1e-6 * I0 * 1e14) ≈ ρ rtol = 1e-9
+    @test envelope_radius(spot, 1.0; intensity = 2 * I0 * 1e14) == 0
+    # a halo widens the envelope far more than the core alone
+    hspot = SuperGaussianSpot(0.3; order = 4.0, halo = 1e-3, halo_scale = 4.0)
+    @test envelope_radius(hspot, 1.0; peak_fraction = 1e-6) > 3 * ρ
+    @test enclosed_fraction(hspot, 50.0) ≈ 1
+    # the halo carries its power through deposition and the ray trace
+    hb = remake(b; spot = hspot)
+    tf = Target(foil(:f, (0, 0, 0), (0, 0, 1); width = 12.0, n = 60))
+    @test sum(raytrace_deposition(tf, [hb]).element) ≈ 1 rtol = 1e-9
+    @test sum(deposit(DepositionOperator(tf, [hb]), [hb]).element) ≈ 1 rtol = 2e-3
+    # pointing toward hardware raises the worst-case power and intensity on it
+    near = translate(Component(:near, disk_mesh(0.2, 0.0; nr = 2, nphi = 32), gold()), (0.75, 0, 1.0))
+    tn = Target(foil(:f, (0, 0, 0), (0, 0, 1); width = 4.0, n = 8), near)
+    r0 = only(clearance(tn, [b]; targets = (:f,), pointing = 0.0).rows)
+    rep1 = clearance(tn, [b]; targets = (:f,), pointing = 0.1)
+    r1 = only(rep1.rows)
+    @test r1.power > r0.power && r1.peak_intensity > r0.peak_intensity
+    @test r1.clearance ≈ r0.clearance - 0.1
+    @test !isempty(violations(rep1; intensity = 0.5 * r1.peak_intensity))
     # A plate across the beam upstream intercepts everything and overlaps.
     plate = Component(:plate, translate(rectangle_mesh(3.0, 3.0; nu = 6, nv = 6), (0, 0, 1.0)), gold();
                       two_sided = true)

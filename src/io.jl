@@ -6,7 +6,8 @@
 # names and units onto these fields.
 
 const BEAM_COLUMNS = (:name, :quad, :group, :theta, :phi, :power, :aim_x, :aim_y, :aim_z,
-                      :defocus, :spot_a, :spot_b, :spot_order, :spot_angle, :fnumber,
+                      :defocus, :spot_a, :spot_b, :spot_order, :spot_angle, :spot_halo,
+                      :spot_halo_scale, :spot_halo_order, :fnumber,
                       :wavelength, :dlambda)
 
 """
@@ -25,7 +26,8 @@ function write_beam_table(path::AbstractString, beams::AbstractVector{<:Beam})
             er, eφ = _radial(b)
             aim = Vec3(v.(b.aim))
             row = (b.name, b.quad, b.group, θ, φ, v(b.power), aim..., v(b.defocus),
-                   v(b.spot.a), v(b.spot.b), b.spot.order, rad2deg(b.spot.angle), b.fnumber,
+                   v(b.spot.a), v(b.spot.b), b.spot.order, rad2deg(b.spot.angle), b.spot.halo,
+                   b.spot.halo_scale, b.spot.halo_order, b.fnumber,
                    b.wavelength, v(b.dlambda), dot(aim, er), dot(aim, eφ))
             println(io, join((_csvfield(x) for x in row), ","))
         end
@@ -118,7 +120,10 @@ function read_beam_table(path::AbstractString; columns = Dict{Symbol,String}(),
         a = get_num(:spot_a, tv(b -> b.spot.a, 0.5))
         spot = SuperGaussianSpot(a, get_num(:spot_b, tv(b -> b.spot.b, a));
                                  order = get_num(:spot_order, tv(b -> b.spot.order, 2.0)),
-                                 angle = deg2rad(get_num(:spot_angle, tv(b -> rad2deg(b.spot.angle), 0.0))))
+                                 angle = deg2rad(get_num(:spot_angle, tv(b -> rad2deg(b.spot.angle), 0.0))),
+                                 halo = get_num(:spot_halo, tv(b -> b.spot.halo, 0.0)),
+                                 halo_scale = get_num(:spot_halo_scale, tv(b -> b.spot.halo_scale, 3.0)),
+                                 halo_order = get_num(:spot_halo_order, tv(b -> b.spot.halo_order, 2.0)))
         aim0 = tv(b -> b.aim, Vec3(0, 0, 0))
         push!(beams, Beam(name; theta = θ, phi = φ,
                           power = get_num(:power, tv(b -> b.power, 1.0)),

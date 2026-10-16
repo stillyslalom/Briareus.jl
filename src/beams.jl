@@ -11,21 +11,42 @@
 #   where θ̂ and φ̂ are the spherical unit vectors at the port.
 
 """
-    SuperGaussianSpot(a, b = a; order = 2.0, angle = 0.0)
+    SuperGaussianSpot(a, b = a; order = 2.0, angle = 0.0, halo = 0.0, halo_scale = 3.0,
+                      halo_order = 2.0)
 
 Elliptical super-Gaussian best-focus intensity `I ∝ exp(-[(u/a)² + (v/b)²]^(order/2))`
 with 1/e semi-axes `a`, `b` (mm). `angle` (radians) rotates the `a` axis from the
 port's θ̂ toward φ̂.
+
+Measured phase-plate spots have low-level wings beyond the super-Gaussian core fit.
+A fraction `halo` of the power can be put in a second, broader component with semi-axes
+`halo_scale·(a, b)` and order `halo_order` — the halo matters for clearance and
+clipping checks, not for drive symmetry.
 """
 struct SuperGaussianSpot{T<:Real}
     a::T
     b::T
     order::Float64
     angle::Float64
+    halo::Float64
+    halo_scale::Float64
+    halo_order::Float64
 end
 
-SuperGaussianSpot(a::Real, b::Real = a; order = 2.0, angle = 0.0) =
-    SuperGaussianSpot(promote(a, b)..., Float64(order), Float64(angle))
+function SuperGaussianSpot(a::Real, b::Real = a; order = 2.0, angle = 0.0, halo = 0.0,
+                           halo_scale = 3.0, halo_order = 2.0)
+    0 <= halo < 1 || throw(ArgumentError("halo fraction must be in [0, 1)"))
+    halo > 0 && halo_scale <= 0 && throw(ArgumentError("halo_scale must be positive"))
+    return SuperGaussianSpot(promote(a, b)..., Float64(order), Float64(angle), Float64(halo),
+                             Float64(halo_scale), Float64(halo_order))
+end
+
+"Same spot profile with semi-axes `a`, `b` (number type follows them)."
+with_axes(s::SuperGaussianSpot, a, b) =
+    SuperGaussianSpot(promote(a, b)..., s.order, s.angle, s.halo, s.halo_scale, s.halo_order)
+
+_retype(s::SuperGaussianSpot, ::Type{T}) where {T} =
+    SuperGaussianSpot{T}(s.a, s.b, s.order, s.angle, s.halo, s.halo_scale, s.halo_order)
 
 # ∫ exp(-ρ^n) dA over the unit-semi-axis ellipse: 2π Γ(2/n) / n
 _sg_norm(n) = 2π * gamma(2 / n) / n
@@ -60,7 +81,7 @@ function Beam(name::AbstractString; theta, phi, power = 1.0, spot = SuperGaussia
               wavelength = 0.351, dlambda = 0.0)
     p = port_vector(theta, phi)
     T = promote_type(eltype(aim), typeof(power), typeof(defocus), typeof(spot.a), typeof(dlambda))
-    sp = SuperGaussianSpot{T}(spot.a, spot.b, spot.order, spot.angle)
+    sp = _retype(spot, T)
     return Beam{T}(String(name), p, SVector{3,T}(aim...), T(power), T(defocus), sp,
                    Float64(fnumber), Symbol(group), String(quad), Float64(wavelength), T(dlambda))
 end
@@ -107,7 +128,7 @@ function remake(b::Beam; aim = b.aim, power = b.power, defocus = b.defocus, spot
                 name = b.name)
     T = promote_type(eltype(aim), typeof(power), typeof(defocus), typeof(spot.a), typeof(spot.b),
                      typeof(dlambda))
-    sp = SuperGaussianSpot{T}(spot.a, spot.b, spot.order, spot.angle)
+    sp = _retype(spot, T)
     return Beam{T}(String(name), Vec3(port), SVector{3,T}(aim...), T(power), T(defocus), sp,
                    Float64(fnumber), Symbol(group), b.quad, b.wavelength, T(dlambda))
 end
@@ -132,25 +153,43 @@ _fmt(x) = string(ForwardDiff.value(x))
 
 Precomputed quantities for evaluating a beam's intensity at many points.
 """
+# One super-Gaussian component of a spot in a beam frame.
+struct _SGComponent{T}
+    a2::T
+    b2::T
+    halfn::Float64
+    defocus_c::Float64        # (1/(2F))² / (4 m_n): adds s²·c to a², b²
+    power_norm::T             # component power / (2π Γ(2/n)/n)
+end
+
+@inline function _sg_eval(c::_SGComponent, u, v, s, cscale = 1.0)
+    a2 = c.a2 + cscale * c.defocus_c * s^2
+    b2 = c.b2 + cscale * c.defocus_c * s^2
+    return c.power_norm / sqrt(a2 * b2) * exp(-(u^2 / a2 + v^2 / b2)^c.halfn)
+end
+
 struct BeamFrame{T}
     k::Vec3
     e1::Vec3
     e2::Vec3
     focus::SVector{3,T}
-    a2::T
-    b2::T
-    halfn::Float64
-    defocus_c::Float64        # (1/(2F))² / (4 m_n): adds s²·c to a², b²
-    power_norm::T             # power / (2π Γ(2/n)/n)
+    core::_SGComponent{T}
+    halo::_SGComponent{T}
+    has_halo::Bool
 end
 
 function BeamFrame(b::Beam)
     k = direction(b)
     e1, e2 = spot_axes(b)
-    n = b.spot.order
+    sp = b.spot
     focus = b.aim + b.defocus * k
-    c = (1 / (2b.fnumber))^2 / (4 * _sg_moment(n))
-    return BeamFrame(k, e1, e2, focus, b.spot.a^2, b.spot.b^2, n / 2, c, b.power / _sg_norm(n))
+    cone2 = (1 / (2b.fnumber))^2
+    n, nh, h, sc = sp.order, sp.halo_order, sp.halo, sp.halo_scale
+    core = _SGComponent(sp.a^2, sp.b^2, n / 2, cone2 / (4 * _sg_moment(n)),
+                        (1 - h) * b.power / _sg_norm(n))
+    halo = _SGComponent((sc * sp.a)^2, (sc * sp.b)^2, nh / 2, cone2 / (4 * _sg_moment(nh)),
+                        h * b.power / _sg_norm(nh))
+    return BeamFrame(k, e1, e2, focus, core, halo, h > 0)
 end
 
 """
@@ -159,17 +198,44 @@ end
 Beam intensity (TW/mm², per unit area normal to the beam) at point `x`. Away from best
 focus the spot is the focal profile convolved with the geometric f-cone disk; this is
 approximated by widening the semi-axes so second moments add exactly
-(`a(s)² = a² + s²/(16 F² m_n)` with `m_n = Γ(4/n)/(2Γ(2/n))`) at fixed order `n`.
+(`a(s)² = a² + s²/(16 F² m_n)` with `m_n = Γ(4/n)/(2Γ(2/n))`) at fixed order `n`, for
+the core and halo components separately.
 """
 @inline function intensity(f::BeamFrame, x)
     d = x - f.focus
     s = dot(d, f.k)
     u = dot(d, f.e1)
     v = dot(d, f.e2)
-    a2 = f.a2 + f.defocus_c * s^2
-    b2 = f.b2 + f.defocus_c * s^2
-    ρ2 = u^2 / a2 + v^2 / b2
-    return f.power_norm / sqrt(a2 * b2) * exp(-ρ2^f.halfn)
+    I = _sg_eval(f.core, u, v, s)
+    f.has_halo && (I += _sg_eval(f.halo, u, v, s))
+    return I
+end
+
+"""
+    focal_profile(spot, power, ρ)
+
+Best-focus intensity (TW/mm²) at elliptical radius `ρ` (in units of the core 1/e
+semi-axes) for a beam of `power` TW.
+"""
+function focal_profile(sp::SuperGaussianSpot, P, ρ)
+    I = (1 - sp.halo) * P / (_sg_norm(sp.order) * sp.a * sp.b) * exp(-ρ^sp.order)
+    if sp.halo > 0
+        sc = sp.halo_scale
+        I += sp.halo * P / (_sg_norm(sp.halo_order) * sc^2 * sp.a * sp.b) *
+             exp(-(ρ / sc)^sp.halo_order)
+    end
+    return I
+end
+
+"""
+    enclosed_fraction(spot, ρ)
+
+Fraction of the beam power inside elliptical radius `ρ` (core 1/e units) at best focus.
+"""
+function enclosed_fraction(sp::SuperGaussianSpot, ρ)
+    f = (1 - sp.halo) * gamma_inc(2 / sp.order, ρ^sp.order)[1]
+    sp.halo > 0 && (f += sp.halo * gamma_inc(2 / sp.halo_order, (ρ / sp.halo_scale)^sp.halo_order)[1])
+    return f
 end
 
 intensity(b::Beam, x) = intensity(BeamFrame(b), x)

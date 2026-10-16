@@ -42,9 +42,8 @@ function GroupPointing(beams::AbstractVector{<:Beam}; by = :group,
     tmpl = [remake(b; aim = Float64.(ForwardDiff.value.(b.aim)),
                    power = Float64(ForwardDiff.value(b.power)),
                    defocus = Float64(ForwardDiff.value(b.defocus)),
-                   spot = SuperGaussianSpot(Float64(ForwardDiff.value(b.spot.a)),
-                                            Float64(ForwardDiff.value(b.spot.b));
-                                            order = b.spot.order, angle = b.spot.angle),
+                   spot = with_axes(b.spot, Float64(ForwardDiff.value(b.spot.a)),
+                                    Float64(ForwardDiff.value(b.spot.b))),
                    dlambda = Float64(ForwardDiff.value(b.dlambda)))
             for b in beams]
     return GroupPointing(tmpl, uk, members, collect(Symbol, fields), mirror)
@@ -103,8 +102,8 @@ function apply(p::GroupPointing, x::AbstractVector{T}) where {T}
             tt = ϕ === nothing ? dot(aim0, eφ) : ϕ
             zz = z === nothing ? aim0[3] : _zsign(p, b) * z
             aim = rr * er + tt * eφ + SVector{3,T}(0, 0, zz)
-            spot = sp === nothing ? SuperGaussianSpot{T}(b.spot.a, b.spot.b, b.spot.order, b.spot.angle) :
-                   SuperGaussianSpot{T}(sp * b.spot.a, sp * b.spot.b, b.spot.order, b.spot.angle)
+            spot = sp === nothing ? _retype(b.spot, T) :
+                   _retype(with_axes(b.spot, sp * b.spot.a, sp * b.spot.b), T)
             out[bi] = remake(b; aim, spot,
                              power = pw === nothing ? T(b.power) : pw,
                              defocus = dfc === nothing ? T(b.defocus) : dfc,

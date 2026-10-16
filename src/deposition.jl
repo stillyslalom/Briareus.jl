@@ -154,8 +154,7 @@ end
     N = length(ds)
     d = x - f.focus
     s = dot(d, f.k)
-    c = f.defocus_c / N
-    acc = zero(f.a2 * s)
+    acc = zero(f.core.a2 * s)
     for j in 1:N
         (m >> (j - 1)) & 0x1 == 0x1 || continue
         dj = ds[j]
@@ -163,11 +162,10 @@ end
         xf = d - sj * dj                      # crossing of the best-focus plane
         u = dot(xf, f.e1)
         v = dot(xf, f.e2)
-        a2 = f.a2 + c * sj^2
-        b2 = f.b2 + c * sj^2
-        acc += exp(-(u^2 / a2 + v^2 / b2)^f.halfn) / sqrt(a2 * b2)
+        acc += _sg_eval(f.core, u, v, sj, 1 / N)
+        f.has_halo && (acc += _sg_eval(f.halo, u, v, sj, 1 / N))
     end
-    return f.power_norm * acc / N
+    return acc / N
 end
 
 """
@@ -200,16 +198,17 @@ end
 # ---------------------------------------------------------------------------------------
 
 """
-    raytrace_deposition(target, beams; nspot = 41, ncone = 7, extent = 3.5) -> Deposition
+    raytrace_deposition(target, beams; nspot = 41, ncone = 7, extent = nothing) -> Deposition
 
-Reference deposition by geometric ray tracing. Each beam is sampled with an
-`nspot × nspot` grid of best-focus points spanning `±extent` 1/e semi-axes, each
+Reference deposition by geometric ray tracing. Each spot component (core, and halo if
+present) is sampled with an `nspot × nspot` grid of best-focus points spanning
+`±extent` 1/e semi-axes (default: out to 1e-12 of the component's peak), each
 launched along `ncone` f-cone directions and weighted by the focal intensity. Rays
 travel straight (no refraction) to the first opaque surface. Power is conserved
 exactly; defocus is exact within the sampling. Not differentiable.
 """
 function raytrace_deposition(t::Target, beams::AbstractVector{<:Beam}; nspot::Integer = 41,
-                             ncone::Integer = 7, extent = 3.5)
+                             ncone::Integer = 7, extent = nothing)
     ne, nc, nb = nelements(t), length(t.components), length(beams)
     E = [zeros(ne) for _ in 1:nb]
     L = [zeros(nc) for _ in 1:nb]
@@ -221,13 +220,13 @@ function raytrace_deposition(t::Target, beams::AbstractVector{<:Beam}; nspot::In
 end
 
 """
-    raytrace_component_power(target, beams; nspot = 41, ncone = 7, extent = 3.5) -> Matrix
+    raytrace_component_power(target, beams; nspot = 41, ncone = 7, extent = nothing) -> Matrix
 
 Power (TW) each beam (rows) deposits on each component (columns, both sides), by the
 reference ray trace — exact power accounting independent of mesh resolution.
 """
 function raytrace_component_power(t::Target, beams::AbstractVector{<:Beam}; nspot::Integer = 41,
-                                  ncone::Integer = 7, extent = 3.5)
+                                  ncone::Integer = 7, extent = nothing)
     nc = length(t.components)
     M = zeros(length(beams), nc)
     Threads.@threads for bi in eachindex(beams)
@@ -242,29 +241,37 @@ function raytrace_component_power(t::Target, beams::AbstractVector{<:Beam}; nspo
     return M
 end
 
+# Each spot component (core, halo) is sampled on its own nspot × nspot grid spanning
+# `extent` 1/e radii (default: out to where the component falls to 1e-12 of its peak).
 function _raytrace_beam!(E, L, t::Target, b::Beam, nspot, ncone, extent)
-    us = range(-extent, extent; length = nspot)
     val = ForwardDiff.value
-    a, bb, n = val(b.spot.a), val(b.spot.b), b.spot.order
+    sp = b.spot
+    a, bb = val(sp.a), val(sp.b)
     e1, e2 = spot_axes(b)
     k = direction(b)
     focus = Vec3(val.(b.aim)) + val(b.defocus) * k
     dirs, dw = cone_directions(b, ncone)
-    wsum = sum(exp(-(u^2 + w^2)^(n / 2)) for u in us, w in us)
     far = 4 * (t.scale + norm(focus)) + 1
     P = val(b.power)
+    comps = [(1 - sp.halo, 1.0, sp.order)]
+    sp.halo > 0 && push!(comps, (sp.halo, sp.halo_scale, sp.halo_order))
     total = 0.0
-    for u in us, w in us
-        wp = exp(-(u^2 + w^2)^(n / 2)) / wsum
-        wp < 1e-12 && continue
-        pf = focus + (u * a) * e1 + (w * bb) * e2
-        for (d, wd) in zip(dirs, dw)
-            pw = P * wp * wd
-            _, tri = closest_hit(t.bvh, pf - far * d, d)
-            tri == 0 && continue
-            total += pw
-            e = dot(d, t.tri_normal[tri]) < 0 ? t.tri_front[tri] : t.tri_back[tri]
-            e > 0 ? (E[e] += pw) : (L[t.tri_comp[tri]] += pw)
+    for (frac, sc, n) in comps
+        ext = extent === nothing ? 1.02 * log(1e12)^(1 / n) : extent
+        us = range(-ext, ext; length = nspot)
+        wsum = sum(exp(-(u^2 + w^2)^(n / 2)) for u in us, w in us)
+        for u in us, w in us
+            wp = frac * exp(-(u^2 + w^2)^(n / 2)) / wsum
+            wp < 1e-15 && continue
+            pf = focus + (sc * u * a) * e1 + (sc * w * bb) * e2
+            for (d, wd) in zip(dirs, dw)
+                pw = P * wp * wd
+                _, tri = closest_hit(t.bvh, pf - far * d, d)
+                tri == 0 && continue
+                total += pw
+                e = dot(d, t.tri_normal[tri]) < 0 ? t.tri_front[tri] : t.tri_back[tri]
+                e > 0 ? (E[e] += pw) : (L[t.tri_comp[tri]] += pw)
+            end
         end
     end
     return total
