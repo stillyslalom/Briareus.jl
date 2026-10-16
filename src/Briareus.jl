@@ -14,7 +14,7 @@ using Printf
 using Random
 using StaticArrays
 using ForwardDiff
-using SpecialFunctions: gamma, gamma_inc, gamma_inc_inv
+using SpecialFunctions: gamma, gamma_inc, gamma_inc_inv, dawson
 import Optim
 
 export Vec3, Mesh, add_polygon!, merge_meshes, transform, translate, rotation_to,
@@ -34,6 +34,7 @@ export enclosed_radius, envelope_radius, focal_profile, enclosed_fraction, with_
        beam_component_power, violations, min_clearance, write_clearance_csv
 export LaserPlasmaModel, apply_lpi, Backscatter, CalibratedTransfer, linear_transfer,
        tabulated_transfer, lpi_summary
+export CBET, CH_IONS, ion_wave_amplitude, receiver_ratio, calibrate_cbet, cbet_gain, cbet_coupling, cbet_plasma, plasma_dispersion
 export BEAM_COLUMNS, write_beam_table, read_beam_table, read_csv, write_element_table, write_moments
 export legendre, legendre_moments, legendre_weights, solid_angle, ylm_moments, mode_power, rms_nonuniformity
 export OrthoCamera, camera_from_port, render, radiance, line_of_sight_power
@@ -57,5 +58,6 @@ include("history.jl")
 include("clearance.jl")
 include("lpi.jl")
 include("io.jl")
+include("cbet.jl")
 
 end

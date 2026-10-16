@@ -420,4 +420,44 @@ end
     @test sum(b.power for b in ev.effective) ≈ sum(b.power for b in ev.beams)
 end
 
+
+@testset "CBET" begin
+    @test plasma_dispersion(1.0) ≈ complex(-1.0761, 0.6520) atol = 1e-4
+    @test plasma_dispersion(0.0) ≈ complex(0.0, sqrt(π))
+    # independent cross-check (research notes): NIF-LEH-like CH plasma, 20° crossing,
+    # 351 nm: |Im Γ| peaks ≈ 153 near Δλ(3ω) ≈ 2 Å without flow
+    m = CBET(leh_z = 5.0, mach = 0.0)
+    pl = cbet_plasma(m, 0.351, 0.0)
+    k = 2 * (2π / 0.351e-6) * sqrt(1 - 0.06) * sind(10)
+    Ω(dl) = 2π * 2.99792458e8 * dl * 1e-10 / 0.351e-6^2
+    ims = [abs(imag(cbet_coupling(Ω(dl), k, 0.0; ne = pl.ne, Te = 5000.0, Ti = 1500.0, ions = CH_IONS)))
+           for dl in 0:0.02:4]
+    @test maximum(ims) ≈ 153 rtol = 0.02
+    @test 1.8 < (0:0.02:4)[argmax(ims)] < 2.1
+    # the redder beam gains; coupling is antisymmetric
+    mk(φ, dl) = Beam("x"; theta = 10, phi = φ, power = 1.0, dlambda = dl, fnumber = 8.0,
+                     spot = SuperGaussianSpot(0.5; order = 4.0), aim = (0, 0, 5.0))
+    @test cbet_gain(m, mk(0, 1.5), mk(180, 0.0)) > 0
+    @test cbet_gain(m, mk(0, 1.5), mk(180, 0.0)) ≈ -cbet_gain(m, mk(180, 0.0), mk(0, 1.5))
+    @test cbet_gain(m, mk(0, 0.0), mk(180, 0.0)) == 0          # no detuning, no flow
+    # hohlraum: power conserved, transfer to the redder inner cones, differentiable
+    q = [remake(b; aim = (0.0, 0.0, sign(b.port[3]) * (b.group in (:inner23, :inner30) ? 3.3 : 5.0)))
+         for b in nif_quads()]
+    inner = (:inner23, :inner30)
+    mf = CBET(leh_z = 5.05)
+    shifted = [remake(b; dlambda = b.group in inner ? 1.0 : 0.0) for b in q]
+    eff = apply_lpi(mf, shifted)
+    @test sum(b.power for b in eff) ≈ sum(b.power for b in q) rtol = 1e-12
+    @test receiver_ratio(mf, q, 2.0; receivers = inner) > receiver_ratio(mf, q, 0.5; receivers = inner)
+    f(dl) = receiver_ratio(mf, q, dl; receivers = inner)
+    h = 1e-5
+    @test ForwardDiff.derivative(f, 1.0) ≈ (f(1.0 + h) - f(1.0 - h)) / 2h rtol = 1e-5
+    @test ion_wave_amplitude(mf, eff[1], eff[end]) ≥ 0
+    # calibration recovers a known multiplier from synthetic transfer data
+    truth = CBET(leh_z = 5.05, multiplier = 0.4, clamp = nothing)
+    data = [(dl, receiver_ratio(truth, q, dl; receivers = inner)) for dl in (0.5, 1.0, 2.0)]
+    fitted, res = calibrate_cbet(CBET(leh_z = 5.05, clamp = nothing), q, data; receivers = inner)
+    @test fitted.multiplier ≈ 0.4 rtol = 1e-3
+end
+
 end
