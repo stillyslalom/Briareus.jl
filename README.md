@@ -1,5 +1,8 @@
 # Briareus.jl
 
+[![CI](https://github.com/stillyslalom/Briareus.jl/actions/workflows/CI.yml/badge.svg)](https://github.com/stillyslalom/Briareus.jl/actions/workflows/CI.yml)
+[![Docs](https://img.shields.io/badge/docs-dev-blue.svg)](https://stillyslalom.github.io/Briareus.jl/dev/)
+
 View-factor radiation and laser-pointing design for high-energy-density experiments:
 indirect-drive hohlraums, backlighter foils, and other laser-irradiated targets. Briareus
 covers the core of what VisRad (MacFarlane, JQSRT 81, 287, 2003) is used for — laser
