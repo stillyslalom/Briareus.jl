@@ -7,7 +7,7 @@ for scope and [ROADMAP.md](ROADMAP.md) for the backlog.
 ## Commands
 
 ```bash
-julia --project=. -t auto -e 'using Pkg; Pkg.test()'    # full suite (~2 min)
+julia --project=. -t auto -e 'using Pkg; Pkg.test()'    # full suite (~5 min on 4 threads)
 julia --project=. -t auto examples/nif_hohlraum.jl       # NIF symmetry optimization
 julia --project=. -t auto examples/backlighter.jl        # OMEGA backlighter uniformity
 julia --project=docs -t auto docs/make.jl                # docs; runs every tutorial
