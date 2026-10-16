@@ -49,7 +49,12 @@ Shot-review layer:
 2. **Diagnostic windows: design studies.** `hohlraum(...; windows)` is in place (closed or
    open windows, conforming mesh, exact curved areas). Next: a tutorial on re-tuning
    pointing around a window set (mode 1, m = 2 and m = 4 at the waist, P2), and a
-   time-dependent burn-through model (closed → open).
+   time-dependent burn-through model (closed → open). First look (two open 2 × 2 mm
+   windows at φ = 78°/258°, NIF quads): −18% drive, c(2,2)/c₀₀ = +0.061, ε₄ 0.6 → 3.1%.
+   Restoring the no-window shape by quad power needs −22 to 57 TW (infeasible);
+   re-pointing (±1.5 mm, ±20% power, keep-out) only reduces the m = 2 departure from
+   0.061 to ~0.04–0.05. Window size looks like the main lever; needs the user's window
+   dimensions and goals before a tutorial.
 3. **Confirm against facility practice:**
    - the TaLIS 0.5° tolerance (pivot, and whether it replaces or adds to the error set);
    - the 1ω footprint side and shape;
