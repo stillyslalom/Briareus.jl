@@ -23,6 +23,7 @@ export Vec3, Mesh, npatches, add_polygon!, merge_meshes, split_mesh, transform, 
 export AlbedoModel, ConstantAlbedo, TabulatedAlbedo, WallLossAlbedo, albedo, Material, gold, ablator, BLACK,
        Component, aperture, Target, nelements, elements, component_index, element_quadrature
 export hohlraum, foil, disk_foil
+export WallWindow, conforming_grid
 export SuperGaussianSpot, Beam, port_vector, port_angles, direction, remake, intensity, wavelength,
        beams_from_table, nif_quads, nif_beams, nif_spot, NIF_QUAD_NAMES, nif_port, nif_bundle, nif_bundles, omega_ports, omega_beams, omega_spot
 export DepositionOperator, Deposition, deposit, raytrace_deposition, raytrace_component_power, laser_flux,

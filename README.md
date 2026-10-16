@@ -35,7 +35,9 @@ for the same workflow: target, beams, drive, optimization and shot review.
   *apertures* that measure the escaping x-ray flux. A component can carry the exact
   surface its mesh approximates (`SphereSurface`, `CylinderSurface`, `DiskSurface`), and
   the radiation model then integrates over the true curved surface; hohlraums do this by
-  default.
+  default. `hohlraum(windows = [WallWindow(...)])` cuts diagnostic windows into the wall:
+  closed ones re-emit with their own material, open ones are apertures that laser light
+  passes through and x rays escape from, and the mesh conforms to their edges.
 - **Laser deposition.** Beams enter from facility ports with elliptical super-Gaussian
   phase-plate spots, an f-number cone, pointing, and defocus. Two methods:
   - `DepositionOperator` + `deposit` — precomputed quadrature with per-direction

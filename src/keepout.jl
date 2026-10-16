@@ -2,7 +2,7 @@
 # of entrance holes, smooth enough to optimize against.
 
 """
-    ApertureKeepOut(target; apertures = all aperture components, peak_fraction = 0.01,
+    ApertureKeepOut(target; apertures = planar aperture components, peak_fraction = 0.01,
                     intensity = nothing, pointing = 0.05, target_offset = 0.025,
                     hardware_tolerance = 0.0, focus = 1.0, margin = 0.0,
                     minimum = 0.0, weight = 100.0, nrim = 96)
@@ -41,7 +41,10 @@ function ApertureKeepOut(t::Target; apertures = nothing, peak_fraction = nothing
                          hardware_tolerance = 0.0, focus = 1.0, margin = 0.0,
                          minimum = 0.0, weight = 100.0, nrim::Integer = 96)
     intensity === nothing && peak_fraction === nothing && (peak_fraction = 0.01)
-    names = apertures === nothing ? [c.name for c in t.components if c.kind === :aperture] :
+    # by default every planar aperture; open windows in a hohlraum wall (apertures on a
+    # `CylinderSurface`) are not entrance holes
+    names = apertures === nothing ?
+            [c.name for c in t.components if c.kind === :aperture && !(c.surface isa CylinderSurface)] :
             Symbol[apertures...]
     isempty(names) && throw(ArgumentError("target has no apertures"))
     centers, rims = Vec3[], Vector{Vec3}[]

@@ -298,17 +298,59 @@ end
 # ---------------------------------------------------------------------------------------
 
 """
-    cylinder_mesh(radius, z0, z1; nz, nphi, inward = true, phi0 = 0.0)
+    conforming_grid(a, b, n, breaks; periodic = false) -> Vector{Float64}
+
+Grid lines from `a` to `b` with about `n` cells that include every break line in
+`breaks`: each interval between consecutive breaks is divided uniformly into
+`max(1, round(len / h))` cells, `h = (b - a)/n`. Breaks closer than `1e-9 (b - a)` are
+merged. With `periodic` (an azimuth, `b - a` one period), breaks are wrapped into the
+period and the grid runs from the first break to the first break plus the period, so
+the end points `a`, `b` are not grid lines themselves. Without breaks, use
+`range(a, b; length = n + 1)`.
+"""
+function conforming_grid(a, b, n::Integer, breaks; periodic::Bool = false)
+    P = b - a
+    tol = 1e-9 * abs(P)
+    xs = periodic ? sort!([a + mod(x - a, P) for x in breaks]) :
+         [a; sort!([Float64(x) for x in breaks if a + tol < x < b - tol]); b]
+    keep = Float64[]
+    for x in xs
+        (isempty(keep) || x - keep[end] > tol) && push!(keep, x)
+    end
+    if periodic
+        isempty(keep) && throw(ArgumentError("periodic grid needs at least one break"))
+        keep[end] - keep[1] > P - tol && length(keep) > 1 && pop!(keep)
+        push!(keep, keep[1] + P)
+    end
+    h = P / n
+    grid = [keep[1]]
+    for i in 1:length(keep)-1
+        k = max(1, round(Int, (keep[i+1] - keep[i]) / h))
+        append!(grid, range(keep[i], keep[i+1]; length = k + 1)[2:end])
+    end
+    return grid
+end
+
+"""
+    cylinder_mesh(radius, z0, z1; nz, nphi, inward = true, phi0 = 0.0, zbreaks = (),
+                  phibreaks = ())
 
 Open cylinder of the given radius about the z axis spanning `z0 ≤ z ≤ z1`, with `nz`
 axial by `nphi` azimuthal quadrilateral patches. Front faces point toward the axis
 when `inward` (a hohlraum wall), away from it otherwise.
+
+`zbreaks` (mm) and `phibreaks` (radians) are lines the mesh must contain, e.g. the edges
+of a window cut into the wall: the grid is then uniform between consecutive breaks with
+about the default spacing (`conforming_grid`), so a region bounded by break lines is
+tiled exactly by whole patches. Without breaks the grid is uniform from `phi0`.
 """
 function cylinder_mesh(radius, z0, z1; nz::Integer, nphi::Integer, inward::Bool = true,
-                       phi0 = 0.0)
+                       phi0 = 0.0, zbreaks = (), phibreaks = ())
     m = Mesh()
-    zs = range(z0, z1; length = nz + 1)
-    φs = range(phi0, phi0 + 2π; length = nphi + 1)
+    zs = isempty(zbreaks) ? range(z0, z1; length = nz + 1) : conforming_grid(z0, z1, nz, zbreaks)
+    φs = isempty(phibreaks) ? range(phi0, phi0 + 2π; length = nphi + 1) :
+         conforming_grid(phi0, phi0 + 2π, nphi, phibreaks; periodic = true)
+    nz, nphi = length(zs) - 1, length(φs) - 1
     for i in 1:nz, j in 1:nphi
         a, b = φs[j], φs[j+1]
         p = [Vec3(radius * cos(a), radius * sin(a), zs[i]),
@@ -323,17 +365,21 @@ function cylinder_mesh(radius, z0, z1; nz::Integer, nphi::Integer, inward::Bool 
 end
 
 """
-    annulus_mesh(r_inner, r_outer, z; nr, nphi, up = true)
+    annulus_mesh(r_inner, r_outer, z; nr, nphi, up = true, phi0 = 0.0, phibreaks = ())
 
 Flat annulus (a disk when `r_inner == 0`) in the plane `z`, with `nr` radial by `nphi`
 azimuthal patches. Front faces point along `+ẑ` when `up`, `-ẑ` otherwise. Rings are
-equal-area so patch areas are uniform.
+equal-area so patch areas are uniform. `phibreaks` (radians) are azimuths the mesh must
+contain, as in `cylinder_mesh`; giving both the same `nphi` and `phibreaks` makes an
+end cap meet a wall vertex for vertex.
 """
 function annulus_mesh(r_inner, r_outer, z; nr::Integer, nphi::Integer, up::Bool = true,
-                      phi0 = 0.0)
+                      phi0 = 0.0, phibreaks = ())
     m = Mesh()
     rs = sqrt.(range(r_inner^2, r_outer^2; length = nr + 1))
-    φs = range(phi0, phi0 + 2π; length = nphi + 1)
+    φs = isempty(phibreaks) ? range(phi0, phi0 + 2π; length = nphi + 1) :
+         conforming_grid(phi0, phi0 + 2π, nphi, phibreaks; periodic = true)
+    nphi = length(φs) - 1
     facing = up ? Vec3(0, 0, 1) : Vec3(0, 0, -1)
     for i in 1:nr, j in 1:nphi
         a, b = φs[j], φs[j+1]
