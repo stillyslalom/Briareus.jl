@@ -37,15 +37,19 @@ Shot-review layer:
 - **Docs:** a Documenter site with tutorials that double as validation (laser spot,
   integrating sphere, freeing a bundle for radiography).
 - **`BriareusGUI`:** a desktop window built on GLMakie + QML.
+- **Hohlraum diagnostic windows** (`WallWindow`), exact cylinder-patch areas, cached
+  radiosity factorizations (repeated solves 45× faster), and progress/cancel hooks on
+  `clearance` and `optimize_pointing`.
 
 ## Next
 1. **Sombrero and backlighter geometry.** Model the LEH shield as a component (a
    dimpled annulus), and the backlighter foil's placement relative to the diagnostic
    line of sight. The line-of-sight and clearance checks in the radiography tutorial
    then decide which bundles can drive the foil. This needs real dimensions.
-2. **Diagnostic windows in the hohlraum wall.** A `hohlraum(...; windows)` option with
-   low-albedo or burn-through patches, and their effect on drive symmetry (mode 1, and
-   m = 2 and 4 at the waist).
+2. **Diagnostic windows: design studies.** `hohlraum(...; windows)` is in place (closed or
+   open windows, conforming mesh, exact curved areas). Next: a tutorial on re-tuning
+   pointing around a window set (mode 1, m = 2 and m = 4 at the waist, P2), and a
+   time-dependent burn-through model (closed → open).
 3. **Confirm against facility practice:**
    - the TaLIS 0.5° tolerance (pivot, and whether it replaces or adds to the error set);
    - the 1ω footprint side and shape;
@@ -56,12 +60,9 @@ Shot-review layer:
 4. **Benchmark against VisRad.** Run `write_visrad_kit` cases at work and bring back the
    outputs for `compare_visrad`. This validates absolute drive levels and mode
    amplitudes.
-5. **GUI requests:**
-   - a cached factorization of (I − αF) for repeated `solve` calls;
-   - a progress/cancel hook on `clearance`;
-   - foil center and normal stored on the component;
-   - session save/load;
-   - x-ray images, TaLIS checks and VisRad I/O in the window.
+5. **GUI requests:** foil center and normal stored on the component; session
+   save/load; x-ray images in the window. (Cached radiosity factorization, clearance and
+   optimizer progress/cancel hooks are done.)
 6. **Time-dependent view factor.** Wall, LEH and spot motion from rad-hydro or a
    parametric model; P2(t) swing; optimization of cone fraction versus time.
 7. **Shot-data calibration.** Fit effective parameters (cone multipliers, CBET
