@@ -365,8 +365,13 @@ end
         a, b = 0.3 + rand(rng), 0.3 + rand(rng)
         u, v = 3 .* (rand(rng, 2) .- 0.5)
         d = Briareus._ellipse_distance(u, v, a, b)
-        bf = minimum(hypot(u - a * cos(θ), v - b * sin(θ)) for θ in range(0, 2π; length = 20001))
-        @test abs(d) ≈ bf atol = 1e-5
+        # brute force, refined around the best sample: a sampled curve alone overestimates
+        # the distance by up to half the sample spacing for points near the ellipse
+        dist(θ) = hypot(u - a * cos(θ), v - b * sin(θ))
+        θs = range(0, 2π; length = 20001)
+        θ0 = θs[argmin(dist.(θs))]
+        bf = minimum(dist, range(θ0 - step(θs), θ0 + step(θs); length = 20001))
+        @test abs(d) ≈ bf atol = 1e-7
         @test (d < 0) == ((u / a)^2 + (v / b)^2 < 1)
     end
     # Beam straight down onto a foil at z = 0; a small disk upstream at z = 2 with its
