@@ -81,6 +81,11 @@ end
 
 _fullmask(ds) = UInt16((1 << length(ds)) - 1)
 
+"Operator restricted to the beams `idx` (same order as `idx`)."
+Base.getindex(op::DepositionOperator, idx::AbstractVector{<:Integer}) =
+    DepositionOperator(op.target, op.ports[idx], op.dirs[idx], op.pts[idx], op.w[idx],
+                       op.mask[idx], op.dest[idx])
+
 function Base.show(io::IO, op::DepositionOperator)
     np = sum(length, op.w; init = 0)
     npart = sum(count(!=(_fullmask(ds)), M) for (M, ds) in zip(op.mask, op.dirs); init = 0)

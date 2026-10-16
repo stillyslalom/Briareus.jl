@@ -108,36 +108,96 @@ legendre_moments(values::AbstractVector, t::Target, elems::AbstractVector{<:Inte
     legendre_weights(t, elems; kwargs...) * values[elems]
 
 """
-    ylm_moments(values, target, elems; lmax = 8, axis = ẑ, center = 0, level = 2) -> Matrix
+    mode_index(l, m) -> Int
 
-Coefficients of real orthonormal spherical harmonics, `c[l+1, l+1+m]` for
-`-l ≤ m ≤ l`, with the polar axis along `axis` (field constant on each element,
-harmonics integrated over each facet). Use `mode_power` for rotation-invariant per-`l`
-amplitudes.
+Position of the real spherical harmonic `(l, m)` in the flat ordering used by
+`ylm_weights`: `l² + l + m + 1`, i.e. `(0,0), (1,-1), (1,0), (1,1), (2,-2), …`.
 """
-function ylm_moments(values::AbstractVector, t::Target, elems::AbstractVector{<:Integer};
-                     lmax::Integer = 8, axis = Vec3(0, 0, 1), center = zero(Vec3),
-                     level::Integer = 2)
+mode_index(l::Integer, m::Integer) = l^2 + l + m + 1
+
+"""
+    ylm_frame(axis) -> (ẑ, x̂, ŷ)
+
+Right-handed frame for spherical harmonics with the polar axis along `axis`. For the
+default `axis = ẑ` this is the chamber frame, so azimuthal mode phases are relative to
+`+x` (NIF: the direction of Switchyard 1).
+"""
+function ylm_frame(axis)
     ax = normalize(Vec3(axis))
+    if abs(ax[3]) > 1 - 1e-12
+        ex = Vec3(1, 0, 0)
+        ey = cross(ax, ex)
+        return ax, ex, ey
+    end
     ex = normalize(abs(ax[1]) < 0.9 ? cross(Vec3(1, 0, 0), ax) : cross(Vec3(0, 1, 0), ax))
-    ey = cross(ax, ex)
+    return ax, ex, cross(ax, ex)
+end
+
+"""
+    ylm_weights(target, elems; lmax = 8, axis = ẑ, center = 0, level = 2) -> Matrix
+
+Matrix `W` with `W * values[elems]` the coefficients of real orthonormal spherical
+harmonics in the flat `mode_index` ordering: `Y_l0 = P̄_l0`, `Y_lm ∝ cos mφ` for `m > 0`
+and `∝ sin |m|φ` for `m < 0`, without the Condon–Shortley phase, so `Y_11 ∝ +x` and
+`Y_1,-1 ∝ +y`. Each element's field is taken as constant over the
+element and the harmonics are integrated over its facets with exact sub-triangle solid
+angles (`4^level` per triangle); the covered solid angle is normalized to 4π.
+"""
+function ylm_weights(t::Target, elems::AbstractVector{<:Integer}; lmax::Integer = 8,
+                     axis = Vec3(0, 0, 1), center = zero(Vec3), level::Integer = 2)
+    ax, ex, ey = ylm_frame(axis)
     c = Vec3(center)
-    T = eltype(values)
-    C = zeros(T, lmax + 1, 2lmax + 1)
-    Ω = 0.0
+    W = zeros((lmax + 1)^2, length(elems))
     Y = zeros(lmax + 1, 2lmax + 1)
-    Ye = zeros(lmax + 1, 2lmax + 1)
-    for e in elems
-        fill!(Ye, 0)
+    Ω = 0.0
+    for (k, e) in enumerate(elems)
         for (dΩ, u) in _facet_samples(t, e, c, level)
             Ω += dΩ
             _real_ylm!(Y, lmax, dot(u, ax), atan(dot(u, ey), dot(u, ex)))
-            Ye .+= Y .* dΩ
+            for l in 0:lmax, m in -l:l
+                W[mode_index(l, m), k] += Y[l+1, lmax+1+m] * dΩ
+            end
         end
-        C .+= values[e] .* Ye
     end
-    return C .* (4π / Ω)       # normalize the covered solid angle to 4π
+    return W .* (4π / Ω)
 end
+
+"""
+    ylm_matrix(c, lmax) -> Matrix
+
+Flat coefficients (`mode_index` order) as the `(lmax+1) × (2lmax+1)` matrix
+`C[l+1, lmax+1+m]` used by `ylm_moments` and `mode_power` (unused entries zero).
+"""
+function ylm_matrix(c::AbstractVector, lmax::Integer)
+    C = zeros(eltype(c), lmax + 1, 2lmax + 1)
+    for l in 0:lmax, m in -l:l
+        C[l+1, lmax+1+m] = c[mode_index(l, m)]
+    end
+    return C
+end
+
+"""
+    ylm_moments(values, target, elems; lmax = 8, axis = ẑ, center = 0, level = 2) -> Matrix
+
+Coefficients of real orthonormal spherical harmonics, `c[l+1, l+1+m]` for
+`-l ≤ m ≤ l` (`m > 0`: cos mφ, `m < 0`: sin |m|φ), with the polar axis along `axis`
+(field constant on each element, harmonics integrated over each facet; see
+`ylm_weights`). Use `mode_power` for rotation-invariant per-`l` amplitudes.
+"""
+ylm_moments(values::AbstractVector, t::Target, elems::AbstractVector{<:Integer};
+            lmax::Integer = 8, kwargs...) =
+    ylm_matrix(ylm_weights(t, elems; lmax, kwargs...) * values[elems], lmax)
+
+"""
+    relative_mode_power(c, l) -> Real
+
+`Σₘ (c_lm / c_00)²` from flat coefficients `c` (`mode_index` order): the squared
+rotation-invariant amplitude of degree `l` relative to the mean. Smooth (no square
+root), so suited to objectives; `mode_power` is its square root. For an axisymmetric
+field it equals `(aₗ/a₀)² / (2l+1)`.
+"""
+relative_mode_power(c::AbstractVector, l::Integer) =
+    sum(abs2, (c[mode_index(l, m)] for m in -l:l)) / c[1]^2
 
 # Real orthonormal spherical harmonics via normalized associated Legendre recursion.
 function _real_ylm!(Y, lmax, μ, φ)
@@ -146,7 +206,7 @@ function _real_ylm!(Y, lmax, μ, φ)
     P = zeros(lmax + 1, lmax + 1)
     P[1, 1] = sqrt(1 / (4π))
     for m in 1:lmax
-        P[m+1, m+1] = -sqrt((2m + 1) / (2m)) * s * P[m, m]
+        P[m+1, m+1] = sqrt((2m + 1) / (2m)) * s * P[m, m]     # no Condon–Shortley phase
     end
     for m in 0:lmax-1
         P[m+2, m+1] = sqrt(2m + 3) * μ * P[m+1, m+1]

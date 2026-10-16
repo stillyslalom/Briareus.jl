@@ -519,4 +519,66 @@ end
     @test only(x for x in ry.rows if x.component === :plate && x.color === :omega1).exposure === :clear
 end
 
+
+@testset "spherical harmonics and 3D symmetry" begin
+    t = Target(Component(:s, sphere_mesh(1.0; ntheta = 40, nphi = 80), gold()))
+    es = collect(1:nelements(t))
+    W = ylm_weights(t, es; lmax = 4)
+    @test size(W) == (25, length(es))
+    # x and y components land in m = +1 and m = -1 (azimuth from +x)
+    u = [normalize(c) for c in t.elem_centroid]
+    cx = W * [1 + 0.1 * v[1] for v in u]
+    cy = W * [1 + 0.1 * v[2] for v in u]
+    @test cx[mode_index(1, 1)] > 0 && abs(cx[mode_index(1, -1)]) < 1e-6
+    @test cy[mode_index(1, -1)] > 0 && abs(cy[mode_index(1, 1)]) < 1e-6
+    # Y_11 = √(3/4π) x, so 0.1 x has c_11 = 0.1 √(4π/3) relative to c_00 = √(4π)
+    @test cx[mode_index(1, 1)] / cx[1] ≈ 0.1 / sqrt(3) rtol = 1e-3
+    # axisymmetric field: relative_mode_power = (a_l/a_0)²/(2l+1)
+    μ = [v[3] for v in u]
+    f = 1 .+ 0.1 .* legendre.(2, μ)
+    c = W * f
+    @test relative_mode_power(c, 2) ≈ 0.1^2 / 5 rtol = 5e-3
+    @test ylm_matrix(c, 4) ≈ ylm_moments(f, t, es; lmax = 4)
+
+    # NIF hohlraum: the quad set is D2-symmetric, so cos-type modes with l+m odd and
+    # sin-type modes with l+m even vanish; dropping a bundle breaks it
+    th = hohlraum(nz = 16, nphi = 24, capsule_ntheta = 12, capsule_nphi = 24)
+    q = [remake(b; aim = (0.0, 0.0, sign(b.port[3]) * (b.group in (:inner23, :inner30) ? 3.3 : 5.0)))
+         for b in nif_quads()]
+    p = GroupPointing(q; by = :quad, fields = (:power,))
+    sc = Scenario(th, q; observe = :capsule, parameterization = p)
+    cf = flux_ylm(evaluate(sc, q); lmax = 4)
+    forbidden = [(l, m) for l in 0:4 for m in -l:l if (m >= 0 ? isodd(l + m) : iseven(l + m))]
+    @test maximum(abs(cf[mode_index(l, m)]) for (l, m) in forbidden) < 1e-10 * cf[1]
+    keep = findall(b -> nif_bundle(b) != "11", q)
+    sub = subset(sc, keep)
+    cd = flux_ylm(evaluate(sub, q[keep]); lmax = 4)
+    @test relative_mode_power(cd, 1) > 1e-6
+    # subset ≡ zero power on the dropped quads in the full scenario
+    q0 = [nif_bundle(b) == "11" ? remake(b; power = 0.0) : b for b in q]
+    @test flux_ylm(evaluate(sc, q0); lmax = 4) ≈ cd rtol = 1e-12
+    # influence matrix: modes are linear in quad powers
+    M = influence_matrix(sc, q; lmax = 4)
+    P = [b.power for b in q0]
+    @test M * P ≈ cd rtol = 1e-10
+    # dropping also the bundle related to 11 by the 180° rotation about z restores that
+    # symmetry, which removes every odd-m mode (l = 1, m = 0 is allowed and stays tiny)
+    p11 = q[findfirst(x -> x.name == "Q11T", q)].port
+    partner = nif_bundle(q[findfirst(b -> b.port ≈ Vec3(-p11[1], -p11[2], p11[3]), q)])
+    @test partner == "34"
+    c2 = flux_ylm(evaluate(sc, [nif_bundle(b) in ("11", partner) ? remake(b; power = 0.0) : b
+                                for b in q]); lmax = 4)
+    @test maximum(abs(c2[mode_index(l, m)]) for l in 1:4 for m in -l:l if isodd(m)) < 1e-10 * c2[1]
+    @test abs(c2[mode_index(1, 0)]) < 1e-5 * c2[1]
+    # objective gradient and absolute power caps
+    obj = asymmetry_objective(components = ((1, 1) => 5.0,))
+    x0 = initial_parameters(sub.param)
+    g = ForwardDiff.gradient(x -> obj(evaluate(sub, x)), x0)
+    h = 1e-6
+    e1 = zeros(length(x0)); e1[3] = 1
+    @test g[3] ≈ (obj(evaluate(sub, x0 .+ h .* e1)) - obj(evaluate(sub, x0 .- h .* e1))) / 2h rtol = 1e-4
+    lo, hi = bounds(sub.param, x0; power = 0.5, power_max = 9.0)
+    @test all(hi .== 9.0) && all(lo .== 4.0)
+end
+
 end

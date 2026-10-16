@@ -115,19 +115,25 @@ end
 
 """
     bounds(p::GroupPointing, x0; z = 1.0, r = 1.0, phi = 1.0, defocus = 2.0,
-           power = 0.5, spot = 0.5, dlambda = 2.0) -> (lower, upper)
+           power = 0.5, spot = 0.5, dlambda = 2.0, power_min = 0.0,
+           power_max = Inf) -> (lower, upper)
 
 Box bounds around `x0`: `±z`, `±r`, `±phi`, `±defocus` mm, relative `±power`, `±spot`
-fractions, and `±dlambda` Å.
+fractions, and `±dlambda` Å. Power bounds are further clipped to the absolute limits
+`power_min ≤ P ≤ power_max` (TW per beam, e.g. a facility's per-quad capability).
 """
 function bounds(p::GroupPointing, x0 = initial_parameters(p); z = 1.0, r = 1.0, phi = 1.0,
-                defocus = 2.0, power = 0.5, spot = 0.5, dlambda = 2.0)
+                defocus = 2.0, power = 0.5, spot = 0.5, dlambda = 2.0, power_min = 0.0,
+                power_max = Inf)
     lo, hi = copy(x0), copy(x0)
     for g in eachindex(p.members), (fi, f) in enumerate(p.fields)
         i = _pidx(p, g, fi)
-        if f in (:power, :spot)
-            frac = f === :power ? power : spot
-            lo[i] = x0[i] * (1 - frac); hi[i] = x0[i] * (1 + frac)
+        if f === :power
+            lo[i] = max(x0[i] * (1 - power), power_min)
+            hi[i] = min(x0[i] * (1 + power), power_max)
+            lo[i] <= hi[i] || throw(ArgumentError("empty power bounds for group $(p.keys[g])"))
+        elseif f === :spot
+            lo[i] = x0[i] * (1 - spot); hi[i] = x0[i] * (1 + spot)
         else
             δ = f === :z ? z : f === :r ? r : f === :phi ? phi : f === :dlambda ? dlambda : defocus
             lo[i] = x0[i] - δ; hi[i] = x0[i] + δ
@@ -160,9 +166,12 @@ struct Scenario{P}
     observed::Vector{Int}
     response::Union{Nothing,Matrix{Float64}}
     moment_weights::Matrix{Float64}   # legendre_weights of the observed elements (lmax = 12)
+    ylm_weights::Matrix{Float64}      # ylm_weights of the observed elements (lmax = 6)
     lpi::Any                          # laser–plasma model (see apply_lpi)
     time::Float64
 end
+
+const _CACHED_YLM_LMAX = 6
 
 function Scenario(t::Target, beams::AbstractVector{<:Beam}; observe = nothing,
                   radiation::Bool = observe !== nothing, time = 0.0,
@@ -173,7 +182,28 @@ function Scenario(t::Target, beams::AbstractVector{<:Beam}; observe = nothing,
     model = radiation ? RadiationModel(t; viewfactor_kw...) : nothing
     R = (model !== nothing && !isempty(obs)) ? flux_response(model, obs; time) : nothing
     W = isempty(obs) ? zeros(0, 0) : legendre_weights(t, obs; lmax = _CACHED_LMAX)
-    return Scenario(t, parameterization, op, model, obs, R, W, lpi, Float64(time))
+    Y = isempty(obs) ? zeros(0, 0) : ylm_weights(t, obs; lmax = _CACHED_YLM_LMAX)
+    return Scenario(t, parameterization, op, model, obs, R, W, Y, lpi, Float64(time))
+end
+
+"""
+    subset(scenario, keep; parameterization = GroupPointing(kept beams; same fields))
+
+Scenario for the beams `keep` (indices into the scenario's beams) — e.g. after
+dropping a bundle — reusing the view factors, flux response and mode weights; only the
+deposition operator is restricted. The kept beams' template values (pointing, power)
+come from the scenario's parameterization; the default new parameterization keeps its
+fields and mirroring and groups by `group` (pass one to group by quad or beam).
+"""
+function subset(s::Scenario, keep::AbstractVector{<:Integer}; parameterization = nothing)
+    s.param isa GroupPointing || parameterization !== nothing ||
+        throw(ArgumentError("give a parameterization for a non-GroupPointing scenario"))
+    beams = s.param.template[keep]
+    param = parameterization === nothing ?
+            GroupPointing(beams; fields = Tuple(s.param.fields), mirror = s.param.mirror) :
+            parameterization
+    return Scenario(s.target, param, s.deposition[keep], s.model, s.observed, s.response,
+                    s.moment_weights, s.ylm_weights, s.lpi, s.time)
 end
 
 function Base.show(io::IO, s::Scenario)
@@ -260,14 +290,89 @@ function symmetry_objective(; modes = (2 => 1.0, 4 => 1.0), odd = 1.0, lmax::Int
         a = flux_moments(ev; lmax, center)
         J = sum(w * (a[l+1] / a[1])^2 for (l, w) in modes)
         odd > 0 && (J += odd * sum((a[l+1] / a[1])^2 for l in 1:2:lmax))
-        clip > 0 && (J += clip * clipped_fraction(ev)^2)
-        missed > 0 && (J += missed * missed_fraction(ev)^2)
-        if direct > 0 && all(n -> any(c -> c.name === n, ev.scenario.target.components), direct_names)
-            J += direct * power_fraction(ev, direct_names...)^2
-        end
+        J += _penalties(ev; clip, missed, direct, direct_names)
         drive === nothing || (J += drive_weight * (a[1] / drive - 1)^2)
         return J
     end
+end
+
+function _penalties(ev::Evaluation; clip, missed, direct, direct_names)
+    J = zero(ev.deposition.delivered)
+    clip > 0 && (J += clip * clipped_fraction(ev)^2)
+    missed > 0 && (J += missed * missed_fraction(ev)^2)
+    if direct > 0 && all(n -> any(c -> c.name === n, ev.scenario.target.components), direct_names)
+        J += direct * power_fraction(ev, direct_names...)^2
+    end
+    return J
+end
+
+"""
+    flux_ylm(ev; lmax = 6) -> Vector
+
+Real spherical-harmonic coefficients of the observed incident flux in the flat
+`mode_index` order (polar axis ẑ, azimuth from +x about TCC), from the scenario's cached
+`ylm_weights`. Use `ylm_matrix(c, lmax)` for the `C[l+1, lmax+1+m]` layout.
+"""
+function flux_ylm(ev::Evaluation; lmax::Integer = _CACHED_YLM_LMAX)
+    ev.flux === nothing && throw(ArgumentError("scenario has no radiation response"))
+    lmax <= _CACHED_YLM_LMAX || throw(ArgumentError("cached Y_lm weights reach lmax = $_CACHED_YLM_LMAX"))
+    return view(ev.scenario.ylm_weights, 1:(lmax+1)^2, :) * ev.flux
+end
+
+"""
+    asymmetry_objective(; modes = (1 => 1.0, 2 => 1.0, 3 => 1.0, 4 => 1.0), components = (),
+                        clip = 10.0, missed = 10.0, direct = 10.0, direct_names = (:capsule,),
+                        drive = nothing, drive_weight = 1.0)
+
+Objective for three-dimensional drive symmetry. For each `l => w` in `modes` it adds
+`w × relative_mode_power(c, l)` — the rotation-invariant power of all `2l+1` real
+harmonics of degree `l` over the mean (`(aₗ/a₀)²/(2l+1)` for an axisymmetric field) — and
+for each `(l, m) => w` in `components` adds `w × (c_lm/c_00)²`, so a particular
+azimuthal mode (e.g. the `l = 1, m = ±1` drift of a dropped bundle) can be weighted
+separately. Penalties for clipping, missing and direct capsule illumination and the
+`drive` target are as in `symmetry_objective`, with `drive` compared to the mean flux
+`c_00/√(4π)`.
+"""
+function asymmetry_objective(; modes = (1 => 1.0, 2 => 1.0, 3 => 1.0, 4 => 1.0),
+                             components = (), clip = 10.0, missed = 10.0, direct = 10.0,
+                             direct_names = (:capsule,), drive = nothing, drive_weight = 1.0)
+    lmax = maximum(vcat([l for (l, _) in modes], [lm[1] for (lm, _) in components], 0))
+    return function (ev::Evaluation)
+        c = flux_ylm(ev; lmax = max(lmax, 1))
+        J = zero(c[1])
+        for (l, w) in modes
+            J += w * relative_mode_power(c, l)
+        end
+        for ((l, m), w) in components
+            J += w * (c[mode_index(l, m)] / c[1])^2
+        end
+        J += _penalties(ev; clip, missed, direct, direct_names)
+        drive === nothing || (J += drive_weight * (c[1] / sqrt(4π) / drive - 1)^2)
+        return J
+    end
+end
+
+"""
+    influence_matrix(scenario, beams; lmax = 6) -> Matrix
+
+Mode response of the observed flux to each beam: column `b` is the real-harmonic
+coefficient vector (`mode_index` order) produced by beam `b` alone at 1 TW, with the
+beam's pointing, spot and focus. Without a laser–plasma model the flux is linear in
+beam powers, so the coefficients of any power assignment `P` are `M * P` — the basis of
+power-rebalancing solves and of tables of what losing each beam costs.
+"""
+function influence_matrix(s::Scenario, beams::AbstractVector{<:Beam};
+                          lmax::Integer = _CACHED_YLM_LMAX)
+    s.response === nothing && throw(ArgumentError("scenario has no radiation response"))
+    nb = length(beams)
+    M = zeros((lmax + 1)^2, nb)
+    Wy = view(s.ylm_weights, 1:(lmax+1)^2, :)
+    for i in 1:nb
+        unit = [remake(b; power = j == i ? 1.0 : 0.0) for (j, b) in enumerate(beams)]
+        dep = deposit(s.deposition, unit)
+        M[:, i] = Wy * (s.response * dep.element)
+    end
+    return M
 end
 
 """
