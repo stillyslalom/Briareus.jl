@@ -39,7 +39,9 @@ export LaserPlasmaModel, apply_lpi, Backscatter, CalibratedTransfer, linear_tran
        tabulated_transfer, lpi_summary
 export CBET, CH_IONS, ion_wave_amplitude, receiver_ratio, calibrate_cbet, cbet_gain, cbet_coupling, cbet_plasma, plasma_dispersion
 export UnconvertedColor, nif_unconverted, UnconvertedRow, UnconvertedReport, unconverted_light_check
+export TaLISRow, TaLISReport, talis_check, write_talis_csv, TALIS_SOURCE, TALIS_OUT_OF_SCOPE
 export BEAM_COLUMNS, write_beam_table, read_beam_table, read_csv, write_element_table, write_moments
+export VISRAD_SST_COLUMNS, VISRAD_PHASE_PLATES, visrad_spot, write_visrad_sst, read_visrad_sst, write_visrad_summary, read_visrad_summary, write_visrad_powers, read_visrad_powers, read_visrad_pulse_shape, read_visrad_table, visrad_legendre_fit, visrad_ylm_fit, write_visrad_kit, compare_visrad
 export legendre, legendre_moments, legendre_weights, solid_angle, ylm_moments, ylm_weights,
        ylm_matrix, ylm_frame, mode_index, relative_mode_power, mode_amplitude, mode_power, rms_nonuniformity
 export OrthoCamera, camera_from_port, render, radiance, line_of_sight_power
@@ -63,8 +65,10 @@ include("optimize.jl")
 include("history.jl")
 include("clearance.jl")
 include("keepout.jl")
+include("talis.jl")
 include("lpi.jl")
 include("io.jl")
+include("visrad.jl")
 include("cbet.jl")
 include("unconverted.jl")
 

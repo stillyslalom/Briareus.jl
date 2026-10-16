@@ -359,7 +359,90 @@ distances are measured orthogonal to the beam.
   applied. Briareus's interpretation, a lateral allowance of r tan 0.5° with r the
   distance from TCC, is an assumption to confirm.
 
-### VisRad formats
+#### Re-read of the source, and `talis_check` (2026-10-16)
+
+The document was re-read in full:
+https://lmf.llnl.gov/sites/lmf/files/2023-05/TCC-configuration-requirements.pdf. It is
+16 slides (PDF title "TaLIS Configuration requirements_22Oct2018"), with input from
+S. Ayers, D. Kalantar and D. LaTray. The rule slides (3–6) are text only, with no
+figures. **H** Details beyond the summary above:
+
+- **Origin of the rules.** Slides 3–6 come from the "TaLIS Configuration Assessments
+  Guidance Document". That document is not public; it was not found on LMF, OSTI or by
+  web search. The hardware rules are "Alignment Team requirements (Sept 2018)".
+- **0.5° wording.** "Clearance allowing for up to 0.5 degrees
+  metrology/alignment/positioning tolerance from the target component". No pivot or
+  formula is given. **H** (wording); how it is applied is still not found.
+- **Consequences.**
+  - Capture or 3ω clearance violated, or incidence > 70°: "must be assessed for
+    blow-by by the backscatter working group".
+  - 1ω not cleared: "evaluated for unconverted light management".
+  - Undimpled surface whose specular 1ω reflection comes within 20° of an open quad:
+    "requires additional review and may not be allowed".
+  - 1ω light that clears is "no concern". **H**
+- **TAS stay-in zone** (slide 14). During beam alignment the maximum target height in
+  TAS is about 38 mm.
+  - No component may extend more than 19 mm above the lowest aim point of an upper
+    beam, or more than 19 mm below the highest aim point of a lower beam.
+  - Violations "may require a different alignment sequence or ... beam selection".
+  - TAS withdrawal envelope: a cylinder of radius 60 mm (TARPOS 90-239, TANDM 90-348) or
+    29 mm (C-TARPOS 90-015), target height 38 mm. The cylinder axis is not stated.
+  - **H**
+- **Not on the summary slides.**
+  - The 4.45 mm 1ω 10% offset sits 0.35 mm inside the User Guide's 4.8 mm nominal edge.
+  - The User Guide (§5.6.2, 2024 rev.) words the curvature rule as "not larger than"
+    2 mm / 5 mm. TaLIS says "< 2 mm / < 5 mm"; Briareus uses the strict form.
+  - The User Guide adds: dimple half-side to radius "cannot be smaller than 0.25"
+    (printed "0.25 mm"); horizontal planar targets have conjugate beams in the same
+    hemisphere. **H**
+
+Other LMF material checked:
+- Brown Bag charts (LLNL-PRES-673980, "Other constraints"): unconverted light must be
+  managed against reflections from flat surfaces. No numbers.
+- Laser Performance Shot RI training deck (NP1314-C): describes TaLIS as a NIF Expert
+  Group and shows counter-propagating 1ω via refraction (N150917-005). No clearance
+  numbers.
+- NIF User Guide §3.3: TaLIS reviews configuration, unconverted light and debris.
+
+Context for the 0.5°, not the rule itself:
+- Alger et al., "NIF Target Assembly Metrology Methodology and Results" (LLNL-JRNL-431151,
+  Fusion Sci. Technol. 2010; https://www.osti.gov/servlets/purl/1227013). Ignition
+  targets were held to x, y, z ± 0.5 mm, roll ± 1.0° and pitch ± 0.25° relative to the
+  base, with about 0.02° metrology uncertainty. **H**
+  - These are rotations about the target base or mount, which supports offering a mount
+    pivot.
+- A NIF shroud flexure mechanism (https://www.osti.gov/servlets/purl/1343009) reportedly
+  has 0.5° rotational travel. **L**: from a search snippet only; the PDF did not
+  download cleanly.
+
+Implementation (`src/talis.jl`, `talis_check`):
+
+- **Tolerance.** Default: lateral allowance r tan(0.5°), r = |x − TCC|. Alternatives:
+  `pivot = :aim` (about the beam's aim point), `:max` (larger of the two), or a point
+  such as the component's mount. It is added linearly to the `clearance` error set:
+  pointing 50 µm + target 25 µm + hardware tolerance, and focus/(2F).
+  - That double counts the positioning part, conservatively.
+  - Angle rules get +0.5° on incidence, and −1° on specular-reflection angles (a tilt by
+    α turns a reflection by 2α).
+- **1ω footprint model.** *Derived*, **M**.
+  - Each beamlet's 10% 1ω region at its 3ω focal plane is a 22.7 mm square: the User
+    Guide's 22 mm, grown 0.35 mm per side so that its near edge is the TaLIS 4.45 mm.
+  - It is displaced along φ̂ to the beamlet's own side of the quad axis (User Guide
+    Fig. 4-12 top view).
+  - Away from that plane it is the cone converging to the 1ω focus 460 mm beyond the
+    3ω focus, with its centre on the chief ray from the lens centre 7.7 m upstream. The
+    centroid offset is then 15.8 mm at 2.05 mrad, consistent with the earlier estimate
+    of about 16 mm and 2.0 mrad.
+  - Near edge = 4.45 + 0.027 s mm: closer to the 3ω axis upstream of focus.
+  - Quad-level beams are expanded into their four LMF-table beamlets, so both sides
+    are lit.
+- **Rule interpretations to confirm.**
+  - Substrate edge = free mesh edge.
+  - "Diagnostics to 1ω": clearance 10 + 0.015 r mm from the 1ω footprint region, r from
+    TCC.
+  - Open quads default to all 48 FOAs.
+  - The "sombrero" dimpled LEH shield is modeled as a flat annulus flagged
+    `(:dimpled, r)`.
 
 All from the manual. **H**
 
@@ -398,4 +481,205 @@ design papers, OSTI full texts (library redirect), GitHub code search, User Guid
 - The NIF far-field halo or wing fraction.
 - The unconverted-light energy fraction as a function of pulse shape.
 - OMEGA EP port angles.
+
+## VisRad interchange formats (2026-10-16)
+
+Implemented in `src/visrad.jl`. Source: the VISRAD 21.1.1 manual,
+https://prism-cs.com/Manuals/VisRad/ (abbreviated `VR/`). All 311 linked pages were
+crawled and searched; the screenshots cited below were downloaded and read, since
+several format details exist only in them. Confidence: **H** stated in the text or
+legible in a screenshot; **M** inferred from a worked example; **L** assumption.
+
+### NIF SST pointing CSV
+
+- Exported by File | Export Laser Beam Data | NIF SST Beam Data. One row per beam:
+  aim point x, y, z about TCC and the defocus. "The position corresponds to that
+  without the defocus applied." (VR/files/laser_beam_data_files.html) **H**
+- Exact headers: `Beam`, `Pointing: Beam Aim Point X (mm)`, `… Y (mm)`, `… Z (mm)`,
+  `Pointing: Beam Aim Point Beam Defocus (mm)`. These are legible in the v21.0.0
+  import-mapping screenshot (VR/intro/images/updated_import_sst_file.jpg, also
+  VR/power_sources/images/import_laser_date_csv_custom.jpg), with Units = mm. **H**
+- On import, VisRad sets the reference frame to "Target Chamber" and turns a beam on or
+  off by whether the file has pointing data for it
+  (VR/power_sources/import_laser_beam_data_csv.html). **H**
+- NIF beam names are `B###`, e.g. B334, B421 in the same screenshot. **H**
+- Not documented: delimiter quoting, preamble lines, and whether the SST adds columns.
+  The reader finds the header by "Beam Aim Point" and ignores the rest.
+- No example data rows are published. The tests use synthetic rows.
+
+### Pointing and focus conventions
+
+- The Reference Point is the aim. The focus offset is measured along the beam
+  direction; a positive value moves the focus along the propagation
+  (VR/power_sources/set_laser_beam_pointing.html). This equals Briareus's `defocus`.
+  **H**
+- The worked example confirms the sign: offset −0.03 cm puts the focus 300 µm back
+  toward the port (VR/intro/nif/sample_nif_half_lasers.html). **H**
+- NIF CMT defocus: "a positive value moves the lens towards the target"
+  (VR/power_sources/import_nif_cmt_data_file.html). That is the same sign. **H**
+- VisRad's beam axis runs from the port position on the chamber wall through the
+  Reference Point. Briareus keeps the axis parallel to the port. The difference is
+  ≲ 1 µm at focus for mm-scale aims. **H** (the formula is stated; the size is
+  estimated)
+- Pointing refers to the 3ω (blue) cone. The 2ω and 1ω foci follow from the NIF optics
+  (VR/power_sources/nif_beam_params.html). **H**
+- VisRad's NIF chamber frame matches Briareus's: the sample problem views Q15T from
+  θ = 23.5°, φ = 78.75° (VR/intro/nif/sample_nif_3wrect_lasers.html), as in
+  `NIF_QUAD_NAMES`. **H**
+
+### Laser Beam Summary CSV
+
+- The export writes "the table data, as they are displayed in the table". Only shown
+  beams are included (unused beams can be hidden), in display order
+  (VR/files/laser_beam_data_files.html). **H**
+- The file can be re-imported as the "Standard" format, selectively: General, Position,
+  Energetics, Spatial profile (VR/power_sources/import_laser_beam_data_csv.html). **H**
+- v21 headers legible in VR/power_sources/images/laser_summary.jpg: `Cluster`,
+  `Beam ID`, `On/Off`, `Polar Ang`, `Azm Ang`, `Pt Ref-CS`, `Pt Geom`, `Pt Param-1/2/3`,
+  `Focus offset`, `TC Pt Pos-x/y/z`, `Powe…`. **H**
+- The later columns are cut off in the screenshot. The page lists them as quantities:
+  power, randomized power multiplier, DPR, profile model, R0 major/minor, minor-axis
+  rotation (VR/power_sources/laser_summary_table.html). Their exact headers are
+  unknown. **L**
+- An older layout (VR/intro/images/laser_summary.jpg) uses `Beam #` (numeric), `Pt Ref
+  CS`, `Pt CS`, `Pt X-1/2/3`, `Sp Prof` and `Ro`. The reader accepts both layouts.
+- **Units.**
+  - Distances are in cm (VR/intro/conventions.html; the Pointing tab shows "(cm)"). **H**
+  - Focus offset is in cm: the dialog shows `Offset: -0.148 (cm)`. **H**
+  - R0 is in µm. The spatial-profile dialog shows "(microns)", and the old table shows
+    `Ro = 50` with "default spot size 50 microns" in the v6.5.0 release notes. **H**
+  - The user can switch input widgets to mm in Preferences. Whether that changes the
+    CSV is unknown. **L**
+- **TC Pt Pos is the focus position, not the Reference Point.** The manual's example
+  rows show it. Beam_10 (58.85°, 5.94°), Beam_28 (58.85°, 318.06°) and Beam_31
+  (42.02°, 342°) all point at (0, 0, 0) in `Pb_Bi_foil` with focus offset −0.215 cm.
+  Their TC positions differ by 0.215 cm × (port₁ − port₂) to 4×10⁻⁵ cm, and all three
+  decode to one aim. Beams at the LEH origin with zero offset share one TC position, and
+  Beam_40 at +0.01 cm along the LEH axis sits 0.0100 cm from it. **M-H** (derived, but
+  checked to the table's 4-digit precision; this is a test in `test/visrad.jl`)
+- Pointing angles in cylindrical or spherical form are shown in degrees since v9.0.0, and
+  the chamber-frame TC positions were added to the table in v8.0.0
+  (VR/intro/revision_versions_800to1020.html). **H**
+- A time-dependent power shows as "T-<peak>". **H**
+- **Spot profile.**
+  - At focus, `I = I₀ exp(−[(x'/a)² + (y'/b)²]^{n/2})` with a₀, b₀ the 1/e major and
+    minor radii (VR/power_sources/set_laser_profile_props.html, eq. images
+    profile_eq_A/B). This is the same function as `SuperGaussianSpot`. **H**
+  - Spot size can be defined at 36.8 % (1/e), 50 % or 5 % of peak; the conversion is
+    r_f = a (ln 1/f)^{1/n}. **H**
+  - NIF CPP radii have been HWHM since v10.0.0 (VR/intro/revision_versions_800to1020.html). **H**
+  - Away from focus VisRad uses a(z) = a₀√((z/z_A)² + 1) and n(z) = n₀[1 + 0.2 z/z₀]. This
+    differs from Briareus's f-cone convolution. **H**
+- **Rotation.**
+  - The rotation is that of the minor axis from vertical, positive clockwise; zero has
+    the major axis "nearly horizontal", "coincident with the upper edge of the square
+    beam as it enters the target chamber" (same page; revision notes). **H**
+  - Which side "clockwise" is viewed from is not stated. Briareus assumes the beam's-eye
+    view (looking along propagation): ψ_major = 90° − ρ. `rotation_sense = :target`
+    gives 90° + ρ. **L — verify at work**
+  - NIF spots (major axis along φ̂) have ρ = 0 either way.
+- DPR ("On" splits an OMEGA beam into two cones 85 µm apart) is in the CSV. **H**
+  Briareus ignores it with a warning.
+
+### Phase-plate table
+
+- Table at VR/power_sources/phase_plate_params.html. Radii are in µm: the "(mm)"
+  headers are "µm" in the Symbol font. **H**
+  - OMEGA, OMEGA EP: 1/e radii.
+  - NIF CPPs: HWHM.
+  - LMJ: radii at 3 %.
+  - GEKKO: definition not stated; 1/e assumed. **L**
+- The OMEGA table has a "# radii at 5 %" footnote that no row references.
+- VisRad's NIF CPPs agree with Briareus's measured fits to ≤ 2 % in 1/e radius:
+  Rev3-Inner 890/660 µm HWHM with n = 7.6, against 886/656 µm with n = 7.37. **H**
+- Encoded as `VISRAD_PHASE_PLATES` and `visrad_spot`.
+
+### Power files
+
+- CSV layout: a `time (ns)` header, then one column per beam named `B115` (NIF; `BL115`
+  is accepted) or `Beam_10` (OMEGA). Rows hold times in ns and powers in TW
+  (VR/files/laser_beam_data_files.html). **H**
+- The import screenshot shows a NIF file `N121207-001-999_LEH_beam_powers.csv` with
+  `BL115…` columns (VR/power_sources/images/import_tdep_laser_powers.jpg). **H**
+- Negative powers are set to zero on import. For NIF the powers go to the blue cones
+  (VR/power_sources/import_tdep_beam_powers.html). **H**
+- Pulse-shape library files are two columns, W versus s
+  (VR/files/laser_pulse_shape_files.html). The column order is not stated; time first
+  is assumed. **L**
+- Beam-energy files: Beam, then kJ columns; only one column is read. **H** Not
+  implemented.
+
+### NIF CMT XML (not implemented)
+
+- Documented content (VR/power_sources/import_nif_cmt_data_file.html,
+  import_nif_cmt_pointing_data.html): **H**
+  - target STP file per mount
+  - beam on/off
+  - chamber Cartesian aim and defocus, in "cm", "mm" or "um"
+  - CPP names: "Rev3 Outer Cone 2W CPP", "Rev3 Inner Cone 2W CPP", "1.0 Rev1 Outer Cone
+    2W CPP", "1.0 Rev1a Inner Cone 2W CPP", "400um CPP", "No CPP"
+- Beams in the file are turned on in all three cones; others are turned off. **H**
+- The XML element names, nesting and unit encoding are not documented anywhere in the
+  manual (the TaLIS controller screenshot shows only the import list). No public sample
+  was found (web search 2026-10-16). Without the schema a reader would be guesswork, so
+  none was written; a sample CMT file from work would settle it.
+
+### Workspace `.vrw` (JSON) and `.bti` (not implemented)
+
+- `.vrw` is JSON since v21.0.0 and "can be readily modified using scripting tools"
+  (VR/files/workspace_files.html). **H**
+- The only key the manual names is "Beam cone F number" (v21.1.0 notes). The schema is
+  undocumented. **H** (that it is undocumented)
+- `.bti` (File | Export Laser Beam Data → Beam-Target Intersection Points) gives each
+  beam's intersection points in the component's and the chamber's frames, in cm and
+  degrees (VR/files/laser_target_intpts_file.html). **H**
+  - Format ID 2 adds the beam name and port angles.
+  - An optional block adds a(z), b(z), n(z), fSQ, DLW, DLH, M.
+  - The column layout is undocumented. Not implemented.
+
+### Result tables and fits
+
+- **Surface Element Properties.**
+  - Saved via File | Save Data for Object / All Objects / Selected Rows as
+    "multi-column ascii". `*.sed` files from a run have the same contents
+    (VR/results/display_surf_elem_table.html, VR/simulation_times/config_sim_params.html).
+    **H**
+  - Positions are in the component's own coordinates, (r, θ, φ) for spheres. **H**
+  - Headers in the screenshot: `Z (cm)`, `Azim. ang (deg)`, `Radius (cm)`,
+    `Surf Index`, `Emis T (eV)`, `Rad T (eV)`, `Flux In (TW/cm2)`,
+    `Flux Out (TW/cm2)`, `Pwr Src …` (VR/results/images/surf_elem_table.jpg). **H**
+  - The file's delimiter and header layout are undocumented, and the polar-angle
+    header for spheres is not shown. **L**
+- **Power Summary** (`*.psd`): object rows with `Surface Area (cm2)`,
+  `Incident Rad Pwr`, `Emitted Rad Pwr`, `Pwr Src Term`, `Laser Pwr Dep`,
+  `Direct Laser Pwr` (VR/results/images/power_summary_table.jpg). **H** The file
+  layout is undocumented. **L**
+- **Fits** (VR/results/display_surf_elem_table.html). **H**
+  - Legendre: least-squares fit `F(θ) = Σ Aₙ Pₙ(cos θ)` up to A4, each term selectable.
+  - Real spherical harmonics up to L = 4, with `N_LM = √((2L+1)(L−M)!/(L+M)!)`, √2 for
+    M ≠ 0, cos for M > 0 and sin for M < 0.
+  - This normalization gives Y₀₀ = 1, so A₀₀ is the mean; the example shows mean 9.736
+    and A₀₀ = 9.739.
+  - It also gives A_L0 = A_L/√(2L+1); the example shows 1.143·√5 = 2.556 against
+    A₂ = 2.563.
+  - Not stated: the fit weights and the Condon–Shortley phase. `visrad_legendre_fit`
+    and `visrad_ylm_fit` are unweighted and have no phase. **L**
+- In VisRad, the grid size of Sphere, Cylinder, Cylindrical Hohlraum and similar
+  objects is the outer wall; the inner wall lies inward by the Wall Thickness
+  (VR/intro/revision_history.html, v21.0.0). **H** The benchmark kit's README says so.
+
+### To verify with real files at work
+
+1. Export a Laser Beam Summary CSV from a NIF workspace with elliptical CPPs:
+   - the exact headers after "Power", and whether exponent and spot definition appear
+   - whether "TC Pt Pos" is the focus (as derived above)
+   - cm units for the focus offset with mm preferences set
+2. Set one elliptical beam to rotation +30° and check the spot overlay. Is the minor
+   axis clockwise from vertical when looking along the beam (Briareus's `:beam`) or
+   from TCC (`:target`)?
+3. Export a NIF SST file. Check the header strings, any preamble or extra columns, and
+   whether off beams are listed.
+4. Save Data for Object on a sphere. Check the delimiter, the header spellings
+   (especially the polar-angle column) and whether rows carry an index.
+5. Obtain a sample CMT XML to implement the CMT reader.
 

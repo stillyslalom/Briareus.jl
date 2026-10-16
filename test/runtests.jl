@@ -681,4 +681,6 @@ end
     @test sum(Fc[rim, wl]) ≈ 1 - Ftop rtol = 2e-3
 end
 
+include("talis.jl")
+include("visrad.jl")
 end

@@ -386,9 +386,7 @@ function clearance(t::Target, beams::AbstractVector{<:Beam}; targets,
     variants = Beam{Float64}[]
     owner = Int[]
     for (bi, b) in enumerate(beams)
-        bv = remake(b; aim = ForwardDiff.value.(b.aim), power = ForwardDiff.value(b.power),
-                    defocus = ForwardDiff.value(b.defocus), spot = _value_spot(b.spot),
-                    dlambda = ForwardDiff.value(b.dlambda))
+        bv = _value_beam(b)
         e1, e2 = spot_axes(bv)
         shifts = R > 0 ?
                  vcat([zero(Vec3)], [R * (cos(2π * j / nangles) * e1 + sin(2π * j / nangles) * e2)
@@ -507,8 +505,8 @@ function _envelope_union_distance(envs, wingc, x)
 end
 
 # Axial position (relative to best focus) where the beam axis first meets a target
-# component; the aim plane if it never does.
-function _landing(t::Target, env::BeamEnvelope, tgt_idx)
+# component; the aim plane if it never does (or `miss`, when given).
+function _landing(t::Target, env::BeamEnvelope, tgt_idx; miss = nothing)
     far = 4 * (t.scale + norm(env.aim)) + 1
     o = env.aim - far * env.k
     traveled = 0.0
@@ -521,7 +519,7 @@ function _landing(t::Target, env::BeamEnvelope, tgt_idx)
         traveled += τ
         traveled > 2far && break
     end
-    return dot(env.aim - env.focus, env.k)
+    return miss === nothing ? dot(env.aim - env.focus, env.k) : miss
 end
 
 function _subtri_vertices!(pts, a, b, c, level)
@@ -553,10 +551,7 @@ function beam_component_power(op::DepositionOperator, beams::AbstractVector{<:Be
         bi === nothing && throw(ArgumentError("beam $(b.name) port is not in the operator"))
         E = zeros(nelements(t))
         L = zeros(nc)
-        bv = remake(b; aim = ForwardDiff.value.(b.aim), power = ForwardDiff.value(b.power),
-                    defocus = ForwardDiff.value(b.defocus), spot = _value_spot(b.spot),
-                    dlambda = ForwardDiff.value(b.dlambda))
-        _deposit_beam!(E, L, op, bi, BeamFrame(bv))
+        _deposit_beam!(E, L, op, bi, BeamFrame(_value_beam(b)))
         for e in eachindex(E)
             M[i, t.elem_comp[e]] += E[e]
         end
@@ -567,6 +562,12 @@ end
 
 _value_spot(s::SuperGaussianSpot) =
     with_axes(s, ForwardDiff.value(s.a), ForwardDiff.value(s.b))
+
+# Float64 copy of a beam (strips ForwardDiff duals).
+_value_beam(b::Beam) =
+    remake(b; aim = ForwardDiff.value.(b.aim), power = ForwardDiff.value(b.power),
+           defocus = ForwardDiff.value(b.defocus), spot = _value_spot(b.spot),
+           dlambda = ForwardDiff.value(b.dlambda))
 
 """
     violations(report; status = (:fail, :review), clearance = -Inf) -> Vector{ClearanceRow}

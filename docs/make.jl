@@ -83,6 +83,7 @@ tutorial_page(file) = joinpath("tutorials", splitext(file)[1] * ".md")
             "Laser–plasma models" => "reference/lpi.md",
             "Shot review" => "reference/review.md",
             "Input and output" => "reference/io.md",
+            "VisRad interchange" => "reference/visrad.md",
         ],
     ],
     checkdocs = :exports,
