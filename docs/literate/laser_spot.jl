@@ -292,19 +292,19 @@ I0 = focal_profile(spot, P, 0.0)
 # ## Images
 #
 # [`render`](@ref) draws any per-element field as seen by an [`OrthoCamera`](@ref).
-# Here the camera looks down onto the central 2.5 mm of the foil, and the field is the
+# Here the camera looks down onto the central 2.5 mm of a foil, and the field is the
 # absorbed laser flux from [`laser_flux`](@ref), converted to W/cm² by
-# [`to_Wcm2`](@ref). The three images share one color scale, from zero to the peak at
-# best focus. Each 50 µm patch shows its own absorbed flux, so the edges of the spots
-# are drawn in steps of a patch. The beam at best focus is aimed at ``(0.3, -0.2)``
-# mm, the other two at the origin.
+# [`to_Wcm2`](@ref). For the images the foil is that central 2.5 mm alone, divided into
+# 20 µm patches rather than 50 µm. Each patch shows its own absorbed flux. The three
+# images share one color scale, from zero to the peak at best focus. The beam at best
+# focus is aimed at ``(0.3, -0.2)`` mm, the other two at the origin.
 
 camera = OrthoCamera((0, 0, -1); up = (0, 1, 0), width = 2.5, nx = 500)
+fine = Target(foil(:foil, (0, 0, 0), (0, 0, 1); width = 2.5, n = 125, two_sided = false))
 defocused = Beam("B"; theta = 0, phi = 0, power = P, spot, fnumber = F, defocus = -4.0)
-cases = ("best focus" => fast,
-         "4 mm from focus" => deposit(DepositionOperator(target, [defocused]), [defocused]),
-         "θ = 50°" => tilted_dep)
-images = [render(target, to_Wcm2.(laser_flux(d, target)) ./ 1e14, camera) for (_, d) in cases]
+cases = ("best focus" => beam, "4 mm from focus" => defocused, "θ = 50°" => tilted)
+fine_flux(b) = laser_flux(deposit(DepositionOperator(fine, [b]), [b]), fine)
+images = [render(fine, to_Wcm2.(fine_flux(b)) ./ 1e14, camera) for (_, b) in cases]
 peak = maximum(maximum(filter(isfinite, img)) for img in images)
 fig = Figure(size = (800, 300))
 for (i, (label, _)) in enumerate(cases)

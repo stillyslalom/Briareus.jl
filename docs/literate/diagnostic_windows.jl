@@ -23,6 +23,7 @@ using Briareus
 using CairoMakie
 using Printf
 CairoMakie.activate!(type = "png", px_per_unit = 2)
+include(joinpath(pkgdir(Briareus), "docs", "literate", "_plotting.jl"))   # figure helpers
 set_theme!(fontsize = 15, linewidth = 2.5)
 
 # ## A circular window on the wall
@@ -244,9 +245,10 @@ for g in (0.0, 0.05)
     end
 end
 
-# The radiation temperature on the capsule, the change in ``P_2`` and the ``m = 2``
-# amplitude ``\sqrt{c_{22}^2 + c_{2,-2}^2}/c_{00}`` of the capsule flux, and each
-# window's heat front as a fraction of its foil:
+# The change in the capsule's radiation temperature and in ``P_2`` from the hohlraum
+# without windows, the ``m = 2`` amplitude ``\sqrt{c_{22}^2 + c_{2,-2}^2}/c_{00}`` of
+# the capsule flux, and each window's heat front as a fraction of its foil. Without
+# windows the capsule's radiation temperature peaks at the value printed below:
 
 P2(h) = h.moments[3, :] ./ h.moments[1, :]
 P4(h) = h.moments[5, :] ./ h.moments[1, :]
@@ -254,16 +256,17 @@ m2(h) = hypot.(h.ylm[mode_index(2, 2), :], h.ylm[mode_index(2, -2), :]) ./ h.ylm
 palette = Makie.wong_colors()
 colors = Dict(1.7 => palette[6], 2.5 => palette[2], 3.6 => palette[1])
 fig = Figure(size = (820, 700))
-axT = Axis(fig[1, 1], ylabel = "capsule Tᵣ (eV)", title = "Radiation temperature")
+axT = Axis(fig[1, 1], ylabel = "ΔTᵣ (eV)", title = "Change in capsule Tᵣ")
 axP = Axis(fig[1, 2], ylabel = "ΔP₂/P₀ (%)", title = "Change in P₂ from the windows")
 axM = Axis(fig[2, 1], xlabel = "time (ns)", ylabel = "|c₂,±₂|/c₀₀ (%)", title = "m = 2 amplitude")
 axF = Axis(fig[2, 2], xlabel = "time (ns)", ylabel = "heat front / foil areal mass",
            title = "Heat front in window 1")
-lines!(axT, times, base.Tr, color = :black)
+hlines!(axT, [0.0], color = :black)
+hlines!(axP, [0.0], color = :black)
 for thickness in (1.7, 2.5, 3.6), g in (0.0, 0.05)
     h = runs[(thickness, g)]
     kw = (; color = colors[thickness], linestyle = g == 0 ? :solid : :dash)
-    g == 0 && lines!(axT, times, h.Tr; kw...)
+    lines!(axT, times, h.Tr .- base.Tr; kw...)
     lines!(axP, times, 100 .* (P2(h) .- P2(base)); kw...)
     lines!(axM, times, 100 .* m2(h); kw...)
     g == 0 && lines!(axF, times, h.front[:window_1]; kw...)
@@ -274,8 +277,9 @@ Legend(fig[3, 1:2],
        [[LineElement(color = :black)];
         [LineElement(color = colors[x]) for x in (1.7, 2.5, 3.6)];
         [LineElement(color = :gray30), LineElement(color = :gray30, linestyle = :dash)]],
-       ["no windows", "1.7 µm", "2.5 µm", "3.6 µm", "no gap", "50 µm open gap"],
+       ["no windows (reference)", "1.7 µm", "2.5 µm", "3.6 µm", "no gap", "50 µm open gap"],
        orientation = :horizontal, framevisible = false, nbanks = 1)
+@printf("capsule Tᵣ without windows: %.0f eV at the peak\n", maximum(base.Tr))
 fig
 
 # Without a gap the windows cost nothing until they burn through: an intact window
@@ -323,40 +327,49 @@ odd = maximum(abs(h.ylm[mode_index(l, m), k]) / h.ylm[1, k]
               for l in 1:4 for m in -l:l if isodd(m) for k in eachindex(times))
 @printf("largest odd-m |c_lm|/c₀₀ over the pulse: %.1e\n", odd)
 
-# The capsule flux at the end of the peak, without windows and with the 2.5 µm pair
-# and its gaps. The maps use an equal-area projection (azimuth across, ``\cos\theta`` up)
-# and show the relative deviation from the mean. They are drawn from the spherical
-# harmonics through ``l = 6``, which carry the low modes a capsule responds to, rather
-# than from the coarse capsule mesh. The windows face the capsule's waist at φ = 78° and
-# 258° (white circles):
+# The capsule flux at the end of the peak, as equal-area (Hammer) maps seen from
+# outside, centered between the windows, which face the capsule's waist at φ = 78° and
+# 258° (circles). The maps are drawn from the spherical harmonics through ``l = 6``,
+# which carry the low modes a capsule responds to, rather than from the coarse capsule
+# mesh. The top row shows the flux relative to its own mean, without windows and with
+# the 2.5 µm pair and its gaps. Without windows this untuned pointing already drives
+# the waist hot, so the bottom row subtracts that map and shows what the windows
+# change: on the left without gaps, on the right with them.
 
-function deviation_map(c; lmax = 6, φs = range(0, 360; length = 361), μs = range(-1, 1; length = 181))
+function ylm_field(c; lmax = 6)
     C = ylm_matrix(c, lmax)
     Y = zeros(lmax + 1, 2lmax + 1)
     mean = c[1] / sqrt(4π)                          # c₀₀ Y₀₀
-    return [(Briareus._real_ylm!(Y, lmax, μ, deg2rad(φ)); sum(C .* Y) / mean - 1) for φ in φs, μ in μs]
+    return (θ, φ) -> (Briareus._real_ylm!(Y, lmax, cosd(θ), deg2rad(φ)); 100 * (sum(C .* Y) / mean - 1))
 end
 k_end = findfirst(≈(9.4), times)
-maps = ["no windows" => deviation_map(base.ylm[:, k_end]),
-        "2.5 µm windows, 50 µm gaps" => deviation_map(h.ylm[:, k_end])]
-limit = maximum(maximum(abs, last(m)) for m in maps) * 100
-fig = Figure(size = (820, 380))
-for (i, (label, field)) in enumerate(maps)
-    ax = Axis(fig[1, i], title = label, xlabel = "φ (°)", ylabel = i == 1 ? "cos θ" : "",
-              xticks = 0:90:360, yticklabelsvisible = i == 1)
-    hm = heatmap!(ax, range(0, 360; length = 361), range(-1, 1; length = 181), 100 .* field;
-                  colormap = Reverse(:RdBu), colorrange = (-limit, limit))
-    scatter!(ax, [78, 258], [0, 0]; marker = :circle, markersize = 16, color = :transparent,
-             strokecolor = :white, strokewidth = 2.5)
-    i == 2 && Colorbar(fig[1, 3], hm, label = "H/H̄ − 1 (%)")
+φ0 = 168.0                                         # map center, between the windows
+deviation_map(h) = sphere_map(ylm_field(h.ylm[:, k_end]); φ0)
+base_map = deviation_map(base)
+change_map(h) = (m = deviation_map(h); (m[1], m[2], m[3] .- base_map[3]))
+rows = (["no windows" => base_map, "2.5 µm windows, 50 µm gaps" => deviation_map(h)],
+        ["2.5 µm windows, no gap" => change_map(runs[(2.5, 0.0)]),
+         "2.5 µm windows, 50 µm gaps" => change_map(h)])
+limits = [ceil(maximum(maximum(abs, filter(isfinite, m[3])) for (_, m) in row)) for row in rows]
+fig = Figure(size = (800, 470))
+for (i, row) in enumerate(rows), (j, (title, m)) in enumerate(row)
+    ax = sphere_axis(fig[i, j]; title, φ0)
+    sphere_heatmap!(ax, m; colormap = :balance, colorrange = (-limits[i], limits[i]))
+    mark_directions!(ax, [(90, 78), (90, 258)]; φ0, marker = :circle, markersize = 14,
+                     color = :transparent, strokecolor = :black, strokewidth = 2)
 end
+Colorbar(fig[1, 3]; colormap = :balance, colorrange = (-limits[1], limits[1]),
+         height = Relative(0.8), label = "H/⟨H⟩ − 1 (%)")
+Colorbar(fig[2, 3]; colormap = :balance, colorrange = (-limits[2], limits[2]),
+         height = Relative(0.8), label = "change from no windows (%)")
+rowgap!(fig.layout, 6)
 fig
 
 # Without windows this untuned pointing drives the waist hot (``P_2/P_0 \approx -12\%``,
 # which cone tuning would remove). With the windows open, the waist facing them turns
-# cold while the waist between them stays hot. The waist's mean excess drops, which is
-# the positive ``\Delta P_2``, and the pattern ``\cos 2(\phi - 78°)`` is the ``m = 2``
-# asymmetry.
+# cold while the waist between them gains, relative to the mean, and the poles gain
+# too. The waist's mean excess drops, which is the positive ``\Delta P_2``, and the
+# pattern ``\cos 2(\phi - 78°)`` is the ``m = 2`` asymmetry. The gaps add to it a little.
 
 # ### The window energy balance
 #

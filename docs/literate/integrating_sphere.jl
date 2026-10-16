@@ -199,32 +199,45 @@ end
 # Looking into the sphere from above through the port, an imager sees the lower
 # hemisphere of the wall. [`radiance`](@ref) converts radiosity to the Lambertian
 # radiance it records, and [`render`](@ref) draws any per-element field as an
-# [`OrthoCamera`](@ref) sees it. The radiance shows the heated spot, about four
-# elements across. The radiance is computed per element, and the left image smooths
-# the element values with a Gaussian 90 µm wide, about half an element, so that the
-# facets of this coarse mesh do not hide the spot's shape; the smoothing lowers the
-# peak by 7%. The other two images show the error of the incident flux of each element,
-# unsmoothed, on one color scale. With flat facets it alternates in sign from triangle
-# to triangle and is largest beside the heated spot; on the curved surface it is too
-# small to see.
+# [`OrthoCamera`](@ref) sees it. The port is cut from the mesh along element edges, so
+# its rim is a staircase; the images are cropped to the largest circle inside it.
+#
+# The radiance shows the heated spot, about four elements across. The radiance is
+# computed per element, and the left image smooths the element values with a Gaussian
+# 90 µm wide, about half an element, so that the facets of this coarse mesh do not
+# hide the spot's shape; the smoothing lowers the peak by 7%. The other two images
+# show the magnitude of the error of the incident flux, element by element and
+# unsmoothed, on one logarithmic scale, as in the plot of the wall flux above. With
+# flat facets it is ``10^{-3}`` to ``10^{-1}`` and varies from triangle to triangle;
+# on the curved surface it is round-off, near ``10^{-15}`` everywhere.
 
 camera = OrthoCamera((0, 0, -1); up = (0, 1, 0), width = 2.1, nx = 420)
 B = render_smoothed(curved.target, to_Wcm2.(radiance(curved.solution)) ./ 1e12, :wall, camera;
                     σ = 0.09)
-flux_error(s) = render(s.target, 100 .* (s.solution.H ./ s.H_exact .- 1), camera)
-fig = Figure(size = (800, 350))
-ax = Axis(fig[1, 1]; title = "radiance B/π", aspect = DataAspect())
-hidedecorations!(ax)
-hm = camera_image!(ax, B, camera; colormap = :inferno, colorrange = (0, maximum(filter(isfinite, B))))
+log_error(s) = log10.(max.(abs.(s.solution.H ./ s.H_exact .- 1), 1e-17))
+images = [B, render(flat.target, log_error(flat), camera), render(curved.target, log_error(curved), camera)]
+rim = minimum(inscribed_radius(img, camera) for img in images)
+foreach(img -> crop_to_circle!(img, camera, rim), images)
+@printf("images cropped to a radius of %.2f mm; the port's radius is %.2f mm\n", rim, R * sind(30))
+
+fig = Figure(size = (800, 360))
+panels = [Axis(fig[1, j]; title, aspect = DataAspect(), limits = (-1.05, 1.05, -1.05, 1.05))
+          for (j, title) in enumerate(("radiance B/π", "H error, flat facets", "H error, curved surface"))]
+foreach(hidedecorations!, panels)
+foreach(hidespines!, panels)
+hm = camera_image!(panels[1], images[1], camera; colormap = :inferno,
+                   colorrange = (0, maximum(filter(isfinite, images[1]))))
 Colorbar(fig[2, 1], hm; vertical = false, flipaxis = false, width = Relative(0.85),
          label = "B/π (10¹² W/cm²/sr)")
-for (j, (title, s)) in enumerate((("H, flat facets", flat), ("H, curved surface", curved)))
-    local ax = Axis(fig[1, j + 1]; title, aspect = DataAspect())
-    hidedecorations!(ax)
-    camera_image!(ax, flux_error(s), camera; colormap = :balance, colorrange = (-12.5, 12.5))
+for j in 2:3
+    camera_image!(panels[j], images[j], camera; colormap = :viridis, colorrange = (-16, -1))
 end
-Colorbar(fig[2, 2:3]; colormap = :balance, colorrange = (-12.5, 12.5), vertical = false,
-         flipaxis = false, width = Relative(0.6), label = "H/H_exact − 1 (%)")
+Colorbar(fig[2, 2:3]; colormap = :viridis, colorrange = (-16, -1), vertical = false,
+         flipaxis = false, width = Relative(0.6), ticks = -16:3:-1,
+         label = "log₁₀ |H/H_exact − 1|")
+for ax in panels
+    lines!(ax, Circle(Point2f(0, 0), rim); color = :black, linewidth = 1)
+end
 rowgap!(fig.layout, 6)
 fig
 

@@ -6,6 +6,8 @@ using Briareus
 using CairoMakie
 using LinearAlgebra
 
+set_theme!()   # every page starts from Makie's default theme, whatever ran before it
+
 """
     VertexField(target, values, component)
 
@@ -152,6 +154,38 @@ function sphere_map(t::Target, values, component::Symbol; nx = 640, φ0 = 0.0)
     return xs, ys, img
 end
 
+"""
+    sphere_map(f; nx = 640, φ0 = 0) -> (xs, ys, image)
+
+Equal-area (Hammer) map of a function `f(θ, φ)` of the direction, in degrees.
+"""
+function sphere_map(f::Function; nx = 640, φ0 = 0.0)
+    xs = range(-2sqrt(2), 2sqrt(2); length = nx)
+    ys = range(-sqrt(2), sqrt(2); length = nx ÷ 2)
+    img = fill(NaN, length(xs), length(ys))
+    for i in eachindex(xs), j in eachindex(ys)
+        θ, φ = inverse_hammer(xs[i], ys[j]; φ0)
+        isnan(θ) || (img[i, j] = f(θ, φ))
+    end
+    return xs, ys, img
+end
+
+"Radius (mm) of the largest circle about the center of a camera image with no blank pixel."
+function inscribed_radius(img, cam::OrthoCamera)
+    xs, ys = camera_axes(cam)
+    return minimum(hypot(xs[j], ys[end+1-i]) for i in axes(img, 1), j in axes(img, 2)
+                   if isnan(img[i, j]))
+end
+
+"Blank the pixels of a camera image outside the circle of `radius` (mm) about its center."
+function crop_to_circle!(img, cam::OrthoCamera, radius)
+    xs, ys = camera_axes(cam)
+    for i in axes(img, 1), j in axes(img, 2)
+        hypot(xs[j], ys[end+1-i]) >= radius && (img[i, j] = NaN)
+    end
+    return img
+end
+
 "An axis for a Hammer map, with a graticule every 30° in θ and 45° in φ."
 function sphere_axis(pos; title = "", φ0 = 0.0)
     ax = Axis(pos; title, aspect = DataAspect(), limits = ((-3.3, 2.9), (-1.48, 1.48)))
@@ -167,8 +201,8 @@ function sphere_axis(pos; title = "", φ0 = 0.0)
     lines!(ax, [Point2f(hammer(θ, φ0 + s * 179.999; φ0)) for s in (-1, 1) for θ in (s < 0 ? (0:180) : (180:-1:0))];
            color = :black, linewidth = 0.8)
     for φ in φ0 .+ (-135:45:135)
-        text!(ax, Point2f(hammer(90, φ; φ0)) .+ Point2f(0, 0.02); text = "$(Int(mod(φ, 360)))°",
-              align = (:center, :bottom), fontsize = 10, color = (:black, 0.8))
+        text!(ax, Point2f(hammer(90, φ; φ0)) .- Point2f(0, 0.1); text = "$(Int(mod(φ, 360)))°",
+              align = (:center, :top), fontsize = 10, color = (:black, 0.8))
     end
     for θ in 30:30:150
         text!(ax, Point2f(hammer(θ, φ0 - 179.999; φ0)) .- Point2f(0.04, 0); text = "$(θ)°",

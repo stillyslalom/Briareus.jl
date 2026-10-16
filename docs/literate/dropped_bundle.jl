@@ -78,8 +78,16 @@ quads = aimed.(nif_quads(power = 8.0))
 # factors, the linear response of the capsule's incident flux to the power each element
 # absorbs, and the mode weights of the capsule. Its parameterization here gives each
 # quad its own power.
+#
+# The deposition operator is sampled more coarsely than its defaults, to keep the
+# optimizations below quick: points no farther apart than 0.6 of the spot's smaller
+# semi-axis (rather than 0.3), refined only within 0.5 mm of each beam's footprint
+# (rather than 2 mm; no aim moves by more than 0.3 mm here), and one point per
+# triangle elsewhere. That cuts the operator to a fifth of its points and changes the
+# modes below in the fourth digit.
 
 scenario = Scenario(target, quads; observe = :capsule,
+                    deposition_kw = (; resolution = 0.6, reach = 0.5, level = 0),
                     parameterization = GroupPointing(quads; by = :quad, fields = (:power,)))
 full = flux_ylm(evaluate(scenario, quads); lmax = 4)
 show_modes(label, c) = @printf("%-24s ε₁ %6.3f%%  ε₂ %6.3f%%  ε₃ %6.3f%%  ε₄ %6.3f%%  drive %.4f\n",
@@ -142,8 +150,10 @@ end
 # way. The clearance is judged as a shot review judges it, on the worst case:
 # [`clearance`](@ref) grows each beam's envelope (its contour at 1% of the peak,
 # spread by the f-cone) by 50 µm of pointing error and 25 µm of target positioning,
-# adds ±1 mm of focus error, and reports the smallest distance to the hardware.
-# The foil's distance is a design choice; two are tried.
+# adds ±1 mm of focus error, and reports the smallest distance to the hardware. That
+# distance is exact; only the power on the hardware, not used here, depends on how
+# finely the error set and the spot are sampled, so both are sampled coarsely. The
+# foil's distance is a design choice; two are tried.
 
 function backlighter_bundles(φ_los, d)
     n = [cosd(φ_los), sind(φ_los), 0.0]                    # toward the detector
@@ -156,7 +166,7 @@ function backlighter_bundles(φ_los, d)
         all(<(70), incidence) || continue
         report = clearance(scene, [remake(b; aim = center) for b in qs];
                            targets = (:backlighter,), hardware = (:wall, :cap_top, :cap_bottom, :capsule),
-                           peak_fraction = 0.01, wings = [], nangles = 8)
+                           peak_fraction = 0.01, wings = [], nangles = 4, nspot = 15)
         push!(found, (bundle = k, incidence, clearance = minimum(r -> r.clearance, report.rows)))
     end
     return found
@@ -401,16 +411,18 @@ fit = optimize_pointing(power_only, misfit; x0 = P0, lower = fill(0.0, length(P0
 # around it, and minimize mode 1 strongly and modes 2–4 weakly while holding the drive
 # at its value after the bundle is freed. [`asymmetry_objective`](@ref) builds that
 # objective and adds penalties for light clipped by the entrance holes and light
-# striking the capsule.
+# striking the capsule. Each optimization here stops after a fixed number of L-BFGS-B
+# iterations, 40 and then 20, short of full convergence but well past the point where
+# mode 1 is gone.
 
 repoint = subset(scenario, keep; parameterization = GroupPointing(remaining; by = :quad,
                                                                   fields = (:phi, :z)))
 x0 = initial_parameters(repoint.param)
 lower, upper = bounds(repoint.param, x0; phi = 0.3, z = 0.3)
-goals = (modes = (1 => 50.0, 2 => 1.0, 3 => 1.0, 4 => 1.0), drive = c_free[1] / sqrt(4π),
+goals = (modes = (1 => 200.0, 2 => 1.0, 3 => 1.0, 4 => 1.0), drive = c_free[1] / sqrt(4π),
          drive_weight = 10.0)
 first_try = optimize_pointing(repoint, asymmetry_objective(; goals...); x0, lower, upper,
-                              iterations = 150)
+                              iterations = 40)
 show_modes("bundle 11 freed", c_free)
 show_modes("re-pointed", flux_ylm(evaluate(repoint, first_try.x); lmax = 4))
 @printf("clipped %.1e of the delivered power\n", clipped_fraction(evaluate(repoint, first_try.x)))
@@ -435,12 +447,13 @@ function cap_review(beams)
 end
 review_line(label, r) = @printf("%-22s nominal %6.3f mm   worst case %6.3f mm   cap power ≤ %.1e   %d fail\n",
                                 label, r.nominal, r.worst, r.power, r.fail)
-review_line("48 quads", cap_review(quads))
+review_48 = cap_review(quads)
+review_line("48 quads", review_48)
 review_line("re-pointed", cap_review(first_try.beams))
 
 # The original pointing clears the caps by 66 µm in the worst case. The re-pointed
 # quads have used up that margin: in the worst case their 1% contours overlap the
-# entrance-hole lips, several of them fail, and up to a few times 10⁻⁴ of a beam's
+# entrance-hole lips, several of them fail, and up to several times 10⁻⁴ of a beam's
 # power lands on a cap.
 #
 # The optimizer has to see the same worst case. An [`ApertureKeepOut`](@ref) computes
@@ -452,21 +465,21 @@ review_line("re-pointed", cap_review(first_try.beams))
 keepout = ApertureKeepOut(target; peak_fraction = 0.01, minimum = 0.01, weight = 1e3)
 from_keepout = aperture_clearance(keepout, quads)
 @printf("worst-case clearance from the keep-out %.3f mm, from clearance %.3f mm\n",
-        minimum(from_keepout), cap_review(quads).worst)
+        minimum(from_keepout), review_48.worst)
 
 second_try = optimize_pointing(repoint, asymmetry_objective(; goals..., keepout); x0,
-                               lower, upper, iterations = 150)
+                               lower, upper, iterations = 20)
 repointed = evaluate(repoint, second_try.x)
 c_repointed = flux_ylm(repointed; lmax = 4)
 show_modes("re-pointed, keep-out", c_repointed)
 review_line("re-pointed, keep-out", cap_review(second_try.beams))
 
-# Re-pointing within the clearance still removes nearly all of mode 1, to under ten
-# kilometres per second of hot-spot velocity, and the drive stays within 0.4% of its
-# value after the bundle is freed. The worst-case clearance comes out at 8 µm rather
-# than the 10 µm asked for: the penalty is soft, and the keep-out's distance differs
-# from the clearance check's by a few micrometres. The flux on the capsule before and
-# after re-pointing, on the same maps and color scales as above:
+# Re-pointing within the clearance still removes nearly all of mode 1, to a few
+# kilometres per second of hot-spot velocity, and the drive stays within 0.3% of its
+# value after the bundle is freed. The worst-case clearance comes out at 14 µm rather
+# than exactly the 10 µm asked for: the penalty is soft, and the keep-out's distance
+# differs from the clearance check's by a few micrometres. The flux on the capsule
+# before and after re-pointing, on the same maps and color scales as above:
 
 fig = Figure(size = (800, 470))
 for (j, (title, H, c)) in enumerate((("bundle 11 freed", H_free, c_free),
@@ -483,9 +496,9 @@ rowgap!(fig.layout, 6)
 fig
 
 # Re-pointing removes the warm side around the freed ports. What remains of the change
-# from the 48-quad drive is in the higher modes, which the objective weighted fifty
-# times less than mode 1: the re-pointed drive trades the dipole for a slightly weaker
-# ``l = 2`` and a stronger ``l = 3``.
+# from the 48-quad drive is in the higher modes, which the objective weighted two
+# hundred times less than mode 1: the re-pointed drive trades the dipole for a
+# stronger ``l = 3``, while ``l = 2`` is as it was with all 48 quads.
 
 # ### Independent check
 #
