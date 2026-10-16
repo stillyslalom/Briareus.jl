@@ -205,7 +205,7 @@ end
 
 # Area of the patch obtained by projecting the flat triangle (a, b, c) onto the surface.
 # Radial projection maps a flat triangle onto a spherical triangle exactly, whose area is
-# its solid angle times R²; on a cylinder the patch is integrated over 16 sub-triangles.
+# its solid angle times R².
 function _curved_area(s::SphereSurface, a, b, c)
     x, y, z = a - s.center, b - s.center, c - s.center
     lx, ly, lz = norm(x), norm(y), norm(z)
@@ -213,14 +213,59 @@ function _curved_area(s::SphereSurface, a, b, c)
     den = lx * ly * lz + dot(x, y) * lz + dot(x, z) * ly + dot(y, z) * lx
     return 2 * atan(num, den) * s.radius^2
 end
-function _curved_area(s::CylinderSurface, a, b, c; level = 2)
-    if level == 0
-        pa, pb, pc = first(surface_point(s, a)), first(surface_point(s, b)), first(surface_point(s, c))
-        return norm(cross(pb - pa, pc - pa)) / 2
+
+# On a cylinder the projection keeps the axial coordinate z and maps each point to its
+# azimuth φ about the axis, so the patch has area R ∬ dφ dz = R |∮ z dφ| (Green's theorem
+# around the projected edges). Along a straight edge P → Q, with u(t) = u_P + tΔ the part
+# of the point perpendicular to the axis, dφ/dt = C/|u|² where C = (u_P × u_Q)·axis, and
+# z is linear in t, so
+#     ∫ z dφ = z_P Δφ + (z_Q - z_P) T,   T = ∫₀¹ t C dt / (E + Bt + At²),
+# with A = |Δ|², B = 2u_P·Δ, E = |u_P|² and Δφ the angle from u_P to u_Q. In closed form,
+# with G = |u_Q|² - |u_P|² = Δ·(u_Q + u_P) = A + B,
+#     T = Δφ/2 + [C log(1 + G/E) - G Δφ] / 2A.
+# For a chord of the circle (both ends on the surface, as in `cylinder_mesh`) G = 0 and
+# ∫ z dφ is the trapezoid (z_P + z_Q)Δφ/2: the curved patch of a triangle with its
+# vertices on the cylinder has R times the area of the straight triangle in (φ, z).
+# Writing B through G avoids the cancellation in 2u_P·Δ (terms of size R|Δ| summing to
+# |Δ|²) that would cost a short chord ε R/|Δ| of relative accuracy. The bracket still
+# loses digits ~|B|/A for short edges seen obliquely from the axis; there the poles of
+# the integrand lie far from [0, 1] and Gauss–Legendre is exact to round-off.
+const _GL16 = let n = 16
+    F = eigen(SymTridiagonal(zeros(n), [k / sqrt(4k^2 - 1) for k in 1:n-1]))
+    (; x = (F.values .+ 1) ./ 2, w = F.vectors[1, :] .^ 2)          # on [0, 1], Σw = 1
+end
+
+# ∫ z dφ along the edge P → Q: perpendicular parts u_P, u_Q, the edge's perpendicular
+# part Δ and axial rise dz (taken from Q - P directly, which is exact for nearby points;
+# differencing u_Q - u_P would carry the ε R rounding of each projection), z_P.
+function _cylinder_edge_integral(uP, uQ, Δ, zP, dz, ax)
+    C = dot(cross(uP, Δ), ax)          # = (u_P × u_Q)·axis, without its cancellation
+    Δφ = atan(C, dot(uP, uQ))
+    A = dot(Δ, Δ)
+    A == 0 && return zP * Δφ
+    E = dot(uP, uP)
+    G = dot(Δ, uQ + uP)
+    B = G - A
+    T = if abs(B) <= 16A
+        Δφ / 2 + (C * log1p(G / E) - G * Δφ) / 2A
+    else
+        sum(w * x * C / (E + B * x + A * x^2) for (x, w) in zip(_GL16.x, _GL16.w))
     end
-    ab, bc, ca = (a + b) / 2, (b + c) / 2, (c + a) / 2
-    return _curved_area(s, a, ab, ca; level = level - 1) + _curved_area(s, ab, b, bc; level = level - 1) +
-           _curved_area(s, ca, bc, c; level = level - 1) + _curved_area(s, ab, bc, ca; level = level - 1)
+    return zP * Δφ + dz * T
+end
+
+function _curved_area(s::CylinderSurface, a, b, c)
+    ax = s.axis
+    perp(d) = d - dot(d, ax) * ax
+    ua, ub, uc = perp(a - s.origin), perp(b - s.origin), perp(c - s.origin)
+    ab, bc, ca = b - a, c - b, a - c
+    # Σ Δφ = 0 around the patch, so z may be measured from its first vertex; that keeps
+    # a small patch far from z = 0 from cancelling z Δφ terms of size |z| Δφ
+    zb, zc = dot(ab, ax), dot(c - a, ax)
+    acc = _cylinder_edge_integral(ua, ub, perp(ab), 0.0, zb, ax) +
+          _cylinder_edge_integral(ub, uc, perp(bc), zb, dot(bc, ax), ax) +
+          _cylinder_edge_integral(uc, ua, perp(ca), zc, dot(ca, ax), ax)
+    return s.radius * abs(acc)
 end
 
 """

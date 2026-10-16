@@ -678,7 +678,7 @@ end
                 Component(:top, disk_mesh(Rc, L; nr = 4, nphi = 24, up = false), gold();
                           surface = DiskSurface(center = (0, 0, L))))
     @test sum(tc.elem_area[elements(tc, :bot)]) ≈ π rtol = 1e-12
-    @test sum(tc.elem_area[elements(tc, :wall)]) ≈ 2π * Rc * L rtol = 1e-3
+    @test sum(tc.elem_area[elements(tc, :wall)]) ≈ 2π * Rc * L rtol = 1e-14
     Fc = view_factors(tc)
     wl, bt, tp = elements(tc, :wall), elements(tc, :bot), elements(tc, :top)
     X = 1 + (1 + (Rc / L)^2) / (Rc / L)^2
