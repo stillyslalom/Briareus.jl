@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Freeing a bundle for radiography · Briareus.jl</title><meta name="title" content="Freeing a bundle for radiography · Briareus.jl"/><meta property="og:title" content="Freeing a bundle for radiography · Briareus.jl"/><meta property="twitter:title" content="Freeing a bundle for radiography · Briareus.jl"/><meta name="description" content="Documentation for Briareus.jl."/><meta property="og:description" content="Documentation for Briareus.jl."/><meta property="twitter:description" content="Documentation for Briareus.jl."/><script data-outdated-warner src="../../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.63.2/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../assets/documenter.js"></script><script src="../../search_index.js"></script><script src="../../siteinfo.js"></script><script src="../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../../">Briareus.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../../">Home</a></li><li><span class="tocitem">Tutorials</span><ul><li><a class="tocitem" href="../laser_spot/">Laser spot on a foil</a></li><li><a class="tocitem" href="../integrating_sphere/">Integrating sphere</a></li><li class="is-active"><a class="tocitem" href>Freeing a bundle for radiography</a><ul class="internal"><li><a class="tocitem" href="#Modes-on-the-capsule"><span>Modes on the capsule</span></a></li><li><a class="tocitem" href="#The-hohlraum-and-its-pointing"><span>The hohlraum and its pointing</span></a></li><li><a class="tocitem" href="#The-symmetry-of-the-ports"><span>The symmetry of the ports</span></a></li><li><a class="tocitem" href="#Which-bundles-can-drive-the-backlighter"><span>Which bundles can drive the backlighter</span></a></li><li><a class="tocitem" href="#What-each-bundle-costs"><span>What each bundle costs</span></a></li><li><a class="tocitem" href="#Freeing-bundle-11"><span>Freeing bundle 11</span></a></li><li><a class="tocitem" href="#Remedy-1:-free-the-partner-as-well"><span>Remedy 1: free the partner as well</span></a></li><li><a class="tocitem" href="#Remedy-2:-rebalance-the-powers"><span>Remedy 2: rebalance the powers</span></a></li><li><a class="tocitem" href="#Remedy-3:-re-point"><span>Remedy 3: re-point</span></a></li><li><a class="tocitem" href="#What-this-checks"><span>What this checks</span></a></li></ul></li></ul></li><li><span class="tocitem">Explanation</span><ul><li><a class="tocitem" href="../../explanation/verification-validation/">Verification and validation</a></li></ul></li><li><span class="tocitem">Reference</span><ul><li><a class="tocitem" href="../../reference/geometry/">Geometry and targets</a></li><li><a class="tocitem" href="../../reference/beams/">Beams and facilities</a></li><li><a class="tocitem" href="../../reference/deposition/">Laser deposition</a></li><li><a class="tocitem" href="../../reference/radiation/">Radiation</a></li><li><a class="tocitem" href="../../reference/analysis/">Mode analysis</a></li><li><a class="tocitem" href="../../reference/optimization/">Optimization</a></li><li><a class="tocitem" href="../../reference/lpi/">Laser–plasma models</a></li><li><a class="tocitem" href="../../reference/review/">Shot review</a></li><li><a class="tocitem" href="../../reference/io/">Input and output</a></li><li><a class="tocitem" href="../../reference/visrad/">VisRad interchange</a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Tutorials</a></li><li class="is-active"><a href>Freeing a bundle for radiography</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Freeing a bundle for radiography</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/stillyslalom/Briareus.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/stillyslalom/Briareus.jl/blob/main/docs/literate/dropped_bundle.jl" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Freeing-a-bundle-for-radiography"><a class="docs-heading-anchor" href="#Freeing-a-bundle-for-radiography">Freeing a bundle for radiography</a><a id="Freeing-a-bundle-for-radiography-1"></a><a class="docs-heading-anchor-permalink" href="#Freeing-a-bundle-for-radiography" title="Permalink"></a></h1><p>A radiograph of an imploding capsule needs a backlighter, and on NIF the backlighter&#39;s lasers come out of the drive. Freeing one bundle (two quads of four beams, one quad in each hemisphere, sharing an amplifier chain) leaves 46 quads to drive the hohlraum, and the capsule sees the asymmetry of the missing ports. On a layered DT ignition shot there is little margin for it. A mode-1 asymmetry of the drive, a flux difference between opposite sides of the capsule, pushes the hot spot sideways at about 100 km/s for each percent of mode-1 flux (MacGowan et al., High Energy Density Physics 40, 100944, 2021), and the drive itself is the scarcest resource of the shot.</p><p>Which bundle can be freed is set first by the radiograph: its quads must reach a backlighter foil placed across the target from the detector, perpendicular to the line of sight, without their light touching the hohlraum on the way. This tutorial finds the bundles that can serve each of two equatorial lines of sight, ranks them by the symmetry they cost, and compares three ways to win that symmetry back: freeing the bundle&#39;s symmetric partner as well, rebalancing the powers of the remaining quads, and re-pointing them within the clearance the entrance holes allow. It introduces three-dimensional mode analysis with real spherical harmonics, the symmetry of the NIF ports, scenarios on a subset of the beams, the influence matrix, optimization with automatic-differentiation gradients, and beam-clearance checks.</p><pre><code class="language-julia hljs">using Briareus
+using CairoMakie
+using LinearAlgebra
+using Printf
+CairoMakie.activate!(type = &quot;png&quot;)</code></pre><h2 id="Modes-on-the-capsule"><a class="docs-heading-anchor" href="#Modes-on-the-capsule">Modes on the capsule</a><a id="Modes-on-the-capsule-1"></a><a class="docs-heading-anchor-permalink" href="#Modes-on-the-capsule" title="Permalink"></a></h2><p>Expand the incident flux on the capsule in real spherical harmonics,</p><p class="math-container">\[H(\theta, \phi) = \sum_{l, m} c_{lm}\, Y_{lm}(\theta, \phi),\]</p><p>where <span>$Y_{lm}$</span> with <span>$m &gt; 0$</span> varies as <span>$\cos m\phi$</span> and with <span>$m &lt; 0$</span> as <span>$\sin |m|\phi$</span>; <span>$Y_{11}$</span> points along <span>$+x$</span> and <span>$Y_{1,-1}$</span> along <span>$+y$</span>. <a href="../../reference/optimization/#Briareus.flux_ylm-Tuple{Evaluation}"><code>flux_ylm</code></a> returns the coefficients, in the order of <a href="../../reference/analysis/#Briareus.mode_index-Tuple{Integer, Integer}"><code>mode_index</code></a>. The size of mode <span>$l$</span> relative to the mean is</p><p class="math-container">\[\epsilon_l = \frac{1}{c_{00}}\sqrt{(2l + 1)\sum_m c_{lm}^2},\]</p><p>computed by <a href="../../reference/analysis/#Briareus.mode_amplitude-Tuple{AbstractVector, Integer}"><code>mode_amplitude</code></a>. For a field with azimuthal symmetry about any axis this is the familiar Legendre ratio <span>$|a_l/a_0|$</span>; for <span>$l = 1$</span> it is the fractional amplitude <span>$\epsilon$</span> of a flux <span>$1 + \epsilon\cos\gamma$</span>, where <span>$\gamma$</span> is the angle from the direction of the asymmetry.</p><h2 id="The-hohlraum-and-its-pointing"><a class="docs-heading-anchor" href="#The-hohlraum-and-its-pointing">The hohlraum and its pointing</a><a id="The-hohlraum-and-its-pointing-1"></a><a class="docs-heading-anchor-permalink" href="#The-hohlraum-and-its-pointing" title="Permalink"></a></h2><p>The hohlraum is 10.1 mm long with a radius of 2.875 mm and 3.1 mm laser entrance holes, around a capsule of radius 0.9 mm. Its wall, end caps, entrance holes and capsule carry their exact cylindrical, planar and spherical surfaces (see the <a href="../integrating_sphere/#Integrating-sphere">Integrating sphere</a> tutorial). <a href="../../reference/beams/#Briareus.nif_quads-Tuple{}"><code>nif_quads</code></a> gives the 48 quads, at 8 TW each, with their measured phase-plate spots. The outer quads are aimed on the hohlraum axis near the entrance-hole planes, at <span>$z = \pm 5.01$</span> mm (50° cone) and <span>$\pm 5.20$</span> mm (44.5°); the inner quads at <span>$z = \pm 3.63$</span> mm (30°) and <span>$\pm 3.09$</span> mm (23.5°), displaced 0.60 and 1.09 mm from the axis away from their own port, across the hohlraum.</p><pre><code class="language-julia hljs">target = hohlraum(length = 10.1, radius = 2.875, leh_radius = 1.55, capsule_radius = 0.9,
+                  wall = gold(albedo = 0.85, conversion = 0.8))
+pointing = Dict(:outer50 =&gt; (0.0, 5.01), :outer44 =&gt; (0.0, 5.20),
+                :inner30 =&gt; (0.60, 3.63), :inner23 =&gt; (1.09, 3.09))
+function aimed(b)
+    r, z = pointing[b.group]
+    φ = port_angles(b)[2]
+    return remake(b; aim = (-r * cosd(φ), -r * sind(φ), sign(b.port[3]) * z))
+end
+quads = aimed.(nif_quads(power = 8.0))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">48-element Vector{Beam{Float64}}:
+ Beam(Q15T, θ=23.50°, φ=78.75°, 8 TW, aim=(-0.2126, -1.069, 3.09), defocus=0 mm)
+ Beam(Q42T, θ=23.50°, φ=168.75°, 8 TW, aim=(1.069, -0.2126, 3.09), defocus=0 mm)
+ Beam(Q33T, θ=23.50°, φ=258.75°, 8 TW, aim=(0.2126, 1.069, 3.09), defocus=0 mm)
+ Beam(Q24T, θ=23.50°, φ=348.75°, 8 TW, aim=(-1.069, 0.2126, 3.09), defocus=0 mm)
+ Beam(Q13T, θ=30.58°, φ=34.33°, 8 TW, aim=(-0.4955, -0.3384, 3.63), defocus=0 mm)
+ Beam(Q41T, θ=30.00°, φ=123.75°, 8 TW, aim=(0.3333, -0.4989, 3.63), defocus=0 mm)
+ Beam(Q36T, θ=30.58°, φ=214.33°, 8 TW, aim=(0.4955, 0.3384, 3.63), defocus=0 mm)
+ Beam(Q26T, θ=30.00°, φ=303.75°, 8 TW, aim=(-0.3333, 0.4989, 3.63), defocus=0 mm)
+ Beam(Q14T, θ=44.50°, φ=16.29°, 8 TW, aim=(-0, -0, 5.2), defocus=0 mm)
+ Beam(Q12T, θ=44.50°, φ=62.46°, 8 TW, aim=(-0, -0, 5.2), defocus=0 mm)
+ ⋮
+ Beam(Q22B, θ=135.50°, φ=343.71°, 8 TW, aim=(-0, 0, -5.2), defocus=0 mm)
+ Beam(Q16B, θ=150.00°, φ=56.25°, 8 TW, aim=(-0.3333, -0.4989, -3.63), defocus=0 mm)
+ Beam(Q44B, θ=149.42°, φ=145.67°, 8 TW, aim=(0.4955, -0.3384, -3.63), defocus=0 mm)
+ Beam(Q31B, θ=150.00°, φ=236.25°, 8 TW, aim=(0.3333, 0.4989, -3.63), defocus=0 mm)
+ Beam(Q21B, θ=149.42°, φ=325.67°, 8 TW, aim=(-0.4955, 0.3384, -3.63), defocus=0 mm)
+ Beam(Q15B, θ=156.50°, φ=11.25°, 8 TW, aim=(-1.069, -0.2126, -3.09), defocus=0 mm)
+ Beam(Q42B, θ=156.50°, φ=101.25°, 8 TW, aim=(0.2126, -1.069, -3.09), defocus=0 mm)
+ Beam(Q33B, θ=156.50°, φ=191.25°, 8 TW, aim=(1.069, 0.2126, -3.09), defocus=0 mm)
+ Beam(Q24B, θ=156.50°, φ=281.25°, 8 TW, aim=(-0.2126, 1.069, -3.09), defocus=0 mm)</code></pre><p>A <a href="../../reference/optimization/#Briareus.Scenario"><code>Scenario</code></a> holds what does not change while beams are re-aimed and their powers adjusted: the target, the deposition operator for these ports, the view factors, the linear response of the capsule&#39;s incident flux to the power each element absorbs, and the mode weights of the capsule. Its parameterization here gives each quad its own power.</p><pre><code class="language-julia hljs">scenario = Scenario(target, quads; observe = :capsule,
+                    parameterization = GroupPointing(quads; by = :quad, fields = (:power,)))
+full = flux_ylm(evaluate(scenario, quads); lmax = 4)
+show_modes(label, c) = @printf(&quot;%-24s ε₁ %6.3f%%  ε₂ %6.3f%%  ε₃ %6.3f%%  ε₄ %6.3f%%  drive %.4f\n&quot;,
+                               label, (100 * mode_amplitude(c, l) for l in 1:4)..., c[1] / full[1])
+show_modes(&quot;48 quads&quot;, full)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">48 quads                 ε₁  0.000%  ε₂ 14.501%  ε₃  0.208%  ε₄  0.584%  drive 1.0000</code></pre><p>With all 48 quads the drive has the large <span>$l = 2$</span> asymmetry of this untuned pointing (the cone powers and pointing would tune it away) and no mode 1.</p><h2 id="The-symmetry-of-the-ports"><a class="docs-heading-anchor" href="#The-symmetry-of-the-ports">The symmetry of the ports</a><a id="The-symmetry-of-the-ports-1"></a><a class="docs-heading-anchor-permalink" href="#The-symmetry-of-the-ports" title="Permalink"></a></h2><p>The NIF ports are not symmetric under every rotation that leaves the hohlraum unchanged. Rotating every port by 180° about the <span>$x$</span>, <span>$y$</span> or <span>$z$</span> axis maps the set of ports onto itself, but rotating by 90° about <span>$z$</span>, inverting through the center, or reflecting through the equatorial plane does not:</p><pre><code class="language-julia hljs">ports = [b.port for b in quads]
+maps_onto_itself(f) = all(any(norm(f(p) - q) &lt; 1e-6 for q in ports) for p in ports)
+operations = [&quot;180° about x&quot; =&gt; p -&gt; [p[1], -p[2], -p[3]],
+              &quot;180° about y&quot; =&gt; p -&gt; [-p[1], p[2], -p[3]],
+              &quot;180° about z&quot; =&gt; p -&gt; [-p[1], -p[2], p[3]],
+              &quot;90° about z&quot; =&gt; p -&gt; [-p[2], p[1], p[3]],
+              &quot;inversion&quot; =&gt; p -&gt; -p,
+              &quot;reflection in z = 0&quot; =&gt; p -&gt; [p[1], p[2], -p[3]]]
+for (name, f) in operations
+    @printf(&quot;%-20s %s\n&quot;, name, maps_onto_itself(f) ? &quot;symmetry&quot; : &quot;not a symmetry&quot;)
+end</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">180° about x         symmetry
+180° about y         symmetry
+180° about z         symmetry
+90° about z          not a symmetry
+inversion            not a symmetry
+reflection in z = 0  not a symmetry</code></pre><p>The three rotations form the group <span>$D_2$</span>. A harmonic survives the average over <span>$D_2$</span> only if each rotation leaves it unchanged. A rotation by 180° about <span>$z$</span> multiplies <span>$Y_{lm}$</span> by <span>$(-1)^m$</span>, and one about <span>$x$</span> multiplies it by <span>$(-1)^{l+m}$</span> for <span>$m \ge 0$</span> and by <span>$(-1)^{l+m+1}$</span> for <span>$m &lt; 0$</span>. A drive with the symmetry of the ports can therefore contain only even <span>$m$</span>, with <span>$l$</span> even for the cosine harmonics and <span>$l$</span> odd for the sine harmonics. Every coefficient the rule forbids is zero to round-off:</p><pre><code class="language-julia hljs">allowed(l, m) = iseven(m) &amp;&amp; (m &gt;= 0 ? iseven(l) : isodd(l))
+forbidden = [abs(full[mode_index(l, m)]) for l in 0:4 for m in -l:l if !allowed(l, m)]
+@printf(&quot;largest forbidden |c_lm|/c₀₀ %.1e\n&quot;, maximum(forbidden) / full[1])
+for l in 1:4, m in -l:l
+    allowed(l, m) &amp;&amp; @printf(&quot;c(%d,%2d)/c₀₀ = %+.5f\n&quot;, l, m, full[mode_index(l, m)] / full[1])
+end</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">largest forbidden |c_lm|/c₀₀ 2.2e-16
+c(2, 0)/c₀₀ = -0.06485
+c(2, 2)/c₀₀ = -0.00046
+c(3,-2)/c₀₀ = +0.00079
+c(4, 0)/c₀₀ = +0.00121
+c(4, 2)/c₀₀ = -0.00001
+c(4, 4)/c₀₀ = -0.00153</code></pre><p>The cosine <span>$l = 2, m = 2$</span> and sine <span>$l = 3, m = -2$</span> harmonics are allowed by the ports&#39; symmetry, and the ports excite them weakly.</p><h2 id="Which-bundles-can-drive-the-backlighter"><a class="docs-heading-anchor" href="#Which-bundles-can-drive-the-backlighter">Which bundles can drive the backlighter</a><a id="Which-bundles-can-drive-the-backlighter-1"></a><a class="docs-heading-anchor-permalink" href="#Which-bundles-can-drive-the-backlighter" title="Permalink"></a></h2><p>Two lines of sight at the equator (<span>$\theta = 90°$</span>) suit radiography of the capsule, at <span>$\phi = 78°$</span> and <span>$\phi = 348°$</span>. For each, a 2 mm backlighter foil faces the detector from the far side of the target, a distance <span>$d$</span> from the target center; the radiography beams strike its face toward the target, so the x rays they generate cross the capsule to the detector. The &quot;sombrero&quot;, the dimpled shield around the entrance hole that keeps unconverted 1ω light off the hohlraum and its thermo-mechanical package, also stands between some beams and the foil; it is not modeled here, so this selection is necessary but not sufficient. A quad can drive the foil if it strikes that face at less than 70° from its normal, the LMF limit for laser capture on a target surface, and if its beam, aimed at the foil center, clears the hohlraum and capsule on the way. The clearance is judged as a shot review judges it, on the worst case: <a href="../../reference/review/#Briareus.clearance-Tuple{Target, AbstractVector{&lt;:Beam}}"><code>clearance</code></a> grows each beam&#39;s envelope (its contour at 1% of the peak, spread by the f-cone) by 50 µm of pointing error and 25 µm of target positioning, adds ±1 mm of focus error, and reports the smallest distance to the hardware. The foil&#39;s distance is a design choice; two are tried.</p><pre><code class="language-julia hljs">function backlighter_bundles(φ_los, d)
+    n = [cosd(φ_los), sind(φ_los), 0.0]                    # toward the detector
+    center = Tuple(-d .* n)
+    scene = Target(target.components..., foil(:backlighter, center, Tuple(n); width = 2.0, n = 8))
+    found = []
+    for k in sort(collect(keys(bundles)))
+        qs = quads[bundles[k]]
+        incidence = [acosd(dot(b.port, n)) for b in qs]
+        all(&lt;(70), incidence) || continue
+        report = clearance(scene, [remake(b; aim = center) for b in qs];
+                           targets = (:backlighter,), hardware = (:wall, :cap_top, :cap_bottom, :capsule),
+                           peak_fraction = 0.01, wings = [], nangles = 8)
+        push!(found, (bundle = k, incidence, clearance = minimum(r -&gt; r.clearance, report.rows)))
+    end
+    return found
+end
+
+bundles = nif_bundles(quads)
+for φ_los in (78.0, 348.0)
+    near, far = backlighter_bundles(φ_los, 8.0), backlighter_bundles(φ_los, 12.0)
+    @printf(&quot;line of sight 90-%g: %d bundles within 70°\n&quot;, φ_los, length(near))
+    @printf(&quot;  %-7s %-16s %-14s %s\n&quot;, &quot;bundle&quot;, &quot;cones&quot;, &quot;incidence&quot;, &quot;worst-case clearance, d = 8 / 12 mm&quot;)
+    for (a, b) in zip(near, far)
+        cones = join(sort(unique(string(quads[i].group) for i in bundles[a.bundle])), &quot;+&quot;)
+        @printf(&quot;  %-7s %-16s %4.1f°, %4.1f°   %6.2f / %5.2f mm\n&quot;, a.bundle, cones, a.incidence...,
+                a.clearance, b.clearance)
+    end
+end</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">line of sight 90-78: 6 bundles within 70°
+  bundle  cones            incidence      worst-case clearance, d = 8 / 12 mm
+  11      outer50          53.1°, 47.1°    -0.62 /  2.04 mm
+  12      outer44          47.5°, 45.7°    -1.01 /  1.67 mm
+  16      inner30+outer50  40.4°, 62.3°    -1.18 /  0.73 mm
+  41      inner30+outer50  69.6°, 43.1°    -1.18 /  1.22 mm
+  43      outer44          51.9°, 57.3°    -0.13 /  2.82 mm
+  46      outer50          61.4°, 69.2°     1.87 /  4.93 mm
+line of sight 90-348: 6 bundles within 70°
+  bundle  cones            incidence      worst-case clearance, d = 8 / 12 mm
+  11      outer50          61.6°, 69.4°     1.90 /  4.96 mm
+  13      inner30+outer50  69.4°, 43.1°    -1.18 /  1.22 mm
+  14      outer44          51.9°, 57.3°    -0.13 /  2.82 mm
+  21      inner30+outer50  40.4°, 61.9°    -1.18 /  0.73 mm
+  22      outer44          47.5°, 45.7°    -1.01 /  1.67 mm
+  23      outer50          53.2°, 47.3°    -0.59 /  2.07 mm</code></pre><p>Each line of sight can be served by six bundles. With the foil 12 mm from the center all six clear the hohlraum; at 8 mm the hohlraum is in the way of all but one, whose quads pass above and below it at steep incidence: bundle 46 for 90-78 and bundle 11 for 90-348. Their lower quads strike the foil at 69°, just inside the capture limit.</p><h2 id="What-each-bundle-costs"><a class="docs-heading-anchor" href="#What-each-bundle-costs">What each bundle costs</a><a id="What-each-bundle-costs-1"></a><a class="docs-heading-anchor-permalink" href="#What-each-bundle-costs" title="Permalink"></a></h2><p>Without a laser–plasma model the capsule&#39;s flux is linear in the beam powers. <a href="../../reference/optimization/#Briareus.influence_matrix-Tuple{Scenario, AbstractVector{&lt;:Beam}}"><code>influence_matrix</code></a> returns the harmonic coefficients produced by each quad alone at 1 TW, so the coefficients for any assignment of powers <span>$P$</span> are <span>$M P$</span>. <a href="../../reference/beams/#Briareus.nif_bundles-Tuple{AbstractVector{&lt;:Beam}}"><code>nif_bundles</code></a> groups the quads into bundles.</p><pre><code class="language-julia hljs">M = influence_matrix(scenario, quads; lmax = 4)
+P_full = [b.power for b in quads]
+without(k) = setdiff(eachindex(quads), bundles[k])</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">without (generic function with 1 method)</code></pre><p>The rotations of <span>$D_2$</span> carry each bundle onto another, so the 24 bundles fall into sets of equivalent bundles, and freeing any member of a set costs the same. Each quad&#39;s image under a rotation is a quad of the image bundle:</p><pre><code class="language-julia hljs">image(i, f) = findfirst(q -&gt; norm(f(quads[i].port) - q.port) &lt; 1e-6, quads)
+rotations = last.(operations[1:3])
+image_bundle(k, f) = only(unique(nif_bundle(quads[image(i, f)]) for i in bundles[k]))
+orbits = unique(sort(unique([k; [image_bundle(k, f) for f in rotations]])) for k in keys(bundles))
+
+cost(k) = M[:, without(k)] * P_full[without(k)]
+sort!(orbits; by = o -&gt; mode_amplitude(cost(o[1]), 1))
+@printf(&quot;%-13s %-15s %7s %7s %7s %7s %7s\n&quot;, &quot;bundles&quot;, &quot;cones&quot;, &quot;ε₁ (%)&quot;, &quot;ε₂ (%)&quot;,
+        &quot;ε₃ (%)&quot;, &quot;ε₄ (%)&quot;, &quot;drive&quot;)
+for o in orbits
+    cones = join(sort(unique(string(quads[i].group) for i in bundles[o[1]])), &quot;+&quot;)
+    ε = [[mode_amplitude(cost(k), l) for l in 1:4] for k in o]
+    @assert all(e -&gt; isapprox(e, ε[1]; atol = 1e-9), ε)
+    @printf(&quot;%-13s %-15s %7.3f %7.3f %7.3f %7.3f %7.4f\n&quot;, join(o, &quot; &quot;), cones,
+            (100 .* ε[1])..., cost(o[1])[1] / full[1])
+end</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">bundles       cones            ε₁ (%)  ε₂ (%)  ε₃ (%)  ε₄ (%)   drive
+11 23 34 46   outer50           1.083  15.348   0.788   0.644  0.9625
+14 22 35 45   outer44           1.475  15.172   0.871   0.688  0.9606
+12 25 32 43   outer44           1.475  15.163   0.809   0.687  0.9606
+15 24 33 42   inner23           2.977  13.450   1.028   0.795  0.9533
+13 21 36 44   inner30+outer50   3.076  14.156   1.247   0.458  0.9565
+16 26 31 41   inner30+outer50   3.100  14.168   1.186   0.468  0.9566</code></pre><p>A bundle&#39;s two quads need not share a cone. The bundles whose quads both sit in the 50° cone cost least, in mode 1 and in drive, and those of the 44.5° cone next. A bundle with an inner quad costs three times as much mode 1: the inner quads deposit their power around the waist of the hohlraum, closest to the capsule. Among the bundles that can drive a backlighter, the 50° bundles are therefore the ones to free: 11 or 23 for the line of sight at 90-348, 46 or 11 for 90-78, and with the foil at 8 mm only 11 and 46 remain. This tutorial frees bundle 11, the pair Q11T and Q11B, for the line of sight at 90-348; bundle 46 is its image under a rotation of <span>$D_2$</span> and costs the same.</p><pre><code class="language-julia hljs">freed = &quot;11&quot;
+keep = without(freed)
+remaining = quads[keep]</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">46-element Vector{Beam{Float64}}:
+ Beam(Q15T, θ=23.50°, φ=78.75°, 8 TW, aim=(-0.2126, -1.069, 3.09), defocus=0 mm)
+ Beam(Q42T, θ=23.50°, φ=168.75°, 8 TW, aim=(1.069, -0.2126, 3.09), defocus=0 mm)
+ Beam(Q33T, θ=23.50°, φ=258.75°, 8 TW, aim=(0.2126, 1.069, 3.09), defocus=0 mm)
+ Beam(Q24T, θ=23.50°, φ=348.75°, 8 TW, aim=(-1.069, 0.2126, 3.09), defocus=0 mm)
+ Beam(Q13T, θ=30.58°, φ=34.33°, 8 TW, aim=(-0.4955, -0.3384, 3.63), defocus=0 mm)
+ Beam(Q41T, θ=30.00°, φ=123.75°, 8 TW, aim=(0.3333, -0.4989, 3.63), defocus=0 mm)
+ Beam(Q36T, θ=30.58°, φ=214.33°, 8 TW, aim=(0.4955, 0.3384, 3.63), defocus=0 mm)
+ Beam(Q26T, θ=30.00°, φ=303.75°, 8 TW, aim=(-0.3333, 0.4989, 3.63), defocus=0 mm)
+ Beam(Q14T, θ=44.50°, φ=16.29°, 8 TW, aim=(-0, -0, 5.2), defocus=0 mm)
+ Beam(Q12T, θ=44.50°, φ=62.46°, 8 TW, aim=(-0, -0, 5.2), defocus=0 mm)
+ ⋮
+ Beam(Q22B, θ=135.50°, φ=343.71°, 8 TW, aim=(-0, 0, -5.2), defocus=0 mm)
+ Beam(Q16B, θ=150.00°, φ=56.25°, 8 TW, aim=(-0.3333, -0.4989, -3.63), defocus=0 mm)
+ Beam(Q44B, θ=149.42°, φ=145.67°, 8 TW, aim=(0.4955, -0.3384, -3.63), defocus=0 mm)
+ Beam(Q31B, θ=150.00°, φ=236.25°, 8 TW, aim=(0.3333, 0.4989, -3.63), defocus=0 mm)
+ Beam(Q21B, θ=149.42°, φ=325.67°, 8 TW, aim=(-0.4955, 0.3384, -3.63), defocus=0 mm)
+ Beam(Q15B, θ=156.50°, φ=11.25°, 8 TW, aim=(-1.069, -0.2126, -3.09), defocus=0 mm)
+ Beam(Q42B, θ=156.50°, φ=101.25°, 8 TW, aim=(0.2126, -1.069, -3.09), defocus=0 mm)
+ Beam(Q33B, θ=156.50°, φ=191.25°, 8 TW, aim=(1.069, 0.2126, -3.09), defocus=0 mm)
+ Beam(Q24B, θ=156.50°, φ=281.25°, 8 TW, aim=(-0.2126, 1.069, -3.09), defocus=0 mm)</code></pre><h2 id="Freeing-bundle-11"><a class="docs-heading-anchor" href="#Freeing-bundle-11">Freeing bundle 11</a><a id="Freeing-bundle-11-1"></a><a class="docs-heading-anchor-permalink" href="#Freeing-bundle-11" title="Permalink"></a></h2><p>A <a href="../../reference/optimization/#Briareus.subset-Tuple{Scenario, AbstractVector{&lt;:Integer}}"><code>subset</code></a> of the scenario holds the 46 remaining quads and reuses everything but the deposition operator, which it restricts to their ports. The same coefficients follow from the full scenario with the bundle&#39;s quads at zero power, and from the influence matrix:</p><pre><code class="language-julia hljs">c_free = flux_ylm(evaluate(subset(scenario, keep), remaining); lmax = 4)
+zeroed = [i in bundles[freed] ? remake(b; power = 0.0) : b for (i, b) in enumerate(quads)]
+c_zeroed = flux_ylm(evaluate(scenario, zeroed); lmax = 4)
+c_matrix = M[:, keep] * P_full[keep]
+@printf(&quot;subset vs zero power %.1e   subset vs influence matrix %.1e\n&quot;,
+        norm(c_free - c_zeroed) / norm(c_free), norm(c_free - c_matrix) / norm(c_free))
+show_modes(&quot;bundle 11 freed&quot;, c_free)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">subset vs zero power 0.0e+00   subset vs influence matrix 5.5e-16
+bundle 11 freed          ε₁  1.083%  ε₂ 15.348%  ε₃  0.788%  ε₄  0.644%  drive 0.9625</code></pre><p>The drive falls by 4% and a mode-1 asymmetry of 1.1% appears, about 110 km/s of hot-spot velocity. Its direction lies between the azimuths of the freed quads&#39; ports:</p><pre><code class="language-julia hljs">dipole = normalize([c_free[mode_index(1, 1)], c_free[mode_index(1, -1)], c_free[mode_index(1, 0)]])
+@printf(&quot;mode-1 direction θ = %.1f°, φ = %.1f°\n&quot;, acosd(dipole[3]),
+        mod(atand(dipole[2], dipole[1]), 360))
+for i in bundles[freed]
+    @printf(&quot;%s port θ = %.2f°, φ = %.2f°\n&quot;, quads[i].name, port_angles(quads[i])...)
+end</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">mode-1 direction θ = 90.0°, φ = 45.1°
+Q11T port θ = 50.00°, φ = 39.67°
+Q11B port θ = 130.00°, φ = 50.62°</code></pre><p>An outer quad crosses the hohlraum axis near its entrance hole and heats the wall on the far side, so without it the side of the capsule facing away from its port is colder. The flux on the capsule, relative to the full-power mean:</p><pre><code class="language-julia hljs">capsule = elements(target, :capsule)
+function flux_map(ax, sc, beams)
+    H = evaluate(sc, beams).flux
+    p = target.elem_centroid[capsule]
+    θ = [acosd(clamp(x[3] / norm(x), -1, 1)) for x in p]
+    φ = [mod(atand(x[2], x[1]), 360) for x in p]
+    return scatter!(ax, φ, θ; color = H ./ (full[1] / sqrt(4π)) .- 1, colormap = :balance,
+                    colorrange = (-0.06, 0.06), markersize = 7)
+end
+capsule_axis(fig, title) = Axis(fig[1, 1]; xlabel = &quot;φ (degrees)&quot;, ylabel = &quot;θ (degrees)&quot;,
+                                yreversed = true, title, xticks = 0:45:360, yticks = 0:30:180)
+fig = Figure(size = (760, 380))
+ax = capsule_axis(fig, &quot;Capsule flux with bundle 11 freed, relative to the full mean&quot;)
+Colorbar(fig[1, 2], flux_map(ax, subset(scenario, keep), remaining), label = &quot;H/H̄ − 1&quot;)
+fig</code></pre><img src="47a80a2c.png" alt="Example block output"/><p>The <span>$l = 2$</span> band from pole to waist dominates; mode 1 shows as the warmer side around <span>$\phi = 45°$</span>.</p><h2 id="Remedy-1:-free-the-partner-as-well"><a class="docs-heading-anchor" href="#Remedy-1:-free-the-partner-as-well">Remedy 1: free the partner as well</a><a id="Remedy-1:-free-the-partner-as-well-1"></a><a class="docs-heading-anchor-permalink" href="#Remedy-1:-free-the-partner-as-well" title="Permalink"></a></h2><p>The rotation by 180° about <span>$z$</span> carries bundle 11 onto bundle 34. Freeing both leaves ports with that symmetry, which removes every harmonic of odd <span>$m$</span>, among them the two transverse components of mode 1. The axial component <span>$c_{10}$</span> vanishes for another reason: the hohlraum is axisymmetric, so a quad&#39;s contribution to <span>$c_{10}$</span> depends only on its cone and hemisphere, and each freed bundle takes one quad from each hemisphere of the same cone.</p><pre><code class="language-julia hljs">partner = image_bundle(freed, rotations[3])
+keep_pair = setdiff(keep, bundles[partner])
+c_pair = M[:, keep_pair] * P_full[keep_pair]
+show_modes(&quot;bundles 11 and $partner freed&quot;, c_pair)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">bundles 11 and 34 freed  ε₁  0.000%  ε₂ 16.291%  ε₃  0.334%  ε₄  0.727%  drive 0.9249</code></pre><p>Mode 1 is gone, but so is another 4% of the drive, which an ignition shot cannot spare.</p><h2 id="Remedy-2:-rebalance-the-powers"><a class="docs-heading-anchor" href="#Remedy-2:-rebalance-the-powers">Remedy 2: rebalance the powers</a><a id="Remedy-2:-rebalance-the-powers-1"></a><a class="docs-heading-anchor-permalink" href="#Remedy-2:-rebalance-the-powers" title="Permalink"></a></h2><p>Keeping the other 46 quads at their pointing, find the smallest change <span>$\delta P$</span> of their powers that restores the full-set coefficients of every mode up to degree <span>$L$</span>. With <span>$M_L$</span> the rows of <span>$M$</span> through degree <span>$L$</span>, this is the minimum-norm solution</p><p class="math-container">\[\delta P = M_L^{+}\,\left(c^{\mathrm{full}}_L - M_L P\right),\]</p><p>where <span>$M_L^{+}$</span> is the pseudoinverse:</p><pre><code class="language-julia hljs">Mk = M[:, keep]
+P_keep = P_full[keep]
+rebalanced = Dict{Int,Vector{Float64}}()
+for L in 1:3
+    rows = 1:(L+1)^2
+    rebalanced[L] = P_keep + pinv(Mk[rows, :]) * (full[rows] - Mk[rows, :] * P_keep)
+    show_modes(&quot;rebalanced through l = $L&quot;, Mk * rebalanced[L])
+    @printf(&quot;%24s quad powers %.2f – %.2f TW\n&quot;, &quot;&quot;, extrema(rebalanced[L])...)
+end</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">rebalanced through l = 1 ε₁  0.000%  ε₂ 15.464%  ε₃  0.922%  ε₄  0.656%  drive 1.0000
+                         quad powers 7.86 – 8.88 TW
+rebalanced through l = 2 ε₁  0.000%  ε₂ 14.501%  ε₃  0.956%  ε₄  0.561%  drive 1.0000
+                         quad powers 7.37 – 8.81 TW
+rebalanced through l = 3 ε₁  0.000%  ε₂ 14.501%  ε₃  0.208%  ε₄  0.561%  drive 1.0000
+                         quad powers 7.06 – 9.91 TW</code></pre><p>Restoring the drive and mode 1 needs some quads 11% above the nominal 8 TW, and restoring <span>$l = 3$</span> as well needs 24%. An ignition pulse runs the laser close to its energy and peak-power limits, so this headroom is rarely available. The quads near the freed bundle carry the extra power:</p><pre><code class="language-julia hljs">fig = Figure(size = (760, 380))
+ax = Axis(fig[1, 1], xlabel = &quot;port azimuth φ (degrees)&quot;, ylabel = &quot;quad power (TW)&quot;,
+          title = &quot;Power rebalance with bundle 11 freed&quot;, xticks = 0:45:360)
+φk = [port_angles(b)[2] for b in remaining]
+for (L, marker) in ((1, :circle), (2, :utriangle), (3, :rect))
+    scatter!(ax, φk, rebalanced[L]; marker, label = &quot;through l = $L&quot;)
+end
+vlines!(ax, [port_angles(quads[i])[2] for i in bundles[freed]], color = :gray, linestyle = :dash)
+axislegend(ax, position = :lt)
+fig</code></pre><img src="997f36a9.png" alt="Example block output"/><p>The same answer comes from the optimizer. <a href="../../reference/optimization/#Briareus.optimize_pointing-Tuple{Scenario, Any}"><code>optimize_pointing</code></a> minimizes an objective of an <a href="../../reference/optimization/#Briareus.Evaluation"><code>Evaluation</code></a> over the scenario&#39;s parameters, here the 46 quad powers, with gradients from forward-mode automatic differentiation. With the misfit of the <span>$l \le 2$</span> coefficients as the objective and the bounds out of reach, L-BFGS-B starts from <span>$P$</span> and moves only within the span of the gradients, which is the row space of <span>$M_2$</span>; it therefore converges to the minimum-norm solution:</p><pre><code class="language-julia hljs">power_only = subset(scenario, keep; parameterization = GroupPointing(remaining; by = :quad,
+                                                                     fields = (:power,)))
+misfit(ev) = sum(abs2, flux_ylm(ev; lmax = 2) .- full[1:9]) / full[1]^2
+P0 = initial_parameters(power_only.param)
+fit = optimize_pointing(power_only, misfit; x0 = P0, lower = fill(0.0, length(P0)),
+                        upper = fill(20.0, length(P0)), g_tol = 1e-14)
+@printf(&quot;misfit %.1e → %.1e,  max |P_optimizer − P_pseudoinverse| %.1e TW\n&quot;,
+        fit.initial_value, fit.value, maximum(abs.(fit.x - rebalanced[2])))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">misfit 1.5e-03 → 1.7e-24,  max |P_optimizer − P_pseudoinverse| 2.1e-10 TW</code></pre><h2 id="Remedy-3:-re-point"><a class="docs-heading-anchor" href="#Remedy-3:-re-point">Remedy 3: re-point</a><a id="Remedy-3:-re-point-1"></a><a class="docs-heading-anchor-permalink" href="#Remedy-3:-re-point" title="Permalink"></a></h2><p>Re-aiming quads moves drive around the hohlraum at no cost in power. Let each of the remaining quads move its aim by up to 0.3 mm along the hohlraum axis and sideways around it, and minimize mode 1 strongly and modes 2–4 weakly while holding the drive at its value after the bundle is freed. <a href="../../reference/optimization/#Briareus.asymmetry_objective-Tuple{}"><code>asymmetry_objective</code></a> builds that objective and adds penalties for light clipped by the entrance holes and light striking the capsule.</p><pre><code class="language-julia hljs">repoint = subset(scenario, keep; parameterization = GroupPointing(remaining; by = :quad,
+                                                                  fields = (:phi, :z)))
+x0 = initial_parameters(repoint.param)
+lower, upper = bounds(repoint.param, x0; phi = 0.3, z = 0.3)
+goals = (modes = (1 =&gt; 50.0, 2 =&gt; 1.0, 3 =&gt; 1.0, 4 =&gt; 1.0), drive = c_free[1] / sqrt(4π),
+         drive_weight = 10.0)
+first_try = optimize_pointing(repoint, asymmetry_objective(; goals...); x0, lower, upper,
+                              iterations = 150)
+show_modes(&quot;bundle 11 freed&quot;, c_free)
+show_modes(&quot;re-pointed&quot;, flux_ylm(evaluate(repoint, first_try.x); lmax = 4))
+@printf(&quot;clipped %.1e of the delivered power\n&quot;, clipped_fraction(evaluate(repoint, first_try.x)))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">bundle 11 freed          ε₁  1.083%  ε₂ 15.348%  ε₃  0.788%  ε₄  0.644%  drive 0.9625
+re-pointed               ε₁  0.001%  ε₂ 13.748%  ε₃  0.179%  ε₄  0.446%  drive 0.9598
+clipped 1.2e-07 of the delivered power</code></pre><p>Mode 1 is gone and nothing is clipped. But the clipping penalty sees only the nominal beams, and a shot review judges a pointing on its worst case. <a href="../../reference/review/#Briareus.clearance-Tuple{Target, AbstractVector{&lt;:Beam}}"><code>clearance</code></a> grows each beam&#39;s envelope (here its contour at 1% of the peak, the level of LMF&#39;s target-configuration rules, spread by the f-cone) by 50 µm of pointing error and 25 µm of target positioning, adds ±1 mm of focus error, and reports the smallest distance to the end caps, together with the worst-case power and intensity the caps receive. The scattered-light wings, which reach the entrance-hole lip in any design, are left out:</p><pre><code class="language-julia hljs">function cap_review(beams)
+    report = clearance(target, beams; targets = (:wall, :capsule),
+                       hardware = (:cap_top, :cap_bottom), peak_fraction = 0.01, wings = [],
+                       nangles = 8)
+    return (nominal = minimum(r -&gt; r.nominal, report.rows),
+            worst = minimum(r -&gt; r.clearance, report.rows),
+            power = maximum(r -&gt; r.intercepted, report.rows),
+            fail = count(r -&gt; r.status === :fail, report.rows))
+end
+review_line(label, r) = @printf(&quot;%-22s nominal %6.3f mm   worst case %6.3f mm   cap power ≤ %.1e   %d fail\n&quot;,
+                                label, r.nominal, r.worst, r.power, r.fail)
+review_line(&quot;48 quads&quot;, cap_review(quads))
+review_line(&quot;re-pointed&quot;, cap_review(first_try.beams))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">48 quads               nominal  0.205 mm   worst case  0.066 mm   cap power ≤ 6.0e-08   0 fail
+re-pointed             nominal  0.025 mm   worst case -0.114 mm   cap power ≤ 2.5e-04   17 fail</code></pre><p>The original pointing clears the caps by 66 µm in the worst case. The re-pointed quads have used up that margin: in the worst case their 1% contours overlap the entrance-hole lips, several of them fail, and up to a few times 10⁻⁴ of a beam&#39;s power lands on a cap.</p><p>The optimizer has to see the same worst case. An <a href="../../reference/review/#Briareus.ApertureKeepOut"><code>ApertureKeepOut</code></a> computes each beam&#39;s worst-case clearance from the rim of its entrance hole with the same envelope and error set, smoothly enough to differentiate, and adds a penalty when it falls below a minimum, here 10 µm. On the original pointing it agrees with <a href="../../reference/review/#Briareus.clearance-Tuple{Target, AbstractVector{&lt;:Beam}}"><code>clearance</code></a>:</p><pre><code class="language-julia hljs">keepout = ApertureKeepOut(target; peak_fraction = 0.01, minimum = 0.01, weight = 1e3)
+from_keepout = aperture_clearance(keepout, quads)
+@printf(&quot;worst-case clearance from the keep-out %.3f mm, from clearance %.3f mm\n&quot;,
+        minimum(from_keepout), cap_review(quads).worst)
+
+second_try = optimize_pointing(repoint, asymmetry_objective(; goals..., keepout); x0,
+                               lower, upper, iterations = 150)
+repointed = evaluate(repoint, second_try.x)
+c_repointed = flux_ylm(repointed; lmax = 4)
+show_modes(&quot;re-pointed, keep-out&quot;, c_repointed)
+review_line(&quot;re-pointed, keep-out&quot;, cap_review(second_try.beams))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">worst-case clearance from the keep-out 0.066 mm, from clearance 0.066 mm
+re-pointed, keep-out     ε₁  0.022%  ε₂ 14.249%  ε₃  0.978%  ε₄  0.633%  drive 0.9596
+re-pointed, keep-out   nominal  0.147 mm   worst case  0.008 mm   cap power ≤ 1.3e-06   0 fail</code></pre><p>Re-pointing within the clearance still removes nearly all of mode 1, to under ten kilometres per second of hot-spot velocity, and the drive stays within 0.4% of its value after the bundle is freed. The worst-case clearance comes out at 8 µm rather than the 10 µm asked for: the penalty is soft, and the keep-out&#39;s distance differs from the clearance check&#39;s by a few micrometres. The flux on the capsule:</p><pre><code class="language-julia hljs">fig = Figure(size = (760, 380))
+ax = capsule_axis(fig, &quot;Capsule flux with bundle 11 freed, re-pointed within clearance&quot;)
+Colorbar(fig[1, 2], flux_map(ax, repoint, second_try.beams), label = &quot;H/H̄ − 1&quot;)
+fig</code></pre><img src="677912bd.png" alt="Example block output"/><h3 id="Independent-check"><a class="docs-heading-anchor" href="#Independent-check">Independent check</a><a id="Independent-check-1"></a><a class="docs-heading-anchor-permalink" href="#Independent-check" title="Permalink"></a></h3><p>The optimizer worked through the deposition operator and the linear flux response. <a href="../../reference/deposition/#Briareus.raytrace_deposition-Tuple{Target, AbstractVector{&lt;:Beam}}"><code>raytrace_deposition</code></a> recomputes the deposition of the re-pointed quads by tracing rays from each spot through its f-cone, and <a href="../../reference/radiation/#Briareus.solve-Tuple{RadiationModel, Deposition}"><code>solve</code></a> recomputes the radiosity directly:</p><pre><code class="language-julia hljs">traced = raytrace_deposition(target, second_try.beams; nspot = 61)
+H = solve(scenario.model, traced).H[capsule]
+show_modes(&quot;re-pointed, ray-traced&quot;, ylm_weights(target, capsule; lmax = 4) * H)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">re-pointed, ray-traced   ε₁  0.028%  ε₂ 14.252%  ε₃  0.972%  ε₄  0.632%  drive 0.9596</code></pre><h2 id="What-this-checks"><a class="docs-heading-anchor" href="#What-this-checks">What this checks</a><a id="What-this-checks-1"></a><a class="docs-heading-anchor-permalink" href="#What-this-checks" title="Permalink"></a></h2><ul><li>The NIF ports have the symmetry <span>$D_2$</span> and no more, and every harmonic that <span>$D_2$</span> forbids vanishes from the computed drive to round-off.</li><li>Bundles in the same <span>$D_2$</span> orbit cost the same in every mode, as the symmetry requires.</li><li>Three routes to the drive without a bundle agree to round-off: a scenario on the remaining beams, the full scenario with the bundle at zero power, and the influence matrix.</li><li>Freeing a bundle together with its image under the 180° rotation about the hohlraum axis removes mode 1.</li><li>The power rebalance from the pseudoinverse and from the automatic-differentiation optimizer agree, as they must for a linear least-squares problem solved from the same start.</li><li>The keep-out&#39;s worst-case clearance agrees with the clearance check&#39;s, and re-pointing against it passes that check.</li><li>The re-pointed drive, recomputed by ray tracing and a direct radiosity solve, reproduces the optimizer&#39;s modes.</li></ul><hr/><p><em>This page was generated using <a href="https://github.com/fredrikekre/Literate.jl">Literate.jl</a>.</em></p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../integrating_sphere/">« Integrating sphere</a><a class="docs-footer-nextpage" href="../../explanation/verification-validation/">Verification and validation »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.19.0 on <span class="colophon-date" title="Friday 16 October 2026 14:44">Friday 16 October 2026</span>. Using Julia version 1.13.2.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
