@@ -552,6 +552,8 @@ end
     f = 1 .+ 0.1 .* legendre.(2, μ)
     c = W * f
     @test relative_mode_power(c, 2) ≈ 0.1^2 / 5 rtol = 5e-3
+    @test mode_amplitude(c, 2) ≈ 0.1 rtol = 3e-3
+    @test mode_amplitude(W * [1 + 0.02 * v[1] for v in u], 1) ≈ 0.02 rtol = 3e-3   # tilted dipole
     @test ylm_matrix(c, 4) ≈ ylm_moments(f, t, es; lmax = 4)
 
     # NIF hohlraum: the quad set is D2-symmetric, so cos-type modes with l+m odd and

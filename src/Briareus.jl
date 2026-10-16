@@ -40,7 +40,7 @@ export CBET, CH_IONS, ion_wave_amplitude, receiver_ratio, calibrate_cbet, cbet_g
 export UnconvertedColor, nif_unconverted, UnconvertedRow, UnconvertedReport, unconverted_light_check
 export BEAM_COLUMNS, write_beam_table, read_beam_table, read_csv, write_element_table, write_moments
 export legendre, legendre_moments, legendre_weights, solid_angle, ylm_moments, ylm_weights,
-       ylm_matrix, ylm_frame, mode_index, relative_mode_power, mode_power, rms_nonuniformity
+       ylm_matrix, ylm_frame, mode_index, relative_mode_power, mode_amplitude, mode_power, rms_nonuniformity
 export OrthoCamera, camera_from_port, render, radiance, line_of_sight_power
 export GroupPointing, nparams, parameter_names, initial_parameters, apply, bounds,
        Scenario, Evaluation, evaluate, subset, flux_ylm, asymmetry_objective, influence_matrix,

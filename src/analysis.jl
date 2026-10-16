@@ -199,6 +199,16 @@ field it equals `(aₗ/a₀)² / (2l+1)`.
 relative_mode_power(c::AbstractVector, l::Integer) =
     sum(abs2, (c[mode_index(l, m)] for m in -l:l)) / c[1]^2
 
+"""
+    mode_amplitude(c, l) -> Real
+
+Rotation-invariant amplitude of degree `l` relative to the mean, in the normalization
+of Legendre moments: `√((2l+1) Σₘ (c_lm/c_00)²)`. It equals `|aₗ/a₀|` for a field
+axisymmetric about any axis, so for `l = 1` it is the fractional amplitude `ε` of a
+dipole drive `1 + ε cos γ`, the quantity hot-spot velocity sensitivities refer to.
+"""
+mode_amplitude(c::AbstractVector, l::Integer) = sqrt((2l + 1) * relative_mode_power(c, l))
+
 # Real orthonormal spherical harmonics via normalized associated Legendre recursion.
 function _real_ylm!(Y, lmax, μ, φ)
     s = sqrt(max(0.0, 1 - μ^2))
