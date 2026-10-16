@@ -134,7 +134,10 @@ The 1ω focus is 46 cm beyond the 3ω focus (MacFarlane 2003). **H**
 *Derived* from fused-silica dispersion:
 - 2ω focus about +27 cm beyond 3ω.
 - Centroid offsets about 16 mm (1ω) and 9 mm (2ω), i.e. about 2.0 and 1.2 mrad.
-- The per-beam offset direction is not public.
+- **Offset direction** (later search, below): the footprints fall to the left and
+  right of the 3ω spot along ±φ, each column of a quad to its own side. Sources: NIF
+  User Guide Fig. 4-12 (top/side views) and VisRad's "NIF Unconverted Light in 3ω
+  Focus Plane" sample. **H/M**
 
 ## NIF quad names and bundles
 
@@ -180,7 +183,9 @@ Structure of the mapping:
 
 ## VisRad
 
-There is no public manual; help is built into the software.
+*Corrected:* the full manual is online at https://prism-cs.com/Manuals/VisRad/
+(v21.1.1). An earlier search missed it. Formats documented there are listed in
+"Later search" below.
 
 Confirmed features:
 - JSON workspace files (VisRad 21.1.0).
@@ -190,11 +195,8 @@ Confirmed features:
 - Multi-column ASCII time tables.
 - Per-element flux exports for rad-hydro input (MacFarlane 2003).
 
-Unknown, and needing either sample files or Prism (mail@prism-cs.com):
-- file extensions
-- pointing-table columns and units
-- defocus sign convention
-- capsule-flux export format
+Not documented in the manual: the full JSON schema of `.vrw` workspaces. Sample files
+are still needed for that.
 
 ## State of the art (pointing design and tools)
 
@@ -225,9 +227,11 @@ Unknown, and needing either sample files or Prism (mail@prism-cs.com):
 
 ## Beam clearance methodology
 
-**No facility publishes numeric clearance criteria.** NIF's TaLIS and BLIP reviews and
-LLE's campaign reviews hold them internally (NIF User Guide §3.2–3.3). **H** What is
-public:
+*Corrected:* NIF's TaLIS criteria **are** public, in "TCC Configuration Requirements"
+(NIF User Forum, 2018), linked from the LMF Shot RI Resources page; see "Later search"
+below. LLE's campaign criteria were not found. The material in this section predates
+that finding, and the engineering defaults derived from it are superseded for NIF by
+the TaLIS rules. What else is public:
 
 - **Qualitative LLNL rule.** "Spaced from the laser beams appropriately to account for
   beam intensity profile as well as possible misalignment of laser beams and target
@@ -291,3 +295,107 @@ These are engineering defaults, not facility criteria:
 |---|---|---|
 | fail | > 10¹² W/cm² | > 10⁻³ |
 | review | > 10⁹ W/cm² | > 10⁻⁵ |
+
+## Later search (2026-10-16): LMF Shot RI Resources and the VisRad manual
+
+The sources are the LMF Shot RI Resources page
+(https://lmf.llnl.gov/for-users/shot-ri-resources, including xlsx and pdf files) and
+the VisRad manual (https://prism-cs.com/Manuals/VisRad/). Everything below was checked
+by reading the originals.
+
+### NIF beam table
+
+- Source: `beam-port-locations-updated-10-15-2020.xlsx`, sheet "Quads Port Locations".
+  It gives θ and φ for B111–B468, with bundle and TOP/BOTTOM.
+- The table is transcribed to `data/nif_beams.csv`.
+- Each quad's mean beam direction matches the NIF User Guide port table to within
+  0.004°. That independently confirms all 48 quad names read from the
+  chamber-geometry figures. **H**
+- Chamber map: +x toward Switchyard 1 (φ = 0), +y toward the control room (φ = 90°),
+  z up.
+
+### NIF CPP spots
+
+- Source: `phase-plate-table-updated-10-15-2020.xlsx`, sheet "Measured profiles".
+- Fit function: `c + m exp[-½ ρ^n]`, with radii = σ (2 ln 2)^(1/n), i.e. half widths
+  at half maximum.
+- Data: TAS images of rod shot N151022-002-006 (2ω), averaged per cone.
+
+| Cone | n | Major HWHM (mm) | Minor HWHM (mm) |
+|---|---|---|---|
+| 23.5° | 7.37 | 0.886 | 0.656 |
+| 30° | 8.05 | 0.858 | 0.606 |
+| 44.5° | 4.79 | 0.637 | 0.372 |
+| 50° | 4.52 | 0.619 | 0.362 |
+
+- These are now `NIF_SPOTS`, converted to 1/e semi-axes. **H**
+- The "Specs" sheet gives design 80/90/95% radii and ellipticities.
+- Major axis horizontal: inferred from User Guide plots and VisRad's convention. **M**
+
+### TaLIS rules
+
+Source: "TCC Configuration Requirements", NIF User Forum, 27 Oct 2018. **H** All
+distances are measured orthogonal to the beam.
+
+- **3ω capture.** The 10%-of-peak contour must be ≥ 0.5 mm from the substrate edge,
+  with incidence < 70° to the target normal.
+- **3ω clearance.** The 1%-of-peak contour must clear a component by > 0.5 mm, plus up
+  to 0.5° of metrology/alignment/positioning tolerance. A failure is assessed for
+  blow-by by the backscatter working group.
+- **1ω clearance.** The 10% contour of the 1ω footprint must clear by > 0.2 mm, plus the
+  same 0.5°. That contour is offset 4.45 mm from the 3ω aim point. ARC must not
+  intersect a NIF beam footprint on a target feature.
+- **Uncleared 1ω surfaces.** Radius of curvature < 2 mm (cylinders) or < 5 mm
+  (spherical dimpling). Otherwise the specular 1ω reflection must not come within 20°
+  of any open quad (FOA).
+- **Hardware.**
+  - Positioner clearance: 25 mm inside the CIVS NFOV (NFOV ≤ 120 mm for TANDM-124,
+    < 150 mm otherwise), 35 mm outside.
+  - Target to TAS: 5 mm above/below, 10 mm radially.
+  - Diagnostics to 1ω light: a cone of 10 mm at TCC extruded to 25 mm at 1 m.
+  - Diagnostics to the shroud swept volume: 10 mm.
+- **How the 0.5° enters.** VisRad's clearance report implements fixed and z-varying
+  enlargements of a cone test volume; the documentation does not state how the 0.5° is
+  applied. Briareus's interpretation, a lateral allowance of r tan 0.5° with r the
+  distance from TCC, is an assumption to confirm.
+
+### VisRad formats
+
+All from the manual. **H**
+
+- **Workspaces:** `.vrw`, JSON since v21.0.0.
+- **Laser Beam Summary CSV columns:** Cluster, Beam ID, On/Off, Polar Ang, Azm Ang,
+  Pt Ref-CS, Pt Geom, Pt Param-1/2/3, Focus offset, TC Pt Pos-x/y/z (cm), Power, DPR,
+  profile model, R0 major/minor, minor-axis rotation.
+- **NIF SST CSV columns:** "Beam", "Pointing: Beam Aim Point X (mm)", "Y (mm)",
+  "Z (mm)", "Pointing: Beam Aim Point Beam Defocus (mm)". Chamber Cartesian about TCC,
+  written without the defocus applied.
+- **NIF CMT XML:** chamber Cartesian aim (cm, mm or µm), defocus, CPP and on/off.
+- **Defocus sign:** positive moves the focus along the propagation direction, the same
+  as NIF CMT's positive (lens toward the target) and as Briareus's `defocus`.
+- **Power files:** a time column (ns) then one TW column per beam (headed B115, or
+  Beam_10 on OMEGA).
+- **Other exports:** `.bti` beam–target intersection files, and surface-element flux
+  files.
+- **Capture/clearance report defaults:** equal to the TaLIS rules.
+
+### OMEGA (partial)
+
+- Beams 10–69, numbered by cluster digit and beam digit (Users' Guide Fig. 2.5).
+- P1 is at (0°, 0°); P2–P6 at θ = 63.44°, φ = 54/126/198/270/342°.
+- P6–P7 axis: P6 = (63.44°, 342°). **M**
+- About 18 beam numbers are tied to angles via VisRad screenshots.
+- The full 60-beam assignment in the chamber frame was not found. Places searched:
+  OMEGA Users' Guide mirror, VisRad manual, LLE Review, GitHub; the PI Portal requires
+  a login.
+
+### Still not found
+
+Places searched: Precision Diagnostic System and HDR focal-spot papers, Dixit CPP
+design papers, OSTI full texts (library redirect), GitHub code search, User Guide
+§4.5–4.6.
+
+- The NIF far-field halo or wing fraction.
+- The unconverted-light energy fraction as a function of pulse shape.
+- OMEGA EP port angles.
+

@@ -1,5 +1,11 @@
 # Materials, target components, and the assembled `Target` (elements + ray-casting BVH).
 
+"""
+    AlbedoModel
+
+Supertype of x-ray albedo models: `ConstantAlbedo`, `TabulatedAlbedo`,
+`WallLossAlbedo`. Evaluate with `albedo`.
+"""
 abstract type AlbedoModel end
 
 """
@@ -45,6 +51,13 @@ Base.@kwdef struct WallLossAlbedo <: AlbedoModel
     range::Tuple{Float64,Float64} = (0.0, 0.95)
 end
 
+"""
+    albedo(model, t, T = nothing)
+    albedo(material, t = 0.0)
+
+X-ray albedo at time `t` (ns); temperature-dependent models use the radiation
+temperature `T` (eV) when given.
+"""
 albedo(m::ConstantAlbedo, t, T = nothing) = m.value
 albedo(m::TabulatedAlbedo, t, T = nothing) = _interp(m.t, m.value, t)
 function albedo(m::WallLossAlbedo, t, T = nothing)
@@ -108,6 +121,12 @@ struct Component
     end
 end
 
+"""
+    aperture(name, mesh)
+
+Transparent diagnostic surface (e.g. a laser entrance hole): rays pass through it and
+its incident x-ray flux is the flux escaping through it.
+"""
 aperture(name, mesh) = Component(name, mesh, BLACK; kind = :aperture)
 
 "Component with its mesh rigidly moved (`x ↦ R*x + t`)."
@@ -197,6 +216,7 @@ end
 
 Target(cs::Component...) = Target(collect(cs))
 
+"Number of radiating elements (patch sides) of a target."
 nelements(t::Target) = length(t.elem_area)
 ntriangles(t::Target) = length(t.tri_area)
 

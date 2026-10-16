@@ -5,6 +5,7 @@
 # (e.g. exported from VisRad or a shot setup sheet) are read by mapping their column
 # names and units onto these fields.
 
+"Column names of the canonical beam table (see `write_beam_table`)."
 const BEAM_COLUMNS = (:name, :quad, :group, :theta, :phi, :power, :aim_x, :aim_y, :aim_z,
                       :defocus, :spot_a, :spot_b, :spot_order, :spot_angle, :spot_halo,
                       :spot_halo_scale, :spot_halo_order, :fnumber,

@@ -49,6 +49,7 @@ function GroupPointing(beams::AbstractVector{<:Beam}; by = :group,
     return GroupPointing(tmpl, uk, members, collect(Symbol, fields), mirror)
 end
 
+"Number of parameters of a `GroupPointing` (groups × fields)."
 nparams(p::GroupPointing) = length(p.keys) * length(p.fields)
 
 "Names `\"<group>.<field>\"` for each parameter."

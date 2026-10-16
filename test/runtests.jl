@@ -31,6 +31,11 @@ const R_SPHERE = 2.0
     @test count(n -> n ≈ Vec3(0, 1, 0), tf.elem_normal) == 16
     @test count(n -> n ≈ Vec3(0, -1, 0), tf.elem_normal) == 16
     @test all(c -> c[2] ≈ 2.0, tf.elem_centroid)
+    top, rest = split_mesh(s, c -> c[3] > 1.5)
+    @test npatches(top) + npatches(rest) == npatches(s)
+    @test npatches(top) == 2 * 24                 # the two uppermost bands
+    tt = Target(Component(:a, top, gold()), Component(:b, rest, gold()))
+    @test sum(tt.elem_area) ≈ sum(t.elem_area)
     R = rotation_to(Vec3(1, 1, 1))
     @test R * Vec3(0, 0, 1) ≈ normalize(Vec3(1, 1, 1))
     @test det(R) ≈ 1
@@ -273,6 +278,15 @@ end
     end
     @test kinds == Dict((false, false) => 12, (false, true) => 8, (true, true) => 4)
     @test all(nif_bundle(b) == nif_bundle(b.quad) for b in nif_beams())
+    # the LMF per-beam table: each quad's mean beam direction is its port, which also
+    # confirms the quad names read from the chamber-geometry figures
+    nb = nif_beams()
+    @test length(nb) == 192 && nb[1].name == "B111" && nb[1].quad == "Q11T"
+    for b in q
+        mean_dir = normalize(sum(x.port for x in nb if x.quad == b.quad))
+        @test acosd(clamp(dot(mean_dir, b.port), -1, 1)) < 0.01
+    end
+    @test all(x.group === q[findfirst(y -> y.quad == x.quad, q)].group for x in nb)
 end
 
 @testset "foil optimization + imaging" begin

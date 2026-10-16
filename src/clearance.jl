@@ -292,6 +292,13 @@ struct ClearanceReport
     thresholds::NamedTuple
 end
 
+"""
+    DEFAULT_CLEARANCE_THRESHOLDS
+
+Status tiers of `clearance` (engineering defaults, not facility criteria): `:fail`
+above 1e12 W/cm² (plasma formation) or 1e-3 of the beam power on a component,
+`:review` above 1e9 W/cm² (ablation and debris onset) or 1e-5.
+"""
 const DEFAULT_CLEARANCE_THRESHOLDS = (fail_intensity = 1e12, fail_fraction = 1e-3,
                                       review_intensity = 1e9, review_fraction = 1e-5)
 

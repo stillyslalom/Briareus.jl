@@ -20,6 +20,7 @@ end
 
 Mesh() = Mesh(Vec3[], NTuple{3,Int}[], UnitRange{Int}[])
 
+"Number of patches of a mesh."
 npatches(m::Mesh) = length(m.patches)
 ntriangles(m::Mesh) = length(m.triangles)
 
@@ -81,6 +82,40 @@ function merge_meshes(ms::Mesh...)
 end
 
 """
+    split_mesh(mesh, keep) -> (selected, rest)
+
+Split a mesh by patch: `keep(centroid)` decides, from a patch's area-weighted
+centroid, whether the patch goes to `selected` or `rest`. Use it to cut a port or a
+window out of a surface and make it an `aperture`.
+"""
+function split_mesh(m::Mesh, keep)
+    a, b = Mesh(), Mesh()
+    for r in m.patches
+        poly = Vec3[]
+        for k in r
+            for vi in m.triangles[k]
+                v = m.vertices[vi]
+                any(p -> p == v, poly) || push!(poly, v)
+            end
+        end
+        areas = [norm(_tri_cross(triangle_vertices(m, k)...)) / 2 for k in r]
+        cen = sum(areas[i] * sum(triangle_vertices(m, k)) / 3 for (i, k) in enumerate(r)) / sum(areas)
+        dest = keep(cen) ? a : b
+        i0 = length(dest.vertices)
+        t0 = length(dest.triangles) + 1
+        vmap = Dict{Int,Int}()
+        for k in r, vi in m.triangles[k]
+            haskey(vmap, vi) || (push!(dest.vertices, m.vertices[vi]); vmap[vi] = length(dest.vertices))
+        end
+        for k in r
+            push!(dest.triangles, map(vi -> vmap[vi], m.triangles[k]))
+        end
+        push!(dest.patches, t0:length(dest.triangles))
+    end
+    return a, b
+end
+
+"""
     transform(mesh, R, t)
 
 Apply the rigid map `x ↦ R*x + t` to every vertex. `R` must be a proper rotation for
@@ -89,6 +124,11 @@ the patch orientations to be preserved.
 transform(m::Mesh, R::AbstractMatrix, t = zero(Vec3)) =
     Mesh([Vec3(R * v + t) for v in m.vertices], copy(m.triangles), copy(m.patches))
 
+"""
+    translate(mesh_or_component, t)
+
+Copy shifted by the vector `t` (mm).
+"""
 translate(m::Mesh, t) = Mesh([v + Vec3(t) for v in m.vertices], copy(m.triangles), copy(m.patches))
 
 """
@@ -167,6 +207,11 @@ function annulus_mesh(r_inner, r_outer, z; nr::Integer, nphi::Integer, up::Bool 
     return m
 end
 
+"""
+    disk_mesh(radius, z; nr, nphi, up = true)
+
+Flat disk in the plane `z`; an `annulus_mesh` with zero inner radius.
+"""
 disk_mesh(radius, z; nr::Integer, nphi::Integer, up::Bool = true) =
     annulus_mesh(0.0, radius, z; nr, nphi, up)
 

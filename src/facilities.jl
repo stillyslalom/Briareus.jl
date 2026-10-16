@@ -44,15 +44,22 @@ function _nif_cone(θ)
     c < 27 ? :inner23 : c < 37 ? :inner30 : c < 47 ? :outer44 : :outer50
 end
 
-# Best-focus CPP spots (1/e semi-axes in mm). 30°, 44.5°, 50°: super-Gaussian fits of
-# Kemp et al., Phys. Plasmas 23, 101204 (2016), Table III. 23.5°: NIF User Guide
-# Table 4-3 FWHM (1764 × 1262 µm) converted at the 30° fit's order (n = 8.7). Minor axis
-# along the port's θ̂ (in the plane of the beam and the chamber axis), per Kemp.
+# Best-focus CPP spots (1/e semi-axes in mm) from the measured profiles of LMF's
+# phase-plate-table-updated-10-15-2020.xlsx (sheet "Measured profiles"): super-Gaussian
+# fits `exp(-½ρⁿ)` to beam-normal TAS images of rod shot N151022-002-006, averaged per
+# cone, whose tabulated radii are half widths at half maximum. Converted here to the 1/e
+# semi-axes of `exp(-ρⁿ)`: a = r_HWHM / (ln 2)^(1/n). CPPs: Rev3 Inner (23.5°),
+# 1.0 Rev1a Inner (30°), Rev3 Outer (44.5°), Rev1 Outer (50°). Major axis horizontal
+# (along the port's φ̂), minor axis in the polar plane.
 const NIF_SPOTS = Dict(
-    :inner23 => (major = 0.920, minor = 0.658, order = 8.7),
-    :inner30 => (major = 0.897, minor = 0.6206, order = 8.7),
-    :outer44 => (major = 0.6898, minor = 0.3936, order = 4.3),
-    :outer50 => (major = 0.6744, minor = 0.3613, order = 3.9),
+    :inner23 => (major = 0.88585 / log(2)^(1 / 7.37167), minor = 0.65579 / log(2)^(1 / 7.37167),
+                 order = 7.37167),
+    :inner30 => (major = 0.85838 / log(2)^(1 / 8.046), minor = 0.60591 / log(2)^(1 / 8.046),
+                 order = 8.046),
+    :outer44 => (major = 0.63727 / log(2)^(1 / 4.7925), minor = 0.37234 / log(2)^(1 / 4.7925),
+                 order = 4.7925),
+    :outer50 => (major = 0.61910 / log(2)^(1 / 4.51833), minor = 0.36187 / log(2)^(1 / 4.51833),
+                 order = 4.51833),
 )
 
 """
@@ -73,6 +80,12 @@ end
 # separating the cones) and azimuth and assigned to the nearest port of that cone; all
 # 48 assignments are distinct and within 9° of the tabulated azimuth. The figure's
 # "FABS (130-186)_36B" label fixes the bottom view's orientation (Q36B = port 53).
+"""
+    NIF_QUAD_NAMES
+
+NIF quad name of each indirect-drive chamber port (`Dict(port => "Q11T", …)`), read from
+the labeled LMF chamber-geometry figures; see `nif_port`, `nif_bundle`.
+"""
 const NIF_QUAD_NAMES = Dict(
     1 => "Q15T", 2 => "Q42T", 3 => "Q33T", 4 => "Q24T",
     5 => "Q13T", 6 => "Q41T", 7 => "Q36T", 8 => "Q26T",
@@ -140,27 +153,29 @@ function nif_quads(; power = 8.0, fnumber = 7.9, spot = nif_spot)
 end
 
 """
-    nif_beams(; power = 2.0, fnumber = 20.7, spot = nif_spot, dtheta = 2.35, darc = 2.07)
+    nif_beams(; power = 2.0, fnumber = 20.7, spot = nif_spot)
 
-All 192 indirect-drive NIF beams, four per quad port. Within a quad the beams sit at
-`±dtheta` degrees in polar angle and `±darc` degrees of arc in azimuth about the port
-axis — derived from the published 63.2 cm (polar) × 55.7 cm (azimuthal) beam spacing and
-7.7 m focal length; per-beam tables are not public. Names are the quad name plus
-`a`–`d` (e.g. `"Q31Ba"`); `quad` is the quad name.
+All 192 indirect-drive NIF beams with their individual directions from the LMF beam
+table (`data/nif_beams.csv`, transcribed from beam-port-locations-updated-10-15-2020.xlsx
+of the LMF Shot RI Resources). Names are the facility beam names (`"B111"`–`"B468"`:
+bundle `xy`, beam `z`; beams 1–4 form quad QxyT, 5–8 QxyB); `quad` is the quad name and
+`group` the cone. The mean direction of each quad's four beams is its port direction to
+within 0.004°.
 """
-function nif_beams(; power = 2.0, fnumber = 20.7, spot = nif_spot, dtheta = 2.35, darc = 2.07)
+function nif_beams(; power = 2.0, fnumber = 20.7, spot = nif_spot)
     rows = NamedTuple[]
-    for (p, θ, φ) in NIF_PORTS
-        cone = _nif_cone(θ)
-        for (tag, sθ, sφ) in (("a", -1, -1), ("b", -1, 1), ("c", 1, -1), ("d", 1, 1))
-            θb = θ + sθ * dtheta
-            φb = φ + sφ * darc / sind(θ)
-            push!(rows, (name = NIF_QUAD_NAMES[p] * tag, theta = θb, phi = φb, group = cone,
-                         quad = NIF_QUAD_NAMES[p],
-                         spot = spot(cone)))
-        end
+    for r in _nif_beam_table()
+        cone = _nif_cone(r.theta)
+        push!(rows, (name = r.beam, theta = r.theta, phi = r.phi, group = cone,
+                     quad = "Q" * r.bundle * r.hemisphere, spot = spot(cone)))
     end
     return beams_from_table(rows; fnumber, power)
+end
+
+function _nif_beam_table()
+    _, rows = read_csv(joinpath(@__DIR__, "..", "data", "nif_beams.csv"))
+    return [(beam = r[1], bundle = r[2], hemisphere = r[3], theta = parse(Float64, r[5]),
+             phi = parse(Float64, r[6])) for r in rows]
 end
 
 # ---------------------------------------------------------------------------------------

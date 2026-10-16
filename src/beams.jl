@@ -96,6 +96,7 @@ port_vector(θ, φ) = Vec3(sind(θ) * cosd(φ), sind(θ) * sind(φ), cosd(θ))
 "Polar and azimuthal angles (degrees) of a beam's port."
 port_angles(b::Beam) = (acosd(clamp(b.port[3], -1, 1)), mod(atand(b.port[2], b.port[1]), 360))
 
+"Unit propagation direction of a beam, `-port`."
 direction(b::Beam) = -b.port
 
 """
@@ -256,22 +257,26 @@ function cone_directions(b::Beam, n::Integer)
     return dirs, fill(1.0 / length(dirs), length(dirs))
 end
 
-# Equal-weight points on the unit disk: center + rings (each ring at its area centroid).
+# Equal-weight points on the unit disk: the center plus rings of 6, 12, 18, … points,
+# each ring at the rms radius of its equal-area annulus. The radii are then scaled so
+# the set reproduces the disk's second moment ⟨r²⟩ = 1/2 exactly, the quantity the
+# moment-matched defocus model is built on.
 function _disk_quadrature(n)
     n <= 1 && return [(0.0, 0.0)]
+    counts = Int[]
+    while sum(counts; init = 0) < n - 1
+        push!(counts, min(6 * (length(counts) + 1), n - 1 - sum(counts; init = 0)))
+    end
     pts = [(0.0, 0.0)]
-    rest = n - 1
-    nrings = rest <= 8 ? 1 : 2
-    counts = nrings == 1 ? [rest] : [rest ÷ 3, rest - rest ÷ 3]
-    edges = [sqrt(1 / n)]
+    lo = sqrt(1 / n)
     for (j, c) in enumerate(counts)
-        lo = edges[end]
         hi = sqrt((1 + sum(counts[1:j])) / n)
-        r = (2 / 3) * (hi^3 - lo^3) / (hi^2 - lo^2)
+        r = sqrt((hi^2 + lo^2) / 2)
         for q in 0:c-1
             push!(pts, (r, 2π * (q + 0.5 * (j - 1)) / c))
         end
-        push!(edges, hi)
+        lo = hi
     end
-    return pts
+    scale = sqrt(0.5 / (sum(p[1]^2 for p in pts) / n))
+    return [(scale * r, ϕ) for (r, ϕ) in pts]
 end
