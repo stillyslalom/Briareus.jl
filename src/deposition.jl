@@ -1,20 +1,25 @@
 # Laser deposition: a differentiable quadrature operator and an energy-conserving ray trace.
 
 """
-    DepositionOperator(target, beams; level = 1, ncone = 7)
+    DepositionOperator(target, beams; level = 1, ncone = 13)
 
 Precomputed laser-deposition quadrature. For each beam, every opaque triangle side that
-faces the beam is sampled at `4^level` points; each point stores its area times the
-incidence cosine and a bitmask of which of the `ncone` f-cone directions reach it from
-the lens without hitting another surface. These depend only on the target and the beam
-*directions*, so the operator stays valid as pointing, defocus, spot size, and power
-change — deposition is then a smooth function of those parameters (see `deposit`).
+faces the beam is sampled at `4^level` points; each point stores its area weight, the
+normal of the lit side and a bitmask of which of the `ncone` f-cone directions reach it
+from the lens without hitting another surface. These depend only on the target and the
+beam *directions*, so the operator stays valid as pointing, defocus, spot size, and
+power change — deposition is then a smooth function of those parameters (see
+`deposit`).
 
-Fully visible points use the moment-matched defocused profile (see `intensity`). At
-partially shadowed points each visible cone direction is traced back to the best-focus
-plane and contributes the focal profile there (widened by its own share of the
-aperture), so shadows cast by objects near focus — a capsule at TCC, an LEH edge — are
-correlated with the part of the spot they block.
+The beam is the superposition of `ncone` collimated sub-beams, one per f-cone
+direction `dⱼ` (`cone_directions`), each carrying the best-focus profile. A point
+receives from each visible direction the focal profile where the ray along `dⱼ`
+through it crosses the best-focus plane, times that ray's incidence factor
+`|n·dⱼ|/(k·dⱼ)`. This is the geometric-optics convolution of the focal spot with the
+f-cone, sampled at the cone directions as the reference ray trace samples it, so the
+power on any surface that intercepts the whole beam is the beam power, at any
+distance from focus and any incidence; and shadows cast by objects near focus — a
+capsule at TCC, an LEH edge — are correlated with the part of the spot they block.
 
 The beams' ports must not change after construction.
 """
@@ -23,18 +28,20 @@ struct DepositionOperator
     ports::Vector{Vec3}
     dirs::Vector{Vector{Vec3}}     # cone directions per beam
     pts::Vector{Vector{Vec3}}
-    w::Vector{Vector{Float64}}     # area × |cos| (mm²)
+    w::Vector{Vector{Float64}}     # area weight (mm²)
+    normal::Vector{Vector{Vec3}}   # normal of the lit side
     mask::Vector{Vector{UInt16}}   # visible cone directions (bit j-1 set: direction j)
     dest::Vector{Vector{Int32}}    # > 0: element; < 0: -(component) for an unmodeled back side
 end
 
 function DepositionOperator(t::Target, beams::AbstractVector{<:Beam}; level::Integer = 1,
-                            ncone::Integer = 7)
+                            ncone::Integer = 13)
     1 <= ncone <= 16 || throw(ArgumentError("ncone must be in 1:16"))
     nb = length(beams)
     dirs = Vector{Vector{Vec3}}(undef, nb)
     pts = Vector{Vector{Vec3}}(undef, nb)
     w = Vector{Vector{Float64}}(undef, nb)
+    normal = Vector{Vector{Vec3}}(undef, nb)
     mask = Vector{Vector{UInt16}}(undef, nb)
     dest = Vector{Vector{Int32}}(undef, nb)
     # sub-triangle quadrature in barycentric form, shared by all triangles
@@ -44,7 +51,7 @@ function DepositionOperator(t::Target, beams::AbstractVector{<:Beam}; level::Int
         b = beams[bi]
         k = direction(b)
         ds, _ = cone_directions(b, ncone)
-        P, W, M, D = Vec3[], Float64[], UInt16[], Int32[]
+        P, W, N, M, D = Vec3[], Float64[], Vec3[], UInt16[], Int32[]
         for tri in eachindex(t.tri_area)
             t.tri_opaque[tri] || continue
             n = t.tri_normal[tri]
@@ -64,12 +71,12 @@ function DepositionOperator(t::Target, beams::AbstractVector{<:Beam}; level::Int
                     any_hit(t.bvh, o, -d) || (m |= UInt16(1) << (j - 1))
                 end
                 m == 0 && continue
-                push!(P, x); push!(W, A * wq * abs(c)); push!(M, m); push!(D, target_id)
+                push!(P, x); push!(W, A * wq); push!(N, side_n); push!(M, m); push!(D, target_id)
             end
         end
-        dirs[bi], pts[bi], w[bi], mask[bi], dest[bi] = ds, P, W, M, D
+        dirs[bi], pts[bi], w[bi], normal[bi], mask[bi], dest[bi] = ds, P, W, N, M, D
     end
-    return DepositionOperator(t, [b.port for b in beams], dirs, pts, w, mask, dest)
+    return DepositionOperator(t, [b.port for b in beams], dirs, pts, w, normal, mask, dest)
 end
 
 function _bary_quadrature(level)
@@ -84,7 +91,7 @@ _fullmask(ds) = UInt16((1 << length(ds)) - 1)
 "Operator restricted to the beams `idx` (same order as `idx`)."
 Base.getindex(op::DepositionOperator, idx::AbstractVector{<:Integer}) =
     DepositionOperator(op.target, op.ports[idx], op.dirs[idx], op.pts[idx], op.w[idx],
-                       op.mask[idx], op.dest[idx])
+                       op.normal[idx], op.mask[idx], op.dest[idx])
 
 function Base.show(io::IO, op::DepositionOperator)
     np = sum(length, op.w; init = 0)
@@ -140,12 +147,14 @@ end
 function _deposit_beam!(Ec::Vector{T}, Lc::Vector{T}, op::DepositionOperator, bi,
                         f::BeamFrame) where {T}
     ds = op.dirs[bi]
-    full = _fullmask(ds)
-    P, W, M, D = op.pts[bi], op.w[bi], op.mask[bi], op.dest[bi]
+    # components of the cone directions in the beam frame (fixed by the port)
+    α = [dot(d, f.e1) for d in ds]
+    β = [dot(d, f.e2) for d in ds]
+    κ = [dot(d, f.k) for d in ds]
+    P, W, Nr, M, D = op.pts[bi], op.w[bi], op.normal[bi], op.mask[bi], op.dest[bi]
     acc = zero(T)
     @inbounds for q in eachindex(W)
-        I = M[q] == full ? intensity(f, P[q]) : _partial_intensity(f, ds, M[q], P[q])
-        val = W[q] * I
+        val = W[q] * _cone_intensity(f, ds, α, β, κ, M[q], P[q], Nr[q])
         d = D[q]
         d > 0 ? (Ec[d] += val) : (Lc[-d] += val)
         acc += val
@@ -153,24 +162,25 @@ function _deposit_beam!(Ec::Vector{T}, Lc::Vector{T}, op::DepositionOperator, bi
     return acc
 end
 
-# Sum over visible cone directions of the focal profile at each ray's best-focus
-# crossing, each widened by its 1/N share of the aperture's second moment.
-@inline function _partial_intensity(f::BeamFrame, ds, m::UInt16, x)
-    N = length(ds)
+# Absorbed power per unit area at `x` (lit-side normal `n`): the mean over the visible
+# cone directions dⱼ of the best-focus profile where the ray along dⱼ through `x`
+# crosses the focal plane, times the ray's incidence factor |n·dⱼ|/(k·dⱼ).
+@inline function _cone_intensity(f::BeamFrame, ds, α, β, κ, m::UInt16, x, n)
     d = x - f.focus
     s = dot(d, f.k)
-    acc = zero(f.core.a2 * s)
-    for j in 1:N
+    u0 = dot(d, f.e1)
+    v0 = dot(d, f.e2)
+    acc = zero(f.core.power_norm * s)
+    for j in eachindex(ds)
         (m >> (j - 1)) & 0x1 == 0x1 || continue
-        dj = ds[j]
-        sj = s / dot(dj, f.k)
-        xf = d - sj * dj                      # crossing of the best-focus plane
-        u = dot(xf, f.e1)
-        v = dot(xf, f.e2)
-        acc += _sg_eval(f.core, u, v, sj, 1 / N)
-        f.has_halo && (acc += _sg_eval(f.halo, u, v, sj, 1 / N))
+        sj = s / κ[j]
+        u = u0 - sj * α[j]                    # crossing of the best-focus plane
+        v = v0 - sj * β[j]
+        I = _sg_focal(f.core, u, v)
+        f.has_halo && (I += _sg_focal(f.halo, u, v))
+        acc += I * (abs(dot(n, ds[j])) / κ[j])
     end
-    return acc / N
+    return acc / length(ds)
 end
 
 """
@@ -203,7 +213,7 @@ end
 # ---------------------------------------------------------------------------------------
 
 """
-    raytrace_deposition(target, beams; nspot = 41, ncone = 7, extent = nothing) -> Deposition
+    raytrace_deposition(target, beams; nspot = 41, ncone = 13, extent = nothing) -> Deposition
 
 Reference deposition by geometric ray tracing. Each spot component (core, and halo if
 present) is sampled with an `nspot × nspot` grid of best-focus points spanning
@@ -213,7 +223,7 @@ travel straight (no refraction) to the first opaque surface. Power is conserved
 exactly; defocus is exact within the sampling. Not differentiable.
 """
 function raytrace_deposition(t::Target, beams::AbstractVector{<:Beam}; nspot::Integer = 41,
-                             ncone::Integer = 7, extent = nothing)
+                             ncone::Integer = 13, extent = nothing)
     ne, nc, nb = nelements(t), length(t.components), length(beams)
     E = [zeros(ne) for _ in 1:nb]
     L = [zeros(nc) for _ in 1:nb]
@@ -225,13 +235,13 @@ function raytrace_deposition(t::Target, beams::AbstractVector{<:Beam}; nspot::In
 end
 
 """
-    raytrace_component_power(target, beams; nspot = 41, ncone = 7, extent = nothing) -> Matrix
+    raytrace_component_power(target, beams; nspot = 41, ncone = 13, extent = nothing) -> Matrix
 
 Power (TW) each beam (rows) deposits on each component (columns, both sides), by the
 reference ray trace — exact power accounting independent of mesh resolution.
 """
 function raytrace_component_power(t::Target, beams::AbstractVector{<:Beam}; nspot::Integer = 41,
-                                  ncone::Integer = 7, extent = nothing)
+                                  ncone::Integer = 13, extent = nothing)
     nc = length(t.components)
     M = zeros(length(beams), nc)
     Threads.@threads for bi in eachindex(beams)

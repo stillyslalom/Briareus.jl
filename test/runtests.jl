@@ -184,6 +184,18 @@ end
     pshield(d) = sum(d.element[elements(ts, :shield)])
     @test isapprox(pshield(d2), pshield(r2); rtol = 0.03)
     @test isapprox(pf(d2), pf(r2); rtol = 0.03)
+
+    # Far from focus at grazing incidence: a 30° quad crossing a hohlraum lands on the
+    # wall 7 mm past focus at 60° incidence. Power is conserved and the footprint
+    # matches a converged ray trace element by element.
+    th = hohlraum(length = 10.1, radius = 2.875, leh_radius = 1.55, capsule_radius = 0.9)
+    q30 = first(filter(b -> b.group === :inner30, nif_quads()))
+    φ = port_angles(q30)[2]
+    q30 = remake(q30; aim = (-0.6cosd(φ), -0.6sind(φ), 3.63 * sign(q30.port[3])))
+    dh = deposit(DepositionOperator(th, [q30]), [q30])
+    rh = raytrace_deposition(th, [q30]; nspot = 121, ncone = 61)
+    @test isapprox(sum(dh.element), q30.power; rtol = 1e-3)
+    @test sum(abs.(dh.element .- rh.element)) / q30.power < 0.03
 end
 
 @testset "hohlraum + gradients" begin
@@ -409,6 +421,30 @@ end
     @test length(violations(r2)) == 1
     path = write_clearance_csv(tempname() * ".csv", r)
     @test countlines(path) == 1 + length(r.rows)
+
+    # Aperture keep-out against the clearance check: one quad per cone through the
+    # entrance holes of a hohlraum, judged on the caps at 1% of peak.
+    th = hohlraum(length = 10.1, radius = 2.875, leh_radius = 1.55, capsule_radius = 0.9)
+    qs = nif_quads()
+    qs = [qs[findfirst(b -> b.group === g, qs)] for g in (:inner23, :inner30, :outer44, :outer50)]
+    rz = Dict(:inner23 => (1.09, 3.09), :inner30 => (0.6, 3.63), :outer44 => (0.0, 5.2),
+              :outer50 => (0.0, 5.01))
+    qs = map(qs) do b
+        r0, z0 = rz[b.group]
+        φ = port_angles(b)[2]
+        remake(b; aim = (-r0 * cosd(φ), -r0 * sind(φ), sign(b.port[3]) * z0))
+    end
+    ko = ApertureKeepOut(th; peak_fraction = 0.01)
+    rk = clearance(th, qs; targets = (:wall, :capsule), hardware = (:cap_top, :cap_bottom),
+                   peak_fraction = 0.01, wings = [], nangles = 8)
+    worst = [minimum(x.clearance for x in rk.rows if x.beam == b.name) for b in qs]
+    @test aperture_clearance(ko, qs) ≈ worst atol = 0.005
+    p = GroupPointing(qs; by = :beam, fields = (:z, :phi))
+    g = ForwardDiff.gradient(x -> sum(aperture_clearance(ko, apply(p, x))), initial_parameters(p))
+    @test all(isfinite, g) && norm(g) > 0
+    @test Briareus._keepout_penalty(ApertureKeepOut(th; minimum = -1.0), qs) == 0
+    @test Briareus._keepout_penalty(ApertureKeepOut(th; minimum = 1.0, weight = 2.0), qs) ≈
+          2 * sum((1 .- aperture_clearance(ApertureKeepOut(th), qs)) .^ 2)
 end
 
 @testset "I/O" begin

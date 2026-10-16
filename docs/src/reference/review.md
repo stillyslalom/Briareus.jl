@@ -2,6 +2,6 @@
 
 ```@autodocs
 Modules = [Briareus]
-Pages = ["src/clearance.jl", "src/unconverted.jl"]
+Pages = ["src/clearance.jl", "src/keepout.jl", "src/unconverted.jl"]
 Private = false
 ```

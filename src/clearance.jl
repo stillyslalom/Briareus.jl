@@ -418,6 +418,7 @@ function clearance(t::Target, beams::AbstractVector{<:Beam}; targets,
         envs, wingc = _envelopes(b, wings; intensity, peak_fraction, enclosed, margin = margin + ssd)
         s_stop = _landing(t, envs[1], tgt_idx)
         frames = [BeamFrame(variants[v]) for v in vids]
+        cone = cone_directions(b, _CLEARANCE_NCONE)[1]
         rhs = [w isa PowerLawWing ? _wing_rh(w, b) : 0.0 for w in wings]
         P = b.power
         for (j, ci) in enumerate(hw_idx)
@@ -428,7 +429,7 @@ function clearance(t::Target, beams::AbstractVector{<:Beam}; targets,
                 s <= s_stop || continue
                 d < best && ((best, bp, bs) = (d, x, s))
                 for (vi, f) in zip(vids, frames)
-                    I = intensity_at(f, x)
+                    I = _cone_mean_intensity(f, cone, x)
                     if !isempty(wings)
                         dv = x - f.focus
                         r = hypot(dot(dv, f.e1), dot(dv, f.e2))
@@ -454,7 +455,25 @@ function clearance(t::Target, beams::AbstractVector{<:Beam}; targets,
     return ClearanceReport(rows, contour, R, errs, Float64(margin), tgt, thresholds)
 end
 
-intensity_at(f::BeamFrame, x) = intensity(f, x)
+const _CLEARANCE_NCONE = 37
+
+# Beam intensity at `x`: the mean over cone directions of the best-focus profile where
+# each ray through `x` crosses the focal plane, i.e. the f-cone convolution that
+# deposition uses. (The moment-matched `intensity` sharpens the edge of a defocused
+# flat-topped spot, where clearance is judged.)
+function _cone_mean_intensity(f::BeamFrame, ds, x)
+    d = x - f.focus
+    s = dot(d, f.k)
+    acc = 0.0
+    for dj in ds
+        sj = s / dot(dj, f.k)
+        xf = d - sj * dj
+        u, v = dot(xf, f.e1), dot(xf, f.e2)
+        acc += _sg_focal(f.core, u, v)
+        f.has_halo && (acc += _sg_focal(f.halo, u, v))
+    end
+    return acc / length(ds)
+end
 
 # Core envelope (contour at thr/N for N spot components) and wing contour radii.
 function _envelopes(b::Beam, wings; intensity, peak_fraction, enclosed, margin)

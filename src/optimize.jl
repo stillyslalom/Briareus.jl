@@ -275,23 +275,26 @@ end
 """
     symmetry_objective(; modes = (2 => 1.0, 4 => 1.0), odd = 1.0, lmax = 6,
                        clip = 10.0, missed = 10.0, direct = 10.0, direct_names = (:capsule,),
-                       drive = nothing, drive_weight = 1.0, center = 0)
+                       drive = nothing, drive_weight = 1.0, center = 0, keepout = nothing)
 
 Objective for indirect-drive symmetry: `Σ wₗ (aₗ/a₀)²` over `modes`, plus `odd ×` the
 sum of squared odd moments (top/bottom imbalance), plus `clip`, `missed` and `direct`
 times the squared fractions of laser power clipped on the outside of the target,
 missing it, or hitting `direct_names` (e.g. the capsule) directly. When `drive`
-(TW/mm²) is given, adds `drive_weight × (a₀/drive - 1)²`.
+(TW/mm²) is given, adds `drive_weight × (a₀/drive - 1)²`. A `keepout` (an
+`ApertureKeepOut`) adds its penalty on the beams' worst-case clearance from the
+entrance-hole rims.
 """
 function symmetry_objective(; modes = (2 => 1.0, 4 => 1.0), odd = 1.0, lmax::Integer = 6,
                             clip = 10.0, missed = 10.0, direct = 10.0,
                             direct_names = (:capsule,), drive = nothing, drive_weight = 1.0,
-                            center = zero(Vec3))
+                            center = zero(Vec3), keepout = nothing)
     return function (ev::Evaluation)
         a = flux_moments(ev; lmax, center)
         J = sum(w * (a[l+1] / a[1])^2 for (l, w) in modes)
         odd > 0 && (J += odd * sum((a[l+1] / a[1])^2 for l in 1:2:lmax))
         J += _penalties(ev; clip, missed, direct, direct_names)
+        J += _keepout_penalty(keepout, ev.beams)
         drive === nothing || (J += drive_weight * (a[1] / drive - 1)^2)
         return J
     end
@@ -323,7 +326,7 @@ end
 """
     asymmetry_objective(; modes = (1 => 1.0, 2 => 1.0, 3 => 1.0, 4 => 1.0), components = (),
                         clip = 10.0, missed = 10.0, direct = 10.0, direct_names = (:capsule,),
-                        drive = nothing, drive_weight = 1.0)
+                        drive = nothing, drive_weight = 1.0, keepout = nothing)
 
 Objective for three-dimensional drive symmetry. For each `l => w` in `modes` it adds
 `w × relative_mode_power(c, l)` — the rotation-invariant power of all `2l+1` real
@@ -331,12 +334,13 @@ harmonics of degree `l` over the mean (`(aₗ/a₀)²/(2l+1)` for an axisymmetri
 for each `(l, m) => w` in `components` adds `w × (c_lm/c_00)²`, so a particular
 azimuthal mode (e.g. the `l = 1, m = ±1` drift of a dropped bundle) can be weighted
 separately. Penalties for clipping, missing and direct capsule illumination and the
-`drive` target are as in `symmetry_objective`, with `drive` compared to the mean flux
+`drive` target and `keepout` are as in `symmetry_objective`, with `drive` compared to the mean flux
 `c_00/√(4π)`.
 """
 function asymmetry_objective(; modes = (1 => 1.0, 2 => 1.0, 3 => 1.0, 4 => 1.0),
                              components = (), clip = 10.0, missed = 10.0, direct = 10.0,
-                             direct_names = (:capsule,), drive = nothing, drive_weight = 1.0)
+                             direct_names = (:capsule,), drive = nothing, drive_weight = 1.0,
+                             keepout = nothing)
     lmax = maximum(vcat([l for (l, _) in modes], [lm[1] for (lm, _) in components], 0))
     return function (ev::Evaluation)
         c = flux_ylm(ev; lmax = max(lmax, 1))
@@ -348,6 +352,7 @@ function asymmetry_objective(; modes = (1 => 1.0, 2 => 1.0, 3 => 1.0, 4 => 1.0),
             J += w * (c[mode_index(l, m)] / c[1])^2
         end
         J += _penalties(ev; clip, missed, direct, direct_names)
+        J += _keepout_penalty(keepout, ev.beams)
         drive === nothing || (J += drive_weight * (c[1] / sqrt(4π) / drive - 1)^2)
         return J
     end

@@ -32,6 +32,7 @@ export view_factors, closure_error, enforce_closure!, RadiationModel, RadiationS
 export PulseShape, pulse_energy, with_pulses, drive_history
 export enclosed_radius, envelope_radius, focal_profile, enclosed_fraction, with_axes,
        BeamEnvelope, envelope_distance, ClearanceRow, ClearanceReport, clearance,
+       ApertureKeepOut, aperture_clearance,
        beam_component_power, violations, min_clearance, write_clearance_csv,
        SpotWing, PowerLawWing, UniformScatter, nif_wings, DEFAULT_CLEARANCE_THRESHOLDS
 export LaserPlasmaModel, apply_lpi, Backscatter, CalibratedTransfer, linear_transfer,
@@ -61,6 +62,7 @@ include("imaging.jl")
 include("optimize.jl")
 include("history.jl")
 include("clearance.jl")
+include("keepout.jl")
 include("lpi.jl")
 include("io.jl")
 include("cbet.jl")

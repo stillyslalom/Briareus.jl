@@ -161,6 +161,20 @@ struct _SGComponent{T}
     halfn::Float64
     defocus_c::Float64        # (1/(2F))² / (4 m_n): adds s²·c to a², b²
     power_norm::T             # component power / (2π Γ(2/n)/n)
+    qcut::Float64             # (u/a)² + (v/b)² beyond which the profile is < e⁻⁴⁰ of peak
+end
+
+function _SGComponent(a2, b2, halfn, defocus_c, power_norm)
+    T = promote_type(typeof(a2), typeof(b2), typeof(power_norm))
+    return _SGComponent{T}(a2, b2, halfn, defocus_c, power_norm, 40.0^(1 / halfn))
+end
+
+# Best-focus profile of one component at focal-plane coordinates (u, v); zero where it
+# is below e⁻⁴⁰ of its peak, which skips the transcendental functions off the spot.
+@inline function _sg_focal(c::_SGComponent, u, v)
+    q = u^2 / c.a2 + v^2 / c.b2
+    q > c.qcut && return zero(c.power_norm * q)
+    return c.power_norm / sqrt(c.a2 * c.b2) * exp(-q^c.halfn)
 end
 
 @inline function _sg_eval(c::_SGComponent, u, v, s, cscale = 1.0)
@@ -200,7 +214,10 @@ Beam intensity (TW/mm², per unit area normal to the beam) at point `x`. Away fr
 focus the spot is the focal profile convolved with the geometric f-cone disk; this is
 approximated by widening the semi-axes so second moments add exactly
 (`a(s)² = a² + s²/(16 F² m_n)` with `m_n = Γ(4/n)/(2Γ(2/n))`) at fixed order `n`, for
-the core and halo components separately.
+the core and halo components separately. This smooth profile serves envelope and
+clearance estimates; far from focus its shape departs from the convolution, so
+deposition (`DepositionOperator`, `raytrace_deposition`) sums over the cone directions
+instead.
 """
 @inline function intensity(f::BeamFrame, x)
     d = x - f.focus
@@ -259,8 +276,9 @@ end
 
 # Equal-weight points on the unit disk: the center plus rings of 6, 12, 18, … points,
 # each ring at the rms radius of its equal-area annulus. The radii are then scaled so
-# the set reproduces the disk's second moment ⟨r²⟩ = 1/2 exactly, the quantity the
-# moment-matched defocus model is built on.
+# the set reproduces the disk's second moment ⟨r²⟩ = 1/2 exactly, so that the
+# defocused spot of the deposition operator and the ray trace, a sum over these
+# directions, grows at the exact geometric-optics rate.
 function _disk_quadrature(n)
     n <= 1 && return [(0.0, 0.0)]
     counts = Int[]

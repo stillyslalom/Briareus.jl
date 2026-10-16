@@ -88,9 +88,12 @@ A beam's direction is fixed by its port (`k = -port`), and pointing translates i
 through `aim`. Best focus is at `aim + defocus·k`. Spot axes are given in the port's
 (θ̂, φ̂) frame.
 
-Away from focus, the spot is the focal profile convolved with the f-cone. In fully lit
-regions this is approximated by second-moment matching. Partially shadowed points are
-traced back along each visible cone direction to the focal plane.
+Away from focus, the spot is the focal profile convolved with the f-cone. The
+deposition operator samples that convolution at the cone directions: each surface point
+receives, from each cone direction that reaches it unobstructed, the focal profile where
+that ray crosses the best-focus plane, weighted by the ray's own incidence angle. Power
+is conserved at any distance from focus and incidence, and shadows near focus are
+correlated with the part of the spot they block.
 
 ## Facility data and provenance
 
