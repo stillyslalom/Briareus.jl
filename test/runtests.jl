@@ -649,6 +649,15 @@ end
     @test g[3] ≈ (obj(evaluate(sub, x0 .+ h .* e1)) - obj(evaluate(sub, x0 .- h .* e1))) / 2h rtol = 1e-4
     lo, hi = bounds(sub.param, x0; power = 0.5, power_max = 9.0)
     @test all(hi .== 9.0) && all(lo .== 4.0)
+    # a reference shape: zero at the reference itself, the plain objective without one
+    ev = evaluate(sub, x0)
+    quiet = (; clip = 0.0, missed = 0.0, direct = 0.0)
+    cr = flux_ylm(ev; lmax = 4)
+    @test asymmetry_objective(; reference = cr, quiet...)(ev) < 1e-25
+    @test asymmetry_objective(; reference = 2cr, quiet...)(ev) < 1e-25   # shape, not scale
+    @test asymmetry_objective(; reference = cf, quiet...)(ev) > 0          # the full set differs
+    @test asymmetry_objective(; quiet...)(ev) ≈ sum(relative_mode_power(cr, l) for l in 1:4)
+    @test_throws ArgumentError asymmetry_objective(; reference = cr[1:4])
 end
 
 

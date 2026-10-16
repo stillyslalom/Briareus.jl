@@ -328,7 +328,8 @@ end
 """
     asymmetry_objective(; modes = (1 => 1.0, 2 => 1.0, 3 => 1.0, 4 => 1.0), components = (),
                         clip = 10.0, missed = 10.0, direct = 10.0, direct_names = (:capsule,),
-                        drive = nothing, drive_weight = 1.0, keepout = nothing)
+                        drive = nothing, drive_weight = 1.0, keepout = nothing,
+                        reference = nothing)
 
 Objective for three-dimensional drive symmetry. For each `l => w` in `modes` it adds
 `w × relative_mode_power(c, l)` — the rotation-invariant power of all `2l+1` real
@@ -336,22 +337,32 @@ harmonics of degree `l` over the mean (`(aₗ/a₀)²/(2l+1)` for an axisymmetri
 for each `(l, m) => w` in `components` adds `w × (c_lm/c_00)²`, so a particular
 azimuthal mode (e.g. the `l = 1, m = ±1` drift of a dropped bundle) can be weighted
 separately. Penalties for clipping, missing and direct capsule illumination and the
-`drive` target and `keepout` are as in `symmetry_objective`, with `drive` compared to the mean flux
-`c_00/√(4π)`.
+`drive` target and `keepout` are as in `symmetry_objective`, with `drive` compared to
+the mean flux `c_00/√(4π)`.
+
+With `reference` (a coefficient vector from `flux_ylm`, e.g. of a tuned design before a
+change to the target or the beams), the modes and components measure the departure of
+`c_lm/c_00` from the reference's `c_lm/c_00` instead of from zero, so the objective
+restores a known-good drive shape.
 """
 function asymmetry_objective(; modes = (1 => 1.0, 2 => 1.0, 3 => 1.0, 4 => 1.0),
                              components = (), clip = 10.0, missed = 10.0, direct = 10.0,
                              direct_names = (:capsule,), drive = nothing, drive_weight = 1.0,
-                             keepout = nothing)
+                             keepout = nothing, reference = nothing)
     lmax = maximum(vcat([l for (l, _) in modes], [lm[1] for (lm, _) in components], 0))
+    nref = (max(lmax, 1) + 1)^2
+    reference === nothing || length(reference) >= nref ||
+        throw(ArgumentError("reference needs coefficients through l = $(max(lmax, 1))"))
+    shape = reference === nothing ? zeros(nref) : reference[1:nref] ./ reference[1]
     return function (ev::Evaluation)
         c = flux_ylm(ev; lmax = max(lmax, 1))
+        d = c .- c[1] .* shape                 # departure from the reference shape
         J = zero(c[1])
         for (l, w) in modes
-            J += w * relative_mode_power(c, l)
+            J += w * sum(abs2, view(d, l^2+1:(l+1)^2)) / c[1]^2   # relative_mode_power
         end
         for ((l, m), w) in components
-            J += w * (c[mode_index(l, m)] / c[1])^2
+            J += w * (d[mode_index(l, m)] / c[1])^2
         end
         J += _penalties(ev; clip, missed, direct, direct_names)
         J += _keepout_penalty(keepout, ev.beams)
