@@ -25,16 +25,15 @@ jobs:
       fail-fast: false
       matrix:
         version:
-          - 'lts'
           - '1'
         os:
           - ubuntu-latest
         threads:
-          - '1'
+          - '4'
         include:
-          - version: '1'
+          - version: 'lts'
             os: ubuntu-latest
-            threads: '4'
+            threads: '1'
           - version: '1'
             os: windows-latest
             threads: '4'
@@ -47,6 +46,10 @@ jobs:
       - uses: julia-actions/cache@v2
       - uses: julia-actions/julia-buildpkg@v1
       - uses: julia-actions/julia-runtest@v1
+        with:
+          # Coverage is not uploaded, and Julia 1.13 miscompiles the inlined
+          # point-to-polygon view-factor kernel under --code-coverage (wrong values).
+          coverage: false
   gui:
     name: BriareusGUI - Julia ${{ matrix.version }}
     runs-on: ubuntu-latest
