@@ -320,9 +320,9 @@ function edit_window!(ts::TargetSetup, i::Integer, key::Symbol, text)
         ws = copy(ts.windows[])
         ws[i] = WindowSpec((f === key ? v : getfield(w, f) for f in fieldnames(WindowSpec))...)
         ok = _set_windows!(ts, ws)
+        ts.error[] = replace(ts.error[], "ArgumentError: " => "")
         # say which window, unless the geometry's message names them
-        ok || occursin(r"windows? \d", ts.error[]) ||
-            (ts.error[] = "window $i: " * replace(ts.error[], "ArgumentError: " => ""))
+        ok || occursin(r"windows? \d", ts.error[]) || (ts.error[] = "window $i: " * ts.error[])
         return ok
     catch err
         err isa ArgumentError || rethrow()

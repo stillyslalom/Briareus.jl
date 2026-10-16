@@ -609,18 +609,29 @@ end
 const _TALIS_RULE_ORDER = (:capture_3w, :incidence_3w, :clearance_3w, :clearance_1w,
                            :management_1w, :diagnostic_1w, :tas_stay_in)
 
-function _talis_requirement(rule, s)
-    rule === :capture_3w && return @sprintf("%g%% contour ≥ %g mm inside substrate edge",
-                                            100s.capture_contour, s.capture_margin)
-    rule === :incidence_3w && return @sprintf("incidence < %g° to target normal", s.max_incidence)
-    rule === :clearance_3w && return @sprintf("%g%% contour > %g mm from component",
-                                              100s.clearance_contour, s.clearance_margin)
-    rule === :clearance_1w && return @sprintf("1ω 10%% footprint (%g mm off aim) > %g mm",
-                                              s.omega1_edge, s.omega1_margin)
-    rule === :management_1w && return @sprintf("R < %g mm cyl./%g mm sph., or specular > %g° from quads",
-                                               s.cylinder_radius, s.sphere_radius, s.reflection_angle)
-    rule === :diagnostic_1w && return "diagnostics ≥ 10 mm (TCC) → 25 mm (1 m) from 1ω"
-    rule === :tas_stay_in && return @sprintf("≤ %g mm beyond extreme aim point (TAS)", s.stay_in)
+"""
+    talis_requirement(rule, settings) -> String
+
+Human-readable requirement of a `talis_check` rule (`:capture_3w`, `:incidence_3w`,
+`:clearance_3w`, `:clearance_1w`, `:management_1w`, `:diagnostic_1w`, `:tas_stay_in`)
+under the thresholds in `settings` (a `TaLISReport`'s `settings`).
+"""
+function talis_requirement(rule, s)
+    rule === :capture_3w &&
+        return @sprintf("%g%% contour ≥ %g mm inside the substrate edge", 100s.capture_contour,
+                        s.capture_margin)
+    rule === :incidence_3w && return @sprintf("incidence < %g° to the surface normal", s.max_incidence)
+    rule === :clearance_3w &&
+        return @sprintf("%g%% contour > %g mm from the component", 100s.clearance_contour,
+                        s.clearance_margin)
+    rule === :clearance_1w &&
+        return @sprintf("1ω 10%% footprint (%g mm off the 3ω axis) > %g mm from the component",
+                        s.omega1_edge, s.omega1_margin)
+    rule === :management_1w &&
+        return @sprintf("curvature radius < %g mm (cylinder) or < %g mm (sphere), or specular 1ω > %g° from open ports",
+                        s.cylinder_radius, s.sphere_radius, s.reflection_angle)
+    rule === :diagnostic_1w && return "diagnostics ≥ 10 mm (at TCC) to 25 mm (at 1 m) from 1ω light"
+    rule === :tas_stay_in && return @sprintf("≤ %g mm beyond the extreme aim points (TAS)", s.stay_in)
     return string(rule)
 end
 
@@ -649,7 +660,7 @@ function Base.show(io::IO, ::MIME"text/plain", r::TaLISReport)
         isempty(rs) && continue
         w = rs[argmin([x.margin for x in rs])]
         @printf(io, "  %-14s %-53s %4d %6d %4d  %+9.3f %-3s  %s / %s\n", rule,
-                _talis_requirement(rule, s), count(x -> x.status === :pass, rs),
+                talis_requirement(rule, s), count(x -> x.status === :pass, rs),
                 count(x -> x.status === :review, rs), count(x -> x.status === :fail, rs),
                 w.margin, w.unit, w.beam, w.component)
     end

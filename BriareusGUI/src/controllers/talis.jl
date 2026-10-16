@@ -218,30 +218,6 @@ talis_rows(tl::TaLISState) =
     tl.report[] === nothing ? TaLISRow[] : violations(tl.report[]; status = (:fail, :review, :pass))
 
 """
-    talis_requirement(rule, settings) -> String
-
-The requirement a TaLIS rule checks, with the thresholds of a report's `settings`.
-"""
-function talis_requirement(rule::Symbol, s)
-    rule === :capture_3w &&
-        return @sprintf("%g %% contour ≥ %g mm inside the substrate edge", 100s.capture_contour,
-                        s.capture_margin)
-    rule === :incidence_3w && return @sprintf("incidence < %g° to the surface normal", s.max_incidence)
-    rule === :clearance_3w &&
-        return @sprintf("%g %% contour > %g mm from the component", 100s.clearance_contour,
-                        s.clearance_margin)
-    rule === :clearance_1w &&
-        return @sprintf("1ω 10 %% footprint (%g mm off the 3ω axis) > %g mm from the component",
-                        s.omega1_edge, s.omega1_margin)
-    rule === :management_1w &&
-        return @sprintf("curvature radius < %g mm (cylinder) or < %g mm (sphere), or specular 1ω > %g° from open ports",
-                        s.cylinder_radius, s.sphere_radius, s.reflection_angle)
-    rule === :diagnostic_1w && return "diagnostics ≥ 10 mm (at TCC) to 25 mm (at 1 m) from 1ω light"
-    rule === :tas_stay_in && return @sprintf("≤ %g mm beyond the extreme aim points (TAS)", s.stay_in)
-    return String(rule)
-end
-
-"""
     talis_rule_rows(tl::TaLISState) -> Vector{NamedTuple}
 
 One row per rule in the report: `(; rule, label, requirement, pass, review, fail,

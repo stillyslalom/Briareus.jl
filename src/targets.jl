@@ -46,9 +46,10 @@ end
 function _check_windows(windows, R, h)
     ext = [_window_extent(w, R) for w in windows]
     tol = 1e-9 * max(R, h)
-    for (w, (_, Δφ, za, zb)) in zip(windows, ext)
-        Δφ <= 2π + 1e-12 || throw(ArgumentError("window wider than the wall circumference"))
-        -h - tol <= za && zb <= h + tol || throw(ArgumentError("window extends past the end of the wall"))
+    for (i, (_, Δφ, za, zb)) in enumerate(ext)
+        Δφ <= 2π + 1e-12 || throw(ArgumentError("window $i is wider than the wall circumference"))
+        -h - tol <= za && zb <= h + tol ||
+            throw(ArgumentError("window $i extends past the end of the wall"))
     end
     for i in eachindex(ext), j in i+1:lastindex(ext)
         (ai, wi, zai, zbi), (aj, wj, zaj, zbj) = ext[i], ext[j]

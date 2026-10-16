@@ -146,7 +146,7 @@ end
     @test occursin("overlap", ts.error[]) && ts.target[] === t && ts.windows[][2].phi == 270
     @test !edit_window!(ts, 1, :z, "5.0")                   # past the end of the 10.1 mm wall
     @test occursin("past the end", ts.error[]) && ts.windows[][1].z == 0
-    @test startswith(ts.error[], "window 1: ")                # which window, for the user
+    @test startswith(ts.error[], "window 1")                  # which window, for the user
     @test !edit_window!(ts, 1, :width, "0") && occursin("positive", ts.error[])
     @test !edit_window!(ts, 1, :albedo, "1.5") && occursin("between 0 and 1", ts.error[])
     @test !edit_window!(ts, 1, :height, "tall") && occursin("must be a number", ts.error[])

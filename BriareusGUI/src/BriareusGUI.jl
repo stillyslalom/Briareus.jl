@@ -55,7 +55,7 @@ export ReviewState, REVIEW_QUALITY, REVIEW_VIEWS, review_batch, default_selectio
        clearance_rows, worst_rows, review_brief, export_clearance, review_stale
 export TaLISState, TALIS_PIVOTS, TALIS_RULE_LABELS, TALIS_TOLERANCE_CAVEAT, set_talis_role!,
        set_talis_pivot!, edit_talis!, talis_kwargs, start_talis!, cancel_talis!, talis_rows,
-       talis_requirement, talis_rule_rows, talis_notes, talis_brief, export_talis, talis_stale
+       talis_rule_rows, talis_notes, talis_brief, export_talis, talis_stale
 export DesignSession, DESIGN_STEPS, set_step!, step_label, step_status, drive_stale,
        build_scenario!, accept_optimum!, write_visrad_kit!
 
