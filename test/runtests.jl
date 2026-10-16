@@ -296,4 +296,76 @@ end
     @test h.delivered ≈ 48 .* pulse.([0.5, 2.0, 4.0, 5.5])
 end
 
+@testset "clearance" begin
+    @test enclosed_radius(2.0, 1 - exp(-1)) ≈ 1
+    # point–ellipse distance against brute force, inside and outside
+    rng = MersenneTwister(3)
+    for _ in 1:200
+        a, b = 0.3 + rand(rng), 0.3 + rand(rng)
+        u, v = 3 .* (rand(rng, 2) .- 0.5)
+        d = Briareus._ellipse_distance(u, v, a, b)
+        bf = minimum(hypot(u - a * cos(θ), v - b * sin(θ)) for θ in range(0, 2π; length = 20001))
+        @test abs(d) ≈ bf atol = 1e-5
+        @test (d < 0) == ((u / a)^2 + (v / b)^2 < 1)
+    end
+    # Beam straight down onto a foil at z = 0; a small disk upstream at z = 2 with its
+    # nearest edge 1.0 mm from the axis, and one below the foil (downstream, ignored).
+    spot = SuperGaussianSpot(0.3; order = 4.0)
+    b = Beam("b"; theta = 0, phi = 0, power = 1.0, spot, fnumber = 8.0)
+    up = translate(Component(:up, disk_mesh(0.05, 0.0; nr = 1, nphi = 32), gold()), (1.05, 0, 2.0))
+    down = translate(Component(:down, disk_mesh(0.05, 0.0; nr = 1, nphi = 32), gold()), (0.2, 0, -1.0))
+    t = Target(foil(:f, (0, 0, 0), (0, 0, 1); width = 4.0, n = 8), up, down)
+    r = clearance(t, [b]; targets = (:f,), margin = 0.1)
+    row(c) = only(x for x in r.rows if x.component === c)
+    expected = 1.0 - (enclosed_radius(4.0, 0.99) * 0.3 + 2.0 / 16 + 0.1)
+    @test row(:up).clearance ≈ expected atol = 1e-9
+    @test row(:up).s ≈ -2.0
+    @test row(:down).clearance == Inf
+    @test isempty(violations(r))
+    # A plate across the beam upstream intercepts everything and overlaps.
+    plate = Component(:plate, translate(rectangle_mesh(3.0, 3.0; nu = 6, nv = 6), (0, 0, 1.0)), gold();
+                      two_sided = true)
+    r2 = clearance(Target(foil(:f, (0, 0, 0), (0, 0, 1); width = 4.0, n = 8), plate), [b]; targets = (:f,))
+    @test only(r2.rows).clearance < 0
+    @test only(r2.rows).intercepted ≈ 1 rtol = 1e-3
+    @test length(violations(r2)) == 1
+    path = write_clearance_csv(tempname() * ".csv", r)
+    @test countlines(path) == 1 + length(r.rows)
+end
+
+@testset "laser-plasma models" begin
+    beams = [Beam("i$k"; theta = 23.5, phi = 90k, power = 2.0, group = :inner) for k in 1:4]
+    append!(beams, [Beam("o$k"; theta = 50, phi = 90k + 45, power = 3.0, group = :outer) for k in 1:4])
+    bs = apply_lpi(Backscatter(:inner => 0.1, :outer => ([0.0, 10.0], [0.0, 0.2])), beams, 5.0)
+    @test all(b.power ≈ 1.8 for b in bs if b.group === :inner)
+    @test all(b.power ≈ 2.7 for b in bs if b.group === :outer)
+    # calibrated transfer conserves power and responds to Δλ
+    ct = CalibratedTransfer((:outer,), (:inner,), linear_transfer(0.05, 0.1))
+    shifted = [remake(b; dlambda = b.group === :inner ? 1.0 : 0.0) for b in beams]
+    eff = apply_lpi(ct, shifted)
+    @test sum(b.power for b in eff) ≈ sum(b.power for b in beams)
+    @test sum(b.power for b in eff if b.group === :outer) ≈ 12 * (1 - 0.15)
+    chain = apply_lpi((Backscatter(:inner => 0.1), ct), shifted)
+    @test sum(b.power for b in chain) ≈ 20 - 0.8
+    tab = tabulated_transfer([-1.0, 0.0, 2.0], [0.0, 0.1, 0.3])
+    @test tab(1.0, 0.0) ≈ 0.2
+    @test ForwardDiff.derivative(x -> tab(x, 0.0), 1.0) ≈ 0.1
+    # gradients flow through dlambda in a scenario
+    t = hohlraum(nz = 10, nphi = 16, capsule_ntheta = 8, capsule_nphi = 12)
+    q = [remake(b; aim = (0.0, 0.0, sign(b.port[3]) * (b.group in (:inner23, :inner30) ? 3.3 : 5.0)))
+         for b in nif_quads()]
+    p = GroupPointing(q; fields = (:dlambda,))
+    lpi = CalibratedTransfer((:outer44, :outer50), (:inner23, :inner30), linear_transfer(0.0, 0.05))
+    sc = Scenario(t, q; observe = :capsule, parameterization = p, lpi)
+    f(x) = (a = flux_moments(evaluate(sc, x); lmax = 2); a[3] / a[1])
+    x0 = zeros(nparams(p))
+    x1 = [k in (:inner23, :inner30) ? 1.0 : 0.0 for k in p.keys]
+    @test f(x1) < f(x0)               # more inner-cone (waist) drive lowers flux P2
+    g = ForwardDiff.gradient(f, x1)
+    h = 1e-6
+    @test g[1] ≈ (f(x1 .+ h .* (1:4 .== 1)) - f(x1 .- h .* (1:4 .== 1))) / 2h rtol = 1e-4
+    ev = evaluate(sc, x1)
+    @test sum(b.power for b in ev.effective) ≈ sum(b.power for b in ev.beams)
+end
+
 end

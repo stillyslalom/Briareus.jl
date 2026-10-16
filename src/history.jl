@@ -33,9 +33,10 @@ with_pulses(beams, pulses, t) = [remake(b; power = pulses[b.group](t)) for b in 
 
 """
     drive_history(model, op, beams_at, times; observe = :capsule, lmax = 6,
-                  wall = (:wall,)) -> NamedTuple
+                  wall = (:wall,), lpi = nothing) -> NamedTuple
 
-Quasi-static drive history: at each time, deposit `beams_at(t)` with `op`, solve the
+Quasi-static drive history: at each time, deposit `beams_at(t)` with `op` (after the
+laser–plasma model `lpi`, evaluated at that time), solve the
 radiosity at that time (time- and temperature-dependent albedos included), and record
 
 - `delivered` — laser power (TW)
@@ -47,7 +48,8 @@ radiosity at that time (time- and temperature-dependent albedos included), and r
   of the `wall` components.
 """
 function drive_history(m::RadiationModel, op::DepositionOperator, beams_at, times;
-                       observe = :capsule, lmax::Integer = 6, wall = (:wall,))
+                       observe = :capsule, lmax::Integer = 6, wall = (:wall,),
+                       lpi = nothing)
     t = m.target
     obs = elements(t, (observe isa Symbol ? (observe,) : observe)...)
     we = elements(t, wall...)
@@ -57,7 +59,7 @@ function drive_history(m::RadiationModel, op::DepositionOperator, beams_at, time
     wall_Tr, wall_albedo = zeros(nt), zeros(nt)
     moments = zeros(lmax + 1, nt)
     for (k, τ) in enumerate(times)
-        beams = beams_at(τ)
+        beams = apply_lpi(lpi, beams_at(τ), τ)
         dep = deposit(op, beams)
         sol = solve(m, dep; time = τ)
         a = legendre_moments(sol.H, t, obs; lmax)

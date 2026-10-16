@@ -38,7 +38,8 @@ _sg_moment(n) = gamma(4 / n) / (2 * gamma(2 / n))
 
 One laser beam entering from the port at polar angle `theta` and azimuth `phi`
 (degrees, target-chamber frame, z up). `power` in TW. `group` labels beams that share
-pointing parameters (e.g. a cone).
+pointing parameters (e.g. a cone). `wavelength` is the nominal vacuum wavelength (µm)
+and `dlambda` the detuning from it (Å), used by laser–plasma models.
 """
 struct Beam{T<:Real}
     name::String
@@ -50,15 +51,18 @@ struct Beam{T<:Real}
     fnumber::Float64
     group::Symbol
     quad::String
+    wavelength::Float64       # nominal vacuum wavelength (µm)
+    dlambda::T                # wavelength offset from nominal (Å)
 end
 
 function Beam(name::AbstractString; theta, phi, power = 1.0, spot = SuperGaussianSpot(0.5),
-              fnumber = 20.0, aim = (0.0, 0.0, 0.0), defocus = 0.0, group = :none, quad = "")
+              fnumber = 20.0, aim = (0.0, 0.0, 0.0), defocus = 0.0, group = :none, quad = "",
+              wavelength = 0.351, dlambda = 0.0)
     p = port_vector(theta, phi)
-    T = promote_type(eltype(aim), typeof(power), typeof(defocus), typeof(spot.a))
+    T = promote_type(eltype(aim), typeof(power), typeof(defocus), typeof(spot.a), typeof(dlambda))
     sp = SuperGaussianSpot{T}(spot.a, spot.b, spot.order, spot.angle)
     return Beam{T}(String(name), p, SVector{3,T}(aim...), T(power), T(defocus), sp,
-                   Float64(fnumber), Symbol(group), String(quad))
+                   Float64(fnumber), Symbol(group), String(quad), Float64(wavelength), T(dlambda))
 end
 
 """
@@ -93,17 +97,23 @@ function spot_axes(b::Beam)
 end
 
 """
-    remake(beam; aim, power, defocus, spot)
+    remake(beam; aim, power, defocus, spot, dlambda, port, fnumber, group, name)
 
 Copy of `beam` with the given fields replaced; the element type widens as needed (so
 ForwardDiff duals can flow through pointing parameters).
 """
-function remake(b::Beam; aim = b.aim, power = b.power, defocus = b.defocus, spot = b.spot)
-    T = promote_type(eltype(aim), typeof(power), typeof(defocus), typeof(spot.a), typeof(spot.b))
+function remake(b::Beam; aim = b.aim, power = b.power, defocus = b.defocus, spot = b.spot,
+                dlambda = b.dlambda, port = b.port, fnumber = b.fnumber, group = b.group,
+                name = b.name)
+    T = promote_type(eltype(aim), typeof(power), typeof(defocus), typeof(spot.a), typeof(spot.b),
+                     typeof(dlambda))
     sp = SuperGaussianSpot{T}(spot.a, spot.b, spot.order, spot.angle)
-    return Beam{T}(b.name, b.port, SVector{3,T}(aim...), T(power), T(defocus), sp, b.fnumber,
-                   b.group, b.quad)
+    return Beam{T}(String(name), Vec3(port), SVector{3,T}(aim...), T(power), T(defocus), sp,
+                   Float64(fnumber), Symbol(group), b.quad, b.wavelength, T(dlambda))
 end
+
+"Wavelength (µm) including the detuning `dlambda`."
+wavelength(b::Beam) = b.wavelength + 1e-4 * b.dlambda
 
 function Base.show(io::IO, b::Beam)
     θ, φ = port_angles(b)

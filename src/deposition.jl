@@ -214,29 +214,58 @@ function raytrace_deposition(t::Target, beams::AbstractVector{<:Beam}; nspot::In
     E = [zeros(ne) for _ in 1:nb]
     L = [zeros(nc) for _ in 1:nb]
     per_beam = zeros(nb)
-    us = range(-extent, extent; length = nspot)
     Threads.@threads for bi in 1:nb
-        b = beams[bi]
-        a, bb, n = Float64(b.spot.a), Float64(b.spot.b), b.spot.order
-        e1, e2 = spot_axes(b)
-        k = direction(b)
-        focus = Vec3(b.aim + b.defocus * k)
-        dirs, dw = cone_directions(b, ncone)
-        wsum = sum(exp(-(u^2 + v^2)^(n / 2)) for u in us, v in us)
-        far = 4 * (t.scale + norm(focus)) + 1
-        for u in us, v in us
-            wp = exp(-(u^2 + v^2)^(n / 2)) / wsum
-            wp < 1e-12 && continue
-            pf = focus + (u * a) * e1 + (v * bb) * e2
-            for (d, wd) in zip(dirs, dw)
-                pw = Float64(b.power) * wp * wd
-                _, tri = closest_hit(t.bvh, pf - far * d, d)
-                tri == 0 && continue
-                per_beam[bi] += pw
-                e = dot(d, t.tri_normal[tri]) < 0 ? t.tri_front[tri] : t.tri_back[tri]
-                e > 0 ? (E[bi][e] += pw) : (L[bi][t.tri_comp[tri]] += pw)
-            end
+        per_beam[bi] = _raytrace_beam!(E[bi], L[bi], t, beams[bi], nspot, ncone, extent)
+    end
+    return Deposition(sum(E), sum(L), per_beam, sum(ForwardDiff.value(b.power) for b in beams))
+end
+
+"""
+    raytrace_component_power(target, beams; nspot = 41, ncone = 7, extent = 3.5) -> Matrix
+
+Power (TW) each beam (rows) deposits on each component (columns, both sides), by the
+reference ray trace — exact power accounting independent of mesh resolution.
+"""
+function raytrace_component_power(t::Target, beams::AbstractVector{<:Beam}; nspot::Integer = 41,
+                                  ncone::Integer = 7, extent = 3.5)
+    nc = length(t.components)
+    M = zeros(length(beams), nc)
+    Threads.@threads for bi in eachindex(beams)
+        E = zeros(nelements(t))
+        L = zeros(nc)
+        _raytrace_beam!(E, L, t, beams[bi], nspot, ncone, extent)
+        for e in eachindex(E)
+            M[bi, t.elem_comp[e]] += E[e]
+        end
+        M[bi, :] .+= L
+    end
+    return M
+end
+
+function _raytrace_beam!(E, L, t::Target, b::Beam, nspot, ncone, extent)
+    us = range(-extent, extent; length = nspot)
+    val = ForwardDiff.value
+    a, bb, n = val(b.spot.a), val(b.spot.b), b.spot.order
+    e1, e2 = spot_axes(b)
+    k = direction(b)
+    focus = Vec3(val.(b.aim)) + val(b.defocus) * k
+    dirs, dw = cone_directions(b, ncone)
+    wsum = sum(exp(-(u^2 + w^2)^(n / 2)) for u in us, w in us)
+    far = 4 * (t.scale + norm(focus)) + 1
+    P = val(b.power)
+    total = 0.0
+    for u in us, w in us
+        wp = exp(-(u^2 + w^2)^(n / 2)) / wsum
+        wp < 1e-12 && continue
+        pf = focus + (u * a) * e1 + (w * bb) * e2
+        for (d, wd) in zip(dirs, dw)
+            pw = P * wp * wd
+            _, tri = closest_hit(t.bvh, pf - far * d, d)
+            tri == 0 && continue
+            total += pw
+            e = dot(d, t.tri_normal[tri]) < 0 ? t.tri_front[tri] : t.tri_back[tri]
+            e > 0 ? (E[e] += pw) : (L[t.tri_comp[tri]] += pw)
         end
     end
-    return Deposition(sum(E), sum(L), per_beam, sum(Float64(b.power) for b in beams))
+    return total
 end

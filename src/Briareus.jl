@@ -14,7 +14,7 @@ using Printf
 using Random
 using StaticArrays
 using ForwardDiff
-using SpecialFunctions: gamma
+using SpecialFunctions: gamma, gamma_inc_inv
 import Optim
 
 export Vec3, Mesh, add_polygon!, merge_meshes, transform, translate, rotation_to,
@@ -22,13 +22,17 @@ export Vec3, Mesh, add_polygon!, merge_meshes, transform, translate, rotation_to
 export AlbedoModel, ConstantAlbedo, TabulatedAlbedo, WallLossAlbedo, albedo, Material, gold, ablator, BLACK,
        Component, aperture, Target, nelements, elements, component_index, element_quadrature
 export hohlraum, foil, disk_foil
-export SuperGaussianSpot, Beam, port_vector, port_angles, direction, remake, intensity,
+export SuperGaussianSpot, Beam, port_vector, port_angles, direction, remake, intensity, wavelength,
        beams_from_table, nif_quads, nif_beams, nif_spot, omega_ports, omega_beams, omega_spot
-export DepositionOperator, Deposition, deposit, raytrace_deposition, laser_flux,
+export DepositionOperator, Deposition, deposit, raytrace_deposition, raytrace_component_power, laser_flux,
        component_power
 export view_factors, closure_error, enforce_closure!, RadiationModel, RadiationSolution, solve,
        flux_response, energy_balance, radiation_temperature, to_Wcm2, SIGMA_SB, albedos
 export PulseShape, pulse_energy, with_pulses, drive_history
+export enclosed_radius, BeamEnvelope, envelope_distance, ClearanceRow, ClearanceReport, clearance,
+       beam_component_power, violations, min_clearance, write_clearance_csv
+export LaserPlasmaModel, apply_lpi, Backscatter, CalibratedTransfer, linear_transfer,
+       tabulated_transfer, lpi_summary
 export legendre, legendre_moments, legendre_weights, solid_angle, ylm_moments, mode_power, rms_nonuniformity
 export OrthoCamera, camera_from_port, render, radiance, line_of_sight_power
 export GroupPointing, nparams, parameter_names, initial_parameters, apply, bounds,
@@ -48,5 +52,7 @@ include("analysis.jl")
 include("imaging.jl")
 include("optimize.jl")
 include("history.jl")
+include("clearance.jl")
+include("lpi.jl")
 
 end

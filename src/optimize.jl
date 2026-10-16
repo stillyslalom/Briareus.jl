@@ -2,7 +2,7 @@
 
 const _CACHED_LMAX = 12
 
-const _FIELDS = (:z, :r, :phi, :defocus, :power, :spot)
+const _FIELDS = (:z, :r, :phi, :defocus, :power, :spot, :dlambda)
 
 """
     GroupPointing(beams; by = :group, fields = (:z, :r, :defocus), mirror = true)
@@ -17,6 +17,7 @@ Maps a parameter vector to beams. Beams are grouped by `by` (`:group` — e.g. c
 - `:defocus` — focal-plane offset along the beam (mm, see `Beam`).
 - `:power` — power per beam (TW).
 - `:spot` — multiplier on the best-focus spot semi-axes.
+- `:dlambda` — wavelength detuning (Å), used by laser–plasma models.
 
 Fields not listed keep each beam's template value.
 """
@@ -43,7 +44,8 @@ function GroupPointing(beams::AbstractVector{<:Beam}; by = :group,
                    defocus = Float64(ForwardDiff.value(b.defocus)),
                    spot = SuperGaussianSpot(Float64(ForwardDiff.value(b.spot.a)),
                                             Float64(ForwardDiff.value(b.spot.b));
-                                            order = b.spot.order, angle = b.spot.angle))
+                                            order = b.spot.order, angle = b.spot.angle),
+                   dlambda = Float64(ForwardDiff.value(b.dlambda)))
             for b in beams]
     return GroupPointing(tmpl, uk, members, collect(Symbol, fields), mirror)
 end
@@ -73,7 +75,8 @@ function initial_parameters(p::GroupPointing)
             f === :r ? dot(b.aim, er) :
             f === :phi ? dot(b.aim, eφ) :
             f === :defocus ? b.defocus :
-            f === :power ? b.power : 1.0
+            f === :power ? b.power :
+            f === :dlambda ? b.dlambda : 1.0
         end
         x[_pidx(p, g, fi)] = sum(vals) / length(vals)
     end
@@ -91,6 +94,7 @@ function apply(p::GroupPointing, x::AbstractVector{T}) where {T}
     for (g, mem) in enumerate(p.members)
         val(f) = (fi = findfirst(==(f), p.fields); fi === nothing ? nothing : x[_pidx(p, g, fi)])
         z, r, ϕ, dfc, pw, sp = val(:z), val(:r), val(:phi), val(:defocus), val(:power), val(:spot)
+        dl = val(:dlambda)
         for bi in mem
             b = p.template[bi]
             er, eφ = _radial(b)
@@ -103,7 +107,8 @@ function apply(p::GroupPointing, x::AbstractVector{T}) where {T}
                    SuperGaussianSpot{T}(sp * b.spot.a, sp * b.spot.b, b.spot.order, b.spot.angle)
             out[bi] = remake(b; aim, spot,
                              power = pw === nothing ? T(b.power) : pw,
-                             defocus = dfc === nothing ? T(b.defocus) : dfc)
+                             defocus = dfc === nothing ? T(b.defocus) : dfc,
+                             dlambda = dl === nothing ? T(b.dlambda) : dl)
         end
     end
     return out
@@ -111,13 +116,13 @@ end
 
 """
     bounds(p::GroupPointing, x0; z = 1.0, r = 1.0, phi = 1.0, defocus = 2.0,
-           power = 0.5, spot = 0.5) -> (lower, upper)
+           power = 0.5, spot = 0.5, dlambda = 2.0) -> (lower, upper)
 
-Box bounds around `x0`: `±z`, `±r`, `±phi`, `±defocus` mm, and relative `±power`,
-`±spot` fractions.
+Box bounds around `x0`: `±z`, `±r`, `±phi`, `±defocus` mm, relative `±power`, `±spot`
+fractions, and `±dlambda` Å.
 """
 function bounds(p::GroupPointing, x0 = initial_parameters(p); z = 1.0, r = 1.0, phi = 1.0,
-                defocus = 2.0, power = 0.5, spot = 0.5)
+                defocus = 2.0, power = 0.5, spot = 0.5, dlambda = 2.0)
     lo, hi = copy(x0), copy(x0)
     for g in eachindex(p.members), (fi, f) in enumerate(p.fields)
         i = _pidx(p, g, fi)
@@ -125,7 +130,7 @@ function bounds(p::GroupPointing, x0 = initial_parameters(p); z = 1.0, r = 1.0, 
             frac = f === :power ? power : spot
             lo[i] = x0[i] * (1 - frac); hi[i] = x0[i] * (1 + frac)
         else
-            δ = f === :z ? z : f === :r ? r : f === :phi ? phi : defocus
+            δ = f === :z ? z : f === :r ? r : f === :phi ? phi : f === :dlambda ? dlambda : defocus
             lo[i] = x0[i] - δ; hi[i] = x0[i] + δ
         end
     end
@@ -138,12 +143,15 @@ end
 
 """
     Scenario(target, beams; observe = nothing, radiation = true, time = 0.0,
-             parameterization = GroupPointing(beams), deposition_kw = (;), viewfactor_kw = (;))
+             parameterization = GroupPointing(beams), lpi = nothing,
+             deposition_kw = (;), viewfactor_kw = (;))
 
 Everything precomputed for fast repeated evaluation of a pointing design:
 the `DepositionOperator`, and — when `radiation` and `observe` (component names whose
 incident x-ray flux is the figure of merit, e.g. `:capsule`) are given — the view
-factors and the linear flux response of the observed elements.
+factors and the linear flux response of the observed elements. `lpi` is a laser–plasma
+model (`Backscatter`, `CalibratedTransfer`, `CBET`, or a tuple of them) applied at `time`
+between the setup beams and deposition.
 """
 struct Scenario{P}
     target::Target
@@ -153,18 +161,20 @@ struct Scenario{P}
     observed::Vector{Int}
     response::Union{Nothing,Matrix{Float64}}
     moment_weights::Matrix{Float64}   # legendre_weights of the observed elements (lmax = 12)
+    lpi::Any                          # laser–plasma model (see apply_lpi)
+    time::Float64
 end
 
 function Scenario(t::Target, beams::AbstractVector{<:Beam}; observe = nothing,
                   radiation::Bool = observe !== nothing, time = 0.0,
                   parameterization = GroupPointing(beams), deposition_kw = (;),
-                  viewfactor_kw = (;))
+                  viewfactor_kw = (;), lpi = nothing)
     op = DepositionOperator(t, beams; deposition_kw...)
     obs = observe === nothing ? Int[] : elements(t, (observe isa Symbol ? (observe,) : observe)...)
     model = radiation ? RadiationModel(t; viewfactor_kw...) : nothing
     R = (model !== nothing && !isempty(obs)) ? flux_response(model, obs; time) : nothing
     W = isempty(obs) ? zeros(0, 0) : legendre_weights(t, obs; lmax = _CACHED_LMAX)
-    return Scenario(t, parameterization, op, model, obs, R, W)
+    return Scenario(t, parameterization, op, model, obs, R, W, lpi, Float64(time))
 end
 
 function Base.show(io::IO, s::Scenario)
@@ -176,12 +186,15 @@ end
 """
     Evaluation
 
-Result of `evaluate`: the `beams`, their `deposition`, and `flux` — incident x-ray flux
-on the scenario's observed elements (TW/mm²; `nothing` without radiation).
+Result of `evaluate`: the setup `beams`, the `effective` beams after the scenario's
+laser–plasma model, their `deposition`, and `flux` — incident x-ray flux on the
+scenario's observed elements (TW/mm²; `nothing` without radiation). Deposition
+fractions are relative to effective (post-LPI) power.
 """
-struct Evaluation{T,B}
+struct Evaluation{T,B,E}
     scenario::Scenario
     beams::Vector{B}
+    effective::Vector{E}
     deposition::Deposition{T}
     flux::Union{Nothing,Vector{T}}
 end
@@ -192,9 +205,10 @@ end
 evaluate(s::Scenario, x::AbstractVector{<:Real}) = evaluate(s, apply(s.param, x))
 
 function evaluate(s::Scenario, beams::AbstractVector{<:Beam})
-    dep = deposit(s.deposition, beams)
+    eff = apply_lpi(s.lpi, beams, s.time)
+    dep = deposit(s.deposition, eff)
     H = s.response === nothing ? nothing : s.response * dep.element
-    return Evaluation(s, beams, dep, H)
+    return Evaluation(s, beams, eff, dep, H)
 end
 
 "Fraction of delivered laser power striking the outside (back side) of any component."
@@ -317,6 +331,15 @@ Print a power accounting and flux-moment summary of an evaluation.
 function report(io::IO, ev::Evaluation; lmax::Integer = 6)
     d = ev.deposition
     P = ForwardDiff.value(d.delivered)
+    if ev.scenario.lpi !== nothing
+        Ps = sum(ForwardDiff.value(b.power) for b in ev.beams)
+        @printf(io, "Setup laser power: %.4g TW; after laser–plasma model:
+", Ps)
+        for (g, v) in sort(collect(lpi_summary(ev.beams, ev.effective)); by = first)
+            @printf(io, "  %-20s %9.4g → %9.4g TW  (×%.3f)
+", g, v.setup, v.effective, v.ratio)
+        end
+    end
     @printf(io, "Delivered laser power: %.4g TW\n", P)
     cp = component_power(d, ev.scenario.target)
     missed = pop!(cp, :missed)
