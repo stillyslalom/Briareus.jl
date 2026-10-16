@@ -18,6 +18,7 @@ const TUTORIALS = [
     "laser_spot.jl",
     "integrating_sphere.jl",
     "dropped_bundle.jl",
+    "diagnostic_windows.jl",
 ]
 
 const PAGE_TIMES = Dict{String,Float64}()
@@ -70,6 +71,7 @@ tutorial_page(file) = joinpath("tutorials", splitext(file)[1] * ".md")
             "Laser spot on a foil" => tutorial_page("laser_spot.jl"),
             "Integrating sphere" => tutorial_page("integrating_sphere.jl"),
             "Freeing a bundle for radiography" => tutorial_page("dropped_bundle.jl"),
+            "Diagnostic windows in the hohlraum wall" => tutorial_page("diagnostic_windows.jl"),
         ],
         "Explanation" => [
             "Verification and validation" => "explanation/verification-validation.md",

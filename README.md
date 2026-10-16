@@ -41,6 +41,9 @@ for the same workflow: target, beams, drive, optimization and shot review.
   default. `hohlraum(windows = [WallWindow(...)])` cuts diagnostic windows into the wall:
   closed ones re-emit with their own material, open ones are apertures that laser light
   passes through and x rays escape from, and the mesh conforms to their edges.
+  Windows are rectangles or disks, with optional assembly gaps, at exact areas; a
+  thin-foil window burns through when the Marshak heat front reaches its back
+  (`BurnthroughAlbedo`).
 - **Laser deposition.** Beams enter from facility ports with elliptical super-Gaussian
   phase-plate spots, an f-number cone, pointing, and defocus. Two methods:
   - `DepositionOperator` + `deposit` — precomputed quadrature with per-direction
@@ -178,5 +181,6 @@ The suite checks the code against analytic results:
   round trips.
 
 The documentation's tutorials add exact references: the f-cone convolution of a laser
-spot, the oblique-incidence footprint, the integrating sphere, and the symmetry of the
-NIF ports.
+spot, the oblique-incidence footprint, the integrating sphere, the symmetry of the
+NIF ports, and the gold heat front against published self-similar solutions and
+measured foil burnthrough.

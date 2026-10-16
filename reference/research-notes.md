@@ -683,3 +683,101 @@ legible in a screenshot; **M** inferred from a worked example; **L** assumption.
    (especially the polar-angle column) and whether rows carry an index.
 5. Obtain a sample CMT XML to implement the CMT reader.
 
+
+## Gold wall loss and thin-foil burnthrough (2026-10-16)
+
+Implemented in `src/target.jl` (`WallLossAlbedo`, `HeatFront`, `BurnthroughAlbedo`).
+Units: T in heV (100 eV), t in ns, areal mass in g/cm², 1 hJ/mm² = 10⁴ J/cm².
+Confidence: **H** read in the primary text; **H-img** read from a rendered page image of
+a scanned or garbled PDF; **M** secondary; **L** inference.
+
+### Sources
+- Hammer & Rosen, Phys. Plasmas 10, 1829 (2003), via the preprint
+  (https://www.osti.gov/servlets/purl/15002150). **H-img**
+- Lindl et al., Phys. Plasmas 11, 339 (2004), Sec. IV.A. **H-img**
+- Shussman & Heizler, Phys. Plasmas 22, 082109 (2015), arXiv:1505.05524. **H**
+- Rosen, "Fundamentals of ICF hohlraums" (2005), https://www.osti.gov/servlets/purl/885380.
+  **H**
+- Rosen, 33rd EPS Conf. Plasma Phys., P2.006 (2006). **H-img**
+- Rosen, "Marshak waves: constant flux vs constant T" (1994),
+  https://www.osti.gov/servlets/purl/104716. **H-img**
+- Lindl, Phys. Plasmas 2, 3933 (1995): not read.
+
+### Gold power-law fits (Hammer & Rosen eq. 31) **H-img**
+- Specific energy e = f T^β ρ^−μ with f = 3.4 MJ/g, β = 1.6, μ = 0.14.
+- Opacity 1/K = g T^α ρ^−λ with g = 1/7200 g/cm², α = 1.5, λ = 0.2.
+- The fits hold for 1–2 heV. The subsonic solution adds r = P/(ρe) = 0.25.
+
+### Subsonic heat front, T_s = T₀ tᵏ (Hammer & Rosen eq. 112, q₀ = 5.5k) **H-img**
+- m = m₀ T_s(t)^1.914 t^0.5156 and F = F₀ T_s(t)^3.346 t^−0.4115, with T_s the
+  instantaneous surface temperature.
+- q₀ = 0 (constant T): m₀ = 9.51e-4 g/cm² and F₀ = 3.44e-3 MJ/ns/cm². These are the
+  `HeatFront` defaults.
+- q₀ = 1 (k = 0.182): m₀ = 7.13e-4. Their Fig. 4b gives an ablated mass of about
+  2.2–2.4e-3 g/cm² at 4 ns for T_s = t^0.182, from both HYDRA and the analytic curve.
+- Shussman & Heizler's exact solution, same fits (eqs. 35–36) **H**:
+  - constant T: m_F = 10.17e-4 T^1.91 t^0.52 and E = 0.59 T^3.35 t^0.59 hJ/mm²
+  - constant flux (T ∝ t^0.123): m_F = 8.32e-4 T₀^1.91 t^0.75
+- Rosen 2005 quotes m_F0 = 9.9e-4 and 7.4e-4 for k = 0 and 0.18. **H**
+- Lindl 2004 eq. 4-24 has m₀ = 1.20e-3 T^1.86 τ^(0.54+1.86P) (1+3.44P)^−0.46, with T
+  at 1 ns and T ∝ t^P. **H-img** At 300 eV and 1 ns this is about 20% more mass than
+  Hammer & Rosen.
+
+### Time-varying drive (*derived*) **L**
+- `HeatFront` integrates m_F^(1/b) = c^(1/b) ∫ (T/1 heV)^(a/b) dt. This is exact at
+  constant T. For T ∝ tᵏ it gives the self-similar exponent a k + b and the
+  coefficient c (1 + k a/b)^(−b).
+- Against the exact solutions, m(k)/m(0) is +2.2% for Hammer & Rosen at k = 0.182
+  and +0.7% for Shussman & Heizler at k = 0.123. A single drive integral cannot carry
+  the profile-shape change with drive history.
+- Lindl's (1+3.44P)^−0.46 factor is worse: +6.7% at k = 0.182.
+- Not validated for a drive falling after its peak (Hammer & Rosen Sec. IIc).
+- No published subsonic formula covers an arbitrary T(t).
+
+### Wall loss and consistency with `WallLossAlbedo`
+- Lindl 2004 eq. 4-21: E_w = 5.2e-3 T^3.3 τ^0.62 MJ/cm² at constant T. Its time
+  derivative over σT⁴ is eq. 4-31, the instantaneous albedo
+  α = 1 − 0.32 T^−0.7 τ^−0.38 (the `WallLossAlbedo` defaults). Eq. 4-32 gives the
+  time-averaged 1 − 0.52 T^−0.7 τ^−0.38. **H-img**
+- Hammer & Rosen's flux gives 1 − α = 0.334 T^−0.654 t^−0.4115, and Shussman &
+  Heizler 0.338 T^−0.65 t^−0.41 (*derived*). Over 1–3 heV and 1–10 ns these lie within
+  about 10% of Lindl's loss, so the burnthrough front and the wall albedo come from the
+  same physics.
+- The 20% difference in heated mass between Lindl and Hammer & Rosen is a difference
+  in the mean specific energy E_w/m_F: Lindl 4.3 T^1.44 MJ/g against Hammer & Rosen
+  6.1 T^1.43 MJ/g (*derived*). `HeatFront` takes Hammer & Rosen. The Lindl values are
+  in its docstring for comparison.
+- Lindl's T is the incident (drive) temperature, and Hammer & Rosen's the surface
+  temperature, with T_D⁴ ≈ T_s⁴ (1 + (1−α)/2). Briareus drives with the incident-flux
+  temperature, a few percent difference for gold late in the pulse.
+
+### Measured burnthrough (Nova) **H-img**
+- Gold patches of 0.77–3 µm on the wall of a hohlraum near 260 eV, with T rising
+  about as t^0.15 under a flat pulse (Lindl 2004 Fig. 4-6; Sigel et al., PRL 1990;
+  Porter & Thiessen 1992).
+- Half-signal burnthrough times, read by eye to ±0.03 ns:
+
+  | Au (µm) | Time (ns) |
+  |---|---|
+  | 0.77 | 0.33 |
+  | 1.05–1.1 | 0.55–0.58 |
+  | 1.55 | 0.78 |
+  | 1.93 | 0.86 |
+  | 2.05 | 1.03 |
+  | 2.27 | 1.14 |
+  | 3.0 | 1.47–1.58 |
+
+- `HeatFront` at 260 eV (t/1 ns)^0.15 puts the front 0.09–0.23 ns (mean 0.19)
+  earlier (*derived*). This sets the default 0.4 ns transition width of
+  `BurnthroughAlbedo`, which reaches half transmission at t_b + 0.2 ns.
+- Lindl's analytic curve, x = 2.45 t^0.82 µm, is also about 0.2 ns early ("about a
+  10 eV temperature difference").
+- A constant 260 eV estimate is 3× too early.
+
+### Modeling choices
+- Before burnthrough the foil uses the thick-wall albedo. Ahead of a nonlinear
+  diffusion front the cold layer does not change the flux into the wall, and the Nova
+  data show no early transmission.
+- `after = 0` (a burned-through foil is an open hole) is an upper bound on the loss. A
+  foil tamped by a low-Z backing stays hot and re-emits. The effective post-burnthrough
+  albedo is a calibration knob. **L**

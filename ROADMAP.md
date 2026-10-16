@@ -41,20 +41,37 @@ Shot-review layer:
   radiosity factorizations (repeated solves 45× faster), and progress/cancel hooks on
   `clearance` and `optimize_pointing`.
 
+## Done (2026-10-16, windows)
+- **Circular windows and gaps:** `WallWindow(; diameter, gap)`. Disks are drawn on
+  the unrolled wall and re-meshed inside a box stitched to the conforming grid. An
+  equal-area edge polygon gives exact window and gap areas.
+- **View-factor visibility on curved surfaces:** facets of a cylinder or sphere no
+  longer occlude rays between points inside it. The centroid facing test is relaxed
+  by the spread of true normals across a facet. A tilted triangle on the wall had been
+  culling real exchanges, and capsule rows now close 10× better.
+- **Thin-foil burnthrough:** `BurnthroughAlbedo` and `HeatFront` use Hammer & Rosen's
+  subsonic gold heat front, integrated over each element's own T_r(t) in
+  `drive_history`. `energy_balance` reports `transmitted`, and `drive_history`
+  reports `window_loss`.
+- **Tutorial "Diagnostic windows in the hohlraum wall":** the front is checked against
+  the exact ramp solutions (2.2% and 0.7%) and the Nova foil-burnthrough data. It runs
+  1.7, 2.5 and 3.6 µm windows with and without a 50 µm gap.
+
 ## Next
 1. **Sombrero and backlighter geometry.** Model the LEH shield as a component (a
    dimpled annulus), and the backlighter foil's placement relative to the diagnostic
    line of sight. The line-of-sight and clearance checks in the radiography tutorial
    then decide which bundles can drive the foil. This needs real dimensions.
-2. **Diagnostic windows: design studies.** `hohlraum(...; windows)` is in place (closed or
-   open windows, conforming mesh, exact curved areas). Next: a tutorial on re-tuning
-   pointing around a window set (mode 1, m = 2 and m = 4 at the waist, P2), and a
-   time-dependent burn-through model (closed → open). First look (two open 2 × 2 mm
-   windows at φ = 78°/258°, NIF quads): −18% drive, c(2,2)/c₀₀ = +0.061, ε₄ 0.6 → 3.1%.
-   Restoring the no-window shape by quad power needs −22 to 57 TW (infeasible);
-   re-pointing (±1.5 mm, ±20% power, keep-out) only reduces the m = 2 departure from
-   0.061 to ~0.04–0.05. Window size looks like the main lever; needs the user's window
-   dimensions and goals before a tutorial.
+2. **Diagnostic windows: design studies.** Circular windows, gaps and burnthrough are in
+   place (see the tutorial). With `after = 0`, a burned-through window is an open hole.
+   That is an upper bound on the loss: two 2 mm windows give a flux-weighted ΔP2 of
+   +4 to +5% and cost 12–15% of capsule energy.
+   - Calibrate an effective post-burnthrough albedo. A tamped foil keeps re-emitting.
+     One option is an effusivity model of the foil/backing interface temperature.
+   - Model gap closure in time, e.g. a `TabulatedAlbedo` or a closing-gap model.
+   - Re-tune pointing around the window pair: m = 2 and P2 at the waist, versus time.
+   - Earlier look (two open 2 × 2 mm windows, NIF quads): power rebalance is
+     infeasible, and re-pointing only trims the m = 2 departure.
 3. **Confirm against facility practice:**
    - the TaLIS 0.5° tolerance (pivot, and whether it replaces or adds to the error set);
    - the 1ω footprint side and shape;

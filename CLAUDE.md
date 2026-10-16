@@ -39,6 +39,17 @@ environment has no ForwardDiff/Optim, and `Vec3` clashes with Makie there.
   for reciprocity. Components carrying a `CurvedSurface` (Sphere/Cylinder/DiskSurface)
   are integrated on the true surface — hohlraums do this by default; ray casting always
   uses the facets. `closed = true` (Sinkhorn balancing) only for closed enclosures.
+  Visibility ignores facets of a cylinder/sphere when both ray ends are inside it
+  (faceting artifacts), and the centroid facing test is relaxed by each curved
+  element's normal spread (a general triangle on a cylinder is tilted ~h/2R).
+- Patches must be planar: on a cylinder, mesh anything but chord rectangles as
+  triangles (a folded patch's centroid sits behind its facets and sees nothing).
+  Circular `WallWindow`s use equal-area edge polygons for exact areas.
+- Thin-foil windows (`BurnthroughAlbedo`): `drive_history` tracks each element's heat
+  front (`HeatFront`, Hammer & Rosen 2003) from its own T(t). A single `solve` treats
+  the foil as intact unless given the model's `burnthrough` or a per-element
+  `burnthrough` vector. `sol.albedo` is the albedo B was solved with, and `sol.intact`
+  its before-burnthrough part, which `energy_balance` uses to split out `transmitted`.
 - Deposition (operator and ray trace) sums the best-focus profile over `ncone` (default
   13) f-cone directions, each with its own incidence factor `|n·dⱼ|/(k·dⱼ)`. Don't use the
   moment-matched `intensity` for deposition: it has the right second moment but the
