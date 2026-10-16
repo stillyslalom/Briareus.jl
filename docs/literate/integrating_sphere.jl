@@ -169,8 +169,9 @@ end
 # ## Images
 #
 # Looking into the sphere through the port, the radiosity shows the heated spot while
-# the incident flux is uniform. [`radiance`](@ref) converts radiosity to the Lambertian
-# radiance an imager records.
+# the incident flux is uniform, so uniform that its color scale is given a ±1% range
+# about the mean. [`radiance`](@ref) converts radiosity to the Lambertian radiance an
+# imager records.
 
 camera = OrthoCamera((0, 0, -1); up = (0, 1, 0), width = 2.2, nx = 220)
 fig = Figure(size = (780, 360))
@@ -179,7 +180,9 @@ for (i, (label, field)) in enumerate(("radiance B/π" => radiance(curved.solutio
     img = render(curved.target, to_Wcm2.(field), camera)
     panel = Axis(fig[1, 2i-1], title = label, aspect = DataAspect())
     hidedecorations!(panel)
-    hm = heatmap!(panel, reverse(img; dims = 1)'; colormap = :inferno)
+    vals = filter(isfinite, img)
+    crange = i == 1 ? extrema(vals) : (0.99, 1.01) .* (sum(vals) / length(vals))
+    hm = heatmap!(panel, reverse(img; dims = 1)'; colormap = :inferno, colorrange = crange)
     Colorbar(fig[1, 2i], hm, label = i == 1 ? "W/cm²/sr" : "W/cm²")
 end
 fig

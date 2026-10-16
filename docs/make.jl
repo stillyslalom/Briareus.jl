@@ -61,7 +61,8 @@ tutorial_page(file) = joinpath("tutorials", splitext(file)[1] * ".md")
     sitename = "Briareus.jl",
     modules = [Briareus],
     authors = "Alex Ames",
-    format = Documenter.HTML(; prettyurls = get(ENV, "CI", "false") == "true",
+    repo = Remotes.GitHub("stillyslalom", "Briareus.jl"),
+    format = Documenter.HTML(; prettyurls = get(ENV, "CI", "false") == "true", edit_link = "main",
                              size_threshold = 400 * 1024, example_size_threshold = 0),
     pages = [
         "Home" => "index.md",
