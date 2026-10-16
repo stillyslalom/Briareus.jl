@@ -190,3 +190,72 @@ Unknown, and needing either sample files or Prism (mail@prism-cs.com):
   - Manual pointing iteration.
   - No pointing uncertainty quantification for hohlraums.
   - Separate bespoke metrics for mode-1 and m=4.
+
+## Beam clearance methodology
+
+**No facility publishes numeric clearance criteria.** NIF's TaLIS and BLIP reviews and
+LLE's campaign reviews hold them internally (NIF User Guide §3.2–3.3). **H** What is
+public:
+
+- **Qualitative LLNL rule.** "Spaced from the laser beams appropriately to account for
+  beam intensity profile as well as possible misalignment of laser beams and target
+  components." Shield assemblies were held to ≤ 250 µm, preferably < 100 µm, of
+  stacked tolerance (Boehm et al., OSTI 1342996). **H**
+- **Design-era encircled-energy specs.** NIF and LMJ: 98% of 3ω energy within a 600 µm
+  circle, i.e. about 2% outside the nominal spot (Caird et al., UCRL-JC-124872).
+- **Why a 99%-enclosed envelope is unsafe** (*derived*). For a super-Gaussian, the 99%
+  contour sits at 4–9% of peak intensity: about 4×10¹³ W/cm² for a 2 TW beam with
+  n = 4.7 and r₀ = 300 µm.
+
+### Error budgets
+
+| Item | Value | Source |
+|---|---|---|
+| NIF pointing | 50 µm rms spec, met | Haynam AO 2011; Di Nicola 2024 |
+| NIF beam-to-beam pointing | 5.2 µrad (≈ 40 µm) | Di Nicola 2024 |
+| NIF mean beams-to-target | ≤ 25 µm | SPIE 8505 |
+| NIF target vertical positioning | ±22 µm | Di Nicola 2024 |
+| NIF focus error (1994 spec) | ≤ 1 mm | Fusion Tech. 1994 |
+| OMEGA pointing | 9–20 µm rms | LLE Review v100 |
+| OMEGA EP pointing | < 75 µm | LLE |
+
+How reviews combine these errors (box vs. 3σ, linear vs. RSS) is not public.
+
+### Far field
+
+- **OMEGA measured** (Theobald, OSTI 1846973):
+  - SG5-650: R1/e = 285.6 µm, n = 4.19.
+  - SG5-850: R1/e = 362.5 µm, n = 4.74.
+  - Less than 1% of the energy lies in the non-super-Gaussian wing.
+- **NIF:** no public wing measurement.
+- **Upstream scatter:** limited by the spatial-filter pinholes, about ±200 µrad
+  (≈ 1.5 mm at TCC).
+- **Final-optics scatter:** unfiltered, up to about 3 mrad (≈ 23 mm).
+- **NIF SSD smear** (*derived*, low confidence): about ±30 µm along the dispersion
+  direction at 45 GHz.
+
+### Unconverted light
+
+- NIF uses a wedged focus lens.
+- Footprints are 1ω ≈ 22 mm square (nearest edge ≈ 4.8 mm from the aim point) and
+  2ω ≈ 12 mm square (nearest edge ≈ 2.9 mm), reaching about 32 mm from TCC.
+- Curvature rule inside the 1ω footprint: 1D radius ≤ 2 mm, 2D radius ≤ 5 mm, or
+  dimpled (§5.6.2).
+- Off-TCC pointing can send 1ω into near-opposite final optics assemblies (OSTI 13900).
+
+### Briareus defaults
+
+These are engineering defaults, not facility criteria:
+
+- **Envelope:** 10⁻⁴-of-peak contour, plus the f-cone.
+- **Wings** (`nif_wings`):
+  - power-law halo [1+(r/r95)²]^(-3/2) with 1% of the energy, truncated at 1.5 mm;
+  - scatter floor of 10⁻³ of the energy, out to 23 mm.
+- **Error set:** pointing 50 µm + target 25 µm + hardware tolerance (user-supplied),
+  added linearly, plus focus ±1 mm.
+- **Status tiers:**
+
+| Tier | Intensity | Intercepted fraction |
+|---|---|---|
+| fail | > 10¹² W/cm² | > 10⁻³ |
+| review | > 10⁹ W/cm² | > 10⁻⁵ |

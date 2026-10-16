@@ -31,10 +31,12 @@ export view_factors, closure_error, enforce_closure!, RadiationModel, RadiationS
 export PulseShape, pulse_energy, with_pulses, drive_history
 export enclosed_radius, envelope_radius, focal_profile, enclosed_fraction, with_axes,
        BeamEnvelope, envelope_distance, ClearanceRow, ClearanceReport, clearance,
-       beam_component_power, violations, min_clearance, write_clearance_csv
+       beam_component_power, violations, min_clearance, write_clearance_csv,
+       SpotWing, PowerLawWing, UniformScatter, nif_wings, DEFAULT_CLEARANCE_THRESHOLDS
 export LaserPlasmaModel, apply_lpi, Backscatter, CalibratedTransfer, linear_transfer,
        tabulated_transfer, lpi_summary
 export CBET, CH_IONS, ion_wave_amplitude, receiver_ratio, calibrate_cbet, cbet_gain, cbet_coupling, cbet_plasma, plasma_dispersion
+export UnconvertedColor, nif_unconverted, UnconvertedRow, UnconvertedReport, unconverted_light_check
 export BEAM_COLUMNS, write_beam_table, read_beam_table, read_csv, write_element_table, write_moments
 export legendre, legendre_moments, legendre_weights, solid_angle, ylm_moments, mode_power, rms_nonuniformity
 export OrthoCamera, camera_from_port, render, radiance, line_of_sight_power
@@ -59,5 +61,6 @@ include("clearance.jl")
 include("lpi.jl")
 include("io.jl")
 include("cbet.jl")
+include("unconverted.jl")
 
 end

@@ -54,6 +54,23 @@ See `examples/nif_hohlraum.jl` and `examples/backlighter.jl`.
 - **Imaging.** `render` produces orthographic images of any per-element field (x-ray
   radiance, laser intensity) from any direction or port. `line_of_sight_power` gives
   the x-ray power toward a distant detector.
+- **Laser–plasma corrections.** Applied between the laser setup and deposition, and
+  differentiable in power and Δλ:
+  - per-cone, time-dependent `Backscatter`;
+  - an empirical `CalibratedTransfer` (transfer as a function of Δλ);
+  - a reduced kinetic `CBET` model at the LEHs: multi-species Maxwellian ion-acoustic
+    response, flow Doppler shift, polarization smoothing, and a smooth δn/n saturation
+    clamp. `calibrate_cbet` fits its multiplier, flow and clamp to transfer data.
+- **Shot-review checks.**
+  - `clearance` gives the worst-case beam-to-hardware clearance, power and intensity
+    over a linear error stack (pointing, target offset, hardware tolerance, focus). It
+    uses intensity-contour envelopes and clearance-only spot wings (`nif_wings`), with
+    pass/review/fail tiers.
+  - `unconverted_light_check` covers the 1ω/2ω footprints, the 32 mm zone, and the
+    curvature rule.
+- **Beam-table I/O.** `write_beam_table`/`read_beam_table` read and write a canonical
+  CSV, with column and unit mapping for foreign tables. Element and moment exports are
+  also available.
 - **Time dependence.** `PulseShape` per cone and `drive_history` give quasi-static
   T_r(t) and P_l(t).
 - **Optimization.** `GroupPointing` maps parameters to beams, per cone, quad or beam:
@@ -85,12 +102,27 @@ traced back along each visible cone direction to the focal plane.
 | OMEGA beams | Truncated icosahedron with edge ratio 1.2 in the hohlraum (P6–P7) frame; reproduces the 21.415/42.020/58.852/81.249° cones | The azimuthal origin is not tied to chamber coordinates. Load the real port table with `beams_from_table`. |
 | OMEGA phase plates | OMEGA Users' Guide (2014) | SG4, SG8, E-IDI-300 |
 
+## Provenance of physics defaults
+
+`reference/research-notes.md` records sources and confidence levels for:
+- the CBET formulas and benchmark;
+- NIF Δλ conventions (quoted at 1ω since about 2013; `Beam.dlambda` is at the beam's
+  own wavelength);
+- backscatter practice;
+- unconverted light;
+- error budgets and clearance defaults.
+
+Clearance thresholds and wing models are engineering defaults, not facility criteria.
+Override them with your facility's review requirements and measured far fields.
+
 ## Scope and limitations
 
-Like VisRad, Briareus is a geometric view-factor and ray-trace code. It has no
-hydrodynamics, refraction, laser–plasma instabilities (backscatter, CBET), wall motion
-or LEH closure. Represent those effects through effective per-cone powers, pointing
-and albedo.
+Briareus is a geometric view-factor and ray-trace code with reduced laser–plasma
+corrections. It has no hydrodynamics, refraction, wall motion or LEH closure.
+
+The CBET model assumes uniform LEH plasma and full pairwise overlap. Its unsaturated
+coupling overpredicts transfer, so calibrate it (`calibrate_cbet`) against shot data
+or reference transfer points before trusting magnitudes.
 
 Radiosity is gray, with no spectral resolution. Visibility between elements uses a
 single centroid ray.

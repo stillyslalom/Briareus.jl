@@ -316,11 +316,11 @@ end
     down = translate(Component(:down, disk_mesh(0.05, 0.0; nr = 1, nphi = 32), gold()), (0.2, 0, -1.0))
     t = Target(foil(:f, (0, 0, 0), (0, 0, 1); width = 4.0, n = 8), up, down)
     r = clearance(t, [b]; targets = (:f,), enclosed = 0.99, margin = 0.1, pointing = 0.05,
-                  focus = 0.4)
+                  target_offset = 0.02, hardware_tolerance = 0.03, focus = 0.4, wings = [])
     row(c) = only(x for x in r.rows if x.component === c)
     nominal = 1.0 - (enclosed_radius(4.0, 0.99) * 0.3 + 2.0 / 16 + 0.1)
     @test row(:up).nominal ≈ nominal atol = 1e-9
-    @test row(:up).clearance ≈ nominal - 0.05 - 0.4 / 16 atol = 1e-9
+    @test row(:up).clearance ≈ nominal - (0.05 + 0.02 + 0.03) - 0.4 / 16 atol = 1e-9
     @test row(:up).s ≈ -2.0
     @test row(:down).clearance == Inf
     @test isempty(violations(r))
@@ -342,18 +342,39 @@ end
     # pointing toward hardware raises the worst-case power and intensity on it
     near = translate(Component(:near, disk_mesh(0.2, 0.0; nr = 2, nphi = 32), gold()), (0.75, 0, 1.0))
     tn = Target(foil(:f, (0, 0, 0), (0, 0, 1); width = 4.0, n = 8), near)
-    r0 = only(clearance(tn, [b]; targets = (:f,), pointing = 0.0).rows)
-    rep1 = clearance(tn, [b]; targets = (:f,), pointing = 0.1)
+    nowing = (; wings = [], target_offset = 0.0, focus = 0.0)
+    r0 = only(clearance(tn, [b]; targets = (:f,), pointing = 0.0, nowing...).rows)
+    rep1 = clearance(tn, [b]; targets = (:f,), pointing = 0.1, nowing...)
     r1 = only(rep1.rows)
     @test r1.power > r0.power && r1.peak_intensity > r0.peak_intensity
     @test r1.clearance ≈ r0.clearance - 0.1
-    @test !isempty(violations(rep1; intensity = 0.5 * r1.peak_intensity))
+    strict = (fail_intensity = Inf, fail_fraction = Inf, review_intensity = 0.5 * r1.peak_intensity,
+              review_fraction = Inf)
+    rs = clearance(tn, [b]; targets = (:f,), pointing = 0.1, thresholds = strict, nowing...)
+    @test only(rs.rows).status === :review
+    @test length(violations(rs)) == 1 && isempty(violations(rs; status = (:fail,)))
+    # wings: a large foil catches all of the halo and scatter power; the far scatter
+    # reaches hardware the core envelope clears by millimetres
+    wl = nif_wings()
+    @test sum(w.fraction for w in wl) ≈ 0.011
+    tw = Target(foil(:f, (0, 0, 0), (0, 0, 1); width = 60.0, n = 30),
+                translate(Component(:far, disk_mesh(0.5, 0.0; nr = 2, nphi = 16), gold()), (8.0, 0, 3.0)))
+    rw = only(clearance(tw, [b]; targets = (:f,), wings = wl, focus = 0.0, intensity = 1e7).rows)
+    rn = only(clearance(tw, [b]; targets = (:f,), wings = [], focus = 0.0, intensity = 1e7).rows)
+    @test rn.power == 0 && rw.power > 0
+    @test rw.peak_intensity ≈ 1e14 * 1e-3 / (π * 23.0^2) rtol = 1e-6   # scatter floor only
+    @test rw.clearance < 0 < rn.clearance        # inside the 1e7 W/cm² scatter disk
+    Lw = zeros(2)
+    Briareus._raytrace_wing!(Lw, tw, b, wl[1], Briareus._wing_rh(wl[1], b))
+    @test Lw[1] ≈ 0.01 rtol = 1e-9
     # A plate across the beam upstream intercepts everything and overlaps.
     plate = Component(:plate, translate(rectangle_mesh(3.0, 3.0; nu = 6, nv = 6), (0, 0, 1.0)), gold();
                       two_sided = true)
-    r2 = clearance(Target(foil(:f, (0, 0, 0), (0, 0, 1); width = 4.0, n = 8), plate), [b]; targets = (:f,))
+    r2 = clearance(Target(foil(:f, (0, 0, 0), (0, 0, 1); width = 4.0, n = 8), plate), [b]; targets = (:f,),
+                   wings = [])
     @test only(r2.rows).clearance < 0
     @test only(r2.rows).intercepted ≈ 1 rtol = 1e-3
+    @test only(r2.rows).status === :fail
     @test length(violations(r2)) == 1
     path = write_clearance_csv(tempname() * ".csv", r)
     @test countlines(path) == 1 + length(r.rows)
@@ -458,6 +479,27 @@ end
     data = [(dl, receiver_ratio(truth, q, dl; receivers = inner)) for dl in (0.5, 1.0, 2.0)]
     fitted, res = calibrate_cbet(CBET(leh_z = 5.05, clamp = nothing), q, data; receivers = inner)
     @test fitted.multiplier ≈ 0.4 rtol = 1e-3
+end
+
+
+@testset "unconverted light" begin
+    b = Beam("b"; theta = 0, phi = 0, power = 1.0)          # e1 = θ̂ = x̂ at the pole
+    plate = Component(:plate, translate(rectangle_mesh(2.0, 2.0; nu = 2, nv = 2), (10.0, 0, 0)), gold();
+                      two_sided = true)
+    near = Component(:near, translate(sphere_mesh(0.5; ntheta = 6, nphi = 8), (1.0, 0, 0)), gold())
+    t = Target(plate, near)
+    r = unconverted_light_check(t, [b])
+    row(c, col) = only(x for x in r.rows if x.component === c && x.color === col)
+    @test row(:plate, :omega1).exposure === :possible       # some offset direction reaches it
+    @test row(:near, :omega1).exposure === :clear           # inside the 4.8 mm clear radius
+    @test row(:near, :omega2).exposure === :clear
+    @test r.flat[:plate] && !r.flat[:near]
+    @test r.zone[:near] ≈ 0.5 rtol = 1e-6
+    # with a known offset direction the footprint is a definite square
+    rx = unconverted_light_check(t, [b]; offsets = Dict("b" => 0.0))      # toward +x
+    ry = unconverted_light_check(t, [b]; offsets = Dict("b" => 90.0))     # toward +y
+    @test only(x for x in rx.rows if x.component === :plate && x.color === :omega1).exposure === :exposed
+    @test only(x for x in ry.rows if x.component === :plate && x.color === :omega1).exposure === :clear
 end
 
 end

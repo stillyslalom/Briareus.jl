@@ -139,19 +139,129 @@ function _ellipse_distance(u, v, a, b)
 end
 
 """
+    SpotWing
+
+Supertype of low-level circular far-field components outside a beam's phase-plate
+core, used only by clearance checks (they carry ≲1% of the energy and do not matter for
+drive symmetry). Each wing is centered on the beam axis at best focus; radii in mm.
+"""
+abstract type SpotWing end
+
+"""
+    PowerLawWing(fraction; rh = :r95, rmax = 1.5)
+
+Halo with `I ∝ [1 + (r/rh)²]^(-3/2)` for `r ≤ rmax`, carrying `fraction` of the beam
+power. `rh = :r95` uses the radius enclosing 95% of the core (geometric mean of the
+axes). `rmax` is the spatial-filter cutoff (NIF ≈ ±200 µrad × 7.7 m ≈ 1.5 mm).
+"""
+struct PowerLawWing <: SpotWing
+    fraction::Float64
+    rh::Union{Float64,Symbol}
+    rmax::Float64
+end
+PowerLawWing(fraction; rh = :r95, rmax = 1.5) = PowerLawWing(fraction, rh isa Symbol ? rh : Float64(rh), rmax)
+
+"""
+    UniformScatter(fraction; radius = 23.0)
+
+Far-angle scatter floor: `fraction` of the beam power spread uniformly over a disk of
+`radius` mm at the target plane (NIF final-optics scatter up to ≈3 mrad × 7.7 m).
+"""
+struct UniformScatter <: SpotWing
+    fraction::Float64
+    radius::Float64
+end
+UniformScatter(fraction; radius = 23.0) = UniformScatter(fraction, radius)
+
+"""
+    nif_wings(; halo = 0.01, rmax = 1.5, scatter = 1e-3, scatter_radius = 23.0)
+
+Default NIF clearance wing model. These are engineering defaults (see
+reference/research-notes.md), not facility criteria; override them with measured
+far-field data:
+- a 1% power-law halo (OMEGA measured < 1% outside the super-Gaussian; the NIF/LMJ
+  design specs allowed 2% outside the nominal spot), truncated at the spatial-filter
+  angle;
+- a 10⁻³ uniform scatter floor out to 3 mrad.
+"""
+nif_wings(; halo = 0.01, rmax = 1.5, scatter = 1e-3, scatter_radius = 23.0) =
+    SpotWing[PowerLawWing(halo; rmax), UniformScatter(scatter; radius = scatter_radius)]
+
+_wing_rh(w::PowerLawWing, b::Beam) =
+    w.rh === :r95 ? envelope_radius(b.spot, 1.0; enclosed = 0.95) * sqrt(ForwardDiff.value(b.spot.a) * ForwardDiff.value(b.spot.b)) :
+    w.rh isa Symbol ? throw(ArgumentError("unknown rh $(w.rh)")) : w.rh
+
+# intensity (TW/mm²) of a wing at transverse radius r for beam power P
+function _wing_intensity(w::PowerLawWing, rh, P, r)
+    r > w.rmax && return 0.0
+    norm = 2π * rh^2 * (1 - 1 / sqrt(1 + (w.rmax / rh)^2))
+    return w.fraction * P / norm * (1 + (r / rh)^2)^(-1.5)
+end
+_wing_intensity(w::UniformScatter, _, P, r) = r > w.radius ? 0.0 : w.fraction * P / (π * w.radius^2)
+
+# radius (mm) of a wing's contour at intensity thr (TW/mm²); 0 if never that bright
+function _wing_contour(w::PowerLawWing, rh, P, thr)
+    I0 = _wing_intensity(w, rh, P, 0.0)
+    I0 <= thr && return 0.0
+    return min(w.rmax, rh * sqrt((I0 / thr)^(2 / 3) - 1))
+end
+_wing_contour(w::UniformScatter, _, P, thr) = _wing_intensity(w, nothing, P, 0.0) > thr ? w.radius : 0.0
+
+# cumulative power fraction of a wing inside radius r
+_wing_cdf(w::PowerLawWing, rh, r) = (1 - 1 / sqrt(1 + (min(r, w.rmax) / rh)^2)) / (1 - 1 / sqrt(1 + (w.rmax / rh)^2))
+_wing_cdf(w::UniformScatter, _, r) = min(r, w.radius)^2 / w.radius^2
+_wing_rmax(w::PowerLawWing) = w.rmax
+_wing_rmax(w::UniformScatter) = w.radius
+
+# Ray trace a circular wing (polar grid, equal-power annuli) into per-component power.
+function _raytrace_wing!(L, t::Target, b::Beam, w::SpotWing, rh; nr = 48, nθ = 64, ncone = 7)
+    val = ForwardDiff.value
+    e1, e2 = spot_axes(b)
+    k = direction(b)
+    focus = Vec3(val.(b.aim)) + val(b.defocus) * k
+    dirs, dw = cone_directions(b, ncone)
+    far = 4 * (t.scale + norm(focus)) + 1
+    P = val(b.power) * w.fraction
+    rmax = _wing_rmax(w)
+    # annulus edges at equal power, sample at each annulus' median radius
+    cdf_inv(u) = begin
+        lo, hi = 0.0, rmax
+        for _ in 1:60
+            mid = (lo + hi) / 2
+            _wing_cdf(w, rh, mid) < u ? (lo = mid) : (hi = mid)
+        end
+        (lo + hi) / 2
+    end
+    for i in 1:nr
+        r = cdf_inv((i - 0.5) / nr)
+        for j in 1:nθ
+            ϕ = 2π * (j - 0.5) / nθ
+            pf = focus + r * (cos(ϕ) * e1 + sin(ϕ) * e2)
+            for (d, wd) in zip(dirs, dw)
+                _, tri = closest_hit(t.bvh, pf - far * d, d)
+                tri == 0 && continue
+                L[t.tri_comp[tri]] += P * wd / (nr * nθ)
+            end
+        end
+    end
+    return L
+end
+
+"""
     ClearanceRow
 
-One beam/hardware-component pair. All "worst" values are over the pointing and focus
-tolerance:
+One beam/hardware-component pair. "Worst" values are over the error set (pointing,
+target offset, hardware tolerance, focus):
 
-- `clearance` — worst-case envelope clearance (mm; negative = overlap)
-- `nominal` — clearance at nominal pointing and focus
+- `clearance` — worst-case signed distance to the beam envelope (mm; negative = overlap)
+- `nominal` — the same at nominal pointing and focus
 - `point`, `s` — hardware point of minimum clearance and its axial position from best
   focus (mm)
-- `power`, `intercepted` — worst-case power (TW) landing on the component and its
-  fraction of the beam power
-- `peak_intensity` — worst-case beam intensity (W/cm², normal to the beam) at the
-  component's upstream surface points, ignoring shadowing (conservative)
+- `power`, `intercepted` — worst-case power (TW) on the component (core + wings) and
+  its fraction of the beam power
+- `peak_intensity` — worst-case beam intensity (W/cm², normal to the beam, core +
+  wings) at the component's upstream surface points, ignoring shadowing
+- `status` — `:fail`, `:review` or `:pass` against the report's thresholds
 """
 struct ClearanceRow
     beam::String
@@ -163,67 +273,96 @@ struct ClearanceRow
     power::Float64
     intercepted::Float64
     peak_intensity::Float64
+    status::Symbol
 end
 
 """
     ClearanceReport
 
 Result of `clearance`: one `ClearanceRow` per beam and hardware component plus the
-envelope and tolerance settings. See `violations`.
+envelope, error-set and threshold settings. See `violations`, `min_clearance`.
 """
 struct ClearanceReport
     rows::Vector{ClearanceRow}
     contour::String
-    pointing::Float64
-    focus::Float64
+    transverse::Float64      # total transverse error radius (mm)
+    errors::NamedTuple
     margin::Float64
     targets::Vector{Symbol}
+    thresholds::NamedTuple
+end
+
+const DEFAULT_CLEARANCE_THRESHOLDS = (fail_intensity = 1e12, fail_fraction = 1e-3,
+                                      review_intensity = 1e9, review_fraction = 1e-5)
+
+function _status(I, frac, th)
+    (I > th.fail_intensity || frac > th.fail_fraction) && return :fail
+    (I > th.review_intensity || frac > th.review_fraction) && return :review
+    return :pass
 end
 
 """
     clearance(target, beams; targets, hardware = all other surfaces,
               intensity = nothing, peak_fraction = 1e-4, enclosed = nothing,
-              pointing = 0.05, focus = 0.0, margin = 0.0, nangles = 8,
-              level = 2, op = nothing, nspot = 61) -> ClearanceReport
+              wings = nif_wings(), pointing = 0.05, target_offset = 0.025,
+              hardware_tolerance = 0.0, focus = 1.0, margin = 0.0, ssd = 0.0,
+              thresholds = DEFAULT_CLEARANCE_THRESHOLDS, nangles = 16, level = 2,
+              op = nothing, nspot = 61) -> ClearanceReport
 
-Beam-to-hardware clearance check.
+Beam-to-hardware clearance check, judged on the worst case over an error set.
 
-Envelope: the best-focus contour at an absolute `intensity` (W/cm²), a `peak_fraction`
-of the peak, or an `enclosed` power fraction (give one), grown by the f-cone and
-`margin` (see `BeamEnvelope`).
+**Spot.** Each beam's `SuperGaussianSpot` core (with its optional super-Gaussian halo)
+plus clearance-only circular `wings` (default `nif_wings()`: a 1% power-law halo and a
+10⁻³ scatter floor — engineering defaults, override with measured far fields). `ssd`
+(mm) is the half-width of the SSD smear along the dispersion axis, added isotropically
+to the envelope (conservative).
 
-Tolerances: `pointing` is the radius (mm) of the transverse aim error disk, `focus` the
-± focal-position error (mm) along the beam. Worst-case clearance is exact for these —
-the nominal clearance minus `pointing` minus `focus/(2F)`. (For an independent ±δ box
-in two transverse axes, pass `pointing = √2·δ`.) Worst-case power and peak intensity
-are maxima over aims displaced to `nangles` points on the tolerance circle (plus
-nominal) at focus offsets `-focus, 0, +focus`.
+**Envelope.** The best-focus contour at an absolute `intensity` (W/cm²), a
+`peak_fraction` of the core peak, or an `enclosed` core fraction (give one), grown by
+the f-cone, `ssd` and `margin`. With wings, each spot component's contour is taken at
+the threshold divided by the number of components, and the envelope is their union,
+so the total intensity outside it is below the threshold.
 
-Only hardware upstream of the beam's landing is checked: where the beam axis first
-meets one of the `targets` components (the surfaces the beam is meant to hit, e.g.
-`(:wall,)`), or the aim plane if it misses them. Hardware is sampled at triangle
-vertices and `4^level` sub-triangle points.
+**Error set.** Transverse errors add linearly (not in quadrature):
+`R = pointing + target_offset + hardware_tolerance` (mm) — per-beam pointing (NIF
+50 µm rms spec; pass ≈ 0.12 for a 3σ statistical radius), rigid target offset (NIF
+mean beams-to-target ≈ 25 µm), and as-built hardware tolerance (metrology, or
+0.1–0.25 mm without it). `focus` is the ± focal-position error (mm; 1994 NIF spec ≤ 1 mm).
+Worst-case clearance is exact: nominal − `R` − `focus/(2F)`. Worst-case power and
+intensity are maxima over aims displaced to `nangles` points on the radius-`R` circle
+(plus nominal) at focus offsets `0, ±focus`.
 
-Power on hardware comes from the reference ray trace (`nspot` grid per spot component,
-exact power accounting at any hardware mesh resolution, halo included), or from `op` —
-a `DepositionOperator` for these beam ports — when given (faster; accurate when the
-hardware mesh resolves the spot).
+**Status.** `thresholds` (W/cm² and fraction of beam power): `:fail` above
+`fail_intensity` (1e12, plasma formation) or `fail_fraction` (1e-3), `:review` above
+`review_intensity` (1e9, ablation/debris onset) or `review_fraction` (1e-5). These are
+engineering defaults; NIF (TaLIS/BLIP) and LLE review criteria are not public.
+
+Only hardware upstream of each beam's landing is checked: where the beam axis first
+meets one of the `targets` components (the surfaces the beam should hit), or the aim
+plane if it misses them. Hardware is sampled at triangle vertices and `4^level`
+sub-triangle points. Power on hardware comes from the reference ray trace (`nspot`
+grid per core component; wings on equal-power polar grids), or for the core from `op`,
+a `DepositionOperator` for these ports, when given.
 """
 function clearance(t::Target, beams::AbstractVector{<:Beam}; targets,
                    hardware = nothing, intensity = nothing, peak_fraction = nothing,
-                   enclosed = nothing, pointing = 0.05, focus = 0.0, margin = 0.0,
-                   nangles::Integer = 8, level::Integer = 2,
+                   enclosed = nothing, wings = nif_wings(), pointing = 0.05,
+                   target_offset = 0.025, hardware_tolerance = 0.0, focus = 1.0,
+                   margin = 0.0, ssd = 0.0, thresholds = DEFAULT_CLEARANCE_THRESHOLDS,
+                   nangles::Integer = 16, level::Integer = 2,
                    op::Union{Nothing,DepositionOperator} = nothing, nspot::Integer = 61)
     all(isnothing, (intensity, peak_fraction, enclosed)) && (peak_fraction = 1e-4)
     contour = intensity !== nothing ? @sprintf("%.3g W/cm²", intensity) :
-              peak_fraction !== nothing ? @sprintf("%.3g of peak", peak_fraction) :
-              @sprintf("%.6g enclosed", enclosed)
+              peak_fraction !== nothing ? @sprintf("%.3g of core peak", peak_fraction) :
+              @sprintf("%.6g of core enclosed", enclosed)
+    R = pointing + target_offset + hardware_tolerance
     tgt = Symbol[targets...]
     hw = hardware === nothing ?
          [c.name for c in t.components if c.kind === :surface && !(c.name in tgt)] :
          Symbol[hardware...]
     tgt_idx = Set(component_index(t, n) for n in tgt)
     hw_idx = [component_index(t, n) for n in hw]
+    nc = length(t.components)
     samples = Dict{Int,Vector{Vec3}}()
     for ci in hw_idx
         pts = Vec3[]
@@ -235,7 +374,7 @@ function clearance(t::Target, beams::AbstractVector{<:Beam}; targets,
         samples[ci] = unique(pts)
     end
 
-    # beam variants over the tolerance region
+    # beam variants over the error set (nominal first for each beam)
     nb = length(beams)
     variants = Beam{Float64}[]
     owner = Int[]
@@ -244,8 +383,8 @@ function clearance(t::Target, beams::AbstractVector{<:Beam}; targets,
                     defocus = ForwardDiff.value(b.defocus), spot = _value_spot(b.spot),
                     dlambda = ForwardDiff.value(b.dlambda))
         e1, e2 = spot_axes(bv)
-        shifts = pointing > 0 ?
-                 vcat([zero(Vec3)], [pointing * (cos(2π * j / nangles) * e1 + sin(2π * j / nangles) * e2)
+        shifts = R > 0 ?
+                 vcat([zero(Vec3)], [R * (cos(2π * j / nangles) * e1 + sin(2π * j / nangles) * e2)
                                      for j in 0:nangles-1]) : [zero(Vec3)]
         for δ in shifts, df in (focus > 0 ? (0.0, -focus, focus) : (0.0,))
             push!(variants, remake(bv; aim = Vec3(bv.aim) + δ, defocus = bv.defocus + df))
@@ -254,37 +393,92 @@ function clearance(t::Target, beams::AbstractVector{<:Beam}; targets,
     end
     Pc = op === nothing ? raytrace_component_power(t, variants; nspot) :
          beam_component_power(op, variants)
+    if !isempty(wings)
+        Threads.@threads for v in eachindex(variants)
+            b = variants[v]
+            L = zeros(nc)
+            for w in wings
+                _raytrace_wing!(L, t, b, w, w isa PowerLawWing ? _wing_rh(w, b) : nothing)
+            end
+            Pc[v, :] .+= L
+        end
+    end
 
     rows = Vector{ClearanceRow}(undef, nb * length(hw_idx))
     Threads.@threads for bi in 1:nb
         vids = findall(==(bi), owner)
-        b = variants[vids[1]]                       # nominal variant comes first
-        env = BeamEnvelope(b; intensity, peak_fraction, enclosed, margin)
-        s_stop = _landing(t, env, tgt_idx)
+        b = variants[vids[1]]
+        envs, wingc = _envelopes(b, wings; intensity, peak_fraction, enclosed, margin = margin + ssd)
+        s_stop = _landing(t, envs[1], tgt_idx)
         frames = [BeamFrame(variants[v]) for v in vids]
+        rhs = [w isa PowerLawWing ? _wing_rh(w, b) : 0.0 for w in wings]
         P = b.power
         for (j, ci) in enumerate(hw_idx)
             best, bp, bs = Inf, zero(Vec3), NaN
             Imax = 0.0
             for x in samples[ci]
-                d, s = envelope_distance(env, x)
+                d, s = _envelope_union_distance(envs, wingc, x)
                 s <= s_stop || continue
                 d < best && ((best, bp, bs) = (d, x, s))
-                for f in frames
-                    Imax = max(Imax, intensity_at(f, x))
+                for (vi, f) in zip(vids, frames)
+                    I = intensity_at(f, x)
+                    if !isempty(wings)
+                        dv = x - f.focus
+                        r = hypot(dot(dv, f.e1), dot(dv, f.e2))
+                        for (w, rh) in zip(wings, rhs)
+                            I += _wing_intensity(w, rh, P, r)
+                        end
+                    end
+                    Imax = max(Imax, I)
                 end
             end
-            worst = best - pointing - focus * env.cone
+            worst = best - R - focus * envs[1].cone
             pw = maximum(Pc[v, ci] for v in vids)
+            frac = P > 0 ? pw / P : 0.0
+            Iw = to_Wcm2(Imax)
             rows[(bi-1)*length(hw_idx)+j] = ClearanceRow(b.name, t.components[ci].name, worst, best,
-                                                         bp, bs, pw, P > 0 ? pw / P : 0.0,
-                                                         to_Wcm2(Imax))
+                                                         bp, bs, pw, frac, Iw,
+                                                         _status(Iw, frac, thresholds))
         end
     end
-    return ClearanceReport(rows, contour, Float64(pointing), Float64(focus), Float64(margin), tgt)
+    errs = (; pointing = Float64(pointing), target_offset = Float64(target_offset),
+            hardware_tolerance = Float64(hardware_tolerance), focus = Float64(focus),
+            ssd = Float64(ssd))
+    return ClearanceReport(rows, contour, R, errs, Float64(margin), tgt, thresholds)
 end
 
 intensity_at(f::BeamFrame, x) = intensity(f, x)
+
+# Core envelope (contour at thr/N for N spot components) and wing contour radii.
+function _envelopes(b::Beam, wings; intensity, peak_fraction, enclosed, margin)
+    N = 1 + length(wings)
+    P = b.power
+    if enclosed !== nothing
+        core = BeamEnvelope(b; enclosed, margin)
+        thr = focal_profile(b.spot, P, enclosed_radius(b.spot.order, enclosed))
+    else
+        thr = intensity !== nothing ? intensity / 1e14 : peak_fraction * focal_profile(b.spot, P, 0.0)
+        core = BeamEnvelope(b; intensity = 1e14 * thr / N, margin)
+    end
+    wingc = [_wing_contour(w, w isa PowerLawWing ? _wing_rh(w, b) : nothing, P, thr / N) for w in wings]
+    return [core], wingc
+end
+
+# Signed distance to the union of the core envelope and the wing disks (each grown by
+# the f-cone and the core envelope's margin).
+function _envelope_union_distance(envs, wingc, x)
+    env = envs[1]
+    d, s = envelope_distance(env, x)
+    if !isempty(wingc)
+        dv = x - env.focus
+        r = hypot(dot(dv, env.e1), dot(dv, env.e2))
+        for rw in wingc
+            rw > 0 || continue
+            d = min(d, r - rw - env.cone * abs(s) - env.margin)
+        end
+    end
+    return d, s
+end
 
 # Axial position (relative to best focus) where the beam axis first meets a target
 # component; the aim plane if it never does.
@@ -320,9 +514,8 @@ end
     beam_component_power(op, beams) -> Matrix
 
 Absorbed power (TW) per beam (rows) and component (columns), both sides of each
-component, from the deposition operator. `beams` may differ from the operator's in
-pointing, focus, spot and power but must share its ports, in the same order — or be
-any list whose ports all appear among the operator's (each is matched by port).
+component, from the deposition operator. Beams may differ from the operator's in
+pointing, focus, spot and power; each is matched to the operator by its port.
 """
 function beam_component_power(op::DepositionOperator, beams::AbstractVector{<:Beam})
     t = op.target
@@ -350,15 +543,16 @@ _value_spot(s::SuperGaussianSpot) =
     with_axes(s, ForwardDiff.value(s.a), ForwardDiff.value(s.b))
 
 """
-    violations(report; clearance = 0.0, power = Inf, intensity = Inf) -> Vector{ClearanceRow}
+    violations(report; status = (:fail, :review), clearance = -Inf) -> Vector{ClearanceRow}
 
-Rows failing any criterion: worst-case clearance below `clearance` mm, worst-case power
-on the component above `power` TW, or worst-case intensity above `intensity` W/cm².
-Sorted by clearance.
+Rows whose status is in `status`, or whose worst-case clearance is below `clearance`
+mm; failures first, then by clearance.
 """
-violations(r::ClearanceReport; clearance = 0.0, power = Inf, intensity = Inf) =
-    sort(filter(x -> x.clearance < clearance || x.power > power || x.peak_intensity > intensity,
-                r.rows); by = x -> x.clearance)
+function violations(r::ClearanceReport; status = (:fail, :review), clearance = -Inf)
+    rows = filter(x -> x.status in status || x.clearance < clearance, r.rows)
+    rank(x) = x.status === :fail ? 0 : x.status === :review ? 1 : 2
+    return sort(rows; by = x -> (rank(x), x.clearance))
+end
 
 """
     min_clearance(report) -> Dict{Symbol,ClearanceRow}
@@ -376,21 +570,27 @@ end
 
 function Base.show(io::IO, ::MIME"text/plain", r::ClearanceReport)
     nb = length(unique(x.beam for x in r.rows))
-    @printf(io, "ClearanceReport: %d beams; envelope at %s + f-cone + %.3g mm margin\n",
-            nb, r.contour, r.margin)
-    @printf(io, "  tolerances: pointing %.3g mm (transverse radius), focus ±%.3g mm; targets: %s\n",
-            r.pointing, r.focus, join(r.targets, ", "))
-    println(io, "  component        closest beam   worst (nominal) clearance mm   max power on it   max intensity")
+    e = r.errors
+    @printf(io, "ClearanceReport: %d beams; envelope at %s + f-cone + %.3g mm margin + %.3g mm SSD\n",
+            nb, r.contour, r.margin, e.ssd)
+    @printf(io, "  error set: transverse %.3g mm (pointing %.3g + target %.3g + hardware %.3g), focus ±%.3g mm\n",
+            r.transverse, e.pointing, e.target_offset, e.hardware_tolerance, e.focus)
+    th = r.thresholds
+    @printf(io, "  status: fail > %.0e W/cm² or %.0e of beam; review > %.0e W/cm² or %.0e\n",
+            th.fail_intensity, th.fail_fraction, th.review_intensity, th.review_fraction)
+    println(io, "  component        status  closest beam  worst (nominal) clearance mm  max power   max intensity")
     mc = min_clearance(r)
     for (c, row) in sort(collect(mc); by = x -> x[2].clearance)
         rs = [x for x in r.rows if x.component === c]
         pmax = maximum(x.power for x in rs)
         imax = maximum(x.peak_intensity for x in rs)
-        @printf(io, "  %-16s %-14s %+9.3f (%+9.3f)          %9.3g GW      %9.3g W/cm²\n", c,
+        st = any(x -> x.status === :fail, rs) ? :fail : any(x -> x.status === :review, rs) ? :review : :pass
+        @printf(io, "  %-16s %-7s %-13s %+9.3f (%+9.3f)       %9.3g GW  %9.3g W/cm²\n", c, st,
                 row.beam, row.clearance, row.nominal, 1e3pmax, imax)
     end
-    nv = count(x -> x.clearance < 0, r.rows)
-    nv > 0 && println(io, "  ", nv, " beam/component pairs overlap the envelope in the worst case")
+    nf = count(x -> x.status === :fail, r.rows)
+    nr = count(x -> x.status === :review, r.rows)
+    println(io, "  ", nf, " failing and ", nr, " review beam/component pairs")
 end
 
 """
@@ -400,10 +600,10 @@ Write every row of a clearance report as CSV.
 """
 function write_clearance_csv(path::AbstractString, r::ClearanceReport)
     open(path, "w") do io
-        println(io, "beam,component,worst_clearance_mm,nominal_clearance_mm,x_mm,y_mm,z_mm,s_mm,",
+        println(io, "beam,component,status,worst_clearance_mm,nominal_clearance_mm,x_mm,y_mm,z_mm,s_mm,",
                 "worst_power_TW,worst_intercepted_fraction,worst_peak_intensity_Wcm2")
         for x in r.rows
-            println(io, join((x.beam, x.component,
+            println(io, join((x.beam, x.component, x.status,
                               (@sprintf("%.6g", v) for v in (x.clearance, x.nominal, x.point..., x.s,
                                                               x.power, x.intercepted, x.peak_intensity))...), ","))
         end

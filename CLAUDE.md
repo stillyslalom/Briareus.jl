@@ -44,4 +44,14 @@ directions) → `facilities.jl` (NIF ports/spots, OMEGA) → `deposition.jl`
 (RadiationModel, solve, flux_response, energy_balance, enforce_closure!) → `analysis.jl`
 (solid angles, Legendre/Y_lm) → `imaging.jl` (OrthoCamera, render, line_of_sight_power)
 → `optimize.jl` (GroupPointing, Scenario, objectives, optimize_pointing, report) →
-`history.jl` (PulseShape, drive_history).
+`history.jl` (PulseShape, drive_history) → `clearance.jl` (envelopes, wings, worst-case
+clearance) → `lpi.jl` (LaserPlasmaModel, Backscatter, CalibratedTransfer) → `io.jl`
+(CSV beam tables) → `cbet.jl` (reduced kinetic CBET, calibrate_cbet) → `unconverted.jl`.
+
+Physics defaults and their sources live in `reference/research-notes.md`. Keep each
+number's provenance and confidence there, and say in docstrings when a value is
+derived or an engineering default rather than a facility criterion.
+
+Editing pitfall on this Windows box: Python `open()` defaults to cp1252. Use
+`encoding='utf-8'`, or the Edit tool, for files with Unicode. Julia triple-quoted
+strings dedent, so multi-line `replace` patterns built from them miss indented code.
