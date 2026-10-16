@@ -4,7 +4,7 @@
     AlbedoModel
 
 Supertype of x-ray albedo models: `ConstantAlbedo`, `TabulatedAlbedo`,
-`WallLossAlbedo`. Evaluate with `albedo`.
+`WallLossAlbedo`, `BurnthroughAlbedo`. Evaluate with `albedo`.
 """
 abstract type AlbedoModel end
 
@@ -64,6 +64,167 @@ function albedo(m::WallLossAlbedo, t, T = nothing)
     Te = (T === nothing || T <= 0) ? m.reference_temperature : T
     loss = m.coefficient * (Te / 100)^m.temperature_exponent * max(t, m.t0)^m.time_exponent
     return clamp(1 - loss, m.range...)
+end
+
+"""
+    HeatFront(; coefficient = 9.51e-4, temperature_exponent = 1.914, time_exponent = 0.5156)
+
+Areal mass (g/cm²) behind the ablative (subsonic) Marshak heat front that radiation of
+temperature `T` drives into a gold wall: at constant `T`,
+
+    m_F = c (T/100 eV)^a (t/1 ns)^b,
+
+with the defaults from the self-similar solution of Hammer & Rosen, Phys. Plasmas 10,
+1829 (2003), eq. 112 for a constant drive (q₀ = 0), built on their power-law fits to
+gold's opacity and equation of state. For a drive `T(t)` the front is integrated as
+
+    m_F(t) = c [∫₀ᵗ (T(t′)/100 eV)^(a/b) dt′]^b,
+
+which is exact at constant `T`, depends only on the drive history, and for a ramp
+`T ∝ tᵏ` gives `m_F = c (1 + k a/b)^(-b) T(t)^a t^b`: within 2% of Hammer & Rosen's
+exact coefficient for `k = 0.182` and within 1% of Shussman & Heizler's (Phys. Plasmas
+22, 082109 (2015)) for `k = 0.123` (see `heat_front` and the diagnostic-windows
+tutorial). Lindl et al. (Phys. Plasmas 11, 339 (2004), eq. 4-24) give
+`c = 1.20e-3, a = 1.86, b = 0.54`, the scaling the `WallLossAlbedo` defaults come
+from; it heats about 20% more mass at 300 eV, 1 ns. `T` is the incident-flux
+radiation temperature (Lindl's convention; Hammer & Rosen drive with the surface
+temperature, a few percent lower for gold late in a pulse).
+"""
+Base.@kwdef struct HeatFront
+    coefficient::Float64 = 9.51e-4
+    temperature_exponent::Float64 = 1.914
+    time_exponent::Float64 = 0.5156
+end
+
+# The integrand (T/100 eV)^(a/b) of the front's drive integral, and the areal mass for
+# a value of the integral.
+_front_rate(f::HeatFront, T) = (max(T, zero(T)) / 100)^(f.temperature_exponent / f.time_exponent)
+_front_mass(f::HeatFront, I) = f.coefficient * max(I, zero(I))^f.time_exponent
+_front_integral(f::HeatFront, m) = (m / f.coefficient)^(1 / f.time_exponent)
+
+"""
+    heat_front(front::HeatFront, times, Tr) -> Vector
+
+Areal mass (g/cm²) behind the heat front at each of `times` (ns) for the radiation
+temperature history `Tr` (eV) sampled at those times, piecewise linear between them
+(trapezoidal drive integral), from zero before `times[1]`.
+"""
+function heat_front(f::HeatFront, times, Tr)
+    length(times) == length(Tr) || throw(ArgumentError("times and temperatures differ in length"))
+    I = 0.0
+    m = zeros(length(times))
+    for k in 2:length(times)
+        I += (times[k] - times[k-1]) * (_front_rate(f, Tr[k-1]) + _front_rate(f, Tr[k])) / 2
+        m[k] = _front_mass(f, I)
+    end
+    return m
+end
+
+"""
+    BurnthroughAlbedo(; thickness, density = 19.3, before = WallLossAlbedo(), after = 0.0,
+                      width = 0.4, burnthrough = nothing, front = HeatFront())
+
+Albedo of a thin wall layer (a thin-foil diagnostic window: `thickness` µm of a
+material of `density` g/cm³, gold by default) that re-emits like the wall until the
+Marshak heat front (`front`, a `HeatFront`) has heated its whole areal mass
+`ρ × thickness`, and then transmits:
+
+    α(t) = α_before + s((t - t_b)/width) (α_after - α_before),
+
+with `s` the smooth step `3x² - 2x³` on [0, 1] and `t_b` the burnthrough time.
+`before` and `after` are albedo models or numbers: `before` defaults to the wall's
+Marshak loss (`WallLossAlbedo`), `after = 0` sends everything that reaches the
+burned-through foil out of the hohlraum (an open hole, or absorption in a low-Z
+backing; the upper bound on the loss).
+
+The burnthrough time `t_b` is, in order:
+- the per-element time passed to `solve`/`albedos` (`burnthrough = ...`), which
+  `drive_history` integrates from each element's own incident-flux temperature
+  history (`heat_front`);
+- the explicit `burnthrough` (ns), when given;
+- otherwise the foil is intact (`t_b = ∞`): a single solve has no history to estimate
+  it from. `burnthrough_time` gives the estimate for a temperature history.
+
+Before `t_b` the foil loses exactly what a thick wall loses: in the diffusion
+picture the cold material ahead of a nonlinear heat front does not change the flux
+into it, so no early loss is modeled. Measured burnthrough of 0.8–3 µm gold foils on
+a 260 eV hohlraum wall (Nova; Lindl et al., Phys. Plasmas 11, 339 (2004), Fig. 4-6)
+reaches half signal 0.1–0.25 ns after the computed front arrival, 0.19 ns on average,
+which sets the default `width` (half transmission at `t_b + width/2`; see the
+diagnostic-windows tutorial).
+"""
+struct BurnthroughAlbedo <: AlbedoModel
+    thickness::Float64
+    density::Float64
+    before::AlbedoModel
+    after::AlbedoModel
+    width::Float64
+    burnthrough::Union{Nothing,Float64}
+    front::HeatFront
+    function BurnthroughAlbedo(thickness, density, before, after, width, burnthrough, front)
+        thickness > 0 && density > 0 || throw(ArgumentError("thickness and density must be positive"))
+        width >= 0 || throw(ArgumentError("the transition width must not be negative"))
+        new(thickness, density, _albedo_model(before), _albedo_model(after), width,
+            burnthrough === nothing ? nothing : Float64(burnthrough), front)
+    end
+end
+_albedo_model(x) = x isa AlbedoModel ? x : ConstantAlbedo(x)
+
+BurnthroughAlbedo(; thickness, density = 19.3, before = WallLossAlbedo(), after = 0.0,
+                  width = 0.4, burnthrough = nothing, front = HeatFront()) =
+    BurnthroughAlbedo(thickness, density, before, after, width, burnthrough, front)
+
+"Areal mass (g/cm²) of a burnthrough layer."
+areal_mass(m::BurnthroughAlbedo) = m.density * m.thickness * 1e-4
+
+# Transmitting fraction of the transition at time t for burnthrough time tb.
+function _burnthrough_step(m::BurnthroughAlbedo, t, tb)
+    isfinite(tb) || return 0.0
+    m.width == 0 && return t >= tb ? 1.0 : 0.0
+    x = clamp((t - tb) / m.width, 0.0, 1.0)
+    return x^2 * (3 - 2x)
+end
+
+function albedo(m::BurnthroughAlbedo, t, T = nothing; burnthrough = nothing)
+    tb = burnthrough !== nothing && !isnan(burnthrough) ? burnthrough :
+         m.burnthrough !== nothing ? m.burnthrough : Inf
+    αb = albedo(m.before, t, T)
+    s = _burnthrough_step(m, t, tb)
+    return s == 0 ? αb : αb + s * (albedo(m.after, t, T) - αb)
+end
+
+"""
+    burnthrough_time(model::BurnthroughAlbedo, times, Tr) -> Float64
+
+Time (ns) at which the heat front driven by the radiation temperature history `Tr`
+(eV, at `times`, piecewise linear; `heat_front`) reaches the back of the layer, or `Inf`
+if it does not within `times`. This is the estimate alone; an explicit `burnthrough`
+of the model is not consulted.
+"""
+function burnthrough_time(m::BurnthroughAlbedo, times, Tr)
+    length(times) == length(Tr) || throw(ArgumentError("times and temperatures differ in length"))
+    f = m.front
+    need = _front_integral(f, areal_mass(m))
+    I = 0.0
+    for k in 2:length(times)
+        r0, r1 = _front_rate(f, Tr[k-1]), _front_rate(f, Tr[k])
+        Δ = times[k] - times[k-1]
+        dI = Δ * (r0 + r1) / 2
+        if I + dI >= need
+            # the integrand is linear across the step: solve the quadratic for the crossing
+            return times[k-1] + _linear_crossing(r0, r1, Δ, need - I)
+        end
+        I += dI
+    end
+    return Inf
+end
+
+# x in [0, Δ] with ∫₀ˣ (r0 + (r1 - r0) s/Δ) ds = J (0 ≤ J ≤ Δ(r0 + r1)/2).
+function _linear_crossing(r0, r1, Δ, J)
+    a = (r1 - r0) / 2Δ
+    abs(a) * Δ^2 <= 1e-12 * max(J, eps()) && return r0 > 0 ? J / r0 : Δ
+    # a x² + r0 x - J = 0, root in [0, Δ], written to avoid cancellation
+    return 2J / (r0 + sqrt(max(r0^2 + 4a * J, 0.0)))
 end
 
 function _interp(ts, vs, t)

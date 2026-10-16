@@ -128,30 +128,52 @@ function empty_cache!(m::RadiationModel)
 end
 
 """
-    albedos(target, time = 0.0, H = nothing) -> Vector
+    albedos(target, time = 0.0, H = nothing; burnthrough = nothing) -> Vector
 
 Albedo per element at `time`; temperature-dependent models use each element's
 radiation temperature from incident flux `H` (or their reference temperature when `H`
-is `nothing`).
+is `nothing`). `burnthrough` (ns, per element; `NaN` where not given) sets the
+burnthrough time of `BurnthroughAlbedo` elements.
 """
-function albedos(t::Target, time = 0.0, H = nothing)
-    return [is_aperture(t, e) ? 0.0 :
-            albedo(element_material(t, e).albedo, time,
-                   H === nothing ? nothing : radiation_temperature(ForwardDiff.value(H[e])))
-            for e in 1:nelements(t)]
+albedos(t::Target, time = 0.0, H = nothing; burnthrough = nothing) =
+    first(_albedos(t, time, H, burnthrough))
+
+# Albedo per element and, alongside, the albedo it would have intact: a thin-foil
+# element's `before` albedo at the same temperature (the albedo itself elsewhere).
+function _albedos(t::Target, time, H, burnthrough)
+    n = nelements(t)
+    α, intact = zeros(n), zeros(n)
+    for e in 1:n
+        is_aperture(t, e) && continue
+        a = element_material(t, e).albedo
+        T = H === nothing ? nothing : radiation_temperature(ForwardDiff.value(H[e]))
+        if a isa BurnthroughAlbedo
+            α[e] = albedo(a, time, T; burnthrough = burnthrough === nothing ? NaN : burnthrough[e])
+            intact[e] = albedo(a.before, time, T)
+        else
+            α[e] = intact[e] = albedo(a, time, T)
+        end
+    end
+    return α, intact
 end
 conversions(t::Target) =
     [is_aperture(t, e) ? 0.0 : element_material(t, e).conversion for e in 1:nelements(t)]
 
 _temperature_dependent(t::Target) =
-    any(c -> c.kind === :surface && c.material.albedo isa WallLossAlbedo, t.components)
+    any(c -> c.kind === :surface && _temperature_dependent(c.material.albedo), t.components)
+_temperature_dependent(::AlbedoModel) = false
+_temperature_dependent(::WallLossAlbedo) = true
+_temperature_dependent(m::BurnthroughAlbedo) =
+    _temperature_dependent(m.before) || _temperature_dependent(m.after)
 
 """
     RadiationSolution
 
 Fields: `laser` (absorbed laser power per element, TW), `source` (x-ray source flux
 ηP/A), `B` (radiosity), `H` (incident flux), all per element in TW/mm²; `albedo` per
-element; `time`.
+element (the albedos the radiosity was solved with, so `B = source + albedo .* H`
+exactly), and `intact`, the albedo each element would have intact (a thin-foil
+element's `before` albedo, the albedo elsewhere; see `energy_balance`); `time`.
 """
 struct RadiationSolution{T}
     model::RadiationModel
@@ -160,17 +182,22 @@ struct RadiationSolution{T}
     B::Vector{T}
     H::Vector{T}
     albedo::Vector{Float64}
+    intact::Vector{Float64}
     time::Float64
 end
 
 """
-    solve(model, dep::Deposition; time = 0.0, albedo = nothing, tol = 1e-4, maxiter = 50)
+    solve(model, dep::Deposition; time = 0.0, albedo = nothing, burnthrough = nothing,
+          tol = 1e-4, maxiter = 50)
     solve(model, laser_power::AbstractVector; ...)
 
 Solve the radiosity system for the given absorbed laser power per element. Albedos come
 from the materials at `time` unless an explicit per-element `albedo` vector is passed.
 Temperature-dependent albedos (`WallLossAlbedo`) are iterated to self-consistency with
-each element's incident-flux temperature (to `tol` in albedo).
+each element's incident-flux temperature (to `tol` in albedo). `burnthrough` (ns, per
+element, `NaN` where not given) sets the burnthrough times of `BurnthroughAlbedo`
+elements; without it a thin-foil element uses its model's explicit `burnthrough`, or
+is intact (`drive_history` tracks it from the flux history instead).
 
 The factorization of the system for the initial albedo (the materials' at `time`, or the
 explicit `albedo`) is cached on the model, so repeated solves with unchanged albedos
@@ -180,23 +207,24 @@ temperature-dependent albedo differ from call to call and are factored afresh.
 solve(m::RadiationModel, d::Deposition; kwargs...) = solve(m, d.element; kwargs...)
 
 function solve(m::RadiationModel, P::AbstractVector; time = 0.0, albedo = nothing,
-               tol = 1e-4, maxiter::Integer = 50)
+               burnthrough = nothing, tol = 1e-4, maxiter::Integer = 50)
     t = m.target
     S = conversions(t) .* P ./ t.elem_area
-    α = albedo === nothing ? albedos(t, time) : collect(Float64, albedo)
+    α, intact = albedo === nothing ? _albedos(t, time, nothing, burnthrough) :
+                (a = collect(Float64, albedo); (a, a))
     iterate = albedo === nothing && _temperature_dependent(t)
     B = H = nothing
     for it in 1:(iterate ? maxiter : 1)
         B = (it == 1 ? _radiosity_lu(m, α) : lu!(I - α .* m.F)) \ S
         H = m.F * B
         iterate || break
-        αn = albedos(t, time, H)
+        αn, intactn = _albedos(t, time, H, burnthrough)
         δ = maximum(abs.(αn .- α))
-        α = αn
-        δ < tol && break
+        δ < tol && break          # keep the albedo B was solved with, so B = S + αH exactly
+        α, intact = αn, intactn
         it == maxiter && @warn "albedo iteration did not converge" δ
     end
-    return RadiationSolution(m, collect(P), S, B, H, α, Float64(time))
+    return RadiationSolution(m, collect(P), S, B, H, α, intact, Float64(time))
 end
 
 """
@@ -223,26 +251,33 @@ end
     energy_balance(sol) -> NamedTuple
 
 Global x-ray power accounting (TW): `source` (Σ ηPᵢ), `absorbed` by each component
-(`(1-α)HA`), `escaped` through each aperture, and `lost` to open space (what leaves
-the geometry without reaching any element). `source ≈ Σabsorbed + Σescaped + lost`.
+(`(1-α)HA`), `escaped` through each aperture, `transmitted` through each burned-through
+thin-foil component (`BurnthroughAlbedo`), and `lost` to open space (what leaves the
+geometry without reaching any element). A thin-foil component's loss splits into the
+wall-like part it absorbs as if intact, `(1-α_before)HA`, and the excess it transmits,
+`(α_before-α)HA`. `source ≈ Σabsorbed + Σescaped + Σtransmitted + lost`.
 """
 function energy_balance(s::RadiationSolution)
     m = s.model
     t = m.target
-    α = s.albedo
+    α, αi = s.albedo, s.intact
     absorbed = Dict{Symbol,Float64}()
     escaped = Dict{Symbol,Float64}()
+    transmitted = Dict{Symbol,Float64}()
     for (ci, c) in enumerate(t.components)
         es = t.comp_elems[ci]
+        P(e) = ForwardDiff.value(s.H[e]) * t.elem_area[e]
         if c.kind === :aperture
-            escaped[c.name] = sum(ForwardDiff.value(s.H[e]) * t.elem_area[e] for e in es; init = 0.0)
+            escaped[c.name] = sum(P, es; init = 0.0)
+        elseif c.material.albedo isa BurnthroughAlbedo
+            absorbed[c.name] = sum((1 - αi[e]) * P(e) for e in es; init = 0.0)
+            transmitted[c.name] = sum((αi[e] - α[e]) * P(e) for e in es; init = 0.0)
         else
-            absorbed[c.name] = sum((1 - α[e]) * ForwardDiff.value(s.H[e]) * t.elem_area[e]
-                                   for e in es; init = 0.0)
+            absorbed[c.name] = sum((1 - α[e]) * P(e) for e in es; init = 0.0)
         end
     end
     lost = sum(ForwardDiff.value(s.B[e]) * t.elem_area[e] * c for (e, c) in
                enumerate(closure_error(m.F)); init = 0.0)
     source = sum(ForwardDiff.value(s.source[e]) * t.elem_area[e] for e in 1:nelements(t))
-    return (; source, absorbed, escaped, lost)
+    return (; source, absorbed, escaped, transmitted, lost)
 end

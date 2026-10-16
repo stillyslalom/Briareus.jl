@@ -72,8 +72,8 @@
         H = mw.F * B
         αn = albedos(tw, 2.0, H)
         δ = maximum(abs.(αn .- α))
-        α = αn
         δ < 1e-4 && break
+        α = αn
     end
     @test rel(sw.B, B) <= 1e-12 && rel(sw.H, H) <= 1e-12 && sw.albedo == α
     @test length(mw.cache.keys) == 1 && mw.cache.keys[1] == albedos(tw, 2.0)

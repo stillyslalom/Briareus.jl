@@ -131,12 +131,16 @@ function closest_hit(b::BVH, o::Vec3, d::Vec3, tmax = Inf)
     return (best, hit)
 end
 
-"""
-    any_hit(bvh, origin, dir, tmax = Inf) -> Bool
+_skipped(::Nothing, id) = false
+_skipped(f, id) = f(id)
 
-Whether any triangle intersects `origin + t*dir` for `0 < t < tmax`.
 """
-function any_hit(b::BVH, o::Vec3, d::Vec3, tmax = Inf)
+    any_hit(bvh, origin, dir, tmax = Inf, skip = nothing) -> Bool
+
+Whether any triangle intersects `origin + t*dir` for `0 < t < tmax`, ignoring triangles
+whose identifier `id` has `skip(id) == true`.
+"""
+function any_hit(b::BVH, o::Vec3, d::Vec3, tmax = Inf, skip = nothing)
     isempty(b.nodes) && return false
     inv = _safe_inv(d)
     stack = MVector{64,Int32}(undef)
@@ -149,7 +153,8 @@ function any_hit(b::BVH, o::Vec3, d::Vec3, tmax = Inf)
         if node.b < 0
             for k in node.a:(node.a - node.b - 1)
                 it = b.items[k]
-                _intersect(o, d, b.v0[it], b.e1[it], b.e2[it], tmax) < Inf && return true
+                _intersect(o, d, b.v0[it], b.e1[it], b.e2[it], tmax) < Inf &&
+                    !_skipped(skip, b.ids[it]) && return true
             end
         else
             stack[sp+1] = node.a

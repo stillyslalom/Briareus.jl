@@ -258,3 +258,120 @@ end
     # keep-out ignores wall windows (they are not entrance holes)
     @test Set(ApertureKeepOut(tw).names) == Set([:leh_top, :leh_bottom])
 end
+
+@testset "circular windows and gaps" begin
+    R, L = 2.875, 9.4
+    h = L / 2
+    @test_throws ArgumentError WallWindow(phi = 0, diameter = 1, width = 1, height = 1)
+    @test_throws ArgumentError WallWindow(phi = 0, width = 1)
+    @test_throws ArgumentError WallWindow(phi = 0, diameter = 1, gap = -0.1)
+    @test_throws ArgumentError WallWindow(phi = 0, diameter = 1, segments = 6)
+    @test_throws ArgumentError hohlraum(windows = [WallWindow(phi = 0, diameter = 2),
+                                                   WallWindow(phi = 40, diameter = 2)])
+    @test_throws ArgumentError hohlraum(windows = [WallWindow(phi = 0, z = 3.9, diameter = 1.5)])
+    # the equal-area polygon has the disk's area
+    @test let n = 32, r = 1.3, ρ = equal_area_radius(r, n)
+        n / 2 * ρ^2 * sin(2π / n) ≈ π * r^2
+    end
+
+    # --- geometry: exact areas, every vertex on the cylinder, triangles only
+    d, g = 2.0, 0.05
+    pair = [WallWindow(phi = 78, diameter = d, gap = g),
+            WallWindow(phi = 258, diameter = d, gap = g, name = :south)]
+    t = hohlraum(windows = pair)
+    names = [c.name for c in t.components]
+    @test names[end-3:end] == [:window_1, :window_1_gap, :south, :south_gap]
+    @test t.components[end-3].kind === :surface && t.components[end-2].kind === :aperture
+    for n in (:window_1, :south)
+        @test sum(t.elem_area[elements(t, n)]) ≈ π * d^2 / 4 rtol = 1e-12
+    end
+    for n in (:window_1_gap, :south_gap)
+        @test sum(t.elem_area[elements(t, n)]) ≈ π * ((d / 2 + g)^2 - (d / 2)^2) rtol = 1e-12
+    end
+    @test sum(t.elem_area[elements(t, :wall, :window_1, :window_1_gap, :south, :south_gap)]) ≈
+          2π * R * L rtol = 1e-13
+    for c in t.components[[1; length(t.components)-3:length(t.components)]]
+        @test all(v -> abs(hypot(v[1], v[2]) - R) < 1e-12, c.mesh.vertices)
+    end
+    @test all(r -> length(r) == 1, t.components[end].mesh.patches)
+    # the window's edge: n sides on the equal-area circle, in the unrolled coordinates
+    uv(v, φc) = (R * (mod(atan(v[2], v[1]) - deg2rad(φc) + π, 2π) - π), v[3])
+    ρs = [hypot(uv(v, 78)...) for v in t.components[end-3].mesh.vertices]
+    n = Briareus._window_segments(pair[1], min(2π * R / 48, L / 36))
+    @test maximum(ρs) ≈ equal_area_radius(d / 2, n) rtol = 1e-12
+    @test count(ρ -> abs(ρ - maximum(ρs)) < 1e-12, unique(ρs)) <= n
+    # explicit segment count; a gap-free window is just the disk
+    t1 = hohlraum(windows = [WallWindow(phi = 10, z = -1.0, diameter = 1.2, segments = 64, open = true)])
+    @test sum(t1.elem_area[elements(t1, :window_1)]) ≈ π * 0.6^2 rtol = 1e-12
+    @test maximum(hypot(uv(v, 10)[1], v[3] + 1) for v in t1.components[end].mesh.vertices) ≈
+          equal_area_radius(0.6, 64) rtol = 1e-12
+
+    # --- watertight: with the window and its gap closed every ray from inside toward the
+    # window's region hits an opaque patch; with them open, rays toward the window and
+    # gap centerlines escape
+    closed = hohlraum(capsule_radius = 0, windows = [WallWindow(phi = 78, diameter = d, gap = g,
+                                                                gap_material = gold())])
+    opened = hohlraum(capsule_radius = 0, windows = [WallWindow(phi = 78, diameter = d, gap = g,
+                                                                open = true)])
+    o = Vec3(0.3, -0.2, 0.1)
+    rng = MersenneTwister(11)
+    onwall(u, v) = (φ = deg2rad(78) + u / R; Vec3(R * cos(φ), R * sin(φ), v))
+    pts = [(ρ * cos(θ), ρ * sin(θ)) for θ in 2π .* rand(rng, 500)
+           for ρ in (d / 2, d / 2 + g, d / 2 + g / 2, 1.4 * rand(rng), d / 2 + 1e-4 * randn(rng))]
+    @test all(p -> Briareus.closest_hit(closed.bvh, o, onwall(p...) - o)[2] != 0, pts)
+    # well inside the polygons (their edge is within ~3 µm of the circles)
+    inner = [(ρ * cos(θ), ρ * sin(θ)) for θ in 2π .* rand(rng, 200) for ρ in (0.9 * rand(rng) * d / 2, d / 2 + g / 2)]
+    @test all(p -> Briareus.closest_hit(opened.bvh, o, onwall(p...) - o)[2] == 0, inner)
+
+    # --- view factors: in the capsule-free hohlraum (a convex enclosure, so the single
+    # visibility ray is exact) rows close as well as without windows, reciprocity is
+    # exact by construction, and closure enforcement keeps it
+    kw = (; nz = 16, nphi = 24)
+    tw = hohlraum(; kw..., capsule_radius = 0,
+                  windows = [WallWindow(phi = 78, diameter = d, gap = g, gap_material = gold()),
+                             WallWindow(phi = 258, diameter = d, gap = g)])
+    t0 = hohlraum(; kw..., capsule_radius = 0)
+    F = view_factors(tw)
+    err0 = maximum(abs, closure_error(view_factors(t0)))
+    @test err0 < 2e-3
+    @test maximum(abs, closure_error(F)) < 1.2 * err0
+    for n in (:window_1, :window_1_gap, :window_2, :window_2_gap)
+        @test maximum(abs, closure_error(F)[elements(tw, n)]) < 1e-3
+    end
+    G = tw.elem_area .* F
+    @test maximum(abs, G - G') <= 1e-14 * maximum(G)
+    m = RadiationModel(tw; closed = true)
+    @test maximum(abs, closure_error(m.F)) < 1e-10
+    Gc = tw.elem_area .* m.F
+    @test maximum(abs, Gc - Gc') <= 1e-12 * maximum(Gc)
+
+    # --- a pair related by the 180° rotation about z adds no odd-m harmonics; the open
+    # gap's escape is its share of the open area
+    q = [remake(b; aim = (0.0, 0.0, sign(b.port[3]) * (b.group in (:inner23, :inner30) ? 3.3 : 5.0)))
+         for b in nif_quads()]
+    kwc = (; nz = 16, nphi = 24, capsule_ntheta = 12, capsule_nphi = 24)
+    capsule_modes(t) = flux_ylm(evaluate(Scenario(t, q; observe = :capsule,
+                                                  viewfactor_kw = (; closed = true)), q); lmax = 4)
+    oddm(c) = maximum(abs(c[mode_index(l, m)]) for l in 1:4 for m in -l:l if isodd(m)) / c[1]
+    c0 = capsule_modes(hohlraum(; kwc...))
+    cp = capsule_modes(hohlraum(; kwc..., windows = [WallWindow(phi = 78, diameter = d, open = true),
+                                                     WallWindow(phi = 258, diameter = d, open = true)]))
+    @test oddm(cp) < 1e-10
+    @test 0.9 * c0[1] < cp[1] < 0.97 * c0[1]
+    # a closed window of wall material is just wall, up to the remeshing
+    cw = capsule_modes(hohlraum(; kwc..., windows = [WallWindow(phi = 0, diameter = d)]))
+    @test mode_amplitude(cw, 1) < 1e-3 && abs(cw[1] / c0[1] - 1) < 1e-3
+    tg = hohlraum(; kwc..., windows = [WallWindow(phi = 0, diameter = d, gap = g)])
+    src = elements(tg, :wall, :cap_top, :cap_bottom)
+    laser = zeros(nelements(tg))
+    laser[src] .= tg.elem_area[src]
+    sol = solve(RadiationModel(tg; closed = true), laser)
+    bal = energy_balance(sol)
+    @test bal.source ≈ sum(values(bal.absorbed)) + sum(values(bal.escaped)) + bal.lost rtol = 1e-12
+    eg = elements(tg, :window_1_gap)
+    @test bal.escaped[:window_1_gap] ≈ sum(sol.H[eg] .* tg.elem_area[eg]) rtol = 1e-12
+    # the gap sees about the wall's mean flux: its escape is its area times that flux
+    ew = elements(tg, :wall)
+    Hw = sum(sol.H[ew] .* tg.elem_area[ew]) / sum(tg.elem_area[ew])
+    @test bal.escaped[:window_1_gap] / (Hw * π * ((d / 2 + g)^2 - (d / 2)^2)) ≈ 1 atol = 0.05
+end

@@ -25,7 +25,12 @@ sees itself, which gives the diagonal `Fᵢᵢ`. Flat facets standing in for a c
 exchange between nearby elements by an amount of order one relative to its size, which
 matters next to a concentrated source such as a laser spot.
 
-Visibility is a single centroid-to-centroid ray between the flat facets.
+Visibility is a single centroid-to-centroid ray between the flat facets; the facets of
+a curved surface (cylinder or sphere) do not block a ray between two points inside it,
+since the true surface cannot. On curved elements the centroid facing test is relaxed
+by the spread of the true normals across the flat facet, so pairs the curved patches
+exchange across are kept (a general triangle on a cylinder has its plane tilted axially
+by about its size over 2R), and the point kernels apply the exact facing per point.
 """
 function view_factors(t::Target; near = 3.0, mid = 12.0, level::Integer = 1, exact_far::Bool = true)
     N = nelements(t)
@@ -58,8 +63,36 @@ function view_factors(t::Target; near = 3.0, mid = 12.0, level::Integer = 1, exa
     size = [sqrt(2) * maximum(max(norm(t.tri_v0[k] - C[e]), norm(t.tri_v0[k] + t.tri_e1[k] - C[e]),
                                   norm(t.tri_v0[k] + t.tri_e2[k] - C[e])) for k in t.elem_tris[e])
             for e in 1:N]
+    # a flat facet standing in for a curved patch has a normal that departs from the true
+    # surface normals across the patch: by Δφ/2 at the edges of a chord rectangle, and
+    # also axially for a general triangle on a cylinder (its plane is tilted by ~h/2R).
+    # The centroid facing test is relaxed by that spread (`slack`, a sine), so a pair the
+    # curved patches exchange across is not culled; the point kernels then apply the
+    # exact per-point facing. A visibility ray admitted only by the slack (heading behind
+    # its own facet's plane) starts that much farther off the facet, so it clears the
+    # facet; every other ray starts ε off it, as for flat elements (lifting all origins
+    # would bias them toward the middle of a cavity, and into the capsule's shadow).
+    slack = zeros(N)
+    for e in 1:N
+        curved[e] && !sector[e] || continue
+        s = t.components[t.elem_comp[e]].surface
+        for k in t.elem_tris[e], v in (t.tri_v0[k], t.tri_v0[k] + t.tri_e1[k], t.tri_v0[k] + t.tri_e2[k])
+            slack[e] = max(slack[e], norm(cross(t.elem_curved[e] * last(surface_point(s, v)), Nrm[e])))
+        end
+    end
+    # A segment between two points inside a convex curved surface (cylinder, sphere)
+    # cannot cross the surface, so its facets do not occlude such a pair: they would only
+    # by faceting (a ray grazing the wall from a small facet is blocked by a larger
+    # neighbor, which sits deeper inside the true surface).
+    surfs = unique(c.surface for c in t.components if c.surface isa Union{CylinderSurface,SphereSurface})
+    comp_surf = [something(findfirst(==(c.surface), surfs), 0) for c in t.components]
+    tri_surf = Int32[comp_surf[c] for c in t.tri_comp]
+    inside = BitMatrix(undef, length(surfs), N)
+    for e in 1:N, (k, s) in enumerate(surfs)
+        inside[k, e] = _inside(s, C[e])
+    end
     ctx = (; t, bvh = t.bvh, C, Nrm, A, planar, concave, recv, qnear, qmid, qfar, qself,
-           size, ε, near2 = near^2, mid2 = mid^2, level, exact_far)
+           size, slack, ε, tri_surf, inside, near2 = near^2, mid2 = mid^2, level, exact_far)
     # rows have i:N pairs, so they are handed out one at a time, longest first, rather
     # than in equal contiguous chunks (the first chunk would carry most of the work)
     next = Threads.Atomic{Int}(1)
@@ -74,10 +107,9 @@ end
 # Row i of the view-factor matrix (pairs i < j), behind a function barrier so the
 # threaded loop is specialized on the concrete types in `ctx`.
 function _vf_row!(F, ctx, i)
-    (; t, bvh, C, Nrm, A, planar, concave, recv, qnear, qmid, qfar, qself, size, ε, near2, mid2,
-       level, exact_far) = ctx
+    (; t, bvh, C, Nrm, A, planar, concave, recv, qnear, qmid, qfar, qself, size, slack, ε,
+       tri_surf, inside, near2, mid2, level, exact_far) = ctx
     N = length(A)
-    oi = C[i] + ε * Nrm[i]
     if concave[i]
         F[i, i] = _self_kernel(qself[i]) / A[i]
     end
@@ -85,10 +117,14 @@ function _vf_row!(F, ctx, i)
         d = C[j] - C[i]
         r2 = dot(d, d)
         r2 == 0 && continue
-        # elements must face each other (centroid test)
-        dot(Nrm[i], d) > 0 && dot(Nrm[j], d) < 0 || continue
-        oj = C[j] + ε * Nrm[j]
-        any_hit(bvh, oi, oj - oi, 1 - 1e-9) && continue
+        # elements must face each other (centroid test, relaxed on curved surfaces)
+        r = sqrt(r2)
+        ci, cj = dot(Nrm[i], d) / r, -dot(Nrm[j], d) / r
+        ci > -slack[i] && cj > -slack[j] || continue
+        oi = C[i] + (ε + size[i] * max(0.0, -ci)) * Nrm[i]
+        oj = C[j] + (ε + size[j] * max(0.0, -cj)) * Nrm[j]
+        any_hit(bvh, oi, oj - oi, 1 - 1e-9,
+                k -> (s = tri_surf[k]; s != 0 && inside[s, i] && inside[s, j])) && continue
         s2 = max(size[i], size[j])^2
         tier = r2 < near2 * s2 ? :near : r2 < mid2 * s2 ? :mid : :far
         # G = Aᵢ Fᵢⱼ = Aⱼ Fⱼᵢ
@@ -113,6 +149,11 @@ function _vf_row!(F, ctx, i)
     end
     return nothing
 end
+
+# Whether `p` lies inside the (convex) curved surface, to round-off.
+_inside(s::CylinderSurface, p) =
+    (d = p - s.origin; norm(d - dot(d, s.axis) * s.axis) <= s.radius * (1 + 1e-12))
+_inside(s::SphereSurface, p) = norm(p - s.center) <= s.radius * (1 + 1e-12)
 
 # One-point rule of a curved element: the projected centroid, its normal and the area.
 function _one_point(t::Target, e)
