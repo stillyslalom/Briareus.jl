@@ -21,6 +21,18 @@ Radiation temperature (eV) of incident flux `H` (TW/mm²): `(H/σ)^(1/4)`.
 """
 radiation_temperature(H) = (max(H, zero(H)) / SIGMA_SB)^(1 / 4)
 
+# LU factorizations of I - diag(α) F, most recently used first, keyed on α.
+struct _FactorCache
+    lock::ReentrantLock
+    keys::Vector{Vector{Float64}}
+    facts::Vector{LU{Float64,Matrix{Float64},Vector{Int}}}
+end
+_FactorCache() = _FactorCache(ReentrantLock(), Vector{Float64}[],
+                              LU{Float64,Matrix{Float64},Vector{Int}}[])
+
+"Number of radiosity factorizations a `RadiationModel` keeps (each is n² Float64)."
+const FACTOR_CACHE_SIZE = 2
+
 """
     RadiationModel(target; F = view_factors(target), closed = false, kwargs...)
 
@@ -29,10 +41,17 @@ deposition. `kwargs` pass through to `view_factors`. Set `closed = true` when th
 elements (apertures included) form a closed enclosure — e.g. a hohlraum with its LEHs
 — to remove discretization closure error with `enforce_closure!`; radiation that would
 otherwise leak through the mesh is amplified by multiple bounces at high albedo.
+
+The model caches LU factorizations of the radiosity matrix `I - diag(α) F` keyed on
+the albedo vector (the two most recently used), so `solve` and `flux_response` with
+unchanged albedos skip the factorization. The cache is thread-safe. Do not mutate `F`
+after the first solve (or call `Briareus.empty_cache!(model)` if you do).
 """
 struct RadiationModel
     target::Target
     F::Matrix{Float64}
+    cache::_FactorCache
+    RadiationModel(t::Target, F::AbstractMatrix) = new(t, F, _FactorCache())
 end
 
 function RadiationModel(t::Target; F = nothing, closed::Bool = false, kwargs...)
@@ -67,6 +86,45 @@ end
 
 function Base.show(io::IO, m::RadiationModel)
     print(io, "RadiationModel(", nelements(m.target), " elements)")
+end
+
+# LU factorization of I - diag(α) F, from the model's cache when α was seen recently.
+# The factorization runs under the lock, so concurrent solves with the same new albedo
+# wait for one factorization instead of each repeating it; the returned LU is only read.
+function _radiosity_lu(m::RadiationModel, α::Vector{Float64})
+    c = m.cache
+    lock(c.lock) do
+        i = findfirst(==(α), c.keys)
+        if i !== nothing
+            if i != 1
+                pushfirst!(c.keys, popat!(c.keys, i))
+                pushfirst!(c.facts, popat!(c.facts, i))
+            end
+            return c.facts[1]
+        end
+        f = lu!(I - α .* m.F)
+        pushfirst!(c.keys, copy(α))
+        pushfirst!(c.facts, f)
+        if length(c.keys) > FACTOR_CACHE_SIZE
+            pop!(c.keys)
+            pop!(c.facts)
+        end
+        return f
+    end
+end
+
+"""
+    empty_cache!(model::RadiationModel) -> model
+
+Drop the cached radiosity factorizations (frees memory; required after mutating
+`model.F`).
+"""
+function empty_cache!(m::RadiationModel)
+    lock(m.cache.lock) do
+        empty!(m.cache.keys)
+        empty!(m.cache.facts)
+    end
+    return m
 end
 
 """
@@ -113,6 +171,11 @@ Solve the radiosity system for the given absorbed laser power per element. Albed
 from the materials at `time` unless an explicit per-element `albedo` vector is passed.
 Temperature-dependent albedos (`WallLossAlbedo`) are iterated to self-consistency with
 each element's incident-flux temperature (to `tol` in albedo).
+
+The factorization of the system for the initial albedo (the materials' at `time`, or the
+explicit `albedo`) is cached on the model, so repeated solves with unchanged albedos
+cost only a pair of triangular solves and a matrix–vector product. Iterates of a
+temperature-dependent albedo differ from call to call and are factored afresh.
 """
 solve(m::RadiationModel, d::Deposition; kwargs...) = solve(m, d.element; kwargs...)
 
@@ -124,7 +187,7 @@ function solve(m::RadiationModel, P::AbstractVector; time = 0.0, albedo = nothin
     iterate = albedo === nothing && _temperature_dependent(t)
     B = H = nothing
     for it in 1:(iterate ? maxiter : 1)
-        B = (I - α .* m.F) \ S
+        B = (it == 1 ? _radiosity_lu(m, α) : lu!(I - α .* m.F)) \ S
         H = m.F * B
         iterate || break
         αn = albedos(t, time, H)
@@ -143,16 +206,16 @@ Linear operator `R` with `H[observed] = R * P`: incident x-ray flux on the obser
 elements (TW/mm²) per unit absorbed laser power on every element (TW). It is fixed
 for a given geometry and albedo, so optimizers that only change the laser source
 apply it as a matrix product instead of re-solving. Pass the converged `sol.albedo` of
-a reference solution to linearize about a temperature-dependent albedo state.
+a reference solution to linearize about a temperature-dependent albedo state. Shares
+the model's factorization cache with `solve`.
 """
 function flux_response(m::RadiationModel, observed::AbstractVector{<:Integer}; time = 0.0,
                        albedo = nothing)
     t = m.target
     α = albedo === nothing ? albedos(t, time) : collect(Float64, albedo)
     η = conversions(t)
-    M = I - α .* m.F
     # R = F[obs,:] M⁻¹ diag(η ./ A)  ⇒  Rᵀ = diag(η ./ A) M⁻ᵀ F[obs,:]ᵀ
-    X = M' \ Matrix(m.F[observed, :]')
+    X = _radiosity_lu(m, α)' \ Matrix(m.F[observed, :]')
     return Matrix((X .* (η ./ t.elem_area))')
 end
 

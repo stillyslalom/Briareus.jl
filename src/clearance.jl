@@ -281,6 +281,8 @@ end
 
 Result of `clearance`: one `ClearanceRow` per beam and hardware component plus the
 envelope, error-set and threshold settings. See `violations`, `min_clearance`.
+`canceled` is true when a `clearance` callback stopped the check early; `rows` then
+hold only the beams completed before the cancel (the leading beams, in input order).
 """
 struct ClearanceReport
     rows::Vector{ClearanceRow}
@@ -290,7 +292,10 @@ struct ClearanceReport
     margin::Float64
     targets::Vector{Symbol}
     thresholds::NamedTuple
+    canceled::Bool
 end
+ClearanceReport(rows, contour, transverse, errors, margin, targets, thresholds) =
+    ClearanceReport(rows, contour, transverse, errors, margin, targets, thresholds, false)
 
 """
     DEFAULT_CLEARANCE_THRESHOLDS
@@ -314,7 +319,8 @@ end
               wings = nif_wings(), pointing = 0.05, target_offset = 0.025,
               hardware_tolerance = 0.0, focus = 1.0, margin = 0.0, ssd = 0.0,
               thresholds = DEFAULT_CLEARANCE_THRESHOLDS, nangles = 16, level = 2,
-              op = nothing, nspot = 61) -> ClearanceReport
+              op = nothing, nspot = 61, callback = nothing,
+              batch = Threads.nthreads()) -> ClearanceReport
 
 Beam-to-hardware clearance check, judged on the worst case over an error set.
 
@@ -350,6 +356,15 @@ plane if it misses them. Hardware is sampled at triangle vertices and `4^level`
 sub-triangle points. Power on hardware comes from the reference ray trace (`nspot`
 grid per core component; wings on equal-power polar grids), or for the core from `op`,
 a `DepositionOperator` for these ports, when given.
+
+**Progress and cancel.** With a `callback`, beams are checked in batches of `batch`
+(input order) and `callback((; done, total))` is called with the number of beams
+completed — once with `done = 0` before any work, then after each batch. Returning
+`true` cancels: `clearance` returns at once with the rows of the completed beams and
+`canceled = true` in the report (a `true` after the last batch is ignored). The
+callback always runs on the calling task, never on a worker thread, so it may touch
+task-local state; it must not block for long, since no work runs while it does. Rows
+do not depend on `callback` or `batch`.
 """
 function clearance(t::Target, beams::AbstractVector{<:Beam}; targets,
                    hardware = nothing, intensity = nothing, peak_fraction = nothing,
@@ -357,7 +372,8 @@ function clearance(t::Target, beams::AbstractVector{<:Beam}; targets,
                    target_offset = 0.025, hardware_tolerance = 0.0, focus = 1.0,
                    margin = 0.0, ssd = 0.0, thresholds = DEFAULT_CLEARANCE_THRESHOLDS,
                    nangles::Integer = 16, level::Integer = 2,
-                   op::Union{Nothing,DepositionOperator} = nothing, nspot::Integer = 61)
+                   op::Union{Nothing,DepositionOperator} = nothing, nspot::Integer = 61,
+                   callback = nothing, batch::Integer = Threads.nthreads())
     all(isnothing, (intensity, peak_fraction, enclosed)) && (peak_fraction = 1e-4)
     contour = intensity !== nothing ? @sprintf("%.3g W/cm²", intensity) :
               peak_fraction !== nothing ? @sprintf("%.3g of core peak", peak_fraction) :
@@ -369,7 +385,6 @@ function clearance(t::Target, beams::AbstractVector{<:Beam}; targets,
          Symbol[hardware...]
     tgt_idx = Set(component_index(t, n) for n in tgt)
     hw_idx = [component_index(t, n) for n in hw]
-    nc = length(t.components)
     samples = Dict{Int,Vector{Vec3}}()
     for ci in hw_idx
         pts = Vec3[]
@@ -380,7 +395,34 @@ function clearance(t::Target, beams::AbstractVector{<:Beam}; targets,
         end
         samples[ci] = unique(pts)
     end
+    errs = (; pointing = Float64(pointing), target_offset = Float64(target_offset),
+            hardware_tolerance = Float64(hardware_tolerance), focus = Float64(focus),
+            ssd = Float64(ssd))
+    finish(rows, canceled) = ClearanceReport(rows, contour, R, errs, Float64(margin), tgt,
+                                             thresholds, canceled)
+    rowsof(bs) = _clearance_rows(t, bs, samples, hw_idx, tgt_idx, wings, op, nspot, R,
+                                 focus, nangles, thresholds;
+                                 intensity, peak_fraction, enclosed, margin = margin + ssd)
+    callback === nothing && return finish(rowsof(beams), false)
 
+    # In batches of beams, reporting progress (and polling for a cancel) between them.
+    nb = length(beams)
+    rows = ClearanceRow[]
+    callback((; done = 0, total = nb)) === true && nb > 0 && return finish(rows, true)
+    step = max(1, batch)
+    for lo in 1:step:nb
+        hi = min(lo + step - 1, nb)
+        append!(rows, rowsof(view(beams, lo:hi)))
+        callback((; done = hi, total = nb)) === true && hi < nb && return finish(rows, true)
+    end
+    return finish(rows, false)
+end
+
+# Rows of the clearance check for `beams` (all beams of a non-batched call).
+function _clearance_rows(t::Target, beams, samples, hw_idx, tgt_idx, wings, op, nspot, R,
+                         focus, nangles, thresholds; intensity, peak_fraction, enclosed,
+                         margin)
+    nc = length(t.components)
     # beam variants over the error set (nominal first for each beam)
     nb = length(beams)
     variants = Beam{Float64}[]
@@ -413,7 +455,7 @@ function clearance(t::Target, beams::AbstractVector{<:Beam}; targets,
     Threads.@threads for bi in 1:nb
         vids = findall(==(bi), owner)
         b = variants[vids[1]]
-        envs, wingc = _envelopes(b, wings; intensity, peak_fraction, enclosed, margin = margin + ssd)
+        envs, wingc = _envelopes(b, wings; intensity, peak_fraction, enclosed, margin)
         s_stop = _landing(t, envs[1], tgt_idx)
         frames = [BeamFrame(variants[v]) for v in vids]
         cone = cone_directions(b, _CLEARANCE_NCONE)[1]
@@ -447,10 +489,7 @@ function clearance(t::Target, beams::AbstractVector{<:Beam}; targets,
                                                          _status(Iw, frac, thresholds))
         end
     end
-    errs = (; pointing = Float64(pointing), target_offset = Float64(target_offset),
-            hardware_tolerance = Float64(hardware_tolerance), focus = Float64(focus),
-            ssd = Float64(ssd))
-    return ClearanceReport(rows, contour, R, errs, Float64(margin), tgt, thresholds)
+    return rows
 end
 
 const _CLEARANCE_NCONE = 37
@@ -598,8 +637,8 @@ end
 function Base.show(io::IO, ::MIME"text/plain", r::ClearanceReport)
     nb = length(unique(x.beam for x in r.rows))
     e = r.errors
-    @printf(io, "ClearanceReport: %d beams; envelope at %s + f-cone + %.3g mm margin + %.3g mm SSD\n",
-            nb, r.contour, r.margin, e.ssd)
+    @printf(io, "ClearanceReport: %d beams%s; envelope at %s + f-cone + %.3g mm margin + %.3g mm SSD\n",
+            nb, r.canceled ? " (canceled: partial)" : "", r.contour, r.margin, e.ssd)
     @printf(io, "  error set: transverse %.3g mm (pointing %.3g + target %.3g + hardware %.3g), focus ±%.3g mm\n",
             r.transverse, e.pointing, e.target_offset, e.hardware_tolerance, e.focus)
     th = r.thresholds
