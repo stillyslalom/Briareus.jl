@@ -595,4 +595,52 @@ end
     @test all(hi .== 9.0) && all(lo .== 4.0)
 end
 
+
+@testset "curved surfaces" begin
+    # cubed sphere: convex faceting (every element sees every other), exact curved area
+    cs = cubed_sphere_mesh(2.0; n = 6, outward = false)
+    t = Target(Component(:s, cs, Material(:w; albedo = 0.5, conversion = 0.7); surface = SphereSurface(2.0)))
+    @test sum(t.elem_area) ≈ 16π rtol = 1e-12
+    F = view_factors(t)
+    @test maximum(abs.(closure_error(F))) < 1e-10
+    @test maximum(abs.(F .- (t.elem_area ./ sum(t.elem_area))')) < 1e-12      # F_ij = A_j / 4πR², self included
+    # integrating sphere with a port: incident flux uniform to round-off wherever the laser lands
+    port, wall = split_mesh(cs, c -> c[3] > 2.0 * cosd(30))
+    ts = Target(Component(:wall, wall, Material(:w; albedo = 0.5, conversion = 0.7); surface = SphereSurface(2.0)),
+                aperture(:port, port; surface = SphereSurface(2.0)))
+    b = Beam("B"; theta = 0, phi = 0, power = 1.0, spot = omega_spot(:SG4), fnumber = 6.7, aim = (0.3, 0.0, -1.0))
+    dep = raytrace_deposition(ts, [b]; nspot = 31)
+    sol = solve(RadiationModel(ts), dep)
+    w = elements(ts, :wall)
+    A, Aw = sum(ts.elem_area), sum(ts.elem_area[w])
+    exact = 0.7 * sum(dep.element[w]) / (A - 0.5 * Aw)
+    @test maximum(abs.(sol.H[w] ./ exact .- 1)) < 1e-10
+    # closed cylinder with sector end caps against exact view factors
+    Rc, L = 1.0, 2.0
+    tc = Target(Component(:wall, cylinder_mesh(Rc, 0.0, L; nz = 8, nphi = 24), gold(); surface = CylinderSurface(Rc)),
+                Component(:bot, disk_mesh(Rc, 0.0; nr = 4, nphi = 24, up = true), gold(); surface = DiskSurface()),
+                Component(:top, disk_mesh(Rc, L; nr = 4, nphi = 24, up = false), gold();
+                          surface = DiskSurface(center = (0, 0, L))))
+    @test sum(tc.elem_area[elements(tc, :bot)]) ≈ π rtol = 1e-12
+    @test sum(tc.elem_area[elements(tc, :wall)]) ≈ 2π * Rc * L rtol = 1e-3
+    Fc = view_factors(tc)
+    wl, bt, tp = elements(tc, :wall), elements(tc, :bot), elements(tc, :top)
+    X = 1 + (1 + (Rc / L)^2) / (Rc / L)^2
+    dd = (X - sqrt(X^2 - 4)) / 2
+    Fdd = sum(tc.elem_area[i] * Fc[i, j] for i in bt, j in tp) / sum(tc.elem_area[bt])
+    Fww = sum(tc.elem_area[i] * Fc[i, j] for i in wl, j in wl) / sum(tc.elem_area[wl])
+    @test Fdd ≈ dd rtol = 1e-3
+    @test Fww ≈ 1 - π * Rc^2 * (1 - dd) / (π * Rc * L) rtol = 1e-3
+    @test maximum(abs.(closure_error(Fc))) < 3e-3
+    # the rim element at the wall–cap corner against the exact point-to-disk factor
+    Fdisk(ρ, z, R) = 0.5 * (1 - (z^2 + ρ^2 - R^2) / sqrt((z^2 + ρ^2 + R^2)^2 - 4ρ^2 * R^2))
+    rim = bt[end]
+    r0, r1 = element_sector(tc, rim)[1:2]
+    rs = range(r0, r1; length = 4001)
+    mids = (rs[1:end-1] .+ rs[2:end]) ./ 2
+    Ftop = sum(m * Fdisk(m, L, Rc) for m in mids) / sum(mids)
+    @test sum(Fc[rim, tp]) ≈ Ftop rtol = 2e-3
+    @test sum(Fc[rim, wl]) ≈ 1 - Ftop rtol = 2e-3
+end
+
 end

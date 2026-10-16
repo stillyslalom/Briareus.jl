@@ -100,13 +100,14 @@ ablator(; albedo = 0.3, conversion = 0.3) = Material(:ablator; albedo, conversio
 const BLACK = Material(:black; albedo = 0.0, conversion = 0.0)
 
 """
-    Component(name, mesh, material; kind = :surface, two_sided = false)
+    Component(name, mesh, material; kind = :surface, two_sided = false, surface = nothing)
 
 A named piece of a target. `kind = :surface` components are opaque: they block laser
 rays and lines of sight, absorb laser light, and radiate from their front side (and
 back side when `two_sided`). `kind = :aperture` components (e.g. laser entrance holes)
 are transparent diagnostic surfaces that record the x-ray flux crossing them and
-re-emit nothing.
+re-emit nothing. `surface` is the exact `CurvedSurface` the mesh approximates, if any;
+the radiation model then uses the curved geometry (see `view_factors`).
 """
 struct Component
     name::Symbol
@@ -114,10 +115,12 @@ struct Component
     material::Material
     kind::Symbol
     two_sided::Bool
-    function Component(name, mesh, material; kind::Symbol = :surface, two_sided::Bool = false)
+    surface::Union{Nothing,CurvedSurface}
+    function Component(name, mesh, material; kind::Symbol = :surface, two_sided::Bool = false,
+                       surface::Union{Nothing,CurvedSurface} = nothing)
         kind in (:surface, :aperture) || throw(ArgumentError("kind must be :surface or :aperture"))
         kind === :aperture && two_sided && throw(ArgumentError("apertures are one-sided"))
-        new(Symbol(name), mesh, material, kind, two_sided)
+        new(Symbol(name), mesh, material, kind, two_sided, surface)
     end
 end
 
@@ -127,11 +130,12 @@ end
 Transparent diagnostic surface (e.g. a laser entrance hole): rays pass through it and
 its incident x-ray flux is the flux escaping through it.
 """
-aperture(name, mesh) = Component(name, mesh, BLACK; kind = :aperture)
+aperture(name, mesh; surface = nothing) = Component(name, mesh, BLACK; kind = :aperture, surface)
 
 "Component with its mesh rigidly moved (`x ↦ R*x + t`)."
 transform(c::Component, R::AbstractMatrix, t = zero(Vec3)) =
-    Component(c.name, transform(c.mesh, R, Vec3(t...)), c.material; kind = c.kind, two_sided = c.two_sided)
+    Component(c.name, transform(c.mesh, R, Vec3(t...)), c.material; kind = c.kind,
+              two_sided = c.two_sided, surface = _transform_surface(c.surface, R, Vec3(t...)))
 translate(c::Component, t) = transform(c, SMatrix{3,3,Float64}(I), t)
 
 """
@@ -161,6 +165,7 @@ struct Target
     elem_comp::Vector{Int32}
     elem_side::Vector{Int8}        # +1 front, -1 back
     elem_tris::Vector{UnitRange{Int}}
+    elem_curved::Vector{Int8}      # radiating side relative to the curved surface's outward normal (0: flat)
     comp_elems::Vector{Vector{Int}}
     bvh::BVH
     scale::Float64                 # bounding-sphere radius about the origin (mm)
@@ -172,7 +177,7 @@ function Target(components::AbstractVector{Component})
     tv0, te1, te2, tn, ta = Vec3[], Vec3[], Vec3[], Vec3[], Float64[]
     tcomp, tfront, tback = Int32[], Int32[], Int32[]
     topaque = BitVector()
-    ec, en, ea, ecomp, eside = Vec3[], Vec3[], Float64[], Int32[], Int8[]
+    ec, en, ea, ecomp, eside, ecurv = Vec3[], Vec3[], Float64[], Int32[], Int8[], Int8[]
     etris = UnitRange{Int}[]
     comp_elems = Vector{Int}[]
     for (ci, c) in enumerate(components)
@@ -195,7 +200,16 @@ function Target(components::AbstractVector{Component})
                 A > 0 || continue
                 cen = sum(ta[k] * (tv0[k] + (te1[k] + te2[k]) / 3) for k in gr) / A
                 nrm = normalize(sum(ta[k] * tn[k] for k in gr))
-                push!(ec, cen); push!(en, side * nrm); push!(ea, A)
+                curv = Int8(0)
+                if c.surface !== nothing
+                    # radiation uses the curved patch: its area, and normals on the side
+                    # the flat element radiates from
+                    A = c.surface isa DiskSurface ?
+                        _sector_area(_sector(c.surface, _patch_vertices(tv0, te1, te2, gr))) :
+                        sum(_curved_area(c.surface, tv0[k], tv0[k] + te1[k], tv0[k] + te2[k]) for k in gr)
+                    curv = Int8(sign(dot(side * nrm, last(surface_point(c.surface, cen)))))
+                end
+                push!(ec, cen); push!(en, side * nrm); push!(ea, A); push!(ecurv, curv)
                 push!(ecomp, ci); push!(eside, side); push!(etris, gr)
                 e = length(ec)
                 push!(mine, e)
@@ -211,7 +225,7 @@ function Target(components::AbstractVector{Component})
     scale = isempty(tv0) ? 1.0 :
             maximum(max(norm(v), norm(v + a), norm(v + b)) for (v, a, b) in zip(tv0, te1, te2))
     return Target(collect(components), tv0, te1, te2, tn, ta, tcomp, tfront, tback, topaque,
-                  ec, en, ea, ecomp, eside, etris, comp_elems, bvh, scale)
+                  ec, en, ea, ecomp, eside, etris, ecurv, comp_elems, bvh, scale)
 end
 
 Target(cs::Component...) = Target(collect(cs))
@@ -266,10 +280,13 @@ Whether the open segment between points `a` and `b` is free of opaque surfaces.
 visible(t::Target, a::Vec3, b::Vec3) = !any_hit(t.bvh, a, b - a, 1 - 1e-9)
 
 """
-    element_quadrature(target, e, level) -> (points, weights)
+    element_quadrature(target, e, level) -> (points, weights, normals)
 
-Quadrature over element `e` from `4^level` sub-triangles per triangle (sub-triangle
-centroids weighted by area). Weights sum to the element area.
+Quadrature over element `e` from `4^level` sub-triangles per triangle: sub-triangle
+centroids weighted by area, with the element normal. On a component with a
+`CurvedSurface`, the points are projected onto the surface and carry its normals
+(on the element's radiating side) and curved-patch areas. Weights sum to the element
+area.
 """
 function element_quadrature(t::Target, e::Integer, level::Integer)
     pts = Vec3[]
@@ -277,7 +294,53 @@ function element_quadrature(t::Target, e::Integer, level::Integer)
     for k in t.elem_tris[e]
         _subtri!(pts, ws, t.tri_v0[k], t.tri_v0[k] + t.tri_e1[k], t.tri_v0[k] + t.tri_e2[k], level)
     end
-    return pts, ws
+    s = t.components[t.elem_comp[e]].surface
+    if s === nothing || t.elem_curved[e] == 0
+        return pts, ws, fill(t.elem_normal[e], length(pts))
+    end
+    if s isa DiskSurface
+        r0, r1, a, b = element_sector(t, e)
+        nr, nφ = 2^level, 2^(level + 1)
+        rs = sqrt.(range(r0^2, r1^2; length = nr + 1))        # equal-area rings
+        φs = range(a, b; length = nφ + 1)
+        cpts, cws = Vec3[], Float64[]
+        for i in 1:nr, k in 1:nφ
+            push!(cpts, _sector_point(s, sqrt((rs[i]^2 + rs[i+1]^2) / 2), (φs[k] + φs[k+1]) / 2))
+            push!(cws, (rs[i+1]^2 - rs[i]^2) / 2 * (φs[k+1] - φs[k]))
+        end
+        return cpts, cws, fill(t.elem_curved[e] * s.normal, length(cpts))
+    end
+    cpts, cws, cns = Vec3[], Float64[], Vec3[]
+    for k in t.elem_tris[e]
+        _curved_subtri!(cpts, cws, cns, s, t.elem_curved[e], t.tri_v0[k], t.tri_v0[k] + t.tri_e1[k],
+                        t.tri_v0[k] + t.tri_e2[k], level)
+    end
+    return cpts, cws, cns
+end
+
+_patch_vertices(tv0, te1, te2, gr) =
+    unique(vcat([[tv0[k], tv0[k] + te1[k], tv0[k] + te2[k]] for k in gr]...))
+
+"""
+    element_sector(target, e) -> (r0, r1, φa, φb)
+
+Polar sector of an element of a component with a `DiskSurface`.
+"""
+element_sector(t::Target, e::Integer) =
+    _sector(t.components[t.elem_comp[e]].surface,
+            _patch_vertices(t.tri_v0, t.tri_e1, t.tri_e2, t.elem_tris[e]))
+
+function _curved_subtri!(pts, ws, ns, s, sgn, a, b, c, level)
+    if level == 0
+        p, n = surface_point(s, (a + b + c) / 3)
+        push!(pts, p); push!(ns, sgn * n); push!(ws, _curved_area(s, a, b, c))
+        return
+    end
+    ab, bc, ca = (a + b) / 2, (b + c) / 2, (c + a) / 2
+    _curved_subtri!(pts, ws, ns, s, sgn, a, ab, ca, level - 1)
+    _curved_subtri!(pts, ws, ns, s, sgn, ab, b, bc, level - 1)
+    _curved_subtri!(pts, ws, ns, s, sgn, ca, bc, c, level - 1)
+    _curved_subtri!(pts, ws, ns, s, sgn, ab, bc, ca, level - 1)
 end
 
 function _subtri!(pts, ws, a, b, c, level)

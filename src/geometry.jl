@@ -82,6 +82,148 @@ function merge_meshes(ms::Mesh...)
 end
 
 """
+    CurvedSurface
+
+Exact surface that a faceted component approximates: `SphereSurface` or
+`CylinderSurface`. When a component carries one, the radiation model integrates over
+the true surface (points, normals and areas of the curved patches), while ray casting
+and visibility keep using the flat facets. On a curved concave surface the view-factor
+kernel stays bounded, and flat facets would misrepresent the exchange between nearby
+elements.
+"""
+abstract type CurvedSurface end
+
+"""
+    SphereSurface(radius; center = (0, 0, 0))
+"""
+struct SphereSurface <: CurvedSurface
+    center::Vec3
+    radius::Float64
+end
+SphereSurface(radius::Real; center = (0.0, 0.0, 0.0)) = SphereSurface(Vec3(center...), Float64(radius))
+
+"""
+    CylinderSurface(radius; origin = (0, 0, 0), axis = (0, 0, 1))
+
+Infinite circular cylinder through `origin` along `axis`.
+"""
+struct CylinderSurface <: CurvedSurface
+    origin::Vec3
+    axis::Vec3
+    radius::Float64
+end
+CylinderSurface(radius::Real; origin = (0.0, 0.0, 0.0), axis = (0.0, 0.0, 1.0)) =
+    CylinderSurface(Vec3(origin...), normalize(Vec3(axis...)), Float64(radius))
+
+"""
+    DiskSurface(; center = (0, 0, 0), normal = (0, 0, 1))
+
+Plane through `center` whose elements are polar sectors about `center`, as produced by
+`annulus_mesh` and `disk_mesh`: each element's exact shape is the annular sector spanned
+by its vertices, with circular arcs where the mesh has chords. Giving a hohlraum's end
+caps and laser entrance holes this surface makes them meet a `CylinderSurface` wall
+exactly at the rim.
+"""
+struct DiskSurface <: CurvedSurface
+    center::Vec3
+    normal::Vec3
+end
+DiskSurface(; center = (0.0, 0.0, 0.0), normal = (0.0, 0.0, 1.0)) =
+    DiskSurface(Vec3(center...), normalize(Vec3(normal...)))
+
+"""
+    surface_point(surface, p) -> (point, normal)
+
+Projection of `p` onto the surface (radially from the center or the axis) and the
+outward unit normal there.
+"""
+function surface_point(s::SphereSurface, p)
+    d = normalize(p - s.center)
+    return s.center + s.radius * d, d
+end
+function surface_point(s::CylinderSurface, p)
+    d = p - s.origin
+    a = dot(d, s.axis)
+    n = normalize(d - a * s.axis)
+    return s.origin + a * s.axis + s.radius * n, n
+end
+
+_transform_surface(::Nothing, R, t) = nothing
+_transform_surface(s::SphereSurface, R, t) = SphereSurface(Vec3(R * s.center + t), s.radius)
+_transform_surface(s::CylinderSurface, R, t) =
+    CylinderSurface(Vec3(R * s.origin + t), normalize(Vec3(R * s.axis)), s.radius)
+_transform_surface(s::DiskSurface, R, t) = DiskSurface(Vec3(R * s.center + t), normalize(Vec3(R * s.normal)))
+
+surface_point(s::DiskSurface, p) = (p - dot(p - s.center, s.normal) * s.normal, s.normal)
+
+function _disk_basis(s::DiskSurface)
+    e1 = normalize(abs(s.normal[1]) < 0.9 ? cross(s.normal, Vec3(1, 0, 0)) : cross(s.normal, Vec3(0, 1, 0)))
+    return e1, cross(s.normal, e1)
+end
+
+"""
+    _sector(s::DiskSurface, vertices) -> (r0, r1, φa, φb)
+
+Polar sector spanned by an element's vertices: radii from the smallest to the largest
+vertex radius (zero when a vertex sits at the center), angles from the first to the last
+vertex angle, unwrapped about the element's mean direction.
+"""
+function _sector(s::DiskSurface, verts)
+    e1, e2 = _disk_basis(s)
+    rs = Float64[]
+    φs = Float64[]
+    for v in verts
+        d = v - s.center
+        r = hypot(dot(d, e1), dot(d, e2))
+        push!(rs, r)
+        r > 1e-12 * maximum(norm(w - s.center) for w in verts) && push!(φs, atan(dot(d, e2), dot(d, e1)))
+    end
+    ref = atan(sum(sin, φs), sum(cos, φs))
+    rel = [mod(φ - ref + π, 2π) - π for φ in φs]
+    r0 = minimum(rs) < 1e-9 * maximum(rs) ? 0.0 : minimum(rs)
+    return r0, maximum(rs), ref + minimum(rel), ref + maximum(rel)
+end
+
+_sector_area((r0, r1, a, b)) = (r1^2 - r0^2) / 2 * (b - a)
+_sector_point(s::DiskSurface, r, φ) = (e = _disk_basis(s); s.center + r * (cos(φ) * e[1] + sin(φ) * e[2]))
+
+# Triangles of the sector with its arcs divided into `m` straight segments each.
+function _sector_triangles(s::DiskSurface, (r0, r1, a, b); m = 16)
+    φs = range(a, b; length = m + 1)
+    tris = NTuple{3,Vec3}[]
+    for k in 1:m
+        o1, o2 = _sector_point(s, r1, φs[k]), _sector_point(s, r1, φs[k+1])
+        if r0 == 0
+            push!(tris, (s.center, o1, o2))
+        else
+            i1, i2 = _sector_point(s, r0, φs[k]), _sector_point(s, r0, φs[k+1])
+            push!(tris, (i1, o1, o2), (i1, o2, i2))
+        end
+    end
+    return tris
+end
+
+# Area of the patch obtained by projecting the flat triangle (a, b, c) onto the surface.
+# Radial projection maps a flat triangle onto a spherical triangle exactly, whose area is
+# its solid angle times R²; on a cylinder the patch is integrated over 16 sub-triangles.
+function _curved_area(s::SphereSurface, a, b, c)
+    x, y, z = a - s.center, b - s.center, c - s.center
+    lx, ly, lz = norm(x), norm(y), norm(z)
+    num = abs(dot(x, cross(y, z)))
+    den = lx * ly * lz + dot(x, y) * lz + dot(x, z) * ly + dot(y, z) * lx
+    return 2 * atan(num, den) * s.radius^2
+end
+function _curved_area(s::CylinderSurface, a, b, c; level = 2)
+    if level == 0
+        pa, pb, pc = first(surface_point(s, a)), first(surface_point(s, b)), first(surface_point(s, c))
+        return norm(cross(pb - pa, pc - pa)) / 2
+    end
+    ab, bc, ca = (a + b) / 2, (b + c) / 2, (c + a) / 2
+    return _curved_area(s, a, ab, ca; level = level - 1) + _curved_area(s, ab, b, bc; level = level - 1) +
+           _curved_area(s, ca, bc, c; level = level - 1) + _curved_area(s, ab, bc, ca; level = level - 1)
+end
+
+"""
     split_mesh(mesh, keep) -> (selected, rest)
 
 Split a mesh by patch: `keep(centroid)` decides, from a patch's area-weighted
@@ -238,6 +380,42 @@ function sphere_mesh(radius; ntheta::Integer, nphi::Integer, outward::Bool = tru
         end
         c = sum(p) / length(p)
         add_polygon!(m, p; facing = outward ? c : -c)
+    end
+    return m
+end
+
+"""
+    cubed_sphere_mesh(radius; n, outward = true)
+
+Sphere about the origin from the six faces of a cube, each divided into `n × n`
+equiangular cells projected onto the sphere. The four corners of a projected cell are
+not coplanar, so each cell is split into two triangular patches along alternating
+diagonals chosen to keep the faceted sphere convex (`12n²` planar patches). Unlike a latitude–longitude mesh it has no poles and
+no slivers, which suits radiation problems where every part of the sphere matters
+equally.
+"""
+function cubed_sphere_mesh(radius; n::Integer, outward::Bool = true)
+    m = Mesh()
+    axes = (Vec3(1, 0, 0), Vec3(0, 1, 0), Vec3(0, 0, 1))
+    ts = range(-π / 4, π / 4; length = n + 1)
+    for (fi, ax) in enumerate(axes), sgn in (1, -1)
+        u = axes[mod1(fi + 1, 3)]
+        v = axes[mod1(fi + 2, 3)]
+        pt(a, b) = radius * normalize(sgn * ax + tan(a) * u + tan(b) * v)
+        for i in 1:n, j in 1:n
+            p = [pt(ts[i], ts[j]), pt(ts[i+1], ts[j]), pt(ts[i+1], ts[j+1]), pt(ts[i], ts[j+1])]
+            # take the diagonal that keeps the faceted sphere convex: the fourth corner
+            # must lie inside the plane of the other three (a reflex fold would hide
+            # neighboring elements from each other)
+            n123 = cross(p[2] - p[1], p[3] - p[1])
+            n123 = dot(n123, p[1]) < 0 ? -n123 : n123          # outward
+            halves = dot(n123, p[4] - p[1]) <= 0 ? ((p[1], p[2], p[3]), (p[1], p[3], p[4])) :
+                     ((p[1], p[2], p[4]), (p[2], p[3], p[4]))
+            for tri in halves
+                c = sum(tri) / 3
+                add_polygon!(m, collect(tri); facing = outward ? c : -c)
+            end
+        end
     end
     return m
 end
