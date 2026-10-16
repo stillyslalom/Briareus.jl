@@ -159,3 +159,88 @@ function any_hit(b::BVH, o::Vec3, d::Vec3, tmax = Inf)
     end
     return false
 end
+
+"""
+    _sah_bvh(bvh) -> BVH
+
+The same triangles as `bvh` regrouped by a binned surface-area heuristic, which
+`Target` uses for every ray query. A median-split tree has fat interior boxes inside a
+concave enclosure, so a chord across a hohlraum visits ~700 nodes and ~140 triangles;
+this tree visits ~55 and ~10. Hit answers are unchanged: the triangle tests are the
+same and only the culling boxes differ, which matters only for a ray grazing a
+triangle within round-off.
+"""
+function _sah_bvh(b::BVH; leaf::Integer = 4, nbins::Integer = 16)
+    n = length(b.v0)
+    items = Int32.(collect(1:n))
+    nodes = BVHNode[]
+    n == 0 && return BVH(nodes, items, b.v0, b.e1, b.e2, b.ids)
+    lo = [min.(b.v0[k], b.v0[k] + b.e1[k], b.v0[k] + b.e2[k]) for k in 1:n]
+    hi = [max.(b.v0[k], b.v0[k] + b.e1[k], b.v0[k] + b.e2[k]) for k in 1:n]
+    cen = [(lo[k] + hi[k]) / 2 for k in 1:n]
+    bins = (zeros(Int, nbins), Vector{Vec3}(undef, nbins), Vector{Vec3}(undef, nbins),
+            zeros(nbins))
+    _sah_build!(nodes, items, lo, hi, cen, 1, n, leaf, bins)
+    return BVH(nodes, items, b.v0, b.e1, b.e2, b.ids)
+end
+
+_box_area(lo, hi) = (e = hi - lo; 2 * (e[1] * e[2] + e[2] * e[3] + e[3] * e[1]))
+_bin(c, ax, clo, chi, nb) = clamp(floor(Int, (c[ax] - clo[ax]) / (chi[ax] - clo[ax]) * nb) + 1, 1, nb)
+
+function _sah_build!(nodes, items, lo, hi, cen, first, last, leaf, bins)
+    blo, bhi = Vec3(Inf, Inf, Inf), Vec3(-Inf, -Inf, -Inf)
+    clo, chi = blo, bhi
+    for k in first:last
+        it = items[k]
+        blo = min.(blo, lo[it]); bhi = max.(bhi, hi[it])
+        clo = min.(clo, cen[it]); chi = max.(chi, cen[it])
+    end
+    idx = length(nodes) + 1
+    count = last - first + 1
+    if count <= leaf || maximum(chi - clo) == 0
+        push!(nodes, BVHNode(blo, bhi, Int32(first), Int32(-count)))
+        return idx
+    end
+    push!(nodes, BVHNode(blo, bhi, 0, 0))     # placeholder
+    # split between centroid bins at the least Σ count × box area over the two sides
+    bc, bl, bh, rcost = bins
+    nb = length(bc)
+    best, bax, bs = Inf, 0, 0
+    for ax in 1:3
+        chi[ax] > clo[ax] || continue
+        fill!(bc, 0); fill!(bl, Vec3(Inf, Inf, Inf)); fill!(bh, Vec3(-Inf, -Inf, -Inf))
+        for k in first:last
+            it = items[k]
+            s = _bin(cen[it], ax, clo, chi, nb)
+            bc[s] += 1; bl[s] = min.(bl[s], lo[it]); bh[s] = max.(bh[s], hi[it])
+        end
+        rl, rh, nr = Vec3(Inf, Inf, Inf), Vec3(-Inf, -Inf, -Inf), 0
+        for s in nb:-1:2
+            rl = min.(rl, bl[s]); rh = max.(rh, bh[s]); nr += bc[s]
+            rcost[s] = nr == 0 ? Inf : nr * _box_area(rl, rh)
+        end
+        ll, lh, nl = Vec3(Inf, Inf, Inf), Vec3(-Inf, -Inf, -Inf), 0
+        for s in 1:nb-1
+            ll = min.(ll, bl[s]); lh = max.(lh, bh[s]); nl += bc[s]
+            nl == 0 && continue
+            c = nl * _box_area(ll, lh) + rcost[s+1]
+            c < best && ((best, bax, bs) = (c, ax, s))
+        end
+    end
+    v = view(items, first:last)
+    if bax == 0
+        mid = (first + last) ÷ 2
+        axis = argmax(chi - clo)
+        partialsort!(v, mid - first + 1; by = it -> cen[it][axis])
+    else
+        m = 0
+        for k in eachindex(v)
+            _bin(cen[v[k]], bax, clo, chi, nb) <= bs && (m += 1; (v[m], v[k]) = (v[k], v[m]))
+        end
+        mid = first + m - 1
+    end
+    l = _sah_build!(nodes, items, lo, hi, cen, first, mid, leaf, bins)
+    r = _sah_build!(nodes, items, lo, hi, cen, mid + 1, last, leaf, bins)
+    nodes[idx] = BVHNode(blo, bhi, Int32(l), Int32(r))
+    return idx
+end

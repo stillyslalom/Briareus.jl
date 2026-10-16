@@ -221,7 +221,7 @@ function Target(components::AbstractVector{Component})
         push!(comp_elems, mine)
     end
     opaque_idx = findall(topaque)
-    bvh = BVH(tv0[opaque_idx], te1[opaque_idx], te2[opaque_idx], Int32.(opaque_idx))
+    bvh = _sah_bvh(BVH(tv0[opaque_idx], te1[opaque_idx], te2[opaque_idx], Int32.(opaque_idx)))
     scale = isempty(tv0) ? 1.0 :
             maximum(max(norm(v), norm(v + a), norm(v + b)) for (v, a, b) in zip(tv0, te1, te2))
     return Target(collect(components), tv0, te1, te2, tn, ta, tcomp, tfront, tback, topaque,
