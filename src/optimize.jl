@@ -34,6 +34,8 @@ function GroupPointing(beams::AbstractVector{<:Beam}; by = :group,
     for f in fields
         f in _FIELDS || throw(ArgumentError("unknown field $f; choose from $_FIELDS"))
     end
+    by === :quad && any(b -> isempty(b.quad), beams) &&
+        throw(ArgumentError("by = :quad needs quad names on every beam (OMEGA beams have none)"))
     key = by === :group ? (b -> b.group) : by === :quad ? (b -> b.quad) :
           by === :beam ? (b -> b.name) : by
     ks = map(key, beams)
@@ -412,26 +414,56 @@ end
 
 """
     optimize_pointing(scenario, objective; x0, lower, upper, iterations = 200,
-                      show_trace = false) -> NamedTuple
+                      show_trace = false, g_tol = 1e-8, callback = nothing) -> NamedTuple
 
 Minimize `objective(evaluate(scenario, x))` within box bounds by L-BFGS-B with
 forward-mode automatic-differentiation gradients. Returns `(; x, beams, value,
-initial_value, result)`.
+initial_value, iterations, evaluations, stopped, result)`.
+
+`callback`, if given, is called after every (non-derivative) objective evaluation with
+`(; evaluations, value, best_value, best_x)`; returning `true` stops the optimization,
+which then returns the best design found so far with `stopped = true` and `result =
+nothing`. Use it for progress reports and cancellation.
 """
 function optimize_pointing(s::Scenario, objective; x0 = initial_parameters(s.param),
                            lower = bounds(s.param, x0)[1], upper = bounds(s.param, x0)[2],
                            iterations::Integer = 200, show_trace::Bool = false,
-                           g_tol = 1e-8)
-    f(x) = objective(evaluate(s, x))
+                           g_tol = 1e-8, callback = nothing)
+    xs = clamp.(x0, lower, upper)
+    best_x, best_value, count = copy(xs), Inf, Ref(0)
+    function f(x)
+        J = objective(evaluate(s, x))
+        if eltype(x) <: AbstractFloat
+            count[] += 1
+            J < best_value && ((best_value, best_x) = (J, copy(x)))
+            callback === nothing ||
+                callback((; evaluations = count[], value = J, best_value, best_x)) === true &&
+                throw(_StopOptimization())
+        end
+        return J
+    end
     cfg = ForwardDiff.GradientConfig(f, x0, ForwardDiff.Chunk(min(length(x0), 12)))
     g!(G, x) = ForwardDiff.gradient!(G, f, x, cfg)
-    xs = clamp.(x0, lower, upper)
-    res = Optim.optimize(f, g!, lower, upper, xs, Optim.LBFGSB(),
-                         Optim.Options(; iterations, show_trace, g_abstol = g_tol))
+    initial_value = objective(evaluate(s, xs))
+    res = try
+        Optim.optimize(f, g!, lower, upper, xs, Optim.LBFGSB(),
+                       Optim.Options(; iterations, show_trace, g_abstol = g_tol))
+    catch err
+        err isa _StopOptimization || rethrow()
+        nothing
+    end
+    if res === nothing
+        return (; x = best_x, beams = apply(s.param, best_x), value = best_value,
+                initial_value, iterations = nothing, evaluations = count[], stopped = true,
+                result = nothing)
+    end
     x = Optim.minimizer(res)
-    return (; x, beams = apply(s.param, x), value = Optim.minimum(res),
-            initial_value = f(xs), result = res)
+    return (; x, beams = apply(s.param, x), value = Optim.minimum(res), initial_value,
+            iterations = Optim.iterations(res), evaluations = count[], stopped = false,
+            result = res)
 end
+
+struct _StopOptimization <: Exception end
 
 """
     report(ev; lmax = 6) -> nothing

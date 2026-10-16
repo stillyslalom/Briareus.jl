@@ -324,6 +324,14 @@ end
     lo, hi = bounds(p, x0; r = 0.5, phi = 0.5, z = 0.0)
     res = optimize_pointing(sc, obj; x0, lower = lo, upper = hi, iterations = 50)
     @test res.value < 0.5 * res.initial_value
+    @test !res.stopped && res.iterations > 0 && res.evaluations > 0
+    # a callback sees every evaluation and can stop the run, keeping the best design
+    seen = Float64[]
+    stop = optimize_pointing(sc, obj; x0, lower = lo, upper = hi, iterations = 50,
+                             callback = st -> (push!(seen, st.value); st.evaluations >= 3))
+    @test stop.stopped && stop.evaluations == 3 == length(seen)
+    @test stop.value == minimum(seen) && obj(evaluate(sc, stop.x)) ≈ stop.value
+    @test_throws ArgumentError GroupPointing(beams; by = :quad)
     dep = evaluate(sc, res.x).deposition
     img = render(t, laser_flux(dep, t), OrthoCamera((0, 0, -1); up = (0, 1, 0), width = 4.0, nx = 64))
     @test count(isfinite, img) ≈ 64^2 * (3 / 4)^2 rtol = 0.05
