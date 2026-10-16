@@ -333,6 +333,32 @@ end
     @test countlines(path) == 1 + length(r.rows)
 end
 
+@testset "I/O" begin
+    q = [remake(b; aim = (0.1, -0.2, 0.3), dlambda = 1.5, defocus = 0.7) for b in nif_quads()]
+    path = write_beam_table(tempname() * ".csv", q)
+    r = read_beam_table(path)
+    @test length(r) == length(q)
+    @test all(a.name == b.name && a.port ≈ b.port && a.aim ≈ b.aim && a.defocus ≈ b.defocus &&
+              a.spot.a ≈ b.spot.a && a.spot.b ≈ b.spot.b && a.spot.order == b.spot.order &&
+              a.spot.angle ≈ b.spot.angle && a.group === b.group && a.dlambda ≈ b.dlambda &&
+              a.fnumber == b.fnumber for (a, b) in zip(q, r))
+    # a foreign, semicolon-separated pointing table in cm updates a template beam set
+    f = tempname() * ".csv"
+    write(f, "# exported pointing\nBeam;X (cm);Z (cm)\nP1;0.01;0.42\n\"P5\";-0.02;0.36\n")
+    fb = read_beam_table(f; columns = Dict(:name => "Beam", :aim_x => "X (cm)", :aim_z => "Z (cm)"),
+                         scale = Dict(:aim_x => 10, :aim_z => 10), template = q)
+    @test fb[1].aim ≈ Vec3(0.1, -0.2, 4.2)
+    @test fb[2].aim ≈ Vec3(-0.2, -0.2, 3.6)
+    @test fb[1].port == q[1].port && fb[1].spot.a == q[1].spot.a
+    @test_throws ArgumentError read_beam_table(f)            # no name column without mapping
+    t = hohlraum(nz = 4, nphi = 8, capsule_ntheta = 4, capsule_nphi = 6)
+    p2 = write_element_table(tempname() * ".csv", t, :one => ones(nelements(t)))
+    hdr, rows = read_csv(p2)
+    @test hdr[end] == "one" && length(rows) == nelements(t)
+    p3 = write_moments(tempname() * ".csv", [2.0, 0.0, -0.2])
+    @test read_csv(p3)[2][3][3] == "-0.1"
+end
+
 @testset "laser-plasma models" begin
     beams = [Beam("i$k"; theta = 23.5, phi = 90k, power = 2.0, group = :inner) for k in 1:4]
     append!(beams, [Beam("o$k"; theta = 50, phi = 90k + 45, power = 3.0, group = :outer) for k in 1:4])

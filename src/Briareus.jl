@@ -33,6 +33,7 @@ export enclosed_radius, BeamEnvelope, envelope_distance, ClearanceRow, Clearance
        beam_component_power, violations, min_clearance, write_clearance_csv
 export LaserPlasmaModel, apply_lpi, Backscatter, CalibratedTransfer, linear_transfer,
        tabulated_transfer, lpi_summary
+export BEAM_COLUMNS, write_beam_table, read_beam_table, read_csv, write_element_table, write_moments
 export legendre, legendre_moments, legendre_weights, solid_angle, ylm_moments, mode_power, rms_nonuniformity
 export OrthoCamera, camera_from_port, render, radiance, line_of_sight_power
 export GroupPointing, nparams, parameter_names, initial_parameters, apply, bounds,
@@ -54,5 +55,6 @@ include("optimize.jl")
 include("history.jl")
 include("clearance.jl")
 include("lpi.jl")
+include("io.jl")
 
 end
