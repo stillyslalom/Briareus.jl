@@ -15,42 +15,65 @@ Shot-review layer:
 - beam-table I/O;
 - backscatter, calibrated transfer, and a reduced kinetic CBET model with calibration.
 
-## Next (from the SOTA survey, reference/research-notes.md)
-1. **VisRad bridge.** There is no public format spec. Collect sanitized sample files
-   (workspace JSON, pointing tables, capsule-flux and clearance-report exports) and
-   write readers and writers. Add a "benchmark kit" that exports standard cases to run
-   in VisRad at work and compares the outputs back here.
-2. **Time-dependent view factor.** Wall, LEH and spot motion from rad-hydro or a
-   parametric model; P2(t) swing; cone fraction vs. time optimization.
-3. **Shot-data calibration.** Fit effective parameters (cone multipliers, CBET
+## Done (2026-10-17)
+- **Facility data:** the LMF per-beam table, NIF quad names and bundles, and the
+  measured CPP fits.
+- **Radiation on true curved surfaces:** sphere, cylinder and disk sectors, with
+  adaptive near-pair quadrature. View factors are 19× faster and use 165× less memory,
+  with a SAH ray tree for every target.
+- **Real spherical-harmonic analysis:** `mode_amplitude`, the influence matrix and
+  `asymmetry_objective`.
+- **Deposition operator rebuilt:**
+  - It sums the best-focus profile over the f-cone directions, with per-direction
+    incidence factors; the moment-matched profile had the wrong shape far from focus.
+  - It refines triangles where each beam can land.
+  - Per-beam power is conserved to 1e-4 unclipped and 2e-3 when clipped, on fine and
+    coarse meshes.
+- **Shot review:**
+  - `ApertureKeepOut`, a differentiable worst-case LEH clearance for optimization;
+  - `talis_check`, NIF's published target-configuration rules.
+- **VisRad interchange:** SST pointing, Laser Beam Summary and power files, plus the
+  benchmark kit.
+- **Docs:** a Documenter site with tutorials that double as validation (laser spot,
+  integrating sphere, freeing a bundle for radiography).
+- **`BriareusGUI`:** a desktop window built on GLMakie + QML.
+
+## Next
+1. **Sombrero and backlighter geometry.** Model the LEH shield as a component (a
+   dimpled annulus), and the backlighter foil's placement relative to the diagnostic
+   line of sight. The line-of-sight and clearance checks in the radiography tutorial
+   then decide which bundles can drive the foil. This needs real dimensions.
+2. **Diagnostic windows in the hohlraum wall.** A `hohlraum(...; windows)` option with
+   low-albedo or burn-through patches, and their effect on drive symmetry (mode 1, and
+   m = 2 and 4 at the waist).
+3. **Confirm against facility practice:**
+   - the TaLIS 0.5° tolerance (pivot, and whether it replaces or adds to the error set);
+   - the 1ω footprint side and shape;
+   - which quads count as open for the 20° rule;
+   - the VisRad items listed in the research notes (summary-CSV columns after Power,
+     spot-rotation sense, SST preamble, element-export layout);
+   - the NIF CMT XML schema.
+4. **Benchmark against VisRad.** Run `write_visrad_kit` cases at work and bring back the
+   outputs for `compare_visrad`. This validates absolute drive levels and mode
+   amplitudes.
+5. **GUI requests:**
+   - a cached factorization of (I − αF) for repeated `solve` calls;
+   - a progress/cancel hook on `clearance`;
+   - foil center and normal stored on the component;
+   - session save/load;
+   - x-ray images, TaLIS checks and VisRad I/O in the window.
+6. **Time-dependent view factor.** Wall, LEH and spot motion from rad-hydro or a
+   parametric model; P2(t) swing; optimization of cone fraction versus time.
+7. **Shot-data calibration.** Fit effective parameters (cone multipliers, CBET
    multiplier/clamp, albedo) to measured P2/P4 and shock symmetry, with uncertainty.
    Reproduce P2-vs-Δλ curves.
-4. **Robust optimization and UQ.** Monte Carlo or Jacobian propagation of 50 µm
-   pointing and power imbalance; optimize mean + kσ; sensitivity matrices. Also mode-1
-   and m=4 budgets and inverse solves (MacGowan 2021).
-5. **Independent 23.5°/30° Δλ and per-quad azimuthal knobs.**
-6. **Polar direct drive mode**, benchmarked against published GA optimizers.
-7. **Backlighter module.** CE(Z, I, τ) models with uncertainty; photometric chain to
-   the detector.
-8. **Visualization extension (Makie weakdep).**
-9. **Docs** (Documenter, Diátaxis).
-
-## Earlier backlog
-1. **Benchmark against VisRad.** Reproduce published VisRad cases (MacFarlane 2003
-   OMEGA hohlraum; NIF capsule P2/P4 for a known pointing) and user-supplied VisRad runs.
-2. **Visualization extension (Makie weakdep).** 3D target + beam view, unwrapped wall
-   and Mollweide capsule flux maps, deposition footprints, time histories.
-3. **Beam data I/O.** Read real port tables (NIF per-beam, OMEGA chamber frame with
-   P6/P7 orientation, OMEGA EP), VisRad-style setup files; save/load scenarios.
-4. **Robustness.** Monte Carlo pointing/power-imbalance errors (e.g. ±50 µm rms),
-   sensitivity reports (∂P_l/∂parameter from the AD gradients), multi-start optimization.
-5. **Time-dependent geometry.** Wall motion and LEH closure (effective radii vs time),
-   capsule convergence; time-dependent pointing/pulse objectives (P2(t) swing).
-6. **Effective laser–plasma corrections.** Per-cone backscatter, CBET-like power transfer
-   between cones as a parameterized model, 1ω/2ω unconverted light.
-7. **Spectral radiosity.** Multigroup Planckian emission, detector responses (Dante /
-   XRD lines of sight from facility diagnostic ports), brightness temperatures.
-8. **Scale.** Multi-ray partial visibility for view factors, hierarchical/iterative
-   radiosity and Float32 storage for >10⁴ elements, GPU kernels.
-9. **Docs.** Documenter site (Diátaxis: tutorials from the examples, how-tos, explanation
-   of the deposition/view-factor models, API reference).
+8. **Robust optimization and UQ.** Monte Carlo or Jacobian propagation of 50 µm
+   pointing and power imbalance; optimize the mean plus kσ; sensitivity matrices;
+   mode-1 and m = 4 budgets and inverse solves (MacGowan 2021).
+9. **Backlighter physics.** CE(Z, I, τ) models with uncertainty, and the photometric
+   chain to the detector.
+10. **Spectral radiosity.** Multigroup emission, detector responses along Dante and XRD
+    lines of sight, and brightness temperatures.
+11. **Scale.** Multi-ray partial visibility for view factors, hierarchical or iterative
+    radiosity, Float32 storage for more than 10⁴ elements, and GPU kernels.
+12. **Polar direct drive mode**, benchmarked against published GA optimizers.
