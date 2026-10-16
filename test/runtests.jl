@@ -196,6 +196,16 @@ end
     rh = raytrace_deposition(th, [q30]; nspot = 121, ncone = 61)
     @test isapprox(sum(dh.element), q30.power; rtol = 1e-3)
     @test sum(abs.(dh.element .- rh.element)) / q30.power < 0.03
+    # On a coarse mesh (1.3 mm wall triangles) the triangles near each beam are refined
+    # until the spot is resolved, so power is still conserved beam by beam, here with
+    # beams aimed close enough to the LEH plane to clip on the lip.
+    tc = hohlraum(length = 10.1, radius = 2.875, leh_radius = 1.55, capsule_radius = 0.9, nz = 8)
+    qc = [remake(b; aim = (0.0, 0.0, 4.0 * sign(b.port[3]))) for b in nif_quads()[1:12:48]]
+    dc = deposit(DepositionOperator(tc, qc), qc)
+    @test sum(dc.backside) > 0.01 * sum(b.power for b in qc)
+    @test maximum(abs.(dc.per_beam ./ [b.power for b in qc] .- 1)) < 2e-3
+    @test maximum(abs.(deposit(DepositionOperator(tc, qc; maxlevel = 1), qc).per_beam ./
+                       [b.power for b in qc] .- 1)) > 1e-2   # unrefined, it is not
 end
 
 @testset "hohlraum + gradients" begin

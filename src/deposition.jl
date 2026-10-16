@@ -1,15 +1,25 @@
 # Laser deposition: a differentiable quadrature operator and an energy-conserving ray trace.
 
 """
-    DepositionOperator(target, beams; level = 1, ncone = 13)
+    DepositionOperator(target, beams; level = 1, ncone = 13, resolution = 0.3,
+                       reach = 2.0, maxlevel = 5, shadow = 0)
 
 Precomputed laser-deposition quadrature. For each beam, every opaque triangle side that
-faces the beam is sampled at `4^level` points; each point stores its area weight, the
-normal of the lit side and a bitmask of which of the `ncone` f-cone directions reach it
-from the lens without hitting another surface. These depend only on the target and the
-beam *directions*, so the operator stays valid as pointing, defocus, spot size, and
-power change — deposition is then a smooth function of those parameters (see
-`deposit`).
+faces the beam is sampled at `4^level` points, or more where the beam can land: a
+triangle within `reach` (mm) of the beam's footprint (2.5 spot semi-axes grown by the
+f-cone along the beam axis through the aim) is divided until its sub-triangles are no
+longer than `resolution` times the spot's smaller semi-axis, up to `4^maxlevel` points;
+with `shadow > 0`, such a triangle crossed by a shadow edge (its points see different
+cone directions) is divided `shadow` times more. `reach` is the aim motion the operator
+stays accurate for; beyond it, deposition is resolved only at `level`. The defaults
+conserve each beam's power to 1e-4 when nothing clips and to 2e-3 when an entrance-hole
+lip clips several percent of it, on fine and coarse hohlraum meshes alike.
+
+Each point stores its area weight, the normal of the lit side and a bitmask of which of
+the `ncone` f-cone directions reach it from the lens without hitting another surface.
+These depend only on the target and the beam *directions*, so the operator stays valid
+as pointing, defocus, spot size, and power change — deposition is then a smooth
+function of those parameters (see `deposit`).
 
 The beam is the superposition of `ncone` collimated sub-beams, one per f-cone
 direction `dⱼ` (`cone_directions`), each carrying the best-focus profile. A point
@@ -35,8 +45,10 @@ struct DepositionOperator
 end
 
 function DepositionOperator(t::Target, beams::AbstractVector{<:Beam}; level::Integer = 1,
-                            ncone::Integer = 13)
+                            ncone::Integer = 13, resolution = 0.3, reach = 2.0,
+                            maxlevel::Integer = 5, shadow::Integer = 0)
     1 <= ncone <= 16 || throw(ArgumentError("ncone must be in 1:16"))
+    maxlevel = max(maxlevel, level)
     nb = length(beams)
     dirs = Vector{Vector{Vec3}}(undef, nb)
     pts = Vector{Vector{Vec3}}(undef, nb)
@@ -44,13 +56,19 @@ function DepositionOperator(t::Target, beams::AbstractVector{<:Beam}; level::Int
     normal = Vector{Vector{Vec3}}(undef, nb)
     mask = Vector{Vector{UInt16}}(undef, nb)
     dest = Vector{Vector{Int32}}(undef, nb)
-    # sub-triangle quadrature in barycentric form, shared by all triangles
-    bary, bw = _bary_quadrature(level)
+    # sub-triangle quadratures in barycentric form, shared by all triangles
+    rules = [_bary_quadrature(l) for l in 0:maxlevel]
     ε = _ray_eps(t)
     Threads.@threads for bi in 1:nb
         b = beams[bi]
         k = direction(b)
         ds, _ = cone_directions(b, ncone)
+        sp = b.spot
+        amin = ForwardDiff.value(min(sp.a, sp.b))
+        extent = 2.5 * ForwardDiff.value(max(sp.a, sp.b)) * (sp.halo > 0 ? max(1, sp.halo_scale) : 1)
+        aim = Vec3(ForwardDiff.value.(b.aim))
+        focus = aim + ForwardDiff.value(b.defocus) * k
+        cone = 1 / (2b.fnumber)
         P, W, N, M, D = Vec3[], Float64[], Vec3[], UInt16[], Int32[]
         for tri in eachindex(t.tri_area)
             t.tri_opaque[tri] || continue
@@ -62,14 +80,23 @@ function DepositionOperator(t::Target, beams::AbstractVector{<:Beam}; level::Int
             target_id = e > 0 ? e : -t.tri_comp[tri]
             A = t.tri_area[tri]
             v0, e1, e2 = t.tri_v0[tri], t.tri_e1[tri], t.tri_e2[tri]
-            for (λ, wq) in zip(bary, bw)
-                x = v0 + λ[1] * e1 + λ[2] * e2
-                o = x + ε * side_n
-                m = UInt16(0)
-                for (j, d) in enumerate(ds)
-                    dot(d, side_n) < 0 || continue
-                    any_hit(t.bvh, o, -d) || (m |= UInt16(1) << (j - 1))
-                end
+            lv = level
+            L = max(norm(e1), norm(e2), norm(e2 - e1))
+            cen = v0 + (e1 + e2) / 3
+            rad = max(norm(v0 - cen), norm(v0 + e1 - cen), norm(v0 + e2 - cen))
+            d = cen - focus
+            s = dot(d, k)
+            near = norm(d - s * k) - rad <= extent + cone * abs(s) + reach
+            if near && L > resolution * amin * 2^level
+                lv = clamp(ceil(Int, log2(L / (resolution * amin))), level, maxlevel)
+            end
+            xs, ms = _visible_directions(t, rules[lv+1][1], v0, e1, e2, side_n, ds, ε)
+            # a shadow edge crosses the triangle: resolve it more finely
+            if near && shadow > 0 && lv < maxlevel && any(!=(ms[1]), ms)
+                lv = min(lv + shadow, maxlevel)
+                xs, ms = _visible_directions(t, rules[lv+1][1], v0, e1, e2, side_n, ds, ε)
+            end
+            for (x, m, wq) in zip(xs, ms, rules[lv+1][2])
                 m == 0 && continue
                 push!(P, x); push!(W, A * wq); push!(N, side_n); push!(M, m); push!(D, target_id)
             end
@@ -77,6 +104,25 @@ function DepositionOperator(t::Target, beams::AbstractVector{<:Beam}; level::Int
         dirs[bi], pts[bi], w[bi], normal[bi], mask[bi], dest[bi] = ds, P, W, N, M, D
     end
     return DepositionOperator(t, [b.port for b in beams], dirs, pts, w, normal, mask, dest)
+end
+
+# Quadrature points of a triangle and, for each, the bitmask of cone directions that
+# reach it unobstructed.
+function _visible_directions(t::Target, bary, v0, e1, e2, side_n, ds, ε)
+    xs = Vec3[]
+    ms = UInt16[]
+    for λ in bary
+        x = v0 + λ[1] * e1 + λ[2] * e2
+        o = x + ε * side_n
+        m = UInt16(0)
+        for (j, d) in enumerate(ds)
+            dot(d, side_n) < 0 || continue
+            any_hit(t.bvh, o, -d) || (m |= UInt16(1) << (j - 1))
+        end
+        push!(xs, x)
+        push!(ms, m)
+    end
+    return xs, ms
 end
 
 function _bary_quadrature(level)
@@ -147,10 +193,10 @@ end
 function _deposit_beam!(Ec::Vector{T}, Lc::Vector{T}, op::DepositionOperator, bi,
                         f::BeamFrame) where {T}
     ds = op.dirs[bi]
-    # components of the cone directions in the beam frame (fixed by the port)
-    α = [dot(d, f.e1) for d in ds]
-    β = [dot(d, f.e2) for d in ds]
+    # transverse slopes of the cone directions in the beam frame (fixed by the port)
     κ = [dot(d, f.k) for d in ds]
+    α = [dot(d, f.e1) / dot(d, f.k) for d in ds]
+    β = [dot(d, f.e2) / dot(d, f.k) for d in ds]
     P, W, Nr, M, D = op.pts[bi], op.w[bi], op.normal[bi], op.mask[bi], op.dest[bi]
     acc = zero(T)
     @inbounds for q in eachindex(W)
@@ -164,7 +210,11 @@ end
 
 # Absorbed power per unit area at `x` (lit-side normal `n`): the mean over the visible
 # cone directions dⱼ of the best-focus profile where the ray along dⱼ through `x`
-# crosses the focal plane, times the ray's incidence factor |n·dⱼ|/(k·dⱼ).
+# crosses the focal plane, times the ray's incidence factor |n·dⱼ|/(k·dⱼ). Each
+# direction's sub-beam is a bundle of parallel rays, so the visibility mask that
+# selects it is exactly consistent with where its light goes, and power is conserved
+# at shadow edges. (Giving each sub-beam a share of the f-cone spread would smooth the
+# footprint but break that consistency: 0.6% of a beam clipped by an LEH edge is lost.)
 @inline function _cone_intensity(f::BeamFrame, ds, α, β, κ, m::UInt16, x, n)
     d = x - f.focus
     s = dot(d, f.k)
@@ -173,9 +223,8 @@ end
     acc = zero(f.core.power_norm * s)
     for j in eachindex(ds)
         (m >> (j - 1)) & 0x1 == 0x1 || continue
-        sj = s / κ[j]
-        u = u0 - sj * α[j]                    # crossing of the best-focus plane
-        v = v0 - sj * β[j]
+        u = u0 - s * α[j]                     # crossing of the best-focus plane
+        v = v0 - s * β[j]
         I = _sg_focal(f.core, u, v)
         f.has_halo && (I += _sg_focal(f.halo, u, v))
         acc += I * (abs(dot(n, ds[j])) / κ[j])
