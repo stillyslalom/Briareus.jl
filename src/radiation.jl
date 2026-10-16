@@ -188,7 +188,7 @@ end
 
 """
     solve(model, dep::Deposition; time = 0.0, albedo = nothing, burnthrough = nothing,
-          tol = 1e-4, maxiter = 50)
+          tol = 1e-4, maxiter = 50, guess = nothing)
     solve(model, laser_power::AbstractVector; ...)
 
 Solve the radiosity system for the given absorbed laser power per element. Albedos come
@@ -203,19 +203,27 @@ The factorization of the system for the initial albedo (the materials' at `time`
 explicit `albedo`) is cached on the model, so repeated solves with unchanged albedos
 cost only a pair of triangular solves and a matrix–vector product. Iterates of a
 temperature-dependent albedo differ from call to call and are factored afresh.
+
+`guess`, a previous solution of the same model (e.g. the last step of a history),
+starts the albedo iteration from its incident-flux temperatures instead of the
+materials' reference temperatures: fewer iterations when it is close. The result then
+differs from a cold start by less than the iteration's tolerance. The first albedo is
+not cached in that case.
 """
 solve(m::RadiationModel, d::Deposition; kwargs...) = solve(m, d.element; kwargs...)
 
 function solve(m::RadiationModel, P::AbstractVector; time = 0.0, albedo = nothing,
-               burnthrough = nothing, tol = 1e-4, maxiter::Integer = 50)
+               burnthrough = nothing, tol = 1e-4, maxiter::Integer = 50, guess = nothing)
     t = m.target
     S = conversions(t) .* P ./ t.elem_area
-    α, intact = albedo === nothing ? _albedos(t, time, nothing, burnthrough) :
-                (a = collect(Float64, albedo); (a, a))
     iterate = albedo === nothing && _temperature_dependent(t)
+    warm = iterate && guess !== nothing
+    warm && guess.model.target !== t && throw(ArgumentError("guess is a solution of another model"))
+    α, intact = albedo === nothing ? _albedos(t, time, warm ? guess.H : nothing, burnthrough) :
+                (a = collect(Float64, albedo); (a, a))
     B = H = nothing
     for it in 1:(iterate ? maxiter : 1)
-        B = (it == 1 ? _radiosity_lu(m, α) : lu!(I - α .* m.F)) \ S
+        B = (it == 1 && !warm ? _radiosity_lu(m, α) : lu!(I - α .* m.F)) \ S
         H = m.F * B
         iterate || break
         αn, intactn = _albedos(t, time, H, burnthrough)

@@ -56,6 +56,16 @@ Shot-review layer:
 - **Tutorial "Diagnostic windows in the hohlraum wall":** the front is checked against
   the exact ramp solutions (2.2% and 0.7%) and the Nova foil-burnthrough data. It runs
   1.7, 2.5 and 3.6 µm windows with and without a 50 µm gap.
+- **Adaptive drive histories:** `drive_history(...; transition, flux_change)` inserts
+  steps through burnthrough transitions (planned from predicted burnthrough times) or
+  wherever the observed flux shape moves too far. Each step's albedo iteration starts
+  from the previous step's temperatures (`solve(...; guess)`), about a third fewer
+  factorizations.
+- **Threaded deposition:** `deposit` hands out work units (element blocks, back-side
+  pieces) dynamically; each unit owns its outputs, so results are bitwise independent
+  of the thread count. Operator construction and the ray trace are balanced the same
+  way. 77% of `deposit`'s work on the NIF hohlraum is on the wall's outside, where
+  the beams' far wings land: the next lever if gradients need to be faster.
 
 ## Next
 1. **Sombrero and backlighter geometry.** Model the LEH shield as a component (a

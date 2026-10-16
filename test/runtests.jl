@@ -206,6 +206,24 @@ end
     @test maximum(abs.(dc.per_beam ./ [b.power for b in qc] .- 1)) < 2e-3
     @test maximum(abs.(deposit(DepositionOperator(tc, qc; maxlevel = 1), qc).per_beam ./
                        [b.power for b in qc] .- 1)) > 1e-2   # unrefined, it is not
+    # `deposit` splits the work into units that own their outputs and sums each output in
+    # a fixed order, so it matches a serial beam-by-beam sum bit for bit whatever the
+    # thread count, also when cut into many small units; a beam subset gets its own plan
+    opc = DepositionOperator(tc, qc)
+    small = Briareus._deposit_plan(nelements(tc), opc.dest; unit = 64)
+    @test size(small.boff, 1) > 10 && length(small.back) > length(qc)
+    fine = DepositionOperator(tc, opc.ports, opc.dirs, opc.pts, opc.w, opc.normal, opc.mask,
+                              opc.dest, small)
+    serial(o, bs) = (E = zeros(nelements(tc)); L = zeros(length(tc.components));
+                     pb = [Briareus._deposit_beam!(E, L, o, bi, Briareus.BeamFrame(bs[bi]))
+                           for bi in eachindex(bs)]; (E, L, pb))
+    for (o, bs) in ((opc, qc), (fine, qc), (opc[[2, 4]], qc[[2, 4]]))
+        d = deposit(o, bs)
+        E, L, pb = serial(o, bs)
+        @test d.element == E
+        @test d.backside ≈ L rtol = 1e-14
+        @test d.per_beam ≈ pb rtol = 1e-14
+    end
 end
 
 @testset "hohlraum + gradients" begin

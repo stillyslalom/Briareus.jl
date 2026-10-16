@@ -114,7 +114,10 @@ end
     mw = RadiationModel(tw; closed = true)
     op = DepositionOperator(tw, q)
     times = 0.25:0.125:5.0
-    h = drive_history(mw, op, τ -> with_pulses(q, pulse, τ), times)
+    # each step's albedo iteration starts from the previous step's temperatures; iterated
+    # tightly, the march and the cold re-solves below reach the same fixed point
+    h = drive_history(mw, op, τ -> with_pulses(q, pulse, τ), times; tol = 1e-9)
+    @test h.time == collect(times)
     tb = h.burnthrough[:window_1]
     @test all(isfinite, tb) && all(t -> 2.0 < t < 5.0, tb)
     @test h.burnthrough[:window_2] == fill(3.5, length(elements(tw, :window_2)))
@@ -126,10 +129,10 @@ end
     tbv[e1] .= tb
     Te = zeros(length(times), length(e1))
     for (k, τ) in enumerate(times)
-        s = solve(mw, deposit(op, with_pulses(q, pulse, τ)); time = τ, burnthrough = tbv)
+        s = solve(mw, deposit(op, with_pulses(q, pulse, τ)); time = τ, burnthrough = tbv, tol = 1e-9)
         Te[k, :] .= radiation_temperature.(s.H[e1])
         if k == length(times)
-            @test energy_balance(s).transmitted[:window_1] ≈ h.transmitted[:window_1][k] rtol = 1e-10
+            @test energy_balance(s).transmitted[:window_1] ≈ h.transmitted[:window_1][k] rtol = 1e-7
         end
     end
     model = tw.components[component_index(tw, :window_1)].material.albedo
@@ -140,4 +143,55 @@ end
     @test all(==(0), h.transmitted[:window_1][times .< minimum(tb)])
     @test h.transmitted[:window_2][end] > 0 && h.transmitted[:window_2][times .<= 3.5] == zeros(count(times .<= 3.5))
     @test all(>(0), h.escaped[:leh_top]) && issorted(h.Tr[1:5])
+
+    # --- adaptive steps through the burnthrough transitions (width 0.4 ns): window 1
+    # burns through at about 2.46 ns, window 2 at its explicit 3.5 ns
+    f = τ -> with_pulses(q, pulse, τ)
+    coarse = 0.25:0.25:5.0
+    hc = drive_history(mw, op, f, coarse)
+    @test hc.time == collect(coarse)                    # by default, exactly the given times
+    hr = drive_history(mw, op, f, coarse; transition = 0.1)
+    inserted = setdiff(hr.time, coarse)
+    @test issorted(hr.time) && issubset(coarse, hr.time) && !isempty(inserted)
+    # refined only while a transition is under way, and no step advances one by more
+    # than the tolerance (1.5 times it after a step's own correction); without
+    # refinement a single step takes most of a transition
+    tb1 = hr.burnthrough[:window_1]
+    @test all(τ -> minimum(tb1) < τ < maximum(tb1) + 0.4 || 3.5 < τ < 3.9, inserted)
+    fm = tw.components[component_index(tw, :window_1)].material.albedo
+    advance(h) = maximum(Briareus._burnthrough_step(fm, h.time[k], tb) -
+                         Briareus._burnthrough_step(fm, h.time[k-1], tb)
+                         for tb in [h.burnthrough[:window_1]; 3.5] for k in 2:length(h.time))
+    @test advance(hr) <= 0.15 && advance(hc) > 0.5
+    @test length(hr.Tr) == length(hr.window_loss) == size(hr.moments, 2) == length(hr.time)
+    # against a uniformly fine history: the refined one, interpolated linearly between
+    # its steps, follows the window loss through the transitions 5 times more closely
+    fine = 0.25:1/32:5.0
+    hf = drive_history(mw, op, f, fine)
+    interp(h, τ) = (k = clamp(searchsortedlast(h.time, τ), 1, length(h.time) - 1);
+                    w = (τ - h.time[k]) / (h.time[k+1] - h.time[k]);
+                    (1 - w) * h.window_loss[k] + w * h.window_loss[k+1])
+    err(h) = maximum(abs(interp(h, τ) - x) for (τ, x) in zip(hf.time, hf.window_loss)) /
+             maximum(hf.window_loss)
+    @test err(hr) < 0.015 && err(hr) < err(hc) / 5
+    @test maximum(abs.(hr.burnthrough[:window_1] .- hf.burnthrough[:window_1])) < 2e-3
+    @test hr.window_loss[end] ≈ hf.window_loss[end] rtol = 1e-3
+
+    # flux_change: the observed flux shape H/⟨H⟩ moves by at most the tolerance per
+    # step (checked by re-solving at the steps with the final burnthrough times)
+    hx = drive_history(mw, op, f, coarse; flux_change = 0.02)
+    @test issubset(coarse, hx.time) && length(hx.time) > length(coarse)
+    obs = elements(tw, :capsule)
+    function shape_change(h)
+        tbv = fill(NaN, nelements(tw))
+        tbv[elements(tw, :window_1)] .= h.burnthrough[:window_1]
+        S = map(h.time) do τ
+            s = solve(mw, deposit(op, f(τ)); time = τ, burnthrough = tbv)
+            s.H[obs] ./ legendre_moments(s.H, tw, obs; lmax = 0)[1]
+        end
+        return maximum(maximum(abs.(S[k] .- S[k-1])) for k in 2:length(S))
+    end
+    @test shape_change(hx) <= 0.02 && shape_change(hc) > 0.05
+    @test_throws ArgumentError drive_history(mw, op, f, coarse; transition = 0.0)
+    @test_throws ArgumentError drive_history(mw, op, f, [1.0, 0.5])
 end

@@ -226,30 +226,45 @@ pulse = PulseShape([0.0, 0.3, 1.0, 1.4, 4.5, 5.0, 6.0, 7.5, 9.5, 10.0],
 # Each window element tracks its own heat front from its own incident flux, so the
 # windows burn through when the flux on them says they should. With `ylm = true` it
 # also records the real spherical harmonics of the capsule flux. The three thicknesses
-# share one geometry, so they share its view factors.
+# share one geometry, so they share its view factors and its deposition operator.
+#
+# The steps are 0.2 ns, but a window's albedo falls to zero over the 0.4 ns `width` of
+# its transition, which two steps would jump across. With `transition = 0.05` the march
+# inserts steps wherever an element's transition would advance by more than a
+# twentieth of the way in one step, planned from each element's known or predicted
+# burnthrough time. It returns the times it took in `time`.
 
 times = 0.2:0.2:9.8
 beams_at(τ) = with_pulses(quads, pulse, τ)
-history(model, target) = drive_history(model, DepositionOperator(target, quads), beams_at,
-                                       times; lmax = 6, ylm = true)
-base_target = build(())
-base = history(RadiationModel(base_target; closed = true), base_target)
+history(model, op, times) = drive_history(model, op, beams_at, times; lmax = 6, ylm = true,
+                                          transition = 0.05)
 runs = Dict{Tuple{Float64,Float64},Any}()
-for g in (0.0, 0.05)
-    F = nothing
-    for thickness in (1.7, 2.5, 3.6)
-        t = build(windows(thickness; gap = g))
-        model = F === nothing ? RadiationModel(t; closed = true) : RadiationModel(t; F)
-        F = model.F
-        runs[(thickness, g)] = history(model, t)
+shared = Dict{Float64,Any}()                       # view factors and operator per gap
+for g in (0.0, 0.05), thickness in (1.7, 2.5, 3.6)
+    t = build(windows(thickness; gap = g))
+    if !haskey(shared, g)
+        shared[g] = (RadiationModel(t; closed = true).F, DepositionOperator(t, quads))
     end
+    F, op = shared[g]
+    runs[(thickness, g)] = history(RadiationModel(t; F), op, times)
 end
+@printf("steps: %d given, %d–%d taken\n", length(times),
+        extrema(length(h.time) for h in values(runs))...)
+
+# The hohlraum without windows is the reference. It is solved at every time any of the
+# windowed runs took, so the differences below compare like with like.
+
+base_target = build(())
+base = history(RadiationModel(base_target; closed = true), DepositionOperator(base_target, quads),
+               sort(unique(reduce(vcat, [h.time for h in values(runs)]))))
+@printf("reference steps: %d\n", length(base.time))
 
 # The change in the capsule's radiation temperature and in ``P_2`` from the hohlraum
 # without windows, the ``m = 2`` amplitude ``\sqrt{c_{22}^2 + c_{2,-2}^2}/c_{00}`` of
 # the capsule flux, and each window's heat front as a fraction of its foil. Without
 # windows the capsule's radiation temperature peaks at the value printed below:
 
+on(h, x) = x[indexin(h.time, base.time)]              # base values at the times of run h
 P2(h) = h.moments[3, :] ./ h.moments[1, :]
 P4(h) = h.moments[5, :] ./ h.moments[1, :]
 m2(h) = hypot.(h.ylm[mode_index(2, 2), :], h.ylm[mode_index(2, -2), :]) ./ h.ylm[1, :]
@@ -266,10 +281,10 @@ hlines!(axP, [0.0], color = :black)
 for thickness in (1.7, 2.5, 3.6), g in (0.0, 0.05)
     h = runs[(thickness, g)]
     kw = (; color = colors[thickness], linestyle = g == 0 ? :solid : :dash)
-    lines!(axT, times, h.Tr .- base.Tr; kw...)
-    lines!(axP, times, 100 .* (P2(h) .- P2(base)); kw...)
-    lines!(axM, times, 100 .* m2(h); kw...)
-    g == 0 && lines!(axF, times, h.front[:window_1]; kw...)
+    lines!(axT, h.time, h.Tr .- on(h, base.Tr); kw...)
+    lines!(axP, h.time, 100 .* (P2(h) .- on(h, P2(base))); kw...)
+    lines!(axM, h.time, 100 .* m2(h); kw...)
+    g == 0 && lines!(axF, h.time, h.front[:window_1]; kw...)
 end
 hlines!(axF, [1.0], color = :gray50, linestyle = :dot)
 ylims!(axF, 0, 2)
@@ -289,31 +304,44 @@ fig
 # by 14 eV. Thinner foils burn through earlier: 1.7 µm during the second step of the
 # pulse, 2.5 µm on the rise, and 3.6 µm just before the peak. An open 50 µm gap leaks
 # from the start. Before burnthrough the gaps alone give about 0.5% of ``P_2``, 0.4% of
-# ``m = 2`` and 1.3 eV; at the peak they add 0.6% and 1.6 eV to the windows' cost.
+# ``m = 2`` and 1.3 eV; at the peak they add 0.6% and 1.5 eV to the windows' cost.
 #
 # A capsule's shape integrates the drive asymmetry over the pulse. The table therefore
 # gives the change in ``P_2``, ``P_4`` and ``m = 2`` weighted by the capsule flux from
 # 5 ns on, as well as at the peak. It also gives the drive cost: the radiation
 # temperature at the peak, the capsule's absorbed energy over the pulse, and the
-# energy that leaves through the windows and gaps (`window_loss`).
+# energy that leaves through the windows and gaps (`window_loss`). Each history is
+# summed over its own steps, each step weighted by half the time to its neighbors (the
+# first and last by a whole step), which on the uniform `times` is the plain sum times
+# the step.
 
-flux_weighted(x, h; from = 5.0) = (k = findall(>=(from), times);
-                                    sum(x[k] .* h.moments[1, k]) / sum(h.moments[1, k]))
-peak = findall(t -> 7.6 <= t <= 9.4, times)
-peak_mean(x) = sum(x[peak]) / length(peak)
-integral(x) = sum(x) * step(times)
+function weights(τ)
+    w = [(τ[min(k + 1, end)] - τ[max(k - 1, 1)]) / 2 for k in eachindex(τ)]
+    w[1] *= 2
+    w[end] *= 2
+    return w
+end
+integral(h, x) = sum(weights(h.time) .* x)
+function flux_weighted(h, x; from = 5.0)
+    w = weights(h.time) .* (h.time .>= from) .* h.moments[1, :]
+    return sum(w .* x) / sum(w)
+end
+function peak_mean(h, x)
+    w = weights(h.time) .* (7.6 .<= h.time .<= 9.4)
+    return sum(w .* x) / sum(w)
+end
 println("  Au    gap   burnthrough  ΔTᵣ peak  capsule energy  window loss   ΔP₂     ΔP₂     ΔP₄      m=2")
 println(" (µm)  (µm)     (ns)        (eV)       (%)           (kJ)       peak   weighted weighted weighted")
 for g in (0.0, 0.05), thickness in (1.7, 2.5, 3.6)
     h = runs[(thickness, g)]
     tb = h.burnthrough[:window_1]
     @printf(" %.1f   %3.0f     %5.2f      %+6.1f      %+6.1f        %6.0f       %+5.2f%%  %+5.2f%%  %+5.2f%%   %4.2f%%\n",
-            thickness, 1e3g, sum(tb) / length(tb), peak_mean(h.Tr) - peak_mean(base.Tr),
-            100 * (integral(h.flux) / integral(base.flux) - 1), integral(h.window_loss),
-            100 * (peak_mean(P2(h)) - peak_mean(P2(base))),
-            100 * (flux_weighted(P2(h), h) - flux_weighted(P2(base), base)),
-            100 * (flux_weighted(P4(h), h) - flux_weighted(P4(base), base)),
-            100 * flux_weighted(m2(h), h))
+            thickness, 1e3g, sum(tb) / length(tb), peak_mean(h, h.Tr) - peak_mean(base, base.Tr),
+            100 * (integral(h, h.flux) / integral(base, base.flux) - 1), integral(h, h.window_loss),
+            100 * (peak_mean(h, P2(h)) - peak_mean(base, P2(base))),
+            100 * (flux_weighted(h, P2(h)) - flux_weighted(base, P2(base))),
+            100 * (flux_weighted(h, P4(h)) - flux_weighted(base, P4(base))),
+            100 * flux_weighted(h, m2(h)))
 end
 
 # At the peak all three thicknesses have burned through and look alike. What the
@@ -324,7 +352,7 @@ end
 
 h = runs[(2.5, 0.05)]
 odd = maximum(abs(h.ylm[mode_index(l, m), k]) / h.ylm[1, k]
-              for l in 1:4 for m in -l:l if isodd(m) for k in eachindex(times))
+              for l in 1:4 for m in -l:l if isodd(m) for k in eachindex(h.time))
 @printf("largest odd-m |c_lm|/c₀₀ over the pulse: %.1e\n", odd)
 
 # The capsule flux at the end of the peak, as equal-area (Hammer) maps seen from
@@ -342,9 +370,8 @@ function ylm_field(c; lmax = 6)
     mean = c[1] / sqrt(4π)                          # c₀₀ Y₀₀
     return (θ, φ) -> (Briareus._real_ylm!(Y, lmax, cosd(θ), deg2rad(φ)); 100 * (sum(C .* Y) / mean - 1))
 end
-k_end = findfirst(≈(9.4), times)
 φ0 = 168.0                                         # map center, between the windows
-deviation_map(h) = sphere_map(ylm_field(h.ylm[:, k_end]); φ0)
+deviation_map(h) = sphere_map(ylm_field(h.ylm[:, findfirst(≈(9.4), h.time)]); φ0)
 base_map = deviation_map(base)
 change_map(h) = (m = deviation_map(h); (m[1], m[2], m[3] .- base_map[3]))
 rows = (["no windows" => base_map, "2.5 µm windows, 50 µm gaps" => deviation_map(h)],
@@ -380,19 +407,20 @@ fig
 # with a 50 µm gap:
 
 t = build(windows(2.5; gap = 0.05))
-model = RadiationModel(t; closed = true)
+F, op = shared[0.05]
+model = RadiationModel(t; F)
 tb = fill(NaN, nelements(t))
 for n in (:window_1, :window_2)
     tb[elements(t, n)] .= h.burnthrough[n]
 end
-sol = solve(model, deposit(DepositionOperator(t, quads), beams_at(9.4)); time = 9.4, burnthrough = tb)
+sol = solve(model, deposit(op, beams_at(9.4)); time = 9.4, burnthrough = tb)
 bal = energy_balance(sol)
 @printf("source %.1f TW: absorbed %.1f, entrance holes %.1f, windows transmit %.1f, gaps %.1f, lost %.1e\n",
         bal.source, sum(values(bal.absorbed)), bal.escaped[:leh_top] + bal.escaped[:leh_bottom],
         bal.transmitted[:window_1] + bal.transmitted[:window_2],
         bal.escaped[:window_1_gap] + bal.escaped[:window_2_gap],
         bal.source - sum(values(bal.absorbed)) - sum(values(bal.escaped)) - sum(values(bal.transmitted)))
-@printf("window loss from the history at 9.4 ns: %.1f TW\n", h.window_loss[findfirst(≈(9.4), times)])
+@printf("window loss from the history at 9.4 ns: %.1f TW\n", h.window_loss[findfirst(≈(9.4), h.time)])
 
 # ## What a gray view-factor model leaves out
 #
@@ -424,7 +452,9 @@ bal = energy_balance(sol)
 # - A pair of windows related by the 180° rotation about the axis adds no odd-``m``
 #   harmonics.
 #
-# The test suite (`test/windows.jl`, `test/burnthrough.jl`) adds three more checks.
+# The test suite (`test/windows.jl`, `test/burnthrough.jl`) adds four more checks.
 # The view-factor rows of a windowed hohlraum close as well as those without windows.
 # Reciprocity holds. Each window element's burnthrough time in the drive history
-# matches the standalone estimate from that element's own temperature history.
+# matches the standalone estimate from that element's own temperature history. A
+# history refined through the transitions follows a uniformly fine one five times more
+# closely than the unrefined steps do.
