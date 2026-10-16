@@ -5,10 +5,10 @@ import jlqml
 
 StepPage {
     title: "Target"
-    guidance: "Choose a hohlraum or a backlighter foil and its dimensions (mm). The viewer " +
-              "colors the mesh by component; drag to rotate it. The coarse mesh keeps the " +
-              "view factors on the Drive step to a few seconds; use the standard mesh for " +
-              "design numbers."
+    guidance: "Choose a hohlraum or a backlighter foil and its dimensions (mm), and cut " +
+              "diagnostic windows into a hohlraum wall. The viewer colors the mesh by " +
+              "component; drag to rotate it. The coarse mesh keeps the view factors on the " +
+              "Drive step to a few seconds; use the standard mesh for design numbers."
 
     GridLayout {
         columns: 2
@@ -66,6 +66,88 @@ StepPage {
             }
         }
     }
+    // diagnostic windows in the hohlraum wall
+    ColumnLayout {
+        id: windows
+        visible: app.targetKind === "hohlraum"
+        spacing: 4
+        Layout.topMargin: 8
+        Layout.fillWidth: true
+        readonly property var fields: [
+            { key: "phi", label: "φ (°)" }, { key: "z", label: "z (mm)" },
+            { key: "width", label: "width" }, { key: "height", label: "height" },
+            { key: "albedo", label: "albedo" }, { key: "conversion", label: "conv." }]
+        RowLayout {
+            spacing: 12
+            Label { text: "Diagnostic windows"; font.weight: Font.DemiBold }
+            Button {
+                text: "Add window"
+                onClicked: Julia.br_add_window()
+                ToolTip.visible: hovered
+                ToolTip.text: "A closed 1 × 1 mm window at the midplane, where it fits"
+            }
+        }
+        Label {
+            text: "Rectangular windows cut into the wall: centered at azimuth φ and height z, " +
+                  "width in mm of arc and height in mm. A closed window re-emits with its own " +
+                  "albedo and laser → x-ray conversion; an open one is a hole that laser light " +
+                  "and x-rays leave through. Each window is its own component (window_1, …), " +
+                  "outlined in the viewer."
+            visible: app.windowCount > 0
+            opacity: 0.75
+            wrapMode: Text.WordWrap
+            Layout.fillWidth: true
+        }
+        RowLayout {
+            visible: app.windowCount > 0
+            spacing: 4
+            Label { text: ""; Layout.preferredWidth: 64 }
+            Repeater {
+                model: windows.fields
+                Label { text: modelData.label; Layout.preferredWidth: 52; font.pixelSize: 12 }
+            }
+            Label { text: "open"; font.pixelSize: 12 }
+        }
+        Repeater {
+            model: windowModel
+            delegate: RowLayout {
+                id: windowRow
+                readonly property int rowNumber: model.number
+                readonly property bool isOpen: model.open
+                readonly property var cells: [
+                    { key: "phi", value: model.phi }, { key: "z", value: model.z },
+                    { key: "width", value: model.width }, { key: "height", value: model.height },
+                    { key: "albedo", value: model.albedo }, { key: "conversion", value: model.conversion }]
+                spacing: 4
+                Label { text: model.name; Layout.preferredWidth: 64 }
+                Repeater {
+                    model: windowRow.cells
+                    TextField {
+                        Layout.preferredWidth: 52
+                        text: modelData.value
+                        selectByMouse: true
+                        // albedo and conversion only apply to a closed window
+                        enabled: !(windowRow.isOpen && index >= 4)
+                        onEditingFinished: if (text !== modelData.value)
+                                               Julia.br_edit_window(windowRow.rowNumber, modelData.key, text)
+                    }
+                }
+                CheckBox {
+                    checked: windowRow.isOpen
+                    onToggled: Julia.br_window_open(windowRow.rowNumber, checked)
+                    ToolTip.visible: hovered
+                    ToolTip.text: "Open: a hole in the wall (burned through or uncovered)"
+                }
+                ToolButton {
+                    text: "✕"
+                    onClicked: Julia.br_remove_window(windowRow.rowNumber)
+                    ToolTip.visible: hovered
+                    ToolTip.text: "Remove this window"
+                }
+            }
+        }
+    }
+
     Label {
         text: app.targetError
         visible: text !== ""

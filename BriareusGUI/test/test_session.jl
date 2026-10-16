@@ -97,6 +97,7 @@ end
     @test r.value <= r.initial_value
     @test all(r.lower .<= r.x .<= r.upper)
     @test r.evaluations > 0 && st.evaluations[] == r.evaluations
+    @test r.iterations isa Int && 0 < r.iterations <= 4         # from optimize_pointing
     @test length(r.before.modes) == 4 && length(r.after.modes) == 4
     rows = parameter_rows(r)
     @test length(rows) == 8 && rows[1].start ≈ 3.09
@@ -127,10 +128,26 @@ end
     @test occursin("needs a foil", st.status[])
     set_objective!(st, :legendre)
 
-    # cancel only sets the flag the running objective checks
+    # cancel only sets the flag the core callback returns
     job_st = OptimizeState()
     cancel_optimize!(job_st)
     @test job_st.cancel[] && !job_st.running[]
+
+    # cancel through optimize_pointing's callback, inline: the progress delivered
+    # after the first objective evaluation cancels, and the callback stops there
+    st.iterations[] = 50
+    idx = findall(sess.beams.enabled[])
+    seen = Int[]
+    cancel_after_first = f -> (f(); push!(seen, st.evaluations[]);
+                               st.evaluations[] >= 1 && cancel_optimize!(st))
+    start_optimize!(st, sess.drive.scenario[], sess.beams.beams[][idx], idx;
+                    deliver = cancel_after_first, spawn = false)
+    rc = st.result[]
+    @test !rc.completed && rc.iterations === nothing && rc.evaluations == 1
+    @test first(seen) == 1                                   # progress reached `deliver`
+    @test rc.value ≈ rc.initial_value                        # the start is the best so far
+    @test rc.x ≈ rc.x0 && occursin("canceled; kept the best design", st.status[])
+    @test step_status(sess, :optimize)[1] === :attention
 end
 
 @testset "Review step (no GL)" begin
@@ -148,7 +165,7 @@ end
     kw = clearance_kwargs(rv)
     @test kw.targets == (:wall, :capsule) && kw.level == 1 && kw.focus == 0.5
 
-    # three quads, one per chunk boundary
+    # three quads
     bt = sess.beams
     keep = [1, 9, 17]
     for i in eachindex(bt.enabled[])
@@ -165,7 +182,8 @@ end
     @test issorted([(rank(x.status), x.clearance) for x in rows])
     @test [x.component for x in worst_rows(rv)] == [:cap_top, :cap_bottom]
     @test occursin("3 beams", review_brief(rv))
-    # the chunked check equals one clearance call
+    @test !rep.canceled
+    # the batched check equals one clearance call without a callback
     ref = clearance(sess.target.target[], active_beams(bt); clearance_kwargs(rv)...)
     key(r) = sort([(x.beam, x.component, x.clearance) for x in r.rows])
     a, b = key(rep), key(ref)
@@ -176,6 +194,24 @@ end
     @test !review_stale(sess)
     edit_beams!(bt, 1, :z, "3.2")
     @test review_stale(sess) && step_status(sess, :review)[1] === :attention
+
+    # cancel through clearance's callback, inline: after the first batch of 2 beams
+    progress = Tuple{Int,Int}[]
+    cancel_after_batch = f -> (f(); push!(progress, rv.progress[]);
+                               rv.progress[][1] >= 2 && cancel_clearance!(rv))
+    four = active_beams(bt)[1:3]
+    start_clearance!(rv, sess.target.target[], [four; bt.beams[][25]]; spawn = false, batch = 2,
+                     deliver = cancel_after_batch)
+    rc = rv.report[]
+    @test progress[1:2] == [(0, 4), (2, 4)]                   # done = 0 first, then per batch
+    @test rc.canceled && length(unique(x.beam for x in rc.rows)) == 2
+    @test rv.status[] == "canceled after 2 of 4 beams" && !rv.running[]
+    @test occursin("canceled, partial", review_brief(rv))
+    @test step_status(sess, :review)[1] === :attention
+    # canceled before any beam: no report
+    start_clearance!(rv, sess.target.target[], four; spawn = false, batch = 2,
+                     deliver = f -> (f(); cancel_clearance!(rv)))
+    @test rv.report[] === nothing && rv.status[] == "canceled after 0 of 3 beams"
 
     rv2 = ReviewState()
     start_clearance!(rv2, sess.target.target[], Beam{Float64}[]; spawn = false)
@@ -220,22 +256,23 @@ end
     @test r.value <= r.initial_value
     @test length(r.x) == 12
 
-    # clearance on a worker with progress, canceled after the first chunk
+    # clearance on a worker with progress, canceled after the first batch
     bt = sess.beams
     for i in eachindex(bt.enabled[])
-        bt.enabled[][i] = i <= 2 * Controllers.REVIEW_CHUNK
+        bt.enabled[][i] = i <= 4
     end
     notify(bt.enabled)
     rv = sess.review
-    start_clearance!(sess; spawn = true)
+    start_clearance!(sess; spawn = true, batch = 2)
     @test rv.running[] && step_status(sess, :review)[1] === :busy
     drain_until(() -> rv.progress[][1] > 0 || !rv.running[], q)
     cancel_clearance!(sess)
     drain_until(() -> !rv.running[], q)
     @test rv.report[] isa ClearanceReport
     n = length(unique(x.beam for x in rv.report[].rows))
-    @test n == Controllers.REVIEW_CHUNK && occursin("canceled", rv.status[]) ||
-          n == 2 * Controllers.REVIEW_CHUNK
+    @test n == 2 && rv.report[].canceled && occursin("canceled", rv.status[]) ||
+          n == 4 && !rv.report[].canceled
+    @test review_batch() >= 4
     Controllers._abandon_jobs!(sess)
     @test !sess.drive.building[]
 end
@@ -271,4 +308,52 @@ end
     set_target_kind!(sess.target, :hohlraum)
     @test sess.beams.preset[] === :nif_quads && drive_stale(sess)
     @test sess.review.hardware[] == [:cap_top, :cap_bottom]
+end
+
+@testset "windows in the drive and the VisRad kit (no GL)" begin
+    sess = DesignSession(resolution = :coarse)
+    dir = joinpath(mktempdir(), "kit")
+    write_visrad_kit!(sess, dir)
+    @test occursin("compute the drive first", sess.drive.kit_status[]) && !isdir(dir)
+    # a closed and an open window: separate components, a valid closed enclosure
+    @test add_window!(sess.target)
+    @test add_window!(sess.target; phi = 200.0, z = 2.0, width = 1.5, height = 1.5, open = true)
+    build_scenario!(sess)
+    res = sess.drive.result[]
+    t = sess.target.target[]
+    @test res isa DriveResult && res.evaluation.scenario.target === t
+    @test sum(p.power for p in res.power) ≈ res.evaluation.deposition.delivered rtol = 1e-6
+    @test any(p -> p.name == "window_1", res.power)
+    @test all(isfinite, element_values(res, :radiosity))
+    @test all(isnan, element_values(res, :laser)[elements(t, :window_2)])    # a hole
+    # x-rays leave through the open window: its incident flux is a loss
+    @test sum(res.solution.H[e] * t.elem_area[e] for e in elements(t, :window_2)) > 0
+
+    set_enabled!(sess.beams, 4, false)
+    write_visrad_kit!(sess, dir)                             # inline: spawn[] is false
+    dr = sess.drive
+    @test !dr.kit_running[] && startswith(dr.kit_status[], "wrote")
+    @test occursin("VisRad kit", sess.status[])
+    for f in ("pointing_sst.csv", "beam_summary.csv", "briareus_beams.csv", "README.txt",
+              "briareus_results.csv", "briareus_capsule_elements.csv")
+        @test isfile(joinpath(dir, f))
+    end
+    # disabled beams are written at zero power: left out of the SST
+    @test countlines(joinpath(dir, "pointing_sst.csv")) == 1 + 4 * length(active_beams(sess.beams))
+    # the kit's laser accounting is the drive's (same operator, same beams)
+    line = only(l for l in readlines(joinpath(dir, "briareus_results.csv")) if startswith(l, "Laser delivered,"))
+    @test parse(Float64, split(line, ",")[2]) ≈ dr.result[].evaluation.deposition.delivered rtol = 1e-6
+    @test occursin("window_1", read(joinpath(dir, "README.txt"), String))
+
+    # on a worker, through a delivery queue
+    q = Channel{Any}(Inf)
+    sess.deliver[] = f -> put!(q, f)
+    sess.spawn[] = true
+    dir2 = joinpath(mktempdir(), "kit2")
+    write_visrad_kit!(sess, dir2)
+    @test dr.kit_running[]
+    drain_until(() -> !dr.kit_running[], q)
+    @test isfile(joinpath(dir2, "README.txt")) && startswith(dr.kit_status[], "wrote")
+    sess.spawn[] = false
+    sess.deliver[] = f -> f()
 end

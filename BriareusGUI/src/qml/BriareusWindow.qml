@@ -1,8 +1,9 @@
 // The Briareus window: header, step rail, the step pages, the persistent viewer
 // canvas with its toolbar, and the tick timer. All state lives in Julia: `app`
-// (property map) and the item models (`stepModel`, `beamModel`, `modeModel`,
-// `powerModel`, `optModeModel`, `paramModel`, `compModel`, `clearModel`,
-// `worstModel`); actions call Julia.br_* functions.
+// (property map) and the item models (`stepModel`, `windowModel`, `beamModel`,
+// `modeModel`, `powerModel`, `optModeModel`, `paramModel`, `compModel`, `clearModel`,
+// `worstModel`, `talisCompModel`, `ruleModel`, `talisModel`, `noteModel`); actions
+// call Julia.br_* functions.
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts

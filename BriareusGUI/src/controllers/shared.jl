@@ -1,14 +1,6 @@
 # Small helpers shared by the controllers: error messages, text-field parsing,
-# number display, the background-job runner, and the cancellation signal.
-
-"""
-    JobCancelled()
-
-Thrown inside a background job (from an objective or between beam chunks) to stop it
-at the next check. What the job finished before stays available (the best design an
-optimization found so far; the clearance rows already computed).
-"""
-struct JobCancelled <: Exception end
+# number display, and the background-job runner. (Long jobs cancel through the core's
+# own callbacks: `optimize_pointing` and `clearance` stop when theirs returns `true`.)
 
 # First line of an exception's message, for status lines.
 _errmsg(err) = first(split(sprint(showerror, err), '\n'))

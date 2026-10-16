@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import QtQuick.Dialogs
 import jlqml
 
 StepPage {
@@ -114,6 +115,34 @@ StepPage {
     Label { text: "Foil spot"; font.weight: Font.DemiBold; visible: app.spotText !== ""; Layout.topMargin: 8 }
     Label { text: app.spotText; visible: text !== ""; wrapMode: Text.WordWrap; Layout.fillWidth: true }
 
+    // VisRad benchmark kit
+    RowLayout {
+        spacing: 8
+        Layout.topMargin: 8
+        Button {
+            text: "Write VisRad benchmark kit…"
+            enabled: app.kitReady && !app.kitRunning
+            onClicked: kitDialog.open()
+            ToolTip.visible: hovered
+            ToolTip.text: "Write the pointing (SST), the beam summary, the beam table, a README with " +
+                          "the geometry and the VisRad steps, and these results to compare against, " +
+                          "into a folder"
+        }
+        BusyIndicator {
+            running: app.kitRunning
+            visible: running
+            Layout.preferredHeight: 32
+            Layout.preferredWidth: 32
+        }
+        Label {
+            text: app.kitStatus
+            visible: text !== ""
+            opacity: 0.75
+            wrapMode: Text.WordWrap
+            Layout.fillWidth: true
+        }
+    }
+
     // laser power accounting
     Label { text: "Laser power"; font.weight: Font.DemiBold; visible: app.driveHasResult; Layout.topMargin: 8 }
     Label { text: app.delivered; visible: app.driveHasResult; opacity: 0.75 }
@@ -134,5 +163,11 @@ StepPage {
             model: powerModel
             delegate: Label { Layout.row: index; Layout.column: 2; text: model.percent }
         }
+    }
+
+    FolderDialog {
+        id: kitDialog
+        title: "Folder for the VisRad benchmark kit"
+        onAccepted: Julia.br_write_kit(selectedFolder.toString())
     }
 }

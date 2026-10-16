@@ -71,3 +71,38 @@
     @test !isempty(colorbuffer(sc.fig; px_per_unit = 1))
     @test length(sc.ax.scene.plots) == nplots
 end
+
+@testset "window outlines and TaLIS beam colors (offscreen)" begin
+    sess = DesignSession(resolution = :coarse)
+    sc = BriareusGUI.scene_canvas(sess)
+    nplots = length(sc.ax.scene.plots)
+    finite(pts) = count(p -> all(isfinite, p), pts)
+    @test finite(sc.outlines[1][]) == 0
+    add_window!(sess.target)
+    add_window!(sess.target; phi = 200.0, open = true)
+    # per window: inside and outside loops of 2 × 12 arc pieces and 2 axial edges
+    @test finite(sc.outlines[1][]) == 2 * 2 * (2 * 12 + 2) * 2
+    R = sess.target.params[][:radius]
+    @test all(p -> abs(hypot(p[1], p[2]) - R) < 0.02, filter(p -> all(isfinite, p), sc.outlines[1][]))
+    @test sc.outlines.color[][end] == BriareusGUI.WINDOW_COLORS.open
+    # the closed window is a component of the legend; the open one a hole
+    @test "window_1" in sc.colorbar.ticks[][2] && !("window_2" in sc.colorbar.ticks[][2])
+    @test !isempty(colorbuffer(sc.fig; px_per_unit = 1))
+    # Review step: beams colored by the shown report
+    bt = sess.beams
+    for i in eachindex(bt.enabled[])
+        bt.enabled[][i] = i in (1, 2)
+    end
+    notify(bt.enabled)
+    set_step!(sess, :review)
+    start_talis!(sess; spawn = false)
+    @test BriareusGUI._beam_status(sess) === nothing                  # clearance view, no report
+    set_review_view!(sess.review, :talis)
+    worst = BriareusGUI._beam_status(sess)
+    @test Set(keys(worst)) == Set(b.name for b in active_beams(bt))
+    @test sc.aims.color[][1] == BriareusGUI.STATUS_COLORS[worst[bt.beams[][1].name]]
+    remove_window!(sess.target, 2)
+    remove_window!(sess.target, 1)
+    @test finite(sc.outlines[1][]) == 0
+    @test length(sc.ax.scene.plots) == nplots
+end

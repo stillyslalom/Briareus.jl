@@ -47,7 +47,8 @@ build), `building`/`started`/`build_seconds`, `result` (the latest
 [`DriveResult`](@ref)), `evaluating`, `field` (one of [`DRIVE_FIELDS`](@ref)), `view`
 (`:scene`, the 3D target, or `:map`, the capsule θ–φ map or foil face), `spot_radius`
 (mm; the foil spot over which irradiance statistics and the foil objective are
-taken), and `status`.
+taken), `status`, and the VisRad benchmark kit's `kit_running`/`kit_status` (see
+[`write_visrad_kit!`](@ref)).
 """
 struct DriveState
     scenario::Observable{Union{Nothing,Scenario}}
@@ -60,6 +61,8 @@ struct DriveState
     view::Observable{Symbol}
     spot_radius::Observable{Float64}
     status::Observable{String}
+    kit_running::Observable{Bool}
+    kit_status::Observable{String}
     key::Base.RefValue{Any}                  # (target, ports) of the scenario
     lookup::Base.RefValue{Any}               # flux-map raster lookup of the scenario
     generation::Base.RefValue{Int}           # build requests
@@ -70,7 +73,8 @@ DriveState() = DriveState(Observable{Union{Nothing,Scenario}}(nothing), Observab
                           Observable(0.0), Observable(0.0),
                           Observable{Union{Nothing,DriveResult}}(nothing), Observable(false),
                           Observable(:laser), Observable(:scene), Observable(0.5),
-                          Observable(""), Ref{Any}(nothing), Ref{Any}(nothing), Ref(0), Ref(0))
+                          Observable(""), Observable(false), Observable(""),
+                          Ref{Any}(nothing), Ref{Any}(nothing), Ref(0), Ref(0))
 
 """
     set_field!(dr::DriveState, field::Symbol)

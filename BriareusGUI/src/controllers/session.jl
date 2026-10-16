@@ -16,17 +16,19 @@ const STEP_LABELS = Dict(:target => "Target", :beams => "Beams", :drive => "Driv
 
 State of the Briareus window. Step controllers: `target` ([`TargetSetup`](@ref)),
 `beams` ([`BeamTable`](@ref)), `drive` ([`DriveState`](@ref)), `optimize`
-([`OptimizeState`](@ref)) and `review` ([`ReviewState`](@ref)); `step` (the open
-step, one of [`DESIGN_STEPS`](@ref)) and `status`.
+([`OptimizeState`](@ref)), `review` ([`ReviewState`](@ref)) and `talis`
+([`TaLISState`](@ref), the Review step's TaLIS checks); `step` (the open step, one
+of [`DESIGN_STEPS`](@ref)) and `status`.
 
 The table starts from `beams` (a vector of `Beam`s) or a [`BEAM_PRESETS`](@ref) entry
 pointed for the target. Changing the target kind swaps a NIF preset for the OMEGA
 backlighter set (and back), unless the beams were imported.
 
 Background work: `spawn[]` (`false` by default; a window sets it) runs the scenario
-build and its evaluations on worker tasks, handing their results to `deliver[]` (a
-window queues them for its GUI thread). Without it they run inline. The optimization
-and the clearance check take an explicit `spawn` keyword.
+build, its evaluations and the VisRad kit on worker tasks, handing their results to
+`deliver[]` (a window queues them for its GUI thread). Without it they run inline.
+The optimization, the clearance check and the TaLIS checks take an explicit `spawn`
+keyword.
 """
 struct DesignSession
     target::TargetSetup
@@ -34,6 +36,7 @@ struct DesignSession
     drive::DriveState
     optimize::OptimizeState
     review::ReviewState
+    talis::TaLISState
     step::Observable{Symbol}
     status::Observable{String}
     deliver::Base.RefValue{Any}
@@ -47,9 +50,10 @@ function DesignSession(; kind::Symbol = :hohlraum, resolution::Symbol = :standar
     bt = beams === nothing ?
          BeamTable(preset_beams(preset; target_kind = kind, params = ts.params[]); preset) :
          BeamTable(beams)
-    sess = DesignSession(ts, bt, DriveState(), OptimizeState(), ReviewState(), Observable(:target),
-                         Observable(""), Ref{Any}(deliver), Ref(false))
+    sess = DesignSession(ts, bt, DriveState(), OptimizeState(), ReviewState(), TaLISState(),
+                         Observable(:target), Observable(""), Ref{Any}(deliver), Ref(false))
     default_selection!(sess.review, ts.target[])
+    default_selection!(sess.talis, ts.target[])
     _connect!(sess)
     return sess
 end
@@ -71,6 +75,7 @@ function _connect!(sess::DesignSession)
     end
     on(ts.target) do t
         default_selection!(sess.review, t)
+        default_selection!(sess.talis, t)
         _drive_inputs_changed!(sess)
     end
     onany((_...) -> _drive_inputs_changed!(sess), bt.beams, bt.enabled)
@@ -128,12 +133,26 @@ function step_status(sess::DesignSession, step::Symbol)
         r.applied && return (:ok, txt * " · applied")
         return (:attention, txt * " · not applied")
     else
-        rv = sess.review
+        rv, tl = sess.review, sess.talis
         rv.running[] && return (:busy, "checking: $(rv.progress[][1]) of $(rv.progress[][2]) beams")
-        rv.report[] === nothing && return (:todo, isempty(rv.status[]) ? "not run" : rv.status[])
-        review_stale(sess) && return (:attention, "beams changed since: " * review_brief(rv))
-        fails = any(x -> x.status !== :pass, rv.report[].rows)
-        return (fails ? :attention : :ok, review_brief(rv))
+        tl.running[] && return (:busy, "TaLIS checks… " * _seconds(time() - tl.started[]))
+        if rv.report[] === nothing && tl.report[] === nothing
+            msg = !isempty(rv.status[]) ? rv.status[] : !isempty(tl.status[]) ? tl.status[] : "not run"
+            return (:todo, msg)
+        end
+        parts = String[]
+        attention = false
+        if rv.report[] !== nothing
+            push!(parts, review_brief(rv))
+            attention |= rv.report[].canceled || any(x -> x.status !== :pass, rv.report[].rows)
+        end
+        if tl.report[] !== nothing
+            push!(parts, "TaLIS " * talis_brief(tl))
+            attention |= any(x -> x.status !== :pass, tl.report[].rows)
+        end
+        txt = join(parts, " · ")
+        review_stale(sess) && return (:attention, "beams changed since: " * txt)
+        return (attention ? :attention : :ok, txt)
     end
 end
 
@@ -224,6 +243,48 @@ function _request_evaluation!(sess::DesignSession)
     return sess
 end
 
+"""
+    write_visrad_kit!(sess::DesignSession, dir)
+
+Write a VisRad benchmark kit for the current target and beam table into `dir` with
+`write_visrad_kit` (SST pointing, beam summary, the canonical beam table, a README with
+the geometry and VisRad steps, and Briareus's results to compare against), on a worker
+when `spawn[]` is set. It reuses the drive's deposition operator and radiation model,
+so the drive must be computed and current. Disabled beams are written at zero power.
+The capsule (or a foil target's main sphere) is the observed surface. Progress and
+the outcome go to `drive.kit_running`/`drive.kit_status`.
+"""
+function write_visrad_kit!(sess::DesignSession, dir::AbstractString)
+    dr = sess.drive
+    dr.kit_running[] && return sess
+    if !_drive_current(sess)
+        dr.kit_status[] = "compute the drive first: the kit reuses its view factors"
+        return sess
+    end
+    s = dr.scenario[]
+    t = sess.target.target[]
+    beams = display_beams(sess.beams)
+    names = component_names(t)
+    observe = :capsule in names ? :capsule : :main in names ? :main : :none
+    dir = String(dir)
+    dr.kit_running[] = true
+    dr.kit_status[] = "writing the VisRad kit…"
+    notes = "Written by BriareusGUI: " * target_summary(sess.target) * "; " * beams_summary(sess.beams)
+    runner = _runner(sess.spawn, sess.deliver)
+    runner(() -> write_visrad_kit(dir, t, beams; op = s.deposition, model = s.model, observe, notes),
+           function (out)
+               dr.kit_running[] = false
+               if out.err === nothing
+                   n = length(out.value.files)
+                   dr.kit_status[] = "wrote $n files to $dir"
+                   sess.status[] = "wrote the VisRad kit to " * basename(rstrip(dir, ['/', '\\']))
+               else
+                   dr.kit_status[] = "kit failed: " * _errmsg(out.err)
+               end
+           end)
+    return sess
+end
+
 # ---------------------------------------------------------------- optimize
 
 """
@@ -272,19 +333,38 @@ end
 # ---------------------------------------------------------------- review
 
 """
-    start_clearance!(sess::DesignSession; spawn = true)
+    start_clearance!(sess::DesignSession; spawn = true, batch = review_batch())
 
 Check the enabled beams' clearance from the selected hardware (see
 [`start_clearance!(::ReviewState, …)`](@ref start_clearance!)).
 """
-start_clearance!(sess::DesignSession; spawn::Bool = true) =
+start_clearance!(sess::DesignSession; spawn::Bool = true, batch::Integer = review_batch()) =
     (start_clearance!(sess.review, sess.target.target[], active_beams(sess.beams);
-                      deliver = sess.deliver[], spawn); sess)
+                      deliver = sess.deliver[], spawn, batch); sess)
 
 cancel_clearance!(sess::DesignSession) = cancel_clearance!(sess.review)
 
-review_stale(sess::DesignSession) =
-    review_stale(sess.review, sess.target.target[], active_beams(sess.beams))
+"""
+    start_talis!(sess::DesignSession; spawn = true)
+
+Run the TaLIS checks on the enabled beams with the Review step's error stack (see
+[`start_talis!(::TaLISState, …)`](@ref start_talis!)).
+"""
+start_talis!(sess::DesignSession; spawn::Bool = true) =
+    (start_talis!(sess.talis, sess.review, sess.target.target[], active_beams(sess.beams);
+                  deliver = sess.deliver[], spawn); sess)
+
+cancel_talis!(sess::DesignSession) = (cancel_talis!(sess.talis); sess)
+
+"""
+    review_stale(sess::DesignSession) -> Bool
+
+Whether the target or the enabled beams changed since the clearance or TaLIS check.
+"""
+function review_stale(sess::DesignSession)
+    t, bs = sess.target.target[], active_beams(sess.beams)
+    return review_stale(sess.review, t, bs) || talis_stale(sess.talis, t, bs)
+end
 
 """
     load_preset!(sess::DesignSession, preset::Symbol)
@@ -302,11 +382,14 @@ function _abandon_jobs!(sess::DesignSession)
     sess.drive.eval_generation[] += 1
     sess.drive.building[] = false
     sess.drive.evaluating[] = false
-    for (job, cancel!) in ((sess.optimize, cancel_optimize!), (sess.review, cancel_clearance!))
+    for (job, cancel!) in ((sess.optimize, cancel_optimize!), (sess.review, cancel_clearance!),
+                           (sess.talis, cancel_talis!))
         job.running[] || continue
         cancel!(job)                       # the worker stops at its next check
         job.running[] = false
         job.status[] = "abandoned when the window closed"
     end
+    sess.drive.kit_running[] && (sess.drive.kit_running[] = false;
+                                 sess.drive.kit_status[] = "abandoned when the window closed")
     return sess
 end

@@ -128,3 +128,116 @@ end
     @test_throws ArgumentError set_grouping!(bt, :quad)
     @test_throws ArgumentError Controllers._check_grouping(bt.beams[], :quad)   # the optimizer's check
 end
+
+@testset "diagnostic windows (no GL)" begin
+    ts = TargetSetup(resolution = :coarse)
+    t0 = ts.target[]
+    n0 = nelements(t0)
+    @test add_window!(ts)                                   # closed, 1 × 1 mm at φ = 90°
+    w1 = only(ts.windows[])
+    @test w1.phi == 90 && w1.z == 0 && !w1.open && w1.albedo == ts.params[][:wall_albedo]
+    @test :window_1 in surface_names(ts.target[]) && window_name(1) === :window_1
+    @test occursin("with 1 window", target_summary(ts))
+    @test add_window!(ts) && ts.windows[][2].phi == 270     # the next free default place
+    t = ts.target[]
+
+    # the geometry's rejections surface as messages and keep the target
+    @test !edit_window!(ts, 2, :phi, "90.2")
+    @test occursin("overlap", ts.error[]) && ts.target[] === t && ts.windows[][2].phi == 270
+    @test !edit_window!(ts, 1, :z, "5.0")                   # past the end of the 10.1 mm wall
+    @test occursin("past the end", ts.error[]) && ts.windows[][1].z == 0
+    @test startswith(ts.error[], "window 1: ")                # which window, for the user
+    @test !edit_window!(ts, 1, :width, "0") && occursin("positive", ts.error[])
+    @test !edit_window!(ts, 1, :albedo, "1.5") && occursin("between 0 and 1", ts.error[])
+    @test !edit_window!(ts, 1, :height, "tall") && occursin("must be a number", ts.error[])
+    @test !add_window!(ts; phi = 92.0) && occursin("overlap", ts.error[])
+    @test length(ts.windows[]) == 2 && ts.target[] === t
+    @test_throws ArgumentError edit_window!(ts, 1, :depth, "1")
+    @test_throws ArgumentError edit_window!(ts, 3, :z, "1")
+    @test_throws ArgumentError remove_window!(ts, 3)
+
+    # accepted edits rebuild; a closed window re-emits with its own material
+    @test edit_window!(ts, 1, :z, "1.5") && ts.error[] == "" && ts.target[] !== t
+    @test edit_window!(ts, 1, :albedo, "0.3") && edit_window!(ts, 1, :conversion, "0.1")
+    tw = ts.target[]
+    c1 = tw.components[component_index(tw, :window_1)]
+    @test c1.kind === :surface && albedo(c1.material) ≈ 0.3 && c1.material.conversion ≈ 0.1
+    zs = [tw.elem_centroid[e][3] for e in elements(tw, :window_1)]
+    @test all(z -> 1.0 < z < 2.0, zs)                       # the mesh conforms to the window
+    # an open window is a hole (an aperture)
+    @test set_window_open!(ts, 2, true)
+    @test ts.target[].components[component_index(ts.target[], :window_2)].kind === :aperture
+    @test !(:window_2 in surface_names(ts.target[]))
+    # a dimension edit that leaves a window off the wall is rejected
+    @test !edit_target!(ts, :length, "3.0") && occursin("past the end", ts.error[])
+    @test ts.params[][:length] == 10.1
+    # resolution and kind keep the windows; a foil has none
+    set_resolution!(ts, :standard)
+    @test :window_1 in component_names(ts.target[]) && nelements(ts.target[]) > 4n0
+    set_resolution!(ts, :coarse)
+    set_target_kind!(ts, :foil)
+    @test !any(n -> startswith(String(n), "window"), component_names(ts.target[]))
+    @test !occursin("window", target_summary(ts))
+    @test !add_window!(ts) && occursin("hohlraum", ts.error[])
+    set_target_kind!(ts, :hohlraum)
+    @test component_names(ts.target[])[end-1:end] == [:window_1, :window_2]
+    # removing renumbers: the open window becomes window_1
+    remove_window!(ts, 1)
+    @test length(ts.windows[]) == 1 && ts.windows[][1].open
+    @test ts.target[].components[component_index(ts.target[], :window_1)].kind === :aperture
+    remove_window!(ts, 1)
+    @test isempty(ts.windows[]) && nelements(ts.target[]) == n0
+    # windows given up front
+    ts2 = TargetSetup(resolution = :coarse, windows = [WindowSpec(phi = 0.0, height = 2.0, open = true)])
+    @test :window_1 in component_names(ts2.target[])
+end
+
+@testset "VisRad interchange through the beam table (no GL)" begin
+    bt = BeamTable(preset_beams(:nif_quads); preset = :nif_quads)
+    edit_beams!(bt, 1, :z, "3.3")
+    edit_beams!(bt, 2, :defocus, "0.5")
+    set_enabled!(bt, 4, false)                                 # the 50° cone off
+    ref, en = copy(bt.beams[]), copy(bt.enabled[])
+    dir = mktempdir()
+
+    # SST pointing: one row per NIF beam of the enabled quads
+    sst = export_visrad_sst(bt, joinpath(dir, "sst.csv"))
+    @test bt.path[] == sst
+    @test countlines(sst) == 1 + 4 * count(en)
+    fresh() = BeamTable(preset_beams(:nif_quads); preset = :nif_quads)
+    b2 = fresh()
+    import_visrad_sst!(b2, sst)
+    @test all(((a, b),) -> a.aim ≈ b.aim && a.defocus ≈ b.defocus,
+              zip(bt.beams[][en], b2.beams[][en]))
+    @test beam_rows(b2)[1].z ≈ 3.3 && beam_rows(b2)[2].defocus ≈ 0.5
+    # the quads absent from the file come back disabled, at their power
+    @test b2.enabled[] == en && all(b -> b.power == 8.0, b2.beams[])
+    @test b2.preset[] === :nif_quads && b2.path[] == sst
+    @test occursin("disabled", b2.warnings[][1])
+    # the reader's warnings are collected: a beam the table does not have
+    open(io -> println(io, "B999,1.0,2.0,3.0,0.0"), sst, "a")
+    b2b = fresh()
+    import_visrad_sst!(b2b, sst)
+    @test any(w -> occursin("ignored", w) && occursin("B999", w), b2b.warnings[])
+
+    # Laser Beam Summary: pointing, power and spot round trip; off beams disabled
+    summ = export_visrad_summary(bt, joinpath(dir, "summary.csv"))
+    b3 = fresh()
+    edit_beams!(b3, 1, :power, "5")                       # the file restores it
+    import_visrad_summary!(b3, summ)
+    @test b3.enabled[] == en
+    @test all(((a, b),) -> a.aim ≈ b.aim && a.defocus ≈ b.defocus && a.power ≈ b.power &&
+                           a.spot.a ≈ b.spot.a && a.spot.b ≈ b.spot.b,
+              zip(ref, b3.beams[]))
+    # a file that is not VisRad's leaves the table unchanged
+    bad = joinpath(dir, "bad.csv")
+    write(bad, "Beam,X\nB115,1\n")
+    b4 = fresh()
+    before = b4.beams[]
+    @test_throws ArgumentError import_visrad_sst!(b4, bad)
+    @test b4.beams[] === before
+    @test_throws ArgumentError import_visrad_sst!(BeamTable(), sst)       # nothing to apply to
+    # loading a preset clears the warnings
+    load_preset!(b2, :nif_quads)
+    @test isempty(b2.warnings[])
+end

@@ -1,7 +1,8 @@
 # The Optimize step: a GroupPointing parameterization of the enabled beams (fields,
 # grouping, box bounds), an objective (capsule symmetry, axisymmetric or 3D, or foil
-# uniformity) and `optimize_pointing` on a worker. The objective is wrapped to count
-# evaluations, report progress, remember the best design so far, and stop on cancel.
+# uniformity) and `optimize_pointing` on a worker. Its callback reports each objective
+# evaluation (progress) and stops the optimization on cancel, which then returns the
+# best design found so far.
 
 """
 Objectives of the Optimize step: `:legendre` (`symmetry_objective`: weighted
@@ -24,9 +25,10 @@ const DEFAULT_DELTAS = Dict(:z => 1.0, :r => 1.0, :phi => 1.0, :defocus => 2.0, 
 A finished (or canceled) optimization: `names` (parameter names), `x0`, `x`, `lower`,
 `upper`, `initial_value`, `value`, `beams` (the optimized enabled beams), `indices`
 (their positions in the beam table), `before`/`after` (quick summaries: `modes`,
-`mean_flux`, `spot`, `clipped`), `evaluations`, `seconds`, `completed` (`false`
-when canceled: the best design found so far), and `applied` (set by
-[`accept_optimum!`](@ref)).
+`mean_flux`, `spot`, `clipped`), `evaluations` (objective evaluations, not counting
+gradients), `iterations` (L-BFGS-B iterations; `nothing` when canceled), `seconds`,
+`completed` (`false` when canceled: the best design found so far), and `applied`
+(set by [`accept_optimum!`](@ref)).
 """
 mutable struct OptimizeResult
     names::Vector{String}
@@ -41,6 +43,7 @@ mutable struct OptimizeResult
     before::NamedTuple
     after::NamedTuple
     evaluations::Int
+    iterations::Union{Nothing,Int}
     seconds::Float64
     completed::Bool
     applied::Bool
@@ -197,9 +200,10 @@ end
 
 Optimize the enabled `beams` (positions `indices` in the beam table; `scenario` is
 built for the whole table) with the current settings. Runs `optimize_pointing` on a
-worker with `spawn`; progress (`evaluations`, `current`, `best`) and the result go
-through `deliver`. [`cancel_optimize!`](@ref) stops at the next objective evaluation
-and keeps the best design found so far.
+worker with `spawn`; its callback hands progress (`evaluations`, `current`, `best`,
+at most every 0.1 s) to `deliver`, and so does the result. [`cancel_optimize!`](@ref)
+makes the callback stop the optimization after the next objective evaluation; the
+result is then the best design found so far.
 """
 function start_optimize!(st::OptimizeState, s::Scenario, beams::AbstractVector,
                          indices::AbstractVector{<:Integer}; spot_radius::Real = 0.5,
@@ -226,59 +230,32 @@ function start_optimize!(st::OptimizeState, s::Scenario, beams::AbstractVector,
     cfg = _objective_settings(st)
     job = function ()
         t0 = time()
-        count = Ref(0)
-        best = Ref(Inf)
-        best_beams = Ref{Any}(nothing)
+        p = GroupPointing(beams; by, fields, mirror = _mirror(by))
+        sub = subset(s, collect(indices); parameterization = p)
+        x0 = initial_parameters(p)
+        d = settings.deltas
+        lower, upper = bounds(p, x0; z = d[:z], r = d[:r], phi = d[:phi],
+                              defocus = d[:defocus], power = d[:power])
+        ev0 = evaluate(sub, x0)
+        before = _quick_summary(ev0, spot_radius)
+        obj = _make_objective(cfg, sub, ev0, spot_radius)
+        # called on this task after every objective evaluation; `true` stops
         reported = Ref(0.0)
-        local p, x0, lower, upper, sub, before
-        outcome = try
-            p = GroupPointing(beams; by, fields, mirror = _mirror(by))
-            sub = subset(s, collect(indices); parameterization = p)
-            x0 = initial_parameters(p)
-            d = settings.deltas
-            lower, upper = bounds(p, x0; z = d[:z], r = d[:r], phi = d[:phi],
-                                  defocus = d[:defocus], power = d[:power])
-            ev0 = evaluate(sub, x0)
-            before = _quick_summary(ev0, spot_radius)
-            obj = _make_objective(cfg, sub, ev0, spot_radius)
-            wrapped = function (ev)
-                st.cancel[] && throw(JobCancelled())
-                J = obj(ev)
-                count[] += 1
-                if J isa Float64
-                    if J < best[]
-                        best[] = J
-                        best_beams[] = ev.beams
-                    end
-                    if time() - reported[] > 0.1
-                        reported[] = time()
-                        n, b = count[], best[]
-                        deliver(() -> (st.evaluations[] = n; st.current[] = J; st.best[] = b))
-                    end
-                end
-                return J
+        progress = function (info)
+            if time() - reported[] > 0.1
+                reported[] = time()
+                n, J, b = info.evaluations, info.value, info.best_value
+                deliver(() -> (st.evaluations[] = n; st.current[] = J; st.best[] = b))
             end
-            res = optimize_pointing(sub, wrapped; x0, lower, upper, iterations)
-            (; x = res.x, beams = res.beams, value = res.value, initial_value = res.initial_value,
-             completed = true)
-        catch err
-            err isa JobCancelled || rethrow()
-            bb = best_beams[]
-            bb === nothing ? err :
-                (; x = initial_parameters(GroupPointing(bb; by, fields, mirror = _mirror(by))),
-                 beams = bb, value = best[], initial_value = NaN, completed = false)
+            return st.cancel[]
         end
-        if outcome isa Exception
-            return outcome
-        end
-        x = outcome.x
-        after = _quick_summary(evaluate(sub, x), spot_radius)
-        init = isnan(outcome.initial_value) ? _initial_value(cfg, sub, x0, spot_radius) :
-               outcome.initial_value
-        return OptimizeResult(parameter_names(p), x0, x, lower, upper, init, outcome.value,
-                              Beam{Float64}[_float_beam(b) for b in outcome.beams],
-                              collect(Int, indices), before, after, count[], time() - t0,
-                              outcome.completed, false)
+        res = optimize_pointing(sub, obj; x0, lower, upper, iterations, callback = progress)
+        after = _quick_summary(evaluate(sub, res.x), spot_radius)
+        return OptimizeResult(parameter_names(p), x0, collect(Float64, res.x), lower, upper,
+                              res.initial_value, res.value,
+                              Beam{Float64}[_float_beam(b) for b in res.beams],
+                              collect(Int, indices), before, after, res.evaluations,
+                              res.iterations, time() - t0, !res.stopped, false)
     end
     run = function ()
         out = _try_job(job)
@@ -288,21 +265,18 @@ function start_optimize!(st::OptimizeState, s::Scenario, beams::AbstractVector,
     return st
 end
 
-_initial_value(cfg, sub, x0, r) = (ev = evaluate(sub, x0); _make_objective(cfg, sub, ev, r)(ev))
-
 function _finish_optimize!(st::OptimizeState, out)
-    v = out.err === nothing ? out.value : out.err
-    if v isa OptimizeResult
+    if out.err === nothing
+        v = out.value
         st.result[] = v
         st.evaluations[] = v.evaluations
         st.best[] = v.value
+        its = v.iterations === nothing ? "" : " ($(v.iterations) iterations)"
         st.status[] = (v.completed ? "done" : "canceled; kept the best design so far") *
-                      @sprintf(": objective %.4g → %.4g in %d evaluations, %s", v.initial_value,
-                               v.value, v.evaluations, _seconds(v.seconds))
-    elseif v isa JobCancelled
-        st.status[] = "canceled before the first evaluation"
+                      @sprintf(": objective %.4g → %.4g in %d evaluations%s, %s", v.initial_value,
+                               v.value, v.evaluations, its, _seconds(v.seconds))
     else
-        st.status[] = "failed: " * _errmsg(v)
+        st.status[] = "failed: " * _errmsg(out.err)
     end
     st.running[] = false
     return st
@@ -311,8 +285,9 @@ end
 """
     cancel_optimize!(st::OptimizeState)
 
-Stop the optimization at the next objective evaluation; the best design found so far
-becomes the result.
+Stop the optimization after the objective evaluation in progress (the
+`optimize_pointing` callback returns `true`); the best design found so far becomes
+the result.
 """
 cancel_optimize!(st::OptimizeState) = (st.cancel[] = true; st)
 

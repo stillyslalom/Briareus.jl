@@ -24,9 +24,9 @@ const _NOPOINT3 = [Point3f(NaN, NaN, NaN)]
     SceneCanvas
 
 The 3D viewer of the Briareus window: `fig`/`ax` (an `Axis3`), the target `body` mesh,
-beam axis `segments` and `aims`, the `colorbar`, `cutaway` (cut the quadrant of the
-hohlraum shell facing the camera; display only), and a `dirty` flag the shell reads
-to request a redraw.
+beam axis `segments` and `aims`, the diagnostic-window `outlines`, the `colorbar`,
+`cutaway` (cut the quadrant of the hohlraum shell facing the camera; display only),
+and a `dirty` flag the shell reads to request a redraw.
 """
 struct SceneCanvas
     fig::Figure
@@ -34,6 +34,7 @@ struct SceneCanvas
     body::Any
     segments::Any
     aims::Any
+    outlines::Any
     colorbar::Colorbar
     cutaway::Base.RefValue{Bool}
     dirty::Base.RefValue{Bool}
@@ -54,15 +55,20 @@ function scene_canvas(sess::DesignSession)
     segments = linesegments!(ax, [Point3f(NaN, NaN, NaN), Point3f(NaN, NaN, NaN)];
                              color = [NAN_COLOR, NAN_COLOR], linewidth = 1.5)
     aims = scatter!(ax, _NOPOINT3; color = [NAN_COLOR], markersize = 7)
+    outlines = linesegments!(ax, [Point3f(NaN, NaN, NaN), Point3f(NaN, NaN, NaN)];
+                             color = [NAN_COLOR, NAN_COLOR], linewidth = 2.5)
     cb = Colorbar(fig[1, 2]; colormap = [NAN_COLOR, NAN_COLOR], limits = (0.0, 1.0), label = " ",
                   height = Relative(0.6))
-    c = SceneCanvas(fig, ax, body, segments, aims, cb, Ref(true), Ref(true), Ref(0))
+    c = SceneCanvas(fig, ax, body, segments, aims, outlines, cb, Ref(true), Ref(true), Ref(0))
     dr = sess.drive
     onany((_...) -> _draw_body!(c, sess), sess.target.target, sess.step, dr.result, dr.field)
     onany((_...) -> _draw_beams!(c, sess), sess.target.target, sess.beams.beams,
-          sess.beams.enabled, sess.step, sess.review.report)
+          sess.beams.enabled, sess.step, sess.review.report, sess.review.view,
+          sess.talis.report)
+    on(_ -> _draw_windows!(c, sess), sess.target.target)
     _draw_body!(c, sess)
     _draw_beams!(c, sess)
+    _draw_windows!(c, sess)
     return c
 end
 
@@ -189,16 +195,56 @@ function _draw_beams!(c::SceneCanvas, sess::DesignSession)
     return c
 end
 
-# On the Review step, each beam's worst clearance status.
+# On the Review step, each beam's worst status in the shown report (clearance or
+# TaLIS; the TAS stay-in rows are per hemisphere, not per beam).
 function _beam_status(sess::DesignSession)
     sess.step[] === :review || return nothing
-    r = sess.review.report[]
+    r = sess.review.view[] === :talis ? sess.talis.report[] : sess.review.report[]
     r === nothing && return nothing
     rank = Dict(:fail => 0, :review => 1, :pass => 2)
     out = Dict{String,Symbol}()
     for row in r.rows
+        row isa TaLISRow && row.rule === :tas_stay_in && continue
         s = get(out, row.beam, :pass)
         out[row.beam] = rank[row.status] < rank[s] ? row.status : s
     end
     return out
+end
+
+const WINDOW_COLORS = (closed = RGBAf(0.08, 0.08, 0.08, 1), open = RGBAf(0.9, 0.3, 0.1, 1))
+
+# Outline each diagnostic window of a hohlraum on the wall, just inside and just
+# outside it (an open window is a hole; a closed one is a patch colored as its own
+# component): arcs along φ at its z edges and axial lines at its φ edges.
+function _draw_windows!(c::SceneCanvas, sess::DesignSession)
+    ts = sess.target
+    ws = ts.kind[] === :hohlraum ? ts.windows[] : WindowSpec[]
+    if isempty(ws)
+        _update!(c.outlines, [Point3f(NaN, NaN, NaN), Point3f(NaN, NaN, NaN)];
+                 color = [NAN_COLOR, NAN_COLOR])
+        c.dirty[] = true
+        return c
+    end
+    R = ts.params[][:radius]
+    segs = Point3f[]
+    cols = RGBAf[]
+    narc = 12
+    for w in ws, r in (R - 0.01, R + 0.01)
+        φa = deg2rad(w.phi) - w.width / 2R
+        Δφ = w.width / R
+        za, zb = w.z - w.height / 2, w.z + w.height / 2
+        p(φ, z) = Point3f(r * cos(φ), r * sin(φ), z)
+        col = w.open ? WINDOW_COLORS.open : WINDOW_COLORS.closed
+        for z in (za, zb), k in 1:narc
+            push!(segs, p(φa + (k - 1) * Δφ / narc, z), p(φa + k * Δφ / narc, z))
+            push!(cols, col, col)
+        end
+        for φ in (φa, φa + Δφ)
+            push!(segs, p(φ, za), p(φ, zb))
+            push!(cols, col, col)
+        end
+    end
+    _update!(c.outlines, segs; color = cols)
+    c.dirty[] = true
+    return c
 end

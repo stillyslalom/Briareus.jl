@@ -197,6 +197,48 @@ mutable struct ClearRow
     intensity::String
 end
 
+# One diagnostic window of the Target step; numbers as text-field text.
+mutable struct WindowRow
+    number::Int
+    name::String
+    phi::String
+    z::String
+    width::String
+    height::String
+    open::Bool
+    albedo::String
+    conversion::String
+end
+
+# TaLIS: one rule's summary, one check, one note.
+mutable struct RuleRow
+    label::String
+    requirement::String
+    pass::Int
+    review::Int
+    fail::Int
+    worst::String                                  # worst margin with unit
+    where_::String                                 # its beam / component
+    status::String                                 # worst status
+end
+
+mutable struct TalisRow
+    beam::String
+    rule::String
+    component::String
+    status::String
+    margin::String
+    worst::String
+    nominal::String
+    required::String
+    note::String
+end
+
+mutable struct NoteRow
+    kind::String                                   # assumed, settings, skipped, scope, source
+    text::String
+end
+
 _same(a, b) = all(f -> getfield(a, f) == getfield(b, f), fieldnames(typeof(a)))
 
 # Replace the rows of an item model: in place when the count is unchanged (only
@@ -218,9 +260,11 @@ end
 
 # ---------------------------------------------------------------- shell
 
-const _MODEL_ROWS = (stepModel = StepRow, beamModel = BeamRow, modeModel = ModeRow,
-                     powerModel = PowerRow, optModeModel = ModeRow, paramModel = ParamRow,
-                     compModel = CompRow, clearModel = ClearRow, worstModel = ClearRow)
+const _MODEL_ROWS = (stepModel = StepRow, windowModel = WindowRow, beamModel = BeamRow,
+                     modeModel = ModeRow, powerModel = PowerRow, optModeModel = ModeRow,
+                     paramModel = ParamRow, compModel = CompRow, clearModel = ClearRow,
+                     worstModel = ClearRow, talisCompModel = CompRow, ruleModel = RuleRow,
+                     talisModel = TalisRow, noteModel = NoteRow)
 
 """
 State shared between a `DesignSession` and its QML window: the property map `app`,
@@ -250,16 +294,20 @@ function BriareusShell(sess::DesignSession; queue::Channel{Any} = Channel{Any}(I
     _set!(sh, "grabPath", "")
     _set!(sh, "cutaway", true)
     mark = (_...) -> (sh.dirty[] = true)
-    ts, bt, dr, st, rv = sess.target, sess.beams, sess.drive, sess.optimize, sess.review
-    for obs in (sess.step, sess.status, ts.kind, ts.params, ts.resolution, ts.target, ts.error,
-                bt.beams, bt.enabled, bt.preset, bt.by, bt.path, bt.error,
+    ts, bt, dr, st, rv, tl = sess.target, sess.beams, sess.drive, sess.optimize, sess.review,
+                             sess.talis
+    for obs in (sess.step, sess.status, ts.kind, ts.params, ts.resolution, ts.windows, ts.target,
+                ts.error,
+                bt.beams, bt.enabled, bt.preset, bt.by, bt.path, bt.error, bt.warnings,
                 dr.scenario, dr.building, dr.result, dr.evaluating, dr.field, dr.view,
-                dr.spot_radius, dr.status,
+                dr.spot_radius, dr.status, dr.kit_running, dr.kit_status,
                 st.by, st.fields, st.deltas, st.objective, st.weights, st.hold_drive, st.keepout,
                 st.keepout_min, st.spill, st.iterations, st.running, st.evaluations, st.status,
                 st.error, st.result,
                 rv.targets, rv.hardware, rv.peak_fraction, rv.wings, rv.errors, rv.quality,
-                rv.running, rv.progress, rv.status, rv.error, rv.report)
+                rv.view, rv.running, rv.progress, rv.status, rv.error, rv.report,
+                tl.capture, tl.hardware, tl.tolerance, tl.pivot, tl.pivot_point, tl.omega1,
+                tl.running, tl.status, tl.error, tl.report)
         on(mark, obs)
     end
     _refresh!(sh)
@@ -310,6 +358,12 @@ function _refresh_target!(sh::BriareusShell)
     for (k, v) in ts.params[]
         _set!(sh, "t_" * String(k), _num(v))
     end
+    ws = ts.windows[]
+    rows = [WindowRow(i, String(window_name(i)), _num(w.phi), _num(w.z), _num(w.width),
+                      _num(w.height), w.open, _num(w.albedo), _num(w.conversion))
+            for (i, w) in enumerate(ws)]
+    _sync_rows!(sh.rows[:windowModel], sh.models[:windowModel], rows)
+    _set!(sh, "windowCount", length(ws))
     return
 end
 
@@ -321,6 +375,7 @@ function _refresh_beams!(sh::BriareusShell)
     _set!(sh, "beamsSummary", beams_summary(bt))
     _set!(sh, "beamsError", bt.error[])
     _set!(sh, "beamsPath", bt.path[])
+    _set!(sh, "beamsWarnings", join(bt.warnings[], "\n"))
     rows = [BeamRow(i, r.key, r.count, @sprintf("%.2f", r.theta), isnan(r.phi) ? "–" : @sprintf("%.2f", r.phi),
                     _fix(r.z), _fix(r.r), _fix(r.phi_offset), _fix(r.defocus), _num(r.power),
                     r.enabled === missing ? 2 : r.enabled ? 1 : 0)
@@ -362,6 +417,9 @@ function _refresh_drive!(sh::BriareusShell)
     _sync_rows!(sh.rows[:powerModel], sh.models[:powerModel], power)
     _set!(sh, "delivered", res === nothing ? "" :
                            @sprintf("%.4g TW delivered", res.evaluation.deposition.delivered))
+    _set!(sh, "kitRunning", dr.kit_running[])
+    _set!(sh, "kitStatus", dr.kit_status[])
+    _set!(sh, "kitReady", Controllers._drive_current(sess))
     return
 end
 
@@ -436,6 +494,53 @@ function _refresh_review!(sh::BriareusShell)
     _sync_rows!(sh.rows[:compModel], sh.models[:compModel], comps)
     _sync_rows!(sh.rows[:clearModel], sh.models[:clearModel], ClearRow[_clear_row(x) for x in clearance_rows(rv)])
     _sync_rows!(sh.rows[:worstModel], sh.models[:worstModel], ClearRow[_clear_row(x) for x in worst_rows(rv)])
+    _set!(sh, "rvView", String(rv.view[]))
+    _refresh_talis!(sh)
+    return
+end
+
+_unit(u::Symbol) = u === :deg ? "°" : String(u)
+# A margin or distance; ±Inf means the rule found nothing to measure (no free edge, all
+# hardware downstream of the landing point).
+_val(x::Real, u::Symbol) = isfinite(x) ? @sprintf("%+.3f %s", x, _unit(u)) : x > 0 ? "n/a" : "–"
+_val0(x::Real, u::Symbol) = isfinite(x) ? @sprintf("%.3f %s", x, _unit(u)) : x > 0 ? "n/a" : "–"
+
+function _talis_row(x::TaLISRow)
+    return TalisRow(x.beam, get(TALIS_RULE_LABELS, x.rule, String(x.rule)), String(x.component),
+                    String(x.status), _val(x.margin, x.unit), _val0(x.worst, x.unit),
+                    _val0(x.nominal, x.unit), _val0(x.required, x.unit), x.note)
+end
+
+function _refresh_talis!(sh::BriareusShell)
+    sess = sh.sess
+    tl = sess.talis
+    _set!(sh, "tlTolerance", _num(tl.tolerance[]))
+    _set!(sh, "tlPivot", String(tl.pivot[]))
+    _set!(sh, "tlPivotPoint", join((_num(v) for v in tl.pivot_point[]), ", "))
+    _set!(sh, "tlOmega1", tl.omega1[])
+    _set!(sh, "tlRunning", tl.running[])
+    _set!(sh, "tlElapsed", tl.running[] ? Controllers._seconds(time() - tl.started[]) : "")
+    _set!(sh, "tlStatus", tl.status[])
+    _set!(sh, "tlError", tl.error[])
+    _set!(sh, "tlHasReport", tl.report[] !== nothing)
+    _set!(sh, "tlBrief", talis_brief(tl))
+    _set!(sh, "tlStale", talis_stale(tl, sess.target.target[], active_beams(sess.beams)))
+    comps = [CompRow(String(n), n in tl.capture[] ? "capture" : n in tl.hardware[] ? "hardware" : "none")
+             for n in surface_names(sess.target.target[])]
+    _sync_rows!(sh.rows[:talisCompModel], sh.models[:talisCompModel], comps)
+    # the rows change only with the report (hundreds of them: not on every refresh)
+    if get(sh.shown, "_talisReport", missing) !== tl.report[]
+        sh.shown["_talisReport"] = tl.report[]
+        rules = [RuleRow(r.label, r.requirement, r.pass, r.review, r.fail,
+                         _val(r.worst.margin, r.worst.unit), r.worst.beam * " / " * String(r.worst.component),
+                         r.fail > 0 ? "fail" : r.review > 0 ? "review" : "pass")
+                 for r in talis_rule_rows(tl)]
+        _sync_rows!(sh.rows[:ruleModel], sh.models[:ruleModel], rules)
+        _sync_rows!(sh.rows[:talisModel], sh.models[:talisModel],
+                    TalisRow[_talis_row(x) for x in talis_rows(tl)])
+    end
+    _sync_rows!(sh.rows[:noteModel], sh.models[:noteModel],
+                NoteRow[NoteRow(String(n.kind), n.text) for n in talis_notes(tl)])
     return
 end
 
@@ -503,7 +608,8 @@ function br_tick()
     end
     sess = sh.sess
     # running jobs report elapsed time on the rail
-    (sess.drive.building[] || sess.optimize.running[] || sess.review.running[]) && (sh.dirty[] = true)
+    (sess.drive.building[] || sess.optimize.running[] || sess.review.running[] ||
+     sess.talis.running[]) && (sh.dirty[] = true)
     sh.dirty[] && (sh.dirty[] = false; _refresh!(sh))
     redraw = sh.scene.dirty[] || sh.map.dirty[]
     sh.scene.dirty[] = false
@@ -518,6 +624,23 @@ br_set_step(name) = _with_shell(sh -> set_step!(sh.sess, _sym(name)))
 br_set_target_kind(kind) = _with_shell(sh -> set_target_kind!(sh.sess.target, _sym(kind)))
 br_set_resolution(r) = _with_shell(sh -> set_resolution!(sh.sess.target, _sym(r)))
 br_edit_target(key, text) = _with_shell(sh -> edit_target!(sh.sess.target, _sym(key), string(text)))
+br_add_window() = _with_shell(sh -> add_window!(sh.sess.target))
+br_remove_window(row) = _with_shell(sh -> remove_window!(sh.sess.target, round(Int, row)))
+function br_edit_window(row, key, text)
+    _with_shell() do sh
+        k = round(Int, row)
+        # a rejected edit keeps the window: re-send its row so the field shows it again
+        edit_window!(sh.sess.target, k, _sym(key), string(text)) ||
+            (k <= length(sh.rows[:windowModel]) && (sh.models[:windowModel][k] = sh.rows[:windowModel][k]))
+    end
+end
+function br_window_open(row, on)
+    _with_shell() do sh
+        k = round(Int, row)
+        set_window_open!(sh.sess.target, k, Bool(on)) ||
+            (k <= length(sh.rows[:windowModel]) && (sh.models[:windowModel][k] = sh.rows[:windowModel][k]))
+    end
+end
 # Beams
 br_load_preset(name) = _with_shell(sh -> load_preset!(sh.sess, _sym(name)))
 br_set_grouping(by) = _with_shell(sh -> set_grouping!(sh.sess.beams, _sym(by)))
@@ -535,12 +658,24 @@ br_import_beams(url) = _with_shell(sh -> (import_beams!(sh.sess.beams, _url_to_p
                                           sh.sess.status[] = "imported " * basename(sh.sess.beams.path[])))
 br_export_beams(url) = _with_shell(sh -> (export_beams(sh.sess.beams, _url_to_path(String(url)));
                                           sh.sess.status[] = "exported " * basename(sh.sess.beams.path[])))
+function _visrad_io(f, url, verb)
+    _with_shell() do sh
+        path = _url_to_path(String(url))
+        f(sh.sess.beams, path)
+        sh.sess.status[] = verb * " " * basename(path)
+    end
+end
+br_import_sst(url) = _visrad_io(import_visrad_sst!, url, "applied VisRad pointing from")
+br_import_summary(url) = _visrad_io(import_visrad_summary!, url, "applied the VisRad beam summary")
+br_export_sst(url) = _visrad_io(export_visrad_sst, url, "wrote VisRad pointing to")
+br_export_summary(url) = _visrad_io(export_visrad_summary, url, "wrote the VisRad beam summary to")
 # Drive
 br_build() = _with_shell(sh -> build_scenario!(sh.sess))
 br_set_field(f) = _with_shell(sh -> set_field!(sh.sess.drive, _sym(f)))
 br_set_view(v) = _with_shell(sh -> set_view!(sh.sess.drive, _sym(v)))
 br_set_spot_radius(text) = _with_shell(sh -> (sh.sess.drive.spot_radius[] =
                                                   Controllers._parse_number(string(text), "the spot radius"; positive = true)))
+br_write_kit(url) = _with_shell(sh -> write_visrad_kit!(sh.sess, _url_to_path(String(url))))
 # Optimize
 br_opt_set_by(by) = _with_shell(sh -> (by = _sym(by); by in BEAM_GROUPINGS &&
                                                       Controllers._assign!(sh.sess.optimize.by, by)))
@@ -561,6 +696,15 @@ br_rv_quality(q) = _with_shell(sh -> (q = _sym(q); haskey(REVIEW_QUALITY, q) &&
 br_rv_start() = _with_shell(sh -> start_clearance!(sh.sess))
 br_rv_cancel() = _with_shell(sh -> cancel_clearance!(sh.sess))
 br_rv_export(url) = _with_shell(sh -> export_clearance(sh.sess.review, _url_to_path(String(url))))
+br_rv_view(v) = _with_shell(sh -> set_review_view!(sh.sess.review, _sym(v)))
+# TaLIS
+br_tl_role(name, role) = _with_shell(sh -> set_talis_role!(sh.sess.talis, _sym(name), _sym(role)))
+br_tl_edit(key, text) = _with_shell(sh -> edit_talis!(sh.sess.talis, _sym(key), string(text)))
+br_tl_pivot(p) = _with_shell(sh -> set_talis_pivot!(sh.sess.talis, _sym(p)))
+br_tl_omega1(on) = _with_shell(sh -> Controllers._assign!(sh.sess.talis.omega1, Bool(on)))
+br_tl_start() = _with_shell(sh -> start_talis!(sh.sess))
+br_tl_cancel() = _with_shell(sh -> cancel_talis!(sh.sess))
+br_tl_export(url) = _with_shell(sh -> export_talis(sh.sess.talis, _url_to_path(String(url))))
 # Viewer
 br_set_cutaway(on) = _with_shell(sh -> (set_cutaway!(sh.scene, sh.sess, Bool(on)); _set!(sh, "cutaway", Bool(on))))
 br_reset_view() = _with_shell(sh -> sh.figure === sh.map.fig ? (reset_limits!(sh.map.ax); sh.map.dirty[] = true) :
@@ -574,6 +718,10 @@ function _register_qml_functions()
     @qmlfunction br_opt_hold br_opt_keepout br_opt_start br_opt_cancel br_opt_accept
     @qmlfunction br_rv_role br_rv_edit br_rv_wings br_rv_quality br_rv_start br_rv_cancel
     @qmlfunction br_rv_export br_set_cutaway br_reset_view
+    @qmlfunction br_add_window br_remove_window br_edit_window br_window_open
+    @qmlfunction br_import_sst br_import_summary br_export_sst br_export_summary br_write_kit
+    @qmlfunction br_rv_view br_tl_role br_tl_edit br_tl_pivot br_tl_omega1 br_tl_start
+    @qmlfunction br_tl_cancel br_tl_export
     return
 end
 
@@ -586,28 +734,33 @@ end
 Open the Briareus window and return its session when the window closes. Its steps:
 
 - **Target** — a hohlraum (length, radius, LEH and capsule radii, wall albedo and
-  conversion) or a backlighter foil, and the mesh resolution; the 3D view colors the
-  mesh by component.
+  conversion, and diagnostic windows in the wall, open or closed) or a backlighter
+  foil, and the mesh resolution; the 3D view colors the mesh by component and
+  outlines the windows.
 - **Beams** — a facility preset or an imported beam table (CSV), edited per cone, quad
-  or beam: aim, defocus, power, on/off; the 3D view draws each beam's axis from its
-  port to its aim point.
+  or beam: aim, defocus, power, on/off; VisRad SST pointing and Laser Beam Summary
+  files import onto the table and export from it; the 3D view draws each beam's axis
+  from its port to its aim point.
 - **Drive** — the view factors (computed on a worker; seconds to tens of seconds),
   then the target colored by absorbed laser intensity, x-ray radiosity or incident
   flux (W/cm²), the capsule flux map over θ–φ, the mode amplitudes ε₁…ε₄ and Pₗ/P₀, and
-  the laser power accounting. Later beam edits re-evaluate at once.
+  the laser power accounting. Later beam edits re-evaluate at once. A VisRad
+  benchmark kit (`write_visrad_kit`) writes the case to a folder.
 - **Optimize** — free fields and bounds per group, an objective (capsule symmetry,
   axisymmetric or 3D, or foil uniformity) with mode weights, run in the background
   with progress and cancel; before/after modes and the parameter table; accepting
   puts the optimized pointing into the beam table.
 - **Review** — worst-case beam-to-hardware clearance on chosen hardware, in the
   background with progress and cancel; rows colored by status, the closest beam per
-  component, and CSV export.
+  component, and CSV export. A TaLIS tab runs the target-configuration rules
+  (`talis_check`) on chosen capture surfaces and hardware with a chosen rule-tolerance
+  interpretation, and shows every check by status with the report's notes.
 
 The session starts from `sess`, or a fresh `DesignSession(; kind, resolution,
 preset, beams)`; `build = true` starts computing the drive at once. The call blocks
 while the window is open (Qt runs its event loop on this thread); start Julia with
 several threads (`julia -t auto`) so background jobs leave the window responsive.
-Closing the window cancels an optimization or clearance check in progress.
+Closing the window cancels an optimization, clearance or TaLIS check in progress.
 
 The window throws an `ArgumentError` when this Julia session already has a GLMakie
 screen (a GLMakie window or an offscreen `colorbuffer`): GLMakie's windows and the Qt

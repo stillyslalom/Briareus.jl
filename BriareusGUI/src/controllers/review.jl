@@ -1,7 +1,7 @@
 # The Review step: worst-case beam-to-hardware clearance (`clearance`) of the enabled
-# beams on chosen hardware components. Each beam's rows are independent, so the check
-# runs in chunks of beams on a worker: progress between chunks, cancel keeps the rows
-# already computed.
+# beams on chosen hardware components, on a worker. `clearance` checks the beams in
+# batches and reports progress through its callback between them; canceling returns
+# the rows of the beams already checked. The step's TaLIS checks live in talis.jl.
 
 """
 Clearance-check quality presets: `:quick` (hardware sampled at triangle vertices and
@@ -11,8 +11,16 @@ Clearance-check quality presets: `:quick` (hardware sampled at triangle vertices
 const REVIEW_QUALITY = Dict(:quick => (; level = 1, nangles = 8, nspot = 31),
                             :standard => (; level = 2, nangles = 16, nspot = 61))
 
-# Beams per clearance call: progress and cancel granularity.
-const REVIEW_CHUNK = 4
+"""
+    review_batch() -> Int
+
+Beams per `clearance` batch (its `batch` keyword): the progress and cancel
+granularity of the Review step's check. One beam per thread, at least 4.
+"""
+review_batch() = max(4, Threads.nthreads())
+
+"Views of the Review step: worst-case clearance, or the TaLIS rule checks."
+const REVIEW_VIEWS = (:clearance, :talis)
 
 """
     ReviewState()
@@ -21,10 +29,11 @@ State of the Review step. Settings: `targets` (components the beams should land 
 hardware beyond a beam's landing is not checked), `hardware` (components checked),
 `peak_fraction` (envelope contour, fraction of each spot's peak), `wings` (include
 the clearance-only `nif_wings` far field), the error stack `pointing`,
-`target_offset`, `hardware_tolerance`, `focus` (mm), and `quality` (a
-[`REVIEW_QUALITY`](@ref) key). Job: `running`, `progress` `(beams done, total)`,
-`started`, `status`, `report` (a core `ClearanceReport`, partial after a cancel),
-and `inputs` (the target and beams it checked).
+`target_offset`, `hardware_tolerance`, `focus` (mm; the TaLIS checks use it too), and
+`quality` (a [`REVIEW_QUALITY`](@ref) key). `view` is the shown part of the step (one
+of [`REVIEW_VIEWS`](@ref)). Job: `running`, `progress` `(beams done, total)`,
+`started`, `status`, `report` (a core `ClearanceReport`, partial with `canceled` set
+after a cancel), and `inputs` (the target and beams it checked).
 """
 struct ReviewState
     targets::Observable{Vector{Symbol}}
@@ -33,6 +42,7 @@ struct ReviewState
     wings::Observable{Bool}
     errors::Observable{Dict{Symbol,Float64}}
     quality::Observable{Symbol}
+    view::Observable{Symbol}
     running::Observable{Bool}
     progress::Observable{Tuple{Int,Int}}
     started::Observable{Float64}
@@ -40,6 +50,7 @@ struct ReviewState
     error::Observable{String}
     report::Observable{Union{Nothing,ClearanceReport}}
     inputs::Base.RefValue{Any}
+    known::Base.RefValue{Vector{Symbol}}         # components the roles were chosen for
     cancel::Threads.Atomic{Bool}
 end
 
@@ -47,33 +58,63 @@ ReviewState() = ReviewState(Observable(Symbol[]), Observable(Symbol[]), Observab
                             Observable(true),
                             Observable(Dict(:pointing => 0.05, :target_offset => 0.025,
                                             :hardware_tolerance => 0.0, :focus => 1.0)),
-                            Observable(:quick), Observable(false), Observable((0, 0)),
-                            Observable(0.0), Observable(""), Observable(""),
+                            Observable(:quick), Observable(:clearance), Observable(false),
+                            Observable((0, 0)), Observable(0.0), Observable(""), Observable(""),
                             Observable{Union{Nothing,ClearanceReport}}(nothing), Ref{Any}(nothing),
-                            Threads.Atomic{Bool}(false))
+                            Ref(Symbol[]), Threads.Atomic{Bool}(false))
+
+# Whether a component is where beams are meant to land by default (a hohlraum wall or
+# capsule, a backlighter foil); everything else is hardware to check.
+_lands_on(name::Symbol) = name in (:wall, :capsule, FOIL_NAME)
+
+# Keep two role lists (`first`, `second`) in step with a target's components: roles of
+# known components stay; new components get `role(name)` (`1`, `2`, or `0` for none);
+# if no component keeps the first role, every role is chosen afresh.
+function _update_roles!(first::Observable, second::Observable, known::Base.RefValue,
+                        names::Vector{Symbol}, role)
+    a = filter(in(names), first[])
+    b = filter(in(names), second[])
+    fresh = isempty(a)
+    for n in names
+        (fresh || !(n in known[])) || continue
+        fresh && (filter!(!=(n), a); filter!(!=(n), b))
+        r = role(n)
+        r == 1 ? push!(a, n) : r == 2 && push!(b, n)
+    end
+    if isempty(a) && !isempty(names)              # no default landing component
+        a = names[1:1]
+        b = names[2:end]
+    end
+    known[] = copy(names)
+    _assign!(first, a)
+    _assign!(second, b)
+    return nothing
+end
 
 """
     default_selection!(rv::ReviewState, t::Target)
 
-Choose the landing targets and hardware for a target: a hohlraum's beams land on the
-wall (and capsule) and the LEH caps are checked; a foil's beams land on the foil and
-the main target is checked. Keeps a selection that still names existing components.
+Choose the landing targets and hardware for a target's components: a hohlraum's beams
+land on the wall and capsule and everything else (LEH caps, closed diagnostic
+windows) is checked; a foil's beams land on the foil and the main target is checked.
+Components the selection was already made for keep their roles; new components get
+the default role.
 """
 function default_selection!(rv::ReviewState, t::Target)
-    names = surface_names(t)
-    keep(v) = !isempty(v) && all(in(names), v)
-    if !(keep(rv.targets[]) && all(in(names), rv.hardware[]))
-        if :wall in names
-            _assign!(rv.targets, [n for n in (:wall, :capsule) if n in names])
-            _assign!(rv.hardware, [n for n in (:cap_top, :cap_bottom) if n in names])
-        elseif FOIL_NAME in names
-            _assign!(rv.targets, [FOIL_NAME])
-            _assign!(rv.hardware, filter(!=(FOIL_NAME), names))
-        else
-            _assign!(rv.targets, names[1:min(1, end)])
-            _assign!(rv.hardware, names[2:end])
-        end
-    end
+    _update_roles!(rv.targets, rv.hardware, rv.known, surface_names(t),
+                   n -> _lands_on(n) ? 1 : 2)
+    return rv
+end
+
+"""
+    set_review_view!(rv::ReviewState, view::Symbol)
+
+Show the clearance check or the TaLIS checks (one of [`REVIEW_VIEWS`](@ref)); the
+viewer colors the beams by the shown report.
+"""
+function set_review_view!(rv::ReviewState, view::Symbol)
+    view in REVIEW_VIEWS || throw(ArgumentError("view must be one of $REVIEW_VIEWS"))
+    _assign!(rv.view, view)
     return rv
 end
 
@@ -136,14 +177,17 @@ function clearance_kwargs(rv::ReviewState)
 end
 
 """
-    start_clearance!(rv::ReviewState, target, beams; deliver = f -> f(), spawn = true)
+    start_clearance!(rv::ReviewState, target, beams; deliver = f -> f(), spawn = true,
+                     batch = review_batch())
 
-Check `beams` against the selected hardware of `target` with `clearance`, in chunks
-of [`REVIEW_CHUNK`](@ref) beams (on a worker with `spawn`). [`cancel_clearance!`](@ref)
-stops after the chunk in flight and keeps the rows already computed.
+Check `beams` against the selected hardware of `target` with `clearance` (on a worker
+with `spawn`). `clearance` checks `batch` beams at a time and reports `(; done,
+total)` through its callback after each batch, which updates `progress` through
+`deliver`; [`cancel_clearance!`](@ref) makes the callback stop the check after the
+batch in flight, and the report keeps the rows already computed (`canceled` set).
 """
 function start_clearance!(rv::ReviewState, t::Target, beams::AbstractVector;
-                          deliver = f -> f(), spawn::Bool = true)
+                          deliver = f -> f(), spawn::Bool = true, batch::Integer = review_batch())
     rv.running[] && return rv
     msg = isempty(beams) ? "no beams are enabled" :
           isempty(rv.targets[]) ? "choose the components the beams land on" :
@@ -158,36 +202,32 @@ function start_clearance!(rv::ReviewState, t::Target, beams::AbstractVector;
     rv.status[] = "checking…"
     rv.running[] = true
     job = function ()
-        rows = ClearanceRow[]
-        head = nothing
-        outcome = try
-            for lo in 1:REVIEW_CHUNK:length(bs)
-                rv.cancel[] && throw(JobCancelled())
-                hi = min(lo + REVIEW_CHUNK - 1, length(bs))
-                rep = clearance(t, bs[lo:hi]; kw...)
-                head === nothing && (head = rep)
-                append!(rows, rep.rows)
-                deliver(() -> (rv.progress[] = (hi, length(bs))))
-            end
-            :done
-        catch err
-            err isa JobCancelled ? :canceled : err
+        # runs on the job's task between batches: report progress, poll the cancel flag
+        progress = function (p)
+            done, total = p.done, p.total
+            deliver(() -> (rv.progress[] = (done, total)))
+            return rv.cancel[]
         end
-        report = head === nothing ? nothing :
-                 ClearanceReport(rows, head.contour, head.transverse, head.errors, head.margin,
-                                 head.targets, head.thresholds)
-        deliver(() -> _finish_clearance!(rv, report, outcome))
+        out = _try_job(() -> clearance(t, bs; kw..., callback = progress, batch))
+        deliver(() -> _finish_clearance!(rv, out))
     end
     _run_job(job, spawn)
     return rv
 end
 
-function _finish_clearance!(rv::ReviewState, report, outcome)
-    rv.report[] = report
-    done, total = rv.progress[]
-    rv.status[] = outcome === :done ? "done: " * review_brief(rv) :
-                  outcome === :canceled ? "canceled after $done of $total beams" :
-                  "failed: " * _errmsg(outcome)
+function _finish_clearance!(rv::ReviewState, out)
+    rep = out.value
+    if out.err !== nothing
+        rv.status[] = "failed: " * _errmsg(out.err)
+    elseif rep.canceled
+        # nothing checked yet: keep no report
+        rv.report[] = isempty(rep.rows) ? nothing : rep
+        done, total = rv.progress[]
+        rv.status[] = "canceled after $done of $total beams"
+    else
+        rv.report[] = rep
+        rv.status[] = "done: " * review_brief(rv)
+    end
     rv.running[] = false
     return rv
 end
@@ -195,7 +235,8 @@ end
 """
     cancel_clearance!(rv::ReviewState)
 
-Stop after the chunk of beams in flight; rows already computed are kept.
+Stop after the batch of beams in flight (`clearance`'s callback returns `true`); the
+rows already computed are kept.
 """
 cancel_clearance!(rv::ReviewState) = (rv.cancel[] = true; rv)
 
@@ -232,7 +273,8 @@ function review_brief(rv::ReviewState)
     nr = count(x -> x.status === :review, r.rows)
     worst = minimum(x -> x.clearance, r.rows)
     nb = length(unique(x.beam for x in r.rows))
-    return @sprintf("%d beams: %d fail, %d review · worst clearance %.3f mm", nb, nf, nr, worst)
+    return @sprintf("%d beams%s: %d fail, %d review · worst clearance %.3f mm", nb,
+                    r.canceled ? " (canceled, partial)" : "", nf, nr, worst)
 end
 
 """

@@ -38,7 +38,8 @@ State of the Beams step: `beams` (every beam of the table, in table order), `ena
 (one flag per beam; disabled beams are kept but deliver no power), `preset` (one of
 [`BEAM_PRESETS`](@ref), or `:custom` for an imported or scripted table), `by` (row
 grouping, one of [`BEAM_GROUPINGS`](@ref)), `path` (the last imported or exported
-file), and `error` (the last rejected edit).
+file), `error` (the last rejected edit), and `warnings` (what the last VisRad import
+warned about: unmatched beams, port-angle mismatches, …).
 """
 struct BeamTable
     beams::Observable{Vector{Beam{Float64}}}
@@ -47,12 +48,13 @@ struct BeamTable
     by::Observable{Symbol}
     path::Observable{String}
     error::Observable{String}
+    warnings::Observable{Vector{String}}
 end
 
 function BeamTable(beams::AbstractVector = Beam{Float64}[]; preset::Symbol = :custom)
     bs = Beam{Float64}[_float_beam(b) for b in beams]
     return BeamTable(Observable(bs), Observable(fill(true, length(bs))), Observable(preset),
-                     Observable(:group), Observable(""), Observable(""))
+                     Observable(:group), Observable(""), Observable(""), Observable(String[]))
 end
 
 _float_beam(b::Beam{Float64}) = b
@@ -121,6 +123,7 @@ function set_beams!(bt::BeamTable, beams::AbstractVector; preset::Symbol = :cust
     bt.beams[] = Beam{Float64}[_float_beam(b) for b in beams]
     notify(bt.enabled)
     bt.error[] = ""
+    isempty(bt.warnings[]) || (bt.warnings[] = String[])
     return bt
 end
 
@@ -258,6 +261,111 @@ Write the table (or only the enabled beams) with `write_beam_table`.
 """
 function export_beams(bt::BeamTable, path::AbstractString; enabled_only::Bool = false)
     write_beam_table(path, enabled_only ? active_beams(bt) : bt.beams[])
+    bt.path[] = String(path)
+    return path
+end
+
+# ---------------------------------------------------------------- VisRad files
+
+# Collects the warnings logged while reading a file (the VisRad readers report
+# unmatched beams, port-angle mismatches and the like with @warn).
+struct _WarningCollector <: Base.CoreLogging.AbstractLogger
+    messages::Vector{String}
+end
+Base.CoreLogging.min_enabled_level(::_WarningCollector) = Base.CoreLogging.Warn
+Base.CoreLogging.shouldlog(::_WarningCollector, args...) = true
+Base.CoreLogging.catch_exceptions(::_WarningCollector) = false
+function Base.CoreLogging.handle_message(c::_WarningCollector, level, msg, _module, group, id,
+                                         file, line; kwargs...)
+    level < Base.CoreLogging.Warn && return nothing
+    s = string(msg)
+    kw = [(k, v) for (k, v) in kwargs if k !== :maxlog]
+    isempty(kw) ||
+        (s *= " (" * join(("$k = $(v isa AbstractVector ? join(first(v, 12), ", ") * (length(v) > 12 ? ", …" : "") : v)"
+                           for (k, v) in kw), "; ") * ")")
+    push!(c.messages, length(s) > 400 ? s[1:prevind(s, 400)] * "…" : s)
+    return nothing
+end
+
+function _with_warnings(f)
+    c = _WarningCollector(String[])
+    v = Base.CoreLogging.with_logger(f, c)
+    return v, unique(c.messages)
+end
+
+# Apply beams read from a VisRad file with the table as template. A beam the file
+# turns off (absent from it, or "Off") becomes disabled at its previous power, so it
+# can be switched back on; the others are enabled, as VisRad turns on the beams the
+# file has data for.
+function _apply_visrad!(bt::BeamTable, read, path::AbstractString)
+    old = bt.beams[]
+    isempty(old) && throw(ArgumentError("load a beam preset first: the VisRad file is applied to the table"))
+    new, warns = _with_warnings(() -> read(old))
+    length(new) == length(old) || throw(ArgumentError("$(basename(path)) did not match the beam table"))
+    en = copy(bt.enabled[])
+    bs = Beam{Float64}[]
+    noff = 0
+    for (i, (a, b)) in enumerate(zip(old, new))
+        b = _float_beam(b)
+        if b.power == 0 && a.power > 0
+            en[i] = false
+            noff += 1
+            b = remake(b; power = a.power)
+        elseif b.power > 0
+            en[i] = true
+        end
+        push!(bs, b)
+    end
+    set_beams!(bt, bs; preset = bt.preset[], enabled = en)
+    noff > 0 && pushfirst!(warns, (noff == 1 ? "1 beam of the table is" : "$noff beams of the table are") *
+                                  " off or absent in $(basename(path)): disabled (power kept)")
+    bt.warnings[] = warns
+    bt.path[] = String(path)
+    return bt
+end
+
+"""
+    import_visrad_sst!(bt::BeamTable, path)
+
+Apply a NIF SST pointing CSV (`read_visrad_sst`, as VisRad exports it) to the table:
+each beam in the file gets its aim point and defocus (mm; quads take the mean of their
+four beams); powers and spots stay. As in VisRad, beams absent from the file are
+turned off: here they are disabled at their power. Warnings land in `warnings`.
+"""
+import_visrad_sst!(bt::BeamTable, path::AbstractString) =
+    _apply_visrad!(bt, old -> read_visrad_sst(path; template = old, missing = :off), path)
+
+"""
+    import_visrad_summary!(bt::BeamTable, path)
+
+Apply a VisRad Laser Beam Summary CSV (`read_visrad_summary`) to the table: pointing,
+defocus, power and spot of each beam in the file (port angles are checked against the
+table's, with a warning). Beams that are "Off" or absent are disabled at their power.
+Warnings land in `warnings`.
+"""
+import_visrad_summary!(bt::BeamTable, path::AbstractString) =
+    _apply_visrad!(bt, old -> read_visrad_summary(path; template = old, missing = :off), path)
+
+"""
+    export_visrad_sst(bt::BeamTable, path) -> path
+
+Write the enabled beams' pointing as a NIF SST CSV (`write_visrad_sst`; quads as their
+four beams, disabled beams left out so VisRad turns them off).
+"""
+function export_visrad_sst(bt::BeamTable, path::AbstractString)
+    write_visrad_sst(path, display_beams(bt))
+    bt.path[] = String(path)
+    return path
+end
+
+"""
+    export_visrad_summary(bt::BeamTable, path) -> path
+
+Write the table as a VisRad Laser Beam Summary CSV (`write_visrad_summary`; disabled
+beams "Off").
+"""
+function export_visrad_summary(bt::BeamTable, path::AbstractString)
+    write_visrad_summary(path, display_beams(bt))
     bt.path[] = String(path)
     return path
 end

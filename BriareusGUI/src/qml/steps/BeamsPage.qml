@@ -7,7 +7,8 @@ import jlqml
 StepPage {
     id: page
     title: "Beams"
-    guidance: "Load a facility preset or a beam table, then edit pointing per cone, quad or " +
+    guidance: "Load a facility preset or a beam table (VisRad pointing and beam-summary files " +
+              "apply to the loaded table), then edit pointing per cone, quad or " +
               "beam. Aim z is along the hohlraum axis (per cone, mirrored for the lower " +
               "hemisphere), r toward the beam's own port azimuth, and the tangential offset " +
               "counterclockwise about z (mm). Positive defocus puts best focus beyond the aim " +
@@ -36,7 +37,49 @@ StepPage {
         }
         Button { text: "Export…"; onClicked: exportDialog.open() }
     }
+    Flow {
+        spacing: 8
+        Layout.fillWidth: true
+        Label { text: "VisRad files"; height: 32; verticalAlignment: Text.AlignVCenter }
+        Button {
+            text: "Import SST…"
+            enabled: table.count > 0
+            onClicked: { visradDialog.mode = "import_sst"; visradDialog.open() }
+            ToolTip.visible: hovered
+            ToolTip.text: "Apply a NIF SST pointing CSV (aim points and defocus) to this table; " +
+                          "beams absent from the file are switched off"
+        }
+        Button {
+            text: "Import summary…"
+            enabled: table.count > 0
+            onClicked: { visradDialog.mode = "import_summary"; visradDialog.open() }
+            ToolTip.visible: hovered
+            ToolTip.text: "Apply a VisRad Laser Beam Summary CSV (pointing, defocus, power, spot) " +
+                          "to this table; beams off or absent in the file are switched off"
+        }
+        Button {
+            text: "Export SST…"
+            enabled: table.count > 0
+            onClicked: { visradDialog.mode = "export_sst"; visradDialog.open() }
+            ToolTip.visible: hovered
+            ToolTip.text: "Write the enabled beams' pointing as a NIF SST CSV (VisRad: Import Laser Beam Data, Pointing Data)"
+        }
+        Button {
+            text: "Export summary…"
+            enabled: table.count > 0
+            onClicked: { visradDialog.mode = "export_summary"; visradDialog.open() }
+            ToolTip.visible: hovered
+            ToolTip.text: "Write the table in VisRad's Laser Beam Summary layout"
+        }
+    }
     Label { text: app.beamsSummary; opacity: 0.75 }
+    Label {
+        text: app.beamsWarnings
+        visible: text !== ""
+        color: "#d08a00"
+        wrapMode: Text.WordWrap
+        Layout.fillWidth: true
+    }
 
     RowLayout {
         spacing: 8
@@ -128,5 +171,27 @@ StepPage {
         defaultSuffix: "csv"
         nameFilters: ["Beam table (*.csv)"]
         onAccepted: Julia.br_export_beams(selectedFile.toString())
+    }
+    // one dialog for the four VisRad files
+    FileDialog {
+        id: visradDialog
+        property string mode: "import_sst"
+        readonly property bool saving: mode.startsWith("export")
+        title: {
+            if (mode === "import_sst") return "Apply a NIF SST pointing file"
+            if (mode === "import_summary") return "Apply a VisRad Laser Beam Summary"
+            if (mode === "export_sst") return "Write the pointing as a NIF SST file"
+            return "Write a VisRad Laser Beam Summary"
+        }
+        fileMode: saving ? FileDialog.SaveFile : FileDialog.OpenFile
+        defaultSuffix: "csv"
+        nameFilters: ["CSV (*.csv *.txt)", "All files (*)"]
+        onAccepted: {
+            const url = selectedFile.toString()
+            if (mode === "import_sst") Julia.br_import_sst(url)
+            else if (mode === "import_summary") Julia.br_import_summary(url)
+            else if (mode === "export_sst") Julia.br_export_sst(url)
+            else Julia.br_export_summary(url)
+        }
     }
 }
