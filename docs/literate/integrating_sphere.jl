@@ -20,7 +20,8 @@ using Briareus
 using CairoMakie
 using LinearAlgebra
 using Printf
-CairoMakie.activate!(type = "png")
+CairoMakie.activate!(type = "png", px_per_unit = 2)
+include(joinpath(pkgdir(Briareus), "docs", "literate", "_plotting.jl"))   # figure helpers
 
 # ## The sphere multiplier
 #
@@ -91,22 +92,26 @@ flat = sphere_solution(flat_target)
 #
 # [`RadiationModel`](@ref) computes the view factors between all elements, and
 # [`solve`](@ref) returns the radiosity ``B`` and the incident flux ``H`` of every
-# element. The incident flux on the wall, against the angular distance from the center
-# of the heated spot:
+# element. The relative error of the incident flux on each element of the wall, against
+# its angular distance from the center of the heated spot, on a logarithmic scale that
+# holds both calculations. Elements where the curved calculation is exact to the last
+# bit are drawn at ``10^{-17}``:
 
 function angle_from_spot(s)
     center = normalize(sum(s.dep.element .* s.target.elem_centroid))
     return [acosd(clamp(dot(normalize(s.target.elem_centroid[e]), center), -1, 1)) for e in s.wall]
 end
-fig = Figure(size = (760, 400))
-ax = Axis(fig[1, 1], xlabel = "angle from the heated spot (degrees)", ylabel = "H / H_exact",
-          title = "Incident flux on the wall")
-scatter!(ax, angle_from_spot(flat), flat.solution.H[flat.wall] ./ flat.H_exact,
-         markersize = 3, label = "flat facets")
-scatter!(ax, angle_from_spot(curved), curved.solution.H[curved.wall] ./ curved.H_exact,
-         markersize = 3, label = "curved surface")
-hlines!(ax, [1.0], color = :black)
-axislegend(ax, position = :rb)
+fig = Figure(size = (800, 400))
+ax = Axis(fig[1, 1], xlabel = "angle from the heated spot (degrees)",
+          ylabel = "|H/H_exact − 1|", title = "Incident flux on the wall", yscale = log10,
+          yticks = LogTicks(-17:2:-1), xticks = 0:30:180, limits = ((0, 180), (4e-18, 0.4)))
+for (s, label, marker, markersize) in ((flat, "flat facets", :circle, 4),
+                                       (curved, "curved surface", :diamond, 5))
+    rel_error = abs.(s.solution.H[s.wall] ./ s.H_exact .- 1)
+    scatter!(ax, angle_from_spot(s), max.(rel_error, 1e-17); marker, markersize, label)
+end
+hlines!(ax, [eps()], color = :gray40, linestyle = :dash, label = "machine ε")
+Legend(fig[1, 2], ax; framevisible = false)
 fig
 
 # On the flat facets the flux is uniform far from the spot but scattered by several
@@ -116,7 +121,7 @@ fig
 # an amount of order one, and the spot, which holds most of the source in a few
 # elements, makes that error visible in the flux of its neighbors. Refining the facets
 # reduces the scatter only in proportion to the element size. On the curved surface
-# the flux is uniform to round-off:
+# the flux is uniform to round-off, within 10⁻¹⁴:
 
 for (label, s) in (("flat facets", flat), ("curved surface", curved))
     h = s.solution.H[s.wall] ./ s.H_exact
@@ -149,18 +154,41 @@ function mean_ratio(s, a)
     return sum(sol.H[s.wall] .* Aw) / sum(Aw) / exact
 end
 albedos = 0.0:0.05:0.95
-fig = Figure(size = (720, 400))
-ax = Axis(fig[1, 1], xlabel = "albedo α", ylabel = "mean wall flux / exact",
-          title = "Sphere multiplier")
-hlines!(ax, [1.0], color = :black)
-scatterlines!(ax, albedos, [mean_ratio(flat, a) for a in albedos], label = "flat facets")
-scatterlines!(ax, albedos, [mean_ratio(curved, a) for a in albedos], label = "curved surface")
-axislegend(ax, position = :lb)
+ratios = [[mean_ratio(s, a) for a in albedos] for s in (flat, curved)]
+multiplier(a) = 1 / (1 - a * (1 - curved.f))
+nothing #hide
+
+# The upper panel shows the computed multiplier, the mean wall flux over the direct
+# flux ``\eta P/A``, against the exact one; the lower panel shows the relative error of
+# the mean flux, with exact results drawn at ``10^{-17}``:
+
+fig = Figure(size = (800, 520))
+ax = Axis(fig[1, 1], ylabel = "⟨H⟩ / (ηP/A)", title = "Sphere multiplier",
+          xticklabelsvisible = false)
+αs = range(0, 0.96; length = 200)
+lines!(ax, αs, multiplier.(αs), color = :black, label = "exact 1/[1 − α(1 − f)]")
+scatter!(ax, albedos, ratios[1] .* multiplier.(albedos), marker = :rect, markersize = 11,
+         label = "flat facets")
+scatter!(ax, albedos, ratios[2] .* multiplier.(albedos), marker = :circle, markersize = 6,
+         label = "curved surface")
+axislegend(ax, position = :lt)
+err = Axis(fig[2, 1], xlabel = "albedo α", ylabel = "|⟨H⟩/⟨H⟩_exact − 1|", yscale = log10,
+           yticks = LogTicks(-16:4:-2), limits = (nothing, (4e-18, 1e-2)))
+scatterlines!(err, albedos, max.(abs.(ratios[1] .- 1), 1e-17), marker = :rect, markersize = 9)
+scatterlines!(err, albedos, max.(abs.(ratios[2] .- 1), 1e-17), marker = :circle, markersize = 7)
+hlines!(err, [eps()], color = :gray40, linestyle = :dash)
+text!(err, 0.5, eps(); text = "machine ε", align = (:center, :top), fontsize = 12,
+      color = :gray30)
+linkxaxes!(ax, err)
+rowsize!(fig.layout, 2, Relative(0.4))
+rowgap!(fig.layout, 8)
 fig
 
-# The multiplier reaches ``1/[1 - 0.95(1-f)] \approx 14`` at the right of the plot. The
-# curved calculation follows it to round-off; the rows of its view-factor matrix sum to
-# one to round-off, because the sphere's kernel is integrated exactly:
+# The multiplier reaches ``1/[1 - 0.95(1-f)] \approx 9`` at the right of the plot, with
+# the port taking ``f = 6.3\%`` of the sphere. The faceted cavity's error grows with it,
+# tenfold over these albedos. The curved calculation follows the multiplier to
+# round-off; the rows of its view-factor matrix sum to one to round-off, because the
+# sphere's kernel is integrated exactly:
 
 for (label, s) in (("flat facets", flat), ("curved surface", curved))
     @printf("%-15s largest |closure error| %.1e\n", label, maximum(abs.(closure_error(s.model.F))))
@@ -168,23 +196,36 @@ end
 
 # ## Images
 #
-# Looking into the sphere through the port, the radiosity shows the heated spot while
-# the incident flux is uniform, so uniform that its color scale is given a ±1% range
-# about the mean. [`radiance`](@ref) converts radiosity to the Lambertian radiance an
-# imager records.
+# Looking into the sphere from above through the port, an imager sees the lower
+# hemisphere of the wall. [`radiance`](@ref) converts radiosity to the Lambertian
+# radiance it records, and [`render`](@ref) draws any per-element field as an
+# [`OrthoCamera`](@ref) sees it. The radiance shows the heated spot, about four
+# elements across. The radiance is computed per element, and the left image smooths
+# the element values with a Gaussian 90 µm wide, about half an element, so that the
+# facets of this coarse mesh do not hide the spot's shape; the smoothing lowers the
+# peak by 7%. The other two images show the error of the incident flux of each element,
+# unsmoothed, on one color scale. With flat facets it alternates in sign from triangle
+# to triangle and is largest beside the heated spot; on the curved surface it is too
+# small to see.
 
-camera = OrthoCamera((0, 0, -1); up = (0, 1, 0), width = 2.2, nx = 220)
-fig = Figure(size = (780, 360))
-for (i, (label, field)) in enumerate(("radiance B/π" => radiance(curved.solution),
-                                      "incident flux H" => curved.solution.H))
-    img = render(curved.target, to_Wcm2.(field), camera)
-    panel = Axis(fig[1, 2i-1], title = label, aspect = DataAspect())
-    hidedecorations!(panel)
-    vals = filter(isfinite, img)
-    crange = i == 1 ? extrema(vals) : (0.99, 1.01) .* (sum(vals) / length(vals))
-    hm = heatmap!(panel, reverse(img; dims = 1)'; colormap = :inferno, colorrange = crange)
-    Colorbar(fig[1, 2i], hm, label = i == 1 ? "W/cm²/sr" : "W/cm²")
+camera = OrthoCamera((0, 0, -1); up = (0, 1, 0), width = 2.1, nx = 420)
+B = render_smoothed(curved.target, to_Wcm2.(radiance(curved.solution)) ./ 1e12, :wall, camera;
+                    σ = 0.09)
+flux_error(s) = render(s.target, 100 .* (s.solution.H ./ s.H_exact .- 1), camera)
+fig = Figure(size = (800, 350))
+ax = Axis(fig[1, 1]; title = "radiance B/π", aspect = DataAspect())
+hidedecorations!(ax)
+hm = camera_image!(ax, B, camera; colormap = :inferno, colorrange = (0, maximum(filter(isfinite, B))))
+Colorbar(fig[2, 1], hm; vertical = false, flipaxis = false, width = Relative(0.85),
+         label = "B/π (10¹² W/cm²/sr)")
+for (j, (title, s)) in enumerate((("H, flat facets", flat), ("H, curved surface", curved)))
+    local ax = Axis(fig[1, j + 1]; title, aspect = DataAspect())
+    hidedecorations!(ax)
+    camera_image!(ax, flux_error(s), camera; colormap = :balance, colorrange = (-12.5, 12.5))
 end
+Colorbar(fig[2, 2:3]; colormap = :balance, colorrange = (-12.5, 12.5), vertical = false,
+         flipaxis = false, width = Relative(0.6), label = "H/H_exact − 1 (%)")
+rowgap!(fig.layout, 6)
 fig
 
 # ## What this checks

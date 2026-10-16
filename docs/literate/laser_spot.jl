@@ -20,7 +20,8 @@ using Briareus
 using CairoMakie
 using LinearAlgebra
 using Printf
-CairoMakie.activate!(type = "png")
+CairoMakie.activate!(type = "png", px_per_unit = 2)
+include(joinpath(pkgdir(Briareus), "docs", "literate", "_plotting.jl"))   # figure helpers
 
 # ## The spot and its defocus
 #
@@ -119,14 +120,27 @@ for s in shifts
     push!(ray_spread, spread(raytrace_deposition(target, [b]; nspot = 61, ncone = 61)))
 end
 
-fig = Figure(size = (720, 420))
-ax = Axis(fig[1, 1], xlabel = "distance from best focus s (mm)",
-          ylabel = "⟨r²⟩ (mm²)", title = "Spot growth through focus")
-ss = range(-4, 4; length = 200)
+# The upper panel compares the second moments with the exact growth; the lower panel
+# shows their relative errors, ``\langle r^2\rangle/\langle r^2\rangle_{\rm exact} - 1``.
+
+fig = Figure(size = (800, 520))
+ax = Axis(fig[1, 1], ylabel = "⟨r²⟩ (mm²)", title = "Spot growth through focus",
+          xticklabelsvisible = false)
+ss = range(-4.4, 4.4; length = 200)
 lines!(ax, ss, moment.(ss), color = :black, label = "exact: 2a²mₙ + s²/8F²")
-scatter!(ax, shifts, fast_spread, marker = :rect, markersize = 11, label = "deposition operator")
+scatter!(ax, shifts, fast_spread, marker = :rect, markersize = 12, label = "deposition operator")
 scatter!(ax, shifts, ray_spread, marker = :circle, markersize = 7, label = "ray trace")
 axislegend(ax, position = :ct)
+err = Axis(fig[2, 1], xlabel = "distance from best focus s (mm)", ylabel = "relative error (10⁻³)")
+hlines!(err, [0.0], color = :black)
+scatterlines!(err, shifts, 1e3 .* (fast_spread ./ moment.(shifts) .- 1), marker = :rect,
+              markersize = 10)
+scatterlines!(err, shifts, 1e3 .* (ray_spread ./ moment.(shifts) .- 1), marker = :circle,
+              markersize = 8)
+linkxaxes!(ax, err)
+xlims!(ax, -4.5, 4.5)
+rowsize!(fig.layout, 2, Relative(0.3))
+rowgap!(fig.layout, 8)
 fig
 
 # The largest relative errors over the scan:
@@ -143,8 +157,8 @@ fig
 # ## Shape far from focus
 #
 # Second moments do not fix the shape. Four millimetres from focus the f-cone disk has
-# a radius of 0.3 mm, comparable to the spot, and the convolution turns the flat top
-# into a lower, broader plateau with soft shoulders. The exact convolution is
+# a radius of 0.3 mm, comparable to the spot, and the convolution rounds the flat top
+# into a lower, broader peak with soft shoulders. The exact convolution is
 # evaluated here directly, by averaging the focal profile over 3000 points of the disk
 # of focal points at each of 16 points in each patch near the spot.
 
@@ -190,8 +204,32 @@ moment_matched = [intensity(far, x) * a for (x, a) in zip(target.elem_centroid, 
 @printf("moment-matched super-Gaussian: misplaced %.4f, peak/exact %.3f\n",
         misplaced(moment_matched), maximum(moment_matched) / maximum(exact_far))
 
-# It misses the plateau by a quarter and misplaces a sixth of the power, which is why
-# deposition sums over cone directions. In a hohlraum the walls lie several
+# A cut through the spot shows the difference. Every curve gives, for each patch of
+# the row just above ``y = 0``, the absorbed power divided by the patch's area; the
+# best-focus profile is dashed for reference:
+
+operator_far = deposit(DepositionOperator(target, [far]), [far]).element
+focus = Beam("B"; theta = 0, phi = 0, power = P, spot, fnumber = F)
+focus_dep = deposit(DepositionOperator(target, [focus]), [focus]).element
+cut = sort([e for e in 1:nelements(target) if abs(target.elem_centroid[e][2] - Δ / 2) < Δ / 4];
+           by = e -> target.elem_centroid[e][1])
+x_cut = [target.elem_centroid[e][1] for e in cut]
+flux_cut(E) = to_Wcm2.(E[cut] ./ target.elem_area[cut]) ./ 1e14
+fig = Figure(size = (800, 380))
+ax = Axis(fig[1, 1], xlabel = "x (mm)", ylabel = "absorbed flux (10¹⁴ W/cm²)",
+          title = "Cut through the spot, 4 mm from focus", limits = ((-1.2, 1.2), (0, 1.5)))
+lines!(ax, x_cut, flux_cut(focus_dep), color = :gray55, linestyle = :dash, label = "best focus")
+lines!(ax, x_cut, flux_cut(exact_far), color = :black, linewidth = 2, label = "exact convolution")
+scatter!(ax, x_cut, flux_cut(operator_far), color = Makie.wong_colors()[1], markersize = 8,
+         label = "operator, 13 directions")
+lines!(ax, x_cut, flux_cut(moment_matched), color = Makie.wong_colors()[2], linewidth = 2,
+       label = "moment-matched\nsuper-Gaussian")
+Legend(fig[1, 2], ax; framevisible = false)
+fig
+
+# The moment-matched spot keeps a flat top, more than a quarter below the exact peak,
+# and misplaces a sixth of the power, which is why deposition sums over cone
+# directions. In a hohlraum the walls lie several
 # millimetres from focus, often at grazing incidence, and a moment-matched spot there
 # deposits up to 2% more power than the beam carries.
 
@@ -254,24 +292,28 @@ I0 = focal_profile(spot, P, 0.0)
 # ## Images
 #
 # [`render`](@ref) draws any per-element field as seen by an [`OrthoCamera`](@ref).
-# Here the camera looks down onto the foil, and the field is the absorbed laser flux
-# from [`laser_flux`](@ref), converted to W/cm² by [`to_Wcm2`](@ref).
+# Here the camera looks down onto the central 2.5 mm of the foil, and the field is the
+# absorbed laser flux from [`laser_flux`](@ref), converted to W/cm² by
+# [`to_Wcm2`](@ref). The three images share one color scale, from zero to the peak at
+# best focus. Each 50 µm patch shows its own absorbed flux, so the edges of the spots
+# are drawn in steps of a patch. The beam at best focus is aimed at ``(0.3, -0.2)``
+# mm, the other two at the origin.
 
-camera = OrthoCamera((0, 0, -1); up = (0, 1, 0), width = W, nx = 240)
+camera = OrthoCamera((0, 0, -1); up = (0, 1, 0), width = 2.5, nx = 500)
 defocused = Beam("B"; theta = 0, phi = 0, power = P, spot, fnumber = F, defocus = -4.0)
-cases = ("best focus" => (beam, fast),
-         "4 mm from focus" => (defocused, deposit(DepositionOperator(target, [defocused]), [defocused])),
-         "θ = 50°" => (tilted, tilted_dep))
-fig = Figure(size = (900, 330))
-extent = (-W / 2, W / 2)
-for (i, (label, (b, d))) in enumerate(cases)
-    img = render(target, to_Wcm2.(laser_flux(d, target)), camera)
+cases = ("best focus" => fast,
+         "4 mm from focus" => deposit(DepositionOperator(target, [defocused]), [defocused]),
+         "θ = 50°" => tilted_dep)
+images = [render(target, to_Wcm2.(laser_flux(d, target)) ./ 1e14, camera) for (_, d) in cases]
+peak = maximum(maximum(filter(isfinite, img)) for img in images)
+fig = Figure(size = (800, 300))
+for (i, (label, _)) in enumerate(cases)
     panel = Axis(fig[1, i], title = label, aspect = DataAspect(), xlabel = "x (mm)",
-                 ylabel = i == 1 ? "y (mm)" : "")
-    heatmap!(panel, range(extent..., length = 240), range(extent..., length = 240),
-             reverse(img; dims = 1)'; colormap = :inferno, colorrange = (0, 1.3e15))
+                 ylabel = i == 1 ? "y (mm)" : "", yticklabelsvisible = i == 1)
+    camera_image!(panel, images[i], camera; colormap = :inferno, colorrange = (0, peak))
 end
-Colorbar(fig[1, 4], colormap = :inferno, colorrange = (0, 1.3e15), label = "absorbed flux (W/cm²)")
+Colorbar(fig[1, 4], colormap = :inferno, colorrange = (0, peak),
+         label = "absorbed flux (10¹⁴ W/cm²)")
 fig
 
 # ## What this checks

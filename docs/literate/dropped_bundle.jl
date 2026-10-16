@@ -25,7 +25,8 @@ using Briareus
 using CairoMakie
 using LinearAlgebra
 using Printf
-CairoMakie.activate!(type = "png")
+CairoMakie.activate!(type = "png", px_per_unit = 2)
+include(joinpath(pkgdir(Briareus), "docs", "literate", "_plotting.jl"))   # figure helpers
 
 # ## Modes on the capsule
 #
@@ -253,26 +254,54 @@ end
 
 # An outer quad crosses the hohlraum axis near its entrance hole and heats the wall on
 # the far side, so without it the side of the capsule facing away from its port is
-# colder. The flux on the capsule, relative to the full-power mean:
+# colder.
+#
+# The maps below show the flux on the capsule as seen from outside, in an equal-area
+# (Hammer) projection, so that equal areas of the map are equal solid angles of the
+# capsule. Polar angle θ is marked at the left edge and azimuth φ along the equator,
+# which runs across the middle. The flux is computed per element, on 24 × 32 patches
+# in θ and φ; the maps interpolate it linearly from the patch values averaged onto
+# their corners. The left map shows the flux relative to its own mean,
+# ``H/\langle H\rangle - 1``, where ``\langle H\rangle = c_{00}/\sqrt{4\pi}``.
+# The right map subtracts the same quantity for all 48 quads, which isolates what
+# freeing the bundle changed. The figure helpers `sphere_axis`, `sphere_map` and
+# `mark_directions!` come from `docs/literate/_plotting.jl`.
 
 capsule = elements(target, :capsule)
-function flux_map(ax, sc, beams)
-    H = evaluate(sc, beams).flux
-    p = target.elem_centroid[capsule]
-    θ = [acosd(clamp(x[3] / norm(x), -1, 1)) for x in p]
-    φ = [mod(atand(x[2], x[1]), 360) for x in p]
-    return scatter!(ax, φ, θ; color = H ./ (full[1] / sqrt(4π)) .- 1, colormap = :balance,
-                    colorrange = (-0.06, 0.06), markersize = 7)
+deviation(H, c) = 100 .* (H ./ (c[1] / sqrt(4π)) .- 1)       # percent of ⟨H⟩
+H_full = evaluate(scenario, quads).flux
+H_free = evaluate(subset(scenario, keep), remaining).flux
+port_marker = (marker = :xcross, markersize = 12, color = :black)
+los_marker = (marker = :circle, markersize = 11, color = :transparent, strokecolor = :black,
+              strokewidth = 1.5)
+function capsule_panel(pos, field, range; title = "")
+    ax = sphere_axis(pos; title)
+    hm = sphere_heatmap!(ax, sphere_map(target, field, :capsule); colormap = :balance,
+                         colorrange = (-range, range))
+    mark_directions!(ax, [port_angles(quads[i]) for i in bundles[freed]]; port_marker...)
+    mark_directions!(ax, [(90, 348)]; los_marker...)
+    return hm
 end
-capsule_axis(fig, title) = Axis(fig[1, 1]; xlabel = "φ (degrees)", ylabel = "θ (degrees)",
-                                yreversed = true, title, xticks = 0:45:360, yticks = 0:30:180)
-fig = Figure(size = (760, 380))
-ax = capsule_axis(fig, "Capsule flux with bundle 11 freed, relative to the full mean")
-Colorbar(fig[1, 2], flux_map(ax, subset(scenario, keep), remaining), label = "H/H̄ − 1")
+capsule_legend(pos) = Legend(pos, [MarkerElement(; port_marker...), MarkerElement(; los_marker...)],
+                             ["ports of the freed quads", "line of sight 90-348"];
+                             orientation = :horizontal, framevisible = false)
+
+fig = Figure(size = (800, 330))
+hm = capsule_panel(fig[1, 1], deviation(H_free, c_free), 15; title = "bundle 11 freed")
+Colorbar(fig[2, 1], hm; vertical = false, flipaxis = false, width = Relative(0.7),
+         label = "H/⟨H⟩ − 1 (%)")
+hm = capsule_panel(fig[1, 2], deviation(H_free, c_free) - deviation(H_full, full), 2;
+                   title = "change from 48 quads")
+Colorbar(fig[2, 2], hm; vertical = false, flipaxis = false, width = Relative(0.7),
+         label = "difference in H/⟨H⟩ − 1 (%)")
+capsule_legend(fig[3, 1:2])
+rowgap!(fig.layout, 6)
 fig
 
-# The ``l = 2`` band from pole to waist dominates; mode 1 shows as the warmer side
-# around ``\phi = 45°``.
+# The untuned ``l = 2`` asymmetry, a hot waist and cold poles, dominates the flux and
+# barely changes. What freeing the bundle changed is mostly mode 1: the side facing the
+# freed ports, around ``\phi = 45°``, is warmer relative to the mean by about 1%, and
+# the far side, where the freed quads deposited their power, colder by up to 2%.
 
 # ## Remedy 1: free the partner as well
 #
@@ -317,17 +346,36 @@ end
 # Restoring the drive and mode 1 needs some quads 11% above the nominal 8 TW, and
 # restoring ``l = 3`` as well needs 24%. An ignition pulse runs the laser close to its
 # energy and peak-power limits, so this headroom is rarely available. The quads near
-# the freed bundle carry the extra power:
+# the freed bundle carry the extra power. Each hemisphere is shown separately, with
+# the nominal 8 TW as a gray line and the azimuth of its freed quad dashed; the three
+# solutions are offset by ±1.5° in azimuth so that they do not hide one another:
 
-fig = Figure(size = (760, 380))
-ax = Axis(fig[1, 1], xlabel = "port azimuth φ (degrees)", ylabel = "quad power (TW)",
-          title = "Power rebalance with bundle 11 freed", xticks = 0:45:360)
 φk = [port_angles(b)[2] for b in remaining]
-for (L, marker) in ((1, :circle), (2, :utriangle), (3, :rect))
-    scatter!(ax, φk, rebalanced[L]; marker, label = "through l = $L")
+upper = [b.port[3] > 0 for b in remaining]
+function rebalance_panel(pos, hemisphere, sel; bottom)
+    ax = Axis(pos; ylabel = "power (TW)", title = "quads in the $hemisphere hemisphere",
+              xticks = 0:45:360, limits = ((0, 360), (6.8, 10.3)),
+              xlabel = "port azimuth φ (degrees)", xlabelvisible = bottom,
+              xticklabelsvisible = bottom)
+    hlines!(ax, [8.0]; color = :gray, linewidth = 1)
+    for i in bundles[freed]
+        b = quads[i]
+        (b.port[3] > 0) == (hemisphere == "upper") || continue
+        vlines!(ax, [port_angles(b)[2]]; color = :gray, linestyle = :dash)
+        text!(ax, port_angles(b)[2] + 2, 10.2; text = "$(b.name) freed", align = (:left, :top),
+              fontsize = 12, color = :gray30)
+    end
+    for (L, marker, dx) in ((1, :circle, -1.5), (2, :utriangle, 0.0), (3, :rect, 1.5))
+        scatter!(ax, φk[sel] .+ dx, rebalanced[L][sel]; marker, markersize = 9,
+                 label = "restored through l = $L")
+    end
+    return ax
 end
-vlines!(ax, [port_angles(quads[i])[2] for i in bundles[freed]], color = :gray, linestyle = :dash)
-axislegend(ax, position = :lt)
+fig = Figure(size = (800, 470))
+rebalance_panel(fig[1, 1], "upper", upper; bottom = false)
+ax = rebalance_panel(fig[2, 1], "lower", .!upper; bottom = true)
+Legend(fig[3, 1], ax; orientation = :horizontal, framevisible = false)
+rowgap!(fig.layout, 8)
 fig
 
 # The same answer comes from the optimizer. [`optimize_pointing`](@ref) minimizes an
@@ -417,12 +465,27 @@ review_line("re-pointed, keep-out", cap_review(second_try.beams))
 # kilometres per second of hot-spot velocity, and the drive stays within 0.4% of its
 # value after the bundle is freed. The worst-case clearance comes out at 8 µm rather
 # than the 10 µm asked for: the penalty is soft, and the keep-out's distance differs
-# from the clearance check's by a few micrometres. The flux on the capsule:
+# from the clearance check's by a few micrometres. The flux on the capsule before and
+# after re-pointing, on the same maps and color scales as above:
 
-fig = Figure(size = (760, 380))
-ax = capsule_axis(fig, "Capsule flux with bundle 11 freed, re-pointed within clearance")
-Colorbar(fig[1, 2], flux_map(ax, repoint, second_try.beams), label = "H/H̄ − 1")
+fig = Figure(size = (800, 470))
+for (j, (title, H, c)) in enumerate((("bundle 11 freed", H_free, c_free),
+                                     ("re-pointed within clearance", repointed.flux, c_repointed)))
+    capsule_panel(fig[1, j], deviation(H, c), 15; title)
+    capsule_panel(fig[2, j], deviation(H, c) - deviation(H_full, full), 2)
+end
+Colorbar(fig[1, 3]; colormap = :balance, colorrange = (-15, 15), height = Relative(0.8),
+         label = "H/⟨H⟩ − 1 (%)")
+Colorbar(fig[2, 3]; colormap = :balance, colorrange = (-2, 2), height = Relative(0.8),
+         label = "change from 48 quads (%)")
+capsule_legend(fig[3, 1:2])
+rowgap!(fig.layout, 6)
 fig
+
+# Re-pointing removes the warm side around the freed ports. What remains of the change
+# from the 48-quad drive is in the higher modes, which the objective weighted fifty
+# times less than mode 1: the re-pointed drive trades the dipole for a slightly weaker
+# ``l = 2`` and a stronger ``l = 3``.
 
 # ### Independent check
 #
