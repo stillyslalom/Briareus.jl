@@ -957,4 +957,7 @@ Findings:
 GUI presets chosen from these (errors against the finest meshes / extrapolation):
 `:coarse` h = 0.6, capsule 0.2 (≈ 1,300 elements, < 1 s; P2 ≈ 0.4 pp, P4 ≈ 0.5 pp);
 `:standard` h = 0.28, capsule 0.09 (≈ 5,900, ≈ 4 s; ≲ 0.1 pp); `:fine` h = 0.17,
-capsule 0.05 (≈ 16,000, ≈ 40 s; ≲ 0.02 pp, converged for design work).
+capsule 0.05 (≈ 16,000, ≈ 40 s; ≲ 0.02 pp, converged for design work). Build times
+are from before the 2026-10-17 performance pass; a fine `Scenario` (16,244 elements,
+closed) now takes 15 s on 24 threads (view factors 4 s, LU 7 s), and an optimizer
+iteration about 60 ms.

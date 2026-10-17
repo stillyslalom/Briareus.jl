@@ -165,10 +165,12 @@ neither.
 """
 flux_map(dr::DriveState) = dr.result[] === nothing ? nothing : dr.result[].map
 
-function _flux_map(lk, ev::Evaluation)
+# The capsule flux comes from the drive's radiosity solution (`ev.flux` would solve for
+# the full flux response, which only repeated evaluations repay).
+function _flux_map(lk, ev::Evaluation, sol)
     lk === nothing && return nothing
     t = ev.scenario.target
-    vals = lk.kind === :capsule ? to_Wcm2.(ev.flux) :
+    vals = lk.kind === :capsule ? to_Wcm2.(sol.H[ev.scenario.observed]) :
            to_Wcm2.(ev.deposition.element[lk.elems] ./ t.elem_area[lk.elems])
     return (; lk.kind, lk.x, lk.y, values = vals[lk.index], lk.xlabel, lk.ylabel, lk.title)
 end
@@ -182,14 +184,14 @@ function _evaluate_drive(s::Scenario, beams, lookup, spot_radius::Real)
     sol = s.model === nothing ? nothing : solve(s.model, ev.deposition)
     modes = NamedTuple[]
     mean = NaN
-    if ev.flux !== nothing
+    if _has_flux(ev)
         c = flux_ylm(ev; lmax = maximum(MODE_DEGREES))
         a = flux_moments(ev; lmax = maximum(MODE_DEGREES))
         mean = a[1]
         modes = [(; l, epsilon = mode_amplitude(c, l), legendre = a[l+1] / a[1]) for l in MODE_DEGREES]
     end
     return DriveResult(ev, sol, modes, mean, power_rows(ev), _spot_stats(ev, spot_radius),
-                       _flux_map(lookup, ev), time() - t0)
+                       _flux_map(lookup, ev, sol), time() - t0)
 end
 
 """

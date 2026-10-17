@@ -162,11 +162,13 @@ struct _SGComponent{T}
     defocus_c::Float64        # (1/(2F))² / (4 m_n): adds s²·c to a², b²
     power_norm::T             # component power / (2π Γ(2/n)/n)
     qcut::Float64             # (u/a)² + (v/b)² beyond which the profile is < e⁻⁴⁰ of peak
+    peak::T                   # power_norm / (a b): the best-focus peak intensity
 end
 
 function _SGComponent(a2, b2, halfn, defocus_c, power_norm)
     T = promote_type(typeof(a2), typeof(b2), typeof(power_norm))
-    return _SGComponent{T}(a2, b2, halfn, defocus_c, power_norm, 40.0^(1 / halfn))
+    return _SGComponent{T}(a2, b2, halfn, defocus_c, power_norm, 40.0^(1 / halfn),
+                           power_norm / sqrt(a2 * b2))
 end
 
 # Best-focus profile of one component at focal-plane coordinates (u, v); zero where it
@@ -174,8 +176,17 @@ end
 @inline function _sg_focal(c::_SGComponent, u, v)
     q = u^2 / c.a2 + v^2 / c.b2
     q > c.qcut && return zero(c.power_norm * q)
-    return c.power_norm / sqrt(c.a2 * c.b2) * exp(-q^c.halfn)
+    q > 0 || return c.peak * one(q)
+    return c.peak * exp(-_pow(q, c.halfn))
 end
+
+# `q^h` for q > 0 as exp(h log q): half the cost of `^` (whose extra accuracy, ~1e-15
+# relative, the profile does not need), and a quarter on duals, where `^` takes a
+# second power for the derivative.
+@inline _pow(q, h) = exp(h * log(q))
+
+# Whether (u, v) is inside the cutoff of the profile (`_sg_focal` is nonzero there).
+@inline _sg_inside(c::_SGComponent, u, v) = u^2 / c.a2 + v^2 / c.b2 <= c.qcut
 
 @inline function _sg_eval(c::_SGComponent, u, v, s, cscale = 1.0)
     a2 = c.a2 + cscale * c.defocus_c * s^2

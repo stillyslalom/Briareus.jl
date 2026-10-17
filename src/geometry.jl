@@ -249,7 +249,12 @@ function _cylinder_edge_integral(uP, uQ, Δ, zP, dz, ax)
     T = if abs(B) <= 16A
         Δφ / 2 + (C * log1p(G / E) - G * Δφ) / 2A
     else
-        sum(w * x * C / (E + B * x + A * x^2) for (x, w) in zip(_GL16.x, _GL16.w))
+        s = 0.0
+        for k in eachindex(_GL16.x)
+            x = _GL16.x[k]
+            s += _GL16.w[k] * x * C / (E + B * x + A * x^2)
+        end
+        s
     end
     return zP * Δφ + dz * T
 end

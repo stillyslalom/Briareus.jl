@@ -67,12 +67,22 @@ function _build!(nodes, items, lo, hi, cen, first, last)
 end
 
 @inline function _slab(node::BVHNode, o::Vec3, inv::Vec3, tmax)
-    t1 = (node.lo - o) .* inv
-    t2 = (node.hi - o) .* inv
-    tn = maximum(min.(t1, t2))
-    tf = minimum(max.(t1, t2))
+    tn, tf = _slab_span(node, o, inv)
     return tn <= tf && tf >= 0 && tn <= tmax
 end
+
+# Parameter interval of the ray inside a node's box. Every operand is finite (`_safe_inv`),
+# so plain comparisons select the min and max (Base's handle NaN and signed zeros, and
+# cost twice as much in this, the innermost loop of every ray query).
+@inline function _slab_span(node::BVHNode, o::Vec3, inv::Vec3)
+    t1 = (node.lo - o) .* inv
+    t2 = (node.hi - o) .* inv
+    lo = map(_fmin, t1, t2)
+    hi = map(_fmax, t1, t2)
+    return _fmax(_fmax(lo[1], lo[2]), lo[3]), _fmin(_fmin(hi[1], hi[2]), hi[3])
+end
+@inline _fmin(a, b) = ifelse(a < b, a, b)
+@inline _fmax(a, b) = ifelse(a > b, a, b)
 
 # Zero direction components map to a huge finite slope so slab tests never form 0*Inf.
 @inline _safe_inv(d::Vec3) = map(x -> iszero(x) ? 1e300 : 1 / x, d)
@@ -140,7 +150,7 @@ _skipped(f, id) = f(id)
 Whether any triangle intersects `origin + t*dir` for `0 < t < tmax`, ignoring triangles
 whose identifier `id` has `skip(id) == true`.
 """
-function any_hit(b::BVH, o::Vec3, d::Vec3, tmax = Inf, skip = nothing)
+function any_hit(b::BVH, o::Vec3, d::Vec3, tmax = Inf, skip::S = nothing) where {S}
     isempty(b.nodes) && return false
     inv = _safe_inv(d)
     stack = MVector{64,Int32}(undef)

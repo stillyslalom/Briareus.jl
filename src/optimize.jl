@@ -149,6 +149,13 @@ end
 # Scenario: precomputed operators + evaluation
 # ---------------------------------------------------------------------------------------
 
+# The full flux response of a scenario, computed when first read.
+mutable struct _LazyResponse
+    const lock::ReentrantLock
+    R::Union{Nothing,Matrix{Float64}}
+end
+_LazyResponse() = _LazyResponse(ReentrantLock(), nothing)
+
 """
     Scenario(target, beams; observe = nothing, radiation = true, time = 0.0,
              parameterization = GroupPointing(beams), lpi = nothing,
@@ -160,6 +167,12 @@ incident x-ray flux is the figure of merit, e.g. `:capsule`) are given — the v
 factors and the linear flux response of the observed elements. `lpi` is a laser–plasma
 model (`Backscatter`, `CalibratedTransfer`, `CBET`, or a tuple of them) applied at `time`
 between the setup beams and deposition.
+
+Objectives need only the moments of the observed flux, so the scenario keeps the
+response contracted with the Legendre (`lmax = 12`) and real-harmonic (`lmax = 6`)
+weights: per evaluation a 13 × n and a 49 × n product, and a 62-column solve at setup.
+The full observed × n response `scenario.response` (and an evaluation's `flux`) is
+computed when first read.
 """
 struct Scenario{P}
     target::Target
@@ -167,14 +180,34 @@ struct Scenario{P}
     deposition::DepositionOperator
     model::Union{Nothing,RadiationModel}
     observed::Vector{Int}
-    response::Union{Nothing,Matrix{Float64}}
     moment_weights::Matrix{Float64}   # legendre_weights of the observed elements (lmax = 12)
     ylm_weights::Matrix{Float64}      # ylm_weights of the observed elements (lmax = 6)
+    moment_response::Matrix{Float64}  # moment_weights * response: moments per element power
+    ylm_response::Matrix{Float64}     # ylm_weights * response
     lpi::Any                          # laser–plasma model (see apply_lpi)
     time::Float64
+    _response::_LazyResponse          # the full response, once read (shared by subsets)
 end
 
 const _CACHED_YLM_LMAX = 6
+
+Base.getproperty(s::Scenario, name::Symbol) =
+    name === :response ? _response(s) : getfield(s, name)
+Base.propertynames(::Scenario) =
+    (:target, :param, :deposition, :model, :observed, :response, :moment_weights,
+     :ylm_weights, :moment_response, :ylm_response, :lpi, :time)
+
+# Whether the scenario has a radiation response (observed elements and a model).
+_radiative(s::Scenario) = s.model !== nothing && !isempty(s.observed)
+
+function _response(s::Scenario)
+    _radiative(s) || return nothing
+    c = getfield(s, :_response)
+    lock(c.lock) do
+        c.R === nothing && (c.R = flux_response(s.model, s.observed; time = s.time))
+        c.R
+    end
+end
 
 function Scenario(t::Target, beams::AbstractVector{<:Beam}; observe = nothing,
                   radiation::Bool = observe !== nothing, time = 0.0,
@@ -183,10 +216,15 @@ function Scenario(t::Target, beams::AbstractVector{<:Beam}; observe = nothing,
     op = DepositionOperator(t, beams; deposition_kw...)
     obs = observe === nothing ? Int[] : elements(t, (observe isa Symbol ? (observe,) : observe)...)
     model = radiation ? RadiationModel(t; viewfactor_kw...) : nothing
-    R = (model !== nothing && !isempty(obs)) ? flux_response(model, obs; time) : nothing
     W = isempty(obs) ? zeros(0, 0) : legendre_weights(t, obs; lmax = _CACHED_LMAX)
     Y = isempty(obs) ? zeros(0, 0) : ylm_weights(t, obs; lmax = _CACHED_YLM_LMAX)
-    return Scenario(t, parameterization, op, model, obs, R, W, Y, lpi, Float64(time))
+    WR, YR = zeros(0, 0), zeros(0, 0)
+    if model !== nothing && !isempty(obs)
+        WY = flux_response(model, obs; time, weights = vcat(W, Y))
+        WR, YR = WY[1:size(W, 1), :], WY[size(W, 1)+1:end, :]
+    end
+    return Scenario(t, parameterization, op, model, obs, W, Y, WR, YR, lpi, Float64(time),
+                    _LazyResponse())
 end
 
 """
@@ -205,8 +243,9 @@ function subset(s::Scenario, keep::AbstractVector{<:Integer}; parameterization =
     param = parameterization === nothing ?
             GroupPointing(beams; fields = Tuple(s.param.fields), mirror = s.param.mirror) :
             parameterization
-    return Scenario(s.target, param, s.deposition[keep], s.model, s.observed, s.response,
-                    s.moment_weights, s.ylm_weights, s.lpi, s.time)
+    return Scenario(s.target, param, s.deposition[keep], s.model, s.observed,
+                    s.moment_weights, s.ylm_weights, s.moment_response, s.ylm_response,
+                    s.lpi, s.time, getfield(s, :_response))
 end
 
 function Base.show(io::IO, s::Scenario)
@@ -221,14 +260,27 @@ end
 Result of `evaluate`: the setup `beams`, the `effective` beams after the scenario's
 laser–plasma model, their `deposition`, and `flux` — incident x-ray flux on the
 scenario's observed elements (TW/mm²; `nothing` without radiation). Deposition
-fractions are relative to effective (post-LPI) power.
+fractions are relative to effective (post-LPI) power. The flux is computed when first
+read; `flux_moments` and `flux_ylm` do not need it.
 """
 struct Evaluation{T,B,E}
     scenario::Scenario
     beams::Vector{B}
     effective::Vector{E}
     deposition::Deposition{T}
-    flux::Union{Nothing,Vector{T}}
+    _flux::Base.RefValue{Union{Nothing,Vector{T}}}   # observed flux, once computed
+end
+
+Base.getproperty(ev::Evaluation, name::Symbol) =
+    name === :flux ? _flux(ev) : getfield(ev, name)
+Base.propertynames(::Evaluation) = (:scenario, :beams, :effective, :deposition, :flux)
+
+function _flux(ev::Evaluation)
+    s = getfield(ev, :scenario)
+    _radiative(s) || return nothing
+    c = getfield(ev, :_flux)
+    c[] === nothing && (c[] = _mul(s.response, getfield(ev, :deposition).element))
+    return c[]
 end
 
 """
@@ -239,8 +291,25 @@ evaluate(s::Scenario, x::AbstractVector{<:Real}) = evaluate(s, apply(s.param, x)
 function evaluate(s::Scenario, beams::AbstractVector{<:Beam})
     eff = apply_lpi(s.lpi, beams, s.time)
     dep = deposit(s.deposition, eff)
-    H = s.response === nothing ? nothing : s.response * dep.element
-    return Evaluation(s, beams, eff, dep, H)
+    T = eltype(dep.element)
+    return Evaluation(s, beams, eff, dep, Ref{Union{Nothing,Vector{T}}}(nothing))
+end
+
+# `A * x` for a Float64 matrix and a vector of duals through BLAS: the values and each
+# partial are the columns of one matrix product (a generic dual mat-vec runs ~10×
+# slower). Other element types use the generic product.
+_mul(A::AbstractMatrix, x::AbstractVector) = A * x
+function _mul(A::Matrix{Float64}, x::Vector{ForwardDiff.Dual{Tag,Float64,N}}) where {Tag,N}
+    X = Matrix{Float64}(undef, length(x), N + 1)
+    for (i, d) in enumerate(x)
+        X[i, 1] = ForwardDiff.value(d)
+        p = ForwardDiff.partials(d)
+        for j in 1:N
+            X[i, j+1] = p[j]
+        end
+    end
+    Y = A * X
+    return [ForwardDiff.Dual{Tag}(Y[i, 1], ntuple(j -> Y[i, j+1], Val(N))) for i in axes(Y, 1)]
 end
 
 "Fraction of delivered laser power striking the outside (back side) of any component."
@@ -260,9 +329,9 @@ Legendre moments `aₗ` of the observed incident flux (index `l+1`).
 function flux_moments(ev::Evaluation; lmax::Integer = 8, axis = Vec3(0, 0, 1),
                       center = zero(Vec3))
     s = ev.scenario
-    ev.flux === nothing && throw(ArgumentError("scenario has no radiation response"))
+    _radiative(s) || throw(ArgumentError("scenario has no radiation response"))
     if lmax <= _CACHED_LMAX && Vec3(axis...) == Vec3(0, 0, 1) && Vec3(center...) == zero(Vec3)
-        return view(s.moment_weights, 1:lmax+1, :) * ev.flux
+        return _mul(s.moment_response, ev.deposition.element)[1:lmax+1]
     end
     return legendre_moments(_full(ev), s.target, s.observed; lmax, axis, center)
 end
@@ -321,9 +390,9 @@ Real spherical-harmonic coefficients of the observed incident flux in the flat
 `ylm_weights`. Use `ylm_matrix(c, lmax)` for the `C[l+1, lmax+1+m]` layout.
 """
 function flux_ylm(ev::Evaluation; lmax::Integer = _CACHED_YLM_LMAX)
-    ev.flux === nothing && throw(ArgumentError("scenario has no radiation response"))
+    _radiative(ev.scenario) || throw(ArgumentError("scenario has no radiation response"))
     lmax <= _CACHED_YLM_LMAX || throw(ArgumentError("cached Y_lm weights reach lmax = $_CACHED_YLM_LMAX"))
-    return view(ev.scenario.ylm_weights, 1:(lmax+1)^2, :) * ev.flux
+    return _mul(ev.scenario.ylm_response, ev.deposition.element)[1:(lmax+1)^2]
 end
 
 """
@@ -383,14 +452,15 @@ power-rebalancing solves and of tables of what losing each beam costs.
 """
 function influence_matrix(s::Scenario, beams::AbstractVector{<:Beam};
                           lmax::Integer = _CACHED_YLM_LMAX)
-    s.response === nothing && throw(ArgumentError("scenario has no radiation response"))
+    _radiative(s) || throw(ArgumentError("scenario has no radiation response"))
     nb = length(beams)
     M = zeros((lmax + 1)^2, nb)
-    Wy = view(s.ylm_weights, 1:(lmax+1)^2, :)
+    lmax <= _CACHED_YLM_LMAX || throw(ArgumentError("cached Y_lm weights reach lmax = $_CACHED_YLM_LMAX"))
+    Wy = view(s.ylm_response, 1:(lmax+1)^2, :)
     for i in 1:nb
         unit = [remake(b; power = j == i ? 1.0 : 0.0) for (j, b) in enumerate(beams)]
         dep = deposit(s.deposition, unit)
-        M[:, i] = Wy * (s.response * dep.element)
+        M[:, i] = Wy * dep.element
     end
     return M
 end
@@ -452,24 +522,36 @@ function optimize_pointing(s::Scenario, objective; x0 = initial_parameters(s.par
                            show_trace::Bool = false, g_tol = 1e-8, callback = nothing)
     xs = clamp.(x0, lower, upper)
     best_x, best_value, count, iter = copy(xs), Inf, Ref(0), Ref(0)
-    function f(x)
-        J = objective(evaluate(s, x))
-        if eltype(x) <: AbstractFloat
-            count[] += 1
-            J < best_value && ((best_value, best_x) = (J, copy(x)))
-            callback === nothing ||
-                callback((; evaluations = count[], iteration = iter[], value = J, best_value,
-                          best_x)) === true && throw(_OptimizationStop(:callback))
-            count[] >= evaluations && throw(_OptimizationStop(:evaluations))
-        end
-        return J
+    J(x) = objective(evaluate(s, x))
+    # every objective value the optimizer sees (bookkeeping, callback, budget)
+    function seen(x, v)
+        count[] += 1
+        v < best_value && ((best_value, best_x) = (v, copy(x)))
+        callback === nothing ||
+            callback((; evaluations = count[], iteration = iter[], value = v, best_value,
+                      best_x)) === true && throw(_OptimizationStop(:callback))
+        count[] >= evaluations && throw(_OptimizationStop(:evaluations))
+        return v
     end
-    cfg = ForwardDiff.GradientConfig(f, x0, ForwardDiff.Chunk(min(length(x0), 12)))
-    g!(G, x) = ForwardDiff.gradient!(G, f, x, cfg)
-    initial_value = objective(evaluate(s, xs))
+    f(x) = seen(x, J(x))
+    # One dual tag for every objective, so the compiled deposition and objective code
+    # (and the package's precompiled copy) serve any objective, not only the first.
+    # The tag check is off: objectives do not differentiate internally.
+    cfg = ForwardDiff.GradientConfig(J, x0, ForwardDiff.Chunk(min(length(x0), 12)),
+                                     ForwardDiff.Tag(_PointingTag(), Float64))
+    g!(G, x) = ForwardDiff.gradient!(G, J, x, cfg, Val(false))
+    # L-BFGS-B asks for value and gradient together: the dual pass carries the value
+    out = ForwardDiff.DiffResults.GradientResult(similar(xs))
+    function fg!(G, x)
+        ForwardDiff.gradient!(out, J, x, cfg, Val(false))
+        copyto!(G, ForwardDiff.DiffResults.gradient(out))
+        return seen(x, ForwardDiff.DiffResults.value(out))
+    end
+    initial_value = J(xs)
     track(st) = (iter[] = st.iteration; false)
     res = try
-        Optim.optimize(f, g!, lower, upper, xs, Optim.LBFGSB(),
+        Optim.optimize(Optim.OnceDifferentiable(f, g!, fg!, xs, 0.0), lower, upper, xs,
+                       Optim.LBFGSB(),
                        Optim.Options(; iterations, show_trace, g_abstol = g_tol,
                                      callback = track))
     catch err
@@ -492,6 +574,8 @@ end
 struct _OptimizationStop <: Exception
     reason::Symbol
 end
+
+struct _PointingTag end
 
 """
     report(ev; lmax = 6) -> nothing
@@ -519,7 +603,7 @@ function report(io::IO, ev::Evaluation; lmax::Integer = 6)
     # negative values are quadrature imbalance of the analytic deposition
     abs(missed) > 1e-6 * P &&
         @printf(io, "  %-20s %9.4g TW  (%6.2f%%)\n", missed > 0 ? "missed" : "imbalance", missed, 100missed / P)
-    if ev.flux !== nothing
+    if _radiative(ev.scenario)
         a = ForwardDiff.value.(flux_moments(ev; lmax))
         @printf(io, "Observed flux: mean %.4g TW/mm² (%.4g W/cm², Tr = %.1f eV)\n", a[1],
                 to_Wcm2(a[1]), radiation_temperature(a[1]))

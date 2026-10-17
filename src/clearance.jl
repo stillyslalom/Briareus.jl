@@ -452,6 +452,7 @@ function _clearance_rows(t::Target, beams, samples, hw_idx, tgt_idx, wings, op, 
     end
 
     rows = Vector{ClearanceRow}(undef, nb * length(hw_idx))
+    wt = Tuple(wings)        # concrete wing types in the per-sample loop
     Threads.@threads for bi in 1:nb
         vids = findall(==(bi), owner)
         b = variants[vids[1]]
@@ -459,27 +460,11 @@ function _clearance_rows(t::Target, beams, samples, hw_idx, tgt_idx, wings, op, 
         s_stop = _landing(t, envs[1], tgt_idx)
         frames = [BeamFrame(variants[v]) for v in vids]
         cone = cone_directions(b, _CLEARANCE_NCONE)[1]
-        rhs = [w isa PowerLawWing ? _wing_rh(w, b) : 0.0 for w in wings]
+        rhs = map(w -> w isa PowerLawWing ? _wing_rh(w, b) : 0.0, wt)
         P = b.power
         for (j, ci) in enumerate(hw_idx)
-            best, bp, bs = Inf, zero(Vec3), NaN
-            Imax = 0.0
-            for x in samples[ci]
-                d, s = _envelope_union_distance(envs, wingc, x)
-                s <= s_stop || continue
-                d < best && ((best, bp, bs) = (d, x, s))
-                for (vi, f) in zip(vids, frames)
-                    I = _cone_mean_intensity(f, cone, x)
-                    if !isempty(wings)
-                        dv = x - f.focus
-                        r = hypot(dot(dv, f.e1), dot(dv, f.e2))
-                        for (w, rh) in zip(wings, rhs)
-                            I += _wing_intensity(w, rh, P, r)
-                        end
-                    end
-                    Imax = max(Imax, I)
-                end
-            end
+            best, bp, bs, Imax = _scan_hardware(samples[ci], envs[1], wingc, s_stop, frames,
+                                                cone, wt, rhs, P)
             worst = best - R - focus * envs[1].cone
             pw = maximum(Pc[v, ci] for v in vids)
             frac = P > 0 ? pw / P : 0.0
@@ -493,6 +478,35 @@ function _clearance_rows(t::Target, beams, samples, hw_idx, tgt_idx, wings, op, 
 end
 
 const _CLEARANCE_NCONE = 37
+
+# Nearest hardware sample to the envelope (distance, point, axial position) upstream of
+# `s_stop`, and the largest intensity over the error-set variants `frames` there.
+function _scan_hardware(samples, env::BeamEnvelope, wingc, s_stop, frames, cone, wings::Tuple,
+                        rhs, P)
+    best, bp, bs, Imax = Inf, zero(Vec3), NaN, 0.0
+    # transverse slopes of the cone directions (all variants share the port)
+    f1 = frames[1]
+    αmax = maximum(dj -> abs(dot(dj, f1.e1) / dot(dj, f1.k)), cone)
+    βmax = maximum(dj -> abs(dot(dj, f1.e2) / dot(dj, f1.k)), cone)
+    for x in samples
+        d, s = _envelope_union_distance((env,), wingc, x)
+        s <= s_stop || continue
+        d < best && ((best, bp, bs) = (d, x, s))
+        for f in frames
+            I = _beyond(f, αmax, βmax, x) ? 0.0 : _cone_mean_intensity(f, cone, x)
+            if !isempty(wings)
+                dv = x - f.focus
+                r = hypot(dot(dv, f.e1), dot(dv, f.e2))
+                I += _wing_sum(wings, rhs, P, r)
+            end
+            Imax = max(Imax, I)
+        end
+    end
+    return best, bp, bs, Imax
+end
+
+_wing_sum(wings::Tuple, rhs::Tuple, P, r) =
+    sum(map((w, rh) -> _wing_intensity(w, rh, P, r), wings, rhs); init = 0.0)
 
 # Beam intensity at `x`: the mean over cone directions of the best-focus profile where
 # each ray through `x` crosses the focal plane, i.e. the f-cone convolution that

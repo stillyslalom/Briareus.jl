@@ -14,6 +14,10 @@ julia --project=docs -t auto docs/make.jl                # docs; runs every tuto
 julia --project=docs -t auto docs/literate/<name>.jl     # one tutorial as a script
 ```
 
+The package precompiles a workload (end of `src/Briareus.jl`); `BRIAREUS_NO_WORKLOAD=true`
+skips it for quick rebuilds. Precompile caches do not key on that variable: after a
+build without the workload, touch a source file before measuring time to first result.
+
 Docs follow CompactLES.jl: Literate tutorials in `docs/literate/`, registered in
 `docs/make.jl`, each ending in "What this checks" with exact references. The docs
 environment has no ForwardDiff/Optim, and `Vec3` clashes with Makie there.
@@ -75,7 +79,17 @@ environment has no ForwardDiff/Optim, and `Vec3` clashes with Makie there.
   put the same worst case into objectives. The `direct` deposition penalty is
   quadratic in a tiny fraction and does not keep beams off the capsule.
 - `optimize_pointing` bounds both iterations and objective evaluations (a line search
-  on a kinked objective can take dozens per iteration).
+  on a kinked objective can take dozens per iteration). It hands L-BFGS-B value and
+  gradient from one dual pass, under one fixed dual tag (`_PointingTag`), so compiled
+  and precompiled code serves every objective.
+- Performance of the optimization path: a `Scenario` keeps the flux response contracted
+  with the cached Legendre/Y_lm weights (`moment_response`, `ylm_response`); the full
+  `scenario.response` and `ev.flux` are computed lazily on first read, so test for
+  radiation with the scenario's `model`/`observed`, never `ev.flux === nothing`. Dual
+  mat-vecs go through BLAS (`_mul`). `deposit` skips points and cone directions off the
+  spot on Float64 values (exact zeros); keep such screens exact. Keep heterogeneous
+  collections (keep-out tuples, wing lists) out of generators and abstract-typed loops
+  on hot paths: a `sum` over a generator on a mixed tuple took inference 27 s.
 - Mesh sizes: `hohlraum(; h, capsule_h)`; the GUI presets come from
   `examples/mesh_convergence.jl` (research notes): the capsule mesh sets P4 (error ∝
   capsule_h²), fine (0.17/0.05 mm) is converged to ~0.02 percentage points.
@@ -100,6 +114,7 @@ Physics defaults and their sources live in `reference/research-notes.md`. Keep e
 number's provenance and confidence there, and say in docstrings when a value is
 derived or an engineering default rather than a facility criterion.
 
-Editing pitfall on this Windows box: Python `open()` defaults to cp1252. Use
-`encoding='utf-8'`, or the Edit tool, for files with Unicode. Julia triple-quoted
+Editing pitfall on this Windows box: Python `open()` defaults to cp1252 and, in text
+mode, writes CRLF. Use `encoding='utf-8', newline='
+'`, or the Edit tool. Julia triple-quoted
 strings dedent, so multi-line `replace` patterns built from them miss indented code.

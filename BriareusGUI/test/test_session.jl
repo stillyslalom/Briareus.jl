@@ -44,7 +44,8 @@ const SESS = DesignSession(resolution = :coarse)
     # the capsule θ–φ map: the observed flux on a regular grid
     mp = flux_map(dr)
     @test mp.kind === :capsule && size(mp.values) == (length(mp.x), length(mp.y))
-    @test extrema(mp.values) == extrema(to_Wcm2.(res.evaluation.flux))
+    # (from the radiosity solve; the flux response agrees to round-off)
+    @test all(isapprox.(extrema(mp.values), extrema(to_Wcm2.(res.evaluation.flux)); rtol = 1e-9))
     set_view!(dr, :map)
     @test dr.view[] === :map
     @test_throws ArgumentError set_view!(dr, :image)

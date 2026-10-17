@@ -118,6 +118,31 @@ Shot-review layer:
   through all 210k CAD elements lands them in the hohlraum. CAD normals there are
   inconsistent (the inner wall faces out), hence `two_sided`.
 
+## Done (2026-10-17, performance)
+Measured on the NIF hohlraum at the GUI's standard mesh (5,864 elements, 48 quads,
+12 parameters, both keep-outs), 24 threads (i9-12900K):
+
+| | before | after |
+|---|---|---|
+| first objective call (compile) | 14 s, 12 GiB | 4 ms |
+| gradient | 31 ms | 8 ms |
+| optimizer, 20 iterations | 4.7 s | 1.05 s |
+| `clearance` (48 quads) | 6.0 s, 15 GiB | 1.8 s, 0.15 GiB |
+| `Scenario` setup | 2.1 s | 1.3 s |
+| first `optimize_pointing` in a session | +1.5 s compile | none |
+
+- A sum over a generator of a mixed keep-out tuple took Julia 1.13's inference 27 s.
+- Objectives read the observed flux's moments from the response contracted with the
+  Legendre/Y_lm weights; the full response (`scenario.response`, `ev.flux`) is computed
+  on first read (8 s and 2.5 GiB on the fine mesh), and dual mat-vecs go through BLAS.
+- L-BFGS-B gets value and gradient from one dual pass, under one package dual tag, and
+  the package precompiles a coarse design workload.
+- Deposition skips points and cone directions off the spot on values (78% of points,
+  exact zeros); the focal profile uses `exp(h log q)`; smaller work units.
+- BVH slab tests without NaN-aware min/max (ray traces 2×); `any_hit` specialized on
+  its skip predicate (view factors: 13.8M allocations to 0.6M).
+- Radiosity and closure without n² temporaries.
+
 ## Next
 1. **Sombrero and backlighter geometry.** Model the LEH shield as a component (a
    dimpled annulus), and the backlighter foil's placement relative to the diagnostic

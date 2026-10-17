@@ -202,9 +202,17 @@ _keepout_clearance(k::SphereKeepOut, beams) = sphere_clearance(k, beams)
 
 _keepout_penalty(::Nothing, beams) = 0.0
 
-# Several keep-outs (a tuple or vector) add their penalties.
-_keepout_penalty(ks::Union{Tuple,AbstractVector}, beams) =
-    sum(_keepout_penalty(k, beams) for k in ks; init = 0.0)
+# Several keep-outs (a tuple or vector) add their penalties. A tuple is unrolled with
+# `map`: a generator over a heterogeneous tuple took Julia 1.13's inference 27 s.
+_keepout_penalty(ks::Tuple, beams) = sum(map(k -> _keepout_penalty(k, beams), ks); init = 0.0)
+
+function _keepout_penalty(ks::AbstractVector, beams)
+    J = 0.0
+    for k in ks
+        J += _keepout_penalty(k, beams)
+    end
+    return J
+end
 
 function _keepout_penalty(k::Union{ApertureKeepOut,SphereKeepOut}, beams)
     c = _keepout_clearance(k, beams)

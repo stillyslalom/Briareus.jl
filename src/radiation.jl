@@ -70,17 +70,18 @@ nothing are left untouched.
 """
 function enforce_closure!(F::AbstractMatrix, A::AbstractVector; tol = 1e-12,
                           maxiter::Integer = 1000)
-    G = A .* F
+    # with G = diag(A) F, (G s)ᵢ = Aᵢ (F s)ᵢ and sᵢ Gᵢⱼ sⱼ / Aᵢ = sᵢ Fᵢⱼ sⱼ: no copy of F
     s = ones(length(A))
-    active = vec(sum(G; dims = 2)) .> 0
+    active = vec(sum(F; dims = 2)) .> 0
+    r = similar(s)
     for _ in 1:maxiter
-        r = G * s
+        r .= A .* mul!(r, F, s)
         snew = [active[i] ? sqrt(s[i] * A[i] / r[i]) : 1.0 for i in eachindex(s)]
         δ = maximum(abs.(snew .- s))
         s = snew
         δ < tol && break
     end
-    F .= (s .* G .* s') ./ A
+    F .= s .* F .* s'
     return F
 end
 
@@ -102,7 +103,7 @@ function _radiosity_lu(m::RadiationModel, α::Vector{Float64})
             end
             return c.facts[1]
         end
-        f = lu!(I - α .* m.F)
+        f = lu!(_radiosity_matrix(m.F, α))
         pushfirst!(c.keys, copy(α))
         pushfirst!(c.facts, f)
         if length(c.keys) > FACTOR_CACHE_SIZE
@@ -111,6 +112,15 @@ function _radiosity_lu(m::RadiationModel, α::Vector{Float64})
         end
         return f
     end
+end
+
+# I - diag(α) F, in one allocation.
+function _radiosity_matrix(F::Matrix{Float64}, α::Vector{Float64})
+    M = F .* (.-α)
+    for i in axes(M, 1)
+        M[i, i] += 1
+    end
+    return M
 end
 
 """
@@ -228,7 +238,7 @@ function solve(m::RadiationModel, P::AbstractVector; time = 0.0, albedo = nothin
                     (a = collect(Float64, albedo); (a, a, zero(a)))
     B = H = nothing
     for it in 1:(iterate ? maxiter : 1)
-        B = (it == 1 && !warm ? _radiosity_lu(m, α) : lu!(I - α .* m.F)) \ S
+        B = (it == 1 && !warm ? _radiosity_lu(m, α) : lu!(_radiosity_matrix(m.F, α))) \ S
         H = m.F * B
         iterate || break
         αn, intactn, trn = _albedos(t, time, H, burnthrough)
@@ -241,7 +251,7 @@ function solve(m::RadiationModel, P::AbstractVector; time = 0.0, albedo = nothin
 end
 
 """
-    flux_response(model, observed; time = 0.0, albedo = nothing) -> Matrix
+    flux_response(model, observed; time = 0.0, albedo = nothing, weights = nothing) -> Matrix
 
 Linear operator `R` with `H[observed] = R * P`: incident x-ray flux on the observed
 elements (TW/mm²) per unit absorbed laser power on every element (TW). It is fixed
@@ -249,15 +259,27 @@ for a given geometry and albedo, so optimizers that only change the laser source
 apply it as a matrix product instead of re-solving. Pass the converged `sol.albedo` of
 a reference solution to linearize about a temperature-dependent albedo state. Shares
 the model's factorization cache with `solve`.
+
+With `weights` (a matrix with one column per observed element, e.g. `legendre_weights`),
+returns `weights * R` directly, solving for its rows only: far cheaper than `R` when
+only a few moments of the observed flux are wanted.
 """
 function flux_response(m::RadiationModel, observed::AbstractVector{<:Integer}; time = 0.0,
-                       albedo = nothing)
+                       albedo = nothing, weights = nothing)
     t = m.target
     α = albedo === nothing ? albedos(t, time) : collect(Float64, albedo)
     η = conversions(t)
     # R = F[obs,:] M⁻¹ diag(η ./ A)  ⇒  Rᵀ = diag(η ./ A) M⁻ᵀ F[obs,:]ᵀ
-    X = _radiosity_lu(m, α)' \ Matrix(m.F[observed, :]')
-    return Matrix((X .* (η ./ t.elem_area))')
+    rhs = if weights === nothing
+        Matrix(transpose(view(m.F, observed, :)))
+    else
+        # (weights F[obs,:])ᵀ as one BLAS product over all elements
+        Wn = zeros(size(weights, 1), nelements(t))
+        Wn[:, observed] .= weights
+        Matrix(transpose(Wn * m.F))
+    end
+    X = ldiv!(_radiosity_lu(m, α)', rhs)
+    return Matrix(transpose(X .* (η ./ t.elem_area)))
 end
 
 """

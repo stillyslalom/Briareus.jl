@@ -16,6 +16,7 @@ using StaticArrays
 using ForwardDiff
 using SpecialFunctions: gamma, gamma_inc, gamma_inc_inv, dawson
 import Optim
+using PrecompileTools: @setup_workload, @compile_workload
 
 export CurvedSurface, SphereSurface, CylinderSurface, DiskSurface, surface_point, element_sector
 export Vec3, Mesh, npatches, add_polygon!, merge_meshes, split_mesh, transform, translate, rotation_to,
@@ -75,5 +76,36 @@ include("visrad.jl")
 include("visrad_workspace.jl")
 include("cbet.jl")
 include("unconverted.jl")
+
+# Time to first design: a coarse NIF hohlraum through setup, evaluation, a short
+# optimization with keep-outs, clearance and the radiation solve. Set the environment
+# variable BRIAREUS_NO_WORKLOAD=true to skip it (faster rebuilds while developing).
+@setup_workload begin
+    get(ENV, "BRIAREUS_NO_WORKLOAD", "") == "true" || @compile_workload begin
+        t = hohlraum(; length = 10.1, radius = 2.875, leh_radius = 1.55, capsule_radius = 0.9,
+                     h = 1.2, capsule_h = 0.45)
+        quads = nif_quads(power = 8.0)
+        p = GroupPointing(quads; fields = (:z, :r, :power))
+        s = Scenario(t, quads; observe = :capsule, parameterization = p,
+                     viewfactor_kw = (; closed = true))
+        x0 = initial_parameters(p)
+        ev = evaluate(s, x0)
+        a = flux_moments(ev)
+        flux_ylm(ev)
+        ev.flux
+        keepout = (ApertureKeepOut(t), SphereKeepOut(t))
+        for obj in (symmetry_objective(; modes = (2 => 1.0, 4 => 1.0, 6 => 0.25), drive = a[1],
+                                       keepout),
+                    asymmetry_objective(; keepout))
+            optimize_pointing(s, obj; x0, iterations = 1, evaluations = 2)
+        end
+        report(devnull, ev)
+        sol = solve(s.model, ev.deposition)
+        energy_balance(sol)
+        legendre_moments(sol.H, t, s.observed; lmax = 4)
+        clearance(t, quads[1:2]; targets = (:wall,), nspot = 5, nangles = 4)
+        raytrace_deposition(t, quads[1:2]; nspot = 5)
+    end
+end
 
 end

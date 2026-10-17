@@ -95,7 +95,7 @@ struct DepositionOperator
     plan::_DepositPlan             # work units of the threaded `deposit`
 end
 
-const _DEPOSIT_UNIT = 8192   # points per work unit
+const _DEPOSIT_UNIT = 4096   # points per work unit
 
 function _deposit_plan(ne::Integer, dest::Vector{Vector{Int32}}; unit::Integer = _DEPOSIT_UNIT)
     nb = length(dest)
@@ -457,12 +457,13 @@ function deposit(op::DepositionOperator, beams::AbstractVector{<:Beam})
     plan = op.plan
     nblock, nback = size(plan.boff, 1) - 1, length(plan.back)
     frames = [BeamFrame(b) for b in beams]
+    screens = [_screen_frame(f, b) for (f, b) in zip(frames, beams)]
     slopes = [_cone_slopes(op.dirs[bi], frames[bi]) for bi in 1:nb]
     E = zeros(T, ne)
     PB = zeros(T, nb, nblock)     # per-beam power by element block
     LB = zeros(T, nc, nback)      # back-side power by piece
     SB = zeros(T, nback)          # piece totals
-    _deposit_units!(E, PB, LB, SB, op, frames, slopes)
+    _deposit_units!(E, PB, LB, SB, op, frames, screens, slopes)
     # partial sums reduced in a fixed order
     per_beam = [sum(@view PB[bi, :]; init = zero(T)) for bi in 1:nb]
     L = zeros(T, nc)
@@ -474,7 +475,7 @@ function deposit(op::DepositionOperator, beams::AbstractVector{<:Beam})
 end
 
 # Function barrier for the threaded loop over `op.plan`'s work units.
-function _deposit_units!(E, PB, LB, SB, op::DepositionOperator, frames, slopes)
+function _deposit_units!(E, PB, LB, SB, op::DepositionOperator, frames, screens, slopes)
     plan = op.plan
     nblock = size(plan.boff, 1) - 1
     _tforeach(length(plan.order)) do k
@@ -483,12 +484,14 @@ function _deposit_units!(E, PB, LB, SB, op::DepositionOperator, frames, slopes)
             # an element block: every point lands on an element (E is never indexed < 0)
             for bi in axes(plan.boff, 2)
                 r = plan.boff[u, bi]:plan.boff[u+1, bi]-1
-                isempty(r) || (PB[bi, u] = _deposit_points!(E, E, op, bi, frames[bi], slopes[bi], r))
+                isempty(r) || (PB[bi, u] = _deposit_points!(E, E, op, bi, frames[bi], screens[bi],
+                                                            slopes[bi], r))
             end
         else
             v = u - nblock
             bi, r = plan.back[v]
-            SB[v] = _deposit_points!(E, view(LB, :, v), op, bi, frames[bi], slopes[bi], r)
+            SB[v] = _deposit_points!(E, view(LB, :, v), op, bi, frames[bi], screens[bi],
+                                     slopes[bi], r)
         end
     end
 end
@@ -501,14 +504,25 @@ function _cone_slopes(ds, f::BeamFrame)
     return (κ, α, β)
 end
 
+# Float64 frame for screening points and cone directions (`_beyond`, `_live_directions`).
+_screen_frame(f::BeamFrame{Float64}, b) = f
+_screen_frame(::BeamFrame, b) = BeamFrame(_value_beam(b))
+
 # Deposit beam `bi`'s points `r` into elements `Ec` and back sides `Lc`; returns their sum.
+# Most points of a beam lie off its spot: a bound on all cone directions at once skips
+# them, and for dual beams each remaining direction is screened on values. Skipped
+# points and directions would contribute exact zeros.
 function _deposit_points!(Ec::AbstractVector{T}, Lc::AbstractVector{T}, op::DepositionOperator,
-                          bi, f::BeamFrame, (κ, α, β), r) where {T}
+                          bi, f::BeamFrame, fv::BeamFrame{Float64}, (κ, α, β), r) where {T}
     ds = op.dirs[bi]
     P, W, Nr, M, D = op.pts[bi], op.w[bi], op.normal[bi], op.mask[bi], op.dest[bi]
+    αmax, βmax = maximum(abs, α), maximum(abs, β)
     acc = zero(T)
     @inbounds for q in r
-        val = W[q] * _cone_intensity(f, ds, α, β, κ, M[q], P[q], Nr[q])
+        _beyond(fv, αmax, βmax, P[q]) && continue
+        m = T === Float64 ? M[q] : _live_directions(fv, α, β, M[q], P[q])
+        m == 0 && continue
+        val = W[q] * _cone_intensity(f, ds, α, β, κ, m, P[q], Nr[q])
         d = D[q]
         d > 0 ? (Ec[d] += val) : (Lc[-d] += val)
         acc += val
@@ -516,8 +530,42 @@ function _deposit_points!(Ec::AbstractVector{T}, Lc::AbstractVector{T}, op::Depo
     return acc
 end
 
+# Whether every cone direction's ray through `x` crosses the focal plane outside the
+# profile's cutoff: the crossing (u₀ - sαⱼ, v₀ - sβⱼ) is at least |u₀| - |s| max|α| and
+# |v₀| - |s| max|β| off axis (with a relative allowance for rounding).
+@inline function _beyond(f::BeamFrame{Float64}, αmax, βmax, x)
+    d = x - f.focus
+    s = abs(dot(d, f.k))
+    u = max(abs(dot(d, f.e1)) - s * αmax, 0.0)
+    v = max(abs(dot(d, f.e2)) - s * βmax, 0.0)
+    _outside(c) = u^2 / c.a2 + v^2 / c.b2 > c.qcut * (1 + 1e-9)
+    return _outside(f.core) && (!f.has_halo || _outside(f.halo))
+end
+
+# The visible directions `m` whose ray through `x` crosses the focal plane inside the
+# profile's cutoff, from the beam's values: the others contribute exact zeros (value
+# and partials), so dual arithmetic is spent only on the ~1/6 of point-direction pairs
+# under the spot. (A Float64 beam is not screened: `_cone_intensity` tests the cutoff
+# itself.)
+@inline function _live_directions(f::BeamFrame, α, β, m::UInt16, x)
+    d = x - f.focus
+    s = dot(d, f.k)
+    u0 = dot(d, f.e1)
+    v0 = dot(d, f.e2)
+    live = UInt16(0)
+    for j in eachindex(α)
+        (m >> (j - 1)) & 0x1 == 0x1 || continue
+        u = u0 - s * α[j]
+        v = v0 - s * β[j]
+        (_sg_inside(f.core, u, v) || (f.has_halo && _sg_inside(f.halo, u, v))) &&
+            (live |= UInt16(1) << (j - 1))
+    end
+    return live
+end
+
 _deposit_beam!(Ec, Lc, op::DepositionOperator, bi, f::BeamFrame) =
-    _deposit_points!(Ec, Lc, op, bi, f, _cone_slopes(op.dirs[bi], f), eachindex(op.w[bi]))
+    _deposit_points!(Ec, Lc, op, bi, f, _screen_frame(f, nothing), _cone_slopes(op.dirs[bi], f),
+                     eachindex(op.w[bi]))
 
 # Absorbed power per unit area at `x` (lit-side normal `n`): the mean over the visible
 # cone directions dⱼ of the best-focus profile where the ray along dⱼ through `x`

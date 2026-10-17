@@ -186,7 +186,7 @@ function _make_objective(cfg::NamedTuple, s::Scenario, ev0::Evaluation, spot_rad
             length(elements(s.target, FOIL_NAME))
         return irradiance_objective(FOIL_NAME; center = c, radius = spot_radius, spill = cfg.spill)
     end
-    ev0.flux === nothing && throw(ArgumentError("capsule symmetry needs a hohlraum with a capsule"))
+    _has_flux(ev0) || throw(ArgumentError("capsule symmetry needs a hohlraum with a capsule"))
     modes = Tuple(l => w for (l, w) in sort(collect(cfg.weights)) if w > 0)
     isempty(modes) && throw(ArgumentError("give at least one mode a positive weight"))
     keepouts = Any[]
@@ -203,11 +203,15 @@ function _make_objective(cfg::NamedTuple, s::Scenario, ev0::Evaluation, spot_rad
     return asymmetry_objective(; modes, drive, keepout)
 end
 
+# Whether an evaluation has an observed x-ray flux (checked on the scenario: reading
+# `ev.flux` would compute the full flux response, which the moments do not need).
+_has_flux(ev::Evaluation) = ev.scenario.model !== nothing && !isempty(ev.scenario.observed)
+
 # Capsule modes / foil spot and clipping of an evaluation, for before/after tables.
 function _quick_summary(ev::Evaluation, spot_radius::Real)
     modes = NamedTuple[]
     mean = NaN
-    if ev.flux !== nothing
+    if _has_flux(ev)
         c = flux_ylm(ev; lmax = maximum(MODE_DEGREES))
         a = flux_moments(ev; lmax = maximum(MODE_DEGREES))
         mean = a[1]
