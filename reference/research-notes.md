@@ -702,6 +702,9 @@ a scanned or garbled PDF; **M** secondary; **L** inference.
 - Rosen, "Marshak waves: constant flux vs constant T" (1994),
   https://www.osti.gov/servlets/purl/104716. **H-img**
 - Lindl, Phys. Plasmas 2, 3933 (1995): not read.
+- R. S. Lester et al., Phys. Rev. E 114, L023201 (2026), doi:10.1103/k8dz-pjdx
+  (https://journals.aps.org/pre/abstract/10.1103/k8dz-pjdx), p. L023201-2, eqs. 1–2
+  and the text between them. **H** (text, checked against the rendered page)
 
 ### Gold power-law fits (Hammer & Rosen eq. 31) **H-img**
 - Specific energy e = f T^β ρ^−μ with f = 3.4 MJ/g, β = 1.6, μ = 0.14.
@@ -778,6 +781,34 @@ a scanned or garbled PDF; **M** secondary; **L** inference.
 - Before burnthrough the foil uses the thick-wall albedo. Ahead of a nonlinear
   diffusion front the cold layer does not change the flux into the wall, and the Nova
   data show no early transmission.
-- `after = 0` (a burned-through foil is an open hole) is an upper bound on the loss. A
-  foil tamped by a low-Z backing stays hot and re-emits. The effective post-burnthrough
-  albedo is a calibration knob. **L**
+- After burnthrough (default since 2026-10-16) a fraction T of the incident flux is
+  transmitted out of the hohlraum and the rest re-emits with the `before` albedo:
+  α = (1 − sT) α_before, transmitted sT, with s the smooth step. See the next section.
+- `after = 0` (a burned-through foil is an open hole) is an upper bound on the loss,
+  kept as an option. With an explicit `after`, only the loss beyond the intact foil's,
+  (α_before − α)HA, is booked as transmitted (the earlier default's accounting).
+  `transmission = 1` gives the same albedo and books the whole loss as transmitted.
+
+### Post-burnthrough transmission (Lester et al. 2026)
+- Eq. 1: τ(L) = L / λ_Au(T_h), "where λ_Au is the Rosseland mean free path of gold at
+  radiation temperature T_h (typically 300–350 eV)", in a "simplified gray-opacity
+  model". **H**
+- "At L = 2.5 µm, and assuming the Au density is ≈1 g/cm³, the resulting τ ∼ 5". **H**
+- Eq. 2: F_trans = (4/3) F_inc / (τ + 2/3), "the planar Eddington approximation with a
+  Marshak boundary condition", i.e. T = 4/(3τ + 2) = 4/17 = 0.235 at τ = 5
+  (*derived*; the paper does not print T). **H**
+- The paper uses eq. 2 to benchmark 1D radiation-hydrodynamics transmission estimates
+  after burnthrough. It is a diffusion result: T > 1 below τ = 2/3, where
+  `eddington_transmission` caps it at 1.
+- Density and thickness: the paper pairs the as-built thickness L = 2.5 µm with λ_Au
+  at an assumed (expanded) density of ≈1 g/cm³. Literally, ρκL at 1 g/cm³ over
+  2.5 µm is 0.25 mg/cm², not the as-built foil's 4.8 mg/cm². Briareus keeps the
+  paper's pairing as the reference point: τ = 5 for the areal mass of 2.5 µm of
+  solid gold (19.3 g/cm³). **H** (the pairing) / **L** (the interpretation)
+- Thickness scaling (*derived*, **L**): τ is linear in areal mass at fixed λ_Au and
+  density (eq. 1), so τ = 5 × ρ·thickness / (19.3 g/cm³ × 2.5 µm). T = 0.328, 0.235
+  and 0.169 at 1.7, 2.5 and 3.6 µm (τ = 3.4, 5, 7.2).
+- Not modeled: λ_Au's dependence on T_h and density (held at the paper's 300–350 eV
+  evaluation; the gray mean free path grows with temperature), time dependence of T
+  after burnthrough, absorption or re-emission by a low-Z backing, non-gold foils
+  (pass `transmission`). **L**

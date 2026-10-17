@@ -54,7 +54,8 @@ radiosity at that time (time- and temperature-dependent albedos included), and r
 - `wall_Tr`, `wall_albedo` — area-weighted mean incident-flux temperature and albedo
   of the `wall` components
 - `escaped` — power (TW) through each aperture, and `transmitted` through each
-  thin-foil (`BurnthroughAlbedo`) component, as in `energy_balance`
+  thin-foil (`BurnthroughAlbedo`) component, as in `energy_balance` (by default the
+  fraction `s T` of the flux on each burned-through element)
 - `window_loss` — power lost through diagnostic windows: `transmitted` plus `escaped`
   through every aperture except the entrance `holes` (default: the apertures not on a
   `CylinderSurface`, i.e. a hohlraum's LEHs)
@@ -79,8 +80,9 @@ A burnthrough transition takes the foil's `width` (0.4 ns by default), and a ste
 much longer than that jumps across it. Two optional criteria insert steps between
 `times`:
 
-- `transition` — no thin-foil element's transition (the fraction of the way its albedo
-  has gone from `before` to `after`, 0 to 1) advances by more than this in one step.
+- `transition` — no thin-foil element's transition (the smooth step `s` of
+  `BurnthroughAlbedo`, 0 intact to 1 burned through) advances by more than this in one
+  step.
   Steps are planned from each element's known or predicted burnthrough time, and
   halved if the step's own temperatures move a burnthrough so that the advance
   exceeds 1.5 `transition`.

@@ -121,21 +121,83 @@ function heat_front(f::HeatFront, times, Tr)
 end
 
 """
-    BurnthroughAlbedo(; thickness, density = 19.3, before = WallLossAlbedo(), after = 0.0,
+    eddington_transmission(τ)
+
+Fraction of the incident flux that a gray, planar foil of optical depth `τ` transmits
+in the Eddington approximation with a Marshak boundary condition,
+
+    F_trans / F_inc = (4/3) / (τ + 2/3) = 4 / (3τ + 2),
+
+eq. 2 of R. S. Lester et al., Phys. Rev. E 114, L023201 (2026), doi:10.1103/k8dz-pjdx.
+It is a diffusion result for optically thick foils: it exceeds 1 below `τ = 2/3`,
+where it is capped at 1. `BurnthroughAlbedo` takes its default transmission from it
+(see `optical_depth`). Generic in the number type.
+"""
+function eddington_transmission(τ)
+    τ >= 0 || throw(DomainError(τ, "the optical depth must not be negative"))
+    T = 4 / (3τ + 2)
+    return min(one(T), T)
+end
+
+# The point the default foil optical depth is scaled from: τ ∼ 5 for a gold foil
+# 2.5 µm thick (Lester et al. 2026, after eq. 1), i.e. 19.3 g/cm³ × 2.5 µm of gold.
+const _FOIL_REFERENCE_DEPTH = 5.0
+const _FOIL_REFERENCE_AREAL_MASS = 19.3 * 2.5e-4      # g/cm²
+
+_foil_optical_depth(areal_mass) = _FOIL_REFERENCE_DEPTH * areal_mass / _FOIL_REFERENCE_AREAL_MASS
+
+"""
+    BurnthroughAlbedo(; thickness, density = 19.3, before = WallLossAlbedo(),
+                      transmission = eddington_transmission(τ), after = nothing,
                       width = 0.4, burnthrough = nothing, front = HeatFront())
 
 Albedo of a thin wall layer (a thin-foil diagnostic window: `thickness` µm of a
 material of `density` g/cm³, gold by default) that re-emits like the wall until the
 Marshak heat front (`front`, a `HeatFront`) has heated its whole areal mass
-`ρ × thickness`, and then transmits:
+`ρ × thickness`, and then lets part of the flux that reaches it through.
 
-    α(t) = α_before + s((t - t_b)/width) (α_after - α_before),
+Once burned through, a fraction `T = transmission` of the incident flux passes through
+the foil and leaves the hohlraum. The rest meets the foil as before and is re-emitted
+with the albedo of `before`. Across the transition
 
-with `s` the smooth step `3x² - 2x³` on [0, 1] and `t_b` the burnthrough time.
-`before` and `after` are albedo models or numbers: `before` defaults to the wall's
-Marshak loss (`WallLossAlbedo`), `after = 0` sends everything that reaches the
-burned-through foil out of the hohlraum (an open hole, or absorption in a low-Z
-backing; the upper bound on the loss).
+    α(t) = α_before (1 - s T),    transmitted fraction s T,
+
+with `s = s((t - t_b)/width)` the smooth step `3x² - 2x³` on [0, 1] and `t_b` the
+burnthrough time, so the burned-through albedo is `(1 - T) α_before`. Of the flux
+`H A` on the foil, `s T H A` is transmitted and `(1 - s T)(1 - α_before) H A` absorbed
+(`energy_balance`, `drive_history`). `before` is an albedo model or a number, by
+default the wall's Marshak loss (`WallLossAlbedo`).
+
+The default `T` is the gray-foil estimate of R. S. Lester et al., Phys. Rev. E 114,
+L023201 (2026), doi:10.1103/k8dz-pjdx: `T = 4/(3τ + 2)` (their eq. 2,
+`eddington_transmission`). The optical depth is their eq. 1, `τ = L/λ_Au(T_h)` at a
+fixed Rosseland mean free path λ_Au, scaled linearly in areal mass (`optical_depth`)
+from their point `τ ∼ 5` at `L = 2.5 µm`:
+
+    τ = 5 × ρ thickness / (19.3 g/cm³ × 2.5 µm),
+
+so `T ≈ 0.33`, `0.235` and `0.17` for 1.7, 2.5 and 3.6 µm of gold. Limitations:
+- λ_Au is held at their evaluation, for a hohlraum radiation temperature `T_h` of
+  typically 300–350 eV and an assumed gold density of about 1 g/cm³ (the expanded
+  foil). Its dependence on temperature and density is not modeled, and `T` is
+  constant once burned through.
+- Pairing that density with the 2.5 µm as-built thickness is theirs. Taken literally,
+  eq. 1 at 1 g/cm³ describes a layer of 0.25 mg/cm², not the foil's 4.8. The scaling
+  with thickness (areal mass) is ours, from eq. 1.
+- The estimate is gray, planar and quasi-static, and for gold: pass `transmission`
+  for another material. Below `τ = 2/3` (0.33 µm of gold) it is capped at 1.
+
+`transmission = 1` makes a burned-through foil an open hole whose whole incident flux
+is transmitted.
+
+An explicit `after` (an albedo model or number; exclusive with `transmission`) sets
+the burned-through albedo directly instead,
+
+    α(t) = α_before + s (α_after - α_before),
+
+and counts as transmitted only the loss beyond the intact foil's, `(α_before - α) H A`;
+the intact foil's own `(1 - α_before) H A` stays absorbed. `after = 0` is the open-hole
+bound on the loss with this split (the default before `transmission` existed).
 
 The burnthrough time `t_b` is, in order:
 - the per-element time passed to `solve`/`albedos` (`burnthrough = ...`), which
@@ -145,37 +207,60 @@ The burnthrough time `t_b` is, in order:
 - otherwise the foil is intact (`t_b = ∞`): a single solve has no history to estimate
   it from. `burnthrough_time` gives the estimate for a temperature history.
 
-Before `t_b` the foil loses exactly what a thick wall loses: in the diffusion
-picture the cold material ahead of a nonlinear heat front does not change the flux
-into it, so no early loss is modeled. Measured burnthrough of 0.8–3 µm gold foils on
-a 260 eV hohlraum wall (Nova; Lindl et al., Phys. Plasmas 11, 339 (2004), Fig. 4-6)
-reaches half signal 0.1–0.25 ns after the computed front arrival, 0.19 ns on average,
-which sets the default `width` (half transmission at `t_b + width/2`; see the
-diagnostic-windows tutorial).
+Before `t_b` the foil loses exactly what a thick wall loses and transmits nothing: in
+the diffusion picture the cold material ahead of a nonlinear heat front does not
+change the flux into it, so no early loss is modeled. Measured burnthrough of 0.8–3 µm
+gold foils on a 260 eV hohlraum wall (Nova; Lindl et al., Phys. Plasmas 11, 339
+(2004), Fig. 4-6) reaches half signal 0.1–0.25 ns after the computed front arrival,
+0.19 ns on average, which sets the default `width` (half transmission at
+`t_b + width/2`; see the diagnostic-windows tutorial).
 """
 struct BurnthroughAlbedo <: AlbedoModel
     thickness::Float64
     density::Float64
     before::AlbedoModel
-    after::AlbedoModel
+    after::Union{Nothing,AlbedoModel}       # an explicit burned-through albedo, or
+    transmission::Union{Nothing,Float64}    # the transmitted fraction (exactly one is set)
     width::Float64
     burnthrough::Union{Nothing,Float64}
     front::HeatFront
-    function BurnthroughAlbedo(thickness, density, before, after, width, burnthrough, front)
+    function BurnthroughAlbedo(thickness, density, before, after, transmission, width,
+                               burnthrough, front)
         thickness > 0 && density > 0 || throw(ArgumentError("thickness and density must be positive"))
         width >= 0 || throw(ArgumentError("the transition width must not be negative"))
-        new(thickness, density, _albedo_model(before), _albedo_model(after), width,
+        after === nothing || transmission === nothing ||
+            throw(ArgumentError("give `after` or `transmission`, not both"))
+        if after === nothing
+            transmission === nothing &&
+                (transmission = eddington_transmission(_foil_optical_depth(density * thickness * 1e-4)))
+            0 <= transmission <= 1 || throw(ArgumentError("transmission must lie in [0, 1]"))
+        end
+        new(thickness, density, _albedo_model(before),
+            after === nothing ? nothing : _albedo_model(after),
+            transmission === nothing ? nothing : Float64(transmission), width,
             burnthrough === nothing ? nothing : Float64(burnthrough), front)
     end
 end
 _albedo_model(x) = x isa AlbedoModel ? x : ConstantAlbedo(x)
 
-BurnthroughAlbedo(; thickness, density = 19.3, before = WallLossAlbedo(), after = 0.0,
-                  width = 0.4, burnthrough = nothing, front = HeatFront()) =
-    BurnthroughAlbedo(thickness, density, before, after, width, burnthrough, front)
+BurnthroughAlbedo(; thickness, density = 19.3, before = WallLossAlbedo(), after = nothing,
+                  transmission = nothing, width = 0.4, burnthrough = nothing,
+                  front = HeatFront()) =
+    BurnthroughAlbedo(thickness, density, before, after, transmission, width, burnthrough, front)
 
 "Areal mass (g/cm²) of a burnthrough layer."
 areal_mass(m::BurnthroughAlbedo) = m.density * m.thickness * 1e-4
+
+"""
+    optical_depth(model::BurnthroughAlbedo)
+
+Gray optical depth of a burned-through gold foil, scaled linearly in areal mass from
+`τ ∼ 5` at 2.5 µm (Lester et al., Phys. Rev. E 114, L023201 (2026), eq. 1 at a fixed
+Rosseland mean free path): `5 × areal_mass(model) / (19.3 g/cm³ × 2.5 µm)`. The
+default `transmission` is `eddington_transmission(optical_depth(model))`. An explicit
+`transmission` or `after` does not change this estimate.
+"""
+optical_depth(m::BurnthroughAlbedo) = _foil_optical_depth(areal_mass(m))
 
 # Transmitting fraction of the transition at time t for burnthrough time tb.
 function _burnthrough_step(m::BurnthroughAlbedo, t, tb)
@@ -185,13 +270,24 @@ function _burnthrough_step(m::BurnthroughAlbedo, t, tb)
     return x^2 * (3 - 2x)
 end
 
-function albedo(m::BurnthroughAlbedo, t, T = nothing; burnthrough = nothing)
+# The albedo at time t, the intact (`before`) albedo, and the fraction of the incident
+# flux transmitted out of the enclosure.
+function _burnthrough_split(m::BurnthroughAlbedo, t, T, burnthrough)
     tb = burnthrough !== nothing && !isnan(burnthrough) ? burnthrough :
          m.burnthrough !== nothing ? m.burnthrough : Inf
     αb = albedo(m.before, t, T)
     s = _burnthrough_step(m, t, tb)
-    return s == 0 ? αb : αb + s * (albedo(m.after, t, T) - αb)
+    s == 0 && return αb, αb, zero(αb)
+    if m.after === nothing
+        τ = s * m.transmission
+        return αb * (1 - τ), αb, τ + zero(αb)
+    end
+    α = αb + s * (albedo(m.after, t, T) - αb)
+    return α, αb, αb - α
 end
+
+albedo(m::BurnthroughAlbedo, t, T = nothing; burnthrough = nothing) =
+    first(_burnthrough_split(m, t, T, burnthrough))
 
 """
     burnthrough_time(model::BurnthroughAlbedo, times, Tr) -> Float64

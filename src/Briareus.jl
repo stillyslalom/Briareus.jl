@@ -21,7 +21,7 @@ export CurvedSurface, SphereSurface, CylinderSurface, DiskSurface, surface_point
 export Vec3, Mesh, npatches, add_polygon!, merge_meshes, split_mesh, transform, translate, rotation_to,
        cylinder_mesh, annulus_mesh, disk_mesh, sphere_mesh, cubed_sphere_mesh, rectangle_mesh, frustum_mesh
 export AlbedoModel, ConstantAlbedo, TabulatedAlbedo, WallLossAlbedo, BurnthroughAlbedo, HeatFront,
-       heat_front, burnthrough_time, areal_mass, albedo, Material, gold, ablator, BLACK,
+       heat_front, burnthrough_time, areal_mass, optical_depth, eddington_transmission, albedo, Material, gold, ablator, BLACK,
        Component, aperture, Target, nelements, elements, component_index, element_quadrature
 export hohlraum, foil, disk_foil
 export WallWindow, conforming_grid, equal_area_radius

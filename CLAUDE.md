@@ -48,8 +48,13 @@ environment has no ForwardDiff/Optim, and `Vec3` clashes with Makie there.
 - Thin-foil windows (`BurnthroughAlbedo`): `drive_history` tracks each element's heat
   front (`HeatFront`, Hammer & Rosen 2003) from its own T(t). A single `solve` treats
   the foil as intact unless given the model's `burnthrough` or a per-element
-  `burnthrough` vector. `sol.albedo` is the albedo B was solved with, and `sol.intact`
-  its before-burnthrough part, which `energy_balance` uses to split out `transmitted`.
+  `burnthrough` vector. Once burned through, a foil transmits the fraction
+  `transmission` T (default `eddington_transmission(optical_depth(m))`, Lester et al.
+  2026: 4/(3τ+2), τ = 5 at 2.5 µm Au, linear in areal mass) and re-emits the rest with
+  `before`: α = (1 − sT)α_before. An explicit `after` (e.g. 0, the open-hole bound)
+  replaces this and books only α_before − α as transmitted. `sol.albedo` is the albedo
+  B was solved with, `sol.intact` its before-burnthrough part, and `sol.transmission`
+  the transmitted fraction that `energy_balance` splits out as `transmitted`.
 - Deposition (operator and ray trace) sums the best-focus profile over `ncone` (default
   13) f-cone directions, each with its own incidence factor `|n·dⱼ|/(k·dⱼ)`. Don't use the
   moment-matched `intensity` for deposition: it has the right second moment but the

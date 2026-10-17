@@ -43,7 +43,8 @@ for the same workflow: target, beams, drive, optimization and shot review.
   passes through and x rays escape from, and the mesh conforms to their edges.
   Windows are rectangles or disks, with optional assembly gaps, at exact areas; a
   thin-foil window burns through when the Marshak heat front reaches its back
-  (`BurnthroughAlbedo`).
+  (`BurnthroughAlbedo`), and then transmits the gray Eddington fraction `4/(3τ + 2)` of
+  the flux on it (Lester et al., Phys. Rev. E 114, L023201 (2026)).
 - **Laser deposition.** Beams enter from facility ports with elliptical super-Gaussian
   phase-plate spots, an f-number cone, pointing, and defocus. Two methods:
   - `DepositionOperator` + `deposit` — precomputed quadrature with per-direction

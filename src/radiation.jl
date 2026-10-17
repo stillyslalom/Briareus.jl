@@ -138,23 +138,25 @@ burnthrough time of `BurnthroughAlbedo` elements.
 albedos(t::Target, time = 0.0, H = nothing; burnthrough = nothing) =
     first(_albedos(t, time, H, burnthrough))
 
-# Albedo per element and, alongside, the albedo it would have intact: a thin-foil
-# element's `before` albedo at the same temperature (the albedo itself elsewhere).
+# Albedo per element and, alongside, the albedo it would have intact (a thin-foil
+# element's `before` albedo at the same temperature, the albedo itself elsewhere) and
+# the fraction of its incident flux it transmits out of the enclosure (0 but on a
+# burned-through thin foil).
 function _albedos(t::Target, time, H, burnthrough)
     n = nelements(t)
-    α, intact = zeros(n), zeros(n)
+    α, intact, transmission = zeros(n), zeros(n), zeros(n)
     for e in 1:n
         is_aperture(t, e) && continue
         a = element_material(t, e).albedo
         T = H === nothing ? nothing : radiation_temperature(ForwardDiff.value(H[e]))
         if a isa BurnthroughAlbedo
-            α[e] = albedo(a, time, T; burnthrough = burnthrough === nothing ? NaN : burnthrough[e])
-            intact[e] = albedo(a.before, time, T)
+            α[e], intact[e], transmission[e] =
+                _burnthrough_split(a, time, T, burnthrough === nothing ? NaN : burnthrough[e])
         else
             α[e] = intact[e] = albedo(a, time, T)
         end
     end
-    return α, intact
+    return α, intact, transmission
 end
 conversions(t::Target) =
     [is_aperture(t, e) ? 0.0 : element_material(t, e).conversion for e in 1:nelements(t)]
@@ -164,7 +166,7 @@ _temperature_dependent(t::Target) =
 _temperature_dependent(::AlbedoModel) = false
 _temperature_dependent(::WallLossAlbedo) = true
 _temperature_dependent(m::BurnthroughAlbedo) =
-    _temperature_dependent(m.before) || _temperature_dependent(m.after)
+    _temperature_dependent(m.before) || (m.after !== nothing && _temperature_dependent(m.after))
 
 """
     RadiationSolution
@@ -172,8 +174,10 @@ _temperature_dependent(m::BurnthroughAlbedo) =
 Fields: `laser` (absorbed laser power per element, TW), `source` (x-ray source flux
 ηP/A), `B` (radiosity), `H` (incident flux), all per element in TW/mm²; `albedo` per
 element (the albedos the radiosity was solved with, so `B = source + albedo .* H`
-exactly), and `intact`, the albedo each element would have intact (a thin-foil
-element's `before` albedo, the albedo elsewhere; see `energy_balance`); `time`.
+exactly); `intact`, the albedo each element would have intact (a thin-foil element's
+`before` albedo, the albedo elsewhere); `transmission`, the fraction of its incident
+flux each element transmits out of the enclosure (nonzero only on a burned-through
+`BurnthroughAlbedo` foil; see `energy_balance`); `time`.
 """
 struct RadiationSolution{T}
     model::RadiationModel
@@ -183,6 +187,7 @@ struct RadiationSolution{T}
     H::Vector{T}
     albedo::Vector{Float64}
     intact::Vector{Float64}
+    transmission::Vector{Float64}
     time::Float64
 end
 
@@ -219,20 +224,20 @@ function solve(m::RadiationModel, P::AbstractVector; time = 0.0, albedo = nothin
     iterate = albedo === nothing && _temperature_dependent(t)
     warm = iterate && guess !== nothing
     warm && guess.model.target !== t && throw(ArgumentError("guess is a solution of another model"))
-    α, intact = albedo === nothing ? _albedos(t, time, warm ? guess.H : nothing, burnthrough) :
-                (a = collect(Float64, albedo); (a, a))
+    α, intact, tr = albedo === nothing ? _albedos(t, time, warm ? guess.H : nothing, burnthrough) :
+                    (a = collect(Float64, albedo); (a, a, zero(a)))
     B = H = nothing
     for it in 1:(iterate ? maxiter : 1)
         B = (it == 1 && !warm ? _radiosity_lu(m, α) : lu!(I - α .* m.F)) \ S
         H = m.F * B
         iterate || break
-        αn, intactn = _albedos(t, time, H, burnthrough)
+        αn, intactn, trn = _albedos(t, time, H, burnthrough)
         δ = maximum(abs.(αn .- α))
         δ < tol && break          # keep the albedo B was solved with, so B = S + αH exactly
-        α, intact = αn, intactn
+        α, intact, tr = αn, intactn, trn
         it == maxiter && @warn "albedo iteration did not converge" δ
     end
-    return RadiationSolution(m, collect(P), S, B, H, α, intact, Float64(time))
+    return RadiationSolution(m, collect(P), S, B, H, α, intact, tr, Float64(time))
 end
 
 """
@@ -261,14 +266,17 @@ end
 Global x-ray power accounting (TW): `source` (Σ ηPᵢ), `absorbed` by each component
 (`(1-α)HA`), `escaped` through each aperture, `transmitted` through each burned-through
 thin-foil component (`BurnthroughAlbedo`), and `lost` to open space (what leaves the
-geometry without reaching any element). A thin-foil component's loss splits into the
-wall-like part it absorbs as if intact, `(1-α_before)HA`, and the excess it transmits,
-`(α_before-α)HA`. `source ≈ Σabsorbed + Σescaped + Σtransmitted + lost`.
+geometry without reaching any element). A thin-foil component's loss `(1-α)HA` splits
+into what it transmits, `τHA` with `τ` its `sol.transmission`, and what it absorbs,
+`(1-α-τ)HA`: with the default `transmission` `T`, `τ = sT` and `α = (1-sT)α_before`
+(`s` the transition's progress), so it absorbs `(1-sT)(1-α_before)HA`; with an
+explicit `after`, `τ = α_before-α` and it absorbs `(1-α_before)HA`, as if intact.
+`source ≈ Σabsorbed + Σescaped + Σtransmitted + lost`.
 """
 function energy_balance(s::RadiationSolution)
     m = s.model
     t = m.target
-    α, αi = s.albedo, s.intact
+    α, τ = s.albedo, s.transmission
     absorbed = Dict{Symbol,Float64}()
     escaped = Dict{Symbol,Float64}()
     transmitted = Dict{Symbol,Float64}()
@@ -278,8 +286,8 @@ function energy_balance(s::RadiationSolution)
         if c.kind === :aperture
             escaped[c.name] = sum(P, es; init = 0.0)
         elseif c.material.albedo isa BurnthroughAlbedo
-            absorbed[c.name] = sum((1 - αi[e]) * P(e) for e in es; init = 0.0)
-            transmitted[c.name] = sum((αi[e] - α[e]) * P(e) for e in es; init = 0.0)
+            absorbed[c.name] = sum((1 - α[e] - τ[e]) * P(e) for e in es; init = 0.0)
+            transmitted[c.name] = sum(τ[e] * P(e) for e in es; init = 0.0)
         else
             absorbed[c.name] = sum((1 - α[e]) * P(e) for e in es; init = 0.0)
         end

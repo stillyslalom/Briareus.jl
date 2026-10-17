@@ -6,8 +6,9 @@
 # micrometres thick, backed by a low-Z material that x rays above a few keV pass
 # through. Early in the pulse the thin gold re-emits like the rest of the wall. The
 # Marshak heat front that carries the x rays into the wall eats through it during the
-# drive, and from then on the window lets radiation out: the waist of the capsule
-# loses drive, and the poles, relatively, gain it. Two windows facing each other on
+# drive, and from then on part of the radiation that reaches the window passes through
+# it and leaves: the waist of the capsule loses drive, and the poles, relatively, gain
+# it. Two windows facing each other on
 # the waist give a positive ``P_2`` and an ``m = 2`` asymmetry, and they cost drive.
 # Assembly leaves a thin annular gap around each window that leaks from the start.
 #
@@ -16,8 +17,8 @@
 # solutions and measurements, and then follows a pair of windows through a NIF-like
 # drive for three window thicknesses, with and without a gap. It introduces
 # `WallWindow` disks and gaps, the `BurnthroughAlbedo` thin-foil model with its
-# `HeatFront`, and the window accounting of [`drive_history`](@ref) and
-# [`energy_balance`](@ref).
+# `HeatFront` and its transmission after burnthrough, and the window accounting of
+# [`drive_history`](@ref) and [`energy_balance`](@ref).
 
 using Briareus
 using CairoMakie
@@ -187,9 +188,38 @@ end
 # diffusion picture the cold gold ahead of a nonlinear front does not change the flux
 # into it, and the measurements show no early transmission. So the thin-foil albedo
 # follows the wall's own Marshak scaling, [`WallLossAlbedo`](@ref), until burnthrough.
-# Then it falls smoothly to its `after` value, 0 by default: everything that reaches
-# the burned-through foil leaves the hohlraum. That is the open-hole limit, an upper
-# bound on the loss.
+#
+# ### After burnthrough
+#
+# A burned-through foil does not vanish. It is hot, held in place by its backing, and
+# still optically thick. A gray, planar foil of optical depth ``\tau`` in the
+# Eddington approximation with a Marshak boundary condition transmits
+#
+# ```math
+# \frac{F_\mathrm{trans}}{F_\mathrm{inc}} = \frac{4/3}{\tau + 2/3} = \frac{4}{3\tau + 2}
+# ```
+#
+# of the flux on it (R. S. Lester et al., Phys. Rev. E 114, L023201, 2026, eq. 2;
+# [`eddington_transmission`](@ref)). Their eq. 1 sets
+# ``\tau = L/\lambda_\mathrm{Au}(T_h)``, with ``\lambda_\mathrm{Au}`` the Rosseland mean
+# free path of gold at the hohlraum's radiation temperature, and gives ``\tau \sim 5``
+# for ``L = 2.5`` µm (gold at an assumed density of about 1 g/cm³, ``T_h`` typically
+# 300–350 eV). [`BurnthroughAlbedo`](@ref) keeps that mean free path and scales
+# ``\tau`` with the foil's areal mass ([`optical_depth`](@ref)). A fraction
+# ``\mathcal{T}`` of the flux on a burned-through window leaves the hohlraum. The rest
+# meets the foil as before and is re-emitted with the wall's Marshak albedo, so across
+# the transition the albedo falls smoothly from ``\alpha_\mathrm{before}`` to
+# ``(1 - \mathcal{T})\,\alpha_\mathrm{before}``. For the windows below:
+
+for x in (1.7, 2.5, 3.6)
+    model = BurnthroughAlbedo(thickness = x)
+    @printf("%.1f µm: τ = %.1f, transmission %.3f\n", x, optical_depth(model),
+            model.transmission)
+end
+
+# This is a gray estimate with the mean free path held at one temperature. The limit
+# it replaces, `after = 0`, makes a burned-through window an open hole: everything
+# that reaches it leaves, an upper bound on the loss.
 
 # ## A pair of windows in a NIF-like hohlraum
 #
@@ -228,8 +258,9 @@ pulse = PulseShape([0.0, 0.3, 1.0, 1.4, 4.5, 5.0, 6.0, 7.5, 9.5, 10.0],
 # also records the real spherical harmonics of the capsule flux. The three thicknesses
 # share one geometry, so they share its view factors and its deposition operator.
 #
-# The steps are 0.2 ns, but a window's albedo falls to zero over the 0.4 ns `width` of
-# its transition, which two steps would jump across. With `transition = 0.05` the march
+# The steps are 0.2 ns, but a window's albedo falls to
+# ``(1 - \mathcal{T})\,\alpha_\mathrm{before}`` over the 0.4 ns `width` of its
+# transition, which two steps would jump across. With `transition = 0.05` the march
 # inserts steps wherever an element's transition would advance by more than a
 # twentieth of the way in one step, planned from each element's known or predicted
 # burnthrough time. It returns the times it took in `time`.
@@ -299,12 +330,13 @@ fig
 
 # Without a gap the windows cost nothing until they burn through: an intact window
 # re-emits like the wall, and its ``\Delta P_2`` and ``m = 2`` stay below 0.05%, the
-# size of the remeshing. Then ``P_2`` jumps by about 5% (the waist goes cold), the
-# ``m = 2`` amplitude reaches about 4%, and the capsule's radiation temperature falls
-# by 14 eV. Thinner foils burn through earlier: 1.7 µm during the second step of the
-# pulse, 2.5 µm on the rise, and 3.6 µm just before the peak. An open 50 µm gap leaks
-# from the start. Before burnthrough the gaps alone give about 0.5% of ``P_2``, 0.4% of
-# ``m = 2`` and 1.3 eV; at the peak they add 0.6% and 1.5 eV to the windows' cost.
+# size of the remeshing. Then the waist goes cold. Thinner foils burn through earlier
+# (1.7 µm during the second step of the pulse, 2.5 µm on the rise, and 3.6 µm just
+# before the peak) and transmit more. At the peak, ``P_2`` is up by 0.9–1.7%, the
+# ``m = 2`` amplitude reaches 0.7–1.3%, and the capsule's radiation temperature is
+# down by 2.5–4.7 eV, from 3.6 µm to 1.7 µm. An open 50 µm gap leaks from the start.
+# Before burnthrough the gaps alone give about 0.5% of ``P_2``, 0.4% of ``m = 2`` and
+# 1.3 eV; at the peak they add 0.55% and 1.7–1.8 eV to the windows' cost.
 #
 # A capsule's shape integrates the drive asymmetry over the pulse. The table therefore
 # gives the change in ``P_2``, ``P_4`` and ``m = 2`` weighted by the capsule flux from
@@ -344,11 +376,52 @@ for g in (0.0, 0.05), thickness in (1.7, 2.5, 3.6)
             100 * flux_weighted(h, m2(h)))
 end
 
-# At the peak all three thicknesses have burned through and look alike. What the
-# thickness changes is how long the windows have been open. The flux-weighted
-# ``\Delta P_2`` rises from 4.1% for 3.6 µm to 5.3% for 1.7 µm, and the capsule loses
-# 12–15% of its energy. The pair of windows adds no odd-``m`` harmonics, because it
-# shares the ports' 180° symmetry:
+# A thinner foil burns through earlier and transmits more, so the thin foils cost the
+# most. The flux-weighted ``\Delta P_2`` rises from 0.7%
+# for 3.6 µm to 1.7% for 1.7 µm (1.2–2.3% with the gaps), and the capsule loses
+# 2.4–5.5% of its energy (4.4–7.4% with the gaps).
+#
+# The open hole bounds these losses from above. At the peak every window has burned
+# through, so the albedos no longer depend on when each element did: a solve at each
+# peak step with `after = 0` and every window element burned through gives the
+# open-hole history there exactly. It reuses the view factors and the deposition
+# operator of the runs above.
+
+peak_times = filter(τ -> 7.6 <= τ <= 9.4, collect(times))
+at_peak(h, x) = (w = weights(peak_times); sum(w .* x[indexin(peak_times, h.time)]) / sum(w))
+function open_hole(g)
+    hole = Material(:Au; albedo = BurnthroughAlbedo(thickness = 2.5, after = 0), conversion = 0.8)
+    t = build([WallWindow(; phi, diameter = 2.0, gap = g, material = hole) for phi in (78, 258)])
+    F, op = shared[g]
+    model = RadiationModel(t; F)
+    obs = elements(t, :capsule)
+    W = ylm_weights(t, obs; lmax = 6)
+    burned = zeros(nelements(t))                   # burnthrough times: all at 0 ns
+    sols = [solve(model, deposit(op, beams_at(τ)); time = τ, burnthrough = burned)
+            for τ in peak_times]
+    moments = reduce(hcat, [legendre_moments(s.H, t, obs; lmax = 6) for s in sols])
+    return (; time = peak_times, moments, Tr = radiation_temperature.(moments[1, :]),
+            ylm = reduce(hcat, [W * s.H[obs] for s in sols]))
+end
+println("  peak, 7.6–9.4 ns              gap    ΔTᵣ     ΔP₂      m=2")
+println("                                (µm)   (eV)")
+for g in (0.0, 0.05)
+    transmitting = [(@sprintf("transmission %.3f (%.1f µm)",
+                              BurnthroughAlbedo(thickness = x).transmission, x), runs[(x, g)])
+                    for x in (1.7, 2.5, 3.6)]
+    for (label, r) in [("open hole (after = 0)", open_hole(g)); transmitting]
+        @printf("  %-28s  %3.0f   %+5.1f   %+5.2f%%   %4.2f%%\n", label, 1e3g,
+                at_peak(r, r.Tr) - at_peak(base, base.Tr),
+                100 * (at_peak(r, P2(r)) - at_peak(base, P2(base))), 100 * at_peak(r, m2(r)))
+    end
+end
+
+# At the peak the open hole costs three to six times as much as the transmitting
+# foils: 13.6 eV of radiation temperature and 5.3% of ``P_2`` without gaps. The gaps
+# add about the same in either model, 0.55–0.6% of ``P_2`` and 1.6–1.8 eV.
+#
+# The pair of windows adds no odd-``m`` harmonics, because it shares the ports' 180°
+# symmetry:
 
 h = runs[(2.5, 0.05)]
 odd = maximum(abs(h.ylm[mode_index(l, m), k]) / h.ylm[1, k]
@@ -393,18 +466,20 @@ rowgap!(fig.layout, 6)
 fig
 
 # Without windows this untuned pointing drives the waist hot (``P_2/P_0 \approx -12\%``,
-# which cone tuning would remove). With the windows open, the waist facing them turns
-# cold while the waist between them gains, relative to the mean, and the poles gain
-# too. The waist's mean excess drops, which is the positive ``\Delta P_2``, and the
-# pattern ``\cos 2(\phi - 78°)`` is the ``m = 2`` asymmetry. The gaps add to it a little.
+# which cone tuning would remove). With the windows open, the waist facing them cools to
+# about the mean while the waist between them gains, relative to the mean, and the
+# poles gain too. The waist's mean excess drops, which is the positive ``\Delta P_2``, and the
+# pattern ``\cos 2(\phi - 78°)`` is the ``m = 2`` asymmetry. The gaps add to it
+# about half again.
 
 # ### The window energy balance
 #
-# At any time, [`energy_balance`](@ref) splits a thin-foil window's loss into the part
-# it absorbs as if it were intact, ``(1 - \alpha_\mathrm{before}) H A``, and the excess
-# it transmits once burned through, ``(\alpha_\mathrm{before} - \alpha) H A``. With the
-# open gap's escape this is `window_loss`. At the end of the peak, for 2.5 µm windows
-# with a 50 µm gap:
+# At any time, [`energy_balance`](@ref) splits a thin-foil window's loss
+# ``(1 - \alpha) H A`` into what it transmits, ``s\mathcal{T} H A`` with ``s`` the
+# progress of its transition (0 intact, 1 burned through), and what it absorbs like
+# the wall, ``(1 - s\mathcal{T})(1 - \alpha_\mathrm{before}) H A``. The transmitted part
+# with the open gap's escape is `window_loss`. At the end of the peak, for 2.5 µm
+# windows with a 50 µm gap:
 
 t = build(windows(2.5; gap = 0.05))
 F, op = shared[0.05]
@@ -421,18 +496,27 @@ bal = energy_balance(sol)
         bal.escaped[:window_1_gap] + bal.escaped[:window_2_gap],
         bal.source - sum(values(bal.absorbed)) - sum(values(bal.escaped)) - sum(values(bal.transmitted)))
 @printf("window loss from the history at 9.4 ns: %.1f TW\n", h.window_loss[findfirst(≈(9.4), h.time)])
+incident = sum(sol.H[e] * t.elem_area[e] for n in (:window_1, :window_2) for e in elements(t, n))
+@printf("incident on the windows %.1f TW, transmitted fraction %.6f (transmission %.6f)\n",
+        incident, (bal.transmitted[:window_1] + bal.transmitted[:window_2]) / incident,
+        BurnthroughAlbedo(thickness = 2.5).transmission)
+
+# The accounting closes to round-off, and the burned-through windows transmit the
+# fraction ``\mathcal{T}`` of the power on them.
 
 # ## What a gray view-factor model leaves out
 #
-# The model gives the geometry of the loss exactly but not its physics after
-# burnthrough. Setting `after = 0` treats a burned-through window as a hole. A real
-# foil tamped by its low-Z backing stays hot and goes on re-emitting, and the heated
-# backing radiates back. So the losses and asymmetries above are upper bounds once the
-# windows burn through: an `after` albedo between 0 and the wall's brackets them. The
-# gap is open from the start here, but an assembly gap tens of micrometres wide closes
-# as its walls blow off, so the gap rows overstate its late-time leak. The view-factor
-# model also has no capsule hydrodynamics: it gives flux asymmetries, not the shape
-# they imprint.
+# The model gives the geometry of the loss exactly, but its physics after burnthrough
+# is the gray estimate above. The foil is planar and steady, and gold's mean free path
+# is held at one hohlraum temperature. The mean free path grows with temperature, so
+# the fixed value understates the transmission in a hotter hohlraum and overstates it
+# in a cooler one, and the transmission does not change through the pulse. The open
+# hole, `after = 0`, bounds the loss from above. The heated backing absorbs part of
+# what the gold transmits and radiates part back; here all of it is lost. The gap is
+# open from the start, but an assembly gap tens of micrometres wide closes as its
+# walls blow off, so the gap rows overstate its late-time leak. The view-factor model
+# also has no capsule hydrodynamics: it gives flux asymmetries, not the shape they
+# imprint.
 
 # ## What this checks
 #
@@ -447,14 +531,18 @@ bal = energy_balance(sol)
 # - Over 0.8–3 µm, the heat front and the transition width reproduce the measured
 #   burnthrough times of gold foils on a 260 eV hohlraum wall to within the scatter
 #   of the data. A constant-temperature estimate does not.
-# - The thin-foil energy accounting closes to round-off at a single time, and it
-#   agrees with the window loss the drive history tracks.
+# - The thin-foil energy accounting closes to round-off at a single time, the
+#   burned-through windows transmit the fraction ``\mathcal{T} = 4/(3\tau + 2)`` of
+#   the power on them to round-off, and the accounting agrees with the window loss
+#   the drive history tracks.
 # - A pair of windows related by the 180° rotation about the axis adds no odd-``m``
 #   harmonics.
 #
-# The test suite (`test/windows.jl`, `test/burnthrough.jl`) adds four more checks.
+# The test suite (`test/windows.jl`, `test/burnthrough.jl`) adds five more checks.
 # The view-factor rows of a windowed hohlraum close as well as those without windows.
 # Reciprocity holds. Each window element's burnthrough time in the drive history
-# matches the standalone estimate from that element's own temperature history. A
-# history refined through the transitions follows a uniformly fine one five times more
-# closely than the unrefined steps do.
+# matches the standalone estimate from that element's own temperature history. Once a
+# window has burned through, the drive history sends exactly the fraction
+# ``\mathcal{T}`` of the power on it to `transmitted`. A history refined through the
+# transitions follows a uniformly fine one five times more closely than the unrefined
+# steps do.

@@ -61,6 +61,13 @@ Shot-review layer:
   wherever the observed flux shape moves too far. Each step's albedo iteration starts
   from the previous step's temperatures (`solve(...; guess)`), about a third fewer
   factorizations.
+- **Post-burnthrough transmission (default):** a burned-through foil transmits
+  `T = 4/(3τ + 2)` (gray planar Eddington with a Marshak boundary; Lester et al., Phys.
+  Rev. E 114, L023201 (2026)), τ = 5 at 2.5 µm of gold and linear in areal mass, and
+  re-emits the rest with the wall's albedo: T = 0.33, 0.235, 0.17 at 1.7, 2.5, 3.6 µm.
+  `eddington_transmission`, `optical_depth`, `sol.transmission`; `after = 0` keeps the
+  open-hole bound. In the tutorial the windows' flux-weighted ΔP2 drops from +4.1–5.3%
+  (open hole) to +0.7–1.7%, and the capsule-energy cost from 12–15% to 2.4–5.5%.
 - **Threaded deposition:** `deposit` hands out work units (element blocks, back-side
   pieces) dynamically; each unit owns its outputs, so results are bitwise independent
   of the thread count. Operator construction and the ray trace are balanced the same
@@ -76,12 +83,14 @@ Shot-review layer:
    dimpled annulus), and the backlighter foil's placement relative to the diagnostic
    line of sight. The line-of-sight and clearance checks in the radiography tutorial
    then decide which bundles can drive the foil. This needs real dimensions.
-2. **Diagnostic windows: design studies.** Circular windows, gaps and burnthrough are in
-   place (see the tutorial). With `after = 0`, a burned-through window is an open hole.
-   That is an upper bound on the loss: two 2 mm windows give a flux-weighted ΔP2 of
-   +4 to +5% and cost 12–15% of capsule energy.
-   - Calibrate an effective post-burnthrough albedo. A tamped foil keeps re-emitting.
-     One option is an effusivity model of the foil/backing interface temperature.
+2. **Diagnostic windows: design studies.** Circular windows, gaps, burnthrough and the
+   gray post-burnthrough transmission are in place (see the tutorial). Two 2 mm windows
+   of 1.7–3.6 µm gold give a flux-weighted ΔP2 of +0.7 to +1.7% and cost 2.4–5.5% of
+   capsule energy (open-hole bound, `after = 0`: +4 to +5% and 12–15%).
+   - Refine the transmission: λ_Au is held at a 300–350 eV evaluation. A
+     temperature- and density-dependent Rosseland mean free path (or a tabulated
+     T(t)) would let it follow the drive, and a backing could absorb and re-emit part
+     of what the gold transmits.
    - Model gap closure in time, e.g. a `TabulatedAlbedo` or a closing-gap model.
    - Re-tune pointing around the window pair: m = 2 and P2 at the waist, versus time.
    - Earlier look (two open 2 × 2 mm windows, NIF quads): power rebalance is
