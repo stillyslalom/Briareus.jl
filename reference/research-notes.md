@@ -812,3 +812,52 @@ a scanned or garbled PDF; **M** secondary; **L** inference.
   evaluation; the gray mean free path grows with temperature), time dependence of T
   after burnthrough, absorption or re-emission by a low-Z backing, non-gold foils
   (pass `transmission`). **L**
+
+## Hohlraum mesh work-precision (2026-10-16) *derived*
+
+`examples/mesh_convergence.jl`: the GUI's NIF hohlraum (10.1 × 2.875 mm, LEH 1.55,
+capsule 0.9, wall albedo 0.85, conversion 0.8), NIF quads at the published cone aims
+("nominal") and at an optimizer-like pointing with the inner cones pulled to the waist
+("tight"). Elements are sized with `hohlraum(; h, capsule_h)`. Build = deposition
+operator + view factors + flux response, 16 threads.
+
+Wall/cap element size `h` (capsule 0.07 mm), Legendre moments of the capsule flux in
+percentage points:
+
+| h (mm) | N | build | P2 nominal | P2 tight | P4 tight |
+|---|---|---|---|---|---|
+| 0.80 | 3,900 | 3.6 s | −14.64 | −4.54 | −1.127 |
+| 0.60 | 4,276 | 2.4 s | −14.56 | −4.29 | −1.168 |
+| 0.45 | 5,028 | 3.3 s | −14.60 | −4.14 | −1.196 |
+| 0.35 | 5,796 | 3.9 s | −14.57 | −4.06 | −1.203 |
+| 0.28 | 7,260 | 5.4 s | −14.54 | −3.97 | −1.205 |
+| 0.22 | 9,428 | 12 s | −14.54 | −3.94 | −1.212 |
+| 0.17 | 13,076 | 24 s | −14.52 | −3.90 | −1.216 |
+| 0.13 | 19,572 | 58 s | −14.53 | −3.90 | −1.216 |
+
+Capsule element size (wall 0.2 mm):
+
+| capsule h (mm) | N | P2 nominal | P4 nominal | P4 tight |
+|---|---|---|---|---|
+| 0.30 | 7,208 | −13.94 | +1.238 | −0.687 |
+| 0.22 | 7,372 | −14.20 | +0.814 | −0.909 |
+| 0.16 | 7,656 | −14.38 | +0.508 | −1.057 |
+| 0.12 | 8,160 | −14.49 | +0.325 | −1.167 |
+| 0.09 | 9,056 | −14.52 | +0.245 | −1.205 |
+| 0.07 | 10,452 | −14.53 | +0.216 | −1.213 |
+| 0.05 | 13,620 | −14.55 | +0.185 | −1.216 |
+| 0.04 | 17,232 | −14.55 | +0.177 | −1.226 |
+
+Findings:
+- The wall converges as about h^2.5–3 in P2 (tight: 0.64, 0.25, 0.075, 0.005 pp at
+  h = 0.8, 0.45, 0.28, 0.17 against 0.13). The nominal design wanders by ±0.03 pp
+  without a trend below h = 0.45.
+- The capsule mesh dominates P4: a piecewise-constant flux on facets converges as
+  capsule_h² (P4 nominal extrapolates to ≈ +0.16 %; error 0.08 pp at 0.09 mm, 0.6 pp
+  at 0.2 mm). The old "standard" capsule (24 × 32, ≈ 0.12 × 0.18 mm) was 0.15 pp off.
+- The mean drive and laser power fractions converge to 1e-4 already at h = 0.45.
+
+GUI presets chosen from these (errors against the finest meshes / extrapolation):
+`:coarse` h = 0.6, capsule 0.2 (≈ 1,300 elements, < 1 s; P2 ≈ 0.4 pp, P4 ≈ 0.5 pp);
+`:standard` h = 0.28, capsule 0.09 (≈ 5,900, ≈ 4 s; ≲ 0.1 pp); `:fine` h = 0.17,
+capsule 0.05 (≈ 16,000, ≈ 40 s; ≲ 0.02 pp, converged for design work).

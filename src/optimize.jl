@@ -284,8 +284,9 @@ sum of squared odd moments (top/bottom imbalance), plus `clip`, `missed` and `di
 times the squared fractions of laser power clipped on the outside of the target,
 missing it, or hitting `direct_names` (e.g. the capsule) directly. When `drive`
 (TW/mm²) is given, adds `drive_weight × (a₀/drive - 1)²`. A `keepout` (an
-`ApertureKeepOut`) adds its penalty on the beams' worst-case clearance from the
-entrance-hole rims.
+`ApertureKeepOut` for the entrance-hole rims, a `SphereKeepOut` for the capsule, or a
+tuple of them) adds its penalty on the beams' worst-case clearance. The `direct`
+penalty only sees power already on the capsule; keep a margin with a `SphereKeepOut`.
 """
 function symmetry_objective(; modes = (2 => 1.0, 4 => 1.0), odd = 1.0, lmax::Integer = 6,
                             clip = 10.0, missed = 10.0, direct = 10.0,
@@ -425,56 +426,72 @@ end
 
 """
     optimize_pointing(scenario, objective; x0, lower, upper, iterations = 200,
-                      show_trace = false, g_tol = 1e-8, callback = nothing) -> NamedTuple
+                      evaluations = 20 * iterations, show_trace = false, g_tol = 1e-8,
+                      callback = nothing) -> NamedTuple
 
 Minimize `objective(evaluate(scenario, x))` within box bounds by L-BFGS-B with
 forward-mode automatic-differentiation gradients. Returns `(; x, beams, value,
-initial_value, iterations, evaluations, stopped, result)`.
+initial_value, iterations, evaluations, stopped, reason, result)`.
+
+The run ends after `iterations` L-BFGS-B iterations or `evaluations` objective
+evaluations (each gradient counts one), whichever comes first: a line search may take
+many evaluations in one iteration, on a kinked objective (keep-out hinges, a coarse
+mesh) dozens, so the iteration limit alone does not bound the run time. `reason` is
+`:converged` (projected gradient below `g_tol`, or no further progress), `:iterations`,
+`:evaluations` or `:callback`. On `:evaluations` and `:callback` the result is the best
+design evaluated so far, with `stopped = true` and `result = nothing`; `iterations` is
+the number of iterations completed in every case.
 
 `callback`, if given, is called after every (non-derivative) objective evaluation with
-`(; evaluations, value, best_value, best_x)`; returning `true` stops the optimization,
-which then returns the best design found so far with `stopped = true` and `result =
-nothing`. Use it for progress reports and cancellation.
+`(; evaluations, iteration, value, best_value, best_x)`; returning `true` stops the
+optimization. Use it for progress reports and cancellation.
 """
 function optimize_pointing(s::Scenario, objective; x0 = initial_parameters(s.param),
                            lower = bounds(s.param, x0)[1], upper = bounds(s.param, x0)[2],
-                           iterations::Integer = 200, show_trace::Bool = false,
-                           g_tol = 1e-8, callback = nothing)
+                           iterations::Integer = 200, evaluations::Integer = 20 * iterations,
+                           show_trace::Bool = false, g_tol = 1e-8, callback = nothing)
     xs = clamp.(x0, lower, upper)
-    best_x, best_value, count = copy(xs), Inf, Ref(0)
+    best_x, best_value, count, iter = copy(xs), Inf, Ref(0), Ref(0)
     function f(x)
         J = objective(evaluate(s, x))
         if eltype(x) <: AbstractFloat
             count[] += 1
             J < best_value && ((best_value, best_x) = (J, copy(x)))
             callback === nothing ||
-                callback((; evaluations = count[], value = J, best_value, best_x)) === true &&
-                throw(_StopOptimization())
+                callback((; evaluations = count[], iteration = iter[], value = J, best_value,
+                          best_x)) === true && throw(_OptimizationStop(:callback))
+            count[] >= evaluations && throw(_OptimizationStop(:evaluations))
         end
         return J
     end
     cfg = ForwardDiff.GradientConfig(f, x0, ForwardDiff.Chunk(min(length(x0), 12)))
     g!(G, x) = ForwardDiff.gradient!(G, f, x, cfg)
     initial_value = objective(evaluate(s, xs))
+    track(st) = (iter[] = st.iteration; false)
     res = try
         Optim.optimize(f, g!, lower, upper, xs, Optim.LBFGSB(),
-                       Optim.Options(; iterations, show_trace, g_abstol = g_tol))
+                       Optim.Options(; iterations, show_trace, g_abstol = g_tol,
+                                     callback = track))
     catch err
-        err isa _StopOptimization || rethrow()
-        nothing
+        err isa _OptimizationStop || rethrow()
+        err
     end
-    if res === nothing
+    if res isa _OptimizationStop
         return (; x = best_x, beams = apply(s.param, best_x), value = best_value,
-                initial_value, iterations = nothing, evaluations = count[], stopped = true,
-                result = nothing)
+                initial_value, iterations = iter[], evaluations = count[], stopped = true,
+                reason = res.reason, result = nothing)
     end
     x = Optim.minimizer(res)
+    n = Optim.iterations(res)
     return (; x, beams = apply(s.param, x), value = Optim.minimum(res), initial_value,
-            iterations = Optim.iterations(res), evaluations = count[], stopped = false,
+            iterations = n, evaluations = count[], stopped = false,
+            reason = Optim.converged(res) || n < iterations ? :converged : :iterations,
             result = res)
 end
 
-struct _StopOptimization <: Exception end
+struct _OptimizationStop <: Exception
+    reason::Symbol
+end
 
 """
     report(ev; lmax = 6) -> nothing

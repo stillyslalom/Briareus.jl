@@ -207,9 +207,39 @@ function _circular_window(box::Mesh, R, φc, zc, rw, rg, n::Integer, hcell)
 end
 
 """
+    hohlraum_counts(; length, radius, leh_radius, h) -> (; nz, nphi, nr_cap, nr_leh)
+
+Mesh counts of `hohlraum` for wall and end-cap elements no larger than `h` (mm) along
+either side: `nz` axial and `nphi` azimuthal (a multiple of 8, so the NIF and OMEGA
+port symmetries map the mesh onto itself) wall cells, `nr_cap` radial cap rings and
+`nr_leh` LEH rings (their sides `≤ h`).
+"""
+function hohlraum_counts(; length, radius, leh_radius, h)
+    h > 0 || throw(ArgumentError("the element size h must be positive"))
+    nz = max(2, ceil(Int, length / h))
+    nphi = 8 * max(1, ceil(Int, 2π * radius / h / 8))
+    nr_cap = max(1, ceil(Int, (radius - leh_radius) / h))
+    nr_leh = max(1, ceil(Int, leh_radius / h))
+    return (; nz, nphi, nr_cap, nr_leh)
+end
+
+"""
+    capsule_counts(capsule_radius, capsule_h) -> (; capsule_ntheta, capsule_nphi)
+
+Capsule mesh counts of `hohlraum` for elements no larger than `capsule_h` (mm) along a
+meridian or the equator (`capsule_nphi` a multiple of 4).
+"""
+function capsule_counts(r, ch)
+    ch > 0 || throw(ArgumentError("the capsule element size must be positive"))
+    nt = max(2, ceil(Int, π * r / ch))
+    return (; capsule_ntheta = nt, capsule_nphi = 4 * max(1, ceil(Int, 2π * r / ch / 4)))
+end
+
+"""
     hohlraum(; length = 9.4, radius = 2.875, leh_radius = 1.55, capsule_radius = 0.9,
-             nz = 36, nphi = 48, nr_cap = 6, capsule_ntheta = 24, capsule_nphi = 32,
-             wall = gold(), capsule = ablator(), capsule_center = (0,0,0), windows = ())
+             nz = 36, nphi = 48, nr_cap = 6, nr_leh = 4, capsule_ntheta = 24, capsule_nphi = 32,
+             h = nothing, capsule_h = nothing, wall = gold(), capsule = ablator(),
+             capsule_center = (0,0,0), windows = ())
 
 Cylindrical hohlraum along `z`, centered on TCC (dimensions in mm), with components
 
@@ -237,14 +267,25 @@ circular window is cut the same way as a square box around it and its gap, half 
 cell wider, which is re-meshed to conform to the circles (`_circular_window`) and
 stitched to the surrounding grid at the box's own vertices. Without windows the mesh
 is the uniform `nz × nphi` grid.
+
+Mesh size: give `h` (mm) to set the wall, cap and LEH counts from an element size
+instead (`hohlraum_counts`), and `capsule_h` for the capsule (`capsule_counts`); they
+replace the corresponding counts.
 """
 function hohlraum(; length = 9.4, radius = 2.875, leh_radius = 1.55, capsule_radius = 0.9,
                   nz::Integer = 36, nphi::Integer = 48, nr_cap::Integer = 6, nr_leh::Integer = 4,
                   capsule_ntheta::Integer = 24, capsule_nphi::Integer = 32,
+                  h = nothing, capsule_h = nothing,
                   wall::Material = gold(), capsule::Material = ablator(),
                   capsule_center = (0.0, 0.0, 0.0), windows = ())
     0 < leh_radius < radius || throw(ArgumentError("need 0 < leh_radius < radius"))
     capsule_radius < min(radius, length / 2) || throw(ArgumentError("capsule does not fit"))
+    if h !== nothing
+        (; nz, nphi, nr_cap, nr_leh) = hohlraum_counts(; length, radius, leh_radius, h)
+    end
+    if capsule_h !== nothing && capsule_radius > 0
+        (; capsule_ntheta, capsule_nphi) = capsule_counts(capsule_radius, capsule_h)
+    end
     h = length / 2
     windows = windows isa WallWindow ? [windows] : collect(WallWindow, windows)
     hcell = min(2π * radius / nphi, length / nz)

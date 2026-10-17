@@ -23,7 +23,7 @@ export Vec3, Mesh, npatches, add_polygon!, merge_meshes, split_mesh, transform, 
 export AlbedoModel, ConstantAlbedo, TabulatedAlbedo, WallLossAlbedo, BurnthroughAlbedo, HeatFront,
        heat_front, burnthrough_time, areal_mass, optical_depth, eddington_transmission, albedo, Material, gold, ablator, BLACK,
        Component, aperture, Target, nelements, elements, component_index, element_quadrature
-export hohlraum, foil, disk_foil
+export hohlraum, hohlraum_counts, capsule_counts, foil, disk_foil
 export WallWindow, conforming_grid, equal_area_radius
 export SuperGaussianSpot, Beam, port_vector, port_angles, direction, remake, intensity, wavelength,
        beams_from_table, nif_quads, nif_beams, nif_spot, NIF_QUAD_NAMES, nif_port, nif_bundle, nif_bundles, omega_ports, omega_beams, omega_spot
@@ -34,7 +34,7 @@ export view_factors, closure_error, enforce_closure!, RadiationModel, RadiationS
 export PulseShape, pulse_energy, with_pulses, drive_history
 export enclosed_radius, envelope_radius, focal_profile, enclosed_fraction, with_axes,
        BeamEnvelope, envelope_distance, ClearanceRow, ClearanceReport, clearance,
-       ApertureKeepOut, aperture_clearance,
+       ApertureKeepOut, aperture_clearance, SphereKeepOut, sphere_clearance,
        beam_component_power, violations, min_clearance, write_clearance_csv,
        SpotWing, PowerLawWing, UniformScatter, nif_wings, DEFAULT_CLEARANCE_THRESHOLDS
 export LaserPlasmaModel, apply_lpi, Backscatter, CalibratedTransfer, linear_transfer,

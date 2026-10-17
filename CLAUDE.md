@@ -71,7 +71,14 @@ environment has no ForwardDiff/Optim, and `Vec3` clashes with Makie there.
   traces converged at nspot ≥ 121), never against the method under test; the ray trace
   aliases against patch grids at coarse nspot.
 - Beam clearance is judged on the worst case over pointing, positioning and focus
-  errors (`clearance`); `ApertureKeepOut` puts the same worst case into objectives.
+  errors (`clearance`); `ApertureKeepOut` (LEH rims) and `SphereKeepOut` (the capsule)
+  put the same worst case into objectives. The `direct` deposition penalty is
+  quadratic in a tiny fraction and does not keep beams off the capsule.
+- `optimize_pointing` bounds both iterations and objective evaluations (a line search
+  on a kinked objective can take dozens per iteration).
+- Mesh sizes: `hohlraum(; h, capsule_h)`; the GUI presets come from
+  `examples/mesh_convergence.jl` (research notes): the capsule mesh sets P4 (error ∝
+  capsule_h²), fine (0.17/0.05 mm) is converged to ~0.02 percentage points.
 - Facility data provenance is recorded in README; derived numbers (NIF per-beam offsets,
   OMEGA hohlraum frame) are labeled as such in docstrings.
 

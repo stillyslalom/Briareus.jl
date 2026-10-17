@@ -376,6 +376,12 @@ end
                              callback = st -> (push!(seen, st.value); st.evaluations >= 3))
     @test stop.stopped && stop.evaluations == 3 == length(seen)
     @test stop.value == minimum(seen) && obj(evaluate(sc, stop.x)) ≈ stop.value
+    @test stop.reason === :callback
+    @test res.reason in (:converged, :iterations)
+    # the evaluation budget bounds the run whatever the line searches do
+    few = optimize_pointing(sc, obj; x0, lower = lo, upper = hi, iterations = 50, evaluations = 5)
+    @test few.stopped && few.reason === :evaluations && few.evaluations == 5
+    @test few.iterations < 50 && few.value <= few.initial_value
     @test_throws ArgumentError GroupPointing(beams; by = :quad)
     dep = evaluate(sc, res.x).deposition
     img = render(t, laser_flux(dep, t), OrthoCamera((0, 0, -1); up = (0, 1, 0), width = 4.0, nx = 64))
@@ -513,6 +519,29 @@ end
     @test Briareus._keepout_penalty(ApertureKeepOut(th; minimum = -1.0), qs) == 0
     @test Briareus._keepout_penalty(ApertureKeepOut(th; minimum = 1.0, weight = 2.0), qs) ≈
           2 * sum((1 .- aperture_clearance(ApertureKeepOut(th), qs)) .^ 2)
+
+    # capsule keep-out against the clearance check on a fine capsule mesh (vertices on
+    # the sphere), with the inner cones pulled in toward it
+    tc = hohlraum(length = 10.1, radius = 2.875, leh_radius = 1.55, capsule_radius = 0.9,
+                  capsule_ntheta = 48, capsule_nphi = 96)
+    close = map(qs) do b
+        b.group in (:inner23, :inner30) || return b
+        remake(b; aim = Vec3(0.3 * b.aim[1], 0.3 * b.aim[2], b.aim[3] - sign(b.aim[3])))
+    end
+    kc = SphereKeepOut(tc)
+    @test kc.names == [:capsule]
+    rc = clearance(tc, close; targets = (:wall, :cap_top, :cap_bottom), hardware = (:capsule,),
+                   peak_fraction = 0.01, wings = [], nangles = 8)
+    sc = sphere_clearance(kc, close)
+    worst = [only(x.clearance for x in rc.rows if x.beam == b.name) for b in close]
+    @test any(<(0), sc)
+    @test sc ≈ worst atol = 0.005
+    p = GroupPointing(close; by = :beam, fields = (:z, :r))
+    g = ForwardDiff.gradient(x -> sum(sphere_clearance(kc, apply(p, x))), initial_parameters(p))
+    @test all(isfinite, g) && norm(g) > 0
+    both = (ApertureKeepOut(tc; minimum = 0.2), SphereKeepOut(tc; minimum = 0.2))
+    @test Briareus._keepout_penalty(both, close) ≈
+          sum(Briareus._keepout_penalty(k, close) for k in both)
 end
 
 @testset "I/O" begin
