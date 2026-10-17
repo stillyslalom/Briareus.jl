@@ -268,7 +268,10 @@ function _point_polygon_vf(p::Vec3, n::Vec3, tri)
 end
 
 # Contour sum over the first `m` vertices of `poly`, each relative vertex formed once.
-@inline function _contour_vf(p, n, poly, m)
+# @noinline: when inlined into `_point_polygon_vf`, LLVM's x86 register coalescer can drop
+# the upper lane of a vectorized vertex around the `atan` call (wrong view factors seen
+# under --code-coverage on Julia 1.13 and --track-allocation on 1.12-1.14). No measurable cost.
+@noinline function _contour_vf(p, n, poly, m)
     s = 0.0
     a1 = poly[1] - p
     a = a1
