@@ -1,13 +1,18 @@
-# The Target step: a hohlraum or a backlighter foil, its dimensions and wall
-# properties, and the mesh resolution. Every edit rebuilds the `Target` (meshing takes
-# milliseconds; the view factors come later, on the Drive step).
+# The target: a template (a hohlraum, a backlighter foil, or none) with its dimensions
+# and wall properties, diagnostic windows in a hohlraum wall, free parts placed
+# anywhere (spheres, disks, washers, rectangles, cylinders, cones, as VisRad's target
+# components), and the mesh element sizes. Every edit rebuilds the `Target` (meshing
+# takes milliseconds; the view factors are computed on request).
 
 """
-Target kinds of the Target step: `:hohlraum` (cylindrical hohlraum with LEHs and an
-optional capsule, `Briareus.hohlraum`) and `:foil` (a backlighter foil facing TCC with
-an optional black sphere standing in for the main target).
+Target templates: `:hohlraum` (cylindrical hohlraum with LEHs and an optional capsule,
+`Briareus.hohlraum`), `:foil` (a backlighter foil facing TCC with an optional black
+sphere standing in for the main target) and `:custom` (parts only).
 """
-const TARGET_KINDS = (:hohlraum, :foil)
+const TARGET_KINDS = (:hohlraum, :foil, :custom)
+
+const TARGET_KIND_LABELS = Dict(:hohlraum => "Hohlraum", :foil => "Backlighter foil",
+                                :custom => "Custom (parts only)")
 
 """
 Editable dimensions per target kind: `(key, label, unit, default)`. Lengths in mm;
@@ -23,30 +28,53 @@ const TARGET_FIELDS = (
     foil = ((:distance, "Distance from TCC", "mm", 6.0),
             (:width, "Foil width", "mm", 2.0),
             (:conversion, "Laser → x-ray conversion", "", 0.02),
-            (:main_radius, "Main-target sphere radius", "mm", 1.0)))
+            (:main_radius, "Main-target sphere radius", "mm", 1.0)),
+    custom = ())
 
 """
-Mesh resolutions of the Target step. `:standard` is `hohlraum`'s default mesh (about
-3,300 elements); `:coarse` (about 550) keeps the view factors to a few seconds.
+    MeshSpec(h, capsule_h)
+
+Element sizes (mm): `h` for the hohlraum wall, end caps and LEHs (`hohlraum_counts`),
+a foil target's black main sphere and the parts; `capsule_h` for the surface whose
+drive is studied: the capsule (`capsule_counts`) or the backlighter foil. A part may
+override `h` with its own.
 """
+struct MeshSpec
+    h::Float64
+    capsule_h::Float64
+end
+
+"""
+Mesh presets (`MeshSpec`s), from the work-precision study in
+`examples/mesh_convergence.jl` (reference/research-notes.md, "Hohlraum mesh
+work-precision") on the NIF hohlraum: errors in capsule P2/P0 and P4/P0 against the
+converged meshes of about 0.5 percentage points (`:coarse`, ≈ 1,300 elements, view
+factors in under a second), 0.1 (`:standard`, ≈ 5,900 elements, a few seconds) and
+0.02 (`:fine`, ≈ 16,000 elements, tens of seconds: converged for design work). The
+capsule mesh sets P4: its error falls as `capsule_h²`.
+"""
+const MESH_PRESETS = (coarse = MeshSpec(0.6, 0.2), standard = MeshSpec(0.28, 0.09),
+                      fine = MeshSpec(0.17, 0.05))
+
+"Mesh presets in order; `:custom` marks sizes edited by hand."
 const MESH_RESOLUTIONS = (:coarse, :standard, :fine)
 
-const _HOHLRAUM_MESH = Dict(
-    :coarse => (; nz = 12, nphi = 16, nr_cap = 3, nr_leh = 2, capsule_ntheta = 8, capsule_nphi = 12),
-    :standard => (; nz = 36, nphi = 48, nr_cap = 6, nr_leh = 4, capsule_ntheta = 24, capsule_nphi = 32),
-    :fine => (; nz = 48, nphi = 64, nr_cap = 8, nr_leh = 4, capsule_ntheta = 32, capsule_nphi = 48))
-const _FOIL_MESH = Dict(:coarse => (16, 8, 12), :standard => (40, 16, 24), :fine => (60, 24, 32))
+_preset_of(m::MeshSpec) = something(findfirst(==(m), MESH_PRESETS), :custom)
 
 "Name of the foil component of a `:foil` target; the main-target sphere is `:main`."
 const FOIL_NAME = :backlighter
 
+# ---------------------------------------------------------------- windows
+
 """
     WindowSpec(; phi = 0.0, z = 0.0, width = 1.0, height = 1.0, open = false,
-               albedo = 0.85, conversion = 0.8)
+               albedo = 0.85, conversion = 0.8, round = true)
 
 A diagnostic window cut into the hohlraum wall (a core `WallWindow`): centered at
-azimuth `phi` (degrees from +x) and axial position `z` (mm), `width` mm of arc by
-`height` mm along the axis. A closed window (`open = false`) is an opaque wall patch
+azimuth `phi` (degrees from +x) and axial position `z` (mm); `round` (the default, as
+diagnostic windows usually are) a disk of diameter `width` mm on the unrolled wall,
+otherwise a rectangle `width` mm of arc by `height` mm along the axis. A closed window
+(`open = false`) is an opaque wall patch
 with its own x-ray `albedo` and laser → x-ray `conversion`; an open one is a hole
 (an aperture: laser light and x-rays leave through it). Window `k` of the table is the
 target component `:window_k`.
@@ -59,14 +87,15 @@ struct WindowSpec
     open::Bool
     albedo::Float64
     conversion::Float64
+    round::Bool
 end
 WindowSpec(; phi = 0.0, z = 0.0, width = 1.0, height = 1.0, open::Bool = false,
-           albedo = 0.85, conversion = 0.8) =
-    WindowSpec(phi, z, width, height, open, albedo, conversion)
+           albedo = 0.85, conversion = 0.8, round::Bool = true) =
+    WindowSpec(phi, z, width, height, open, albedo, conversion, round)
 
 """
 Editable window fields: `(key, label, unit)`. Albedo and conversion apply to closed
-windows only.
+windows only; a round window's `width` is its diameter and it has no `height`.
 """
 const WINDOW_FIELDS = ((:phi, "φ", "°"), (:z, "z", "mm"), (:width, "Width", "mm of arc"),
                        (:height, "Height", "mm"), (:albedo, "Albedo", ""),
@@ -82,81 +111,263 @@ function _wall_window(w::WindowSpec, k::Integer)
     w.width > 0 && w.height > 0 ||
         throw(ArgumentError("window $k: the width and height must be positive"))
     mat = w.open ? nothing : Material(:window; albedo = w.albedo, conversion = w.conversion)
+    w.round && return WallWindow(; phi = w.phi, z = w.z, diameter = w.width, material = mat,
+                                 open = w.open)
     return WallWindow(; phi = w.phi, z = w.z, width = w.width, height = w.height,
                       material = mat, open = w.open)
 end
 
-"""
-    TargetSetup(; kind = :hohlraum, resolution = :standard, windows = WindowSpec[])
+# ---------------------------------------------------------------- parts
 
-State of the Target step: `kind` (one of [`TARGET_KINDS`](@ref)), `params` (every
-[`TARGET_FIELDS`](@ref) value of both kinds, so switching kinds keeps the other's
-edits), `resolution` (one of [`MESH_RESOLUTIONS`](@ref)), `windows` (the hohlraum's
-diagnostic windows, [`WindowSpec`](@ref)s; a foil ignores them), the built `target`,
-and `error` (the last rejected edit). Edit with [`set_target_kind!`](@ref),
-[`edit_target!`](@ref), [`set_resolution!`](@ref), [`add_window!`](@ref),
-[`edit_window!`](@ref), [`set_window_open!`](@ref) and [`remove_window!`](@ref).
+"""
+Kinds of free parts: `:sphere`, `:disk`, `:annulus` (a washer), `:rectangle`,
+`:cylinder` (open tube) and `:cone` (open frustum).
+"""
+const PART_KINDS = (:sphere, :disk, :annulus, :rectangle, :cylinder, :cone)
+
+const PART_KIND_LABELS = Dict(:sphere => "Sphere", :disk => "Disk", :annulus => "Washer (annulus)",
+                              :rectangle => "Rectangle", :cylinder => "Cylinder (tube)",
+                              :cone => "Cone (frustum)")
+
+"""
+Size fields of each part kind: `(key, label, unit, default)`. The part's local axis is
+its `z`: a disk, washer or rectangle faces `+z` (its front), a cylinder or cone runs
+along `z` centered on the part's center (a cone from `r1` at `−length/2` to `r2` at
+`+length/2`).
+"""
+const PART_SIZE_FIELDS = Dict(
+    :sphere => ((:r1, "Radius", "mm", 0.5),),
+    :disk => ((:r1, "Radius", "mm", 0.5),),
+    :annulus => ((:r1, "Inner radius", "mm", 0.3), (:r2, "Outer radius", "mm", 0.8)),
+    :rectangle => ((:r1, "Width", "mm", 1.0), (:r2, "Height", "mm", 1.0)),
+    :cylinder => ((:r1, "Radius", "mm", 0.5), (:length, "Length", "mm", 2.0)),
+    :cone => ((:r1, "Radius at −L/2", "mm", 0.2), (:r2, "Radius at +L/2", "mm", 0.6),
+              (:length, "Length", "mm", 1.0)))
+
+"""
+Placement and material fields of every part: `(key, label, unit, default)`. The part
+is rotated by `rotation` about its own axis, then tilted to polar angle `theta` and
+azimuth `phi` (VisRad's Polar/Azimuthal/Rotation order: the axis then points along
+`(θ, φ)`), then moved to `(x, y, z)`. `h` (mm) overrides the mesh element size (0:
+the target's).
+"""
+const PART_FIELDS = ((:x, "x", "mm", 0.0), (:y, "y", "mm", 0.0), (:z, "z", "mm", 0.0),
+                     (:theta, "Axis polar θ", "°", 0.0), (:phi, "Axis azimuth φ", "°", 0.0),
+                     (:rotation, "Rotation about axis", "°", 0.0),
+                     (:albedo, "Albedo", "", 0.0), (:conversion, "Laser → x-ray conversion", "", 0.0),
+                     (:h, "Element size (0: target's)", "mm", 0.0))
+
+"""
+    PartSpec(kind; name, values, two_sided = false, inward = false, aperture = false)
+
+A free target part: `kind` (one of [`PART_KINDS`](@ref)), its component `name`,
+`values` (every [`PART_FIELDS`](@ref) key and its kind's [`PART_SIZE_FIELDS`](@ref)),
+`two_sided` (both sides radiate and absorb), `inward` (a sphere, cylinder or cone
+radiates from its inside; a flat part from its back) and `aperture` (a transparent
+diagnostic surface: rays pass, its incident flux is what escapes through it).
+"""
+struct PartSpec
+    kind::Symbol
+    name::Symbol
+    values::Dict{Symbol,Float64}
+    two_sided::Bool
+    inward::Bool
+    aperture::Bool
+end
+
+function PartSpec(kind::Symbol; name = kind, values = Dict{Symbol,Float64}(),
+                  two_sided::Bool = false, inward::Bool = false, aperture::Bool = false)
+    kind in PART_KINDS || throw(ArgumentError("part kind must be one of $PART_KINDS"))
+    v = Dict{Symbol,Float64}(k => d for (k, _, _, d) in (PART_FIELDS..., PART_SIZE_FIELDS[kind]...))
+    for (k, x) in values
+        haskey(v, k) || throw(ArgumentError("a $kind has no field :$k"))
+        v[k] = x
+    end
+    return PartSpec(kind, Symbol(name), v, two_sided, inward, aperture)
+end
+
+_with(p::PartSpec; kind = p.kind, name = p.name, values = p.values, two_sided = p.two_sided,
+      inward = p.inward, aperture = p.aperture) =
+    PartSpec(kind, name, values, two_sided, inward, aperture)
+
+"Axis (unit vector) of a part: polar `theta` and azimuth `phi` in degrees."
+part_axis(p::PartSpec) = Vec3(sind(p.values[:theta]) * cosd(p.values[:phi]),
+                              sind(p.values[:theta]) * sind(p.values[:phi]), cosd(p.values[:theta]))
+
+"Center of a part."
+part_center(p::PartSpec) = Vec3(p.values[:x], p.values[:y], p.values[:z])
+
+# Rz(φ) Ry(θ) Rz(ψ): VisRad's order (rotation about the own axis, polar tilt, azimuth).
+function _part_rotation(p::PartSpec)
+    θ, φ, ψ = deg2rad.((p.values[:theta], p.values[:phi], p.values[:rotation]))
+    Rz(a) = [cos(a) -sin(a) 0; sin(a) cos(a) 0; 0 0 1]
+    Ry(a) = [cos(a) 0 sin(a); 0 1 0; -sin(a) 0 cos(a)]
+    return Rz(φ) * Ry(θ) * Rz(ψ)
+end
+
+_count(len, h; min = 1, multiple = 1) = multiple * max(cld(min, multiple), ceil(Int, len / h / multiple))
+
+"""
+    part_component(p::PartSpec, h) -> Component
+
+The core component of a part, meshed with elements of size `h` (mm) unless the part
+gives its own, and carrying its exact curved surface (sphere, disk, washer, cylinder)
+for the view factors.
+"""
+function part_component(p::PartSpec, h::Real)
+    v = p.values
+    hp = v[:h] > 0 ? v[:h] : Float64(h)
+    hp > 0 || throw(ArgumentError("$(p.name): the element size must be positive"))
+    for (k, label, _, _) in PART_SIZE_FIELDS[p.kind]
+        v[k] > 0 || throw(ArgumentError("$(p.name): the $(lowercase(label)) must be positive"))
+    end
+    0 <= v[:albedo] <= 1 || throw(ArgumentError("$(p.name): the albedo must be between 0 and 1"))
+    0 <= v[:conversion] <= 1 ||
+        throw(ArgumentError("$(p.name): the conversion must be between 0 and 1"))
+    out = !p.inward
+    k = p.kind
+    if k === :sphere
+        r = v[:r1]
+        (; capsule_ntheta, capsule_nphi) = capsule_counts(r, hp)
+        m = sphere_mesh(r; ntheta = capsule_ntheta, nphi = capsule_nphi, outward = out)
+        surf = SphereSurface(r)
+    elseif k === :disk
+        r = v[:r1]
+        m = disk_mesh(r, 0.0; nr = _count(r, hp), nphi = _count(2π * r, hp; min = 8, multiple = 4), up = out)
+        surf = DiskSurface()
+    elseif k === :annulus
+        ri, ro = v[:r1], v[:r2]
+        ro > ri || throw(ArgumentError("$(p.name): the outer radius must exceed the inner"))
+        m = annulus_mesh(ri, ro, 0.0; nr = _count(ro - ri, hp), nphi = _count(2π * ro, hp; min = 8, multiple = 4),
+                         up = out)
+        surf = DiskSurface()
+    elseif k === :rectangle
+        w, ht = v[:r1], v[:r2]
+        m = rectangle_mesh(w, ht; nu = _count(w, hp), nv = _count(ht, hp))
+        out || (m = transform(m, [1 0 0; 0 -1 0; 0 0 -1]))          # face −z
+        surf = nothing
+    elseif k === :cylinder
+        r, L = v[:r1], v[:length]
+        m = cylinder_mesh(r, -L / 2, L / 2; nz = _count(L, hp), nphi = _count(2π * r, hp; min = 8, multiple = 4),
+                          inward = !out)
+        surf = CylinderSurface(r)
+    else
+        r1, r2, L = v[:r1], v[:r2], v[:length]
+        m = frustum_mesh(r1, -L / 2, r2, L / 2; nz = _count(L, hp),
+                         nphi = _count(2π * max(r1, r2), hp; min = 8, multiple = 4), inward = !out)
+        surf = nothing
+    end
+    c = p.aperture ? aperture(p.name, m; surface = surf) :
+        Component(p.name, m, Material(p.name; albedo = v[:albedo], conversion = v[:conversion]);
+                  two_sided = p.two_sided, surface = surf)
+    return transform(c, _part_rotation(p), part_center(p))
+end
+
+# ---------------------------------------------------------------- the setup
+
+"""
+    TargetSetup(; kind = :hohlraum, resolution = :standard, mesh = nothing,
+                windows = WindowSpec[], parts = PartSpec[])
+
+The target being designed: `kind` (one of [`TARGET_KINDS`](@ref)), `params` (every
+[`TARGET_FIELDS`](@ref) value of every kind, so switching kinds keeps the others'
+edits), `mesh` (the element sizes, a [`MeshSpec`](@ref)), `resolution` (the preset the
+sizes match, one of [`MESH_RESOLUTIONS`](@ref), or `:custom`), `windows` (the
+hohlraum's diagnostic windows, [`WindowSpec`](@ref)s; other templates ignore them),
+`parts` (free parts, [`PartSpec`](@ref)s), the built `target`, and `error` (the last
+rejected edit). Edit with [`set_target_kind!`](@ref), [`edit_target!`](@ref),
+[`set_resolution!`](@ref), [`edit_mesh!`](@ref), the window functions
+([`add_window!`](@ref), …) and the part functions ([`add_part!`](@ref), …).
 """
 struct TargetSetup
     kind::Observable{Symbol}
     params::Observable{Dict{Symbol,Float64}}
+    mesh::Observable{MeshSpec}
     resolution::Observable{Symbol}
     windows::Observable{Vector{WindowSpec}}
+    parts::Observable{Vector{PartSpec}}
     target::Observable{Target}
     error::Observable{String}
 end
 
 function TargetSetup(; kind::Symbol = :hohlraum, resolution::Symbol = :standard,
-                     windows::AbstractVector{WindowSpec} = WindowSpec[])
+                     mesh::Union{Nothing,MeshSpec} = nothing,
+                     windows::AbstractVector{WindowSpec} = WindowSpec[],
+                     parts::AbstractVector{PartSpec} = PartSpec[])
     kind in TARGET_KINDS || throw(ArgumentError("target kind must be one of $TARGET_KINDS"))
-    resolution in MESH_RESOLUTIONS ||
-        throw(ArgumentError("resolution must be one of $MESH_RESOLUTIONS"))
+    if mesh === nothing
+        resolution in MESH_RESOLUTIONS ||
+            throw(ArgumentError("resolution must be one of $MESH_RESOLUTIONS"))
+        mesh = MESH_PRESETS[resolution]
+    end
     params = Dict{Symbol,Float64}(k => v for fs in TARGET_FIELDS for (k, _, _, v) in fs)
     ws = collect(WindowSpec, windows)
-    t = build_target(kind, params, resolution, ws)
-    return TargetSetup(Observable(kind), Observable(params), Observable(resolution),
-                       Observable(ws), Observable(t), Observable(""))
+    ps = collect(PartSpec, parts)
+    kind === :custom && isempty(ps) && push!(ps, PartSpec(:sphere; name = :sphere_1))
+    t = build_target(kind, params, mesh, ws, ps)
+    return TargetSetup(Observable(kind), Observable(params), Observable(mesh),
+                       Observable(_preset_of(mesh)), Observable(ws), Observable(ps),
+                       Observable(t), Observable(""))
 end
 
 """
-    build_target(kind, params, resolution, windows = WindowSpec[]) -> Target
+    build_target(kind, params, mesh, windows = WindowSpec[], parts = PartSpec[]) -> Target
     build_target(ts::TargetSetup) -> Target
 
-The `Target` for a kind, its dimensions (`params`, as in [`TARGET_FIELDS`](@ref)), a
-mesh resolution and, for a hohlraum, its diagnostic windows. Throws `ArgumentError`
-for dimensions or windows the geometry rejects (overlapping windows, a window past
-the end of the wall, …).
+The `Target` of a template kind, its dimensions (`params`, as in
+[`TARGET_FIELDS`](@ref)), the element sizes (a [`MeshSpec`](@ref) or a preset name), a
+hohlraum's diagnostic windows, and free parts. Throws `ArgumentError` for dimensions,
+windows or parts the geometry rejects (overlapping windows, a window past the end of
+the wall, a duplicate component name, …).
 """
-function build_target(kind::Symbol, p::AbstractDict, resolution::Symbol,
-                      windows::AbstractVector{WindowSpec} = WindowSpec[])
+build_target(kind::Symbol, p::AbstractDict, resolution::Symbol, windows = WindowSpec[],
+             parts = PartSpec[]) =
+    build_target(kind, p, MESH_PRESETS[resolution], windows, parts)
+
+function build_target(kind::Symbol, p::AbstractDict, mesh::MeshSpec,
+                      windows::AbstractVector{WindowSpec} = WindowSpec[],
+                      parts::AbstractVector{PartSpec} = PartSpec[])
     frac(k, what) = 0 <= p[k] <= 1 || throw(ArgumentError("$what must be between 0 and 1"))
+    mesh.h > 0 && mesh.capsule_h > 0 || throw(ArgumentError("element sizes must be positive"))
+    comps = Component[]
     if kind === :hohlraum
         frac(:wall_albedo, "the wall albedo")
         frac(:wall_conversion, "the wall conversion")
         p[:length] > 0 || throw(ArgumentError("the length must be positive"))
         p[:capsule_radius] >= 0 || throw(ArgumentError("the capsule radius must not be negative"))
-        return hohlraum(; length = p[:length], radius = p[:radius], leh_radius = p[:leh_radius],
-                        capsule_radius = p[:capsule_radius],
-                        wall = gold(albedo = p[:wall_albedo], conversion = p[:wall_conversion]),
-                        windows = [_wall_window(w, k) for (k, w) in enumerate(windows)],
-                        _HOHLRAUM_MESH[resolution]...)
+        t = hohlraum(; length = p[:length], radius = p[:radius], leh_radius = p[:leh_radius],
+                     capsule_radius = p[:capsule_radius],
+                     wall = gold(albedo = p[:wall_albedo], conversion = p[:wall_conversion]),
+                     windows = [_wall_window(w, k) for (k, w) in enumerate(windows)],
+                     h = mesh.h, capsule_h = mesh.capsule_h)
+        append!(comps, t.components)
     elseif kind === :foil
         frac(:conversion, "the conversion")
         p[:width] > 0 || throw(ArgumentError("the foil width must be positive"))
         p[:main_radius] >= 0 || throw(ArgumentError("the sphere radius must not be negative"))
         p[:distance] > p[:main_radius] + p[:width] / 2 ||
             throw(ArgumentError("the foil must sit outside the main-target sphere"))
-        n, nt, np = _FOIL_MESH[resolution]
-        comps = Component[foil(FOIL_NAME, foil_center(p), (-1, 0, 0); width = p[:width], n,
-                               material = Material(:Ti; conversion = p[:conversion]),
-                               two_sided = false)]
-        p[:main_radius] > 0 &&
-            push!(comps, Component(:main, sphere_mesh(p[:main_radius]; ntheta = nt, nphi = np), BLACK))
-        return Target(comps)
+        n = max(4, ceil(Int, p[:width] / mesh.capsule_h))
+        push!(comps, foil(FOIL_NAME, foil_center(p), (-1, 0, 0); width = p[:width], n,
+                          material = Material(:Ti; conversion = p[:conversion]), two_sided = false))
+        if p[:main_radius] > 0
+            (; capsule_ntheta, capsule_nphi) = capsule_counts(p[:main_radius], mesh.h)
+            push!(comps, Component(:main, sphere_mesh(p[:main_radius]; ntheta = capsule_ntheta,
+                                                     nphi = capsule_nphi), BLACK;
+                                   surface = SphereSurface(p[:main_radius])))
+        end
+    elseif kind !== :custom
+        throw(ArgumentError("unknown target kind :$kind"))
     end
-    throw(ArgumentError("unknown target kind :$kind"))
+    for part in parts
+        any(c -> c.name === part.name, comps) &&
+            throw(ArgumentError("two components are named $(part.name)"))
+        push!(comps, part_component(part, mesh.h))
+    end
+    isempty(comps) && throw(ArgumentError("the target is empty: add a part"))
+    return Target(comps)
 end
-build_target(ts::TargetSetup) = build_target(ts.kind[], ts.params[], ts.resolution[], ts.windows[])
+build_target(ts::TargetSetup) = build_target(ts.kind[], ts.params[], ts.mesh[], ts.windows[], ts.parts[])
 
 """
     foil_center(params) -> Vec3
@@ -166,36 +377,75 @@ Center of the foil of a `:foil` target: `distance` mm from TCC along +x, facing 
 foil_center(p::AbstractDict) = Vec3(p[:distance], 0.0, 0.0)
 foil_center(ts::TargetSetup) = foil_center(ts.params[])
 
-# Rebuild after a change; a rejected change is undone by the caller.
-function _rebuild!(ts::TargetSetup)
-    ts.target[] = build_target(ts)
-    ts.error[] = ""
-    return ts
+# Rebuild with changed inputs, committing them only if the geometry accepts them.
+function _try_build!(ts::TargetSetup; kind = ts.kind[], params = ts.params[], mesh = ts.mesh[],
+                     windows = ts.windows[], parts = ts.parts[])
+    try
+        t = build_target(kind, params, mesh, windows, parts)
+        kind == ts.kind[] || (ts.kind[] = kind)
+        params === ts.params[] || (ts.params[] = params)
+        if mesh != ts.mesh[]
+            ts.mesh[] = mesh
+            _assign!(ts.resolution, _preset_of(mesh))
+        end
+        windows === ts.windows[] || (ts.windows[] = windows)
+        parts === ts.parts[] || (ts.parts[] = parts)
+        ts.target[] = t
+        ts.error[] = ""
+        return true
+    catch err
+        err isa ArgumentError || rethrow()
+        ts.error[] = _errmsg(err)
+        return false
+    end
 end
 
 """
-    set_target_kind!(ts::TargetSetup, kind::Symbol)
+    set_target_kind!(ts::TargetSetup, kind::Symbol) -> Bool
 
-Switch between a hohlraum and a foil (one of [`TARGET_KINDS`](@ref)).
+Switch the template (one of [`TARGET_KINDS`](@ref)). Parts are kept; a custom target
+without parts gets a sphere at TCC.
 """
 function set_target_kind!(ts::TargetSetup, kind::Symbol)
     kind in TARGET_KINDS || throw(ArgumentError("target kind must be one of $TARGET_KINDS"))
-    ts.kind[] == kind && return ts
-    ts.kind[] = kind
-    return _rebuild!(ts)
+    ts.kind[] == kind && return true
+    parts = ts.parts[]
+    kind === :custom && isempty(parts) && (parts = [PartSpec(:sphere; name = :sphere_1)])
+    return _try_build!(ts; kind, parts)
 end
 
 """
-    set_resolution!(ts::TargetSetup, resolution::Symbol)
+    set_resolution!(ts::TargetSetup, resolution::Symbol) -> Bool
 
-Mesh resolution, one of [`MESH_RESOLUTIONS`](@ref).
+Mesh element sizes from a preset, one of [`MESH_RESOLUTIONS`](@ref) (see
+[`MESH_PRESETS`](@ref)).
 """
 function set_resolution!(ts::TargetSetup, resolution::Symbol)
     resolution in MESH_RESOLUTIONS ||
         throw(ArgumentError("resolution must be one of $MESH_RESOLUTIONS"))
-    ts.resolution[] == resolution && return ts
-    ts.resolution[] = resolution
-    return _rebuild!(ts)
+    ts.mesh[] == MESH_PRESETS[resolution] && return true
+    return _try_build!(ts; mesh = MESH_PRESETS[resolution])
+end
+
+"""
+    edit_mesh!(ts::TargetSetup, key::Symbol, text) -> Bool
+
+Set an element size (`:h` or `:capsule_h`, mm) from text; the resolution becomes the
+preset the sizes match, or `:custom`.
+"""
+function edit_mesh!(ts::TargetSetup, key::Symbol, text)
+    key in (:h, :capsule_h) || throw(ArgumentError("unknown mesh field :$key"))
+    try
+        v = _parse_number(text, key === :h ? "the element size" : "the capsule element size";
+                          positive = true)
+        m = ts.mesh[]
+        m = key === :h ? MeshSpec(v, m.capsule_h) : MeshSpec(m.h, v)
+        return _try_build!(ts; mesh = m)
+    catch err
+        err isa ArgumentError || rethrow()
+        ts.error[] = _errmsg(err)
+        return false
+    end
 end
 
 """
@@ -213,11 +463,7 @@ function edit_target!(ts::TargetSetup, key::Symbol, text)
         v == old && (ts.error[] = ""; return true)
         p = copy(ts.params[])
         p[key] = v
-        t = build_target(ts.kind[], p, ts.resolution[], ts.windows[])   # validate before committing
-        ts.params[] = p
-        ts.target[] = t
-        ts.error[] = ""
-        return true
+        return _try_build!(ts; params = p)
     catch err
         err isa ArgumentError || rethrow()
         ts.error[] = _errmsg(err)
@@ -237,19 +483,11 @@ end
 # Commit a new window list if the hohlraum accepts it; otherwise keep the target and
 # report why. Windows only exist on a hohlraum.
 function _set_windows!(ts::TargetSetup, ws::Vector{WindowSpec})
-    try
-        ts.kind[] === :hohlraum ||
-            throw(ArgumentError("diagnostic windows are cut into a hohlraum wall"))
-        t = build_target(ts.kind[], ts.params[], ts.resolution[], ws)
-        ts.windows[] = ws
-        ts.target[] = t
-        ts.error[] = ""
-        return true
-    catch err
-        err isa ArgumentError || rethrow()
-        ts.error[] = _errmsg(err)
+    if ts.kind[] !== :hohlraum
+        ts.error[] = "diagnostic windows are cut into a hohlraum wall"
         return false
     end
+    return _try_build!(ts; windows = ws)
 end
 
 function _check_window_index(ts::TargetSetup, i::Integer)
@@ -261,7 +499,7 @@ end
     add_window!(ts::TargetSetup; kwargs...) -> Bool
 
 Add a diagnostic window to the hohlraum wall: a [`WindowSpec`](@ref) from `kwargs`,
-or by default a closed 1 × 1 mm window at the hohlraum's midplane with the wall's
+or by default a closed round window 1 mm across at the hohlraum's midplane with the wall's
 albedo and conversion, at the first of φ = 90°, 270°, 0°, 180°, … where it does not
 overlap another window. A window the geometry rejects sets `error` and returns
 `false`.
@@ -276,7 +514,7 @@ function add_window!(ts::TargetSetup; kwargs...)
     for φ in (90.0, 270.0, 0.0, 180.0, 45.0, 135.0, 225.0, 315.0)
         ws = [ts.windows[]; WindowSpec(; base..., phi = φ, kwargs...)]
         try
-            ts.kind[] === :hohlraum && build_target(ts.kind[], p, ts.resolution[], ws)
+            ts.kind[] === :hohlraum && build_target(ts.kind[], p, ts.mesh[], ws, ts.parts[])
         catch err
             err isa ArgumentError || rethrow()
             continue
@@ -342,25 +580,142 @@ function set_window_open!(ts::TargetSetup, i::Integer, open::Bool)
     w = ts.windows[][i]
     w.open == open && return true
     ws = copy(ts.windows[])
-    ws[i] = WindowSpec(w.phi, w.z, w.width, w.height, open, w.albedo, w.conversion)
+    ws[i] = WindowSpec(w.phi, w.z, w.width, w.height, open, w.albedo, w.conversion, w.round)
+    return _set_windows!(ts, ws)
+end
+
+"""
+    set_window_round!(ts::TargetSetup, i, round::Bool) -> Bool
+
+Make window `i` a disk (diameter = its width) or a rectangle.
+"""
+function set_window_round!(ts::TargetSetup, i::Integer, round::Bool)
+    _check_window_index(ts, i)
+    w = ts.windows[][i]
+    w.round == round && return true
+    ws = copy(ts.windows[])
+    ws[i] = WindowSpec(w.phi, w.z, w.width, w.height, w.open, w.albedo, w.conversion, round)
     return _set_windows!(ts, ws)
 end
 
 "Target component name of window `i`."
 window_name(i::Integer) = Symbol(:window_, i)
 
+# ---------------------------------------------------------------- parts
+
+function _check_part_index(ts::TargetSetup, i::Integer)
+    1 <= i <= length(ts.parts[]) || throw(ArgumentError("no part $i"))
+    return i
+end
+
+"""
+    add_part!(ts::TargetSetup, kind::Symbol; name, values...) -> Bool
+
+Add a free part (one of [`PART_KINDS`](@ref)) named `name` (default: the kind and the
+first free number) with [`PART_FIELDS`](@ref) and size values given as keywords
+(e.g. `add_part!(ts, :disk; z = 6.0, r1 = 1.0, theta = 180)`). A part the geometry
+rejects sets `error` and returns `false`.
+"""
+function add_part!(ts::TargetSetup, kind::Symbol; name = nothing, two_sided::Bool = false,
+                   inward::Bool = false, aperture::Bool = false, values...)
+    taken = Set(component_names(ts.target[]))
+    if name === nothing
+        k = 1
+        while Symbol(kind, :_, k) in taken
+            k += 1
+        end
+        name = Symbol(kind, :_, k)
+    end
+    part = try
+        PartSpec(kind; name, values = Dict{Symbol,Float64}(k => Float64(v) for (k, v) in values),
+                 two_sided, inward, aperture)
+    catch err
+        err isa ArgumentError || rethrow()
+        ts.error[] = _errmsg(err)
+        return false
+    end
+    return _try_build!(ts; parts = [ts.parts[]; part])
+end
+
+"""
+    remove_part!(ts::TargetSetup, i) -> Bool
+"""
+function remove_part!(ts::TargetSetup, i::Integer)
+    _check_part_index(ts, i)
+    ps = copy(ts.parts[])
+    deleteat!(ps, i)
+    return _try_build!(ts; parts = ps)
+end
+
+"""
+    edit_part!(ts::TargetSetup, i, key, text) -> Bool
+
+Set a field of part `i` from text: a [`PART_FIELDS`](@ref) or size key, or `:name`.
+"""
+function edit_part!(ts::TargetSetup, i::Integer, key::Symbol, text)
+    _check_part_index(ts, i)
+    p = ts.parts[][i]
+    try
+        if key === :name
+            s = strip(String(text))
+            occursin(r"^[A-Za-z_][A-Za-z0-9_]*$", s) ||
+                throw(ArgumentError("a part name is letters, digits and _, starting with a letter"))
+            Symbol(s) == p.name && return true
+            new = _with(p; name = Symbol(s))
+        else
+            haskey(p.values, key) || throw(ArgumentError("a $(p.kind) has no field :$key"))
+            v = _parse_number(text, String(key))
+            v == p.values[key] && (ts.error[] = ""; return true)
+            vals = copy(p.values)
+            vals[key] = v
+            new = _with(p; values = vals)
+        end
+        ps = copy(ts.parts[])
+        ps[i] = new
+        return _try_build!(ts; parts = ps)
+    catch err
+        err isa ArgumentError || rethrow()
+        ts.error[] = _errmsg(err)
+        return false
+    end
+end
+
+"""
+    set_part_flag!(ts::TargetSetup, i, flag, on::Bool) -> Bool
+
+Set `:two_sided`, `:inward` or `:aperture` of part `i`.
+"""
+function set_part_flag!(ts::TargetSetup, i::Integer, flag::Symbol, on::Bool)
+    _check_part_index(ts, i)
+    flag in (:two_sided, :inward, :aperture) || throw(ArgumentError("unknown part flag :$flag"))
+    p = ts.parts[][i]
+    getfield(p, flag) == on && return true
+    ps = copy(ts.parts[])
+    ps[i] = _with(p; (flag => on,)...)
+    return _try_build!(ts; parts = ps)
+end
+
+"""
+    part_index(ts::TargetSetup, name::Symbol) -> Union{Nothing,Int}
+"""
+part_index(ts::TargetSetup, name::Symbol) = findfirst(p -> p.name === name, ts.parts[])
+
+# ---------------------------------------------------------------- summary
+
 """
     target_summary(ts::TargetSetup) -> String
 
-Element count and component list, for the step rail and page.
+Template, windows and parts, and the element count.
 """
 function target_summary(ts::TargetSetup)
     t = ts.target[]
-    kind = ts.kind[] === :hohlraum ? "hohlraum" : "foil"
+    kind = ts.kind[] === :hohlraum ? "hohlraum" : ts.kind[] === :foil ? "foil" : "custom target"
     nw = ts.kind[] === :hohlraum ? length(ts.windows[]) : 0
     nw > 0 && (kind *= nw == 1 ? " with 1 window" : " with $nw windows")
-    return "$kind · $(nelements(t)) elements · " *
-           join((String(c.name) for c in t.components), ", ")
+    np = length(ts.parts[])
+    np > 0 && ts.kind[] !== :custom && (kind *= np == 1 ? " + 1 part" : " + $np parts")
+    ts.kind[] === :custom && (kind *= np == 1 ? " (1 part)" : " ($np parts)")
+    return "$kind · $(nelements(t)) elements"
 end
 
 "Names of a target's components, in order."

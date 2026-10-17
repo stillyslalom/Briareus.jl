@@ -1,24 +1,29 @@
-# The Briareus window's state: one controller per step, the links between them (a
+# The Briareus window's state: the target, the beams, the analyses on them (drive,
+# optimization, clearance, TaLIS) and what the window shows, the links between them (a
 # target or port change makes the scenario stale; pointing edits re-evaluate it), and
-# the background-job plumbing (`spawn`, `deliver`) shared by every job.
+# the background-job plumbing (`spawn`, `deliver`) shared by every job. Nothing here
+# imposes an order: any analysis can be started at any time, and each reports whether
+# it is current.
 
 """
-Steps of the Briareus window, in order.
+Analyses of a design, in the model tree's order: `:drive` (view factors, laser
+deposition and x-ray drive), `:optimize` (pointing optimization), `:clearance`
+(worst-case beam clearance) and `:talis` (NIF target-configuration rules).
 """
-const DESIGN_STEPS = (:target, :beams, :drive, :optimize, :review)
+const TASKS = (:drive, :optimize, :clearance, :talis)
 
-const STEP_LABELS = Dict(:target => "Target", :beams => "Beams", :drive => "Drive",
-                         :optimize => "Optimize", :review => "Review")
+const TASK_LABELS = Dict(:drive => "Drive (view factors)", :optimize => "Pointing optimization",
+                         :clearance => "Beam clearance", :talis => "TaLIS rules")
 
 """
     DesignSession(; kind = :hohlraum, resolution = :standard, preset = :nif_quads,
                   beams = nothing, deliver = f -> f())
 
-State of the Briareus window. Step controllers: `target` ([`TargetSetup`](@ref)),
-`beams` ([`BeamTable`](@ref)), `drive` ([`DriveState`](@ref)), `optimize`
-([`OptimizeState`](@ref)), `review` ([`ReviewState`](@ref)) and `talis`
-([`TaLISState`](@ref), the Review step's TaLIS checks); `step` (the open step, one
-of [`DESIGN_STEPS`](@ref)) and `status`.
+State of the Briareus window: `target` ([`TargetSetup`](@ref)), `beams`
+([`BeamTable`](@ref)), the analyses `drive` ([`DriveState`](@ref)), `optimize`
+([`OptimizeState`](@ref)), `review` ([`ReviewState`](@ref), the clearance check) and
+`talis` ([`TaLISState`](@ref)), `view` ([`ViewState`](@ref): coloring, beam drawing,
+selection, model tree) and `status` (the last message).
 
 The table starts from `beams` (a vector of `Beam`s) or a [`BEAM_PRESETS`](@ref) entry
 pointed for the target. Changing the target kind swaps a NIF preset for the OMEGA
@@ -37,7 +42,7 @@ struct DesignSession
     optimize::OptimizeState
     review::ReviewState
     talis::TaLISState
-    step::Observable{Symbol}
+    view::ViewState
     status::Observable{String}
     deliver::Base.RefValue{Any}
     spawn::Base.RefValue{Bool}
@@ -51,7 +56,7 @@ function DesignSession(; kind::Symbol = :hohlraum, resolution::Symbol = :standar
          BeamTable(preset_beams(preset; target_kind = kind, params = ts.params[]); preset) :
          BeamTable(beams)
     sess = DesignSession(ts, bt, DriveState(), OptimizeState(), ReviewState(), TaLISState(),
-                         Observable(:target), Observable(""), Ref{Any}(deliver), Ref(false))
+                         ViewState(), Observable(""), Ref{Any}(deliver), Ref(false))
     default_selection!(sess.review, ts.target[])
     default_selection!(sess.talis, ts.target[])
     _connect!(sess)
@@ -59,8 +64,7 @@ function DesignSession(; kind::Symbol = :hohlraum, resolution::Symbol = :standar
 end
 
 function Base.show(io::IO, s::DesignSession)
-    print(io, "DesignSession(", target_summary(s.target), "; ", beams_summary(s.beams),
-          "; step :", s.step[], ")")
+    print(io, "DesignSession(", target_summary(s.target), "; ", beams_summary(s.beams), ")")
 end
 
 function _connect!(sess::DesignSession)
@@ -76,47 +80,59 @@ function _connect!(sess::DesignSession)
     on(ts.target) do t
         default_selection!(sess.review, t)
         default_selection!(sess.talis, t)
+        # forget hidden components and a selection that no longer exist
+        names = Set(component_names(t))
+        h = filter(in(names), sess.view.hidden[])
+        h == sess.view.hidden[] || (sess.view.hidden[] = h)
+        c = selected_component(sess)
+        c === nothing || c in names || select!(sess.view, "target")
         _drive_inputs_changed!(sess)
     end
+    # a beam selection whose beams went away (a preset, a split, a regrouping)
+    onany(bt.beams, bt.cluster) do _...
+        kind, _ = selection_kind(sess.view.selection[])
+        kind in (:beam, :quad, :group) || return
+        gone = filter(id -> isempty(node_beams(bt, id)), selected_ids(sess.view))
+        isempty(gone) && return
+        sess.view.selection[] in gone ? select!(sess.view, "beams") :
+        (sess.view.extra[] = filter(id -> !(id in gone), sess.view.extra[]))
+    end
     onany((_...) -> _drive_inputs_changed!(sess), bt.beams, bt.enabled)
+    # a rejected edit's message belongs to what was being edited
+    on(sess.view.selection) do _
+        isempty(ts.error[]) || (ts.error[] = "")
+        isempty(bt.error[]) || (bt.error[] = "")
+    end
     on(_ -> _request_evaluation!(sess), dr.spot_radius)
     return sess
 end
 
-# ---------------------------------------------------------------- steps
-
 """
-    set_step!(sess::DesignSession, step::Symbol)
+    set_color!(sess::DesignSession, mode::Symbol)
 
-Show a step (one of [`DESIGN_STEPS`](@ref)).
+Color the 3D view by `mode` (one of [`COLOR_MODES`](@ref)). A drive field needs the
+drive: if it is missing or stale it is computed now (in the background in a window),
+as VisRad computes what a display asks for.
 """
-function set_step!(sess::DesignSession, step::Symbol)
-    step in DESIGN_STEPS || throw(ArgumentError("unknown step :$step"))
-    _assign!(sess.step, step)
+function set_color!(sess::DesignSession, mode::Symbol)
+    mode in COLOR_MODES || throw(ArgumentError("color mode must be one of $COLOR_MODES"))
+    _assign!(sess.view.color, mode)
+    if mode !== :component
+        set_field!(sess.drive, mode)
+        _drive_current(sess) || sess.drive.building[] || build_scenario!(sess)
+    end
     return sess
 end
 
-"Rail label of a step."
-step_label(::DesignSession, step::Symbol) = STEP_LABELS[step]
-
 """
-    step_status(sess::DesignSession, step) -> (state, summary)
+    task_status(sess::DesignSession, task) -> (state, summary)
 
 `state` is `:todo`, `:ok`, `:attention`, or `:busy`, with a one-line summary for the
-step rail.
+model tree (`task` one of [`TASKS`](@ref)).
 """
-function step_status(sess::DesignSession, step::Symbol)
-    step in DESIGN_STEPS || throw(ArgumentError("unknown step :$step"))
-    if step === :target
-        isempty(sess.target.error[]) || return (:attention, sess.target.error[])
-        return (:ok, target_summary(sess.target))
-    elseif step === :beams
-        bt = sess.beams
-        isempty(bt.beams[]) && return (:todo, "no beams")
-        isempty(bt.error[]) || return (:attention, bt.error[])
-        isempty(active_beams(bt)) && return (:attention, "every beam is off")
-        return (:ok, beams_summary(bt))
-    elseif step === :drive
+function task_status(sess::DesignSession, task::Symbol)
+    task in TASKS || throw(ArgumentError("unknown analysis :$task"))
+    if task === :drive
         dr = sess.drive
         dr.building[] && return (:busy, "computing view factors… " * _seconds(time() - dr.started[]))
         dr.scenario[] === nothing && return (:todo, isempty(dr.status[]) ? "not computed" : dr.status[])
@@ -124,7 +140,7 @@ function step_status(sess::DesignSession, step::Symbol)
         dr.evaluating[] && return (:busy, "evaluating…")
         dr.result[] === nothing && return (:attention, isempty(dr.status[]) ? "no evaluation" : dr.status[])
         return (:ok, drive_summary(dr.result[]))
-    elseif step === :optimize
+    elseif task === :optimize
         st = sess.optimize
         st.running[] && return (:busy, optimize_progress(st))
         r = st.result[]
@@ -132,27 +148,24 @@ function step_status(sess::DesignSession, step::Symbol)
         txt = @sprintf("objective %.3g → %.3g", r.initial_value, r.value)
         r.applied && return (:ok, txt * " · applied")
         return (:attention, txt * " · not applied")
-    else
-        rv, tl = sess.review, sess.talis
+    elseif task === :clearance
+        rv = sess.review
         rv.running[] && return (:busy, "checking: $(rv.progress[][1]) of $(rv.progress[][2]) beams")
-        tl.running[] && return (:busy, "TaLIS checks… " * _seconds(time() - tl.started[]))
-        if rv.report[] === nothing && tl.report[] === nothing
-            msg = !isempty(rv.status[]) ? rv.status[] : !isempty(tl.status[]) ? tl.status[] : "not run"
-            return (:todo, msg)
-        end
-        parts = String[]
-        attention = false
-        if rv.report[] !== nothing
-            push!(parts, review_brief(rv))
-            attention |= rv.report[].canceled || any(x -> x.status !== :pass, rv.report[].rows)
-        end
-        if tl.report[] !== nothing
-            push!(parts, "TaLIS " * talis_brief(tl))
-            attention |= any(x -> x.status !== :pass, tl.report[].rows)
-        end
-        txt = join(parts, " · ")
-        review_stale(sess) && return (:attention, "beams changed since: " * txt)
-        return (attention ? :attention : :ok, txt)
+        rv.report[] === nothing && return (:todo, isempty(rv.status[]) ? "not run" : rv.status[])
+        txt = review_brief(rv)
+        review_stale(rv, sess.target.target[], active_beams(sess.beams)) &&
+            return (:attention, "beams or target changed since: " * txt)
+        bad = rv.report[].canceled || any(x -> x.status !== :pass, rv.report[].rows)
+        return (bad ? :attention : :ok, txt)
+    else
+        tl = sess.talis
+        tl.running[] && return (:busy, "checking… " * _seconds(time() - tl.started[]))
+        tl.report[] === nothing && return (:todo, isempty(tl.status[]) ? "not run" : tl.status[])
+        txt = talis_brief(tl)
+        talis_stale(tl, sess.target.target[], active_beams(sess.beams)) &&
+            return (:attention, "beams or target changed since: " * txt)
+        bad = any(x -> x.status !== :pass, tl.report[].rows)
+        return (bad ? :attention : :ok, txt)
     end
 end
 
@@ -202,7 +215,9 @@ function build_scenario!(sess::DesignSession)
     dr.status[] = "computing view factors…"
     runner = _runner(sess.spawn, sess.deliver)
     t0 = time()
-    runner(() -> _build_scenario(t, beams), function (out)
+    # free parts lie outside the hohlraum's enclosure: its rows no longer sum to one
+    closed = sess.target.kind[] === :hohlraum && isempty(sess.target.parts[])
+    runner(() -> _build_scenario(t, beams; closed), function (out)
         g == dr.generation[] || return
         dr.building[] = false
         if out.err !== nothing
@@ -296,13 +311,14 @@ Optimize the enabled beams on the current scenario (see
 function start_optimize!(sess::DesignSession; spawn::Bool = true)
     st = sess.optimize
     if !_drive_current(sess)
-        st.status[] = "compute the drive first (Drive step)"
+        st.status[] = "compute the drive first (Compute ▸ Drive)"
         return sess
     end
     bt = sess.beams
     idx = findall(bt.enabled[])
     start_optimize!(st, sess.drive.scenario[], bt.beams[][idx], idx;
-                    spot_radius = sess.drive.spot_radius[], deliver = sess.deliver[], spawn)
+                    spot_radius = sess.drive.spot_radius[], clusters = bt.cluster[][idx],
+                    deliver = sess.deliver[], spawn)
     return sess
 end
 
@@ -312,7 +328,7 @@ cancel_optimize!(sess::DesignSession) = cancel_optimize!(sess.optimize)
     accept_optimum!(sess::DesignSession)
 
 Put the optimized pointing into the beam table (the enabled beams it was computed
-for); the Drive step then re-evaluates.
+for); the drive then re-evaluates.
 """
 function accept_optimum!(sess::DesignSession)
     r = sess.optimize.result[]
@@ -347,7 +363,7 @@ cancel_clearance!(sess::DesignSession) = cancel_clearance!(sess.review)
 """
     start_talis!(sess::DesignSession; spawn = true)
 
-Run the TaLIS checks on the enabled beams with the Review step's error stack (see
+Run the TaLIS checks on the enabled beams with the clearance check's error stack (see
 [`start_talis!(::TaLISState, …)`](@ref start_talis!)).
 """
 start_talis!(sess::DesignSession; spawn::Bool = true) =

@@ -1,4 +1,4 @@
-# The Review step's TaLIS checks: a small foil with one beam and a plate upstream
+# The TaLIS checks: a small foil with one beam and a plate upstream
 # (the core's analytic case), then the coarse hohlraum with the NIF quads and a
 # diagnostic window, through a DesignSession.
 
@@ -107,7 +107,7 @@ end
     tl = sess.talis
     @test tl.capture[] == [:wall] && :window_1 in tl.hardware[] && :cap_top in tl.hardware[]
     @test :window_1 in sess.review.hardware[]                 # clearance checks it too
-    @test step_status(sess, :review)[1] === :todo
+    @test task_status(sess, :talis)[1] === :todo
     start_talis!(sess; spawn = false)
     r = tl.report[]
     rules = Set(x.rule for x in r.rows)
@@ -118,14 +118,14 @@ end
     # every quad lands on the wall: capture rows have no free substrate edge to measure
     @test all(x -> x.component === :wall, (x for x in r.rows if x.rule === :capture_3w))
     @test occursin("48 beams", talis_brief(tl))
-    st, txt = step_status(sess, :review)
-    @test st === :attention && occursin("TaLIS", txt)          # the LEH caps fail 3ω clearance
+    st, txt = task_status(sess, :talis)
+    @test st === :attention && occursin("48 beams", txt)      # the LEH caps fail 3ω clearance
     # roles follow the target: a removed window leaves the selection, a new one is checked
     set_talis_role!(tl, :capsule, :none)
     edit_target!(sess.target, :length, "10.0")
     @test !(:capsule in tl.hardware[]) && !(:capsule in tl.capture[])      # kept as chosen
     @test talis_stale(tl, sess.target.target[], active_beams(sess.beams))
-    @test step_status(sess, :review)[1] === :attention
+    @test task_status(sess, :talis)[1] === :attention
     remove_window!(sess.target, 1)
     @test !(:window_1 in tl.hardware[]) && !(:window_1 in sess.review.hardware[])
     add_window!(sess.target)

@@ -1,19 +1,16 @@
-# The Drive, Optimize and Review steps through a DesignSession, inline (as a script
-# would run them) and through a window-style delivery queue. A coarse hohlraum keeps
+# The drive, optimization and clearance analyses through a DesignSession, inline (as a
+# script would run them) and through a window-style delivery queue. A coarse hohlraum keeps
 # the view factors to seconds.
 
 const SESS = DesignSession(resolution = :coarse)
 
-@testset "Drive step (no GL)" begin
+@testset "drive (no GL)" begin
     sess = SESS
-    @test step_status(sess, :target)[1] === :ok
-    @test step_status(sess, :beams)[1] === :ok
-    @test step_status(sess, :drive) == (:todo, "not computed")
-    @test step_status(sess, :optimize)[1] === :todo
-    @test step_status(sess, :review)[1] === :todo
-    set_step!(sess, :drive)
-    @test sess.step[] === :drive
-    @test_throws ArgumentError set_step!(sess, :results)
+    @test task_status(sess, :drive) == (:todo, "not computed")
+    @test task_status(sess, :optimize)[1] === :todo
+    @test task_status(sess, :clearance)[1] === :todo
+    @test task_status(sess, :talis)[1] === :todo
+    @test_throws ArgumentError task_status(sess, :results)
 
     build_scenario!(sess)                                # inline: spawn[] is false
     dr = sess.drive
@@ -31,7 +28,7 @@ const SESS = DesignSession(resolution = :coarse)
     @test m[2].epsilon ≈ abs(m[2].legendre) rtol = 0.05        # nearly axisymmetric
     @test 1e14 < to_Wcm2(res.mean_flux) < 1e16
     @test occursin("capsule", drive_summary(res)) && occursin("ε₂", drive_summary(res))
-    @test step_status(sess, :drive)[1] === :ok
+    @test task_status(sess, :drive)[1] === :ok
     # power accounting sums to the delivered power
     @test sum(p.power for p in res.power) ≈ res.evaluation.deposition.delivered rtol = 1e-6
     @test any(p -> p.name == "wall", res.power)
@@ -67,14 +64,14 @@ const SESS = DesignSession(resolution = :coarse)
     # a target change makes the scenario stale and clears the evaluation
     edit_target!(sess.target, :length, "10.0")
     @test drive_stale(sess) && dr.result[] === nothing
-    @test step_status(sess, :drive)[1] === :attention
+    @test task_status(sess, :drive)[1] === :attention
     edit_target!(sess.target, :length, "10.1")
     @test drive_stale(sess)                                  # a new Target object
     build_scenario!(sess)
     @test !drive_stale(sess) && dr.result[] isa DriveResult
 end
 
-@testset "Optimize step (no GL)" begin
+@testset "optimization (no GL)" begin
     sess = SESS
     st = sess.optimize
     @test_throws ArgumentError set_free!(st, :spot, true)
@@ -92,19 +89,23 @@ end
     start_optimize!(sess; spawn = false)
     r = st.result[]
     @test r isa OptimizeResult && r.completed && !st.running[]
-    @test startswith(st.status[], "done")
+    @test occursin(r"^(converged|reached the iteration limit)", st.status[])
     @test length(r.names) == 8 && r.names[1] == "inner23.z"
     @test r.value <= r.initial_value
     @test all(r.lower .<= r.x .<= r.upper)
     @test r.evaluations > 0 && st.evaluations[] == r.evaluations
     @test r.iterations isa Int && 0 < r.iterations <= 4         # from optimize_pointing
+    @test r.reason in (:converged, :iterations)
+    # the capsule keep-out is on by default and reported before and after
+    @test st.capsule_keepout[] && isfinite(r.after.capsule_clearance)
+    @test r.after.capsule >= 0
     @test length(r.before.modes) == 4 && length(r.after.modes) == 4
     rows = parameter_rows(r)
     @test length(rows) == 8 && rows[1].start ≈ 3.09
-    @test step_status(sess, :optimize)[1] === :attention       # not applied yet
+    @test task_status(sess, :optimize)[1] === :attention       # not applied yet
 
     accept_optimum!(sess)
-    @test r.applied && step_status(sess, :optimize)[1] === :ok
+    @test r.applied && task_status(sess, :optimize)[1] === :ok
     rws = beam_rows(sess.beams)
     @test rws[1].z ≈ r.x[1] && rws[1].r ≈ r.x[2]
     @test sess.drive.result[].modes[2].epsilon ≈ r.after.modes[2].epsilon rtol = 1e-6
@@ -143,14 +144,45 @@ end
     start_optimize!(st, sess.drive.scenario[], sess.beams.beams[][idx], idx;
                     deliver = cancel_after_first, spawn = false)
     rc = st.result[]
-    @test !rc.completed && rc.iterations === nothing && rc.evaluations == 1
+    @test !rc.completed && rc.reason === :callback && rc.evaluations == 1
     @test first(seen) == 1                                   # progress reached `deliver`
     @test rc.value ≈ rc.initial_value                        # the start is the best so far
     @test rc.x ≈ rc.x0 && occursin("canceled; kept the best design", st.status[])
-    @test step_status(sess, :optimize)[1] === :attention
+    @test task_status(sess, :optimize)[1] === :attention
+
+    # the evaluation budget ends a run whatever the line searches do
+    st.iterations[] = 50
+    @test edit_optimize!(st, :max_evaluations, "3") && st.max_evaluations[] == 3
+    start_optimize!(sess; spawn = false)
+    rb = st.result[]
+    @test rb.reason === :evaluations && rb.evaluations == 3 && rb.completed
+    @test occursin("evaluation limit", st.status[])
+    st.max_evaluations[] = 1000
 end
 
-@testset "Review step (no GL)" begin
+@testset "capsule keep-out in the optimization (no GL)" begin
+    # inner cones pulled toward the waist put their envelopes on the capsule; with the
+    # keep-out the optimizer moves them off
+    sess = DesignSession(resolution = :coarse)
+    for (cone, z, r) in (("inner23", "2.2", "-0.5"), ("inner30", "2.4", "-0.3"))
+        edit_beam_node!(sess.beams, :group, cone, :z, z)
+        edit_beam_node!(sess.beams, :group, cone, :r, r)
+    end
+    build_scenario!(sess)
+    st = sess.optimize
+    st.iterations[] = 40
+    st.weights[] = Dict(1 => 0.0, 2 => 1.0, 3 => 0.0, 4 => 1.0)
+    start_optimize!(sess; spawn = false)
+    on = st.result[]
+    @test on.before.capsule_clearance < 0
+    @test on.after.capsule_clearance > -0.02 && on.after.capsule < 1e-4
+    st.capsule_keepout[] = false
+    start_optimize!(sess; spawn = false)
+    off = st.result[]
+    @test off.after.capsule_clearance < on.after.capsule_clearance
+end
+
+@testset "clearance (no GL)" begin
     sess = SESS
     rv = sess.review
     @test rv.targets[] == [:wall, :capsule] && rv.hardware[] == [:cap_top, :cap_bottom]
@@ -193,7 +225,7 @@ end
     @test countlines(path) == 1 + length(rep.rows)
     @test !review_stale(sess)
     edit_beams!(bt, 1, :z, "3.2")
-    @test review_stale(sess) && step_status(sess, :review)[1] === :attention
+    @test review_stale(sess) && task_status(sess, :clearance)[1] === :attention
 
     # cancel through clearance's callback, inline: after the first batch of 2 beams
     progress = Tuple{Int,Int}[]
@@ -207,7 +239,7 @@ end
     @test rc.canceled && length(unique(x.beam for x in rc.rows)) == 2
     @test rv.status[] == "canceled after 2 of 4 beams" && !rv.running[]
     @test occursin("canceled, partial", review_brief(rv))
-    @test step_status(sess, :review)[1] === :attention
+    @test task_status(sess, :clearance)[1] === :attention
     # canceled before any beam: no report
     start_clearance!(rv, sess.target.target[], four; spawn = false, batch = 2,
                      deliver = f -> (f(); cancel_clearance!(rv)))
@@ -229,7 +261,7 @@ end
     sess.spawn[] = true
     build_scenario!(sess)
     @test sess.drive.building[]
-    @test step_status(sess, :drive)[1] === :busy
+    @test task_status(sess, :drive)[1] === :busy
     drain_until(() -> sess.drive.result[] !== nothing, q)
     @test !sess.drive.building[] && sess.drive.scenario[] isa Scenario
 
@@ -264,7 +296,7 @@ end
     notify(bt.enabled)
     rv = sess.review
     start_clearance!(sess; spawn = true, batch = 2)
-    @test rv.running[] && step_status(sess, :review)[1] === :busy
+    @test rv.running[] && task_status(sess, :clearance)[1] === :busy
     drain_until(() -> rv.progress[][1] > 0 || !rv.running[], q)
     cancel_clearance!(sess)
     drain_until(() -> !rv.running[], q)

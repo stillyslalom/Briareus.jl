@@ -78,6 +78,34 @@ Shot-review layer:
   converged ray traces to 1%, with 44% fewer operator points on the NIF hohlraum.
   Element values are unchanged bit for bit.
 
+## Done (2026-10-17, GUI as a design tool)
+- **BriareusGUI as a CAD-style tool:** the step rail is gone. Model tree (components,
+  beams by cone/quad/beam, analyses with their state), Properties for the selection,
+  result tabs, menus and a toolbar; any operation at any time, stale results flagged;
+  coloring by a drive field computes the drive on request (as VisRad does).
+- **Viewer:** own camera (`CadCamera`): zoom toward the pointer, orbit about the
+  selection or the picked point, pan the grabbed point, double-click fit, standard and
+  along-beam views, perspective/orthographic, near/far planes from the bounding
+  sphere (no clipping), ray-cast picking, an orientation triad. Beams as rays to where
+  they land, or as envelope volumes cut at the target.
+- **Free parts** (sphere, disk, washer, rectangle, cylinder, cone) placed with
+  VisRad's polar/azimuth/rotation angles, with their own material, sidedness,
+  aperture flag and element size. Round diagnostic windows by default.
+- **Beam groups** (VisRad's clusters, kept apart from the cone `group` the LPI models
+  use): any set of beams, Ctrl-selected in the tree or the view, moved to a named
+  group and pointed together, relative to the ports or at a common aim point; the
+  optimizer's per-group parameters follow them. NIF quads split into their four
+  beams and merge back. The tree carries the component and group colors (no color
+  key on the canvas).
+- **Capsule keep-out** (`SphereKeepOut`): the optimizer had moved inner cones onto the
+  capsule (0.75% of their power) because the `direct` penalty is quadratic in a tiny
+  fraction; the keep-out holds the worst-case envelope off it (on by default in the
+  GUI). `optimize_pointing` also caps objective evaluations (`evaluations`), which a
+  GUI run had overrun with 100 iterations of long line searches.
+- **Mesh work-precision study** (`examples/mesh_convergence.jl`): element-size meshing
+  (`hohlraum(; h, capsule_h)`), GUI presets coarse/standard/fine at ~0.5/0.1/0.02
+  percentage points in P2 and P4.
+
 ## Next
 1. **Sombrero and backlighter geometry.** Model the LEH shield as a component (a
    dimpled annulus), and the backlighter foil's placement relative to the diagnostic
@@ -105,9 +133,12 @@ Shot-review layer:
 4. **Benchmark against VisRad.** Run `write_visrad_kit` cases at work and bring back the
    outputs for `compare_visrad`. This validates absolute drive levels and mode
    amplitudes.
-5. **GUI requests:** foil center and normal stored on the component; session
-   save/load; x-ray images in the window. (Cached radiosity factorization, clearance and
-   optimizer progress/cancel hooks are done.)
+5. **GUI requests:** session save/load (a workspace file); undo/redo; x-ray images
+   in the window; reference frames for parts (attach to a component or a port axis, as
+   VisRad does); clipping volumes and STEP/STL import; a second simultaneous view
+   (the capsule map beside the 3D view).
+   Adaptive mesh refinement of the radiation mesh where deposition varies fastest
+   (the uniform fine mesh is converged but costs ~16k elements).
 6. **Time-dependent view factor.** Wall, LEH and spot motion from rad-hydro or a
    parametric model; P2(t) swing; optimization of cone fraction versus time.
 7. **Shot-data calibration.** Fit effective parameters (cone multipliers, CBET

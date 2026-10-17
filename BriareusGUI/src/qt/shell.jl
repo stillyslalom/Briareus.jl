@@ -8,6 +8,8 @@
 # Canvas: the QMLMakie canvas (`MakieArea`) is never destroyed while the window is
 # open — destroying one leaves a dangling callback in jlqml that crashes at window
 # teardown. The 3D viewer and the flux map are two figures shown in turn on it.
+# The 3D viewer's mouse and keyboard gestures reach Makie's events through it
+# (canvas/cad_camera.jl).
 
 const QML_DIR = joinpath(@__DIR__, "..", "qml")
 
@@ -137,11 +139,27 @@ end
 
 # ---------------------------------------------------------------- bridge rows
 
-mutable struct StepRow
+# One visible row of the model tree (see `Controllers.model_tree`).
+mutable struct TreeItem
+    id::String
+    depth::Int
+    label::String
+    detail::String
+    kind::String
+    expandable::Bool
+    expanded::Bool
+    on::Int                                        # -1 none, 0 off, 1 on, 2 mixed
+    status::String
+    selected::Bool
+    color::String                                  # swatch (hex), "" for none
+end
+
+# An editable field of the inspector: key, label, unit, value as text.
+mutable struct FieldRow
     key::String
     label::String
-    status::String                                 # :todo/:ok/:attention/:busy ("state" clashes with QML)
-    summary::String
+    unit::String
+    value::String
 end
 
 # One beam-table row; numbers travel as text-field text. `on`: 0 off, 1 on, 2 mixed.
@@ -163,7 +181,7 @@ mutable struct ModeRow
     l::Int
     epsilon::String
     legendre::String
-    before::String                                 # Optimize: ε_l before → after
+    before::String                                 # optimization: ε_l before → after
     after::String
 end
 
@@ -197,7 +215,7 @@ mutable struct ClearRow
     intensity::String
 end
 
-# One diagnostic window of the Target step; numbers as text-field text.
+# One diagnostic window; numbers as text-field text.
 mutable struct WindowRow
     number::Int
     name::String
@@ -208,6 +226,7 @@ mutable struct WindowRow
     open::Bool
     albedo::String
     conversion::String
+    round::Bool
 end
 
 # TaLIS: one rule's summary, one check, one note.
@@ -260,11 +279,12 @@ end
 
 # ---------------------------------------------------------------- shell
 
-const _MODEL_ROWS = (stepModel = StepRow, windowModel = WindowRow, beamModel = BeamRow,
-                     modeModel = ModeRow, powerModel = PowerRow, optModeModel = ModeRow,
-                     paramModel = ParamRow, compModel = CompRow, clearModel = ClearRow,
-                     worstModel = ClearRow, talisCompModel = CompRow, ruleModel = RuleRow,
-                     talisModel = TalisRow, noteModel = NoteRow)
+const _MODEL_ROWS = (treeModel = TreeItem, targetFieldModel = FieldRow, partFieldModel = FieldRow,
+                     windowModel = WindowRow, beamModel = BeamRow, modeModel = ModeRow,
+                     powerModel = PowerRow, optModeModel = ModeRow, paramModel = ParamRow,
+                     compModel = CompRow, clearModel = ClearRow, worstModel = ClearRow,
+                     talisCompModel = CompRow, ruleModel = RuleRow, talisModel = TalisRow,
+                     noteModel = NoteRow)
 
 """
 State shared between a `DesignSession` and its QML window: the property map `app`,
@@ -292,22 +312,42 @@ function BriareusShell(sess::DesignSession; queue::Channel{Any} = Channel{Any}(I
                        Ref(true), Dict{String,Any}(), scene.fig)
     sh.app["canvas"] = scene.fig
     _set!(sh, "grabPath", "")
-    _set!(sh, "cutaway", true)
+    for k in ("compInfo", "selTitle", "partKind", "partName", "bnBy", "bn_z", "bn_r", "bn_phi",
+              "bn_defocus", "bn_power", "bn_aim_x", "bn_aim_y", "bn_aim_z", "bnInfo",
+              "bnCluster", "bnQuad")
+        _set!(sh, k, "")
+    end
+    for k in ("bnMirrored", "bnCanSplit", "bnCanMerge")
+        _set!(sh, k, false)
+    end
+    _set!(sh, "bnCount", 0)
+    _set!(sh, "clusterNames", String[])
+    for k in ("compHidden", "partTwoSided", "partInward", "partAperture")
+        _set!(sh, k, false)
+    end
+    _set!(sh, "bnOn", 0)
+    _set!(sh, "partNumber", 0)
+    _set!(sh, "windowNumber", 0)
+    _set!(sh, "ortho", false)
+    _set!(sh, "turntable", true)
     mark = (_...) -> (sh.dirty[] = true)
-    ts, bt, dr, st, rv, tl = sess.target, sess.beams, sess.drive, sess.optimize, sess.review,
-                             sess.talis
-    for obs in (sess.step, sess.status, ts.kind, ts.params, ts.resolution, ts.windows, ts.target,
-                ts.error,
+    ts, bt, dr, st, rv, tl, v = sess.target, sess.beams, sess.drive, sess.optimize, sess.review,
+                                sess.talis, sess.view
+    for obs in (sess.status, ts.kind, ts.params, ts.mesh, ts.resolution, ts.windows, ts.parts,
+                ts.target, ts.error,
                 bt.beams, bt.enabled, bt.preset, bt.by, bt.path, bt.error, bt.warnings,
                 dr.scenario, dr.building, dr.result, dr.evaluating, dr.field, dr.view,
                 dr.spot_radius, dr.status, dr.kit_running, dr.kit_status,
                 st.by, st.fields, st.deltas, st.objective, st.weights, st.hold_drive, st.keepout,
-                st.keepout_min, st.spill, st.iterations, st.running, st.evaluations, st.status,
-                st.error, st.result,
+                st.keepout_min, st.capsule_keepout, st.capsule_min, st.spill, st.iterations,
+                st.max_evaluations, st.running, st.evaluations, st.iteration, st.status,
+                st.error, st.result, bt.cluster, v.extra,
                 rv.targets, rv.hardware, rv.peak_fraction, rv.wings, rv.errors, rv.quality,
-                rv.view, rv.running, rv.progress, rv.status, rv.error, rv.report,
+                rv.running, rv.progress, rv.status, rv.error, rv.report,
                 tl.capture, tl.hardware, tl.tolerance, tl.pivot, tl.pivot_point, tl.omega1,
-                tl.running, tl.status, tl.error, tl.report)
+                tl.running, tl.status, tl.error, tl.report,
+                v.color, v.beams, v.beam_color, v.beam_length, v.cutaway, v.hidden, v.selection,
+                v.expanded)
         on(mark, obs)
     end
     _refresh!(sh)
@@ -330,18 +370,19 @@ _g(x::Real) = isfinite(x) ? @sprintf("%.3g", x) : "–"
 function _refresh!(sh::BriareusShell)
     sess = sh.sess
     _set!(sh, "title", "Briareus | " * target_summary(sess.target))
-    _set!(sh, "step", String(sess.step[]))
     _set!(sh, "status", sess.status[])
+    _refresh_view!(sh)
     _refresh_target!(sh)
     _refresh_beams!(sh)
+    _refresh_selection!(sh)
     _refresh_drive!(sh)
     _refresh_optimize!(sh)
     _refresh_review!(sh)
-    steps = [StepRow(String(s), step_label(sess, s), String(st), txt)
-             for s in DESIGN_STEPS for (st, txt) in (step_status(sess, s),)]
-    _sync_rows!(sh.rows[:stepModel], sh.models[:stepModel], steps)
-    # the flux map on Drive/Optimize when chosen there; the 3D view otherwise
-    fig = sess.step[] in (:drive, :optimize) && sess.drive.view[] === :map ? sh.map.fig : sh.scene.fig
+    tree = [TreeItem(r...) for r in model_tree(sess)]
+    _set!(sh, "selectionCount", length(selected_ids(sess.view)))
+    _sync_rows!(sh.rows[:treeModel], sh.models[:treeModel], tree)
+    # the flux map when chosen; the 3D view otherwise
+    fig = sess.drive.view[] === :map ? sh.map.fig : sh.scene.fig
     if fig !== sh.figure
         sh.figure = fig
         sh.app["canvas"] = fig
@@ -349,21 +390,44 @@ function _refresh!(sh::BriareusShell)
     return
 end
 
+function _refresh_view!(sh::BriareusShell)
+    v = sh.sess.view
+    _set!(sh, "colorBy", String(v.color[]))
+    _set!(sh, "beamStyle", String(v.beams[]))
+    _set!(sh, "beamColor", String(v.beam_color[]))
+    _set!(sh, "beamLength", v.beam_length[] > 0 ? _num(v.beam_length[]) : "")
+    _set!(sh, "cutaway", v.cutaway[])
+    busy = String[]
+    dr, st, rv, tl = sh.sess.drive, sh.sess.optimize, sh.sess.review, sh.sess.talis
+    dr.building[] && push!(busy, "view factors " * Controllers._seconds(time() - dr.started[]))
+    st.running[] && push!(busy, "optimizing")
+    rv.running[] && push!(busy, "clearance $(rv.progress[][1])/$(rv.progress[][2])")
+    tl.running[] && push!(busy, "TaLIS")
+    _set!(sh, "busy", join(busy, " · "))
+    return
+end
+
 function _refresh_target!(sh::BriareusShell)
     ts = sh.sess.target
     _set!(sh, "targetKind", String(ts.kind[]))
     _set!(sh, "targetResolution", String(ts.resolution[]))
+    _set!(sh, "mesh_h", _num(ts.mesh[].h))
+    _set!(sh, "mesh_capsule_h", _num(ts.mesh[].capsule_h))
     _set!(sh, "targetSummary", target_summary(ts))
     _set!(sh, "targetError", ts.error[])
-    for (k, v) in ts.params[]
-        _set!(sh, "t_" * String(k), _num(v))
-    end
-    ws = ts.windows[]
+    fields = [FieldRow(String(k), label, unit, _num(ts.params[][k]))
+              for (k, label, unit, _) in getfield(TARGET_FIELDS, ts.kind[])]
+    _sync_rows!(sh.rows[:targetFieldModel], sh.models[:targetFieldModel], fields)
+    ws = ts.kind[] === :hohlraum ? ts.windows[] : WindowSpec[]
     rows = [WindowRow(i, String(window_name(i)), _num(w.phi), _num(w.z), _num(w.width),
-                      _num(w.height), w.open, _num(w.albedo), _num(w.conversion))
+                      _num(w.height), w.open, _num(w.albedo), _num(w.conversion), w.round)
             for (i, w) in enumerate(ws)]
     _sync_rows!(sh.rows[:windowModel], sh.models[:windowModel], rows)
     _set!(sh, "windowCount", length(ws))
+    _set!(sh, "partCount", length(ts.parts[]))
+    names = component_names(ts.target[])
+    _set!(sh, "hasCapsule", :capsule in names)
+    _set!(sh, "hasFoil", FOIL_NAME in names)
     return
 end
 
@@ -376,6 +440,7 @@ function _refresh_beams!(sh::BriareusShell)
     _set!(sh, "beamsError", bt.error[])
     _set!(sh, "beamsPath", bt.path[])
     _set!(sh, "beamsWarnings", join(bt.warnings[], "\n"))
+    _set!(sh, "hasQuads", !isempty(bt.beams[]) && all(b -> !isempty(b.quad), bt.beams[]))
     rows = [BeamRow(i, r.key, r.count, @sprintf("%.2f", r.theta), isnan(r.phi) ? "–" : @sprintf("%.2f", r.phi),
                     _fix(r.z), _fix(r.r), _fix(r.phi_offset), _fix(r.defocus), _num(r.power),
                     r.enabled === missing ? 2 : r.enabled ? 1 : 0)
@@ -384,18 +449,107 @@ function _refresh_beams!(sh::BriareusShell)
     return
 end
 
+const _BY_OF_KIND = Dict(:group => :group, :quad => :quad, :beam => :beam)
+
+# The inspector: what is selected and its editable values.
+function _refresh_selection!(sh::BriareusShell)
+    sess = sh.sess
+    id = sess.view.selection[]
+    kind, key = selection_kind(id)
+    _set!(sh, "selection", id)
+    _set!(sh, "selKind", String(kind))
+    _set!(sh, "selKey", key)
+    t = sess.target.target[]
+    if kind in (:comp, :part, :window)
+        name = selected_component(sess)
+        ci = findfirst(c -> c.name === name, t.components)
+        if ci !== nothing
+            c = t.components[ci]
+            es = elements(t, name)
+            A = sum(t.elem_area[e] for e in es; init = 0.0)
+            what = c.kind === :aperture ? "aperture (transparent: rays pass, x-rays escape)" :
+                   c.two_sided ? "two-sided surface" : "one-sided surface"
+            mat = c.kind === :aperture ? "" :
+                  @sprintf(" · albedo %.3g · conversion %.3g", albedo(c.material), c.material.conversion)
+            surf = c.surface === nothing ? "faceted" : "exact " * replace(string(nameof(typeof(c.surface))), "Surface" => "") * " surface"
+            _set!(sh, "compInfo", @sprintf("%s · %d elements · %.4g mm² · %s%s", what, length(es), A,
+                                           surf, mat))
+            _set!(sh, "compHidden", name in sess.view.hidden[])
+            _set!(sh, "selTitle", String(name))
+        end
+    end
+    if kind === :part
+        i = part_index(sess.target, Symbol(key))
+        if i !== nothing
+            p = sess.target.parts[][i]
+            _set!(sh, "partNumber", i)
+            _set!(sh, "partKind", PART_KIND_LABELS[p.kind])
+            _set!(sh, "partName", String(p.name))
+            _set!(sh, "partTwoSided", p.two_sided)
+            _set!(sh, "partInward", p.inward)
+            _set!(sh, "partAperture", p.aperture)
+            fields = [FieldRow(String(k), label, unit, _num(p.values[k]))
+                      for (k, label, unit, _) in (PART_SIZE_FIELDS[p.kind]..., PART_FIELDS...)]
+            _sync_rows!(sh.rows[:partFieldModel], sh.models[:partFieldModel], fields)
+        end
+    elseif kind === :window
+        _set!(sh, "windowNumber", parse(Int, key))
+    elseif kind in (:group, :quad, :beam)
+        bt = sess.beams
+        idx = selected_beams(sess)
+        if !isempty(idx)
+            n = beam_set_values(bt, idx)
+            bs = bt.beams[]
+            nsel = length(selected_ids(sess.view))
+            gname = split(key, '@')
+            _set!(sh, "selTitle", nsel > 1 ? "$(nsel) selections · $(n.count) beams" :
+                                  kind === :group ? "Group " * key :
+                                  kind === :quad ? "Quad " * gname[1] * (length(gname) > 1 ? " (" * gname[2] * ")" : "") :
+                                  "Beam " * key)
+            _set!(sh, "bnBy", nsel > 1 ? "set" : String(_BY_OF_KIND[kind]))
+            for (f, v) in ((:z, n.z), (:r, n.r), (:phi, n.phi), (:defocus, n.defocus),
+                           (:aim_x, n.aim[1]), (:aim_y, n.aim[2]), (:aim_z, n.aim[3]))
+                _set!(sh, "bn_" * String(f), _fix(v))
+            end
+            _set!(sh, "bn_power", _num(n.power))
+            _set!(sh, "bnMirrored", n.mirrored)
+            _set!(sh, "bnOn", n.enabled === missing ? 2 : n.enabled ? 1 : 0)
+            _set!(sh, "bnCount", n.count)
+            cls = unique(bt.cluster[][idx])
+            _set!(sh, "bnCluster", length(cls) == 1 ? String(cls[1]) : "")
+            _set!(sh, "clusterNames", String.(clusters(bt)))
+            # quads: one NIF quad beam can be split; a quad's four beams merged
+            qs = unique(bs[i].quad for i in idx)
+            q = length(qs) == 1 ? qs[1] : ""
+            _set!(sh, "bnQuad", q)
+            nq = isempty(q) ? 0 : count(b -> b.quad == q, bs)
+            _set!(sh, "bnCanSplit", nq == 1 && startswith(q, "Q") && length(idx) == 1)
+            _set!(sh, "bnCanMerge", nq == 4 && startswith(q, "Q"))
+            b = bs[idx[1]]
+            p = beam_path(t, b)
+            land = n.count > 1 ? "" : p.component === :missed ? " · misses the target" :
+                   " · axis lands on " * String(p.component)
+            spot = @sprintf("spot %.3g × %.3g mm (order %.3g), f/%.3g", b.spot.a, b.spot.b,
+                            b.spot.order, b.fnumber)
+            θ, φ = port_angles(b)
+            angles = n.count == 1 ? @sprintf("port θ %.2f°, φ %.2f°", θ, φ) : ""
+            _set!(sh, "bnInfo", join(filter(!isempty, [@sprintf("%d beam%s", n.count, n.count == 1 ? "" : "s"),
+                                                        angles, spot]), " · ") * land)
+        end
+    end
+    return
+end
+
 function _refresh_drive!(sh::BriareusShell)
     sess = sh.sess
     dr = sess.drive
     res = dr.result[]
-    names = component_names(sess.target.target[])
-    _set!(sh, "hasCapsule", :capsule in names)
-    _set!(sh, "hasFoil", FOIL_NAME in names)
     _set!(sh, "driveBuilding", dr.building[])
     _set!(sh, "driveElapsed", dr.building[] ? Controllers._seconds(time() - dr.started[]) : "")
     _set!(sh, "driveEvaluating", dr.evaluating[])
     _set!(sh, "driveBuilt", dr.scenario[] !== nothing)
     _set!(sh, "driveStale", drive_stale(sess))
+    _set!(sh, "driveCurrent", Controllers._drive_current(sess))
     _set!(sh, "driveStatus", dr.status[])
     _set!(sh, "driveHasResult", res !== nothing)
     _set!(sh, "driveField", String(dr.field[]))
@@ -437,8 +591,11 @@ function _refresh_optimize!(sh::BriareusShell)
     _set!(sh, "optHold", st.hold_drive[])
     _set!(sh, "optKeepout", st.keepout[])
     _set!(sh, "optKeepoutMin", _num(st.keepout_min[]))
+    _set!(sh, "optCapsule", st.capsule_keepout[])
+    _set!(sh, "optCapsuleMin", _num(st.capsule_min[]))
     _set!(sh, "optSpill", _num(st.spill[]))
     _set!(sh, "optIterations", st.iterations[])
+    _set!(sh, "optMaxEvaluations", st.max_evaluations[])
     _set!(sh, "optRunning", st.running[])
     _set!(sh, "optProgress", optimize_progress(st))
     _set!(sh, "optStatus", st.status[])
@@ -446,12 +603,13 @@ function _refresh_optimize!(sh::BriareusShell)
     r = st.result[]
     _set!(sh, "optHasResult", r !== nothing)
     _set!(sh, "optApplied", r !== nothing && r.applied)
-    _set!(sh, "optValues", r === nothing ? "" :
-                           @sprintf("objective %.4g → %.4g · %d evaluations · %s%s", r.initial_value,
-                                    r.value, r.evaluations, Controllers._seconds(r.seconds),
-                                    r.completed ? "" : " · canceled (best so far)"))
+    _set!(sh, "optValues", r === nothing ? "" : st.status[])
     _set!(sh, "optClipped", r === nothing ? "" :
-                            "clipped laser power " * _pct(r.before.clipped) * " → " * _pct(r.after.clipped))
+                            "clipped laser power " * _pct(r.before.clipped) * " → " * _pct(r.after.clipped) *
+                            (isfinite(r.after.capsule_clearance) ?
+                             " · on the capsule " * _pct(r.before.capsule, 3) * " → " * _pct(r.after.capsule, 3) *
+                             @sprintf(" · capsule worst-case clearance %.3f → %.3f mm",
+                                      r.before.capsule_clearance, r.after.capsule_clearance) : ""))
     _set!(sh, "optSpot", r === nothing || r.after.spot === nothing ? "" :
                          @sprintf("spot rms nonuniformity %.1f %% → %.1f %%", 100 * r.before.spot.rms,
                                   100 * r.after.spot.rms))
@@ -488,13 +646,12 @@ function _refresh_review!(sh::BriareusShell)
     _set!(sh, "rvError", rv.error[])
     _set!(sh, "rvHasReport", rv.report[] !== nothing)
     _set!(sh, "rvBrief", review_brief(rv))
-    _set!(sh, "rvStale", review_stale(sess))
+    _set!(sh, "rvStale", review_stale(rv, sess.target.target[], active_beams(sess.beams)))
     comps = [CompRow(String(n), n in rv.targets[] ? "target" : n in rv.hardware[] ? "hardware" : "none")
              for n in surface_names(sess.target.target[])]
     _sync_rows!(sh.rows[:compModel], sh.models[:compModel], comps)
     _sync_rows!(sh.rows[:clearModel], sh.models[:clearModel], ClearRow[_clear_row(x) for x in clearance_rows(rv)])
     _sync_rows!(sh.rows[:worstModel], sh.models[:worstModel], ClearRow[_clear_row(x) for x in worst_rows(rv)])
-    _set!(sh, "rvView", String(rv.view[]))
     _refresh_talis!(sh)
     return
 end
@@ -562,7 +719,7 @@ request_close() = (_CLOSE_REQUESTED[] = true; nothing)
 """
     request_grab(path)
 
-Save an image of the open window's body (step page and viewer) to `path` (PNG) on the
+Save an image of the open window's body (panels and viewer) to `path` (PNG) on the
 window's next tick, through QML `grabToImage`. The file appears asynchronously.
 """
 request_grab(path::AbstractString) = (sh = _SHELL[]; sh === nothing || _set!(sh, "grabPath", String(path)); nothing)
@@ -607,7 +764,7 @@ function br_tick()
         end
     end
     sess = sh.sess
-    # running jobs report elapsed time on the rail
+    # running jobs report elapsed time
     (sess.drive.building[] || sess.optimize.running[] || sess.review.running[] ||
      sess.talis.running[]) && (sh.dirty[] = true)
     sh.dirty[] && (sh.dirty[] = false; _refresh!(sh))
@@ -618,14 +775,41 @@ function br_tick()
 end
 
 _sym(x) = Symbol(String(x))
+_parse(text, what) = Controllers._parse_number(string(text), what)
 
-br_set_step(name) = _with_shell(sh -> set_step!(sh.sess, _sym(name)))
+# Model tree and selection
+br_select(id) = _with_shell(sh -> select!(sh.sess.view, String(id)))
+br_select_add(id) = _with_shell(sh -> select_add!(sh.sess.view, String(id)))
+br_toggle_expand(id) = _with_shell(sh -> toggle_expanded!(sh.sess.view, String(id)))
+function br_tree_on(id, on)
+    _with_shell() do sh
+        sess = sh.sess
+        kind, key = selection_kind(String(id))
+        on = Bool(on)
+        if kind in (:group, :quad, :beam)
+            idx = String(id) == sess.view.selection[] ? selected_beams(sess) : node_beams(sess.beams, String(id))
+            isempty(idx) || set_set_enabled!(sess.beams, idx, on)
+        elseif kind === :beams
+            Controllers._assign!(sess.beams.enabled, fill(on, length(sess.beams.beams[])))
+        elseif kind in (:comp, :part, :window)
+            name = kind === :window ? window_name(parse(Int, key)) : Symbol(key)
+            set_hidden!(sess.view, name, !on)
+        end
+    end
+end
 # Target
 br_set_target_kind(kind) = _with_shell(sh -> set_target_kind!(sh.sess.target, _sym(kind)))
 br_set_resolution(r) = _with_shell(sh -> set_resolution!(sh.sess.target, _sym(r)))
+br_edit_mesh(key, text) = _with_shell(sh -> edit_mesh!(sh.sess.target, _sym(key), string(text)))
 br_edit_target(key, text) = _with_shell(sh -> edit_target!(sh.sess.target, _sym(key), string(text)))
-br_add_window() = _with_shell(sh -> add_window!(sh.sess.target))
-br_remove_window(row) = _with_shell(sh -> remove_window!(sh.sess.target, round(Int, row)))
+function br_add_window()
+    _with_shell() do sh
+        n = length(sh.sess.target.windows[])
+        add_window!(sh.sess.target) && select!(sh.sess.view, "window:$(n + 1)")
+    end
+end
+br_remove_window(row) = _with_shell(sh -> (remove_window!(sh.sess.target, round(Int, row));
+                                           select!(sh.sess.view, "target")))
 function br_edit_window(row, key, text)
     _with_shell() do sh
         k = round(Int, row)
@@ -634,11 +818,69 @@ function br_edit_window(row, key, text)
             (k <= length(sh.rows[:windowModel]) && (sh.models[:windowModel][k] = sh.rows[:windowModel][k]))
     end
 end
+function br_window_round(row, on)
+    _with_shell() do sh
+        k = round(Int, row)
+        set_window_round!(sh.sess.target, k, Bool(on)) ||
+            (k <= length(sh.rows[:windowModel]) && (sh.models[:windowModel][k] = sh.rows[:windowModel][k]))
+    end
+end
 function br_window_open(row, on)
     _with_shell() do sh
         k = round(Int, row)
         set_window_open!(sh.sess.target, k, Bool(on)) ||
             (k <= length(sh.rows[:windowModel]) && (sh.models[:windowModel][k] = sh.rows[:windowModel][k]))
+    end
+end
+function br_add_part(kind)
+    _with_shell() do sh
+        ts = sh.sess.target
+        if add_part!(ts, _sym(kind))
+            select!(sh.sess.view, "part:" * String(ts.parts[][end].name))
+            sh.sess.status[] = "added " * String(ts.parts[][end].name) * " at TCC: set its size and place in Properties"
+        end
+    end
+end
+function _resend_part_fields!(sh)
+    rows = sh.rows[:partFieldModel]
+    for i in eachindex(rows)
+        sh.models[:partFieldModel][i] = rows[i]
+    end
+end
+function br_edit_part(key, text)
+    _with_shell() do sh
+        ts = sh.sess.target
+        i = part_index(ts, Symbol(selection_kind(sh.sess.view.selection[])[2]))
+        i === nothing && return
+        k = _sym(key)
+        ok = edit_part!(ts, i, k, string(text))
+        if ok && k === :name
+            select!(sh.sess.view, "part:" * String(ts.parts[][i].name))
+        elseif !ok
+            _resend_part_fields!(sh)
+        end
+    end
+end
+function br_part_flag(flag, on)
+    _with_shell() do sh
+        ts = sh.sess.target
+        i = part_index(ts, Symbol(selection_kind(sh.sess.view.selection[])[2]))
+        i === nothing || set_part_flag!(ts, i, _sym(flag), Bool(on))
+    end
+end
+function br_remove_selected()
+    _with_shell() do sh
+        sess = sh.sess
+        kind, key = selection_kind(sess.view.selection[])
+        if kind === :part
+            i = part_index(sess.target, Symbol(key))
+            i === nothing || (remove_part!(sess.target, i); select!(sess.view, "target"))
+        elseif kind === :window
+            remove_window!(sess.target, parse(Int, key))
+            select!(sess.view, "target")
+        else
+            sess.status[] = "only parts and windows can be removed (hide a component instead)"
+        end
     end
 end
 # Beams
@@ -654,6 +896,57 @@ function br_edit_beam(row, field, text)
     end
 end
 br_set_beam_on(row, on) = _with_shell(sh -> set_enabled!(sh.sess.beams, round(Int, row), Bool(on)))
+# Edit every selected beam (a group, quad, beam or Ctrl-selected set) at once.
+function br_edit_node(field, text)
+    _with_shell() do sh
+        idx = selected_beams(sh.sess)
+        isempty(idx) && return
+        edit_beam_set!(sh.sess.beams, idx, _sym(field), string(text)) ||
+            (delete!(sh.shown, "bn_" * String(field)))       # re-send the kept value
+    end
+end
+function br_set_cluster(name)
+    _with_shell() do sh
+        sess = sh.sess
+        idx = selected_beams(sess)
+        isempty(idx) && return
+        if set_cluster!(sess.beams, idx, string(name))
+            g = strip(string(name))
+            "group:" * g in sess.view.expanded[] || toggle_expanded!(sess.view, "group:" * g)
+            select!(sess.view, "group:" * g)
+            sess.status[] = "moved $(length(idx)) beam$(length(idx) == 1 ? "" : "s") to group $g"
+        end
+    end
+end
+function br_rename_cluster(new)
+    _with_shell() do sh
+        kind, key = selection_kind(sh.sess.view.selection[])
+        kind === :group && rename_cluster!(sh.sess.beams, key, string(new)) &&
+            select!(sh.sess.view, "group:" * strip(string(new)))
+    end
+end
+function br_split_quad()
+    _with_shell() do sh
+        q = get(sh.shown, "bnQuad", "")
+        isempty(q) && return
+        g = sh.sess.beams.cluster[][findfirst(b -> b.quad == q, sh.sess.beams.beams[])]
+        if split_quad!(sh.sess.beams, q)
+            id = "quad:" * q * "@" * String(g)
+            "group:" * String(g) in sh.sess.view.expanded[] || toggle_expanded!(sh.sess.view, "group:" * String(g))
+            id in sh.sess.view.expanded[] || toggle_expanded!(sh.sess.view, id)
+            select!(sh.sess.view, id)
+            sh.sess.status[] = "split $q into its four beams (the drive must be computed again)"
+        end
+    end
+end
+function br_merge_quad()
+    _with_shell() do sh
+        q = get(sh.shown, "bnQuad", "")
+        isempty(q) && return
+        merge_quad!(sh.sess.beams, q) && (select!(sh.sess.view, "beam:" * q);
+                                          sh.sess.status[] = "merged $q into one quad beam")
+    end
+end
 br_import_beams(url) = _with_shell(sh -> (import_beams!(sh.sess.beams, _url_to_path(String(url)));
                                           sh.sess.status[] = "imported " * basename(sh.sess.beams.path[])))
 br_export_beams(url) = _with_shell(sh -> (export_beams(sh.sess.beams, _url_to_path(String(url)));
@@ -671,7 +964,6 @@ br_export_sst(url) = _visrad_io(export_visrad_sst, url, "wrote VisRad pointing t
 br_export_summary(url) = _visrad_io(export_visrad_summary, url, "wrote the VisRad beam summary to")
 # Drive
 br_build() = _with_shell(sh -> build_scenario!(sh.sess))
-br_set_field(f) = _with_shell(sh -> set_field!(sh.sess.drive, _sym(f)))
 br_set_view(v) = _with_shell(sh -> set_view!(sh.sess.drive, _sym(v)))
 br_set_spot_radius(text) = _with_shell(sh -> (sh.sess.drive.spot_radius[] =
                                                   Controllers._parse_number(string(text), "the spot radius"; positive = true)))
@@ -684,44 +976,66 @@ br_opt_edit(key, text) = _with_shell(sh -> edit_optimize!(sh.sess.optimize, _sym
 br_opt_objective(k) = _with_shell(sh -> set_objective!(sh.sess.optimize, _sym(k)))
 br_opt_hold(on) = _with_shell(sh -> (sh.sess.optimize.hold_drive[] = Bool(on)))
 br_opt_keepout(on) = _with_shell(sh -> (sh.sess.optimize.keepout[] = Bool(on)))
+br_opt_capsule(on) = _with_shell(sh -> (sh.sess.optimize.capsule_keepout[] = Bool(on)))
 br_opt_start() = _with_shell(sh -> start_optimize!(sh.sess))
 br_opt_cancel() = _with_shell(sh -> cancel_optimize!(sh.sess))
 br_opt_accept() = _with_shell(sh -> accept_optimum!(sh.sess))
-# Review
+# Clearance
 br_rv_role(name, role) = _with_shell(sh -> set_role!(sh.sess.review, _sym(name), _sym(role)))
 br_rv_edit(key, text) = _with_shell(sh -> edit_review!(sh.sess.review, _sym(key), string(text)))
 br_rv_wings(on) = _with_shell(sh -> (sh.sess.review.wings[] = Bool(on)))
 br_rv_quality(q) = _with_shell(sh -> (q = _sym(q); haskey(REVIEW_QUALITY, q) &&
                                                    Controllers._assign!(sh.sess.review.quality, q)))
-br_rv_start() = _with_shell(sh -> start_clearance!(sh.sess))
+br_rv_start() = _with_shell(sh -> (start_clearance!(sh.sess);
+                                   Controllers._assign!(sh.sess.view.beam_color, :clearance)))
 br_rv_cancel() = _with_shell(sh -> cancel_clearance!(sh.sess))
 br_rv_export(url) = _with_shell(sh -> export_clearance(sh.sess.review, _url_to_path(String(url))))
-br_rv_view(v) = _with_shell(sh -> set_review_view!(sh.sess.review, _sym(v)))
 # TaLIS
 br_tl_role(name, role) = _with_shell(sh -> set_talis_role!(sh.sess.talis, _sym(name), _sym(role)))
 br_tl_edit(key, text) = _with_shell(sh -> edit_talis!(sh.sess.talis, _sym(key), string(text)))
 br_tl_pivot(p) = _with_shell(sh -> set_talis_pivot!(sh.sess.talis, _sym(p)))
 br_tl_omega1(on) = _with_shell(sh -> Controllers._assign!(sh.sess.talis.omega1, Bool(on)))
-br_tl_start() = _with_shell(sh -> start_talis!(sh.sess))
+br_tl_start() = _with_shell(sh -> (start_talis!(sh.sess);
+                                   Controllers._assign!(sh.sess.view.beam_color, :talis)))
 br_tl_cancel() = _with_shell(sh -> cancel_talis!(sh.sess))
 br_tl_export(url) = _with_shell(sh -> export_talis(sh.sess.talis, _url_to_path(String(url))))
+br_cancel_all() = _with_shell(sh -> (cancel_optimize!(sh.sess); cancel_clearance!(sh.sess);
+                                     cancel_talis!(sh.sess)))
 # Viewer
-br_set_cutaway(on) = _with_shell(sh -> (set_cutaway!(sh.scene, sh.sess, Bool(on)); _set!(sh, "cutaway", Bool(on))))
-br_reset_view() = _with_shell(sh -> sh.figure === sh.map.fig ? (reset_limits!(sh.map.ax); sh.map.dirty[] = true) :
-                                    reset_view!(sh.scene))
+br_set_color(mode) = _with_shell(sh -> set_color!(sh.sess, _sym(mode)))
+br_beam_style(s) = _with_shell(sh -> (s = _sym(s); s in BEAM_STYLES && Controllers._assign!(sh.sess.view.beams, s)))
+br_beam_color(s) = _with_shell(sh -> (s = _sym(s); s in BEAM_COLORINGS &&
+                                                   Controllers._assign!(sh.sess.view.beam_color, s)))
+br_beam_length(text) = _with_shell(sh -> Controllers._assign!(sh.sess.view.beam_length,
+                                                              isempty(strip(string(text))) ? 0.0 :
+                                                              Controllers._parse_number(string(text), "the beam length";
+                                                                                        nonnegative = true)))
+br_set_cutaway(on) = _with_shell(sh -> Controllers._assign!(sh.sess.view.cutaway, Bool(on)))
+br_standard_view(name) = _with_shell(sh -> (set_view!(sh.sess.drive, :scene); standard_view!(sh.scene, _sym(name))))
+br_fit_all() = _with_shell(sh -> sh.figure === sh.map.fig ? (reset_limits!(sh.map.ax); sh.map.dirty[] = true) :
+                                 fit_all!(sh.scene))
+br_fit_selection() = _with_shell(sh -> fit_selection!(sh.scene, sh.sess))
+br_look_along_beam() = _with_shell(sh -> (set_view!(sh.sess.drive, :scene); look_along_beam!(sh.scene, sh.sess)))
+br_projection(ortho) = _with_shell(sh -> (set_projection!(sh.scene, Bool(ortho)); _set!(sh, "ortho", Bool(ortho))))
+br_turntable(on) = _with_shell(sh -> (set_turntable!(sh.scene, Bool(on)); _set!(sh, "turntable", Bool(on))))
 
 function _register_qml_functions()
-    @qmlfunction br_tick br_grab_started br_set_step br_set_target_kind br_set_resolution
-    @qmlfunction br_edit_target br_load_preset br_set_grouping br_edit_beam br_set_beam_on
-    @qmlfunction br_import_beams br_export_beams br_build br_set_field br_set_view
-    @qmlfunction br_set_spot_radius br_opt_set_by br_opt_free br_opt_edit br_opt_objective
-    @qmlfunction br_opt_hold br_opt_keepout br_opt_start br_opt_cancel br_opt_accept
-    @qmlfunction br_rv_role br_rv_edit br_rv_wings br_rv_quality br_rv_start br_rv_cancel
-    @qmlfunction br_rv_export br_set_cutaway br_reset_view
+    @qmlfunction br_tick br_grab_started br_select br_select_add br_toggle_expand br_tree_on
+    @qmlfunction br_set_cluster br_rename_cluster br_split_quad br_merge_quad br_window_round
+    @qmlfunction br_set_target_kind br_set_resolution br_edit_mesh br_edit_target
     @qmlfunction br_add_window br_remove_window br_edit_window br_window_open
-    @qmlfunction br_import_sst br_import_summary br_export_sst br_export_summary br_write_kit
-    @qmlfunction br_rv_view br_tl_role br_tl_edit br_tl_pivot br_tl_omega1 br_tl_start
-    @qmlfunction br_tl_cancel br_tl_export
+    @qmlfunction br_add_part br_edit_part br_part_flag br_remove_selected
+    @qmlfunction br_load_preset br_set_grouping br_edit_beam br_set_beam_on br_edit_node
+    @qmlfunction br_import_beams br_export_beams br_import_sst br_import_summary br_export_sst
+    @qmlfunction br_export_summary br_build br_set_view br_set_spot_radius br_write_kit
+    @qmlfunction br_opt_set_by br_opt_free br_opt_edit br_opt_objective br_opt_hold
+    @qmlfunction br_opt_keepout br_opt_capsule br_opt_start br_opt_cancel br_opt_accept
+    @qmlfunction br_rv_role br_rv_edit br_rv_wings br_rv_quality br_rv_start br_rv_cancel
+    @qmlfunction br_rv_export br_tl_role br_tl_edit br_tl_pivot br_tl_omega1 br_tl_start
+    @qmlfunction br_tl_cancel br_tl_export br_cancel_all
+    @qmlfunction br_set_color br_beam_style br_beam_color br_beam_length br_set_cutaway
+    @qmlfunction br_standard_view br_fit_all br_fit_selection br_look_along_beam
+    @qmlfunction br_projection br_turntable
     return
 end
 
@@ -731,30 +1045,26 @@ end
     briareus(sess = DesignSession(); kind = :hohlraum, resolution = :standard,
              preset = nothing, beams = nothing, build = false) -> DesignSession
 
-Open the Briareus window and return its session when the window closes. Its steps:
+Open the Briareus window and return its session when the window closes. The window is
+a design tool in the manner of VisRad, not a sequence of steps:
 
-- **Target** — a hohlraum (length, radius, LEH and capsule radii, wall albedo and
-  conversion, and diagnostic windows in the wall, open or closed) or a backlighter
-  foil, and the mesh resolution; the 3D view colors the mesh by component and
-  outlines the windows.
-- **Beams** — a facility preset or an imported beam table (CSV), edited per cone, quad
-  or beam: aim, defocus, power, on/off; VisRad SST pointing and Laser Beam Summary
-  files import onto the table and export from it; the 3D view draws each beam's axis
-  from its port to its aim point.
-- **Drive** — the view factors (computed on a worker; seconds to tens of seconds),
-  then the target colored by absorbed laser intensity, x-ray radiosity or incident
-  flux (W/cm²), the capsule flux map over θ–φ, the mode amplitudes ε₁…ε₄ and Pₗ/P₀, and
-  the laser power accounting. Later beam edits re-evaluate at once. A VisRad
-  benchmark kit (`write_visrad_kit`) writes the case to a folder.
-- **Optimize** — free fields and bounds per group, an objective (capsule symmetry,
-  axisymmetric or 3D, or foil uniformity) with mode weights, run in the background
-  with progress and cancel; before/after modes and the parameter table; accepting
-  puts the optimized pointing into the beam table.
-- **Review** — worst-case beam-to-hardware clearance on chosen hardware, in the
-  background with progress and cancel; rows colored by status, the closest beam per
-  component, and CSV export. A TaLIS tab runs the target-configuration rules
-  (`talis_check`) on chosen capture surfaces and hardware with a chosen rule-tolerance
-  interpretation, and shows every check by status with the report's notes.
+- **Model tree** (left): the target's components (a hohlraum's wall, caps, LEHs and
+  capsule, its diagnostic windows, free parts), the beams by cone, quad and beam (with
+  on/off switches), and the analyses with their state. Selecting a node selects it in
+  the 3D view and shows it in Properties.
+- **Properties** (right): the selection's settings: the target template, dimensions,
+  materials and mesh element sizes; a window or part's size, placement and material;
+  a cone, quad or beam's pointing, defocus and power; an analysis's settings and Run.
+- **3D view** (center): CAD-style navigation (wheel zooms toward the pointer, left or
+  middle drag orbits about the selection or the point under the pointer, right drag
+  or Shift-drag pans, double click fits the clicked part, `f` fits all), standard
+  views, a perspective or orthographic projection, beams as rays to where they land
+  or as volumes, coloring by component or by a drive field (computed on request), a
+  cutaway, and an orientation triad. The capsule θ–φ (or foil) map shares the canvas.
+- **Results** (bottom): the beam table, the drive (modes, power accounting, VisRad
+  benchmark kit), the optimization, the clearance check and the TaLIS rules.
+- **Menus and toolbar**: new targets, parts and windows, beam presets and imports
+  (CSV, VisRad SST and Laser Beam Summary) and exports, views, and the analyses.
 
 The session starts from `sess`, or a fresh `DesignSession(; kind, resolution,
 preset, beams)`; `build = true` starts computing the drive at once. The call blocks

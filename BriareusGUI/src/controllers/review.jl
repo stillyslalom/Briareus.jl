@@ -15,7 +15,7 @@ const REVIEW_QUALITY = Dict(:quick => (; level = 1, nangles = 8, nspot = 31),
     review_batch() -> Int
 
 Beams per `clearance` batch (its `batch` keyword): the progress and cancel
-granularity of the Review step's check. One beam per thread, at least 4.
+granularity of the clearance check. One beam per thread, at least 4.
 """
 review_batch() = max(4, Threads.nthreads())
 
@@ -25,7 +25,7 @@ const REVIEW_VIEWS = (:clearance, :talis)
 """
     ReviewState()
 
-State of the Review step. Settings: `targets` (components the beams should land on;
+State of the clearance check. Settings: `targets` (components the beams should land on;
 hardware beyond a beam's landing is not checked), `hardware` (components checked),
 `peak_fraction` (envelope contour, fraction of each spot's peak), `wings` (include
 the clearance-only `nif_wings` far field), the error stack `pointing`,
@@ -165,7 +165,7 @@ end
 """
     clearance_kwargs(rv::ReviewState) -> NamedTuple
 
-The keyword arguments of the `clearance` call the Review step makes.
+The keyword arguments of the `clearance` call the clearance check makes.
 """
 function clearance_kwargs(rv::ReviewState)
     e = rv.errors[]

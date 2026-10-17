@@ -5,7 +5,7 @@
 # target or the beam ports change.
 
 """
-Element fields the Drive step colors the target by (all W/cm²): `:laser` (absorbed
+Element fields the 3D view colors the target by (all W/cm²): `:laser` (absorbed
 laser intensity), `:radiosity` (x-ray radiosity B), `:incident` (incident x-ray flux H).
 """
 const DRIVE_FIELDS = (:laser, :radiosity, :incident)
@@ -20,7 +20,7 @@ const MODE_DEGREES = 1:4
 """
     DriveResult
 
-One evaluation of the Drive step: `evaluation` (core `Evaluation` of the display
+One evaluation of the drive: `evaluation` (core `Evaluation` of the display
 beams: every beam of the table, disabled ones at zero power), `solution` (the
 radiosity `RadiationSolution`, or `nothing` without a radiation model), `modes` (rows
 `(; l, epsilon, legendre)` of the capsule flux, empty without a capsule), `mean_flux`
@@ -42,7 +42,7 @@ end
 """
     DriveState()
 
-State of the Drive step: `scenario` (the core `Scenario`, `nothing` before the first
+State of the drive analysis: `scenario` (the core `Scenario`, `nothing` before the first
 build), `building`/`started`/`build_seconds`, `result` (the latest
 [`DriveResult`](@ref)), `evaluating`, `field` (one of [`DRIVE_FIELDS`](@ref)), `view`
 (`:scene`, the 3D target, or `:map`, the capsule θ–φ map or foil face), `spot_radius`
@@ -99,12 +99,12 @@ function set_view!(dr::DriveState, view::Symbol)
 end
 
 # Build a scenario for a target and the table's beams (all of them: disabled beams are
-# evaluated at zero power, so on/off needs no rebuild). Hohlraums observe the capsule
-# and close the enclosure; every target gets a radiation model for the B/H fields.
-function _build_scenario(t::Target, beams::Vector{Beam{Float64}})
+# evaluated at zero power, so on/off needs no rebuild). Hohlraums observe the capsule;
+# `closed` (a hohlraum and nothing outside it) balances the view factors of the
+# enclosure. Every target gets a radiation model for the B/H fields.
+function _build_scenario(t::Target, beams::Vector{Beam{Float64}}; closed::Bool = false)
     names = component_names(t)
     observe = :capsule in names ? :capsule : nothing
-    closed = :leh_top in names                          # a hohlraum with its LEHs
     s = Scenario(t, beams; observe, radiation = true, viewfactor_kw = (; closed))
     return s, flux_lookup(s)
 end

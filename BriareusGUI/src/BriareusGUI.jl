@@ -1,11 +1,14 @@
 """
     BriareusGUI
 
-The Briareus window (`briareus`): a target (with diagnostic windows), its beams (with
-VisRad pointing and beam-summary interchange), the laser and x-ray drive (and a VisRad
-benchmark kit), a pointing optimization, and a review of beam clearance and the TaLIS
-target-configuration rules, in one Qt Quick window with a 3D GLMakie viewer. Use `Controllers` to run the same steps from a script without a
-window. Controller state is exposed through `Observables`.
+The Briareus window (`briareus`): a laser-target design tool in the manner of VisRad. A
+target (a hohlraum with diagnostic windows, a backlighter foil, or free parts), its
+beams (with VisRad pointing and beam-summary interchange), and analyses run on them in
+any order: the laser and x-ray drive (and a VisRad benchmark kit), a pointing
+optimization, beam clearance and the TaLIS target-configuration rules. One Qt Quick
+window: model tree, properties, a 3D viewer with CAD-style navigation, and result
+panels. Use `Controllers` to do the same from a script without a window. Controller
+state is exposed through `Observables`.
 """
 module BriareusGUI
 
@@ -16,6 +19,7 @@ import QMLMakie                       # registers the MakieArea QML type
 import Qt6Declarative_jll
 import Libdl
 using Printf
+using LinearAlgebra: norm, dot, cross, normalize
 
 # Framework-free controller layer: the submodule boundary keeps Makie names out of
 # scope, so controller code cannot grow GL dependencies by accident.
@@ -24,7 +28,7 @@ module Controllers
 using Briareus
 using Observables
 using Printf
-using LinearAlgebra: dot, norm, normalize
+using LinearAlgebra: dot, norm, normalize, cross
 
 include("controllers/shared.jl")
 include("controllers/target_setup.jl")
@@ -33,16 +37,24 @@ include("controllers/drive.jl")
 include("controllers/optimizer.jl")
 include("controllers/review.jl")
 include("controllers/talis.jl")
-include("controllers/session.jl")             # links the steps
+include("controllers/beam_geometry.jl")
+include("controllers/view.jl")
+include("controllers/session.jl")             # links the parts
 
 export display_number
-export TargetSetup, TARGET_KINDS, TARGET_FIELDS, MESH_RESOLUTIONS, FOIL_NAME, build_target,
-       foil_center, set_target_kind!, set_resolution!, edit_target!, target_summary,
-       component_names, surface_names
+export TargetSetup, TARGET_KINDS, TARGET_KIND_LABELS, TARGET_FIELDS, MeshSpec, MESH_PRESETS,
+       MESH_RESOLUTIONS, FOIL_NAME, build_target, foil_center, set_target_kind!,
+       set_resolution!, edit_mesh!, edit_target!, target_summary, component_names, surface_names
+export PartSpec, PART_KINDS, PART_KIND_LABELS, PART_FIELDS, PART_SIZE_FIELDS, part_component,
+       part_axis, part_center, add_part!, remove_part!, edit_part!, set_part_flag!, part_index
 export WindowSpec, WINDOW_FIELDS, add_window!, remove_window!, edit_window!, set_window_open!,
+       set_window_round!,
        window_name
 export BeamTable, BEAM_PRESETS, BEAM_GROUPINGS, BEAM_FIELDS, PRESET_LABELS, preset_beams,
        load_preset!, set_beams!, set_grouping!, beam_rows, edit_beams!, set_enabled!,
+       beam_node, edit_beam_node!, set_node_enabled!, SET_FIELDS, beam_set_values,
+       edit_beam_set!, set_set_enabled!, clusters, set_cluster!, rename_cluster!, split_quad!,
+       merge_quad!,
        active_beams, display_beams, import_beams!, export_beams, beams_summary
 export import_visrad_sst!, import_visrad_summary!, export_visrad_sst, export_visrad_summary
 export DriveState, DriveResult, DRIVE_FIELDS, DRIVE_FIELD_LABELS, MODE_DEGREES, set_field!,
@@ -56,22 +68,29 @@ export ReviewState, REVIEW_QUALITY, REVIEW_VIEWS, review_batch, default_selectio
 export TaLISState, TALIS_PIVOTS, TALIS_RULE_LABELS, TALIS_TOLERANCE_CAVEAT, set_talis_role!,
        set_talis_pivot!, edit_talis!, talis_kwargs, start_talis!, cancel_talis!, talis_rows,
        talis_rule_rows, talis_notes, talis_brief, export_talis, talis_stale
-export DesignSession, DESIGN_STEPS, set_step!, step_label, step_status, drive_stale,
+export BEAM_STYLES, BeamPath, beam_path, beam_paths, beam_volume, beam_hit_distance
+export ViewState, COLOR_MODES, COLOR_LABELS, BEAM_COLORINGS, PALETTE, component_colors,
+       cluster_colors, TreeRow, select!, select_add!, selected_ids, toggle_expanded!, set_hidden!,
+       selection_kind, component_id, beam_id, model_tree, node_beams, selected_beams,
+       selected_component
+export DesignSession, TASKS, TASK_LABELS, task_status, set_color!, drive_stale,
        build_scenario!, accept_optimum!, write_visrad_kit!
 
 end # module Controllers
 
 using .Controllers
 
-export DesignSession, briareus, set_step!, step_status, build_scenario!, start_optimize!,
+export DesignSession, briareus, task_status, set_color!, build_scenario!, start_optimize!,
        cancel_optimize!, accept_optimum!, start_clearance!, cancel_clearance!, start_talis!,
        cancel_talis!, write_visrad_kit!
-export TargetSetup, set_target_kind!, set_resolution!, edit_target!, add_window!,
+export TargetSetup, set_target_kind!, set_resolution!, edit_mesh!, edit_target!, add_window!,
+       add_part!, edit_part!, remove_part!,
        edit_window!, set_window_open!, remove_window!, BeamTable, load_preset!,
        set_grouping!, beam_rows, edit_beams!, set_enabled!, import_beams!, export_beams,
        import_visrad_sst!, import_visrad_summary!, export_visrad_sst, export_visrad_summary,
        set_field!, set_view!, export_clearance, export_talis
 
+include("canvas/cad_camera.jl")
 include("canvas/scene_canvas.jl")
 include("canvas/map_canvas.jl")
 include("qt/shell.jl")
@@ -92,9 +111,10 @@ using PrecompileTools: @setup_workload, @compile_workload
         beam_rows(sess.beams)
         edit_beams!(sess.beams, 1, :z, "3.2")
         set_grouping!(sess.beams, :group)
-        for st in DESIGN_STEPS
-            set_step!(sess, st)
-            step_status(sess, st)
+        add_part!(sess.target, :disk; z = 7.0)
+        model_tree(sess)
+        for task in TASKS
+            task_status(sess, task)
         end
         sc = scene_canvas(sess)
         mc = map_canvas(sess)

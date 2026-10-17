@@ -1,4 +1,4 @@
-# The Target and Beams steps' controllers: no scenario, no GL.
+# The target, beam table and view controllers: no scenario, no GL.
 
 @testset "TargetSetup (no GL)" begin
     ts = TargetSetup(resolution = :coarse)
@@ -240,4 +240,231 @@ end
     # loading a preset clears the warnings
     load_preset!(b2, :nif_quads)
     @test isempty(b2.warnings[])
+end
+
+@testset "mesh element sizes (no GL)" begin
+    ts = TargetSetup(resolution = :coarse)
+    @test ts.mesh[] == MESH_PRESETS.coarse && ts.resolution[] === :coarse
+    n = nelements(ts.target[])
+    @test edit_mesh!(ts, :h, "0.4")
+    @test ts.mesh[].h == 0.4 && ts.resolution[] === :custom && nelements(ts.target[]) > n
+    @test !edit_mesh!(ts, :capsule_h, "-1") && occursin("positive", ts.error[])
+    @test edit_mesh!(ts, :h, "0.6") && ts.resolution[] === :coarse       # back on the preset
+    @test_throws ArgumentError edit_mesh!(ts, :n, "1")
+    # the hohlraum counts follow the element size
+    t = ts.target[]
+    wall = elements(t, :wall)
+    hmax = maximum(sqrt(t.elem_area[e]) for e in wall)
+    @test hmax <= 0.6 * 1.01
+    @test set_resolution!(ts, :fine) && ts.mesh[] == MESH_PRESETS.fine
+end
+
+@testset "free parts (no GL)" begin
+    ts = TargetSetup(resolution = :coarse)
+    for (k, kw) in ((:sphere, (; x = 4.0, r1 = 0.5)), (:disk, (; z = 7.0, r1 = 1.0, theta = 180)),
+                    (:annulus, (; z = -7.0, r1 = 0.5, r2 = 1.5)),
+                    (:rectangle, (; x = -6.0, r1 = 1.0, r2 = 2.0, theta = 90, phi = 0)),
+                    (:cylinder, (; y = 5.0, r1 = 0.3, length = 2.0, theta = 90, phi = 90)),
+                    (:cone, (; y = -5.0, theta = 90, phi = -90)))
+        @test add_part!(ts, k; kw...)
+        @test ts.error[] == ""
+    end
+    t = ts.target[]
+    @test [p.name for p in ts.parts[]] == [:sphere_1, :disk_1, :annulus_1, :rectangle_1, :cylinder_1, :cone_1]
+    @test all(n -> n in component_names(t), (:sphere_1, :cone_1))
+    # placement: a disk tilted to θ = 180° faces −z, at its center
+    es = elements(t, :disk_1)
+    @test all(e -> t.elem_centroid[e][3] ≈ 7.0, es)
+    @test all(e -> t.elem_normal[e][3] < -0.99, es)
+    # a rectangle along +x faces +x; its area is width × height
+    er = elements(t, :rectangle_1)
+    @test sum(t.elem_area[er]) ≈ 2.0 && all(e -> t.elem_normal[e][1] > 0.99, er)
+    # the sphere carries its exact surface at its center
+    c = t.components[component_index(t, :sphere_1)]
+    @test c.surface isa SphereSurface && c.surface.center ≈ Briareus.Vec3(4, 0, 0)
+    # edits: accepted, rejected, renamed, flags
+    i = part_index(ts, :disk_1)
+    @test edit_part!(ts, i, :r1, "1.5") && ts.parts[][i].values[:r1] == 1.5
+    @test !edit_part!(ts, i, :r1, "0") && occursin("positive", ts.error[])
+    @test !edit_part!(ts, i, :albedo, "2") && occursin("between 0 and 1", ts.error[])
+    @test !edit_part!(ts, i, :name, "wall") && occursin("two components", ts.error[])
+    @test !edit_part!(ts, i, :name, "1bad") && occursin("letters", ts.error[])
+    @test edit_part!(ts, i, :name, "shield") && :shield in component_names(ts.target[])
+    @test set_part_flag!(ts, i, :aperture, true)
+    @test ts.target[].components[component_index(ts.target[], :shield)].kind === :aperture
+    @test set_part_flag!(ts, i, :aperture, false)
+    n1 = length(elements(ts.target[], :shield))
+    @test set_part_flag!(ts, i, :two_sided, true)
+    @test length(elements(ts.target[], :shield)) == 2 * n1
+    @test !add_part!(ts, :annulus; r1 = 2.0, r2 = 1.0) && occursin("outer radius", ts.error[])
+    @test !add_part!(ts, :torus) && occursin("part kind", ts.error[])
+    @test remove_part!(ts, i) && !(:shield in component_names(ts.target[]))
+    # parts survive a change of template; a custom target starts with a sphere
+    np = length(ts.parts[])
+    @test set_target_kind!(ts, :foil) && length(ts.parts[]) == np
+    @test set_target_kind!(ts, :custom)
+    @test component_names(ts.target[]) == [p.name for p in ts.parts[]]
+    ts2 = TargetSetup(kind = :custom, resolution = :coarse)
+    @test component_names(ts2.target[]) == [:sphere_1]
+    @test !remove_part!(ts2, 1) && occursin("empty", ts2.error[])
+end
+
+@testset "model tree and selection (no GL)" begin
+    sess = DesignSession(resolution = :coarse)
+    rows = model_tree(sess)
+    ids = [r.id for r in rows]
+    @test ids[1] == "target" && "comp:wall" in ids && "comp:capsule" in ids && "beams" in ids
+    @test "group:inner23" in ids && !("quad:Q15T" in ids)          # cones collapsed
+    @test count(r -> r.kind == "task", rows) == length(TASKS)
+    @test all(r -> r.status == "todo", filter(r -> r.kind == "task", rows))
+    toggle_expanded!(sess.view, "group:inner23")
+    rows = model_tree(sess)
+    kids = [r for r in rows if r.depth == 2]
+    @test length(kids) == 8 && all(r -> r.kind == "beam", kids)      # NIF quads: one beam each
+    # selection by id: beams under it, components
+    select!(sess.view, "group:inner23")
+    @test length(selected_beams(sess)) == 8 && selected_component(sess) === nothing
+    @test only(r for r in model_tree(sess) if r.id == "group:inner23").selected
+    select!(sess.view, kids[1].id)
+    @test length(selected_beams(sess)) == 1
+    select!(sess.view, "comp:wall")
+    @test selected_component(sess) === :wall && isempty(selected_beams(sess))
+    add_window!(sess.target)
+    @test component_id(sess.target, :window_1) == "window:1"
+    select!(sess.view, "window:1")
+    @test selected_component(sess) === :window_1
+    remove_window!(sess.target, 1)
+    @test sess.view.selection[] == "target"                         # the selection went away
+    @test selection_kind("part:shield") == (:part, "shield") && selection_kind("") == (:none, "")
+    # editing and switching a node by name, whatever the table's grouping
+    bt = sess.beams
+    set_grouping!(bt, :beam)
+    @test edit_beam_node!(bt, :group, "inner30", :z, "3.5")
+    @test all(b -> abs(b.aim[3]) ≈ 3.5, filter(b -> b.group === :inner30, bt.beams[]))
+    @test bt.by[] === :beam                                          # the table kept its grouping
+    q = bt.beams[][1].name
+    set_node_enabled!(bt, :beam, q, false)
+    @test !bt.enabled[][1] && count(bt.enabled[]) == 47
+    @test model_tree(sess)[findfirst(r -> r.id == "beams", model_tree(sess))].on == 2
+    @test !edit_beam_node!(bt, :quad, "nope", :z, "1") && occursin("no quad", bt.error[])
+    # hidden components
+    set_hidden!(sess.view, :wall, true)
+    toggle_expanded!(sess.view, "target")
+    toggle_expanded!(sess.view, "target")
+    @test only(r for r in model_tree(sess) if r.id == "comp:wall").on == 0
+end
+
+@testset "beam geometry (no GL)" begin
+    sess = DesignSession(resolution = :coarse)
+    t = sess.target.target[]
+    bs = sess.beams.beams[]
+    ps = beam_paths(t, bs)
+    # every published NIF quad lands on the wall, past its aim in the LEH plane
+    @test all(p -> p.component === :wall, ps)
+    @test all(p -> abs(p.stop[3]) < abs(p.aim[3]), ps)
+    @test all(p -> abs(hypot(p.stop[1], p.stop[2]) - 2.875) < 0.05, ps)
+    # the start is `length` before the aim, against the beam direction
+    b = bs[1]
+    p = beam_path(t, b; length = 10.0)
+    @test p.start ≈ Briareus.Vec3(b.aim) - 10.0 * direction(b)
+    # a beam aimed away from the target misses it
+    away = remake(b; aim = Briareus.Vec3(b.aim) + 20 * BriareusGUI.normalize(BriareusGUI.cross(direction(b), Briareus.Vec3(0, 0, 1))))
+    @test beam_path(t, away).component === :missed
+    # volumes: closed rings around the axis, cut at the target
+    v, f = beam_volume(t, b; nring = 16, nseg = 4)
+    @test length(f) == 2 * 16 * (length(v) ÷ 16 - 1)
+    @test all(x -> 1 <= x <= length(v), Iterators.flatten(f))
+    @test maximum(x -> hypot(x[1], x[2]), v[2:end]) < 2 * t.scale + 3     # nothing far past the wall
+    # pick distance from a ray through the axis is zero; off it, the offset
+    @test beam_hit_distance(p, p.start - direction(b), direction(b)) < 1e-9
+end
+
+@testset "beam groups, sets and quads (no GL)" begin
+    bt = BeamTable(preset_beams(:nif_quads); preset = :nif_quads)
+    @test clusters(bt) == [:inner23, :inner30, :outer44, :outer50]
+    # a backlighter group: two outer quads aimed at a point away from TCC
+    idx = [findfirst(b -> b.group === :outer44, bt.beams[]), findfirst(b -> b.group === :outer50, bt.beams[])]
+    @test set_cluster!(bt, idx, "backlighter")
+    @test :backlighter in clusters(bt) && bt.cluster[][idx] == [:backlighter, :backlighter]
+    @test bt.beams[][idx[1]].group === :outer44                   # the cone stays for LPI
+    @test only(r for r in beam_rows(bt) if r.key == "backlighter").count == 2
+    for (f, v) in ((:aim_x, "0.5"), (:aim_y, "-1.0"), (:aim_z, "6.0"))
+        @test edit_beam_set!(bt, idx, f, v)
+    end
+    @test all(i -> bt.beams[][i].aim ≈ Briareus.Vec3(0.5, -1.0, 6.0), idx)
+    v = beam_set_values(bt, idx)
+    @test v.aim ≈ Briareus.Vec3(0.5, -1.0, 6.0) && v.count == 2 && v.enabled === true
+    # a relative edit on a set in one hemisphere uses the aim's own z
+    up = findall(b -> b.port[3] > 0 && b.group === :inner23, bt.beams[])
+    @test !beam_set_values(bt, up).mirrored
+    @test edit_beam_set!(bt, up, :z, "2.5") && all(i -> bt.beams[][i].aim[3] ≈ 2.5, up)
+    both = findall(==(:inner30), bt.cluster[])
+    @test beam_set_values(bt, both).mirrored
+    @test edit_beam_set!(bt, both, :z, "3.3")
+    @test all(i -> bt.beams[][i].aim[3] ≈ sign(bt.beams[][i].port[3]) * 3.3, both)
+    @test !edit_beam_set!(bt, both, :power, "-1") && occursin("negative", bt.error[])
+    @test !edit_beam_set!(bt, Int[], :z, "1") && occursin("no beams", bt.error[])
+    set_set_enabled!(bt, idx, false)
+    @test beam_set_values(bt, idx).enabled === false && count(bt.enabled[]) == 46
+    @test !set_cluster!(bt, idx, "  ") && occursin("name", bt.error[])
+    @test rename_cluster!(bt, :backlighter, "bl") && :bl in clusters(bt) && !(:backlighter in clusters(bt))
+    # the optimizer's per-group parameters follow the groups
+    p = Controllers._pointing(bt, (:z,); by = :group)
+    @test :bl in p.keys && length(p.keys) == 5
+
+    # split a quad into its four beams, edit one, merge back
+    q = bt.beams[][1].quad
+    g = bt.cluster[][1]
+    aim, P = bt.beams[][1].aim, bt.beams[][1].power
+    @test split_quad!(bt, q)
+    four = findall(b -> b.quad == q, bt.beams[])
+    @test length(four) == 4 && length(bt.beams[]) == 51 && all(==(g), bt.cluster[][four])
+    @test all(i -> bt.beams[][i].aim ≈ aim && bt.beams[][i].power ≈ P / 4, four)
+    @test all(i -> bt.beams[][i].port != bt.beams[][four[1]].port || i == four[1], four)   # own ports
+    @test !split_quad!(bt, q) && occursin("already split", bt.error[])
+    @test edit_beam_set!(bt, four[1:2], :z, "2.0")                 # an upper half pointed apart
+    @test merge_quad!(bt, q)
+    m = findfirst(b -> b.quad == q, bt.beams[])
+    @test length(bt.beams[]) == 48 && bt.beams[][m].power ≈ P && bt.beams[][m].fnumber ≈ 7.9
+    @test bt.beams[][m].aim[3] ≈ (2 * 2.0 + 2 * aim[3]) / 4
+    @test !merge_quad!(bt, q) && occursin("not split", bt.error[])
+    @test !split_quad!(bt, "Q99T") && occursin("no quad", bt.error[])
+end
+
+@testset "multi-selection and round windows (no GL)" begin
+    sess = DesignSession(resolution = :coarse)
+    v = sess.view
+    select!(v, "group:inner23")
+    select_add!(v, "group:inner30")
+    @test selected_ids(v) == ["group:inner23", "group:inner30"] && length(selected_beams(sess)) == 16
+    rows = model_tree(sess)
+    @test count(r -> r.selected, rows) == 2
+    @test only(r for r in rows if r.id == "group:inner23").color == cluster_colors(sess.beams)[:inner23]
+    @test only(r for r in rows if r.id == "comp:capsule").color == component_colors(sess.target.target[])[:capsule]
+    @test only(r for r in rows if r.id == "comp:leh_top").color == ""          # a hole
+    select_add!(v, "group:inner23")                                            # toggles off
+    @test selected_ids(v) == ["group:inner30"]
+    select_add!(v, "comp:wall")                                                # not a beam: replaces
+    @test selected_ids(v) == ["comp:wall"]
+    # moving the selection to a new group keeps it selectable
+    select!(v, "group:outer44")
+    set_cluster!(sess.beams, selected_beams(sess), "drive")
+    @test v.selection[] == "beams"                                             # outer44 is gone
+    @test length(node_beams(sess.beams, "group:drive")) == 16
+    # split quads show as quads in their group
+    q = sess.beams.beams[][1].quad
+    split_quad!(sess.beams, q)
+    toggle_expanded!(v, "group:inner23")
+    g = String(sess.beams.cluster[][1])
+    @test any(r -> r.id == "quad:" * q * "@" * g, model_tree(sess))
+    @test length(node_beams(sess.beams, "quad:" * q * "@" * g)) == 4
+    # windows are round by default; rectangles on request
+    ts = sess.target
+    @test add_window!(ts) && ts.windows[][1].round
+    t = ts.target[]
+    A = sum(t.elem_area[e] for e in elements(t, :window_1))
+    @test A ≈ π * 0.5^2 rtol = 1e-6                                           # exact disk area
+    @test set_window_round!(ts, 1, false) && !ts.windows[][1].round
+    t = ts.target[]
+    @test sum(t.elem_area[e] for e in elements(t, :window_1)) ≈ 1.0 rtol = 1e-6
 end

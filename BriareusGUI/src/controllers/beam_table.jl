@@ -1,9 +1,12 @@
-# The Beams step: a facility preset or an imported beam table, edited per cone
-# (group), quad, or beam. Edits go through `GroupPointing` with only the edited field,
-# so a group edit sets that field on every member and leaves the others as they were.
+# The beam table: a facility preset or an imported beam table, its beams gathered in
+# groups (VisRad's clusters: the cone by default, or any named set such as
+# "backlighter"), edited per group, quad, beam or any set of beams. Edits go through
+# `GroupPointing` with only the edited field, so a group edit sets that field on every
+# member and leaves the others as they were. NIF quads can be split into their four
+# beams and merged back.
 
 """
-Beam presets of the Beams step:
+Beam presets:
 
 - `:nif_quads` — the 48 NIF indirect-drive quads (`nif_quads`, 8 TW each), pointed at
   the published cone (r, z) aims of `examples/nif_hohlraum.jl`;
@@ -20,7 +23,7 @@ const PRESET_LABELS = Dict(:nif_quads => "NIF quads (48)", :nif_beams => "NIF be
                            :omega_hohlraum => "OMEGA hohlraum (40)",
                            :omega_backlighter => "OMEGA backlighter", :custom => "imported table")
 
-"Row groupings of the beam table: per cone (`:group`), per `:quad`, per `:beam`."
+"Row groupings of the beam table: per group (`:group`, see `BeamTable`'s `cluster`), per `:quad`, per `:beam`."
 const BEAM_GROUPINGS = (:group, :quad, :beam)
 
 "Editable beam-table columns (`GroupPointing` fields): aim z, r, tangential offset, defocus (mm), power (TW)."
@@ -34,8 +37,11 @@ const NIF_CONE_POINTING = Dict(:inner23 => (-1.09, 3.09), :inner30 => (-0.60, 3.
 """
     BeamTable(beams = Beam{Float64}[]; preset = :custom)
 
-State of the Beams step: `beams` (every beam of the table, in table order), `enabled`
-(one flag per beam; disabled beams are kept but deliver no power), `preset` (one of
+The beam table: `beams` (every beam of the table, in table order), `enabled` (one flag
+per beam; disabled beams are kept but deliver no power), `cluster` (each beam's group
+name, as VisRad's beam clusters: the beam's cone `group` by default; a group edit,
+`:group` rows and the optimizer's per-group parameters follow it, while the beam's own
+`group` stays its cone for the laser–plasma models), `preset` (one of
 [`BEAM_PRESETS`](@ref), or `:custom` for an imported or scripted table), `by` (row
 grouping, one of [`BEAM_GROUPINGS`](@ref)), `path` (the last imported or exported
 file), `error` (the last rejected edit), and `warnings` (what the last VisRad import
@@ -44,6 +50,7 @@ warned about: unmatched beams, port-angle mismatches, …).
 struct BeamTable
     beams::Observable{Vector{Beam{Float64}}}
     enabled::Observable{Vector{Bool}}
+    cluster::Observable{Vector{Symbol}}
     preset::Observable{Symbol}
     by::Observable{Symbol}
     path::Observable{String}
@@ -53,7 +60,8 @@ end
 
 function BeamTable(beams::AbstractVector = Beam{Float64}[]; preset::Symbol = :custom)
     bs = Beam{Float64}[_float_beam(b) for b in beams]
-    return BeamTable(Observable(bs), Observable(fill(true, length(bs))), Observable(preset),
+    return BeamTable(Observable(bs), Observable(fill(true, length(bs))),
+                     Observable(Symbol[b.group for b in bs]), Observable(preset),
                      Observable(:group), Observable(""), Observable(""), Observable(String[]))
 end
 
@@ -110,18 +118,23 @@ function load_preset!(bt::BeamTable, preset::Symbol; kwargs...)
 end
 
 """
-    set_beams!(bt::BeamTable, beams; preset = :custom, enabled = all)
+    set_beams!(bt::BeamTable, beams; preset = :custom, enabled = all, cluster = cones)
 
-Replace the table's beams (all enabled unless `enabled` is given).
+Replace the table's beams (all enabled unless `enabled` is given, grouped by cone
+unless `cluster` is given).
 """
 function set_beams!(bt::BeamTable, beams::AbstractVector; preset::Symbol = :custom,
-                    enabled::AbstractVector{Bool} = fill(true, length(beams)))
+                    enabled::AbstractVector{Bool} = fill(true, length(beams)),
+                    cluster::AbstractVector{Symbol} = Symbol[b.group for b in beams])
     length(enabled) == length(beams) || throw(DimensionMismatch("one enabled flag per beam"))
+    length(cluster) == length(beams) || throw(DimensionMismatch("one group per beam"))
     bt.enabled.val = collect(Bool, enabled)          # observers see consistent lengths
+    bt.cluster.val = collect(Symbol, cluster)
     bt.preset[] = preset
     bt.by[] === :quad && any(b -> isempty(b.quad), beams) && (bt.by[] = :group)
     bt.beams[] = Beam{Float64}[_float_beam(b) for b in beams]
     notify(bt.enabled)
+    notify(bt.cluster)
     bt.error[] = ""
     isempty(bt.warnings[]) || (bt.warnings[] = String[])
     return bt
@@ -145,26 +158,35 @@ function _check_grouping(beams, by::Symbol)
     return nothing
 end
 
-# Rows group by cone with z mirrored top/bottom (one value describes a cone); per quad
-# or beam, z is the aim's own coordinate.
+# Rows group by cluster with z mirrored top/bottom (one value describes a cone); per
+# quad or beam, z is the aim's own coordinate.
 _mirror(by::Symbol) = by === :group
-_pointing(bt::BeamTable, fields) =
-    GroupPointing(bt.beams[]; by = bt.by[], fields, mirror = _mirror(bt.by[]))
+
+# The `GroupPointing` key of a grouping: `:group` rows follow the table's clusters.
+function _keyfun(bt::BeamTable, by::Symbol)
+    by === :group || return by
+    d = Dict(b.name => c for (b, c) in zip(bt.beams[], bt.cluster[]))
+    return b -> d[b.name]
+end
+
+_pointing(bt::BeamTable, fields; by::Symbol = bt.by[]) =
+    GroupPointing(bt.beams[]; by = _keyfun(bt, by), fields, mirror = _mirror(by))
 
 """
-    beam_rows(bt::BeamTable) -> Vector{NamedTuple}
+    beam_rows(bt::BeamTable; by = bt.by[]) -> Vector{NamedTuple}
 
-One row per group of the current grouping: `key` (cone, quad, or beam name), `count`
+One row per group of the grouping `by` (the table's by default): `key` (cone, quad, or beam name), `count`
 (beams), `members` (beam indices), `theta`/`phi` (port angles, degrees: per cone the
 mean polar angle from the nearer pole and `NaN` azimuth; per quad or beam the mean
 port angles), the mean
 `z`, `r`, `phi_offset`, `defocus` (mm) and `power` (TW per beam), and `enabled`
 (`true`, `false`, or `missing` when only some members are enabled).
 """
-function beam_rows(bt::BeamTable)
+function beam_rows(bt::BeamTable; by::Symbol = bt.by[])
     bs = bt.beams[]
     isempty(bs) && return NamedTuple[]
-    p = _pointing(bt, BEAM_FIELDS)
+    _check_grouping(bs, by)
+    p = _pointing(bt, BEAM_FIELDS; by)
     x = initial_parameters(p)
     nf = length(BEAM_FIELDS)
     en = bt.enabled[]
@@ -172,7 +194,7 @@ function beam_rows(bt::BeamTable)
         mem = p.members[g]
         angles = port_angles.(bs[mem])
         on = count(i -> en[i], mem)
-        cone = _mirror(bt.by[])
+        cone = _mirror(by)
         θ = sum(a -> cone ? min(a[1], 180 - a[1]) : a[1], angles) / length(mem)
         φ = cone ? NaN : sum(last, angles) / length(mem)
         (; key = string(k), count = length(mem), members = mem, theta = θ, phi = φ,
@@ -183,17 +205,17 @@ function beam_rows(bt::BeamTable)
 end
 
 """
-    edit_beams!(bt::BeamTable, row, field, text) -> Bool
+    edit_beams!(bt::BeamTable, row, field, text; by = bt.by[]) -> Bool
 
 Set `field` (one of [`BEAM_FIELDS`](@ref)) of every beam in `row` of
-[`beam_rows`](@ref) from text-field text. Only that field changes. A rejected value
-sets `error` and returns `false`.
+[`beam_rows`](@ref) (with grouping `by`) from text-field text. Only that field
+changes. A rejected value sets `error` and returns `false`.
 """
-function edit_beams!(bt::BeamTable, row::Integer, field::Symbol, text)
+function edit_beams!(bt::BeamTable, row::Integer, field::Symbol, text; by::Symbol = bt.by[])
     field in BEAM_FIELDS || throw(ArgumentError("beam field must be one of $BEAM_FIELDS"))
     try
         v = _parse_number(text, field === :power ? "power" : "$field"; nonnegative = field === :power)
-        p = _pointing(bt, (field,))
+        p = _pointing(bt, (field,); by)
         1 <= row <= length(p.keys) || throw(ArgumentError("no beam-table row $row"))
         x = initial_parameters(p)
         x[row] == v && (bt.error[] = ""; return true)
@@ -215,13 +237,13 @@ function edit_beams!(bt::BeamTable, row::Integer, field::Symbol, text)
 end
 
 """
-    set_enabled!(bt::BeamTable, row, on::Bool)
+    set_enabled!(bt::BeamTable, row, on::Bool; by = bt.by[])
 
-Enable or disable every beam in `row` of [`beam_rows`](@ref). Disabled beams stay in
-the table and deliver no power (e.g. a dropped quad or bundle).
+Enable or disable every beam in `row` of [`beam_rows`](@ref) (with grouping `by`).
+Disabled beams stay in the table and deliver no power (e.g. a dropped quad or bundle).
 """
-function set_enabled!(bt::BeamTable, row::Integer, on::Bool)
-    rows = beam_rows(bt)
+function set_enabled!(bt::BeamTable, row::Integer, on::Bool; by::Symbol = bt.by[])
+    rows = beam_rows(bt; by)
     1 <= row <= length(rows) || throw(ArgumentError("no beam-table row $row"))
     en = copy(bt.enabled[])
     en[rows[row].members] .= on
@@ -234,7 +256,7 @@ end
     display_beams(bt::BeamTable) -> Vector{Beam}
 
 The enabled beams; every beam with the disabled ones at zero power (same ports and
-order as the table, which the Drive step's deposition operator is built for).
+order as the table, which the drive's deposition operator is built for).
 """
 active_beams(bt::BeamTable) = bt.beams[][bt.enabled[]]
 display_beams(bt::BeamTable) =
@@ -316,7 +338,7 @@ function _apply_visrad!(bt::BeamTable, read, path::AbstractString)
         end
         push!(bs, b)
     end
-    set_beams!(bt, bs; preset = bt.preset[], enabled = en)
+    set_beams!(bt, bs; preset = bt.preset[], enabled = en, cluster = bt.cluster[])
     noff > 0 && pushfirst!(warns, (noff == 1 ? "1 beam of the table is" : "$noff beams of the table are") *
                                   " off or absent in $(basename(path)): disabled (power kept)")
     bt.warnings[] = warns
@@ -362,10 +384,14 @@ end
     export_visrad_summary(bt::BeamTable, path) -> path
 
 Write the table as a VisRad Laser Beam Summary CSV (`write_visrad_summary`; disabled
-beams "Off").
+beams "Off", each beam's cluster its group).
 """
 function export_visrad_summary(bt::BeamTable, path::AbstractString)
-    write_visrad_summary(path, display_beams(bt))
+    # quads are written as their four beams: those take the quad's group
+    d = Dict(b.name => c for (b, c) in zip(bt.beams[], bt.cluster[]))
+    dq = Dict(b.quad => c for (b, c) in zip(bt.beams[], bt.cluster[]) if !isempty(b.quad))
+    write_visrad_summary(path, display_beams(bt);
+                         cluster = b -> string(get(d, b.name, get(dq, b.quad, b.group))))
     bt.path[] = String(path)
     return path
 end
@@ -386,3 +412,228 @@ end
 
 "Ports of a beam list (what a deposition operator is tied to)."
 _ports(bs) = [b.port for b in bs]
+
+# ---------------------------------------------------------------- by name
+
+"""
+    beam_node(bt::BeamTable, by, key) -> Union{Nothing,NamedTuple}
+
+The [`beam_rows`](@ref) row named `key` (a cone, quad or beam name) under grouping
+`by`, with its index as `row`.
+"""
+function beam_node(bt::BeamTable, by::Symbol, key::AbstractString)
+    by === :quad && any(b -> isempty(b.quad), bt.beams[]) && return nothing
+    rows = beam_rows(bt; by)
+    i = findfirst(r -> r.key == key, rows)
+    return i === nothing ? nothing : merge(rows[i], (; row = i))
+end
+
+"""
+    edit_beam_node!(bt, by, key, field, text) -> Bool
+    set_node_enabled!(bt, by, key, on::Bool)
+
+[`edit_beams!`](@ref) and [`set_enabled!`](@ref) on the cone, quad or beam named `key`.
+"""
+function edit_beam_node!(bt::BeamTable, by::Symbol, key::AbstractString, field::Symbol, text)
+    n = beam_node(bt, by, key)
+    n === nothing && (bt.error[] = "no $by named $key"; return false)
+    return edit_beams!(bt, n.row, field, text; by)
+end
+
+function set_node_enabled!(bt::BeamTable, by::Symbol, key::AbstractString, on::Bool)
+    n = beam_node(bt, by, key)
+    n === nothing && throw(ArgumentError("no $by named $key"))
+    return set_enabled!(bt, n.row, on; by)
+end
+
+# ---------------------------------------------------------------- sets of beams
+
+"Editable fields of a set of beams: the `BEAM_FIELDS` and the Cartesian aim point."
+const SET_FIELDS = (BEAM_FIELDS..., :aim_x, :aim_y, :aim_z)
+
+function _check_set(bt::BeamTable, idx)
+    isempty(idx) && throw(ArgumentError("no beams selected"))
+    all(i -> 1 <= i <= length(bt.beams[]), idx) || throw(ArgumentError("no such beam"))
+    return collect(Int, idx)
+end
+
+# A set spanning both hemispheres describes z as a cone does (mirrored); a set in one
+# hemisphere uses the aim's own z.
+_set_mirror(bs, idx) = any(i -> bs[i].port[3] > 0, idx) && any(i -> bs[i].port[3] < 0, idx)
+
+function _set_pointing(bt::BeamTable, idx, fields)
+    S = Set(bt.beams[][i].name for i in idx)
+    p = GroupPointing(bt.beams[]; by = b -> b.name in S, fields,
+                      mirror = _set_mirror(bt.beams[], idx))
+    return p, findfirst(==(true), p.keys)
+end
+
+"""
+    beam_set_values(bt::BeamTable, idx) -> NamedTuple
+
+Mean `z`, `r`, `phi` (tangential offset), `defocus` (mm) and `power` (TW per beam) of
+the beams `idx`, as [`edit_beam_set!`](@ref) reads them (z mirrored when the set spans
+both hemispheres: `mirrored`), their mean Cartesian `aim`, `count`, and `enabled`
+(`true`, `false`, or `missing` for some).
+"""
+function beam_set_values(bt::BeamTable, idx)
+    idx = _check_set(bt, idx)
+    p, g = _set_pointing(bt, idx, BEAM_FIELDS)
+    x = initial_parameters(p)
+    nf = length(BEAM_FIELDS)
+    v(f) = x[(g-1)*nf+findfirst(==(f), BEAM_FIELDS)]
+    bs = bt.beams[]
+    aim = sum(bs[i].aim for i in idx) / length(idx)
+    on = count(i -> bt.enabled[][i], idx)
+    return (; z = v(:z), r = v(:r), phi = v(:phi), defocus = v(:defocus), power = v(:power), aim,
+            count = length(idx), mirrored = _set_mirror(bs, idx),
+            enabled = on == length(idx) ? true : on == 0 ? false : missing)
+end
+
+"""
+    edit_beam_set!(bt::BeamTable, idx, field, text) -> Bool
+
+Set `field` (one of [`SET_FIELDS`](@ref)) of every beam in `idx` from text: a
+[`BEAM_FIELDS`](@ref) value as a group edit does (only that field changes), or one
+coordinate of the aim point (`:aim_x`, `:aim_y`, `:aim_z`, mm), which every beam of the
+set then shares, as VisRad points a cluster at a reference point. A rejected value sets
+`error` and returns `false`.
+"""
+function edit_beam_set!(bt::BeamTable, idx, field::Symbol, text)
+    field in SET_FIELDS || throw(ArgumentError("beam field must be one of $SET_FIELDS"))
+    try
+        idx = _check_set(bt, idx)
+        v = _parse_number(text, field === :power ? "power" : "$field"; nonnegative = field === :power)
+        bs = copy(bt.beams[])
+        if field in BEAM_FIELDS
+            p, g = _set_pointing(bt, idx, (field,))
+            x = initial_parameters(p)
+            x[g] == v && (bt.error[] = ""; return true)
+            x[g] = v
+            new = apply(p, x)
+            for i in idx
+                bs[i] = _float_beam(new[i])
+            end
+        else
+            k = field === :aim_x ? 1 : field === :aim_y ? 2 : 3
+            for i in idx
+                a = collect(bs[i].aim)
+                a[k] = v
+                bs[i] = remake(bs[i]; aim = Vec3(a...))
+            end
+        end
+        bt.beams[] = bs
+        bt.error[] = ""
+        return true
+    catch err
+        err isa ArgumentError || rethrow()
+        bt.error[] = _errmsg(err)
+        return false
+    end
+end
+
+"""
+    set_set_enabled!(bt::BeamTable, idx, on::Bool)
+"""
+function set_set_enabled!(bt::BeamTable, idx, on::Bool)
+    idx = _check_set(bt, idx)
+    en = copy(bt.enabled[])
+    en[idx] .= on
+    _assign!(bt.enabled, en)
+    return bt
+end
+
+"Group (cluster) names of the table, in order of first appearance."
+clusters(bt::BeamTable) = unique(bt.cluster[])
+
+"""
+    set_cluster!(bt::BeamTable, idx, name) -> Bool
+
+Move the beams `idx` into the group `name` (a new group if no beam is in it yet), as
+VisRad's "Move to Cluster". A group left without beams disappears.
+"""
+function set_cluster!(bt::BeamTable, idx, name)
+    try
+        idx = _check_set(bt, idx)
+        s = strip(String(name))
+        isempty(s) && throw(ArgumentError("give the group a name"))
+        c = copy(bt.cluster[])
+        c[idx] .= Symbol(s)
+        _assign!(bt.cluster, c)
+        bt.error[] = ""
+        return true
+    catch err
+        err isa ArgumentError || rethrow()
+        bt.error[] = _errmsg(err)
+        return false
+    end
+end
+
+"""
+    rename_cluster!(bt::BeamTable, old, new) -> Bool
+"""
+rename_cluster!(bt::BeamTable, old, new) =
+    set_cluster!(bt, findall(==(Symbol(old)), bt.cluster[]), new)
+
+"""
+    split_quad!(bt::BeamTable, quad) -> Bool
+
+Replace a NIF quad that the table holds as one beam (`nif_quads`) by its four beams
+(`nif_beams`: their own ports and f/20.7 cones), each with the quad's aim, defocus,
+detuning, spot and group, and a quarter of its power, so its beams can be pointed
+apart (split quads). The quad's enabled flag carries over. Ports change, so the drive
+must be computed again.
+"""
+function split_quad!(bt::BeamTable, quad::AbstractString)
+    try
+        bs = bt.beams[]
+        i = findfirst(b -> b.quad == quad, bs)
+        i === nothing && throw(ArgumentError("no quad $quad in the table"))
+        count(b -> b.quad == quad, bs) == 1 ||
+            throw(ArgumentError("quad $quad is already split into its beams"))
+        q = bs[i]
+        parts = [remake(b; aim = q.aim, defocus = q.defocus, dlambda = q.dlambda, spot = q.spot,
+                        power = q.power / 4, group = q.group)
+                 for b in nif_beams() if b.quad == quad]
+        length(parts) == 4 || throw(ArgumentError("$quad is not a NIF quad"))
+        nb = vcat(bs[1:i-1], parts, bs[i+1:end])
+        en = vcat(bt.enabled[][1:i-1], fill(bt.enabled[][i], 4), bt.enabled[][i+1:end])
+        cl = vcat(bt.cluster[][1:i-1], fill(bt.cluster[][i], 4), bt.cluster[][i+1:end])
+        set_beams!(bt, nb; preset = bt.preset[], enabled = en, cluster = cl)
+        return true
+    catch err
+        err isa ArgumentError || rethrow()
+        bt.error[] = _errmsg(err)
+        return false
+    end
+end
+
+"""
+    merge_quad!(bt::BeamTable, quad) -> Bool
+
+Replace the four beams of a NIF quad by the quad as one beam (`nif_quads`): their mean
+aim and defocus, their total power, the first beam's spot, group and enabled flag.
+"""
+function merge_quad!(bt::BeamTable, quad::AbstractString)
+    try
+        bs = bt.beams[]
+        idx = findall(b -> b.quad == quad, bs)
+        length(idx) == 4 || throw(ArgumentError("quad $quad is not split into four beams"))
+        tmpl = findfirst(b -> b.quad == quad, nif_quads())
+        tmpl === nothing && throw(ArgumentError("$quad is not a NIF quad"))
+        b1 = bs[idx[1]]
+        q = remake(nif_quads()[tmpl]; aim = sum(bs[i].aim for i in idx) / 4,
+                   defocus = sum(bs[i].defocus for i in idx) / 4, dlambda = b1.dlambda,
+                   power = sum(bs[i].power for i in idx), spot = b1.spot, group = b1.group)
+        keep = setdiff(eachindex(bs), idx[2:end])
+        nb = copy(bs)
+        nb[idx[1]] = q
+        set_beams!(bt, nb[keep]; preset = bt.preset[], enabled = bt.enabled[][keep],
+                   cluster = bt.cluster[][keep])
+        return true
+    catch err
+        err isa ArgumentError || rethrow()
+        bt.error[] = _errmsg(err)
+        return false
+    end
+end

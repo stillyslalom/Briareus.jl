@@ -1,6 +1,6 @@
 # The Review step's TaLIS checks: the NIF target-configuration rules of `talis_check`
 # (3ω capture, incidence and clearance, 1ω clearance and management, the TAS stay-in
-# zone) on chosen capture and hardware components, with the Review step's error stack.
+# zone) on chosen capture and hardware components, with the clearance check's error stack.
 # One `talis_check` call runs on a worker (it takes well under a second on the GUI's
 # meshes); canceling drops its result.
 
@@ -33,7 +33,7 @@ const TALIS_TOLERANCE_CAVEAT =
 """
     TaLISState()
 
-State of the Review step's TaLIS checks. Settings: `capture` (components beams are
+State of the TaLIS checks. Settings: `capture` (components beams are
 meant to land on: backlighter foils, capture surfaces, a hohlraum wall), `hardware`
 (other components checked for 3ω and 1ω clearance; capture components are checked
 too, for beams landing elsewhere), `tolerance` (rule tolerance, degrees), `pivot` (one
@@ -140,7 +140,7 @@ end
     talis_kwargs(tl::TaLISState, rv::ReviewState) -> NamedTuple
 
 The keyword arguments of the `talis_check` call: capture and hardware components, the
-rule tolerance and its pivot, the Review step's error stack (pointing, positioning,
+rule tolerance and its pivot, the clearance check's error stack (pointing, positioning,
 hardware tolerance, focus) and hardware sampling level.
 """
 function talis_kwargs(tl::TaLISState, rv::ReviewState)
