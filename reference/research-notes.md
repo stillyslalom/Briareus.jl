@@ -188,15 +188,16 @@ Structure of the mapping:
 "Later search" below.
 
 Confirmed features:
-- JSON workspace files (VisRad 21.1.0).
+- Workspace files (`.vrw`). The manual calls them JSON from v21.0.0, but real 20.0.0
+  and 21.0.0 workspaces are keyed text; see "VisRad workspace files" below.
 - STEP CAD import.
 - A "Laser-Target Capture Clearance Report" (capture fraction and maximum incidence
   angle) exportable as ASCII.
 - Multi-column ASCII time tables.
 - Per-element flux exports for rad-hydro input (MacFarlane 2003).
 
-Not documented in the manual: the full JSON schema of `.vrw` workspaces. Sample files
-are still needed for that.
+Not documented in the manual: the `.vrw` layout. Two sample workspaces (2026-10-17)
+settled the text format; see "VisRad workspace files".
 
 ## State of the art (pointing design and tools)
 
@@ -446,7 +447,8 @@ Implementation (`src/talis.jl`, `talis_check`):
 
 All from the manual. **H**
 
-- **Workspaces:** `.vrw`, JSON since v21.0.0.
+- **Workspaces:** `.vrw`; the manual says JSON since v21.0.0, real 20.0.0/21.0.0 files
+  are keyed text ("VisRad workspace files" below).
 - **Laser Beam Summary CSV columns:** Cluster, Beam ID, On/Off, Polar Ang, Azm Ang,
   Pt Ref-CS, Pt Geom, Pt Param-1/2/3, Focus offset, TC Pt Pos-x/y/z (cm), Power, DPR,
   profile model, R0 major/minor, minor-axis rotation.
@@ -624,18 +626,113 @@ legible in a screenshot; **M** inferred from a worked example; **L** assumption.
   was found (web search 2026-10-16). Without the schema a reader would be guesswork, so
   none was written; a sample CMT file from work would settle it.
 
-### Workspace `.vrw` (JSON) and `.bti` (not implemented)
+### Workspace `.vrw` and `.bti`
 
-- `.vrw` is JSON since v21.0.0 and "can be readily modified using scripting tools"
-  (VR/files/workspace_files.html). **H**
-- The only key the manual names is "Beam cone F number" (v21.1.0 notes). The schema is
-  undocumented. **H** (that it is undocumented)
+- The manual says `.vrw` is JSON since v21.0.0 and "can be readily modified using
+  scripting tools" (VR/files/workspace_files.html). Real 20.0.0 and 21.0.0 workspaces
+  are keyed text instead; `read_visrad_workspace` reads that format (next section). A
+  JSON workspace (perhaps 21.1+) is rejected with an error. **H** for the text format
+- The only key the manual names is "Beam cone F number" (v21.1.0 notes).
 - `.bti` (File | Export Laser Beam Data → Beam-Target Intersection Points) gives each
   beam's intersection points in the component's and the chamber's frames, in cm and
   degrees (VR/files/laser_target_intpts_file.html). **H**
   - Format ID 2 adds the beam name and port angles.
   - An optional block adds a(z), b(z), n(z), fSQ, DLW, DLH, M.
   - The column layout is undocumented. Not implemented.
+
+### VisRad workspace files (2026-10-17)
+
+Read off two real workspaces (not committed): a NIF hohlraum with bundled STEP CAD
+(VisRad 20.0.0, 17 objects, 192 beams, ~20 MB) and a primitive hohlraum + foil
+(VisRad 21.0.0). Implemented in `src/visrad_workspace.jl`, `read_visrad_workspace`. The
+test fixture rebuilds the layout from rows copied from these files.
+
+- **Layout.** CRLF text. Line 1 `Workspace Format ID  = 11`; sections `[Name]:` …
+  `[End Name]`: Header Data (`VisRad Version_21.0.0`), Target Component Data
+  (`# File format ID:  29`), Laser Beam Data (`#VF LaserParmFile: Format ID = 22` in
+  20.0.0, 23 in 21.0.0, same columns), Diagnostic Port, Chamber Component, Dialog
+  Settings, Snapshots, Movie Maker, Memorized Views, Power Source Data (per-element
+  source table), Radiosity Data, Beam Capture-Clearance Data, TVS Viewer, SRF Beam,
+  View Factor Data. **H**
+- **Units.** Lengths in cm and angles in degrees regardless of the GUI's "Ruler units =
+  mm" preference (aims of 0.5905 = 5.905 mm at the LEH plane). **H**
+- **Objects.** `Begin Parameters for Object = <name>` … `End Parameters for Object:
+  <name>`, `key = value` lines: `Object type`, `Length 1..6 value`, `Number of mesh pts
+  1..4`, `Normals in/out`, RGB, `Object visibility`, `Reference coord. system name`,
+  `Set position of ID`, `Coord. sys. geometry type` (0 Cartesian, 2 spherical (r, θ, φ)
+  — a marker at (0.32, 90, 150); 1 cylindrical assumed (r, z, φ)), `Position 1..3`,
+  `Tilt angle`, `Rotation angle`, `Spin angle`, albedo / x-ray conversion / power
+  source / laser reflectivity values with model IDs, and the three `Include in …
+  calc.` flags. Then ten `Time-Dependent … for <name>:  # table times = N` lines
+  (N = 0 in both files; the row layout of N > 0 is not seen), `Number of Bounding
+  Volumes`. **H**
+- **Generalized meshes (type 13, CAD).** `Gen. mesh object origin: x/y/z` (= −Position
+  in every object), `Number of vertices`, `Number of surfaces`, `Node positions:`
+  (`index x y z`, cm, centered on the object's bounding-box centroid, 0-based) and
+  `Surface element connectivity:` (`index v1 v2 v3 -1`, all triangles). The manual: a
+  GM object's position defaults to its bounding-box centroid
+  (VR/grid/import_export_cad_files.html). Placement x = R·node + Position is consistent
+  with every object (all angles are zero in the file, so R is untested on meshes). **H**
+  for zero angles
+- **CAD normals are not reliable.** In the NIF workspace the inner hohlraum wall
+  (r = 3.21 mm) faces away from the cavity on every triangle, and the next sheet
+  (r = 3.24 mm) is mixed (556 out, 259 in). Edges are not shared between CAD faces
+  (tens of thousands of open edges per part). VisRad: "Surface normal directions are
+  not editable" and radiosity results for such objects "may be inaccurate" (same
+  page). `visrad_target(...; two_sided = true)` is the workaround. **H**
+- **Type codes.** 13 = generalized mesh; 11 = the "reference cone" VisRad makes for a
+  multi-shape STEP import (all CAD shapes use it as their reference frame; manual,
+  same page). 1 = sphere (Length 1 = radius, Lengths 2–5 = 0, 360, 0, 180 angular
+  limits), 4 = rectangle (Length 1 × 2), 5 = cylindrical hohlraum (Length 1 = radius,
+  2 = length, 3 = LEH radius) are inferred from parameters. **M**
+- **Primitive grids** from VisRad's element counts (Power Source table): a rectangle with
+  10 × 10 mesh points has 81 elements; a hohlraum with (11, 12, 4) has 216 = 10 × 12
+  wall + 2 × 3 × 12 end cap (albedo 0.7) + 2 × 12 LEH (albedo 0, indices 192–215).
+  Periodic azimuth counts elements, other directions count nodes. Radial spacing on the
+  caps (uniform in r or area) and the azimuthal phase are not fixed; Briareus uses
+  equal-area rings from φ = 0. **H** counts, **L** spacing
+- **Orientation.** The manual names Polar, Azimuthal and Rotation angles applied as
+  Rz(Rotation), then Ry(Polar), then Rz(Azimuthal) about the original axes, then a
+  translation of the centroid (VR/grid/specifying_orient_angles.html); 2D objects lie
+  in x-y with normals +z, cylinders along z. The file's Tilt/Rotation/Spin are read as
+  Polar/Azimuthal/Rotation with right-handed rotations. Only one nonzero angle was seen:
+  the foil's tilt 90° turns its normal to +x, facing the four beams aimed at it (ports
+  at x ≈ +0.78). **M** for tilt, **L** for the other two
+- **Directory tree.** `Begin Target Component Directory Structure` … `End …`:
+  `Number of target components = n`, n names, `Number of child folders = m`, then m ×
+  (folder name, subtree). **H**
+- **Beams.** After `Cluster Names:` (one per line, blank-terminated) each beam is
+  `Laser Beam Name = B113`, `Cluster Name = Ring_050`, one whitespace row of 53 columns
+  named by the file's own `!` header, `Ref. Coord. Sys.:  Target Chamber`, `D toward Port
+  ID:  P 0 - 0`, `Pulse Shape Name:`, GUI text items, and three `… laser power table
+  values:  # table times = N` lines (blue, green, red). Columns: port index, θ, φ, port
+  radius (cm), custom flag, cone half-angle min/max (deg), f-number, RGB, transparency,
+  pointing method, distance to port, coordinate geometry, position 1–3, focus offset
+  (cm), red/green power model, power on/off ×3 (blue, green, red), visibility ×3, power
+  mode ×3, power (TW) ×3, random multiplier, energy-normalized flag, energy (kJ), use
+  multiplier ×3, multiplier ×3, spatial profile model, spot size model, spot size (µm),
+  elliptical flag, minor radius (µm), rotation (deg), rotation model, rotation angle ID
+  (blank in both files, leaving 52 tokens), super-Gaussian exponent, envelope and lens
+  radius ratios, DPR on/off. The rows do not line up with the header's dash runs, so
+  they are split on whitespace. **H**
+- **Pointing methods** are 0-based in the order of the Pointing tab
+  (VR/power_sources/set_laser_beam_pointing.html): 0 TCC, 1 distance toward a
+  diagnostic port (not supported), 2 position in a coordinate system. Both files use
+  2, Cartesian, chamber frame. **H** for 2
+- **Spots.** NIF profile models 49–52 carry the built-in plate's numbers in the row:
+  49 = Rev3-Inner-2w (890/660 µm, n 7.6), 50 = 1.0 Rev1a-Inner-2w (860/610, 8.0),
+  51 = Rev3-Outer-2w (640/370, 4.8), 52 = Rev1-Outer-2w (620/360, 4.5), i.e. HWHM radii
+  (VR/power_sources/phase_plate_params.html). The reader identifies plates by those
+  numbers, not the model ID. Nothing in the file states a spot-size definition for
+  custom profiles (`spot size model` = 0 throughout); 1/e is assumed. **H** plates,
+  **L** custom
+- **Checks on the NIF workspace.** Port angles match `nif_beams()` to 0.0056° (the
+  file's 3 decimals). Outer cones aim at z = ±5.905 (50°) and ±5.723 mm (44.5°), 0.45 mm
+  off axis; inner cones at ±4.078 (30°) and ±3.462 mm (23.5°), 0.67 and 1.22 mm off
+  axis; 8 of the 44.5° beams are off; 1 TW each in 3ω. A ray trace of the 184 beams
+  through all 15 CAD parts (210k elements) conserves power: 144 TW on the two hohlraum
+  halves, 31.5 TW on the waist part, 7.4 TW on two side parts, < 1 mW on the LEH
+  washers.
 
 ### Result tables and fits
 

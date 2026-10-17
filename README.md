@@ -97,8 +97,10 @@ for the same workflow: target, beams, drive, optimization and shot review.
     hole into an optimization objective.
 - **I/O.** `write_beam_table`/`read_beam_table` read and write a canonical CSV, with
   column and unit mapping for foreign tables. VisRad interchange: NIF SST pointing and
-  Laser Beam Summary CSVs, power files, and a benchmark kit (`write_visrad_kit`,
-  `compare_visrad`) for comparing the same case run in both codes.
+  Laser Beam Summary CSVs, power files, a benchmark kit (`write_visrad_kit`,
+  `compare_visrad`) for comparing the same case run in both codes, and VisRad
+  workspaces (`read_visrad_workspace`, `visrad_target`): target components including
+  bundled CAD, and beams with their pointing and spots.
 - **Time dependence.** `PulseShape` per cone and `drive_history` give quasi-static
   T_r(t) and P_l(t).
 - **Optimization.** `GroupPointing` maps parameters to beams, per cone, quad or beam:

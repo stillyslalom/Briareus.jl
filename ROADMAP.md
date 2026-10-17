@@ -106,6 +106,18 @@ Shot-review layer:
   (`hohlraum(; h, capsule_h)`), GUI presets coarse/standard/fine at ~0.5/0.1/0.02
   percentage points in P2 and P4.
 
+## Done (2026-10-17, VisRad workspaces)
+- **`read_visrad_workspace`** reads VisRad 20/21 `.vrw` workspaces, which are keyed
+  text, not the JSON the manual describes. It reads the target components, including
+  bundled CAD as generalized meshes (cm to mm, placed in the chamber frame through
+  reference frames), and the beams with their pointing, 3ω power, f-number and spots.
+  NIF CPP radii are recognized as HWHM by their numbers. `visrad_target` builds a
+  `Target`, meshing spheres, rectangles and cylindrical hohlraums on VisRad's own grid
+  (element counts checked against VisRad's power-source table). Checked on a real NIF
+  CAD workspace: ports match `nif_beams` to 0.006°, and a ray trace of its 184 beams
+  through all 210k CAD elements lands them in the hohlraum. CAD normals there are
+  inconsistent (the inner wall faces out), hence `two_sided`.
+
 ## Next
 1. **Sombrero and backlighter geometry.** Model the LEH shield as a component (a
    dimpled annulus), and the backlighter foil's placement relative to the diagnostic
@@ -128,29 +140,55 @@ Shot-review layer:
    - the 1ω footprint side and shape;
    - which quads count as open for the 20° rule;
    - the VisRad items listed in the research notes (summary-CSV columns after Power,
-     spot-rotation sense, SST preamble, element-export layout);
+     spot-rotation sense, SST preamble, element-export layout; in workspaces, the
+     Rotation/Spin angle mapping, the cylindrical position order, primitive grid
+     spacing and the spot-size definition of custom profiles: one small workspace
+     with a rotated cylinder and a rotated CAD part would settle most of them);
    - the NIF CMT XML schema.
 4. **Benchmark against VisRad.** Run `write_visrad_kit` cases at work and bring back the
    outputs for `compare_visrad`. This validates absolute drive levels and mode
    amplitudes.
-5. **GUI requests:** session save/load (a workspace file); undo/redo; x-ray images
+5. **VisRad workspace import: what `read_visrad_workspace` skips.** Each is warned
+   about or refused today. Most need a sample workspace that uses the feature, since
+   the layout of the extra data is not seen yet.
+   - Unconverted light: beams with 2ω/1ω on (the green/red power columns) as
+     `nif_unconverted` colors or extra beams.
+   - Time-dependent beam powers (power mode ≠ 0, `laser power table values` with
+     N > 0; VisRad's time unit is seconds), energy-normalized beams, and named pulse
+     shapes, as `PulseShape`s.
+   - DPR beams (split into two cones, as VisRad does for OMEGA).
+   - Pointing method 1 (distance toward a diagnostic port, from `[Diagnostic Port
+     Data]`), and target-mount or diagnostic-port reference frames for objects and beams.
+   - Objects positioned by a key point other than the centroid (cylinder top/bottom,
+     box and rectangle corners).
+   - Time-dependent albedo, x-ray conversion, lengths and power sources (the ten
+     `Time-Dependent …` tables), laser reflectivity, and power self-emission.
+   - Wall thickness (inner and side walls), partial spheres, and the other primitive
+     types: cylinder, cone, disk, box, polygon, halfraum, rugby and slotted hohlraums,
+     surfaces of revolution, multi-element objects.
+   - CAD meshes: consistent orientation (repair inward/outward faces, e.g. by ray
+     casting from inside closed parts) instead of `two_sided`, and coplanar merging or
+     decimation so that selected CAD parts are small enough for view factors.
+6. **GUI requests:** session save/load (a workspace file); undo/redo; x-ray images
    in the window; reference frames for parts (attach to a component or a port axis, as
-   VisRad does); clipping volumes and STEP/STL import; a second simultaneous view
+   VisRad does); clipping volumes and STEP/STL import (CAD already arrives through VisRad
+   workspaces, `read_visrad_workspace`; a GUI loader and decimation for view factors
+   would make it usable there); a second simultaneous view
    (the capsule map beside the 3D view).
    Adaptive mesh refinement of the radiation mesh where deposition varies fastest
    (the uniform fine mesh is converged but costs ~16k elements).
-6. **Time-dependent view factor.** Wall, LEH and spot motion from rad-hydro or a
+7. **Time-dependent view factor.** Wall, LEH and spot motion from rad-hydro or a
    parametric model; P2(t) swing; optimization of cone fraction versus time.
-7. **Shot-data calibration.** Fit effective parameters (cone multipliers, CBET
+8. **Shot-data calibration.** Fit effective parameters (cone multipliers, CBET
    multiplier/clamp, albedo) to measured P2/P4 and shock symmetry, with uncertainty.
    Reproduce P2-vs-Δλ curves.
-8. **Robust optimization and UQ.** Monte Carlo or Jacobian propagation of 50 µm
+9. **Robust optimization and UQ.** Monte Carlo or Jacobian propagation of 50 µm
    pointing and power imbalance; optimize the mean plus kσ; sensitivity matrices;
    mode-1 and m = 4 budgets and inverse solves (MacGowan 2021).
-9. **Backlighter physics.** CE(Z, I, τ) models with uncertainty, and the photometric
+10. **Backlighter physics.** CE(Z, I, τ) models with uncertainty, and the photometric
    chain to the detector.
-10. **Spectral radiosity.** Multigroup emission, detector responses along Dante and XRD
+11. **Spectral radiosity.** Multigroup emission, detector responses along Dante and XRD
     lines of sight, and brightness temperatures.
-11. **Scale.** Multi-ray partial visibility for view factors, hierarchical or iterative
+12. **Scale.** Multi-ray partial visibility for view factors, hierarchical or iterative
     radiosity, Float32 storage for more than 10⁴ elements, and GPU kernels.
-12. **Polar direct drive mode**, benchmarked against published GA optimizers.
+13. **Polar direct drive mode**, benchmarked against published GA optimizers.

@@ -44,6 +44,7 @@ export UnconvertedColor, nif_unconverted, UnconvertedRow, UnconvertedReport, unc
 export TaLISRow, TaLISReport, talis_check, write_talis_csv, TALIS_SOURCE, TALIS_OUT_OF_SCOPE, talis_requirement
 export BEAM_COLUMNS, write_beam_table, read_beam_table, read_csv, write_element_table, write_moments
 export VISRAD_SST_COLUMNS, VISRAD_PHASE_PLATES, visrad_spot, write_visrad_sst, read_visrad_sst, write_visrad_summary, read_visrad_summary, write_visrad_powers, read_visrad_powers, read_visrad_pulse_shape, read_visrad_table, visrad_legendre_fit, visrad_ylm_fit, write_visrad_kit, compare_visrad
+export VisRadObject, VisRadWorkspace, read_visrad_workspace, visrad_component, visrad_target
 export legendre, legendre_moments, legendre_weights, solid_angle, ylm_moments, ylm_weights,
        ylm_matrix, ylm_frame, mode_index, relative_mode_power, mode_amplitude, mode_power, rms_nonuniformity
 export OrthoCamera, camera_from_port, render, radiance, line_of_sight_power
@@ -71,6 +72,7 @@ include("talis.jl")
 include("lpi.jl")
 include("io.jl")
 include("visrad.jl")
+include("visrad_workspace.jl")
 include("cbet.jl")
 include("unconverted.jl")
 
