@@ -888,6 +888,22 @@ test fixture rebuilds the layout from rows copied from these files.
   Float64 matrices (view factors and two cached factorizations) fill half the memory
   (`radiation_size`: 26.8k elements on 32 GB, *derived*); the drive is then laser
   only.
+- **The window's cavity and stalls (BriareusGUI, 2026-10-18, measured locally, H).**
+  Cavity selection on the window's remeshed elements against the library's faceted
+  two-pass (`visrad_target(...; remesh = 0.28, inside)`: select on the oriented CAD
+  facets, remesh the kept facets, select again), same objects, tent left out: one
+  selection 0.8 s (2.2 s with the pocket search) and 7,155 elements, 360 mm², against
+  5.3 s and 6,908 elements, 339 mm². The window keeps each part remeshed whole (it
+  draws it, deposits laser on it and checks clearance against it), so the faceted path
+  would add the remeshing of the kept facets to every cavity build; the 6 % extra area
+  is whole elements straddling the cavity's edge (mostly a cap washer, 413 vs 295).
+  Element-size edits: building the `Target` of the 12 parts and of the 200k-facet
+  ghost took 1.2–1.5 s per edit (BVHs), now reused for identical components; a CAD
+  remesh runs on workers with the part drawn from its facets meanwhile. The ~1 s stalls
+  at the first drive result, the first coloring by a field and the first ghost were
+  JIT compilation (Makie's heatmap colormapping, the colorbar's first drawing, the
+  transparent mesh's first upload), not GC (≤ 0.26 s pauses at 3.3 GB live); the
+  window now compiles them before it opens.
 - **CAD surface fitting (2026-10-18).** `fit_surfaces` (region growing over patches
   sharing a vertex, least-squares plane/cylinder/sphere fits refined by Gauss–Newton,
   tolerance `max(1e-4 mm, 1e-3 min(R, extent))`, regions kept when their rms is under a

@@ -202,47 +202,58 @@ end
 # primitive workspace): a rectangle with 10 × 10 mesh points has 81 elements, a
 # cylindrical hohlraum with mesh points (11, 12, 4) has 216 — 10 × 12 wall, 2 × 3 × 12
 # end-cap and 2 × 12 laser-entrance-hole elements. Periodic azimuths count elements,
-# other directions count nodes.
-function _vrw_primitive(kind, name, p, mat)
+# other directions count nodes. With `h` (mm) the grid is Briareus's for elements of
+# about that size instead (`hohlraum_counts`, `capsule_counts`; VisRad's counts ignored).
+function _vrw_primitive(kind, name, p, mat; h = nothing)
     L(k) = 10 * _vrw_float(p, "Length $k value")
     N(k) = _vrw_int(p, "Number of mesh pts $k")
+    h === nothing || h > 0 || throw(ArgumentError("VisRad object $name: the element size must be positive"))
+    cells(len) = max(1, ceil(Int, len / h))
     flip = _vrw_int(p, "Normals in/out") != 0
     _vrw_int(p, "Use non-zero wall thickness") != 0 &&
         @warn "VisRad object $name has a wall thickness; Briareus models its outer surface only"
     if kind === :rectangle
         # Length 1 × Length 2 (x × y) centered in the object's x-y plane, normal +z
-        m = rectangle_mesh(L(1), L(2); nu = max(1, N(1) - 1), nv = max(1, N(2) - 1))
+        m = h === nothing ? rectangle_mesh(L(1), L(2); nu = max(1, N(1) - 1), nv = max(1, N(2) - 1)) :
+            rectangle_mesh(L(1), L(2); nu = cells(L(1)), nv = cells(L(2)))
         return [Component(name, flip ? _vrw_flip(m) : m, mat)]
     elseif kind === :sphere
         # Length 1 = radius; Lengths 2–5 = angular limits (full sphere only)
         Ls = Tuple(_vrw_float(p, "Length $k value") for k in 2:5)
         Ls == (0.0, 360.0, 0.0, 180.0) ||
             throw(ArgumentError("VisRad sphere $name: partial spheres are not supported"))
-        m = sphere_mesh(L(1); ntheta = max(2, N(1) - 1), nphi = max(3, N(2)), outward = !flip)
+        nt, np = h === nothing ? (max(2, N(1) - 1), max(3, N(2))) : values(capsule_counts(L(1), h))
+        m = sphere_mesh(L(1); ntheta = nt, nphi = np, outward = !flip)
         return [Component(name, m, mat; surface = SphereSurface(L(1)))]
     elseif kind === :cylindrical_hohlraum
         # Length 1 = radius, Length 2 = length, Length 3 = LEH radius; mesh points 1 =
         # axial nodes, 2 = azimuthal elements, 3 = radial nodes on each end cap. VisRad
         # hohlraum normals point in by default. Each LEH is one ring of elements.
         R, H, r = L(1), L(2), L(3)
-        nphi = max(3, N(2))
-        h = H / 2
+        # VisRad's grid: one ring of LEH elements; Briareus's: `hohlraum`'s (LEH rings of
+        # about h, half the wall's azimuthal count)
+        nz, nphi, nr, nr_leh, nphi_leh = if h === nothing
+            max(1, N(1) - 1), max(3, N(2)), max(1, N(3) - 1), 1, max(3, N(2))
+        else
+            c = hohlraum_counts(; length = H, radius = R, leh_radius = min(r, R), h)
+            c.nz, c.nphi, c.nr_cap, c.nr_leh, c.nphi ÷ 2
+        end
+        z = H / 2
         cyl = CylinderSurface(R)
         nm(s) = Symbol(name, "_", s)
-        comps = Component[Component(nm(:wall), cylinder_mesh(R, -h, h; nz = max(1, N(1) - 1), nphi,
-                                                             inward = !flip), mat; surface = cyl)]
+        comps = Component[Component(nm(:wall), cylinder_mesh(R, -z, z; nz, nphi, inward = !flip), mat;
+                                    surface = cyl)]
         if r < R
-            nr = max(1, N(3) - 1)
-            push!(comps, Component(nm(:cap_top), annulus_mesh(r, R, h; nr, nphi, up = flip), mat;
-                                   surface = DiskSurface(center = (0, 0, h))))
-            push!(comps, Component(nm(:cap_bottom), annulus_mesh(r, R, -h; nr, nphi, up = !flip), mat;
-                                   surface = DiskSurface(center = (0, 0, -h))))
+            push!(comps, Component(nm(:cap_top), annulus_mesh(r, R, z; nr, nphi, up = flip), mat;
+                                   surface = DiskSurface(center = (0, 0, z))))
+            push!(comps, Component(nm(:cap_bottom), annulus_mesh(r, R, -z; nr, nphi, up = !flip), mat;
+                                   surface = DiskSurface(center = (0, 0, -z))))
         end
         if r > 0
-            push!(comps, aperture(nm(:leh_top), disk_mesh(min(r, R), h; nr = 1, nphi, up = false);
-                                  surface = DiskSurface(center = (0, 0, h))))
-            push!(comps, aperture(nm(:leh_bottom), disk_mesh(min(r, R), -h; nr = 1, nphi, up = true);
-                                  surface = DiskSurface(center = (0, 0, -h))))
+            push!(comps, aperture(nm(:leh_top), disk_mesh(min(r, R), z; nr = nr_leh, nphi = nphi_leh, up = false);
+                                  surface = DiskSurface(center = (0, 0, z))))
+            push!(comps, aperture(nm(:leh_bottom), disk_mesh(min(r, R), -z; nr = nr_leh, nphi = nphi_leh, up = true);
+                                  surface = DiskSurface(center = (0, 0, -z))))
         end
         return comps
     end
@@ -541,7 +552,7 @@ end
 """
     visrad_component(object; material = nothing, two_sided = false, orient = false,
                      toward = (0, 0, 0), coarsen = nothing, remesh = nothing,
-                     fit = false) -> Vector{Component}
+                     fit = false, primitive_h = nothing) -> Vector{Component}
 
 Briareus components for one `VisRadObject`, in the chamber frame (mm). The material
 defaults to the object's albedo and x-ray conversion efficiency. CAD meshes give one
@@ -564,12 +575,14 @@ the radiation model integrates on the curved walls as it does for a primitive
 hohlraum. Rectangles give one component (normal +z before orientation), spheres one with
 a `SphereSurface`, and cylindrical hohlraums five — `<name>_wall`, `_cap_top`,
 `_cap_bottom` and the apertures `_leh_top`, `_leh_bottom` — with the curved surfaces
-`hohlraum` uses, all on VisRad's grid (`Number of mesh pts`). Other object types return
-no components (with a warning).
+`hohlraum` uses, all on VisRad's grid (`Number of mesh pts`, which reproduces VisRad's
+element table), or with `primitive_h` (mm) on Briareus's grid for elements of about
+that size (`hohlraum_counts`, `capsule_counts`), e.g. to resolve a spot on a foil that
+VisRad meshes coarsely. Other object types return no components (with a warning).
 """
 function visrad_component(o::VisRadObject; material = nothing, two_sided::Bool = false,
                           orient::Bool = false, toward = (0.0, 0.0, 0.0), coarsen = nothing,
-                          remesh = nothing, fit = false)
+                          remesh = nothing, fit = false, primitive_h = nothing)
     coarsen === nothing || remesh === nothing ||
         throw(ArgumentError("give one of `coarsen` and `remesh`, not both"))
     mat = material === nothing ? Material(Symbol(o.name); albedo = o.albedo, conversion = o.conversion) :
@@ -585,7 +598,7 @@ function visrad_component(o::VisRadObject; material = nothing, two_sided::Bool =
         return curved_components(c; reference = mesh === facets ? nothing : facets,
                                  (fit === true ? (;) : fit)...)
     end
-    cs = _vrw_primitive(o.kind, o.name, o.params, mat)
+    cs = _vrw_primitive(o.kind, o.name, o.params, mat; h = primitive_h)
     cs = [c.kind === :surface && two_sided ? Component(c.name, c.mesh, c.material; two_sided, surface = c.surface) : c
           for c in cs]
     isempty(cs) && (@warn "VisRad object $(o.name) (type $(o.type)) is not supported; skipped"; return cs)

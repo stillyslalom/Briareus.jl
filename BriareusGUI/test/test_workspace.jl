@@ -362,6 +362,17 @@ include(joinpath(pkgdir(Briareus), "test", "vrw_fixture.jl"))
     w = elements(t, :Cyl_Hohlraum_0_wall)
     @test sum(t.elem_centroid[e] * t.elem_area[e] for e in w) / sum(t.elem_area[w]) ≈
           Briareus.Vec3(-4, 0, 0) atol = 1e-6
+    # a VisRad primitive keeps VisRad's grid (81 foil elements) unless given a size
+    i = part_index(ts, :Rectangle_0)
+    @test length(elements(t, :Rectangle_0)) == 81
+    @test part_size_label(ts.parts[][i]) == "Element size (0: VisRad's grid)"
+    @test part_size_label(ts.parts[][part_index(ts, :CAD_0)]) == "Element size (0: target's)"
+    @test edit_part!(ts, i, :h, "0.5") && length(elements(ts.target[], :Rectangle_0)) == 64
+    @test sum(ts.target[].elem_area[elements(ts.target[], :Rectangle_0)]) ≈ 16
+    @test edit_mesh!(ts, :h, "0.4") && length(elements(ts.target[], :Rectangle_0)) == 64
+    @test edit_part!(ts, i, :h, "0") && length(elements(ts.target[], :Rectangle_0)) == 81
+    set_resolution!(ts, :coarse)
+    t = ts.target[]
     # an edit to a beam goes back into a copy of the workspace, the rest unchanged
     edit_beams!(s.beams, 1, :power, "3.0"; by = :beam)
     out = joinpath(dir, "out.vrw")
@@ -377,6 +388,17 @@ include(joinpath(pkgdir(Briareus), "test", "vrw_fixture.jl"))
     load_session!(s2, f)
     @test s2.visrad_source[] == abspath(src)
     @test component_names(s2.target.target[]) == names
+    # a design's targets are built once: an edit to a part left out of the calculations
+    # keeps the calculation target, and an undo or a redo finds its target again
+    t1 = ts.target[]
+    @test edit_part!(ts, part_index(ts, :Marker), :x, "0.5") && ts.target[] === t1
+    record!(s)
+    @test edit_part!(ts, part_index(ts, :CAD_0), :h, "0.45")
+    t2 = ts.target[]
+    @test t2 !== t1
+    record!(s)
+    @test undo!(s) && ts.target[] === t1
+    @test redo!(s) && ts.target[] === t2
 end
 
 @testset "VisRad import in the background, roles, laser-only drive (no GL)" begin
@@ -566,6 +588,83 @@ end
         @test :BIG_CAD in s3.target.excluded[] && nelements(s3.target.target[]) < n
     finally
         RADIATION_MAX_ELEMENTS[] = 0
+    end
+end
+
+@testset "CAD remeshing in the background (no GL)" begin
+    # a key asked for while it is being computed is computed once
+    calls = Threads.Atomic{Int}(0)
+    cache = Dict{Any,Any}()
+    tasks = [Threads.@spawn Controllers._cached(() -> (Threads.atomic_add!(calls, 1); sleep(0.3); 42),
+                                                cache, :k) for _ in 1:4]
+    @test all(==(42), fetch.(tasks)) && calls[] == 1
+
+    dir = mktempdir()
+    src = joinpath(dir, "work.vrw")
+    write(src, synthetic_workspace())
+    s = DesignSession(resolution = :coarse)
+    import_visrad_workspace!(s, src)
+    record!(s)                                                # as a window does after each event
+    ts = s.target
+    set_cavity!(s.drive, false)
+    queue = Channel{Any}(Inf)
+    s.deliver[] = f -> put!(queue, f)
+    s.spawn[] = true
+    i = part_index(ts, :CAD_0)
+    n0 = length(elements(ts.target[], :CAD_0))
+    # an element size not meshed yet: the edit is committed at once, the part drawn from
+    # its file's facets (4) until it is remeshed on a worker; a drive asked for meanwhile
+    # waits for it
+    @test edit_part!(ts, i, :h, "0.31")
+    record!(s)
+    @test ts.parts[][i].values[:h] == 0.31 && ts.pending[] == Set([:CAD_0])
+    @test length(elements(ts.target[], :CAD_0)) == 4 && occursin("remeshing CAD_0", target_summary(ts))
+    build_scenario!(s)
+    @test s.build_queued[] && !s.drive.building[] && task_status(s, :drive)[1] === :busy
+    @test occursin("waiting for CAD_0", s.drive.status[])
+    drain_until(() -> isempty(ts.pending[]) && s.drive.scenario[] !== nothing && !s.drive.building[] &&
+                      s.drive.result[] !== nothing, queue)
+    n1 = length(elements(ts.target[], :CAD_0))
+    @test n1 > 4 && n1 != n0 && !drive_stale(s) && !s.build_queued[]
+    # undo and redo: both sizes are meshed now, so no job
+    @test undo!(s) && isempty(ts.pending[]) && ts.parts[][i].values[:h] == 0
+    @test length(elements(ts.target[], :CAD_0)) == n0
+    @test redo!(s) && isempty(ts.pending[]) && length(elements(ts.target[], :CAD_0)) == n1
+    # two edits in a row: the second's job supersedes the first's, and the target is built
+    # from the design as it is when the meshing is done (a move made meanwhile kept)
+    @test edit_part!(ts, i, :h, "0.27") && edit_part!(ts, i, :h, "0.23")
+    j = part_index(ts, :Marker)
+    @test edit_part!(ts, j, :x, "1.0") && ts.pending[] == Set([:CAD_0])
+    drain_until(() -> isempty(ts.pending[]), queue)
+    @test ts.parts[][i].values[:h] == 0.23 && ts.parts[][j].values[:x] == 1.0
+    n2 = length(elements(ts.target[], :CAD_0))
+    # the same as an inline build
+    s.spawn[] = false
+    s.deliver[] = f -> f()
+    ref = build_target(ts)
+    @test n2 == count(==(findfirst(c -> c.name === :CAD_0, ref.components)), ref.elem_comp)
+    # a session saved with a size not meshed yet loads at once in a window
+    f = joinpath(dir, "cad.briareus.toml")
+    edit_part!(ts, i, :h, "0.19")
+    save_session(f, s)
+    s2 = DesignSession(resolution = :coarse)
+    s2.deliver[] = g -> put!(queue, g)
+    s2.spawn[] = true
+    empty!(Controllers._VRW_PARTS)                            # as in a new window
+    empty!(Controllers._PART_MEMO)
+    load_session!(s2, f)
+    @test s2.target.pending[] == Set([:CAD_0]) && length(elements(s2.target.target[], :CAD_0)) == 4
+    drain_until(() -> isempty(s2.target.pending[]), queue)
+    @test length(elements(s2.target.target[], :CAD_0)) == length(elements(ts.target[], :CAD_0))
+    # a window closed while a part remeshes: the drive meshes it inline
+    @test edit_part!(s2.target, i, :h, "0.17") && !isempty(s2.target.pending[])
+    Controllers._abandon_jobs!(s2)
+    s2.spawn[] = false
+    s2.deliver[] = g -> g()
+    build_scenario!(s2)
+    @test isempty(s2.target.pending[]) && s2.drive.scenario[] !== nothing
+    while isready(queue)                                      # the dropped job's delivery
+        take!(queue)()
     end
 end
 

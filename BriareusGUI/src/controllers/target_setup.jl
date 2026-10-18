@@ -153,7 +153,7 @@ Placement and material fields of every part: `(key, label, unit, default)`. The 
 is rotated by `rotation` about its own axis, then tilted to polar angle `theta` and
 azimuth `phi` (VisRad's Polar/Azimuthal/Rotation order: the axis then points along
 `(θ, φ)`), then moved to `(x, y, z)`. `h` (mm) overrides the mesh element size (0:
-the target's).
+the target's; for a VisRad primitive, VisRad's own grid, see [`part_size_label`](@ref)).
 """
 const PART_FIELDS = ((:x, "x", "mm", 0.0), (:y, "y", "mm", 0.0), (:z, "z", "mm", 0.0),
                      (:theta, "Axis polar θ", "°", 0.0), (:phi, "Axis azimuth φ", "°", 0.0),
@@ -335,13 +335,30 @@ end
 The core components of a part: one for every kind but `:visrad`, whose object can be a
 primitive hohlraum (wall, caps and entrance holes). A VisRad object keeps its own place
 in the chamber (VisRad's frames), moved further by the part's placement; its windings
-are repaired and its CAD surface remeshed into elements of the part's size. With `raw`
+are repaired and its CAD surface remeshed into elements of the part's size. A VisRad
+primitive (rectangle, sphere, cylindrical hohlraum) keeps VisRad's grid, which
+reproduces VisRad's element table, unless the part sets its own element size. With `raw`
 a VisRad CAD part keeps its file's facets as they are (no winding repair, no remeshing:
 for drawing a part left out of the calculations, at no meshing cost).
 """
 function part_components(p::PartSpec, h::Real;
                          frame = ([1.0 0.0 0.0; 0.0 1.0 0.0; 0.0 0.0 1.0], zero(Vec3)),
                          raw::Bool = false)
+    # the same components (identical objects) for the same part, size and frame, so the
+    # targets built from them are found again (`_target_of`): an edit elsewhere, an undo
+    lock(() -> length(_PART_MEMO) > 512 && empty!(_PART_MEMO), _STL_LOCK)
+    return _cached(() -> _part_components(p, h, frame, raw), _PART_MEMO, _part_key(p, h, frame, raw))
+end
+
+const _PART_MEMO = Dict{Any,Vector{Component}}()
+
+function _part_key(p::PartSpec, h::Real, frame, raw::Bool)
+    stamp = isfile(p.file) ? (mtime(p.file), filesize(p.file)) : nothing
+    return (p.kind, p.name, sort!(collect(p.values)), p.two_sided, p.inward, p.aperture, p.file,
+            p.object, stamp, Float64(h), Float64.(vec(frame[1])), Vec3(frame[2]...), raw)
+end
+
+function _part_components(p::PartSpec, h::Real, frame, raw::Bool)
     Rf, tf = frame
     R = Rf * _part_rotation(p)
     center = Rf * part_center(p) + tf
@@ -383,9 +400,7 @@ function part_components(p::PartSpec, h::Real;
         v[:scale] > 0 || throw(ArgumentError("$(p.name): the scale must be positive"))
         # facing the target center, remeshed into elements of the part's size
         toward = transpose(R) * (zero(Vec3) - center)
-        # a whole file, or one solid of a multi-solid file (`object`: its position)
-        m = isempty(p.object) ? _stl_part_mesh(p.file, v[:scale], hp, toward, p.inward) :
-            _stl_solid_mesh(p.file, parse(Int, p.object), v[:scale], hp, toward, p.inward)
+        m = _stl_mesh(p, hp, toward; raw)
         surf = nothing
     elseif k === :cylinder
         r, L = v[:r1], v[:length]
@@ -405,38 +420,91 @@ function part_components(p::PartSpec, h::Real;
 end
 
 # A VisRad object's components in the chamber frame (windings repaired toward `toward`,
-# CAD surfaces remeshed into elements of `h`; with `raw` the file's facets as they are),
-# kept per workspace version and settings: every edit rebuilds the target, and
-# remeshing a CAD part of 10⁵ facets takes tens of seconds.
+# CAD surfaces remeshed into elements of `h`; with `raw` the file's facets as they are;
+# primitives on VisRad's grid unless the part sets its own element size), kept per
+# workspace version and settings: every edit rebuilds the target, and remeshing a CAD
+# part of 10⁵ facets takes tens of seconds.
 const _VRW_PARTS = Dict{Any,Vector{Component}}()
 
 # `cache[key]`, computed by `f()` outside the lock when missing (parts mesh in parallel,
-# and a long meshing never holds up the GUI thread's lookups of other parts).
+# and a long meshing never holds up the GUI thread's lookups of other parts). A key
+# being computed is computed once: other callers wait for it (an edit made while a
+# part remeshes in the background asks for the same part again).
+const _INFLIGHT = Dict{Any,Base.Event}()
+
 function _cached(f, cache::AbstractDict, key)
-    v = lock(() -> get(cache, key, nothing), _STL_LOCK)
-    v === nothing || return v
-    v = f()
-    return lock(() -> get!(cache, key, v), _STL_LOCK)
+    ev, mine = lock(_STL_LOCK) do
+        haskey(cache, key) && return (nothing, false)
+        e = get(_INFLIGHT, key, nothing)
+        e === nothing || return (e, false)
+        e = _INFLIGHT[key] = Base.Event()
+        return (e, true)
+    end
+    ev === nothing && return lock(() -> cache[key], _STL_LOCK)
+    if !mine
+        wait(ev)
+        v = lock(() -> get(cache, key, nothing), _STL_LOCK)
+        return v === nothing ? _cached(f, cache, key) : v      # it failed there: try here
+    end
+    try
+        v = f()
+        lock(() -> (cache[key] = v), _STL_LOCK)
+        return v
+    finally
+        lock(() -> delete!(_INFLIGHT, key), _STL_LOCK)
+        notify(ev)
+    end
+end
+
+_iscached(cache::AbstractDict, key) = lock(() -> haskey(cache, key), _STL_LOCK)
+
+# The cache key of a VisRad part's components, the element size a primitive takes
+# (`nothing`: VisRad's grid, which reproduces VisRad's element table) and whether the
+# part is drawn from its file's facets (`raw`, CAD only).
+function _visrad_key(p::PartSpec, o::VisRadObject, h, toward, raw::Bool)
+    v = p.values
+    cad = o.kind === :mesh
+    ph = cad || v[:h] <= 0 ? nothing : v[:h]
+    raw &= cad
+    key = (abspath(p.file), mtime(p.file), p.object, raw ? 0.0 : cad ? Float64(h) : something(ph, 0.0),
+           raw || !cad ? nothing : round.(Tuple(toward); digits = 9), p.two_sided, v[:albedo],
+           v[:conversion], p.name, raw)
+    return key, ph, raw
 end
 
 function _visrad_components(p::PartSpec, h, toward; raw::Bool = false)
     v = p.values
     o = _visrad_object(p.file, p.object)
-    raw &= o.kind === :mesh
-    key = (abspath(p.file), mtime(p.file), p.object, raw ? 0.0 : Float64(h),
-           raw ? nothing : round.(Tuple(toward); digits = 9), p.two_sided, v[:albedo],
-           v[:conversion], p.name, raw)
+    cad = o.kind === :mesh
+    key, ph, raw = _visrad_key(p, o, h, toward, raw)
     _cached(_VRW_PARTS, key) do
         mat = Material(p.name; albedo = v[:albedo], conversion = v[:conversion])
         cs = raw ? visrad_component(o; material = mat, two_sided = p.two_sided) :
              visrad_component(o; material = mat, two_sided = p.two_sided, orient = !p.two_sided,
-                              toward, remesh = o.kind === :mesh ? h : nothing)
+                              toward, remesh = cad ? h : nothing, primitive_h = ph)
         isempty(cs) && throw(ArgumentError("$(p.name): VisRad object type $(o.type) is not supported"))
         # components carry the part's name (renamed, or given a role), not the object's
         String(p.name) == o.name ? cs :
         [Component(String(p.name) * String(c.name)[ncodeunits(o.name)+1:end], c.mesh, c.material;
                    kind = c.kind, two_sided = c.two_sided, surface = c.surface) for c in cs]
     end
+end
+
+"""
+    part_size_label(p::PartSpec) -> String
+
+The label of a part's element-size field: what 0 means for it (the target's size, or
+for a VisRad primitive VisRad's own grid).
+"""
+function part_size_label(p::PartSpec)
+    p.kind === :visrad || return "Element size (0: target's)"
+    cad = try
+        _visrad_object(p.file, p.object).kind === :mesh
+    catch err
+        err isa ArgumentError || rethrow()
+        true
+    end
+    return cad ? "Element size (0: target's)" : "Element size (0: VisRad's grid)"
 end
 
 "Names of the components a VisRad object makes (without meshing its CAD)."
@@ -459,28 +527,40 @@ function _visrad_object(file::AbstractString, object::AbstractString)
     return ws.objects[i]
 end
 
-# An STL file's mesh, oriented (`orient_mesh`: closed solids face out of their material,
-# open sheets toward `toward`, flipped for `inward`) and remeshed into elements of `h`.
-# Every edit rebuilds the target, so the result is kept per file version and settings.
+# An STL part's mesh: its file's facets (a whole file, or solid `object` of a
+# multi-solid file) scaled to mm, oriented (`orient_mesh`: closed solids face out of
+# their material, open sheets toward `toward`, flipped for `inward`) and remeshed into
+# elements of `h`; with `raw` the facets as they are (drawing only). Every edit rebuilds
+# the target, so the result is kept per file version and settings.
 const _STL_CACHE = Dict{Any,Mesh}()
 const _STL_LOCK = ReentrantLock()
 
-# NOTE(stl solids): `_stl_solid_mesh` below runs the same pipeline on one solid of a
-# multi-solid file (`add_stl_parts!`); keep the two in step.
-function _stl_part_mesh(file::AbstractString, scale, h, toward, inward::Bool)
-    isfile(file) || throw(ArgumentError("STL file not found: $file"))
-    key = (abspath(file), mtime(file), filesize(file), Float64(scale), Float64(h),
-           round.(Tuple(toward); digits = 9), inward)
-    lock(_STL_LOCK) do
-        get!(_STL_CACHE, key) do
-            m = remesh_mesh(orient_mesh(read_stl(file; scale); toward); size = h)
-            inward ? Mesh(m.vertices, [(a, c, b) for (a, b, c) in m.triangles], m.patches) : m
+function _stl_key(p::PartSpec, h, toward, raw::Bool)
+    isfile(p.file) || throw(ArgumentError("STL file not found: $(p.file)"))
+    return (abspath(p.file), mtime(p.file), filesize(p.file), p.object, p.values[:scale],
+            raw ? 0.0 : Float64(h), raw ? nothing : round.(Tuple(toward); digits = 9),
+            !raw && p.inward)
+end
+
+function _stl_mesh(p::PartSpec, h, toward; raw::Bool = false)
+    scale = p.values[:scale]
+    _cached(_STL_CACHE, _stl_key(p, h, toward, raw)) do
+        m0 = if isempty(p.object)
+            read_stl(p.file; scale)
+        else
+            solids = _stl_solids(p.file)
+            k = parse(Int, p.object)
+            1 <= k <= length(solids) || throw(ArgumentError("$(basename(p.file)) has no solid $k"))
+            m = last(solids[k])
+            Mesh([scale * v for v in m.vertices], m.triangles, m.patches)
         end
+        raw && return m0
+        m = remesh_mesh(orient_mesh(m0; toward); size = h)
+        p.inward ? Mesh(m.vertices, [(a, c, b) for (a, b, c) in m.triangles], m.patches) : m
     end
 end
 
-# Solid `k` of a multi-solid (ASCII) STL file, prepared as `_stl_part_mesh` prepares a
-# whole file. The file's solids are read once per version.
+# The solids of a multi-solid (ASCII) STL file, read once per version.
 const _STL_SOLIDS = Dict{Any,Vector{Pair{String,Mesh}}}()
 
 function _stl_solids(file::AbstractString)
@@ -489,17 +569,69 @@ function _stl_solids(file::AbstractString)
     return _cached(() -> read_stl_solids(file), _STL_SOLIDS, key)
 end
 
-function _stl_solid_mesh(file::AbstractString, k::Integer, scale, h, toward, inward::Bool)
-    solids = _stl_solids(file)
-    1 <= k <= length(solids) || throw(ArgumentError("$(basename(file)) has no solid $k"))
-    key = (abspath(file), mtime(file), filesize(file), k, Float64(scale), Float64(h),
-           round.(Tuple(toward); digits = 9), inward)
-    _cached(_STL_CACHE, key) do
-        m0 = last(solids[k])
-        m0 = Mesh([scale * v for v in m0.vertices], m0.triangles, m0.patches)
-        m = remesh_mesh(orient_mesh(m0; toward); size = h)
-        inward ? Mesh(m.vertices, [(a, c, b) for (a, b, c) in m.triangles], m.patches) : m
+# Whether part `p` (element size `h`, placed through `frame`) is meshed already: CAD
+# parts (VisRad CAD, STL) remesh for seconds to minutes and are cached; the other kinds
+# mesh at once. A part the geometry rejects counts as ready (the build says why).
+function _part_ready(p::PartSpec, h::Real, frame)
+    p.kind in (:visrad, :mesh) || return true
+    _iscached(_PART_MEMO, _part_key(p, h, frame, false)) && return true
+    try
+        Rf, tf = frame
+        R = Rf * _part_rotation(p)
+        center = Rf * part_center(p) + tf
+        hp = p.values[:h] > 0 ? p.values[:h] : Float64(h)
+        toward = transpose(R) * (zero(Vec3) - center)
+        if p.kind === :visrad
+            o = _visrad_object(p.file, p.object)
+            o.kind === :mesh || return true
+            return _iscached(_VRW_PARTS, first(_visrad_key(p, o, hp, toward, false)))
+        end
+        return _iscached(_STL_CACHE, _stl_key(p, hp, toward, false))
+    catch err
+        err isa ArgumentError || rethrow()
+        return true
     end
+end
+
+# Names of the CAD parts of a design that are in the calculations and not meshed yet.
+function _unmeshed_parts(kind, params, mesh::MeshSpec, parts, excluded)
+    out = Symbol[]
+    for p in parts
+        (p.kind in (:visrad, :mesh) && !(p.name in excluded)) || continue
+        frame = try
+            anchor_frame(p.anchor, kind, params, parts)
+        catch err
+            err isa ArgumentError || rethrow()
+            continue
+        end
+        _part_ready(p, mesh.h, frame) || push!(out, p.name)
+    end
+    return out
+end
+
+# Mesh `parts` (of the design's parts `all`) on worker threads, each once (the part
+# caches then serve the target build, its commit and later edits); `raw` parts (names)
+# keep their file's facets. Progress goes to `report`.
+function _mesh_parts(parts, kind, params, mesh, raw, report, label; all = parts)
+    n = length(parts)
+    finished = Threads.Atomic{Int}(0)
+    report("$label: meshing $n parts…")
+    tasks = map(parts) do p
+        Threads.@spawn begin
+            part_components(p, mesh.h; frame = anchor_frame(p.anchor, kind, params, all),
+                            raw = p.name in raw)
+            k = Threads.atomic_add!(finished, 1) + 1
+            k < n && report("$label: meshed $k of $n parts…")
+        end
+    end
+    for t in tasks
+        try
+            fetch(t)
+        catch err
+            err isa TaskFailedException ? throw(err.task.exception) : rethrow()
+        end
+    end
+    return nothing
 end
 
 """
@@ -551,6 +683,15 @@ hohlraum's diagnostic windows, [`WindowSpec`](@ref)s; other templates ignore the
 `parts` (free parts, [`PartSpec`](@ref)s), the built `target`, `error` (the last
 rejected edit), `excluded` (component names left out of the calculations, see
 [`set_excluded!`](@ref)) and `ghost` (those components, for drawing, or `nothing`).
+
+CAD parts (VisRad CAD, STL) are remeshed when their element size, the target's, or
+their placement changes, and when an undo or a session brings back a size not meshed
+before: seconds to minutes for 10⁵ facets. With `spawn[]` set (a window shares its
+session's) that runs on worker threads: the edit is committed at once with those parts
+drawn from their file's facets, `pending` names them, and the target is built again
+from the current design when they are ready (through `deliver[]`, on the GUI thread).
+Without it the edit waits for the meshing.
+
 Edit with [`set_target_kind!`](@ref), [`edit_target!`](@ref),
 [`set_resolution!`](@ref), [`edit_mesh!`](@ref), the window functions
 ([`add_window!`](@ref), …) and the part functions ([`add_part!`](@ref), …).
@@ -566,6 +707,10 @@ struct TargetSetup
     error::Observable{String}
     excluded::Observable{Set{Symbol}}
     ghost::Observable{Union{Nothing,Target}}
+    pending::Observable{Set{Symbol}}       # CAD parts being remeshed (drawn from their facets)
+    spawn::Base.RefValue{Bool}             # remesh on workers (a window's session sets it)
+    deliver::Base.RefValue{Any}            # hands a worker's result to the GUI thread
+    mesh_job::Base.RefValue{Int}           # the latest remeshing job (earlier ones are dropped)
 end
 
 function TargetSetup(; kind::Symbol = :hohlraum, resolution::Symbol = :standard,
@@ -586,7 +731,8 @@ function TargetSetup(; kind::Symbol = :hohlraum, resolution::Symbol = :standard,
     return TargetSetup(Observable(kind), Observable(params), Observable(mesh),
                        Observable(_preset_of(mesh)), Observable(ws), Observable(ps),
                        Observable(t), Observable(""), Observable(Set{Symbol}()),
-                       Observable{Union{Nothing,Target}}(nothing))
+                       Observable{Union{Nothing,Target}}(nothing), Observable(Set{Symbol}()),
+                       Ref(false), Ref{Any}(f -> f()), Ref(0))
 end
 
 """
@@ -606,6 +752,14 @@ build_target(kind::Symbol, p::AbstractDict, resolution::Symbol, windows = Window
 function build_target(kind::Symbol, p::AbstractDict, mesh::MeshSpec,
                       windows::AbstractVector{WindowSpec} = WindowSpec[],
                       parts::AbstractVector{PartSpec} = PartSpec[]; raw = ())
+    return _target_of(_target_components(kind, p, mesh, windows, parts; raw))
+end
+build_target(ts::TargetSetup) = build_target(ts.kind[], ts.params[], ts.mesh[], ts.windows[], ts.parts[])
+
+# The components of a design (`raw`: names of CAD parts drawn from their file's facets).
+function _target_components(kind::Symbol, p::AbstractDict, mesh::MeshSpec,
+                            windows::AbstractVector{WindowSpec} = WindowSpec[],
+                            parts::AbstractVector{PartSpec} = PartSpec[]; raw = ())
     frac(k, what) = 0 <= p[k] <= 1 || throw(ArgumentError("$what must be between 0 and 1"))
     mesh.h > 0 && mesh.capsule_h > 0 || throw(ArgumentError("element sizes must be positive"))
     comps = Component[]
@@ -647,9 +801,34 @@ function build_target(kind::Symbol, p::AbstractDict, mesh::MeshSpec,
         append!(comps, new)
     end
     isempty(comps) && throw(ArgumentError("the target is empty: add a part"))
-    return Target(comps)
+    return comps
 end
-build_target(ts::TargetSetup) = build_target(ts.kind[], ts.params[], ts.mesh[], ts.windows[], ts.parts[])
+
+# The `Target` of `comps`, built once for the same components (identical objects): the
+# few latest are kept, so an edit to a part left out of the calculations, or an undo,
+# finds its targets again (a NIF CAD workspace's take a second to build: BVHs of
+# 2 × 10⁵ facets).
+const _TARGETS = Pair{Vector{Component},Target}[]
+const _TARGETS_KEPT = 4
+
+function _target_of(comps::Vector{Component})
+    same(e) = length(e.first) == length(comps) && all(k -> e.first[k] === comps[k], eachindex(comps))
+    t = lock(_STL_LOCK) do
+        i = findlast(same, _TARGETS)
+        i === nothing && return nothing
+        e = _TARGETS[i]
+        deleteat!(_TARGETS, i)                 # the most recently used last
+        push!(_TARGETS, e)
+        return e.second
+    end
+    t === nothing || return t
+    t = Target(comps)
+    lock(_STL_LOCK) do
+        push!(_TARGETS, comps => t)
+        length(_TARGETS) > _TARGETS_KEPT && popfirst!(_TARGETS)
+    end
+    return t
+end
 
 """
     foil_center(params) -> Vec3
@@ -659,30 +838,34 @@ Center of the foil of a `:foil` target: `distance` mm from TCC along +x, facing 
 foil_center(p::AbstractDict) = Vec3(p[:distance], 0.0, 0.0)
 foil_center(ts::TargetSetup) = foil_center(ts.params[])
 
-# A built target split into the components in the calculations and those left out
-# (`excluded`, drawn as a ghost: `nothing` when none is).
-function _split_excluded(t::Target, excluded)
-    out = Set(c.name for c in t.components if c.name in excluded)
-    isempty(out) && return t, nothing
-    keep = [c for c in t.components if !(c.name in out)]
+# A design's components split into the target of those in the calculations and that of
+# those left out (`excluded`, drawn as a ghost: `nothing` when none is).
+function _split_components(comps::Vector{Component}, excluded)
+    keep = [c for c in comps if !(c.name in excluded)]
     isempty(keep) && throw(ArgumentError("every component is left out of the calculations"))
-    return Target(keep), Target([c for c in t.components if c.name in out])
+    length(keep) == length(comps) && return _target_of(keep), nothing
+    return _target_of(keep), _target_of([c for c in comps if c.name in excluded])
 end
 
 # Rebuild with changed inputs, committing them only if the geometry accepts them.
 # `prebuilt` is the `(target, ghost)` of exactly these inputs when a worker built it
-# already ([`import_visrad_workspace!`](@ref)).
+# already ([`import_visrad_workspace!`](@ref)). With `spawn[]`, CAD parts not meshed yet
+# are drawn from their file's facets and meshed on workers (`pending`), and the target
+# is built again when they are ready.
 function _try_build!(ts::TargetSetup; kind = ts.kind[], params = ts.params[], mesh = ts.mesh[],
                      windows = ts.windows[], parts = ts.parts[], excluded = ts.excluded[],
                      prebuilt = nothing)
     try
+        waiting = prebuilt === nothing && ts.spawn[] ?
+                  _unmeshed_parts(kind, params, mesh, parts, excluded) : Symbol[]
         # components left out of the calculations (those still in the target)
         t, ghost = prebuilt === nothing ?
-                   _split_excluded(build_target(kind, params, mesh, windows, parts; raw = excluded),
-                                   excluded) :
+                   _split_components(_target_components(kind, params, mesh, windows, parts;
+                                                        raw = union(Set{Symbol}(excluded), waiting)),
+                                     excluded) :
                    prebuilt
         _assign!(ts.excluded, Set{Symbol}(excluded))
-        ts.ghost[] = ghost
+        ts.ghost[] === ghost || (ts.ghost[] = ghost)
         kind == ts.kind[] || (ts.kind[] = kind)
         params === ts.params[] || (ts.params[] = params)
         if mesh != ts.mesh[]
@@ -691,14 +874,37 @@ function _try_build!(ts::TargetSetup; kind = ts.kind[], params = ts.params[], me
         end
         windows === ts.windows[] || (ts.windows[] = windows)
         parts === ts.parts[] || (ts.parts[] = parts)
-        ts.target[] = t
+        t === ts.target[] || (ts.target[] = t)
         ts.error[] = ""
+        g = (ts.mesh_job[] += 1)                  # a meshing job for earlier inputs is dropped
+        _assign!(ts.pending, Set{Symbol}(waiting))
+        isempty(waiting) || _mesh_in_background!(ts, g, waiting, kind, params, mesh, parts)
         return true
     catch err
         err isa ArgumentError || rethrow()
         ts.error[] = _errmsg(err)
         return false
     end
+end
+
+# Mesh the parts `names` on workers, then build the target again from the design as it
+# is then (job `g`: a later edit's job supersedes it; a part both ask for is meshed once).
+function _mesh_in_background!(ts::TargetSetup, g::Integer, names, kind, params, mesh, parts)
+    deliver = ts.deliver[]
+    todo = [p for p in parts if p.name in names]
+    job = () -> _mesh_parts(todo, kind, params, mesh, Set{Symbol}(), _ -> nothing, ""; all = parts)
+    _run_job(() -> (out = _try_job(job); deliver(() -> _meshed!(ts, g, out))), true)
+    return nothing
+end
+
+function _meshed!(ts::TargetSetup, g::Integer, out)
+    g == ts.mesh_job[] || return false
+    if out.err !== nothing
+        ts.error[] = "remeshing " * join(sort!(String.(collect(ts.pending[]))), ", ") * " failed: " *
+                     _errmsg(out.err)
+        return false
+    end
+    return _try_build!(ts)
 end
 
 """
@@ -1277,7 +1483,8 @@ function target_summary(ts::TargetSetup)
     np = length(ts.parts[])
     np > 0 && ts.kind[] !== :custom && (kind *= np == 1 ? " + 1 part" : " + $np parts")
     ts.kind[] === :custom && (kind *= np == 1 ? " (1 part)" : " ($np parts)")
-    return "$kind · $(nelements(t)) elements"
+    pend = isempty(ts.pending[]) ? "" : " · remeshing " * join(sort!(String.(collect(ts.pending[]))), ", ")
+    return "$kind · $(nelements(t)) elements" * pend
 end
 
 "Names of a target's components, in order."

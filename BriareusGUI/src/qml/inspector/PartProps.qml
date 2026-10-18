@@ -37,7 +37,8 @@ ColumnLayout {
     }
     Note {
         visible: app.partKind === "VisRad object"
-        text: "A VisRad CAD part's element size (below; 0: the target's) sets its remeshing. " +
+        text: "A VisRad CAD part's element size (below; 0: the target's) sets its remeshing; a " +
+              "VisRad rectangle, sphere or hohlraum keeps VisRad's grid unless given a size. " +
               "Mounting hardware far from the target is drawn only after an import; put it back " +
               "in the calculations for the laser and clearance to see it (the drive's cavity " +
               "leaves it out of the x-ray view factors either way)."

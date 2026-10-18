@@ -98,6 +98,46 @@ function _warm_glyph_atlas!()
     return
 end
 
+# Compile what the canvases first do with a drive or a CAD import before the window
+# opens, so the first drive result, the first coloring by a field and the first parts
+# left out of the calculations do not stall the window for most of a second each (JIT
+# compilation, measured on a NIF CAD workspace; the package's precompile workload does
+# not keep these). CPU side: a filled flux map and a field colorbar on throwaway
+# canvases (their own session). GL side, at the window's first frame: the transparent
+# ghost plot is drawn from a degenerate triangle (invisible), and the colorbar is shown
+# (as a drive field shows it) and hidden again after that frame.
+function _warm_canvases!(sh)
+    ws = DesignSession(resolution = :coarse)
+    mc = map_canvas(ws)
+    x, y = collect(1.0:4.0), collect(1.0:3.0)
+    _update!(mc.heatmap, x, y, Float32[k + j for k in 1:4, j in 1:3]; colorrange = (1.0, 7.0))
+    mc.ax.aspect[] = AxisAspect(2)
+    reset_limits!(mc.ax)
+    sc = scene_canvas(ws)
+    cb = sc.colorbar
+    cb.colormap[] = FIELD_COLORMAP
+    cb.limits[] = (0.0, 1.3e14)
+    cb.ticks[] = Makie.automatic
+    cb.label[] = Controllers.DRIVE_FIELD_LABELS[:incident]
+    _show_colorbar!(sc, true)
+    # the window's own canvas
+    c = sh.scene
+    sh.sess.target.ghost[] === nothing && _update!(c.ghost, _NOTRI...; visible = true)
+    if !c.colorbar.blockscene.visible[]
+        _show_colorbar!(c, true)
+        ticks = Ref(0)
+        once = Ref{Any}(nothing)
+        once[] = on(events(c.fig.scene).tick) do _
+            # a tick precedes each frame's drawing: hide it at the second
+            (ticks[] += 1) < 2 && return
+            off(once[])
+            # unless a drive field colors the body by now
+            _body_coloring(sh.sess) === nothing && (_show_colorbar!(c, false); c.dirty[] = true)
+        end
+    end
+    return nothing
+end
+
 # After the window closes Qt has destroyed its GL contexts: forget the canvas's
 # screens so GLMakie neither renders to them nor frees them at exit.
 function _release_qml_screens!()
@@ -361,7 +401,7 @@ function BriareusShell(sess::DesignSession; queue::Channel{Any} = Channel{Any}(I
     ts, bt, dr, st, rv, tl, v = sess.target, sess.beams, sess.drive, sess.optimize, sess.review,
                                 sess.talis, sess.view
     for obs in (sess.status, sess.meshing, ts.kind, ts.params, ts.mesh, ts.resolution, ts.windows, ts.parts,
-                ts.target, ts.error,
+                ts.target, ts.error, ts.pending,
                 bt.beams, bt.enabled, bt.preset, bt.by, bt.path, bt.error, bt.warnings,
                 dr.scenario, dr.building, dr.result, dr.evaluating, dr.field, dr.view,
                 dr.cavity, dr.cavity_point, dr.films,
@@ -447,6 +487,8 @@ function _refresh_view!(sh::BriareusShell)
     busy = String[]
     dr, st, rv, tl = sh.sess.drive, sh.sess.optimize, sh.sess.review, sh.sess.talis
     isempty(sh.sess.meshing[]) || push!(busy, sh.sess.meshing[])
+    pend = sh.sess.target.pending[]
+    isempty(pend) || push!(busy, "remeshing " * join(sort!(String.(collect(pend))), ", "))
     dr.building[] && push!(busy, "drive " * Controllers._seconds(time() - dr.started[]))
     st.running[] && push!(busy, "optimizing")
     rv.running[] && push!(busy, "clearance $(rv.progress[][1])/$(rv.progress[][2])")
@@ -556,7 +598,7 @@ function _refresh_selection!(sh::BriareusShell)
                        for (k, label, unit, _) in PART_SIZE_FIELDS[p.kind]];
                       [FieldRow(String(k), label, unit, _num(pos[k]))
                        for (k, label, unit) in PART_POSITION_FIELDS[p.coords]];
-                      [FieldRow(String(k), label, unit, _num(p.values[k]))
+                      [FieldRow(String(k), k === :h ? part_size_label(p) : label, unit, _num(p.values[k]))
                        for (k, label, unit, _) in PART_FIELDS if !(k in (:x, :y, :z))]]
             _sync_rows!(sh.rows[:partFieldModel], sh.models[:partFieldModel], fields)
         end
@@ -790,6 +832,7 @@ const _SHELL = Ref{Union{Nothing,BriareusShell}}(nothing)
 # through it); `request_close()` closes the window from Julia.
 const _TICK_HOOK = Ref{Any}(nothing)
 const _CLOSE_REQUESTED = Ref(false)
+const _LAST_REFRESH = Ref(0.0)
 
 """
     request_close()
@@ -873,11 +916,19 @@ function br_tick()
         end
     end
     sess = sh.sess
-    # running jobs report elapsed time
-    (sess.drive.building[] || sess.optimize.running[] || sess.review.running[] ||
-     sess.talis.running[]) && (sh.dirty[] = true)
     # after any action: note the design for undo, then show the new state
-    sh.dirty[] && (sh.dirty[] = false; record!(sess); _refresh!(sh))
+    if sh.dirty[]
+        sh.dirty[] = false
+        record!(sess)
+        _refresh!(sh)
+        _LAST_REFRESH[] = time()
+    elseif (sess.drive.building[] || sess.optimize.running[] || sess.review.running[] ||
+            sess.talis.running[] || !isempty(sess.target.pending[])) && time() - _LAST_REFRESH[] > 0.25
+        # running jobs report elapsed time, four times a second (not a design edit: a
+        # snapshot for undo every tick took a third of the GUI thread during a drive)
+        _refresh!(sh)
+        _LAST_REFRESH[] = time()
+    end
     redraw = sh.scene.dirty[] || sh.map.dirty[]
     sh.scene.dirty[] = false
     sh.map.dirty[] = false
@@ -1506,6 +1557,7 @@ function briareus(sess::Union{Nothing,DesignSession} = nothing; kind::Symbol = :
         _qt_init!()
         _warm_glyph_atlas!()
         sh = BriareusShell(sess; queue)
+        _warm_canvases!(sh)
         _SHELL[] = sh
         _CLOSE_REQUESTED[] = false
         _register_qml_functions()

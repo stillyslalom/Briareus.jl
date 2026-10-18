@@ -79,6 +79,7 @@ struct DesignSession
     visrad_source::Base.RefValue{String}   # the imported VisRad workspace (export template)
     meshing::Observable{String}            # a workspace import or CAD meshing in progress ("" when none)
     mesh_generation::Base.RefValue{Int}    # import and meshing requests (latest wins)
+    build_queued::Base.RefValue{Bool}      # a drive asked for while CAD parts remesh
 end
 
 function DesignSession(; kind::Symbol = :hohlraum, resolution::Symbol = :standard,
@@ -88,9 +89,11 @@ function DesignSession(; kind::Symbol = :hohlraum, resolution::Symbol = :standar
     bt = beams === nothing ?
          BeamTable(preset_beams(preset; target_kind = kind, params = ts.params[]); preset) :
          BeamTable(beams)
+    # the target remeshes CAD parts on the session's workers (the same switches)
+    ts.deliver[] = deliver
     sess = DesignSession(ts, bt, DriveState(), OptimizeState(), ReviewState(), TaLISState(),
-                         ViewState(), Observable(""), Ref{Any}(deliver), Ref(false), EditHistory(),
-                         Ref(""), Observable(""), Ref(0))
+                         ViewState(), Observable(""), ts.deliver, ts.spawn, EditHistory(),
+                         Ref(""), Observable(""), Ref(0), Ref(false))
     default_selection!(sess.review, ts.target[])
     default_selection!(sess.talis, ts.target[])
     _connect!(sess)
@@ -142,6 +145,10 @@ function _connect!(sess::DesignSession)
     end
     on(_ -> _request_evaluation!(sess), dr.spot_radius)
     onany((_...) -> _drive_inputs_changed!(sess), dr.cavity, dr.cavity_point, dr.films)
+    # a drive asked for while CAD parts remeshed runs when they are ready
+    on(ts.pending) do pend
+        isempty(pend) && sess.build_queued[] && (sess.build_queued[] = false; build_scenario!(sess))
+    end
     # the x-ray image follows the drive
     on(dr.result) do res
         dr.image_request[] === nothing && return
@@ -241,6 +248,7 @@ function task_status(sess::DesignSession, task::Symbol)
     task in TASKS || throw(ArgumentError("unknown analysis :$task"))
     if task === :drive
         dr = sess.drive
+        sess.build_queued[] && return (:busy, dr.status[])
         dr.building[] && return (:busy, "computing view factors… " * _seconds(time() - dr.started[]))
         dr.scenario[] === nothing && return (:todo, isempty(dr.status[]) ? "not computed" : dr.status[])
         drive_stale(sess) && return (:attention, "target or beam ports changed: compute again")
@@ -323,6 +331,19 @@ function build_scenario!(sess::DesignSession)
     t = sess.target.target[]
     beams = sess.beams.beams[]
     isempty(beams) && (dr.status[] = "add beams first"; return sess)
+    pend = sess.target.pending[]
+    # parts left remeshing when a window closed: mesh them now
+    !isempty(pend) && !sess.spawn[] && _try_build!(sess.target)
+    pend = sess.target.pending[]
+    if !isempty(pend)
+        sess.build_queued[] = true
+        dr.generation[] += 1                              # drop a build in flight
+        dr.building[] = false
+        dr.status[] = "waiting for " * join(sort!(String.(collect(pend))), ", ") *
+                      " to be remeshed, then computing"
+        return sess
+    end
+    sess.build_queued[] = false
     g = (dr.generation[] += 1)
     cavity = dr.cavity[] ? (dr.cavity_point[], copy(dr.films[])) : nothing
     dr.building[] = true
@@ -472,8 +493,8 @@ function include_components!(sess::DesignSession, names, include::Bool; spawn::B
     report(msg) = deliver(() -> g == sess.mesh_generation[] && _assign!(sess.meshing, msg))
     job = function ()
         back = [p for p in parts if p.name in names]
-        _mesh_parts(back, kind, params, mesh, ex, report, label)
-        return _split_excluded(build_target(kind, params, mesh, windows, parts; raw = ex), ex)
+        _mesh_parts(back, kind, params, mesh, ex, report, label; all = parts)
+        return _split_components(_target_components(kind, params, mesh, windows, parts; raw = ex), ex)
     end
     commit = function (out)
         g == sess.mesh_generation[] || return
@@ -490,31 +511,6 @@ function include_components!(sess::DesignSession, names, include::Bool; spawn::B
     end
     _run_job(() -> (out = _try_job(job); deliver(() -> commit(out))), true)
     return sess
-end
-
-# Mesh `parts` on worker threads, each once (the part caches then serve the target
-# build, its commit and later edits); `raw` parts (names) keep their file's facets.
-# Progress goes to `report`.
-function _mesh_parts(parts, kind, params, mesh, raw, report, label)
-    n = length(parts)
-    finished = Threads.Atomic{Int}(0)
-    report("$label: meshing $n parts…")
-    tasks = map(parts) do p
-        Threads.@spawn begin
-            part_components(p, mesh.h; frame = anchor_frame(p.anchor, kind, params, parts),
-                            raw = p.name in raw)
-            k = Threads.atomic_add!(finished, 1) + 1
-            k < n && report("$label: meshed $k of $n parts…")
-        end
-    end
-    for t in tasks
-        try
-            fetch(t)
-        catch err
-            err isa TaskFailedException ? throw(err.task.exception) : rethrow()
-        end
-    end
-    return nothing
 end
 
 # Names of the CAD (mesh) objects reaching farther from TCC than twice the farthest aim
@@ -587,8 +583,8 @@ function import_visrad_workspace!(sess::DesignSession, path::AbstractString;
         union!(names, Symbol.(far))
         _mesh_parts(parts, :custom, params, mesh, names, report, file)
         report("$file: building the target…")
-        built = _split_excluded(build_target(:custom, params, mesh, WindowSpec[], parts; raw = names),
-                                names)
+        built = _split_components(_target_components(:custom, params, mesh, WindowSpec[], parts; raw = names),
+                                  names)
         return (; ws, parts, names, far, built)
     end
     commit = function (out)
@@ -954,6 +950,8 @@ load_preset!(sess::DesignSession, preset::Symbol) =
 function _abandon_jobs!(sess::DesignSession)
     sess.mesh_generation[] += 1
     _assign!(sess.meshing, "")
+    sess.target.mesh_job[] += 1            # parts still remeshing stay `pending`
+    sess.build_queued[] = false
     sess.drive.generation[] += 1
     sess.drive.eval_generation[] += 1
     sess.drive.building[] = false

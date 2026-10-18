@@ -55,7 +55,8 @@ and each analysis says when it is out of date.
     frame, and moves with it when the target's dimensions or that part change. Its
     position is given in Cartesian, cylindrical or spherical coordinates of that
     frame, chosen per part. A *VisRad object* part is a component of an imported
-    VisRad workspace. A *mesh* part reads an
+    VisRad workspace: a VisRad rectangle, sphere or cylindrical hohlraum keeps VisRad's
+    own grid (its element table) unless the part is given an element size. A *mesh* part reads an
     STL file (a CAD export; Target ▸ Add part ▸ Mesh from STL file), scaled to mm, with
     its windings repaired (`orient_mesh`) and its surface remeshed into elements of
     the part's size (`remesh_mesh`); a multi-body export (an ASCII STL of named solids)
@@ -118,6 +119,10 @@ and each analysis says when it is out of date.
   Drive properties list what the cavity kept of each part. A target whose x-ray view
   factors would not fit in half the memory (`radiation_size`: ≈ 27,000 elements on
   32 GB) gets the laser deposition alone, with the reason and the fix in the status.
+  A CAD part whose element size changes (its own, the target's, an undo or a loaded
+  session bringing back a size not meshed before) is remeshed on worker threads: the
+  edit takes effect at once with the part drawn from its file's facets ("remeshing …"
+  in the status), and a drive asked for meanwhile starts when the parts are ready.
 - **Results** (bottom tabs):
   - *Beam table:* every cone, quad or beam with its pointing, defocus, power and
     on/off, edited in place.

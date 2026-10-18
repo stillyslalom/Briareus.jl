@@ -309,6 +309,23 @@ end
     @test t.components[5].kind === :aperture
     @test all(norm((t.elem_centroid[i] - Vec3(-4, 0, 0))[1:2]) ≈ 2.55 * cos(π / 12) for i in w)  # 12 chords
     @test all(dot(t.elem_normal[i], t.elem_centroid[i] - Vec3(-4, 0, 0)) < 0 for i in w)  # normals in
+    # primitives at a given element size instead of VisRad's grid: same surfaces and places
+    rect = only(visrad_component(ws.objects[1]; primitive_h = 0.5))
+    @test npatches(rect.mesh) == 8 * 8                                   # 4 mm / 0.5 mm
+    tr = Target([rect])
+    @test sum(tr.elem_area) ≈ 16 && all(n -> n ≈ Vec3(1, 0, 0), tr.elem_normal)
+    hc = visrad_component(ws.objects[2]; primitive_h = 0.5)
+    @test [c.name for c in hc] == [c.name for c in t.components[2:6]]
+    cnt = hohlraum_counts(; length = 9.35, radius = 2.55, leh_radius = 1.52, h = 0.5)
+    @test npatches(hc[1].mesh) == cnt.nz * cnt.nphi && npatches(hc[2].mesh) == cnt.nr_cap * cnt.nphi
+    @test npatches(hc[4].mesh) == cnt.nr_leh * cnt.nphi ÷ 2 && hc[4].kind === :aperture
+    th = Target(hc)
+    @test sum(th.elem_area[th.comp_elems[1]]) ≈ 2π * 2.55 * 9.35 rtol = 1e-12
+    @test all(dot(th.elem_normal[i], th.elem_centroid[i] - Vec3(-4, 0, 0)) < 0 for i in th.comp_elems[1])
+    @test sum(th.elem_area[th.comp_elems[2]]) ≈ sum(t.elem_area[t.comp_elems[3]]) rtol = 1e-12
+    sph = only(visrad_component(ws.objects[5]; primitive_h = 0.2))
+    @test npatches(sph.mesh) > npatches(only(visrad_component(ws.objects[5])).mesh)
+    @test_throws ArgumentError visrad_component(ws.objects[1]; primitive_h = 0.0)
     # CAD mesh: outward front faces; two-sided on request
     @test all(dot(t.elem_normal[i], t.elem_centroid[i] - cad.position) > 0 for i in t.comp_elems[7])
     t2 = visrad_target(ws; select = o -> o.kind === :mesh, two_sided = o -> true)
