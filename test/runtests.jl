@@ -253,6 +253,80 @@ end
     end
 end
 
+@testset "VisRad beam profile" begin
+    # VisRad's model (VR/power_sources/set_laser_profile_props.html): the super-Gaussian
+    # keeps its shape along the beam, with semi-axes r(z) = r₀ √((z/z_R)² + 1),
+    # z_R = FL [(FL/(2 r₀ f#))² − 1]^(-1/2), cut off at the envelope and renormalized
+    # to the beam's power in each transverse plane. Reference: that closed form, its
+    # normalization summed radially here, integrated over elements by midpoints.
+    FL, F, ρe, n = 7695.0, 6.7, 1.6, 4.5
+    prof = VisRadProfile(; envelope = ρe, focal_length = FL)
+    spot = SuperGaussianSpot(0.6, 0.35; order = n, angle = 0.4)
+    zr(r) = FL / sqrt((FL / (2r * F))^2 - 1)
+    dr = ρe / 200_000
+    norm_in = 2π * sum(exp(-((i - 0.5) * dr)^n) * (i - 0.5) * dr for i in 1:200_000) * dr
+    function Iref(b, x)
+        e1, e2 = spot_axes(b)
+        d = x - (Vec3(b.aim) + b.defocus * direction(b))
+        s = dot(d, direction(b))
+        a = b.spot.a * sqrt(1 + (s / zr(b.spot.a))^2)
+        bb = b.spot.b * sqrt(1 + (s / zr(b.spot.b))^2)
+        q = (dot(d, e1) / a)^2 + (dot(d, e2) / bb)^2
+        return q > ρe^2 ? 0.0 : b.power / (norm_in * a * bb) * exp(-q^(n / 2))
+    end
+    # element integrals of Iref × |n·k| by an m × m midpoint rule on each triangle
+    function element_ref(t, b; m = 24)
+        k = direction(b)
+        E = zeros(nelements(t))
+        for e in 1:nelements(t), tri in t.elem_tris[e]
+            c = abs(dot(t.elem_normal[e], k))
+            dot(t.elem_normal[e], k) < 0 || continue
+            v0, a1, a2 = t.tri_v0[tri], t.tri_e1[tri], t.tri_e2[tri]
+            pts = [((i + 1 / 3) / m, (j + 1 / 3) / m) for i in 0:m-1 for j in 0:m-1-i]
+            append!(pts, [((i + 2 / 3) / m, (j + 2 / 3) / m) for i in 0:m-2 for j in 0:m-2-i])
+            E[e] += t.tri_area[tri] / m^2 * c * sum(Iref(b, v0 + λ * a1 + μ * a2) for (λ, μ) in pts)
+        end
+        return E
+    end
+    b = Beam("b"; theta = 0, phi = 0, power = 2.0, spot, fnumber = F, aim = (0.1, -0.2, 0.0))
+    # the profile itself, at and away from focus, inside and outside the envelope
+    e1, e2 = spot_axes(b)
+    for s in (0.0, 5.0, -8.0), (u, v) in ((0.0, 0.0), (0.4, 0.1), (-0.5, 0.3), (2.0, 0.0))
+        x = Vec3(b.aim) + s * direction(b) + u * e1 + v * e2
+        @test intensity(prof, b, x) ≈ Iref(b, x) rtol = 1e-6 atol = 1e-12
+    end
+    # power through transverse planes is the beam's at any distance from focus
+    for s in (0.0, 5.0)
+        h = 0.01
+        c = Vec3(b.aim) + s * direction(b)
+        @test sum(intensity(prof, b, c + u * e1 + v * e2) for u in -2:h:2, v in -2:h:2) * h^2 ≈ 2.0 rtol = 1e-3
+    end
+    # deposition on a foil normal to the beam, at focus and 5 mm from it (the spot grows
+    # by 18% and 47% along its axes), and on a foil tilted 40°
+    tf = Target(foil(:f, (0, 0, 0), (0, 0, 1); width = 4.0, n = 24))
+    tt = Target(foil(:f, (0, 0, 0), (sind(40), 0, cosd(40)); width = 4.0, n = 24))
+    for (tg, bx) in ((tf, b), (tf, remake(b; defocus = 5.0)), (tt, b))
+        d = deposit(DepositionOperator(tg, [bx]; profile = prof), [bx])
+        ref = element_ref(tg, bx)
+        @test sum(d.element) ≈ sum(ref) rtol = 2e-3
+        @test sum(ref) ≈ 2.0 rtol = 2e-3
+        bright = ref .> 0.05 * maximum(ref)
+        @test maximum(abs.(d.element[bright] ./ ref[bright] .- 1)) < 0.02
+    end
+    # near focus it agrees with the f-cone model, which has no envelope
+    op = DepositionOperator(tf, [b]; profile = prof)
+    dv, df = deposit(op, [b]).element, deposit(DepositionOperator(tf, [b]), [b]).element
+    bright = df .> 0.05 * maximum(df)
+    @test maximum(abs.(dv[bright] ./ df[bright] .- 1)) < 0.01
+    # differentiable in the aim; a beam subset keeps the profile; a Scenario passes it on
+    g(δ) = (bd = remake(b; aim = b.aim .+ δ .* (1.0, 0.0, 0.0)); E = deposit(op, [bd]).element;
+            sum(E .* getindex.(tf.elem_centroid, 1)))
+    @test ForwardDiff.derivative(g, 0.05) ≈ (g(0.05 + 1e-5) - g(0.05 - 1e-5)) / 2e-5 rtol = 1e-4
+    @test op[[1]].profile === prof
+    @test Scenario(tf, [b]; deposition_kw = (; profile = prof)).deposition.profile === prof
+    @test_throws ArgumentError VisRadProfile(; envelope = 0)
+end
+
 @testset "hohlraum + gradients" begin
     t = hohlraum(nz = 16, nphi = 24, capsule_ntheta = 12, capsule_nphi = 16)
     q = nif_quads()

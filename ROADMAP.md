@@ -220,17 +220,64 @@ Measured on the NIF hohlraum at the GUI's standard mesh (5,864 elements, 48 quad
   port; the x-ray image under Compute, unchecking it restores the previous view; menus
   sized to their entries; a stuck pan after losing focus with Shift held fixed.
 
+## Done (2026-10-17, VisRad deposition)
+- **3ω power under VisRad's red/green models:** under "Fraction of Total Beam Power" the
+  power column is the total and the blue cone carries 1 − f_G − f_R of it, whether or
+  not those cones are on. `read_visrad_workspace` and `write_visrad_workspace` now
+  apply it (both sample workspaces use it: 0.9 TW per 1 TW beam).
+- **Checked against a VisRad deposition table** (four NIF beams on a tilted 4 mm foil,
+  9 × 9 elements): totals agree to 1e-8, and elements above 5% of peak to 1.4%. The
+  faint wings differ by up to ~20%; see the research notes, "The faint wings".
+- **`VisRadProfile`**, VisRad's beam model, as a deposition option
+  (`DepositionOperator(...; profile)`, `Scenario(...; deposition_kw = (; profile))`,
+  `visrad_profile(workspace)`). The super-Gaussian keeps its shape along the beam,
+  with hyperbolic semi-axes, an envelope cut-off and per-plane power normalization,
+  instead of being convolved over the f-cone. It is differentiable like the default
+  model and tested against the closed form.
+
 ## Next
-1. **Sombrero and backlighter geometry.** Model the LEH shield as a component (a
+1. **VisRad deposition parity: needs runs in VisRad.** The goal: optimize in
+   Briareus with `profile = visrad_profile(ws)`, export with `write_visrad_workspace`,
+   and get the same deposition in VisRad. Near focus that holds today. What VisRad
+   does away from focus, and at envelopes, shadows and tilted surfaces, needs VisRad
+   output, all on the foil workspace unless noted:
+   - **Intersection-point export** (File ▸ Export, laser beam–target intersection
+     points; VR/files/laser_target_intpts_file.html). It lists a(z), b(z), n(z),
+     f_SQ(z), ΔL_W(z), ΔL_H(z) and M(z) at each hit, which pins down the parts of the
+     defocus law the manual leaves out: z₀ in n(z), and Γ, ΔL(z), M(z) in the
+     square-beam blend. Then add them to `VisRadProfile` and recheck the foil wings
+     (now up to ~20% off at 0.2–0.6 mm from focus).
+   - **Foil normal to the beams** (tilted to face the quad's mean port). With the
+     distance from focus nearly constant across the spot, this separates the focal
+     profile from the defocus law.
+   - **Focus sweep**: focus offsets of ±1, ±3 and ±10 mm on the same foil. Hohlraum
+     walls sit this far from focus, and that is where VisRad's shape-keeping profile
+     and Briareus's f-cone convolution differ most.
+   - **Envelope**: the same run with the envelope ratio changed (e.g. 2.0), on a
+     finer foil (e.g. 41 × 41). VisRad's effective cut-off lay near 1.64 1/e radii
+     against the file's 1.53645 (= (ln 1000)^(1/4.5), the 10⁻³ radius for n = 4.5).
+     The ratio's exact definition is open.
+   - **Power on tilted surfaces**: VisRad's foil total was exact to 1e-8, while
+     per-plane normalization gives 1.1e-4 too much at ~40°. A steeper foil (~70°)
+     would show whether VisRad renormalizes each beam's deposited total.
+   - **Shadowing**: a washer or sphere in front of the foil, and a hohlraum case with
+     LEH clipping. VisRad decides occultation on its 25 × 24 ray grid; Briareus uses
+     the beam axis through each point.
+   - **End-to-end**: a primitive hohlraum with a few quads, optimized here, exported,
+     and run in VisRad, with the workspace saved after computing. Reading the
+     `[Power Source Data]` tables back (a reader still to write; the rectangle's
+     elements run local-x fastest, the hohlraum's order is unknown) would turn this
+     into a routine comparison.
+2. **Sombrero and backlighter geometry.** Model the LEH shield as a component (a
    dimpled annulus), and the backlighter foil's placement relative to the diagnostic
    line of sight. The line-of-sight and clearance checks in the radiography tutorial
    then decide which bundles can drive the foil. This needs real dimensions.
-2. **Diagnostic windows: what remains.** The studies are in the tutorial (see Done).
+3. **Diagnostic windows: what remains.** The studies are in the tutorial (see Done).
    Open: the expanded foil's density (held at Lester's 1 g/cm³ through the
    normalization), a backing that absorbs and re-emits part of what the gold
    transmits, a computed gap-closure time (plasma filling the gap), and the windows'
    l = 4, which neither quad powers nor pointing removed.
-3. **Confirm against facility practice:**
+4. **Confirm against facility practice:**
    - the TaLIS 0.5° tolerance (pivot, and whether it replaces or adds to the error set);
    - the 1ω footprint side and shape;
    - which quads count as open for the 20° rule;
@@ -240,10 +287,10 @@ Measured on the NIF hohlraum at the GUI's standard mesh (5,864 elements, 48 quad
      spacing and the spot-size definition of custom profiles: one small workspace
      with a rotated cylinder and a rotated CAD part would settle most of them);
    - the NIF CMT XML schema.
-4. **Benchmark against VisRad.** Run `write_visrad_kit` cases at work and bring back the
+5. **Benchmark against VisRad.** Run `write_visrad_kit` cases at work and bring back the
    outputs for `compare_visrad`. This validates absolute drive levels and mode
    amplitudes.
-5. **VisRad workspace import: what `read_visrad_workspace` skips.** Each is warned
+6. **VisRad workspace import: what `read_visrad_workspace` skips.** Each is warned
    about or refused today. Most need a sample workspace that uses the feature, since
    the layout of the extra data is not seen yet.
    - Unconverted light: beams with 2ω/1ω on (the green/red power columns) as
@@ -263,27 +310,29 @@ Measured on the NIF hohlraum at the GUI's standard mesh (5,864 elements, 48 quad
      surfaces of revolution, multi-element objects.
    - CAD meshes tessellated as long slivers (curved walls): `coarsen_mesh` cannot
      shorten them; remeshing (e.g. onto a fitted cylinder) would.
-6. **GUI requests:** frames on a port axis (the chamber, the entrance holes, the foil
-   and other parts are done); clipping volumes; STEP import (needs a CAD kernel; STL
+7. **GUI requests:** a beam-model choice (Briareus's f-cone or `VisRadProfile`), set
+   to VisRad's with the workspace's parameters when one is imported, and passed to the
+   drive's `Scenario` (`controllers/drive.jl`); frames on a port axis (the chamber,
+   the entrance holes, the foil and other parts are done); clipping volumes; STEP import (needs a CAD kernel; STL
    and VisRad workspaces cover CAD meanwhile); an x-ray image that follows the camera
    as it moves; time in the window (pulse tables, drive histories and the retune's
    power histories plotted, rather than written to CSV).
    Adaptive mesh refinement of the radiation mesh where deposition varies fastest
    (the uniform fine mesh is converged but costs ~16k elements).
-7. **Time-dependent view factor.** Wall, LEH and spot motion from rad-hydro or a
+8. **Time-dependent view factor.** Wall, LEH and spot motion from rad-hydro or a
    parametric model; P2(t) swing. Retuning to a reference drive (see Done) assumes
    the reference's view factors hold through the pulse.
-8. **Shot-data calibration.** Fit effective parameters (cone multipliers, CBET
+9. **Shot-data calibration.** Fit effective parameters (cone multipliers, CBET
    multiplier/clamp, albedo) to measured P2/P4 and shock symmetry, with uncertainty.
    Reproduce P2-vs-Δλ curves.
-9. **Robust optimization and UQ: what remains.** Correlated errors (per bundle, per
+10. **Robust optimization and UQ: what remains.** Correlated errors (per bundle, per
    cone; target positioning, which moves every beam at once), time-dependent budgets
    (errors through `drive_history`), and inverse solves for a measured mode (MacGowan
    2021) as a documented workflow.
-10. **Backlighter physics.** CE(Z, I, τ) models with uncertainty, and the photometric
+11. **Backlighter physics.** CE(Z, I, τ) models with uncertainty, and the photometric
    chain to the detector.
-11. **Spectral radiosity.** Multigroup emission, detector responses along Dante and XRD
+12. **Spectral radiosity.** Multigroup emission, detector responses along Dante and XRD
     lines of sight, and brightness temperatures.
-12. **Scale.** Multi-ray partial visibility for view factors, hierarchical or iterative
+13. **Scale.** Multi-ray partial visibility for view factors, hierarchical or iterative
     radiosity, Float32 storage for more than 10⁴ elements, and GPU kernels.
-13. **Polar direct drive mode**, benchmarked against published GA optimizers.
+14. **Polar direct drive mode**, benchmarked against published GA optimizers.

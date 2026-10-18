@@ -339,6 +339,9 @@ end
     @test nb["B113"].aim ≈ b1.aim && nb["B113"].power ≈ 0.9
     @test nb["B113"].quad == nifb[findfirst(b -> b.name == "B113", nifb)].quad
     @test nb["B121"].power == 0 && nb["B468"].power == 0
+    # VisRad's beam model with the file's envelope ratio and final-optic distance (cm → mm)
+    vp = visrad_profile(ws)
+    @test vp.envelope == 1.53645 && vp.focal_length ≈ 7695
     @test_throws ArgumentError read_visrad_workspace(vrfile("not.vrw", "{\"json\": 1}"))
 
     # written back into the workspace: new pointing, focus, power and on/off, in each

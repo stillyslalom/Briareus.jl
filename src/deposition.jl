@@ -36,7 +36,8 @@ end
 """
     DepositionOperator(target, beams; level = 1, ncone = 13, resolution = 0.3,
                        reach = 2.0, maxlevel = 5, shadow = 0,
-                       backside_resolution = 1.0, edge_resolution = 0.01)
+                       backside_resolution = 1.0, edge_resolution = 0.01,
+                       profile = nothing)
 
 Precomputed laser-deposition quadrature. For each beam, every opaque triangle side that
 faces the beam and belongs to an element is sampled at `4^level` points, or more where
@@ -81,6 +82,16 @@ power on any surface that intercepts the whole beam is the beam power, at any
 distance from focus and any incidence; and shadows cast by objects near focus — a
 capsule at TCC, an LEH edge — are correlated with the part of the spot they block.
 
+`profile = VisRadProfile(...)` replaces this with VisRad's beam model, so that a
+design can be checked in VisRad and its deposition reproduced. The model keeps the
+super-Gaussian's shape along the beam, with semi-axes that grow on a hyperbola and an
+envelope cut-off. Points are then sampled along the beam axis only (`ncone` is
+ignored), and the beam axis through each point decides its shadowing. The two models
+agree near focus; away from it VisRad's spot keeps its shape while the f-cone
+convolution softens the edges. Power on a surface that intercepts the whole beam is
+the beam's power in planes normal to the beam, and only approximately on tilted ones
+(VisRad normalizes per transverse plane).
+
 The beams' ports must not change after construction.
 """
 struct DepositionOperator
@@ -93,6 +104,7 @@ struct DepositionOperator
     mask::Vector{Vector{UInt16}}   # visible cone directions (bit j-1 set: direction j)
     dest::Vector{Vector{Int32}}    # > 0: element; < 0: -(component) for an unmodeled back side
     plan::_DepositPlan             # work units of the threaded `deposit`
+    profile::Union{Nothing,VisRadProfile}   # nothing: the f-cone model
 end
 
 const _DEPOSIT_UNIT = 4096   # points per work unit
@@ -137,20 +149,26 @@ function _deposit_plan(ne::Integer, dest::Vector{Vector{Int32}}; unit::Integer =
     return _DepositPlan(boff, back, sortperm(cost; rev = true))
 end
 
-DepositionOperator(t::Target, ports, dirs, pts, w, normal, mask, dest) =
-    DepositionOperator(t, ports, dirs, pts, w, normal, mask, dest, _deposit_plan(nelements(t), dest))
+DepositionOperator(t::Target, ports, dirs, pts, w, normal, mask, dest,
+                   profile::Union{Nothing,VisRadProfile} = nothing) =
+    DepositionOperator(t, ports, dirs, pts, w, normal, mask, dest, _deposit_plan(nelements(t), dest),
+                       profile)
+DepositionOperator(t::Target, ports, dirs, pts, w, normal, mask, dest, plan::_DepositPlan) =
+    DepositionOperator(t, ports, dirs, pts, w, normal, mask, dest, plan, nothing)
 
 function DepositionOperator(t::Target, beams::AbstractVector{<:Beam}; level::Integer = 1,
                             ncone::Integer = 13, resolution = 0.3, reach = 2.0,
                             maxlevel::Integer = 5, shadow::Integer = 0,
-                            backside_resolution = 1.0, edge_resolution = 0.01)
+                            backside_resolution = 1.0, edge_resolution = 0.01,
+                            profile::Union{Nothing,VisRadProfile} = nothing)
     1 <= ncone <= 16 || throw(ArgumentError("ncone must be in 1:16"))
+    profile === nothing || (ncone = 1)               # VisRad's model: the beam axis only
     maxlv = max(maxlevel, level)
     nb = length(beams)
     # sub-triangle quadratures in barycentric form, shared by all triangles
     rules = [_bary_quadrature(l) for l in 0:maxlv]
     ε = _ray_eps(t)
-    geo = [_operator_beam(b, ncone) for b in beams]
+    geo = [_operator_beam(b, ncone, profile) for b in beams]
     flags, rimdist = _open_boundary(t)
     back = (; resolution, coarse = backside_resolution, edge = edge_resolution, flags, rimdist)
     # Work units are (beam, triangle range): beams differ in cost and the triangles near
@@ -184,22 +202,26 @@ function DepositionOperator(t::Target, beams::AbstractVector{<:Beam}; level::Int
         dest[bi] = D[perm]
     end
     return DepositionOperator(t, [b.port for b in beams], [g.ds for g in geo], pts, w, normal,
-                              mask, dest)
+                              mask, dest, profile)
 end
 
 const _OperatorPoints = @NamedTuple{P::Vector{Vec3}, W::Vector{Float64}, N::Vector{Vec3},
                                     M::Vector{UInt16}, D::Vector{Int32}}
 
 # Beam quantities the operator's sampling depends on (Float64 values).
-function _operator_beam(b::Beam, ncone)
+function _operator_beam(b::Beam, ncone, profile)
     k = direction(b)
     ds, _ = cone_directions(b, ncone)
     sp = b.spot
     amin = ForwardDiff.value(min(sp.a, sp.b))
-    extent = 2.5 * ForwardDiff.value(max(sp.a, sp.b)) * (sp.halo > 0 ? max(1, sp.halo_scale) : 1)
+    # footprint: 2.5 semi-axes grown by the f-cone; VisRad's envelope grows as a(z) does,
+    # within envelope × (a₀ + |z|/(2f#))
+    r = profile === nothing ? 2.5 : max(2.5, profile.envelope)
+    extent = r * ForwardDiff.value(max(sp.a, sp.b)) * (sp.halo > 0 ? max(1, sp.halo_scale) : 1)
     aim = Vec3(ForwardDiff.value.(b.aim))
     focus = aim + ForwardDiff.value(b.defocus) * k
-    return (; k, ds, amin, extent, focus, cone = 1 / (2b.fnumber))
+    cone = (profile === nothing ? 1.0 : max(1.0, profile.envelope)) / (2b.fnumber)
+    return (; k, ds, amin, extent, focus, cone)
 end
 
 # Lit quadrature points of one beam on the triangles `tris`.
@@ -412,13 +434,14 @@ _fullmask(ds) = UInt16((1 << length(ds)) - 1)
 "Operator restricted to the beams `idx` (same order as `idx`)."
 Base.getindex(op::DepositionOperator, idx::AbstractVector{<:Integer}) =
     DepositionOperator(op.target, op.ports[idx], op.dirs[idx], op.pts[idx], op.w[idx],
-                       op.normal[idx], op.mask[idx], op.dest[idx])
+                       op.normal[idx], op.mask[idx], op.dest[idx], op.profile)
 
 function Base.show(io::IO, op::DepositionOperator)
     np = sum(length, op.w; init = 0)
     npart = sum(count(!=(_fullmask(ds)), M) for (M, ds) in zip(op.mask, op.dirs); init = 0)
     print(io, "DepositionOperator(", length(op.ports), " beams, ", np,
-          " lit quadrature points, ", npart, " partially shadowed)")
+          " lit quadrature points, ", npart, " partially shadowed",
+          op.profile === nothing ? "" : ", VisRad profile", ")")
 end
 
 """
@@ -524,6 +547,8 @@ end
 # the sum of those powers (of type `T`).
 @inline function _sum_points(sink::F, op::DepositionOperator, bi, f::BeamFrame,
                              fv::BeamFrame{Float64}, (κ, α, β), r, ::Type{T}) where {F,T}
+    op.profile === nothing ||
+        return _sum_points_visrad(sink, op, bi, _VRFrame(f, op.profile), _VRFrame(fv, op.profile), r, T)
     ds = op.dirs[bi]
     P, W, Nr, M, D = op.pts[bi], op.w[bi], op.normal[bi], op.mask[bi], op.dest[bi]
     αmax, βmax = maximum(abs, α), maximum(abs, β)
@@ -570,6 +595,23 @@ end
             (live |= UInt16(1) << (j - 1))
     end
     return live
+end
+
+# VisRad's profile: each stored point sees the beam axis (the operator's one direction)
+# and absorbs the profile at its own distance from focus times |n·k|. Points outside
+# the envelope (on values) contribute exact zeros.
+function _sum_points_visrad(sink::F, op::DepositionOperator, bi, f::_VRFrame, fv::_VRFrame{Float64},
+                            r, ::Type{T}) where {F,T}
+    P, W, Nr, D = op.pts[bi], op.w[bi], op.normal[bi], op.dest[bi]
+    k = f.k
+    acc = zero(T)
+    @inbounds for q in r
+        _vr_beyond(fv, P[q]) && continue
+        val = W[q] * _vr_intensity(f, P[q]) * abs(dot(Nr[q], k))
+        sink(D[q], val)
+        acc += val
+    end
+    return acc
 end
 
 _deposit_beam!(Ec, Lc, op::DepositionOperator, bi, f::BeamFrame) =

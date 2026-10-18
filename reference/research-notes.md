@@ -727,7 +727,10 @@ test fixture rebuilds the layout from rows copied from these files.
   with columns 1.000 / 0.050 / 0.050, and the foil workspace's deposition table holds
   4 × 0.900 TW for four beams (green off, red on). So the codes are numbered 0–3 in the
   manual's order, and the fractions are subtracted whether or not those cones are on.
-  The reader takes the blue cone power as P × (1 − f_G − f_R) under model 2.
+  The reader takes the blue cone power as P × (1 − f_G − f_R) under model 2. This is the
+  right design: the laser's output does not depend on which cones a calculation
+  includes or displays, so a drive tuned in total power keeps its 3ω power when the
+  unconverted cones are hidden or switched off.
   **H** for model 2 (measured), **M** for the numbering of the others
 - **Deposition check (foil workspace, 2026-10-17).** The `[Power Source Data]` section
   lists, per object, one row per element: index, direct laser power source (TW/cm²),
@@ -744,13 +747,67 @@ test fixture rebuilds the layout from rows copied from these files.
     major axis and narrower across it. Elements near 1 TW/cm² differ by 20–27%, and
     those below 0.01 TW/cm² by up to 80%. Elements under 30 TW/cm² hold 4.38% of the
     power in VisRad and 4.29% in Briareus.
-  - The wings are not explained by Briareus's f-cone blur (≈ 1%), centroid sampling,
-    an envelope cut-off at the file's envelope ratio (1.536), 600 fixed cone cells (25
-    × 24, the workspace's cone power-fraction grid), or a spot rotation. Fitted axis or
-    exponent changes improve the wings only by making the core worse.
   - An independent analytic projection (super-Gaussian evaluated in the beam plane,
     × cos ι) reproduces Briareus's single-cone deposition to 0.05% in the core.
-  **H** (measured locally); the cause of the wing difference is open.
+  **H** (measured locally)
+- **The faint wings (follow-up, 2026-10-17).** Rays and envelope:
+  - *Rays.* "Incident angle" in the capture data is the largest ray-to-normal angle over
+    a grid of rays from the final optic to the focal spot, out to the I/Imax boundary
+    (0.1 for capture) (VR/power_sources/laser_capture_report.html, beam_capture.jpg).
+    With the beam's 1/e radius at the lens on the f-number cone (half-angle 1.38°), the
+    10% boundary lies (ln 10)^(1/4.5) × 1.38° = 1.66° off axis. That gives 40.04,
+    39.38, 44.65 and 44.06° against the file's 40.02, 39.26, 44.61 and 43.93°, so the
+    beam geometry agrees. **M**
+  - *Envelope ratio.* 1.53645 = (ln 1000)^(1/4.5): the radius, in 1/e units, where an
+    n = 4.5 profile falls to 10⁻³ of peak. **H** (arithmetic)
+  - *Cone counts.* The per-element "# Blue Cones Hitting Surf" counts fit a 25 × 24 polar
+    ray grid (nodes 0…ρe, azimuths offset by half a step) with ρe = 1.65–1.66 in 1/e
+    units, against an elliptical footprint. Only two diagonal corner elements miss, with
+    VisRad 3 and the model 0. The fitted ρe is ≈ 1.53645 × (ln 2)^(−1/4.5) = 1.667, as
+    if the envelope ratio scaled the HWHM radius converted to 1/e once more. Elements
+    just past that envelope along the major axis (1.11–1.56 mm) get 5×10⁻⁵ TW/cm²
+    against Briareus's 1×10⁻³. **M**
+- **Wing residuals.**
+  - The residual follows each element's distance from best focus along the beam, not
+    its position in the beam. The foil is tilted ~40°, so the distance reaches ±0.6 mm
+    across the spot. VisRad/Briareus is 1.01 at 0.10 mm (major-axis edge), 1.08 and
+    1.14 at 0.17 and 0.37 mm (the diagonals), and 0.79 at 0.54 mm (minor-axis edge).
+    The table is exactly point-symmetric about the aim, so the dependence is even in
+    that distance.
+  - VisRad's profile changes with distance from focus
+    (VR/power_sources/set_laser_profile_props.html, eqs. profile_eq_A–C):
+    - I = I₀(z) exp(−α), with α = f_sq(z)[(x/ΔL)^M + (y/ΔL)^M] + (1 − f_sq)[(x′/a)² + (y′/b)²]^{n(z)/2}.
+    - f_sq = [z/(z² + a(z)b(z))^{1/2}]^Γ.
+    - n(z) = n₀[1 + 0.2(z/z₀)].
+    - a(z) = a₀√((z/z_A)² + 1), z_A ≈ 2a₀f# = 28 mm.
+    - I₀(z) is renormalized to the envelope's power at each z.
+  - Γ, ΔL(z), M(z) and z₀ are not given. a(z) and b(z) are negligible within 0.6 mm,
+    but f_sq is not unless Γ is large: z/√(z² + ab) = 0.5 at 0.3 mm and 0.76 at 0.6 mm.
+  - Briareus instead convolves the best-focus profile over the f-cone. That moves these
+    wings by ~1% (`ncone = 1` against 13).
+  - A blend with box half-widths c·a and c·b, a constant M, and I₀(z) renormalized
+    (fit: Γ ≈ 10, c ≈ 0.94, M ≈ 7.7) takes the minor-axis edge from −21% to −2% and
+    keeps the core within 1.4%. It leaves the diagonals at +8% and +14%. Three
+    parameters fitted to ~20 informative elements: suggestive, not identified. **L**
+- **Ruled out:**
+  - Centroid or few-point element quadrature (vertices, 2×2/3×3 Gauss, Simpson,
+    p × p grids).
+  - Averaging the profile at the ray hit points.
+  - Fixed 600-cell beamlets.
+  - An elliptical envelope cut alone (1.5–2.0).
+  - Global or per-beam spot rotations, including quad-parallel square beams (±1.6–1.9°).
+  - Axis or exponent changes. These fit the wings only by moving the core by 3–6%.
+- **Power on the tilted foil.** VisRad's foil total is 3.5999999 TW for 3.6 TW
+  delivered, exact to the table's rounding (~1e-6). Normalizing per transverse plane
+  as the manual describes, with the hyperbolic semi-axes and the envelope
+  (`VisRadProfile`), gives 3.60041 TW on this ~40° foil. VisRad therefore also
+  renormalizes each beam's deposited total, perhaps by its ray-grid capture fraction
+  (1.00000 for all four beams here). **M**
+- **What would settle it.** The VisRad runs listed in ROADMAP, "VisRad deposition
+  parity". The intersection-point export (VR/files/laser_target_intpts_file.html:
+  a(z), b(z), n(z), f_SQ(z), ΔL_W(z), ΔL_H(z), M(z) at each hit) gives the defocus law
+  directly. Rerunning with the foil normal to the beams, where the distance from focus
+  barely varies, separates the focal profile from that law.
 - **Spots.** NIF profile models 49–52 carry the built-in plate's numbers in the row:
   49 = Rev3-Inner-2w (890/660 µm, n 7.6), 50 = 1.0 Rev1a-Inner-2w (860/610, 8.0),
   51 = Rev3-Outer-2w (640/370, 4.8), 52 = Rev1-Outer-2w (620/360, 4.5), i.e. HWHM radii
