@@ -235,6 +235,111 @@ Measured on the NIF hohlraum at the GUI's standard mesh (5,864 elements, 48 quad
   instead of being convolved over the f-cone. It is differentiable like the default
   model and tested against the closed form.
 
+## Done (2026-10-18, CAD and STL)
+- **STL interchange** (3ffcefa): `write_stl` writes a mesh, component or target as
+  binary STL or ASCII with one named solid per component (normals from the winding,
+  coordinates divided by `scale`, two-sided parts written once, apertures as their own
+  solids unless `apertures = false`); `read_stl_solids` returns the named solids of
+  multi-body CAD exports. The ASCII reader takes any case, tabs and CRLF and parses
+  200k facets in 0.08 s (`%e`) to 0.3 s (full precision), from 1.2 s; binary in 6 ms;
+  truncated files get a clear error.
+- **CAD remeshing** (208fb44): `remesh_mesh` cuts sliver-tessellated CAD (curved walls
+  as full-length strips) into compact, near-planar elements of a given size without
+  moving the surface: conforming refinement with T-junctions joined, then Lloyd-relaxed
+  clusters halved until each element is within `angle` of planar, within `size` of its
+  centroid and has its centroid on it; areas kept to round-off.
+  `visrad_target(...; remesh)`, and the GUI's STL and VisRad CAD parts. On a NIF CAD
+  workspace the inner wall of the two hohlraum halves gets 2,756 elements at 0.3 mm (at
+  most 0.53 mm across, against 4.5 mm slivers), 0.4 s per half.
+- **Cavity selection** (5bca2e8): `enclosure(target, point)` keeps the element sides
+  bounding the free space around a point. Each element gathers, through its own diffuse
+  rays, the flux an isotropic source there would put on it (geometric albedo 0.9; kept
+  above 5% of the cavity's flux), so the choice ignores element size and exterior
+  structure cannot carry itself in. `visrad_target(ws; inside)` selects on the facets
+  and remeshes only what is kept. On a NIF CAD workspace (capsule tent left out): 15k
+  of 151k elements, open area 14.5 mm² (the LEHs), 3 s; with `remesh = 0.3`, 6,950
+  elements in 11 s.
+- **Straight cuts on CAD strips** (aa85e31): `remesh_mesh` cuts parallel long edges
+  (and their strips' diagonals) on shared plane families and grows elements in bands
+  about `size` long, so cuts across sliver strips are single straight chords shared by
+  both neighbours (equal per-edge spacing had staggered them: a strip's diagonal took
+  one point more than its sides). On a 2,000-strip tube: outline edges 275 → 132 per
+  element, flat view factors 30 → 11 s (8 threads); planar strips become rectangles.
+  The NIF CAD workspace and the CAD tutorial change within their stated agreements.
+- **GUI on CAD, third pass** (a89155f): targets of more than 30k triangles not built
+  before, and CAD capsule sphere fits, run on workers (the edit applies at once, the
+  previous target is drawn until the new one is ready, the drive and checks wait for
+  it). On a NIF CAD workspace: leaving a part out 733 → 145 ms, element-size edits
+  0.36 + 0.35 s → 27 ms, capsule role 772 → 43 ms. A CAD part that is one cylinder or
+  sphere as a whole keeps its name and gets that surface; the drive's status flags flat
+  parts of more than 50 facets per element. The ~1 s gap at the end of a drive was
+  GUI-thread compilation plus full model-tree resets (precompiled drive path,
+  incremental row inserts): 1.21 → 0.31 s.
+- **Analytic surfaces in CAD** (534c6a6): `fit_surfaces` segments a mesh into plane,
+  cylinder and sphere regions (region growing, least squares refined by Gauss–Newton,
+  rms-gated); remeshed CAD is fitted on its original facets (`reference`).
+  `curved_components` and `visrad_target(...; remesh, fit = true)` split parts into
+  `<part>/cylN`, `/sphN` and `/rest` carrying the fitted surfaces. Curved elements of
+  more than two facets get a lumped quadrature, and a folded patch's centroid is moved
+  onto its facets (remeshed convex CAD, e.g. a capsule, saw nothing before); primitives
+  are bit for bit unchanged. A remeshed CAD sphere gives exact F and a uniform
+  integrating-sphere flux (flat: 10% off); a CAD hohlraum's view factors run 24× faster
+  than flat, and closed, its capsule flux matches the primitive's to 7e-6.
+- **Tutorial "Radiation in an imported CAD hohlraum"** (d877790): a synthetic CAD
+  assembly (thick halves with a waist gap, LEH bores, capsule, tent, mount; sliver
+  tessellation, mixed windings) through multi-solid STL, `orient_mesh`, `enclosure`,
+  `remesh_mesh`, `curved_components` and radiosity. At equal element size it matches
+  the same cavity built from primitives (capsule flux 0.06%, a₂/a₀ 0.12 points, LEH
+  loss 0.15% at 0.5 mm; 0.012%, 0.07 and 0.04% at 0.25 mm), capsule view factors equal
+  solid angles within 1.2e-3, and fitted view factors cost a tenth of flat;
+  `hohlraum()` loses 3.3% more through flush LEHs than bored ones. 53 s in the docs.
+- **Flat view factors on remeshed CAD** (f0e67f1): elements of more than two facets
+  receive through their outline when the point sees all of it (exactly the facet sum),
+  otherwise plane piece by plane piece closed across the tangent-plane cut; near pairs
+  emit from cells that lump the facets. Tutorial flat view factors 12.4 → 2.7 s,
+  synthetic CAD hohlraum 47 → 4.1 s (fitted 2.3 → 1.3 s); closed forms within 5e-5 of
+  before; primitives bit for bit unchanged. A flat CAD pair still costs ~5× a
+  primitive pair (exact square–polygon clipping on planar elements would cut it).
+- **CAD cones** (ac8ba2b): `ConeSurface` (radial projection at constant height, exact
+  patch areas: faceted frusta tile the true cone to 4e-15); `fit_surfaces` finds cones
+  (ties: plane, cylinder, cone, sphere), `curved_components` gives `<part>/coneN`;
+  elements touching an apex stay flat. A closed 45° frustum's cone→cone exchange is
+  +2.5e-4 curved vs +4.1e-3 flat. On a NIF CAD workspace: an 84.5° end-wall cone at
+  the LEH and a 61° waist chamfer on the halves, a 77° rim chamfer on the washers.
+  `curved_components(...; maxradius, minfraction)` leave near-flat and small fits flat
+  (off by default; `minfraction = 1e-3`: 138 → 25 components for two halves).
+- **CAD fit cost on fan-tessellated parts** (8ad51af): `fit_surfaces` visits a patch's
+  neighbours through its vertices, each vertex once per ring and once per growth, in
+  the same order (results bit for bit unchanged). A NIF CAD capsule part (fill tube in
+  800-facet fans) fits in 0.11 s (was 0.5 s) with default kinds, 20 s (was 121 s) with
+  cylinders and spheres only.
+- **One call for CAD** (70b9dc0): `cad_target(parts; orient, inside, remesh/coarsen,
+  fit, material, two_sided)` takes CAD meshes (`read_stl_solids` pairs) and primitive
+  components to a radiation-ready target: orient, cavity selection on the facets,
+  remesh only the kept facets, select again on the elements, fit cylinders and spheres
+  on the kept facets; settings per part as a value, function or dictionary of the name.
+  `visrad_target` uses it for workspace CAD (bitwise unchanged on the fixture), and the
+  CAD tutorial ends with it.
+- **GUI on CAD workspaces** (ffef88c): VisRad import on worker threads with progress;
+  far mounting hardware drawn only (raw facets), pickable, and put back by *Include in
+  calculations*; the drive of a CAD design runs on the cavity around a point
+  (`enclosure`), and a pocket sealed by a capsule tent is opened automatically (the
+  tent left out as a thin film, said in the status); view factors past half the
+  memory fall back to a laser-only drive with the reason. Part roles (Capsule, a sphere
+  fitted to a CAD capsule; Backlighter foil; Thin film), File ▸ Export target as STL,
+  one part per solid on STL import, renamed VisRad parts rename their components,
+  cutaway on imported designs, off beams hidden when most are off, 1 ms Windows timer
+  while the window is open (steady 17 ms ticks). On a NIF CAD workspace: 1.7 ms
+  frames at 211k triangles, import off the UI thread (0.4 s call), 9.8k-element cavity
+  drive in 92 s, capsule ε₂ 15.4% → 9.2% in 40 evaluations (14 s).
+- **GUI on CAD, second pass** (53811fa): VisRad primitives take a part's element size
+  (`visrad_component(...; primitive_h)`; VisRad's grid by default). CAD remeshing after
+  element-size edits, undo/redo and session loads runs on workers, the part drawn from
+  its facets until ready and a queued drive starting then (all ten CAD parts: 1.97 s
+  UI stall → 0.33 s). Targets are reused for identical components (undo/redo 1.1 →
+  0.05 s, the drive stays current). The 0.7–0.9 s first-use stalls (drive result,
+  field coloring, import) were JIT compilation, now warmed before the window opens.
+
 ## Next
 1. **VisRad deposition parity: needs runs in VisRad.** The goal: optimize in
    Briareus with `profile = visrad_profile(ws)`, export with `write_visrad_workspace`,
@@ -308,9 +413,43 @@ Measured on the NIF hohlraum at the GUI's standard mesh (5,864 elements, 48 quad
    - Wall thickness (inner and side walls), partial spheres, and the other primitive
      types: cylinder, cone, disk, box, polygon, halfraum, rugby and slotted hohlraums,
      surfaces of revolution, multi-element objects.
-   - CAD meshes tessellated as long slivers (curved walls): `coarsen_mesh` cannot
-     shorten them; remeshing (e.g. onto a fitted cylinder) would.
-7. **GUI requests:** a beam-model choice (Briareus's f-cone or `VisRadProfile`), set
+   - CAD after `remesh_mesh` (see Done): view-factor receivers could use an element's
+     outline instead of its ~10–14 CAD triangles (far-pair cost scales with them); an
+     adaptive `angle` for thin rods and fillets (many narrow elements now); closing
+     cracks where two CAD faces tessellate one curved edge differently (moves geometry
+     slightly).
+   - CAD capsule tents and LEH windows are opaque closed solids: a thin-film option
+     that transmits (or automatic thin-solid detection in the library; the GUI already
+     opens a sealed pocket) would let the cavity include the tent region.
+   - CAD fits (see Done): tori for fillets (fillet pieces now fit as small tilted cones
+     and spheres; `minfraction` hides them); one surface shared across parts (the
+     halves' inner walls); a quadrature at a cone apex; TALIS curvature kind for cones;
+     default filters (see the decisions in the overnight log).
+   - `orient_mesh` on hollow solids (a shell with its inner surface modeled) faces the
+     inner surface into the material; containment parity would face it into the gas,
+     but `enclosure` from TCC would then select a hollow capsule's interior (the GUI's
+     cavity from TCC relies on the current behavior). A user decision.
+   - Adjacent flat CAD pairs: near-kernel evaluations scale as shared-edge length over
+     r/256 (~700 per pair on a sliver tube even with straight cuts); an exact or coarser
+     treatment along straight shared edges would cut them. Banding misses most of the
+     NIF halves' long facets (long edges ~90° apart, fans, cones): circular plane
+     families would extend it. `_earclip` falls back to raw triangles on pinched
+     outlines.
+   - Laser deposition on sliver CAD is slow in BVH `any_hit` (~5 s per beam on the full
+     157k-element NIF CAD target; moot on the cavity).
+7. **GUI on CAD: what remains.** Partial curved fits of CAD parts (needs a
+   part-to-component name mapping, or a per-element surface on `Component`; neutral on
+   the NIF workspace); a 0.75 s first-import tick and a 0.16 s first field-coloring
+   frame (compilation); `include_components!` costs 0.3 s on the UI thread; a "fit the
+   hohlraum template to CAD parts" action; the foil objective with one shared parameter
+   set for beams aimed at one point does not move (per-beam parameters).
+   `fit_surfaces` repeats rejected growths: a finely faceted face of none of the
+   requested kinds (a tapered tube without cones, a fine fillet or torus) costs
+   quadratic time, every patch seeding a growth the rms test rejects (20 s on a NIF
+   capsule's fill tube with cylinders and spheres only). Skipping seeds inside rejected
+   regions is ~5× faster but lost a true small cone on a NIF half; an rms test during
+   growth, or a torus kind, might be safe.
+8. **GUI requests:** a beam-model choice (Briareus's f-cone or `VisRadProfile`), set
    to VisRad's with the workspace's parameters when one is imported, and passed to the
    drive's `Scenario` (`controllers/drive.jl`); frames on a port axis (the chamber,
    the entrance holes, the foil and other parts are done); clipping volumes; STEP import (needs a CAD kernel; STL
@@ -319,20 +458,20 @@ Measured on the NIF hohlraum at the GUI's standard mesh (5,864 elements, 48 quad
    power histories plotted, rather than written to CSV).
    Adaptive mesh refinement of the radiation mesh where deposition varies fastest
    (the uniform fine mesh is converged but costs ~16k elements).
-8. **Time-dependent view factor.** Wall, LEH and spot motion from rad-hydro or a
+9. **Time-dependent view factor.** Wall, LEH and spot motion from rad-hydro or a
    parametric model; P2(t) swing. Retuning to a reference drive (see Done) assumes
    the reference's view factors hold through the pulse.
-9. **Shot-data calibration.** Fit effective parameters (cone multipliers, CBET
+10. **Shot-data calibration.** Fit effective parameters (cone multipliers, CBET
    multiplier/clamp, albedo) to measured P2/P4 and shock symmetry, with uncertainty.
    Reproduce P2-vs-Δλ curves.
-10. **Robust optimization and UQ: what remains.** Correlated errors (per bundle, per
+11. **Robust optimization and UQ: what remains.** Correlated errors (per bundle, per
    cone; target positioning, which moves every beam at once), time-dependent budgets
    (errors through `drive_history`), and inverse solves for a measured mode (MacGowan
    2021) as a documented workflow.
-11. **Backlighter physics.** CE(Z, I, τ) models with uncertainty, and the photometric
+12. **Backlighter physics.** CE(Z, I, τ) models with uncertainty, and the photometric
    chain to the detector.
-12. **Spectral radiosity.** Multigroup emission, detector responses along Dante and XRD
+13. **Spectral radiosity.** Multigroup emission, detector responses along Dante and XRD
     lines of sight, and brightness temperatures.
-13. **Scale.** Multi-ray partial visibility for view factors, hierarchical or iterative
+14. **Scale.** Multi-ray partial visibility for view factors, hierarchical or iterative
     radiosity, Float32 storage for more than 10⁴ elements, and GPU kernels.
-14. **Polar direct drive mode**, benchmarked against published GA optimizers.
+15. **Polar direct drive mode**, benchmarked against published GA optimizers.
