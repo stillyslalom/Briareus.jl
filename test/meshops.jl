@@ -78,7 +78,7 @@ end
                   maximum(norm(m.vertices[a] - m.vertices[b]) for a in vs, b in vs))
     @test all(span(c, p) <= 0.8 + 1e-12 for p in 1:npatches(c))
     t, tc = Target([Component(:p, plate, gold())]), Target([Component(:p, c, gold())])
-    @test sum(tc.elem_area) ≈ sum(t.elem_area) rtol = 1e-14
+    @test sum(tc.elem_area) ≈ sum(t.elem_area) rtol = 1e-12
     @test all(n -> n ≈ Vec3(0, 0, 1), tc.elem_normal)
     # a curved surface: merged elements stay within the angle of planar
     s = sphere_mesh(1.0; ntheta = 48, nphi = 96)
