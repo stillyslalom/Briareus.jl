@@ -107,6 +107,11 @@ for the same workflow: target, beams, drive, optimization and shot review.
   surface remeshed into compact, near-planar elements of a chosen size for view
   factors (`remesh_mesh`, which also cuts the long slivers CAD tessellates curved walls
   into; `coarsen_mesh` only merges whole facets).
+  `cad_target` takes CAD parts (e.g. the solids of a multi-solid STL file,
+  `read_stl_solids`) to a radiation-ready target in one call: oriented, cut to the
+  cavity around a point (`enclosure`), remeshed, and with the exact cylinders and
+  spheres fitted (`fit_surfaces`); primitive components can be passed with the parts.
+  `visrad_target` uses it for the CAD a VisRad workspace bundles.
   `write_visrad_workspace` writes a design's beams back into a copy of a workspace.
   `write_results` exports a calculation for postprocessing: per-element laser,
   radiosity and flux, per-component and per-beam power, and the capsule's Legendre and

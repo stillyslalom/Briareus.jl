@@ -387,3 +387,108 @@ function Base.show(io::IO, ::MIME"text/plain", enc::Enclosure)
 end
 Base.show(io::IO, enc::Enclosure) =
     print(io, "Enclosure(", nelements(enc.target), " of ", nelements(enc.source), " elements)")
+
+"""
+    cad_target(parts; orient = true, toward = (0, 0, 0), inside = nothing,
+               remesh = nothing, coarsen = nothing, fit = false, material = gold(),
+               two_sided = false, enclosure_kw = (;)) -> Target
+
+A radiation-ready target from CAD meshes in one call: what the
+[Radiation in an imported CAD hohlraum](@ref) tutorial does by hand, and what
+`visrad_target` does with the CAD a VisRad workspace bundles. `parts` holds
+`name => mesh` pairs, the CAD parts (as `read_stl_solids` returns them), and
+`Component`s, taken as they are (primitives, apertures, parts prepared by hand): those
+take part in the cavity selection but are not oriented, remeshed or fitted. The
+target's components keep the order of `parts`.
+
+Each CAD part becomes a component of `material` radiating from its front (from both
+sides when `two_sided`), through these steps:
+
+1. `orient = true` repairs its windings with [`orient_mesh`](@ref): closed solids face
+   out of their material, open sheets face the point `toward` (mm).
+2. With `inside`, a point (mm) in the cavity, [`enclosure`](@ref) keeps only the
+   elements that bound the free space around it, among the facets of all the parts as
+   oriented (`enclosure_kw` are its keywords). The selection needs consistent windings.
+3. `remesh` (mm) divides the kept facets into compact, near-planar elements of about
+   that size ([`remesh_mesh`](@ref)); `coarsen` (mm) instead merges whole facets into
+   elements ([`coarsen_mesh`](@ref)). Give at most one. Only the kept facets are
+   divided, which is much cheaper when most of an assembly lies outside the cavity.
+   With `inside`, the selection is then repeated on the elements: an element straddling
+   the edge of the lit region averages its flux over its own area.
+4. `fit = true` (or a named tuple of [`fit_surfaces`](@ref) keywords) splits each part
+   into its cylinders, its spheres and the rest ([`curved_components`](@ref)), fitted on
+   the kept CAD facets, whose vertices lie on the true surfaces, so the radiation model
+   integrates over the curved walls.
+
+`material`, `two_sided`, `remesh` and `coarsen` take one value for every CAD part, a
+function of the part's name (a `Symbol`), or a dictionary keyed by name (`Symbol` or
+`String`). A part missing from a `remesh` or `coarsen` dictionary keeps its facets, one
+missing from a `two_sided` dictionary is one-sided, and one missing from a `material`
+dictionary is an error. For example, `remesh = n -> n === :capsule ? 0.15 : 0.5`
+remeshes a capsule finer than the walls. For the account of what the cavity selection
+drops, call `enclosure` on the target built without `inside`.
+"""
+function cad_target(parts; orient::Bool = true, toward = (0.0, 0.0, 0.0), inside = nothing,
+                    remesh = nothing, coarsen = nothing, fit = false, material = gold(),
+                    two_sided = false, enclosure_kw = (;))
+    coarsen === nothing || remesh === nothing ||
+        throw(ArgumentError("give one of `coarsen` and `remesh`, not both"))
+    fit isa Union{Bool,NamedTuple} ||
+        throw(ArgumentError("`fit` must be true, false or a named tuple of fit_surfaces keywords"))
+    comps = Component[]
+    cad = Bool[]                         # per component: a CAD part
+    for p in parts
+        if p isa Component
+            push!(comps, p)
+            push!(cad, false)
+        elseif p isa Pair && last(p) isa Mesh
+            name = Symbol(first(p))
+            mat = _part_value(material, name, nothing)
+            mat isa Material || throw(ArgumentError("no material for CAD part $name"))
+            mesh = orient ? orient_mesh(last(p); toward) : last(p)
+            push!(comps, Component(name, mesh, mat; two_sided = Bool(_part_value(two_sided, name, false))))
+            push!(cad, true)
+        else
+            throw(ArgumentError("a part must be a `name => mesh` pair or a Component, not a $(typeof(p))"))
+        end
+    end
+    isempty(comps) && throw(ArgumentError("no parts given"))
+    select = inside !== nothing
+    if select
+        enc = enclosure(comps, inside; enclosure_kw...)
+        comps, cad = enc.target.components, cad[_survivors(enc)]
+    end
+    facets = [c.mesh for c in comps]     # the CAD facets kept: the reference for the fits
+    redone = falses(length(comps))       # the parts divided into new elements
+    if remesh !== nothing || coarsen !== nothing
+        comps = copy(comps)
+        for (i, c) in enumerate(comps)
+            cad[i] || continue
+            sr = remesh === nothing ? nothing : _part_value(remesh, c.name, nothing)
+            sc = coarsen === nothing ? nothing : _part_value(coarsen, c.name, nothing)
+            sr === nothing && sc === nothing && continue
+            m = sc === nothing ? remesh_mesh(c.mesh; size = sr) : coarsen_mesh(c.mesh; size = sc)
+            comps[i] = Component(c.name, m, c.material; two_sided = c.two_sided)
+            redone[i] = true
+        end
+        if select
+            # select again at the elements' own granularity
+            enc = enclosure(comps, inside; enclosure_kw...)
+            s = _survivors(enc)
+            comps, cad, facets, redone = enc.target.components, cad[s], facets[s], redone[s]
+        end
+    end
+    fit === false && return Target(comps)
+    fkw = fit === true ? (;) : fit
+    return Target(reduce(vcat, (cad[i] ? curved_components(comps[i]; reference = redone[i] ? facets[i] : nothing, fkw...) :
+                                [comps[i]] for i in eachindex(comps)); init = Component[]))
+end
+
+# A per-part setting: one value, a function of the part's name, or a dictionary by name.
+_part_value(x::AbstractDict, name::Symbol, default) =
+    haskey(x, name) ? x[name] : get(x, String(name), default)
+_part_value(x::Function, name::Symbol, default) = x(name)
+_part_value(x, name::Symbol, default) = x
+
+# The components of `enc.source` that `enc.target` keeps (those with a kept element), in order.
+_survivors(enc::Enclosure) = sort!(unique(enc.source.elem_comp[enc.index]))

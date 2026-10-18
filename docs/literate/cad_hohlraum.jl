@@ -17,8 +17,9 @@
 # repairs the windings, [`enclosure`](@ref) keeps the surfaces that bound the cavity
 # around the capsule, [`remesh_mesh`](@ref) divides them into compact elements,
 # [`fit_surfaces`](@ref) and [`curved_components`](@ref) find the cylinders and spheres
-# and attach their exact surfaces, and the radiosity solution is checked against the same
-# hohlraum built from Briareus's primitives and against closed forms.
+# and attach their exact surfaces; [`cad_target`](@ref) then takes these steps in one
+# call. The radiosity solution is checked against the same hohlraum built from
+# Briareus's primitives and against closed forms.
 
 using Briareus
 using CairoMakie
@@ -326,6 +327,25 @@ stage_panel(fig[1, 3], [c.name => c.mesh for c in fitted_top],
             "fitted: cylinders, sphere, flat")
 fig
 
+# ## In one call
+#
+# [`cad_target`](@ref) takes the parts as read and runs the same steps: it orients each
+# part, selects the cavity around the point `inside` on the facets, remeshes the kept
+# facets (sizes and materials can be given per part, as functions of the part's name),
+# selects again on the elements, and fits the curved surfaces on the kept facets. It is
+# the call `visrad_target` makes for the CAD a VisRad workspace bundles; components
+# built otherwise, such as primitives, can be passed with the parts and take part in
+# the selection as they are. The target it builds is the one built by hand above:
+
+one_call = cad_target(filter(p -> !startswith(p[1], "tent"), solids); inside = (0, 0, 0),
+                      remesh = size_of, fit = true,
+                      material = n -> n === :capsule ? ablator() : gold())
+by_hand = Target(fitted)
+@printf("%d elements in %d components (by hand: %d in %d); same names, areas and normals: %s\n",
+        nelements(one_call), length(one_call.components), nelements(by_hand), length(by_hand.components),
+        [c.name for c in one_call.components] == [c.name for c in by_hand.components] &&
+        one_call.elem_area == by_hand.elem_area && one_call.elem_normal == by_hand.elem_normal)
+
 # ## Openings and references
 #
 # The cavity is closed with apertures where the radiation leaves: the two LEHs at the
@@ -562,6 +582,8 @@ fig
 # - Fitting: [`fit_surfaces`](@ref) recovers the radii of the wall (2.875 mm), the bores
 #   (1.55 mm) and the capsule (0.9 mm) to nine digits from the CAD facets, and the
 #   fitted capsule has the area 4πr² to round-off.
+# - One call: [`cad_target`](@ref) on the parts as read builds the target built by hand,
+#   with the same components, element areas and normals, exactly.
 # - Radiation: the capsule's view factors to the LEHs, bores, caps and wall match the
 #   solid angles they subtend from its center to 1e-3. The capsule flux, its
 #   ``a_2/a_0`` and ``a_4/a_0``, and the LEH and gap losses of the CAD models, flat or

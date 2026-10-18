@@ -32,7 +32,7 @@ export SuperGaussianSpot, Beam, port_vector, port_angles, direction, spot_axes, 
        beams_from_table, nif_quads, nif_beams, nif_spot, NIF_QUAD_NAMES, nif_port, nif_bundle, nif_bundles, omega_ports, omega_beams, omega_spot
 export DepositionOperator, Deposition, deposit, raytrace_deposition, raytrace_component_power, laser_flux,
        component_power
-export Enclosure, enclosure
+export Enclosure, enclosure, cad_target
 export view_factors, closure_error, enforce_closure!, RadiationModel, RadiationSolution, solve,
        flux_response, energy_balance, radiation_temperature, to_Wcm2, SIGMA_SB, albedos
 export PulseShape, pulse_energy, with_pulses, drive_history, cone_fraction_pulses,

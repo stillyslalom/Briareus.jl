@@ -631,7 +631,9 @@ and a per-component account of what was dropped). It needs consistent windings
 `coarsen` then divide only the facets kept (much cheaper when most of the assembly lies
 outside the cavity), and a second selection on the resulting elements drops those
 that average too little flux. `fit` then applies to the elements kept, fitted on the
-kept facets.
+kept facets. The CAD meshes go through these steps in `cad_target`, which takes the
+other components as they are (into the selection, but not remeshed or fitted); it
+does the same for CAD read from STL files.
 """
 function visrad_target(ws::VisRadWorkspace; select = o -> o.radiosity || o.laser,
                        materials = Dict{String,Material}(), two_sided = false,
@@ -639,38 +641,25 @@ function visrad_target(ws::VisRadWorkspace; select = o -> o.radiosity || o.laser
                        remesh = nothing, fit = false, inside = nothing)
     coarsen === nothing || remesh === nothing ||
         throw(ArgumentError("give one of `coarsen` and `remesh`, not both"))
-    comps = Component[]
-    cad = Set{Symbol}()                 # CAD meshes whose elements wait for the selection
+    parts = Union{Component,Pair{Symbol,Mesh}}[]
+    mats = Dict{Symbol,Material}()        # of the CAD parts, for cad_target
+    sides = Dict{Symbol,Bool}()
     for o in ws.objects
         select(o) || continue
         (o.radiosity && o.laser) || @warn "VisRad object $(o.name) is included in only one of VisRad's radiosity and laser calculations; Briareus uses it in both"
         ts = two_sided isa Bool ? two_sided : Bool(two_sided(o))
-        later = inside !== nothing && o.kind === :mesh
-        cs = visrad_component(o; material = get(materials, o.name, nothing), two_sided = ts,
-                              orient, toward, coarsen = later ? nothing : coarsen,
-                              remesh = later ? nothing : remesh, fit = later ? false : fit)
-        later && foreach(c -> push!(cad, c.name), cs)
-        append!(comps, cs)
+        material = get(materials, o.name, nothing)
+        if o.kind === :mesh
+            # the CAD part as VisRad has it (material, sidedness); cad_target does the rest
+            c = only(visrad_component(o; material, two_sided = ts))
+            push!(parts, c.name => c.mesh)
+            mats[c.name], sides[c.name] = c.material, c.two_sided
+        else
+            append!(parts, visrad_component(o; material, two_sided = ts, orient, toward, coarsen, remesh, fit))
+        end
     end
-    isempty(comps) && throw(ArgumentError("no VisRad components selected"))
-    inside === nothing && return Target(comps)
-    kept = enclosure(comps, inside).target.components
-    facets = Dict(c.name => c.mesh for c in kept if c.name in cad)
-    if coarsen !== nothing || remesh !== nothing
-        elems = m -> coarsen === nothing ? remesh_mesh(m; size = remesh) : coarsen_mesh(m; size = coarsen)
-        # select again at the elements' own granularity: an element straddling the edge of
-        # the lit region averages its flux over a larger area than the facets did
-        redone = [c.name in cad ? Component(c.name, elems(c.mesh), c.material; two_sided = c.two_sided) : c
-                  for c in kept]
-        kept = enclosure(redone, inside).target.components
-    end
-    fit === false && return Target(kept)
-    # fitted on the kept CAD facets, whose vertices lie on the surfaces
-    fkw = fit === true ? (;) : fit
-    remeshed = coarsen !== nothing || remesh !== nothing
-    return Target(reduce(vcat, (c.name in cad ?
-                                curved_components(c; reference = remeshed ? facets[c.name] : nothing, fkw...) :
-                                [c] for c in kept); init = Component[]))
+    isempty(parts) && throw(ArgumentError("no VisRad components selected"))
+    return cad_target(parts; orient, toward, inside, remesh, coarsen, fit, material = mats, two_sided = sides)
 end
 
 """

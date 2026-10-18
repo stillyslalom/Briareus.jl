@@ -328,3 +328,80 @@ end
     @test sum(e -> ncells(t, e), multi) / length(multi) < ncells(square, 1)
     @test maximum(e -> ncells(t, e), multi) < 1.5 * ncells(square, 1)
 end
+
+@testset "cad_target" begin
+    # a multi-solid STL assembly with mixed windings, as CAD exports it: two thick-walled
+    # hohlraum halves 40 µm apart at the waist, a capsule and a mounting block outside,
+    # and primitive entrance-hole apertures passed with the parts as components
+    R, Rout, Rleh, h, t, g, rc = 2.875, 2.975, 1.55, 4.7, 0.05, 0.02, 0.9
+    top = [map(v -> v + Vec3(0, 0, g), f) for f in cad_half(; R, Rout, Rleh, h, t, nphi = 72)]
+    F = NTuple{3,Vec3}[]
+    lo, hi = Vec3(Rout + 0.3, -1, -1.5), Vec3(Rout + 2.3, 1, 1.5)
+    c = [Vec3(x, y, z) for x in (lo[1], hi[1]), y in (lo[2], hi[2]), z in (lo[3], hi[3])]
+    for q in ((1, 3, 7, 5), (2, 6, 8, 4), (1, 5, 6, 2), (3, 4, 8, 7), (1, 2, 4, 3), (5, 7, 8, 6))
+        cad_quad!(F, c[q[1]], c[q[2]], c[q[3]], c[q[4]], sum(c[collect(q)]) / 4 - (lo + hi) / 2)
+    end
+    rng = Xoshiro(7)
+    soup(F) = facet_soup([rand(rng) < 0.3 ? (a, c, b) : (a, b, c) for (a, b, c) in shuffle(rng, F)])
+    names = ["hohlraum_top", "hohlraum_bottom", "capsule", "mount"]
+    path = write_stl(joinpath(mktempdir(), "assembly.stl"),
+                     [n => soup(f) for (n, f) in zip(names, (top, cad_mirror(top), cad_sphere(rc; ntheta = 16, nphi = 24), F))];
+                     binary = false)
+    solids = read_stl_solids(path)
+    @test first.(solids) == names
+    zl = h + t + g
+    leh = [aperture(:leh_top, disk_mesh(Rleh, zl; nr = 2, nphi = 24, up = false)),
+           aperture(:leh_bottom, disk_mesh(Rleh, -zl; nr = 2, nphi = 24, up = true))]
+    mat = n -> n === :capsule ? ablator() : gold()
+    size_of = n -> n === :capsule ? 0.2 : 0.5
+    tc = cad_target([solids; leh]; inside = (0, 0, 0), remesh = size_of, fit = true, material = mat)
+
+    # the cavity: inner walls, bores, caps and waist faces of the halves, the capsule and
+    # the apertures as given; the outer walls (no cylinder of radius Rout) and the mount
+    # are dropped
+    @test !any(c -> startswith(String(c.name), "mount"), tc.components)
+    @test tc.components[end-1:end] == leh
+    cyl = [c for c in tc.components if c.surface isa CylinderSurface]
+    @test sort([c.surface.radius for c in cyl]) ≈ [Rleh, Rleh, R, R] rtol = 1e-6
+    sph = only(c for c in tc.components if c.surface isa SphereSurface)
+    @test sph.name === Symbol("capsule/sph1")
+    @test sph.surface.radius ≈ rc rtol = 1e-6
+    @test sph.material == ablator() && all(c -> c.material == gold(), cyl)
+    # the curved elements have the true surfaces' areas
+    area(c) = sum(tc.elem_area[elements(tc, c.name)])
+    @test all(isapprox(area(c), 2π * R * h; rtol = 1e-6) for c in cyl if c.surface.radius > 2)
+    @test area(sph) ≈ 4π * rc^2 rtol = 1e-6
+    # compact elements of about the size asked
+    @test 0.4 < sqrt(area(cyl[1]) / npatches(cyl[1].mesh)) < 0.6
+
+    # the same steps by hand: orient, select on the facets, remesh the kept ones, select
+    # again on the elements, fit on the kept facets
+    kept = enclosure([[Component(n, orient_mesh(m; toward = (0, 0, 0)), mat(Symbol(n))) for (n, m) in solids]; leh]).target.components
+    el = enclosure([c.kind === :aperture ? c : Component(c.name, remesh_mesh(c.mesh; size = size_of(c.name)), c.material)
+                    for c in kept]).target.components
+    ref = Dict(c.name => c.mesh for c in kept)
+    hand = Target(reduce(vcat, [c.kind === :aperture ? [c] : curved_components(c; reference = ref[c.name]) for c in el]))
+    @test [c.name for c in tc.components] == [c.name for c in hand.components]
+    @test tc.elem_area == hand.elem_area && tc.elem_centroid == hand.elem_centroid
+
+    # without `inside`, every part, oriented, in order; per-part settings by dictionary
+    t0 = cad_target(solids; two_sided = Dict(:mount => true))
+    @test [c.name for c in t0.components] == Symbol.(names)
+    @test all(npatches(c.mesh) == npatches(m) for (c, (_, m)) in zip(t0.components, solids))
+    @test [c.two_sided for c in t0.components] == [false, false, false, true]
+    @test all(c -> c.material == gold(), t0.components)
+    @test t0.components[3].mesh.triangles == orient_mesh(solids[3][2]; toward = (0, 0, 0)).triangles
+    @test cad_target(solids; orient = false).components[1].mesh === solids[1][2]
+    # coarsening instead of remeshing, the capsule only (a dictionary keyed by String)
+    tk = cad_target(solids; inside = (0, 0, 0), coarsen = Dict("capsule" => 0.3), material = mat)
+    tf = cad_target(solids; inside = (0, 0, 0), material = mat)
+    cap(t) = t.components[findfirst(c -> c.name === :capsule, t.components)]
+    @test npatches(cap(tk).mesh) < npatches(cap(tf).mesh)
+    @test sum(tk.elem_area) ≈ sum(tf.elem_area) rtol = 1e-10
+    @test [npatches(c.mesh) for c in tk.components if c.name !== :capsule] ==
+          [npatches(c.mesh) for c in tf.components if c.name !== :capsule]
+    @test_throws ArgumentError cad_target(solids; remesh = 0.5, coarsen = 0.5)
+    @test_throws ArgumentError cad_target(solids; material = Dict("capsule" => ablator()))
+    @test_throws ArgumentError cad_target([solids[1][2]])
+    @test_throws ArgumentError cad_target(Pair{String,Mesh}[])
+end
