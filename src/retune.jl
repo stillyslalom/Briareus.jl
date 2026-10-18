@@ -29,11 +29,10 @@ end
 
 """
     write_pulse_table(path, pulses) -> path
-    read_pulse_table(path) -> Dict{Symbol,PulseShape}
 
 Pulses (power per beam, TW, against time, ns) per group, quad or beam as CSV: a
-`time_ns` column and one column per key, on the union of the pulses' times. Read a
-reference shot's measured or requested powers this way.
+`time_ns` column and one column per key, on the union of the pulses' times. Read back
+with [`read_pulse_table`](@ref).
 """
 function write_pulse_table(path::AbstractString, pulses::AbstractDict)
     ks = sort(collect(keys(pulses)); by = string)
@@ -47,6 +46,13 @@ function write_pulse_table(path::AbstractString, pulses::AbstractDict)
     return path
 end
 
+"""
+    read_pulse_table(path) -> Dict{Symbol,PulseShape}
+
+Pulses per group, quad or beam from a CSV table in the layout of
+[`write_pulse_table`](@ref): a `time_ns` column and one column per key (power per beam,
+TW). Read a reference shot's measured or requested powers this way.
+"""
 function read_pulse_table(path::AbstractString)
     header, rows = read_csv(path)
     ti = findfirst(==("time_ns"), strip.(header))
