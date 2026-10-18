@@ -45,6 +45,30 @@ function cad_sphere(r; ntheta, nphi, outward = true)
     return F
 end
 
+# conical frustum from radius r0 at z0 to r1 at z1 as CAD tessellates it: nz bands of
+# nphi strips (one band: vertices on the two rims only), facing the axis or away
+function cad_frustum(r0, z0, r1, z1; nz = 1, nphi, inward = true)
+    F = NTuple{3,Vec3}[]
+    φs = range(0, 2π; length = nphi + 1)
+    for i in 1:nz, j in 1:nphi
+        (ra, za), (rb, zb) = ((r0 + (r1 - r0) * x, z0 + (z1 - z0) * x) for x in ((i - 1) / nz, i / nz))
+        a, b = φs[j], φs[j+1]
+        out = Vec3((z1 - z0) * cos((a + b) / 2), (z1 - z0) * sin((a + b) / 2), -(r1 - r0))
+        cad_quad!(F, cad_pt(ra, a, za), cad_pt(ra, b, za), cad_pt(rb, b, zb), cad_pt(rb, a, zb), inward ? -out : out)
+    end
+    return F
+end
+# the fan of slivers CAD makes of a disk of radius r at height z, facing ±z
+function cad_fan(r, z, up; nphi)
+    F = NTuple{3,Vec3}[]
+    φs = range(0, 2π; length = nphi + 1)
+    for j in 1:nphi
+        p, q, c = Vec3(0, 0, z), cad_pt(r, φs[j], z), cad_pt(r, φs[j+1], z)
+        push!(F, (cross(q - p, c - p)[3] > 0) == up ? (p, q, c) : (p, c, q))
+    end
+    return F
+end
+
 # through binary STL and back: Float32 coordinates, one patch per facet
 function stl_roundtrip(F)
     path = joinpath(mktempdir(), "part.stl")
@@ -102,7 +126,25 @@ end
         add_polygon!(para, [p(x0, y0), p(x0 + d, y0 + d), p(x0, y0 + d)])
     end
     @test isempty(fit_surfaces(para))
-    @test_throws ArgumentError fit_surfaces(para; kinds = (:cone,))
+    @test_throws ArgumentError fit_surfaces(para; kinds = (:torus,))
+
+    # cones: an entrance-hole cone (39°) and a 45° one as single bands (vertices on two
+    # rims only, which a sphere fits as well: the cone is taken), a slightly tapered bore
+    # (2.9°, apex 40 mm away) and a near-flat 83° cone in several bands, facing in or out
+    for (r0, z0, r1, z1, nz, nphi, inward) in ((1.55, 4.7, 2.2, 5.5, 1, 360, true), (1.0, 0.0, 2.0, 1.0, 1, 120, false),
+                                               (2.0, 0.0, 1.9, 2.0, 8, 180, true), (0.5, 0.0, 3.0, 0.3, 3, 120, true))
+        k = (r1 - r0) / (z1 - z0)
+        raw = orient_mesh(stl_roundtrip(cad_frustum(r0, z0, r1, z1; nz, nphi, inward)))
+        for mesh in (raw, remesh_mesh(raw; size = 0.3))
+            regs = fit_surfaces(mesh; reference = mesh === raw ? nothing : raw)
+            @test length(regs) == 1 && regs[1].kind === :cone && length(regs[1].patches) == npatches(mesh)
+            c = regs[1].surface
+            @test c.half_angle ≈ atand(abs(k)) rtol = 1e-6
+            @test c.apex ≈ Vec3(0, 0, z0 - r0 / k) atol = 1e-5 * max(1, abs(z0 - r0 / k))
+            @test c.axis ≈ Vec3(0, 0, sign(k)) atol = 1e-7
+            @test regs[1].facing == (inward ? -1 : 1)
+        end
+    end
 end
 
 @testset "curved_components" begin
@@ -126,6 +168,18 @@ end
     plate = Component(:plate, rectangle_mesh(2.0, 1.0; nu = 4, nv = 2), gold())
     @test curved_components(plate) == [plate]
     @test_throws ArgumentError curved_components(c; kinds = (:plane,))
+    # dropping gently curved and small regions into the rest: the part's extent is
+    # 9.7 mm, its area 215 mm², the bore's 0.49 mm²
+    @test [x.name for x in curved_components(c; reference = raw, maxradius = 0.2)] == Symbol.(["half/cyl1", "half/rest"])
+    @test [x.surface.radius for x in curved_components(c; reference = raw, minfraction = 0.01)[1:2]] ≈ [Rout, R] rtol = 1e-6
+    @test length(curved_components(c; reference = raw, minfraction = 0.01)) == 3
+    # a cone, with the cylinders of a part
+    cone = orient_mesh(stl_roundtrip([cad_frustum(1.0, 0.0, 2.0, 1.0; nphi = 120); cad_frustum(2.0, 1.0, 2.0, 2.5; nphi = 120)]))
+    cs = curved_components(Component(:shield, remesh_mesh(cone; size = 0.3), gold()); reference = cone)
+    @test [x.name for x in cs] == Symbol.(["shield/cyl1", "shield/cone1"])
+    @test cs[2].surface isa ConeSurface
+    @test cs[2].surface.half_angle ≈ 45 rtol = 1e-7
+    @test sum(Target(cs).elem_area) ≈ π * 3 * sqrt(2) + 6π rtol = 1e-7
 end
 
 @testset "radiation on fitted CAD" begin
@@ -230,6 +284,36 @@ end
     flux(sol, t, es) = sum(sol.H[es] .* t.elem_area[es]) / sum(t.elem_area[es])
     @test flux(sc, tc, cap) ≈ flux(sp, prim, elements(prim, :capsule)) rtol = 3e-4
     @test flux(sc, tc, leh) ≈ flux(sp, prim, elements(prim, :leh_top, :leh_bottom)) rtol = 3e-4
+end
+
+@testset "radiation in a fitted CAD cone" begin
+    # a CAD frustum (45°, r 1 → 2 over z 0 → 1, one band of 180 strips) closed by two
+    # fans, remeshed at 0.3 mm: the fitted cone against the exact exchanges (the disks'
+    # coaxial factor; the cone's by closure and reciprocity), and against flat elements
+    r1, r2, L = 1.0, 2.0, 1.0
+    Ac, A1, A2 = π * (r1 + r2) * hypot(r2 - r1, L), π * r1^2, π * r2^2
+    X = 1 + (1 + (r2 / L)^2) / (r1 / L)^2
+    f12 = (X - sqrt(X^2 - 4(r2 / r1)^2)) / 2
+    cd1, cd2 = A1 * (1 - f12) / Ac, (A2 - A1 * f12) / Ac
+    raw = [stl_roundtrip(f) for f in (cad_frustum(r1, 0.0, r2, L; nphi = 180), cad_fan(r1, 0.0, true; nphi = 180),
+                                      cad_fan(r2, L, false; nphi = 180))]
+    el = [remesh_mesh(m; size = 0.3) for m in raw]
+    disks = [Component(:d1, el[2], gold()), Component(:d2, el[3], gold())]
+    errs = map((Target([Component(:cone, el[1], gold()); disks]),
+                Target([curved_components(Component(:cone, el[1], gold()); reference = raw[1]); disks]))) do t
+        F = view_factors(t)
+        A = t.elem_area
+        c = [e for e in 1:nelements(t) if abs(t.elem_normal[e][3]) < 0.9]
+        d1, d2 = elements(t, :d1), elements(t, :d2)
+        flux(I, J) = sum(A[i] * F[i, j] for i in I, j in J) / sum(A[I])
+        (; names = [x.name for x in t.components], area = sum(A[c]) / Ac - 1, d2 = flux(c, d2) / cd2 - 1,
+         cc = flux(c, c) / (1 - cd1 - cd2) - 1, back = flux(d2, c) / (1 - A1 * f12 / A2) - 1)
+    end
+    flat, fitted = errs
+    @test fitted.names == [Symbol("cone/cone1"), :d1, :d2]
+    @test abs(fitted.area) < 1e-8                         # (Float32 vertices)
+    @test abs(fitted.d2) < 1e-3 && abs(fitted.cc) < 1e-3 && abs(fitted.back) < 1e-3
+    @test abs(fitted.d2) < abs(flat.d2) / 3 && abs(fitted.back) < abs(flat.back) / 3
 end
 
 @testset "view factors on remeshed CAD elements" begin

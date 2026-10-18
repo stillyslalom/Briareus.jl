@@ -40,13 +40,13 @@ environment has no ForwardDiff/Optim, and `Vec3` clashes with Makie there.
   0.5 % level on default capsule meshes.
 - View factors: near pairs use the exact point-to-polygon kernel over sub-triangle points
   of the emitter (adaptive toward shared edges), mid/far pairs fixed quadrature, averaged
-  for reciprocity. Components carrying a `CurvedSurface` (Sphere/Cylinder/DiskSurface)
+  for reciprocity. Components carrying a `CurvedSurface` (Sphere/Cylinder/Cone/DiskSurface)
   are integrated on the true surface — hohlraums do this by default; ray casting always
   uses the facets. `closed = true` (Sinkhorn balancing) only for closed enclosures.
   Elements of more than two facets (remeshed CAD) emit from lumped cells and receive
   through their outline (or plane by plane when cut by the point's tangent plane);
   1–2-facet elements (every primitive) keep the per-facet path bit for bit.
-  Visibility ignores facets of a cylinder/sphere when both ray ends are inside it
+  Visibility ignores facets of a cylinder/sphere/cone when both ray ends are inside it
   (faceting artifacts), and the centroid facing test is relaxed by each curved
   element's normal spread (a general triangle on a cylinder is tilted ~h/2R).
 - Patches must be planar: on a cylinder, mesh anything but chord rectangles as
@@ -56,9 +56,12 @@ environment has no ForwardDiff/Optim, and `Vec3` clashes with Makie there.
   moves such an element's centroid along its normal onto its facets (a planar patch
   keeps its centroid bit for bit), or on a convex surface (a capsule) it would see
   nothing.
-- CAD curved walls: `fit_surfaces` finds planes, cylinders and spheres in a mesh;
+- CAD curved walls: `fit_surfaces` finds planes, cylinders, cones and spheres in a mesh;
   `curved_components` (or `visrad_target(...; remesh, fit = true)`) splits a part into
-  `<part>/cyl1`, …, `<part>/sph1`, …, `<part>/rest`, each carrying its fitted surface.
+  `<part>/cyl1`, …, `<part>/cone1`, …, `<part>/sph1`, …, `<part>/rest`, each carrying
+  its fitted surface. `ConeSurface` projects radially at constant height (rim chords
+  land on the rim circles, so faceted frusta tile exactly); elements touching a cone's
+  apex stay flat (the surface is singular there).
   Planes get none (flat elements are exact; `DiskSurface` assumes polar sectors). A
   curved element of more than two facets gets a lumped quadrature (as many points as a
   two-triangle element), so view-factor cost does not grow with the CAD faceting;

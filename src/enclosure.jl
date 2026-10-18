@@ -415,9 +415,10 @@ sides when `two_sided`), through these steps:
    divided, which is much cheaper when most of an assembly lies outside the cavity.
    With `inside`, the selection is then repeated on the elements: an element straddling
    the edge of the lit region averages its flux over its own area.
-4. `fit = true` (or a named tuple of [`fit_surfaces`](@ref) keywords) splits each part
-   into its cylinders, its spheres and the rest ([`curved_components`](@ref)), fitted on
-   the kept CAD facets, whose vertices lie on the true surfaces, so the radiation model
+4. `fit = true` (or a named tuple of keywords of [`curved_components`](@ref) and
+   [`fit_surfaces`](@ref), such as `minfraction = 1e-3` to leave small curved faces
+   flat) splits each part into its cylinders, cones, spheres and the rest, fitted on the
+   kept CAD facets, whose vertices lie on the true surfaces, so the radiation model
    integrates over the curved walls.
 
 `material`, `two_sided`, `remesh` and `coarsen` take one value for every CAD part, a
@@ -434,7 +435,7 @@ function cad_target(parts; orient::Bool = true, toward = (0.0, 0.0, 0.0), inside
     coarsen === nothing || remesh === nothing ||
         throw(ArgumentError("give one of `coarsen` and `remesh`, not both"))
     fit isa Union{Bool,NamedTuple} ||
-        throw(ArgumentError("`fit` must be true, false or a named tuple of fit_surfaces keywords"))
+        throw(ArgumentError("`fit` must be true, false or a named tuple of curved_components keywords"))
     comps = Component[]
     cad = Bool[]                         # per component: a CAD part
     for p in parts

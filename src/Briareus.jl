@@ -18,7 +18,7 @@ using SpecialFunctions: gamma, gamma_inc, gamma_inc_inv, dawson
 import Optim
 using PrecompileTools: @setup_workload, @compile_workload
 
-export CurvedSurface, SphereSurface, CylinderSurface, DiskSurface, surface_point, element_sector
+export CurvedSurface, SphereSurface, CylinderSurface, ConeSurface, DiskSurface, surface_point, element_sector
 export Vec3, Mesh, npatches, add_polygon!, merge_meshes, split_mesh, transform, translate, rotation_to,
        orient_mesh, coarsen_mesh, remesh_mesh, SurfaceRegion, fit_surfaces, curved_components,
        cylinder_mesh, annulus_mesh, disk_mesh, sphere_mesh, cubed_sphere_mesh, rectangle_mesh, frustum_mesh

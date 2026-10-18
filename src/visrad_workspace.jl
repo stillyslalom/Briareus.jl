@@ -569,10 +569,10 @@ before view factors: `remesh` (mm) divides the surface into near-planar elements
 about that size whatever the facets' shapes (`remesh_mesh`; long slivers are cut),
 while `coarsen` (mm) only merges whole near-coplanar facets up to that size
 (`coarsen_mesh`; slivers longer than the size stay). `fit = true` (or a named tuple of
-`fit_surfaces` keywords) then splits a CAD part into its cylinders and spheres, each
-with its exact surface fitted to the CAD facets, and the rest (`curved_components`), so
-the radiation model integrates on the curved walls as it does for a primitive
-hohlraum. Rectangles give one component (normal +z before orientation), spheres one with
+`curved_components` and `fit_surfaces` keywords) then splits a CAD part into its
+cylinders, cones and spheres, each with its exact surface fitted to the CAD facets, and
+the rest (`curved_components`), so the radiation model integrates on the curved walls
+as it does for a primitive hohlraum. Rectangles give one component (normal +z before orientation), spheres one with
 a `SphereSurface`, and cylindrical hohlraums five — `<name>_wall`, `_cap_top`,
 `_cap_bottom` and the apertures `_leh_top`, `_leh_bottom` — with the curved surfaces
 `hohlraum` uses, all on VisRad's grid (`Number of mesh pts`, which reproduces VisRad's
@@ -618,7 +618,7 @@ file's albedo and conversion efficiency. `two_sided` (a `Bool`, or a function of
 object) makes surfaces radiate from both sides; see `visrad_component` for why CAD
 meshes often need it, and for `orient`, `toward`, `remesh`, `coarsen` and `fit` (which
 apply to CAD meshes: repaired windings, elements of about `remesh` or `coarsen` mm, and
-exact cylinders and spheres for the radiation model).
+exact cylinders, cones and spheres for the radiation model).
 
 CAD meshes can hold hundreds of thousands of triangles, and each becomes a radiating
 element. That is fine for ray tracing (deposition, clearance, imaging) but too many for

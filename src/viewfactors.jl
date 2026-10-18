@@ -38,7 +38,7 @@ of times more per near pair. Give such parts their fitted surface
 (`curved_components`): they are then integrated on the curved surface instead.
 
 Visibility is a single centroid-to-centroid ray between the flat facets; the facets of
-a curved surface (cylinder or sphere) do not block a ray between two points inside it,
+a curved surface (cylinder, sphere or cone) do not block a ray between two points inside it,
 since the true surface cannot. On curved elements the centroid facing test is relaxed
 by the spread of the true normals across the flat facet, so pairs the curved patches
 exchange across are kept (a general triangle on a cylinder has its plane tilted axially
@@ -92,11 +92,11 @@ function view_factors(t::Target; near = 3.0, mid = 12.0, level::Integer = 1, exa
             slack[e] = max(slack[e], norm(cross(t.elem_curved[e] * last(surface_point(s, v)), Nrm[e])))
         end
     end
-    # A segment between two points inside a convex curved surface (cylinder, sphere)
+    # A segment between two points inside a convex curved surface (cylinder, sphere, cone)
     # cannot cross the surface, so its facets do not occlude such a pair: they would only
     # by faceting (a ray grazing the wall from a small facet is blocked by a larger
     # neighbor, which sits deeper inside the true surface).
-    surfs = unique(c.surface for c in t.components if c.surface isa Union{CylinderSurface,SphereSurface})
+    surfs = unique(c.surface for c in t.components if c.surface isa Union{CylinderSurface,SphereSurface,ConeSurface})
     comp_surf = [something(findfirst(==(c.surface), surfs), 0) for c in t.components]
     tri_surf = Int32[comp_surf[c] for c in t.tri_comp]
     inside = BitMatrix(undef, length(surfs), N)
@@ -166,6 +166,12 @@ end
 _inside(s::CylinderSurface, p) =
     (d = p - s.origin; norm(d - dot(d, s.axis) * s.axis) <= s.radius * (1 + 1e-12))
 _inside(s::SphereSurface, p) = norm(p - s.center) <= s.radius * (1 + 1e-12)
+# (a cone's nappe bounds a convex solid: points within the half-angle of the axis)
+function _inside(s::ConeSurface, p)
+    sα, cα = sincosd(s.half_angle)
+    z, ρ, _ = _cone_coordinates(s, p)
+    return ρ * cα - z * sα <= 1e-12 * norm(p - s.apex)
+end
 
 # One-point rule of a curved element: the projected centroid, its normal and the area.
 function _one_point(t::Target, e)

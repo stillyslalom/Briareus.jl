@@ -557,11 +557,11 @@ function _talis_stay_in(t::Target, beams, surf, limit, htol)
     return rows
 end
 
-# Vertices, sub-triangles (a, b, c, centroid) and their normals (exact on sphere and
-# cylinder surfaces) of a component.
+# Vertices, sub-triangles (a, b, c, centroid) and their normals (exact on sphere,
+# cylinder and cone surfaces) of a component.
 function _talis_samples(t::Target, ci, level)
     c = t.components[ci]
-    curved = c.surface isa SphereSurface || c.surface isa CylinderSurface
+    curved = c.surface isa Union{SphereSurface,CylinderSurface,ConeSurface}
     verts, leaves, normals, buf = Vec3[], NTuple{4,Vec3}[], Vec3[], Vec3[]
     for k in eachindex(t.tri_area)
         (t.tri_comp[k] == ci && t.tri_area[k] > 0) || continue

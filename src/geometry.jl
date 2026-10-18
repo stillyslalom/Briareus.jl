@@ -84,12 +84,12 @@ end
 """
     CurvedSurface
 
-Exact surface that a faceted component approximates: `SphereSurface` or
-`CylinderSurface`. When a component carries one, the radiation model integrates over
-the true surface (points, normals and areas of the curved patches), while ray casting
-and visibility keep using the flat facets. On a curved concave surface the view-factor
-kernel stays bounded, and flat facets would misrepresent the exchange between nearby
-elements.
+Exact surface that a faceted component approximates: `SphereSurface`,
+`CylinderSurface`, `ConeSurface` or `DiskSurface`. When a component carries one, the
+radiation model integrates over the true surface (points, normals and areas of the
+curved patches), while ray casting and visibility keep using the flat facets. On a
+curved concave surface the view-factor kernel stays bounded, and flat facets would
+misrepresent the exchange between nearby elements.
 """
 abstract type CurvedSurface end
 
@@ -116,6 +116,27 @@ CylinderSurface(radius::Real; origin = (0.0, 0.0, 0.0), axis = (0.0, 0.0, 1.0)) 
     CylinderSurface(Vec3(origin...), normalize(Vec3(axis...)), Float64(radius))
 
 """
+    ConeSurface(half_angle; apex = (0, 0, 0), axis = (0, 0, 1))
+
+One nappe of a right circular cone: the points seen from `apex` at `half_angle` degrees
+(0 < θ < 90) from `axis`, at distance z tan θ from the axis a distance z along it (an
+entrance-hole cone, a conical shield, a tapered bore). As on a cylinder, points are
+projected onto it radially, keeping their height along the axis, so the chords of a
+circle about the axis (the rims of a faceted cone) land on the circle and a faceted
+frustum covers the true one exactly; facets' patches have exact areas.
+"""
+struct ConeSurface <: CurvedSurface
+    apex::Vec3
+    axis::Vec3
+    half_angle::Float64             # degrees
+    function ConeSurface(apex, axis, half_angle)
+        0 < half_angle < 90 || throw(ArgumentError("a cone's half-angle must lie between 0 and 90 degrees"))
+        return new(Vec3(apex...), normalize(Vec3(axis...)), Float64(half_angle))
+    end
+end
+ConeSurface(half_angle::Real; apex = (0.0, 0.0, 0.0), axis = (0.0, 0.0, 1.0)) = ConeSurface(apex, axis, half_angle)
+
+"""
     DiskSurface(; center = (0, 0, 0), normal = (0, 0, 1))
 
 Plane through `center` whose elements are polar sectors about `center`, as produced by
@@ -135,7 +156,7 @@ DiskSurface(; center = (0.0, 0.0, 0.0), normal = (0.0, 0.0, 1.0)) =
     surface_point(surface, p) -> (point, normal)
 
 Projection of `p` onto the surface (radially from the center or the axis) and the
-outward unit normal there.
+outward unit normal there (away from the center or the axis).
 """
 function surface_point(s::SphereSurface, p)
     d = normalize(p - s.center)
@@ -148,10 +169,31 @@ function surface_point(s::CylinderSurface, p)
     return s.origin + a * s.axis + s.radius * n, n
 end
 
+# A point's height z along the cone's axis from its apex, its distance ρ from the axis
+# and the unit vector toward it (any perpendicular on the axis).
+function _cone_coordinates(s::ConeSurface, p)
+    d = p - s.apex
+    z = dot(d, s.axis)
+    q = d - z * s.axis
+    ρ = norm(q)
+    if ρ > 0
+        return z, ρ, q / ρ
+    end
+    a = s.axis
+    return z, ρ, normalize(cross(a, abs(a[1]) < 0.9 ? Vec3(1, 0, 0) : Vec3(0, 1, 0)))
+end
+
+function surface_point(s::ConeSurface, p)
+    sα, cα = sincosd(s.half_angle)
+    z, ρ, ρ̂ = _cone_coordinates(s, p)
+    return s.apex + max(z, 0.0) * (s.axis + (sα / cα) * ρ̂), cα * ρ̂ - sα * s.axis
+end
+
 _transform_surface(::Nothing, R, t) = nothing
 _transform_surface(s::SphereSurface, R, t) = SphereSurface(Vec3(R * s.center + t), s.radius)
 _transform_surface(s::CylinderSurface, R, t) =
     CylinderSurface(Vec3(R * s.origin + t), normalize(Vec3(R * s.axis)), s.radius)
+_transform_surface(s::ConeSurface, R, t) = ConeSurface(Vec3(R * s.apex + t), Vec3(R * s.axis), s.half_angle)
 _transform_surface(s::DiskSurface, R, t) = DiskSurface(Vec3(R * s.center + t), normalize(Vec3(R * s.normal)))
 
 surface_point(s::DiskSurface, p) = (p - dot(p - s.center, s.normal) * s.normal, s.normal)
@@ -271,6 +313,73 @@ function _curved_area(s::CylinderSurface, a, b, c)
           _cylinder_edge_integral(ub, uc, perp(bc), zb, dot(bc, ax), ax) +
           _cylinder_edge_integral(uc, ua, perp(ca), zc, dot(ca, ax), ax)
     return s.radius * abs(acc)
+end
+
+# On a cone the projection keeps the height z along the axis (from the apex) and the
+# azimuth φ, and the surface element is ρ dφ dz / cos θ = (sin θ / cos²θ) z dz dφ, so the
+# patch has area (sin θ / 2cos²θ) |∮ z² dφ| (Green's theorem). Along a straight edge
+# P → Q, z is linear and dφ/dt = C/|u|² as on the cylinder; ∫ z^k dφ is done by
+# Gauss–Legendre, the edge halved until the poles of 1/|u|² (t = (−B ± 2i|C|)/2A) lie
+# outside the Bernstein ellipse of parameter 5 of each piece, where 16 points converge to
+# round-off (8 beyond parameter 20; a chord short against its distance from the axis
+# needs no halving). With z = z₀ + ζ, z₀ the lowest vertex, and ∮ dφ = 0 around the patch,
+#     ∮ z² dφ = ∮ ζ² dφ + 2 z₀ ∮ ζ dφ,
+# which keeps a small patch far from the apex (a slightly tapered cone, z₀ tan θ = ρ₀ its
+# radius) from cancelling terms of size z₀² Δφ; as θ → 0 the area tends to the
+# cylinder's ρ₀ ∮ ζ dφ.
+const _GL8 = let n = 8
+    F = eigen(SymTridiagonal(zeros(n), [k / sqrt(4k^2 - 1) for k in 1:n-1]))
+    (; x = (F.values .+ 1) ./ 2, w = F.vectors[1, :] .^ 2)
+end
+
+function _curved_area(s::ConeSurface, a, b, c)
+    sα, cα = sincosd(s.half_angle)
+    ax = s.axis
+    perp(d) = d - dot(d, ax) * ax
+    vs = (a, b, c)
+    zs = map(v -> dot(v - s.apex, ax), vs)
+    i0 = argmin(zs)
+    z0, v0 = zs[i0], vs[i0]
+    acc1 = 0.0                          # ∮ ζ dφ
+    acc2 = 0.0                          # ∮ ζ² dφ
+    for k in 1:3
+        P, Q = vs[k], vs[mod1(k + 1, 3)]
+        uP = perp(P - s.apex)
+        Δ = perp(Q - P)
+        C = dot(cross(uP, Δ), ax)
+        C == 0 && continue
+        i1, i2 = _cone_edge_integral(uP, Δ, C, dot(P - v0, ax), dot(Q - P, ax), 0.0, 1.0, 0)
+        acc1 += i1
+        acc2 += i2
+    end
+    return abs(sα / (2cα^2) * acc2 + (z0 * sα / cα^2) * acc1)
+end
+
+# (∫ ζ dφ, ∫ ζ² dφ) over t ∈ [t0, t1] of the edge u(t) = u_P + tΔ, ζ(t) = ζP + dz t.
+function _cone_edge_integral(uP, Δ, C, ζP, dz, t0, t1, depth)
+    A = dot(Δ, Δ)
+    B = 2dot(uP, Δ)
+    # a pole of 1/|u|², mapped to [-1, 1], and the Bernstein ellipse through it
+    x = (2 * complex(-B / 2A, abs(C) / A) - t0 - t1) / (t1 - t0)
+    ρB = abs(x + sqrt(x - 1) * sqrt(x + 1))
+    ρB = max(ρB, 1 / ρB)
+    if ρB < 5 && depth < 40
+        tm = (t0 + t1) / 2
+        a1, a2 = _cone_edge_integral(uP, Δ, C, ζP, dz, t0, tm, depth + 1)
+        b1, b2 = _cone_edge_integral(uP, Δ, C, ζP, dz, tm, t1, depth + 1)
+        return a1 + b1, a2 + b2
+    end
+    GL = ρB < 20 ? _GL16 : _GL8
+    i1, i2 = 0.0, 0.0
+    for k in eachindex(GL.x)
+        t = t0 + (t1 - t0) * GL.x[k]
+        u = uP + t * Δ
+        ζ = ζP + dz * t
+        dφ = GL.w[k] * C / dot(u, u)
+        i1 += ζ * dφ
+        i2 += ζ^2 * dφ
+    end
+    return (t1 - t0) * i1, (t1 - t0) * i2
 end
 
 """

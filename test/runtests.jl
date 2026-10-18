@@ -859,6 +859,74 @@ end
     Ftop = sum(m * Fdisk(m, L, Rc) for m in mids) / sum(mids)
     @test sum(Fc[rim, tp]) ≈ Ftop rtol = 2e-3
     @test sum(Fc[rim, wl]) ≈ 1 - Ftop rtol = 2e-3
+
+    # cones: the patches of a faceted cone tile it exactly, rim chords included (frusta
+    # both ways, a pointed cone, a near-flat and a slightly tapered one: π(r₀ + r₁)s)...
+    curved_sum(s, m) = sum(Briareus._curved_area(s, (m.vertices[i] for i in tri)...) for tri in m.triangles)
+    for (r0, z0, r1, z1) in ((1.0, 1.0, 2.0, 2.0), (0.0, 0.0, 1.5, 3.0), (2.0, 0.0, 1.0, 4.0), (3.0, 0.0, 2.99, 1.0),
+                             (1.0, 0.0, 5.0, 0.05))
+        k = (r1 - r0) / (z1 - z0)
+        s = ConeSurface(atand(abs(k)); apex = (0, 0, z0 - r0 / k), axis = (0, 0, sign(k)))
+        for (nz, nphi) in ((1, 12), (4, 90))
+            @test curved_sum(s, frustum_mesh(r0, z0, r1, z1; nz, nphi)) ≈ π * (r0 + r1) * hypot(r1 - r0, z1 - z0) rtol = 1e-13
+        end
+    end
+    # ...and a general triangle's patch has the area of its projection, against a fine
+    # subdivision (Richardson-extrapolated)
+    function projected_area(s, a, b, c, n)
+        P(i, j) = first(surface_point(s, a + (i / n) * (b - a) + (j / n) * (c - a)))
+        A = 0.0
+        for i in 0:n-1, j in 0:n-1-i
+            A += norm(cross(P(i + 1, j) - P(i, j), P(i, j + 1) - P(i, j))) / 2
+            i + j < n - 1 && (A += norm(cross(P(i + 1, j + 1) - P(i + 1, j), P(i, j + 1) - P(i + 1, j))) / 2)
+        end
+        return A
+    end
+    rng = Xoshiro(3)
+    for θ in (5.0, 30.0, 75.0)
+        s = ConeSurface(θ; apex = (0.1, -0.2, 0.3), axis = (0.2, 0.1, 1.0))
+        e1 = normalize(cross(s.axis, Vec3(1, 0, 0)))
+        e2 = cross(s.axis, e1)
+        for _ in 1:2
+            a, b, c = [(z = 1 + 2rand(rng); φ = rand(rng);
+                        s.apex + z * s.axis + z * tand(θ) * (cos(φ) * e1 + sin(φ) * e2) + 0.01randn(rng, Vec3)) for _ in 1:3]
+            ref = (4projected_area(s, a, b, c, 200) - projected_area(s, a, b, c, 100)) / 3
+            @test Briareus._curved_area(s, a, b, c) ≈ ref rtol = 1e-9
+        end
+    end
+    # a frustum (45°, r 1 → 2 over z 0 → 1) closed by sector disks, against the exact
+    # exchanges: the coaxial-disk factor, and the cone's by closure and reciprocity
+    r1, r2, L = 1.0, 2.0, 1.0
+    Ac, A1, A2 = π * (r1 + r2) * hypot(r2 - r1, L), π * r1^2, π * r2^2
+    X = 1 + (1 + (r2 / L)^2) / (r1 / L)^2
+    f12 = (X - sqrt(X^2 - 4(r2 / r1)^2)) / 2
+    exact = (; cd1 = A1 * (1 - f12) / Ac, cd2 = (A2 - A1 * f12) / Ac)
+    errs = map((nothing, ConeSurface(45.0; apex = (0, 0, -1)))) do s
+        t = Target(Component(:cone, frustum_mesh(r1, 0.0, r2, L; nz = 8, nphi = 48), gold(); surface = s),
+                   Component(:d1, disk_mesh(r1, 0.0; nr = 6, nphi = 48, up = true), gold(); surface = DiskSurface()),
+                   Component(:d2, disk_mesh(r2, L; nr = 6, nphi = 48, up = false), gold();
+                             surface = DiskSurface(center = (0, 0, L))))
+        F = view_factors(t)
+        A = t.elem_area
+        c, d1, d2 = elements(t, :cone), elements(t, :d1), elements(t, :d2)
+        flux(I, J) = sum(A[i] * F[i, j] for i in I, j in J) / sum(A[I])
+        (; area = sum(A[c]) / Ac - 1, d1 = flux(c, d1) / exact.cd1 - 1, d2 = flux(c, d2) / exact.cd2 - 1,
+         cc = flux(c, c) / (1 - exact.cd1 - exact.cd2) - 1, recip = maximum(abs, A .* F .- (A .* F)'))
+    end
+    flat, fitted = errs
+    @test abs(fitted.area) < 1e-14 && fitted.recip < 1e-15
+    @test abs(fitted.d1) < 2e-3 && abs(fitted.d2) < 1e-3 && abs(fitted.cc) < 5e-4
+    @test abs(fitted.d2) < abs(flat.d2) / 3 && abs(fitted.cc) < abs(flat.cc) / 5
+    # a pointed cone on its base: the base sees only the cone; the ring of elements at
+    # the apex (where the surface is singular) stays flat
+    rb, H = 1.5, 3.0
+    t = Target(Component(:cone, frustum_mesh(0.0, 0.0, rb, H; nz = 8, nphi = 48), gold(); surface = ConeSurface(atand(rb / H))),
+               Component(:base, disk_mesh(rb, H; nr = 6, nphi = 48, up = false), gold(); surface = DiskSurface(center = (0, 0, H))))
+    @test count(e -> t.elem_curved[e] == 0, elements(t, :cone)) == 48
+    @test count(e -> t.elem_curved[e] == -1, elements(t, :cone)) == 7 * 48
+    F = view_factors(t)
+    b = elements(t, :base)
+    @test sum(t.elem_area[i] * F[i, j] for i in b, j in elements(t, :cone)) / sum(t.elem_area[b]) ≈ 1 rtol = 1e-4
 end
 
 include("talis.jl")

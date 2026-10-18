@@ -1021,6 +1021,72 @@ test fixture rebuilds the layout from rows copied from these files.
   2.4 s (22× faster; mean tube row sum 0.6185 vs 0.6168 flat); fitting the NIF cavity's
   parts changes its time little (19.3 vs 19.7 s). Deposition on the tube target: 8.5 s
   for 3 beams. **H** (synthetic; the NIF numbers measured locally)
+- **Cones (2026-10-18).** `ConeSurface(half_angle; apex, axis)` projects points radially
+  at constant height along the axis, as on a cylinder; the patch area is
+  (sin θ / 2cos²θ)|∮ z² dφ| (Green's theorem in height and azimuth), each edge by
+  Gauss–Legendre (16 or 8 points) halved until the poles of 1/ρ² lie outside the
+  Bernstein ellipse of parameter 5, with z measured from the lowest vertex so a slightly
+  tapered cone does not cancel. The nearest-point projection was tried first: rim chords
+  then dip toward the apex and a 12-strip 45° frustum covered only 97.7% of the true
+  one (−2.3e-2, −9e-4 at 60 strips); at constant height rim chords land on the rims and
+  faceted frusta (12–360 strips, 1–8 bands; 45°, 14.0°, 0.57°, 89.3°, and a pointed
+  26.6° cone) give π(r₀ + r₁)s to 4e-15, a 0.01° cone to 3e-14, and single triangles of
+  cones of 5°, 30°, 75° match a 200/400 subdivision of their projection (Richardson)
+  to 8e-12. Cost 450 ns per triangle against 310 ns for the cylinder's closed form.
+  The apex is a singular point: point rules on the ring of elements around it missed
+  3.4% of its exchange (ring closure −3.4e-2 at 4, 8 and 16 bands alike), so elements
+  touching the apex stay flat (+3.4e-3, as the flat cone). Closed 45° frustum
+  (r 1 → 2, z 0 → 1, sector disks, 8 bands × 48), against the coaxial-disk factor and
+  closure/reciprocity: curved cone→d1 +1.1e-3, cone→d2 −5.7e-4, cone→cone +2.5e-4
+  (flat +1.0e-2, −2.2e-3, +4.1e-3; at 16 × 96 curved +8.6e-4, −3.6e-4, +1.5e-4, flat
+  +4.0e-3, −1.3e-3, +1.0e-3). Pointed cone on its base: F(base → cone) = 1 − 5e-5.
+  **H** (synthetic)
+- **Cone fits (2026-10-18).** `fit_surfaces` grows cones as ρ = R + kz about an axis
+  point (k → 0 is a cylinder, so the fit stays well conditioned for slight tapers):
+  axis from the centered patch normals (on a cone they trace a circle about the axis;
+  right for a band around it) or the cylinder's axis (right for a small patch), an
+  algebraic fit of ρ² (with and without the k²z² term: on a band with only two rims z²
+  is a combination of 1 and z), then Gauss–Newton with step halving; the lower residual
+  wins. A cone whose apex lies over 1000 extents away is left to the cylinder, one whose
+  curvature radius R/cos θ does to the plane. Tie-break order plane, cylinder, cone,
+  sphere: a band with vertices on two rims fits a sphere and a cone equally, and is taken
+  for a cone (a tessellator would put rings inside a spherical zone that bulged beyond
+  its chord tolerance; a 45° one-band frustum fitted as a sphere has 5% more area).
+  Synthetic Float32 STL frusta (one band at 39° and 45°, 8 bands at 2.86°, 3 bands at
+  83.2°, raw and remeshed at 0.3 mm with the facets as reference): half-angle to 1e-6
+  relative, apex to 1e-5 mm, one region holding every element. CAD frustum (45°, 180
+  strips, fan disks, remeshed at 0.3): fitted cone→d2 −5.9e-4, cone→cone +3.5e-4,
+  d2→cone −3.8e-4 against flat −2.7e-3, −1.5e-3, −2.7e-3; view factors 0.6 s vs 1.3 s
+  (8 threads). Cylinder, sphere and plane fits, and every result on targets without a
+  cone, are bit-for-bit unchanged (seven primitive targets; the tutorial's half, washer,
+  capsule and tent cup fitted raw and remeshed). **H** (synthetic)
+- **Cones in the NIF CAD workspace (2026-10-18, local).** Raw facets, one thread; time
+  with cones vs without: hohlraum halves 1.1/0.8 s vs 0.7/0.6 s. Each half: the inner
+  end wall beside the LEH is a 84.47° cone facing the cavity (apex 5.789 mm from the
+  waist plane, radius 2.153–2.363 mm, 3.04 mm², rms 0.25 µm; it meets the r = 2.15 mm
+  LEH bore), and a 61.1° chamfer at the waist edge of the inner wall (r 3.21–3.25 mm,
+  0.19 mm², axis within 1.7e-3 rad of z). The LEH washers: a 77.14° chamfer on the outer
+  rim (r 3.065–3.082 mm, 0.35 mm², facing out). A waist sleeve: a 10.0° bore chamfer
+  facing in (2.35 mm²) and two 45.0° chamfers facing out (1.72 mm² each), rms 2e-10 mm.
+  Cones also absorb pieces of free-form faces (fillets) within tolerance: on the halves
+  8–10 more cones of 0.001–0.12 mm², most with axes tilted 0.03–1.5 rad, rms 0.5–1 µm
+  (previously unfitted or spheres). Two halves through `visrad_target(remesh = 0.3,
+  fit = true)`: 116 components (102 cylinders, 12 spheres, 2 rest) before, 138 with 22
+  cones; curved area 353.6 → 360.8 of 490 mm²; view factors no slower (10.8 s before,
+  7.9 s with cones, 8 threads) and identical on the inner wall (self-view, wall-to-wall,
+  6 digits). **H** (measured locally)
+- **Near-flat and small fitted regions (2026-10-18, local).** `curved_components` now
+  takes `maxradius` (relative to the part's bounding-box diagonal, 11 mm for a half)
+  and `minfraction` (relative to the part's area, 245 mm²); both off by default. Two
+  halves, remeshed at 0.3 mm, with cones: maxradius 1, 2, 5 alone → 127, 128, 131
+  components (the R = 23–670 mm spheres and cylinders are only ~10 of them; most of the
+  138 are small holes and edge faces); minfraction 1e-3, 3e-3, 1e-2 → 25, 16, 10
+  components with 356.6, 353.2, 344.1 mm² curved (of 360.8); minfraction 1e-2 keeps the
+  inner walls, outer sheets, steps and the two 84.5° cones. **H** (measured locally)
+- **Tori (fillets), not done.** A torus fit (7 parameters) would turn the CAD fillets
+  that stay unfitted or split into small cones/spheres into one region each; on the NIF
+  halves they are ≤ 1.3 mm² apiece and their flat elements are within the faceting, so
+  the gain is a smaller component count, which `minfraction` already gives. **M**
 
 ### Result tables and fits
 

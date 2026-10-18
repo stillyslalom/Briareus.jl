@@ -567,7 +567,7 @@ function Target(components::AbstractVector{Component})
                 nrm = normalize(sum(ta[k] * tn[k] for k in gr))
                 cen = _onto_patch(tv0, te1, te2, gr, cen, nrm)
                 curv = Int8(0)
-                if c.surface !== nothing
+                if c.surface !== nothing && !_at_apex(c.surface, tv0, te1, te2, gr)
                     # radiation uses the curved patch: its area, and normals on the side
                     # the flat element radiates from
                     A = c.surface isa DiskSurface ?
@@ -595,6 +595,22 @@ function Target(components::AbstractVector{Component})
 end
 
 Target(cs::Component...) = Target(collect(cs))
+
+# Whether an element touches the apex of the cone it lies on: the true surface is
+# singular there (the kernel between points on either side of the apex grows as 1/s²
+# toward it), which the curved elements' point rules miss by a fixed fraction however
+# fine the mesh (the ring around the apex of a pointed cone saw 3.4% too little); such an
+# element stays flat, where near pairs use the exact polygon kernel with adaptive
+# emitters.
+_at_apex(s, tv0, te1, te2, gr) = false
+function _at_apex(s::ConeSurface, tv0, te1, te2, gr)
+    dmin, dmax = Inf, 0.0
+    for k in gr, v in (tv0[k], tv0[k] + te1[k], tv0[k] + te2[k])
+        d = norm(v - s.apex)
+        dmin, dmax = min(dmin, d), max(dmax, d)
+    end
+    return dmin <= 1e-3 * dmax
+end
 
 # A folded patch (a remeshed CAD element spans facets within a few degrees of one
 # plane) has its area centroid off its facets: behind them on a convex surface, where

@@ -1,15 +1,16 @@
-# Analytic surfaces in imported (CAD) meshes: patches that lie on one plane, cylinder
-# or sphere are found by region growing with least-squares fits, and the curved ones are
-# attached to their components as `CurvedSurface`s, so the radiation model integrates
-# on the true surface as it does for primitive targets.
+# Analytic surfaces in imported (CAD) meshes: patches that lie on one plane, cylinder,
+# cone or sphere are found by region growing with least-squares fits, and the curved ones
+# are attached to their components as `CurvedSurface`s, so the radiation model
+# integrates on the true surface as it does for primitive targets.
 
 """
     SurfaceRegion
 
 Patches of a mesh lying on one analytic surface, as found by [`fit_surfaces`](@ref):
 
-- `kind`: `:plane`, `:cylinder` or `:sphere`
-- `surface`: the fitted `CylinderSurface` or `SphereSurface` (`nothing` for a plane)
+- `kind`: `:plane`, `:cylinder`, `:cone` or `:sphere`
+- `surface`: the fitted `CylinderSurface`, `ConeSurface` or `SphereSurface` (`nothing`
+  for a plane)
 - `centroid`: area-weighted centroid of the patches (mm)
 - `normal`: a plane's unit normal, on the side most of its area faces (zero for
   curved surfaces)
@@ -18,12 +19,13 @@ Patches of a mesh lying on one analytic surface, as found by [`fit_surfaces`](@r
 - `rms`, `maxdev`: rms and largest distance of the patches' vertices from the surface
   (mm)
 - `facing`: for curved surfaces, `-1` when every patch faces the axis or center (the
-  inside of a hohlraum wall), `+1` when every patch faces away from it, `0` when mixed;
+  inside of a hohlraum wall or of a cone), `+1` when every patch faces away from it, `0`
+  when mixed;
   for planes `+1`, or `0` when some patches face the other way
 """
 struct SurfaceRegion
     kind::Symbol
-    surface::Union{Nothing,CylinderSurface,SphereSurface}
+    surface::Union{Nothing,CylinderSurface,ConeSurface,SphereSurface}
     centroid::Vec3
     normal::Vec3
     patches::Vector{Int}
@@ -38,6 +40,7 @@ function Base.show(io::IO, r::SurfaceRegion)
     s = r.surface
     geo = r.kind === :plane ? "normal $(p3(r.normal))" :
           r.kind === :cylinder ? @sprintf("radius %.6g mm, axis %s through %s", s.radius, p3(s.axis), p3(s.origin)) :
+          r.kind === :cone ? @sprintf("half-angle %.6g°, axis %s from apex %s", s.half_angle, p3(s.axis), p3(s.apex)) :
           @sprintf("radius %.6g mm, center %s", s.radius, p3(s.center))
     side = r.facing == 0 ? ", mixed facing" :
            r.kind === :plane ? "" : r.facing < 0 ? ", facing in" : ", facing out"
@@ -46,35 +49,49 @@ function Base.show(io::IO, r::SurfaceRegion)
 end
 
 # A fitted surface: plane (point c, unit normal u), cylinder (axis point c, unit axis
-# u, radius R) or sphere (center c, radius R).
+# u, radius R), cone (axis point c, unit axis u, radius R at c and slope k = dρ/dz along
+# u: ρ = R + k z, either sign, so a cone tends to a cylinder as k → 0) or sphere
+# (center c, radius R).
 struct _SurfaceModel
     kind::Symbol
     c::Vec3
     u::Vec3
     R::Float64
+    k::Float64
 end
+_SurfaceModel(kind, c, u, R) = _SurfaceModel(kind, c, u, R, 0.0)
 
 function _model_distance(m::_SurfaceModel, p)
     d = p - m.c
     m.kind === :plane && return dot(d, m.u)
     m.kind === :cylinder && return norm(d - dot(d, m.u) * m.u) - m.R
+    if m.kind === :cone
+        z = dot(d, m.u)
+        return (norm(d - z * m.u) - m.R - m.k * z) / sqrt(1 + m.k^2)
+    end
     return norm(d) - m.R
 end
 
 function _model_normal(m::_SurfaceModel, p)
     m.kind === :plane && return m.u
     d = p - m.c
-    m.kind === :cylinder && (d -= dot(d, m.u) * m.u)
-    return normalize(d)
+    m.kind === :sphere && return normalize(d)
+    ρ̂ = normalize(d - dot(d, m.u) * m.u)
+    return m.kind === :cone ? (ρ̂ - m.k * m.u) / sqrt(1 + m.k^2) : ρ̂
 end
 
 _model_surface(m::_SurfaceModel) =
     m.kind === :cylinder ? CylinderSurface(m.c, m.u, m.R) :
+    m.kind === :cone ? ConeSurface(m.c - (m.R / m.k) * m.u, sign(m.k) * m.u, atand(abs(m.k))) :
     m.kind === :sphere ? SphereSurface(m.c, m.R) : nothing
 
+# Radius of curvature across the surface (a cone's at its reference circle, R/cos θ).
+_model_radius(m::_SurfaceModel) = m.kind === :cone ? m.R * sqrt(1 + m.k^2) : m.R
+
 # Least-squares fits to points X (with the patch normals N and areas W for the
-# cylinder's axis). `nothing` when the points do not determine the surface, or give a
-# radius beyond 1000 times their extent (a plane in disguise).
+# cylinder's and the cone's axis). `nothing` when the points do not determine the
+# surface, or give a radius beyond 1000 times their extent (a plane in disguise; for a
+# cone, also an apex that far: a cylinder in disguise).
 function _fit_model(kind::Symbol, X::Vector{Vec3}, N::Vector{Vec3}, W::Vector{Float64})
     m = sum(X) / length(X)
     ext = maximum(x -> norm(x - m), X)
@@ -86,6 +103,9 @@ function _fit_model(kind::Symbol, X::Vector{Vec3}, N::Vector{Vec3}, W::Vector{Fl
     elseif kind === :sphere
         length(X) >= 5 || return nothing
         return _fit_sphere(X, m, ext)
+    elseif kind === :cone
+        length(X) >= 7 || return nothing
+        return _fit_cone(X, N, W, m, ext)
     else
         length(X) >= 6 || return nothing
         return _fit_cylinder(X, N, W, m, ext)
@@ -181,6 +201,119 @@ function _fit_cylinder(X, N, W, m, ext)
     return _SurfaceModel(:cylinder, m + o, a, R)
 end
 
+# Cone: from two axis directions, the axis of the circle the normals trace (on a cone
+# they make a fixed angle with the axis: the least principal direction of the centered
+# normals, right for a band around the axis) and the cylinder's (the direction the
+# normals are perpendicular to, right for a small patch of a gentle cone), an algebraic
+# fit of ρ = R + k z across the axis (u² + v² linear in the axis point, R², 2Rk and k²;
+# or without the k² z² term, z being centered, when that fits better: on a band of two
+# rims z² is a combination of 1 and z), then Gauss–Newton (step halving when the
+# residual grows) on the geometric distances (ρ − R − kz)/√(1+k²) over the axis
+# direction, its position, R and k. The better of the two is kept.
+function _fit_cone(X, N, W, m, ext)
+    wt = sum(W)
+    wt > 0 || return nothing
+    nbar = sum(w * n for (n, w) in zip(N, W)) / wt
+    Sc = zeros(SMatrix{3,3,Float64})
+    Su = zeros(SMatrix{3,3,Float64})
+    for (n, w) in zip(N, W)
+        Sc += w * ((n - nbar) * (n - nbar)')
+        Su += w * (n * n')
+    end
+    best, bestc = nothing, Inf
+    for S in (Sc, Su)
+        a = Vec3(eigen(Symmetric(Matrix(S))).vectors[:, 1])
+        g = _cone_guess(X, m, a, true)
+        g1 = _cone_guess(X, m, a, false)
+        if g === nothing || (g1 !== nothing && _cone_cost(X, m, g1...) < _cone_cost(X, m, g...))
+            g = g1
+        end
+        g === nothing && continue
+        r = _cone_refine(X, m, ext, g...)
+        r === nothing && continue
+        r[2] < bestc && ((best, bestc) = r)
+    end
+    return best
+end
+
+function _cone_guess(X, m, a, quadratic::Bool)
+    e1, e2 = _perp_basis(a)
+    M = zeros(SMatrix{5,5,Float64})
+    g = zeros(SVector{5,Float64})
+    for x in X
+        y = x - m
+        u, v, z = dot(y, e1), dot(y, e2), dot(y, a)
+        q = SVector(2u, 2v, 1.0, z, quadratic ? z^2 : 0.0)
+        M += q * q'
+        g += q * (u^2 + v^2)
+    end
+    quadratic || (M += SMatrix{5,5,Float64}(Diagonal(SVector(0.0, 0.0, 0.0, 0.0, 1.0))))
+    s = _solve_small(M, g)
+    s === nothing && return nothing
+    R2 = s[3] + s[1]^2 + s[2]^2
+    R2 > 0 || return nothing
+    R = sqrt(R2)
+    return a, s[1] * e1 + s[2] * e2, R, s[4] / 2R
+end
+
+function _cone_cost(X, m, a, o, R, k)
+    c = 0.0
+    for x in X
+        d = x - m - o
+        z = dot(d, a)
+        c += (norm(d - z * a) - R - k * z)^2
+    end
+    return c / (1 + k^2)
+end
+
+function _cone_refine(X, m, ext, a, o, R, k)
+    cost = _cone_cost(X, m, a, o, R, k)
+    for _ in 1:30
+        (isfinite(R) && isfinite(k) && R > 0) || return nothing
+        e1, e2 = _perp_basis(a)
+        S = sqrt(1 + k^2)
+        M6 = zeros(SMatrix{6,6,Float64})
+        g6 = zeros(SVector{6,Float64})
+        for x in X
+            d = x - m - o
+            z = dot(d, a)
+            q = d - z * a
+            ρ = norm(q)
+            ρ > 0 || continue
+            û = q / ρ
+            ue1, ue2 = dot(û, e1), dot(û, e2)
+            r = (ρ - R - k * z) / S
+            h = (z + k * ρ) / S
+            J = SVector(-ue1 * h, -ue2 * h, -ue1 / S, -ue2 / S, -1 / S, -z / S - r * k / S^2)
+            M6 += J * J'
+            g6 += J * r
+        end
+        δ = _solve_small(M6, -g6)
+        δ === nothing && return nothing
+        step = 1.0
+        accepted = false
+        a2, o2, R2, k2, c2 = a, o, R, k, cost
+        for _ in 1:12
+            a2 = normalize(a + step * δ[1] * e1 + step * δ[2] * e2)
+            o2 = o + step * δ[3] * e1 + step * δ[4] * e2
+            R2, k2 = R + step * δ[5], k + step * δ[6]
+            h = dot(o2, a2)                             # back to the axis point nearest m
+            o2 -= h * a2
+            R2 -= k2 * h
+            c2 = _cone_cost(X, m, a2, o2, R2, k2)
+            c2 <= cost && (accepted = true; break)
+            step /= 2
+        end
+        accepted || break
+        a, o, R, k, cost = a2, o2, R2, k2, c2
+        step * norm(δ) <= 1e-13 * max(R, 1.0) && break
+    end
+    (isfinite(R) && isfinite(k) && R > 0) || return nothing
+    R * sqrt(1 + k^2) < 1e3ext || return nothing     # a plane in disguise
+    abs(k) * 1e3ext > R || return nothing             # apex beyond 1000 extents: a cylinder
+    return _SurfaceModel(:cone, m + o, a, R, k), cost
+end
+
 function _perp_basis(a)
     e1 = normalize(cross(a, abs(a[1]) < 0.9 ? Vec3(1, 0, 0) : Vec3(0, 1, 0)))
     return e1, cross(a, e1)
@@ -235,7 +368,7 @@ end
 # region's extent `ext` if smaller (a gently curved face is not a sphere of any radius
 # that bends less than `rtol R` across it), at least `atol`; `atol` for a plane (CAD
 # planes are flat to round-off).
-_fit_tol(m::_SurfaceModel, ext, rtol, atol) = m.kind === :plane ? atol : max(atol, rtol * min(m.R, ext))
+_fit_tol(m::_SurfaceModel, ext, rtol, atol) = m.kind === :plane ? atol : max(atol, rtol * min(_model_radius(m), ext))
 
 # Diagonal of the bounding box of the patches' vertices.
 function _extent(D, ps)
@@ -397,32 +530,40 @@ function _region(kind, members, model, D, scratch)
 end
 
 """
-    fit_surfaces(mesh; reference = nothing, kinds = (:plane, :cylinder, :sphere),
+    fit_surfaces(mesh; reference = nothing, kinds = (:plane, :cylinder, :cone, :sphere),
                  rtol = 1e-3, atol = 1e-4, angle = 30.0, minpatches = 6, minarea = 0.0,
                  tol = 1e-9) -> Vector{SurfaceRegion}
 
-Regions of `mesh` whose patches lie on one plane, cylinder (any axis) or sphere, by
-decreasing area; patches in no region are on none of them (fillets, free-form faces,
+Regions of `mesh` whose patches lie on one plane, cylinder (any axis), cone or sphere,
+by decreasing area; patches in no region are on none of them (fillets, free-form faces,
 patches straddling two faces). Use it on imported CAD (raw facets or after
 `remesh_mesh`), then [`curved_components`](@ref) to give the curved regions their exact
 surface for the radiation model.
 
 A patch belongs to a surface when every one of its vertices lies within
-`max(atol, rtol min(R, L))` mm of it (R the radius, L the region's extent; `atol` for a
-plane: CAD planes are flat to round-off) and its normal is within `angle` degrees of the surface normal at its centroid (either
-side: windings do not matter). Regions grow from seed patches, by decreasing area, over
-patches that share a vertex (welded by position to `tol` times the mesh's extent),
-nearest first, refitting by least squares as they grow: planes by principal components,
-spheres by an algebraic fit, cylinders by the axis the patch normals are perpendicular
-to and a circle fit across it, both refined by Gauss–Newton on the vertex distances.
-From each seed all `kinds` are grown and the largest region kept (a plane, then a
-cylinder, when within 1% of the largest: a narrow band with vertices only on its two
-rims, such as the bore of an entrance hole, fits a sphere as well as a cylinder) among
-those with at least `minpatches` patches and `minarea` mm² whose rms distance is under
-a quarter of the tolerance: on a true surface the residual is the faceting, well
-inside the tolerance, while a fit to a free-form or conical face grows until the
-tolerance stops it (rms about 0.4 of it), so such patches stay unfitted. Regions of one kind whose patches all lie on each other's fits (one
-surface interrupted by another face) are then merged.
+`max(atol, rtol min(R, L))` mm of it (R the radius of curvature, R/cos θ on a cone of
+half-angle θ; L the region's extent; `atol` for a plane: CAD planes are flat to
+round-off) and its normal is within `angle` degrees of the surface normal at its
+centroid (either side: windings do not matter). Regions grow from seed patches, by
+decreasing area, over patches that share a vertex (welded by position to `tol` times the
+mesh's extent), nearest first, refitting by least squares as they grow: planes by
+principal components, spheres by an algebraic fit, cylinders by the axis the patch
+normals are perpendicular to and a circle fit across it, cones by the axis the normals
+make a constant angle with (or the cylinder's, for a small patch) and an algebraic fit of
+the radius linear along it, all refined by Gauss–Newton on the vertex distances. A cone
+whose apex lies over 1000 extents away is left to the cylinder, as a surface whose
+radius of curvature does is left to the plane. From each seed all `kinds` are grown and the largest region
+kept, the earlier of plane, cylinder, cone, sphere when within 1% of the largest: a
+narrow band with vertices only on its two rims fits a sphere as well, and a cone too
+when its rims differ in radius (the bore of an entrance hole is a cylinder, a conical
+shield tessellated as one band a cone: a tessellator puts rings of vertices inside a
+spherical zone that bulges beyond its chord tolerance). Only regions with at least
+`minpatches` patches and `minarea` mm² whose rms distance is under a quarter of the
+tolerance count: on a true surface the residual is the faceting, well inside the
+tolerance, while a fit to a free-form face (a fillet, a torus) grows until the tolerance
+stops it (rms about 0.4 of it), so such patches stay unfitted. Regions of one kind whose
+patches all lie on each other's fits (one surface interrupted by another face) are then
+merged.
 
 The tolerance must exceed the faceting several times over. Facet vertices of exported
 CAD lie on the true surface, but points `remesh_mesh` adds on a facet lie up to w²/8R
@@ -436,10 +577,10 @@ index the patches of `mesh`, with their rms and largest distances from the
 (reference) fit.
 """
 function fit_surfaces(m::Mesh; reference::Union{Nothing,Mesh} = nothing,
-                      kinds = (:plane, :cylinder, :sphere), rtol::Real = 1e-3, atol::Real = 1e-4,
+                      kinds = (:plane, :cylinder, :cone, :sphere), rtol::Real = 1e-3, atol::Real = 1e-4,
                       angle::Real = 30.0, minpatches::Integer = 6, minarea::Real = 0.0, tol::Real = 1e-9)
-    all(in((:plane, :cylinder, :sphere)), kinds) ||
-        throw(ArgumentError("kinds must be among :plane, :cylinder and :sphere"))
+    all(in((:plane, :cylinder, :cone, :sphere)), kinds) ||
+        throw(ArgumentError("kinds must be among :plane, :cylinder, :cone and :sphere"))
     opts = (; rtol = Float64(rtol), atol = Float64(atol), cosmax = cosd(angle))
     if reference !== nothing
         regs = fit_surfaces(reference; kinds, rtol, atol, angle, minpatches, minarea, tol)
@@ -452,7 +593,7 @@ function fit_surfaces(m::Mesh; reference::Union{Nothing,Mesh} = nothing,
          scratch = falses(length(D.P)))
     avail = trues(np)
     order = sortperm(D.area; rev = true)
-    ordered = [k for k in (:plane, :cylinder, :sphere) if k in kinds]
+    ordered = [k for k in (:plane, :cylinder, :cone, :sphere) if k in kinds]
     found = Tuple{Symbol,Vector{Int},_SurfaceModel}[]
     for s in order
         avail[s] || continue
@@ -501,14 +642,20 @@ function fit_surfaces(m::Mesh; reference::Union{Nothing,Mesh} = nothing,
     return sort!(regions; by = r -> -r.area)
 end
 
-_region_model(r::SurfaceRegion) =
-    r.kind === :plane ? _SurfaceModel(:plane, r.centroid, r.normal, Inf) :
-    r.kind === :cylinder ? _SurfaceModel(:cylinder, r.surface.origin, r.surface.axis, r.surface.radius) :
-    _SurfaceModel(:sphere, r.surface.center, zero(Vec3), r.surface.radius)
+function _region_model(r::SurfaceRegion)
+    r.kind === :plane && return _SurfaceModel(:plane, r.centroid, r.normal, Inf)
+    r.kind === :cylinder && return _SurfaceModel(:cylinder, r.surface.origin, r.surface.axis, r.surface.radius)
+    r.kind === :sphere && return _SurfaceModel(:sphere, r.surface.center, zero(Vec3), r.surface.radius)
+    # a cone about the axis point level with the region's centroid, as fitted
+    s = r.surface
+    z = dot(r.centroid - s.apex, s.axis)
+    k = tand(s.half_angle)
+    return _SurfaceModel(:cone, s.apex + z * s.axis, s.axis, z * k, k)
+end
 
 # Largest distance from the model of the points of the triangle (a, b, c), sampled on a
-# barycentric grid of step 1/4 (on a cylinder or sphere the distance is concave across a
-# facet whose vertices lie on it, largest inside or on an edge).
+# barycentric grid of step 1/4 (on a cylinder, cone or sphere the distance is concave
+# across a facet whose vertices lie on it, largest inside or on an edge).
 function _facet_deviation(m::_SurfaceModel, a, b, c)
     d = 0.0
     for i in 0:4, j in 0:4-i
@@ -577,24 +724,33 @@ function _patch_submesh(m::Mesh, ps)
 end
 
 """
-    curved_components(component; kinds = (:cylinder, :sphere), regions = nothing, kwargs...)
-        -> Vector{Component}
+    curved_components(component; kinds = (:cylinder, :cone, :sphere), regions = nothing,
+                      maxradius = Inf, minfraction = 0.0, kwargs...) -> Vector{Component}
     curved_components(components; kwargs...) -> Vector{Component}
     curved_components(target; kwargs...) -> Target
 
-The component split into one component per cylinder or sphere that
-[`fit_surfaces`](@ref) finds in its mesh (keywords are passed on to it; or give its
-`regions`), each carrying its fitted `CylinderSurface` or `SphereSurface`, and the rest:
-`<name>/cyl1`, `<name>/cyl2`, …, `<name>/sph1`, …, by decreasing area, then
-`<name>/rest` with the other patches (planes and unrecognized faces). Material, kind
-and sidedness are the component's. For a remeshed CAD part pass the facets it was
-remeshed from as `reference` (see `fit_surfaces`). A component that already has a surface, or in which
-no curved region is found, is returned unchanged.
+The component split into one component per cylinder, cone or sphere that
+[`fit_surfaces`](@ref) finds in its mesh (other keywords are passed on to it; or give
+its `regions`), each carrying its fitted `CylinderSurface`, `ConeSurface` or
+`SphereSurface`, and the rest: `<name>/cyl1`, `<name>/cyl2`, …, `<name>/cone1`, …,
+`<name>/sph1`, …, by decreasing area, then `<name>/rest` with the other patches (planes
+and unrecognized faces). Material, kind and sidedness are the component's. For a
+remeshed CAD part pass the facets it was remeshed from as `reference` (see
+`fit_surfaces`). A component that already has a surface, or in which no curved region
+is found, is returned unchanged.
+
+`maxradius` and `minfraction` leave regions in the rest: those whose radius of
+curvature (R/cos θ on a cone of half-angle θ) exceeds `maxradius` times the part's
+extent (its bounding-box diagonal), and those of less than `minfraction` of the part's
+area. Gently curved CAD faces that are neither planar nor free-form within the fit's
+tolerance (radii of tens to hundreds of mm on a hohlraum half) otherwise each become a
+component of their own; their flat elements are close to exact (the sagitta of an
+element of size h is h²/8R).
 
 The radiation model then integrates over the true curved surface, as it does for the
 primitive `hohlraum`: each element's sub-triangle points are projected onto the surface
 with exact curved-patch areas, whatever the element's shape (the compact,
-many-triangle elements of `remesh_mesh` included), and the facets of a cylinder or
+many-triangle elements of `remesh_mesh` included), and the facets of a cylinder, cone or
 sphere no longer occlude pairs of points inside it. Ray casting keeps the facets.
 Planar regions are not given a surface: flat elements are already exact there
 (`DiskSurface` describes polar-sector elements of primitive end caps, not general
@@ -604,11 +760,24 @@ A region of a CAD part is named by its part and kind, so `elements(target, :part
 longer exists after the split; collect `elements(target, n)` over the names starting
 with the part's.
 """
-function curved_components(c::Component; kinds = (:cylinder, :sphere), regions = nothing, kwargs...)
-    all(in((:cylinder, :sphere)), kinds) || throw(ArgumentError("kinds must be among :cylinder and :sphere"))
+function curved_components(c::Component; kinds = (:cylinder, :cone, :sphere), regions = nothing,
+                           maxradius::Real = Inf, minfraction::Real = 0.0, kwargs...)
+    all(in((:cylinder, :cone, :sphere)), kinds) ||
+        throw(ArgumentError("kinds must be among :cylinder, :cone and :sphere"))
     c.surface === nothing || return [c]
     regs = regions === nothing ? fit_surfaces(c.mesh; kwargs...) : regions
-    sel = sort!([r for r in regs if r.kind in kinds && r.surface !== nothing]; by = r -> -r.area)
+    sel = [r for r in regs if r.kind in kinds && r.surface !== nothing]
+    if isfinite(maxradius) || minfraction > 0
+        m = c.mesh
+        lo, hi = Vec3(Inf, Inf, Inf), Vec3(-Inf, -Inf, -Inf)
+        for v in m.vertices
+            lo, hi = min.(lo, v), max.(hi, v)
+        end
+        L = norm(hi - lo)
+        A = sum(norm(_tri_cross(triangle_vertices(m, k)...)) for k in eachindex(m.triangles); init = 0.0) / 2
+        filter!(r -> _model_radius(_region_model(r)) <= maxradius * L && r.area >= minfraction * A, sel)
+    end
+    sort!(sel; by = r -> -r.area)
     isempty(sel) && return [c]
     out = Component[]
     used = falses(npatches(c.mesh))
@@ -616,7 +785,7 @@ function curved_components(c::Component; kinds = (:cylinder, :sphere), regions =
     for r in sel
         any(used[r.patches]) && throw(ArgumentError("regions overlap"))
         k = nk[r.kind] = get(nk, r.kind, 0) + 1
-        name = Symbol(c.name, r.kind === :cylinder ? "/cyl" : "/sph", k)
+        name = Symbol(c.name, r.kind === :cylinder ? "/cyl" : r.kind === :cone ? "/cone" : "/sph", k)
         push!(out, Component(name, _patch_submesh(c.mesh, r.patches), c.material; kind = c.kind,
                              two_sided = c.two_sided, surface = r.surface))
         used[r.patches] .= true

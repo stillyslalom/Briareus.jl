@@ -1089,6 +1089,11 @@ function _vr_describe(io, t::Target, sol)
             zs = [dot(v - s.origin, s.axis) for v in vs]
             @printf(io, "    cylinder: radius %.6g mm (%.6g µm), axis %s through %s mm, from %.6g to %.6g mm along it\n",
                     s.radius, 1000 * s.radius, p3(s.axis), p3(s.origin), minimum(zs), maximum(zs))
+        elseif s isa ConeSurface
+            zs = [dot(v - s.apex, s.axis) for v in vs]
+            @printf(io, "    cone: half-angle %.6g°, apex %s mm, axis %s, from %.6g to %.6g mm along it
+",
+                    s.half_angle, p3(s.apex), p3(s.axis), minimum(zs), maximum(zs))
         elseif s isa DiskSurface
             rs = [norm((v - s.center) - dot(v - s.center, s.normal) * s.normal) for v in vs]
             @printf(io, "    planar disk/annulus: center %s mm, normal %s, radii %.6g to %.6g mm\n",
