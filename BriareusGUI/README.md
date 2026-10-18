@@ -31,8 +31,12 @@ and each analysis says when it is out of date.
   capsule; diagnostic windows; free parts) with a swatch of their color in the 3D view
   (the tree is the color key), the beams by group, quad and beam with on/off boxes, and
   the analyses (drive, optimization, clearance, TaLIS) with their state. Selecting a
-  node selects it in the 3D view and shows it in Properties; Ctrl + click adds beams
-  to the selection; a double click fits the view to it; right click for its actions.
+  node selects it in the 3D view and shows it in Properties; Ctrl + click adds
+  components or beams to the selection and Shift + click a range, and Properties then
+  edits them together; a double click fits the view to it; right click for its
+  actions, among them *Show* (draw it or not) and *Include in calculations*: a
+  component left out is drawn as a gray ghost and taken out of the target (an open
+  enclosure then), and beams left out are switched off.
 - **Properties** (right): the selection's settings.
   - *Target:* template (hohlraum with capsule, backlighter foil, or custom parts
     only), dimensions and wall material, and the mesh: presets from a work-precision
@@ -45,18 +49,31 @@ and each analysis says when it is out of date.
   - *Parts:* spheres, disks, washers, rectangles, cylinders and cones placed anywhere
     (center, axis polar and azimuth angles and a rotation, as VisRad orders them),
     with their own albedo, conversion, sidedness, aperture flag and element size,
-    e.g. a shield, a stalk, a detector aperture or a second foil.
+    e.g. a shield, a stalk, a detector aperture or a second foil. A part is placed in
+    the chamber's frame, at an entrance hole (z pointing out of the hohlraum: one
+    placement mirrors between the two), at the backlighter foil, or in another part's
+    frame, and moves with it when the target's dimensions or that part change. Its
+    position is given in Cartesian, cylindrical or spherical coordinates of that
+    frame, chosen per part. A *VisRad object* part is a component of an imported
+    VisRad workspace. A *mesh* part reads an
+    STL file (a CAD export; Target ▸ Add part ▸ Mesh from STL file), scaled to mm, with
+    its windings repaired (`orient_mesh`) and its facets merged into elements of the
+    part's size (`coarsen_mesh`).
   - *Beams* (a group, quad, beam, or any Ctrl-selected set): aim relative to the ports
     (z, r, tangential offset) or a common aim point (x, y, z, as VisRad points a
-    cluster at a reference point), defocus, power, on/off, and where the axis lands;
+    cluster at a reference point), or *Aim at* a component's centroid (the foil, an
+    entrance hole, a part), which the beams follow when it moves; defocus, power,
+    on/off, and where the axis lands;
     "Look along beam" views the target from its port. Beams belong to groups, as
     VisRad's clusters: the cone by default, or any named set ("backlighter"), moved
     with Move to group; a group is edited, switched and optimized together (its
     members keep their cone for the laser–plasma models). A NIF quad held as one beam
     splits into its four beams (own ports, a quarter of the power each) to point them
     apart, and merges back.
-  - *Beams:* presets (NIF quads or beams at the published cone aims, the OMEGA
-    hohlraum or backlighter sets) and how beams are drawn.
+  - *Beams:* the facility (Beams ▸ Facility: NIF, OMEGA, OMEGA EP or custom), which
+    decides the presets offered (NIF quads or beams at the published cone aims, the
+    OMEGA hohlraum or backlighter sets; OMEGA EP's port geometry is not built in) and
+    the checks (the TaLIS rules are NIF's), and how beams are drawn.
   - *Analyses:* the settings and Run of the drive, the optimization, the clearance
     check and the TaLIS rules (as described below).
 - **3D view** (center), with CAD navigation: the wheel zooms toward the point under
@@ -66,8 +83,9 @@ and each analysis says when it is out of date.
   or beam, a double click fits it, `f` fits everything and the arrow keys orbit. Near
   and far planes follow the eye, so nothing is clipped however close the view.
   Standard views, a perspective or orthographic projection, turntable (z up) or free
-  rotation, a cutaway of the hohlraum shell, show/hide per component, and an
-  orientation triad. Beams are drawn as rays (each axis from the lens side to the
+  rotation, a cutaway (right-click the Cutaway tool for its width, its azimuth or the
+  side facing the view, and which components it cuts), show/hide per component,
+  View ▸ Look from port (a beam's port or any θ, φ), and an orientation triad. Beams are drawn as rays (each axis from the lens side to the
   surface it lands on, the aim point marked) or as volumes (the 5 % contour of the
   spot carried along the f-cone through best focus, each edge cut where it meets the
   target, so a beam clipping an LEH lip or the capsule shows), colored by group or by
@@ -75,7 +93,12 @@ and each analysis says when it is out of date.
   target is colored by component (keyed in the tree) or by
   absorbed laser intensity, x-ray radiosity or incident flux (W/cm²), which computes
   the drive when it is missing. The capsule θ–φ flux map (or the foil face) shares
-  the canvas.
+  the canvas, and so does an x-ray image (Compute ▸ X-ray image along the view,
+  `xray_image!`; unchecking it returns to the view before): the radiance of the surfaces seen along the 3D view's direction,
+  framed as the view frames them, through transparent apertures (a hohlraum is seen
+  inside through its entrance holes). It follows the drive as beams are edited. View ▸
+  Map or image beside the 3D view shows either of them in a second canvas next to
+  the 3D target instead of in its place.
 - **Results** (bottom tabs):
   - *Beam table:* every cone, quad or beam with its pointing, defocus, power and
     on/off, edited in place.
@@ -113,8 +136,28 @@ and each analysis says when it is out of date.
   (`read_beam_table`/`write_beam_table`) and VisRad files in and out (a NIF SST
   pointing CSV, `read_visrad_sst`: aim points and defocus; a Laser Beam Summary CSV,
   `read_visrad_summary`: pointing, defocus, power and spot; beams off or absent in the
-  file are switched off at their power, and the readers' warnings are listed); views;
-  and the analyses.
+  file are switched off at their power, and the readers' warnings are listed); VisRad
+  workspaces (File ▸ Import VisRad workspace: its components as VisRad object parts
+  and its beams; File ▸ Export VisRad workspace writes the beams back into a copy of
+  the imported one, `write_visrad_workspace`); File ▸ Export results (the drive's
+  per-element laser, radiosity and flux, power per component and beam, and capsule
+  modes as CSV, `write_results`, with the session that produced them); views; and the
+  analyses.
+- **Retune to a reference drive** (Compute ▸): given the pulse table of a reference
+  shot that fired every beam of the table (`read_pulse_table`: power per beam against
+  time per cone group, quad or beam), the enabled beams' powers are retuned at each
+  time of the table to restore the reference's capsule drive level and its modes
+  through l = 4 (`retune_drive`), within a limit relative to the reference powers and
+  optionally staying near them. The disabled beams are the ones the shot loses. The
+  new pulses are written as a pulse table; the dialog reports the worst-time mode 1
+  and Tᵣ change before and after, from drive histories of both.
+- **Sessions, undo and redo:** File ▸ Save session (Ctrl + S) writes the whole design
+  (target, windows, parts, beams with their groups and on/off state, the analyses'
+  settings and the view) to a plain TOML file (`save_session`), and File ▸ Open session
+  (Ctrl + O) reads it back (`load_session!`); results are computed again. Edit ▸ Undo
+  (Ctrl + Z) and Redo (Ctrl + Y) step through every design edit, whether typed, from a
+  menu, from a file or an applied optimization; the view (coloring, selection, camera)
+  is not part of the history.
 
 `briareus` returns its session (a `DesignSession`) when the window closes; the
 controllers in `BriareusGUI.Controllers` run the same steps from a script:
@@ -137,6 +180,10 @@ worst_rows(sess.review)
 start_talis!(sess; spawn = false)                # TaLIS rules, same error stack
 talis_rule_rows(sess.talis)
 talis_notes(sess.talis)                          # the ASSUMED tolerance caveat first
+export_results(sess, "results")                  # per-element and per-mode CSV
+retune_to_reference!(sess, "reference.csv", "retuned.csv")  # disabled beams are the dropped ones
+save_session("design.briareus.toml", sess)       # the design as TOML; load_session! reads it
+record!(sess); undo!(sess)                       # undo/redo steps (a window records them itself)
 ```
 
 `edit_*` functions take text-field text and return `false` with the reason in the

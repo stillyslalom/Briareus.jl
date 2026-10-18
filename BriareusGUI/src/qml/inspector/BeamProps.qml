@@ -43,6 +43,21 @@ ColumnLayout {
     PropRow { label: "x"; value: app.bn_aim_x; unit: "mm"; onEdited: (text) => Julia.br_edit_node("aim_x", text) }
     PropRow { label: "y"; value: app.bn_aim_y; unit: "mm"; onEdited: (text) => Julia.br_edit_node("aim_y", text) }
     PropRow { label: "z"; value: app.bn_aim_z; unit: "mm"; onEdited: (text) => Julia.br_edit_node("aim_z", text) }
+    RowLayout {
+        Label { text: "Aim at"; Layout.preferredWidth: 110 }
+        ComboBox {
+            Layout.fillWidth: true
+            model: app.aimChoices
+            // -1: the selected beams follow different components
+            currentIndex: app.bnAimRef
+            displayText: app.bnAimRef < 0 ? "(several)" : currentText
+            onActivated: (index) => Julia.br_aim_at(index)
+        }
+    }
+    Note {
+        text: "Aiming at a component (its centroid: a foil, an entrance hole, a part) keeps " +
+              "the beams on it when the target changes; pointing edits become offsets from it."
+    }
     ErrorText { text: app.beamsError }
 
     SectionLabel { text: "Group" }

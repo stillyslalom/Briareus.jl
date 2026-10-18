@@ -51,7 +51,12 @@ Pane {
                     onClicked: (mouse) => {
                         if (mouse.button === Qt.RightButton) {
                             if (!model.selected) Julia.br_select(node.nodeId)
+                            const f = Julia.br_node_flags(node.nodeId)
+                            showItem.checked = f[0]
+                            includeItem.checked = f[1]
                             menu.popup()
+                        } else if (mouse.modifiers & Qt.ShiftModifier) {
+                            Julia.br_select_range(node.nodeId)
                         } else if (mouse.modifiers & Qt.ControlModifier) {
                             Julia.br_select_add(node.nodeId)
                         } else {
@@ -111,8 +116,26 @@ Pane {
                         HoverHandler { id: detailHover }
                     }
                 }
-                Menu {
+                AutoMenu {
                     id: menu
+                    readonly property bool showable: ["comp", "part", "window", "group", "quad", "beam", "beams"].indexOf(node.nodeKind) >= 0
+                    MenuItem {
+                        id: showItem
+                        text: "Show in the 3D view"
+                        checkable: true
+                        visible: menu.showable
+                        height: visible ? implicitHeight : 0
+                        onTriggered: Julia.br_node_show(node.nodeId, checked)
+                    }
+                    MenuItem {
+                        id: includeItem
+                        text: "Include in calculations"
+                        checkable: true
+                        visible: menu.showable
+                        height: visible ? implicitHeight : 0
+                        onTriggered: Julia.br_node_include(node.nodeId, checked)
+                    }
+                    MenuSeparator { visible: menu.showable; height: visible ? implicitHeight : 0 }
                     MenuItem { text: "Fit view"; onTriggered: Julia.br_fit_selection() }
                     MenuItem {
                         text: "Look along beam"

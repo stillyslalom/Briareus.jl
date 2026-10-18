@@ -406,6 +406,15 @@ function _vrw_beams(lines, a, b)
     return clusters, rows
 end
 
+# Fraction of the power column that is in the blue (3ω) cone. VisRad's red/green power
+# models (VR/power_sources/set_laser_beam_energetics.html), numbered in the dialog's
+# order: 0 None, 1 Absolute Power (TW), 2 Fraction of Total Beam Power, 3 Relative to
+# Blue Cone Power. Only under model 2 is the power column the total, with the blue cone
+# carrying 1 - f_G - f_R of it; the fractions count whether or not those cones are on.
+# The numbering and the on/off rule are read off the foil workspace, where four 1 TW
+# beams with f_G = f_R = 0.05 (green off) deposit 3.60 TW.
+_vrw_blue_fraction(r) = round(Int, r.rg_model) == 2 ? 1 - r.power_green - r.power_red : 1.0
+
 # Beam record (as `_vr_apply` takes it) from a raw row.
 function _vrw_record(r, frame_of)
     method = round(Int, r.method)
@@ -423,7 +432,8 @@ function _vrw_record(r, frame_of)
     r.mode_blue != 0 && @warn "beam $(r.name): time-dependent power is not imported; using the constant power column"
     r.energy_norm != 0 && @warn "beam $(r.name): power is normalized to an energy in VisRad; using the power column"
     r.dpr != 0 && @warn "DPR is on for beam $(r.name); Briareus does not model DPR"
-    P = r.power_blue * (r.use_mult_blue != 0 ? r.mult_blue : 1.0) * (r.random_used ? r.random_mult : 1.0)
+    P = r.power_blue * _vrw_blue_fraction(r) * (r.use_mult_blue != 0 ? r.mult_blue : 1.0) *
+        (r.random_used ? r.random_mult : 1.0)
     minor = r.elliptical != 0 ? r.minor : r.major
     plate = _vrw_plate_name(r.major, minor, r.order)
     spot = (model = plate, major = r.major, minor = minor, rot = r.rotation, order = r.order, level = nothing)
@@ -454,8 +464,9 @@ chamber or to another component.
 **Beams.** Port angles and f-number come from the file. Pointing at TCC or at a point
 given in the chamber's or a component's frame is supported; the point is the aim and
 the focus offset (cm) the defocus (mm), as in `read_visrad_summary`. Power is the 3ω
-power (TW; times the beam's power multiplier when enabled) for beams with 3ω on, and 0
-otherwise. Spots are VisRad's super-Gaussian radii (µm), exponent and minor-axis
+(blue cone) power in TW for beams with 3ω on, and 0 otherwise: the power column times
+the beam's power multiplier when enabled and, under VisRad's "Fraction of Total Beam
+Power" red/green model (where that column is the total), times 1 − f_G − f_R. Spots are VisRad's super-Gaussian radii (µm), exponent and minor-axis
 rotation, converted as in `read_visrad_summary`: radii that match a built-in phase
 plate (`VISRAD_PHASE_PLATES`) are read at that plate's level (HWHM for NIF CPPs), others
 at `spot_definition` (`:auto` = 1/e). Unconverted light, time-dependent powers, energy
@@ -508,7 +519,8 @@ function read_visrad_workspace(path::AbstractString; template = nothing, missing
 end
 
 """
-    visrad_component(object; material = nothing, two_sided = false) -> Vector{Component}
+    visrad_component(object; material = nothing, two_sided = false, orient = false,
+                     toward = (0, 0, 0), coarsen = nothing) -> Vector{Component}
 
 Briareus components for one `VisRadObject`, in the chamber frame (mm). The material
 defaults to the object's albedo and x-ray conversion efficiency. CAD meshes give one
@@ -516,18 +528,28 @@ component radiating from the front of VisRad's surface elements (counterclockwis
 winding, *assumption*), or from both sides when `two_sided`. VisRad does not let users
 edit the normals of imported CAD (VR/grid/import_export_cad_files.html), and tessellated
 CAD often faces the wrong way: in the NIF workspace this reader was built from, the
-inner hohlraum wall faces away from the cavity. Use `two_sided = true` for such meshes
-(thin shells are then modeled as two radiating sides). Rectangles give one component (normal +z before orientation), spheres one with
+inner hohlraum wall faces away from the cavity. `orient = true` repairs the winding
+with `orient_mesh`: consistent across shared edges, closed solids facing out of their
+material, open sheets facing the point `toward` (mm, chamber frame; by default the
+target chamber center). `two_sided = true` instead radiates from both sides (thin
+shells are then modeled as two radiating sides). `coarsen` (mm) merges near-coplanar
+facets into elements of about that size (`coarsen_mesh`), which CAD needs before view
+factors. Rectangles give one component (normal +z before orientation), spheres one with
 a `SphereSurface`, and cylindrical hohlraums five — `<name>_wall`, `_cap_top`,
 `_cap_bottom` and the apertures `_leh_top`, `_leh_bottom` — with the curved surfaces
 `hohlraum` uses, all on VisRad's grid (`Number of mesh pts`). Other object types return
 no components (with a warning).
 """
-function visrad_component(o::VisRadObject; material = nothing, two_sided::Bool = false)
+function visrad_component(o::VisRadObject; material = nothing, two_sided::Bool = false,
+                          orient::Bool = false, toward = (0.0, 0.0, 0.0), coarsen = nothing)
     mat = material === nothing ? Material(Symbol(o.name); albedo = o.albedo, conversion = o.conversion) :
           material
     o.reflectivity > 0 && @warn "VisRad object $(o.name) reflects laser light ($(o.reflectivity)); Briareus absorbs it all"
-    o.kind === :mesh && return [Component(o.name, o.mesh, mat; two_sided)]
+    if o.kind === :mesh
+        mesh = orient ? orient_mesh(o.mesh; toward) : o.mesh
+        coarsen === nothing || (mesh = coarsen_mesh(mesh; size = coarsen))
+        return [Component(o.name, mesh, mat; two_sided)]
+    end
     cs = _vrw_primitive(o.kind, o.name, o.params, mat)
     cs = [c.kind === :surface && two_sided ? Component(c.name, c.mesh, c.material; two_sided, surface = c.surface) : c
           for c in cs]
@@ -537,29 +559,119 @@ end
 
 """
     visrad_target(workspace; select = o -> o.radiosity || o.laser, materials = Dict(),
-                  two_sided = false) -> Target
+                  two_sided = false, orient = false, toward = (0, 0, 0),
+                  coarsen = nothing) -> Target
 
 Target built from the components of a VisRad workspace (`read_visrad_workspace`) for
 which `select(object)` is true — by default those VisRad includes in its radiosity or
 direct-laser calculation. `materials` maps object names to a `Material` overriding the
 file's albedo and conversion efficiency. `two_sided` (a `Bool`, or a function of the
 object) makes surfaces radiate from both sides; see `visrad_component` for why CAD
-meshes often need it.
+meshes often need it, and for `orient`, `toward` and `coarsen` (which apply to CAD
+meshes: repaired windings, and elements of about `coarsen` mm).
 
 CAD meshes can hold hundreds of thousands of triangles, and each becomes a radiating
 element. That is fine for ray tracing (deposition, clearance, imaging) but too many for
 view factors; select the parts that matter for the radiation problem, e.g.
-`select = o -> o.folder == "Hohlraum"` or by name.
+`select = o -> o.folder == "Hohlraum"` or by name, and coarsen them.
 """
 function visrad_target(ws::VisRadWorkspace; select = o -> o.radiosity || o.laser,
-                       materials = Dict{String,Material}(), two_sided = false)
+                       materials = Dict{String,Material}(), two_sided = false,
+                       orient::Bool = false, toward = (0.0, 0.0, 0.0), coarsen = nothing)
     comps = Component[]
     for o in ws.objects
         select(o) || continue
         (o.radiosity && o.laser) || @warn "VisRad object $(o.name) is included in only one of VisRad's radiosity and laser calculations; Briareus uses it in both"
         ts = two_sided isa Bool ? two_sided : Bool(two_sided(o))
-        append!(comps, visrad_component(o; material = get(materials, o.name, nothing), two_sided = ts))
+        append!(comps, visrad_component(o; material = get(materials, o.name, nothing), two_sided = ts,
+                                        orient, toward, coarsen))
     end
     isempty(comps) && throw(ArgumentError("no VisRad components selected"))
     return Target(comps)
+end
+
+"""
+    write_visrad_workspace(path, template, beams; angle_tol = 0.05) -> path
+
+A VisRad workspace with the pointing, focus, power and on/off of `beams` written into a
+copy of the workspace `template` (a `.vrw` file, e.g. the one a design was imported
+from with `read_visrad_workspace`). Each beam row of the template whose name matches a
+beam gets that beam's aim, as a Cartesian position in the row's own reference frame
+(cm), its focus offset `defocus` (cm), its power as the 3ω power column (divided by
+the row's power multipliers and, under the "Fraction of Total Beam Power" red/green
+model, by its blue fraction, so VisRad's blue cone carries the beam's power) and on (power > 0)
+or off. Everything else is copied byte for byte: the target components and their
+frames, the spots, pulse shapes and VisRad's settings stay VisRad's own. Numbers are
+written in place at the template's column widths and decimals (0.1 µm for positions).
+
+Rows without a matching beam are left as they were, and beams without a row are
+reported in a warning: the template sets which beams exist. A beam whose port differs
+from its row's by more than `angle_tol` degrees is refused (ports cannot be changed).
+Time-dependent power tables and energy normalization in the template are left as they
+are, so a row that uses them does not take the constant power (warned).
+"""
+function write_visrad_workspace(path::AbstractString, template::AbstractString,
+                                beams::AbstractVector{<:Beam}; angle_tol = 0.05)
+    ws = read_visrad_workspace(template)
+    frames = Dict(o.name => (o.rotation, o.position) for o in ws.objects)
+    byname = Dict(b.name => b for b in beams)
+    rows = Dict(r.name => r for r in ws.rows)
+    text = read(template, String)
+    lines = split(text, '\n')                       # line endings (\r) stay on the lines
+    used = Set{String}()
+    for (j, l) in enumerate(lines)
+        startswith(l, "Laser Beam Name") || continue
+        name = String(strip(last(_vrw_kv(rstrip(l, '\r')))))
+        haskey(byname, name) && haskey(rows, name) || continue
+        b, r = byname[name], rows[name]
+        θ, φ = port_angles(b)
+        (abs(θ - r.theta) <= angle_tol && abs(mod(φ - r.phi + 180, 360) - 180) <= angle_tol) ||
+            throw(ArgumentError("beam $name: port (θ $θ, φ $φ) differs from the workspace's ($(r.theta), $(r.phi))"))
+        (r.mode_blue != 0 || r.energy_norm != 0) &&
+            @warn "beam $name: VisRad uses a power table or energy normalization for it; its constant power is written but not used"
+        R, t = _vrw_frame_of(r.ref, n -> get(frames, n, nothing))
+        p = transpose(R) * (Vec3(_vr_v.(b.aim)) - t) / 10
+        P = _vr_v(b.power)
+        mult = _vrw_blue_fraction(r) * (r.use_mult_blue != 0 ? r.mult_blue : 1.0) *
+               (r.random_used ? r.random_mult : 1.0)
+        mult > 0 || throw(ArgumentError("beam $name: the workspace's power multiplier (or blue fraction) is zero"))
+        new = Dict(:method => 2, :geometry => 0, :p1 => p[1], :p2 => p[2], :p3 => p[3],
+                   :focus => _vr_v(b.defocus) / 10, :on_blue => P > 0 ? 1 : 0,
+                   :power_blue => P > 0 ? P / mult : r.power_blue)
+        lines[j+2] = _vrw_patch_row(lines[j+2], new)
+        push!(used, name)
+    end
+    missing_rows = [b.name for b in beams if !(b.name in used)]
+    isempty(missing_rows) ||
+        @warn "$(length(missing_rows)) beams have no row in the template workspace and were not written" beams = missing_rows
+    write(path, join(lines, '\n'))
+    return path
+end
+
+
+const _VRW_DECIMALS = Dict(:p1 => 6, :p2 => 6, :p3 => 6, :focus => 6, :power_blue => 4)
+
+# A beam row with the given columns rewritten in place: each value right-aligned where
+# the old token ended, with the old token's decimals (integers for integer tokens), at
+# least `_VRW_DECIMALS` of them (VisRad's own: 0.1 µm for positions in cm).
+function _vrw_patch_row(line::AbstractString, new::AbstractDict)
+    cr = endswith(line, '\r')
+    s = cr ? chop(line) : String(line)
+    spans = [m.offset:m.offset+ncodeunits(m.match)-1 for m in eachmatch(r"\S+", s)]
+    n = length(_VRW_BEAM_COLUMNS)
+    blank = length(spans) == n - 1            # the "rot_id" column is blank
+    length(spans) == n || blank || throw(ArgumentError("unexpected VisRad beam row: $line"))
+    ri = findfirst(==(:rot_id), _VRW_BEAM_COLUMNS)
+    tok(k) = (i = findfirst(==(k), _VRW_BEAM_COLUMNS); blank && i > ri ? i - 1 : i)
+    edits = sort([(tok(k), k, v) for (k, v) in new]; by = first, rev = true)
+    for (i, k, v) in edits
+        sp = spans[i]
+        old = s[sp]
+        d = occursin('.', old) ? max(length(old) - findfirst('.', old), get(_VRW_DECIMALS, k, 0)) : 0
+        txt = d == 0 ? string(round(Int, v)) : @sprintf("%.*f", d, v)
+        from = i == 1 ? 1 : last(spans[i-1]) + 1       # the field: its leading spaces and token
+        w = last(sp) - from + 1
+        s = s[1:from-1] * lpad(txt, max(w, length(txt) + 1)) * s[last(sp)+1:end]
+    end
+    return cr ? s * "\r" : s
 end

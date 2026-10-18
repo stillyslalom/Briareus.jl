@@ -23,19 +23,26 @@ pulse_energy(s::PulseShape) =
     sum((s.t[k+1] - s.t[k]) * (s.p[k] + s.p[k+1]) / 2 for k in 1:length(s.t)-1; init = 0.0)
 
 """
-    with_pulses(beams, pulses, t) -> Vector{Beam}
+    with_pulses(beams, pulses, t; by = :group) -> Vector{Beam}
 
 Beams with power set to `pulses[key](t)`, where `key` is each beam's `group` (pulses
-given as a `Dict` or NamedTuple keyed by group), or a single `PulseShape` for all.
+given as a `Dict` or NamedTuple keyed by group), its `quad` (`by = :quad`), its `name`
+(`by = :beam`) or `by(beam)` for a function, or a single `PulseShape` for all.
 """
-with_pulses(beams, pulse::PulseShape, t) = [remake(b; power = pulse(t)) for b in beams]
-with_pulses(beams, pulses, t) = [remake(b; power = pulses[b.group](t)) for b in beams]
+with_pulses(beams, pulse::PulseShape, t; by = :group) = [remake(b; power = pulse(t)) for b in beams]
+function with_pulses(beams, pulses, t; by = :group)
+    key = _beam_key(by)
+    return [remake(b; power = pulses[key(b)](t)) for b in beams]
+end
+
+_beam_key(by) = by === :group ? (b -> b.group) : by === :quad ? (b -> Symbol(b.quad)) :
+                by === :beam ? (b -> Symbol(b.name)) : by
 
 """
     drive_history(model, op, beams_at, times; observe = :capsule, lmax = 6,
                   wall = (:wall,), lpi = nothing, holes = nothing, ylm = false,
                   transition = nothing, flux_change = nothing, min_step = 1e-3,
-                  tol = 1e-4) -> NamedTuple
+                  tol = 1e-4, keep_albedo = false) -> NamedTuple
 
 Quasi-static drive history: at each time, deposit `beams_at(t)` with `op` (after the
 laser–plasma model `lpi`, evaluated at that time), solve the
@@ -54,8 +61,9 @@ radiosity at that time (time- and temperature-dependent albedos included), and r
 - `wall_Tr`, `wall_albedo` — area-weighted mean incident-flux temperature and albedo
   of the `wall` components
 - `escaped` — power (TW) through each aperture, and `transmitted` through each
-  thin-foil (`BurnthroughAlbedo`) component, as in `energy_balance` (by default the
-  fraction `s T` of the flux on each burned-through element)
+  thin-foil (`BurnthroughAlbedo`) and closing-gap (`GapClosure`) component, as in
+  `energy_balance` (by default the fraction `s T` of the flux on each burned-through
+  element, and `1 - s` on a gap a fraction `s` closed)
 - `window_loss` — power lost through diagnostic windows: `transmitted` plus `escaped`
   through every aperture except the entrance `holes` (default: the apertures not on a
   `CylinderSurface`, i.e. a hohlraum's LEHs)
@@ -63,7 +71,9 @@ radiosity at that time (time- and temperature-dependent albedos included), and r
   of the foil's (`≥ 1` once burned through), from its own flux history even when the
   model has an explicit `burnthrough`
 - `burnthrough` — per thin-foil component, each element's burnthrough time (ns; `Inf`
-  if it has not burned through).
+  if it has not burned through)
+- `albedo` — with `keep_albedo = true`, each step's converged albedo per element (the
+  state a flux response linearizes about, e.g. for `retune_drive`), otherwise `nothing`.
 
 Each step's temperature-dependent albedos are iterated to `tol` (see `solve`), starting
 from the previous step's temperatures.
@@ -81,8 +91,8 @@ much longer than that jumps across it. Two optional criteria insert steps betwee
 `times`:
 
 - `transition` — no thin-foil element's transition (the smooth step `s` of
-  `BurnthroughAlbedo`, 0 intact to 1 burned through) advances by more than this in one
-  step.
+  `BurnthroughAlbedo`, 0 intact to 1 burned through), and no closing gap's (`GapClosure`,
+  0 open to 1 closed), advances by more than this in one step.
   Steps are planned from each element's known or predicted burnthrough time, and
   halved if the step's own temperatures move a burnthrough so that the advance
   exceeds 1.5 `transition`.
@@ -97,7 +107,7 @@ function drive_history(m::RadiationModel, op::DepositionOperator, beams_at, time
                        observe = :capsule, lmax::Integer = 6, wall = (:wall,),
                        lpi = nothing, holes = nothing, ylm::Bool = false,
                        transition = nothing, flux_change = nothing, min_step::Real = 1e-3,
-                       tol = 1e-4)
+                       tol = 1e-4, keep_albedo::Bool = false)
     transition === nothing || transition > 0 || throw(ArgumentError("transition must be positive"))
     flux_change === nothing || flux_change > 0 || throw(ArgumentError("flux_change must be positive"))
     min_step > 0 || throw(ArgumentError("min_step must be positive"))
@@ -112,9 +122,13 @@ function drive_history(m::RadiationModel, op::DepositionOperator, beams_at, time
     foils = [ci for (ci, c) in enumerate(t.components)
              if c.kind === :surface && c.material.albedo isa BurnthroughAlbedo]
     foil_elems = [e for ci in foils for e in t.comp_elems[ci]]
+    # components that transmit part of their flux out: thin foils and closing gaps
+    transmitters = [ci for (ci, c) in enumerate(t.components)
+                    if c.kind === :surface && _transmits(c.material.albedo)]
     model(e) = element_material(t, e).albedo
     tracked = [e for e in foil_elems if model(e).burnthrough === nothing]
-    smooth = [e for e in foil_elems if model(e).width > 0]   # transitions a step can resolve
+    # transitions a step can resolve
+    smooth = [e for ci in transmitters for e in t.comp_elems[ci] if model(e).width > 0]
     need = zeros(N)
     for e in foil_elems
         need[e] = _front_integral(model(e).front, areal_mass(model(e)))
@@ -136,9 +150,10 @@ function drive_history(m::RadiationModel, op::DepositionOperator, beams_at, time
     moments = Vector{Float64}[]
     clm = Vector{Float64}[]
     escaped = Dict(n => Float64[] for n in apertures)
-    transmitted = Dict(t.components[ci].name => Float64[] for ci in foils)
+    transmitted = Dict(t.components[ci].name => Float64[] for ci in transmitters)
     front = Dict(t.components[ci].name => Float64[] for ci in foils)
     window_loss = Float64[]
+    albedo_steps = Vector{Float64}[]
 
     # The step from τ0 (`nothing` at the first time) to τ: its solution and the
     # thin-foil state at τ. The state at τ0 is left untouched, so a step can be retried.
@@ -181,8 +196,8 @@ function drive_history(m::RadiationModel, op::DepositionOperator, beams_at, time
     end
     # the largest advance of a smooth transition from τ0 to τ, given burnthrough times
     advance_of(τ0, τ, tbs) =
-        maximum((_burnthrough_step(model(e), τ, _nan_inf(tbs[e])) -
-                 _burnthrough_step(model(e), τ0, _nan_inf(tbs[e])) for e in smooth); init = 0.0)
+        maximum((_transition_step(model(e), τ, _nan_inf(tbs[e])) -
+                 _transition_step(model(e), τ0, _nan_inf(tbs[e])) for e in smooth); init = 0.0)
     shape(sol, a0) = ForwardDiff.value.(sol.H[obs]) ./ ForwardDiff.value(a0)
 
     τ0 = nothing                   # time of the last step taken
@@ -234,16 +249,20 @@ function drive_history(m::RadiationModel, op::DepositionOperator, beams_at, time
             Hw = sum(sol.H[we] .* Aw) / sum(Aw)
             push!(wall_Tr, radiation_temperature(Hw))
             push!(wall_albedo, sum(sol.albedo[we] .* Aw) / sum(Aw))
+            keep_albedo && push!(albedo_steps, copy(sol.albedo))
             bal = energy_balance(sol)
             loss = 0.0
             for n in apertures
                 push!(escaped[n], bal.escaped[n])
                 n in holes || (loss += bal.escaped[n])
             end
-            for ci in foils
+            for ci in transmitters
                 c = t.components[ci]
                 push!(transmitted[c.name], bal.transmitted[c.name])
                 loss += bal.transmitted[c.name]
+            end
+            for ci in foils
+                c = t.components[ci]
                 es = t.comp_elems[ci]
                 push!(front[c.name], sum(_front_mass(model(e).front, I[e]) / areal_mass(model(e)) * t.elem_area[e]
                                          for e in es) / sum(t.elem_area[es]))
@@ -255,7 +274,8 @@ function drive_history(m::RadiationModel, op::DepositionOperator, beams_at, time
     burnthrough = Dict(t.components[ci].name => [_nan_inf(tb[e]) for e in t.comp_elems[ci]] for ci in foils)
     return (; time, delivered, flux, Tr, moments = _columns(moments, lmax + 1),
             ylm = ylm ? _columns(clm, (lmax + 1)^2) : nothing, wall_Tr,
-            wall_albedo, escaped, transmitted, window_loss, front, burnthrough)
+            wall_albedo, escaped, transmitted, window_loss, front, burnthrough,
+            albedo = keep_albedo ? albedo_steps : nothing)
 end
 
 _columns(v, n) = isempty(v) ? zeros(n, 0) : reduce(hcat, v)

@@ -121,13 +121,15 @@ end
 
 """
 Kinds of free parts: `:sphere`, `:disk`, `:annulus` (a washer), `:rectangle`,
-`:cylinder` (open tube) and `:cone` (open frustum).
+`:cylinder` (open tube), `:cone` (open frustum) and `:mesh` (a triangle mesh from an STL
+file, such as a CAD export).
 """
-const PART_KINDS = (:sphere, :disk, :annulus, :rectangle, :cylinder, :cone)
+const PART_KINDS = (:sphere, :disk, :annulus, :rectangle, :cylinder, :cone, :mesh, :visrad)
 
 const PART_KIND_LABELS = Dict(:sphere => "Sphere", :disk => "Disk", :annulus => "Washer (annulus)",
                               :rectangle => "Rectangle", :cylinder => "Cylinder (tube)",
-                              :cone => "Cone (frustum)")
+                              :cone => "Cone (frustum)", :mesh => "Mesh (STL file)",
+                              :visrad => "VisRad object")
 
 """
 Size fields of each part kind: `(key, label, unit, default)`. The part's local axis is
@@ -142,7 +144,9 @@ const PART_SIZE_FIELDS = Dict(
     :rectangle => ((:r1, "Width", "mm", 1.0), (:r2, "Height", "mm", 1.0)),
     :cylinder => ((:r1, "Radius", "mm", 0.5), (:length, "Length", "mm", 2.0)),
     :cone => ((:r1, "Radius at −L/2", "mm", 0.2), (:r2, "Radius at +L/2", "mm", 0.6),
-              (:length, "Length", "mm", 1.0)))
+              (:length, "Length", "mm", 1.0)),
+    :mesh => ((:scale, "Scale (mm per file unit)", "", 1.0),),
+    :visrad => ())
 
 """
 Placement and material fields of every part: `(key, label, unit, default)`. The part
@@ -158,13 +162,66 @@ const PART_FIELDS = ((:x, "x", "mm", 0.0), (:y, "y", "mm", 0.0), (:z, "z", "mm",
                      (:h, "Element size (0: target's)", "mm", 0.0))
 
 """
-    PartSpec(kind; name, values, two_sided = false, inward = false, aperture = false)
+Frames a part can be placed in (VisRad's reference frames): `:tcc` (the target chamber),
+`:leh_top` and `:leh_bottom` (a hohlraum's entrance holes: origin at the hole's center,
+`z` pointing out of the hohlraum, so one placement mirrors between the two ends), and
+`:foil` (a backlighter foil's center, `z` along its back normal, away from TCC). A part
+in a target's frame moves with it when its dimensions change. A part can also be
+placed in another part's own frame (its anchor is that part's name): it then moves and
+turns with that part.
+"""
+const PART_ANCHORS = (:tcc, :leh_top, :leh_bottom, :foil)
+
+const PART_ANCHOR_LABELS = Dict(:tcc => "Target chamber (TCC)", :leh_top => "Top entrance hole",
+                                :leh_bottom => "Bottom entrance hole", :foil => "Backlighter foil")
+
+"""
+    anchor_frame(anchor, kind, params, parts = PartSpec[]) -> (R, origin)
+
+Rotation and origin of a part's frame for a target of template `kind` with dimensions
+`params`: one of [`PART_ANCHORS`](@ref), or the name of one of `parts` (that part's own
+frame: its axis is the frame's `z`). A point `x` of the frame is `R * x + origin` in the
+chamber. Throws `ArgumentError` for a frame the template lacks, an unknown part, or
+parts placed relative to each other in a loop.
+"""
+function anchor_frame(anchor::Symbol, kind::Symbol, params::AbstractDict,
+                      parts::AbstractVector = PartSpec[]; _visiting = Set{Symbol}())
+    I3 = [1.0 0.0 0.0; 0.0 1.0 0.0; 0.0 0.0 1.0]
+    if !(anchor in PART_ANCHORS)
+        i = findfirst(q -> q.name === anchor, parts)
+        i === nothing && throw(ArgumentError("no part named $anchor to place a part in"))
+        anchor in _visiting && throw(ArgumentError("parts placed relative to each other in a loop ($anchor)"))
+        push!(_visiting, anchor)
+        q = parts[i]
+        Rq, tq = anchor_frame(q.anchor, kind, params, parts; _visiting)
+        delete!(_visiting, anchor)
+        return Rq * _part_rotation(q), Rq * part_center(q) + tq
+    end
+    anchor === :tcc && return I3, zero(Vec3)
+    if anchor === :leh_top || anchor === :leh_bottom
+        kind === :hohlraum || throw(ArgumentError("only a hohlraum has entrance holes to place a part at"))
+        L = params[:length]
+        return anchor === :leh_top ? (I3, Vec3(0, 0, L / 2)) :
+               ([1.0 0.0 0.0; 0.0 -1.0 0.0; 0.0 0.0 -1.0], Vec3(0, 0, -L / 2))
+    end
+    anchor === :foil || throw(ArgumentError("a part's frame must be one of $PART_ANCHORS"))
+    kind === :foil || throw(ArgumentError("only a backlighter target has a foil to place a part at"))
+    return [0.0 0.0 1.0; 0.0 1.0 0.0; -1.0 0.0 0.0], foil_center(params)
+end
+
+"""
+    PartSpec(kind; name, values, two_sided = false, inward = false, aperture = false,
+             file = "", anchor = :tcc)
 
 A free target part: `kind` (one of [`PART_KINDS`](@ref)), its component `name`,
 `values` (every [`PART_FIELDS`](@ref) key and its kind's [`PART_SIZE_FIELDS`](@ref)),
 `two_sided` (both sides radiate and absorb), `inward` (a sphere, cylinder or cone
-radiates from its inside; a flat part from its back) and `aperture` (a transparent
-diagnostic surface: rays pass, its incident flux is what escapes through it).
+radiates from its inside; a flat part from its back; a mesh from the other side) and
+`aperture` (a transparent diagnostic surface: rays pass, its incident flux is what
+escapes through it). A `:mesh` part reads its triangles from the STL `file`. The
+placement fields are in the frame `anchor` ([`PART_ANCHORS`](@ref), or another part's
+name); `coords` ([`PART_COORDINATES`](@ref)) is how its position is shown and edited
+(the values keep `x`, `y`, `z`).
 """
 struct PartSpec
     kind::Symbol
@@ -173,28 +230,79 @@ struct PartSpec
     two_sided::Bool
     inward::Bool
     aperture::Bool
+    file::String
+    anchor::Symbol
+    coords::Symbol
+    object::String
+end
+
+"""
+Coordinates a part's position is shown and edited in: `:cartesian` (x, y, z),
+`:cylindrical` (r, φ, z about the frame's z axis) and `:spherical` (r, θ, φ).
+"""
+const PART_COORDINATES = (:cartesian, :cylindrical, :spherical)
+
+# Position fields of each coordinate system: (key, label, unit).
+const PART_POSITION_FIELDS = Dict(
+    :cartesian => ((:x, "x", "mm"), (:y, "y", "mm"), (:z, "z", "mm")),
+    :cylindrical => ((:pos_r, "r (from the axis)", "mm"), (:pos_phi, "φ (position)", "°"), (:z, "z", "mm")),
+    :spherical => ((:pos_r, "r (from the origin)", "mm"), (:pos_theta, "θ (position)", "°"),
+                   (:pos_phi, "φ (position)", "°")))
+
+"Position of a part in its coordinates: `key => value` for its position fields."
+function part_position(p::PartSpec)
+    x, y, z = p.values[:x], p.values[:y], p.values[:z]
+    p.coords === :cartesian && return [:x => x, :y => y, :z => z]
+    φ = mod(atand(y, x), 360)
+    p.coords === :cylindrical && return [:pos_r => hypot(x, y), :pos_phi => φ, :z => z]
+    r = sqrt(x^2 + y^2 + z^2)
+    return [:pos_r => r, :pos_theta => r > 0 ? acosd(clamp(z / r, -1, 1)) : 0.0, :pos_phi => φ]
+end
+
+# x, y, z from a part's position in its coordinates with `key` set to `v`.
+function _set_position(p::PartSpec, key::Symbol, v::Real)
+    pos = Dict(part_position(p))
+    haskey(pos, key) || throw(ArgumentError("$(p.coords) coordinates have no field :$key"))
+    pos[key] = v
+    p.coords === :cartesian && return pos[:x], pos[:y], pos[:z]
+    if p.coords === :cylindrical
+        pos[:pos_r] >= 0 || throw(ArgumentError("the radius must not be negative"))
+        return pos[:pos_r] * cosd(pos[:pos_phi]), pos[:pos_r] * sind(pos[:pos_phi]), pos[:z]
+    end
+    r, θ, φ = pos[:pos_r], pos[:pos_theta], pos[:pos_phi]
+    r >= 0 || throw(ArgumentError("the radius must not be negative"))
+    return r * sind(θ) * cosd(φ), r * sind(θ) * sind(φ), r * cosd(θ)
 end
 
 function PartSpec(kind::Symbol; name = kind, values = Dict{Symbol,Float64}(),
-                  two_sided::Bool = false, inward::Bool = false, aperture::Bool = false)
+                  two_sided::Bool = false, inward::Bool = false, aperture::Bool = false,
+                  file::AbstractString = "", anchor::Symbol = :tcc, coords::Symbol = :cartesian,
+                  object::AbstractString = "")
     kind in PART_KINDS || throw(ArgumentError("part kind must be one of $PART_KINDS"))
+    anchor === Symbol(name) && throw(ArgumentError("a part cannot be placed in its own frame"))
+    coords in PART_COORDINATES || throw(ArgumentError("coordinates must be one of $PART_COORDINATES"))
+    kind === :mesh && isempty(file) && throw(ArgumentError("a mesh part needs an STL file"))
+    kind === :visrad && (isempty(file) || isempty(object)) &&
+        throw(ArgumentError("a VisRad part needs a workspace file and an object name"))
     v = Dict{Symbol,Float64}(k => d for (k, _, _, d) in (PART_FIELDS..., PART_SIZE_FIELDS[kind]...))
     for (k, x) in values
         haskey(v, k) || throw(ArgumentError("a $kind has no field :$k"))
         v[k] = x
     end
-    return PartSpec(kind, Symbol(name), v, two_sided, inward, aperture)
+    return PartSpec(kind, Symbol(name), v, two_sided, inward, aperture, String(file), anchor,
+                    coords, String(object))
 end
 
 _with(p::PartSpec; kind = p.kind, name = p.name, values = p.values, two_sided = p.two_sided,
-      inward = p.inward, aperture = p.aperture) =
-    PartSpec(kind, name, values, two_sided, inward, aperture)
+      inward = p.inward, aperture = p.aperture, file = p.file, anchor = p.anchor,
+      coords = p.coords, object = p.object) =
+    PartSpec(kind, name, values, two_sided, inward, aperture, file, anchor, coords, object)
 
-"Axis (unit vector) of a part: polar `theta` and azimuth `phi` in degrees."
+"Axis (unit vector) of a part in its frame: polar `theta` and azimuth `phi` in degrees."
 part_axis(p::PartSpec) = Vec3(sind(p.values[:theta]) * cosd(p.values[:phi]),
                               sind(p.values[:theta]) * sind(p.values[:phi]), cosd(p.values[:theta]))
 
-"Center of a part."
+"Center of a part in its frame."
 part_center(p::PartSpec) = Vec3(p.values[:x], p.values[:y], p.values[:z])
 
 # Rz(φ) Ry(θ) Rz(ψ): VisRad's order (rotation about the own axis, polar tilt, azimuth).
@@ -208,13 +316,32 @@ end
 _count(len, h; min = 1, multiple = 1) = multiple * max(cld(min, multiple), ceil(Int, len / h / multiple))
 
 """
-    part_component(p::PartSpec, h) -> Component
+    part_component(p::PartSpec, h; frame = (I, 0)) -> Component
 
 The core component of a part, meshed with elements of size `h` (mm) unless the part
-gives its own, and carrying its exact curved surface (sphere, disk, washer, cylinder)
-for the view factors.
+gives its own, carrying its exact curved surface (sphere, disk, washer, cylinder) for
+the view factors, and placed in the chamber through its `frame` (`(R, origin)`, see
+[`anchor_frame`](@ref)).
 """
-function part_component(p::PartSpec, h::Real)
+function part_component(p::PartSpec, h::Real;
+                        frame = ([1.0 0.0 0.0; 0.0 1.0 0.0; 0.0 0.0 1.0], zero(Vec3)))
+    p.kind === :visrad && throw(ArgumentError("a VisRad object can make several components: use part_components"))
+    return only(part_components(p, h; frame))
+end
+
+"""
+    part_components(p::PartSpec, h; frame = (I, 0)) -> Vector{Component}
+
+The core components of a part: one for every kind but `:visrad`, whose object can be a
+primitive hohlraum (wall, caps and entrance holes). A VisRad object keeps its own place
+in the chamber (VisRad's frames), moved further by the part's placement; its windings
+are repaired and its CAD facets merged into elements of the part's size.
+"""
+function part_components(p::PartSpec, h::Real;
+                         frame = ([1.0 0.0 0.0; 0.0 1.0 0.0; 0.0 0.0 1.0], zero(Vec3)))
+    Rf, tf = frame
+    R = Rf * _part_rotation(p)
+    center = Rf * part_center(p) + tf
     v = p.values
     hp = v[:h] > 0 ? v[:h] : Float64(h)
     hp > 0 || throw(ArgumentError("$(p.name): the element size must be positive"))
@@ -246,6 +373,15 @@ function part_component(p::PartSpec, h::Real)
         m = rectangle_mesh(w, ht; nu = _count(w, hp), nv = _count(ht, hp))
         out || (m = transform(m, [1 0 0; 0 -1 0; 0 0 -1]))          # face −z
         surf = nothing
+    elseif k === :visrad
+        cs = _visrad_components(p, hp, transpose(R) * (zero(Vec3) - center))
+        return [transform(c, R, center) for c in cs]
+    elseif k === :mesh
+        v[:scale] > 0 || throw(ArgumentError("$(p.name): the scale must be positive"))
+        # facing the target center, merged into elements of the part's size
+        toward = transpose(R) * (zero(Vec3) - center)
+        m = _stl_part_mesh(p.file, v[:scale], hp, toward, p.inward)
+        surf = nothing
     elseif k === :cylinder
         r, L = v[:r1], v[:length]
         m = cylinder_mesh(r, -L / 2, L / 2; nz = _count(L, hp), nphi = _count(2π * r, hp; min = 8, multiple = 4),
@@ -260,7 +396,64 @@ function part_component(p::PartSpec, h::Real)
     c = p.aperture ? aperture(p.name, m; surface = surf) :
         Component(p.name, m, Material(p.name; albedo = v[:albedo], conversion = v[:conversion]);
                   two_sided = p.two_sided, surface = surf)
-    return transform(c, _part_rotation(p), part_center(p))
+    return [transform(c, R, center)]
+end
+
+# A VisRad object's components in the chamber frame (windings repaired toward `toward`,
+# CAD facets merged to `h`), kept per workspace version and settings: every edit
+# rebuilds the target, and orienting a CAD part of 10⁵ facets takes seconds.
+const _VRW_PARTS = Dict{Any,Vector{Component}}()
+
+function _visrad_components(p::PartSpec, h, toward)
+    v = p.values
+    key = (abspath(p.file), mtime(p.file), p.object, Float64(h), round.(Tuple(toward); digits = 9),
+           p.two_sided, v[:albedo], v[:conversion], p.name)
+    lock(_STL_LOCK) do
+        get!(_VRW_PARTS, key) do
+            o = _visrad_object(p.file, p.object)
+            mat = Material(p.name; albedo = v[:albedo], conversion = v[:conversion])
+            cs = visrad_component(o; material = mat, two_sided = p.two_sided, orient = !p.two_sided,
+                                  toward, coarsen = o.kind === :mesh ? h : nothing)
+            isempty(cs) && throw(ArgumentError("$(p.name): VisRad object type $(o.type) is not supported"))
+            cs
+        end
+    end
+end
+
+"Names of the components a VisRad object makes (without meshing its CAD)."
+visrad_component_names(o::VisRadObject) =
+    o.kind === :mesh ? [Symbol(o.name)] : [c.name for c in visrad_component(o)]
+
+# A VisRad workspace's object, the workspace read once per file version.
+const _VRW_CACHE = Dict{Any,VisRadWorkspace}()
+
+function _visrad_object(file::AbstractString, object::AbstractString)
+    isfile(file) || throw(ArgumentError("VisRad workspace not found: $file"))
+    key = (abspath(file), mtime(file), filesize(file))
+    ws = lock(_STL_LOCK) do
+        get!(() -> read_visrad_workspace(file), _VRW_CACHE, key)
+    end
+    i = findfirst(o -> o.name == object, ws.objects)
+    i === nothing && throw(ArgumentError("no object $object in $(basename(file))"))
+    return ws.objects[i]
+end
+
+# An STL file's mesh, oriented (`orient_mesh`: closed solids face out of their material,
+# open sheets toward `toward`, flipped for `inward`) and coarsened to elements of `h`.
+# Every edit rebuilds the target, so the result is kept per file version and settings.
+const _STL_CACHE = Dict{Any,Mesh}()
+const _STL_LOCK = ReentrantLock()
+
+function _stl_part_mesh(file::AbstractString, scale, h, toward, inward::Bool)
+    isfile(file) || throw(ArgumentError("STL file not found: $file"))
+    key = (abspath(file), mtime(file), filesize(file), Float64(scale), Float64(h),
+           round.(Tuple(toward); digits = 9), inward)
+    lock(_STL_LOCK) do
+        get!(_STL_CACHE, key) do
+            m = coarsen_mesh(orient_mesh(read_stl(file; scale); toward); size = h)
+            inward ? Mesh(m.vertices, [(a, c, b) for (a, b, c) in m.triangles], m.patches) : m
+        end
+    end
 end
 
 # ---------------------------------------------------------------- the setup
@@ -274,8 +467,10 @@ The target being designed: `kind` (one of [`TARGET_KINDS`](@ref)), `params` (eve
 edits), `mesh` (the element sizes, a [`MeshSpec`](@ref)), `resolution` (the preset the
 sizes match, one of [`MESH_RESOLUTIONS`](@ref), or `:custom`), `windows` (the
 hohlraum's diagnostic windows, [`WindowSpec`](@ref)s; other templates ignore them),
-`parts` (free parts, [`PartSpec`](@ref)s), the built `target`, and `error` (the last
-rejected edit). Edit with [`set_target_kind!`](@ref), [`edit_target!`](@ref),
+`parts` (free parts, [`PartSpec`](@ref)s), the built `target`, `error` (the last
+rejected edit), `excluded` (component names left out of the calculations, see
+[`set_excluded!`](@ref)) and `ghost` (those components, for drawing, or `nothing`).
+Edit with [`set_target_kind!`](@ref), [`edit_target!`](@ref),
 [`set_resolution!`](@ref), [`edit_mesh!`](@ref), the window functions
 ([`add_window!`](@ref), …) and the part functions ([`add_part!`](@ref), …).
 """
@@ -288,6 +483,8 @@ struct TargetSetup
     parts::Observable{Vector{PartSpec}}
     target::Observable{Target}
     error::Observable{String}
+    excluded::Observable{Set{Symbol}}
+    ghost::Observable{Union{Nothing,Target}}
 end
 
 function TargetSetup(; kind::Symbol = :hohlraum, resolution::Symbol = :standard,
@@ -307,7 +504,8 @@ function TargetSetup(; kind::Symbol = :hohlraum, resolution::Symbol = :standard,
     t = build_target(kind, params, mesh, ws, ps)
     return TargetSetup(Observable(kind), Observable(params), Observable(mesh),
                        Observable(_preset_of(mesh)), Observable(ws), Observable(ps),
-                       Observable(t), Observable(""))
+                       Observable(t), Observable(""), Observable(Set{Symbol}()),
+                       Observable{Union{Nothing,Target}}(nothing))
 end
 
 """
@@ -360,9 +558,11 @@ function build_target(kind::Symbol, p::AbstractDict, mesh::MeshSpec,
         throw(ArgumentError("unknown target kind :$kind"))
     end
     for part in parts
-        any(c -> c.name === part.name, comps) &&
-            throw(ArgumentError("two components are named $(part.name)"))
-        push!(comps, part_component(part, mesh.h))
+        new = part_components(part, mesh.h; frame = anchor_frame(part.anchor, kind, p, parts))
+        for c in new
+            any(d -> d.name === c.name, comps) && throw(ArgumentError("two components are named $(c.name)"))
+        end
+        append!(comps, new)
     end
     isempty(comps) && throw(ArgumentError("the target is empty: add a part"))
     return Target(comps)
@@ -379,9 +579,20 @@ foil_center(ts::TargetSetup) = foil_center(ts.params[])
 
 # Rebuild with changed inputs, committing them only if the geometry accepts them.
 function _try_build!(ts::TargetSetup; kind = ts.kind[], params = ts.params[], mesh = ts.mesh[],
-                     windows = ts.windows[], parts = ts.parts[])
+                     windows = ts.windows[], parts = ts.parts[], excluded = ts.excluded[])
     try
         t = build_target(kind, params, mesh, windows, parts)
+        # components left out of the calculations (those still in the target)
+        out = Set(c.name for c in t.components if c.name in excluded)
+        ghost = nothing
+        if !isempty(out)
+            keep = [c for c in t.components if !(c.name in out)]
+            isempty(keep) && throw(ArgumentError("every component is left out of the calculations"))
+            ghost = Target([c for c in t.components if c.name in out])
+            t = Target(keep)
+        end
+        _assign!(ts.excluded, Set{Symbol}(excluded))
+        ts.ghost[] = ghost
         kind == ts.kind[] || (ts.kind[] = kind)
         params === ts.params[] || (ts.params[] = params)
         if mesh != ts.mesh[]
@@ -399,6 +610,25 @@ function _try_build!(ts::TargetSetup; kind = ts.kind[], params = ts.params[], me
         return false
     end
 end
+
+"""
+    set_excluded!(ts::TargetSetup, name::Symbol, excluded::Bool) -> Bool
+
+Leave component `name` out of the calculations (`excluded = true`) or put it back.
+An excluded component is not part of `target` (no laser, view factors, clearance or
+checks see it) but stays listed and drawn as a ghost (`ghost`), so it can be put
+back; a hohlraum with an excluded component is no longer treated as closed.
+"""
+function set_excluded!(ts::TargetSetup, name::Symbol, excluded::Bool)
+    ex = copy(ts.excluded[])
+    excluded ? push!(ex, name) : delete!(ex, name)
+    ex == ts.excluded[] && return true
+    return _try_build!(ts; excluded = ex)
+end
+
+"Every component name of the design: in the calculations, then excluded ones."
+all_component_names(ts::TargetSetup) =
+    [component_names(ts.target[]); ts.ghost[] === nothing ? Symbol[] : component_names(ts.ghost[])]
 
 """
     set_target_kind!(ts::TargetSetup, kind::Symbol) -> Bool
@@ -609,15 +839,19 @@ function _check_part_index(ts::TargetSetup, i::Integer)
 end
 
 """
-    add_part!(ts::TargetSetup, kind::Symbol; name, values...) -> Bool
+    add_part!(ts::TargetSetup, kind::Symbol; name, file = "", values...) -> Bool
 
 Add a free part (one of [`PART_KINDS`](@ref)) named `name` (default: the kind and the
 first free number) with [`PART_FIELDS`](@ref) and size values given as keywords
-(e.g. `add_part!(ts, :disk; z = 6.0, r1 = 1.0, theta = 180)`). A part the geometry
-rejects sets `error` and returns `false`.
+(e.g. `add_part!(ts, :disk; z = 6.0, r1 = 1.0, theta = 180)`). A `:mesh` part reads the
+STL `file` (scaled by `scale`, mm per file unit), placed like any part, with its
+windings repaired (closed solids facing out of their material, open sheets toward the
+target center) and its facets merged into elements of the part's size (`h`, or the
+target's). A part the geometry rejects sets `error` and returns `false`.
 """
 function add_part!(ts::TargetSetup, kind::Symbol; name = nothing, two_sided::Bool = false,
-                   inward::Bool = false, aperture::Bool = false, values...)
+                   inward::Bool = false, aperture::Bool = false, file::AbstractString = "",
+                   anchor::Symbol = :tcc, values...)
     taken = Set(component_names(ts.target[]))
     if name === nothing
         k = 1
@@ -628,7 +862,7 @@ function add_part!(ts::TargetSetup, kind::Symbol; name = nothing, two_sided::Boo
     end
     part = try
         PartSpec(kind; name, values = Dict{Symbol,Float64}(k => Float64(v) for (k, v) in values),
-                 two_sided, inward, aperture)
+                 two_sided, inward, aperture, file, anchor)
     catch err
         err isa ArgumentError || rethrow()
         ts.error[] = _errmsg(err)
@@ -662,6 +896,15 @@ function edit_part!(ts::TargetSetup, i::Integer, key::Symbol, text)
                 throw(ArgumentError("a part name is letters, digits and _, starting with a letter"))
             Symbol(s) == p.name && return true
             new = _with(p; name = Symbol(s))
+            # parts placed in this one's frame follow the rename
+            ps = [q.anchor === p.name ? _with(q; anchor = Symbol(s)) : q for q in ts.parts[]]
+            ps[i] = new
+            return _try_build!(ts; parts = ps)
+        elseif key in (:pos_r, :pos_phi, :pos_theta)
+            x, y, z = _set_position(p, key, _parse_number(text, String(key)))
+            vals = copy(p.values)
+            vals[:x], vals[:y], vals[:z] = x, y, z
+            new = _with(p; values = vals)
         else
             haskey(p.values, key) || throw(ArgumentError("a $(p.kind) has no field :$key"))
             v = _parse_number(text, String(key))
@@ -681,6 +924,23 @@ function edit_part!(ts::TargetSetup, i::Integer, key::Symbol, text)
 end
 
 """
+    set_part_coords!(ts::TargetSetup, i, coords::Symbol) -> Bool
+
+Show and edit part `i`'s position in other coordinates ([`PART_COORDINATES`](@ref)); the
+part does not move.
+"""
+function set_part_coords!(ts::TargetSetup, i::Integer, coords::Symbol)
+    _check_part_index(ts, i)
+    coords in PART_COORDINATES || throw(ArgumentError("coordinates must be one of $PART_COORDINATES"))
+    p = ts.parts[][i]
+    p.coords === coords && return true
+    ps = copy(ts.parts[])
+    ps[i] = _with(p; coords)
+    ts.parts[] = ps                     # the geometry is unchanged: no rebuild
+    return true
+end
+
+"""
     set_part_flag!(ts::TargetSetup, i, flag, on::Bool) -> Bool
 
 Set `:two_sided`, `:inward` or `:aperture` of part `i`.
@@ -693,6 +953,46 @@ function set_part_flag!(ts::TargetSetup, i::Integer, flag::Symbol, on::Bool)
     ps = copy(ts.parts[])
     ps[i] = _with(p; (flag => on,)...)
     return _try_build!(ts; parts = ps)
+end
+
+"""
+    set_part_anchor!(ts::TargetSetup, i, anchor::Symbol; keep = true) -> Bool
+
+Place part `i` in another frame ([`PART_ANCHORS`](@ref), or another part's name). With
+`keep` the part stays
+where it is in the chamber: its center and axis are converted to the new frame (and
+its rotation about the axis kept, exact when the frames differ by a translation or a
+half turn); otherwise its placement values are kept and it moves with the frame.
+"""
+function set_part_anchor!(ts::TargetSetup, i::Integer, anchor::Symbol; keep::Bool = true)
+    _check_part_index(ts, i)
+    p = ts.parts[][i]
+    p.anchor === anchor && return true
+    try
+        anchor === p.name && throw(ArgumentError("a part cannot be placed in its own frame"))
+        kind, params, parts = ts.kind[], ts.params[], ts.parts[]
+        # (a frame that leads back to this part is a loop: caught by anchor_frame)
+        trial = copy(parts)
+        trial[i] = _with(p; anchor)
+        anchor_frame(anchor, kind, params, trial)
+        vals = copy(p.values)
+        if keep
+            R0, t0 = anchor_frame(p.anchor, kind, params, parts)
+            R1, t1 = anchor_frame(anchor, kind, params, parts)
+            l = transpose(R1) * (R0 * part_center(p) + t0 - t1)
+            vals[:x], vals[:y], vals[:z] = l
+            a = transpose(R1) * (R0 * part_axis(p))             # the same chamber direction
+            vals[:theta] = acosd(clamp(a[3], -1, 1))
+            vals[:phi] = mod(atand(a[2], a[1]), 360)
+        end
+        ps = copy(ts.parts[])
+        ps[i] = _with(p; anchor, values = vals)
+        return _try_build!(ts; parts = ps)
+    catch err
+        err isa ArgumentError || rethrow()
+        ts.error[] = _errmsg(err)
+        return false
+    end
 end
 
 """

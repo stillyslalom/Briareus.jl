@@ -23,6 +23,30 @@ const PRESET_LABELS = Dict(:nif_quads => "NIF quads (48)", :nif_beams => "NIF be
                            :omega_hohlraum => "OMEGA hohlraum (40)",
                            :omega_backlighter => "OMEGA backlighter", :custom => "imported table")
 
+"""
+Facilities: `:nif`, `:omega`, `:omega_ep` and `:custom` (another facility, or none).
+The facility decides the presets offered ([`FACILITY_PRESETS`](@ref)) and the checks
+that apply: the TaLIS target-configuration rules are NIF's. OMEGA EP's port geometry
+is not built in: its beams come from a beam table or a VisRad file.
+"""
+const FACILITIES = (:nif, :omega, :omega_ep, :custom)
+
+const FACILITY_LABELS = Dict(:nif => "NIF", :omega => "OMEGA", :omega_ep => "OMEGA EP",
+                             :custom => "Other (imported beams)")
+
+"Beam presets of each facility (the first is the default)."
+const FACILITY_PRESETS = Dict(:nif => (:nif_quads, :nif_beams),
+                              :omega => (:omega_hohlraum, :omega_backlighter),
+                              :omega_ep => (), :custom => ())
+
+"The facility of a preset (`nothing` for `:custom`)."
+function facility_of(preset::Symbol)
+    for (f, ps) in FACILITY_PRESETS
+        preset in ps && return f
+    end
+    return nothing
+end
+
 "Row groupings of the beam table: per group (`:group`, see `BeamTable`'s `cluster`), per `:quad`, per `:beam`."
 const BEAM_GROUPINGS = (:group, :quad, :beam)
 
@@ -44,8 +68,12 @@ name, as VisRad's beam clusters: the beam's cone `group` by default; a group edi
 `group` stays its cone for the laser–plasma models), `preset` (one of
 [`BEAM_PRESETS`](@ref), or `:custom` for an imported or scripted table), `by` (row
 grouping, one of [`BEAM_GROUPINGS`](@ref)), `path` (the last imported or exported
-file), `error` (the last rejected edit), and `warnings` (what the last VisRad import
-warned about: unmatched beams, port-angle mismatches, …).
+file), `error` (the last rejected edit), `warnings` (what the last VisRad import warned
+about: unmatched beams, port-angle mismatches, …), `facility` (one of
+[`FACILITIES`](@ref); set by a preset, or with [`set_facility!`](@ref)), `aim_ref` (per
+beam, the target component its aim follows, or `:none`; see
+[`set_aim_reference!`](@ref)) and `ref_point` (where that component's reference point
+was when the aim last followed it).
 """
 struct BeamTable
     beams::Observable{Vector{Beam{Float64}}}
@@ -56,13 +84,18 @@ struct BeamTable
     path::Observable{String}
     error::Observable{String}
     warnings::Observable{Vector{String}}
+    facility::Observable{Symbol}
+    aim_ref::Observable{Vector{Symbol}}
+    ref_point::Base.RefValue{Vector{Vec3}}
 end
 
 function BeamTable(beams::AbstractVector = Beam{Float64}[]; preset::Symbol = :custom)
     bs = Beam{Float64}[_float_beam(b) for b in beams]
     return BeamTable(Observable(bs), Observable(fill(true, length(bs))),
                      Observable(Symbol[b.group for b in bs]), Observable(preset),
-                     Observable(:group), Observable(""), Observable(""), Observable(String[]))
+                     Observable(:group), Observable(""), Observable(""), Observable(String[]),
+                     Observable(something(facility_of(preset), :custom)),
+                     Observable(fill(:none, length(bs))), Ref(fill(zero(Vec3), length(bs))))
 end
 
 _float_beam(b::Beam{Float64}) = b
@@ -108,6 +141,80 @@ function _cone_pointing(bs, rz)
 end
 
 """
+    set_facility!(bt::BeamTable, facility; target_kind = :hohlraum, params) -> bt
+
+Choose the facility ([`FACILITIES`](@ref)). If the table's preset belongs to another
+facility, the new facility's first preset replaces it (for a target of `target_kind`
+with dimensions `params`); a facility without presets keeps the beams.
+"""
+function set_facility!(bt::BeamTable, facility::Symbol; kwargs...)
+    facility in FACILITIES || throw(ArgumentError("facility must be one of $FACILITIES"))
+    _assign!(bt.facility, facility)
+    ps = FACILITY_PRESETS[facility]
+    if !isempty(ps) && facility_of(bt.preset[]) !== facility
+        load_preset!(bt, first(ps); kwargs...)
+    end
+    return bt
+end
+
+"""
+    set_aim_reference!(bt::BeamTable, idx, name::Symbol, point = nothing) -> bt
+
+Aim beams `idx` at `point` (the reference point of target component `name`, such as
+its centroid: a backlighter foil, an entrance hole) and keep them on it: when the
+target changes, [`follow_references!`](@ref) moves their aims with the component.
+Pointing edits afterwards set offsets from it, which the aims keep as they follow.
+`name = :none` releases the beams (their aims stay where they are).
+"""
+function set_aim_reference!(bt::BeamTable, idx, name::Symbol, point = nothing)
+    name === :none || point !== nothing || throw(ArgumentError("give the point to aim at"))
+    refs, pts, bs = copy(bt.aim_ref[]), copy(bt.ref_point[]), copy(bt.beams[])
+    for i in idx
+        refs[i] = name
+        name === :none && continue
+        pts[i] = Vec3(point...)
+        bs[i] = remake(bs[i]; aim = Vec3(point...))
+    end
+    bt.ref_point[] = pts
+    bt.aim_ref[] = refs
+    bs == bt.beams[] || (bt.beams[] = bs)
+    return bt
+end
+
+"""
+    follow_references!(bt::BeamTable, points::AbstractDict) -> Bool
+
+Move every beam that follows a component ([`set_aim_reference!`](@ref)) by how far that
+component's reference point moved since the aim last followed it (`points`: component
+name → its point now). A beam whose component is gone is released. Returns whether
+anything changed.
+"""
+function follow_references!(bt::BeamTable, points::AbstractDict)
+    refs, pts, bs = copy(bt.aim_ref[]), copy(bt.ref_point[]), copy(bt.beams[])
+    changed = false
+    for i in eachindex(refs)
+        r = refs[i]
+        r === :none && continue
+        if !haskey(points, r)
+            refs[i] = :none
+            changed = true
+            continue
+        end
+        p = Vec3(points[r]...)
+        δ = p - pts[i]
+        iszero(δ) && continue
+        bs[i] = remake(bs[i]; aim = Vec3(bs[i].aim) + δ)
+        pts[i] = p
+        changed = true
+    end
+    changed || return false
+    bt.ref_point[] = pts
+    refs == bt.aim_ref[] || (bt.aim_ref[] = refs)
+    bs == bt.beams[] || (bt.beams[] = bs)
+    return true
+end
+
+"""
     load_preset!(bt::BeamTable, preset; target_kind, params)
 
 Replace the table with a preset's beams (see [`preset_beams`](@ref)), all enabled.
@@ -125,16 +232,25 @@ unless `cluster` is given).
 """
 function set_beams!(bt::BeamTable, beams::AbstractVector; preset::Symbol = :custom,
                     enabled::AbstractVector{Bool} = fill(true, length(beams)),
-                    cluster::AbstractVector{Symbol} = Symbol[b.group for b in beams])
+                    cluster::AbstractVector{Symbol} = Symbol[b.group for b in beams],
+                    aim_ref::AbstractVector{Symbol} = fill(:none, length(beams)),
+                    ref_point::AbstractVector = fill(zero(Vec3), length(beams)))
     length(enabled) == length(beams) || throw(DimensionMismatch("one enabled flag per beam"))
     length(cluster) == length(beams) || throw(DimensionMismatch("one group per beam"))
+    length(aim_ref) == length(ref_point) == length(beams) ||
+        throw(DimensionMismatch("one aim reference per beam"))
     bt.enabled.val = collect(Bool, enabled)          # observers see consistent lengths
     bt.cluster.val = collect(Symbol, cluster)
+    bt.aim_ref.val = collect(Symbol, aim_ref)
+    bt.ref_point[] = Vec3[Vec3(p...) for p in ref_point]
     bt.preset[] = preset
+    f = facility_of(preset)
+    f === nothing || _assign!(bt.facility, f)
     bt.by[] === :quad && any(b -> isempty(b.quad), beams) && (bt.by[] = :group)
     bt.beams[] = Beam{Float64}[_float_beam(b) for b in beams]
     notify(bt.enabled)
     notify(bt.cluster)
+    notify(bt.aim_ref)
     bt.error[] = ""
     isempty(bt.warnings[]) || (bt.warnings[] = String[])
     return bt
@@ -599,7 +715,10 @@ function split_quad!(bt::BeamTable, quad::AbstractString)
         nb = vcat(bs[1:i-1], parts, bs[i+1:end])
         en = vcat(bt.enabled[][1:i-1], fill(bt.enabled[][i], 4), bt.enabled[][i+1:end])
         cl = vcat(bt.cluster[][1:i-1], fill(bt.cluster[][i], 4), bt.cluster[][i+1:end])
-        set_beams!(bt, nb; preset = bt.preset[], enabled = en, cluster = cl)
+        rf = vcat(bt.aim_ref[][1:i-1], fill(bt.aim_ref[][i], 4), bt.aim_ref[][i+1:end])
+        rp = vcat(bt.ref_point[][1:i-1], fill(bt.ref_point[][i], 4), bt.ref_point[][i+1:end])
+        set_beams!(bt, nb; preset = bt.preset[], enabled = en, cluster = cl, aim_ref = rf,
+                   ref_point = rp)
         return true
     catch err
         err isa ArgumentError || rethrow()
@@ -629,7 +748,8 @@ function merge_quad!(bt::BeamTable, quad::AbstractString)
         nb = copy(bs)
         nb[idx[1]] = q
         set_beams!(bt, nb[keep]; preset = bt.preset[], enabled = bt.enabled[][keep],
-                   cluster = bt.cluster[][keep])
+                   cluster = bt.cluster[][keep], aim_ref = bt.aim_ref[][keep],
+                   ref_point = bt.ref_point[][keep])
         return true
     catch err
         err isa ArgumentError || rethrow()

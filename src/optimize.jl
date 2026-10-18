@@ -158,7 +158,7 @@ _LazyResponse() = _LazyResponse(ReentrantLock(), nothing)
 
 """
     Scenario(target, beams; observe = nothing, radiation = true, time = 0.0,
-             parameterization = GroupPointing(beams), lpi = nothing,
+             albedo = nothing, parameterization = GroupPointing(beams), lpi = nothing,
              deposition_kw = (;), viewfactor_kw = (;))
 
 Everything precomputed for fast repeated evaluation of a pointing design:
@@ -167,6 +167,11 @@ incident x-ray flux is the figure of merit, e.g. `:capsule`) are given — the v
 factors and the linear flux response of the observed elements. `lpi` is a laser–plasma
 model (`Backscatter`, `CalibratedTransfer`, `CBET`, or a tuple of them) applied at `time`
 between the setup beams and deposition.
+
+The flux response is linear in the laser source at fixed albedos: the materials' at
+`time` (temperature-dependent ones at their reference temperatures, thin foils
+intact), or an explicit per-element `albedo`, such as the converged `sol.albedo` of a
+solution at the design point (e.g. a drive history's peak, windows burned through).
 
 Objectives need only the moments of the observed flux, so the scenario keeps the
 response contracted with the Legendre (`lmax = 12`) and real-harmonic (`lmax = 6`)
@@ -187,6 +192,7 @@ struct Scenario{P}
     lpi::Any                          # laser–plasma model (see apply_lpi)
     time::Float64
     _response::_LazyResponse          # the full response, once read (shared by subsets)
+    albedo::Union{Nothing,Vector{Float64}}   # explicit albedos of the response
 end
 
 const _CACHED_YLM_LMAX = 6
@@ -195,7 +201,7 @@ Base.getproperty(s::Scenario, name::Symbol) =
     name === :response ? _response(s) : getfield(s, name)
 Base.propertynames(::Scenario) =
     (:target, :param, :deposition, :model, :observed, :response, :moment_weights,
-     :ylm_weights, :moment_response, :ylm_response, :lpi, :time)
+     :ylm_weights, :moment_response, :ylm_response, :lpi, :time, :albedo)
 
 # Whether the scenario has a radiation response (observed elements and a model).
 _radiative(s::Scenario) = s.model !== nothing && !isempty(s.observed)
@@ -204,13 +210,13 @@ function _response(s::Scenario)
     _radiative(s) || return nothing
     c = getfield(s, :_response)
     lock(c.lock) do
-        c.R === nothing && (c.R = flux_response(s.model, s.observed; time = s.time))
+        c.R === nothing && (c.R = flux_response(s.model, s.observed; time = s.time, s.albedo))
         c.R
     end
 end
 
 function Scenario(t::Target, beams::AbstractVector{<:Beam}; observe = nothing,
-                  radiation::Bool = observe !== nothing, time = 0.0,
+                  radiation::Bool = observe !== nothing, time = 0.0, albedo = nothing,
                   parameterization = GroupPointing(beams), deposition_kw = (;),
                   viewfactor_kw = (;), lpi = nothing)
     op = DepositionOperator(t, beams; deposition_kw...)
@@ -220,11 +226,11 @@ function Scenario(t::Target, beams::AbstractVector{<:Beam}; observe = nothing,
     Y = isempty(obs) ? zeros(0, 0) : ylm_weights(t, obs; lmax = _CACHED_YLM_LMAX)
     WR, YR = zeros(0, 0), zeros(0, 0)
     if model !== nothing && !isempty(obs)
-        WY = flux_response(model, obs; time, weights = vcat(W, Y))
+        WY = flux_response(model, obs; time, albedo, weights = vcat(W, Y))
         WR, YR = WY[1:size(W, 1), :], WY[size(W, 1)+1:end, :]
     end
     return Scenario(t, parameterization, op, model, obs, W, Y, WR, YR, lpi, Float64(time),
-                    _LazyResponse())
+                    _LazyResponse(), albedo === nothing ? nothing : collect(Float64, albedo))
 end
 
 """
@@ -245,7 +251,7 @@ function subset(s::Scenario, keep::AbstractVector{<:Integer}; parameterization =
             parameterization
     return Scenario(s.target, param, s.deposition[keep], s.model, s.observed,
                     s.moment_weights, s.ylm_weights, s.moment_response, s.ylm_response,
-                    s.lpi, s.time, getfield(s, :_response))
+                    s.lpi, s.time, getfield(s, :_response), s.albedo)
 end
 
 function Base.show(io::IO, s::Scenario)
@@ -346,7 +352,8 @@ end
 """
     symmetry_objective(; modes = (2 => 1.0, 4 => 1.0), odd = 1.0, lmax = 6,
                        clip = 10.0, missed = 10.0, direct = 10.0, direct_names = (:capsule,),
-                       drive = nothing, drive_weight = 1.0, center = 0, keepout = nothing)
+                       drive = nothing, drive_weight = 1.0, center = 0, keepout = nothing,
+                       uncertainty = nothing)
 
 Objective for indirect-drive symmetry: `Σ wₗ (aₗ/a₀)²` over `modes`, plus `odd ×` the
 sum of squared odd moments (top/bottom imbalance), plus `clip`, `missed` and `direct`
@@ -356,20 +363,42 @@ missing it, or hitting `direct_names` (e.g. the capsule) directly. When `drive`
 `ApertureKeepOut` for the entrance-hole rims, a `SphereKeepOut` for the capsule, or a
 tuple of them) adds its penalty on the beams' worst-case clearance. The `direct`
 penalty only sees power already on the capsule; keep a margin with a `SphereKeepOut`.
+
+With `uncertainty = (; pointing, power)` (rms beam-to-beam pointing in mm and relative
+power, as in `mode_uncertainty`) the mode terms are their expected values over those
+errors, linearized: each `(aₗ/a₀)²` gains the variance the errors give it, so the
+optimum also makes the drive shape insensitive to them (robust design). This costs
+about three gradients per evaluation.
 """
 function symmetry_objective(; modes = (2 => 1.0, 4 => 1.0), odd = 1.0, lmax::Integer = 6,
                             clip = 10.0, missed = 10.0, direct = 10.0,
                             direct_names = (:capsule,), drive = nothing, drive_weight = 1.0,
-                            center = zero(Vec3), keepout = nothing)
+                            center = zero(Vec3), keepout = nothing, uncertainty = nothing)
+    errs = _uncertainty_spec(uncertainty)
+    errs === nothing || (Vec3(center...) == zero(Vec3) && lmax <= _CACHED_LMAX) ||
+        throw(ArgumentError("uncertainty needs center = 0 and lmax ≤ $_CACHED_LMAX"))
     return function (ev::Evaluation)
         a = flux_moments(ev; lmax, center)
         J = sum(w * (a[l+1] / a[1])^2 for (l, w) in modes)
         odd > 0 && (J += odd * sum((a[l+1] / a[1])^2 for l in 1:2:lmax))
+        if errs !== nothing
+            v = _error_variance(ev.scenario, ev.effective, ev.scenario.moment_response, lmax + 1, errs)
+            J += sum(w * v[l+1] for (l, w) in modes)
+            odd > 0 && (J += odd * sum(v[l+1] for l in 1:2:lmax))
+        end
         J += _penalties(ev; clip, missed, direct, direct_names)
         J += _keepout_penalty(keepout, ev.beams)
         drive === nothing || (J += drive_weight * (a[1] / drive - 1)^2)
         return J
     end
+end
+
+# (pointing, power) of an objective's `uncertainty` keyword, or nothing.
+_uncertainty_spec(::Nothing) = nothing
+function _uncertainty_spec(u)
+    p, q = Float64(get(u, :pointing, 0.0)), Float64(get(u, :power, 0.0))
+    p >= 0 && q >= 0 || throw(ArgumentError("uncertainty must be nonnegative rms errors"))
+    return (p, q)
 end
 
 function _penalties(ev::Evaluation; clip, missed, direct, direct_names)
@@ -399,7 +428,7 @@ end
     asymmetry_objective(; modes = (1 => 1.0, 2 => 1.0, 3 => 1.0, 4 => 1.0), components = (),
                         clip = 10.0, missed = 10.0, direct = 10.0, direct_names = (:capsule,),
                         drive = nothing, drive_weight = 1.0, keepout = nothing,
-                        reference = nothing)
+                        reference = nothing, uncertainty = nothing)
 
 Objective for three-dimensional drive symmetry. For each `l => w` in `modes` it adds
 `w × relative_mode_power(c, l)` — the rotation-invariant power of all `2l+1` real
@@ -414,11 +443,16 @@ With `reference` (a coefficient vector from `flux_ylm`, e.g. of a tuned design b
 change to the target or the beams), the modes and components measure the departure of
 `c_lm/c_00` from the reference's `c_lm/c_00` instead of from zero, so the objective
 restores a known-good drive shape.
+
+With `uncertainty = (; pointing, power)` the mode and component terms are their
+expected values over independent beam errors of those rms sizes (linearized; see
+`mode_uncertainty` and `symmetry_objective`): a robust design.
 """
 function asymmetry_objective(; modes = (1 => 1.0, 2 => 1.0, 3 => 1.0, 4 => 1.0),
                              components = (), clip = 10.0, missed = 10.0, direct = 10.0,
                              direct_names = (:capsule,), drive = nothing, drive_weight = 1.0,
-                             keepout = nothing, reference = nothing)
+                             keepout = nothing, reference = nothing, uncertainty = nothing)
+    errs = _uncertainty_spec(uncertainty)
     lmax = maximum(vcat([l for (l, _) in modes], [lm[1] for (lm, _) in components], 0))
     nref = (max(lmax, 1) + 1)^2
     reference === nothing || length(reference) >= nref ||
@@ -433,6 +467,15 @@ function asymmetry_objective(; modes = (1 => 1.0, 2 => 1.0, 3 => 1.0, 4 => 1.0),
         end
         for ((l, m), w) in components
             J += w * (d[mode_index(l, m)] / c[1])^2
+        end
+        if errs !== nothing
+            v = _error_variance(ev.scenario, ev.effective, ev.scenario.ylm_response, nref, errs)
+            for (l, w) in modes
+                J += w * sum(@view v[l^2+1:(l+1)^2])
+            end
+            for ((l, m), w) in components
+                J += w * v[mode_index(l, m)]
+            end
         end
         J += _penalties(ev; clip, missed, direct, direct_names)
         J += _keepout_penalty(keepout, ev.beams)

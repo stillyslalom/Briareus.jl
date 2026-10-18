@@ -27,6 +27,9 @@ using BriareusGUI.Briareus
     sst = joinpath(files, "pointing.csv")
     kit = joinpath(files, "kit")
     talis_csv = joinpath(files, "talis.csv")
+    session_file = joinpath(files, "design.briareus.toml")
+    reference_csv = joinpath(files, "reference.csv")
+    retuned_csv = joinpath(files, "retuned.csv")
     B = BriareusGUI
     B._TICK_HOOK[] = function (sh)
         s = sh.sess
@@ -192,6 +195,55 @@ using BriareusGUI.Briareus
             B.br_edit_node("defocus", "0.5")
             B.request_grab(png("split")); next!()
         elseif k == 17 && grabbed(png("split"))
+            # undo the split (one step: the tick recorded it with the defocus edit),
+            # after saving the session with the quad split
+            B.br_save_session(session_file)
+            B.br_undo(); next!()
+        elseif k == 18 && time() - t_stage[] > 0.2
+            q = first(b.quad for b in s.beams.beams[] if b.group === :inner23)
+            count(b -> b.quad == q, s.beams.beams[]) == 1 && sh.app["canRedo"] && push!(seen, :undo)
+            B.br_redo(); next!()
+        elseif k == 19 && time() - t_stage[] > 0.2
+            q = first(b.quad for b in s.beams.beams[] if b.group === :inner23)
+            count(b -> b.quad == q, s.beams.beams[]) == 4 && push!(seen, :redo)
+            # a change, then the saved session back
+            B.br_edit_target("length", "11.0")
+            B.br_open_session(session_file)
+            s.target.params[][:length] == 10.0 && count(b -> b.quad == q, s.beams.beams[]) == 4 &&
+                sh.session_path == session_file && push!(seen, :session)
+            # an x-ray image down the axis, through the top entrance hole (the drive is
+            # stale after the load: computed first)
+            B.br_standard_view("top")
+            B.br_xray_image(); next!()
+        elseif k == 20 && s.drive.image[] !== nothing && !s.drive.building[] && !s.drive.evaluating[]
+            count(isfinite, s.drive.image[].values) > 100 && sh.figure === sh.map.fig &&
+                push!(seen, :xray)
+            # the image beside the 3D view: two canvases at once (camera actions keep it)
+            B.br_side_view(true)
+            B.br_standard_view("iso")
+            B.request_grab(png("xray")); next!()
+        elseif k == 21 && grabbed(png("xray"))
+            sh.figure === sh.scene.fig && sh.side_figure === sh.map.fig && sh.app["sideView"] &&
+                s.drive.view[] === :image && push!(seen, :side)
+            # back to the scene, a cut half the shell wide, and the view from a port
+            B.br_side_view(false)
+            B.br_close_image()
+            B.br_cut_width(180)
+            B.br_look_from_port("80", "225")         # into the cut
+            s.view.cut_width[] == 180 && s.view.cutaway[] && sh.figure === sh.scene.fig &&
+                startswith(s.status[], "looking from the port") && push!(seen, :port)
+            # retune to a reference drive with bundle 31 down, on a worker
+            bs = s.beams.beams[]
+            pul = cone_fraction_pulses(bs, [0.0, 1.0, 3.0, 4.0], [0.0, 100.0, 300.0, 0.0],
+                                       [0.3, 0.3, 0.25, 0.25])
+            write_pulse_table(reference_csv, pul)
+            s.beams.enabled[] = [nif_bundle(b) != "31" for b in bs]
+            B.br_retune(reference_csv, retuned_csv, "quad", "1.5", "0")
+            s.drive.retune_running[] && push!(seen, :retune_started)
+            B.request_grab(png("cut_port")); next!()
+        elseif k == 22 && grabbed(png("cut_port")) && !s.drive.retune_running[]
+            isfile(retuned_csv) && occursin("quad powers", s.drive.retune_status[]) &&
+                sh.app["retuneStatus"] == s.drive.retune_status[] && push!(seen, :retune)
             B.request_close(); next!()
         end
     end
@@ -202,11 +254,12 @@ using BriareusGUI.Briareus
         B._TICK_HOOK[] = nothing
     end
     @info "window session" seconds = round(time() - t0; digits = 1) shots
-    @test stage[] == 18
+    @test stage[] == 23
     @test seen == [:target, :windows, :part, :mesh, :remove, :tree_beams, :visrad, :volumes, :zoom,
                    :pick, :drive, :kit, :map, :optimize, :capsule, :applied, :clearance, :talis,
-                   :talis_csv, :group, :split]
+                   :talis_csv, :group, :split, :undo, :redo, :session, :xray, :side, :port,
+                   :retune_started, :retune]
     @test !sess.spawn[]                              # restored when the window closed
     @test all(isfile ∘ png, ("target", "part", "beams", "drive_scene", "drive_map", "optimize",
-                             "clearance", "talis", "along_beam", "group", "split"))
+                             "clearance", "talis", "along_beam", "group", "split", "cut_port"))
 end

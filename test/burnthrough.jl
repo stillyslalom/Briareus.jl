@@ -292,3 +292,130 @@ end
     @test_throws ArgumentError drive_history(mw, op, f, coarse; transition = 0.0)
     @test_throws ArgumentError drive_history(mw, op, f, [1.0, 0.5])
 end
+
+@testset "temperature-dependent foil transmission" begin
+    rt = RosselandTransmission()
+    bt = BurnthroughAlbedo(thickness = 2.5, transmission = rt)
+    # at the reference temperature, or without a known flux, it is the constant default
+    @test foil_transmission(bt) == foil_transmission(bt, 325.0) == 4 / 17
+    @test foil_transmission(BurnthroughAlbedo(thickness = 2.5)) == 4 / 17
+    @test foil_transmission(BurnthroughAlbedo(thickness = 2.5), 150.0) == 4 / 17
+    # τ follows gold's Rosseland opacity, K ∝ T^-1.5 (Hammer & Rosen, eq. 31)
+    for T in (150.0, 250.0, 400.0), x in (1.7, 3.6)
+        m = BurnthroughAlbedo(thickness = x, transmission = rt)
+        @test foil_transmission(m, T) ≈ eddington_transmission(5x / 2.5 * (T / 325)^-1.5) rtol = 1e-14
+    end
+    @test issorted([foil_transmission(bt, T) for T in 100:50:600])   # hotter foils transmit more
+    @test foil_transmission(bt, 2000.0) == 1                         # τ < 2/3: capped
+    @test isnan(foil_transmission(BurnthroughAlbedo(thickness = 2.5, after = 0)))
+    # Hammer & Rosen's absolute fit, 1/K = T^1.5 ρ^-0.2 / 7200 g/cm² (T in heV), for the
+    # as-built areal mass of 2.5 µm of gold at Lester's expanded 1 g/cm³: τ = 5.9 at
+    # 325 eV, within 20% of the τ ∼ 5 the reference is normalized to
+    @test 19.3 * 2.5e-4 * 7200 * 3.25^-1.5 ≈ 5.93 atol = 0.01
+    @test_throws ArgumentError BurnthroughAlbedo(thickness = 2.5, transmission = rt, after = 0)
+    # the albedo split, burned through: transmitted the transmission at that temperature
+    bb = BurnthroughAlbedo(thickness = 2.5, transmission = rt, burnthrough = 1.0)
+    for T in (180.0, 300.0)
+        α, αb, τ = Briareus._burnthrough_split(bb, 3.0, T, NaN)
+        @test τ == foil_transmission(bb, T)
+        @test α ≈ (1 - τ) * αb rtol = 1e-15
+    end
+    @test Briareus._temperature_dependent(BurnthroughAlbedo(thickness = 2.5, transmission = rt,
+                                                            before = 0.8))
+    @test !Briareus._temperature_dependent(BurnthroughAlbedo(thickness = 2.5, before = 0.8))
+
+    # in a hohlraum: solve iterates the transmission with the albedos, and each
+    # burned-through element transmits the fraction for its own converged temperature
+    kw = (; nz = 12, nphi = 16, capsule_ntheta = 8, capsule_nphi = 12)
+    wall = Material(:Au; albedo = WallLossAlbedo(), conversion = 0.8)
+    windowed(transmission) =
+        hohlraum(; kw..., wall,
+                 windows = [WallWindow(; phi = 0, diameter = 2.0,
+                                       material = Material(:Au; conversion = 0.8,
+                                                           albedo = BurnthroughAlbedo(; thickness = 2.5, burnthrough = 1.0, transmission)))])
+    t = windowed(rt)
+    m = RadiationModel(t; closed = true)
+    src = elements(t, :wall)
+    ew = elements(t, :window_1)
+    for (flux, label) in ((0.02, "hot"), (0.002, "cold"))
+        laser = zeros(nelements(t))
+        laser[src] .= t.elem_area[src] .* flux
+        s = solve(m, laser; time = 2.0, tol = 1e-12)
+        Te = radiation_temperature.(s.H[ew])
+        @test s.transmission[ew] ≈ foil_transmission.(Ref(bb), Te) rtol = 1e-9
+        bal = energy_balance(s)
+        @test bal.source ≈ sum(values(bal.absorbed)) + sum(values(bal.escaped)) +
+                           sum(values(bal.transmitted)) + bal.lost rtol = 1e-12
+        @test bal.transmitted[:window_1] ≈ sum(s.transmission[ew] .* s.H[ew] .* t.elem_area[ew]) rtol = 1e-14
+        # against the constant transmission: more where the foil is hotter than 325 eV
+        sc = solve(RadiationModel(windowed(nothing); F = m.F), laser; time = 2.0, tol = 1e-12)
+        @test sign(sum(s.transmission[ew]) - sum(sc.transmission[ew])) ==
+              sign(sum(Te) / length(Te) - 325)
+    end
+end
+
+@testset "closing gap" begin
+    @test_throws ArgumentError GapClosure(closure = 1.0, width = -0.1)
+    @test GapClosure(closure = 1.0).after isa WallLossAlbedo
+    g = GapClosure(closure = 2.0, width = 0.4, after = 0.8)
+    @test albedo(g, 1.0) == 0 && albedo(g, 2.4) == 0.8
+    @test albedo(g, 2.2) ≈ 0.4 rtol = 1e-14
+    split(t) = Briareus._closure_split(g, t, nothing)
+    @test split(1.0) == (0.0, 0.8, 1.0) && split(3.0) == (0.8, 0.8, 0.0)
+    @test all(split(2.2) .≈ (0.4, 0.8, 0.5))
+    @test albedo(GapClosure(closure = 2.0, width = 0.0, after = 0.8), 2.0) == 0.8
+    @test Briareus._temperature_dependent(GapClosure(closure = 1.0)) &&
+          !Briareus._temperature_dependent(g)
+
+    # in a hohlraum: open, the gap is the open (aperture) gap; closed, a wall patch
+    kw = (; nz = 12, nphi = 16, capsule_ntheta = 8, capsule_nphi = 12)
+    wall = Material(:Au; albedo = 0.8, conversion = 0.8)
+    with_gap(gap_material) = hohlraum(; kw..., wall, windows = [WallWindow(; phi = 0, diameter = 2.0,
+                                                                          gap = 0.1, gap_material)])
+    to, tc = with_gap(nothing), with_gap(Material(:Au; albedo = GapClosure(closure = 2.0, after = 0.8),
+                                                   conversion = 0.8))
+    tw = with_gap(wall)
+    @test nelements(to) == nelements(tc) == nelements(tw)
+    mo, mc, mw = (RadiationModel(t; closed = true) for t in (to, tc, tw))
+    src = elements(tc, :wall)
+    laser = zeros(nelements(tc))
+    laser[src] .= tc.elem_area[src] .* 0.02
+    c, eg = elements(tc, :capsule), elements(tc, :window_1_gap)
+    so, sc = solve(mo, laser; time = 1.0), solve(mc, laser; time = 1.0)
+    @test sc.H[c] ≈ so.H[c] rtol = 1e-6
+    bo, bc = energy_balance(so), energy_balance(sc)
+    @test bc.transmitted[:window_1_gap] ≈ bo.escaped[:window_1_gap] rtol = 1e-6
+    @test bc.absorbed[:window_1_gap] ≈ 0 atol = 1e-14
+    late, sw = solve(mc, laser; time = 3.0), solve(mw, laser; time = 3.0)
+    @test late.H ≈ sw.H rtol = 1e-12
+    @test energy_balance(late).transmitted[:window_1_gap] == 0
+    # halfway closed: half the flux on it leaves, the other half meets the wall albedo
+    mid = solve(mc, laser; time = 2.2)
+    Pin = sum(mid.H[eg] .* tc.elem_area[eg])
+    bm = energy_balance(mid)
+    @test bm.transmitted[:window_1_gap] ≈ Pin / 2 rtol = 1e-12
+    @test bm.absorbed[:window_1_gap] ≈ Pin / 2 * (1 - 0.8) rtol = 1e-12
+    for s in (sc, mid, late)
+        b = energy_balance(s)
+        @test b.source ≈ sum(values(b.absorbed)) + sum(values(b.escaped)) +
+                         sum(values(b.transmitted)) + b.lost rtol = 1e-12
+    end
+    @test sum(sc.H[c]) < sum(mid.H[c]) < sum(late.H[c])
+
+    # drive_history: the gap's leak is window loss until it closes, and `transition`
+    # resolves the closure
+    q = [remake(b; aim = (0.0, 0.0, sign(b.port[3]) * 4.0)) for b in nif_quads()]
+    op = DepositionOperator(tc, q)
+    f = τ -> with_pulses(q, PulseShape([0.0, 4.0], [5.0, 5.0]), τ)
+    h = drive_history(mc, op, f, 0.5:0.5:3.5; transition = 0.1)
+    @test h.window_loss == h.transmitted[:window_1_gap]
+    @test all(>(0), h.window_loss[h.time .< 2.0]) && all(==(0), h.window_loss[h.time .>= 2.4])
+    inserted = setdiff(h.time, 0.5:0.5:3.5)
+    @test !isempty(inserted) && all(τ -> 2.0 < τ < 2.4, inserted)
+    steps = [Briareus._closure_step(GapClosure(closure = 2.0, after = 0.8), τ) for τ in h.time]
+    @test maximum(diff(steps)) <= 0.1 + 1e-12
+    # (the laser light these beams put on the gap, 1.3 TW, is absorbed there; an aperture
+    # gap would pass it, so the history is checked against a solve, not the open gap)
+    s1 = solve(mc, deposit(op, f(1.0)); time = 1.0)
+    @test h.window_loss[findfirst(==(1.0), h.time)] ≈ energy_balance(s1).transmitted[:window_1_gap] rtol = 1e-6
+end

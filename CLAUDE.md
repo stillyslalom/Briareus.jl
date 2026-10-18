@@ -59,6 +59,10 @@ environment has no ForwardDiff/Optim, and `Vec3` clashes with Makie there.
   replaces this and books only α_before − α as transmitted. `sol.albedo` is the albedo
   B was solved with, `sol.intact` its before-burnthrough part, and `sol.transmission`
   the transmitted fraction that `energy_balance` splits out as `transmitted`.
+  `RosselandTransmission` makes `T` follow the radiation temperature (iterated in
+  `solve`). `GapClosure` (an open gap that closes at a given time) also transmits;
+  albedo models report (albedo, intact, transmitted) through `_albedo_split`, and
+  `_transmits` marks the ones `energy_balance` and `drive_history` book.
 - Deposition (operator and ray trace) sums the best-focus profile over `ncone` (default
   13) f-cone directions, each with its own incidence factor `|n·dⱼ|/(k·dⱼ)`. Don't use the
   moment-matched `intensity` for deposition: it has the right second moment but the
@@ -98,7 +102,7 @@ environment has no ForwardDiff/Optim, and `Vec3` clashes with Makie there.
 
 ## Architecture (src/, include order)
 
-`geometry.jl` (Mesh, primitives) → `bvh.jl` (BVH, closest/any hit) → `target.jl`
+`geometry.jl` (Mesh, primitives) → `meshops.jl` (orient/coarsen imported meshes) → `bvh.jl` (BVH, closest/any hit) → `target.jl`
 (materials, albedo models, Component, Target, element quadrature) → `targets.jl`
 (hohlraum, foil) → `beams.jl` (SuperGaussianSpot, Beam, BeamFrame, intensity, cone
 directions) → `facilities.jl` (NIF ports/spots, OMEGA) → `deposition.jl`
@@ -106,9 +110,13 @@ directions) → `facilities.jl` (NIF ports/spots, OMEGA) → `deposition.jl`
 (RadiationModel, solve, flux_response, energy_balance, enforce_closure!) → `analysis.jl`
 (solid angles, Legendre/Y_lm) → `imaging.jl` (OrthoCamera, render, line_of_sight_power)
 → `optimize.jl` (GroupPointing, Scenario, objectives, optimize_pointing, report) →
-`history.jl` (PulseShape, drive_history) → `clearance.jl` (envelopes, wings, worst-case
-clearance) → `keepout.jl` (differentiable entrance-hole keep-out) → `lpi.jl` (LaserPlasmaModel, Backscatter, CalibratedTransfer) → `io.jl`
-(CSV beam tables) → `cbet.jl` (reduced kinetic CBET, calibrate_cbet) → `unconverted.jl`.
+`history.jl` (PulseShape, drive_history) → `retune.jl` (pulse tables, retune_drive) →
+`clearance.jl` (envelopes, wings, worst-case clearance) → `keepout.jl` (differentiable
+entrance-hole keep-out) → `uncertainty.jl` (beam-error sensitivities, robust objectives)
+→ `talis.jl` → `lpi.jl` (LaserPlasmaModel, Backscatter, CalibratedTransfer) → `io.jl`
+(CSV beam tables, write_results) → `visrad.jl`, `visrad_workspace.jl` (VisRad files and
+workspaces, read and write) → `cbet.jl` (reduced kinetic CBET, calibrate_cbet) →
+`unconverted.jl`.
 
 Physics defaults and their sources live in `reference/research-notes.md`. Keep each
 number's provenance and confidence there, and say in docstrings when a value is

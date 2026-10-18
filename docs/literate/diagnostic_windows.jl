@@ -15,10 +15,12 @@
 # This tutorial meshes circular windows with their gaps into the wall, checks the
 # heat-front model that decides when a window burns through against published
 # solutions and measurements, and then follows a pair of windows through a NIF-like
-# drive for three window thicknesses, with and without a gap. It introduces
-# `WallWindow` disks and gaps, the `BurnthroughAlbedo` thin-foil model with its
-# `HeatFront` and its transmission after burnthrough, and the window accounting of
-# [`drive_history`](@ref) and [`energy_balance`](@ref).
+# drive for three window thicknesses, with and without a gap. It then lets the
+# transmission follow the drive and the gaps close, and restores the drive the windows
+# take, with quad powers or quad pointing. It introduces `WallWindow` disks and gaps,
+# the `BurnthroughAlbedo` thin-foil model with its `HeatFront` and its transmission
+# after burnthrough, `GapClosure`, the window accounting of [`drive_history`](@ref) and
+# [`energy_balance`](@ref), and a [`Scenario`](@ref) linearized about a solution.
 
 using Briareus
 using CairoMakie
@@ -220,6 +222,26 @@ end
 # This is a gray estimate with the mean free path held at one temperature. The limit
 # it replaces, `after = 0`, makes a burned-through window an open hole: everything
 # that reaches it leaves, an upper bound on the loss.
+#
+# Gold's Rosseland mean free path grows with temperature. Hammer and Rosen's power-law
+# fit to its opacity, ``1/K = g\,T^{1.5}\rho^{-0.2}`` with ``g = 1/7200`` g/cm² and
+# ``T`` in hectovolts (their eq. 31, fitted over 100–200 eV), puts the as-built areal
+# mass of a 2.5 µm foil, at the expanded density of 1 g/cm³ that Lester et al. assume,
+# at ``\tau = 5.9`` for 325 eV: within 20% of their ``\tau \sim 5``, from independent
+# physics. `transmission = RosselandTransmission()` keeps their point at 325 eV, the
+# middle of their 300–350 eV, and scales ``\tau`` as ``T^{-1.5}`` with the radiation
+# temperature of the flux on the foil ([`foil_transmission`](@ref)):
+
+@printf("Hammer & Rosen, 2.5 µm at 1 g/cm³ and 325 eV: τ = %.2f\n", 19.3 * 2.5e-4 * 7200 * 3.25^-1.5)
+println("  Au (µm)   transmission at 250, 300, 325, 350 eV")
+for x in (1.7, 2.5, 3.6)
+    model = BurnthroughAlbedo(thickness = x, transmission = RosselandTransmission())
+    @printf("  %.1f       %s\n", x, join((@sprintf("%.3f", foil_transmission(model, T))
+                                         for T in (250, 300, 325, 350)), "  "))
+end
+
+# A foil that burns through while the hohlraum is cooler than 325 eV transmits less
+# than the constant estimate, and one in a hotter hohlraum more.
 
 # ## A pair of windows in a NIF-like hohlraum
 #
@@ -236,9 +258,9 @@ wall = Material(:Au; albedo = WallLossAlbedo(), conversion = 0.8)
 resolution = (; nz = 24, nphi = 32, capsule_ntheta = 12, capsule_nphi = 24)
 build(windows) = hohlraum(; length = 10.1, radius = 2.875, leh_radius = 1.55,
                           capsule_radius = 0.9, wall, windows, resolution...)
-foil(thickness) = Material(:Au; albedo = BurnthroughAlbedo(; thickness), conversion = 0.8)
-windows(thickness; gap = 0.0) =
-    [WallWindow(; phi, diameter = 2.0, gap, material = foil(thickness)) for phi in (78, 258)]
+foil(thickness; kw...) = Material(:Au; albedo = BurnthroughAlbedo(; thickness, kw...), conversion = 0.8)
+windows(thickness; gap = 0.0, kw...) =
+    [WallWindow(; phi, diameter = 2.0, gap, material = foil(thickness; kw...)) for phi in (78, 258)]
 
 pointing = Dict(:outer50 => (0.0, 5.01), :outer44 => (0.0, 5.20),
                 :inner30 => (0.60, 3.63), :inner23 => (1.09, 3.09))
@@ -286,8 +308,9 @@ end
 # windowed runs took, so the differences below compare like with like.
 
 base_target = build(())
-base = history(RadiationModel(base_target; closed = true), DepositionOperator(base_target, quads),
-               sort(unique(reduce(vcat, [h.time for h in values(runs)]))))
+base_model, base_op = RadiationModel(base_target; closed = true), DepositionOperator(base_target, quads)
+rebase(hs) = history(base_model, base_op, sort(unique(reduce(vcat, [h.time for h in hs]))))
+base = rebase(values(runs))
 @printf("reference steps: %d\n", length(base.time))
 
 # The change in the capsule's radiation temperature and in ``P_2`` from the hohlraum
@@ -504,19 +527,243 @@ incident = sum(sol.H[e] * t.elem_area[e] for n in (:window_1, :window_2) for e i
 # The accounting closes to round-off, and the burned-through windows transmit the
 # fraction ``\mathcal{T}`` of the power on them.
 
+# ### A transmission that follows the drive
+#
+# The same pairs of windows without gaps, with the transmission following the
+# temperature of the flux on each window element, against the constant transmission
+# above. Each history is compared with the hohlraum without windows solved at its own
+# times, with the measures of the table above:
+
+function costs(h, b)
+    on_b(x) = x[indexin(h.time, b.time)]
+    return (; burnthrough = sum(h.burnthrough[:window_1]) / length(h.burnthrough[:window_1]),
+            energy = 100 * (integral(h, h.flux) / integral(b, b.flux) - 1),
+            loss = integral(h, h.window_loss),
+            P2 = 100 * (flux_weighted(h, P2(h)) - flux_weighted(b, P2(b))),
+            m2 = 100 * flux_weighted(h, m2(h)), Tr = peak_mean(h, h.Tr) - peak_mean(h, on_b(b.Tr)))
+end
+F0, op0 = shared[0.0]
+follows = Dict(x => history(RadiationModel(build(windows(x; transmission = RosselandTransmission())); F = F0),
+                            op0, times) for x in (1.7, 2.5, 3.6))
+base_follows = rebase([collect(values(follows)); [runs[(x, 0.0)] for x in (1.7, 2.5, 3.6)]])
+println("  Au    transmission   burnthrough  ΔTᵣ peak  capsule energy  window loss  ΔP₂ weighted  m=2 weighted")
+println(" (µm)                    (ns)        (eV)       (%)            (kJ)")
+for x in (1.7, 2.5, 3.6), (label, h) in (("constant", runs[(x, 0.0)]), ("follows Tᵣ", follows[x]))
+    c = costs(h, base_follows)
+    @printf(" %.1f   %-12s    %5.2f      %+5.1f      %+5.1f         %5.0f        %+5.2f%%        %4.2f%%\n",
+            x, label, c.burnthrough, c.Tr, c.energy, c.loss, c.P2, c.m2)
+end
+@printf("wall Tᵣ at burnthrough: %s eV; at the peak %.0f eV\n",
+        join((@sprintf("%.0f", runs[(x, 0.0)].wall_Tr[findfirst(≥(costs(runs[(x, 0.0)], base).burnthrough),
+                                                                 runs[(x, 0.0)].time)])
+              for x in (1.7, 2.5, 3.6)), ", "), peak_mean(base, base.wall_Tr))
+
+# These windows burn through while the wall is at 150–285 eV, and even at the peak it
+# stays near 310 eV, below the 325 eV the constant transmission is pinned at. The
+# transmission that follows the drive therefore loses about a tenth less: the 1.7 µm
+# pair's flux-weighted ``\Delta P_2`` drops from 1.69% to 1.48% and its capsule-energy
+# cost from 5.4% to 4.8%, and the 3.6 µm pair's from 0.68% to 0.62% and 2.3% to 2.1%.
+# The burnthrough times do not change: the transmission starts only once the front is
+# through.
+#
+# ### Gaps that close
+#
+# The 50 µm gaps above stay open through the pulse, but plasma blown off their gold
+# walls fills them. [`GapClosure`](@ref) makes a gap open (all the flux on it leaves)
+# until a closure time and wall-like after it, across a 0.4 ns step; the closure time is
+# an input this model does not compute. For the 2.5 µm pair with gaps closing at 3 ns
+# (before the windows burn through) and at 7 ns (after):
+
+closing_gap(tc) = Material(:Au; albedo = GapClosure(closure = tc), conversion = 0.8)
+gapped(tc) = build([WallWindow(; phi, diameter = 2.0, gap = 0.05, gap_material = closing_gap(tc),
+                               material = foil(2.5)) for phi in (78, 258)])
+Fg = RadiationModel(gapped(3.0); closed = true).F          # one geometry for both closures
+opg = DepositionOperator(gapped(3.0), quads)
+closes = Dict(tc => history(RadiationModel(gapped(tc); F = Fg), opg, times) for tc in (3.0, 7.0))
+base_closes = rebase([collect(values(closes)); runs[(2.5, 0.0)]; runs[(2.5, 0.05)]])
+println("  2.5 µm windows        ΔTᵣ peak  capsule energy  window loss  ΔP₂ weighted  m=2 weighted")
+for (label, h) in (("no gap", runs[(2.5, 0.0)]), ("gap closing at 3 ns", closes[3.0]),
+                   ("gap closing at 7 ns", closes[7.0]), ("gap open throughout", runs[(2.5, 0.05)]))
+    c = costs(h, base_closes)
+    @printf("  %-20s   %+5.1f      %+5.1f          %5.0f        %+5.2f%%        %4.2f%%\n",
+            label, c.Tr, c.energy, c.loss, c.P2, c.m2)
+end
+
+# A gap that closes at 3 ns costs nothing measurable beyond the windows: it leaks only
+# during the picket and the foot. Closing at 7 ns, after the windows have burned
+# through but before the peak, it adds 0.4% of capsule energy and 0.09% of ``P_2``, a
+# fifth of what a gap open throughout adds (2.0% and 0.55%). How long a gap stays
+# open thus matters more than its width, and the open-gap rows of the first table
+# are the bound.
+
+# ## Restoring the drive around the windows
+#
+# The windows take drive from the waist facing them: at the peak the 2.5 µm pair
+# raises ``P_2`` by 1.2% and adds an ``m = 2`` of 0.9%. Cone pointing and power can
+# restore ``P_2``, but no cone setting can remove ``m = 2``, which needs quads set
+# apart. Two ways to set them: per-quad powers (NIF quads take their own pulse
+# shapes), and per-quad pointing.
+#
+# The optimizer needs a linear model of the capsule flux at the peak, with the windows
+# burned through and the wall at its peak albedo. A [`Scenario`](@ref) with `albedo`
+# set to a solution's converged albedos is exactly that: its flux response holds the
+# albedos fixed, so it reproduces the solution it was taken from.
+
+tpeak = 8.6
+w25 = runs[(2.5, 0.0)]
+twin = build(windows(2.5))
+burned = fill(NaN, nelements(twin))
+for n in (:window_1, :window_2)
+    burned[elements(twin, n)] .= w25.burnthrough[n]
+end
+win_model = RadiationModel(twin; F = F0)
+sol_win = solve(win_model, deposit(op0, beams_at(tpeak)); time = tpeak, burnthrough = burned)
+sol_base = solve(base_model, deposit(base_op, beams_at(tpeak)); time = tpeak)
+peak = beams_at(tpeak)
+quad_power = GroupPointing(peak; by = :quad, fields = (:power,))
+S_win = Scenario(twin, peak; observe = :capsule, time = tpeak, albedo = sol_win.albedo,
+                 parameterization = quad_power, viewfactor_kw = (; F = F0))
+S_base = Scenario(base_target, peak; observe = :capsule, time = tpeak, albedo = sol_base.albedo,
+                  parameterization = quad_power, viewfactor_kw = (; F = base_model.F))
+x0 = initial_parameters(quad_power)
+capsule = elements(twin, :capsule)
+a = legendre_moments(sol_win.H, twin, capsule; lmax = 2)
+@printf("P₂/P₀ at %.1f ns with windows: solve %+.6f%%, linearized scenario %+.6f%%\n", tpeak,
+        100 * a[3] / a[1], 100 * (b = flux_moments(evaluate(S_win, x0); lmax = 2); b[3] / b[1]))
+
+# The design without windows is the reference shape: the coefficients ``c_{lm}/c_{00}``
+# of its capsule flux at the peak. [`asymmetry_objective`](@ref) with `reference`
+# measures the departure from them for every ``(l, m)`` through ``l = 4``, and `drive`
+# holds the mean flux at the reference's. Each quad's power may change by 20%:
+
+ref = flux_ylm(evaluate(S_base, x0))
+restore = asymmetry_objective(; modes = (1 => 1.0, 2 => 1.0, 3 => 1.0, 4 => 1.0), reference = ref,
+                              drive = ref[1] / sqrt(4π))
+lo, hi = bounds(quad_power, x0; power = 0.2)
+trim = optimize_pointing(S_win, restore; x0, lower = lo, upper = hi, iterations = 300)
+function departure(ev)
+    c = flux_ylm(ev; lmax = 4)
+    d = c ./ c[1] .- ref[1:length(c)] ./ ref[1]
+    return [100 * sqrt(sum(abs2, d[l^2+1:(l+1)^2])) for l in 1:4]
+end
+factors = trim.x ./ x0
+@printf("%s after %d iterations; quad powers ×%.2f–%.2f (%d at a limit), total ×%.3f\n",
+        trim.reason, trim.iterations, extrema(factors)..., count(f -> abs(abs(f - 1) - 0.2) < 1e-6, factors),
+        sum(trim.x) / sum(x0))
+for (label, ev) in (("as designed", evaluate(S_win, x0)), ("quad powers", evaluate(S_win, trim.x)))
+    @printf("  %-12s  departure from the reference shape, l = 1–4: %s %%\n", label,
+            join((@sprintf("%.3f", d) for d in departure(ev)), ", "))
+end
+for g in (:inner23, :inner30, :outer44, :outer50)
+    f = factors[[b.group === g for b in peak]]
+    @printf("  %-8s quads ×%.3f on average (%.2f–%.2f)\n", g, sum(f) / length(f), extrema(f)...)
+end
+
+# The trim moves power to the inner cones, as the cold waist needs (the 30° cone by
+# 17%), and spreads the quads within each cone over the whole ±20%. It brings the
+# ``l = 2`` departure from 1.09% to 0.07% and keeps ``l = 1`` and ``l = 3`` below
+# 0.02%, but not ``l = 4``, which stays near 0.15–0.19%: these windows' ``l = 4``
+# pattern is out of reach of quad powers within the limits. Pointing can do the same:
+# below, the quads are re-pointed at fixed power, up to 0.3 mm in ``z`` and along the
+# wall (`phi`). The windows and the NIF ports share the 180° rotation about the axis, so
+# each quad moves with its partner across the axis, and the entrance-hole and capsule
+# keep-outs hold.
+
+partner(b) = (b.group, sign(b.port[3]), round(Int, mod(port_angles(b)[2], 180)))
+pairs = GroupPointing(peak; by = partner, fields = (:z, :phi), mirror = false)
+S_pairs = subset(S_win, eachindex(peak); parameterization = pairs)
+xp = initial_parameters(pairs)
+lo, hi = bounds(pairs, xp; z = 0.3, phi = 0.3)
+shape_only = asymmetry_objective(; modes = (1 => 1.0, 2 => 1.0, 3 => 1.0, 4 => 1.0), reference = ref,
+                                 keepout = (ApertureKeepOut(twin), SphereKeepOut(twin)))
+repoint = optimize_pointing(S_pairs, shape_only; x0 = xp, lower = lo, upper = hi, iterations = 200)
+moves = reshape(repoint.x .- xp, 2, :)
+@printf("%d quad pairs re-pointed: rms %.0f µm in z, %.0f µm along the wall (largest %.0f, %.0f)\n",
+        size(moves, 2), 1e3 * sqrt(sum(abs2, moves[1, :]) / size(moves, 2)),
+        1e3 * sqrt(sum(abs2, moves[2, :]) / size(moves, 2)), 1e3 .* maximum(abs, moves; dims = 2)...)
+ev = evaluate(S_pairs, repoint.x)
+@printf("  re-pointed    departure from the reference shape, l = 1–4: %s %%; mean flux %+.1f%%\n",
+        join((@sprintf("%.3f", d) for d in departure(ev)), ", "), 100 * (flux_ylm(ev)[1] / ref[1] - 1))
+
+# Moves of 0.09–0.14 mm rms (two to three times NIF's 50 µm rms pointing
+# specification, some at the 0.3 mm limit) restore ``l = 1``–``3`` to 0.02%, better
+# than the powers, and leave the same ``l = 4``; pointing alone cannot give back the
+# 3.4% of drive the windows take.
+#
+# Both settings were found at the peak, with the windows burned through. Before they
+# burn through, the windows cost nothing, and a trim that is on throughout the pulse
+# then makes the asymmetry it was meant to remove. NIF can set each quad's pulse shape,
+# so the power trim can instead come on with the burnthrough, across the windows'
+# 0.4 ns transition; pointing cannot change during the shot. The four designs through
+# the pulse, against the hohlraum without windows:
+
+tb_mean = sum(w25.burnthrough[:window_1]) / length(w25.burnthrough[:window_1])
+switch(τ) = (x = clamp((τ - tb_mean) / 0.4, 0, 1); x^2 * (3 - 2x))
+repointed = apply(pairs, repoint.x)
+designs = ["as designed" => beams_at,
+           "quad powers throughout" => τ -> [remake(b; power = b.power * f)
+                                             for (b, f) in zip(beams_at(τ), factors)],
+           "quad powers at burnthrough" => τ -> [remake(b; power = b.power * (1 + switch(τ) * (f - 1)))
+                                                 for (b, f) in zip(beams_at(τ), factors)],
+           "re-pointed" => τ -> with_pulses(repointed, pulse, τ)]
+restored = Dict(label => drive_history(win_model, op0, f, times; lmax = 6, ylm = true, transition = 0.05)
+                for (label, f) in designs)
+base_restored = rebase(values(restored))
+fig = Figure(size = (820, 380))
+axP = Axis(fig[1, 1], xlabel = "time (ns)", ylabel = "ΔP₂/P₀ (%)", title = "Change in P₂ from no windows")
+axM = Axis(fig[1, 2], xlabel = "time (ns)", ylabel = "|c₂,±₂|/c₀₀ (%)", title = "m = 2 amplitude")
+hlines!(axP, [0.0], color = :black)
+vspan!(axP, tb_mean, tb_mean + 0.4, color = (:gray, 0.2))
+vspan!(axM, tb_mean, tb_mean + 0.4, color = (:gray, 0.2))
+for ((label, _), color) in zip(designs, palette)
+    h = restored[label]
+    lines!(axP, h.time, 100 .* (P2(h) .- P2(base_restored)[indexin(h.time, base_restored.time)]); color, label)
+    lines!(axM, h.time, 100 .* m2(h); color, label)
+end
+xlims!(axP, 4, 10); xlims!(axM, 4, 10)
+Legend(fig[2, 1:2], axP, orientation = :horizontal, framevisible = false, nbanks = 2)
+fig
+
+#-
+
+span_mean(h, x, a, b) = (w = weights(h.time) .* (a .<= h.time .<= b); sum(w .* x) / sum(w))
+println("  design                      laser    ΔTᵣ      ΔP₂ (%)                    m=2 (%)")
+println("                              energy   peak     before  peak  weighted    before  peak  weighted")
+for (label, f) in designs
+    h = restored[label]
+    c = costs(h, base_restored)
+    energy = integral(h, h.delivered) / integral(base_restored, base_restored.delivered) - 1
+    dP2 = 100 .* (P2(h) .- P2(base_restored)[indexin(h.time, base_restored.time)])
+    @printf("  %-26s  %+5.1f%%   %+5.1f    %+5.2f  %+5.2f   %+5.2f       %4.2f  %4.2f   %4.2f\n",
+            label, 100 * energy, c.Tr, span_mean(h, dP2, 5.0, tb_mean), peak_mean(h, dP2), c.P2,
+            100 * span_mean(h, m2(h), 5.0, tb_mean), 100 * peak_mean(h, m2(h)), c.m2)
+end
+
+# ("Before" is from 5 ns to the burnthrough.) The settings that act throughout
+# overshoot before burnthrough: the trimmed powers and the re-pointed quads drive the
+# waist the windows will cool while they are still intact, so ``P_2`` falls by 1.3–1.4%
+# and an ``m = 2`` of 1.1% in the opposite phase appears until the windows open, which
+# the flux-weighted averages largely hide. Switched on with the burnthrough, the
+# trimmed powers keep ``P_2`` and ``m = 2`` at the no-window values before it (−0.01%
+# and 0.04%) and hold ``m = 2`` at 0.03% after it; the 0.13% of ``P_2`` left at the
+# peak is what the ±20% limits leave (the ``l = 2`` departure above). The trims cost
+# 3.3–3.9% more laser energy, the drive the windows take. The switch time comes from
+# this model's heat front, so it inherits the front's uncertainty (about 0.2 ns against
+# the Nova data, above).
+
 # ## What a gray view-factor model leaves out
 #
 # The model gives the geometry of the loss exactly, but its physics after burnthrough
-# is the gray estimate above. The foil is planar and steady, and gold's mean free path
-# is held at one hohlraum temperature. The mean free path grows with temperature, so
-# the fixed value understates the transmission in a hotter hohlraum and overstates it
-# in a cooler one, and the transmission does not change through the pulse. The open
-# hole, `after = 0`, bounds the loss from above. The heated backing absorbs part of
-# what the gold transmits and radiates part back; here all of it is lost. The gap is
-# open from the start, but an assembly gap tens of micrometres wide closes as its
-# walls blow off, so the gap rows overstate its late-time leak. The view-factor model
-# also has no capsule hydrodynamics: it gives flux asymmetries, not the shape they
-# imprint.
+# is the gray estimate above. The foil is planar and steady. Its mean free path follows
+# the temperature only through the opacity fit's ``T^{1.5}``, at a density held at the
+# assumed expansion, and the fit is extrapolated from 100–200 eV. The open hole,
+# `after = 0`, bounds the loss from above. The heated backing absorbs part of what the
+# gold transmits and radiates part back; here all of it is lost. A closing gap needs
+# its closure time from elsewhere (a hydrodynamic estimate or a measurement). The
+# restored designs are linear about the peak; they hold the no-window shape in the
+# quasi-static histories, which use the full temperature-dependent albedos. The
+# view-factor model also has no capsule hydrodynamics: it gives flux asymmetries, not
+# the shape they imprint.
 
 # ## What this checks
 #
@@ -537,12 +784,20 @@ incident = sum(sol.H[e] * t.elem_area[e] for n in (:window_1, :window_2) for e i
 #   the drive history tracks.
 # - A pair of windows related by the 180° rotation about the axis adds no odd-``m``
 #   harmonics.
+# - The temperature-following transmission equals the constant one at its 325 eV
+#   reference, and Hammer and Rosen's gold opacity fit puts the 2.5 µm foil at
+#   ``\tau = 5.9`` there, within 20% of the ``\tau \sim 5`` of Lester et al.
+# - A scenario linearized about the peak solution's albedos reproduces that solution's
+#   ``P_2`` to round-off.
 #
-# The test suite (`test/windows.jl`, `test/burnthrough.jl`) adds five more checks.
+# The test suite (`test/windows.jl`, `test/burnthrough.jl`) adds seven more checks.
 # The view-factor rows of a windowed hohlraum close as well as those without windows.
 # Reciprocity holds. Each window element's burnthrough time in the drive history
 # matches the standalone estimate from that element's own temperature history. Once a
 # window has burned through, the drive history sends exactly the fraction
 # ``\mathcal{T}`` of the power on it to `transmitted`. A history refined through the
 # transitions follows a uniformly fine one five times more closely than the unrefined
-# steps do.
+# steps do. The temperature-following transmission of each burned-through element is
+# the one for its own converged temperature. An open `GapClosure` gap matches the open
+# (aperture) gap, a closed one the wall, and halfway closed it transmits half the
+# power on it.

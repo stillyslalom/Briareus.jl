@@ -50,10 +50,14 @@ cluster_colors(bt::BeamTable) = Dict(c => palette_color(k) for (k, c) in enumera
 State of the 3D view and the model tree: `color` (one of [`COLOR_MODES`](@ref)),
 `beams` (one of [`BEAM_STYLES`](@ref)), `beam_color` (one of
 [`BEAM_COLORINGS`](@ref)), `beam_length` (mm drawn before the aim point; 0: twice the
-target's size), `cutaway` (cut the quadrant of a hohlraum shell facing −x −y),
-`hidden` (component names not drawn), `selection` (a tree node id, `""` for none: what
-Properties shows), `extra` (more beam nodes selected with Ctrl: their beams and the
-selection's are edited together) and `expanded` (expanded tree node ids).
+target's size), `cutaway` (cut away part of the target to show its inside: the
+components `cut_components` within `cut_width` degrees of azimuth centered on
+`cut_azimuth`, by default the quadrant of a hohlraum shell facing −x −y; see
+[`set_cut!`](@ref)), `hidden` (component names not drawn), `hidden_beams` (beam names not drawn; whether a
+beam takes part in the calculations is the beam table's `enabled`), `selection` (a
+tree node id, `""` for none: what Properties shows), `extra` (more nodes of the same
+family, beams or components, selected with Ctrl or Shift: edited together with the
+selection) and `expanded` (expanded tree node ids).
 
 Tree node ids: `"target"`, `"comp:<name>"`, `"window:<k>"`, `"part:<name>"`,
 `"beams"`, `"group:<group>"` (a beam group, see `BeamTable`'s `cluster`),
@@ -70,19 +74,60 @@ struct ViewState
     selection::Observable{String}
     extra::Observable{Vector{String}}
     expanded::Observable{Set{String}}
+    cut_azimuth::Observable{Float64}
+    cut_width::Observable{Float64}
+    cut_components::Observable{Set{Symbol}}
+    hidden_beams::Observable{Set{String}}
 end
+
+"Components the cutaway cuts by default: a hohlraum's shell."
+const DEFAULT_CUT_COMPONENTS = (:wall, :cap_top, :cap_bottom)
 
 ViewState() = ViewState(Observable(:component), Observable(:rays), Observable(:group),
                         Observable(0.0), Observable(true), Observable(Set{Symbol}()),
                         Observable(""), Observable(String[]),
-                        Observable(Set(["target", "beams", "analyses"])))
+                        Observable(Set(["target", "beams", "analyses"])), Observable(225.0),
+                        Observable(90.0), Observable(Set{Symbol}(DEFAULT_CUT_COMPONENTS)),
+                        Observable(Set{String}()))
+
+"""
+    set_cut!(v::ViewState; azimuth, width, components) -> v
+
+Where the cutaway cuts: the sector of `width` degrees of azimuth (90 a quadrant, 180 a
+half) centered on `azimuth` (degrees from +x; 225 faces −x −y), through the named
+`components` (whole elements, so the cut edge follows the mesh). Unspecified settings
+are kept.
+"""
+function set_cut!(v::ViewState; azimuth = v.cut_azimuth[], width = v.cut_width[],
+                  components = v.cut_components[])
+    0 < width <= 360 || throw(ArgumentError("the cut width must be in (0, 360] degrees"))
+    _assign!(v.cut_azimuth, mod(Float64(azimuth), 360))
+    _assign!(v.cut_width, Float64(width))
+    _assign!(v.cut_components, Set{Symbol}(components))
+    return v
+end
+
+"""
+    is_cut(v::ViewState, name::Symbol, point) -> Bool
+
+Whether the cutaway removes component `name` at `point` (an element's centroid).
+"""
+function is_cut(v::ViewState, name::Symbol, p)
+    v.cutaway[] && name in v.cut_components[] || return false
+    hypot(p[1], p[2]) > 0 || return false
+    δ = mod(atand(p[2], p[1]) - v.cut_azimuth[] + 180, 360) - 180
+    return abs(δ) < v.cut_width[] / 2
+end
 
 """
     select!(v::ViewState, id) / select_add!(v, id) / toggle_expanded!(v, id) /
     set_hidden!(v, name, hidden)
 
-`select!` selects one node; `select_add!` adds a beam node to the selection, or removes
-it if already selected (Ctrl + click). Other nodes are selected alone.
+`select!` selects one node; `select_add!` adds a node to the selection, or removes it
+if already selected (Ctrl + click), when it is of the selection's family (beam nodes,
+or component nodes: components, parts and windows); other nodes are selected alone.
+`select_range!` (Shift + click) selects the nodes of the family from the selection to
+`id` in the tree's order.
 """
 function select!(v::ViewState, id::AbstractString)
     isempty(v.extra[]) || (v.extra[] = String[])
@@ -92,10 +137,19 @@ end
 
 _is_beam_node(id) = first(selection_kind(id)) in (:group, :quad, :beam, :beams)
 
+# Nodes that can be selected together: beam nodes, or component nodes.
+function _family(id)
+    k = first(selection_kind(id))
+    k in (:group, :quad, :beam, :beams) && return :beams
+    k in (:comp, :part, :window) && return :components
+    return nothing
+end
+
 function select_add!(v::ViewState, id::AbstractString)
     id = String(id)
     cur = v.selection[]
-    (_is_beam_node(id) && _is_beam_node(cur)) || return select!(v, id)
+    f = _family(id)
+    (f !== nothing && f === _family(cur)) || return select!(v, id)
     ex = copy(v.extra[])
     if id == cur
         isempty(ex) && return select!(v, "")
@@ -111,6 +165,16 @@ function select_add!(v::ViewState, id::AbstractString)
     return v
 end
 
+function select_range!(v::ViewState, order::AbstractVector{<:AbstractString}, id::AbstractString)
+    id, cur = String(id), v.selection[]
+    f = _family(id)
+    i, j = findfirst(==(cur), order), findfirst(==(id), order)
+    (f !== nothing && f === _family(cur) && i !== nothing && j !== nothing) || return select!(v, id)
+    span = [String(x) for x in order[min(i, j):max(i, j)] if _family(x) === f && x != cur]
+    v.extra[] = span
+    return v
+end
+
 "Every selected node id: the selection and the extra ones."
 selected_ids(v::ViewState) = isempty(v.selection[]) ? copy(v.extra[]) : [v.selection[]; v.extra[]]
 
@@ -118,6 +182,13 @@ function toggle_expanded!(v::ViewState, id::AbstractString)
     e = copy(v.expanded[])
     id in e ? delete!(e, id) : push!(e, String(id))
     v.expanded[] = e
+    return v
+end
+
+function set_beams_hidden!(v::ViewState, names, hidden::Bool)
+    h = copy(v.hidden_beams[])
+    hidden ? union!(h, String.(names)) : setdiff!(h, String.(names))
+    h == v.hidden_beams[] || (v.hidden_beams[] = h)
     return v
 end
 
@@ -197,6 +268,14 @@ function model_tree(sess)
             push!(rows, _row(id, 1, lab, kindtxt, false, false, c.name in hid ? 0 : 1, "", sel;
                              color = get(cols, c.name, "")))
         end
+        # left out of the calculations: listed (and drawn as a ghost) to be put back
+        if ts.ghost[] !== nothing
+            for c in ts.ghost[].components
+                lab = get(_COMPONENT_LABELS, c.name, String(c.name))
+                push!(rows, _row(component_id(ts, c.name), 1, lab, "not in calculations", false,
+                                 false, c.name in hid ? 0 : 1, "", sel))
+            end
+        end
     end
     bt = sess.beams
     bs, en = bt.beams[], bt.enabled[]
@@ -241,7 +320,7 @@ function model_tree(sess)
     end
     push!(rows, _row("analyses", 0, "Analyses", "", true, "analyses" in ex, -1, "", sel))
     if "analyses" in ex
-        for task in TASKS
+        for task in session_tasks(sess)
             st, txt = task_status(sess, task)
             push!(rows, _row("task:" * String(task), 1, TASK_LABELS[task], txt, false, false, -1,
                              String(st), sel))
@@ -279,6 +358,17 @@ every beam), in table order; empty for other selections.
 selected_beams(sess) =
     sort!(unique!(reduce(vcat, (node_beams(sess.beams, id) for id in selected_ids(sess.view));
                          init = Int[])))
+
+"Names of the selected components (components, parts and windows)."
+function selected_components(sess)
+    out = Symbol[]
+    for id in selected_ids(sess.view)
+        kind, key = selection_kind(id)
+        kind in (:comp, :part) && push!(out, Symbol(key))
+        kind === :window && push!(out, window_name(parse(Int, key)))
+    end
+    return out
+end
 
 """
     selected_component(sess) -> Union{Nothing,Symbol}

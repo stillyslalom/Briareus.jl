@@ -719,6 +719,38 @@ test fixture rebuilds the layout from rows copied from these files.
   (VR/power_sources/set_laser_beam_pointing.html): 0 TCC, 1 distance toward a
   diagnostic port (not supported), 2 position in a coordinate system. Both files use
   2, Cartesian, chamber frame. **H** for 2
+- **Red/green power model** (the column after the focus offset). The manual's four
+  models (VR/power_sources/set_laser_beam_energetics.html): None (P_TOT = P_B),
+  Absolute Power (P_G, P_R in TW), Fraction of Total Beam Power (f_G, f_R; the user gives
+  P_TOT and f_B = 1 − f_G − f_R), Relative to Blue Cone Power (R_i = P_i/P_B). Only
+  under the fraction model is the power column the total. Both workspaces use model 2
+  with columns 1.000 / 0.050 / 0.050, and the foil workspace's deposition table holds
+  4 × 0.900 TW for four beams (green off, red on). So the codes are numbered 0–3 in the
+  manual's order, and the fractions are subtracted whether or not those cones are on.
+  The reader takes the blue cone power as P × (1 − f_G − f_R) under model 2.
+  **H** for model 2 (measured), **M** for the numbering of the others
+- **Deposition check (foil workspace, 2026-10-17).** The `[Power Source Data]` section
+  lists, per object, one row per element: index, direct laser power source (TW/cm²),
+  uniform source, albedo, x-ray conversion efficiency, laser reflectivity, pre-reflection
+  power, numbers of red and blue cones hitting, and the minimum overlap angles at 1ω and
+  3ω. The rectangle's elements run with its local x fastest (the transpose of
+  `rectangle_mesh`'s order). Values are element averages, not centroid values (centroid
+  values differ from it by up to 13% next to the peak). Against Briareus, four beams with a 620/360 µm HWHM
+  n = 4.5 spot aimed at the 4 mm foil, tilted ~40° (9 × 9 elements of 0.44 mm):
+  - Totals: 3.6000 TW in both.
+  - Elements above 20 TW/cm² (peak 371): within 1.4%, centre within 0.1%.
+  - The nine brightest elements' power fractions agree within 0.001.
+  - Faint wings (2–30 TW/cm²) differ by 8–15%, and VisRad's wings are wider along the
+    major axis and narrower across it. Elements near 1 TW/cm² differ by 20–27%, and
+    those below 0.01 TW/cm² by up to 80%. Elements under 30 TW/cm² hold 4.38% of the
+    power in VisRad and 4.29% in Briareus.
+  - The wings are not explained by Briareus's f-cone blur (≈ 1%), centroid sampling,
+    an envelope cut-off at the file's envelope ratio (1.536), 600 fixed cone cells (25
+    × 24, the workspace's cone power-fraction grid), or a spot rotation. Fitted axis or
+    exponent changes improve the wings only by making the core worse.
+  - An independent analytic projection (super-Gaussian evaluated in the beam plane,
+    × cos ι) reproduces Briareus's single-cone deposition to 0.05% in the core.
+  **H** (measured locally); the cause of the wing difference is open.
 - **Spots.** NIF profile models 49–52 carry the built-in plate's numbers in the row:
   49 = Rev3-Inner-2w (890/660 µm, n 7.6), 50 = 1.0 Rev1a-Inner-2w (860/610, 8.0),
   51 = Rev3-Outer-2w (640/370, 4.8), 52 = Rev1-Outer-2w (620/360, 4.5), i.e. HWHM radii
@@ -729,10 +761,21 @@ test fixture rebuilds the layout from rows copied from these files.
 - **Checks on the NIF workspace.** Port angles match `nif_beams()` to 0.0056° (the
   file's 3 decimals). Outer cones aim at z = ±5.905 (50°) and ±5.723 mm (44.5°), 0.45 mm
   off axis; inner cones at ±4.078 (30°) and ±3.462 mm (23.5°), 0.67 and 1.22 mm off
-  axis; 8 of the 44.5° beams are off; 1 TW each in 3ω. A ray trace of the 184 beams
-  through all 15 CAD parts (210k elements) conserves power: 144 TW on the two hohlraum
-  halves, 31.5 TW on the waist part, 7.4 TW on two side parts, < 1 mW on the LEH
-  washers.
+  axis; 8 of the 44.5° beams are off; 1 TW total each, 0.9 TW in 3ω (red/green model 2,
+  below). A ray trace of the 184 beams through all 15 CAD parts (210k elements)
+  conserves power: at 0.9 TW per beam, 130 TW on the two hohlraum halves, 28.4 TW on the
+  waist part, 6.7 TW on two side parts, < 1 mW on the LEH washers (first run at 1 TW per
+  beam, scaled).
+- **CAD windings (2026-10-17).** In the NIF workspace all 15 CAD parts are closed
+  solids (no boundary edges once vertices are welded by position; 247 non-manifold
+  edges in the largest), with 1–25% of the shared edges joining patches of opposite
+  winding (signed volumes up to 50× the bounding box before repair). After
+  `orient_mesh` (consistent, closed solids facing out of their material) the volumes
+  are plausible (an LEH washer 6.2 mm across and 50 µm thick: 84 → 1.1 mm³), and the
+  hohlraum halves' inner wall (r = 3.20–3.21 mm) faces the axis and the outer
+  (3.24 mm and beyond) away from it; as read, both faced out. `coarsen_mesh` at
+  0.3 mm reduces the hohlraum halves only from 7,300 to 6,300 elements each: their
+  tessellation is long slivers that no merging shortens. **H** (measured locally)
 
 ### Result tables and fits
 
@@ -905,10 +948,53 @@ a scanned or garbled PDF; **M** secondary; **L** inference.
 - Thickness scaling (*derived*, **L**): τ is linear in areal mass at fixed λ_Au and
   density (eq. 1), so τ = 5 × ρ·thickness / (19.3 g/cm³ × 2.5 µm). T = 0.328, 0.235
   and 0.169 at 1.7, 2.5 and 3.6 µm (τ = 3.4, 5, 7.2).
-- Not modeled: λ_Au's dependence on T_h and density (held at the paper's 300–350 eV
-  evaluation; the gray mean free path grows with temperature), time dependence of T
-  after burnthrough, absorption or re-emission by a low-Z backing, non-gold foils
-  (pass `transmission`). **L**
+- Not modeled by the default: λ_Au's dependence on T_h and density (held at the
+  paper's 300–350 eV evaluation; the gray mean free path grows with temperature), time
+  dependence of T after burnthrough, absorption or re-emission by a low-Z backing,
+  non-gold foils (pass `transmission`). **L**
+
+### Temperature-dependent transmission (`RosselandTransmission`, 2026-10-17)
+- τ(T) = τ_ref (T/325 eV)^−1.5: the exponent of Hammer & Rosen's gold Rosseland
+  opacity fit, 1/K = g T^1.5 ρ^−0.2 with g = 1/7200 g/cm² (T in heV; eq. 31, fitted
+  over 1–2 heV), and Lester's τ ∼ 5 at 2.5 µm as the reference point at 325 eV, the
+  middle of their 300–350 eV. At the reference it is the constant default. *derived*
+- Cross-check (*derived*, extrapolating the fit to 3.25 heV): the as-built areal mass
+  of 2.5 µm of solid gold, 4.83 mg/cm², with the opacity at Lester's expanded
+  1 g/cm³, gives τ = 4.83e-3 × 7200 × 3.25^−1.5 = 5.9, within 20% of their τ ∼ 5. This
+  supports the reading of their pairing in the previous section: the as-built areal
+  mass with the opacity of the expanded foil. At solid density K would be 1.8× larger
+  (ρ^0.2), τ ≈ 11.
+- Held fixed: the density of the expanded foil (1 g/cm³ implicitly, through the
+  normalization). In the windows tutorial (NIF-like drive, 2 mm windows) the foils
+  burn through at wall temperatures of 150–285 eV and the wall peaks near 310 eV, so
+  the temperature-following transmission is about a tenth smaller over the pulse than
+  the constant one (flux-weighted ΔP2 1.48 vs 1.69% for 1.7 µm, 1.00 vs 1.12% for
+  2.5 µm).
+
+### Closing gaps (`GapClosure`, 2026-10-17)
+- A gap is open (all flux on it transmitted) until a given closure time, then wall-like
+  across a smooth step (0.4 ns default). The closure time is an input; no gap-closure
+  speed was found in the sources read. **L**
+- Tutorial result (*derived*): 50 µm gaps around 2.5 µm windows closing at 3 ns cost
+  nothing measurable beyond the windows; closing at 7 ns (after burnthrough, before the
+  peak) they add 0.4% capsule energy and 0.09% ΔP2, a fifth of a gap open throughout
+  (2.0%, 0.55%).
+
+### Restoring the drive around a window pair (2026-10-17) *derived*
+- Two 2 mm windows of 2.5 µm gold at the waist (φ = 78°, 258°), NIF-like pulse, the
+  windows tutorial's pointing: at the peak they raise P2 by 1.2% and add m = 2 of 0.9%.
+- Per-quad powers within ±20% (asymmetry objective against the no-window Y_lm shape,
+  drive held), linearized at the peak with the converged albedos: l = 2 departure 1.09
+  → 0.07%, l = 1, 3 below 0.02%, l = 4 unchanged (0.15 → 0.19%); the 30° cone +17%,
+  32 of 48 quads at a limit, +3.9% peak power.
+- Per-quad-pair re-pointing (z and along the wall, ≤ 0.3 mm, fixed power, keep-outs):
+  l = 1–3 to 0.02%, l = 4 unchanged, 0.14/0.09 mm rms; cannot restore the 3.4% drive.
+  This replaces the earlier look's "re-pointing only trims m = 2" (two open 2 × 2 mm
+  windows, a much larger loss).
+- In time: settings found at the peak overshoot before burnthrough (ΔP2 −1.3 to −1.4%,
+  m = 2 1.1% of the opposite phase, 5 ns to burnthrough). Per-quad power trims switched
+  on with the burnthrough (NIF quads take their own pulse shapes) hold P2 and m = 2 at
+  the no-window values throughout (m = 2 ≤ 0.04%), for +3.3% laser energy.
 
 ## Hohlraum mesh work-precision (2026-10-16) *derived*
 
@@ -961,3 +1047,56 @@ capsule 0.05 (≈ 16,000, ≈ 40 s; ≲ 0.02 pp, converged for design work). Bui
 are from before the 2026-10-17 performance pass; a fine `Scenario` (16,244 elements,
 closed) now takes 15 s on 24 threads (view factors 4 s, LU 7 s), and an optimizer
 iteration about 60 ms.
+
+## Beam-error budgets (2026-10-17) *derived*
+
+`mode_uncertainty` and the beam-errors tutorial: NIF hohlraum (10.1 × 5.75 mm, 3.1 mm
+LEHs, 0.9 mm capsule, h = 0.45, capsule_h = 0.12), 48 quads at 8 TW, independent errors
+per quad of 50 µm rms pointing (displacement length, transverse to the beam) and 3% rms
+power.
+- Per-beam sensitivities from three dual partials per beam agree with central
+  differences of full evaluations to 2e-9 (relative).
+- Linear propagation agrees with a 300-shot Monte Carlo of full evaluations to 1–2% in
+  every mode l = 1–4 (the sampling error).
+- Published pointing: rms of the mode amplitude (√Σ_m (δc_lm/c00)²) 0.28, 0.21, 0.13,
+  0.03% for l = 1–4; pointing and power contribute about equally to l = 1 (0.20% each).
+  ε₁ = mode_amplitude: median 0.43%, 90th percentile 0.67% (≈ 67 km/s of hot-spot
+  velocity at MacGowan's 100 km/s per percent).
+- After tuning the cones (l = 1–4 nulled at fixed drive): 0.23, 0.16, 0.09, 0.02%.
+  The robust objective (expected mode power) started from the tuned design does not
+  move it: with cone-level pointing, independent beam errors leave a floor set by the
+  error sizes, not by where the cones point.
+
+## Retuning to a reference drive (2026-10-17) *derived*
+
+`retune_drive` and the retune tutorial: the same NIF hohlraum and mesh with
+`WallLossAlbedo` (wall albedo 0.65 → 0.94 through the pulse), tutorial pointing, a
+reference pulse from a total power (60 TW picket, 15 TW foot, 50 TW step, 420 TW peak)
+and a cone fraction (0.35 in the foot to 0.25 at the peak, an engineering example, not a
+shot), drive histories at 0.4 ns steps to 9.6 ns. Bundle 31 (Q31T, Q31B) dropped.
+- Bundle down on the reference pulses: ε₁ 2.02% averaged over the peak (7.6–9.4 ns),
+  5.2% at most (in the foot, where the dropped pair carries a larger share of the
+  inner-cone drive); Tᵣ −3.3 eV at the peak. ε₂ and ε₄ barely change (9.17 → 8.99%,
+  0.25 → 0.20%: the tutorial pointing is not tuned for P2).
+- Retuned per quad, each within 1.3× its cone's reference power per quad: ε₁ 0.023%
+  at the peak and 0.18% at most, ε₂, ε₄ and Tᵣ back to the reference's (ΔTᵣ +0.01 eV).
+  The fit holds the albedos at the reference's; a drive history of the new pulses,
+  with albedos following the drive, reproduces the predicted c_lm/c₀₀ to 3e-5, so the
+  linearization is not the limit.
+- The unconstrained retune is not unique and uses its bounds: 25 of 46 quads at 1.3×
+  at the peak, some near zero. Weighting the departure from the reference powers
+  (`stay`, per quad relative to the mean reference power):
+
+  | stay | ε₁ peak | ε₁ max | powers / reference at 8.8 ns | quads at the limit |
+  |---|---|---|---|---|
+  | 0 | 0.023% | 0.18% | 0.00–1.30 | 25 |
+  | 1e-5 | 0.12% | 0.25% | 0.82–1.30 | 6 |
+  | 1e-4 | 0.34% | 0.45% | 0.95–1.30 | 2 |
+  | 1e-3 | 1.24% | 1.55% | 1.01–1.14 | 0 |
+
+  A dropped bundle's mode 1 is fixed mostly by the quads around it; a stay of order
+  1e-4 keeps most of the correction with powers within a few percent of the reference
+  for all but a few quads.
+- Limits: the per-quad caps here are relative to the reference powers, not NIF's
+  per-quad energy or power capability (which depends on the pulse and the laser's
+  state). The view factors and pointing are the reference's through the pulse.

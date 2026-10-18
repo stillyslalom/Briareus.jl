@@ -44,7 +44,9 @@ for the same workflow: target, beams, drive, optimization and shot review.
   Windows are rectangles or disks, with optional assembly gaps, at exact areas; a
   thin-foil window burns through when the Marshak heat front reaches its back
   (`BurnthroughAlbedo`), and then transmits the gray Eddington fraction `4/(3τ + 2)` of
-  the flux on it (Lester et al., Phys. Rev. E 114, L023201 (2026)).
+  the flux on it (Lester et al., Phys. Rev. E 114, L023201 (2026)), optionally with the
+  optical depth following the radiation temperature (`RosselandTransmission`). Gaps can
+  close during the pulse (`GapClosure`).
 - **Laser deposition.** Beams enter from facility ports with elliptical super-Gaussian
   phase-plate spots, an f-number cone, pointing, and defocus. Two methods:
   - `DepositionOperator` + `deposit` — precomputed quadrature with per-direction
@@ -100,15 +102,35 @@ for the same workflow: target, beams, drive, optimization and shot review.
   Laser Beam Summary CSVs, power files, a benchmark kit (`write_visrad_kit`,
   `compare_visrad`) for comparing the same case run in both codes, and VisRad
   workspaces (`read_visrad_workspace`, `visrad_target`): target components including
-  bundled CAD, and beams with their pointing and spots.
-- **Time dependence.** `PulseShape` per cone and `drive_history` give quasi-static
-  T_r(t) and P_l(t).
+  bundled CAD, and beams with their pointing and spots. CAD windings are repaired
+  (`orient_mesh`: consistent, closed solids facing out of their material) and facets
+  merged into elements of a chosen size (`coarsen_mesh`) for view factors.
+  `write_visrad_workspace` writes a design's beams back into a copy of a workspace.
+  `write_results` exports a calculation for postprocessing: per-element laser,
+  radiosity and flux, per-component and per-beam power, and the capsule's Legendre and
+  Y_lm modes, as CSV.
+- **Time dependence.** `PulseShape` per cone, quad or beam (`with_pulses(...; by)`) and
+  `drive_history` give quasi-static T_r(t) and P_l(t). `cone_fraction_pulses` builds
+  pulses from a total power and a cone fraction; `read_pulse_table` and
+  `write_pulse_table` read and write them as CSV.
+- **Retuning to a reference drive.** `retune_drive` finds the power histories, per
+  cone, quad or beam, that reproduce a reference shot's capsule drive (its Y_lm shape
+  through any l, and its level) through time, under per-key power limits (a dropped
+  quad is a zero limit). It optionally prefers powers near the reference's. Each time
+  is a bounded linear least-squares problem about the reference's converged albedos,
+  and a drive history of the result confirms it. With bundle 31 down on NIF, retuning
+  the other 46 quads takes the mode-1 drive asymmetry from 2% to 0.02% at the peak.
 - **Optimization.** `GroupPointing` maps parameters to beams, per cone, quad or beam:
   axial/radial/tangential aim, defocus, power, spot scale and Δλ, with top/bottom
   mirroring. `symmetry_objective` and `asymmetry_objective` target capsule drive
   symmetry (axisymmetric and three-dimensional), and `irradiance_objective` targets foil
   uniformity. `optimize_pointing` runs bounded L-BFGS-B with forward-mode AD gradients,
   with a callback for progress and cancellation.
+- **Beam errors.** `mode_sensitivity` gives the exact sensitivity of the drive shape to
+  each beam's pointing and power errors, `mode_uncertainty` the asymmetry independent
+  errors leave (linear propagation; `sample_modes` is the Monte Carlo check), and the
+  objectives' `uncertainty` keyword optimizes the expected symmetry over them (robust
+  design).
 
 ## Conventions
 

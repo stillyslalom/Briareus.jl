@@ -4,7 +4,7 @@
     AlbedoModel
 
 Supertype of x-ray albedo models: `ConstantAlbedo`, `TabulatedAlbedo`,
-`WallLossAlbedo`, `BurnthroughAlbedo`. Evaluate with `albedo`.
+`WallLossAlbedo`, `BurnthroughAlbedo`, `GapClosure`. Evaluate with `albedo`.
 """
 abstract type AlbedoModel end
 
@@ -147,6 +147,40 @@ const _FOIL_REFERENCE_AREAL_MASS = 19.3 * 2.5e-4      # g/cm²
 _foil_optical_depth(areal_mass) = _FOIL_REFERENCE_DEPTH * areal_mass / _FOIL_REFERENCE_AREAL_MASS
 
 """
+    RosselandTransmission(; reference_temperature = 325.0, exponent = 1.5)
+
+Post-burnthrough transmission of a gold foil that follows the radiation temperature
+`T` (eV) of the flux on it, for `BurnthroughAlbedo(; transmission =
+RosselandTransmission())`. The foil's optical depth scales with gold's Rosseland
+opacity,
+
+    τ(T) = τ_ref (T / reference_temperature)^(-exponent),
+
+and the transmission is `eddington_transmission(τ(T))`, where `τ_ref` is the foil's
+`optical_depth` (5 at 2.5 µm). The exponent is that of Hammer & Rosen's power-law fit
+to gold's Rosseland opacity, `1/K = g T^1.5 ρ^-0.2` (Phys. Plasmas 10, 1829 (2003), eq.
+31, fitted over 100–200 eV), so the mean free path grows as `T^1.5`. The reference
+temperature is the middle of the 300–350 eV at which Lester et al. (Phys. Rev. E 114,
+L023201 (2026)) evaluate `τ ∼ 5`: at the reference the transmission equals the constant
+default. Hammer & Rosen's fit also reproduces that point: with the as-built areal mass
+of 2.5 µm of gold at Lester's expanded density of 1 g/cm³ it gives `τ = 5.9` at 325 eV
+(*derived*, extrapolating the fit). The density is held at that expansion (`K ∝ ρ^0.2`:
+solid gold would double `τ`). Where no flux is known (`T = nothing`) the reference
+temperature is used.
+"""
+Base.@kwdef struct RosselandTransmission
+    reference_temperature::Float64 = 325.0
+    exponent::Float64 = 1.5
+end
+
+# Transmitted fraction of a burned-through foil of optical depth τ_ref at temperature T.
+_transmission(x::Real, τref, Tr) = x
+function _transmission(m::RosselandTransmission, τref, Tr)
+    Te = (Tr === nothing || Tr <= 0) ? m.reference_temperature : Tr
+    return eddington_transmission(τref * (Te / m.reference_temperature)^(-m.exponent))
+end
+
+"""
     BurnthroughAlbedo(; thickness, density = 19.3, before = WallLossAlbedo(),
                       transmission = eddington_transmission(τ), after = nothing,
                       width = 0.4, burnthrough = nothing, front = HeatFront())
@@ -157,7 +191,8 @@ Marshak heat front (`front`, a `HeatFront`) has heated its whole areal mass
 `ρ × thickness`, and then lets part of the flux that reaches it through.
 
 Once burned through, a fraction `T = transmission` of the incident flux passes through
-the foil and leaves the hohlraum. The rest meets the foil as before and is re-emitted
+the foil and leaves the hohlraum (a number, or `RosselandTransmission()` for a fraction
+that follows the radiation temperature). The rest meets the foil as before and is re-emitted
 with the albedo of `before`. Across the transition
 
     α(t) = α_before (1 - s T),    transmitted fraction s T,
@@ -179,8 +214,9 @@ from their point `τ ∼ 5` at `L = 2.5 µm`:
 so `T ≈ 0.33`, `0.235` and `0.17` for 1.7, 2.5 and 3.6 µm of gold. Limitations:
 - λ_Au is held at their evaluation, for a hohlraum radiation temperature `T_h` of
   typically 300–350 eV and an assumed gold density of about 1 g/cm³ (the expanded
-  foil). Its dependence on temperature and density is not modeled, and `T` is
-  constant once burned through.
+  foil), so `T` is constant once burned through. `transmission =
+  RosselandTransmission()` lets λ_Au follow the temperature of the flux on the foil
+  instead; its density dependence is not modeled.
 - Pairing that density with the 2.5 µm as-built thickness is theirs. Taken literally,
   eq. 1 at 1 g/cm³ describes a layer of 0.25 mg/cm², not the foil's 4.8. The scaling
   with thickness (areal mass) is ours, from eq. 1.
@@ -220,7 +256,7 @@ struct BurnthroughAlbedo <: AlbedoModel
     density::Float64
     before::AlbedoModel
     after::Union{Nothing,AlbedoModel}       # an explicit burned-through albedo, or
-    transmission::Union{Nothing,Float64}    # the transmitted fraction (exactly one is set)
+    transmission::Union{Nothing,Float64,RosselandTransmission}  # the transmitted fraction (exactly one is set)
     width::Float64
     burnthrough::Union{Nothing,Float64}
     front::HeatFront
@@ -233,11 +269,12 @@ struct BurnthroughAlbedo <: AlbedoModel
         if after === nothing
             transmission === nothing &&
                 (transmission = eddington_transmission(_foil_optical_depth(density * thickness * 1e-4)))
-            0 <= transmission <= 1 || throw(ArgumentError("transmission must lie in [0, 1]"))
+            transmission isa RosselandTransmission || 0 <= transmission <= 1 ||
+                throw(ArgumentError("transmission must lie in [0, 1]"))
         end
         new(thickness, density, _albedo_model(before),
             after === nothing ? nothing : _albedo_model(after),
-            transmission === nothing ? nothing : Float64(transmission), width,
+            transmission isa Real ? Float64(transmission) : transmission, width,
             burnthrough === nothing ? nothing : Float64(burnthrough), front)
     end
 end
@@ -262,6 +299,17 @@ default `transmission` is `eddington_transmission(optical_depth(model))`. An exp
 """
 optical_depth(m::BurnthroughAlbedo) = _foil_optical_depth(areal_mass(m))
 
+"""
+    foil_transmission(model::BurnthroughAlbedo, T = nothing)
+
+Fraction of the incident flux a burned-through foil transmits when the flux on it has
+radiation temperature `T` (eV): the model's `transmission`, evaluated at `T` for a
+`RosselandTransmission` (at its reference temperature when `T` is `nothing`). `NaN`
+for a model with an explicit `after`.
+"""
+foil_transmission(m::BurnthroughAlbedo, T = nothing) =
+    m.after === nothing ? _transmission(m.transmission, optical_depth(m), T) : NaN
+
 # Transmitting fraction of the transition at time t for burnthrough time tb.
 function _burnthrough_step(m::BurnthroughAlbedo, t, tb)
     isfinite(tb) || return 0.0
@@ -279,7 +327,7 @@ function _burnthrough_split(m::BurnthroughAlbedo, t, T, burnthrough)
     s = _burnthrough_step(m, t, tb)
     s == 0 && return αb, αb, zero(αb)
     if m.after === nothing
-        τ = s * m.transmission
+        τ = s * _transmission(m.transmission, optical_depth(m), T)
         return αb * (1 - τ), αb, τ + zero(αb)
     end
     α = αb + s * (albedo(m.after, t, T) - αb)
@@ -288,6 +336,66 @@ end
 
 albedo(m::BurnthroughAlbedo, t, T = nothing; burnthrough = nothing) =
     first(_burnthrough_split(m, t, T, burnthrough))
+
+"""
+    GapClosure(; closure, width = 0.4, after = WallLossAlbedo())
+
+Albedo of an opening that closes during the pulse, such as the assembly gap around a
+diagnostic window, `WallWindow(; gap, gap_material = Material(:Au; albedo =
+GapClosure(closure = 3.0)))`. Until `closure` (ns) the gap is open: all the flux that
+reaches it leaves the hohlraum, as through an aperture. Across the next `width` ns it
+closes, and then it re-emits like the wall with the albedo of `after` (a model or a
+number):
+
+    α(t) = s α_after,    transmitted fraction 1 - s,
+
+with `s = s((t - closure)/width)` the smooth step `3x² - 2x³` on [0, 1], as for
+`BurnthroughAlbedo`. `energy_balance` books `(1 - s) H A` as transmitted, and
+`drive_history` counts it in `window_loss`. The closure time is an input: a gap tens of
+micrometres wide closes as plasma blown off its walls fills it, which this model does
+not compute. Unlike an aperture, the gap is opaque to laser light and to view-factor
+visibility rays, which matters only for gaps a beam would reach.
+"""
+struct GapClosure <: AlbedoModel
+    closure::Float64
+    width::Float64
+    after::AlbedoModel
+    function GapClosure(closure, width, after)
+        width >= 0 || throw(ArgumentError("the closure width must not be negative"))
+        new(Float64(closure), Float64(width), _albedo_model(after))
+    end
+end
+GapClosure(; closure, width = 0.4, after = WallLossAlbedo()) = GapClosure(closure, width, after)
+
+# Closed fraction of a gap at time t (0 open, 1 closed).
+function _closure_step(m::GapClosure, t)
+    m.width == 0 && return t >= m.closure ? 1.0 : 0.0
+    x = clamp((t - m.closure) / m.width, 0.0, 1.0)
+    return x^2 * (3 - 2x)
+end
+
+# The albedo at time t, the closed albedo, and the transmitted fraction.
+function _closure_split(m::GapClosure, t, T)
+    αa = albedo(m.after, t, T)
+    s = _closure_step(m, t)
+    return s * αa, αa, (1 - s) + zero(αa)
+end
+
+albedo(m::GapClosure, t, T = nothing) = first(_closure_split(m, t, T))
+
+# An albedo model's albedo, the albedo it would have intact (closed), and the fraction of
+# the incident flux it transmits out of the enclosure.
+_albedo_split(m::AlbedoModel, t, T, burnthrough) = (α = albedo(m, t, T); (α, α, zero(α)))
+_albedo_split(m::BurnthroughAlbedo, t, T, burnthrough) = _burnthrough_split(m, t, T, burnthrough)
+_albedo_split(m::GapClosure, t, T, burnthrough) = _closure_split(m, t, T)
+
+# Whether a model lets part of the flux on it leave the enclosure.
+_transmits(::AlbedoModel) = false
+_transmits(::Union{BurnthroughAlbedo,GapClosure}) = true
+
+# Progress of a model's transition at time t (burnthrough time tb): 0 before, 1 after.
+_transition_step(m::BurnthroughAlbedo, t, tb) = _burnthrough_step(m, t, tb)
+_transition_step(m::GapClosure, t, tb) = _closure_step(m, t)
 
 """
     burnthrough_time(model::BurnthroughAlbedo, times, Tr) -> Float64

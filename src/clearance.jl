@@ -613,14 +613,16 @@ function beam_component_power(op::DepositionOperator, beams::AbstractVector{<:Be
     return M
 end
 
-_value_spot(s::SuperGaussianSpot) =
-    with_axes(s, ForwardDiff.value(s.a), ForwardDiff.value(s.b))
+# The Float64 value of a number, through nested duals.
+_fvalue(x::ForwardDiff.Dual) = _fvalue(ForwardDiff.value(x))
+_fvalue(x::Real) = x
 
-# Float64 copy of a beam (strips ForwardDiff duals).
+_value_spot(s::SuperGaussianSpot) = with_axes(s, _fvalue(s.a), _fvalue(s.b))
+
+# Float64 copy of a beam (strips ForwardDiff duals, nested ones included).
 _value_beam(b::Beam) =
-    remake(b; aim = ForwardDiff.value.(b.aim), power = ForwardDiff.value(b.power),
-           defocus = ForwardDiff.value(b.defocus), spot = _value_spot(b.spot),
-           dlambda = ForwardDiff.value(b.dlambda))
+    remake(b; aim = _fvalue.(b.aim), power = _fvalue(b.power), defocus = _fvalue(b.defocus),
+           spot = _value_spot(b.spot), dlambda = _fvalue(b.dlambda))
 
 """
     violations(report; status = (:fail, :review), clearance = -Inf) -> Vector{ClearanceRow}

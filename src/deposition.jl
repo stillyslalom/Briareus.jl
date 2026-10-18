@@ -513,7 +513,17 @@ _screen_frame(::BeamFrame, b) = BeamFrame(_value_beam(b))
 # them, and for dual beams each remaining direction is screened on values. Skipped
 # points and directions would contribute exact zeros.
 function _deposit_points!(Ec::AbstractVector{T}, Lc::AbstractVector{T}, op::DepositionOperator,
-                          bi, f::BeamFrame, fv::BeamFrame{Float64}, (κ, α, β), r) where {T}
+                          bi, f::BeamFrame, fv::BeamFrame{Float64}, slopes, r) where {T}
+    return _sum_points(op, bi, f, fv, slopes, r, T) do d, val
+        @inbounds d > 0 ? (Ec[d] += val) : (Lc[-d] += val)
+    end
+end
+
+# The deposition loop: `sink(destination, power)` for every point of beam `bi` in `r`
+# that receives light (`destination` > 0 an element, < 0 a component's back side), and
+# the sum of those powers (of type `T`).
+@inline function _sum_points(sink::F, op::DepositionOperator, bi, f::BeamFrame,
+                             fv::BeamFrame{Float64}, (κ, α, β), r, ::Type{T}) where {F,T}
     ds = op.dirs[bi]
     P, W, Nr, M, D = op.pts[bi], op.w[bi], op.normal[bi], op.mask[bi], op.dest[bi]
     αmax, βmax = maximum(abs, α), maximum(abs, β)
@@ -523,8 +533,7 @@ function _deposit_points!(Ec::AbstractVector{T}, Lc::AbstractVector{T}, op::Depo
         m = T === Float64 ? M[q] : _live_directions(fv, α, β, M[q], P[q])
         m == 0 && continue
         val = W[q] * _cone_intensity(f, ds, α, β, κ, m, P[q], Nr[q])
-        d = D[q]
-        d > 0 ? (Ec[d] += val) : (Lc[-d] += val)
+        sink(D[q], val)
         acc += val
     end
     return acc

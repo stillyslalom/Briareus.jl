@@ -149,9 +149,9 @@ albedos(t::Target, time = 0.0, H = nothing; burnthrough = nothing) =
     first(_albedos(t, time, H, burnthrough))
 
 # Albedo per element and, alongside, the albedo it would have intact (a thin-foil
-# element's `before` albedo at the same temperature, the albedo itself elsewhere) and
-# the fraction of its incident flux it transmits out of the enclosure (0 but on a
-# burned-through thin foil).
+# element's `before` albedo at the same temperature, a closing gap's closed albedo, the
+# albedo itself elsewhere) and the fraction of its incident flux it transmits out of
+# the enclosure (0 but on a burned-through thin foil or an open gap).
 function _albedos(t::Target, time, H, burnthrough)
     n = nelements(t)
     α, intact, transmission = zeros(n), zeros(n), zeros(n)
@@ -159,12 +159,8 @@ function _albedos(t::Target, time, H, burnthrough)
         is_aperture(t, e) && continue
         a = element_material(t, e).albedo
         T = H === nothing ? nothing : radiation_temperature(ForwardDiff.value(H[e]))
-        if a isa BurnthroughAlbedo
-            α[e], intact[e], transmission[e] =
-                _burnthrough_split(a, time, T, burnthrough === nothing ? NaN : burnthrough[e])
-        else
-            α[e] = intact[e] = albedo(a, time, T)
-        end
+        α[e], intact[e], transmission[e] =
+            _albedo_split(a, time, T, burnthrough === nothing ? NaN : burnthrough[e])
     end
     return α, intact, transmission
 end
@@ -176,7 +172,9 @@ _temperature_dependent(t::Target) =
 _temperature_dependent(::AlbedoModel) = false
 _temperature_dependent(::WallLossAlbedo) = true
 _temperature_dependent(m::BurnthroughAlbedo) =
-    _temperature_dependent(m.before) || (m.after !== nothing && _temperature_dependent(m.after))
+    _temperature_dependent(m.before) || m.transmission isa RosselandTransmission ||
+    (m.after !== nothing && _temperature_dependent(m.after))
+_temperature_dependent(m::GapClosure) = _temperature_dependent(m.after)
 
 """
     RadiationSolution
@@ -287,7 +285,8 @@ end
 
 Global x-ray power accounting (TW): `source` (Σ ηPᵢ), `absorbed` by each component
 (`(1-α)HA`), `escaped` through each aperture, `transmitted` through each burned-through
-thin-foil component (`BurnthroughAlbedo`), and `lost` to open space (what leaves the
+thin-foil component (`BurnthroughAlbedo`) and each open or closing gap (`GapClosure`,
+`(1-s)HA` while a fraction `s` is closed), and `lost` to open space (what leaves the
 geometry without reaching any element). A thin-foil component's loss `(1-α)HA` splits
 into what it transmits, `τHA` with `τ` its `sol.transmission`, and what it absorbs,
 `(1-α-τ)HA`: with the default `transmission` `T`, `τ = sT` and `α = (1-sT)α_before`
@@ -307,7 +306,7 @@ function energy_balance(s::RadiationSolution)
         P(e) = ForwardDiff.value(s.H[e]) * t.elem_area[e]
         if c.kind === :aperture
             escaped[c.name] = sum(P, es; init = 0.0)
-        elseif c.material.albedo isa BurnthroughAlbedo
+        elseif _transmits(c.material.albedo)
             absorbed[c.name] = sum((1 - α[e] - τ[e]) * P(e) for e in es; init = 0.0)
             transmitted[c.name] = sum(τ[e] * P(e) for e in es; init = 0.0)
         else

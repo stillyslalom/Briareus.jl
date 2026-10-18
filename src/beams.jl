@@ -112,6 +112,12 @@ function port_basis(p::Vec3)
     return eθ, eφ
 end
 
+"""
+    spot_axes(beam) -> (a, b)
+
+Unit vectors of the spot's `a` and `b` axes, transverse to the beam: the port's θ̂ and
+φ̂ turned by the spot's `angle` toward φ̂.
+"""
 function spot_axes(b::Beam)
     eθ, eφ = port_basis(b.port)
     ψ = b.spot.angle

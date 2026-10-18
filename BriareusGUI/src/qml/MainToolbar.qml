@@ -2,7 +2,9 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import QtQml.Models
 import jlqml
+import "common"
 
 ToolBar {
     id: bar
@@ -39,9 +41,42 @@ ToolBar {
             onClicked: Julia.br_projection(checked)
         }
         Tool {
+            id: cutTool
             text: "Cutaway"; checkable: true; checked: app.cutaway
-            tip: "Cut away the quadrant of the hohlraum shell facing −x −y"
+            tip: "Cut away part of the target to see inside (right-click: where and what)"
             onClicked: Julia.br_set_cutaway(checked)
+            TapHandler {
+                acceptedButtons: Qt.RightButton
+                onTapped: cutMenu.popup()
+            }
+            AutoMenu {
+                id: cutMenu
+                MenuItem { text: "Quadrant (90°)"; checkable: true; checked: app.cutWidth === 90; onTriggered: Julia.br_cut_width(90) }
+                MenuItem { text: "Half (180°)"; checkable: true; checked: app.cutWidth === 180; onTriggered: Julia.br_cut_width(180) }
+                MenuItem { text: "Three quarters (270°)"; checkable: true; checked: app.cutWidth === 270; onTriggered: Julia.br_cut_width(270) }
+                MenuSeparator {}
+                MenuItem { text: "Facing the current view"; onTriggered: Julia.br_cut_toward_view() }
+                MenuItem { text: "Facing −x −y"; checkable: true; checked: app.cutAzimuth === 225; onTriggered: Julia.br_cut_azimuth(225) }
+                MenuItem { text: "Facing −y"; checkable: true; checked: app.cutAzimuth === 270; onTriggered: Julia.br_cut_azimuth(270) }
+                MenuItem { text: "Facing +x"; checkable: true; checked: app.cutAzimuth === 0; onTriggered: Julia.br_cut_azimuth(0) }
+                MenuSeparator {}
+                AutoMenu {
+                    id: cutCompMenu
+                    title: "Components cut"
+                    Instantiator {
+                        model: app.cutChoices
+                        delegate: MenuItem {
+                            required property string modelData
+                            text: modelData
+                            checkable: true
+                            checked: app.cutSet.indexOf(modelData) >= 0
+                            onTriggered: Julia.br_cut_component(modelData, checked)
+                        }
+                        onObjectAdded: (index, object) => cutCompMenu.insertItem(index, object)
+                        onObjectRemoved: (index, object) => cutCompMenu.removeItem(object)
+                    }
+                }
+            }
         }
         ToolSeparator {}
         Label { text: "Beams"; opacity: 0.7; leftPadding: 4; rightPadding: 4 }

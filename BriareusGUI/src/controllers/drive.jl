@@ -45,10 +45,14 @@ end
 State of the drive analysis: `scenario` (the core `Scenario`, `nothing` before the first
 build), `building`/`started`/`build_seconds`, `result` (the latest
 [`DriveResult`](@ref)), `evaluating`, `field` (one of [`DRIVE_FIELDS`](@ref)), `view`
-(`:scene`, the 3D target, or `:map`, the capsule θ–φ map or foil face), `spot_radius`
-(mm; the foil spot over which irradiance statistics and the foil objective are
-taken), `status`, and the VisRad benchmark kit's `kit_running`/`kit_status` (see
-[`write_visrad_kit!`](@ref)).
+(`:scene`, the 3D target, `:map`, the capsule θ–φ map or foil face, or `:image`, an
+x-ray image), `spot_radius` (mm; the foil spot over which irradiance statistics and
+the foil objective are taken), `status`, the VisRad benchmark kit's
+`kit_running`/`kit_status` (see [`write_visrad_kit!`](@ref)), the retune's
+`retune_running`/`retune_status` (see [`retune_to_reference!`](@ref)), the x-ray image's
+`image_request` (its camera, see [`xray_image!`](@ref)) and `image` (the latest
+rendering, `(; x, y, values, title)` in mm and W/cm²/sr, or `nothing`), and `side`
+(show the map or the image beside the 3D target instead of in its place).
 """
 struct DriveState
     scenario::Observable{Union{Nothing,Scenario}}
@@ -63,6 +67,11 @@ struct DriveState
     status::Observable{String}
     kit_running::Observable{Bool}
     kit_status::Observable{String}
+    retune_running::Observable{Bool}
+    retune_status::Observable{String}
+    image_request::Observable{Any}           # the x-ray image's camera, or nothing
+    image::Observable{Any}                   # its latest rendering, or nothing
+    side::Observable{Bool}                   # map or image beside the 3D view
     key::Base.RefValue{Any}                  # (target, ports) of the scenario
     lookup::Base.RefValue{Any}               # flux-map raster lookup of the scenario
     generation::Base.RefValue{Int}           # build requests
@@ -74,6 +83,7 @@ DriveState() = DriveState(Observable{Union{Nothing,Scenario}}(nothing), Observab
                           Observable{Union{Nothing,DriveResult}}(nothing), Observable(false),
                           Observable(:laser), Observable(:scene), Observable(0.5),
                           Observable(""), Observable(false), Observable(""),
+                          Observable(false), Observable(""), Observable{Any}(nothing), Observable{Any}(nothing), Observable(false),
                           Ref{Any}(nothing), Ref{Any}(nothing), Ref(0), Ref(0))
 
 """
@@ -88,14 +98,41 @@ function set_field!(dr::DriveState, field::Symbol)
 end
 
 """
+    set_side_view!(dr::DriveState, on::Bool)
+
+Show the flux map (or the x-ray image) beside the 3D target (`true`), or in its place
+when chosen (`false`).
+"""
+set_side_view!(dr::DriveState, on::Bool) = (_assign!(dr.side, on); dr)
+
+"""
     set_view!(dr::DriveState, view::Symbol)
 
-Show the 3D target (`:scene`) or the flux map (`:map`).
+Show the 3D target (`:scene`), the flux map (`:map`) or the x-ray image (`:image`, see
+[`xray_image!`](@ref)).
 """
 function set_view!(dr::DriveState, view::Symbol)
-    view in (:scene, :map) || throw(ArgumentError("view must be :scene or :map"))
+    view in (:scene, :map, :image) || throw(ArgumentError("view must be :scene, :map or :image"))
     _assign!(dr.view, view)
     return dr
+end
+
+# The x-ray image of the latest drive for the requested camera (`nothing` without one).
+function _render_image(dr::DriveState)
+    req, res = dr.image_request[], dr.result[]
+    (req === nothing || res === nothing || res.solution === nothing) && return nothing
+    sol = res.solution
+    t = sol.model.target
+    cam = OrthoCamera(req.direction; up = req.up, center = req.center, width = req.width,
+                      nx = req.nx)
+    img = render(t, radiance(sol), cam)
+    h = cam.width / 2
+    x = range(-h, h; length = cam.nx)
+    y = range(-h, h; length = cam.ny)
+    # rows from the top: as a matrix over (x, y) with y increasing
+    values = permutedims(to_Wcm2.(img)[end:-1:1, :])
+    return (; x, y, values, title = "X-ray radiance seen along " *
+                                    join((@sprintf("%.2f", c) for c in cam.dir), ", "))
 end
 
 # Build a scenario for a target and the table's beams (all of them: disabled beams are

@@ -333,6 +333,19 @@ end
 
 camera_scroll!(c::CadCamera, px, notches::Real) = zoom_camera!(c, px, _ZOOM_STEP^notches)
 
+"""
+    release_input!(scene, c::CadCamera)
+
+Forget held keys and any drag in progress: for when the canvas loses the keyboard or
+the window loses focus. The scene learns of a key release only while it has focus, so
+a Shift released elsewhere would otherwise stay held and turn every drag into a pan.
+"""
+function release_input!(scene, c::CadCamera)
+    empty!(Makie.events(scene).keyboardstate)
+    c.mode = :none
+    return c
+end
+
 const _BUTTONS = Dict(Makie.Mouse.left => :left, Makie.Mouse.middle => :middle,
                       Makie.Mouse.right => :right)
 

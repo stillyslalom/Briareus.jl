@@ -788,8 +788,13 @@ end
 end
 
 include("talis.jl")
+include("vrw_fixture.jl")
 include("visrad.jl")
 include("solve_cache.jl")
 include("windows.jl")
 include("burnthrough.jl")
+include("meshops.jl")
+include("uncertainty.jl")
+include("results.jl")
+include("retune.jl")
 end

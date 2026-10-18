@@ -48,7 +48,7 @@ const SESS = DesignSession(resolution = :coarse)
     @test all(isapprox.(extrema(mp.values), extrema(to_Wcm2.(res.evaluation.flux)); rtol = 1e-9))
     set_view!(dr, :map)
     @test dr.view[] === :map
-    @test_throws ArgumentError set_view!(dr, :image)
+    @test_throws ArgumentError set_view!(dr, :movie)
     set_view!(dr, :scene)
 
     # pointing edits re-evaluate without a rebuild; on/off too

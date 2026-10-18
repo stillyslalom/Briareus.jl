@@ -189,3 +189,153 @@ function write_moments(path::AbstractString, times::AbstractVector, M::AbstractM
     end
     return path
 end
+
+"""
+    read_stl(path; scale = 1.0) -> Mesh
+
+Triangle mesh from an STL file (binary or ASCII), one patch per facet, with vertex
+coordinates multiplied by `scale` (STL carries no units: 1 for millimetres, 10 for
+centimetres, 25.4 for inches). Facet normals in the file are ignored; the winding
+decides the front side, as STL specifies (counterclockwise seen from outside), but
+exported CAD often mixes windings: pass the mesh through `orient_mesh`, and through
+`coarsen_mesh` before view factors.
+"""
+function read_stl(path::AbstractString; scale::Real = 1.0)
+    data = read(path)
+    n = length(data) >= 84 ? Int(reinterpret(UInt32, data[81:84])[1]) : -1
+    tris = n >= 0 && length(data) == 84 + 50n ? _stl_binary(data, n) : _stl_ascii(String(data))
+    m = Mesh()
+    for (a, b, c) in tris
+        i0 = length(m.vertices)
+        push!(m.vertices, scale * a, scale * b, scale * c)
+        push!(m.triangles, (i0 + 1, i0 + 2, i0 + 3))
+        push!(m.patches, length(m.triangles):length(m.triangles))
+    end
+    return m
+end
+
+function _stl_binary(data::Vector{UInt8}, n::Integer)
+    tris = Vector{NTuple{3,Vec3}}(undef, n)
+    for k in 1:n
+        o = 84 + 50(k - 1) + 12                  # skip the facet normal
+        f = reinterpret(Float32, data[o+1:o+36])
+        tris[k] = (Vec3(f[1], f[2], f[3]), Vec3(f[4], f[5], f[6]), Vec3(f[7], f[8], f[9]))
+    end
+    return tris
+end
+
+function _stl_ascii(text::AbstractString)
+    startswith(lstrip(text), "solid") || throw(ArgumentError("not an STL file (neither binary nor ASCII)"))
+    tris = NTuple{3,Vec3}[]
+    vs = Vec3[]
+    for line in eachline(IOBuffer(text))
+        w = split(line)
+        isempty(w) && continue
+        if w[1] == "vertex"
+            length(w) == 4 || throw(ArgumentError("malformed STL vertex line: $line"))
+            push!(vs, Vec3(parse(Float64, w[2]), parse(Float64, w[3]), parse(Float64, w[4])))
+        elseif w[1] == "endfacet"
+            length(vs) == 3 || throw(ArgumentError("an STL facet must have 3 vertices, not $(length(vs))"))
+            push!(tris, (vs[1], vs[2], vs[3]))
+            empty!(vs)
+        end
+    end
+    return tris
+end
+
+"""
+    write_results(dir, target, dep; sol = nothing, beams = nothing, observe = nothing,
+                  lmax = 8) -> Vector{String}
+
+Write a calculation's results to the folder `dir` as CSV files, for postprocessing or
+comparison with another code, and return their paths:
+
+- `elements.csv` — per element (`write_element_table`): absorbed laser power (TW) and
+  intensity (W/cm²), and with a radiosity solution `sol` the x-ray source, radiosity
+  and incident flux (W/cm²), albedo and transmitted fraction;
+- `components.csv` — per component: absorbed laser power (TW, front and the unmodeled
+  back side), and with `sol` the x-ray power absorbed, escaped (apertures) and
+  transmitted (thin foils, gaps) from `energy_balance`;
+- `beams.csv` — with `beams` (in the deposition's order): each beam's name, port angles,
+  delivered and landed power (TW);
+- `legendre.csv` and `ylm.csv` — with `observe` (component names) and `sol`: the
+  Legendre moments `aₗ` (`write_moments`) and the real spherical-harmonic coefficients
+  `c_lm` of the observed incident flux, with their ratios to the mean term;
+- `summary.txt` — totals (delivered, landed, missed; x-ray source, lost).
+"""
+function write_results(dir::AbstractString, t::Target, dep::Deposition; sol = nothing,
+                       beams = nothing, observe = nothing, lmax::Integer = 8)
+    mkpath(dir)
+    files = String[]
+    v(x) = ForwardDiff.value.(x)
+    P = v(dep.element)
+    fields = Pair[:laser_TW => P, :laser_Wcm2 => to_Wcm2.(P ./ t.elem_area)]
+    if sol !== nothing
+        append!(fields, [:source_Wcm2 => to_Wcm2.(v(sol.source)), :radiosity_Wcm2 => to_Wcm2.(v(sol.B)),
+                         :incident_Wcm2 => to_Wcm2.(v(sol.H)), :albedo => sol.albedo,
+                         :transmission => sol.transmission])
+    end
+    push!(files, write_element_table(joinpath(dir, "elements.csv"), t, fields...))
+    cp = component_power(dep, t)
+    bal = sol === nothing ? nothing : energy_balance(sol)
+    path = joinpath(dir, "components.csv")
+    open(path, "w") do io
+        println(io, "component,kind,laser_TW,laser_outside_TW",
+                bal === nothing ? "" : ",xray_absorbed_TW,xray_escaped_TW,xray_transmitted_TW")
+        for c in t.components
+            row = Any[c.name, c.kind, get(cp, c.name, 0.0), get(cp, Symbol(c.name, :_outside), 0.0)]
+            if bal !== nothing
+                push!(row, get(bal.absorbed, c.name, 0.0), get(bal.escaped, c.name, 0.0),
+                      get(bal.transmitted, c.name, 0.0))
+            end
+            println(io, join((_csvfield(x) for x in row), ","))
+        end
+    end
+    push!(files, path)
+    if beams !== nothing
+        length(beams) == length(dep.per_beam) ||
+            throw(DimensionMismatch("one beam per deposited beam expected"))
+        path = joinpath(dir, "beams.csv")
+        open(path, "w") do io
+            println(io, "name,quad,group,theta_deg,phi_deg,delivered_TW,landed_TW")
+            for (b, landed) in zip(beams, dep.per_beam)
+                θ, φ = port_angles(b)
+                println(io, join(_csvfield.((b.name, b.quad, b.group, θ, φ, ForwardDiff.value(b.power),
+                                             ForwardDiff.value(landed))), ","))
+            end
+        end
+        push!(files, path)
+    end
+    if observe !== nothing && sol !== nothing
+        obs = elements(t, (observe isa Symbol ? (observe,) : observe)...)
+        H = v(sol.H)
+        push!(files, write_moments(joinpath(dir, "legendre.csv"), legendre_moments(H, t, obs; lmax)))
+        c = ylm_weights(t, obs; lmax) * H[obs]
+        path = joinpath(dir, "ylm.csv")
+        open(path, "w") do io
+            println(io, "l,m,c_lm,c_lm_over_c00")
+            for l in 0:lmax, m in -l:l
+                x = c[mode_index(l, m)]
+                println(io, l, ",", m, ",", _csvfield(x), ",", _csvfield(x / c[1]))
+            end
+        end
+        push!(files, path)
+    end
+    path = joinpath(dir, "summary.txt")
+    open(path, "w") do io
+        delivered = ForwardDiff.value(dep.delivered)
+        landed = sum(v(dep.per_beam))
+        println(io, "elements = ", nelements(t))
+        println(io, "laser_delivered_TW = ", delivered)
+        println(io, "laser_landed_TW = ", landed)
+        println(io, "laser_missed_TW = ", delivered - landed)
+        println(io, "laser_outside_TW = ", sum(v(dep.backside)))
+        if bal !== nothing
+            println(io, "xray_source_TW = ", bal.source)
+            println(io, "xray_lost_TW = ", bal.lost)
+            println(io, "time_ns = ", sol.time)
+        end
+    end
+    push!(files, path)
+    return files
+end

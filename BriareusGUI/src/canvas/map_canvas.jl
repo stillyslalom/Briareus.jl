@@ -29,12 +29,13 @@ function map_canvas(sess::DesignSession)
                   colorrange = (0.0, 1.0), nan_color = :transparent)
     cb = Colorbar(fig[1, 2], hm; label = " ")
     c = MapCanvas(fig, ax, hm, cb, Ref(true))
-    on(_ -> _draw_map!(c, sess), sess.drive.result)
+    onany((_...) -> _draw_map!(c, sess), sess.drive.result, sess.drive.image, sess.drive.view)
     _draw_map!(c, sess)
     return c
 end
 
 function _draw_map!(c::MapCanvas, sess::DesignSession)
+    sess.drive.view[] === :image && return _draw_image!(c, sess)
     m = flux_map(sess.drive)
     ax = c.ax
     if m === nothing
@@ -53,6 +54,31 @@ function _draw_map!(c::MapCanvas, sess::DesignSession)
         ax.aspect[] = m.kind === :capsule ? AxisAspect(2) : DataAspect()     # equal degrees / mm
         ax.title[] = m.kind === :capsule ? "Capsule incident x-ray flux" : "Foil laser irradiance"
         c.colorbar.label[] = "W/cm²"
+        reset_limits!(ax)
+    end
+    c.dirty[] = true
+    return c
+end
+
+# The x-ray image (see `xray_image!`): radiance over the image plane, mm by mm.
+function _draw_image!(c::MapCanvas, sess::DesignSession)
+    im = sess.drive.image[]
+    ax = c.ax
+    if im === nothing
+        _update!(c.heatmap, [0.0, 1.0], [0.0, 1.0], fill(NaN32, 2, 2); colorrange = (0.0, 1.0))
+        ax.title[] = "Computing the drive for the x-ray image…"
+        c.colorbar.label[] = " "
+    else
+        fin = filter(isfinite, im.values)
+        lo, hi = isempty(fin) ? (0.0, 1.0) : (0.0, maximum(fin))
+        hi > lo || (hi = lo + 1.0)
+        _update!(c.heatmap, collect(im.x), collect(im.y), Float32.(im.values); colorrange = (lo, hi))
+        ax.xlabel[] = "image x (mm)"
+        ax.ylabel[] = "image y (mm)"
+        ax.yreversed[] = false
+        ax.aspect[] = DataAspect()
+        ax.title[] = im.title
+        c.colorbar.label[] = "W/cm²/sr"
         reset_limits!(ax)
     end
     c.dirty[] = true

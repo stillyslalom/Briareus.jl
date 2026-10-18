@@ -22,7 +22,8 @@ Pane {
             TabButton { text: "Drive"; width: implicitWidth }
             TabButton { text: "Optimization"; width: implicitWidth }
             TabButton { text: "Clearance"; width: implicitWidth }
-            TabButton { text: "TaLIS"; width: implicitWidth }
+            // NIF's rules: the tab only for NIF beams
+            TabButton { text: "TaLIS"; width: app.facility === "nif" ? implicitWidth : 0; visible: app.facility === "nif" }
         }
         StackLayout {
             Layout.fillWidth: true

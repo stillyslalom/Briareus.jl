@@ -302,6 +302,9 @@ mutable struct BriareusShell
     dirty::Base.RefValue{Bool}
     shown::Dict{String,Any}
     figure::Any                                    # the figure on the canvas
+    session_path::String                           # the session file, once saved or opened
+    side_figure::Any                               # the figure on the side canvas
+    blank::Any                                     # what the side canvas shows when hidden
 end
 
 function BriareusShell(sess::DesignSession; queue::Channel{Any} = Channel{Any}(Inf))
@@ -309,10 +312,20 @@ function BriareusShell(sess::DesignSession; queue::Channel{Any} = Channel{Any}(I
     models = Dict{Symbol,JuliaItemModel}(k => JuliaItemModel(rows[k]) for k in keys(_MODEL_ROWS))
     scene = scene_canvas(sess)
     sh = BriareusShell(sess, scene, map_canvas(sess), JuliaPropertyMap(), rows, models, queue,
-                       Ref(true), Dict{String,Any}(), scene.fig)
+                       Ref(true), Dict{String,Any}(), scene.fig, "", nothing,
+                       Figure(size = (40, 40)))
     sh.app["canvas"] = scene.fig
+    # a figure is shown on one canvas at a time: the side canvas holds a blank one
+    # unless the map sits beside the 3D view
+    sh.side_figure = sh.blank
+    sh.app["sideCanvas"] = sh.blank
+    _set!(sh, "sideView", false)
     _set!(sh, "grabPath", "")
-    for k in ("compInfo", "selTitle", "partKind", "partName", "bnBy", "bn_z", "bn_r", "bn_phi",
+    _set!(sh, "sessionPath", "")
+    _set!(sh, "canUndo", false)
+    _set!(sh, "canRedo", false)
+    _set!(sh, "visradSource", "")
+    for k in ("compInfo", "selTitle", "partKind", "partName", "partFile", "bnBy", "bn_z", "bn_r", "bn_phi",
               "bn_defocus", "bn_power", "bn_aim_x", "bn_aim_y", "bn_aim_z", "bnInfo",
               "bnCluster", "bnQuad")
         _set!(sh, k, "")
@@ -322,11 +335,18 @@ function BriareusShell(sess::DesignSession; queue::Channel{Any} = Channel{Any}(I
     end
     _set!(sh, "bnCount", 0)
     _set!(sh, "clusterNames", String[])
+    _set!(sh, "aimChoices", ["(free)"])
+    _set!(sh, "bnAimRef", 0)
+    _set!(sh, "beamNames", String[])
+    _set!(sh, "facility", "nif")
     for k in ("compHidden", "partTwoSided", "partInward", "partAperture")
         _set!(sh, k, false)
     end
     _set!(sh, "bnOn", 0)
     _set!(sh, "partNumber", 0)
+    _set!(sh, "partAnchor", 0)
+    _set!(sh, "partCoords", 0)
+    _set!(sh, "anchorLabels", [PART_ANCHOR_LABELS[a] for a in PART_ANCHORS])
     _set!(sh, "windowNumber", 0)
     _set!(sh, "ortho", false)
     _set!(sh, "turntable", true)
@@ -337,7 +357,8 @@ function BriareusShell(sess::DesignSession; queue::Channel{Any} = Channel{Any}(I
                 ts.target, ts.error,
                 bt.beams, bt.enabled, bt.preset, bt.by, bt.path, bt.error, bt.warnings,
                 dr.scenario, dr.building, dr.result, dr.evaluating, dr.field, dr.view,
-                dr.spot_radius, dr.status, dr.kit_running, dr.kit_status,
+                dr.spot_radius, dr.status, dr.kit_running, dr.kit_status, dr.retune_running,
+                dr.retune_status,
                 st.by, st.fields, st.deltas, st.objective, st.weights, st.hold_drive, st.keepout,
                 st.keepout_min, st.capsule_keepout, st.capsule_min, st.spill, st.iterations,
                 st.max_evaluations, st.running, st.evaluations, st.iteration, st.status,
@@ -369,7 +390,12 @@ _g(x::Real) = isfinite(x) ? @sprintf("%.3g", x) : "–"
 
 function _refresh!(sh::BriareusShell)
     sess = sh.sess
-    _set!(sh, "title", "Briareus | " * target_summary(sess.target))
+    file = isempty(sh.session_path) ? "" : basename(sh.session_path) * " | "
+    _set!(sh, "title", "Briareus | " * file * target_summary(sess.target))
+    _set!(sh, "sessionPath", sh.session_path)
+    _set!(sh, "canUndo", can_undo(sess))
+    _set!(sh, "canRedo", can_redo(sess))
+    _set!(sh, "visradSource", basename(sess.visrad_source[]))
     _set!(sh, "status", sess.status[])
     _refresh_view!(sh)
     _refresh_target!(sh)
@@ -381,12 +407,19 @@ function _refresh!(sh::BriareusShell)
     tree = [TreeItem(r...) for r in model_tree(sess)]
     _set!(sh, "selectionCount", length(selected_ids(sess.view)))
     _sync_rows!(sh.rows[:treeModel], sh.models[:treeModel], tree)
-    # the flux map when chosen; the 3D view otherwise
-    fig = sess.drive.view[] === :map ? sh.map.fig : sh.scene.fig
+    # the flux map (or the x-ray image) when chosen, in place of the 3D view or beside it
+    side = sess.drive.side[]
+    fig = !side && sess.drive.view[] in (:map, :image) ? sh.map.fig : sh.scene.fig
+    sidefig = side ? sh.map.fig : sh.blank
     if fig !== sh.figure
         sh.figure = fig
         sh.app["canvas"] = fig
     end
+    if sidefig !== sh.side_figure
+        sh.side_figure = sidefig
+        sh.app["sideCanvas"] = sidefig
+    end
+    _set!(sh, "sideView", side)
     return
 end
 
@@ -397,6 +430,11 @@ function _refresh_view!(sh::BriareusShell)
     _set!(sh, "beamColor", String(v.beam_color[]))
     _set!(sh, "beamLength", v.beam_length[] > 0 ? _num(v.beam_length[]) : "")
     _set!(sh, "cutaway", v.cutaway[])
+    _set!(sh, "cutWidth", v.cut_width[])
+    _set!(sh, "cutAzimuth", v.cut_azimuth[])
+    t = sh.sess.target.target[]
+    _set!(sh, "cutChoices", [String(c.name) for c in t.components if c.kind === :surface])
+    _set!(sh, "cutSet", sort([String(n) for n in v.cut_components[]]))
     busy = String[]
     dr, st, rv, tl = sh.sess.drive, sh.sess.optimize, sh.sess.review, sh.sess.talis
     dr.building[] && push!(busy, "view factors " * Controllers._seconds(time() - dr.started[]))
@@ -441,6 +479,8 @@ function _refresh_beams!(sh::BriareusShell)
     _set!(sh, "beamsPath", bt.path[])
     _set!(sh, "beamsWarnings", join(bt.warnings[], "\n"))
     _set!(sh, "hasQuads", !isempty(bt.beams[]) && all(b -> !isempty(b.quad), bt.beams[]))
+    _set!(sh, "beamNames", [b.name for b in bt.beams[]])
+    _set!(sh, "facility", String(bt.facility[]))
     rows = [BeamRow(i, r.key, r.count, @sprintf("%.2f", r.theta), isnan(r.phi) ? "–" : @sprintf("%.2f", r.phi),
                     _fix(r.z), _fix(r.r), _fix(r.phi_offset), _fix(r.defocus), _num(r.power),
                     r.enabled === missing ? 2 : r.enabled ? 1 : 0)
@@ -485,11 +525,23 @@ function _refresh_selection!(sh::BriareusShell)
             _set!(sh, "partNumber", i)
             _set!(sh, "partKind", PART_KIND_LABELS[p.kind])
             _set!(sh, "partName", String(p.name))
+            _set!(sh, "partFile", p.file)
+            # its frame: the target's, or another part's
+            anchors = _part_anchor_choices(sess, p)
+            _set!(sh, "anchorLabels", [a in PART_ANCHORS ? PART_ANCHOR_LABELS[a] : "Part: " * String(a)
+                                       for a in anchors])
+            _set!(sh, "partAnchor", something(findfirst(==(p.anchor), anchors), 0) - 1)
+            _set!(sh, "partCoords", findfirst(==(p.coords), PART_COORDINATES) - 1)
             _set!(sh, "partTwoSided", p.two_sided)
             _set!(sh, "partInward", p.inward)
             _set!(sh, "partAperture", p.aperture)
-            fields = [FieldRow(String(k), label, unit, _num(p.values[k]))
-                      for (k, label, unit, _) in (PART_SIZE_FIELDS[p.kind]..., PART_FIELDS...)]
+            pos = Dict(part_position(p))
+            fields = [[FieldRow(String(k), label, unit, _num(p.values[k]))
+                       for (k, label, unit, _) in PART_SIZE_FIELDS[p.kind]];
+                      [FieldRow(String(k), label, unit, _num(pos[k]))
+                       for (k, label, unit) in PART_POSITION_FIELDS[p.coords]];
+                      [FieldRow(String(k), label, unit, _num(p.values[k]))
+                       for (k, label, unit, _) in PART_FIELDS if !(k in (:x, :y, :z))]]
             _sync_rows!(sh.rows[:partFieldModel], sh.models[:partFieldModel], fields)
         end
     elseif kind === :window
@@ -518,6 +570,11 @@ function _refresh_selection!(sh::BriareusShell)
             cls = unique(bt.cluster[][idx])
             _set!(sh, "bnCluster", length(cls) == 1 ? String(cls[1]) : "")
             _set!(sh, "clusterNames", String.(clusters(bt)))
+            # the component the beams' aims follow: "(free)" first, then the components
+            choices = _aim_choices(sess)
+            refs = unique(bt.aim_ref[][idx])
+            _set!(sh, "aimChoices", [c === :none ? "(free)" : String(c) for c in choices])
+            _set!(sh, "bnAimRef", length(refs) == 1 ? something(findfirst(==(refs[1]), choices), 1) - 1 : -1)
             # quads: one NIF quad beam can be split; a quad's four beams merged
             qs = unique(bs[i].quad for i in idx)
             q = length(qs) == 1 ? qs[1] : ""
@@ -574,6 +631,8 @@ function _refresh_drive!(sh::BriareusShell)
     _set!(sh, "kitRunning", dr.kit_running[])
     _set!(sh, "kitStatus", dr.kit_status[])
     _set!(sh, "kitReady", Controllers._drive_current(sess))
+    _set!(sh, "retuneRunning", dr.retune_running[])
+    _set!(sh, "retuneStatus", dr.retune_status[])
     return
 end
 
@@ -767,7 +826,8 @@ function br_tick()
     # running jobs report elapsed time
     (sess.drive.building[] || sess.optimize.running[] || sess.review.running[] ||
      sess.talis.running[]) && (sh.dirty[] = true)
-    sh.dirty[] && (sh.dirty[] = false; _refresh!(sh))
+    # after any action: note the design for undo, then show the new state
+    sh.dirty[] && (sh.dirty[] = false; record!(sess); _refresh!(sh))
     redraw = sh.scene.dirty[] || sh.map.dirty[]
     sh.scene.dirty[] = false
     sh.map.dirty[] = false
@@ -780,6 +840,66 @@ _parse(text, what) = Controllers._parse_number(string(text), what)
 # Model tree and selection
 br_select(id) = _with_shell(sh -> select!(sh.sess.view, String(id)))
 br_select_add(id) = _with_shell(sh -> select_add!(sh.sess.view, String(id)))
+br_select_range(id) = _with_shell(sh -> select_range!(sh.sess.view, [r.id for r in model_tree(sh.sess)],
+                                                      String(id)))
+
+# The nodes a tree action on `id` applies to: the whole selection when `id` is in it.
+function _acted_nodes(sh, id)
+    ids = selected_ids(sh.sess.view)
+    return String(id) in ids ? ids : [String(id)]
+end
+# Component name of a component node (`nothing` for other nodes).
+function _node_component(sess, id)
+    kind, key = selection_kind(id)
+    kind in (:comp, :part) && return Symbol(key)
+    kind === :window && return window_name(parse(Int, key))
+    return nothing
+end
+_node_beam_names(sess, id) = [sess.beams.beams[][i].name for i in node_beams(sess.beams, id)]
+
+# Whether a node is shown in the 3D view and takes part in the calculations, for the
+# tree's right-click menu: [shown, included].
+function br_node_flags(id)
+    sh = _SHELL[]
+    sh === nothing && return [true, true]
+    sess = sh.sess
+    c = _node_component(sess, String(id))
+    if c !== nothing
+        return [!(c in sess.view.hidden[]), !(c in sess.target.excluded[])]
+    end
+    idx = node_beams(sess.beams, String(id))
+    isempty(idx) && return [true, true]
+    hid = sess.view.hidden_beams[]
+    bs = sess.beams.beams[]
+    return [all(i -> !(bs[i].name in hid), idx), all(i -> sess.beams.enabled[][i], idx)]
+end
+function br_node_show(id, on)
+    _with_shell() do sh
+        sess = sh.sess
+        for n in _acted_nodes(sh, id)
+            c = _node_component(sess, n)
+            if c !== nothing
+                set_hidden!(sess.view, c, !Bool(on))
+            else
+                set_beams_hidden!(sess.view, _node_beam_names(sess, n), !Bool(on))
+            end
+        end
+    end
+end
+function br_node_include(id, on)
+    _with_shell() do sh
+        sess = sh.sess
+        for n in _acted_nodes(sh, id)
+            c = _node_component(sess, n)
+            if c !== nothing
+                set_excluded!(sess.target, c, !Bool(on))
+            else
+                idx = node_beams(sess.beams, n)
+                isempty(idx) || set_set_enabled!(sess.beams, idx, Bool(on))
+            end
+        end
+    end
+end
 br_toggle_expand(id) = _with_shell(sh -> toggle_expanded!(sh.sess.view, String(id)))
 function br_tree_on(id, on)
     _with_shell() do sh
@@ -841,31 +961,86 @@ function br_add_part(kind)
         end
     end
 end
+function br_add_stl(url)
+    _with_shell() do sh
+        ts = sh.sess.target
+        path = _url_to_path(String(url))
+        if add_part!(ts, :mesh; file = path)
+            name = String(ts.parts[][end].name)
+            select!(sh.sess.view, "part:" * name)
+            sh.sess.status[] = "added $name from $(basename(path)): set its scale (mm per file unit) and place in Properties"
+        end
+    end
+end
 function _resend_part_fields!(sh)
     rows = sh.rows[:partFieldModel]
     for i in eachindex(rows)
         sh.models[:partFieldModel][i] = rows[i]
     end
 end
+# The selected parts (indices), the one shown in Properties first: edits apply to all.
+function _selected_parts(sh)
+    ts = sh.sess.target
+    idx = Int[]
+    for id in selected_ids(sh.sess.view)
+        kind, key = selection_kind(id)
+        kind === :part || continue
+        i = part_index(ts, Symbol(key))
+        i === nothing || push!(idx, i)
+    end
+    return idx
+end
 function br_edit_part(key, text)
     _with_shell() do sh
         ts = sh.sess.target
-        i = part_index(ts, Symbol(selection_kind(sh.sess.view.selection[])[2]))
-        i === nothing && return
+        idx = _selected_parts(sh)
+        isempty(idx) && return
         k = _sym(key)
-        ok = edit_part!(ts, i, k, string(text))
-        if ok && k === :name
-            select!(sh.sess.view, "part:" * String(ts.parts[][i].name))
-        elseif !ok
-            _resend_part_fields!(sh)
+        if k === :name                                  # names are per part
+            i = idx[1]
+            edit_part!(ts, i, k, string(text)) ?
+                select!(sh.sess.view, "part:" * String(ts.parts[][i].name)) : _resend_part_fields!(sh)
+            return
         end
+        ok = true
+        for i in idx
+            haskey(ts.parts[][i].values, k) || continue  # a field of other kinds
+            ok &= edit_part!(ts, i, k, string(text))
+        end
+        ok || _resend_part_fields!(sh)
     end
 end
 function br_part_flag(flag, on)
     _with_shell() do sh
         ts = sh.sess.target
-        i = part_index(ts, Symbol(selection_kind(sh.sess.view.selection[])[2]))
-        i === nothing || set_part_flag!(ts, i, _sym(flag), Bool(on))
+        for i in _selected_parts(sh)
+            set_part_flag!(ts, i, _sym(flag), Bool(on))
+        end
+    end
+end
+# Move the selected part to another frame, keeping it where it is (index into
+# `anchorKeys`).
+# Frames a part can be placed in: the target's, then the other parts.
+_part_anchor_choices(sess, p) =
+    [collect(PART_ANCHORS); [q.name for q in sess.target.parts[] if q.name !== p.name]]
+function br_part_anchor(index)
+    _with_shell() do sh
+        ts = sh.sess.target
+        idx = _selected_parts(sh)
+        isempty(idx) && return
+        anchor = _part_anchor_choices(sh.sess, ts.parts[][idx[1]])[Int(index)+1]
+        ok = true
+        for i in idx
+            ok &= set_part_anchor!(ts, i, anchor)
+        end
+        ok || _set!(sh, "partAnchor", -1)
+    end
+end
+function br_part_coords(index)
+    _with_shell() do sh
+        for i in _selected_parts(sh)
+            set_part_coords!(sh.sess.target, i, PART_COORDINATES[Int(index)+1])
+        end
     end
 end
 function br_remove_selected()
@@ -925,6 +1100,25 @@ function br_rename_cluster(new)
             select!(sh.sess.view, "group:" * strip(string(new)))
     end
 end
+_aim_choices(sess) = [:none; component_names(sess.target.target[])]
+# Aim the selected beams at a component and keep them on it (index into `aimChoices`).
+function br_aim_at(index)
+    _with_shell() do sh
+        idx = selected_beams(sh.sess)
+        isempty(idx) && return
+        name = _aim_choices(sh.sess)[Int(index)+1]
+        aim_at_component!(sh.sess, idx, name)
+        sh.sess.status[] = name === :none ? "the beams' aims no longer follow a component" :
+                           "the beams aim at $name and follow it"
+    end
+end
+function br_set_facility(f)
+    _with_shell() do sh
+        s = sh.sess
+        set_facility!(s.beams, _sym(f); target_kind = s.target.kind[], params = s.target.params[])
+        s.status[] = "facility: " * FACILITY_LABELS[_sym(f)]
+    end
+end
 function br_split_quad()
     _with_shell() do sh
         q = get(sh.shown, "bnQuad", "")
@@ -947,6 +1141,26 @@ function br_merge_quad()
                                           sh.sess.status[] = "merged $q into one quad beam")
     end
 end
+# Session files and undo
+br_undo() = _with_shell(sh -> undo!(sh.sess) || (sh.sess.status[] = "nothing to undo"))
+br_redo() = _with_shell(sh -> redo!(sh.sess) || (sh.sess.status[] = "nothing to redo"))
+function br_open_session(url)
+    _with_shell() do sh
+        path = _url_to_path(String(url))
+        load_session!(sh.sess, path)
+        sh.session_path = path
+        select!(sh.sess.view, "target")
+    end
+end
+# An empty url saves to the current session file.
+function br_save_session(url)
+    _with_shell() do sh
+        path = isempty(String(url)) ? sh.session_path : _url_to_path(String(url))
+        isempty(path) && throw(ArgumentError("choose a file to save the session to"))
+        save_session(path, sh.sess)
+        sh.session_path = path
+    end
+end
 br_import_beams(url) = _with_shell(sh -> (import_beams!(sh.sess.beams, _url_to_path(String(url)));
                                           sh.sess.status[] = "imported " * basename(sh.sess.beams.path[])))
 br_export_beams(url) = _with_shell(sh -> (export_beams(sh.sess.beams, _url_to_path(String(url)));
@@ -965,9 +1179,49 @@ br_export_summary(url) = _visrad_io(export_visrad_summary, url, "wrote the VisRa
 # Drive
 br_build() = _with_shell(sh -> build_scenario!(sh.sess))
 br_set_view(v) = _with_shell(sh -> set_view!(sh.sess.drive, _sym(v)))
+# Leave the x-ray image for the view shown before it.
+br_close_image() = _with_shell(sh -> set_view!(sh.sess.drive, get(sh.shown, "_viewBeforeImage", :scene)))
+br_side_view(on) = _with_shell(sh -> set_side_view!(sh.sess.drive, Bool(on)))
+# An x-ray image seen along the 3D view's direction, framing what the view frames.
+function br_xray_image()
+    _with_shell() do sh
+        c = sh.scene.camera
+        f, _, u = camera_frame(c)
+        width = 2 * norm(c.lookat - c.eye) * tand(c.fov / 2)
+        current = Controllers._drive_current(sh.sess)
+        v = sh.sess.drive.view[]
+        v === :image || (sh.shown["_viewBeforeImage"] = v)
+        xray_image!(sh.sess; direction = Tuple(f), up = Tuple(u), center = Tuple(c.lookat), width)
+        sh.sess.status[] = current ? "x-ray image along the view" :
+                           "computing the drive for the x-ray image…"
+    end
+end
 br_set_spot_radius(text) = _with_shell(sh -> (sh.sess.drive.spot_radius[] =
                                                   Controllers._parse_number(string(text), "the spot radius"; positive = true)))
+function br_import_visrad_workspace(url)
+    _with_shell() do sh
+        import_visrad_workspace!(sh.sess, _url_to_path(String(url)))
+        select!(sh.sess.view, "target")
+        fit_all!(sh.scene)
+    end
+end
+br_export_visrad_workspace(url) = _with_shell(sh -> export_visrad_workspace(sh.sess, _url_to_path(String(url))))
+br_export_results(url) = _with_shell(sh -> export_results(sh.sess, _url_to_path(String(url))))
 br_write_kit(url) = _with_shell(sh -> write_visrad_kit!(sh.sess, _url_to_path(String(url))))
+# The retune's errors show in its dialog, where it was asked for.
+function br_retune(table, out, by, cap, stay)
+    _with_shell() do sh
+        try
+            retune_to_reference!(sh.sess, _url_to_path(String(table)), _url_to_path(String(out));
+                                 by = _sym(by),
+                                 cap = Controllers._parse_number(cap, "the power limit"; positive = true),
+                                 stay = Controllers._parse_number(stay, "the weight on the reference powers";
+                                                                  nonnegative = true))
+        catch err
+            sh.sess.drive.retune_status[] = "retune failed: " * Controllers._errmsg(err)
+        end
+    end
+end
 # Optimize
 br_opt_set_by(by) = _with_shell(sh -> (by = _sym(by); by in BEAM_GROUPINGS &&
                                                       Controllers._assign!(sh.sess.optimize.by, by)))
@@ -1011,31 +1265,83 @@ br_beam_length(text) = _with_shell(sh -> Controllers._assign!(sh.sess.view.beam_
                                                               Controllers._parse_number(string(text), "the beam length";
                                                                                         nonnegative = true)))
 br_set_cutaway(on) = _with_shell(sh -> Controllers._assign!(sh.sess.view.cutaway, Bool(on)))
-br_standard_view(name) = _with_shell(sh -> (set_view!(sh.sess.drive, :scene); standard_view!(sh.scene, _sym(name))))
+# Cut parameters (the Cutaway button's right-click menu); any change turns the cut on.
+br_cut_width(w) = _with_shell(sh -> (set_cut!(sh.sess.view; width = Float64(w));
+                                     Controllers._assign!(sh.sess.view.cutaway, true)))
+br_cut_azimuth(a) = _with_shell(sh -> (set_cut!(sh.sess.view; azimuth = Float64(a));
+                                       Controllers._assign!(sh.sess.view.cutaway, true)))
+# Center the cut on the side the 3D view looks from.
+function br_cut_toward_view()
+    _with_shell() do sh
+        c = sh.scene.camera
+        d = c.eye - c.lookat
+        hypot(d[1], d[2]) > 0 || return
+        set_cut!(sh.sess.view; azimuth = atand(d[2], d[1]))
+        Controllers._assign!(sh.sess.view.cutaway, true)
+    end
+end
+function br_cut_component(name, on)
+    _with_shell() do sh
+        v = sh.sess.view
+        s = copy(v.cut_components[])
+        Bool(on) ? push!(s, Symbol(String(name))) : delete!(s, Symbol(String(name)))
+        set_cut!(v; components = s)
+        Controllers._assign!(v.cutaway, true)
+    end
+end
+# Camera actions bring the 3D view back to the canvas (unless the map sits beside it).
+_show_scene!(sh) = sh.sess.drive.side[] || set_view!(sh.sess.drive, :scene)
+br_standard_view(name) = _with_shell(sh -> (_show_scene!(sh); standard_view!(sh.scene, _sym(name))))
 br_fit_all() = _with_shell(sh -> sh.figure === sh.map.fig ? (reset_limits!(sh.map.ax); sh.map.dirty[] = true) :
                                  fit_all!(sh.scene))
 br_fit_selection() = _with_shell(sh -> fit_selection!(sh.scene, sh.sess))
-br_look_along_beam() = _with_shell(sh -> (set_view!(sh.sess.drive, :scene); look_along_beam!(sh.scene, sh.sess)))
+function br_look_from_port(theta, phi)
+    _with_shell() do sh
+        θ, φ = _parse(theta, "the polar angle θ"), _parse(phi, "the azimuth φ")
+        _show_scene!(sh)
+        look_from_port!(sh.scene, sh.sess, θ, φ)
+        sh.sess.status[] = @sprintf("looking from the port at θ = %g°, φ = %g°", θ, φ)
+    end
+end
+# Port angles of beam `i` of the table (0-based, as the dialog lists them), as text.
+function br_port_angles(i)
+    sh = _SHELL[]
+    sh === nothing && return ["", ""]
+    bs = sh.sess.beams.beams[]
+    0 <= i < length(bs) || return ["", ""]
+    θ, φ = port_angles(bs[i+1])
+    return [@sprintf("%.3f", θ), @sprintf("%.3f", mod(φ, 360))]
+end
+br_look_along_beam() = _with_shell(sh -> (_show_scene!(sh); look_along_beam!(sh.scene, sh.sess)))
 br_projection(ortho) = _with_shell(sh -> (set_projection!(sh.scene, Bool(ortho)); _set!(sh, "ortho", Bool(ortho))))
 br_turntable(on) = _with_shell(sh -> (set_turntable!(sh.scene, Bool(on)); _set!(sh, "turntable", Bool(on))))
+# The canvas lost the keyboard (or the window lost focus): forget held keys and drags.
+br_canvas_focus(on) = (sh = _SHELL[]; sh === nothing || Bool(on) || release_input!(sh.scene); nothing)
 
 function _register_qml_functions()
     @qmlfunction br_tick br_grab_started br_select br_select_add br_toggle_expand br_tree_on
+    @qmlfunction br_select_range br_node_flags br_node_show br_node_include
+    @qmlfunction br_undo br_redo br_open_session br_save_session
     @qmlfunction br_set_cluster br_rename_cluster br_split_quad br_merge_quad br_window_round
+    @qmlfunction br_set_facility br_aim_at
     @qmlfunction br_set_target_kind br_set_resolution br_edit_mesh br_edit_target
     @qmlfunction br_add_window br_remove_window br_edit_window br_window_open
-    @qmlfunction br_add_part br_edit_part br_part_flag br_remove_selected
+    @qmlfunction br_add_part br_add_stl br_edit_part br_part_flag br_part_anchor br_part_coords
+    @qmlfunction br_remove_selected
     @qmlfunction br_load_preset br_set_grouping br_edit_beam br_set_beam_on br_edit_node
     @qmlfunction br_import_beams br_export_beams br_import_sst br_import_summary br_export_sst
-    @qmlfunction br_export_summary br_build br_set_view br_set_spot_radius br_write_kit
+    @qmlfunction br_export_summary br_build br_set_view br_side_view br_xray_image br_close_image br_set_spot_radius br_write_kit br_export_results
+    @qmlfunction br_import_visrad_workspace br_export_visrad_workspace br_retune
     @qmlfunction br_opt_set_by br_opt_free br_opt_edit br_opt_objective br_opt_hold
     @qmlfunction br_opt_keepout br_opt_capsule br_opt_start br_opt_cancel br_opt_accept
     @qmlfunction br_rv_role br_rv_edit br_rv_wings br_rv_quality br_rv_start br_rv_cancel
     @qmlfunction br_rv_export br_tl_role br_tl_edit br_tl_pivot br_tl_omega1 br_tl_start
     @qmlfunction br_tl_cancel br_tl_export br_cancel_all
     @qmlfunction br_set_color br_beam_style br_beam_color br_beam_length br_set_cutaway
+    @qmlfunction br_cut_width br_cut_azimuth br_cut_toward_view br_cut_component
     @qmlfunction br_standard_view br_fit_all br_fit_selection br_look_along_beam
-    @qmlfunction br_projection br_turntable
+    @qmlfunction br_look_from_port br_port_angles
+    @qmlfunction br_projection br_turntable br_canvas_focus
     return
 end
 

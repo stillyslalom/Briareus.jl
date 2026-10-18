@@ -143,23 +143,93 @@ Measured on the NIF hohlraum at the GUI's standard mesh (5,864 elements, 48 quad
   its skip predicate (view factors: 13.8M allocations to 0.6M).
 - Radiosity and closure without n² temporaries.
 
+## Done (2026-10-17, windows and CAD)
+- **Window design studies** (roadmap item 2, in the diagnostic-windows tutorial):
+  - `RosselandTransmission`: the post-burnthrough optical depth follows the radiation
+    temperature as gold's Rosseland opacity (`T^-1.5`, Hammer & Rosen), normalized to
+    Lester's point at 325 eV; Hammer & Rosen's absolute fit gives τ = 5.9 there
+    (Lester: ∼5). About a tenth less window cost than the constant in the tutorial.
+  - `GapClosure`: an open gap that closes at a given time; closed before the peak a
+    50 µm gap costs a fifth (at 7 ns) or nothing (at 3 ns) of an open one.
+  - `Scenario(...; albedo)` linearizes about a solution (e.g. a drive history's peak,
+    windows burned through), reproducing its P2 exactly.
+  - Restoring the drive: per-quad powers (±20%) or quad-pair re-pointing (≤ 0.3 mm)
+    remove the windows' P2 and m = 2 at the peak (not their l = 4); settings found at
+    the peak overshoot before burnthrough, and power trims switched on with the
+    burnthrough hold the no-window shape through the pulse.
+- **CAD repair** (part of item 5): `orient_mesh` (consistent windings, closed solids
+  facing out of their material, open sheets toward a point) and `coarsen_mesh`
+  (near-coplanar facets merged into elements of a given size); `visrad_target(...;
+  orient, coarsen)`. On the NIF CAD workspace the inner hohlraum wall now faces the
+  cavity without `two_sided`.
+
+## Done (2026-10-17, GUI sessions and CAD parts)
+- **Session files:** the whole design (target, windows, parts, beams with groups and
+  on/off state, analysis settings, view) as a plain TOML file (`save_session`,
+  `load_session!`; File ▸ Save / Open, Ctrl + S / Ctrl + O). Ports are stored as
+  vectors, so a reloaded design is bit for bit the saved one.
+- **Undo and redo** of every design edit (Edit ▸ Undo / Redo, Ctrl + Z / Ctrl + Y):
+  snapshots of the design taken after each action (`record!`); the view is not part
+  of the history.
+- **STL parts:** `read_stl` (binary and ASCII) and a `:mesh` part kind (Target ▸ Add
+  part ▸ Mesh from STL file): placed like any part, windings repaired, facets merged
+  into elements of the part's size.
+- **Part frames** (VisRad's reference frames): a part is placed relative to the chamber,
+  either entrance hole (z out of the hohlraum, so one placement mirrors) or a
+  backlighter foil, and follows it when the target's dimensions change; changing the
+  frame keeps the part in place (`set_part_anchor!`).
+- **X-ray images in the window** (View ▸ X-ray image along the view, `xray_image!`):
+  the radiance seen along the 3D view's direction, framed as the view, rendered again
+  as the drive is re-evaluated; the map or the image can sit beside the 3D view in a
+  second canvas.
+
+## Done (2026-10-17, beam errors)
+- `mode_sensitivity` (exact per-beam sensitivities of the drive shape to pointing and
+  power errors, one forward-mode pass per beam), `mode_uncertainty` (linear
+  propagation of independent errors: rms per coefficient and per mode) and
+  `sample_modes` (Monte Carlo check); the objectives' `uncertainty` keyword optimizes
+  the expected symmetry (robust design). Tutorial "Pointing and power errors": linear
+  and Monte Carlo agree to 1–2%; NIF 50 µm / 3% errors leave 0.23–0.28% rms of mode 1,
+  a floor cone pointing does not lower.
+
+## Done (2026-10-17, design workflow)
+- **Retune to a reference drive:** `retune_drive` finds per-cone, quad or beam power
+  histories that reproduce a reference shot's capsule drive (Y_lm shape and level)
+  under power limits, linear about the reference's converged albedos
+  (`drive_history(...; keep_albedo)`), optionally staying near the reference powers.
+  Pulses come from a total power and a cone fraction (`cone_fraction_pulses`) or a
+  CSV pulse table (`read_pulse_table`/`write_pulse_table`), and are applied per quad
+  or beam (`with_pulses(...; by)`). Tutorial "Retuning a drive to a reference shot":
+  bundle 31 down takes ε₁ from 0 to 2% at the peak, and retuning the other 46 quads
+  brings it to 0.02%, confirmed by a drive history to 3e-5. In the window:
+  Compute ▸ Retune to a reference drive.
+- **Exported calculations:** `write_results` (per-element laser, radiosity and flux,
+  per-component and per-beam power, Legendre and Y_lm modes, a summary) and File ▸
+  Export results, with the session that produced them.
+- **VisRad workspaces in the window:** File ▸ Import (components become VisRad object
+  parts, beams the table) and Export, which writes the beams into a copy of the
+  imported workspace (`write_visrad_workspace`: only beam rows change; round trip
+  exact).
+- **Frames and coordinates:** a part placed in another part's frame (followed when it
+  moves, loops refused); positions in Cartesian, cylindrical or spherical coordinates
+  per part; beams aimed at a component's centroid (foil, LEH, part) and following it.
+- **Window:** facility selector (NIF, OMEGA, OMEGA EP, custom: presets and checks per
+  facility, TaLIS on NIF only); right-click Show and Include in calculations per
+  component or beam (excluded components drawn as ghosts); Shift/Ctrl multi-select
+  with multi-part edits; cutaway width, azimuth and cut components; View ▸ Look from
+  port; the x-ray image under Compute, unchecking it restores the previous view; menus
+  sized to their entries; a stuck pan after losing focus with Shift held fixed.
+
 ## Next
 1. **Sombrero and backlighter geometry.** Model the LEH shield as a component (a
    dimpled annulus), and the backlighter foil's placement relative to the diagnostic
    line of sight. The line-of-sight and clearance checks in the radiography tutorial
    then decide which bundles can drive the foil. This needs real dimensions.
-2. **Diagnostic windows: design studies.** Circular windows, gaps, burnthrough and the
-   gray post-burnthrough transmission are in place (see the tutorial). Two 2 mm windows
-   of 1.7–3.6 µm gold give a flux-weighted ΔP2 of +0.7 to +1.7% and cost 2.4–5.5% of
-   capsule energy (open-hole bound, `after = 0`: +4 to +5% and 12–15%).
-   - Refine the transmission: λ_Au is held at a 300–350 eV evaluation. A
-     temperature- and density-dependent Rosseland mean free path (or a tabulated
-     T(t)) would let it follow the drive, and a backing could absorb and re-emit part
-     of what the gold transmits.
-   - Model gap closure in time, e.g. a `TabulatedAlbedo` or a closing-gap model.
-   - Re-tune pointing around the window pair: m = 2 and P2 at the waist, versus time.
-   - Earlier look (two open 2 × 2 mm windows, NIF quads): power rebalance is
-     infeasible, and re-pointing only trims the m = 2 departure.
+2. **Diagnostic windows: what remains.** The studies are in the tutorial (see Done).
+   Open: the expanded foil's density (held at Lester's 1 g/cm³ through the
+   normalization), a backing that absorbs and re-emits part of what the gold
+   transmits, a computed gap-closure time (plasma filling the gap), and the windows'
+   l = 4, which neither quad powers nor pointing removed.
 3. **Confirm against facility practice:**
    - the TaLIS 0.5° tolerance (pivot, and whether it replaces or adds to the error set);
    - the 1ω footprint side and shape;
@@ -191,25 +261,25 @@ Measured on the NIF hohlraum at the GUI's standard mesh (5,864 elements, 48 quad
    - Wall thickness (inner and side walls), partial spheres, and the other primitive
      types: cylinder, cone, disk, box, polygon, halfraum, rugby and slotted hohlraums,
      surfaces of revolution, multi-element objects.
-   - CAD meshes: consistent orientation (repair inward/outward faces, e.g. by ray
-     casting from inside closed parts) instead of `two_sided`, and coplanar merging or
-     decimation so that selected CAD parts are small enough for view factors.
-6. **GUI requests:** session save/load (a workspace file); undo/redo; x-ray images
-   in the window; reference frames for parts (attach to a component or a port axis, as
-   VisRad does); clipping volumes and STEP/STL import (CAD already arrives through VisRad
-   workspaces, `read_visrad_workspace`; a GUI loader and decimation for view factors
-   would make it usable there); a second simultaneous view
-   (the capsule map beside the 3D view).
+   - CAD meshes tessellated as long slivers (curved walls): `coarsen_mesh` cannot
+     shorten them; remeshing (e.g. onto a fitted cylinder) would.
+6. **GUI requests:** frames on a port axis (the chamber, the entrance holes, the foil
+   and other parts are done); clipping volumes; STEP import (needs a CAD kernel; STL
+   and VisRad workspaces cover CAD meanwhile); an x-ray image that follows the camera
+   as it moves; time in the window (pulse tables, drive histories and the retune's
+   power histories plotted, rather than written to CSV).
    Adaptive mesh refinement of the radiation mesh where deposition varies fastest
    (the uniform fine mesh is converged but costs ~16k elements).
 7. **Time-dependent view factor.** Wall, LEH and spot motion from rad-hydro or a
-   parametric model; P2(t) swing; optimization of cone fraction versus time.
+   parametric model; P2(t) swing. Retuning to a reference drive (see Done) assumes
+   the reference's view factors hold through the pulse.
 8. **Shot-data calibration.** Fit effective parameters (cone multipliers, CBET
    multiplier/clamp, albedo) to measured P2/P4 and shock symmetry, with uncertainty.
    Reproduce P2-vs-Δλ curves.
-9. **Robust optimization and UQ.** Monte Carlo or Jacobian propagation of 50 µm
-   pointing and power imbalance; optimize the mean plus kσ; sensitivity matrices;
-   mode-1 and m = 4 budgets and inverse solves (MacGowan 2021).
+9. **Robust optimization and UQ: what remains.** Correlated errors (per bundle, per
+   cone; target positioning, which moves every beam at once), time-dependent budgets
+   (errors through `drive_history`), and inverse solves for a measured mode (MacGowan
+   2021) as a documented workflow.
 10. **Backlighter physics.** CE(Z, I, τ) models with uncertainty, and the photometric
    chain to the detector.
 11. **Spectral radiosity.** Multigroup emission, detector responses along Dante and XRD
