@@ -28,7 +28,7 @@ module Controllers
 using Briareus
 using Observables
 using Printf
-using LinearAlgebra: dot, norm, normalize, cross
+using LinearAlgebra: dot, norm, normalize, cross, eigen, Symmetric
 import TOML
 
 include("controllers/shared.jl")
@@ -49,7 +49,8 @@ export import_visrad_workspace!, export_visrad_workspace, export_results, retune
        redo!, can_undo, can_redo, reset_history!
 export TargetSetup, TARGET_KINDS, TARGET_KIND_LABELS, TARGET_FIELDS, MeshSpec, MESH_PRESETS,
        MESH_RESOLUTIONS, FOIL_NAME, build_target, foil_center, set_target_kind!,
-       set_resolution!, edit_mesh!, edit_target!, target_summary, component_names, surface_names
+       set_resolution!, edit_mesh!, edit_target!, target_summary, component_names, surface_names,
+       target_ready, await_target!, BACKGROUND_TRIANGLES
 export PartSpec, PART_KINDS, PART_KIND_LABELS, PART_FIELDS, PART_SIZE_FIELDS, part_component,
        part_axis, part_center, add_part!, remove_part!, edit_part!, set_part_flag!, part_index,
        PART_ANCHORS, PART_ANCHOR_LABELS, anchor_frame, set_part_anchor!, set_excluded!,
@@ -127,7 +128,25 @@ using PrecompileTools: @setup_workload, @compile_workload
         edit_beams!(sess.beams, 1, :z, "3.2")
         set_grouping!(sess.beams, :group)
         add_part!(sess.target, :disk; z = 7.0)
+        # the capsule role's sphere fit (0.65 s to compile at the first CAD capsule)
+        Controllers._fit_capsule(part_components(PartSpec(:sphere; name = :s), 0.3), :s)
+        # the first undo and redo (0.3 s of compilation otherwise)
+        record!(sess)
+        edit_target!(sess.target, :length, "10.2")
+        record!(sess)
+        undo!(sess)
+        redo!(sess)
         model_tree(sess)
+        for task in TASKS
+            task_status(sess, task)
+        end
+        # a drive on the cavity, its result and summaries (the window's first drive
+        # compiled these on the GUI thread)
+        set_cavity!(sess.drive, true)
+        build_scenario!(sess)
+        drive_summary(sess.drive.result[])
+        cavity_summary(sess.drive)
+        element_values(sess.drive.result[], :incident)
         for task in TASKS
             task_status(sess, task)
         end

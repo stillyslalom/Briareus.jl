@@ -145,10 +145,13 @@ function _connect!(sess::DesignSession)
     end
     on(_ -> _request_evaluation!(sess), dr.spot_radius)
     onany((_...) -> _drive_inputs_changed!(sess), dr.cavity, dr.cavity_point, dr.films)
-    # a drive asked for while CAD parts remeshed runs when they are ready
-    on(ts.pending) do pend
-        isempty(pend) && sess.build_queued[] && (sess.build_queued[] = false; build_scenario!(sess))
+    # a drive asked for while CAD parts remeshed, the target was built or a capsule was
+    # fitted runs when the target is ready
+    onany(ts.pending, ts.building, ts.fitting) do _...
+        target_ready(ts) && sess.build_queued[] && (sess.build_queued[] = false; build_scenario!(sess))
     end
+    # inputs committed whose target is still being built: the drive is not current
+    on(b -> b && _drive_inputs_changed!(sess), ts.building)
     # the x-ray image follows the drive
     on(dr.result) do res
         dr.image_request[] === nothing && return
@@ -185,6 +188,7 @@ releases them.
 """
 function aim_at_component!(sess::DesignSession, idx, name::Symbol)
     name === :none && return (set_aim_reference!(sess.beams, idx, :none); sess)
+    await_target!(sess.target)
     pts = component_points(sess.target.target[])
     haskey(pts, name) || throw(ArgumentError("no component $name in the calculations"))
     set_aim_reference!(sess.beams, idx, name, pts[name])
@@ -290,12 +294,13 @@ end
     drive_stale(sess::DesignSession) -> Bool
 
 Whether the scenario was built for another target or other beam ports (it must be
-computed again). `false` before the first build.
+computed again), or the target of the design is still being built. `false` before the
+first build.
 """
 function drive_stale(sess::DesignSession)
     k = sess.drive.key[]
     k === nothing && return false
-    return k[1] !== sess.target.target[] || k[2] != _ports(sess.beams.beams[]) ||
+    return sess.target.building[] || k[1] !== sess.target.target[] || k[2] != _ports(sess.beams.beams[]) ||
            k[3] != _cavity_key(sess.drive)
 end
 
@@ -328,21 +333,22 @@ the laser deposition alone, and `status` says why and what to do.
 """
 function build_scenario!(sess::DesignSession)
     dr = sess.drive
-    t = sess.target.target[]
     beams = sess.beams.beams[]
     isempty(beams) && (dr.status[] = "add beams first"; return sess)
-    pend = sess.target.pending[]
-    # parts left remeshing when a window closed: mesh them now
-    !isempty(pend) && !sess.spawn[] && _try_build!(sess.target)
-    pend = sess.target.pending[]
-    if !isempty(pend)
+    ts = sess.target
+    # parts left remeshing, or a target left building, when a window closed: now
+    sess.spawn[] || await_target!(ts)
+    if !target_ready(ts)
         sess.build_queued[] = true
         dr.generation[] += 1                              # drop a build in flight
         dr.building[] = false
-        dr.status[] = "waiting for " * join(sort!(String.(collect(pend))), ", ") *
-                      " to be remeshed, then computing"
+        pend = ts.pending[]
+        dr.status[] = !isempty(pend) ?
+                      "waiting for " * join(sort!(String.(collect(pend))), ", ") * " to be remeshed, then computing" :
+                      "waiting for the target (" * target_waiting(ts) * "), then computing"
         return sess
     end
+    t = ts.target[]
     sess.build_queued[] = false
     g = (dr.generation[] += 1)
     cavity = dr.cavity[] ? (dr.cavity_point[], copy(dr.films[])) : nothing
@@ -351,6 +357,7 @@ function build_scenario!(sess::DesignSession)
     dr.status[] = cavity !== nothing ? "selecting the cavity, then its view factors…" :
                   radiation_size(t).feasible ? "computing view factors…" :
                   "computing the laser deposition (too many elements for the x-ray view factors)…"
+    dr.status[] *= _facet_note(t)
     runner = _runner(sess.spawn, sess.deliver)
     t0 = time()
     closed = _closed_enclosure(sess.target)
@@ -383,7 +390,7 @@ function build_scenario!(sess::DesignSession)
                        "left out of the cavity as a thin film (Properties)") *
                       (enc !== nothing && cavity_sealed(dr) ?
                        " · the cavity is a sealed pocket: mark the film that closes it (Properties ▸ Thin film)" : "") *
-                      (s.model === nothing ? _radiation_note(s.target) : "")
+                      (s.model === nothing ? _radiation_note(s.target) : _facet_note(s.target))
         _request_evaluation!(sess)
     end)
     return sess
@@ -444,6 +451,32 @@ function _radiation_note(t::Target)
            "or give the CAD parts a larger element size"
 end
 _radiation_note(sess::DesignSession) = _radiation_note(sess.target.target[])
+
+"""
+Flat elements (no fitted surface) carrying more facets than this on average make a
+component's view factors slow: a curved CAD face cut into slivers. The drive's status
+names such components ([`build_scenario!`](@ref)).
+"""
+const SLOW_FACETS_PER_ELEMENT = 50
+
+# Why the view factors may be slow ("" when nothing stands out): flat components whose
+# elements carry many facets each (≈ 20× the cost of the same tube fitted, research notes).
+function _facet_note(t::Target)
+    ne = zeros(Int, length(t.components))
+    nt = zeros(Int, length(t.components))
+    for e in 1:nelements(t)
+        ne[t.elem_comp[e]] += 1
+    end
+    for k in eachindex(t.tri_comp)
+        nt[t.tri_comp[k]] += 1
+    end
+    slow = [(c.name, nt[i] / ne[i]) for (i, c) in enumerate(t.components)
+            if c.surface === nothing && c.kind === :surface && ne[i] > 0 && nt[i] / ne[i] > SLOW_FACETS_PER_ELEMENT]
+    isempty(slow) && return ""
+    return " · slow view factors: " * join((@sprintf("%s (%.0f facets per element)", n, f) for (n, f) in slow), ", ") *
+           ": a curved face tessellated in slivers on the flat path (a part that is one cylinder or sphere " *
+           "is fitted to it; one of several faces is not)"
+end
 
 # Evaluate the table's current pointing on the scenario (latest request wins).
 function _request_evaluation!(sess::DesignSession)
@@ -661,6 +694,7 @@ parts. Apertures (entrance holes, open windows) are written as their own solids 
 """
 function export_target_stl(sess::DesignSession, path::AbstractString; binary::Bool = true,
                            apertures::Bool = true)
+    await_target!(sess.target)
     t = sess.target.target[]
     write_stl(path, t; binary, apertures)
     sess.status[] = "wrote the target ($(length(t.components)) components, $(length(t.tri_area)) " *
@@ -909,7 +943,8 @@ Check the enabled beams' clearance from the selected hardware (see
 [`start_clearance!(::ReviewState, …)`](@ref start_clearance!)).
 """
 start_clearance!(sess::DesignSession; spawn::Bool = true, batch::Integer = review_batch()) =
-    (start_clearance!(sess.review, sess.target.target[], active_beams(sess.beams);
+    (await_target!(sess.target);
+     start_clearance!(sess.review, sess.target.target[], active_beams(sess.beams);
                       deliver = sess.deliver[], spawn, batch); sess)
 
 cancel_clearance!(sess::DesignSession) = cancel_clearance!(sess.review)
@@ -921,7 +956,8 @@ Run the TaLIS checks on the enabled beams with the clearance check's error stack
 [`start_talis!(::TaLISState, …)`](@ref start_talis!)).
 """
 start_talis!(sess::DesignSession; spawn::Bool = true) =
-    (start_talis!(sess.talis, sess.review, sess.target.target[], active_beams(sess.beams);
+    (await_target!(sess.target);
+     start_talis!(sess.talis, sess.review, sess.target.target[], active_beams(sess.beams);
                   deliver = sess.deliver[], spawn); sess)
 
 cancel_talis!(sess::DesignSession) = (cancel_talis!(sess.talis); sess)
@@ -950,7 +986,13 @@ load_preset!(sess::DesignSession, preset::Symbol) =
 function _abandon_jobs!(sess::DesignSession)
     sess.mesh_generation[] += 1
     _assign!(sess.meshing, "")
-    sess.target.mesh_job[] += 1            # parts still remeshing stay `pending`
+    # parts still remeshing stay `pending`, and a target being built `building`: the
+    # drive and the checks finish them inline (`await_target!`); capsule fits are dropped
+    sess.target.mesh_job[] += 1
+    isempty(sess.target.fitting[]) ||
+        (sess.status[] = "the capsule fit of " * join(sort!(String.(collect(sess.target.fitting[]))), ", ") *
+                         " was abandoned when the window closed: give the role again")
+    _cancel_fits!(sess.target)
     sess.build_queued[] = false
     sess.drive.generation[] += 1
     sess.drive.eval_generation[] += 1

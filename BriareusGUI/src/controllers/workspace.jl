@@ -132,6 +132,7 @@ function restore!(sess::DesignSession, state::AbstractDict)
                               coords = Symbol(get(p, "coords", "cartesian")),
                               object = get(p, "object", ""))
                      for p in t["parts"]]
+    _cancel_fits!(ts)                     # a capsule fit in flight was for another design
     _try_build!(ts; kind = Symbol(t["kind"]), params, mesh, windows, parts,
                 excluded = Set(_syms(get(t, "excluded", String[])))) ||
         throw(ArgumentError("the saved target was rejected: $(ts.error[])"))
@@ -163,10 +164,24 @@ function restore!(sess::DesignSession, state::AbstractDict)
             _assign!(obs, convert(typeof(obs[]), o[String(k)]))
         end
     end
+    # the checks' component roles once the saved design's target is in place (a target
+    # built on a worker would otherwise give its new components their default roles)
+    roles = function ()
+        if haskey(state, "review")
+            r = state["review"]
+            _assign!(sess.review.targets, _syms(r["targets"]))
+            _assign!(sess.review.hardware, _syms(r["hardware"]))
+        end
+        if haskey(state, "talis")
+            c = state["talis"]
+            _assign!(sess.talis.capture, _syms(c["capture"]))
+            _assign!(sess.talis.hardware, _syms(c["hardware"]))
+        end
+    end
+    roles()
+    _after_build!(roles, ts)
     if haskey(state, "review")
         r, rv = state["review"], sess.review
-        _assign!(rv.targets, _syms(r["targets"]))
-        _assign!(rv.hardware, _syms(r["hardware"]))
         _assign!(rv.peak_fraction, Float64(r["peak_fraction"]))
         _assign!(rv.wings, r["wings"])
         _assign!(rv.errors, Dict{Symbol,Float64}(Symbol(k) => v for (k, v) in r["errors"]))
@@ -174,8 +189,6 @@ function restore!(sess::DesignSession, state::AbstractDict)
     end
     if haskey(state, "talis")
         c, tl = state["talis"], sess.talis
-        _assign!(tl.capture, _syms(c["capture"]))
-        _assign!(tl.hardware, _syms(c["hardware"]))
         _assign!(tl.tolerance, Float64(c["tolerance"]))
         _assign!(tl.pivot, Symbol(c["pivot"]))
         _assign!(tl.pivot_point, Tuple(Float64.(c["pivot_point"])))

@@ -300,11 +300,37 @@ end
 
 _same(a, b) = all(f -> getfield(a, f) == getfield(b, f), fieldnames(typeof(a)))
 
-# Replace the rows of an item model: in place when the count is unchanged (only
-# changed rows are re-sent), otherwise with a full reset. `new` may be an empty
-# comprehension whose eltype inference gave up on (`Vector{Union{}}`).
+# How many leading rows of `old` and `new` are the same nodes (equal first fields): rows
+# are inserted or removed after them.
+function _common_lead(old::AbstractVector, new::AbstractVector)
+    p = 0
+    while p < min(length(old), length(new)) && getfield(old[p+1], 1) == getfield(new[p+1], 1)
+        p += 1
+    end
+    return p
+end
+
+# Replace the rows of an item model: only changed rows are re-sent, and a change in the
+# count inserts or removes rows where the old and new rows part (aligned on their first
+# field: a tree node's id), so the view keeps the delegates of the others. A full reset
+# rebuilt every delegate of the model tree: 0.2 s on a CAD workspace each time a node
+# was expanded or a part added. `new` may be an empty comprehension whose eltype
+# inference gave up on (`Vector{Union{}}`).
 function _sync_rows!(rows::Vector{R}, model::JuliaItemModel, new::AbstractVector) where {R}
     new = convert(Vector{R}, new)
+    n, m = length(rows), length(new)
+    if n != m && n > 0 && m > 0
+        p = _common_lead(rows, new)
+        if m > n
+            QML.begin_insert_rows(model, p + 1, p + m - n)
+            for k in 1:m-n
+                insert!(rows, p + k, new[p+k])
+            end
+            QML.@deferredcall QML.end_insert_rows(model)
+        else
+            QML.remove_rows!(model, p + 1, n - m)
+        end
+    end
     if length(new) == length(rows)
         for (i, r) in enumerate(new)
             _same(rows[i], r) && continue
@@ -401,7 +427,7 @@ function BriareusShell(sess::DesignSession; queue::Channel{Any} = Channel{Any}(I
     ts, bt, dr, st, rv, tl, v = sess.target, sess.beams, sess.drive, sess.optimize, sess.review,
                                 sess.talis, sess.view
     for obs in (sess.status, sess.meshing, ts.kind, ts.params, ts.mesh, ts.resolution, ts.windows, ts.parts,
-                ts.target, ts.error, ts.pending,
+                ts.target, ts.error, ts.pending, ts.building, ts.fitting,
                 bt.beams, bt.enabled, bt.preset, bt.by, bt.path, bt.error, bt.warnings,
                 dr.scenario, dr.building, dr.result, dr.evaluating, dr.field, dr.view,
                 dr.cavity, dr.cavity_point, dr.films,
@@ -487,8 +513,8 @@ function _refresh_view!(sh::BriareusShell)
     busy = String[]
     dr, st, rv, tl = sh.sess.drive, sh.sess.optimize, sh.sess.review, sh.sess.talis
     isempty(sh.sess.meshing[]) || push!(busy, sh.sess.meshing[])
-    pend = sh.sess.target.pending[]
-    isempty(pend) || push!(busy, "remeshing " * join(sort!(String.(collect(pend))), ", "))
+    waiting = Controllers.target_waiting(sh.sess.target)
+    isempty(waiting) || push!(busy, waiting)
     dr.building[] && push!(busy, "drive " * Controllers._seconds(time() - dr.started[]))
     st.running[] && push!(busy, "optimizing")
     rv.running[] && push!(busy, "clearance $(rv.progress[][1])/$(rv.progress[][2])")
@@ -923,7 +949,7 @@ function br_tick()
         _refresh!(sh)
         _LAST_REFRESH[] = time()
     elseif (sess.drive.building[] || sess.optimize.running[] || sess.review.running[] ||
-            sess.talis.running[] || !isempty(sess.target.pending[])) && time() - _LAST_REFRESH[] > 0.25
+            sess.talis.running[] || !target_ready(sess.target)) && time() - _LAST_REFRESH[] > 0.25
         # running jobs report elapsed time, four times a second (not a design edit: a
         # snapshot for undo every tick took a third of the GUI thread during a drive)
         _refresh!(sh)
@@ -1153,12 +1179,18 @@ function br_part_role(index)
         isempty(idx) && return
         ts = sh.sess.target
         role = PART_ROLES[Int(index)+1]
-        if set_part_role!(ts, idx[1], role)
-            # a CAD part made the capsule: the fitted sphere is the capsule
-            p = role === :capsule && part_role(ts.parts[][idx[1]]) !== :capsule ?
-                ts.parts[][part_index(ts, :capsule)] : ts.parts[][idx[1]]
+        name = ts.parts[][idx[1]].name
+        # once given (a CAD capsule's sphere may be fitted on a worker first): select the
+        # part holding the role, the fitted sphere for a CAD capsule
+        done = function ()
+            i = role === :none ? nothing : part_index(ts, Controllers._ROLE_NAMES[role])
+            p = i === nothing ? ts.parts[][something(part_index(ts, name), idx[1])] : ts.parts[][i]
             select!(sh.sess.view, "part:" * String(p.name))
             sh.sess.status[] = "$(p.name): " * lowercase(PART_ROLE_LABELS[part_role(p)])
+            sh.dirty[] = true
+        end
+        if set_part_role!(ts, idx[1], role; done)
+            name in ts.fitting[] && (sh.sess.status[] = "$name: fitting the capsule's sphere…")
         else
             delete!(sh.shown, "partRole")
         end
@@ -1572,6 +1604,10 @@ function briareus(sess::Union{Nothing,DesignSession} = nothing; kind::Symbol = :
         Controllers._abandon_jobs!(sess)
         sess.deliver[] = previous_deliver
         sess.spawn[] = previous_spawn
+        # a target left building: the session returned holds the design's (parts left
+        # remeshing are meshed when the drive asks)
+        ts = sess.target
+        ts.building[] && isempty(ts.pending[]) && await_target!(ts)
         _release_qml_screens!()
     end
     return sess

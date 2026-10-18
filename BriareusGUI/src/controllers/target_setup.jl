@@ -401,7 +401,8 @@ function _part_components(p::PartSpec, h::Real, frame, raw::Bool)
         # facing the target center, remeshed into elements of the part's size
         toward = transpose(R) * (zero(Vec3) - center)
         m = _stl_mesh(p, hp, toward; raw)
-        surf = nothing
+        # a part that is one cylinder or sphere (a tube, a shell) gets it for the view factors
+        surf = raw ? nothing : _whole_surface(m, _stl_mesh(p, hp, toward; raw = true))
     elseif k === :cylinder
         r, L = v[:r1], v[:length]
         m = cylinder_mesh(r, -L / 2, L / 2; nz = _count(L, hp), nphi = _count(2π * r, hp; min = 8, multiple = 4),
@@ -483,6 +484,12 @@ function _visrad_components(p::PartSpec, h, toward; raw::Bool = false)
              visrad_component(o; material = mat, two_sided = p.two_sided, orient = !p.two_sided,
                               toward, remesh = cad ? h : nothing, primitive_h = ph)
         isempty(cs) && throw(ArgumentError("$(p.name): VisRad object type $(o.type) is not supported"))
+        # a CAD part that is one cylinder or sphere (a tube, a shell) gets it for the view
+        # factors, fitted on its file's facets
+        if cad && !raw
+            ref = visrad_component(o; material = mat, two_sided = p.two_sided)
+            cs = [length(ref) == 1 ? _with_surface(c, _whole_surface(c.mesh, only(ref).mesh)) : c for c in cs]
+        end
         # components carry the part's name (renamed, or given a role), not the object's
         String(p.name) == o.name ? cs :
         [Component(String(p.name) * String(c.name)[ncodeunits(o.name)+1:end], c.mesh, c.material;
@@ -559,6 +566,77 @@ function _stl_mesh(p::PartSpec, h, toward; raw::Bool = false)
         p.inward ? Mesh(m.vertices, [(a, c, b) for (a, b, c) in m.triangles], m.patches) : m
     end
 end
+
+"""
+    _whole_surface(mesh, reference) -> Union{Nothing,CylinderSurface,SphereSurface}
+
+The cylinder or sphere a remeshed CAD part lies on when the whole part is one
+(`fit_surfaces` on its file's facets, `reference`, whose vertices lie on the true
+surface; every element of `mesh` in that one region), else `nothing`. The part then
+keeps its name and its elements and is integrated on the true surface: a tube or shell
+tessellated in slivers otherwise carries hundreds of facets per element, and its view
+factors cost ~20× more on the flat path (research notes, "Finely faceted curved CAD on
+the flat path"). A part of several faces (a hohlraum half: its bore, walls, ends) is
+left flat: `curved_components` would split it into renamed pieces, while the window
+keys exclusions, films and the cavity's account on part names.
+"""
+function _whole_surface(m::Mesh, ref::Mesh)
+    npatches(m) >= 6 && length(ref.triangles) >= 6 || return nothing
+    # `fit_surfaces` grows every face of a part (minutes for a 4 × 10⁴-facet CAD capsule
+    # with its fill tube): only a part whose vertices are all on one sphere or cylinder
+    # is worth it
+    _on_one_surface(ref) || return nothing
+    regs = try
+        fit_surfaces(m; reference = ref, kinds = (:cylinder, :sphere))
+    catch err
+        err isa ArgumentError || rethrow()
+        return nothing
+    end
+    length(regs) == 1 && length(regs[1].patches) == npatches(m) || return nothing
+    s = regs[1].surface
+    # a nearly flat part fits a sphere or cylinder of any large radius; visibility ignores
+    # a curved part's facets between points inside it, so only a true tube or shell counts
+    lo, hi = extrema(v -> v[1], ref.vertices), extrema(v -> v[2], ref.vertices)
+    zl = extrema(v -> v[3], ref.vertices)
+    extent = hypot(lo[2] - lo[1], hi[2] - hi[1], zl[2] - zl[1])
+    return s !== nothing && s.radius <= extent ? s : nothing
+end
+
+# Whether every vertex of `m` lies on one sphere or one cylinder, within twice
+# `fit_surfaces`' default tolerance (max(0.1 µm, 10⁻³ R)): algebraic least-squares fits to
+# all vertices, the cylinder's axis the direction the facet normals are all
+# perpendicular to. Milliseconds for 10⁵ vertices.
+function _on_one_surface(m::Mesh)
+    P = unique(m.vertices)
+    length(P) >= 6 || return false
+    tol(r) = 2 * max(1e-4, 1e-3 * r)
+    # sphere: |p|² = 2 c·p + (r² − |c|²)
+    A = [2p[k] for p in P, k in 1:3]
+    x = [A ones(length(P))] \ [dot(p, p) for p in P]
+    c = Vec3(x[1], x[2], x[3])
+    r = sqrt(max(x[4] + dot(c, c), 0.0))
+    r > 0 && maximum(p -> abs(norm(p - c) - r), P) <= tol(r) && return true
+    # cylinder: the facet normals span the plane across the axis
+    M = zeros(3, 3)
+    for (a, b, d) in m.triangles
+        n = cross(m.vertices[b] - m.vertices[a], m.vertices[d] - m.vertices[a])   # area-weighted
+        M .+= n * transpose(n) ./ max(norm(n), eps())
+    end
+    F = eigen(Symmetric(M))
+    F.values[1] <= 1e-3 * F.values[3] || return false
+    ax = Vec3(F.vectors[:, 1]...)
+    e1 = Vec3(F.vectors[:, 2]...)
+    e2 = Vec3(F.vectors[:, 3]...)
+    U = [dot(p, e1) for p in P]
+    V = [dot(p, e2) for p in P]
+    y = [2U 2V ones(length(P))] \ (U .^ 2 .+ V .^ 2)
+    rc = sqrt(max(y[3] + y[1]^2 + y[2]^2, 0.0))
+    return rc > 0 && maximum(k -> abs(hypot(U[k] - y[1], V[k] - y[2]) - rc), eachindex(P)) <= tol(rc)
+end
+
+_with_surface(c::Component, surf) =
+    surf === nothing ? c : Component(c.name, c.mesh, c.material; kind = c.kind, two_sided = c.two_sided,
+                                     surface = surf)
 
 # The solids of a multi-solid (ASCII) STL file, read once per version.
 const _STL_SOLIDS = Dict{Any,Vector{Pair{String,Mesh}}}()
@@ -652,7 +730,7 @@ function add_stl_parts!(ts, file::AbstractString; values...)      # ts::TargetSe
         return false
     end
     length(solids) <= 1 && return add_part!(ts, :mesh; file, values...)
-    taken = Set(all_component_names(ts))
+    taken = union(Set(all_component_names(ts)), (p.name for p in ts.parts[]))
     parts = copy(ts.parts[])
     vals = Dict{Symbol,Float64}(k => Float64(v) for (k, v) in values)
     for (k, (sname, _)) in enumerate(solids)
@@ -692,6 +770,15 @@ drawn from their file's facets, `pending` names them, and the target is built ag
 from the current design when they are ready (through `deliver[]`, on the GUI thread).
 Without it the edit waits for the meshing.
 
+Building the `Target` itself (its BVH and element tables) takes a second for 10⁵
+triangles, so with `spawn[]` a target of more than [`BACKGROUND_TRIANGLES`](@ref)
+triangles that has not been built before is built on a worker too: the edit's inputs
+(`parts`, `params`, …) are committed at once, `target` and `ghost` keep the previous
+design's until the new ones are ready, and `building` is set meanwhile. A CAD part
+given the role of the capsule has its sphere fitted on a worker as well (`fitting`
+names it; the role is committed with the fit). The drive and the checks wait for both
+([`target_ready`](@ref)).
+
 Edit with [`set_target_kind!`](@ref), [`edit_target!`](@ref),
 [`set_resolution!`](@ref), [`edit_mesh!`](@ref), the window functions
 ([`add_window!`](@ref), …) and the part functions ([`add_part!`](@ref), …).
@@ -710,7 +797,11 @@ struct TargetSetup
     pending::Observable{Set{Symbol}}       # CAD parts being remeshed (drawn from their facets)
     spawn::Base.RefValue{Bool}             # remesh on workers (a window's session sets it)
     deliver::Base.RefValue{Any}            # hands a worker's result to the GUI thread
-    mesh_job::Base.RefValue{Int}           # the latest remeshing job (earlier ones are dropped)
+    mesh_job::Base.RefValue{Int}           # the latest remeshing or build job (earlier ones are dropped)
+    building::Observable{Bool}             # the target of the committed inputs is being built
+    fitting::Observable{Set{Symbol}}       # CAD parts whose capsule sphere is being fitted
+    fit_jobs::Dict{Symbol,Int}             # their jobs (a fit whose job is gone is dropped)
+    after_build::Vector{Any}               # run once the target being built is committed
 end
 
 function TargetSetup(; kind::Symbol = :hohlraum, resolution::Symbol = :standard,
@@ -732,7 +823,54 @@ function TargetSetup(; kind::Symbol = :hohlraum, resolution::Symbol = :standard,
                        Observable(_preset_of(mesh)), Observable(ws), Observable(ps),
                        Observable(t), Observable(""), Observable(Set{Symbol}()),
                        Observable{Union{Nothing,Target}}(nothing), Observable(Set{Symbol}()),
-                       Ref(false), Ref{Any}(f -> f()), Ref(0))
+                       Ref(false), Ref{Any}(f -> f()), Ref(0), Observable(false),
+                       Observable(Set{Symbol}()), Dict{Symbol,Int}(), Any[])
+end
+
+"""
+Targets of more triangles than this (≈ 30 ms to build) are built on a worker in a window
+(see [`TargetSetup`](@ref)); smaller ones, such as the templates' meshes, at once. Set it
+to change the threshold for a session (tests set 0).
+"""
+const BACKGROUND_TRIANGLES = Ref(30_000)
+
+"""
+    target_ready(ts::TargetSetup) -> Bool
+
+Whether `target` is the target of the committed design: no CAD part is being remeshed
+(`pending`), no target is being built (`building`) and no capsule sphere is being
+fitted (`fitting`). The drive and the checks wait for it in a window.
+"""
+target_ready(ts::TargetSetup) = isempty(ts.pending[]) && !ts.building[] && isempty(ts.fitting[])
+
+# What the target is waiting for, for status lines ("" when ready).
+function target_waiting(ts::TargetSetup)
+    out = String[]
+    isempty(ts.pending[]) || push!(out, "remeshing " * join(sort!(String.(collect(ts.pending[]))), ", "))
+    isempty(ts.fitting[]) ||
+        push!(out, "fitting the capsule to " * join(sort!(String.(collect(ts.fitting[]))), ", "))
+    ts.building[] && isempty(ts.pending[]) && push!(out, "building the target")
+    return join(out, " · ")
+end
+
+# Run `f()` once the target of the committed design is in `target` (at once if it is).
+function _after_build!(f, ts::TargetSetup)
+    ts.building[] ? push!(ts.after_build, f) : f()
+    return nothing
+end
+
+"""
+    await_target!(ts::TargetSetup) -> Bool
+
+Make `target` the committed design's now if a worker is still building it (the build
+in flight is waited for, not repeated), as the checks that read it need. CAD parts
+still remeshing stay `pending` (their facets are drawn) unless the session no longer
+spawns jobs (a closed window), when they are meshed here. Returns whether the target
+is current.
+"""
+function await_target!(ts::TargetSetup)
+    (ts.building[] || (!ts.spawn[] && !isempty(ts.pending[]))) || return true
+    return _try_build!(ts; sync = true)
 end
 
 """
@@ -807,27 +945,27 @@ end
 # The `Target` of `comps`, built once for the same components (identical objects): the
 # few latest are kept, so an edit to a part left out of the calculations, or an undo,
 # finds its targets again (a NIF CAD workspace's take a second to build: BVHs of
-# 2 × 10⁵ facets).
-const _TARGETS = Pair{Vector{Component},Target}[]
-const _TARGETS_KEPT = 4
+# 2 × 10⁵ facets). A target being built on a worker is waited for, not built twice.
+# Keyed by the components' object ids: the entry holds the components, so no other
+# object takes their ids while it is kept.
+const _TARGETS = Dict{Vector{UInt},Pair{Vector{Component},Target}}()
+const _TARGETS_ORDER = Vector{UInt}[]          # least recently used first
+const _TARGETS_KEPT = 6                        # calculation targets and ghosts of 3 designs
+
+_target_key(comps::Vector{Component}) = UInt[objectid(c) for c in comps]
+_target_built(comps::Vector{Component}) = _iscached(_TARGETS, _target_key(comps))
 
 function _target_of(comps::Vector{Component})
-    same(e) = length(e.first) == length(comps) && all(k -> e.first[k] === comps[k], eachindex(comps))
-    t = lock(_STL_LOCK) do
-        i = findlast(same, _TARGETS)
-        i === nothing && return nothing
-        e = _TARGETS[i]
-        deleteat!(_TARGETS, i)                 # the most recently used last
-        push!(_TARGETS, e)
-        return e.second
-    end
-    t === nothing || return t
-    t = Target(comps)
+    key = _target_key(comps)
+    e = _cached(() -> comps => Target(comps), _TARGETS, key)
     lock(_STL_LOCK) do
-        push!(_TARGETS, comps => t)
-        length(_TARGETS) > _TARGETS_KEPT && popfirst!(_TARGETS)
+        filter!(!=(key), _TARGETS_ORDER)
+        push!(_TARGETS_ORDER, key)
+        while length(_TARGETS_ORDER) > _TARGETS_KEPT
+            delete!(_TARGETS, popfirst!(_TARGETS_ORDER))
+        end
     end
-    return t
+    return e.second
 end
 
 """
@@ -841,31 +979,54 @@ foil_center(ts::TargetSetup) = foil_center(ts.params[])
 # A design's components split into the target of those in the calculations and that of
 # those left out (`excluded`, drawn as a ghost: `nothing` when none is).
 function _split_components(comps::Vector{Component}, excluded)
+    keep, gh = _split_lists(comps, excluded)
+    return _targets_of(keep, gh)
+end
+
+# The components in the calculations and those left out (`nothing` when none is).
+function _split_lists(comps::Vector{Component}, excluded)
     keep = [c for c in comps if !(c.name in excluded)]
     isempty(keep) && throw(ArgumentError("every component is left out of the calculations"))
-    length(keep) == length(comps) && return _target_of(keep), nothing
-    return _target_of(keep), _target_of([c for c in comps if c.name in excluded])
+    length(keep) == length(comps) && return keep, nothing
+    return keep, [c for c in comps if c.name in excluded]
+end
+
+_targets_of(keep, gh) = _target_of(keep), gh === nothing ? nothing : _target_of(gh)
+
+# Whether building the targets of these lists is worth a worker: not built yet, and
+# more than `BACKGROUND_TRIANGLES` triangles to build.
+function _build_later(keep, gh)
+    n = 0
+    for cs in (keep, gh)
+        (cs === nothing || _target_built(cs)) && continue
+        n += sum(c -> length(c.mesh.triangles), cs; init = 0)
+    end
+    return n > 0 && n > BACKGROUND_TRIANGLES[]
 end
 
 # Rebuild with changed inputs, committing them only if the geometry accepts them.
 # `prebuilt` is the `(target, ghost)` of exactly these inputs when a worker built it
 # already ([`import_visrad_workspace!`](@ref)). With `spawn[]`, CAD parts not meshed yet
 # are drawn from their file's facets and meshed on workers (`pending`), and the target
-# is built again when they are ready.
+# is built again when they are ready; a large target not built before is built on a
+# worker (`building`) unless `sync`, the inputs committed at once.
 function _try_build!(ts::TargetSetup; kind = ts.kind[], params = ts.params[], mesh = ts.mesh[],
                      windows = ts.windows[], parts = ts.parts[], excluded = ts.excluded[],
-                     prebuilt = nothing)
+                     prebuilt = nothing, sync::Bool = !ts.spawn[])
     try
         waiting = prebuilt === nothing && ts.spawn[] ?
                   _unmeshed_parts(kind, params, mesh, parts, excluded) : Symbol[]
         # components left out of the calculations (those still in the target)
-        t, ghost = prebuilt === nothing ?
-                   _split_components(_target_components(kind, params, mesh, windows, parts;
-                                                        raw = union(Set{Symbol}(excluded), waiting)),
-                                     excluded) :
-                   prebuilt
+        built, lists = if prebuilt === nothing
+            keep, gh = _split_lists(_target_components(kind, params, mesh, windows, parts;
+                                                       raw = union(Set{Symbol}(excluded), waiting)),
+                                    excluded)
+            !sync && _build_later(keep, gh) ? (nothing, (keep, gh)) : (_targets_of(keep, gh), nothing)
+        else
+            prebuilt, nothing
+        end
         _assign!(ts.excluded, Set{Symbol}(excluded))
-        ts.ghost[] === ghost || (ts.ghost[] = ghost)
+        built === nothing || (ts.ghost[] === built[2] || (ts.ghost[] = built[2]))
         kind == ts.kind[] || (ts.kind[] = kind)
         params === ts.params[] || (ts.params[] = params)
         if mesh != ts.mesh[]
@@ -874,10 +1035,20 @@ function _try_build!(ts::TargetSetup; kind = ts.kind[], params = ts.params[], me
         end
         windows === ts.windows[] || (ts.windows[] = windows)
         parts === ts.parts[] || (ts.parts[] = parts)
-        t === ts.target[] || (ts.target[] = t)
+        g = (ts.mesh_job[] += 1)                  # a meshing or build job for earlier inputs is dropped
         ts.error[] = ""
-        g = (ts.mesh_job[] += 1)                  # a meshing job for earlier inputs is dropped
-        _assign!(ts.pending, Set{Symbol}(waiting))
+        if built === nothing
+            # the target and ghost of the previous inputs stay until these are built
+            _assign!(ts.building, true)
+            _assign!(ts.pending, Set{Symbol}(waiting))
+            deliver = ts.deliver[]
+            _run_job(() -> (out = _try_job(() -> _targets_of(lists...)); deliver(() -> _built!(ts, g, out))),
+                     true)
+        else
+            built[1] === ts.target[] || (ts.target[] = built[1])
+            _assign!(ts.pending, Set{Symbol}(waiting))
+            _built_now!(ts)
+        end
         isempty(waiting) || _mesh_in_background!(ts, g, waiting, kind, params, mesh, parts)
         return true
     catch err
@@ -885,6 +1056,32 @@ function _try_build!(ts::TargetSetup; kind = ts.kind[], params = ts.params[], me
         ts.error[] = _errmsg(err)
         return false
     end
+end
+
+# A worker built the target of job `g`: commit it unless a later edit superseded it.
+function _built!(ts::TargetSetup, g::Integer, out)
+    g == ts.mesh_job[] || return false
+    if out.err !== nothing                       # (a bug: the inputs were checked)
+        ts.error[] = "building the target failed: " * _errmsg(out.err)
+        empty!(ts.after_build)
+        _assign!(ts.building, false)
+        return false
+    end
+    t, ghost = out.value
+    ts.ghost[] === ghost || (ts.ghost[] = ghost)
+    t === ts.target[] || (ts.target[] = t)
+    _built_now!(ts)
+    return true
+end
+
+# The target of the committed design is in place: run what waited for it.
+function _built_now!(ts::TargetSetup)
+    _assign!(ts.building, false)
+    isempty(ts.after_build) && return
+    fs = copy(ts.after_build)
+    empty!(ts.after_build)
+    foreach(f -> f(), fs)
+    return
 end
 
 # Mesh the parts `names` on workers, then build the target again from the design as it
@@ -1040,7 +1237,10 @@ function add_window!(ts::TargetSetup; kwargs...)
     for φ in (90.0, 270.0, 0.0, 180.0, 45.0, 135.0, 225.0, 315.0)
         ws = [ts.windows[]; WindowSpec(; base..., phi = φ, kwargs...)]
         try
-            ts.kind[] === :hohlraum && build_target(ts.kind[], p, ts.mesh[], ws, ts.parts[])
+            # the windows are checked as the wall is meshed (no target to build, no CAD
+            # part to remesh: those are drawn from their facets here)
+            ts.kind[] === :hohlraum && _target_components(ts.kind[], p, ts.mesh[], ws, ts.parts[];
+                                                          raw = Set(q.name for q in ts.parts[]))
         catch err
             err isa ArgumentError || rethrow()
             continue
@@ -1148,7 +1348,8 @@ target's; `remesh_mesh`). A part the geometry rejects sets `error` and returns `
 function add_part!(ts::TargetSetup, kind::Symbol; name = nothing, two_sided::Bool = false,
                    inward::Bool = false, aperture::Bool = false, file::AbstractString = "",
                    anchor::Symbol = :tcc, values...)
-    taken = Set(component_names(ts.target[]))
+    # (the parts too: the target may still be the previous design's, being built)
+    taken = union(Set(component_names(ts.target[])), (p.name for p in ts.parts[]))
     if name === nothing
         k = 1
         while Symbol(kind, :_, k) in taken
@@ -1325,7 +1526,7 @@ function _plain_name(p::PartSpec, taken)
 end
 
 """
-    set_part_role!(ts::TargetSetup, i, role::Symbol) -> Bool
+    set_part_role!(ts::TargetSetup, i, role::Symbol; done = () -> nothing) -> Bool
 
 Give part `i` a role in the analyses (one of [`PART_ROLES`](@ref)) by naming it as the
 drive and the optimizer expect: `:capsule` or `:foil` (a disk, rectangle or mesh, or a
@@ -1338,21 +1539,24 @@ conversion the part's), and left out of the calculations itself. A part that hel
 role gives it up (back to its own name); `:none` renames the part to its own name (a
 VisRad object's, or its kind and a number). Parts placed in its frame follow. A role
 the part cannot take, or one a template component already holds (a hohlraum's
-capsule, a foil target's foil), sets `error` and returns `false`.
+capsule, a foil target's foil), sets `error` and returns `false`. In a window
+(`spawn[]`) a large CAD capsule is fitted on a worker (see [`TargetSetup`](@ref)):
+`true` then means the fit is under way, and `done()` runs once the role is given (at
+once otherwise).
 """
-function set_part_role!(ts::TargetSetup, i::Integer, role::Symbol)
+function set_part_role!(ts::TargetSetup, i::Integer, role::Symbol; done = () -> nothing)
     _check_part_index(ts, i)
     role in PART_ROLES || throw(ArgumentError("a part's role must be one of $PART_ROLES"))
     ps = copy(ts.parts[])
     p = ps[i]
-    part_role(p) === role && return true
+    part_role(p) === role && (done(); return true)
     ex = copy(ts.excluded[])
     try
         shape = _part_shape(p)
         if role === :capsule && shape !== :sphere
             shape === :mesh ||
                 throw(ArgumentError("the capsule is a sphere, or a CAD part a sphere is fitted to"))
-            return _capsule_from_part!(ts, i)
+            return _capsule_from_part!(ts, i; done)
         end
         role === :foil && !(shape in (:rectangle, :disk, :mesh)) &&
             throw(ArgumentError("the backlighter foil is a flat part (a rectangle or disk) or a mesh"))
@@ -1378,7 +1582,9 @@ function set_part_role!(ts::TargetSetup, i::Integer, role::Symbol)
         ts.error[] = _errmsg(err)
         return false
     end
-    return _try_build!(ts; parts = ps, excluded = ex)
+    ok = _try_build!(ts; parts = ps, excluded = ex)
+    ok && done()
+    return ok
 end
 
 """
@@ -1431,12 +1637,29 @@ function fit_sphere(points::AbstractVector, weights::AbstractVector = ones(lengt
 end
 
 # Role `:capsule` for CAD part `i`: a sphere part `:capsule` fitted to it in its place in
-# the calculations.
-function _capsule_from_part!(ts::TargetSetup, i::Integer)
-    ps = copy(ts.parts[])
-    p = ps[i]
-    frame = anchor_frame(p.anchor, ts.kind[], ts.params[], ps)
+# the calculations. With `spawn[]` a part of more than `BACKGROUND_TRIANGLES` facets is
+# fitted on a worker (`fitting`), and the role is given when the fit is done, to the part
+# as it is then (fitted again if it moved meanwhile; dropped if it went away).
+function _capsule_from_part!(ts::TargetSetup, i::Integer; done = () -> nothing)
+    p = ts.parts[][i]
+    frame = anchor_frame(p.anchor, ts.kind[], ts.params[], ts.parts[])
     cs = part_components(p, ts.mesh[].h; frame, raw = true)
+    if ts.spawn[] && sum(c -> length(c.mesh.triangles), cs; init = 0) > BACKGROUND_TRIANGLES[]
+        job = ts.fit_jobs[p.name] = get(ts.fit_jobs, p.name, 0) + 1
+        _assign!(ts.fitting, union(ts.fitting[], (p.name,)))
+        ts.error[] = ""
+        deliver = ts.deliver[]
+        _run_job(() -> (out = _try_job(() -> _fit_capsule(cs, p.name));
+                        deliver(() -> _capsule_fitted!(ts, p, job, out, done))), true)
+        return true
+    end
+    ok = _apply_capsule!(ts, i, _fit_capsule(cs, p.name)...)
+    ok && done()
+    return ok
+end
+
+# The sphere (center, radius) of a CAD capsule's components (raw facets in the chamber).
+function _fit_capsule(cs, name)
     # each triangle's vertices weighted by a third of its area
     pts, wts = Vec3[], Float64[]
     for comp in cs, (a, b, d) in comp.mesh.triangles
@@ -1446,7 +1669,49 @@ function _capsule_from_part!(ts::TargetSetup, i::Integer)
         append!(wts, (A, A, A))
     end
     c, r = fit_sphere(pts, wts)
-    r > 0 || throw(ArgumentError("$(p.name): no sphere fits it"))
+    r > 0 || throw(ArgumentError("$name: no sphere fits it"))
+    return c, r
+end
+
+# A worker fitted the capsule to part `p` (job `job`): give it the role now.
+function _capsule_fitted!(ts::TargetSetup, p::PartSpec, job::Integer, out, done = () -> nothing)
+    get(ts.fit_jobs, p.name, 0) == job || return false       # asked again, or canceled
+    delete!(ts.fit_jobs, p.name)
+    ok = try
+        i = findfirst(q -> q === p, ts.parts[])
+        j = part_index(ts, p.name)
+        if out.err !== nothing
+            ts.error[] = _errmsg(out.err)
+            false
+        elseif i !== nothing
+            _apply_capsule!(ts, i, out.value...) && (done(); true)
+        elseif j !== nothing                                  # edited meanwhile: fit it again
+            set_part_role!(ts, j, :capsule; done)
+        else
+            ts.error[] = "$(p.name) went away before its capsule sphere was fitted"
+            false
+        end
+    catch err
+        err isa ArgumentError || rethrow()
+        ts.error[] = _errmsg(err)
+        false
+    end
+    # the role is committed (its target building, or built) before the fit stops
+    # holding the drive back, unless the part is being fitted again
+    haskey(ts.fit_jobs, p.name) || _assign!(ts.fitting, setdiff(ts.fitting[], (p.name,)))
+    return ok
+end
+
+# Drop the capsule fits in flight (an undo, a session loaded, a window closed).
+function _cancel_fits!(ts::TargetSetup)
+    empty!(ts.fit_jobs)
+    _assign!(ts.fitting, Set{Symbol}())
+    return ts
+end
+
+function _apply_capsule!(ts::TargetSetup, i::Integer, c, r)
+    ps = copy(ts.parts[])
+    p = ps[i]
     ex = copy(ts.excluded[])
     taken = Set{Symbol}(q.name for q in ps)
     j = findfirst(q -> q.name === :capsule, ps)
@@ -1483,8 +1748,8 @@ function target_summary(ts::TargetSetup)
     np = length(ts.parts[])
     np > 0 && ts.kind[] !== :custom && (kind *= np == 1 ? " + 1 part" : " + $np parts")
     ts.kind[] === :custom && (kind *= np == 1 ? " (1 part)" : " ($np parts)")
-    pend = isempty(ts.pending[]) ? "" : " · remeshing " * join(sort!(String.(collect(ts.pending[]))), ", ")
-    return "$kind · $(nelements(t)) elements" * pend
+    w = target_waiting(ts)
+    return "$kind · $(nelements(t)) elements" * (isempty(w) ? "" : " · " * w)
 end
 
 "Names of a target's components, in order."

@@ -591,6 +591,41 @@ end
     end
 end
 
+@testset "CAD parts that are one cylinder or sphere (no GL)" begin
+    dir = mktempdir()
+    # an STL tube of 400 slivers (r = 1.5 mm): its cylinder, under its own name
+    tube = joinpath(dir, "tube.stl")
+    write_stl(tube, cylinder_mesh(1.5, -2.0, 2.0; nz = 1, nphi = 400); binary = false)
+    ts = TargetSetup(kind = :custom)
+    @test add_part!(ts, :mesh; name = :tube, file = tube, h = 0.5)
+    c = only(c for c in ts.target[].components if c.name === :tube)
+    @test c.surface isa Briareus.CylinderSurface && isapprox(c.surface.radius, 1.5; rtol = 1e-9)
+    # a sphere shell too; a can with a lid (two faces) stays flat
+    shell = joinpath(dir, "shell.stl")
+    write_stl(shell, sphere_mesh(0.9; ntheta = 24, nphi = 48); binary = false)
+    @test add_part!(ts, :mesh; name = :shell, file = shell, h = 0.3, x = 4.0)
+    c = only(c for c in ts.target[].components if c.name === :shell)
+    @test c.surface isa Briareus.SphereSurface && isapprox(c.surface.radius, 0.9; rtol = 1e-6)
+    can = joinpath(dir, "can.stl")
+    write_stl(can, merge_meshes(cylinder_mesh(1.0, -1.0, 1.0; nz = 1, nphi = 200),
+                                disk_mesh(1.0, 1.0; nr = 2, nphi = 200)); binary = false)
+    @test add_part!(ts, :mesh; name = :can, file = can, h = 0.4, x = -4.0)
+    @test only(c for c in ts.target[].components if c.name === :can).surface === nothing
+    # a VisRad CAD tube of slivers (the slow flat case): fitted when in the calculations
+    src = joinpath(dir, "tube.vrw")
+    write(src, sliver_workspace(4000))
+    s = DesignSession(resolution = :coarse)
+    import_visrad_workspace!(s, src; display_only = :none)
+    c = only(c for c in s.target.target[].components if c.name === :BIG_CAD)
+    @test c.surface isa Briareus.CylinderSurface && isapprox(c.surface.radius, 3.0; rtol = 1e-6)
+    # the drive's status names flat components of many facets per element
+    rim = [Briareus.Vec3(cos(a), sin(a), 0) for a in range(0, π / 2; length = 61)]
+    fan = Briareus.Mesh(pushfirst!(rim, Briareus.Vec3(0, 0, 0)), [(1, k, k + 1) for k in 2:61], [1:60])
+    t = Target([Component(:fan, fan, gold())])
+    @test occursin("fan (60 facets per element)", Controllers._facet_note(t))
+    @test Controllers._facet_note(s.target.target[]) == ""
+end
+
 @testset "CAD remeshing in the background (no GL)" begin
     # a key asked for while it is being computed is computed once
     calls = Threads.Atomic{Int}(0)
@@ -665,6 +700,116 @@ end
     @test isempty(s2.target.pending[]) && s2.drive.scenario[] !== nothing
     while isready(queue)                                      # the dropped job's delivery
         take!(queue)()
+    end
+end
+
+@testset "target builds and capsule fits in the background (no GL)" begin
+    dir = mktempdir()
+    src = joinpath(dir, "work.vrw")
+    write(src, synthetic_workspace())
+    s = DesignSession(resolution = :coarse)
+    import_visrad_workspace!(s, src)
+    set_cavity!(s.drive, false)
+    record!(s)
+    ts = s.target
+    queue = Channel{Any}(Inf)
+    s.deliver[] = f -> put!(queue, f)
+    s.spawn[] = true
+    BACKGROUND_TRIANGLES[] = 0                                # every new target on a worker
+    try
+        # an edit commits its inputs at once; the target follows from a worker, and the
+        # drive asked for meanwhile waits for it
+        j = part_index(ts, :Marker)
+        t0, g0 = ts.target[], ts.ghost[]
+        @test edit_part!(ts, j, :x, "0.7")
+        record!(s)
+        @test ts.parts[][j].values[:x] == 0.7 && ts.building[] && !target_ready(ts)
+        @test ts.target[] === t0 && ts.ghost[] === g0 && occursin("building the target", target_summary(ts))
+        build_scenario!(s)
+        @test s.build_queued[] && occursin("waiting for the target", s.drive.status[])
+        drain_until(() -> target_ready(ts) && s.drive.result[] !== nothing && !s.drive.building[], queue)
+        @test ts.ghost[] !== g0 && !drive_stale(s)
+        @test only(c for c in ts.ghost[].components if c.name === :Marker).mesh.vertices ≈
+              only(c for c in g0.components if c.name === :Marker).mesh.vertices .+ Ref(Briareus.Vec3(0.7, 0, 0))
+        # two edits in a row: the second's build supersedes the first's
+        t1 = ts.target[]
+        @test edit_part!(ts, part_index(ts, :Rectangle_0), :y, "0.1") &&
+              edit_part!(ts, part_index(ts, :Rectangle_0), :y, "0.2")
+        @test drive_stale(s)                                  # the target is not the drive's
+        drain_until(() -> target_ready(ts), queue)
+        ref = Target([c for c in build_target(ts).components if !(c.name in ts.excluded[])])
+        @test ts.target[] !== t1 && ts.target[].elem_centroid ≈ ref.elem_centroid
+        # parts added while the target builds get distinct names
+        @test add_part!(ts, :disk; z = 3.0) && add_part!(ts, :disk; z = 4.0)
+        @test [p.name for p in ts.parts[][end-1:end]] == [:disk_1, :disk_2]
+        # the checks wait for the target (here: built on the spot)
+        @test remove_part!(ts, length(ts.parts[]) - 1) && ts.building[]     # a design not built yet
+        start_clearance!(s; spawn = false)
+        @test !ts.building[] && !(:disk_1 in component_names(ts.target[])) &&
+              :disk_2 in component_names(ts.target[])
+        drain_until(() -> target_ready(ts), queue)            # (the dropped job's delivery)
+        remove_part!(ts, length(ts.parts[]))
+        drain_until(() -> target_ready(ts), queue)
+        @test !any(p -> p.kind === :disk, ts.parts[]) && !(:disk_2 in component_names(ts.target[]))
+        # an undo bringing a component back restores the checks' roles of the saved design
+        # once its target is built (not the defaults a new component gets)
+        record!(s)
+        set_role!(s.review, :Rectangle_0, :none)
+        record!(s)
+        @test remove_part!(ts, part_index(ts, :Rectangle_0))
+        drain_until(() -> target_ready(ts), queue)
+        record!(s)
+        empty!(Controllers._TARGETS)                          # built again, on a worker
+        empty!(Controllers._TARGETS_ORDER)
+        @test undo!(s) && part_index(ts, :Rectangle_0) !== nothing && ts.building[]
+        drain_until(() -> target_ready(ts), queue)
+        @test :Rectangle_0 in component_names(ts.target[])
+        @test !(:Rectangle_0 in s.review.targets[]) && !(:Rectangle_0 in s.review.hardware[])
+
+        # the capsule role of a CAD part: its sphere is fitted on a worker, the role given then
+        np = length(ts.parts[])
+        i = part_index(ts, :CAD_0)
+        given = Ref(false)
+        @test set_part_role!(ts, i, :capsule; done = () -> (given[] = true))
+        @test ts.fitting[] == Set([:CAD_0]) && length(ts.parts[]) == np && !target_ready(ts) && !given[]
+        @test occursin("fitting the capsule to CAD_0", target_summary(ts))
+        build_scenario!(s)
+        @test s.build_queued[]
+        drain_until(() -> target_ready(ts) && !s.build_queued[] && s.drive.result[] !== nothing &&
+                          !s.drive.building[], queue)
+        cap = ts.parts[][end]
+        @test given[] && length(ts.parts[]) == np + 1 && cap.name === :capsule && :CAD_0 in ts.excluded[]
+        @test :capsule in component_names(s.drive.scenario[].target)
+        tri = only(c for c in ts.ghost[].components if c.name === :CAD_0).mesh.vertices
+        @test all(v -> abs(sqrt(sum(abs2, v - part_center(cap))) - cap.values[:r1]) < 1e-6, tri)
+        # a fit made stale by an undo is dropped
+        record!(s)
+        @test undo!(s) && !(:capsule in (p.name for p in ts.parts[]))
+        @test set_part_role!(ts, part_index(ts, :CAD_0), :capsule) && !isempty(ts.fitting[])
+        @test undo!(s) && isempty(ts.fitting[])
+        sleep(0.5)                                            # the fit's delivery arrives, dropped
+        drain_until(() -> target_ready(ts), queue)
+        @test !(:capsule in (p.name for p in ts.parts[]))
+        # a part moved while its sphere is fitted is fitted again where it is
+        @test set_part_role!(ts, part_index(ts, :CAD_0), :capsule)
+        @test edit_part!(ts, part_index(ts, :CAD_0), :x, "0.5")
+        drain_until(() -> target_ready(ts), queue)
+        cap2 = ts.parts[][end]
+        @test cap2.name === :capsule && cap2.values[:x] ≈ cap.values[:x] + 0.5 && cap2.values[:r1] ≈ cap.values[:r1]
+        # a window closed while a target builds: the session holds the design's target
+        @test edit_part!(ts, j, :x, "0.9") && ts.building[]
+        Controllers._abandon_jobs!(s)
+        s.spawn[] = false
+        s.deliver[] = f -> f()
+        @test await_target!(ts) && !ts.building[]
+        @test only(c for c in ts.ghost[].components if c.name === :Marker).mesh.vertices ≈
+              only(c for c in g0.components if c.name === :Marker).mesh.vertices .+ Ref(Briareus.Vec3(0.9, 0, 0))
+        while isready(queue)                                  # the dropped jobs' deliveries
+            take!(queue)()
+        end
+        @test !ts.building[]
+    finally
+        BACKGROUND_TRIANGLES[] = 30_000
     end
 end
 

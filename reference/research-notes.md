@@ -904,6 +904,23 @@ test fixture rebuilds the layout from rows copied from these files.
   JIT compilation (Makie's heatmap colormapping, the colorbar's first drawing, the
   transparent mesh's first upload), not GC (≤ 0.26 s pauses at 3.3 GB live); the
   window now compiles them before it opens.
+- **The window's target builds, capsule fit and drive end (BriareusGUI, 2026-10-18,
+  measured locally in the scripted Qt window on a NIF CAD workspace, 8 threads, H).**
+  `Target` of the 12 calculation parts (275k facets, 20k elements) 0.39–0.40 s, of the
+  4 drawn-only parts (141k facets) 0.18–0.19 s; the components themselves 1–5 ms (cached
+  parts). The CAD capsule's sphere fit 0.13 s (0.79 s at the first call: compilation).
+  `fit_surfaces` on that capsule (38k facets, sphere and fill tube) took 133 s
+  single-threaded, so the window's whole-part curved fit first checks that every
+  vertex lies on one algebraic sphere or cylinder (ms): none of the workspace's 14 CAD
+  parts is one surface as a whole (hohlraum halves: bore, walls, ends), so the fit is
+  neutral there; a sliver tube (the synthetic workspace) gets its cylinder. The ~1 s
+  GUI-thread gap at a drive's end was inside the window's refresh, not Qt: compilation
+  of the drive's result path (selection, drive and tree refreshes: 1.0 s and 0.9 s with
+  1.3–1.5 s compiled, the evaluation compiling on a worker meanwhile) and a full reset
+  of the model tree's rows (0.2–0.26 s, every delegate rebuilt) at every row-count
+  change. A precompiled drive (the package's workload) and row inserts/removals where
+  the tree changes bring the largest gap at the drive's end from 1.2 s to 0.31 s, of
+  which 0.23 s is a GC pause.
 - **CAD surface fitting (2026-10-18).** `fit_surfaces` (region growing over patches
   sharing a vertex, least-squares plane/cylinder/sphere fits refined by Gauss–Newton,
   tolerance `max(1e-4 mm, 1e-3 min(R, extent))`, regions kept when their rms is under a

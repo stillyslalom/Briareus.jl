@@ -468,3 +468,16 @@ end
     t = ts.target[]
     @test sum(t.elem_area[e] for e in elements(t, :window_1)) ≈ 1.0 rtol = 1e-6
 end
+
+@testset "model rows inserted where a tree changes (no GL)" begin
+    sess = DesignSession(resolution = :coarse)
+    old = model_tree(sess)
+    g = only(r.id for r in old if startswith(r.id, "group:inner23"))
+    toggle_expanded!(sess.view, g)                       # its quads appear below it, or go
+    new = model_tree(sess)
+    length(new) < length(old) && ((old, new) = (new, old))
+    p = BriareusGUI._common_lead(old, new)
+    k = length(new) - length(old)
+    @test k > 0 && old[p].id == g && [r.id for r in old[p+1:end]] == [r.id for r in new[p+k+1:end]]
+    @test BriareusGUI._common_lead(new, old) == p
+end

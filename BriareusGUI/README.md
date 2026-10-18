@@ -123,6 +123,15 @@ and each analysis says when it is out of date.
   session bringing back a size not meshed before) is remeshed on worker threads: the
   edit takes effect at once with the part drawn from its file's facets ("remeshing …"
   in the status), and a drive asked for meanwhile starts when the parts are ready.
+  Building a target of 10⁵ facets (its BVH) takes half a second, so a large target not
+  built before is built on a worker as well: the edit's settings apply at once, the
+  view shows the previous target until the new one is ready ("building the target"),
+  and the drive and the checks wait for it; so does a CAD capsule's sphere fit
+  ("fitting the capsule to …"). A CAD part that is one cylinder or sphere as a whole (a
+  tube, a shell; `fit_surfaces` on its file's facets) is integrated on that surface in
+  the view factors under its own name; parts of several faces stay flat, and the
+  drive's status names flat parts carrying more than 50 facets per element (a curved
+  face tessellated in slivers: slow view factors).
 - **Results** (bottom tabs):
   - *Beam table:* every cone, quad or beam with its pointing, defocus, power and
     on/off, edited in place.
