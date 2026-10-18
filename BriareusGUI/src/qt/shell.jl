@@ -799,12 +799,39 @@ function _with_shell(f)
     return nothing
 end
 
+# The Briareus icon (docs/make_icons.jl writes it).
+const ICON_ICO = joinpath(QML_DIR, "icons", "briareus.ico")
+const _ICON_TRIES = Ref(0)
+
+# Windows: show the icon in the title bar and taskbar. Qt Quick windows have no icon
+# property and QML.jl does not expose QGuiApplication's, so the icon is sent to the
+# window (found by its title) on the first ticks after it opens. Elsewhere the window
+# keeps the platform default.
+function _set_window_icon(title::AbstractString)
+    Sys.iswindows() || return true
+    hwnd = ccall((:FindWindowW, "user32"), Ptr{Cvoid}, (Ptr{Cvoid}, Cwstring), C_NULL, title)
+    hwnd == C_NULL && return false
+    for (which, metric) in ((0, 49), (1, 11))     # ICON_SMALL/SM_CXSMICON, ICON_BIG/SM_CXICON
+        px = ccall((:GetSystemMetrics, "user32"), Cint, (Cint,), metric)
+        icon = ccall((:LoadImageW, "user32"), Ptr{Cvoid},
+                     (Ptr{Cvoid}, Cwstring, Cuint, Cint, Cint, Cuint),
+                     C_NULL, ICON_ICO, 1, px, px, 0x10)      # IMAGE_ICON, LR_LOADFROMFILE
+        icon == C_NULL ||
+            ccall((:SendMessageW, "user32"), Ptr{Cvoid}, (Ptr{Cvoid}, Cuint, Csize_t, Ptr{Cvoid}),
+                  hwnd, 0x0080, which, icon)                 # WM_SETICON
+    end
+    return true
+end
+
 # Returns 0 (nothing to draw), 1 (redraw the canvas), or 2 (close the window).
 function br_tick()
     sh = _SHELL[]
     sh === nothing && return 0
     # Only thread 1 runs libuv's event loop, and it sits in Qt's exec(): pump it here.
     Base.process_events()
+    if _ICON_TRIES[] > 0
+        _ICON_TRIES[] = _set_window_icon(get(sh.shown, "title", "")) ? 0 : _ICON_TRIES[] - 1
+    end
     if _TICK_HOOK[] !== nothing
         try
             _TICK_HOOK[](sh)
@@ -1404,6 +1431,7 @@ function briareus(sess::Union{Nothing,DesignSession} = nothing; kind::Symbol = :
         _CLOSE_REQUESTED[] = false
         _register_qml_functions()
         build && build_scenario!(sess)
+        _ICON_TRIES[] = 120                    # about two seconds of ticks
         loadqml(joinpath(QML_DIR, "BriareusWindow.qml"); app = sh.app,
                 (k => m for (k, m) in sh.models)...)
         exec()
