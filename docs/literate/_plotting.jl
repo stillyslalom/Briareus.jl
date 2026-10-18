@@ -221,3 +221,66 @@ end
 "Mark the directions (θ, φ) in degrees on a Hammer map."
 mark_directions!(ax, θφ; φ0 = 0.0, kwargs...) =
     scatter!(ax, [Point2f(hammer(θ, φ; φ0)) for (θ, φ) in θφ]; kwargs...)
+
+# ## Cutaway drawings of meshes
+#
+# CairoMakie draws polygons in the order given, so a mesh seen from one side is drawn
+# by the painter's algorithm: farthest polygon first. Sorting by centroid depth is
+# right for the compact elements of a target, and good enough for a picture of long
+# CAD slivers.
+
+"""
+    patch_outline(mesh, patch) -> Vector{Vec3}
+
+Boundary loop of a mesh patch (an element): the edges used by one of its triangles,
+chained in the triangles' winding (the longest loop when there are several).
+"""
+function patch_outline(m::Briareus.Mesh, p::Integer)
+    r = m.patches[p]
+    length(r) == 1 && return [m.vertices[i] for i in m.triangles[first(r)]]
+    key(i) = round.(Tuple(m.vertices[i]); digits = 9)
+    edges(k) = zip(m.triangles[k], circshift(collect(m.triangles[k]), -1))
+    uses = Dict{Any,Int}()
+    for k in r, (a, b) in edges(k)
+        e = minmax(key(a), key(b))
+        uses[e] = get(uses, e, 0) + 1
+    end
+    next = Dict{Any,Any}()
+    point = Dict{Any,Briareus.Vec3}()
+    for k in r, (a, b) in edges(k)
+        uses[minmax(key(a), key(b))] == 1 || continue
+        next[key(a)] = key(b)
+        point[key(a)] = m.vertices[a]
+    end
+    best = Briareus.Vec3[]
+    seen = Set{Any}()
+    for s in keys(next)
+        s in seen && continue
+        loop, v = Briareus.Vec3[], s
+        while !(v in seen) && haskey(next, v)
+            push!(seen, v)
+            push!(loop, point[v])
+            v = next[v]
+        end
+        length(loop) > length(best) && (best = loop)
+    end
+    return best
+end
+
+"""
+    cutaway!(ax, polygons, colors; view = (0, 1, -0.3), strokewidth = 0.3, strokecolor)
+
+Draw 3-D polygons (vectors of points, mm) in a 2-D axis as seen along `view`, farthest
+first, in screen coordinates across (perpendicular to `view` and to z) and up.
+"""
+function cutaway!(ax, polys, colors; view = (0.0, 1.0, -0.3), strokewidth = 0.3,
+                  strokecolor = (:black, 0.45))
+    f = normalize(Briareus.Vec3(view...))
+    r = normalize(cross(f, Briareus.Vec3(0, 0, 1)))
+    u = cross(r, f)
+    depth = [sum(dot(p, f) for p in P) / length(P) for P in polys]
+    order = sortperm(depth; rev = true)
+    poly!(ax, [Makie.GeometryBasics.Polygon([Point2f(dot(p, r), dot(p, u)) for p in polys[i]]) for i in order];
+          color = colors[order], strokewidth, strokecolor)
+    return ax
+end

@@ -21,6 +21,7 @@ const TUTORIALS = [
     "diagnostic_windows.jl",
     "beam_errors.jl",
     "retune.jl",
+    "cad_hohlraum.jl",
 ]
 
 const PAGE_TIMES = Dict{String,Float64}()
@@ -77,6 +78,7 @@ tutorial_page(file) = joinpath("tutorials", splitext(file)[1] * ".md")
             "Diagnostic windows in the hohlraum wall" => tutorial_page("diagnostic_windows.jl"),
             "Pointing and power errors" => tutorial_page("beam_errors.jl"),
             "Retuning a drive to a reference shot" => tutorial_page("retune.jl"),
+            "Radiation in an imported CAD hohlraum" => tutorial_page("cad_hohlraum.jl"),
         ],
         "Explanation" => [
             "Verification and validation" => "explanation/verification-validation.md",

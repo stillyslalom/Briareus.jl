@@ -934,6 +934,30 @@ test fixture rebuilds the layout from rows copied from these files.
   flat, 0.7 s primitive (8 threads). Integrated hohlraum quantities are thus already good
   on flat remeshed CAD once closed; fitting fixes the local exchange (concave self-view,
   the integrating-sphere uniformity) and the cost. **H**
+- **CAD tutorial assembly (2026-10-18), synthetic, ASCII STL round trip** (docs tutorial
+  "Radiation in an imported CAD hohlraum"). Thick-walled halves (R = 2.875, 50 µm walls,
+  20 µm waist gap, 120 full-length strips), 50 µm end walls and washers (0.1 mm LEH
+  bores), a 40 × 80 capsule, a two-cup tent, a mount; 30% of the facets reversed.
+  `enclosure` from TCC with the tent: pocket only (open area 0); without: exactly the
+  cavity surfaces; open area 14.99 mm² at 64 rays/element (−2.8%) and 15.33 at 512
+  (−0.6%) against 15.42 (LEH 120-gons 15.09 + gap exit 0.37 − 0.04 intercepted by the
+  mount); its spread over seeds is ~2% at 64 rays, 0.45% at 256. Under a prescribed
+  wall source (closed by Sinkhorn), against the same cavity built from primitives with
+  exact surfaces: at 0.5 mm (capsule 0.15) capsule flux within 0.06%, a₂/a₀ within
+  0.12 points, LEH loss within 0.15%, flat and fitted alike; at 0.25 mm (capsule 0.1 vs
+  0.05) within 0.012%, 0.07 points, 0.04%; a₂/a₀ itself moves 0.35 points from 0.5 to
+  0.25 mm (10.92% at 0.2). Flat view factors 13.3 s vs fitted 1.4 s (1,684 elements,
+  8 threads); with 180 strips per wall the flat ones take 22 s: the flat path integrates
+  over every facet of a remeshed element. The thin-walled `hohlraum()` loses 3.3% more
+  through flush LEHs and has a₂/a₀ 0.77 points lower: the bores and gap matter.
+  **Capsule mesh and P4:** the remeshed CAD capsule (compact elements) gives
+  a₄/a₀ = −0.78 to −0.80% at 0.15 and 0.1 mm (408 and ~900 elements; walls 0.25–0.5);
+  the latitude-longitude `sphere_mesh` capsule of the same cavity gives −1.01% at
+  0.15 mm, −0.90% at 0.1 (walls 0.35), −0.82% at 0.05 (6.6k elements; −0.815% with
+  0.2 mm walls). **Visibility:** with bored LEHs and a
+  gap, row sums before balancing miss one by up to 1.3% on walls/caps/capsule and 8% on
+  LEH apertures and narrow faces, in the primitives as in the CAD (`hohlraum()`: 0.14%):
+  pairs partly shadowed by a bore rim, decided by one centroid ray. **H** (synthetic)
 
 ### Result tables and fits
 
