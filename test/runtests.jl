@@ -872,4 +872,5 @@ include("stl.jl")
 include("uncertainty.jl")
 include("results.jl")
 include("retune.jl")
+include("enclosure.jl")
 end

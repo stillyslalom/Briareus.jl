@@ -849,6 +849,26 @@ test fixture rebuilds the layout from rows copied from these files.
   0.9–1.1 elements per size²; `rmax = size` (rather than 0.75 size) avoids splitting
   Lloyd cells into fragments (0.75 doubled the count). **H** (measured locally; the
   constants are engineering choices, **M**)
+- **Cavity selection (`enclosure`, 2026-10-17).** On the same workspace (oriented,
+  `coarsen = 0.3`: 155k elements, 212k facets), 64 diffuse rays per element and the
+  gathered flux take 3.0–3.5 s on 8 threads (7.8 s on 3; kept set and fluxes bitwise
+  equal). From the capsule center the kept set is only the capsule and the inside of
+  its tent (4.4k elements, open area 5e-4 mm²): the two tent films are closed solids in
+  the CAD and seal the capsule into a pocket. With the tent left out, 15.3k elements
+  (486 mm²) are kept: the inner walls and LEH-side end faces of the hohlraum halves
+  (≈137 mm² each), the LEH washers' inner faces, the capsule and fill tube, two inner
+  parts, part of the waist band through the 20 µm gap between the halves, and 62 mm²
+  of the mounting structure (of 7,200) near the LEHs. The open-area estimate is
+  14.5 mm², the two LEHs' area (r ≈ 1.5 mm); the dropped surfaces would return
+  0.8 mm² of the reference flux (0.12 mm² at `threshold = 0.01`, which keeps 21.9k
+  elements; 140k at `threshold = 0`, through 5e-4 mm² of gaps). `visrad_target(ws;
+  orient = true, remesh = 0.3, inside = (0, 0, 0))` (tent excluded) selects on the
+  205k oriented facets (6.5 s), remeshes the kept facets and selects again: 6,950
+  elements (358 mm²) in 11 s, against 24 s to remesh everything (154k elements) and
+  7,300 elements (388 mm²) selected after. A single selection on facets keeps 10.7k
+  remeshed elements (492 mm²): a long facet straddling the edge of the lit region is
+  kept whole. The defaults (geometric albedo 0.9, threshold 0.05 of the reference
+  flux, 64 rays) are engineering choices, **M**; the measurements **H** (locally).
 
 ### Result tables and fits
 

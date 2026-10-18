@@ -586,7 +586,8 @@ end
 """
     visrad_target(workspace; select = o -> o.radiosity || o.laser, materials = Dict(),
                   two_sided = false, orient = false, toward = (0, 0, 0),
-                  coarsen = nothing, remesh = nothing) -> Target
+                  coarsen = nothing, remesh = nothing,
+                  inside = nothing) -> Target
 
 Target built from the components of a VisRad workspace (`read_visrad_workspace`) for
 which `select(object)` is true — by default those VisRad includes in its radiosity or
@@ -599,22 +600,44 @@ to CAD meshes: repaired windings, and elements of about `remesh` or `coarsen` mm
 CAD meshes can hold hundreds of thousands of triangles, and each becomes a radiating
 element. That is fine for ray tracing (deposition, clearance, imaging) but too many for
 view factors; select the parts that matter for the radiation problem, e.g.
-`select = o -> o.folder == "Hohlraum"` or by name, and remesh them.
+`select = o -> o.folder == "Hohlraum"` or by name, and remesh them. `inside`, a point
+(mm, chamber frame) in the cavity, keeps only the elements that bound the free space
+around it (`enclosure` with its defaults; call it on the full target for the options
+and a per-component account of what was dropped). It needs consistent windings
+(`orient = true`). The selection runs on the CAD facets as oriented, `remesh` or
+`coarsen` then divide only the facets kept (much cheaper when most of the assembly lies
+outside the cavity), and a second selection on the resulting elements drops those
+that average too little flux.
 """
 function visrad_target(ws::VisRadWorkspace; select = o -> o.radiosity || o.laser,
                        materials = Dict{String,Material}(), two_sided = false,
                        orient::Bool = false, toward = (0.0, 0.0, 0.0), coarsen = nothing,
-                       remesh = nothing)
+                       remesh = nothing, inside = nothing)
+    coarsen === nothing || remesh === nothing ||
+        throw(ArgumentError("give one of `coarsen` and `remesh`, not both"))
     comps = Component[]
+    cad = Set{Symbol}()                 # CAD meshes whose elements wait for the selection
     for o in ws.objects
         select(o) || continue
         (o.radiosity && o.laser) || @warn "VisRad object $(o.name) is included in only one of VisRad's radiosity and laser calculations; Briareus uses it in both"
         ts = two_sided isa Bool ? two_sided : Bool(two_sided(o))
-        append!(comps, visrad_component(o; material = get(materials, o.name, nothing), two_sided = ts,
-                                        orient, toward, coarsen, remesh))
+        later = inside !== nothing && o.kind === :mesh
+        cs = visrad_component(o; material = get(materials, o.name, nothing), two_sided = ts,
+                              orient, toward, coarsen = later ? nothing : coarsen,
+                              remesh = later ? nothing : remesh)
+        later && foreach(c -> push!(cad, c.name), cs)
+        append!(comps, cs)
     end
     isempty(comps) && throw(ArgumentError("no VisRad components selected"))
-    return Target(comps)
+    inside === nothing && return Target(comps)
+    kept = enclosure(comps, inside).target.components
+    coarsen === nothing && remesh === nothing && return Target(kept)
+    elems(m) = coarsen === nothing ? remesh_mesh(m; size = remesh) : coarsen_mesh(m; size = coarsen)
+    # select again at the elements' own granularity: an element straddling the edge of
+    # the lit region averages its flux over a larger area than the facets did
+    redone = [c.name in cad ? Component(c.name, elems(c.mesh), c.material; two_sided = c.two_sided) : c
+              for c in kept]
+    return enclosure(redone, inside).target
 end
 
 """
