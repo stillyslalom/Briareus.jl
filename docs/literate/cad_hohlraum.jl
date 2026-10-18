@@ -494,10 +494,10 @@ end
 # - Flat and fitted CAD agree on these integrated quantities within the same margins
 #   (the flat capsule is 0.13% short of its area): flat facets misstate the exchange
 #   between neighbors, which sums out over a cavity, as the
-#   [Integrating sphere](@ref) tutorial shows. The fitted view factors cost a tenth as
-#   much: the curved elements' quadrature lumps their facets, while the flat path
-#   integrates over every facet of every element (13 s here with 120 strips per wall,
-#   22 s with 180).
+#   [Integrating sphere](@ref) tutorial shows. The fitted view factors cost about half
+#   as much: both models lump each element's facets, but a flat element folded across
+#   the wall's strips receives through its exact outline (16 edges on average), where a
+#   curved element exchanges with its curved neighbors point to point.
 # - The thin-walled `hohlraum()` loses 3.3% more through its flush LEHs, and its
 #   ``a_2/a_0`` is 0.77 points lower: the 0.1 mm bores and the gap matter at this level,
 #   and the CAD model keeps them.
@@ -567,6 +567,6 @@ fig
 #   ``a_2/a_0`` and ``a_4/a_0``, and the LEH and gap losses of the CAD models, flat or
 #   fitted, match the same cavity built from Briareus's primitives at the same element
 #   size, within less than the change that halving the element size makes; the fitted
-#   model's view factors cost a tenth of the flat model's. The thin-walled
+#   model's view factors cost about half the flat model's. The thin-walled
 #   [`hohlraum`](@ref) differs from both by more: its LEH loss by 3.3%, its
 #   ``a_2/a_0`` by 0.8 points.

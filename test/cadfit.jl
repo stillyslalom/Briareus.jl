@@ -231,3 +231,100 @@ end
     @test flux(sc, tc, cap) ≈ flux(sp, prim, elements(prim, :capsule)) rtol = 3e-4
     @test flux(sc, tc, leh) ≈ flux(sp, prim, elements(prim, :leh_top, :leh_bottom)) rtol = 3e-4
 end
+
+@testset "view factors on remeshed CAD elements" begin
+    # a rectangle o + [0,1]u + [0,1]v as CAD strips (long along v), facing `facing`
+    function strips(o, u, v, facing; n = 40)
+        F = NTuple{3,Vec3}[]
+        for i in 0:n-1
+            a, b = o + u * i / n, o + u * (i + 1) / n
+            cad_quad!(F, a, b, b + v, a + v, facing)
+        end
+        return facet_soup(F)
+    end
+    X, Y, Z = Vec3(1, 0, 0), Vec3(0, 1, 0), Vec3(0, 0, 1)
+    flux(t, F, I, J) = sum(t.elem_area[i] * F[i, j] for i in I, j in J) / sum(t.elem_area[I])
+    # perpendicular rectangles with a common edge of length 1, widths 1 and 0.6
+    function hottel(W, H)
+        Q = W^2 + H^2
+        return (W * atan(1 / W) + H * atan(1 / H) - sqrt(Q) * atan(1 / sqrt(Q)) +
+                log((1 + W^2) * (1 + H^2) / (1 + Q) * (W^2 * (1 + Q) / ((1 + W^2) * Q))^(W^2) *
+                    (H^2 * (1 + Q) / ((1 + H^2) * Q))^(H^2)) / 4) / (π * W)
+    end
+    plates = [(strips(0X, Y, X, Z), strips(0X, 0.6Z, X, Y)),        # strips along the common edge
+              (strips(0X, X, Y, Z), strips(0X, X, 0.6Z, Y))]        # and across it
+    for (a, b) in plates
+        t = Target(Component(:a, remesh_mesh(a; size = 0.25), gold()), Component(:b, remesh_mesh(b; size = 0.25), gold()))
+        @test minimum(length, t.elem_tris) > 2                       # every element of many facets
+        F = view_factors(t)
+        @test flux(t, F, elements(t, :a), elements(t, :b)) ≈ hottel(1.0, 0.6) rtol = 1e-3
+        @test flux(t, F, elements(t, :b), elements(t, :a)) ≈ hottel(0.6, 1.0) rtol = 1e-3
+    end
+    # coaxial disks (radii 1 and 0.8, 0.4 apart) as fans of 360 slivers
+    function fan(r, z, facing)
+        F = NTuple{3,Vec3}[]
+        φs = range(0, 2π; length = 361)
+        for j in 1:360
+            p, q, c = Vec3(0, 0, z), cad_pt(r, φs[j], z), cad_pt(r, φs[j+1], z)
+            push!(F, dot(cross(q - p, c - p), facing) > 0 ? (p, q, c) : (p, c, q))
+        end
+        return facet_soup(F)
+    end
+    t = Target(Component(:d1, remesh_mesh(fan(1.0, 0.0, Z); size = 0.25), gold()),
+               Component(:d2, remesh_mesh(fan(0.8, 0.4, -Z); size = 0.25), gold()))
+    R1, R2 = 1.0 / 0.4, 0.8 / 0.4
+    S = 1 + (1 + R2^2) / R1^2
+    @test flux(t, view_factors(t), elements(t, :d1), elements(t, :d2)) ≈ (S - sqrt(S^2 - 4(R2 / R1)^2)) / 2 rtol = 4e-3
+    # a closed box of strips: rows sum to one
+    faces = [(0X, X, Y), (Z, Y, X), (0X, Z, X), (Y, X, Z), (0X, Y, Z), (X, Z, Y)]
+    box = Target([Component(Symbol(:f, i), remesh_mesh(strips(o, u, v, cross(u, v)); size = 0.25), gold())
+                  for (i, (o, u, v)) in enumerate(faces)])
+    @test all(e -> dot(box.elem_normal[e], Vec3(0.5, 0.5, 0.5) - box.elem_centroid[e]) > 0, 1:nelements(box))
+    F = view_factors(box)
+    @test maximum(abs, closure_error(F)) < 6e-3
+    @test sum(abs, closure_error(F)) / nelements(box) < 4e-3
+
+    # The outline receiver is the sum over the facets to round-off, at points anywhere
+    # (seen whole, cut by the point's tangent plane, behind), for planar elements and
+    # elements folded across a faceted cylinder
+    R = 2.875
+    wall = orient_mesh(stl_roundtrip(cad_half(; R, Rout = 2.975, Rleh = 1.55, h = 4.7, t = 0.05, nphi = 120)))
+    t = Target(Component(:p, remesh_mesh(plates[2][1]; size = 0.25), gold()),
+               Component(:w, remesh_mesh(wall; size = 0.5), gold()))
+    offset = cumsum([0; [length(c.mesh.triangles) for c in t.components]])
+    rng = Xoshiro(7)
+    worst, npoly, nfolded, nedges, nfacet_edges = 0.0, 0, 0, 0, 0
+    for e in 1:nelements(t)
+        length(t.elem_tris[e]) > 2 || continue
+        r = Briareus._poly_receiver(t, e, offset)
+        npoly += 1
+        nfolded += length(r.pieces) > 1
+        nedges += length(r.edges)
+        nfacet_edges += 3 * length(t.elem_tris[e])
+        tris = [(t.tri_v0[k], t.tri_v0[k] + t.tri_e1[k], t.tri_v0[k] + t.tri_e2[k]) for k in t.elem_tris[e]]
+        for j in 1:nelements(t)
+            # points on nearby elements with their normals, and points around the element
+            j != e && (norm(t.elem_centroid[j] - r.center) < 3r.radius || rand(rng) < 0.002) || continue
+            k = rand(rng, t.elem_tris[j])
+            u, v = rand(rng), rand(rng)
+            u + v > 1 && ((u, v) = (1 - u, 1 - v))
+            for (p, n) in ((t.tri_v0[k] + u * t.tri_e1[k] + v * t.tri_e2[k], t.elem_normal[j]),
+                           (r.center + 2r.radius * randn(rng, Vec3), normalize(randn(rng, Vec3))))
+                worst = max(worst, abs(Briareus._receiver_vf(p, n, r) - sum(_point_polygon_vf(p, n, x) for x in tris)))
+            end
+        end
+    end
+    @test worst < 1e-12
+    @test nfolded > 100 && npoly - nfolded > 100
+    # cost: the outlines have under 40% of the facets' edges, and the emitter's root cells
+    # are about as many as a square two-facet element has (2·4^depth, plus the cells its
+    # edges cut), however many facets an element has
+    @test nedges < 0.4 * nfacet_edges
+    square = Target(Component(:q, rectangle_mesh(0.3, 0.3; nu = 1, nv = 1), gold()))
+    ncells(t, e) = length(Briareus._cell_emitter(t, e, 3).cells)
+    multi = filter(e -> length(t.elem_tris[e]) > 2, 1:nelements(t))
+    @test all(e -> sum(c[1] for c in Briareus._cell_emitter(t, e, 3).cells) ≈ t.elem_area[e], multi)
+    @test maximum(e -> length(t.elem_tris[e]), multi) > 30
+    @test sum(e -> ncells(t, e), multi) / length(multi) < ncells(square, 1)
+    @test maximum(e -> ncells(t, e), multi) < 1.5 * ncells(square, 1)
+end

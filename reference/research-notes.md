@@ -947,8 +947,8 @@ test fixture rebuilds the layout from rows copied from these files.
   0.12 points, LEH loss within 0.15%, flat and fitted alike; at 0.25 mm (capsule 0.1 vs
   0.05) within 0.012%, 0.07 points, 0.04%; a₂/a₀ itself moves 0.35 points from 0.5 to
   0.25 mm (10.92% at 0.2). Flat view factors 13.3 s vs fitted 1.4 s (1,684 elements,
-  8 threads); with 180 strips per wall the flat ones take 22 s: the flat path integrates
-  over every facet of a remeshed element. The thin-walled `hohlraum()` loses 3.3% more
+  8 threads); with 180 strips per wall the flat ones take 22 s: the flat path integrated
+  over every facet of a remeshed element (until "Flat CAD elements" below). The thin-walled `hohlraum()` loses 3.3% more
   through flush LEHs and has a₂/a₀ 0.77 points lower: the bores and gap matter.
   **Capsule mesh and P4:** the remeshed CAD capsule (compact elements) gives
   a₄/a₀ = −0.78 to −0.80% at 0.15 and 0.1 mm (408 and ~900 elements; walls 0.25–0.5);
@@ -958,6 +958,35 @@ test fixture rebuilds the layout from rows copied from these files.
   gap, row sums before balancing miss one by up to 1.3% on walls/caps/capsule and 8% on
   LEH apertures and narrow faces, in the primitives as in the CAD (`hohlraum()`: 0.14%):
   pairs partly shadowed by a bore rim, decided by one centroid ray. **H** (synthetic)
+- **Flat CAD elements (2026-10-18).** A remeshed CAD element carries 6–46 facets (mean
+  15 on the tutorial's walls, 23 on its capsule), and the flat path summed the
+  point-to-polygon factor over each receiving facet and integrated each emitting facet
+  separately (16 sub-triangles each, then adaptive). Now: (1) the receiver is the
+  element's outline when the point sees all of it from in front with every facet facing
+  the same way (the contour integrand is divergence-free, so the facets' contours sum to
+  the boundary's; exact for folded elements too), otherwise piece by piece (facets in one
+  plane to 1e-12; a piece cut by the point's tangent plane is closed by one segment
+  between its two crossings, more crossings sum its facets); straight runs merged. Over
+  110k points on neighbors and around elements of the tutorial's flat model (37k of them
+  cut) it equals the facet sum to 8e-13; outlines have 16 edges against 52 facet edges.
+  (2) Near-pair emitters lump their facets into cells of the tangent plane and refine
+  cells toward the receiver. At the two-facet resolution (level + 1) the cells carry the
+  bias that primitive quads have: perpendicular plates with a common edge (Hottel's
+  closed form), all pairs on the near path, +2.0e-4 for strips remeshed at 0.25 and for
+  quads alike, against ≤ 3e-5 for the per-facet rule; rooted one level finer (level + 2)
+  +6e-7 to +3e-5 (pieces bisected under a child's side when refining: under half
+  changed nothing at 1e-6 and cost 70% more). At the default `near` (mid/far pairs by
+  centroid, unchanged) the closed forms move by under 5e-5 from main: plates +6.45e-4 and
+  +4.34e-4 (main +6.28e-4, +4.13e-4), coaxial disks −3.05e-3 (−2.98e-3, 90-gon fans),
+  a closed box of strips max |row − 1| 4.60e-3 (4.64e-3). Curved (fitted) elements of
+  many facets use the same cells, rooted at level + 1 (the resolution of their point
+  rule). Times (8 threads, main → now): tutorial flat model 12.4 → 2.7 s, fitted
+  1.2 → 1.1 s (primitives at 0.5 mm, 2,244 elements: 1.0 s); the synthetic
+  thick-walled hohlraum of test/cadfit.jl at 0.5 mm (1,217 elements) flat 47.1 → 4.1 s,
+  fitted 2.3 → 1.3 s; integrated results unchanged (capsule flux, a₂, a₄, LEH loss to
+  ≤ 2e-6 relative or 1e-4 points; capsule rows identical to 4 digits). A flat CAD pair still costs ~5× a primitive pair: folded
+  outlines have ~3× a quad's edges, and the cells' bookkeeping. Primitive targets
+  (1–2 facets per element) are bit-for-bit unchanged. **H** (synthetic)
 
 ### Result tables and fits
 
