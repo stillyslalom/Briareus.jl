@@ -244,6 +244,10 @@ using BriareusGUI.Briareus
         elseif k == 22 && grabbed(png("cut_port")) && !s.drive.retune_running[]
             isfile(retuned_csv) && occursin("quad powers", s.drive.retune_status[]) &&
                 sh.app["retuneStatus"] == s.drive.retune_status[] && push!(seen, :retune)
+            B.br_set_target_kind("custom"); next!()                # no template fields
+        elseif k == 23 && time() - t_stage[] > 0.5
+            s.target.kind[] === :custom && sh.app["targetKind"] == "custom" &&
+                isempty(sh.rows[:targetFieldModel]) && push!(seen, :custom)
             B.request_close(); next!()
         end
     end
@@ -254,11 +258,11 @@ using BriareusGUI.Briareus
         B._TICK_HOOK[] = nothing
     end
     @info "window session" seconds = round(time() - t0; digits = 1) shots
-    @test stage[] == 23
+    @test stage[] == 24
     @test seen == [:target, :windows, :part, :mesh, :remove, :tree_beams, :visrad, :volumes, :zoom,
                    :pick, :drive, :kit, :map, :optimize, :capsule, :applied, :clearance, :talis,
                    :talis_csv, :group, :split, :undo, :redo, :session, :xray, :side, :port,
-                   :retune_started, :retune]
+                   :retune_started, :retune, :custom]
     @test !sess.spawn[]                              # restored when the window closed
     @test all(isfile ∘ png, ("target", "part", "beams", "drive_scene", "drive_map", "optimize",
                              "clearance", "talis", "along_beam", "group", "split", "cut_port"))

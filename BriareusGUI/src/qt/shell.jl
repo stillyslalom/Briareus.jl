@@ -261,8 +261,10 @@ end
 _same(a, b) = all(f -> getfield(a, f) == getfield(b, f), fieldnames(typeof(a)))
 
 # Replace the rows of an item model: in place when the count is unchanged (only
-# changed rows are re-sent), otherwise with a full reset.
-function _sync_rows!(rows::Vector{R}, model::JuliaItemModel, new::Vector{R}) where {R}
+# changed rows are re-sent), otherwise with a full reset. `new` may be an empty
+# comprehension whose eltype inference gave up on (`Vector{Union{}}`).
+function _sync_rows!(rows::Vector{R}, model::JuliaItemModel, new::AbstractVector) where {R}
+    new = convert(Vector{R}, new)
     if length(new) == length(rows)
         for (i, r) in enumerate(new)
             _same(rows[i], r) && continue
