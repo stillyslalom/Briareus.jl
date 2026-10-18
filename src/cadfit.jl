@@ -327,7 +327,10 @@ function _solve_small(M, g)
 end
 
 # Per-patch data on welded vertices: positions, each patch's vertices, area, unit
-# normal, centroid, and the patches sharing a vertex with it.
+# normal, centroid, and the patches at each vertex. (Neighbors are visited through the
+# vertices, each vertex once per pass: a vertex shared by d patches, the apex of a fan
+# of CAD slivers, otherwise costs d² per pass; a fill tube with fans of 800 made a capsule
+# part's fit two minutes long.)
 function _fit_data(m::Mesh, weld)
     id = _welded_ids(m; tol = weld)
     P = Vector{Vec3}(undef, isempty(id) ? 0 : maximum(id))
@@ -345,8 +348,25 @@ function _fit_data(m::Mesh, weld)
     for (p, vs) in enumerate(pv), v in vs
         push!(vp[v], p)
     end
-    nbr = [unique(q for v in pv[p] for q in vp[v] if q != p) for p in eachindex(pv)]
-    return (; P, pv, area, nrm, cen, nbr)
+    return (; P, pv, area, nrm, cen, vp)
+end
+
+# Append to `out` the patches sharing a vertex with the patches `ps` that pass `keep`, in
+# the order of first occurrence over p ∈ ps, v ∈ pv[p], q ∈ vp[v], each once, skipping
+# those already stamped: patches with `pstamp[q] == s` (stamped as they are added) and
+# vertices with `vstamp[v] == s` (stamped as they are visited).
+function _append_neighbors!(out, D, ps, keep, pstamp, vstamp, s)
+    for p in ps, v in D.pv[p]
+        vstamp[v] == s && continue
+        vstamp[v] = s
+        for q in D.vp[v]
+            pstamp[q] == s && continue
+            keep(q) || continue
+            pstamp[q] = s
+            push!(out, q)
+        end
+    end
+    return out
 end
 
 function _fit_patches(kind, D, ps, scratch)
@@ -396,8 +416,13 @@ function _grow_region(kind, seed, D, avail, W, opts)
     gid = W.gid[]
     # start from the seed and its neighbors (two rings, then one) facing its way
     near(q) = avail[q] && (D.area[q] == 0 || abs(dot(D.nrm[q], D.nrm[seed])) >= cosmax)
-    ring1 = [seed; [q for q in D.nbr[seed] if near(q)]]
-    ring2 = unique!([ring1; [q for p in ring1 for q in D.nbr[p] if near(q)]])
+    (; pring, vring) = W
+    s = W.stamp[] += 1
+    pring[seed] = s
+    ring1 = _append_neighbors!([seed], D, (seed,), near, pring, vring, s)
+    s = W.stamp[] += 1
+    pring[ring1] .= s
+    ring2 = _append_neighbors!(copy(ring1), D, ring1, near, pring, vring, s)
     model = nothing
     members = Int[]
     for init in (ring2, ring1, [seed])
@@ -412,11 +437,18 @@ function _grow_region(kind, seed, D, avail, W, opts)
     return _grow_from!(kind, seed, model::_SurfaceModel, members, D, avail, W, gid, opts)
 end
 
-function _push_neighbors!(H, D, p, avail, mark, queued, gid, c0)
-    for q in D.nbr[p]
-        (avail[q] && mark[q] != gid && queued[q] != gid) || continue
-        queued[q] = gid
-        _heap_push!(H, norm(D.cen[q] - c0), q, 0)
+# Queue the available patches sharing a vertex with p, not yet members or queued (each
+# vertex is visited once per growth: its patches are queued, members or unavailable from
+# then on).
+function _push_neighbors!(H, D, p, avail, mark, queued, vgrow, gid, c0)
+    for v in D.pv[p]
+        vgrow[v] == gid && continue
+        vgrow[v] = gid
+        for q in D.vp[v]
+            (avail[q] && mark[q] != gid && queued[q] != gid) || continue
+            queued[q] = gid
+            _heap_push!(H, norm(D.cen[q] - c0), q, 0)
+        end
     end
 end
 
@@ -430,7 +462,7 @@ function _grow_from!(kind, seed, model::_SurfaceModel, members::Vector{Int}, D, 
     empty!(H.key); empty!(H.tri); empty!(H.seed)
     c0 = D.cen[seed]
     for p in members
-        _push_neighbors!(H, D, p, avail, mark, queued, gid, c0)
+        _push_neighbors!(H, D, p, avail, mark, queued, W.vgrow, gid, c0)
     end
     lo, hi = Vec3(Inf, Inf, Inf), Vec3(-Inf, -Inf, -Inf)
     for p in members, v in D.pv[p]
@@ -450,7 +482,7 @@ function _grow_from!(kind, seed, model::_SurfaceModel, members::Vector{Int}, D, 
                 for v in D.pv[p]
                     lo, hi = min.(lo, D.P[v]), max.(hi, D.P[v])
                 end
-                _push_neighbors!(H, D, p, avail, mark, queued, gid, c0)
+                _push_neighbors!(H, D, p, avail, mark, queued, W.vgrow, gid, c0)
                 length(members) < 1.25nfit + 4 && continue
             else
                 push!(rejected, p)
@@ -589,8 +621,10 @@ function fit_surfaces(m::Mesh; reference::Union{Nothing,Mesh} = nothing,
     np = npatches(m)
     np == 0 && return SurfaceRegion[]
     D = _fit_data(m, tol)
+    nv = length(D.P)
     W = (; mark = zeros(Int, np), queued = zeros(Int, np), gid = Ref(0), heap = _GrowHeap(),
-         scratch = falses(length(D.P)))
+         scratch = falses(nv), vgrow = zeros(Int, nv), pring = zeros(Int, np), vring = zeros(Int, nv),
+         stamp = Ref(0))
     avail = trues(np)
     order = sortperm(D.area; rev = true)
     ordered = [k for k in (:plane, :cylinder, :cone, :sphere) if k in kinds]

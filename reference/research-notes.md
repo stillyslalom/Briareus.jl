@@ -1143,6 +1143,28 @@ test fixture rebuilds the layout from rows copied from these files.
   that stay unfitted or split into small cones/spheres into one region each; on the NIF
   halves they are ≤ 1.3 mm² apiece and their flat elements are within the faceting, so
   the gain is a smaller component count, which `minfraction` already gives. **M**
+- **Cost of `fit_surfaces` on finely faceted CAD (2026-10-18).** Not the sphere: a
+  finely faceted sphere is one region grown from its first seed (lat-long spheres of
+  10k and 40k facets, an icosphere of 20k: 0.01–0.07 s). The NIF CAD capsule part
+  (38,200 facets, raw, one thread, local) has a fill tube tessellated in fans: vertex
+  degrees up to 801, so the patch-neighbor lists (patches sharing a vertex) held 4.4M
+  entries (116 per patch), and each seed's two-ring start walked 1,600 lists of 1,600:
+  83% of the time. Neighbors are now visited through each vertex once per pass, with
+  the same order of first occurrence, so results are bit-for-bit unchanged (every region
+  of the workspace's 14 CAD parts, raw; the tutorial's parts raw and remeshed; synthetic
+  frusta, capsules with tubes, tori). Capsule 0.50 → 0.11 s with the default kinds and
+  121 → 20 s with `kinds = (:cylinder, :sphere)`; hohlraum halves 1.39/0.84 →
+  1.31/0.79 s; the tutorial's fit step 47 → 30 ms; a synthetic fan-tessellated tube
+  (19k facets) 0.37 → 0.05 s. Refits already come at every ×1.25 in size, so a growth
+  costs linear time in its region; an incremental least-squares fit would not change the
+  order. What remains super-linear is a face of none of the requested kinds: every one
+  of its patches seeds a growth that runs until the tolerance stops it and is then
+  rejected by the rms test (the capsule's 0.15° tapered tube without cones: 13,836
+  rejected cylinder growths of ~1,000 patches; a synthetic tapered tube 12 s at 16k
+  facets, 45 s at 25k; a 40k-facet torus 14 s with all kinds). Not seeding the interior
+  patches of such a rejected region again cut the capsule to 4.4 s and the halves to
+  0.5 s, but dropped regions on 5 of the 14 parts, among them a true 6-patch 56.9° cone
+  (rms 0.1 µm) on a half, so it was not adopted. **H** (measured locally and synthetic)
 
 ### Result tables and fits
 
