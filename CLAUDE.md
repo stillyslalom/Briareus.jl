@@ -43,6 +43,9 @@ environment has no ForwardDiff/Optim, and `Vec3` clashes with Makie there.
   for reciprocity. Components carrying a `CurvedSurface` (Sphere/Cylinder/DiskSurface)
   are integrated on the true surface — hohlraums do this by default; ray casting always
   uses the facets. `closed = true` (Sinkhorn balancing) only for closed enclosures.
+  Elements of more than two facets (remeshed CAD) emit from lumped cells and receive
+  through their outline (or plane by plane when cut by the point's tangent plane);
+  1–2-facet elements (every primitive) keep the per-facet path bit for bit.
   Visibility ignores facets of a cylinder/sphere when both ray ends are inside it
   (faceting artifacts), and the centroid facing test is relaxed by each curved
   element's normal spread (a general triangle on a cylinder is tilted ~h/2R).
