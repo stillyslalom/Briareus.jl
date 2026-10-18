@@ -565,6 +565,7 @@ function Target(components::AbstractVector{Component})
                 A > 0 || continue
                 cen = sum(ta[k] * (tv0[k] + (te1[k] + te2[k]) / 3) for k in gr) / A
                 nrm = normalize(sum(ta[k] * tn[k] for k in gr))
+                cen = _onto_patch(tv0, te1, te2, gr, cen, nrm)
                 curv = Int8(0)
                 if c.surface !== nothing
                     # radiation uses the curved patch: its area, and normals on the side
@@ -594,6 +595,34 @@ function Target(components::AbstractVector{Component})
 end
 
 Target(cs::Component...) = Target(collect(cs))
+
+# A folded patch (a remeshed CAD element spans facets within a few degrees of one
+# plane) has its area centroid off its facets: behind them on a convex surface, where
+# rays from the centroid (visibility, imaging) start inside the solid and are blocked by
+# the patch itself. Such a centroid is moved along the mean normal onto the facet the
+# line through it meets (`remesh_mesh` makes sure it meets one); a planar patch keeps
+# its centroid unchanged.
+function _onto_patch(tv0, te1, te2, gr, c, n)
+    length(gr) > 1 || return c
+    h = 0.0
+    for k in gr, v in (tv0[k], tv0[k] + te1[k], tv0[k] + te2[k])
+        h = max(h, norm(v - c))
+    end
+    best = Inf
+    for k in gr
+        nt = cross(te1[k], te2[k])
+        den = dot(n, nt)
+        den == 0 && continue
+        a = tv0[k]
+        s = dot(a - c, nt) / den
+        p = c + s * n
+        b, d = a + te1[k], a + te2[k]
+        tol = -1e-9 * dot(nt, nt)
+        dot(_tri_cross(a, b, p), nt) >= tol && dot(_tri_cross(b, d, p), nt) >= tol &&
+            dot(_tri_cross(d, a, p), nt) >= tol && abs(s) < abs(best) && (best = s)
+    end
+    return isfinite(best) && abs(best) > 1e-9 * h ? c + best * n : c
+end
 
 "Number of radiating elements (patch sides) of a target."
 nelements(t::Target) = length(t.elem_area)
@@ -650,8 +679,10 @@ visible(t::Target, a::Vec3, b::Vec3) = !any_hit(t.bvh, a, b - a, 1 - 1e-9)
 Quadrature over element `e` from `4^level` sub-triangles per triangle: sub-triangle
 centroids weighted by area, with the element normal. On a component with a
 `CurvedSurface`, the points are projected onto the surface and carry its normals
-(on the element's radiating side) and curved-patch areas. Weights sum to the element
-area.
+(on the element's radiating side) and curved-patch areas; an element of more than two
+facets (imported CAD) instead gets as many points as a two-triangle element, from its
+facets' pieces lumped into cells of the element's tangent plane. Weights sum to the
+element area.
 """
 function element_quadrature(t::Target, e::Integer, level::Integer)
     pts = Vec3[]
@@ -675,12 +706,73 @@ function element_quadrature(t::Target, e::Integer, level::Integer)
         end
         return cpts, cws, fill(t.elem_curved[e] * s.normal, length(cpts))
     end
+    length(t.elem_tris[e]) > 2 && return _lumped_quadrature(t, e, level, s)
     cpts, cws, cns = Vec3[], Float64[], Vec3[]
     for k in t.elem_tris[e]
         _curved_subtri!(cpts, cws, cns, s, t.elem_curved[e], t.tri_v0[k], t.tri_v0[k] + t.tri_e1[k],
                         t.tri_v0[k] + t.tri_e2[k], level)
     end
     return cpts, cws, cns
+end
+
+# Quadrature of a curved element made of more than two facets (CAD faceting, e.g. a
+# remeshed element across many strips of a cylinder), with as many points as a
+# two-triangle element would have, wherever its facets lie: each facet is bisected along
+# its longest edge until that edge is under half a cell, the pieces (projected onto
+# the surface, exact curved areas) are lumped into square cells of side
+# size / (2^level √2) in the element's tangent plane (`size` = √2 × the largest
+# centroid-to-vertex distance, as in `view_factors`; a square element then has 2·4^level
+# cells), and each cell becomes one point: the projection of its pieces' weighted mean
+# point, with their total area. Weights sum to the element's exact curved area.
+function _lumped_quadrature(t::Target, e::Integer, level::Integer, s::CurvedSurface)
+    C, n, sgn = t.elem_centroid[e], t.elem_normal[e], t.elem_curved[e]
+    r = 0.0
+    for k in t.elem_tris[e], v in (t.tri_v0[k], t.tri_v0[k] + t.tri_e1[k], t.tri_v0[k] + t.tri_e2[k])
+        r = max(r, norm(v - C))
+    end
+    hq = r / 2^level                                   # √2 r / (2^level √2)
+    e1 = normalize(cross(n, abs(n[1]) < 0.9 ? Vec3(1, 0, 0) : Vec3(0, 1, 0)))
+    e2 = cross(n, e1)
+    cells = Dict{Tuple{Int,Int},Tuple{Float64,Vec3}}()
+    for k in t.elem_tris[e]
+        a = t.tri_v0[k]
+        _lump_pieces!(cells, s, C, e1, e2, hq, a, a + t.tri_e1[k], a + t.tri_e2[k])
+    end
+    pts, ws, ns = Vec3[], Float64[], Vec3[]
+    for key in sort!(collect(keys(cells)))
+        w, wp = cells[key]
+        w > 0 || continue
+        p, nn = surface_point(s, wp / w)
+        push!(pts, p); push!(ws, w); push!(ns, sgn * nn)
+    end
+    return pts, ws, ns
+end
+
+function _lump_pieces!(cells, s, C, e1, e2, hq, a, b, c)
+    lab, lbc, lca = sum(abs2, b - a), sum(abs2, c - b), sum(abs2, a - c)
+    if max(lab, lbc, lca) > (hq / 2)^2
+        if lab >= lbc && lab >= lca
+            m = (a + b) / 2
+            _lump_pieces!(cells, s, C, e1, e2, hq, a, m, c)
+            _lump_pieces!(cells, s, C, e1, e2, hq, m, b, c)
+        elseif lbc >= lca
+            m = (b + c) / 2
+            _lump_pieces!(cells, s, C, e1, e2, hq, a, b, m)
+            _lump_pieces!(cells, s, C, e1, e2, hq, a, m, c)
+        else
+            m = (c + a) / 2
+            _lump_pieces!(cells, s, C, e1, e2, hq, a, b, m)
+            _lump_pieces!(cells, s, C, e1, e2, hq, m, b, c)
+        end
+        return
+    end
+    g = (a + b + c) / 3
+    key = (floor(Int, dot(g - C, e1) / hq), floor(Int, dot(g - C, e2) / hq))
+    w = _curved_area(s, a, b, c)
+    p = first(surface_point(s, g))
+    w0, p0 = get(cells, key, (0.0, zero(Vec3)))
+    cells[key] = (w0 + w, p0 + w * p)
+    return
 end
 
 _patch_vertices(tv0, te1, te2, gr) =

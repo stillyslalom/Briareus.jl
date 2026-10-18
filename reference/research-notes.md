@@ -888,6 +888,52 @@ test fixture rebuilds the layout from rows copied from these files.
   Float64 matrices (view factors and two cached factorizations) fill half the memory
   (`radiation_size`: 26.8k elements on 32 GB, *derived*); the drive is then laser
   only.
+- **CAD surface fitting (2026-10-18).** `fit_surfaces` (region growing over patches
+  sharing a vertex, least-squares plane/cylinder/sphere fits refined by Gauss–Newton,
+  tolerance `max(1e-4 mm, 1e-3 min(R, extent))`, regions kept when their rms is under a
+  quarter of it) on one hohlraum half of the NIF workspace (7,342 facets, 245 mm²), one
+  thread:
+  - Raw facets, 0.7 s: 64 regions, 77% of the area (75% curved). The inner wall is a
+    cylinder of r = 3.2100 mm (480 facets, 86.7 mm², facing the axis, rms 0.28 µm, axis
+    within 1.4e-8 rad of z), the next sheet r = 3.2400 mm (65 mm², facing out, rms
+    0.25 µm, max 1.3 µm: not quite one cylinder), a step at r = 3.348 mm (22 mm²), the
+    entrance-hole bore r = 2.15 mm about z, holes of r = 1.0 and 0.25 mm on horizontal
+    axes, and a few large-radius spheres and cylinders (R = 23–640 mm, rms 0.3–0.9 µm)
+    on faces that are neither planar nor (within 0.1 µm) any of the three; those are
+    harmless (within tolerance) but split off as small components.
+  - Remeshed at 0.3 mm (4,237 elements), fitted directly: 1.6% of the area. Points
+    `remesh_mesh` adds inside the wall's facets lie up to 5.8 µm inside the cylinder,
+    beyond the 3.2 µm tolerance. With the raw facets as `reference` (fit there, then
+    each element assigned to the region whose surface its vertices lie within tolerance
+    plus that region's own facet deviation of), 1.3 s: 74% of the area, the inner wall
+    881 elements and 84.6 of its 86.7 mm² (elements straddling the wall's edges stay
+    flat). **H** (measured locally)
+- **Curved quadrature on remeshed elements (2026-10-18).** The cylinder/sphere
+  quadrature (sub-triangle points projected radially, exact curved areas via
+  `_curved_area`) is exact in area for any element whose facets are a radial graph
+  over the surface, not only chord rectangles. Its cost was not: per-facet points made
+  a 12-facet element 6× (36× per pair) dearer than a primitive one. Elements of more than
+  two facets now lump the facets' pieces into cells of size/(2^level √2), as many as a
+  two-facet element has. Remeshed elements also need their centroid on their facets:
+  on a convex surface (a CAD capsule) the area centroid of an element folded across
+  facets lies inside the solid, and its visibility rays were blocked by the element
+  itself (every capsule element saw nothing). **H** (synthetic, see below)
+- **Fitted vs flat CAD (2026-10-18), synthetic, Float32 STL round trip.** Interior of a
+  latitude-longitude sphere (R = 2 mm, 60 × 120 bands, remeshed at 0.5 mm, 257
+  elements): fitted, F_ij = A_j/4πR² to 5e-17 and an integrating sphere's incident flux
+  uniform to 1e-15 with the source on five elements; flat, entries off by up to 1.4×
+  the exact value (5e-3 absolute), rows by 0.37% on average, and the flux 10.5% low on
+  the worst element; view factors 0.4 s against 28 s (8 threads). Closed can (R = 1, L = 2, 180 strips,
+  remeshed at 0.25): wall–wall exchange −9.0e-4 flat, +4.6e-4 fitted (exact closed form);
+  disk–disk +2.6e-3 for both (the planar disks are flat elements in both). Hohlraum
+  (two thick halves with entrance-hole bores, 360 strips, a 56 × 112 capsule, remeshed
+  at 0.3, 2,902 cavity elements): capsule rows to wall, caps and LEHs within 6e-4 of the
+  exact solid-angle fractions for both; with Sinkhorn closure the capsule flux under a
+  uniform wall drive is 2.097957 fitted, 2.098185 flat, 2.097943 for the primitive
+  `hohlraum(h = 0.3)` (fitted 7e-6 off, flat 1.1e-4); view factors 3.5 s fitted, 83 s
+  flat, 0.7 s primitive (8 threads). Integrated hohlraum quantities are thus already good
+  on flat remeshed CAD once closed; fitting fixes the local exchange (concave self-view,
+  the integrating-sphere uniformity) and the cost. **H**
 
 ### Result tables and fits
 

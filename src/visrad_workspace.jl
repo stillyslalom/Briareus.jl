@@ -540,7 +540,8 @@ end
 
 """
     visrad_component(object; material = nothing, two_sided = false, orient = false,
-                     toward = (0, 0, 0), coarsen = nothing, remesh = nothing) -> Vector{Component}
+                     toward = (0, 0, 0), coarsen = nothing, remesh = nothing,
+                     fit = false) -> Vector{Component}
 
 Briareus components for one `VisRadObject`, in the chamber frame (mm). The material
 defaults to the object's albedo and x-ray conversion efficiency. CAD meshes give one
@@ -556,7 +557,11 @@ shells are then modeled as two radiating sides). CAD needs fewer, compact elemen
 before view factors: `remesh` (mm) divides the surface into near-planar elements of
 about that size whatever the facets' shapes (`remesh_mesh`; long slivers are cut),
 while `coarsen` (mm) only merges whole near-coplanar facets up to that size
-(`coarsen_mesh`; slivers longer than the size stay). Rectangles give one component (normal +z before orientation), spheres one with
+(`coarsen_mesh`; slivers longer than the size stay). `fit = true` (or a named tuple of
+`fit_surfaces` keywords) then splits a CAD part into its cylinders and spheres, each
+with its exact surface fitted to the CAD facets, and the rest (`curved_components`), so
+the radiation model integrates on the curved walls as it does for a primitive
+hohlraum. Rectangles give one component (normal +z before orientation), spheres one with
 a `SphereSurface`, and cylindrical hohlraums five — `<name>_wall`, `_cap_top`,
 `_cap_bottom` and the apertures `_leh_top`, `_leh_bottom` — with the curved surfaces
 `hohlraum` uses, all on VisRad's grid (`Number of mesh pts`). Other object types return
@@ -564,17 +569,21 @@ no components (with a warning).
 """
 function visrad_component(o::VisRadObject; material = nothing, two_sided::Bool = false,
                           orient::Bool = false, toward = (0.0, 0.0, 0.0), coarsen = nothing,
-                          remesh = nothing)
+                          remesh = nothing, fit = false)
     coarsen === nothing || remesh === nothing ||
         throw(ArgumentError("give one of `coarsen` and `remesh`, not both"))
     mat = material === nothing ? Material(Symbol(o.name); albedo = o.albedo, conversion = o.conversion) :
           material
     o.reflectivity > 0 && @warn "VisRad object $(o.name) reflects laser light ($(o.reflectivity)); Briareus absorbs it all"
     if o.kind === :mesh
-        mesh = orient ? orient_mesh(o.mesh; toward) : o.mesh
-        coarsen === nothing || (mesh = coarsen_mesh(mesh; size = coarsen))
+        facets = orient ? orient_mesh(o.mesh; toward) : o.mesh
+        mesh = coarsen === nothing ? facets : coarsen_mesh(facets; size = coarsen)
         remesh === nothing || (mesh = remesh_mesh(mesh; size = remesh))
-        return [Component(o.name, mesh, mat; two_sided)]
+        c = Component(o.name, mesh, mat; two_sided)
+        fit === false && return [c]
+        # fitted on the CAD facets, whose vertices lie on the surfaces
+        return curved_components(c; reference = mesh === facets ? nothing : facets,
+                                 (fit === true ? (;) : fit)...)
     end
     cs = _vrw_primitive(o.kind, o.name, o.params, mat)
     cs = [c.kind === :surface && two_sided ? Component(c.name, c.mesh, c.material; two_sided, surface = c.surface) : c
@@ -586,7 +595,7 @@ end
 """
     visrad_target(workspace; select = o -> o.radiosity || o.laser, materials = Dict(),
                   two_sided = false, orient = false, toward = (0, 0, 0),
-                  coarsen = nothing, remesh = nothing,
+                  coarsen = nothing, remesh = nothing, fit = false,
                   inside = nothing) -> Target
 
 Target built from the components of a VisRad workspace (`read_visrad_workspace`) for
@@ -594,8 +603,9 @@ which `select(object)` is true — by default those VisRad includes in its radio
 direct-laser calculation. `materials` maps object names to a `Material` overriding the
 file's albedo and conversion efficiency. `two_sided` (a `Bool`, or a function of the
 object) makes surfaces radiate from both sides; see `visrad_component` for why CAD
-meshes often need it, and for `orient`, `toward`, `remesh` and `coarsen` (which apply
-to CAD meshes: repaired windings, and elements of about `remesh` or `coarsen` mm).
+meshes often need it, and for `orient`, `toward`, `remesh`, `coarsen` and `fit` (which
+apply to CAD meshes: repaired windings, elements of about `remesh` or `coarsen` mm, and
+exact cylinders and spheres for the radiation model).
 
 CAD meshes can hold hundreds of thousands of triangles, and each becomes a radiating
 element. That is fine for ray tracing (deposition, clearance, imaging) but too many for
@@ -607,12 +617,13 @@ and a per-component account of what was dropped). It needs consistent windings
 (`orient = true`). The selection runs on the CAD facets as oriented, `remesh` or
 `coarsen` then divide only the facets kept (much cheaper when most of the assembly lies
 outside the cavity), and a second selection on the resulting elements drops those
-that average too little flux.
+that average too little flux. `fit` then applies to the elements kept, fitted on the
+kept facets.
 """
 function visrad_target(ws::VisRadWorkspace; select = o -> o.radiosity || o.laser,
                        materials = Dict{String,Material}(), two_sided = false,
                        orient::Bool = false, toward = (0.0, 0.0, 0.0), coarsen = nothing,
-                       remesh = nothing, inside = nothing)
+                       remesh = nothing, fit = false, inside = nothing)
     coarsen === nothing || remesh === nothing ||
         throw(ArgumentError("give one of `coarsen` and `remesh`, not both"))
     comps = Component[]
@@ -624,20 +635,29 @@ function visrad_target(ws::VisRadWorkspace; select = o -> o.radiosity || o.laser
         later = inside !== nothing && o.kind === :mesh
         cs = visrad_component(o; material = get(materials, o.name, nothing), two_sided = ts,
                               orient, toward, coarsen = later ? nothing : coarsen,
-                              remesh = later ? nothing : remesh)
+                              remesh = later ? nothing : remesh, fit = later ? false : fit)
         later && foreach(c -> push!(cad, c.name), cs)
         append!(comps, cs)
     end
     isempty(comps) && throw(ArgumentError("no VisRad components selected"))
     inside === nothing && return Target(comps)
     kept = enclosure(comps, inside).target.components
-    coarsen === nothing && remesh === nothing && return Target(kept)
-    elems(m) = coarsen === nothing ? remesh_mesh(m; size = remesh) : coarsen_mesh(m; size = coarsen)
-    # select again at the elements' own granularity: an element straddling the edge of
-    # the lit region averages its flux over a larger area than the facets did
-    redone = [c.name in cad ? Component(c.name, elems(c.mesh), c.material; two_sided = c.two_sided) : c
-              for c in kept]
-    return enclosure(redone, inside).target
+    facets = Dict(c.name => c.mesh for c in kept if c.name in cad)
+    if coarsen !== nothing || remesh !== nothing
+        elems = m -> coarsen === nothing ? remesh_mesh(m; size = remesh) : coarsen_mesh(m; size = coarsen)
+        # select again at the elements' own granularity: an element straddling the edge of
+        # the lit region averages its flux over a larger area than the facets did
+        redone = [c.name in cad ? Component(c.name, elems(c.mesh), c.material; two_sided = c.two_sided) : c
+                  for c in kept]
+        kept = enclosure(redone, inside).target.components
+    end
+    fit === false && return Target(kept)
+    # fitted on the kept CAD facets, whose vertices lie on the surfaces
+    fkw = fit === true ? (;) : fit
+    remeshed = coarsen !== nothing || remesh !== nothing
+    return Target(reduce(vcat, (c.name in cad ?
+                                curved_components(c; reference = remeshed ? facets[c.name] : nothing, fkw...) :
+                                [c] for c in kept); init = Component[]))
 end
 
 """

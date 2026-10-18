@@ -48,7 +48,18 @@ environment has no ForwardDiff/Optim, and `Vec3` clashes with Makie there.
   element's normal spread (a general triangle on a cylinder is tilted ~h/2R).
 - Patches must be planar: on a cylinder, mesh anything but chord rectangles as
   triangles (a folded patch's centroid sits behind its facets and sees nothing).
-  Circular `WallWindow`s use equal-area edge polygons for exact areas.
+  Circular `WallWindow`s use equal-area edge polygons for exact areas. The exception is
+  remeshed CAD (`remesh_mesh`: elements folded across facets within `angle`): `Target`
+  moves such an element's centroid along its normal onto its facets (a planar patch
+  keeps its centroid bit for bit), or on a convex surface (a capsule) it would see
+  nothing.
+- CAD curved walls: `fit_surfaces` finds planes, cylinders and spheres in a mesh;
+  `curved_components` (or `visrad_target(...; remesh, fit = true)`) splits a part into
+  `<part>/cyl1`, …, `<part>/sph1`, …, `<part>/rest`, each carrying its fitted surface.
+  Planes get none (flat elements are exact; `DiskSurface` assumes polar sectors). A
+  curved element of more than two facets gets a lumped quadrature (as many points as a
+  two-triangle element), so view-factor cost does not grow with the CAD faceting;
+  elements of one or two facets (every primitive) keep the per-facet rule.
 - Thin-foil windows (`BurnthroughAlbedo`): `drive_history` tracks each element's heat
   front (`HeatFront`, Hammer & Rosen 2003) from its own T(t). A single `solve` treats
   the foil as intact unless given the model's `burnthrough` or a per-element
@@ -111,7 +122,7 @@ environment has no ForwardDiff/Optim, and `Vec3` clashes with Makie there.
 
 `geometry.jl` (Mesh, primitives) → `meshops.jl` (orient/coarsen imported meshes) → `bvh.jl` (BVH, closest/any hit) → `target.jl`
 (materials, albedo models, Component, Target, element quadrature) → `targets.jl`
-(hohlraum, foil) → `beams.jl` (SuperGaussianSpot, Beam, BeamFrame, intensity, cone
+(hohlraum, foil) → `cadfit.jl` (fit_surfaces, curved_components) → `beams.jl` (SuperGaussianSpot, Beam, BeamFrame, intensity, cone
 directions) → `facilities.jl` (NIF ports/spots, OMEGA) → `deposition.jl`
 (DepositionOperator, deposit, raytrace_deposition) → `viewfactors.jl` → `enclosure.jl`
 (enclosure: the elements bounding the free space around a point) → `radiation.jl`

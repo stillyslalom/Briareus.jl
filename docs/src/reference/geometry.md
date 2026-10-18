@@ -6,6 +6,6 @@ Briareus
 
 ```@autodocs
 Modules = [Briareus]
-Pages = ["src/geometry.jl", "src/meshops.jl", "src/target.jl", "src/targets.jl"]
+Pages = ["src/geometry.jl", "src/meshops.jl", "src/target.jl", "src/targets.jl", "src/cadfit.jl"]
 Private = false
 ```
