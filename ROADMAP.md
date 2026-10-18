@@ -340,6 +340,41 @@ Measured on the NIF hohlraum at the GUI's standard mesh (5,864 elements, 48 quad
   0.05 s, the drive stays current). The 0.7–0.9 s first-use stalls (drive result,
   field coloring, import) were JIT compilation, now warmed before the window opens.
 
+## Open questions (from the 2026-10-18 CAD work)
+Choices made provisionally overnight or left open; the lean is in brackets.
+1. `fit = true` by default when `remesh` is given (cad_target, visrad_target, GUI)?
+   Up to 24× faster view factors and exact curved walls, but parts are split and
+   renamed `<part>/cylN`, `/coneN`, `/sphN`, `/rest`. [Yes eventually; off now.]
+2. Default `minfraction = 1e-3` in cad_target/visrad_target/GUI fits? Two NIF CAD
+   hohlraum halves: 138 → 25 components, 1.2% of the curved area left flat.
+   `maxradius` removes only ~10. [Yes for minfraction; maxradius off.]
+3. Cones on by default in `fit_surfaces` (22 more components on the NIF halves)? [Keep.]
+4. Capsule tents and LEH windows in CAD are opaque closed solids that seal the capsule
+   in a pocket. The GUI opens it automatically (tent as a thin film); the library
+   does not. [Library stays explicit; add a transmitting thin-film option.]
+5. `enclosure` threshold 0.05 (6.9k remeshed elements on the NIF workspace) or 0.01
+   (1.4×, return estimate 0.8 → 0.12 mm² against 14.5 mm² open)? [0.05.]
+6. GUI defaults: far CAD parts drawn only on import [keep; reversible per part]; the
+   foil objective with per-beam parameters [yes]; the cavity for non-CAD designs [no];
+   the 30k-triangle background-build threshold [keep]; a one-frame colorbar flash at
+   window open to warm it [accept]; partial curved fits of CAD parts in the GUI (needs
+   a part-to-component name mapping or a per-element surface) [wait for a workspace
+   that benefits]; the whole-part fit guard (`_on_one_surface`) [keep].
+7. `coarsen = x` route to remeshing, or deprecate `coarsen_mesh` for CAD? [Keep both;
+   recommend `remesh` in the docs.]
+8. Remeshed planar strips are now 2–4-facet rectangles on the primitive view-factor
+   path, as accurate as primitive quads (test/cadfit.jl Hottel check loosened 1e-3 →
+   2e-3). The alternative, a finer near rule for ≤ 2-facet elements, moves every
+   primitive baseline. [Accept.]
+9. Baseline moves to offer as options first: a compact capsule mesh in `hohlraum()`
+   (P4 converged with ~400 elements instead of ~6.6k lat-long); partial-visibility
+   sampling for pairs whose centroid ray grazes a rim (row sums miss by up to 1.3% on
+   walls and 8% on LEH apertures before balancing, with bored LEHs). [Both as options.]
+10. `orient_mesh` faces a hollow solid's inner surface into the material; containment
+    parity would face it into the gas, but `enclosure` from TCC would then select a
+    hollow capsule's interior (the GUI relies on the current behavior). [Keep;
+    document.]
+
 ## Next
 1. **VisRad deposition parity: needs runs in VisRad.** The goal: optimize in
    Briareus with `profile = visrad_profile(ws)`, export with `write_visrad_workspace`,
@@ -424,11 +459,7 @@ Measured on the NIF hohlraum at the GUI's standard mesh (5,864 elements, 48 quad
    - CAD fits (see Done): tori for fillets (fillet pieces now fit as small tilted cones
      and spheres; `minfraction` hides them); one surface shared across parts (the
      halves' inner walls); a quadrature at a cone apex; TALIS curvature kind for cones;
-     default filters (see the decisions in the overnight log).
-   - `orient_mesh` on hollow solids (a shell with its inner surface modeled) faces the
-     inner surface into the material; containment parity would face it into the gas,
-     but `enclosure` from TCC would then select a hollow capsule's interior (the GUI's
-     cavity from TCC relies on the current behavior). A user decision.
+     default filters (Open questions 1–2).
    - Adjacent flat CAD pairs: near-kernel evaluations scale as shared-edge length over
      r/256 (~700 per pair on a sliver tube even with straight cuts); an exact or coarser
      treatment along straight shared edges would cut them. Banding misses most of the
