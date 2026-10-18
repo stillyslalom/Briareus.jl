@@ -30,7 +30,12 @@ by facet: a flat one receives through its outline (exactly the sum over its face
 round-off; piece by piece, each piece its facets in one plane, where the point's tangent
 plane cuts it), and near pairs integrate over cells that lump the emitter's facets (side
 size / (2^(level+2) √2) before refining toward the receiver, 2^(level+1) on a curved
-surface), so a pair costs a few times a two-facet pair whatever the facet count.
+surface), so a pair costs a few times a two-facet pair whatever the facet count — as
+long as the receiver is: each point's factor sums its outline, or its pieces when the
+point's tangent plane cuts it, so an element on a finely faceted curved wall (hundreds
+of sliver facets, tens of pieces and a jagged outline of hundreds of edges) costs tens
+of times more per near pair. Give such parts their fitted surface
+(`curved_components`): they are then integrated on the curved surface instead.
 
 Visibility is a single centroid-to-centroid ray between the flat facets; the facets of
 a curved surface (cylinder or sphere) do not block a ray between two points inside it,

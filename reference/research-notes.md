@@ -1003,6 +1003,24 @@ test fixture rebuilds the layout from rows copied from these files.
   ≤ 2e-6 relative or 1e-4 points; capsule rows identical to 4 digits). A flat CAD pair still costs ~5× a primitive pair: folded
   outlines have ~3× a quad's edges, and the cells' bookkeeping. Primitive targets
   (1–2 facets per element) are bit-for-bit unchanged. **H** (synthetic)
+- **Finely faceted curved CAD on the flat path (2026-10-18).** A slow drive reported on
+  the GUI's synthetic sliver workspace (`sliver_workspace(4000)` in
+  BriareusGUI/test/test_workspace.jl: a tube of 4,000 full-length strips, r = 3 mm,
+  2,000 around, 9.4 µm wide, across the hohlraum) is the cost of the flat many-facet
+  path, not a hang or runaway refinement: refinement stops at depth 8, no loop is
+  unbounded. Remeshed at the coarse preset the tube gives 492 of the 802 elements, with
+  274 facets, 72 pieces (strips are never coplanar) and 275 outline edges per element
+  (the cuts across strips are staggered: a boundary between axial neighbors spans
+  0.15–0.2 mm along the strips, about size/3). View factors: 54 s on 4
+  threads (210 CPU-s), 99% of it in the 9,177 tube–tube near pairs: 1,800 cell
+  evaluations per pair (max 34k: the staggered boundaries interleave neighbors over a
+  band, not a line) at 13 µs each (the receiver's pieces and outline). The NIF CAD
+  cavity at the coarse preset (3,740 elements, ~7 pieces per wall element, 35 on the
+  capsule): 19 s on 4 threads, 443 evaluations per near pair, 1.7 µs each on the walls.
+  With the tube given its cylinder (`curved_components`, 3 s) its view factors take
+  2.4 s (22× faster; mean tube row sum 0.6185 vs 0.6168 flat); fitting the NIF cavity's
+  parts changes its time little (19.3 vs 19.7 s). Deposition on the tube target: 8.5 s
+  for 3 beams. **H** (synthetic; the NIF numbers measured locally)
 
 ### Result tables and fits
 
