@@ -54,7 +54,9 @@ target's size), `cutaway` (cut away part of the target to show its inside: the
 components `cut_components` within `cut_width` degrees of azimuth centered on
 `cut_azimuth`, by default the quadrant of a hohlraum shell facing −x −y; see
 [`set_cut!`](@ref)), `hidden` (component names not drawn), `hidden_beams` (beam names not drawn; whether a
-beam takes part in the calculations is the beam table's `enabled`), `selection` (a
+beam takes part in the calculations is the beam table's `enabled`), `show_off` (draw the
+disabled beams, faint; an imported VisRad workspace whose beams are mostly off turns it
+off), `selection` (a
 tree node id, `""` for none: what Properties shows), `extra` (more nodes of the same
 family, beams or components, selected with Ctrl or Shift: edited together with the
 selection) and `expanded` (expanded tree node ids).
@@ -78,6 +80,7 @@ struct ViewState
     cut_width::Observable{Float64}
     cut_components::Observable{Set{Symbol}}
     hidden_beams::Observable{Set{String}}
+    show_off::Observable{Bool}
 end
 
 "Components the cutaway cuts by default: a hohlraum's shell."
@@ -88,7 +91,7 @@ ViewState() = ViewState(Observable(:component), Observable(:rays), Observable(:g
                         Observable(""), Observable(String[]),
                         Observable(Set(["target", "beams", "analyses"])), Observable(225.0),
                         Observable(90.0), Observable(Set{Symbol}(DEFAULT_CUT_COMPONENTS)),
-                        Observable(Set{String}()))
+                        Observable(Set{String}()), Observable(true))
 
 """
     set_cut!(v::ViewState; azimuth, width, components) -> v

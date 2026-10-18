@@ -330,15 +330,18 @@ function part_component(p::PartSpec, h::Real;
 end
 
 """
-    part_components(p::PartSpec, h; frame = (I, 0)) -> Vector{Component}
+    part_components(p::PartSpec, h; frame = (I, 0), raw = false) -> Vector{Component}
 
 The core components of a part: one for every kind but `:visrad`, whose object can be a
 primitive hohlraum (wall, caps and entrance holes). A VisRad object keeps its own place
 in the chamber (VisRad's frames), moved further by the part's placement; its windings
-are repaired and its CAD surface remeshed into elements of the part's size.
+are repaired and its CAD surface remeshed into elements of the part's size. With `raw`
+a VisRad CAD part keeps its file's facets as they are (no winding repair, no remeshing:
+for drawing a part left out of the calculations, at no meshing cost).
 """
 function part_components(p::PartSpec, h::Real;
-                         frame = ([1.0 0.0 0.0; 0.0 1.0 0.0; 0.0 0.0 1.0], zero(Vec3)))
+                         frame = ([1.0 0.0 0.0; 0.0 1.0 0.0; 0.0 0.0 1.0], zero(Vec3)),
+                         raw::Bool = false)
     Rf, tf = frame
     R = Rf * _part_rotation(p)
     center = Rf * part_center(p) + tf
@@ -374,13 +377,15 @@ function part_components(p::PartSpec, h::Real;
         out || (m = transform(m, [1 0 0; 0 -1 0; 0 0 -1]))          # face −z
         surf = nothing
     elseif k === :visrad
-        cs = _visrad_components(p, hp, transpose(R) * (zero(Vec3) - center))
+        cs = _visrad_components(p, hp, transpose(R) * (zero(Vec3) - center); raw)
         return [transform(c, R, center) for c in cs]
     elseif k === :mesh
         v[:scale] > 0 || throw(ArgumentError("$(p.name): the scale must be positive"))
         # facing the target center, remeshed into elements of the part's size
         toward = transpose(R) * (zero(Vec3) - center)
-        m = _stl_part_mesh(p.file, v[:scale], hp, toward, p.inward)
+        # a whole file, or one solid of a multi-solid file (`object`: its position)
+        m = isempty(p.object) ? _stl_part_mesh(p.file, v[:scale], hp, toward, p.inward) :
+            _stl_solid_mesh(p.file, parse(Int, p.object), v[:scale], hp, toward, p.inward)
         surf = nothing
     elseif k === :cylinder
         r, L = v[:r1], v[:length]
@@ -400,23 +405,37 @@ function part_components(p::PartSpec, h::Real;
 end
 
 # A VisRad object's components in the chamber frame (windings repaired toward `toward`,
-# CAD surfaces remeshed into elements of `h`), kept per workspace version and settings: every edit
-# rebuilds the target, and orienting a CAD part of 10⁵ facets takes seconds.
+# CAD surfaces remeshed into elements of `h`; with `raw` the file's facets as they are),
+# kept per workspace version and settings: every edit rebuilds the target, and
+# remeshing a CAD part of 10⁵ facets takes tens of seconds.
 const _VRW_PARTS = Dict{Any,Vector{Component}}()
 
-function _visrad_components(p::PartSpec, h, toward)
+# `cache[key]`, computed by `f()` outside the lock when missing (parts mesh in parallel,
+# and a long meshing never holds up the GUI thread's lookups of other parts).
+function _cached(f, cache::AbstractDict, key)
+    v = lock(() -> get(cache, key, nothing), _STL_LOCK)
+    v === nothing || return v
+    v = f()
+    return lock(() -> get!(cache, key, v), _STL_LOCK)
+end
+
+function _visrad_components(p::PartSpec, h, toward; raw::Bool = false)
     v = p.values
-    key = (abspath(p.file), mtime(p.file), p.object, Float64(h), round.(Tuple(toward); digits = 9),
-           p.two_sided, v[:albedo], v[:conversion], p.name)
-    lock(_STL_LOCK) do
-        get!(_VRW_PARTS, key) do
-            o = _visrad_object(p.file, p.object)
-            mat = Material(p.name; albedo = v[:albedo], conversion = v[:conversion])
-            cs = visrad_component(o; material = mat, two_sided = p.two_sided, orient = !p.two_sided,
-                                  toward, remesh = o.kind === :mesh ? h : nothing)
-            isempty(cs) && throw(ArgumentError("$(p.name): VisRad object type $(o.type) is not supported"))
-            cs
-        end
+    o = _visrad_object(p.file, p.object)
+    raw &= o.kind === :mesh
+    key = (abspath(p.file), mtime(p.file), p.object, raw ? 0.0 : Float64(h),
+           raw ? nothing : round.(Tuple(toward); digits = 9), p.two_sided, v[:albedo],
+           v[:conversion], p.name, raw)
+    _cached(_VRW_PARTS, key) do
+        mat = Material(p.name; albedo = v[:albedo], conversion = v[:conversion])
+        cs = raw ? visrad_component(o; material = mat, two_sided = p.two_sided) :
+             visrad_component(o; material = mat, two_sided = p.two_sided, orient = !p.two_sided,
+                              toward, remesh = o.kind === :mesh ? h : nothing)
+        isempty(cs) && throw(ArgumentError("$(p.name): VisRad object type $(o.type) is not supported"))
+        # components carry the part's name (renamed, or given a role), not the object's
+        String(p.name) == o.name ? cs :
+        [Component(String(p.name) * String(c.name)[ncodeunits(o.name)+1:end], c.mesh, c.material;
+                   kind = c.kind, two_sided = c.two_sided, surface = c.surface) for c in cs]
     end
 end
 
@@ -427,12 +446,14 @@ visrad_component_names(o::VisRadObject) =
 # A VisRad workspace's object, the workspace read once per file version.
 const _VRW_CACHE = Dict{Any,VisRadWorkspace}()
 
-function _visrad_object(file::AbstractString, object::AbstractString)
+function _visrad_workspace(file::AbstractString)
     isfile(file) || throw(ArgumentError("VisRad workspace not found: $file"))
     key = (abspath(file), mtime(file), filesize(file))
-    ws = lock(_STL_LOCK) do
-        get!(() -> read_visrad_workspace(file), _VRW_CACHE, key)
-    end
+    return _cached(() -> read_visrad_workspace(file), _VRW_CACHE, key)
+end
+
+function _visrad_object(file::AbstractString, object::AbstractString)
+    ws = _visrad_workspace(file)
     i = findfirst(o -> o.name == object, ws.objects)
     i === nothing && throw(ArgumentError("no object $object in $(basename(file))"))
     return ws.objects[i]
@@ -444,6 +465,8 @@ end
 const _STL_CACHE = Dict{Any,Mesh}()
 const _STL_LOCK = ReentrantLock()
 
+# NOTE(stl solids): `_stl_solid_mesh` below runs the same pipeline on one solid of a
+# multi-solid file (`add_stl_parts!`); keep the two in step.
 function _stl_part_mesh(file::AbstractString, scale, h, toward, inward::Bool)
     isfile(file) || throw(ArgumentError("STL file not found: $file"))
     key = (abspath(file), mtime(file), filesize(file), Float64(scale), Float64(h),
@@ -454,6 +477,64 @@ function _stl_part_mesh(file::AbstractString, scale, h, toward, inward::Bool)
             inward ? Mesh(m.vertices, [(a, c, b) for (a, b, c) in m.triangles], m.patches) : m
         end
     end
+end
+
+# Solid `k` of a multi-solid (ASCII) STL file, prepared as `_stl_part_mesh` prepares a
+# whole file. The file's solids are read once per version.
+const _STL_SOLIDS = Dict{Any,Vector{Pair{String,Mesh}}}()
+
+function _stl_solids(file::AbstractString)
+    isfile(file) || throw(ArgumentError("STL file not found: $file"))
+    key = (abspath(file), mtime(file), filesize(file))
+    return _cached(() -> read_stl_solids(file), _STL_SOLIDS, key)
+end
+
+function _stl_solid_mesh(file::AbstractString, k::Integer, scale, h, toward, inward::Bool)
+    solids = _stl_solids(file)
+    1 <= k <= length(solids) || throw(ArgumentError("$(basename(file)) has no solid $k"))
+    key = (abspath(file), mtime(file), filesize(file), k, Float64(scale), Float64(h),
+           round.(Tuple(toward); digits = 9), inward)
+    _cached(_STL_CACHE, key) do
+        m0 = last(solids[k])
+        m0 = Mesh([scale * v for v in m0.vertices], m0.triangles, m0.patches)
+        m = remesh_mesh(orient_mesh(m0; toward); size = h)
+        inward ? Mesh(m.vertices, [(a, c, b) for (a, b, c) in m.triangles], m.patches) : m
+    end
+end
+
+"""
+    add_stl_parts!(ts::TargetSetup, file; values...) -> Bool
+
+Add the parts of an STL file: one `:mesh` part for a file of one solid (as
+[`add_part!`](@ref)), or one per named solid of an ASCII file of several (a multi-body CAD
+export, `read_stl_solids`), each named after its solid (letters, digits and `_`, made
+unique) and placed and sized by `values` alike. The parts are added together: one the
+geometry rejects (an empty solid, …) adds none, sets `error` and returns `false`.
+"""
+function add_stl_parts!(ts, file::AbstractString; values...)      # ts::TargetSetup (defined below)
+    solids = try
+        _stl_solids(file)
+    catch err
+        err isa ArgumentError || rethrow()
+        ts.error[] = _errmsg(err)
+        return false
+    end
+    length(solids) <= 1 && return add_part!(ts, :mesh; file, values...)
+    taken = Set(all_component_names(ts))
+    parts = copy(ts.parts[])
+    vals = Dict{Symbol,Float64}(k => Float64(v) for (k, v) in values)
+    for (k, (sname, _)) in enumerate(solids)
+        base = replace(strip(sname), r"[^A-Za-z0-9_]" => "_")
+        (isempty(base) || !occursin(r"^[A-Za-z_]", base)) && (base = "solid_" * base)
+        name, j = Symbol(base), 1
+        while name in taken
+            j += 1
+            name = Symbol(base, :_, j)
+        end
+        push!(taken, name)
+        push!(parts, PartSpec(:mesh; name, file, object = string(k), values = vals))
+    end
+    return _try_build!(ts; parts)
 end
 
 # ---------------------------------------------------------------- the setup
@@ -524,7 +605,7 @@ build_target(kind::Symbol, p::AbstractDict, resolution::Symbol, windows = Window
 
 function build_target(kind::Symbol, p::AbstractDict, mesh::MeshSpec,
                       windows::AbstractVector{WindowSpec} = WindowSpec[],
-                      parts::AbstractVector{PartSpec} = PartSpec[])
+                      parts::AbstractVector{PartSpec} = PartSpec[]; raw = ())
     frac(k, what) = 0 <= p[k] <= 1 || throw(ArgumentError("$what must be between 0 and 1"))
     mesh.h > 0 && mesh.capsule_h > 0 || throw(ArgumentError("element sizes must be positive"))
     comps = Component[]
@@ -558,7 +639,8 @@ function build_target(kind::Symbol, p::AbstractDict, mesh::MeshSpec,
         throw(ArgumentError("unknown target kind :$kind"))
     end
     for part in parts
-        new = part_components(part, mesh.h; frame = anchor_frame(part.anchor, kind, p, parts))
+        new = part_components(part, mesh.h; frame = anchor_frame(part.anchor, kind, p, parts),
+                              raw = part.name in raw)
         for c in new
             any(d -> d.name === c.name, comps) && throw(ArgumentError("two components are named $(c.name)"))
         end
@@ -577,20 +659,28 @@ Center of the foil of a `:foil` target: `distance` mm from TCC along +x, facing 
 foil_center(p::AbstractDict) = Vec3(p[:distance], 0.0, 0.0)
 foil_center(ts::TargetSetup) = foil_center(ts.params[])
 
+# A built target split into the components in the calculations and those left out
+# (`excluded`, drawn as a ghost: `nothing` when none is).
+function _split_excluded(t::Target, excluded)
+    out = Set(c.name for c in t.components if c.name in excluded)
+    isempty(out) && return t, nothing
+    keep = [c for c in t.components if !(c.name in out)]
+    isempty(keep) && throw(ArgumentError("every component is left out of the calculations"))
+    return Target(keep), Target([c for c in t.components if c.name in out])
+end
+
 # Rebuild with changed inputs, committing them only if the geometry accepts them.
+# `prebuilt` is the `(target, ghost)` of exactly these inputs when a worker built it
+# already ([`import_visrad_workspace!`](@ref)).
 function _try_build!(ts::TargetSetup; kind = ts.kind[], params = ts.params[], mesh = ts.mesh[],
-                     windows = ts.windows[], parts = ts.parts[], excluded = ts.excluded[])
+                     windows = ts.windows[], parts = ts.parts[], excluded = ts.excluded[],
+                     prebuilt = nothing)
     try
-        t = build_target(kind, params, mesh, windows, parts)
         # components left out of the calculations (those still in the target)
-        out = Set(c.name for c in t.components if c.name in excluded)
-        ghost = nothing
-        if !isempty(out)
-            keep = [c for c in t.components if !(c.name in out)]
-            isempty(keep) && throw(ArgumentError("every component is left out of the calculations"))
-            ghost = Target([c for c in t.components if c.name in out])
-            t = Target(keep)
-        end
+        t, ghost = prebuilt === nothing ?
+                   _split_excluded(build_target(kind, params, mesh, windows, parts; raw = excluded),
+                                   excluded) :
+                   prebuilt
         _assign!(ts.excluded, Set{Symbol}(excluded))
         ts.ghost[] = ghost
         kind == ts.kind[] || (ts.kind[] = kind)
@@ -993,6 +1083,178 @@ function set_part_anchor!(ts::TargetSetup, i::Integer, anchor::Symbol; keep::Boo
         ts.error[] = _errmsg(err)
         return false
     end
+end
+
+"""
+Roles a part can take in the analyses, by the component name the drive and the
+optimizer look for: `:none`, `:capsule` (the observed surface: its x-ray drive's modes
+and the capsule keep-out; a sphere) and `:foil` (the backlighter foil, `FOIL_NAME`: its
+spot statistics and the foil objective; a flat part or a mesh).
+"""
+const PART_ROLES = (:none, :capsule, :foil)
+
+const PART_ROLE_LABELS = Dict(:none => "None", :capsule => "Capsule (observed x-ray drive)",
+                              :foil => "Backlighter foil (spot uniformity)")
+
+const _ROLE_NAMES = Dict(:capsule => :capsule, :foil => FOIL_NAME)
+
+"Role of a part (one of [`PART_ROLES`](@ref)): which analysis name it carries."
+part_role(p::PartSpec) = p.name === :capsule ? :capsule : p.name === FOIL_NAME ? :foil : :none
+
+# The object kind a part stands for (a VisRad object's own kind).
+function _part_shape(p::PartSpec)
+    p.kind === :visrad || return p.kind
+    k = _visrad_object(p.file, p.object).kind
+    return k === :mesh ? :mesh : k
+end
+
+# A part's name without a role: a VisRad object's own name, else its kind and a free number.
+function _plain_name(p::PartSpec, taken)
+    p.kind === :visrad && return Symbol(p.object)
+    k = 1
+    while Symbol(p.kind, :_, k) in taken
+        k += 1
+    end
+    return Symbol(p.kind, :_, k)
+end
+
+"""
+    set_part_role!(ts::TargetSetup, i, role::Symbol) -> Bool
+
+Give part `i` a role in the analyses (one of [`PART_ROLES`](@ref)) by naming it as the
+drive and the optimizer expect: `:capsule` or `:foil` (a disk, rectangle or mesh, or a
+VisRad rectangle or CAD part: the backlighter whose spot the foil objective makes
+uniform). The capsule is a sphere (the mode analysis and the keep-out take its center
+and radius): a sphere part or a VisRad sphere is renamed; a CAD part (a capsule with
+its fill tube, say) is replaced in the calculations by a sphere part `:capsule` fitted
+to it ([`fit_sphere`](@ref): its element size the target's capsule size, its albedo and
+conversion the part's), and left out of the calculations itself. A part that held the
+role gives it up (back to its own name); `:none` renames the part to its own name (a
+VisRad object's, or its kind and a number). Parts placed in its frame follow. A role
+the part cannot take, or one a template component already holds (a hohlraum's
+capsule, a foil target's foil), sets `error` and returns `false`.
+"""
+function set_part_role!(ts::TargetSetup, i::Integer, role::Symbol)
+    _check_part_index(ts, i)
+    role in PART_ROLES || throw(ArgumentError("a part's role must be one of $PART_ROLES"))
+    ps = copy(ts.parts[])
+    p = ps[i]
+    part_role(p) === role && return true
+    ex = copy(ts.excluded[])
+    try
+        shape = _part_shape(p)
+        if role === :capsule && shape !== :sphere
+            shape === :mesh ||
+                throw(ArgumentError("the capsule is a sphere, or a CAD part a sphere is fitted to"))
+            return _capsule_from_part!(ts, i)
+        end
+        role === :foil && !(shape in (:rectangle, :disk, :mesh)) &&
+            throw(ArgumentError("the backlighter foil is a flat part (a rectangle or disk) or a mesh"))
+        taken = Set{Symbol}(q.name for q in ps)
+        function rename(k, new)
+            old = ps[k].name
+            ps[k] = _with(ps[k]; name = new)
+            for j in eachindex(ps)
+                ps[j].anchor === old && (ps[j] = _with(ps[j]; anchor = new))
+            end
+            old in ex && (delete!(ex, old); push!(ex, new))    # stays left out
+        end
+        if role !== :none
+            new = _ROLE_NAMES[role]
+            j = findfirst(q -> q.name === new, ps)
+            j === nothing || rename(j, _plain_name(ps[j], taken))
+            rename(i, new)
+        else
+            rename(i, _plain_name(p, taken))
+        end
+    catch err
+        err isa ArgumentError || rethrow()
+        ts.error[] = _errmsg(err)
+        return false
+    end
+    return _try_build!(ts; parts = ps, excluded = ex)
+end
+
+"""
+    fit_sphere(points, weights = ones; inlier = 0.1) -> (center, radius)
+
+A sphere through most of `points` (mm), weighted by `weights` (e.g. the surface area
+each point stands for, so a finely tessellated fill tube does not outweigh the capsule
+it is attached to): a sphere fitted to every point (weighted least squares, algebraic),
+then refitted to the points within 0.3, then four times within `inlier`, × its radius.
+Robust to a minority of the weight off the sphere. A shell modeled with both faces
+fits between them; the radius returned is the outer face's (the weighted 75th
+percentile of the distances within 20 % of the fit).
+"""
+function fit_sphere(points::AbstractVector, weights::AbstractVector = ones(length(points));
+                    inlier::Real = 0.1)
+    P = [Vec3(p...) for p in points]
+    w = Float64.(weights)
+    length(P) >= 4 && length(w) == length(P) && all(>=(0), w) && sum(w) > 0 ||
+        throw(ArgumentError("a sphere needs at least four points with nonnegative weights"))
+    function wmedian(x, w)
+        o = sortperm(x)
+        cw = cumsum(w[o])
+        return x[o[searchsortedfirst(cw, cw[end] / 2)]]
+    end
+    c = sum(w .* P) / sum(w)
+    r = wmedian([norm(p - c) for p in P], w)
+    for it in 1:6
+        # every point first, then those near the sphere
+        band = (it == 1 ? Inf : it == 2 ? 0.3 : Float64(inlier)) * r
+        sel = [k for k in eachindex(P) if abs(norm(P[k] - c) - r) <= band && w[k] > 0]
+        length(sel) >= 4 || break
+        # |p|² = 2 c·p + (r² − |c|²): linear in (c, k); rows weighted by √w
+        sw = sqrt.(w[sel])
+        A = reduce(vcat, [sw[j] * [2P[k][1] 2P[k][2] 2P[k][3] 1.0] for (j, k) in enumerate(sel)])
+        b = [sw[j] * dot(P[k], P[k]) for (j, k) in enumerate(sel)]
+        x = A \ b
+        c = Vec3(x[1], x[2], x[3])
+        r = sqrt(max(x[4] + dot(c, c), 0.0))
+    end
+    # a shell's inner and outer faces fit in between: take the outer one (the radiating
+    # surface), the weighted 75th percentile of the distances near the sphere
+    near = [k for k in eachindex(P) if abs(norm(P[k] - c) - r) <= 0.2r]
+    if length(near) >= 4
+        d = [norm(P[k] - c) for k in near]
+        o = sortperm(d)
+        cw = cumsum(w[near][o])
+        r = d[o[searchsortedfirst(cw, 0.75 * cw[end])]]
+    end
+    return c, r
+end
+
+# Role `:capsule` for CAD part `i`: a sphere part `:capsule` fitted to it in its place in
+# the calculations.
+function _capsule_from_part!(ts::TargetSetup, i::Integer)
+    ps = copy(ts.parts[])
+    p = ps[i]
+    frame = anchor_frame(p.anchor, ts.kind[], ts.params[], ps)
+    cs = part_components(p, ts.mesh[].h; frame, raw = true)
+    # each triangle's vertices weighted by a third of its area
+    pts, wts = Vec3[], Float64[]
+    for comp in cs, (a, b, d) in comp.mesh.triangles
+        va, vb, vd = comp.mesh.vertices[a], comp.mesh.vertices[b], comp.mesh.vertices[d]
+        A = norm(cross(vb - va, vd - va)) / 6
+        push!(pts, va, vb, vd)
+        append!(wts, (A, A, A))
+    end
+    c, r = fit_sphere(pts, wts)
+    r > 0 || throw(ArgumentError("$(p.name): no sphere fits it"))
+    ex = copy(ts.excluded[])
+    taken = Set{Symbol}(q.name for q in ps)
+    j = findfirst(q -> q.name === :capsule, ps)
+    if j !== nothing
+        old = ps[j].name
+        ps[j] = _with(ps[j]; name = _plain_name(ps[j], taken))
+        old in ex && (delete!(ex, old); push!(ex, ps[j].name))
+    end
+    push!(ps, PartSpec(:sphere; name = :capsule,
+                       values = Dict(:x => c[1], :y => c[2], :z => c[3], :r1 => r,
+                                     :h => ts.mesh[].capsule_h, :albedo => p.values[:albedo],
+                                     :conversion => p.values[:conversion])))
+    push!(ex, p.name)
+    return _try_build!(ts; parts = ps, excluded = ex)
 end
 
 """

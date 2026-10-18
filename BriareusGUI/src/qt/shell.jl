@@ -347,6 +347,11 @@ function BriareusShell(sess::DesignSession; queue::Channel{Any} = Channel{Any}(I
     _set!(sh, "bnOn", 0)
     _set!(sh, "partNumber", 0)
     _set!(sh, "partAnchor", 0)
+    _set!(sh, "partRole", 0)
+    _set!(sh, "partFilm", false)
+    _set!(sh, "cavitySummary", "")
+    _set!(sh, "compIncluded", true)
+    _set!(sh, "roleLabels", [PART_ROLE_LABELS[r] for r in PART_ROLES])
     _set!(sh, "partCoords", 0)
     _set!(sh, "anchorLabels", [PART_ANCHOR_LABELS[a] for a in PART_ANCHORS])
     _set!(sh, "windowNumber", 0)
@@ -355,10 +360,11 @@ function BriareusShell(sess::DesignSession; queue::Channel{Any} = Channel{Any}(I
     mark = (_...) -> (sh.dirty[] = true)
     ts, bt, dr, st, rv, tl, v = sess.target, sess.beams, sess.drive, sess.optimize, sess.review,
                                 sess.talis, sess.view
-    for obs in (sess.status, ts.kind, ts.params, ts.mesh, ts.resolution, ts.windows, ts.parts,
+    for obs in (sess.status, sess.meshing, ts.kind, ts.params, ts.mesh, ts.resolution, ts.windows, ts.parts,
                 ts.target, ts.error,
                 bt.beams, bt.enabled, bt.preset, bt.by, bt.path, bt.error, bt.warnings,
                 dr.scenario, dr.building, dr.result, dr.evaluating, dr.field, dr.view,
+                dr.cavity, dr.cavity_point, dr.films,
                 dr.spot_radius, dr.status, dr.kit_running, dr.kit_status, dr.retune_running,
                 dr.retune_status,
                 st.by, st.fields, st.deltas, st.objective, st.weights, st.hold_drive, st.keepout,
@@ -369,7 +375,7 @@ function BriareusShell(sess::DesignSession; queue::Channel{Any} = Channel{Any}(I
                 rv.running, rv.progress, rv.status, rv.error, rv.report,
                 tl.capture, tl.hardware, tl.tolerance, tl.pivot, tl.pivot_point, tl.omega1,
                 tl.running, tl.status, tl.error, tl.report,
-                v.color, v.beams, v.beam_color, v.beam_length, v.cutaway, v.hidden, v.selection,
+                v.color, v.beams, v.beam_color, v.show_off, v.cut_components, v.beam_length, v.cutaway, v.hidden, v.selection,
                 v.expanded)
         on(mark, obs)
     end
@@ -432,6 +438,7 @@ function _refresh_view!(sh::BriareusShell)
     _set!(sh, "beamColor", String(v.beam_color[]))
     _set!(sh, "beamLength", v.beam_length[] > 0 ? _num(v.beam_length[]) : "")
     _set!(sh, "cutaway", v.cutaway[])
+    _set!(sh, "showOff", v.show_off[])
     _set!(sh, "cutWidth", v.cut_width[])
     _set!(sh, "cutAzimuth", v.cut_azimuth[])
     t = sh.sess.target.target[]
@@ -439,7 +446,8 @@ function _refresh_view!(sh::BriareusShell)
     _set!(sh, "cutSet", sort([String(n) for n in v.cut_components[]]))
     busy = String[]
     dr, st, rv, tl = sh.sess.drive, sh.sess.optimize, sh.sess.review, sh.sess.talis
-    dr.building[] && push!(busy, "view factors " * Controllers._seconds(time() - dr.started[]))
+    isempty(sh.sess.meshing[]) || push!(busy, sh.sess.meshing[])
+    dr.building[] && push!(busy, "drive " * Controllers._seconds(time() - dr.started[]))
     st.running[] && push!(busy, "optimizing")
     rv.running[] && push!(busy, "clearance $(rv.progress[][1])/$(rv.progress[][2])")
     tl.running[] && push!(busy, "TaLIS")
@@ -504,18 +512,22 @@ function _refresh_selection!(sh::BriareusShell)
     t = sess.target.target[]
     if kind in (:comp, :part, :window)
         name = selected_component(sess)
-        ci = findfirst(c -> c.name === name, t.components)
+        # a component left out of the calculations is described from the ghost
+        g = sess.target.ghost[]
+        tc = any(c -> c.name === name, t.components) || g === nothing ? t : g
+        ci = findfirst(c -> c.name === name, tc.components)
+        _set!(sh, "compIncluded", !(name in sess.target.excluded[]))
         if ci !== nothing
-            c = t.components[ci]
-            es = elements(t, name)
-            A = sum(t.elem_area[e] for e in es; init = 0.0)
+            c = tc.components[ci]
+            es = elements(tc, name)
+            A = sum(tc.elem_area[e] for e in es; init = 0.0)
             what = c.kind === :aperture ? "aperture (transparent: rays pass, x-rays escape)" :
                    c.two_sided ? "two-sided surface" : "one-sided surface"
             mat = c.kind === :aperture ? "" :
                   @sprintf(" · albedo %.3g · conversion %.3g", albedo(c.material), c.material.conversion)
             surf = c.surface === nothing ? "faceted" : "exact " * replace(string(nameof(typeof(c.surface))), "Surface" => "") * " surface"
-            _set!(sh, "compInfo", @sprintf("%s · %d elements · %.4g mm² · %s%s", what, length(es), A,
-                                           surf, mat))
+            _set!(sh, "compInfo", @sprintf("%s · %d elements · %.4g mm² · %s%s%s", what, length(es), A,
+                                           surf, mat, tc === t ? "" : " · not in the calculations"))
             _set!(sh, "compHidden", name in sess.view.hidden[])
             _set!(sh, "selTitle", String(name))
         end
@@ -537,6 +549,8 @@ function _refresh_selection!(sh::BriareusShell)
             _set!(sh, "partTwoSided", p.two_sided)
             _set!(sh, "partInward", p.inward)
             _set!(sh, "partAperture", p.aperture)
+            _set!(sh, "partRole", findfirst(==(part_role(p)), PART_ROLES) - 1)
+            _set!(sh, "partFilm", p.name in sess.drive.films[])
             pos = Dict(part_position(p))
             fields = [[FieldRow(String(k), label, unit, _num(p.values[k]))
                        for (k, label, unit, _) in PART_SIZE_FIELDS[p.kind]];
@@ -630,6 +644,13 @@ function _refresh_drive!(sh::BriareusShell)
     _sync_rows!(sh.rows[:powerModel], sh.models[:powerModel], power)
     _set!(sh, "delivered", res === nothing ? "" :
                            @sprintf("%.4g TW delivered", res.evaluation.deposition.delivered))
+    _set!(sh, "driveCavity", dr.cavity[])
+    _set!(sh, "cavityPoint", join((_num(x) for x in dr.cavity_point[]), ", "))
+    # the cavity's account changes with the drive's build only
+    if get(sh.shown, "_enclosure", missing) !== dr.enclosure[]
+        sh.shown["_enclosure"] = dr.enclosure[]
+        _set!(sh, "cavitySummary", cavity_summary(dr))
+    end
     _set!(sh, "kitRunning", dr.kit_running[])
     _set!(sh, "kitStatus", dr.kit_status[])
     _set!(sh, "kitReady", Controllers._drive_current(sess))
@@ -918,15 +939,18 @@ end
 function br_node_include(id, on)
     _with_shell() do sh
         sess = sh.sess
+        comps = Symbol[]
         for n in _acted_nodes(sh, id)
             c = _node_component(sess, n)
             if c !== nothing
-                set_excluded!(sess.target, c, !Bool(on))
+                push!(comps, c)
             else
                 idx = node_beams(sess.beams, n)
                 isempty(idx) || set_set_enabled!(sess.beams, idx, Bool(on))
             end
         end
+        # CAD parts put back are remeshed on workers (the target follows when ready)
+        isempty(comps) || include_components!(sess, comps, Bool(on))
     end
 end
 br_toggle_expand(id) = _with_shell(sh -> toggle_expanded!(sh.sess.view, String(id)))
@@ -994,10 +1018,15 @@ function br_add_stl(url)
     _with_shell() do sh
         ts = sh.sess.target
         path = _url_to_path(String(url))
-        if add_part!(ts, :mesh; file = path)
+        n0 = length(ts.parts[])
+        # one part, or one per named solid of a multi-body export
+        if add_stl_parts!(ts, path)
             name = String(ts.parts[][end].name)
-            select!(sh.sess.view, "part:" * name)
-            sh.sess.status[] = "added $name from $(basename(path)): set its scale (mm per file unit) and place in Properties"
+            n = length(ts.parts[]) - n0
+            select!(sh.sess.view, "part:" * String(ts.parts[][n0+1].name))
+            sh.sess.status[] = n == 1 ?
+                "added $name from $(basename(path)): set its scale (mm per file unit) and place in Properties" :
+                "added $n parts from $(basename(path)), one per solid: set their scale (mm per file unit) and place in Properties"
         end
     end
 end
@@ -1063,6 +1092,25 @@ function br_part_anchor(index)
             ok &= set_part_anchor!(ts, i, anchor)
         end
         ok || _set!(sh, "partAnchor", -1)
+    end
+end
+# The selected part's role in the analyses (index into `roleLabels`); a refused role
+# shows the part's own again.
+function br_part_role(index)
+    _with_shell() do sh
+        idx = _selected_parts(sh)
+        isempty(idx) && return
+        ts = sh.sess.target
+        role = PART_ROLES[Int(index)+1]
+        if set_part_role!(ts, idx[1], role)
+            # a CAD part made the capsule: the fitted sphere is the capsule
+            p = role === :capsule && part_role(ts.parts[][idx[1]]) !== :capsule ?
+                ts.parts[][part_index(ts, :capsule)] : ts.parts[][idx[1]]
+            select!(sh.sess.view, "part:" * String(p.name))
+            sh.sess.status[] = "$(p.name): " * lowercase(PART_ROLE_LABELS[part_role(p)])
+        else
+            delete!(sh.shown, "partRole")
+        end
     end
 end
 function br_part_coords(index)
@@ -1221,21 +1269,44 @@ function br_xray_image()
         v = sh.sess.drive.view[]
         v === :image || (sh.shown["_viewBeforeImage"] = v)
         xray_image!(sh.sess; direction = Tuple(f), up = Tuple(u), center = Tuple(c.lookat), width)
-        sh.sess.status[] = current ? "x-ray image along the view" :
-                           "computing the drive for the x-ray image…"
+        current || (sh.sess.status[] = "computing the drive for the x-ray image…")
+        current && sh.sess.drive.image[] !== nothing && (sh.sess.status[] = "x-ray image along the view")
+    end
+end
+br_cavity(on) = _with_shell(sh -> set_cavity!(sh.sess.drive, Bool(on)))
+function br_cavity_point(text)
+    _with_shell() do sh
+        xs = split(strip(string(text)), r"[,\s]+")
+        length(xs) == 3 || throw(ArgumentError("give the cavity point as x, y, z (mm)"))
+        set_cavity!(sh.sess.drive, sh.sess.drive.cavity[];
+                    point = [Controllers._parse_number(x, "a coordinate") for x in xs])
+        delete!(sh.shown, "cavityPoint")
+    end
+end
+# The selected parts as thin films (left out of the drive's cavity) or not.
+function br_part_film(on)
+    _with_shell() do sh
+        dr = sh.sess.drive
+        f = copy(dr.films[])
+        for i in _selected_parts(sh)
+            n = sh.sess.target.parts[][i].name
+            Bool(on) ? push!(f, n) : delete!(f, n)
+        end
+        set_cavity!(dr, dr.cavity[]; films = f)
     end
 end
 br_set_spot_radius(text) = _with_shell(sh -> (sh.sess.drive.spot_radius[] =
                                                   Controllers._parse_number(string(text), "the spot radius"; positive = true)))
 function br_import_visrad_workspace(url)
     _with_shell() do sh
-        import_visrad_workspace!(sh.sess, _url_to_path(String(url)))
-        select!(sh.sess.view, "target")
-        fit_all!(sh.scene)
+        # read and meshed on a worker (seconds for CAD); the design changes when it is ready
+        import_visrad_workspace!(sh.sess, _url_to_path(String(url));
+                                 done = () -> (select!(sh.sess.view, "target"); fit_all!(sh.scene)))
     end
 end
 br_export_visrad_workspace(url) = _with_shell(sh -> export_visrad_workspace(sh.sess, _url_to_path(String(url))))
 br_export_results(url) = _with_shell(sh -> export_results(sh.sess, _url_to_path(String(url))))
+br_export_stl(url) = _with_shell(sh -> export_target_stl(sh.sess, _url_to_path(String(url))))
 br_write_kit(url) = _with_shell(sh -> write_visrad_kit!(sh.sess, _url_to_path(String(url))))
 # The retune's errors show in its dialog, where it was asked for.
 function br_retune(table, out, by, cap, stay)
@@ -1293,6 +1364,7 @@ br_beam_length(text) = _with_shell(sh -> Controllers._assign!(sh.sess.view.beam_
                                                               isempty(strip(string(text))) ? 0.0 :
                                                               Controllers._parse_number(string(text), "the beam length";
                                                                                         nonnegative = true)))
+br_show_off(on) = _with_shell(sh -> Controllers._assign!(sh.sess.view.show_off, Bool(on)))
 br_set_cutaway(on) = _with_shell(sh -> Controllers._assign!(sh.sess.view.cutaway, Bool(on)))
 # Cut parameters (the Cutaway button's right-click menu); any change turns the cut on.
 br_cut_width(w) = _with_shell(sh -> (set_cut!(sh.sess.view; width = Float64(w));
@@ -1356,6 +1428,7 @@ function _register_qml_functions()
     @qmlfunction br_set_target_kind br_set_resolution br_edit_mesh br_edit_target
     @qmlfunction br_add_window br_remove_window br_edit_window br_window_open
     @qmlfunction br_add_part br_add_stl br_edit_part br_part_flag br_part_anchor br_part_coords
+    @qmlfunction br_part_role br_export_stl br_cavity br_cavity_point br_part_film
     @qmlfunction br_remove_selected
     @qmlfunction br_load_preset br_set_grouping br_edit_beam br_set_beam_on br_edit_node
     @qmlfunction br_import_beams br_export_beams br_import_sst br_import_summary br_export_sst
@@ -1366,7 +1439,7 @@ function _register_qml_functions()
     @qmlfunction br_rv_role br_rv_edit br_rv_wings br_rv_quality br_rv_start br_rv_cancel
     @qmlfunction br_rv_export br_tl_role br_tl_edit br_tl_pivot br_tl_omega1 br_tl_start
     @qmlfunction br_tl_cancel br_tl_export br_cancel_all
-    @qmlfunction br_set_color br_beam_style br_beam_color br_beam_length br_set_cutaway
+    @qmlfunction br_set_color br_beam_style br_beam_color br_beam_length br_set_cutaway br_show_off
     @qmlfunction br_cut_width br_cut_azimuth br_cut_toward_view br_cut_component
     @qmlfunction br_standard_view br_fit_all br_fit_selection br_look_along_beam
     @qmlfunction br_look_from_port br_port_angles
@@ -1425,6 +1498,10 @@ function briareus(sess::Union{Nothing,DesignSession} = nothing; kind::Symbol = :
     previous_deliver, previous_spawn = sess.deliver[], sess.spawn[]
     sess.deliver[] = f -> put!(queue, f)
     sess.spawn[] = true
+    # Windows ticks timers at 15.6 ms unless a process asks for finer: the window's 16 ms
+    # tick then fires every 31 ms (30 frames per second while orbiting). Ask for 1 ms while
+    # the window is open, as browsers do.
+    finer = Sys.iswindows() && ccall((:timeBeginPeriod, "winmm"), UInt32, (UInt32,), 1) == 0
     try
         _qt_init!()
         _warm_glyph_atlas!()
@@ -1438,6 +1515,7 @@ function briareus(sess::Union{Nothing,DesignSession} = nothing; kind::Symbol = :
                 (k => m for (k, m) in sh.models)...)
         exec()
     finally
+        finer && ccall((:timeEndPeriod, "winmm"), UInt32, (UInt32,), 1)
         _SHELL[] = nothing
         Controllers._abandon_jobs!(sess)
         sess.deliver[] = previous_deliver

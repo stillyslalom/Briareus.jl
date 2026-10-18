@@ -58,7 +58,12 @@ and each analysis says when it is out of date.
     VisRad workspace. A *mesh* part reads an
     STL file (a CAD export; Target ▸ Add part ▸ Mesh from STL file), scaled to mm, with
     its windings repaired (`orient_mesh`) and its surface remeshed into elements of
-    the part's size (`remesh_mesh`).
+    the part's size (`remesh_mesh`); a multi-body export (an ASCII STL of named solids)
+    gives one part per solid. A part's *Role* names it for the analyses: *Capsule*
+    (the observed surface; a CAD capsule is replaced in the calculations by a sphere
+    fitted to it, `fit_sphere`, so a fill tube does not count) or *Backlighter foil*
+    (the foil objective's spot), and *Thin film* leaves it out of the drive's cavity
+    (below).
   - *Beams* (a group, quad, beam, or any Ctrl-selected set): aim relative to the ports
     (z, r, tangential offset) or a common aim point (x, y, z, as VisRad points a
     cluster at a reference point), or *Aim at* a component's centroid (the foil, an
@@ -99,6 +104,20 @@ and each analysis says when it is out of date.
   inside through its entrance holes). It follows the drive as beams are edited. View ▸
   Map or image beside the 3D view shows either of them in a second canvas next to
   the 3D target instead of in its place.
+- **CAD workspaces.** A NIF CAD workspace brings 15 parts and 2 × 10⁵ facets, most of
+  them mounting hardware reaching 10² mm from the target. On import, a CAD part that
+  reaches farther than twice the farthest aim point of the beams VisRad fires is
+  drawn only (from its file's facets, not remeshed) and left out of the
+  calculations; the status names these parts and *Include in calculations* puts one
+  back (remeshed on workers). Beams VisRad leaves off are not drawn when most are
+  (View ▸ Beams ▸ Show beams that are off). The drive of a workspace with CAD runs on
+  its cavity around TCC (Drive ▸ Cavity, `set_cavity!`, `Briareus.enclosure`): the
+  elements bounding the free space around the point, without the assembly's outer
+  faces (≈ 7,000 of 20,000 elements on that workspace); a thin film modeled as a solid
+  that seals the point into a pocket (a capsule tent) is found and left out, and the
+  Drive properties list what the cavity kept of each part. A target whose x-ray view
+  factors would not fit in half the memory (`radiation_size`: ≈ 27,000 elements on
+  32 GB) gets the laser deposition alone, with the reason and the fix in the status.
 - **Results** (bottom tabs):
   - *Beam table:* every cone, quad or beam with its pointing, defocus, power and
     on/off, edited in place.
@@ -138,8 +157,9 @@ and each analysis says when it is out of date.
   `read_visrad_summary`: pointing, defocus, power and spot; beams off or absent in the
   file are switched off at their power, and the readers' warnings are listed); VisRad
   workspaces (File ▸ Import VisRad workspace: its components as VisRad object parts
-  and its beams; File ▸ Export VisRad workspace writes the beams back into a copy of
-  the imported one, `write_visrad_workspace`); File ▸ Export results (the drive's
+  and its beams, read and meshed on worker threads with progress; File ▸ Export
+  VisRad workspace writes the beams back into a copy of the imported one,
+  `write_visrad_workspace`); File ▸ Export target as STL (`write_stl`, mm); File ▸ Export results (the drive's
   per-element laser, radiosity and flux, power per component and beam, and capsule
   modes as CSV, `write_results`, with the session that produced them); views; and the
   analyses.

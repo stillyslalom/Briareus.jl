@@ -90,7 +90,7 @@ function scene_canvas(sess::DesignSession)
     c = SceneCanvas(fig, ls, cam, body, highlight, rays, selected_rays, aims, hits, volumes,
                     outlines, cb, triad, Ref(BeamPath[]), Ref(falses(0)), Ref{Any}(nothing),
                     Ref(true), Ref(0), ghost)
-    cam.pick = (o, d) -> _pick_surface(c, sess, o, d)[1]
+    cam.pick = (o, d) -> min(_pick_surface(c, sess, o, d)[1], _pick_ghost(sess, o, d)[1])
     cam.pivot = () -> selection_center(sess)
     cam.on_click = (o, d, px) -> _click!(c, sess, o, d, px)
     cam.on_double = (o, d, px) -> _double_click!(c, sess, o, d, px)
@@ -101,7 +101,7 @@ function scene_canvas(sess::DesignSession)
           v.cutaway, v.hidden, v.cut_azimuth, v.cut_width, v.cut_components)
     onany((_...) -> _draw_beams!(c, sess), sess.target.target, sess.beams.beams,
           sess.beams.enabled, sess.beams.cluster, v.beams, v.beam_color, v.beam_length, sess.review.report,
-          sess.talis.report, v.hidden_beams)
+          sess.talis.report, v.hidden_beams, v.show_off)
     onany((_...) -> _draw_selection!(c, sess), v.selection, v.extra, sess.target.target,
           v.cutaway, v.cut_azimuth, v.cut_width, v.cut_components, sess.beams.beams,
           sess.beams.cluster)
@@ -216,14 +216,36 @@ function _pick_surface(c::SceneCanvas, sess::DesignSession, o, d)
     return (Inf, 0)
 end
 
+# First shown ghost (a component left out of the calculations) along a ray: (distance,
+# component name), (Inf, :none) when none. Ghosts are drawn whole (no cutaway).
+function _pick_ghost(sess::DesignSession, o, d)
+    g = sess.target.ghost[]
+    g === nothing && return (Inf, :none)
+    hid = sess.view.hidden[]
+    o, d = Briareus.Vec3(o...), Briareus.Vec3(d...)
+    traveled = 0.0
+    for _ in 1:64
+        τ, tri = Briareus.closest_hit(g.bvh, o, d)
+        tri == 0 && return (Inf, :none)
+        traveled += τ
+        name = g.components[g.tri_comp[tri]].name
+        name in hid || return (traveled, name)
+        step = 1e-6 * max(g.scale, 1.0)
+        o = o + (τ + step) * d
+        traveled += step
+    end
+    return (Inf, :none)
+end
+
 # The beam whose drawn axis passes nearest the pixel, within `_PICK_PIXELS`.
 function _pick_beam(c::SceneCanvas, sess::DesignSession, px)
     sess.view.beams[] === :off && return nothing
     best, bi = _PICK_PIXELS, nothing
     hid = sess.view.hidden_beams[]
     bs = sess.beams.beams[]
+    en, off = sess.beams.enabled[], sess.view.show_off[]
     for (i, p) in enumerate(c.paths[])
-        i <= length(bs) && bs[i].name in hid && continue
+        i <= length(bs) && (bs[i].name in hid || !(off || en[i])) && continue
         a, b = project_point(c.camera, Makie.Vec3d(p.start...)), project_point(c.camera, Makie.Vec3d(p.stop...))
         d = _segment_distance(px, a, b)
         d < best && ((best, bi) = (d, i))
@@ -241,10 +263,14 @@ end
 function _click!(c::SceneCanvas, sess::DesignSession, o, d, px)
     bi = _pick_beam(c, sess, px)
     τ, tri = _pick_surface(c, sess, o, d)
+    τg, ghost = _pick_ghost(sess, o, d)
     add = c.camera.click_ctrl
     if bi !== nothing
         b = sess.beams.beams[][bi]
         add ? select_add!(sess.view, beam_id(b)) : select!(sess.view, beam_id(b))
+    elseif τg < τ                       # a part left out of the calculations, in front
+        id = component_id(sess.target, ghost)
+        add ? select_add!(sess.view, id) : select!(sess.view, id)
     elseif tri != 0
         t = sess.target.target[]
         id = component_id(sess.target, t.components[t.tri_comp[tri]].name)
@@ -307,8 +333,16 @@ function _body_coloring(sess::DesignSession)
     sess.view.color[] === :component && return nothing
     res = sess.drive.result[]
     res === nothing && return nothing
-    res.evaluation.scenario.target === sess.target.target[] || return nothing
-    return element_values(res, sess.view.color[])
+    t = sess.target.target[]
+    res.evaluation.scenario.target === t && return element_values(res, sess.view.color[])
+    # a drive on the cavity: its elements are some of the target's
+    dr = sess.drive
+    idx = dr.cavity_index[]
+    (idx !== nothing && res.evaluation.scenario === dr.scenario[] && dr.key[] !== nothing &&
+     dr.key[][1] === t) || return nothing
+    full = fill(NaN, nelements(t))
+    full[idx] = element_values(res, sess.view.color[])
+    return full
 end
 
 # Components left out of the calculations, drawn faint (not pickable: rays and the
@@ -336,7 +370,10 @@ end
 
 function _draw_body!(c::SceneCanvas, sess::DesignSession)
     t = sess.target.target[]
-    c.camera.bounds = (Makie.Vec3d(0, 0, 0), 2.2 * t.scale)        # with the beams drawn
+    g = sess.target.ghost[]
+    # with the beams drawn, and the parts left out of the calculations (CAD mounting
+    # hardware can reach 10² mm): the clip planes hold them all
+    c.camera.bounds = (Makie.Vec3d(0, 0, 0), max(2.2 * t.scale, g === nothing ? 0.0 : 1.05 * g.scale))
     c.camera.home = (Makie.Vec3d(0, 0, 0), t.scale)
     if c.fitted[] === nothing
         c.camera.lookat = Makie.Vec3d(0, 0, 0)
@@ -411,10 +448,14 @@ function _draw_selection!(c::SceneCanvas, sess::DesignSession)
     pts = Point3f[]
     if name !== nothing && length(drawn) == length(t.tri_area)
         ci = findfirst(x -> x.name === name, t.components)
-        for k in eachindex(t.tri_area)
-            (ci !== nothing && t.tri_comp[k] == ci) || continue
+        # a part left out of the calculations is highlighted on its ghost
+        g = sess.target.ghost[]
+        tt = ci === nothing && g !== nothing ? g : t
+        ci === nothing && g !== nothing && (ci = findfirst(x -> x.name === name, g.components))
+        for k in eachindex(tt.tri_area)
+            (ci !== nothing && tt.tri_comp[k] == ci) || continue
             # apertures and cut-away parts are not drawn; highlight them anyway
-            v0, e1, e2 = t.tri_v0[k], t.tri_e1[k], t.tri_e2[k]
+            v0, e1, e2 = tt.tri_v0[k], tt.tri_e1[k], tt.tri_e2[k]
             push!(pts, Point3f(v0...), Point3f((v0 + e1)...), Point3f((v0 + e2)...))
         end
     end
@@ -442,7 +483,7 @@ function _beam_colors(sess::DesignSession)
     hid = sess.view.hidden_beams[]
     return map(zip(bs, en, sess.beams.cluster[])) do (b, on, g)
         b.name in hid && return RGBAf(0, 0, 0, 0)               # not drawn
-        on || return BEAM_OFF
+        on || return sess.view.show_off[] ? BEAM_OFF : RGBAf(0, 0, 0, 0)
         status !== nothing && return get(STATUS_COLORS, get(status, b.name, :none), NAN_COLOR)
         _hexcolor(pal[g])
     end
@@ -481,6 +522,7 @@ function _draw_beams!(c::SceneCanvas, sess::DesignSession)
         vcols = RGBAf[]
         for (b, col) in zip(bs, cols)
             b.name in sess.view.hidden_beams[] && continue
+            col.alpha == 0 && continue                          # an off beam not drawn
             v, f = beam_volume(t, b; length = L)
             o = length(verts)
             append!(verts, Point3f.(v))

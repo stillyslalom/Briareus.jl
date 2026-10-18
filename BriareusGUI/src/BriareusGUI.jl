@@ -54,7 +54,8 @@ export PartSpec, PART_KINDS, PART_KIND_LABELS, PART_FIELDS, PART_SIZE_FIELDS, pa
        part_axis, part_center, add_part!, remove_part!, edit_part!, set_part_flag!, part_index,
        PART_ANCHORS, PART_ANCHOR_LABELS, anchor_frame, set_part_anchor!, set_excluded!,
        PART_COORDINATES, PART_POSITION_FIELDS, part_position, set_part_coords!, part_components,
-       all_component_names
+       all_component_names, PART_ROLES, PART_ROLE_LABELS, part_role, set_part_role!,
+       export_target_stl, add_stl_parts!, fit_sphere
 export WindowSpec, WINDOW_FIELDS, add_window!, remove_window!, edit_window!, set_window_open!,
        set_window_round!,
        window_name
@@ -68,7 +69,7 @@ export BeamTable, BEAM_PRESETS, BEAM_GROUPINGS, BEAM_FIELDS, PRESET_LABELS, pres
        active_beams, display_beams, import_beams!, export_beams, beams_summary
 export import_visrad_sst!, import_visrad_summary!, export_visrad_sst, export_visrad_summary
 export DriveState, DriveResult, DRIVE_FIELDS, DRIVE_FIELD_LABELS, MODE_DEGREES, set_field!, xray_image!,
-       set_side_view!,
+       set_side_view!, set_cavity!, cavity_rows, cavity_summary, cavity_sealed,
        set_view!, flux_lookup, flux_map, power_rows, element_values, drive_summary
 export OptimizeState, OptimizeResult, OBJECTIVES, OBJECTIVE_LABELS, set_free!,
        edit_optimize!, set_objective!, start_optimize!, cancel_optimize!, optimize_progress,
@@ -87,7 +88,8 @@ export ViewState, COLOR_MODES, COLOR_LABELS, BEAM_COLORINGS, PALETTE, component_
        selection_kind, component_id, beam_id, model_tree, node_beams, selected_beams,
        selected_component
 export DesignSession, TASKS, TASK_LABELS, task_status, set_color!, drive_stale,
-       build_scenario!, accept_optimum!, write_visrad_kit!
+       build_scenario!, accept_optimum!, write_visrad_kit!, radiation_size, include_components!,
+       RADIATION_MAX_ELEMENTS
 
 end # module Controllers
 

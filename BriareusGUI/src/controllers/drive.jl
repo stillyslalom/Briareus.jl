@@ -51,8 +51,15 @@ the foil objective are taken), `status`, the VisRad benchmark kit's
 `kit_running`/`kit_status` (see [`write_visrad_kit!`](@ref)), the retune's
 `retune_running`/`retune_status` (see [`retune_to_reference!`](@ref)), the x-ray image's
 `image_request` (its camera, see [`xray_image!`](@ref)) and `image` (the latest
-rendering, `(; x, y, values, title)` in mm and W/cm²/sr, or `nothing`), and `side`
-(show the map or the image beside the 3D target instead of in its place).
+rendering, `(; x, y, values, title)` in mm and W/cm²/sr, or `nothing`), `side`
+(show the map or the image beside the 3D target instead of in its place), and the
+cavity (see [`set_cavity!`](@ref)): `cavity` (compute the drive on the elements that
+bound the free space around `cavity_point` only, `Briareus.enclosure`: an imported CAD
+assembly's hohlraum cavity without its outer faces and mounting hardware), `films`
+(components the cavity leaves out: thin films a CAD file models as solids, such as a
+capsule tent or an entrance-hole window, which would seal the point into a pocket) and
+`enclosure` (the latest cavity selection, with `cavity_index`, the target element of
+each drive element).
 """
 struct DriveState
     scenario::Observable{Union{Nothing,Scenario}}
@@ -72,6 +79,11 @@ struct DriveState
     image_request::Observable{Any}           # the x-ray image's camera, or nothing
     image::Observable{Any}                   # its latest rendering, or nothing
     side::Observable{Bool}                   # map or image beside the 3D view
+    cavity::Observable{Bool}                 # drive on the cavity around cavity_point
+    cavity_point::Observable{Vec3}
+    films::Observable{Set{Symbol}}           # left out of the cavity (tents, windows)
+    enclosure::Base.RefValue{Any}            # the latest cavity selection, or nothing
+    cavity_index::Base.RefValue{Any}         # target element of each drive element
     key::Base.RefValue{Any}                  # (target, ports) of the scenario
     lookup::Base.RefValue{Any}               # flux-map raster lookup of the scenario
     generation::Base.RefValue{Int}           # build requests
@@ -84,6 +96,8 @@ DriveState() = DriveState(Observable{Union{Nothing,Scenario}}(nothing), Observab
                           Observable(:laser), Observable(:scene), Observable(0.5),
                           Observable(""), Observable(false), Observable(""),
                           Observable(false), Observable(""), Observable{Any}(nothing), Observable{Any}(nothing), Observable(false),
+                          Observable(false), Observable(zero(Vec3)), Observable(Set{Symbol}()),
+                          Ref{Any}(nothing), Ref{Any}(nothing),
                           Ref{Any}(nothing), Ref{Any}(nothing), Ref(0), Ref(0))
 
 """
@@ -135,16 +149,153 @@ function _render_image(dr::DriveState)
                                     join((@sprintf("%.2f", c) for c in cam.dir), ", "))
 end
 
+"""
+    set_cavity!(dr::DriveState, on::Bool; point = dr.cavity_point[], films = dr.films[]) -> dr
+
+Compute the drive on the cavity around `point` (mm) only (`on`), or on the whole target.
+The cavity is what `Briareus.enclosure` keeps: the elements bounding the free space the
+point is in, without the outer faces, end faces and mounting hardware of an imported CAD
+assembly (a NIF CAD workspace's 10⁴–10⁵ elements become a few thousand), so its x-ray
+view factors are within reach. `films` (component names) are left out first: thin
+films a CAD file models as closed solids, such as a capsule tent or an entrance-hole
+window, seal the point into a pocket (they transmit x-rays at their thickness). The
+drive's laser deposition then sees the cavity only (light that would clip outer faces
+passes); the clearance and TaLIS checks keep using the whole target.
+"""
+function set_cavity!(dr::DriveState, on::Bool; point = dr.cavity_point[], films = dr.films[])
+    _assign!(dr.cavity_point, Vec3(point...))
+    _assign!(dr.films, Set{Symbol}(films))
+    _assign!(dr.cavity, on)
+    return dr
+end
+
+# The cavity of a target around `point`, `films` left out: the enclosure, and the
+# target element of each of its elements.
+function _cavity(t::Target, point, films)
+    comps = [c for c in t.components if !(c.name in films)]
+    isempty(comps) && throw(ArgumentError("every component is a film left out of the cavity"))
+    enc = enclosure(comps, point)
+    src = enc.source
+    pos = Dict{Symbol,Vector{Int}}(c.name => collect(elements(t, c.name)) for c in comps)
+    rank = zeros(Int, nelements(src))
+    for c in comps
+        for (k, e) in enumerate(elements(src, c.name))
+            rank[e] = k
+        end
+    end
+    index = [pos[src.components[src.elem_comp[e]].name][rank[e]] for e in enc.index]
+    return enc, index
+end
+
+"""
+    cavity_rows(dr::DriveState) -> Vector{NamedTuple}
+
+What the latest cavity selection kept of each component: rows `(; name, kept, elements,
+area_kept, area)` (element counts and mm²), largest kept area first; empty before one.
+"""
+function cavity_rows(dr::DriveState)
+    enc = dr.enclosure[]
+    enc === nothing && return NamedTuple[]
+    src = enc.source
+    rows = map(src.components) do c
+        es = elements(src, c.name)
+        k = [e for e in es if enc.kept[e]]
+        (; name = c.name, kept = length(k), elements = length(es),
+         area_kept = sum(src.elem_area[e] for e in k; init = 0.0),
+         area = sum(src.elem_area[e] for e in es; init = 0.0))
+    end
+    return sort(rows; by = r -> -r.area_kept)
+end
+
+"""
+    cavity_summary(dr::DriveState) -> String
+
+The latest cavity in a few lines: elements and area kept, the open area, and per
+component what was kept; with a warning when the point sits in a sealed pocket.
+"""
+function cavity_summary(dr::DriveState)
+    enc = dr.enclosure[]
+    enc === nothing && return ""
+    rows = cavity_rows(dr)
+    n = sum(r.kept for r in rows; init = 0)
+    A = sum(r.area_kept for r in rows; init = 0.0)
+    head = @sprintf("Cavity around (%.3g, %.3g, %.3g) mm: %d of %d elements, %.4g mm², open area %.3g mm²",
+                    enc.point..., n, nelements(enc.source), A, enc.open_area)
+    sealed = cavity_sealed(dr) ?
+             "\nSealed: nothing escapes, and few components bound it. A thin film modeled as a solid " *
+             "(a capsule tent, an entrance-hole window) closes the point in: mark it as a thin film " *
+             "(Properties)." : ""
+    lines = [@sprintf("%s: %d of %d elements, %.3g of %.3g mm²", r.name, r.kept, r.elements,
+                      r.area_kept, r.area) for r in rows if r.kept > 0]
+    dropped = [String(r.name) for r in rows if r.kept == 0]
+    isempty(dropped) || push!(lines, "dropped whole: " * join(dropped, ", "))
+    return head * sealed * "\n" * join(lines, "\n")
+end
+
+"Whether the latest cavity is a sealed pocket (no open area: a film closes the point in)."
+cavity_sealed(dr::DriveState) = dr.enclosure[] !== nothing && _sealed(dr.enclosure[])
+
+# A pocket: nothing escapes from the point, and at most two components bound it (a
+# capsule in its tent, say).
+_sealed(enc) = enc.escape < 1e-3 && length(enc.target.components) <= 2
+
+# The cavity around a point, and when films seal it into a pocket, the component of the
+# pocket whose leaving out opens the largest cavity (the film: a tent or a window, tried
+# among the pocket's three largest components). Returns (enclosure, index, film or nothing).
+function _open_cavity(t::Target, point, films)
+    enc, index = _cavity(t, point, films)
+    _sealed(enc) || return enc, index, nothing
+    best = nothing
+    for c in sort(enc.target.components; by = c -> -sum(enc.target.elem_area[e] for e in elements(enc.target, c.name)))[1:min(3, end)]
+        e2, i2 = _cavity(t, point, union(films, (c.name,)))
+        _sealed(e2) && continue
+        A = sum(e2.target.elem_area)
+        (best === nothing || A > best[4]) && (best = (e2, i2, c.name, A))
+    end
+    best === nothing && return enc, index, nothing
+    return best[1], best[2], best[3]
+end
+
 # Build a scenario for a target and the table's beams (all of them: disabled beams are
 # evaluated at zero power, so on/off needs no rebuild). Hohlraums observe the capsule;
 # `closed` (a hohlraum and nothing outside it) balances the view factors of the
-# enclosure. Every target gets a radiation model for the B/H fields.
-function _build_scenario(t::Target, beams::Vector{Beam{Float64}}; closed::Bool = false)
+# enclosure. Every target gets a radiation model for the B/H fields, unless it is too
+# large for its view factors (`radiation_size`: laser only). With `cavity = (point,
+# films)` the scenario is built on the cavity around the point (see `set_cavity!`); a
+# pocket sealed by a film is opened by leaving that film out too (`_open_cavity`), and
+# a point in the open (most of its rays escape: a backlighter foil and its shields, say)
+# keeps the whole target. Returns `(; s, lookup, enc, index, film, escape)`: the
+# scenario, its flux-map lookup, the cavity's enclosure and element index, the film
+# found (`nothing`s without a cavity), and the point's escaping fraction.
+function _build_scenario(t::Target, beams::Vector{Beam{Float64}}; closed::Bool = false,
+                         radiation::Union{Bool,Nothing} = nothing, cavity = nothing)
+    enc = index = film = nothing
+    escape = NaN
+    if cavity !== nothing
+        # the parts are meshed to their element sizes already, so the selection runs on
+        # elements (`visrad_target(...; inside)` selects on CAD facets before remeshing)
+        enc, index, film = _open_cavity(t, cavity...)
+        escape = enc.escape
+        if escape > CAVITY_MAX_ESCAPE
+            enc = index = film = nothing
+        else
+            t = enc.target
+            closed = false
+        end
+    end
+    radiation === nothing && (radiation = radiation_size(t).feasible)
     names = component_names(t)
-    observe = :capsule in names ? :capsule : nothing
-    s = Scenario(t, beams; observe, radiation = true, viewfactor_kw = (; closed))
-    return s, flux_lookup(s)
+    observe = radiation && :capsule in names ? :capsule : nothing
+    s = Scenario(t, beams; observe, radiation, viewfactor_kw = (; closed))
+    return (; s, lookup = flux_lookup(s), enc, index, film, escape)
 end
+
+"""
+The largest fraction of the rays from the cavity point that may escape for the drive to
+use the cavity: above it the point is in the open (a backlighter foil's side of the
+chamber) and the drive keeps the whole target.
+"""
+const CAVITY_MAX_ESCAPE = 0.5
 
 # ---------------------------------------------------------------- flux map
 
@@ -317,5 +468,6 @@ function drive_summary(res::DriveResult)
                         s.mean, 100 * s.rms, 100 * s.fraction, s.radius)
     end
     d = res.evaluation.deposition
-    return @sprintf("%.4g TW delivered", d.delivered)
+    return @sprintf("%.4g TW delivered", d.delivered) *
+           (res.solution === nothing ? " (laser only: no x-ray drive)" : "")
 end

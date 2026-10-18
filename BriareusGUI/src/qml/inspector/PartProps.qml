@@ -17,14 +17,40 @@ ColumnLayout {
     Note {
         visible: app.partFile !== ""
         text: "File: " + app.partFile + "\nWindings repaired (closed solids face out of their " +
-              "material, open sheets the target center) and facets merged into elements of the " +
-              "part's size."
+              "material, open sheets the target center) and its surface remeshed into elements of " +
+              "the part's size; a part left out of the calculations is drawn from its file's facets."
     }
     PropRow {
         label: "Name"
         value: app.partName
         fieldWidth: 140
         onEdited: (text) => Julia.br_edit_part("name", text)
+    }
+    RowLayout {
+        Label { text: "Role"; Layout.preferredWidth: 110 }
+        ComboBox {
+            Layout.fillWidth: true
+            model: app.roleLabels
+            currentIndex: app.partRole
+            onActivated: (index) => Julia.br_part_role(index)
+        }
+    }
+    Note {
+        visible: app.partKind === "VisRad object"
+        text: "A VisRad CAD part's element size (below; 0: the target's) sets its remeshing. " +
+              "Mounting hardware far from the target is drawn only after an import; put it back " +
+              "in the calculations for the laser and clearance to see it (the drive's cavity " +
+              "leaves it out of the x-ray view factors either way)."
+    }
+    CheckBox {
+        text: "Thin film: left out of the drive's cavity (a capsule tent, an LEH window)"
+        checked: app.partFilm
+        onToggled: Julia.br_part_film(checked)
+    }
+    CheckBox {
+        text: "Include in calculations (laser, x-ray drive, clearance)"
+        checked: app.compIncluded
+        onToggled: Julia.br_node_include(app.selection, checked)
     }
     RowLayout {
         Label { text: "Placed in"; Layout.preferredWidth: 110 }

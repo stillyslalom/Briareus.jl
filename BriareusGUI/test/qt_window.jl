@@ -30,6 +30,7 @@ using BriareusGUI.Briareus
     session_file = joinpath(files, "design.briareus.toml")
     reference_csv = joinpath(files, "reference.csv")
     retuned_csv = joinpath(files, "retuned.csv")
+    target_stl = joinpath(files, "target.stl")
     B = BriareusGUI
     B._TICK_HOOK[] = function (sh)
         s = sh.sess
@@ -248,6 +249,10 @@ using BriareusGUI.Briareus
         elseif k == 23 && time() - t_stage[] > 0.5
             s.target.kind[] === :custom && sh.app["targetKind"] == "custom" &&
                 isempty(sh.rows[:targetFieldModel]) && push!(seen, :custom)
+            # File ▸ Export target as STL; View ▸ Beams ▸ Show beams that are off
+            B.br_export_stl(target_stl)
+            B.br_show_off(false)
+            isfile(target_stl) && !s.view.show_off[] && push!(seen, :stl)
             B.request_close(); next!()
         end
     end
@@ -262,7 +267,7 @@ using BriareusGUI.Briareus
     @test seen == [:target, :windows, :part, :mesh, :remove, :tree_beams, :visrad, :volumes, :zoom,
                    :pick, :drive, :kit, :map, :optimize, :capsule, :applied, :clearance, :talis,
                    :talis_csv, :group, :split, :undo, :redo, :session, :xray, :side, :port,
-                   :retune_started, :retune, :custom]
+                   :retune_started, :retune, :custom, :stl]
     @test !sess.spawn[]                              # restored when the window closed
     @test all(isfile ∘ png, ("target", "part", "beams", "drive_scene", "drive_map", "optimize",
                              "clearance", "talis", "along_beam", "group", "split", "cut_port"))

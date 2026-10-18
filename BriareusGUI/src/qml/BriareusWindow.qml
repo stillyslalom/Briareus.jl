@@ -85,6 +85,7 @@ ApplicationWindow {
             Action { text: "Export VisRad beam summary…"; onTriggered: fileDialog.run("export_summary") }
             Action { text: "Write VisRad benchmark kit…"; enabled: app.kitReady && !app.kitRunning; onTriggered: kitDialog.open() }
             Action { text: "Export results (CSV)…"; enabled: app.kitReady; onTriggered: resultsDialog.open() }
+            Action { text: "Export target as STL…"; onTriggered: exportStlDialog.open() }
             MenuSeparator {}
             Action { text: "Save view as image…"; onTriggered: saveViewDialog.open() }
             MenuSeparator {}
@@ -173,6 +174,8 @@ ApplicationWindow {
                 Action { text: "Rays"; checkable: true; checked: app.beamStyle === "rays"; onTriggered: Julia.br_beam_style("rays") }
                 Action { text: "Volumes"; checkable: true; checked: app.beamStyle === "volumes"; onTriggered: Julia.br_beam_style("volumes") }
                 Action { text: "Hidden"; checkable: true; checked: app.beamStyle === "off"; onTriggered: Julia.br_beam_style("off") }
+                MenuSeparator {}
+                Action { text: "Show beams that are off"; checkable: true; checked: app.showOff; onTriggered: Julia.br_show_off(checked) }
                 MenuSeparator {}
                 Action { text: "Color by cone"; checkable: true; checked: app.beamColor === "group"; onTriggered: Julia.br_beam_color("group") }
                 Action { text: "Color by clearance"; checkable: true; checked: app.beamColor === "clearance"; onTriggered: Julia.br_beam_color("clearance") }
@@ -370,6 +373,14 @@ ApplicationWindow {
         fileMode: FileDialog.OpenFile
         nameFilters: ["STL mesh (*.stl)", "All files (*)"]
         onAccepted: Julia.br_add_stl(selectedFile.toString())
+    }
+    FileDialog {
+        id: exportStlDialog
+        title: "Export the target as STL (mm; the components in the calculations)"
+        fileMode: FileDialog.SaveFile
+        defaultSuffix: "stl"
+        nameFilters: ["STL mesh (*.stl)", "All files (*)"]
+        onAccepted: Julia.br_export_stl(selectedFile.toString())
     }
     // VisRad workspaces: import a design; export its beams into a copy of the imported one
     FileDialog {

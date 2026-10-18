@@ -379,6 +379,196 @@ include(joinpath(pkgdir(Briareus), "test", "vrw_fixture.jl"))
     @test component_names(s2.target.target[]) == names
 end
 
+@testset "VisRad import in the background, roles, laser-only drive (no GL)" begin
+    dir = mktempdir()
+    src = joinpath(dir, "work.vrw")
+    write(src, synthetic_workspace())
+    # as in a window: the import runs on a worker and is applied from the queue
+    s = DesignSession(resolution = :coarse)
+    queue = Channel{Any}(Inf)
+    s.deliver[] = f -> put!(queue, f)
+    s.spawn[] = true
+    before = s.target.target[]
+    done = Ref(false)
+    import_visrad_workspace!(s, src; done = () -> (done[] = true))
+    @test !isempty(s.meshing[]) && s.target.target[] === before     # not yet replaced
+    t0 = time()
+    while !done[] && time() - t0 < 120
+        f = take!(queue)
+        f()
+    end
+    @test done[] && isempty(s.meshing[]) && startswith(s.status[], "imported work.vrw")
+    @test s.target.kind[] === :custom && :CAD_0 in component_names(s.target.target[])
+    @test length(s.beams.beams[]) == 3 && s.visrad_source[] == abspath(src)
+    # a failed import says why and keeps the design
+    bad = joinpath(dir, "empty.vrw")
+    write(bad, "Workspace Format ID  = 11\n")
+    t = s.target.target[]
+    import_visrad_workspace!(s, bad)
+    while isempty(s.status[]) || !isempty(s.meshing[]) || startswith(s.status[], "imported")
+        take!(queue)()
+    end
+    @test occursin("import of empty.vrw failed", s.status[]) && s.target.target[] === t
+    s.spawn[] = false
+    s.deliver[] = f -> f()
+    @test_throws ArgumentError import_visrad_workspace!(s, bad)              # inline: throws
+
+    # roles: the imported rectangle becomes the backlighter foil, and back
+    ts = s.target
+    i = part_index(ts, :Rectangle_0)
+    @test part_role(ts.parts[][i]) === :none
+    @test set_part_role!(ts, i, :foil)
+    @test ts.parts[][i].name === FOIL_NAME && FOIL_NAME in component_names(ts.target[])
+    @test !set_part_role!(ts, part_index(ts, :Cyl_Hohlraum_0), :capsule)      # not a sphere
+    @test occursin("is a sphere", ts.error[])
+    # a CAD capsule: a sphere fitted to it takes its place in the calculations
+    np = length(ts.parts[])
+    @test set_part_role!(ts, part_index(ts, :CAD_0), :capsule)
+    cap = ts.parts[][end]
+    @test length(ts.parts[]) == np + 1 && cap.name === :capsule && cap.kind === :sphere
+    @test :CAD_0 in ts.excluded[] && :capsule in component_names(ts.target[])
+    tri = only(c for c in ts.ghost[].components if c.name === :CAD_0).mesh.vertices
+    @test all(v -> abs(sqrt(sum(abs2, v - part_center(cap))) - cap.values[:r1]) < 1e-6, tri)   # its sphere
+    # the excluded marker sphere can be the capsule (the fitted one gives the role up),
+    # and stays left out
+    m = part_index(ts, :Marker)
+    @test set_part_role!(ts, m, :capsule)
+    @test :capsule in ts.excluded[] && :capsule in all_component_names(ts) &&
+          !(:capsule in component_names(ts.target[])) && ts.parts[][end].name === :sphere_1
+    @test set_part_role!(ts, m, :none) && ts.parts[][m].name === :Marker && :Marker in ts.excluded[]
+    remove_part!(ts, length(ts.parts[]))
+    @test set_excluded!(ts, :CAD_0, false)
+    # fit_sphere ignores a minority of points off the sphere (a fill tube)
+    pts = [Briareus.Vec3(1.1sin(θ)cos(φ) + 0.2, 1.1sin(θ)sin(φ), 1.1cos(θ)) for θ in 0.1:0.2:3.1 for φ in 0:0.3:6.2]
+    append!(pts, [Briareus.Vec3(x, 0.0, 0.0) for x in 1.6:0.1:4.0])
+    c0, r0 = fit_sphere(pts)
+    @test sqrt(sum(abs2, c0 - Briareus.Vec3(0.2, 0, 0))) < 1e-9 && r0 ≈ 1.1
+
+    # a drive too large for the x-ray view factors computes the laser alone
+    RADIATION_MAX_ELEMENTS[] = 50
+    try
+        @test !radiation_size(ts.target[]).feasible
+        build_scenario!(s)
+        dr = s.drive
+        @test dr.scenario[] !== nothing && dr.scenario[].model === nothing
+        @test occursin("laser only", dr.status[]) && occursin("most are in", dr.status[])
+        res = dr.result[]
+        @test res !== nothing && res.solution === nothing && res.spot !== nothing   # the foil's spot
+        @test all(isnan, element_values(res, :radiosity))
+        xray_image!(s; direction = (1, 0, 0), width = 4.0)
+        @test s.drive.image[] === nothing && startswith(s.status[], "no x-ray image")
+        set_objective!(s.optimize, :legendre)
+        start_optimize!(s; spawn = false)
+        @test occursin("laser only", s.optimize.status[]) && s.optimize.result[] === nothing
+    finally
+        RADIATION_MAX_ELEMENTS[] = 0
+    end
+    @test radiation_size(ts.target[]).feasible
+    # the foil objective runs on the imported foil once it has its role
+    build_scenario!(s)
+    @test s.drive.scenario[].model !== nothing
+    st = s.optimize
+    set_objective!(st, :irradiance)
+    st.fields[] = [:r]
+    st.by[] = :beam
+    st.iterations[] = 2
+    start_optimize!(s; spawn = false)
+    @test st.result[] !== nothing && st.result[].before.spot !== nothing
+
+    # the target as STL: one named solid per component (ASCII), read back as parts
+    f = joinpath(dir, "target.stl")
+    export_target_stl(s, f; binary = false)
+    solids = read_stl_solids(f)
+    @test [Symbol(n) for (n, _) in solids] == component_names(ts.target[])
+    @test sum(length(m.triangles) for (_, m) in solids) == length(ts.target[].tri_area)
+    fb = joinpath(dir, "target_binary.stl")
+    export_target_stl(s, fb)                                                  # binary
+    @test length(read_stl(fb).triangles) == length(ts.target[].tri_area)
+    # and back in as parts: one per solid of the ASCII file, one for the binary file
+    ts2 = TargetSetup(kind = :custom)
+    n0 = length(ts2.parts[])
+    @test add_stl_parts!(ts2, f; h = 0.5)
+    @test length(ts2.parts[]) - n0 == length(solids)
+    @test all(p -> p.kind === :mesh && !isempty(p.object), ts2.parts[][n0+1:end])
+    @test FOIL_NAME in component_names(ts2.target[])                          # named after its solid
+    @test add_stl_parts!(ts2, fb) && isempty(ts2.parts[][end].object)
+end
+
+# A synthetic CAD workspace with a part of `n` sliver triangles (long thin strips of a
+# tube of radius `radius` cm, as tessellated CAD writes thin shells), placed through a
+# reference cone like a STEP import: mounting hardware when the tube is wide.
+function sliver_workspace(n::Integer; radius = 0.3)
+    txt = synthetic_workspace()
+    nodes = NTuple{3,Float64}[]
+    faces = NTuple{3,Int}[]
+    m = n ÷ 2
+    for k in 0:m-1          # two triangles per strip of a cylinder, z ∈ ±0.5 cm
+        φ = 2π * k / m
+        push!(nodes, (radius * cos(φ), radius * sin(φ), -0.5), (radius * cos(φ), radius * sin(φ), 0.5))
+    end
+    for k in 0:m-1
+        a, b, c, d = 2k, 2k + 1, 2mod(k + 1, m), 2mod(k + 1, m) + 1
+        push!(faces, (a, c, b), (b, c, d))
+    end
+    io = IOBuffer()
+    println(io, "Begin Parameters for Object = BIG_CAD")
+    println(io, "Object type                 = 13\n")
+    # copy the CAD tetrahedron's parameter block, then the big mesh
+    blk = match(r"Begin Parameters for Object = CAD_0\n.*?Number of Bounding Volumes = 0\n"s, txt).match
+    body = split(blk, '\n'; limit = 3)[3]
+    print(io, body)
+    println(io, "\n   Gen. mesh object origin: x     = -0.1\n   Gen. mesh object origin: y     = 0\n   Gen. mesh object origin: z     = 0")
+    println(io, "Number of vertices = ", length(nodes))
+    println(io, "Number of surfaces = ", length(faces), "\n\nNode positions:")
+    for (i, v) in enumerate(nodes)
+        println(io, "  ", i - 1, "  ", join(v, "  "))
+    end
+    println(io, "Surface element connectivity:")
+    for (i, f) in enumerate(faces)
+        println(io, "  ", i - 1, "  ", join(f, "  "), "  -1")
+    end
+    println(io, "\nEnd Parameters for Object: BIG_CAD\n")
+    big = String(take!(io))
+    txt = replace(txt, "Number of View Factor Objects =  5" => "Number of View Factor Objects =  6")
+    i = findfirst("Begin Parameters for Object = Marker", txt)
+    return txt[1:first(i)-1] * big * txt[first(i):end]
+end
+
+@testset "a CAD workspace of 10⁵ triangles (no GL)" begin
+    dir = mktempdir()
+    src = joinpath(dir, "cad.vrw")
+    # mounting hardware: 10⁵ slivers on a tube 60 mm across, far beyond the aim points
+    write(src, sliver_workspace(100_000; radius = 3.0))
+    s = DesignSession(resolution = :coarse)
+    t1 = @elapsed import_visrad_workspace!(s, src)          # compiles too
+    ts = s.target
+    # drawn only: left out of the calculations, from its file's facets (no remeshing)
+    @test :BIG_CAD in ts.excluded[] && !(:BIG_CAD in component_names(ts.target[]))
+    @test length(ts.ghost[].tri_area) >= 100_000
+    @test occursin("drawn only", s.status[]) && occursin("BIG_CAD", s.status[])
+    @test t1 < 60
+    # again, from the caches (a second import in the window): seconds
+    s2 = DesignSession(resolution = :coarse)
+    @test (@elapsed import_visrad_workspace!(s2, src)) < 10
+    @test (@elapsed model_tree(s2)) < 0.5
+    # VisRad's flags alone: in the calculations, too many elements for the x-ray drive
+    small = joinpath(dir, "cad_small.vrw")                  # remeshing 10⁵ slivers takes a minute
+    write(small, sliver_workspace(20_000))
+    RADIATION_MAX_ELEMENTS[] = 500
+    try
+        s3 = DesignSession(resolution = :coarse)
+        import_visrad_workspace!(s3, small; display_only = :none)
+        @test :BIG_CAD in component_names(s3.target.target[])
+        @test occursin("laser only", s3.status[]) && occursin("BIG_CAD", s3.status[])
+        n = nelements(s3.target.target[])
+        # left out again: cheap (its facets as they are)
+        @test (@elapsed include_components!(s3, [:BIG_CAD], false)) < 10
+        @test :BIG_CAD in s3.target.excluded[] && nelements(s3.target.target[]) < n
+    finally
+        RADIATION_MAX_ELEMENTS[] = 0
+    end
+end
+
 @testset "retune to a reference drive (no GL)" begin
     s = DesignSession(resolution = :coarse)
     dir = mktempdir()

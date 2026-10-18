@@ -30,11 +30,36 @@ ColumnLayout {
         }
     }
     Note {
-        text: app.driveBuilding ? "computing view factors… " + app.driveElapsed :
+        text: app.driveBuilding ? app.driveStatus + " " + app.driveElapsed :
               app.driveStale ? "The target or the beam ports changed since the view factors were computed." :
               app.driveStatus
         color: app.driveStale ? "#d08a00" : palette.windowText
     }
+
+    SectionLabel { text: "Cavity" }
+    CheckBox {
+        text: "Compute the drive on the cavity around a point"
+        checked: app.driveCavity
+        onToggled: Julia.br_cavity(checked)
+    }
+    PropRow {
+        visible: app.driveCavity
+        label: "Point"
+        value: app.cavityPoint
+        unit: "x, y, z mm"
+        fieldWidth: 140
+        tip: "A point in the free space of the cavity (inside the capsule is fine)"
+        onEdited: (text) => Julia.br_cavity_point(text)
+    }
+    Note {
+        visible: app.driveCavity
+        text: "Only the elements that bound the free space around the point take part in the " +
+              "drive: a CAD assembly's outer faces and mounting hardware drop out of the view " +
+              "factors. Mark thin films modeled as solids (a capsule tent, an entrance-hole " +
+              "window) in their Properties, or they seal the point into a pocket. The clearance " +
+              "and TaLIS checks use the whole target."
+    }
+    Note { visible: app.driveCavity && app.cavitySummary !== ""; text: app.cavitySummary }
 
     SectionLabel { text: "Show" }
     Label { text: "Color the target by" }

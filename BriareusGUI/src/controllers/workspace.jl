@@ -83,7 +83,10 @@ function session_state(sess::DesignSession; view::Bool = true)
     state = Dict{String,Any}("format" => SESSION_FORMAT, "version" => SESSION_VERSION,
                              "visrad_source" => sess.visrad_source[],
                              "target" => target, "beams" => beams,
-                             "drive" => Dict{String,Any}("spot_radius" => dr.spot_radius[]),
+                             "drive" => Dict{String,Any}("spot_radius" => dr.spot_radius[],
+                                                         "cavity" => dr.cavity[],
+                                                         "cavity_point" => collect(dr.cavity_point[]),
+                                                         "films" => sort(_strs(dr.films[]))),
                              "optimize" => optimize, "review" => review, "talis" => talis)
     if view
         v = sess.view
@@ -93,7 +96,7 @@ function session_state(sess::DesignSession; view::Bool = true)
                                          "cut_azimuth" => v.cut_azimuth[], "cut_width" => v.cut_width[],
                                          "cut_components" => sort(_strs(v.cut_components[])),
                                          "hidden" => sort(_strs(v.hidden[])),
-                                         "side" => dr.side[])
+                                         "side" => dr.side[], "show_off" => v.show_off[])
     end
     return state
 end
@@ -141,7 +144,12 @@ function restore!(sess::DesignSession, state::AbstractDict)
                ref_point = [Vec3(get(r, "ref_point", [0.0, 0.0, 0.0])...) for r in rows])
     _assign!(bt.by, Symbol(b["by"]))
     haskey(b, "facility") && _assign!(bt.facility, Symbol(b["facility"]))
-    haskey(state, "drive") && _assign!(sess.drive.spot_radius, Float64(state["drive"]["spot_radius"]))
+    if haskey(state, "drive")
+        d = state["drive"]
+        _assign!(sess.drive.spot_radius, Float64(d["spot_radius"]))
+        set_cavity!(sess.drive, get(d, "cavity", false); point = Float64.(get(d, "cavity_point", [0.0, 0.0, 0.0])),
+                    films = _syms(get(d, "films", String[])))
+    end
     if haskey(state, "optimize")
         o, op = state["optimize"], sess.optimize
         _assign!(op.by, Symbol(o["by"]))
@@ -184,6 +192,7 @@ function restore!(sess::DesignSession, state::AbstractDict)
                                            components = _syms(v["cut_components"]))
         _assign!(vs.hidden, Set(_syms(v["hidden"])))
         haskey(v, "side") && _assign!(sess.drive.side, Bool(v["side"]))
+        haskey(v, "show_off") && _assign!(vs.show_off, Bool(v["show_off"]))
     end
     return sess
 end

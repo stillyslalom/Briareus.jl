@@ -47,8 +47,11 @@ State of the Briareus window: `target` ([`TargetSetup`](@ref)), `beams`
 ([`BeamTable`](@ref)), the analyses `drive` ([`DriveState`](@ref)), `optimize`
 ([`OptimizeState`](@ref)), `review` ([`ReviewState`](@ref), the clearance check) and
 `talis` ([`TaLISState`](@ref)), `view` ([`ViewState`](@ref): coloring, beam drawing,
-selection, model tree), `status` (the last message) and `history` (the
-[`EditHistory`](@ref) of [`undo!`](@ref) and [`redo!`](@ref)). Designs are saved and
+selection, model tree), `status` (the last message), `history` (the
+[`EditHistory`](@ref) of [`undo!`](@ref) and [`redo!`](@ref)) and `meshing` (the
+progress of a VisRad workspace import or of CAD parts put back into the calculations,
+`""` when none runs; see [`import_visrad_workspace!`](@ref) and
+[`include_components!`](@ref)). Designs are saved and
 loaded with [`save_session`](@ref) and [`load_session!`](@ref).
 
 The table starts from `beams` (a vector of `Beam`s) or a [`BEAM_PRESETS`](@ref) entry
@@ -74,6 +77,8 @@ struct DesignSession
     spawn::Base.RefValue{Bool}
     history::EditHistory
     visrad_source::Base.RefValue{String}   # the imported VisRad workspace (export template)
+    meshing::Observable{String}            # a workspace import or CAD meshing in progress ("" when none)
+    mesh_generation::Base.RefValue{Int}    # import and meshing requests (latest wins)
 end
 
 function DesignSession(; kind::Symbol = :hohlraum, resolution::Symbol = :standard,
@@ -85,7 +90,7 @@ function DesignSession(; kind::Symbol = :hohlraum, resolution::Symbol = :standar
          BeamTable(beams)
     sess = DesignSession(ts, bt, DriveState(), OptimizeState(), ReviewState(), TaLISState(),
                          ViewState(), Observable(""), Ref{Any}(deliver), Ref(false), EditHistory(),
-                         Ref(""))
+                         Ref(""), Observable(""), Ref(0))
     default_selection!(sess.review, ts.target[])
     default_selection!(sess.talis, ts.target[])
     _connect!(sess)
@@ -136,9 +141,13 @@ function _connect!(sess::DesignSession)
         isempty(bt.error[]) || (bt.error[] = "")
     end
     on(_ -> _request_evaluation!(sess), dr.spot_radius)
+    onany((_...) -> _drive_inputs_changed!(sess), dr.cavity, dr.cavity_point, dr.films)
     # the x-ray image follows the drive
-    on(dr.result) do _
-        dr.image_request[] === nothing || (dr.image[] = _render_image(dr))
+    on(dr.result) do res
+        dr.image_request[] === nothing && return
+        dr.image[] = _render_image(dr)
+        res !== nothing && res.solution === nothing &&
+            (sess.status[] = "no x-ray image: the drive is laser only" * _radiation_note(sess))
     end
     return sess
 end
@@ -213,6 +222,8 @@ function xray_image!(sess::DesignSession; direction, up = (0.0, 0.0, 1.0), cente
     _assign!(sess.drive.view, :image)
     if _drive_current(sess) && sess.drive.result[] !== nothing
         sess.drive.image[] = _render_image(sess.drive)
+        sess.drive.result[].solution === nothing &&
+            (sess.status[] = "no x-ray image: the drive is laser only" * _radiation_note(sess))
     else
         sess.drive.image[] = nothing
         sess.drive.building[] || build_scenario!(sess)
@@ -276,8 +287,12 @@ computed again). `false` before the first build.
 function drive_stale(sess::DesignSession)
     k = sess.drive.key[]
     k === nothing && return false
-    return k[1] !== sess.target.target[] || k[2] != _ports(sess.beams.beams[])
+    return k[1] !== sess.target.target[] || k[2] != _ports(sess.beams.beams[]) ||
+           k[3] != _cavity_key(sess.drive)
 end
+
+# The cavity settings a scenario was built with (`nothing`: the whole target).
+_cavity_key(dr::DriveState) = dr.cavity[] ? (dr.cavity_point[], dr.films[]) : nothing
 
 # Whether the scenario matches the current target and ports.
 _drive_current(sess::DesignSession) = sess.drive.scenario[] !== nothing && !drive_stale(sess)
@@ -298,7 +313,10 @@ end
 
 Build the core `Scenario` for the current target and every beam of the table
 (deposition operator, view factors, capsule flux response; seconds to tens of
-seconds), on a worker when `spawn[]` is set, then evaluate the current pointing.
+seconds), on a worker when `spawn[]` is set, then evaluate the current pointing. With
+the drive's cavity on ([`set_cavity!`](@ref)) the scenario is built on the cavity's
+elements. A target too large for the x-ray view factors ([`radiation_size`](@ref)) gets
+the laser deposition alone, and `status` says why and what to do.
 """
 function build_scenario!(sess::DesignSession)
     dr = sess.drive
@@ -306,33 +324,105 @@ function build_scenario!(sess::DesignSession)
     beams = sess.beams.beams[]
     isempty(beams) && (dr.status[] = "add beams first"; return sess)
     g = (dr.generation[] += 1)
+    cavity = dr.cavity[] ? (dr.cavity_point[], copy(dr.films[])) : nothing
     dr.building[] = true
     dr.started[] = time()
-    dr.status[] = "computing view factors…"
+    dr.status[] = cavity !== nothing ? "selecting the cavity, then its view factors…" :
+                  radiation_size(t).feasible ? "computing view factors…" :
+                  "computing the laser deposition (too many elements for the x-ray view factors)…"
     runner = _runner(sess.spawn, sess.deliver)
     t0 = time()
-    # free parts lie outside the hohlraum's enclosure, and an excluded component leaves a
-    # hole in it: its rows no longer sum to one
-    closed = sess.target.kind[] === :hohlraum && isempty(sess.target.parts[]) &&
-             sess.target.ghost[] === nothing
-    runner(() -> _build_scenario(t, beams; closed), function (out)
+    closed = _closed_enclosure(sess.target)
+    runner(() -> _build_scenario(t, beams; closed, cavity), function (out)
         g == dr.generation[] || return
         dr.building[] = false
         if out.err !== nothing
             dr.status[] = "failed: " * _errmsg(out.err)
             return
         end
-        s, lookup = out.value
+        (; s, lookup, enc, index, film, escape) = out.value
         dr.build_seconds[] = time() - t0
-        dr.key[] = (t, _ports(beams))
+        # a film found sealing the cavity joins the films (and the scenario's key)
+        film === nothing || (_assign!(dr.films, union(dr.films[], (film,)));
+                             cavity = (cavity[1], copy(dr.films[])))
+        dr.key[] = (t, _ports(beams), cavity)
         dr.lookup[] = lookup
+        dr.enclosure[] = enc
+        dr.cavity_index[] = index
         dr.scenario[] = s
         dr.status[] = @sprintf("built in %s: %d elements, %d beams", _seconds(dr.build_seconds[]),
-                               nelements(t), length(beams))
+                               nelements(s.target), length(beams)) *
+                      (enc === nothing ? "" : @sprintf(" (the cavity: %d of the target's %d elements)",
+                                                       nelements(s.target), nelements(t))) *
+                      (cavity !== nothing && enc === nothing ?
+                       @sprintf(" · on the whole target: the cavity point is in the open (%.0f %% of its rays escape)",
+                                100escape) : "") *
+                      (film === nothing ? "" :
+                       " · $film sealed the point in a pocket (a capsule tent or window modeled as a solid): " *
+                       "left out of the cavity as a thin film (Properties)") *
+                      (enc !== nothing && cavity_sealed(dr) ?
+                       " · the cavity is a sealed pocket: mark the film that closes it (Properties ▸ Thin film)" : "") *
+                      (s.model === nothing ? _radiation_note(s.target) : "")
         _request_evaluation!(sess)
     end)
     return sess
 end
+
+# Whether the drive's target is a closed hohlraum enclosure, whose view factors are
+# balanced so its rows sum to one: the template's components only (free parts lie
+# outside it), none of them left out (that leaves a hole).
+const _TEMPLATE_HOHLRAUM = (:wall, :cap_top, :cap_bottom, :leh_top, :leh_bottom, :capsule)
+_template_component(n::Symbol) = n in _TEMPLATE_HOHLRAUM || occursin(r"^window_\d+$", String(n))
+function _closed_enclosure(ts::TargetSetup)
+    ts.kind[] === :hohlraum || return false
+    all(c -> _template_component(c.name), ts.target[].components) || return false
+    g = ts.ghost[]
+    return g === nothing || !any(c -> _template_component(c.name), g.components)
+end
+
+"""
+Elements the x-ray view factors may take (`0`: from the memory, see
+[`radiation_size`](@ref)). Set it to change the limit for a session (tests do).
+"""
+const RADIATION_MAX_ELEMENTS = Ref(0)
+
+"""
+    radiation_size(t::Target) -> (; elements, bytes, limit, feasible)
+
+Whether the drive can include the x-ray radiation of `t`: the view factors and the
+radiosity factorizations it keeps are dense (three `N × N` Float64 matrices, `bytes`),
+so the element count `N` is limited to `limit`, what half of this machine's memory holds
+(or [`RADIATION_MAX_ELEMENTS`](@ref)). About 27,000 elements on 32 GB; the mesh presets
+of the templates stay far below (16,000 elements at `:fine`), but an imported CAD
+workspace can hold 10⁵ elements. Above the limit [`build_scenario!`](@ref) computes the
+laser deposition alone.
+"""
+function radiation_size(t::Target)
+    N = nelements(t)
+    limit = RADIATION_MAX_ELEMENTS[] > 0 ? RADIATION_MAX_ELEMENTS[] :
+            floor(Int, sqrt(0.5 * Sys.total_memory() / 24))
+    return (; elements = N, bytes = 24.0 * N^2, limit, feasible = N <= limit)
+end
+
+_gb(x) = x >= 2^30 ? @sprintf("%.0f GB", x / 2^30) : @sprintf("%.0f MB", x / 2^20)
+
+# Why a target's drive is laser only, and what to do ("" when it is not), naming the
+# components that hold most elements.
+function _radiation_note(t::Target)
+    r = radiation_size(t)
+    r.feasible && return ""
+    counts = zeros(Int, length(t.components))
+    for e in 1:nelements(t)
+        counts[t.elem_comp[e]] += 1
+    end
+    big = sort(eachindex(counts); by = i -> -counts[i])[1:min(3, length(counts))]
+    who = join(("$(t.components[i].name) ($(counts[i]))" for i in big if counts[i] > 0), ", ")
+    return " · laser only: x-ray view factors for $(r.elements) elements would need " *
+           "$(_gb(r.bytes)) (limit $(r.limit) elements); most are in $who. " *
+           "Leave the mounting hardware out of the calculations (right-click ▸ Include in calculations) " *
+           "or give the CAD parts a larger element size"
+end
+_radiation_note(sess::DesignSession) = _radiation_note(sess.target.target[])
 
 # Evaluate the table's current pointing on the scenario (latest request wins).
 function _request_evaluation!(sess::DesignSession)
@@ -357,39 +447,192 @@ function _request_evaluation!(sess::DesignSession)
 end
 
 """
-    import_visrad_workspace!(sess::DesignSession, path; include = o -> o.radiosity || o.laser)
+    include_components!(sess::DesignSession, names, include::Bool; spawn = sess.spawn[]) -> sess
+
+Put the components `names` back into the calculations (`include = true`) or leave them
+out (see [`set_excluded!`](@ref)). A CAD part left out is drawn from its file's facets;
+putting it back repairs its windings and remeshes it, which takes tens of seconds for
+10⁵ facets: with `spawn` that runs on worker threads, with progress in `meshing`, and
+the target is replaced when it is ready. A rejected change sets the target's `error`.
+"""
+function include_components!(sess::DesignSession, names, include::Bool; spawn::Bool = sess.spawn[])
+    ts = sess.target
+    ex = copy(ts.excluded[])
+    include ? setdiff!(ex, names) : union!(ex, names)
+    ex == ts.excluded[] && return sess
+    if !spawn || !include
+        _try_build!(ts; excluded = ex)
+        return sess
+    end
+    kind, params, mesh, windows, parts = ts.kind[], ts.params[], ts.mesh[], ts.windows[], ts.parts[]
+    g = (sess.mesh_generation[] += 1)
+    deliver = sess.deliver[]
+    label = join(string.(names), ", ")
+    sess.meshing[] = "meshing $label for the calculations…"
+    report(msg) = deliver(() -> g == sess.mesh_generation[] && _assign!(sess.meshing, msg))
+    job = function ()
+        back = [p for p in parts if p.name in names]
+        _mesh_parts(back, kind, params, mesh, ex, report, label)
+        return _split_excluded(build_target(kind, params, mesh, windows, parts; raw = ex), ex)
+    end
+    commit = function (out)
+        g == sess.mesh_generation[] || return
+        _assign!(sess.meshing, "")
+        if out.err !== nothing
+            ts.error[] = _errmsg(out.err)
+            sess.status[] = "could not put $label back: " * ts.error[]
+            return
+        end
+        same = ts.kind[] === kind && ts.params[] === params && ts.mesh[] == mesh &&
+               ts.windows[] === windows && ts.parts[] === parts
+        _try_build!(ts; excluded = ex, prebuilt = same ? out.value : nothing) &&
+            (sess.status[] = "$label back in the calculations" * _radiation_note(sess))
+    end
+    _run_job(() -> (out = _try_job(job); deliver(() -> commit(out))), true)
+    return sess
+end
+
+# Mesh `parts` on worker threads, each once (the part caches then serve the target
+# build, its commit and later edits); `raw` parts (names) keep their file's facets.
+# Progress goes to `report`.
+function _mesh_parts(parts, kind, params, mesh, raw, report, label)
+    n = length(parts)
+    finished = Threads.Atomic{Int}(0)
+    report("$label: meshing $n parts…")
+    tasks = map(parts) do p
+        Threads.@spawn begin
+            part_components(p, mesh.h; frame = anchor_frame(p.anchor, kind, params, parts),
+                            raw = p.name in raw)
+            k = Threads.atomic_add!(finished, 1) + 1
+            k < n && report("$label: meshed $k of $n parts…")
+        end
+    end
+    for t in tasks
+        try
+            fetch(t)
+        catch err
+            err isa TaskFailedException ? throw(err.task.exception) : rethrow()
+        end
+    end
+    return nothing
+end
+
+# Names of the CAD (mesh) objects reaching farther from TCC than twice the farthest aim
+# point of the beams that fire (none without such beams): mounting hardware.
+function _far_objects(objs, beams)
+    aims = [norm(b.aim) for b in beams if b.power > 0]
+    isempty(aims) && return String[]
+    reach = 2 * max(maximum(aims), 1.0)
+    return [o.name for o in objs if o.kind === :mesh && o.mesh !== nothing &&
+                                    maximum(norm, o.mesh.vertices) > reach]
+end
+
+"""
+    import_visrad_workspace!(sess::DesignSession, path; include = o -> o.radiosity || o.laser,
+                             display_only = :far, spawn = sess.spawn[], done = () -> nothing)
         -> sess
 
 Replace the design with a VisRad workspace's (`read_visrad_workspace`): a custom target
 whose parts are the workspace's objects (`:visrad` parts: each keeps its place, albedo
-and conversion; CAD windings are repaired and facets merged to the target's element
+and conversion; CAD windings are repaired and surfaces remeshed to the target's element
 size), and the workspace's beams, in their clusters as groups, switched on where
 VisRad delivers power. Objects for which `include` is false (by default those VisRad
 leaves out of both its laser and radiosity calculations) are imported but left out of
 the calculations, drawn as ghosts. The workspace becomes the template of
 [`export_visrad_workspace`](@ref).
+
+CAD workspaces bring the mounting hardware along: parts of 10⁵ facets reaching tens of
+mm from the target, which would take most of the elements (and the x-ray view factors
+out of reach, see [`radiation_size`](@ref)) and tens of seconds of remeshing. With
+`display_only = :far` (the default) a CAD part that reaches farther from TCC than twice
+the farthest aim point of the beams VisRad fires is left out of the calculations too,
+drawn from its file's facets; `status` names these parts, and
+[`include_components!`](@ref) or *Include in calculations* puts one back (laser,
+clearance and the x-ray drive then see it). `display_only = :none` follows VisRad's
+flags alone.
+
+Reading a CAD workspace and remeshing its parts takes seconds, so with `spawn` (a
+window sets it) the file is read and the parts meshed on worker threads, with progress
+in `meshing`, and the design is replaced on the GUI thread when it is ready (then
+`done()` runs); a later import supersedes one in progress. Errors are reported in
+`status` then. Inline (`spawn = false`) the import completes before returning and
+throws `ArgumentError` for a workspace it cannot use.
 """
 function import_visrad_workspace!(sess::DesignSession, path::AbstractString;
-                                  include = o -> o.radiosity || o.laser)
-    ws = read_visrad_workspace(path)
-    supported = [o for o in ws.objects if o.kind in (:mesh, :sphere, :rectangle, :cylindrical_hohlraum)]
-    isempty(supported) && throw(ArgumentError("$(basename(path)) has no target components Briareus reads"))
-    parts = [PartSpec(:visrad; name = Symbol(o.name), file = abspath(path), object = o.name,
-                      values = Dict(:albedo => o.albedo, :conversion => o.conversion))
-             for o in supported]
+                                  include = o -> o.radiosity || o.laser, display_only::Symbol = :far,
+                                  spawn::Bool = sess.spawn[], done = () -> nothing)
+    display_only in (:far, :none) || throw(ArgumentError("display_only must be :far or :none"))
+    path = abspath(String(path))
     ts = sess.target
-    # the components of objects VisRad leaves out are left out of the calculations
-    names = Set{Symbol}(n for o in supported if !include(o) for n in visrad_component_names(o))
-    any(include, supported) ||
-        throw(ArgumentError("VisRad includes none of the workspace's objects in its calculations"))
-    _try_build!(ts; kind = :custom, windows = WindowSpec[], parts, excluded = names) ||
-        throw(ArgumentError("the workspace's target was rejected: $(ts.error[])"))
-    bs = ws.beams
-    set_beams!(sess.beams, bs; preset = :custom, enabled = [b.power > 0 for b in bs],
-               cluster = Symbol[b.group for b in bs])
-    sess.beams.path[] = String(path)
-    sess.visrad_source[] = abspath(path)
-    sess.status[] = "imported $(basename(path)): $(length(parts)) objects, $(length(bs)) beams"
+    params, mesh = ts.params[], ts.mesh[]
+    g = (sess.mesh_generation[] += 1)
+    deliver = sess.deliver[]
+    file = basename(path)
+    sess.meshing[] = "reading $file…"
+    report(msg) = spawn && deliver(() -> g == sess.mesh_generation[] && _assign!(sess.meshing, msg))
+    job = function ()
+        ws = _visrad_workspace(path)
+        supported = [o for o in ws.objects if o.kind in (:mesh, :sphere, :rectangle, :cylindrical_hohlraum)]
+        isempty(supported) && throw(ArgumentError("$file has no target components Briareus reads"))
+        any(include, supported) ||
+            throw(ArgumentError("VisRad includes none of the workspace's objects in its calculations"))
+        parts = [PartSpec(:visrad; name = Symbol(o.name), file = path, object = o.name,
+                          values = Dict(:albedo => o.albedo, :conversion => o.conversion))
+                 for o in supported]
+        # the components of objects VisRad leaves out are left out of the calculations,
+        # and so (by default) is CAD hardware far from where the beams point
+        names = Set{Symbol}(n for o in supported if !include(o) for n in visrad_component_names(o))
+        far = display_only === :far ? _far_objects(filter(include, supported), ws.beams) : String[]
+        length(far) < count(include, supported) || (far = String[])
+        union!(names, Symbol.(far))
+        _mesh_parts(parts, :custom, params, mesh, names, report, file)
+        report("$file: building the target…")
+        built = _split_excluded(build_target(:custom, params, mesh, WindowSpec[], parts; raw = names),
+                                names)
+        return (; ws, parts, names, far, built)
+    end
+    commit = function (out)
+        g == sess.mesh_generation[] || return
+        _assign!(sess.meshing, "")
+        if out.err !== nothing
+            sess.status[] = "import of $file failed: " * _errmsg(out.err)
+            spawn || throw(out.err)
+            return
+        end
+        (; ws, parts, names, far, built) = out.value
+        # a target edit while the worker ran: build again from the current settings
+        same = ts.params[] === params && ts.mesh[] == mesh
+        if !_try_build!(ts; kind = :custom, windows = WindowSpec[], parts, excluded = names,
+                        prebuilt = same ? built : nothing)
+            sess.status[] = "the workspace's target was rejected: $(ts.error[])"
+            spawn || throw(ArgumentError(sess.status[]))
+            return
+        end
+        bs = ws.beams
+        set_beams!(sess.beams, bs; preset = :custom, enabled = [b.power > 0 for b in bs],
+                   cluster = Symbol[b.group for b in bs])
+        sess.beams.path[] = path
+        sess.visrad_source[] = path
+        # a CAD assembly's drive runs on its cavity around TCC (outer faces and mounting
+        # hardware out of the view factors)
+        set_cavity!(sess.drive, any(o -> o.kind === :mesh, ws.objects); point = (0.0, 0.0, 0.0),
+                    films = Symbol[])
+        # VisRad workspaces list every port: draw the beams that fire when most do not
+        _assign!(sess.view.show_off, 2 * count(sess.beams.enabled[]) >= length(bs))
+        # the cutaway cuts every component of an imported design (its names are VisRad's)
+        set_cut!(sess.view; components = [n for n in surface_names(ts.target[]) if n !== :capsule])
+        sess.status[] = "imported $file: $(length(parts)) objects, $(length(bs)) beams" *
+                        (isempty(far) ? "" :
+                         "; drawn only, far from the target (Include in calculations puts one back " *
+                         "for the laser, clearance and drive): " * join(far, ", ")) *
+                        _radiation_note(sess)
+        done()
+    end
+    if spawn
+        _run_job(() -> (out = _try_job(job); deliver(() -> commit(out))), true)
+    else
+        commit(_try_job(job))
+    end
     return sess
 end
 
@@ -407,6 +650,25 @@ function export_visrad_workspace(sess::DesignSession, path::AbstractString)
     bs = [on ? b : remake(b; power = 0.0) for (b, on) in zip(sess.beams.beams[], sess.beams.enabled[])]
     write_visrad_workspace(path, src, bs)
     sess.status[] = "wrote the beams into a copy of $(basename(src)): $(basename(path))"
+    return path
+end
+
+"""
+    export_target_stl(sess::DesignSession, path; binary = true, apertures = true) -> path
+
+Write the design's target as an STL file in millimetres (`Briareus.write_stl`): the
+components in the calculations (those left out are not written), each triangle wound
+toward its radiating side. Binary STL by default; `binary = false` writes ASCII STL with
+one named solid per component, which `read_stl_solids` (or a CAD tool) reads back as
+parts. Apertures (entrance holes, open windows) are written as their own solids unless
+`apertures = false`.
+"""
+function export_target_stl(sess::DesignSession, path::AbstractString; binary::Bool = true,
+                           apertures::Bool = true)
+    t = sess.target.target[]
+    write_stl(path, t; binary, apertures)
+    sess.status[] = "wrote the target ($(length(t.components)) components, $(length(t.tri_area)) " *
+                    "triangles, mm) to $(basename(path))"
     return path
 end
 
@@ -454,7 +716,7 @@ function write_visrad_kit!(sess::DesignSession, dir::AbstractString)
         return sess
     end
     s = dr.scenario[]
-    t = sess.target.target[]
+    t = s.target                        # the drive's: the cavity, when it has one
     beams = display_beams(sess.beams)
     names = component_names(t)
     observe = :capsule in names ? :capsule : :main in names ? :main : :none
@@ -595,9 +857,24 @@ function start_optimize!(sess::DesignSession; spawn::Bool = true)
         st.status[] = "compute the drive first (Compute ▸ Drive)"
         return sess
     end
+    s = sess.drive.scenario[]
+    # objectives the drive cannot serve: say why and what to do, instead of a failed job
+    if st.objective[] === :irradiance
+        FOIL_NAME in component_names(s.target) ||
+            (st.status[] = "the foil objective needs a foil: a foil target's, or a part with the role " *
+                           "Backlighter foil (Properties ▸ Role)"; return sess)
+    elseif s.model === nothing
+        st.status[] = "capsule symmetry needs the x-ray drive, and this target's drive is laser only" *
+                      _radiation_note(s.target)
+        return sess
+    elseif isempty(s.observed)
+        st.status[] = "capsule symmetry needs a hohlraum with a capsule, or a sphere part with the " *
+                      "role Capsule (Properties ▸ Role)"
+        return sess
+    end
     bt = sess.beams
     idx = findall(bt.enabled[])
-    start_optimize!(st, sess.drive.scenario[], bt.beams[][idx], idx;
+    start_optimize!(st, s, bt.beams[][idx], idx;
                     spot_radius = sess.drive.spot_radius[], clusters = bt.cluster[][idx],
                     deliver = sess.deliver[], spawn)
     return sess
@@ -675,6 +952,8 @@ load_preset!(sess::DesignSession, preset::Symbol) =
 # Abandon jobs in flight: their results are dropped when they arrive (a closing
 # window restores inline delivery).
 function _abandon_jobs!(sess::DesignSession)
+    sess.mesh_generation[] += 1
+    _assign!(sess.meshing, "")
     sess.drive.generation[] += 1
     sess.drive.eval_generation[] += 1
     sess.drive.building[] = false

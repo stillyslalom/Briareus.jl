@@ -869,6 +869,25 @@ test fixture rebuilds the layout from rows copied from these files.
   remeshed elements (492 mm²): a long facet straddling the edge of the lit region is
   kept whole. The defaults (geometric albedo 0.9, threshold 0.05 of the reference
   flux, 64 rays) are engineering choices, **M**; the measurements **H** (locally).
+- **The window's CAD path (BriareusGUI, 2026-10-18).** Engineering defaults, **M**: a
+  CAD part reaching farther from TCC than twice the farthest aim point of the beams
+  VisRad fires is drawn only (its facets as read, not remeshed) and left out of the
+  calculations on import; on the NIF workspace that is the 133k-facet mounting part
+  (to 53 mm) and two far parts (to 97 and 14 mm), leaving 20k elements at the
+  standard 0.28 mm in 12 parts (import 4.6 s on 8 threads, against ~25 s to remesh
+  the mounting part too). The drive then runs on the cavity around TCC (`enclosure`
+  on the remeshed elements, one selection): 7,155 elements with the tent left out; a
+  pocket (nothing escapes, at most two components bound it) is opened by leaving out
+  the one of its three largest components that gives the largest open cavity, which
+  finds the tent. A capsule role on the CAD capsule fits a sphere to its vertices
+  weighted by area (the fill tube is ~7 % of the area): center at TCC to 1e-4 mm,
+  r = 1.1333 mm, the outer face of the shell (the median vertex radius within 1.5 mm
+  is 1.1333). Cavity + 3,120-element capsule (h = 0.09): 9,726 elements, scenario
+  built in 93 s on 8 threads, 3.1 GB live; an `optimize_pointing` evaluation ≈ 0.4 s.
+  The x-ray view factors are refused above the element count whose three dense N×N
+  Float64 matrices (view factors and two cached factorizations) fill half the memory
+  (`radiation_size`: 26.8k elements on 32 GB, *derived*); the drive is then laser
+  only.
 
 ### Result tables and fits
 
