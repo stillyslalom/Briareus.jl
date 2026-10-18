@@ -260,14 +260,24 @@ shorten: it only groups whole facets. Here:
    split there, so faces that meet along an edge are connected;
 2. every facet is split, in its own plane, into triangles with edges of at most
    `size / 3`; an edge gets the same points from both facets sharing it, so the refined
-   triangulation is conforming;
+   triangulation is conforming. Parallel edges longer than that (the sides of a wall's
+   strips: a cylinder's or an extrusion's generators, to 0.25°) and the diagonals of
+   their strips are cut where they cross a common family of planes across them, so
+   neighboring strips are cut at the same places and a cut across a strip is one
+   straight chord; other edges are divided equally;
 3. the refined triangles are clustered: seeds `0.85 size` apart (a Poisson-disk sample)
    claim triangles nearest first across shared, consistently wound edges (see
    `orient_mesh`), taking those whose normals are within `angle` degrees of the seed's;
-   Lloyd iterations move each seed to its element's centroid and mean normal. An
-   element with a facet more than `angle` from its mean normal, a vertex farther than
-   `size` from its centroid, or a centroid that does not project (along the normal)
-   onto it, is halved until it has none;
+   Lloyd iterations move each seed to its element's centroid and mean normal. On strips
+   (facets whose edges longer than `size` are all cut by one family of planes), every
+   few planes bound a band about `size` long, and elements grow within one band: their
+   cuts across the strips lie on the planes, straight and shared by the elements on
+   both sides, and a sliver strip's piece in a band goes whole to one element, so their
+   sides run along strip edges (an element `w` wide crosses about w/(strip width)
+   strips, and its outline has about two edges per strip). An element with a facet more
+   than `angle` from its mean normal, a vertex farther than `size` from its centroid, or
+   a centroid that does not project (along the normal) onto it, is halved until it has
+   none;
 4. within each element, the pieces of facets in one plane are joined and
    re-triangulated from their outline (a point is dropped only where it lies on a
    straight outline in every element using it, so the mesh stays conforming).
@@ -290,8 +300,12 @@ function remesh_mesh(m::Mesh; size::Real, angle::Real = 10.0, tol = 1e-9)
     lo = reduce((a, b) -> min.(a, b), P)
     hi = reduce((a, b) -> max.(a, b), P)
     chains = _tjunction_chains(P, tris, tol * max(norm(hi - lo), eps()))
-    rtris, parent = _refine_facets!(P, tris, chains, size / 3)
-    region = _cluster_elements(P, rtris, Float64(size), Float64(angle))
+    h = size / 3
+    fam, families = _plane_families(P, tris, chains, h, Float64(size))
+    rtris, parent = _refine_facets!(P, tris, chains, h, fam, families)
+    zone, axis = _band_zones(P, tris, chains, rtris, parent, fam, families, size)
+    strip = _strip_pairs(P, tris)
+    region = _cluster_elements(P, rtris, Float64(size), Float64(angle); zone, axis, unit = strip[parent])
     return _assemble_elements(P, rtris, _coplanar_classes(P, tris, parent, region, size), region)
 end
 
@@ -368,18 +382,182 @@ function _tjunction_chains(P, tris, δ)
     return chains
 end
 
-# Points of segment p → q (with p, without q), equally spaced at most `h` apart; each
-# segment's points are made once, so both facets sharing it use the same ones.
-function _segment_points!(loop, P, segs, p, q, h)
+# Cutting planes shared by parallel segments: segments longer than `h` whose directions
+# lie within `angle` degrees of one another (the long sides of a wall's strips: the
+# generators of a cylinder or an extrusion are parallel) form a family, cut by the planes
+# ⟂ `u` at `s0 + k g` (g ≤ h), and so are the strips' diagonals (below). Each such
+# segment gets its points where it crosses the planes, so neighboring strips are cut at
+# the same places whatever their lengths and ends, and a cut across a strip is one
+# straight chord (a strip's long sides and its diagonal meet each plane on one line).
+# Equal spacing per segment would not line up: a strip's diagonal is longer than its
+# sides and can take one point more, which staggers every cut across the strips. The
+# tolerance is tight (diagonals of neighboring strips of a 48-sided can are 0.5° apart
+# and must not form families of their own); converging strips (a fan, a cone) keep equal
+# spacing, which lines up when their edges are equally long.
+struct _PlaneFamily
+    u::Vec3
+    s0::Float64
+    g::Float64
+    m::Int              # planes per element band (see `_band_zones`)
+    nb::Int             # element bands over the family's extent
+end
+
+const _PLANE_MARGIN = 0.05            # planes within this many g of a segment's end are skipped
+
+function _plane_families(P, tris, chains, h, band; angle = 0.25, strip = 30.0)
+    fam = Dict{Tuple{Int,Int},Int}()
+    families = _PlaneFamily[]
+    long = [k for k in _facet_segments(tris, chains) if sum(abs2, P[k[2]] - P[k[1]]) > h^2]
+    isempty(long) && return fam, families
+    len = [norm(P[k[2]] - P[k[1]]) for k in long]
+    order = sortperm(collect(zip(.-len, long)))          # longest first, deterministic
+    cosα = cosd(angle)
+    cell = 2sind(angle / 2)                                # chord of `angle` on the unit sphere
+    key(d) = Tuple(floor.(Int, d ./ cell))
+    dirs = Vec3[]
+    grid = Dict{NTuple{3,Int},Vector{Int}}()
+    group = zeros(Int, length(long))
+    sgn = ones(Int, length(long))
+    for i in order
+        d = (P[long[i][2]] - P[long[i][1]]) / len[i]
+        for s in (1, -1), dx in -1:1, dy in -1:1, dz in -1:1
+            c = key(s * d)
+            for f in get(grid, (c[1] + dx, c[2] + dy, c[3] + dz), Int[])
+                dot(dirs[f], s * d) >= cosα && (group[i] = f; sgn[i] = s; break)
+            end
+            group[i] > 0 && break
+        end
+        if group[i] == 0
+            push!(dirs, d)
+            push!(get!(grid, key(d), Int[]), length(dirs))
+            group[i] = length(dirs)
+        end
+    end
+    G = length(dirs)
+    nmem = zeros(Int, G)
+    usum = fill(zero(Vec3), G)
+    for i in eachindex(long)
+        nmem[group[i]] += 1
+        usum[group[i]] += sgn[i] * (P[long[i][2]] - P[long[i][1]])
+    end
+    # a group whose strip facets (two long sides within `strip` degrees) pair it mostly
+    # with one heavier group joins that group: the diagonals of a plate's equal strips
+    # are parallel among themselves, and their strips' sides set the planes (a fan's
+    # antipodal pairs pair equally with both neighbors and stay apart)
+    index = Dict(long[i] => i for i in eachindex(long))
+    weight = [(norm(usum[g]), g) for g in 1:G]
+    cosβ = cosd(strip)
+    pairs = Dict{Tuple{Int,Int},Int}()
+    total = zeros(Int, G)
+    segs = Tuple{Int,Int}[]
+    gs = Int[]
+    for t in tris
+        _facet_segs!(empty!(segs), chains, t)
+        empty!(gs)
+        for k in segs
+            i = get(index, k, 0)
+            i > 0 && nmem[group[i]] >= 2 && !(group[i] in gs) && push!(gs, group[i])
+        end
+        for a in gs, b in gs
+            a != b && abs(dot(dirs[a], dirs[b])) >= cosβ || continue
+            pairs[(a, b)] = get(pairs, (a, b), 0) + 1
+            total[a] += 1
+        end
+    end
+    root = collect(1:G)
+    for ((a, b), n) in pairs
+        3n > 2total[a] && weight[b] > weight[a] && (root[a] = b)
+    end
+    find(g) = (while root[g] != g; g = root[g]; end; g)
+    # a family needs two segments to line up; the planes are spaced so that no piece of a
+    # member within 2 `angle` of `u` is longer than h (others are divided further), ends
+    # skipped within the margin, and every m-th plane bounds an element band of about
+    # `band` over the family's extent
+    gmax = h * cosd(2angle) / (1 + 2_PLANE_MARGIN)
+    lo = fill(Inf, G)
+    hi = fill(-Inf, G)
+    for i in eachindex(long)
+        f = find(group[i])
+        nmem[group[i]] >= 2 || continue
+        u = normalize(usum[f])
+        for v in long[i]
+            lo[f] = min(lo[f], dot(P[v], u))
+            hi[f] = max(hi[f], dot(P[v], u))
+        end
+    end
+    fi = zeros(Int, G)
+    for f in 1:G
+        root[f] == f && nmem[f] >= 2 || continue
+        E = hi[f] - lo[f]
+        nb = max(1, round(Int, E / band))
+        m = max(1, ceil(Int, E / (nb * gmax) - 1e-9))
+        push!(families, _PlaneFamily(normalize(usum[f]), lo[f], E / (nb * m), m, nb))
+        fi[f] = length(families)
+    end
+    for i in eachindex(long)
+        nmem[group[i]] >= 2 && (fam[long[i]] = fi[find(group[i])])
+    end
+    # a long segment in no family that shares a facet with members, within `strip`
+    # degrees of their direction (the diagonal of a strip wider than the tolerance), is
+    # cut by the nearest such family's planes: any plane meets a facet on one chord, so
+    # the cuts across the strip stay straight
+    member = Set(keys(fam))                            # adopted segments adopt no others
+    for t in tris
+        _facet_segs!(empty!(segs), chains, t)
+        for k in segs
+            haskey(fam, k) && continue
+            d = P[k[2]] - P[k[1]]
+            L = norm(d)
+            L > h || continue
+            best, f = cosβ, 0
+            for j in segs
+                j in member || continue
+                c = abs(dot(d, families[fam[j]].u)) / L
+                c >= best && ((best, f) = (c, fam[j]))
+            end
+            f > 0 && (fam[k] = f)
+        end
+    end
+    return fam, families
+end
+
+# Points of segment p → q (with p, without q) at most `h` apart: where it crosses its
+# family's planes, or equally spaced; each segment's points are made once, so both
+# facets sharing it use the same ones.
+function _segment_points!(loop, P, segs, p, q, h, fam = nothing, families = nothing)
     k = minmax(p, q)
     ids = get(segs, k, nothing)
     if ids === nothing
         a, b = P[k[1]], P[k[2]]
-        n = max(1, ceil(Int, norm(b - a) / h - 1e-9))
-        ids = Vector{Int}(undef, n + 1)
+        f = fam === nothing ? 0 : get(fam, k, 0)
+        if f > 0
+            (; u, s0, g) = families[f]
+            sa, sb = dot(a, u), dot(b, u)
+            lo, hi = minmax(sa, sb)
+            k0 = ceil(Int, (lo - s0) / g + _PLANE_MARGIN)
+            k1 = floor(Int, (hi - s0) / g - _PLANE_MARGIN)
+            cuts = [0.0; [(s0 + j * g - sa) / (sb - sa) for j in k0:k1]; 1.0]
+            sa > sb && reverse!(@view cuts[2:end-1])
+            # a gap longer than h (only on a member far from `u`: a strip's diagonal)
+            # is divided equally
+            L = norm(b - a)
+            ts = Float64[]
+            for i in 1:length(cuts)-1
+                m = max(1, ceil(Int, L * (cuts[i+1] - cuts[i]) / h - 1e-9))
+                for j in 1:m-1
+                    push!(ts, cuts[i] + (cuts[i+1] - cuts[i]) * (j / m))
+                end
+                i < length(cuts) - 1 && push!(ts, cuts[i+1])
+            end
+        end
+        if f == 0
+            n = max(1, ceil(Int, norm(b - a) / h - 1e-9))
+            ts = [i / n for i in 1:n-1]
+        end
+        ids = Vector{Int}(undef, length(ts) + 2)
         ids[1], ids[end] = k[1], k[2]
-        for i in 1:n-1
-            push!(P, a + (b - a) * (i / n))
+        for (i, t) in enumerate(ts)
+            push!(P, a + (b - a) * t)
             ids[i+1] = length(P)
         end
         segs[k] = ids
@@ -392,29 +570,48 @@ function _segment_points!(loop, P, segs, p, q, h)
     return loop
 end
 
-function _edge_points!(loop, P, segs, chains, a, b, h)
+function _edge_points!(loop, P, segs, chains, a, b, h, fam = nothing, families = nothing)
     k = minmax(a, b)
     ch = get(chains, k, nothing)
-    ch === nothing && return _segment_points!(loop, P, segs, a, b, h)
+    ch === nothing && return _segment_points!(loop, P, segs, a, b, h, fam, families)
     seq = a == k[1] ? ch : reverse(ch)
     for i in 1:length(seq)-1
-        _segment_points!(loop, P, segs, seq[i], seq[i+1], h)
+        _segment_points!(loop, P, segs, seq[i], seq[i+1], h, fam, families)
     end
     return loop
 end
 
+# The segments (vertex pairs, sorted) of a facet's edges, split at their T-junctions.
+function _facet_segs!(segs, chains, (a, b, c))
+    for (p, q) in ((a, b), (b, c), (c, a))
+        ch = get(chains, minmax(p, q), nothing)
+        if ch === nothing
+            push!(segs, minmax(p, q))
+        else
+            for i in 1:length(ch)-1
+                push!(segs, minmax(ch[i], ch[i+1]))
+            end
+        end
+    end
+    return segs
+end
+
+_facet_segments(tris, chains) =
+    sort!(unique!(foldl((s, t) -> _facet_segs!(s, chains, t), tris; init = Tuple{Int,Int}[])))
+
 # Every facet split in its plane into triangles with edges of at most `h`, conforming
-# across shared edges: the triangles, and the facet each came from.
-function _refine_facets!(P, tris, chains, h)
+# across shared edges (segments of a plane family cut at its planes): the triangles, and
+# the facet each came from.
+function _refine_facets!(P, tris, chains, h, fam = nothing, families = nothing)
     segs = Dict{Tuple{Int,Int},Vector{Int}}()
     rtris = NTuple{3,Int}[]
     parent = Int[]
     loop = Int[]
     for (k, (a, b, c)) in enumerate(tris)
         empty!(loop)
-        _edge_points!(loop, P, segs, chains, a, b, h)
-        _edge_points!(loop, P, segs, chains, b, c, h)
-        _edge_points!(loop, P, segs, chains, c, a, h)
+        _edge_points!(loop, P, segs, chains, a, b, h, fam, families)
+        _edge_points!(loop, P, segs, chains, b, c, h, fam, families)
+        _edge_points!(loop, P, segs, chains, c, a, h, fam, families)
         if length(loop) == 3
             push!(rtris, (a, b, c))
             push!(parent, k)
@@ -503,6 +700,70 @@ function _split_polygon!(rtris, parent, k, P, ids, h)
     return rtris
 end
 
+# Element bands on sliver strips. A facet whose segments longer than `size` are all cut
+# by one plane family is a strip (two long sides, at most 30° apart: see
+# `_plane_families`); its refined triangles lie between two of the family's planes
+# (cuts across a strip are its shortest chords). Every m-th plane bounds an element band,
+# and the band is the triangle's zone (0: none).
+# Elements grow within one zone (`_cluster_elements`), so their cuts across the strips
+# follow the planes: straight, and shared by the elements on either side, where nearest-
+# seed growth staggers them by a plane or two between neighboring strips. Returns the
+# zones and, per zone, the family's direction and the band's length.
+function _band_zones(P, tris, chains, rtris, parent, fam, families, size)
+    zone = zeros(Int, length(rtris))
+    bands = [(u = F.u, len = F.m * F.g) for F in families for _ in 1:F.nb]
+    isempty(families) && return zone, bands
+    offset = cumsum([0; [F.nb for F in families]])
+    ffam = zeros(Int, length(tris))
+    segs = Tuple{Int,Int}[]
+    for (k, t) in enumerate(tris)
+        _facet_segs!(empty!(segs), chains, t)
+        f = 0
+        for s in segs
+            sum(abs2, P[s[2]] - P[s[1]]) > size^2 || continue
+            g = get(fam, s, 0)
+            if g == 0 || (f != 0 && g != f)
+                f = 0
+                break
+            end
+            f = g
+        end
+        ffam[k] = f
+    end
+    for (i, (a, b, c)) in enumerate(rtris)
+        f = ffam[parent[i]]
+        f == 0 && continue
+        F = families[f]
+        s = dot(P[a] + P[b] + P[c], F.u) / 3
+        zone[i] = offset[f] + clamp(floor(Int, (s - F.s0) / (F.m * F.g)), 0, F.nb - 1) + 1
+    end
+    return zone, bands
+end
+
+# The strip of each facet: facets sharing their longest edge within a degree of one
+# plane (a strip's two triangles, split along its diagonal) are one strip, numbered by
+# the lower facet.
+function _strip_pairs(P, tris)
+    strip = collect(eachindex(tris))
+    longest = Dict{Tuple{Int,Int},Int}()
+    for (k, (a, b, c)) in enumerate(tris)
+        e = argmax(e -> sum(abs2, P[e[2]] - P[e[1]]), ((a, b), (b, c), (c, a)))
+        f = get(longest, minmax(e...), 0)
+        if f == 0
+            longest[minmax(e...)] = k
+        else
+            n1 = normalize(_tri_cross(P[a], P[b], P[c]))
+            n2 = normalize(_tri_cross(P[tris[f][1]], P[tris[f][2]], P[tris[f][3]]))
+            dot(n1, n2) >= cosd(1.0) && (strip[k] = strip[f])
+        end
+    end
+    return strip
+end
+
+# Can a triangle of zone `zt` join an element seeded in zone `zs`? Zoned triangles join
+# only their own band's elements, or elements seeded off the bands.
+_zone_ok(zt, zs) = zt == 0 || zs == 0 || zt == zs
+
 # Binary min-heap of (key, triangle, seed) for growing elements nearest first.
 struct _GrowHeap
     key::Vector{Float64}
@@ -569,7 +830,7 @@ function _triangle_neighbors(tris)
 end
 
 # Grow the given seeds over unowned triangles, nearest (to the seed point) first.
-function _grow_seeds!(owner, best, H, seeds, P, rtris, cen, nrm, thin, nbr, spos, snrm, stri, cosmax, rmax)
+function _grow_seeds!(owner, best, H, seeds, P, rtris, cen, nrm, thin, nbr, spos, snrm, stri, cosmax, rmax, zone)
     for s in seeds
         t = stri[s]
         owner[t] == 0 || continue
@@ -586,6 +847,7 @@ function _grow_seeds!(owner, best, H, seeds, P, rtris, cen, nrm, thin, nbr, spos
             q == 0 && break
             owner[q] == 0 || continue
             thin[q] || dot(nrm[q], snrm[s]) >= cosmax || continue
+            _zone_ok(zone[q], zone[stri[s]]) || continue
             a, b, c = rtris[q]
             max(norm(P[a] - spos[s]), norm(P[b] - spos[s]), norm(P[c] - spos[s])) <= rmax || continue
             k = norm(cen[q] - spos[s])
@@ -604,9 +866,15 @@ end
 # smoothed. Elements more than `angle` from planar, reaching beyond `rmax` of their
 # centroid, or with a centroid off the element are halved until they are not. The
 # spacing 0.85 `size` makes the mean element area ≈ `size`² on smooth surfaces.
+# Triangles of a `zone` (an element band on sliver strips, see `_band_zones`) join only
+# elements seeded in it (or off the bands); seeds in a band are spaced across it only,
+# 0.75 `size`²/length apart (one row: random sequential seeds leave gaps of 1.34 times
+# the spacing on average), so its elements span the band and their mean area is `size`².
 function _cluster_elements(P, rtris, size::Float64, angle::Float64; iterations::Int = 5,
                            spacing::Float64 = 0.85size, rmax::Float64 = size,
-                           smooth::Int = 3)
+                           smooth::Int = 3, zone::Vector{Int} = zeros(Int, length(rtris)),
+                           axis = NamedTuple{(:u, :len),Tuple{Vec3,Float64}}[], unit::Vector{Int} = Int[],
+                           minband::Float64 = 2.0)
     N = length(rtris)
     cen = Vector{Vec3}(undef, N)
     nrm = Vector{Vec3}(undef, N)
@@ -621,24 +889,56 @@ function _cluster_elements(P, rtris, size::Float64, angle::Float64; iterations::
         thin[i] = A <= 1e-6 * max(sum(abs2, P[b] - P[a]), sum(abs2, P[c] - P[b]), sum(abs2, P[a] - P[c]))
     end
     nbr = _triangle_neighbors(rtris)
+    # a band's connected piece under `minband` size² (a few strips of a small face, a
+    # band cut short by the strips' ends) would only confine its elements: no band there
+    zone = copy(zone)
+    seen = falses(N)
+    piece = Int[]
+    for t0 in 1:N
+        zone[t0] > 0 && !seen[t0] || continue
+        empty!(piece)
+        push!(piece, t0)
+        seen[t0] = true
+        i = 1
+        while i <= length(piece)
+            t = piece[i]
+            for q in view(nbr, :, t)
+                q == 0 && break
+                !seen[q] && zone[q] == zone[t0] && (seen[q] = true; push!(piece, q))
+            end
+            i += 1
+        end
+        sum(t -> area[t], piece) < minband * size^2 && (zone[piece] .= 0)
+    end
     cosmax = cosd(angle)
     order = randperm(MersenneTwister(1), N)
     # Poisson-disk seeds: a triangle seeds unless a seed facing the same way is closer
-    # than the spacing
+    # than the spacing (in a band: a seed of the band, closer across it)
     spos, snrm, stri = Vec3[], Vec3[], Int[]
     lo = reduce((a, b) -> min.(a, b), cen)
-    key(p) = Tuple(floor.(Int, (p - lo) ./ spacing))
+    bspacing = [min(0.75size^2 / b.len, 2spacing) for b in axis]
+    cell = max(spacing, maximum(b -> b.len, axis; init = 0.0), maximum(bspacing; init = 0.0))
+    key(p) = Tuple(floor.(Int, (p - lo) ./ cell))
     grid = Dict{NTuple{3,Int},Vector{Int}}()
     for t in order
         thin[t] && continue
         c = key(cen[t])
+        z = zone[t]
         taken = false
         for dx in -1:1, dy in -1:1, dz in -1:1
             for s in get(grid, (c[1] + dx, c[2] + dy, c[3] + dz), Int[])
-                if norm(spos[s] - cen[t]) < spacing && dot(snrm[s], nrm[t]) >= cosmax
-                    taken = true
-                    break
+                zs = zone[stri[s]]
+                dot(snrm[s], nrm[t]) >= cosmax || continue
+                d = spos[s] - cen[t]
+                taken = if z == 0 || zs == 0
+                    norm(d) < spacing
+                elseif z == zs
+                    u = axis[z].u
+                    norm(d - dot(d, u) * u) < bspacing[z]
+                else
+                    false
                 end
+                taken && break
             end
             taken && break
         end
@@ -653,12 +953,12 @@ function _cluster_elements(P, rtris, size::Float64, angle::Float64; iterations::
     for it in 0:iterations
         fill!(owner, 0)
         fill!(best, Inf)
-        _grow_seeds!(owner, best, H, eachindex(spos), P, rtris, cen, nrm, thin, nbr, spos, snrm, stri, cosmax, reach)
+        _grow_seeds!(owner, best, H, eachindex(spos), P, rtris, cen, nrm, thin, nbr, spos, snrm, stri, cosmax, reach, zone)
         for pass in 1:2, t in order                      # triangles no seed reached
             owner[t] == 0 && (pass == 2 || !thin[t]) || continue
             push!(spos, cen[t]); push!(snrm, nrm[t]); push!(stri, t)
             _grow_seeds!(owner, best, H, length(spos):length(spos), P, rtris, cen, nrm, thin, nbr,
-                         spos, snrm, stri, cosmax, reach)
+                         spos, snrm, stri, cosmax, reach, zone)
         end
         it == iterations && break
         # Lloyd: each seed to its element's centroid and mean normal
@@ -695,10 +995,38 @@ function _cluster_elements(P, rtris, size::Float64, angle::Float64; iterations::
             r = r1 == r2 || r1 == r3 ? r1 : r2 == r3 ? r2 : 0
             (r == 0 || r == o || stri[o] == t) && continue
             thin[t] || dot(nrm[t], snrm[r]) >= cosmax || continue
+            _zone_ok(zone[t], zone[stri[r]]) || continue
             owner[t] = r
             moved += 1
         end
         moved == 0 && break
+    end
+    # a sliver strip's piece in a band (its refined triangles in one zone, `unit` giving
+    # the strip of each; narrower than size/5 on average) goes whole to the element
+    # holding most of its area, so element sides run along strip edges, not through
+    # strips; wider strips' pieces stay divided
+    if !isempty(unit)
+        strip = unit
+        unit = sort!([t for t in 1:N if zone[t] > 0]; by = t -> (strip[t], zone[t]))
+        i = 1
+        while i <= length(unit)
+            j = i
+            while j < length(unit) && strip[unit[j+1]] == strip[unit[i]] && zone[unit[j+1]] == zone[unit[i]]
+                j += 1
+            end
+            if any(k -> owner[unit[k]] != owner[unit[i]], i+1:j) &&
+               sum(k -> area[unit[k]], i:j) < 0.2size * axis[zone[unit[i]]].len
+                w = Dict{Int,Float64}()
+                for k in i:j
+                    w[owner[unit[k]]] = get(w, owner[unit[k]], 0.0) + area[unit[k]]
+                end
+                o = first(sort!(collect(w); by = x -> (-x[2], x[1])))[1]
+                for k in i:j
+                    owner[unit[k]] = o
+                end
+            end
+            i = j + 1
+        end
     end
     members = [Int[] for _ in eachindex(spos)]
     for t in 1:N
@@ -708,8 +1036,28 @@ function _cluster_elements(P, rtris, size::Float64, angle::Float64; iterations::
     nel = 0
     stack = [ms for ms in members if !isempty(ms)]
     lab = zeros(Int, N)
+    part = Int[]
     while !isempty(stack)
         ms = pop!(stack)
+        # an element in pieces (strip pieces moved whole can cut one off) is split first
+        lab[ms] .= -1
+        empty!(part)
+        push!(part, ms[1])
+        lab[ms[1]] = 1
+        i = 1
+        while i <= length(part)
+            for q in view(nbr, :, part[i])
+                q == 0 && break
+                lab[q] == -1 && (lab[q] = 1; push!(part, q))
+            end
+            i += 1
+        end
+        lab[ms] .= 0
+        if length(part) < length(ms)
+            inpart = Set(part)
+            push!(stack, copy(part), [t for t in ms if !(t in inpart)])
+            continue
+        end
         A = sum(area[t] for t in ms)
         c = A > 0 ? sum(area[t] * cen[t] for t in ms) / A : sum(cen[ms]) / length(ms)
         nv = sum(area[t] * nrm[t] for t in ms)

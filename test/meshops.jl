@@ -150,6 +150,11 @@ function element_quality(m, p)
     diam = maximum(norm(m.vertices[u] - m.vertices[v]) for u in vs, v in vs)
     return (; A, tilt, reach, diam, on)
 end
+# edges of an element's outline, straight runs merged (as its view-factor receiver has them)
+function outline_edges(m, p)
+    T = m.triangles[m.patches[p]]
+    return length(Briareus._merge_straight(m.vertices, Briareus._boundary_edges(T, eachindex(T))))
+end
 
 @testset "remesh_mesh" begin
     rng = Random.MersenneTwister(11)
@@ -166,9 +171,11 @@ end
     @test sum(x -> x.A, q) ≈ 8 rtol = 1e-12
     # about one element per size² (a square element of side `size` has that area), each
     # within `size` of its centroid, compact, and with the centroid on it
-    @test 0.8 < npatches(r) * size^2 / 8 < 1.25
+    @test 0.9 < npatches(r) * size^2 / 8 < 1.15
     @test all(x -> x.reach <= size * (1 + 1e-12) && x.diam / sqrt(x.A) < 2.2 && x.on, q)
-    @test all(x -> x.A > 0.3size^2, q)
+    @test all(x -> x.A > 0.6size^2, q)
+    # cut across the strips on common planes, along them at strip edges: rectangles
+    @test all(p -> outline_edges(r, p) == 4, 1:npatches(r))
     t = Target([Component(:p, r, gold())])
     @test all(n -> n ≈ Vec3(0, 0, 1), t.elem_normal)
     # the same surface: its only open edges are the plate's outline
@@ -200,9 +207,9 @@ end
     @test mesh_area(r) ≈ A rtol = 1e-12
     @test open_edges(r)[1] == 0 && open_edges(r)[3] == 0             # closed and conforming
     q = [element_quality(r, p) for p in 1:npatches(r)]
-    @test 0.8 < npatches(r) * size^2 / A < 1.4
+    @test 0.9 < npatches(r) * size^2 / A < 1.2
     @test all(x -> x.tilt <= 10.0 + 1e-9 && x.reach <= size * (1 + 1e-12) && x.on, q)
-    @test count(x -> x.diam / sqrt(x.A) > 2.2, q) <= npatches(r) ÷ 50
+    @test all(x -> x.diam / sqrt(x.A) < 2.2, q)
     # radiation inside it (turned inward): every element sees the whole enclosure (rows
     # sum to 1 within 0.6%, mean 0.14%; the prism below: 0.33%, mean 0.16%), and the wall
     # sends the caps what the same prism meshed by `cylinder_mesh` sends
@@ -219,6 +226,34 @@ end
     cap(t) = [e for e in 1:nelements(t) if abs(t.elem_normal[e][3]) > 0.5]
     exchange(t, F) = sum(t.elem_area[i] * F[i, j] for i in wall(t), j in cap(t)) / sum(t.elem_area[wall(t)])
     @test exchange(inside, F) ≈ exchange(prism, Fp) rtol = 2e-3
+
+    # a tube of 360 full-length sliver strips (radius 2, length 3: 35 µm by 3 mm), its
+    # length a multiple of size/3, so a strip's diagonal, a hair longer than its sides,
+    # would take one point more under equal spacing and stagger every cut. The strips are
+    # cut on common planes and elements fill bands between them: every cut across the
+    # strips is one straight chord per strip, shared by the elements on both sides
+    nphi = 360
+    ring(z) = [Vec3(2cos(2π * j / nphi), 2sin(2π * j / nphi), z) for j in 0:nphi-1]
+    tube = Mesh([ring(-1.5); ring(1.5)], NTuple{3,Int}[], UnitRange{Int}[])
+    for j in 1:nphi
+        k = mod1(j + 1, nphi)
+        push!(tube.triangles, (j, nphi + j, k), (nphi + j, nphi + k, k))
+        push!(tube.patches, length(tube.triangles)-1:length(tube.triangles))
+    end
+    size = 0.3
+    r = remesh_mesh(tube; size)
+    A = mesh_area(tube)
+    @test mesh_area(r) ≈ A rtol = 1e-12
+    @test open_edges(r)[2] ≈ open_edges(tube)[2] && open_edges(r)[3] == 0
+    q = [element_quality(r, p) for p in 1:npatches(r)]
+    @test 0.9 < npatches(r) * size^2 / A < 1.1
+    @test all(x -> x.tilt <= 10.0 + 1e-9 && x.reach <= size * (1 + 1e-12) && x.on && x.diam / sqrt(x.A) < 1.6, q)
+    zext = [extrema(r.vertices[v][3] for k in r.patches[p] for v in r.triangles[k]) for p in 1:npatches(r)]
+    @test length(unique(round(z; digits = 6) for e in zext for z in e)) == round(Int, 3 / size) + 1
+    # outlines: a chord across each strip at the two cuts, two runs along strips
+    strip_of(c) = floor(Int, mod(atan(c[2], c[1]), 2π) * nphi / 2π)
+    nstrips(p) = length(unique(strip_of(sum(r.vertices[v] for v in r.triangles[k])) for k in r.patches[p]))
+    @test all(p -> outline_edges(r, p) <= 2nstrips(p) + 2, 1:npatches(r))
 
     @test_throws ArgumentError remesh_mesh(plate; size = 0)
     @test_throws ArgumentError remesh_mesh(plate; size = 0.4, angle = 0)

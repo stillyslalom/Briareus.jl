@@ -245,7 +245,7 @@ for c in kept
 end
 
 # On the walls and the capsule the remeshed elements are as compact as squares, about
-# one per size² (the 104.5 mm² of a half's cavity side in about 450 elements of
+# one per size² (the 104.5 mm² of a half's cavity side in about 470 elements of
 # 0.5 mm). Faces narrower than the size, the 50 µm bores and gap faces, give elements
 # as narrow: that is the geometry's own scale. Coarsening leaves the strips whole, and
 # five times as many elements on the capsule. The capsule is remeshed finer (0.15 mm)
@@ -497,18 +497,18 @@ end
 # [`hohlraum`](@ref) at 0.25 mm.
 #
 # - The capsule's view factors match the solid angles within 1.2e-3 in every model. The
-#   row sums of the wall, caps and capsule miss one by up to 1.3%, in the primitives as
+#   row sums of the wall, caps and capsule miss one by up to 1%, in the primitives as
 #   in the CAD, against 0.14% in `hohlraum()`; the narrow faces and the LEHs miss by up
-#   to 8%. These are the elements that see others partly, past the rim of a bore or
+#   to 7%. These are the elements that see others partly, past the rim of a bore or
 #   into the gap, where a single line of sight decides visibility; balancing restores
 #   the rows.
 # - At the same element size, the CAD models and the primitives agree on the capsule
 #   flux within 0.06%, on ``a_2/a_0`` within 0.12 percentage points, and on the LEH
-#   loss within 0.15%; at 0.25 mm within 0.012%, 0.07 points and 0.04%. Both move by
+#   loss within 0.15%; at 0.25 mm within 0.02%, 0.07 points and 0.04%. Both move by
 #   more than that between 0.5 and 0.25 mm: ``a_2/a_0`` rises by 0.35 points (the
 #   primitives at 0.2 mm give 10.92%, so 0.25 mm is not yet converged in it).
 # - ``a_4/a_0`` is set by the capsule mesh. The remeshed CAD capsule, with compact
-#   elements, gives −0.78% to −0.80% at every size tried (0.15 and 0.1 mm); the
+#   elements, gives −0.77% to −0.80% at every size tried (0.15 and 0.1 mm); the
 #   latitude-longitude capsule of the primitives gives −1.01% at 0.15 mm and −0.82% at
 #   0.05 mm.
 # - Flat and fitted CAD agree on these integrated quantities within the same margins
@@ -516,7 +516,7 @@ end
 #   between neighbors, which sums out over a cavity, as the
 #   [Integrating sphere](@ref) tutorial shows. The fitted view factors cost about half
 #   as much: both models lump each element's facets, but a flat element folded across
-#   the wall's strips receives through its exact outline (16 edges on average), where a
+#   the wall's strips receives through its exact outline (14 edges on average), where a
 #   curved element exchanges with its curved neighbors point to point.
 # - The thin-walled `hohlraum()` loses 3.3% more through its flush LEHs, and its
 #   ``a_2/a_0`` is 0.77 points lower: the 0.1 mm bores and the gap matter at this level,

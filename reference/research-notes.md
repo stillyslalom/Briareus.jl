@@ -1038,6 +1038,45 @@ test fixture rebuilds the layout from rows copied from these files.
   2.4 s (22× faster; mean tube row sum 0.6185 vs 0.6168 flat); fitting the NIF cavity's
   parts changes its time little (19.3 vs 19.7 s). Deposition on the tube target: 8.5 s
   for 3 beams. **H** (synthetic; the NIF numbers measured locally)
+- **Straight cuts across sliver strips (2026-10-18).** The stagger above came from
+  dividing each edge equally: a strip's diagonal (10.0000044 mm on the tube) took 51
+  points where its sides (exactly 50 × size/3) took 50, so the chords across every strip
+  were slanted (267 of an element's 275 outline edges). `remesh_mesh` now cuts parallel
+  edges longer than size/3 (within 0.25°; a strip's diagonal joins its sides' family
+  within 30°, and a family whose strip facets pair it mostly with a heavier one joins
+  that) where they cross common planes ⟂ the family, spaced ≤ (size/3)·cos 0.5°/1.1, and
+  grows elements within bands between every m-th plane, about `size` long (bands of
+  under 2 size² connected area are dropped); seeds in a band are spaced across it only
+  (0.75 size²/length: random sequential seeding in a row leaves gaps of 1.34 times the
+  spacing), a sliver strip's piece in a band (mean width under size/5) goes whole to the
+  element holding most of it, and an element left in pieces is split. Standalone tube
+  (2,000 strips, r = 3, 10 mm, the GUI test's), size 0.6, main → now: 492 → 523
+  elements (0.94 → 1.00 per size²), 274 → 130 facets and 275.5 → 132.0 outline edges per
+  element (2.1×; the floor is two per strip crossed, ~65), reach ≤ 0.99 → 0.82 size,
+  diam/√A ≤ 1.80 → 1.44, smallest element 0.47 → 0.80 size²; view factors 30.3 → 10.6 s
+  (8 threads), cell evaluations per near kernel 999 → 693 (1.44×) and 17.2M → 9.9M in
+  all, mean row sum 0.7195 → 0.7221. Evaluations do not halve: an adjacent pair refines
+  along the shared boundary down to cells of r/256, so its count is the boundary's
+  length over that, which straight cuts shorten only by the stagger (the same tube cut
+  into eight faces at random heights, where equal spacing happens to align, gave 603).
+  Plate of 40 strips (test/meshops.jl): 28.5 → 3.2 facets and 30.1 → 4.0 outline edges
+  per element (rectangles); can of 48 strips: 13.3 → 8.3 facets. Remeshed planar strips
+  are thus 2–4-facet rectangles on the two-facet view-factor path: perpendicular plates
+  remeshed at 0.25 match Hottel to +7.8e-4 and +1.9e-3, as 4 × 4 and 5 × 5 primitive
+  quads do (+1.2e-3, +1.9e-3); the staggered many-facet elements, on the finer cell
+  path, gave +3.9e-4 and +6.6e-4. NIF CAD workspace (local): the hohlraum halves'
+  facets are mostly not long parallel strips at these sizes (34 of 245 mm² banded; most
+  long facets have long edges ~90° apart), and change little: 4,637/4,728 → 4,684/4,716
+  elements at 0.28 mm, 2,147/2,209 → 2,115/2,225 at 0.6; the GUI's coarse cavity 3,740 →
+  3,790 elements, outline edges 16.0 → 16.1 per many-facet element, view factors 10.9 →
+  11.9 s (8 threads), 266 → 269 evaluations per near kernel. CAD tutorial: halves 449/454
+  → 470/470 elements at 0.5 mm; flat model 1,684 → 1,723 elements, outline edges 16.2 →
+  13.8 (walls 16.3 → 11.8), view factors 3.0 → 2.7 s; row sums before balancing within
+  1.3e-2 → 8.4e-3 (narrow faces 7.7e-2 → 6.4e-2); capsule flux against the primitives
+  −0.057 → −0.050% (flat, 0.5 mm) and −0.012 → −0.019% (fitted, 0.25 mm), a₂/a₀ 10.550 →
+  10.570% (flat 0.5), LEH loss 0.25356 → 0.25321. The constants (0.25°, 30°, the 0.05 g
+  end margin, band length `size`, 2 size², size/5) are engineering choices, **M**; the
+  measurements **H** (synthetic; the NIF numbers measured locally)
 - **Cones (2026-10-18).** `ConeSurface(half_angle; apex, axis)` projects points radially
   at constant height along the axis, as on a cylinder; the patch area is
   (sin θ / 2cos²θ)|∮ z² dφ| (Green's theorem in height and azimuth), each edge by
