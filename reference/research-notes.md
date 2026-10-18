@@ -833,6 +833,22 @@ test fixture rebuilds the layout from rows copied from these files.
   (3.24 mm and beyond) away from it; as read, both faced out. `coarsen_mesh` at
   0.3 mm reduces the hohlraum halves only from 7,300 to 6,300 elements each: their
   tessellation is long slivers that no merging shortens. **H** (measured locally)
+- **CAD remeshing (2026-10-17).** `remesh_mesh` (facets split to edges ≤ size/3,
+  conforming, then clustered into elements and re-triangulated) on the same workspace,
+  one thread: the hohlraum halves (7,300–7,600 facets, 245 mm² each, inner and outer
+  surfaces) give 4,240–4,310 elements at 0.3 mm in 0.4 s and 7,970–8,010 at 0.2 mm in
+  1.0 s, about 10 triangles per element; areas agree to 5e-15, every element is within
+  10° of planar, reaches at most `size` from its centroid, and has its centroid on it;
+  flat and gently curved faces give elements of area ≈ size² (diameter/√area 1.4–1.5),
+  while faces narrower than the size (wall ends, fillets, thin rims) give narrow
+  elements: 20% of the elements but 0.5% of the area. The largest part (133k facets,
+  7,200 mm²) takes 20 s (128k elements) at 0.3 mm and 47 s (236k) at 0.2 mm; a thin rod
+  part, curved faster than 10° per element across its width, gives 14 elements per
+  size² (pass a larger `angle` there). The design default `spacing = 0.85 size`
+  (Poisson-disk seeds) was set on synthetic plates, tubes and cans, where it gives
+  0.9–1.1 elements per size²; `rmax = size` (rather than 0.75 size) avoids splitting
+  Lloyd cells into fragments (0.75 doubled the count). **H** (measured locally; the
+  constants are engineering choices, **M**)
 
 ### Result tables and fits
 

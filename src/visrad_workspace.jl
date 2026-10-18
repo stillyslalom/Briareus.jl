@@ -540,7 +540,7 @@ end
 
 """
     visrad_component(object; material = nothing, two_sided = false, orient = false,
-                     toward = (0, 0, 0), coarsen = nothing) -> Vector{Component}
+                     toward = (0, 0, 0), coarsen = nothing, remesh = nothing) -> Vector{Component}
 
 Briareus components for one `VisRadObject`, in the chamber frame (mm). The material
 defaults to the object's albedo and x-ray conversion efficiency. CAD meshes give one
@@ -552,22 +552,28 @@ inner hohlraum wall faces away from the cavity. `orient = true` repairs the wind
 with `orient_mesh`: consistent across shared edges, closed solids facing out of their
 material, open sheets facing the point `toward` (mm, chamber frame; by default the
 target chamber center). `two_sided = true` instead radiates from both sides (thin
-shells are then modeled as two radiating sides). `coarsen` (mm) merges near-coplanar
-facets into elements of about that size (`coarsen_mesh`), which CAD needs before view
-factors. Rectangles give one component (normal +z before orientation), spheres one with
+shells are then modeled as two radiating sides). CAD needs fewer, compact elements
+before view factors: `remesh` (mm) divides the surface into near-planar elements of
+about that size whatever the facets' shapes (`remesh_mesh`; long slivers are cut),
+while `coarsen` (mm) only merges whole near-coplanar facets up to that size
+(`coarsen_mesh`; slivers longer than the size stay). Rectangles give one component (normal +z before orientation), spheres one with
 a `SphereSurface`, and cylindrical hohlraums five — `<name>_wall`, `_cap_top`,
 `_cap_bottom` and the apertures `_leh_top`, `_leh_bottom` — with the curved surfaces
 `hohlraum` uses, all on VisRad's grid (`Number of mesh pts`). Other object types return
 no components (with a warning).
 """
 function visrad_component(o::VisRadObject; material = nothing, two_sided::Bool = false,
-                          orient::Bool = false, toward = (0.0, 0.0, 0.0), coarsen = nothing)
+                          orient::Bool = false, toward = (0.0, 0.0, 0.0), coarsen = nothing,
+                          remesh = nothing)
+    coarsen === nothing || remesh === nothing ||
+        throw(ArgumentError("give one of `coarsen` and `remesh`, not both"))
     mat = material === nothing ? Material(Symbol(o.name); albedo = o.albedo, conversion = o.conversion) :
           material
     o.reflectivity > 0 && @warn "VisRad object $(o.name) reflects laser light ($(o.reflectivity)); Briareus absorbs it all"
     if o.kind === :mesh
         mesh = orient ? orient_mesh(o.mesh; toward) : o.mesh
         coarsen === nothing || (mesh = coarsen_mesh(mesh; size = coarsen))
+        remesh === nothing || (mesh = remesh_mesh(mesh; size = remesh))
         return [Component(o.name, mesh, mat; two_sided)]
     end
     cs = _vrw_primitive(o.kind, o.name, o.params, mat)
@@ -580,31 +586,32 @@ end
 """
     visrad_target(workspace; select = o -> o.radiosity || o.laser, materials = Dict(),
                   two_sided = false, orient = false, toward = (0, 0, 0),
-                  coarsen = nothing) -> Target
+                  coarsen = nothing, remesh = nothing) -> Target
 
 Target built from the components of a VisRad workspace (`read_visrad_workspace`) for
 which `select(object)` is true — by default those VisRad includes in its radiosity or
 direct-laser calculation. `materials` maps object names to a `Material` overriding the
 file's albedo and conversion efficiency. `two_sided` (a `Bool`, or a function of the
 object) makes surfaces radiate from both sides; see `visrad_component` for why CAD
-meshes often need it, and for `orient`, `toward` and `coarsen` (which apply to CAD
-meshes: repaired windings, and elements of about `coarsen` mm).
+meshes often need it, and for `orient`, `toward`, `remesh` and `coarsen` (which apply
+to CAD meshes: repaired windings, and elements of about `remesh` or `coarsen` mm).
 
 CAD meshes can hold hundreds of thousands of triangles, and each becomes a radiating
 element. That is fine for ray tracing (deposition, clearance, imaging) but too many for
 view factors; select the parts that matter for the radiation problem, e.g.
-`select = o -> o.folder == "Hohlraum"` or by name, and coarsen them.
+`select = o -> o.folder == "Hohlraum"` or by name, and remesh them.
 """
 function visrad_target(ws::VisRadWorkspace; select = o -> o.radiosity || o.laser,
                        materials = Dict{String,Material}(), two_sided = false,
-                       orient::Bool = false, toward = (0.0, 0.0, 0.0), coarsen = nothing)
+                       orient::Bool = false, toward = (0.0, 0.0, 0.0), coarsen = nothing,
+                       remesh = nothing)
     comps = Component[]
     for o in ws.objects
         select(o) || continue
         (o.radiosity && o.laser) || @warn "VisRad object $(o.name) is included in only one of VisRad's radiosity and laser calculations; Briareus uses it in both"
         ts = two_sided isa Bool ? two_sided : Bool(two_sided(o))
         append!(comps, visrad_component(o; material = get(materials, o.name, nothing), two_sided = ts,
-                                        orient, toward, coarsen))
+                                        orient, toward, coarsen, remesh))
     end
     isempty(comps) && throw(ArgumentError("no VisRad components selected"))
     return Target(comps)

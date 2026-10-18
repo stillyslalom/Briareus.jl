@@ -335,7 +335,7 @@ end
 The core components of a part: one for every kind but `:visrad`, whose object can be a
 primitive hohlraum (wall, caps and entrance holes). A VisRad object keeps its own place
 in the chamber (VisRad's frames), moved further by the part's placement; its windings
-are repaired and its CAD facets merged into elements of the part's size.
+are repaired and its CAD surface remeshed into elements of the part's size.
 """
 function part_components(p::PartSpec, h::Real;
                          frame = ([1.0 0.0 0.0; 0.0 1.0 0.0; 0.0 0.0 1.0], zero(Vec3)))
@@ -378,7 +378,7 @@ function part_components(p::PartSpec, h::Real;
         return [transform(c, R, center) for c in cs]
     elseif k === :mesh
         v[:scale] > 0 || throw(ArgumentError("$(p.name): the scale must be positive"))
-        # facing the target center, merged into elements of the part's size
+        # facing the target center, remeshed into elements of the part's size
         toward = transpose(R) * (zero(Vec3) - center)
         m = _stl_part_mesh(p.file, v[:scale], hp, toward, p.inward)
         surf = nothing
@@ -400,7 +400,7 @@ function part_components(p::PartSpec, h::Real;
 end
 
 # A VisRad object's components in the chamber frame (windings repaired toward `toward`,
-# CAD facets merged to `h`), kept per workspace version and settings: every edit
+# CAD surfaces remeshed into elements of `h`), kept per workspace version and settings: every edit
 # rebuilds the target, and orienting a CAD part of 10⁵ facets takes seconds.
 const _VRW_PARTS = Dict{Any,Vector{Component}}()
 
@@ -413,7 +413,7 @@ function _visrad_components(p::PartSpec, h, toward)
             o = _visrad_object(p.file, p.object)
             mat = Material(p.name; albedo = v[:albedo], conversion = v[:conversion])
             cs = visrad_component(o; material = mat, two_sided = p.two_sided, orient = !p.two_sided,
-                                  toward, coarsen = o.kind === :mesh ? h : nothing)
+                                  toward, remesh = o.kind === :mesh ? h : nothing)
             isempty(cs) && throw(ArgumentError("$(p.name): VisRad object type $(o.type) is not supported"))
             cs
         end
@@ -439,7 +439,7 @@ function _visrad_object(file::AbstractString, object::AbstractString)
 end
 
 # An STL file's mesh, oriented (`orient_mesh`: closed solids face out of their material,
-# open sheets toward `toward`, flipped for `inward`) and coarsened to elements of `h`.
+# open sheets toward `toward`, flipped for `inward`) and remeshed into elements of `h`.
 # Every edit rebuilds the target, so the result is kept per file version and settings.
 const _STL_CACHE = Dict{Any,Mesh}()
 const _STL_LOCK = ReentrantLock()
@@ -450,7 +450,7 @@ function _stl_part_mesh(file::AbstractString, scale, h, toward, inward::Bool)
            round.(Tuple(toward); digits = 9), inward)
     lock(_STL_LOCK) do
         get!(_STL_CACHE, key) do
-            m = coarsen_mesh(orient_mesh(read_stl(file; scale); toward); size = h)
+            m = remesh_mesh(orient_mesh(read_stl(file; scale); toward); size = h)
             inward ? Mesh(m.vertices, [(a, c, b) for (a, b, c) in m.triangles], m.patches) : m
         end
     end
@@ -846,8 +846,8 @@ first free number) with [`PART_FIELDS`](@ref) and size values given as keywords
 (e.g. `add_part!(ts, :disk; z = 6.0, r1 = 1.0, theta = 180)`). A `:mesh` part reads the
 STL `file` (scaled by `scale`, mm per file unit), placed like any part, with its
 windings repaired (closed solids facing out of their material, open sheets toward the
-target center) and its facets merged into elements of the part's size (`h`, or the
-target's). A part the geometry rejects sets `error` and returns `false`.
+target center) and its surface remeshed into elements of the part's size (`h`, or the
+target's; `remesh_mesh`). A part the geometry rejects sets `error` and returns `false`.
 """
 function add_part!(ts::TargetSetup, kind::Symbol; name = nothing, two_sided::Bool = false,
                    inward::Bool = false, aperture::Bool = false, file::AbstractString = "",

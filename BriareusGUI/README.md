@@ -57,8 +57,8 @@ and each analysis says when it is out of date.
     frame, chosen per part. A *VisRad object* part is a component of an imported
     VisRad workspace. A *mesh* part reads an
     STL file (a CAD export; Target ▸ Add part ▸ Mesh from STL file), scaled to mm, with
-    its windings repaired (`orient_mesh`) and its facets merged into elements of the
-    part's size (`coarsen_mesh`).
+    its windings repaired (`orient_mesh`) and its surface remeshed into elements of
+    the part's size (`remesh_mesh`).
   - *Beams* (a group, quad, beam, or any Ctrl-selected set): aim relative to the ports
     (z, r, tangential offset) or a common aim point (x, y, z, as VisRad points a
     cluster at a reference point), or *Aim at* a component's centroid (the foil, an

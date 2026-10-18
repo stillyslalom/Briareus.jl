@@ -109,6 +109,121 @@ end
     @test_throws ArgumentError coarsen_mesh(plate; size = 0)
 end
 
+# one patch per triangle with its own vertices, as an STL file has them
+function facet_soup(tris)
+    m = Mesh()
+    foreach(t -> add_polygon!(m, collect(t)), tris)
+    return m
+end
+mesh_area(m) = sum(norm(Briareus._patch_area_vector(m, k:k)) for k in eachindex(m.triangles))
+# welded edges used by one triangle (count, total length) and by more than two
+function open_edges(m)
+    id = Briareus._welded_ids(m)
+    pos = Dict(id[i] => m.vertices[i] for i in eachindex(id))
+    uses = Dict{Tuple{Int,Int},Int}()
+    for (a, b, c) in m.triangles, (u, v) in ((id[a], id[b]), (id[b], id[c]), (id[c], id[a]))
+        uses[minmax(u, v)] = get(uses, minmax(u, v), 0) + 1
+    end
+    one = [e for (e, n) in uses if n == 1]
+    return length(one), sum((norm(pos[u] - pos[v]) for (u, v) in one); init = 0.0), count(>(2), values(uses))
+end
+# an element's area, largest facet tilt from its mean normal (degrees; facets thinner
+# than 1e-6 of their length have no orientation), largest vertex distance from its
+# centroid, diameter, and whether the centroid projects along the normal onto it
+function element_quality(m, p)
+    r = m.patches[p]
+    tv(k) = Briareus.triangle_vertices(m, k)
+    A = sum(norm(Briareus._patch_area_vector(m, k:k)) for k in r)
+    n = normalize(Briareus._patch_area_vector(m, r))
+    c = Briareus._patch_centroid(m, r)
+    tilt, on = 0.0, false
+    for k in r
+        a, b, d = tv(k)
+        nk = cross(b - a, d - a)
+        norm(nk) > 1e-6 * maximum(sum(abs2, e) for e in (b - a, d - b, a - d)) &&
+            (tilt = max(tilt, acosd(clamp(dot(normalize(nk), n), -1, 1))))
+        q = c + dot(a - c, nk) / dot(n, nk) * n
+        on |= all(dot(cross(y - x, q - x), nk) >= -1e-9 * dot(nk, nk) for (x, y) in ((a, b), (b, d), (d, a)))
+    end
+    vs = unique(v for k in r for v in m.triangles[k])
+    reach = maximum(norm(m.vertices[v] - c) for v in vs)
+    diam = maximum(norm(m.vertices[u] - m.vertices[v]) for u in vs, v in vs)
+    return (; A, tilt, reach, diam, on)
+end
+
+@testset "remesh_mesh" begin
+    rng = Random.MersenneTwister(11)
+    # a 4 × 2 mm plate tessellated as 40 strips of two slivers spanning its length
+    # (l²/A = 320), each facet with its own vertices, windings scrambled
+    strips = vcat([[(Vec3(0, y, 0), Vec3(4, y, 0), Vec3(4, y + 0.05, 0)),
+                    (Vec3(0, y, 0), Vec3(4, y + 0.05, 0), Vec3(0, y + 0.05, 0))] for y in 0:0.05:1.95]...)
+    plate = orient_mesh(scramble(facet_soup(strips), rng); toward = (2, 1, 1))
+    @test npatches(coarsen_mesh(plate; size = 0.4)) == 80          # merging cannot shorten them
+    size = 0.4
+    r = remesh_mesh(plate; size)
+    @test mesh_area(r) ≈ 8 rtol = 1e-12
+    q = [element_quality(r, p) for p in 1:npatches(r)]
+    @test sum(x -> x.A, q) ≈ 8 rtol = 1e-12
+    # about one element per size² (a square element of side `size` has that area), each
+    # within `size` of its centroid, compact, and with the centroid on it
+    @test 0.8 < npatches(r) * size^2 / 8 < 1.25
+    @test all(x -> x.reach <= size * (1 + 1e-12) && x.diam / sqrt(x.A) < 2.2 && x.on, q)
+    @test all(x -> x.A > 0.3size^2, q)
+    t = Target([Component(:p, r, gold())])
+    @test all(n -> n ≈ Vec3(0, 0, 1), t.elem_normal)
+    # the same surface: its only open edges are the plate's outline
+    @test open_edges(r)[2] ≈ 12 && open_edges(r)[3] == 0
+
+    # a closed can (radius 1, length 2) as one sheet: wall strips spanning its length,
+    # caps as fans of slivers from the axis, every facet with its own vertices, windings
+    # scrambled; every other wall strip is split at the midpoint of its bottom chord,
+    # which the cap's facet does not have (a T-junction, as between CAD faces)
+    nphi = 48
+    facets = NTuple{3,Vec3}[]
+    for j in 1:nphi
+        a, b = 2π * (j - 1) / nphi, 2π * j / nphi
+        p1, p2 = Vec3(cos(a), sin(a), -1), Vec3(cos(b), sin(b), -1)
+        p3, p4 = Vec3(cos(b), sin(b), 1), Vec3(cos(a), sin(a), 1)
+        if iseven(j)
+            m = (p1 + p2) / 2
+            push!(facets, (p1, p3, m), (m, p3, p2))
+        else
+            push!(facets, (p1, p3, p2))
+        end
+        push!(facets, (p1, p4, p3), (Vec3(0, 0, -1), p2, p1), (Vec3(0, 0, 1), p4, p3))
+    end
+    can = orient_mesh(scramble(facet_soup(facets), rng))
+    @test open_edges(can)[1] == 3nphi ÷ 2                           # the T-junctions
+    size = 0.25
+    r = remesh_mesh(can; size)
+    A = mesh_area(can)
+    @test mesh_area(r) ≈ A rtol = 1e-12
+    @test open_edges(r)[1] == 0 && open_edges(r)[3] == 0             # closed and conforming
+    q = [element_quality(r, p) for p in 1:npatches(r)]
+    @test 0.8 < npatches(r) * size^2 / A < 1.4
+    @test all(x -> x.tilt <= 10.0 + 1e-9 && x.reach <= size * (1 + 1e-12) && x.on, q)
+    @test count(x -> x.diam / sqrt(x.A) > 2.2, q) <= npatches(r) ÷ 50
+    # radiation inside it (turned inward): every element sees the whole enclosure (rows
+    # sum to 1 within 0.6%, mean 0.14%; the prism below: 0.33%, mean 0.16%), and the wall
+    # sends the caps what the same prism meshed by `cylinder_mesh` sends
+    inside = Target([Component(:can, Mesh(r.vertices, [(a, c, b) for (a, b, c) in r.triangles], r.patches),
+                               gold())])
+    F = view_factors(inside)
+    @test maximum(abs, sum(F; dims = 2) .- 1) < 1e-2
+    @test sum(abs, sum(F; dims = 2) .- 1) / nelements(inside) < 2e-3
+    prism = Target([Component(:wall, cylinder_mesh(1.0, -1, 1; nz = 8, nphi), gold()),
+                    Component(:caps, merge_meshes(annulus_mesh(0.0, 1.0, -1; nr = 4, nphi, up = true),
+                                                  annulus_mesh(0.0, 1.0, 1; nr = 4, nphi, up = false)), gold())])
+    Fp = view_factors(prism)
+    wall(t) = [e for e in 1:nelements(t) if abs(t.elem_normal[e][3]) < 0.5]
+    cap(t) = [e for e in 1:nelements(t) if abs(t.elem_normal[e][3]) > 0.5]
+    exchange(t, F) = sum(t.elem_area[i] * F[i, j] for i in wall(t), j in cap(t)) / sum(t.elem_area[wall(t)])
+    @test exchange(inside, F) ≈ exchange(prism, Fp) rtol = 2e-3
+
+    @test_throws ArgumentError remesh_mesh(plate; size = 0)
+    @test_throws ArgumentError remesh_mesh(plate; size = 0.4, angle = 0)
+end
+
 @testset "read_stl" begin
     # a unit cube's 12 facets, every other one wound backward (as exported CAD can be)
     corners = [Vec3(x, y, z) for x in 0:1, y in 0:1, z in 0:1]

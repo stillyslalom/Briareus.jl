@@ -103,8 +103,10 @@ for the same workflow: target, beams, drive, optimization and shot review.
   `compare_visrad`) for comparing the same case run in both codes, and VisRad
   workspaces (`read_visrad_workspace`, `visrad_target`): target components including
   bundled CAD, and beams with their pointing and spots. CAD windings are repaired
-  (`orient_mesh`: consistent, closed solids facing out of their material) and facets
-  merged into elements of a chosen size (`coarsen_mesh`) for view factors.
+  (`orient_mesh`: consistent, closed solids facing out of their material) and the
+  surface remeshed into compact, near-planar elements of a chosen size for view
+  factors (`remesh_mesh`, which also cuts the long slivers CAD tessellates curved walls
+  into; `coarsen_mesh` only merges whole facets).
   `write_visrad_workspace` writes a design's beams back into a copy of a workspace.
   `write_results` exports a calculation for postprocessing: per-element laser,
   radiosity and flux, per-component and per-beam power, and the capsule's Legendre and

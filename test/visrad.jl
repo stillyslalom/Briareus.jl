@@ -313,6 +313,13 @@ end
     @test all(dot(t.elem_normal[i], t.elem_centroid[i] - cad.position) > 0 for i in t.comp_elems[7])
     t2 = visrad_target(ws; select = o -> o.kind === :mesh, two_sided = o -> true)
     @test length(t2.components) == 1 && length(t2.comp_elems[1]) == 8
+    # remeshed into elements of about 0.3 mm (its faces are 1 mm right triangles): the
+    # same surface, still facing out; `coarsen` and `remesh` exclude each other
+    t3 = visrad_target(ws; select = o -> o.kind === :mesh, orient = true, toward = cad.position, remesh = 0.3)
+    @test sum(t3.elem_area) ≈ sum(t.elem_area[t.comp_elems[7]]) rtol = 1e-12
+    @test nelements(t3) > 4 * 4
+    @test all(dot(t3.elem_normal[i], t3.elem_centroid[i] - cad.position) > 0 for i in 1:nelements(t3))
+    @test_throws ArgumentError visrad_target(ws; select = o -> o.kind === :mesh, coarsen = 0.3, remesh = 0.3)
     # beams
     b1, b2, b3 = ws.beams
     @test [b.name for b in ws.beams] == ["B113", "B111", "B121"]

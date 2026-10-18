@@ -115,15 +115,15 @@ end
     name = ts.parts[][end].name
     t = ts.target[]
     es = elements(t, name)
-    # a 0.25 mm cube at z = 7.5, every face out of the solid; with elements up to the
-    # coarse mesh's 0.6 mm each face's two facets merge, but never across its edges
+    # a 0.25 mm cube at z = 7.5, every face out of the solid; with elements of the
+    # coarse mesh's 0.6 mm each face is one element, never one across its edges
     @test length(es) == 6
     @test all(sum(t.elem_normal[e] .* (t.elem_centroid[e] - Briareus.Vec3(0, 0, 7.5))) > 0 for e in es)
     @test sum(t.elem_area[es]) ≈ 6 * 0.25^2 rtol = 1e-12
-    # at 1 mm the faces' diagonals exceed the element size: the facets stay apart
+    # at 1 mm each face is remeshed into four elements of about the 0.6 mm size
     @test edit_part!(ts, length(ts.parts[]), :scale, "0.5")
     @test sum(ts.target[].elem_area[elements(ts.target[], name)]) ≈ 6 * 1.0^2 rtol = 1e-12
-    @test length(elements(ts.target[], name)) == 12
+    @test length(elements(ts.target[], name)) == 24
     @test !edit_part!(ts, length(ts.parts[]), :scale, "-1")       # rejected
     # in a session file
     f = joinpath(mktempdir(), "with_stl.briareus.toml")
