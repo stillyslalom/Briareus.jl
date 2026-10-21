@@ -353,7 +353,16 @@ engineering defaults; NIF (TaLIS/BLIP) and LLE review criteria are not public.
 Only hardware upstream of each beam's landing is checked: where the beam axis first
 meets one of the `targets` components (the surfaces the beam should hit), or the aim
 plane if it misses them. Hardware is sampled at triangle vertices and `4^level`
-sub-triangle points. Power on hardware comes from the reference ray trace (`nspot`
+sub-triangle points, and a sample counts only if beam light can reach it past the
+target's opaque surfaces (apertures are transparent; the component's own triangles
+never block it): the straight segment to it from the beam axis at the same axial
+position is unobstructed; or, outside the envelope, the segment from the nearest
+envelope point along the same transverse ray, provided that point is lit (some f-cone
+direction reaches it from upstream: envelope behind a surface the beam edge already
+struck carries no light); or, inside the envelope, the sample itself is lit. So
+hardware outside a hohlraum wall is not judged against a beam inside it, while
+hardware beside the beam path before an entrance hole still is. The rule is
+conservative: a sample is dropped only when every one of these paths is blocked. Power on hardware comes from the reference ray trace (`nspot`
 grid per core component; wings on equal-power polar grids), or for the core from `op`,
 a `DepositionOperator` for these ports, when given.
 
@@ -463,8 +472,8 @@ function _clearance_rows(t::Target, beams, samples, hw_idx, tgt_idx, wings, op, 
         rhs = map(w -> w isa PowerLawWing ? _wing_rh(w, b) : 0.0, wt)
         P = b.power
         for (j, ci) in enumerate(hw_idx)
-            best, bp, bs, Imax = _scan_hardware(samples[ci], envs[1], wingc, s_stop, frames,
-                                                cone, wt, rhs, P)
+            best, bp, bs, Imax = _scan_hardware(t, ci, samples[ci], envs[1], wingc, s_stop,
+                                                frames, cone, wt, rhs, P)
             worst = best - R - focus * envs[1].cone
             pw = maximum(Pc[v, ci] for v in vids)
             frac = P > 0 ? pw / P : 0.0
@@ -479,10 +488,11 @@ end
 
 const _CLEARANCE_NCONE = 37
 
-# Nearest hardware sample to the envelope (distance, point, axial position) upstream of
-# `s_stop`, and the largest intensity over the error-set variants `frames` there.
-function _scan_hardware(samples, env::BeamEnvelope, wingc, s_stop, frames, cone, wings::Tuple,
-                        rhs, P)
+# Nearest reachable sample of hardware component `ci` to the envelope (distance, point,
+# axial position) upstream of `s_stop`, and the largest intensity over the error-set
+# variants `frames` there.
+function _scan_hardware(t::Target, ci, samples, env::BeamEnvelope, wingc, s_stop, frames,
+                        cone, wings::Tuple, rhs, P)
     best, bp, bs, Imax = Inf, zero(Vec3), NaN, 0.0
     # transverse slopes of the cone directions (all variants share the port)
     f1 = frames[1]
@@ -491,6 +501,7 @@ function _scan_hardware(samples, env::BeamEnvelope, wingc, s_stop, frames, cone,
     for x in samples
         d, s = _envelope_union_distance((env,), wingc, x)
         s <= s_stop || continue
+        _reachable(t, ci, env, cone, x, d, s) || continue
         d < best && ((best, bp, bs) = (d, x, s))
         for f in frames
             I = _beyond(f, αmax, βmax, x) ? 0.0 : _cone_mean_intensity(f, cone, x)
@@ -503,6 +514,44 @@ function _scan_hardware(samples, env::BeamEnvelope, wingc, s_stop, frames, cone,
         end
     end
     return best, bp, bs, Imax
+end
+
+# Whether beam light can reach hardware sample `x` (component `ci`) at axial position `s`
+# and signed envelope distance `d`, ignoring the component's own triangles (apertures
+# are not in the BVH). Reachable if the segment to `x` from the beam axis at the same
+# `s` is unobstructed, or
+# - outside the envelope (d > 0): the envelope point `p` nearest `x` along the
+#   transverse ray from the axis is lit (sees upstream along some f-cone direction)
+#   and the segment from `p` to `x` is unobstructed — envelope beyond a surface the
+#   beam edge already struck carries no light;
+# - inside it (d ≤ 0): `x` itself is lit.
+# A point is skipped only when every one of these paths is blocked.
+function _reachable(t::Target, ci, env::BeamEnvelope, cone, x, d, s)
+    skip = let comp = t.tri_comp, ci = ci
+        id -> comp[id] == ci
+    end
+    ε = _ray_eps(t)
+    a = env.focus + s * env.k
+    _unblocked(t, a, x, skip, ε) && return true
+    d > 0 || return _lit(t, x, cone, skip, ε)
+    ρ = norm(x - a)
+    p = a + (clamp(ρ - d, 0.0, ρ) / ρ) * (x - a)
+    return _unblocked(t, p, x, skip, ε) && _lit(t, p, cone, skip, ε)
+end
+
+# Some f-cone direction reaches `x` from upstream without crossing an opaque triangle.
+function _lit(t::Target, x, cone, skip, ε)
+    for dj in cone
+        any_hit(t.bvh, x - ε * dj, -dj, Inf, skip) || return true
+    end
+    return false
+end
+
+# No opaque triangle (other than `skip`ped ones) on the open segment from `a` to `x`.
+function _unblocked(t::Target, a, x, skip, ε)
+    L = norm(x - a)
+    L <= 2ε && return true
+    return !any_hit(t.bvh, a, (x - a) / L, L - ε, skip)
 end
 
 _wing_sum(wings::Tuple, rhs::Tuple, P, r) =

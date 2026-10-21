@@ -570,6 +570,31 @@ end
     path = write_clearance_csv(tempname() * ".csv", r)
     @test countlines(path) == 1 + length(r.rows)
 
+    # Occlusion: a 23.5° quad through the top LEH lands on the wall below the waist. A
+    # foam ring just outside the wall at the waist lies upstream of the landing and
+    # within the envelope's transverse reach, but behind the opaque wall: not judged.
+    # A disk beside the beam above the LEH still is.
+    tho = hohlraum(length = 10.1, radius = 2.875, leh_radius = 1.55, capsule_radius = 0.9,
+                   nz = 20, nphi = 32, nr_cap = 3, nr_leh = 2, capsule_ntheta = 8, capsule_nphi = 12)
+    bo = only(x for x in nif_quads() if x.group === :inner23 && x.port[3] > 0 && port_angles(x)[2] < 90)
+    bo = remake(bo; aim = (0.0, 0.0, 5.05))
+    foam = Component(:foam, cylinder_mesh(3.0, -0.6, 0.6; nz = 4, nphi = 48, inward = false), BLACK)
+    xa = Vec3(bo.aim) - ((7.0 - 5.05) / -direction(bo)[3]) * direction(bo)   # axis at z = 7
+    pre = translate(Component(:pre, disk_mesh(0.1, 0.0; nr = 1, nphi = 16), BLACK), xa + Vec3(0.5, 0, 0))
+    to = Target(tho.components..., foam, pre)
+    tgts = (:wall, :cap_top, :cap_bottom, :capsule)
+    env = BeamEnvelope(bo; peak_fraction = 1e-4)
+    s_stop = Briareus._landing(to, env, Set(component_index(to, n) for n in tgts))
+    near = [envelope_distance(env, Vec3(v)) for v in foam.mesh.vertices]
+    @test minimum(d for (d, s) in near if s < s_stop) < 0     # flagged without occlusion
+    ro = clearance(to, [bo]; targets = tgts, hardware = (:foam, :pre), wings = [],
+                   peak_fraction = 1e-4)
+    rowo(c) = only(x for x in ro.rows if x.component === c)
+    @test rowo(:foam).clearance == Inf && rowo(:foam).status === :pass
+    @test rowo(:foam).peak_intensity == 0
+    @test rowo(:pre).clearance < 0 && rowo(:pre).status === :fail
+    @test [x.component for x in violations(ro)] == [:pre]
+
     # Aperture keep-out against the clearance check: one quad per cone through the
     # entrance holes of a hohlraum, judged on the caps at 1% of peak.
     th = hohlraum(length = 10.1, radius = 2.875, leh_radius = 1.55, capsule_radius = 0.9)
