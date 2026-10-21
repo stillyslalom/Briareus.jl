@@ -85,6 +85,9 @@ Any plasma parameter and `multiplier` may be a number, a function of time (ns), 
 LEH, so total power is conserved. The coupled exchange is integrated with `nsteps` RK4
 steps. Beam detuning comes from `Beam.dlambda` (Å at the beam's own wavelength — NIF
 quotes Δλ at 1ω, so divide those values by 3 for 3ω beams).
+
+The pair coefficients, and the two LEHs' exchanges, run on threads; results are
+bitwise independent of the thread count.
 """
 Base.@kwdef struct CBET <: LaserPlasmaModel
     leh_z::Any
@@ -165,7 +168,13 @@ function _beam_at_plane(b::Beam, zL)
     return 2 * sqrt(a * bb), _sg_norm(sp.order) * a * bb
 end
 
-function apply_lpi(m::CBET, beams::AbstractVector{<:Beam}, time = 0.0)
+apply_lpi(m::CBET, beams::AbstractVector{<:Beam}, time = 0.0) =
+    _apply_cbet(m, beams, time, Threads.nthreads() > 1)
+
+# `threaded = false` is the serial reference. Both paths give bitwise identical results
+# for any thread count: every pair writes its own slots of K and D, the two LEHs never
+# share data, and no sum runs in a thread-dependent order.
+function _apply_cbet(m::CBET, beams::AbstractVector{<:Beam}, time, threaded::Bool)
     T = promote_type(mapreduce(b -> typeof(b.power), promote_type, beams),
                      mapreduce(b -> typeof(b.dlambda), promote_type, beams),
                      mapreduce(b -> eltype(b.aim), promote_type, beams))
@@ -174,67 +183,116 @@ function apply_lpi(m::CBET, beams::AbstractVector{<:Beam}, time = 0.0)
         v = getfield(m, f)
         v === nothing || (T = promote_type(T, typeof(_tvalue(v, time))))
     end
+    # every pair coefficient is built from T-typed inputs and Float64 constants
+    Tk = promote_type(T, Float64)
     P = T[b.power for b in beams]
     zL = _tvalue(m.leh_z, time)
     clampv = m.clamp === nothing ? nothing : _tvalue(m.clamp, time)
+    idxs = Vector{Int}[]
     for top in (true, false)
         idx = [i for (i, b) in enumerate(beams) if (b.port[3] > 0) == top]
-        length(idx) < 2 && continue
-        geo = [_beam_at_plane(beams[i], top ? zL : -zL) for i in idx]
-        Aeff = [g[2] for g in geo]
-        n = length(idx)
-        # exchange coefficients K[p,q] = g_pq ℓ_pq / Ā_pq (antisymmetric) and ion-wave
-        # amplitude coefficients D[p,q] (symmetric)
-        pairs = [(p, q) for p in 1:n for q in p+1:n]
-        vals = map(pairs) do (p, q)
-            b, c = beams[idx[p]], beams[idx[q]]
-            cosθ = clamp(dot(direction(b), direction(c)), -1.0, 1.0)
-            sinθ = sqrt(max(1 - cosθ^2, 1e-12))
-            ℓ = min(m.length, (geo[p][1] + geo[q][1]) / 2 / sinθ)
-            Ā = sqrt(Aeff[p] * Aeff[q])
-            g, d = _cbet_pair(m, b, c, time)
-            (g * ℓ / Ā, d)
-        end
-        Tk = promote_type(T, mapreduce(v -> promote_type(typeof.(v)...), promote_type, vals))
-        K = zeros(Tk, n, n)
-        D = zeros(Tk, n, n)
-        for ((p, q), (kpq, d)) in zip(pairs, vals)
-            K[p, q] = kpq
-            K[q, p] = -kpq
-            D[p, q] = D[q, p] = d
-        end
-        clampv isa Real || clampv === nothing || (clampv = convert(Tk, clampv))
-        # dP_p/dτ = P_p Σ_q K_pq S_pq P_q, with the smooth saturation factor
-        # S_pq = 1/√(1 + (δn_pq/clamp)²) symmetric in p, q so power is conserved.
-        function f(x)
-            if clampv === nothing
-                return x .* (K * x)
-            end
-            I = x ./ Aeff
-            out = similar(x)
-            for p in 1:n
-                acc = zero(eltype(x))
-                for q in 1:n
-                    q == p && continue
-                    δn = D[p, q] * sqrt(max(I[p] * I[q], zero(I[p])))
-                    acc += K[p, q] * x[q] / sqrt(1 + (δn / clampv)^2)
-                end
-                out[p] = x[p] * acc
-            end
-            return out
-        end
-        Pl = P[idx]
-        h = 1 / m.nsteps
-        for _ in 1:m.nsteps
-            k1 = f(Pl)
-            k2 = f(Pl .+ (h / 2) .* k1)
-            k3 = f(Pl .+ (h / 2) .* k2)
-            k4 = f(Pl .+ h .* k3)
-            Pl = Pl .+ (h / 6) .* (k1 .+ 2 .* k2 .+ 2 .* k3 .+ k4)
-        end
+        length(idx) < 2 || push!(idxs, idx)
+    end
+    isempty(idxs) && return [remake(b; power = P[i]) for (i, b) in enumerate(beams)]
+    geos = [[_beam_at_plane(beams[i], beams[i].port[3] > 0 ? zL : -zL) for i in idx]
+            for idx in idxs]
+    # exchange coefficients K[p,q] = g_pq ℓ_pq / Ā_pq (antisymmetric) and ion-wave
+    # amplitude coefficients D[p,q] (symmetric), one pair of matrices per LEH
+    Ks = [zeros(Tk, length(idx), length(idx)) for idx in idxs]
+    Ds = [zeros(Tk, length(idx), length(idx)) for idx in idxs]
+    tasks = [(l, p, q) for l in eachindex(idxs) for p in eachindex(idxs[l])
+             for q in p+1:length(idxs[l])]
+    _cbet_couplings!(Ks, Ds, m, beams, idxs, geos, tasks, time, threaded)
+    Pls = [P[idx] for idx in idxs]
+    Aeffs = [[g[2] for g in geo] for geo in geos]
+    _cbet_exchanges!(Pls, Ks, Ds, Aeffs, clampv, m.nsteps, threaded)
+    for (idx, Pl) in zip(idxs, Pls)
         P[idx] = Pl
     end
     return [remake(b; power = P[i]) for (i, b) in enumerate(beams)]
+end
+
+# Function barrier: the coefficient eltype is a type parameter here, so the threaded
+# closure does not box it.
+function _cbet_couplings!(Ks::Vector{Matrix{Tk}}, Ds::Vector{Matrix{Tk}}, m::CBET, beams,
+                          idxs, geos, tasks, time, threaded::Bool) where {Tk}
+    function pair!(j)
+        l, p, q = tasks[j]
+        idx, geo, K, D = idxs[l], geos[l], Ks[l], Ds[l]
+        b, c = beams[idx[p]], beams[idx[q]]
+        cosθ = clamp(dot(direction(b), direction(c)), -1.0, 1.0)
+        sinθ = sqrt(max(1 - cosθ^2, 1e-12))
+        ℓ = min(m.length, (geo[p][1] + geo[q][1]) / 2 / sinθ)
+        Ā = sqrt(geo[p][2] * geo[q][2])
+        g, d = _cbet_pair(m, b, c, time)
+        kpq = g * ℓ / Ā
+        K[p, q] = kpq
+        K[q, p] = -kpq
+        D[p, q] = D[q, p] = d
+        return nothing
+    end
+    if threaded && length(tasks) > 1
+        Threads.@threads for j in eachindex(tasks)
+            pair!(j)
+        end
+    else
+        foreach(pair!, eachindex(tasks))
+    end
+    return nothing
+end
+
+function _cbet_exchanges!(Pls, Ks, Ds, Aeffs, clampv, nsteps, threaded::Bool)
+    if threaded && length(Pls) > 1
+        Threads.@threads for l in eachindex(Pls)
+            _cbet_exchange!(Pls[l], Ks[l], Ds[l], Aeffs[l], clampv, nsteps)
+        end
+    else
+        for l in eachindex(Pls)
+            _cbet_exchange!(Pls[l], Ks[l], Ds[l], Aeffs[l], clampv, nsteps)
+        end
+    end
+    return nothing
+end
+
+# RK4 integration of dP_p/dτ = P_p Σ_q K_pq S_pq P_q over τ ∈ [0, 1] in place, with the
+# smooth saturation factor S_pq = 1/√(1 + (δn_pq/clamp)²) symmetric in p, q so power
+# is conserved. Work buffers are allocated once per call.
+function _cbet_exchange!(x::AbstractVector, K, D, Aeff, clampv, nsteps)
+    k1, k2, k3, k4, y = similar(x), similar(x), similar(x), similar(x), similar(x)
+    I = similar(x, promote_type(eltype(x), eltype(Aeff)))
+    h = 1 / nsteps
+    for _ in 1:nsteps
+        _cbet_rate!(k1, x, K, D, Aeff, clampv, I)
+        y .= x .+ (h / 2) .* k1
+        _cbet_rate!(k2, y, K, D, Aeff, clampv, I)
+        y .= x .+ (h / 2) .* k2
+        _cbet_rate!(k3, y, K, D, Aeff, clampv, I)
+        y .= x .+ h .* k3
+        _cbet_rate!(k4, y, K, D, Aeff, clampv, I)
+        x .= x .+ (h / 6) .* (k1 .+ 2 .* k2 .+ 2 .* k3 .+ k4)
+    end
+    return x
+end
+
+function _cbet_rate!(out, x, K, D, Aeff, ::Nothing, I)
+    mul!(out, K, x)
+    out .= x .* out
+    return out
+end
+
+function _cbet_rate!(out, x, K, D, Aeff, clampv, I)
+    n = length(x)
+    I .= x ./ Aeff
+    for p in 1:n
+        acc = zero(eltype(x))
+        for q in 1:n
+            q == p && continue
+            δn = D[p, q] * sqrt(max(I[p] * I[q], zero(I[p])))
+            acc += K[p, q] * x[q] / sqrt(1 + (δn / clampv)^2)
+        end
+        out[p] = x[p] * acc
+    end
+    return out
 end
 
 """

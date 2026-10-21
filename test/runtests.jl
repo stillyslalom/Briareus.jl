@@ -712,6 +712,26 @@ end
     h = 1e-5
     @test ForwardDiff.derivative(f, 1.0) ≈ (f(1.0 + h) - f(1.0 - h)) / 2h rtol = 1e-5
     @test ion_wave_amplitude(mf, eff[1], eff[end]) ≥ 0
+    # threaded pair coefficients and LEH exchanges reproduce the serial path bit for bit,
+    # for values and for duals through power, aim and model parameters
+    for mm in (mf, CBET(leh_z = 5.05, clamp = nothing))
+        @test [b.power for b in Briareus._apply_cbet(mm, shifted, 0.0, true)] ==
+              [b.power for b in Briareus._apply_cbet(mm, shifted, 0.0, false)] ==
+              [b.power for b in apply_lpi(mm, shifted)]
+    end
+    function cbet_obj(x, threaded)
+        mm = CBET(leh_z = 5.05, multiplier = x[1], mach = x[2])
+        bs = [remake(b; power = b.power * (1 + x[3] * (b.group === :outer44)),
+                     aim = b.aim .+ (0.0, 0.0, x[4] * sign(b.port[3]))) for b in shifted]
+        return sum(b.power^2 for b in Briareus._apply_cbet(mm, bs, 0.0, threaded) if b.group in inner)
+    end
+    x = [0.7, 1.1, 0.05, 0.2]
+    gt = ForwardDiff.gradient(y -> cbet_obj(y, true), x)
+    @test gt == ForwardDiff.gradient(y -> cbet_obj(y, false), x)
+    hx = 1e-6
+    fd = [(cbet_obj(x .+ hx .* (1:4 .== i), true) - cbet_obj(x .- hx .* (1:4 .== i), true)) / 2hx
+          for i in 1:4]
+    @test gt ≈ fd rtol = 1e-5
     # calibration recovers a known multiplier from synthetic transfer data
     truth = CBET(leh_z = 5.05, multiplier = 0.4, clamp = nothing)
     data = [(dl, receiver_ratio(truth, q, dl; receivers = inner)) for dl in (0.5, 1.0, 2.0)]
