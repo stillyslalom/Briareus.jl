@@ -22,6 +22,7 @@ const TUTORIALS = [
     "beam_errors.jl",
     "retune.jl",
     "cad_hohlraum.jl",
+    "leh_power_balance.jl",
 ]
 
 const PAGE_TIMES = Dict{String,Float64}()
@@ -79,6 +80,7 @@ tutorial_page(file) = joinpath("tutorials", splitext(file)[1] * ".md")
             "Pointing and power errors" => tutorial_page("beam_errors.jl"),
             "Retuning a drive to a reference shot" => tutorial_page("retune.jl"),
             "Radiation in an imported CAD hohlraum" => tutorial_page("cad_hohlraum.jl"),
+            "Entrance-hole size and the power balance" => tutorial_page("leh_power_balance.jl"),
         ],
         "Explanation" => [
             "Verification and validation" => "explanation/verification-validation.md",

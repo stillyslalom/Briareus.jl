@@ -1489,3 +1489,34 @@ shot), drive histories at 0.4 ns steps to 9.6 ns. Bundle 31 (Q31T, Q31B) dropped
 - Limits: the per-quad caps here are relative to the reference powers, not NIF's
   per-quad energy or power capability (which depends on the pulse and the laser's
   state). The view factors and pointing are the reference's through the pulse.
+
+## HYBRID-E (N210808) hohlraum and LEH size (2026-10-20)
+
+Source: Kritcher et al., Phys. Rev. E 106, 025201 (2022), Table I, Secs. II A and II C
+(full text, MIT PSFC copy). **H**
+- Hohlraum: Au-lined depleted uranium, 6.4 mm diameter, 11.24 mm long, 0.3 mg/cm³ He.
+- LEH diameter: 3.64 mm on N210207 and N210307, 3.1 mm on N210808. Callahan's HEDS
+  slides (2022) quote 3.65 → 3.1 mm, 27% less area. **H**
+- Capsule: HDC, 1.05 mm inner radius, ablator 76–80 µm (density 3.5 MCD / 3.32 NCD);
+  the tutorial's 1.13 mm outer radius is *derived*.
+- Peak laser power / energy: N210307 487 TW / 1.909 MJ; N210808 441 TW / 1.917 MJ.
+  The smaller LEH "was used to operate at lower peak power ... while still achieving
+  similar radiation temperature" (qualitative). Δλ 1.55 → 1.8 Å (1ω); the 50° beams
+  moved toward the midplane to clear the smaller LEH; peak cone fraction 33%.
+
+`docs/literate/leh_power_balance.jl` and `test/leh_power_balance.jl` (*derived*):
+- Inputs that are engineering estimates, not shot data: wall albedo 0.925
+  (`WallLossAlbedo` at 300 eV, 6 ns; the Au-lined DU wall is not modeled), capsule
+  albedo 0.3, the x-ray source as uniform bands at 0.6 ≤ |z| ≤ 1.8 mm (inner, 33%)
+  and 3.4 ≤ |z| ≤ 4.6 mm (outer). Moving the outer bands ±0.5 mm moves the fractions
+  by < 0.005.
+- Holes are open and static; LEH closure and the gold bubble shrink the effective hole
+  during the pulse, so the computed LEH loss is the open-hole bound.
+- At 3.1 mm: 34.4% of the x-ray source escapes through the LEHs, 23.7% is absorbed by
+  the capsule; per 0.1 mm of diameter over 3.0–3.6 mm, +1.6% escape, −0.5% capsule.
+- Briareus (`closed = true`, h = 0.4) against a Monte Carlo photon walk in the exact
+  geometry: within 1e-4 (10⁸ histories, σ 3.5e-5). The uniform-flux power balance
+  reads the LEH loss 6.5–7% low and the capsule's share ~1% high.
+- Required-power ratio 3.1 vs 3.64 mm at fixed capsule drive: 0.890 (α_w 0.925),
+  0.905 (α_w 0.90), against 441/487 = 0.906. This is consistent in size only, since the
+  shots also changed Δλ, pointing and pulse length. **L**

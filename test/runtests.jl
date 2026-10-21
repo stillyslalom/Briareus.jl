@@ -987,4 +987,5 @@ include("uncertainty.jl")
 include("results.jl")
 include("retune.jl")
 include("enclosure.jl")
+include("leh_power_balance.jl")
 end

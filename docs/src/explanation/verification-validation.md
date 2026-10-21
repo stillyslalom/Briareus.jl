@@ -28,6 +28,7 @@ A tutorial states which of these it does in its closing section, "What this chec
 | BVH ray casting against brute force | code verification | `test/runtests.jl`, "ray casting" |
 | Coaxial-disk view factor, occlusion, point-to-polygon kernel | code verification | "view factors" |
 | Integrating sphere, energy balance, closure enforcement | validation, code verification | "radiosity"; [Integrating sphere](@ref) |
+| LEH escape and capsule fractions against a Monte Carlo photon walk over LEH size (N210808 hohlraum); peak-power saving 3.64 → 3.1 mm against N210307/N210808 | code verification, approximate validation | `test/leh_power_balance.jl`; [Entrance-hole size and the power balance](@ref) |
 | Beam power at any defocus; defocus second moments; oblique-incidence correction | code verification | "beam profile"; [Laser spot on a foil](@ref) |
 | Defocused footprint against the exact f-cone convolution | validation | [Laser spot on a foil](@ref) |
 | Fast deposition against the ray trace, with shadowing and at grazing incidence far from focus | solution verification | "deposition vs ray trace"; [Laser spot on a foil](@ref); [Freeing a bundle for radiography](@ref) |
