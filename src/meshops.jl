@@ -864,7 +864,8 @@ end
 # (triangles no seed reaches seed elements of their own), and Lloyd iterations move
 # each seed to its element's centroid and mean normal; teeth of the outlines are then
 # smoothed. Elements more than `angle` from planar, reaching beyond `rmax` of their
-# centroid, or with a centroid off the element are halved until they are not. The
+# centroid, or with a centroid off the element are halved until they are not, and those
+# under `minarea` size² then join a neighbor where the union stays acceptable. The
 # spacing 0.85 `size` makes the mean element area ≈ `size`² on smooth surfaces.
 # Triangles of a `zone` (an element band on sliver strips, see `_band_zones`) join only
 # elements seeded in it (or off the bands); seeds in a band are spaced across it only,
@@ -874,7 +875,7 @@ function _cluster_elements(P, rtris, size::Float64, angle::Float64; iterations::
                            spacing::Float64 = 0.85size, rmax::Float64 = size,
                            smooth::Int = 3, zone::Vector{Int} = zeros(Int, length(rtris)),
                            axis = NamedTuple{(:u, :len),Tuple{Vec3,Float64}}[], unit::Vector{Int} = Int[],
-                           minband::Float64 = 2.0)
+                           minband::Float64 = 2.0, minarea::Float64 = 1 / 3)
     N = length(rtris)
     cen = Vector{Vec3}(undef, N)
     nrm = Vector{Vec3}(undef, N)
@@ -911,7 +912,9 @@ function _cluster_elements(P, rtris, size::Float64, angle::Float64; iterations::
         sum(t -> area[t], piece) < minband * size^2 && (zone[piece] .= 0)
     end
     cosmax = cosd(angle)
-    order = randperm(MersenneTwister(1), N)
+    # a fixed shuffle (splitmix64 of the index): Random's streams differ across Julia
+    # versions (1.11 reseeded MersenneTwister), and the elements depend on the order
+    order = sortperm([_splitmix(UInt64(t))[2] for t in 1:N])
     # Poisson-disk seeds: a triangle seeds unless a seed facing the same way is closer
     # than the spacing (in a band: a seed of the band, closer across it)
     spos, snrm, stri = Vec3[], Vec3[], Int[]
@@ -1099,6 +1102,96 @@ function _cluster_elements(P, rtris, size::Float64, angle::Float64; iterations::
             isempty(part) || push!(stack, part)
         end
         lab[ms] .= 0
+    end
+    _merge_small!(owner, nel, P, rtris, nbr, area, cen, nrm, thin, cosmax, rmax, minarea * size^2)
+    return owner
+end
+
+# Is a set of triangles an acceptable element: flat within the angle, within `rmax` of
+# its centroid, and with the centroid (moved along the mean normal) on it?
+function _element_ok(P, rtris, ms, area, cen, nrm, thin, cosmax, rmax)
+    A = sum(area[t] for t in ms)
+    c = A > 0 ? sum(area[t] * cen[t] for t in ms) / A : sum(cen[ms]) / length(ms)
+    nv = sum(area[t] * nrm[t] for t in ms)
+    norm(nv) > 0 || return false
+    nbar = nv / norm(nv)
+    all(t -> thin[t] || dot(nrm[t], nbar) >= cosmax - 1e-12, ms) || return false
+    maximum(t -> maximum(v -> norm(P[v] - c), rtris[t]), ms) <= rmax || return false
+    return _centroid_on(P, rtris, ms, c, nbar)
+end
+
+# Elements under `amin` (slivers left between grown elements, pieces cut off by halving)
+# join, smallest first, the neighbor they share the longest edge with among those the
+# union keeps acceptable; the elements are then renumbered 1, 2, ….
+function _merge_small!(owner, nel, P, rtris, nbr, area, cen, nrm, thin, cosmax, rmax, amin)
+    members = [Int[] for _ in 1:nel]
+    for t in eachindex(owner)
+        push!(members[owner[t]], t)
+    end
+    earea = [sum(area[t] for t in ms; init = 0.0) for ms in members]
+    shared = Dict{Int,Float64}()
+    for e in sortperm(earea)
+        earea[e] < amin || continue                  # (it may have grown by a merge)
+        empty!(shared)
+        for t in members[e], q in view(nbr, :, t)
+            q == 0 && break
+            o = owner[q]
+            o == e && continue
+            u, v = (w for w in rtris[t] if w in rtris[q])
+            shared[o] = get(shared, o, 0.0) + norm(P[u] - P[v])
+        end
+        merged = false
+        for (o, _) in sort!(collect(shared); by = x -> (-x[2], x[1]))
+            ms = vcat(members[o], members[e])
+            _element_ok(P, rtris, ms, area, cen, nrm, thin, cosmax, rmax) || continue
+            owner[members[e]] .= o
+            members[o] = ms
+            earea[o] += earea[e]
+            empty!(members[e])
+            merged = true
+            break
+        end
+        merged || _dissolve!(owner, members, earea, e, P, rtris, nbr, area, cen, nrm, thin, cosmax, rmax)
+    end
+    id = cumsum(.!isempty.(members))
+    owner .= id[owner]
+    return owner
+end
+
+# A small element no neighbor can take whole (a sliver across the edge between two wall
+# strips: either neighbor would exceed the angle) is shared out triangle by triangle,
+# each to an adjacent element that stays acceptable; all or nothing.
+function _dissolve!(owner, members, earea, e, P, rtris, nbr, area, cen, nrm, thin, cosmax, rmax)
+    rest = copy(members[e])
+    moves = Tuple{Int,Int}[]                          # (triangle, element)
+    while !isempty(rest)
+        i = findfirst(rest) do t
+            for q in view(nbr, :, t)
+                q == 0 && break
+                o = owner[q]
+                o == e && continue
+                ms = push!(copy(members[o]), t)
+                _element_ok(P, rtris, ms, area, cen, nrm, thin, cosmax, rmax) || continue
+                owner[t] = o
+                members[o] = ms
+                push!(moves, (t, o))
+                return true
+            end
+            return false
+        end
+        i === nothing && break
+        deleteat!(rest, i)
+    end
+    if isempty(rest)
+        for (t, o) in moves
+            earea[o] += area[t]
+        end
+        empty!(members[e])
+    else                                              # stuck: undo
+        for (t, o) in reverse(moves)
+            owner[t] = e
+            pop!(members[o])
+        end
     end
     return owner
 end

@@ -210,6 +210,7 @@ end
     @test 0.9 < npatches(r) * size^2 / A < 1.2
     @test all(x -> x.tilt <= 10.0 + 1e-9 && x.reach <= size * (1 + 1e-12) && x.on, q)
     @test all(x -> x.diam / sqrt(x.A) < 2.2, q)
+    @test all(x -> x.A > 0.3size^2, q)                              # no slivers left between elements
     # radiation inside it (turned inward): every element sees the whole enclosure (rows
     # sum to 1 within 0.6%, mean 0.14%; the prism below: 0.33%, mean 0.16%), and the wall
     # sends the caps what the same prism meshed by `cylinder_mesh` sends
