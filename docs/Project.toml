@@ -9,3 +9,4 @@ path = ".."
 
 [compat]
 CairoMakie = "0.15"
+Documenter = "1"
