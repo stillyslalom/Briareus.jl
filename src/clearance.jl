@@ -362,9 +362,10 @@ direction reaches it from upstream: envelope behind a surface the beam edge alre
 struck carries no light); or, inside the envelope, the sample itself is lit. So
 hardware outside a hohlraum wall is not judged against a beam inside it, while
 hardware beside the beam path before an entrance hole still is. The rule is
-conservative: a sample is dropped only when every one of these paths is blocked. Power on hardware comes from the reference ray trace (`nspot`
-grid per core component; wings on equal-power polar grids), or for the core from `op`,
-a `DepositionOperator` for these ports, when given.
+conservative: a sample is dropped only when every one of these paths is blocked. Power
+on hardware comes from the reference ray trace (`nspot` grid per core component; wings
+on equal-power polar grids), or for the core from `op`, a `DepositionOperator` for these
+ports, when given.
 
 **Progress and cancel.** With a `callback`, beams are checked in batches of `batch`
 (input order) and `callback((; done, total))` is called with the number of beams
