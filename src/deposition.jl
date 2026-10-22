@@ -614,14 +614,16 @@ end
 
 # VisRad's profile: each stored point sees the beam axis (the operator's one direction)
 # and absorbs the profile at its own distance from focus times |n·k|. Points outside
-# the envelope (on values) contribute exact zeros.
+# the envelope (on values) contribute exact zeros: a dual beam skips them on values;
+# a Float64 one evaluates them (the profile is exactly zero there, and screening first
+# would compute the semi-axes twice).
 function _sum_points_visrad(sink::F, op::DepositionOperator, bi, f::_VRFrame, fv::_VRFrame{Float64},
                             r, ::Type{T}) where {F,T}
     P, W, Nr, D = op.pts[bi], op.w[bi], op.normal[bi], op.dest[bi]
     k = f.k
     acc = zero(T)
     @inbounds for q in r
-        _vr_beyond(fv, P[q]) && continue
+        T === Float64 || !_vr_beyond(fv, P[q]) || continue
         val = W[q] * _vr_intensity(f, P[q]) * abs(dot(Nr[q], k))
         sink(D[q], val)
         acc += val

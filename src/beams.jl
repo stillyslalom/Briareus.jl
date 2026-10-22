@@ -393,13 +393,15 @@ const _VR_MEASURED = [
      n_ratio = [1.00000, 1.01938, 1.03587, 1.05078, 1.06499, 1.07901, 1.09319, 1.10784, 1.12328, 1.15688, 1.19543, 1.26526]),
 ]
 
-# The measured plate of a focal spot (exponent `n`, 1/e semi-axes `a`, `b` in mm), if any
-function _vr_measured(n, a, b)
-    for m in _VR_MEASURED
-        abs(n - m.order) <= 0.01 && abs(a / m.a - 1) <= 0.01 && abs(b / m.b - 1) <= 0.01 && return m
+# The measured plate of a focal spot (exponent `n`, 1/e semi-axes `a`, `b` in mm), if any:
+# its index in `_VR_MEASURED` (0 for none; an index, so frame construction allocates nothing)
+function _vr_measured_index(n, a, b)
+    for (i, m) in enumerate(_VR_MEASURED)
+        abs(n - m.order) <= 0.01 && abs(a / m.a - 1) <= 0.01 && abs(b / m.b - 1) <= 0.01 && return i
     end
-    return nothing
+    return 0
 end
+_vr_measured(n, a, b) = (i = _vr_measured_index(n, a, b); i == 0 ? nothing : _VR_MEASURED[i])
 _vr_measured(prof::VisRadProfile, sp::SuperGaussianSpot) =
     prof.measured ? _vr_measured(sp.order, ForwardDiff.value(max(sp.a, sp.b)), ForwardDiff.value(min(sp.a, sp.b))) :
     nothing
@@ -436,40 +438,67 @@ function _VRComponent(c::_SGComponent, F, prof::VisRadProfile, env)
     inside = gamma_inc(2 / n, env^n)[1]
     g = _vr_zfactor(prof, env)
     a, b = sqrt(ForwardDiff.value(c.a2)), sqrt(ForwardDiff.value(c.b2))
-    m = prof.measured ? _vr_measured(n, max(a, b), min(a, b)) : nothing
-    zs, ra, rb, rn, rnorm = if m === nothing
-        Float64[], Float64[], Float64[], Float64[], Float64[]
+    i = prof.measured ? _vr_measured_index(n, max(a, b), min(a, b)) : 0
+    zs, ra, rb, rn, rnorm = if i == 0
+        _VR_NONE, _VR_NONE, _VR_NONE, _VR_NONE, _VR_NONE
     else
+        m = _VR_MEASURED[i]
         # a table's a/b follow the major/minor axis, whichever of the component's axes it is
         ra, rb = a >= b ? (m.a_ratio, m.b_ratio) : (m.b_ratio, m.a_ratio)
-        norm0 = _sg_norm(n) * inside
-        m.z, ra, rb, m.n_ratio,
-        [norm0 / (_sg_norm(n * r) * gamma_inc(2 / (n * r), env^(n * r))[1]) for r in m.n_ratio]
+        m.z, ra, rb, m.n_ratio, _vr_rnorm(i, n, env)
     end
     return _VRComponent(c.a2, c.b2, g * _vr_range2(c.a2, F, prof.focal_length),
                         g * _vr_range2(c.b2, F, prof.focal_length), c.halfn, c.power_norm / inside,
                         env^2, zs, ra, rb, rn, rnorm)
 end
 
-# Linear interpolation of table `y` at |s| (the last segment extended beyond the table)
-@inline function _vr_interp(zs, y, s)
-    z = abs(s)
-    zv = ForwardDiff.value(z)
-    k = 1
-    while k < length(zs) - 1 && zs[k+1] < zv
-        k += 1
+const _VR_NONE = Float64[]           # no table (shared; never mutated)
+
+# A measured plate's normalization relative to focus at each table node, for exponent `n`
+# and envelope `env`: built once per (plate, n, env), since each node takes a `gamma_inc`.
+# Frames are built per beam and work unit, so reads take no lock and allocate nothing: a
+# miss copies the cache, adds the entry and swaps it in under the lock.
+const _VRNormKey = Tuple{Int,Float64,Float64}       # (plate index, n, env): isbits
+const _VR_RNORM = Ref(Dict{_VRNormKey,Vector{Float64}}())
+const _VR_RNORM_LOCK = ReentrantLock()
+function _vr_rnorm(i, n, env)
+    key = (i, Float64(n), Float64(env))
+    v = get(_VR_RNORM[], key, nothing)
+    v === nothing || return v
+    lock(_VR_RNORM_LOCK)
+    try
+        d = copy(_VR_RNORM[])
+        v = get!(d, key) do
+            norm0 = _sg_norm(n) * gamma_inc(2 / n, env^n)[1]
+            [norm0 / (_sg_norm(n * r) * gamma_inc(2 / (n * r), env^(n * r))[1]) for r in _VR_MEASURED[i].n_ratio]
+        end
+        _VR_RNORM[] = d
+        return v
+    finally
+        unlock(_VR_RNORM_LOCK)
     end
-    return y[k] + (y[k+1] - y[k]) * (z - zs[k]) / (zs[k+1] - zs[k])
 end
 
-# Squared semi-axes, half exponent and normalization factor a distance s from best focus
+# Squared semi-axes, half exponent and normalization factor a distance s from best focus;
+# tables are interpolated linearly in |s|, the last segment extended beyond them
 @inline function _vr_axes(c::_VRComponent, s)
     if isempty(c.zs)
         return c.a2 * (1 + s^2 / c.za2), c.b2 * (1 + s^2 / c.zb2), c.halfn * one(s), one(s)
     end
-    ra, rb = _vr_interp(c.zs, c.ra, s), _vr_interp(c.zs, c.rb, s)
-    return c.a2 * ra^2, c.b2 * rb^2, c.halfn * _vr_interp(c.zs, c.rn, s), _vr_interp(c.zs, c.rnorm, s)
+    zs = c.zs
+    z = abs(s)
+    zv = ForwardDiff.value(z)
+    k = 1
+    @inbounds while k < length(zs) - 1 && zs[k+1] < zv
+        k += 1
+    end
+    @inbounds w = (z - zs[k]) / (zs[k+1] - zs[k])
+    ra, rb = _vr_lerp(c.ra, k, w), _vr_lerp(c.rb, k, w)
+    return c.a2 * ra^2, c.b2 * rb^2, c.halfn * _vr_lerp(c.rn, k, w), _vr_lerp(c.rnorm, k, w)
 end
+
+# (no closure over the loop-updated `k`: it would be boxed)
+@inline _vr_lerp(y, k, w) = @inbounds y[k] + (y[k+1] - y[k]) * w
 
 # Intensity (per unit area normal to the beam) at focal-frame coordinates (u, v), a
 # distance s from best focus; 0 outside the envelope.
