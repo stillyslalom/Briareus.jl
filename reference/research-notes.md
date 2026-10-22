@@ -1723,7 +1723,11 @@ Findings:
 - P2 converges at the same rate on both (≈ 50/N pp nominal; 0.02 pp at ~2,500
   elements): the capsule's piecewise-constant sampling, not element shape, sets it.
   The tight design's P2 is within 0.01 pp at every compact size.
-- Odd moments stay at round-off: the icosphere (a vertex on +z) is centrally symmetric.
+- Odd moments stay at round-off: the icosphere is centrally symmetric. (Table above: a
+  vertex on +z. Since it became the `hohlraum()` default, 2026-10-22, the icosahedron
+  sits in its standard frame, mirror-symmetric in x, y and z, because the 5-fold axis on
+  z leaked odd-m modes of ~6e-5 of the drive into the D2-symmetric NIF hohlraum; see
+  "Default capsule mesh and visibility".)
 - Element quality, not count, sets P4: the lat-long cells near the poles are slivers
   whose centroids sample P4 poorly; at 0.09 mm the "standard" lat-long capsule is still
   0.08 pp off in P4, the compact one 0.005.

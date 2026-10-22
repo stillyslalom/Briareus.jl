@@ -482,10 +482,12 @@ Choices made provisionally overnight or left open; the lean is in brackets.
    The geodesic capsule reaches P4 within 0.02 pp with ~0.8–1.2k elements against
    ~8k lat-long, same limits, same P2 and drive (research notes, "Compact capsule
    mesh"). Switching moves every capsule baseline and the GUI presets' meaning (a
-   compact preset would be capsule_h ≈ 0.12). [Compact default, with the GUI presets
-   re-chosen in the same change; partial visibility the default for targets with rims
-   (bored LEHs, CAD), now that the ray-traced radiosity favors it; `hohlraum()` loses
-   nothing by it but 2–3× view-factor time.]
+   compact preset would be capsule_h ≈ 0.12). **Decided (user, 2026-10-22):** compact
+   is the `hohlraum()` default, GUI presets re-chosen (capsule_h 0.3/0.16/0.09: P2 also
+   needs ~2,500 capsule elements for 0.02 pp); `Target` carries a `visibility` rule,
+   `:sampled` for `cad_target`/`visrad_target`, `:centroid` for `hohlraum()` and
+   hand-assembled targets (pass `Target(...; visibility = :sampled)` for primitive
+   cavities with bores).
 10. `orient_mesh` faces a hollow solid's inner surface into the material; containment
     parity would face it into the gas, but `enclosure` from TCC would then select a
     hollow capsule's interior (the GUI relies on the current behavior). [Keep;

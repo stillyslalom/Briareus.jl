@@ -504,7 +504,7 @@ transform(c::Component, R::AbstractMatrix, t = zero(Vec3)) =
 translate(c::Component, t) = transform(c, SMatrix{3,3,Float64}(I), t)
 
 """
-    Target(components; closed = false)
+    Target(components; closed = false, visibility = :centroid)
 
 Assembled target geometry. Each patch side that radiates becomes an *element* (the
 unknowns of the radiation model): one element per patch for one-sided surfaces and
@@ -515,6 +515,13 @@ laser light as a loss but is not modeled radiatively.
 so `RadiationModel` balances its view factors by default (`enforce_closure!`).
 `hohlraum` sets it; a target assembled from its components does not, since added parts
 (a foil, a sombrero) may lie outside the enclosure.
+
+`visibility` is the `view_factors` visibility rule `RadiationModel` uses by default:
+`:centroid` (one ray per pair) or `:sampled` (the visible fraction of pairs partly
+shadowed by a rim). Targets with rims set `:sampled`: `cad_target` and `visrad_target`
+(bored entrance holes, gaps, CAD walls), where one centroid ray leaves row sums up to
+1% off on walls and 6% on LEH apertures; `hohlraum` keeps `:centroid` (flush apertures,
+row-sum errors ~0.1% that balancing removes; research notes, "Partial visibility").
 """
 struct Target
     components::Vector{Component}
@@ -540,9 +547,13 @@ struct Target
     bvh::BVH
     scale::Float64                 # bounding-sphere radius about the origin (mm)
     closed::Bool                   # the elements form a closed enclosure
+    visibility::Symbol             # default `view_factors` visibility rule
 end
 
-function Target(components::AbstractVector{Component}; closed::Bool = false)
+function Target(components::AbstractVector{Component}; closed::Bool = false,
+                visibility::Symbol = :centroid)
+    visibility in (:centroid, :sampled) ||
+        throw(ArgumentError("visibility must be :centroid or :sampled, got :$visibility"))
     names = [c.name for c in components]
     allunique(names) || throw(ArgumentError("component names must be unique: $names"))
     tv0, te1, te2, tn, ta = Vec3[], Vec3[], Vec3[], Vec3[], Float64[]
@@ -597,10 +608,10 @@ function Target(components::AbstractVector{Component}; closed::Bool = false)
     scale = isempty(tv0) ? 1.0 :
             maximum(max(norm(v), norm(v + a), norm(v + b)) for (v, a, b) in zip(tv0, te1, te2))
     return Target(collect(components), tv0, te1, te2, tn, ta, tcomp, tfront, tback, topaque,
-                  ec, en, ea, ecomp, eside, etris, ecurv, comp_elems, bvh, scale, closed)
+                  ec, en, ea, ecomp, eside, etris, ecurv, comp_elems, bvh, scale, closed, visibility)
 end
 
-Target(cs::Component...; closed::Bool = false) = Target(collect(cs); closed)
+Target(cs::Component...; kwargs...) = Target(collect(cs); kwargs...)
 
 # Whether an element touches the apex of the cone it lies on: the true surface is
 # singular there (the kernel between points on either side of the apex grows as 1/s²

@@ -345,7 +345,7 @@ function _cut_target(t::Target, kept)
         push!(comps, Component(c.name, mesh, c.material; kind = c.kind, two_sided = c.two_sided,
                                surface = c.surface))
     end
-    return Target(comps), findall(keep_elem)
+    return Target(comps; t.visibility), findall(keep_elem)
 end
 
 # The mesh made of the patches p with keep[p], in order, sharing vertices as before.
@@ -391,7 +391,7 @@ Base.show(io::IO, enc::Enclosure) =
 """
     cad_target(parts; orient = true, toward = (0, 0, 0), inside = nothing,
                remesh = nothing, coarsen = nothing, fit = false, material = gold(),
-               two_sided = false, enclosure_kw = (;)) -> Target
+               two_sided = false, visibility = :sampled, enclosure_kw = (;)) -> Target
 
 A radiation-ready target from CAD meshes in one call: what the
 [Radiation in an imported CAD hohlraum](@ref) tutorial does by hand, and what
@@ -421,6 +421,10 @@ sides when `two_sided`), through these steps:
    kept CAD facets, whose vertices lie on the true surfaces, so the radiation model
    integrates over the curved walls.
 
+The target's view factors default to `visibility = :sampled` (see `view_factors`): CAD
+cavities have rims (entrance-hole bores, gaps) that partly shadow element pairs, which
+a single centroid ray decides all or nothing.
+
 `material`, `two_sided`, `remesh` and `coarsen` take one value for every CAD part, a
 function of the part's name (a `Symbol`), or a dictionary keyed by name (`Symbol` or
 `String`). A part missing from a `remesh` or `coarsen` dictionary keeps its facets, one
@@ -431,7 +435,7 @@ drops, call `enclosure` on the target built without `inside`.
 """
 function cad_target(parts; orient::Bool = true, toward = (0.0, 0.0, 0.0), inside = nothing,
                     remesh = nothing, coarsen = nothing, fit = false, material = gold(),
-                    two_sided = false, enclosure_kw = (;))
+                    two_sided = false, visibility = :sampled, enclosure_kw = (;))
     coarsen === nothing || remesh === nothing ||
         throw(ArgumentError("give one of `coarsen` and `remesh`, not both"))
     fit isa Union{Bool,NamedTuple} ||
@@ -479,10 +483,10 @@ function cad_target(parts; orient::Bool = true, toward = (0.0, 0.0, 0.0), inside
             comps, cad, facets, redone = enc.target.components, cad[s], facets[s], redone[s]
         end
     end
-    fit === false && return Target(comps)
+    fit === false && return Target(comps; visibility)
     fkw = fit === true ? (;) : fit
     return Target(reduce(vcat, (cad[i] ? curved_components(comps[i]; reference = redone[i] ? facets[i] : nothing, fkw...) :
-                                [comps[i]] for i in eachindex(comps)); init = Component[]))
+                                [comps[i]] for i in eachindex(comps)); init = Component[]); visibility)
 end
 
 # A per-part setting: one value, a function of the part's name, or a dictionary by name.

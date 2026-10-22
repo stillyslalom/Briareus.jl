@@ -1,7 +1,7 @@
 # Element-to-element view factors with occlusion.
 
 """
-    view_factors(target; near = 3.0, level = 1, visibility = :centroid, visibility_grid = 4)
+    view_factors(target; near = 3.0, level = 1, visibility = target.visibility, visibility_grid = 4)
         -> Matrix{Float64}
 
 Dense view-factor matrix `F[i, j]`: the fraction of diffuse radiation leaving element
@@ -47,7 +47,7 @@ by about its size over 2R), and the point kernels apply the exact facing per poi
 
 A pair that sees each other only partly, past the rim of an entrance-hole bore or a gap
 or around the capsule, is all or nothing by its centroid ray. `visibility = :sampled`
-estimates the visible fraction instead: up to four probe rays per element (from points
+(the default for targets with rims: `cad_target`, `visrad_target`) estimates the visible fraction instead: up to four probe rays per element (from points
 near its extremes to the other's centroid) test whether the pair straddles an occluder;
 if they all agree with the centroid ray, the factor is the `:centroid` one bit for bit,
 and otherwise rays between the `visibility_grid²` sample points of each element (its
@@ -61,7 +61,7 @@ the same facets, it cuts the balanced capsule a₂/a₀ error there (0.51 → 0.
 0.5 mm, 0.30 → 0.14 pp at 0.25 mm; research notes, "Monte Carlo radiosity reference").
 """
 function view_factors(t::Target; near = 3.0, mid = 12.0, level::Integer = 1, exact_far::Bool = true,
-                      visibility::Symbol = :centroid, visibility_grid::Integer = 4)
+                      visibility::Symbol = t.visibility, visibility_grid::Integer = 4)
     visibility in (:centroid, :sampled) ||
         throw(ArgumentError("visibility must be :centroid or :sampled, got :$visibility"))
     visibility_grid >= 1 || throw(ArgumentError("visibility_grid must be at least 1"))

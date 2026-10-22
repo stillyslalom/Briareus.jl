@@ -628,7 +628,8 @@ end
 """
     icosphere_mesh(radius; n, outward = true)
 
-Geodesic sphere about the origin: each face of an icosahedron (a vertex on `+z`)
+Geodesic sphere about the origin: each face of an icosahedron (in its standard frame,
+vertices at the cyclic permutations of (0, ±1, ±ϕ): mirror-symmetric in x, y and z)
 divided into `n × n` triangles whose vertices are projected onto the sphere (`20n²`
 triangular patches). The triangles are nearly equilateral everywhere (edges within
 about ±20% of `1.107 radius / n`), with no poles and no slivers; on a capsule they
@@ -640,11 +641,12 @@ function icosphere_mesh(radius; n::Integer, outward::Bool = true)
     n >= 1 || throw(ArgumentError("the subdivision n must be at least 1"))
     m = Mesh()
     ϕ = (1 + sqrt(5)) / 2
-    # icosahedron (cyclic permutations of (0, ±1, ±ϕ)) rotated so (0, 1, ϕ) lies on +z
-    raw = [v for s1 in (-1, 1) for s2 in (-1, 1)
-           for v in (Vec3(0, s1, s2 * ϕ), Vec3(s1, s2 * ϕ, 0), Vec3(s2 * ϕ, 0, s1))]
-    R = rotation_to(Vec3(0, 1, ϕ))'                         # (0, 1, ϕ) → ẑ
-    V = [normalize(R * v) for v in raw]
+    # icosahedron in its standard frame (cyclic permutations of (0, ±1, ±ϕ)): its 2-fold
+    # axes and mirror planes are x, y and z, the symmetries of a hohlraum with a NIF-like
+    # (D2) beam set, so the mesh adds no modes the beams and wall do not (a vertex on z,
+    # a 5-fold axis, leaked odd-m modes at ~6e-5 of the drive)
+    V = [normalize(v) for s1 in (-1, 1) for s2 in (-1, 1)
+         for v in (Vec3(0, s1, s2 * ϕ), Vec3(s1, s2 * ϕ, 0), Vec3(s2 * ϕ, 0, s1))]
     e = minimum(norm(V[i] - V[j]) for i in 1:12 for j in i+1:12)
     faces = [(i, j, k) for i in 1:12 for j in i+1:12 for k in j+1:12
              if all(d -> isapprox(d, e; rtol = 1e-9), (norm(V[i] - V[j]), norm(V[j] - V[k]), norm(V[i] - V[k])))]

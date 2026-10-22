@@ -238,7 +238,7 @@ end
 """
     hohlraum(; length = 9.4, radius = 2.875, leh_radius = 1.55, capsule_radius = 0.9,
              nz = 36, nphi = 48, nr_cap = 6, nr_leh = 4, capsule_ntheta = 24, capsule_nphi = 32,
-             h = nothing, capsule_h = nothing, capsule_mesh = :latlong, wall = gold(),
+             h = nothing, capsule_h = nothing, capsule_mesh = :compact, wall = gold(),
              capsule = ablator(), capsule_center = (0,0,0), windows = ())
 
 Cylindrical hohlraum along `z`, centered on TCC (dimensions in mm), with components
@@ -274,18 +274,19 @@ Mesh size: give `h` (mm) to set the wall, cap and LEH counts from an element siz
 instead (`hohlraum_counts`), and `capsule_h` for the capsule (`capsule_counts`); they
 replace the corresponding counts.
 
-`capsule_mesh` picks the capsule mesh: `:latlong` (`sphere_mesh`, `capsule_ntheta ×
-capsule_nphi`) or `:compact`, a geodesic `icosphere_mesh` of nearly equilateral
-triangles with sides of about `capsule_h` (`icosphere_frequency`; without `capsule_h`,
-the lat-long meridional size `π capsule_radius / capsule_ntheta`). The capsule mesh
-sets the flux's P4: lat-long cells are slivers near the poles, and the compact mesh
-reaches the same P4 error with several times fewer elements (research notes, "Compact
-capsule mesh").
+`capsule_mesh` picks the capsule mesh: `:compact` (the default), a geodesic
+`icosphere_mesh` of nearly equilateral triangles with sides of about `capsule_h`
+(`icosphere_frequency`; without `capsule_h`, the lat-long meridional size
+`π capsule_radius / capsule_ntheta`), or `:latlong` (`sphere_mesh`, `capsule_ntheta ×
+capsule_nphi`). The capsule mesh sets the flux's P4: lat-long cells are slivers near
+the poles, and the compact mesh reaches the same P4 error with several times fewer
+elements (research notes, "Compact capsule mesh"). The default was `:latlong` until
+2026-10-22; pass it to reproduce earlier baselines.
 """
 function hohlraum(; length = 9.4, radius = 2.875, leh_radius = 1.55, capsule_radius = 0.9,
                   nz::Integer = 36, nphi::Integer = 48, nr_cap::Integer = 6, nr_leh::Integer = 4,
                   capsule_ntheta::Integer = 24, capsule_nphi::Integer = 32,
-                  h = nothing, capsule_h = nothing, capsule_mesh::Symbol = :latlong,
+                  h = nothing, capsule_h = nothing, capsule_mesh::Symbol = :compact,
                   wall::Material = gold(), capsule::Material = ablator(),
                   capsule_center = (0.0, 0.0, 0.0), windows = ())
     0 < leh_radius < radius || throw(ArgumentError("need 0 < leh_radius < radius"))

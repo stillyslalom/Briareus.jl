@@ -1,6 +1,6 @@
 # Capsule mesh study: Legendre moments of the capsule flux versus capsule element count
-# for the latitude-longitude capsule (`hohlraum(capsule_mesh = :latlong)`, the default)
-# and the geodesic one (`:compact`, `icosphere_mesh`), on the hohlraum and the two
+# for the latitude-longitude capsule (`hohlraum(capsule_mesh = :latlong)`) and the
+# geodesic one (`:compact`, `icosphere_mesh`, the default since 2026-10-22), on the hohlraum and the two
 # pointings of examples/mesh_convergence.jl with the wall fixed at h = 0.2 mm. P4 is
 # extrapolated to zero element size from the two finest compact meshes (error ∝ h²).
 # Writes a CSV (path from ARGS[1], default capsule_mesh.csv); a rerun skips rows the

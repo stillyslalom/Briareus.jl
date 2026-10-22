@@ -45,16 +45,19 @@ struct MeshSpec
 end
 
 """
-Mesh presets (`MeshSpec`s), from the work-precision study in
-`examples/mesh_convergence.jl` (reference/research-notes.md, "Hohlraum mesh
-work-precision") on the NIF hohlraum: errors in capsule P2/P0 and P4/P0 against the
-converged meshes of about 0.5 percentage points (`:coarse`, ≈ 1,300 elements, view
-factors in under a second), 0.1 (`:standard`, ≈ 5,900 elements, a few seconds) and
-0.02 (`:fine`, ≈ 16,000 elements, tens of seconds: converged for design work). The
-capsule mesh sets P4: its error falls as `capsule_h²`.
+Mesh presets (`MeshSpec`s), from the work-precision studies in
+`examples/mesh_convergence.jl` and `examples/capsule_mesh.jl` (reference/research-notes.md,
+"Hohlraum mesh work-precision" and "Compact capsule mesh") on the NIF hohlraum, whose
+capsule is the geodesic `capsule_mesh = :compact`. The wall sizes set capsule P2/P0
+errors against the converged meshes of about 0.5 percentage points (`:coarse`, view
+factors in under a second), 0.1 (`:standard`, a few seconds) and 0.02 (`:fine`, tens of
+seconds: converged for design work). The capsule sizes keep its share within those:
+P2/P0 within about 0.17, 0.05 and 0.02 points and P4/P0 within 0.09, 0.03 and 0.01
+(320, 980 and 2,880 capsule elements; P2 falls as 1/N on any capsule mesh, P4 ten times
+faster on this one than on the lat-long mesh, which needed 0.2, 0.09 and 0.05 mm).
 """
-const MESH_PRESETS = (coarse = MeshSpec(0.6, 0.2), standard = MeshSpec(0.28, 0.09),
-                      fine = MeshSpec(0.17, 0.05))
+const MESH_PRESETS = (coarse = MeshSpec(0.6, 0.3), standard = MeshSpec(0.28, 0.16),
+                      fine = MeshSpec(0.17, 0.09))
 
 "Mesh presets in order; `:custom` marks sizes edited by hand."
 const MESH_RESOLUTIONS = (:coarse, :standard, :fine)

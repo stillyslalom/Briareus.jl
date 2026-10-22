@@ -610,7 +610,7 @@ end
     visrad_target(workspace; select = o -> o.radiosity || o.laser, materials = Dict(),
                   two_sided = false, orient = false, toward = (0, 0, 0),
                   coarsen = nothing, remesh = nothing, fit = false,
-                  inside = nothing) -> Target
+                  inside = nothing, visibility = :sampled) -> Target
 
 Target built from the components of a VisRad workspace (`read_visrad_workspace`) for
 which `select(object)` is true — by default those VisRad includes in its radiosity or
@@ -634,12 +634,14 @@ outside the cavity), and a second selection on the resulting elements drops thos
 that average too little flux. `fit` then applies to the elements kept, fitted on the
 kept facets. The CAD meshes go through these steps in `cad_target`, which takes the
 other components as they are (into the selection, but not remeshed or fitted); it
-does the same for CAD read from STL files.
+does the same for CAD read from STL files. `visibility` is the target's default
+`view_factors` visibility rule (`:sampled`, as for `cad_target`: workspaces carry
+entrance-hole washers and CAD with rims).
 """
 function visrad_target(ws::VisRadWorkspace; select = o -> o.radiosity || o.laser,
                        materials = Dict{String,Material}(), two_sided = false,
                        orient::Bool = false, toward = (0.0, 0.0, 0.0), coarsen = nothing,
-                       remesh = nothing, fit = false, inside = nothing)
+                       remesh = nothing, fit = false, inside = nothing, visibility::Symbol = :sampled)
     coarsen === nothing || remesh === nothing ||
         throw(ArgumentError("give one of `coarsen` and `remesh`, not both"))
     parts = Union{Component,Pair{Symbol,Mesh}}[]
@@ -660,7 +662,8 @@ function visrad_target(ws::VisRadWorkspace; select = o -> o.radiosity || o.laser
         end
     end
     isempty(parts) && throw(ArgumentError("no VisRad components selected"))
-    return cad_target(parts; orient, toward, inside, remesh, coarsen, fit, material = mats, two_sided = sides)
+    return cad_target(parts; orient, toward, inside, remesh, coarsen, fit, material = mats, two_sided = sides,
+                      visibility)
 end
 
 # ---------------------------------------------------------------------------------------
