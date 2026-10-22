@@ -480,7 +480,8 @@ the beam's power multiplier when enabled and, under VisRad's "Fraction of Total 
 Power" red/green model (where that column is the total), times 1 − f_G − f_R. Spots are VisRad's super-Gaussian radii (µm), exponent and minor-axis
 rotation, converted as in `read_visrad_summary`: radii that match a built-in phase
 plate (`VISRAD_PHASE_PLATES`) are read at that plate's level (HWHM for NIF CPPs), others
-at `spot_definition` (`:auto` = 1/e). Unconverted light, time-dependent powers, energy
+at `spot_definition` (`:auto` = 1/e), and a NIF beam's rotation is relative to its quad's
+horizontal (the quad from the template or, without one, from the beam's name). Unconverted light, time-dependent powers, energy
 normalization and DPR are warned about and not imported.
 
 With a `template` (e.g. `nif_beams()`), the file's pointing, power and spots are
@@ -518,9 +519,9 @@ function read_visrad_workspace(path::AbstractString; template = nothing, missing
         for (k, r) in zip(order, rows)
             rec = recs[k]
             sp = _vr_spot(rec.spot, nothing, spot_definition, rotation_sense)
-            push!(out, Beam(r.name; theta = r.theta, phi = r.phi, power = rec.power, aim = rec.aim,
-                            defocus = rec.defocus, spot = sp, fnumber = r.fnumber,
-                            group = Symbol(r.cluster)))
+            push!(out, _vr_quad_framed(Beam(r.name; theta = r.theta, phi = r.phi, power = rec.power,
+                                            aim = rec.aim, defocus = rec.defocus, spot = sp,
+                                            fnumber = r.fnumber, group = Symbol(r.cluster))))
         end
         identity.(out)
     else
@@ -530,23 +531,23 @@ function read_visrad_workspace(path::AbstractString; template = nothing, missing
 end
 
 """
-    visrad_profile(workspace) -> VisRadProfile
+    visrad_profile(workspace; growth = 0.67, measured = true) -> VisRadProfile
 
-VisRad's beam model with the workspace's parameters: the envelope ratio and the final
-optic distance (port radius, cm → mm) of the beams that are on (of all beams if none
-is on). Beams that differ in either are warned about, and the largest value is used.
-Pass it to `DepositionOperator(target, beams; profile)`, or to a `Scenario` through
-`deposition_kw = (; profile)`.
+VisRad's beam model with the workspace's parameters: each beam's envelope ratio (by
+name; VisRad's default ratio differs by phase plate, 1.27–1.54 for the NIF plates) and
+the final-optic distance (port radius, cm → mm) of the beams that are on (of all beams
+if none is on; beams that differ in it are warned about, and the largest is used).
+`growth` and `measured` are `VisRadProfile`'s. Pass it to `DepositionOperator(target, beams; profile)`,
+or to a `Scenario` through `deposition_kw = (; profile)`.
 """
-function visrad_profile(ws::VisRadWorkspace)
+function visrad_profile(ws::VisRadWorkspace; growth = 0.67, measured::Bool = true)
     rows = filter(r -> r.on_blue != 0, ws.rows)
     isempty(rows) && (rows = ws.rows)
-    isempty(rows) && return VisRadProfile()
-    env = unique(r.envelope_ratio for r in rows)
+    isempty(rows) && return VisRadProfile(; growth, measured)
     fl = unique(10 * r.port_radius for r in rows)
-    length(env) > 1 && @warn "beams differ in VisRad's envelope ratio; using the largest" ratios = env
     length(fl) > 1 && @warn "beams differ in final-optic distance; using the largest" distances_mm = fl
-    return VisRadProfile(; envelope = maximum(env), focal_length = maximum(fl))
+    return VisRadProfile(; envelope = Dict(r.name => r.envelope_ratio for r in ws.rows),
+                         focal_length = maximum(fl), growth, measured)
 end
 
 """

@@ -1,7 +1,7 @@
 # VisRad interchange (src/visrad.jl): round trips and rows copied from the VisRad 21.1.1
 # manual, https://prism-cs.com/Manuals/VisRad/.
 
-using Briareus: _vr_key, _vr_rotation
+using Briareus: _vr_key, _vr_rotation, _vr_reference_angle
 
 @testset "VisRad interchange" begin
 
@@ -142,6 +142,15 @@ end
     @test intensity(r0, x) ≈ intensity(b0, x) rtol = 1e-8
     # NIF spots (major axis along φ̂) have rotation 0 in either sense
     @test _vr_rotation(nif_spot(:outer44), :beam) == 0 == _vr_rotation(nif_spot(:outer44), :target)
+    # VisRad's rotation is relative to the quad's horizontal: at rotation 0 a NIF beam's
+    # major axis lies along φ̂ of its quad's port, which for B111 is turned -1.60° from
+    # its own φ̂ (VisRad 21 deposition on a plate normal to B111 fitted -1.58°); quads and
+    # beams of no quad keep their own φ̂
+    b111 = nb[findfirst(b -> b.name == "B111", nb)]
+    ref = _vr_reference_angle(b111)
+    @test rad2deg(ref) ≈ -1.60 atol = 0.01
+    @test _vr_reference_angle(nif_quads()[1]) == 0 && _vr_reference_angle(omega_beams()[1]) == 0
+    @test _vr_rotation(SuperGaussianSpot(0.6, 0.4; angle = π / 2 + ref), :beam, ref) ≈ 0 atol = 1e-12
     # quads expand and aggregate, OMEGA beams keep their names
     q = nif_quads()
     q2 = [remake(b; aim = (0.02i, 0.0, -0.01i), defocus = 0.1) for (i, b) in enumerate(q)]
@@ -350,10 +359,12 @@ end
     # power column 1 TW under the "Fraction of Total Beam Power" red/green model with
     # f_G = f_R = 0.05 (green off): the blue cone carries 0.9 TW; under "None" all of it
     @test b1.power ≈ 0.9 && b2.power == 1.0 && b3.power == 0.0
-    # Rev1-Outer-2w radii are HWHM: 1/e semi-axes r/(ln 2)^(1/n), major axis along φ̂
+    # Rev1-Outer-2w radii are HWHM: 1/e semi-axes r/(ln 2)^(1/n); rotation 0 puts the
+    # major axis along the φ̂ of the beam's quad (from its name without a template)
     s = log(2)^(1 / 4.5)
     @test b1.spot.a ≈ 0.62 / s && b1.spot.b ≈ 0.36 / s && b1.spot.order == 4.5
-    @test mod(b1.spot.angle, π) ≈ π / 2
+    @test b1.quad == "Q11T" && b3.quad == "Q12T"
+    @test mod(b1.spot.angle - _vr_reference_angle(b1), π) ≈ π / 2 && abs(_vr_reference_angle(b1)) > 0.01
     # a custom super-Gaussian is read at 1/e; pointing in a component's frame (53-field
     # row with a rotation ID) lands on that component's origin
     @test b2.spot.a ≈ 0.3 && b2.spot.order == 2.0
@@ -366,10 +377,13 @@ end
     @test length(wt.beams) == length(nifb)
     @test nb["B113"].aim ≈ b1.aim && nb["B113"].power ≈ 0.9
     @test nb["B113"].quad == nifb[findfirst(b -> b.name == "B113", nifb)].quad
+    @test nb["B113"].spot.angle ≈ b1.spot.angle atol = 1e-4     # the file's ports carry 3 decimals
     @test nb["B121"].power == 0 && nb["B468"].power == 0
-    # VisRad's beam model with the file's envelope ratio and final-optic distance (cm → mm)
+    # VisRad's beam model with the file's envelope ratios (per beam) and final-optic
+    # distance (cm → mm)
     vp = visrad_profile(ws)
-    @test vp.envelope == 1.53645 && vp.focal_length ≈ 7695
+    @test vp.envelope["B113"] == 1.53645 && vp.focal_length ≈ 7695 && vp.growth == 0.67
+    @test visrad_profile(ws; growth = nothing).growth === nothing
     @test_throws ArgumentError read_visrad_workspace(vrfile("not.vrw", "{\"json\": 1}"))
 
     # written back into the workspace: new pointing, focus, power and on/off, in each

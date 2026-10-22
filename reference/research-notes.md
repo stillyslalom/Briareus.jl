@@ -781,8 +781,11 @@ test fixture rebuilds the layout from rows copied from these files.
     - n(z) = n₀[1 + 0.2(z/z₀)].
     - a(z) = a₀√((z/z_A)² + 1), z_A ≈ 2a₀f# = 28 mm.
     - I₀(z) is renormalized to the envelope's power at each z.
-  - Γ, ΔL(z), M(z) and z₀ are not given. a(z) and b(z) are negligible within 0.6 mm,
-    but f_sq is not unless Γ is large: z/√(z² + ab) = 0.5 at 0.3 mm and 0.76 at 0.6 mm.
+  - ΔL(z), M(z) and z₀ are not given; the manual's text gives Γ = 1.0 ("currently set
+    to 1.0") and f_sq ≡ 0 for a beam circular at the final optics (re-read 2026-10-21;
+    the equation images, profile_eq_A–C.jpg, carry no alt text). a(z) and b(z) are
+    negligible within 0.6 mm, but f_sq is not unless Γ is large: z/√(z² + ab) = 0.5 at
+    0.3 mm and 0.76 at 0.6 mm. (The hohlraum runs below show f_sq = 0 for NIF beams.)
   - Briareus instead convolves the best-focus profile over the f-cone. That moves these
     wings by ~1% (`ncone = 1` against 13).
   - A blend with box half-widths c·a and c·b, a constant M, and I₀(z) renormalized
@@ -808,6 +811,154 @@ test fixture rebuilds the layout from rows copied from these files.
   a(z), b(z), n(z), f_SQ(z), ΔL_W(z), ΔL_H(z), M(z) at each hit) gives the defocus law
   directly. Rerunning with the foil normal to the beams, where the distance from focus
   barely varies, separates the focal profile from that law.
+
+#### VisRad deposition parity: hohlraum runs (2026-10-21)
+
+VisRad 21 ran laser deposition on three workspaces built from Briareus geometry in the
+thor repo (`visrad/workspaces/{n210808,n210808_reference,bu34_repointed}.vrw`): an
+N210808-like hohlraum (Au wall r = 3.2 mm, 11.24 mm long, open LEHs; 2388 wall
+triangles of ~0.6 mm, one VisRad element each), capsule, two window patches, foam, a
+4 × 4 mm foil tilted 20° (3200 elements), sombreros; 192 NIF beams with the built-in
+CPP spots, f/20.755, port radius 769.5 cm. Each file's `[Power Source Data]` holds the
+per-element direct laser source. Comparison scripts: thor `visrad/compare_*.jl`; the
+fits below used Briareus's own operator points with a free-form evaluator.
+
+- **Manual (re-read).** VR/power_sources/set_laser_profile_props.html: hybrid model,
+  "the analytic model provides the spatial profile for the intensity at a surface
+  element, while the ray-trace component is used to test occultation ... and energy
+  loss ... through holes". a(z) = a₀[(z/z_A)² + 1]^½, z_A = FL[(FL/(2a₀f#))² − 1]^−½;
+  n(z) = n₀[1 + k(z/z₀)^a], a = 1, k = 0.2; f_sq with Γ = 1.0, zero for a beam circular
+  at the final optics; I₀(z) normalized so the envelope holds the power at each z;
+  envelope "typically ~2–3"; "the ratio of the lens radius to the value of d(z) at the
+  final optics ... changes z₀" (d(z) undefined).
+  VR/power_sources/set_direct_pwr_calc_props.html: the ray trace uses a grid of
+  N_r × N_θ points within each cone (default 25 × 24). Preferences, Lasers tab
+  (VR/additional_topics/set_preferences_data.html): AMR thresholds segment length/d(z)
+  0.5, distance/d(z) 1.5. **H** (manual text)
+- **Envelope ratio = (ln 1000)^(1/n).** The four NIF plates' file ratios 1.53645,
+  1.49576, 1.27326, 1.28955 (n = 4.5, 4.8, 8.0, 7.6) equal (ln 1000)^(1/n) to 6
+  digits: VisRad's default puts the cut-off at 10⁻³ of peak (`visrad_envelope`).
+  **H** (arithmetic on four values)
+- **Lens radius ratio** is 0.4 for every beam (the row column after the envelope). Its
+  role cannot be identified from these runs (all beams share it). **H** value
+- **Before (manual z_A, one envelope):** wall elements rms difference 10.2% of mean
+  (n210808), correlation 0.9969, Briareus peak 858.8 vs 778.1 TW/cm² (+10%); totals
+  within 1e-4. Elements dominated (> 80%) by one quad, binned in focal coordinates:
+  VisRad/Briareus 0.93–0.97 at the spot centre, 1.1–1.7 at q = 1–1.3 (q = elliptical
+  radius in 1/e units), i.e. VisRad's spots are wider on the wall (3–8 mm past focus).
+- **Free-form profile fit.** With intensity P/(a(z)b(z)) g(q) and g a hat-basis
+  function per cone (17 nodes, q ≤ 2.4), least squares over wall and window elements
+  reproduces VisRad to 1.09% rms: VisRad's profile is a function of q alone per cone,
+  cut sharply at the envelope. Against the manual's a(z), the fitted g follows
+  exp(−(q/s)^m) with s ≈ 1.09, m ≈ 5.3 (n₀ = 4.5) and s ≈ 1.03, m ≈ 8.6 (n₀ = 8):
+  mostly a larger spot. With the semi-axes grown as below, the fitted g matches the n₀
+  super-Gaussian within the fit's noise (±5–10%) at every q < 1.2.
+- **What it is not** (n210808 wall rms, each at its best value):
+  - the square blend with Γ = 1 (a square of half-width c·a(z), c·√(ab) or a rectangle
+    c·a(z) × c·b(z), M = 4–20): 6–35%; 6.0% only for the rectangle with c = 1, M = 4,
+    another way of lowering the edge order. The NIF beams here behave as circular at
+    the final optics (f_sq = 0);
+  - n(z) increasing as the manual writes it (z₀ = 3–10 mm): worse (11–12%);
+  - a lower exponent: n × 0.6 helps the outer cones and not the inner ones (inner best
+    0.8–1.0); n decreasing with |z| (z₀ ≈ 2.5 mm) gives 5.7–6% but is not the manual's
+    form;
+  - element sampling (with the growth below): centroid 4.7%, vertices 13.0%, edge
+    midpoints 3.4%, against 2.8% for the element average and 2.7% for a 4-subtriangle
+    rule: VisRad's values are element averages, as on the foil;
+  - spot orientation (axes swapped): 18–35%; the envelope cut (ρ, 0.95ρ, 1.05ρ, grown
+    with a(z) or not): ≤ 0.1%.
+- **Faster growth, z_A → (γ/ρ) z_A.** Scaling z_A (and z_B) by a per-cone factor, best
+  factor 0.45, 0.45, 0.52, 0.48 for n = 4.5, 4.8, 8.0, 7.6 on n210808 and 0.44, 0.45,
+  0.52, 0.49 on bu34_repointed. Times the envelope ratio ρ: 0.69, 0.67, 0.66, 0.62
+  (n210808) and 0.68, 0.67, 0.66, 0.63 (bu34), one constant γ ≈ 0.67. The form
+  γ(ln 2)^(1/n)/ρ spreads more (0.65–0.75); z_A ∝ a₀² fails (≥ 5.8%). One γ for all
+  beams on n210808: 0.60 4.2%, 0.64 3.2%, 0.68 2.80%, 0.72 3.0%, 0.76 3.5%. Adopted
+  γ = 0.67 (`VisRadProfile(; growth)`). Every beam has the default ρ = (ln 1000)^(1/n),
+  so a dependence on ρ cannot be told from one on n. What a(FL) ≈ ρ R_lens/γ ≈ 1.5 ρ
+  R_lens means in VisRad's terms (d(z), the lens ratio 0.4) is unknown.
+  **M** (inferred from VisRad output: one constant, fitted on one workspace)
+- **Validation** (`visrad_profile(ws)`: per-beam envelopes, γ = 0.67, through
+  `DepositionOperator`; before → after):
+
+  | case | component | rms diff | peak, Briareus vs VisRad (TW/cm²) | correlation |
+  |---|---|---|---|---|
+  | n210808 (fit) | wall | 10.21% → 2.81% | 858.8 → 774.4 vs 778.1 | 0.9969 → 0.9997 |
+  | n210808 | windows | 2.46% → 0.94% | 315.2 → 308.6 vs 308.5 | 0.9974 → 0.9995 |
+  | n210808_reference | wall | 10.21% → 2.81% | as n210808 | |
+  | bu34_repointed | wall | 10.66% → 2.68% | 942.1 → 897.4 vs 915.9 | 0.9969 → 0.9997 |
+  | bu34_repointed | windows | 3.80% → 1.41% | 386.5 → 384.6 vs 374.6 | 0.9899 → 0.9989 |
+  | bu34_repointed | foil (±2.5 mm of focus) | 2.81% → 2.60% | 1039.1 → 1039.2 vs 1032.0 | 0.99991 → 0.99993 |
+  | basic.vrw foil, 4 beams | elements > 20 TW/cm² | max 1.43% → 1.31% | | |
+
+  Capsule-drive departures of bu34_repointed from n210808_reference (Briareus
+  radiosity on each deposition; drive ratio, then δ1..4 in %): VisRad 0.9261, 0.006,
+  0.092, 0.018, 0.046; before 0.9261, 0.006, 0.054, 0.012, 0.024; after 0.9261, 0.007,
+  0.090, 0.019, 0.037. n210808 δ2: VisRad 2.576, before 2.574, after 2.573. δ2 moves by
+  ∓0.008 for γ ± 0.05. **M**
+- **What remains.**
+  - Wall rms 2.7–2.8%. Outer-dominated elements carry 82% of it (4.5% rms; the outer
+    peak ring at |z| = 2.7 mm is 3–4% low), inner-dominated ones 1.2%. Per-cone γ
+    would give 1.1–2.0% per cone. δ4 stays 0.009 pp below VisRad's.
+  - Totals on tilted surfaces: per-plane normalization puts 0.15% too much on the 20°
+    foil (VisRad: 20.80008 TW for 8 × 2.6, exact) and 0.06% on the 40° basic.vrw foil
+    (0.01% with the manual z_A). VisRad renormalizes each beam's total; not modeled.
+  - Window patches in bu34_repointed get 1.0% more than in VisRad (n210808: 0.02%).
+  - Near-focus wings on the foil (10⁻³–10⁻² of peak): ±10–40%, as before.
+  - Occultation by the ray grid: VisRad puts ≤ 7e-4 TW/cm² on the LEH washers'
+    elements, Briareus nothing.
+- **VisRad beam-profile probe (2026-10-21).** Workspace thor
+  `visrad/workspaces/profile_probe.vrw` (`build_profile_probe.jl`):
+  - **Setup.** One beam per NIF quad (48, 1 TW each, the template's CPP rows), each
+    focused 60 mm out along its port and deposited on its own flat plate normal to the
+    beam, at |z| = 0–12 mm (inner cones) or 0–15 mm (outer) from best focus, before and
+    after it. The plates have 2 × 44² triangles, laser deposition only.
+  - **Fit.** `fit_profiles.jl` fits each plate with a rotated, shifted super-Gaussian
+    averaged over each element (16 sub-triangles), cut at ρ. It leaves 0.0–2.5% rms;
+    the fitted power is the beam's within 0.13% and the center is on axis within 1 µm.
+    VisRad catches 1.00009 of each beam's power on its plate.
+  - **Rotation.** VisRad's spot is turned from Briareus's axes by exactly the angle
+    between the beam's φ̂ and its quad port's φ̂ (NIF User Guide angles): within
+    0.02° on all 48 plates. That angle is 4.3–5.3° (23° cone), 3.2–3.9° (30°),
+    1.9–2.3° (44°), 1.6–1.9° (50°), with its sign varying by beam. VisRad's rotation 0
+    is the quad's horizontal ("nearly horizontal" in the manual). **H** (48 beams)
+  - **Symmetry.** −z and +z plates give the same a, b and n to the fit's precision.
+  - **Exponent.** n(z)/n₀ − 1 is linear in |z|: 0.010–0.012/mm for both inner plates
+    and 0.015–0.017/mm for both outer plates. That is the manual's n₀(1 + 0.2|z|/z₀)
+    with z₀ ≈ 18.5 mm (inner) and 12.7 mm (outer), about 0.45–0.50 of the manual's z_A
+    of the major axis. The subagent's earlier n(z) test used z₀ = 3–10 mm, too
+    strong. **H**
+  - **Semi-axes.** They follow no hyperbola, neither the 1/e radius nor any radius at
+    a fixed intensity level, with or without n(z). a/a₀ = 1.50–1.54 and
+    b/b₀ = 2.04–2.11 at 15 mm (outer); 1.16 and 1.25–1.28 at 12 mm (inner). The minor
+    axis grows faster in relative terms but slower than γ/ρ makes it (2.26–2.35 at
+    15 mm). **H** (tabulated; the law is unknown)
+  - **Not an f-cone average.** Briareus's f-cone deposition through the same fit
+    lowers n with |z| (to 0.5 n₀ at 15 mm); VisRad's rises.
+  - **Model** (`VisRadProfile`, `measured = true`). The four plates' tables
+    (`_VR_MEASURED`, normalized at z = 0), interpolated linearly in |z| and extended
+    linearly beyond the last node, with the normalization tabulated per node. The
+    `.vrw`/CSV readers and writers apply the quad-frame rotation
+    (`_vr_reference_angle`).
+  - **Validation through `DepositionOperator`** (thor `compare_deposition.jl`):
+    - **Probe plates:** element rms 0.1–1.6% (inner), 0.2–4.5% (outer, largest at
+      15 mm), against 2.6–20% with γ/ρ.
+    - **n210808 wall:** 0.9% rms (from 2.8%), peak 779.1 against 778.1 TW/cm²,
+      correlation 1.0000.
+    - **bu34_repointed wall:** 0.9% rms, peak 911.5 against 915.9.
+    - **Totals:** wall 0.07% below VisRad (γ/ρ: 1e-4); windows 0.17% below; the 20°
+      foil 0.37% above.
+    - **Capsule modes:** absolute P2/P4 agree with VisRad's deposition to
+      0.014/0.004 pp (bu34_repointed).
+    - **Departures of bu34_repointed from the reference:** δ1..4 0.008, 0.104, 0.020,
+      0.045%, against VisRad's 0.006, 0.092, 0.018, 0.046% (γ/ρ: 0.007, 0.090, 0.019,
+      0.037). Swapping one component's deposition at a time puts 0.010 of the δ2
+      difference on the wall, 0.001 on each window and none on the foil.
+    - **n210808 δ2:** 2.575 against 2.576.
+    **M** (measured tables, checked on two hohlraum runs)
+  - **Still unknown.** The law behind a(z) and b(z) (the tables cover only the four NIF
+    plates at the default envelope and lens ratio 0.4); whether the envelope follows
+    n(z); what moves δ2 by 0.01 pp on the wall; the per-beam renormalization on tilted
+    surfaces.
 - **Spots.** NIF profile models 49–52 carry the built-in plate's numbers in the row:
   49 = Rev3-Inner-2w (890/660 µm, n 7.6), 50 = 1.0 Rev1a-Inner-2w (860/610, 8.0),
   51 = Rev3-Outer-2w (640/370, 4.8), 52 = Rev1-Outer-2w (620/360, 4.5), i.e. HWHM radii

@@ -87,11 +87,15 @@ environment has no ForwardDiff/Optim, and `Vec3` clashes with Makie there.
   moment-matched `intensity` for deposition: it has the right second moment but the
   wrong shape far from focus (2% excess power, 10% misplaced, on hohlraum walls). It
   remains for envelopes. `profile = VisRadProfile(...)` (from `visrad_profile(ws)`)
-  swaps in VisRad's model so exported designs reproduce in VisRad: a shape-keeping
-  super-Gaussian with hyperbolic semi-axes, cut at an envelope and normalized per
-  transverse plane, along the beam axis only. Its unknown parts (n(z), the square-beam
-  blend, the envelope's definition) wait on VisRad runs (ROADMAP "VisRad deposition
-  parity"); don't tune them to the one foil table.
+  swaps in VisRad's model so exported designs reproduce in VisRad: a super-Gaussian
+  cut at each beam's envelope ratio ρ (default (ln 1000)^(1/n)) and normalized per
+  transverse plane, along the beam axis only. For the four NIF plates a(z), b(z), n(z)
+  are VisRad 21's, measured on plates normal to 48 beams (`_VR_MEASURED`, research
+  notes "VisRad beam-profile probe"; 0.9% wall rms on the hohlraum runs); other spots
+  keep hyperbolic semi-axes with z_A × γ/ρ (γ = `growth` = 0.67, fitted before the
+  probe). Spot rotation in VisRad files is relative to the beam's NIF quad horizontal
+  (`_vr_reference_angle`, measured to 0.02°), not the beam's own φ̂. Don't refit the
+  tables to hohlraum runs; remeasure with thor `visrad/build_profile_probe.jl`.
 - VisRad's "Fraction of Total Beam Power" red/green model makes the power column the
   total; the 3ω cone carries 1 − f_G − f_R of it even when green/red are off.
 - `DepositionOperator` samples unmodeled back sides (clipped power) only for their total:
