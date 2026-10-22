@@ -413,6 +413,14 @@ Measured on the NIF hohlraum at the GUI's standard mesh (5,864 elements, 48 quad
   positioning-only prior, but 7 µm (l = 1) or 11 µm (l = 1, 3) when beam and cone
   errors may share the blame; the median error keeps 99% of its prior spread.
 
+## Done (2026-10-22, compact capsule mesh)
+- **`icosphere_mesh`** (geodesic: icosahedron faces divided n × n, 20n² near-equilateral
+  triangles) and `hohlraum(; capsule_mesh = :compact)` sized by `capsule_h`
+  (`icosphere_frequency`); lat-long stays the default. `examples/capsule_mesh.jl`: P4
+  within 0.02 pp at ~1k elements against ~8k lat-long, both converging as 1/N to the
+  same limits. Tests: closed, outward, exact curved area, convex faceting (F_ij = A_j/4πR²),
+  uniform field has no l ≥ 1 moments, hohlraum capsule drive and P2 match lat-long.
+
 ## Open questions (from the 2026-10-18 CAD work)
 Choices made provisionally overnight or left open; the lean is in brackets.
 1. `fit = true` by default when `remesh` is given (cad_target, visrad_target, GUI)?
@@ -440,9 +448,14 @@ Choices made provisionally overnight or left open; the lean is in brackets.
    2e-3). The alternative, a finer near rule for ≤ 2-facet elements, moves every
    primitive baseline. [Accept.]
 9. Baseline moves to offer as options first: a compact capsule mesh in `hohlraum()`
-   (P4 converged with ~400 elements instead of ~6.6k lat-long); partial-visibility
-   sampling for pairs whose centroid ray grazes a rim (row sums miss by up to 1.3% on
-   walls and 8% on LEH apertures before balancing, with bored LEHs). [Both as options.]
+   (offered 2026-10-22 as `capsule_mesh = :compact`; make it the default?) and
+   partial-visibility sampling for pairs whose centroid ray grazes a rim (row sums miss
+   by up to 1.3% on walls and 8% on LEH apertures before balancing, with bored LEHs).
+   The geodesic capsule reaches P4 within 0.02 pp with ~0.8–1.2k elements against
+   ~8k lat-long, same limits, same P2 and drive (research notes, "Compact capsule
+   mesh"). Switching moves every capsule baseline and the GUI presets' meaning (a
+   compact preset would be capsule_h ≈ 0.12). [Compact default, with the GUI presets
+   re-chosen in the same change; partial visibility still an option.]
 10. `orient_mesh` faces a hollow solid's inner surface into the material; containment
     parity would face it into the gas, but `enclosure` from TCC would then select a
     hollow capsule's interior (the GUI relies on the current behavior). [Keep;

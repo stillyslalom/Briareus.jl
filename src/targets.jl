@@ -238,8 +238,8 @@ end
 """
     hohlraum(; length = 9.4, radius = 2.875, leh_radius = 1.55, capsule_radius = 0.9,
              nz = 36, nphi = 48, nr_cap = 6, nr_leh = 4, capsule_ntheta = 24, capsule_nphi = 32,
-             h = nothing, capsule_h = nothing, wall = gold(), capsule = ablator(),
-             capsule_center = (0,0,0), windows = ())
+             h = nothing, capsule_h = nothing, capsule_mesh = :latlong, wall = gold(),
+             capsule = ablator(), capsule_center = (0,0,0), windows = ())
 
 Cylindrical hohlraum along `z`, centered on TCC (dimensions in mm), with components
 
@@ -273,19 +273,31 @@ is the uniform `nz × nphi` grid.
 Mesh size: give `h` (mm) to set the wall, cap and LEH counts from an element size
 instead (`hohlraum_counts`), and `capsule_h` for the capsule (`capsule_counts`); they
 replace the corresponding counts.
+
+`capsule_mesh` picks the capsule mesh: `:latlong` (`sphere_mesh`, `capsule_ntheta ×
+capsule_nphi`) or `:compact`, a geodesic `icosphere_mesh` of nearly equilateral
+triangles with sides of about `capsule_h` (`icosphere_frequency`; without `capsule_h`,
+the lat-long meridional size `π capsule_radius / capsule_ntheta`). The capsule mesh
+sets the flux's P4: lat-long cells are slivers near the poles, and the compact mesh
+reaches the same P4 error with several times fewer elements (research notes, "Compact
+capsule mesh").
 """
 function hohlraum(; length = 9.4, radius = 2.875, leh_radius = 1.55, capsule_radius = 0.9,
                   nz::Integer = 36, nphi::Integer = 48, nr_cap::Integer = 6, nr_leh::Integer = 4,
                   capsule_ntheta::Integer = 24, capsule_nphi::Integer = 32,
-                  h = nothing, capsule_h = nothing,
+                  h = nothing, capsule_h = nothing, capsule_mesh::Symbol = :latlong,
                   wall::Material = gold(), capsule::Material = ablator(),
                   capsule_center = (0.0, 0.0, 0.0), windows = ())
     0 < leh_radius < radius || throw(ArgumentError("need 0 < leh_radius < radius"))
     capsule_radius < min(radius, length / 2) || throw(ArgumentError("capsule does not fit"))
+    capsule_mesh in (:latlong, :compact) ||
+        throw(ArgumentError("capsule_mesh must be :latlong or :compact, got :$capsule_mesh"))
     if h !== nothing
         (; nz, nphi, nr_cap, nr_leh) = hohlraum_counts(; length, radius, leh_radius, h)
     end
-    if capsule_h !== nothing && capsule_radius > 0
+    if capsule_mesh === :compact && capsule_radius > 0
+        capsule_n = icosphere_frequency(capsule_radius, something(capsule_h, π * capsule_radius / capsule_ntheta))
+    elseif capsule_h !== nothing && capsule_radius > 0
         (; capsule_ntheta, capsule_nphi) = capsule_counts(capsule_radius, capsule_h)
     end
     h = length / 2
@@ -333,8 +345,9 @@ function hohlraum(; length = 9.4, radius = 2.875, leh_radius = 1.55, capsule_rad
                  surface = DiskSurface(center = (0, 0, -h))),
     ]
     if capsule_radius > 0
-        cm = translate(sphere_mesh(capsule_radius; ntheta = capsule_ntheta, nphi = capsule_nphi),
-                       Vec3(capsule_center...))
+        cm = capsule_mesh === :compact ? icosphere_mesh(capsule_radius; n = capsule_n) :
+             sphere_mesh(capsule_radius; ntheta = capsule_ntheta, nphi = capsule_nphi)
+        cm = translate(cm, Vec3(capsule_center...))
         push!(comps, Component(:capsule, cm, capsule;
                                surface = SphereSurface(capsule_radius; center = capsule_center)))
     end

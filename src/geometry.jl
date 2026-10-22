@@ -626,6 +626,57 @@ function cubed_sphere_mesh(radius; n::Integer, outward::Bool = true)
 end
 
 """
+    icosphere_mesh(radius; n, outward = true)
+
+Geodesic sphere about the origin: each face of an icosahedron (a vertex on `+z`)
+divided into `n × n` triangles whose vertices are projected onto the sphere (`20n²`
+triangular patches). The triangles are nearly equilateral everywhere (edges within
+about ±20% of `1.107 radius / n`), with no poles and no slivers; on a capsule they
+converge the flux's high Legendre moments (P4) with far fewer elements than
+`sphere_mesh`, whose polar cells are slivers. `icosphere_frequency` gives `n` for an
+element size.
+"""
+function icosphere_mesh(radius; n::Integer, outward::Bool = true)
+    n >= 1 || throw(ArgumentError("the subdivision n must be at least 1"))
+    m = Mesh()
+    ϕ = (1 + sqrt(5)) / 2
+    # icosahedron (cyclic permutations of (0, ±1, ±ϕ)) rotated so (0, 1, ϕ) lies on +z
+    raw = [v for s1 in (-1, 1) for s2 in (-1, 1)
+           for v in (Vec3(0, s1, s2 * ϕ), Vec3(s1, s2 * ϕ, 0), Vec3(s2 * ϕ, 0, s1))]
+    R = rotation_to(Vec3(0, 1, ϕ))'                         # (0, 1, ϕ) → ẑ
+    V = [normalize(R * v) for v in raw]
+    e = minimum(norm(V[i] - V[j]) for i in 1:12 for j in i+1:12)
+    faces = [(i, j, k) for i in 1:12 for j in i+1:12 for k in j+1:12
+             if all(d -> isapprox(d, e; rtol = 1e-9), (norm(V[i] - V[j]), norm(V[j] - V[k]), norm(V[i] - V[k])))]
+    # A point from integer barycentric weights, summed in vertex-index order so points on
+    # shared edges come out bit for bit the same from either face.
+    pt(i, j, k, a, b, c) = radius * normalize(a * V[i] + b * V[j] + c * V[k])
+    for (i, j, k) in faces
+        P(a, b) = pt(i, j, k, n - a - b, a, b)
+        for a in 0:n-1, b in 0:n-1-a
+            tris = [(P(a, b), P(a + 1, b), P(a, b + 1))]
+            a + b < n - 1 && push!(tris, (P(a + 1, b), P(a + 1, b + 1), P(a, b + 1)))
+            for t in tris
+                c = sum(t) / 3
+                add_polygon!(m, collect(t); facing = outward ? c : -c)
+            end
+        end
+    end
+    return m
+end
+
+"""
+    icosphere_frequency(radius, h) -> n
+
+Subdivision of `icosphere_mesh` for triangles with sides of about `h` (mm): an
+icosahedron edge spans 1.107 radians of arc.
+"""
+function icosphere_frequency(r, h)
+    h > 0 || throw(ArgumentError("the element size must be positive"))
+    return max(1, ceil(Int, atan(2.0) * r / h))
+end
+
+"""
     rectangle_mesh(width, height; nu, nv)
 
 Rectangle `|x| ≤ width/2, |y| ≤ height/2` in the plane `z = 0`, front face along `+ẑ`,

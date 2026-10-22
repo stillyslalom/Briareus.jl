@@ -1149,7 +1149,7 @@ fits below used Briareus's own operator points with a free-form evaluator.
   a₄/a₀ = −0.78 to −0.80% at 0.15 and 0.1 mm (408 and ~900 elements; walls 0.25–0.5);
   the latitude-longitude `sphere_mesh` capsule of the same cavity gives −1.01% at
   0.15 mm, −0.90% at 0.1 (walls 0.35), −0.82% at 0.05 (6.6k elements; −0.815% with
-  0.2 mm walls). **Visibility:** with bored LEHs and a
+  0.2 mm walls); see "Compact capsule mesh" (2026-10-22). **Visibility:** with bored LEHs and a
   gap, row sums before balancing miss one by up to 1.3% on walls/caps/capsule and 8% on
   LEH apertures and narrow faces, in the primitives as in the CAD (`hohlraum()`: 0.14%):
   pairs partly shadowed by a bore rim, decided by one centroid ray. **H** (synthetic)
@@ -1682,3 +1682,49 @@ Source: Kritcher et al., Phys. Rev. E 106, 025201 (2022), Table I, Secs. II A an
 - Required-power ratio 3.1 vs 3.64 mm at fixed capsule drive: 0.890 (α_w 0.925),
   0.905 (α_w 0.90), against 441/487 = 0.906. This is consistent in size only, since the
   shots also changed Δλ, pointing and pulse length. **L**
+
+## Compact capsule mesh (2026-10-22) *derived*
+
+`examples/capsule_mesh.jl`: the hohlraum and the nominal and tight pointings of the
+mesh work-precision study above, wall fixed at h = 0.2 mm, closed, 16 threads. The
+capsule is either the latitude-longitude `sphere_mesh` (`hohlraum(capsule_mesh =
+:latlong)`, the default, sized by `capsule_counts`) or the geodesic `icosphere_mesh`
+(`:compact`: icosahedron faces divided into n × n triangles projected onto the sphere,
+20n² elements, edges within −16/+19% of 1.107R/n, n = ⌈1.107R/capsule_h⌉). Both carry
+the `SphereSurface`. N is the capsule's element count; moments in percentage points.
+
+| mesh | capsule h | N | P2 nominal | P4 nominal | P4 tight | build |
+|---|---|---|---|---|---|---|
+| lat-long | 0.30 | 200 | −13.938 | +1.238 | −0.687 | 12 s |
+| lat-long | 0.16 | 648 | −14.383 | +0.508 | −1.057 | 9 s |
+| lat-long | 0.12 | 1,152 | −14.488 | +0.325 | −1.167 | 10 s |
+| lat-long | 0.09 | 2,048 | −14.524 | +0.245 | −1.205 | 11 s |
+| lat-long | 0.07 | 3,444 | −14.533 | +0.216 | −1.213 | 15 s |
+| lat-long | 0.05 | 6,612 | −14.546 | +0.185 | −1.219 | 22 s |
+| lat-long | 0.04 | 10,224 | −14.549 | +0.177 | −1.226 | 35 s |
+| compact | 0.30 | 320 | −14.386 | +0.203 | −1.149 | 9 s |
+| compact | 0.22 | 500 | −14.454 | +0.190 | −1.185 | 9 s |
+| compact | 0.16 | 980 | −14.499 | +0.177 | −1.211 | 9 s |
+| compact | 0.12 | 1,620 | −14.518 | +0.171 | −1.221 | 10 s |
+| compact | 0.09 | 2,880 | −14.532 | +0.167 | −1.228 | 12 s |
+| compact | 0.07 | 4,500 | −14.539 | +0.165 | −1.231 | 15 s |
+| compact | 0.05 | 8,000 | −14.544 | +0.164 | −1.234 | 26 s |
+| compact | 0.04 | 12,500 | −14.547 | +0.163 | −1.235 | 45 s |
+
+Findings:
+- Both converge as c/N (∝ capsule_h²) to the same limits, extrapolated from each mesh's
+  two finest points: P4 nominal +0.161 (lat-long) / +0.162 (compact), P4 tight −1.237 /
+  −1.237, P2 nominal −14.553 / −14.551. The mean drive is within 2e-4 of its limit at every size on both.
+- P4 error ≈ 160/N pp (nominal) and 120/N (tight) on the lat-long capsule, 16/N and
+  24/N on the compact one: within 0.02 pp of the limit takes ~8,000 lat-long elements
+  (capsule_h ≈ 0.045) against ~800 (nominal) to ~1,200 (tight) compact ones
+  (capsule_h ≈ 0.12–0.16). The compact mesh is 5–10× cheaper for P4, consistent with the
+  remeshed CAD capsule's 408 elements (another cavity, 2026-10-18 entry above).
+- P2 converges at the same rate on both (≈ 50/N pp nominal; 0.02 pp at ~2,500
+  elements): the capsule's piecewise-constant sampling, not element shape, sets it.
+  The tight design's P2 is within 0.01 pp at every compact size.
+- Odd moments stay at round-off: the icosphere (a vertex on +z) is centrally symmetric.
+- Element quality, not count, sets P4: the lat-long cells near the poles are slivers
+  whose centroids sample P4 poorly; at 0.09 mm the "standard" lat-long capsule is still
+  0.08 pp off in P4, the compact one 0.005.
+- Build time is set by the wall at these sizes (~9 s up to ~3k capsule elements).

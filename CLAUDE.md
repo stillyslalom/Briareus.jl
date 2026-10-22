@@ -127,6 +127,8 @@ environment has no ForwardDiff/Optim, and `Vec3` clashes with Makie there.
 - Mesh sizes: `hohlraum(; h, capsule_h)`; the GUI presets come from
   `examples/mesh_convergence.jl` (research notes): the capsule mesh sets P4 (error ∝
   capsule_h²), fine (0.17/0.05 mm) is converged to ~0.02 percentage points.
+  `capsule_mesh = :compact` (geodesic `icosphere_mesh`) reaches that P4 with ~1k
+  capsule elements instead of ~8k; lat-long stays the default until the user decides.
 - Facility data provenance is recorded in README; derived numbers (NIF per-beam offsets,
   OMEGA hohlraum frame) are labeled as such in docstrings.
 

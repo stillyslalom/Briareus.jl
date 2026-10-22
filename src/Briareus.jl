@@ -21,7 +21,8 @@ using PrecompileTools: @setup_workload, @compile_workload
 export CurvedSurface, SphereSurface, CylinderSurface, ConeSurface, DiskSurface, surface_point, element_sector
 export Vec3, Mesh, npatches, add_polygon!, merge_meshes, split_mesh, transform, translate, rotation_to,
        orient_mesh, coarsen_mesh, remesh_mesh, SurfaceRegion, fit_surfaces, curved_components,
-       cylinder_mesh, annulus_mesh, disk_mesh, sphere_mesh, cubed_sphere_mesh, rectangle_mesh, frustum_mesh
+       cylinder_mesh, annulus_mesh, disk_mesh, sphere_mesh, cubed_sphere_mesh, icosphere_mesh,
+       icosphere_frequency, rectangle_mesh, frustum_mesh
 export AlbedoModel, ConstantAlbedo, TabulatedAlbedo, WallLossAlbedo, BurnthroughAlbedo, HeatFront,
        RosselandTransmission, foil_transmission, GapClosure,
        heat_front, burnthrough_time, areal_mass, optical_depth, eddington_transmission, albedo, Material, gold, ablator, BLACK,
