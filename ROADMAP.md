@@ -544,6 +544,13 @@ Choices made provisionally overnight or left open; the lean is in brackets.
      finer foil (e.g. 41 × 41). VisRad's effective cut-off lay near 1.64 1/e radii
      against the file's 1.53645 (= (ln 1000)^(1/4.5), the 10⁻³ radius for n = 4.5).
      The ratio's exact definition is open.
+   - **Tilted-plate probe** (todo, 2026-10-22): plates tilted to cos i ≈ 0.6–0.8 about
+     4–5 mm from focus, where the outer cones land on the wall; build it with thor
+     `visrad/build_profile_probe.jl`. On N230729 at 0.1 mm (thor `n230729_fine`) the
+     tuned model is 1.16% rms per wall element (peak 599 vs 609 TW/cm²), almost all
+     on the 44.5°/50° shoulders (model −3 to −16% at r/ρ 0.6–0.9). It is not
+     sampling (centroid vs integrated agree), and per-cone refits to that run
+     degrade the held-out runs and the normal plates (thor `visrad/refit_profile.jl`).
    - **Power on tilted surfaces**: VisRad's foil total was exact to 1e-8, while
      per-plane normalization gives 1.1e-4 too much at ~40°. A steeper foil (~70°)
      would show whether VisRad renormalizes each beam's deposited total.
