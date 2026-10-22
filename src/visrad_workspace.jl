@@ -662,6 +662,204 @@ function visrad_target(ws::VisRadWorkspace; select = o -> o.radiosity || o.laser
     return cad_target(parts; orient, toward, inside, remesh, coarsen, fit, material = mats, two_sided = sides)
 end
 
+# ---------------------------------------------------------------------------------------
+# Results: power-source tables
+# ---------------------------------------------------------------------------------------
+
+# Column names and units from a power-source table's comment header: the first line
+# names the columns (cells separated by 2+ spaces, which also fixes where each column
+# starts), later lines add words or "(unit)" cells to the column starting nearest them.
+# "Direct Laser" / "Pwr Source" / "(TW/cm2)" -> :direct_laser_pwr_source, "TW/cm2".
+function _vrw_ps_columns(header, ncol)
+    cells(l) = [(m.offset, String(m.match)) for m in eachmatch(r"\S+(?: \S+)*", l[2:end])]
+    generic = ([Symbol("col", k) for k in 1:ncol], fill("", ncol))
+    isempty(header) && return generic
+    first_cells = cells(header[1])
+    length(first_cells) == ncol || return generic
+    starts = first.(first_cells)
+    words = [[s] for (_, s) in first_cells]
+    units = fill("", ncol)
+    for l in header[2:end], (o, s) in cells(l)
+        k = argmin(abs.(starts .- o))
+        startswith(s, "(") && endswith(s, ")") ? (units[k] = s[2:end-1]) : push!(words[k], s)
+    end
+    names = Symbol[]
+    for w in words
+        s = replace(lowercase(join(w, " ")), "#" => "n ")
+        s = strip(replace(s, r"[^a-z0-9]+" => "_"), '_')
+        s = isempty(s) ? "col$(length(names) + 1)" : s
+        push!(names, Symbol(s in String.(names) ? "$(s)_$(length(names) + 1)" : s))
+    end
+    return names, units
+end
+
+"""
+    visrad_power_sources(workspace; stale = :error) -> (; time, units, tables)
+
+VisRad's power-source results saved in a computed workspace (a `.vrw` path or a
+`VisRadWorkspace`, re-read from its `path`): the `[Power Source Data]` section, which
+VisRad writes after computing the power sources. Per object it lists one row per
+surface element: index (0-based), direct laser power source (TW/cm², the laser power
+absorbed per area averaged over the element), uniform source, albedo, x-ray conversion
+efficiency, laser reflectivity, pre-reflection laser power, numbers of red and blue
+cones hitting the element, and minimum overlap angles at 1ω and 3ω.
+
+`tables` maps each object's name to a `NamedTuple` of column vectors, named from the
+section's own header (`:surface_index`, `:direct_laser_pwr_source`, `:uniform_source`,
+`:albedo`, `:x_ray_conv_efficiency`, `:laser_reflectivity`, `:pre_reflect_laser_pwr`,
+`:n_red_cones_hitting_surf`, `:n_blue_cones_hitting_surf`, `:min_angle_overlap_1w`,
+`:min_angle_overlap_3w` in VisRad 20–21); integer columns are `Int`. `units` maps
+column names to the header's units (`"TW/cm2"`, `"deg"`, `""`), and `time` is the
+simulation time (ns) the sources were computed for.
+
+A workspace saved before computing, or changed since, says "Power sources are not up to
+date" and holds no tables: that is an error, or `nothing` with `stale = :nothing`.
+Tables of the same layout in other sections (beam capture and clearance data) are not
+read. Map the direct laser source onto a Briareus target with `visrad_deposition`.
+"""
+function visrad_power_sources(path::AbstractString; stale::Symbol = :error)
+    stale in (:error, :nothing) || throw(ArgumentError("stale must be :error or :nothing, not :$stale"))
+    lines = _vr_lines(path)
+    occursin("Workspace Format ID", first(lines)) ||
+        throw(ArgumentError("$path is not a VisRad text workspace (first line: \"$(first(lines))\")"))
+    a = _vrw_find(lines, "[Power Source Data]")
+    a === nothing && throw(ArgumentError("$path has no [Power Source Data] section"))
+    b = something(_vrw_find(lines, "[End Power Source Data]", a), length(lines))
+    re = r"Power sources are (not )?up to date for time\s*=\s*(\S+)"
+    s = findfirst(l -> occursin(re, l), lines[a:b])
+    s === nothing && throw(ArgumentError("$path: no up-to-date line in [Power Source Data]"))
+    m = match(re, lines[a+s-1])
+    if m[1] !== nothing
+        stale === :nothing && return nothing
+        throw(ArgumentError("$path: VisRad's power sources are not up to date (compute them in VisRad and save the workspace)"))
+    end
+    time = parse(Float64, m[2])
+    tables = Dict{String,NamedTuple}()
+    units = Dict{Symbol,String}()
+    summary = r"^#\s*---\s*Power Source Summary for\s+(.*?)\s*$"
+    i = a
+    while (i = findnext(l -> occursin(summary, l), lines, i + 1)) !== nothing && i < b
+        name = String(match(summary, lines[i])[1])
+        j = findnext(l -> !startswith(l, "#"), lines, i + 1)          # first row
+        (j === nothing || j > b) && throw(ArgumentError("$path: no rows for $name"))
+        head = lines[i+1:j-1]
+        k = findfirst(l -> occursin("Number of surfaces", l), head)
+        k === nothing && throw(ArgumentError("$path: no surface count for $name"))
+        n = parse(Int, strip(last(split(head[k], '='))))
+        rows = [split(l) for l in lines[j:j+n-1]]
+        (j + n - 1 < b && all(r -> !isempty(r) && !startswith(r[1], "#"), rows)) ||
+            throw(ArgumentError("$path: $name lists fewer than its $n surfaces"))
+        ncol = length(rows[1])
+        all(r -> length(r) == ncol, rows) || throw(ArgumentError("$path: ragged rows for $name"))
+        header = [l for l in head if occursin(r"^#\s*\S", l) && !occursin('=', l)]
+        cols, us = _vrw_ps_columns(header, ncol)
+        vals = map(1:ncol) do c
+            ints = [tryparse(Int, r[c]) for r in rows]
+            all(!isnothing, ints) ? Int.(ints) : [parse(Float64, r[c]) for r in rows]
+        end
+        vals[1] == 0:n-1 || throw(ArgumentError("$path: $name's rows are not surfaces 0, 1, …, $(n - 1)"))
+        tables[name] = NamedTuple{Tuple(cols)}(Tuple(vals))
+        for (c, u) in zip(cols, us)
+            units[c] = u
+        end
+        i = j + n - 1
+    end
+    return (; time, units, tables)
+end
+
+visrad_power_sources(ws::VisRadWorkspace; kw...) = visrad_power_sources(ws.path; kw...)
+
+# Briareus patch of each VisRad surface element (row) of an object's component, or
+# `nothing` when the order is not established. CAD meshes: one patch per VisRad surface
+# element, in file order (the row order is the connectivity order; checked on the NIF
+# workspaces, where Briareus's deposition matches VisRad's element by element).
+# Rectangles: VisRad runs the local x fastest, `rectangle_mesh` the local y (measured on
+# the foil workspace, research notes). Spheres and hohlraums: unknown.
+function _vrw_row_patches(o::VisRadObject, n)
+    o.kind === :mesh && return collect(1:n)
+    if o.kind === :rectangle
+        nu = max(1, _vrw_int(o.params, "Number of mesh pts 1") - 1)
+        nv = max(1, _vrw_int(o.params, "Number of mesh pts 2") - 1)
+        nu * nv == n || return nothing
+        return [ix * nv + iy + 1 for r in 0:n-1 for (iy, ix) in (divrem(r, nu),)]
+    end
+    return nothing
+end
+
+"""
+    visrad_deposition(workspace, target = visrad_target(workspace);
+                      sources = visrad_power_sources(workspace)) -> Vector{Float64}
+
+VisRad's absorbed laser power per element of `target` (TW), from the direct laser power
+source of a computed workspace (`visrad_power_sources`): each VisRad surface element's
+value (TW/cm²) times its area. This is the convention of `deposit(...).element`, so
+VisRad's and Briareus's depositions on the same target compare element by element and
+per component (`sum(P[elements(target, :wall)])`).
+
+`target` must hold the workspace's objects as `visrad_target(workspace)` or
+`visrad_component` build them, one component per object (named after it) on VisRad's
+own elements. Each component is checked against the object's elements; a component
+remeshed, coarsened, fitted or cut to a cavity is refused. Elements are matched by:
+
+- CAD meshes (generalized meshes): one Briareus patch per VisRad surface element, in
+  the file's connectivity order. The order is VisRad's own; it is confirmed by
+  Briareus's deposition matching VisRad's element by element (correlation 1.0000,
+  0.9% rms with `VisRadProfile`) on 2388 wall elements of a NIF workspace.
+- Rectangles on VisRad's grid: VisRad's elements run the local x fastest (measured on a
+  foil workspace).
+- Spheres and cylindrical hohlraums: VisRad's element order is not established (only
+  the counts are). An object of these kinds with any laser power is refused; leave it
+  out of the target (`visrad_target(ws; select)`) to map the rest.
+
+A two-sided component takes the power on its front elements (VisRad's table has one
+value per surface element). Objects with laser power but no component in `target` are
+warned about; components without a VisRad table stay zero.
+"""
+function visrad_deposition(ws::VisRadWorkspace, t::Target = visrad_target(ws);
+                           sources = visrad_power_sources(ws))
+    P = zeros(nelements(t))
+    objs = Dict(o.name => o for o in ws.objects)
+    for (name, tbl) in sources.tables
+        k = findfirst(c -> startswith(String(c), "direct_laser"), keys(tbl))
+        k === nothing && throw(ArgumentError("$name: no direct laser power source column in $(keys(tbl))"))
+        col = keys(tbl)[k]
+        q = tbl[col]
+        f = _vr_flux_scale(get(sources.units, col, ""))         # to TW/cm²
+        o = get(objs, name, nothing)
+        o === nothing && throw(ArgumentError("VisRad object $name has power sources but is not in the workspace"))
+        ci = findfirst(c -> String(c.name) == name, t.components)
+        if ci === nothing
+            mine = o.kind === :cylindrical_hohlraum &&
+                   any(c -> startswith(String(c.name), name * "_"), t.components)
+            if any(!iszero, q)
+                mine && throw(ArgumentError("VisRad's element order on hohlraum $name is not established; leave it out of the target"))
+                @warn "VisRad object $name absorbs laser power but has no component in the target; not mapped"
+            end
+            continue
+        end
+        all(iszero, q) && continue
+        c = t.components[ci]
+        rows = _vrw_row_patches(o, length(q))
+        rows === nothing &&
+            throw(ArgumentError("VisRad's element order on $(o.kind) $name is not established; leave it out of the target"))
+        ref = o.kind === :mesh ? o.mesh : only(visrad_component(o; material = c.material)).mesh
+        (c.mesh.patches == ref.patches && length(c.mesh.vertices) == length(ref.vertices) &&
+         all(isapprox.(c.mesh.vertices, ref.vertices; atol = 1e-9)) && npatches(ref) == length(q)) ||
+            throw(ArgumentError("component $name is not on VisRad's $(length(q)) elements (remeshed, coarsened, fitted or cut?)"))
+        t0 = findfirst(==(ci), t.tri_comp) - 1
+        for (k, p) in enumerate(rows)
+            tri = t0 + first(c.mesh.patches[p])
+            e = t.tri_front[tri] != 0 ? t.tri_front[tri] : t.tri_back[tri]
+            e == 0 && continue                                   # a zero-area element
+            P[e] = q[k] * f * t.elem_area[e] / 100                  # TW/cm² × mm²/100
+        end
+    end
+    return P
+end
+
+visrad_deposition(path::AbstractString, args...; kw...) =
+    visrad_deposition(read_visrad_workspace(path), args...; kw...)
+
 """
     write_visrad_workspace(path, template, beams; angle_tol = 0.05) -> path
 

@@ -340,6 +340,15 @@ Measured on the NIF hohlraum at the GUI's standard mesh (5,864 elements, 48 quad
   0.05 s, the drive stays current). The 0.7–0.9 s first-use stalls (drive result,
   field coloring, import) were JIT compilation, now warmed before the window opens.
 
+## Done (2026-10-22, VisRad results)
+- **VisRad's deposition read back:** `visrad_power_sources` reads a computed workspace's
+  `[Power Source Data]` tables (columns named from the file's header; an error, or
+  `nothing`, when not up to date), and `visrad_deposition(ws, target)` maps the direct
+  laser source onto a `visrad_target` as absorbed TW per element, the convention of
+  `deposit(...).element`. CAD meshes map in file order and rectangles local-x fastest;
+  spheres and hohlraums with laser power are refused (order unknown). On N210808 it
+  equals the ad hoc study reader bit for bit (wall 428.4920, THOR windows 6.2526 TW each).
+
 ## Open questions (from the 2026-10-18 CAD work)
 Choices made provisionally overnight or left open; the lean is in brackets.
 1. `fit = true` by default when `remesh` is given (cad_target, visrad_target, GUI)?
@@ -404,10 +413,11 @@ Choices made provisionally overnight or left open; the lean is in brackets.
      LEH clipping. VisRad decides occultation on its 25 × 24 ray grid; Briareus uses
      the beam axis through each point.
    - **End-to-end**: a primitive hohlraum with a few quads, optimized here, exported,
-     and run in VisRad, with the workspace saved after computing. Reading the
-     `[Power Source Data]` tables back (a reader still to write; the rectangle's
-     elements run local-x fastest, the hohlraum's order is unknown) would turn this
-     into a routine comparison.
+     and run in VisRad, with the workspace saved after computing. The
+     `[Power Source Data]` tables read back with `visrad_power_sources` and
+     `visrad_deposition` (see Done), which makes it a routine comparison on CAD and
+     rectangles; a primitive hohlraum needs its element order measured first (e.g.
+     one beam on the wall), or the hohlraum given as CAD.
 2. **Sombrero and backlighter geometry.** Model the LEH shield as a component (a
    dimpled annulus), and the backlighter foil's placement relative to the diagnostic
    line of sight. The line-of-sight and clearance checks in the radiography tutorial

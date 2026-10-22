@@ -122,3 +122,32 @@ function synthetic_workspace()
     println(io, "[End Laser Beam Data]\n\n[Diagnostic Port Data]:\n[End Diagnostic Port Data]")
     return String(take!(io))
 end
+
+# The [Power Source Data] section VisRad writes after computing the power sources, in
+# the layout of real VisRad 20/21 workspaces (header lines copied verbatim): per object,
+# `name => direct laser source per element (TW/cm²)`; the other columns are filler.
+function power_source_section(objects; up_to_date = true)
+    io = IOBuffer()
+    println(io, "[Power Source Data]:")
+    if !up_to_date
+        println(io, "   Power sources are not up to date for time = 0.000000e+00\n[End Power Source Data]\n")
+        return String(take!(io))
+    end
+    println(io, "   Power sources are up to date for time = 0.000000e+00")
+    println(io, "#\n#**************** RESULTS FOR POWER SOURCE TERMS **************#")
+    println(io, "#    Number of Objects =      ", length(objects), "\n#\n#")
+    for (name, q) in objects
+        println(io, "#  --- Power Source Summary for ", name, "\n#")
+        println(io, "#      Format ID          = 6\n#      Number of surfaces = ", length(q), "\n#\n#")
+        println(io, "# Surface     Direct Laser   Uniform      Albedo        X-ray Conv.   Laser         Pre-reflect   # Red Cones   # Blue Cones  Min Angle     Min Angle")
+        println(io, "#  Index      Pwr Source     Source                     Efficiency    Reflectivity  Laser Pwr     Hitting Surf  Hitting Surf  Overlap-1w    Overlap-3w")
+        println(io, "#             (TW/cm2)       (TW/cm2)                                               (TW/cm2)                                  (deg)         (deg)")
+        println(io, "#")
+        for (i, x) in enumerate(q)
+            println(io, lpad(i - 1, 7), lpad(string(x), 14), "       0.00000       0.70000       0.60000",
+                    "       0.00000       0.00000             0", lpad(x > 0 ? 2 : 0, 14), "     360.00000     360.00000")
+        end
+    end
+    println(io, "[End Power Source Data]\n")
+    return String(take!(io))
+end

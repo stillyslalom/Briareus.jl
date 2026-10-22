@@ -750,6 +750,17 @@ test fixture rebuilds the layout from rows copied from these files.
   - An independent analytic projection (super-Gaussian evaluated in the beam plane,
     × cos ι) reproduces Briareus's single-cone deposition to 0.05% in the core.
   **H** (measured locally)
+- **Power Source Data layout** (`visrad_power_sources`; NIF CAD and primitive
+  workspaces, VisRad 20–21). After `[Power Source Data]:` a line "Power sources are
+  [not ]up to date for time = t"; a workspace not computed has no tables. Then per
+  object `#  --- Power Source Summary for <name>`, `Format ID = 6`, `Number of
+  surfaces = n`, a three-line comment header (names on two lines, units on the third,
+  columns 14 characters wide) and n rows indexed from 0. The Beam Capture-Clearance
+  section repeats the same summaries in the primitive workspace, so only the Power
+  Source section is read. CAD row order is the connectivity order: Briareus's
+  deposition matches VisRad's on the N210808 wall element by element (2388 elements,
+  correlation 1.0000, 0.9% rms with `VisRadProfile`). Hohlraum and sphere element
+  order: not established. **H** layout and CAD order
 - **The faint wings (follow-up, 2026-10-17).** Rays and envelope:
   - *Rays.* "Incident angle" in the capture data is the largest ray-to-normal angle over
     a grid of rays from the final optic to the focal spot, out to the I/Imax boundary
