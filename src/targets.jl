@@ -258,6 +258,8 @@ is reported as the `_outside` back-side loss of those components; light that lea
 through an open window is `:missed`. The wall, caps, LEHs, windows and capsule carry
 their exact `CylinderSurface`, `DiskSurface` and `SphereSurface`, so the radiation
 model uses the true geometry.
+The target is declared `closed`, so `RadiationModel` balances its view factors
+(`enforce_closure!`) unless given `closed = false`.
 
 With windows, the wall and end-cap meshes contain the windows' edges as grid lines
 (`conforming_grid`; the wall's axial grid gets their `z` edges, wall and caps share
@@ -337,7 +339,7 @@ function hohlraum(; length = 9.4, radius = 2.875, leh_radius = 1.55, capsule_rad
                                surface = SphereSurface(capsule_radius; center = capsule_center)))
     end
     append!(comps, window_comps)
-    return Target(comps)
+    return Target(comps; closed = true)
 end
 
 """

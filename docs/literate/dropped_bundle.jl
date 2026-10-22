@@ -476,7 +476,7 @@ review_line("re-pointed, keep-out", cap_review(second_try.beams))
 
 # Re-pointing within the clearance still removes nearly all of mode 1, to a few
 # kilometres per second of hot-spot velocity, and the drive stays within 0.3% of its
-# value after the bundle is freed. The worst-case clearance comes out at 14 µm rather
+# value after the bundle is freed. The worst-case clearance comes out at 9 µm rather
 # than exactly the 10 µm asked for: the penalty is soft, and the keep-out's distance
 # differs from the clearance check's by a few micrometres. The flux on the capsule
 # before and after re-pointing, on the same maps and color scales as above:

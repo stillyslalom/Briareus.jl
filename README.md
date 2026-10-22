@@ -67,7 +67,8 @@ for the same workflow: target, beams, drive, optimization and shot review.
   3,000-element hohlraum) and gray diffuse radiosity `solve`. Wall albedo can be
   constant, tabulated in time, or the Marshak wall-loss scaling `WallLossAlbedo`,
   iterated to self-consistency with the local radiation temperature. For closed
-  enclosures, `closed = true` removes discretization leakage while keeping reciprocity.
+  enclosures, `closed = true` removes discretization leakage while keeping reciprocity
+  (the default for `hohlraum` targets).
   `flux_response` precomputes the linear map from laser deposition to capsule flux, so
   optimizers never re-solve.
 - **Analysis.** Legendre moments (`legendre_moments`) and real spherical harmonics

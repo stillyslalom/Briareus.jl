@@ -34,13 +34,17 @@ _FactorCache() = _FactorCache(ReentrantLock(), Vector{Float64}[],
 const FACTOR_CACHE_SIZE = 2
 
 """
-    RadiationModel(target; F = view_factors(target), closed = false, kwargs...)
+    RadiationModel(target; F = view_factors(target), closed, kwargs...)
 
 Target plus view factors: everything needed to solve for x-ray fluxes given laser
-deposition. `kwargs` pass through to `view_factors`. Set `closed = true` when the
-elements (apertures included) form a closed enclosure — e.g. a hohlraum with its LEHs
-— to remove discretization closure error with `enforce_closure!`; radiation that would
-otherwise leak through the mesh is amplified by multiple bounces at high albedo.
+deposition. `kwargs` pass through to `view_factors`. `closed = true`, for elements
+(apertures included) that form a closed enclosure, removes discretization closure
+error with `enforce_closure!`: view-factor rows sum to one only to ~1e-3, and multiple
+bounces at high albedo amplify that leak or excess (at α = 0.925, a 5e-4 shift in the
+wall's mean row sum moves the capsule drive by 0.3% and its P2 by ~0.05%). It defaults
+to the target's own declaration (`hohlraum` makes it) when the view factors are
+computed here, and to `false` for a given `F`, which is used as is; pass
+`closed = false` for the raw view factors of a closed target.
 
 The model caches LU factorizations of the radiosity matrix `I - diag(α) F` keyed on
 the albedo vector (the two most recently used), so `solve` and `flux_response` with
@@ -54,7 +58,8 @@ struct RadiationModel
     RadiationModel(t::Target, F::AbstractMatrix) = new(t, F, _FactorCache())
 end
 
-function RadiationModel(t::Target; F = nothing, closed::Bool = false, kwargs...)
+function RadiationModel(t::Target; F = nothing, closed::Union{Bool,Nothing} = nothing, kwargs...)
+    closed = something(closed, F === nothing && t.closed)
     F = F === nothing ? view_factors(t; kwargs...) : copy(F)
     closed && enforce_closure!(F, t.elem_area)
     return RadiationModel(t, F)

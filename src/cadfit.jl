@@ -832,4 +832,4 @@ end
 
 curved_components(cs::AbstractVector{Component}; kwargs...) =
     reduce(vcat, (curved_components(c; kwargs...) for c in cs); init = Component[])
-curved_components(t::Target; kwargs...) = Target(curved_components(t.components; kwargs...))
+curved_components(t::Target; kwargs...) = Target(curved_components(t.components; kwargs...); t.closed)

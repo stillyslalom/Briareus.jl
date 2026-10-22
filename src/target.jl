@@ -504,12 +504,17 @@ transform(c::Component, R::AbstractMatrix, t = zero(Vec3)) =
 translate(c::Component, t) = transform(c, SMatrix{3,3,Float64}(I), t)
 
 """
-    Target(components)
+    Target(components; closed = false)
 
 Assembled target geometry. Each patch side that radiates becomes an *element* (the
 unknowns of the radiation model): one element per patch for one-sided surfaces and
 apertures, two for two-sided surfaces. The back side of a one-sided surface absorbs
 laser light as a loss but is not modeled radiatively.
+
+`closed = true` declares that the elements (apertures included) form a closed enclosure,
+so `RadiationModel` balances its view factors by default (`enforce_closure!`).
+`hohlraum` sets it; a target assembled from its components does not, since added parts
+(a foil, a sombrero) may lie outside the enclosure.
 """
 struct Target
     components::Vector{Component}
@@ -534,9 +539,10 @@ struct Target
     comp_elems::Vector{Vector{Int}}
     bvh::BVH
     scale::Float64                 # bounding-sphere radius about the origin (mm)
+    closed::Bool                   # the elements form a closed enclosure
 end
 
-function Target(components::AbstractVector{Component})
+function Target(components::AbstractVector{Component}; closed::Bool = false)
     names = [c.name for c in components]
     allunique(names) || throw(ArgumentError("component names must be unique: $names"))
     tv0, te1, te2, tn, ta = Vec3[], Vec3[], Vec3[], Vec3[], Float64[]
@@ -591,10 +597,10 @@ function Target(components::AbstractVector{Component})
     scale = isempty(tv0) ? 1.0 :
             maximum(max(norm(v), norm(v + a), norm(v + b)) for (v, a, b) in zip(tv0, te1, te2))
     return Target(collect(components), tv0, te1, te2, tn, ta, tcomp, tfront, tback, topaque,
-                  ec, en, ea, ecomp, eside, etris, ecurv, comp_elems, bvh, scale)
+                  ec, en, ea, ecomp, eside, etris, ecurv, comp_elems, bvh, scale, closed)
 end
 
-Target(cs::Component...) = Target(collect(cs))
+Target(cs::Component...; closed::Bool = false) = Target(collect(cs); closed)
 
 # Whether an element touches the apex of the cone it lies on: the true surface is
 # singular there (the kernel between points on either side of the apex grows as 1/s²

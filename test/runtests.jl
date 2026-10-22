@@ -125,6 +125,14 @@ mc = RadiationModel(s; closed = true)
 @test maximum(abs.(s.elem_area .* mc.F .- (s.elem_area .* mc.F)')) < 1e-12
 solc = solve(mc, P)
 @test all(h -> isapprox(h, expected; rtol = 1e-6), solc.H)
+# a target declared closed is balanced by default; a given F is used as is
+sd = Target(s.components; closed = true)
+@test RadiationModel(sd).F == mc.F
+@test RadiationModel(sd; closed = false).F == m.F
+@test RadiationModel(sd; F = m.F).F == m.F
+let th = hohlraum(nz = 6, nphi = 8, nr_cap = 1, nr_leh = 1, capsule_radius = 0)
+    @test th.closed && !Target(th.components).closed && curved_components(th).closed
+end
 # flux_response reproduces the direct solve
     obs = collect(1:5:nelements(s))
     R = flux_response(m, obs)
