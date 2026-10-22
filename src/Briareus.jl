@@ -59,7 +59,7 @@ export GroupPointing, nparams, parameter_names, initial_parameters, apply, bound
        Scenario, Evaluation, evaluate, subset, flux_ylm, asymmetry_objective, influence_matrix,
        clipped_fraction, missed_fraction, power_fraction,
        flux_moments, symmetry_objective, irradiance_objective, optimize_pointing, report,
-       mode_sensitivity, mode_uncertainty, sample_modes
+       mode_sensitivity, mode_uncertainty, sample_modes, infer_errors
 
 include("geometry.jl")
 include("meshops.jl")

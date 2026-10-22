@@ -10,8 +10,9 @@
 #
 # This tutorial computes how much asymmetry such errors leave in a NIF hohlraum's
 # drive, checks the linear estimate against a Monte Carlo of full evaluations, and
-# uses it to design a pointing that is less sensitive to the errors. It introduces
-# [`mode_sensitivity`](@ref), [`mode_uncertainty`](@ref), [`sample_modes`](@ref) and the
+# uses it two ways: to infer the errors behind a measured asymmetry, and to design a
+# pointing that is less sensitive to them. It introduces [`mode_sensitivity`](@ref),
+# [`mode_uncertainty`](@ref), [`sample_modes`](@ref), [`infer_errors`](@ref) and the
 # `uncertainty` keyword of the symmetry objectives.
 
 using Briareus
@@ -153,6 +154,74 @@ ss = sample_modes(scenario, quads; shared..., n = 200, lmax, rng = MersenneTwist
 # beam. A cone moving together, and the target's offset, are near translations of the
 # drive pattern, so they feed the odd modes (``l = 1, 3``) and leave ``l = 2`` alone.
 
+# ## Reading the errors back from a measured mode
+#
+# The inverse question comes after a shot: the implosion showed a mode-1 asymmetry;
+# which errors could have caused it? Trending measured low modes against beam and
+# target data over many shots, as MacGowan et al. (2021) did for NIF's mode 1, starts
+# from this question for each shot. [`infer_errors`](@ref) answers it linearly: with
+# the measured departure ``\Delta c`` (measured minus nominal ``c_{lm}/c_{00}``), its
+# measurement error, and the same error priors as `mode_uncertainty`, it returns the most
+# probable errors and their posterior spread.
+#
+# A synthetic measurement: the target sits 30 µm off center along x, so every aim moves
+# 30 µm along +x relative to it. The "measured" ``l = 1`` comes from a full evaluation,
+# with an assumed measurement error of 0.01 percentage points per component. The prior
+# allows every error source of the previous section, with cones shared per hemisphere
+# (a cone's top and bottom halves point in opposite directions, so their mean direction
+# does not define a transverse plane):
+
+cone(b) = (b.group, b.port[3] > 0)
+prior = (; pointing = 0.05, group_pointing = 0.02, groups = cone, positioning = 0.03)
+offset = [0.03, 0.0, 0.0]
+moved = [remake(b; aim = b.aim + offset) for b in quads]
+c_nom, c_meas = shape(quads), shape(moved)
+Δc(l) = c_meas[l^2+1:(l+1)^2] .- c_nom[l^2+1:(l+1)^2]
+inv1 = infer_errors(scenario, quads, (1 => Δc(1),); sigma = 1e-4, prior...)
+pos(r) = join((@sprintf("%+.1f ± %.1f", 1000r.positioning[i], 1000r.sigma[end-3+i]) for i in 1:3), ", ")
+@printf("measured l = 1: positioning (µm) %s; %.2f of 3 combinations resolved\n", pos(inv1), inv1.resolved)
+for t in inv1.sources[1:4]
+    @printf("  %-28s explains %5.1f%%\n", t.source, 100t.fraction)
+end
+
+# The direction is right, and the positioning is the largest single source, but it
+# explains only a quarter of the measurement and its estimate falls well short of
+# 30 µm. Three numbers cannot tell a target offset from the same mode-1 pattern made
+# by the 96 independent beam displacements and the cones' shared ones: the prior
+# allows all of them, so the most probable explanation spreads the blame. ``l = 3``,
+# which a translation also drives, separates them a little further:
+
+inv13 = infer_errors(scenario, quads, (1 => Δc(1), 3 => Δc(3)); sigma = 1e-4, prior...)
+@printf("measured l = 1, 3: positioning (µm) %s; %.2f of 10 resolved\n", pos(inv13), inv13.resolved)
+for t in inv13.sources[1:3]
+    @printf("  %-28s explains %5.1f%%\n", t.source, 100t.fraction)
+end
+@printf("posterior/prior rms: positioning %.2f %.2f %.2f; median over all %d errors %.3f\n",
+        (inv13.sigma[end-2:end] ./ inv13.prior_sigma[end-2:end])..., length(inv13.x),
+        sort(inv13.sigma ./ inv13.prior_sigma)[end÷2])
+
+# Ten numbers determine at most ten combinations of the errors, and most of the
+# errors keep their prior spread. The answer is only as specific as the prior: if the
+# beams are known to have pointed well (their errors measured, say), a prior on the
+# positioning alone recovers the offset from ``l = 1`` by itself:
+
+inv_pos = infer_errors(scenario, quads, (1 => Δc(1),); sigma = 1e-4, pointing = 0.0,
+                       positioning = 0.03)
+@printf("positioning-only prior: positioning (µm) %s; residual %.4f%% of |Δc| %.4f%%\n",
+        pos(inv_pos), 100norm(inv_pos.residual), 100norm(inv_pos.measured))
+
+# 29 ± 3 µm against the true 30. With the broad prior, the positioning's posterior rms
+# fell only to 0.8 of its prior along x, while the median error kept 99% of its
+# prior spread: the measurement says little about any one error unless the prior
+# says the rest are small. For the broad-prior case, the inferred errors applied to
+# the beams (`beams`) reproduce the measurement in a full evaluation:
+
+c_back = shape(inv13.beams)
+rows13 = [mode_index(l, m) for (l, m) in inv13.components]
+@printf("|Δc| %.4f%%, |prediction J x̂ − Δc| %.4f%%, full evaluation − prediction %.4f%%\n",
+        100norm(inv13.measured), 100norm(inv13.residual),
+        100norm(c_back[rows13] .- c_nom[rows13] .- inv13.predicted))
+
 # ## Does the pointing change the budget?
 #
 # The errors' share of each mode depends on where the spots land: a spot on a steep
@@ -214,5 +283,13 @@ robust_budget = budget_row("robust", robust.x)
 #   target-positioning) errors. The test suite also checks that a group of one beam
 #   reproduces the independent errors exactly, and that a shared target displacement
 #   matches central differences.
+# - With a positioning-only prior, the inverse recovers a known 30 µm target offset
+#   from a full evaluation's mode 1 (29 ± 3 µm, printed above), and a full evaluation
+#   of the inferred errors departs from their linear prediction by 0.0003 percentage
+#   points.
+#   The test suite also recovers one hemisphere cone's shared displacement,
+#   checks the data-space posterior against the dense solve in error space
+#   (``(\Sigma_p^{-1} + J^\mathsf{T}\Sigma_m^{-1}J)^{-1}``, to 1e-8), and that full
+#   evaluations of the inferred beams depart from ``J\hat x`` at second order only.
 # - The robust objective adds exactly the propagated variance to the nominal one (test
 #   suite), and its gradients, through nested dual numbers, match finite differences.

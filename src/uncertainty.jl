@@ -262,6 +262,175 @@ function sample_modes(s::Scenario, beams::AbstractVector{<:Beam}; pointing::Real
     return out
 end
 
+"""
+    infer_errors(scenario, beams, measured; sigma, pointing = 0.05, power = 0.0,
+                 group_pointing = 0.0, group_power = 0.0, groups = :quad,
+                 positioning = 0.0) -> NamedTuple
+
+The most probable beam errors behind a measured drive-shape departure: the inverse of
+`mode_uncertainty`, which takes the same error priors. A measured low mode that trends
+from shot to shot (MacGowan et al., HEDP 2021, trend mode 1 of NIF implosions against
+beam and target data) asks which errors could have caused it; this answers it for one
+shot, linearly.
+
+`measured` holds the departures `Δc = (c_lm/c_00)_measured − (c_lm/c_00)_nominal` as
+pairs: `(l, m) => Δc` for a component, `l => [Δc_l,-l, …, Δc_l,l]` for a whole degree
+(`mode_index` order). `sigma` is the measurement's rms error, one number or one per
+component (in the order `measured` expands to). The nominal shape is the scenario's
+for `beams`; components through `l = 6` (the cached Y_lm weights).
+
+Model: `Δc = J x + ε`, with `x` the errors (zero-mean normal, the variances of
+`mode_uncertainty`: per beam its aim along the spot axes `a`, `b` and its relative
+power; per group a shared displacement and power; the target positioning) and `J`
+their exact sensitivities (`mode_sensitivity`, with the shared columns). The posterior
+mean, which is also the most probable `x`, and its covariance come from the data-space
+(Woodbury) form, a solve the size of the measurement:
+
+    x̂ = Σₚ Jᵀ (J Σₚ Jᵀ + Σₘ)⁻¹ Δc,   Σ = Σₚ − Σₚ Jᵀ (J Σₚ Jᵀ + Σₘ)⁻¹ J Σₚ.
+
+Returns `(; beam, group, positioning, x, sigma, prior_sigma, covariance, names,
+components, measured, predicted, residual, sources, resolved, beams, J, c)`:
+- `beam`: `nb × 3`, each beam's inferred `a`, `b` displacement (mm) and relative power;
+- `group`: a `Dict` from group key to `(; displacement, power)` (a `Vec3` in mm);
+- `positioning`: the inferred common displacement of every aim relative to the target
+  (the target sits at minus this from where the beams expect it);
+- `x`, `sigma`, `prior_sigma`, `covariance`, `names`: all errors as one vector (beams'
+  `a`, `b`, `power`, then the groups', then x, y, z), their posterior and prior rms,
+  the posterior covariance, and labels;
+- `predicted = J x̂` and `residual = Δc − J x̂`, over `components` (the `(l, m)` list);
+- `sources`: per error source (a beam's pointing, a beam's power, a group's pointing or
+  power, the positioning), the `fraction` of `Δc` its share of `J x̂` explains,
+  `dot(J_s x̂_s, Δc)/|Δc|²`, sorted descending (the fractions sum to
+  `dot(predicted, Δc)/|Δc|²`): the few sources that best explain the measurement;
+- `resolved`: Σⱼ (1 − Σⱼⱼ/σⱼ²), the number of error combinations the data determine
+  (at most the number of components);
+- `beams`: `beams` with `x̂` applied, for a full `evaluate` (the nonlinear check; the
+  errors are applied before a laser–plasma model, which the sensitivities follow).
+
+The name says what comes back: errors, under a prior, not a unique explanation. Many
+errors map to a few modes, so a handful of combinations are determined and every other
+direction keeps its prior: `sigma ./ prior_sigma` stays near 1 for most errors, and
+`resolved` counts what was learned. What the inverse reports is only as good as the
+prior: an error left out of it (`group_pointing = 0`, say) cannot be blamed, and its
+effect is attributed to the sources that are allowed. Linear in the errors.
+"""
+function infer_errors(s::Scenario, beams::AbstractVector{<:Beam}, measured; sigma,
+                      pointing::Real = 0.05, power::Real = 0.0, group_pointing::Real = 0.0,
+                      group_power::Real = 0.0, groups = :quad, positioning = 0.0)
+    _radiative(s) || throw(ArgumentError("scenario has no radiation response"))
+    min(pointing, power, group_pointing, group_power) >= 0 ||
+        throw(ArgumentError("error rms values must be non-negative"))
+    comps, Δc = _measured_components(measured)
+    lmax = maximum(first, comps)
+    lmax <= _CACHED_YLM_LMAX || throw(ArgumentError("cached Y_lm weights reach lmax = $_CACHED_YLM_LMAX"))
+    σm = sigma isa Real ? fill(Float64(sigma), length(Δc)) : Float64.(collect(sigma))
+    length(σm) == length(Δc) && all(>=(0), σm) ||
+        throw(ArgumentError("sigma is one non-negative number or one per measured component"))
+    σpos = _positioning_rms(positioning)
+    nm = (lmax + 1)^2
+    eff = apply_lpi(s.lpi, beams, s.time)
+    nb = length(eff)
+    shared = group_pointing > 0 || group_power > 0 || any(>(0), σpos)
+    N = shared ? 4 : 3
+    J4, c = _beam_mode_derivatives(s, eff, s.ylm_response, nm; axial = shared)
+    Jb = shared ? J4[:, [N * (bi - 1) + k for bi in 1:nb for k in 1:3]] : J4
+    Vg, σg = _group_sources(J4, N, eff, groups, group_pointing, group_power)
+    Vp, σp = _positioning_sources(J4, N, eff, σpos)
+    layout = _group_layout(eff, groups, group_pointing, group_power)
+    rows = [mode_index(l, m) for (l, m) in comps]
+    A = hcat(Jb, Vg, Vp)[rows, :]
+    v = vcat(_error_variances(nb, pointing, power), σg, σp)
+    # data space: S = A Σₚ Aᵀ + Σₘ (k × k)
+    F = cholesky(Symmetric(A * (v .* transpose(A)) + Diagonal(σm .^ 2)); check = false)
+    issuccess(F) || throw(ArgumentError("the measured components are not constrained: " *
+                                        "give a measurement sigma or a prior that moves them"))
+    K = transpose(F \ (A .* transpose(v)))                   # Σₚ Aᵀ S⁻¹ (n × k)
+    x = K * Δc
+    post = Diagonal(v) - K * (A .* transpose(v))
+    post = (post + transpose(post)) / 2
+    sd = sqrt.(max.(diag(post), 0.0))
+    resolved = sum((1 - post[j, j] / v[j] for j in eachindex(v) if v[j] > 0); init = 0.0)
+    predicted = A * x
+    # the error sources: column ranges and labels
+    srcs = Tuple{String,UnitRange{Int}}[]
+    for (bi, b) in enumerate(eff)
+        push!(srcs, (string(b.name, " pointing"), 3bi-2:3bi-1), (string(b.name, " power"), 3bi:3bi))
+    end
+    o = 3nb
+    names = [string(b.name, ".", k) for b in eff for k in ("a", "b", "power")]
+    gd = Dict(g => (; displacement = zero(Vec3), power = 0.0) for g in unique(_group_key(b, groups) for b in eff))
+    for (g, kind, u) in layout
+        o += 1
+        if kind === :power
+            push!(srcs, (string(g, " power"), o:o))
+            push!(names, string(g, ".power"))
+            gd[g] = (; gd[g]..., power = x[o])
+        else
+            kind === :u1 && push!(srcs, (string(g, " pointing"), o:o+1))
+            push!(names, string(g, ".", kind))
+            gd[g] = (; gd[g]..., displacement = gd[g].displacement + x[o] * u)
+        end
+    end
+    D = zero(Vec3)
+    if !isempty(σp)
+        push!(srcs, ("positioning", o+1:o+3))
+        append!(names, ("positioning.x", "positioning.y", "positioning.z"))
+        D = Vec3(x[o+1], x[o+2], x[o+3])
+    end
+    n2 = dot(Δc, Δc)
+    sources = [(; source, fraction = n2 > 0 ? dot(A[:, r] * x[r], Δc) / n2 : 0.0, delta = A[:, r] * x[r])
+               for (source, r) in srcs if any(>(0), @view v[r])]
+    sort!(sources; by = t -> -t.fraction)
+    beam = permutedims(reshape(x[1:3nb], 3, nb))
+    keys = [_group_key(b, groups) for b in eff]
+    applied = map(eachindex(beams)) do i
+        b = beams[i]
+        e1, e2 = spot_axes(eff[i])
+        g = gd[keys[i]]
+        remake(b; aim = Vec3(b.aim) + beam[i, 1] * e1 + beam[i, 2] * e2 + g.displacement + D,
+               power = b.power * (1 + beam[i, 3]) * (1 + g.power))
+    end
+    return (; beam, group = gd, positioning = D, x, sigma = sd, prior_sigma = sqrt.(v),
+            covariance = post, names, components = comps, measured = Δc, predicted,
+            residual = Δc - predicted, sources, resolved, beams = applied, J = A, c = c[rows])
+end
+
+# The measured departures as ((l, m) list, values): pairs (l, m) => Δc or l => vector
+function _measured_components(measured)
+    comps = Tuple{Int,Int}[]
+    vals = Float64[]
+    for kv in measured
+        key, val = first(kv), last(kv)
+        if key isa Tuple
+            l, m = key
+            1 <= l && abs(m) <= l || throw(ArgumentError("measured component $key is not (l ≥ 1, |m| ≤ l)"))
+            push!(comps, (l, m)); push!(vals, val)
+        else
+            key >= 1 && length(val) == 2key + 1 ||
+                throw(ArgumentError("measured degree $key takes 2l + 1 = $(2key + 1) values"))
+            append!(comps, [(key, m) for m in -key:key]); append!(vals, val)
+        end
+    end
+    isempty(comps) && throw(ArgumentError("no measured components"))
+    allunique(comps) || throw(ArgumentError("a measured component is given twice"))
+    return comps, vals
+end
+
+# The order of `_group_sources`' columns: (group, :u1 | :u2 | :power, displacement unit)
+function _group_layout(beams, groups, pointing, power)
+    out = Tuple{Any,Symbol,Vec3}[]
+    keys = [_group_key(b, groups) for b in beams]
+    for g in unique(keys)
+        idx = findall(==(g), keys)
+        if pointing > 0
+            u1, u2 = _transverse_basis(normalize(sum(_beam_k(beams[i]) for i in idx)))
+            push!(out, (g, :u1, u1), (g, :u2, u2))
+        end
+        power > 0 && push!(out, (g, :power, zero(Vec3)))
+    end
+    return out
+end
+
 # The expected squared departure the errors add to each shape coefficient (first `nm`
 # of the response `R`): Σ_j σ_j² (∂(c_i/c_1)/∂e_j)², linearized.
 function _error_variance(s::Scenario, beams, R, nm, e)

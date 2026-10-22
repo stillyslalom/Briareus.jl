@@ -397,6 +397,21 @@ Measured on the NIF hohlraum at the GUI's standard mesh (5,864 elements, 48 quad
   radiosities, capture/clearance) to "not up to date" when it writes any row, so old
   results cannot be read back as the new beams'.
 
+## Done (2026-10-22, inverse beam errors)
+- **`infer_errors`** (roadmap item 11): the most probable beam, group and positioning
+  errors behind a measured shape departure (components or whole degrees, with a
+  measurement sigma), under `mode_uncertainty`'s priors, by the linear-Gaussian
+  posterior in data-space (Woodbury) form. Returns the errors (per beam, per group, the
+  target offset), posterior and prior rms, the predicted departure and residual, the
+  sources ranked by the share they explain, the number of combinations resolved, and
+  the beams with the errors applied. Tests: a target offset recovered from a full
+  evaluation's l = 1, 3 to ~1% (within 3σ), a hemisphere cone's shared displacement
+  against every cone's, MAP and covariance equal to the dense error-space solve to
+  1e-8, and full evaluations of the inferred beams agree to second order. Tutorial
+  "Beam errors": a measured P1 from a 30 µm target offset gives 29 ± 3 µm under a
+  positioning-only prior, but 7 µm (l = 1) or 11 µm (l = 1, 3) when beam and cone
+  errors may share the blame; the median error keeps 99% of its prior spread.
+
 ## Open questions (from the 2026-10-18 CAD work)
 Choices made provisionally overnight or left open; the lean is in brackets.
 1. `fit = true` by default when `remesh` is given (cad_target, visrad_target, GUI)?
@@ -561,8 +576,9 @@ Choices made provisionally overnight or left open; the lean is in brackets.
    multiplier/clamp, albedo) to measured P2/P4 and shock symmetry, with uncertainty.
    Reproduce P2-vs-Δλ curves.
 11. **Robust optimization and UQ: what remains.** Time-dependent budgets (errors
-   through `drive_history`), and inverse solves for a measured mode (MacGowan 2021) as
-   a documented workflow. Correlated errors are done (see Done, 2026-10-22).
+   through `drive_history`). Correlated errors and the inverse for a measured mode
+   (`infer_errors`) are done (see Done, 2026-10-22); trending over many shots (a shared
+   prior fitted to a shot series) is not.
 12. **Backlighter physics.** CE(Z, I, τ) models with uncertainty, and the photometric
    chain to the detector.
 13. **Spectral radiosity.** Multigroup emission, detector responses along Dante and XRD

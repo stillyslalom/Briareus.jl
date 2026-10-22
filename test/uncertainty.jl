@@ -103,6 +103,59 @@ std_rows(A) = sqrt.(sum(abs2, A .- sum(A; dims = 2) ./ size(A, 2); dims = 2) ./ 
         @test gc[i] ≈ (fc(xg .+ e) - fc(xg .- e)) / 2h rtol = 1e-5
     end
 
+    # inverse: the errors behind a measured shape departure
+    # (1) synthetic recovery of a target offset from a full evaluation's l = 1 and 3
+    D = Vec3(0.04, 0.0, -0.03)
+    cm = shape([remake(b; aim = Vec3(b.aim) + D) for b in quads])
+    meas = (1 => cm[2:4] .- sens.c[2:4], 3 => cm[10:16] .- sens.c[10:16])
+    ri = infer_errors(s, quads, meas; sigma = 1e-4, pointing = 0.0, positioning = 0.05)
+    @test norm(ri.positioning - D) < 0.03 * norm(D)
+    @test all(abs.(ri.positioning - D) .<= 3 .* ri.sigma[end-2:end])
+    @test all(ri.sigma[end-2:end] .< 0.2 .* ri.prior_sigma[end-2:end])
+    @test norm(ri.residual) < 0.03 * norm(ri.measured)
+    @test ri.sources[1].source == "positioning"
+    # ... and of one hemisphere-cone's shared displacement, against every cone's
+    hemi(b) = (b.group, b.port[3] > 0)
+    g0 = hemi(quads[5])
+    kg = normalize(sum(-normalize(Vec3(b.port...)) for b in quads if hemi(b) == g0))
+    dg = 0.05 * normalize(cross(Vec3(0, 0, 1), kg))
+    cg = shape([hemi(b) == g0 ? remake(b; aim = Vec3(b.aim) + dg) : b for b in quads])
+    measg = [l => cg[l^2+1:(l+1)^2] .- sens.c[l^2+1:(l+1)^2] for l in 1:lmax]
+    rg = infer_errors(s, quads, measg; sigma = 1e-5, pointing = 0.0, group_pointing = 0.05, groups = hemi)
+    @test norm(rg.group[g0].displacement - dg) < 0.05 * norm(dg)
+    @test rg.sources[1].source == string(g0, " pointing")
+    @test all(norm(rg.group[g].displacement) < 0.1 * norm(dg) for g in keys(rg.group) if g != g0)
+    # (2) zero departure: zero errors; MAP and posterior against the dense error-space
+    # solve, Σ = (Σₚ⁻¹ + Jᵀ Σₘ⁻¹ J)⁻¹, x̂ = Σ Jᵀ Σₘ⁻¹ Δc
+    errall = (; pointing = 0.03, power = 0.02, group_pointing = 0.02, group_power = 0.01,
+              groups = hemi, positioning = 0.02)
+    mz = (1 => zeros(3), (2, 0) => 0.0, (4, 0) => 0.0)
+    @test iszero(infer_errors(s, quads, mz; sigma = 1e-3, errall...).x)
+    md = (1 => [2e-3, -1e-3, 5e-4], (2, 0) => -3e-3, (4, 0) => 1e-3)
+    σd = [1e-3, 1e-3, 2e-3, 5e-4, 1e-3]
+    rd = infer_errors(s, quads, md; sigma = σd, errall...)
+    @test rd.components == [(1, -1), (1, 0), (1, 1), (2, 0), (4, 0)]
+    Σd = inv(Diagonal(1 ./ rd.prior_sigma .^ 2) + rd.J' * Diagonal(1 ./ σd .^ 2) * rd.J)
+    @test rd.covariance ≈ Σd rtol = 1e-8
+    @test rd.x ≈ Σd * rd.J' * (rd.measured ./ σd .^ 2) rtol = 1e-8
+    @test rd.sigma ≈ sqrt.(diag(Σd)) rtol = 1e-8
+    @test 0 < rd.resolved < length(rd.measured)
+    @test sum(t.fraction for t in rd.sources) ≈ dot(rd.predicted, rd.measured) / dot(rd.measured, rd.measured)
+    # the sensitivities are mode_uncertainty's: the prior predictive covariance matches
+    uall = mode_uncertainty(s, quads; errall..., lmax)
+    rows = [mode_index(l, m) for (l, m) in rd.components]
+    @test rd.J * Diagonal(rd.prior_sigma .^ 2) * rd.J' ≈ uall.covariance[rows, rows] rtol = 1e-9
+    # (3) the prediction is J x̂, and a full evaluation of the beams with x̂ applied
+    # agrees to linear order (the departure halves, the nonlinear rest quarters)
+    @test rd.predicted ≈ rd.J * rd.x && rd.residual ≈ rd.measured - rd.predicted
+    nonlin(r) = norm(shape(r.beams)[rows] .- rd.c .- r.predicted)
+    rh = infer_errors(s, quads, [k => v ./ 2 for (k, v) in md]; sigma = σd, errall...)
+    @test rh.x ≈ rd.x ./ 2
+    @test nonlin(rd) < 0.05 * norm(rd.predicted)
+    @test nonlin(rh) < 0.35 * nonlin(rd)
+    @test_throws ArgumentError infer_errors(s, quads, ((1, 2) => 0.1,); sigma = 1e-3)
+    @test_throws ArgumentError infer_errors(s, quads, (2 => [0.1],); sigma = 1e-3)
+
     # and the Legendre one, with the moments' own sensitivities
     sym = symmetry_objective(modes = (2 => 1.0, 4 => 1.0), odd = 0.0)
     symr = symmetry_objective(modes = (2 => 1.0, 4 => 1.0), odd = 0.0, uncertainty = errs)
