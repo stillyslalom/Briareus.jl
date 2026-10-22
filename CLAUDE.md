@@ -86,10 +86,12 @@ environment has no ForwardDiff/Optim, and `Vec3` clashes with Makie there.
   wrong shape far from focus (2% excess power, 10% misplaced, on hohlraum walls). It
   remains for envelopes. `profile = VisRadProfile(...)` (from `visrad_profile(ws)`)
   swaps in VisRad's model so exported designs reproduce in VisRad: a shape-keeping
-  super-Gaussian with hyperbolic semi-axes, cut at an envelope and normalized per
-  transverse plane, along the beam axis only. Its unknown parts (n(z), the square-beam
-  blend, the envelope's definition) wait on VisRad runs (ROADMAP "VisRad deposition
-  parity"); don't tune them to the one foil table.
+  super-Gaussian with hyperbolic semi-axes, cut at each beam's envelope ratio ρ
+  (default (ln 1000)^(1/n)) and normalized per transverse plane, along the beam axis
+  only. z_A is the manual's times γ/ρ, γ = `growth` = 0.67, inferred from VisRad 21
+  hohlraum runs (research notes, "VisRad deposition parity: hohlraum runs"); `growth =
+  nothing` is the manual's. n(z) and the square blend stay out (the runs show neither).
+  Recheck γ against all three thor workspaces (and the foil) before changing it.
 - VisRad's "Fraction of Total Beam Power" red/green model makes the power column the
   total; the 3ω cone carries 1 − f_G − f_R of it even when green/red are off.
 - `DepositionOperator` samples unmodeled back sides (clipped power) only for their total:
