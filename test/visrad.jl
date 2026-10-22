@@ -409,6 +409,67 @@ end
     @test all(k -> length(split(new[k])) == length(split(old[k])), changed)
     @test_throws ArgumentError write_visrad_workspace(q, p, [remake(b1; port = port_vector(60, 37))])
     @test_logs (:warn, r"no row") write_visrad_workspace(q, p, [edited[1]; Beam("B999"; theta = 10, phi = 0)])
+
+    # VisRad's results read back: the [Power Source Data] section of a computed
+    # workspace (vrw_fixture.jl), followed by a table of the same layout in another
+    # section, which is not read
+    qcad = [10.0, 0.0, 2.5, 7.25]
+    qrect = Float64.(1:81)                         # VisRad's row number, to find each row
+    tables(; rect = qrect, hohl = zeros(216)) =
+        ["Rectangle_0" => rect, "Cyl_Hohlraum_0" => hohl, "CAD_0" => qcad]
+    decoy = replace(power_source_section(["Decoy" => [1.0]]), "[Power Source Data]" => "[Beam Capture-Clearance Data]",
+                    "[End Power Source Data]" => "[End Beam Capture-Clearance Data]")
+    computed(; kw...) = vrfile("computed.vrw", synthetic_workspace() * "\n" * power_source_section(tables(; kw...)) * decoy)
+    pc = computed()
+    ps = visrad_power_sources(pc)
+    @test ps.time == 0 && sort(collect(keys(ps.tables))) == ["CAD_0", "Cyl_Hohlraum_0", "Rectangle_0"]
+    tc = ps.tables["CAD_0"]
+    @test keys(tc) == (:surface_index, :direct_laser_pwr_source, :uniform_source, :albedo, :x_ray_conv_efficiency,
+                       :laser_reflectivity, :pre_reflect_laser_pwr, :n_red_cones_hitting_surf,
+                       :n_blue_cones_hitting_surf, :min_angle_overlap_1w, :min_angle_overlap_3w)
+    @test tc.surface_index == 0:3 && tc.surface_index isa Vector{Int} && tc.n_blue_cones_hitting_surf == [2, 0, 2, 2]
+    @test tc.direct_laser_pwr_source == qcad && tc.albedo == fill(0.7, 4)
+    @test ps.units[:direct_laser_pwr_source] == "TW/cm2" && ps.units[:pre_reflect_laser_pwr] == "TW/cm2"
+    @test ps.units[:min_angle_overlap_3w] == "deg" && ps.units[:albedo] == ""
+    @test length(ps.tables["Cyl_Hohlraum_0"].albedo) == 216
+    # not computed (or changed since): no tables
+    ps0 = vrfile("stale.vrw", synthetic_workspace() * "\n" * power_source_section([]; up_to_date = false))
+    @test_throws ArgumentError visrad_power_sources(ps0)
+    @test visrad_power_sources(ps0; stale = :nothing) === nothing
+    @test_throws ArgumentError visrad_power_sources(p)                     # no section
+    # beams written into a computed workspace: its results belong to the old beams
+    qc = joinpath(dirname(pc), "computed_rewritten.vrw")
+    write_visrad_workspace(qc, pc, edited)
+    @test visrad_power_sources(qc; stale = :nothing) === nothing
+    @test occursin("Power sources are not up to date for time", read(qc, String))
+    @test all(isapprox(y.aim, x.aim; atol = 1e-6) for (x, y) in zip(edited, read_visrad_workspace(qc).beams))
+
+    # mapped onto the target: power = source × area (TW/cm² × mm² / 100) per element
+    wc = read_visrad_workspace(pc)
+    tc = visrad_target(wc)
+    P = visrad_deposition(wc, tc)
+    @test length(P) == nelements(tc) && P == visrad_deposition(pc)
+    ec = elements(tc, :CAD_0)
+    @test P[ec] ≈ qcad .* tc.elem_area[ec] ./ 100
+    @test all(iszero, P[elements(tc, :Cyl_Hohlraum_0_wall, :Cyl_Hohlraum_0_cap_top)])
+    # the rectangle's rows run its local x fastest: tilted 90°, local x is chamber -z
+    # and local y is chamber y; 9 × 9 elements of 4/9 mm
+    er = elements(tc, :Rectangle_0)
+    vrow(c) = 9 * round(Int, (c[2] + 2) * 9 / 4 - 0.5) + round(Int, (-c[3] + 2) * 9 / 4 - 0.5) + 1
+    @test P[er] ≈ [vrow(tc.elem_centroid[e]) * tc.elem_area[e] / 100 for e in er]
+    @test sort(vrow.(tc.elem_centroid[er])) == 1:81
+    # two-sided: on the front elements
+    t2 = visrad_target(wc; select = o -> o.kind === :mesh, two_sided = true)
+    P2 = @test_logs (:warn, r"Rectangle_0") match_mode = :any visrad_deposition(wc, t2)
+    @test P2[t2.elem_side .== 1] ≈ qcad .* t2.elem_area[1:4] ./ 100 && all(iszero, P2[t2.elem_side .== -1])
+    # VisRad's hohlraum element order is unknown: refused when it has laser power,
+    # unless left out of the target; elements not VisRad's own are refused
+    wh = read_visrad_workspace(computed(; hohl = ones(216)))
+    @test_throws ArgumentError visrad_deposition(wh)
+    th = visrad_target(wh; select = o -> o.kind in (:rectangle, :mesh))
+    @test (@test_logs (:warn, r"Cyl_Hohlraum_0") visrad_deposition(wh, th)) == P[[er; ec]]
+    @test_throws ArgumentError visrad_deposition(wc, visrad_target(wc; select = o -> o.kind === :mesh, remesh = 0.3))
+    @test_throws ArgumentError visrad_deposition(wc, Target(visrad_component(wc.objects[1]; primitive_h = 0.5)))
 end
 
 end

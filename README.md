@@ -113,7 +113,9 @@ for the same workflow: target, beams, drive, optimization and shot review.
   cavity around a point (`enclosure`), remeshed, and with the exact cylinders and
   spheres fitted (`fit_surfaces`); primitive components can be passed with the parts.
   `visrad_target` uses it for the CAD a VisRad workspace bundles.
-  `write_visrad_workspace` writes a design's beams back into a copy of a workspace.
+  `write_visrad_workspace` writes a design's beams back into a copy of a workspace;
+  once VisRad has computed it, `visrad_power_sources` and `visrad_deposition` read
+  its per-element laser deposition back onto the same target.
   `write_results` exports a calculation for postprocessing: per-element laser,
   radiosity and flux, per-component and per-beam power, and the capsule's Legendre and
   Y_lm modes, as CSV.
