@@ -349,6 +349,14 @@ Measured on the NIF hohlraum at the GUI's standard mesh (5,864 elements, 48 quad
   checked on the other two: wall 2.7–2.8% rms, correlation 0.9997, peaks within 0.5–2%;
   bu34_repointed's capsule departures δ1..4 0.007, 0.090, 0.019, 0.037% against
   VisRad's 0.006, 0.092, 0.018, 0.046% (were 0.006, 0.054, 0.012, 0.024).
+- **Beam-profile probe** (thor `visrad/profile_probe.vrw`: 48 beams onto plates normal
+  to them, |z| = 0–15 mm). VisRad's spot rotation is relative to the quad's horizontal,
+  measured to 0.02° and now applied by the readers and writers. n(z) grows linearly
+  (manual form, z₀ ≈ 18.5/12.7 mm inner/outer). The semi-axes are tabulated per NIF
+  plate (`measured = true`). Results:
+  - hohlraum wall rms 0.9% (from 2.8%);
+  - bu34_repointed δ1..4 0.008, 0.104, 0.020, 0.045% against VisRad's 0.006, 0.092,
+    0.018, 0.046%.
 - **Envelope per beam.** VisRad's default ratio is (ln 1000)^(1/n) (`visrad_envelope`;
   1.27–1.54 for the NIF plates). `VisRadProfile(; envelope)` takes a number, a `Dict`
   by beam name, or `nothing` for the default; `visrad_profile(ws)` reads each beam's.
@@ -401,8 +409,14 @@ Choices made provisionally overnight or left open; the lean is in brackets.
      confirm or replace the inferred growth γ/ρ (a(z) should come out ~6% above a₀ at
      4.5 mm for the 50° cone), say whether it follows the envelope ratio or the
      exponent (rerun one cone with a non-default envelope), and give z₀ and f_SQ.
-     Remaining after the 2026-10-21 fit: wall rms 2.7% (outer peak ring 3–4% low),
-     δ4 0.009 pp low, the foil wings.
+     Remaining after the 2026-10-21 profile probe:
+     - the law behind the tabulated a(z), b(z), so plates other than the four NIF ones
+       work;
+     - δ2 0.012 pp high on bu34_repointed, almost all from the wall;
+     - totals: wall 0.07% low, tilted foil 0.37% high;
+     - the foil wings.
+     A rerun of the probe with a non-default envelope or lens ratio would show which
+     of them set the growth.
    - **Foil normal to the beams** (tilted to face the quad's mean port). With the
      distance from focus nearly constant across the spot, this separates the focal
      profile from the defocus law.

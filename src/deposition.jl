@@ -219,14 +219,21 @@ function _operator_beam(b::Beam, ncone, profile)
     sp = b.spot
     amin = ForwardDiff.value(min(sp.a, sp.b))
     # footprint: 2.5 semi-axes grown by the f-cone; VisRad's envelope grows as a(z) does,
-    # within ρ (a₀ + |z| a₀/z_A), a₀/z_A < 1/(2f#) × max(1, ρ/γ)
+    # within ρ (a₀ + |z| a₀/z_A), a₀/z_A < 1/(2f#) × max(1, ρ/γ), or for a measured plate
+    # within ρ times its steepest growth of either semi-axis
     env = profile === nothing ? 1.0 : _vr_envelope(profile, b)
     r = max(2.5, env)
-    extent = r * ForwardDiff.value(max(sp.a, sp.b)) * (sp.halo > 0 ? max(1, sp.halo_scale) : 1)
+    amax = ForwardDiff.value(max(sp.a, sp.b))
+    extent = r * amax * (sp.halo > 0 ? max(1, sp.halo_scale) : 1)
     aim = Vec3(ForwardDiff.value.(b.aim))
     focus = aim + ForwardDiff.value(b.defocus) * k
     cone = (profile === nothing ? 1.0 : max(1.0, env) / sqrt(min(1.0, _vr_zfactor(profile, env)))) /
            (2b.fnumber)
+    m = profile === nothing ? nothing : _vr_measured(profile, sp)
+    if m !== nothing
+        slope(y, r0) = maximum((y[i+1] - y[i]) / (m.z[i+1] - m.z[i]) for i in 1:length(m.z)-1) * r0
+        cone = max(cone, 1.1 * env * max(slope(m.a_ratio, m.a), slope(m.b_ratio, m.b)))
+    end
     return (; k, ds, amin, extent, focus, cone)
 end
 

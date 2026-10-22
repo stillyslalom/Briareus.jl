@@ -114,8 +114,10 @@ function _vr_expand(beams::AbstractVector{<:Beam})
     for (i, b) in enumerate(beams)
         if _is_nif_quad(b.name)
             for n in members[b.name]
+                # the quad's spot, oriented as on the quad (VisRad's rotation is quad-relative)
+                spot = _vr_turn(b.spot, _vr_reference_angle(nb[n]))
                 push!(out, (remake(nb[n]; aim = b.aim, defocus = b.defocus, power = b.power / 4,
-                                   spot = b.spot, group = b.group), i, 0.25))
+                                   spot, group = b.group), i, 0.25))
             end
         else
             push!(out, (b, i, 1.0))
@@ -240,21 +242,60 @@ function _vr_sense(sense::Symbol)
     throw(ArgumentError("rotation_sense must be :beam or :target"))
 end
 
-function _vr_rotation(sp::SuperGaussianSpot, sense::Symbol)
+# VisRad measures a NIF beam's rotation from its quad's horizontal, not the beam's own:
+# at rotation 0 the major axis lies along φ̂ of the quad's port, turned about the beam
+# axis by 1.6–5.3° from the beam's φ̂ (measured: VisRad 21 deposition on plates normal to
+# 48 beams, the fitted spot rotation equals this angle to 0.02° on all of them;
+# reference/research-notes.md, "VisRad deposition parity"). The angle (rad, Briareus's
+# sense: from θ̂ toward φ̂) of the quad's φ̂ from the beam's; 0 for beams of no NIF quad
+# (a quad itself, OMEGA beams).
+function _vr_reference_angle(b::Beam)
+    q = get(_NIF_QUAD_PORTS, b.quad, nothing)
+    q === nothing && return 0.0
+    eθ, eφ = port_basis(b.port)
+    _, qφ = port_basis(q)
+    return atan(dot(qφ, eφ), dot(qφ, eθ)) - π / 2
+end
+
+const _NIF_QUAD_PORTS = Dict(NIF_QUAD_NAMES[p] => port_vector(θ, φ) for (p, θ, φ) in NIF_PORTS)
+
+# NIF quad of a facility beam name (B<cluster><bundle><beam>: beams 1–4 form quad QxyT,
+# 5–8 QxyB), "" for other names
+function _nif_beam_quad(name::AbstractString)
+    m = match(r"^B([1-4][1-6])([1-8])$", name)
+    m === nothing && return ""
+    return "Q" * m[1] * (parse(Int, m[2]) <= 4 ? "T" : "B")
+end
+
+# A beam built from a file without a template: its NIF quad from its name, and its spot
+# (read relative to the beam's own φ̂) turned to the quad's horizontal
+function _vr_quad_framed(b::Beam)
+    q = _nif_beam_quad(b.name)
+    isempty(q) && return b
+    b = Beam(b.name, b.port, b.aim, b.power, b.defocus, b.spot, b.fnumber, b.group, q, b.wavelength, b.dlambda)
+    return remake(b; spot = _vr_turn(b.spot, _vr_reference_angle(b)))
+end
+
+_vr_turn(sp::SuperGaussianSpot, δ) = δ == 0 ? sp :
+    SuperGaussianSpot(sp.a, sp.b, sp.order, sp.angle + δ, sp.halo, sp.halo_scale, sp.halo_order)
+
+# VisRad rotation (degrees) of a Briareus spot; `ref` is `_vr_reference_angle` of its beam
+function _vr_rotation(sp::SuperGaussianSpot, sense::Symbol, ref = 0.0)
     _vr_v(sp.a) == _vr_v(sp.b) && return 0.0
-    ψ = rad2deg(sp.angle)
+    ψ = rad2deg(sp.angle - ref)
     ψminor = _vr_v(sp.a) > _vr_v(sp.b) ? ψ + 90 : ψ
     ρ = _vr_sense(sense) * ψminor
     return mod(ρ + 90, 180) - 90
 end
 
-# Briareus spot from VisRad radii (µm) at intensity `level` × peak, rotation ρ (deg).
+# Briareus spot from VisRad radii (µm) at intensity `level` × peak, rotation ρ (deg);
+# `ref` is `_vr_reference_angle` of the beam.
 function _vr_make_spot(major, minor, ρ, order, level, sense::Symbol;
-                       halo = 0.0, halo_scale = 3.0, halo_order = 2.0)
+                       halo = 0.0, halo_scale = 3.0, halo_order = 2.0, ref = 0.0)
     s = log(1 / level)^(1 / order)
     a = major / 1000 / s
     b = minor / 1000 / s
-    angle = a == b ? 0.0 : deg2rad(mod(90 + _vr_sense(sense) * ρ, 180))
+    angle = a == b ? 0.0 : deg2rad(mod(90 + _vr_sense(sense) * ρ, 180)) + ref
     return SuperGaussianSpot(a, b; order, angle, halo, halo_scale, halo_order)
 end
 
@@ -319,7 +360,8 @@ function _vr_spot(raw, tb::Union{Nothing,Beam}, spot_definition, sense)
     minor = raw.minor === nothing ? raw.major : raw.minor
     h = tb === nothing ? (halo = 0.0, halo_scale = 3.0, halo_order = 2.0) :
         (halo = tb.spot.halo, halo_scale = tb.spot.halo_scale, halo_order = tb.spot.halo_order)
-    return _vr_make_spot(raw.major, minor, something(raw.rot, 0.0), order, level, sense; h...)
+    return _vr_make_spot(raw.major, minor, something(raw.rot, 0.0), order, level, sense; h...,
+                         ref = tb === nothing ? 0.0 : _vr_reference_angle(tb))
 end
 
 _vr_level(x::Real) = Float64(x)
@@ -381,11 +423,11 @@ function _vr_from_records(recs::Dict, order::Vector{String}, spot_definition, se
             throw(ArgumentError("beam $(r.name) has no port angles; pass a template beam set"))
         sp = _vr_spot(r.spot, nothing, spot_definition, sense)
         name = occursin(r"^\s*\d+\s*$", r.name) ? k : r.name     # bare OMEGA beam numbers
-        push!(out, Beam(name; theta = r.theta, phi = r.phi,
-                        power = r.on ? something(r.power, 1.0) : 0.0,
-                        aim = something(r.aim, Vec3(0, 0, 0)),
-                        defocus = something(r.defocus, 0.0),
-                        spot = something(sp, SuperGaussianSpot(0.5))))
+        push!(out, _vr_quad_framed(Beam(name; theta = r.theta, phi = r.phi,
+                                        power = r.on ? something(r.power, 1.0) : 0.0,
+                                        aim = something(r.aim, Vec3(0, 0, 0)),
+                                        defocus = something(r.defocus, 0.0),
+                                        spot = something(sp, SuperGaussianSpot(0.5)))))
     end
     return identity.(out)
 end
@@ -592,10 +634,13 @@ Conversions:
   "SG Exponent" column, else the phase-plate table, else the template beam. A "Uniform"
   profile (flat across R0 at focus) is approximated by n = 50 with 1/e radius R0.
 - **Rotation.** "Rot Angle" is the minor-axis rotation ρ (degrees, clockwise from
-  vertical; ρ = 0 puts the major axis horizontal, i.e. along the port's φ̂). Briareus's
-  `angle` of the major axis from θ̂ toward φ̂ is `90° − ρ` for `rotation_sense = :beam`
-  (spot seen looking along the beam) and `90° + ρ` for `:target` (seen from TCC). The
-  manual does not say which; `:beam` is an *assumption* to verify.
+  vertical; ρ = 0 puts the major axis "nearly horizontal"). Briareus's `angle` of the
+  major axis from θ̂ toward φ̂ is `90° − ρ` for `rotation_sense = :beam` (spot seen
+  looking along the beam) and `90° + ρ` for `:target` (seen from TCC). The manual does
+  not say which; `:beam` is an *assumption* to verify. Horizontal is φ̂ of the beam's
+  NIF quad port (`quad` of the template beam), which is turned 1.6–5.3° from the beam's
+  own φ̂: measured in VisRad 21 to 0.02° on 48 beams. Beams of no NIF quad use their
+  own φ̂.
 - DPR, halo, f-number and wavelength are not in the file: DPR "On" is warned about and
   ignored (VisRad splits such OMEGA beams into two cones 85 µm apart); the rest come from
   the template.
@@ -716,7 +761,7 @@ function write_visrad_summary(path::AbstractString, beams::AbstractVector{<:Beam
             row = Any[cluster(b), b.name, _vr_v(b.power) > 0 ? "On" : "Off", θ, φ,
                       "Target Chamber", "Cartesian", (aim ./ 10)..., d / 10, (focus ./ 10)...,
                       _vr_v(b.power), "Off", profile, 1000 * max(a, bb), 1000 * min(a, bb),
-                      _vr_rotation(sp, rotation_sense)]
+                      _vr_rotation(sp, rotation_sense, _vr_reference_angle(b))]
             extras && append!(row, (sp.order, "36.8% (1/e)"))
             println(io, join(_vr_field.(row), ","))
         end
@@ -1255,7 +1300,7 @@ function _vr_readme(io, t, beams, sol, dep, pulses, time, observe, obs_ok, terms
         rmaj, rmin = 1000 * max(v(sp.a), v(sp.b)), 1000 * min(v(sp.a), v(sp.b))
         hw = log(2)^(1 / sp.order)
         @printf(io, "    spot: super-Gaussian n = %.6g, 1/e radii %.6g × %.6g µm (major × minor), rotation %.6g° (VisRad minor-axis convention, sense :%s)\n",
-                sp.order, rmaj, rmin, _vr_rotation(sp, sense), sense)
+                sp.order, rmaj, rmin, _vr_rotation(sp, sense, _vr_reference_angle(b)), sense)
         @printf(io, "    = radii %.6g × %.6g µm at half maximum (VisRad NIF CPPs are HWHM)\n",
                 rmaj * hw, rmin * hw)
         sp.halo > 0 && @printf(io, "    halo: %.3g of the power at %.3g× the core radii (not representable in VisRad)\n",

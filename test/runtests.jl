@@ -354,6 +354,58 @@ end
     @test DepositionOperator(tf, [b, b2]; profile = VisRadProfile()).envelope ≈ [visrad_envelope(4.5), ρ8]
 end
 
+@testset "VisRad measured plate profile" begin
+    # A beam with VisRad's Rev1-Outer-2w spot (n = 4.5, 1/e semi-axes 0.6726 × 0.3905 mm)
+    # takes the measured tables: at |z| on a table node, the profile is the super-Gaussian
+    # with a(z) = a₀ ra(z), b(z) = b₀ rb(z), n(z) = n₀ rn(z) (Rev1-Outer-2w row of the
+    # tables: z = 8 mm → 1.21256, 1.39545, 1.12328), linear between nodes, the last segment
+    # extended beyond; power through each transverse plane is the beam's. Reference: those
+    # values, and sums over transverse planes.
+    n0, a0, b0, F, FL = 4.5, 0.6726, 0.3905, 20.7, 7695.0
+    b = Beam("b"; theta = 30, phi = 20, power = 1.5, fnumber = F, aim = (0.2, 0.0, -0.1),
+             spot = SuperGaussianSpot(a0, b0; order = n0, angle = π / 2))
+    prof = VisRadProfile(; focal_length = FL)
+    e1, e2 = spot_axes(b)
+    k = direction(b)
+    I(s, u, v) = intensity(prof, b, Vec3(b.aim) + s * k + u * e1 + v * e2)
+    for s in (8.0, -8.0)
+        a, bb, n = a0 * 1.21256, b0 * 1.39545, n0 * 1.12328
+        @test I(s, a, 0) / I(s, 0, 0) ≈ exp(-1) rtol = 1e-9
+        @test I(s, 0, bb) / I(s, 0, 0) ≈ exp(-1) rtol = 1e-9
+        @test I(s, 0.5a, 0) / I(s, 0, 0) ≈ exp(-0.5^n) rtol = 1e-9
+    end
+    a9 = a0 * (1.21256 + (1.29637 - 1.21256) / 2)               # between 8 and 10 mm
+    @test I(9.0, a9, 0) / I(9.0, 0, 0) ≈ exp(-1) rtol = 1e-9
+    a20 = a0 * (1.53547 + 5 / 3 * (1.53547 - 1.38807))           # beyond 15 mm
+    @test I(20.0, a20, 0) / I(20.0, 0, 0) ≈ exp(-1) rtol = 1e-9
+    for s in (0.0, 8.0, 15.0)
+        h = 0.01
+        @test sum(I(s, u, v) for u in -3:h:3, v in -3:h:3) * h^2 ≈ 1.5 rtol = 1e-3
+    end
+    # the same spot with its axes swapped (a < b, turned 90°) is the same beam
+    bs = remake(b; spot = SuperGaussianSpot(b0, a0; order = n0, angle = 0.0))
+    for s in (0.0, 6.0), (u, v) in ((0.3, 0.1), (-0.5, 0.2))
+        x = Vec3(b.aim) + s * k + u * e1 + v * e2
+        @test intensity(prof, bs, x) ≈ intensity(prof, b, x) rtol = 1e-9
+    end
+    # `measured = false`, or a spot no plate matches, keeps the hyperbolic model; at focus
+    # they agree
+    pm = VisRadProfile(; focal_length = FL, measured = false)
+    x8 = Vec3(b.aim) + 8 * k + 0.6 * e1
+    @test intensity(pm, b, x8) != intensity(prof, b, x8)
+    @test intensity(pm, b, Vec3(b.aim) + 0.6 * e1) ≈ intensity(prof, b, Vec3(b.aim) + 0.6 * e1) rtol = 1e-12
+    bo = remake(b; spot = SuperGaussianSpot(0.6, 0.35; order = n0, angle = π / 2))
+    @test intensity(prof, bo, x8) == intensity(pm, bo, x8)
+    # deposition on a foil normal to the beam 8 mm past focus holds the beam's power and
+    # is differentiable in the focus
+    tf = Target(foil(:f, Tuple(Vec3(b.aim) + 8 * k), Tuple(-k); width = 6.0, n = 40))
+    op = DepositionOperator(tf, [b]; profile = prof)
+    @test sum(deposit(op, [b]).element) ≈ 1.5 rtol = 2e-3
+    g(δ) = (bd = remake(b; defocus = δ); E = deposit(op, [bd]).element;
+            sum(E .* [dot(c - Vec3(b.aim), e1)^2 for c in tf.elem_centroid]))
+    @test ForwardDiff.derivative(g, 0.3) ≈ (g(0.3 + 1e-5) - g(0.3 - 1e-5)) / 2e-5 rtol = 1e-4
+end
+
 @testset "hohlraum + gradients" begin
     t = hohlraum(nz = 16, nphi = 24, capsule_ntheta = 12, capsule_nphi = 16)
     q = nif_quads()

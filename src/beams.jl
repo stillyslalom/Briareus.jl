@@ -281,62 +281,68 @@ intensity(b::Beam, x) = intensity(BeamFrame(b), x)
 # ---------------------------------------------------------------------------------------
 
 """
-    VisRadProfile(; envelope = nothing, focal_length = 7695.0, growth = 0.67)
+    VisRadProfile(; envelope = nothing, focal_length = 7695.0, growth = 0.67, measured = true)
 
 VisRad's analytic beam model (VR/power_sources/set_laser_profile_props.html), for
 deposition that reproduces VisRad 21's (`DepositionOperator(...; profile)`). The beam is
-not the focal spot convolved over the f-cone, as in Briareus's default model. Instead
-the super-Gaussian keeps its shape along the beam with semi-axes
+not the focal spot convolved over the f-cone, as in Briareus's default model, but a
+super-Gaussian whose semi-axes a(z), b(z) and exponent n(z) change with the distance `z`
+from best focus. It is cut off at the elliptical radius ρ (the envelope ratio, in 1/e
+semi-axes a(z), b(z)) and renormalized so the envelope holds the beam's power in every
+transverse plane. A surface absorbs the profile times the incidence factor |n·k| of the
+beam axis, where the axis reaches it unobstructed.
+
+**Measured plates** (`measured = true`, the default). For the four NIF phase plates
+VisRad's profile along the beam is measured (`_VR_MEASURED`: one beam per quad deposited
+on a plate normal to it at |z| = 0–15 mm, VisRad 21; `reference/research-notes.md`,
+"VisRad deposition parity"): a(z)/a₀, b(z)/b₀ and n(z)/n₀ are tabulated in |z|
+(symmetric about focus) and interpolated linearly, the last segment extended beyond
+the table. n grows by about 1.1%/mm (inner plates) and 1.6%/mm (outer), the manual's
+n₀(1 + 0.2|z|/z₀) with z₀ ≈ 18.5 and 12.7 mm; the semi-axes follow no hyperbola, the
+minor growing faster than the major. A beam takes a plate's tables when its focal
+exponent matches to 0.01 and its 1/e semi-axes to 1% (as `visrad_profile` reads them
+from a workspace). With VisRad's quad-relative spot rotation (`read_visrad_workspace`)
+this reproduces VisRad's hohlraum wall deposition to 0.9% rms per element.
+
+**Other spots** (and `measured = false`) take the manual's hyperbolic semi-axes at fixed
+n,
 
     a(z) = a₀ √((z/z_A)² + 1),   z_A = (γ/ρ) FL [(FL / (2a₀ f#))² − 1]^(-1/2),
 
-and likewise b(z) with z_B, for distance `z` from best focus, final-optic distance `FL`
-(`focal_length`, mm; VisRad's port radius, 769.5 cm at NIF), the beam's envelope ratio
-ρ and `growth` γ. The profile is cut off at the elliptical radius ρ (in 1/e semi-axes
-a(z), b(z)), and its peak is renormalized so the envelope holds the beam's power in
-every transverse plane. A surface absorbs the profile times the incidence factor |n·k|
-of the beam axis, where the axis reaches it unobstructed.
-
-The manual gives z_A without the factor γ/ρ (`growth = nothing` uses it so; a(FL) is
-then the f-cone's radius at the lens). VisRad 21's output grows faster: on NIF hohlraum
-walls 3–8 mm past focus its spots are as wide as γ/ρ with γ = 0.67 makes them, for all
-four NIF cones (ρ = 1.27–1.54), where the manual's z_A leaves Briareus's peaks 10% high
-and the element rms difference at 10%. γ is inferred from VisRad output (fitted on one
-workspace, checked on two others and a foil near focus; `reference/research-notes.md`,
-"VisRad deposition parity"). Every beam there had VisRad's default envelope, so the
-data cannot tell a dependence on ρ from one on the exponent n.
+and likewise b(z) with z_B, for final-optic distance `FL` (`focal_length`, mm; VisRad's
+port radius, 769.5 cm at NIF) and `growth` γ. The manual gives z_A without the factor
+γ/ρ (`growth = nothing` uses it so). γ = 0.67 was fitted to VisRad's hohlraum
+deposition before the plates were measured (2.8% element rms there).
 
 `envelope` is the ratio ρ for every beam (a number), per beam name (a `Dict`; beams
-not in it take the default), or `nothing` for VisRad's default (ln 1000)^(1/n), the
+not in it take the default), or `nothing` for VisRad's default (ln 1000)^(1/n₀), the
 radius where the focal profile falls to 10⁻³ of its peak (it reproduces the NIF
 plates' ratios 1.53645, 1.49576, 1.27326 and 1.28955). `visrad_profile` takes the
 envelopes and focal length from a workspace.
 
-What is not modeled, for lack of VisRad's constants (see `reference/research-notes.md`):
-- the exponent's change along the beam, n(z) = n₀[1 + 0.2 z/z₀], with z₀ unstated (the
-  wall data are as well or better fit with z₀ = ∞);
-- the blend toward a square beam, f_sq = [z/√(z² + ab)]^Γ with Γ = 1; the NIF beams in
-  the workspaces checked behave as circular at the final optics (f_sq = 0), and a
-  blend of that weight would square their spots on the walls, which VisRad's are not;
-- occultation by VisRad's ray grid. Here the beam axis through each point decides it.
+Not modeled: the blend toward a square beam (f_sq, zero for beams circular at the
+final optics, as NIF's behave), the envelope's own dependence on n(z) (the cut is at
+ρ in 1/e semi-axes; the profile there is ≲ 10⁻³ of peak), and occultation by VisRad's
+ray grid (here the beam axis through each point decides it).
 """
 struct VisRadProfile
     envelope::Union{Nothing,Float64,Dict{String,Float64}}
     focal_length::Float64
     growth::Union{Nothing,Float64}
-    function VisRadProfile(envelope, focal_length, growth)
+    measured::Bool
+    function VisRadProfile(envelope, focal_length, growth, measured = true)
         env = envelope isa AbstractDict ? Dict{String,Float64}(String(k) => v for (k, v) in envelope) :
               envelope === nothing ? nothing : Float64(envelope)
         all(>(0), env isa Dict ? values(env) : something(env, 1.0)) ||
             throw(ArgumentError("envelope must be positive"))
         focal_length > 0 || throw(ArgumentError("focal_length must be positive"))
         growth === nothing || growth > 0 || throw(ArgumentError("growth must be positive"))
-        return new(env, Float64(focal_length), growth === nothing ? nothing : Float64(growth))
+        return new(env, Float64(focal_length), growth === nothing ? nothing : Float64(growth), Bool(measured))
     end
 end
 
-VisRadProfile(; envelope = nothing, focal_length = 7695.0, growth = 0.67) =
-    VisRadProfile(envelope, focal_length, growth)
+VisRadProfile(; envelope = nothing, focal_length = 7695.0, growth = 0.67, measured = true) =
+    VisRadProfile(envelope, focal_length, growth, measured)
 
 """
     visrad_envelope(order) -> Float64
@@ -358,8 +364,51 @@ end
 # Factor on z_A² (and z_B²): (γ/ρ)², or 1 for the manual's z_A.
 _vr_zfactor(prof::VisRadProfile, env) = prof.growth === nothing ? 1.0 : (prof.growth / env)^2
 
+# VisRad 21's profile along the beam for the four NIF phase plates, measured with one beam
+# per quad focused onto a plate normal to it at |z| from best focus (48 plates; thor
+# visrad/profile_probe, `reference/research-notes.md`, "VisRad deposition parity"). Each
+# plate was fitted by a rotated super-Gaussian (0–2.5% rms): the semi-axes and exponent
+# over their focal values, the same before and after focus, normalized at z = 0. Matched
+# to a beam by its focal exponent and 1/e semi-axes (mm).
+const _VR_MEASURED = [
+    (plate = "Rev3-Inner-2w (23°)", order = 7.6, a = 0.934, b = 0.6926,
+     z = Float64[0, 2, 3, 4, 6, 9, 12],
+     a_ratio = [1.00000, 1.00311, 1.01015, 1.01974, 1.04499, 1.09513, 1.15740],
+     b_ratio = [1.00000, 1.01861, 1.03125, 1.04633, 1.08392, 1.15838, 1.25306],
+     n_ratio = [1.00000, 1.02632, 1.03718, 1.04715, 1.06562, 1.09150, 1.11713]),
+    (plate = "1.0 Rev1a-Inner-2w (30°)", order = 8.0, a = 0.9003, b = 0.6386,
+     z = Float64[0, 2, 3, 4, 6, 9, 12],
+     a_ratio = [1.00000, 1.00216, 1.00940, 1.01941, 1.04603, 1.09888, 1.16440],
+     b_ratio = [1.00000, 1.02001, 1.03389, 1.05058, 1.09247, 1.17617, 1.28271],
+     n_ratio = [1.00000, 1.02631, 1.03740, 1.04773, 1.06667, 1.09346, 1.12053]),
+    (plate = "Rev3-Outer-2w (44°)", order = 4.8, a = 0.6908, b = 0.3994,
+     z = Float64[0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 15],
+     a_ratio = [1.00000, 1.01046, 1.02604, 1.04585, 1.06938, 1.09625, 1.12622, 1.15903, 1.19449, 1.27238, 1.35796, 1.49642],
+     b_ratio = [1.00000, 1.01897, 1.04567, 1.08037, 1.12310, 1.17373, 1.23194, 1.29742, 1.36980, 1.53353, 1.71984, 2.03510],
+     n_ratio = [1.00000, 1.01959, 1.03594, 1.05063, 1.06445, 1.07798, 1.09152, 1.10537, 1.11990, 1.15129, 1.18648, 1.24972]),
+    (plate = "Rev1-Outer-2w (50°)", order = 4.5, a = 0.6726, b = 0.3905,
+     z = Float64[0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 15],
+     a_ratio = [1.00000, 1.01234, 1.02980, 1.05158, 1.07723, 1.10640, 1.13884, 1.17431, 1.21256, 1.29637, 1.38807, 1.53547],
+     b_ratio = [1.00000, 1.02042, 1.04904, 1.08621, 1.13193, 1.18603, 1.24822, 1.31815, 1.39545, 1.57030, 1.76936, 2.10609],
+     n_ratio = [1.00000, 1.01938, 1.03587, 1.05078, 1.06499, 1.07901, 1.09319, 1.10784, 1.12328, 1.15688, 1.19543, 1.26526]),
+]
+
+# The measured plate of a focal spot (exponent `n`, 1/e semi-axes `a`, `b` in mm), if any
+function _vr_measured(n, a, b)
+    for m in _VR_MEASURED
+        abs(n - m.order) <= 0.01 && abs(a / m.a - 1) <= 0.01 && abs(b / m.b - 1) <= 0.01 && return m
+    end
+    return nothing
+end
+_vr_measured(prof::VisRadProfile, sp::SuperGaussianSpot) =
+    prof.measured ? _vr_measured(sp.order, ForwardDiff.value(max(sp.a, sp.b)), ForwardDiff.value(min(sp.a, sp.b))) :
+    nothing
+
 # One component of a beam under VisRad's profile: focal semi-axes squared, their
-# Rayleigh-like ranges z_A², z_B², and the power normalization within the envelope.
+# Rayleigh-like ranges z_A², z_B², and the power normalization within the envelope; for a
+# measured plate (`_VR_MEASURED`), its tables in |z| (empty otherwise): semi-axis and
+# exponent ratios and the normalization relative to focus (the exponent's change moves
+# the power inside the envelope).
 struct _VRComponent{T}
     a2::T
     b2::T
@@ -368,6 +417,11 @@ struct _VRComponent{T}
     halfn::Float64
     power_norm::T             # component power / (2π Γ(2/n)/n × fraction inside the envelope)
     q2::Float64               # envelope², in (u/a)² + (v/b)²
+    zs::Vector{Float64}
+    ra::Vector{Float64}       # a(z)/a₀ (a is the component's first axis, `spot_axes`)
+    rb::Vector{Float64}
+    rn::Vector{Float64}
+    rnorm::Vector{Float64}
 end
 
 # z_R² = FL² / ((FL / (2 r f#))² − 1) for a 1/e semi-axis r
@@ -381,24 +435,57 @@ function _VRComponent(c::_SGComponent, F, prof::VisRadProfile, env)
     n = 2 * c.halfn
     inside = gamma_inc(2 / n, env^n)[1]
     g = _vr_zfactor(prof, env)
+    a, b = sqrt(ForwardDiff.value(c.a2)), sqrt(ForwardDiff.value(c.b2))
+    m = prof.measured ? _vr_measured(n, max(a, b), min(a, b)) : nothing
+    zs, ra, rb, rn, rnorm = if m === nothing
+        Float64[], Float64[], Float64[], Float64[], Float64[]
+    else
+        # a table's a/b follow the major/minor axis, whichever of the component's axes it is
+        ra, rb = a >= b ? (m.a_ratio, m.b_ratio) : (m.b_ratio, m.a_ratio)
+        norm0 = _sg_norm(n) * inside
+        m.z, ra, rb, m.n_ratio,
+        [norm0 / (_sg_norm(n * r) * gamma_inc(2 / (n * r), env^(n * r))[1]) for r in m.n_ratio]
+    end
     return _VRComponent(c.a2, c.b2, g * _vr_range2(c.a2, F, prof.focal_length),
                         g * _vr_range2(c.b2, F, prof.focal_length), c.halfn, c.power_norm / inside,
-                        env^2)
+                        env^2, zs, ra, rb, rn, rnorm)
+end
+
+# Linear interpolation of table `y` at |s| (the last segment extended beyond the table)
+@inline function _vr_interp(zs, y, s)
+    z = abs(s)
+    zv = ForwardDiff.value(z)
+    k = 1
+    while k < length(zs) - 1 && zs[k+1] < zv
+        k += 1
+    end
+    return y[k] + (y[k+1] - y[k]) * (z - zs[k]) / (zs[k+1] - zs[k])
+end
+
+# Squared semi-axes, half exponent and normalization factor a distance s from best focus
+@inline function _vr_axes(c::_VRComponent, s)
+    if isempty(c.zs)
+        return c.a2 * (1 + s^2 / c.za2), c.b2 * (1 + s^2 / c.zb2), c.halfn * one(s), one(s)
+    end
+    ra, rb = _vr_interp(c.zs, c.ra, s), _vr_interp(c.zs, c.rb, s)
+    return c.a2 * ra^2, c.b2 * rb^2, c.halfn * _vr_interp(c.zs, c.rn, s), _vr_interp(c.zs, c.rnorm, s)
 end
 
 # Intensity (per unit area normal to the beam) at focal-frame coordinates (u, v), a
 # distance s from best focus; 0 outside the envelope.
 @inline function _vr_eval(c::_VRComponent, u, v, s)
-    a2 = c.a2 * (1 + s^2 / c.za2)
-    b2 = c.b2 * (1 + s^2 / c.zb2)
+    a2, b2, hn, g = _vr_axes(c, s)
     q = u^2 / a2 + v^2 / b2
-    q > c.q2 && return zero(c.power_norm * q)
-    q > 0 || return c.power_norm / sqrt(a2 * b2) * one(q)
-    return c.power_norm / sqrt(a2 * b2) * exp(-_pow(q, c.halfn))
+    q > c.q2 && return zero(c.power_norm * q * g)
+    I0 = g * c.power_norm / sqrt(a2 * b2)
+    q > 0 || return I0 * one(q)
+    return I0 * exp(-_pow(q, hn))
 end
 
-@inline _vr_outside(c::_VRComponent, u, v, s) =
-    u^2 / (c.a2 * (1 + s^2 / c.za2)) + v^2 / (c.b2 * (1 + s^2 / c.zb2)) > c.q2 * (1 + 1e-9)
+@inline function _vr_outside(c::_VRComponent, u, v, s)
+    a2, b2, _, _ = _vr_axes(c, s)
+    return u^2 / a2 + v^2 / b2 > c.q2 * (1 + 1e-9)
+end
 
 struct _VRFrame{T}
     k::Vec3

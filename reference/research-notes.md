@@ -906,6 +906,59 @@ fits below used Briareus's own operator points with a free-form evaluator.
   - Near-focus wings on the foil (10⁻³–10⁻² of peak): ±10–40%, as before.
   - Occultation by the ray grid: VisRad puts ≤ 7e-4 TW/cm² on the LEH washers'
     elements, Briareus nothing.
+- **VisRad beam-profile probe (2026-10-21).** Workspace thor
+  `visrad/workspaces/profile_probe.vrw` (`build_profile_probe.jl`):
+  - **Setup.** One beam per NIF quad (48, 1 TW each, the template's CPP rows), each
+    focused 60 mm out along its port and deposited on its own flat plate normal to the
+    beam, at |z| = 0–12 mm (inner cones) or 0–15 mm (outer) from best focus, before and
+    after it. The plates have 2 × 44² triangles, laser deposition only.
+  - **Fit.** `fit_profiles.jl` fits each plate with a rotated, shifted super-Gaussian
+    averaged over each element (16 sub-triangles), cut at ρ. It leaves 0.0–2.5% rms;
+    the fitted power is the beam's within 0.13% and the center is on axis within 1 µm.
+    VisRad catches 1.00009 of each beam's power on its plate.
+  - **Rotation.** VisRad's spot is turned from Briareus's axes by exactly the angle
+    between the beam's φ̂ and its quad port's φ̂ (NIF User Guide angles): within
+    0.02° on all 48 plates. That angle is 4.3–5.3° (23° cone), 3.2–3.9° (30°),
+    1.9–2.3° (44°), 1.6–1.9° (50°), with its sign varying by beam. VisRad's rotation 0
+    is the quad's horizontal ("nearly horizontal" in the manual). **H** (48 beams)
+  - **Symmetry.** −z and +z plates give the same a, b and n to the fit's precision.
+  - **Exponent.** n(z)/n₀ − 1 is linear in |z|: 0.010–0.012/mm for both inner plates
+    and 0.015–0.017/mm for both outer plates. That is the manual's n₀(1 + 0.2|z|/z₀)
+    with z₀ ≈ 18.5 mm (inner) and 12.7 mm (outer), about 0.45–0.50 of the manual's z_A
+    of the major axis. The subagent's earlier n(z) test used z₀ = 3–10 mm, too
+    strong. **H**
+  - **Semi-axes.** They follow no hyperbola, neither the 1/e radius nor any radius at
+    a fixed intensity level, with or without n(z). a/a₀ = 1.50–1.54 and
+    b/b₀ = 2.04–2.11 at 15 mm (outer); 1.16 and 1.25–1.28 at 12 mm (inner). The minor
+    axis grows faster in relative terms but slower than γ/ρ makes it (2.26–2.35 at
+    15 mm). **H** (tabulated; the law is unknown)
+  - **Not an f-cone average.** Briareus's f-cone deposition through the same fit
+    lowers n with |z| (to 0.5 n₀ at 15 mm); VisRad's rises.
+  - **Model** (`VisRadProfile`, `measured = true`). The four plates' tables
+    (`_VR_MEASURED`, normalized at z = 0), interpolated linearly in |z| and extended
+    linearly beyond the last node, with the normalization tabulated per node. The
+    `.vrw`/CSV readers and writers apply the quad-frame rotation
+    (`_vr_reference_angle`).
+  - **Validation through `DepositionOperator`** (thor `compare_deposition.jl`):
+    - **Probe plates:** element rms 0.1–1.6% (inner), 0.2–4.5% (outer, largest at
+      15 mm), against 2.6–20% with γ/ρ.
+    - **n210808 wall:** 0.9% rms (from 2.8%), peak 779.1 against 778.1 TW/cm²,
+      correlation 1.0000.
+    - **bu34_repointed wall:** 0.9% rms, peak 911.5 against 915.9.
+    - **Totals:** wall 0.07% below VisRad (γ/ρ: 1e-4); windows 0.17% below; the 20°
+      foil 0.37% above.
+    - **Capsule modes:** absolute P2/P4 agree with VisRad's deposition to
+      0.014/0.004 pp (bu34_repointed).
+    - **Departures of bu34_repointed from the reference:** δ1..4 0.008, 0.104, 0.020,
+      0.045%, against VisRad's 0.006, 0.092, 0.018, 0.046% (γ/ρ: 0.007, 0.090, 0.019,
+      0.037). Swapping one component's deposition at a time puts 0.010 of the δ2
+      difference on the wall, 0.001 on each window and none on the foil.
+    - **n210808 δ2:** 2.575 against 2.576.
+    **M** (measured tables, checked on two hohlraum runs)
+  - **Still unknown.** The law behind a(z) and b(z) (the tables cover only the four NIF
+    plates at the default envelope and lens ratio 0.4); whether the envelope follows
+    n(z); what moves δ2 by 0.01 pp on the wall; the per-beam renormalization on tilted
+    surfaces.
 - **Spots.** NIF profile models 49–52 carry the built-in plate's numbers in the row:
   49 = Rev3-Inner-2w (890/660 µm, n 7.6), 50 = 1.0 Rev1a-Inner-2w (860/610, 8.0),
   51 = Rev3-Outer-2w (640/370, 4.8), 52 = Rev1-Outer-2w (620/360, 4.5), i.e. HWHM radii
