@@ -421,6 +421,14 @@ Measured on the NIF hohlraum at the GUI's standard mesh (5,864 elements, 48 quad
   same limits. Tests: closed, outward, exact curved area, convex faceting (F_ij = A_j/4πR²),
   uniform field has no l ≥ 1 moments, hohlraum capsule drive and P2 match lat-long.
 
+## Done (2026-10-22, partial visibility)
+- **`view_factors(...; visibility = :sampled, visibility_grid = 4)`**: probe rays flag
+  pairs that straddle an occluder; those get a kernel-weighted visible fraction from
+  g² × g² sample rays, the rest keep the centroid factor bit for bit. Bored-LEH cavity at
+  0.5 mm, largest row-sum error before balancing: walls 0.97% → 0.19%, LEH apertures
+  5.9% → 0.7%, capsule 0.16% → 0.05%; 2–4× the time. Fractions within 0.02 (mean) of a
+  256²-point reference. Tests: default unchanged, reciprocity, half-shadowed pair = ½.
+
 ## Open questions (from the 2026-10-18 CAD work)
 Choices made provisionally overnight or left open; the lean is in brackets.
 1. `fit = true` by default when `remesh` is given (cad_target, visrad_target, GUI)?
@@ -449,13 +457,19 @@ Choices made provisionally overnight or left open; the lean is in brackets.
    primitive baseline. [Accept.]
 9. Baseline moves to offer as options first: a compact capsule mesh in `hohlraum()`
    (offered 2026-10-22 as `capsule_mesh = :compact`; make it the default?) and
-   partial-visibility sampling for pairs whose centroid ray grazes a rim (row sums miss
-   by up to 1.3% on walls and 8% on LEH apertures before balancing, with bored LEHs).
+   partial-visibility sampling for pairs whose centroid ray grazes a rim (offered
+   2026-10-22 as `visibility = :sampled`; make it the default?). With bored LEHs it cuts
+   row-sum errors before balancing 5–9× on walls and LEHs (not the 20 µm gap's faces)
+   for 2–4× the view-factor time, and after balancing moves a₂/a₀ by −0.16 pp and a₄/a₀
+   by +0.11 pp at both 0.5 and 0.25 mm: balancing does not absorb it, and which limit
+   is right is not yet checked against a ray-traced radiosity (research notes, "Partial
+   visibility").
    The geodesic capsule reaches P4 within 0.02 pp with ~0.8–1.2k elements against
    ~8k lat-long, same limits, same P2 and drive (research notes, "Compact capsule
    mesh"). Switching moves every capsule baseline and the GUI presets' meaning (a
    compact preset would be capsule_h ≈ 0.12). [Compact default, with the GUI presets
-   re-chosen in the same change; partial visibility still an option.]
+   re-chosen in the same change; partial visibility an option until checked against a
+   ray-traced radiosity on a bored cavity.]
 10. `orient_mesh` faces a hollow solid's inner surface into the material; containment
     parity would face it into the gas, but `enclosure` from TCC would then select a
     hollow capsule's interior (the GUI relies on the current behavior). [Keep;
@@ -597,6 +611,6 @@ Choices made provisionally overnight or left open; the lean is in brackets.
    chain to the detector.
 13. **Spectral radiosity.** Multigroup emission, detector responses along Dante and XRD
     lines of sight, and brightness temperatures.
-14. **Scale.** Multi-ray partial visibility for view factors, hierarchical or iterative
-    radiosity, Float32 storage for more than 10⁴ elements, and GPU kernels.
+14. **Scale.** Hierarchical or iterative radiosity, Float32 storage for more than 10⁴
+    elements, and GPU kernels.
 15. **Polar direct drive mode**, benchmarked against published GA optimizers.

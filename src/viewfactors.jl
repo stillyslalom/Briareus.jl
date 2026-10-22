@@ -1,7 +1,8 @@
 # Element-to-element view factors with occlusion.
 
 """
-    view_factors(target; near = 3.0, level = 1) -> Matrix{Float64}
+    view_factors(target; near = 3.0, level = 1, visibility = :centroid, visibility_grid = 4)
+        -> Matrix{Float64}
 
 Dense view-factor matrix `F[i, j]`: the fraction of diffuse radiation leaving element
 `i` that arrives at element `j`. Reciprocity `Aᵢ Fᵢⱼ = Aⱼ Fⱼᵢ` holds exactly by
@@ -43,8 +44,25 @@ since the true surface cannot. On curved elements the centroid facing test is re
 by the spread of the true normals across the flat facet, so pairs the curved patches
 exchange across are kept (a general triangle on a cylinder has its plane tilted axially
 by about its size over 2R), and the point kernels apply the exact facing per point.
+
+A pair that sees each other only partly, past the rim of an entrance-hole bore or a gap
+or around the capsule, is all or nothing by its centroid ray. `visibility = :sampled`
+estimates the visible fraction instead: up to four probe rays per element (from points
+near its extremes to the other's centroid) test whether the pair straddles an occluder;
+if they all agree with the centroid ray, the factor is the `:centroid` one bit for bit,
+and otherwise rays between the `visibility_grid²` sample points of each element (its
+area lumped into a g × g grid of its tangent plane) give the kernel-weighted visible
+fraction, which scales the unobstructed factor (reciprocity is kept). On a hohlraum with
+0.1 mm LEH bores and a 20 µm waist gap at 0.5 mm, it brings the largest row-sum error
+before balancing from 1.0% to 0.19% on the walls and from 5.9% to 0.7% on the LEH
+apertures, for 2–4× the time; features narrower than a sample cell (the gap's slot) are
+not resolved (research notes, "Partial visibility").
 """
-function view_factors(t::Target; near = 3.0, mid = 12.0, level::Integer = 1, exact_far::Bool = true)
+function view_factors(t::Target; near = 3.0, mid = 12.0, level::Integer = 1, exact_far::Bool = true,
+                      visibility::Symbol = :centroid, visibility_grid::Integer = 4)
+    visibility in (:centroid, :sampled) ||
+        throw(ArgumentError("visibility must be :centroid or :sampled, got :$visibility"))
+    visibility_grid >= 1 || throw(ArgumentError("visibility_grid must be at least 1"))
     N = nelements(t)
     F = zeros(N, N)
     C, Nrm, A = t.elem_centroid, t.elem_normal, t.elem_area
@@ -103,8 +121,10 @@ function view_factors(t::Target; near = 3.0, mid = 12.0, level::Integer = 1, exa
     for e in 1:N, (k, s) in enumerate(surfs)
         inside[k, e] = _inside(s, C[e])
     end
+    # partial visibility (`visibility = :sampled`): each element's ray samples and probes
+    vis = visibility === :sampled ? [_visibility_samples(t, e, visibility_grid) for e in 1:N] : nothing
     ctx = (; t, bvh = t.bvh, C, Nrm, A, planar, concave, recv, cells, qnear, qmid, qfar, qself,
-           size, slack, ε, tri_surf, inside, near2 = near^2, mid2 = mid^2, level, exact_far)
+           size, slack, ε, tri_surf, inside, near2 = near^2, mid2 = mid^2, level, exact_far, vis)
     # rows have i:N pairs, so they are handed out one at a time, longest first, rather
     # than in equal contiguous chunks (the first chunk would carry most of the work)
     next = Threads.Atomic{Int}(1)
@@ -120,7 +140,7 @@ end
 # threaded loop is specialized on the concrete types in `ctx`.
 function _vf_row!(F, ctx, i)
     (; t, bvh, C, Nrm, A, planar, concave, recv, cells, qnear, qmid, qfar, qself, size, slack, ε,
-       tri_surf, inside, near2, mid2, level, exact_far) = ctx
+       tri_surf, inside, near2, mid2, level, exact_far, vis) = ctx
     near_kernel(e, rc) = cells[e] === nothing ? _adaptive_kernel(t, e, rc; mindepth = level + 1) :
                          _cell_kernel(cells[e], rc)
     N = length(A)
@@ -137,8 +157,15 @@ function _vf_row!(F, ctx, i)
         ci > -slack[i] && cj > -slack[j] || continue
         oi = C[i] + (ε + size[i] * max(0.0, -ci)) * Nrm[i]
         oj = C[j] + (ε + size[j] * max(0.0, -cj)) * Nrm[j]
-        any_hit(bvh, oi, oj - oi, 1 - 1e-9,
-                k -> (s = tri_surf[k]; s != 0 && inside[s, i] && inside[s, j])) && continue
+        skip = k -> (s = tri_surf[k]; s != 0 && inside[s, i] && inside[s, j])
+        blocked = any_hit(bvh, oi, oj - oi, 1 - 1e-9, skip)
+        frac = 1.0
+        if vis === nothing
+            blocked && continue
+        else
+            frac = _visible_fraction(bvh, vis[i], vis[j], oi, oj, oi - C[i], oj - C[j], Nrm[i], Nrm[j], blocked, skip)
+            frac == 0 && continue
+        end
         s2 = max(size[i], size[j])^2
         tier = r2 < near2 * s2 ? :near : r2 < mid2 * s2 ? :mid : :far
         # G = Aᵢ Fᵢⱼ = Aⱼ Fⱼᵢ
@@ -156,10 +183,82 @@ function _vf_row!(F, ctx, i)
                 tier === :near ? (planar[j] ? near_kernel(i, recv[j]) : near_kernel(j, recv[i])) :
                 planar[j] ? _pair_kernel(q[i], recv[j]) : _pair_kernel(q[j], recv[i])
         end
+        frac == 1 || (G *= frac)
         F[i, j] = G / A[i]
         F[j, i] = G / A[j]
     end
     return nothing
+end
+
+# ------------------------------------------------------------ partial visibility
+#
+# `visibility = :sampled`. The centroid ray decides a pair that is wholly visible or
+# wholly hidden, but a pair that sees past a rim (an LEH bore's, a gap's) is partly
+# both. Each element carries ray samples, its facets lumped into a g × g grid of its
+# tangent plane (area-weighted mean point and area per cell), and up to four probes, the
+# samples farthest along ±e₁ and ±e₂. Probe rays go from each probe of one element to
+# the other's centroid. A pair whose probes all agree with its centroid ray keeps the
+# centroid's verdict, so the factor is the `:centroid` one bit for bit; otherwise rays
+# between every pair of samples give the visible fraction, weighted by the point kernel
+# cosθᵢ cosθⱼ / r² (by area / r² if no sample pair faces), and the factor of the
+# unobstructed pair is scaled by it. The fraction is computed once per unordered pair
+# from segments that do not depend on the direction, so reciprocity holds exactly.
+
+struct _VisSamples
+    points::Vector{Vec3}
+    weights::Vector{Float64}
+    probes::Vector{Int}               # indices into `points`
+end
+
+function _visibility_samples(t::Target, e, g)
+    C, n = t.elem_centroid[e], t.elem_normal[e]
+    e1 = normalize(cross(n, abs(n[1]) < 0.9 ? Vec3(1, 0, 0) : Vec3(0, 1, 0)))
+    e2 = cross(n, e1)
+    pts, ws = Vec3[], Float64[]
+    # sub-triangles of under about half a grid cell
+    L = ceil(Int, log2(g)) + 1
+    for k in t.elem_tris[e]
+        _subtri!(pts, ws, t.tri_v0[k], t.tri_v0[k] + t.tri_e1[k], t.tri_v0[k] + t.tri_e2[k], L)
+    end
+    u = [dot(p - C, e1) for p in pts]
+    v = [dot(p - C, e2) for p in pts]
+    u0, v0 = minimum(u), minimum(v)
+    du, dv = max(maximum(u) - u0, eps()) / g, max(maximum(v) - v0, eps()) / g
+    W = zeros(g, g)
+    P = fill(zero(Vec3), g, g)
+    for (k, p) in enumerate(pts)
+        a = clamp(floor(Int, (u[k] - u0) / du) + 1, 1, g)
+        b = clamp(floor(Int, (v[k] - v0) / dv) + 1, 1, g)
+        W[a, b] += ws[k]
+        P[a, b] += ws[k] * p
+    end
+    keep = findall(>(0), vec(W))
+    points = [vec(P)[c] / vec(W)[c] for c in keep]
+    weights = vec(W)[keep]
+    probes = unique!([argmax(p -> dot(points[p] - C, d), eachindex(points)) for d in (e1, -e1, e2, -e2)])
+    return _VisSamples(points, weights, probes)
+end
+
+# Visible fraction of a pair whose centroid ray (from `oi` to `oj`) is `blocked` or not;
+# `li`, `lj` lift the samples off their facets as the centroid ray's ends are lifted.
+function _visible_fraction(bvh, si::_VisSamples, sj::_VisSamples, oi, oj, li, lj, ni, nj, blocked, skip)
+    seen(p, q) = !any_hit(bvh, p, q - p, 1 - 1e-9, skip)
+    agree = all(k -> seen(si.points[k] + li, oj) != blocked, si.probes) &&
+            all(k -> seen(oi, sj.points[k] + lj) != blocked, sj.probes)
+    agree && return blocked ? 0.0 : 1.0
+    vis, tot, visa, tota = 0.0, 0.0, 0.0, 0.0
+    for a in eachindex(si.points), b in eachindex(sj.points)
+        p, q = si.points[a] + li, sj.points[b] + lj
+        d = q - p
+        r2 = dot(d, d)
+        r2 > 0 || continue
+        wa = si.weights[a] * sj.weights[b] / r2
+        w = wa * max(dot(ni, d), 0.0) * max(-dot(nj, d), 0.0) / r2
+        s = seen(p, q)
+        tot += w; tota += wa
+        s && (vis += w; visa += wa)
+    end
+    return tot > 0 ? vis / tot : tota > 0 ? visa / tota : 0.0
 end
 
 # Whether `p` lies inside the (convex) curved surface, to round-off.

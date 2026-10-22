@@ -1728,3 +1728,56 @@ Findings:
   whose centroids sample P4 poorly; at 0.09 mm the "standard" lat-long capsule is still
   0.08 pp off in P4, the compact one 0.005.
 - Build time is set by the wall at these sizes (~9 s up to ~3k capsule elements).
+
+## Partial visibility (2026-10-22) *derived*
+
+`view_factors(...; visibility = :sampled, visibility_grid = g)` (also through
+`RadiationModel(t; visibility = :sampled)` and a `Scenario`'s `viewfactor_kw`). Each
+element's area is lumped into a g × g grid of its tangent plane (area-weighted points);
+up to four of those points (the extremes along ±e₁, ±e₂) are probes. Per facing pair,
+after the centroid ray: probe rays from each element's probes to the other's (lifted)
+centroid. All agreeing with the centroid ray → the `:centroid` factor, bit for bit;
+otherwise the g² × g² sample rays give a visible fraction weighted by
+cosθᵢ cosθⱼ / r² that scales the unobstructed factor (computed even when the centroid
+ray is blocked). One fraction per unordered pair: reciprocity exact. Rays use the facets
+and the curved-surface skip rule of the centroid ray. Default `:centroid` checked equal
+(`==`) to main's `viewfactors.jl` on `hohlraum(h = 1, capsule_h = 0.4)` and the bored
+cavity at 1 mm.
+
+Geometry: the primitive bored cavity of the CAD tutorial (R 2.875, L 9.4, 0.1 mm LEH
+bores of radius 1.55 with `nphi ÷ 2` facets, 20 µm waist gap, capsule 0.9, apertures on
+the LEHs and the gap exit), `closed = false`, 8 threads. Largest |row sum − 1| (rms):
+
+| component | 0.5 mm, centroid | 0.5 mm, g = 4 | 0.25 mm, centroid | 0.25 mm, g = 4 | 0.25 mm, g = 6 |
+|---|---|---|---|---|---|
+| walls | 9.7e-3 (4.1e-3) | 1.9e-3 (5.0e-4) | 9.1e-3 (3.3e-3) | 1.4e-3 (6.9e-4) | 1.2e-3 (6.0e-4) |
+| caps | 1.7e-3 (1.2e-3) | 1.4e-3 (7.8e-4) | 2.2e-3 (1.2e-3) | 1.2e-3 (5.4e-4) | 9.7e-4 (4.5e-4) |
+| bores | 5.7e-3 | 2.6e-3 | 5.2e-3 | 2.1e-3 | 6.3e-4 |
+| capsule | 1.6e-3 (9.2e-4) | 5.0e-4 (2.4e-4) | 2.0e-3 (1.1e-3) | 2.0e-3 (6.6e-4) | 2.0e-3 (6.6e-4) |
+| LEH apertures | 5.9e-2 (3.2e-2) | 6.7e-3 (2.8e-3) | 6.1e-2 (3.5e-2) | 2.0e-2 (9.3e-3) | 1.5e-2 (7.4e-3) |
+| gap faces | 5.0e-2 | 5.5e-2 | 5.2e-2 | 5.5e-2 | 3.3e-2 |
+| gap exit | 2.3e-2 | 2.9e-2 | 3.9e-3 | 6.5e-3 | 6.1e-3 |
+| time | 1.9 s | 4.0 s (g = 2: 2.5 s) | 4.5 s | 18.5 s (g = 3: 13.4 s) | 50 s |
+
+(2,244 and 6,304 elements.) The 50 µm gap faces behind a 20 µm slot are not helped:
+the slot is narrower than a wall sample cell. `hohlraum()` (3,264 elements, flush LEHs):
+1.3 s → 4.6 s; at h = 0.5 its walls' 0.30% goes to 0.28% (most changed pairs there are
+capsule shadows).
+At 1 mm with 12-facet bores the option makes LEH rows worse (3.9% → 7.7%): the faceted
+bore (sagitta 0.05 mm on a 0.1 mm bore) over-shadows rays from the LEH rim, which the
+fractions then reproduce faithfully. With 64-facet bores at 0.5 mm the residual on the
+walls (4.5e-3, near the waist) is the 0.3 mm capsule's faceting.
+
+Reference: visible fractions of 56 changed pairs at 0.5 mm (the 30 of largest exchange
+change and 26 at random), against kernel-weighted visibility over 256 × 256 points per
+facet pair (same rays, no grid): centroid error mean 0.42, max 0.49; sampled (g = 4)
+mean 0.017, max 0.08. At 1 mm, one LEH element against every wall element: 0.020 / 0.16.
+Half-shadowed pair (unit squares 2 apart, one turned 45°, a plate over half the
+mid-plane; exactly ½ by point symmetry): 0.493 at g = 4, 0.500 at g = 8 (g = 3: 0.430,
+its center samples tie on the edge).
+
+Effect after Sinkhorn balancing (the tutorial's two-ring wall source): capsule flux
++0.05%, a₂/a₀ −0.175 pp (0.5 mm) and −0.155 pp (0.25 mm), a₄/a₀ +0.11 pp at both, LEH
+loss −0.4%. The shift barely shrinks with the mesh, so balancing does not absorb the
+centroid rule's visibility error; which limit is right needs a finer mesh or a
+ray-traced radiosity reference (not done). **M**
