@@ -51,6 +51,11 @@ environment has no ForwardDiff/Optim, and `Vec3` clashes with Makie there.
   Visibility ignores facets of a cylinder/sphere/cone when both ray ends are inside it
   (faceting artifacts), and the centroid facing test is relaxed by each curved
   element's normal spread (a general triangle on a cylinder is tilted ~h/2R).
+- `hohlraum(; corner_radius)` rounds the wall–cap corners: each quarter-circle fillet is
+  `nr_corner` frustum bands (`:corner_top_1…` from wall to cap), each carrying its exact
+  `ConeSurface`, so the fillet is the arc's chord polygon and bands meet wall and caps
+  vertex for vertex. NIF cones cannot reach a ~1 mm fillet through the LEH (the cap
+  shadows it); the corners change the radiation, not direct deposition.
 - Patches must be planar: on a cylinder, mesh anything but chord rectangles as
   triangles (a folded patch's centroid sits behind its facets and sees nothing).
   Circular `WallWindow`s use equal-area edge polygons for exact areas. The exception is

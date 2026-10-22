@@ -59,7 +59,7 @@ using Briareus, LinearAlgebra, Test
     # in a hohlraum: a uniform wall source drives the capsule as on the lat-long mesh
     kw = (; h = 0.6, capsule_h = 0.15, wall = Material(:Au; albedo = 0.85, conversion = 1.0))
     th = hohlraum(; kw..., capsule_mesh = :compact)
-    tl = hohlraum(; kw...)
+    tl = hohlraum(; kw..., capsule_mesh = :latlong)
     nc = icosphere_frequency(0.9, 0.15)
     @test length(elements(th, :capsule)) == 20nc^2
     @test th.components[component_index(th, :capsule)].surface isa SphereSurface

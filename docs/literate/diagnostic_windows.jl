@@ -359,7 +359,7 @@ fig
 # ``m = 2`` amplitude reaches 0.7–1.3%, and the capsule's radiation temperature is
 # down by 2.5–4.7 eV, from 3.6 µm to 1.7 µm. An open 50 µm gap leaks from the start.
 # Before burnthrough the gaps alone give about 0.5% of ``P_2``, 0.4% of ``m = 2`` and
-# 1.3 eV; at the peak they add 0.55% and 1.7–1.8 eV to the windows' cost.
+# 1.3 eV; at the peak they add 0.58% and 1.7–1.8 eV to the windows' cost.
 #
 # A capsule's shape integrates the drive asymmetry over the pulse. The table therefore
 # gives the change in ``P_2``, ``P_4`` and ``m = 2`` weighted by the capsule flux from
@@ -402,7 +402,7 @@ end
 # A thinner foil burns through earlier and transmits more, so the thin foils cost the
 # most. The flux-weighted ``\Delta P_2`` rises from 0.7%
 # for 3.6 µm to 1.7% for 1.7 µm (1.2–2.3% with the gaps), and the capsule loses
-# 2.4–5.5% of its energy (4.4–7.4% with the gaps).
+# 2.3–5.4% of its energy (4.4–7.4% with the gaps).
 #
 # The open hole bounds these losses from above. At the peak every window has burned
 # through, so the albedos no longer depend on when each element did: a solve at each
@@ -440,8 +440,8 @@ for g in (0.0, 0.05)
 end
 
 # At the peak the open hole costs three to six times as much as the transmitting
-# foils: 13.6 eV of radiation temperature and 5.3% of ``P_2`` without gaps. The gaps
-# add about the same in either model, 0.55–0.6% of ``P_2`` and 1.6–1.8 eV.
+# foils: 13.6 eV of radiation temperature and 5.4% of ``P_2`` without gaps. The gaps
+# add about the same in either model, 0.58–0.62% of ``P_2`` and 1.6–1.8 eV.
 #
 # The pair of windows adds no odd-``m`` harmonics, because it shares the ports' 180°
 # symmetry:
@@ -561,7 +561,7 @@ end
 # These windows burn through while the wall is at 150–285 eV, and even at the peak it
 # stays near 310 eV, below the 325 eV the constant transmission is pinned at. The
 # transmission that follows the drive therefore loses about a tenth less: the 1.7 µm
-# pair's flux-weighted ``\Delta P_2`` drops from 1.69% to 1.48% and its capsule-energy
+# pair's flux-weighted ``\Delta P_2`` drops from 1.71% to 1.49% and its capsule-energy
 # cost from 5.4% to 4.8%, and the 3.6 µm pair's from 0.68% to 0.62% and 2.3% to 2.1%.
 # The burnthrough times do not change: the transmission starts only once the front is
 # through.
@@ -591,8 +591,8 @@ end
 
 # A gap that closes at 3 ns costs nothing measurable beyond the windows: it leaks only
 # during the picket and the foot. Closing at 7 ns, after the windows have burned
-# through but before the peak, it adds 0.4% of capsule energy and 0.09% of ``P_2``, a
-# fifth of what a gap open throughout adds (2.0% and 0.55%). How long a gap stays
+# through but before the peak, it adds 0.4% of capsule energy and 0.10% of ``P_2``, a
+# fifth of what a gap open throughout adds (2.0% and 0.57%). How long a gap stays
 # open thus matters more than its width, and the open-gap rows of the first table
 # are the bound.
 
@@ -661,7 +661,7 @@ end
 
 # The trim moves power to the inner cones, as the cold waist needs (the 30° cone by
 # 17%), and spreads the quads within each cone over the whole ±20%. It brings the
-# ``l = 2`` departure from 1.09% to 0.07% and keeps ``l = 1`` and ``l = 3`` below
+# ``l = 2`` departure from 1.10% to 0.07% and keeps ``l = 1`` and ``l = 3`` below
 # 0.02%, but not ``l = 4``, which stays near 0.15–0.19%: these windows' ``l = 4``
 # pattern is out of reach of quad powers within the limits. Pointing can do the same:
 # below, the quads are re-pointed at fixed power, up to 0.3 mm in ``z`` and along the
@@ -685,8 +685,8 @@ ev = evaluate(S_pairs, repoint.x)
 @printf("  re-pointed    departure from the reference shape, l = 1–4: %s %%; mean flux %+.1f%%\n",
         join((@sprintf("%.3f", d) for d in departure(ev)), ", "), 100 * (flux_ylm(ev)[1] / ref[1] - 1))
 
-# Moves of 0.09–0.14 mm rms (two to three times NIF's 50 µm rms pointing
-# specification, some at the 0.3 mm limit) restore ``l = 1``–``3`` to 0.02%, better
+# Moves of 0.11–0.15 mm rms (two to three times NIF's 50 µm rms pointing
+# specification, the largest 0.29 mm) restore ``l = 1``–``3`` to 0.02%, better
 # than the powers, and leave the same ``l = 4``; pointing alone cannot give back the
 # 3.4% of drive the windows take.
 #
@@ -741,10 +741,10 @@ end
 
 # ("Before" is from 5 ns to the burnthrough.) The settings that act throughout
 # overshoot before burnthrough: the trimmed powers and the re-pointed quads drive the
-# waist the windows will cool while they are still intact, so ``P_2`` falls by 1.3–1.4%
-# and an ``m = 2`` of 1.1% in the opposite phase appears until the windows open, which
-# the flux-weighted averages largely hide. Switched on with the burnthrough, the
-# trimmed powers keep ``P_2`` and ``m = 2`` at the no-window values before it (−0.01%
+# waist the windows will cool while they are still intact, so ``P_2`` falls by 1.3–1.5%
+# and an ``m = 2`` of 1.1–1.2% in the opposite phase appears until the windows open,
+# which the flux-weighted averages largely hide. Switched on with the burnthrough, the
+# trimmed powers keep ``P_2`` and ``m = 2`` at the no-window values before it (−0.02%
 # and 0.04%) and hold ``m = 2`` at 0.03% after it; the 0.13% of ``P_2`` left at the
 # peak is what the ±20% limits leave (the ``l = 2`` departure above). The trims cost
 # 3.3–3.9% more laser energy, the drive the windows take. The switch time comes from

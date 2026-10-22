@@ -242,7 +242,7 @@ nothing #hide
 
 # ## The nominal hohlraum
 #
-# At the N210808 hole size, with a wall mesh of 0.4 mm (3,900 elements), 10⁷ photon
+# At the N210808 hole size, with a wall mesh of 0.4 mm (4,400 elements), 10⁷ photon
 # histories, and the closed form:
 
 nominal = briareus_fractions(N210808.leh_diameter)
@@ -264,10 +264,11 @@ pb_nominal = power_balance(N210808.leh_diameter)
 #
 # ## Mesh convergence
 #
-# The view-factor loss is a discretization error. Refining the wall mesh, or
-# rescaling the view factors so every row sums to one (`closed = true`, valid here
-# because the holes close the enclosure), brings Briareus to the photon walk. Each
-# mesh has its own piecewise-constant source, so each gets its own Monte Carlo run:
+# The view-factor loss is a discretization error. Refining the wall mesh brings
+# Briareus to within a few 10⁻⁴ of the photon walk; rescaling the view factors so
+# every row sums to one (`closed = true`, valid here because the holes close the
+# enclosure) brings it within the sampling error. Each mesh has its own
+# piecewise-constant source, so each gets its own Monte Carlo run:
 
 convergence = map([(0.6, false), (0.4, false), (0.25, false), (0.4, true)]) do (h, closed)
     b = briareus_fractions(N210808.leh_diameter; h, closed)
@@ -280,9 +281,10 @@ end
 nothing #hide
 
 # On the coarsest mesh the rows sum to more than one (a negative loss) and both
-# fractions read 3–4×10⁻³ high; the error falls to a few 10⁻⁴ at 0.4 mm and, for the
-# LEH, to the sampling error at 0.25 mm (the capsule's 2.6×10⁻⁴ is 3σ). Balancing the
-# rows at 0.4 mm brings both within the sampling error.
+# fractions read 3–4×10⁻³ high; the error falls to a few 10⁻⁴ at 0.4 mm and stays
+# there at 0.25 mm (3×10⁻⁴ for the LEH, 5×10⁻⁴ for the capsule), within the
+# 1.4×10⁻³ the view factors lose. Balancing the rows at 0.4 mm brings both within the
+# sampling error.
 #
 # ## The sweep
 #
@@ -377,7 +379,7 @@ for (a, r, rc) in ratios
     @printf("wall albedo %.3f: Briareus %.3f, closed form %.3f\n", a, r, rc)
 end
 
-# At the estimated wall albedo the prediction is an 11% saving (ratio 0.890), and 9.5%
+# At the estimated wall albedo the prediction is an 11% saving (ratio 0.891), and 9.5%
 # at an albedo of 0.9, against the 9.4% the two shots' peak powers show. The closed
 # form, whose error largely cancels in the ratio, gives nearly the same. The
 # comparison is approximate. The shots also changed the wavelength separation (1.55 to
@@ -395,8 +397,9 @@ end
 #   3×10⁻⁴ of the source at a 0.4 mm wall mesh, within the view factors' lost
 #   fraction (10⁻³). With the rows balanced (`closed = true`) it is within the
 #   sampling error (10⁻⁴; 2σ band) at every LEH diameter from 3.0 to 3.64 mm.
-# - **Solution verification.** The difference from the reference falls from 4×10⁻³ to
-#   the sampling error as the wall mesh is refined from 0.6 to 0.25 mm.
+# - **Solution verification.** The difference from the reference falls from 4×10⁻³ at
+#   a 0.6 mm wall mesh to a few 10⁻⁴ at 0.4 and 0.25 mm, within the view factors'
+#   lost fraction.
 # - **The closed-form power balance** with a uniform flux is not a reference for the
 #   LEH loss in a hohlraum: it reads it 6.5–7% low over 3.0–3.64 mm. It gets the
 #   capsule's share within 2%.

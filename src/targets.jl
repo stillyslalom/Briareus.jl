@@ -105,6 +105,32 @@ function _check_windows(windows, R, h, hcell)
     return exts
 end
 
+# Band `i` of `k` of the fillet of radius `rc` joining the wall (radius R, ends ±hw) to the
+# cap at z = sgn (hw + rc): the frustum between the arc points at θ = (i-1)π/2k and iπ/2k
+# from the wall, on the wall's azimuthal grid, facing the cavity, with its exact cone.
+function _corner_band(name, R, hw, rc, sgn, i, k, nphi, phibreaks, material)
+    θa, θb = (i - 1) * π / 2k, i * π / 2k
+    ρa, za = R - rc + rc * cos(θa), sgn * (hw + rc * sin(θa))
+    ρb, zb = R - rc + rc * cos(θb), sgn * (hw + rc * sin(θb))
+    φs = isempty(phibreaks) ? range(0.0, 2π; length = nphi + 1) :
+         conforming_grid(0.0, 2π, nphi, phibreaks; periodic = true)
+    m = Mesh()
+    θc = (θa + θb) / 2
+    for j in 1:length(φs)-1
+        a, b = φs[j], φs[j+1]
+        p = [Vec3(ρa * cos(a), ρa * sin(a), za), Vec3(ρa * cos(b), ρa * sin(b), za),
+             Vec3(ρb * cos(b), ρb * sin(b), zb), Vec3(ρb * cos(a), ρb * sin(a), zb)]
+        φc = (a + b) / 2
+        # toward the fillet's center of curvature: into the cavity
+        add_polygon!(m, p; facing = -Vec3(cos(θc) * cos(φc), cos(θc) * sin(φc), sgn * sin(θc)))
+    end
+    # the cone through both rim circles: apex on the axis beyond the cap, opening toward
+    # the waist
+    zapex = za + (zb - za) * ρa / (ρa - ρb)
+    half = atand((ρa - ρb) / abs(zb - za))
+    return Component(name, m, material; surface = ConeSurface(half; apex = (0.0, 0.0, zapex), axis = (0.0, 0.0, -sgn)))
+end
+
 """
     equal_area_radius(r, n)
 
@@ -239,7 +265,8 @@ end
     hohlraum(; length = 9.4, radius = 2.875, leh_radius = 1.55, capsule_radius = 0.9,
              nz = 36, nphi = 48, nr_cap = 6, nr_leh = 4, capsule_ntheta = 24, capsule_nphi = 32,
              h = nothing, capsule_h = nothing, capsule_mesh = :compact, wall = gold(),
-             capsule = ablator(), capsule_center = (0,0,0), windows = ())
+             capsule = ablator(), capsule_center = (0,0,0), windows = (), corner_radius = 0,
+             nr_corner = nothing)
 
 Cylindrical hohlraum along `z`, centered on TCC (dimensions in mm), with components
 
@@ -274,6 +301,15 @@ Mesh size: give `h` (mm) to set the wall, cap and LEH counts from an element siz
 instead (`hohlraum_counts`), and `capsule_h` for the capsule (`capsule_counts`); they
 replace the corresponding counts.
 
+`corner_radius` (mm) rounds the wall–cap corners into quarter-circle fillets of that
+radius (a hohlraum machined with curved corners): the wall stops `corner_radius` short
+of each end and the caps `corner_radius` short of the wall radius. Each fillet is
+`nr_corner` bands (default: about one wall cell of arc each, at least 2), components
+`:corner_top_1`, … (from the wall to the cap) and `:corner_bottom_1`, …, of the wall
+material. Each band is the exact frustum through its two rim circles (`ConeSurface`),
+so the fillet is the chord polygon of the arc (sagitta `corner_radius (1 − cos(π/4k))`,
+20 µm for 1 mm in 4 bands) and the bands, wall and caps meet vertex for vertex.
+
 `capsule_mesh` picks the capsule mesh: `:compact` (the default), a geodesic
 `icosphere_mesh` of nearly equilateral triangles with sides of about `capsule_h`
 (`icosphere_frequency`; without `capsule_h`, the lat-long meridional size
@@ -288,13 +324,20 @@ function hohlraum(; length = 9.4, radius = 2.875, leh_radius = 1.55, capsule_rad
                   capsule_ntheta::Integer = 24, capsule_nphi::Integer = 32,
                   h = nothing, capsule_h = nothing, capsule_mesh::Symbol = :compact,
                   wall::Material = gold(), capsule::Material = ablator(),
-                  capsule_center = (0.0, 0.0, 0.0), windows = ())
+                  capsule_center = (0.0, 0.0, 0.0), windows = (), corner_radius::Real = 0.0,
+                  nr_corner::Union{Nothing,Integer} = nothing)
     0 < leh_radius < radius || throw(ArgumentError("need 0 < leh_radius < radius"))
+    rc = Float64(corner_radius)
+    0 <= rc < min(radius - leh_radius, length / 2) ||
+        throw(ArgumentError("need 0 ≤ corner_radius < min(radius - leh_radius, length / 2)"))
     capsule_radius < min(radius, length / 2) || throw(ArgumentError("capsule does not fit"))
     capsule_mesh in (:latlong, :compact) ||
         throw(ArgumentError("capsule_mesh must be :latlong or :compact, got :$capsule_mesh"))
     if h !== nothing
         (; nz, nphi, nr_cap, nr_leh) = hohlraum_counts(; length, radius, leh_radius, h)
+        # the straight wall and the flat caps are shorter by the fillets
+        nz = max(2, ceil(Int, (length - 2rc) / h))
+        nr_cap = max(1, ceil(Int, (radius - rc - leh_radius) / h))
     end
     if capsule_mesh === :compact && capsule_radius > 0
         capsule_n = icosphere_frequency(capsule_radius, something(capsule_h, π * capsule_radius / capsule_ntheta))
@@ -302,12 +345,13 @@ function hohlraum(; length = 9.4, radius = 2.875, leh_radius = 1.55, capsule_rad
         (; capsule_ntheta, capsule_nphi) = capsule_counts(capsule_radius, capsule_h)
     end
     h = length / 2
+    hw = h - rc                                     # half-length of the straight wall
     windows = windows isa WallWindow ? [windows] : collect(WallWindow, windows)
-    hcell = min(2π * radius / nphi, length / nz)
-    exts = _check_windows(windows, radius, h, hcell)
+    hcell = min(2π * radius / nphi, 2hw / nz)
+    exts = _check_windows(windows, radius, hw, hcell)
     zbreaks = [z for e in exts for (_, _, za, zb) in e for z in (za, zb)]
     phibreaks = [φ for e in exts for (φa, Δφ, _, _) in e for φ in (φa, φa + Δφ)]
-    wall_mesh = cylinder_mesh(radius, -h, h; nz, nphi, inward = true, zbreaks, phibreaks)
+    wall_mesh = cylinder_mesh(radius, -hw, hw; nz, nphi, inward = true, zbreaks, phibreaks)
     cyl = CylinderSurface(radius)
     part(name, mesh, open, mat) = open ? aperture(name, mesh; surface = cyl) :
                                   Component(name, mesh, mat === nothing ? wall : mat; surface = cyl)
@@ -334,10 +378,10 @@ function hohlraum(; length = 9.4, radius = 2.875, leh_radius = 1.55, capsule_rad
     end
     comps = Component[
         Component(:wall, wall_mesh, wall; surface = cyl),
-        Component(:cap_top, annulus_mesh(leh_radius, radius, h; nr = nr_cap, nphi, up = false,
+        Component(:cap_top, annulus_mesh(leh_radius, radius - rc, h; nr = nr_cap, nphi, up = false,
                                          phibreaks), wall;
                   surface = DiskSurface(center = (0, 0, h))),
-        Component(:cap_bottom, annulus_mesh(leh_radius, radius, -h; nr = nr_cap, nphi, up = true,
+        Component(:cap_bottom, annulus_mesh(leh_radius, radius - rc, -h; nr = nr_cap, nphi, up = true,
                                             phibreaks), wall;
                   surface = DiskSurface(center = (0, 0, -h))),
         aperture(:leh_top, disk_mesh(leh_radius, h; nr = nr_leh, nphi = nphi ÷ 2, up = false);
@@ -345,6 +389,13 @@ function hohlraum(; length = 9.4, radius = 2.875, leh_radius = 1.55, capsule_rad
         aperture(:leh_bottom, disk_mesh(leh_radius, -h; nr = nr_leh, nphi = nphi ÷ 2, up = true);
                  surface = DiskSurface(center = (0, 0, -h))),
     ]
+    if rc > 0
+        k = something(nr_corner, max(2, ceil(Int, (π / 2) * rc / hcell)))
+        k >= 1 || throw(ArgumentError("nr_corner must be at least 1"))
+        for (sgn, name) in ((1, :corner_top), (-1, :corner_bottom)), i in 1:k
+            push!(comps, _corner_band(Symbol(name, :_, i), radius, hw, rc, sgn, i, k, nphi, phibreaks, wall))
+        end
+    end
     if capsule_radius > 0
         cm = capsule_mesh === :compact ? icosphere_mesh(capsule_radius; n = capsule_n) :
              sphere_mesh(capsule_radius; ntheta = capsule_ntheta, nphi = capsule_nphi)

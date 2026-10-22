@@ -503,12 +503,12 @@ end
 #   into the gap, where a single line of sight decides visibility; balancing restores
 #   the rows.
 # - At the same element size, the CAD models and the primitives agree on the capsule
-#   flux within 0.06%, on ``a_2/a_0`` within 0.12 percentage points, and on the LEH
-#   loss within 0.15%; at 0.25 mm within 0.02%, 0.07 points and 0.04%. Both move by
+#   flux within 0.06%, on ``a_2/a_0`` within 0.1 percentage points, and on the LEH
+#   loss within 0.11%; at 0.25 mm within 0.03%, 0.05 points and 0.02%. Both move by
 #   more than that between 0.5 and 0.25 mm: ``a_2/a_0`` rises by 0.35 points (the
 #   primitives at 0.2 mm give 10.92%, so 0.25 mm is not yet converged in it).
 # - ``a_4/a_0`` is set by the capsule mesh. The remeshed CAD capsule, with compact
-#   elements, gives −0.77% to −0.80% at every size tried (0.15 and 0.1 mm); the
+#   elements, gives −0.78% to −0.81% at every size tried (0.15 and 0.1 mm); the
 #   latitude-longitude capsule of the primitives gives −1.01% at 0.15 mm and −0.82% at
 #   0.05 mm.
 # - Flat and fitted CAD agree on these integrated quantities within the same margins

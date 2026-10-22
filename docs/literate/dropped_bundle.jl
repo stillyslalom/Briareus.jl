@@ -269,9 +269,9 @@ end
 # The maps below show the flux on the capsule as seen from outside, in an equal-area
 # (Hammer) projection, so that equal areas of the map are equal solid angles of the
 # capsule. Polar angle θ is marked at the left edge and azimuth φ along the equator,
-# which runs across the middle. The flux is computed per element, on 24 × 32 patches
-# in θ and φ; the maps interpolate it linearly from the patch values averaged onto
-# their corners. The left map shows the flux relative to its own mean,
+# which runs across the middle. The flux is computed per element, on the 1,620
+# triangles of the capsule's geodesic mesh; the maps interpolate it linearly from the
+# element values averaged onto their corners. The left map shows the flux relative to its own mean,
 # ``H/\langle H\rangle - 1``, where ``\langle H\rangle = c_{00}/\sqrt{4\pi}``.
 # The right map subtracts the same quantity for all 48 quads, which isolates what
 # freeing the bundle changed. The figure helpers `sphere_axis`, `sphere_map` and

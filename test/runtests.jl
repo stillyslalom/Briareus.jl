@@ -1078,4 +1078,5 @@ include("leh_power_balance.jl")
 include("capsule_mesh.jl")
 include("partial_visibility.jl")
 include("montecarlo.jl")
+include("corners.jl")
 end

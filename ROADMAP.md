@@ -438,6 +438,14 @@ Measured on the NIF hohlraum at the GUI's standard mesh (5,864 elements, 48 quad
   elements. Tests: closed cube S/(1 − α), open cube against closed-form factors,
   continuum limit of an 8 × 8 cube.
 
+## Done (2026-10-22, rounded hohlraum corners)
+- **`hohlraum(; corner_radius, nr_corner)`**: quarter-circle wall–cap fillets as frustum
+  bands with exact `ConeSurface`s (the arc's chord polygon; about one wall cell of arc
+  per band), wall and caps shortened to meet them vertex for vertex; `corner_radius = 0`
+  is the square hohlraum element for element. Tests: areas (wall and caps exact, the
+  fillet just under the quarter torus), facing, raw row sums, D2 selection rules, and a
+  steep beam on the fillet (operator vs ray trace). For N210808 (user: 1.053 mm).
+
 ## Open questions (from the 2026-10-18 CAD work)
 Choices made provisionally overnight or left open; the lean is in brackets.
 1. `fit = true` by default when `remesh` is given (cad_target, visrad_target, GUI)?
@@ -499,6 +507,11 @@ Choices made provisionally overnight or left open; the lean is in brackets.
     −0.07%, a₂/a₀ +0.16 → +0.09 pp; fine: within 0.03% and 0.02 pp); departures agree
     within 0.01 pp raw or balanced. The flat-element bias does not carry over.
     Unchecked for bored LEHs, gaps and CAD cavities. [Keep the default.]
+12. LEH power-balance tutorial on the compact capsule (2026-10-22): against its photon
+    walk, the error grows from 0.4 to 0.25 mm (LEH −1.2e-4 → −3.3e-4, capsule −2.8e-4 →
+    −5.0e-4, 3–5σ) as the view factors' lost fraction grows (7.5e-4 → 1.4e-3); on the
+    lat-long capsule it fell to the sampling error. Look at the capsule's raw row sums at
+    capsule_h = h/3 (0.083 mm) before trusting balanced results at that resolution.
 
 ## Next
 1. **VisRad deposition parity: needs runs in VisRad.** The goal: optimize in

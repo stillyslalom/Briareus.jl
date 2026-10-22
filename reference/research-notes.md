@@ -1922,3 +1922,27 @@ Mean |row sum − 1| before balancing (curved): 7.6e-4 / 4.6e-4 / 2.0e-4, larges
 - Not covered: bored LEHs, gaps and CAD cavities (larger row errors; the flat bored
   cavity of the previous entry is the only data there), sampled visibility, windows.
   **H** for `hohlraum()` at these meshes and albedos; **M** beyond.
+
+## Default capsule mesh and visibility (2026-10-22) *decision*
+
+User decision (Open question 9): `hohlraum()` builds its capsule as the geodesic
+`icosphere_mesh` (`capsule_mesh = :compact`); `:latlong` reproduces earlier baselines.
+`Target` carries a `visibility` rule that `view_factors` uses by default: `:sampled` for
+`cad_target` and `visrad_target` (rims), `:centroid` for `hohlraum()` and hand-assembled
+targets.
+
+- **Orientation.** With a vertex on +z (the table in "Compact capsule mesh") the
+  icosahedron's 5-fold axis lies along the hohlraum axis, and the D2-symmetric NIF
+  hohlraum picked up odd-m capsule modes of ~6e-5 of the drive (test/runtests.jl and
+  test/windows.jl selection rules, threshold 1e-10). The icosahedron now sits in its
+  standard frame (vertices at the cyclic permutations of (0, ±1, ±ϕ)): its 2-fold axes
+  and mirror planes are x, y and z, so the selection rules hold to round-off. P2/P4
+  convergence rates are a property of element shape and are unchanged in kind; the
+  table's compact rows were not rerun in the new frame.
+- **GUI presets.** capsule_h 0.3 / 0.16 / 0.09 mm (320 / 980 / 2,880 capsule elements):
+  P2 needs ~2,500 capsule elements for 0.02 pp on any capsule mesh (≈ 50/N pp), so the
+  fine preset is not 0.12 as first proposed.
+- **Effect on a study.** thor aps-dpp-2026 (N210808 + two THOR windows, h 0.45 /
+  capsule_h 0.15, closed, tuned NIF beams) moved by ≤ 0.01 pp in every departure and
+  drive (Round 8 vs Round 7); a design optimized on the lat-long capsule evaluates at
+  δ2 = 0.015% on the compact one.
