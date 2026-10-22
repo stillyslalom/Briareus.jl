@@ -1845,4 +1845,76 @@ balanced, sampled − centroid: a₂/a₀ −0.175 / −0.155 pp, a₄/a₀ +0.1
   at 1–2%) over each row's partners symmetrically, which is not where the missing
   exchange is (not checked element by element). This holds for flat
   elements; the curved (default) path's row errors differ and a curved-surface Monte
-  Carlo would be needed to check balancing there. **M**
+  Carlo would be needed to check balancing there (done: next entry; on the curved path
+  balancing moves toward the continuum). **M**
+
+## Balancing on the curved path against a continuum Monte Carlo (2026-10-22) *derived*
+
+Does `closed = true` (the `hohlraum()` default) bias the capsule drive on the default
+curved path? Reference: `montecarlo_incident(...; reemit = :hit)` (the continuum) on a
+flat copy of the hohlraum faceted at wall/cap h = 0.1 mm, capsule_h = 0.05 mm (33,292
+elements, 6,612 on the capsule; the chord sagitta of the wall is 4e-4 mm). Geometry
+10.1 × 5.75 mm, 3.1 mm LEHs, 0.9 mm capsule; wall gold α = 0.925 and 0.85, η = 0.8.
+Source: 48 NIF quads at 8 TW at the published cone aims (`examples/mesh_convergence.jl`
+"nominal"), deposited on each mesh by its own `DepositionOperator` (totals agree to
+4e-5 between meshes) and scaled to the reference total. Departure: one outer-44 quad
+off; by linearity the Monte Carlo traces that quad's source alone (paired batches give
+its error). 298M paths at 0.925 (8.6 min on 16 threads), 198M at 0.85.
+`examples/mc_closure.jl`.
+
+Reference convergence in faceting (α = 0.925, 32M paths each): wall h 0.2 / 0.1 / 0.06
+gives a₀ 8.4148 / 8.4116 / 8.4118 (± 0.0011) and a₂/a₀ −12.547 / −12.546 / −12.554
+(± 0.027) %; capsule_h 0.035 instead of 0.05 moves a₀ +0.03 ± 0.02% and a₂/a₀
++0.04 ± 0.04 pp (a₄/a₀ +0.08 ± 0.05 pp, mostly the piecewise-constant moment analysis,
+which `capsule_h` sets for model and reference alike). Converged to ~0.03% in a₀ and
+~0.03 pp in a₂/a₀.
+
+Capsule incident flux: reference a₀ (TW/mm²), a₂/a₀, a₄/a₀ (%), and the departure
+(design − quad off: Δa₀ in %, Δa₂/a₀ and Δa₄/a₀ in pp); model rows are differences from
+the reference (a₀ in %, the rest in pp). Default visibility (centroid). Curved = the
+`hohlraum()` default; flat = the same meshes without surfaces, a coarser polygonal
+geometry than the reference (so its rows mix geometry error in).
+
+| α = 0.925 | a₀ | a₂/a₀ | a₄/a₀ | Δa₀ | Δa₂/a₀ | Δa₄/a₀ |
+|---|---|---|---|---|---|---|
+| **MC `:hit`** | 8.4118 ± 0.0003 | −12.513 ± 0.010 | +0.225 ± 0.010 | +2.045 ± 0.001 | +0.233 ± 0.001 | −0.035 ± 0.001 |
+| curved 0.45/0.15, raw | +0.56% | +0.161 | +0.266 | +0.000 | −0.006 | −0.003 |
+| curved 0.45/0.15, balanced | −0.07% | +0.091 | +0.249 | +0.000 | −0.004 | −0.004 |
+| curved 0.28/0.09, raw | −0.03% | +0.088 | +0.149 | −0.001 | −0.001 | −0.002 |
+| curved 0.28/0.09, balanced | −0.05% | +0.029 | +0.064 | −0.000 | −0.001 | −0.002 |
+| curved 0.17/0.05, raw | −0.09% | +0.036 | +0.006 | +0.000 | +0.001 | −0.001 |
+| curved 0.17/0.05, balanced | −0.03% | +0.020 | +0.007 | +0.000 | +0.000 | −0.001 |
+| flat 0.45/0.15, raw / balanced | +1.12 / +0.54% | +0.030 / +0.038 | +0.075 / +0.063 | +0.001 | +0.000 / +0.001 | +0.003 / +0.002 |
+| flat 0.28/0.09, raw / balanced | +0.24 / +0.22% | −0.017 / +0.030 | +0.007 / −0.000 | −0.001 / +0.000 | +0.001 | +0.001 |
+| flat 0.17/0.05, raw / balanced | +0.03 / +0.07% | +0.039 / +0.025 | −0.014 / −0.015 | +0.000 | +0.001 | −0.000 |
+
+| α = 0.85 | a₀ | a₂/a₀ | a₄/a₀ | Δa₀ | Δa₂/a₀ | Δa₄/a₀ |
+|---|---|---|---|---|---|---|
+| **MC `:hit`** | 6.1316 ± 0.0003 | −14.547 ± 0.011 | +0.150 ± 0.014 | +2.013 ± 0.001 | +0.315 ± 0.001 | −0.046 ± 0.002 |
+| curved 0.45/0.15, raw | +0.35% | +0.148 | +0.322 | −0.001 | −0.009 | −0.007 |
+| curved 0.45/0.15, balanced | −0.06% | +0.077 | +0.306 | −0.001 | −0.008 | −0.007 |
+| curved 0.28/0.09, raw | −0.03% | +0.074 | +0.178 | −0.002 | −0.003 | −0.005 |
+| curved 0.28/0.09, balanced | −0.04% | +0.016 | +0.095 | −0.001 | −0.003 | −0.005 |
+| curved 0.17/0.05, raw | −0.07% | +0.022 | +0.034 | −0.001 | −0.001 | −0.004 |
+| curved 0.17/0.05, balanced | −0.02% | +0.010 | +0.035 | −0.001 | −0.001 | −0.004 |
+
+Mean |row sum − 1| before balancing (curved): 7.6e-4 / 4.6e-4 / 2.0e-4, largest
+3.2e-3 / 3.1e-3 / 1.5e-3 at the three meshes.
+
+- On the curved path balancing does not bias the drive: it moves a₂/a₀ toward the
+  continuum at every mesh and both albedos (0.161 → 0.091, 0.088 → 0.029,
+  0.036 → 0.020 pp at 0.925) and fixes the study mesh's a₀ (+0.56% → −0.07%; the raw
+  excess is the ~8e-4 row-sum error amplified by the wall albedo). The flat-element
+  upward bias of the previous entry does not carry over: raw curved factors already
+  sit above the reference in a₂/a₀, and balancing pulls them down.
+- Balanced curved models are within 0.07% in a₀ and 0.09 pp in a₂/a₀ at every
+  preset, 0.03% and 0.02 pp at the fine one (inside the reference's own ~0.03
+  convergence). a₄/a₀ at the coarser presets is dominated by the capsule mesh (the
+  moment analysis on 0.15 and 0.09 mm facets, cf. "Mesh convergence"); at 0.17/0.05,
+  whose capsule mesh is the reference's, it agrees to 0.01 pp at 0.925.
+- Departures (one quad off) agree with the reference within 0.01 pp in Δa₂/a₀ and
+  Δa₄/a₀ and 0.002% in Δa₀ for every model, raw or balanced: balancing is immaterial
+  for departures here.
+- Not covered: bored LEHs, gaps and CAD cavities (larger row errors; the flat bored
+  cavity of the previous entry is the only data there), sampled visibility, windows.
+  **H** for `hohlraum()` at these meshes and albedos; **M** beyond.

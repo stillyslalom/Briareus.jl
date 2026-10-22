@@ -477,7 +477,8 @@ Choices made provisionally overnight or left open; the lean is in brackets.
    (0.25 mm), a₄/a₀ 0.27 → 0.13 and 0.11 → 0.01 pp; on flush-LEH `hohlraum()` both
    visibilities balance to the same answer. What remains is mostly balancing's own
    bias (+0.06 to +0.48 pp in a₂/a₀ over the raw factors, the control included), a
-   separate question for the `closed` default that needs a curved-surface reference.
+   separate question for the `closed` default that needs a curved-surface reference
+   (see 11).
    The geodesic capsule reaches P4 within 0.02 pp with ~0.8–1.2k elements against
    ~8k lat-long, same limits, same P2 and drive (research notes, "Compact capsule
    mesh"). Switching moves every capsule baseline and the GUI presets' meaning (a
@@ -489,6 +490,13 @@ Choices made provisionally overnight or left open; the lean is in brackets.
     parity would face it into the gas, but `enclosure` from TCC would then select a
     hollow capsule's interior (the GUI relies on the current behavior). [Keep;
     document.]
+11. `closed = true` the default for `hohlraum()`? Against a continuum Monte Carlo
+    (`examples/mc_closure.jl`; research notes, "Balancing on the curved path"), on the
+    curved default path with NIF quads at α = 0.925 and 0.85, balancing moves a₀ and
+    a₂/a₀ toward the reference at every preset (study mesh 0.45/0.15: a₀ +0.56% →
+    −0.07%, a₂/a₀ +0.16 → +0.09 pp; fine: within 0.03% and 0.02 pp); departures agree
+    within 0.01 pp raw or balanced. The flat-element bias does not carry over.
+    Unchecked for bored LEHs, gaps and CAD cavities. [Keep the default.]
 
 ## Next
 1. **VisRad deposition parity: needs runs in VisRad.** The goal: optimize in
