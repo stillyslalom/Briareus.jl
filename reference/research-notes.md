@@ -1780,4 +1780,69 @@ Effect after Sinkhorn balancing (the tutorial's two-ring wall source): capsule f
 +0.05%, a₂/a₀ −0.175 pp (0.5 mm) and −0.155 pp (0.25 mm), a₄/a₀ +0.11 pp at both, LEH
 loss −0.4%. The shift barely shrinks with the mesh, so balancing does not absorb the
 centroid rule's visibility error; which limit is right needs a finer mesh or a
-ray-traced radiosity reference (not done). **M**
+ray-traced radiosity reference (done: next entry, the sampled one is closer). **M**
+
+## Monte Carlo radiosity reference for partial visibility (2026-10-22) *derived*
+
+`Briareus.montecarlo_incident` (src/montecarlo.jl, unexported): diffuse transport on the
+facets with no view factors. Paths start at a uniform point on a capsule element's
+facets and go backward (reciprocity of the Lambertian kernel): cosine-weighted
+direction, first hit by `closest_hit` over all triangles (apertures included: a hit
+there is an escape), the hit element's source `ηP/A` added with the path weight, weight
+× albedo, Russian roulette below 1/20. `reemit = :hit` continues from the hit point
+(the continuum); `:element` from a uniform point on the hit element (the element model
+with exact view factors and visibility). Statistical errors from 64 batches. Checked
+(test/montecarlo.jl): a closed cube with uniform source gives S/(1 − α) within 1%; an
+open-top cube against the closed-form factors (Hottel 0.199825 opposite,
+(1 − 0.199825)/4 adjacent) within 5σ and 1%; 8 × 8 elements per face against `solve`
+within 1.5% on face means (one element per face: the continuum differs by up to 26%).
+
+Since the Monte Carlo traces facets, the comparison uses flat elements (the same meshes
+with `surface = nothing`); the curved models are a different geometry (true surfaces)
+and are listed only for the size of the visibility shift. Source: the CAD tutorial's
+two Gaussian wall rings, integrated over each element, η = 0.75, wall α = 0.8, capsule
+α = 0.3. 200k paths per capsule element (105–310 s on 16 threads).
+`examples/mc_radiosity.jl`. Capsule incident flux, a₀ (TW/mm²), a₂/a₀ and a₄/a₀ (%):
+
+| case | a₀ | a₂/a₀ | a₄/a₀ |
+|---|---|---|---|
+| **bored 0.5 mm (2,244 el.)**: MC `:element` | 0.85004 ± 0.00004 | 10.641 ± 0.012 | −0.510 ± 0.015 |
+| MC `:hit` (continuum) | 0.85009 ± 0.00005 | 10.667 ± 0.011 | −0.530 ± 0.016 |
+| flat, centroid, raw | +0.45% | +0.025 | −0.063 |
+| flat, centroid, balanced | +0.08% | +0.508 | −0.274 |
+| flat, sampled, raw | +0.29% | +0.108 | −0.063 |
+| flat, sampled, balanced | +0.12% | +0.312 | −0.130 |
+| **bored 0.25 mm (6,304 el.)**: MC `:element` | 0.84811 ± 0.00003 | 10.752 ± 0.008 | −0.600 ± 0.011 |
+| MC `:hit` | 0.84835 ± 0.00003 | 10.746 ± 0.007 | −0.587 ± 0.011 |
+| flat, centroid, raw | +0.02% | +0.070 | +0.019 |
+| flat, centroid, balanced | +0.16% | +0.303 | −0.107 |
+| flat, sampled, raw | +0.11% | +0.033 | +0.016 |
+| flat, sampled, balanced | +0.21% | +0.142 | +0.007 |
+| **`hohlraum()` (3,264 el.)**: MC `:element` | 0.84677 ± 0.00005 | 10.228 ± 0.012 | −0.465 ± 0.014 |
+| MC `:hit` | 0.84673 ± 0.00004 | 10.238 ± 0.010 | −0.458 ± 0.014 |
+| flat, centroid, raw | +0.46% | −0.091 | +0.016 |
+| flat, centroid, balanced | +0.22% | +0.086 | +0.013 |
+| flat, sampled, raw | +0.18% | +0.019 | +0.011 |
+| flat, sampled, balanced | +0.23% | +0.083 | +0.018 |
+
+(Model rows: a₀ relative to MC `:element`, moments as pp differences.) Curved models,
+balanced, sampled − centroid: a₂/a₀ −0.175 / −0.155 pp, a₄/a₀ +0.11 / +0.11 pp (bored
+0.5 / 0.25 mm), −0.003 / +0.004 pp on `hohlraum()`; flat: −0.196 / −0.161 and
++0.144 / +0.114 pp, −0.003 / −0.005 pp. The shift is the same on both geometries.
+
+- The two Monte Carlo modes agree within 0.03 pp (2σ): the element discretization of the
+  radiosity is negligible here, and MC `:element` is the reference for the view factors.
+- After balancing, sampled visibility is closer in every bored case: a₂/a₀ error
+  0.51 → 0.31 pp (0.5 mm) and 0.30 → 0.14 pp (0.25 mm), a₄/a₀ 0.27 → 0.13 and
+  0.11 → 0.01 pp. The −0.16 pp shift is a correction, not an artifact; it is about
+  half the balanced centroid model's error. On the flush-LEH control both visibilities
+  balance to the same answer (+0.085 pp), as expected.
+- Balancing itself biases a₂/a₀ upward: +0.06 to +0.48 pp over the raw factors of the
+  same visibility, on every case including the control. Raw sampled factors are the
+  closest of the four in a₂/a₀ on the 0.25 mm cavity and the control (0.02–0.03 pp);
+  their a₀ is off 0.1–0.3%, balanced 0.1–0.25%. Presumably Sinkhorn spreads the
+  residual row error (on the cavity, the waist gap's faces at 5% and the LEH apertures
+  at 1–2%) over each row's partners symmetrically, which is not where the missing
+  exchange is (not checked element by element). This holds for flat
+  elements; the curved (default) path's row errors differ and a curved-surface Monte
+  Carlo would be needed to check balancing there. **M**

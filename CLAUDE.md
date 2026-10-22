@@ -140,7 +140,8 @@ environment has no ForwardDiff/Optim, and `Vec3` clashes with Makie there.
 directions) → `facilities.jl` (NIF ports/spots, OMEGA) → `deposition.jl`
 (DepositionOperator, deposit, raytrace_deposition) → `viewfactors.jl` → `enclosure.jl`
 (enclosure: the elements bounding the free space around a point) → `radiation.jl`
-(RadiationModel, solve, flux_response, energy_balance, enforce_closure!) → `analysis.jl`
+(RadiationModel, solve, flux_response, energy_balance, enforce_closure!) → `montecarlo.jl`
+(Monte Carlo radiosity reference, unexported) → `analysis.jl`
 (solid angles, Legendre/Y_lm) → `imaging.jl` (OrthoCamera, render, line_of_sight_power)
 → `optimize.jl` (GroupPointing, Scenario, objectives, optimize_pointing, report) →
 `history.jl` (PulseShape, drive_history) → `retune.jl` (pulse tables, retune_drive) →

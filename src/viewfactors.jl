@@ -56,7 +56,9 @@ fraction, which scales the unobstructed factor (reciprocity is kept). On a hohlr
 0.1 mm LEH bores and a 20 µm waist gap at 0.5 mm, it brings the largest row-sum error
 before balancing from 1.0% to 0.19% on the walls and from 5.9% to 0.7% on the LEH
 apertures, for 2–4× the time; features narrower than a sample cell (the gap's slot) are
-not resolved (research notes, "Partial visibility").
+not resolved (research notes, "Partial visibility"). Against a Monte Carlo radiosity on
+the same facets, it cuts the balanced capsule a₂/a₀ error there (0.51 → 0.31 pp at
+0.5 mm, 0.30 → 0.14 pp at 0.25 mm; research notes, "Monte Carlo radiosity reference").
 """
 function view_factors(t::Target; near = 3.0, mid = 12.0, level::Integer = 1, exact_far::Bool = true,
                       visibility::Symbol = :centroid, visibility_grid::Integer = 4)

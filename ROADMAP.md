@@ -429,6 +429,15 @@ Measured on the NIF hohlraum at the GUI's standard mesh (5,864 elements, 48 quad
   5.9% → 0.7%, capsule 0.16% → 0.05%; 2–4× the time. Fractions within 0.02 (mean) of a
   256²-point reference. Tests: default unchanged, reciprocity, half-shadowed pair = ½.
 
+## Done (2026-10-22, Monte Carlo radiosity)
+- **`Briareus.montecarlo_incident`** (unexported): backward diffuse path tracing on the
+  facets, no view factors, re-emission from the hit point (continuum) or the hit element
+  (element model with exact factors); batch errors. `examples/mc_radiosity.jl` settles
+  partial visibility (Open question 9): sampled is closer after balancing on the bored
+  cavity at 0.5 and 0.25 mm; balancing biases a₂/a₀ by +0.06 to +0.48 pp on flat
+  elements. Tests: closed cube S/(1 − α), open cube against closed-form factors,
+  continuum limit of an 8 × 8 cube.
+
 ## Open questions (from the 2026-10-18 CAD work)
 Choices made provisionally overnight or left open; the lean is in brackets.
 1. `fit = true` by default when `remesh` is given (cad_target, visrad_target, GUI)?
@@ -461,15 +470,21 @@ Choices made provisionally overnight or left open; the lean is in brackets.
    2026-10-22 as `visibility = :sampled`; make it the default?). With bored LEHs it cuts
    row-sum errors before balancing 5–9× on walls and LEHs (not the 20 µm gap's faces)
    for 2–4× the view-factor time, and after balancing moves a₂/a₀ by −0.16 pp and a₄/a₀
-   by +0.11 pp at both 0.5 and 0.25 mm: balancing does not absorb it, and which limit
-   is right is not yet checked against a ray-traced radiosity (research notes, "Partial
-   visibility").
+   by +0.11 pp at both 0.5 and 0.25 mm (research notes, "Partial visibility"). Checked
+   against a Monte Carlo radiosity on the same facets (flat elements; research notes,
+   "Monte Carlo radiosity reference"): the shift is toward the reference in every bored
+   case, the balanced a₂/a₀ error going 0.51 → 0.31 pp (0.5 mm) and 0.30 → 0.14 pp
+   (0.25 mm), a₄/a₀ 0.27 → 0.13 and 0.11 → 0.01 pp; on flush-LEH `hohlraum()` both
+   visibilities balance to the same answer. What remains is mostly balancing's own
+   bias (+0.06 to +0.48 pp in a₂/a₀ over the raw factors, the control included), a
+   separate question for the `closed` default that needs a curved-surface reference.
    The geodesic capsule reaches P4 within 0.02 pp with ~0.8–1.2k elements against
    ~8k lat-long, same limits, same P2 and drive (research notes, "Compact capsule
    mesh"). Switching moves every capsule baseline and the GUI presets' meaning (a
    compact preset would be capsule_h ≈ 0.12). [Compact default, with the GUI presets
-   re-chosen in the same change; partial visibility an option until checked against a
-   ray-traced radiosity on a bored cavity.]
+   re-chosen in the same change; partial visibility the default for targets with rims
+   (bored LEHs, CAD), now that the ray-traced radiosity favors it; `hohlraum()` loses
+   nothing by it but 2–3× view-factor time.]
 10. `orient_mesh` faces a hollow solid's inner surface into the material; containment
     parity would face it into the gas, but `enclosure` from TCC would then select a
     hollow capsule's interior (the GUI relies on the current behavior). [Keep;
