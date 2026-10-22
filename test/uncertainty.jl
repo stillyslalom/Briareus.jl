@@ -63,6 +63,46 @@ std_rows(A) = sqrt.(sum(abs2, A .- sum(A; dims = 2) ./ size(A, 2); dims = 2) ./ 
                 sum(w * ua.sigma[mode_index(l, m)]^2 for ((l, m), w) in comps; init = 0.0)
         @test robust(ev) - nominal(ev) ≈ extra rtol = 1e-9
     end
+    # correlated errors. One beam per group: a shared transverse displacement is the
+    # beam's own pointing error
+    ug = mode_uncertainty(s, quads; pointing = 0.0, group_pointing = 0.02, groups = :name, lmax)
+    up = mode_uncertainty(s, quads; pointing = 0.02, lmax)
+    @test ug.covariance ≈ up.covariance rtol = 1e-9
+    @test ug.rms_by.beam == zeros(lmax) && ug.rms_by.group ≈ ug.rms_mode
+    # one shared power scale for every beam moves nothing
+    @test maximum(mode_uncertainty(s, quads; pointing = 0.0, group_power = 0.05, groups = b -> 1, lmax).sigma) < 1e-12
+    # target positioning along x alone: σ = |∂c/∂x| against central differences of
+    # every aim moved together
+    ux = mode_uncertainty(s, quads; pointing = 0.0, positioning = (1.0, 0.0, 0.0), lmax)
+    h = 1e-4
+    fdx = (shape([remake(b; aim = Vec3(b.aim) + Vec3(h, 0, 0)) for b in quads]) .-
+           shape([remake(b; aim = Vec3(b.aim) - Vec3(h, 0, 0)) for b in quads])) ./ 2h
+    @test maximum(abs, ux.sigma .- abs.(fdx)) <= 1e-6 * maximum(abs, fdx)
+    @test ux.rms_by.positioning ≈ ux.rms_mode
+    # all sources together against Monte Carlo (per cone: groups = :group)
+    errc = (; pointing = 0.02, power = 0.01, group_pointing = 0.02, group_power = 0.01,
+            groups = :group, positioning = 0.01)
+    uc = mode_uncertainty(s, quads; errc..., lmax)
+    @test uc.rms_mode ≈ sqrt.(uc.rms_by.beam .^ 2 .+ uc.rms_by.group .^ 2 .+ uc.rms_by.positioning .^ 2)
+    @test all(uc.rms_by.group .> 0) && all(uc.rms_by.positioning .> 0)
+    sc = sample_modes(s, quads; errc..., n = 400, lmax, rng = MersenneTwister(5))
+    rms_c = [sqrt(sum(abs2, sc[l^2+1:(l+1)^2, :] .- sens.c[l^2+1:(l+1)^2]) / size(sc, 2)) for l in 1:lmax]
+    @test all(abs.(rms_c ./ uc.rms_mode .- 1) .< 0.15)
+    @test_throws ArgumentError mode_uncertainty(s, quads; positioning = (0.1, 0.1), lmax)
+    # robust objectives with shared errors add exactly the propagated variance
+    nominal = asymmetry_objective(; modes = (1 => 1.0, 3 => 2.0))
+    robustc = asymmetry_objective(; modes = (1 => 1.0, 3 => 2.0), uncertainty = errc)
+    ev = evaluate(s, quads)
+    @test robustc(ev) - nominal(ev) ≈ uc.rms_mode[1]^2 + 2uc.rms_mode[3]^2 rtol = 1e-9
+    xg = initial_parameters(s.param)
+    fc(x) = robustc(evaluate(s, x))
+    gc = ForwardDiff.gradient(fc, xg)
+    for i in (2, 5)
+        h = 1e-5
+        e = [j == i ? h : 0.0 for j in eachindex(xg)]
+        @test gc[i] ≈ (fc(xg .+ e) - fc(xg .- e)) / 2h rtol = 1e-5
+    end
+
     # and the Legendre one, with the moments' own sensitivities
     sym = symmetry_objective(modes = (2 => 1.0, 4 => 1.0), odd = 0.0)
     symr = symmetry_objective(modes = (2 => 1.0, 4 => 1.0), odd = 0.0, uncertainty = errs)

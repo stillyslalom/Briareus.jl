@@ -361,6 +361,22 @@ Measured on the NIF hohlraum at the GUI's standard mesh (5,864 elements, 48 quad
   1.27–1.54 for the NIF plates). `VisRadProfile(; envelope)` takes a number, a `Dict`
   by beam name, or `nothing` for the default; `visrad_profile(ws)` reads each beam's.
 
+## Done (2026-10-22, correlated beam errors)
+- **Shared errors in `mode_uncertainty` and `sample_modes`** (roadmap item 11):
+  - `group_pointing`: one displacement shared by a group's beams, transverse to the
+    group's mean direction;
+  - `group_power`: one relative power error per group;
+  - `groups`: a beam field (`:quad`, `:group` for the cone) or a function, e.g. the bundle;
+  - `positioning`: the target offset from chamber center, isotropic or per axis.
+  Shared displacements move beams along themselves too, so the per-beam sensitivities
+  gain an axial column (computed only when shared errors are asked for). `rms_by` splits
+  the budget by source. The robust objectives (`symmetry_objective`,
+  `asymmetry_objective`) take the same keywords in `uncertainty`. Tests: a one-beam
+  group reproduces the independent errors to
+  1e-9, a target shift matches central differences, and every source together matches
+  Monte Carlo within 15%. Tutorial "Beam errors": 20 µm per cone gives half the l = 1
+  of 50 µm per beam and nothing at l = 2.
+
 ## Open questions (from the 2026-10-18 CAD work)
 Choices made provisionally overnight or left open; the lean is in brackets.
 1. `fit = true` by default when `remesh` is given (cad_target, visrad_target, GUI)?
@@ -525,10 +541,9 @@ Choices made provisionally overnight or left open; the lean is in brackets.
 10. **Shot-data calibration.** Fit effective parameters (cone multipliers, CBET
    multiplier/clamp, albedo) to measured P2/P4 and shock symmetry, with uncertainty.
    Reproduce P2-vs-Δλ curves.
-11. **Robust optimization and UQ: what remains.** Correlated errors (per bundle, per
-   cone; target positioning, which moves every beam at once), time-dependent budgets
-   (errors through `drive_history`), and inverse solves for a measured mode (MacGowan
-   2021) as a documented workflow.
+11. **Robust optimization and UQ: what remains.** Time-dependent budgets (errors
+   through `drive_history`), and inverse solves for a measured mode (MacGowan 2021) as
+   a documented workflow. Correlated errors are done (see Done, 2026-10-22).
 12. **Backlighter physics.** CE(Z, I, τ) models with uncertainty, and the photometric
    chain to the detector.
 13. **Spectral radiosity.** Multigroup emission, detector responses along Dante and XRD

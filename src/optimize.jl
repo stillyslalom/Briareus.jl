@@ -368,7 +368,9 @@ With `uncertainty = (; pointing, power)` (rms beam-to-beam pointing in mm and re
 power, as in `mode_uncertainty`) the mode terms are their expected values over those
 errors, linearized: each `(aₗ/a₀)²` gains the variance the errors give it, so the
 optimum also makes the drive shape insensitive to them (robust design). This costs
-about three gradients per evaluation.
+about three gradients per evaluation. The shared errors of `mode_uncertainty`
+(`group_pointing`, `group_power`, `groups`, `positioning`) are accepted too; they add
+a fourth per-beam sensitivity (about four gradients per evaluation).
 """
 function symmetry_objective(; modes = (2 => 1.0, 4 => 1.0), odd = 1.0, lmax::Integer = 6,
                             clip = 10.0, missed = 10.0, direct = 10.0,
@@ -393,12 +395,17 @@ function symmetry_objective(; modes = (2 => 1.0, 4 => 1.0), odd = 1.0, lmax::Int
     end
 end
 
-# (pointing, power) of an objective's `uncertainty` keyword, or nothing.
+# The errors of an objective's `uncertainty` keyword (`mode_uncertainty`'s keywords), or
+# nothing.
 _uncertainty_spec(::Nothing) = nothing
 function _uncertainty_spec(u)
-    p, q = Float64(get(u, :pointing, 0.0)), Float64(get(u, :power, 0.0))
-    p >= 0 && q >= 0 || throw(ArgumentError("uncertainty must be nonnegative rms errors"))
-    return (p, q)
+    e = (; pointing = Float64(get(u, :pointing, 0.0)), power = Float64(get(u, :power, 0.0)),
+         group_pointing = Float64(get(u, :group_pointing, 0.0)),
+         group_power = Float64(get(u, :group_power, 0.0)), groups = get(u, :groups, :quad),
+         positioning = _positioning_rms(get(u, :positioning, 0.0)))
+    min(e.pointing, e.power, e.group_pointing, e.group_power) >= 0 ||
+        throw(ArgumentError("uncertainty must be nonnegative rms errors"))
+    return e
 end
 
 function _penalties(ev::Evaluation; clip, missed, direct, direct_names)
@@ -446,7 +453,9 @@ restores a known-good drive shape.
 
 With `uncertainty = (; pointing, power)` the mode and component terms are their
 expected values over independent beam errors of those rms sizes (linearized; see
-`mode_uncertainty` and `symmetry_objective`): a robust design.
+`mode_uncertainty` and `symmetry_objective`): a robust design. Shared errors
+(`group_pointing`, `group_power`, `groups`, `positioning`) are accepted as in
+`mode_uncertainty`.
 """
 function asymmetry_objective(; modes = (1 => 1.0, 2 => 1.0, 3 => 1.0, 4 => 1.0),
                              components = (), clip = 10.0, missed = 10.0, direct = 10.0,

@@ -125,6 +125,34 @@ fig
         100 * sort(ε1)[end÷2], 100 * sort(ε1)[9end÷10], 100 * 100 * sort(ε1)[9end÷10],
         100 * u.rms_mode[1], 100 * sqrt(3) * u.rms_mode[1])
 
+# ## Correlated errors
+#
+# Some errors are shared. A cone's beams can all be off the same way, every beam of a
+# quad can carry the same power error, and a target displaced from chamber center moves
+# every aim by the same vector relative to the target. `mode_uncertainty` takes
+# these as `group_pointing` and `group_power`, with `groups` a beam field such as `:group`
+# (the cone) or a function of the beam, and `positioning`, an rms length. A shared
+# displacement also moves beams along themselves: their focus moves with the aim, so
+# these propagate through a fourth per-beam sensitivity. `rms_by` splits the budget by
+# source. Here we take 50 µm pointing per beam, 20 µm shared per cone and 30 µm target
+# positioning:
+
+shared = (; pointing = 0.05, group_pointing = 0.02, groups = :group, positioning = 0.03)
+us = mode_uncertainty(scenario, quads; shared..., lmax)
+for l in 1:lmax
+    @printf("l = %d: total %.3f%% = beams %.3f, cones %.3f, positioning %.3f (in quadrature)\n", l,
+            100us.rms_mode[l], 100us.rms_by.beam[l], 100us.rms_by.group[l], 100us.rms_by.positioning[l])
+end
+ss = sample_modes(scenario, quads; shared..., n = 200, lmax, rng = MersenneTwister(7))
+@printf("Monte Carlo / linear, l = 1..4: %s\n",
+        join((@sprintf("%.2f", sqrt(sum(abs2, ss[l^2+1:(l+1)^2, :] .- us.c[l^2+1:(l+1)^2]) / size(ss, 2)) /
+                                us.rms_mode[l]) for l in 1:lmax), " "))
+
+# A shared displacement adds coherently over the beams it moves. 20 µm shared by a whole
+# cone gives about half the ``l = 1`` budget of 50 µm scattered independently over every
+# beam. A cone moving together, and the target's offset, are near translations of the
+# drive pattern, so they feed the odd modes (``l = 1, 3``) and leave ``l = 2`` alone.
+
 # ## Does the pointing change the budget?
 #
 # The errors' share of each mode depends on where the spots land: a spot on a steep
@@ -182,6 +210,9 @@ robust_budget = budget_row("robust", robust.x)
 # - The per-beam sensitivities from dual numbers match central differences of full
 #   evaluations (printed above; the test suite checks them to 1e-6).
 # - The linear propagation of independent errors matches a Monte Carlo of full
-#   evaluations to its sampling error, mode by mode.
+#   evaluations to its sampling error, mode by mode; so do the shared (cone and
+#   target-positioning) errors. The test suite also checks that a group of one beam
+#   reproduces the independent errors exactly, and that a shared target displacement
+#   matches central differences.
 # - The robust objective adds exactly the propagated variance to the nominal one (test
 #   suite), and its gradients, through nested dual numbers, match finite differences.
