@@ -14,6 +14,15 @@ const DRIVE_FIELD_LABELS = Dict(:laser => "Absorbed laser intensity (W/cm²)",
                                 :radiosity => "X-ray radiosity (W/cm²)",
                                 :incident => "Incident x-ray flux (W/cm²)")
 
+"""
+Beam models of the drive's laser deposition: `:fcone` (Briareus's: the focal spot
+convolved over the f-cone) and `:visrad` (VisRad's, `VisRadProfile`, so that a design
+exported to VisRad deposits there as here).
+"""
+const BEAM_MODELS = (:fcone, :visrad)
+
+const BEAM_MODEL_LABELS = Dict(:fcone => "Briareus (f-cone)", :visrad => "VisRad profile")
+
 "Degrees of the mode table: ε_l and P_l/P0 for l = 1…4."
 const MODE_DEGREES = 1:4
 
@@ -59,7 +68,8 @@ assembly's hohlraum cavity without its outer faces and mounting hardware), `film
 (components the cavity leaves out: thin films a CAD file models as solids, such as a
 capsule tent or an entrance-hole window, which would seal the point into a pocket) and
 `enclosure` (the latest cavity selection, with `cavity_index`, the target element of
-each drive element).
+each drive element), and the beam model (see [`set_beam_model!`](@ref)): `beam_model`
+(one of [`BEAM_MODELS`](@ref)) and `profile` (the `VisRadProfile` of `:visrad`).
 """
 struct DriveState
     scenario::Observable{Union{Nothing,Scenario}}
@@ -82,6 +92,8 @@ struct DriveState
     cavity::Observable{Bool}                 # drive on the cavity around cavity_point
     cavity_point::Observable{Vec3}
     films::Observable{Set{Symbol}}           # left out of the cavity (tents, windows)
+    beam_model::Observable{Symbol}           # :fcone or :visrad
+    profile::Observable{VisRadProfile}       # the deposition profile of :visrad
     enclosure::Base.RefValue{Any}            # the latest cavity selection, or nothing
     cavity_index::Base.RefValue{Any}         # target element of each drive element
     key::Base.RefValue{Any}                  # (target, ports) of the scenario
@@ -97,6 +109,7 @@ DriveState() = DriveState(Observable{Union{Nothing,Scenario}}(nothing), Observab
                           Observable(""), Observable(false), Observable(""),
                           Observable(false), Observable(""), Observable{Any}(nothing), Observable{Any}(nothing), Observable(false),
                           Observable(false), Observable(zero(Vec3)), Observable(Set{Symbol}()),
+                          Observable(:fcone), Observable(VisRadProfile()),
                           Ref{Any}(nothing), Ref{Any}(nothing),
                           Ref{Any}(nothing), Ref{Any}(nothing), Ref(0), Ref(0))
 
@@ -109,6 +122,43 @@ function set_field!(dr::DriveState, field::Symbol)
     field in DRIVE_FIELDS || throw(ArgumentError("field must be one of $DRIVE_FIELDS"))
     _assign!(dr.field, field)
     return dr
+end
+
+"""
+    set_beam_model!(dr::DriveState, model::Symbol; profile = dr.profile[]) -> dr
+
+Deposit the laser with one of [`BEAM_MODELS`](@ref): `:visrad` with `profile` (a
+`VisRadProfile`; a VisRad workspace import sets the workspace's, `visrad_profile`),
+`:fcone` with Briareus's model. `profile` is kept for a later switch back to
+`:visrad`. A change makes the scenario stale.
+"""
+function set_beam_model!(dr::DriveState, model::Symbol; profile::VisRadProfile = dr.profile[])
+    model in BEAM_MODELS || throw(ArgumentError("beam model must be one of $BEAM_MODELS"))
+    _profile_state(profile) == _profile_state(dr.profile[]) || (dr.profile[] = profile)
+    _assign!(dr.beam_model, model)
+    return dr
+end
+
+# The deposition profile of the drive's scenario (`nothing`: the f-cone model).
+_deposition_profile(dr::DriveState) = dr.beam_model[] === :visrad ? dr.profile[] : nothing
+
+# A `VisRadProfile` as plain data (session files, and the scenario's key: profiles
+# compare by value). TOML has no `nothing`: an absent envelope is VisRad's default
+# ratio, an absent growth the manual's z_A.
+function _profile_state(p::VisRadProfile)
+    d = Dict{String,Any}("focal_length" => p.focal_length, "measured" => p.measured)
+    p.envelope === nothing ||
+        (d["envelope"] = p.envelope isa AbstractDict ? Dict{String,Any}(p.envelope) : p.envelope)
+    p.growth === nothing || (d["growth"] = p.growth)
+    return d
+end
+_profile_state(::Nothing) = nothing
+
+function _state_profile(d::AbstractDict)
+    e = get(d, "envelope", nothing)
+    envelope = e isa AbstractDict ? Dict{String,Float64}(String(k) => Float64(v) for (k, v) in e) : e
+    return VisRadProfile(; envelope, focal_length = Float64(d["focal_length"]),
+                         growth = get(d, "growth", nothing), measured = Bool(d["measured"]))
 end
 
 """
@@ -264,11 +314,13 @@ end
 # films)` the scenario is built on the cavity around the point (see `set_cavity!`); a
 # pocket sealed by a film is opened by leaving that film out too (`_open_cavity`), and
 # a point in the open (most of its rays escape: a backlighter foil and its shields, say)
-# keeps the whole target. Returns `(; s, lookup, enc, index, film, escape)`: the
+# keeps the whole target. `profile` is the deposition's beam model (`nothing`: the
+# f-cone; a `VisRadProfile`: VisRad's, see `set_beam_model!`). Returns `(; s, lookup, enc, index, film, escape)`: the
 # scenario, its flux-map lookup, the cavity's enclosure and element index, the film
 # found (`nothing`s without a cavity), and the point's escaping fraction.
 function _build_scenario(t::Target, beams::Vector{Beam{Float64}}; closed::Bool = false,
-                         radiation::Union{Bool,Nothing} = nothing, cavity = nothing)
+                         radiation::Union{Bool,Nothing} = nothing, cavity = nothing,
+                         profile::Union{Nothing,VisRadProfile} = nothing)
     enc = index = film = nothing
     escape = NaN
     if cavity !== nothing
@@ -286,7 +338,7 @@ function _build_scenario(t::Target, beams::Vector{Beam{Float64}}; closed::Bool =
     radiation === nothing && (radiation = radiation_size(t).feasible)
     names = component_names(t)
     observe = radiation && :capsule in names ? :capsule : nothing
-    s = Scenario(t, beams; observe, radiation, viewfactor_kw = (; closed))
+    s = Scenario(t, beams; observe, radiation, viewfactor_kw = (; closed), deposition_kw = (; profile))
     return (; s, lookup = flux_lookup(s), enc, index, film, escape)
 end
 

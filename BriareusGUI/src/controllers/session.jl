@@ -144,7 +144,8 @@ function _connect!(sess::DesignSession)
         isempty(bt.error[]) || (bt.error[] = "")
     end
     on(_ -> _request_evaluation!(sess), dr.spot_radius)
-    onany((_...) -> _drive_inputs_changed!(sess), dr.cavity, dr.cavity_point, dr.films)
+    onany((_...) -> _drive_inputs_changed!(sess), dr.cavity, dr.cavity_point, dr.films,
+          dr.beam_model, dr.profile)
     # a drive asked for while CAD parts remeshed, the target was built or a capsule was
     # fitted runs when the target is ready
     onany(ts.pending, ts.building, ts.fitting) do _...
@@ -255,7 +256,7 @@ function task_status(sess::DesignSession, task::Symbol)
         sess.build_queued[] && return (:busy, dr.status[])
         dr.building[] && return (:busy, "computing view factors… " * _seconds(time() - dr.started[]))
         dr.scenario[] === nothing && return (:todo, isempty(dr.status[]) ? "not computed" : dr.status[])
-        drive_stale(sess) && return (:attention, "target or beam ports changed: compute again")
+        drive_stale(sess) && return (:attention, "target, beam ports or beam model changed: compute again")
         dr.evaluating[] && return (:busy, "evaluating…")
         dr.result[] === nothing && return (:attention, isempty(dr.status[]) ? "no evaluation" : dr.status[])
         return (:ok, drive_summary(dr.result[]))
@@ -293,15 +294,15 @@ end
 """
     drive_stale(sess::DesignSession) -> Bool
 
-Whether the scenario was built for another target or other beam ports (it must be
-computed again), or the target of the design is still being built. `false` before the
+Whether the scenario was built for another target, other beam ports, cavity or beam
+model (it must be computed again), or the target of the design is still being built. `false` before the
 first build.
 """
 function drive_stale(sess::DesignSession)
     k = sess.drive.key[]
     k === nothing && return false
     return sess.target.building[] || k[1] !== sess.target.target[] || k[2] != _ports(sess.beams.beams[]) ||
-           k[3] != _cavity_key(sess.drive)
+           k[3] != _cavity_key(sess.drive) || k[4] != _profile_state(_deposition_profile(sess.drive))
 end
 
 # The cavity settings a scenario was built with (`nothing`: the whole target).
@@ -328,7 +329,8 @@ Build the core `Scenario` for the current target and every beam of the table
 (deposition operator, view factors, capsule flux response; seconds to tens of
 seconds), on a worker when `spawn[]` is set, then evaluate the current pointing. With
 the drive's cavity on ([`set_cavity!`](@ref)) the scenario is built on the cavity's
-elements. A target too large for the x-ray view factors ([`radiation_size`](@ref)) gets
+elements, and its laser deposition uses the drive's beam model ([`set_beam_model!`](@ref)).
+A target too large for the x-ray view factors ([`radiation_size`](@ref)) gets
 the laser deposition alone, and `status` says why and what to do.
 """
 function build_scenario!(sess::DesignSession)
@@ -352,6 +354,7 @@ function build_scenario!(sess::DesignSession)
     sess.build_queued[] = false
     g = (dr.generation[] += 1)
     cavity = dr.cavity[] ? (dr.cavity_point[], copy(dr.films[])) : nothing
+    profile = _deposition_profile(dr)
     dr.building[] = true
     dr.started[] = time()
     dr.status[] = cavity !== nothing ? "selecting the cavity, then its view factors…" :
@@ -361,7 +364,7 @@ function build_scenario!(sess::DesignSession)
     runner = _runner(sess.spawn, sess.deliver)
     t0 = time()
     closed = _closed_enclosure(sess.target)
-    runner(() -> _build_scenario(t, beams; closed, cavity), function (out)
+    runner(() -> _build_scenario(t, beams; closed, cavity, profile), function (out)
         g == dr.generation[] || return
         dr.building[] = false
         if out.err !== nothing
@@ -373,7 +376,7 @@ function build_scenario!(sess::DesignSession)
         # a film found sealing the cavity joins the films (and the scenario's key)
         film === nothing || (_assign!(dr.films, union(dr.films[], (film,)));
                              cavity = (cavity[1], copy(dr.films[])))
-        dr.key[] = (t, _ports(beams), cavity)
+        dr.key[] = (t, _ports(beams), cavity, _profile_state(profile))
         dr.lookup[] = lookup
         dr.enclosure[] = enc
         dr.cavity_index[] = index
@@ -568,7 +571,8 @@ size), and the workspace's beams, in their clusters as groups, switched on where
 VisRad delivers power. Objects for which `include` is false (by default those VisRad
 leaves out of both its laser and radiosity calculations) are imported but left out of
 the calculations, drawn as ghosts. The workspace becomes the template of
-[`export_visrad_workspace`](@ref).
+[`export_visrad_workspace`](@ref), and the drive deposits with VisRad's beam model and
+the workspace's parameters (`visrad_profile`; [`set_beam_model!`](@ref) switches back).
 
 CAD workspaces bring the mounting hardware along: parts of 10⁵ facets reaching tens of
 mm from the target, which would take most of the elements (and the x-ray view factors
@@ -618,7 +622,7 @@ function import_visrad_workspace!(sess::DesignSession, path::AbstractString;
         report("$file: building the target…")
         built = _split_components(_target_components(:custom, params, mesh, WindowSpec[], parts; raw = names),
                                   names)
-        return (; ws, parts, names, far, built)
+        return (; ws, parts, names, far, built, profile = visrad_profile(ws))
     end
     commit = function (out)
         g == sess.mesh_generation[] || return
@@ -628,7 +632,7 @@ function import_visrad_workspace!(sess::DesignSession, path::AbstractString;
             spawn || throw(out.err)
             return
         end
-        (; ws, parts, names, far, built) = out.value
+        (; ws, parts, names, far, built, profile) = out.value
         # a target edit while the worker ran: build again from the current settings
         same = ts.params[] === params && ts.mesh[] == mesh
         if !_try_build!(ts; kind = :custom, windows = WindowSpec[], parts, excluded = names,
@@ -646,6 +650,8 @@ function import_visrad_workspace!(sess::DesignSession, path::AbstractString;
         # hardware out of the view factors)
         set_cavity!(sess.drive, any(o -> o.kind === :mesh, ws.objects); point = (0.0, 0.0, 0.0),
                     films = Symbol[])
+        # deposit as VisRad does, with the workspace's envelopes and focal length
+        set_beam_model!(sess.drive, :visrad; profile)
         # VisRad workspaces list every port: draw the beams that fire when most do not
         _assign!(sess.view.show_off, 2 * count(sess.beams.enabled[]) >= length(bs))
         # the cutaway cuts every component of an imported design (its names are VisRad's)

@@ -340,6 +340,53 @@ end
 
 include(joinpath(pkgdir(Briareus), "test", "vrw_fixture.jl"))
 
+@testset "beam model (no GL)" begin
+    s = DesignSession(resolution = :coarse)
+    dr = s.drive
+    @test dr.beam_model[] === :fcone && BEAM_MODELS == (:fcone, :visrad)
+    @test_throws ArgumentError set_beam_model!(dr, :gaussian)
+    build_scenario!(s)
+    @test dr.scenario[].deposition.profile === nothing && !drive_stale(s)
+    # the scenario receives the profile; a change of model or profile makes it stale
+    prof = VisRadProfile(; envelope = Dict("Q15T1" => 1.5), focal_length = 7000.0, growth = nothing)
+    set_beam_model!(dr, :visrad; profile = prof)
+    @test drive_stale(s) && dr.result[] === nothing
+    @test task_status(s, :drive)[1] === :attention
+    build_scenario!(s)
+    @test dr.scenario[].deposition.profile === prof && !drive_stale(s)
+    @test dr.result[] isa DriveResult
+    set_beam_model!(dr, :visrad; profile = VisRadProfile(; envelope = Dict("Q15T1" => 1.5),
+                                                          focal_length = 7000.0, growth = nothing))
+    @test !drive_stale(s)                                 # profiles compare by value
+    set_beam_model!(dr, :visrad; profile = VisRadProfile())
+    @test drive_stale(s)
+    # an undoable edit; the profile is kept for a switch back
+    set_beam_model!(dr, :visrad; profile = prof)
+    record!(s)
+    set_beam_model!(dr, :fcone)
+    @test record!(s) && drive_stale(s)
+    @test dr.profile[] === prof
+    @test undo!(s) && dr.beam_model[] === :visrad && dr.profile[] === prof
+    @test redo!(s) && dr.beam_model[] === :fcone
+    # session files keep the model and its parameters (nothing included)
+    set_beam_model!(dr, :visrad)
+    path = joinpath(mktempdir(), "model.briareus.toml")
+    save_session(path, s)
+    s2 = DesignSession(resolution = :coarse)
+    load_session!(s2, path)
+    @test s2.drive.beam_model[] === :visrad
+    p2 = s2.drive.profile[]
+    @test p2.envelope == Dict("Q15T1" => 1.5) && p2.focal_length == 7000.0 &&
+          p2.growth === nothing && p2.measured
+    @test session_state(s2) == session_state(s)
+    # sessions from before the choice load with the f-cone
+    state = session_state(s)
+    delete!(state["drive"], "beam_model")
+    delete!(state["drive"], "profile")
+    restore!(s2, state)
+    @test s2.drive.beam_model[] === :fcone && s2.drive.profile[].envelope === nothing
+end
+
 @testset "VisRad workspaces in the window (no GL)" begin
     dir = mktempdir()
     src = joinpath(dir, "work.vrw")
@@ -357,6 +404,11 @@ include(joinpath(pkgdir(Briareus), "test", "vrw_fixture.jl"))
     @test :Marker in all_component_names(ts) && !(:Marker in names)
     @test length(s.beams.beams[]) == 3 && s.beams.enabled[] == [true, true, false]
     @test s.beams.cluster[] == [:Ring_050, :Ring_050, :Ring_045]
+    # the drive deposits with VisRad's beam model and the workspace's parameters
+    @test s.drive.beam_model[] === :visrad
+    @test Controllers._profile_state(s.drive.profile[]) ==
+          Controllers._profile_state(visrad_profile(read_visrad_workspace(src)))
+    @test s.drive.profile[].envelope isa Dict
     # the hohlraum keeps its place (x = -4 mm) and the CAD its winding repaired, outward
     t = ts.target[]
     w = elements(t, :Cyl_Hohlraum_0_wall)
@@ -387,6 +439,7 @@ include(joinpath(pkgdir(Briareus), "test", "vrw_fixture.jl"))
     s2 = DesignSession(resolution = :coarse)
     load_session!(s2, f)
     @test s2.visrad_source[] == abspath(src)
+    @test s2.drive.beam_model[] === :visrad && s2.drive.profile[].envelope == s.drive.profile[].envelope
     @test component_names(s2.target.target[]) == names
     # a design's targets are built once: an edit to a part left out of the calculations
     # keeps the calculation target, and an undo or a redo finds its target again

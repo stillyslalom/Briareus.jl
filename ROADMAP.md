@@ -377,6 +377,14 @@ Measured on the NIF hohlraum at the GUI's standard mesh (5,864 elements, 48 quad
   Monte Carlo within 15%. Tutorial "Beam errors": 20 µm per cone gives half the l = 1
   of 50 µm per beam and nothing at l = 2.
 
+## Done (2026-10-22, GUI beam model)
+- **Beam-model choice in the GUI** (Drive ▸ Beam model): Briareus's f-cone or VisRad's
+  `VisRadProfile`, passed to the drive's `Scenario` (`deposition_kw`), so the
+  optimization and the VisRad kit use it too. Importing a VisRad workspace sets
+  VisRad's with `visrad_profile(ws)`; switching back keeps the parameters. Saved in
+  session files (older sessions load as f-cone), undoable, and a change makes the
+  drive stale.
+
 ## Open questions (from the 2026-10-18 CAD work)
 Choices made provisionally overnight or left open; the lean is in brackets.
 1. `fit = true` by default when `remesh` is given (cad_target, visrad_target, GUI)?
@@ -526,9 +534,7 @@ Choices made provisionally overnight or left open; the lean is in brackets.
    capsule's fill tube with cylinders and spheres only). Skipping seeds inside rejected
    regions is ~5× faster but lost a true small cone on a NIF half; an rms test during
    growth, or a torus kind, might be safe.
-8. **GUI requests:** a beam-model choice (Briareus's f-cone or `VisRadProfile`), set
-   to VisRad's with the workspace's parameters when one is imported, and passed to the
-   drive's `Scenario` (`controllers/drive.jl`); frames on a port axis (the chamber,
+8. **GUI requests:** frames on a port axis (the chamber,
    the entrance holes, the foil and other parts are done); clipping volumes; STEP import (needs a CAD kernel; STL
    and VisRad workspaces cover CAD meanwhile); an x-ray image that follows the camera
    as it moves; time in the window (pulse tables, drive histories and the retune's

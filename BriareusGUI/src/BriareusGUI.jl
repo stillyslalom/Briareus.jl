@@ -71,7 +71,8 @@ export BeamTable, BEAM_PRESETS, BEAM_GROUPINGS, BEAM_FIELDS, PRESET_LABELS, pres
 export import_visrad_sst!, import_visrad_summary!, export_visrad_sst, export_visrad_summary
 export DriveState, DriveResult, DRIVE_FIELDS, DRIVE_FIELD_LABELS, MODE_DEGREES, set_field!, xray_image!,
        set_side_view!, set_cavity!, cavity_rows, cavity_summary, cavity_sealed,
-       set_view!, flux_lookup, flux_map, power_rows, element_values, drive_summary
+       set_view!, flux_lookup, flux_map, power_rows, element_values, drive_summary,
+       BEAM_MODELS, BEAM_MODEL_LABELS, set_beam_model!
 export OptimizeState, OptimizeResult, OBJECTIVES, OBJECTIVE_LABELS, set_free!,
        edit_optimize!, set_objective!, start_optimize!, cancel_optimize!, optimize_progress,
        parameter_rows

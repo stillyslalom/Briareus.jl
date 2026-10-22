@@ -38,7 +38,7 @@ end
 
 The design as plain data, ready for TOML: the target (template, dimensions, element
 sizes, windows, parts), the beams (each beam's port, aim, power, focus, spot, cone and
-quad, group, and whether it is on), the settings of the drive, the optimization, the
+quad, group, and whether it is on), the settings of the drive (beam model included), the optimization, the
 clearance check and the TaLIS checks, and (with `view`) the 3D view's coloring, beam
 drawing, cutaway and hidden components. Results are not part of it; they are
 computed again. Restore it with [`restore!`](@ref).
@@ -86,7 +86,9 @@ function session_state(sess::DesignSession; view::Bool = true)
                              "drive" => Dict{String,Any}("spot_radius" => dr.spot_radius[],
                                                          "cavity" => dr.cavity[],
                                                          "cavity_point" => collect(dr.cavity_point[]),
-                                                         "films" => sort(_strs(dr.films[]))),
+                                                         "films" => sort(_strs(dr.films[])),
+                                                         "beam_model" => String(dr.beam_model[]),
+                                                         "profile" => _profile_state(dr.profile[])),
                              "optimize" => optimize, "review" => review, "talis" => talis)
     if view
         v = sess.view
@@ -150,6 +152,9 @@ function restore!(sess::DesignSession, state::AbstractDict)
         _assign!(sess.drive.spot_radius, Float64(d["spot_radius"]))
         set_cavity!(sess.drive, get(d, "cavity", false); point = Float64.(get(d, "cavity_point", [0.0, 0.0, 0.0])),
                     films = _syms(get(d, "films", String[])))
+        # sessions before the beam-model choice deposited with the f-cone
+        set_beam_model!(sess.drive, Symbol(get(d, "beam_model", "fcone"));
+                        profile = haskey(d, "profile") ? _state_profile(d["profile"]) : VisRadProfile())
     end
     if haskey(state, "optimize")
         o, op = state["optimize"], sess.optimize

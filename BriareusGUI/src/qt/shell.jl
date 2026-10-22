@@ -430,7 +430,7 @@ function BriareusShell(sess::DesignSession; queue::Channel{Any} = Channel{Any}(I
                 ts.target, ts.error, ts.pending, ts.building, ts.fitting,
                 bt.beams, bt.enabled, bt.preset, bt.by, bt.path, bt.error, bt.warnings,
                 dr.scenario, dr.building, dr.result, dr.evaluating, dr.field, dr.view,
-                dr.cavity, dr.cavity_point, dr.films,
+                dr.cavity, dr.cavity_point, dr.films, dr.beam_model, dr.profile,
                 dr.spot_radius, dr.status, dr.kit_running, dr.kit_status, dr.retune_running,
                 dr.retune_status,
                 st.by, st.fields, st.deltas, st.objective, st.weights, st.hold_drive, st.keepout,
@@ -713,6 +713,7 @@ function _refresh_drive!(sh::BriareusShell)
     _set!(sh, "delivered", res === nothing ? "" :
                            @sprintf("%.4g TW delivered", res.evaluation.deposition.delivered))
     _set!(sh, "driveCavity", dr.cavity[])
+    _set!(sh, "beamModel", String(dr.beam_model[]))
     _set!(sh, "cavityPoint", join((_num(x) for x in dr.cavity_point[]), ", "))
     # the cavity's account changes with the drive's build only
     if get(sh.shown, "_enclosure", missing) !== dr.enclosure[]
@@ -1378,6 +1379,7 @@ function br_part_film(on)
         set_cavity!(dr, dr.cavity[]; films = f)
     end
 end
+br_beam_model(model) = _with_shell(sh -> set_beam_model!(sh.sess.drive, _sym(model)))
 br_set_spot_radius(text) = _with_shell(sh -> (sh.sess.drive.spot_radius[] =
                                                   Controllers._parse_number(string(text), "the spot radius"; positive = true)))
 function br_import_visrad_workspace(url)
@@ -1515,7 +1517,7 @@ function _register_qml_functions()
     @qmlfunction br_remove_selected
     @qmlfunction br_load_preset br_set_grouping br_edit_beam br_set_beam_on br_edit_node
     @qmlfunction br_import_beams br_export_beams br_import_sst br_import_summary br_export_sst
-    @qmlfunction br_export_summary br_build br_set_view br_side_view br_xray_image br_close_image br_set_spot_radius br_write_kit br_export_results
+    @qmlfunction br_export_summary br_build br_set_view br_side_view br_xray_image br_close_image br_set_spot_radius br_beam_model br_write_kit br_export_results
     @qmlfunction br_import_visrad_workspace br_export_visrad_workspace br_retune
     @qmlfunction br_opt_set_by br_opt_free br_opt_edit br_opt_objective br_opt_hold
     @qmlfunction br_opt_keepout br_opt_capsule br_opt_start br_opt_cancel br_opt_accept

@@ -1,5 +1,5 @@
-// The drive analysis: compute the view factors, what the target is colored by, the
-// capsule or foil map, and the foil spot radius.
+// The drive analysis: compute the view factors, the beam model of the laser deposition,
+// what the target is colored by, the capsule or foil map, and the foil spot radius.
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -31,9 +31,25 @@ ColumnLayout {
     }
     Note {
         text: app.driveBuilding ? app.driveStatus + " " + app.driveElapsed :
-              app.driveStale ? "The target or the beam ports changed since the view factors were computed." :
+              app.driveStale ? "The target, the beam ports, the cavity or the beam model changed since the drive was computed." :
               app.driveStatus
         color: app.driveStale ? "#d08a00" : palette.windowText
+    }
+
+    SectionLabel { text: "Beam model" }
+    ComboBox {
+        Layout.fillWidth: true
+        textRole: "text"; valueRole: "value"
+        model: [{ text: "Briareus (f-cone)", value: "fcone" },
+                { text: "VisRad profile", value: "visrad" }]
+        currentIndex: Math.max(0, ["fcone", "visrad"].indexOf(app.beamModel))
+        onActivated: Julia.br_beam_model(currentValue)
+    }
+    Note {
+        text: app.beamModel === "visrad" ?
+              "VisRad's beam model (a super-Gaussian cut at each beam's envelope), so the design " +
+              "deposits in VisRad as here; an imported workspace sets its envelopes and focal length." :
+              "The focal spot summed over the f-cone's directions, each with its own incidence."
     }
 
     SectionLabel { text: "Cavity" }
