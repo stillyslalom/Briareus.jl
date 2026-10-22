@@ -374,8 +374,9 @@ Measured on the NIF hohlraum at the GUI's standard mesh (5,864 elements, 48 quad
   `asymmetry_objective`) take the same keywords in `uncertainty`. Tests: a one-beam
   group reproduces the independent errors to
   1e-9, a target shift matches central differences, and every source together matches
-  Monte Carlo within 15%. Tutorial "Beam errors": 20 µm per cone gives half the l = 1
-  of 50 µm per beam and nothing at l = 2.
+  Monte Carlo within 15%. Tutorial "Beam errors": 20 µm per half-cone gives ~40% of
+  the l = 1 of 50 µm per beam. A shared displacement needs a group with a common beam
+  direction: a cone over both hemispheres (`groups = :group`) is refused.
 
 ## Done (2026-10-22, GUI beam model)
 - **Beam-model choice in the GUI** (Drive ▸ Beam model): Briareus's f-cone or VisRad's

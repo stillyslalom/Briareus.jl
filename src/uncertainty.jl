@@ -117,11 +117,12 @@ the beam with rms `pointing` mm (the rms of the displacement's length, `pointing
 along each axis; NIF specifies 50 µm), and its power by an rms fraction `power`.
 
 Correlated errors (zero by default):
-- `group_pointing`: every beam of a group (`groups`: a `Beam` field such as `:quad` or
-  `:group` (the cone), or a function of the beam, e.g. its bundle) is displaced by one
-  shared vector transverse to the group's mean beam direction, rms length
-  `group_pointing` mm. Beams at an angle to that mean also move along themselves
-  (their focus moves with the aim).
+- `group_pointing`: every beam of a group (`groups`: a `Beam` field such as `:quad`, or
+  a function of the beam, e.g. its bundle, or its cone in one hemisphere,
+  `b -> (b.group, b.port[3] > 0)`) is displaced by one shared vector transverse to the
+  group's mean beam direction, rms length `group_pointing` mm. Beams at an angle to that
+  mean also move along themselves (their focus moves with the aim). A group whose beams
+  have no common direction (`:group`, a cone over both hemispheres) is refused.
 - `group_power`: one shared relative power error per group, rms `group_power`.
 - `positioning`: the target is displaced from chamber center, which moves every aim by
   the same vector relative to the target: rms length `positioning` mm, isotropic, or a
@@ -180,6 +181,18 @@ function _transverse_basis(k)
     return u1, cross(k, u1)
 end
 
+# The transverse basis of a group's shared displacement: its beams' mean direction must be
+# well defined (a cone's beams from both hemispheres nearly cancel and have none).
+function _group_basis(beams, idx, g)
+    k = sum(_beam_k(beams[i]) for i in idx)
+    norm(k) >= length(idx) / 2 ||
+        throw(ArgumentError("group $(repr(g)): its beams have no common direction (|mean k| = " *
+                            "$(round(norm(k) / length(idx); digits = 2))), so a shared transverse " *
+                            "displacement is undefined; group by hemisphere, e.g. " *
+                            "groups = b -> (b.group, b.port[3] > 0)"))
+    return _transverse_basis(normalize(k))
+end
+
 # δc when beam bi's aim moves by the vector d (columns a, b and axial of J4)
 function _displaced(J4, N, bi, b, d)
     e1, e2 = spot_axes(b)
@@ -196,7 +209,7 @@ function _group_sources(J4, N, beams, groups, pointing, power)
     for g in unique(keys)
         idx = findall(==(g), keys)
         if pointing > 0
-            for u in _transverse_basis(normalize(sum(_beam_k(beams[i]) for i in idx)))
+            for u in _group_basis(beams, idx, g)
                 push!(cols, sum(_displaced(J4, N, i, beams[i], u) for i in idx))
                 push!(σ2, pointing^2 / 2)
             end
@@ -239,7 +252,7 @@ function sample_modes(s::Scenario, beams::AbstractVector{<:Beam}; pointing::Real
     eff = apply_lpi(s.lpi, beams, s.time)
     keys = [_group_key(b, groups) for b in eff]
     gs = unique(keys)
-    basis = Dict(g => _transverse_basis(normalize(sum(_beam_k(eff[i]) for i in eachindex(eff) if keys[i] == g)))
+    basis = Dict(g => group_pointing > 0 ? _group_basis(eff, findall(==(g), keys), g) : (zero(Vec3), zero(Vec3))
                  for g in gs)
     out = zeros(nm, n)
     for k in 1:n
@@ -423,7 +436,7 @@ function _group_layout(beams, groups, pointing, power)
     for g in unique(keys)
         idx = findall(==(g), keys)
         if pointing > 0
-            u1, u2 = _transverse_basis(normalize(sum(_beam_k(beams[i]) for i in idx)))
+            u1, u2 = _group_basis(beams, idx, g)
             push!(out, (g, :u1, u1), (g, :u2, u2))
         end
         power > 0 && push!(out, (g, :power, zero(Vec3)))

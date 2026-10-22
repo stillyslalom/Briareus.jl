@@ -79,9 +79,12 @@ std_rows(A) = sqrt.(sum(abs2, A .- sum(A; dims = 2) ./ size(A, 2); dims = 2) ./ 
            shape([remake(b; aim = Vec3(b.aim) - Vec3(h, 0, 0)) for b in quads])) ./ 2h
     @test maximum(abs, ux.sigma .- abs.(fdx)) <= 1e-6 * maximum(abs, fdx)
     @test ux.rms_by.positioning ≈ ux.rms_mode
-    # all sources together against Monte Carlo (per cone: groups = :group)
+    # a cone over both hemispheres has no common direction for a shared displacement
+    @test_throws ArgumentError mode_uncertainty(s, quads; group_pointing = 0.02, groups = :group, lmax)
+    @test mode_uncertainty(s, quads; group_power = 0.01, groups = :group, lmax).rms_by.group[1] > 0
+    # all sources together against Monte Carlo (per cone and hemisphere)
     errc = (; pointing = 0.02, power = 0.01, group_pointing = 0.02, group_power = 0.01,
-            groups = :group, positioning = 0.01)
+            groups = b -> (b.group, b.port[3] > 0), positioning = 0.01)
     uc = mode_uncertainty(s, quads; errc..., lmax)
     @test uc.rms_mode ≈ sqrt.(uc.rms_by.beam .^ 2 .+ uc.rms_by.group .^ 2 .+ uc.rms_by.positioning .^ 2)
     @test all(uc.rms_by.group .> 0) && all(uc.rms_by.positioning .> 0)
