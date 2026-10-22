@@ -517,6 +517,38 @@ end
     @test all(x.group === q[findfirst(y -> y.quad == x.quad, q)].group for x in nb)
 end
 
+@testset "relative group pointing" begin
+    # an as-shot-like table: each quad's beams aim at their own points (tangential split)
+    nb = [b for b in nif_beams() if b.quad in ("Q11T", "Q11B", "Q31T")]
+    splitaim(b) = (er = normalize(Vec3(b.port[1], b.port[2], 0)); et = Vec3(-er[2], er[1], 0);
+                s = parse(Int, b.name[end]) % 2 == 1 ? 0.45 : -0.45;
+                Tuple(s * et + Vec3(0, 0, sign(b.port[3]) * 5.9)))
+    bs = [remake(b; aim = splitaim(b)) for b in nb]
+    p = GroupPointing(bs; by = :quad, fields = (:z, :r, :phi), relative = true)
+    @test initial_parameters(p) == zeros(nparams(p))
+    @test all(a.aim ≈ b.aim for (a, b) in zip(apply(p, initial_parameters(p)), bs))
+    # one shift per quad moves every member rigidly in z (mirrored below) and keeps the split
+    x = zeros(nparams(p)); x[1] = 0.2                       # Q11T.z
+    x[nparams(p)-2] = 0.1                                   # Q31T.z
+    moved = apply(p, x)
+    for (a, b) in zip(moved, bs)
+        dz = b.quad == "Q11T" ? 0.2 : b.quad == "Q31T" ? 0.1 : 0.0
+        @test a.aim[3] ≈ b.aim[3] + dz
+        @test a.aim[1] ≈ b.aim[1] && a.aim[2] ≈ b.aim[2]
+    end
+    xm = zeros(nparams(p)); xm[4] = 0.3                     # Q11B.z, mirrored below the equator
+    @test all(a.aim[3] ≈ b.aim[3] - 0.3 for (a, b) in zip(apply(p, xm), bs) if b.quad == "Q11B")
+    # the absolute parameterization collapses each quad onto one tangential aim
+    pa = GroupPointing(bs; by = :quad, fields = (:z, :r, :phi))
+    @test any(!(a.aim ≈ b.aim) for (a, b) in zip(apply(pa, initial_parameters(pa)), bs))
+    # differentiable, and subset keeps the mode
+    t = hohlraum(nz = 8, nphi = 16, capsule_ntheta = 6, capsule_nphi = 8)
+    sc = Scenario(t, bs; observe = :capsule, parameterization = p)
+    g = ForwardDiff.gradient(x -> flux_moments(evaluate(sc, x))[1], initial_parameters(p))
+    @test all(isfinite, g) && any(!iszero, g)
+    @test subset(sc, findall(b -> b.quad != "Q31T", bs)).param.relative
+end
+
 @testset "foil optimization + imaging" begin
     t = Target(foil(:bl, (0, 0, 0), (0, 0, 1); width = 3.0, n = 30, two_sided = false))
     beams = [Beam("b$i"; theta = 40, phi = 90i, power = 0.5, spot = omega_spot(:SG4),

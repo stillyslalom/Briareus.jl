@@ -5,7 +5,7 @@ const _CACHED_LMAX = 12
 const _FIELDS = (:z, :r, :phi, :defocus, :power, :spot, :dlambda)
 
 """
-    GroupPointing(beams; by = :group, fields = (:z, :r, :defocus), mirror = true)
+    GroupPointing(beams; by = :group, fields = (:z, :r, :defocus), mirror = true, relative = false)
 
 Maps a parameter vector to beams. Beams are grouped by `by` (`:group` — e.g. cone —,
 `:quad`, `:beam`, or a function `beam -> key`); each group gets one value per field:
@@ -20,6 +20,12 @@ Maps a parameter vector to beams. Beams are grouped by `by` (`:group` — e.g. c
 - `:dlambda` — wavelength detuning (Å), used by laser–plasma models.
 
 Fields not listed keep each beam's template value.
+
+`relative = true` makes the aim fields (`:z`, `:r`, `:phi`) shifts added to each beam's
+own template aim instead of values the group's beams share, so a group moves rigidly
+and keeps its members' differences: re-pointing an as-shot table, whose beams within a
+quad aim at different points (a facility's per-beam offsets), by one shift per quad.
+Its initial parameters are then zero; the other fields stay absolute.
 """
 struct GroupPointing{K}
     template::Vector{Beam{Float64}}
@@ -27,10 +33,11 @@ struct GroupPointing{K}
     members::Vector{Vector{Int}}
     fields::Vector{Symbol}
     mirror::Bool
+    relative::Bool
 end
 
 function GroupPointing(beams::AbstractVector{<:Beam}; by = :group,
-                       fields = (:z, :r, :defocus), mirror::Bool = true)
+                       fields = (:z, :r, :defocus), mirror::Bool = true, relative::Bool = false)
     for f in fields
         f in _FIELDS || throw(ArgumentError("unknown field $f; choose from $_FIELDS"))
     end
@@ -48,7 +55,7 @@ function GroupPointing(beams::AbstractVector{<:Beam}; by = :group,
                                     Float64(ForwardDiff.value(b.spot.b))),
                    dlambda = Float64(ForwardDiff.value(b.dlambda)))
             for b in beams]
-    return GroupPointing(tmpl, uk, members, collect(Symbol, fields), mirror)
+    return GroupPointing(tmpl, uk, members, collect(Symbol, fields), mirror, relative)
 end
 
 "Number of parameters of a `GroupPointing` (groups × fields)."
@@ -65,11 +72,13 @@ _radial(b::Beam) = (φ = atan(b.port[2], b.port[1]); (Vec3(cos(φ), sin(φ), 0),
 """
     initial_parameters(p::GroupPointing) -> Vector{Float64}
 
-Parameters reproducing the template beams (group means where members differ).
+Parameters reproducing the template beams (group means where members differ; zero
+shifts for the aim fields of a `relative` parameterization).
 """
 function initial_parameters(p::GroupPointing)
     x = zeros(nparams(p))
     for (g, mem) in enumerate(p.members), (fi, f) in enumerate(p.fields)
+        p.relative && f in (:z, :r, :phi) && continue
         vals = map(mem) do bi
             b = p.template[bi]
             er, eφ = _radial(b)
@@ -101,9 +110,15 @@ function apply(p::GroupPointing, x::AbstractVector{T}) where {T}
             b = p.template[bi]
             er, eφ = _radial(b)
             aim0 = b.aim
-            rr = r === nothing ? dot(aim0, er) : r
-            tt = ϕ === nothing ? dot(aim0, eφ) : ϕ
-            zz = z === nothing ? aim0[3] : _zsign(p, b) * z
+            if p.relative
+                rr = r === nothing ? dot(aim0, er) : dot(aim0, er) + r
+                tt = ϕ === nothing ? dot(aim0, eφ) : dot(aim0, eφ) + ϕ
+                zz = z === nothing ? aim0[3] : aim0[3] + _zsign(p, b) * z
+            else
+                rr = r === nothing ? dot(aim0, er) : r
+                tt = ϕ === nothing ? dot(aim0, eφ) : ϕ
+                zz = z === nothing ? aim0[3] : _zsign(p, b) * z
+            end
             aim = rr * er + tt * eφ + SVector{3,T}(0, 0, zz)
             spot = sp === nothing ? _retype(b.spot, T) :
                    _retype(with_axes(b.spot, sp * b.spot.a, sp * b.spot.b), T)
@@ -247,7 +262,8 @@ function subset(s::Scenario, keep::AbstractVector{<:Integer}; parameterization =
         throw(ArgumentError("give a parameterization for a non-GroupPointing scenario"))
     beams = s.param.template[keep]
     param = parameterization === nothing ?
-            GroupPointing(beams; fields = Tuple(s.param.fields), mirror = s.param.mirror) :
+            GroupPointing(beams; fields = Tuple(s.param.fields), mirror = s.param.mirror,
+                          relative = s.param.relative) :
             parameterization
     return Scenario(s.target, param, s.deposition[keep], s.model, s.observed,
                     s.moment_weights, s.ylm_weights, s.moment_response, s.ylm_response,
