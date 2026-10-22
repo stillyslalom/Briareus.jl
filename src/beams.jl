@@ -281,45 +281,82 @@ intensity(b::Beam, x) = intensity(BeamFrame(b), x)
 # ---------------------------------------------------------------------------------------
 
 """
-    VisRadProfile(; envelope = 1.53645, focal_length = 7695.0)
+    VisRadProfile(; envelope = nothing, focal_length = 7695.0, growth = 0.67)
 
 VisRad's analytic beam model (VR/power_sources/set_laser_profile_props.html), for
-deposition that reproduces VisRad's (`DepositionOperator(...; profile)`). The beam is
+deposition that reproduces VisRad 21's (`DepositionOperator(...; profile)`). The beam is
 not the focal spot convolved over the f-cone, as in Briareus's default model. Instead
 the super-Gaussian keeps its shape along the beam with semi-axes
 
-    a(z) = a₀ √((z/z_A)² + 1),   z_A = FL [(FL / (2a₀ f#))² − 1]^(-1/2),
+    a(z) = a₀ √((z/z_A)² + 1),   z_A = (γ/ρ) FL [(FL / (2a₀ f#))² − 1]^(-1/2),
 
-and likewise b(z) with z_B, for distance `z` from best focus and final-optic distance
-`FL` (`focal_length`, mm; VisRad's port radius, 769.5 cm at NIF). Then a(FL) is the
-f-cone's radius at the lens. The profile is cut off at the elliptical radius
-`envelope` (in 1/e semi-axes), and its peak is renormalized so the envelope holds the
-beam's power in every transverse plane. A surface absorbs the profile times the
-incidence factor |n·k| of the beam axis, where the axis reaches it unobstructed.
+and likewise b(z) with z_B, for distance `z` from best focus, final-optic distance `FL`
+(`focal_length`, mm; VisRad's port radius, 769.5 cm at NIF), the beam's envelope ratio
+ρ and `growth` γ. The profile is cut off at the elliptical radius ρ (in 1/e semi-axes
+a(z), b(z)), and its peak is renormalized so the envelope holds the beam's power in
+every transverse plane. A surface absorbs the profile times the incidence factor |n·k|
+of the beam axis, where the axis reaches it unobstructed.
 
-What is not modeled, for lack of VisRad's constants (see `reference/research-notes.md`,
-"The faint wings"):
-- the exponent's change along the beam, n(z) = n₀[1 + 0.2 z/z₀], with z₀ unstated;
-- the blend toward a square beam away from focus, whose weight
-  f_sq = [z/√(z² + ab)]^Γ is not small at sub-mm defocus unless Γ is large;
+The manual gives z_A without the factor γ/ρ (`growth = nothing` uses it so; a(FL) is
+then the f-cone's radius at the lens). VisRad 21's output grows faster: on NIF hohlraum
+walls 3–8 mm past focus its spots are as wide as γ/ρ with γ = 0.67 makes them, for all
+four NIF cones (ρ = 1.27–1.54), where the manual's z_A leaves Briareus's peaks 10% high
+and the element rms difference at 10%. γ is inferred from VisRad output (fitted on one
+workspace, checked on two others and a foil near focus; `reference/research-notes.md`,
+"VisRad deposition parity"). Every beam there had VisRad's default envelope, so the
+data cannot tell a dependence on ρ from one on the exponent n.
+
+`envelope` is the ratio ρ for every beam (a number), per beam name (a `Dict`; beams
+not in it take the default), or `nothing` for VisRad's default (ln 1000)^(1/n), the
+radius where the focal profile falls to 10⁻³ of its peak (it reproduces the NIF
+plates' ratios 1.53645, 1.49576, 1.27326 and 1.28955). `visrad_profile` takes the
+envelopes and focal length from a workspace.
+
+What is not modeled, for lack of VisRad's constants (see `reference/research-notes.md`):
+- the exponent's change along the beam, n(z) = n₀[1 + 0.2 z/z₀], with z₀ unstated (the
+  wall data are as well or better fit with z₀ = ∞);
+- the blend toward a square beam, f_sq = [z/√(z² + ab)]^Γ with Γ = 1; the NIF beams in
+  the workspaces checked behave as circular at the final optics (f_sq = 0), and a
+  blend of that weight would square their spots on the walls, which VisRad's are not;
 - occultation by VisRad's ray grid. Here the beam axis through each point decides it.
-
-Against a VisRad foil calculation the elements above 5% of peak agree within 1.4%.
-The wings at sub-mm defocus differ by up to ~20%. VisRad's effective envelope there lay
-near 1.64, against the file's ratio of 1.53645; the ratio's exact definition is
-unresolved. `visrad_profile` takes the parameters from a workspace.
 """
 struct VisRadProfile
-    envelope::Float64
+    envelope::Union{Nothing,Float64,Dict{String,Float64}}
     focal_length::Float64
-    function VisRadProfile(envelope, focal_length)
-        envelope > 0 || throw(ArgumentError("envelope must be positive"))
+    growth::Union{Nothing,Float64}
+    function VisRadProfile(envelope, focal_length, growth)
+        env = envelope isa AbstractDict ? Dict{String,Float64}(String(k) => v for (k, v) in envelope) :
+              envelope === nothing ? nothing : Float64(envelope)
+        all(>(0), env isa Dict ? values(env) : something(env, 1.0)) ||
+            throw(ArgumentError("envelope must be positive"))
         focal_length > 0 || throw(ArgumentError("focal_length must be positive"))
-        return new(Float64(envelope), Float64(focal_length))
+        growth === nothing || growth > 0 || throw(ArgumentError("growth must be positive"))
+        return new(env, Float64(focal_length), growth === nothing ? nothing : Float64(growth))
     end
 end
 
-VisRadProfile(; envelope = 1.53645, focal_length = 7695.0) = VisRadProfile(envelope, focal_length)
+VisRadProfile(; envelope = nothing, focal_length = 7695.0, growth = 0.67) =
+    VisRadProfile(envelope, focal_length, growth)
+
+"""
+    visrad_envelope(order) -> Float64
+
+VisRad's default envelope ratio for a super-Gaussian of exponent `order`: the radius,
+in 1/e units, where the focal profile falls to 10⁻³ of its peak, (ln 1000)^(1/n).
+Inferred: it reproduces every NIF plate's ratio in VisRad 21 workspaces.
+"""
+visrad_envelope(order) = log(1000.0)^(1 / order)
+
+# The envelope ratio `prof` gives beam `b`.
+function _vr_envelope(prof::VisRadProfile, b::Beam)
+    e = prof.envelope
+    e isa Float64 && return e
+    e isa Dict && haskey(e, b.name) && return e[b.name]
+    return visrad_envelope(b.spot.order)
+end
+
+# Factor on z_A² (and z_B²): (γ/ρ)², or 1 for the manual's z_A.
+_vr_zfactor(prof::VisRadProfile, env) = prof.growth === nothing ? 1.0 : (prof.growth / env)^2
 
 # One component of a beam under VisRad's profile: focal semi-axes squared, their
 # Rayleigh-like ranges z_A², z_B², and the power normalization within the envelope.
@@ -340,12 +377,13 @@ function _vr_range2(r2, F, FL)
     return FL^2 / (x - 1)
 end
 
-function _VRComponent(c::_SGComponent, F, prof::VisRadProfile)
+function _VRComponent(c::_SGComponent, F, prof::VisRadProfile, env)
     n = 2 * c.halfn
-    inside = gamma_inc(2 / n, prof.envelope^n)[1]
-    return _VRComponent(c.a2, c.b2, _vr_range2(c.a2, F, prof.focal_length),
-                        _vr_range2(c.b2, F, prof.focal_length), c.halfn, c.power_norm / inside,
-                        prof.envelope^2)
+    inside = gamma_inc(2 / n, env^n)[1]
+    g = _vr_zfactor(prof, env)
+    return _VRComponent(c.a2, c.b2, g * _vr_range2(c.a2, F, prof.focal_length),
+                        g * _vr_range2(c.b2, F, prof.focal_length), c.halfn, c.power_norm / inside,
+                        env^2)
 end
 
 # Intensity (per unit area normal to the beam) at focal-frame coordinates (u, v), a
@@ -372,9 +410,10 @@ struct _VRFrame{T}
     has_halo::Bool
 end
 
-_VRFrame(f::BeamFrame, prof::VisRadProfile) =
-    _VRFrame(f.k, f.e1, f.e2, f.focus, _VRComponent(f.core, f.fnumber, prof),
-             _VRComponent(f.halo, f.fnumber, prof), f.has_halo)
+# `env`: the beam's envelope ratio (`_vr_envelope`)
+_VRFrame(f::BeamFrame, prof::VisRadProfile, env) =
+    _VRFrame(f.k, f.e1, f.e2, f.focus, _VRComponent(f.core, f.fnumber, prof, env),
+             _VRComponent(f.halo, f.fnumber, prof, env), f.has_halo)
 
 @inline function _vr_coords(f::_VRFrame, x)
     d = x - f.focus
@@ -399,7 +438,8 @@ end
 Intensity (TW/mm², per unit area normal to the beam) of `beam` at point `x` under
 VisRad's beam model (`VisRadProfile`).
 """
-intensity(prof::VisRadProfile, b::Beam, x) = _vr_intensity(_VRFrame(BeamFrame(b), prof), x)
+intensity(prof::VisRadProfile, b::Beam, x) =
+    _vr_intensity(_VRFrame(BeamFrame(b), prof, _vr_envelope(prof, b)), x)
 
 """
     cone_directions(beam, n) -> (dirs, weights)

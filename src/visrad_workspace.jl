@@ -530,23 +530,23 @@ function read_visrad_workspace(path::AbstractString; template = nothing, missing
 end
 
 """
-    visrad_profile(workspace) -> VisRadProfile
+    visrad_profile(workspace; growth = 0.67) -> VisRadProfile
 
-VisRad's beam model with the workspace's parameters: the envelope ratio and the final
-optic distance (port radius, cm → mm) of the beams that are on (of all beams if none
-is on). Beams that differ in either are warned about, and the largest value is used.
-Pass it to `DepositionOperator(target, beams; profile)`, or to a `Scenario` through
-`deposition_kw = (; profile)`.
+VisRad's beam model with the workspace's parameters: each beam's envelope ratio (by
+name; VisRad's default ratio differs by phase plate, 1.27–1.54 for the NIF plates) and
+the final-optic distance (port radius, cm → mm) of the beams that are on (of all beams
+if none is on; beams that differ in it are warned about, and the largest is used).
+`growth` is `VisRadProfile`'s. Pass it to `DepositionOperator(target, beams; profile)`,
+or to a `Scenario` through `deposition_kw = (; profile)`.
 """
-function visrad_profile(ws::VisRadWorkspace)
+function visrad_profile(ws::VisRadWorkspace; growth = 0.67)
     rows = filter(r -> r.on_blue != 0, ws.rows)
     isempty(rows) && (rows = ws.rows)
-    isempty(rows) && return VisRadProfile()
-    env = unique(r.envelope_ratio for r in rows)
+    isempty(rows) && return VisRadProfile(; growth)
     fl = unique(10 * r.port_radius for r in rows)
-    length(env) > 1 && @warn "beams differ in VisRad's envelope ratio; using the largest" ratios = env
     length(fl) > 1 && @warn "beams differ in final-optic distance; using the largest" distances_mm = fl
-    return VisRadProfile(; envelope = maximum(env), focal_length = maximum(fl))
+    return VisRadProfile(; envelope = Dict(r.name => r.envelope_ratio for r in ws.rows),
+                         focal_length = maximum(fl), growth)
 end
 
 """

@@ -88,9 +88,11 @@ super-Gaussian's shape along the beam, with semi-axes that grow on a hyperbola a
 envelope cut-off. Points are then sampled along the beam axis only (`ncone` is
 ignored), and the beam axis through each point decides its shadowing. The two models
 agree near focus; away from it VisRad's spot keeps its shape while the f-cone
-convolution softens the edges. Power on a surface that intercepts the whole beam is
-the beam's power in planes normal to the beam, and only approximately on tilted ones
-(VisRad normalizes per transverse plane).
+convolution softens the edges, and VisRad's spot grows faster (on NIF hohlraum walls
+the f-cone model's peaks are 10% higher than VisRad's). Power on a surface that
+intercepts the whole beam is the beam's power in planes normal to the beam, and only
+approximately on tilted ones (per-plane normalization: 0.15% high on a foil tilted 20°
+across ±2.5 mm of focus, where VisRad's totals are exact).
 
 The beams' ports must not change after construction.
 """
@@ -105,6 +107,7 @@ struct DepositionOperator
     dest::Vector{Vector{Int32}}    # > 0: element; < 0: -(component) for an unmodeled back side
     plan::_DepositPlan             # work units of the threaded `deposit`
     profile::Union{Nothing,VisRadProfile}   # nothing: the f-cone model
+    envelope::Vector{Float64}      # per beam: VisRad envelope ratio (empty for the f-cone model)
 end
 
 const _DEPOSIT_UNIT = 4096   # points per work unit
@@ -150,11 +153,11 @@ function _deposit_plan(ne::Integer, dest::Vector{Vector{Int32}}; unit::Integer =
 end
 
 DepositionOperator(t::Target, ports, dirs, pts, w, normal, mask, dest,
-                   profile::Union{Nothing,VisRadProfile} = nothing) =
+                   profile::Union{Nothing,VisRadProfile} = nothing, envelope = Float64[]) =
     DepositionOperator(t, ports, dirs, pts, w, normal, mask, dest, _deposit_plan(nelements(t), dest),
-                       profile)
+                       profile, envelope)
 DepositionOperator(t::Target, ports, dirs, pts, w, normal, mask, dest, plan::_DepositPlan) =
-    DepositionOperator(t, ports, dirs, pts, w, normal, mask, dest, plan, nothing)
+    DepositionOperator(t, ports, dirs, pts, w, normal, mask, dest, plan, nothing, Float64[])
 
 function DepositionOperator(t::Target, beams::AbstractVector{<:Beam}; level::Integer = 1,
                             ncone::Integer = 13, resolution = 0.3, reach = 2.0,
@@ -201,8 +204,9 @@ function DepositionOperator(t::Target, beams::AbstractVector{<:Beam}; level::Int
         mask[bi] = reduce(vcat, [p.M for p in col])[perm]
         dest[bi] = D[perm]
     end
+    envelope = profile === nothing ? Float64[] : [_vr_envelope(profile, b) for b in beams]
     return DepositionOperator(t, [b.port for b in beams], [g.ds for g in geo], pts, w, normal,
-                              mask, dest, profile)
+                              mask, dest, profile, envelope)
 end
 
 const _OperatorPoints = @NamedTuple{P::Vector{Vec3}, W::Vector{Float64}, N::Vector{Vec3},
@@ -215,12 +219,14 @@ function _operator_beam(b::Beam, ncone, profile)
     sp = b.spot
     amin = ForwardDiff.value(min(sp.a, sp.b))
     # footprint: 2.5 semi-axes grown by the f-cone; VisRad's envelope grows as a(z) does,
-    # within envelope × (a₀ + |z|/(2f#))
-    r = profile === nothing ? 2.5 : max(2.5, profile.envelope)
+    # within ρ (a₀ + |z| a₀/z_A), a₀/z_A < 1/(2f#) × max(1, ρ/γ)
+    env = profile === nothing ? 1.0 : _vr_envelope(profile, b)
+    r = max(2.5, env)
     extent = r * ForwardDiff.value(max(sp.a, sp.b)) * (sp.halo > 0 ? max(1, sp.halo_scale) : 1)
     aim = Vec3(ForwardDiff.value.(b.aim))
     focus = aim + ForwardDiff.value(b.defocus) * k
-    cone = (profile === nothing ? 1.0 : max(1.0, profile.envelope)) / (2b.fnumber)
+    cone = (profile === nothing ? 1.0 : max(1.0, env) / sqrt(min(1.0, _vr_zfactor(profile, env)))) /
+           (2b.fnumber)
     return (; k, ds, amin, extent, focus, cone)
 end
 
@@ -434,7 +440,8 @@ _fullmask(ds) = UInt16((1 << length(ds)) - 1)
 "Operator restricted to the beams `idx` (same order as `idx`)."
 Base.getindex(op::DepositionOperator, idx::AbstractVector{<:Integer}) =
     DepositionOperator(op.target, op.ports[idx], op.dirs[idx], op.pts[idx], op.w[idx],
-                       op.normal[idx], op.mask[idx], op.dest[idx], op.profile)
+                       op.normal[idx], op.mask[idx], op.dest[idx], op.profile,
+                       op.profile === nothing ? Float64[] : op.envelope[idx])
 
 function Base.show(io::IO, op::DepositionOperator)
     np = sum(length, op.w; init = 0)
@@ -548,7 +555,8 @@ end
 @inline function _sum_points(sink::F, op::DepositionOperator, bi, f::BeamFrame,
                              fv::BeamFrame{Float64}, (κ, α, β), r, ::Type{T}) where {F,T}
     op.profile === nothing ||
-        return _sum_points_visrad(sink, op, bi, _VRFrame(f, op.profile), _VRFrame(fv, op.profile), r, T)
+        return _sum_points_visrad(sink, op, bi, _VRFrame(f, op.profile, op.envelope[bi]),
+                                  _VRFrame(fv, op.profile, op.envelope[bi]), r, T)
     ds = op.dirs[bi]
     P, W, Nr, M, D = op.pts[bi], op.w[bi], op.normal[bi], op.mask[bi], op.dest[bi]
     αmax, βmax = maximum(abs, α), maximum(abs, β)
