@@ -393,6 +393,9 @@ Measured on the NIF hohlraum at the GUI's standard mesh (5,864 elements, 48 quad
   `deposit(...).element`. CAD meshes map in file order and rectangles local-x fastest;
   spheres and hohlraums with laser power are refused (order unknown). On N210808 it
   equals the ad hoc study reader bit for bit (wall 428.4920, THOR windows 6.2526 TW each).
+  `write_visrad_workspace` resets a computed template's results (power sources,
+  radiosities, capture/clearance) to "not up to date" when it writes any row, so old
+  results cannot be read back as the new beams'.
 
 ## Open questions (from the 2026-10-18 CAD work)
 Choices made provisionally overnight or left open; the lean is in brackets.
