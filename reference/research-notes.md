@@ -2269,3 +2269,77 @@ primary text read, **M** = abstract or secondary, **L** = inference or arithmeti
   Before 4.8 ns the two agree to < 0.01 eV and 0.003 points. A 16 % smaller LEH radius
   is therefore worth ~2.5 points of P2, which is comparable to the cone-fraction
   retunes of the tutorials. Set the closure from data before trusting absolute P2.
+
+## Inner-beam bubble absorption (2026-10-23)
+
+`BubbleAbsorption` (`src/bubble.jl`, ROADMAP Next 9, third piece; `test/bubble.jl`). A
+laser–plasma model (`apply_lpi`), so it enters `drive_history(...; lpi)`,
+`Scenario(...; lpi)` and composes with CBET (`lpi = (cbet, bubble)`). Sources are in
+`reference/litreview/hohlraum_dynamics.md` §1 and "What Briareus should implement" §3.
+
+- **Model.** Tip x_bub(t) = v_b·max(0, t − t_L), t_L = outer turn-on + 0.2 ns,
+  v_b = v_ref (E/E_ref)^0.2 (ρ₀/0.3)^−0.2. In the plane z_b where the `footprint`
+  (default 50°) beams' axes reach the wall (the moved wall when given a `WallMotion`),
+  the bubble is the annulus r > R₀ − x_bub. Each inner beam loses f·(1 − T_b), with f its
+  power crossing z_b inside the annulus, from the beam itself: best-focus spot (core and
+  halo, 12 equal-power radii × 24 angles) carried along 13 f-cone directions, as the
+  deposition model does. T_b = exp(−τ_b (ρ₀/0.3)^q (x/1 mm)^0.5 (R₀/(R₀ − x))²).
+  *Engineering model.*
+- **Departures from the lit-review spec, and why.**
+  - A density factor (ρ₀/0.3)^q in T_b. Without it the 0.15 mg/cc bubble, being deeper,
+    is *more* opaque, so no τ_b can meet both of Izumi's anchors. Two anchors fix τ_b and
+    q: **τ_b = 0.1441, q = 1.862** (*derived*, `_bubble_anchor_fit`: R = 2.88 mm, launch
+    0.5 ns, x = 1.75 / 2.01 mm at 5.5 ns). q ≈ 2 is the ρ² of inverse bremsstrahlung,
+    which supports the form (**L**).
+  - The absorbed power is not deposited on a separate wall band: it is moved to the
+    footprint beams of the inner beam's hemisphere, in equal shares, so the existing
+    deposition operator puts it where those beams land. Beam power is conserved
+    exactly (per hemisphere), the band follows the outer pointing and the moving wall,
+    and no new operator or keyframe data is needed. Equal shares (not power-weighted)
+    keep it defined when the outer power is zero. The footprint beams' own LEH loss
+    (a few 1e-4) applies to the moved power.
+  - The bubble edge is a logistic step 0.05 mm wide (`edge`), so f is smooth in time,
+    depth and pointing (ForwardDiff through `speed`, `opacity` and the beams).
+  - The tip is measured from the initial wall; only the footprint plane follows a
+    moving wall.
+- **Defaults** (engineering, **M**): v_ref 0.35 mm/ns at 0.3 mg/cc (Izumi PoP 28,
+  022706, 2021, 345 µm/ns; Meezan 2020 measured 321–461 µm/ns); scalings E^0.2, ρ₀^−0.2
+  (Izumi 2021, ±0.03 each); delay 0.2 ns (Izumi: intercept 0.5 ± 0.1 ns for a 0.3 ns
+  turn-on); p = 0.5 (Izumi Eq. 6); (R/(R − x))² stands for Izumi's ρ_bub ∝ (R/R_bub)^k
+  with k = 1 (the paper's k is illegible in the extraction, **L**).
+- **Checks** (*derived*):
+  - Anchors: T_b = 0.290 (0.3 mg/cc) and 0.540 (0.15) at 5.5 ns, exact by construction.
+  - f against a closed form: a Gaussian spot on a collimated vertical beam gives
+    exp(−ρ²/a²) to 3e-3 (nr = 400).
+  - Ralph et al. 2018 (6.72 mm CH high-foot, 0.6 mg/cc). Geometry **L**: R = 3.36,
+    L = 11.3 mm, the retune tutorial's pointing scaled in z by 11.3/10.1. On Ralph's
+    measured trajectory (0.182 mm/ns, at the wall at 2.47 ns), inner absorption reaches
+    Ralph's 51 % and 62 % at x = 1.93 and 2.05 mm, i.e. 13.1 and 13.7 ns. That is
+    consistent with his anchor if mid-peak falls there (the high-foot pulse timing is
+    not in our notes, **L**). The 30° cone first meets the bubble (1 % clipped) at
+    r = 2.11 mm, against Ralph's 2.4 mm; the scaled pointing is a guess.
+  - Swing direction. Retune-tutorial hohlraum (10.1 × 5.75 mm, `WallLossAlbedo`,
+    h 0.45 / capsule_h 0.15, 0.25 ns steps), wall 0.1 mm/ns from 0.3 ns (11 keyframes),
+    lips `GapClosure(closure = 5.0, width = 0.5, after = WallLossAlbedo())`, bubble
+    turn-on 0 (launch 0.2 ns), footprint following the wall. Capsule flux P2/P0:
+
+    | t (ns) | static | wall | wall + lips | wall + lips + bubble | PRE 109 Fig. 10 (N221204) |
+    |---|---|---|---|---|---|
+    | 2.0 | −0.173 | −0.167 | −0.167 | −0.167 | ≈0 |
+    | 4.0 | −0.151 | −0.129 | −0.129 | −0.107 | −0.013 |
+    | 5.5 | −0.122 | −0.075 | −0.048 | +0.051 | −0.168 |
+    | 6.5 | −0.099 | −0.029 | −0.004 | +0.131 | −0.057 |
+    | 8.0 | −0.092 | +0.012 | +0.035 | +0.172 | +0.090 |
+
+    The bubble moves P2/P0 positive, as HYDRA's swing does, by +0.10 at 5.5 ns and
+    +0.14 from 6.5 ns. Inner absorption is 54 % (23°) and 44 % (30°) at 5.5 ns, 88/79 %
+    at 6.5 ns, and > 99 % by 8 ns. Capsule Tr falls 2–8 eV against wall + lips (the moved
+    power lands near the LEH). The tutorial pointing is not HYBRID-E's and its foot
+    is not tuned (−0.17 against ≈0), so only the direction and the late rise compare.
+- **Open.** The ballistic tip crosses a 2.9 mm hohlraum by ~8 ns and clips every inner
+  beam, so late-peak P2 plateaus at full inner absorption. Izumi 2023 finds the tip
+  stagnates in low-trough pulses and slows near the axis; HYDRA (PRE 109 Fig. 1a) shows
+  the dense bubble only 0.7–1.0 mm in at 6 ns. A stagnation depth, or fitting
+  v_ref and τ_b to shot data (Next 10), is the next step. The ridge-stop stage
+  (inner power stopping at r ≈ 0.73 R after the ablator–wall collision) is not
+  implemented.

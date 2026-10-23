@@ -2,6 +2,6 @@
 
 ```@autodocs
 Modules = [Briareus]
-Pages = ["src/lpi.jl", "src/cbet.jl"]
+Pages = ["src/lpi.jl", "src/bubble.jl", "src/cbet.jl"]
 Private = false
 ```

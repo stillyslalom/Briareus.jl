@@ -45,7 +45,8 @@ export enclosed_radius, envelope_radius, focal_profile, enclosed_fraction, with_
        beam_component_power, violations, min_clearance, write_clearance_csv,
        SpotWing, PowerLawWing, UniformScatter, nif_wings, DEFAULT_CLEARANCE_THRESHOLDS
 export LaserPlasmaModel, apply_lpi, Backscatter, CalibratedTransfer, linear_transfer,
-       tabulated_transfer, lpi_summary
+       tabulated_transfer, lpi_summary, BubbleAbsorption, bubble_speed, bubble_depth,
+       bubble_transmission, bubble_fractions, iris_fraction
 export CBET, CH_IONS, ion_wave_amplitude, receiver_ratio, calibrate_cbet, cbet_gain, cbet_coupling, cbet_plasma, plasma_dispersion
 export UnconvertedColor, nif_unconverted, UnconvertedRow, UnconvertedReport, unconverted_light_check
 export TaLISRow, TaLISReport, talis_check, write_talis_csv, TALIS_SOURCE, TALIS_OUT_OF_SCOPE, talis_requirement
@@ -92,6 +93,7 @@ include("uncertainty.jl")
 include("implosion.jl")
 include("talis.jl")
 include("lpi.jl")
+include("bubble.jl")
 include("io.jl")
 include("visrad.jl")
 include("visrad_workspace.jl")
