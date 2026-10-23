@@ -1111,4 +1111,5 @@ include("capsule_mesh.jl")
 include("partial_visibility.jl")
 include("montecarlo.jl")
 include("corners.jl")
+include("dynamics.jl")
 end

@@ -249,6 +249,20 @@ function hohlraum_counts(; length, radius, leh_radius, h)
     return (; nz, nphi, nr_cap, nr_leh)
 end
 
+# The wall, cap, LEH and fillet counts `hohlraum` meshes with: from the element size `h`
+# when given (the straight wall and the flat caps are shorter by the fillets), and the
+# fillet bands about one wall cell of arc each unless `nr_corner` is given.
+function _hohlraum_grid(; length, radius, leh_radius, h, rc, nz, nphi, nr_cap, nr_leh, nr_corner)
+    if h !== nothing
+        (; nz, nphi, nr_cap, nr_leh) = hohlraum_counts(; length, radius, leh_radius, h)
+        nz = max(2, ceil(Int, (length - 2rc) / h))
+        nr_cap = max(1, ceil(Int, (radius - rc - leh_radius) / h))
+    end
+    hcell = min(2π * radius / nphi, (length - 2rc) / nz)
+    nr_corner = rc > 0 ? something(nr_corner, max(2, ceil(Int, (π / 2) * rc / hcell))) : nr_corner
+    return (; nz, nphi, nr_cap, nr_leh, nr_corner)
+end
+
 """
     capsule_counts(capsule_radius, capsule_h) -> (; capsule_ntheta, capsule_nphi)
 
@@ -333,12 +347,8 @@ function hohlraum(; length = 9.4, radius = 2.875, leh_radius = 1.55, capsule_rad
     capsule_radius < min(radius, length / 2) || throw(ArgumentError("capsule does not fit"))
     capsule_mesh in (:latlong, :compact) ||
         throw(ArgumentError("capsule_mesh must be :latlong or :compact, got :$capsule_mesh"))
-    if h !== nothing
-        (; nz, nphi, nr_cap, nr_leh) = hohlraum_counts(; length, radius, leh_radius, h)
-        # the straight wall and the flat caps are shorter by the fillets
-        nz = max(2, ceil(Int, (length - 2rc) / h))
-        nr_cap = max(1, ceil(Int, (radius - rc - leh_radius) / h))
-    end
+    (; nz, nphi, nr_cap, nr_leh, nr_corner) =
+        _hohlraum_grid(; length, radius, leh_radius, h, rc, nz, nphi, nr_cap, nr_leh, nr_corner)
     if capsule_mesh === :compact && capsule_radius > 0
         capsule_n = icosphere_frequency(capsule_radius, something(capsule_h, π * capsule_radius / capsule_ntheta))
     elseif capsule_h !== nothing && capsule_radius > 0
@@ -390,7 +400,7 @@ function hohlraum(; length = 9.4, radius = 2.875, leh_radius = 1.55, capsule_rad
                  surface = DiskSurface(center = (0, 0, -h))),
     ]
     if rc > 0
-        k = something(nr_corner, max(2, ceil(Int, (π / 2) * rc / hcell)))
+        k = nr_corner
         k >= 1 || throw(ArgumentError("nr_corner must be at least 1"))
         for (sgn, name) in ((1, :corner_top), (-1, :corner_bottom)), i in 1:k
             push!(comps, _corner_band(Symbol(name, :_, i), radius, hw, rc, sgn, i, k, nphi, phibreaks, wall))

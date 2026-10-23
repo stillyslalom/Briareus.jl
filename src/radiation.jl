@@ -222,7 +222,8 @@ explicit `albedo`) is cached on the model, so repeated solves with unchanged alb
 cost only a pair of triangular solves and a matrix–vector product. Iterates of a
 temperature-dependent albedo differ from call to call and are factored afresh.
 
-`guess`, a previous solution of the same model (e.g. the last step of a history),
+`guess`, a previous solution of the same model or one with the same elements (e.g. the
+last step of a history, or a keyframe of a moving target),
 starts the albedo iteration from its incident-flux temperatures instead of the
 materials' reference temperatures: fewer iterations when it is close. The result then
 differs from a cold start by less than the iteration's tolerance. The first albedo is
@@ -236,7 +237,8 @@ function solve(m::RadiationModel, P::AbstractVector; time = 0.0, albedo = nothin
     S = conversions(t) .* P ./ t.elem_area
     iterate = albedo === nothing && _temperature_dependent(t)
     warm = iterate && guess !== nothing
-    warm && guess.model.target !== t && throw(ArgumentError("guess is a solution of another model"))
+    warm && nelements(guess.model.target) != nelements(t) &&
+        throw(ArgumentError("guess is a solution of a model with other elements"))
     α, intact, tr = albedo === nothing ? _albedos(t, time, warm ? guess.H : nothing, burnthrough) :
                     (a = collect(Float64, albedo); (a, a, zero(a)))
     B = H = nothing

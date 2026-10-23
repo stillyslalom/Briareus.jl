@@ -103,20 +103,23 @@ much longer than that jumps across it. Two optional criteria insert steps betwee
 Neither shortens a step below `min_step` (ns). Without them (the default) the steps
 are exactly `times`.
 """
-function drive_history(m::RadiationModel, op::DepositionOperator, beams_at, times;
-                       observe = :capsule, lmax::Integer = 6, wall = (:wall,),
-                       lpi = nothing, holes = nothing, ylm::Bool = false,
-                       transition = nothing, flux_change = nothing, min_step::Real = 1e-3,
-                       tol = 1e-4, keep_albedo::Bool = false)
+drive_history(m::RadiationModel, op::DepositionOperator, beams_at, times; kwargs...) =
+    _drive_history(m.target, τ -> m, (τ, beams) -> deposit(op, beams), beams_at, times; kwargs...)
+
+# The history on the models `model_at(τ)` and depositions `deposit_at(τ, beams)`, whose
+# elements are those of `t` (a fixed target, or the keyframes of a moving one).
+function _drive_history(t::Target, model_at, deposit_at, beams_at, times;
+                        observe = :capsule, lmax::Integer = 6, wall = (:wall,),
+                        lpi = nothing, holes = nothing, ylm::Bool = false,
+                        transition = nothing, flux_change = nothing, min_step::Real = 1e-3,
+                        tol = 1e-4, keep_albedo::Bool = false)
     transition === nothing || transition > 0 || throw(ArgumentError("transition must be positive"))
     flux_change === nothing || flux_change > 0 || throw(ArgumentError("flux_change must be positive"))
     min_step > 0 || throw(ArgumentError("min_step must be positive"))
     issorted(times) || throw(ArgumentError("times must be sorted"))
-    t = m.target
     obs = elements(t, (observe isa Symbol ? (observe,) : observe)...)
     we = elements(t, wall...)
-    Aw = t.elem_area[we]
-    W = ylm ? ylm_weights(t, obs; lmax) : nothing
+    weights = _TargetCache(tg -> ylm_weights(tg, obs; lmax))
     N = nelements(t)
     # thin-foil components and the elements whose burnthrough is tracked
     foils = [ci for (ci, c) in enumerate(t.components)
@@ -165,7 +168,8 @@ function drive_history(m::RadiationModel, op::DepositionOperator, beams_at, time
             isnan(tb[e]) && rate[e] > 0 && I[e] + Δ * rate[e] >= need[e] &&
                 (pred[e] = τ0 + (need[e] - I[e]) / rate[e])
         end
-        sol = solve(m, dep; time = τ, burnthrough = pred, guess, tol)
+        mτ = model_at(τ)
+        sol = solve(mτ, dep; time = τ, burnthrough = pred, guess, tol)
         # corrector: the trapezoidal integral with this step's temperatures
         function advance(sol)
             Ik, tk, rk = copy(I), copy(tb), copy(rate)
@@ -189,7 +193,7 @@ function drive_history(m::RadiationModel, op::DepositionOperator, beams_at, time
                        !(abs(tk[e] - used[e]) <= 1e-12 * max(abs(τ), 1.0))
             any(moved, tracked) || break
             used = tk
-            sol = solve(m, dep; time = τ, burnthrough = used, guess = sol, tol)
+            sol = solve(mτ, dep; time = τ, burnthrough = used, guess = sol, tol)
             Ik, tk, rk = advance(sol)
         end
         return sol, Ik, tk, rk
@@ -225,9 +229,9 @@ function drive_history(m::RadiationModel, op::DepositionOperator, beams_at, time
             end
             local sol, Ik, tk, rk, a, dep
             while true
-                dep = deposit(op, apply_lpi(lpi, beams_at(τ), τ))
+                dep = deposit_at(τ, apply_lpi(lpi, beams_at(τ), τ))
                 sol, Ik, tk, rk = step(τ0, τ, dep, last)
-                a = legendre_moments(sol.H, t, obs; lmax)
+                a = legendre_moments(sol.H, sol.model.target, obs; lmax)
                 τ0 === nothing && break
                 h = τ - τ0
                 h / 2 >= min_step || break
@@ -243,7 +247,8 @@ function drive_history(m::RadiationModel, op::DepositionOperator, beams_at, time
             push!(time, τ)
             push!(delivered, dep.delivered)
             push!(moments, a)
-            ylm && push!(clm, W * sol.H[obs])
+            ylm && push!(clm, weights(sol.model.target) * sol.H[obs])
+            Aw = sol.model.target.elem_area[we]
             push!(flux, a[1])
             push!(Tr, radiation_temperature(a[1]))
             Hw = sum(sol.H[we] .* Aw) / sum(Aw)
@@ -280,3 +285,15 @@ end
 
 _columns(v, n) = isempty(v) ? zeros(n, 0) : reduce(hcat, v)
 _nan_inf(x) = isnan(x) ? Inf : x
+
+# A value computed from a target and kept while the target stays the same object.
+mutable struct _TargetCache{F}
+    f::F
+    target::Union{Nothing,Target}
+    value::Any
+end
+_TargetCache(f) = _TargetCache(f, nothing, nothing)
+function (c::_TargetCache)(t::Target)
+    c.target === t || (c.value = c.f(t); c.target = t)
+    return c.value
+end

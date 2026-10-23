@@ -2122,3 +2122,44 @@ Two surfaces move at different speeds, and a view-factor model should treat them
   its own P2 (+0.53 at the wall) (Dewald PoP 27, 2020, **H**).
 - CompactLES (2026-10-22) has no radiation, laser, plasma EOS or ablation model; its
   SESAME/IONMIX readers exist but no solver uses them.
+
+## Moving wall on keyframes (2026-10-23) *derived*
+
+`WallMotion` / `moving_hohlraum` / `Keyframes` (ROADMAP Next 9, first piece). The radiating
+wall cylinder shrinks at `speed` from `start`; caps keep their planes, LEHs their radius,
+the capsule stays; mesh counts are frozen at R₀ so every time has the same elements.
+Between keyframes the exchange matrix Aᵢ Fᵢⱼ is interpolated linearly in time and divided
+by the areas at that time (reciprocity kept; rebalanced for closed targets); deposition
+operators are built at each time.
+
+**Default speed 0.10 mm/ns** (engineering default, **M**): Chen 2020 (500 µm in by 5.5 ns
+at 0.3 mg/cc, 400 at 0.45: ~0.07–0.09 mm/ns); PRE 109, 025204 Fig. 1a (HYBRID-E,
+measured off the figure ±0.15 mm: wall-material edge at the waist 2.80–2.85 mm at 6 ns from
+3.2 mm, ~0.1 mm/ns; under the outer spots 2.2–2.5 mm).
+
+**Cost** (NIF hohlraum 10.1 × 5.75 mm, WallLossAlbedo, 48 quads, 50-step history, 16
+threads): coarse (0.6/0.3, 1,152 elements) view factors 0.3 s, deposition operator 0.6 s,
+history 4.3 s; standard (0.28/0.16, 4,796) 2.1 / 0.7 / 63 s; fine (0.17/0.09, 12,512)
+12.4 / 1.2 / 945 s. The history dominates (fresh LUs in the albedo iteration, ~19 s a step
+at fine), so keyframes on the solve mesh are cheap: six fine keyframes plus per-step
+deposition operators add ~14 % to a fine history; a rebuild at every step ~70 %.
+
+**Accuracy** (standard mesh, 0.1 mm/ns from 0.3 ns, 39 steps 0.25–9.75 ns; max error
+against a rebuild at every step):
+
+| keyframes (spacing) | interpolated deposition: P2/P0, P4/P0 (pp) | per-time deposition: P2/P0, P4/P0 (pp), Tr (eV) |
+|---|---|---|
+| 3 (4.9 ns) | 1.56, 0.40 | 0.086, 0.110, 0.15 |
+| 6 (1.9 ns) | 0.24, 0.060 | 0.035, 0.022, 0.03 |
+| 11 (0.97 ns) | 0.068, 0.020 | 0.012, 0.007, 0.01 |
+| 21 (0.49 ns) | 0.022, 0.008 | 0.009, 0.003, 0.005 |
+
+Interpolating depositions blurs the outer footprints, which slide toward the LEH by
+ΔR/tanθ; per-time operators (adopted) remove most of the error. A still wall reproduces
+the fixed-target history to 1e-12.
+
+**Effect** (tutorial pointing of `docs/literate/retune.jl`, not tuned): the moving wall
+makes capsule P2/P0 more positive through the pulse, −0.091 → +0.044 at 9 ns against the
+static wall's −0.091 (shift +0.13; 0.005 at 1 ns, 0.04 at 5 ns, 0.08 at 7 ns), and Tr
++1 to +7 eV (smaller cavity). For scale, PRE 109 Fig. 10's HYDRA swing (wall, bubble and
+CBET together) is −0.17 at 5.5 ns to +0.08–0.10 at 8 ns.

@@ -36,6 +36,7 @@ export DepositionOperator, Deposition, deposit, raytrace_deposition, raytrace_co
 export Enclosure, enclosure, cad_target
 export view_factors, closure_error, enforce_closure!, RadiationModel, RadiationSolution, solve,
        flux_response, energy_balance, radiation_temperature, to_Wcm2, SIGMA_SB, albedos
+export WallMotion, wall_radius, moving_hohlraum, Keyframes, model_at, deposition_at
 export PulseShape, pulse_energy, with_pulses, drive_history, cone_fraction_pulses,
        write_pulse_table, read_pulse_table, retune_drive
 export enclosed_radius, envelope_radius, focal_profile, enclosed_fraction, with_axes,
@@ -79,6 +80,7 @@ include("analysis.jl")
 include("imaging.jl")
 include("optimize.jl")
 include("history.jl")
+include("dynamics.jl")
 include("retune.jl")
 include("clearance.jl")
 include("keepout.jl")
