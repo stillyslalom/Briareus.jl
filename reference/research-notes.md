@@ -2366,8 +2366,10 @@ laser–plasma model (`apply_lpi`), so it enters `drive_history(...; lpi)`,
     5.45 ns with a 1.5× picket). The 0.5 mm band width and 0.2 ns rise are engineering
     choices (**L**). It is applied by `lpi_deposit` (new, `lpi.jl`), which
     `drive_history` (fixed and keyframed) and `Scenario` evaluations now call instead
-    of `deposit`; the beam-error sensitivities in `uncertainty.jl` and
-    `influence_matrix` still use the beams' own deposition and do not see it.
+    of `deposit`. Since the same day the beam-error sensitivities (`uncertainty.jl`:
+    per-beam dual partials take g of an inner beam off the operator and put it on its
+    ridge band) and `influence_matrix` see it too (checked against central
+    differences of `lpi_deposit` in test/uncertainty.jl).
   - `stagnation` and `collision` are generic (`remake(m; speed, opacity, stagnation,
     collision)`), for the Next 10 fits; `stagnation = Inf`, `collision = Inf` restore
     the ballistic, ridge-free model.

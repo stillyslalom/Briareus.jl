@@ -175,5 +175,33 @@ std_rows(A) = sqrt.(sum(abs2, A .- sum(A; dims = 2) ./ size(A, 2); dims = 2) ./ 
         e = [j == i ? h : 0.0 for j in eachindex(x)]
         @test g[i] ≈ (f(x .+ e) - f(x .- e)) / 2h rtol = 1e-5
     end
+
+    # a laser–plasma model that deposits light (the bubble's ridge stop, mid-rise at
+    # 5.55 ns) enters the sensitivities and the influence matrix through `lpi_deposit`
+    bub = BubbleAbsorption(radius = 2.875)
+    sb = Scenario(t, quads; observe = :capsule, viewfactor_kw = (; closed = true),
+                  lpi = bub, time = 5.55)
+    @test 0 < ridge_fraction(bub, 5.55) < 1
+    effb = apply_lpi(bub, quads, 5.55)
+    shapeb(bs) = (c = Briareus._ylm_product(sb.ylm_response,
+                                            lpi_deposit(bub, sb.deposition, bs, 5.55).element, nm); c ./ c[1])
+    sensb = mode_sensitivity(sb, quads; lmax)
+    @test sensb.c ≈ shapeb(effb)
+    @test maximum(abs, sensb.c .- shape(effb)) > 1e-3              # the ridge matters here
+    ii = findfirst(b -> b.group === :inner30, effb)
+    for (bi, k) in ((ii, 1), (ii, 2), (ii, 3), (1, 1))
+        b = effb[bi]
+        e1, e2 = spot_axes(b)
+        move(δ) = k == 3 ? remake(b; power = b.power * (1 + δ)) :
+                  remake(b; aim = Vec3(b.aim) + δ * (k == 1 ? e1 : e2))
+        h = 1e-4
+        fd = (shapeb([j == bi ? move(h) : effb[j] for j in eachindex(effb)]) .-
+              shapeb([j == bi ? move(-h) : effb[j] for j in eachindex(effb)])) ./ 2h
+        col = sensb.J[:, 3(bi-1)+k]
+        @test maximum(abs, fd .- col) <= 1e-6 * max(maximum(abs, col), 1e-6)
+    end
+    Mb = influence_matrix(sb, effb; lmax)
+    cb = Mb * [b.power for b in effb]
+    @test cb ./ cb[1] ≈ shapeb(effb) rtol = 1e-10
 end
 

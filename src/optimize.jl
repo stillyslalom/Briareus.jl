@@ -516,7 +516,10 @@ Mode response of the observed flux to each beam: column `b` is the real-harmonic
 coefficient vector (`mode_index` order) produced by beam `b` alone at 1 TW, with the
 beam's pointing, spot and focus. Without a laser–plasma model the flux is linear in
 beam powers, so the coefficients of any power assignment `P` are `M * P` — the basis of
-power-rebalancing solves and of tables of what losing each beam costs.
+power-rebalancing solves and of tables of what losing each beam costs. `beams` are the
+effective beams (after `apply_lpi`); a laser–plasma model that deposits light itself
+(the ridge stop of `BubbleAbsorption`, linear in each beam's power) is included through
+`lpi_deposit` at the scenario's time.
 """
 function influence_matrix(s::Scenario, beams::AbstractVector{<:Beam};
                           lmax::Integer = _CACHED_YLM_LMAX)
@@ -527,7 +530,7 @@ function influence_matrix(s::Scenario, beams::AbstractVector{<:Beam};
     Wy = view(s.ylm_response, 1:(lmax+1)^2, :)
     for i in 1:nb
         unit = [remake(b; power = j == i ? 1.0 : 0.0) for (j, b) in enumerate(beams)]
-        dep = deposit(s.deposition, unit)
+        dep = lpi_deposit(s.lpi, s.deposition, unit, s.time)
         M[:, i] = Wy * dep.element
     end
     return M

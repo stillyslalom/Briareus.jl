@@ -41,7 +41,7 @@ function _beam_mode_derivatives(s::Scenario, beams, R::Matrix{Float64}, nm; axia
     nb = length(beams)
     N = axial ? 4 : 3
     # the nominal coefficients, from all beams together
-    dep = deposit(s.deposition, beams)
+    dep = lpi_deposit(s.lpi, s.deposition, beams, s.time)
     craw = _ylm_product(R, dep.element, nm)
     dcraw = Array{T}(undef, nm, N, nb)
     _tforeach(nb) do bi
@@ -87,6 +87,10 @@ function _beam_coefficient_partials(s::Scenario, b::Beam{V}, bi, R, nm, ::Val{N}
     N == 4 && (aim += one3(4) * _beam_k(b))
     bd = remake(b; aim, power = b.power * (one(V) + one3(3)), defocus = D(b.defocus),
                 spot = _retype(b.spot, D), dlambda = D(b.dlambda))
+    # a laser–plasma model's ridge stop (`lpi_deposit`) takes g of the beam off the operator
+    rs = _ridge_split(s.lpi, op, bd, s.time)
+    Pr = rs === nothing ? zero(bd.power) : bd.power * rs.g
+    rs === nothing || (bd = remake(bd; power = bd.power * (1 - rs.g)))
     f = BeamFrame(bd)
     # the coefficients accumulated point by point (an element vector per beam, of nested
     # duals in a robust objective, is most of the cost)
@@ -97,6 +101,11 @@ function _beam_coefficient_partials(s::Scenario, b::Beam{V}, bi, R, nm, ::Val{N}
             @inbounds for i in 1:nm
                 craw[i] += R[i, d] * val
             end
+        end
+    end
+    if rs !== nothing
+        for (j, e) in enumerate(rs.es), i in 1:nm
+            craw[i] += R[i, e] * Pr * rs.w[j]
         end
     end
     return [ForwardDiff.partials(craw[i], k) for i in 1:nm, k in 1:N]
@@ -269,7 +278,7 @@ function sample_modes(s::Scenario, beams::AbstractVector{<:Beam}; pointing::Real
                             gd[keys[i]] + D,
                    power = b.power * (1 + power * randn(rng)) * (1 + gp[keys[i]]))
         end
-        c = _ylm_product(s.ylm_response, deposit(s.deposition, perturbed).element, nm)
+        c = _ylm_product(s.ylm_response, lpi_deposit(s.lpi, s.deposition, perturbed, s.time).element, nm)
         out[:, k] = c ./ c[1]
     end
     return out

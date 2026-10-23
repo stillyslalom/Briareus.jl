@@ -39,6 +39,16 @@ function lpi_deposit(ms::Union{Tuple,AbstractVector}, op, beams, time = 0.0)
 end
 _deposits(m) = false
 
+# The same, beam by beam (for the beam-error sensitivities, which deposit each beam
+# alone): `nothing`, or `(; g, es, w)`: the operator deposits 1 − g of beam `b`, and
+# g of it lands on elements `es` with weights `w` (summing to 1).
+_ridge_split(m, op, b, time) = nothing
+function _ridge_split(ms::Union{Tuple,AbstractVector}, op, b, time)
+    ds = [m for m in ms if _deposits(m)]
+    length(ds) > 1 && throw(ArgumentError("more than one laser–plasma model deposits light"))
+    return isempty(ds) ? nothing : _ridge_split(only(ds), op, b, time)
+end
+
 # A per-group quantity: a number, a function of time, or a (times, values) table.
 _tvalue(f::Real, t) = f
 _tvalue(f::Function, t) = f(t)

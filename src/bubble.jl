@@ -72,9 +72,9 @@ where the beam's axis crosses that radius, Gaussian in z with rms `ridge_width` 
 area-weighted: the heated ridge radiates at the wall's conversion, from the wall just
 outside it. The rest of the beam's power is deposited as usual. Power is conserved
 (the ridge power is booked to the beam's `per_beam`). The ridge stop acts only where
-the deposition goes through `lpi_deposit` ([`drive_history`](@ref) and `Scenario`
-evaluations); the beam-error sensitivities of `uncertainty.jl` differentiate the beams'
-own deposition and do not see it.
+the deposition goes through `lpi_deposit`: [`drive_history`](@ref), `Scenario`
+evaluations, the beam-error sensitivities ([`mode_sensitivity`](@ref) and the rest of
+`uncertainty.jl`) and [`influence_matrix`](@ref).
 
 The edge of the bubble is smoothed over `edge` (mm, a logistic step), which keeps `f`
 smooth in time, in the bubble depth and in the beams' pointing. Spot points: `nr`
@@ -384,26 +384,39 @@ function lpi_deposit(m::BubbleAbsorption, op::DepositionOperator,
     isinner = [b.group in m.inner for b in beams]
     dep = deposit(op, [remake(b; power = b.power * (isinner[i] ? 1 - g : one(g)))
                        for (i, b) in enumerate(beams)])
-    t = op.target
-    es = reduce(vcat, (t.comp_elems[ci] for (ci, c) in enumerate(t.components)
-                       if c.name in m.ridge_components); init = Int[])
-    isempty(es) && throw(ArgumentError("no ridge components $(m.ridge_components) in the target"))
+    es = _ridge_elements(m, op.target)
     T = promote_type(eltype(dep.element), typeof(g), map(b -> eltype(b.aim), beams)...)
     E, L, PB = Vector{T}(dep.element), Vector{T}(dep.backside), Vector{T}(dep.per_beam)
-    z = [t.elem_centroid[e][3] for e in es]
-    A = t.elem_area[es]
-    rr = m.ridge * m.radius
     added = zero(T)
     for (i, b) in enumerate(beams)
         isinner[i] || continue
         P = b.power * g
-        zr = _axis_wall_z(b, rr)
-        w = A .* exp.(-((z .- zr) ./ m.ridge_width) .^ 2 ./ 2)
-        W = sum(w)
-        W > 0 || throw(ArgumentError("ridge band of $(b.name) misses the ridge components"))
-        E[es] .+= P .* w ./ W
+        E[es] .+= P .* _ridge_weights(m, op.target, es, b)
         PB[i] += P
         added += P
     end
     return Deposition(E, L, PB, convert(T, dep.delivered + added))
+end
+
+function _ridge_elements(m::BubbleAbsorption, t)
+    es = reduce(vcat, (t.comp_elems[ci] for (ci, c) in enumerate(t.components)
+                       if c.name in m.ridge_components); init = Int[])
+    isempty(es) && throw(ArgumentError("no ridge components $(m.ridge_components) in the target"))
+    return es
+end
+
+# Weights (sum 1) of beam b's ridge band over the ridge elements `es`.
+function _ridge_weights(m::BubbleAbsorption, t, es, b::Beam)
+    zr = _axis_wall_z(b, m.ridge * m.radius)
+    w = [t.elem_area[e] * exp(-((t.elem_centroid[e][3] - zr) / m.ridge_width)^2 / 2) for e in es]
+    W = sum(w)
+    W > 0 || throw(ArgumentError("ridge band of $(b.name) misses the ridge components"))
+    return w ./ W
+end
+
+function _ridge_split(m::BubbleAbsorption, op::DepositionOperator, b::Beam, time)
+    g = ridge_fraction(m, time)
+    (g == 0 || !(b.group in m.inner)) && return nothing
+    es = _ridge_elements(m, op.target)
+    return (; g, es, w = _ridge_weights(m, op.target, es, b))
 end
