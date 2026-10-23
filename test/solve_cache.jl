@@ -75,8 +75,85 @@
         δ < 1e-4 && break
         α = αn
     end
-    @test rel(sw.B, B) <= 1e-12 && rel(sw.H, H) <= 1e-12 && sw.albedo == α
+    # (iterates after the first are solved by preconditioned GMRES to a 1e-12 residual)
+    @test rel(sw.B, B) <= 1e-10 && rel(sw.H, H) <= 1e-10 && maximum(abs.(sw.albedo .- α)) <= 1e-12
     @test length(mw.cache.keys) == 1 && mw.cache.keys[1] == albedos(tw, 2.0)
+end
+
+@testset "preconditioned iterative radiosity solves" begin
+    q = [remake(b; aim = (0.0, 0.0, sign(b.port[3]) * 4.0)) for b in nif_quads()]
+    tw = hohlraum(nz = 12, nphi = 16, capsule_ntheta = 8, capsule_nphi = 12,
+                  wall = Material(:Au; albedo = WallLossAlbedo(), conversion = 0.8))
+    m = RadiationModel(tw)
+    dep = deposit(DepositionOperator(tw, q), q)
+    S = Briareus.conversions(tw) .* dep.element ./ tw.elem_area
+    rel(x, y) = maximum(abs.(x .- y)) / maximum(abs.(y))
+    direct(α, S) = (I - α .* m.F) \ S
+
+    # GMRES with the LU of a nearby albedo against the direct solve
+    α0 = albedos(tw, 2.0)
+    α1 = albedos(tw, 2.0, m.F * direct(α0, S))
+    P = lu(I - α0 .* m.F)
+    x = Briareus._gmres_radiosity(m.F, α1, P, S, P \ S)
+    @test rel(x, direct(α1, S)) <= 1e-10
+    @test norm(S - (I - α1 .* m.F) * x) <= 1e-12 * norm(S)
+    # a preconditioner far from the system does not converge in a few iterations
+    @test Briareus._gmres_radiosity(m.F, α1, lu(Matrix(1.0I, size(m.F)...)), S, zero(S);
+                                    maxiter = 2) === nothing
+    # ... and _iterate_solve then factors afresh and keeps that as the preconditioner
+    Briareus.empty_cache!(m)
+    m.cache.precond[] = lu(rand(Xoshiro(1), size(m.F)...))
+    Briareus._reset_solve_stats!()
+    @test rel(Briareus._iterate_solve(m, α1, S, nothing), direct(α1, S)) <= 1e-12
+    @test Briareus._SOLVE_STATS.lu[] == 1
+    @test m.cache.precond[].factors ≈ lu(I - α1 .* m.F).factors
+
+    # temperature-dependent histories: the iterative path against a fresh LU per iterate
+    function both(f)
+        Briareus.empty_cache!(m)
+        Briareus._ITERATIVE_SOLVE[] = false
+        a = f()
+        Briareus.empty_cache!(m)
+        Briareus._ITERATIVE_SOLVE[] = true
+        b = f()
+        return a, b
+    end
+    s_old, s_new = both(() -> solve(m, dep; time = 2.0))
+    @test maximum(abs.(s_old.albedo .- s_new.albedo)) <= 1e-12
+    @test rel(s_new.B, s_old.B) <= 1e-10 && rel(s_new.H, s_old.H) <= 1e-10
+    # warm starts (the previous solution as guess and source of the preconditioner)
+    g = solve(m, dep; time = 1.0)
+    w_old, w_new = both(() -> solve(m, 1.3 .* dep.element; time = 2.0, guess = g))
+    @test maximum(abs.(w_old.albedo .- w_new.albedo)) <= 1e-12
+    @test rel(w_new.H, w_old.H) <= 1e-10
+    # and from a model with the same elements (a moving target's previous time)
+    m2 = RadiationModel(tw; F = 0.999 .* m.F)
+    Briareus.empty_cache!(m)
+    g = solve(m, dep; time = 2.0)
+    Briareus._reset_solve_stats!()
+    s2 = solve(m2, dep; time = 2.0, guess = g)
+    @test Briareus._SOLVE_STATS.lu[] == 0 && m2.cache.precond[] === m.cache.precond[]
+    Briareus._ITERATIVE_SOLVE[] = false
+    s2_old = solve(m2, dep; time = 2.0, guess = g)
+    Briareus._ITERATIVE_SOLVE[] = true
+    @test maximum(abs.(s2.albedo .- s2_old.albedo)) <= 1e-12 && rel(s2.H, s2_old.H) <= 1e-10
+
+    # dual-number sources: value and partials solved as columns
+    dP = ForwardDiff.Dual{Nothing}.(dep.element, 0.5 .* dep.element, dep.element .^ 2 ./ maximum(dep.element))
+    d_old, d_new = both(() -> solve(m, dP; time = 2.0, guess = g))
+    @test maximum(abs.(d_old.albedo .- d_new.albedo)) <= 1e-12
+    @test rel(ForwardDiff.value.(d_new.H), ForwardDiff.value.(d_old.H)) <= 1e-10
+    for k in 1:2
+        @test rel(ForwardDiff.partials.(d_new.H, k), ForwardDiff.partials.(d_old.H, k)) <= 1e-10
+    end
+
+    # a drive history (warm-started steps, step halving on flux_change)
+    op = DepositionOperator(tw, q)
+    beams_at = τ -> [remake(b; power = 1.0 + 4τ^2) for b in q]
+    h_old, h_new = both(() -> drive_history(m, op, beams_at, 0.25:0.25:2.0; flux_change = 0.02))
+    @test h_old.time == h_new.time
+    @test maximum(abs.(h_old.Tr .- h_new.Tr)) <= 1e-8
+    @test h_new.moments ≈ h_old.moments rtol = 1e-9
 end
 
 @testset "clearance progress and cancel" begin
