@@ -2243,7 +2243,8 @@ primary text read, **M** = abstract or secondary, **L** = inference or arithmeti
   `window_loss`). `ApertureKeepOut` keeps the full `leh_radius` rim (beams must still
   clear the hardware). It converts no laser light. *Engineering model.* The plasma that
   closes the hole is not computed; closure time and radius are inputs. The Monte Carlo
-  reference treats the lip as open.
+  reference (`montecarlo_incident`) re-emits from a lip with its albedo at the time
+  given (`albedo = albedos(t, time)`); test/montecarlo.jl checks it against `solve`.
 - **Default `leh_open_radius` = 0.84 r₀.** Schneider et al., PoP 22, 122705 (2015): the
   LEH closes in the low-power part of the pulse and reopens at the rise. Its radius at
   peak is ~0.84 r₀ and varies ≤ 4 % through peak. The measured open area is
