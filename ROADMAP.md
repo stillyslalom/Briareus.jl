@@ -451,6 +451,59 @@ Measured on the NIF hohlraum at the GUI's standard mesh (5,864 elements, 48 quad
   fillet just under the quarter torus), facing, raw row sums, D2 selection rules, and a
   steep beam on the fillet (operator vs ray trace). For N210808 (user: 1.053 mm).
 
+## Done (2026-10-23, overnight: hohlraum dynamics, implosion metrics, N221204)
+Details and numbers in the research notes, under the section named in each entry.
+- **Implosion metrics** (item 11; "Implosion metrics"): `src/implosion.jl` turns mode 1
+  into a hot-spot velocity (100 km/s per %, away from the bright side, or a user Green's
+  function over a drive history), with Hurricane's piston-model yield factors (no-α and
+  α), Nora's burn amplification (low branch, an upper estimate), P2 swing metrics against
+  Milovich's 7.5 % picket limit, the velocity covariance and expected yield factor from
+  `mode_uncertainty`, `infer_errors` from a measured nToF velocity with Casey's
+  capsule-thickness nuisance, and a velocity penalty for the objectives. Young's N170601
+  gives 44.0 km/s (44.7 VF + G) and Kritcher's N230729 70 km/s (70–75). Tutorial
+  "Implosion metrics".
+- **Moving wall** (item 9; "Moving wall on keyframes"): `WallMotion`, `moving_hohlraum`
+  and `Keyframes`. The wall cylinder shrinks at 0.10 mm/ns by default; the exchange
+  matrix AᵢFᵢⱼ is interpolated between keyframes (reciprocity kept) and deposition
+  operators are built at each step time. The error falls as the square of the keyframe
+  spacing (11 keyframes: 0.012 pp in P2/P0 against a rebuild at every step), and six
+  fine keyframes add ~14 % to a fine history. A still wall reproduces the fixed target to
+  1e-12. `drive_history` runs on keyframes.
+- **Closing entrance holes** (item 9; "Closing entrance holes"): `hohlraum(; leh_closure,
+  leh_open_radius = 0.84 r₀)` splits each LEH into an open hole and a lip carrying a
+  `GapClosure` albedo; transparent to beams, booked as escaped until it closes, the
+  keep-out keeping the full rim. In the Monte Carlo reference, `write_stl` and the GUI.
+  On the retune tutorial's hohlraum, closing at 5 ns raises Tr 3.3 % and P2/P0 2.5 points.
+- **Inner-beam bubble absorption** (item 9; "Inner-beam bubble absorption"):
+  `BubbleAbsorption`, an LPI model (composes with CBET). Izumi's bubble tip, each inner
+  beam's own clipped fraction at the outer footprint's plane, a transparency fitted to
+  both of Izumi's anchors (exact), the absorbed power moved to that hemisphere's outer
+  beams; a stagnation depth and a ridge stop (power deposited on a wall band after the
+  spots separate). Differentiable. Applied by the new `lpi_deposit` in `drive_history`,
+  `Scenario`, the beam-error sensitivities and `influence_matrix`.
+- **Mock HYBRID-E pointing** (item 16; "Mock HYBRID-E pointing"):
+  `hybride_mock_pointing()`, seven numbers fitted to the symmetry of a non-public export
+  (only summary agreement in the repository): capsule P2/P0 within 0.14 pp (foot) and
+  0.03 pp (peak), Y_lm (l ≤ 6) within 0.06 pp, CBET transfer within 0.03 %, LEH beam
+  overlaps within 7.8 %.
+- **Two-zone CBET** (item 10; "Two-zone CBET calibrated to PRE 109 Fig. 9"):
+  `TwoZoneCBET` (outside the LEH, supersonic, inner → outer; inside, Mach 0, outer →
+  inner), so Δλ = 0 is not zero transfer, and a multi-epoch `calibrate_cbet` fitted to
+  the post-transfer cone fraction against time of PRE 109 Fig. 9 (digitized,
+  `n221204_fig9()`): rms 0.016, outer-cone ratios matching Fig. 9a without being fitted,
+  dCF/dΔλ 0.16 per Å (target 0.15–0.18). `n221204_cbet()` holds the fit.
+- **N221204 time-dependent benchmark** (item 16; "N221204 time-dependent benchmark"):
+  `examples/n221204.jl` adds wall, lips and bubble in turn on the mock pointing with the
+  calibrated CBET, against PRE 109 Fig. 10. The swing has the right shape, mostly from
+  the bubble, but the minimum is shallow (−0.09 at 5.5 ns against −0.17), the curve turns
+  positive about 0.5 ns early, and it ends about +0.07 high (+0.17 against +0.09 at 8 ns).
+  Capsule Tr peaks at 305–312 eV against 313. Nothing was tuned to Fig. 10.
+- **Concurrent gradient chunks** (see the 2026-10-17 performance section): gradients ~2×
+  faster, bitwise equal to serial.
+- **VisRad kits for item 1** (thor `visrad/kits_2026-10-23`): six cases (tilted-plate
+  probe, normal foil, focus sweep, envelope 2.0, steep foil, shadowing) with a comparison
+  script. Waiting for runs in VisRad.
+
 ## Open questions (from the 2026-10-18 CAD work)
 Choices made provisionally overnight or left open; the lean is in brackets.
 **Decided (user, 2026-10-22):** the bracketed leans stand. On 1: parts may be split
@@ -526,7 +579,9 @@ pick the original parts, not `<part>/cylN` pieces).
    Briareus with `profile = visrad_profile(ws)`, export with `write_visrad_workspace`,
    and get the same deposition in VisRad. Near focus that holds today. What VisRad
    does away from focus, and at envelopes, shadows and tilted surfaces, needs VisRad
-   output, all on the foil workspace unless noted:
+   output, all on the foil workspace unless noted. Kits for the tilted-plate probe, the
+   normal foil, the focus sweep, the envelope, the steep foil and shadowing are built
+   (thor `visrad/kits_2026-10-23`, 2026-10-23) and wait for runs in VisRad:
    - **Intersection-point export** (File ▸ Export, laser beam–target intersection
      points, with "write beam spatial profile parameters" checked in Preferences ▸
      Lasers; VR/files/laser_target_intpts_file.html). It lists a(z), b(z), n(z),
@@ -655,31 +710,22 @@ Kritcher et al. 2024 (research notes, "Literature review against Kritcher et al.
 full reports in `reference/litreview/`). Retuning to a reference drive (see Done) assumes
 the reference's view factors hold through the pulse; items 9 and 10 remove that assumption.
 
-9. **Time-dependent view factor: the P2 swing.** Four parametric pieces, all on
-   `drive_history` time, each with a published anchor (`reference/litreview/hohlraum_dynamics.md`):
-   - `WallMotion`: the radiating cylinder shrinks, R_w(t) = R₀ − v_w (t − t₀), v_w ≈
-     0.05–0.10 mm/ns by gas fill (Chen 2020: 400–600 µm by peak); rebuild target and
-     deposition operator at 6–10 keyframes, interpolate the moment responses. With
-     ports and aims fixed the outer footprints slide toward the LEH by ΔR/tan θ, which
-     is the spot-motion swing for free. Check: time-average ≈ Young 2020's 85 % static radii.
-     Only the wall cylinder moves; caps stay fixed, rounded corners follow the wall, the
-     LEH has its own piece (user, 2026-10-22). Keyframe mesh: measure the keyframes'
-     share of the whole workload; if fine keyframes cost only a few percent (e.g. 0.5 %
-     coarse → 3 % fine), use fine. Judge by overall work-precision (user, 2026-10-22).
-   - LEH radius(t) through the gap machinery (`GapClosure`-style albedo split on a
-     closing annulus): open in the foot, ~0.84 r₀ through peak (Schneider 2015).
-   - `BubbleAbsorption` on the inner cones: Izumi 2021's tip x_bub(t) ∝ E^0.2 ρ₀^−0.2 at
-     ~0.35 mm/ns, the clipped fraction from Briareus's own inner-beam envelope at the
-     outer footprint's z, one fitted transparency curve (anchors 29 % / 54 % at 5.5 ns
-     for 0.3 / 0.15 mg/cc), absorbed power redeposited under the outer footprint. Stays
-     differentiable, so it enters the optimizer and item 10's fits.
-   - Report Callahan's and Izumi's figures of merit beside the computed swing.
-   Validation, in order: Ralph 2018's anchor (cone fraction 18.5 % for zero flux P2 at the
-   measured peak wall position); the Izumi 2018/2021 HDC SymCap single-parameter series
-   (core P2 −18 to +21 µm); Young 2020's static-vs-dynamic test (mode 1 within 0.14 % at
-   peak); Callahan's 39-shot curve (σ 8 µm); and PRE 109, 025204 Fig. 10's simulated
-   flux P2/P0(t) for N210808/N220919/N221204 (digitize: ≈ 0 foot, −0.17 at 5.5 ns, 0 at
-   6.5 ns, +0.12–0.15 at 8 ns).
+9. **Time-dependent view factor: the P2 swing.** Done (2026-10-23, see Done): the moving
+   wall on keyframes (`WallMotion`, `Keyframes`; error ∝ spacing²), closing LEH lips,
+   and `BubbleAbsorption` with stagnation and ridge stop (`lpi_deposit`), compared with
+   PRE 109 Fig. 10 for N221204 (item 16). What remains:
+   - calibrating the pieces (bubble absorption, wall speed and start, lip closure time,
+     the spot-collision time) against data: item 10;
+   - the capsule's shrinking radius (Fig. 1a: ~0.92 mm at 6 ns), Izumi 2023's
+     low-contrast stall and relaunch, and a computed lip closure (plasma filling the
+     hole);
+   - Callahan's and Izumi's figures of merit beside the computed swing;
+   - validation still to run: Ralph 2018's anchor (cone fraction 18.5 % for zero flux P2
+     at the measured peak wall position; only the bubble absorption is checked on it),
+     the Izumi 2018/2021 HDC SymCap series (core P2 −18 to +21 µm), Young 2020's
+     static-vs-dynamic test (mode 1 within 0.14 % at peak; time-averaged radii against
+     the 85 % static ones), Callahan's 39-shot curve (σ 8 µm), and Fig. 10's N210808
+     and N220919 curves.
 10. **Shot-data calibration.** Fit effective parameters (cone multipliers, CBET
    multiplier/clamp, bubble transparency, wall-motion speed, albedo) to measured in-flight
    and hot-spot P2/P4 and keyhole shock symmetry, with uncertainty. Reproduce the
@@ -688,34 +734,31 @@ the reference's view factors hold through the pulse; items 9 and 10 remove that 
    response (0.21 → 0.24 raises shell P2 9.1 → 27.5 µm; 0.21 → 0.16 leaves it). HYDRA's
    own knobs for comparison: clamp 0.002 (foot) / 0.0075 (peak), 2DConA fits need
    0.005–0.007; laser degraded 9–13 % or peak multipliers 0.825–0.86.
-   CBET (`reference/litreview/cbet_calibration.md`): a clamp schedule by pulse phase
-   driven by the `PulseShape`; a hard-minimum saturation option so HYDRA clamps carry
-   over; two crossing zones per LEH (outside, supersonic, inner → outer at Δλ = 0;
-   inside, outer → inner) with a test that Δλ = 0 is not zero transfer; plasma-state
-   tables as calibration inputs (no low-fill LEH state history is public); a
-   multi-shot, multi-epoch `calibrate_cbet`; outer-cone depletion and an inner-quad SBS
-   proxy to flag the N220919 limit and the 2.9 Å overshoot. Targets: N221204 post-CBET
-   cone fraction 0.18 / 0.64 / 0.52 at foot / 5.5 ns / 8 ns (±0.03–0.06), dCF/dΔλ
-   0.15–0.18 per Å at 1–1.8 Å, and 40–50 µm of hot-spot P2 per Å at 2.7 µm per % cone
-   fraction.
-11. **Implosion metrics and UQ.** A thin `implosion_metrics` layer after `uncertainty.jl`
-   (`reference/litreview/asymmetry_transfer.md`):
-   - mode-1 vector → hot-spot velocity at a documented ~100 km/s per % (Young 2020,
-     MacGowan 2021, Kritcher 2024), or convolved with a user-supplied Green's function
-     G₁(t) over `drive_history` (Young's recipe: negative in the foot, rise and peak
-     dominant; linear below ~0.75 %);
-   - f = v_HS/v_imp, RKE = c f² KE (c = 0.66), no-α yield factor (1 − f²)^3.3 and the
-     α factor (Hurricane 2020/2022; Casey 2023), burn-on amplification (Nora 2023);
-   - P2/P4 swing metrics: time-integrated P2 over a window, max − min, picket P2 against
-     Milovich's 7.5 %, and hot-spot/ρR response only when given a kernel (Masse 2019's
-     sign flip before ~4.5 ns means the two can disagree); never output µm by default;
-   - `mode_uncertainty` propagated to a velocity covariance and expected yield factor;
-     `infer_errors` taking a measured velocity vector (nToF ±14 km/s, 13° θ, 29° φ) with
-     a capsule-thickness nuisance term of opposite sign (Casey 2021: 110–140 km/s per %);
-   - an optional velocity penalty in the objectives.
-   Validate on Young's N170601 (0.44 % → 37.6/44.7 km/s), Kritcher's N230729 (0.7 % →
-   75 km/s burn-off), Hurricane's tolerance table and Spears 2014 (2 % → 120 km/s,
-   saturated). Time-dependent error budgets and multi-shot trending remain.
+   CBET (`reference/litreview/cbet_calibration.md`). Done (2026-10-23, see Done):
+   `TwoZoneCBET` (Δλ = 0 is not zero transfer) and a multi-epoch `calibrate_cbet`, fitted
+   to N221204's post-transfer cone fraction against time in PRE 109 Fig. 9 (rms 0.016,
+   dCF/dΔλ 0.16 per Å, within the 0.15–0.18 target). What remains:
+   - a joint fit to N210808 and N220919 (multi-shot), which would also test the model's
+     Δλ sensitivity (~2.5× HYDRA's cross-shot difference);
+   - the fitted Te(t) reaches 7.4 keV late in the peak, above every published LEH value:
+     suspect;
+   - a clamp schedule driven by the `PulseShape` (the fit uses the deck's fixed
+     schedule), a hard-minimum saturation option so HYDRA clamps carry over, plasma-state
+     tables as inputs, outer-cone depletion and an inner-quad SBS proxy (the N220919
+     limit and the 2.9 Å overshoot), and the 23.5°/30° split (the model favours 30°,
+     HYDRA splits evenly).
+   Item 9's dynamics, calibrated against published data rather than tuned to Fig. 10:
+   bubble absorption (85 % of inner power at 8 ns in the N221204 benchmark, against
+   Ralph 2018's 51–62 % at peak), wall speed (0.56 mm by 6 ns against 0.35–0.40 mm in
+   PRE 109 Fig. 1a) and the spot-collision time scaling.
+11. **Implosion metrics and UQ.** Done (2026-10-23, see Done; research notes,
+   "Implosion metrics"). Open:
+   - two comparisons with Young 2020 do not match: a dropped inner quad moves the hot
+     spot 1.3–1.6× as much as an outer one (Young ~2×), and a horizontal target offset
+     gives 0.60 km/s/µm (Young 0.1; vertical 0.99 against 1.3);
+   - Nora's high-yield amplification branch and shape term, as transcribed, are
+     inconsistent and not implemented until checked against the paper;
+   - time-dependent error budgets and multi-shot trending.
 12. **Backlighter physics.** CE(Z, I, τ) models with uncertainty, and the photometric
    chain to the detector.
 13. **Spectral radiosity.** Multigroup emission, an Au M-band component (~15 % of the
@@ -727,7 +770,12 @@ the reference's view factors hold through the pulse; items 9 and 10 remove that 
     elements, and GPU kernels.
 15. **Polar direct drive mode**, benchmarked against published GA optimizers.
 16. **Absolute energetics and an N221204 benchmark** (`reference/litreview/energetics.md`,
-    `n221204_benchmark.md`). Model changes, each with its data:
+    `n221204_benchmark.md`). Done (2026-10-23, see Done): the mock HYBRID-E pointing
+    (`hybride_mock_pointing()`) and `examples/n221204.jl` against PRE 109 Fig. 10. The
+    P2/P0 swing has the right shape, but its minimum is shallow (−0.09 against −0.17), it
+    turns positive about 0.5 ns early and it ends about +0.07 high; the fix is item 10's
+    calibration of the dynamics. The foot sits 0.04–0.07 below Fig. 10 (mock pointing,
+    foot cone fraction read by eye). Model changes still to make, each with its data:
     - `WallLossAlbedo` material factor for Au-lined DU: 1 − α × ~0.83 with the
       temperature exponent shifted ~−0.2 (Rosen 2005, Schein 2007; Döppner 2015's 6.5 %
       peak-power equivalence as the check), optionally gold until `HeatFront` passes the
@@ -739,21 +787,17 @@ the reference's view factors hold through the pulse; items 9 and 10 remove that 
     - a capsule albedo model (tabulated, default ~0.2) with an effective-radius
       schedule, E_cap in `energy_balance`, calibrated to the 16.2 % total absorption of
       N221204 (not the 246 kJ left in the unablated shell);
-    - the LEH radius schedule of item 9, checked on the Zylstra 2022 pair (3.64 mm at
+    - the LEH lips of item 9 (done) checked on the Zylstra 2022 pair (3.64 mm at
       465 TW and 3.1 mm at 390 TW reach the same Trad);
-    - a synthetic Dante (item 13) reported beside the capsule-seen temperature.
-    Benchmark: `examples/n221204.jl` from the input deck in `n221204_benchmark.md`
-    (geometry, 2.05 MJ / 440 TW, per-cone powers digitized from Di Nicola 2024 Fig. 1,
-    Δλ 0.917 Å at 3ω, SBS 42 kJ), targets drive Trad 313 eV (307 for N210808), the
-    54 / 25 / 4.5 / 16 % energy split, bang time 9.53 ns as the end of the drive window,
-    hot-spot P2 ≈ 0 and velocity 36 km/s at (151°, 54°) through item 11, and PRE 109
-    Fig. 10's flux P2/P0(t) through item 9. Pointing: a mock-up made to resemble the
-    shot's (user, 2026-10-22): the same symmetry, the same static capsule radiosity
-    and similar CBET interactions, built and checked against the non-public N230729 SST
-    export in thor (`read_visrad_sst`). Only the mock-up and a comparison of summary
-    metrics enter the repository; the export's aim points never do. CPPs, window
-    geometry and the liner thickness are unpublished: use the repository's HYBRID-E
-    defaults and say so.
+    - a synthetic Dante (item 13) reported beside the capsule-seen temperature;
+    - laser degradation (HYDRA's 9–13 %) and backscatter (SBS 42 kJ) in the example.
+    Benchmark targets still to check: drive Trad 313 eV (307 for N210808; capsule Tr
+    305–312 eV now, partly from the undegraded laser), the 54 / 25 / 4.5 / 16 % energy
+    split, bang time 9.53 ns as the end of the drive window, and hot-spot P2 ≈ 0 and
+    velocity 36 km/s at (151°, 54°) through item 11. The pointing stays the public
+    mock-up; the non-public export's aim points never enter the repository. CPPs, window
+    geometry, corners and the liner thickness are unpublished and stay at repository
+    defaults.
 17. **Briareus → CompactLES** (`reference/litreview/hydro_coupling.md`). LLNL's two-step
     method with Briareus as the integrated step and CompactLES as the capsule-only step.
     Coupling (user, 2026-10-22): both codes are Julia, so couple in memory through a
