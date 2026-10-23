@@ -23,6 +23,22 @@ apply_lpi(::Nothing, beams, time = 0.0) = beams
 apply_lpi(ms::Union{Tuple,AbstractVector}, beams, time = 0.0) =
     foldl((bs, m) -> apply_lpi(m, bs, time), ms; init = beams)
 
+"""
+    lpi_deposit(model, op::DepositionOperator, beams, time = 0.0) -> Deposition
+
+Deposition of the effective `beams` (from [`apply_lpi`](@ref)) under the laser–plasma
+`model`: `deposit(op, beams)`, unless the model deposits part of the light where no
+beam lands (the ridge stop of [`BubbleAbsorption`](@ref)). Of a tuple or vector of
+models, at most one may do so.
+"""
+lpi_deposit(m, op, beams, time = 0.0) = deposit(op, beams)
+function lpi_deposit(ms::Union{Tuple,AbstractVector}, op, beams, time = 0.0)
+    ds = [m for m in ms if _deposits(m)]
+    length(ds) > 1 && throw(ArgumentError("more than one laser–plasma model deposits light"))
+    return isempty(ds) ? deposit(op, beams) : lpi_deposit(only(ds), op, beams, time)
+end
+_deposits(m) = false
+
 # A per-group quantity: a number, a function of time, or a (times, values) table.
 _tvalue(f::Real, t) = f
 _tvalue(f::Function, t) = f(t)

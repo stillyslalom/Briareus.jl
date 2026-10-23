@@ -46,7 +46,7 @@ export enclosed_radius, envelope_radius, focal_profile, enclosed_fraction, with_
        SpotWing, PowerLawWing, UniformScatter, nif_wings, DEFAULT_CLEARANCE_THRESHOLDS
 export LaserPlasmaModel, apply_lpi, Backscatter, CalibratedTransfer, linear_transfer,
        tabulated_transfer, lpi_summary, BubbleAbsorption, bubble_speed, bubble_depth,
-       bubble_transmission, bubble_fractions, iris_fraction
+       bubble_transmission, bubble_fractions, iris_fraction, ridge_fraction, lpi_deposit
 export CBET, CH_IONS, ion_wave_amplitude, receiver_ratio, calibrate_cbet, cbet_gain, cbet_coupling, cbet_plasma, plasma_dispersion
 export UnconvertedColor, nif_unconverted, UnconvertedRow, UnconvertedReport, unconverted_light_check
 export TaLISRow, TaLISReport, talis_check, write_talis_csv, TALIS_SOURCE, TALIS_OUT_OF_SCOPE, talis_requirement

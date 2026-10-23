@@ -104,11 +104,11 @@ Neither shortens a step below `min_step` (ns). Without them (the default) the st
 are exactly `times`.
 """
 drive_history(m::RadiationModel, op::DepositionOperator, beams_at, times; kwargs...) =
-    _drive_history(m.target, τ -> m, (τ, beams) -> deposit(op, beams), beams_at, times; kwargs...)
+    _drive_history(m.target, τ -> m, τ -> op, beams_at, times; kwargs...)
 
-# The history on the models `model_at(τ)` and depositions `deposit_at(τ, beams)`, whose
+# The history on the models `model_at(τ)` and deposition operators `operator_at(τ)`, whose
 # elements are those of `t` (a fixed target, or the keyframes of a moving one).
-function _drive_history(t::Target, model_at, deposit_at, beams_at, times;
+function _drive_history(t::Target, model_at, operator_at, beams_at, times;
                         observe = :capsule, lmax::Integer = 6, wall = (:wall,),
                         lpi = nothing, holes = nothing, ylm::Bool = false,
                         transition = nothing, flux_change = nothing, min_step::Real = 1e-3,
@@ -230,7 +230,7 @@ function _drive_history(t::Target, model_at, deposit_at, beams_at, times;
             end
             local sol, Ik, tk, rk, a, dep
             while true
-                dep = deposit_at(τ, apply_lpi(lpi, beams_at(τ), τ))
+                dep = lpi_deposit(lpi, operator_at(τ), apply_lpi(lpi, beams_at(τ), τ), τ)
                 sol, Ik, tk, rk = step(τ0, τ, dep, last)
                 a = legendre_moments(sol.H, sol.model.target, obs; lmax)
                 τ0 === nothing && break

@@ -2336,13 +2336,64 @@ laser–plasma model (`apply_lpi`), so it enters `drive_history(...; lpi)`,
     at 6.5 ns, and > 99 % by 8 ns. Capsule Tr falls 2–8 eV against wall + lips (the moved
     power lands near the LEH). The tutorial pointing is not HYBRID-E's and its foot
     is not tuned (−0.17 against ≈0), so only the direction and the late rise compare.
-- **Open.** The ballistic tip crosses a 2.9 mm hohlraum by ~8 ns and clips every inner
-  beam, so late-peak P2 plateaus at full inner absorption. Izumi 2023 finds the tip
-  stagnates in low-trough pulses and slows near the axis; HYDRA (PRE 109 Fig. 1a) shows
-  the dense bubble only 0.7–1.0 mm in at 6 ns. A stagnation depth, or fitting
-  v_ref and τ_b to shot data (Next 10), is the next step. The ridge-stop stage
-  (inner power stopping at r ≈ 0.73 R after the ablator–wall collision) is not
-  implemented.
+- **Stagnation and ridge stop (added 2026-10-23, same day).** The ballistic tip crossed a
+  2.9 mm hohlraum by ~8 ns and clipped every inner beam (> 99 % absorbed), so late-peak
+  P2 plateaued at full inner absorption. Two options, on by default (*engineering*, **M**):
+  - *Stagnation depth.* `bubble_depth` is ballistic up to the knee x_max − w, then
+    x_max − w·exp(−(x_bal − x_max + w)/w) (C¹, stops at x_max). Defaults x_max = 0.80 R,
+    w = 0.08 R: exactly ballistic to 0.72 R (2.07 mm at R = 2.88), past both anchor
+    depths (1.75 / 2.01 mm at 5.5 ns), so **the anchors stay exact** (T_b 29 % / 54 %,
+    tested bit for bit against the ballistic tip), and near the ~2.1 mm the ballistic fit to
+    Izumi's 0.3 mg/cc trajectories reaches by 6.5 ns; it stops between that and the
+    ~2.4 mm (0.83 R) of 0.15 mg/cc (end of the measured range, 1.2–2.4 mm).
+    Izumi 2023: the tip slows on back-pressure near the axis and is not ballistic in
+    low-contrast pulses (stall in the trough, relaunch ≤ 300 µm/ns at ~6 ns; not
+    modeled, set `speed`/`turn_on` for such pulses). *Not* x_max = R − 0.73 R: the ridge
+    radius is measured at the waist, and 0.78 mm would stop the tip before it reaches
+    the inner beams at z_b (1.3 mm from the wall, Izumi 2021) and contradict the
+    measured ballistic trajectories (1.2–2.4 mm over 4.5–6.5 ns). Izumi 2018's point that
+    attenuation follows the line-integrated density, not the displacement, is what the
+    (R/(R − x))² density factor stands for; it is not modeled further.
+  - *Ridge stop.* After t_c a fraction g(t) (C¹ smoothstep over t_c ± 0.2 ns) of each
+    inner beam's power left by the bubble is deposited on an axisymmetric band of the
+    wall component centred at the height where the beam's axis crosses r = 0.73 R
+    (Izumi 2023: ridge at 2.1 mm in 2.88 mm), Gaussian in z with rms 0.5 mm, area-weighted.
+    The heated ridge is taken to radiate at the wall's conversion from the wall just
+    outside it (Briareus has no volume emitter; a lower ridge conversion would lower
+    the waist drive further). Power is conserved and booked on the beam's `per_beam`.
+    t_c = turn_on + 5.5 − 2.0 (r_cap/r_basecamp − 1) − 0.7 (E − 1) ns (*derived*, Izumi
+    2018: spots separate at 5.8 ns for a 0.3 ns turn-on, ~0.4 ns earlier for 1.2× r_cap,
+    5.45 ns with a 1.5× picket). The 0.5 mm band width and 0.2 ns rise are engineering
+    choices (**L**). It is applied by `lpi_deposit` (new, `lpi.jl`), which
+    `drive_history` (fixed and keyframed) and `Scenario` evaluations now call instead
+    of `deposit`; the beam-error sensitivities in `uncertainty.jl` and
+    `influence_matrix` still use the beams' own deposition and do not see it.
+  - `stagnation` and `collision` are generic (`remake(m; speed, opacity, stagnation,
+    collision)`), for the Next 10 fits; `stagnation = Inf`, `collision = Inf` restore
+    the ballistic, ridge-free model.
+  - Swing rerun (same retune hohlraum, wall + lips, bubble turn-on 0 so t_c = 5.5 ns):
+
+    | t (ns) | wall + lips | + ballistic bubble (before) | + stagnation only | + stagnation + ridge (defaults) | PRE 109 Fig. 10 |
+    |---|---|---|---|---|---|
+    | 2.0 | −0.167 | −0.167 | −0.167 | −0.167 | ≈0 |
+    | 4.0 | −0.129 | −0.107 | −0.107 | −0.107 | −0.013 |
+    | 5.5 | −0.048 | +0.051 | +0.051 | +0.057 | −0.168 |
+    | 6.5 | −0.004 | +0.131 | +0.126 | +0.128 | −0.057 |
+    | 8.0 | +0.035 | +0.172 | +0.152 | +0.150 | +0.090 |
+    | 9.0 | +0.065 | +0.190 | +0.169 | +0.163 | |
+
+    Inner absorption now plateaus at ~90 % (23°) and ~81 % (30°) from ~7.5 ns (tip
+    2.29 mm at 8 ns) instead of > 99 %; Ralph 2018 measured 51–62 % at peak. The late
+    rise from 6.5 to 9 ns falls from +0.059 to +0.035 (the wall and lips alone give
+    +0.069). The ridge stop moves P2/P0 by < 0.01: its band sits ~1–2 mm from where the
+    inner beams would hit the wall, both near the waist, and converts at the wall's
+    efficiency. The early offset (+0.10 above Fig. 10 at 5.5 ns, where HYDRA is at its
+    minimum) is unchanged: the bubble absorbs 54 / 44 % of the inner power by 5.5 ns.
+    Defaults were not tuned to Fig. 10, and the pointing is not HYBRID-E's.
+- **Open.** The plateau absorption (~80–90 %) sits above Ralph's 51–62 %: with Izumi's
+  anchors fixed, any stagnation past the anchor depths leaves T_b ≲ 1 % on clipped
+  light. Fitting v_ref, τ_b, x_max (and t_c) to shot data (Next 10) is the next step.
+  Low-contrast relaunch (Izumi 2023) is not modeled.
 
 ## Mock HYBRID-E pointing (2026-10-23) *derived*
 

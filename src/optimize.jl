@@ -312,7 +312,7 @@ evaluate(s::Scenario, x::AbstractVector{<:Real}) = evaluate(s, apply(s.param, x)
 
 function evaluate(s::Scenario, beams::AbstractVector{<:Beam})
     eff = apply_lpi(s.lpi, beams, s.time)
-    dep = deposit(s.deposition, eff)
+    dep = lpi_deposit(s.lpi, s.deposition, eff, s.time)
     T = eltype(dep.element)
     return Evaluation(s, beams, eff, dep, Ref{Union{Nothing,Vector{T}}}(nothing))
 end

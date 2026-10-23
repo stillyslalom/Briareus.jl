@@ -203,5 +203,5 @@ fixed-target history; areas, moments and spherical harmonics are taken on each t
 target.
 """
 drive_history(kf::Keyframes, beams_at, times; kwargs...) =
-    _drive_history(kf.reference, τ -> model_at(kf, τ), (τ, beams) -> deposit(kf, beams, τ),
+    _drive_history(kf.reference, τ -> model_at(kf, τ), τ -> deposition_at(kf, τ),
                    beams_at, times; kwargs...)

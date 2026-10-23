@@ -433,7 +433,7 @@ function infer_errors(s::Scenario, beams::AbstractVector{<:Beam}, v::AbstractVec
     M = _velocity_map(per_percent * amplification)
     Mi = inv(M)
     eff = apply_lpi(s.lpi, beams, s.time)
-    c = _ylm_product(s.ylm_response, deposit(s.deposition, eff).element, 4)
+    c = _ylm_product(s.ylm_response, lpi_deposit(s.lpi, s.deposition, eff, s.time).element, 4)
     c = c ./ c[1]
     v0 = M * c[2:4]
     Δc = Mi * (Vector{Float64}(v) - v0)
