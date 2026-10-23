@@ -43,4 +43,34 @@ using Briareus, LinearAlgebra, Test
     Hmc, _ = Briareus.montecarlo_incident(t, P, 1:nelements(t); paths = 4_000)
     face_mean(H, n) = (es = elements(t, n); sum(H[es] .* t.elem_area[es]) / sum(t.elem_area[es]))
     @test all(abs(face_mean(Hmc, n) / face_mean(sol.H, n) - 1) < 0.015 for n in (:bottom, :top, :xm, :yp))
+
+    # Closing entrance holes: a closed lip re-emits its albedo, as in `solve`. A small flat
+    # hohlraum (the meshes without their curved surfaces) driven on the wall, lips closed
+    # at 3 ns, against the same hohlraum with open entrance holes: the capsule's mean
+    # incident flux from the element model (sampled visibility) and from the Monte Carlo.
+    # Each agrees to its view-factor error (measured 0.3–0.4%); the closure's gain (8.5%)
+    # to the Monte Carlo's sampling error (5σ ≈ 0.4%).
+    flat(t) = Target([Component(c.name, c.mesh, c.material; kind = c.kind, two_sided = c.two_sided)
+                      for c in t.components]; closed = t.closed)
+    au = Material(:Au; albedo = 0.8, conversion = 0.8)
+    kw = (length = 6.0, radius = 2.0, leh_radius = 1.3, capsule_radius = 0.6, h = 0.6, capsule_h = 0.4, wall = au)
+    capflux = map((nothing, GapClosure(closure = 1.0, width = 0.5, after = 0.8))) do lip
+        t = flat(hohlraum(; kw..., leh_closure = lip))
+        P = [t.components[t.elem_comp[e]].name === :wall ? t.elem_area[e] : 0.0 for e in 1:nelements(t)]
+        cap = elements(t, :capsule)
+        A = t.elem_area[cap] ./ sum(t.elem_area[cap])
+        sol = solve(RadiationModel(t; F = view_factors(t; visibility = :sampled)), P; time = 3.0)
+        lip === nothing || @test all(sol.albedo[elements(t, :leh_bottom_lip)] .≈ 0.8)
+        _, batch = Briareus.montecarlo_incident(t, P, cap; paths = 8_000, reemit = :element,
+                                                albedo = albedos(t, 3.0))
+        means = batch * A
+        nb = length(means)
+        (; sol = sum(sol.H[cap] .* A), mc = sum(means) / nb,
+           se = sqrt(sum(abs2, means .- sum(means) / nb) / (nb - 1) / nb))
+    end
+    (o, c) = capflux
+    @test abs(o.mc / o.sol - 1) < 0.006 && abs(c.mc / c.sol - 1) < 0.006
+    gain_mc, gain = c.mc / o.mc, c.sol / o.sol
+    @test gain > 1.05
+    @test abs(gain_mc - gain) < 5gain_mc * hypot(o.se / o.mc, c.se / c.mc)
 end

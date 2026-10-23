@@ -16,7 +16,13 @@ uniform point on the receiver's facets, a cosine-weighted direction, the first f
 (`closest_hit` over every triangle, apertures included), whose element contributes its
 source; the path continues diffusely with its weight multiplied by the element's albedo
 (Russian roulette below 1/20), and ends on an aperture (escape), a one-sided surface's
-back, or a miss. Each path's sum is an unbiased estimate of the incident flux, as a
+back, or a miss. A closing lip (`aperture(...; closure)`, a `GapClosure`) is the
+exception among apertures: like a surface, it re-emits diffusely the fraction `albedo`
+of what reaches it (its own α(t) = s α_after, from `albedos(target, time)` as `solve`
+uses) and lets the rest escape; it has no source. Apertures stay transparent to laser
+rays and lines of sight elsewhere; here the lip plane is the enclosure's boundary.
+`albedo` defaults to the albedos at time 0; pass `albedos(target, time)` (or a
+solution's `albedo`) to compare with a solve at a later time. Each path's sum is an unbiased estimate of the incident flux, as a
 forward photon tally would be, but every sample lands on a receiver.
 
 `reemit = :hit` continues from the hit point: the transport of the continuum, with
@@ -41,7 +47,9 @@ function montecarlo_incident(t::Target, P::AbstractVector, receivers::AbstractVe
     α = collect(Float64, albedo)
     nt = ntriangles(t)
     bvh = _sah_bvh(BVH(t.tri_v0, t.tri_e1, t.tri_e2, Int32.(1:nt)))   # apertures included
-    aper = [t.components[t.tri_comp[k]].kind === :aperture for k in 1:nt]
+    # open apertures end a path; a closing lip re-emits its albedo like a surface
+    aper = [(c = t.components[t.tri_comp[k]]; c.kind === :aperture && !_transmits(c.material.albedo))
+            for k in 1:nt]
     # facet choice by area within each element
     cum = [cumsum(t.tri_area[t.elem_tris[e]]) for e in 1:nelements(t)]
     n = max(1, paths ÷ batches)
@@ -63,12 +71,13 @@ function _mc_batch!(out, t, bvh, aper, cum, S, α, receivers, n, reemit, rng)
             while true
                 d = _cosine_direction(nrm, rng)
                 s, k = closest_hit(bvh, x + eps * nrm, d)
-                (k == 0 || aper[k]) && break                  # lost, or out through an aperture
+                (k == 0 || aper[k]) && break                  # lost, or out through an open aperture
                 dn = dot(d, t.tri_normal[k])
                 e2 = dn < 0 ? t.tri_front[k] : t.tri_back[k]
                 e2 == 0 && break                              # back of a one-sided surface
                 acc += w * S[e2]
                 w *= α[e2]
+                w == 0 && break                               # a black element, or an open lip
                 if w < 0.05
                     rand(rng) < 20w || break
                     w = 0.05
