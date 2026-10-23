@@ -327,18 +327,27 @@ direction keeps its prior: `sigma ./ prior_sigma` stays near 1 for most errors, 
 prior: an error left out of it (`group_pointing = 0`, say) cannot be blamed, and its
 effect is attributed to the sources that are allowed. Linear in the errors.
 """
-function infer_errors(s::Scenario, beams::AbstractVector{<:Beam}, measured; sigma,
-                      pointing::Real = 0.05, power::Real = 0.0, group_pointing::Real = 0.0,
-                      group_power::Real = 0.0, groups = :quad, positioning = 0.0)
-    _radiative(s) || throw(ArgumentError("scenario has no radiation response"))
-    min(pointing, power, group_pointing, group_power) >= 0 ||
-        throw(ArgumentError("error rms values must be non-negative"))
+function infer_errors(s::Scenario, beams::AbstractVector{<:Beam}, measured; sigma, kwargs...)
     comps, Δc = _measured_components(measured)
-    lmax = maximum(first, comps)
-    lmax <= _CACHED_YLM_LMAX || throw(ArgumentError("cached Y_lm weights reach lmax = $_CACHED_YLM_LMAX"))
     σm = sigma isa Real ? fill(Float64(sigma), length(Δc)) : Float64.(collect(sigma))
     length(σm) == length(Δc) && all(>=(0), σm) ||
         throw(ArgumentError("sigma is one non-negative number or one per measured component"))
+    return _infer_errors(s, beams, comps, Δc, Matrix(Diagonal(σm .^ 2)); kwargs...)
+end
+
+# The inverse for measured departures Δc of the components `comps`, with measurement
+# covariance Σm. A `nuisance` (; columns, variances, names, label) adds error sources
+# that act on the measured components directly (columns: their δc per unit error),
+# after the positioning.
+function _infer_errors(s::Scenario, beams::AbstractVector{<:Beam}, comps, Δc, Σm;
+                       pointing::Real = 0.05, power::Real = 0.0, group_pointing::Real = 0.0,
+                       group_power::Real = 0.0, groups = :quad, positioning = 0.0,
+                       nuisance = nothing)
+    _radiative(s) || throw(ArgumentError("scenario has no radiation response"))
+    min(pointing, power, group_pointing, group_power) >= 0 ||
+        throw(ArgumentError("error rms values must be non-negative"))
+    lmax = maximum(first, comps)
+    lmax <= _CACHED_YLM_LMAX || throw(ArgumentError("cached Y_lm weights reach lmax = $_CACHED_YLM_LMAX"))
     σpos = _positioning_rms(positioning)
     nm = (lmax + 1)^2
     eff = apply_lpi(s.lpi, beams, s.time)
@@ -353,8 +362,12 @@ function infer_errors(s::Scenario, beams::AbstractVector{<:Beam}, measured; sigm
     rows = [mode_index(l, m) for (l, m) in comps]
     A = hcat(Jb, Vg, Vp)[rows, :]
     v = vcat(_error_variances(nb, pointing, power), σg, σp)
+    if nuisance !== nothing
+        A = hcat(A, nuisance.columns)
+        v = vcat(v, nuisance.variances)
+    end
     # data space: S = A Σₚ Aᵀ + Σₘ (k × k)
-    F = cholesky(Symmetric(A * (v .* transpose(A)) + Diagonal(σm .^ 2)); check = false)
+    F = cholesky(Symmetric(A * (v .* transpose(A)) + Σm); check = false)
     issuccess(F) || throw(ArgumentError("the measured components are not constrained: " *
                                         "give a measurement sigma or a prior that moves them"))
     K = transpose(F \ (A .* transpose(v)))                   # Σₚ Aᵀ S⁻¹ (n × k)
@@ -389,6 +402,11 @@ function infer_errors(s::Scenario, beams::AbstractVector{<:Beam}, measured; sigm
         push!(srcs, ("positioning", o+1:o+3))
         append!(names, ("positioning.x", "positioning.y", "positioning.z"))
         D = Vec3(x[o+1], x[o+2], x[o+3])
+        o += 3
+    end
+    if nuisance !== nothing
+        push!(srcs, (nuisance.label, o+1:o+length(nuisance.variances)))
+        append!(names, nuisance.names)
     end
     n2 = dot(Δc, Δc)
     sources = [(; source, fraction = n2 > 0 ? dot(A[:, r] * x[r], Δc) / n2 : 0.0, delta = A[:, r] * x[r])

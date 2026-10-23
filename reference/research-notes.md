@@ -1946,3 +1946,69 @@ targets.
   capsule_h 0.15, closed, tuned NIF beams) moved by ≤ 0.01 pp in every departure and
   drive (Round 8 vs Round 7); a design optimized on the lat-long capsule evaluates at
   δ2 = 0.015% on the compact one.
+
+## Implosion metrics (2026-10-22)
+
+`src/implosion.jl`, the implosion-metrics tutorial and `test/implosion.jl`. The sources
+are summarized in `reference/litreview/asymmetry_transfer.md`. Confidence: **H** =
+primary text read, **M** = abstract or secondary, **L** = inference or arithmetic.
+
+- **`HOTSPOT_VELOCITY_PER_PERCENT` = 100 km/s per % of mode 1** (`a₁/a₀`, the norm of
+  the l = 1 vector, burn-off, rise and peak). *Engineering default.*
+  - Young et al., Phys. Plasmas 27, 082702 (2020) **H**: N170601 0.44 % → 37.6 km/s
+    (3D HYDRA), 44.7 km/s (VF + G); linear below ~0.75 %.
+  - MacGowan et al., HEDP 40, 100944 (2021) **M**: ~100 km/s per %.
+  - Kritcher et al. 2024 **H**: N230729 ~0.7 % → 70–75 km/s burn-off (~105 per %, **L**).
+  - Spears et al. 2014 **H**: 2 % → 120 km/s (saturated; the linear rule gives 200).
+  - Platform specific; Briareus gets 44.0 and 70.0 km/s for the first two (test suite).
+- **Direction**: the hot spot moves away from the high-flux side (Casey et al., PRL 126,
+  025002, 2021, **H**). Briareus's real Y_lm have no Condon–Shortley phase, so
+  `v = −k (c₁₁, c₁,₋₁, c₁₀) √3/c₀₀` in chamber x, y, z. Young's Eq. 9 signs
+  (V_x = +G c₁₁) follow their own associated-Legendre convention, which was not
+  checked; the physical rule (away from the bright side) is what is implemented. **L**
+- **Piston model** (Hurricane et al., Phys. Plasmas 27, 062704, 2020, **H**):
+  f = v_HS/v_imp; RKE/KE = c f², c = 0.66; no-α yield (1 − f²)ᵃ, a = 3.3; α factor
+  exp(−q χ^1.2 f²), q = a − 1 (Eq. 21, 26). Casey et al. PRE 108, L053203 (2023) **H**
+  write q = 1.2(a − 1) and a = 6 − 1.5 ln T; both are offered (`q`).
+  - `vimp` = 380 km/s default: Hurricane's Table I value. *Engineering default.*
+  - Table I is reproduced at χ = 2 (f to two digits, v_HS 29.4/42.0/52.2/61.1 against
+    30/40/50/60, rounded); at χ = 1.5 the 5 % row would give f = 0.09. So the table's
+    "near ignition" χ is ≈ 2. **L**
+  - Casey 2021's "~22 % no-α yield at 100 km/s / 400 km/s" gives 19 % with
+    (1 − f²)^{10/3} at f = 0.25. Small gap, not resolved. **L**
+- **Expected yield over errors**: `E[exp(−β f²)]` for Gaussian v in closed form,
+  `det(I + 2bΣ)^{-1/2} exp(−b μᵀ(I + 2bΣ)⁻¹μ)`, b = β/v_imp². This uses
+  (1 − f²)ᵃ ≈ exp(−a f²) (0.7 % high at f = 0.25). *Derived.* Checked against a Monte
+  Carlo of full evaluations (3 %; 5 % with α).
+- **Burn amplification** (Nora et al., Phys. Plasmas 30, 092705, 2023, Eq. 4, **H** via
+  the lit review): 0.324 ln(Y_amp + 2.239) + 0.653 for Y_amp ≤ 40.
+  - It is ~1.8 at Y_amp = 30, against Kritcher 2024's burn-on/off ratios of 1.27–1.39.
+    Use it as an upper estimate.
+  - The Y_amp 80–500 branch as transcribed (13 ln(Y_amp + 1585) − 95) is 1.43 at 80,
+    below the low branch's 1.87 at 40. It is not implemented until checked against
+    the paper.
+  - The shape term (Eq. 2) as transcribed does not give the stated 0.8–1.2 range for
+    |P2| < 0.4 (0.19 at −0.4). It is not implemented either.
+- **Thickness nuisance in `infer_errors`** (Casey 2021, **H**):
+  - 110 km/s per % of thickness mode 1 (simulated; 140 ± 30 measured), toward the
+    thicker side.
+  - The prior is 0.2 % per axis by default. *Derived* from ~0.15 µm metrology on a
+    78 µm shell (**L**).
+- **nToF covariance**: ±14 km/s, 13° θ, 29° φ (Young 2020 **H**), in the measured
+  vector's radial/polar/azimuthal frame.
+- **Picket P2 limit** 7.5 % (Milovich et al., Phys. Plasmas 23, 032701, 2016, **H**).
+  The paper does not say whether this limits the picket's average or its peak.
+  `swing_metrics` judges the average and reports both. **L**
+- **Comparisons with Young 2020 that do not match** (tutorial hohlraum: 10.1 × 5.75 mm,
+  h 0.6 / capsule_h 0.2, wall albedo 0.85, no LPI; *derived*):
+  - A dropped inner quad gives 190–217 km/s and an outer quad 139–150 km/s, a ratio of
+    1.3–1.6 against Young's ~2 (N170827).
+  - The whole-target offset gives 0.99 km/s/µm vertical (Young 1.3) and 0.60 km/s/µm
+    along x (Young 0.1 horizontal).
+  - The geometry and LPI differ from N170827. A horizontal offset may couple more
+    strongly in a static single-albedo model; open.
+- **Not implemented** (no published values):
+  - Young's G₁(t) and Masse's P2 kernels, which are printed only as figures. Briareus
+    ships `flat_kernel` (flat over a window, the static sensitivity; *derived*) and
+    takes user kernels.
+  - Time-dependent error budgets and multi-shot trending remain (ROADMAP 11).
