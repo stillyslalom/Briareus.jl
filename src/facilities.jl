@@ -189,8 +189,6 @@ const HYBRIDE_MOCK_POINTING = Dict(
     :outer50 => (z = 5.8, r = 0.0, s = 0.5),
 )
 
-export hybride_mock_pointing
-
 """
     hybride_mock_pointing(beams = nif_beams(); table = HYBRIDE_MOCK_POINTING) -> Vector{Beam}
 
