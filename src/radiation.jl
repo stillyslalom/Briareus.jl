@@ -161,7 +161,7 @@ function _albedos(t::Target, time, H, burnthrough)
     n = nelements(t)
     α, intact, transmission = zeros(n), zeros(n), zeros(n)
     for e in 1:n
-        is_aperture(t, e) && continue
+        is_aperture(t, e) && !_transmits(element_material(t, e).albedo) && continue
         a = element_material(t, e).albedo
         T = H === nothing ? nothing : radiation_temperature(ForwardDiff.value(H[e]))
         α[e], intact[e], transmission[e] =
@@ -173,7 +173,7 @@ conversions(t::Target) =
     [is_aperture(t, e) ? 0.0 : element_material(t, e).conversion for e in 1:nelements(t)]
 
 _temperature_dependent(t::Target) =
-    any(c -> c.kind === :surface && _temperature_dependent(c.material.albedo), t.components)
+    any(c -> _temperature_dependent(c.material.albedo), t.components)
 _temperature_dependent(::AlbedoModel) = false
 _temperature_dependent(::WallLossAlbedo) = true
 _temperature_dependent(m::BurnthroughAlbedo) =
@@ -311,7 +311,10 @@ function energy_balance(s::RadiationSolution)
     for (ci, c) in enumerate(t.components)
         es = t.comp_elems[ci]
         P(e) = ForwardDiff.value(s.H[e]) * t.elem_area[e]
-        if c.kind === :aperture
+        if c.kind === :aperture && _transmits(c.material.albedo)     # a closing lip
+            escaped[c.name] = sum(τ[e] * P(e) for e in es; init = 0.0)
+            absorbed[c.name] = sum((1 - α[e] - τ[e]) * P(e) for e in es; init = 0.0)
+        elseif c.kind === :aperture
             escaped[c.name] = sum(P, es; init = 0.0)
         elseif _transmits(c.material.albedo)
             absorbed[c.name] = sum((1 - α[e] - τ[e]) * P(e) for e in es; init = 0.0)

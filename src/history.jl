@@ -130,8 +130,9 @@ function _drive_history(t::Target, model_at, deposit_at, beams_at, times;
                     if c.kind === :surface && _transmits(c.material.albedo)]
     model(e) = element_material(t, e).albedo
     tracked = [e for e in foil_elems if model(e).burnthrough === nothing]
-    # transitions a step can resolve
-    smooth = [e for ci in transmitters for e in t.comp_elems[ci] if model(e).width > 0]
+    # transitions a step can resolve (closing entrance-hole lips included)
+    smooth = [e for (ci, c) in enumerate(t.components) if _transmits(c.material.albedo)
+              for e in t.comp_elems[ci] if model(e).width > 0]
     need = zeros(N)
     for e in foil_elems
         need[e] = _front_integral(model(e).front, areal_mass(model(e)))

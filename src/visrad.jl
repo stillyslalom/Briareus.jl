@@ -1118,11 +1118,15 @@ function _vr_describe(io, t::Target, sol)
         hi = reduce((a, b) -> max.(a, b), vs)
         A = sum(t.elem_area[es]; init = 0.0) / (c.two_sided ? 2 : 1)
         α = isempty(es) ? 0.0 : sum(sol.albedo[es] .* t.elem_area[es]) / sum(t.elem_area[es])
-        kind = c.kind === :aperture ? "aperture (transparent; its incident flux is the escaping flux)" :
+        lip = c.kind === :aperture && _transmits(c.material.albedo)
+        kind = lip ? "closing aperture lip (transparent to laser light; re-emits the x-ray albedo below, " *
+                     "the rest of its incident flux escapes; VisRad: an aperture while open, else a " *
+                     "laser-transparent surface of that albedo)" :
+               c.kind === :aperture ? "aperture (transparent; its incident flux is the escaping flux)" :
                c.two_sided ? "opaque, two-sided" : "opaque, radiates from its front side"
         @printf(io, "- %s: %s, %d elements, area %.6g mm² (%.6g cm²)\n", c.name, kind,
                 length(es), A, A / 100)
-        c.kind === :aperture ||
+        (c.kind === :aperture && !lip) ||
             @printf(io, "    material %s: x-ray albedo %.4g (area mean as solved), laser→x-ray conversion %.4g\n",
                     c.material.name, α, c.material.conversion)
         s = c.surface

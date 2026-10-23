@@ -280,7 +280,7 @@ end
              nz = 36, nphi = 48, nr_cap = 6, nr_leh = 4, capsule_ntheta = 24, capsule_nphi = 32,
              h = nothing, capsule_h = nothing, capsule_mesh = :compact, wall = gold(),
              capsule = ablator(), capsule_center = (0,0,0), windows = (), corner_radius = 0,
-             nr_corner = nothing)
+             nr_corner = nothing, leh_closure = nothing, leh_open_radius = 0.84 leh_radius)
 
 Cylindrical hohlraum along `z`, centered on TCC (dimensions in mm), with components
 
@@ -288,6 +288,8 @@ Cylindrical hohlraum along `z`, centered on TCC (dimensions in mm), with compone
 - `:cap_top`, `:cap_bottom` — end-cap washers between the LEH and the wall
 - `:leh_top`, `:leh_bottom` — laser entrance holes (apertures; their incident flux is
   the x-ray loss through the LEH)
+- `:leh_top_lip`, `:leh_bottom_lip` — with `leh_closure`, each hole's closing lip (after
+  its hole)
 - `:capsule` — spherical capsule (omit with `capsule_radius = 0`)
 - `:window_1`, … — diagnostic windows in the wall, one component per `WallWindow` in
   `windows` (or the window's own name): closed windows are opaque wall patches with
@@ -324,6 +326,17 @@ material. Each band is the exact frustum through its two rim circles (`ConeSurfa
 so the fillet is the chord polygon of the arc (sagitta `corner_radius (1 − cos(π/4k))`,
 20 µm for 1 mm in 4 bands) and the bands, wall and caps meet vertex for vertex.
 
+`leh_closure`, a `GapClosure`, closes each entrance hole to x-rays from `leh_radius` down
+to `leh_open_radius` during the pulse: the annulus between them is a closing lip
+(`aperture(...; closure)`), transparent to laser light and lines of sight, which lets
+its incident flux escape until `closure.closure` (ns) and across the next
+`closure.width` ns turns into plasma that re-emits with the albedo of `closure.after`
+(the wall's, e.g. `WallLossAlbedo()`). Engineering default for low-fill NIF hohlraums:
+open through the foot, closing over ~0.5 ns at the rise to peak, to
+`leh_open_radius = 0.84 leh_radius` (Schneider et al. 2015: ~0.84 r₀ through the peak;
+Young et al. 2020 use 85 % static radii; research notes, "Closing entrance holes"). Beams
+pass the lip unclipped: the laser keeps its own path open (Chen et al. 2020).
+
 `capsule_mesh` picks the capsule mesh: `:compact` (the default), a geodesic
 `icosphere_mesh` of nearly equilateral triangles with sides of about `capsule_h`
 (`icosphere_frequency`; without `capsule_h`, the lat-long meridional size
@@ -339,8 +352,11 @@ function hohlraum(; length = 9.4, radius = 2.875, leh_radius = 1.55, capsule_rad
                   h = nothing, capsule_h = nothing, capsule_mesh::Symbol = :compact,
                   wall::Material = gold(), capsule::Material = ablator(),
                   capsule_center = (0.0, 0.0, 0.0), windows = (), corner_radius::Real = 0.0,
-                  nr_corner::Union{Nothing,Integer} = nothing)
+                  nr_corner::Union{Nothing,Integer} = nothing,
+                  leh_closure::Union{Nothing,GapClosure} = nothing, leh_open_radius::Real = 0.84 * leh_radius)
     0 < leh_radius < radius || throw(ArgumentError("need 0 < leh_radius < radius"))
+    leh_closure === nothing || 0 < leh_open_radius < leh_radius ||
+        throw(ArgumentError("need 0 < leh_open_radius < leh_radius"))
     rc = Float64(corner_radius)
     0 <= rc < min(radius - leh_radius, length / 2) ||
         throw(ArgumentError("need 0 ≤ corner_radius < min(radius - leh_radius, length / 2)"))
@@ -394,11 +410,22 @@ function hohlraum(; length = 9.4, radius = 2.875, leh_radius = 1.55, capsule_rad
         Component(:cap_bottom, annulus_mesh(leh_radius, radius - rc, -h; nr = nr_cap, nphi, up = true,
                                             phibreaks), wall;
                   surface = DiskSurface(center = (0, 0, -h))),
-        aperture(:leh_top, disk_mesh(leh_radius, h; nr = nr_leh, nphi = nphi ÷ 2, up = false);
-                 surface = DiskSurface(center = (0, 0, h))),
-        aperture(:leh_bottom, disk_mesh(leh_radius, -h; nr = nr_leh, nphi = nphi ÷ 2, up = true);
-                 surface = DiskSurface(center = (0, 0, -h))),
     ]
+    for (sgn, name) in ((1, :leh_top), (-1, :leh_bottom))
+        disk = DiskSurface(center = (0, 0, sgn * h))
+        if leh_closure === nothing
+            push!(comps, aperture(name, disk_mesh(leh_radius, sgn * h; nr = nr_leh, nphi = nphi ÷ 2,
+                                                  up = sgn < 0); surface = disk))
+        else
+            # the hole open at the peak, and the lip that closes around it
+            ro = leh_open_radius
+            push!(comps, aperture(name, disk_mesh(ro, sgn * h; nr = max(1, round(Int, nr_leh * ro / leh_radius)),
+                                                  nphi = nphi ÷ 2, up = sgn < 0); surface = disk))
+            push!(comps, aperture(Symbol(name, :_lip), annulus_mesh(ro, leh_radius, sgn * h; nr = 1,
+                                                                    nphi = nphi ÷ 2, up = sgn < 0);
+                                  surface = disk, closure = leh_closure))
+        end
+    end
     if rc > 0
         k = nr_corner
         k >= 1 || throw(ArgumentError("nr_corner must be at least 1"))

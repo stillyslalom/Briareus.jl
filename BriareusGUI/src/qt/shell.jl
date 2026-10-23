@@ -589,7 +589,10 @@ function _refresh_selection!(sh::BriareusShell)
             c = tc.components[ci]
             es = elements(tc, name)
             A = sum(tc.elem_area[e] for e in es; init = 0.0)
-            what = c.kind === :aperture ? "aperture (transparent: rays pass, x-rays escape)" :
+            lip = c.kind === :aperture && c.material.albedo isa GapClosure
+            what = lip ? @sprintf("closing lip (rays pass; x-rays escape until %.3g ns, then re-emitted)",
+                                  c.material.albedo.closure) :
+                   c.kind === :aperture ? "aperture (transparent: rays pass, x-rays escape)" :
                    c.two_sided ? "two-sided surface" : "one-sided surface"
             mat = c.kind === :aperture ? "" :
                   @sprintf(" · albedo %.3g · conversion %.3g", albedo(c.material), c.material.conversion)

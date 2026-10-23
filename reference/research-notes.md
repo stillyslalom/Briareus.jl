@@ -2229,3 +2229,42 @@ primary text read, **M** = abstract or secondary, **L** = inference or arithmeti
     ships `flat_kernel` (flat over a window, the static sensitivity; *derived*) and
     takes user kernels.
   - Time-dependent error budgets and multi-shot trending remain (ROADMAP 11).
+
+## Closing entrance holes (2026-10-23)
+
+- **Model** (`hohlraum(; leh_closure, leh_open_radius)`, `aperture(...; closure)`): each
+  entrance hole is split into the hole that stays open (radius `leh_open_radius`) and a
+  lip, the annulus out to `leh_radius`. The lip is an aperture with a `GapClosure`
+  albedo: transparent to laser light, lines of sight and view-factor rays at all times,
+  it lets all of its incident x-ray flux escape until `closure`, then across `width`
+  re-emits α = s·α_after (s the smooth step) and lets 1 − s escape. `energy_balance`
+  books τP as escaped and (1 − α − τ)P as absorbed; `drive_history` resolves the
+  closure with `transition` steps and counts the lip with the entrance holes (not in
+  `window_loss`). `ApertureKeepOut` keeps the full `leh_radius` rim (beams must still
+  clear the hardware). It converts no laser light. *Engineering model.* The plasma that
+  closes the hole is not computed; closure time and radius are inputs. The Monte Carlo
+  reference treats the lip as open.
+- **Default `leh_open_radius` = 0.84 r₀.** Schneider et al., PoP 22, 122705 (2015): the
+  LEH closes in the low-power part of the pulse and reopens at the rise. Its radius at
+  peak is ~0.84 r₀ and varies ≤ 4 % through peak. The measured open area is
+  1.25–1.4× the modeled (HYDRA) area. **H** (via the 2026-10-22 lit review).
+  Young et al., PoP 27, 082702 (2020): a static view-factor model with all radii at 85 %
+  reproduces the dynamic model at peak. **H**. 0.84 sits between them. **M**
+- **Timing.** Chen et al., PoP 27, 022702 (2020): at 0.15 mg/cc a ~1550 µm-radius LEH stays
+  open until ~4.5 ns, then its x-ray-emitting size drops rapidly over 4.5–5 ns. Where the
+  laser passes, the beams keep it open. **M** (secondary transcription). Swadling et al.,
+  PoP 32, 052707 (2025): closure runs faster than simulated (~100 µm in diameter). **H**
+  Briareus has no default `closure`. The example below closes at 5.0 ns over 0.5 ns (the
+  rise from the foot) with the wall's `WallLossAlbedo`. **L**: an engineering default
+  to be set per design from SXI data.
+- **What it changes** (*derived*, 2026-10-23). Hohlraum and pointing of
+  `docs/literate/retune.jl` (10.1 × 5.75 mm, 3.1 mm LEH, `WallLossAlbedo` wall,
+  h = 0.45, capsule_h = 0.15, its reference pulses, steps of 0.4 ns,
+  `closed = true`). Compare open holes with `leh_closure = GapClosure(closure = 5.0,
+  width = 0.5, after = WallLossAlbedo())` at 0.84 r₀, averaged over 7.6–9.4 ns:
+  - capsule Tr goes from 310.2 to 320.4 eV (+10.2 eV, +3.3 %);
+  - P2/P0 goes from −9.19 % to −6.67 % (+2.5 points; closing the holes adds pole drive);
+  - P4/P0 goes from −0.09 % to −0.15 %.
+  Before 4.8 ns the two agree to < 0.01 eV and 0.003 points. A 16 % smaller LEH radius
+  is therefore worth ~2.5 points of P2, which is comparable to the cone-fraction
+  retunes of the tutorials. Set the closure from data before trusting absolute P2.

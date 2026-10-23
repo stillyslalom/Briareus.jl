@@ -471,7 +471,8 @@ A named piece of a target. `kind = :surface` components are opaque: they block l
 rays and lines of sight, absorb laser light, and radiate from their front side (and
 back side when `two_sided`). `kind = :aperture` components (e.g. laser entrance holes)
 are transparent diagnostic surfaces that record the x-ray flux crossing them and
-re-emit nothing. `surface` is the exact `CurvedSurface` the mesh approximates, if any;
+re-emit nothing, or, with a `GapClosure` albedo, re-emit what a closing lip of plasma
+would (see `aperture`). `surface` is the exact `CurvedSurface` the mesh approximates, if any;
 the radiation model then uses the curved geometry (see `view_factors`).
 """
 struct Component
@@ -490,12 +491,21 @@ struct Component
 end
 
 """
-    aperture(name, mesh)
+    aperture(name, mesh; surface = nothing, closure = nothing)
 
 Transparent diagnostic surface (e.g. a laser entrance hole): rays pass through it and
 its incident x-ray flux is the flux escaping through it.
+
+With `closure`, a `GapClosure`, it is an opening that plasma closes to x-rays during the
+pulse while laser light and lines of sight still pass (the lip of a closing laser entrance
+hole, `hohlraum(; leh_closure)`): it re-emits the fraction α(t) = s α_after of its
+incident flux and lets `1 - s` escape, booked as escaped by `energy_balance`. It
+converts no laser light. The Monte Carlo reference (`Briareus.montecarlo_incident`) treats
+every aperture as open.
 """
-aperture(name, mesh; surface = nothing) = Component(name, mesh, BLACK; kind = :aperture, surface)
+aperture(name, mesh; surface = nothing, closure::Union{Nothing,GapClosure} = nothing) =
+    Component(name, mesh, closure === nothing ? BLACK : Material(:plasma; albedo = closure, conversion = 0.0);
+              kind = :aperture, surface)
 
 "Component with its mesh rigidly moved (`x ↦ R*x + t`)."
 transform(c::Component, R::AbstractMatrix, t = zero(Vec3)) =

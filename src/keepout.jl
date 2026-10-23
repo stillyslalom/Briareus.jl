@@ -42,10 +42,14 @@ function ApertureKeepOut(t::Target; apertures = nothing, peak_fraction = nothing
                          minimum = 0.0, weight = 100.0, nrim::Integer = 96)
     intensity === nothing && peak_fraction === nothing && (peak_fraction = 0.01)
     # by default every planar aperture; open windows in a hohlraum wall (apertures on a
-    # `CylinderSurface`) are not entrance holes
+    # `CylinderSurface`) are not entrance holes, and a closing lip (an aperture with a
+    # `GapClosure`) widens the hole whose plane and center it shares
+    lip(c) = c.kind === :aperture && _transmits(c.material.albedo)
     names = apertures === nothing ?
-            [c.name for c in t.components if c.kind === :aperture && !(c.surface isa CylinderSurface)] :
+            [c.name for c in t.components
+             if c.kind === :aperture && !(c.surface isa CylinderSurface) && !lip(c)] :
             Symbol[apertures...]
+    lips = [findall(==(ci), t.tri_comp) for (ci, c) in enumerate(t.components) if lip(c)]
     isempty(names) && throw(ArgumentError("target has no apertures"))
     centers, rims = Vec3[], Vector{Vec3}[]
     for name in names
@@ -54,8 +58,14 @@ function ApertureKeepOut(t::Target; apertures = nothing, peak_fraction = nothing
         A = sum(t.tri_area[tris])
         c = sum(t.tri_area[k] * (t.tri_v0[k] + (t.tri_e1[k] + t.tri_e2[k]) / 3) for k in tris) / A
         n = t.tri_normal[tris[1]]
-        r = maximum(max(norm(t.tri_v0[k] - c), norm(t.tri_v0[k] + t.tri_e1[k] - c),
-                        norm(t.tri_v0[k] + t.tri_e2[k] - c)) for k in tris)
+        reach(ks) = maximum(max(norm(t.tri_v0[k] - c), norm(t.tri_v0[k] + t.tri_e1[k] - c),
+                                norm(t.tri_v0[k] + t.tri_e2[k] - c)) for k in ks)
+        r = reach(tris)
+        for ks in lips
+            cl = sum(t.tri_area[k] * (t.tri_v0[k] + (t.tri_e1[k] + t.tri_e2[k]) / 3) for k in ks) /
+                 sum(t.tri_area[ks])
+            norm(cl - c) < 1e-6 * r && abs(dot(t.tri_normal[ks[1]], n)) > 1 - 1e-9 && (r = max(r, reach(ks)))
+        end
         e1 = normalize(abs(n[1]) < 0.9 ? cross(n, Vec3(1, 0, 0)) : cross(n, Vec3(0, 1, 0)))
         e2 = cross(n, e1)
         push!(centers, c)
