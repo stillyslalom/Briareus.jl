@@ -120,7 +120,10 @@ environment has no ForwardDiff/Optim, and `Vec3` clashes with Makie there.
 - `optimize_pointing` bounds both iterations and objective evaluations (a line search
   on a kinked objective can take dozens per iteration). It hands L-BFGS-B value and
   gradient from one dual pass, under one fixed dual tag (`_PointingTag`), so compiled
-  and precompiled code serves every objective.
+  and precompiled code serves every objective. The 12-wide chunks' dual passes run
+  concurrently (`_pointing_gradient!`, nesting `deposit`'s and CBET's threads), bitwise
+  equal to serial `ForwardDiff.gradient!`; so objectives must be thread-safe (no shared
+  mutable caches written during an evaluation).
 - Performance of the optimization path: a `Scenario` keeps the flux response contracted
   with the cached Legendre/Y_lm weights (`moment_response`, `ylm_response`); the full
   `scenario.response` and `ev.flux` are computed lazily on first read, so test for
