@@ -50,6 +50,18 @@ using Printf: @sprintf
         # apertures: written as their own solids by default, left out on request
         noleh = read_stl_solids(write_stl(joinpath(dir, "noleh.stl"), t; binary = false, apertures = false))
         @test first.(noleh) == [String(c.name) for c in t.components if c.kind !== :aperture]
+        # closing lips are written with their entrance holes: each hole whole
+        tl = hohlraum(nz = 6, nphi = 12, capsule_ntheta = 6, capsule_nphi = 8,
+                      leh_closure = GapClosure(closure = 5.0))
+        sl = read_stl_solids(write_stl(joinpath(dir, "lips.stl"), tl; binary = false))
+        @test first.(sl) == names
+        leh(ss) = only(m for (n, m) in ss if n == "leh_top")
+        @test total_area(leh(sl)) ≈ total_area(leh(read_stl_solids(joinpath(dir, "h_false_1.0.stl")))) rtol = 1e-9
+        @test first.(read_stl_solids(write_stl(joinpath(dir, "lips.stl"), tl; binary = false, apertures = false))) ==
+              first.(noleh)
+        lone = read_stl_solids(write_stl(joinpath(dir, "lone.stl"), [tl.components[component_index(tl, :leh_top_lip)]];
+                                         binary = false))
+        @test first.(lone) == ["leh_top_lip"]
         # a two-sided component is written once; a mesh alone, pairs, a component vector
         f = foil(:f, (1.0, 0.0, 0.0), (1, 0, 0); width = 1.0, n = 2)
         @test f.two_sided

@@ -411,7 +411,10 @@ at full Float64 precision; [`read_stl_solids`](@ref) reads them back as named pa
 A two-sided component is written once, wound toward its front side. Apertures (laser
 entrance holes and other open windows, transparent to light) are written as their own
 solids so a CAD user sees them; pass `apertures = false` to leave them out, e.g. for a
-code that would take every facet for a wall. A component's exact `CurvedSurface` is
+code that would take every facet for a wall. A closing lip (`aperture(...; closure)`,
+`hohlraum(; leh_closure)`) is a plasma model, not a part: a lip named `<hole>_lip` is
+written in the solid of its aperture `<hole>`, so the entrance hole comes out whole, at
+its full radius (a lip without its hole keeps its own solid). A component's exact `CurvedSurface` is
 not written, only its facets, and the patch structure is lost (`read_stl` returns one
 patch per triangle).
 """
@@ -429,8 +432,24 @@ end
 _stl_solids(m::Mesh, _, name) = [name => m]
 _stl_solids(c::Component, apertures, name) = _stl_solids([c], apertures, name)
 _stl_solids(t::Target, apertures, name) = _stl_solids(t.components, apertures, name)
-_stl_solids(cs::AbstractVector{Component}, apertures, _) =
-    [String(c.name) => c.mesh for c in cs if apertures || c.kind !== :aperture]
+function _stl_solids(cs::AbstractVector{Component}, apertures, _)
+    out = Pair{String,Mesh}[]
+    lip(c) = c.kind === :aperture && _transmits(c.material.albedo)
+    holes = Set(String(c.name) for c in cs if c.kind === :aperture && !lip(c))
+    for c in cs
+        (apertures || c.kind !== :aperture) || continue
+        name = String(c.name)
+        if lip(c) && endswith(name, "_lip") && chopsuffix(name, "_lip") in holes
+            continue                                    # written with its hole, below
+        end
+        m = c.mesh
+        for l in cs                                     # the hole's closing lip, if any
+            lip(l) && String(l.name) == name * "_lip" && (m = merge_meshes(m, l.mesh))
+        end
+        push!(out, name => m)
+    end
+    return out
+end
 _stl_solids(ps::AbstractVector{<:Pair}, _, _) = [string(n) => m::Mesh for (n, m) in ps]
 
 function _stl_facet(m::Mesh, t::Integer, s::Float64)
