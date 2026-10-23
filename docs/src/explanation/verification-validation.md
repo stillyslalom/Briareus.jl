@@ -38,6 +38,7 @@ A tutorial states which of these it does in its closing section, "What this chec
 | Optimizer against the closed-form least-squares solution | code verification | [Freeing a bundle for radiography](@ref) |
 | CBET coupling against an independent Im Γ computation | code verification | "CBET" |
 | CBET transfer against published points | calibration | `calibrate_cbet` |
+| Two-zone CBET against the N221204 HYDRA transfer (PRE 109 Fig. 9, digitized): cone fraction over the pulse, per-cone outer ratios not fitted | calibration | `test/cbet_zones.jl`; `examples/n221204_cbet_calibration.jl` |
 | Clearance envelopes, wings, worst-case formulas | code verification | "clearance" |
 | Differentiable entrance-hole keep-out against the clearance check | code verification | "clearance"; [Freeing a bundle for radiography](@ref) |
 

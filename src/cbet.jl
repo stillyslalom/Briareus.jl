@@ -68,6 +68,10 @@ as a laser–plasma model (`apply_lpi`, `Scenario(...; lpi)`).
   Michel et al. 2009; `Ti` is not given there and is an assumption.
 - `flow` — outflow speed along the hohlraum axis (km/s, away from the hohlraum), or
   `mach` times the ion sound speed `√((Z̄ Te + 3 Ti)/(Ā m_p))` when `flow` is nothing.
+  Signed: a negative `mach` or `flow` flows into the hohlraum. With outflow the inner
+  (steeper) cones see the larger blue shift, so flow alone moves power from the inner
+  to the outer cones; red-detuned inner cones (`dlambda > 0`) take power back.
+  [`TwoZoneCBET`](@ref) puts a supersonic zone outside the LEH and a slow one inside.
 - `length` — maximum interaction length (mm). A pair crossing at angle θ interacts over
   `min(length, w/sin θ)`, with `w` the mean beam width at the LEH plane.
 - `polarization` — `:smoothed` (NIF polarization smoothing, uncorrelated speckle:
@@ -310,6 +314,44 @@ function ion_wave_amplitude(m::CBET, b::Beam, c::Beam, t = 0.0)
 end
 
 """
+    TwoZoneCBET(outside::CBET, inside::CBET)
+    TwoZoneCBET(; leh_z, offset = 0.5, outside = (;), inside = (;))
+
+CBET in two crossing zones per entrance hole, applied in the order the beams meet
+them: `outside` the LEH (supersonic outflow; the flow's Doppler shift moves power from
+the inner cones to the outer ones even without detuning) and `inside` it (slow flow;
+the transfer is set by the wavelength detuning, outer → inner for red-detuned inner
+cones). Each zone is a full [`CBET`](@ref) with its own crossing plane, flow (signed
+`mach` or `flow`), plasma state (`ne_nc`, `Te`, `Ti`, `ions`, as numbers, functions
+of time or `(times, values)` tables), `clamp`, `multiplier` and `length`, and stays
+generic in the number type.
+
+The keyword form places the zones `offset` (mm) outside and inside the LEH planes
+`±leh_z` and passes `outside`/`inside` (NamedTuples) to `CBET`; their defaults are
+Mach 2 outflow outside (the near-sonic LEH flow turns supersonic outside, Michel et al.
+2013) and Mach 0 inside — engineering defaults, not measurements. In a low-fill
+hohlraum the net transfer is the balance of the two (Pickworth et al. 2020's HYDRA:
+inner → outer outside the LEH, outer → inner inside), which is why Δλ = 0 is not zero
+transfer there (NC24: I-Raum needed ~0.5 Å to cancel flow-driven CBET).
+[`n221204_cbet`](@ref) is a version calibrated to the N221204 HYDRA transfer.
+"""
+struct TwoZoneCBET <: LaserPlasmaModel
+    outside::CBET
+    inside::CBET
+end
+
+_zshift(z::Real, d) = z + d
+_zshift(z, d) = t -> _tvalue(z, t) + d
+
+function TwoZoneCBET(; leh_z, offset::Real = 0.5, outside = (;), inside = (;))
+    return TwoZoneCBET(CBET(; leh_z = _zshift(leh_z, offset), mach = 2.0, outside...),
+                       CBET(; leh_z = _zshift(leh_z, -offset), mach = 0.0, inside...))
+end
+
+apply_lpi(m::TwoZoneCBET, beams::AbstractVector{<:Beam}, time = 0.0) =
+    apply_lpi(m.inside, apply_lpi(m.outside, beams, time), time)
+
+"""
     receiver_ratio(model, beams, dlambda; receivers, time = 0.0)
 
 Ratio of the `receivers` groups' total power after/before `model` when those groups are
@@ -336,31 +378,181 @@ multiplied by `ratio` (e.g. 1.6 for "inner +60%"). Fits the constant-valued fiel
 residuals with automatic-differentiation gradients. Returns the calibrated model and the
 Optim result.
 """
-function calibrate_cbet(m::CBET, beams::AbstractVector{<:Beam}, data; receivers,
-                        fit = (:multiplier,), time = 0.0,
-                        bounds = Dict(:multiplier => (1e-3, 10.0), :mach => (0.0, 3.0),
-                                      :clamp => (1e-4, 0.05)))
-    fields = Symbol[fit...]
-    for f in fields
-        f in (:multiplier, :mach, :clamp) || throw(ArgumentError("cannot fit $f"))
-        v = getfield(m, f)
-        v isa Real || throw(ArgumentError("$f must be a number to be fitted (got $(typeof(v)))"))
+function calibrate_cbet(m::Union{CBET,TwoZoneCBET}, beams::AbstractVector{<:Beam}, data;
+                        receivers, fit = (:multiplier,), time = 0.0,
+                        bounds = _CBET_BOUNDS, iterations = 200)
+    loss(mm) = sum((log(receiver_ratio(mm, beams, dλ; receivers, time)) - log(r))^2
+                   for (dλ, r) in data)
+    return _calibrate(loss, m, fit, bounds, iterations)
+end
+
+"""
+    calibrate_cbet(model, beams_at, data; receivers, fit = (:multiplier,), bounds,
+                   iterations = 200) -> (model, result)
+
+Multi-epoch calibration: fit `model` (a [`CBET`](@ref) or [`TwoZoneCBET`](@ref)) to a
+time series of post-transfer power fractions. `beams_at(t)` gives the setup beams at
+time `t` (ns); `data` lists `(t, fraction)` or `(t, fraction, weight)` rows, `fraction`
+being the `receivers` groups' share of the total power after `model` (e.g. the inner
+cone fraction of PRE 109 Fig. 9b). Minimizes the weighted sum of squared fraction
+residuals.
+
+`fit` names the parameters: fields of a `CBET` (`:multiplier`, `:mach`, `:flow`,
+`:clamp`, `:Te`, `:Ti`, `:ne_nc`), or for a `TwoZoneCBET` `(zone, field)` pairs with
+zone `:outside`, `:inside` or `:both` (one value shared by the two zones; a bare
+field name means `:both`). A field holding a number is one parameter; a field holding
+a `(times, values)` table fits every value at its fixed time, so plasma-state
+histories are calibration inputs. `bounds` maps fields to `(lo, hi)`; parameters
+with `lo > 0` are fitted in log space. Bounded L-BFGS-B with forward-mode gradients.
+"""
+function calibrate_cbet(m::Union{CBET,TwoZoneCBET}, beams_at::Function, data; receivers,
+                        fit = (:multiplier,), bounds = _CBET_BOUNDS, iterations = 200)
+    rs = Set(Symbol[receivers...])
+    rows = [(Float64(r[1]), Float64(r[2]), length(r) > 2 ? Float64(r[3]) : 1.0) for r in data]
+    beams = [beams_at(t) for (t, _, _) in rows]
+    function loss(mm)
+        acc = 0.0
+        for ((t, f, w), bs) in zip(rows, beams)
+            eff = apply_lpi(mm, bs, t)
+            acc += w * (sum(b.power for b in eff if b.group in rs) / sum(b.power for b in eff) - f)^2
+        end
+        return acc
     end
-    with(x) = _cbet_with(m, Dict(f => x[i] for (i, f) in enumerate(fields)))
-    loss(x) = sum((log(receiver_ratio(with(x), beams, dλ; receivers, time)) - log(r))^2
-                  for (dλ, r) in data)
-    x0 = Float64[getfield(m, f) for f in fields]
-    lo = Float64[bounds[f][1] for f in fields]
-    hi = Float64[bounds[f][2] for f in fields]
-    g!(G, x) = ForwardDiff.gradient!(G, loss, x)
-    res = Optim.optimize(loss, g!, lo, hi, clamp.(x0, lo, hi), Optim.LBFGSB(),
-                         Optim.Options(; iterations = 200))
+    return _calibrate(loss, m, fit, bounds, iterations)
+end
+
+const _CBET_BOUNDS = Dict(:multiplier => (1e-3, 10.0), :mach => (0.0, 3.0),
+                          :flow => (-1000.0, 1000.0), :clamp => (1e-4, 0.05),
+                          :Te => (300.0, 2e4), :Ti => (100.0, 1e4), :ne_nc => (1e-3, 0.25))
+const _CBET_FITTABLE = (:multiplier, :mach, :flow, :clamp, :Te, :Ti, :ne_nc)
+
+# normalized (zone, field) specs of a fit
+_fit_specs(::CBET, fit) = [(:self, f isa Symbol ? f : Symbol(last(f))) for f in fit]
+_fit_specs(::TwoZoneCBET, fit) =
+    [f isa Symbol ? (:both, f) : (Symbol(first(f)), Symbol(last(f))) for f in fit]
+_zone(m::CBET, ::Symbol) = m
+function _zone(m::TwoZoneCBET, z::Symbol)
+    z === :inside && return m.inside
+    z in (:outside, :both) && return m.outside
+    throw(ArgumentError("zone must be :outside, :inside or :both (got $z)"))
+end
+
+# parameter values of a field: a number, or the values of a (times, values) table
+function _field_values(v, f)
+    v isa Real && return [Float64(v)]
+    v isa Tuple{<:AbstractVector,<:AbstractVector} && return Float64.(collect(v[2]))
+    throw(ArgumentError("$f must be a number or a (times, values) table to be fitted (got $(typeof(v)))"))
+end
+
+function _calibrate(loss, m, fit, bounds, iterations)
+    specs = _fit_specs(m, fit)
+    for (_, f) in specs
+        f in _CBET_FITTABLE || throw(ArgumentError("cannot fit $f"))
+    end
+    x0, lo, hi, sizes = Float64[], Float64[], Float64[], Int[]
+    for (z, f) in specs
+        v = _field_values(getfield(_zone(m, z), f), f)
+        append!(x0, v)
+        append!(lo, fill(bounds[f][1], length(v)))
+        append!(hi, fill(bounds[f][2], length(v)))
+        push!(sizes, length(v))
+    end
+    logs = lo .> 0
+    to_u(x) = [l ? log(xi) : xi for (xi, l) in zip(x, logs)]
+    from_u(u) = [l ? exp(ui) : ui for (ui, l) in zip(u, logs)]
+    with(u) = _cbet_set(m, specs, sizes, from_u(u))
+    f(u) = loss(with(u))
+    g!(G, u) = ForwardDiff.gradient!(G, f, u)
+    ulo, uhi = to_u(lo), to_u(hi)
+    u0 = to_u(clamp.(x0, lo, hi))
+    res = Optim.optimize(f, g!, ulo, uhi, u0, Optim.LBFGSB(), Optim.Options(; iterations))
     return with(Optim.minimizer(res)), res
 end
 
-function _cbet_with(m::CBET, vals::Dict)
-    return CBET(; leh_z = m.leh_z, ne_nc = m.ne_nc, Te = m.Te, Ti = m.Ti, ions = m.ions,
-                mach = get(vals, :mach, m.mach), flow = m.flow, length = m.length,
-                polarization = m.polarization, multiplier = get(vals, :multiplier, m.multiplier),
-                clamp = get(vals, :clamp, m.clamp), nsteps = m.nsteps)
+# the model with the fitted fields set from x (numbers, or the values of tables)
+function _cbet_set(m, specs, sizes, x)
+    vals = Dict(z => Dict{Symbol,Any}() for z in (:self, :outside, :inside))
+    k = 0
+    for ((z, f), n) in zip(specs, sizes)
+        old = getfield(_zone(m, z), f)
+        v = old isa Real ? x[k+1] : (old[1], x[k+1:k+n])
+        k += n
+        for zz in (z === :both ? (:outside, :inside) : (z,))
+            vals[zz][f] = v
+        end
+    end
+    m isa CBET && return _cbet_with(m, vals[:self])
+    return TwoZoneCBET(_cbet_with(m.outside, vals[:outside]), _cbet_with(m.inside, vals[:inside]))
+end
+
+function _cbet_with(m::CBET, vals::AbstractDict)
+    kw = Dict{Symbol,Any}(f => getfield(m, f) for f in fieldnames(CBET))
+    merge!(kw, vals)
+    return CBET(; kw...)
+end
+
+
+"""
+    n221204_fig9() -> NamedTuple
+
+PRE 109, 025204 (2024) Fig. 9 for N221204 (HYDRA), digitized
+(`data/pre109_fig9_n221204.csv`, provenance in its header): columns `t` (ns, 0.7–9.0 in
+0.1 ns steps), inner cone fraction `cf_in`/`cf_post` before and after CBET (Fig. 9b),
+and per-cone powers `p23_in`, `p23_post`, …, `p50_post` (TW, Fig. 9a). Reading error
+about ±0.01 in cone fraction and ±2 TW per cone; the foot inner-cone powers (< 8 TW) are
+below the figure's resolution.
+"""
+function n221204_fig9()
+    h, rows = read_csv(joinpath(@__DIR__, "..", "data", "pre109_fig9_n221204.csv"))
+    cols = Tuple([parse(Float64, r[i]) for r in rows] for i in eachindex(h))
+    return NamedTuple{Tuple(Symbol.(h))}(cols)
+end
+
+"""
+    n221204_fig9_beams(beams, fig9, t) -> Vector{Beam}
+
+`beams` (NIF cones `:inner23`, `:inner30`, `:outer44`, `:outer50`) with the powers
+HYDRA fed to CBET at time `t` in PRE 109 Fig. 9 (`fig9 = n221204_fig9()`, nearest
+sample): the outer cones' powers from Fig. 9a, the inner cones' total from Fig. 9b's
+input cone fraction (Fig. 9a's foot inner powers are below its resolution), split
+evenly between 23.5° and 30° as Fig. 9a shows at peak; each cone's power is shared
+equally by its beams. These are HYDRA's degraded powers (~370 TW at peak, against
+~440 TW delivered).
+"""
+function n221204_fig9_beams(beams::AbstractVector{<:Beam}, fig9, t)
+    i = argmin(abs.(fig9.t .- t))
+    o44, o50, c = fig9.p44_in[i], fig9.p50_in[i], fig9.cf_in[i]
+    inner = c / (1 - c) * (o44 + o50) / 2
+    P = Dict(:outer44 => o44, :outer50 => o50, :inner23 => inner, :inner30 => inner)
+    n = Dict(g => count(b -> b.group === g, beams) for g in keys(P))
+    return [remake(b; power = P[b.group] / n[b.group]) for b in beams]
+end
+
+# LEH electron temperature (eV) at shot times (ns) of the N221204 calibration
+const _N221204_TE = ([1.0, 3.0, 4.0, 4.75, 5.5, 6.5, 8.0],
+                     [2790.0, 3550.0, 3720.0, 5190.0, 5500.0, 6030.0, 7440.0])
+
+"""
+    n221204_cbet(; leh_z = 5.62, offset = 0.5) -> TwoZoneCBET
+
+Two-zone CBET calibrated to the N221204 HYDRA transfer (PRE 109, 025204 Fig. 9b, as
+digitized in [`n221204_fig9`](@ref)), on [`hybride_mock_pointing`](@ref) beams with
+Fig. 9's input powers ([`n221204_fig9_beams`](@ref)) and Δλ 2.75 Å (1ω, 0.917 Å at 3ω)
+on the inner cones. Both zones: the deck's clamp schedule (δn/n 0.002 until 3.9 ns,
+0.0075 from 4.1 ns), CH at ne/nc 0.06 and Ti 1.5 keV (repository defaults), and one
+fitted electron-temperature history Te(t) (2.8 keV at 1 ns, 3.7 at 4, 5.5 at 5.5,
+7.4 at 8 ns; constant outside). Outside zone: fitted outflow Mach 1.23 and multiplier
+0.30; inside: Mach 0 and fitted multiplier 1.23. Fit over 0.8–8.4 ns: cone-fraction
+rms 0.016, worst 0.041 (8.4 ns); the outer cones' post/input ratios (not fitted)
+match Fig. 9a to 0.03.
+
+*Derived* (research notes, "Two-zone CBET calibrated to PRE 109 Fig. 9"): an effective
+calibration to one HYDRA simulation of one shot, not a measured plasma state. Times
+are shot times, so it applies to pulses timed like N221204's.
+"""
+function n221204_cbet(; leh_z = 5.62, offset::Real = 0.5)
+    clamp = ([0.0, 3.9, 4.1, 20.0], [0.002, 0.002, 0.0075, 0.0075])
+    return TwoZoneCBET(; leh_z, offset,
+                       outside = (mach = 1.23, multiplier = 0.30, Te = _N221204_TE, clamp),
+                       inside = (multiplier = 1.23, Te = _N221204_TE, clamp))
 end
