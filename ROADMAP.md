@@ -448,6 +448,9 @@ Measured on the NIF hohlraum at the GUI's standard mesh (5,864 elements, 48 quad
 
 ## Open questions (from the 2026-10-18 CAD work)
 Choices made provisionally overnight or left open; the lean is in brackets.
+**Decided (user, 2026-10-22):** the bracketed leans stand. On 1: parts may be split
+for computational efficiency, but GUI display and interaction must stay elegant (show and
+pick the original parts, not `<part>/cylN` pieces).
 1. `fit = true` by default when `remesh` is given (cad_target, visrad_target, GUI)?
    Up to 24× faster view factors and exact curved walls, but parts are split and
    renamed `<part>/cylN`, `/coneN`, `/sphN`, `/rest`. [Yes eventually; off now.]
@@ -654,6 +657,10 @@ the reference's view factors hold through the pulse; items 9 and 10 remove that 
      deposition operator at 6–10 keyframes, interpolate the moment responses. With
      ports and aims fixed the outer footprints slide toward the LEH by ΔR/tan θ, which
      is the spot-motion swing for free. Check: time-average ≈ Young 2020's 85 % static radii.
+     Only the wall cylinder moves; caps stay fixed, rounded corners follow the wall, the
+     LEH has its own piece (user, 2026-10-22). Keyframe mesh: measure the keyframes'
+     share of the whole workload; if fine keyframes cost only a few percent (e.g. 0.5 %
+     coarse → 3 % fine), use fine. Judge by overall work-precision (user, 2026-10-22).
    - LEH radius(t) through the gap machinery (`GapClosure`-style albedo split on a
      closing annulus): open in the foot, ~0.84 r₀ through peak (Schneider 2015).
    - `BubbleAbsorption` on the inner cones: Izumi 2021's tip x_bub(t) ∝ E^0.2 ρ₀^−0.2 at
@@ -735,13 +742,20 @@ the reference's view factors hold through the pulse; items 9 and 10 remove that 
     Δλ 0.917 Å at 3ω, SBS 42 kJ), targets drive Trad 313 eV (307 for N210808), the
     54 / 25 / 4.5 / 16 % energy split, bang time 9.53 ns as the end of the drive window,
     hot-spot P2 ≈ 0 and velocity 36 km/s at (151°, 54°) through item 11, and PRE 109
-    Fig. 10's flux P2/P0(t) through item 9. Pointing comes from the non-public N230729
-    SST export in thor (`read_visrad_sst`; see `n221204_benchmark.md`); CPPs, window
+    Fig. 10's flux P2/P0(t) through item 9. Pointing: a mock-up made to resemble the
+    shot's (user, 2026-10-22): the same symmetry, the same static capsule radiosity
+    and similar CBET interactions, built and checked against the non-public N230729 SST
+    export in thor (`read_visrad_sst`). Only the mock-up and a comparison of summary
+    metrics enter the repository; the export's aim points never do. CPPs, window
     geometry and the liner thickness are unpublished: use the repository's HYBRID-E
     defaults and say so.
 17. **Briareus → CompactLES** (`reference/litreview/hydro_coupling.md`). LLNL's two-step
     method with Briareus as the integrated step and CompactLES as the capsule-only step.
-    Export (HDF5): T_r(t), capsule-averaged incident flux, a_l/a_0 for l ≤ 8 (P2 > 0
+    Coupling (user, 2026-10-22): both codes are Julia, so couple in memory through a
+    package extension (`BriareusCompactLESExt`, or the reverse; pick the side with the
+    lighter dependency) rather than a static export. HDF5 output is optional, as an
+    extension, for provenance and non-Julia consumers. The drive to hand over:
+    T_r(t), capsule-averaged incident flux, a_l/a_0 for l ≤ 8 (P2 > 0
     pole-hot) on a ≤ 50 ps grid, the radius the flux was evaluated at (later a table over
     radius, and a Planck + M-band split from item 13), with provenance. Stages on the
     CompactLES side: (0) an absorbed-flux energy source in a thin layer at the ablation
