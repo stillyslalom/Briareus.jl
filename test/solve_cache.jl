@@ -154,6 +154,38 @@ end
     @test h_old.time == h_new.time
     @test maximum(abs.(h_old.Tr .- h_new.Tr)) <= 1e-8
     @test h_new.moments ≈ h_old.moments rtol = 1e-9
+
+    # transmitting albedos: closing LEH lips (GapClosure) and a burned-through window
+    # whose transmission follows its temperature (RosselandTransmission) iterate the
+    # same albedo/transmission split on either path
+    win = Material(:Au; conversion = 0.8,
+                   albedo = BurnthroughAlbedo(; thickness = 2.5, burnthrough = 1.0,
+                                              transmission = RosselandTransmission()))
+    tt = hohlraum(nz = 12, nphi = 16, capsule_ntheta = 8, capsule_nphi = 12,
+                  wall = Material(:Au; albedo = WallLossAlbedo(), conversion = 0.8),
+                  leh_closure = GapClosure(closure = 1.5, width = 0.5),
+                  windows = [WallWindow(; phi = 0, diameter = 2.0, material = win)])
+    mt = RadiationModel(tt)
+    dt = deposit(DepositionOperator(tt, q), q)
+    ew = elements(tt, :window_1)
+    for τ in (1.4, 2.0)
+        Briareus.empty_cache!(mt)
+        Briareus._ITERATIVE_SOLVE[] = false
+        a = solve(mt, dt; time = τ, tol = 1e-10)
+        Briareus.empty_cache!(mt)
+        Briareus._ITERATIVE_SOLVE[] = true
+        Briareus._reset_solve_stats!()
+        b = solve(mt, dt; time = τ, tol = 1e-10)
+        @test Briareus._SOLVE_STATS.gmres[] > 0 && Briareus._SOLVE_STATS.lu[] == 0
+        @test maximum(abs.(a.albedo .- b.albedo)) <= 1e-10
+        @test maximum(abs.(a.transmission .- b.transmission)) <= 1e-10
+        @test maximum(b.transmission[ew]) > 0
+        @test rel(b.H, a.H) <= 1e-10
+        ea, eb = energy_balance(a), energy_balance(b)
+        @test eb.escaped[:leh_top_lip] ≈ ea.escaped[:leh_top_lip] rtol = 1e-9 atol = 1e-14
+        @test eb.transmitted[:window_1] ≈ ea.transmitted[:window_1] rtol = 1e-9
+        @test keys(eb.transmitted) == keys(ea.transmitted) && keys(eb.escaped) == keys(ea.escaped)
+    end
 end
 
 @testset "clearance progress and cancel" begin
