@@ -259,6 +259,43 @@ end
     @test set_resolution!(ts, :fine) && ts.mesh[] == MESH_PRESETS.fine
 end
 
+@testset "closing entrance holes (no GL)" begin
+    sess = DesignSession(resolution = :coarse)
+    ts = sess.target
+    @test ts.params[][:leh_closure] == 0 && ts.params[][:leh_open_fraction] == 0.84
+    @test !any(is_lip, ts.target[].components)
+    @test set_leh_closure!(ts, true) && ts.error[] == ""
+    t = ts.target[]
+    lip = t.components[component_index(t, :leh_top_lip)]
+    @test is_lip(lip) && lip.material.albedo.closure == 5.0 && lip.material.albedo.width == 0.5
+    @test albedo(lip.material.albedo, 6.0) ≈ ts.params[][:wall_albedo]       # closed: the wall's
+    hole = elements(t, :leh_top)
+    @test sqrt(maximum(sum(abs2, t.elem_centroid[e][1:2]) for e in hole)) < 0.84 * 1.55
+    # the settings are edited as dimensions, and rejected values keep the target
+    @test edit_target!(ts, :leh_closure_time, "4.5")
+    @test ts.target[].components[component_index(ts.target[], :leh_top_lip)].material.albedo.closure == 4.5
+    t = ts.target[]
+    @test !edit_target!(ts, :leh_open_fraction, "1.2") && ts.target[] === t && occursin("open radius", ts.error[])
+    @test edit_target!(ts, :leh_open_fraction, "0.8")
+    # lips are shown, selected and left out with their holes
+    rows = model_tree(sess)
+    @test !any(r -> occursin("lip", r.id), rows)
+    @test only(r for r in rows if r.id == "comp:leh_top").detail == "aperture · closing"
+    @test component_id(ts, :leh_top_lip) == "comp:leh_top"
+    @test with_lips([:wall, :leh_top]) == [:wall, :leh_top, :leh_top_lip]
+    @test Controllers._closed_enclosure(ts)
+    @test set_excluded!(ts, :leh_top, true)
+    @test !(:leh_top_lip in component_names(ts.target[])) && :leh_top_lip in component_names(ts.ghost[])
+    @test !any(r -> occursin("lip", r.id), model_tree(sess))
+    @test set_excluded!(ts, :leh_top, false) && :leh_top_lip in component_names(ts.target[])
+    # saved and restored with the session
+    state = session_state(sess)
+    @test set_leh_closure!(ts, false) && !any(is_lip, ts.target[].components)
+    restore!(sess, state)
+    @test ts.params[][:leh_closure] == 1 && ts.params[][:leh_open_fraction] == 0.8
+    @test :leh_bottom_lip in component_names(ts.target[])
+end
+
 @testset "free parts (no GL)" begin
     ts = TargetSetup(resolution = :coarse)
     for (k, kw) in ((:sphere, (; x = 4.0, r1 = 0.5)), (:disk, (; z = 7.0, r1 = 1.0, theta = 180)),

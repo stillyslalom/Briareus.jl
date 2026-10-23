@@ -73,6 +73,14 @@ const B = BriareusGUI
     @test !sc.highlight.visible[]
     select!(sess.view, "comp:capsule")
     @test sc.highlight.visible[] && length(sc.highlight[1][]) == count(==(6), t.tri_comp)   # faces
+    # an entrance hole is highlighted with its closing lip
+    set_leh_closure!(sess.target, true)
+    tl = sess.target.target[]
+    select!(sess.view, "comp:leh_top")
+    nleh = count(k -> tl.components[k].name in (:leh_top, :leh_top_lip), tl.tri_comp)
+    @test sc.highlight.visible[] && length(sc.highlight[1][]) == nleh &&
+          nleh > count(k -> tl.components[k].name === :leh_top, tl.tri_comp)
+    set_leh_closure!(sess.target, false)
     select!(sess.view, "group:inner23")
     @test !sc.highlight.visible[] && sc.selected_rays.visible[] && finite(sc.selected_rays[1][]) == 2 * 8
     select_add!(sess.view, "group:inner30")

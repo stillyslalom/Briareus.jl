@@ -40,6 +40,32 @@ ColumnLayout {
             onEdited: (text) => Julia.br_edit_target(model.key, text)
         }
     }
+    CheckBox {
+        visible: app.targetKind === "hohlraum"
+        text: "Closing entrance holes"
+        checked: app.lehClosure
+        onToggled: Julia.br_leh_closure(checked)
+        ToolTip.visible: hovered
+        ToolTip.text: "Plasma closes each LEH to x-rays down to the open radius during the pulse; " +
+                      "laser light still passes. Closed, the lip re-emits like the wall"
+    }
+    PropRow {
+        visible: app.targetKind === "hohlraum" && app.lehClosure
+        label: "Closure time"; value: app.leh_closure_time; unit: "ns"
+        tip: "Middle of the closure; set it per design (e.g. from soft x-ray images)"
+        onEdited: (text) => Julia.br_edit_target("leh_closure_time", text)
+    }
+    PropRow {
+        visible: app.targetKind === "hohlraum" && app.lehClosure
+        label: "Closure duration"; value: app.leh_closure_width; unit: "ns"
+        onEdited: (text) => Julia.br_edit_target("leh_closure_width", text)
+    }
+    PropRow {
+        visible: app.targetKind === "hohlraum" && app.lehClosure
+        label: "Open radius"; value: app.leh_open_fraction; unit: "× LEH radius"
+        tip: "Radius that stays open at peak: about 0.84 of the LEH radius on NIF (Schneider et al. 2015)"
+        onEdited: (text) => Julia.br_edit_target("leh_open_fraction", text)
+    }
 
     SectionLabel { text: "Mesh" }
     RowLayout {

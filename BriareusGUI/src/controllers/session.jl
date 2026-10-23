@@ -402,7 +402,8 @@ end
 # Whether the drive's target is a closed hohlraum enclosure, whose view factors are
 # balanced so its rows sum to one: the template's components only (free parts lie
 # outside it), none of them left out (that leaves a hole).
-const _TEMPLATE_HOHLRAUM = (:wall, :cap_top, :cap_bottom, :leh_top, :leh_bottom, :capsule)
+const _TEMPLATE_HOHLRAUM = (:wall, :cap_top, :cap_bottom, :leh_top, :leh_bottom, :leh_top_lip,
+                            :leh_bottom_lip, :capsule)
 _template_component(n::Symbol) = n in _TEMPLATE_HOHLRAUM || occursin(r"^window_\d+$", String(n))
 function _closed_enclosure(ts::TargetSetup)
     ts.kind[] === :hohlraum || return false

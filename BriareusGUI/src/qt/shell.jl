@@ -544,6 +544,10 @@ function _refresh_target!(sh::BriareusShell)
     names = component_names(ts.target[])
     _set!(sh, "hasCapsule", :capsule in names)
     _set!(sh, "hasFoil", FOIL_NAME in names)
+    _set!(sh, "lehClosure", get(ts.params[], :leh_closure, 0.0) != 0)
+    for (k, _, _, _) in LEH_CLOSURE_FIELDS
+        _set!(sh, String(k), _num(ts.params[][k]))
+    end
     return
 end
 
@@ -587,11 +591,13 @@ function _refresh_selection!(sh::BriareusShell)
         _set!(sh, "compIncluded", !(name in sess.target.excluded[]))
         if ci !== nothing
             c = tc.components[ci]
-            es = elements(tc, name)
+            # an entrance hole is shown with its closing lip (a split for the calculations)
+            li = findfirst(l -> is_lip(l) && shown_component(l.name) === name, tc.components)
+            es = li === nothing ? elements(tc, name) : [elements(tc, name); elements(tc, tc.components[li].name)]
             A = sum(tc.elem_area[e] for e in es; init = 0.0)
-            lip = c.kind === :aperture && c.material.albedo isa GapClosure
-            what = lip ? @sprintf("closing lip (rays pass; x-rays escape until %.3g ns, then re-emitted)",
-                                  c.material.albedo.closure) :
+            what = li !== nothing ?
+                   @sprintf("closing entrance hole (rays pass; its outer lip lets x-rays escape until %.3g ns, then re-emits them)",
+                            tc.components[li].material.albedo.closure) :
                    c.kind === :aperture ? "aperture (transparent: rays pass, x-rays escape)" :
                    c.two_sided ? "two-sided surface" : "one-sided surface"
             mat = c.kind === :aperture ? "" :
@@ -1056,6 +1062,7 @@ br_set_target_kind(kind) = _with_shell(sh -> set_target_kind!(sh.sess.target, _s
 br_set_resolution(r) = _with_shell(sh -> set_resolution!(sh.sess.target, _sym(r)))
 br_edit_mesh(key, text) = _with_shell(sh -> edit_mesh!(sh.sess.target, _sym(key), string(text)))
 br_edit_target(key, text) = _with_shell(sh -> edit_target!(sh.sess.target, _sym(key), string(text)))
+br_leh_closure(on) = _with_shell(sh -> set_leh_closure!(sh.sess.target, Bool(on)))
 function br_add_window()
     _with_shell() do sh
         n = length(sh.sess.target.windows[])
@@ -1513,7 +1520,7 @@ function _register_qml_functions()
     @qmlfunction br_undo br_redo br_open_session br_save_session
     @qmlfunction br_set_cluster br_rename_cluster br_split_quad br_merge_quad br_window_round
     @qmlfunction br_set_facility br_aim_at
-    @qmlfunction br_set_target_kind br_set_resolution br_edit_mesh br_edit_target
+    @qmlfunction br_set_target_kind br_set_resolution br_edit_mesh br_edit_target br_leh_closure
     @qmlfunction br_add_window br_remove_window br_edit_window br_window_open
     @qmlfunction br_add_part br_add_stl br_edit_part br_part_flag br_part_anchor br_part_coords
     @qmlfunction br_part_role br_export_stl br_cavity br_cavity_point br_part_film

@@ -214,12 +214,14 @@ function selection_kind(id::AbstractString)
     return (Symbol(id[1:i-1]), String(id[i+1:end]))
 end
 
-"Tree node id of a target component (window and part components get their own kinds)."
+"""Tree node id of a target component (window and part components get their own kinds;
+an entrance hole's closing lip is its hole's)."""
 function component_id(ts, name::Symbol)
     m = match(r"^window_(\d+)$", String(name))
     m !== nothing && ts.kind[] === :hohlraum && parse(Int, m[1]) <= length(ts.windows[]) &&
         return "window:" * m[1]
     any(p -> p.name === name, ts.parts[]) && return "part:" * String(name)
+    ts.kind[] === :hohlraum && return "comp:" * String(shown_component(name))
     return "comp:" * String(name)
 end
 
@@ -264,16 +266,20 @@ function model_tree(sess)
     if "target" in ex
         hid = v.hidden[]
         cols = component_colors(t)
+        lips = Set(shown_component(c.name) for c in t.components if is_lip(c))
         for c in t.components
+            is_lip(c) && continue                   # shown as part of its entrance hole
             id = component_id(ts, c.name)
             lab = get(_COMPONENT_LABELS, c.name, String(c.name))
-            kindtxt = c.kind === :aperture ? "aperture" : c.two_sided ? "two-sided" : ""
+            kindtxt = c.kind === :aperture ? (c.name in lips ? "aperture · closing" : "aperture") :
+                      c.two_sided ? "two-sided" : ""
             push!(rows, _row(id, 1, lab, kindtxt, false, false, c.name in hid ? 0 : 1, "", sel;
                              color = get(cols, c.name, "")))
         end
         # left out of the calculations: listed (and drawn as a ghost) to be put back
         if ts.ghost[] !== nothing
             for c in ts.ghost[].components
+                is_lip(c) && continue
                 lab = get(_COMPONENT_LABELS, c.name, String(c.name))
                 push!(rows, _row(component_id(ts, c.name), 1, lab, "not in calculations", false,
                                  false, c.name in hid ? 0 : 1, "", sel))

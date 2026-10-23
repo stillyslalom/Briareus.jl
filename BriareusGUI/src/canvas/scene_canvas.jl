@@ -297,7 +297,7 @@ points), `nothing` without a component or beam selection.
 """
 function selection_bounds(sess::DesignSession)
     t = sess.target.target[]
-    names = selected_components(sess)
+    names = with_lips(selected_components(sess))      # an entrance hole with its lip
     pts = Briareus.Vec3[]
     if !isempty(names)
         # the selected components, in the calculations or excluded (drawn as ghosts)
@@ -451,9 +451,10 @@ function _draw_selection!(c::SceneCanvas, sess::DesignSession)
         # a part left out of the calculations is highlighted on its ghost
         g = sess.target.ghost[]
         tt = ci === nothing && g !== nothing ? g : t
-        ci === nothing && g !== nothing && (ci = findfirst(x -> x.name === name, g.components))
+        # an entrance hole with its closing lip
+        cis = findall(x -> x.name in with_lips((name,)), tt.components)
         for k in eachindex(tt.tri_area)
-            (ci !== nothing && tt.tri_comp[k] == ci) || continue
+            tt.tri_comp[k] in cis || continue
             # apertures and cut-away parts are not drawn; highlight them anyway
             v0, e1, e2 = tt.tri_v0[k], tt.tri_e1[k], tt.tri_e2[k]
             push!(pts, Point3f(v0...), Point3f((v0 + e1)...), Point3f((v0 + e2)...))

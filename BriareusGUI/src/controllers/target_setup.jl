@@ -64,6 +64,32 @@ const MESH_RESOLUTIONS = (:coarse, :standard, :fine)
 
 _preset_of(m::MeshSpec) = something(findfirst(==(m), MESH_PRESETS), :custom)
 
+"""
+Closing entrance holes of a hohlraum (`Briareus.hohlraum(; leh_closure, leh_open_radius)`),
+kept in the target's `params` with the dimensions: `:leh_closure` (1 on, 0 off; set
+with [`set_leh_closure!`](@ref)) and these fields `(key, label, unit, default)`, edited
+with [`edit_target!`](@ref). On, each entrance hole is open out to `leh_open_fraction ×`
+the LEH radius and its lip beyond closes to x-rays at `leh_closure_time` over
+`leh_closure_width` (a `GapClosure` whose closed albedo is the wall's). 0.84 is the
+measured LEH radius at peak (research notes, "Closing entrance holes"); the time and
+width are an engineering example (closure at the rise to peak), to be set per design.
+"""
+const LEH_CLOSURE_FIELDS = ((:leh_closure_time, "Closure time", "ns", 5.0),
+                            (:leh_closure_width, "Closure duration", "ns", 0.5),
+                            (:leh_open_fraction, "Open radius", "× LEH radius", 0.84))
+
+# The closing lip of an entrance hole (`:leh_top_lip`, `:leh_bottom_lip`) is a split of
+# the hole for the calculations: the GUI lists, selects, highlights and leaves it out
+# with its hole.
+const _LIP_NAME = r"^(leh_(?:top|bottom))_lip$"
+"Whether `c` is a hohlraum's closing entrance-hole lip."
+is_lip(c::Component) =
+    c.kind === :aperture && c.material.albedo isa GapClosure && occursin(_LIP_NAME, String(c.name))
+"The component a name is shown as: an entrance hole for its lip, else itself."
+shown_component(name::Symbol) = (m = match(_LIP_NAME, String(name)); m === nothing ? name : Symbol(m[1]))
+"Components `names` with the lips of the entrance holes among them."
+with_lips(names) = Symbol[n for x in names for n in (x in (:leh_top, :leh_bottom) ? (x, Symbol(x, :_lip)) : (x,))]
+
 "Name of the foil component of a `:foil` target; the main-target sphere is `:main`."
 const FOIL_NAME = :backlighter
 
@@ -818,6 +844,10 @@ function TargetSetup(; kind::Symbol = :hohlraum, resolution::Symbol = :standard,
         mesh = MESH_PRESETS[resolution]
     end
     params = Dict{Symbol,Float64}(k => v for fs in TARGET_FIELDS for (k, _, _, v) in fs)
+    params[:leh_closure] = 0.0
+    for (k, _, _, v) in LEH_CLOSURE_FIELDS
+        params[k] = v
+    end
     ws = collect(WindowSpec, windows)
     ps = collect(PartSpec, parts)
     kind === :custom && isempty(ps) && push!(ps, PartSpec(:sphere; name = :sphere_1))
@@ -909,11 +939,15 @@ function _target_components(kind::Symbol, p::AbstractDict, mesh::MeshSpec,
         frac(:wall_conversion, "the wall conversion")
         p[:length] > 0 || throw(ArgumentError("the length must be positive"))
         p[:capsule_radius] >= 0 || throw(ArgumentError("the capsule radius must not be negative"))
+        wall = gold(albedo = p[:wall_albedo], conversion = p[:wall_conversion])
+        closing = get(p, :leh_closure, 0.0) != 0
+        lip = closing ? _leh_closure(p, wall) : nothing
+        fopen = closing ? p[:leh_open_fraction] : 0.84
         t = hohlraum(; length = p[:length], radius = p[:radius], leh_radius = p[:leh_radius],
-                     capsule_radius = p[:capsule_radius],
-                     wall = gold(albedo = p[:wall_albedo], conversion = p[:wall_conversion]),
+                     capsule_radius = p[:capsule_radius], wall,
                      windows = [_wall_window(w, k) for (k, w) in enumerate(windows)],
-                     h = mesh.h, capsule_h = mesh.capsule_h)
+                     h = mesh.h, capsule_h = mesh.capsule_h,
+                     leh_closure = lip, leh_open_radius = fopen * p[:leh_radius])
         append!(comps, t.components)
     elseif kind === :foil
         frac(:conversion, "the conversion")
@@ -943,6 +977,14 @@ function _target_components(kind::Symbol, p::AbstractDict, mesh::MeshSpec,
     end
     isempty(comps) && throw(ArgumentError("the target is empty: add a part"))
     return comps
+end
+
+# The lips' `GapClosure`: closed, they re-emit with the wall's albedo.
+function _leh_closure(p::AbstractDict, wall::Material)
+    p[:leh_closure_width] >= 0 || throw(ArgumentError("the closure duration must not be negative"))
+    0 < p[:leh_open_fraction] < 1 ||
+        throw(ArgumentError("the open radius must be between 0 and 1 of the LEH radius"))
+    return GapClosure(closure = p[:leh_closure_time], width = p[:leh_closure_width], after = wall.albedo)
 end
 
 # The `Target` of `comps`, built once for the same components (identical objects): the
@@ -988,10 +1030,11 @@ end
 
 # The components in the calculations and those left out (`nothing` when none is).
 function _split_lists(comps::Vector{Component}, excluded)
-    keep = [c for c in comps if !(c.name in excluded)]
+    out(c) = (is_lip(c) ? shown_component(c.name) : c.name) in excluded   # a lip with its hole
+    keep = [c for c in comps if !out(c)]
     isempty(keep) && throw(ArgumentError("every component is left out of the calculations"))
     length(keep) == length(comps) && return keep, nothing
-    return keep, [c for c in comps if c.name in excluded]
+    return keep, [c for c in comps if out(c)]
 end
 
 _targets_of(keep, gh) = _target_of(keep), gh === nothing ? nothing : _target_of(gh)
@@ -1127,6 +1170,20 @@ all_component_names(ts::TargetSetup) =
     [component_names(ts.target[]); ts.ghost[] === nothing ? Symbol[] : component_names(ts.ghost[])]
 
 """
+    set_leh_closure!(ts::TargetSetup, on::Bool) -> Bool
+
+Close a hohlraum's entrance holes during the pulse (`on`), with the settings of
+[`LEH_CLOSURE_FIELDS`](@ref), or keep them open. Each hole is then split into the hole
+and its closing lip (`:leh_top_lip`, …), shown, selected and left out with the hole.
+"""
+function set_leh_closure!(ts::TargetSetup, on::Bool)
+    (get(ts.params[], :leh_closure, 0.0) != 0) == on && return true
+    p = copy(ts.params[])
+    p[:leh_closure] = on ? 1.0 : 0.0
+    return _try_build!(ts; params = p)
+end
+
+"""
     set_target_kind!(ts::TargetSetup, kind::Symbol) -> Bool
 
 Switch the template (one of [`TARGET_KINDS`](@ref)). Parts are kept; a custom target
@@ -1198,7 +1255,7 @@ function edit_target!(ts::TargetSetup, key::Symbol, text)
 end
 
 function _target_label(key::Symbol)
-    for fs in TARGET_FIELDS, (k, label, _, _) in fs
+    for fs in (TARGET_FIELDS..., LEH_CLOSURE_FIELDS), (k, label, _, _) in fs
         k === key && return label
     end
     return String(key)

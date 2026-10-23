@@ -50,7 +50,8 @@ export import_visrad_workspace!, export_visrad_workspace, export_results, retune
 export TargetSetup, TARGET_KINDS, TARGET_KIND_LABELS, TARGET_FIELDS, MeshSpec, MESH_PRESETS,
        MESH_RESOLUTIONS, FOIL_NAME, build_target, foil_center, set_target_kind!,
        set_resolution!, edit_mesh!, edit_target!, target_summary, component_names, surface_names,
-       target_ready, await_target!, BACKGROUND_TRIANGLES
+       target_ready, await_target!, BACKGROUND_TRIANGLES, LEH_CLOSURE_FIELDS, set_leh_closure!,
+       is_lip, shown_component, with_lips
 export PartSpec, PART_KINDS, PART_KIND_LABELS, PART_FIELDS, PART_SIZE_FIELDS, part_component,
        part_axis, part_center, add_part!, remove_part!, edit_part!, set_part_flag!, part_index,
        PART_ANCHORS, PART_ANCHOR_LABELS, anchor_frame, set_part_anchor!, set_excluded!,
