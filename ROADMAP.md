@@ -642,20 +642,116 @@ Choices made provisionally overnight or left open; the lean is in brackets.
    power histories plotted, rather than written to CSV).
    Adaptive mesh refinement of the radiation mesh where deposition varies fastest
    (the uniform fine mesh is converged but costs ~16k elements).
-9. **Time-dependent view factor.** Wall, LEH and spot motion from rad-hydro or a
-   parametric model; P2(t) swing. Retuning to a reference drive (see Done) assumes
-   the reference's view factors hold through the pulse.
+Items 9–13 and 16–17 were rewritten after the 2026-10-22 literature review against
+Kritcher et al. 2024 (research notes, "Literature review against Kritcher et al. 2024";
+full reports in `reference/litreview/`). Retuning to a reference drive (see Done) assumes
+the reference's view factors hold through the pulse; items 9 and 10 remove that assumption.
+
+9. **Time-dependent view factor: the P2 swing.** Four parametric pieces, all on
+   `drive_history` time, each with a published anchor (`reference/litreview/hohlraum_dynamics.md`):
+   - `WallMotion`: the radiating cylinder shrinks, R_w(t) = R₀ − v_w (t − t₀), v_w ≈
+     0.05–0.10 mm/ns by gas fill (Chen 2020: 400–600 µm by peak); rebuild target and
+     deposition operator at 6–10 keyframes, interpolate the moment responses. With
+     ports and aims fixed the outer footprints slide toward the LEH by ΔR/tan θ, which
+     is the spot-motion swing for free. Check: time-average ≈ Young 2020's 85 % static radii.
+   - LEH radius(t) through the gap machinery (`GapClosure`-style albedo split on a
+     closing annulus): open in the foot, ~0.84 r₀ through peak (Schneider 2015).
+   - `BubbleAbsorption` on the inner cones: Izumi 2021's tip x_bub(t) ∝ E^0.2 ρ₀^−0.2 at
+     ~0.35 mm/ns, the clipped fraction from Briareus's own inner-beam envelope at the
+     outer footprint's z, one fitted transparency curve (anchors 29 % / 54 % at 5.5 ns
+     for 0.3 / 0.15 mg/cc), absorbed power redeposited under the outer footprint. Stays
+     differentiable, so it enters the optimizer and item 10's fits.
+   - Report Callahan's and Izumi's figures of merit beside the computed swing.
+   Validation, in order: Ralph 2018's anchor (cone fraction 18.5 % for zero flux P2 at the
+   measured peak wall position); the Izumi 2018/2021 HDC SymCap single-parameter series
+   (core P2 −18 to +21 µm); Young 2020's static-vs-dynamic test (mode 1 within 0.14 % at
+   peak); Callahan's 39-shot curve (σ 8 µm); and PRE 109, 025204 Fig. 10's simulated
+   flux P2/P0(t) for N210808/N220919/N221204 (digitize: ≈ 0 foot, −0.17 at 5.5 ns, 0 at
+   6.5 ns, +0.12–0.15 at 8 ns).
 10. **Shot-data calibration.** Fit effective parameters (cone multipliers, CBET
-   multiplier/clamp, albedo) to measured P2/P4 and shock symmetry, with uncertainty.
-   Reproduce P2-vs-Δλ curves.
-11. **Robust optimization and UQ: what remains.** Time-dependent budgets (errors
-   through `drive_history`). Correlated errors and the inverse for a measured mode
-   (`infer_errors`) are done (see Done, 2026-10-22); trending over many shots (a shared
-   prior fitted to a shot series) is not.
+   multiplier/clamp, bubble transparency, wall-motion speed, albedo) to measured in-flight
+   and hot-spot P2/P4 and keyhole shock symmetry, with uncertainty. Reproduce the
+   P2-vs-Δλ sequence N210808 → N220919 → N221204 → N230729 (1.8 / 2.5 / 2.75 / 2.9 Å at
+   1ω: hot-spot P2 −2.3 / −10.8 / +0.3 / +6 µm) and Ruof 2026's rise-cone-fraction
+   response (0.21 → 0.24 raises shell P2 9.1 → 27.5 µm; 0.21 → 0.16 leaves it). HYDRA's
+   own knobs for comparison: clamp 0.002 (foot) / 0.0075 (peak), 2DConA fits need
+   0.005–0.007; laser degraded 9–13 % or peak multipliers 0.825–0.86.
+   CBET (`reference/litreview/cbet_calibration.md`): a clamp schedule by pulse phase
+   driven by the `PulseShape`; a hard-minimum saturation option so HYDRA clamps carry
+   over; two crossing zones per LEH (outside, supersonic, inner → outer at Δλ = 0;
+   inside, outer → inner) with a test that Δλ = 0 is not zero transfer; plasma-state
+   tables as calibration inputs (no low-fill LEH state history is public); a
+   multi-shot, multi-epoch `calibrate_cbet`; outer-cone depletion and an inner-quad SBS
+   proxy to flag the N220919 limit and the 2.9 Å overshoot. Targets: N221204 post-CBET
+   cone fraction 0.18 / 0.64 / 0.52 at foot / 5.5 ns / 8 ns (±0.03–0.06), dCF/dΔλ
+   0.15–0.18 per Å at 1–1.8 Å, and 40–50 µm of hot-spot P2 per Å at 2.7 µm per % cone
+   fraction.
+11. **Implosion metrics and UQ.** A thin `implosion_metrics` layer after `uncertainty.jl`
+   (`reference/litreview/asymmetry_transfer.md`):
+   - mode-1 vector → hot-spot velocity at a documented ~100 km/s per % (Young 2020,
+     MacGowan 2021, Kritcher 2024), or convolved with a user-supplied Green's function
+     G₁(t) over `drive_history` (Young's recipe: negative in the foot, rise and peak
+     dominant; linear below ~0.75 %);
+   - f = v_HS/v_imp, RKE = c f² KE (c = 0.66), no-α yield factor (1 − f²)^3.3 and the
+     α factor (Hurricane 2020/2022; Casey 2023), burn-on amplification (Nora 2023);
+   - P2/P4 swing metrics: time-integrated P2 over a window, max − min, picket P2 against
+     Milovich's 7.5 %, and hot-spot/ρR response only when given a kernel (Masse 2019's
+     sign flip before ~4.5 ns means the two can disagree); never output µm by default;
+   - `mode_uncertainty` propagated to a velocity covariance and expected yield factor;
+     `infer_errors` taking a measured velocity vector (nToF ±14 km/s, 13° θ, 29° φ) with
+     a capsule-thickness nuisance term of opposite sign (Casey 2021: 110–140 km/s per %);
+   - an optional velocity penalty in the objectives.
+   Validate on Young's N170601 (0.44 % → 37.6/44.7 km/s), Kritcher's N230729 (0.7 % →
+   75 km/s burn-off), Hurricane's tolerance table and Spears 2014 (2 % → 120 km/s,
+   saturated). Time-dependent error budgets and multi-shot trending remain.
 12. **Backlighter physics.** CE(Z, I, τ) models with uncertainty, and the photometric
    chain to the detector.
-13. **Spectral radiosity.** Multigroup emission, detector responses along Dante and XRD
-    lines of sight, and brightness temperatures.
+13. **Spectral radiosity.** Multigroup emission, an Au M-band component (~15 % of the
+    spectrum above 1.8 keV at peak, pole-hot with its own P2 of ~+0.5 at the wall;
+    Dewald 2020), detector responses along Dante and XRD lines of sight (Dante 1 at
+    θ 143°, φ 274°, 37° through the LEH; Dante 2 at θ 64°, φ 350°), and brightness
+    temperatures. A synthetic Dante is also item 16's first absolute check.
 14. **Scale.** Hierarchical or iterative radiosity, Float32 storage for more than 10⁴
     elements, and GPU kernels.
 15. **Polar direct drive mode**, benchmarked against published GA optimizers.
+16. **Absolute energetics and an N221204 benchmark** (`reference/litreview/energetics.md`,
+    `n221204_benchmark.md`). Model changes, each with its data:
+    - `WallLossAlbedo` material factor for Au-lined DU: 1 − α × ~0.83 with the
+      temperature exponent shifted ~−0.2 (Rosen 2005, Schein 2007; Döppner 2015's 6.5 %
+      peak-power equivalence as the check), optionally gold until `HeatFront` passes the
+      liner's areal mass;
+    - `conversion` as a model: η₀ (t/1 ns)^0.12–0.2 and per-element in log I from 0.95 at
+      10¹⁴ to 0.80 at 10¹⁵ W/cm²; the NIF default toward 0.85–0.9 at peak (the only
+      published VisRad calibration is η 0.95, α 0.77 on an Au hohlraum at 400 TW,
+      Swadling 2025);
+    - a capsule albedo model (tabulated, default ~0.2) with an effective-radius
+      schedule, E_cap in `energy_balance`, calibrated to the 16.2 % total absorption of
+      N221204 (not the 246 kJ left in the unablated shell);
+    - the LEH radius schedule of item 9, checked on the Zylstra 2022 pair (3.64 mm at
+      465 TW and 3.1 mm at 390 TW reach the same Trad);
+    - a synthetic Dante (item 13) reported beside the capsule-seen temperature.
+    Benchmark: `examples/n221204.jl` from the input deck in `n221204_benchmark.md`
+    (geometry, 2.05 MJ / 440 TW, per-cone powers digitized from Di Nicola 2024 Fig. 1,
+    Δλ 0.917 Å at 3ω, SBS 42 kJ), targets drive Trad 313 eV (307 for N210808), the
+    54 / 25 / 4.5 / 16 % energy split, bang time 9.53 ns as the end of the drive window,
+    hot-spot P2 ≈ 0 and velocity 36 km/s at (151°, 54°) through item 11, and PRE 109
+    Fig. 10's flux P2/P0(t) through item 9. Pointing comes from the non-public N230729
+    SST export in thor (`read_visrad_sst`; see `n221204_benchmark.md`); CPPs, window
+    geometry and the liner thickness are unpublished: use the repository's HYBRID-E
+    defaults and say so.
+17. **Briareus → CompactLES** (`reference/litreview/hydro_coupling.md`). LLNL's two-step
+    method with Briareus as the integrated step and CompactLES as the capsule-only step.
+    Export (HDF5): T_r(t), capsule-averaged incident flux, a_l/a_0 for l ≤ 8 (P2 > 0
+    pole-hot) on a ≤ 50 ps grid, the radius the flux was evaluated at (later a table over
+    radius, and a Planck + M-band split from item 13), with provenance. Stages on the
+    CompactLES side: (0) an absorbed-flux energy source in a thin layer at the ablation
+    front with carbon exponents P_abl ∝ T^3.3 t^−0.09 and the prefactor calibrated to
+    HYBRID-E (first shock > 12 Mbar at ~150 eV, ~140–150 Mbar at peak), checking v_imp
+    380–400 km/s, 5–6.6 % mass remaining, 19–33 kJ coupled, Hurricane's free-fall
+    condition and Masse's P2 sign flip near 4.5 ns; (1) implicit gray flux-limited
+    diffusion with a Marshak boundary carrying the angle-resolved flux, flux-limited
+    conduction at 0.15, QEOS/FEOS tables and TOPS opacities, validated first on the
+    Shestakov 1998 Be/D capsule at 160 eV, then Kritcher 2024 Table III; (2) multigroup
+    with the M-band. Bang time (9.53 ns) is an input in LLNL's capsule-only runs and the
+    first prediction here. Pitfalls: apply the asymmetry near the ablation front, not at
+    a distant fixed radius; the M-band has its own larger P2.
