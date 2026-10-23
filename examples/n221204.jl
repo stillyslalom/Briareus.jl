@@ -8,9 +8,10 @@
 #
 # `h`, `capsule_h`: mesh (default 0.28 / 0.16, the standard mesh); `runs`: `all`
 # (default) or `full` (only the full model, e.g. for a fine-mesh confirmation);
-# `transfer`: `reduced` (default: the reduced CBET model at the deck's settings) or
-# `fig9b` (the outer-to-inner transfer that gives PRE 109 Fig. 9b's post-transfer cone
-# fraction, HYDRA's own CBET result for this shot). Writes
+# `transfer`: `calibrated` (default: the two-zone reduced CBET calibrated to PRE 109
+# Fig. 9, `n221204_cbet()`), `reduced` (the single-zone reduced CBET model at the deck's
+# settings) or `fig9b` (the outer-to-inner transfer that gives PRE 109 Fig. 9b's
+# post-transfer cone fraction, HYDRA's own CBET result for this shot). Writes
 # `n221204_<transfer>_<h>_<capsule_h>.csv` (P2/P0, P4/P0 and capsule Tr per run) to the
 # current directory.
 
@@ -19,7 +20,7 @@ using Briareus, Printf, DelimitedFiles
 h = parse(Float64, get(ARGS, 1, "0.28"))
 capsule_h = parse(Float64, get(ARGS, 2, "0.16"))
 which = get(ARGS, 3, "all")
-transfer = get(ARGS, 4, "reduced")
+transfer = get(ARGS, 4, "calibrated")
 
 # Geometry (mm; n221204_benchmark.md §1, PRE 109 Fig. 1a): 11.24 × 6.4 mm Au-lined DU
 # hohlraum, 3.1 mm LEHs, 1.135 mm capsule. Unpublished, so repository defaults: square
@@ -60,16 +61,24 @@ function fig9b_fraction(Δλ, t)
     return clamp((cf9b(t) - c) / max(1 - c, eps()), 0.0, 1.0)
 end
 fig9b = CalibratedTransfer((:outer44, :outer50), (:inner23, :inner30), fig9b_fraction)
-cbet = transfer == "fig9b" ? fig9b : reduced
+# The two-zone model (supersonic outflow outside the LEH, slow plasma inside) with its
+# multipliers, outside Mach number and LEH electron-temperature history calibrated to
+# PRE 109 Fig. 9b (research notes, "Two-zone CBET calibrated to PRE 109 Fig. 9"). The
+# calibration used HYDRA's degraded input powers (~370 TW at peak); here it acts on the
+# delivered 442 TW.
+calibrated = n221204_cbet(leh_z = geometry.length / 2)
+cbet = transfer == "fig9b" ? fig9b : transfer == "reduced" ? reduced : calibrated
 
 # Hohlraum dynamics, all at repository defaults: the wall moves in at 0.10 mm/ns from
 # the outer turn-on (0.4 ns); the LEH lips (0.84 r₀) close at 5.0 ns over 0.5 ns (the
 # example closure of the research notes, not measured for N221204); the bubble model
-# with its defaults, launched by the same turn-on, footprint following the wall.
+# with its defaults, launched by the same turn-on, footprint following the wall, and
+# its ablator–wall collision time scaled to HYBRID-E's 1.135 mm capsule against the
+# HDC basecamp SymCap's ~0.91 mm (`capsule_scale` 1.25: t_c 5.41 ns instead of 5.9).
 turn_on = 0.4
 motion = WallMotion(start = turn_on)
 lip = GapClosure(closure = 5.0, width = 0.5, after = WallLossAlbedo())
-bubble = BubbleAbsorption(; radius = R0, turn_on, wall = motion)
+bubble = BubbleAbsorption(; radius = R0, turn_on, wall = motion, capsule_scale = 1.135 / 0.91)
 # Every step is quasi-static (no burnthrough fronts here), so `table` (5th argument)
 # solves only the times of the comparison table, for a fine-mesh check.
 times = get(ARGS, 5, "") == "table" ? [2.0, 4.0, 4.5, 5.5, 6.5, 7.0, 8.0, 8.5] : collect(0.5:0.25:9.0)

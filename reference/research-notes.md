@@ -2502,7 +2502,8 @@ of PRE 109, 025204 Fig. 10 (N221204, post-CBET, digitized ±0.001 where visible,
      informative only with (b). This is the CBET item of ROADMAP Next 10: two crossing
      zones per LEH (outer → inner inside), plasma-state (flow, Te, ne) inputs and a
      multi-epoch `calibrate_cbet` against the published post-CBET per-cone powers
-     (Fig. 9a/b, Fig. 1d) would fix it.
+     (Fig. 9a/b, Fig. 1d) would fix it (done: "Two-zone CBET calibrated to PRE 109
+     Fig. 9" below; the example now defaults to it).
   2. *With Fig. 9b's transfer the swing is reproduced in shape and timing of the
      minimum; the late side rises too early and too far.* Contributions at 8 ns: wall
      +0.086, lips +0.032, bubble +0.226; at 6.5 ns: +0.031, +0.035, +0.173. The bubble
@@ -2524,3 +2525,151 @@ of PRE 109, 025204 Fig. 10 (N221204, post-CBET, digitized ±0.001 where visible,
   washer) at repository defaults; the capsule does not shrink (Fig. 10's evaluation
   radius and flux definition are not stated); no backscatter and no laser degradation;
   Fig. 10 is a HYDRA calculation, not data. Nothing here was tuned to Fig. 10.
+
+## Two-zone CBET calibrated to PRE 109 Fig. 9 (2026-10-23) *derived*
+
+This fixes diagnosis 1 of the N221204 benchmark above. At the deck's settings the
+single-zone reduced `CBET` sent the transfer the wrong way: post-CBET cone fraction 0.14
+at peak, against HYDRA's 0.65. Its Mach-1 outflow outweighs the 0.917 Å (3ω) detuning.
+
+- **Data.** PRE 109, 025204 Fig. 9 (N221204, HYDRA), digitized by pixel analysis of the
+  figure's raster into `data/pre109_fig9_n221204.csv` (`n221204_fig9()`).
+  - Coverage: 0.7–9.0 ns in 0.1 ns steps. Columns are the input and post-transfer inner
+    cone fraction (Fig. 9b) and the per-cone power (Fig. 9a).
+  - Reading error ≈ ±0.01 in cone fraction and ±2 TW per cone. Foot inner-cone powers
+    (< 8 TW) are below the figure's resolution.
+  - Checks: Fig. 9a's per-cone post powers reproduce Fig. 9b's cone fraction to 0.01 at
+    peak. Total power is conserved post/input to < 1 %.
+  - Cone fraction, input → post: 0.15 → 0.22 (2.0 ns), 0.12 → 0.20 (3.4 ns), 0.18 → 0.40
+    (4.4 ns), 0.34 → 0.65 (5.6 ns), 0.34 → 0.57 (7.0 ns), 0.35 → 0.52 (8.0 ns).
+  - Fig. 9a post/input per cone (23° / 30° / 44° / 50°): ×1.92 / ×1.88 / ×0.43 / ×0.64 at
+    5.6 ns; ×1.53 / ×1.46 / ×0.64 / ×0.84 at 8 ns.
+  - The plotted inputs are HYDRA's degraded powers: ≈370 TW at peak, against 442 TW
+    delivered.
+- **Model** (`TwoZoneCBET`, `src/cbet.jl`). Two full `CBET` zones per LEH, applied in
+  the order the beams meet them.
+  - *Outside*: crossing plane 0.5 mm outside the LEH, supersonic outflow. The outflow's
+    Doppler shift makes the steeper inner beams bluer in the flow frame, so this zone
+    moves power inner → outer even at Δλ = 0.
+  - *Inside*: crossing plane 0.5 mm inside the LEH, Mach 0. Here the red-detuned inner
+    beams gain.
+  - This is P20's HYDRA picture. It is also why Δλ = 0 is not zero transfer at low fill
+    (NC24).
+  - Flow is signed: negative means into the hohlraum.
+  - The single-zone `CBET` and its defaults are unchanged. One HYDRA shot is not enough
+    evidence to change a general default, and the two-zone fit is tied to that shot's
+    timing.
+  - Also unchanged, at repository defaults (L): CH composition, ne/nc 0.06, Ti 1.5 keV.
+- **Calibration** (`calibrate_cbet(model, beams_at, data; fit)`, the multi-epoch method).
+  Script `examples/n221204_cbet_calibration.jl`: 67 L-BFGS-B iterations, 9 min on
+  4 threads.
+  - Beams: `hybride_mock_pointing(nif_beams())` with Fig. 9's input powers
+    (`n221204_fig9_beams`). Outer cones come from Fig. 9a. The inner total comes from
+    Fig. 9b's input cone fraction, split evenly between 23.5° and 30°. Δλ is 0.917 Å
+    (3ω) on the inner cones.
+  - Both zones use the deck's clamp schedule: 0.002 → 0.0075 across 3.9–4.1 ns.
+  - Target: Fig. 9b's post-transfer cone fraction every 0.2 ns over 0.8–8.4 ns
+    (39 points), with 10 fitted parameters:
+
+  | Parameter | Value | Plausibility |
+  |---|---|---|
+  | outside multiplier | 0.30 | Published NIF practice treats gains as calibration factors. A value < 1 also stands in for the outside zone's lower density and shorter overlap. |
+  | outside outflow Mach | 1.23 | Supersonic outside the LEH (M13: near-sonic at the throat, supersonic outside). |
+  | inside multiplier | 1.23 | Order one: the linear kinetic gain needs little adjustment. |
+  | Te(t), both zones (keV) | 2.79 (1 ns), 3.55 (3), 3.72 (4), 5.19 (4.75), 5.50 (5.5), 6.03 (6.5), 7.44 (8) | M13: 2.8 keV at the start of the main pulse (high fill). Michel 2009: 5–6 keV LEH in the reduced model. B16: 4.2 ± 0.2 keV at peak (0.8 scale, 1.6 mg/cc He equivalent); Te "follows the drive, peaks late". The fitted rise with the drive matches B16. The 7.4 keV late in the peak is above every published LEH value (L: low fill, no measurement exists). |
+
+  - Fit quality: cone-fraction rms 0.016. The largest residuals are +0.041 at 8.4 ns
+    (input cone fraction rising steeply), −0.025 at 2.0–2.6 ns (foot) and +0.035 at
+    3.6–3.8 ns (before the clamp switch).
+  - Outer-cone ratios against Fig. 9a (not fitted), at 5.6 / 7 / 8 ns:
+
+    | Cone | Model | Fig. 9a |
+    |---|---|---|
+    | 44° | 0.41 / 0.54 / 0.65 | 0.43 / 0.54 / 0.64 |
+    | 50° | 0.67 / 0.79 / 0.86 | 0.64 / 0.80 / 0.84 |
+
+    The 44° cone loses more than the 50° cone, as in HYDRA.
+  - Inner-cone ratios at 5.6 ns (not fitted): 23° 1.62 and 30° 2.20, against Fig. 9a's
+    1.92 and 1.88. The model favours 30°, as I23 saw in x-ray spots, but HYDRA splits
+    the transfer evenly.
+  - Ion-wave amplitude inside at peak: 4×10⁻⁴ median, 1.2×10⁻³ max. The 0.0075 peak
+    clamp therefore does not bind, as the lit review expected. The 0.002 foot clamp does
+    bind, and the clamp switch produces Fig. 9b's step at 3.9 ns.
+  - `n221204_cbet()` holds the fit rounded (rms 0.016, unchanged).
+- **Δλ response.** Post-transfer cone fraction with Fig. 9's powers, Δλ at 1ω:
+
+  | Δλ (Å) | 0 | 0.5 | 1.0 | 1.4 | 1.8 | 2.25 | 2.75 |
+  |---|---|---|---|---|---|---|---|
+  | 5.6 ns | 0.090 | 0.188 | 0.298 | 0.381 | 0.461 | 0.548 | 0.641 |
+  | 7.0 ns | 0.121 | 0.207 | 0.298 | 0.364 | 0.426 | 0.491 | 0.561 |
+  | 8.0 ns | 0.155 | 0.228 | 0.302 | 0.356 | 0.404 | 0.454 | 0.507 |
+  | 2.0 ns | 0.128 | 0.142 | 0.153 | 0.160 | 0.169 | 0.179 | 0.194 |
+
+  - dCF/dΔλ over 1–1.8 Å is 0.20 per Å at 5.6 ns, 0.16 at 7 ns and 0.13 at 8 ns (peak
+    mean 0.16). The ROADMAP target is 0.15–0.18 per Å, derived from 40–50 µm/Å at
+    2.7 µm/%CF.
+  - The response is linear within 10 % over 0.5–2.75 Å at 5.6 ns.
+  - At Δλ = 0 the net transfer is inner → outer (cone fraction 0.336 → 0.090 at peak).
+    The null is at ≈1.2 Å, inside NC24's 1–1.55 Å for HYBRID-E.
+  - Caveat: HYDRA's peak post-CBET cone fraction differs by only ≈0.07 between N210808
+    (1.8 Å) and N221204 (2.75 Å): 0.55–0.6 against 0.65 in Fig. 1e. The calibrated model
+    is therefore ~2.5× more sensitive to Δλ than HYDRA's cross-shot difference
+    (different pulses, L). Beyond the clamp, the model has no saturation of transfer
+    with Δλ.
+- **Benchmark rerun.** `examples/n221204.jl` with transfer `calibrated`, now the
+  example's default. Standard mesh (h 0.28 / capsule_h 0.16), 20 min on 8 threads.
+  - The calibrated model acts on the example's delivered powers (DN24 Fig. 1, 442 TW),
+    ~19 % above Fig. 9's.
+  - Resulting post-transfer cone fraction: 0.21 (2 ns), 0.25 (4), 0.29 (4.5), 0.56 (5),
+    0.69 (5.5), 0.66 (6), 0.63 (6.5), 0.59 (7), 0.52 (8).
+  - At 4–4.5 ns this is below Fig. 9b's 0.35–0.40, because DN24's input cone fraction
+    there (0.13–0.14) is below Fig. 9b's (0.17–0.18). At 5.5 ns it is 0.04 above,
+    from the higher intensity.
+  - Also changed in the example: the bubble's `capsule_scale` is now 1.135/0.91 = 1.25
+    (*derived*). That is HYBRID-E's capsule against the ≈0.91 mm outer radius of the HDC
+    basecamp SymCap (the "910 µm" HDC capsule class of the hydro-coupling review, M). It
+    moves t_c to 5.41 ns from 5.9.
+
+  | t (ns) | static, no CBET | static | +wall | +lips | +bubble | (b) Fig. 9b, +bubble, scale 1.25 | Fig. 10 |
+  |---|---|---|---|---|---|---|---|
+  | 2.0 | −0.017 | −0.057 | −0.032 | −0.032 | −0.032 | −0.043 | −0.002 |
+  | 4.0 | −0.010 | −0.072 | −0.029 | −0.029 | −0.029 | −0.082 | −0.013 |
+  | 4.5 | −0.020 | −0.088 | −0.048 | −0.048 | −0.043 | −0.120 | −0.091 |
+  | 5.5 | −0.107 | −0.258 | −0.245 | −0.207 | −0.086 | −0.086 | −0.168 |
+  | 6.5 | −0.105 | −0.227 | −0.187 | −0.151 | +0.031 | +0.030 | −0.057 |
+  | 7.0 | −0.105 | −0.207 | −0.150 | −0.116 | +0.093 | +0.092 | +0.039 |
+  | 8.0 | −0.104 | −0.177 | −0.083 | −0.052 | +0.168 | +0.165 | +0.090 |
+  | 8.5 | −0.166 | −0.220 | −0.109 | −0.076 | +0.176 | +0.182 | +0.117 |
+
+  Capsule Tr peak: 294.7 eV static, 303.7 eV +wall and 312.1 eV +lips (all at 8 ns),
+  305.0 eV +bubble (at 5.5 ns).
+- **Reading.**
+  1. The reduced model now carries HYDRA's transfer.
+     - Static P2/P0 at 5.5 ns is −0.26, against +0.01 with the single-zone deck
+       settings and −0.23 with Fig. 9b's prescribed transfer.
+     - With all dynamics, the calibrated and prescribed transfers agree within 0.007
+       from 5.5 ns on.
+     - The foot is closer to Fig. 10: −0.03, against −0.04 to −0.08 with the
+       prescription (Fig. 10 ≈ 0). DN24's lower input cone fraction at 4–4.5 ns gives
+       less transfer there than Fig. 9b's own.
+  2. `capsule_scale` 1.25 moves the ridge stop 0.5 ns earlier (g = 0.83 already at
+     5.5 ns).
+     - The 5.5 ns minimum rises from −0.138 (scale 1) to −0.086, against Fig. 10's
+       −0.168. The values at 6.5–8.5 ns are unchanged, since the ridge was already fully
+       on there.
+     - So the swing turns up ≈0.5 ns too early and ends 0.06–0.08 high.
+     - The open items are the same as before: the bubble's inner absorption (48 % at
+       6.5 ns and 85 % at 8 ns, above Ralph's 51–62 % at peak) and the wall motion
+       (constant 0.10 mm/ns from the turn-on).
+     - New: the collision time. Izumi's 0.4 ns per 20 % of capsule radius is
+       extrapolated here to 25 % and to a 3.2 mm hohlraum. Whether r_cap or r_cap/R_hohl
+       should set it is open; r_cap/R_hohl would give a scale of 1.12 and t_c ≈ 5.66 ns.
+- **Open.**
+  - This is one shot and one HYDRA run. Only the time history and the Δλ = 0 null
+    constrain the split between the zones.
+  - Te(t) absorbs everything time-dependent: ne, Ti, flow and the HYDRA power
+    multipliers.
+  - The 23°/30° split disagrees with Fig. 9a.
+  - The model's Δλ sensitivity across shots is above HYDRA's (N210808 against N221204).
+  - Next test of the Δλ response: a joint fit to N210808 (Fig. 1e) and N220919 (Fig. 9,
+    black curves). Both are in the same figures.
