@@ -610,11 +610,13 @@ function optimize_pointing(s::Scenario, objective; x0 = initial_parameters(s.par
     # The tag check is off: objectives do not differentiate internally.
     cfg = ForwardDiff.GradientConfig(J, x0, ForwardDiff.Chunk(min(length(x0), 12)),
                                      ForwardDiff.Tag(_PointingTag(), Float64))
-    g!(G, x) = ForwardDiff.gradient!(G, J, x, cfg, Val(false))
-    # L-BFGS-B asks for value and gradient together: the dual pass carries the value
+    # The chunks' dual passes run concurrently (`_pointing_gradient!`); the result is
+    # bitwise ForwardDiff's serial chunk-mode gradient.
     out = ForwardDiff.DiffResults.GradientResult(similar(xs))
+    g!(G, x) = copyto!(G, ForwardDiff.DiffResults.gradient(_pointing_gradient!(out, J, x, cfg)))
+    # L-BFGS-B asks for value and gradient together: the dual pass carries the value
     function fg!(G, x)
-        ForwardDiff.gradient!(out, J, x, cfg, Val(false))
+        _pointing_gradient!(out, J, x, cfg)
         copyto!(G, ForwardDiff.DiffResults.gradient(out))
         return seen(x, ForwardDiff.DiffResults.value(out))
     end
@@ -647,6 +649,48 @@ struct _OptimizationStop <: Exception
 end
 
 struct _PointingTag end
+
+# ForwardDiff's chunk-mode `gradient!(out, f, x, cfg)` with the chunks' dual passes run
+# concurrently, one task each (their inner threaded loops nest on the same pool). A
+# pass is seeded exactly as ForwardDiff seeds it (the last chunk carries N partials, its
+# trailing seeds zero) and every pass is deterministic, so the gradient and value are
+# bitwise those of the serial `ForwardDiff.gradient!`; the value is taken from the last
+# chunk, as ForwardDiff takes it. Serial on one thread, for a single chunk, or with
+# `_PARALLEL_CHUNKS[] = false` (the reference path).
+const _PARALLEL_CHUNKS = Ref(true)
+
+function _pointing_gradient!(out, f, x::AbstractVector{Float64},
+                             cfg::ForwardDiff.GradientConfig{T,Float64,N}) where {T,N}
+    nc = cld(length(x), N)
+    (nc <= 1 || Threads.nthreads() == 1 || !_PARALLEL_CHUNKS[]) &&
+        return ForwardDiff.gradient!(out, f, x, cfg, Val(false))
+    G = ForwardDiff.DiffResults.gradient(out)
+    vals = Vector{Float64}(undef, nc)
+    tasks = [Threads.@spawn _gradient_chunk!(G, vals, f, x, cfg.seeds, T, c) for c in 1:nc]
+    for t in tasks
+        try
+            wait(t)
+        catch err
+            # rethrow the chunk's own exception (e.g. a stop request) unwrapped
+            err isa TaskFailedException ? throw(err.task.exception) : rethrow()
+        end
+    end
+    return ForwardDiff.DiffResults.value!(out, vals[nc])
+end
+
+# Dual pass `c` of `_pointing_gradient!`: writes only its own gradient slots and value.
+function _gradient_chunk!(G, vals, f, x, seeds::NTuple{N,ForwardDiff.Partials{N,Float64}},
+                          ::Type{T}, c) where {N,T}
+    lo = (c - 1) * N
+    zp = zero(ForwardDiff.Partials{N,Float64})
+    xd = [ForwardDiff.Dual{T}(x[i], lo < i <= lo + N ? seeds[i-lo] : zp) for i in eachindex(x)]
+    y = f(xd)
+    for k in 1:min(N, length(x) - lo)
+        G[lo+k] = y isa ForwardDiff.Dual ? ForwardDiff.partials(y, k) : 0.0
+    end
+    vals[c] = ForwardDiff.value(y)
+    return nothing
+end
 
 """
     report(ev; lmax = 6) -> nothing

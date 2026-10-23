@@ -137,6 +137,11 @@ Measured on the NIF hohlraum at the GUI's standard mesh (5,864 elements, 48 quad
   on first read (8 s and 2.5 GiB on the fine mesh), and dual mat-vecs go through BLAS.
 - L-BFGS-B gets value and gradient from one dual pass, under one package dual tag, and
   the package precompiles a coarse design workload.
+- (2026-10-23) Gradient chunks run concurrently, each nesting the threaded deposit and
+  CBET pair loop; bitwise equal to the serial chunk loop. NIF `hohlraum()`, 46 quads,
+  CBET, `asymmetry_objective` + `ApertureKeepOut`, 16 threads: gradient 50 → 25 ms (46
+  parameters), 148 → 72 ms (138), CPU 45 → 85%; 5 L-BFGS-B iterations 2.1 → 1.3 s.
+  Chunk 12 with nested threads beat chunk 6, 24 and 46 and un-nested concurrency.
 - Deposition skips points and cone directions off the spot on values (78% of points,
   exact zeros); the focal profile uses `exp(h log q)`; smaller work units.
 - BVH slab tests without NaN-aware min/max (ray traces 2×); `any_hit` specialized on
