@@ -62,6 +62,10 @@ export GroupPointing, nparams, parameter_names, initial_parameters, apply, bound
        clipped_fraction, missed_fraction, power_fraction,
        flux_moments, symmetry_objective, irradiance_objective, optimize_pointing, report,
        mode_sensitivity, mode_uncertainty, sample_modes, infer_errors
+export HOTSPOT_VELOCITY_PER_PERCENT, mode1_vector, hotspot_velocity, ResponseKernel, flat_kernel,
+       yield_factor, alpha_factor, rke_fraction, reactivity_exponent, burn_amplification,
+       implosion_metrics, mode1_tolerance, swing_metrics,
+       velocity_uncertainty, ntof_covariance, VelocityPenalty
 
 include("geometry.jl")
 include("meshops.jl")
@@ -85,6 +89,7 @@ include("retune.jl")
 include("clearance.jl")
 include("keepout.jl")
 include("uncertainty.jl")
+include("implosion.jl")
 include("talis.jl")
 include("lpi.jl")
 include("io.jl")

@@ -1112,4 +1112,5 @@ include("partial_visibility.jl")
 include("montecarlo.jl")
 include("corners.jl")
 include("dynamics.jl")
+include("implosion.jl")
 end
