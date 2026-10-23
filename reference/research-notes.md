@@ -2437,3 +2437,90 @@ repository; only the aggregate agreement below is.
   within 7.8 % (worst pair, outer44–outer44), 3.5 % rms over the ten pairs.
 - Use: a stand-in for pointing-level studies of the benchmark (moments, CBET, LEH
   clearance), not a facility pointing. Fit and check scripts: thor `hybride_mock/`.
+
+## N221204 time-dependent benchmark (2026-10-23) *derived*
+
+`examples/n221204.jl` (ROADMAP Next 9 and 16): capsule flux P2/P0(t) of an N221204-class
+HYBRID-E hohlraum, each hohlraum-dynamics piece added in turn, against the HYDRA curve
+of PRE 109, 025204 Fig. 10 (N221204, post-CBET, digitized ±0.001 where visible, up to
+±0.024 where covered; notes in the 2026-10-22 PRE 109 reading).
+
+- **Inputs** (`n221204_benchmark.md` §5). 11.24 × 6.4 mm hohlraum, 3.1 mm LEHs, 1.135 mm
+  capsule (**H**). Unpublished, so repository defaults: square corners, no diagnostic
+  windows, `gold(albedo = WallLossAlbedo())` wall (conversion 0.75), `ablator()` capsule,
+  the capsule held at its initial radius (HYDRA's is near 0.92 mm at 6 ns, Fig. 1a).
+  192 beams at `hybride_mock_pointing()` (a fitted public stand-in, not the shot's
+  pointing). DN24 Fig. 1 delivered inner/outer powers (**L**; 2.03 MJ, 442 TW),
+  `cone_fraction_pulses`; Δλ 2.75 Å (1ω) on the inner cones, 0.917 Å at 3ω, no
+  23.5°/30° or 44.5°/50° split. Wall `WallMotion()` (0.10 mm/ns) from the outer turn-on
+  0.4 ns, 11 keyframes; lips `GapClosure(closure = 5.0, width = 0.5, after =
+  WallLossAlbedo())` at 0.84 r₀ (the research-notes example closure, not N221204 data);
+  `BubbleAbsorption(; radius = 3.2, turn_on = 0.4, wall)` at its defaults (t_c = 5.9 ns,
+  `capsule_scale` 1). Steps of 0.25 ns, 0.5–9 ns, standard mesh h 0.28 / capsule_h 0.16.
+- **Two transfers.** (a) The reduced `CBET` at the deck's settings (leh_z 5.62 mm,
+  clamp 0.002 → 0.0075 across 3.9–4.1 ns, other plasma parameters at the model's
+  defaults). (b) The transfer that turns the input cone fraction into Fig. 9b's
+  post-transfer one (0.65 at 5.6 ns, 0.55 at 7, 0.52 at 8; HYDRA's own CBET result for
+  this shot, a `CalibratedTransfer` from the outer to the inner cones). (b) takes an
+  input from the same paper as Fig. 10, but not from Fig. 10, and no model default was
+  changed.
+- **Capsule flux P2/P0** (standard mesh; each column adds one piece to the one before):
+
+  | t (ns) | static, no CBET | (a) static | (a) +wall | (a) +lips | (a) +bubble | (b) static | (b) +wall | (b) +lips | (b) +bubble | Fig. 10 |
+  |---|---|---|---|---|---|---|---|---|---|---|
+  | 2.0 | −0.017 | −0.006 | +0.028 | +0.028 | +0.028 | −0.067 | −0.043 | −0.043 | −0.043 | −0.002 |
+  | 4.0 | −0.010 | +0.014 | +0.081 | +0.081 | +0.081 | −0.114 | −0.083 | −0.083 | −0.082 | −0.013 |
+  | 4.5 | −0.020 | +0.024 | +0.092 | +0.092 | +0.094 | −0.148 | −0.127 | −0.127 | −0.120 | −0.091 |
+  | 5.5 | −0.107 | +0.010 | +0.080 | +0.094 | +0.108 | −0.233 | −0.230 | −0.193 | −0.138 | −0.168 |
+  | 6.5 | −0.105 | +0.008 | +0.097 | +0.110 | +0.158 | −0.209 | −0.178 | −0.143 | +0.030 | −0.057 |
+  | 7.0 | −0.105 | +0.007 | +0.106 | +0.119 | +0.176 | −0.193 | −0.145 | −0.111 | +0.092 | +0.039 |
+  | 8.0 | −0.104 | +0.006 | +0.128 | +0.140 | +0.203 | −0.179 | −0.093 | −0.061 | +0.165 | +0.090 |
+  | 8.5 | −0.166 | −0.086 | +0.047 | +0.069 | +0.203 | −0.181 | −0.073 | −0.042 | +0.182 | +0.117 |
+
+  A coarse mesh (0.8 / 0.4) gives the (a) columns to within 0.006; a finer one (0.2 / 0.1,
+  table times only, 408 s on 16 threads) the (b) full model to within 0.001. The
+  standard run takes ~35 min per transfer on 8 threads (keyframed runs ~10 min each).
+- **Swing shape, (b) full model against Fig. 10:** minimum −0.175 at 5.0 ns (−0.172 at
+  5.57 ns); upward zero crossing 6.26 ns (6.69); +0.165 at 8 ns (+0.090); mean over
+  5.25–8.5 ns +0.048 (−0.001); peak to peak ≈0.36 (0.31). Without the bubble (wall +
+  lips) the curve never crosses zero before 8.5 ns.
+- **Capsule Tr peak** (313 eV drive Trad, AS24; Dante ≈311 eV at 8.2 ns): (b) static
+  295.1, +wall 304.5, +lips 312.7 eV (all at 8.0 ns), +bubble 306.1 eV at 5.75 ns and
+  302.1 at 8 ns (the moved inner power lands near the LEH); (a) 288.7 → 302.1 (lips) →
+  299.3 eV. Without CBET 293.0 eV. The +lips value matching 313 eV is partly the
+  undegraded laser (HYDRA degrades it 9–13 %) against the missing windows and lip
+  hardware, so it is not a calibration.
+- **Diagnosis.**
+  1. *The reduced CBET reverses the transfer.* At the deck's settings it moves power
+     from the inner to the outer cones: post-transfer cone fraction 0.14 at peak (input
+     0.33) against Fig. 9b's 0.65, with the 50° cone gaining ×2.1 and the 23° cone
+     keeping 29 %. A static probe at peak (6 ns): Δλ = 0 gives 0.013, Δλ = 0.917 Å 0.14,
+     clamp 0.002 0.15, Δλ = 2.0 Å (3ω) 0.66, and `mach = 0` with 0.917 Å 0.80. The
+     default Mach-1 axial outflow Doppler-shifts the outer beams to the receiving side
+     and overwhelms the 0.917 Å detuning. With (a) the static P2 is near zero and every
+     dynamic piece pushes it positive, so (a) cannot show the swing; the comparison is
+     informative only with (b). This is the CBET item of ROADMAP Next 10: two crossing
+     zones per LEH (outer → inner inside), plasma-state (flow, Te, ne) inputs and a
+     multi-epoch `calibrate_cbet` against the published post-CBET per-cone powers
+     (Fig. 9a/b, Fig. 1d) would fix it.
+  2. *With Fig. 9b's transfer the swing is reproduced in shape and timing of the
+     minimum; the late side rises too early and too far.* Contributions at 8 ns: wall
+     +0.086, lips +0.032, bubble +0.226; at 6.5 ns: +0.031, +0.035, +0.173. The bubble
+     dominates the swing, as Fig. 10's caption says ("as the wall enters and blocks the
+     inner beams"), but its inner absorption (48 / 46 % at 6.5 ns, 85 / 83 % at 8 ns for
+     23° / 30°) sits above Ralph 2018's 51–62 % at peak, and the wall has moved 0.56 mm
+     at 6 ns against 0.35–0.40 mm at the waist in PRE 109 Fig. 1a (constant 0.10 mm/ns
+     from the turn-on overstates the motion in the low-power foot). Both put the zero
+     crossing 0.4 ns early and the late plateau +0.07 high. Data that would fix it
+     (Next 10): the HYBRID-E inner-beam propagation/absorption history (Ralph-type
+     inner-beam imaging or HYDRA bubble transparency vs time) for v_ref, τ_b, x_max; the
+     emitting-wall radius vs time (SXI/wall-motion imaging) for the wall speed and its
+     start; LEH SXI for the lip closure time.
+  3. *The foot is offset* by −0.04 to −0.07 with (b) (static −0.07 at 2 ns, −0.11 at
+     4 ns) where HYDRA holds ≈0: the foot P2 is set by pointing and foot cone fraction,
+     and the mock pointing and Fig. 9b's foot CF (read by eye, ±0.02 ≈ ±0.02 in P2) are
+     not the shot's tuned foot. The moving wall alone adds +0.03 by 2 ns (0.16 mm).
+- **Caveats.** Mock pointing; unpublished geometry (corners, windows, liner, LEH
+  washer) at repository defaults; the capsule does not shrink (Fig. 10's evaluation
+  radius and flux definition are not stated); no backscatter and no laser degradation;
+  Fig. 10 is a HYDRA calculation, not data. Nothing here was tuned to Fig. 10.
