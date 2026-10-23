@@ -178,6 +178,62 @@ function _nif_beam_table()
              phi = parse(Float64, r[6])) for r in rows]
 end
 
+# Mock HYBRID-E pointing, per cone: aim z (mm, upper hemisphere), aim radius r (mm, along
+# the quad's port azimuth; negative = across the axis) and tangential split s (mm).
+# A public stand-in fitted to summary metrics, not a facility pointing: research notes,
+# "Mock HYBRID-E pointing (2026-10-23)".
+const HYBRIDE_MOCK_POINTING = Dict(
+    :inner23 => (z = 3.3, r = -1.3, s = 0.0),
+    :inner30 => (z = 4.2, r = -0.8, s = 0.0),
+    :outer44 => (z = 5.7, r = 0.0, s = 0.5),
+    :outer50 => (z = 5.8, r = 0.0, s = 0.5),
+)
+
+export hybride_mock_pointing
+
+"""
+    hybride_mock_pointing(beams = nif_beams(); table = HYBRIDE_MOCK_POINTING) -> Vector{Beam}
+
+A public mock of the HYBRID-E (N221204/N230729-class) NIF pointing: `beams` (NIF beams or
+quads, with `group` the cone) re-aimed by cone, defocus 0; power, spot and `dlambda` are
+kept. Each cone's quads share one rule in their own frame, mirrored top to bottom: the aim
+sits at `±z` (mm, the bottom hemisphere at `-z`), `r` along the quad's port azimuth
+(negative: across the axis, toward the opposite wall) and, for the outer cones, `±s` along
+the quad's φ̂, each beam aiming to the side opposite its own port (`-sign(φ_beam − φ_quad)
+s`; the quad's beams cross). The quad azimuth is that of the mean port of its beams in
+`beams`, so a quad given as one beam (`nif_quads()`) gets no split.
+
+| cone | z | r | s |
+|---|---|---|---|
+| 23.5° | 3.3 | −1.3 | 0 |
+| 30° | 4.2 | −0.8 | 0 |
+| 44.5° | 5.7 | 0 | 0.5 |
+| 50° | 5.8 | 0 | 0.5 |
+
+*Derived*, not a facility pointing: the values were fitted, on a 0.1 mm grid, to the
+capsule-flux moments and LEH beam crossing of a non-public as-shot HYBRID-E pointing on
+the 11.24 × 6.4 mm hohlraum with 3.1 mm LEHs, which they reproduce to within 0.15
+percentage point (P2/P0, P4/P0, P6/P0 and Y_lm/Y00 for l ≤ 6, at foot and peak cone
+fractions) and its reduced-model CBET transfer to 0.03 % (research notes, "Mock HYBRID-E pointing (2026-10-23)").
+"""
+function hybride_mock_pointing(beams::AbstractVector{<:Beam} = nif_beams();
+                               table = HYBRIDE_MOCK_POINTING)
+    sums = Dict{String,Vec3}()
+    for b in beams
+        sums[b.quad] = get(sums, b.quad, zero(Vec3)) + Vec3(b.port...)
+    end
+    return map(beams) do b
+        p = table[b.group]
+        q = sums[b.quad]
+        φq = atan(q[2], q[1])
+        δ = mod(atan(b.port[2], b.port[1]) - φq + π, 2π) - π
+        side = abs(δ) < 1e-9 ? 0.0 : sign(δ)
+        er, eφ = Vec3(cos(φq), sin(φq), 0), Vec3(-sin(φq), cos(φq), 0)
+        aim = p.r * er - side * p.s * eφ + Vec3(0, 0, sign(b.port[3]) * p.z)
+        remake(b; aim, defocus = zero(b.defocus))
+    end
+end
+
 # ---------------------------------------------------------------------------------------
 # OMEGA
 # ---------------------------------------------------------------------------------------

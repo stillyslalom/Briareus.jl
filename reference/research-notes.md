@@ -2343,3 +2343,44 @@ laser–plasma model (`apply_lpi`), so it enters `drive_history(...; lpi)`,
   v_ref and τ_b to shot data (Next 10), is the next step. The ridge-stop stage
   (inner power stopping at r ≈ 0.73 R after the ablator–wall collision) is not
   implemented.
+
+## Mock HYBRID-E pointing (2026-10-23) *derived*
+
+`hybride_mock_pointing()` (`src/facilities.jl`, table `HYBRIDE_MOCK_POINTING`) is a
+public stand-in for the HYBRID-E pointing of the N221204 benchmark (ROADMAP 16). The
+user's brief (2026-10-22): the same symmetry, the same static capsule radiosity and
+similar CBET interactions as the shot's pointing, with the non-public N230729 SST export
+(thor, `read_visrad_sst`) used only to fit and check it. Its aim points are not in this
+repository; only the aggregate agreement below is.
+- Form: one rule per cone in each quad's own frame, mirrored top to bottom, defocus 0:
+  aim z, aim radius r along the quad's port azimuth (inner cones across the axis) and,
+  for the outer cones, a tangential split ±s with each beam aiming to the far side of
+  its quad (the 450 µm outer-quad split of Kritcher et al. 2021 is this kind). The
+  export has the same form, so the mock keeps its symmetry class: no top/bottom
+  difference beyond the port pattern, and each cone's quads rotated copies of each
+  other.
+- Fit: the seven numbers (four z, two inner r, one outer s) on a 0.1 mm grid, exhaustive
+  search of the per-cone grid combinations against the export's capsule-flux Legendre
+  P1–P6 and real Y_lm (l ≤ 6) over P0 at a foot (cone fraction 0.15) and a peak (1/3)
+  cone fraction, keeping only candidates whose LEH-plane beam overlaps agree within
+  10 % and ranking ties by clipped power. Several grid points fit about equally well;
+  the one chosen is not the export rounded to the grid.
+- Geometry (`n221204_benchmark.md` §5): 11.24 × 6.4 mm hohlraum, 3.1 mm LEHs, 1.135 mm
+  capsule. Corner radius, windows and the Au/DU liner are unpublished: repository
+  defaults (square corners, no windows, `gold()` wall, `ablator()` capsule). All 192
+  beams (`nif_beams()`, f/20.7, CPP spots), 440 TW, inner power split evenly over the
+  23.5°/30° cones and outer over 44.5°/50°, one static solve per cone fraction.
+- Agreement, mock − export, fine mesh (h 0.17, capsule_h 0.09; the standard mesh 0.3/0.16
+  agrees with it to 0.01 pp): P2/P0 +0.14 pp (foot) and −0.03 pp (peak); P4/P0 and
+  P6/P0 within 0.03 pp; odd P_l zero for both; every Y_lm/Y00 with l ≤ 6 within 0.06 pp
+  (foot) and 0.02 pp (peak), and the largest azimuthal (m ≠ 0) term the same to
+  0.001 pp; capsule-mean flux within 0.1 %; clipped power ~1e-5 of the laser for both.
+- CBET: the reduced model (`CBET`, leh_z 5.62 mm, Δλ 0.917 Å inner at 3ω, clamps 0.0075,
+  0.002 and none) transfers the same power to within 0.03 % of the transfer for every
+  cone. Its pointing dependence is only through each beam's width at the LEH plane,
+  which an aim near the LEH and f/20 optics leave insensitive to 0.1 mm moves; so the
+  check also compares a geometric one, the mean overlap of Gaussian beam footprints
+  (width from `_beam_at_plane`, axes where they cross the LEH plane) per cone pair:
+  within 7.8 % (worst pair, outer44–outer44), 3.5 % rms over the ten pairs.
+- Use: a stand-in for pointing-level studies of the benchmark (moments, CBET, LEH
+  clearance), not a facility pointing. Fit and check scripts: thor `hybride_mock/`.

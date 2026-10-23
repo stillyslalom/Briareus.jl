@@ -1115,4 +1115,5 @@ include("dynamics.jl")
 include("leh_closure.jl")
 include("bubble.jl")
 include("implosion.jl")
+include("hybride_mock.jl")
 end
