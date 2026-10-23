@@ -500,6 +500,10 @@ Details and numbers in the research notes, under the section named in each entry
   Capsule Tr peaks at 305–312 eV against 313. Nothing was tuned to Fig. 10.
 - **Concurrent gradient chunks** (see the 2026-10-17 performance section): gradients ~2×
   faster, bitwise equal to serial.
+- **Faster albedo iterations** (`solve`, `drive_history`): GMRES preconditioned with
+  the cached LU of a nearby albedo replaces a fresh LU per iteration. A 50-step fine-mesh
+  history went from 32 to 3.6 s/step (standard mesh: 3.1 to 1.3), matching the old path
+  to ~1e-12.
 - **VisRad kits for item 1** (thor `visrad/kits_2026-10-23`): six cases (tilted-plate
   probe, normal foil, focus sweep, envelope 2.0, steep foil, shadowing) with a comparison
   script. Waiting for runs in VisRad.
