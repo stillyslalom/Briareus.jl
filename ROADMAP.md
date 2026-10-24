@@ -523,6 +523,31 @@ Details and numbers in the research notes, under the section named in each entry
   Tests: areas, facing, zero exchange, beams on both faces (operator vs ray trace),
   clearance pass and fail.
 
+## Done (2026-10-24, hohlraum dynamics calibrated)
+Research notes, "Hohlraum dynamics calibrated to published data (2026-10-24)". Items 9,
+10 and 16; PRE 109 Fig. 10 used only as the blind check.
+- **Anchors digitized as data**: Young 2020 Fig. 3a (the LLNL dynamic view-factor radii,
+  `young2020_radii()`), PRE 109 Fig. 1a (HYBRID-E wall edge at 6 ns,
+  `pre109_fig1a_wall()`), Izumi 2021 Figs. 8 and 10a (bubble trajectories, HYDRA absorbed
+  fraction; vector graphics, `izumi2021_bubble()`, `izumi2021_absorption()`).
+- **`WallMotion` saturates**: ballistic, then stopping smoothly. Defaults fitted to
+  Young: 0.185 mm/ns from 0.8 ns after the turn-on, stopping 0.45 mm in (HYBRID-E: 0.38,
+  the Fig. 1a waist edge). The motion happens in the foot; the old 0.10 mm/ns from the
+  turn-on moved N221204's wall 0.86 mm by 9 ns.
+- **`BubbleAbsorption` refitted**: speed 0.36 mm/ns and launch 0.25 ns after the turn-on
+  (Izumi Fig. 8a, 28 points); density exponent 1.8 from Izumi's Eq. 7; opacity 0.111 to
+  the HYDRA absorbed fraction (0.02 / 0.23 / 0.55 at 4 / 5 / 6 ns); the collision time
+  scales with the capsule–wall gap and picket energy (`capsule_radius` replaces
+  `capsule_scale`), reproducing all three of Izumi 2018's separation times. HYBRID-E's
+  wider gap gives t_c 6.09 ns (the old capsule-only extrapolation 5.41).
+- **N221204 benchmark rerun** (`examples/n221204.jl`, new `dynamics` and `shot`
+  arguments): minimum −0.168 (Fig. 10 −0.173), +0.123 at 8 ns (+0.095), rms over
+  2–8.5 ns 0.035 (was 0.051); the upward zero crossing stays ~0.4 ns early (6.26 against
+  6.67 ns). Proxies of N220919 and N210808 (Δλ 2.5 / 1.8 Å).
+- **The 7.4 keV CBET temperature is a degeneracy, not data**: a refit with Te ≤ 5.5 keV
+  fits Fig. 9b as well (rms 0.016) with lower multipliers, but moves the Δλ null from
+  1.2 to 0.5 Å (NC24: 1–1.55). `n221204_cbet()` is unchanged.
+
 ## Open questions (from the 2026-10-18 CAD work)
 Choices made provisionally overnight or left open; the lean is in brackets.
 **Decided (user, 2026-10-22):** the bracketed leans stand. On 1: parts may be split
@@ -732,19 +757,31 @@ the reference's view factors hold through the pulse; items 9 and 10 remove that 
 9. **Time-dependent view factor: the P2 swing.** Done (2026-10-23, see Done): the moving
    wall on keyframes (`WallMotion`, `Keyframes`; error ∝ spacing²), closing LEH lips,
    and `BubbleAbsorption` with stagnation and ridge stop (`lpi_deposit`), compared with
-   PRE 109 Fig. 10 for N221204 (item 16). What remains:
-   - calibrating the pieces (bubble absorption, wall speed and start, lip closure time,
-     the spot-collision time) against data: item 10;
-   - the capsule's shrinking radius (Fig. 1a: ~0.92 mm at 6 ns), Izumi 2023's
-     low-contrast stall and relaunch, and a computed lip closure (plasma filling the
-     hole);
+   PRE 109 Fig. 10 for N221204 (item 16). Calibrated against published data
+   (2026-10-24, see Done): wall speed, start and saturation (Young 2020, PRE 109
+   Fig. 1a), bubble speed, launch and opacity (Izumi 2021), collision time (Izumi 2018),
+   lips (Young 2020's LEH history). What remains:
+   - the swing still turns positive ~0.4 ns early (6.26 against 6.67 ns) and its
+     minimum comes ~0.3 ns early: inner absorption rises from 0.22 to 0.57 over
+     5.5–6.5 ns on HYBRID-E. The HYBRID-E bubble speed is the weakest link (`energy` 1.1
+     from the picket energy and quad splitting; PRE 109 Fig. 1a hides N221204's tip under
+     its rays, ≥ 1.55 mm at 6 ns against the model's 1.96); a HYBRID-E bubble or thin-wall
+     measurement would settle it;
+   - the lip closure history (only Young's end value 0.857 r₀ is measured; the ramp is
+     assumed); a computed lip closure (plasma filling the hole);
+   - the capsule's shrinking radius (Young Fig. 3a has one: 0.83 mm at 5.5 ns, 0.22 at
+     7.75 ns; PRE 109 Fig. 1a ~0.92 mm at 6 ns), Izumi 2023's low-contrast stall and
+     relaunch;
    - Callahan's and Izumi's figures of merit beside the computed swing;
-   - validation still to run: Ralph 2018's anchor (cone fraction 18.5 % for zero flux P2
-     at the measured peak wall position; only the bubble absorption is checked on it),
-     the Izumi 2018/2021 HDC SymCap series (core P2 −18 to +21 µm), Young 2020's
-     static-vs-dynamic test (mode 1 within 0.14 % at peak; time-averaged radii against
-     the 85 % static ones), Callahan's 39-shot curve (σ 8 µm), and Fig. 10's N210808
-     and N220919 curves.
+   - validation still to run: Ralph 2018's 18.5 % cone fraction for zero flux P2 (needs
+     the high-foot pointing and measured wall radius, unpublished; his 51–62 %
+     peak-averaged absorption is matched: 0.575 on N221204), the Izumi 2018/2021 HDC
+     SymCap series (core P2 −18 to +21 µm), Young 2020's static-vs-dynamic test (mode 1
+     within 0.14 % at peak; time-averaged radii against the 85 % static ones; the radii
+     are now digitized), Callahan's 39-shot curve (σ 8 µm). Fig. 10's N220919 is close
+     on the proxy (minimum −0.140 against −0.145); N210808's proxy is not (foot +0.03
+     against −0.05, minimum −0.09 against −0.14): its pulse and foot cone fraction are
+     only approximated.
 10. **Shot-data calibration.** Fit effective parameters (cone multipliers, CBET
    multiplier/clamp, bubble transparency, wall-motion speed, albedo) to measured in-flight
    and hot-spot P2/P4 and keyhole shock symmetry, with uncertainty. Reproduce the
@@ -759,17 +796,19 @@ the reference's view factors hold through the pulse; items 9 and 10 remove that 
    dCF/dΔλ 0.16 per Å, within the 0.15–0.18 target). What remains:
    - a joint fit to N210808 and N220919 (multi-shot), which would also test the model's
      Δλ sensitivity (~2.5× HYDRA's cross-shot difference);
-   - the fitted Te(t) reaches 7.4 keV late in the peak, above every published LEH value:
-     suspect;
+   - the fitted Te(t) reaches 7.4 keV late in the peak, above every published LEH value.
+     Investigated (2026-10-24, see Done): Fig. 9b fixes only Te's rise with time; Te ≤
+     5.5 keV fits as well with smaller multipliers, but moves the Δλ null from 1.2 to
+     0.5 Å while bringing the 1.8 Å response closer to HYDRA's N210808. The joint fit
+     with the null as a constraint decides it;
    - a clamp schedule driven by the `PulseShape` (the fit uses the deck's fixed
      schedule), a hard-minimum saturation option so HYDRA clamps carry over, plasma-state
      tables as inputs, outer-cone depletion and an inner-quad SBS proxy (the N220919
      limit and the 2.9 Å overshoot), and the 23.5°/30° split (the model favours 30°,
      HYDRA splits evenly).
-   Item 9's dynamics, calibrated against published data rather than tuned to Fig. 10:
-   bubble absorption (85 % of inner power at 8 ns in the N221204 benchmark, against
-   Ralph 2018's 51–62 % at peak), wall speed (0.56 mm by 6 ns against 0.35–0.40 mm in
-   PRE 109 Fig. 1a) and the spot-collision time scaling.
+   Item 9's dynamics: calibrated against published data (2026-10-24, see Done). Left:
+   the HYBRID-E bubble speed (the picket-fluence transfer from the HDC basecamp is the
+   least constrained input) and the lip closure history.
 11. **Implosion metrics and UQ.** Done (2026-10-23, see Done; research notes,
    "Implosion metrics"). Open:
    - two comparisons with Young 2020 do not match: a dropped inner quad moves the hot
@@ -791,10 +830,12 @@ the reference's view factors hold through the pulse; items 9 and 10 remove that 
 16. **Absolute energetics and an N221204 benchmark** (`reference/litreview/energetics.md`,
     `n221204_benchmark.md`). Done (2026-10-23, see Done): the mock HYBRID-E pointing
     (`hybride_mock_pointing()`) and `examples/n221204.jl` against PRE 109 Fig. 10. The
-    P2/P0 swing has the right shape, but its minimum is shallow (−0.09 against −0.17), it
-    turns positive about 0.5 ns early and it ends about +0.07 high; the fix is item 10's
-    calibration of the dynamics. The foot sits 0.04–0.07 below Fig. 10 (mock pointing,
-    foot cone fraction read by eye). Model changes still to make, each with its data:
+    P2/P0 swing has the right shape. With the dynamics calibrated to published data
+    (2026-10-24, see Done) its minimum is −0.168 (Fig. 10 −0.173) and it ends +0.03 high
+    (+0.123 at 8 ns against +0.095), but it still turns positive ~0.4 ns early (item 9).
+    At 4.5 ns it sits 0.06 above Fig. 10 (DN24's input cone fraction there is below
+    Fig. 9b's); the foot sits ~0.03 below (mock pointing, foot cone fraction read by
+    eye). Model changes still to make, each with its data:
     - `WallLossAlbedo` material factor for Au-lined DU: 1 − α × ~0.83 with the
       temperature exponent shifted ~−0.2 (Rosen 2005, Schein 2007; Döppner 2015's 6.5 %
       peak-power equivalence as the check), optionally gold until `HeatFront` passes the

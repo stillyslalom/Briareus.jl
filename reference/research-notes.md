@@ -2132,7 +2132,7 @@ Between keyframes the exchange matrix Aᵢ Fᵢⱼ is interpolated linearly in t
 by the areas at that time (reciprocity kept; rebalanced for closed targets); deposition
 operators are built at each time.
 
-**Default speed 0.10 mm/ns** (engineering default, **M**): Chen 2020 (500 µm in by 5.5 ns
+**Default speed 0.10 mm/ns** (superseded 2026-10-24 by a saturating wall fitted to Young 2020: "Hohlraum dynamics calibrated to published data" below; engineering default, **M**): Chen 2020 (500 µm in by 5.5 ns
 at 0.3 mg/cc, 400 at 0.45: ~0.07–0.09 mm/ns); PRE 109, 025204 Fig. 1a (HYBRID-E,
 measured off the figure ±0.15 mm: wall-material edge at the waist 2.80–2.85 mm at 6 ns from
 3.2 mm, ~0.1 mm/ns; under the outer spots 2.2–2.5 mm).
@@ -2302,7 +2302,7 @@ laser–plasma model (`apply_lpi`), so it enters `drive_history(...; lpi)`,
     depth and pointing (ForwardDiff through `speed`, `opacity` and the beams).
   - The tip is measured from the initial wall; only the footprint plane follows a
     moving wall.
-- **Defaults** (engineering, **M**): v_ref 0.35 mm/ns at 0.3 mg/cc (Izumi PoP 28,
+- **Defaults** (superseded 2026-10-24: speed, launch, opacity, q and collision refitted, "Hohlraum dynamics calibrated to published data" below; engineering, **M**): v_ref 0.35 mm/ns at 0.3 mg/cc (Izumi PoP 28,
   022706, 2021, 345 µm/ns; Meezan 2020 measured 321–461 µm/ns); scalings E^0.2, ρ₀^−0.2
   (Izumi 2021, ±0.03 each); delay 0.2 ns (Izumi: intercept 0.5 ± 0.1 ns for a 0.3 ns
   turn-on); p = 0.5 (Izumi Eq. 6); (R/(R − x))² stands for Izumi's ρ_bub ∝ (R/R_bub)^k
@@ -2392,7 +2392,7 @@ laser–plasma model (`apply_lpi`), so it enters `drive_history(...; lpi)`,
     efficiency. The early offset (+0.10 above Fig. 10 at 5.5 ns, where HYDRA is at its
     minimum) is unchanged: the bubble absorbs 54 / 44 % of the inner power by 5.5 ns.
     Defaults were not tuned to Fig. 10, and the pointing is not HYBRID-E's.
-- **Open.** The plateau absorption (~80–90 %) sits above Ralph's 51–62 %: with Izumi's
+- **Open** (addressed 2026-10-24, "Hohlraum dynamics calibrated to published data": Ralph's 51–62 % is a peak average; N221204's is 0.575). The plateau absorption (~80–90 %) sits above Ralph's 51–62 %: with Izumi's
   anchors fixed, any stagnation past the anchor depths leaves T_b ≲ 1 % on clipped
   light. Fitting v_ref, τ_b, x_max (and t_c) to shot data (Next 10) is the next step.
   Low-contrast relaunch (Izumi 2023) is not modeled.
@@ -2768,3 +2768,189 @@ dimensions are recorded here). The CAD is design intent, not metrology. **M**
   (above 1e-5) at 1.2e8 W/cm². Drive beams
   reach the shield only past the hohlraum's outside, so it matters for beams aimed
   outside the hohlraum (backlighters), not for the drive.
+
+## Hohlraum dynamics calibrated to published data (2026-10-24) *derived*
+
+ROADMAP Next 9 and 10. Each piece of the hohlraum dynamics (wall, LEH lips, bubble, ridge
+stop, two-zone CBET) is refitted to its own published anchor. PRE 109 Fig. 10 is not used
+in any fit; it is the blind check at the end. Full texts are the accepted manuscripts in
+the user's paper folder (not in the repository).
+
+### Anchors extracted
+
+| Anchor | Source | Form | Value | Stored |
+|---|---|---|---|---|
+| Dynamic VF hohlraum radius vs t (N170827) | Young et al., PoP 27, 082702 (2020) Fig. 3a | raster, axes from frame and gridlines, overlay checked | flat to 0.9 ns, in at 0.185 mm/ns, plateau 0.43–0.48 mm in through the peak, 0.55 at 7.5 ns | `young2020_radii()` |
+| LEH radius vs t (same model) | Young Fig. 3a | same | 1.83 → 1.57 mm (0.857 r₀) linearly by ~6 ns; only the end value is SXI data | same |
+| HYBRID-E wall edge at 6 ns | PRE 109 Fig. 1a (HYDRA) | raster, axis/waist/outline calibration, 1 px = 0.018 mm | waist 0.38 ± 0.04 mm in (laser-absorption edge); bubble tip ≈1.85 ± 0.1 mm (N210808), ≥ 1.55 (N221204, under its rays) at z ≈ 2.9–3.5 mm | `pre109_fig1a_wall()` |
+| Bubble tip x_bub(t), 7 shots | Izumi et al., PoP 28, 022706 (2021) Fig. 8a/b | vector graphics (exact) | 1.38–2.28 mm over 4.65–6.19 ns; ±40 µm | `izumi2021_bubble()` |
+| Inner-power fraction absorbed in the bubble | Izumi 2021 Fig. 10a (HYDRA circles, Eq. 6 line) | vector | 0, 0.020, 0.230, 0.550 at 3, 4, 5, 6 ns (basecamp, 0.3 mg/cc) | `izumi2021_absorption()` |
+| Spot separation (ablator–wall collision) | Izumi et al., RSI 89, 10K111 (2018) | text | 5.8 ns basecamp (turn-on 0.3), 5.45 ns at 1.5× picket, ~0.4 ns earlier with the 1.18× capsule | docstring, tests |
+| Peak-averaged inner absorption | Ralph et al., PoP 25, 082701 (2018) | text | 51 ± 2 % to 62 ± 2 % (CH high foot, 6.72 mm, 0.6 mg/cc, over the peak FWHM) | notes |
+| Cone fraction for zero flux P2 | Ralph 2018 (VisRad at the measured peak wall position) | text | 18.5 %; peak F_in 0.34–0.38 → F' 0.14–0.18 (Fig. 5) | notes |
+| Bubble density | Izumi 2021 Eq. 7 | text | ρ_bub = S ρ₀ R/(R − x), S ≈ 3 ∝ ρ₀^-0.1 (k = 1, settling the "illegible" exponent) | `density_exponent` 1.8 |
+
+Digitization: Izumi 2021's figures are vector graphics in the accepted manuscript, so
+markers and lines are read from the PDF paths (axes from the tick marks; exact to the
+drawing). Young Fig. 3a and PRE 109 Fig. 1a are rasters: axes from frames, gridlines and
+the drawn outline, stroke centres per column, overlays checked by eye.
+
+### Fits (each against its own anchor)
+
+| Parameter | Before | Now | Uncertainty | Anchor |
+|---|---|---|---|---|
+| Wall speed | 0.10 mm/ns | 0.185 mm/ns | 0.175–0.195 | Young Fig. 3a |
+| Wall start | outer turn-on | turn-on + 0.8 ns (fit 0.78) | 0.68–0.85 ns | Young Fig. 3a |
+| Wall saturation | none | 0.45 mm (default); 0.38 for HYBRID-E | 0.445–0.455 (±0.03 reading); HYBRID-E ±0.04, upper bound | Young; PRE 109 Fig. 1a waist |
+| Bubble speed | 0.35 mm/ns | 0.36 mm/ns | 0.347–0.372 | Izumi Fig. 8a, 28 points, χ²/dof 0.89 |
+| Bubble launch delay | 0.2 ns | 0.25 ns | 0.07–0.42 (correlated with speed) | Izumi Fig. 8a |
+| Density exponent q | 1.862 (two-anchor fit) | 1.8 (physics) | — | Izumi Eq. 7: ρ_bub² ∝ (Sρ₀)², S ∝ ρ₀^-0.1 |
+| Opacity τ_b | 0.144 (fit to T_b 29 %/54 %) | 0.111 | 0.100–0.124 stat.; 0.085–0.158 with plane ±0.2 mm and launch | Izumi Fig. 10a HYDRA absorbed fraction |
+| Collision t_c | turn_on + 5.5 − 2.0(s − 1) − 0.7(E − 1) | turn_on + 5.5 (R − r_cap)/1.967 mm · E^-0.16 | ±0.15 ns (frame spacing) | Izumi 2018: 5.8, 5.45 (1.5× picket), −0.4 ns (1.18× capsule; the gap gives −0.44) |
+| HYBRID-E picket fluence `energy` | 1 | 1.1 (example) | 0.8–1.5 | 1.5× basecamp energy (DN24 vs Izumi Fig. 3a) × 0.73 for split outer quads; Fig. 1a N210808 tip 1.85 ± 0.1 mm at 6 ns |
+| LEH lips (example) | 5.0 ns step over 0.5 ns to 0.84 r₀ | smoothstep from −0.1 ns over 7.85 ns to 0.857 r₀ | half-closed 3.0–3.8 ns (timing mapping) | Young Fig. 3a LEH radius (end value SXI; ramp assumed) shifted 0.8 ns |
+
+Checks of the fits:
+- *Wall.* Young's radius is flat to 0.9 ns, falls at 0.185 mm/ns to 0.45 mm in by 3.3 ns
+  and then holds (0.43–0.48 mm) through the peak: the motion happens in the foot, not at
+  a constant speed through the pulse. The fit's residuals are < 0.03 mm over 0.5–6.75 ns
+  (`test/dynamics.jl`). On N221204 the old wall (0.10 mm/ns from the turn-on) was
+  0.56 mm in at 6 ns and 0.86 at 9 ns; the new one is 0.38 from 3.3 ns on.
+- *Bubble tip.* The seven shots' residuals to the global fit (E^0.2 ρ₀^-0.2 scalings,
+  one speed, one launch) are −0.09 to +0.07 mm, rms 0.036 mm, inside the ±0.04 error bars.
+  Per shot, the slopes are 0.33–0.43 mm/ns and the intercepts 0.14–1.02 ns.
+- *Absorbed fraction.* The opacity is degenerate with the bubble's plane and launch: with
+  the plane where the proxy pointing's 50° axes reach the wall (z = 2.59 mm instead of
+  Izumi's 3 mm) τ_b = 0.086. The absorbed fraction against time is the same in every
+  variant (0.03 / 0.20 / 0.36 / 0.56 at 4 / 5 / 5.5 / 6 ns, against HYDRA's 0.02 / 0.23 /
+  – / 0.55 and Izumi's Eq. 6 0.04 / 0.20 / 0.32 / 0.56). The old defaults gave 0.09 / 0.32
+  / 0.50 / 0.69 on the proxy geometry (plane 2.59 mm): too much, too early.
+- *Collision.* Izumi 2018's 1.18× capsule (outer radius 1.064 mm against 0.908) narrows
+  the capsule–wall gap by 8 %, which at constant closing speed (0.36 mm/ns) brings the
+  collision 0.44 ns earlier: the measured "roughly 400 ps". The 1.5× picket's 5.45 ns
+  gives the energy exponent −0.16. HYBRID-E's gap (3.2 − 1.135 = 2.065 mm) is 5 %
+  *wider* than the basecamp's, so t_c = 0.4 + 5.77 · 1.1^-0.16 = 6.09 ns. The old
+  extrapolation in capsule radius alone gave 5.41 ns.
+- *Ralph 2018.* Energy-weighted over N221204's peak FWHM (4.62–8.76 ns), after CBET, the
+  calibrated bubble absorbs 0.575 of the inner power (old defaults 0.50, E = 1.5 0.65),
+  inside Ralph's 51–62 %. The platforms differ (CH high foot, 0.6 mg/cc, 14 ns pulse), so
+  this is a plausibility check, not a fit. The earlier "85 % against 51–62 %" compared an
+  instantaneous value at 8 ns with a peak average. Ralph's 18.5 % cone fraction for zero
+  flux P2 at the measured peak wall position is not reproduced: it needs the high-foot
+  pointing and the measured wall radius, neither of which is published.
+- *HYBRID-E bubble (PRE 109 Fig. 1a, 6 ns).* N210808's tip is 1.85 ± 0.1 mm from the
+  wall at z ≈ 2.9–3.5 mm; N221204's is ≥ 1.55 mm (its denser inner-beam rays are drawn
+  over the plasma). The calibrated model with `energy` 1.1 puts it at 1.96 mm, in the
+  plane z_b = 3.49 mm.
+
+### Two-zone CBET: the 7.4 keV LEH temperature
+
+`n221204_cbet()`'s Te(t) reaches 7.44 keV at 8 ns, above every published LEH value. Refit
+to the same Fig. 9b data with Te ≤ 5.5 keV (`calibrate_cbet` with an upper bound,
+16 min on 4 threads: `examples/n221204_cbet_calibration.jl` with `bounds[:Te] = (300, 5500)`):
+
+| Fit | Fig. 9b rms | Te (keV, 1 → 8 ns) | multipliers out / in, Mach | 44° / 50° at 5.6 ns (Fig. 9a 0.43 / 0.64) | CF at Δλ 0 | Δλ null | CF at 1.8 Å, 5.6 ns |
+|---|---|---|---|---|---|---|---|
+| `n221204_cbet()` | 0.0163 | 2.79 → 7.44 | 0.30 / 1.23, 1.23 | 0.41 / 0.68 | 0.090 | 1.20 Å | 0.461 |
+| A: Te ≤ 5.5 keV | 0.0160 | 1.75 → 5.01 | 0.07 / 0.41, 0.91 | 0.47 / 0.61 | 0.281 | 0.50 Å | 0.499 |
+| B: A + ne/nc(t) | 0.0115 | 4.87, 1.87 … 5.50, 4.88 | 0.04 / 1.09, 0.33 | 0.48 / 0.58 | 0.333 | 0.05 Å | 0.513 |
+
+- Fig. 9b does not set the absolute Te: A fits it as well with every Te ~0.67× lower,
+  the outside multiplier 4× smaller and the inside one 3× smaller. The 7.4 keV is the
+  overall gain scale and the balance between the zones, not a measured temperature.
+  The rise of Te with time (×2.7–2.9 from 1 to 8 ns) is what the data constrain.
+- What separates the fits is the Δλ response, which is not fitted. The reference puts
+  the null at 1.2 Å, inside NC24's 1–1.55 Å for HYBRID-E. A moves it to 0.5 Å. A
+  matches HYDRA's N210808 (1.8 Å) post-CBET cone fraction better (0.50 against ~0.55–0.6
+  in Fig. 1e; the reference 0.46), i.e. it halves the excess Δλ sensitivity.
+- B fits Fig. 9b better only with an unphysical density history (ne/nc 0.15 at 1 ns,
+  0.01 at 4.75–5.5 ns) and moves the null to 0.05 Å: rejected.
+- Not adopted: `n221204_cbet()` is unchanged. Constraining Te trades one unfitted check
+  (the null) for another (N210808). A joint fit to N210808 / N220919 with the null as a
+  constraint (ROADMAP 10) is what can fix the temperature scale.
+
+### N221204 benchmark rerun: the blind check against Fig. 10
+
+`examples/n221204.jl` (default `dynamics = calibrated`; `old` reruns the 2026-10-23
+settings), calibrated two-zone CBET, mock HYBRID-E pointing, standard mesh (h 0.28 /
+capsule_h 0.16, 31 min for the five runs on 4 threads). Settings: wall from 1.2 ns at
+0.185 mm/ns stopping 0.38 mm in; lips to 0.857 r₀ along Young's ramp shifted 0.8 ns
+(closure −0.1 ns, width 7.85 ns); bubble defaults with `energy` 1.1 and
+`capsule_radius` 1.135 (t_c 6.09 ns). `energy` was set from the picket energy and quad
+splitting before the comparison was run.
+
+| t (ns) | static | +wall | +lips | +bubble (now) | +bubble (2026-10-23) | Fig. 10 |
+|---|---|---|---|---|---|---|
+| 2.0 | −0.057 | −0.034 | −0.031 | −0.031 | −0.032 | −0.001 |
+| 4.0 | −0.072 | −0.026 | −0.017 | −0.016 | −0.029 | −0.018 |
+| 4.5 | −0.088 | −0.053 | −0.040 | −0.034 | −0.043 | −0.092 |
+| 5.5 | −0.258 | −0.266 | −0.239 | −0.166 | −0.086 | −0.169 |
+| 6.5 | −0.227 | −0.233 | −0.202 | +0.029 | +0.031 | −0.045 |
+| 7.0 | −0.207 | −0.210 | −0.179 | +0.085 | +0.093 | +0.046 |
+| 8.0 | −0.177 | −0.175 | −0.145 | +0.123 | +0.168 | +0.095 |
+| 8.5 | −0.220 | −0.229 | −0.196 | +0.126 | +0.176 | +0.109 |
+
+| Swing metric (full model) | 2026-10-23 (coarse mesh) | now (standard) | Fig. 10 |
+|---|---|---|---|
+| minimum | −0.164 at 5.00 ns | −0.168 at 5.25 ns | −0.173 at 5.58 ns |
+| upward zero crossing | 6.25 ns | 6.26 ns | 6.67 ns |
+| at 8 ns | +0.162 | +0.123 | +0.095 |
+| mean over 5.25–8.5 ns | +0.054 | +0.024 | −0.001 |
+| rms against Fig. 10, 2–8.5 ns | 0.051 | 0.035 | — |
+
+The coarse mesh (0.8 / 0.4) reproduces these within 0.006. Capsule Tr peaks at 301.8 eV
+(5.5 ns) with everything on, 307.2 with wall and lips (drive Trad 313 eV).
+
+**Why the swing changed.**
+1. *Wall.* Saturating at 0.38 mm takes +0.09 off the late P2 (the +wall column now
+   stays at the static value after 5.5 ns; before, it rose to −0.083 at 8 ns). This is
+   most of the late improvement (+0.168 → +0.123 at 8 ns).
+2. *Collision.* The ridge stop now starts at 6.09 ns instead of 5.41, so at 5.5 ns the
+   inner light still reaches the wall where it is not absorbed: the 5.5 ns value drops
+   from −0.086 to −0.166 and the minimum deepens to Fig. 10's level.
+3. *Bubble.* On HYBRID-E's geometry the refitted bubble absorbs about as much as before
+   by 5.5 ns (0.22 against 0.17) but more later (0.57 at 6.5 ns against 0.47, 0.92 at
+   8 ns against 0.84). With the ridge on from ~6.2 ns this sets the rise from −0.17 to
+   +0.03 between 5.5 and 6.5 ns, 0.4 ns ahead of HYDRA's.
+4. *Lips.* Closing along Young's ramp instead of a step at 5.0 ns moves P2 by < 0.01
+   from 4 ns on (sensitivity run `late_lips`: minimum −0.169 at 5.0 ns, crossing 6.25,
+   +0.118 at 8 ns, coarse mesh).
+
+**Sensitivity to the least constrained input** (coarse mesh, full model). The HYBRID-E
+picket fluence `energy` is 1.1 from the picket energy (1.5×, by eye) and split outer
+quads (−27 %); PRE 109 Fig. 1a's N210808 bubble tip (1.85 ± 0.1 mm at 6 ns) gives 0.8
+(0.6–1.05) on its own. E = 1.5: minimum −0.138 at 5.25 ns, crossing 5.99 ns, +0.121 at
+8 ns. E = 0.8: −0.184 at 5.5 ns, 6.62 ns, +0.109 (rms 0.024). The crossing time follows
+the bubble speed: 0.6 ns per factor 1.9 in E, i.e. per ±7 % in speed. The default is
+kept at 1.1, the value set before the comparison; 0.8 matches Fig. 10 better and is
+consistent with Fig. 1a, but choosing it now would be tuning to the blind check.
+
+**N220919 and N210808 proxies** (coarse, `shot` argument; same mock pointing, CBET
+calibration and hohlraum; N220919 on N221204's pulse with Δλ 2.5 Å; N210808 with the rise
+0.2 ns and the peak end 0.45 ns earlier and Δλ 1.8 Å):
+
+| | minimum | crossing | at 8 ns | rms 2–8.5 ns |
+|---|---|---|---|---|
+| N220919 now (old) | −0.140 at 5.25 (−0.139 at 5.0) | 6.23 (6.14) | +0.118 (+0.165) | 0.033 (0.053) |
+| Fig. 10 N220919 | −0.145 at 5.6 | 6.66 | +0.094 | |
+| N210808 now (old) | −0.092 at 5.25 (−0.095 at 5.0) | 6.09 (5.67) | +0.119 (+0.166) | 0.061 (0.077) |
+| Fig. 10 N210808 | −0.141 at 5.5 | 6.68 | +0.084 | |
+
+N220919 behaves like N221204. N210808's proxy has a positive foot (+0.03 at 4 ns against
+−0.05) and a shallow minimum: its pulse and foot cone fraction are only approximated
+(N221204's DN24 powers, shifted), and the CBET calibration is N221204's (its Δλ
+sensitivity is ~2.5× HYDRA's across shots, ROADMAP 10).
+
+**Remaining discrepancies and likely causes.**
+- Crossing ~0.4 ns early: the HYBRID-E bubble speed (above), and the bubble plane:
+  z_b follows the mock pointing's 50° axes (3.49 mm), which sets how much of the inner
+  beams the bubble clips; the absorbed-fraction calibration was done on a 5.75 mm
+  hohlraum with Izumi's plane.
+- 4.5 ns 0.06 above Fig. 10: DN24's delivered input cone fraction (0.13–0.14) is below
+  Fig. 9b's (0.17–0.18) in the rise, so the CBET gives less transfer there.
+- Foot ~0.03 below: mock pointing and the foot cone fraction (read by eye).
+- Late +0.02–0.03 high: the capsule does not shrink (Young's ablation front is at 0.83 mm
+  at 5.5 ns, falling fast after 6 ns), no laser degradation or backscatter.
+- Every dynamic piece is still one effective parameter set from other platforms (HDC
+  SymCap in 5.75 mm Au, N170827); only the wall saturation and the bubble-tip check come
+  from HYBRID-E itself, and both from the HYDRA picture of Fig. 1a.
