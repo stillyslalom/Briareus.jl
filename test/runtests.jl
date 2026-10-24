@@ -1120,4 +1120,5 @@ include("parallel_gradient.jl")
 include("cbet_zones.jl")
 include("sombrero.jl")
 include("energetics.jl")
+include("capsule_drive.jl")
 end

@@ -71,6 +71,7 @@ export HOTSPOT_VELOCITY_PER_PERCENT, mode1_vector, hotspot_velocity, ResponseKer
        shape_amplification, young2020_green, young2020_kernel, young2020_pulses, young2020_dropped_quads,
        implosion_metrics, mode1_tolerance, swing_metrics,
        velocity_uncertainty, ntof_covariance, VelocityPenalty
+export CapsuleDrive, capsule_drive
 
 include("geometry.jl")
 include("meshops.jl")
@@ -95,6 +96,7 @@ include("clearance.jl")
 include("keepout.jl")
 include("uncertainty.jl")
 include("implosion.jl")
+include("capsule_drive.jl")
 include("talis.jl")
 include("lpi.jl")
 include("bubble.jl")
