@@ -26,6 +26,8 @@ export Vec3, Mesh, npatches, add_polygon!, merge_meshes, split_mesh, transform, 
 export AlbedoModel, ConstantAlbedo, TabulatedAlbedo, WallLossAlbedo, BurnthroughAlbedo, HeatFront,
        RosselandTransmission, foil_transmission, GapClosure,
        heat_front, burnthrough_time, areal_mass, optical_depth, eddington_transmission, albedo, Material, gold, ablator, BLACK,
+       TemperatureAlbedo, CapsuleAlbedo, capsule_radius_fraction, du_wall_loss, wall_loss_factor, uranium,
+       Conversion, conversion_efficiency, nif_conversion,
        Component, aperture, Target, nelements, elements, component_index, element_quadrature
 export hohlraum, hohlraum_counts, capsule_counts, foil, disk_foil
 export WallWindow, Sombrero, conforming_grid, equal_area_radius
@@ -35,9 +37,9 @@ export DepositionOperator, Deposition, deposit, raytrace_deposition, raytrace_co
        component_power
 export Enclosure, enclosure, cad_target
 export view_factors, closure_error, enforce_closure!, RadiationModel, RadiationSolution, solve,
-       flux_response, energy_balance, radiation_temperature, to_Wcm2, SIGMA_SB, albedos
+       flux_response, energy_balance, radiation_temperature, to_Wcm2, SIGMA_SB, albedos, conversions
 export WallMotion, wall_radius, wall_displacement, moving_hohlraum, Keyframes, model_at, deposition_at
-export PulseShape, pulse_energy, with_pulses, drive_history, cone_fraction_pulses,
+export PulseShape, pulse_energy, with_pulses, drive_history, energy_budget, cone_fraction_pulses,
        write_pulse_table, read_pulse_table, retune_drive
 export enclosed_radius, envelope_radius, focal_profile, enclosed_fraction, with_axes,
        BeamEnvelope, envelope_distance, ClearanceRow, ClearanceReport, clearance,

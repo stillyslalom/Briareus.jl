@@ -315,13 +315,46 @@ function _albedos(t::Target, time, H, burnthrough)
     end
     return α, intact, transmission
 end
-conversions(t::Target) =
-    [is_aperture(t, e) ? 0.0 : element_material(t, e).conversion for e in 1:nelements(t)]
+"""
+    conversions(target, time = 0.0, laser = nothing) -> Vector
+
+Laser → x-ray conversion efficiency per element (0 on apertures) at `time` (ns), for
+the absorbed laser power `laser` (TW per element; needed by intensity-dependent
+[`Conversion`](@ref) models, which see the absorbed flux `laser/area`). Generic in the
+number type of `laser`.
+"""
+function conversions(t::Target, time = 0.0, P = nothing)
+    _constant_conversion(t) &&
+        return Float64[is_aperture(t, e) ? 0.0 : element_material(t, e).conversion::Float64
+                       for e in 1:nelements(t)]
+    T = P === nothing || !_intensity_dependent(t) ? Float64 : promote_type(Float64, eltype(P))
+    η = zeros(T, nelements(t))
+    for e in 1:nelements(t)
+        is_aperture(t, e) && continue
+        m = element_material(t, e).conversion
+        if _intensity_dependent(m)
+            P === nothing && throw(ArgumentError("the conversion of $(element_material(t, e).name) depends on the laser intensity: pass the absorbed laser power"))
+            η[e] = conversion_efficiency(m, time, to_Wcm2(P[e] / t.elem_area[e]))
+        else
+            η[e] = conversion_efficiency(m, time)
+        end
+    end
+    return η
+end
+_constant_conversion(t::Target) = all(c -> c.material.conversion isa Real, t.components)
+_intensity_dependent(t::Target) = any(c -> _intensity_dependent(c.material.conversion), t.components)
+
+# The x-ray source flux ηP/A per element at `time`: with constant conversions exactly
+# the product of the materials' numbers.
+_xray_source(t::Target, P, time) = _constant_conversion(t) ? conversions(t) .* P ./ t.elem_area :
+                                   conversions(t, time, P) .* P ./ t.elem_area
 
 _temperature_dependent(t::Target) =
     any(c -> _temperature_dependent(c.material.albedo), t.components)
 _temperature_dependent(::AlbedoModel) = false
 _temperature_dependent(::WallLossAlbedo) = true
+_temperature_dependent(::TemperatureAlbedo) = true
+_temperature_dependent(m::CapsuleAlbedo) = _temperature_dependent(m.albedo)
 _temperature_dependent(m::BurnthroughAlbedo) =
     _temperature_dependent(m.before) || m.transmission isa RosselandTransmission ||
     (m.after !== nothing && _temperature_dependent(m.after))
@@ -390,7 +423,7 @@ solve(m::RadiationModel, d::Deposition; kwargs...) = solve(m, d.element; kwargs.
 function solve(m::RadiationModel, P::AbstractVector; time = 0.0, albedo = nothing,
                burnthrough = nothing, tol = 1e-4, maxiter::Integer = 50, guess = nothing)
     t = m.target
-    S = conversions(t) .* P ./ t.elem_area
+    S = _xray_source(t, P, time)
     iterate = albedo === nothing && _temperature_dependent(t)
     warm = iterate && guess !== nothing
     warm && nelements(guess.model.target) != nelements(t) &&
@@ -438,12 +471,18 @@ the model's factorization cache with `solve`.
 With `weights` (a matrix with one column per observed element, e.g. `legendre_weights`),
 returns `weights * R` directly, solving for its rows only: far cheaper than `R` when
 only a few moments of the observed flux are wanted.
+
+A time-dependent [`Conversion`](@ref) is evaluated at `time`. An intensity-dependent one
+makes the source nonlinear in `P`: pass the absorbed laser power `laser` (TW per
+element) to linearize about, i.e. to fix each element's conversion at its value for
+that deposition (the secant, exact at `laser` itself).
 """
 function flux_response(m::RadiationModel, observed::AbstractVector{<:Integer}; time = 0.0,
-                       albedo = nothing, weights = nothing)
+                       albedo = nothing, weights = nothing, laser = nothing)
     t = m.target
     α = albedo === nothing ? albedos(t, time) : collect(Float64, albedo)
-    η = conversions(t)
+    η = _constant_conversion(t) ? conversions(t) :
+        conversions(t, time, laser === nothing ? nothing : ForwardDiff.value.(laser))
     # R = F[obs,:] M⁻¹ diag(η ./ A)  ⇒  Rᵀ = diag(η ./ A) M⁻ᵀ F[obs,:]ᵀ
     rhs = if weights === nothing
         Matrix(transpose(view(m.F, observed, :)))
@@ -469,6 +508,8 @@ into what it transmits, `τHA` with `τ` its `sol.transmission`, and what it abs
 `(1-α-τ)HA`: with the default `transmission` `T`, `τ = sT` and `α = (1-sT)α_before`
 (`s` the transition's progress), so it absorbs `(1-sT)(1-α_before)HA`; with an
 explicit `after`, `τ = α_before-α` and it absorbs `(1-α_before)HA`, as if intact.
+A capsule with a `CapsuleAlbedo` absorbs `(1-α_c)(R/R₀)² HA`, its effective sphere's
+share (E_cap's power; `energy_budget` integrates it over a `drive_history`).
 `source ≈ Σabsorbed + Σescaped + Σtransmitted + lost`.
 """
 function energy_balance(s::RadiationSolution)

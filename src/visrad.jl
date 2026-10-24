@@ -1110,6 +1110,16 @@ end
 const _VR_POWER_COLUMNS = ("Surface Area", "Incident Rad Pwr", "Emitted Rad Pwr", "Pwr Src Term",
                            "Laser Pwr Dep")
 
+# A component's conversion as one number: its own, or for a `Conversion` model the
+# laser-weighted mean of the solved source (the model at the solution's time without laser).
+_mean_conversion(η::Real, sol, t, es) = η
+function _mean_conversion(m::Conversion, sol, t, es)
+    v = ForwardDiff.value
+    P = sum(v(sol.laser[e]) for e in es; init = 0.0)
+    P > 0 && return sum(v(sol.source[e]) * t.elem_area[e] for e in es) / P
+    return _intensity_dependent(m) ? NaN : conversion_efficiency(m, sol.time)
+end
+
 function _vr_describe(io, t::Target, sol)
     for (ci, c) in enumerate(t.components)
         vs = c.mesh.vertices
@@ -1128,7 +1138,7 @@ function _vr_describe(io, t::Target, sol)
                 length(es), A, A / 100)
         (c.kind === :aperture && !lip) ||
             @printf(io, "    material %s: x-ray albedo %.4g (area mean as solved), laser→x-ray conversion %.4g\n",
-                    c.material.name, α, c.material.conversion)
+                    c.material.name, α, _mean_conversion(c.material.conversion, sol, t, es))
         s = c.surface
         p3(x) = @sprintf("(%.6g, %.6g, %.6g)", x[1], x[2], x[3])
         if s isa SphereSurface
@@ -1213,7 +1223,9 @@ function write_visrad_kit(dir::AbstractString, target::Target, beams::AbstractVe
         push!(results, "Incident Rad Pwr [$n]" => (sum(v(sol.H[e]) * t.elem_area[e] for e in es; init = 0.0), "TW"))
         push!(results, "Emitted Rad Pwr [$n]" => (sum(v(sol.B[e]) * t.elem_area[e] for e in es; init = 0.0), "TW"))
         c.kind === :aperture && continue
-        push!(results, "Pwr Src Term [$n]" => (c.material.conversion * laser, "TW"))
+        η = c.material.conversion
+        src = η isa Real ? η * laser : sum(v(sol.source[e]) * t.elem_area[e] for e in es; init = 0.0)
+        push!(results, "Pwr Src Term [$n]" => (src, "TW"))
         push!(results, "Laser Pwr Dep [$n]" => (laser, "TW"))
         bs = v(dep.backside[ci])
         bs > 0 && push!(results, "Laser Pwr Dep [$(n)_outside]" => (bs, "TW"))

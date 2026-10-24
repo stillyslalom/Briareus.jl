@@ -33,25 +33,6 @@ struct TabulatedAlbedo <: AlbedoModel
 end
 
 """
-    WallLossAlbedo(; coefficient = 0.32, temperature_exponent = -0.7, time_exponent = -0.38,
-                   reference_temperature = 250.0, t0 = 0.1, range = (0.0, 0.95))
-
-Marshak-wave wall-loss albedo, `1 - α = c (T/100 eV)^p (t/1 ns)^q`, with defaults for
-gold from Lindl's scaling (T in heV, t in ns). `t` is clamped below at `t0`, and α to
-`range`. The radiation temperature is each element's incident-flux temperature, so
-`solve` iterates it to self-consistency; `reference_temperature` (eV) is used where
-no flux is known.
-"""
-Base.@kwdef struct WallLossAlbedo <: AlbedoModel
-    coefficient::Float64 = 0.32
-    temperature_exponent::Float64 = -0.7
-    time_exponent::Float64 = -0.38
-    reference_temperature::Float64 = 250.0
-    t0::Float64 = 0.1
-    range::Tuple{Float64,Float64} = (0.0, 0.95)
-end
-
-"""
     albedo(model, t, T = nothing)
     albedo(material, t = 0.0)
 
@@ -60,11 +41,26 @@ temperature `T` (eV) when given.
 """
 albedo(m::ConstantAlbedo, t, T = nothing) = m.value
 albedo(m::TabulatedAlbedo, t, T = nothing) = _interp(m.t, m.value, t)
-function albedo(m::WallLossAlbedo, t, T = nothing)
-    Te = (T === nothing || T <= 0) ? m.reference_temperature : T
-    loss = m.coefficient * (Te / 100)^m.temperature_exponent * max(t, m.t0)^m.time_exponent
-    return clamp(1 - loss, m.range...)
+
+"""
+    TemperatureAlbedo(temperatures, values; reference_temperature = 250.0)
+
+Albedo interpolated linearly in the incident-flux radiation temperature (eV) and held
+constant outside the table; `reference_temperature` is used where no flux is known.
+`solve` iterates it to self-consistency, like `WallLossAlbedo`.
+"""
+struct TemperatureAlbedo <: AlbedoModel
+    T::Vector{Float64}
+    value::Vector{Float64}
+    reference_temperature::Float64
+    function TemperatureAlbedo(T, v; reference_temperature = 250.0)
+        length(T) == length(v) || throw(ArgumentError("temperatures and values differ in length"))
+        issorted(T) || throw(ArgumentError("temperatures must be sorted"))
+        new(collect(Float64, T), collect(Float64, v), Float64(reference_temperature))
+    end
 end
+albedo(m::TemperatureAlbedo, t, T = nothing) =
+    _interp(m.T, m.value, (T === nothing || T <= 0) ? m.reference_temperature : T)
 
 """
     HeatFront(; coefficient = 9.51e-4, temperature_exponent = 1.914, time_exponent = 0.5156)
@@ -101,6 +97,125 @@ end
 _front_rate(f::HeatFront, T) = (max(T, zero(T)) / 100)^(f.temperature_exponent / f.time_exponent)
 _front_mass(f::HeatFront, I) = f.coefficient * max(I, zero(I))^f.time_exponent
 _front_integral(f::HeatFront, m) = (m / f.coefficient)^(1 / f.time_exponent)
+
+"""
+    WallLossAlbedo(; coefficient = 0.32, temperature_exponent = -0.7, time_exponent = -0.38,
+                   reference_temperature = 250.0, t0 = 0.1, range = (0.0, 0.95),
+                   factor = 1.0, factor_exponent = 0.0, factor_temperature = 300.0,
+                   liner = 0.0, front = HeatFront())
+
+Marshak-wave wall-loss albedo, `1 - α = c (T/100 eV)^p (t/1 ns)^q`, with defaults for
+gold from Lindl's scaling (T in heV, t in ns). `t` is clamped below at `t0`, and α to
+`range`. The radiation temperature is each element's incident-flux temperature, so
+`solve` iterates it to self-consistency; `reference_temperature` (eV) is used where
+no flux is known.
+
+**Wall material.** `factor` f and `factor_exponent` δ scale gold's loss to another wall
+material's,
+
+    1 - α = r(T) c (T/100 eV)^p (t/1 ns)^q,    r(T) = f (T / factor_temperature)^δ,
+
+applied to gold's loss after its `range` clamp (so a DU wall's albedo may exceed gold's
+cap), the ratio of the two materials' Marshak wall losses (Rosen 2005: for U₀.₆Dy₀.₂Au₀.₂
+against Au, `E/A ∝ T^3.1 t^0.57` against `T^3.3 t^0.6`, a ratio ∝ T^-0.22 t^-0.05).
+`du_wall_loss()` is the preset for an Au-lined depleted-uranium wall.
+
+**Liner.** `liner` (g/cm², 0 for none) of gold on the inside of such a wall: until the
+heat front has crossed it the wall loses like gold. The front's areal mass is the
+constant-temperature similarity form of `front` (a [`HeatFront`](@ref)) at the
+element's own `T` and `t`, `m_F = c_F (T/100 eV)^a t^b` (no history: exact at constant
+`T`, within a few percent of the drive integral for slow ramps), and the ratio becomes
+
+    r_eff = w + (1 - w) r(T),    w = min(1, liner / m_F),
+
+the gold liner's share of the heated mass (an energy-content blend, *engineering*:
+continuous in `T` and `t`, so the albedo iteration stays smooth; a sharp front would
+switch the loss rate to the substrate's as soon as `m_F` passes the liner). With the
+defaults (`factor = 1`, no liner) the albedo is gold's, bit for bit.
+"""
+Base.@kwdef struct WallLossAlbedo <: AlbedoModel
+    coefficient::Float64 = 0.32
+    temperature_exponent::Float64 = -0.7
+    time_exponent::Float64 = -0.38
+    reference_temperature::Float64 = 250.0
+    t0::Float64 = 0.1
+    range::Tuple{Float64,Float64} = (0.0, 0.95)
+    factor::Float64 = 1.0
+    factor_exponent::Float64 = 0.0
+    factor_temperature::Float64 = 300.0
+    liner::Float64 = 0.0
+    front::HeatFront = HeatFront()
+end
+
+function albedo(m::WallLossAlbedo, t, T = nothing)
+    Te = (T === nothing || T <= 0) ? m.reference_temperature : T
+    tc = max(t, m.t0)
+    loss = m.coefficient * (Te / 100)^m.temperature_exponent * tc^m.time_exponent
+    α = clamp(1 - loss, m.range...)
+    m.factor == 1 && m.factor_exponent == 0 && return α
+    r = m.factor * (Te / m.factor_temperature)^m.factor_exponent
+    if m.liner > 0
+        f = m.front
+        w = min(1.0, m.liner / (f.coefficient * (Te / 100)^f.temperature_exponent * tc^f.time_exponent))
+        r = w + (1 - w) * r
+    end
+    return 1 - r * (1 - α)
+end
+
+"""
+    wall_loss_factor(model::WallLossAlbedo, t, T)
+
+The ratio `r_eff` of the model's wall loss to gold's at time `t` (ns) and radiation
+temperature `T` (eV): 1 for gold, `f (T/T_f)^δ` for another material, blended toward 1
+while the heat front is inside a gold `liner`.
+"""
+function wall_loss_factor(m::WallLossAlbedo, t, T)
+    g = WallLossAlbedo(; m.coefficient, m.temperature_exponent, m.time_exponent,
+                       m.reference_temperature, m.t0, range = (-Inf, Inf))
+    d = WallLossAlbedo(; m.coefficient, m.temperature_exponent, m.time_exponent,
+                       m.reference_temperature, m.t0, range = (-Inf, Inf), m.factor,
+                       m.factor_exponent, m.factor_temperature, m.liner, m.front)
+    return (1 - albedo(d, t, T)) / (1 - albedo(g, t, T))
+end
+
+# The depleted-uranium loss factor at 300 eV: calibrated so that an Au-lined DU wall is
+# worth 6.5 % of peak laser power on a NIF high-foot hohlraum (research notes, "Wall
+# material, conversion and capsule energetics (2026-10-24)").
+const DU_LOSS_FACTOR = 0.785
+
+"Areal mass (g/cm²) of the 0.7 µm gold liner of Döppner et al., PRL 115, 055001 (2015)."
+const DU_LINER = 19.3 * 0.7e-4
+
+"""
+    du_wall_loss(; factor = 0.785, factor_exponent = -0.2, liner = 19.3 × 0.7e-4, kwargs...)
+
+`WallLossAlbedo` for an Au-lined depleted-uranium hohlraum wall: gold's loss times
+`r(T) = factor (T/300 eV)^factor_exponent`, gold until the heat front crosses the
+`liner` (g/cm²). `kwargs` pass through (gold's Lindl coefficients by default).
+
+- `factor_exponent` −0.2: the cocktail/Au loss ratio's temperature scaling, T^-0.22 from
+  Rosen's Hammer–Rosen fits (M. D. Rosen, "Fundamentals of ICF hohlraums", UCRL-JRNL-
+  211678 / OSTI 885380 (2005), §VI) and T^-0.19 between LASNEX's 97.6 / 90.8 / 88.6 % at
+  185 / 275 / 305 eV (Schein et al., PRL 98, 175003 (2007)).
+- `factor` 0.785 at 300 eV is *calibrated* in this model: on the NIF high-foot hohlraum
+  of Döppner et al. 2015 at peak (5.75 × 9.43 mm, 3.1 mm LEHs, 1.125 mm capsule,
+  390 TW × 0.86 coupling at 13 ns, conversion 0.9, wall source in inner/outer bands) the
+  DU wall is then worth 6.5 % of laser power against gold at the same capsule radiation
+  temperature, the measured equivalence of the first DU shots (Döppner 2015, citing
+  Kline 2013 and Callahan 2012; Callahan et al., PoP 27, 072704 (2020): "in both
+  simulations and experiments ... about 6.5 % in drive"). Range 0.78–0.79 over 12–14 ns
+  and conversion 0.75–0.95. At equal power it raises the capsule Tr by 4.9 eV against
+  the measured +5 ± 6 eV of Döppner's T-1 pair (N140311 Au 317 eV, N140520 DU 322 eV,
+  391/393 TW). Rosen's "about 0.83" and Schein's 17.5 % (0.825), for the U:Dy:Au
+  cocktail, give 5.1 % here: gold's Lindl loss leaves the wall only ~30 % of the x-ray
+  source at a NIF peak, so the measured 6.5 % needs a larger loss reduction than a
+  wall-dominated accounting (Schein's 17.5 % → 10 %) would.
+- `liner` is the 0.7 µm gold of Döppner 2015's DU hohlraums (7 µm DU, 22.3 µm gold
+  backing); HYBRID-E's liner thickness is unpublished. The front crosses it in about
+  0.4 ns at 150 eV, so it matters only in the picket.
+"""
+du_wall_loss(; factor = DU_LOSS_FACTOR, factor_exponent = -0.2, liner = DU_LINER, kwargs...) =
+    WallLossAlbedo(; factor, factor_exponent, liner, kwargs...)
 
 """
     heat_front(front::HeatFront, times, Tr) -> Vector
@@ -383,6 +498,46 @@ end
 
 albedo(m::GapClosure, t, T = nothing) = first(_closure_split(m, t, T))
 
+"""
+    CapsuleAlbedo(; albedo = 0.2, radius = nothing)
+
+Albedo of a capsule that absorbs as a sphere of effective radius `R(t)` inside its
+fixed mesh of radius `R₀`:
+
+    α_eff(t) = 1 - (1 - α_c) (R(t)/R₀)²,
+
+so that the capsule mesh absorbs `(1 - α_c) H 4πR(t)²`, the absorption of the smaller
+sphere at the same incident flux, and passes the rest on (re-emitted from the mesh, an
+approximation of light crossing the shrunken capsule's surroundings). `albedo` α_c is
+a number or an `AlbedoModel` (`TabulatedAlbedo` in time, `TemperatureAlbedo` in the
+incident radiation temperature); `radius` is `nothing` (R = R₀), a `(times, R/R₀)`
+table (ns; linear, held at its ends) or a function `t -> R/R₀`. `energy_balance` then
+books the capsule's absorbed power at the effective radius, and `energy_budget` its
+integral E_cap.
+
+The default α_c = 0.2 is the 0-D value f_cap = 1 − α_cap ≈ 0.8 of Swadling et al., PoP
+32, 052707 (2025); no measured α_cap(t) for W-doped HDC is published.
+"""
+struct CapsuleAlbedo{F} <: AlbedoModel
+    albedo::AlbedoModel
+    radius::F
+end
+CapsuleAlbedo(; albedo = 0.2, radius = nothing) =
+    CapsuleAlbedo(_albedo_model(albedo),
+                  radius isa Tuple ? (collect(Float64, radius[1]), collect(Float64, radius[2])) : radius)
+
+"Effective radius over the mesh radius, `R(t)/R₀`, of a `CapsuleAlbedo`."
+capsule_radius_fraction(m::CapsuleAlbedo, t) = _radius_fraction(m.radius, t)
+_radius_fraction(::Nothing, t) = 1.0
+_radius_fraction(r::Tuple, t) = _interp(r[1], r[2], t)
+_radius_fraction(r, t) = r(t)
+
+function albedo(m::CapsuleAlbedo, t, T = nothing)
+    αc = albedo(m.albedo, t, T)
+    m.radius === nothing && return αc
+    return 1 - (1 - αc) * capsule_radius_fraction(m, t)^2
+end
+
 # An albedo model's albedo, the albedo it would have intact (closed), and the fraction of
 # the incident flux it transmits out of the enclosure.
 _albedo_split(m::AlbedoModel, t, T, burnthrough) = (α = albedo(m, t, T); (α, α, zero(α)))
@@ -440,16 +595,107 @@ function _interp(ts, vs, t)
 end
 
 """
+    Conversion(; efficiency = 0.75, time_exponent = 0.0, reference_time = 1.0, start = 0.0,
+               t0 = 0.1, intensities = nothing, efficiencies = nothing, range = (0.0, 1.0))
+
+Laser → x-ray conversion efficiency that varies in time and with the absorbed laser
+intensity, for `Material(...; conversion = Conversion(...))`:
+
+    η(t, I) = clamp(η₀(I) ((t - start)/reference_time)^s, range...),
+
+with `s` = `time_exponent`, `t - start` clamped below at `t0` (ns), and `η₀(I)` either
+the constant `efficiency` or, with `intensities` (W/cm²) and `efficiencies`, the table
+interpolated linearly in log₁₀ I and held at its ends. `I` is each element's absorbed
+laser flux `P/A` (×1e14 W/cm²): a property of the element mesh too (coarse elements
+average a spot over more area). Evaluate with `conversion_efficiency`.
+
+Published forms (see `nif_conversion` for the preset):
+- in time, η ∝ t^0.12–0.2: `0.7 t^0.12` for Nova's 1 ns hohlraums, which makes the
+  measured `T ∝ t^0.15` (Lindl et al., PoP 11, 339 (2004), Fig. 4-4 caption);
+  `0.7 t^0.2` (Rosen 2005, Nova LASNEX); `0.85 t^0.2` (Schein 2007, Omega);
+- in intensity, the backscatter-corrected plateau on Au, U and cocktail spheres:
+  0.95 at 10¹⁴ and 0.80 at 10¹⁵ W/cm² (Dewald et al., PoP 15, 072706 (2008),
+  abstract), `Conversion(intensities = (1e14, 1e15), efficiencies = (0.95, 0.80))`.
+  A hohlraum's η exceeds a disk's at the same intensity (Lindl 2004, Fig. 4-10).
+
+Generic in the number type of the laser power (the intensity table is differentiable);
+a material with a plain number keeps that number, bit for bit.
+"""
+struct Conversion
+    efficiency::Float64
+    time_exponent::Float64
+    reference_time::Float64
+    start::Float64
+    t0::Float64
+    log_intensity::Vector{Float64}     # log₁₀(W/cm²); empty: no intensity dependence
+    table::Vector{Float64}
+    range::Tuple{Float64,Float64}
+end
+
+function Conversion(; efficiency::Real = 0.75, time_exponent::Real = 0.0, reference_time::Real = 1.0,
+                    start::Real = 0.0, t0::Real = 0.1, intensities = nothing, efficiencies = nothing,
+                    range = (0.0, 1.0))
+    (intensities === nothing) == (efficiencies === nothing) ||
+        throw(ArgumentError("give both `intensities` and `efficiencies`, or neither"))
+    li = intensities === nothing ? Float64[] : log10.(collect(Float64, intensities))
+    tb = efficiencies === nothing ? Float64[] : collect(Float64, efficiencies)
+    length(li) == length(tb) || throw(ArgumentError("intensities and efficiencies differ in length"))
+    issorted(li) || throw(ArgumentError("intensities must be sorted"))
+    reference_time > 0 && t0 > 0 || throw(ArgumentError("reference_time and t0 must be positive"))
+    return Conversion(efficiency, time_exponent, reference_time, start, t0, li, tb,
+                      (Float64(range[1]), Float64(range[2])))
+end
+
+"""
+    conversion_efficiency(model, t = 0.0, I = nothing)
+
+Laser → x-ray conversion efficiency of `model` (a `Conversion` or a number) at time `t`
+(ns) and absorbed laser intensity `I` (W/cm²; required by an intensity table).
+"""
+conversion_efficiency(η::Real, t = 0.0, I = nothing) = η
+function conversion_efficiency(m::Conversion, t = 0.0, I = nothing)
+    η0 = if isempty(m.table)
+        m.efficiency
+    else
+        I === nothing && throw(ArgumentError("this conversion depends on the laser intensity: pass it"))
+        _interp_ad(m.log_intensity, m.table, log10(max(I, 1.0)))
+    end
+    m.time_exponent == 0 && return clamp(η0, m.range...)
+    τ = max(t - m.start, m.t0) / m.reference_time
+    return clamp(η0 * τ^m.time_exponent, m.range...)
+end
+
+_intensity_dependent(::Real) = false
+_intensity_dependent(m::Conversion) = !isempty(m.table)
+
+"""
+    nif_conversion(; efficiency = 0.7, time_exponent = 0.12, range = (0.0, 0.95), kwargs...)
+
+The conversion preset for NIF hohlraums: Lindl's Nova `0.7 t^0.12` (t from the start
+of the pulse, ns) capped at 0.95. Extrapolated to a NIF pulse it gives 0.80 at 3 ns,
+0.85 at 5 ns and 0.90 at 8 ns, the 85–90 % inferred from NIF vacuum hohlraums at
+235–345 eV (Olson et al., PoP 19, 053301 (2012), abstract); the cap is the 10¹⁴ W/cm²
+plateau of Dewald 2008 and the value of the only published VisRad energetics
+calibration (η 0.95 with albedo 0.77, Au, 400 TW; Swadling et al., PoP 32, 052707
+(2025)). *Derived* (research notes, "Wall material, conversion and capsule energetics
+(2026-10-24)"); the materials' default stays the constant 0.75.
+"""
+nif_conversion(; efficiency = 0.7, time_exponent = 0.12, range = (0.0, 0.95), kwargs...) =
+    Conversion(; efficiency, time_exponent, range, kwargs...)
+
+"""
     Material(name; albedo = 0.0, conversion = 0.0)
 
 Surface properties for the radiation model. `albedo` (a number or `AlbedoModel`) is the
-x-ray re-emission fraction; `conversion` is the fraction of absorbed laser power
-re-emitted as x-rays.
+x-ray re-emission fraction; `conversion` (a number or a [`Conversion`](@ref)) is the
+fraction of absorbed laser power re-emitted as x-rays.
 """
 struct Material
     name::Symbol
     albedo::AlbedoModel
-    conversion::Float64
+    conversion::Union{Float64,Conversion}
+    Material(name, albedo, conversion) =
+        new(name, albedo, conversion isa Conversion ? conversion : Float64(conversion))
 end
 
 Material(name::Symbol; albedo = 0.0, conversion = 0.0) =
@@ -459,6 +705,8 @@ albedo(m::Material, t = 0.0) = albedo(m.albedo, t)
 
 "Gold hohlraum wall (defaults: albedo 0.8, laser→x-ray conversion 0.75)."
 gold(; albedo = 0.8, conversion = 0.75) = Material(:Au; albedo, conversion)
+"Au-lined depleted-uranium hohlraum wall (defaults: `du_wall_loss()`, conversion 0.75, as gold's)."
+uranium(; albedo = du_wall_loss(), conversion = 0.75) = Material(:DU; albedo, conversion)
 "Capsule ablator (defaults: albedo 0.3, conversion 0.3)."
 ablator(; albedo = 0.3, conversion = 0.3) = Material(:ablator; albedo, conversion)
 "Perfect absorber that emits nothing."

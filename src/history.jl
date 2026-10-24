@@ -73,7 +73,12 @@ radiosity at that time (time- and temperature-dependent albedos included), and r
 - `burnthrough` — per thin-foil component, each element's burnthrough time (ns; `Inf`
   if it has not burned through)
 - `albedo` — with `keep_albedo = true`, each step's converged albedo per element (the
-  state a flux response linearizes about, e.g. for `retune_drive`), otherwise `nothing`.
+  state a flux response linearizes about, e.g. for `retune_drive`), otherwise `nothing`
+- `setup` — the power of `beams_at(t)` (TW, before `lpi`); `laser` — absorbed laser
+  power per component (TW, back side included); `source` — x-ray source power per
+  component (Σ ηP); `absorbed` — x-ray power absorbed per surface component (and per
+  closing lip), as in `energy_balance`; `lost` — x-ray power lost to open space.
+  `energy_budget` integrates them.
 
 Each step's temperature-dependent albedos are iterated to `tol` (see `solve`), starting
 from the previous step's temperatures.
@@ -158,6 +163,12 @@ function _drive_history(t::Target, model_at, operator_at, beams_at, times;
     front = Dict(t.components[ci].name => Float64[] for ci in foils)
     window_loss = Float64[]
     albedo_steps = Vector{Float64}[]
+    names = [c.name for c in t.components]
+    setup, lost = Float64[], Float64[]
+    laser = Dict(n => Float64[] for n in names)
+    source = Dict(n => Float64[] for n in names)
+    absorbed = Dict(c.name => Float64[] for c in t.components
+                    if c.kind !== :aperture || _transmits(c.material.albedo))
 
     # The step from τ0 (`nothing` at the first time) to τ: its solution and the
     # thin-foil state at τ. The state at τ0 is left untouched, so a step can be retried.
@@ -228,9 +239,11 @@ function _drive_history(t::Target, model_at, operator_at, beams_at, times;
                     τ = min(lo, τgoal)
                 end
             end
-            local sol, Ik, tk, rk, a, dep
+            local sol, Ik, tk, rk, a, dep, P0
             while true
-                dep = lpi_deposit(lpi, operator_at(τ), apply_lpi(lpi, beams_at(τ), τ), τ)
+                b0 = beams_at(τ)
+                P0 = sum(b -> ForwardDiff.value(b.power), b0; init = 0.0)
+                dep = lpi_deposit(lpi, operator_at(τ), apply_lpi(lpi, b0, τ), τ)
                 sol, Ik, tk, rk = step(τ0, τ, dep, last)
                 a = legendre_moments(sol.H, sol.model.target, obs; lmax)
                 τ0 === nothing && break
@@ -274,6 +287,16 @@ function _drive_history(t::Target, model_at, operator_at, beams_at, times;
                                          for e in es) / sum(t.elem_area[es]))
             end
             push!(window_loss, loss)
+            push!(setup, P0)
+            push!(lost, bal.lost)
+            tg = sol.model.target
+            v = ForwardDiff.value
+            for (ci, c) in enumerate(tg.components)
+                es = tg.comp_elems[ci]
+                push!(laser[c.name], sum(v(sol.laser[e]) for e in es; init = 0.0) + v(dep.backside[ci]))
+                push!(source[c.name], sum(v(sol.source[e]) * tg.elem_area[e] for e in es; init = 0.0))
+                haskey(absorbed, c.name) && push!(absorbed[c.name], bal.absorbed[c.name])
+            end
             τ == τgoal && break
         end
     end
@@ -281,7 +304,43 @@ function _drive_history(t::Target, model_at, operator_at, beams_at, times;
     return (; time, delivered, flux, Tr, moments = _columns(moments, lmax + 1),
             ylm = ylm ? _columns(clm, (lmax + 1)^2) : nothing, wall_Tr,
             wall_albedo, escaped, transmitted, window_loss, front, burnthrough,
-            albedo = keep_albedo ? albedo_steps : nothing)
+            albedo = keep_albedo ? albedo_steps : nothing, setup, laser, source, absorbed, lost)
+end
+
+"""
+    energy_budget(history; from = nothing, to = nothing) -> NamedTuple
+
+Energies (kJ = TW·ns) of a `drive_history`, the trapezoidal integrals of its power
+records over the solved times (or over `[from, to]`, with the powers held at zero
+outside the solved times only through the trapezoids they bound):
+
+- `setup` — the laser power `beams_at(t)` delivers (before the laser–plasma model);
+  `coupled` — after it (`delivered`); `backscattered` — their difference (what
+  `Backscatter` and other lossy models remove; CBET conserves power);
+- `laser` — absorbed laser energy per component (front elements plus back side),
+  `unabsorbed` — `coupled − Σ laser`, the light that leaves through the holes;
+- `source` — x-ray energy converted per component (Σ η P); `absorbed` — x-ray energy
+  absorbed per surface component (`(1 − α) H A`; a `CapsuleAlbedo` capsule's at its
+  effective radius: E_cap); `escaped` per aperture; `transmitted` per thin-foil or
+  closing-gap component; `lost` to open space;
+- `heating` — per surface component, what stays in it: unconverted laser plus absorbed
+  x-rays, `laser − source + absorbed`.
+
+`setup ≈ backscattered + unabsorbed + Σ heating + Σ escaped + Σ transmitted + lost`, to
+the closure of the view factors.
+"""
+function energy_budget(h; from = nothing, to = nothing)
+    t = h.time
+    keep = [(from === nothing || τ >= from) && (to === nothing || τ <= to) for τ in t]
+    tt = t[keep]
+    ∫(p) = (q = p[keep]; sum((tt[k+1] - tt[k]) * (q[k] + q[k+1]) / 2 for k in 1:length(tt)-1; init = 0.0))
+    d(x) = Dict(n => ∫(v) for (n, v) in x)
+    setup, coupled = ∫(h.setup), ∫(h.delivered)
+    laser, source, absorbed = d(h.laser), d(h.source), d(h.absorbed)
+    heating = Dict(n => laser[n] - source[n] + absorbed[n] for n in keys(absorbed))
+    return (; setup, coupled, backscattered = setup - coupled, laser,
+            unabsorbed = coupled - sum(values(laser); init = 0.0), source, absorbed,
+            escaped = d(h.escaped), transmitted = d(h.transmitted), lost = ∫(h.lost), heating)
 end
 
 _columns(v, n) = isempty(v) ? zeros(n, 0) : reduce(hcat, v)
