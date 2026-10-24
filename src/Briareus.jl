@@ -36,7 +36,7 @@ export SuperGaussianSpot, Beam, port_vector, port_angles, direction, spot_axes, 
 export DepositionOperator, Deposition, deposit, raytrace_deposition, raytrace_component_power, laser_flux,
        component_power
 export Enclosure, enclosure, cad_target
-export view_factors, closure_error, enforce_closure!, RadiationModel, RadiationSolution, solve,
+export view_factors, Float32Matrix, closure_error, enforce_closure!, RadiationModel, RadiationSolution, solve,
        flux_response, energy_balance, radiation_temperature, to_Wcm2, SIGMA_SB, albedos, conversions
 export WallMotion, wall_radius, wall_displacement, moving_hohlraum, Keyframes, model_at, deposition_at
 export PulseShape, pulse_energy, with_pulses, drive_history, energy_budget, cone_fraction_pulses,
@@ -85,6 +85,7 @@ include("cadfit.jl")
 include("beams.jl")
 include("facilities.jl")
 include("deposition.jl")
+include("storage.jl")
 include("viewfactors.jl")
 include("enclosure.jl")
 include("radiation.jl")
@@ -137,6 +138,10 @@ include("unconverted.jl")
         sol = solve(s.model, ev.deposition)
         energy_balance(sol)
         legendre_moments(sol.H, t, s.observed; lmax = 4)
+        # the large-model path (Float32 storage, iterative solves) on the same elements
+        ml = RadiationModel(t; F = s.model.F, storage = Float32, closed = false)
+        energy_balance(solve(ml, ev.deposition))
+        flux_response(ml, s.observed; weights = s.moment_weights)
         clearance(t, quads[1:2]; targets = (:wall,), nspot = 5, nangles = 4)
         raytrace_deposition(t, quads[1:2]; nspot = 5)
     end

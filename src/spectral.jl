@@ -391,6 +391,10 @@ function _group_radiosity(m::RadiationModel, A::Matrix{Float64}, S::Matrix{Float
         αg = A[:, g]
         cols = [k for k in g:G if !done[k] && view(A, :, k) == αg]
         done[cols] .= true
+        if m.iterative
+            B[:, cols] .= _iterative_radiosity(m, αg, S[:, cols], nothing)
+            continue
+        end
         f, exact = _cached_lu(m, αg)
         if f !== nothing && exact
             B[:, cols] .= f \ S[:, cols]
@@ -414,7 +418,7 @@ end
 # Groups h with their own albedos, thermalized: X_h - a_h∘(F X_h) - b_h∘R = S_h with
 # R = Σ_h (α - a_h)∘(F X_h), solved jointly by (unpreconditioned) GMRES; the iteration
 # matrix has spectral radius about max(a_h) + Σ_h b_h (α - a_h), small for hard groups.
-function _thermalized_groups(F::Matrix{Float64}, Ah::Matrix{Float64}, bh::Matrix{Float64},
+function _thermalized_groups(F::AbstractMatrix{Float64}, Ah::Matrix{Float64}, bh::Matrix{Float64},
                              Sh::Matrix{Float64}, α::Vector{Float64})
     n, Gh = size(Sh)
     loss = α .- Ah

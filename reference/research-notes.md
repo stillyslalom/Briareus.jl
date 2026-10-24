@@ -3506,3 +3506,118 @@ one more knob and the obvious next step, and the KE comparison is loose (our KE 
 the remaining ablator). Numerics: the run takes ~30 min on 4 threads (timestep set by
 the hot driver gas, CFL 0.1 after the automatic retries in the foot); a 2 µm grid
 (layer < 3 cells) fails in the foot.
+
+## Large radiation models (2026-10-24) *derived*
+
+ROADMAP 14. Goal: make 1e4–5e4-element radiation models (the fine hohlraum preset,
+remeshed CAD) practical on a laptop (Ryzen 9 4900HS, 4 threads of 8 used, 16 GB, another
+job sharing the machine). Workload, as a design session runs it: the GUI NIF hohlraum
+(10.1 × 2.875 mm, LEH 1.55, capsule 0.9) with a `WallLossAlbedo` wall, NIF quads;
+deposition operator, view factors, closure, a temperature-dependent `solve` at 2 ns, a
+6-step `drive_history`, a `Scenario` (62-row moment response), an optimizer gradient
+and `ev.flux`. Script: the session's scratchpad `prof.jl` (one process per mesh,
+`BRIAREUS_NO_WORKLOAD=true`, so first calls include compilation: "solve again" is the
+warm figure).
+
+### Where the time and memory went (before)
+
+| N (h / capsule_h) | 3,712 (0.6/0.09) | 10,484 (0.22/0.07) |
+|---|---|---|
+| deposition operator | 2.4 s | 3.5 s |
+| view factors | 1.2 s | 14.3 s |
+| closure | 0.3 s | 2.1 s |
+| solve (first, LU) / again | 0.9 / 0.4 s | 9.1 / 3.0 s |
+| drive_history, 6 steps | 4.3 s | 20.9 s |
+| Scenario (incl. a copy of F) | 3.4 s | 13.2 s |
+| gradient | 0.02 s | 0.02 s |
+| ev.flux (full response) | 0.9 s | 8.9 s |
+| max RSS | 1.4 GB | 6.6 GB |
+
+Dense Float64 holds F and up to two LU factors, 24N² bytes: 7.5 GB at 17.6k, 20 GB at
+29k, 38 GB at 40k; one LU is 2N³/3 flops (≈40 s at 17.6k on 4 threads, ≈7 min at 40k).
+The fine preset did not fit next to the other job, and 40k does not fit at all.
+
+### What changed
+
+1. **Float32 storage** (`Float32Matrix`, `view_factors(...; storage = Float32)`): Float32
+   data read as Float64; every product accumulates in Float64, so it is exactly the
+   product with `Float64.(F.data)`. Assembled directly in Float32 (no Float64 peak),
+   bit-identical to `Float32.(view_factors(t))`. Balancing (`enforce_closure!`) runs in
+   Float64 on the stored values and rounds once: row sums to ~1.5e-8 (Float64 ~1e-12),
+   negligible beside the 1e-3 discretization error it removes.
+2. **Factorization-free solves** (`RadiationModel(...; solver = :iterative)`): restarted
+   block GMRES (`_gmres_block`), no preconditioner, 1e-12 relative residual like the
+   LU-preconditioned path; the columns of a block (dual value and partials, spectral
+   groups, the 62 moment rows) iterate in lockstep, each with its own basis, sharing one
+   product with F per iteration; bases kept under 256 MB (columns batched). Iterations
+   at 17.6k: 17 for a cold solve, fewer warm (a history step starts from the last
+   radiosity), 28 for the transposed moment rows. `ev.flux` on such a model is one solve
+   instead of the full observed × N response (still available, a solve per row).
+3. **Defaults**: above `Briareus.LARGE_MODEL[]` = 10,000 elements `RadiationModel`
+   computes Float32 view factors and solves iteratively; below it nothing changes (dense
+   Float64 + LU, bit for bit). `storage`/`solver` override; a given `F` keeps its storage.
+   `Scenario(...; model)` reuses a model (no copy of F).
+4. **Kernels**: vector products threaded over row/column blocks at 28–33 GB/s (memory
+   bound); a fused 4-column kernel for blocks of ≤ 48 columns (3–7× the widen-to-Float64
+   + BLAS panels at k = 2–16; the panels win past ~50 columns). 17.6k: F x 43 ms,
+   Fᵀx 37 ms, k = 2: 64/50 ms, k = 16: 280/240 ms, k = 62: 880/890 ms (panels).
+5. **View-factor assembly** (both storages, bit for bit): the near-pair kernel's result
+   was inferred `Any` (the CAD cell list is untyped), so every pair boxed its factor and
+   dispatched the store dynamically: 13.7M allocations at 5k, and GC pressure across
+   threads. A type assertion removed them: 10.5k 14.5 → 12.1 s (allocation 2.9 → 0.7
+   GB), 17.6k 56 → 31 s (9.1 → 1.5 GB).
+
+### After (Float32 + iterative; same script)
+
+| N | 10,484 | 17,632 | 29,124 |
+|---|---|---|---|
+| deposition operator | 6.5 s | 6.6 s | 9.8 s |
+| view factors | 13.0 s | 31.4 s | 101.6 s (140 s before the fix in 5) |
+| closure | 1.6 s | 3.0 s | 6.2 s |
+| solve again (T-dep albedo, warm) | 1.0 s | 2.5 s | 7.4 s |
+| drive_history, 6 steps | 8.9 s | 14.7 s | 31.4 s |
+| Scenario (62-row response) | 11.2 s | 17.2 s | 39.0 s |
+| gradient | 0.02 s | 0.03 s | 0.04 s |
+| ev.flux (one solve) | 0.37 s | 0.64 s | 1.4 s |
+| max RSS | 1.3 GB | 2.3 GB | 4.5–5.3 GB |
+
+(The before runs loaded a package image with the precompile workload, the after runs one
+without it, so first calls here include compilation: ~3 s of the deposition operator,
+~8 s of the first solve.) 40k extrapolates
+to 6.4 GB for F, ~190 s of view factors, ~14 s per warm solve.
+
+Accuracy of the Float32 path against the dense Float64 path at 10,484 elements (same
+mesh, same process otherwise): capsule a₀ 1.3e-10 relative, P2/P0 and P4/P0 2e-10 and
+1e-10 absolute (solve and Scenario), drive history moments ≤ 2e-10, Tr ≤ 2e-9 eV, H
+1.2e-8 relative at worst (an LEH element). The Float64 iterative path agrees with LU to
+the GMRES residual (~1e-12). Tests: `test/large_models.jl` (forced on at ~1k elements:
+products, block GMRES, solve/flux_response/duals/drive_history/Scenario gradient/
+`spectral_solve`/keyframe interpolation against the dense path).
+
+### Tried and dropped
+
+- **Two-grid preconditioner** (clusters of 16 or 4 elements by coordinate bisection,
+  Galerkin coarse view factors, coarse LU per albedo): 17 → 12 (11) iterations per solve,
+  28 → 26 (24) for the moment rows, no gain in time. The slow part of the spectrum is not
+  the smooth one the clusters capture.
+- **Row-blocked stores in the assembly** (rows written 16 at a time): the profile's
+  samples on the stores were skid from the divisions; no change in time.
+
+### Not done: GPU and hierarchical radiosity
+
+- **GPU** (RTX 2060 Max-Q, 6 GB, ~1/32-rate FP64): Float32 F fits to ~35k elements; a
+  mat-vec with Float64 accumulation needs 2 flops per 4-byte entry, ~130 GFLOP/s at the
+  card's ~260 GB/s, about its FP64 rate, so ~6–8× the CPU's 30 GB/s is the ceiling. The
+  solves are ~30 % of the workload at 17–29k (Scenario response, history, solve), so a
+  CUDA extension would save ≲ 25 % end to end; view-factor assembly (BVH rays and exact
+  contour kernels, CPU) remains the largest cost. Not worth CUDA.jl yet.
+- **Hierarchical (H-matrix) view factors** are the real answer past ~30k: assembly and
+  storage are N², and both grow 4× per halving of h. Design: cluster tree by coordinate
+  bisection (as tried above); admissible cluster pairs (distance > η × diameter, and
+  visibility tested by a few rays per pair and found all-or-nothing) stored as low-rank
+  blocks (ACA on the far-pair kernel, rank 1–8), the rest (near pairs, partly occluded
+  pairs straddling the capsule shadow or LEH rims) dense; O(N log N) memory and
+  assembly. It needs only `mul!` with F and Fᵀ and row sums: the iterative path here
+  already uses nothing else, so an H-matrix type plugs in as another
+  `AbstractMatrix{Float64}` (balancing is a diagonal scaling s F s). Reciprocity per
+  block (G = AF symmetric) halves it again.

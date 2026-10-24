@@ -174,7 +174,7 @@ _LazyResponse() = _LazyResponse(ReentrantLock(), nothing)
 """
     Scenario(target, beams; observe = nothing, radiation = true, time = 0.0,
              albedo = nothing, parameterization = GroupPointing(beams), lpi = nothing,
-             deposition_kw = (;), viewfactor_kw = (;))
+             deposition_kw = (;), viewfactor_kw = (;), model = nothing)
 
 Everything precomputed for fast repeated evaluation of a pointing design:
 the `DepositionOperator`, and — when `radiation` and `observe` (component names whose
@@ -192,7 +192,9 @@ Objectives need only the moments of the observed flux, so the scenario keeps the
 response contracted with the Legendre (`lmax = 12`) and real-harmonic (`lmax = 6`)
 weights: per evaluation a 13 × n and a 49 × n product, and a 62-column solve at setup.
 The full observed × n response `scenario.response` (and an evaluation's `flux`) is
-computed when first read.
+computed when first read; on a large (iterative) model an evaluation's `flux` is one
+solve instead, until the response has been read. `model`, a `RadiationModel` of the
+target, is used instead of building one from `viewfactor_kw`.
 """
 struct Scenario{P}
     target::Target
@@ -233,10 +235,12 @@ end
 function Scenario(t::Target, beams::AbstractVector{<:Beam}; observe = nothing,
                   radiation::Bool = observe !== nothing, time = 0.0, albedo = nothing,
                   parameterization = GroupPointing(beams), deposition_kw = (;),
-                  viewfactor_kw = (;), lpi = nothing)
+                  viewfactor_kw = (;), lpi = nothing, model = nothing)
     op = DepositionOperator(t, beams; deposition_kw...)
+    model === nothing || model.target === t ||
+        throw(ArgumentError("model is a radiation model of another target"))
     obs = observe === nothing ? Int[] : elements(t, (observe isa Symbol ? (observe,) : observe)...)
-    model = radiation ? RadiationModel(t; viewfactor_kw...) : nothing
+    model = !radiation ? nothing : model === nothing ? RadiationModel(t; viewfactor_kw...) : model
     W = isempty(obs) ? zeros(0, 0) : legendre_weights(t, obs; lmax = _CACHED_LMAX)
     Y = isempty(obs) ? zeros(0, 0) : ylm_weights(t, obs; lmax = _CACHED_YLM_LMAX)
     WR, YR = zeros(0, 0), zeros(0, 0)
@@ -301,8 +305,21 @@ function _flux(ev::Evaluation)
     s = getfield(ev, :scenario)
     _radiative(s) || return nothing
     c = getfield(ev, :_flux)
-    c[] === nothing && (c[] = _mul(s.response, getfield(ev, :deposition).element))
+    c[] === nothing && (c[] = _observed_flux(s, getfield(ev, :deposition).element))
     return c[]
+end
+
+# The observed flux for absorbed laser power P: the full response times P, or on a large
+# model whose response has not been read, one iterative solve (the response would take
+# a solve per observed element).
+function _observed_flux(s::Scenario, P)
+    m = s.model
+    (m.iterative && getfield(s, :_response).R === nothing) || return _mul(s.response, P)
+    t = m.target
+    α = s.albedo === nothing ? albedos(t, s.time) : s.albedo
+    η = _constant_conversion(t) ? conversions(t) : conversions(t, s.time)
+    B = _iterative_radiosity(m, α, η .* P ./ t.elem_area, nothing)
+    return _mul(m.F, B)[s.observed]
 end
 
 """

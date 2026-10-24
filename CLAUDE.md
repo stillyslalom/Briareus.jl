@@ -132,6 +132,17 @@ environment has no ForwardDiff/Optim, and `Vec3` clashes with Makie there.
   spot on Float64 values (exact zeros); keep such screens exact. Keep heterogeneous
   collections (keep-out tuples, wing lists) out of generators and abstract-typed loops
   on hot paths: a `sum` over a generator on a mixed tuple took inference 27 s.
+- Large models (> `LARGE_MODEL[]` = 10k elements, or `storage = Float32` /
+  `solver = :iterative`): view factors in a `Float32Matrix` (Float32 data, every product
+  accumulated in Float64, so results are those of `Float64.(F.data)` exactly) and
+  factorization-free block GMRES (`_gmres_block`, columns in lockstep sharing one product
+  with F; duals as value + partial columns). Never densify (`Float64.(F.data)`, `F .* x`,
+  `I - α .* F`) or factor on that path; go through `mul!`/`*` on the matrix. Small
+  models stay dense Float64 + LU bit for bit. `RadiationModel{M}` is parametric, so
+  `m.F` is concrete only behind a function barrier: elementwise loops over `m.F` from an
+  abstractly typed model (`Dict{Int,RadiationModel}`, `sol.model`) dispatch per element.
+  A two-grid (aggregation) preconditioner did not pay (research notes, "Large radiation
+  models"); view-factor assembly is the dominant cost there.
 - Mesh sizes: `hohlraum(; h, capsule_h)`; the GUI presets come from
   `examples/mesh_convergence.jl` (research notes): the capsule mesh sets P4 (error ∝
   capsule_h²), fine (0.17/0.05 mm) is converged to ~0.02 percentage points.

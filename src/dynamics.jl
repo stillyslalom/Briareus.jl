@@ -219,6 +219,18 @@ The radiation model of the moving target at time `τ`: a keyframe's, or between 
 target `build(τ)` with interpolated exchange factors (see [`Keyframes`](@ref)). The last
 interpolated model is kept, so repeated calls at one time build it once.
 """
+# Exchange factors (1 - w) A₀F₀ + w A₁F₁ over the areas A, in the storage of F₀ (behind
+# a function barrier: the keyframe models' matrix type is only known at run time).
+function _interpolate_exchange(F0, F1, A0, A1, A, w)
+    F = similar(F0)
+    Threads.@threads for j in axes(F, 2)
+        @inbounds for i in axes(F, 1)
+            F[i, j] = ((1 - w) * A0[i] * F0[i, j] + w * A1[i] * F1[i, j]) / A[i]
+        end
+    end
+    return F
+end
+
 function model_at(kf::Keyframes, τ::Real)
     k0, k1, w = _bracket(kf.time, τ)
     w == 0 && return first(_keyframe(kf, k0))
@@ -228,12 +240,7 @@ function model_at(kf::Keyframes, τ::Real)
     m1, _ = _keyframe(kf, k1)
     t = _check_elements(kf, kf.build(τ), τ)
     A0, A1, A = m0.target.elem_area, m1.target.elem_area, t.elem_area
-    F = similar(m0.F)
-    Threads.@threads for j in axes(F, 2)
-        @inbounds for i in axes(F, 1)
-            F[i, j] = ((1 - w) * A0[i] * m0.F[i, j] + w * A1[i] * m1.F[i, j]) / A[i]
-        end
-    end
+    F = _interpolate_exchange(m0.F, m1.F, A0, A1, A, w)
     kf.closed && enforce_closure!(F, A)
     m = RadiationModel(t, F)
     kf.between[] = (τ, m)

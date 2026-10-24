@@ -1122,4 +1122,5 @@ include("sombrero.jl")
 include("energetics.jl")
 include("capsule_drive.jl")
 include("spectral.jl")
+include("large_models.jl")
 end

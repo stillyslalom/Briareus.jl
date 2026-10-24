@@ -589,6 +589,20 @@ and item 16's first absolute check.
   6.25 ns against 313 measured at 8.4 ns; capsule 302 at 5.5 ns. The drive falls through
   the peak where the data rise: item 16's late-time energetics.
 
+## Done (2026-10-24, large radiation models)
+Research notes, "Large radiation models (2026-10-24)". Item 14's first part.
+- **`Float32Matrix`** view factors (`view_factors(...; storage = Float32)`): Float32
+  data, Float64 accumulation in every product; half the memory, assembled directly.
+- **Factorization-free solves** (`RadiationModel(...; solver = :iterative)`): block GMRES
+  for `solve`, albedo iterates, duals, `flux_response`, `spectral_solve`; `ev.flux` by one
+  solve. Automatic above `Briareus.LARGE_MODEL[]` = 10⁴ elements; small models unchanged
+  bit for bit. `Scenario(...; model)` reuses a model.
+- Fine preset (17.6k): max RSS 7.5+ GB (dense, extrapolated) → 2.3 GB; warm solve
+  2.5 s, 6-step history 15 s, Scenario 17 s. Float32 against Float64 at 10.5k: moments
+  ≤ 2e-10, Tr ≤ 2e-9 eV.
+- View-factor assembly 17–45 % faster, bit for bit (a boxed near-pair factor): 17.6k
+  56 → 31 s on 4 threads.
+
 ## Open questions (from the 2026-10-18 CAD work)
 Choices made provisionally overnight or left open; the lean is in brackets.
 **Decided (user, 2026-10-22):** the bracketed leans stand. On 1: parts may be split
@@ -847,7 +861,8 @@ pick the original parts, not `<part>/cylN` pieces).
    as it moves; time in the window (pulse tables, drive histories and the retune's
    power histories plotted, rather than written to CSV).
    Adaptive mesh refinement of the radiation mesh where deposition varies fastest
-   (the uniform fine mesh is converged but costs ~16k elements).
+   (the uniform fine mesh is converged but costs ~16k elements; since 2026-10-24 those
+   run in 2.3 GB without factorizations, item 14).
 Items 9–13 and 16–17 were rewritten after the 2026-10-22 literature review against
 Kritcher et al. 2024 (research notes, "Literature review against Kritcher et al. 2024";
 full reports in `reference/litreview/`). Retuning to a reference drive (see Done) assumes
@@ -938,8 +953,14 @@ the reference's view factors hold through the pulse; items 9 and 10 remove that 
     plasma (Dante's initial- vs open-area brackets differ by 20 eV at N221204's peak); a
     time-resolved M-band P2 history against Dewald's Fig. 10 on a moving hohlraum; the
     M-band split in the `CapsuleDrive` handover (item 17).
-14. **Scale.** Hierarchical or iterative radiosity, Float32 storage for more than 10⁴
-    elements, and GPU kernels.
+14. **Scale.** Float32 storage and iterative radiosity: **done (2026-10-24, see Done)**;
+    above 10⁴ elements by default, 17.6k in 2.3 GB, 29k in 4.5 GB. Still open, in order
+    (research notes, "Large radiation models"): hierarchical (H-matrix) view factors,
+    since assembly and storage stay N² (31 s and 1.2 GB at 17.6k, ~190 s and 6.4 GB
+    extrapolated to 40k; the iterative path needs only products, so an H-matrix plugs
+    in as another matrix type); GPU mat-vecs (≲ 25 % end to end on the RTX 2060 while
+    assembly stays on the CPU; not worth CUDA.jl yet); `radiation_size` in BriareusGUI
+    still budgets three dense Float64 matrices (now 4N² bytes above 10⁴ elements).
 15. **Polar direct drive mode**, benchmarked against published GA optimizers.
 16. **Absolute energetics and an N221204 benchmark** (`reference/litreview/energetics.md`,
     `n221204_benchmark.md`). Done (2026-10-23, see Done): the mock HYBRID-E pointing

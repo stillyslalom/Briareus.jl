@@ -1,13 +1,14 @@
 # Element-to-element view factors with occlusion.
 
 """
-    view_factors(target; near = 3.0, level = 1, visibility = target.visibility, visibility_grid = 4)
-        -> Matrix{Float64}
+    view_factors(target; near = 3.0, level = 1, visibility = target.visibility, visibility_grid = 4,
+                 storage = Float64) -> Matrix{Float64} or Float32Matrix
 
 Dense view-factor matrix `F[i, j]`: the fraction of diffuse radiation leaving element
 `i` that arrives at element `j`. Reciprocity `Aᵢ Fᵢⱼ = Aⱼ Fⱼᵢ` holds exactly by
 construction, and rows sum to one for a closed enclosure (counting apertures); see
-`closure_error`.
+`closure_error`. `storage = Float32` assembles into a [`Float32Matrix`](@ref) instead
+(half the memory; each factor rounded to single precision, products in Float64).
 
 Flat elements use the exact differential-area-to-polygon view factor onto the other
 element, integrated over the emitter: over `4^level` sub-triangle points for pairs
@@ -63,12 +64,14 @@ the same facets, it cuts the balanced capsule a₂/a₀ error there (0.51 → 0.
 0.5 mm, 0.30 → 0.14 pp at 0.25 mm; research notes, "Monte Carlo radiosity reference").
 """
 function view_factors(t::Target; near = 3.0, mid = 12.0, level::Integer = 1, exact_far::Bool = true,
-                      visibility::Symbol = t.visibility, visibility_grid::Integer = 4)
+                      visibility::Symbol = t.visibility, visibility_grid::Integer = 4,
+                      storage::Type = Float64)
     visibility in (:centroid, :sampled) ||
         throw(ArgumentError("visibility must be :centroid or :sampled, got :$visibility"))
     visibility_grid >= 1 || throw(ArgumentError("visibility_grid must be at least 1"))
+    storage in (Float64, Float32) || throw(ArgumentError("storage must be Float64 or Float32, got $storage"))
     N = nelements(t)
-    F = zeros(N, N)
+    F = storage === Float32 ? Float32Matrix(zeros(Float32, N, N)) : zeros(N, N)
     C, Nrm, A = t.elem_centroid, t.elem_normal, t.elem_area
     curved = t.elem_curved .!= 0
     # planar elements (flat facets and polar sectors) receive through the exact
@@ -145,8 +148,9 @@ end
 function _vf_row!(F, ctx, i)
     (; t, bvh, C, Nrm, A, planar, concave, recv, cells, qnear, qmid, qfar, qself, size, slack, ε,
        tri_surf, inside, near2, mid2, level, exact_far, vis, multi) = ctx
-    near_kernel(e, rc) = cells[e] === nothing ? _adaptive_kernel(t, e, rc; mindepth = level + 1) :
-                         _cell_kernel(cells[e], rc)
+    # (`cells` is untyped: assert the kernel's type, or every pair's factor is boxed)
+    near_kernel(e, rc) = (cells[e] === nothing ? _adaptive_kernel(t, e, rc; mindepth = level + 1) :
+                          _cell_kernel(cells[e], rc))::Float64
     N = length(A)
     if concave[i]
         F[i, i] = _self_kernel(qself[i]) / A[i]
@@ -874,7 +878,7 @@ end
 geometry entirely (zero for every element of a closed enclosure, up to discretization
 error).
 """
-closure_error(F::AbstractMatrix) = 1 .- vec(sum(F; dims = 2))
+closure_error(F::AbstractMatrix) = 1 .- _rowsums(F)
 
 # Adaptive outer quadrature for near pairs: emitter cells are subdivided while they lie
 # within `ratio` cell sizes of the receiver, so the points concentrate along a shared

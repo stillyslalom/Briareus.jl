@@ -56,19 +56,60 @@ The model caches LU factorizations of the radiosity matrix `I - diag(α) F` keye
 the albedo vector (the two most recently used), so `solve` and `flux_response` with
 unchanged albedos skip the factorization. The cache is thread-safe. Do not mutate `F`
 after the first solve (or call `Briareus.empty_cache!(model)` if you do).
+
+Large models (more than `Briareus.LARGE_MODEL[]` = 10,000 elements by default) keep the
+view factors they compute in a [`Float32Matrix`](@ref) (`storage = :auto`; pass
+`Float64` or `Float32` to choose) and solve by GMRES without factorizations
+(`solver = :auto`; `:direct` or `:iterative` to choose; a given `F` keeps its storage
+unless `storage` names the other one). Each GMRES iteration is one product with `F`
+accumulated in Float64, so iterative solves reach the same relative residual (1e-12)
+as the preconditioned ones; Float32 storage changes the capsule moments by ~1e-8
+relative (research notes, "Large radiation models"). `RadiationModel(target, F;
+solver = :auto)` wraps a given matrix as is.
 """
-struct RadiationModel
+struct RadiationModel{M<:AbstractMatrix{Float64}}
     target::Target
-    F::Matrix{Float64}
+    F::M
     cache::_FactorCache
-    RadiationModel(t::Target, F::AbstractMatrix) = new(t, F, _FactorCache())
+    iterative::Bool
+    function RadiationModel(t::Target, F::AbstractMatrix; solver::Symbol = :auto)
+        solver in (:auto, :direct, :iterative) ||
+            throw(ArgumentError("solver must be :auto, :direct or :iterative, got :$solver"))
+        F = F isa Float32Matrix ? F : convert(Matrix{Float64}, F)
+        iterative = solver === :iterative ||
+                    (solver === :auto && (F isa Float32Matrix || size(F, 1) > LARGE_MODEL[]))
+        return new{typeof(F)}(t, F, _FactorCache(), iterative)
+    end
 end
 
-function RadiationModel(t::Target; F = nothing, closed::Union{Bool,Nothing} = nothing, kwargs...)
+"""
+    Briareus.LARGE_MODEL[]
+
+Element count above which `RadiationModel` stores the view factors it computes in
+Float32 (`storage = :auto`) and solves iteratively (`solver = :auto`): 10,000 by
+default. A dense Float64 model holds the view factors and up to two LU factorizations,
+24N² bytes (6 GB at 16k elements, 38 GB at 40k); the large path 4N² and a Krylov basis
+(research notes, "Large radiation models").
+"""
+const LARGE_MODEL = Ref(10_000)
+
+function RadiationModel(t::Target; F = nothing, closed::Union{Bool,Nothing} = nothing,
+                        storage = :auto, solver::Symbol = :auto, kwargs...)
+    storage in (:auto, Float64, Float32) ||
+        throw(ArgumentError("storage must be :auto, Float64 or Float32, got $storage"))
     closed = something(closed, F === nothing && t.closed)
-    F = F === nothing ? view_factors(t; kwargs...) : copy(F)
+    if F === nothing
+        st = storage === :auto ? (nelements(t) > LARGE_MODEL[] ? Float32 : Float64) : storage
+        F = view_factors(t; storage = st, kwargs...)
+    elseif storage === Float32 && !(F isa Float32Matrix)
+        F = Float32Matrix(F)
+    elseif storage === Float64 && F isa Float32Matrix
+        F = Matrix{Float64}(F)
+    elseif closed
+        F = copy(F)                 # balanced below: the caller's matrix is left alone
+    end
     closed && enforce_closure!(F, t.elem_area)
-    return RadiationModel(t, F)
+    return RadiationModel(t, F; solver)
 end
 
 """
@@ -83,7 +124,7 @@ function enforce_closure!(F::AbstractMatrix, A::AbstractVector; tol = 1e-12,
                           maxiter::Integer = 1000)
     # with G = diag(A) F, (G s)ᵢ = Aᵢ (F s)ᵢ and sᵢ Gᵢⱼ sⱼ / Aᵢ = sᵢ Fᵢⱼ sⱼ: no copy of F
     s = ones(length(A))
-    active = vec(sum(F; dims = 2)) .> 0
+    active = _rowsums(F) .> 0
     r = similar(s)
     for _ in 1:maxiter
         r .= A .* mul!(r, F, s)
@@ -92,12 +133,12 @@ function enforce_closure!(F::AbstractMatrix, A::AbstractVector; tol = 1e-12,
         s = snew
         δ < tol && break
     end
-    F .= s .* F .* s'
-    return F
+    return _balance!(F, s)
 end
 
 function Base.show(io::IO, m::RadiationModel)
-    print(io, "RadiationModel(", nelements(m.target), " elements)")
+    print(io, "RadiationModel(", nelements(m.target), " elements",
+          m.F isa Float32Matrix ? ", Float32" : "", m.iterative ? ", iterative" : "", ")")
 end
 
 # LU factorization of I - diag(α) F, from the model's cache when α was seen recently.
@@ -234,6 +275,7 @@ end
 # becomes the preconditioner. Dual-number sources are solved column by column (value and
 # partials) with the same Float64 operator.
 function _iterate_solve(m::RadiationModel, α::Vector{Float64}, S::AbstractVector, x0)
+    m.iterative && return _iterative_radiosity(m, α, S, x0)
     if !_ITERATIVE_SOLVE[]
         Threads.atomic_add!(_SOLVE_STATS.lu, 1)
         return lu!(_radiosity_matrix(m.F, α)) \ S
@@ -280,6 +322,154 @@ function _real_columns(S::AbstractVector{ForwardDiff.Dual{T,Float64,N}}) where {
     return cols, rebuild
 end
 _real_columns(S::AbstractVector) = (nothing, nothing)
+
+# Unpreconditioned solves of a large model (`m.iterative`): no factorization, only
+# products with F. The operator I - diag(α)F has its eigenvalues in a disk of radius
+# max α about 1 (F is similar to a symmetric matrix of spectral radius ≤ 1), and those of
+# F cluster at 0, so restarted GMRES converges in a few tens of iterations. The columns
+# of a block (several right-hand sides, or a dual's value and partials) are iterated in
+# lockstep, each with its own Krylov basis, sharing one product with F per iteration.
+
+const _BLOCK_RESTART = 40
+const _BLOCK_MAXITER = 400
+# a block's Krylov bases are kept under this many bytes (columns are batched)
+const _BLOCK_BYTES = 1 << 28
+
+# Restarted GMRES for the columns of A X = B, `op!(Y, X)` computing Y = A X for an
+# n × k block. Returns `nothing` if some column's true residual does not reach
+# rtol‖bᵢ‖ within `maxiter` iterations.
+function _gmres_block(op!, B::Matrix{Float64}, X0::Matrix{Float64}; rtol = _GMRES_RTOL,
+                      restart::Integer = _BLOCK_RESTART, maxiter::Integer = _BLOCK_MAXITER)
+    n, k = size(B)
+    bn = [norm(view(B, :, c)) for c in 1:k]
+    X = copy(X0)
+    R = similar(B)
+    V = Array{Float64,3}(undef, n, restart + 1, k)
+    Hs = zeros(restart + 1, restart, k)
+    cs, sn = zeros(restart, k), zeros(restart, k)
+    g = zeros(restart + 1, k)
+    Z, W = similar(B), similar(B)
+    steps = zeros(Int, k)
+    used = 0
+    while true
+        op!(R, X)
+        R .= B .- R
+        active = [c for c in 1:k if norm(view(R, :, c)) > rtol * bn[c]]
+        isempty(active) && return X
+        used >= maxiter && return nothing
+        fill!(g, 0.0)
+        fill!(steps, 0)
+        for c in active
+            β = norm(view(R, :, c))
+            g[1, c] = β
+            V[:, 1, c] .= view(R, :, c) ./ β
+        end
+        live = copy(active)
+        for j in 1:min(restart, maxiter - used)
+            nl = length(live)
+            Zl, Wl = view(Z, :, 1:nl), view(W, :, 1:nl)
+            for (q, c) in enumerate(live)
+                Zl[:, q] .= view(V, :, j, c)
+            end
+            op!(Wl, Zl)
+            Threads.atomic_add!(_SOLVE_STATS.iterations, 1)
+            done = falses(nl)
+            for (q, c) in enumerate(live)
+                w = view(Wl, :, q)
+                Vj = view(V, :, 1:j, c)
+                h = Vj' * w                      # classical Gram–Schmidt, twice
+                mul!(w, Vj, h, -1.0, 1.0)
+                h2 = Vj' * w
+                mul!(w, Vj, h2, -1.0, 1.0)
+                h .+= h2
+                hn = norm(w)
+                for i in 1:j-1
+                    hi = cs[i, c] * h[i] + sn[i, c] * h[i+1]
+                    h[i+1] = -sn[i, c] * h[i] + cs[i, c] * h[i+1]
+                    h[i] = hi
+                end
+                ρ = hypot(h[j], hn)
+                cs[j, c], sn[j, c] = h[j] / ρ, hn / ρ
+                h[j] = ρ
+                g[j+1, c] = -sn[j, c] * g[j, c]
+                g[j, c] = cs[j, c] * g[j, c]
+                Hs[1:j, j, c] .= view(h, 1:j)
+                steps[c] = j
+                hn > 0 && (V[:, j+1, c] .= w ./ hn)
+                done[q] = abs(g[j+1, c]) <= 0.5 * rtol * bn[c] || hn == 0
+            end
+            live = live[.!done]
+            isempty(live) && break
+        end
+        used += maximum(steps)
+        U = view(Z, :, 1:length(active))
+        for (q, c) in enumerate(active)
+            kc = steps[c]
+            y = UpperTriangular(view(Hs, 1:kc, 1:kc, c)) \ g[1:kc, c]
+            mul!(view(U, :, q), view(V, :, 1:kc, c), y)
+        end
+        for (q, c) in enumerate(active)
+            X[:, c] .+= view(U, :, q)
+        end
+    end
+end
+
+# Solve op X = B column batch by column batch (Krylov bases under `_BLOCK_BYTES`).
+function _solve_columns(op!, B::Matrix{Float64}, X0::Matrix{Float64}, what)
+    n, k = size(B)
+    kb = max(1, _BLOCK_BYTES ÷ (8 * n * (_BLOCK_RESTART + 1)))
+    X = similar(B)
+    for c0 in 1:kb:k
+        cols = c0:min(c0 + kb - 1, k)
+        Threads.atomic_add!(_SOLVE_STATS.gmres, length(cols))
+        x = _gmres_block(op!, B[:, cols], X0[:, cols])
+        x === nothing && error("iterative radiosity solve ($what) did not converge in $_BLOCK_MAXITER iterations")
+        X[:, cols] .= x
+    end
+    return X
+end
+
+# (I - diag(α)F) X and its transpose Xᵀ ↦ X - Fᵀ(α ∘ X), on blocks.
+function _radiosity_block!(Y, F, α, X)
+    mul!(Y, F, X)
+    Y .= X .- α .* Y
+    return Y
+end
+function _radiosity_tblock!(Y, F, α, X)
+    mul!(Y, transpose(F), α .* X)
+    Y .= X .- Y
+    return Y
+end
+
+# B = (I - diag(α)F)⁻¹ S on a large model, from `x0` (an earlier radiosity) or from S;
+# Float64 or first-order dual sources (value and partials as columns).
+function _iterative_radiosity(m::RadiationModel, α::Vector{Float64}, S::AbstractVector, x0)
+    cols, rebuild = _real_columns(S)
+    cols === nothing &&
+        throw(ArgumentError("iterative radiosity solves take Float64 or first-order dual sources, got $(eltype(S))"))
+    X0 = copy(cols)
+    if x0 !== nothing && length(x0) == length(S)
+        c0 = first(_real_columns(x0))
+        if c0 !== nothing
+            nc = min(size(c0, 2), size(X0, 2))
+            X0[:, 1:nc] .= view(c0, :, 1:nc)
+        end
+    end
+    F = m.F
+    return rebuild(_solve_columns((Y, X) -> _radiosity_block!(Y, F, α, X), cols, X0, "radiosity"))
+end
+
+# ... and for the columns of a matrix of sources
+function _iterative_radiosity(m::RadiationModel, α::Vector{Float64}, S::Matrix{Float64}, ::Nothing)
+    F = m.F
+    return _solve_columns((Y, X) -> _radiosity_block!(Y, F, α, X), S, copy(S), "radiosity")
+end
+
+# X = (I - diag(α)F)⁻ᵀ R on a large model.
+function _iterative_transposed(m::RadiationModel, α::Vector{Float64}, R::Matrix{Float64})
+    F = m.F
+    return _solve_columns((Y, X) -> _radiosity_tblock!(Y, F, α, X), R, copy(R), "flux response")
+end
 
 """
     empty_cache!(model::RadiationModel) -> model
@@ -425,6 +615,11 @@ materials' reference temperatures, and its radiosity starts the first iterate's 
 it is close. The result then
 differs from a cold start by less than the iteration's tolerance. The first albedo is
 not cached in that case.
+
+A large model (`model.iterative`, see [`RadiationModel`](@ref)) factors nothing: every
+iterate is solved by unpreconditioned GMRES to the same 1e-12 relative residual, from
+the previous iterate (or `guess`). Dual-number sources are solved as one block, the
+value and partials sharing each product with `F`.
 """
 solve(m::RadiationModel, d::Deposition; kwargs...) = solve(m, d.element; kwargs...)
 
@@ -448,7 +643,9 @@ function solve(m::RadiationModel, P::AbstractVector; time = 0.0, albedo = nothin
         end
     end
     for it in 1:(iterate ? maxiter : 1)
-        if it == 1 && !warm
+        if it == 1 && !warm && m.iterative
+            B = _iterative_radiosity(m, α, S, nothing)
+        elseif it == 1 && !warm
             f = _radiosity_lu(m, α)
             iterate && lock(() -> m.cache.precond[] = f, m.cache.lock)
             B = f \ S
@@ -478,7 +675,9 @@ the model's factorization cache with `solve`.
 
 With `weights` (a matrix with one column per observed element, e.g. `legendre_weights`),
 returns `weights * R` directly, solving for its rows only: far cheaper than `R` when
-only a few moments of the observed flux are wanted.
+only a few moments of the observed flux are wanted. On a large model (`model.iterative`)
+the rows are solved by GMRES on the transposed system, in blocks that share each
+product with `F`: the full response costs a solve per observed element there.
 
 A time-dependent [`Conversion`](@ref) is evaluated at `time`. An intensity-dependent one
 makes the source nonlinear in `P`: pass the absorbed laser power `laser` (TW per
@@ -500,7 +699,7 @@ function flux_response(m::RadiationModel, observed::AbstractVector{<:Integer}; t
         Wn[:, observed] .= weights
         Matrix(transpose(Wn * m.F))
     end
-    X = ldiv!(_radiosity_lu(m, α)', rhs)
+    X = m.iterative ? _iterative_transposed(m, α, rhs) : ldiv!(_radiosity_lu(m, α)', rhs)
     return Matrix(transpose(X .* (η ./ t.elem_area)))
 end
 
