@@ -2,12 +2,21 @@
 # temperature along a broadband spectrometer's line of sight through an entrance hole.
 
 """
+    AbstractDanteChannel
+
+A Dante channel's spectral response: a [`DanteChannel`](@ref) (Gaussian approximation)
+or a [`DanteResponse`](@ref) (built from filters, mirror and XRD).
+"""
+abstract type AbstractDanteChannel end
+
+"""
     DanteChannel(energy, fwhm)
 
 One Dante channel's spectral response, approximated by a unit-peak Gaussian centred on
-`energy` (eV) with full width `fwhm` (eV).
+`energy` (eV) with full width `fwhm` (eV): the fallback of `dante1_channels(model =
+:gaussian)`.
 """
-struct DanteChannel
+struct DanteChannel <: AbstractDanteChannel
     energy::Float64
     fwhm::Float64
 end
@@ -19,17 +28,20 @@ const _DANTE1_ENERGIES = [1170.0, 3060.0, 250.0, 470.0, 710.0, 870.0, 940.0, 117
                           1710.0, 3430.0, 2580.0, 3000.0, 1700.0, 940.0, 14370.0, 690.0, 3660.0]
 
 """
-    dante1_channels(; resolution = 0.3) -> Vector{DanteChannel}
+    dante1_channels(; model = :hardware, resolution = 0.3) -> Vector
 
-The 18 NIF Dante 1 channels at their published band energies (Rubery et al., RSI 2023,
-Fig. 4: 0.25–3.66 keV and one at 14.4 keV), each a Gaussian of FWHM `resolution × energy`.
-An **approximation**: the real responses combine filter transmission (with K- and
-L-edges), grazing-incidence mirror cutoffs and x-ray diode sensitivity, and have
-high-energy tails; Dante's own unfold approximates each response by a Gaussian, whose
-widths are not published there, so `resolution` is an engineering choice.
+The 18 NIF Dante 1 channels (Rubery et al., RSI 2023, Fig. 4). `model = :hardware`
+(default): [`dante1_responses`](@ref), each response built from the channel's filters,
+grid, mirror and XRD cathode. `model = :gaussian`: the fallback approximation, a
+[`DanteChannel`](@ref) Gaussian at each published band energy (0.25–3.66 keV and one at
+14.4 keV) of FWHM `resolution × energy`; it has no K- or L-edge structure, mirror
+cutoffs or high-energy tails, and `resolution` is an engineering choice.
 """
-dante1_channels(; resolution::Real = 0.3) =
-    [DanteChannel(E, resolution * E) for E in _DANTE1_ENERGIES]
+function dante1_channels(; model::Symbol = :hardware, resolution::Real = 0.3)
+    model === :hardware && return dante1_responses()
+    model === :gaussian || throw(ArgumentError("model must be :hardware or :gaussian"))
+    return [DanteChannel(E, resolution * E) for E in _DANTE1_ENERGIES]
+end
 
 """
     DanteView(theta, phi; through = :leh_bottom, pixels = 400, channels = dante1_channels(),
@@ -56,7 +68,7 @@ struct DanteView
     direction::Vec3
     through::Symbol
     pixels::Int
-    channels::Vector{DanteChannel}
+    channels::Vector{<:AbstractDanteChannel}
     area::Union{Nothing,Float64}
     cache::IdDict{Target,Any}
     lock::ReentrantLock
@@ -66,7 +78,7 @@ function DanteView(theta::Real, phi::Real; through::Symbol = :leh_bottom, pixels
                    channels = dante1_channels(), area = nothing)
     pixels >= 1 || throw(ArgumentError("pixels must be positive"))
     return DanteView(Float64(theta), Float64(phi), port_vector(theta, phi), through, Int(pixels),
-                     collect(DanteChannel, channels), area === nothing ? nothing : Float64(area),
+                     collect(channels), area === nothing ? nothing : Float64(area),
                      IdDict{Target,Any}(), ReentrantLock())
 end
 
@@ -85,6 +97,26 @@ NIF Dante 2: θ 64°, φ 350°, a shallow view of the upper entrance hole (Ruber
 RSI 2023).
 """
 dante2(; kwargs...) = DanteView(64, 350; through = :leh_top, kwargs...)
+
+"""
+    sentinel(dim = :polar; through, kwargs...)
+
+The NIF Sentinel filtered-XRD array (Kemp et al., RSI 2020, LLNL-JRNL-813698), a
+DIM-mounted broadband spectrometer that can be fielded on the polar DIM (`:polar`,
+000-000: θ 0°, straight down the hohlraum axis through the upper entrance hole) or on
+either equatorial DIM (`:equatorial_78`, 090-078; `:equatorial_315`, 090-315), where a
+hohlraum is seen only through a diagnostic window, so `through` must name it. Its own
+filter set (16 Al, Ni and Cr MiniXRDs behind Dante filters) is not tabulated here: the
+channels default to Dante 1's (`dante1_channels()`, *assumed*), to be replaced by the
+shot's configuration.
+"""
+function sentinel(dim::Symbol = :polar; through = nothing, kwargs...)
+    dim === :polar && return DanteView(0, 0; through = something(through, :leh_top), kwargs...)
+    φ = dim === :equatorial_78 ? 78 : dim === :equatorial_315 ? 315 :
+        throw(ArgumentError("dim must be :polar, :equatorial_78 or :equatorial_315"))
+    through === nothing && throw(ArgumentError("an equatorial view needs `through` (a window)"))
+    return DanteView(90, φ; through, kwargs...)
+end
 
 function Base.show(io::IO, v::DanteView)
     print(io, "DanteView(θ = ", v.theta, "°, φ = ", v.phi, "° through :", v.through, ")")
@@ -161,19 +193,27 @@ end
 
 """
     dante(view::DanteView, sol::RadiationSolution) -> NamedTuple
-    dante(view::DanteView, s::SpectralSolution) -> NamedTuple
+    dante(view::DanteView, s::SpectralSolution; unfold = :traditional, kwargs...) -> NamedTuple
 
 Synthetic Dante signal: `intensity` (TW/sr toward the detector), `Tr` (eV, the
 brightness temperature over the hole; see `DanteView`), `area` (mm²) and `cos` of the
 viewing angle; `Tr_open`, the brightness temperature over the hole's open area (the
 aperture plus each closing-lip element's area times its open fraction), the radiation
 temperature behind the hole that the view samples (equal to `Tr` without lips). For a
-`SpectralSolution` also `spectrum` (TW/sr per group), `edges`,
-`channels` (each channel's signal, ∫ (dI/dE) R(E) dE in TW/sr, the spectrum taken flat
-within each group; the open-ended top group contributes nothing), `color_temperature`
+`SpectralSolution` also `spectrum` (TW/sr per group), `edges`, `channels` (each
+channel's signal; the open-ended top group contributes nothing), `color_temperature`
 (eV, the Planckian whose channel signals best match, in log, those of the channels
 below 1.5 keV, as Dante's unfold starts) and `mband_fraction` (of the intensity above
 1.8 keV, `NaN` without that edge).
+
+With [`DanteResponse`](@ref) channels (the default, `dante1_channels()`) `channels` are
+the voltages `Ω ∫ (dI/dE) R dE` (V), the spectrum taken within each group as a
+Planckian at `Tr_open` (the temperature behind the hole), and the voltages are unfolded
+as data are ([`dante_unfold`](@ref) with `method = unfold` and `kwargs`, over the
+view's area and angle): `unfold` (its result) and `Tr_unfold`, the unfolded radiation
+temperature, to compare with `Tr`. `unfold = nothing` skips it. With Gaussian
+[`DanteChannel`](@ref)s `channels` is ∫ (dI/dE) R(E) dE (TW/sr) with the spectrum flat
+within each group, and there is no unfold.
 """
 function dante(v::DanteView, sol::RadiationSolution)
     fp = _footprint(v, sol.model.target)
@@ -188,26 +228,30 @@ function _open_temperature(fp, I, τ)
     return radiation_temperature(π * I / (A * fp.cosv))
 end
 
-function dante(v::DanteView, s::SpectralSolution)
+function dante(v::DanteView, s::SpectralSolution; unfold = :traditional, kwargs...)
     sol = s.gray
     fp = _footprint(v, sol.model.target)
     G = ngroups(s)
     spectrum = [_los_intensity(fp, view(s.B, :, g), sol.transmission) for g in 1:G]
     I = sum(spectrum)
     A = something(v.area, fp.hole_area)
-    W = _channel_matrix(v.channels, s.edges)
-    signals = W * spectrum
+    Tr_open = _open_temperature(fp, I, sol.transmission)
+    hw = eltype(v.channels) <: DanteResponse
+    W = hw ? _channel_matrix(v.channels, s.edges; T = Tr_open) : _channel_matrix(v.channels, s.edges)
+    signals = hw ? W * (1e3 .* spectrum) : W * spectrum
     k = findfirst(==(1800.0), s.edges)
     mband_fraction = k === nothing ? NaN : sum(spectrum[k:end]) / I
-    return (; intensity = I, Tr = radiation_temperature(π * I / (A * fp.cosv)), area = A,
-            cos = fp.cosv, Tr_open = _open_temperature(fp, I, sol.transmission), spectrum,
-            edges = s.edges, channels = signals,
+    base = (; intensity = I, Tr = radiation_temperature(π * I / (A * fp.cosv)), area = A,
+            cos = fp.cosv, Tr_open, spectrum, edges = s.edges, channels = signals,
             color_temperature = _color_temperature(v.channels, s.edges, W, signals),
             mband_fraction)
+    (hw && unfold !== nothing) || return base
+    u = dante_unfold(v.channels, signals; area = A, cos = fp.cosv, method = unfold, kwargs...)
+    return (; base..., unfold = u, Tr_unfold = u.Tr)
 end
 
 # W[c, g]: channel c's signal per unit power in group g, spread flat over the group.
-function _channel_matrix(ch::Vector{DanteChannel}, E::Vector{Float64})
+function _channel_matrix(ch::Vector{DanteChannel}, E::Vector{Float64}; T = nothing)
     G = length(E) - 1
     W = zeros(length(ch), G)
     for (c, h) in enumerate(ch), g in 1:G

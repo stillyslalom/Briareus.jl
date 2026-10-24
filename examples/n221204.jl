@@ -50,7 +50,9 @@
 # - `lips=prescribed|computed`: the lips close along the prescribed ramp (default) or by
 #   the computed `LipClosure`; `lag=<ns>`: the power through a first-order lag, a
 #   sensitivity estimate of plasma-stored energy (research notes, "Computed LEH closure
-#   (2026-10-24)").
+#   (2026-10-24)");
+# - `unfold=on`: Dante 1's spectrum, channel voltages and their unfold at 5–8.5 ns in the
+#   full model (research notes, "Dante channel responses and the unfold (2026-10-24)").
 # Every run prints its time-integrated energy budget (`energy_budget`) against PRE 109
 # App. 3's N221204 split (wall 54.1 %, LEH 25.2 %, gas 4.5 %, capsule 16.2 %), and its
 # synthetic Dante 1 Tr peak (`dante1()`) beside the capsule-seen Tr, against the measured
@@ -283,6 +285,28 @@ p4(r) = r.moments[5, :] ./ r.moments[1, :]
 # temperature behind the hole), recorded at every step of every run.
 d1 = dante1()
 dante_tr(sol) = (d = dante(d1, sol); (d.Tr, d.Tr_open))
+# `unfold=on`: in the full model, at the times below, also the spectrum Dante 1 sees
+# (`spectral_solve`, 42 groups; Planckian per element, and with the intensity-form
+# laser M-band `MBandEmission()`), its 18 channel voltages through the hardware
+# responses (`dante1_responses()`) and their unfold (`dante_unfold`, traditional and
+# smooth) against the input spectrum's Tr (research notes, "Dante channel responses and
+# the unfold (2026-10-24)").
+unfold_times = get(opt, "unfold", "off") == "on" ? [5.0, 6.0, 7.0, 8.0, 8.5] : Float64[]
+unfolds = Dict{Float64,Any}()
+d1g = dante1(channels = dante1_channels(model = :gaussian))   # the Gaussian fallback, for comparison
+function dante_spectral(sol)
+    out = Any[]
+    for mb in (nothing, MBandEmission())
+        s = spectral_solve(sol; edges = spectral_edges(), mband = mb)
+        d = dante(d1, s)
+        gauss = dante(d1g, s).color_temperature
+        push!(out, (; d.Tr, d.Tr_open, d.mband_fraction, d.color_temperature, gauss, traditional = d.Tr_unfold,
+                    smooth = dante_unfold(d1.channels, d.channels; area = d.area, cos = d.cos, method = :smooth).Tr,
+                    misfit = d.unfold.misfit, solver = d.unfold.solver))
+    end
+    return out
+end
+dante_rec(sol) = (any(≈(sol.time), unfold_times) && (unfolds[sol.time] = dante_spectral(sol)); dante_tr(sol))
 runs = Pair{String,Any}[]
 t0 = time()
 function run!(name, f)
@@ -301,7 +325,7 @@ if which == "all"
 end
 kl = Keyframes(moving_hohlraum(motion; radius = R0, geometry..., leh_closure = lip, shrink...), keyframes, beams)
 which == "all" && run!("+lips", () -> drive_history(kl, beams_at, times; lpi = with_pre(cbet), record = dante_tr, wall_history, wall_release))
-run!("+bubble", () -> drive_history(kl, beams_at, times; lpi = with_pre(cbet, bubble), record = dante_tr, wall_history, wall_release))
+run!("+bubble", () -> drive_history(kl, beams_at, times; lpi = with_pre(cbet, bubble), record = dante_rec, wall_history, wall_release))
 
 # PRE 109 Fig. 10, N221204 (HYDRA, post-CBET), digitized (`n221204_fig10()`: ±0.002
 # where the curve is visible, up to ±0.015 where N220919's curve covers it).
@@ -364,6 +388,16 @@ for (n, r) in runs
             n, dt[k], times[k], dto[k], r.Tr[k], dt[k] - r.Tr[k])
     k = findfirst(≈(8.5), times)
     k === nothing || @printf("  %-22s at 8.5 ns: Dante %.1f (open area %.1f), capsule %.1f\n", "", dt[k], dto[k], r.Tr[k])
+end
+if !isempty(unfolds)
+    println("\nDante 1 unfolded (full model; eV over the initial LEH area): input spectrum Tr / traditional unfold /",
+            " smooth unfold; color temperature (hardware, Gaussian channels); M-band share > 1.8 keV;",
+            " worst channel misfit (traditional)")
+    for t in sort(collect(keys(unfolds))), (u, lab) in zip(unfolds[t], ("Planckian", "+ M-band"))
+        @printf("  %.1f ns %-10s %.1f / %.1f / %.1f (%+.2f / %+.2f); Tc %.1f, %.1f; M-band %.3f; misfit %.1e (%s)\n",
+                t, lab, u.Tr, u.traditional, u.smooth, u.traditional - u.Tr, u.smooth - u.Tr,
+                u.color_temperature, u.gauss, u.mband_fraction, u.misfit, u.solver)
+    end
 end
 
 # Energy budget over the solved times (0.5–9.35 ns), against PRE 109 App. 3's HYDRA

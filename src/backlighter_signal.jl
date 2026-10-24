@@ -199,25 +199,39 @@ const _MU_RHO = Dict{Symbol,Tuple{Vector{Float64},Vector{Float64}}}(
                [128.8, 54.66, 27.92, 16.08, 6.75, 3.481, 1.132, 0.5798, 0.3009, 0.2304]),
     :polyethylene => ([3, 4, 5, 6, 8, 10, 15, 20, 30, 40],
                       [77.43, 32.42, 16.43, 9.432, 3.975, 2.088, 0.7452, 0.4315, 0.2706, 0.2275]))
-# densities (g/cm³); Kapton (polyimide) takes Mylar's μ/ρ (close in composition)
+# densities (g/cm³); under the NIST table Kapton (polyimide) takes Mylar's μ/ρ (close in
+# composition). The elements added with the Henke tables (`xray_optics.jl`) carry
+# handbook densities; compounds carry their own (`_COMPOUNDS`).
 const _FILTER_DENSITY = Dict(:Be => 1.848, :Al => 2.699, :Ti => 4.54, :Fe => 7.874, :Cu => 8.96,
                              :Mo => 10.22, :Ta => 16.65, :mylar => 1.38, :kapton => 1.42,
-                             :polyethylene => 0.93)
+                             :polyethylene => 0.93, :Mg => 1.738, :Si => 2.329, :V => 6.11,
+                             :Cr => 7.19, :Co => 8.90, :Ni => 8.908, :Zn => 7.134, :Ag => 10.49,
+                             :Au => 19.32)
 
 """
-    mass_attenuation(material, hν) -> cm²/g
+    mass_attenuation(material, hν; table = :auto) -> cm²/g
 
-Mass attenuation coefficient μ/ρ (coherent scattering included) of a filter `material`
-(`:Be`, `:Al`, `:Ti`, `:Fe`, `:Cu`, `:Mo`, `:Ta`, `:mylar`, `:kapton`, `:polyethylene`)
-at photon energy `hν` (keV, 3–40). Values are from NIST's tables (Hubbell & Seltzer),
-interpolated log-log, with the absorption edges exact; an energy exactly on an edge
-takes the value above it. Between the tables' 1–5 keV spaced energies the interpolation
-is good to a few percent away from edges. `:kapton` uses Mylar's μ/ρ, which is also
-a few-percent approximation. This is a minimal set for transmission estimates, not a
-spectral response model.
+Mass attenuation coefficient μ/ρ of a filter `material` at photon energy `hν` (keV).
+
+- `table = :nist`: NIST's X-Ray Mass Attenuation Coefficients (Hubbell & Seltzer;
+  coherent scattering included), 3–40 keV, for `:Be`, `:Al`, `:Ti`, `:Fe`, `:Cu`, `:Mo`,
+  `:Ta`, `:mylar`, `:kapton` (Mylar's μ/ρ, a few-percent approximation) and
+  `:polyethylene`, interpolated log-log with the absorption edges exact (an energy
+  exactly on an edge takes the value above it); between the tables' 1–5 keV spaced
+  energies good to a few percent away from edges.
+- `table = :henke`: photoabsorption from Henke's f₂ ([`henke_mass_attenuation`](@ref),
+  0.01–30 keV), for the elements H, Be, C, N, O, Mg, Al, Si, Cl, Ti, V, Cr, Fe, Co, Ni,
+  Cu, Zn, Ag, Au and the compounds `:CH`, `:lexan`, `:parylene`, `:parylene_c`,
+  `:saran`, `:polyimide` (= `:kapton`), `:mylar`, `:polyethylene`, `:SiO2`.
+- `table = :auto` (default): NIST where it covers the material and energy, Henke
+  elsewhere (so the backlighter filters keep NIST's values).
 """
-function mass_attenuation(mat::Symbol, hν::Real)
+function mass_attenuation(mat::Symbol, hν::Real; table::Symbol = :auto)
+    table in (:auto, :nist, :henke) || throw(ArgumentError("table must be :auto, :nist or :henke"))
     key = mat === :kapton ? :mylar : mat
+    if table === :henke || (table === :auto && !(haskey(_MU_RHO, key) && 3 <= hν <= 40))
+        return henke_mass_attenuation(mat, 1000 * hν)
+    end
     haskey(_MU_RHO, key) || throw(ArgumentError("no attenuation table for :$mat"))
     3 <= hν <= 40 || throw(ArgumentError("the attenuation tables cover 3–40 keV"))
     E, μ = _MU_RHO[key]
@@ -228,22 +242,27 @@ function mass_attenuation(mat::Symbol, hν::Real)
 end
 
 """
-    filter_transmission(filters, hν) -> Real
+    filter_transmission(filters, hν; table = :auto) -> Real
 
 Transmission `exp(−Σ (μ/ρ) ρ t)` at normal incidence through `filters`, a collection of
-`material => thickness` pairs (thickness in mm). The materials and μ/ρ are those of
-[`mass_attenuation`](@ref); the densities are Be 1.848, Al 2.699, Ti 4.54, Fe 7.874,
-Cu 8.96, Mo 10.22, Ta 16.65, Mylar 1.38, Kapton 1.42 and polyethylene 0.93 g/cm³. Pass
+`material => thickness` pairs (thickness in mm), at photon energy `hν` (keV). The
+materials and μ/ρ are those of [`mass_attenuation`](@ref) (`table` passed on); the
+densities are Be 1.848, Al 2.699, Ti 4.54, Fe 7.874, Cu 8.96, Mo 10.22, Ta 16.65, Mylar
+1.38, Kapton 1.42, polyethylene 0.93, Mg 1.738, Si 2.329, V 6.11, Cr 7.19, Co 8.90, Ni
+8.908, Zn 7.134, Ag 10.49 and Au 19.32 g/cm³; the other compounds of
+[`henke_mass_attenuation`](@ref) carry CH 1.05, Lexan 1.20, parylene (N) 1.11, Saran
+1.70 and SiO₂ 2.2 g/cm³ (CH, parylene and Saran densities assumed). Pass
 `material => (thickness, density)` to override a density.
 """
-function filter_transmission(filters, hν::Real)
+function filter_transmission(filters, hν::Real; table::Symbol = :auto)
     τ = 0.0
     for (mat, spec) in filters
         t, ρ = spec isa Tuple ? (Float64(spec[1]), Float64(spec[2])) :
-               (Float64(spec), get(_FILTER_DENSITY, mat, NaN))
+               (Float64(spec), get(_FILTER_DENSITY, mat,
+                                   haskey(_COMPOUNDS, mat) ? _COMPOUNDS[mat][2] : NaN))
         isnan(ρ) && throw(ArgumentError("no density for :$mat; pass $mat => (thickness, density)"))
         t >= 0 || throw(ArgumentError("filter thicknesses must be non-negative"))
-        τ += mass_attenuation(mat, hν) * ρ * 0.1t       # mm → cm
+        τ += mass_attenuation(mat, hν; table) * ρ * 0.1t       # mm → cm
     end
     return exp(-τ)
 end

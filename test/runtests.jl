@@ -1127,5 +1127,6 @@ include("backlighter_signal.jl")
 include("energetics.jl")
 include("capsule_drive.jl")
 include("spectral.jl")
+include("dante_response.jl")
 include("large_models.jl")
 end

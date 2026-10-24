@@ -65,10 +65,12 @@ export legendre, legendre_moments, legendre_weights, solid_angle, ylm_moments, y
 export OrthoCamera, camera_from_port, render, radiance, line_of_sight_power
 export backlighter_foil, line_of_sight, LineOfSightReport
 export kshell_line_energy, kshell_ce_data, kshell_ce_model, KShellCEModel, kshell_ce,
-       mass_attenuation, filter_transmission, backlighter_signal, BacklighterSignal
+       mass_attenuation, filter_transmission, backlighter_signal, BacklighterSignal,
+       henke_mass_attenuation, mirror_reflectivity
 export planck_fraction, planck_fractions, spectral_edges, MBandEmission, mband_conversion,
        nif_mband, mband_power, SpectralSolution, spectral_solve, ngroups, band_flux,
-       mband_recirculation, DanteChannel, dante1_channels, DanteView, dante1, dante2, dante, visible_area
+       mband_recirculation, DanteChannel, dante1_channels, DanteView, dante1, dante2, dante, visible_area,
+       AbstractDanteChannel, DanteResponse, dante1_responses, xrd_sensitivity, dante_unfold, sentinel
 export GroupPointing, nparams, parameter_names, initial_parameters, apply, bounds,
        Scenario, Evaluation, evaluate, subset, flux_ylm, asymmetry_objective, influence_matrix,
        clipped_fraction, missed_fraction, power_fraction,
@@ -100,7 +102,9 @@ include("imaging.jl")
 include("optimize.jl")
 include("history.jl")
 include("spectral.jl")
+include("xray_optics.jl")
 include("dante.jl")
+include("dante_response.jl")
 include("dynamics.jl")
 include("retune.jl")
 include("clearance.jl")
