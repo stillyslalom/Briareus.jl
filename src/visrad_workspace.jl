@@ -572,8 +572,10 @@ while `coarsen` (mm) only merges whole near-coplanar facets up to that size
 (`coarsen_mesh`; slivers longer than the size stay). `fit = true` (or a named tuple of
 `curved_components` and `fit_surfaces` keywords) then splits a CAD part into its
 cylinders, cones and spheres, each with its exact surface fitted to the CAD facets, and
-the rest (`curved_components`), so the radiation model integrates on the curved walls
-as it does for a primitive hohlraum. Rectangles give one component (normal +z before orientation), spheres one with
+the rest (`curved_components`; curved faces of under 10⁻³ of the part's area stay flat
+unless `minfraction = 0`), so the radiation model integrates on the curved walls as it
+does for a primitive hohlraum. The pieces are renamed `<name>/cyl1`, …, `<name>/rest`
+(see `cad_target`). Rectangles give one component (normal +z before orientation), spheres one with
 a `SphereSurface`, and cylindrical hohlraums five — `<name>_wall`, `_cap_top`,
 `_cap_bottom` and the apertures `_leh_top`, `_leh_bottom` — with the curved surfaces
 `hohlraum` uses, all on VisRad's grid (`Number of mesh pts`, which reproduces VisRad's

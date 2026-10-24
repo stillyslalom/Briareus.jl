@@ -1328,6 +1328,35 @@ fits below used Briareus's own operator points with a free-form evaluator.
   patches of such a rejected region again cut the capsule to 4.4 s and the halves to
   0.5 s, but dropped regions on 5 of the 14 parts, among them a true 6-patch 56.9° cone
   (rms 0.1 µm) on a half, so it was not adopted. **H** (measured locally and synthetic)
+- **Fitting CAD by default (2026-10-24, local).** Should `fit = true` follow `remesh`
+  in `cad_target`/`visrad_target`/the GUI (ROADMAP open question 1)? The NIF CAD
+  workspace, its 11 parts near the cavity (no mount, far parts or tent),
+  `visrad_target(...; orient = true, remesh = 0.6 or 0.3 (capsule half that),
+  inside = (0, 0, 0))`, 4 threads with other jobs running. Fit cost: `fit_surfaces` on
+  the parts' raw facets 7 s in all (halves 1.9–2.7 s; the 38k-facet capsule with its
+  fill tube 0.29 s with the default kinds: the quadratic case of the previous item needs
+  a face of none of the kinds), against ~220 s (0.6) and ~420 s (0.3) for the cavity
+  selection and remeshing. Components: 10 parts → 158 (0.6) / 159 (0.3) fitted, 68 with
+  `minfraction = 1e-3` (40 cylinders, 9 cones, 9 spheres, 9 rests, one part unsplit);
+  the capsule's mean flux and moments with 1e-3 are within 3e-4 and 0.04 points of
+  fitting everything (`:sampled` runs, below), so 1e-3 became `curved_components`' default. Left in with
+  `maxradius` off: cylinders of R 54–670 mm and spheres of R 0.94–6.4 mm besides the
+  capsule's (all of which `SphereKeepOut` would take by default). View factors, default
+  `:sampled` visibility: 47 → 49 s at 0.6, 177 → 161 s at 0.3; with `:centroid`
+  visibility at 0.6, 33 → 22 s. The 22× of the sliver tube (above) is a whole-part fit,
+  which the GUI already makes (`_whole_surface`). Accuracy against
+  `montecarlo_incident` on the flat facets (α = 0.7, a source on the inner walls,
+  4,000 paths per receiver), `:centroid` visibility: outer capsule flux flat +0.03%,
+  fitted +0.26% (MC `:element` 0.5096 ± 0.0003; the fitted capsule is the true sphere,
+  and `:hit` gives +1.3% over `:element`); halves (400 elements) flat −0.81%, fitted
+  −0.22%. **With the default `:sampled` visibility the
+  outer capsule's row sums are 0.21 (0.0–0.99) against 0.955 with `:centroid`, and its
+  flux 7× too low, flat or fitted; the halves' rows 0.79 against 0.91 (flux −15%).**
+  `_visibility_samples` averages each grid cell's sub-triangle points, and on an
+  element folded across the facets of a convex part (13.5 facets per capsule element)
+  that mean lies behind the facets, where every ray is blocked (the failure `Target`
+  avoids for the centroid by moving it onto the facets). Fix before relying on
+  `:sampled` CAD targets. **H** (measured locally)
 
 ### Result tables and fits
 

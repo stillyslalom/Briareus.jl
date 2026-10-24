@@ -279,7 +279,10 @@ foreach(println, regions[:hohlraum_top])
 # lie inside the wall by up to their sagitta, ``2.875 (2\pi/120)^2/8`` = 0.98 µm.
 # [`curved_components`](@ref) splits each part into its curved regions, each carrying
 # the fitted `CylinderSurface` or `SphereSurface`, and the rest; planar faces stay flat
-# elements, which are exact.
+# elements, which are exact. So do curved regions of under 10⁻³ of the part's area
+# (`minfraction`): in real CAD those are fillet pieces, small holes and edge faces, each
+# of which would otherwise become a component of its own (the bore here is about
+# 5×10⁻³ of its half's kept area).
 
 fitted = reduce(vcat, [curved_components(c; regions = regions[c.name]) for c in remeshed.target.components])
 nothing #hide

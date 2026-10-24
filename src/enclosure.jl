@@ -416,10 +416,13 @@ sides when `two_sided`), through these steps:
    With `inside`, the selection is then repeated on the elements: an element straddling
    the edge of the lit region averages its flux over its own area.
 4. `fit = true` (or a named tuple of keywords of [`curved_components`](@ref) and
-   [`fit_surfaces`](@ref), such as `minfraction = 1e-3` to leave small curved faces
-   flat) splits each part into its cylinders, cones, spheres and the rest, fitted on the
-   kept CAD facets, whose vertices lie on the true surfaces, so the radiation model
-   integrates over the curved walls.
+   [`fit_surfaces`](@ref), such as `minfraction = 0` to fit even the curved faces of
+   under 10⁻³ of a part's area, which stay flat by default) splits each part into its
+   cylinders, cones, spheres and the rest, fitted on the kept CAD facets, whose vertices
+   lie on the true surfaces, so the radiation model integrates over the curved walls.
+   The pieces are components of their own, named `<part>/cyl1`, …, `<part>/rest`:
+   reports, `elements` and the keep-outs see them, not the part (`SphereKeepOut` by
+   default takes every fitted sphere). Fitting is off by default for that reason.
 
 The target's view factors default to `visibility = :sampled` (see `view_factors`): CAD
 cavities have rims (entrance-hole bores, gaps) that partly shadow element pairs, which

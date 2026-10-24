@@ -173,6 +173,13 @@ end
     @test [x.name for x in curved_components(c; reference = raw, maxradius = 0.2)] == Symbol.(["half/cyl1", "half/rest"])
     @test [x.surface.radius for x in curved_components(c; reference = raw, minfraction = 0.01)[1:2]] ≈ [Rout, R] rtol = 1e-6
     @test length(curved_components(c; reference = raw, minfraction = 0.01)) == 3
+    # by default a curved region of under 1e-3 of the part's area stays flat: a sphere
+    # (50.3 mm²) with a small tube stub (0.031 mm², 6e-4 of it)
+    stub = orient_mesh(stl_roundtrip([cad_sphere(2.0; ntheta = 24, nphi = 48);
+                                      cad_frustum(0.05, 5.0, 0.05, 5.1; nphi = 24, inward = false)]))
+    cs = Component(:s, stub, gold())
+    @test [x.name for x in curved_components(cs)] == Symbol.(["s/sph1", "s/rest"])
+    @test [x.name for x in curved_components(cs; minfraction = 0)] == Symbol.(["s/sph1", "s/cyl1"])
     # a cone, with the cylinders of a part
     cone = orient_mesh(stl_roundtrip([cad_frustum(1.0, 0.0, 2.0, 1.0; nphi = 120); cad_frustum(2.0, 1.0, 2.0, 2.5; nphi = 120)]))
     cs = curved_components(Component(:shield, remesh_mesh(cone; size = 0.3), gold()); reference = cone)

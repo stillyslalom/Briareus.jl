@@ -556,9 +556,35 @@ pick the original parts, not `<part>/cylN` pieces).
 1. `fit = true` by default when `remesh` is given (cad_target, visrad_target, GUI)?
    Up to 24× faster view factors and exact curved walls, but parts are split and
    renamed `<part>/cylN`, `/coneN`, `/sphN`, `/rest`. [Yes eventually; off now.]
-2. Default `minfraction = 1e-3` in cad_target/visrad_target/GUI fits? Two NIF CAD
-   hohlraum halves: 138 → 25 components, 1.2% of the curved area left flat.
-   `maxradius` removes only ~10. [Yes for minfraction; maxradius off.]
+   **Looked at 2026-10-24, still off** (research notes, "Fitting CAD by default"). On
+   the NIF CAD cavity the gain is small: view factors 1.0–1.5× faster (the 24× is a
+   sliver tube fitted whole, which the GUI already does), the halves' flux 0.8 → 0.2%
+   from a Monte Carlo reference, fits 7 s against ~220 s of selection and remeshing.
+   The cost is the names: 10 parts become 68 components, and every name-keyed surface
+   sees the pieces: `Target`/`Enclosure` display, `energy_balance`, `component_power`
+   and `<name>_outside`, `write_results` (components.csv rows, elements.csv's
+   component column), `report`, clearance/TaLIS/unconverted rows; `elements(t, :part)`
+   and `Scenario(...; observe = :part)` throw; the `direct` penalty silently switches
+   off when a named part is split; `SphereKeepOut` takes every fitted sphere (9 here,
+   R 0.94–6.4 mm, not only the capsule). `visrad_deposition` and
+   `write_visrad_workspace` are unaffected (remeshed targets are refused; only beams
+   are written). The GUI keys its tree, picking, colors, hidden set, exclusions, films,
+   the cavity's sealing film and saved sessions on component names. Plan, in order:
+   (a) a part name on `Component` (`part`, default `name`; `curved_components` and
+   every rebuild keep it) and `parts(t)`; (b) `elements` and the name-taking APIs
+   (observe, `power_fraction`/`direct`, keep-outs, clearance hardware, TaLIS) accept a
+   part for all its pieces; `SphereKeepOut` defaults to whole-part spheres; (c)
+   reports aggregate pieces to parts (`energy_balance`, `component_power`, CSVs,
+   `report`, `show`), pieces reachable by name; (d) a part fitted as one region keeps
+   its name (as the GUI's `_whole_surface` does); (e) the GUI keeps its part-keyed
+   state and maps pieces back to parts for drawing and picking (or fits only the
+   drive's computational target, mapping elements back as the cavity's `index` does).
+   Then flip.
+2. ~~Default `minfraction = 1e-3` in cad_target/visrad_target/GUI fits?~~ **Done
+   2026-10-24:** `curved_components` (so every fit) defaults to `minfraction = 1e-3`.
+   Two NIF CAD hohlraum halves: 138 → 25 components, 1.2% of the curved area left flat;
+   the NIF cavity 158 → 68, capsule flux within 3e-4 of fitting everything.
+   `maxradius` stays off.
 3. Cones on by default in `fit_surfaces` (22 more components on the NIF halves)? [Keep.]
 4. Capsule tents and LEH windows in CAD are opaque closed solids that seal the capsule
    in a pocket. The GUI opens it automatically (tent as a thin film); the library
@@ -617,6 +643,16 @@ pick the original parts, not `<part>/cylN` pieces).
     −5.0e-4, 3–5σ) as the view factors' lost fraction grows (7.5e-4 → 1.4e-3); on the
     lat-long capsule it fell to the sampling error. Look at the capsule's raw row sums at
     capsule_h = h/3 (0.083 mm) before trusting balanced results at that resolution.
+13. **Bug, found 2026-10-24: `:sampled` visibility on remeshed CAD** (the
+    `cad_target`/`visrad_target` default). On the NIF CAD cavity at 0.6 mm the outer
+    capsule's row sums are 0.21 (0.0–0.99) against 0.955 with `:centroid`, and its flux
+    7× too low (`montecarlo_incident` agrees with `:centroid` to 0.03%); the halves'
+    rows 0.79 against 0.91, flux −15%. Fitting does not help. `_visibility_samples`
+    averages each grid cell's sub-triangle points; on an element folded across a
+    convex part's facets that mean lies behind them (research notes, "Fitting CAD by
+    default"). Put each sample on the element's facets (as `Target` does the centroid)
+    and add a CAD capsule to the partial-visibility tests. The GUI builds `:centroid`
+    targets and is unaffected.
 
 ## Next
 1. **VisRad deposition parity: needs runs in VisRad.** The goal: optimize in
@@ -721,7 +757,8 @@ pick the original parts, not `<part>/cylN` pieces).
    - CAD fits (see Done): tori for fillets (fillet pieces now fit as small tilted cones
      and spheres; `minfraction` hides them); one surface shared across parts (the
      halves' inner walls); a quadrature at a cone apex; TALIS curvature kind for cones;
-     default filters (Open questions 1–2).
+     fitting by default (Open question 1; `minfraction = 1e-3` is the default since
+     2026-10-24).
    - Adjacent flat CAD pairs: near-kernel evaluations scale as shared-edge length over
      r/256 (~700 per pair on a sliver tube even with straight cuts); an exact or coarser
      treatment along straight shared edges would cut them. Banding misses most of the
@@ -731,8 +768,9 @@ pick the original parts, not `<part>/cylN` pieces).
    - Laser deposition on sliver CAD is slow in BVH `any_hit` (~5 s per beam on the full
      157k-element NIF CAD target; moot on the cavity).
 7. **GUI on CAD: what remains.** Partial curved fits of CAD parts (needs a
-   part-to-component name mapping, or a per-element surface on `Component`; neutral on
-   the NIF workspace); a 0.75 s first-import tick and a 0.16 s first field-coloring
+   part-to-component name mapping, or a per-element surface on `Component`; on the NIF
+   workspace 1.5× faster view factors and 0.6% on the halves' flux, the plan in Open
+   question 1); a 0.75 s first-import tick and a 0.16 s first field-coloring
    frame (compilation); `include_components!` costs 0.3 s on the UI thread; a "fit the
    hohlraum template to CAD parts" action; the foil objective with one shared parameter
    set for beams aimed at one point does not move (per-beam parameters).

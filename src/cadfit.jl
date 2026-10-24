@@ -759,7 +759,7 @@ end
 
 """
     curved_components(component; kinds = (:cylinder, :cone, :sphere), regions = nothing,
-                      maxradius = Inf, minfraction = 0.0, kwargs...) -> Vector{Component}
+                      maxradius = Inf, minfraction = 1e-3, kwargs...) -> Vector{Component}
     curved_components(components; kwargs...) -> Vector{Component}
     curved_components(target; kwargs...) -> Target
 
@@ -779,7 +779,12 @@ extent (its bounding-box diagonal), and those of less than `minfraction` of the 
 area. Gently curved CAD faces that are neither planar nor free-form within the fit's
 tolerance (radii of tens to hundreds of mm on a hohlraum half) otherwise each become a
 component of their own; their flat elements are close to exact (the sagitta of an
-element of size h is h²/8R).
+element of size h is h²/8R). `minfraction` defaults to 1e-3: the fillet pieces, small
+holes and edge faces of CAD fit as tiny cylinders, cones and spheres, and on a NIF CAD
+cavity (remeshed at 0.6 and 0.3 mm) the default keeps 68 of 158–159 components, with
+the capsule's incident flux within 3e-4 and its Legendre moments within 0.04 percentage
+points of fitting everything (research notes, "Fitting CAD by default"). Pass
+`minfraction = 0` to fit every region. `maxradius` is off by default.
 
 The radiation model then integrates over the true curved surface, as it does for the
 primitive `hohlraum`: each element's sub-triangle points are projected onto the surface
@@ -795,7 +800,7 @@ longer exists after the split; collect `elements(target, n)` over the names star
 with the part's.
 """
 function curved_components(c::Component; kinds = (:cylinder, :cone, :sphere), regions = nothing,
-                           maxradius::Real = Inf, minfraction::Real = 0.0, kwargs...)
+                           maxradius::Real = Inf, minfraction::Real = 1e-3, kwargs...)
     all(in((:cylinder, :cone, :sphere)), kinds) ||
         throw(ArgumentError("kinds must be among :cylinder, :cone and :sphere"))
     c.surface === nothing || return [c]
