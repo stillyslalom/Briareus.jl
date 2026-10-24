@@ -67,9 +67,16 @@ resolves, every public name has a docstring that some `@docs`/`@autodocs` block 
   keeps its centroid bit for bit), or on a convex surface (a capsule) it would see
   nothing.
 - CAD curved walls: `fit_surfaces` finds planes, cylinders, cones and spheres in a mesh;
-  `curved_components` (or `visrad_target(...; remesh, fit = true)`) splits a part into
-  `<part>/cyl1`, …, `<part>/cone1`, …, `<part>/sph1`, …, `<part>/rest`, each carrying
-  its fitted surface. `ConeSurface` projects radially at constant height (rim chords
+  `curved_components` splits a part into `<part>/cyl1`, …, `<part>/cone1`, …,
+  `<part>/sph1`, …, `<part>/rest`, each carrying its fitted surface; a part that is one
+  surface keeps its name. `cad_target`/`visrad_target`/`visrad_component` fit whenever
+  `remesh` is given (`fit = false` keeps flat elements; `minfraction = 1e-3`). Each
+  piece's `Component.part` names the user's part: name-taking APIs and reports go
+  through `parts`, `part_pieces` and `elements(t, part)` and aggregate by part
+  (`by = :component` for pieces); primitive targets report exactly as before. Rebuilding
+  a `Component` must pass `c.part`. The GUI keeps one flat component per part and fits
+  only the drive's own target (`_fitted_target`, mapped back like the cavity's index).
+  `ConeSurface` projects radially at constant height (rim chords
   land on the rim circles, so faceted frusta tile exactly); elements touching a cone's
   apex stay flat (the surface is singular there).
   Planes get none (flat elements are exact; `DiskSurface` assumes polar sectors). A
