@@ -3161,3 +3161,175 @@ fitted to Izumi 2021's 0.15/0.3 mg/cc anchors and the collision time to Izumi 20
 separation times (basecamp, 1.5× picket, 1.18× capsule), so this checks the composition
 (bubble, view factors and transfer), not the inputs. Ralph 2018's 18.5 % anchor stays
 skipped (unpublished pointing).
+
+## Wall material, conversion and capsule energetics (2026-10-24) *derived*
+
+ROADMAP Next 16's model changes, each with its data check. Full texts read (accepted
+manuscripts, in the user's paper folder, not in the repository): Döppner et al., PRL 115,
+055001 (2015) (OSTI 1209256); Schein et al., PRL 98, 175003 (2007) (OSTI 908388); Rosen,
+"Fundamentals of ICF hohlraums" (2005, OSTI 885380), §VI; Callahan et al., PoP 27,
+072704 (2020); Zylstra et al., PRE 106, 025202 (2022). Confidence: **H** primary text,
+**L** our arithmetic or construction, *calibrated* / *derived* as marked.
+
+### Inputs read
+
+| Quantity | Value | Source | Conf. |
+|---|---|---|---|
+| DU wall equivalence | "equivalent to an additional 6.5 % of laser power (≈25 TW) at the peak" | Döppner 2015, citing Kline 2013 and Callahan 2012 | H |
+| Same, as a drive factor | f_DU = 1.065 in T^3.3 ∝ E f_cap f_LEH f_DU, "in both simulations and experiments" | Callahan 2020 Eq. 5 | H |
+| DU hohlraum build | 7.0 µm DU lined with 0.7 µm Au, 22.3 µm Au backing; the liner keeps the picket as in Au | Döppner 2015 | H |
+| Au/DU pair, high foot (T-1) | N140311 Au 391 TW, η_L 0.857, 317 ± 4 eV; N140520 DU 393 TW, 0.863, 322 ± 4 eV | Döppner 2015 Table I | H |
+| Cocktail/Au loss ratio | E/A: Au (0.598, 0.398) T^3.3 t^0.6, U₀.₆Dy₀.₂Au₀.₂ (0.604, 0.407) T^3.1 t^0.57; ratio ∝ T^-0.22 t^-0.05; "about 0.83" for NIF | Rosen 2005 §VI | H |
+| Same, LASNEX | 97.6 / 90.8 / 88.6 % at 185 / 275 / 305 eV (1 ns); 17.5 % less wall loss → 10 % less laser energy at 300 eV | Schein 2007 | H |
+| Conversion in time | 0.7 t^0.12 makes Nova's 1 ns T ∝ t^0.15 (Lindl 2004 Fig. 4-4); 0.7 t^0.2 (Rosen); 0.85 t^0.2 (Schein) | energetics.md §2.2 | H |
+| Conversion in intensity | 0.95 at 10¹⁴, 0.80 at 10¹⁵ W/cm² (spheres, backscatter corrected) | Dewald 2008 abstract | M |
+| NIF hohlraum η | 85–90 % at 235–345 eV | Olson 2012 abstract | M |
+| N221204 split | wall 54.1 % (Au lining 4.4), LEH 25.2 %, gas 4.5 %, capsule 16.2 %; laser degraded 9–13 % | PRE 109 App. 3 | H |
+| N221204 backscatter | SBS 42 ± 11 kJ early in the peak, mostly inner cones; SRS 6 ± 1 kJ | AS24 | H |
+| LEH pair | N191118 3.64 mm LEH, ≈465 TW; N210601 3.1 mm, ≈390 TW; Dante Trad "comparable until ~7.5 ns" (≈295 / ≈300 eV) | Zylstra 2022 Fig. 2 and text | H, H-img |
+
+### 1. Au-lined DU wall (`du_wall_loss()`, `uranium()`)
+
+`WallLossAlbedo` gains `factor` f, `factor_exponent` δ (at `factor_temperature` 300 eV),
+applied to gold's clamped loss, and an optional gold `liner` (areal mass) during which
+the loss stays gold's (an energy-content blend w = min(1, liner/m_F) with m_F the
+constant-T `HeatFront` mass; *engineering*). Defaults unchanged (gold, bit for bit).
+
+- δ = −0.2 (Rosen −0.22; Schein's three LASNEX points give −0.19).
+- **f = 0.785, calibrated** to the 6.5 % equivalence: Döppner's high-foot hohlraum
+  (5.75 × 9.43 mm, 3.1 mm LEHs, 1.125 mm capsule at albedo 0.3), 390 TW × 0.86 coupling,
+  conversion 0.9, a wall source in two bands (30 % at |z| 0.5–1.7 mm, 70 % at 3.0–4.2),
+  at 13 ns, h 0.4: the Au wall needs 6.5 % more power for the DU wall's capsule Tr.
+  Range 0.778–0.789 over 12–14 ns and conversion 0.75–0.95 (*L*).
+- **Check, Döppner's T-1 pair** (not fitted): at equal power the DU wall raises the
+  capsule Tr by 4.9 eV (294.2 → 299.1); measured 317 → 322 ± 4 eV (+5 ± 6) at 391 / 393 TW.
+- **Rosen's 0.83 / Schein's 0.825 give only 5.0–5.1 %** here (3.9 eV): in this model
+  gold's Lindl loss leaves the wall ~30 % of the x-ray source at a NIF peak (α ≈ 0.94),
+  far from Schein's wall-dominated accounting (17.5 % → 10 % implies ~57 %). Pure DU
+  should be no better than the cocktail, so the calibrated f below Rosen's cocktail value
+  says the Lindl gold loss is low at late times, not that DU beats the cocktail.
+- On HYBRID-E (11.24 × 6.4 mm, same bands, 350 TW) the same f is worth 8.4–9.0 % of
+  power (6.0–6.5 eV) at 6–8 ns: the larger case-to-LEH ratio gives the wall a larger
+  share. In the N221204 example (full dynamics, nif conversion, ablator) DU raises the
+  peak capsule Tr from 303.3 to 310.6 eV.
+- Liner: 0.7 µm Au (Döppner; HYBRID-E's is unpublished) is crossed in ~0.4 ns at 150 eV;
+  at 300 eV, 8 ns it is 6 % of the heated mass (PRE 109 puts 4.4 of 54.1 % of the wall
+  heating, 8 %, in the lining; *L*, consistent in size).
+
+### 2. Conversion as a model (`Conversion`, `nif_conversion()`)
+
+η(t, I) = clamp(η₀(I) ((t − start)/1 ns)^s, range), η₀ constant or a table in log₁₀ I of
+the element's absorbed flux. Materials with a number keep the scalar path bit for bit
+(tested); intensity tables are generic in the number type (ForwardDiff through `solve`
+tested); `flux_response(...; laser)` linearizes an intensity-dependent conversion (secant,
+exact at `laser`); `Scenario`'s flux response evaluates a time-dependent one at its time.
+
+- **Closed-form check**: with the wall loss dominating (pinhole LEHs, reflecting capsule,
+  Nova scale-1 cylinder 1.6 × 2.55 mm, 20 TW), T ∝ t^((0.38 + s)/3.3): model slopes
+  0.111 / 0.147 / 0.171 for s = 0 / 0.12 / 0.2 over 0.3–1 ns (closed form 0.115 / 0.152 /
+  0.176).
+- **Lindl's Nova statement** (0.7 t^0.12 → T ∝ t^0.15) is *not* reproduced with open
+  LEHs: on the scale-1 hohlraum with 1.2 mm LEHs the slopes are 0.052 / 0.086 / 0.108 for
+  s = 0 / 0.12 / 0.2. The LEHs take ~36 % of the source and flatten T(t); Lindl's
+  analysis is wall-dominated. Matching T ∝ t^0.15 with open holes would need s ≈ 0.3
+  (*L*), so s stays an input.
+- **NIF preset** `nif_conversion()` = 0.7 t^0.12 ≤ 0.95 (*derived*): 0.80 / 0.85 / 0.90
+  at 3 / 5 / 8 ns, Olson's 85–90 % at NIF peak; the cap is Dewald's 10¹⁴ plateau and
+  Swadling 2025's VisRad value. Energy-weighted over N221204 it is 0.868. The materials'
+  default stays 0.75 (changing it would move every baseline, and see §4).
+- Dewald's intensity table is available as `Conversion(intensities = (1e14, 1e15),
+  efficiencies = (0.95, 0.80))` but is not used in the example: it is a disk/sphere
+  plateau (hohlraum η exceeds it, Lindl Fig. 4-10), and the element-mean absorbed flux
+  depends on the mesh.
+
+### 3. Capsule albedo with an effective radius (`CapsuleAlbedo`)
+
+α_eff = 1 − (1 − α_c)(R(t)/R₀)²: the fixed capsule mesh absorbs what a sphere of the
+effective radius would at the same incident flux; `energy_balance` books it,
+`energy_budget` integrates E_cap. α_c a number or a model (`TabulatedAlbedo` in time,
+the new `TemperatureAlbedo` in Tr); default 0.2 (Swadling 2025's f_cap 0.8).
+
+- **Schedule (example, *L*)**: HYDRA's ablation front, 0.92 mm = 0.81 R₀ at 6 ns (PRE 109
+  Fig. 1a), along the shape of Young 2020 Fig. 3a's N170827 front, its time axis mapped
+  piecewise linearly (Young's 0.81 R₀ at 5.75 ns → 6.0 ns; its end, 0.23 R₀ at 7.75 ns →
+  N221204's bang time 9.53 ns): R/R₀ = 0.94 at 4.2, 0.86 at 5.0, 0.81 at 6.0, 0.66 at 7.0, 0.51 at
+  8.0, 0.31 at 9.0 ns.
+- **Calibration**: α_c = 0.22 gives E_cap = 16.2 % of the coupled energy (285 kJ of
+  1762) in the full energetics configuration below (α_c 0.20: 16.5 %). It is degenerate
+  with the schedule and with the hohlraum temperature: in the configuration whose LEH
+  share matches HYDRA's (v4 below, Tr 307.7 eV) α_c = 0.2 gives 12.8 %, and 16.2 % would
+  need α_c ≈ 0 (or a larger effective radius than the ablation front). So "α_c ≈ 0.2"
+  is consistent with Swadling only together with the too-hot drive of §4.
+- Kr24b's 16.2 % is read as a fraction of the laser energy in the simulation (after the
+  9–13 % degradation): the four fractions sum to 100 % with no laser loss. As a fraction
+  of the delivered energy the same run gives 14.1 %.
+
+### 4. N221204 benchmark: energetics and the Fig. 10 blind effect
+
+`examples/n221204.jl ... full` with the new `key=value` options; full model (calibrated
+CBET, wall, lips, bubble); laser 2.03 MJ by eye. Backscatter: SBS 16.7 % of the inner
+power over 5.5–6.5 ns (ramps 5.0–5.5 and 6.5–7.5) and SRS 1.14 % over 5.5–9.0 ns, scaled to
+42 and 6 kJ (shapes *L*); degradation 11 % on every beam (the middle of 9–13 %); both
+before CBET (whose calibration used HYDRA's degraded powers). Coarse mesh (0.8 / 0.4)
+unless "std" (standard 0.28 / 0.16, 10 min per run on 4 threads; coarse within 0.006 in
+P2 and 0.1 eV).
+
+Energy split, % of the coupled energy (after backscatter and degradation); wall = all
+surfaces' heating (unconverted laser + absorbed x-rays; the bubble's light is conducted
+to the wall, so HYDRA's wall + gas, 58.6 %, is the comparison):
+
+| Run | wall | LEH | capsule | peak capsule Tr (eV) | P2/P0 min (ns) | zero | 8 ns | rms vs Fig. 10 |
+|---|---|---|---|---|---|---|---|---|
+| HYDRA (PRE 109 App. 3; Fig. 10) | 58.6 | 25.2 | 16.2 | ~300 internal, Dante 313 | −0.170 (5.6) | 6.67 | +0.095 | — |
+| before, std (Au, η 0.75, ablator 0.3 at R₀, full laser) | 57.6 | 22.2 | 20.1 | 301.8 at 5.5 ns | −0.168 (5.25) | 6.26 | +0.123 | 0.036 |
+| v1 + backscatter + 11 % degradation | 58.2 | 22.1 | 19.8 | 288.9 at 8.0 | −0.138 (5.25) | 6.19 | +0.119 | 0.042 |
+| v2 = v1 + nif conversion | 50.8 | 25.9 | 23.3 | 303.3 | −0.136 | 6.19 | +0.117 | 0.042 |
+| v3 = v2 + DU wall | 46.4 | 28.2 | 25.4 | 310.6 | −0.127 | 6.20 | +0.106 | 0.041 |
+| v4 = v1 + capsule model (α_c 0.2) | 62.1 | 25.1 | 12.8 | 307.7 | −0.140 | 6.28 | +0.058 | 0.041 |
+| v5 = v4 + nif conversion | 55.4 | 29.7 | 15.0 | 323.4 | −0.139 | 6.28 | +0.056 | 0.042 |
+| after, std (`energetics=new`: v5 + DU, α_c 0.22) | 50.8 | 33.0 | 16.2 | 334.2 at 8.0 | −0.134 (5.25) | 6.31 | +0.046 | 0.044 |
+
+Findings:
+- **The split has two independent numbers** (wall = 1 − LEH − capsule with no other
+  sink): the LEH share fixes the drive temperature, the capsule share then fixes
+  α_c(R/R₀)². With everything published switched on (`after`), the LEH share is 33 %
+  against 25 % and the capsule Tr peaks at 334 eV against HYDRA's ~300 (Dante 313):
+  (25.2/33.0)^¼ × 334 = 312 eV, i.e. matching the LEH share and matching Dante are the
+  same correction. The x-ray wall loss is 37.6 % of the coupled energy; HYDRA's split at
+  this conversion needs ~45 %, a wall loss ~1.6× this model's at the lower temperature.
+- **What overshoots**: Lindl's gold loss (α ≈ 0.94 at the HYBRID-E peak) times the
+  calibrated DU factor, with η 0.87, and the shrinking capsule that removes the late sink
+  (v1 → v4: +19 eV). Each piece is from data; together they are too reflective. The
+  configuration that matches the LEH share (v4: Au loss, η 0.75) does so by the old
+  constant conversion standing in for the missing wall loss. Missing sinks here: the He
+  gas (4.5 %), the LEH windows, the M-band (Dewald 2020, not gray), and HYDRA's NLTE wall
+  emission. Not fixed by tuning: no default was changed to close it.
+- **Backscatter and degradation** (v1) cool the peak by 13 eV and move the swing minimum
+  from −0.168 to −0.138 (less inner power after CBET); they barely change the late P2.
+- **Fig. 10 (blind)**: with the full energetics the minimum is −0.134 at 5.25 ns
+  (Fig. 10 −0.170 at 5.6), the upward crossing 6.31 ns (6.67), +0.046 at 8 ns (+0.095);
+  rms 0.044 against 0.036 before. The late P2 drops by 0.065 with the capsule model: the
+  shrinking absorber turns the capsule mesh into a reflector (α_eff 0.80 at 8 ns, 0.92 at 9), and a
+  hohlraum with less sink smooths more. Part of that is physical (the real capsule
+  absorbs less late), part is the fixed-mesh approximation (the flux is still evaluated
+  at R₀; Fig. 10's radius is not stated). Nothing was tuned to Fig. 10.
+
+### 5. LEH lips on the Zylstra 2022 pair
+
+Static solves at 7 ns, 6.4 × 11.24 mm, h 0.4, wall bands as above; the power the 3.64 mm
+LEH needs to give the 3.1 mm LEH's capsule Tr at 390 TW (data: 465/390 = ×1.192 for
+"comparable" Dante Trad, the 3.1 mm one 5 eV hotter, so the equal-Tr ratio is ≥ 1.19):
+
+| Wall, conversion | no lips, static wall | no lips, moving wall | lips (0.857 r₀), static | lips, moving |
+|---|---|---|---|---|
+| Au loss, 0.75 | ×1.124 | ×1.131 | ×1.099 | ×1.107 |
+| DU, nif | ×1.140 | ×1.147 | ×1.115 | ×1.122 |
+
+Lips closing to Young's 0.857 r₀ for both sizes *reduce* the model's LEH sensitivity
+(both holes lose the same fraction of their area, so the difference shrinks); closing both by Young's absolute 0.26 mm gives ×1.143
+(DU, nif, moving). All variants sit below the data's ×1.19. Reaching it at equal
+temperature would need the LEHs to carry ~55 % of the 3.64 mm hohlraum's loss at 7 ns,
+implausible against PRE 109's 25 % for the whole pulse; so the two shots' different
+histories (N191118's pulse ends at ~7.5 ns, N210601's continues; different feet) and
+Dante's LEH view (it sees the outer-beam bubble region, Ch24), not the lips, are the
+likely difference. The pair checks the trend only (*L*).

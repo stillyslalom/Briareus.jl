@@ -523,6 +523,28 @@ Details and numbers in the research notes, under the section named in each entry
   Tests: areas, facing, zero exchange, beams on both faces (operator vs ray trace),
   clearance pass and fail.
 
+## Done (2026-10-24, energetics models)
+Research notes, "Wall material, conversion and capsule energetics (2026-10-24)". Item 16.
+- **`du_wall_loss()` / `uranium()`**: `WallLossAlbedo(; factor, factor_exponent, liner)`
+  scales gold's loss by f (T/300 eV)^-0.2 (Rosen 2005, Schein 2007), gold while the heat
+  front is inside a 0.7 µm liner (Döppner 2015). f = 0.785 *calibrated* to Döppner's
+  6.5 % peak-power equivalence on the high-foot hohlraum; checked on his T-1 Au/DU pair
+  (+4.9 eV against +5 ± 6). Worth 8.4–9 % of power on HYBRID-E. Gold unchanged, bit for bit.
+- **`Conversion`**: η(t, I) = η₀(I)((t − start)/1 ns)^s, η₀ constant or a log-I table
+  (Dewald 2008); `nif_conversion()` = 0.7 t^0.12 ≤ 0.95 (0.85 / 0.90 at 5 / 8 ns, Olson
+  2012). Scalar conversions bit for bit; generic in the number type; `flux_response(...;
+  laser)` for intensity tables. Checked against the wall-dominated closed form
+  T ∝ t^((0.38 + s)/3.3); Lindl's open-LEH Nova t^0.15 is not reproduced (0.086).
+- **`CapsuleAlbedo`** (α_c, effective radius schedule) and `TemperatureAlbedo`;
+  `energy_balance` books E_cap; `drive_history` records laser, source, absorbed and
+  setup power, and **`energy_budget`** integrates them.
+- **`examples/n221204.jl`** takes `wall=`, `conversion=`, `capsule=`, `capsule_albedo=`,
+  `degrade=`, `backscatter=` and `energetics=new`, and prints the energy budget and the
+  rms against Fig. 10. Before → after (standard mesh): split 57.6 / 22.2 / 20.1 → 50.8 /
+  33.0 / 16.2 % (HYDRA 58.6 / 25.2 / 16.2), capsule Tr 301.8 → 334.2 eV; Fig. 10 (blind):
+  minimum −0.168 → −0.134 (−0.170), crossing 6.26 → 6.31 ns (6.67), +0.123 → +0.046 at
+  8 ns (+0.095), rms 0.036 → 0.044. The example's defaults are unchanged.
+
 ## Done (2026-10-24, hohlraum dynamics calibrated)
 Research notes, "Hohlraum dynamics calibrated to published data (2026-10-24)". Items 9,
 10 and 16; PRE 109 Fig. 10 used only as the blind check.
@@ -905,29 +927,27 @@ the reference's view factors hold through the pulse; items 9 and 10 remove that 
     (+0.123 at 8 ns against +0.095), but it still turns positive ~0.4 ns early (item 9).
     At 4.5 ns it sits 0.06 above Fig. 10 (DN24's input cone fraction there is below
     Fig. 9b's); the foot sits ~0.03 below (mock pointing, foot cone fraction read by
-    eye). Model changes still to make, each with its data:
-    - `WallLossAlbedo` material factor for Au-lined DU: 1 − α × ~0.83 with the
-      temperature exponent shifted ~−0.2 (Rosen 2005, Schein 2007; Döppner 2015's 6.5 %
-      peak-power equivalence as the check), optionally gold until `HeatFront` passes the
-      liner's areal mass;
-    - `conversion` as a model: η₀ (t/1 ns)^0.12–0.2 and per-element in log I from 0.95 at
-      10¹⁴ to 0.80 at 10¹⁵ W/cm²; the NIF default toward 0.85–0.9 at peak (the only
-      published VisRad calibration is η 0.95, α 0.77 on an Au hohlraum at 400 TW,
-      Swadling 2025);
-    - a capsule albedo model (tabulated, default ~0.2) with an effective-radius
-      schedule, E_cap in `energy_balance`, calibrated to the 16.2 % total absorption of
-      N221204 (not the 246 kJ left in the unablated shell);
-    - the LEH lips of item 9 (done) checked on the Zylstra 2022 pair (3.64 mm at
-      465 TW and 3.1 mm at 390 TW reach the same Trad);
+    eye). The energetics models are in (2026-10-24, see Done: `du_wall_loss`,
+    `Conversion`/`nif_conversion`, `CapsuleAlbedo`, `energy_budget`, backscatter and
+    degradation in the example). With all of them on, the split is wall 50.8 / LEH 33.0 /
+    capsule 16.2 % (HYDRA 58.6 with gas / 25.2 / 16.2, the capsule calibrated) and the
+    capsule Tr peaks at 334 eV (HYDRA ~300 internal, Dante 313): the published pieces
+    together leave the wall too reflective (x-ray wall loss ~1.6× short at HYDRA's
+    temperature). Still to do, each with its data:
+    - the missing sinks and wall loss behind that excess: He gas (4.5 %), LEH windows, a
+      wall loss above Lindl's gold at late times (the DU factor calibrated to Döppner's
+      6.5 % came out 0.785, below Rosen's cocktail 0.83, a sign of the same thing), and
+      the M-band (item 13); then recalibrate the capsule albedo (16.2 % needs α_c ≈ 0 at
+      a drive that matches the LEH share);
     - a synthetic Dante (item 13) reported beside the capsule-seen temperature;
-    - laser degradation (HYDRA's 9–13 %) and backscatter (SBS 42 kJ) in the example.
-    Benchmark targets still to check: drive Trad 313 eV (307 for N210808; capsule Tr
-    305–312 eV now, partly from the undegraded laser), the 54 / 25 / 4.5 / 16 % energy
-    split, bang time 9.53 ns as the end of the drive window, and hot-spot P2 ≈ 0 and
-    velocity 36 km/s at (151°, 54°) through item 11. The pointing stays the public
-    mock-up; the non-public export's aim points never enter the repository. CPPs, window
-    geometry, corners and the liner thickness are unpublished and stay at repository
-    defaults.
+    - the Zylstra 2022 LEH pair: the model needs ×1.10–1.15 more power for the 3.64 mm
+      LEH (lips reduce it), the data ×1.19 or more; the shots' different histories and
+      Dante's view are the likely gap, so a time-dependent run of both pulses is next.
+    Benchmark targets still to check: bang time 9.53 ns as the end of the drive window,
+    and hot-spot P2 ≈ 0 and velocity 36 km/s at (151°, 54°) through item 11. The pointing
+    stays the public mock-up; the non-public export's aim points never enter the
+    repository. CPPs, window geometry, corners and the liner thickness are unpublished
+    and stay at repository defaults.
 17. **Briareus → CompactLES** (`reference/litreview/hydro_coupling.md`). LLNL's two-step
     method with Briareus as the integrated step and CompactLES as the capsule-only step.
     Coupling (user, 2026-10-22): both codes are Julia, so couple in memory through a
