@@ -9,16 +9,29 @@
     quads = aimed.(nif_quads())
     inner(bs) = [b.group in (:inner23, :inner30) for b in bs]
 
-    # Izumi 2021's transparency anchors: 29 % / 54 % at 5.5 ns (0.3 / 0.15 mg/cc) in a
-    # 2.88 mm hohlraum, launched 0.2 ns after a 0.3 ns turn-on
+    # calibration: the tip against Izumi 2021 Fig. 8a (seven shots, ±40 µm), the absorbed
+    # fraction against its HYDRA run (Fig. 10a) with the bubble at Izumi's z = ±3 mm
     m3 = BubbleAbsorption(radius = 2.88, turn_on = 0.3)
     m15 = BubbleAbsorption(radius = 2.88, turn_on = 0.3, fill = 0.15)
-    @test bubble_transmission(m3, 5.5) ≈ 0.29 rtol = 1e-10
-    @test bubble_transmission(m15, 5.5) ≈ 0.54 rtol = 1e-10
-    @test bubble_depth(m3, 5.5) ≈ 1.75
+    tr = izumi2021_bubble()
+    meas = findall(==("data"), tr.source)
+    @test length(meas) == 28
+    res = [bubble_depth(BubbleAbsorption(radius = 2.88, turn_on = 0.3, energy = tr.energy[i],
+                                         fill = tr.fill[i], stagnation = Inf), tr.t[i]) - tr.x_bub[i]
+           for i in meas]
+    @test sqrt(sum(abs2, res) / length(res)) < 0.045 && maximum(abs, res) < 0.1
+    ab = izumi2021_absorption()
+    mz = BubbleAbsorption(radius = 2.875, turn_on = 0.3, footprint_z = 3.0)
+    ii = findall(inner(quads))
+    for i in findall(==("hydra"), ab.source)
+        @test sum(bubble_fractions(mz, quads, ab.t[i]).absorbed[ii]) / length(ii) ≈ ab.absorbed[i] atol = 0.03
+    end
+    @test 0.3 < bubble_transmission(m3, 5.5) < 0.4             # Izumi's own model: 0.29
+    @test 0.5 < bubble_transmission(m15, 5.5) < 0.62           # and 0.54
+    @test bubble_depth(m3, 5.5) ≈ 0.36 * (5.5 - 0.55)
     @test bubble_speed(m15) / bubble_speed(m3) ≈ 2^0.2
-    @test bubble_speed(BubbleAbsorption(radius = 2.88, energy = 1.5)) ≈ 0.35 * 1.5^0.2
-    @test 1.7 < m3.density_exponent < 2.0                     # near IB's ρ²
+    @test bubble_speed(BubbleAbsorption(radius = 2.88, energy = 1.5)) ≈ 0.36 * 1.5^0.2
+    @test m3.density_exponent == 1.8                            # IB ∝ ρ², S ∝ ρ₀^-0.1
     @test bubble_transmission(m3, 0.4) == 1 && bubble_depth(m3, 0.4) == 0
     @test bubble_transmission(BubbleAbsorption(radius = 2.88, stagnation = Inf), 20.0) == 0
 
@@ -39,14 +52,19 @@
     @test bubble_transmission(m3, 50.0) > 0
     @test all(diff([bubble_depth(m3, t) for t in 0.0:0.1:20.0]) .>= 0)
 
-    # the ridge stop's timing: Izumi 2018's 5.8 ns for a 0.3 ns turn-on, 0.4 ns earlier
-    # for a 1.2× capsule, 5.45 ns with a 1.5× picket
-    @test m3.collision ≈ 5.8
-    @test BubbleAbsorption(radius = 2.88, turn_on = 0.3, capsule_scale = 1.2).collision ≈ 5.4
-    @test BubbleAbsorption(radius = 2.88, turn_on = 0.3, energy = 1.5).collision ≈ 5.45
-    @test ridge_fraction(m3, 5.8 - m3.ridge_rise) == 0 && ridge_fraction(m3, 5.5) == 0
-    @test ridge_fraction(m3, 5.8) ≈ 0.5
-    @test ridge_fraction(m3, 5.8 + m3.ridge_rise) == 1
+    # the ridge stop's timing: Izumi 2018's 5.8 ns for a 0.3 ns turn-on, ~0.4 ns earlier
+    # for the 1.18× capsule (outer radius 1.064 mm), 5.45 ns with a 1.5× picket
+    mc = BubbleAbsorption(radius = 2.875, turn_on = 0.3)
+    @test mc.collision ≈ 5.8
+    @test BubbleAbsorption(radius = 2.875, turn_on = 0.3, capsule_radius = 1.064).collision ≈ 5.4 atol = 0.05
+    @test BubbleAbsorption(radius = 2.875, turn_on = 0.3, energy = 1.5).collision ≈ 5.45 atol = 0.01
+    # a wider capsule–wall gap collides later (HYBRID-E: 3.2 mm wall, 1.135 mm capsule)
+    @test BubbleAbsorption(radius = 3.2, turn_on = 0.4, capsule_radius = 1.135).collision ≈
+          0.4 + 5.5 * (3.2 - 1.135) / (2.875 - 0.908)
+    @test m3.collision ≈ 0.3 + 5.5 * (2.88 - 0.908) / (2.875 - 0.908)
+    @test ridge_fraction(mc, 5.8 - mc.ridge_rise) == 0 && ridge_fraction(mc, 5.5) == 0
+    @test ridge_fraction(mc, 5.8) ≈ 0.5
+    @test ridge_fraction(mc, 5.8 + mc.ridge_rise) == 1
     @test ridge_fraction(BubbleAbsorption(radius = 2.88, collision = Inf), 1e3) == 0
 
     # the clipped fraction against a closed form: a Gaussian spot (1/e radius a) on a

@@ -1,0 +1,76 @@
+# Inner edge of the hohlraum wall material at t = 6 ns in the HYDRA simulations of N210808
+# (left half) and N221204 (right half) shown in A. L. Kritcher et al., Phys. Rev. E 109,
+# 025204 (2024), Fig. 1a (upper half: Au-lined DU wall in orange, simulated laser rays drawn
+# over it). Digitized 2026-10-24 from the figure's embedded raster (2090 x 895 px): hohlraum
+# axis at the dashed line (column 331), waist at the boundary of the t = 6 ns and t = 0
+# halves (row 446.5), scale from the outer wall outline (3.2 mm = 180 px, 56.25 px per mm,
+# taken isotropic). In each row (every 0.1 mm of z) the edge is the innermost run of four
+# orange pixels from the axis outward; one pixel is 0.018 mm. Rays drawn over the wall hide
+# material under them, so the edge is where the rays end (the laser-absorption surface)
+# or, where rays cross the plasma, an upper bound on r (a lower bound on the displacement).
+# Regions (by eye): waist z < 1.1 mm (inner-beam rays end at the edge; displacement
+# 0.34-0.41 mm below z = 0.9, the usable number: 0.38 +/- 0.04); inner 1.2-2.0 (under inner-beam
+# deposition); collision 2.0-3.0 (wall and ablator plasma meet, rays cross it); outer
+# 3.0-3.6 (outer-beam rays drawn over the plasma: the edge is hidden, values near 2.9 mark the rays);
+# bubble 3.6-4.8 (Au bubble under the outer spots); lip > 4.8 (LEH lip plasma). Two
+# isolated rows hit by text or ray strokes are NaN. A schematic of a simulation, not data.
+# Research notes, "Hohlraum dynamics calibrated to published data (2026-10-24)".
+# Columns: z (mm from the waist); r_n210808, r_n221204 (edge radius, mm; initial wall 3.2);
+# region
+z,n210808,n221204,region
+0.04,2.844,2.862,waist
+0.15,2.827,2.862,waist
+0.26,2.827,2.844,waist
+0.35,2.827,2.844,waist
+0.45,2.809,2.844,waist
+0.56,2.809,2.827,waist
+0.65,2.809,2.827,waist
+0.76,2.773,2.809,waist
+0.86,2.773,2.791,waist
+0.95,2.756,2.791,waist
+1.06,2.738,2.756,waist
+1.15,NaN,2.738,inner
+1.25,2.631,2.667,inner
+1.36,2.596,2.613,inner
+1.45,2.578,2.613,inner
+1.56,2.578,2.613,inner
+1.64,2.578,2.596,inner
+1.75,2.560,2.596,inner
+1.86,2.542,2.596,inner
+1.95,2.524,2.560,inner
+2.05,2.471,1.920,collision
+2.16,2.382,1.849,collision
+2.25,2.258,1.813,collision
+2.36,2.222,1.796,collision
+2.46,2.169,1.760,collision
+2.55,2.133,1.724,collision
+2.66,2.098,2.133,collision
+2.75,2.062,2.080,collision
+2.85,2.009,2.044,collision
+2.96,2.898,1.991,collision
+3.05,2.916,1.956,outer
+3.16,NaN,2.880,outer
+3.24,2.933,2.880,outer
+3.35,2.933,2.898,outer
+3.46,2.933,2.898,outer
+3.55,2.862,2.862,outer
+3.65,2.773,2.773,bubble
+3.76,2.684,2.684,bubble
+3.85,2.507,2.578,bubble
+3.96,2.418,2.507,bubble
+4.06,2.293,2.400,bubble
+4.15,2.204,2.204,bubble
+4.26,2.098,2.027,bubble
+4.35,2.044,2.098,bubble
+4.45,2.293,2.293,bubble
+4.56,2.418,2.507,bubble
+4.65,2.578,2.542,bubble
+4.76,2.560,2.507,bubble
+4.84,1.529,1.440,lip
+4.95,1.369,1.351,lip
+5.06,1.333,1.280,lip
+5.15,1.280,1.209,lip
+5.25,1.244,1.156,lip
+5.36,1.138,1.102,lip
+5.45,1.102,1.067,lip
+5.56,1.084,1.031,lip

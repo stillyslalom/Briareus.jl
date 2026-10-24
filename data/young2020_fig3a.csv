@@ -1,0 +1,49 @@
+# Dynamic view-factor model radii for NIF shot N170827 (W-doped HDC, 11.3 mm long hohlraum; fill
+# not stated in the paper), from C. V. Young et al., Phys. Plasmas 27, 082702 (2020), Fig. 3a (LLNL-JRNL-807170 accepted
+# manuscript, middle panel, solid lines: "Dynamic"). The hohlraum radius is the average of
+# the laser-absorption and x-ray-emission surfaces of a 2D HYDRA simulation; the capsule
+# radius its ablation front; the LEH radius estimated from SXI (end value measured, the
+# ramp assumed). Digitized 2026-10-24 from the figure's embedded raster (638 x 626 px):
+# time axis from the frame and gridlines (0 and 8 ns at 80 and 623 px, residual < 1 px),
+# radius axis from the gridlines at 0, 1, 2, 3 (46.9 px per mm). Each value is the centre
+# of the coloured stroke averaged over +/-2 px (+/-0.03 ns) of columns; where the solid
+# line runs within 2.5 px of the dashed static line ("Static, 0.85x") the two cannot be
+# told apart and the error is 0.05 mm, else 0.03 mm. The plotted initial hohlraum radius
+# is 3.0 mm (the paper's Table II lists 3.1 for N170827); use displacements from the first
+# row. Overlay checked by eye. Research notes, "Hohlraum dynamics calibrated to published
+# data (2026-10-24)".
+# Columns: t (ns); wall, leh, capsule (radius, mm); u_wall, u_leh, u_capsule (reading error, mm)
+t,wall,leh,capsule,u_wall,u_leh,u_capsule
+0.00,3.017,1.828,0.991,0.03,0.03,0.03
+0.25,3.017,1.823,0.991,0.03,0.03,0.03
+0.50,3.017,1.810,0.991,0.03,0.03,0.03
+0.75,3.017,1.802,0.991,0.03,0.03,0.03
+1.00,3.000,1.787,0.991,0.03,0.03,0.03
+1.25,2.953,1.780,0.991,0.03,0.03,0.03
+1.50,2.908,1.765,0.991,0.03,0.03,0.03
+1.75,2.859,1.759,0.991,0.03,0.03,0.03
+2.00,2.814,1.744,0.970,0.03,0.03,0.03
+2.25,2.772,1.738,0.970,0.03,0.03,0.03
+2.50,2.727,1.723,0.970,0.03,0.03,0.03
+2.75,2.680,1.716,0.970,0.03,0.03,0.03
+3.00,2.638,1.699,0.970,0.03,0.03,0.03
+3.25,2.569,1.695,0.949,0.05,0.03,0.03
+3.50,2.559,1.678,0.949,0.05,0.03,0.03
+3.75,2.537,1.674,0.949,0.05,0.03,0.03
+4.00,2.548,1.657,0.932,0.05,0.03,0.03
+4.25,2.550,1.652,0.928,0.05,0.03,0.03
+4.50,2.559,1.638,0.906,0.05,0.03,0.03
+4.75,2.569,1.631,0.857,0.05,0.03,0.05
+5.00,2.574,1.610,0.849,0.05,0.05,0.05
+5.25,2.582,1.593,0.838,0.05,0.05,0.05
+5.50,2.586,1.582,0.829,0.05,0.05,0.05
+5.75,2.586,1.580,0.804,0.05,0.05,0.05
+6.00,2.584,1.567,0.733,0.05,0.05,0.03
+6.25,2.576,1.567,0.674,0.05,0.05,0.03
+6.50,2.563,1.567,0.614,0.05,0.05,0.03
+6.75,2.554,1.567,0.542,0.05,0.05,0.03
+7.00,2.505,1.567,0.465,0.05,0.05,0.03
+7.25,2.463,1.567,0.380,0.03,0.05,0.03
+7.50,2.463,1.567,0.294,0.03,0.05,0.03
+7.75,2.450,1.567,0.224,0.03,0.05,0.03
+8.00,2.415,1.572,0.224,0.03,0.05,0.03

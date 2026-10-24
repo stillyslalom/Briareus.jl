@@ -1,7 +1,25 @@
 @testset "moving targets on keyframes" begin
-    w = WallMotion(speed = 0.1, start = 1.0)
+    w = WallMotion(speed = 0.1, start = 1.0, saturation = Inf)
     @test wall_radius(w, 2.875, 0.5) == 2.875
     @test wall_radius(w, 2.875, 5.0) ≈ 2.475
+    # the default wall stops: ballistic to the knee, C¹ there, then approaching saturation
+    d = WallMotion()
+    @test (d.speed, d.start, d.saturation, d.knee) == (0.185, 0.8, 0.45, 0.05)
+    tk = d.start + (d.saturation - d.knee) / d.speed
+    @test wall_displacement(d, tk) ≈ d.saturation - d.knee
+    @test wall_displacement(d, tk + 1e-6) - wall_displacement(d, tk) ≈ d.speed * 1e-6 rtol = 1e-4
+    @test wall_displacement(d, 9.0) < d.saturation && wall_displacement(d, 9.0) > d.saturation - 1e-6
+    @test wall_displacement(d, 0.5) == 0
+    @test_throws ArgumentError WallMotion(speed = 0.1, saturation = 0.04)
+    # the fitted defaults reproduce Young 2020's dynamic view-factor radius (N170827)
+    y = young2020_radii()
+    i = findall(t -> 0.5 <= t <= 6.75, y.t)
+    r = [y.wall[1] - y.wall[k] - wall_displacement(WallMotion(start = 0.15 + 0.8), y.t[k]) for k in i]
+    @test maximum(abs, r) < 0.035
+    # the HYBRID-E waist edge of PRE 109 Fig. 1a: 0.36–0.41 mm in at 6 ns
+    f1a = pre109_fig1a_wall()
+    waist = findall(z -> z <= 0.7, f1a.z)
+    @test all(0.33 .< 3.2 .- f1a.n221204[waist] .< 0.42)
 
     kw = (length = 10.1, leh_radius = 1.55, capsule_radius = 0.9, h = 0.8, capsule_h = 0.4,
           wall = Material(:Au; albedo = 0.9, conversion = 0.8), corner_radius = 0.3)

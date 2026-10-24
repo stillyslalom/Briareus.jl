@@ -36,7 +36,7 @@ export DepositionOperator, Deposition, deposit, raytrace_deposition, raytrace_co
 export Enclosure, enclosure, cad_target
 export view_factors, closure_error, enforce_closure!, RadiationModel, RadiationSolution, solve,
        flux_response, energy_balance, radiation_temperature, to_Wcm2, SIGMA_SB, albedos
-export WallMotion, wall_radius, moving_hohlraum, Keyframes, model_at, deposition_at
+export WallMotion, wall_radius, wall_displacement, moving_hohlraum, Keyframes, model_at, deposition_at
 export PulseShape, pulse_energy, with_pulses, drive_history, cone_fraction_pulses,
        write_pulse_table, read_pulse_table, retune_drive
 export enclosed_radius, envelope_radius, focal_profile, enclosed_fraction, with_axes,
@@ -46,7 +46,8 @@ export enclosed_radius, envelope_radius, focal_profile, enclosed_fraction, with_
        SpotWing, PowerLawWing, UniformScatter, nif_wings, DEFAULT_CLEARANCE_THRESHOLDS
 export LaserPlasmaModel, apply_lpi, Backscatter, CalibratedTransfer, linear_transfer,
        tabulated_transfer, lpi_summary, BubbleAbsorption, bubble_speed, bubble_depth,
-       bubble_transmission, bubble_fractions, iris_fraction, ridge_fraction, lpi_deposit
+       bubble_transmission, bubble_fractions, iris_fraction, ridge_fraction, lpi_deposit,
+       izumi2021_bubble, izumi2021_absorption, young2020_radii, pre109_fig1a_wall
 export CBET, TwoZoneCBET, n221204_cbet, n221204_fig9, n221204_fig10, n221204_fig9_beams, CH_IONS, ion_wave_amplitude, receiver_ratio, calibrate_cbet, cbet_gain, cbet_coupling, cbet_plasma, plasma_dispersion
 export UnconvertedColor, nif_unconverted, UnconvertedRow, UnconvertedReport, unconverted_light_check
 export TaLISRow, TaLISReport, talis_check, write_talis_csv, TALIS_SOURCE, TALIS_OUT_OF_SCOPE, talis_requirement

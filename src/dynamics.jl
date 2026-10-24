@@ -1,26 +1,88 @@
 # Moving targets: geometry that changes through the pulse, solved on keyframes.
 
 """
-    WallMotion(; speed = 0.10, start = 0.0)
+    WallMotion(; speed = 0.185, start = 0.8, saturation = 0.45, knee = 0.05)
 
-Inward motion of a hohlraum's radiating wall: the x-ray emission surface sits at radius
-`R₀ - speed * max(0, t - start)` (mm, ns), where `R₀` is the initial wall radius and
-`start` the outer cones' turn-on.
+Inward motion of a hohlraum's radiating wall. The wall cylinder sits at radius
+`R₀ - d(t)` (mm, ns), where `R₀` is the initial wall radius and the displacement
 
-The default speed is an engineering default for low gas fill (0.3 mg/cc), *derived* from
-Chen et al. 2020 (the emitting wall 500 µm in by 5.5 ns at 0.3 mg/cc, 400 µm at 0.45;
-about 0.07 mm/ns) and the HYBRID-E wall of PRE 109, 025204 Fig. 1a (0.35–0.4 mm in by
-6 ns at the waist); use ~0.05 mm/ns at 0.6 mg/cc. See research notes, "Hohlraum
-dynamics".
+    d(t) = stagnate(speed · max(0, t − start), saturation, knee)
+
+is ballistic from `start` and stops smoothly at `saturation`: it follows the straight
+line up to `saturation − knee`, then approaches `saturation` as
+`saturation − knee · exp(−(x − saturation + knee)/knee)` (C¹ at the knee, the form of
+[`bubble_depth`](@ref)). `saturation = Inf` keeps the wall moving at `speed`.
+
+The radius stands for the one of the LLNL dynamic view-factor model (Young et al., PoP
+27, 082702, 2020): the average of the laser-absorption and x-ray-emission surfaces of a
+2D HYDRA simulation, as one cylinder. The defaults are *fitted* to that model's hohlraum
+radius for N170827 (Young Fig. 3a, digitized as [`young2020_radii`](@ref)): the wall
+starts moving at the end of the picket, 0.8 ns after the turn-on (fit 0.78, range
+0.68–0.85), moves in at 0.185 mm/ns (0.175–0.195) and stops 0.45 mm in (0.445–0.455,
+±0.03 reading), where it stays through the peak. So `start` is the outer cones' turn-on
+plus 0.8 ns (the default assumes a turn-on at 0). For HYBRID-E (N221204) the HYDRA
+laser-absorption edge of the wall at the waist is 0.38 ± 0.04 mm in at 6 ns (PRE 109,
+025204 Fig. 1a, digitized as [`pre109_fig1a_wall`](@ref)); the emission surface lies
+outside it, so this bounds that platform's `saturation` from above. Chen et al. 2020
+(G-LEH) saw the emitting wall 0.5 mm in by 5.5 ns at 0.3 mg/cc and 0.4 mm at 0.45.
+Research notes, "Hohlraum dynamics calibrated to published data (2026-10-24)".
 """
 struct WallMotion
     speed::Float64
     start::Float64
+    saturation::Float64
+    knee::Float64
+    function WallMotion(speed, start, saturation = Inf, knee = 0.05)
+        speed >= 0 || throw(ArgumentError("speed must not be negative"))
+        knee > 0 && saturation > knee || throw(ArgumentError("need saturation > knee > 0"))
+        return new(Float64(speed), Float64(start), Float64(saturation), Float64(knee))
+    end
 end
-WallMotion(; speed::Real = 0.10, start::Real = 0.0) = WallMotion(speed, start)
+WallMotion(; speed::Real = 0.185, start::Real = 0.8, saturation::Real = 0.45,
+           knee::Real = 0.05) = WallMotion(speed, start, saturation, knee)
+
+"Wall displacement (mm) of `w` at time `t` (ns): ballistic, then stopping at `saturation`."
+wall_displacement(w::WallMotion, t) =
+    _stagnate(w.speed * max(zero(t), t - w.start), w.saturation, w.knee)
 
 "Wall radius (mm) at time `t` (ns) of a wall that starts at radius `R0`."
-wall_radius(w::WallMotion, R0, t) = R0 - w.speed * max(0.0, t - w.start)
+wall_radius(w::WallMotion, R0, t) = R0 - wall_displacement(w, t)
+
+# A digitized table in data/: numeric columns as Float64 vectors, others as strings.
+function _data_table(file)
+    h, rows = read_csv(joinpath(@__DIR__, "..", "data", file))
+    col(i) = (v = [r[i] for r in rows];
+              all(x -> tryparse(Float64, x) !== nothing, v) ? parse.(Float64, v) : String.(v))
+    return NamedTuple{Tuple(Symbol.(h))}(Tuple(col(i) for i in eachindex(h)))
+end
+
+"""
+    young2020_radii() -> NamedTuple
+
+The LLNL dynamic view-factor model's radii for N170827 against time: Young et al., PoP
+27, 082702 (2020), Fig. 3a, digitized (`data/young2020_fig3a.csv`, provenance in its
+header). Columns `t` (ns, 0–8 every 0.25), `wall` (the hohlraum radius, the average of
+HYDRA's laser-absorption and x-ray-emission surfaces), `leh` (from SXI: only the end
+value is measured), `capsule` (ablation front), all in mm, and their reading errors
+`u_wall`, `u_leh`, `u_capsule` (0.03 mm, 0.05 where the static line hides the curve).
+The plotted initial wall radius is 3.0 mm; use displacements. The calibration target of
+[`WallMotion`](@ref)'s defaults.
+"""
+young2020_radii() = _data_table("young2020_fig3a.csv")
+
+"""
+    pre109_fig1a_wall() -> NamedTuple
+
+The inner edge of the wall material at 6 ns in the HYDRA simulations of N210808 and
+N221204 drawn in PRE 109, 025204 (2024) Fig. 1a, digitized (`data/pre109_fig1a_wall.csv`,
+provenance in its header). Columns `z` (mm from the waist, every 0.1 mm), `n210808`,
+`n221204` (edge radius, mm; initial wall 3.2 mm) and `region` (`"waist"`, `"inner"`,
+`"collision"`, `"outer"`, `"bubble"`, `"lip"`). Laser rays are drawn over the plasma, so
+the edge is where they end (the laser-absorption surface) or, under crossing rays, an
+upper bound on the radius. The waist rows (z < 0.9 mm) give the usable number: the wall
+0.38 ± 0.04 mm in at 6 ns.
+"""
+pre109_fig1a_wall() = _data_table("pre109_fig1a_wall.csv")
 
 """
     moving_hohlraum(motion::WallMotion; radius = 2.875, kwargs...) -> (τ -> Target)

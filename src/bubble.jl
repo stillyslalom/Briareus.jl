@@ -5,31 +5,24 @@
 # from Briareus's own beams instead of an annulus. See `reference/research-notes.md`,
 # "Inner-beam bubble absorption".
 
-# Izumi 2021's transparency anchors (bubble transparency at 5.5 ns, computed there for a
-# 5.75 mm hohlraum, R = 2.88 mm): 29 % at 0.3 mg/cc, 54 % at 0.15 mg/cc.
-const _BUBBLE_ANCHORS = (radius = 2.88, time = 5.5, launch = 0.5, fills = (0.3, 0.15),
-                         transmission = (0.29, 0.54))
+# Calibration (research notes, "Hohlraum dynamics calibrated to published data
+# (2026-10-24)"): tip speed and launch fitted to Izumi 2021 Fig. 8a (28 measured points,
+# seven shots, `izumi2021_bubble()`), the opacity to the HYDRA absorbed fraction of Fig. 10a
+# (`izumi2021_absorption()`) on the basecamp geometry with the bubble at z = ±3 mm.
+const _BUBBLE_SPEED = 0.36      # mm/ns at 0.3 mg/cc and the basecamp picket (0.347–0.372)
+const _BUBBLE_DELAY = 0.25      # ns after the outer turn-on (0.07–0.42)
+const _BUBBLE_OPACITY = 0.111   # τ_b (0.100–0.124 statistical; 0.085–0.158 with the plane and launch)
+const _BUBBLE_Q = 1.8           # ρ_bub² ∝ (S ρ₀)², S ∝ ρ₀^-0.1 (Izumi 2021 Eq. 7)
 
-# Opacity τ_b and density exponent q that put T_b through both anchors, with the
-# default speed (0.35 mm/ns at 0.3 mg/cc, ∝ ρ₀^-0.2), x_ref = 1 mm and p = 0.5.
-function _bubble_anchor_fit(; speed = 0.35, exponent = 0.5, x_ref = 1.0, fill_ref = 0.3,
-                            a = _BUBBLE_ANCHORS)
-    R = a.radius
-    x = [speed * (ρ / fill_ref)^-0.2 * (a.time - a.launch) for ρ in a.fills]
-    g = [(xi / x_ref)^exponent * (R / (R - xi))^2 for xi in x]
-    τ = -log.(collect(a.transmission))
-    q = log(τ[1] / τ[2] * g[2] / g[1]) / log(a.fills[1] / a.fills[2])
-    τb = τ[1] / ((a.fills[1] / fill_ref)^q * g[1])
-    return τb, q
-end
-
-const _BUBBLE_FIT = _bubble_anchor_fit()
+# Basecamp geometry of Izumi 2018/2021: hohlraum and capsule outer radius (mm), and the
+# ablator–wall collision 5.5 ns after the outer turn-on (inner spots separate at 5.8 ns).
+const _BASECAMP = (radius = 2.875, capsule = 0.908, collision = 5.5)
 
 """
-    BubbleAbsorption(; radius, turn_on = 0.0, delay = 0.2, speed = 0.35, fill = 0.3,
-                     energy = 1.0, opacity = 0.144, density_exponent = 1.86,
+    BubbleAbsorption(; radius, turn_on = 0.0, delay = 0.25, speed = 0.36, fill = 0.3,
+                     energy = 1.0, opacity = 0.111, density_exponent = 1.8,
                      exponent = 0.5, x_ref = 1.0, stagnation = 0.80 radius,
-                     stagnation_width = 0.08 radius, collision = <t_c>, capsule_scale = 1.0,
+                     stagnation_width = 0.08 radius, collision = <t_c>, capsule_radius = 0.908,
                      ridge = 0.73, ridge_width = 0.5, ridge_rise = 0.2,
                      inner = (:inner23, :inner30), footprint = (:outer50,),
                      ridge_components = (:wall,), wall = nothing, footprint_z = nothing,
@@ -89,28 +82,38 @@ hole); the bubble tip and the ridge are measured from the initial wall either wa
 `footprint_z` fixes |z_b| instead. `stagnation = Inf` keeps the tip ballistic;
 `collision = Inf` turns the ridge stop off.
 
-Engineering defaults (research notes, "Inner-beam bubble absorption"):
-- `speed` 0.35 mm/ns at 0.3 mg/cc and the reference picket, ∝ E^0.2 ρ₀^-0.2: Izumi
-  et al., PoP 28, 022706 (2021) (345 µm/ns baseline); Meezan et al. 2020 measured
-  321–461 µm/ns. `delay` 0.2 ns: Izumi's launch at the outer turn-on, fit intercept
-  0.5 ± 0.1 ns for a 0.3 ns turn-on.
-- `opacity` and `density_exponent` are *fitted* so that T_b passes through Izumi
-  2021's computed transparencies at 5.5 ns, 29 % (0.3 mg/cc) and 54 % (0.15), in a
-  2.88 mm-radius hohlraum (`_bubble_anchor_fit`). The fitted q ≈ 1.86 is near the
-  ρ² of inverse-bremsstrahlung absorption. `exponent` 0.5 is Izumi's Eq. 6
-  (x_bub/1 mm)^0.5; the (R/(R − x))² factor stands for the compressed bubble's density
-  (Izumi's ρ_bub ∝ (R_hohl/R_bub)^k with k = 1; the paper's exponent is not legible).
+Defaults (research notes, "Hohlraum dynamics calibrated to published data (2026-10-24)";
+the data are [`izumi2021_bubble`](@ref) and [`izumi2021_absorption`](@ref)):
+- `speed` 0.36 mm/ns at 0.3 mg/cc and the basecamp picket, ∝ E^0.2 ρ₀^-0.2, and
+  `delay` 0.25 ns after the outer turn-on: *fitted* to the 28 measured tip positions of
+  Izumi et al., PoP 28, 022706 (2021) Fig. 8a (seven HDC SymCap shots, 0.15–0.3 mg/cc,
+  picket 0.73–1.5×; χ²/dof 0.89 with the paper's ±40 µm): 0.360 (0.347–0.372) mm/ns,
+  delay 0.25 (0.07–0.42) ns, the two correlated. Meezan et al. 2020 measured
+  321–461 µm/ns on the same shots.
+- `density_exponent` q = 1.8: inverse-bremsstrahlung absorption goes as ρ_bub², and Izumi's
+  Eq. 7 has ρ_bub = S ρ₀ R/(R − x) with the shock compression S ∝ ρ₀^-0.1, so
+  ρ_bub² ∝ ρ₀^1.8 (R/(R − x))². `exponent` 0.5 is Eq. 6's chord (x_bub/1 mm)^0.5.
+- `opacity` τ_b 0.111 is *fitted* to the inner-power fraction absorbed in the bubble
+  in Izumi's 2D HYDRA simulation of the 0.3 mg/cc basecamp (Fig. 10a: 0.02, 0.23, 0.55 at
+  4, 5, 6 ns), with this model's own clipping of NIF beams pointed for a 5.75 mm hohlraum
+  and the bubble plane at Izumi's z = ±3 mm (`footprint_z = 3.0`): absorbed 0.03, 0.20,
+  0.36, 0.56 at 4, 5, 5.5, 6 ns, χ² 1.1 at ±0.03. Statistical range 0.100–0.124; the
+  plane (2.8–3.2 mm) and the launch move τ_b over 0.085–0.158 but leave the absorbed
+  fraction within 0.01, which is the calibrated quantity. T_b at 5.5 ns is then 0.36 at
+  0.3 mg/cc and 0.58 at 0.15 (Izumi's own model: 0.29 and 0.54, with an annulus for f).
 - `stagnation` 0.80 R, `stagnation_width` 0.08 R (*engineering*): the tip is exactly
-  ballistic to 0.72 R (2.07 mm in a 2.88 mm hohlraum), past both anchor depths (1.75 and
-  2.01 mm at 5.5 ns) and near the ~2.1 mm of the 0.3 mg/cc ballistic fit at 6.5 ns; it stops
-  between that and the 2.4 mm (0.83 R) reached at 0.15 mg/cc. Izumi 2023: the tip
-  slows on back-pressure near the axis. (R − 0.73 R, the ridge's depth at the waist,
-  would stop the tip before it reaches the inner beams at z_b, 1.3 mm from the wall.)
-- `collision` t_c = turn_on + 5.5 − 2.0 (capsule_scale − 1) − 0.7 (energy − 1) ns
-  (*derived*, Izumi 2018: the inner spots separate at 5.8 ns for a 0.3 ns turn-on,
-  about 0.4 ns earlier for a 1.2× capsule radius, 5.45 ns with a 1.5× picket);
-  `capsule_scale` is the capsule radius over the HDC basecamp SymCap's. `ridge` 0.73:
-  Izumi 2023's ridge at r ≈ 2.1 mm in a 2.88 mm hohlraum. `ridge_width` 0.5 mm and
+  ballistic to 0.72 R (2.07 mm in a 2.88 mm hohlraum), past the measured depths at
+  0.3 mg/cc (2.07 mm at 6.2 ns) and near those at 0.15 (up to 2.28 mm, 0.79 R). Izumi
+  2023: the tip slows on back-pressure near the axis. (R − 0.73 R, the ridge's depth at
+  the waist, would stop the tip before it reaches the inner beams at z_b, 1.3 mm from
+  the wall.)
+- `collision` t_c = turn_on + 5.5 ns · (R − r_cap)/(2.875 − 0.908 mm) · energy^-0.16
+  (*fitted*, Izumi et al., RSI 89, 10K111, 2018: the inner spots separate at 5.8 ns for
+  the basecamp's 0.3 ns turn-on, 5.45 ns with a 1.5× picket, and about 0.4 ns earlier
+  with the 1.18× capsule; the gap between the capsule's outer radius `capsule_radius`
+  r_cap and the wall gives 0.44 ns for that capsule, so a constant closing speed of
+  ablator and wall plasma, 0.36 mm/ns, explains the capsule shot). `ridge` 0.73: Izumi
+  2023's ridge at r ≈ 2.1 mm in a 2.88 mm hohlraum. `ridge_width` 0.5 mm and
   `ridge_rise` 0.2 ns are engineering choices (not measured).
 """
 struct BubbleAbsorption{S<:Real} <: LaserPlasmaModel
@@ -140,17 +143,21 @@ struct BubbleAbsorption{S<:Real} <: LaserPlasmaModel
     ncone::Int
 end
 
-# Izumi 2018's ablator–wall collision time, relative to the outer turn-on.
-_collision_time(turn_on, capsule_scale, energy) =
-    turn_on + 5.5 - 2.0 * (capsule_scale - 1) - 0.7 * (energy - 1)
+# Ablator–wall collision time (Izumi 2018): the basecamp's 5.5 ns after the outer turn-on,
+# scaled with the capsule–wall gap and the picket energy.
+_collision_time(turn_on, radius, capsule_radius, energy) =
+    turn_on + _BASECAMP.collision * (radius - capsule_radius) /
+              (_BASECAMP.radius - _BASECAMP.capsule) * energy^-0.16
 
-function BubbleAbsorption(; radius::Real, turn_on::Real = 0.0, delay::Real = 0.2,
-                          speed::Real = 0.35, opacity::Real = _BUBBLE_FIT[1], fill::Real = 0.3,
-                          energy::Real = 1.0, density_exponent::Real = _BUBBLE_FIT[2],
+function BubbleAbsorption(; radius::Real, turn_on::Real = 0.0, delay::Real = _BUBBLE_DELAY,
+                          speed::Real = _BUBBLE_SPEED, opacity::Real = _BUBBLE_OPACITY,
+                          fill::Real = 0.3, energy::Real = 1.0,
+                          density_exponent::Real = _BUBBLE_Q,
                           exponent::Real = 0.5, x_ref::Real = 1.0,
                           stagnation::Real = 0.80 * radius,
-                          stagnation_width::Real = 0.08 * radius, capsule_scale::Real = 1.0,
-                          collision::Real = _collision_time(turn_on, capsule_scale, energy),
+                          stagnation_width::Real = 0.08 * radius,
+                          capsule_radius::Real = _BASECAMP.capsule,
+                          collision::Real = _collision_time(turn_on, radius, capsule_radius, energy),
                           ridge::Real = 0.73, ridge_width::Real = 0.5, ridge_rise::Real = 0.2,
                           inner = (:inner23, :inner30), footprint = (:outer50,),
                           ridge_components = (:wall,),
@@ -196,6 +203,31 @@ function Base.show(io::IO, m::BubbleAbsorption)
             ForwardDiff.value(m.stagnation), ForwardDiff.value(m.collision),
             join(m.inner, "/"), join(m.footprint, "/"))
 end
+
+"""
+    izumi2021_bubble() -> NamedTuple
+
+Au bubble tip displacement from the initial wall against time on the HDC SymCap series of
+Izumi et al., PoP 28, 022706 (2021), Fig. 8 (5.75 mm Au hohlraum, outer turn-on 0.3 ns),
+extracted from the figure's vector graphics (`data/izumi2021_fig8.csv`, provenance in
+its header). Columns `shot`, `source` (`"data"`: measured, Fig. 8a, error bars ±40 µm;
+`"hydra"`: 2D HYDRA, Fig. 8b), `energy` (outer picket fluence over the basecamp's),
+`fill` (mg/cc), `capsule` (radius over the basecamp's), `t` (ns), `x_bub` (mm) and
+`u` (mm). The calibration target of [`BubbleAbsorption`](@ref)'s `speed` and `delay`.
+"""
+izumi2021_bubble() = _data_table("izumi2021_fig8.csv")
+
+"""
+    izumi2021_absorption() -> NamedTuple
+
+The fraction of the inner-cone power absorbed in the bubble against time for the
+0.3 mg/cc basecamp of Izumi et al., PoP 28, 022706 (2021), Fig. 10a, from the figure's
+vector graphics (`data/izumi2021_fig10a.csv`): `source` `"hydra"` (the 2D simulation:
+0, 0.02, 0.23, 0.55 at 3, 4, 5, 6 ns) or `"model"` (the paper's Eq. 6, every 0.1 ns),
+`t` (ns), `absorbed` and `u`. The calibration target of [`BubbleAbsorption`](@ref)'s
+`opacity`.
+"""
+izumi2021_absorption() = _data_table("izumi2021_fig10a.csv")
 
 "Bubble tip speed (mm/ns): `speed · energy^0.2 · (fill/0.3)^-0.2`."
 bubble_speed(m::BubbleAbsorption) = m.speed * m.energy^0.2 * (m.fill / 0.3)^-0.2

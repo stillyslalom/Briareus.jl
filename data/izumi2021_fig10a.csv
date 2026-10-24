@@ -1,0 +1,48 @@
+# Fraction of the inner-cone power absorbed in the Au bubble, CF_bub/CF, against time for
+# the 0.3 mg/cc basecamp (5.75 mm Au hohlraum, outer turn-on 0.3 ns, peak power 4.5-6.1 ns)
+# of N. Izumi et al., Phys. Plasmas 28, 022706 (2021), Fig. 10a: "hydra" rows are the
+# radiation-hydrodynamics simulation (circles), "model" rows the paper's Eq. (6) (line:
+# clipping by an opaque annulus 1.3-2.4 mm from the wall at z = 3 mm, smoothed over 0.7 mm,
+# times exp(-G Z rho^2 dz (x_bub/1 mm)^0.5 / Te^1.5), rho = S rho0 R/(R - x_bub), Te 5 keV,
+# transparency 29% at 5.5 ns). Extracted 2026-10-24 from the vector graphics of the
+# accepted manuscript (LLNL-JRNL-812268, p. 21): axes from the tick marks (0-7 ns, 0-1),
+# circle centres from their bounding boxes, the line sampled every 0.1 ns from its Bezier
+# path. Research notes, "Hohlraum dynamics calibrated to published data (2026-10-24)".
+# Columns: source (hydra, model); t (ns); absorbed (CF_bub/CF); u (extraction error)
+source,t,absorbed,u
+hydra,2.999,0.000,0.005
+hydra,4.000,0.020,0.005
+hydra,4.999,0.230,0.005
+hydra,6.000,0.550,0.005
+model,3.00,0.0000,0.002
+model,3.10,0.0009,0.002
+model,3.20,0.0028,0.002
+model,3.30,0.0050,0.002
+model,3.40,0.0077,0.002
+model,3.50,0.0110,0.002
+model,3.60,0.0150,0.002
+model,3.70,0.0196,0.002
+model,3.80,0.0250,0.002
+model,3.90,0.0313,0.002
+model,4.00,0.0387,0.002
+model,4.10,0.0470,0.002
+model,4.20,0.0565,0.002
+model,4.30,0.0674,0.002
+model,4.40,0.0795,0.002
+model,4.50,0.0932,0.002
+model,4.60,0.1085,0.002
+model,4.70,0.1255,0.002
+model,4.80,0.1443,0.002
+model,4.90,0.1651,0.002
+model,5.00,0.1879,0.002
+model,5.10,0.2127,0.002
+model,5.20,0.2398,0.002
+model,5.30,0.2690,0.002
+model,5.40,0.3006,0.002
+model,5.50,0.3344,0.002
+model,5.60,0.3702,0.002
+model,5.70,0.4083,0.002
+model,5.80,0.4483,0.002
+model,5.90,0.4902,0.002
+model,6.00,0.5335,0.002
+model,6.10,0.5778,0.002

@@ -1,0 +1,66 @@
+# Au bubble tip displacement x_bub from the initial wall against time, HDC SymCap "basecamp"
+# series in a 5.75 mm diameter, 10.13 mm Au hohlraum with 3.37 mm LEHs (outer turn-on at
+# 0.3 ns), from N. Izumi et al., Phys. Plasmas 28, 022706 (2021), Fig. 8a (measured, Au-He
+# boundary seen through the LEH; error bars +/-40 um) and Fig. 8b (2D HYDRA). Extracted
+# 2026-10-24 from the vector graphics of the accepted manuscript (LLNL-JRNL-812268, p. 15):
+# axes from the tick marks (4.5-6.5 ns, 1.2-2.4 mm), each marker at the centre of its
+# bounding box (exact to ~0.003 mm; the four times of each shot are drawn offset by up to
+# 0.04 ns for legibility, kept as drawn). Marker coding from the text, not a legend:
+# black = 0.3 mg/cc, red = 0.15 mg/cc; large dots = the 1.18x capsule (inside radius 1.18x,
+# outer 1.064 against 0.908 mm); triangles = 1.5x picket power (N171212); squares =
+# quad and cone splitting, outer picket fluence -27% (N180117, black; N180917, red,
+# inferred as the only split shot at 0.15 mg/cc). Fig. 8b's markers are matched by the same
+# coding (inferred). Research notes, "Hohlraum dynamics calibrated to published data
+# (2026-10-24)".
+# Columns: shot; source (data = Fig. 8a, hydra = Fig. 8b); energy (outer picket fluence over
+# the basecamp's); fill (mg/cc); capsule (radius over the basecamp's); t (ns); x_bub (mm);
+# u (mm: the plotted error bar for data, the extraction error for hydra)
+shot,source,energy,fill,capsule,t,x_bub,u
+N171010,data,1.0,0.3,1.0,4.688,1.521,0.04
+N171010,data,1.0,0.3,1.0,5.188,1.664,0.04
+N171010,data,1.0,0.3,1.0,5.688,1.860,0.04
+N171010,data,1.0,0.3,1.0,6.188,2.073,0.04
+N180102,data,1.0,0.3,1.18,4.678,1.548,0.04
+N180102,data,1.0,0.3,1.18,5.178,1.707,0.04
+N180102,data,1.0,0.3,1.18,5.678,1.866,0.04
+N180102,data,1.0,0.3,1.18,6.178,2.061,0.04
+N180103,data,1.0,0.15,1.0,4.668,1.651,0.04
+N180103,data,1.0,0.15,1.0,5.168,1.882,0.04
+N180103,data,1.0,0.15,1.0,5.668,2.077,0.04
+N180103,data,1.0,0.15,1.0,6.168,2.272,0.04
+N180117,data,0.73,0.3,1.0,4.658,1.375,0.04
+N180117,data,0.73,0.3,1.0,5.158,1.542,0.04
+N180117,data,0.73,0.3,1.0,5.658,1.709,0.04
+N180117,data,0.73,0.3,1.0,6.158,1.875,0.04
+N180705,data,1.0,0.15,1.18,4.647,1.687,0.04
+N180705,data,1.0,0.15,1.18,5.147,1.885,0.04
+N180705,data,1.0,0.15,1.18,5.648,2.011,0.04
+N180705,data,1.0,0.15,1.18,6.148,2.281,0.04
+N180917,data,0.73,0.15,1.18,4.678,1.544,0.04
+N180917,data,0.73,0.15,1.18,5.178,1.829,0.04
+N180917,data,0.73,0.15,1.18,5.678,1.972,0.04
+N180917,data,0.73,0.15,1.18,6.178,2.210,0.04
+N171212,data,1.5,0.3,1.0,4.668,1.653,0.04
+N171212,data,1.5,0.3,1.0,5.168,1.830,0.04
+N171212,data,1.5,0.3,1.0,5.668,2.025,0.04
+N171212,data,1.5,0.3,1.0,6.168,2.237,0.04
+N171010,hydra,1.0,0.3,1.0,4.652,1.423,0.005
+N171010,hydra,1.0,0.3,1.0,5.150,1.610,0.005
+N171010,hydra,1.0,0.3,1.0,5.651,1.780,0.005
+N171010,hydra,1.0,0.3,1.0,6.150,1.978,0.005
+N171212,hydra,1.5,0.3,1.0,4.652,1.669,0.005
+N171212,hydra,1.5,0.3,1.0,5.150,1.797,0.005
+N171212,hydra,1.5,0.3,1.0,5.651,1.969,0.005
+N171212,hydra,1.5,0.3,1.0,6.150,2.158,0.005
+N180102,hydra,1.0,0.3,1.18,4.652,1.411,0.005
+N180102,hydra,1.0,0.3,1.18,5.149,1.581,0.005
+N180102,hydra,1.0,0.3,1.18,5.651,1.748,0.005
+N180102,hydra,1.0,0.3,1.18,6.149,1.938,0.005
+N180103,hydra,1.0,0.15,1.0,4.652,1.709,0.005
+N180103,hydra,1.0,0.15,1.0,5.150,1.870,0.005
+N180103,hydra,1.0,0.15,1.0,5.651,2.084,0.005
+N180103,hydra,1.0,0.15,1.0,6.150,2.288,0.005
+N180117,hydra,0.73,0.3,1.0,4.652,1.295,0.005
+N180117,hydra,0.73,0.3,1.0,5.150,1.459,0.005
+N180117,hydra,0.73,0.3,1.0,5.651,1.627,0.005
+N180117,hydra,0.73,0.3,1.0,6.150,1.831,0.005
