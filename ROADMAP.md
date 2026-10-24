@@ -698,6 +698,22 @@ Research notes, "Backlighter conversion efficiency and the photometric chain
   5e14 W/cm² (below Ge's 3e15 optimum), CE 0.56% ×/÷ 1.6, ~480 photons per 50 µm pixel
   through a generic 20 µm pinhole at M = 9; Cu 1340, Zn 940, Zr 43.
 
+## Done (2026-10-24, laser-spot spectrum)
+Research notes, "Laser-spot spectrum (2026-10-24)". Item 13.
+- **`spectral_solve(...; spot)`**: the converted laser x-rays less the M-band are thermal
+  at the element's local radiation temperature (`:radiation`, default), the stored-energy
+  emission and thermal re-emission at the wall temperature ((B − ηP/A)/σ)^¼; `:wall`
+  and the earlier `:brightness` (bit for bit) for comparison. Grounded in Dewald 2008
+  (laser-produced M-band 27 % of a 10¹⁵ W/cm² Au source's x-rays), Chen 2024 (> 1.8 keV
+  from the NLTE bubble corona) and Sacks 2024 (Planckian at Tr + non-Planckian M-band).
+  Gray totals unchanged.
+- **Dewald setup**: F_M ≈ 2 now takes α_M ≈ 0.55 (0.5 before: the spots' Planck tails
+  had counted as recirculating M-band); Dante 1 > 1.8 keV 11.4–12.0 % (Dewald 12 %).
+- **N221204**: without M-band, Dante's > 1.8 keV share 0.10–0.22 → 0.07–0.16 and the
+  colour temperature from 7–28 eV above Tr_open to 6–10 below; with the calibrated
+  per-cone M-band 0.115–0.138 (Dewald 12–15 %). The earlier 0.33 was mostly the
+  intensity-form M-band at the gray M-band albedo.
+
 ## Open questions (from the 2026-10-18 CAD work)
 Choices made provisionally overnight or left open; the lean is in brackets.
 **Decided (user, 2026-10-22):** the bracketed leans stand. On 1: parts may be split
@@ -1073,10 +1089,12 @@ the reference's view factors hold through the pulse; items 9 and 10 remove that 
    higher lines in the filter pass band, detector response, the object's transmission.
 13. ~~**Spectral radiosity.**~~ **Done (2026-10-24, see Done)**: multigroup radiosity,
     the laser-produced Au M-band, a synthetic Dante; Dante 1 channels from their hardware,
-    the Dante unfold and the Sentinel views (2026-10-24, see Done). Still open: measured
-    Ni XRD and thin-filter transmissions, Dante 2's and Omega's channel hardware, laser
-    spots split at a plasma temperature rather than their brightness temperature (they
-    put 10–22 % of Dante 1's flux above 1.8 keV without any M-band); angle dependence of the M-band conversion (sin⁴θ, Dewald 2020) and
+    the Dante unfold and the Sentinel views, laser spots thermal at the local Tr plus the
+    M-band (2026-10-24, see Done). Still open: measured Ni XRD and thin-filter
+    transmissions, Dante 2's and Omega's channel hardware; a measured soft spectrum of
+    spots in a cavity (the local-Tr spot temperature is our assumption); the per-cone
+    M-band inside `drive_history` (the N221204 example weights cones by their pre-CBET
+    deposition); angle dependence of the M-band conversion (sin⁴θ, Dewald 2020) and
     its emission from the outer bubble (inner-beam clipping); emission of the closing LEH
     plasma (Dante's initial- vs open-area brackets differ by 20 eV at N221204's peak); a
     time-resolved M-band P2 history against Dewald's Fig. 10 on a moving hohlraum; the

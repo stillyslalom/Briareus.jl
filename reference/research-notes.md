@@ -3427,7 +3427,9 @@ F_M 2.05, capsule M-band P2/P0 +0.145, boundary +0.200, Dante 0.125.
 
 - **α_M ≈ 0.5 (thermalized) is calibrated to Dewald's F_M ≈ 2**, and then Dante 1 sees
   11.9–12.5 % of its flux above 1.8 keV against Dewald's measured 12 % at 290 eV: an
-  independent agreement (Dante's M-band share was not fitted).
+  independent agreement (Dante's M-band share was not fitted). (With the laser spots
+  thermal at the local Tr, the 2026-10-24 default, F_M ≈ 2 takes α_M ≈ 0.55 and Dante
+  sees 11.4–12.0 %: "Laser-spot spectrum" below.)
 - The M-band is pole-hot relative to the thermal drive by +0.15 to +0.21 in P2/P0 at the
   capsule (M-band minus gray), against Dewald's ≈ +0.21 at the ablation front (0.53 ×
   0.4, **L**). The absolute M-band P2 here (+0.04 / +0.15) sits lower because this mock
@@ -4754,7 +4756,9 @@ initial area, 318.6 over the open area, against 310.1 measured.
   intensity-form M-band on top the share reaches 0.33 at 8 ns, against Dewald's
   measured 12–15 % (with the per-cone `nif_mband()` and α_M 0.5 the Dewald setup gave
   12 %). Not acted on here: a spot's thermal emission should be split at a plasma
-  temperature model rather than its brightness temperature.
+  temperature model rather than its brightness temperature. (Resolved in "Laser-spot
+  spectrum (2026-10-24)" below: spots now thermal at the local Tr plus the M-band; the
+  0.33 was mostly the uncalibrated M-band pairing, 0.115–0.138 calibrated.)
 
 ### XRD lines of sight
 
@@ -4776,6 +4780,141 @@ on the hohlraum axis chosen per shot and is left to `DanteView`.
   the 2.5° mirror is an assumption.
 - Within-group spectral shape: voltages assume a Planckian at Tr_open within each group;
   finer groups near the channel edges would remove it.
-- Laser-spot spectra (above) and the M-band split per cone in time-dependent runs.
+- Laser-spot spectra (above; done, "Laser-spot spectrum" below) and the M-band split
+  per cone in time-dependent runs.
 - Dante 2's hardware (11 mirrored channels; not tabulated in Rubery 2023) and the
   Omega Dante configuration (Rubery 2023 Fig. 13).
+
+## Laser-spot spectrum (2026-10-24) *derived*
+
+ROADMAP 13: the finding above ("hot laser spots"). `spectral_solve` split each
+element's whole source as a Planckian at the brightness temperature (B/σ)^¼ of its total
+radiosity. On a laser spot B = ηI + αH with ηI ≈ 1.1 × 10¹⁵ W/cm² at the outer cones'
+1.5 × 10¹⁵, so a ~300 eV cavity put its spots at ~365 eV, whose Planck tail alone holds
+25 % of the power above 1.8 keV (a 290 eV Planckian 12.4 %, 300 eV 14.0 %), and the
+laser M-band was then carved out of that already hard spectrum. Read (cite only; in the
+user's paper folder): Dewald et al., "X-ray conversion efficiency of high-Z hohlraum wall
+materials for indirect drive ignition", PoP 15, 072706 (2008), LLNL-JRNL-402374 (OSTI
+944359; abstract only, the full text is behind the LLNL library); Chen et al., "On the
+deficiency of x-ray flux predictions of indirect-drive ICF experiments at the NIF",
+PRE (2024), LLNL-JRNL-862277 (OSTI 2429360); Sacks et al., "A simple non-Planckian
+radiation source for ICF and HED simulations", LA-UR-23-31376 rev. 1 (2024, OSTI
+2377325); Dewald et al. PoP 27 (2020) (above). Confidence: **H** primary text, **M**
+abstract or secondhand, **L** our construction.
+
+### What the literature fixes
+
+| Statement | Source | Conf. |
+|---|---|---|
+| Au spheres, direct drive, no cavity: x-ray conversion 95 % at 10¹⁴, 80 % at 10¹⁵ W/cm²; M-band (2–5 keV) ~1 % of the x-ray flux at 10¹⁴, 27 % at 10¹⁵ (LASNEX with XSN under-predicts it) | Dewald 2008 abstract | M |
+| The > 1.8 keV emission in NIF hohlraums is "predominantly produced by hot, low-density NLTE gold bubble plasma" (the laser-heated corona); the M-band/total ratio is higher through the LEH, which sees the outer-beam bubble | Chen 2024 §III | H |
+| A hohlraum drive spectrum = a Planckian at Tr plus a non-Planckian power law above 1.85 keV, normalized to the total; used in place of integrated hohlraum simulations and compared with them and with Dante-driven experiments | Sacks 2024 §2–3 | H |
+| The recirculating M-band at the wall is the walls' Planckian thermal tail; the laser-produced part comes from the outer spots | Dewald 2020 §V.2 | H |
+
+So the converted x-rays of a spot have two parts: the non-Planckian M-band, set by the
+laser intensity (Dewald 2008's 27 % is the laser-produced hard fraction itself; an
+extra Planck tail at an inflated temperature counts it twice), and a soft thermal part.
+The soft part's temperature is not published for spots in a cavity (Ze et al., PoP 4,
+1997, OSTI 467314, compare spot and disk x-ray yields, not spectra). The brightness
+temperature is a bookkeeping number of the gray radiosity, not the temperature of an
+emitting surface: the converted energy is radiated by a conversion layer bathed in, and
+thermalized against, the cavity field. We take that layer's thermal emission at the
+local radiation temperature (**L**: the Sacks form applied per element).
+
+### Model (`spectral_solve(...; spot)`)
+
+- `spot = :radiation` (new default): the converted x-rays `ηP/A` (`_xray_source`, the
+  conversion model's own number) less the M-band at the element's radiation temperature
+  `(H/σ)^¼`; the rest of the source (a re-emitting wall's stored energy) and, with
+  `thermalize`, the thermal re-emission at the wall temperature `((B − ηP/A)/σ)^¼` (on a
+  wall without laser light that is (B/σ)^¼, as before); the M-band flat over its band.
+  Both temperatures follow the group totals when hard groups lose energy.
+- `:wall`: the converted x-rays at the wall temperature too (a lower bracket).
+- `:brightness`: the earlier rule, bit for bit (the Dewald scan and the N221204 rows
+  below reproduce the earlier tables to the printed digit).
+- Group sums are untouched: Planck fractions sum to one per element, so Σ_g S_g = S
+  and every gray total of `test/spectral.jl` holds for all three rules (B, H to 1e-11,
+  absorbed power to 1e-11). New tests: the source rows against the closed form of each
+  rule (1e-12), spots softer than under the brightness rule, the rules identical on
+  unlit elements, a stored-energy emission split at the wall temperature.
+- `SpectralSolution` gains `spot_temperature`, `converted`, `spot`.
+
+### Dewald's setup (`examples/mband_dewald2020.jl spot=…`, h 0.3/0.15, per-cone `nif_mband()`)
+
+Cone fraction 1/3 (1/4 in brackets); Dante 1 Tr 291.9 (290.6) eV, Dewald 290.
+
+| rule | α_M | F_M | capsule M-band P2/P0 | boundary P2/P0 | Dante-1 > 1.8 keV | Dante-1 Tc (eV) |
+|---|---|---|---|---|---|---|
+| brightness (before) | 0.5 | 2.15 (2.05) | +0.039 (+0.145) | −0.012 (+0.200) | 0.119 (0.125) | 294.8 (296.2) |
+| brightness | gray | 7.63 | −0.036 | −0.140 | 0.300 | 336.7 |
+| radiation | 0.5 | 1.82 (1.73) | +0.051 (+0.145) | +0.009 (+0.197) | 0.107 (0.112) | 278.8 (279.1) |
+| **radiation** | **0.55** | **2.06 (1.95)** | **+0.041 (+0.127)** | −0.008 (+0.165) | **0.114 (0.120)** | 279.8 (280.2) |
+| radiation | 0.6 | 2.33 (2.22) | +0.030 (+0.109) | −0.026 (+0.133) | 0.124 (0.130) | 281.0 (281.5) |
+| radiation | gray | 6.86 | −0.034 | −0.134 | 0.273 | 309.5 |
+| wall | 0.55 | 1.98 (1.88) | +0.049 (+0.134) | +0.008 (+0.178) | 0.111 (0.117) | 275.3 (275.7) |
+
+- **The α_M calibration was compensating, slightly**: the brightness rule's spot tails
+  counted as recirculating M-band, so F_M ≈ 2 took α_M 0.5; with thermal spots it takes
+  **α_M ≈ 0.55** (thermalized). Recalibrated to F_M (Dewald's number, not to Dante):
+  Dante 1 then sees 11.4–12.0 % above 1.8 keV against Dewald's measured 12 %
+  (11.9–12.5 % before); the capsule M-band P2/P0 moves by +0.002 / −0.018.
+- The colour temperature (channels < 1.5 keV) drops from 3–6 eV above Dante's Tr to
+  ~11 eV below it: the walls emit at α^¼ Tr ≈ 0.95 Tr, the spots at Tr, and 11 % of
+  the flux is M-band. Dewald does not publish a colour temperature, so this is no
+  check either way.
+
+### N221204 (`examples/n221204.jl energetics=new unfold=on`, standard mesh 0.28/0.16)
+
+Dante 1 over the initial LEH area (Tr; open-area Tr_open in brackets), unchanged (gray):
+5 ns 248.8 (262.3), 6 ns 271.4 (289.9), 7 ns 283.8 (305.9), 8 ns 295.0 (318.6), 8.5 ns
+283.4 (306.1) eV. "> 1.8 keV" is the share of what Dante 1 sees; Tc the
+hardware-channel colour temperature; "cones" the per-cone M-band (`nif_mband()`, each
+element's conversion weighted by the cones' shares of its pre-CBET deposition; laser →
+M-band 0.13–0.19 of the absorbed laser, the intensity form 0.04–0.13) with the
+calibrated α_M, thermalized.
+
+| t (ns) | brightness | thermal | brightness + `MBandEmission()` | thermal + `MBandEmission()` | brightness, cones, α_M 0.5 | **thermal, cones, α_M 0.55** |
+|---|---|---|---|---|---|---|
+| > 1.8 keV, 5.0 | 0.098 | 0.069 | 0.139 | 0.111 | 0.120 | **0.115** |
+| 6.0 | 0.144 | 0.108 | 0.199 | 0.166 | 0.121 | **0.116** |
+| 7.0 | 0.192 | 0.137 | 0.284 | 0.239 | 0.129 | **0.122** |
+| 8.0 | 0.223 | 0.162 | 0.331 | 0.280 | 0.126 | **0.118** |
+| 8.5 | 0.165 | 0.136 | 0.195 | 0.168 | 0.143 | **0.138** |
+| Tc − Tr_open, 5.0 | +9.9 | −10.3 | +14.6 | −7.5 | +10.9 | **−8.3** |
+| 6.0 | +11.2 | −9.9 | +21.9 | −1.1 | +5.6 | **−9.2** |
+| 7.0 | +22.4 | −7.4 | +46.1 | +14.3 | +5.5 | **−10.2** |
+| 8.0 | +28.0 | −5.7 | +59.0 | +23.9 | +0.8 | **−14.0** |
+| 8.5 | +7.1 | −8.6 | +13.2 | −2.6 | +2.0 | **−7.8** |
+
+(Tc − Tr over the initial area, the comparison of the finding: +23 to +52 eV before,
++3 to +18 thermal, without M-band.) Coarse mesh (0.8/0.4): the rule-only and calibrated
+rows the same to 0.007 in share and 0.5 eV in Tc (thermal) / 2 eV (brightness); the
+intensity-form rows 0.015–0.02 lower (its element-averaged intensity is mesh
+dependent). Unfolds at 8 ns (input 295.0 eV): traditional 296.2 (brightness) → 295.5
+(thermal), 295.4 (calibrated); smooth within 0.25 eV in every case; all 18 voltages
+matched to < 5e-4.
+
+- **The 0.33 at 8 ns was mostly the M-band pairing, not the spot split**: the example
+  used the intensity-form M-band at the gray albedo in the M-band groups (α_M = α,
+  F_M ≈ 7 on Dewald's setup), which no calibration supports. With the Dewald-calibrated
+  pairing (per-cone M-band, α_M thermalized) both rules give 12–14 %: brightness
+  0.120–0.143, thermal **0.115–0.138**, against Dewald's 12 % (Fig. 1b, at the 290 eV
+  peak) to 15 % (Fig. 3). His shot is a different hohlraum, so agreement to ~2 points is
+  all this supports; not fitted to it.
+- **What the spot split changes**: without any M-band, Dante's > 1.8 keV share falls
+  from 0.10–0.22 to 0.07–0.16 (the cavity's own Planck tail: 0.07 at 250 eV, 0.14 at
+  300); the colour temperature goes from 7–28 eV above Tr_open to 6–10 eV below it; the
+  traditional unfold's bias falls from +0.8–1.3 to +0.15–0.5 eV (its Gaussians have
+  less hard power to spread). With the calibrated M-band the colour temperature sits
+  8–14 eV below Tr_open (brightness rule: 1–11 above).
+- Neither is a Dante check: published N221204 colour temperatures are not in hand, and
+  the M-band share was compared, not fitted.
+
+### What remains
+
+- A measured spot spectrum (soft part) in a cavity: Dante or a spectrometer at a view
+  dominated by spots, or a hohlraum simulation's spot emission, to replace the local-Tr
+  assumption (**L**); Dewald 2008's full text (spectra vs intensity) was not reachable.
+- The per-cone M-band in `drive_history` records: the example's pre-CBET cone weighting
+  is a proxy; bubble-absorbed inner light radiating from the outer bubble (Dewald's
+  clipping) is not split per cone.
