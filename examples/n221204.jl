@@ -4,15 +4,18 @@
 # Fig. 10. Inputs: reference/litreview/n221204_benchmark.md §5; results: research notes,
 # "N221204 time-dependent benchmark (2026-10-23)".
 #
-#   julia --project=. -t auto examples/n221204.jl [h capsule_h [runs [transfer [table]]]]
+#   julia --project=. -t auto examples/n221204.jl [h capsule_h [runs [transfer [table [dynamics [shot]]]]]]
 #
 # `h`, `capsule_h`: mesh (default 0.28 / 0.16, the standard mesh); `runs`: `all`
 # (default) or `full` (only the full model, e.g. for a fine-mesh confirmation);
 # `transfer`: `calibrated` (default: the two-zone reduced CBET calibrated to PRE 109
 # Fig. 9, `n221204_cbet()`), `reduced` (the single-zone reduced CBET model at the deck's
 # settings) or `fig9b` (the outer-to-inner transfer that gives PRE 109 Fig. 9b's
-# post-transfer cone fraction, HYDRA's own CBET result for this shot). Writes
-# `n221204_<transfer>_<h>_<capsule_h>.csv` (P2/P0, P4/P0 and capsule Tr per run) to the
+# post-transfer cone fraction, HYDRA's own CBET result for this shot); `table` as 5th
+# argument solves only the comparison times; `dynamics`: `calibrated` (default), `old`
+# (the 2026-10-23 settings) or `late_lips` (see below); `shot`: `n221204` (default),
+# `n220919` or `n210808` (proxies, see below). Writes
+# `<shot>_<transfer>_<dynamics>_<h>_<capsule_h>.csv` (P2/P0, P4/P0 and capsule Tr per run) to the
 # current directory.
 
 using Briareus, Printf, DelimitedFiles
@@ -33,11 +36,19 @@ R0 = 3.2
 
 # Laser: 192 beams at the public mock HYBRID-E pointing; Δλ 2.75 Å (1ω) on the inner
 # cones, 0.917 Å at 3ω (the 23.5°/30° and 44.5°/50° splits are unpublished: none).
-beams = [remake(b; dlambda = b.group in (:inner23, :inner30) ? 2.75 / 3 : 0.0)
+# `shot` (7th argument) `n220919` or `n210808` runs a proxy of the two other shots of
+# Fig. 10 (*L*): Δλ 2.5 or 1.8 Å on the same mock pointing, CBET calibration and
+# hohlraum; N220919 on N221204's pulse (the same pulse with re-tuned foot powers,
+# K24), N210808 with the rise 0.2 ns earlier and the peak ending 0.45 ns earlier (P24
+# Fig. 1, read by eye).
+shot = get(ARGS, 7, "n221204")
+dλ = Dict("n221204" => 2.75, "n220919" => 2.5, "n210808" => 1.8)[shot]
+beams = [remake(b; dlambda = b.group in (:inner23, :inner30) ? dλ / 3 : 0.0)
          for b in hybride_mock_pointing(nif_beams())]
 
 # Delivered outer (128 beams) and inner (64 beams) power, DN24 Fig. 1 read by eye (TW).
 pt = [0.0, 0.4, 0.8, 1.3, 2.0, 2.5, 3.3, 3.9, 4.5, 5.0, 5.5, 8.0, 8.3, 8.6, 8.9, 9.1, 9.25, 9.35]
+shot == "n210808" && (pt = [t >= 8.0 ? t - 0.45 : t >= 5.0 ? t - 0.2 : t for t in pt])
 outer = [0, 2, 50, 50, 25, 26, 60, 65, 150, 270, 296, 294, 250, 110, 40, 0, 0, 0]
 inner = [0, 2, 4, 4, 4.5, 5, 7, 9, 25, 90, 146, 146, 146, 146, 146, 146, 140, 0]
 total = Float64.(outer .+ inner)
@@ -69,16 +80,44 @@ fig9b = CalibratedTransfer((:outer44, :outer50), (:inner23, :inner30), fig9b_fra
 calibrated = n221204_cbet(leh_z = geometry.length / 2)
 cbet = transfer == "fig9b" ? fig9b : transfer == "reduced" ? reduced : calibrated
 
-# Hohlraum dynamics, all at repository defaults: the wall moves in at 0.10 mm/ns from
-# the outer turn-on (0.4 ns); the LEH lips (0.84 r₀) close at 5.0 ns over 0.5 ns (the
-# example closure of the research notes, not measured for N221204); the bubble model
-# with its defaults, launched by the same turn-on, footprint following the wall, and
-# its ablator–wall collision time scaled to HYBRID-E's 1.135 mm capsule against the
-# HDC basecamp SymCap's ~0.91 mm (`capsule_scale` 1.25: t_c 5.41 ns instead of 5.9).
+# Hohlraum dynamics (`dynamics`, 6th argument), calibrated against published data other
+# than Fig. 10 (research notes, "Hohlraum dynamics calibrated to published data
+# (2026-10-24)"):
+# - wall: `WallMotion`'s defaults (fitted to the LLNL dynamic view-factor radius of Young
+#   2020) from 0.8 ns after the outer turn-on (0.4 ns), stopping 0.38 mm in, HYBRID-E's
+#   own HYDRA waist edge at 6 ns (PRE 109 Fig. 1a, `pre109_fig1a_wall()`);
+# - LEH lips: closing to 0.857 r₀ along the smoothstep fitted to Young 2020's LEH radius
+#   (closure −0.90 ns, width 7.85 ns), shifted 0.8 ns later for N221204's later peak
+#   (peak reached at ~5.4 ns against ~4.6);
+# - bubble: `BubbleAbsorption`'s defaults (Izumi 2021 Figs. 8a and 10a) with an outer
+#   picket fluence 1.1× the HDC basecamp's: 1.5× the energy (~40 against ~26 kJ in the
+#   first ns after the turn-on, DN24 Fig. 1 and Izumi 2021 Fig. 3a read by eye) spread
+#   over split outer quads (−27 % fluence on Izumi's split shots); the tip, 1.97 mm in at
+#   6 ns, against 1.85 ± 0.1 for N210808 in PRE 109 Fig. 1a (N221204's is hidden under
+#   its rays, ≥ 1.55). The collision time scales with HYBRID-E's capsule–wall gap
+#   (3.2 − 1.135 mm): t_c 6.09 ns.
+# `old` reruns the 2026-10-23 settings (0.10 mm/ns from the turn-on, lips at 5.0 ns over
+# 0.5 ns to 0.84 r₀, the bubble's previous defaults with t_c 5.41 ns); `late_lips` is
+# `calibrated` with the old lip closure.
+dynamics = get(ARGS, 6, "calibrated")
 turn_on = 0.4
-motion = WallMotion(start = turn_on)
-lip = GapClosure(closure = 5.0, width = 0.5, after = WallLossAlbedo())
-bubble = BubbleAbsorption(; radius = R0, turn_on, wall = motion, capsule_scale = 1.135 / 0.91)
+if dynamics == "old"
+    motion = WallMotion(speed = 0.10, start = turn_on, saturation = Inf)
+    lip, r_open = GapClosure(closure = 5.0, width = 0.5, after = WallLossAlbedo()), 0.84
+    bubble = BubbleAbsorption(; radius = R0, turn_on, wall = motion, speed = 0.35, delay = 0.2,
+                              opacity = 0.1441, density_exponent = 1.862, collision = 5.405)
+else
+    motion = WallMotion(start = turn_on + 0.8, saturation = 0.38)
+    lip, r_open = dynamics == "late_lips" ?
+        (GapClosure(closure = 5.0, width = 0.5, after = WallLossAlbedo()), 0.84) :
+        (GapClosure(closure = -0.1, width = 7.85, after = WallLossAlbedo()), 0.857)
+    bubble = BubbleAbsorption(; radius = R0, turn_on, wall = motion, capsule_radius = 1.135,
+                              energy = 1.1)
+end
+geometry = (geometry..., leh_open_radius = r_open * geometry.leh_radius)
+@printf("dynamics %s: wall %.2f mm in at 6 ns, %.2f at 9 ns; bubble t_c %.2f ns, tip %.2f mm at 6 ns\n",
+        dynamics, wall_displacement(motion, 6.0), wall_displacement(motion, 9.0), bubble.collision,
+        bubble_depth(bubble, 6.0))
 # Every step is quasi-static (no burnthrough fronts here), so `table` (5th argument)
 # solves only the times of the comparison table, for a fine-mesh check.
 times = get(ARGS, 5, "") == "table" ? [2.0, 4.0, 4.5, 5.5, 6.5, 7.0, 8.0, 8.5] : collect(0.5:0.25:9.0)
@@ -108,13 +147,30 @@ run!("+bubble", () -> drive_history(kl, beams_at, times; lpi = (cbet, bubble)))
 # PRE 109 Fig. 10, N221204 (HYDRA, post-CBET), digitized (`n221204_fig10()`: ±0.002
 # where the curve is visible, up to ±0.015 where N220919's curve covers it).
 fig10 = n221204_fig10()
-println("\ncapsule flux P2/P0")
+ref, uref = getfield(fig10, Symbol(shot)), getfield(fig10, Symbol("u", shot[2:end]))
+println("\ncapsule flux P2/P0 ($shot)")
 println(rpad("t (ns)", 7), join([rpad(n, 17) for (n, _) in runs]), "PRE 109 Fig. 10")
 for t in [2.0, 4.0, 4.5, 5.5, 6.5, 7.0, 8.0, 8.5]
     k = findfirst(≈(t), times)
     i = findfirst(≈(t), fig10.t)
+    k === nothing && continue
     println(rpad(@sprintf("%.1f", t), 7), join([rpad(@sprintf("%+.3f", p2(r)[k]), 17) for (_, r) in runs]),
-            @sprintf("%+.3f ± %.3f", fig10.n221204[i], fig10.u221204[i]))
+            @sprintf("%+.3f ± %.3f", ref[i], uref[i]))
+end
+# swing shape: minimum after 4.5 ns, the upward zero crossing after it, the value at 8 ns
+function swing(t, p)
+    s = findall(k -> t[k] >= 4.5 && isfinite(p[k]), eachindex(t))
+    km = s[argmin(p[s])]
+    kz = findfirst(k -> k > km && p[k - 1] < 0 <= p[k], eachindex(p))
+    tz = kz === nothing ? NaN : t[kz - 1] - p[kz - 1] * (t[kz] - t[kz - 1]) / (p[kz] - p[kz - 1])
+    return (min = p[km], tmin = t[km], zero = tz)
+end
+grid = findall(t -> 0.75 < t < 8.95 && isinteger(round(t * 10, digits = 6)), fig10.t)
+sh = swing(fig10.t[grid], ref[grid])
+@printf("swing (min, at, upward zero): Fig. 10 %+.3f at %.2f ns, %.2f ns\n", sh.min, sh.tmin, sh.zero)
+for (n, r) in runs
+    s = swing(times, p2(r))
+    @printf("  %-22s %+.3f at %.2f ns, %.2f ns\n", n, s.min, s.tmin, s.zero)
 end
 println("\ncapsule Tr peak (eV; drive Trad 313 eV, AS24)")
 for (n, r) in runs
@@ -137,7 +193,7 @@ for t in (2.0, 4.0, 4.5, 5.0, 5.5, 6.0, 6.5, 7.0, 8.0, 8.5)
             t, cf(bs), cf(ec), f.depth, a(:inner23), a(:inner30), f.ridge)
 end
 
-out = "n221204_$(transfer)_$(h)_$(capsule_h).csv"
+out = "$(shot)_$(transfer)_$(dynamics)_$(h)_$(capsule_h).csv"
 header = ["time"; ["P2/P0 $n" for (n, _) in runs]; ["P4/P0 $n" for (n, _) in runs]; ["Tr $n" for (n, _) in runs]]
 writedlm(out, vcat(permutedims(header),
                    hcat(times, [p2(r) for (_, r) in runs]..., [p4(r) for (_, r) in runs]...,
