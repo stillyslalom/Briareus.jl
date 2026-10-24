@@ -613,6 +613,21 @@ Research notes, "N221204 late-time drive (2026-10-24)". Item 16.
 - **`n221204_pulse()`**: N221204's delivered power (2.051 MJ) and measured Dante 1 Tr from
   the vector paths of Pak et al. PRE 109, 025203 Fig. 1; the example's default pulse.
 
+## Done (2026-10-24, wall re-emission and the capsule radius)
+Research notes, "Wall re-emission and the capsule radius (2026-10-24)". Item 16.
+- **Wall re-emission** (`drive_history(...; wall_release = true)`, default;
+  `WallLossAlbedo(; release = 0.77)`): a wall whose temperature falls below its running
+  maximum gives stored energy back through the loss's own self-similar kernel (Duhamel),
+  calibrated against 1-D nonlinear diffusion in gold (`examples/wall_reemission.jl`).
+  Rising drives bit for bit; `solve` carries the release as a per-element emission;
+  `energy_budget` reports `released`. N221204: Dante 1 (open area) 305.8 eV at 8.5 ns
+  (299.2 before, measured 311.3).
+- **Shrinking capsule mesh** (`moving_hohlraum(...; capsule_shrink)`): the capsule mesh
+  follows an R/R₀ schedule on the keyframes with fixed counts. Same E_cap as
+  `CapsuleAlbedo`'s effective radius; late P2 0.026 lower on N221204.
+- **Published capsule albedo** (`examples/n221204.jl capsule_albedo=young`): capsule
+  share 12.3 % (HYDRA 16.2 %), not fitted.
+
 ## Open questions (from the 2026-10-18 CAD work)
 Choices made provisionally overnight or left open; the lean is in brackets.
 **Decided (user, 2026-10-22):** the bracketed leans stand. On 1: parts may be split
@@ -1011,11 +1026,24 @@ the reference's view factors hold through the pulse; items 9 and 10 remove that 
     8 ns brackets the measured 275.5 / 291.3 / 310.1. Fig. 10 (blind): minimum −0.189 at
     5.25 ns, crossing 6.23, +0.077 at 8 ns, rms 0.041. Still to do, each with its data:
     - the drive after the laser droop: the model falls with the power (−18 eV by
-      8.5 ns) where Dante holds 311 eV to 8.6 ns; a wall that gives stored energy back
-      under a falling drive is missing (the self-similar loss cannot);
-    - the missing sinks: He gas (4.5 %), LEH windows, the M-band (item 13); then
-      recalibrate the capsule albedo (16.2 % now needs a larger effective radius than
-      the ablation-front schedule: α_c = 0 gives ~15 %);
+      8.5 ns) where Dante holds 311 eV to 8.6 ns. **Wall re-emission done (2026-10-24,
+      research notes "Wall re-emission and the capsule radius")**: `drive_history`'s
+      `wall_release` (default) answers a drop below each element's running maximum
+      with the loss's own self-similar kernel (Duhamel), scaled by `WallLossAlbedo`'s
+      `release` = 0.77, calibrated against 1-D nonlinear diffusion in gold
+      (`examples/wall_reemission.jl`: 0.76–0.78 for 5–30 % drops); rising drives bit
+      for bit; `energy_budget` books `released`. Check (not fit): Dante 1 over the open
+      area 305.8 eV at 8.5 ns (299.2 before, measured 311.3), 281 at 9 ns (301.5): it
+      does **not** hold 311 eV. Still missing: the hohlraum plasma's stored energy, the
+      LEH after the laser turns off;
+    - the missing sinks: He gas (4.5 %), LEH windows, the M-band (item 13). The capsule
+      share with published radius and albedo (Young 2020's HYDRA ablator albedo on the
+      ablation-front schedule, `capsule_albedo=young`) is 12.3 % against 16.2 %:
+      absorption at the ablation front cannot give 16.2 % (α_c = 0: ~15 %); the
+      absorbing radius outside the front is unpublished. A capsule mesh that shrinks on
+      the keyframes (`moving_hohlraum(...; capsule_shrink)`, `capsule=mesh`) gives the
+      same energetics and moves the late P2 down 0.026 (Fig. 10 minimum −0.170 matched,
+      8 ns +0.047 against +0.095);
     - decide whether `energetics=new` becomes the example's default (the default
       energetics now under-drive the peak: capsule 283 eV at 8 ns);
     - ~~a synthetic Dante (item 13) reported beside the capsule-seen temperature~~

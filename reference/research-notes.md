@@ -3841,3 +3841,176 @@ rise; the DU wall adds 5–8 eV throughout. The capsule model takes the late P2 
   that matches Dante's level and shape through 8 ns and the LEH share. The example's
   default is unchanged (the 2026-10-24 benchmark); switching it is a decision for the
   next round.
+
+## Wall re-emission and the capsule radius (2026-10-24) *derived*
+
+ROADMAP 16, the two open items of "N221204 late-time drive": (1) after the laser droop
+(8.05 ns) the model's drive fell with the power while Dante 1 holds 311 eV to 8.6 ns;
+(2) the capsule share, 11.6 % against HYDRA's 16.2 %. Dante 1 and Fig. 10 are checks
+here, never fit. All runs `examples/n221204.jl ... full energetics=new` (the full model:
+calibrated CBET, wall, lips, bubble; DU wall, `nif_conversion`, backscatter, 11 %
+degradation, `CapsuleAlbedo` on HYDRA's ablation-front schedule), coarse mesh 0.8 / 0.4
+unless "std" (0.28 / 0.16). Confidence: **H** primary text, **L** our construction,
+*calibrated* as marked.
+
+### Inputs read
+
+| Quantity | Value | Source | Conf. |
+|---|---|---|---|
+| Re-emission and the Milne boundary | re-emitted flux φ_B(1 − F/2φ_B), incident φ_B(1 + F/2φ_B), absorbed F; α = 1 − F/φ; emission from ~2/3 mfp into the Marshak profile | Rosen, "Fundamentals of ICF hohlraums" (2005, OSTI 885380), Lecture 1, eqs. 1.34–1.38 | H |
+| Gold power laws | e = 3.4 T^1.6 ρ^-0.14 MJ/g, κ_R = 7200 T^-1.5 ρ^0.2 cm²/g (T in heV) | Hammer & Rosen, PoP 10, 1829 (2003), as quoted by Rosen 2005 | H |
+| Capsule ablation front | 0.92 mm (0.81 R₀) at 6 ns, N221204 | PRE 109, 025204 Fig. 1a | H-img |
+| Dynamic-model capsule radius and albedo, N170827 | front 0.991 → 0.733 mm at 6 ns → 0.224 at 7.75; quasi-1D HYDRA ablator albedo 0.01–0.16 to 6 ns, 0.30 at 7, 0.40 from 7.5 ns | Young et al., PoP 27, 082702 (2020) Fig. 3a (`young2020_radii()`, `young2020_albedos()`) | H-img |
+| Capsule energy in the rocket model | E_cap ∝ ∫ T_r⁴ r_cap(t)² dt with r_cap the rocket model's shell radius | Callahan et al., PoP 27, 072704 (2020) eq. 13 | H |
+
+Rosen's lectures give the re-emission of a driven Marshak wave, not a cooling law: no
+published closure for a wall under a falling drive was found. The model below is our
+construction, checked against our own 1-D diffusion solve (an independent reference:
+it shares no code or assumption with the closure but the material power laws).
+
+### 1. Wall re-emission (`drive_history(...; wall_release = true)`, default)
+
+The self-similar loss with history (`wall_history`) never returns energy: when T falls,
+t_eff grows and the loss only shrinks. The closure (*L*, in `_wall_split`):
+
+- the history loss is the heating response, evaluated at each element's running maximum
+  T_h = max T (bit for bit the old loss while T never falls below it);
+- a drop is the deficit D = φ(T_h) − φ(T) in the wall-energy potential φ = (T/100 eV)^a
+  (a = 4 + p = 3.3), and the wall answers it with the loss's own self-similar kernel,
+  superposed (Duhamel, linear in φ): net flux in F = L(T_h, t_eff) −
+  f_r b C ∫ (t − t′)^(b−1) dD(t′), C = L t_eff^(1−b)/(b φ(T_h)) (constant, c σ(100 eV)⁴/b,
+  for gold's unclamped Lindl loss); a drop D at t_d gives back f_r C D (t − t_d)^b by t:
+  fast at first (the hot surface layer), then as the heat wave's own t^b;
+- D is piecewise linear between steps and the kernel integral exact for it. The step's
+  own term is stiff (Δ^(b−1)); as an emission it made `solve`'s albedo iteration diverge
+  (first try: albedos of 10⁴), so below T_h it goes into the albedo, 1 − f_r C Δ^(b−1)
+  φ(T)/H ∝ T^-0.7 (iterates like Lindl's), and the T-independent rest into a source
+  term (`solve` gained a per-element emission from the albedo state; `sol.source`
+  includes it, so B = source + αH stays exact). The effective wall albedo exceeds 1
+  where the wall gives back more than it takes.
+- Bookkeeping: `drive_history` books `source` as ηP and `absorbed` net of the emission;
+  `released` (new) is the re-emitted power per component and `energy_budget` integrates
+  it. The budget still closes to 1e-15 on a falling drive. `keep_albedo` returns the
+  effective albedo α + E/H, so a flux response about it reproduces the step exactly (a
+  secant linearization; `retune_drive`'s test failed on the raw albedo, whose pulse
+  ends in a ramp down).
+
+**Calibration of f_r (*calibrated*, `WallLossAlbedo(; release = 0.77)`), against 1-D
+nonlinear radiation diffusion** (`examples/wall_reemission.jl`): static gold
+(Hammer–Rosen power laws, ρ 19.3, 300 zones geometric from 1e-8 g/cm², implicit, Picard
+in T⁴), Marshak boundary on the incident flux σT_D⁴. Its constant-T energy goes as
+T^3.57 t^0.5 (similarity 3.55, 0.5), which the closure is given (coefficient from the
+same run). Drive: 100 eV foot to 4 ns, 300 eV by 5 ns, flat to 8 ns, then down by 5 / 10
+/ 30 % over 0.5 / 0.5 / 1.0 ns. Energy into the wall over 8–9.5 ns (MJ/cm²; 0.149 stored
+at 8 ns):
+
+| Drop | reference | no release | f_r = 1 | f_r = 0.77 | f_r the reference needs |
+|---|---|---|---|---|---|
+| 5 % | +0.0193 | +0.0234 | +0.0156 | +0.0191 | 0.759 |
+| 10 % | +0.0086 | +0.0177 | +0.0023 | +0.0089 | 0.779 |
+| 30 % | −0.0148 | +0.0094 | −0.0291 | −0.0153 | 0.762 |
+
+The closure is linear in f_r for a prescribed T_D, so f_r is read off exactly; the same
+0.76–0.78 serves all three drops, and with 0.77 the net flux follows the reference
+point by point (10 % drop, F/σT_D⁴ at 8.1 / 8.5 / 9.0 ns: +0.011 / −0.010 / +0.015
+against +0.013 / −0.009 / +0.014; 30 %: +0.003 / −0.035 / −0.095 against +0.006 /
+−0.032 / −0.093). The linear response (f_r = 1) overshoots by ~1.6×: a cooled surface is
+more opaque and throttles the release. Without the release the wall keeps absorbing
+after the drop. Caveats: static wall (the ablating wall's b = 0.62 is not tested), one
+material's exponents; the history loss itself is 8 % low against the reference early
+in the peak (5 ns: 0.112 against 0.122 of σT_D⁴) and within 2 % from 6 ns.
+
+**Checks.** Rising drives: bit for bit (`test/energetics.jl`, "wall re-emission"). Step
+size: coarse N221204 at 0.125 against 0.25 ns steps (f_r 1): capsule Tr 302.1 / 283.9
+against 301.7 / 284.0 eV at 8.5 / 9.0 ns. The per-element net flux matches the formula
+evaluated from the recorded temperatures to 1e-6 of σT⁴.
+
+**N221204 after the droop (check, not a fit).** Capsule Tr / Dante 1 over the initial /
+open LEH area (eV), coarse:
+
+| t (ns) | 8.0 | 8.5 | 9.0 |
+|---|---|---|---|
+| no release (before) | 310.6 / 294.6 / 318.2 | 292.6 / 277.0 / 299.2 | 261.6 / 246.5 / 266.3 |
+| release, f_r 0.77 (after) | 310.6 / 294.6 / 318.2 | 299.5 / 283.1 / 305.8 | 277.0 / 260.4 / 281.3 |
+| release, f_r 1 | 310.6 / 294.6 / 318.2 | 301.7 / 285.1 / 308.0 | 284.0 / 266.8 / 288.1 |
+| measured Dante 1 | 310.1 | 311.3 | 301.5 |
+
+**It does not hold 311 eV.** The release takes the fall from 8 to 8.5 ns from −19 to
+−12 eV (open area) and from 8 to 9 ns from −52 to −37 eV; Dante rises 1 eV and then
+falls 9.8. Over the open area the model is 5.5 eV low at 8.5 ns (12.1 before) and 20 eV
+at 9.0 ns (35 before). Through 8 ns nothing moves by more than 0.2 eV (elements whose T
+dips while the drive rises, near the lips and the bubble), so the early-peak excess at
+5–5.5 ns is unchanged (+24 / +18 eV over the open area). Split (% of coupled): wall 63.6
+→ 62.8, LEH 24.8 → 25.5, capsule 11.6 → 11.7; 103 kJ re-emitted in all (gross). Fig. 10:
+unchanged to 8 ns (−0.181 at 5.25, crossing 6.24, +0.073 at 8 ns, rms 0.041); 8.5 ns
++0.056 → +0.047 (Fig. 10 +0.109). The remaining late gap needs something else: the
+energy in the hohlraum plasma (gas and blow-off, which the radiosity has no store for),
+the capsule's shrinking sink (it is in), and the LEH closing faster after the laser
+turns off (Chen 2020); none is modeled here.
+
+### 2. Capsule radius and albedo from published data
+
+The schedule is unchanged: HYDRA's ablation front for N221204 (0.81 R₀ at 6 ns) along
+Young's N170827 front, time-mapped so its end falls at bang time (9.53 ns). That end
+mapping is the slowest plausible shrink (anchoring only at 6 ns, a pure shift, ends at
+8.0 ns and absorbs less), and it agrees with N221204's kinematics to ~0.05 R₀ (*L*: from
+0.92 mm at 6 ns to ~0.3 mm at peak velocity, ~9.0 ns, needs a mean ~190 km/s rising to
+~380). What was not from data was α_c = 0.22, calibrated on the old, too hot drive.
+
+| Run (coarse, release 0.77) | capsule α_c | capsule Tr 5.0 / 8.0 / 8.5 | Dante open 5.0 / 8.5 | LEH / capsule (%) | Fig. 10 min (ns), zero, 8 ns, rms |
+|---|---|---|---|---|---|
+| R₀ mesh, CapsuleAlbedo radius (`capsule=model`) | 0.22 (calibrated) | 260.9 / 310.6 / 299.5 | 261.8 / 305.8 | 25.5 / 11.7 | −0.181 (5.25), 6.24, +0.073, 0.041 |
+| same | Young's HYDRA α(t) (`capsule_albedo=young`) | 259.1 / 310.8 / 299.8 | 260.1 / 306.1 | 25.3 / 12.3 | −0.180 (5.25), 6.23, +0.072, 0.043 |
+| shrinking mesh (`capsule=mesh`) | 0.22 | 260.9 / 310.7 / 299.7 | 261.9 / 306.1 | 25.5 / 11.7 | −0.170 (5.25), 6.28, +0.047, 0.045 |
+| shrinking mesh | Young's α(t) | 259.2 / 310.9 / 300.0 | 260.2 / 306.4 | 25.2 / 12.3 | −0.169 (5.25), 6.25, +0.046, 0.047 |
+| HYDRA / PRE 109 Fig. 10 / Dante | — | ~300 internal | 237.9 / 311.3 | 25.2 / 16.2 | −0.170 (5.6), 6.67, +0.095 |
+
+- **The published albedo raises the share to 12.3 %**, not 16.2 %: Young's ablator
+  albedo is below 0.16 to 6 ns (more absorption early, −1.8 eV at 5 ns, which moves the
+  early-peak excess by that much) and 0.3–0.4 late, where the small radius makes it
+  matter little. With α_c = 0 the share is ~15 % (before). **16.2 % is not reachable
+  with absorption at the ablation front** under this drive; HYDRA's "absorbed by the
+  capsule" must include absorption outside the front (the blow-off, W-doped, which
+  fills the low-fill hohlraum's centre) or a larger effective radius than the front.
+  No published radius of that absorbing surface was found, so nothing is fitted.
+- **The fixed mesh is an energetics-exact stand-in**: shrinking the mesh itself on the
+  keyframes (`moving_hohlraum(...; capsule_shrink)`, new) gives the same E_cap (11.7 /
+  12.3 %) and capsule Tr within 0.3 eV, and costs nothing (the keyframes already rebuild
+  the target for the moving wall: 264 against 271 s per coarse run). The approximation
+  `CapsuleAlbedo`'s radius makes is in the flux *pattern*: it evaluates the capsule
+  flux on R₀ and re-emits the unabsorbed share from the R₀ sphere, as if light crossed
+  the shell's surroundings undisturbed.
+- **P2: the shrinking sphere sees less of the late pattern**: +0.073 → +0.047 at 8 ns,
+  +0.047 → +0.026 at 8.5 ns, and the minimum −0.181 → −0.170 (Fig. 10 −0.170), the
+  crossing 6.24 → 6.28 ns; rms 0.041 → 0.045 (the late values move away from Fig. 10's
+  +0.095 / +0.109). Early (≤ 5 ns, R/R₀ ≥ 0.86) the two agree within 0.002. Fig. 10's
+  flux radius is not stated (HYDRA's is the ablation front's own), so the shrinking-mesh
+  P2 is the like-for-like comparison if Fig. 10 is the flux at the front.
+
+### Standard mesh (0.28 / 0.16)
+
+Capsule Tr / Dante 1 initial / open area (eV); "before" is the late-time-drive notes'
+standard run (no release); coarse agrees within 0.6 eV and 0.008 in P2.
+
+| t (ns) | 5.0 | 8.0 | 8.5 | 9.0 | LEH / capsule (%) | Fig. 10 min (ns), zero, 8 ns, rms |
+|---|---|---|---|---|---|---|
+| before | 260.9 / 248.7 / 262.2 | 310.5 / 295.0 / 318.6 | 292.5 / 277.2 / 299.5 | 261.6 / 246.7 / 266.4 | 24.8 / 11.6 | −0.189 (5.25), 6.23, +0.077, 0.041 |
+| release (`energetics=new`, now) | 261.0 / 248.8 / 262.3 | 310.5 / 295.0 / 318.6 | 299.4 / 283.4 / 306.1 | 277.0 / 260.5 / 281.4 | 25.6 / 11.7 | −0.189 (5.25), 6.23, +0.077, 0.042 |
+| + shrinking mesh, Young's α(t) | 259.3 / 247.2 / 260.7 | 310.9 / 295.4 / 319.0 | 300.0 / 283.9 / 306.7 | 277.5 / 261.1 / 282.1 | 25.2 / 12.3 | −0.176 (5.25), 6.24, +0.048, 0.047 |
+| measured Dante 1 / HYDRA / Fig. 10 | 237.9 | 310.1 | 311.3 | 301.5 | 25.2 / 16.2 | −0.170 (5.6), 6.67, +0.095 |
+
+Split with the release: wall 62.7 / LEH 25.6 / capsule 11.7 % of the coupled energy,
+103 kJ re-emitted (gross).
+
+### What remains
+
+- The late drive: with the release the model falls 12 eV from 8 to 8.5 ns where Dante
+  rises 1; the hohlraum plasma's stored energy and the LEH after the laser turns off are
+  the candidates (neither modeled).
+- The capsule share: 12.3 % with published radius and albedo against 16.2 %; the
+  absorbing radius outside the ablation front is the open input.
+- The early peak (+18 to +24 eV over the open area at 5–5.5 ns, +1 to +11 over the
+  initial area) is not moved by either change (the published capsule albedo takes
+  1.7 eV off).
+- The release closure is calibrated on a static wall; an ablating-wall (hydro) reference
+  would test b = 0.62.
