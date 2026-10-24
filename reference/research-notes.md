@@ -3543,6 +3543,12 @@ is not converged: at 2 µm the same A gives 298 km/s and 7.3 %, and the 0.5 µm 
 at 5.5 ns. Read v to ±10 %. The calibration belongs to the drive. Briareus 3f25f29
 (late-time wall-loss history) peaks at 285 eV, and with P₀ recalibrated to 5.53 Mbar
 the same A gives 307 km/s, 8.2 % and 25.6 kJ (the CompactLES example, end to end).
+r–θ run (aₗ to l = 8, 2 µm × 64 cells, annulus from 0.25 mm, stopped at 7.6 ns).
+The pole-hot foot (a₂/a₀ +0.03…+0.15 to 4.7 ns) makes the shell oblate, to −0.45 %
+P2/P0 at 5.5–6 ns. The pole-cold peak (−0.09) reverses it, and the shell is prolate
+from ≈ 7.1 ns (+0.5 % at 7.6). This is a swing, but not yet Masse's G(t,τ) inversion,
+because the drive's own P2 changes sign at 4.7 ns. Telling them apart needs impulse
+runs to stagnation (**L**).
 
 ## Large radiation models (2026-10-24) *derived*
 
