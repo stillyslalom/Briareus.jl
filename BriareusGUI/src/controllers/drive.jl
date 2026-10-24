@@ -597,3 +597,84 @@ function drive_summary(res::DriveResult)
     return @sprintf("%.4g TW delivered", d.delivered) *
            (res.solution === nothing ? " (laser only: no x-ray drive)" : "")
 end
+
+# ---------------------------------------------------------------- time
+
+# The time panel's state (its logic is in timeline.jl, after the session).
+
+"""
+Charts of the time panel: `:pulses` (laser power per beam group), `:drive` (capsule
+Tᵣ, Dante 1 and a_l/a_0), `:energy` (where the laser energy has gone by each time) and
+`:retune` (the latest retune's reference and retuned powers and its mode 1).
+"""
+const TIME_CHARTS = (:pulses, :drive, :energy, :retune)
+
+const TIME_CHART_LABELS = Dict(:pulses => "Pulses", :drive => "Drive history", :energy => "Energy",
+                               :retune => "Retune")
+
+"""
+    DriveHistory
+
+A drive history of the session ([`start_history!`](@ref)): `time` (ns), `Tr` (capsule
+radiation temperature, eV), `legendre` (rows l = 1…4 of a_l/a_0 per step), `dante`
+(Dante 1 brightness temperature, eV, `NaN` without one), `energy` (series `(; name,
+values)` in kJ, cumulative), `fields` (per [`DRIVE_FIELDS`](@ref) an elements × steps
+matrix in W/cm², on the drive's elements), `range` (each field's finite extremes over
+the history), `history` (the core `drive_history`), `key` (what it was computed for)
+and `seconds`.
+"""
+struct DriveHistory
+    time::Vector{Float64}
+    Tr::Vector{Float64}
+    legendre::Matrix{Float64}
+    dante::Vector{Float64}
+    energy::Vector{NamedTuple}
+    fields::Dict{Symbol,Matrix{Float32}}
+    range::Dict{Symbol,Tuple{Float64,Float64}}
+    history::Any
+    key::Any
+    seconds::Float64
+end
+
+"""
+    TimeState()
+
+State of the time panel: `pulses` (the pulses the beams fire, see
+[`load_pulses!`](@ref) and [`use_pulse_shape!`](@ref); `nothing` before one), `history`
+(the latest [`DriveHistory`](@ref)), `retune` (the latest retune's histories, see
+[`retune_to_reference!`](@ref)), `chart` (one of [`TIME_CHARTS`](@ref)), `cursor` (the
+time shown in the 3D view, ns; `NaN`: the drive at the table's powers), `dante` (record
+a synthetic Dante 1), and the history job's `running`, `progress` (steps done, steps),
+`started` and `status`.
+"""
+struct TimeState
+    pulses::Observable{Any}
+    history::Observable{Any}
+    retune::Observable{Any}
+    chart::Observable{Symbol}
+    cursor::Observable{Float64}
+    dante::Observable{Bool}
+    running::Observable{Bool}
+    progress::Observable{Tuple{Int,Int}}
+    started::Observable{Float64}
+    status::Observable{String}
+    generation::Base.RefValue{Int}
+    cancel::Threads.Atomic{Bool}
+    queued::Base.RefValue{Bool}               # run once the drive is computed
+end
+
+TimeState() = TimeState(Observable{Any}(nothing), Observable{Any}(nothing), Observable{Any}(nothing),
+                        Observable(:pulses), Observable(NaN), Observable(true), Observable(false),
+                        Observable((0, 0)), Observable(0.0), Observable(""), Ref(0),
+                        Threads.Atomic{Bool}(false), Ref(false))
+
+"""
+    set_chart!(tm::TimeState, chart::Symbol) -> tm
+
+Show one of [`TIME_CHARTS`](@ref).
+"""
+function set_chart!(tm::TimeState, chart::Symbol)
+    chart in TIME_CHARTS || throw(ArgumentError("chart must be one of $TIME_CHARTS"))
+    _assign!(tm.chart, chart)
+    return tm
+end

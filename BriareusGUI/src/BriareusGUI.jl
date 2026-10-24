@@ -5,7 +5,8 @@ The Briareus window (`briareus`): a laser-target design tool in the manner of Vi
 target (a hohlraum with diagnostic windows, a backlighter foil, or free parts), its
 beams (with VisRad pointing and beam-summary interchange), and analyses run on them in
 any order: the laser and x-ray drive (and a VisRad benchmark kit), a pointing
-optimization, beam clearance and the TaLIS target-configuration rules. One Qt Quick
+optimization, beam clearance and the TaLIS target-configuration rules, and the drive in
+time (pulse tables, drive histories and a time cursor on the 3D view). One Qt Quick
 window: model tree, properties, a 3D viewer with CAD-style navigation, and result
 panels. Use `Controllers` to do the same from a script without a window. Controller
 state is exposed through `Observables`.
@@ -41,6 +42,7 @@ include("controllers/talis.jl")
 include("controllers/beam_geometry.jl")
 include("controllers/view.jl")
 include("controllers/session.jl")             # links the parts
+include("controllers/timeline.jl")            # pulses, drive histories, the time cursor
 include("controllers/workspace.jl")           # session files, undo and redo
 
 export display_number
@@ -74,6 +76,9 @@ export DriveState, DriveResult, DRIVE_FIELDS, DRIVE_FIELD_LABELS, MODE_DEGREES, 
        set_side_view!, set_cavity!, cavity_rows, cavity_summary, cavity_sealed,
        set_view!, flux_lookup, flux_map, power_rows, element_values, drive_summary,
        BEAM_MODELS, BEAM_MODEL_LABELS, set_beam_model!
+export TimeState, DriveHistory, TIME_CHARTS, TIME_CHART_LABELS, set_chart!, load_pulses!,
+       use_pulse_shape!, start_history!, cancel_history!, history_stale, set_time_cursor!,
+       set_time_step!, time_step, cursor_values, cursor_range, time_label, time_chart
 export OptimizeState, OptimizeResult, OBJECTIVES, OBJECTIVE_LABELS, set_free!,
        edit_optimize!, set_objective!, start_optimize!, cancel_optimize!, optimize_progress,
        parameter_rows
@@ -111,6 +116,7 @@ export TargetSetup, set_target_kind!, set_resolution!, edit_mesh!, edit_target!,
 include("canvas/cad_camera.jl")
 include("canvas/scene_canvas.jl")
 include("canvas/map_canvas.jl")
+include("canvas/time_canvas.jl")
 include("qt/shell.jl")
 
 using PrecompileTools: @setup_workload, @compile_workload
@@ -152,8 +158,16 @@ using PrecompileTools: @setup_workload, @compile_workload
         for task in TASKS
             task_status(sess, task)
         end
+        # the time panel: pulses, a short drive history and its charts
+        use_pulse_shape!(sess; step = 3.0)
+        start_history!(sess)
+        for c in TIME_CHARTS
+            time_chart(sess, c)
+        end
+        set_time_cursor!(sess, 6.0)
         sc = scene_canvas(sess)
         mc = map_canvas(sess)
+        tc = time_canvas(sess)
     end
 end
 

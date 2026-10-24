@@ -1,4 +1,5 @@
-// The bottom panel: the beam table and each analysis's results, one tab each.
+// The bottom panel: the beam table and each analysis's results, one tab each (Time:
+// pulses, drive histories and the retune over time).
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -9,8 +10,9 @@ Pane {
     id: results
     padding: 0
     property alias currentIndex: tabs.currentIndex
-    readonly property var keys: ["beams", "drive", "optimize", "clearance", "talis"]
+    readonly property var keys: ["beams", "drive", "time", "optimize", "clearance", "talis"]
     function show(key) { const i = keys.indexOf(key); if (i >= 0) tabs.currentIndex = i }
+    function redrawTime() { timePanel.redraw() }
 
     ColumnLayout {
         anchors.fill: parent
@@ -20,6 +22,7 @@ Pane {
             Layout.fillWidth: true
             TabButton { text: "Beam table"; width: implicitWidth }
             TabButton { text: "Drive"; width: implicitWidth }
+            TabButton { text: "Time"; width: implicitWidth }
             TabButton { text: "Optimization"; width: implicitWidth }
             TabButton { text: "Clearance"; width: implicitWidth }
             // NIF's rules: the tab only for NIF beams
@@ -33,6 +36,7 @@ Pane {
                 BeamTablePanel { anchors.fill: parent; anchors.margins: 10 }
             }
             DrivePanel {}
+            TimePanel { id: timePanel }
             OptimizePanel {}
             Item {
                 ClearancePanel { anchors.fill: parent; anchors.margins: 10 }

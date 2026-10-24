@@ -98,7 +98,7 @@ function scene_canvas(sess::DesignSession)
     attach_cad_camera!(sc, cam)
     dr, v = sess.drive, sess.view
     onany((_...) -> _draw_body!(c, sess), sess.target.target, dr.result, v.color, dr.field,
-          v.cutaway, v.hidden, v.cut_azimuth, v.cut_width, v.cut_components)
+          sess.time.cursor, sess.time.history, v.cutaway, v.hidden, v.cut_azimuth, v.cut_width, v.cut_components)
     onany((_...) -> _draw_beams!(c, sess), sess.target.target, sess.beams.beams,
           sess.beams.enabled, sess.beams.cluster, v.beams, v.beam_color, v.beam_length, sess.review.report,
           sess.talis.report, v.hidden_beams, v.show_off)
@@ -328,20 +328,29 @@ selection_center(sess::DesignSession) = (b = selection_bounds(sess); b === nothi
 
 # ---------------------------------------------------------------- target
 
-# What the body is colored by: a drive field when chosen and computed for this target.
+# What the body is colored by: a drive field when chosen and computed for this target,
+# at the time cursor's step of the drive history when it shows one (`cursor_values`).
 function _body_coloring(sess::DesignSession)
-    sess.view.color[] === :component && return nothing
-    res = sess.drive.result[]
-    res === nothing && return nothing
+    field = sess.view.color[]
+    field === :component && return nothing
     t = sess.target.target[]
-    res.evaluation.scenario.target === t && return element_values(res, sess.view.color[])
-    # a drive on the cavity: its elements are some of the target's
     dr = sess.drive
+    vals = cursor_values(sess, field)
+    if vals === nothing
+        res = dr.result[]
+        res === nothing && return nothing
+        s = res.evaluation.scenario
+        s.target === t && return element_values(res, field)
+        s === dr.scenario[] || return nothing
+        vals = element_values(res, field)
+    else
+        dr.scenario[].target === t && return vals
+    end
+    # a drive on the cavity: its elements are some of the target's
     idx = dr.cavity_index[]
-    (idx !== nothing && res.evaluation.scenario === dr.scenario[] && dr.key[] !== nothing &&
-     dr.key[][1] === t) || return nothing
+    (idx !== nothing && dr.key[] !== nothing && dr.key[][1] === t) || return nothing
     full = fill(NaN, nelements(t))
-    full[idx] = element_values(res, sess.view.color[])
+    full[idx] = vals
     return full
 end
 
@@ -411,12 +420,16 @@ function _draw_body!(c::SceneCanvas, sess::DesignSession)
         lo, hi = isempty(fin) ? (0.0, 1.0) : extrema(fin)
         sess.view.color[] === :laser && (lo = 0.0)
         hi > lo || (hi = lo + 1)
+        # a drive history's step: one scale for the whole history
+        rng = cursor_range(sess, sess.view.color[])
+        rng === nothing || ((lo, hi) = rng)
+        at = time_label(sess)
         cmap = Makie.to_colormap(FIELD_COLORMAP)
         cols = [isfinite(v) ? _cmap_color(cmap, (v - lo) / (hi - lo)) : NAN_COLOR for v in tvals]
         cb.colormap[] = FIELD_COLORMAP
         cb.limits[] = (lo, hi)
         cb.ticks[] = Makie.automatic
-        cb.label[] = DRIVE_FIELD_LABELS[sess.view.color[]]
+        cb.label[] = DRIVE_FIELD_LABELS[sess.view.color[]] * (isempty(at) ? "" : " at " * at[5:end])
         _show_colorbar!(c, true)
         _update!(c.body, pts, [GLTriangleFace(3i - 2, 3i - 1, 3i) for i in 1:n];
                  color = repeat(cols; inner = 3))

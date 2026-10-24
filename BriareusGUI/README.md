@@ -141,6 +141,24 @@ and each analysis says when it is out of date.
     power accounting, and **Write VisRad benchmark kit…** (`write_visrad_kit`: SST
     pointing, beam summary, beam table, a README with the geometry and the VisRad
     steps, and the Briareus results), reusing the drive's view factors.
+  - *Time:* the drive in time. **Pulse table…** fires the beams with a pulse table
+    (`read_pulse_table`: power per beam against time per cone group, quad or beam;
+    disabled beams stay off), and **N221204 shape** with N221204's delivered pulse shape
+    (`n221204_pulse`), each beam reaching its table power at the peak. **Run history**
+    solves the drive at each time of the pulses with the drive's view factors
+    (`drive_history`, on a worker with progress and cancel; the drive is computed first
+    when it is missing). Four charts, colored as the model tree keys the beam groups and
+    components: *Pulses* (each group's power and the total, TW), *Drive history*
+    (capsule Tᵣ and a synthetic Dante 1, `dante(dante1(), …)`, in eV; a₂/a₀ and a₄/a₀ in
+    % on the right axis), *Energy* (the laser energy delivered by each time and where it
+    went, kJ, `energy_budget`: heat in the walls and the capsule, x-rays out of the
+    entrance holes and windows) and *Retune* (below). A click or drag on the chart, or
+    the slider under it, moves the time cursor: the 3D view is colored by that step of
+    the history (by the incident x-ray flux when it was colored by component), on one
+    color scale for the whole history, labeled with the time; each step's fields are
+    kept with the history, so scrubbing computes nothing. **Now** returns to the drive
+    at the table's powers. A beam, pulse or target edit marks the history out of date
+    and the 3D view leaves it until it is run again.
   - *Optimization:* free aim, defocus and power per cone, quad or beam within ±
     bounds; minimize capsule asymmetry (axisymmetric P_l or all-m 3D modes, optionally
     holding the drive) or foil-spot nonuniformity with `optimize_pointing` in the
@@ -184,7 +202,9 @@ and each analysis says when it is out of date.
   through l = 4 (`retune_drive`), within a limit relative to the reference powers and
   optionally staying near them. The disabled beams are the ones the shot loses. The
   new pulses are written as a pulse table; the dialog reports the worst-time mode 1
-  and Tᵣ change before and after, from drive histories of both.
+  and Tᵣ change before and after, from drive histories of both, and the Time tab plots
+  them: each group's power on the reference pulses (dashed) and on the retuned ones,
+  and ε₁ before and after.
 - **Sessions, undo and redo:** File ▸ Save session (Ctrl + S) writes the whole design
   (target, windows, parts, beams with their groups and on/off state, the analyses'
   settings and the view) to a plain TOML file (`save_session`), and File ▸ Open session
@@ -216,6 +236,10 @@ talis_rule_rows(sess.talis)
 talis_notes(sess.talis)                          # the ASSUMED tolerance caveat first
 export_results(sess, "results")                  # per-element and per-mode CSV
 retune_to_reference!(sess, "reference.csv", "retuned.csv")  # disabled beams are the dropped ones
+load_pulses!(sess, "reference.csv")              # or use_pulse_shape!(sess): N221204's shape
+start_history!(sess)                             # drive_history on the drive's view factors
+time_chart(sess, :drive)                         # what the Time tab plots (also :pulses, :energy, :retune)
+set_time_cursor!(sess, 6.0)                      # the 3D view at the history step nearest 6 ns
 save_session("design.briareus.toml", sess)       # the design as TOML; load_session! reads it
 record!(sess); undo!(sess)                       # undo/redo steps (a window records them itself)
 ```

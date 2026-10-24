@@ -258,3 +258,35 @@ end
     @test finite(sc.outlines[1][]) == 0
     @test length(sc.lscene.scene.plots) == nplots
 end
+
+@testset "time chart and the 3D view at a time (offscreen)" begin
+    sess = DesignSession(resolution = :coarse)
+    sc = B.scene_canvas(sess)
+    tc = B.time_canvas(sess)
+    nplots = (length(tc.ax.scene.plots), length(tc.ax2.scene.plots))
+    shown(pools) = sum(count(p -> p.visible[], pool) for pool in values(pools))
+    @test shown(tc.left) == 0 && !tc.cursor.visible[]
+    use_pulse_shape!(sess; step = 1.0)
+    @test shown(tc.left) == length(time_chart(sess).left.series) == 5 && shown(tc.right) == 0
+    @test tc.ax.ylabel[] == "Laser power (TW)" && !tc.ax2.ylabelvisible[]
+    start_history!(sess)
+    h = sess.time.history[]
+    # the drive chart: Tr and Dante 1 on the left, a2/a0 and a4/a0 on the right
+    @test shown(tc.left) == 2 && shown(tc.right) == 2 && tc.ax2.ylabelvisible[]
+    @test tc.left[:solid][1][1][] == [Point2f(x, y) for (x, y) in zip(h.time, h.Tr)]
+    @test tc.left[:dash][1][1][] == [Point2f(x, y) for (x, y) in zip(h.time, h.dante)]
+    @test tc.left[:dash][1].visible[]                       # Dante 1, dashed
+    set_chart!(sess.time, :energy)
+    @test shown(tc.left) == length(h.energy) && shown(tc.right) == 0
+    # the cursor: drawn on the chart, and the 3D view colored by that step on one scale
+    set_time_cursor!(sess, 7.9)
+    k = time_step(sess.time)
+    @test tc.cursor.visible[] && tc.cursor[1][] == [h.time[k]]
+    @test sess.view.color[] === :incident
+    @test sc.colorbar.label[] == Controllers.DRIVE_FIELD_LABELS[:incident] * " at " * time_label(sess)[5:end]
+    @test sc.colorbar.limits[] == h.range[:incident]
+    @test !isempty(colorbuffer(tc.fig; px_per_unit = 1)) && !isempty(colorbuffer(sc.fig; px_per_unit = 1))
+    set_time_cursor!(sess, NaN)
+    @test !tc.cursor.visible[] && !occursin(" at ", sc.colorbar.label[])
+    @test (length(tc.ax.scene.plots), length(tc.ax2.scene.plots)) == nplots
+end

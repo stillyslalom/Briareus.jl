@@ -298,6 +298,13 @@ mutable struct NoteRow
     text::String
 end
 
+# One entry of the time chart's key.
+mutable struct LegendRow
+    label::String
+    color::String
+    style::String                                  # solid, dash, dot
+end
+
 _same(a, b) = all(f -> getfield(a, f) == getfield(b, f), fieldnames(typeof(a)))
 
 # How many leading rows of `old` and `new` are the same nodes (equal first fields): rows
@@ -352,7 +359,7 @@ const _MODEL_ROWS = (treeModel = TreeItem, targetFieldModel = FieldRow, partFiel
                      powerModel = PowerRow, optModeModel = ModeRow, paramModel = ParamRow,
                      compModel = CompRow, clearModel = ClearRow, worstModel = ClearRow,
                      talisCompModel = CompRow, ruleModel = RuleRow, talisModel = TalisRow,
-                     noteModel = NoteRow)
+                     noteModel = NoteRow, timeLegendModel = LegendRow)
 
 """
 State shared between a `DesignSession` and its QML window: the property map `app`,
@@ -363,6 +370,7 @@ mutable struct BriareusShell
     sess::DesignSession
     scene::SceneCanvas
     map::MapCanvas
+    time::TimeCanvas
     app::JuliaPropertyMap
     rows::Dict{Symbol,Vector}
     models::Dict{Symbol,JuliaItemModel}
@@ -379,16 +387,18 @@ function BriareusShell(sess::DesignSession; queue::Channel{Any} = Channel{Any}(I
     rows = Dict{Symbol,Vector}(k => R[] for (k, R) in pairs(_MODEL_ROWS))
     models = Dict{Symbol,JuliaItemModel}(k => JuliaItemModel(rows[k]) for k in keys(_MODEL_ROWS))
     scene = scene_canvas(sess)
-    sh = BriareusShell(sess, scene, map_canvas(sess), JuliaPropertyMap(), rows, models, queue,
+    sh = BriareusShell(sess, scene, map_canvas(sess), time_canvas(sess), JuliaPropertyMap(), rows, models, queue,
                        Ref(true), Dict{String,Any}(), scene.fig, "", nothing,
                        Figure(size = (40, 40)))
     sh.app["canvas"] = scene.fig
+    sh.app["timeCanvas"] = sh.time.fig
     # a figure is shown on one canvas at a time: the side canvas holds a blank one
     # unless the map sits beside the 3D view
     sh.side_figure = sh.blank
     sh.app["sideCanvas"] = sh.blank
     _set!(sh, "sideView", false)
     _set!(sh, "grabPath", "")
+    _set!(sh, "resultsRequest", "")
     _set!(sh, "sessionPath", "")
     _set!(sh, "canUndo", false)
     _set!(sh, "canRedo", false)
@@ -424,8 +434,8 @@ function BriareusShell(sess::DesignSession; queue::Channel{Any} = Channel{Any}(I
     _set!(sh, "ortho", false)
     _set!(sh, "turntable", true)
     mark = (_...) -> (sh.dirty[] = true)
-    ts, bt, dr, st, rv, tl, v = sess.target, sess.beams, sess.drive, sess.optimize, sess.review,
-                                sess.talis, sess.view
+    ts, bt, dr, st, rv, tl, v, tm = sess.target, sess.beams, sess.drive, sess.optimize, sess.review,
+                                    sess.talis, sess.view, sess.time
     for obs in (sess.status, sess.meshing, ts.kind, ts.params, ts.mesh, ts.resolution, ts.windows, ts.parts,
                 ts.target, ts.error, ts.pending, ts.building, ts.fitting,
                 bt.beams, bt.enabled, bt.preset, bt.by, bt.path, bt.error, bt.warnings,
@@ -442,7 +452,8 @@ function BriareusShell(sess::DesignSession; queue::Channel{Any} = Channel{Any}(I
                 tl.capture, tl.hardware, tl.tolerance, tl.pivot, tl.pivot_point, tl.omega1,
                 tl.running, tl.status, tl.error, tl.report,
                 v.color, v.beams, v.beam_color, v.show_off, v.cut_components, v.beam_length, v.cutaway, v.hidden, v.selection,
-                v.expanded)
+                v.expanded, tm.pulses, tm.history, tm.retune, tm.chart, tm.cursor, tm.dante, tm.running,
+                tm.progress, tm.status)
         on(mark, obs)
     end
     _refresh!(sh)
@@ -476,6 +487,7 @@ function _refresh!(sh::BriareusShell)
     _refresh_beams!(sh)
     _refresh_selection!(sh)
     _refresh_drive!(sh)
+    _refresh_time!(sh)
     _refresh_optimize!(sh)
     _refresh_review!(sh)
     tree = [TreeItem(r...) for r in model_tree(sess)]
@@ -519,6 +531,8 @@ function _refresh_view!(sh::BriareusShell)
     st.running[] && push!(busy, "optimizing")
     rv.running[] && push!(busy, "clearance $(rv.progress[][1])/$(rv.progress[][2])")
     tl.running[] && push!(busy, "TaLIS")
+    tm = sh.sess.time
+    tm.running[] && push!(busy, "drive history $(tm.progress[][1])/$(tm.progress[][2])")
     _set!(sh, "busy", join(busy, " · "))
     return
 end
@@ -737,6 +751,33 @@ function _refresh_drive!(sh::BriareusShell)
     return
 end
 
+function _refresh_time!(sh::BriareusShell)
+    sess = sh.sess
+    tm = sess.time
+    ch = time_chart(sess)
+    h = tm.history[]
+    _set!(sh, "timeChart", String(ch.chart))
+    _set!(sh, "timeTitle", ch.title)
+    _set!(sh, "timeEmpty", ch.empty)
+    _set!(sh, "timeRunning", tm.running[])
+    k, n = tm.progress[]
+    _set!(sh, "timeProgress", tm.running[] ? @sprintf("step %d of %d · %s", k, n,
+                                                       Controllers._seconds(time() - tm.started[])) : "")
+    _set!(sh, "timeFraction", n > 0 ? k / n : 0.0)
+    _set!(sh, "timeStatus", tm.status[])
+    _set!(sh, "timeHasPulses", tm.pulses[] !== nothing)
+    _set!(sh, "timeHasHistory", h !== nothing)
+    _set!(sh, "timeStale", history_stale(sess))
+    _set!(sh, "timeSteps", h === nothing ? 0 : length(h.time))
+    step = time_step(tm)
+    _set!(sh, "timeStep", step === nothing ? 0 : step)
+    _set!(sh, "timeLabel", time_label(sess))
+    _set!(sh, "timeDante", tm.dante[])
+    _sync_rows!(sh.rows[:timeLegendModel], sh.models[:timeLegendModel],
+                LegendRow[LegendRow(r.label, r.color, String(r.style)) for r in ch.legend])
+    return
+end
+
 function _refresh_optimize!(sh::BriareusShell)
     st = sh.sess.optimize
     _set!(sh, "optBy", String(st.by[]))
@@ -886,6 +927,15 @@ window's next tick, through QML `grabToImage`. The file appears asynchronously.
 request_grab(path::AbstractString) = (sh = _SHELL[]; sh === nothing || _set!(sh, "grabPath", String(path)); nothing)
 br_grab_started() = (sh = _SHELL[]; sh === nothing || _set!(sh, "grabPath", ""); nothing)
 
+"""
+    request_tab(key)
+
+Show a results tab of the open window (`"beams"`, `"drive"`, `"time"`, `"optimize"`,
+`"clearance"`, `"talis"`), as its menus do.
+"""
+request_tab(key::AbstractString) = (sh = _SHELL[]; sh === nothing ||
+                                    (_set!(sh, "resultsRequest", ""); _set!(sh, "resultsRequest", String(key))); nothing)
+
 # Run a callback body on the current shell, reporting errors in the status line
 # instead of letting them escape into Qt.
 function _with_shell(f)
@@ -959,16 +1009,19 @@ function br_tick()
         _refresh!(sh)
         _LAST_REFRESH[] = time()
     elseif (sess.drive.building[] || sess.optimize.running[] || sess.review.running[] ||
-            sess.talis.running[] || !target_ready(sess.target)) && time() - _LAST_REFRESH[] > 0.25
+            sess.talis.running[] || sess.time.running[] || !target_ready(sess.target)) &&
+           time() - _LAST_REFRESH[] > 0.25
         # running jobs report elapsed time, four times a second (not a design edit: a
         # snapshot for undo every tick took a third of the GUI thread during a drive)
         _refresh!(sh)
         _LAST_REFRESH[] = time()
     end
     redraw = sh.scene.dirty[] || sh.map.dirty[]
+    chart = sh.time.dirty[]
     sh.scene.dirty[] = false
     sh.map.dirty[] = false
-    return redraw ? 1 : 0
+    sh.time.dirty[] = false
+    return (redraw ? 1 : 0) | (chart ? 4 : 0)
 end
 
 _sym(x) = Symbol(String(x))
@@ -1417,6 +1470,15 @@ function br_retune(table, out, by, cap, stay)
         end
     end
 end
+# Time panel
+br_time_chart(key) = _with_shell(sh -> set_chart!(sh.sess.time, _sym(key)))
+br_time_pulses(url) = _with_shell(sh -> load_pulses!(sh.sess, _url_to_path(String(url))))
+br_time_shape() = _with_shell(sh -> use_pulse_shape!(sh.sess))
+br_time_run() = _with_shell(sh -> start_history!(sh.sess))
+br_time_cancel() = _with_shell(sh -> cancel_history!(sh.sess))
+br_time_step(k) = _with_shell(sh -> set_time_step!(sh.sess, round(Int, k)))
+br_time_now() = _with_shell(sh -> set_time_cursor!(sh.sess, NaN))
+br_time_dante(on) = _with_shell(sh -> Controllers._assign!(sh.sess.time.dante, Bool(on)))
 # Optimize
 br_opt_set_by(by) = _with_shell(sh -> (by = _sym(by); by in BEAM_GROUPINGS &&
                                                       Controllers._assign!(sh.sess.optimize.by, by)))
@@ -1529,6 +1591,8 @@ function _register_qml_functions()
     @qmlfunction br_import_beams br_export_beams br_import_sst br_import_summary br_export_sst
     @qmlfunction br_export_summary br_build br_set_view br_side_view br_xray_image br_close_image br_set_spot_radius br_beam_model br_write_kit br_export_results
     @qmlfunction br_import_visrad_workspace br_export_visrad_workspace br_retune
+    @qmlfunction br_time_chart br_time_pulses br_time_shape br_time_run br_time_cancel br_time_step
+    @qmlfunction br_time_now br_time_dante
     @qmlfunction br_opt_set_by br_opt_free br_opt_edit br_opt_objective br_opt_hold
     @qmlfunction br_opt_keepout br_opt_capsule br_opt_start br_opt_cancel br_opt_accept
     @qmlfunction br_rv_role br_rv_edit br_rv_wings br_rv_quality br_rv_start br_rv_cancel
@@ -1565,7 +1629,9 @@ a design tool in the manner of VisRad, not a sequence of steps:
   or as volumes, coloring by component or by a drive field (computed on request), a
   cutaway, and an orientation triad. The capsule θ–φ (or foil) map shares the canvas.
 - **Results** (bottom): the beam table, the drive (modes, power accounting, VisRad
-  benchmark kit), the optimization, the clearance check and the TaLIS rules.
+  benchmark kit), time (pulses, the drive history and the retune plotted against time,
+  with a time cursor that colors the 3D view by that step), the optimization, the
+  clearance check and the TaLIS rules.
 - **Menus and toolbar**: new targets, parts and windows, beam presets and imports
   (CSV, VisRad SST and Laser Beam Summary) and exports, views, and the analyses.
 

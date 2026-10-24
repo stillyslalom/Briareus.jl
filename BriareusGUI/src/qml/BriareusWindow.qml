@@ -6,7 +6,8 @@
 // All state lives in Julia: `app` (property map) and the item models (`treeModel`,
 // `targetFieldModel`, `partFieldModel`, `windowModel`, `beamModel`, `modeModel`,
 // `powerModel`, `optModeModel`, `paramModel`, `compModel`, `clearModel`, `worstModel`,
-// `talisCompModel`, `ruleModel`, `talisModel`, `noteModel`); actions call Julia.br_*.
+// `talisCompModel`, `ruleModel`, `talisModel`, `noteModel`, `timeLegendModel`); actions
+// call Julia.br_*.
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -42,6 +43,9 @@ ApplicationWindow {
     function openClearanceExport() { fileDialog.run("export_clearance") }
     function openTalisExport() { fileDialog.run("export_talis") }
 
+    // a results tab asked for from Julia (`request_tab`)
+    readonly property string resultsRequest: app.resultsRequest
+    onResultsRequestChanged: if (resultsRequest !== "") results.show(resultsRequest)
     // follow the selection with the result tabs
     readonly property string selectionWatch: app.selKind + ":" + app.selKey
     onSelectionWatchChanged: followSelection()
@@ -223,6 +227,11 @@ ApplicationWindow {
             }
             Action { text: "TaLIS rules (NIF)…"; enabled: app.facility === "nif"; onTriggered: win.showTask("talis") }
             Action { text: "Retune to a reference drive…"; enabled: app.kitReady; onTriggered: retuneDialog.open() }
+            Action {
+                text: "Drive history"
+                enabled: app.timeHasPulses && !app.timeRunning
+                onTriggered: { Julia.br_time_run(); results.show("time") }
+            }
             MenuSeparator {}
             Action { text: "Cancel running analyses"; onTriggered: Julia.br_cancel_all() }
         }
@@ -293,6 +302,19 @@ ApplicationWindow {
                               : ""
                         visible: text !== ""
                         color: "#d08a00"
+                        background: Rectangle { color: palette.window; opacity: 0.85; radius: 3 }
+                        padding: 4
+                    }
+                    // the drive history's step the 3D view shows (Time tab)
+                    Label {
+                        anchors.top: parent.top
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        anchors.margins: 8
+                        text: app.timeLabel !== "" && app.colorBy !== "component" &&
+                              (app.driveView === "scene" || app.sideView) ? "drive history at " + app.timeLabel : ""
+                        visible: text !== ""
+                        font.weight: Font.DemiBold
+                        color: "#2f7fd8"
                         background: Rectangle { color: palette.window; opacity: 0.85; radius: 3 }
                         padding: 4
                     }
@@ -547,9 +569,13 @@ ApplicationWindow {
             }
             if (r === 2) {
                 win.close()
-            } else if (r === 1) {
-                canvas.update()
-                if (app.sideView) sideCanvas.update()
+            } else {
+                // 1: the 3D view or the map changed, 4: the time chart
+                if (r & 1) {
+                    canvas.update()
+                    if (app.sideView) sideCanvas.update()
+                }
+                if (r & 4) results.redrawTime()
             }
         }
     }

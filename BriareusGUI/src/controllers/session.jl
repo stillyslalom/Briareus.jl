@@ -46,7 +46,8 @@ EditHistory(; limit::Integer = 200) = EditHistory(Dict{String,Any}[], Dict{Strin
 State of the Briareus window: `target` ([`TargetSetup`](@ref)), `beams`
 ([`BeamTable`](@ref)), the analyses `drive` ([`DriveState`](@ref)), `optimize`
 ([`OptimizeState`](@ref)), `review` ([`ReviewState`](@ref), the clearance check) and
-`talis` ([`TaLISState`](@ref)), `view` ([`ViewState`](@ref): coloring, beam drawing,
+`talis` ([`TaLISState`](@ref)), `time` ([`TimeState`](@ref): pulses, the drive history
+and the time cursor), `view` ([`ViewState`](@ref): coloring, beam drawing,
 selection, model tree), `status` (the last message), `history` (the
 [`EditHistory`](@ref) of [`undo!`](@ref) and [`redo!`](@ref)) and `meshing` (the
 progress of a VisRad workspace import or of CAD parts put back into the calculations,
@@ -71,6 +72,7 @@ struct DesignSession
     optimize::OptimizeState
     review::ReviewState
     talis::TaLISState
+    time::TimeState
     view::ViewState
     status::Observable{String}
     deliver::Base.RefValue{Any}
@@ -92,7 +94,7 @@ function DesignSession(; kind::Symbol = :hohlraum, resolution::Symbol = :standar
     # the target remeshes CAD parts on the session's workers (the same switches)
     ts.deliver[] = deliver
     sess = DesignSession(ts, bt, DriveState(), OptimizeState(), ReviewState(), TaLISState(),
-                         ViewState(), Observable(""), ts.deliver, ts.spawn, EditHistory(),
+                         TimeState(), ViewState(), Observable(""), ts.deliver, ts.spawn, EditHistory(),
                          Ref(""), Observable(""), Ref(0), Ref(false))
     default_selection!(sess.review, ts.target[])
     default_selection!(sess.talis, ts.target[])
@@ -153,6 +155,10 @@ function _connect!(sess::DesignSession)
     end
     # inputs committed whose target is still being built: the drive is not current
     on(b -> b && _drive_inputs_changed!(sess), ts.building)
+    # a drive history asked for before the drive was computed runs when it is
+    on(dr.result) do res
+        sess.time.queued[] && res !== nothing && _drive_current(sess) && start_history!(sess)
+    end
     # the x-ray image follows the drive
     on(dr.result) do res
         dr.image_request[] === nothing && return
@@ -885,6 +891,17 @@ function retune_to_reference!(sess::DesignSession, table::AbstractString, out::A
         end
         v = res.value
         write_pulse_table(out, v.pulses)
+        # the time panel plots the retune (and fires the reference pulses when it had none)
+        bt = sess.beams
+        nodes = sort(unique(reduce(vcat, [p.t for p in values(pulses)])))
+        sess.time.retune[] = (; label = basename(table), by, pulses = v.pulses, reference_pulses = pulses,
+                              reference_by = _pulse_key(beams, pulses), nodes, beams, enabled,
+                              table = (; cluster = copy(bt.cluster[]), colors = cluster_colors(bt)),
+                              before = v.before, after = v.after, reference = v.reference)
+        sess.time.pulses[] === nothing && length(bt.beams[]) == length(beams) &&
+            (sess.time.pulses[] = (; kind = :table, table = pulses, by = _pulse_key(beams, pulses),
+                                   shape = nothing, nodes, times = nodes, label = basename(table)))
+        set_chart!(sess.time, :retune)
         ε1(h) = 100 * maximum(mode_amplitude(h.ylm[:, k], 1) for k in eachindex(h.time))
         ΔT(h) = maximum(abs.(h.Tr .- v.reference.Tr))
         dr.retune_status[] = @sprintf("%d %s powers: worst ε₁ %.2f%% → %.2f%%, |ΔTᵣ| %.1f → %.1f eV; wrote %s",
@@ -1027,6 +1044,10 @@ function _abandon_jobs!(sess::DesignSession)
         job.running[] = false
         job.status[] = "abandoned when the window closed"
     end
+    tm = sess.time
+    tm.queued[] = false
+    tm.running[] && (tm.generation[] += 1; tm.cancel[] = true; tm.running[] = false;
+                     tm.status[] = "abandoned when the window closed")
     sess.drive.kit_running[] && (sess.drive.kit_running[] = false;
                                  sess.drive.kit_status[] = "abandoned when the window closed")
     return sess

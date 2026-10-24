@@ -245,8 +245,29 @@ using BriareusGUI.Briareus
         elseif k == 22 && grabbed(png("cut_port")) && !s.drive.retune_running[]
             isfile(retuned_csv) && occursin("quad powers", s.drive.retune_status[]) &&
                 sh.app["retuneStatus"] == s.drive.retune_status[] && push!(seen, :retune)
+            # the Time tab: the retune's powers, then N221204's shape and its history
+            B.request_tab("time")
+            s.time.chart[] === :retune && sh.app["timeChart"] == "retune" && push!(seen, :time_retune)
+            B.request_grab(png("time_retune")); next!()
+        elseif k == 23 && grabbed(png("time_retune"))
+            B.br_time_shape()
+            B.br_time_run()
+            s.time.running[] && push!(seen, :history_started)
+            next!()
+        elseif k == 24 && !s.time.running[] && time() - t_stage[] > 0.5
+            h = s.time.history[]
+            B.br_time_step(argmax(h.Tr))                           # the peak, in the 3D view
+            B.request_grab(png("time_drive")); next!()
+        elseif k == 25 && grabbed(png("time_drive"))
+            sh.app["timeLabel"] == time_label(s) && startswith(time_label(s), "t = ") &&
+                s.view.color[] !== :component && length(sh.rows[:timeLegendModel]) == 4 && push!(seen, :history)
+            B.br_time_chart("energy")
+            B.request_grab(png("time_energy")); next!()
+        elseif k == 26 && grabbed(png("time_energy"))
+            B.br_time_now()
+            time_label(s) == "" && push!(seen, :time_now)
             B.br_set_target_kind("custom"); next!()                # no template fields
-        elseif k == 23 && time() - t_stage[] > 0.5
+        elseif k == 27 && time() - t_stage[] > 0.5
             s.target.kind[] === :custom && sh.app["targetKind"] == "custom" &&
                 isempty(sh.rows[:targetFieldModel]) && push!(seen, :custom)
             # File ▸ Export target as STL; View ▸ Beams ▸ Show beams that are off
@@ -263,12 +284,13 @@ using BriareusGUI.Briareus
         B._TICK_HOOK[] = nothing
     end
     @info "window session" seconds = round(time() - t0; digits = 1) shots
-    @test stage[] == 24
+    @test stage[] == 28
     @test seen == [:target, :windows, :part, :mesh, :remove, :tree_beams, :visrad, :volumes, :zoom,
                    :pick, :drive, :kit, :map, :optimize, :capsule, :applied, :clearance, :talis,
                    :talis_csv, :group, :split, :undo, :redo, :session, :xray, :side, :port,
-                   :retune_started, :retune, :custom, :stl]
+                   :retune_started, :retune, :time_retune, :history_started, :history, :time_now, :custom, :stl]
     @test !sess.spawn[]                              # restored when the window closed
     @test all(isfile ∘ png, ("target", "part", "beams", "drive_scene", "drive_map", "optimize",
-                             "clearance", "talis", "along_beam", "group", "split", "cut_port"))
+                             "clearance", "talis", "along_beam", "group", "split", "cut_port", "time_retune",
+                             "time_drive", "time_energy"))
 end
