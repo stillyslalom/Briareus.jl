@@ -714,6 +714,23 @@ Research notes, "Laser-spot spectrum (2026-10-24)". Item 13.
   per-cone M-band 0.115–0.138 (Dewald 12–15 %). The earlier 0.33 was mostly the
   intensity-form M-band at the gray M-band albedo.
 
+## Done (2026-10-24, time in the window)
+Item 8's time request. BriareusGUI's *Time* tab (`BriareusGUI/README.md`).
+- **Pulses** from a pulse table (`load_pulses!`, `read_pulse_table`) or N221204's shape
+  scaled to the table's powers (`use_pulse_shape!`); per-group power and the total.
+- **Drive history** (`start_history!`: `drive_history` on the drive's operator and
+  model, on a worker with per-step progress and cancel; the drive first when missing):
+  capsule Tᵣ, synthetic Dante 1, a₂/a₀ and a₄/a₀; the energy split by each time
+  (`energy_budget`: walls, capsule, entrance holes, windows). Coarse NIF hohlraum,
+  N221204 shape at 0.2 ns: 49 steps in 4 s warm.
+- **Time cursor** (click or drag the chart, or the slider): the 3D view colored by that
+  step on one scale for the history, labeled with the time; per-step fields cached with
+  the history, so scrubbing computes nothing; stale after beam, pulse or target edits.
+- **Retune** plotted (reference dashed, retuned solid, ε₁ before/after); its CSV is
+  still written. Tests: `BriareusGUI/test/test_time.jl` (gold's constant albedo: each
+  step is the table-power drive scaled by the pulse shape), the offscreen chart, and
+  Qt window stages.
+
 ## Open questions (from the 2026-10-18 CAD work)
 Choices made provisionally overnight or left open; the lean is in brackets.
 **Decided (user, 2026-10-22):** the bracketed leans stand. On 1: parts may be split
@@ -988,8 +1005,7 @@ pick the original parts, not `<part>/cylN` pieces).
 8. **GUI requests:** frames on a port axis (the chamber,
    the entrance holes, the foil and other parts are done); clipping volumes; STEP import (needs a CAD kernel; STL
    and VisRad workspaces cover CAD meanwhile); an x-ray image that follows the camera
-   as it moves; time in the window (pulse tables, drive histories and the retune's
-   power histories plotted, rather than written to CSV).
+   as it moves (time in the window is done, 2026-10-24).
    Adaptive mesh refinement of the radiation mesh where deposition varies fastest
    (the uniform fine mesh is converged but costs ~16k elements; since 2026-10-24 those
    run in 2.3 GB without factorizations, item 14).
