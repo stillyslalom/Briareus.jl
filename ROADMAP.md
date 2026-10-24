@@ -603,6 +603,16 @@ Research notes, "Large radiation models (2026-10-24)". Item 14's first part.
 - View-factor assembly 17–45 % faster, bit for bit (a boxed near-pair factor): 17.6k
   56 → 31 s on 4 threads.
 
+## Done (2026-10-24, N221204 late-time drive)
+Research notes, "N221204 late-time drive (2026-10-24)". Item 16.
+- **Wall loss from each element's temperature history** (`drive_history(...;
+  wall_history = true)`, default): Lindl's constant-T loss at the effective time
+  ∫(T/T_now)^5.32 dt instead of the time since t = 0. On N221204 the drive now rises
+  through the peak; with all the energetics on, LEH share 33.0 → 24.8 % (HYDRA 25.2) and
+  capsule Tr 334 → 310.5 eV at 8 ns, Dante 1 bracketing the measured history to 8 ns.
+- **`n221204_pulse()`**: N221204's delivered power (2.051 MJ) and measured Dante 1 Tr from
+  the vector paths of Pak et al. PRE 109, 025203 Fig. 1; the example's default pulse.
+
 ## Open questions (from the 2026-10-18 CAD work)
 Choices made provisionally overnight or left open; the lean is in brackets.
 **Decided (user, 2026-10-22):** the bracketed leans stand. On 1: parts may be split
@@ -974,18 +984,31 @@ the reference's view factors hold through the pulse; items 9 and 10 remove that 
     `Conversion`/`nif_conversion`, `CapsuleAlbedo`, `energy_budget`, backscatter and
     degradation in the example). With all of them on, the split is wall 50.8 / LEH 33.0 /
     capsule 16.2 % (HYDRA 58.6 with gas / 25.2 / 16.2, the capsule calibrated) and the
-    capsule Tr peaks at 334 eV (HYDRA ~300 internal, Dante 313): the published pieces
-    together leave the wall too reflective (x-ray wall loss ~1.6× short at HYDRA's
-    temperature). Still to do, each with its data:
-    - the missing sinks and wall loss behind that excess: He gas (4.5 %), LEH windows, a
-      wall loss above Lindl's gold at late times (the DU factor calibrated to Döppner's
-      6.5 % came out 0.785, below Rosen's cocktail 0.83, a sign of the same thing), and
-      the M-band (item 13); then recalibrate the capsule albedo (16.2 % needs α_c ≈ 0 at
-      a drive that matches the LEH share);
+    capsule Tr peaks at 334 eV (HYDRA ~300 internal, Dante 313). **Cause found
+    (2026-10-24, research notes "N221204 late-time drive")**: `drive_history` evaluated
+    Lindl's constant-T wall loss at the time since the pulse start, so a wall that had
+    spent 4 ns in a low foot lost like one held at peak temperature all along (α 0.92
+    instead of ~0.85 at the start of the peak). Each wall element's loss now follows
+    its own temperature history (`wall_history`, default on), and the example uses the
+    measured pulse (`n221204_pulse()`, Pak 2024 Fig. 1 vector data; the by-eye pulse was
+    within a few %, not the cause). With all the energetics on, the split is now wall
+    63.6 / LEH 24.8 / capsule 11.6 % and the capsule Tr rises through the peak to 310.5 eV
+    at 8 ns; Dante 1 (initial / open area) 271 / 290, 284 / 306, 295 / 319 eV at 6 / 7 /
+    8 ns brackets the measured 275.5 / 291.3 / 310.1. Fig. 10 (blind): minimum −0.189 at
+    5.25 ns, crossing 6.23, +0.077 at 8 ns, rms 0.041. Still to do, each with its data:
+    - the drive after the laser droop: the model falls with the power (−18 eV by
+      8.5 ns) where Dante holds 311 eV to 8.6 ns; a wall that gives stored energy back
+      under a falling drive is missing (the self-similar loss cannot);
+    - the missing sinks: He gas (4.5 %), LEH windows, the M-band (item 13); then
+      recalibrate the capsule albedo (16.2 % now needs a larger effective radius than
+      the ablation-front schedule: α_c = 0 gives ~15 %);
+    - decide whether `energetics=new` becomes the example's default (the default
+      energetics now under-drive the peak: capsule 283 eV at 8 ns);
     - ~~a synthetic Dante (item 13) reported beside the capsule-seen temperature~~
       **Done (2026-10-24)**: Dante 1 286 / 306 eV (initial / open LEH area) at 6.25 ns
       against 313 measured at 8.4 ns, capsule 302 eV at 5.5 ns; the model's drive peaks
-      ~2.5 ns early and falls ~30 eV by 8.5 ns (default energetics);
+      ~2.5 ns early and falls ~30 eV by 8.5 ns (default energetics; superseded by the
+      wall-history fix above);
     - the Zylstra 2022 LEH pair: the model needs ×1.10–1.15 more power for the 3.64 mm
       LEH (lips reduce it), the data ×1.19 or more; the shots' different histories and
       Dante's view are the likely gap, so a time-dependent run of both pulses is next.

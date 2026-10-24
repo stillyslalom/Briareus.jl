@@ -3450,7 +3450,9 @@ N221204 (`examples/n221204.jl` full model, standard mesh, default energetics):
   backscatter) and the bubble's growing inner-beam absorption lose drive through the
   peak; this is the first absolute check of item 16, and it points at the late-time
   energetics (wall loss vs time, conversion rising in time, the `energetics=new` options)
-  rather than at the line of sight.
+  rather than at the line of sight. (Resolved in "N221204 late-time drive" below: the
+  wall loss was evaluated at the time since the pulse start; these numbers are the old
+  evaluation.)
 
 ## Capsule drive hand-over and CompactLES stage 0 (2026-10-24) *derived*
 
@@ -3621,3 +3623,161 @@ products, block GMRES, solve/flux_response/duals/drive_history/Scenario gradient
   already uses nothing else, so an H-matrix type plugs in as another
   `AbstractMatrix{Float64}` (balancing is a diagonal scaling s F s). Reciprocity per
   block (G = AF symmetric) halves it again.
+
+## N221204 late-time drive (2026-10-24) *derived*
+
+ROADMAP 16. Two results of the N221204 benchmark (`examples/n221204.jl`) disagreed about
+the late drive. (a) Default energetics: capsule Tr peaked at 301.8 eV at 5.5 ns and was
+flat to 8 ns; synthetic Dante 1 (open LEH area) peaked at 306 eV at 6.25 ns; measured
+Dante 1 rises to 312 eV at 8.3 ns. (b) `energetics=new`: capsule Tr 334 eV at 8 ns and an
+LEH share of 33 % against HYDRA's 25.2 %. Neither Dante nor Fig. 10 was used to fit
+anything below; both stay checks. Confidence: **H** primary text or figure vector data,
+**L** our construction.
+
+### Inputs read
+
+| Quantity | Value | Source | Conf. |
+|---|---|---|---|
+| N221204 delivered power | 2.051 MJ; 440–448 TW from 5.45 to 8.05 ns, 404 TW at 8.2, 269 at 8.6, 133 at 9.2, off at 9.45 ns | Pak et al., PRE 109, 025203 (2024) Fig. 1 top, read from the accepted manuscript's vector paths (`n221204_pulse()`, `data/pak2024_fig1_n221204.csv`) | H |
+| N221204 Dante 1 Tr | 164 eV at 3.3 ns, 238 at 5.0, 263 at 5.5, 275.5 at 6.0, 291 at 7.0, 310 at 8.0, peak 311.9 at 8.30, 311.3 at 8.5, 301.5 at 9.0 | same, Fig. 1 bottom (its inset agrees to 0.05 eV) | H |
+| Lindl wall loss | E_w = 5.2e-3 T^3.3 τ^0.62 MJ/cm² at constant T; α = 1 − 0.32 T^-0.7 τ^-0.38 is its derivative | Lindl 2004 eqs. 4-21, 4-31 ("Gold wall loss and thin-foil burnthrough" above) | H-img |
+
+The example's by-eye DN24 pulse (2.028 MJ) is within a few % of the measured one: the
+rise is ~0.1 ns late (175 against 213 TW at 4.5 ns) and the droop matches. HYDRA's
+Fig. 9a input powers have the same shape (degraded ~0.84× in the peak only).
+
+### Cause
+
+`WallLossAlbedo` is Lindl's constant-temperature loss, and `drive_history` evaluated it
+at the time since the pulse start: at 5.5 ns and 300 eV it used the loss of a wall held
+at 300 eV for 5.5 ns (α ≈ 0.92). A NIF wall spends 4 ns of foot at 100–200 eV, which
+stores little energy on the peak's scale (the loss integrand goes as T^5.3), so at the
+start of the peak the wall loses like a wall ~1 ns old (α ≈ 0.85), and its loss then
+falls as t_eff^-0.38 through the peak. The constant-T evaluation made the model hot
+early in the peak (Dante 296 eV at 5.5 ns against 263 measured) and flat after it; with
+the published energetics it also left the wall too reflective (LEH share 33 %).
+Disagreements (a) and (b) are the same error. The pulse was not the cause (below).
+
+**Fix** (`drive_history(...; wall_history = true)`, the default): Lindl's wall energy is
+carried to a varying T as E_w ∝ [∫ (T/100 eV)^(a/b) dt]^b (a = 3.3, b = 0.62; the form
+of `HeatFront`'s drive integral, exact at constant T). The loss is then the constant-T
+loss at each element's effective time t_eff = ∫ (T(t′)/T(t))^(a/b) dt′, integrated
+trapezoidally from the element's own incident-flux temperature (constant T before the
+first step). For T ∝ t^k it multiplies E_w by (1 + 5.32k)^-0.62 (*L*; the same form for
+the heat front is within 2.2 % of Hammer & Rosen's exact solution at k = 0.18). It is
+not validated for a falling drive (a self-similar wall never gives energy back).
+`wall_history = false` restores the old evaluation; the tests that compare a march with
+standalone `solve`s at τ use it. The example now uses the measured pulse (`pulse=pak`,
+the default), split inner/outer by DN24's cone fraction.
+
+### Breakdown
+
+Coarse mesh (0.8 / 0.4), full model (+bubble). Each cell is capsule Tr / Dante 1 over the
+initial LEH area / Dante 1 over the open area (eV).
+
+| t (ns) | A: old (DN24 pulse, constant-T loss) | B: A + measured pulse | C: B + wall history (new default) | E: `energetics=new`, old | D: `energetics=new`, pulse and history | measured Dante 1 |
+|---|---|---|---|---|---|---|
+| 5.0 | 283.3 / 269.2 / 283.8 | 281.8 / 267.9 / 282.4 | 255.0 / 241.8 / 255.0 | 293.5 / 279.6 / 294.8 | 260.7 / 248.2 / 261.7 | 237.9 |
+| 6.5 | 298.8 / 284.7 / 305.7 | 297.9 / 283.9 / 304.8 | 278.0 / 266.2 / 285.8 | 315.0 / 299.4 / 321.4 | 289.8 / 276.9 / 297.3 | 282.9 |
+| 8.0 | 298.4 / 283.6 / 306.3 | 298.4 / 283.6 / 306.3 | 283.2 / 270.3 / 292.0 | 334.3 / 315.7 / 341.0 | 310.6 / 294.6 / 318.2 | 310.1 |
+| 8.5 | 270.4 / 257.2 / 277.8 | 271.4 / 258.1 / 278.8 | 263.8 / 251.4 / 271.6 | 306.1 / 288.9 / 312.1 | 292.6 / 277.0 / 299.2 | 311.3 |
+| LEH / capsule share (%) | 22.2 / 20.1 | 22.2 / 20.1 | 17.4 / 15.6 | 33.0 / 16.2 | 24.8 / 11.6 | HYDRA 25.2 / 16.2 |
+
+The dynamics pieces, capsule Tr (each column adds one piece; C, then D):
+
+| t (ns) | static, no CBET | static | +wall | +lips | +bubble |
+|---|---|---|---|---|---|
+| 5.0 | 242.6; 248.2 | 247.0; 251.9 | 254.5; 259.7 | 256.5; 262.1 | 255.0; 260.7 |
+| 6.5 | 271.6; 281.1 | 275.4; 283.9 | 283.5; 292.1 | 287.3; 297.3 | 278.0; 289.8 |
+| 8.0 | 279.7; 302.3 | 281.8; 304.1 | 288.6; 312.6 | 293.7; 320.6 | 283.2; 310.6 |
+| 8.5 | 261.8; 285.4 | 263.1; 286.6 | 269.8; 295.2 | 274.7; 303.3 | 263.8; 292.6 |
+
+With the constant-T loss (A) the static column was flat from 5.5 to 8 ns (288.8 → 292.9).
+
+- *Pulse*: ≤ 1.5 eV from 5 ns on (8 eV at 4.5 ns, from the earlier rise). Not the cause.
+- *Wall history*: −27 eV at 5 ns, −20 at 6.5, −15 at 8 (full model, default
+  energetics); −33 / −25 / −24 with the new energetics. It turns the static drive from
+  flat into one that rises through the peak, 4 % (default) to 13 % (new energetics)
+  from 5.5 to 8 ns, and moves ~10 % of the energy from the LEH and capsule into the wall.
+- *Moving wall* +7–8 eV, *lips* +2–8 eV, *bubble* −1.5 to −10 eV (it moves inner power to
+  the outer footprint near the LEH), CBET +2–4 eV: none of them changes the shape.
+- *`energetics=new` against the default, both with history* (D − C): +6 eV at 5 ns, +12 at
+  6.5, +27 at 8, +29 at 8.5. The rising conversion (0.7 t^0.12) and the shrinking capsule
+  (`CapsuleAlbedo` along HYDRA's ablation front) keep the drive rising through the peak,
+  as Dante does. The default energetics (constant η 0.75, the capsule at R₀) have
+  neither.
+- *Dante convention*: from 6 ns on, the measured history lies between the initial-area
+  reading (lips dark) and the open-area one (lips as bright as the wall behind them):
+  in D at 6 / 7 / 8 ns, 271 / 283 / 295 and 290 / 306 / 318 eV against 275.5 / 291.3 /
+  310.1.
+
+### After the fix (standard mesh 0.28 / 0.16)
+
+`energetics=new` (coarse D agrees within 0.1 eV and 0.007 in P2):
+
+| t (ns) | 4.5 | 5.0 | 5.5 | 6.0 | 6.5 | 7.0 | 7.5 | 8.0 | 8.5 | 9.0 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| capsule Tr | 216.3 | 260.9 | 280.0 | 285.8 | 289.7 | 297.7 | 305.2 | 310.5 | 292.5 | 261.6 |
+| Dante 1, initial area | 212.7 | 248.7 | 264.7 | 271.3 | 277.3 | 283.8 | 290.1 | 295.0 | 277.2 | 246.7 |
+| Dante 1, open area | 222.6 | 262.2 | 281.0 | 289.8 | 297.8 | 305.9 | 313.3 | 318.6 | 299.5 | 266.4 |
+| measured Dante 1 | 203.4 | 237.9 | 263.1 | 275.5 | 282.9 | 291.3 | 301.7 | 310.1 | 311.3 | 301.5 |
+
+Capsule Tr peaks at 310.5 eV at 8.0 ns (HYDRA ~300 internal, AS24 drive Trad 313). The
+split is wall 63.6 / LEH 24.8 / capsule 11.6 % of the coupled energy (HYDRA 58.6 with
+gas / 25.2 / 16.2). With the default energetics (standard mesh): capsule Tr 255.2 / 278.4 / 279.9 / 283.1 / 263.7 eV at 5 / 6 / 7 / 8 / 8.5 ns (peak 283.1 at 8.0 ns), Dante 1 over the open area 255.4 / 281.1 / 288.8 / 292.3 / 271.9; split 67.0 / 17.5 / 15.6 %.
+
+Fig. 10 (blind) metrics, full model:
+
+| Run | minimum | upward zero | at 8 ns | rms 2–8.5 ns |
+|---|---|---|---|---|
+| PRE 109 Fig. 10 | −0.170 at 5.6 | 6.67 | +0.095 | — |
+| default, before (A, coarse) | −0.162 at 5.25 | 6.28 | +0.117 | 0.034 |
+| default, after (C, coarse) | −0.226 at 5.25 | 6.26 | +0.143 | 0.046 |
+| default, after (standard) | −0.235 at 5.25 | 6.25 | +0.150 | 0.050 |
+| `energetics=new`, before (E, coarse) | −0.129 at 5.25 | 6.34 | +0.043 | 0.045 |
+| `energetics=new`, after (standard) | −0.189 at 5.25 | 6.23 | +0.077 | 0.041 |
+
+The swing grows with the history: the wall is less reflective early in the peak, so the
+hohlraum smooths the beams' pattern less (the static P2/P0 at 5.5 ns goes from −0.26 to
+−0.33 with the default energetics). With the published energetics the minimum and the
+8 ns value now sit on either side of Fig. 10's, closer than before (−0.189 / +0.077
+against −0.170 / +0.095); the crossing is still ~0.4 ns early (the bubble, see
+"Hohlraum dynamics calibrated to published data"). Nothing was tuned to Fig. 10.
+
+The energetics pieces, each on top of the default with history and the measured pulse
+(coarse; capsule Tr / Dante 1 initial / open area in eV; LEH / capsule share of the
+coupled energy; Fig. 10 minimum, crossing, 8 ns value, rms):
+
+| Run | 5.0 ns | 6.5 ns | 8.0 ns | 8.5 ns | LEH / capsule (%) | Fig. 10 |
+|---|---|---|---|---|---|---|
+| C: default | 255.0 / 241.8 / 255.0 | 278.0 / 266.2 / 285.8 | 283.2 / 270.3 / 292.0 | 263.8 / 251.4 / 271.6 | 17.4 / 15.6 | −0.226, 6.26, +0.143, 0.046 |
+| F1: + backscatter, 11 % degradation | 246.3 / 234.4 / 247.1 | 264.5 / 253.9 / 272.6 | 273.5 / 261.4 / 282.3 | 254.8 / 243.1 / 262.6 | 17.3 / 15.2 | −0.192, 6.19, +0.147, 0.049 |
+| F2: F1 + `nif_conversion` | 254.1 / 241.9 / 255.0 | 275.5 / 264.4 / 283.9 | 286.8 / 274.0 / 296.0 | 267.6 / 255.2 / 275.7 | 20.2 / 17.8 | −0.192, 6.19, +0.145, 0.049 |
+| F3: F2 + DU wall | 259.1 / 246.7 / 260.1 | 283.0 / 271.0 / 290.9 | 295.1 / 281.2 / 303.8 | 274.6 / 261.3 / 282.3 | 22.1 / 19.7 | −0.179, 6.19, +0.130, 0.044 |
+| F4: F1 + capsule model (α_c 0.2) | 247.4 / 235.4 / 248.2 | 269.6 / 258.2 / 277.2 | 285.2 / 271.4 / 293.2 | 268.7 / 255.0 / 275.5 | 18.9 / 9.3 | −0.195, 6.23, +0.093, 0.041 |
+| D: all (α_c 0.22) | 260.7 / 248.2 / 261.7 | 289.8 / 276.9 / 297.3 | 310.6 / 294.6 / 318.2 | 292.6 / 277.0 / 299.2 | 24.8 / 11.6 | −0.182, 6.24, +0.073, 0.041 |
+| all, α_c 0.2 | 260.5 / 247.9 / 261.4 | 289.5 / 276.6 / 297.0 | 310.3 / 294.4 / 318.0 | 292.4 / 276.8 / 299.0 | 24.7 / 11.8 | −0.181, 6.24, +0.074, 0.041 |
+
+Backscatter and degradation cool the peak by ~10 eV; the conversion (+3 eV at 5 ns,
++13 at 8) and the shrinking capsule (+12 at 8 ns, +14 at 8.5, nothing at 5) add the late
+rise; the DU wall adds 5–8 eV throughout. The capsule model takes the late P2 down by
+0.05 (less sink, more smoothing), as before the fix.
+
+### What remains
+
+- **After the laser droop (from 8.05 ns)** the model falls with the power (−18 eV by
+  8.5 ns, −49 by 9 ns) while Dante holds 311 eV to 8.6 ns and reads 301.5 at 9 ns. A
+  quasi-static radiosity with a self-similar wall loss cannot give stored wall energy
+  back; re-emission from the hot surface layer of a wall under a falling drive is the
+  missing physics. Not addressed.
+- **Early peak**: over the open area the model is 15–25 eV above Dante at 5.0–5.5 ns
+  (initial area +11 / +2): the model's rise is ~0.15 ns ahead of the measured one.
+- **Capsule share** 11.6 % against 16.2 % with α_c 0.22, which was calibrated on the
+  old, too hot drive. Even α_c = 0 would give only ~15 %, so 16.2 % needs a larger
+  effective radius than the ablation-front schedule, not a lower albedo. The
+  recalibration is still open (ROADMAP 16) and is not done here.
+- **Default energetics** (Au, η 0.75, the capsule at R₀) now under-drive the peak
+  (capsule Tr 283 eV at 8 ns, Dante 270 / 292 eV). `energetics=new` is the configuration
+  that matches Dante's level and shape through 8 ns and the LEH share. The example's
+  default is unchanged (the 2026-10-24 benchmark); switching it is a decision for the
+  next round.

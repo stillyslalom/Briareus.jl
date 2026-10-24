@@ -286,11 +286,17 @@ pulse = PulseShape([0.0, 0.3, 1.0, 1.4, 4.5, 5.0, 6.0, 7.5, 9.5, 10.0],
 # inserts steps wherever an element's transition would advance by more than a
 # twentieth of the way in one step, planned from each element's known or predicted
 # burnthrough time. It returns the times it took in `time`.
+#
+# The open-hole bound and the linearized scenarios below are standalone `solve`s, which
+# evaluate the wall's [`WallLossAlbedo`](@ref) at the time since the pulse start. The
+# histories do the same here (`wall_history = false`), so that every comparison is like
+# with like; by default a drive history follows each wall element's own temperature
+# history instead, which lowers the wall albedo early in the peak.
 
 times = 0.2:0.2:9.8
 beams_at(τ) = with_pulses(quads, pulse, τ)
 history(model, op, times) = drive_history(model, op, beams_at, times; lmax = 6, ylm = true,
-                                          transition = 0.05)
+                                          transition = 0.05, wall_history = false)
 runs = Dict{Tuple{Float64,Float64},Any}()
 shared = Dict{Float64,Any}()                       # view factors and operator per gap
 for g in (0.0, 0.05), thickness in (1.7, 2.5, 3.6)
@@ -706,7 +712,8 @@ designs = ["as designed" => beams_at,
            "quad powers at burnthrough" => τ -> [remake(b; power = b.power * (1 + switch(τ) * (f - 1)))
                                                  for (b, f) in zip(beams_at(τ), factors)],
            "re-pointed" => τ -> with_pulses(repointed, pulse, τ)]
-restored = Dict(label => drive_history(win_model, op0, f, times; lmax = 6, ylm = true, transition = 0.05)
+restored = Dict(label => drive_history(win_model, op0, f, times; lmax = 6, ylm = true, transition = 0.05,
+                                               wall_history = false)
                 for (label, f) in designs)
 base_restored = rebase(values(restored))
 fig = Figure(size = (820, 380))

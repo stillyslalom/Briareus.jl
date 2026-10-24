@@ -87,6 +87,12 @@ environment has no ForwardDiff/Optim, and `Vec3` clashes with Makie there.
   `solve`). `GapClosure` (an open gap that closes at a given time) also transmits;
   albedo models report (albedo, intact, transmitted) through `_albedo_split`, and
   `_transmits` marks the ones `energy_balance` and `drive_history` book.
+- `WallLossAlbedo` is Lindl's constant-T loss. `drive_history` evaluates it at each
+  wall element's effective time ∫(T/T_now)^(a/b) dt (`wall_history = true`, passed to
+  `solve` through the per-element `burnthrough` slot as `_WallHistory`); a standalone
+  `solve(...; time)` uses the time since t = 0. Compare a march with standalone solves
+  only with `wall_history = false`. Without it a NIF foot leaves the peak wall too
+  reflective (N221204: drive flat, LEH share 33 % instead of 25 %).
 - Deposition (operator and ray trace) sums the best-focus profile over `ncone` (default
   13) f-cone directions, each with its own incidence factor `|n·dⱼ|/(k·dⱼ)`. Don't use the
   moment-matched `intensity` for deposition: it has the right second moment but the
