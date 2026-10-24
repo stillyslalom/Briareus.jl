@@ -105,16 +105,16 @@ kl = Keyframes(moving_hohlraum(motion; radius = R0, geometry..., leh_closure = l
 which == "all" && run!("+lips", () -> drive_history(kl, beams_at, times; lpi = cbet))
 run!("+bubble", () -> drive_history(kl, beams_at, times; lpi = (cbet, bubble)))
 
-# PRE 109 Fig. 10, N221204 (HYDRA, post-CBET), digitized off the figure (±0.001 where
-# the curve is visible, ±0.006–0.024 where covered, 7.3–8.9 ns).
-fig10 = Dict(2.0 => -0.002, 4.0 => -0.013, 4.5 => -0.091, 5.5 => -0.168, 6.5 => -0.057,
-             7.0 => 0.039, 8.0 => 0.090, 8.5 => 0.117)
+# PRE 109 Fig. 10, N221204 (HYDRA, post-CBET), digitized (`n221204_fig10()`: ±0.002
+# where the curve is visible, up to ±0.015 where N220919's curve covers it).
+fig10 = n221204_fig10()
 println("\ncapsule flux P2/P0")
 println(rpad("t (ns)", 7), join([rpad(n, 17) for (n, _) in runs]), "PRE 109 Fig. 10")
-for t in sort(collect(keys(fig10)))
+for t in [2.0, 4.0, 4.5, 5.5, 6.5, 7.0, 8.0, 8.5]
     k = findfirst(≈(t), times)
+    i = findfirst(≈(t), fig10.t)
     println(rpad(@sprintf("%.1f", t), 7), join([rpad(@sprintf("%+.3f", p2(r)[k]), 17) for (_, r) in runs]),
-            @sprintf("%+.3f", fig10[t]))
+            @sprintf("%+.3f ± %.3f", fig10.n221204[i], fig10.u221204[i]))
 end
 println("\ncapsule Tr peak (eV; drive Trad 313 eV, AS24)")
 for (n, r) in runs

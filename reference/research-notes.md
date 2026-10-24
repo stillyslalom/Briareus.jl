@@ -2443,7 +2443,9 @@ repository; only the aggregate agreement below is.
 `examples/n221204.jl` (ROADMAP Next 9 and 16): capsule flux P2/P0(t) of an N221204-class
 HYBRID-E hohlraum, each hohlraum-dynamics piece added in turn, against the HYDRA curve
 of PRE 109, 025204 Fig. 10 (N221204, post-CBET, digitized ±0.001 where visible, up to
-±0.024 where covered; notes in the 2026-10-22 PRE 109 reading).
+±0.024 where covered; notes in the 2026-10-22 PRE 109 reading). These by-eye values are
+superseded by `n221204_fig10()` ("PRE 109 Fig. 10 digitization" below). The table keeps
+them as they were run.
 
 - **Inputs** (`n221204_benchmark.md` §5). 11.24 × 6.4 mm hohlraum, 3.1 mm LEHs, 1.135 mm
   capsule (**H**). Unpublished, so repository defaults: square corners, no diagnostic
@@ -2525,6 +2527,53 @@ of PRE 109, 025204 Fig. 10 (N221204, post-CBET, digitized ±0.001 where visible,
   washer) at repository defaults; the capsule does not shrink (Fig. 10's evaluation
   radius and flux definition are not stated); no backscatter and no laser degradation;
   Fig. 10 is a HYDRA calculation, not data. Nothing here was tuned to Fig. 10.
+
+## PRE 109 Fig. 10 digitization (2026-10-24) *derived*
+
+PRE 109, 025204 Fig. 10 shows HYDRA capsule flux P2/P0(t), post-CBET, for N210808
+(black), N220919 (red) and N221204 (blue). It is now stored as data in
+`data/pre109_fig10.csv` (`n221204_fig10()`), replacing the eight by-eye N221204 points
+that were inline in `examples/n221204.jl`.
+
+- **Method.** The figure is a raster (874 × 868 px) with no vector paths.
+  - Axes: fitted linearly to 18 time ticks (0–9 ns, residual < 1 px) and 21 P2/P0 ticks
+    (residual < 1.5 px). The scale is 77.7 px per ns and 1760 px per unit P2/P0, so one
+    pixel is 0.013 ns or 0.0006.
+  - Colours: each pixel's optical density is unmixed into blue, red and black. A 5 px
+    opening removes the thin black laser-power and cone-fraction lines.
+  - Centreline: in each pixel column, a 12 px stroke (the measured width) is fitted to
+    cover the curve's own colour and no background. Curves drawn over it count as
+    unknown: red is drawn over black, and black over blue.
+  - Each sample averages ±0.027 ns of columns, every 0.1 ns over 0.8–8.9 ns.
+  - The two narrow spikes (N220919 at 8.40 ns, N210808 at 7.66 ns) are traced row by
+    row along their flanks.
+  - Each curve's extrema are added as extra rows. Their values are the stroke's outer
+    edge minus half the stroke width; a column centre is biased by up to 0.003 at a
+    sharp tip.
+  - The overlay of the samples on the figure was checked by eye.
+- **Accuracy** (per-point errors are in the `u*` columns).
+  - ±0.002 where a curve is visible.
+  - 0.004–0.012 where another curve covers it. N221204 lies under N210808 or N220919 at
+    1.5–1.6, 2.4–2.6, 3.5–3.7 and 5.0–5.2 ns, and over much of 6.6–8.9 ns. N210808 is
+    uncertain to 0.004–0.006 in the foot (under the thin lines) and near its 5.5 ns
+    minimum (under N220919).
+  - N221204's 8.2–8.55 ns spike is hidden under N220919's, apart from its left flank. It
+    is N220919's spike moved 0.03 ns earlier with its peak capped at 0.147 ± 0.008
+    (error 0.015).
+  - The start transients before 0.75 ns go off scale and are not digitized.
+- **N221204 values.** Minimum −0.173 at 5.58 ns. Hump +0.031 at 3.50 ns, shoulder −0.098
+  at 4.77 ns. Upward zero crossing 6.67 ns. +0.095 at 8.0 ns. Peak ≈ +0.147 at 8.36 ns.
+- **Comparison with the old by-eye points** (new − old):
+
+  | t (ns) | 2.0 | 4.0 | 4.5 | 5.5 | 6.5 | 7.0 | 8.0 | 8.5 |
+  |---|---|---|---|---|---|---|---|---|
+  | old | −0.002 | −0.013 | −0.091 | −0.168 | −0.057 | +0.039 | +0.090 | +0.117 |
+  | new | −0.001 | −0.018 | −0.092 | −0.169 | −0.045 | +0.046 | +0.095 | +0.109 |
+
+  - The largest differences fall on the steep flanks: +0.012 at 6.5 ns and −0.005 at
+    4.0 ns, where 0.03 ns of timing is worth 0.01. At 8.5 ns the curve is covered, and
+    the difference is within its ±0.015.
+  - None of the benchmark's conclusions above change.
 
 ## Two-zone CBET calibrated to PRE 109 Fig. 9 (2026-10-23) *derived*
 

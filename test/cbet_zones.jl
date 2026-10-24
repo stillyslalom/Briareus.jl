@@ -101,3 +101,22 @@ end
     cf0 = cfr(apply_lpi(m, [remake(b; dlambda = 0.0) for b in bs], fig9.t[k]))
     @test cf0 < fig9.cf_in[k] - 0.1
 end
+
+@testset "PRE 109 Fig. 10 capsule flux P2/P0" begin
+    f = n221204_fig10()
+    @test keys(f) == (:t, :n210808, :u210808, :n220919, :u220919, :n221204, :u221204)
+    @test all(length(c) == length(f.t) for c in f) && length(f.t) > 80
+    @test issorted(f.t; lt = <=) && f.t[1] ≈ 0.8 && f.t[end] ≈ 8.9
+    @test all(0 < u <= 0.015 for u in (f.u210808..., f.u220919..., f.u221204...))
+    # N221204's minimum: −0.17 near 5.5 ns, deeper than the other two shots'
+    k = argmin(f.n221204)
+    @test f.n221204[k] ≈ -0.173 atol = 0.005
+    @test 5.45 < f.t[k] < 5.7
+    @test minimum(f.n220919) ≈ -0.149 atol = 0.005
+    @test minimum(f.n210808) > f.n221204[k] + 0.02
+    # foot near zero, late positive swing
+    foot = 1.0 .<= f.t .<= 3.0
+    @test all(abs.(f.n221204[foot]) .< 0.02)
+    @test f.n221204[findfirst(≈(8.0), f.t)] ≈ 0.095 atol = 0.01
+    @test maximum(f.n220919) ≈ 0.153 atol = 0.005
+end

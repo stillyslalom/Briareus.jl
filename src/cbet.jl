@@ -509,6 +509,25 @@ function n221204_fig9()
 end
 
 """
+    n221204_fig10() -> NamedTuple
+
+PRE 109, 025204 (2024) Fig. 10: capsule radiation-flux P2/P0 against time from HYDRA
+(post-CBET) for N210808, N220919 and N221204, digitized (`data/pre109_fig10.csv`,
+provenance in its header). Columns `t` (ns, 0.8–8.9 in 0.1 ns steps plus each curve's
+extrema), `n210808`, `n220919`, `n221204` (P2/P0; negative is waist-hot) and their
+reading errors `u210808`, `u220919`, `u221204`. The error is ±0.002 where a curve is
+visible and 0.004–0.010 where another curve covers it. N221204 lies under the other two
+for much of 6.6–8.9 ns. Along the late spikes the error is 0.006, and 0.015 for
+N221204's spike, which is hidden under N220919's except its left flank. N221204's
+minimum is −0.173 at 5.58 ns. This is a calculation, not a measurement.
+"""
+function n221204_fig10()
+    h, rows = read_csv(joinpath(@__DIR__, "..", "data", "pre109_fig10.csv"))
+    cols = Tuple([parse(Float64, r[i]) for r in rows] for i in eachindex(h))
+    return NamedTuple{Tuple(Symbol.(h))}(cols)
+end
+
+"""
     n221204_fig9_beams(beams, fig9, t) -> Vector{Beam}
 
 `beams` (NIF cones `:inner23`, `:inner30`, `:outer44`, `:outer50`) with the powers
