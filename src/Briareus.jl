@@ -14,7 +14,7 @@ using Printf
 using Random
 using StaticArrays
 using ForwardDiff
-using SpecialFunctions: gamma, gamma_inc, gamma_inc_inv, dawson
+using SpecialFunctions: gamma, gamma_inc, gamma_inc_inv, dawson, erf
 import Optim
 using PrecompileTools: @setup_workload, @compile_workload
 
@@ -61,6 +61,9 @@ export VisRadObject, VisRadWorkspace, read_visrad_workspace, visrad_component, v
 export legendre, legendre_moments, legendre_weights, solid_angle, ylm_moments, ylm_weights, mode_center,
        ylm_matrix, ylm_frame, mode_index, relative_mode_power, mode_amplitude, mode_power, rms_nonuniformity
 export OrthoCamera, camera_from_port, render, radiance, line_of_sight_power
+export planck_fraction, planck_fractions, spectral_edges, MBandEmission, mband_conversion,
+       nif_mband, mband_power, SpectralSolution, spectral_solve, ngroups, band_flux,
+       mband_recirculation, DanteChannel, dante1_channels, DanteView, dante1, dante2, dante, visible_area
 export GroupPointing, nparams, parameter_names, initial_parameters, apply, bounds,
        Scenario, Evaluation, evaluate, subset, flux_ylm, asymmetry_objective, influence_matrix,
        clipped_fraction, missed_fraction, power_fraction,
@@ -90,6 +93,8 @@ include("analysis.jl")
 include("imaging.jl")
 include("optimize.jl")
 include("history.jl")
+include("spectral.jl")
+include("dante.jl")
 include("dynamics.jl")
 include("retune.jl")
 include("clearance.jl")

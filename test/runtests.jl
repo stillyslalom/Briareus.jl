@@ -1121,4 +1121,5 @@ include("cbet_zones.jl")
 include("sombrero.jl")
 include("energetics.jl")
 include("capsule_drive.jl")
+include("spectral.jl")
 end

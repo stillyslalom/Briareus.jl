@@ -42,7 +42,7 @@ _beam_key(by) = by === :group ? (b -> b.group) : by === :quad ? (b -> Symbol(b.q
     drive_history(model, op, beams_at, times; observe = :capsule, lmax = 6,
                   wall = (:wall,), lpi = nothing, holes = nothing, ylm = false,
                   transition = nothing, flux_change = nothing, min_step = 1e-3,
-                  tol = 1e-4, keep_albedo = false) -> NamedTuple
+                  tol = 1e-4, keep_albedo = false, record = nothing) -> NamedTuple
 
 Quasi-static drive history: at each time, deposit `beams_at(t)` with `op` (after the
 laser–plasma model `lpi`, evaluated at that time), solve the
@@ -79,6 +79,9 @@ radiosity at that time (time- and temperature-dependent albedos included), and r
   component (Σ ηP); `absorbed` — x-ray power absorbed per surface component (and per
   closing lip), as in `energy_balance`; `lost` — x-ray power lost to open space.
   `energy_budget` integrates them.
+- `record` — with `record = f`, the vector of `f(sol)` for each step's
+  `RadiationSolution` (e.g. `sol -> dante(dante1(), sol)` for a synthetic Dante, or a
+  `spectral_solve`), otherwise `nothing`.
 
 Each step's temperature-dependent albedos are iterated to `tol` (see `solve`), starting
 from the previous step's temperatures.
@@ -117,7 +120,7 @@ function _drive_history(t::Target, model_at, operator_at, beams_at, times;
                         observe = :capsule, lmax::Integer = 6, wall = (:wall,),
                         lpi = nothing, holes = nothing, ylm::Bool = false,
                         transition = nothing, flux_change = nothing, min_step::Real = 1e-3,
-                        tol = 1e-4, keep_albedo::Bool = false)
+                        tol = 1e-4, keep_albedo::Bool = false, record = nothing)
     transition === nothing || transition > 0 || throw(ArgumentError("transition must be positive"))
     flux_change === nothing || flux_change > 0 || throw(ArgumentError("flux_change must be positive"))
     min_step > 0 || throw(ArgumentError("min_step must be positive"))
@@ -163,6 +166,7 @@ function _drive_history(t::Target, model_at, operator_at, beams_at, times;
     front = Dict(t.components[ci].name => Float64[] for ci in foils)
     window_loss = Float64[]
     albedo_steps = Vector{Float64}[]
+    recorded = Any[]
     names = [c.name for c in t.components]
     setup, lost = Float64[], Float64[]
     laser = Dict(n => Float64[] for n in names)
@@ -269,6 +273,7 @@ function _drive_history(t::Target, model_at, operator_at, beams_at, times;
             push!(wall_Tr, radiation_temperature(Hw))
             push!(wall_albedo, sum(sol.albedo[we] .* Aw) / sum(Aw))
             keep_albedo && push!(albedo_steps, copy(sol.albedo))
+            record === nothing || push!(recorded, record(sol))
             bal = energy_balance(sol)
             loss = 0.0
             for n in apertures
@@ -304,7 +309,8 @@ function _drive_history(t::Target, model_at, operator_at, beams_at, times;
     return (; time, delivered, flux, Tr, moments = _columns(moments, lmax + 1),
             ylm = ylm ? _columns(clm, (lmax + 1)^2) : nothing, wall_Tr,
             wall_albedo, escaped, transmitted, window_loss, front, burnthrough,
-            albedo = keep_albedo ? albedo_steps : nothing, setup, laser, source, absorbed, lost)
+            albedo = keep_albedo ? albedo_steps : nothing, setup, laser, source, absorbed, lost,
+            record = record === nothing ? nothing : [r for r in recorded])
 end
 
 """

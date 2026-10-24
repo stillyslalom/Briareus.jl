@@ -162,9 +162,17 @@ end
 # system, starting from x0. Returns `nothing` when the true residual does not reach
 # rtol‖b‖ within maxiter iterations (restarting from the last iterate if roundoff in
 # the recurrence stops short of it).
-function _gmres_radiosity(F::Matrix{Float64}, α::Vector{Float64}, P::_LUF,
-                          b::Vector{Float64}, x0::Vector{Float64};
-                          rtol = _GMRES_RTOL, maxiter::Integer = _GMRES_MAXITER)
+_gmres_radiosity(F::Matrix{Float64}, α::Vector{Float64}, P::_LUF, b::Vector{Float64},
+                 x0::Vector{Float64}; kwargs...) =
+    _gmres((y, x) -> _radiosity_mul!(y, F, α, x), P, b, x0; kwargs...)
+
+# Right-preconditioned restarted GMRES for A x = b, with `op!(y, x)` computing y = A x
+# and the LU `P` of a nearby matrix (the radiosity solves above), or no preconditioner
+# (`P = nothing`; the thermalized group solves of `spectral_solve`).
+_precondition!(P::_LUF, z) = ldiv!(P, z)
+_precondition!(::Nothing, z) = z
+function _gmres(op!, P::Union{_LUF,Nothing}, b::Vector{Float64}, x0::Vector{Float64};
+                rtol = _GMRES_RTOL, maxiter::Integer = _GMRES_MAXITER)
     n = length(b)
     bn = norm(b)
     bn == 0 && return zeros(n)
@@ -178,7 +186,7 @@ function _gmres_radiosity(F::Matrix{Float64}, α::Vector{Float64}, P::_LUF,
     g = zeros(maxiter + 1)
     used = 0
     while true
-        r .= b .- _radiosity_mul!(r, F, α, x)
+        r .= b .- op!(r, x)
         β = norm(r)
         β <= rtol * bn && return x
         used >= maxiter && return nothing
@@ -188,8 +196,8 @@ function _gmres_radiosity(F::Matrix{Float64}, α::Vector{Float64}, P::_LUF,
         V[:, 1] .= r ./ β
         k = 0
         for j in 1:m
-            ldiv!(P, copyto!(z, view(V, :, j)))
-            _radiosity_mul!(w, F, α, z)
+            _precondition!(P, copyto!(z, view(V, :, j)))
+            op!(w, z)
             # classical Gram–Schmidt, twice (BLAS-2 and as stable as modified)
             Vj = view(V, :, 1:j)
             h = Vj' * w
@@ -216,7 +224,7 @@ function _gmres_radiosity(F::Matrix{Float64}, α::Vector{Float64}, P::_LUF,
         used += k
         Threads.atomic_add!(_SOLVE_STATS.iterations, k)
         y = UpperTriangular(view(R, 1:k, 1:k)) \ g[1:k]
-        ldiv!(P, mul!(z, view(V, :, 1:k), y))
+        _precondition!(P, mul!(z, view(V, :, 1:k), y))
         x .+= z
     end
 end
