@@ -1102,4 +1102,10 @@ the reference's view factors hold through the pulse; items 9 and 10 remove that 
     on `P_abl` (17 Mbar foot, 145 peak) but reaches 315 km/s with 19.6 % ablator left:
     Lindl's ṁ under-ablates. Next: calibrate ṁ to 5–6.6 % remaining, then v_imp; the
     calibrated-dynamics/CBET drive; r–θ with the a_l (Masse sign flip); r–z with AMR.
-    Research notes, "Capsule drive hand-over and CompactLES stage 0".
+    *Metrics (2026-10-24):* `CapsuleDrive.ylm` carries every m (Schmidt ratios, m = 0
+    = `modes`); CompactLES's drive now runs on r–z and 3-D Cartesian grids and on
+    refined levels (angular bins about the capsule centre, a level-wide hook before
+    each level's right-hand side), with the 1-D per-line path unchanged. Validated
+    over 1–1.5 ns against 1-D, r–θ and m-rotation (research notes). Open: a 1 µm 3-D
+    shell needs the band, whose cost CompactLES's covered-node timestep and tile
+    fragility set today, and the band following the shell over a regrid.

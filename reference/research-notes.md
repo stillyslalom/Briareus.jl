@@ -3569,6 +3569,29 @@ from ≈ 7.1 ns (+0.5 % at 7.6). This is a swing, but not yet Masse's G(t,τ) in
 because the drive's own P2 changes sign at 4.7 ns. Telling them apart needs impulse
 runs to stagnation (**L**).
 
+**Update: every m, and the r–z and 3-D metrics (2026-10-24; CompactLES
+`briareus-drive`).** `capsule_drive` now carries `ylm`, the history's real Y_lm
+(`drive_history(...; ylm = true)`) as Schmidt semi-normalized ratios
+bₗₘ = √((2l+1)/4π) cₗₘ/a₀, so bₗ₀ = aₗ/a₀ (the m = 0 rows are set to `modes`; the
+history's Y_lm quadrature is one sub-triangle level coarser, < 1e-3 of a₀ apart) and
+√Σₘ bₗₘ² = `mode_amplitude`. Tested: a known field's ratios recovered to its
+element-constant quadrature, round trip, and a 45°-rotated three-quad pattern on a
+45°-symmetric mesh rotates (cₗₘ, cₗ,₋ₘ) by mα to 1e-7. CompactLES's front search and
+layer normalization are now sums over equal-solid-angle bins about the capsule centre
+with dV/R² weights (per steradian, so the per-line form is reproduced to 1e-14 in
+1-D), which runs on r–z (axis) and 3-D Cartesian grids, and on refined levels through
+a level-wide hook before each level's right-hand side. Validation (**L**), flat
+250 eV drive, P₀ and ṁ not retuned, 2-cell layer: r–z 10 µm against 1-D 10 µm to
+1.5 ns, front within 0.45 µm, DT shell within 0.15 µm, ablator left equal to 4 digits,
+momentum within 1 % (a tiled 10 µm band likewise to 0.6 ns, then failed); a b₂₀ = 0.2
+drive gives the same front P2 on r–z as on r–θ to 10–15 % (−0.55 vs −0.50 % at 1.5
+ns); a 3-D octant at 20 µm reproduces 1-D (front +0.5…+1.7 µm, ablator to 1e-4), and
+its response to b₂₂ = 0.2 equals its response to b₂₀ = 0.2 to 1–4 % (−0.123 vs
+−0.122 % of R_f at 0.6 ns), with ≤ 0.014 % in Y₄₂ (cubic-grid coupling) and ≤ 0.003 %
+elsewhere. Limits met: a band's coarse level takes the timestep of its covered nodes
+(8× the uniform grid's steps), and tiled levels failed on this problem; a 1 µm 3-D
+shell (~10⁹ cells uniform) waits on those.
+
 ## Large radiation models (2026-10-24) *derived*
 
 ROADMAP 14. Goal: make 1e4–5e4-element radiation models (the fine hohlraum preset,
