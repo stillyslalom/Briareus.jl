@@ -22,7 +22,9 @@
         # up–down mirror: the same |z| in both hemispheres
         @test all(b -> b.aim[3] ≈ sign(b.port[3]) * p.z, mem)
         # quad frame: radius along the quad azimuth, the split along its φ̂
-        @test all(b -> dot(b.aim, er) ≈ p.r, mem)
+        # (outer cones have r = 0: the split along eφ leaves a rounding residual in the
+        # dot product, ~1e-17, nonzero where LLVM fuses the @simd sum into an fma (LTS))
+        @test all(b -> isapprox(dot(b.aim, er), p.r; atol = 1e-12), mem)
         t = [dot(b.aim, eφ) for b in mem]
         if p.s == 0
             @test all(x -> abs(x) < 1e-12, t)                   # inner quads share one aim
