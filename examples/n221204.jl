@@ -28,7 +28,10 @@
 #   `CapsuleAlbedo` with albedo `capsule_albedo` absorbing at the effective radius of
 #   HYDRA's ablation front (below); `capsule_albedo` defaults to `CapsuleAlbedo`'s 0.2,
 #   and to 0.22 with `energetics=new`, calibrated there (coarse mesh) so that E_cap is
-#   16.2 % of the coupled energy;
+#   16.2 % of the coupled energy; `capsule_albedo=young` takes Young 2020's quasi-1D
+#   HYDRA ablator albedo on the schedule's time map instead (published, not fitted);
+#   `capsule=mesh` shrinks the capsule mesh itself along the schedule on the keyframes
+#   (the flux on the shrinking sphere; the static runs keep R₀);
 # - `degrade=<fraction>`: HYDRA's laser degradation (PRE 109 App. 3: 9–13 %), default 0;
 # - `backscatter=off|on`: N221204's measured SBS (42 kJ, early in the peak, on the
 #   inner cones) and SRS (6 kJ, through the peak) (AS24), removed before everything else;
@@ -39,7 +42,10 @@
 #   (default, `n221204_pulse()`) or the earlier by-eye DN24 table;
 # - `history=on|off`: the wall loss from each element's own temperature history
 #   (default, `drive_history`'s `wall_history`) or Lindl's constant-T form at the time
-#   since the pulse start (the earlier runs).
+#   since the pulse start (the earlier runs);
+# - `release=on|off`: the wall re-emits stored energy where the drive falls (default,
+#   `drive_history`'s `wall_release`) or not (research notes, "Wall re-emission and the
+#   capsule radius (2026-10-24)").
 # Every run prints its time-integrated energy budget (`energy_budget`) against PRE 109
 # App. 3's N221204 split (wall 54.1 %, LEH 25.2 %, gas 4.5 %, capsule 16.2 %), and its
 # synthetic Dante 1 Tr peak (`dante1()`) beside the capsule-seen Tr, against the measured
@@ -76,10 +82,23 @@ yr = young2020_radii()
 ty = yr.t
 tmap = [τ <= 5.75 ? τ * 6.0 / 5.75 : 6.0 + (τ - 5.75) * (9.53 - 6.0) / (7.75 - 5.75) for τ in ty]
 capsule_schedule = (tmap, yr.capsule ./ yr.capsule[1])
-capsule = get(opt, "capsule", "ablator") == "model" ?
-    Material(:ablator; albedo = CapsuleAlbedo(albedo = parse(Float64, get(opt, "capsule_albedo", "0.2")),
-                                              radius = capsule_schedule), conversion = 0.3) :
+# `capsule_albedo=young`: the quasi-1D HYDRA ablator albedo of the same dynamic model
+# (Young 2020 Fig. 3a top, `young2020_albedos()`) on the same time map, instead of a
+# number. `capsule=mesh`: the schedule shrinks the capsule mesh itself on the keyframes
+# (`moving_hohlraum`'s `capsule_shrink`; the flux is evaluated on the shrinking sphere)
+# and the albedo is α_c alone; `capsule=model` keeps the mesh at R₀ and absorbs at the
+# effective radius (`CapsuleAlbedo`'s `radius`).
+ya = young2020_albedos()
+capsule_alpha = get(opt, "capsule_albedo", "0.2") == "young" ?
+    TabulatedAlbedo([τ <= 5.75 ? τ * 6.0 / 5.75 : 6.0 + (τ - 5.75) * (9.53 - 6.0) / (7.75 - 5.75) for τ in ya.t],
+                    ya.capsule) :
+    parse(Float64, get(opt, "capsule_albedo", "0.2"))
+capsule_kind = get(opt, "capsule", "ablator")
+capsule = capsule_kind == "model" ?
+    Material(:ablator; albedo = CapsuleAlbedo(albedo = capsule_alpha, radius = capsule_schedule), conversion = 0.3) :
+    capsule_kind == "mesh" ? Material(:ablator; albedo = CapsuleAlbedo(albedo = capsule_alpha), conversion = 0.3) :
     ablator()
+shrink = capsule_kind == "mesh" ? (; capsule_shrink = capsule_schedule) : (;)
 geometry = (length = 11.24, leh_radius = 1.55, capsule_radius = 1.135, h, capsule_h,
             wall = gold(albedo = wall_albedo, conversion = η), capsule)
 R0 = 3.2
@@ -138,6 +157,10 @@ degrade = parse(Float64, get(opt, "degrade", "0"))
 # Lindl), as before 2026-10-24's late-time-drive notes; default on: each wall element's
 # loss follows its own temperature history (`drive_history`'s `wall_history`).
 wall_history = get(opt, "history", "on") == "on"
+# `release=off`: no re-emission of stored wall energy under a falling drive (the runs
+# before the 2026-10-24 wall re-emission notes); default on (`drive_history`'s
+# `wall_release`).
+wall_release = get(opt, "release", "on") == "on"
 pre = Any[]
 get(opt, "backscatter", "off") == "on" &&
     push!(pre, Backscatter(:inner23 => bs_fraction, :inner30 => bs_fraction))
@@ -211,7 +234,10 @@ geometry = (geometry..., leh_open_radius = r_open * geometry.leh_radius)
 # Every step is quasi-static (no burnthrough fronts here), so `table` (5th argument)
 # solves only the times of the comparison table, for a fine-mesh check.
 # The default steps run to the end of the pulse (9.35 ns), for the energy budget.
-times = get(pos, 5, "") == "table" ? [2.0, 4.0, 4.5, 5.5, 6.5, 7.0, 8.0, 8.5] : [0.5:0.25:9.25; 9.35]
+# `dt=<ns>` (default 0.25) sets the step of the default times (a step-size check)
+tstep = parse(Float64, get(opt, "dt", "0.25"))
+times = get(pos, 5, "") == "table" ? [2.0, 4.0, 4.5, 5.5, 6.5, 7.0, 8.0, 8.5] :
+        sort(unique([collect(0.5:tstep:9.25); 9.35; 0.5:0.25:9.25]))
 keyframes = range(turn_on, 9.0, 11)
 
 p2(r) = r.moments[3, :] ./ r.moments[1, :]
@@ -233,14 +259,14 @@ if which == "all"
     static = hohlraum(; radius = R0, geometry...)
     model, op = RadiationModel(static), DepositionOperator(static, beams)
     run!("static, no CBET", () -> drive_history(model, op, beams_at, times; lpi = isempty(pre) ? nothing : Tuple(pre),
-                                                record = dante_tr, wall_history))
-    run!("static", () -> drive_history(model, op, beams_at, times; lpi = with_pre(cbet), record = dante_tr, wall_history))
-    kw = Keyframes(moving_hohlraum(motion; radius = R0, geometry...), keyframes, beams)
-    run!("+wall", () -> drive_history(kw, beams_at, times; lpi = with_pre(cbet), record = dante_tr, wall_history))
+                                                record = dante_tr, wall_history, wall_release))
+    run!("static", () -> drive_history(model, op, beams_at, times; lpi = with_pre(cbet), record = dante_tr, wall_history, wall_release))
+    kw = Keyframes(moving_hohlraum(motion; radius = R0, geometry..., shrink...), keyframes, beams)
+    run!("+wall", () -> drive_history(kw, beams_at, times; lpi = with_pre(cbet), record = dante_tr, wall_history, wall_release))
 end
-kl = Keyframes(moving_hohlraum(motion; radius = R0, geometry..., leh_closure = lip), keyframes, beams)
-which == "all" && run!("+lips", () -> drive_history(kl, beams_at, times; lpi = with_pre(cbet), record = dante_tr, wall_history))
-run!("+bubble", () -> drive_history(kl, beams_at, times; lpi = with_pre(cbet, bubble), record = dante_tr, wall_history))
+kl = Keyframes(moving_hohlraum(motion; radius = R0, geometry..., leh_closure = lip, shrink...), keyframes, beams)
+which == "all" && run!("+lips", () -> drive_history(kl, beams_at, times; lpi = with_pre(cbet), record = dante_tr, wall_history, wall_release))
+run!("+bubble", () -> drive_history(kl, beams_at, times; lpi = with_pre(cbet, bubble), record = dante_tr, wall_history, wall_release))
 
 # PRE 109 Fig. 10, N221204 (HYDRA, post-CBET), digitized (`n221204_fig10()`: ±0.002
 # where the curve is visible, up to ±0.015 where N220919's curve covers it).
@@ -315,6 +341,7 @@ for (n, r) in runs
     println("    LEH x-rays        ", pc(leh))
     println("    capsule (E_cap)   ", pc(b.absorbed[:capsule]))
     println("    laser out the LEH ", pc(b.unabsorbed), "   x-rays lost ", pc(b.lost))
+    println("    wall re-emitted   ", pc(sum(values(b.released); init = 0.0)), "   (stored energy given back; wall heating is net of it)")
     @printf("    mean conversion %.3f\n", sum(values(b.source)) / sum(values(b.laser)))
 end
 

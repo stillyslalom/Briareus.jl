@@ -43,7 +43,7 @@ _beam_key(by) = by === :group ? (b -> b.group) : by === :quad ? (b -> Symbol(b.q
                   wall = (:wall,), lpi = nothing, holes = nothing, ylm = false,
                   transition = nothing, flux_change = nothing, min_step = 1e-3,
                   tol = 1e-4, keep_albedo = false, record = nothing,
-                  wall_history = true) -> NamedTuple
+                  wall_history = true, wall_release = true) -> NamedTuple
 
 Quasi-static drive history: at each time, deposit `beams_at(t)` with `op` (after the
 laser–plasma model `lpi`, evaluated at that time), solve the
@@ -74,11 +74,14 @@ radiosity at that time (time- and temperature-dependent albedos included), and r
 - `burnthrough` — per thin-foil component, each element's burnthrough time (ns; `Inf`
   if it has not burned through)
 - `albedo` — with `keep_albedo = true`, each step's converged albedo per element (the
-  state a flux response linearizes about, e.g. for `retune_drive`), otherwise `nothing`
+  state a flux response linearizes about, e.g. for `retune_drive`; where a wall re-emits
+  stored energy, the effective albedo that carries its emission, so that `B = ηP/A + αH`),
+  otherwise `nothing`
 - `setup` — the power of `beams_at(t)` (TW, before `lpi`); `laser` — absorbed laser
   power per component (TW, back side included); `source` — x-ray source power per
   component (Σ ηP); `absorbed` — x-ray power absorbed per surface component (and per
-  closing lip), as in `energy_balance`; `lost` — x-ray power lost to open space.
+  closing lip), as in `energy_balance` (net of `released`, the power wall components
+  re-emit from stored energy; see below); `lost` — x-ray power lost to open space.
   `energy_budget` integrates them. Like `energy_balance`, `escaped`, `transmitted`,
   `laser`, `source` and `absorbed` are keyed by part, the pieces of a part split by
   `curved_components` summed into it; `front` and `burnthrough` stay per component.
@@ -103,10 +106,29 @@ integrated trapezoidally between the steps from each element's incident-flux
 temperature (constant T before `times[1]`). A wall heated in a low foot holds little
 energy at the peak temperature, so its loss early in the peak is several times the
 constant-T value at `t` (`t_eff` ≈ the time since the rise), and the drive rises
-through a flat peak; when `T` falls, `t_eff` grows and the wall loses little (it gives
-back stored energy, which the albedo `range` caps at 0.95). `wall_history = false`
-evaluates the albedo at `t` (the behaviour before 2026-10-24). Research notes, "N221204
-late-time drive (2026-10-24)".
+through a flat peak. `wall_history = false` evaluates the albedo at `t` (the behaviour
+before 2026-10-24). Research notes, "N221204 late-time drive (2026-10-24)".
+
+**Wall re-emission.** The self-similar loss never gives energy back: when `T` falls,
+`t_eff` grows and the loss only shrinks. With `wall_release = true` (the default, with
+`wall_history`) a falling drive makes the wall re-emit stored energy. The loss above is
+taken as the heating response to the element's highest temperature so far,
+`T_h = max T`, and a drop below it, the deficit `D = φ(T_h) − φ(T)` in the wall-energy
+potential `φ = (T/100 eV)^a`, is answered by the same self-similar kernel, superposed
+(Duhamel's principle for the wall's diffusion, linear in `φ`, *engineering*):
+
+    F = L(T_h, t_eff) − f_r b C ∫ (t − t′)^(b−1) dD(t′),    C = L t_eff^(1−b) / (b φ(T_h)),
+
+the net flux into the wall (`C`, the loss's own coefficient, is constant for gold's
+Lindl loss; `f_r` is `WallLossAlbedo`'s `release`, 0.77, calibrated against 1-D
+nonlinear diffusion in gold, `examples/wall_reemission.jl`). A constant-T wall loses `C b φ t^(b−1)`; a drop `D` at `t_d` gives back
+`f_r C D (t − t_d)^b` by `t`, quickly at first (the hot surface layer) and then as the
+heat wave's own `t^b`. The effective albedo `1 − F/H` exceeds 1 where the wall gives
+back more than it takes; `solve` carries the release as an emission added to the
+element's source. While no element's temperature falls below its running maximum the
+history is the heating loss's bit for bit. `released` records the re-emitted power
+per component (`energy_budget` integrates it); `absorbed` is net of it. Research notes,
+"Wall re-emission and the capsule radius (2026-10-24)".
 
 Each thin-foil element without an explicit `burnthrough` time tracks its own heat
 front: the drive integral of `heat_front` over that element's incident-flux temperature
@@ -143,7 +165,7 @@ function _drive_history(t::Target, model_at, operator_at, beams_at, times;
                         lpi = nothing, holes = nothing, ylm::Bool = false,
                         transition = nothing, flux_change = nothing, min_step::Real = 1e-3,
                         tol = 1e-4, keep_albedo::Bool = false, record = nothing,
-                        wall_history::Bool = true)
+                        wall_history::Bool = true, wall_release::Bool = true)
     transition === nothing || transition > 0 || throw(ArgumentError("transition must be positive"))
     flux_change === nothing || flux_change > 0 || throw(ArgumentError("flux_change must be positive"))
     min_step > 0 || throw(ArgumentError("min_step must be positive"))
@@ -178,6 +200,11 @@ function _drive_history(t::Target, model_at, operator_at, beams_at, times;
     lossy = wall_history ?
             [e for e in 1:N if !is_aperture(t, e) && model(e) isa WallLossAlbedo] : Int[]
     Iw, ratew = zeros(N), zeros(N) # their wall-energy integral and integrand
+    # re-emission (`wall_release`): each element's highest temperature, the deficit
+    # φ(T_max) − φ(T) at every step taken, and the times of those steps
+    Tmax, Dw = zeros(N), zeros(N)
+    deficits, dtimes = Vector{Float64}[], Float64[]
+    cooled = falses(N)             # elements whose deficit has ever been nonzero
     holes = holes === nothing ?
             [c.name for c in t.components if c.kind === :aperture && !(c.surface isa CylinderSurface)] :
             collect(Symbol, holes)
@@ -199,6 +226,7 @@ function _drive_history(t::Target, model_at, operator_at, beams_at, times;
     setup, lost = Float64[], Float64[]
     laser = Dict(n => Float64[] for n in names)
     source = Dict(n => Float64[] for n in names)
+    released = Dict(n => Float64[] for n in names)
     absorbed = Dict(c.name => Float64[] for c in t.components
                     if c.kind !== :aperture || _transmits(c.material.albedo))
 
@@ -216,7 +244,10 @@ function _drive_history(t::Target, model_at, operator_at, beams_at, times;
         # the per-element state the albedos see: burnthrough times, and the wall-loss
         # history of the `lossy` elements (`_WallHistory`)
         hist = Dict(e => (τ0 === nothing ? _WallHistory(0.0, τ) :
-                          _WallHistory(Iw[e] + Δ * ratew[e] / 2, Δ / 2)) for e in lossy)
+                          !wall_release ? _WallHistory(Iw[e] + Δ * ratew[e] / 2, Δ / 2) :
+                          _WallHistory(Iw[e] + Δ * ratew[e] / 2, Δ / 2, Tmax[e],
+                                       cooled[e] ? _deficit_sum(model(e), deficits, dtimes, e, τ) : 0.0,
+                                       Dw[e], Δ)) for e in lossy)
         function state(bt)
             isempty(lossy) && return bt
             s = Vector{Any}(bt)
@@ -252,14 +283,16 @@ function _drive_history(t::Target, model_at, operator_at, beams_at, times;
             sol = solve(mτ, dep; time = τ, burnthrough = state(used), guess = sol, tol)
             Ik, tk, rk = advance(sol)
         end
-        # the wall-energy integrals at τ, with this step's temperatures
+        # the wall-energy integrals at τ, with this step's temperatures (the heating
+        # response at the highest temperature so far when the release is on)
         Iwk, rwk = copy(Iw), copy(ratew)
         for e in lossy
             T = radiation_temperature(ForwardDiff.value(sol.H[e]))
+            wall_release && (T = max(T, Tmax[e]))
             rwk[e] = _loss_rate(model(e), T)
             Iwk[e] = τ0 === nothing ? τ * rwk[e] : hist[e].A + Δ * rwk[e] / 2
         end
-        return sol, Ik, tk, rk, Iwk, rwk
+        return sol, Ik, tk, rk, Iwk, rwk, hist
     end
     # the largest advance of a smooth transition from τ0 to τ, given burnthrough times
     advance_of(τ0, τ, tbs) =
@@ -290,12 +323,12 @@ function _drive_history(t::Target, model_at, operator_at, beams_at, times;
                     τ = min(lo, τgoal)
                 end
             end
-            local sol, Ik, tk, rk, Iwk, rwk, a, dep, P0
+            local sol, Ik, tk, rk, Iwk, rwk, hist, a, dep, P0
             while true
                 b0 = beams_at(τ)
                 P0 = sum(b -> ForwardDiff.value(b.power), b0; init = 0.0)
                 dep = lpi_deposit(lpi, operator_at(τ), apply_lpi(lpi, b0, τ), τ)
-                sol, Ik, tk, rk, Iwk, rwk = step(τ0, τ, dep, last)
+                sol, Ik, tk, rk, Iwk, rwk, hist = step(τ0, τ, dep, last)
                 a = legendre_moments(sol.H, sol.model.target, obs; lmax)
                 τ0 === nothing && break
                 h = τ - τ0
@@ -308,6 +341,21 @@ function _drive_history(t::Target, model_at, operator_at, beams_at, times;
             end
             I, tb, rate = Ik, tk, rk
             Iw, ratew = Iwk, rwk
+            # the release: power re-emitted from stored energy per component, then each
+            # element's running maximum and deficit at τ
+            rel = zeros(N)
+            if wall_release
+                for e in lossy
+                    T = radiation_temperature(ForwardDiff.value(sol.H[e]))
+                    rel[e] = _wall_split(model(e), hist[e], T)[3] * sol.model.target.elem_area[e]
+                    Th = max(T, Tmax[e])
+                    Dw[e] = _wall_potential(model(e), Th) - _wall_potential(model(e), T)
+                    Tmax[e] = Th
+                    Dw[e] != 0 && (cooled[e] = true)
+                end
+                push!(deficits, copy(Dw))
+                push!(dtimes, τ)
+            end
             τ0, last = τ, sol
             shape0 = shape(sol, a[1])
             push!(time, τ)
@@ -319,8 +367,16 @@ function _drive_history(t::Target, model_at, operator_at, beams_at, times;
             push!(Tr, radiation_temperature(a[1]))
             Hw = sum(sol.H[we] .* Aw) / sum(Aw)
             push!(wall_Tr, radiation_temperature(Hw))
-            push!(wall_albedo, sum(sol.albedo[we] .* Aw) / sum(Aw))
-            keep_albedo && push!(albedo_steps, copy(sol.albedo))
+            # the emission a re-emitting wall adds to the solution's source (TW/mm²); the
+            # wall albedo is the effective one, reflected over incident flux
+            xe = wall_release && !isempty(lossy) ?
+                 ForwardDiff.value.(sol.source) .- _xray_source(sol.model.target, ForwardDiff.value.(sol.laser), τ) :
+                 nothing
+            αw = xe === nothing || all(iszero, xe) ? sol.albedo[we] :
+                 sol.albedo[we] .+ xe[we] ./ ForwardDiff.value.(sol.H[we])
+            push!(wall_albedo, sum(αw .* Aw) / sum(Aw))
+            keep_albedo && push!(albedo_steps, xe === nothing || all(iszero, xe) ? copy(sol.albedo) :
+                                   sol.albedo .+ xe ./ max.(ForwardDiff.value.(sol.H), eps()))
             record === nothing || push!(recorded, record(sol))
             bal = energy_balance(sol; by = :component)
             loss = 0.0
@@ -344,26 +400,45 @@ function _drive_history(t::Target, model_at, operator_at, beams_at, times;
             push!(lost, bal.lost)
             tg = sol.model.target
             v = ForwardDiff.value
+            # the wall's re-emission rides on the solution's source: book the x-ray
+            # source as converted laser (ηP) and the absorbed power net of the emission
+            emitted = xe === nothing ? nothing : xe .* tg.elem_area
             for (ci, c) in enumerate(tg.components)
                 es = tg.comp_elems[ci]
+                Ec = emitted === nothing ? 0.0 : sum(emitted[e] for e in es; init = 0.0)
                 push!(laser[c.name], sum(v(sol.laser[e]) for e in es; init = 0.0) + v(dep.backside[ci]))
-                push!(source[c.name], sum(v(sol.source[e]) * tg.elem_area[e] for e in es; init = 0.0))
-                haskey(absorbed, c.name) && push!(absorbed[c.name], bal.absorbed[c.name])
+                push!(source[c.name], sum(v(sol.source[e]) * tg.elem_area[e] for e in es; init = 0.0) - Ec)
+                push!(released[c.name], sum(rel[e] for e in es; init = 0.0))
+                haskey(absorbed, c.name) && push!(absorbed[c.name], bal.absorbed[c.name] - Ec)
             end
             τ == τgoal && break
         end
     end
     burnthrough = Dict(t.components[ci].name => [_nan_inf(tb[e]) for e in t.comp_elems[ci]] for ci in foils)
     if any(c -> c.part !== c.name, t.components)       # pieces of split parts summed into them
-        escaped, transmitted, laser, source, absorbed =
+        escaped, transmitted, laser, source, absorbed, released =
             _by_part(t, escaped), _by_part(t, transmitted), _by_part(t, laser), _by_part(t, source),
-            _by_part(t, absorbed)
+            _by_part(t, absorbed), _by_part(t, released)
     end
     return (; time, delivered, flux, Tr, moments = _columns(moments, lmax + 1),
             ylm = ylm ? _columns(clm, (lmax + 1)^2) : nothing, wall_Tr,
             wall_albedo, escaped, transmitted, window_loss, front, burnthrough,
             albedo = keep_albedo ? albedo_steps : nothing, setup, laser, source, absorbed, lost,
-            record = record === nothing ? nothing : [r for r in recorded])
+            released, record = record === nothing ? nothing : [r for r in recorded])
+end
+
+# The wall-release Duhamel sum of element e at time τ over the steps taken: the deficit
+# D (piecewise linear between the steps) convolved with the kernel's integral,
+# Σₖ (Dₖ − Dₖ₋₁)/(tₖ − tₖ₋₁) [(τ − tₖ₋₁)^b − (τ − tₖ)^b].
+function _deficit_sum(m::WallLossAlbedo, D, ts, e, τ)
+    b = 1 + m.time_exponent
+    G = 0.0
+    for k in 2:length(ts)
+        dD = D[k][e] - D[k-1][e]
+        dD == 0 && continue
+        G += dD / (ts[k] - ts[k-1]) * ((τ - ts[k-1])^b - (τ - ts[k])^b)
+    end
+    return G
 end
 
 # Per-step series keyed by component summed into the components' parts.
@@ -394,7 +469,10 @@ outside the solved times only through the trapezoids they bound):
   effective radius: E_cap); `escaped` per aperture; `transmitted` per thin-foil or
   closing-gap component; `lost` to open space;
 - `heating` — per surface component, what stays in it: unconverted laser plus absorbed
-  x-rays, `laser − source + absorbed`.
+  x-rays, `laser − source + absorbed`;
+- `released` — per component, the stored wall energy re-emitted under a falling drive
+  (`drive_history`'s `wall_release`). `absorbed` is net of it: a wall component took in
+  `absorbed + released` and holds `absorbed`.
 
 `setup ≈ backscattered + unabsorbed + Σ heating + Σ escaped + Σ transmitted + lost`, to
 the closure of the view factors.
@@ -410,7 +488,8 @@ function energy_budget(h; from = nothing, to = nothing)
     heating = Dict(n => laser[n] - source[n] + absorbed[n] for n in keys(absorbed))
     return (; setup, coupled, backscattered = setup - coupled, laser,
             unabsorbed = coupled - sum(values(laser); init = 0.0), source, absorbed,
-            escaped = d(h.escaped), transmitted = d(h.transmitted), lost = ∫(h.lost), heating)
+            escaped = d(h.escaped), transmitted = d(h.transmitted), lost = ∫(h.lost), heating,
+            released = haskey(h, :released) ? d(h.released) : Dict{Symbol,Float64}())
 end
 
 _columns(v, n) = isempty(v) ? zeros(n, 0) : reduce(hcat, v)

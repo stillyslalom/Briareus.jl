@@ -224,6 +224,78 @@ end
     @test abs(on.Tr[k2] - off.Tr[k2]) < abs(on.Tr[k1] - off.Tr[k1])
 end
 
+@testset "wall re-emission" begin
+    t = hohlraum(; h = 0.8, capsule_h = 0.4, wall = gold(albedo = WallLossAlbedo()))
+    m = RadiationModel(t)
+    beams = nif_beams()
+    op = DepositionOperator(t, beams)
+    w = elements(t, :wall)
+    η = conversions(t)
+    # per step: each element's incident-flux temperature and net flux into it,
+    # (1 − α) H − E with E the emission the history adds to the source
+    rec = sol -> (T = radiation_temperature.(sol.H),
+                  F = (1 .- sol.albedo) .* sol.H .- (sol.source .- η .* sol.laser ./ t.elem_area))
+    # a rising drive: no element falls below its running maximum, bit for bit
+    rise = PulseShape([0.0, 0.2, 4.0, 4.2, 9.0], [0.0, 0.2, 0.2, 1.6, 1.6])
+    times = [0.5:0.5:4.0; 4.25; 4.5:0.5:9.0]
+    on = drive_history(m, op, τ -> with_pulses(beams, rise, τ), times; keep_albedo = true)
+    off = drive_history(m, op, τ -> with_pulses(beams, rise, τ), times; keep_albedo = true,
+                        wall_release = false)
+    @test on.albedo == off.albedo && on.Tr == off.Tr && on.moments == off.moments
+    @test all(iszero, on.released[:wall]) && energy_budget(on).released[:wall] == 0
+
+    # a 40 % droop after a flat peak
+    drop = PulseShape([0.0, 0.2, 4.0, 4.2, 7.0, 7.5, 9.0], [0.0, 0.2, 0.2, 1.6, 1.6, 0.96, 0.96])
+    times = [0.5:0.5:7.0; 7.1:0.1:9.0]
+    on = drive_history(m, op, τ -> with_pulses(beams, drop, τ), times; record = rec, tol = 1e-10)
+    off = drive_history(m, op, τ -> with_pulses(beams, drop, τ), times; wall_release = false, tol = 1e-10)
+    k7, k75, k9 = (findfirst(≈(x), times) for x in (7.0, 7.5, 9.0))
+    @test on.Tr[1:k7] == off.Tr[1:k7]
+    # the wall gives energy back: the drive falls less, and never above the peak's
+    @test on.Tr[k75] > off.Tr[k75] + 2
+    # once the drive holds again the cooled wall takes energy back in: the two converge
+    @test abs(on.Tr[k9] - off.Tr[k9]) < 0.25 * (on.Tr[k75] - off.Tr[k75])
+    @test maximum(on.Tr[k7+1:end]) < on.Tr[k7] + 0.5
+    @test on.wall_albedo[k75] > off.wall_albedo[k75]
+    b = energy_budget(on)
+    total = b.backscattered + b.unabsorbed + sum(values(b.heating)) + sum(values(b.escaped)) +
+            sum(values(b.transmitted); init = 0.0) + b.lost
+    @test total ≈ b.setup rtol = 1e-9
+    @test 0 < b.released[:wall] < b.absorbed[:wall]
+    @test b.absorbed[:wall] < energy_budget(off).absorbed[:wall]
+    # each element's net flux is the heating loss at its running maximum less the
+    # Duhamel response to its deficit, evaluated here from the recorded temperatures
+    # (wall loss Lindl's: c = 0.32, p = −0.7, q = −0.38; a = 3.3, b = 0.62; release 0.6)
+    wm = WallLossAlbedo()
+    a_, b_ = 3.3, 0.62
+    φ(T) = (T / 100)^a_
+    r(T) = (T / 100)^(a_ / b_)
+    err = 0.0
+    for e in w
+        T = [x.T[e] for x in on.record]
+        Tm = accumulate(max, T)
+        D = φ.(Tm) .- φ.(T)
+        I = 0.0
+        for k in eachindex(times)
+            I = k == 1 ? times[1] * r(T[1]) : I + (times[k] - times[k-1]) * (r(Tm[k-1]) + r(Tm[k])) / 2
+            te = I / r(Tm[k])
+            L = (1 - albedo(wm, te, Tm[k])) * SIGMA_SB * Tm[k]^4
+            C = wm.release * L * te^(1 - b_) / (b_ * φ(Tm[k]))
+            G = sum((D[j] - D[j-1]) / (times[j] - times[j-1]) *
+                    ((times[k] - times[j-1])^b_ - (times[k] - times[j])^b_) for j in 2:k; init = 0.0)
+            F = L - C * G
+            err = max(err, abs(on.record[k].F[e] - F) / (SIGMA_SB * T[k]^4))
+        end
+    end
+    @test err < 1e-6
+    # the release converges with the step: 0.1 against 0.05 ns steps after the droop
+    fine = [0.5:0.5:7.0; 7.05:0.05:9.0]
+    hf = drive_history(m, op, τ -> with_pulses(beams, drop, τ), fine)
+    for x in (7.5, 8.0, 9.0)
+        @test hf.Tr[findfirst(≈(x), fine)] ≈ on.Tr[findfirst(≈(x), times)] atol = 0.1
+    end
+end
+
 @testset "N221204 delivered pulse and Dante 1" begin
     p = n221204_pulse()
     @test keys(p) == (:t, :power, :dante1)

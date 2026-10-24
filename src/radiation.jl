@@ -501,17 +501,31 @@ albedos(t::Target, time = 0.0, H = nothing; burnthrough = nothing) =
 # element's `before` albedo at the same temperature, a closing gap's closed albedo, the
 # albedo itself elsewhere) and the fraction of its incident flux it transmits out of
 # the enclosure (0 but on a burned-through thin foil or an open gap).
+#
+# The fourth output is the emission per element (TW/mm²) that a model's state adds to
+# the x-ray source: a wall-loss element of a `drive_history` re-emitting stored energy
+# (`_WallHistory`), zero elsewhere (and `nothing` when no element has one).
 function _albedos(t::Target, time, H, burnthrough)
     n = nelements(t)
     α, intact, transmission = zeros(n), zeros(n), zeros(n)
+    emission = nothing
     for e in 1:n
         is_aperture(t, e) && !_transmits(element_material(t, e).albedo) && continue
         a = element_material(t, e).albedo
         T = H === nothing ? nothing : radiation_temperature(ForwardDiff.value(H[e]))
-        α[e], intact[e], transmission[e] =
-            _albedo_split(a, time, T, burnthrough === nothing ? NaN : burnthrough[e])
+        state = burnthrough === nothing ? NaN : burnthrough[e]
+        if a isa WallLossAlbedo && state isa _WallHistory
+            α[e], E, _ = _wall_split(a, state, T)
+            intact[e] = α[e]
+            if E != 0
+                emission === nothing && (emission = zeros(n))
+                emission[e] = E
+            end
+        else
+            α[e], intact[e], transmission[e] = _albedo_split(a, time, T, state)
+        end
     end
-    return α, intact, transmission
+    return α, intact, transmission, emission
 end
 """
     conversions(target, time = 0.0, laser = nothing) -> Vector
@@ -562,7 +576,8 @@ _temperature_dependent(m::GapClosure) = _temperature_dependent(m.after)
     RadiationSolution
 
 Fields: `laser` (absorbed laser power per element, TW), `source` (x-ray source flux
-ηP/A), `B` (radiosity), `H` (incident flux), all per element in TW/mm²; `albedo` per
+ηP/A, plus the emission of wall elements re-emitting stored energy in a
+`drive_history` step), `B` (radiosity), `H` (incident flux), all per element in TW/mm²; `albedo` per
 element (the albedos the radiosity was solved with, so `B = source + albedo .* H`
 exactly); `intact`, the albedo each element would have intact (a thin-foil element's
 `before` albedo, the albedo elsewhere); `transmission`, the fraction of its incident
@@ -631,8 +646,10 @@ function solve(m::RadiationModel, P::AbstractVector; time = 0.0, albedo = nothin
     warm = iterate && guess !== nothing
     warm && nelements(guess.model.target) != nelements(t) &&
         throw(ArgumentError("guess is a solution of a model with other elements"))
-    α, intact, tr = albedo === nothing ? _albedos(t, time, warm ? guess.H : nothing, burnthrough) :
-                    (a = collect(Float64, albedo); (a, a, zero(a)))
+    α, intact, tr, E = albedo === nothing ? _albedos(t, time, warm ? guess.H : nothing, burnthrough) :
+                       (a = collect(Float64, albedo); (a, a, zero(a), nothing))
+    S0 = S
+    E === nothing || (S = S0 .+ E)
     B = H = nothing
     if warm && nelements(guess.model.target) == nelements(t)
         # a nearby system's factorization (another model's: the previous time of a
@@ -654,10 +671,17 @@ function solve(m::RadiationModel, P::AbstractVector; time = 0.0, albedo = nothin
         end
         H = m.F * B
         iterate || break
-        αn, intactn, trn = _albedos(t, time, H, burnthrough)
+        αn, intactn, trn, En = _albedos(t, time, H, burnthrough)
         δ = maximum(abs.(αn .- α))
+        # an emission's change counts as the albedo change it equals (ΔE/H)
+        if E !== nothing || En !== nothing
+            ev(x, e) = x === nothing ? 0.0 : x[e]
+            δ = max(δ, maximum(abs(ev(En, e) - ev(E, e)) / max(ForwardDiff.value(H[e]), eps())
+                               for e in eachindex(H)))
+        end
         δ < tol && break          # keep the albedo B was solved with, so B = S + αH exactly
-        α, intact, tr = αn, intactn, trn
+        α, intact, tr, E = αn, intactn, trn, En
+        S = E === nothing ? S0 : S0 .+ E
         it == maxiter && @warn "albedo iteration did not converge" δ
     end
     return RadiationSolution(m, collect(P), S, B, H, α, intact, tr, Float64(time))

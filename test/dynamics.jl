@@ -71,7 +71,21 @@
         @test hist.moments[:, k] ≈ legendre_moments(sol.H, tk, elements(tk, :capsule); lmax = 6) rtol = 1e-10
     end
 
+    # a shrinking capsule mesh: the initial radius's counts, the area as R², and none of
+    # it without `capsule_shrink`
+    for mesh in (:compact, :latlong)
+        shrinking = moving_hohlraum(w; radius = 2.875, kw..., capsule_mesh = mesh,
+                                    capsule_shrink = ([0.0, 5.0, 9.0], [1.0, 0.8, 0.5]))
+        s0, s7 = shrinking(0.0), shrinking(7.0)
+        c0, c7 = elements(s0, :capsule), elements(s7, :capsule)
+        @test s0.comp_elems == s7.comp_elems
+        @test nelements(s0) == nelements(hohlraum(; radius = 2.875, kw..., capsule_mesh = mesh))
+        @test sum(s7.elem_area[c7]) / sum(s0.elem_area[c0]) ≈ 0.65^2 rtol = 1e-12
+        @test maximum(norm(s7.elem_centroid[e]) for e in c7) < 0.65 * 0.9
+        @test sum(s0.elem_area[c0]) == sum(t0.elem_area[elements(t0, :capsule)]) || mesh === :latlong
+    end
+
     # every keyframe must have the same elements
-    grow = τ -> hohlraum(; radius = 2.875, kw..., h = τ < 1 ? 0.8 : 0.6)
+    grow =τ -> hohlraum(; radius = 2.875, kw..., h = τ < 1 ? 0.8 : 0.6)
     @test_throws ArgumentError model_at(Keyframes(grow, [0.0, 2.0], quads), 1.0)
 end

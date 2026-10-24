@@ -102,7 +102,7 @@ _front_integral(f::HeatFront, m) = (m / f.coefficient)^(1 / f.time_exponent)
     WallLossAlbedo(; coefficient = 0.32, temperature_exponent = -0.7, time_exponent = -0.38,
                    reference_temperature = 250.0, t0 = 0.1, range = (0.0, 0.95),
                    factor = 1.0, factor_exponent = 0.0, factor_temperature = 300.0,
-                   liner = 0.0, front = HeatFront())
+                   liner = 0.0, front = HeatFront(), release = 0.77)
 
 Marshak-wave wall-loss albedo, `1 - α = c (T/100 eV)^p (t/1 ns)^q`, with defaults for
 gold from Lindl's scaling (T in heV, t in ns). `t` is clamped below at `t0`, and α to
@@ -134,6 +134,15 @@ the gold liner's share of the heated mass (an energy-content blend, *engineering
 continuous in `T` and `t`, so the albedo iteration stays smooth; a sharp front would
 switch the loss rate to the substrate's as soon as `m_F` passes the liner). With the
 defaults (`factor = 1`, no liner) the albedo is gold's, bit for bit.
+
+**Re-emission.** `release` scales the stored energy the wall gives back under a falling
+drive in a `drive_history` (`wall_release`): the linear (Duhamel) response of the
+wall's own self-similar loss, times `release`. 0.77 is *calibrated* against 1-D
+nonlinear radiation diffusion in gold (Hammer & Rosen 2003 power laws, static, Marshak
+boundary), with the closure given that medium's own constant-T scaling: after a NIF-like
+peak, drops of 5, 10 and 30 % in the drive temperature need 0.76, 0.78 and 0.76 for the
+energy the wall takes in over the next 1.5 ns (a cooled surface is more opaque and
+throttles the release; 1 overshoots the reference's change by ~1.6×). Research notes, "Wall re-emission and the capsule radius (2026-10-24)".
 """
 Base.@kwdef struct WallLossAlbedo <: AlbedoModel
     coefficient::Float64 = 0.32
@@ -147,6 +156,7 @@ Base.@kwdef struct WallLossAlbedo <: AlbedoModel
     factor_temperature::Float64 = 300.0
     liner::Float64 = 0.0
     front::HeatFront = HeatFront()
+    release::Float64 = 0.77
 end
 
 function albedo(m::WallLossAlbedo, t, T = nothing)
@@ -554,13 +564,35 @@ _albedo_split(m::GapClosure, t, T, burnthrough) = _closure_split(m, t, T)
 # have needed at today's T to hold today's energy. Over a step, with the trapezoidal
 # integral, t_eff = A / r(T) + B (A = I₀ + Δ r₀/2, B = Δ/2; at the first step A = 0,
 # B = t, i.e. constant T since t = 0).
+#
+# Re-emission under a falling drive (`drive_history(...; wall_release = true)`): the
+# loss above is the heating response and is evaluated at the element's highest
+# temperature so far, T_h = max(T_max, T); a drop below T_max is the deficit
+# D(t) = φ(T_max) − φ(T), φ = (T/100 eV)^a, and the wall answers it with the same
+# self-similar kernel, superposed (Duhamel): the net flux into the wall is
+#
+#     F = L(T_h, t_eff) − f_r b C ∫ (t − t′)^(b−1) dD(t′),    C = L t_eff^(1−b) / (b φ(T_h)),
+#
+# where C is the loss's own coefficient (c σ (100 eV)⁴ / b for gold's unclamped Lindl
+# loss, constant), so a constant-T wall's loss is C b φ t^(b−1) and a step down of D
+# releases f_r C D (t − t_d)^b by time t (f_r the model's `release`). D is piecewise
+# linear between the steps (the integral is exact for it): `G` is the earlier steps'
+# part at this step's time, `D` the previous step's deficit, `Δ` this step's length. With no deficit (T never below
+# its running maximum) the albedo is the heating loss's alone, bit for bit.
 struct _WallHistory
     A::Float64
     B::Float64
+    Tmax::Float64          # highest temperature before this step (0: none tracked)
+    G::Float64
+    D::Float64
+    Δ::Float64
 end
+_WallHistory(A, B) = _WallHistory(A, B, 0.0, 0.0, 0.0, 0.0)
 
 _loss_rate(m::WallLossAlbedo, T) =
     (max(T, zero(T)) / 100)^((4 + m.temperature_exponent) / (1 + m.time_exponent))
+# The potential φ = (T/100 eV)^a of the wall energy, whose drops the wall re-emits.
+_wall_potential(m::WallLossAlbedo, T) = (max(T, zero(T)) / 100)^(4 + m.temperature_exponent)
 
 function _effective_time(m::WallLossAlbedo, h::_WallHistory, T)
     Te = (T === nothing || T <= 0) ? m.reference_temperature : T
@@ -568,9 +600,35 @@ function _effective_time(m::WallLossAlbedo, h::_WallHistory, T)
     return h.A / _loss_rate(m, Te) + h.B
 end
 
-_albedo_split(m::WallLossAlbedo, t, T, h::_WallHistory) =
-    (α = albedo(m, _effective_time(m, h, T), T); (α, α, zero(α)))
+# A wall-loss element with history `h` at temperature T: its albedo α, an emission E
+# (TW/mm², added to its x-ray source) and the flux Fc it re-emits from stored energy,
+# with the net flux into the wall (1 − α) H − E = L(T_h) − Fc. While T is at or above
+# its running maximum the albedo is the heating loss's and E = Fc. Below it, Fc's
+# implicit part (this step's deficit, C Δ^(b−1) φ(T)) goes into the albedo and the rest,
+# independent of T, into E: the stiff short-time response of the hot surface layer
+# would make a T-dependent emission diverge in `solve`'s albedo iteration, whereas the
+# albedo 1 − C Δ^(b−1) φ(T)/H ∝ T^-0.7 iterates like Lindl's.
+function _wall_split(m::WallLossAlbedo, h::_WallHistory, T)
+    Te = (T === nothing || T <= 0) ? m.reference_temperature : T
+    if Te >= h.Tmax && h.G == 0 && h.D == 0
+        α = albedo(m, _effective_time(m, h, T), T)
+        return α, zero(α), zero(α)
+    end
+    Th = max(Te, h.Tmax)
+    b = 1 + m.time_exponent
+    K = h.Δ^(b - 1)
+    tc = max(_effective_time(m, h, Th), m.t0)
+    αh = albedo(m, tc, Th)
+    Lh = (1 - αh) * SIGMA_SB * Th^4
+    C = m.release * Lh * tc^(1 - b) / (b * _wall_potential(m, Th))
+    φ = _wall_potential(m, Te)
+    Fc = C * (h.G + (_wall_potential(m, Th) - φ - h.D) * K)
+    Te >= h.Tmax && return αh, Fc, Fc
+    return 1 - C * K * φ / (SIGMA_SB * Te^4), C * K * φ - (Lh - Fc), Fc
+end
 
+_albedo_split(m::WallLossAlbedo, t, T, h::_WallHistory) =
+    (α = first(_wall_split(m, h, T)); (α, α, zero(α)))
 # Whether a model lets part of the flux on it leave the enclosure.
 _transmits(::AlbedoModel) = false
 _transmits(::Union{BurnthroughAlbedo,GapClosure}) = true

@@ -106,15 +106,46 @@ the entrance holes their radius (the caps' annuli shrink with the wall), rounded
 follow the wall, and the capsule stays. The mesh counts are those of the initial radius
 (from `h` when given), so every time has the same elements, as [`Keyframes`](@ref)
 needs.
+
+`capsule_shrink` (`nothing`, a `(times, R/R₀)` table, linear and held at its ends, or a
+function `τ -> R/R₀`) shrinks the capsule mesh itself to `R₀ R/R₀` at `τ`, with the
+initial radius's mesh counts (the `:compact` mesh's frequency, or the lat-long counts):
+the flux is then evaluated on the shrinking sphere, not on the initial one. Its albedo
+should then not shrink it again (`CapsuleAlbedo` without a `radius`).
 """
 function moving_hohlraum(motion::WallMotion; radius::Real = 2.875, length::Real = 9.4,
                          leh_radius::Real = 1.55, h = nothing, corner_radius::Real = 0.0,
                          nz::Integer = 36, nphi::Integer = 48, nr_cap::Integer = 6,
-                         nr_leh::Integer = 4, nr_corner = nothing, kwargs...)
+                         nr_leh::Integer = 4, nr_corner = nothing, capsule_shrink = nothing,
+                         kwargs...)
     grid = _hohlraum_grid(; length, radius, leh_radius, h, rc = Float64(corner_radius),
                           nz, nphi, nr_cap, nr_leh, nr_corner)
-    return τ -> hohlraum(; radius = wall_radius(motion, radius, τ), length, leh_radius,
-                         corner_radius, grid..., kwargs...)
+    capsule_shrink === nothing &&
+        return τ -> hohlraum(; radius = wall_radius(motion, radius, τ), length, leh_radius,
+                             corner_radius, grid..., kwargs...)
+    kw = Dict{Symbol,Any}(kwargs)
+    R0 = Float64(get(kw, :capsule_radius, 0.9))
+    R0 > 0 || throw(ArgumentError("capsule_shrink needs a capsule"))
+    shrink = capsule_shrink isa Tuple ?
+             (collect(Float64, capsule_shrink[1]), collect(Float64, capsule_shrink[2])) : capsule_shrink
+    hc = get(kw, :capsule_h, nothing)
+    if get(kw, :capsule_mesh, :compact) === :compact
+        # the initial frequency n; at R the size R atan(2)/(n − ½) gives n again
+        n = icosphere_frequency(R0, something(hc, π * R0 / get(kw, :capsule_ntheta, 24)))
+        size_at = R -> R * atan(2.0) / (n - 0.5)
+        delete!(kw, :capsule_h)
+    else
+        counts = hc === nothing ? (;) : capsule_counts(R0, hc)
+        size_at = R -> nothing
+        merge!(kw, Dict(pairs(counts)))
+        delete!(kw, :capsule_h)
+    end
+    delete!(kw, :capsule_radius)
+    return function (τ)
+        R = R0 * _radius_fraction(shrink, τ)
+        hohlraum(; radius = wall_radius(motion, radius, τ), length, leh_radius, corner_radius,
+                 grid..., capsule_radius = R, capsule_h = size_at(R), kw...)
+    end
 end
 
 """
