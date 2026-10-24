@@ -3509,6 +3509,39 @@ the remaining ablator). Numerics: the run takes ~30 min on 4 threads (timestep s
 the hot driver gas, CFL 0.1 after the automatic retries in the foot); a 2 µm grid
 (layer < 3 cells) fails in the foot.
 
+**Update: robustness and the ṁ calibration (2026-10-24, CompactLES `briareus-drive`;
+drive from Briareus 785684d, cached).** Two defects of the first run, both fixed in
+CompactLES. (1) The foot failure was the driver gas, not the layer. Held at P_abl, the
+1 mg/cc He is a 2–7 keV ideal gas against a 0.05 eV ablator. The contact cells had
+negative internal energy from 0.1 ns and collapsed the timestep near 0.5 ns, at any
+CFL. A 10 mg/cc driver (≈ 1 % of the ablator's mass) runs the foot at CFL 0.4 with
+no retry. The whole implosion is now one `run!` call of 5–8 min on one thread, with
+1–2 automatic retries when the first shock reaches the origin (7.3 ns). (2) The
+19.6 % was mostly ablator stranded outside the front. A partly converted layer gets no
+push in the uniform-pressure driver, so the accelerating shell left it behind (22 % of
+the ablator at 6 ns). It then pulled the front marker off the shell, and ablation of
+the shell stopped. Now ablator beyond the front is converted first, and the piston
+acts only at and beyond the front. Results (1 µm grid; ablator remaining = ablator
+inside the front at peak DT velocity), *calibrated*:
+
+| ṁ prefactor A (ṁ = A T³) | v_DT peak | ablator remaining | KE (ablator + DT inside front) |
+|---|---|---|---|
+| 2.6e5 | 320 km/s | 7.4 % | 26.5 kJ |
+| **2.85e5 (adopted)** | **336 km/s** | **5.7 %** | **25.8 kJ** |
+| 3.0e5 (Lindl Eq. 6-3) | 346 km/s | 4.8 % | 25.1 kJ |
+| 3.8e5 | 406 km/s | 0.9 % | 19.2 kJ |
+
+Reading (**L**): 5–6.6 % remaining needs A = 2.7–3.0e5, so Lindl's 3e5 T³ was right
+and the earlier "too little ablation" came from the stranding. The T³ exponent is
+kept: Lindl's I^(3/4) is T³, and P/ṁ ∝ T^0.5 with P ∝ T^3.3 would give T^2.8, a
+difference the 290–297 eV-dominated ablation does not resolve. The velocity check
+fails without tuning: 328–344 km/s across the band against 380–400. Reaching 380–400
+needs A ≈ 3.5–3.75e5 and leaves 1.5–2.5 %. Lindl's ideal rocket gives 395 km/s at this
+mass ratio. The gap is in P/ṁ, so the likely causes are the ideal-gas carbon adiabat,
+the 145 Mbar peak and the gray drive, not ṁ. KE 25–26 kJ is inside 19–33 kJ. The grid
+is not converged: at 2 µm the same A gives 298 km/s and 7.3 %, and the 0.5 µm run fails
+at 5.5 ns. Read v to ±10 %.
+
 ## Large radiation models (2026-10-24) *derived*
 
 ROADMAP 14. Goal: make 1e4–5e4-element radiation models (the fine hohlraum preset,
