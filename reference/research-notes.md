@@ -4014,3 +4014,57 @@ Split with the release: wall 62.7 / LEH 25.6 / capsule 11.7 % of the coupled ene
   1.7 eV off).
 - The release closure is calibrated on a static wall; an ablating-wall (hydro) reference
   would test b = 0.62.
+
+## Backlighter foil on the line of sight (2026-10-24) *derived*
+
+ROADMAP Next 2, second half. `backlighter_foil(los; standoff, width, height, tilt,
+tilt_toward, rotation)` and `line_of_sight(target, los; ...) -> LineOfSightReport`
+(`src/backlighter.jl`, `test/backlighter.jl`), used in the radiography tutorial
+(`docs/literate/dropped_bundle.jl`).
+- **Defaults are engineering values.** The 2 mm square gold foil and the standoffs tried
+  are generic: real backlighter dimensions and standoffs are shot-specific, and for THOR
+  not public. The radiography windows (two open 3 mm disks in the wall on the line of
+  sight) are likewise generic. **E**
+- **Placement.** Centered `standoff` mm from TCC opposite the detector, front face (the
+  laser-heated side) toward the detector, normal along the line of sight unless tilted;
+  width along the line of sight's θ̂, height along φ̂.
+- **Line-of-sight bundle.** Every ray from a foil sample point (mesh vertices plus
+  `4^level` sub-triangle points) through a sample point of the object's projected disk
+  (center and rings of 8k points from θ̂), continued without end: all foil-to-detector
+  x-ray paths through the object, a conservative superset of one imager's. A ray counts
+  as stopped if an opaque hardware triangle lies anywhere past the foil (apertures and
+  open windows are transparent) or it would leave through the foil's back. `detector =
+  L` (or `Inf`) takes the imaging rays to a point detector instead. `covered` is the
+  fraction of disk points whose image ray meets the foil's front. Exact for obstruction
+  edges that meet the bundle at sampled extremes (tests: a shield rim grazed by the
+  steepest ray, x* = D(Z + w)/(a + w) − D, to 1e-7 relative; a foil tilted by β covers
+  a disk iff (w/2) cos β ≥ a; a plate at a (1 − s/L) beside converging imaging rays).
+- **Shields vs backlighter beams** (tutorial geometry: 10.1 mm hohlraum, `Sombrero()`
+  defaults, untuned cone pointing; beams aimed at the foil center; worst case of
+  `clearance` at the 1% contour, 50 µm pointing + 25 µm positioning, ±1 mm focus; no
+  wings). *derived*
+  - At 8 and 12 mm standoff every one of the six candidate bundles per line of sight
+    (both quads within 70° of the foil normal) lands on a shield: worst-case clearance
+    −0.99 to −1.12 mm, i.e. the whole envelope, the upper quad on the upper shield, the
+    lower on the lower. The earlier selection without shields (12 mm: all six clear the
+    hohlraum; 8 mm: only 46 for 90-78 and 11 for 90-348) is therefore not achievable.
+    At 12 mm, Q46B / Q11B (lower quads) already pass the lower shield nominally
+    (+0.05 / +0.08 mm) but not in the worst case; the upper quads are fully on the upper
+    shield.
+  - Smallest standoff with positive worst-case clearance from hohlraum, capsule and
+    both shields (bisection to 0.05 mm): bundles 46 (90-78) and 11 (90-348) 13.24 mm;
+    43/14 14.45; 12/22 15.18; 11 (90-78) and 23 (90-348) 15.39; 41/13 15.95; 16/21
+    16.34. The closed-form standoff at which the quad axes cross the shield plane at the
+    9.2 mm rim is 11.49–14.42 mm; the worst case lies 1.6–1.9 mm beyond it.
+  - The bundle choice does not change: 46/11 remain the cheapest (50° cone, ε₁ 1.1%)
+    and the first to clear, now at ≥ 13.2 mm instead of 8 mm.
+  - The equatorial line of sight itself is never near the shields (> 3 mm clear); at
+    14 mm, 6561 of 6561 rays pass with the 3 mm windows (all stopped by the wall without
+    them). At 8 mm the conservative bundle reaches ~1.73 mm from the axis at the far
+    wall and the 1.5 mm-radius detector window stops 356 rays.
+- **Not modeled.** The shield's mounting sector, where the sheet runs past 9.2 mm (it
+  can only push the standoffs out on that side), and its ±0.12 mm dimples (well below
+  the clearance margins above). The radiography windows' radiation cost is not included
+  in the tutorial's drive (see the diagnostic-windows tutorial). Backlighter beam
+  pointing could also be offset from the foil center or the foil moved off the
+  equator; neither is explored.

@@ -183,7 +183,8 @@ directions) → `facilities.jl` (NIF ports/spots, OMEGA) → `deposition.jl`
 (solid angles, Legendre/Y_lm) → `imaging.jl` (OrthoCamera, render, line_of_sight_power)
 → `optimize.jl` (GroupPointing, Scenario, objectives, optimize_pointing, report) →
 `history.jl` (PulseShape, drive_history) → `retune.jl` (pulse tables, retune_drive) →
-`clearance.jl` (envelopes, wings, worst-case clearance) → `keepout.jl` (differentiable
+`clearance.jl` (envelopes, wings, worst-case clearance) → `backlighter.jl`
+(backlighter_foil, line_of_sight) → `keepout.jl` (differentiable
 entrance-hole keep-out) → `uncertainty.jl` (beam-error sensitivities, robust objectives)
 → `talis.jl` → `lpi.jl` (LaserPlasmaModel, Backscatter, CalibratedTransfer) → `io.jl`
 (CSV beam tables, write_results) → `visrad.jl`, `visrad_workspace.jl` (VisRad files and

@@ -12,8 +12,9 @@
 #
 # Which bundle can be freed is set first by the radiograph: its quads must reach a
 # backlighter foil placed across the target from the detector, perpendicular to the
-# line of sight, without their light touching the hohlraum on the way. This tutorial
-# finds the bundles that can serve each of two equatorial lines of sight, ranks them by
+# line of sight, without their light touching the hohlraum or its entrance-hole
+# shields on the way, and the foil's x rays must reach the detector unobstructed.
+# This tutorial finds the bundles that can serve each of two equatorial lines of sight, ranks them by
 # the symmetry they cost, and compares three ways to win that symmetry back: freeing
 # the bundle's symmetric partner as well, rebalancing the powers of the remaining
 # quads, and re-pointing them within the clearance the entrance holes allow. It introduces three-dimensional mode analysis with real
@@ -137,58 +138,151 @@ end
 # ## Which bundles can drive the backlighter
 #
 # Two lines of sight at the equator (``\theta = 90°``) suit radiography of the
-# capsule, at ``\phi = 78°`` and ``\phi = 348°``. For each, a 2 mm backlighter foil faces
-# the detector from the far side of the target, a distance ``d`` from the target
-# center; the radiography beams strike its face toward the target, so the x rays
-# they generate cross the capsule to the detector. The "sombrero", the dimpled shield
-# around the entrance hole that keeps unconverted 1ω light off the hohlraum and its
-# thermo-mechanical package, also stands between some beams and the foil; it is not
-# modeled here, so this selection is necessary but not sufficient. A quad can drive
-# the foil if it strikes that face at
-# less than 70° from its normal, the LMF limit for laser capture on a target surface,
-# and if its beam, aimed at the foil center, clears the hohlraum and capsule on the
-# way. The clearance is judged as a shot review judges it, on the worst case:
+# capsule, at ``\phi = 78°`` and ``\phi = 348°``. For each, [`backlighter_foil`](@ref)
+# places a 2 mm square foil on the far side of the target, a distance ``d`` (the
+# standoff) from its center, facing the detector across the capsule; the radiography
+# beams strike its face toward the target, so the x rays they generate cross the
+# capsule to the detector. The foil's size and standoff here are generic engineering
+# values: real backlighter dimensions are shot-specific and, for this class of
+# target, not public. The radiograph looks through a pair of 3 mm windows in the
+# hohlraum wall, one on each side of the capsule along the line of sight.
+#
+# The scene around the foil is the hohlraum with its entrance-hole shields
+# (`sombrero = true`), the dimpled annular sheets around each end that keep
+# unconverted 1ω light off the hohlraum and its thermo-mechanical package. Each
+# reaches 9.2 mm from the axis, 0.62 mm inside the entrance-hole plane (see
+# [`Sombrero`](@ref)), so it stands across much of the space between the ports and a
+# foil near the waist. The shields lie outside the cavity and do not change its
+# radiation, and the windows' cost to the drive is the subject of the
+# [Diagnostic windows in the hohlraum wall](@ref) tutorial, so the scenario above
+# keeps the closed hohlraum without them; the scene is for the geometry only.
+
+shielded = Dict(φ => hohlraum(length = 10.1, radius = 2.875, leh_radius = 1.55, capsule_radius = 0.9,
+                              wall = gold(albedo = 0.85, conversion = 0.8), sombrero = true,
+                              windows = (WallWindow(; phi = φ, diameter = 3.0, open = true, name = :detector_window),
+                                         WallWindow(; phi = mod(φ + 180, 360), diameter = 3.0, open = true,
+                                                    name = :foil_window)))
+                for φ in (78.0, 348.0))
+scene(φ_los, d; hohl = shielded[φ_los]) =
+    Target([hohl.components..., backlighter_foil((90.0, φ_los); standoff = d)])
+
+# A quad can drive the foil if it strikes the foil's face at less than 70° from its
+# normal, the LMF limit for laser capture on a target surface, and if its beam, aimed
+# at the foil center, clears the hardware on the way: the hohlraum and capsule, and
+# the shields. The clearance is judged as a shot review judges it, on the worst case:
 # [`clearance`](@ref) grows each beam's envelope (its contour at 1% of the peak,
 # spread by the f-cone) by 50 µm of pointing error and 25 µm of target positioning,
-# adds ±1 mm of focus error, and reports the smallest distance to the hardware. That
-# distance is exact; only the power on the hardware, not used here, depends on how
-# finely the error set and the spot are sampled, so both are sampled coarsely. The
-# foil's distance is a design choice; two are tried.
+# adds ±1 mm of focus error, and reports the smallest distance to each piece of
+# hardware. That distance is exact; only the power on the hardware, not used here,
+# depends on how finely the error set and the spot are sampled, so both are sampled
+# coarsely. The standoff is a design choice: for each bundle, the table gives the
+# worst-case clearance from the hohlraum and from the shields at 8 and 12 mm, and the
+# smallest standoff at which both are positive, found by bisection to 0.05 mm.
 
-function backlighter_bundles(φ_los, d)
-    n = [cosd(φ_los), sind(φ_los), 0.0]                    # toward the detector
-    center = Tuple(-d .* n)
-    scene = Target(target.components..., foil(:backlighter, center, Tuple(n); width = 2.0, n = 8))
-    found = []
-    for k in sort(collect(keys(bundles)))
-        qs = quads[bundles[k]]
-        incidence = [acosd(dot(b.port, n)) for b in qs]
-        all(<(70), incidence) || continue
-        report = clearance(scene, [remake(b; aim = center) for b in qs];
-                           targets = (:backlighter,), hardware = (:wall, :cap_top, :cap_bottom, :capsule),
-                           peak_fraction = 0.01, wings = [], nangles = 4, nspot = 15)
-        push!(found, (bundle = k, incidence, clearance = minimum(r -> r.clearance, report.rows)))
+hohlraum_parts, shields = (:wall, :cap_top, :cap_bottom, :capsule), (:sombrero_top, :sombrero_bottom)
+function worst_clearance(φ_los, k, d)
+    n = port_vector(90.0, φ_los)                           # toward the detector
+    report = clearance(scene(φ_los, d), [remake(b; aim = Tuple(-d .* n)) for b in quads[bundles[k]]];
+                       targets = (:backlighter,), hardware = (hohlraum_parts..., shields...),
+                       peak_fraction = 0.01, wings = [], nangles = 4, nspot = 15)
+    worst(parts) = minimum(r -> r.clearance, filter(r -> r.component in parts, report.rows))
+    return (hohlraum = worst(hohlraum_parts), shield = worst(shields))
+end
+clears(φ_los, k, d) = (c = worst_clearance(φ_los, k, d); min(c.hohlraum, c.shield) > 0)
+function min_standoff(φ_los, k; lo = 8.0, hi = 30.0, tol = 0.05)
+    @assert !clears(φ_los, k, lo) && clears(φ_los, k, hi)
+    while hi - lo > tol
+        mid = (lo + hi) / 2
+        clears(φ_los, k, mid) ? (hi = mid) : (lo = mid)
     end
-    return found
+    return hi
+end
+
+# A closed form bounds the bisection from below. A quad's axis runs from the foil
+# center ``-d\,\hat n`` back toward its port ``\hat p``, crossing the plane of its own
+# hemisphere's shield, ``|z| = z_s`` (4.427 mm), a distance ``s = z_s/|p_z|`` along
+# ``\hat p``. It passes outside the rim, ``\rho = 9.2`` mm, once
+# ``|-d\,\hat n + s\,\hat p_\perp| > \rho``, that is beyond the larger root
+#
+# ```math
+# d_\mathrm{axis} = s\,\hat n\cdot\hat p_\perp
+#   + \sqrt{\rho^2 - s^2\left(|\hat p_\perp|^2 - (\hat n\cdot\hat p_\perp)^2\right)},
+# ```
+#
+# taken here as the larger of the bundle's two quads. The beam's envelope and the
+# error set add to it.
+
+z_shield = 10.1 / 2 - Sombrero().offset
+function axis_standoff(φ_los, k)
+    n = port_vector(90.0, φ_los)
+    return maximum(quads[bundles[k]]) do b
+        s = z_shield / abs(b.port[3])
+        p⊥ = [b.port[1], b.port[2], 0.0]
+        s * dot(n, p⊥) + sqrt(Sombrero().outer_radius^2 - s^2 * (dot(p⊥, p⊥) - dot(n, p⊥)^2))
+    end
 end
 
 bundles = nif_bundles(quads)
+standoff = Dict{Tuple{Float64,String},Float64}()
 for φ_los in (78.0, 348.0)
-    near, far = backlighter_bundles(φ_los, 8.0), backlighter_bundles(φ_los, 12.0)
-    @printf("line of sight 90-%g: %d bundles within 70°\n", φ_los, length(near))
-    @printf("  %-7s %-16s %-14s %s\n", "bundle", "cones", "incidence", "worst-case clearance, d = 8 / 12 mm")
-    for (a, b) in zip(near, far)
-        cones = join(sort(unique(string(quads[i].group) for i in bundles[a.bundle])), "+")
-        @printf("  %-7s %-16s %4.1f°, %4.1f°   %6.2f / %5.2f mm\n", a.bundle, cones, a.incidence...,
-                a.clearance, b.clearance)
+    n = port_vector(90.0, φ_los)
+    candidates = [k for k in sort(collect(keys(bundles)))
+                  if all(b -> acosd(dot(b.port, n)) < 70, quads[bundles[k]])]
+    @printf("line of sight 90-%g: %d bundles within 70°\n", φ_los, length(candidates))
+    @printf("  %-6s %-16s %-13s %-34s %s\n", "bundle", "cones", "incidence",
+            "worst case, hohlraum / shields (mm)", "standoff: axis, worst case (mm)")
+    for k in candidates
+        cones = join(sort(unique(string(quads[i].group) for i in bundles[k])), "+")
+        incidence = [acosd(dot(b.port, n)) for b in quads[bundles[k]]]
+        c8, c12 = worst_clearance(φ_los, k, 8.0), worst_clearance(φ_los, k, 12.0)
+        standoff[(φ_los, k)] = min_standoff(φ_los, k)
+        @printf("  %-6s %-16s %4.1f°, %4.1f°  d = 8: %5.2f / %5.2f, 12: %5.2f / %5.2f   %5.2f, %5.2f\n",
+                k, cones, incidence..., c8.hohlraum, c8.shield, c12.hohlraum, c12.shield,
+                axis_standoff(φ_los, k), standoff[(φ_los, k)])
+        @assert standoff[(φ_los, k)] > axis_standoff(φ_los, k)
     end
 end
 
-# Each line of sight can be served by six bundles. With the foil 12 mm from the
-# center all six clear the hohlraum; at 8 mm the hohlraum is in the way of all but one,
-# whose quads pass above and below it at steep incidence: bundle 46 for 90-78 and
-# bundle 11 for 90-348. Their lower quads strike the foil at 69°, just inside the
-# capture limit.
+# Each line of sight can be served by six bundles. Without the shields, a foil 12 mm
+# from the center would let all six clear the hohlraum, and at 8 mm the hohlraum
+# would leave only bundle 46 for 90-78 and bundle 11 for 90-348, whose quads pass
+# above and below it at steep incidence. The shields rule out both designs: at 8 and
+# 12 mm every candidate quad's beam lands on a shield (a worst-case clearance near
+# −1 mm is the whole envelope on it), the upper quad's on the upper shield and the
+# lower quad's on the lower. Bundles 46 and 11 are still the first to clear, at a
+# standoff of 13.2 mm; the other candidates need 14.5–16.3 mm. Each worst-case
+# standoff lies 1.6–1.9 mm beyond the closed-form one at which the bundle's axes
+# graze the rim: the envelope's half-width and the errors, stretched by the shallow
+# angle at which the beams cross the shield's plane (40° for the 50° cone).
+#
+# The beams are half of it; the x rays must also reach the detector, and the same
+# hardware may stand between the foil and the detector. [`line_of_sight`](@ref)
+# traces a bundle of rays from every sample point of the foil's emitting face through
+# every sample point of the capsule's projected disk, on to the detector, and reports
+# any that hardware stops: all the x-ray paths from the foil through the capsule
+# toward any detector in their cone, more than one imager accepts. Here, with the
+# foil at the standoff that bundle 11 needs, rounded up to a millimetre:
+
+d_los = ceil(standoff[(348.0, "11")])
+los = line_of_sight(scene(348.0, d_los), (90.0, 348.0))
+
+# Every one of the 81 × 81 rays passes: the shields stand more than 3 mm above and
+# below the equatorial line of sight, the windows open the wall, and the foil covers
+# the capsule's disk. Without the windows the hohlraum wall stops every ray:
+
+closed_wall = hohlraum(length = 10.1, radius = 2.875, leh_radius = 1.55, capsule_radius = 0.9,
+                       wall = gold(albedo = 0.85, conversion = 0.8), sombrero = true)
+line_of_sight(scene(348.0, d_los; hohl = closed_wall), (90.0, 348.0))
+
+# and a foil closer in spreads the bundle more beyond the capsule. At 8 mm the rays
+# from the foil's corners through the capsule's rim reach about 1.7 mm from the line
+# of sight at the far wall, past the 1.5 mm radius of the detector-side window, which
+# stops a twentieth of them:
+
+s_far = (8.0 + 2.875) / 8.0           # the far wall's distance from the foil, in standoffs
+@printf("bundle radius at the far wall %.2f mm
+", s_far * 0.9 + (s_far - 1) * sqrt(2))
+line_of_sight(scene(348.0, 8.0), (90.0, 348.0))
 
 # ## What each bundle costs
 #
@@ -227,8 +321,9 @@ end
 # bundle with an inner quad costs three times as much mode 1: the inner quads deposit
 # their power around the waist of the hohlraum, closest to the capsule. Among the
 # bundles that can drive a backlighter, the 50° bundles are therefore the ones to free:
-# 11 or 23 for the line of sight at 90-348, 46 or 11 for 90-78, and with the foil at
-# 8 mm only 11 and 46 remain. This tutorial frees bundle 11, the pair Q11T and Q11B,
+# 11 or 23 for the line of sight at 90-348, 46 or 11 for 90-78. Of these, 11 (for
+# 90-348) and 46 (for 90-78) are also the ones the shields let through closest in, at
+# 13.2 mm; the others need 15.4 mm. This tutorial frees bundle 11, the pair Q11T and Q11B,
 # for the line of sight at 90-348; bundle 46 is its image under a rotation of ``D_2``
 # and costs the same.
 
@@ -525,6 +620,14 @@ show_modes("re-pointed, ray-traced", ylm_weights(target, capsule; lmax = 4) * H)
 # - The power rebalance from the pseudoinverse and from the automatic-differentiation
 #   optimizer agree, as they must for a linear least-squares problem solved from the
 #   same start.
+# - Every candidate bundle's worst-case standoff from the shields lies beyond the
+#   closed-form standoff at which its quads' axes graze the shield rim (asserted).
+# - The line-of-sight bundle's reach at the far wall with the foil at 8 mm, from the
+#   closed form for rays from the foil's corners through the capsule's rim, exceeds
+#   the detector-side window's radius, and [`line_of_sight`](@ref) finds rays stopped
+#   there and none at 14 mm. Its closed-form tests (`test/backlighter.jl`): a bundle
+#   exactly grazing a shield's rim, a foil rotated off the line of sight, and imaging
+#   rays converging on a point detector.
 # - The keep-out's worst-case clearance agrees with the clearance check's, and
 #   re-pointing against it passes that check.
 # - The re-pointed drive, recomputed by ray tracing and a direct radiosity solve,

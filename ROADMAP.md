@@ -523,6 +523,21 @@ Details and numbers in the research notes, under the section named in each entry
   Tests: areas, facing, zero exchange, beams on both faces (operator vs ray trace),
   clearance pass and fail.
 
+## Done (2026-10-24, backlighter line of sight)
+- **`backlighter_foil`, `line_of_sight`, `LineOfSightReport`** (item 2, second half;
+  research notes "Backlighter foil on the line of sight"): a foil placed on a
+  diagnostic line of sight at a standoff (tilt and spin optional), and an any-hit
+  check of the ray bundle from the foil's whole face through the object's projected
+  disk to the detector (or the imaging rays to a point detector), with the foil's
+  coverage of the disk. Generic engineering defaults (THOR backlighter dimensions are
+  not public). Tests: a shield rim grazed by the steepest ray, a foil tilted off the
+  line of sight, converging imaging rays.
+- **Radiography tutorial with the shields**: at 8 and 12 mm every candidate bundle's
+  beams land on a shield in the worst case. Bundles 46 (90-78) and 11 (90-348) remain
+  the choice, clearing everything from 13.2 mm; the others need 14.5–16.3 mm. The
+  equatorial line of sight passes > 3 mm from the shields; at 8 mm the conservative
+  bundle overfills a 3 mm detector-side window.
+
 ## Done (2026-10-24, energetics models)
 Research notes, "Wall material, conversion and capsule energetics (2026-10-24)". Item 16.
 - **`du_wall_loss()` / `uranium()`**: `WallLossAlbedo(; factor, factor_exponent, liner)`
@@ -820,10 +835,11 @@ pick the original parts, not `<part>/cylN` pieces).
      `visrad_deposition` (see Done), which makes it a routine comparison on CAD and
      rectangles; a primitive hohlraum needs its element order measured first (e.g.
      one beam on the wall), or the hohlraum given as CAD.
-2. **Backlighter geometry.** The LEH shield is done (`hohlraum(; sombrero)`, see Done
-   2026-10-24). Left: the backlighter foil's placement relative to the diagnostic line
-   of sight. The line-of-sight and clearance checks in the radiography tutorial, with
-   the shields in the target, then decide which bundles can drive the foil.
+2. **Backlighter geometry: done** (shield and foil, see Done 2026-10-24, LEH shield
+   and backlighter line of sight). What remains is optional: the shield's mounting
+   sector (the sheet runs past 9.2 mm there), backlighter beams aimed off the foil
+   center or foils off the equator, which could bring the 13.2 mm standoff in, and
+   real backlighter dimensions when a shot's are available.
 3. **Diagnostic windows: what remains.** The studies are in the tutorial (see Done).
    Open: the expanded foil's density (held at Lester's 1 g/cm³ through the
    normalization), a backing that absorbs and re-emits part of what the gold

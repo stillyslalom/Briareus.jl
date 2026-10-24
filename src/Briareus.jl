@@ -62,6 +62,7 @@ export VisRadObject, VisRadWorkspace, read_visrad_workspace, visrad_component, v
 export legendre, legendre_moments, legendre_weights, solid_angle, ylm_moments, ylm_weights, mode_center,
        ylm_matrix, ylm_frame, mode_index, relative_mode_power, mode_amplitude, mode_power, rms_nonuniformity
 export OrthoCamera, camera_from_port, render, radiance, line_of_sight_power
+export backlighter_foil, line_of_sight, LineOfSightReport
 export planck_fraction, planck_fractions, spectral_edges, MBandEmission, mband_conversion,
        nif_mband, mband_power, SpectralSolution, spectral_solve, ngroups, band_flux,
        mband_recirculation, DanteChannel, dante1_channels, DanteView, dante1, dante2, dante, visible_area
@@ -100,6 +101,7 @@ include("dante.jl")
 include("dynamics.jl")
 include("retune.jl")
 include("clearance.jl")
+include("backlighter.jl")
 include("keepout.jl")
 include("uncertainty.jl")
 include("implosion.jl")
