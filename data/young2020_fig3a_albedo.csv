@@ -1,0 +1,50 @@
+# Albedos of the LLNL dynamic view-factor model for NIF shot N170827 against time, from C. V.
+# Young et al., Phys. Plasmas 27, 082702 (2020), Fig. 3a (LLNL-JRNL-807170 accepted
+# manuscript, top panel, solid lines "Dynamic"; the static model's dashed lines are 0.8 and
+# 0.3). Each is the albedo of a quasi-1D HYDRA block of the material driven by the pulse
+# (re-emitted over incident x-ray flux). Digitized 2026-10-24 from the figure's embedded raster
+# (638 x 626 px): time from the frame and gridlines (0 and 8 ns at 80 and 623 px, the 1-7 ns
+# gridlines within 0.5 px), albedo from the frame and gridlines (0 and 1 at 246 and 82 px,
+# gridlines every 0.2 within 0.5 px). Each value is the mean row of the coloured stroke (blue
+# hohlraum, red capsule) over +/-2 px (+/-0.03 ns) of columns, ignoring pixels within 2.5 px of
+# the static dashed line where the solid line is clear of it. Reading error 0.03 (0.05 where
+# the solid line runs on the dashed one, and on the 0.5-0.65 ns drop of the wall albedo, which
+# the +/-2 px average smooths). Overlay checked by eye. Research notes, "Young 2020 validation".
+# Columns: t (ns); wall, capsule (albedo); u_wall, u_capsule (reading error)
+t,wall,capsule,u_wall,u_capsule
+0.00,0.521,0.012,0.03,0.03
+0.25,0.521,0.012,0.03,0.03
+0.50,0.495,0.012,0.05,0.03
+0.55,0.422,0.014,0.05,0.03
+0.60,0.349,0.020,0.05,0.03
+0.65,0.361,0.024,0.05,0.03
+0.75,0.423,0.027,0.03,0.03
+1.00,0.538,0.046,0.03,0.03
+1.25,0.593,0.055,0.03,0.03
+1.50,0.624,0.064,0.03,0.03
+1.75,0.645,0.076,0.03,0.03
+2.00,0.662,0.082,0.03,0.03
+2.25,0.681,0.095,0.03,0.03
+2.50,0.701,0.101,0.03,0.03
+2.75,0.710,0.088,0.03,0.03
+3.00,0.716,0.080,0.03,0.03
+3.25,0.731,0.088,0.03,0.03
+3.50,0.763,0.095,0.03,0.03
+3.75,0.796,0.096,0.05,0.03
+4.00,0.817,0.088,0.03,0.03
+4.25,0.827,0.088,0.03,0.03
+4.50,0.842,0.095,0.03,0.03
+4.75,0.852,0.096,0.03,0.03
+5.00,0.857,0.107,0.03,0.03
+5.25,0.863,0.111,0.03,0.03
+5.50,0.874,0.125,0.03,0.03
+5.75,0.880,0.135,0.03,0.03
+6.00,0.881,0.157,0.03,0.03
+6.25,0.881,0.198,0.03,0.03
+6.50,0.881,0.226,0.03,0.03
+6.75,0.882,0.260,0.03,0.03
+7.00,0.887,0.302,0.03,0.05
+7.25,0.887,0.359,0.03,0.03
+7.50,0.879,0.399,0.03,0.03
+7.75,0.868,0.399,0.03,0.03
+8.00,0.863,0.399,0.03,0.03

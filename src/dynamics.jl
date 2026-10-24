@@ -71,6 +71,19 @@ The plotted initial wall radius is 3.0 mm; use displacements. The calibration ta
 young2020_radii() = _data_table("young2020_fig3a.csv")
 
 """
+    young2020_albedos() -> NamedTuple
+
+The LLNL dynamic view-factor model's albedos for N170827 against time: Young et al.,
+PoP 27, 082702 (2020), Fig. 3a top panel, digitized (`data/young2020_fig3a_albedo.csv`,
+provenance in its header). Columns `t` (ns, 0–8 every 0.25, plus 0.55–0.65 on the wall's
+drop), `wall` and `capsule` (quasi-1D HYDRA albedos of gold and the HDC ablator) and
+their reading errors `u_wall`, `u_capsule` (0.03; 0.05 where the static line hides the
+curve or on the drop). The static model uses 0.8 and 0.3. With [`young2020_radii`](@ref)
+it defines Young's dynamic model; build it with `TabulatedAlbedo`.
+"""
+young2020_albedos() = _data_table("young2020_fig3a_albedo.csv")
+
+"""
     pre109_fig1a_wall() -> NamedTuple
 
 The inner edge of the wall material at 6 ns in the HYDRA simulations of N210808 and

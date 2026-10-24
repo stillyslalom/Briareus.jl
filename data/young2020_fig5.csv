@@ -1,0 +1,75 @@
+# Mode-1 Green's function G(t) for the final hot-spot velocity of NIF shot N170827 (km/s per %
+# of flux mode 1 per ns), from C. V. Young et al., Phys. Plasmas 27, 082702 (2020), Fig. 5
+# (LLNL-JRNL-807170 accepted manuscript): panel b (red "GF") and panel d (blue "N170827"), two
+# independent readings of the same curve. 59 2D capsule-only HYDRA runs with a 2.5 %, 120 ps
+# c10 impulse every 140 ps from 0.2 to 8.32 ns. Digitized 2026-10-24 from the embedded raster
+# (1211 x 311 px): time from the panel frames (0 and 8 ns: panel b 294 and 494 px, panel d 898
+# and 1197 px), G from the frames (-5 and 65 at 260 and 28 px; the dashed zero line falls at
+# 243 px, 0.4 px from the axis). Each value is the median row of the stroke over +/-1 px of
+# columns (+/-0.04 ns in b, +/-0.03 ns in d). The two readings agree to ~1 km/s/%/ns rms
+# (reading error ~1, up to ~3 on the steep 4.2-4.6 ns rise); NaN where another stroke covers
+# the curve; 7.75 and 7.875 ns are read as 0 (the curve runs on the dashed zero line). Integral over the pulse: ~117 km/s per % (b and d within 0.5 %).
+# Columns: t (ns); panel_b, panel_d (km/s per % per ns)
+t,panel_b,panel_d
+0.250,-2.28,NaN
+0.375,-2.44,-2.54
+0.500,-2.99,-3.04
+0.625,-2.94,-3.04
+0.750,-2.79,-2.74
+0.875,-3.04,-3.24
+1.000,-2.33,-2.66
+1.125,-1.83,NaN
+1.250,-1.33,NaN
+1.375,-0.83,-0.47
+1.500,-0.62,-0.52
+1.625,-0.62,-0.57
+1.750,-0.62,-0.47
+1.875,-0.62,-0.62
+2.000,-0.88,-0.62
+2.125,-0.32,-0.42
+2.250,0.08,-0.17
+2.375,0.73,0.58
+2.500,1.14,1.14
+2.625,2.34,2.19
+2.750,3.65,3.55
+2.875,4.50,4.50
+3.000,3.50,3.15
+3.125,0.93,0.78
+3.250,-1.08,-1.08
+3.375,-1.03,-1.03
+3.500,0.18,-0.25
+3.625,1.08,0.98
+3.750,1.74,1.69
+3.875,2.74,2.74
+4.000,4.60,4.81
+4.125,9.63,8.88
+4.250,20.85,21.50
+4.375,33.77,37.09
+4.500,43.83,43.43
+4.625,39.00,39.13
+4.750,34.43,34.38
+4.875,33.07,32.97
+5.000,34.73,34.58
+5.125,38.50,38.75
+5.250,42.87,42.82
+5.375,46.75,47.00
+5.500,54.34,53.23
+5.625,59.42,58.06
+5.750,63.39,63.39
+5.875,61.78,61.88
+6.000,58.76,59.12
+6.125,55.45,55.75
+6.250,49.81,49.41
+6.375,41.67,42.07
+6.500,33.82,33.62
+6.625,25.32,26.53
+6.750,18.43,20.14
+6.875,12.55,13.30
+7.000,8.58,8.73
+7.125,5.36,5.81
+7.250,3.05,3.15
+7.375,1.79,1.74
+7.500,0.73,1.08
+7.625,0.43,0.73
+7.750,0.00,0.00
+7.875,0.00,0.00

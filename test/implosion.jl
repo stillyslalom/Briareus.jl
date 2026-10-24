@@ -39,9 +39,25 @@
     @test m.f ≈ 0.125 && m.speed ≈ 50
     @test m.yield_factor ≈ (1 - 0.125^2)^3.3 && m.rke ≈ 0.66 * 0.125^2 * 20 && m.total == m.yield_factor
     @test yield_factor(1.2) == 0
-    # Nora et al. 2023 Eq. 4, within its fit
-    @test burn_amplification(30.0) ≈ 0.324 * log(32.239) + 0.653
-    @test_throws DomainError burn_amplification(100.0)
+    # Nora et al. 2023 Eq. 4, low branch: its Table IV lists 1/Vhs_amp^burn per shot
+    # (N130530, N140520, N210207, N211107, N220919, N210808)
+    for (Y, inv) in ((1.13, 0.956), (2.13, 0.885), (4.42, 0.789), (13.2, 0.649), (25.0, 0.580), (27.6, 0.570))
+        @test abs(1 / burn_amplification(Y) - inv) <= 1e-3     # Y_amp itself is rounded
+    end
+    # high branch with the coefficients of the fit drawn in Fig. 6 (Eq. 4 rounds them)
+    @test burn_amplification(100.0) ≈ 13.105 * log(1685.225) - 95.539
+    @test 1.6 < burn_amplification(80.0) < 1.7 && 4.5 < burn_amplification(500.0) < 4.7
+    @test_throws DomainError burn_amplification(60.0)      # between the fits
+    @test_throws DomainError burn_amplification(600.0)
+    # shape term: Eq. 2 (2D fit) is continuous at 0.35 to the printed digits
+    @test shape_amplification(0.0) ≈ 0.71
+    @test abs(shape_amplification(0.35 - 1e-9) - shape_amplification(0.35 + 1e-9)) < 5e-3
+    # Table I (3D): its nodes, the equatorial fold, and N130530 of Table IV (P2 −2 %,
+    # flow at 90°: 1/Vhs_amp^shape = 0.965)
+    @test shape_amplification(-0.5656, 0.0) ≈ 0.046
+    @test shape_amplification(0.4028, 30.0) ≈ 1.027
+    @test shape_amplification(0.1607, 120.0) ≈ shape_amplification(0.1607, 60.0)
+    @test round(1 / shape_amplification(-0.02, 90.0); digits = 3) == 0.965
     # generic in the number type
     @test ForwardDiff.derivative(x -> yield_factor(x / 380), 50.0) ≈
           -3.3 * (1 - (50 / 380)^2)^2.3 * 2 * 50 / 380^2
@@ -162,4 +178,72 @@ end
     k = argmax(abs.(gr))
     e = zeros(length(xg)); e[k] = 1e-5
     @test gr[k] ≈ (J(x1 + e) - J(x1 - e)) / 2e-5 rtol = 1e-5
+end
+
+@testset "mode analysis about an offset capsule" begin
+    # a pure P2 field about a displaced sphere has no mode 1 about the sphere's centre;
+    # analysed about the origin it would leak into one
+    c = Vec3(0.3, 0.0, 0.2)
+    m = translate(icosphere_mesh(0.8; n = 8), c)
+    ts = Target(Component(:capsule, m, ablator(); surface = SphereSurface(0.8; center = c)))
+    els = collect(1:nelements(ts))
+    @test mode_center(ts, els) == c
+    f = [1 + 0.1 * (3 * normalize(ts.elem_centroid[e] - c)[3]^2 - 1) / 2 for e in els]
+    a = ylm_weights(ts, els; lmax = 2) * f
+    @test mode_amplitude(a, 1) < 1e-4
+    @test mode_amplitude(ylm_weights(ts, els; lmax = 2, center = zero(Vec3)) * f, 1) > 5e-3
+    @test legendre_moments(f, ts, els; lmax = 2)[3] ≈ 0.1 rtol = 5e-3
+    # a hohlraum's capsule carries its centre; the wall alone has none
+    th = hohlraum(; length = 6.0, radius = 2.0, leh_radius = 1.0, capsule_radius = 0.5,
+                  capsule_center = (0.1, 0.0, -0.05), h = 1.0, capsule_h = 0.4)
+    @test mode_center(th, elements(th, :capsule)) == Vec3(0.1, 0.0, -0.05)
+    @test mode_center(th, elements(th, :wall)) == zero(Vec3)
+end
+
+@testset "Young et al. 2020: static view factors and their Green's function" begin
+    # N170827's static model (radii at 85 % of Table II, albedos 0.8 / 0.3, conversion
+    # 0.9, no windows), the requested per-beam pulses (Fig. 2e) and the mode-1 Green's
+    # function (Fig. 5), all digitized; the pointing is the tutorials' scaled to the
+    # 11.3 mm length (N170827's is not published). Research notes, "Young 2020 validation".
+    K = young2020_kernel()
+    @test 112 < sum((K.t[k+1] - K.t[k]) * (K.g[k] + K.g[k+1]) / 2 for k in 1:length(K.t)-1) < 122
+    mk(cc = (0.0, 0.0, 0.0)) = hohlraum(; length = 11.3, radius = 0.85 * 3.1, leh_radius = 0.85 * 1.82,
+        capsule_radius = 0.85 * 0.98, corner_radius = 0.85 * 1.05, capsule_center = cc,
+        wall = gold(albedo = 0.8, conversion = 0.9), h = 0.6, capsule_h = 0.2)
+    pub = Dict(:outer50 => (5.01, 0.0), :outer44 => (5.20, 0.0), :inner30 => (3.63, -0.60), :inner23 => (3.09, -1.09))
+    p = GroupPointing(nif_quads(power = 8.0); fields = (:z, :r))
+    quads = apply(p, reduce(vcat, [[1.1188 * pub[k][1], pub[k][2]] for k in p.keys]))
+    P = young2020_pulses()
+    pul = (; inner = PulseShape(P.inner.t, 4 .* P.inner.p), outer = PulseShape(P.outer.t, 4 .* P.outer.p))
+    side(b) = startswith(String(b.group), "inner") ? :inner : :outer
+    times = collect(0.25:0.25:7.75)
+    beams_at(bs, drop = 0) = t -> [j == drop ? remake(b; power = 0.0) : b
+                                   for (j, b) in enumerate(with_pulses(bs, pul, t; by = side))]
+    hist(m, bs, drop = 0) = drive_history(m, DepositionOperator(m.target, bs), beams_at(bs, drop), times;
+                                          ylm = true, lmax = 1)
+    model = RadiationModel(mk(); closed = true)
+    Y = young2020_dropped_quads()
+    v = Dict{Symbol,Float64}()
+    for (g, vy) in zip(Y.cones, Y.velocity)
+        g in (:inner23, :outer50) || continue
+        h = hist(model, quads, findfirst(q -> q.group === g, quads))
+        m1 = [100norm(mode1_vector(view(h.ylm, :, k))) for k in axes(h.ylm, 2)]
+        y = [Briareus._interp(Y.t, getproperty(Y, g), t) for t in times]
+        ok = times .>= 0.5
+        @test sqrt(sum(abs2, (m1 - y)[ok]) / count(ok)) < 0.3          # Fig. 10a, % of mode 1
+        v[g] = norm(hotspot_velocity(h; kernel = K))
+        @test abs(v[g] / vy - 1) < 0.1                                # Fig. 10c
+    end
+    @test 1.8 < v[:inner23] / v[:outer50] < 2.6                       # Young 317/146 = 2.17
+    # whole-target offsets (every aim moves against the target): Young 1.3 and 0.1 km/s/µm
+    δ = 0.05
+    slope(f) = norm(f(1) - f(-1)) / (2δ * 1000)
+    shift(d) = s -> hotspot_velocity(hist(model, [remake(b; aim = b.aim .- s * δ .* d) for b in quads]); kernel = K)
+    @test abs(slope(shift([0.0, 0.0, 1.0])) - 1.3) < 0.25
+    @test slope(shift([1.0, 0.0, 0.0])) < 0.25
+    # capsule offset in the hohlraum: Young 1.1 (vertical) and 0.1 (horizontal) km/s/µm;
+    # about TCC instead of the capsule's centre the horizontal one was ~0.7
+    cap(d) = s -> hotspot_velocity(hist(RadiationModel(mk(s * δ .* d); closed = true), quads); kernel = K)
+    @test abs(slope(cap((0.0, 0.0, 1.0))) - 1.1) < 0.25
+    @test slope(cap((1.0, 0.0, 0.0))) < 0.25
 end

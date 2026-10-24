@@ -831,12 +831,19 @@ the reference's view factors hold through the pulse; items 9 and 10 remove that 
      7.75 ns; PRE 109 Fig. 1a ~0.92 mm at 6 ns), Izumi 2023's low-contrast stall and
      relaunch;
    - Callahan's and Izumi's figures of merit beside the computed swing;
-   - validation still to run: Ralph 2018's 18.5 % cone fraction for zero flux P2 (needs
-     the high-foot pointing and measured wall radius, unpublished; his 51–62 %
-     peak-averaged absorption is matched: 0.575 on N221204), the Izumi 2018/2021 HDC
-     SymCap series (core P2 −18 to +21 µm), Young 2020's static-vs-dynamic test (mode 1
-     within 0.14 % at peak; time-averaged radii against the 85 % static ones; the radii
-     are now digitized), Callahan's 39-shot curve (σ 8 µm). Fig. 10's N220919 is close
+   - validation (2026-10-24, research notes "Young 2020 validation"): Young's
+     static-vs-dynamic test run on `Keyframes` with his digitized radii and albedos: the
+     85 % radii reproduce the moving geometry to 2 % in velocity, but his dynamic wall
+     albedo (0.85–0.88 at peak against 0.8) lowers mode 1 by ~20 % where he reports
+     4.6 % (open: needs N170827's delivered per-beam powers, unpublished; a proxy
+     imbalance was used). Izumi 2018's SymCap changes, through Callahan's 2.7 µm per
+     1 % CF as a transfer: signs all right (1.5× picket −30 µm, 1.18× capsule −12,
+     0.15 mg/cc +24 against −21/−24, −21/−24, +10/+15), not blind (the bubble was fitted
+     to Izumi). Callahan's 39-shot curve cannot be recomputed (per-shot inputs not
+     tabulated); its line is digitized (101.9 − 85.0 x µm). Still skipped: Ralph 2018's
+     18.5 % cone fraction for zero flux P2 (needs the high-foot pointing and measured
+     wall radius, unpublished; his 51–62 % peak-averaged absorption is matched: 0.575
+     on N221204). Fig. 10's N220919 is close
      on the proxy (minimum −0.140 against −0.145); N210808's proxy is not (foot +0.03
      against −0.05, minimum −0.09 against −0.14): its pulse and foot cone fraction are
      only approximated.
@@ -869,11 +876,16 @@ the reference's view factors hold through the pulse; items 9 and 10 remove that 
    least constrained input) and the lip closure history.
 11. **Implosion metrics and UQ.** Done (2026-10-23, see Done; research notes,
    "Implosion metrics"). Open:
-   - two comparisons with Young 2020 do not match: a dropped inner quad moves the hot
-     spot 1.3–1.6× as much as an outer one (Young ~2×), and a horizontal target offset
-     gives 0.60 km/s/µm (Young 0.1; vertical 0.99 against 1.3);
-   - Nora's high-yield amplification branch and shape term, as transcribed, are
-     inconsistent and not implemented until checked against the paper;
+   - ~~two comparisons with Young 2020 do not match~~ **Done (2026-10-24)**: a setup
+     difference (the tutorial's hohlraum). On Young's static N170827 setup with his
+     digitized pulses and Green's function (`young2020_kernel`), dropped-quad
+     velocities 336/349/161/152 against 317/337/170/146 km/s (ratio 2.2 against 2.07),
+     offsets 0.09/1.30 (target) and 0.10/1.07 (capsule) against 0.1/1.3 and 0.1/1.1
+     km/s/µm. One genuine error fixed: modes of an offset capsule were taken about TCC
+     (`mode_center`). Test suite;
+   - ~~Nora's high-yield branch and shape term~~ **Done (2026-10-24)**: Eq. 4 prints
+     rounded coefficients (Fig. 6's are used; 40–80 refused), Table IV's burn column is
+     reproduced; Eq. 2 and Table I in `shape_amplification`;
    - time-dependent error budgets and multi-shot trending.
 12. **Backlighter physics.** CE(Z, I, τ) models with uncertainty, and the photometric
    chain to the detector.

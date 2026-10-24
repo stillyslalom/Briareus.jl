@@ -89,12 +89,15 @@ for g in (:inner23, :inner30, :outer44, :outer50)
             sum(vs) / length(vs) / 100)
 end
 
-# Here the inner quads give 1.3–1.6 times the outer quads' velocity, not 2. The
-# hohlraum, wall albedo, and the absence of laser–plasma transfer all differ from
-# N170827's. The same paper gives the sensitivity to a whole-target offset from
-# chamber center: 1.3 km/s per µm vertical and 0.1 km/s per µm horizontal. The
-# `positioning` error of `mode_uncertainty`, carried to a velocity, gives the same
-# derivative:
+# Here the inner quads give 1.3–1.6 times the outer quads' velocity, not 2. That is
+# this hohlraum, not the model: on Young's own setup (N170827's static model, an
+# 11.3 × 5.27 mm hohlraum with radii at 85 %, albedo 0.8, its requested pulses and its
+# digitized Green's function [`young2020_kernel`](@ref)) Briareus gives 336, 349, 161
+# and 152 km/s for the four cones against Young's 317, 337, 170 and 146, a ratio of 2.2
+# against 2.07 (test suite; research notes, "Young 2020 validation"). The same paper
+# gives the sensitivity to a whole-target offset from chamber center: 1.3 km/s per µm
+# vertical and 0.1 km/s per µm horizontal. The `positioning` error of
+# `mode_uncertainty`, carried to a velocity, gives the same derivative:
 
 for (axis, d) in (("vertical (z)", (0.0, 0.0, 1.0)), ("horizontal (x)", (1.0, 0.0, 0.0)),
                   ("horizontal (y)", (0.0, 1.0, 0.0)))
@@ -102,11 +105,12 @@ for (axis, d) in (("vertical (z)", (0.0, 0.0, 1.0)), ("horizontal (x)", (1.0, 0.
     @printf("target offset %-15s %.2f km/s per µm\n", axis, u.rms / 1000)
 end
 
-# The vertical number is within 25 % of Young's. The horizontal ones are six times
-# larger than Young's. Young's horizontal value is for N170827's hohlraum with its
-# laser–plasma transfer; this static model with a single wall albedo may
-# over-predict it. Check your own platform's derivative before you use it in a
-# tolerance.
+# The vertical number is within 25 % of Young's; the horizontal ones are six times
+# larger. A horizontal offset moves the inner and outer footprints so that their
+# mode 1 opposes, and how well they cancel depends on the hohlraum and pointing: on
+# Young's N170827 setup Briareus gets 0.09 and 1.30 km/s per µm (Young 0.1 and 1.3),
+# and 0.10 and 1.07 for the capsule moved inside the hohlraum (Young 0.1 and 1.1).
+# Check your own platform's derivative before you use it in a tolerance.
 
 # ## The piston model
 #
@@ -139,9 +143,12 @@ m = implosion_metrics([0.0, 0.0, 75.0]; vimp = 380, chi = 1.0)
 
 # α heating also amplifies the measured velocity. Nora et al. (Phys. Plasmas 30,
 # 092705, 2023) fit this as [`burn_amplification`](@ref)(Y_amp), about 1.8 at
-# ``Y_{amp} = 30``. Kritcher et al.'s burn-on/burn-off simulations give 1.27–1.39 for
-# the 2022–23 shots, so the fit is best read as an upper estimate. Pass either as
-# `amplification` when you compare with an nToF measurement.
+# ``Y_{amp} = 30`` (their Table IV divides N210808's measured speed by 1.75). Kritcher
+# et al.'s burn-on/burn-off simulations give 1.27–1.39 for the 2022–23 shots, so the
+# fit is best read as an upper estimate. The stagnated shape changes it too:
+# [`shape_amplification`](@ref)(P2, θ) is Nora's 3D table, about 0.8–1.2 for
+# ``|P_2| < 0.4``. Pass their product as `amplification` when you compare with an nToF
+# measurement.
 
 # ## The errors' velocity budget
 #
@@ -306,10 +313,13 @@ ev = evaluate(scenario, quads)
 #   f to two digits, and ``v_{HS}`` within the table's 10 km/s rounding
 #   (29.4/42.0/52.2/61.1 against 30/40/50/60). Casey et al.'s ``a = 6 - 1.5\ln T``
 #   gives Hurricane's 3.3 at 6 keV (test suite).
-# - Comparisons that do not match: the dropped inner/outer quad ratio is 1.3–1.6
-#   against Young's ~2, the vertical target offset gives 0.99 km/s/µm against Young's
-#   1.3, and the horizontal offset gives ~0.6 km/s/µm against 0.1. These come from a
-#   different hohlraum without laser–plasma transfer, and are printed above.
+# - On this hohlraum the dropped inner/outer quad ratio is 1.3–1.6 and the horizontal
+#   target offset ~0.6 km/s/µm, against Young's ~2 and 0.1 for N170827. On Young's
+#   static N170827 setup with his digitized pulses and Green's function, Briareus
+#   reproduces Fig. 10a's mode-1 histories to 0.05–0.21 % rms, the dropped-quad
+#   velocities within 6 % (ratio 2.2 against 2.07), and the four offset sensitivities
+#   (0.09/1.30 target, 0.10/1.07 capsule, against 0.1/1.3 and 0.1/1.1 km/s/µm) (test
+#   suite).
 # - Kernel integrals are exact for tabulated kernels against hand integration (a step
 #   kernel on steps that miss its breakpoints), and match a 2×10⁵-point midpoint rule
 #   for a function kernel. A constant drive history reproduces the static velocity to

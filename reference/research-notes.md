@@ -2269,10 +2269,12 @@ primary text read, **M** = abstract or secondary, **L** = inference or arithmeti
   - It is ~1.8 at Y_amp = 30, against Kritcher 2024's burn-on/off ratios of 1.27–1.39.
     Use it as an upper estimate.
   - The Y_amp 80–500 branch as transcribed (13 ln(Y_amp + 1585) − 95) is 1.43 at 80,
-    below the low branch's 1.87 at 40. It is not implemented until checked against
-    the paper.
+    below the low branch's 1.87 at 40. *Resolved 2026-10-24* ("Young 2020 validation"
+    below): Eq. 4 prints rounded coefficients; Fig. 6's (13.105, 1585.225, −95.539) are
+    implemented on 80–500, with 40–80 refused.
   - The shape term (Eq. 2) as transcribed does not give the stated 0.8–1.2 range for
-    |P2| < 0.4 (0.19 at −0.4). It is not implemented either.
+    |P2| < 0.4 (0.19 at −0.4). *Resolved 2026-10-24*: that range is Table I's (3D);
+    Eq. 2 is the 2D fit. Both are in `shape_amplification`.
 - **Thickness nuisance in `infer_errors`** (Casey 2021, **H**):
   - 110 km/s per % of thickness mode 1 (simulated; 140 ± 30 measured), toward the
     thicker side.
@@ -2290,7 +2292,10 @@ primary text read, **M** = abstract or secondary, **L** = inference or arithmeti
   - The whole-target offset gives 0.99 km/s/µm vertical (Young 1.3) and 0.60 km/s/µm
     along x (Young 0.1 horizontal).
   - The geometry and LPI differ from N170827. A horizontal offset may couple more
-    strongly in a static single-albedo model; open.
+    strongly in a static single-albedo model; open. *Resolved 2026-10-24* ("Young 2020
+    validation" below): a setup difference (on Young's static N170827 setup Briareus
+    gives a ratio of 2.2 against 2.07 and offsets of 0.09/1.30 against 0.1/1.3), plus a
+    fixed error in the mode analysis of offset capsules.
 - **Not implemented** (no published values):
   - Young's G₁(t) and Masse's P2 kernels, which are printed only as figures. Briareus
     ships `flat_kernel` (flat over a window, the static sensitivity; *derived*) and
@@ -3021,3 +3026,138 @@ sensitivity is ~2.5× HYDRA's across shots, ROADMAP 10).
 - Every dynamic piece is still one effective parameter set from other platforms (HDC
   SymCap in 5.75 mm Au, N170827); only the wall saturation and the bubble-tip check come
   from HYBRID-E itself, and both from the HYDRA picture of Fig. 1a.
+
+## Young 2020 validation (2026-10-24) *derived*
+
+ROADMAP Next 9 ("validation still to run") and 11 (open items). Validation, not tuning: no
+calibrated default changed. Full texts are in the user's paper folder (not in the
+repository); data digitized from them are in `data/` with provenance headers.
+
+**New data.** Young et al., PoP 27, 082702 (2020), N170827: requested per-beam pulses
+(Fig. 2e, `young2020_pulses()`), the mode-1 Green's function (Fig. 5b and 5d read
+independently, agreeing to ~1 km/s/%/ns; `young2020_green()`, `young2020_kernel()`,
+integral ~117 km/s per %), the dropped-quad mode-1 histories (Fig. 10a) and velocities
+(Fig. 10c markers; `young2020_dropped_quads()`), the dynamic model's albedos (Fig. 3a top,
+`young2020_albedos()`). Nora et al., PoP 30, 092705 (2023) Table I (`nora2023_table1.csv`,
+transcribed). All but Table I are rasters; axes from the panel frames with at least two
+tick or gridline checks per axis, overlays checked.
+
+**Young's setup (what the comparisons must match).** Section III (dropped quads, offsets,
+tilt, windows) uses the *static* VisRad model of N170827: Table II's 11.3 mm × 3.1 mm
+hohlraum, 1.82 mm LEH, 1.05 mm corners and 0.98 mm capsule with "hohlraum, LEH, and
+capsule radii all reduced to 85 %", albedo 0.8 (Au) / 0.3 (ablator), conversion 0.9, the
+*requested* (azimuthally symmetric) pulses, no windows, and the velocity from the N170827
+Green's function integrated over the whole pulse (negative in the foot, peaked at the
+rise and at 5.8 ns). Mode 1 is "the vector norm of the three P1m components",
+c_lm = 100 a_lm/a00 (Briareus `mode1_vector`; Young's x/y normalization of the associated
+Legendre functions was not checked, the z one is the same). Offsets: the whole target
+moved against fixed beams, or the capsule moved inside a fixed hohlraum. N170827's
+pointing is not published; Briareus uses the tutorials' pointing with z scaled by
+11.3/10.1, and unscaled as a check.
+
+**Comparisons** (Briareus static model, h 0.5 / capsule_h 0.15; the test suite runs
+h 0.6 with the same tolerances):
+
+| | Briareus (z scaled; unscaled) | Young 2020 |
+|---|---|---|
+| dropped quad, peak mode 1 (%): 23.5 / 30 / 44.5 / 50 | 2.85 / 2.96 / 1.39 / 1.31 (2.64 / 2.90 / 1.52 / 1.41) | 2.72 / 2.89 / 1.50 / 1.30 (Fig. 10a) |
+| mode-1 history rms difference, 0.5–7.75 ns (%) | 0.21 / 0.18 / 0.15 / 0.05 (0.14 / 0.16 / 0.06 / 0.11) | — |
+| dropped-quad velocity (km/s), G of Fig. 5 | 336 / 349 / 161 / 152 (312 / 342 / 176 / 163) | 317 / 337 / 170 / 146 (Fig. 10c) |
+| inner/outer velocity ratio | 2.20 (1.93) | 2.07 ("almost doubles") |
+| whole-target offset, horizontal / vertical (km/s/µm) | 0.09 / 1.30 | 0.1 / 1.3 |
+| capsule offset in the hohlraum, horizontal / vertical | 0.10 / 1.07 | 0.1 / 1.1 |
+
+**Findings.**
+- *Setup difference:* the ROADMAP 11 mismatches (inner/outer 1.3–1.6, horizontal offset
+  0.60 km/s/µm) came from the implosion-metrics tutorial's hohlraum (10.1 × 5.75 mm,
+  0.9 mm capsule, albedo 0.85, a static velocity at 100 km/s/%). A horizontal
+  whole-target offset moves the inner and outer footprints so that their mode 1
+  opposes; in Young's geometry they nearly cancel at peak (inner beams alone
+  0.0056 %/µm, outer alone 0.0067 %/µm, together 0.0012), on the tutorial's they do not
+  (0.030, 0.009, together 0.0059). The foot, with another cone balance, does not cancel
+  (Young's Fig. 14a: ~0.5 % per 100 µm in the foot, ~0.1 % at peak).
+- *Model error, fixed:* the mode analysis (`legendre_weights`, `ylm_weights` and the
+  `Scenario` caches, hence `drive_history`) measured directions from TCC even when the
+  capsule was offset. That mixes the capsule's P2 (−0.1 here) into a spurious mode 1 at
+  first order in the offset: 0.0074 %/µm of fake horizontal mode 1 (0.74 km/s/µm)
+  against 0.00005 %/µm about the capsule's centre, and the vertical one had the wrong
+  sign. They now default to `mode_center` (the centre of the observed sphere; TCC
+  otherwise), so centred capsules are unchanged bit for bit.
+- The 100 km/s/% default against Young's kernel: a flat 100 km/s/% over 4–7.75 ns gives
+  11–17 % less than G on these traces (∫G ≈ 117 km/s/%). The default is unchanged.
+
+**Static vs dynamic (Young Sec. II A, Fig. 3).** Young's dynamic model (radii and albedos
+of Fig. 3a against time) is built with `Keyframes` at every 0.25 ns step: wall 3.1 mm minus
+Fig. 3a's displacement, LEH and capsule scaled to Table II, corners scaled with the wall,
+`TabulatedAlbedo` for wall and capsule. N170827's delivered per-beam powers are not
+published, so the mode-1 source is a proxy: a fixed 5 % rms per-quad imbalance on the
+requested pulses (and, separately, a dropped 23.5° quad). Results (h 0.5):
+
+| | imbalance proxy | dropped 23.5° quad | Young (delivered N170827) |
+|---|---|---|---|
+| mean abs. difference of the mode-1 norm, all times | 0.18 % (mean norm 0.48) | 0.73 % (2.29) | 0.70 % |
+| same, peak 4.5–7 ns | 0.10 % (0.34) | 0.72 % (2.15) | 0.14 % |
+| velocity static / dynamic (km/s) | 52.2 / 40.7 (+28 %) | 336 / 260 (+30 %) | 40.5 / 38.7 (+4.6 %) |
+| direction difference | 2.5° | 0.8° | (75°, 265°) vs (67°, 270°), ~8° |
+
+Decomposition (imbalance proxy, static 52.2 km/s): dynamic radii with static albedos
+51.1; the capsule shrinking alone 50.4; static radii with Young's dynamic albedos 41.7;
+static radii with a wall albedo of 0.87, 41.2. So **the 85 % radii stand in for the
+moving wall, closing LEH and ablating capsule to 2 % in velocity**, as Young found; **the
+albedo does not**: his dynamic wall albedo is 0.85–0.88 through the peak against the
+static 0.8, and the extra re-emission smooths the mode 1 by ~20 % (the same physics as
+in his foot, where the lower albedo raises it). Young reports the static velocity only
+4.6 % higher. Not resolved: his delivered imbalance has its own time structure (larger
+in the foot and rise, where the albedos are closer), which the proxy lacks; the
+delivered per-beam powers would settle it. The mean-difference numbers are on Young's
+scale (0.10 against 0.14 % at peak for a similar peak mode 1) but depend on the source's
+amplitude.
+
+**Nora 2023 (ROADMAP 11): the transcription, checked against the paper.**
+- Eq. 4's high branch is printed with rounded coefficients (13 ln(Y + 1585) − 95). The
+  fit drawn in Fig. 6 has a = 13.105, b = 1585.225, c = −95.539; since ln(Y + b) ≈ 7.4,
+  the rounding moves the result by −0.24 (1.43 against 1.67 at Y_amp = 80). The two
+  branches still do not meet (the low one is 2.08 at 80), and the paper fits nothing
+  between 40 and 80 (burn fractions ~6 %, where the burn moves into the dense fuel).
+  Implemented with the Fig. 6 coefficients on 80–500; 40–80 is refused.
+- Table IV lists the inverses (factors from the measured to the unamplified speed):
+  1/Eq. 4 reproduces its burn column to 1e-3 (N130530 0.956, N210808 0.570, N220919
+  0.580; test suite), and total = shape × burn (N210808: 0.963 × 0.570 = 0.549; the
+  text's "184 %" is 1/0.549 = 1.82).
+- The shape term: Eq. 2 is the 2D fit with P2 as a fraction (1.31 P2 + 0.71 below 0.35,
+  −0.65 P2 + 1.4 above, continuous to 4e-3; 0.71 for a round hot spot because the 2D
+  points are shifted from the 3D ones, Fig. 5). The "80–120 % for −40 % < P2 < 40 %" of
+  the conclusion describes Table I (3D), not Eq. 2; that is where the old transcription
+  went wrong. Both are implemented (`shape_amplification(P2)`,
+  `shape_amplification(P2, θ)`). Table IV's shape column follows Table I for equatorial
+  flows (N130530: 0.965 exactly) but not for polar ones from the listed angles (N210808
+  would need θ ≈ 77° where its flow is at 166°; N210531 matches no angle): the angle
+  convention of Table IV is not recoverable from the paper.
+
+**Callahan 2018 and Izumi 2018 (trends; the repository had no hot-spot transfer).**
+Callahan's Fig. 6 line (digitized from its dotted fit, 29 pixels at the two ends):
+P2_hs − 2.7(CF − 33) = 101.9 − 85.0 x µm, x = √(E_picket,outer/(A_outer ρ_fill)) τ/R ·
+r_cap/R, zero at x = 1.199 (his Eq. 4: 1.2), σ 8 µm over 39 shots. The per-shot inputs are
+not tabulated, so the curve cannot be recomputed shot by shot; Briareus compares
+sensitivities. Transfer: Callahan's 2.7 µm per 1 % cone fraction divided by Briareus's
+own d(flux P2/P0)/dCF (−0.293 % per %, peak 4.5–6.5 ns) gives −9.2 µm of hot-spot P2 per %
+of flux P2 (pole-hot flux → oblate). Setup: 10.1 × 5.75 mm Au hohlraum (albedo 0.8),
+0.908 mm capsule, the tutorials' pointing, N170827's pulses, `BubbleAbsorption` with its
+calibrated defaults (turn-on 0.25 ns), h 0.45. Izumi 2018 (LLNL-PROC-751038)
+single-parameter SymCaps, core P2 against the basecamp's +5.6 µm (the assignment of
+Fig. 6b's points to shots follows the image order of Fig. 6a, **L**):
+
+| change | Briareus flux P2 (pp) → hot spot (µm) | Callahan's line at x ≈ 1.2 | Izumi 2018 measured change |
+|---|---|---|---|
+| 1.5× picket energy | +3.25 → −30 | −23 | −21 to −24 |
+| 1.18× capsule | +1.31 → −12 (view factors alone −0.59 → +5.5) | −18 | −21 to −24 |
+| 0.15 mg/cc fill | −2.56 → +24 | −42 | +10 to +15 |
+| quad splitting | not modeled (the outer fluence change is not given) | — | +10 to +16 |
+
+All three Briareus signs match Izumi, magnitudes within a factor of 2. Callahan's fill
+term gets the low-fill shot's sign wrong (Izumi's own point: the 0.15 mg/cc shot is an
+outlier of the bubble-size picture). Not blind: the bubble opacity's density exponent was
+fitted to Izumi 2021's 0.15/0.3 mg/cc anchors and the collision time to Izumi 2018's
+separation times (basecamp, 1.5× picket, 1.18× capsule), so this checks the composition
+(bubble, view factors and transfer), not the inputs. Ralph 2018's 18.5 % anchor stays
+skipped (unpublished pointing).

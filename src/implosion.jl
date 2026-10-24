@@ -188,15 +188,75 @@ reactivity_exponent(T::Real) = 6 - 1.5 * log(T)
 """
     burn_amplification(Yamp) -> Float64
 
-Factor by which α heating raises the measured (burn-on) hot-spot velocity over the
-burn-off one, as a function of the yield amplification `Y_amp`: `0.324 ln(Y_amp +
-2.239) + 0.653` (Nora et al., Phys. Plasmas 30, 092705, 2023, Eq. 4, fitted for
-`Y_amp < 40`; refused above). It is about 1.8 at `Y_amp = 30`, against burn-on/burn-off
-ratios of 1.27–1.39 in Kritcher et al. 2024 (Table II): treat it as an upper estimate.
+Factor by which α heating raises the measured (burn-on) hot-spot speed over the
+burn-off one, `Vhs_amp^burn`, as a function of the yield amplification `Y_amp` (burn-on
+over burn-off yield), from Nora et al., Phys. Plasmas 30, 092705 (2023), Eq. 4, fitted
+to 2D HYDRA simulations perturbed about N210808:
+- `0.324 ln(Y_amp + 2.239) + 0.653` for `1 ≤ Y_amp ≤ 40`;
+- `13.105 ln(Y_amp + 1585.225) − 95.539` for `80 ≤ Y_amp ≤ 500`, where a significant
+  part of the burn is in the expanding dense fuel (burn fraction above ~6 %). These are
+  the coefficients of the fit drawn in the paper's Fig. 6; Eq. 4 prints them rounded
+  to 13, 1585 and −95, which moves the result by −0.24 (the logarithm is ~7.4), e.g. 1.43
+  instead of 1.67 at `Y_amp = 80`.
+The two regimes do not join (the low branch is 2.08 at 80) and the paper fits nothing
+between 40 and 80, so that range is refused, as is anything outside the fits.
+
+The paper's Table IV lists the inverse, `1/Vhs_amp^burn`, for NIF shots (N210808:
+`Y_amp` 27.6 → 0.570, i.e. 1.75). Burn-on/burn-off ratios in Kritcher et al. 2024
+(Table II, 1.27–1.39 at comparable yields) are lower: treat it as an upper estimate.
 """
 function burn_amplification(Yamp::Real)
-    1 <= Yamp <= 40 || throw(DomainError(Yamp, "Nora et al.'s fit covers 1 ≤ Y_amp ≤ 40"))
-    return 0.324 * log(Yamp + 2.239) + 0.653
+    1 <= Yamp <= 40 && return 0.324 * log(Yamp + 2.239) + 0.653
+    80 <= Yamp <= 500 && return 13.105 * log(Yamp + 1585.225) - 95.539
+    throw(DomainError(Yamp, "Nora et al.'s fits cover 1 ≤ Y_amp ≤ 40 and 80 ≤ Y_amp ≤ 500"))
+end
+
+"""
+    shape_amplification(P2) -> Float64
+    shape_amplification(P2, theta) -> Float64
+
+Factor by which the stagnated hot-spot shape changes the burn-off hot-spot speed driven
+by a mode-1 flux asymmetry, `Vhs_amp^shape` (speed over the speed without a flux P2),
+as a function of the equatorial neutron-image shape `P2` (`P2/P0` of the hot spot, a
+fraction: −0.2 is 20 % oblate), from Nora et al., Phys. Plasmas 30, 092705 (2023):
+- `shape_amplification(P2)`: Eq. 2, a fit to their 2D database (mode 1 along the
+  pole, ~1 % flux mode 1, time-dependent flux P2): `1.31 P2 + 0.71` below 0.35,
+  `−0.65 P2 + 1.4` above. It is 0.71 for a round hot spot: the 2D points sit shifted
+  from the 3D ones (the paper's Fig. 5), and a time-integrated P2 swing does not order
+  them well. Use it for trends.
+- `shape_amplification(P2, theta)`: their Table I (3D HYDRA, constant asymmetries),
+  bilinear in `P2` (−0.5656 to 0.6448, clamped outside) and the polar angle `theta`
+  (degrees from the north pole) of the mode-1 flux asymmetry, folded onto 0–90° by the
+  equatorial symmetry. 0.8–1.2 for |P2| < 0.4 at most angles; mode 1 along the pole of an
+  oblate hot spot is suppressed (0.05 at P2 = −0.57, a toroidal hot spot).
+The paper's Table IV lists `1/Vhs_amp^shape` per shot; its equatorial rows follow Table I
+(N130530: 0.965), the polar ones could not be reproduced from the published angles.
+"""
+function shape_amplification(P2::Real)
+    return P2 < 0.35 ? 1.31 * P2 + 0.71 : -0.65 * P2 + 1.4
+end
+
+const _NORA_TABLE1 = Ref{Any}(nothing)
+
+function shape_amplification(P2::Real, theta::Real)
+    tab = _NORA_TABLE1[]
+    if tab === nothing
+        d = _data_table("nora2023_table1.csv")
+        ks = [k for k in keys(d) if k !== :theta]
+        p2 = [parse(Float64, replace(String(k)[4:end], "m" => "-")) / 100 for k in ks]
+        tab = (; theta = d.theta, p2, v = reduce(hcat, [getproperty(d, k) for k in ks]))
+        _NORA_TABLE1[] = tab
+    end
+    θ = mod(Float64(theta), 360.0)
+    θ = θ > 180 ? 360 - θ : θ
+    θ = min(θ, 180 - θ)
+    x = clamp(Float64(P2), tab.p2[1], tab.p2[end])
+    i = clamp(searchsortedlast(tab.p2, x), 1, length(tab.p2) - 1)
+    j = clamp(searchsortedlast(tab.theta, θ), 1, length(tab.theta) - 1)
+    u = (x - tab.p2[i]) / (tab.p2[i+1] - tab.p2[i])
+    w = (θ - tab.theta[j]) / (tab.theta[j+1] - tab.theta[j])
+    V = tab.v
+    return (1 - w) * ((1 - u) * V[j, i] + u * V[j, i+1]) + w * ((1 - u) * V[j+1, i] + u * V[j+1, i+1])
 end
 
 """
@@ -492,4 +552,60 @@ function (p::VelocityPenalty)(ev::Evaluation)
         J += (100 * p.per_percent * p.amplification)^2 * 3 * (var[2] + var[3] + var[4])
     end
     return p.weight * J / p.scale^2
+end
+
+"""
+    young2020_green() -> NamedTuple
+    young2020_kernel() -> ResponseKernel
+
+The mode-1 Green's function of NIF shot N170827 (km/s of final hot-spot velocity per %
+of flux mode 1 per ns) from 59 2D capsule-only HYDRA impulse runs: Young et al., Phys.
+Plasmas 27, 082702 (2020), Fig. 5, digitized twice (`data/young2020_fig5.csv`,
+provenance and reading errors in its header). `young2020_green()` has columns `t` (ns,
+0.25–7.875 every 0.125), `panel_b` and `panel_d` (`NaN` where another stroke hides the
+curve); `young2020_kernel()` is their mean (either where one is missing) as a
+`ResponseKernel` for `hotspot_velocity(history; kernel)`. Negative in the foot,
+dominated by the rise and peak; its integral is ~117 km/s per % (the constant-mode-1
+sensitivity on this platform, against `HOTSPOT_VELOCITY_PER_PERCENT`'s 100). Platform
+specific: N170601 is almost identical, N180128 weights the rise more.
+"""
+young2020_green() = _data_table("young2020_fig5.csv")
+
+function young2020_kernel()
+    d = young2020_green()
+    g = [isnan(b) ? c : isnan(c) ? b : (b + c) / 2 for (b, c) in zip(d.panel_b, d.panel_d)]
+    keep = .!isnan.(g)
+    return ResponseKernel(d.t[keep], g[keep])
+end
+
+"""
+    young2020_pulses() -> NamedTuple
+
+The requested laser power per beam of NIF shot N170827 (TW), `(; inner, outer)` as
+`PulseShape`s (inner: 23.5° and 30°, outer: 44.5° and 50°): Young et al., Phys. Plasmas
+27, 082702 (2020), Fig. 2e, digitized (`data/young2020_fig2e.csv`, 0.25–7.75 ns every
+0.125, reading error ~0.03 TW). Use with `with_pulses(beams, pulses, t; by = b ->
+startswith(String(b.group), "inner") ? :inner : :outer)`.
+"""
+function young2020_pulses()
+    d = _data_table("young2020_fig2e.csv")
+    pulse(v) = (k = .!isnan.(v); PulseShape(d.t[k], v[k]))
+    return (; inner = pulse(d.inner), outer = pulse(d.outer))
+end
+
+"""
+    young2020_dropped_quads() -> NamedTuple
+
+Flux mode 1 (%, the norm of the l = 1 vector) on the capsule of N170827 with one quad
+dropped from each cone, requested pulses, in the LLNL static view-factor model (radii
+at 85 %, albedos 0.8/0.3): Young et al., Phys. Plasmas 27, 082702 (2020), Fig. 10a,
+digitized (`data/young2020_fig10a.csv`, provenance in its header). Columns `t` (ns,
+0.25–7.75 every 0.125), `inner23`, `inner30`, `outer44`, `outer50` (`NaN` where hidden).
+Fig. 10c's hot-spot velocities (km/s, read off the markers ±2) are in `velocity`
+(requested pulses) and `velocity_delivered`, in the same cone order.
+"""
+function young2020_dropped_quads()
+    d = _data_table("young2020_fig10a.csv")
+    return (; d..., cones = (:inner23, :inner30, :outer44, :outer50),
+            velocity = (316.9, 336.9, 169.7, 145.9), velocity_delivered = (347.5, 358.0, 203.2, 181.2))
 end

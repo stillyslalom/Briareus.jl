@@ -1,0 +1,19 @@
+# Simulated hot-spot speed amplification due to stagnation shape, Vhs_amp^shape (burn-off
+# hot-spot speed over the speed without a flux P2), against the equatorial neutron-image shape
+# P2^NIS (%) and the polar angle of the applied mode-1 flux asymmetry Theta_flux (deg from the
+# north pole), from R. C. Nora et al., Phys. Plasmas 30, 092705 (2023), Table I (linear
+# interpolation of their 3D HYDRA scan, Fig. 3; values rounded by the authors to the third
+# decimal). Transcribed 2026-10-24 from the published PDF; each column header is a P2^NIS
+# value. Research notes, "Implosion metrics".
+# Columns: theta (deg); p2_m56.56, ..., p2_64.48 (Vhs_amp^shape at that P2^NIS in %)
+theta,p2_m56.56,p2_m44.45,p2_m32.35,p2_m20.24,p2_m8.14,p2_3.96,p2_16.07,p2_28.17,p2_40.28,p2_52.38,p2_64.48
+0,0.046,0.235,0.429,0.629,0.821,1.001,1.139,1.203,1.202,1.182,1.122
+10,0.202,0.332,0.477,0.658,0.851,0.999,1.100,1.146,1.144,1.122,1.062
+20,0.367,0.428,0.551,0.696,0.881,0.999,1.075,1.107,1.085,1.052,1.009
+30,0.504,0.562,0.586,0.766,0.912,0.998,1.054,1.069,1.027,1.016,0.942
+40,0.641,0.689,0.662,0.840,0.942,0.998,1.034,1.030,0.969,0.981,0.881
+50,0.717,0.788,0.750,0.922,0.927,0.997,1.008,0.992,0.911,0.923,0.821
+60,0.788,0.875,0.838,0.998,1.016,0.997,0.977,0.935,0.853,0.846,0.747
+70,0.859,0.965,0.925,1.045,1.038,0.997,0.946,0.873,0.804,0.752,0.664
+80,0.931,0.997,1.013,1.061,1.054,0.996,0.914,0.830,0.762,0.680,0.590
+90,1.002,1.069,1.101,1.116,1.077,0.996,0.904,0.810,0.718,0.633,0.552

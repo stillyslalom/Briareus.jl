@@ -344,15 +344,17 @@ power_fraction(ev::Evaluation, names::Symbol...) =
     ev.deposition.delivered
 
 """
-    flux_moments(ev; lmax = 8, axis = ẑ, center = 0) -> Vector
+    flux_moments(ev; lmax = 8, axis = ẑ, center = mode_center(target, observed)) -> Vector
 
-Legendre moments `aₗ` of the observed incident flux (index `l+1`).
+Legendre moments `aₗ` of the observed incident flux (index `l+1`), about the observed
+capsule's centre by default (`mode_center`).
 """
 function flux_moments(ev::Evaluation; lmax::Integer = 8, axis = Vec3(0, 0, 1),
-                      center = zero(Vec3))
+                      center = nothing)
     s = ev.scenario
     _radiative(s) || throw(ArgumentError("scenario has no radiation response"))
-    if lmax <= _CACHED_LMAX && Vec3(axis...) == Vec3(0, 0, 1) && Vec3(center...) == zero(Vec3)
+    if lmax <= _CACHED_LMAX && Vec3(axis...) == Vec3(0, 0, 1) &&
+       (center === nothing || Vec3(center...) == mode_center(s.target, s.observed))
         return _mul(s.moment_response, ev.deposition.element)[1:lmax+1]
     end
     return legendre_moments(_full(ev), s.target, s.observed; lmax, axis, center)
@@ -368,7 +370,7 @@ end
 """
     symmetry_objective(; modes = (2 => 1.0, 4 => 1.0), odd = 1.0, lmax = 6,
                        clip = 10.0, missed = 10.0, direct = 10.0, direct_names = (:capsule,),
-                       drive = nothing, drive_weight = 1.0, center = 0, keepout = nothing,
+                       drive = nothing, drive_weight = 1.0, center = nothing, keepout = nothing,
                        uncertainty = nothing)
 
 Objective for indirect-drive symmetry: `Σ wₗ (aₗ/a₀)²` over `modes`, plus `odd ×` the
@@ -391,10 +393,10 @@ a fourth per-beam sensitivity (about four gradients per evaluation).
 function symmetry_objective(; modes = (2 => 1.0, 4 => 1.0), odd = 1.0, lmax::Integer = 6,
                             clip = 10.0, missed = 10.0, direct = 10.0,
                             direct_names = (:capsule,), drive = nothing, drive_weight = 1.0,
-                            center = zero(Vec3), keepout = nothing, uncertainty = nothing)
+                            center = nothing, keepout = nothing, uncertainty = nothing)
     errs = _uncertainty_spec(uncertainty)
-    errs === nothing || (Vec3(center...) == zero(Vec3) && lmax <= _CACHED_LMAX) ||
-        throw(ArgumentError("uncertainty needs center = 0 and lmax ≤ $_CACHED_LMAX"))
+    errs === nothing || (center === nothing && lmax <= _CACHED_LMAX) ||
+        throw(ArgumentError("uncertainty needs the default center and lmax ≤ $_CACHED_LMAX"))
     return function (ev::Evaluation)
         a = flux_moments(ev; lmax, center)
         J = sum(w * (a[l+1] / a[1])^2 for (l, w) in modes)
@@ -438,7 +440,8 @@ end
     flux_ylm(ev; lmax = 6) -> Vector
 
 Real spherical-harmonic coefficients of the observed incident flux in the flat
-`mode_index` order (polar axis ẑ, azimuth from +x about TCC), from the scenario's cached
+`mode_index` order (polar axis ẑ, azimuth from +x, about the observed capsule's centre:
+`mode_center`, TCC unless the capsule is offset), from the scenario's cached
 `ylm_weights`. Use `ylm_matrix(c, lmax)` for the `C[l+1, lmax+1+m]` layout.
 """
 function flux_ylm(ev::Evaluation; lmax::Integer = _CACHED_YLM_LMAX)

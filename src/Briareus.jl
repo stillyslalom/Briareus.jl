@@ -49,7 +49,7 @@ export enclosed_radius, envelope_radius, focal_profile, enclosed_fraction, with_
 export LaserPlasmaModel, apply_lpi, Backscatter, CalibratedTransfer, linear_transfer,
        tabulated_transfer, lpi_summary, BubbleAbsorption, bubble_speed, bubble_depth,
        bubble_transmission, bubble_fractions, iris_fraction, ridge_fraction, lpi_deposit,
-       izumi2021_bubble, izumi2021_absorption, young2020_radii, pre109_fig1a_wall
+       izumi2021_bubble, izumi2021_absorption, young2020_radii, young2020_albedos, pre109_fig1a_wall
 export CBET, TwoZoneCBET, n221204_cbet, n221204_fig9, n221204_fig10, n221204_fig9_beams, CH_IONS, ion_wave_amplitude, receiver_ratio, calibrate_cbet, cbet_gain, cbet_coupling, cbet_plasma, plasma_dispersion
 export UnconvertedColor, nif_unconverted, UnconvertedRow, UnconvertedReport, unconverted_light_check
 export TaLISRow, TaLISReport, talis_check, write_talis_csv, TALIS_SOURCE, TALIS_OUT_OF_SCOPE, talis_requirement
@@ -58,7 +58,7 @@ export VISRAD_SST_COLUMNS, VISRAD_PHASE_PLATES, visrad_spot, write_visrad_sst, r
 export VisRadObject, VisRadWorkspace, read_visrad_workspace, visrad_component, visrad_target,
        write_visrad_workspace, VisRadProfile, visrad_profile, visrad_envelope,
        visrad_power_sources, visrad_deposition
-export legendre, legendre_moments, legendre_weights, solid_angle, ylm_moments, ylm_weights,
+export legendre, legendre_moments, legendre_weights, solid_angle, ylm_moments, ylm_weights, mode_center,
        ylm_matrix, ylm_frame, mode_index, relative_mode_power, mode_amplitude, mode_power, rms_nonuniformity
 export OrthoCamera, camera_from_port, render, radiance, line_of_sight_power
 export GroupPointing, nparams, parameter_names, initial_parameters, apply, bounds,
@@ -68,6 +68,7 @@ export GroupPointing, nparams, parameter_names, initial_parameters, apply, bound
        mode_sensitivity, mode_uncertainty, sample_modes, infer_errors
 export HOTSPOT_VELOCITY_PER_PERCENT, mode1_vector, hotspot_velocity, ResponseKernel, flat_kernel,
        yield_factor, alpha_factor, rke_fraction, reactivity_exponent, burn_amplification,
+       shape_amplification, young2020_green, young2020_kernel, young2020_pulses, young2020_dropped_quads,
        implosion_metrics, mode1_tolerance, swing_metrics,
        velocity_uncertainty, ntof_covariance, VelocityPenalty
 

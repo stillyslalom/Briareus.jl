@@ -139,11 +139,15 @@ Casey et al., *Phys. Rev. E* **108**, L053203 (2023), OSTI 2283276. **H**
 Nora et al., *Phys. Plasmas* **30**, 092705 (2023), doi:10.1063/5.0153421 (OSTI
 2439462). **H**
 - v_HS = v_HS,no-a₂,no-burn × Vhs_amp^shape × Vhs_amp^burn, decoupled.
-- Shape term (Eq. 2): **1.31 P₂^NIS + 0.71** for P₂^NIS < 0.35, and **−0.65 P₂^NIS + 1.4**
-  for P₂^NIS > 0.35. P₂^NIS is the fractional hot-spot P2/P0 from the neutron image; the
-  term ranges 0.8–1.2 for |P2| < 40%.
+- Shape term (Eq. 2, a 2D fit): **1.31 P₂^NIS + 0.71** for P₂^NIS < 0.35, and
+  **−0.65 P₂^NIS + 1.4** for P₂^NIS > 0.35. P₂^NIS is the fractional hot-spot P2/P0 from
+  the neutron image. The "0.8–1.2 for |P2| < 40%" of the conclusion is Table I (3D,
+  against P2 and the polar angle of the mode 1), not Eq. 2 (checked against the paper
+  2026-10-24; research notes, "Young 2020 validation").
 - Burn term (Eq. 4): **0.324 ln(Y_amp + 2.239) + 0.653** for Y_amp < 40, and
-  **13 ln(Y_amp + 1585) − 95** for 80 < Y_amp < 500.
+  **13.105 ln(Y_amp + 1585.225) − 95.539** for 80 < Y_amp < 500 (Fig. 6's coefficients;
+  Eq. 4 prints them rounded to 13, 1585, −95, which shifts the value by −0.24). Table IV
+  lists the inverses per shot.
 - Prolate or oblate stagnation deflects the flow (their Fig. 4, Tables I and II).
 - In the N210808 family, measured v_HS was inflated up to 184%. Read naively it implies
   a₁/a₀ ≈ 1.8% with YOC 81%; unamplified it is about 0.78% with YOC 94%.

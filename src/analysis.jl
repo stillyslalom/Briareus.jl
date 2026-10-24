@@ -62,7 +62,29 @@ function _subtri_solid!(out, a, b, c, level)
 end
 
 """
-    legendre_weights(target, elems; lmax = 8, axis = ẑ, center = 0, level = 3) -> Matrix
+    mode_center(target, elems) -> Vec3
+
+Centre about which the mode analysis of `elems` (`legendre_weights`, `ylm_weights` and
+the scenario caches built from them) measures directions by default: the centre of
+their `SphereSurface` when every element lies on sphere components with one centre (a
+capsule, also when it is offset from chamber centre), otherwise the origin. Analysing
+an offset capsule about the origin mixes its P2 into a spurious mode 1 at first order
+in the offset (0.74 % of mode 1 per 100 µm on a 0.83 mm capsule with P2/P0 ≈ −0.1).
+"""
+function mode_center(t::Target, elems::AbstractVector{<:Integer})
+    c = nothing
+    for e in elems
+        s = t.components[t.elem_comp[e]].surface
+        s isa SphereSurface || return zero(Vec3)
+        c === nothing ? (c = s.center) : (s.center == c || return zero(Vec3))
+    end
+    return c === nothing ? zero(Vec3) : c
+end
+
+_mode_center(t, elems, center) = center === nothing ? mode_center(t, elems) : Vec3(center...)
+
+"""
+    legendre_weights(target, elems; lmax = 8, axis = ẑ, center = mode_center(target, elems), level = 3) -> Matrix
 
 Matrix `W` with `legendre_moments(values, …) == W * values[elems]`:
 `W[l+1, k] = (2l+1)/Ω ∫ Pₗ(cosθ) dΩ` over element `elems[k]`, integrated over `4^level`
@@ -72,9 +94,9 @@ each element makes a uniform field have no `l > 0` moments, however the facets t
 the sphere.
 """
 function legendre_weights(t::Target, elems::AbstractVector{<:Integer}; lmax::Integer = 8,
-                          axis = Vec3(0, 0, 1), center = zero(Vec3), level::Integer = 3)
+                          axis = Vec3(0, 0, 1), center = nothing, level::Integer = 3)
     ax = normalize(Vec3(axis))
-    c = Vec3(center)
+    c = _mode_center(t, elems, center)
     W = zeros(lmax + 1, length(elems))
     Ω = 0.0
     for (k, e) in enumerate(elems)
@@ -97,7 +119,7 @@ function legendre_weights(t::Target, elems::AbstractVector{<:Integer}; lmax::Int
 end
 
 """
-    legendre_moments(values, target, elems; lmax = 8, axis = ẑ, center = 0, level = 3) -> Vector
+    legendre_moments(values, target, elems; lmax = 8, axis = ẑ, center = mode_center(target, elems), level = 3) -> Vector
 
 Legendre coefficients `aₗ` (index `l+1`) of the azimuthally averaged field,
 `aₗ = (2l+1)/(4π) ∫ f Pₗ(cosθ) dΩ`, where `θ` is measured from `axis` about `center`
@@ -134,7 +156,7 @@ function ylm_frame(axis)
 end
 
 """
-    ylm_weights(target, elems; lmax = 8, axis = ẑ, center = 0, level = 2) -> Matrix
+    ylm_weights(target, elems; lmax = 8, axis = ẑ, center = mode_center(target, elems), level = 2) -> Matrix
 
 Matrix `W` with `W * values[elems]` the coefficients of real orthonormal spherical
 harmonics in the flat `mode_index` ordering: `Y_l0 = P̄_l0`, `Y_lm ∝ cos mφ` for `m > 0`
@@ -144,9 +166,9 @@ element and the harmonics are integrated over its facets with exact sub-triangle
 angles (`4^level` per triangle); the covered solid angle is normalized to 4π.
 """
 function ylm_weights(t::Target, elems::AbstractVector{<:Integer}; lmax::Integer = 8,
-                     axis = Vec3(0, 0, 1), center = zero(Vec3), level::Integer = 2)
+                     axis = Vec3(0, 0, 1), center = nothing, level::Integer = 2)
     ax, ex, ey = ylm_frame(axis)
-    c = Vec3(center)
+    c = _mode_center(t, elems, center)
     W = zeros((lmax + 1)^2, length(elems))
     Y = zeros(lmax + 1, 2lmax + 1)
     Ω = 0.0
@@ -177,7 +199,7 @@ function ylm_matrix(c::AbstractVector, lmax::Integer)
 end
 
 """
-    ylm_moments(values, target, elems; lmax = 8, axis = ẑ, center = 0, level = 2) -> Matrix
+    ylm_moments(values, target, elems; lmax = 8, axis = ẑ, center = mode_center(target, elems), level = 2) -> Matrix
 
 Coefficients of real orthonormal spherical harmonics, `c[l+1, l+1+m]` for
 `-l ≤ m ≤ l` (`m > 0`: cos mφ, `m < 0`: sin |m|φ), with the polar axis along `axis`
