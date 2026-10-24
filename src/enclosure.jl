@@ -343,7 +343,7 @@ function _cut_target(t::Target, kept)
         any(keep) || continue
         mesh = all(keep) ? m : _select_patches(m, keep)
         push!(comps, Component(c.name, mesh, c.material; kind = c.kind, two_sided = c.two_sided,
-                               surface = c.surface))
+                               surface = c.surface, c.part))
     end
     return Target(comps; t.visibility), findall(keep_elem)
 end
@@ -369,20 +369,22 @@ end
 function Base.show(io::IO, ::MIME"text/plain", enc::Enclosure)
     t = enc.source
     nk = count(enc.kept)
+    split = any(c -> c.part !== c.name, t.components)
     println(io, "Enclosure of ", Tuple(enc.point), ": ", nelements(enc.target), " of ", nelements(t),
-            " elements (", nk, " selected), ", length(enc.target.components), " of ",
-            length(t.components), " components")
+            " elements (", nk, " selected), ",
+            split ? length(parts(enc.target)) : length(enc.target.components), " of ",
+            split ? length(parts(t)) : length(t.components), split ? " parts" : " components")
     @printf(io, "  escape %.4f of the rays from the point; open area %.4g mm², leak area %.4g mm² (returning %.3g mm²), back sides %.4g mm² (%d rays per element)\n",
             enc.escape, enc.open_area, enc.leak_area, enc.return_area, enc.back_area, enc.rays)
     inres = falses(nelements(t))
     inres[enc.index] .= true
-    for (i, c) in enumerate(t.components)
-        es = t.comp_elems[i]
+    for p in parts(t)
+        es = elements(t, p)
         isempty(es) && continue
         n = count(e -> inres[e], es)
         A = sum(t.elem_area[e] for e in es)
         Ak = sum(t.elem_area[e] for e in es if inres[e]; init = 0.0)
-        @printf(io, "  %-20s %8d / %-8d elements  area %10.4g / %-10.4g mm²\n", c.name, n, length(es), Ak, A)
+        @printf(io, "  %-20s %8d / %-8d elements  area %10.4g / %-10.4g mm²\n", p, n, length(es), Ak, A)
     end
 end
 Base.show(io::IO, enc::Enclosure) =
@@ -390,7 +392,7 @@ Base.show(io::IO, enc::Enclosure) =
 
 """
     cad_target(parts; orient = true, toward = (0, 0, 0), inside = nothing,
-               remesh = nothing, coarsen = nothing, fit = false, material = gold(),
+               remesh = nothing, coarsen = nothing, fit = remesh !== nothing, material = gold(),
                two_sided = false, visibility = :sampled, enclosure_kw = (;)) -> Target
 
 A radiation-ready target from CAD meshes in one call: what the
@@ -415,14 +417,17 @@ sides when `two_sided`), through these steps:
    divided, which is much cheaper when most of an assembly lies outside the cavity.
    With `inside`, the selection is then repeated on the elements: an element straddling
    the edge of the lit region averages its flux over its own area.
-4. `fit = true` (or a named tuple of keywords of [`curved_components`](@ref) and
-   [`fit_surfaces`](@ref), such as `minfraction = 0` to fit even the curved faces of
-   under 10⁻³ of a part's area, which stay flat by default) splits each part into its
-   cylinders, cones, spheres and the rest, fitted on the kept CAD facets, whose vertices
-   lie on the true surfaces, so the radiation model integrates over the curved walls.
-   The pieces are components of their own, named `<part>/cyl1`, …, `<part>/rest`:
-   reports, `elements` and the keep-outs see them, not the part (`SphereKeepOut` by
-   default takes every fitted sphere). Fitting is off by default for that reason.
+4. `fit` (by default on when `remesh` is given; or a named tuple of keywords of
+   [`curved_components`](@ref) and [`fit_surfaces`](@ref), such as `minfraction = 0`
+   to fit even the curved faces of under 10⁻³ of a part's area, which stay flat by
+   default) splits each remeshed part into its cylinders, cones, spheres and the rest,
+   fitted on the kept CAD facets, whose vertices lie on the true surfaces, so the
+   radiation model integrates over the curved walls. The split is computational: the
+   pieces, `<part>/cyl1`, …, `<part>/rest` (a part that is one surface keeps its name),
+   remember their part, and `elements`, `Scenario(...; observe)`, the keep-outs, the
+   clearance and TaLIS checks and the reports (`energy_balance`, `component_power`,
+   `write_results`, `report`) take and show the parts (see [`parts`](@ref)).
+   `fit = false` keeps flat elements.
 
 The target's view factors default to `visibility = :sampled` (see `view_factors`): CAD
 cavities have rims (entrance-hole bores, gaps) that partly shadow element pairs, which
@@ -437,11 +442,11 @@ remeshes a capsule finer than the walls. For the account of what the cavity sele
 drops, call `enclosure` on the target built without `inside`.
 """
 function cad_target(parts; orient::Bool = true, toward = (0.0, 0.0, 0.0), inside = nothing,
-                    remesh = nothing, coarsen = nothing, fit = false, material = gold(),
+                    remesh = nothing, coarsen = nothing, fit = nothing, material = gold(),
                     two_sided = false, visibility = :sampled, enclosure_kw = (;))
     coarsen === nothing || remesh === nothing ||
         throw(ArgumentError("give one of `coarsen` and `remesh`, not both"))
-    fit isa Union{Bool,NamedTuple} ||
+    fit isa Union{Nothing,Bool,NamedTuple} ||
         throw(ArgumentError("`fit` must be true, false or a named tuple of curved_components keywords"))
     comps = Component[]
     cad = Bool[]                         # per component: a CAD part
@@ -476,7 +481,7 @@ function cad_target(parts; orient::Bool = true, toward = (0.0, 0.0, 0.0), inside
             sc = coarsen === nothing ? nothing : _part_value(coarsen, c.name, nothing)
             sr === nothing && sc === nothing && continue
             m = sc === nothing ? remesh_mesh(c.mesh; size = sr) : coarsen_mesh(c.mesh; size = sc)
-            comps[i] = Component(c.name, m, c.material; two_sided = c.two_sided)
+            comps[i] = Component(c.name, m, c.material; two_sided = c.two_sided, c.part)
             redone[i] = true
         end
         if select
@@ -486,6 +491,7 @@ function cad_target(parts; orient::Bool = true, toward = (0.0, 0.0, 0.0), inside
             comps, cad, facets, redone = enc.target.components, cad[s], facets[s], redone[s]
         end
     end
+    fit === nothing && (fit = remesh !== nothing)
     fit === false && return Target(comps; visibility)
     fkw = fit === true ? (;) : fit
     return Target(reduce(vcat, (cad[i] ? curved_components(comps[i]; reference = redone[i] ? facets[i] : nothing, fkw...) :

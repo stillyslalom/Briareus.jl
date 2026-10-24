@@ -1214,9 +1214,11 @@ function write_visrad_kit(dir::AbstractString, target::Target, beams::AbstractVe
     t = target
     v = ForwardDiff.value
     results = Pair{String,Tuple{Float64,String}}[]
-    for (ci, c) in enumerate(t.components)
-        es = t.comp_elems[ci]
-        n = string(c.name)
+    for p in parts(t)                    # a part split for computation as one
+        cis = part_pieces(t, p)
+        c = t.components[first(cis)]
+        es = elements(t, p)
+        n = string(p)
         A = sum(t.elem_area[es]; init = 0.0) / (c.two_sided ? 2 : 1)
         laser = sum(v(dep.element[e]) for e in es; init = 0.0)
         push!(results, "Surface Area [$n]" => (A / 100, "cm2"))
@@ -1227,16 +1229,16 @@ function write_visrad_kit(dir::AbstractString, target::Target, beams::AbstractVe
         src = η isa Real ? η * laser : sum(v(sol.source[e]) * t.elem_area[e] for e in es; init = 0.0)
         push!(results, "Pwr Src Term [$n]" => (src, "TW"))
         push!(results, "Laser Pwr Dep [$n]" => (laser, "TW"))
-        bs = v(dep.backside[ci])
+        bs = sum(ci -> v(dep.backside[ci]), cis)
         bs > 0 && push!(results, "Laser Pwr Dep [$(n)_outside]" => (bs, "TW"))
     end
     push!(results, "Laser delivered" => (v(dep.delivered), "TW"))
     push!(results, "Laser missed" => (v(dep.delivered - sum(dep.per_beam)), "TW"))
 
-    obs_ok = any(c -> c.name === observe, t.components)
+    obs_ok = any(c -> c.name === observe || c.part === observe, t.components)
     if obs_ok
-        ci = component_index(t, observe)
-        es = t.comp_elems[ci]
+        ci = first(part_pieces(t, observe))     # a split part's largest piece first
+        es = elements(t, observe)
         s = t.components[ci].surface
         ctr = s isa SphereSurface ? s.center :
               sum(t.elem_centroid[es] .* t.elem_area[es]) / sum(t.elem_area[es])

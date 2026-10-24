@@ -96,8 +96,8 @@ function _dante_footprint(t::Target, v::DanteView)
     names = [v.through]
     lip = Symbol(v.through, :_lip)
     any(c -> c.name === lip, t.components) && push!(names, lip)
-    open = t.comp_elems[component_index(t, v.through)]
-    hole = reduce(vcat, [t.comp_elems[component_index(t, nm)] for nm in names])
+    open = elements(t, v.through)
+    hole = elements(t, names...)
     hole_area = sum(t.elem_area[hole])
     c = sum(t.elem_centroid[e] * t.elem_area[e] for e in open) / sum(t.elem_area[open])
     cosv = abs(dot(v.direction, t.elem_normal[first(hole)]))
@@ -145,14 +145,15 @@ _los_intensity(fp, B, τ) =
 """
     visible_area(view::DanteView, target) -> Dict{Symbol,Float64}
 
-Projected area (mm², normal to the line of sight) of each component that the view sees
-through its hole (closing lips counted fully open).
+Projected area (mm², normal to the line of sight) of each part that the view sees
+through its hole (closing lips counted fully open); the pieces of a part split for
+computation are summed into it.
 """
 function visible_area(v::DanteView, t::Target)
     fp = _footprint(v, t)
     out = Dict{Symbol,Float64}()
     for (e, a) in zip(fp.elems, fp.area)
-        n = t.components[t.elem_comp[e]].name
+        n = t.components[t.elem_comp[e]].part
         out[n] = get(out, n, 0.0) + a
     end
     return out

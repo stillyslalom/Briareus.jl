@@ -266,11 +266,13 @@ end
     push!(comps, aperture(:leh_top, disk_mesh(Rleh, h; nr = 3, nphi = 24, up = false); surface = DiskSurface(center = (0, 0, h))),
           aperture(:leh_bottom, disk_mesh(Rleh, -h; nr = 3, nphi = 24, up = true); surface = DiskSurface(center = (0, 0, -h))))
     tc = Target(comps)
+    # (the capsule is one sphere: it keeps its name)
     @test [c.name for c in tc.components] == Symbol.(["top/cyl1", "top/rest", "bottom/cyl1", "bottom/rest",
-                                                      "capsule/sph1", "leh_top", "leh_bottom"])
+                                                      "capsule", "leh_top", "leh_bottom"])
+    @test parts(tc) == [:top, :bottom, :capsule, :leh_top, :leh_bottom]
     F = view_factors(tc)
     A = tc.elem_area
-    cap = elements(tc, Symbol("capsule/sph1"))
+    cap = elements(tc, :capsule)
     @test sum(A[cap]) ≈ 4π * rc^2 rtol = 1e-7
     wall = elements(tc, Symbol("top/cyl1"), Symbol("bottom/cyl1"))
     @test sum(A[wall]) ≈ 4π * R * h rtol = 1e-7
@@ -291,6 +293,45 @@ end
     flux(sol, t, es) = sum(sol.H[es] .* t.elem_area[es]) / sum(t.elem_area[es])
     @test flux(sc, tc, cap) ≈ flux(sp, prim, elements(prim, :capsule)) rtol = 3e-4
     @test flux(sc, tc, leh) ≈ flux(sp, prim, elements(prim, :leh_top, :leh_bottom)) rtol = 3e-4
+
+    # the halves are split for computation only: the name-taking functions and the
+    # reports see the parts, and the pieces stay reachable by their own names
+    top, toprest = Symbol("top/cyl1"), Symbol("top/rest")
+    @test elements(tc, :top) == elements(tc, top, toprest)
+    @test part_pieces(tc, :top) == [1, 2] && part_pieces(tc, toprest) == [2]
+    @test all(c -> c.part === :top, tc.components[1:2]) && tc.components[1].name === top
+    @test_throws KeyError elements(tc, :nothing)
+    @test occursin("(2 pieces)", sprint(show, MIME"text/plain"(), tc))
+    @test_throws ArgumentError Target([Component(:a, tc.components[1].mesh, gold(); part = :b),
+                                       Component(:b, tc.components[2].mesh, gold(); part = :c)])
+    bal, balc = energy_balance(sc), energy_balance(sc; by = :component)
+    @test sort(collect(keys(bal.absorbed))) == [:bottom, :capsule, :top]
+    @test bal.absorbed[:top] ≈ balc.absorbed[top] + balc.absorbed[toprest] rtol = 1e-12
+    @test sum(values(bal.absorbed)) ≈ sum(values(balc.absorbed)) rtol = 1e-12
+    beams = nif_quads()
+    dep = deposit(DepositionOperator(tc, beams), beams)
+    cp, cpc = component_power(dep, tc), component_power(dep, tc; by = :component)
+    @test !any(k -> occursin('/', String(k)), keys(cp))
+    @test cp[:top] ≈ cpc[top] + cpc[toprest] rtol = 1e-12
+    @test sum(values(cp)) ≈ sum(values(cpc)) rtol = 1e-12
+    dir = mktempdir()
+    write_results(dir, tc, dep; sol = sc, observe = :capsule)
+    @test [first(split(l, ',')) for l in readlines(joinpath(dir, "components.csv"))[2:end]] ==
+          ["top", "bottom", "capsule", "leh_top", "leh_bottom"]
+    @test split(readline(joinpath(dir, "elements.csv")), ',')[1:4] == ["element", "component", "part", "side"]
+    @test first.(read_stl_solids(write_stl(joinpath(dir, "t.stl"), tc; binary = false))) == String.(parts(tc))
+    # observe, the direct penalty and the keep-outs take the parts
+    sn = Scenario(tc, beams; observe = :top, radiation = false)
+    @test sn.observed == elements(tc, :top)
+    ev = evaluate(sn, initial_parameters(sn.param))
+    @test power_fraction(ev, :top) > 0
+    @test Briareus._penalties(ev; clip = 0, missed = 0, direct = 1.0, direct_names = (:top,)) ≈
+          power_fraction(ev, :top)^2
+    @test SphereKeepOut(tc).names == [:capsule]
+    @test ApertureKeepOut(tc).names == [:leh_top, :leh_bottom]
+    tr = talis_check(tc, beams[1:4]; capture = (:top, :bottom), omega1 = false)
+    @test all(r -> r.component in (:top, :bottom, :capsule, :none), tr.rows)
+    @test any(r -> r.rule === :clearance_3w && r.component === :capsule, tr.rows)
 end
 
 @testset "radiation in a fitted CAD cone" begin
@@ -317,7 +358,7 @@ end
          cc = flux(c, c) / (1 - cd1 - cd2) - 1, back = flux(d2, c) / (1 - A1 * f12 / A2) - 1)
     end
     flat, fitted = errs
-    @test fitted.names == [Symbol("cone/cone1"), :d1, :d2]
+    @test fitted.names == [:cone, :d1, :d2]             # one cone: the part keeps its name
     @test abs(fitted.area) < 1e-8                         # (Float32 vertices)
     @test abs(fitted.d2) < 1e-3 && abs(fitted.cc) < 1e-3 && abs(fitted.back) < 1e-3
     @test abs(fitted.d2) < abs(flat.d2) / 3 && abs(fitted.back) < abs(flat.back) / 3
@@ -460,7 +501,7 @@ end
     cyl = [c for c in tc.components if c.surface isa CylinderSurface]
     @test sort([c.surface.radius for c in cyl]) ≈ [Rleh, Rleh, R, R] rtol = 1e-6
     sph = only(c for c in tc.components if c.surface isa SphereSurface)
-    @test sph.name === Symbol("capsule/sph1")
+    @test sph.name === :capsule && sph.part === :capsule
     @test sph.surface.radius ≈ rc rtol = 1e-6
     @test sph.material == ablator() && all(c -> c.material == gold(), cyl)
     # the curved elements have the true surfaces' areas

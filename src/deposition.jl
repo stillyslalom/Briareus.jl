@@ -667,18 +667,22 @@ Absorbed laser intensity per element (TW/mm²; multiply by 1e14 for W/cm²).
 laser_flux(d::Deposition, t::Target) = d.element ./ t.elem_area
 
 """
-    component_power(dep, target) -> Dict{Symbol,Float64}
+    component_power(dep, target; by = :part) -> Dict{Symbol,Float64}
 
-Absorbed laser power (TW) per component, plus back-side (outside) losses keyed as
-`Symbol(name, "_outside")` and `:missed` for power that strikes nothing.
+Absorbed laser power (TW) per part, plus back-side (outside) losses keyed as
+`Symbol(name, "_outside")` and `:missed` for power that strikes nothing. The pieces of
+a part split for computation (`curved_components`) are summed into the part; `by =
+:component` keys by component instead. The two agree on targets of unsplit parts.
 """
-function component_power(d::Deposition, t::Target)
+function component_power(d::Deposition, t::Target; by::Symbol = :part)
+    by in (:part, :component) || throw(ArgumentError("by must be :part or :component"))
     out = Dict{Symbol,Float64}()
     for (ci, c) in enumerate(t.components)
         c.kind === :aperture && continue
-        out[c.name] = sum(ForwardDiff.value(d.element[e]) for e in t.comp_elems[ci]; init = 0.0)
+        n = by === :part ? c.part : c.name
+        out[n] = get(out, n, 0.0) + sum(ForwardDiff.value(d.element[e]) for e in t.comp_elems[ci]; init = 0.0)
         bs = ForwardDiff.value(d.backside[ci])
-        bs > 0 && (out[Symbol(c.name, :_outside)] = bs)
+        bs > 0 && (k = Symbol(n, :_outside); out[k] = get(out, k, 0.0) + bs)
     end
     out[:missed] = ForwardDiff.value(d.delivered - sum(d.per_beam))
     return out

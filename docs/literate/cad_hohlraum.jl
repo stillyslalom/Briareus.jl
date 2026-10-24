@@ -83,7 +83,7 @@ half = revolve([(R, g2), (Rout, g2), (Rout, h + te), (Rleh, h + te), (Rleh, h), 
 washer = revolve([(Rleh, h + te), (Rw, h + te), (Rw, zL), (Rleh, zL)]; nphi = 120)
 capsule = revolve(arc(rc, 0, 1, 40); nphi = 80)
 cup = revolve([arc(ro, 0, 1 / 2, 20); reverse(arc(ri, 0, 1 / 2, 20))]; nphi = 80)
-parts = ["hohlraum_top" => half, "hohlraum_bottom" => mirror(half),
+assembly = ["hohlraum_top" => half, "hohlraum_bottom" => mirror(half),
          "washer_top" => washer, "washer_bottom" => mirror(washer),
          "capsule" => capsule, "tent_top" => cup, "tent_bottom" => mirror(cup),
          "mount" => block((Rout + 0.3, -1.0, -1.5), (Rout + 2.3, 1.0, 1.5))]
@@ -105,7 +105,7 @@ function cad_mesh(facets)
     return m
 end
 path = joinpath(mktempdir(), "assembly.stl")
-write_stl(path, [name => cad_mesh(f) for (name, f) in parts]; binary = false)
+write_stl(path, [name => cad_mesh(f) for (name, f) in assembly]; binary = false)
 solids = read_stl_solids(path)
 
 # The facets' shapes, as the longest edge over the height across it (1.15 for an
@@ -189,7 +189,7 @@ end
 # color what each selection keeps, in gray what it drops. The pocket is drawn close up,
 # with the capsule's upper half left out to show the tent's inner face behind it.
 
-colors = Dict{String,Any}(zip(first.(parts), Makie.wong_colors()[[1, 1, 3, 3, 6, 4, 4, 2]]))
+colors = Dict{String,Any}(zip(first.(assembly), Makie.wong_colors()[[1, 1, 3, 3, 6, 4, 4, 2]]))
 function cutaway_panel(pos, enc, title; limits, show = (name, poly) -> true)
     ax = Axis(pos; title, aspect = DataAspect(), limits)
     hidedecorations!(ax); hidespines!(ax)
@@ -324,7 +324,7 @@ stage_panel(fig[1, 2], [c.name => c.mesh for c in remeshed.target.components if 
             (k, m, p) -> colors[String(k)], "remeshed elements")
 kind_color(c) = c.surface isa CylinderSurface ? Makie.wong_colors()[c.surface.radius > 2 ? 1 : 3] :
                 c.surface isa SphereSurface ? Makie.wong_colors()[6] : :gray70
-fitted_top = [c for c in fitted if any(startswith(String(c.name), String(k)) for k in top)]
+fitted_top = [c for c in fitted if c.part in top]      # the pieces remember their part
 stage_panel(fig[1, 3], [c.name => c.mesh for c in fitted_top],
             (k, m, p) -> kind_color(fitted_top[findfirst(c -> c.name === k, fitted_top)]),
             "fitted: cylinders, sphere, flat")
@@ -335,19 +335,28 @@ fig
 # [`cad_target`](@ref) takes the parts as read and runs the same steps: it orients each
 # part, selects the cavity around the point `inside` on the facets, remeshes the kept
 # facets (sizes and materials can be given per part, as functions of the part's name),
-# selects again on the elements, and fits the curved surfaces on the kept facets. It is
-# the call `visrad_target` makes for the CAD a VisRad workspace bundles; components
-# built otherwise, such as primitives, can be passed with the parts and take part in
-# the selection as they are. The target it builds is the one built by hand above:
+# selects again on the elements, and, since it remeshes, fits the curved surfaces on
+# the kept facets (`fit = false` keeps flat elements). It is the call `visrad_target`
+# makes for the CAD a VisRad workspace bundles; components built otherwise, such as
+# primitives, can be passed with the parts and take part in the selection as they are.
+# The target it builds is the one built by hand above:
 
 one_call = cad_target(filter(p -> !startswith(p[1], "tent"), solids); inside = (0, 0, 0),
-                      remesh = size_of, fit = true,
-                      material = n -> n === :capsule ? ablator() : gold())
+                      remesh = size_of, material = n -> n === :capsule ? ablator() : gold())
 by_hand = Target(fitted)
 @printf("%d elements in %d components (by hand: %d in %d); same names, areas and normals: %s\n",
         nelements(one_call), length(one_call.components), nelements(by_hand), length(by_hand.components),
         [c.name for c in one_call.components] == [c.name for c in by_hand.components] &&
         one_call.elem_area == by_hand.elem_area && one_call.elem_normal == by_hand.elem_normal)
+
+# The split is computational. Each piece remembers its part, and [`parts`](@ref),
+# `elements(target, :hohlraum_top)`, the keep-outs, the clearance checks and the reports
+# (`energy_balance`, `component_power`, `write_results`) take and show the parts as
+# read; a piece stays reachable by its own name. A part that is one surface, as the
+# capsule is, keeps its name:
+
+println(parts(one_call))
+one_call
 
 # ## Openings and references
 #
@@ -586,7 +595,8 @@ fig
 #   (1.55 mm) and the capsule (0.9 mm) to nine digits from the CAD facets, and the
 #   fitted capsule has the area 4πr² to round-off.
 # - One call: [`cad_target`](@ref) on the parts as read builds the target built by hand,
-#   with the same components, element areas and normals, exactly.
+#   with the same components, element areas and normals, exactly; its [`parts`](@ref)
+#   are the parts as read, in order.
 # - Radiation: the capsule's view factors to the LEHs, bores, caps and wall match the
 #   solid angles they subtend from its center to 1e-3. The capsule flux, its
 #   ``a_2/a_0`` and ``a_4/a_0``, and the LEH and gap losses of the CAD models, flat or

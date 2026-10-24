@@ -355,7 +355,7 @@ end
 clipped_fraction(ev::Evaluation) = sum(ev.deposition.backside) / ev.deposition.delivered
 "Fraction of delivered power that strikes no surface at all."
 missed_fraction(ev::Evaluation) = 1 - sum(ev.deposition.per_beam) / ev.deposition.delivered
-"Fraction of delivered power absorbed by the named components."
+"Fraction of delivered power absorbed by the named parts or components (see `elements`)."
 power_fraction(ev::Evaluation, names::Symbol...) =
     sum(ev.deposition.element[e] for e in elements(ev.scenario.target, names...); init = zero(ev.deposition.delivered)) /
     ev.deposition.delivered
@@ -447,7 +447,8 @@ function _penalties(ev::Evaluation; clip, missed, direct, direct_names)
     J = zero(ev.deposition.delivered)
     clip > 0 && (J += clip * clipped_fraction(ev)^2)
     missed > 0 && (J += missed * missed_fraction(ev)^2)
-    if direct > 0 && all(n -> any(c -> c.name === n, ev.scenario.target.components), direct_names)
+    # parts or components (a fitted CAD capsule is the part of its pieces)
+    if direct > 0 && all(n -> any(c -> c.name === n || c.part === n, ev.scenario.target.components), direct_names)
         J += direct * power_fraction(ev, direct_names...)^2
     end
     return J

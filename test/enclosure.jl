@@ -135,7 +135,8 @@ end
     @test sum(tr.elem_area) ≈ sum(ec.target.elem_area) rtol = 1e-10
     @test nelements(tr) > 4nelements(ec.target)
     @test_throws ArgumentError visrad_target(ws; coarsen = 0.3, remesh = 0.3, inside = q)
-    # `fit` applies to the elements kept (a tetrahedron has no curved region: unchanged)
-    tf = visrad_target(ws; select = mesh_only, orient = true, remesh = 0.3, inside = q, fit = true)
+    # `fit` (on by default with `remesh`) applies to the elements kept; a tetrahedron has no
+    # curved region: the same as flat
+    tf = visrad_target(ws; select = mesh_only, orient = true, remesh = 0.3, inside = q, fit = false)
     @test [c.name for c in tf.components] == [c.name for c in tr.components] && tf.elem_area == tr.elem_area
 end

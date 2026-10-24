@@ -79,7 +79,9 @@ radiosity at that time (time- and temperature-dependent albedos included), and r
   power per component (TW, back side included); `source` — x-ray source power per
   component (Σ ηP); `absorbed` — x-ray power absorbed per surface component (and per
   closing lip), as in `energy_balance`; `lost` — x-ray power lost to open space.
-  `energy_budget` integrates them.
+  `energy_budget` integrates them. Like `energy_balance`, `escaped`, `transmitted`,
+  `laser`, `source` and `absorbed` are keyed by part, the pieces of a part split by
+  `curved_components` summed into it; `front` and `burnthrough` stay per component.
 - `record` — with `record = f`, the vector of `f(sol)` for each step's
   `RadiationSolution` (e.g. `sol -> dante(dante1(), sol)` for a synthetic Dante, or a
   `spectral_solve`), otherwise `nothing`.
@@ -180,6 +182,7 @@ function _drive_history(t::Target, model_at, operator_at, beams_at, times;
             [c.name for c in t.components if c.kind === :aperture && !(c.surface isa CylinderSurface)] :
             collect(Symbol, holes)
     apertures = [c.name for c in t.components if c.kind === :aperture]
+    partof = Dict(c.name => c.part for c in t.components)
     # records, one entry per step taken
     time = Float64[]
     delivered, flux, Tr = Float64[], Float64[], Float64[]
@@ -319,11 +322,11 @@ function _drive_history(t::Target, model_at, operator_at, beams_at, times;
             push!(wall_albedo, sum(sol.albedo[we] .* Aw) / sum(Aw))
             keep_albedo && push!(albedo_steps, copy(sol.albedo))
             record === nothing || push!(recorded, record(sol))
-            bal = energy_balance(sol)
+            bal = energy_balance(sol; by = :component)
             loss = 0.0
             for n in apertures
                 push!(escaped[n], bal.escaped[n])
-                n in holes || (loss += bal.escaped[n])
+                n in holes || partof[n] in holes || (loss += bal.escaped[n])
             end
             for ci in transmitters
                 c = t.components[ci]
@@ -351,11 +354,27 @@ function _drive_history(t::Target, model_at, operator_at, beams_at, times;
         end
     end
     burnthrough = Dict(t.components[ci].name => [_nan_inf(tb[e]) for e in t.comp_elems[ci]] for ci in foils)
+    if any(c -> c.part !== c.name, t.components)       # pieces of split parts summed into them
+        escaped, transmitted, laser, source, absorbed =
+            _by_part(t, escaped), _by_part(t, transmitted), _by_part(t, laser), _by_part(t, source),
+            _by_part(t, absorbed)
+    end
     return (; time, delivered, flux, Tr, moments = _columns(moments, lmax + 1),
             ylm = ylm ? _columns(clm, (lmax + 1)^2) : nothing, wall_Tr,
             wall_albedo, escaped, transmitted, window_loss, front, burnthrough,
             albedo = keep_albedo ? albedo_steps : nothing, setup, laser, source, absorbed, lost,
             record = record === nothing ? nothing : [r for r in recorded])
+end
+
+# Per-step series keyed by component summed into the components' parts.
+function _by_part(t::Target, d::AbstractDict)
+    out = Dict{Symbol,Vector{Float64}}()
+    for c in t.components
+        haskey(d, c.name) || continue
+        v = d[c.name]
+        out[c.part] = haskey(out, c.part) ? out[c.part] .+ v : copy(v)
+    end
+    return out
 end
 
 """

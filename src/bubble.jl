@@ -432,7 +432,7 @@ end
 
 function _ridge_elements(m::BubbleAbsorption, t)
     es = reduce(vcat, (t.comp_elems[ci] for (ci, c) in enumerate(t.components)
-                       if c.name in m.ridge_components); init = Int[])
+                       if c.name in m.ridge_components || c.part in m.ridge_components); init = Int[])
     isempty(es) && throw(ArgumentError("no ridge components $(m.ridge_components) in the target"))
     return es
 end

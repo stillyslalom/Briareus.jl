@@ -46,15 +46,15 @@ function ApertureKeepOut(t::Target; apertures = nothing, peak_fraction = nothing
     # `GapClosure`) widens the hole whose plane and center it shares
     lip(c) = c.kind === :aperture && _transmits(c.material.albedo)
     names = apertures === nothing ?
-            [c.name for c in t.components
-             if c.kind === :aperture && !(c.surface isa CylinderSurface) && !lip(c)] :
+            unique!([c.part for c in t.components
+                     if c.kind === :aperture && !(c.surface isa CylinderSurface) && !lip(c)]) :
             Symbol[apertures...]
     lips = [findall(==(ci), t.tri_comp) for (ci, c) in enumerate(t.components) if lip(c)]
     isempty(names) && throw(ArgumentError("target has no apertures"))
     centers, rims = Vec3[], Vector{Vec3}[]
     for name in names
-        ci = component_index(t, name)
-        tris = findall(==(ci), t.tri_comp)
+        cis = Set(part_pieces(t, name))           # a part: all its pieces
+        tris = findall(in(cis), t.tri_comp)
         A = sum(t.tri_area[tris])
         c = sum(t.tri_area[k] * (t.tri_v0[k] + (t.tri_e1[k] + t.tri_e2[k]) / 3) for k in tris) / A
         n = t.tri_normal[tris[1]]
@@ -115,7 +115,7 @@ function _sampson_distance(u, v, A, B)
 end
 
 """
-    SphereKeepOut(target; spheres = components on a `SphereSurface`, peak_fraction = 0.01,
+    SphereKeepOut(target; spheres = parts on a `SphereSurface`, peak_fraction = 0.01,
                   intensity = nothing, pointing = 0.05, target_offset = 0.025,
                   hardware_tolerance = 0.0, focus = 1.0, margin = 0.0, minimum = 0.0,
                   weight = 100.0)
@@ -129,6 +129,12 @@ f-cone at the center's axial position and by `margin`) less the sphere's radius,
 transverse error radius `pointing + target_offset + hardware_tolerance` and
 `focus/(2F)`. The distance to the envelope is first order (Sampson), as for apertures;
 the f-cone tilt of the envelope surface (cos of the cone half-angle) is neglected.
+
+By default the spheres are the parts that are spheres: those whose largest spherical
+component carries at least 90% of the part's area (a primitive capsule, or a CAD capsule
+fitted with `curved_components`, its fill tube a piece of its own), not the small
+spherical fillets fitted on hohlraum CAD. `spheres` names parts or components; a part
+stands for its largest sphere, and its other pieces are not landing surfaces.
 
 A sphere counts only when its center lies upstream of where the beam axis first meets
 another opaque component (the wall a hohlraum beam lands on), found on the nominal
@@ -158,19 +164,37 @@ function SphereKeepOut(t::Target; spheres = nothing, peak_fraction = nothing,
                        hardware_tolerance = 0.0, focus = 1.0, margin = 0.0, minimum = 0.0,
                        weight = 100.0)
     intensity === nothing && peak_fraction === nothing && (peak_fraction = 0.01)
-    names = spheres === nothing ?
-            [c.name for c in t.components if c.kind === :surface && c.surface isa SphereSurface] :
-            Symbol[spheres...]
+    area(ci) = sum(t.elem_area[e] for e in t.comp_elems[ci] if t.elem_side[e] == 1; init = 0.0)
+    # the largest sphere among the components `cis` (nothing if none)
+    function sphere_of(cis)
+        sph = [ci for ci in cis if t.components[ci].kind === :surface &&
+                                   t.components[ci].surface isa SphereSurface]
+        isempty(sph) ? nothing : sph[argmax(area.(sph))]
+    end
+    names, comps = Symbol[], Int[]
+    if spheres === nothing
+        # parts that are spheres: a fitted CAD capsule (with its fill tube) is, the small
+        # spherical fillets fitted on hohlraum CAD are not
+        for p in parts(t)
+            cis = part_pieces(t, p)
+            k = sphere_of(cis)
+            k === nothing || area(k) < 0.9 * sum(area, cis) || (push!(names, p); push!(comps, k))
+        end
+    else
+        for n in spheres
+            k = sphere_of(part_pieces(t, Symbol(n)))
+            k === nothing && throw(ArgumentError("component :$n does not carry a SphereSurface"))
+            push!(names, Symbol(n)); push!(comps, k)
+        end
+    end
     isempty(names) && throw(ArgumentError("target has no spherical components"))
     centers, radii = Vec3[], Float64[]
-    for name in names
-        s = t.components[component_index(t, name)].surface
-        s isa SphereSurface ||
-            throw(ArgumentError("component :$name does not carry a SphereSurface"))
+    for k in comps
+        s = t.components[k].surface
         push!(centers, s.center)
         push!(radii, s.radius)
     end
-    idx = Set(component_index(t, n) for n in names)
+    idx = Set(ci for n in names for ci in part_pieces(t, n))
     others = Set(i for (i, c) in enumerate(t.components) if c.kind === :surface && !(i in idx))
     return SphereKeepOut(names, centers, radii, t, others, peak_fraction, intensity,
                          pointing + target_offset + hardware_tolerance, focus, margin,

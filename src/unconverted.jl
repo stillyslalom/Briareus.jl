@@ -78,21 +78,23 @@ reaches) and planar components (flagged against the NIF curvature rule).
 function unconverted_light_check(t::Target, beams::AbstractVector{<:Beam};
                                  colors = nif_unconverted(), offsets = nothing,
                                  hardware = nothing, zone_radius = 32.0, level::Integer = 1)
-    hw = hardware === nothing ? [c.name for c in t.components if c.kind === :surface] :
+    # hardware: parts (all their surface pieces) or components
+    hw = hardware === nothing ? unique!([c.part for c in t.components if c.kind === :surface]) :
          Symbol[hardware...]
-    hw_idx = [component_index(t, n) for n in hw]
+    hw_idx = [hardware === nothing ? [ci for ci in part_pieces(t, n) if t.components[ci].kind === :surface] :
+              part_pieces(t, n) for n in hw]
     samples = Dict{Int,Vector{Vec3}}()
-    for ci in hw_idx
+    for (ci, cis) in enumerate(hw_idx)
         pts = Vec3[]
         for k in eachindex(t.tri_area)
-            t.tri_comp[k] == ci || continue
+            t.tri_comp[k] in cis || continue
             v0, e1, e2 = t.tri_v0[k], t.tri_e1[k], t.tri_e2[k]
             _subtri_vertices!(pts, v0, v0 + e1, v0 + e2, level)
         end
         samples[ci] = unique(pts)
     end
     rows = UnconvertedRow[]
-    for b in beams, col in colors, ci in hw_idx
+    for b in beams, col in colors, ci in eachindex(hw_idx)
         e1, e2 = port_basis(b.port)
         k = direction(b)
         aim = Vec3(ForwardDiff.value.(b.aim))
@@ -120,14 +122,14 @@ function unconverted_light_check(t::Target, beams::AbstractVector{<:Beam};
             best = min(best, dist)
         end
         exposure = best >= 0 ? :clear : dir === nothing ? :possible : :exposed
-        push!(rows, UnconvertedRow(b.name, col.name, t.components[ci].name, exposure, best))
+        push!(rows, UnconvertedRow(b.name, col.name, hw[ci], exposure, best))
     end
     zone = Dict{Symbol,Float64}()
     flat = Dict{Symbol,Bool}()
-    for ci in hw_idx
-        name = t.components[ci].name
+    for (ci, cis) in enumerate(hw_idx)
+        name = hw[ci]
         zone[name] = minimum(norm, samples[ci])
-        ns = [t.tri_normal[k] for k in eachindex(t.tri_area) if t.tri_comp[k] == ci && t.tri_area[k] > 0]
+        ns = [t.tri_normal[k] for k in eachindex(t.tri_area) if t.tri_comp[k] in cis && t.tri_area[k] > 0]
         flat[name] = all(n -> abs(dot(n, ns[1])) > 1 - 1e-9, ns)
     end
     return UnconvertedReport(rows, zone, flat, Float64(zone_radius))

@@ -346,9 +346,10 @@ end
     @test nelements(t3) > 4 * 4
     @test all(dot(t3.elem_normal[i], t3.elem_centroid[i] - cad.position) > 0 for i in 1:nelements(t3))
     @test_throws ArgumentError visrad_target(ws; select = o -> o.kind === :mesh, coarsen = 0.3, remesh = 0.3)
-    # a tetrahedron has no cylinder or sphere: `fit` leaves the part whole
+    # a tetrahedron has no cylinder or sphere: `fit` (on by default with `remesh`) leaves the
+    # part whole, as `fit = false` does
     t4 = visrad_target(ws; select = o -> o.kind === :mesh, orient = true, toward = cad.position, remesh = 0.3,
-                       fit = true)
+                       fit = false)
     @test [c.name for c in t4.components] == [c.name for c in t3.components] && t4.elem_area == t3.elem_area
     # beams
     b1, b2, b3 = ws.beams

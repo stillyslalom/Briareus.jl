@@ -740,7 +740,8 @@ ablator(; albedo = 0.3, conversion = 0.3) = Material(:ablator; albedo, conversio
 const BLACK = Material(:black; albedo = 0.0, conversion = 0.0)
 
 """
-    Component(name, mesh, material; kind = :surface, two_sided = false, surface = nothing)
+    Component(name, mesh, material; kind = :surface, two_sided = false, surface = nothing,
+              part = name)
 
 A named piece of a target. `kind = :surface` components are opaque: they block laser
 rays and lines of sight, absorb laser light, and radiate from their front side (and
@@ -749,6 +750,13 @@ are transparent diagnostic surfaces that record the x-ray flux crossing them and
 re-emit nothing, or, with a `GapClosure` albedo, re-emit what a closing lip of plasma
 would (see `aperture`). `surface` is the exact `CurvedSurface` the mesh approximates, if any;
 the radiation model then uses the curved geometry (see `view_factors`).
+
+`part` names the user's part the component belongs to: its own name, unless it is a
+piece of a part split for computation ([`curved_components`](@ref) names the pieces of
+a part `p` `p/cyl1`, …, `p/rest`, each with `part = p`). Name-taking functions
+(`elements`, `Scenario(...; observe)`, keep-outs, clearance hardware) accept a part's
+name for all its pieces, and reports (`energy_balance`, `component_power`,
+`write_results`, `report`) are keyed by part; see [`parts`](@ref).
 """
 struct Component
     name::Symbol
@@ -757,11 +765,12 @@ struct Component
     kind::Symbol
     two_sided::Bool
     surface::Union{Nothing,CurvedSurface}
+    part::Symbol
     function Component(name, mesh, material; kind::Symbol = :surface, two_sided::Bool = false,
-                       surface::Union{Nothing,CurvedSurface} = nothing)
+                       surface::Union{Nothing,CurvedSurface} = nothing, part = name)
         kind in (:surface, :aperture) || throw(ArgumentError("kind must be :surface or :aperture"))
         kind === :aperture && two_sided && throw(ArgumentError("apertures are one-sided"))
-        new(Symbol(name), mesh, material, kind, two_sided, surface)
+        new(Symbol(name), mesh, material, kind, two_sided, surface, Symbol(part))
     end
 end
 
@@ -786,7 +795,7 @@ aperture(name, mesh; surface = nothing, closure::Union{Nothing,GapClosure} = not
 "Component with its mesh rigidly moved (`x ↦ R*x + t`)."
 transform(c::Component, R::AbstractMatrix, t = zero(Vec3)) =
     Component(c.name, transform(c.mesh, R, Vec3(t...)), c.material; kind = c.kind,
-              two_sided = c.two_sided, surface = _transform_surface(c.surface, R, Vec3(t...)))
+              two_sided = c.two_sided, surface = _transform_surface(c.surface, R, Vec3(t...)), c.part)
 translate(c::Component, t) = transform(c, SMatrix{3,3,Float64}(I), t)
 
 """
@@ -842,6 +851,11 @@ function Target(components::AbstractVector{Component}; closed::Bool = false,
         throw(ArgumentError("visibility must be :centroid or :sampled, got :$visibility"))
     names = [c.name for c in components]
     allunique(names) || throw(ArgumentError("component names must be unique: $names"))
+    for c in components
+        c.part === c.name && continue
+        any(d -> d.name === c.part && d.part !== c.part, components) &&
+            throw(ArgumentError("part $(c.part) is also the name of a component of another part"))
+    end
     tv0, te1, te2, tn, ta = Vec3[], Vec3[], Vec3[], Vec3[], Float64[]
     tcomp, tfront, tback = Int32[], Int32[], Int32[]
     topaque = BitVector()
@@ -949,6 +963,9 @@ ntriangles(t::Target) = length(t.tri_area)
 
 """
     component_index(target, name) -> Int
+
+Index of the component named `name` (a piece's own name; [`part_pieces`](@ref)
+gives the pieces of a part).
 """
 function component_index(t::Target, name::Symbol)
     i = findfirst(c -> c.name === name, t.components)
@@ -957,12 +974,35 @@ function component_index(t::Target, name::Symbol)
 end
 
 """
+    parts(target) -> Vector{Symbol}
+
+The user's parts of a target, in the order of their first components: the components'
+`part`s. A primitive target's parts are its component names; a CAD part that
+[`curved_components`](@ref) split into `p/cyl1`, …, `p/rest` is the one part `p`.
+"""
+parts(t::Target) = unique!([c.part for c in t.components])
+
+"""
+    part_pieces(target, name) -> Vector{Int}
+
+Indices of the components that make up `name`: the pieces of the part `name`, or else
+the one component of that name, so a piece stays reachable by its own name. A
+`KeyError` for a name that is neither.
+"""
+function part_pieces(t::Target, name::Symbol)
+    is = findall(c -> c.part === name, t.components)
+    isempty(is) || return is
+    return [component_index(t, name)]
+end
+
+"""
     elements(target, names...) -> Vector{Int}
 
-Element indices of the named components (both sides of two-sided components).
+Element indices of the named parts or components (both sides of two-sided
+components); a part's name stands for all its pieces (see [`part_pieces`](@ref)).
 """
 elements(t::Target, names::Symbol...) =
-    reduce(vcat, (t.comp_elems[component_index(t, n)] for n in names); init = Int[])
+    reduce(vcat, (t.comp_elems[ci] for n in names for ci in part_pieces(t, n)); init = Int[])
 
 """
     element_material(target, e)
@@ -971,12 +1011,19 @@ element_material(t::Target, e::Integer) = t.components[t.elem_comp[e]].material
 is_aperture(t::Target, e::Integer) = t.components[t.elem_comp[e]].kind === :aperture
 
 function Base.show(io::IO, ::MIME"text/plain", t::Target)
-    println(io, "Target with ", length(t.components), " components, ", nelements(t),
+    ps = parts(t)
+    split = length(ps) < length(t.components)
+    println(io, "Target with ", length(ps), split ? " parts (" : " components, ",
+            split ? string(length(t.components), " components), ") : "", nelements(t),
             " elements, ", ntriangles(t), " triangles")
-    for (i, c) in enumerate(t.components)
-        A = sum(t.elem_area[e] for e in t.comp_elems[i] if t.elem_side[e] == 1; init = 0.0)
-        @printf(io, "  %-14s %-8s %-9s %6d elements  area %9.4f mm²%s\n", c.name, c.kind,
-                c.material.name, length(t.comp_elems[i]), A, c.two_sided ? "  (two-sided)" : "")
+    for p in ps
+        cis = part_pieces(t, p)
+        c = t.components[first(cis)]
+        ne = sum(i -> length(t.comp_elems[i]), cis)
+        A = sum(t.elem_area[e] for i in cis for e in t.comp_elems[i] if t.elem_side[e] == 1; init = 0.0)
+        @printf(io, "  %-14s %-8s %-9s %6d elements  area %9.4f mm²%s%s\n", p, c.kind,
+                c.material.name, ne, A, c.two_sided ? "  (two-sided)" : "",
+                length(cis) > 1 ? "  ($(length(cis)) pieces)" : "")
     end
 end
 Base.show(io::IO, t::Target) = print(io, "Target(", length(t.components), " components, ",

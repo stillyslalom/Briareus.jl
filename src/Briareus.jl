@@ -28,7 +28,8 @@ export AlbedoModel, ConstantAlbedo, TabulatedAlbedo, WallLossAlbedo, Burnthrough
        heat_front, burnthrough_time, areal_mass, optical_depth, eddington_transmission, albedo, Material, gold, ablator, BLACK,
        TemperatureAlbedo, CapsuleAlbedo, capsule_radius_fraction, du_wall_loss, wall_loss_factor, uranium,
        Conversion, conversion_efficiency, nif_conversion,
-       Component, aperture, Target, nelements, elements, component_index, element_quadrature
+       Component, aperture, Target, nelements, elements, component_index, parts, part_pieces,
+       element_quadrature
 export hohlraum, hohlraum_counts, capsule_counts, foil, disk_foil
 export WallWindow, Sombrero, conforming_grid, equal_area_radius
 export SuperGaussianSpot, Beam, port_vector, port_angles, direction, spot_axes, remake, intensity, wavelength,

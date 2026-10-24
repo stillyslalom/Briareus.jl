@@ -704,7 +704,7 @@ function flux_response(m::RadiationModel, observed::AbstractVector{<:Integer}; t
 end
 
 """
-    energy_balance(sol) -> NamedTuple
+    energy_balance(sol; by = :part) -> NamedTuple
 
 Global x-ray power accounting (TW): `source` (Σ ηPᵢ), `absorbed` by each component
 (`(1-α)HA`), `escaped` through each aperture, `transmitted` through each burned-through
@@ -718,27 +718,33 @@ explicit `after`, `τ = α_before-α` and it absorbs `(1-α_before)HA`, as if in
 A capsule with a `CapsuleAlbedo` absorbs `(1-α_c)(R/R₀)² HA`, its effective sphere's
 share (E_cap's power; `energy_budget` integrates it over a `drive_history`).
 `source ≈ Σabsorbed + Σescaped + Σtransmitted + lost`.
+
+The dictionaries are keyed by part: the pieces of a part split for computation
+(`curved_components`) are summed into it. `by = :component` keys them by component.
 """
-function energy_balance(s::RadiationSolution)
+function energy_balance(s::RadiationSolution; by::Symbol = :part)
+    by in (:part, :component) || throw(ArgumentError("by must be :part or :component"))
     m = s.model
     t = m.target
     α, τ = s.albedo, s.transmission
     absorbed = Dict{Symbol,Float64}()
     escaped = Dict{Symbol,Float64}()
     transmitted = Dict{Symbol,Float64}()
+    add!(d, k, v) = (d[k] = get(d, k, 0.0) + v)
     for (ci, c) in enumerate(t.components)
         es = t.comp_elems[ci]
+        n = by === :part ? c.part : c.name
         P(e) = ForwardDiff.value(s.H[e]) * t.elem_area[e]
         if c.kind === :aperture && _transmits(c.material.albedo)     # a closing lip
-            escaped[c.name] = sum(τ[e] * P(e) for e in es; init = 0.0)
-            absorbed[c.name] = sum((1 - α[e] - τ[e]) * P(e) for e in es; init = 0.0)
+            add!(escaped, n, sum(τ[e] * P(e) for e in es; init = 0.0))
+            add!(absorbed, n, sum((1 - α[e] - τ[e]) * P(e) for e in es; init = 0.0))
         elseif c.kind === :aperture
-            escaped[c.name] = sum(P, es; init = 0.0)
+            add!(escaped, n, sum(P, es; init = 0.0))
         elseif _transmits(c.material.albedo)
-            absorbed[c.name] = sum((1 - α[e] - τ[e]) * P(e) for e in es; init = 0.0)
-            transmitted[c.name] = sum(τ[e] * P(e) for e in es; init = 0.0)
+            add!(absorbed, n, sum((1 - α[e] - τ[e]) * P(e) for e in es; init = 0.0))
+            add!(transmitted, n, sum(τ[e] * P(e) for e in es; init = 0.0))
         else
-            absorbed[c.name] = sum((1 - α[e]) * P(e) for e in es; init = 0.0)
+            add!(absorbed, n, sum((1 - α[e]) * P(e) for e in es; init = 0.0))
         end
     end
     lost = sum(ForwardDiff.value(s.B[e]) * t.elem_area[e] * c for (e, c) in

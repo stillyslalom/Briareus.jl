@@ -110,7 +110,9 @@ error set and the rule tolerance, never at nominal.
 
 `capture` lists the components beams are meant to land on (backlighter foils, capture
 surfaces, a hohlraum wall). Each beam's *landing component* is the first of them its
-nominal axis meets.
+nominal axis meets. Here and in `hardware`, `omega1_components`, `diagnostics` and
+`curvature`, a component may be named by its part: a part split for computation
+(`curved_components`) is checked as one, its rows under the part's name.
 
 # Rules
 
@@ -222,14 +224,23 @@ function talis_check(t::Target, beams::AbstractVector{<:Beam}; capture,
                      stay_in = 19.0, level::Integer = 2, edge_step = 0.02)
     tol = _talis_tol(tolerance, pivot)
     R = pointing + target_offset + hardware_tolerance
-    surf = [ci for (ci, c) in enumerate(t.components) if c.kind === :surface]
-    idx(names) = Int[component_index(t, Symbol(n)) for n in names]
+    # checked items: name => its components (a part's pieces, or one component)
+    surf = Pair{Symbol,Vector{Int}}[]
+    for p in parts(t)
+        cis = [ci for ci in part_pieces(t, p) if t.components[ci].kind === :surface]
+        isempty(cis) || push!(surf, p => cis)
+    end
+    idx(names) = Pair{Symbol,Vector{Int}}[Symbol(n) => part_pieces(t, Symbol(n)) for n in names]
     cap_idx = idx(capture)
     hw_idx = hardware === nothing ? surf : idx(hardware)
-    o1_idx = omega1 ? (omega1_components === nothing ? surf : idx(omega1_components)) : Int[]
-    dg_idx = omega1 ? idx(diagnostics) : Int[]
-    geo = Dict(ci => _talis_samples(t, ci, level) for ci in unique(vcat(cap_idx, hw_idx, o1_idx, dg_idx)))
-    edges = _free_edge_points(t, cap_idx, edge_step)
+    o1_idx = omega1 ? (omega1_components === nothing ? surf : idx(omega1_components)) : empty(surf)
+    dg_idx = omega1 ? idx(diagnostics) : empty(surf)
+    geo = Dict(ci => _talis_samples(t, ci, level)
+               for ci in unique(Int[ci for g in (cap_idx, hw_idx, o1_idx, dg_idx) for p in g for ci in last(p)]))
+    pe = _free_edge_points(t, unique(vcat(Int[], last.(cap_idx)...)), edge_step)
+    edges = [unique(vcat(Vec3[], (pe[ci] for ci in last(g))...)) for g in cap_idx]
+    cap_geo = [length(last(g)) == 1 ? geo[only(last(g))] : _merge_samples([geo[ci] for ci in last(g)])
+               for g in cap_idx]
     uc = first(c for c in nif_unconverted() if c.name === :omega1)
     W0 = omega1_size === nothing ? uc.footprint + 2 * (uc.edge - omega1_edge) : Float64(omega1_size)
     f1 = omega1_focus === nothing ? uc.focal_shift : Float64(omega1_focus)
@@ -238,7 +249,7 @@ function talis_check(t::Target, beams::AbstractVector{<:Beam}; capture,
     bls = [omega1 ? _omega1_beamlets(b, offsets, table) : nothing for b in vb]
     ports = _talis_open_ports(open_ports, vb)
     cx = (; tol, R, focus = Float64(focus), ssd = Float64(ssd), cap_idx, hw_idx, o1_idx, dg_idx,
-          geo, edges, capture_contour, capture_margin, max_incidence = Float64(max_incidence),
+          geo, edges, cap_geo, capture_contour, capture_margin, max_incidence = Float64(max_incidence),
           clearance_contour, clearance_margin, tolerance = Float64(tolerance),
           omega1_margin = Float64(omega1_margin), c0 = omega1_edge + W0 / 2, h0 = W0 / 2, f1,
           L = Float64(lens_distance), ports, reflection_angle = Float64(reflection_angle),
@@ -269,7 +280,7 @@ function talis_check(t::Target, beams::AbstractVector{<:Beam}; capture,
                 lens_distance = Float64(lens_distance), reflection_angle = Float64(reflection_angle),
                 cylinder_radius = Float64(cylinder_radius), sphere_radius = Float64(sphere_radius),
                 open_ports = length(ports), stay_in = Float64(stay_in),
-                capture = Symbol[t.components[ci].name for ci in cap_idx])
+                capture = Symbol[first(g) for g in cap_idx])
     return TaLISReport(rows, settings, notes)
 end
 
@@ -282,11 +293,12 @@ function _talis_beam!(rows, t::Target, b::Beam, bl, cx)
     env1 = BeamEnvelope(b; peak_fraction = cx.clearance_contour, margin = cx.ssd)
     env10 = BeamEnvelope(b; peak_fraction = cx.capture_contour, margin = cx.ssd)
     shift = cx.R + cx.focus * env1.cone          # exact worst-case transverse loss
-    land, s_stop = 0, Inf
-    for ci in cx.cap_idx
-        s = _landing(t, env1, (ci,); miss = Inf)
-        s < s_stop && ((land, s_stop) = (ci, s))
+    land, s_stop = 0, Inf                        # index of the landing item in cap_idx
+    for (j, g) in enumerate(cx.cap_idx)
+        s = _landing(t, env1, last(g); miss = Inf)
+        s < s_stop && ((land, s_stop) = (j, s))
     end
+    landed = land == 0 ? Int[] : last(cx.cap_idx[land])
 
     # 3ω capture and incidence
     if !isempty(cx.cap_idx)
@@ -295,7 +307,7 @@ function _talis_beam!(rows, t::Target, b::Beam, bl, cx)
                                  cx.capture_margin, aim,
                                  "beam axis misses every capture component; " * _TALIS_BLOWBY))
         else
-            name = t.components[land].name
+            name = first(cx.cap_idx[land])
             worst, nom, wp = Inf, Inf, aim
             for x in cx.edges[land]
                 d, _ = envelope_distance(env10, x)
@@ -307,7 +319,7 @@ function _talis_beam!(rows, t::Target, b::Beam, bl, cx)
             note = !isfinite(worst) ? "no free substrate edge" : m >= 0 ? "" : _TALIS_BLOWBY
             push!(rows, TaLISRow(b.name, :capture_3w, name, m >= 0 ? :pass : :fail, m, :mm, worst,
                                  nom, cx.capture_margin, wp, note))
-            θw, θn, ip = _talis_incidence(t, cx.geo[land], env10, k, aim, shift, tol)
+            θw, θn, ip = _talis_incidence(t, cx.cap_geo[land], env10, k, aim, shift, tol)
             worst = θw + cx.tolerance
             m = cx.max_incidence - worst
             push!(rows, TaLISRow(b.name, :incidence_3w, name, m > 0 ? :pass : :fail, m, :deg, worst,
@@ -316,10 +328,10 @@ function _talis_beam!(rows, t::Target, b::Beam, bl, cx)
     end
 
     # 3ω clearance
-    for ci in cx.hw_idx
-        ci == land && continue
+    for (name, cis) in cx.hw_idx
+        any(in(landed), cis) && continue
         worst, nom, wp = Inf, Inf, aim
-        for x in cx.geo[ci].verts
+        for ci in cis, x in cx.geo[ci].verts
             d, s = envelope_distance(env1, x)
             s <= s_stop || continue
             nom = min(nom, d)
@@ -328,22 +340,21 @@ function _talis_beam!(rows, t::Target, b::Beam, bl, cx)
         end
         m = worst - cx.clearance_margin
         note = !isfinite(worst) ? "downstream of the landing point" : m > 0 ? "" : _TALIS_BLOWBY
-        push!(rows, TaLISRow(b.name, :clearance_3w, t.components[ci].name, m > 0 ? :pass : :fail, m,
+        push!(rows, TaLISRow(b.name, :clearance_3w, name, m > 0 ? :pass : :fail, m,
                              :mm, worst, nom, cx.clearance_margin, wp, note))
     end
 
     bl === nothing && return rows
     # 1ω clearance and management
-    for ci in cx.o1_idx
+    for (name, cis) in cx.o1_idx
         worst, nom, wp = Inf, Inf, aim
-        for x in cx.geo[ci].verts
+        for ci in cis, x in cx.geo[ci].verts
             dn, dw = _omega1_distance(x, bl, cx)
             nom = min(nom, dn)
             w = dw - cx.R - tol(x, aim)
             w < worst && ((worst, wp) = (w, x))
         end
         m = worst - cx.omega1_margin
-        name = t.components[ci].name
         if m > 0
             push!(rows, TaLISRow(b.name, :clearance_1w, name, :pass, m, :mm, worst, nom,
                                  cx.omega1_margin, wp, ""))
@@ -351,21 +362,21 @@ function _talis_beam!(rows, t::Target, b::Beam, bl, cx)
             push!(rows, TaLISRow(b.name, :clearance_1w, name, :review, m, :mm, worst, nom,
                                  cx.omega1_margin, wp,
                                  "1ω footprint does not clear: unconverted-light management required (see management_1w)"))
-            push!(rows, _talis_management(t, ci, b, bl, cx))
+            push!(rows, _talis_management(t, name, cis, b, bl, cx))
         end
     end
     # diagnostics to 1ω light
-    for ci in cx.dg_idx
+    for (name, cis) in cx.dg_idx
         worst, nom, req, wp = Inf, Inf, NaN, aim
         best = Inf
-        for x in cx.geo[ci].verts
+        for ci in cis, x in cx.geo[ci].verts
             dn, dw = _omega1_distance(x, bl, cx)
             w = dw - cx.R - tol(x, aim)
             r = 10 + 0.015 * norm(x)
             nom = min(nom, dn)
             w - r < best && ((best, worst, req, wp) = (w - r, w, r, x))
         end
-        push!(rows, TaLISRow(b.name, :diagnostic_1w, t.components[ci].name, best >= 0 ? :pass : :fail,
+        push!(rows, TaLISRow(b.name, :diagnostic_1w, name, best >= 0 ? :pass : :fail,
                              best, :mm, worst, nom, req, wp,
                              "required clearance 10 mm at TCC → 25 mm at 1 m (linear in distance from TCC)"))
     end
@@ -398,8 +409,23 @@ function _talis_incidence(t::Target, g, env, k, aim, shift, tol)
     return θw, θn, ip
 end
 
+# 1ω management of an uncleared item `name` made of the components `cis`: the worst of
+# its components' rows (status first, then margin), under the item's name.
+function _talis_management(t::Target, name::Symbol, cis, b::Beam, bl, cx)
+    rank(r) = r.status === :fail ? 0 : r.status === :review ? 1 : 2
+    best = nothing
+    for ci in cis
+        r = _talis_management(t, ci, b, bl, cx)
+        (best === nothing || (rank(r), r.margin) < (rank(best), best.margin)) && (best = r)
+    end
+    r = best
+    return r.component === name ? r :
+           TaLISRow(r.beam, r.rule, name, r.status, r.margin, r.unit, r.worst, r.nominal, r.required,
+                    r.point, r.note)
+end
+
 # 1ω management of an uncleared component: curvature, else specular reflection.
-function _talis_management(t::Target, ci, b::Beam, bl, cx)
+function _talis_management(t::Target, ci::Integer, b::Beam, bl, cx)
     c = t.components[ci]
     aim = Vec3(b.aim)
     kind, rc, half = _talis_curvature(t, ci, cx.curvature)
@@ -447,8 +473,8 @@ end
 # (kind, radius, dimple half-side): kind :cylinder, :sphere, :dimpled, :flat or :unknown.
 function _talis_curvature(t::Target, ci, overrides)
     c = t.components[ci]
-    if haskey(overrides, c.name)
-        v = overrides[c.name]
+    if haskey(overrides, c.name) || haskey(overrides, c.part)
+        v = haskey(overrides, c.name) ? overrides[c.name] : overrides[c.part]
         v === :flat && return (:flat, Inf, NaN)
         kind = Symbol(v[1])
         kind in (:cylinder, :sphere, :dimpled) ||
@@ -543,13 +569,13 @@ function _talis_stay_in(t::Target, beams, surf, limit, htol)
         bs = [b for b in nif if sgn * b.port[3] > 0]
         isempty(bs) && continue
         zref = sgn > 0 ? minimum(b.aim[3] for b in bs) : maximum(b.aim[3] for b in bs)
-        for ci in surf
-            ks = [k for k in eachindex(t.tri_area) if t.tri_comp[k] == ci]
+        for (name, cis) in surf
+            ks = [k for k in eachindex(t.tri_area) if t.tri_comp[k] in cis]
             isempty(ks) && continue
             pts = [v for k in ks for v in (t.tri_v0[k], t.tri_v0[k] + t.tri_e1[k], t.tri_v0[k] + t.tri_e2[k])]
             e, i = findmax(sgn * (p[3] - zref) for p in pts)
             m = limit - (e + htol)
-            push!(rows, TaLISRow(grp, :tas_stay_in, t.components[ci].name, m >= 0 ? :pass : :fail, m,
+            push!(rows, TaLISRow(grp, :tas_stay_in, name, m >= 0 ? :pass : :fail, m,
                                  :mm, e + htol, e, limit, pts[i],
                                  m >= 0 ? "" : "outside the TAS stay-in zone: may need a different alignment sequence or beam selection"))
         end
@@ -578,6 +604,11 @@ function _talis_samples(t::Target, ci, level)
     end
     return (; verts = unique(verts), leaves, normals)
 end
+
+# The samples of several components (the pieces of a part) as one.
+_merge_samples(gs) = (; verts = unique(reduce(vcat, (g.verts for g in gs))),
+                      leaves = reduce(vcat, (g.leaves for g in gs)),
+                      normals = reduce(vcat, (g.normals for g in gs)))
 
 # Points every ≤ `step` mm along the free edges (one opaque triangle) of the given
 # components; vertices are merged by position across components.

@@ -145,18 +145,23 @@ end
 Per-element CSV: index, component, side, centroid (mm), normal, area (mm²), polar and
 azimuthal angle of the centroid (degrees, about TCC), then one column per
 `name => values` pair in `fields` (e.g. `:H => sol.H`, `:laser => laser_flux(dep, t)`).
+On a target with parts split for computation (`curved_components`), a `part` column
+follows `component`.
 """
 function write_element_table(path::AbstractString, t::Target, fields::Pair...;
                              elems = 1:nelements(t))
+    split = any(c -> c.part !== c.name, t.components)
     open(path, "w") do io
-        println(io, join(("element", "component", "side", "x", "y", "z", "nx", "ny", "nz", "area",
-                          "theta_deg", "phi_deg", (string(first(f)) for f in fields)...), ","))
+        println(io, join(("element", "component", (split ? ("part",) : ())..., "side", "x", "y", "z",
+                          "nx", "ny", "nz", "area", "theta_deg", "phi_deg",
+                          (string(first(f)) for f in fields)...), ","))
         for e in elems
             c, n = t.elem_centroid[e], t.elem_normal[e]
             θ = acosd(clamp(c[3] / max(norm(c), eps()), -1, 1))
             φ = mod(atand(c[2], c[1]), 360)
             vals = (ForwardDiff.value(last(f)[e]) for f in fields)
-            println(io, join((e, t.components[t.elem_comp[e]].name, t.elem_side[e],
+            comp = t.components[t.elem_comp[e]]
+            println(io, join((e, comp.name, (split ? (comp.part,) : ())..., t.elem_side[e],
                               _csvfield.((c..., n..., t.elem_area[e], θ, φ))..., _csvfield.(vals)...), ","))
         end
     end
@@ -446,6 +451,12 @@ function _stl_solids(cs::AbstractVector{Component}, apertures, _)
         for l in cs                                     # the hole's closing lip, if any
             lip(l) && String(l.name) == name * "_lip" && (m = merge_meshes(m, l.mesh))
         end
+        # the pieces of a part split for computation are written as the part
+        if c.part !== c.name
+            k = findfirst(o -> first(o) == String(c.part), out)
+            k === nothing ? push!(out, String(c.part) => m) : (out[k] = first(out[k]) => merge_meshes(last(out[k]), m))
+            continue
+        end
         push!(out, name => m)
     end
     return out
@@ -504,12 +515,13 @@ comparison with another code, and return their paths:
 - `elements.csv` — per element (`write_element_table`): absorbed laser power (TW) and
   intensity (W/cm²), and with a radiosity solution `sol` the x-ray source, radiosity
   and incident flux (W/cm²), albedo and transmitted fraction;
-- `components.csv` — per component: absorbed laser power (TW, front and the unmodeled
-  back side), and with `sol` the x-ray power absorbed, escaped (apertures) and
-  transmitted (thin foils, gaps) from `energy_balance`;
+- `components.csv` — per part (component, unless a part was split for computation by
+  `curved_components`; its pieces are summed): absorbed laser power (TW, front and the
+  unmodeled back side), and with `sol` the x-ray power absorbed, escaped (apertures)
+  and transmitted (thin foils, gaps) from `energy_balance`;
 - `beams.csv` — with `beams` (in the deposition's order): each beam's name, port angles,
   delivered and landed power (TW);
-- `legendre.csv` and `ylm.csv` — with `observe` (component names) and `sol`: the
+- `legendre.csv` and `ylm.csv` — with `observe` (part or component names) and `sol`: the
   Legendre moments `aₗ` (`write_moments`) and the real spherical-harmonic coefficients
   `c_lm` of the observed incident flux, with their ratios to the mean term;
 - `summary.txt` — totals (delivered, landed, missed; x-ray source, lost).
@@ -533,11 +545,12 @@ function write_results(dir::AbstractString, t::Target, dep::Deposition; sol = no
     open(path, "w") do io
         println(io, "component,kind,laser_TW,laser_outside_TW",
                 bal === nothing ? "" : ",xray_absorbed_TW,xray_escaped_TW,xray_transmitted_TW")
-        for c in t.components
-            row = Any[c.name, c.kind, get(cp, c.name, 0.0), get(cp, Symbol(c.name, :_outside), 0.0)]
+        for p in parts(t)
+            c = t.components[first(part_pieces(t, p))]
+            row = Any[p, c.kind, get(cp, p, 0.0), get(cp, Symbol(p, :_outside), 0.0)]
             if bal !== nothing
-                push!(row, get(bal.absorbed, c.name, 0.0), get(bal.escaped, c.name, 0.0),
-                      get(bal.transmitted, c.name, 0.0))
+                push!(row, get(bal.absorbed, p, 0.0), get(bal.escaped, p, 0.0),
+                      get(bal.transmitted, p, 0.0))
             end
             println(io, join((_csvfield(x) for x in row), ","))
         end

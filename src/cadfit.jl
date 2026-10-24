@@ -768,10 +768,11 @@ The component split into one component per cylinder, cone or sphere that
 its `regions`), each carrying its fitted `CylinderSurface`, `ConeSurface` or
 `SphereSurface`, and the rest: `<name>/cyl1`, `<name>/cyl2`, …, `<name>/cone1`, …,
 `<name>/sph1`, …, by decreasing area, then `<name>/rest` with the other patches (planes
-and unrecognized faces). Material, kind and sidedness are the component's. For a
-remeshed CAD part pass the facets it was remeshed from as `reference` (see
-`fit_surfaces`). A component that already has a surface, or in which no curved region
-is found, is returned unchanged.
+and unrecognized faces). Material, kind, sidedness and `part` are the component's. A
+component that one fitted surface covers whole keeps its name (and its mesh) and only
+gains the surface. For a remeshed CAD part pass the facets it was remeshed from as
+`reference` (see `fit_surfaces`). A component that already has a surface, or in which
+no curved region is found, is returned unchanged.
 
 `maxradius` and `minfraction` leave regions in the rest: those whose radius of
 curvature (R/cos θ on a cone of half-angle θ) exceeds `maxradius` times the part's
@@ -795,9 +796,10 @@ Planar regions are not given a surface: flat elements are already exact there
 (`DiskSurface` describes polar-sector elements of primitive end caps, not general
 planar CAD faces).
 
-A region of a CAD part is named by its part and kind, so `elements(target, :part)` no
-longer exists after the split; collect `elements(target, n)` over the names starting
-with the part's.
+The pieces remember their part (`part`), so the split is computational only:
+`elements(target, :part)`, the other name-taking functions and the reports
+(`energy_balance`, `component_power`, `write_results`, `report`) see the part, and
+each piece stays reachable by its own name (see [`parts`](@ref)).
 """
 function curved_components(c::Component; kinds = (:cylinder, :cone, :sphere), regions = nothing,
                            maxradius::Real = Inf, minfraction::Real = 1e-3, kwargs...)
@@ -818,6 +820,11 @@ function curved_components(c::Component; kinds = (:cylinder, :cone, :sphere), re
     end
     sort!(sel; by = r -> -r.area)
     isempty(sel) && return [c]
+    if length(sel) == 1 && length(unique(sel[1].patches)) == npatches(c.mesh)
+        # one surface covers the whole part: it keeps its name and its mesh
+        return [Component(c.name, c.mesh, c.material; kind = c.kind, two_sided = c.two_sided,
+                          surface = sel[1].surface, c.part)]
+    end
     out = Component[]
     used = falses(npatches(c.mesh))
     nk = Dict{Symbol,Int}()
@@ -826,12 +833,12 @@ function curved_components(c::Component; kinds = (:cylinder, :cone, :sphere), re
         k = nk[r.kind] = get(nk, r.kind, 0) + 1
         name = Symbol(c.name, r.kind === :cylinder ? "/cyl" : r.kind === :cone ? "/cone" : "/sph", k)
         push!(out, Component(name, _patch_submesh(c.mesh, r.patches), c.material; kind = c.kind,
-                             two_sided = c.two_sided, surface = r.surface))
+                             two_sided = c.two_sided, surface = r.surface, c.part))
         used[r.patches] .= true
     end
     rest = findall(!, used)
     isempty(rest) || push!(out, Component(Symbol(c.name, "/rest"), _patch_submesh(c.mesh, rest), c.material;
-                                          kind = c.kind, two_sided = c.two_sided))
+                                          kind = c.kind, two_sided = c.two_sided, c.part))
     return out
 end
 

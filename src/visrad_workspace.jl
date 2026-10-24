@@ -553,7 +553,7 @@ end
 """
     visrad_component(object; material = nothing, two_sided = false, orient = false,
                      toward = (0, 0, 0), coarsen = nothing, remesh = nothing,
-                     fit = false, primitive_h = nothing) -> Vector{Component}
+                     fit = remesh !== nothing, primitive_h = nothing) -> Vector{Component}
 
 Briareus components for one `VisRadObject`, in the chamber frame (mm). The material
 defaults to the object's albedo and x-ray conversion efficiency. CAD meshes give one
@@ -569,13 +569,15 @@ shells are then modeled as two radiating sides). CAD needs fewer, compact elemen
 before view factors: `remesh` (mm) divides the surface into near-planar elements of
 about that size whatever the facets' shapes (`remesh_mesh`; long slivers are cut),
 while `coarsen` (mm) only merges whole near-coplanar facets up to that size
-(`coarsen_mesh`; slivers longer than the size stay). `fit = true` (or a named tuple of
-`curved_components` and `fit_surfaces` keywords) then splits a CAD part into its
-cylinders, cones and spheres, each with its exact surface fitted to the CAD facets, and
-the rest (`curved_components`; curved faces of under 10⁻³ of the part's area stay flat
-unless `minfraction = 0`), so the radiation model integrates on the curved walls as it
-does for a primitive hohlraum. The pieces are renamed `<name>/cyl1`, …, `<name>/rest`
-(see `cad_target`). Rectangles give one component (normal +z before orientation), spheres one with
+(`coarsen_mesh`; slivers longer than the size stay). `fit` (on by default with
+`remesh`; or a named tuple of `curved_components` and `fit_surfaces` keywords) then
+splits a remeshed CAD part into its cylinders, cones and spheres, each with its exact
+surface fitted to the CAD facets, and the rest (`curved_components`; curved faces of
+under 10⁻³ of the part's area stay flat unless `minfraction = 0`), so the radiation
+model integrates on the curved walls as it does for a primitive hohlraum. The pieces,
+`<name>/cyl1`, …, `<name>/rest`, keep the object's name as their `part`, which the
+name-taking functions and reports use (see `cad_target`); `fit = false` keeps one flat
+component. Rectangles give one component (normal +z before orientation), spheres one with
 a `SphereSurface`, and cylindrical hohlraums five — `<name>_wall`, `_cap_top`,
 `_cap_bottom` and the apertures `_leh_top`, `_leh_bottom` — with the curved surfaces
 `hohlraum` uses, all on VisRad's grid (`Number of mesh pts`, which reproduces VisRad's
@@ -585,7 +587,7 @@ VisRad meshes coarsely. Other object types return no components (with a warning)
 """
 function visrad_component(o::VisRadObject; material = nothing, two_sided::Bool = false,
                           orient::Bool = false, toward = (0.0, 0.0, 0.0), coarsen = nothing,
-                          remesh = nothing, fit = false, primitive_h = nothing)
+                          remesh = nothing, fit = nothing, primitive_h = nothing)
     coarsen === nothing || remesh === nothing ||
         throw(ArgumentError("give one of `coarsen` and `remesh`, not both"))
     mat = material === nothing ? Material(Symbol(o.name); albedo = o.albedo, conversion = o.conversion) :
@@ -596,13 +598,14 @@ function visrad_component(o::VisRadObject; material = nothing, two_sided::Bool =
         mesh = coarsen === nothing ? facets : coarsen_mesh(facets; size = coarsen)
         remesh === nothing || (mesh = remesh_mesh(mesh; size = remesh))
         c = Component(o.name, mesh, mat; two_sided)
+        fit === nothing && (fit = remesh !== nothing)
         fit === false && return [c]
         # fitted on the CAD facets, whose vertices lie on the surfaces
         return curved_components(c; reference = mesh === facets ? nothing : facets,
                                  (fit === true ? (;) : fit)...)
     end
     cs = _vrw_primitive(o.kind, o.name, o.params, mat; h = primitive_h)
-    cs = [c.kind === :surface && two_sided ? Component(c.name, c.mesh, c.material; two_sided, surface = c.surface) : c
+    cs = [c.kind === :surface && two_sided ? Component(c.name, c.mesh, c.material; two_sided, surface = c.surface, c.part) : c
           for c in cs]
     isempty(cs) && (@warn "VisRad object $(o.name) (type $(o.type)) is not supported; skipped"; return cs)
     return [transform(c, o.rotation, o.position) for c in cs]
@@ -611,7 +614,7 @@ end
 """
     visrad_target(workspace; select = o -> o.radiosity || o.laser, materials = Dict(),
                   two_sided = false, orient = false, toward = (0, 0, 0),
-                  coarsen = nothing, remesh = nothing, fit = false,
+                  coarsen = nothing, remesh = nothing, fit = remesh !== nothing,
                   inside = nothing, visibility = :sampled) -> Target
 
 Target built from the components of a VisRad workspace (`read_visrad_workspace`) for
@@ -643,7 +646,7 @@ entrance-hole washers and CAD with rims).
 function visrad_target(ws::VisRadWorkspace; select = o -> o.radiosity || o.laser,
                        materials = Dict{String,Material}(), two_sided = false,
                        orient::Bool = false, toward = (0.0, 0.0, 0.0), coarsen = nothing,
-                       remesh = nothing, fit = false, inside = nothing, visibility::Symbol = :sampled)
+                       remesh = nothing, fit = nothing, inside = nothing, visibility::Symbol = :sampled)
     coarsen === nothing || remesh === nothing ||
         throw(ArgumentError("give one of `coarsen` and `remesh`, not both"))
     parts = Union{Component,Pair{Symbol,Mesh}}[]
@@ -834,6 +837,8 @@ function visrad_deposition(ws::VisRadWorkspace, t::Target = visrad_target(ws);
         o = get(objs, name, nothing)
         o === nothing && throw(ArgumentError("VisRad object $name has power sources but is not in the workspace"))
         ci = findfirst(c -> String(c.name) == name, t.components)
+        ci === nothing && any(!iszero, q) && any(c -> String(c.part) == name, t.components) &&
+            throw(ArgumentError("component $name is not on VisRad's $(length(q)) elements (fitted into pieces)"))
         if ci === nothing
             mine = o.kind === :cylindrical_hohlraum &&
                    any(c -> startswith(String(c.name), name * "_"), t.components)

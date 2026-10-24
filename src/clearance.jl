@@ -323,6 +323,8 @@ end
               batch = Threads.nthreads()) -> ClearanceReport
 
 Beam-to-hardware clearance check, judged on the worst case over an error set.
+`targets` and `hardware` name parts or components (see `elements`): a part split for
+computation stands for all its pieces and gets one row per beam, its pieces' worst case.
 
 **Spot.** Each beam's `SuperGaussianSpot` core (with its optional super-Gaussian halo)
 plus clearance-only circular `wings` (default `nif_wings()`: a 1% power-law halo and a
@@ -390,27 +392,29 @@ function clearance(t::Target, beams::AbstractVector{<:Beam}; targets,
               @sprintf("%.6g of core enclosed", enclosed)
     R = pointing + target_offset + hardware_tolerance
     tgt = Symbol[targets...]
+    tgt_idx = Set(ci for n in tgt for ci in part_pieces(t, n))
+    # hardware: parts (all their pieces) or components, one row each
     hw = hardware === nothing ?
-         [c.name for c in t.components if c.kind === :surface && !(c.name in tgt)] :
+         unique!([c.part for (ci, c) in enumerate(t.components) if c.kind === :surface && !(ci in tgt_idx)]) :
          Symbol[hardware...]
-    tgt_idx = Set(component_index(t, n) for n in tgt)
-    hw_idx = [component_index(t, n) for n in hw]
+    hw_idx = [hardware === nothing ? setdiff(part_pieces(t, n), tgt_idx) : part_pieces(t, n)
+              for n in hw]
     samples = Dict{Int,Vector{Vec3}}()
-    for ci in hw_idx
+    for (j, cis) in enumerate(hw_idx)
         pts = Vec3[]
         for k in eachindex(t.tri_area)
-            t.tri_comp[k] == ci || continue
+            t.tri_comp[k] in cis || continue
             v0, e1, e2 = t.tri_v0[k], t.tri_e1[k], t.tri_e2[k]
             _subtri_vertices!(pts, v0, v0 + e1, v0 + e2, level)
         end
-        samples[ci] = unique(pts)
+        samples[j] = unique(pts)
     end
     errs = (; pointing = Float64(pointing), target_offset = Float64(target_offset),
             hardware_tolerance = Float64(hardware_tolerance), focus = Float64(focus),
             ssd = Float64(ssd))
     finish(rows, canceled) = ClearanceReport(rows, contour, R, errs, Float64(margin), tgt,
                                              thresholds, canceled)
-    rowsof(bs) = _clearance_rows(t, bs, samples, hw_idx, tgt_idx, wings, op, nspot, R,
+    rowsof(bs) = _clearance_rows(t, bs, samples, hw, hw_idx, tgt_idx, wings, op, nspot, R,
                                  focus, nangles, thresholds;
                                  intensity, peak_fraction, enclosed, margin = margin + ssd)
     callback === nothing && return finish(rowsof(beams), false)
@@ -429,7 +433,7 @@ function clearance(t::Target, beams::AbstractVector{<:Beam}; targets,
 end
 
 # Rows of the clearance check for `beams` (all beams of a non-batched call).
-function _clearance_rows(t::Target, beams, samples, hw_idx, tgt_idx, wings, op, nspot, R,
+function _clearance_rows(t::Target, beams, samples, hw, hw_idx, tgt_idx, wings, op, nspot, R,
                          focus, nangles, thresholds; intensity, peak_fraction, enclosed,
                          margin)
     nc = length(t.components)
@@ -472,14 +476,14 @@ function _clearance_rows(t::Target, beams, samples, hw_idx, tgt_idx, wings, op, 
         cone = cone_directions(b, _CLEARANCE_NCONE)[1]
         rhs = map(w -> w isa PowerLawWing ? _wing_rh(w, b) : 0.0, wt)
         P = b.power
-        for (j, ci) in enumerate(hw_idx)
-            best, bp, bs, Imax = _scan_hardware(t, ci, samples[ci], envs[1], wingc, s_stop,
+        for (j, cis) in enumerate(hw_idx)
+            best, bp, bs, Imax = _scan_hardware(t, cis, samples[j], envs[1], wingc, s_stop,
                                                 frames, cone, wt, rhs, P)
             worst = best - R - focus * envs[1].cone
-            pw = maximum(Pc[v, ci] for v in vids)
+            pw = maximum(sum(ci -> Pc[v, ci], cis; init = 0.0) for v in vids)
             frac = P > 0 ? pw / P : 0.0
             Iw = to_Wcm2(Imax)
-            rows[(bi-1)*length(hw_idx)+j] = ClearanceRow(b.name, t.components[ci].name, worst, best,
+            rows[(bi-1)*length(hw_idx)+j] = ClearanceRow(b.name, hw[j], worst, best,
                                                          bp, bs, pw, frac, Iw,
                                                          _status(Iw, frac, thresholds))
         end
@@ -489,7 +493,7 @@ end
 
 const _CLEARANCE_NCONE = 37
 
-# Nearest reachable sample of hardware component `ci` to the envelope (distance, point,
+# Nearest reachable sample of hardware components `ci` to the envelope (distance, point,
 # axial position) upstream of `s_stop`, and the largest intensity over the error-set
 # variants `frames` there.
 function _scan_hardware(t::Target, ci, samples, env::BeamEnvelope, wingc, s_stop, frames,
@@ -517,7 +521,7 @@ function _scan_hardware(t::Target, ci, samples, env::BeamEnvelope, wingc, s_stop
     return best, bp, bs, Imax
 end
 
-# Whether beam light can reach hardware sample `x` (component `ci`) at axial position `s`
+# Whether beam light can reach hardware sample `x` (of components `ci`) at axial position `s`
 # and signed envelope distance `d`, ignoring the component's own triangles (apertures
 # are not in the BVH). Reachable if the segment to `x` from the beam axis at the same
 # `s` is unobstructed, or
@@ -529,7 +533,7 @@ end
 # A point is skipped only when every one of these paths is blocked.
 function _reachable(t::Target, ci, env::BeamEnvelope, cone, x, d, s)
     skip = let comp = t.tri_comp, ci = ci
-        id -> comp[id] == ci
+        id -> comp[id] in ci
     end
     ε = _ray_eps(t)
     a = env.focus + s * env.k
