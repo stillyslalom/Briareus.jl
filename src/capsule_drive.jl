@@ -22,6 +22,16 @@ Build one with [`capsule_drive`](@ref). Fields:
 - `area` — the observed elements' area (mm²)
 - `provenance` — `Dict{Symbol,Any}`: code, version, git commit, the history's source
   times, observed components, capsule material, mesh size, and whatever the caller adds
+- `ylm` — `nothing` (axisymmetric), or the drive with every `m`: the `(lmax+1)² × nt`
+  ratios `bₗₘ` (rows in [`mode_index`](@ref) order, so row 1 is 1) of
+  `F(θ,φ,t) = a₀(t) Σₗₘ bₗₘ(t) Ŷₗₘ(θ,φ)`, where `Ŷₗₘ` are the real Schmidt
+  semi-normalized harmonics, `Ŷₗ₀ = Pₗ(cos θ)` and
+  `Ŷₗ,±ₘ = √(2(l−m)!/(l+m)!) Pₗᵐ(cos θ) (cos mφ, sin mφ)` for `m > 0`, without the
+  Condon–Shortley phase, `φ` from +x toward +y (NIF: Switchyard 1). That is the
+  normalization of `modes`: the `m = 0` rows *are* `modes` (`bₗ₀ = aₗ/a₀`), and
+  `√(Σₘ bₗₘ²)` is `mode_amplitude`, the rotation-invariant `|aₗ/a₀|` of degree `l`.
+  From the orthonormal coefficients `cₗₘ` of `ylm_moments` (or
+  `drive_history(...; ylm = true)`), `bₗₘ = √((2l+1)/4π) cₗₘ / a₀`.
 
 The angular structure is that of the flux on the initial capsule radius; applying it
 at a moving ablation front far inside that radius changes the geometric smoothing
@@ -36,16 +46,26 @@ struct CapsuleDrive
     radius::Float64
     area::Float64
     provenance::Dict{Symbol,Any}
-    function CapsuleDrive(time, Tr, flux, modes, absorbed, radius, area, provenance)
+    ylm::Union{Nothing,Matrix{Float64}}
+    function CapsuleDrive(time, Tr, flux, modes, absorbed, radius, area, provenance,
+                          ylm = nothing)
         nt = length(time)
         (length(Tr) == nt && length(flux) == nt && length(absorbed) == nt && size(modes, 2) == nt) ||
             throw(ArgumentError("time, Tr, flux, absorbed and the columns of modes differ in length"))
         size(modes, 1) >= 1 || throw(ArgumentError("modes needs at least the l = 0 row"))
         issorted(time) || throw(ArgumentError("times must be sorted"))
         radius > 0 || throw(ArgumentError("radius must be positive"))
+        if ylm !== nothing
+            L = size(modes, 1) - 1
+            size(ylm) == ((L + 1)^2, nt) ||
+                throw(ArgumentError("ylm must be (lmax+1)² × nt = $((L + 1)^2) × $nt, as modes"))
+            all(l -> view(ylm, mode_index(l, 0), :) == view(modes, l + 1, :), 0:L) ||
+                throw(ArgumentError("the m = 0 rows of ylm must equal modes (bₗ₀ = aₗ/a₀)"))
+        end
         new(collect(Float64, time), collect(Float64, Tr), collect(Float64, flux),
             Matrix{Float64}(modes), collect(Float64, absorbed), Float64(radius),
-            Float64(area), Dict{Symbol,Any}(provenance))
+            Float64(area), Dict{Symbol,Any}(provenance),
+            ylm === nothing ? nothing : Matrix{Float64}(ylm))
     end
 end
 
@@ -54,26 +74,30 @@ _lmax(d::CapsuleDrive) = size(d.modes, 1) - 1
 
 function Base.show(io::IO, d::CapsuleDrive)
     print(io, "CapsuleDrive(", length(d.time), " times on [", first(d.time), ", ", last(d.time),
-          "] ns, lmax = ", _lmax(d), ", R = ", d.radius, " mm, peak Tr = ",
+          "] ns, lmax = ", _lmax(d), d.ylm === nothing ? "" : " (all m)", ", R = ", d.radius, " mm, peak Tr = ",
           round(maximum(d.Tr); digits = 1), " eV)")
 end
 
 """
-    (d::CapsuleDrive)(t) -> (; Tr, flux, modes)
+    (d::CapsuleDrive)(t) -> (; Tr, flux, modes, ylm)
 
-The drive at time `t` (ns), linear in the moments `aₗ` between grid times and held at
-the end values outside them.
+The drive at time `t` (ns), linear in the moments `aₗ` (and `a₀ bₗₘ`) between grid
+times and held at the end values outside them; `ylm` is `nothing` for an axisymmetric
+drive.
 """
 function (d::CapsuleDrive)(t::Real)
     a = [_interp(d.time, view(d.modes, l + 1, :) .* d.flux, t) for l in 0:_lmax(d)]
     flux = a[1]
-    return (; Tr = radiation_temperature(flux), flux, modes = flux > 0 ? a ./ flux : [1; zeros(_lmax(d))])
+    ratio(v) = flux > 0 ? v ./ flux : [1; zeros(length(v) - 1)]
+    ylm = d.ylm === nothing ? nothing :
+          ratio([_interp(d.time, view(d.ylm, q, :) .* d.flux, t) for q in axes(d.ylm, 1)])
+    return (; Tr = radiation_temperature(flux), flux, modes = ratio(a), ylm)
 end
 
 """
     capsule_drive(history, target; observe = :capsule, dt = 0.05, times = nothing,
                   lmax = size(history.moments, 1) - 1, radius = nothing,
-                  provenance = (;)) -> CapsuleDrive
+                  ylm = history.ylm !== nothing, provenance = (;)) -> CapsuleDrive
 
 The capsule drive of a [`drive_history`](@ref) result for a capsule-only hydrodynamics
 run, on a uniform grid of spacing `≤ dt` (ns; 50 ps by default, hydro_coupling.md §(c))
@@ -82,6 +106,14 @@ Legendre moments `aₗ` are interpolated linearly between the history's steps an
 divided by the interpolated `a₀`; `flux` is `a₀` and `Tr` its radiation temperature,
 exactly the history's `flux` and `Tr` at its own times. Run `drive_history(...; lmax = 8)`
 for the moments through `l = 8` the hand-over calls for; `lmax` here may only truncate.
+
+With `ylm` (the default when the history recorded them, `drive_history(...; ylm =
+true)`), the drive carries every `m` as well: the history's orthonormal coefficients
+`cₗₘ`, interpolated linearly like `aₗ`, become the Schmidt ratios
+`bₗₘ = √((2l+1)/4π) cₗₘ / a₀` of the `ylm` field, whose `m = 0` rows are then set to
+`modes`, so the two agree exactly. (The history integrates its Legendre moments one
+sub-triangle level finer than its `Y_lm`; the replaced rows differ by less than 1e-3
+of `a₀` on the coarse test hohlraum.)
 
 `target` (a `Target` or `RadiationModel`; the keyframes' reference target for a moving
 hohlraum) supplies the radius of the observed sphere (its `SphereSurface`; pass
@@ -92,7 +124,8 @@ recorded provenance.
 """
 function capsule_drive(h::NamedTuple, target; observe = :capsule, dt::Real = 0.05,
                        times = nothing, lmax::Integer = size(h.moments, 1) - 1,
-                       radius = nothing, provenance = (;))
+                       radius = nothing, ylm::Bool = get(h, :ylm, nothing) !== nothing,
+                       provenance = (;))
     t = target isa RadiationModel ? target.target : target isa Keyframes ? target.reference : target
     t isa Target || throw(ArgumentError("target must be a Target, RadiationModel or Keyframes"))
     names = observe isa Symbol ? (observe,) : Tuple(observe)
@@ -121,13 +154,28 @@ function capsule_drive(h::NamedTuple, target; observe = :capsule, dt::Real = 0.0
     flux = A[1, :]
     modes = A ./ reshape(map(x -> x > 0 ? x : Inf, flux), 1, :)
     modes[1, :] .= 1
+    B = nothing
+    if ylm
+        C = get(h, :ylm, nothing)
+        C === nothing && throw(ArgumentError("the history has no Y_lm; run drive_history(...; ylm = true)"))
+        size(C, 1) >= (lmax + 1)^2 || throw(ArgumentError("the history's Y_lm stop below l = $lmax"))
+        B = zeros((lmax + 1)^2, nt)
+        for l in 0:lmax, m in -l:l
+            q, s = mode_index(l, m), sqrt((2l + 1) / 4π)
+            for k in 1:nt
+                B[q, k] = m == 0 ? modes[l+1, k] :
+                          flux[k] > 0 ? s * _interp(th, view(C, q, :), grid[k]) / flux[k] : 0.0
+            end
+        end
+    end
     absorbed = length(names) == 1 && haskey(h.absorbed, names[1]) ?
                [_interp(th, h.absorbed[names[1]], τ) for τ in grid] : fill(NaN, nt)
     R = radius === nothing ? _observed_radius(t, elems) : Float64(radius)
     area = sum(t.elem_area[elems])
     prov = Dict{Symbol,Any}(
         :code => "Briareus", :version => string(pkgversion(@__MODULE__)), :git => _git_commit(),
-        :quantity => "incident x-ray flux on the capsule (gray), Legendre about +z, P2 > 0 pole-hot",
+        :quantity => "incident x-ray flux on the capsule (gray), Legendre about +z, P2 > 0 pole-hot" *
+                     (B === nothing ? "" : "; ylm: Schmidt semi-normalized real Y_lm ratios, phi from +x"),
         :units => "time ns, Tr eV, flux TW/mm^2, absorbed TW, radius mm, area mm^2",
         :observe => collect(Symbol, names), :history_times => (th[1], th[end], length(th)),
         :interpolation => "linear in a_l between history steps",
@@ -137,7 +185,7 @@ function capsule_drive(h::NamedTuple, target; observe = :capsule, dt::Real = 0.0
     for (k, v) in pairs(provenance)
         prov[Symbol(k)] = v
     end
-    return CapsuleDrive(grid, radiation_temperature.(flux), flux, modes, absorbed, R, area, prov)
+    return CapsuleDrive(grid, radiation_temperature.(flux), flux, modes, absorbed, R, area, prov, B)
 end
 
 # The radius of the sphere the observed elements lie on.
