@@ -11,8 +11,9 @@
 # (default) or `full` (only the full model, e.g. for a fine-mesh confirmation);
 # `transfer`: `calibrated` (default: the two-zone reduced CBET calibrated to PRE 109
 # Fig. 9, `n221204_cbet()`), `reduced` (the single-zone reduced CBET model at the deck's
-# settings) or `fig9b` (the outer-to-inner transfer that gives PRE 109 Fig. 9b's
-# post-transfer cone fraction, HYDRA's own CBET result for this shot); `table` as 5th
+# settings), `fig9b` (the outer-to-inner transfer that gives PRE 109 Fig. 9b's
+# post-transfer cone fraction, HYDRA's own CBET result for this shot) or `joint` (the
+# joint three-shot calibration, `hybride_cbet()`); `table` as 5th
 # argument solves only the comparison times; `dynamics`: `calibrated` (default), `old`
 # (the 2026-10-23 settings) or `late_lips` (see below); `shot`: `n221204` (default),
 # `n220919` or `n210808` (proxies, see below). Writes
@@ -215,7 +216,11 @@ fig9b = CalibratedTransfer((:outer44, :outer50), (:inner23, :inner30), fig9b_fra
 # calibration used HYDRA's degraded input powers (~370 TW at peak); here it acts on the
 # delivered 442 TW.
 calibrated = n221204_cbet(leh_z = geometry.length / 2)
-cbet = transfer == "fig9b" ? fig9b : transfer == "reduced" ? reduced : calibrated
+# `joint`: the two-zone model fitted jointly to N210808, N220919 and N221204 with the Te
+# and Δλ-null constraints (`hybride_cbet()`; research notes, "Joint multi-shot CBET
+# calibration"); its time tables follow each shot's rise (N210808's 0.2 ns early).
+joint = hybride_cbet(leh_z = geometry.length / 2, delay = shot == "n210808" ? -0.2 : 0.0)
+cbet = transfer == "fig9b" ? fig9b : transfer == "reduced" ? reduced : transfer == "joint" ? joint : calibrated
 
 # Hohlraum dynamics (`dynamics`, 6th argument), calibrated against published data other
 # than Fig. 10 (research notes, "Hohlraum dynamics calibrated to published data

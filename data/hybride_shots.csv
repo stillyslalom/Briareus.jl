@@ -1,0 +1,22 @@
+# Per-shot CBET-related observables of the HYBRID-E / N221204-design shots (scalar values
+# from the text and tables; time histories are in pre109_fig9_n221204.csv,
+# pre109_fig9_n220919.csv, pre106_fig1_n210808.csv and pre109_fig1_n210808.csv).
+# Columns: shot; dlambda (A, inner - outer at 1w); laser_energy (MJ, delivered);
+# peak_power (TW); hs_p2, u_hs_p2 (hot-spot P2 from the primary neutron image, um,
+# negative = oblate; blank error = not quoted); yield (MJ); clamp_foot, clamp_peak
+# (HYDRA delta n/n saturation clamp; blank = not published for that shot).
+# Sources: dlambda: Kritcher et al. PRE 106, 025201 (2022) (N210808 1.8), PRE 109, 025204
+# (2024) (N220919 2.5, N221204 2.75), PoP 31, 070502 (2024) (N230729 2.9). Energy and
+# power: PRE 109 (1.92 -> 2.05 MJ at ~440 TW), K22 (N210808 441 TW). hs_p2: Pak et al.
+# PRE 109, 025203 (2024) (N210808 -2.3 +/- 0.5, N220919 |P2| 10.8 +/- 1.6, N221204
+# 0.3 +/- 0.1, 17 % contour); PoP 31 Table II (N230729 ~+6, N220919 -10.5); PRE 109 text
+# (N220919 -12). Yield: PoP 31 Table II, PRE 109 Table I. Clamps: PRE 109 App. 1 (0.002
+# foot / 0.0075 rest, the N221204 model; PoP 31 App.: 0.008); Ruof 2026 (2DConA fits of
+# N210808-design shots) need 0.005-0.007 at peak (research notes). The N220919 Dlambda was
+# limited by SBS laser-damage risk (PRE 109, PoP 31). N230729: thicker ablator, early pulse
+# +30 ps (PoP 31): confounded, a trend check only. Collected 2026-10-24.
+shot,dlambda,laser_energy,peak_power,hs_p2,u_hs_p2,yield,clamp_foot,clamp_peak
+N210808,1.8,1.92,441,-2.3,0.5,1.37,,
+N220919,2.5,2.05,440,-10.8,1.6,1.22,,
+N221204,2.75,2.05,440,0.3,0.1,3.15,0.002,0.0075
+N230729,2.9,2.05,440,6,,3.88,,

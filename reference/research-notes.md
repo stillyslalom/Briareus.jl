@@ -2958,7 +2958,9 @@ to the same Fig. 9b data with Te ≤ 5.5 keV (`calibrate_cbet` with an upper bou
   0.01 at 4.75–5.5 ns) and moves the null to 0.05 Å: rejected.
 - Not adopted: `n221204_cbet()` is unchanged. Constraining Te trades one unfitted check
   (the null) for another (N210808). A joint fit to N210808 / N220919 with the null as a
-  constraint (ROADMAP 10) is what can fix the temperature scale.
+  constraint (ROADMAP 10) is what can fix the temperature scale. Done: "Joint multi-shot
+  CBET calibration (2026-10-24)" below. Te ≤ 5.5 keV costs the three-shot fit little; the
+  null in 1–1.55 Å is what the cross-shot data resist.
 
 ### N221204 benchmark rerun: the blind check against Fig. 10
 
@@ -4279,3 +4281,183 @@ tilt_toward, rotation)` and `line_of_sight(target, los; ...) -> LineOfSightRepor
   in the tutorial's drive (see the diagnostic-windows tutorial). Backlighter beam
   pointing could also be offset from the foil center or the foil moved off the
   equator; neither is explored.
+
+## Joint multi-shot CBET calibration (2026-10-24) *derived*
+
+ROADMAP 10 (CBET bullets). `n221204_cbet()` was fitted to one HYDRA run of one shot; its
+Te(t) reaches 7.4 keV and a Te ≤ 5.5 keV refit fitted Fig. 9b as well but moved the Δλ
+null from 1.2 to 0.5 Å ("Hohlraum dynamics calibrated", above). Here the two-zone model is
+fitted to three shots at three detunings at once, with the published constraints as
+bounds and penalties. PRE 109 Fig. 10 is not used in any fit (blind check at the end).
+Confidence: **H** primary text or figure, **L** our construction.
+
+### Data extracted
+
+All HYDRA post-processing, not measurements: no published per-shot *measured* transfer
+exists for these shots (lit review §2). Figures are rasters (no vector paths, including
+PRE 106 page 2, whose 534 drawings are glyphs and legend swatches). Axes were fitted to
+the tick marks on all four frame sides with a shear term (the PRE 109 rasters are sheared
+by −0.005 to −0.007 px/px: the right side of each panel sits 2–3 px higher); colours were
+unmixed per pixel; centrelines are stroke centroids averaged over ±0.05 ns; samples were
+overlaid on the figures and checked by eye.
+
+| Data | Source | Stored | Reading error |
+|---|---|---|---|
+| N220919 (Δλ 2.5 Å) per-cone input/post power and cone fraction, 0.7–7.4 ns (the black curves end at 7.4 ns in every panel) | PRE 109, 025204 Fig. 9 (black) | `pre109_fig9_n220919.csv`, `n220919_fig9()` | 0.35 TW / 0.002 seen; 1.5 TW where hidden under N221204's red (flag `h`: inner inputs before 3.5 ns, much of the outer dashed foot); ±5 TW on the steep rise |
+| N210808 (1.8 Å) incident/post-CBET per cone and cone fraction, 0–9 ns | Kritcher et al., PRE 106, 025201 (2022) Fig. 1(d, e) | `pre106_fig1_n210808.csv`, `n210808_fig1()` | 0.7 TW (native pixel), 0.002 |
+| N210808 and N221204 cone fraction input/post, 23° cone power | PRE 109 Fig. 1(d, e) | `pre109_fig1_n210808.csv`, `pre109_fig1()` | 0.002–0.003, ~1 TW |
+| Δλ, energy, peak power, hot-spot P2, yield, HYDRA clamps for N210808 / N220919 / N221204 / N230729 | K22, PRE 109, PoP 31 Table II, Pak PRE 109 025203 | `hybride_shots.csv`, `hybride_shots()` | as published |
+
+Checks:
+- *Method.* The N221204 red curves re-digitized the same way agree with
+  `pre109_fig9_n221204.csv` to rms 0.004 (cf_in) and 0.006 (cf_post), 0.6–2.7 TW per cone
+  (largest on steep edges). On plateaus the new values are 0.001–0.006 lower, growing with
+  time, the pattern of the shear the 2026-10-23 digitization did not correct. The existing
+  file is kept (the reference fit and its tests use it). PRE 109 Fig. 1e's N221204 curves
+  (a different raster) agree with Fig. 9b to rms 0.002.
+- *Two N210808 runs.* The incident curves of PRE 106 and PRE 109 agree (cone fraction rms
+  0.004), the post-CBET curves do not: PRE 106 is +0.04 higher on average, +0.09 at
+  3.4 ns (0.266 against 0.172) and +0.026 over 5.5–7.8 ns. They are different HYDRA runs
+  (*L*: PRE 106 appeared before the clamp retune from N221106 shock data, PRE 109 App. 1). PRE 109's is
+  the model of Fig. 9 and Fig. 10, so it is the joint fit's N210808 target; its incident
+  per-cone powers come from PRE 106 Fig. 1d (Fig. 1e of PRE 109 gives only the cone
+  fraction and the 23° cone).
+- *N220919 against N221204* (Fig. 9). Foot cone fraction equal to 0.006 at 0.6–2.6 ns;
+  0.02–0.036 lower at 3.0–4.0 ns (outer second step ~10 % higher); peak cone fraction
+  equal (0.332), every cone ~2 % higher. No resolvable rise shift (< 0.05 ns).
+- *Cross-shot transfer in HYDRA* (post-CBET cone fraction, input 0.33 for all):
+
+  | t (ns) | N210808, 1.8 Å (PRE 109 / PRE 106) | N220919, 2.5 Å | N221204, 2.75 Å |
+  |---|---|---|---|
+  | 5.6 | 0.596 / 0.624 | 0.634 | 0.645–0.648 |
+  | 7.0 | 0.465 / 0.508 | 0.564 | 0.571 |
+
+  So HYDRA's peak dCF/dΔλ is 0.03–0.06 per Å between 2.5 and 2.75 Å (same pulse and
+  inputs: 0.014 at 5.6 ns, 0.007 at 7 ns per 0.25 Å) and 0.05 (5.6 ns) to 0.11 (7 ns)
+  per Å between 1.8 and 2.75 Å (different pulses). The lit-review target 0.15–0.18 per Å
+  was derived from hot-spot P2 at 2.7 µm/%CF; HYDRA's own transfer is 2–3× flatter.
+- *Not found.* No N230729 transfer curves (PoP 31 shows its pulse but no post-CBET
+  powers): Δλ 2.9 Å and P2 +6 µm are in `hybride_shots()` as a trend check only. No
+  published LEH Te or ne for any HYBRID-E shot (PRE 109, PoP 31, PRE 106 and HE21 give
+  only the clamps and multipliers); the Te bound below is the high-fill measurement
+  (B16: 4.2 ± 0.2 keV at peak) and the reduced-model value of Michel 2009 (5–6 keV).
+
+### Joint fit (`calibrate_cbet(model, shots; penalty)`, `examples/hybride_cbet_calibration.jl`)
+
+- **Setup.** One `TwoZoneCBET` for all shots: outside multiplier and Mach, inside
+  multiplier, one Te(t) table (7 knots, 1–8 ns, both zones), CH at ne/nc 0.06, Ti 1.5 keV.
+  Per shot: the HYDRA input powers of its own figure (`n221204_fig9_beams` on the mock
+  HYBRID-E pointing; the inner total from the input cone fraction, split evenly 23°/30°),
+  its Δλ, and its timing (`delay` = its `pulse_rise` minus N221204's: −0.03 ns for
+  N220919, −0.06 for N210808; the model is evaluated at t − delay). Targets: post-CBET
+  cone fraction every 0.2 ns over 0.8–8.4 ns where readable (107 rows: 39 / 31 / 37).
+  Equal weights.
+- **Constraints.** Te ≤ 5.5 keV (bound; B16's high-fill 4.2 ± 0.2 keV at peak, Michel
+  2009's 5–6 keV). Δλ null: a squared-hinge penalty (weight 10) on N221204's beams at 5.6
+  and 7.0 ns requiring the inner cones not to gain at 1.0 Å and to gain at 1.55 Å.
+- **New model options** (item 4). `CBET(; saturation = :min)`: S17's hard limit
+  δn = min(clamp, δn_lin), a factor min(1, clamp/δn), so HYDRA's clamp values carry over.
+  `pulse_rise(pulse)`: the knee of the rise (the tangent at half maximum meets the power
+  1 ns earlier; scale-free, so delivered and degraded inputs agree: 4.11 ns on Pak's
+  delivered pulse, 3.98 on Fig. 9's inputs). `cbet_clamp_schedule(pulse; foot, peak)`:
+  the two-knot clamp table switched there (the deck's 3.9–4.1 ns on Fig. 9's inputs).
+  `cbet_null(model, beams, t; receivers)`: the Δλ of zero net transfer, by bisection.
+
+| Fit | Te bound / null | clamps | loss | rms all (N221204 / N220919 / N210808) | Mach out; mult out / in | Te 1 → 8 ns (keV) | null at 5.6 ns | dCF/dΔλ at 5.6 ns, 1–1.8 / 2.5–2.75 Å |
+|---|---|---|---|---|---|---|---|---|
+| `n221204_cbet()` (one shot, reference) | — | deck, smooth | — | 0.044 (0.016 / 0.030 / 0.068) | 1.23; 0.30 / 1.23 | 2.8 → 7.4 | 1.18 Å | 0.20 / 0.19 |
+| free | 20 keV / none | deck, smooth | 0.053 | 0.022 (0.021 / 0.017 / 0.027) | **0.0**; 0.07 / 5.6 (degenerate) | 6.1 → **20 (bound)** | **0 Å** | 0.12 / 0.10 |
+| Te-bounded | 5.5 keV / none | deck, smooth | 0.066 (150 iterations, not converged) | 0.025 (0.023 / 0.017 / 0.032) | **0.0**; 0.09 / 0.37 | 1.8 → 5.5 (bound) | **0 Å** | 0.12 / 0.16 |
+| constrained, clamps started at 0.002 / 0.0075 (not binding: zero gradient, they stay) | 5.5 keV / 1–1.55 Å | fitted, hard min | 0.136 | 0.036 (0.029 / 0.019 / 0.049) | 1.50; 0.058 / 0.60 | 2.0 → 5.5 | 0.98 Å | 0.20 / 0.18 |
+| **constrained + clamps (`hybride_cbet()`)** | 5.5 keV / 1–1.55 Å | fitted, hard min | 0.120 | 0.033 (0.027 / 0.016 / 0.047) | 1.54; 0.142 / 0.729 | 2.1 → 5.5 | 0.97 ± 0.10 Å | 0.197 ± 0.016 / 0.173 ± 0.022 |
+| HYDRA (data) | | | | | | | — | 0.05 (7 ns: 0.11) between 1.8 and 2.75 Å, other pulse / 0.06 (7 ns: 0.03) |
+
+- **One parameter set does not fit all three shots under the constraints.** The
+  constrained fit leaves a systematic cross-shot pattern at peak (5.4–7.4 ns mean
+  residual): N221204 +0.033, N220919 −0.004, N210808 −0.065 (−0.10 at 5.8 ns). The model's
+  Δλ response is linear with a slope 2–3× HYDRA's, so it cannot be right at both 1.8 and
+  2.75 Å. Per-cone ratios (not fitted) stay as in the reference: 44° loses more than
+  50° at peak (0.39 / 0.62 against HYDRA's 0.43 / 0.64), the transfer favours 30° (2.16
+  against 1.88).
+- **What the data alone want** (free): no flow-driven zone (outside Mach → 0, the
+  multipliers then degenerate: σ_u ~10³–10⁵), the null at Δλ = 0, a flatter response
+  (0.10–0.12 per Å at 5.6 ns) and a Te of 14–20 keV, i.e. the gain scale pushed down as far
+  as the bound allows. That is HYDRA's cross-shot flatness bought with an unphysical
+  plasma and the opposite of NC24's statement that HYBRID-E needs 1–1.55 Å to cancel
+  flow-driven CBET. N210808 is still 0.05 low at 5.6 ns.
+- **It is the null, not the temperature, that the data resist.** With Te ≤ 5.5 keV and
+  no null constraint the loss rises only from 0.053 to 0.066 (rms 0.022 → 0.025), still
+  with Mach 0 and the null at 0 Å; adding the null takes it to 0.120–0.136 (rms 0.033–0.036).
+  So the 7.4 keV of `n221204_cbet()` is not needed by any of the data; the flow-driven
+  outside zone that makes the null is what HYDRA's cross-shot data do not support.
+- **The tension is the null against the slope.** With the null at ~1 Å and the
+  cone fraction at 0.33 there, reaching N221204's 0.65 by 2.75 Å needs ~0.18 per Å on
+  average, while HYDRA's two shots on the same pulse (2.5 and 2.75 Å) differ by 0.014 at
+  5.6 ns and 0.007 at 7 ns. A response that steep near the null and that flat by 2.5 Å
+  needs strong saturation in Δλ. The hard clamp does bind at peak in the fit (4.8×10⁻⁴,
+  inside K18's 5×10⁻⁴–2×10⁻³; the linear δn/n of the strongest pairs is ~1×10⁻³ in the
+  reference plasma), but a
+  binding clamp scales the gain down without flattening it in Δλ: the saturated rate goes
+  as Im Γ/|Γ|, which stays near one past the null (scan: clamp 2.5×10⁻⁴ flattens the
+  slope only by also cutting the transfer at 2.75 Å to 0.47). Pump depletion of the 44°
+  cone flattens it only near full transfer (CF > 0.8). The 2026-10-23 single-shot fit
+  (start clamp 0.0075) never reached the binding region: a clamp above every pair's
+  δn has zero gradient.
+- **Possible reasons** (*L*, untested): HYDRA's N210808 and N220919 runs differ from
+  N221204's in more than Δλ (multipliers "adjusted in a common way" but per-shot laser
+  degradation, as-delivered powers, and for N210808 a different pulse);
+  the cross-shot flatness may be a property of HYDRA's inline CBET in a filling hohlraum
+  (the transfer region moves with Δλ), which a fixed two-plane model cannot have; or
+  NC24's 1–1.55 Å is a hot-spot-symmetry statement (data-driven, with other pulse
+  changes), not the null of the transfer itself.
+- **Uncertainty (Laplace, Gauss–Newton at the constrained optimum; σ from the residuals,
+  0.035, model error included; the Te knot at its bound and the penalty held fixed).**
+  Outside multiplier ×/÷ 1.96, inside ±18 %, Mach ±0.38, Te knots ±6–14 %, peak clamp
+  ±27 %, foot clamp unconstrained (σ_u 12: not binding, the foot is fixed by Te and the
+  multipliers). Strong correlations: outside multiplier with Mach (−0.89), inside
+  multiplier with the early Te knots (+0.75–0.83) and with the peak clamp (−0.83). Derived:
+  null 0.97 ± 0.10 Å (the penalty holds it at the band's lower edge), dCF/dΔλ
+  0.197 ± 0.016 (1–1.8 Å) and 0.173 ± 0.022 per Å (2.5–2.75 Å) at 5.6 ns. HYDRA's
+  0.06 between 2.5 and 2.75 Å is > 5 σ away: the discrepancy is the model's structure,
+  not its parameters.
+  A profile in the null (a fit pinned at each null) is the next step; the two ends are in
+  the table (null 0: loss 0.053, or 0.066 with the Te bound; null ~1 Å: loss 0.120), each
+  fit 15–90 min on the shared 4 threads.
+- **Not adopted as the default.** On its own targets the joint fit is better on N220919
+  (rms 0.030 → 0.016) and N210808 (0.068 → 0.047) and over all rows (0.044 → 0.033), but
+  worse on N221204 (0.016 → 0.027), the example's default shot. `n221204_cbet()` stays the
+  example's default; `hybride_cbet()` is the `joint` transfer option.
+
+### Blind check: PRE 109 Fig. 10 per shot
+
+`examples/n221204.jl 0.8 0.4 full <transfer> times calibrated <shot>` (coarse mesh,
+current defaults: calibrated dynamics, wall history and re-emission on, default
+energetics), `calibrated` = `n221204_cbet()` (before), `joint` = `hybride_cbet()` (after;
+N210808's proxy pulse rises 0.2 ns early, so its tables are shifted by −0.2 ns). The
+proxies are as before: N220919 on N221204's delivered pulse, N210808 the DN24 pulse
+shifted. Nothing was fitted to Fig. 10.
+
+| Shot | Fig. 10: min (ns), zero, 8 ns | before: min, zero, 8 ns, rms | after: min, zero, 8 ns, rms | post-CBET CF at 5.5 / 7 ns, before → after |
+|---|---|---|---|---|
+| N221204 (2.75 Å) | −0.170 (5.60), 6.67, +0.095 | −0.225 (5.25), 6.26, +0.143, 0.046 | −0.209 (5.25), 6.31, +0.141, 0.043 | 0.687 / 0.587 → 0.663 / 0.586 |
+| N220919 (2.5 Å) | −0.145 (5.60), 6.66, +0.094 | −0.195 (5.25), 6.22, +0.144, 0.045 | −0.185 (5.25), 6.24, +0.142, 0.044 | 0.634 / 0.546 → 0.619 / 0.551 |
+| N210808 (1.8 Å) | −0.141 (5.50), 6.68, +0.084 | −0.126 (5.25), 6.08, +0.125, 0.071 | −0.137 (5.25), 6.13, +0.123, 0.071 | 0.478 / 0.428 → 0.491 / 0.440 |
+
+- The joint calibration moves every shot's swing by ≤ 0.016 and the crossing by
+  ≤ 0.05 ns, each toward Fig. 10 (minimum within 0.04 of Fig. 10 for all three now;
+  N210808's −0.137 against −0.141). The cross-shot ordering of the minima is HYDRA's
+  (N221204 deepest), and the spread shrinks from 0.099 to 0.072 (Fig. 10: 0.029).
+- Fig. 10's remaining misfit (the crossing ~0.4–0.55 ns early, +0.03–0.05 at 8 ns, the
+  N210808 foot +0.10–0.15 above at 4–4.5 ns) is not CBET's: it is the same with either
+  calibration (bubble speed, proxy pulses; "Hohlraum dynamics calibrated", above).
+
+### What remains
+
+- A per-shot profile of the null and an explicit Δλ-saturation mechanism (or a
+  transfer region that moves with Δλ) to reconcile the null with HYDRA's flat cross-shot
+  response; or evidence that NC24's 1–1.55 Å is not the transfer null.
+- The 23°/30° split (the joint fit still favours 30°), an inner-quad SBS proxy
+  (N220919's limit) and outer depletion reporting; N230729 (2.9 Å) has no published
+  transfer curves, so its +6 µm overshoot stays a trend check.
+- The N221204 Fig. 9 digitization could be replaced by the shear-corrected re-digitization
+  (differences ≤ 0.006 in cone fraction); not done, to keep the reference fit reproducible.

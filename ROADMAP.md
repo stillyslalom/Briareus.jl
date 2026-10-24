@@ -988,19 +988,28 @@ the reference's view factors hold through the pulse; items 9 and 10 remove that 
    CBET (`reference/litreview/cbet_calibration.md`). Done (2026-10-23, see Done):
    `TwoZoneCBET` (Δλ = 0 is not zero transfer) and a multi-epoch `calibrate_cbet`, fitted
    to N221204's post-transfer cone fraction against time in PRE 109 Fig. 9 (rms 0.016,
-   dCF/dΔλ 0.16 per Å, within the 0.15–0.18 target). What remains:
-   - a joint fit to N210808 and N220919 (multi-shot), which would also test the model's
-     Δλ sensitivity (~2.5× HYDRA's cross-shot difference);
-   - the fitted Te(t) reaches 7.4 keV late in the peak, above every published LEH value.
-     Investigated (2026-10-24, see Done): Fig. 9b fixes only Te's rise with time; Te ≤
-     5.5 keV fits as well with smaller multipliers, but moves the Δλ null from 1.2 to
-     0.5 Å while bringing the 1.8 Å response closer to HYDRA's N210808. The joint fit
-     with the null as a constraint decides it;
-   - a clamp schedule driven by the `PulseShape` (the fit uses the deck's fixed
-     schedule), a hard-minimum saturation option so HYDRA clamps carry over, plasma-state
-     tables as inputs, outer-cone depletion and an inner-quad SBS proxy (the N220919
-     limit and the 2.9 Å overshoot), and the 23.5°/30° split (the model favours 30°,
-     HYDRA splits evenly).
+   dCF/dΔλ 0.16 per Å, within the 0.15–0.18 target). Done (2026-10-24, research notes
+   "Joint multi-shot CBET calibration"): the joint fit to N210808 (PRE 109 Fig. 1e, PRE 106
+   Fig. 1d; the two papers' N210808 runs differ), N220919 (Fig. 9, black) and N221204 with
+   one plasma history, Te ≤ 5.5 keV and the null held in NC24's 1–1.55 Å
+   (`hybride_cbet()`, `calibrate_cbet(model, shots; penalty)`, data loaders
+   `n220919_fig9`, `n210808_fig1`, `pre109_fig1`, `hybride_shots`); the hard-minimum
+   saturation (`saturation = :min`), the pulse-driven clamp schedule (`pulse_rise`,
+   `cbet_clamp_schedule`) and `cbet_null`. Result: **one parameter set does not fit all
+   three shots under the constraints** (rms 0.027 / 0.016 / 0.047; N210808's peak 0.07–0.10
+   low). HYDRA's cross-shot response is 0.03–0.06 per Å between 2.5 and 2.75 Å, the
+   constrained model's 0.17 ± 0.02 (the 0.15–0.18 target came from hot-spot P2 at
+   2.7 µm/%CF and is not HYDRA's transfer). Unconstrained, the data want the null at 0 Å
+   (no flow-driven zone) and Te → 20 keV; with Te ≤ 5.5 keV the null stays at 0 Å for
+   little extra misfit: the null, not Te, is what the cross-shot data resist. The 7.4 keV is gone (Te ≤ 5.5 keV, 3.4–3.9 keV in the peak); Fig. 10
+   (blind) moves ≤ 0.016 toward HYDRA on every shot. What remains:
+   - reconcile the null with HYDRA's flat cross-shot response: a profile in the null, a
+     saturation in Δλ (a binding hard clamp, 4.8×10⁻⁴ at peak, scales the gain but does not
+     flatten it) or a transfer region that moves with Δλ; or evidence that NC24's
+     1–1.55 Å is not the transfer null;
+   - plasma-state tables as inputs, outer-cone depletion and an inner-quad SBS proxy (the
+     N220919 limit and the 2.9 Å overshoot; no N230729 transfer curves are published),
+     and the 23.5°/30° split (the model favours 30°, HYDRA splits evenly).
    Item 9's dynamics: calibrated against published data (2026-10-24, see Done). Left:
    the HYBRID-E bubble speed (the picket-fluence transfer from the HDC basecamp is the
    least constrained input) and the lip closure history.

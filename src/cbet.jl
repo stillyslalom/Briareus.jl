@@ -83,6 +83,11 @@ as a laser–plasma model (`apply_lpi`, `Scenario(...; lpi)`).
   `1/√(1 + (δn/clamp)²)`, a smooth version of capping the linear δn/n at `clamp`.
   Published NIF calibrations range from 3×10⁻⁴ (2011) to 0.002 (foot) / 0.0075 (peak)
   for N221204 (Kritcher et al., PRE 109, 025204, 2024); default 0.002.
+  [`cbet_clamp_schedule`](@ref) builds the foot/peak schedule from a `PulseShape`.
+- `saturation` — how `clamp` acts: `:smooth` (default, the factor above) or `:min`,
+  the hard limit δn = min(clamp, δn_linear) of Strozzi et al., PRL 118, 025002 (2017),
+  i.e. a factor `min(1, clamp/δn)`, as in HYDRA's inline model, so its clamp values carry
+  over one to one. At δn = clamp the smooth factor is √2 lower.
 
 Any plasma parameter and `multiplier` may be a number, a function of time (ns), or a
 `(times, values)` table. Each pair's exchange uses the geometric-mean beam area at the
@@ -105,6 +110,7 @@ Base.@kwdef struct CBET <: LaserPlasmaModel
     polarization::Symbol = :smoothed
     multiplier::Any = 1.0
     clamp::Any = 0.002
+    saturation::Symbol = :smooth
     nsteps::Int = 20
 end
 
@@ -192,6 +198,9 @@ function _apply_cbet(m::CBET, beams::AbstractVector{<:Beam}, time, threaded::Boo
     P = T[b.power for b in beams]
     zL = _tvalue(m.leh_z, time)
     clampv = m.clamp === nothing ? nothing : _tvalue(m.clamp, time)
+    m.saturation in (:smooth, :min) ||
+        throw(ArgumentError("saturation must be :smooth or :min (got $(m.saturation))"))
+    sat = clampv === nothing ? nothing : (clampv, m.saturation === :min)
     idxs = Vector{Int}[]
     for top in (true, false)
         idx = [i for (i, b) in enumerate(beams) if (b.port[3] > 0) == top]
@@ -209,7 +218,7 @@ function _apply_cbet(m::CBET, beams::AbstractVector{<:Beam}, time, threaded::Boo
     _cbet_couplings!(Ks, Ds, m, beams, idxs, geos, tasks, time, threaded)
     Pls = [P[idx] for idx in idxs]
     Aeffs = [[g[2] for g in geo] for geo in geos]
-    _cbet_exchanges!(Pls, Ks, Ds, Aeffs, clampv, m.nsteps, threaded)
+    _cbet_exchanges!(Pls, Ks, Ds, Aeffs, sat, m.nsteps, threaded)
     for (idx, Pl) in zip(idxs, Pls)
         P[idx] = Pl
     end
@@ -259,8 +268,9 @@ function _cbet_exchanges!(Pls, Ks, Ds, Aeffs, clampv, nsteps, threaded::Bool)
 end
 
 # RK4 integration of dP_p/dτ = P_p Σ_q K_pq S_pq P_q over τ ∈ [0, 1] in place, with the
-# smooth saturation factor S_pq = 1/√(1 + (δn_pq/clamp)²) symmetric in p, q so power
-# is conserved. Work buffers are allocated once per call.
+# saturation factor S_pq = 1/√(1 + (δn_pq/clamp)²) (smooth) or min(1, clamp/δn_pq)
+# (hard), symmetric in p, q so power is conserved. `clampv` is `nothing` or
+# (clamp, hard). Work buffers are allocated once per call.
 function _cbet_exchange!(x::AbstractVector, K, D, Aeff, clampv, nsteps)
     k1, k2, k3, k4, y = similar(x), similar(x), similar(x), similar(x), similar(x)
     I = similar(x, promote_type(eltype(x), eltype(Aeff)))
@@ -284,7 +294,8 @@ function _cbet_rate!(out, x, K, D, Aeff, ::Nothing, I)
     return out
 end
 
-function _cbet_rate!(out, x, K, D, Aeff, clampv, I)
+function _cbet_rate!(out, x, K, D, Aeff, sat::Tuple, I)
+    clampv, hard = sat
     n = length(x)
     I .= x ./ Aeff
     for p in 1:n
@@ -292,7 +303,8 @@ function _cbet_rate!(out, x, K, D, Aeff, clampv, I)
         for q in 1:n
             q == p && continue
             δn = D[p, q] * sqrt(max(I[p] * I[q], zero(I[p])))
-            acc += K[p, q] * x[q] / sqrt(1 + (δn / clampv)^2)
+            s = hard ? (δn <= clampv ? one(δn) : clampv / δn) : 1 / sqrt(1 + (δn / clampv)^2)
+            acc += K[p, q] * x[q] * s
         end
         out[p] = x[p] * acc
     end
@@ -350,6 +362,69 @@ end
 
 apply_lpi(m::TwoZoneCBET, beams::AbstractVector{<:Beam}, time = 0.0) =
     apply_lpi(m.inside, apply_lpi(m.outside, beams, time), time)
+
+"""
+    pulse_rise(pulse; lookback = 1.0, delta = 0.15) -> t
+
+Start of the rise to peak power (ns), `pulse` a [`PulseShape`](@ref) or `(times,
+powers)`: the knee where the tangent at the half-maximum crossing t½ (slope over
+t½ ± `delta`) meets the power `lookback` ns before t½ (the step the rise leaves). It is
+invariant to a scale factor on the power, so delivered and HYDRA-degraded inputs give
+nearly the same time: 4.11 ns on N221204's delivered pulse ([`n221204_pulse`](@ref)),
+4.0 on PRE 109 Fig. 9's degraded input powers, where the HYDRA deck switches its CBET
+clamp ("until the beginning of the rise to peak power", 3.9–4.1 ns). An engineering
+definition for pulses with one main rise.
+"""
+pulse_rise(p::PulseShape; kw...) = pulse_rise((p.t, p.p); kw...)
+function pulse_rise(p::Tuple{<:AbstractVector,<:AbstractVector}; lookback = 1.0, delta = 0.15)
+    t, P = p
+    half = maximum(P) / 2
+    k = findfirst(>=(half), P)
+    (k === nothing || k == 1) && throw(ArgumentError("the pulse has no rise to its maximum"))
+    th = t[k-1] + (half - P[k-1]) / (P[k] - P[k-1]) * (t[k] - t[k-1])
+    slope = (_interp(t, P, th + delta) - _interp(t, P, th - delta)) / 2delta
+    return th - (half - _interp(t, P, th - lookback)) / slope
+end
+
+"""
+    cbet_clamp_schedule(pulse; foot = 0.002, peak = 0.0075, width = 0.2) -> (times, values)
+
+CBET saturation clamp δn/n stepping from `foot` to `peak` over `width` (ns) centred on
+the start of the pulse's rise to peak power ([`pulse_rise`](@ref)), as a
+two-knot `(times, values)` table for `CBET`'s `clamp` (constant beyond the knots, so
+fitting `:clamp` fits the foot and peak values). The defaults are PRE 109's HYDRA setting
+for N221204 (0.002 until the rise, 0.0075 after; PoP 31, 070502 quotes 0.008), which
+on PRE 109 Fig. 9's input powers puts the switch at the deck's 3.9–4.1 ns (4.0–4.2 ns on
+the delivered pulse). A HYDRA-equivalent setting,
+not physics; with `saturation = :min` the values mean what they mean in HYDRA.
+"""
+function cbet_clamp_schedule(pulse; foot = 0.002, peak = 0.0075, width = 0.2)
+    tr = pulse_rise(pulse)
+    return ([tr - width / 2, tr + width / 2], [foot, peak])
+end
+
+"""
+    cbet_null(model, beams, t; receivers, lo = 0.0, hi = 1.5, tol = 1e-4) -> dlambda
+
+The detuning (Å at the beam wavelength; × 3 for NIF's 1ω convention) of the `receivers`
+groups, all other beams at zero, for which `model` leaves the receivers' total power
+unchanged at time `t`: the Δλ that cancels flow-driven transfer ([`TwoZoneCBET`](@ref);
+NC24 report 1–1.55 Å at 1ω for HYBRID-E). Bisection on [`receiver_ratio`](@ref) over
+[`lo`, `hi`]; `NaN` when the ratio does not cross 1 there.
+"""
+function cbet_null(m::LaserPlasmaModel, beams::AbstractVector{<:Beam}, t; receivers,
+                   lo = 0.0, hi = 1.5, tol = 1e-4)
+    f(x) = receiver_ratio(m, beams, x; receivers, time = t) - 1
+    a, b = float(lo), float(hi)
+    fa, fb = f(a), f(b)
+    sign(fa) == sign(fb) && return NaN
+    while b - a > tol
+        c = (a + b) / 2
+        fc = f(c)
+        sign(fc) == sign(fa) ? ((a, fa) = (c, fc)) : ((b, fb) = (c, fc))
+    end
+    return a - fa * (b - a) / (fb - fa)
+end
 
 """
     receiver_ratio(model, beams, dlambda; receivers, time = 0.0)
@@ -421,6 +496,47 @@ function calibrate_cbet(m::Union{CBET,TwoZoneCBET}, beams_at::Function, data; re
     return _calibrate(loss, m, fit, bounds, iterations)
 end
 
+"""
+    calibrate_cbet(model, shots::AbstractVector; receivers, fit = (:multiplier,), bounds,
+                   penalty = nothing, iterations = 200) -> (model, result)
+
+Joint multi-shot calibration: one `model` (shared plasma physics) fitted to the
+post-transfer power fractions of several shots at once. Each entry of `shots` is a
+NamedTuple `(; beams_at, data, delay = 0.0)`: `beams_at(t)` gives that shot's setup
+beams (its own powers and detuning) and `data` its `(t, fraction[, weight])` rows, as
+in the multi-epoch method. `delay` (ns) shifts the shot against the model's time
+tables: the model is evaluated at `t - delay`, so a shot whose rise to peak comes
+0.2 ns earlier than the reference pulse's has `delay = -0.2` and sees the reference's
+plasma history (and clamp schedule) 0.2 ns early. `penalty(model)` (optional) is added
+to the loss, e.g. a constraint on the Δλ null; it must be generic in the number type.
+`fit`, `bounds`: as in the multi-epoch method.
+"""
+function calibrate_cbet(m::Union{CBET,TwoZoneCBET}, shots::AbstractVector; receivers,
+                        fit = (:multiplier,), bounds = _CBET_BOUNDS, penalty = nothing,
+                        iterations = 200)
+    loss = _joint_loss(shots, receivers, penalty)
+    return _calibrate(loss, m, fit, bounds, iterations)
+end
+
+# Loss of the joint calibration: weighted squared fraction residuals over all shots,
+# plus the penalty. Beams are built once.
+function _joint_loss(shots, receivers, penalty)
+    rs = Set(Symbol[receivers...])
+    sets = map(shots) do s
+        rows = [(Float64(r[1]), Float64(r[2]), length(r) > 2 ? Float64(r[3]) : 1.0) for r in s.data]
+        (rows, [s.beams_at(t) for (t, _, _) in rows], Float64(get(s, :delay, 0.0)))
+    end
+    function loss(mm)
+        acc = penalty === nothing ? 0.0 : penalty(mm)
+        for (rows, beams, delay) in sets, ((t, f, w), bs) in zip(rows, beams)
+            eff = apply_lpi(mm, bs, t - delay)
+            acc += w * (sum(b.power for b in eff if b.group in rs) / sum(b.power for b in eff) - f)^2
+        end
+        return acc
+    end
+    return loss
+end
+
 const _CBET_BOUNDS = Dict(:multiplier => (1e-3, 10.0), :mach => (0.0, 3.0),
                           :flow => (-1000.0, 1000.0), :clamp => (1e-4, 0.05),
                           :Te => (300.0, 2e4), :Ti => (100.0, 1e4), :ne_nc => (1e-3, 0.25))
@@ -445,6 +561,16 @@ function _field_values(v, f)
 end
 
 function _calibrate(loss, m, fit, bounds, iterations)
+    u0, ulo, uhi, with = _calibration_space(m, fit, bounds)
+    f(u) = loss(with(u))
+    g!(G, u) = ForwardDiff.gradient!(G, f, u)
+    res = Optim.optimize(f, g!, ulo, uhi, u0, Optim.LBFGSB(), Optim.Options(; iterations))
+    return with(Optim.minimizer(res)), res
+end
+
+# The fit's parameter space: start, bounds (log space where lo > 0) and the map u ->
+# model. Also used for Laplace (curvature) uncertainties of a fit.
+function _calibration_space(m, fit, bounds)
     specs = _fit_specs(m, fit)
     for (_, f) in specs
         f in _CBET_FITTABLE || throw(ArgumentError("cannot fit $f"))
@@ -461,12 +587,7 @@ function _calibrate(loss, m, fit, bounds, iterations)
     to_u(x) = [l ? log(xi) : xi for (xi, l) in zip(x, logs)]
     from_u(u) = [l ? exp(ui) : ui for (ui, l) in zip(u, logs)]
     with(u) = _cbet_set(m, specs, sizes, from_u(u))
-    f(u) = loss(with(u))
-    g!(G, u) = ForwardDiff.gradient!(G, f, u)
-    ulo, uhi = to_u(lo), to_u(hi)
-    u0 = to_u(clamp.(x0, lo, hi))
-    res = Optim.optimize(f, g!, ulo, uhi, u0, Optim.LBFGSB(), Optim.Options(; iterations))
-    return with(Optim.minimizer(res)), res
+    return to_u(clamp.(x0, lo, hi)), to_u(lo), to_u(hi), with
 end
 
 # the model with the fitted fields set from x (numbers, or the values of tables)
@@ -505,6 +626,69 @@ below the figure's resolution.
 function n221204_fig9()
     h, rows = read_csv(joinpath(@__DIR__, "..", "data", "pre109_fig9_n221204.csv"))
     cols = Tuple([parse(Float64, r[i]) for r in rows] for i in eachindex(h))
+    return NamedTuple{Tuple(Symbol.(h))}(cols)
+end
+
+# a CSV in data/ as a NamedTuple of columns: Float64 (blank cells NaN) where every cell
+# is a number or blank, strings otherwise
+function _nan_table(file)
+    h, rows = read_csv(joinpath(@__DIR__, "..", "data", file))
+    num(s) = isempty(strip(s)) || tryparse(Float64, s) !== nothing
+    val(s) = isempty(strip(s)) ? NaN : parse(Float64, s)
+    col(i) = all(r -> num(r[i]), rows) ? [val(r[i]) for r in rows] : [String(strip(r[i])) for r in rows]
+    return NamedTuple{Tuple(Symbol.(h))}(Tuple(col(i) for i in eachindex(h)))
+end
+
+"""
+    n220919_fig9() -> NamedTuple
+
+PRE 109, 025204 (2024) Fig. 9 for N220919 (HYDRA; the black curves, Δλ 2.5 Å), digitized
+(`data/pre109_fig9_n220919.csv`, provenance in its header). Same columns as
+[`n221204_fig9`](@ref) (`t`, `cf_in`, `cf_post`, `p23_in`, …, `p50_post`; 0.7–7.4 ns,
+where the black curves end), each with a 1σ reading error `u_*` and a reading flag
+`f_*` (`"v"` seen, `"p"` partly covered, `"h"` hidden under N221204's red curve, value
+N221204's; see the header); `NaN` where not readable.
+"""
+n220919_fig9() = _nan_table("pre109_fig9_n220919.csv")
+
+"""
+    n210808_fig1() -> NamedTuple
+
+Kritcher et al., PRE 106, 025201 (2022) Fig. 1(d, e) for N210808 (HYDRA, Δλ 1.8 Å):
+incident and post-CBET power per cone and inner cone fraction, digitized
+(`data/pre106_fig1_n210808.csv`, provenance in its header). Same columns as
+[`n221204_fig9`](@ref). The incident powers carry HYDRA's multipliers (Fig. 1 caption),
+as Fig. 9's do.
+"""
+n210808_fig1() = _nan_table("pre106_fig1_n210808.csv")
+
+"""
+    pre109_fig1() -> NamedTuple
+
+PRE 109, 025204 (2024) Fig. 1(d, e), digitized (`data/pre109_fig1_n210808.csv`,
+provenance in its header): inner cone fraction before and after CBET (`cf_in_n210808`,
+`cf_post_n210808`, `cf_in_n221204`, `cf_post_n221204`) and the 23° cone's power
+(`p23_in_*`, `p23_post_*`, TW) against `t` (ns), each with reading errors `u_*` and flags
+`f_*`. N210808's post-CBET curve here is the 2024 HYDRA model's (the one of Fig. 9 and
+Fig. 10); it differs from PRE 106's ([`n210808_fig1`](@ref)) by +0.04 on average
+(PRE 106 higher; 0.27 against 0.17 at 3.4 ns, +0.03 in the peak) while the incident
+curves agree to 0.004.
+"""
+pre109_fig1() = _nan_table("pre109_fig1_n210808.csv")
+
+"""
+    hybride_shots() -> NamedTuple
+
+Scalar per-shot observables of N210808, N220919, N221204 and N230729
+(`data/hybride_shots.csv`, sources in its header): `shot` (strings), `dlambda` (Å at
+1ω: 1.8, 2.5, 2.75, 2.9), `laser_energy` (MJ), `peak_power` (TW), hot-spot P2 `hs_p2`
+and its error `u_hs_p2` (µm, `NaN` = not quoted), `yield` (MJ) and HYDRA's published
+clamps `clamp_foot`, `clamp_peak` (`NaN` where not published).
+"""
+function hybride_shots()
+    h, rows = read_csv(joinpath(@__DIR__, "..", "data", "hybride_shots.csv"))
+    val(s) = isempty(strip(s)) ? NaN : parse(Float64, s)
+    cols = Tuple(i == 1 ? [String(strip(r[i])) for r in rows] : [val(r[i]) for r in rows] for i in eachindex(h))
     return NamedTuple{Tuple(Symbol.(h))}(cols)
 end
 
@@ -591,4 +775,42 @@ function n221204_cbet(; leh_z = 5.62, offset::Real = 0.5)
     return TwoZoneCBET(; leh_z, offset,
                        outside = (mach = 1.23, multiplier = 0.30, Te = _N221204_TE, clamp),
                        inside = (multiplier = 1.23, Te = _N221204_TE, clamp))
+end
+
+# LEH electron temperature (eV) and clamp knots (ns, N221204's timing) of the joint fit
+const _HYBRIDE_TE = ([1.0, 3.0, 4.0, 4.75, 5.5, 6.5, 8.0],
+                     [2054.0, 2502.0, 2799.0, 3949.0, 3357.0, 3622.0, 5500.0])
+const _HYBRIDE_CLAMP = ([3.88, 4.08], [0.00143, 0.000476])
+
+"""
+    hybride_cbet(; leh_z = 5.62, offset = 0.5, delay = 0.0) -> TwoZoneCBET
+
+Two-zone CBET fitted jointly to HYDRA's post-transfer cone fraction of three HYBRID-E
+shots at three detunings: N210808 (1.8 Å, PRE 109 Fig. 1e with PRE 106 Fig. 1d's
+incident powers, [`pre109_fig1`](@ref), [`n210808_fig1`](@ref)), N220919 (2.5 Å,
+[`n220919_fig9`](@ref)) and N221204 (2.75 Å, [`n221204_fig9`](@ref)), with one plasma
+history for all, under two published constraints: Te ≤ 5.5 keV (the LEH values of
+Michel 2009 and Barrios 2016) and the Δλ null inside NC24's 1–1.55 Å for HYBRID-E.
+HYDRA's hard-minimum saturation (`saturation = :min`) with the clamp schedule switched
+at the rise ([`cbet_clamp_schedule`](@ref)) and both clamp values fitted: 1.4×10⁻³ in
+the foot (not binding, unconstrained), 4.8×10⁻⁴ at peak (binding; ±27 %). Outside:
+Mach 1.54, multiplier 0.14 (×/÷ 2); inside: Mach 0, multiplier 0.73 (±18 %); Te(t)
+2.1 keV at 1 ns, 2.8 at 4, 3.4–3.9 in the peak, 5.5 (the bound) at 8 ns (±6–14 %).
+
+Fit (107 rows, 0.8–8.4 ns): cone-fraction rms 0.027 (N221204), 0.016 (N220919), 0.047
+(N210808), against 0.016 / 0.030 / 0.068 for [`n221204_cbet`](@ref); null 0.97 ± 0.10 Å
+at 5.6 ns. It does not reproduce HYDRA's flat cross-shot response: dCF/dΔλ at peak is
+0.17–0.20 per Å (HYDRA's N220919 and N221204 differ by 0.03–0.06 per Å), so N210808's
+peak is 0.07–0.10 low and N221204's 0.03 high. `delay` (ns) shifts the time tables for a pulse whose rise comes `delay`
+later than N221204's (negative: earlier).
+
+*Derived* (research notes, "Joint multi-shot CBET calibration (2026-10-24)"): effective
+parameters fitted to HYDRA, not a measured plasma state.
+"""
+function hybride_cbet(; leh_z = 5.62, offset::Real = 0.5, delay::Real = 0.0)
+    Te = (_HYBRIDE_TE[1] .+ delay, _HYBRIDE_TE[2])
+    clamp = (_HYBRIDE_CLAMP[1] .+ delay, _HYBRIDE_CLAMP[2])
+    return TwoZoneCBET(; leh_z, offset,
+                       outside = (mach = 1.54, multiplier = 0.142, Te, clamp, saturation = :min),
+                       inside = (multiplier = 0.729, Te, clamp, saturation = :min))
 end
