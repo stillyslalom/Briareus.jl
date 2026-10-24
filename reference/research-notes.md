@@ -3451,3 +3451,58 @@ N221204 (`examples/n221204.jl` full model, standard mesh, default energetics):
   peak; this is the first absolute check of item 16, and it points at the late-time
   energetics (wall loss vs time, conversion rising in time, the `energetics=new` options)
   rather than at the line of sight.
+
+## Capsule drive hand-over and CompactLES stage 0 (2026-10-24) *derived*
+
+ROADMAP Next 17, stage 0. Sources: `reference/litreview/hydro_coupling.md` (all
+literature numbers below are from there, with its confidence marks). Confidence here:
+**L** our construction, *calibrated* as marked.
+
+**Hand-over (`capsule_drive`).** The drive is the history's own `moments` (Legendre
+about +z, about the capsule centre, P2 > 0 pole-hot), interpolated linearly in aₗ and
+divided by a₀; `flux = a₀`, `Tr = radiation_temperature(a₀)`, exactly the history's at
+its times. Default grid 50 ps (hydro_coupling.md §(c)). The radius is the observed
+`SphereSurface`'s (the initial capsule; the flux is not re-evaluated at the moving
+front, pitfall 2). Tested: (1 − α) a₀ A equals `energy_balance`'s capsule absorption
+to 2e-3 on the coarse test hohlraum (solid-angle vs area weights of the facets); beams
+landing on the caps give P2 > 0, toward the waist P2 < 0.
+
+**Extension side.** `CompactLESBriareusExt` in CompactLES (weak dependency on Briareus):
+the glue is CompactLES physics (a source term and its calibration, later a Marshak
+boundary) and evolves with that solver; Briareus's side is a plain struct. Load cost
+is symmetric (an extension loads only with both), but this way Briareus never names
+MPI/KernelAbstractions even as a weak dependency, and CompactLES's `AblationDrive`
+takes plain vectors, so it does not need Briareus either (**L**).
+
+**Stage-0 model (CompactLES `AblationDrive`).** P_abl = P₀ T^3.3 (t/1 ns)^-0.09 Mbar
+(carbon, Trickey 2022), ṁ = 3e5 T³ g cm⁻² s⁻¹ (Lindl 2004 Eq. 6-3), T in heV,
+T_eff⁴ = Tr⁴(1 + Σ aₗ/a₀ Pₗ) on r–θ grids. The front is the ρₐ(−∂ρₐ/∂r)⁺-weighted
+radius per radial line; mass is converted from ablator to a driver gas in a 5 µm
+Gaussian layer, and the driver gas's pressure is relaxed to P_abl (τ = 10 ps): a
+piston at P_abl. A body-force form (force density on the layer) lagged the drive
+(18 Mbar in the shell against 117 applied at 5 ns) and failed; kept for experiments.
+
+**First run (*calibrated*: P₀ only).** Briareus: N221204-class hohlraum (11.24 × 6.4 mm,
+3.1 mm LEH, 1.135 mm capsule), delivered pulse by eye, `hybride_mock_pointing(nif_quads())`,
+static gold wall, no CBET, h 0.4/0.2: capsule Tr peaks at 297 eV (300 with the
+calibrated two-zone CBET; P2/P0 −0.09 vs −0.25 at the peak, neither with wall motion).
+P₀ = 4.81 Mbar puts the peak at 145 Mbar; 17 Mbar where Tr first reaches 150 eV
+(> 12). CompactLES 1-D, 1400 points to 1.4 mm (1 µm), ideal-gas fully ionized C
+(3.5 g/cc, 1.050–1.135 mm), DT ice (0.255, 0.985–1.050), DT gas 0.3 mg/cc, He driver
+1 mg/cc, initial 0.1 Mbar:
+
+| | stage 0 | target |
+|---|---|---|
+| shell pressure at the front | P_abl within 1 % from 0.75 ns | — (by construction) |
+| peak DT velocity | 315 km/s at 8.7 ns | 380–400 km/s |
+| ablator remaining at peak velocity | 19.6 % | 5–6.6 % |
+| ablator + DT KE at peak velocity | 36 kJ | 19–33 kJ |
+| stagnation | ≈ 9.3 ns | (bang 9.53, not a prediction) |
+
+Reading (**L**): with the pressure right, the rocket is too heavy: Lindl's ṁ (a Nova
+fit for low-albedo ablators) removes 80 % of the HDC ablator where HYBRID-E removes
+~94 %. Calibrating ṁ to the mass remaining fixes v through the rocket equation; it is
+one more knob and the obvious next step, and the KE comparison is loose (our KE counts
+the remaining ablator). Numerics: the run takes ~30 min on 4 threads (timestep set by
+the hot driver gas, CFL 0.1 after the automatic retries in the foot); a 2 µm grid
+(layer < 3 cells) fails in the foot.

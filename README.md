@@ -123,6 +123,13 @@ for the same workflow: target, beams, drive, optimization and shot review.
   `drive_history` give quasi-static T_r(t) and P_l(t). `cone_fraction_pulses` builds
   pulses from a total power and a cone fraction; `read_pulse_table` and
   `write_pulse_table` read and write them as CSV.
+- **Capsule drive for a hydrodynamics code.** `capsule_drive(history, model)` packages
+  a drive history for a capsule-only implosion run (LLNL's two-step method): Tr(t),
+  the capsule-averaged incident flux, Legendre ratios aₗ/a₀ (P2 > 0 pole-hot) on a
+  uniform ≤ 50 ps grid, the radius the flux was evaluated on, and provenance. The
+  [CompactLES.jl](https://github.com/stillyslalom/CompactLES.jl) hydrocode reads it in
+  memory through its `CompactLESBriareusExt` extension (`radiation_drive`, a stage-0
+  ablation-pressure drive); Briareus does not depend on CompactLES.
 - **Retuning to a reference drive.** `retune_drive` finds the power histories, per
   cone, quad or beam, that reproduce a reference shot's capsule drive (its Y_lm shape
   through any l, and its level) through time, under per-key power limits (a dropped

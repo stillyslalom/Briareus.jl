@@ -993,3 +993,11 @@ the reference's view factors hold through the pulse; items 9 and 10 remove that 
     with the M-band. Bang time (9.53 ns) is an input in LLNL's capsule-only runs and the
     first prediction here. Pitfalls: apply the asymmetry near the ablation front, not at
     a distant fixed radius; the M-band has its own larger P2.
+    *Stage 0 started (2026-10-24):* Briareus `CapsuleDrive`/`capsule_drive` (785684d);
+    the extension lives in CompactLES (`CompactLESBriareusExt`, branch `briareus-drive`,
+    unmerged): the code is CompactLES physics and Briareus stays free of MPI/KA. The
+    1-D N221204-class run (static Briareus drive, 297 eV peak) holds the shell pressure
+    on `P_abl` (17 Mbar foot, 145 peak) but reaches 315 km/s with 19.6 % ablator left:
+    Lindl's ṁ under-ablates. Next: calibrate ṁ to 5–6.6 % remaining, then v_imp; the
+    calibrated-dynamics/CBET drive; r–θ with the a_l (Masse sign flip); r–z with AMR.
+    Research notes, "Capsule drive hand-over and CompactLES stage 0".
