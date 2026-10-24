@@ -2722,3 +2722,49 @@ at peak, against HYDRA's 0.65. Its Mach-1 outflow outweighs the 0.917 Å (3ω) d
   - The model's Δλ sensitivity across shots is above HYDRA's (N210808 against N221204).
   - Next test of the Δλ response: a joint fit to N210808 (Fig. 1e) and N220919 (Fig. 9,
     black curves). Both are in the same figures.
+
+## LEH shield (sombrero) (2026-10-24)
+
+`Sombrero()` and `hohlraum(; sombrero = true)`. Dimensions measured from the CAD of a
+THOR-class NIF symcap target (a non-public VisRad workspace; only the shield's own
+dimensions are recorded here). The CAD is design intent, not metrology. **M**
+- **Identification.** Each shield is a thin sheet around one end of the hohlraum, 18.4 mm
+  across. The two shields are mirror images to the tessellation's precision.
+- **Measurement.** The sheet's facets were cut by meridional half-planes every 5°, and
+  height maps of both faces were ray cast on a 0.02 mm grid. The r–z sections and maps
+  were checked by eye.
+- **Bore and rim.** Inner radius 4.000 mm, outer 9.200 mm (vertex radii 3.9997–4.0002
+  and 9.2000–9.2003 over all azimuths). Over one azimuthal sector, where the shield is
+  mounted, the sheet runs on past 9.2 mm; that is not modeled.
+- **Thickness.** 38.7 µm median (1–99 %: 37.7–40.7 µm).
+- **Axial position.** The area-mean mid-plane lies 0.623 mm (±0.005 mm, grid and
+  dimple sampling) inside the entrance-hole washer's inner face, i.e. toward the waist,
+  beside the hohlraum wall rather than beyond the hole. That face is the LEH plane
+  (`length/2`) of the matching `hohlraum` model.
+- **Profile.** Flat on average: no cone or axisymmetric dimple. The sheet carries a
+  hexagonal array of shallow dimples, 2.48 mm pitch, their centers sunk toward the
+  waist. Dimple floor to the ridges between dimples is 0.21 mm (top face: floor −0.094,
+  ridge points +0.119 mm from its own mean). The faces stay
+  within ±0.12 mm of the mid-plane (0.5–99.5 %). Two mounting recesses go ~0.3 mm deeper.
+  The rise from a dimple's floor is close to linear in the distance from its center:
+  ~4° near the floor, ~12° toward the ridges.
+- **Model.** `Sombrero` keeps the mean plane: a flat annulus (`annulus_mesh`, exact
+  `DiskSurface`). The dimples are not axisymmetric; they move the true faces by up to
+  ±0.12 mm, about the size of a hardware tolerance in `clearance`.
+- **Material.** The CAD carries none. The default is `BLACK` (engineering default).
+- **Radiation.** It plays no part. The shield sits beside the wall, 0.623 mm inside
+  the LEH plane, so the hohlraum wall hides the hole from it. Its
+  view-factor rows and columns with the hohlraum are exactly zero (`test/sombrero.jl`),
+  `closed = true` balancing leaves those rows alone, and the hohlraum's solution is
+  unchanged to 1e-12. One-sided, facing away from the waist: light from the port side
+  is booked on its elements, light from the waist side (e.g. backlighter beams) as
+  `sombrero_*_outside`.
+- **Drive-beam clearance** *derived*. The test's cone-averaged NIF pointing (Build-A-
+  Hohlraum example, 10.1 mm hohlraum, published cone aims) was run as 192 beams. The
+  core 1e-4 envelope clears both shields by ≥ 2.09 mm in the worst case (outer 50°;
+  44° 2.50, 30° 2.41, 23° 3.25), and the ray trace puts no core power on them. With
+  the engineering `nif_wings()` the envelope clearance is ≥ 1.24 mm. The wings'
+  10⁻³ scatter floor puts ~1e-4 of each beam on a shield, so every beam is `:review`
+  (above 1e-5) at 1.2e8 W/cm². Drive beams
+  reach the shield only past the hohlraum's outside, so it matters for beams aimed
+  outside the hohlraum (backlighters), not for the drive.

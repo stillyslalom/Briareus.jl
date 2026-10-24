@@ -508,6 +508,21 @@ Details and numbers in the research notes, under the section named in each entry
   probe, normal foil, focus sweep, envelope 2.0, steep foil, shadowing) with a comparison
   script. Waiting for runs in VisRad.
 
+## Done (2026-10-24, LEH shield)
+- **`hohlraum(; sombrero)`, `Sombrero`** (item 2, first half; research notes "LEH shield
+  (sombrero)"): a flat annular shield around each end, `:sombrero_top` and
+  `:sombrero_bottom`, one-sided (facing away from the waist), exact `DiskSurface`,
+  `BLACK` by default. Defaults measured from a THOR-class symcap CAD: bore 4.000 mm, rim
+  9.200 mm, a 39 µm sheet whose mid-plane lies 0.623 mm inside the LEH plane. It is flat
+  on average, with a hexagonal array of 0.21 mm dimples (±0.12 mm about the mean plane)
+  that the model leaves out. The shield sits beside the wall, so it sees nothing of the
+  cavity: zero view-factor rows and columns, `closed` balancing and the solution
+  unchanged. Off by default. It blocks beams and lines of sight and is `clearance`
+  hardware. Cone-averaged NIF drive pointing clears it by ≥ 2 mm (core 1e-4 envelope);
+  only the engineering wings' scatter floor reaches it (~1e-4 per beam, `:review`).
+  Tests: areas, facing, zero exchange, beams on both faces (operator vs ray trace),
+  clearance pass and fail.
+
 ## Open questions (from the 2026-10-18 CAD work)
 Choices made provisionally overnight or left open; the lean is in brackets.
 **Decided (user, 2026-10-22):** the bracketed leans stand. On 1: parts may be split
@@ -630,10 +645,10 @@ pick the original parts, not `<part>/cylN` pieces).
      `visrad_deposition` (see Done), which makes it a routine comparison on CAD and
      rectangles; a primitive hohlraum needs its element order measured first (e.g.
      one beam on the wall), or the hohlraum given as CAD.
-2. **Sombrero and backlighter geometry.** Model the LEH shield as a component (a
-   dimpled annulus), and the backlighter foil's placement relative to the diagnostic
-   line of sight. The line-of-sight and clearance checks in the radiography tutorial
-   then decide which bundles can drive the foil. This needs real dimensions.
+2. **Backlighter geometry.** The LEH shield is done (`hohlraum(; sombrero)`, see Done
+   2026-10-24). Left: the backlighter foil's placement relative to the diagnostic line
+   of sight. The line-of-sight and clearance checks in the radiography tutorial, with
+   the shields in the target, then decide which bundles can drive the foil.
 3. **Diagnostic windows: what remains.** The studies are in the tutorial (see Done).
    Open: the expanded foil's density (held at Lester's 1 g/cm³ through the
    normalization), a backing that absorbs and re-emits part of what the gold

@@ -264,6 +264,64 @@ function _hohlraum_grid(; length, radius, leh_radius, h, rc, nz, nphi, nr_cap, n
 end
 
 """
+    Sombrero(; inner_radius = 4.0, outer_radius = 9.2, offset = 0.623, material = BLACK,
+             nr = 4, nphi = 96)
+
+Entrance-hole shield ("sombrero") for `hohlraum(; sombrero)`: a flat annular sheet
+around each end of the hohlraum, from `inner_radius` to `outer_radius` (mm), its
+mid-plane `offset` mm from the entrance-hole plane (`length/2`) toward the waist
+(negative: beyond the hole). `hohlraum` meshes it as an `annulus_mesh` of `nr × nphi`
+patches (equal-area rings; the polygon edges lie within `r (1 − cos(π/nphi))` of the
+circles, 5 µm at 9.2 mm with 96 sides) carrying its exact `DiskSurface`.
+
+The defaults are measured from the CAD of a THOR-class NIF symcap target (2026-10-24,
+research notes "LEH shield (sombrero)"), relative to the entrance-hole washer's inner
+face: bore 4.000 mm and rim 9.200 mm radius (to 0.5 µm in the tessellation), a 39 µm
+sheet whose area-mean mid-plane lies 0.623 mm inside that face (±0.005 mm). The sheet is
+not flat in detail: a hexagonal array of shallow dimples (2.48 mm pitch, centers sunk
+toward the waist, 0.21 mm from dimple floor to the ridges between dimples) puts its faces
+within ±0.12 mm of the mid-plane; the model keeps the mean plane (the dimples are not
+axisymmetric). Both shields are identical (mirror images). Over one azimuthal sector,
+where each shield is mounted, the sheet runs on past 9.2 mm; that is not modeled.
+
+`material` is an engineering default (the CAD carries none): `BLACK`, absorbing laser
+light and emitting nothing. The shield lies outside the cavity and does not see into it
+(beside the wall, the wall hides the hole from it), so its albedo and conversion do not
+change the hohlraum's radiation.
+"""
+struct Sombrero
+    inner_radius::Float64
+    outer_radius::Float64
+    offset::Float64
+    material::Material
+    nr::Int
+    nphi::Int
+    function Sombrero(inner_radius, outer_radius, offset, material, nr, nphi)
+        0 < inner_radius < outer_radius ||
+            throw(ArgumentError("need 0 < inner_radius < outer_radius for a sombrero"))
+        nr >= 1 && nphi >= 3 || throw(ArgumentError("a sombrero needs nr ≥ 1 and nphi ≥ 3"))
+        new(inner_radius, outer_radius, offset, material, nr, nphi)
+    end
+end
+Sombrero(; inner_radius::Real = 4.0, outer_radius::Real = 9.2, offset::Real = 0.623,
+         material::Material = BLACK, nr::Integer = 4, nphi::Integer = 96) =
+    Sombrero(inner_radius, outer_radius, offset, material, nr, nphi)
+
+# The two shields of `s` for a hohlraum of half-length `h`, wall radius `R` and entrance
+# holes of radius `rl`: one-sided, facing away from the waist.
+function _sombreros(s::Sombrero, h, R, rl)
+    z = h - s.offset
+    z > 0 || throw(ArgumentError("the sombrero offset puts the shields past the waist"))
+    # beside the wall the bore must clear it; beyond the hole, the hole
+    s.inner_radius > (s.offset >= 0 ? R : rl) ||
+        throw(ArgumentError("the sombrero bore (inner_radius) cuts into the hohlraum"))
+    return [Component(name, annulus_mesh(s.inner_radius, s.outer_radius, sgn * z; nr = s.nr,
+                                         nphi = s.nphi, up = sgn > 0), s.material;
+                      surface = DiskSurface(center = (0, 0, sgn * z)))
+            for (sgn, name) in ((1, :sombrero_top), (-1, :sombrero_bottom))]
+end
+
+"""
     capsule_counts(capsule_radius, capsule_h) -> (; capsule_ntheta, capsule_nphi)
 
 Capsule mesh counts of `hohlraum` for elements no larger than `capsule_h` (mm) along a
@@ -280,7 +338,8 @@ end
              nz = 36, nphi = 48, nr_cap = 6, nr_leh = 4, capsule_ntheta = 24, capsule_nphi = 32,
              h = nothing, capsule_h = nothing, capsule_mesh = :compact, wall = gold(),
              capsule = ablator(), capsule_center = (0,0,0), windows = (), corner_radius = 0,
-             nr_corner = nothing, leh_closure = nothing, leh_open_radius = 0.84 leh_radius)
+             nr_corner = nothing, leh_closure = nothing, leh_open_radius = 0.84 leh_radius,
+             sombrero = nothing)
 
 Cylindrical hohlraum along `z`, centered on TCC (dimensions in mm), with components
 
@@ -295,6 +354,8 @@ Cylindrical hohlraum along `z`, centered on TCC (dimensions in mm), with compone
   `windows` (or the window's own name): closed windows are opaque wall patches with
   their own material, open ones apertures. A window with a gap is followed by its gap
   component `:window_1_gap`, ….
+- `:sombrero_top`, `:sombrero_bottom` — with `sombrero`, the entrance-hole shields
+  (last)
 
 Laser light that strikes the outside of the wall or caps (clipping on the LEH edge)
 is reported as the `_outside` back-side loss of those components; light that leaves
@@ -337,6 +398,14 @@ open through the foot, closing over ~0.5 ns at the rise to peak, to
 Young et al. 2020 use 85 % static radii; research notes, "Closing entrance holes"). Beams
 pass the lip unclipped: the laser keeps its own path open (Chen et al. 2020).
 
+`sombrero` (`true` for the measured `Sombrero()`, or a `Sombrero`) adds an annular
+shield around each end, one-sided and facing away from the waist: opaque to beams
+(clipping, deposition: power on its waist side is booked as `sombrero_top_outside`) and
+lines of sight, hardware for `clearance`. It lies outside the cavity: its elements see
+none of the hohlraum's (their view-factor rows and columns are zero), so the enclosure
+stays closed, `closed = true` balancing leaves them alone, and the hohlraum's solution
+does not change. Off by default.
+
 `capsule_mesh` picks the capsule mesh: `:compact` (the default), a geodesic
 `icosphere_mesh` of nearly equilateral triangles with sides of about `capsule_h`
 (`icosphere_frequency`; without `capsule_h`, the lat-long meridional size
@@ -353,7 +422,8 @@ function hohlraum(; length = 9.4, radius = 2.875, leh_radius = 1.55, capsule_rad
                   wall::Material = gold(), capsule::Material = ablator(),
                   capsule_center = (0.0, 0.0, 0.0), windows = (), corner_radius::Real = 0.0,
                   nr_corner::Union{Nothing,Integer} = nothing,
-                  leh_closure::Union{Nothing,GapClosure} = nothing, leh_open_radius::Real = 0.84 * leh_radius)
+                  leh_closure::Union{Nothing,GapClosure} = nothing, leh_open_radius::Real = 0.84 * leh_radius,
+                  sombrero::Union{Nothing,Bool,Sombrero} = nothing)
     0 < leh_radius < radius || throw(ArgumentError("need 0 < leh_radius < radius"))
     leh_closure === nothing || 0 < leh_open_radius < leh_radius ||
         throw(ArgumentError("need 0 < leh_open_radius < leh_radius"))
@@ -441,6 +511,8 @@ function hohlraum(; length = 9.4, radius = 2.875, leh_radius = 1.55, capsule_rad
                                surface = SphereSurface(capsule_radius; center = capsule_center)))
     end
     append!(comps, window_comps)
+    sombrero === true && (sombrero = Sombrero())
+    sombrero isa Sombrero && append!(comps, _sombreros(sombrero, h, radius, leh_radius))
     return Target(comps; closed = true)
 end
 

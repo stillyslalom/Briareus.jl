@@ -28,7 +28,7 @@ export AlbedoModel, ConstantAlbedo, TabulatedAlbedo, WallLossAlbedo, Burnthrough
        heat_front, burnthrough_time, areal_mass, optical_depth, eddington_transmission, albedo, Material, gold, ablator, BLACK,
        Component, aperture, Target, nelements, elements, component_index, element_quadrature
 export hohlraum, hohlraum_counts, capsule_counts, foil, disk_foil
-export WallWindow, conforming_grid, equal_area_radius
+export WallWindow, Sombrero, conforming_grid, equal_area_radius
 export SuperGaussianSpot, Beam, port_vector, port_angles, direction, spot_axes, remake, intensity, wavelength,
        beams_from_table, nif_quads, nif_beams, nif_spot, NIF_QUAD_NAMES, nif_port, nif_bundle, nif_bundles, hybride_mock_pointing, omega_ports, omega_beams, omega_spot
 export DepositionOperator, Deposition, deposit, raytrace_deposition, raytrace_component_power, laser_flux,
