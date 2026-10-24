@@ -286,23 +286,54 @@ p4(r) = r.moments[5, :] ./ r.moments[1, :]
 d1 = dante1()
 dante_tr(sol) = (d = dante(d1, sol); (d.Tr, d.Tr_open))
 # `unfold=on`: in the full model, at the times below, also the spectrum Dante 1 sees
-# (`spectral_solve`, 42 groups; Planckian per element, and with the intensity-form
-# laser M-band `MBandEmission()`), its 18 channel voltages through the hardware
-# responses (`dante1_responses()`) and their unfold (`dante_unfold`, traditional and
-# smooth) against the input spectrum's Tr (research notes, "Dante channel responses and
-# the unfold (2026-10-24)").
+# (`spectral_solve`, 42 groups; without and with the intensity-form laser M-band
+# `MBandEmission()`), its 18 channel voltages through the hardware responses
+# (`dante1_responses()`) and their unfold (`dante_unfold`, traditional and smooth)
+# against the input spectrum's Tr (research notes, "Dante channel responses and the
+# unfold (2026-10-24)"). Laser spots split by `spectral_solve`'s default `spot =
+# :radiation` (converted x-rays thermal at the local radiation temperature, plus the
+# M-band) and, for comparison, by the earlier `:brightness` rule (each element a
+# Planckian at its brightness temperature; research notes, "Laser-spot spectrum").
+# Also, as calibrated on Dewald's setup (`examples/mband_dewald2020.jl`): the per-cone
+# M-band (`nif_mband()`, each element's conversion weighted by the cones' shares of its
+# pre-CBET deposition, a proxy: CBET and the bubble change the cone powers, not which
+# cone lights an element) with the M-band group albedo `alpha_m` of the gold
+# (thermalized), 0.55 with the thermal spots and 0.5 with the brightness rule.
 unfold_times = get(opt, "unfold", "off") == "on" ? [5.0, 6.0, 7.0, 8.0, 8.5] : Float64[]
 unfolds = Dict{Float64,Any}()
 d1g = dante1(channels = dante1_channels(model = :gaussian))   # the Gaussian fallback, for comparison
+alpha_m = parse(Float64, get(opt, "alpha_m", "0.55"))
+function cone_mband(mb, sol)
+    t = sol.model.target
+    bs = beams_at(sol.time)
+    op = DepositionOperator(t, bs)
+    D = [deposit(op, [b.group === g ? b : remake(b; power = 0.0) for b in bs]).element for g in keys(mb.groups)]
+    f = collect(values(mb.groups))
+    tot = sum(D)
+    return [tot[e] > 0 && !Briareus.is_aperture(t, e) && Briareus.element_material(t, e).name === :Au ?
+            sum(f[i] * D[i][e] for i in eachindex(D)) / tot[e] * Float64(sol.laser[e]) : 0.0 for e in 1:nelements(t)]
+end
 function dante_spectral(sol)
     out = Any[]
-    for mb in (nothing, MBandEmission())
-        s = spectral_solve(sol; edges = spectral_edges(), mband = mb)
+    E = spectral_edges()
+    k = findfirst(==(1800.0), E)
+    t = sol.model.target
+    mband_albedo(a) = Dict(c.name => [g >= k ? a : NaN for g in 1:length(E)-1]
+                           for c in t.components if c.kind === :surface && c.material.name === :Au)
+    mb = nif_mband()
+    PM = cone_mband(mb, sol)
+    cases = [(; spot = :brightness, mband = nothing), (; spot = :brightness, mband = MBandEmission()),
+             (; spot = :radiation, mband = nothing), (; spot = :radiation, mband = MBandEmission()),
+             (; spot = :brightness, mband = mb, mband_power = PM, albedo = mband_albedo(0.5), thermalize = true),
+             (; spot = :radiation, mband = mb, mband_power = PM, albedo = mband_albedo(alpha_m), thermalize = true)]
+    for kw in cases
+        s = spectral_solve(sol; edges = E, kw...)
         d = dante(d1, s)
         gauss = dante(d1g, s).color_temperature
         push!(out, (; d.Tr, d.Tr_open, d.mband_fraction, d.color_temperature, gauss, traditional = d.Tr_unfold,
                     smooth = dante_unfold(d1.channels, d.channels; area = d.area, cos = d.cos, method = :smooth).Tr,
-                    misfit = d.unfold.misfit, solver = d.unfold.solver))
+                    misfit = d.unfold.misfit, solver = d.unfold.solver,
+                    laser_mband = sum(s.mband .* t.elem_area) / sum(Float64.(sol.laser))))
     end
     return out
 end
@@ -393,10 +424,12 @@ if !isempty(unfolds)
     println("\nDante 1 unfolded (full model; eV over the initial LEH area): input spectrum Tr / traditional unfold /",
             " smooth unfold; color temperature (hardware, Gaussian channels); M-band share > 1.8 keV;",
             " worst channel misfit (traditional)")
-    for t in sort(collect(keys(unfolds))), (u, lab) in zip(unfolds[t], ("Planckian", "+ M-band"))
-        @printf("  %.1f ns %-10s %.1f / %.1f / %.1f (%+.2f / %+.2f); Tc %.1f, %.1f; M-band %.3f; misfit %.1e (%s)\n",
-                t, lab, u.Tr, u.traditional, u.smooth, u.traditional - u.Tr, u.smooth - u.Tr,
-                u.color_temperature, u.gauss, u.mband_fraction, u.misfit, u.solver)
+    labels = ("brightness", "brightness + M-band", "spots thermal", "spots thermal + M-band",
+              "brightness, cones α_M 0.5", @sprintf("thermal, cones α_M %.2g", alpha_m))
+    for t in sort(collect(keys(unfolds))), (u, lab) in zip(unfolds[t], labels)
+        @printf("  %.1f ns %-25s %.1f (open %.1f) / %.1f / %.1f (%+.2f / %+.2f); Tc %.1f, %.1f; M-band %.3f (laser → M-band %.3f); misfit %.1e (%s)\n",
+                t, lab, u.Tr, u.Tr_open, u.traditional, u.smooth, u.traditional - u.Tr, u.smooth - u.Tr,
+                u.color_temperature, u.gauss, u.mband_fraction, u.laser_mband, u.misfit, u.solver)
     end
 end
 

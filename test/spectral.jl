@@ -63,7 +63,9 @@ using Briareus: RadiationSolution, _planck_tail, _channel_matrix, _color_tempera
             absorbed(s) = vec(sum((1 .- s.albedo) .* s.H; dims = 2)) .* t.elem_area
             gray_abs = (1 .- sol.albedo) .* sol.H .* t.elem_area
             for kw in ((;), (; thermalize = true), (; mband = MBandEmission()),
-                       (; mband = MBandEmission(), thermalize = true))
+                       (; mband = MBandEmission(), thermalize = true),
+                       (; mband = MBandEmission(), spot = :brightness),
+                       (; mband = MBandEmission(), spot = :wall, thermalize = true))
                 s = spectral_solve(sol; edges = E, kw...)
                 @test vec(sum(s.source; dims = 2)) ≈ sol.source rtol = 1e-13
                 @test maximum(abs.(vec(sum(s.B; dims = 2)) .- sol.B)) < 1e-11 * maximum(sol.B)
@@ -80,6 +82,53 @@ using Briareus: RadiationSolution, _planck_tail, _channel_matrix, _color_tempera
             # lost instead, the hard groups lose energy
             s = spectral_solve(sol; edges = E, albedo = low)
             @test sum(s.B[cap, :]) < sum(sol.B[cap])
+        end
+
+        @testset "laser-spot spectrum ($(wall.albedo isa WallLossAlbedo ? "wall loss" : "constant"))" begin
+            E = spectral_edges(n = 16)
+            mb = MBandEmission()
+            sh = Briareus._band_shares(E, mb.band)
+            Pf(T) = reduce(hcat, [planck_fractions(x, E) for x in T])'
+            lit = findall(>(0), sol.laser)
+            dark = findall(iszero, sol.laser)
+            @test !isempty(lit) && !isempty(dark)
+            # the earlier rule: everything at the brightness temperature of B
+            sb = spectral_solve(sol; edges = E, mband = mb, spot = :brightness)
+            TB = radiation_temperature.(sol.B)
+            @test sb.temperature == sb.spot_temperature == TB
+            @test sb.source ≈ (sol.source .- sb.mband) .* Pf(TB) .+ sb.mband .* sh' rtol = 1e-13
+            # converted x-rays less the M-band at the radiation temperature, the rest at the
+            # wall temperature (B − ηP/A); here the source is all converted laser
+            s = spectral_solve(sol; edges = E, mband = mb)
+            @test s.spot === :radiation
+            @test s.converted ≈ sol.source rtol = 1e-14
+            @test s.spot_temperature ≈ radiation_temperature.(sol.H) rtol = 1e-14
+            @test s.temperature ≈ radiation_temperature.(sol.B .- sol.source) rtol = 1e-12
+            @test s.source ≈ (sol.source .- s.mband) .* Pf(s.spot_temperature) .+ s.mband .* sh' rtol = 1e-12
+            # spots (B > H) are cooler than their brightness temperature, so softer
+            k = findfirst(==(1800.0), E)
+            spots = findall(e -> sol.laser[e] > 0 && sol.B[e] > sol.H[e], 1:n)
+            @test !isempty(spots)
+            hot = vec(sum(sb.source[spots, k:end]; dims = 2))
+            @test all(vec(sum(s.source[spots, k:end]; dims = 2)) .<= hot .* (1 + 1e-12))
+            # without laser light the rules agree
+            sw = spectral_solve(sol; edges = E, mband = mb, spot = :wall)
+            @test s.B[dark, :] != sb.B[dark, :]          # (the spots' light reaches them)
+            @test s.source[dark, :] == sb.source[dark, :] == sw.source[dark, :]
+            @test sw.spot_temperature == sw.temperature
+            # a stored-energy emission δ on the wall (a re-emitting wall of drive_history)
+            # is split at the wall temperature, the converted x-rays as before
+            δ = zeros(n)
+            δ[elements(t, :wall)] .= 0.1 * maximum(sol.source)
+            sol2 = RadiationSolution(m, sol.laser, sol.source .+ δ, sol.B .+ δ, sol.H, sol.albedo,
+                                     sol.intact, sol.transmission, sol.time)
+            s2 = spectral_solve(sol2; edges = E, mband = mb)
+            @test s2.converted ≈ sol.source rtol = 1e-14
+            @test s2.temperature ≈ radiation_temperature.(sol.B .- sol.source .+ δ) rtol = 1e-12
+            @test s2.source ≈ (sol.source .- s2.mband) .* Pf(s2.spot_temperature) .+ δ .* Pf(s2.temperature) .+
+                              s2.mband .* sh' rtol = 1e-12
+            @test vec(sum(s2.source; dims = 2)) ≈ sol2.source rtol = 1e-13
+            @test_throws ArgumentError spectral_solve(sol; edges = E, spot = :plasma)
         end
 
         @testset "group solves against dense solves" begin

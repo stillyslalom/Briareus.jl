@@ -210,9 +210,13 @@ _band_shares(edges, (a, b)) =
 
 Result of `spectral_solve`. Fields: `gray` (the `RadiationSolution` it splits),
 `edges` (group edges, eV); per element × group (TW/mm²): `source`, `B` (radiosity), `H`
-(incident flux), `albedo`; per element: `temperature` (eV, the emission temperature the
-Planckian split used), `mband` (the laser-produced M-band source, TW/mm²); `mband_shares`
-(its split over the groups); `thermalize`.
+(incident flux), `albedo`; per element: `temperature` (eV, the wall temperature: the
+Planckian of the thermal re-emission and of any stored-energy emission; with `spot =
+:brightness` the one temperature of the whole split), `spot_temperature` (eV, the
+Planckian of the converted laser x-rays less the M-band), `converted` (the converted
+laser source ηP/A, TW/mm²), `mband` (the laser-produced M-band source, TW/mm²);
+`mband_shares` (its split over the groups); `thermalize`; `spot` (the spot-spectrum
+rule, see `spectral_solve`).
 """
 struct SpectralSolution
     gray::RadiationSolution
@@ -222,35 +226,57 @@ struct SpectralSolution
     H::Matrix{Float64}
     albedo::Matrix{Float64}
     temperature::Vector{Float64}
+    spot_temperature::Vector{Float64}
+    converted::Vector{Float64}
     mband::Vector{Float64}
     mband_shares::Vector{Float64}
     thermalize::Bool
+    spot::Symbol
 end
+# a single-temperature split (the `:brightness` rule): every source at `temperature`
+SpectralSolution(gray::RadiationSolution, edges, source, B, H, albedo, temperature::AbstractVector,
+                 mband::AbstractVector, mband_shares, thermalize::Bool) =
+    SpectralSolution(gray, edges, source, B, H, albedo, temperature, copy(temperature),
+                     zeros(length(temperature)), mband, mband_shares, thermalize, :brightness)
 
 "Number of photon-energy groups of a `SpectralSolution`."
 ngroups(s::SpectralSolution) = length(s.edges) - 1
 
 function Base.show(io::IO, s::SpectralSolution)
     print(io, "SpectralSolution(", size(s.B, 1), " elements, ", ngroups(s), " groups",
-          s.thermalize ? ", thermalized" : "", ")")
+          s.thermalize ? ", thermalized" : "", ", spots at ", s.spot, ")")
 end
 
 """
     spectral_solve(sol::RadiationSolution; edges = [0, Inf], albedo = nothing,
                    mband = nothing, mband_power = nothing, thermalize = false,
-                   temperature = nothing, tol = 1e-6, maxiter = 20) -> SpectralSolution
+                   spot = :radiation, temperature = nothing, spot_temperature = nothing,
+                   tol = 1e-6, maxiter = 20) -> SpectralSolution
 
 Multigroup radiosity about a gray solution `sol` (same model, laser deposition and
 time). The groups are `[edges[g], edges[g+1]]` (eV; `edges[1] = 0`, `edges[end] = Inf`,
 e.g. `spectral_edges()`).
 
-- Sources: each element's gray source `ηP/A`, less its laser-produced M-band (`mband`,
-  an `MBandEmission`; its power per element `mband_power`, TW, defaults to
-  `mband_power(mband, target, sol.laser)`, and must be given for a per-group model), is
-  split by a Planckian at the element's emission temperature (the brightness
-  temperature `(B/σ)^¼` of its total radiosity, iterated to `tol` when the totals
-  differ from the gray ones; or a given `temperature` vector, eV); the M-band goes into
-  its band.
+- Sources: an element's gray source is its converted laser x-rays `ηP/A` plus, on a
+  re-emitting wall of a `drive_history`, the emission of its stored energy. The
+  laser-produced M-band (`mband`, an `MBandEmission`; its power per element
+  `mband_power`, TW, defaults to `mband_power(mband, target, sol.laser)`, and must be
+  given for a per-group model) is part of the converted x-rays and goes into its band.
+  The rest is split by Planck fractions, by `spot`:
+  - `:radiation` (default): the converted x-rays less the M-band at the element's
+    radiation temperature `(H/σ)^¼` (its incident flux; the coronal emission of a laser
+    spot is thermal at about the cavity's temperature, its hard part non-Planckian M-band:
+    research notes, "Laser-spot spectrum"); the stored-energy emission (and, with
+    `thermalize`, the thermal re-emission) at the wall temperature `((B − ηP/A)/σ)^¼`,
+    the brightness of the element's radiosity without its converted laser part;
+  - `:wall`: the converted x-rays also at the wall temperature;
+  - `:brightness`: everything at the brightness temperature `(B/σ)^¼` of the total
+    radiosity (the rule before 2026-10-24's spot spectrum; a laser spot then emits as a
+    Planckian well above the wall's temperature, with a hard tail of its own).
+  The temperatures follow the group totals when those differ from the gray ones
+  (iterated to `tol`). A given `temperature` vector (eV) fixes the wall (with
+  `:brightness` the only) temperature, `spot_temperature` the converted x-rays' one.
+  On elements without laser light the three rules agree.
 - Group albedos `α_g`: the fraction of an element's incident flux in group g that it
   re-emits in group g. The gray converged albedo `sol.albedo` in every group, except
   for the components in `albedo`, a `Dict` (or pairs) from component name to a vector
@@ -258,7 +284,8 @@ e.g. `spectral_edges()`).
 - `thermalize`: what happens to the rest of the gray albedo, `α − α_g`. Lost to the
   wall by default (`B_g = S_g + α_g H_g`, each group a gray-type solve); with
   `thermalize = true` re-emitted thermally, spread over the groups by the element's
-  Planck fractions `b_g(T)`: `B_g = S_g + α_g H_g + b_g(T) Σ_g′ (α − α_g′) H_g′` (group
+  Planck fractions `b_g(T)` at its wall temperature:
+  `B_g = S_g + α_g H_g + b_g(T) Σ_g′ (α − α_g′) H_g′` (group
   albedos above `α` are lowered to it). Thermalized, the group sums are the gray
   solution's whatever the group albedos; with every group albedo 0, all re-emission is
   thermal.
@@ -274,11 +301,13 @@ fast for the low albedos of hard groups.
 """
 function spectral_solve(sol::RadiationSolution; edges = [0.0, Inf], albedo = nothing,
                         mband::Union{Nothing,MBandEmission} = nothing, mband_power = nothing,
-                        thermalize::Bool = false, temperature = nothing, tol = 1e-6,
-                        maxiter::Integer = 20)
+                        thermalize::Bool = false, spot::Symbol = :radiation, temperature = nothing,
+                        spot_temperature = nothing, tol = 1e-6, maxiter::Integer = 20)
     E = collect(Float64, edges)
     length(E) >= 2 && E[1] == 0 && E[end] == Inf && issorted(E) && allunique(E) ||
         throw(ArgumentError("edges must increase from 0 to Inf"))
+    spot in (:radiation, :wall, :brightness) ||
+        throw(ArgumentError("spot must be :radiation, :wall or :brightness, got :$spot"))
     m = sol.model
     t = m.target
     n = nelements(t)
@@ -299,15 +328,26 @@ function spectral_solve(sol::RadiationSolution; edges = [0.0, Inf], albedo = not
         length(PM) == n || throw(ArgumentError("mband_power must have one entry per element"))
         SM .= min.(PM ./ t.elem_area, S)
     end
-    T = temperature === nothing ? radiation_temperature.(Bgray) : collect(Float64, temperature)
+    # converted laser x-rays (the rest of the source is a re-emitting wall's stored energy)
+    SC = spot === :brightness ? copy(S) :
+         clamp.(Float64[v(x) for x in _xray_source(t, v.(sol.laser), sol.time)], SM, S)
+    # wall temperature (the only one with :brightness) and the converted x-rays'
+    wallT(Btot) = spot === :brightness ? radiation_temperature.(Btot) :
+                  radiation_temperature.(max.(Btot .- SC, 0.0))
+    spotT(Btot, Htot) = spot === :radiation ? radiation_temperature.(Htot) : wallT(Btot)
+    T = temperature === nothing ? wallT(Bgray) : collect(Float64, temperature)
     length(T) == n || throw(ArgumentError("temperature must have one entry per element"))
+    Tc = spot_temperature !== nothing ? collect(Float64, spot_temperature) :
+         spot === :brightness ? T : spot === :wall ? T : spotT(Bgray, Hgray)
+    length(Tc) == n || throw(ArgumentError("spot_temperature must have one entry per element"))
     soft = [g for g in 1:G if view(A, :, g) == α]     # groups at the gray albedo
     hard = setdiff(1:G, soft)
     gray = G == 1 && isempty(hard) && all(iszero, SM)
     local B, Sg
     for it in 1:maxiter
         b = _planck_matrix(T, E)
-        Sg = (S .- SM) .* b .+ SM .* shares'
+        bc = Tc == T ? b : _planck_matrix(Tc, E)
+        Sg = (SC .- SM) .* bc .+ (S .- SC) .* b .+ SM .* shares'
         if gray
             Sg = reshape(copy(S), n, 1)         # the gray system itself
             B = reshape(copy(Bgray), n, 1)
@@ -326,14 +366,19 @@ function spectral_solve(sol::RadiationSolution; edges = [0.0, Inf], albedo = not
                 (B[:, soft] .= _group_radiosity(m, A[:, soft], Sg[:, soft] .+ b[:, soft] .* R, α))
         end
         # thermalized or at the gray albedo, the totals (and so T) are the gray ones
-        (temperature !== nothing || isempty(hard) || thermalize) && break
-        Tn = radiation_temperature.(vec(sum(B; dims = 2)))
-        maximum(abs.(Tn .- T) ./ max.(T, 1.0)) < tol && break   # keep the T B was solved with
+        fixedT = temperature !== nothing
+        fixedTc = spot_temperature !== nothing || (spot !== :radiation && fixedT)
+        (fixedT && fixedTc || isempty(hard) || thermalize) && break
+        Btot = vec(sum(B; dims = 2))
+        Tn = fixedT ? T : wallT(Btot)
+        Tcn = fixedTc ? Tc : spot === :radiation ? radiation_temperature.(m.F * Btot) : Tn
+        rel(x, y) = maximum(abs.(x .- y) ./ max.(y, 1.0))
+        max(rel(Tn, T), rel(Tcn, Tc)) < tol && break   # keep the T B was solved with
         it == maxiter && @warn "spectral temperature iteration did not converge"
-        T = Tn
+        T, Tc = Tn, Tcn
     end
     H = gray ? reshape(copy(Hgray), n, 1) : m.F * B
-    return SpectralSolution(sol, E, Sg, B, H, A, T, SM, shares, thermalize)
+    return SpectralSolution(sol, E, Sg, B, H, A, T, Tc, SC, SM, shares, thermalize, spot)
 end
 
 # Planck fractions per element (rows) and group (columns).

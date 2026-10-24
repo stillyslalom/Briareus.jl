@@ -4,7 +4,7 @@
 # laser-produced M-band (`nif_mband`) on their setup, a static solve at peak power.
 # Research notes, "Spectral radiosity, M-band and a synthetic Dante (2026-10-24)".
 #
-#   julia --project=. -t auto examples/mband_dewald2020.jl [h capsule_h]
+#   julia --project=. -t auto examples/mband_dewald2020.jl [h capsule_h] [spot=radiation|wall|brightness]
 #
 # Setup (Dewald 2020 §II–V): 10.1 × 5.75 mm Au hohlraum, 3.37 mm LEHs, 360 TW peak with
 # inner/outer power 1/2 (cone fraction 1/3), the wall ~0.2 mm in, the HDC ablation front
@@ -23,11 +23,20 @@
 # The M-band group albedo α_M (> 1.8 keV, Au wall and caps; the rest of the gray albedo
 # re-emitted thermally, so totals are the gray solution's) is the one free number: it is
 # scanned, and the α_M with Dewald's F_M ≈ 2 is the calibrated default of the notes.
+#
+# `spot`: the spectrum of the laser spots' converted x-rays (`spectral_solve`'s `spot`):
+# thermal at the local radiation temperature plus the M-band (`radiation`, default), at
+# the wall temperature (`wall`), or the whole radiosity as a Planckian at its brightness
+# temperature (`brightness`, the rule of the first calibration). Research notes,
+# "Laser-spot spectrum (2026-10-24)".
 
 using Briareus, Printf
 
-h = parse(Float64, get(ARGS, 1, "0.3"))
-capsule_h = parse(Float64, get(ARGS, 2, "0.15"))
+pos = filter(a -> !occursin('=', a), ARGS)
+opt = Dict(String.(split(a, '=', limit = 2)) for a in ARGS if occursin('=', a))
+h = parse(Float64, get(pos, 1, "0.3"))
+capsule_h = parse(Float64, get(pos, 2, "0.15"))
+spot = Symbol(get(opt, "spot", "radiation"))
 L, R = 10.1, 2.875 - 0.2
 t = hohlraum(; length = L, radius = R, leh_radius = 3.37 / 2, capsule_radius = 0.815, h, capsule_h,
              wall = gold(albedo = WallLossAlbedo()))
@@ -79,18 +88,22 @@ for cf in (1 / 3, 0.25)
     @printf("\ncone fraction %.3f: laser M-band %.1f TW (%.3f of the absorbed laser); capsule Tr %.1f eV, Dante-1 Tr %.1f eV\n",
             cf, sum(PM), sum(PM) / sum(dep.element), radiation_temperature(mean_cap(sol.H)), dante(d1, sol).Tr)
     @printf("  gray: capsule P2/P0 %+.3f, P4/P0 %+.3f; boundary P2/P0 %+.3f\n", g2, g4, wallP2(sol.B))
-    println("  α_M      F_M   capsule M-band: fraction  P2/P0   P4/P0  (first flight)  boundary P2/P0   Dante-1 > 1.8 keV")
+    @printf("  spots at :%s\n", spot)
+    println("  α_M      F_M   capsule M-band: fraction  P2/P0   P4/P0  (first flight)  boundary P2/P0   Dante-1 > 1.8 keV, Tc")
     for (name, kw) in (("gray", (;)), ("0.7", (; albedo = mband_albedo(0.7), thermalize = true)),
+                       ("0.6", (; albedo = mband_albedo(0.6), thermalize = true)),
+                       ("0.55", (; albedo = mband_albedo(0.55), thermalize = true)),
                        ("0.5", (; albedo = mband_albedo(0.5), thermalize = true)),
                        ("0.3", (; albedo = mband_albedo(0.3), thermalize = true)),
                        ("0", (; albedo = mband_albedo(0.0), thermalize = true)))
-        s = spectral_solve(sol; edges = E, mband = mb, mband_power = PM, kw...)
+        s = spectral_solve(sol; edges = E, mband = mb, mband_power = PM, spot, kw...)
         HM = band_flux(s, 1800.0)
         p2, p4 = capP(HM)
         d2, _ = capP(m.F * s.mband)
-        @printf("  %-6s %5.2f   %25.3f  %+.3f  %+.3f  (%+.3f)  %+15.3f   %10.3f\n", name,
+        ds = dante(d1, s)
+        @printf("  %-6s %5.2f   %25.3f  %+.3f  %+.3f  (%+.3f)  %+15.3f   %10.3f, %.1f eV\n", name,
                 mband_recirculation(s, wall), mean_cap(HM) / mean_cap(sol.H), p2, p4, d2,
-                wallP2(band_flux(s, 1800.0; field = :B)), dante(d1, s).mband_fraction)
+                wallP2(band_flux(s, 1800.0; field = :B)), ds.mband_fraction, ds.color_temperature)
     end
 end
 println("\nDewald 2020: F_M ≈ 2; wall M-band P2/P0 +0.53; ≈ +0.21 at the ablation front (×0.4), +0.28 at the inner HDC surface; Dante 12 % above 1.8 keV at 290 eV")
