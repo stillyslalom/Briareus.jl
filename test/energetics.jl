@@ -183,3 +183,43 @@ end
     @test b.heating[:wall] ≈ b.laser[:wall] - b.source[:wall] + b.absorbed[:wall]
     @test energy_budget(h; from = 1.0, to = 6.0).setup ≈ 192 * 1.5 * 5
 end
+
+@testset "wall-loss history" begin
+    t = hohlraum(; h = 0.8, capsule_h = 0.4, wall = gold(albedo = WallLossAlbedo()))
+    m = RadiationModel(t)
+    beams = nif_beams()
+    op = DepositionOperator(t, beams)
+    # a foot at 1/8 of the peak power, then a step: the wall heated in the foot holds
+    # little energy at the peak temperature
+    pulse = PulseShape([0.0, 0.2, 4.0, 4.2, 9.0], [0.0, 0.2, 0.2, 1.6, 1.6])
+    times = [0.5:0.5:4.0; 4.25; 4.5:0.5:9.0]
+    rec = sol -> [radiation_temperature(x) for x in sol.H]
+    on = drive_history(m, op, τ -> with_pulses(beams, pulse, τ), times; keep_albedo = true, record = rec)
+    off = drive_history(m, op, τ -> with_pulses(beams, pulse, τ), times; keep_albedo = true, record = rec,
+                        wall_history = false)
+    wm = WallLossAlbedo()
+    w = elements(t, :wall)
+    s = 3.3 / 0.62
+    # each wall element's albedo is the constant-T loss at its effective time
+    # t_eff = ∫ (T/1 heV)^s dt / (T/1 heV)^s (trapezoidal over the steps; constant T
+    # before the first step)
+    err_on = err_off = 0.0
+    for e in w
+        T = [r[e] for r in on.record]
+        I = times[1] * (T[1] / 100)^s
+        for k in eachindex(times)
+            k > 1 && (I += (times[k] - times[k-1]) * ((T[k-1] / 100)^s + (T[k] / 100)^s) / 2)
+            err_on = max(err_on, abs(on.albedo[k][e] - albedo(wm, I / (T[k] / 100)^s, T[k])))
+            err_off = max(err_off, abs(off.albedo[k][e] - albedo(wm, times[k], off.record[k][e])))
+        end
+    end
+    @test err_on < 2e-3 && err_off < 2e-3
+    # identical in the foot's first step; after the step the wall loses more, and the
+    # drive then rises toward the constant-T history's
+    @test on.Tr[1] ≈ off.Tr[1] rtol = 1e-8
+    k1, k2 = findfirst(==(4.5), times), findfirst(==(9.0), times)
+    @test on.wall_albedo[k1] < off.wall_albedo[k1] - 0.03
+    @test on.Tr[k1] < off.Tr[k1] - 5
+    @test on.Tr[k2] - on.Tr[k1] > off.Tr[k2] - off.Tr[k1] + 5
+    @test abs(on.Tr[k2] - off.Tr[k2]) < abs(on.Tr[k1] - off.Tr[k1])
+end

@@ -212,13 +212,6 @@ function _bracket(ts::Vector{Float64}, τ)
     return k, k + 1, w
 end
 
-"""
-    model_at(kf::Keyframes, τ) -> RadiationModel
-
-The radiation model of the moving target at time `τ`: a keyframe's, or between two the
-target `build(τ)` with interpolated exchange factors (see [`Keyframes`](@ref)). The last
-interpolated model is kept, so repeated calls at one time build it once.
-"""
 # Exchange factors (1 - w) A₀F₀ + w A₁F₁ over the areas A, in the storage of F₀ (behind
 # a function barrier: the keyframe models' matrix type is only known at run time).
 function _interpolate_exchange(F0, F1, A0, A1, A, w)
@@ -231,6 +224,13 @@ function _interpolate_exchange(F0, F1, A0, A1, A, w)
     return F
 end
 
+"""
+    model_at(kf::Keyframes, τ) -> RadiationModel
+
+The radiation model of the moving target at time `τ`: a keyframe's, or between two the
+target `build(τ)` with interpolated exchange factors (see [`Keyframes`](@ref)). The last
+interpolated model is kept, so repeated calls at one time build it once.
+"""
 function model_at(kf::Keyframes, τ::Real)
     k0, k1, w = _bracket(kf.time, τ)
     w == 0 && return first(_keyframe(kf, k0))

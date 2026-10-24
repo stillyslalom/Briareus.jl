@@ -11,7 +11,7 @@
     # at z = ±1 and lands on the far cap and entrance-hole end (pole-hot)
     run(z) = (qz = [remake(b; aim = (0.0, 0.0, sign(b.port[3]) * z)) for b in q];
               op = DepositionOperator(t, qz);
-              (drive_history(m, op, τ -> with_pulses(qz, pulse, τ), times; lmax = 8), op, qz))
+              (drive_history(m, op, τ -> with_pulses(qz, pulse, τ), times; lmax = 8, wall_history = false), op, qz))
     h, op, qz = run(4.0)
     d = capsule_drive(h, m; provenance = (; pulse = "test ramp", hohlraum = "coarse NIF"))
     # shapes: a uniform grid of ≤ 50 ps over the solved times, l = 0…8

@@ -42,7 +42,8 @@ _beam_key(by) = by === :group ? (b -> b.group) : by === :quad ? (b -> Symbol(b.q
     drive_history(model, op, beams_at, times; observe = :capsule, lmax = 6,
                   wall = (:wall,), lpi = nothing, holes = nothing, ylm = false,
                   transition = nothing, flux_change = nothing, min_step = 1e-3,
-                  tol = 1e-4, keep_albedo = false, record = nothing) -> NamedTuple
+                  tol = 1e-4, keep_albedo = false, record = nothing,
+                  wall_history = true) -> NamedTuple
 
 Quasi-static drive history: at each time, deposit `beams_at(t)` with `op` (after the
 laser–plasma model `lpi`, evaluated at that time), solve the
@@ -86,6 +87,25 @@ radiosity at that time (time- and temperature-dependent albedos included), and r
 Each step's temperature-dependent albedos are iterated to `tol` (see `solve`), starting
 from the previous step's temperatures.
 
+**Wall-loss history.** With `wall_history = true` (the default) each element whose
+albedo is a [`WallLossAlbedo`](@ref) loses energy as its own temperature history
+requires, not as if it had been at today's temperature since `t = 0`. Lindl's
+constant-T wall energy `E_w ∝ T^a t^b` (a = 4 + p = 3.3, b = 1 + q = 0.62 for the
+defaults) is carried to a varying `T(t)` as `E_w ∝ [∫ (T/100 eV)^(a/b) dt]^b`, the form
+of [`HeatFront`](@ref)'s drive integral (exact at constant T); its rate is the
+constant-T loss at the effective time
+
+    t_eff = ∫₀ᵗ (T(t′)/T(t))^(a/b) dt′,
+
+integrated trapezoidally between the steps from each element's incident-flux
+temperature (constant T before `times[1]`). A wall heated in a low foot holds little
+energy at the peak temperature, so its loss early in the peak is several times the
+constant-T value at `t` (`t_eff` ≈ the time since the rise), and the drive rises
+through a flat peak; when `T` falls, `t_eff` grows and the wall loses little (it gives
+back stored energy, which the albedo `range` caps at 0.95). `wall_history = false`
+evaluates the albedo at `t` (the behaviour before 2026-10-24). Research notes, "N221204
+late-time drive (2026-10-24)".
+
 Each thin-foil element without an explicit `burnthrough` time tracks its own heat
 front: the drive integral of `heat_front` over that element's incident-flux temperature
 history (trapezoidal between the steps, from `times[1]`), so its burnthrough is
@@ -120,7 +140,8 @@ function _drive_history(t::Target, model_at, operator_at, beams_at, times;
                         observe = :capsule, lmax::Integer = 6, wall = (:wall,),
                         lpi = nothing, holes = nothing, ylm::Bool = false,
                         transition = nothing, flux_change = nothing, min_step::Real = 1e-3,
-                        tol = 1e-4, keep_albedo::Bool = false, record = nothing)
+                        tol = 1e-4, keep_albedo::Bool = false, record = nothing,
+                        wall_history::Bool = true)
     transition === nothing || transition > 0 || throw(ArgumentError("transition must be positive"))
     flux_change === nothing || flux_change > 0 || throw(ArgumentError("flux_change must be positive"))
     min_step > 0 || throw(ArgumentError("min_step must be positive"))
@@ -151,6 +172,10 @@ function _drive_history(t::Target, model_at, operator_at, beams_at, times;
     end
     I = zeros(N)                   # drive integral of each thin-foil element
     rate = zeros(N)                # its integrand at the previous time
+    # wall-loss elements whose loss follows their own temperature history
+    lossy = wall_history ?
+            [e for e in 1:N if !is_aperture(t, e) && model(e) isa WallLossAlbedo] : Int[]
+    Iw, ratew = zeros(N), zeros(N) # their wall-energy integral and integrand
     holes = holes === nothing ?
             [c.name for c in t.components if c.kind === :aperture && !(c.surface isa CylinderSurface)] :
             collect(Symbol, holes)
@@ -185,7 +210,19 @@ function _drive_history(t::Target, model_at, operator_at, beams_at, times;
                 (pred[e] = τ0 + (need[e] - I[e]) / rate[e])
         end
         mτ = model_at(τ)
-        sol = solve(mτ, dep; time = τ, burnthrough = pred, guess, tol)
+        # the per-element state the albedos see: burnthrough times, and the wall-loss
+        # history of the `lossy` elements (`_WallHistory`)
+        hist = Dict(e => (τ0 === nothing ? _WallHistory(0.0, τ) :
+                          _WallHistory(Iw[e] + Δ * ratew[e] / 2, Δ / 2)) for e in lossy)
+        function state(bt)
+            isempty(lossy) && return bt
+            s = Vector{Any}(bt)
+            for e in lossy
+                s[e] = hist[e]
+            end
+            return s
+        end
+        sol = solve(mτ, dep; time = τ, burnthrough = state(pred), guess, tol)
         # corrector: the trapezoidal integral with this step's temperatures
         function advance(sol)
             Ik, tk, rk = copy(I), copy(tb), copy(rate)
@@ -209,10 +246,17 @@ function _drive_history(t::Target, model_at, operator_at, beams_at, times;
                        !(abs(tk[e] - used[e]) <= 1e-12 * max(abs(τ), 1.0))
             any(moved, tracked) || break
             used = tk
-            sol = solve(mτ, dep; time = τ, burnthrough = used, guess = sol, tol)
+            sol = solve(mτ, dep; time = τ, burnthrough = state(used), guess = sol, tol)
             Ik, tk, rk = advance(sol)
         end
-        return sol, Ik, tk, rk
+        # the wall-energy integrals at τ, with this step's temperatures
+        Iwk, rwk = copy(Iw), copy(ratew)
+        for e in lossy
+            T = radiation_temperature(ForwardDiff.value(sol.H[e]))
+            rwk[e] = _loss_rate(model(e), T)
+            Iwk[e] = τ0 === nothing ? τ * rwk[e] : hist[e].A + Δ * rwk[e] / 2
+        end
+        return sol, Ik, tk, rk, Iwk, rwk
     end
     # the largest advance of a smooth transition from τ0 to τ, given burnthrough times
     advance_of(τ0, τ, tbs) =
@@ -243,12 +287,12 @@ function _drive_history(t::Target, model_at, operator_at, beams_at, times;
                     τ = min(lo, τgoal)
                 end
             end
-            local sol, Ik, tk, rk, a, dep, P0
+            local sol, Ik, tk, rk, Iwk, rwk, a, dep, P0
             while true
                 b0 = beams_at(τ)
                 P0 = sum(b -> ForwardDiff.value(b.power), b0; init = 0.0)
                 dep = lpi_deposit(lpi, operator_at(τ), apply_lpi(lpi, b0, τ), τ)
-                sol, Ik, tk, rk = step(τ0, τ, dep, last)
+                sol, Ik, tk, rk, Iwk, rwk = step(τ0, τ, dep, last)
                 a = legendre_moments(sol.H, sol.model.target, obs; lmax)
                 τ0 === nothing && break
                 h = τ - τ0
@@ -260,6 +304,7 @@ function _drive_history(t::Target, model_at, operator_at, beams_at, times;
                 τ = τ0 + h / 2
             end
             I, tb, rate = Ik, tk, rk
+            Iw, ratew = Iwk, rwk
             τ0, last = τ, sol
             shape0 = shape(sol, a[1])
             push!(time, τ)

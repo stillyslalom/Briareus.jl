@@ -528,6 +528,23 @@ function n221204_fig10()
 end
 
 """
+    n221204_pulse() -> NamedTuple
+
+N221204's delivered laser power and measured Dante 1 radiation temperature, Pak et al.,
+PRE 109, 025203 (2024) Fig. 1, read from the figure's vector paths
+(`data/pak2024_fig1_n221204.csv`, provenance in its header): `t` (ns, 0–9.6 in 0.05 ns
+steps), `power` (TW, total of the 192 beams; 2.051 MJ) and `dante1` (eV; `NaN` outside
+3.3–9.4 ns, the plotted range). Dante 1 peaks at 311.9 eV at 8.30 ns. Only the total
+power is published there; the inner/outer split is not.
+"""
+function n221204_pulse()
+    h, rows = read_csv(joinpath(@__DIR__, "..", "data", "pak2024_fig1_n221204.csv"))
+    val(s) = isempty(strip(s)) ? NaN : parse(Float64, s)
+    cols = Tuple([val(r[i]) for r in rows] for i in eachindex(h))
+    return NamedTuple{Tuple(Symbol.(h))}(cols)
+end
+
+"""
     n221204_fig9_beams(beams, fig9, t) -> Vector{Beam}
 
 `beams` (NIF cones `:inner23`, `:inner30`, `:outer44`, `:outer50`) with the powers

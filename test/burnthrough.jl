@@ -200,8 +200,9 @@ end
     op = DepositionOperator(tw, q)
     times = 0.25:0.125:5.0
     # each step's albedo iteration starts from the previous step's temperatures; iterated
-    # tightly, the march and the cold re-solves below reach the same fixed point
-    h = drive_history(mw, op, τ -> with_pulses(q, pulse, τ), times; tol = 1e-9)
+    # tightly, the march and the cold re-solves below reach the same fixed point (the
+    # re-solves evaluate the wall loss at τ, so the march does too: `wall_history = false`)
+    h = drive_history(mw, op, τ -> with_pulses(q, pulse, τ), times; tol = 1e-9, wall_history = false)
     @test h.time == collect(times)
     tb = h.burnthrough[:window_1]
     @test all(isfinite, tb) && all(t -> 2.0 < t < 5.0, tb)
@@ -243,9 +244,10 @@ end
     # burns through at about 2.46 ns, window 2 at its explicit 3.5 ns
     f = τ -> with_pulses(q, pulse, τ)
     coarse = 0.25:0.25:5.0
-    hc = drive_history(mw, op, f, coarse)
+    # the wall loss at τ (`wall_history = false`): the re-solves below evaluate it there
+    hc = drive_history(mw, op, f, coarse; wall_history = false)
     @test hc.time == collect(coarse)                    # by default, exactly the given times
-    hr = drive_history(mw, op, f, coarse; transition = 0.1)
+    hr = drive_history(mw, op, f, coarse; transition = 0.1, wall_history = false)
     inserted = setdiff(hr.time, coarse)
     @test issorted(hr.time) && issubset(coarse, hr.time) && !isempty(inserted)
     # refined only while a transition is under way, and no step advances one by more
@@ -262,7 +264,7 @@ end
     # against a uniformly fine history: the refined one, interpolated linearly between
     # its steps, follows the window loss through the transitions 5 times more closely
     fine = 0.25:1/32:5.0
-    hf = drive_history(mw, op, f, fine)
+    hf = drive_history(mw, op, f, fine; wall_history = false)
     interp(h, τ) = (k = clamp(searchsortedlast(h.time, τ), 1, length(h.time) - 1);
                     w = (τ - h.time[k]) / (h.time[k+1] - h.time[k]);
                     (1 - w) * h.window_loss[k] + w * h.window_loss[k+1])
@@ -276,7 +278,7 @@ end
     # step (checked by re-solving at the steps with the final burnthrough times). The
     # coarse steps move it by up to 0.045 with the default transmission (over 0.05 for
     # the open hole that was the default before), so the tolerance is 0.01.
-    hx = drive_history(mw, op, f, coarse; flux_change = 0.01)
+    hx = drive_history(mw, op, f, coarse; flux_change = 0.01, wall_history = false)
     @test issubset(coarse, hx.time) && length(hx.time) > length(coarse)
     obs = elements(tw, :capsule)
     function shape_change(h)

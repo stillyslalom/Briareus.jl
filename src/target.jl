@@ -108,7 +108,9 @@ Marshak-wave wall-loss albedo, `1 - α = c (T/100 eV)^p (t/1 ns)^q`, with defaul
 gold from Lindl's scaling (T in heV, t in ns). `t` is clamped below at `t0`, and α to
 `range`. The radiation temperature is each element's incident-flux temperature, so
 `solve` iterates it to self-consistency; `reference_temperature` (eV) is used where
-no flux is known.
+no flux is known. The form is Lindl's for a wall held at `T` since `t = 0`;
+[`drive_history`](@ref) evaluates it at each element's effective time instead, from
+its own temperature history (`wall_history`).
 
 **Wall material.** `factor` f and `factor_exponent` δ scale gold's loss to another wall
 material's,
@@ -543,6 +545,31 @@ end
 _albedo_split(m::AlbedoModel, t, T, burnthrough) = (α = albedo(m, t, T); (α, α, zero(α)))
 _albedo_split(m::BurnthroughAlbedo, t, T, burnthrough) = _burnthrough_split(m, t, T, burnthrough)
 _albedo_split(m::GapClosure, t, T, burnthrough) = _closure_split(m, t, T)
+
+# The wall-loss history of a `WallLossAlbedo` element through a `drive_history` step.
+# Lindl's wall energy at constant T, E_w ∝ T^a t^b (a = 4 + p = 3.3, b = 1 + q = 0.62),
+# is carried to a varying T(t) as E_w ∝ [∫ r(T) dt]^b, r(T) = (T/100 eV)^(a/b) (the
+# form of `HeatFront`'s drive integral); its rate dE_w/dt is the constant-T loss at the
+# current T and the effective time t_eff = ∫ r(T) dt / r(T): the time the wall would
+# have needed at today's T to hold today's energy. Over a step, with the trapezoidal
+# integral, t_eff = A / r(T) + B (A = I₀ + Δ r₀/2, B = Δ/2; at the first step A = 0,
+# B = t, i.e. constant T since t = 0).
+struct _WallHistory
+    A::Float64
+    B::Float64
+end
+
+_loss_rate(m::WallLossAlbedo, T) =
+    (max(T, zero(T)) / 100)^((4 + m.temperature_exponent) / (1 + m.time_exponent))
+
+function _effective_time(m::WallLossAlbedo, h::_WallHistory, T)
+    Te = (T === nothing || T <= 0) ? m.reference_temperature : T
+    h.A == 0 && return h.B
+    return h.A / _loss_rate(m, Te) + h.B
+end
+
+_albedo_split(m::WallLossAlbedo, t, T, h::_WallHistory) =
+    (α = albedo(m, _effective_time(m, h, T), T); (α, α, zero(α)))
 
 # Whether a model lets part of the flux on it leave the enclosure.
 _transmits(::AlbedoModel) = false

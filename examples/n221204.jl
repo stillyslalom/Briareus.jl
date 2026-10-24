@@ -34,6 +34,12 @@
 #   inner cones) and SRS (6 kJ, through the peak) (AS24), removed before everything else;
 # - `energetics=new`: all of them (du, nif, model with capsule_albedo 0.22, degrade
 #   0.11, backscatter on).
+# Two further options (research notes, "N221204 late-time drive (2026-10-24)"):
+# - `pulse=pak|dn24`: the delivered total power from Pak et al. PRE 109, 025203 Fig. 1
+#   (default, `n221204_pulse()`) or the earlier by-eye DN24 table;
+# - `history=on|off`: the wall loss from each element's own temperature history
+#   (default, `drive_history`'s `wall_history`) or Lindl's constant-T form at the time
+#   since the pulse start (the earlier runs).
 # Every run prints its time-integrated energy budget (`energy_budget`) against PRE 109
 # App. 3's N221204 split (wall 54.1 %, LEH 25.2 %, gas 4.5 %, capsule 16.2 %), and its
 # synthetic Dante 1 Tr peak (`dante1()`) beside the capsule-seen Tr, against the measured
@@ -96,6 +102,18 @@ shot == "n210808" && (pt = [t >= 8.0 ? t - 0.45 : t >= 5.0 ? t - 0.2 : t for t i
 outer = [0, 2, 50, 50, 25, 26, 60, 65, 150, 270, 296, 294, 250, 110, 40, 0, 0, 0]
 inner = [0, 2, 4, 4, 4.5, 5, 7, 9, 25, 90, 146, 146, 146, 146, 146, 146, 140, 0]
 total = Float64.(outer .+ inner)
+# `pulse=pak` (default for N221204 and N220919): the total power as delivered, read from
+# the vector paths of Pak et al., PRE 109, 025203 (2024) Fig. 1 (`n221204_pulse()`,
+# 2.051 MJ), split by DN24's cone fraction above (the split is published only there).
+# `pulse=dn24`: the by-eye DN24 table alone (2.028 MJ; the runs before 2026-10-24's
+# late-time-drive notes).
+measured = n221204_pulse()
+if get(opt, "pulse", "pak") == "pak" && shot != "n210808"
+    oi, ii = PulseShape(pt, Float64.(outer)), PulseShape(pt, Float64.(inner))
+    frac(τ) = (s = oi(τ) + ii(τ); s > 0 ? ii(τ) / s : τ > 5 ? 1.0 : 0.5)
+    pt, total = measured.t, measured.power
+    inner = total .* frac.(pt)
+end
 pulses = cone_fraction_pulses(beams, pt, total, inner ./ max.(total, eps()))
 beams_at = τ -> with_pulses(beams, pulses, τ)
 @printf("laser energy %.3f MJ, peak %.0f TW\n",
@@ -116,6 +134,10 @@ f_sbs = 42.0 / ∫(τ -> sbs_shape(τ) * inner_power(τ))
 f_srs = 6.0 / ∫(τ -> srs_shape(τ) * inner_power(τ))
 bs_fraction = PulseShape(collect(fine), [f_sbs * sbs_shape(τ) + f_srs * srs_shape(τ) for τ in fine])
 degrade = parse(Float64, get(opt, "degrade", "0"))
+# `history=off`: the wall-loss albedo at the time since the pulse start (constant-T
+# Lindl), as before 2026-10-24's late-time-drive notes; default on: each wall element's
+# loss follows its own temperature history (`drive_history`'s `wall_history`).
+wall_history = get(opt, "history", "on") == "on"
 pre = Any[]
 get(opt, "backscatter", "off") == "on" &&
     push!(pre, Backscatter(:inner23 => bs_fraction, :inner30 => bs_fraction))
@@ -211,14 +233,14 @@ if which == "all"
     static = hohlraum(; radius = R0, geometry...)
     model, op = RadiationModel(static), DepositionOperator(static, beams)
     run!("static, no CBET", () -> drive_history(model, op, beams_at, times; lpi = isempty(pre) ? nothing : Tuple(pre),
-                                                record = dante_tr))
-    run!("static", () -> drive_history(model, op, beams_at, times; lpi = with_pre(cbet), record = dante_tr))
+                                                record = dante_tr, wall_history))
+    run!("static", () -> drive_history(model, op, beams_at, times; lpi = with_pre(cbet), record = dante_tr, wall_history))
     kw = Keyframes(moving_hohlraum(motion; radius = R0, geometry...), keyframes, beams)
-    run!("+wall", () -> drive_history(kw, beams_at, times; lpi = with_pre(cbet), record = dante_tr))
+    run!("+wall", () -> drive_history(kw, beams_at, times; lpi = with_pre(cbet), record = dante_tr, wall_history))
 end
 kl = Keyframes(moving_hohlraum(motion; radius = R0, geometry..., leh_closure = lip), keyframes, beams)
-which == "all" && run!("+lips", () -> drive_history(kl, beams_at, times; lpi = with_pre(cbet), record = dante_tr))
-run!("+bubble", () -> drive_history(kl, beams_at, times; lpi = with_pre(cbet, bubble), record = dante_tr))
+which == "all" && run!("+lips", () -> drive_history(kl, beams_at, times; lpi = with_pre(cbet), record = dante_tr, wall_history))
+run!("+bubble", () -> drive_history(kl, beams_at, times; lpi = with_pre(cbet, bubble), record = dante_tr, wall_history))
 
 # PRE 109 Fig. 10, N221204 (HYDRA, post-CBET), digitized (`n221204_fig10()`: ±0.002
 # where the curve is visible, up to ±0.015 where N220919's curve covers it).
@@ -251,12 +273,22 @@ for (n, r) in runs
     @printf("  %-22s %+.3f at %.2f ns, %.2f ns; %+.3f at 8 ns; rms against Fig. 10 (2–8.5 ns) %.3f\n",
             n, s.min, s.tmin, s.zero, p2(r)[findfirst(≈(8.0), times)], sqrt(sum(abs2, d) / length(d)))
 end
+println("\nradiation temperature (eV): capsule Tr / Dante 1 over the initial LEH area / over the open area; measured Dante 1 (Pak PRE 109 Fig. 1)")
+println(rpad("t (ns)", 7), join([rpad(n, 24) for (n, _) in runs]), "measured")
+for t in [4.5, 5.0, 5.5, 6.0, 6.5, 7.0, 7.5, 8.0, 8.5, 9.0]
+    k = findfirst(≈(t), times)
+    k === nothing && continue
+    i = findfirst(≈(t), measured.t)
+    println(rpad(@sprintf("%.1f", t), 7),
+            join([rpad(@sprintf("%.1f / %.1f / %.1f", r.Tr[k], r.record[k]...), 24) for (_, r) in runs]),
+            @sprintf("%.1f", measured.dante1[i]))
+end
 println("\ncapsule Tr peak (eV; drive Trad 313 eV, AS24)")
 for (n, r) in runs
     k = argmax(r.Tr)
     @printf("  %-22s %.1f at %.2f ns\n", n, r.Tr[k], times[k])
 end
-println("\nDante 1 Tr peak (eV; measured 313 ± 2, Rubery PRL 132, 065104; ≈8.4 ns, Pak PRE 109 Fig. 1)")
+println("\nDante 1 Tr peak (eV; measured 313 ± 2, Rubery PRL 132, 065104; Pak PRE 109 Fig. 1: 311.9 at 8.30 ns)")
 for (n, r) in runs
     dt, dto = first.(r.record), last.(r.record)
     k = argmax(dt)
@@ -303,8 +335,10 @@ end
 
 tag = join(("$k-$(opt[k])" for k in given), "_")
 out = "$(shot)_$(transfer)_$(dynamics)_$(h)_$(capsule_h)$(isempty(tag) ? "" : "_" * tag).csv"
-header = ["time"; ["P2/P0 $n" for (n, _) in runs]; ["P4/P0 $n" for (n, _) in runs]; ["Tr $n" for (n, _) in runs]]
+header = ["time"; ["P2/P0 $n" for (n, _) in runs]; ["P4/P0 $n" for (n, _) in runs]; ["Tr $n" for (n, _) in runs];
+          ["Dante $n" for (n, _) in runs]; ["Dante open $n" for (n, _) in runs]]
 writedlm(out, vcat(permutedims(header),
                    hcat(times, [p2(r) for (_, r) in runs]..., [p4(r) for (_, r) in runs]...,
-                        [r.Tr for (_, r) in runs]...)), ',')
+                        [r.Tr for (_, r) in runs]..., [first.(r.record) for (_, r) in runs]...,
+                        [last.(r.record) for (_, r) in runs]...)), ',')
 println("\nwrote ", out)
