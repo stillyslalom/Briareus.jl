@@ -604,6 +604,24 @@ and item 16's first absolute check.
   6.25 ns against 313 measured at 8.4 ns; capsule 302 at 5.5 ns. The drive falls through
   the peak where the data rise: item 16's late-time energetics.
 
+## Done (2026-10-24, Dante channels and the unfold)
+Research notes, "Dante channel responses and the unfold (2026-10-24)". Item 13.
+- **Channels from hardware** (`dante1_responses`, `DanteResponse`, `xrd_sensitivity`;
+  `dante1_channels(model = :gaussian)` keeps the Gaussians): Rubery 2023 Fig. 4's
+  filters, grids, mirrors, XRDs and solid angles; Henke optical constants
+  (`henke_mass_attenuation`, `mirror_reflectivity`, `data/henke/`; `mass_attenuation`
+  and `filter_transmission` take `table = :henke`); XRD and mirror models fitted to
+  Rubery's Figs. 3 and 8 as digitized (`data/rubery2023_dante.csv`,
+  `examples/dante_channels.jl`). Channel 2 gives 0.968 TW/sr per volt against the
+  published 0.97 (not fitted).
+- **Unfold** (`dante_unfold`; `dante(view, ::SpectralSolution)` returns voltages, the
+  unfold and `Tr_unfold`): Harris 2021's traditional algorithm and a positive smooth
+  NNLS unfold; Planckians unfold to the closed form (smooth to 1e-6). N221204
+  (`examples/n221204.jl energetics=new unfold=on`): the traditional unfold reads the
+  input Tr +0.8 to +1.3 eV, the smooth one within 0.05 eV.
+- **Sentinel lines of sight** (`sentinel`): the polar DIM looks down the axis onto the
+  capsule and out of the lower LEH.
+
 ## Done (2026-10-24, large radiation models)
 Research notes, "Large radiation models (2026-10-24)". Item 14's first part.
 - **`Float32Matrix`** view factors (`view_factors(...; storage = Float32)`): Float32
@@ -1054,9 +1072,11 @@ the reference's view factors hold through the pulse; items 9 and 10 remove that 
    picket in the data), a weighted, larger low-Z compilation (Ti, V), continuum and
    higher lines in the filter pass band, detector response, the object's transmission.
 13. ~~**Spectral radiosity.**~~ **Done (2026-10-24, see Done)**: multigroup radiosity,
-    the laser-produced Au M-band, a synthetic Dante. Still open: measured Dante channel
-    responses (filters, mirrors, XRD cathodes) in place of Gaussians and an unfold;
-    XRD lines of sight; angle dependence of the M-band conversion (sin⁴θ, Dewald 2020) and
+    the laser-produced Au M-band, a synthetic Dante; Dante 1 channels from their hardware,
+    the Dante unfold and the Sentinel views (2026-10-24, see Done). Still open: measured
+    Ni XRD and thin-filter transmissions, Dante 2's and Omega's channel hardware, laser
+    spots split at a plasma temperature rather than their brightness temperature (they
+    put 10–22 % of Dante 1's flux above 1.8 keV without any M-band); angle dependence of the M-band conversion (sin⁴θ, Dewald 2020) and
     its emission from the outer bubble (inner-beam clipping); emission of the closing LEH
     plasma (Dante's initial- vs open-area brackets differ by 20 eV at N221204's peak); a
     time-resolved M-band P2 history against Dewald's Fig. 10 on a moving hohlraum; the

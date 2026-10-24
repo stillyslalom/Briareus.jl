@@ -3443,7 +3443,8 @@ Parallel rays (400 × 400) across the LEH give each element's visible projected 
 partial views included; a ray through a closing lip is weighted by its open fraction.
 `Tr = (π I / (σ A cos θ_v))^¼` over the full initial LEH area (Dante's convention),
 `Tr_open` over the open area. Channels: Gaussians at Rubery's 18 Dante 1 energies, FWHM
-0.3 E (**L**, widths unpublished); `color_temperature` fits a Planckian to the channels
+0.3 E (**L**, widths unpublished; since replaced by the hardware responses, "Dante channel
+responses and the unfold" below); `color_temperature` fits a Planckian to the channels
 below 1.5 keV. Checks: a blackbody cavity reads T₀ to 5e-4 (after the caps' inscribed
 24-gon opening, 1.1 % below the equal-area hole on the coarse test mesh: on coarse
 meshes the opening is smaller than π r²); lips at open fractions 0, ½, 1; a Planckian's
@@ -4582,3 +4583,199 @@ assumption); continuum and higher lines in a filter's pass band; detector respon
 (image plate, CCD QE) and the object's transmission. A larger, weighted compilation
 (Kauffman's handbook tables, Phillion & Hailey for Ti, Girard/Babonneau pre-exploded
 foils) would tighten the low-Z end.
+
+## Dante channel responses and the unfold (2026-10-24) *derived*
+
+ROADMAP 13, what remained of the synthetic Dante: the 18 Dante 1 channels built from
+their hardware in place of Gaussians, the Dante unfold, and XRD lines of sight
+(`src/xray_optics.jl`, `src/dante_response.jl`, `examples/dante_channels.jl`,
+`test/dante_response.jl`). Read: Rubery et al., RSI (2023), OSTI 1975922 (Fig. 4
+hardware table, Figs. 3 and 8, §II.C–D); Harris et al., "Spectral sensor error analysis
+for measuring x-ray radiation drive using the DANTE diagnostic", RSI 92, 033505 (2021),
+OSTI 1820019 (eq. 1, the standard unfold, §II); Barnak et al., "Soft x-ray spectrum
+unfold of K-edge filtered x-ray diode arrays using cubic splines", RSI 91, 073102
+(2020), OSTI 1642075; Kemp et al., "A compact filtered x-ray diode array spectrometer
+for the NIF: SENTINEL", RSI (2020), OSTI 1736345; Rubery et al., "A 2–4 keV multilayer
+mirrored channel for the NIF Dante system", RSI 93, 113502 (2022), OSTI 1959490 (not
+needed beyond the 2023 review's Fig. 8). Confidence: **H** primary text/table, **H-img**
+digitized raster figure, **L** our construction or assumption.
+
+### Inputs read
+
+| Quantity | Value | Source | Conf. |
+|---|---|---|---|
+| Dante 1 hardware, 18 channels | energies, filters (µm), 8.8 % W grids, mirrors (ch 2 2–4 keV multilayer, ch 3 3.5° SiO₂, ch 4 2.5° SiO₂), XRD cathodes (Al/Cr/Ni), solid angles (6.51e-7 sr; ch 2 1.90e-7, 3 5.74e-7, 4 5.56e-7, 16 and 18 1.77e-6), uncertainties 8–16 % | Rubery 2023 Fig. 4 (a table image, read at 300 dpi) | H |
+| Channel 2 filter | "47 µm CH" in Fig. 4; 47 µm polyimide in §II.D and Fig. 8 — polyimide used | Rubery 2023 | H |
+| Grids | 8.8 % open tungsten, behind the filters, to keep XRDs below the 500 V Child–Langmuir limit | Rubery 2023 §II.A | H |
+| XRD-31 | reflection-mode planar vacuum diodes, Ni/Al/Cr/Au cathodes, 5 kV bias, 140 ps | Rubery 2023 §II.A | H |
+| Cr XRD sensitivity | 0.07–1 keV, C K (277), O K (525), Cr L (573 eV) structure; axis labelled V/GW | Rubery 2023 Fig. 3b | H-img |
+| Al XRD sensitivity | 1–4.5 keV, MV/GW, Al K edge | Rubery 2023 Fig. 8b | H-img |
+| SiO₂ mirror "3.5°" | measured reflectivity 0–1 keV (0.84 → 0.06) | Rubery 2023 Fig. 3a | H-img |
+| Ti 0.75 µm filter | measured "effective transmission" 0–1 keV | Rubery 2023 Fig. 3a | H-img |
+| Cr/Sc multilayer, 1.9° | reflectivity 1.2–4.5 keV; system response (mirror × polyimide × Al XRD) in kV/GW | Rubery 2023 Fig. 8 | H-img |
+| Channel 2 calibration | 0.97 TW/sr in 2–4 keV per volt at the XRD, 8.7 % | Rubery 2023 §II.D | H |
+| Signal equation | V = Ω ∫ S(E) R(E) dE, S in GW/sr/eV, R in V/GW | Harris 2021 eq. 1 | H |
+| Standard unfold | Planckian start from the channels < 1.5 keV (Rubery) / channels 1–9 (Harris), averaged per-channel brightness temperatures, plus an M-band Gaussian (1 GW/eV/sr, 2.5 keV, width 600 eV); each response replaced by a fitted Gaussian whose amplitude is adjusted channel by channel from the highest energy down, ~10 iterations to 5 % | Harris 2021 §II; Rubery 2023 §II.C | H |
+| Sentinel | DIM-mounted, 16 MiniXRDs (6 Al, 5 Ni, 5 Cr) behind Dante filters, polar DIM 000-000 or equatorial 090-078 / 090-315, ~7 m | Kemp 2020 §II | H |
+| Optical constants | Henke f₁, f₂, 10 eV–30 keV, 19 elements (`data/henke/`, CXRO, fetched 2026-10-24) | Henke, Gullikson & Davis, ADNDT 54, 181 (1993) + CXRO updates | H |
+
+Digitization (`data/rubery2023_dante.csv`): the figures are raster images in the
+accepted manuscript; the plot frames were located from the dark frame lines and the
+axis ends taken at the frame (where the end tick labels sit), each curve masked by colour
+and its median row read per pixel column. Overlaying the read points on the figures
+agreed to about a pixel (~0.1 % of full scale); the narrow edge spikes (XANES) are
+under-read by the median. Units: Fig. 3b's axis says V/GW; read as MV/GW like Fig. 8b's
+Al XRD — with V/GW the quantum efficiency would be ~10⁻⁸, and with MV/GW channel 2
+reproduces its published calibration (below).
+
+### Model
+
+- **Filters**: Henke photoabsorption (`henke_mass_attenuation`; `mass_attenuation(...;
+  table = :henke)`, with `:auto` keeping NIST where it covered the backlighter filters
+  before, so `backlighter_signal` is unchanged). Henke vs NIST at 3 keV: Be, Al, Ti, Fe,
+  Cu, polyethylene within 3 % (NIST includes scattering). Compound densities CH 1.05,
+  parylene (N) 1.11, Saran 1.70 are typical values (**L**).
+- **Grids**: an energy-independent 0.088 (wires opaque) (**L**: the wires' few-µm W
+  transmits nothing below ~10 keV).
+- **SiO₂ mirrors**: Fresnel (s and p averaged) from Henke f₁, f₂ with a Névot–Croce
+  roughness. At the nominal 3.5° the model's cutoff sits at ~0.5 keV, the measured one
+  at ~0.9 keV (rms 0.24 in reflectivity); fitted, the measured curve is SiO₂ at 2.04°
+  with 4.25 nm roughness (rms 0.037). The published angle is therefore not the grazing
+  angle of a bulk SiO₂ surface; the 2.5° mirror takes the same 0.584 scale (1.46°)
+  (**L**).
+- **Multilayer (ch 2)**: Fig. 8a's reflectivity as read (held at its end values
+  outside 1.2–4.5 keV).
+- **XRDs**: Henke's total-yield form S = K (E/1 keV)^γ x/(1 + x), x = L ρ μ_s(E),
+  with μ_s the mass attenuation of the bulk metal plus a surface layer (mass fractions
+  w_C, w_O, from the C and O edges in Fig. 3b). Fitted in log to Fig. 3b (Cr: K 15.84
+  MV/GW, L 33.6 nm, w_C 0.274, w_O 0.250, γ −0.244; rms 12 %) and to Fig. 8b (Al: K 35.12
+  MV/GW, γ 0.102 on Cr's surface layer; rms 6.7 %; the K-edge region 1.54–1.75 keV
+  excluded from the fit). Ni (no published curve) takes Cr's parameters on Ni (**L**);
+  Cr above 1 keV and Al below 1 keV are extrapolations of the fitted form (**L**). As
+  quantum efficiencies: Al 0.016 electrons/photon at 1 keV, Cr 0.03 at 70 eV.
+- **Checks against independent published numbers**: channel 2 (multilayer × 47 µm
+  polyimide × Al XRD, Ω 1.9e-7 sr) gives **0.968 TW/sr per volt** for power flat over
+  2–4 keV against Rubery's **0.97**; its response is 0.942 × Fig. 8b's over 2–4 keV
+  (rms 6 %). Not fitted. The Ti filter of Fig. 3a transmits 0.45 × Henke's 0.75 µm at
+  0.45 keV and 0.83 × at 1 keV: measured filters absorb more than their nominal
+  thickness at low energy (oxide, contamination, support), a caveat for every thin-filter
+  channel here, all of which use nominal thicknesses.
+
+Channel bands (half maximum, eV) against Rubery's nominal energies: 1 (1170) 1084–1305;
+2 (3060) 2307–3625; 3 (250) 226–284; 4 (470) 444–513; 5 (710) 656–779; 6 (870) 867–934;
+7/15 (940) 852–1024; 8 = 0.088 × 1; 9 (1430) 1314–1561; 10/14 (1710/1700) 1558–1840;
+11 (3430) 1821–4467; 12 (2580) 2351–2825; 13 (3000) 2695–3357; 16 (14370) 8579–19247;
+17 (690) 624–779; 18 (3660) 1771–4200. Each band's peak lies within 4–13 % above the
+nominal energy (the absorption edge that closes it), except the broad 11, 16 and 18.
+A Planckian at 300 eV through the LEH (π 1.55², 37°) gives 190 V on channel 1 and 14 V
+on channel 3 (at the XRD, before attenuators), the scale of Harris's N190721 traces
+(90–230 V on the low channels).
+
+### Unfold (`dante_unfold`, `dante(view, ::SpectralSolution)`)
+
+- `:traditional` — Harris's algorithm: Planckian start at the mean of the per-channel
+  brightness temperatures of the channels below 1.5 keV, plus the M-band Gaussian; each
+  response replaced by a unit Gaussian (centre between its half-maximum points, FWHM
+  their distance: Harris fits one but does not say how, **L**); amplitudes adjusted
+  channel by channel from the top. With Dante 1's duplicated hardware (1/8 differ only
+  by the grid, 7/15 and 10/14 are identical) the Gaussians coincide and the sweep
+  diverges; the same equations are then solved directly (least squares in the relative
+  voltages, minimum-norm amplitudes).
+- `:smooth` — positive: the start Planckian (no M-band) times a piecewise-linear factor
+  on 48 log-spaced knots, nonnegative least squares on the relative voltages with a
+  second-difference penalty (λ 1e-3). A Planckian is its own solution (factor 1), so
+  it is exact; it is our construction (**L**), closest in spirit to Barnak 2020's
+  spline unfold (which uses one knot per channel edge and no prior).
+- Tr = (π I / (σ A cos θ))^¼ over the same area and angle as the synthetic Dante's
+  `Tr`, I integrated over 50 eV – 20 keV.
+
+**Closed-form check (Planckians)**: voltages computed by quadrature of the exact
+Planckian through the responses, then unfolded. The exact answer is
+T · F(T)^¼ with F the Planck fraction in 50 eV – 20 keV (the unfold's range):
+
+| T (eV) | exact | traditional | smooth |
+|---|---|---|---|
+| 100 | 99.867 | 105.40 (misfit 95: fails) | 99.867 |
+| 150 | 149.937 | 149.98 (misfit 1.3) | 149.937 |
+| 200 | 199.964 | 199.84 (misfit 0.07) | 199.964 |
+| 250 | 249.976 | 250.047 | 249.976 |
+| 300 | 299.983 | 300.013 | 299.983 |
+| 350 | 349.988 | 350.007 | 349.988 |
+
+The smooth unfold and the traditional one without the M-band start agree with the
+closed form to 1e-6. With Harris's absolute M-band start (1 GW/sr/eV, sized for a NIF
+peak drive) the traditional unfold is within 0.07 eV from 250 eV up and fails below
+~200 eV, where that start is larger than the whole signal of the M-band channels and the
+Gaussians cannot cancel it within the channels' bands.
+
+### N221204 (`examples/n221204.jl energetics=new unfold=on`)
+
+Standard mesh (0.28 / 0.16), full model, published energetics; the spectrum Dante 1
+sees from `spectral_solve` (42 groups to 20 keV), each element's source split as a
+Planckian at its own brightness temperature ("Planckian"), and with the intensity-form
+laser M-band (`MBandEmission()`, "+ M-band"). Within each group the voltages take the
+spectrum as a Planckian at Tr_open (**L**). Tr over the initial LEH area (eV):
+
+| t (ns) | spectrum | input Tr | traditional | smooth | color T, hardware / Gaussian channels | > 1.8 keV |
+|---|---|---|---|---|---|---|
+| 5.0 | Planckian | 248.8 | 249.7 (+0.90) | 248.8 (−0.02) | 272.2 / 271.9 | 0.098 |
+| 5.0 | + M-band | 248.8 | 249.8 (+1.02) | 248.8 (−0.01) | 276.9 / 271.8 | 0.139 |
+| 6.0 | Planckian | 271.4 | 272.3 (+0.90) | 271.3 (−0.02) | 301.1 / 300.5 | 0.144 |
+| 6.0 | + M-band | 271.4 | 272.4 (+1.02) | 271.4 (+0.00) | 311.8 / 300.0 | 0.199 |
+| 7.0 | Planckian | 283.8 | 285.0 (+1.13) | 283.8 (+0.02) | 328.3 / 326.8 | 0.192 |
+| 7.0 | + M-band | 283.8 | 285.1 (+1.27) | 283.9 (+0.04) | 352.0 / 325.4 | 0.284 |
+| 8.0 | Planckian | 295.0 | 296.2 (+1.18) | 295.0 (+0.04) | 346.6 / 345.2 | 0.223 |
+| 8.0 | + M-band | 295.0 | 296.3 (+1.30) | 295.0 (+0.05) | 377.6 / 344.2 | 0.331 |
+| 8.5 | Planckian | 283.4 | 284.2 (+0.82) | 283.3 (−0.02) | 313.2 / 312.1 | 0.165 |
+| 8.5 | + M-band | 283.4 | 284.2 (+0.87) | 283.3 (−0.02) | 319.3 / 311.4 | 0.195 |
+
+(coarse mesh 0.8 / 0.4: the same to 0.4 eV; every unfold matched all 18 voltages to
+< 1e-7.) The gray history is unchanged by this work: Dante 1 295.0 eV at 8 ns over the
+initial area, 318.6 over the open area, against 310.1 measured.
+
+- **The unfold reads the input's Tr**: the traditional unfold 0.8–1.3 eV high (0.3–0.4 %
+  in Tr, ~1.5 % in flux; its Gaussians spread the high channels' power into the
+  thermal band), the smooth one within 0.05 eV. Both well inside Dante's quoted 1σ of
+  1.5 % in Tr (Rubery 2023 §II.C). So comparing the synthetic Dante's `Tr` with the
+  measured Dante Tr, as the N221204 tables do, was sound to ~1 eV; the brackets of
+  initial vs open area (24 eV) and the late-time energetics remain the open terms.
+- **Before/after for the channels**: with Gaussians there was no unfold, only the
+  color temperature of the channels below 1.5 keV. That color temperature agrees
+  between Gaussian and hardware channels for the Planckian spectra (≤ 1.5 eV), but
+  with the laser M-band the hardware channels read 5–33 eV hotter: their high-energy
+  leakage (nominal-energy bands with tails past the absorption edges) picks up the
+  M-band, which Gaussians cannot. The color temperature is a start value, not a
+  result, so Tr is unaffected; it is a reason not to quote a < 1.5 keV color
+  temperature from Dante as the wall temperature.
+- **Model finding — hot laser spots**: even without the laser M-band, 10–22 % of what
+  Dante 1 sees lies above 1.8 keV and the color temperature is 23–52 eV above Tr: the
+  per-element Planckian split puts the laser spots at their brightness temperature
+  (B/σ)^¼, far above the wall's, and Dante 1 sees outer spots through the LEH. With the
+  intensity-form M-band on top the share reaches 0.33 at 8 ns, against Dewald's
+  measured 12–15 % (with the per-cone `nif_mband()` and α_M 0.5 the Dewald setup gave
+  12 %). Not acted on here: a spot's thermal emission should be split at a plasma
+  temperature model rather than its brightness temperature.
+
+### XRD lines of sight
+
+`sentinel(:polar)` (Kemp 2020: polar DIM 000-000, θ 0°) views the hohlraum down its
+axis through the upper LEH: on the test hohlraum (LEHs r 1.6 mm, capsule r 0.9 mm) it
+sees the capsule and, around it, the lower LEH, so a blackbody cavity at 250 eV reads
+the capsule's (0.9/1.6)² share (186 eV): the polar view measures the capsule, not the
+wall. The equatorial DIMs (090-078, 090-315) see a hohlraum only through a window
+(`through` required). Sentinel's own filter set is not tabulated (Dante 1's channels
+stand in, **L**). The OMEGA Dante (port H16I, θ 142.62°, φ 126°; Rubery 2023, the Omega section) depends
+on the hohlraum axis chosen per shot and is left to `DanteView`.
+
+### What remains
+
+- Ni XRD measured shape (Cr's parameters stand in); Al below 1 keV and Cr above 1 keV
+  are extrapolations; measured thin-filter transmissions (Fig. 3a's Ti is 0.45–0.83 ×
+  nominal) — real filters' oxide and contamination layers would move the low channels.
+- The SiO₂ mirror angle scale (published 3.5° behaves as 2.04° bulk SiO₂) applied to
+  the 2.5° mirror is an assumption.
+- Within-group spectral shape: voltages assume a Planckian at Tr_open within each group;
+  finer groups near the channel edges would remove it.
+- Laser-spot spectra (above) and the M-band split per cone in time-dependent runs.
+- Dante 2's hardware (11 mirrored channels; not tabulated in Rubery 2023) and the
+  Omega Dante configuration (Rubery 2023 Fig. 13).
