@@ -48,3 +48,11 @@ model = RadiationModel(target)
 sol = solve(model, ev.deposition)
 println("X-ray power toward the imager: ",
         round(line_of_sight_power(target, sol.B, (-1, 0, 0)); sigdigits = 3), " TW/sr")
+
+# He-α photons at a detector (research notes, "Backlighter conversion efficiency and the
+# photometric chain"): a 1 ns drive on the Ti foil (no picket), a generic point-projection
+# detector 300 mm from TCC behind 25 µm of Be. Ti He-α (4.75 keV) lies below the fitted
+# data (Cr–Zr), so the CE is flagged as extrapolated; the main target is not attenuating.
+signal = backlighter_signal(target, ev.deposition, (-1, 0, 0); line = :Ti, pulse = 1.0,
+                            distance = 300.0, object = :main, filters = (:Be => 0.025,))
+display(signal); println()

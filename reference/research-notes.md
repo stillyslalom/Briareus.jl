@@ -4461,3 +4461,124 @@ shifted. Nothing was fitted to Fig. 10.
   transfer curves, so its +6 µm overshoot stays a trend check.
 - The N221204 Fig. 9 digitization could be replaced by the shear-corrected re-digitization
   (differences ≤ 0.006 in cone fraction); not done, to keep the reference fit reproducible.
+
+## Backlighter conversion efficiency and the photometric chain (2026-10-24) *engineering*
+
+ROADMAP Next 12. `kshell_line_energy`, `kshell_ce_data`, `kshell_ce_model`, `kshell_ce`,
+`mass_attenuation`, `filter_transmission`, `backlighter_signal` (`src/backlighter_signal.jl`,
+`test/backlighter_signal.jl`, `data/kshell_ce.csv`); used in the radiography tutorial
+(`docs/literate/dropped_bundle.jl`, "The radiograph's signal") and `examples/backlighter.jl`.
+All of it is public literature plus generic detector geometry; no facility-specific
+backlighter design is used.
+
+**Data** (`data/kshell_ce.csv`, 42 rows, 37 fitted). CE = He-α (w line plus satellites)
+energy into 4π over the *incident* laser energy, 351 nm, planar foils; every source
+converts J/sr at one view angle to 4π assuming isotropy.
+- *Workman & Kyrala, LA-UR-01-4155 (2001), OSTI 783558* (OMEGA, 1 ns square, solid flat
+  targets, no picket): Cr, Fe, Zn, Ge irradiance scans (Figs. 2–5) and Ni (Fig. 6), 24
+  points **digitized** from the rendered figures (reading ~3% in CE). 550 eV band about
+  He-α (may include part of Ly-α); crystal reflectivities estimated, so the absolute
+  scale is uncertain; relative ±10%, reproducibility 20%; Ge's two lowest points ±50%.
+  Peaks: Cr > 3% at ≤ 1e15 W/cm² (not resolved), Fe ~3% at 3.5e15, Zn ≥ 0.84% at
+  ≤ 4.4e15, Ge 0.22% near 4e16 (unsmoothed tight-focus irradiances, uncertain). They
+  report CE ∝ hν^-(2.5–4) across lines and I^-0.3 (Cr) to I^-0.5 (Zn) past the peak.
+- *Barrios et al., HEDP 9, 626 (2013), OSTI 1237551*, Table 3 (exact): NIF, 1 ns picket
+  3 ns before a 2–5 ns drive, 4–8 beams at 40°, CPP spots. Zn 0.62–1.08% (0.57–3.5e15),
+  Ge 0.52–1.54% (0.57–2.96e15, peak 1.5e15), KBr 0.29% (half the emitters; not fitted),
+  Zr 0.40, 0.32%.
+- *Barrios et al., RSI 85 (2014), LLNL-JRNL-656005, OSTI 1162253*, text (exact): Ge
+  one-sided 1.0 ± 0.3% at 2.9e15 (two-sided 1.3 ± 0.2, not fitted); Zr 0.18 ± 0.10 and
+  0.15 ± 0.07% (1.94, 4.5e15; taken as a reanalysis of the 2013 Zr shots, whose rows
+  are kept unfitted, *inferred*); Zr without picket 0.09 ± 0.05% (4.7e15, put in the
+  single-pulse class); Nb 0.15, 0.18% (17, 23e15); Mo 0.16 ± 0.08% (9.5e15). Pre-pulsed
+  foils follow hν^-(3–4) (their Fig. 3, with Workman's bounds).
+- Context, not fitted: Kemp, APS-DPP 2025 slides (OSTI 3389300) compile foils (0.2–0.5%
+  at 7–10 keV), pre-pulsed foils (1–1.5% at 9–10 keV, 0.3–0.4% at 16 keV), foil-lined
+  cavities and under-dense targets (2× better). Pre-exploded Ti foils reached up to ~8%
+  (Girard et al., PoP 12 (2005); seen only through abstracts and citing papers, not
+  checked against the paper). Gas, aerogel, foam and cavity sources are out of scope.
+
+**Model** (`kshell_ce_model`, fitted from the CSV once per session): least squares on
+ln CE with equal weights, `ln CE = a_c + b L + c_c X + d X² + e X L`, L = ln(hν/10 keV),
+X = ln(I/1e15 W/cm²), class c ∈ {foil (one pulse), prepulsed}. Coefficients: a = −5.694
+(foil), −4.876 (prepulsed); b = −3.92; c = 0.244, 0.209; d = −0.098; e = 0.543. Residual
+scatter **0.41 in ln CE (×1.51)** with 30 degrees of freedom (foil class rms 0.38,
+prepulsed 0.35). The optimum irradiance per line, `exp(−(c_c + e L)/2d)` × 1e15 W/cm²:
+foil Fe 1.2e15, Cu 2.1e15, Ge 3.8e15, Mo 1.8e16; prepulsed Zn 2.2e15, Ge 3.1e15, Zr 1.1e16.
+Peak CE: foil Fe 1.6%, Cu 0.71%, Ge 0.36%; prepulsed Cu 1.6%, Ge 0.78%, Zr 0.20%,
+Mo 0.15%. The peak falls as hν^-3.5 (foil Fe→Ge), inside the published hν^-(2.5–4).
+- **Shortfalls, stated.** The peaks are flatter than the data: Workman's Fe peak (3%) and
+  Barrios's Ge peak (1.5% at 1.5e15) sit ~2× above the fit, and the fitted prepulsed Ge
+  optimum (3e15) is ~2× above Barrios's (1–1.5e15). The quadratic in ln I is the
+  simplest form with an optimum; the scatter absorbs the rest. *confidence: medium
+  inside the data (foil 5.7–16.3 keV, 0.35–76e15; prepulsed 9.0–18.0 keV,
+  0.57–23e15), low beyond.*
+- **Uncertainty.** `kshell_ce` returns σ = √(scatter² + vᵀ C v), C the coefficient
+  covariance, v the basis at the point: 0.43–0.47 inside the data, 0.49 for Ti
+  (single pulse), 0.59 for Ag prepulsed, 0.74 for Ag single pulse (all at 2e15), 1.0 for Ti
+  prepulsed at its optimum (16% ×/÷ 2.7, i.e. unknown). `extrapolated` flags any point outside its
+  class's line, irradiance or (if given) pulse range.
+- **Pulse length.** Not in the model: the foil class is 1 ns (plus one 2–5 ns NIF Zr
+  point), the prepulsed class 2–5 ns, so τ and the picket are confounded. `pulse` only
+  sets the flag (foil 1–5 ns, prepulsed 2–5 ns). *E*
+- **Line energies** (`kshell_line_energy`): Ti 4.750 … Ge 10.279, Kr 13.115 as commonly
+  quoted; Br, Zr, Nb, Mo, Ag from `10.204 eV (Z − 0.42)² [1 + 0.0011 (Z − 22)]` fitted
+  through Ti, Cu, Ge, Kr and Zr (≤ 0.5%). *derived*
+
+**Attenuation** (`mass_attenuation`, `filter_transmission`): NIST X-Ray Mass Attenuation
+Coefficients (Hubbell & Seltzer), μ/ρ with coherent scattering, 3–40 keV, for Be, Al, Ti,
+Fe, Cu, Mo, Ta, Mylar and polyethylene; Kapton uses Mylar's μ/ρ at ρ = 1.42 (a few %).
+Log-log interpolation between the tables' nodes (1–5 keV apart; a few % away from
+edges), edges exact (Ti K 4.966, Fe K 7.112, Cu K 8.979, Mo K 20.00, Ta L 9.881/11.14/
+11.68 keV). Beer–Lambert at normal incidence. A transmission estimate, not a channel
+response.
+
+**Chain** (`backlighter_signal(target, deposition, los; line, pulse, distance, ...)`):
+1. Laser energy: each foil element's deposited power (Briareus deposits all incident
+   power; CE is per incident energy, so backscatter is inside CE) × a flat-top `pulse`.
+2. CE at the power-weighted mean irradiance (`irradiance = :element` evaluates each
+   element at its own; σ stays the mean's), or a given `ce`.
+3. Angular distribution: `:isotropic` by default (how the CE data were converted to 4π;
+   half the energy toward the front), `:lambertian` (4 cos θ, front only), or `f(μ)`
+   with ∫ f dΩ = 4π. Elements facing away or with hardware (any surface part but the
+   foil and `object`) on the path contribute nothing.
+4. Point projection: fluence Σ E_e f/(4π r_e²). Pinhole imager (diameter, distance p;
+   detector at q = distance − p behind it): each image point gets R A_p/q² with
+   R = E_e f/(4π A_e cos θ) the radiance of the foil element seen through the pinhole and
+   a sample point of the object's projected disk; the mean and range over the disk.
+5. Filters at the line energy; 6. photons = fluence/hν per mm² and per pixel; the CE's
+   1σ gives `photons_lo`/`photons_hi`. The object does not attenuate (open field);
+   continuum, Ly-α and detector response are not modeled.
+- Tests (closed forms): point projection Σ E_e/(4π r²) by hand and E_x/(4π(L + D)²) to
+  1e-5; Lambertian pinhole image E_x A_p/(π A q²) exactly at every image point; energy
+  through the pinhole = fluence × image area (magnification q/(p + D)); hemispherical
+  integrals of per_sr E_x/2 (isotropic) and E_x (Lambertian) to 1e-10; filters vs NIST
+  nodes, edges, power-law interpolation, layer products; the fit's residual rms = its
+  scatter, zero mean residual per class, the optimum a maximum, the hν slope in
+  2.5–4.5.
+
+**Tutorial numbers** (radiography tutorial; bundle 11's two quads, 16 TW for 2 ns with a
+picket, aimed at the center of the 2 mm Ge foil at 14 mm; generic imager: 20 µm pinhole
+at 200 mm, detector at 2 m, 50 µm pixels, 250 µm Be + 50 µm Kapton). *derived*
+- 13.6 of 16 TW land on the foil, mean irradiance 5.1e14 W/cm² (just below the NIF
+  data; extrapolated), against Ge's fitted optimum 3.1e15: the CPP spots at best focus
+  fill most of the foil.
+- CE 0.56% (×/÷ 1.62): 154 J of He-α into 4π, 12.2 J/sr toward the detector (= E/4π,
+  asserted), filters 0.95, **~480 photons per pixel** averaged over the capsule's image
+  (295–771 at 1σ); across the image 2e3–5e5 photons/mm², the foil's radiance following
+  the spots.
+- At the same irradiance: Cu 1.35% → ~1340 photons/pixel, Zn 1.0% → ~940, Ge ~480, Zr
+  0.08% → ~43.
+- `examples/backlighter.jl` (OMEGA Ti foil, 1 ns, point projection at 300 mm behind 25 µm
+  Be) prints the same chain: 8.0 kJ on the foil at 4.6e14 W/cm², near the fitted Ti
+  optimum (4.4e14) but below the fitted lines (Cr is the lowest), so extrapolated: CE
+  6.7% ×/÷ 1.78, 531 J into 4π, 42 J/sr, 5.8e11 photons/mm² (3.3e11–1.0e12). Workman's
+  Cr (> 3% at 1e15) makes a few % plausible; the ~8% quoted (secondhand) for pre-exploded
+  Ti foils lies above it.
+
+**Not modeled / next.** Pulse-length and spot-size dependence (data confounded);
+backside emission of thin foils; the line's opacity and limb brightening (the isotropic
+assumption); continuum and higher lines in a filter's pass band; detector response
+(image plate, CCD QE) and the object's transmission. A larger, weighted compilation
+(Kauffman's handbook tables, Phillion & Hailey for Ti, Girard/Babonneau pre-exploded
+foils) would tighten the low-Z end.

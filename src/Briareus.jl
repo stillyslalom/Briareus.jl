@@ -64,6 +64,8 @@ export legendre, legendre_moments, legendre_weights, solid_angle, ylm_moments, y
        ylm_matrix, ylm_frame, mode_index, relative_mode_power, mode_amplitude, mode_power, rms_nonuniformity
 export OrthoCamera, camera_from_port, render, radiance, line_of_sight_power
 export backlighter_foil, line_of_sight, LineOfSightReport
+export kshell_line_energy, kshell_ce_data, kshell_ce_model, KShellCEModel, kshell_ce,
+       mass_attenuation, filter_transmission, backlighter_signal, BacklighterSignal
 export planck_fraction, planck_fractions, spectral_edges, MBandEmission, mband_conversion,
        nif_mband, mband_power, SpectralSolution, spectral_solve, ngroups, band_flux,
        mband_recirculation, DanteChannel, dante1_channels, DanteView, dante1, dante2, dante, visible_area
@@ -103,6 +105,7 @@ include("dynamics.jl")
 include("retune.jl")
 include("clearance.jl")
 include("backlighter.jl")
+include("backlighter_signal.jl")
 include("keepout.jl")
 include("uncertainty.jl")
 include("implosion.jl")

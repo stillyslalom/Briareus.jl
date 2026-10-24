@@ -284,6 +284,70 @@ s_far = (8.0 + 2.875) / 8.0           # the far wall's distance from the foil, i
 ", s_far * 0.9 + (s_far - 1) * sqrt(2))
 line_of_sight(scene(348.0, 8.0), (90.0, 348.0))
 
+# ## The radiograph's signal
+#
+# A clear line of sight still needs enough photons. The freed quads heat the foil. A
+# fraction of their energy, the conversion efficiency (CE), comes out in the He-α line
+# of the foil's element, and the imager records what passes its pinhole and filters.
+# [`kshell_ce`](@ref) estimates the CE from published measurements on planar foils
+# ([`kshell_ce_data`](@ref)): OMEGA foils driven by a single 1 ns pulse (Workman and
+# Kyrala, 2001) and NIF foils with a picket 3 ns ahead of a 2–5 ns drive (Barrios et
+# al., 2013 and 2014). [`kshell_ce_model`](@ref) fits `ln CE` as a quadratic in
+# `ln I` for each line, with an optimum irradiance that rises with photon energy and a
+# peak that falls about as ``(h\nu)^{-3.5}``. The fit's residual scatter, a factor of
+# 1.5, is the CE's uncertainty. The data do not separate the pulse length from the
+# picket.
+#
+# [`backlighter_signal`](@ref) carries the chain through:
+# 1. the laser energy on each foil element, from a deposition calculation;
+# 2. the CE at the foil's mean irradiance;
+# 3. isotropic emission (the assumption the CE measurements were converted with);
+# 4. a pinhole imager on the line of sight;
+# 5. the filters' attenuation ([`filter_transmission`](@ref), from NIST mass
+#    attenuation coefficients);
+# 6. the photons per detector pixel, with the CE's uncertainty.
+#
+# The capsule itself does not attenuate in this calculation: the result is the open-field
+# level that its transmission multiplies. Here bundle 11's two quads, 16 TW for 2 ns
+# with a picket, are aimed at the center of a germanium foil (He-α at 10.3 keV) at the
+# 14 mm standoff. The imager is generic: a 20 µm pinhole 200 mm from the capsule, the
+# detector 2 m away (magnification 9), behind 250 µm of beryllium and 50 µm of Kapton.
+
+foil_center = Tuple(-d_los .* port_vector(90.0, 348.0))
+radiography = [remake(b; aim = foil_center) for b in quads[bundles["11"]]]
+bl_scene = scene(348.0, d_los)
+bl_deposition = raytrace_deposition(bl_scene, radiography; nspot = 61)
+imager = (; distance = 2000.0, pinhole = 0.02, pinhole_distance = 200.0, pixel = 0.05,
+          filters = (:Be => 0.25, :kapton => 0.05))
+signal = backlighter_signal(bl_scene, bl_deposition, (90.0, 348.0); line = :Ge, pulse = 2.0,
+                            prepulse = true, imager...)
+
+# The phase-plate spots at best focus spread the quads' light over most of the foil, so
+# the mean irradiance, about ``5\times10^{14}`` W/cm², lies just below the lowest
+# measured NIF point, which flags the result as extrapolated. It is also well below
+# germanium's fitted optimum of about ``3\times10^{15}`` W/cm². About 500 photons per
+# 50 µm pixel (6 µm at the capsule), averaged over the capsule's image, is uncertain by
+# a factor of 1.6 either way. Across the image the level varies a hundredfold
+# (`signal.photons_range`), because the foil's radiance follows the quads' spots: the
+# capsule's rim is backlit by the foil's weakly irradiated edges. All of the foil's
+# emitting area faces the detector, and through the open windows every element sees
+# it, so the power per steradian toward the detector is the isotropic ``E_x/4\pi``.
+# Lower-Z lines convert better at this irradiance; the capsule's transmission at each
+# energy decides between them:
+
+@assert signal.facing ≈ 1 && signal.per_sr ≈ signal.xray_energy / 4π
+println("line   hν (keV)  CE (%, 1σ range)      filters  photons per pixel (1σ range)")
+for line in (:Cu, :Zn, :Ge, :Zr)
+    s = backlighter_signal(bl_scene, bl_deposition, (90.0, 348.0); line, pulse = 2.0,
+                           prepulse = true, imager...)
+    @printf("%-4s   %6.2f   %5.2f (%4.2f–%4.2f)%s   %5.3f    %6.0f (%.0f–%.0f)\n", line, s.line,
+            100s.ce, 100s.ce * exp(-s.sigma), 100s.ce * exp(s.sigma), s.extrapolated ? "*" : " ",
+            s.transmission, s.photons_pixel, s.photons_lo * 0.05^2, s.photons_hi * 0.05^2)
+end
+
+# (`*`: outside the measured range of its class, here in irradiance, and for Cu also in
+# photon energy.)
+
 # ## What each bundle costs
 #
 # Without a laser–plasma model the capsule's flux is linear in the beam powers.
@@ -628,6 +692,15 @@ show_modes("re-pointed, ray-traced", ylm_weights(target, capsule; lmax = 4) * H)
 #   there and none at 14 mm. Its closed-form tests (`test/backlighter.jl`): a bundle
 #   exactly grazing a shield's rim, a foil rotated off the line of sight, and imaging
 #   rays converging on a point detector.
+# - The backlighter's power per steradian toward the detector equals the isotropic
+#   ``E_x/4\pi``: every emitting element faces the detector and sees it through the
+#   windows (asserted). The chain's closed forms are tested in
+#   `test/backlighter_signal.jl`: point-projection fluence ``E_x/(4\pi r^2)``, a
+#   Lambertian foil's uniform image ``E_x A_p/(\pi A q^2)``, energy through the pinhole
+#   equal to the fluence times the image area, the angular distributions' hemispherical
+#   integrals (``E_x/2`` isotropic, ``E_x`` Lambertian), Beer–Lambert filters against
+#   the NIST nodes and edges, and the CE fit's residuals, optimum and ``h\nu`` scaling
+#   against the published ``(h\nu)^{-(2.5\text{–}4)}``.
 # - The keep-out's worst-case clearance agrees with the clearance check's, and
 #   re-pointing against it passes that check.
 # - The re-pointed drive, recomputed by ray tracing and a direct radiosity solve,

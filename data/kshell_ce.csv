@@ -1,0 +1,74 @@
+# Laser-to-x-ray conversion efficiency (CE) into the He-alpha line (He-like 1s2-1s2p, with its
+# satellites) of planar foils driven by 351 nm nanosecond lasers. CE = line energy into 4 pi
+# (inferred from J/sr measured at one view angle, assuming isotropic emission) over the
+# INCIDENT laser energy. Compiled 2026-10-24 for ROADMAP 12; research notes "Backlighter
+# conversion efficiency and the photometric chain (2026-10-24)".
+#
+# Columns: element; Z; hnu (keV, He-alpha w line, Briareus kshell_line_energy); irradiance
+# (1e15 W/cm2, the paper's spot-average or peak value); pulse (ns, main drive; NIF rows: 2
+# stands for the papers' 2-5 ns); class
+# (foil = single main pulse, prepulsed = 1 ns picket 3 ns before the main drive);
+# ce and u (percent; u = the paper's error bar, or blank); fit (1 = used by
+# kshell_conversion's fit, 0 = kept for reference); facility; source; note.
+#
+# Sources:
+#  W01 = J. Workman and G. A. Kyrala, "Scaling of x-ray K-shell sources from laser-solid
+#        interactions", LA-UR-01-4155 (2001) (OSTI 783558). OMEGA, 1 ns
+#        square, 3-6 kJ, solid flat targets, no smoothing at best focus. CE integrated over
+#        550 eV about He-alpha (may include part of Ly-alpha); crystal reflectivities
+#        estimated (absolute values uncertain), relative error +/-10%, reproducibility 20%.
+#        Values DIGITIZED here from Figs. 2-6 (rendered PDF raster, axis ticks; reading error
+#        ~3% in CE, ~5% in irradiance). Irradiance errors are large at tight focus (overlap
+#        of unsmoothed beams), text: Ge "50% error bars" on the two lowest points.
+#  B13 = M. A. Barrios et al., "Backlighter development at the NIF: zinc to zirconium",
+#        High Energy Density Phys. 9, 626 (2013) (OSTI 1237551), Table 3
+#        (SSII Heα column, exact). NIF, 4-8 beams at 40 deg, CPP spots, 1 ns picket 3 ns
+#        before a 2-5 ns main drive.
+#  B14 = M. A. Barrios et al., "X-ray area backlighter development at the NIF", Rev. Sci.
+#        Instrum. 85 (2014), LLNL-JRNL-656005 (OSTI 1162253), Sec. III text values (exact).
+#  Zr: B14's two prepulsed Zr values (1.94 and 4.5e15) are taken to be a reanalysis of B13's
+#  two Zr shots (1.90 and 9.53e15; inferred, the papers do not say), so B13's Zr rows are
+#  kept with fit = 0. KBr is a compound film with half the Br emitters per area (B13): fit = 0.
+#  Ge two-sided irradiation (B14) is a different geometry: fit = 0.
+element,Z,hnu,irradiance,pulse,class,ce,u,fit,facility,source,note
+Cr,24,5.682,0.93,1,foil,3.02,,1,OMEGA,W01,Fig. 2; 6 beams 650 um
+Cr,24,5.682,4.28,1,foil,2.20,,1,OMEGA,W01,Fig. 2; 6 beams 300 um
+Cr,24,5.682,6.26,1,foil,1.69,,1,OMEGA,W01,Fig. 2; 6 beams 250 um
+Cr,24,5.682,9.5,1,foil,1.48,,1,OMEGA,W01,Fig. 2; 6 beams 200 um
+Fe,26,6.700,0.346,1,foil,0.90,,1,OMEGA,W01,Fig. 3; 2 beams 600 um
+Fe,26,6.700,0.667,1,foil,1.98,,1,OMEGA,W01,Fig. 3; 4 beams 600 um
+Fe,26,6.700,0.91,1,foil,2.38,,1,OMEGA,W01,Fig. 3; 6 beams 600 um
+Fe,26,6.700,3.5,1,foil,3.00,,1,OMEGA,W01,Fig. 3; 6 beams 300 um (peak)
+Fe,26,6.700,19.6,1,foil,0.49,,1,OMEGA,W01,Fig. 3; 6 beams ~100 um
+Ni,28,7.806,30,1,foil,0.42,,1,OMEGA,W01,Fig. 6; 6 beams tight focus at 2-4e16
+Zn,30,9.000,4.36,1,foil,0.84,,1,OMEGA,W01,Fig. 4; 6 beams 300 um
+Zn,30,9.000,8.3,1,foil,0.55,,1,OMEGA,W01,Fig. 4; 6 beams 200 um
+Zn,30,9.000,9.7,1,foil,0.63,,1,OMEGA,W01,Fig. 4; 12 beams 300 um
+Zn,30,9.000,9.7,1,foil,0.62,,1,OMEGA,W01,Fig. 4; 12 beams 300 um (repeat)
+Zn,30,9.000,18.3,1,foil,0.39,,1,OMEGA,W01,Fig. 4; 12 beams 200 um
+Zn,30,9.000,19.6,1,foil,0.34,,1,OMEGA,W01,Fig. 4; 3 beams 100 um
+Zn,30,9.000,39.7,1,foil,0.30,,1,OMEGA,W01,Fig. 4; 6 beams 100 um
+Zn,30,9.000,39.7,1,foil,0.26,,1,OMEGA,W01,Fig. 4; 6 beams 100 um (repeat)
+Ge,32,10.279,6.8,1,foil,0.100,0.05,1,OMEGA,W01,Fig. 5; 1 beam best focus; 50% error (text)
+Ge,32,10.279,13.2,1,foil,0.172,0.086,1,OMEGA,W01,Fig. 5; 2 beams; 50% error (text)
+Ge,32,10.279,40.6,1,foil,0.216,,1,OMEGA,W01,Fig. 5; 6 beams (duplicate shots coincide)
+Ge,32,10.279,75.6,1,foil,0.189,,1,OMEGA,W01,Fig. 5; 12 beams
+Ge,32,10.279,75.6,1,foil,0.184,,1,OMEGA,W01,Fig. 5; 12 beams (repeat)
+Zr,40,16.30,4.7,2,foil,0.09,0.05,1,NIF,B14,15 um Zr; main drive only (no picket)
+Zn,30,9.000,0.57,2,prepulsed,0.62,0.19,1,NIF,B13,N120616-001
+Zn,30,9.000,1.96,2,prepulsed,1.08,0.26,1,NIF,B13,N130324-002
+Zn,30,9.000,3.50,2,prepulsed,0.69,0.16,1,NIF,B13,N130324-003
+Ge,32,10.279,0.57,2,prepulsed,0.52,0.11,1,NIF,B13,N120709-001
+Ge,32,10.279,1.45,2,prepulsed,1.54,0.31,1,NIF,B13,N120812-001
+Ge,32,10.279,1.94,2,prepulsed,1.28,0.37,1,NIF,B13,N120916-002
+Ge,32,10.279,2.96,2,prepulsed,0.64,0.18,1,NIF,B13,N120416-001
+Ge,32,10.279,2.9,2,prepulsed,1.0,0.3,1,NIF,B14,one-sided irradiation
+Ge,32,10.279,2.9,2,prepulsed,1.3,0.2,0,NIF,B14,two-sided irradiation
+Br,35,12.35,1.45,2,prepulsed,0.29,0.09,0,NIF,B13,N120812-003; KBr film (half the emitters)
+Zr,40,16.30,1.90,2,prepulsed,0.40,0.22,0,NIF,B13,N121203-001; superseded by B14 (inferred)
+Zr,40,16.30,9.53,2,prepulsed,0.32,0.13,0,NIF,B13,N121115-001; superseded by B14 (inferred)
+Zr,40,16.30,1.94,2,prepulsed,0.18,0.10,1,NIF,B14,7 um Zr
+Zr,40,16.30,4.5,2,prepulsed,0.15,0.07,1,NIF,B14,7 um Zr
+Nb,41,17.16,17,2,prepulsed,0.15,0.09,1,NIF,B14,12 um Nb
+Nb,41,17.16,23,2,prepulsed,0.18,0.10,1,NIF,B14,12 um Nb
+Mo,42,18.03,9.5,2,prepulsed,0.16,0.08,1,NIF,B14,12.5 um Mo

@@ -658,6 +658,28 @@ Research notes, "Computed LEH closure (2026-10-24)". Items 9 and 16.
   the peak, LEH share 24.8 % (prescribed 25.5, HYDRA 25.2), Fig. 10 within 0.005; the
   8.5 ns gap is not the LEH. `lag=<ns>` adds the plasma-stored-energy sensitivity.
 
+## Done (2026-10-24, backlighter photometry)
+Research notes, "Backlighter conversion efficiency and the photometric chain
+(2026-10-24)". Item 12.
+- **`kshell_ce`, `kshell_ce_model`, `kshell_ce_data`, `kshell_line_energy`**: He-α CE
+  (into 4π, per incident 351 nm energy) of planar foils, a least-squares fit of ln CE,
+  quadratic in ln I with a line-dependent optimum, to 37 published points
+  (`data/kshell_ce.csv`: Workman & Kyrala 2001 OMEGA 1 ns Cr–Ge, digitized; Barrios
+  et al. 2013/2014 NIF prepulsed Zn–Mo, tabulated). Two classes (single pulse,
+  picket); scatter ×1.51 (1σ), plus the coefficient covariance outside the data, and
+  an `extrapolated` flag. Peak ∝ hν^-3.5 (published hν^-(2.5–4)). Pulse length is not
+  separable from the picket in these data.
+- **`mass_attenuation`, `filter_transmission`**: NIST μ/ρ for Be, Al, Ti, Fe, Cu, Mo,
+  Ta, Mylar/Kapton, polyethylene, 3–40 keV, edges exact.
+- **`backlighter_signal` → `BacklighterSignal`**: deposition on the foil → CE → an
+  isotropic or Lambertian emitter → point projection or a pinhole imager through the
+  object's disk → filters → photons per mm² and per pixel, with the CE's 1σ range.
+  Tests: closed forms for both geometries, energy through the pinhole, hemispherical
+  normalization, Beer–Lambert.
+- **Radiography tutorial**: bundle 11 on a 2 mm Ge foil at 14 mm, 2 ns with a picket:
+  5e14 W/cm² (below Ge's 3e15 optimum), CE 0.56% ×/÷ 1.6, ~480 photons per 50 µm pixel
+  through a generic 20 µm pinhole at M = 9; Cu 1340, Zn 940, Zr 43.
+
 ## Open questions (from the 2026-10-18 CAD work)
 Choices made provisionally overnight or left open; the lean is in brackets.
 **Decided (user, 2026-10-22):** the bracketed leans stand. On 1: parts may be split
@@ -1026,8 +1048,11 @@ the reference's view factors hold through the pulse; items 9 and 10 remove that 
      rounded coefficients (Fig. 6's are used; 40–80 refused), Table IV's burn column is
      reproduced; Eq. 2 and Table I in `shape_amplification`;
    - time-dependent error budgets and multi-shot trending.
-12. **Backlighter physics.** CE(Z, I, τ) models with uncertainty, and the photometric
-   chain to the detector.
+12. ~~**Backlighter physics.**~~ **Done (2026-10-24, see Done)**: He-α CE(hν, I) with
+   its uncertainty from published foil data, filters, and the photometric chain to the
+   detector. Still open: a pulse-length and spot-size dependence (confounded with the
+   picket in the data), a weighted, larger low-Z compilation (Ti, V), continuum and
+   higher lines in the filter pass band, detector response, the object's transmission.
 13. ~~**Spectral radiosity.**~~ **Done (2026-10-24, see Done)**: multigroup radiosity,
     the laser-produced Au M-band, a synthetic Dante. Still open: measured Dante channel
     responses (filters, mirrors, XRD cathodes) in place of Gaussians and an unfold;
