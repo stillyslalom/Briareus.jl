@@ -408,8 +408,10 @@ function _patch_on(m::_SurfaceModel, D, p, tol, cosmax)
 end
 
 # Grow a region of one kind from `seed` over available patches, nearest (to the seed)
-# first, refitting as it grows; `nothing` if no start around the seed fits.
-function _grow_region(kind, seed, D, avail, W, opts)
+# first, refitting as it grows; `nothing` if no start around the seed fits. `refs` are
+# the rms trajectories of rejected growths covering the seed: the growth is then given
+# up at a checkpoint where it fits no better than they did (see `fit_surfaces`).
+function _grow_region(kind, seed, D, avail, W, opts, refs = nothing)
     (; rtol, atol, cosmax) = opts
     (; mark, queued, scratch, heap) = W
     W.gid[] += 1
@@ -434,7 +436,8 @@ function _grow_region(kind, seed, D, avail, W, opts)
         break
     end
     model === nothing && return nothing
-    return _grow_from!(kind, seed, model::_SurfaceModel, members, D, avail, W, gid, opts)
+    W.growths[] += 1
+    return _grow_from!(kind, seed, model::_SurfaceModel, members, D, avail, W, gid, opts, refs)
 end
 
 # Queue the available patches sharing a vertex with p, not yet members or queued (each
@@ -452,7 +455,8 @@ function _push_neighbors!(H, D, p, avail, mark, queued, vgrow, gid, c0)
     end
 end
 
-function _grow_from!(kind, seed, model::_SurfaceModel, members::Vector{Int}, D, avail, W, gid, opts)
+function _grow_from!(kind, seed, model::_SurfaceModel, members::Vector{Int}, D, avail, W, gid, opts,
+                     refs = nothing)
     (; rtol, atol, cosmax) = opts
     (; mark, queued, scratch, heap) = W
     H = heap
@@ -472,15 +476,32 @@ function _grow_from!(kind, seed, model::_SurfaceModel, members::Vector{Int}, D, 
     nfit = length(members)
     rejected = Int[]
     rounds = 0
+    # checkpoints at W.check × 2^k members (k = 0, 1, …): the rms over the members of the
+    # current fit, in units of its tolerance (read only: the growth itself is unchanged)
+    traj = W.traj
+    empty!(traj)
+    check = W.check
     while true
         while !isempty(H.key)
             _, p, _ = _heap_pop!(H)
             mark[p] == gid && continue
+            W.work[] += 1
             if _patch_on(model, D, p, tol, cosmax)
                 mark[p] = gid
                 push!(members, p)
                 for v in D.pv[p]
                     lo, hi = min.(lo, D.P[v]), max.(hi, D.P[v])
+                end
+                if length(members) >= check
+                    q = _deviation(model, D, members, scratch)[1] / tol
+                    while length(members) >= check
+                        push!(traj, q)
+                        check *= 2
+                    end
+                    if refs !== nothing && q > _cover_rms(refs, length(traj)) / 2
+                        W.givenup[] += 1
+                        return nothing
+                    end
                 end
                 _push_neighbors!(H, D, p, avail, mark, queued, W.vgrow, gid, c0)
                 length(members) < 1.25nfit + 4 && continue
@@ -597,6 +618,14 @@ stops it (rms about 0.4 of it), so such patches stay unfitted. Regions of one ki
 patches all lie on each other's fits (one surface interrupted by another face) are then
 merged.
 
+On a finely faceted face of none of the `kinds` (a tapered tube without `:cone`, a fine
+fillet) every patch would seed such a growth, at a cost quadratic in the facet count. A
+rejected growth of at least 512 patches therefore covers the patches near its seed
+(within half its radius, while all its patches stay available): a growth of the same
+kind from a covered seed is given up once, at 128, 256, … members, its rms reaches
+half that of the covering growth at the same size, as it does when it is retracing the
+same face. A true surface fits its patches to the faceting and keeps growing.
+
 The tolerance must exceed the faceting several times over. Facet vertices of exported
 CAD lie on the true surface, but points `remesh_mesh` adds on a facet lie up to w²/8R
 inside a curved one (w the facet's width: 0.1 µm for 50 µm strips on a 2.9 mm wall,
@@ -618,30 +647,80 @@ function fit_surfaces(m::Mesh; reference::Union{Nothing,Mesh} = nothing,
         regs = fit_surfaces(reference; kinds, rtol, atol, angle, minpatches, minarea, tol)
         return _transfer_regions(regs, reference, m, opts, tol)
     end
+    return _fit_surfaces(m, kinds, opts, minpatches, minarea, tol)[1]
+end
+
+# Covers (see `fit_surfaces`): a growth that the rms test rejects with at least
+# `_COVER_MIN` patches covers, for its kind, its patches nearer its seed than half the
+# region's radius, as long as all of its patches stay available. A growth of that kind
+# from a covered seed is given up at the first checkpoint (`_COVER_CHECK` × 2^k
+# members) where its rms exceeds half that of each covering growth at the same
+# checkpoint. Measured on the NIF CAD parts (research notes, "Cost of fitting faces of
+# none of the kinds"): smaller covers change regions that only just pass the rms test.
+const _COVER_MIN = 512
+const _COVER_CHECK = 128
+
+# the largest rms (in units of the tolerance) of the covering growths at checkpoint k
+# (their final rms past their last checkpoint)
+_cover_rms(refs, k) = maximum(r -> r[min(k, end)], refs)
+
+# `fit_surfaces` on the mesh itself; also returns the work done (`growths`: growths
+# started, `work`: patches tested while growing, `givenup`: growths given up under a
+# cover, `covers`) for the tests of its cost.
+function _fit_surfaces(m::Mesh, kinds, opts, minpatches, minarea, tol; covermin = _COVER_MIN, check = _COVER_CHECK)
     np = npatches(m)
-    np == 0 && return SurfaceRegion[]
+    np == 0 && return SurfaceRegion[], (; growths = 0, work = 0, givenup = 0, covers = 0)
     D = _fit_data(m, tol)
     nv = length(D.P)
     W = (; mark = zeros(Int, np), queued = zeros(Int, np), gid = Ref(0), heap = _GrowHeap(),
          scratch = falses(nv), vgrow = zeros(Int, nv), pring = zeros(Int, np), vring = zeros(Int, nv),
-         stamp = Ref(0))
+         stamp = Ref(0), growths = Ref(0), work = Ref(0), givenup = Ref(0), traj = Float64[], check)
     avail = trues(np)
     order = sortperm(D.area; rev = true)
     ordered = [k for k in (:plane, :cylinder, :cone, :sphere) if k in kinds]
     found = Tuple{Symbol,Vector{Int},_SurfaceModel}[]
+    # covering growths: kind, rms trajectory and covered patches, whether each still
+    # stands, the covering growths of each patch and the growths each patch is in
+    covers = Tuple{Symbol,Vector{Float64},Vector{Int}}[]
+    standing = Bool[]
+    coveredby = Dict{Int,Vector{Int}}()
+    touched = Dict{Int,Vector{Int}}()
+    refs = Vector{Float64}[]
     for s in order
         avail[s] || continue
         best = nothing
         bestA = 0.0
+        cs = get(coveredby, s, nothing)
         for kind in ordered
-            g = _grow_region(kind, s, D, avail, W, opts)
+            empty!(refs)
+            if cs !== nothing
+                for g in cs
+                    standing[g] && covers[g][1] === kind && push!(refs, covers[g][2])
+                end
+            end
+            g = _grow_region(kind, s, D, avail, W, opts, isempty(refs) ? nothing : refs)
             g === nothing && continue
             ps, mdl = g
             A = sum(D.area[ps])
             length(ps) >= minpatches && A >= minarea || continue
             # a surface explains its vertices well within the tolerance; a fit that only
             # grew until the tolerance stopped it (a sphere on a free-form face) does not
-            _deviation(mdl, D, ps, W.scratch)[1] <= _fit_tol(mdl, _extent(D, ps), opts.rtol, opts.atol) / 4 || continue
+            q = _deviation(mdl, D, ps, W.scratch)[1] / _fit_tol(mdl, _extent(D, ps), opts.rtol, opts.atol)
+            if q > 1 / 4
+                if length(ps) >= covermin
+                    c0 = D.cen[s]
+                    r = maximum(p -> norm(D.cen[p] - c0), ps)
+                    push!(covers, (kind, [W.traj; q], [p for p in ps if norm(D.cen[p] - c0) <= r / 2]))
+                    push!(standing, true)
+                    for p in covers[end][3]
+                        push!(get!(Vector{Int}, coveredby, p), length(covers))
+                    end
+                    for p in ps
+                        push!(get!(Vector{Int}, touched, p), length(covers))
+                    end
+                end
+                continue
+            end
             if best === nothing || A > 1.01bestA
                 best, bestA = (kind, ps, mdl), A
             end
@@ -649,6 +728,11 @@ function fit_surfaces(m::Mesh; reference::Union{Nothing,Mesh} = nothing,
         best === nothing && continue
         avail[best[2]] .= false
         push!(found, best)
+        # a rejected growth over patches now taken no longer stands for its seed's
+        for p in best[2]
+            gs = pop!(touched, p, nothing)
+            gs === nothing || (standing[gs] .= false)
+        end
     end
     # merge regions of one kind lying on one surface
     merged = true
@@ -673,7 +757,7 @@ function fit_surfaces(m::Mesh; reference::Union{Nothing,Mesh} = nothing,
         end
     end
     regions = [_region(k, ps, mdl, D, W.scratch) for (k, ps, mdl) in found]
-    return sort!(regions; by = r -> -r.area)
+    return sort!(regions; by = r -> -r.area), (; growths = W.growths[], work = W.work[], givenup = W.givenup[], covers = length(covers))
 end
 
 function _region_model(r::SurfaceRegion)

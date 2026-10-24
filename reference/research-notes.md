@@ -1328,6 +1328,43 @@ fits below used Briareus's own operator points with a free-form evaluator.
   patches of such a rejected region again cut the capsule to 4.4 s and the halves to
   0.5 s, but dropped regions on 5 of the 14 parts, among them a true 6-patch 56.9° cone
   (rms 0.1 µm) on a half, so it was not adopted. **H** (measured locally and synthetic)
+- **Cost of fitting faces of none of the kinds (2026-10-24).** `fit_surfaces` now
+  keeps rejected growths as covers: one of ≥ 512 patches covers, for its kind, its
+  patches within half its radius of its seed, while all its patches stay available
+  (an accepted region taking any of them lifts it). A growth of that kind from a covered
+  seed is still run, with its rms recorded at 128, 256, … members, and given up at the
+  first such checkpoint where its rms exceeds half the covering growth's there: a seed
+  on the same free-form face retraces it, a true surface fits its patches to the
+  faceting and grows on. The growth's own steps are
+  unchanged, so a growth that is not given up ends exactly as before. Synthetic
+  (`test/cadfit.jl` shapes): the 0.15° tapered tube (r = 50 µm, 2 mm) with cylinders and
+  spheres, 2k / 8k / 18k facets 1.8 / 27 / 171 s before, after 1.5 s (8k) and
+  3.3 / 6.5 / 30 s at 18k / 37k / 131k; patches tested 0.99M / 1.93M / 3.80M at 9k / 18k /
+  37k facets (×1.96 per doubling; 41.8M at 9k without covers). A quarter-torus fillet
+  (R = 2, r = 0.5 mm, all kinds) is unchanged, 4 s at 8k and ~80 s at 33k facets: its
+  rejected growths stay under 512 patches (~200–500), so it is quadratic until they
+  pass it (a torus kind would end that). NIF CAD workspace, its 14 parts other than the
+  133k-facet mount, raw facets, kinds default / cylinder–cone–sphere / cylinder–sphere
+  (42 fits, shared machine): 41 bit for bit unchanged (kind, surface, centroid, normal,
+  patches, area, rms, max deviation, facing of every region); 8.3 → 8.6, 8.1 → 8.3,
+  59 → 22 s (capsule alone 56 → 18 s); the 133k-facet mount with the default kinds
+  also unchanged (1911 regions), 1348 → 1278 s on one thread (that cost is still open).
+  The capsule with cylinders and spheres changes:
+  its tapered fill tube's tolerance-stopped cylinder pieces (rms ≈ tol/4) come out cut
+  differently (17 pieces of 0.151 mm² → 16 of 0.173 mm², 28 → 25 regions), and in their
+  wake a 400-patch R = 7 µm cylinder (max 7 nm) of the tube's end is split between a
+  piece and a near-flat R = 388 mm one (no planes in those kinds). Why these thresholds:
+  with covers from 128 or 256 patches, or a fixed budget of 128 patches for covered
+  seeds, 2–4 parts changed with the default kinds: regions that only just pass the rms test
+  (rms 0.17–0.24 of the tolerance; fillet pieces fit as 30–300-patch spheres and cones)
+  are found in the full search from seeds inside standing rejected growths, and the
+  rms trajectory cannot tell them from the face around them; skipping covered seeds
+  outright changed 6–12 of the 42 fits. Letting covered growths continue while their rms
+  is at the faceting level (≤ 0.03 of the tolerance) is safe but brought the tube back
+  to quadratic (16 s at 33k, 266 s at 131k facets): 128 patches there are one ring of
+  the tube, too short to show the taper. The thresholds are patch counts, so a part
+  faceted several times finer than the NIF parts would bring such marginal pieces
+  under covers. **H** (measured locally and synthetic)
 - **Fitting CAD by default (2026-10-24, local).** Should `fit = true` follow `remesh`
   in `cad_target`/`visrad_target`/the GUI (ROADMAP open question 1)? The NIF CAD
   workspace, its 11 parts near the cavity (no mount, far parts or tent),

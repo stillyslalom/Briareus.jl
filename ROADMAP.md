@@ -975,12 +975,16 @@ pick the original parts, not `<part>/cylN` pieces).
    frame (compilation); `include_components!` costs 0.3 s on the UI thread; a "fit the
    hohlraum template to CAD parts" action; the foil objective with one shared parameter
    set for beams aimed at one point does not move (per-beam parameters).
-   `fit_surfaces` repeats rejected growths: a finely faceted face of none of the
-   requested kinds (a tapered tube without cones, a fine fillet or torus) costs
-   quadratic time, every patch seeding a growth the rms test rejects (20 s on a NIF
-   capsule's fill tube with cylinders and spheres only). Skipping seeds inside rejected
-   regions is ~5× faster but lost a true small cone on a NIF half; an rms test during
-   growth, or a torus kind, might be safe.
+   `fit_surfaces` on a finely faceted face of none of the requested kinds: rejected
+   growths of ≥ 512 patches now cover their seed's neighborhood, and a covered seed's
+   growth is given up once its rms tracks the cover's (2026-10-24; research notes "Cost
+   of fitting faces of none of the kinds"): a tapered tube without cones is linear (171 →
+   3.3 s at 18k facets), the NIF capsule with cylinders and spheres 56 → 18 s, every
+   other NIF CAD fit bit for bit unchanged. Left: a fine fillet or torus whose rejected
+   growths stay under 512 patches is still quadratic (~80 s at 33k facets); a torus kind
+   would end that. The capsule's cylinder–sphere fit cuts its tapered tube into
+   different tolerance pieces than before. The 133k-facet NIF mount takes ~22 min with
+   the default kinds (unchanged by the covers; not profiled).
 8. **GUI requests:** frames on a port axis (the chamber,
    the entrance holes, the foil and other parts are done); clipping volumes; STEP import (needs a CAD kernel; STL
    and VisRad workspaces cover CAD meanwhile); an x-ray image that follows the camera

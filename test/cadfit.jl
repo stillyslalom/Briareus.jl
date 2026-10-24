@@ -147,6 +147,53 @@ end
     end
 end
 
+# a torus section (tube radius r about a circle of radius R at height zc, tube angles
+# ψ0..ψ1 in nψ bands of nphi strips), as CAD tessellates a fillet
+function cad_torus(R, r, zc, ψ0, ψ1; nψ, nphi)
+    F = NTuple{3,Vec3}[]
+    φs = range(0, 2π; length = nphi + 1)
+    ψs = range(ψ0, ψ1; length = nψ + 1)
+    p(ψ, φ) = cad_pt(R + r * cos(ψ), φ, zc + r * sin(ψ))
+    for i in 1:nψ, j in 1:nphi
+        ψ, φ = (ψs[i] + ψs[i+1]) / 2, (φs[j] + φs[j+1]) / 2
+        cad_quad!(F, p(ψs[i], φs[j]), p(ψs[i], φs[j+1]), p(ψs[i+1], φs[j+1]), p(ψs[i+1], φs[j]), cad_pt(cos(ψ), φ, sin(ψ)))
+    end
+    return F
+end
+
+@testset "fit_surfaces on faces of none of the kinds" begin
+    opts = (; rtol = 1e-3, atol = 1e-4, cosmax = cosd(30.0))
+    fit(m, kinds; kw...) = Briareus._fit_surfaces(m, kinds, opts, 6, 0.0, 1e-9; kw...)
+    # a 0.15° tapered tube (r = 50 µm, 2 mm long, like a capsule's fill tube) without
+    # cones: every patch seeds a cylinder growth of ~1000 patches that the rms test
+    # rejects, which made the cost quadratic (4× the work per doubling of the facets,
+    # 171 s at 18k facets); covered seeds now give up their growths early
+    taper(n) = facet_soup(cad_frustum(0.05, 0.0, 0.05 - 2tand(0.15), 2.0; nz = 4n, nphi = n))
+    m1, m2 = taper(34), taper(48)
+    @test 1.9 < length(m2.triangles) / length(m1.triangles) < 2.1
+    (r1, s1), (r2, s2) = fit(m1, (:cylinder, :sphere)), fit(m2, (:cylinder, :sphere))
+    @test isempty(r1) && isempty(r2)
+    @test s2.work < 3s1.work
+    @test s1.givenup > 0.9npatches(m1) && s2.givenup > 0.9npatches(m2)
+    @test isempty(fit_surfaces(m1; kinds = (:cylinder, :sphere)))
+    # a true cone (half-angle 70°, two bands) 10° off a fine torus fillet that ends on a
+    # flat cap, all four kinds: the fillet's growths are covered and given up (here with
+    # covers forced small) and the cone is still found whole
+    n = 56
+    F = cad_torus(2.0, 0.5, 0.0, deg2rad(-60), π / 2; nψ = n ÷ 2, nphi = 4n)
+    append!(F, cad_frustum(2.0, 0.5, 0.3, 0.5; nphi = 4n))
+    ρ0, z0 = 2.0 + 0.5cosd(-60), 0.5sind(-60)
+    append!(F, cad_frustum(ρ0, z0, ρ0 - 0.1sind(70), z0 - 0.1cosd(70); nz = 2, nphi = 4n))
+    m = facet_soup(F)
+    regs, st = fit(m, (:plane, :cylinder, :cone, :sphere); covermin = 16, check = 4)
+    @test st.givenup > 1000
+    cone = only(r for r in regs if r.kind === :cone && r.area > 0.5)
+    @test cone.patches == collect(npatches(m)-16n+1:npatches(m))
+    @test cone.surface.half_angle ≈ 70 rtol = 1e-6
+    @test cone.surface.apex ≈ Vec3(0, 0, z0 - ρ0 / tand(70)) atol = 1e-6
+    @test any(r -> r.kind === :plane && length(r.patches) == 8n, regs)     # the cap
+end
+
 @testset "curved_components" begin
     R, Rout, Rleh, h, t = 2.875, 2.975, 1.55, 4.7, 0.05
     raw = orient_mesh(stl_roundtrip(cad_half(; R, Rout, Rleh, h, t, nphi = 360)))
