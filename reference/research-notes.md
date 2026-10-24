@@ -3333,3 +3333,121 @@ implausible against PRE 109's 25 % for the whole pulse; so the two shots' differ
 histories (N191118's pulse ends at ~7.5 ns, N210601's continues; different feet) and
 Dante's LEH view (it sees the outer-beam bubble region, Ch24), not the lips, are the
 likely difference. The pair checks the trend only (*L*).
+
+## Spectral radiosity, M-band and a synthetic Dante (2026-10-24) *derived*
+
+ROADMAP Next 13 and item 16's first absolute check. Read (accepted manuscripts in the
+user's paper folder, not in the repository): Dewald et al., "Direct measurement of
+hohlraum M-band preheat asymmetry at the ICF capsule", PoP 27 (2020), LLNL-JRNL-813556;
+Rubery et al., "Soft x-ray power diagnostics for fusion experiments at NIF, Omega and Z
+facilities", RSI (2023), OSTI 1975922. Confidence: **H** primary text, **M** quoted
+secondhand, **L** our construction, *calibrated* as marked.
+
+### Inputs read
+
+| Quantity | Value | Source | Conf. |
+|---|---|---|---|
+| M-band definition | > 1.8 keV (Au); Mo fluorescence sensitive > 2.5 keV | Dewald 2020 §II | H |
+| Laser → M-band, Au, normal incidence | ~1 % at 10¹⁴, 20 % at 10¹⁵ W/cm² | Dewald 2020 §I citing Dewald PoP 15, 072706 (2008) | M |
+| Wall irradiance | inner 3 × 10¹⁴, outer 1.5 × 10¹⁵ W/cm²; inner turning point 2.5× lower density (M-band ∝ n_e² ∝ sin⁴θ) | Dewald 2020 §I | H |
+| Dante M-band share | 12 % of the flux at the 290 eV peak (Fig. 1b); 15 % of the spectrum, 1/3 of it > 2.5 keV (Fig. 3) | Dewald 2020 §II–III | H |
+| Setup | 10.1 × 5.75 mm Au, 3.37 mm LEHs, 360 TW / 1 MJ, inner/outer power 1/2, outer ring at z = ±3.3 mm (EHXI), θ_o ≈ 40°, R_o 4.4 mm, wall ~0.2 mm in, HDC front 0.815 mm at 4.35 ns | Dewald 2020 §II, V | H |
+| Mo-sphere P2/P0 | swings, mostly > 0, +0.15 at 6 ns | Dewald 2020 Fig. 10 | H-img |
+| Wall M-band P2/P0 | +0.53 (= 0.15/0.28); a pure ring at 40° gives 1.9, so F_M ≈ 2 (recirculating / laser-produced) with the LEH deficit (−25 %) | Dewald 2020 §V.2 | H |
+| Smoothing | P2: 0.4 at the HDC ablation front (CCR 5.4), 0.28 at the Mo sphere; inferred M-band P2/P0 at the inner HDC surface ≤ +0.28 | Dewald 2020 Figs. 6, 12–14 | H |
+| Dante 1 channels | 18 channels, 0.25–3.66 keV and 14.4 keV (table of energies, filters, mirrors, XRD cathodes); the unfold fits a Planckian to channels < 1.5 keV then Gaussian responses | Rubery 2023 Fig. 4, §II.C | H |
+| Dante lines of sight | Dante 1 θ 143°, φ 274°, 37° view of the LEH; Dante 2 θ 64°, φ 350°, shallow | Rubery 2023 §II | H |
+
+### 1. Multigroup radiosity (`spectral_solve`)
+
+View factors are spectrally independent, so each group g solves the gray system with
+its own source and albedo, `B_g = S_g + α_g H_g`. The source ηP/A minus the laser M-band
+is split by Planck fractions `b_g(T)` at each element's emission brightness temperature
+`(B/σ)^¼` (iterated when the totals change); the M-band is flat over its band. With
+`thermalize = true` the rest of the gray albedo, `α − α_g`, is re-emitted with `b_g(T)`,
+so the totals are the gray solution's whatever the group albedos (*energy as calibrated
+gray*); without it, it is lost to the wall. Groups at the gray albedo reuse the model's
+cached LU (or GMRES preconditioned with it; the GMRES became generic in the operator,
+the gray path bit for bit); hard groups are solved jointly by unpreconditioned GMRES.
+
+Checks (`test/spectral.jl`): Planck tails against quadrature to 1e-8 (series/tail switch
+continuous to 6e-12); one group returns the gray `B`, `H` exactly (`==`); 16 groups, with
+and without the M-band, in group and thermalized: Σ_g B, Σ_g H to < 1e-11 of the gray,
+absorbed power to 1e-11; thermalized with α_M = 0.2 to < 1e-9; in-group solves against
+dense `(I − diag α_g F) \ S_g` to 1e-10 and the thermalized coupled system against a
+dense (nG)² solve to 1e-9.
+
+### 2. Laser-produced M-band (`MBandEmission`, `nif_mband`) *engineering*
+
+Gold elements emit `f P` of their absorbed laser power `P` in a flat 1.8–2.85 keV band
+(the upper edge puts 1/3 above 2.5 keV, **L**), taken out of their Planckian source.
+`f(I)` is the Dewald 2008 table in log–log; element-averaged intensity is mesh dependent
+(on Dewald's hohlraum at h 0.3 mm the outer spots average 4.4e14 W/cm² against his
+1.5e15), so `nif_mband()` fixes f per cone at Dewald 2020's mean wall irradiances:
+outer 0.20, inner 0.042 (the 5× n_e² factor of the inners is not applied: an upper
+bound). `mband_power(m, op, beams)` deposits each cone separately.
+
+Dewald's setup (`examples/mband_dewald2020.jl`, h 0.3/0.15, static at 360 TW, 5.5 ns):
+the scaled mock HYBRID-E pointing put the outer ring at z 2.58 mm; its outer aims moved
++0.53 mm along the axis to the measured 3.3 mm (θ_o 39.1°, R_o 4.24 mm against 40°,
+4.4). Laser M-band 52.6 TW, 0.147 of the absorbed laser at cone fraction 1/3.
+
+| α_M (thermalized) | F_M | capsule M-band share | capsule M-band P2/P0 | boundary P2/P0 | Dante-1 > 1.8 keV |
+|---|---|---|---|---|---|
+| gray | 7.63 | 0.293 | −0.036 | −0.140 | 0.300 |
+| 0.7 | 3.52 | 0.151 | +0.003 | −0.074 | 0.164 |
+| **0.5** | **2.15** | 0.104 | **+0.039** | −0.012 | **0.119** |
+| 0.3 | 1.41 | 0.078 | +0.076 | +0.051 | 0.094 |
+| 0 | 0.79 | 0.057 | +0.132 | +0.145 | 0.073 |
+
+(cone fraction 1/3; gray capsule P2/P0 −0.114, boundary −0.298; first flight of the laser
+M-band +0.505 at the capsule.) At cone fraction 0.25 (gray capsule −0.070): α_M 0.5 gives
+F_M 2.05, capsule M-band P2/P0 +0.145, boundary +0.200, Dante 0.125.
+
+- **α_M ≈ 0.5 (thermalized) is calibrated to Dewald's F_M ≈ 2**, and then Dante 1 sees
+  11.9–12.5 % of its flux above 1.8 keV against Dewald's measured 12 % at 290 eV: an
+  independent agreement (Dante's M-band share was not fitted).
+- The M-band is pole-hot relative to the thermal drive by +0.15 to +0.21 in P2/P0 at the
+  capsule (M-band minus gray), against Dewald's ≈ +0.21 at the ablation front (0.53 ×
+  0.4, **L**). The absolute M-band P2 here (+0.04 / +0.15) sits lower because this mock
+  pointing's thermal drive is waist-hot (−0.11 / −0.07) and the recirculating M-band
+  (2/3 of it) carries that shape, where Dewald takes it as uniform. Likewise the
+  boundary P2/P0 (−0.01 / +0.20) against his +0.53, which assumes a uniform background.
+- Not modeled: the outer-spot motion and inner-beam clipping in the outer bubble that
+  Dewald invokes for the late swing; angle dependence (sin⁴θ) of the conversion.
+
+### 3. Synthetic Dante (`DanteView`, `dante1`, `dante`)
+
+Parallel rays (400 × 400) across the LEH give each element's visible projected area,
+partial views included; a ray through a closing lip is weighted by its open fraction.
+`Tr = (π I / (σ A cos θ_v))^¼` over the full initial LEH area (Dante's convention),
+`Tr_open` over the open area. Channels: Gaussians at Rubery's 18 Dante 1 energies, FWHM
+0.3 E (**L**, widths unpublished); `color_temperature` fits a Planckian to the channels
+below 1.5 keV. Checks: a blackbody cavity reads T₀ to 5e-4 (after the caps' inscribed
+24-gon opening, 1.1 % below the equal-area hole on the coarse test mesh: on coarse
+meshes the opening is smaller than π r²); lips at open fractions 0, ½, 1; a Planckian's
+channel signals unfold to its T to 1e-6.
+
+N221204 (`examples/n221204.jl` full model, standard mesh, default energetics):
+| | peak | at 8.5 ns |
+|---|---|---|
+| capsule Tr (mean incident flux) | 301.8 eV at 5.50 ns | 270.3 |
+| Dante 1, initial LEH area (Dante's convention) | 285.9 at 6.25 ns | 257.4 |
+| Dante 1, open area (lips at their open fraction) | 306.2 at 6.25 ns | 278.1 |
+| measured Dante 1 (Rubery 2024; Pak 2024 Fig. 1) | 313 ± 2 at ≈8.4 ns | ≈310 |
+
+- Dante 1 sees only the wall (no capsule, no cap) at 37°. Over the open area it reads
+  7 eV above the capsule at the Dante peak, the sign of PRE 109's "internal ~13 eV below
+  Dante" (**L**: the simulated internal temperature is not exactly our capsule mean).
+  Over the initial area it reads 13 eV *below* the capsule: the lips (closing to
+  0.857 r₀) are dark to Dante here, while the real closing plasma radiates. Which of the
+  two the measurement corresponds to depends on the LEH plasma's emission, which this
+  model does not have; the two bracket the measured 313 only at the open-area end, and
+  7 eV low there.
+- The larger miss is the time history: the model's drive peaks at 5.5–6.25 ns and falls
+  ~30 eV by 8.5 ns, where Dante's keeps rising to its 8.4 ns peak. The default
+  energetics (Au wall loss, constant conversion 0.75, ablator at its initial radius, no
+  backscatter) and the bubble's growing inner-beam absorption lose drive through the
+  peak; this is the first absolute check of item 16, and it points at the late-time
+  energetics (wall loss vs time, conversion rising in time, the `energetics=new` options)
+  rather than at the line of sight.

@@ -570,6 +570,25 @@ Research notes, "Hohlraum dynamics calibrated to published data (2026-10-24)". I
   fits Fig. 9b as well (rms 0.016) with lower multipliers, but moves the Δλ null from
   1.2 to 0.5 Å (NC24: 1–1.55). `n221204_cbet()` is unchanged.
 
+## Done (2026-10-24, spectral radiosity and a synthetic Dante)
+Research notes, "Spectral radiosity, M-band and a synthetic Dante (2026-10-24)". Item 13
+and item 16's first absolute check.
+- **`spectral_solve`**: multigroup radiosity about a gray solution (Planckian source split
+  at each element's brightness temperature, group albedos, the rest of the gray albedo
+  lost or re-emitted thermally). One group is the gray solution exactly; equal albedos or
+  `thermalize` keep the gray totals (tests to 1e-11, dense-solve checks).
+- **Laser-produced Au M-band** (`MBandEmission`, `nif_mband`, `mband_power`): per-cone
+  conversion 0.20 outer / 0.042 inner (Dewald 2008/2020). On Dewald 2020's setup the
+  M-band albedo 0.5 (thermalized) gives his F_M ≈ 2, and then Dante 1 sees 12 % above
+  1.8 keV (measured 12 %); the capsule M-band is pole-hot by +0.15 to +0.21 relative to
+  the thermal drive (Dewald ≈ +0.21 at the ablation front), `examples/mband_dewald2020.jl`.
+- **Synthetic Dante** (`dante1`, `dante2`, `dante`, `record =` in `drive_history`):
+  visible projected area through the LEH by ray casting, lips at their open fraction,
+  Tr over the initial and the open LEH area, Gaussian channels at Rubery 2023's Dante 1
+  energies. N221204: Dante 1 peaks at 286 eV (initial area) / 306 eV (open area) at
+  6.25 ns against 313 measured at 8.4 ns; capsule 302 at 5.5 ns. The drive falls through
+  the peak where the data rise: item 16's late-time energetics.
+
 ## Open questions (from the 2026-10-18 CAD work)
 Choices made provisionally overnight or left open; the lean is in brackets.
 **Decided (user, 2026-10-22):** the bracketed leans stand. On 1: parts may be split
@@ -911,11 +930,14 @@ the reference's view factors hold through the pulse; items 9 and 10 remove that 
    - time-dependent error budgets and multi-shot trending.
 12. **Backlighter physics.** CE(Z, I, τ) models with uncertainty, and the photometric
    chain to the detector.
-13. **Spectral radiosity.** Multigroup emission, an Au M-band component (~15 % of the
-    spectrum above 1.8 keV at peak, pole-hot with its own P2 of ~+0.5 at the wall;
-    Dewald 2020), detector responses along Dante and XRD lines of sight (Dante 1 at
-    θ 143°, φ 274°, 37° through the LEH; Dante 2 at θ 64°, φ 350°), and brightness
-    temperatures. A synthetic Dante is also item 16's first absolute check.
+13. ~~**Spectral radiosity.**~~ **Done (2026-10-24, see Done)**: multigroup radiosity,
+    the laser-produced Au M-band, a synthetic Dante. Still open: measured Dante channel
+    responses (filters, mirrors, XRD cathodes) in place of Gaussians and an unfold;
+    XRD lines of sight; angle dependence of the M-band conversion (sin⁴θ, Dewald 2020) and
+    its emission from the outer bubble (inner-beam clipping); emission of the closing LEH
+    plasma (Dante's initial- vs open-area brackets differ by 20 eV at N221204's peak); a
+    time-resolved M-band P2 history against Dewald's Fig. 10 on a moving hohlraum; the
+    M-band split in the `CapsuleDrive` handover (item 17).
 14. **Scale.** Hierarchical or iterative radiosity, Float32 storage for more than 10⁴
     elements, and GPU kernels.
 15. **Polar direct drive mode**, benchmarked against published GA optimizers.
@@ -939,7 +961,10 @@ the reference's view factors hold through the pulse; items 9 and 10 remove that 
       6.5 % came out 0.785, below Rosen's cocktail 0.83, a sign of the same thing), and
       the M-band (item 13); then recalibrate the capsule albedo (16.2 % needs α_c ≈ 0 at
       a drive that matches the LEH share);
-    - a synthetic Dante (item 13) reported beside the capsule-seen temperature;
+    - ~~a synthetic Dante (item 13) reported beside the capsule-seen temperature~~
+      **Done (2026-10-24)**: Dante 1 286 / 306 eV (initial / open LEH area) at 6.25 ns
+      against 313 measured at 8.4 ns, capsule 302 eV at 5.5 ns; the model's drive peaks
+      ~2.5 ns early and falls ~30 eV by 8.5 ns (default energetics);
     - the Zylstra 2022 LEH pair: the model needs ×1.10–1.15 more power for the 3.64 mm
       LEH (lips reduce it), the data ×1.19 or more; the shots' different histories and
       Dante's view are the likely gap, so a time-dependent run of both pulses is next.
