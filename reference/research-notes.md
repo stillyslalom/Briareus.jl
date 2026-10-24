@@ -3540,7 +3540,9 @@ needs A ≈ 3.5–3.75e5 and leaves 1.5–2.5 %. Lindl's ideal rocket gives 395 
 mass ratio. The gap is in P/ṁ, so the likely causes are the ideal-gas carbon adiabat,
 the 145 Mbar peak and the gray drive, not ṁ. KE 25–26 kJ is inside 19–33 kJ. The grid
 is not converged: at 2 µm the same A gives 298 km/s and 7.3 %, and the 0.5 µm run fails
-at 5.5 ns. Read v to ±10 %.
+at 5.5 ns. Read v to ±10 %. The calibration belongs to the drive. Briareus 3f25f29
+(late-time wall-loss history) peaks at 285 eV, and with P₀ recalibrated to 5.53 Mbar
+the same A gives 307 km/s, 8.2 % and 25.6 kJ (the CompactLES example, end to end).
 
 ## Large radiation models (2026-10-24) *derived*
 
