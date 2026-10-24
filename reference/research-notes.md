@@ -1395,6 +1395,25 @@ fits below used Briareus's own operator points with a free-form evaluator.
   is closer on every wall band and uniformly slightly low (the raw factors' loss), while
   `:centroid` is high on the walls and low in the capsule's rows.
   **H** (synthetic, measured; NIF measured locally)
+- **Parts of fitted CAD (2026-10-24, local).** With the split made computational
+  (`Component.part`; name-taking functions and reports work on parts, ROADMAP open
+  question 1), fitting became the default when `remesh` is given. The NIF CAD cavity of
+  "Fitting CAD by default" (11 parts selected, 10 in the cavity, `remesh = 0.6`, capsule
+  0.3, `inside = (0, 0, 0)`, default `:sampled` visibility with the folded-element fix,
+  4 threads, shared machine): build 253 s flat, 243 s fitted (the 8 s of fits are inside
+  the noise of the selection and remeshing); 10 parts, 68 components fitted (none of the
+  parts is one surface: the capsule carries its fill tube), 3,086 elements either way.
+  View factors 48.2 s flat, 48.7 s fitted. Against `montecarlo_incident` on the flat
+  facets (α = 0.7, the two-ring source on the inner walls, 4,000 paths per receiver,
+  `:element` re-emission): outer capsule (259 elements) flat −0.31%, fitted −0.06% (MC
+  0.50960 ± 0.00027); halves (400 elements) flat −0.67%, fitted −0.07% (MC 0.45706 ±
+  0.00031). The GUI's route (its flat window target, the drive fitting each part on its
+  whole file facets): 8.4 s, 65 components, view factors 45.8 s, capsule −0.02%,
+  halves −0.06%. Reports on the fitted target: `energy_balance` keyed by the 10 parts
+  (68 with `by = :component`), components.csv 10 rows and no piece names,
+  `SphereKeepOut` default the capsule part alone (9 spherical components),
+  `show` "10 parts (68 components)". So fitting costs nothing measurable here and cuts
+  the flux error 5–10×. **H** (measured locally)
 
 ### Result tables and fits
 

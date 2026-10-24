@@ -618,7 +618,7 @@ Choices made provisionally overnight or left open; the lean is in brackets.
 **Decided (user, 2026-10-22):** the bracketed leans stand. On 1: parts may be split
 for computational efficiency, but GUI display and interaction must stay elegant (show and
 pick the original parts, not `<part>/cylN` pieces).
-1. `fit = true` by default when `remesh` is given (cad_target, visrad_target, GUI)?
+1. ~~`fit = true` by default when `remesh` is given (cad_target, visrad_target, GUI)?~~
    Up to 24× faster view factors and exact curved walls, but parts are split and
    renamed `<part>/cylN`, `/coneN`, `/sphN`, `/rest`. [Yes eventually; off now.]
    **Looked at 2026-10-24, still off** (research notes, "Fitting CAD by default"). On
@@ -645,6 +645,20 @@ pick the original parts, not `<part>/cylN` pieces).
    state and maps pieces back to parts for drawing and picking (or fits only the
    drive's computational target, mapping elements back as the cavity's `index` does).
    Then flip.
+   **Done 2026-10-24: `fit` is on by default when `remesh` is given** (`cad_target`,
+   `visrad_target`, `visrad_component`; `fit = false` keeps flat), `minfraction = 1e-3`.
+   (a)–(d) as planned: `Component.part`, `parts`, `part_pieces`; `elements`, observe,
+   `power_fraction`/`direct`, keep-outs (`SphereKeepOut` takes parts ≥ 90% one sphere),
+   clearance/TaLIS/unconverted hardware and Dante views take parts; `energy_balance`,
+   `component_power` (`by = :component` for pieces), `drive_history`, `write_results`
+   (elements.csv gains a `part` column when split), `write_stl`, `report`, `show` and
+   the check rows aggregate to parts; primitive targets report as before. (e) the second
+   way: the GUI keeps one flat component per part and fits only the drive's own target
+   (`_fitted_target`, on the parts' file facets, cached per component), its elements
+   mapped back to the window's; the drive's power rows, cavity rows and notes show
+   parts. NIF CAD cavity at 0.6 mm (research notes, "Parts of fitted CAD"): build
+   253 → 243 s, view factors 48.2 → 48.7 s (`:sampled`), flux against Monte Carlo
+   capsule −0.31 → −0.06%, halves −0.67 → −0.07%; 10 parts reported as 10.
 2. ~~Default `minfraction = 1e-3` in cad_target/visrad_target/GUI fits?~~ **Done
    2026-10-24:** `curved_components` (so every fit) defaults to `minfraction = 1e-3`.
    Two NIF CAD hohlraum halves: 138 → 25 components, 1.2% of the curved area left flat;
@@ -842,7 +856,7 @@ pick the original parts, not `<part>/cylN` pieces).
    - CAD fits (see Done): tori for fillets (fillet pieces now fit as small tilted cones
      and spheres; `minfraction` hides them); one surface shared across parts (the
      halves' inner walls); a quadrature at a cone apex; TALIS curvature kind for cones;
-     fitting by default (Open question 1; `minfraction = 1e-3` is the default since
+     fitting by default is done (Open question 1, 2026-10-24; `minfraction = 1e-3` since
      2026-10-24).
    - Adjacent flat CAD pairs: near-kernel evaluations scale as shared-edge length over
      r/256 (~700 per pair on a sliver tube even with straight cuts); an exact or coarser
