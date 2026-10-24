@@ -223,3 +223,17 @@ end
     @test on.Tr[k2] - on.Tr[k1] > off.Tr[k2] - off.Tr[k1] + 5
     @test abs(on.Tr[k2] - off.Tr[k2]) < abs(on.Tr[k1] - off.Tr[k1])
 end
+
+@testset "N221204 delivered pulse and Dante 1" begin
+    p = n221204_pulse()
+    @test keys(p) == (:t, :power, :dante1)
+    @test p.t[1] == 0 && p.t[end] ≈ 9.6 && all(diff(p.t) .≈ 0.05)
+    @test pulse_energy(PulseShape(p.t, p.power)) ≈ 2050 rtol = 0.005      # 2.05 MJ
+    @test maximum(p.power) ≈ 448 atol = 3
+    @test all(>(425), p.power[5.6 .<= p.t .<= 7.9])
+    ok = isfinite.(p.dante1)
+    @test p.t[ok][1] ≈ 3.3 && p.t[ok][end] ≈ 9.4
+    k = argmax(replace(p.dante1, NaN => -Inf))
+    @test p.dante1[k] ≈ 311.9 atol = 0.1
+    @test p.t[k] ≈ 8.3
+end
