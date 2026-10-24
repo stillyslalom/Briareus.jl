@@ -4,6 +4,11 @@
 # radiosity elements of a `Target`. Triangle winding defines the patch's front side:
 # the front normal is (v2 - v1) × (v3 - v1).
 
+"""
+    Vec3
+
+A point or direction in 3D, in mm for positions: `SVector{3,Float64}`.
+"""
 const Vec3 = SVector{3,Float64}
 
 """

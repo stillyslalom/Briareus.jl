@@ -21,6 +21,9 @@ build without the workload, touch a source file before measuring time to first r
 Docs follow CompactLES.jl: Literate tutorials in `docs/literate/`, registered in
 `docs/make.jl`, each ending in "What this checks" with exact references. The docs
 environment has no ForwardDiff/Optim, and `Vec3` clashes with Makie there.
+`test/docrefs.jl` (first in the suite, ~3 s) checks without Documenter that every `@ref`
+resolves, every public name has a docstring that some `@docs`/`@autodocs` block renders
+(new src files go in a reference page's `Pages`), and nothing renders twice.
 
 ## Conventions
 

@@ -9,6 +9,9 @@ const R_SPHERE = 2.0
 
 @testset "Briareus" begin
 
+# Docs cross-references, docstrings and @autodocs coverage (cheap; no Documenter).
+include("docrefs.jl")
+
 @testset "meshes" begin
     s = sphere_mesh(R_SPHERE; ntheta = 16, nphi = 24)
     t = Target(Component(:s, s, gold()))
