@@ -156,6 +156,7 @@ using Briareus: RadiationSolution, _planck_tail, _channel_matrix, _color_tempera
             hole = v.through === :leh_bottom ? elements(t, :leh_bottom) : elements(t, :leh_top)
             @test r.area ≈ sum(t.elem_area[hole]) ≈ π * 1.6^2
             @test r.Tr ≈ T0 * (Apoly / r.area)^0.25 rtol = 5e-4
+            @test r.Tr_open == r.Tr
             @test sum(values(visible_area(v, t))) ≈ Apoly * r.cos rtol = 2e-3
         end
         @test dante1().direction ⋅ [0, 0, -1] ≈ cosd(37) atol = 1e-3   # 37° to the axis
@@ -173,6 +174,7 @@ using Briareus: RadiationSolution, _planck_tail, _channel_matrix, _color_tempera
             Ao, Al = (sum(tl.elem_area[elements(tl, c)]) for c in (:leh_bottom, :leh_bottom_lip))
             open = (Ao + f * Al) / (Ao + Al)
             @test r.Tr ≈ T0 * open^0.25 rtol = 4e-3
+            f > 0 && @test r.Tr_open ≈ r.Tr / open^0.25 rtol = 1e-12
         end
         # spectrum: a Planckian's channel signals unfold to its temperature
         E = spectral_edges()

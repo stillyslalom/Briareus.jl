@@ -130,7 +130,9 @@ function _dante_footprint(t::Target, v::DanteView)
         acc[(e, l)] = get(acc, (e, l), 0.0) + px^2
     end
     ks = collect(keys(acc))
-    return (; elems = first.(ks), lips = last.(ks), area = [acc[k] for k in ks], hole_area, cosv)
+    lip_elems = setdiff(hole, open)
+    return (; elems = first.(ks), lips = last.(ks), area = [acc[k] for k in ks], hole_area, cosv,
+            open_area = sum(t.elem_area[open]), lip_elems, lip_area = t.elem_area[lip_elems])
 end
 
 _footprint(v::DanteView, t::Target) = lock(() -> get!(() -> _dante_footprint(t, v), v.cache, t), v.lock)
@@ -162,7 +164,10 @@ end
 
 Synthetic Dante signal: `intensity` (TW/sr toward the detector), `Tr` (eV, the
 brightness temperature over the hole; see `DanteView`), `area` (mm²) and `cos` of the
-viewing angle. For a `SpectralSolution` also `spectrum` (TW/sr per group), `edges`,
+viewing angle; `Tr_open`, the brightness temperature over the hole's open area (the
+aperture plus each closing-lip element's area times its open fraction), the radiation
+temperature behind the hole that the view samples (equal to `Tr` without lips). For a
+`SpectralSolution` also `spectrum` (TW/sr per group), `edges`,
 `channels` (each channel's signal, ∫ (dI/dE) R(E) dE in TW/sr, the spectrum taken flat
 within each group; the open-ended top group contributes nothing), `color_temperature`
 (eV, the Planckian whose channel signals best match, in log, those of the channels
@@ -174,7 +179,12 @@ function dante(v::DanteView, sol::RadiationSolution)
     I = _los_intensity(fp, sol.B, sol.transmission)
     A = something(v.area, fp.hole_area)
     return (; intensity = I, Tr = radiation_temperature(π * I / (A * fp.cosv)), area = A,
-            cos = fp.cosv)
+            cos = fp.cosv, Tr_open = _open_temperature(fp, I, sol.transmission))
+end
+
+function _open_temperature(fp, I, τ)
+    A = fp.open_area + sum(fp.lip_area[k] * τ[e] for (k, e) in enumerate(fp.lip_elems); init = 0.0)
+    return radiation_temperature(π * I / (A * fp.cosv))
 end
 
 function dante(v::DanteView, s::SpectralSolution)
@@ -189,7 +199,8 @@ function dante(v::DanteView, s::SpectralSolution)
     k = findfirst(==(1800.0), s.edges)
     mband_fraction = k === nothing ? NaN : sum(spectrum[k:end]) / I
     return (; intensity = I, Tr = radiation_temperature(π * I / (A * fp.cosv)), area = A,
-            cos = fp.cosv, spectrum, edges = s.edges, channels = signals,
+            cos = fp.cosv, Tr_open = _open_temperature(fp, I, sol.transmission), spectrum,
+            edges = s.edges, channels = signals,
             color_temperature = _color_temperature(v.channels, s.edges, W, signals),
             mband_fraction)
 end

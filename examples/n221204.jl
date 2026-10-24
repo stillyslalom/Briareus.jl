@@ -35,7 +35,9 @@
 # - `energetics=new`: all of them (du, nif, model with capsule_albedo 0.22, degrade
 #   0.11, backscatter on).
 # Every run prints its time-integrated energy budget (`energy_budget`) against PRE 109
-# App. 3's N221204 split (wall 54.1 %, LEH 25.2 %, gas 4.5 %, capsule 16.2 %).
+# App. 3's N221204 split (wall 54.1 %, LEH 25.2 %, gas 4.5 %, capsule 16.2 %), and its
+# synthetic Dante 1 Tr peak (`dante1()`) beside the capsule-seen Tr, against the measured
+# 313 eV (research notes, "Spectral radiosity, M-band and a synthetic Dante").
 
 using Briareus, Printf, DelimitedFiles
 
@@ -192,6 +194,12 @@ keyframes = range(turn_on, 9.0, 11)
 
 p2(r) = r.moments[3, :] ./ r.moments[1, :]
 p4(r) = r.moments[5, :] ./ r.moments[1, :]
+# Synthetic Dante 1 (θ 143°, φ 274°, 37° through the lower LEH; `dante1()`): the
+# brightness temperature of the power per steradian it sees, over the LEH's initial
+# area (Dante's convention) and over its open area (the closing lips' open fraction: the
+# temperature behind the hole), recorded at every step of every run.
+d1 = dante1()
+dante_tr(sol) = (d = dante(d1, sol); (d.Tr, d.Tr_open))
 runs = Pair{String,Any}[]
 t0 = time()
 function run!(name, f)
@@ -202,14 +210,15 @@ end
 if which == "all"
     static = hohlraum(; radius = R0, geometry...)
     model, op = RadiationModel(static), DepositionOperator(static, beams)
-    run!("static, no CBET", () -> drive_history(model, op, beams_at, times; lpi = isempty(pre) ? nothing : Tuple(pre)))
-    run!("static", () -> drive_history(model, op, beams_at, times; lpi = with_pre(cbet)))
+    run!("static, no CBET", () -> drive_history(model, op, beams_at, times; lpi = isempty(pre) ? nothing : Tuple(pre),
+                                                record = dante_tr))
+    run!("static", () -> drive_history(model, op, beams_at, times; lpi = with_pre(cbet), record = dante_tr))
     kw = Keyframes(moving_hohlraum(motion; radius = R0, geometry...), keyframes, beams)
-    run!("+wall", () -> drive_history(kw, beams_at, times; lpi = with_pre(cbet)))
+    run!("+wall", () -> drive_history(kw, beams_at, times; lpi = with_pre(cbet), record = dante_tr))
 end
 kl = Keyframes(moving_hohlraum(motion; radius = R0, geometry..., leh_closure = lip), keyframes, beams)
-which == "all" && run!("+lips", () -> drive_history(kl, beams_at, times; lpi = with_pre(cbet)))
-run!("+bubble", () -> drive_history(kl, beams_at, times; lpi = with_pre(cbet, bubble)))
+which == "all" && run!("+lips", () -> drive_history(kl, beams_at, times; lpi = with_pre(cbet), record = dante_tr))
+run!("+bubble", () -> drive_history(kl, beams_at, times; lpi = with_pre(cbet, bubble), record = dante_tr))
 
 # PRE 109 Fig. 10, N221204 (HYDRA, post-CBET), digitized (`n221204_fig10()`: ±0.002
 # where the curve is visible, up to ±0.015 where N220919's curve covers it).
@@ -246,6 +255,15 @@ println("\ncapsule Tr peak (eV; drive Trad 313 eV, AS24)")
 for (n, r) in runs
     k = argmax(r.Tr)
     @printf("  %-22s %.1f at %.2f ns\n", n, r.Tr[k], times[k])
+end
+println("\nDante 1 Tr peak (eV; measured 313 ± 2, Rubery PRL 132, 065104; ≈8.4 ns, Pak PRE 109 Fig. 1)")
+for (n, r) in runs
+    dt, dto = first.(r.record), last.(r.record)
+    k = argmax(dt)
+    @printf("  %-22s %.1f at %.2f ns (over the open area %.1f); capsule Tr there %.1f (Dante − capsule %+.1f eV)\n",
+            n, dt[k], times[k], dto[k], r.Tr[k], dt[k] - r.Tr[k])
+    k = findfirst(≈(8.5), times)
+    k === nothing || @printf("  %-22s at 8.5 ns: Dante %.1f (open area %.1f), capsule %.1f\n", "", dt[k], dto[k], r.Tr[k])
 end
 
 # Energy budget over the solved times (0.5–9.35 ns), against PRE 109 App. 3's HYDRA
