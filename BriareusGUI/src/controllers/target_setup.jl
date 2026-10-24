@@ -509,9 +509,11 @@ function _visrad_components(p::PartSpec, h, toward; raw::Bool = false)
     key, ph, raw = _visrad_key(p, o, h, toward, raw)
     _cached(_VRW_PARTS, key) do
         mat = Material(p.name; albedo = v[:albedo], conversion = v[:conversion])
+        # one component per CAD part (`fit = false`): the window shows and keys the parts;
+        # the drive fits their curved faces in its own target (`_fitted_target`)
         cs = raw ? visrad_component(o; material = mat, two_sided = p.two_sided) :
              visrad_component(o; material = mat, two_sided = p.two_sided, orient = !p.two_sided,
-                              toward, remesh = cad ? h : nothing, primitive_h = ph)
+                              toward, remesh = cad ? h : nothing, primitive_h = ph, fit = false)
         isempty(cs) && throw(ArgumentError("$(p.name): VisRad object type $(o.type) is not supported"))
         # a CAD part that is one cylinder or sphere (a tube, a shell) gets it for the view
         # factors, fitted on its file's facets
@@ -605,9 +607,9 @@ surface; every element of `mesh` in that one region), else `nothing`. The part t
 keeps its name and its elements and is integrated on the true surface: a tube or shell
 tessellated in slivers otherwise carries hundreds of facets per element, and its view
 factors cost ~20× more on the flat path (research notes, "Finely faceted curved CAD on
-the flat path"). A part of several faces (a hohlraum half: its bore, walls, ends) is
-left flat: `curved_components` would split it into renamed pieces, while the window
-keys exclusions, films and the cavity's account on part names.
+the flat path"). A part of several faces (a hohlraum half: its bore, walls, ends) stays
+one flat component in the window, which shows and keys parts; the drive splits it into
+its fitted pieces in its own target (`_fitted_target`).
 """
 function _whole_surface(m::Mesh, ref::Mesh)
     npatches(m) >= 6 && length(ref.triangles) >= 6 || return nothing
@@ -1812,8 +1814,8 @@ function target_summary(ts::TargetSetup)
     return "$kind · $(nelements(t)) elements" * (isempty(w) ? "" : " · " * w)
 end
 
-"Names of a target's components, in order."
-component_names(t::Target) = [c.name for c in t.components]
+"Names of a target's components, in order: its parts (the drive's fitted pieces of a CAD part are the part)."
+component_names(t::Target) = Briareus.parts(t)
 
-"Names of a target's opaque (non-aperture) components."
-surface_names(t::Target) = [c.name for c in t.components if c.kind === :surface]
+"Names of a target's opaque (non-aperture) components, as parts (see `component_names`)."
+surface_names(t::Target) = unique!([c.part for c in t.components if c.kind === :surface])

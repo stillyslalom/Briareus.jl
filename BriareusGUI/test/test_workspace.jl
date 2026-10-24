@@ -664,6 +664,29 @@ end
                                 disk_mesh(1.0, 1.0; nr = 2, nphi = 200)); binary = false)
     @test add_part!(ts, :mesh; name = :can, file = can, h = 0.4, x = -4.0)
     @test only(c for c in ts.target[].components if c.name === :can).surface === nothing
+    # the drive fits a part of several faces (the can: its wall and its lid) in its own
+    # target; the pieces map back to the part's elements, and the drive reports the part
+    t = ts.target[]
+    refs = Controllers._fit_references(t, ts.kind[], ts.params[], ts.mesh[], ts.parts[])
+    @test collect(keys(refs)) == [:can]                     # the tube and the shell are fitted whole
+    tf, fmap = Controllers._fitted_target(t, refs)
+    @test length(tf.components) == length(t.components) + 1 && Briareus.parts(tf) == Briareus.parts(t)
+    @test any(c -> c.part === :can && c.surface isa Briareus.CylinderSurface, tf.components)
+    @test sort(fmap) == 1:nelements(t) && all(e -> tf.elem_centroid[e] == t.elem_centroid[fmap[e]], 1:nelements(tf))
+    can1(tg) = first(c for c in tg.components if c.part === :can)
+    @test can1(Controllers._fitted_target(t, refs)[1]) === can1(tf)           # fitted once
+    beams = nif_quads()[1:4]
+    out = Controllers._build_scenario(t, beams; references = refs)
+    @test out.index == fmap && component_names(out.s.target) == component_names(t)
+    ev = evaluate(out.s, beams)
+    @test all(r -> !occursin('/', r.name), power_rows(ev))
+    @test Controllers._build_scenario(t, beams).index === nothing
+    Controllers.FIT_CAD[] = false
+    try
+        @test isempty(Controllers._fit_references(t, ts.kind[], ts.params[], ts.mesh[], ts.parts[]))
+    finally
+        Controllers.FIT_CAD[] = true
+    end
     # a VisRad CAD tube of slivers (the slow flat case): fitted when in the calculations
     src = joinpath(dir, "tube.vrw")
     write(src, sliver_workspace(4000))

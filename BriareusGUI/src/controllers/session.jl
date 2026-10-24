@@ -364,7 +364,12 @@ function build_scenario!(sess::DesignSession)
     runner = _runner(sess.spawn, sess.deliver)
     t0 = time()
     closed = _closed_enclosure(sess.target)
-    runner(() -> _build_scenario(t, beams; closed, cavity, profile), function (out)
+    kind, params, mesh, parts = ts.kind[], ts.params[], ts.mesh[], ts.parts[]
+    runner(function ()
+               # the CAD parts' file facets, for the drive's fit of their curved faces
+               references = _fit_references(t, kind, params, mesh, parts)
+               _build_scenario(t, beams; closed, cavity, profile, references)
+           end, function (out)
         g == dr.generation[] || return
         dr.building[] = false
         if out.err !== nothing
@@ -421,20 +426,31 @@ const RADIATION_MAX_ELEMENTS = Ref(0)
 """
     radiation_size(t::Target) -> (; elements, bytes, limit, feasible)
 
-Whether the drive can include the x-ray radiation of `t`: the view factors and the
-radiosity factorizations it keeps are dense (three `N × N` Float64 matrices, `bytes`),
-so the element count `N` is limited to `limit`, what half of this machine's memory holds
-(or [`RADIATION_MAX_ELEMENTS`](@ref)). About 27,000 elements on 32 GB; the mesh presets
-of the templates stay far below (16,000 elements at `:fine`), but an imported CAD
-workspace can hold 10⁵ elements. Above the limit [`build_scenario!`](@ref) computes the
-laser deposition alone.
+Whether the drive can include the x-ray radiation of `t`, whose view factors are dense:
+up to `Briareus.LARGE_MODEL[]` elements (10⁴) the model keeps them with its radiosity
+factorizations, three `N × N` Float64 matrices (24 N² bytes); above it, a large model,
+in Float32 with factorization-free iterative solves (4 N² bytes, research notes, "Large
+radiation models"). `bytes` must fit in half of this machine's memory; `limit` is the
+largest element count that does (or [`RADIATION_MAX_ELEMENTS`](@ref), which then sets
+`feasible`): about 63,000 elements on 32 GB. The mesh presets of the templates stay far
+below (16,000 elements at `:fine`), but an imported CAD workspace can hold 10⁵ elements.
+Above the limit [`build_scenario!`](@ref) computes the laser deposition alone.
 """
 function radiation_size(t::Target)
     N = nelements(t)
-    limit = RADIATION_MAX_ELEMENTS[] > 0 ? RADIATION_MAX_ELEMENTS[] :
-            floor(Int, sqrt(0.5 * Sys.total_memory() / 24))
-    return (; elements = N, bytes = 24.0 * N^2, limit, feasible = N <= limit)
+    bytes = _radiation_bytes(N)
+    RADIATION_MAX_ELEMENTS[] > 0 &&
+        return (; elements = N, bytes, limit = RADIATION_MAX_ELEMENTS[], feasible = N <= RADIATION_MAX_ELEMENTS[])
+    mem = 0.5 * Sys.total_memory()
+    large = Briareus.LARGE_MODEL[]
+    # the largest count that fits: on the Float32 path if any above `large` does
+    big = floor(Int, sqrt(mem / 4))
+    limit = big > large ? big : min(large, floor(Int, sqrt(mem / 24)))
+    return (; elements = N, bytes, limit, feasible = bytes <= mem)
 end
+
+# Bytes of a radiation model of N elements (see `radiation_size`).
+_radiation_bytes(N::Integer) = (N > Briareus.LARGE_MODEL[] ? 4.0 : 24.0) * Float64(N)^2
 
 _gb(x) = x >= 2^30 ? @sprintf("%.0f GB", x / 2^30) : @sprintf("%.0f MB", x / 2^20)
 
@@ -443,12 +459,10 @@ _gb(x) = x >= 2^30 ? @sprintf("%.0f GB", x / 2^30) : @sprintf("%.0f MB", x / 2^2
 function _radiation_note(t::Target)
     r = radiation_size(t)
     r.feasible && return ""
-    counts = zeros(Int, length(t.components))
-    for e in 1:nelements(t)
-        counts[t.elem_comp[e]] += 1
-    end
+    ps = Briareus.parts(t)                  # the drive's fitted pieces of a part as the part
+    counts = [length(elements(t, p)) for p in ps]
     big = sort(eachindex(counts); by = i -> -counts[i])[1:min(3, length(counts))]
-    who = join(("$(t.components[i].name) ($(counts[i]))" for i in big if counts[i] > 0), ", ")
+    who = join(("$(ps[i]) ($(counts[i]))" for i in big if counts[i] > 0), ", ")
     return " · laser only: x-ray view factors for $(r.elements) elements would need " *
            "$(_gb(r.bytes)) (limit $(r.limit) elements); most are in $who. " *
            "Leave the mounting hardware out of the calculations (right-click ▸ Include in calculations) " *
@@ -474,12 +488,13 @@ function _facet_note(t::Target)
     for k in eachindex(t.tri_comp)
         nt[t.tri_comp[k]] += 1
     end
-    slow = [(c.name, nt[i] / ne[i]) for (i, c) in enumerate(t.components)
+    # (a part's flat piece left by the drive's fit is named by its part)
+    slow = [(c.part, nt[i] / ne[i]) for (i, c) in enumerate(t.components)
             if c.surface === nothing && c.kind === :surface && ne[i] > 0 && nt[i] / ne[i] > SLOW_FACETS_PER_ELEMENT]
     isempty(slow) && return ""
     return " · slow view factors: " * join((@sprintf("%s (%.0f facets per element)", n, f) for (n, f) in slow), ", ") *
-           ": a curved face tessellated in slivers on the flat path (a part that is one cylinder or sphere " *
-           "is fitted to it; one of several faces is not)"
+           ": a curved face tessellated in slivers on the flat path (the drive fits cylinders, cones and " *
+           "spheres to CAD parts; this face is none of them, or the fit is off)"
 end
 
 # Evaluate the table's current pointing on the scenario (latest request wins).

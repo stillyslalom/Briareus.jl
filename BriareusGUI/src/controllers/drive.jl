@@ -219,22 +219,87 @@ function set_cavity!(dr::DriveState, on::Bool; point = dr.cavity_point[], films 
     return dr
 end
 
-# The cavity of a target around `point`, `films` left out: the enclosure, and the
+# The cavity of a target around `point`, `films` (parts) left out: the enclosure, and the
 # target element of each of its elements.
 function _cavity(t::Target, point, films)
-    comps = [c for c in t.components if !(c.name in films)]
+    comps = [c for c in t.components if !(c.part in films || c.name in films)]
     isempty(comps) && throw(ArgumentError("every component is a film left out of the cavity"))
     enc = enclosure(comps, point)
     src = enc.source
-    pos = Dict{Symbol,Vector{Int}}(c.name => collect(elements(t, c.name)) for c in comps)
+    own(tg, c) = tg.comp_elems[component_index(tg, c.name)]     # a component's own elements
+    pos = Dict{Symbol,Vector{Int}}(c.name => own(t, c) for c in comps)
     rank = zeros(Int, nelements(src))
     for c in comps
-        for (k, e) in enumerate(elements(src, c.name))
+        for (k, e) in enumerate(own(src, c))
             rank[e] = k
         end
     end
     index = [pos[src.components[src.elem_comp[e]].name][rank[e]] for e in enc.index]
     return enc, index
+end
+
+"""
+Whether the drive fits the curved faces of CAD parts (cylinders, cones, spheres:
+`curved_components` on each part's file facets) in its own target, so the x-ray view
+factors integrate on the true surfaces. The window keeps showing and keying the parts;
+the drive's elements map back to theirs. Set it to `false` for flat CAD elements.
+"""
+const FIT_CAD = Ref(true)
+
+# The drive's target of a design's target `t`: CAD components without a surface split by
+# `curved_components` on their file facets `refs` (component name => facets, chamber
+# frame), and the element of `t` each of its elements is (`nothing` when nothing split:
+# then `t` itself). The pieces keep their part's facets, so the elements match by side
+# and centroid.
+const _FIT_MEMO = Dict{Tuple{UInt,UInt},Pair{Component,Vector{Component}}}()
+
+# The file facets of a design's CAD parts (STL, VisRad CAD) in the target `t` (one flat
+# component named after the part), by name, in the chamber frame: what `_fitted_target`
+# fits them on.
+function _fit_references(t::Target, kind::Symbol, params, mesh, parts)
+    refs = Dict{Symbol,Mesh}()
+    FIT_CAD[] || return refs
+    flat = Set(c.name for c in t.components if c.kind === :surface && c.surface === nothing)
+    for p in parts
+        p.kind in (:visrad, :mesh) && p.name in flat || continue
+        try
+            p.kind === :visrad && _visrad_object(p.file, p.object).kind !== :mesh && continue
+            cs = part_components(p, mesh.h; frame = anchor_frame(p.anchor, kind, params, parts), raw = true)
+            length(cs) == 1 && only(cs).name === p.name && (refs[p.name] = only(cs).mesh)
+        catch err
+            err isa ArgumentError || rethrow()
+        end
+    end
+    return refs
+end
+
+function _fitted_target(t::Target, refs::AbstractDict)
+    isempty(refs) && return t, nothing
+    comps = Component[]
+    split = false
+    for c in t.components
+        ref = get(refs, c.name, nothing)
+        if ref === nothing || c.surface !== nothing || c.kind !== :surface
+            push!(comps, c)
+            continue
+        end
+        key = (objectid(c), objectid(ref))
+        lock(() -> length(_FIT_MEMO) > 256 && empty!(_FIT_MEMO), _STL_LOCK)
+        e = _cached(() -> c => curved_components(c; reference = ref), _FIT_MEMO, key)
+        pieces = first(e) === c ? last(e) : curved_components(c; reference = ref)
+        split |= !(length(pieces) == 1 && only(pieces) === c)
+        append!(comps, pieces)
+    end
+    split || return t, nothing
+    tf = Target(comps; closed = t.closed, visibility = t.visibility)
+    at = Dict{Tuple{Symbol,Int8,Vec3},Int}()
+    for e in 1:nelements(t)
+        at[(t.components[t.elem_comp[e]].part, t.elem_side[e], t.elem_centroid[e])] = e
+    end
+    fmap = [get(at, (tf.components[tf.elem_comp[e]].part, tf.elem_side[e], tf.elem_centroid[e]), 0)
+            for e in 1:nelements(tf)]
+    all(>(0), fmap) && allunique(fmap) || return t, nothing      # (not expected: keep the flat target)
+    return tf, fmap
 end
 
 """
@@ -247,10 +312,10 @@ function cavity_rows(dr::DriveState)
     enc = dr.enclosure[]
     enc === nothing && return NamedTuple[]
     src = enc.source
-    rows = map(src.components) do c
-        es = elements(src, c.name)
+    rows = map(Briareus.parts(src)) do p                  # a part split by the drive's fit as one
+        es = elements(src, p)
         k = [e for e in es if enc.kept[e]]
-        (; name = c.name, kept = length(k), elements = length(es),
+        (; name = p, kept = length(k), elements = length(es),
          area_kept = sum(src.elem_area[e] for e in k; init = 0.0),
          area = sum(src.elem_area[e] for e in es; init = 0.0))
     end
@@ -285,22 +350,23 @@ end
 "Whether the latest cavity is a sealed pocket (no open area: a film closes the point in)."
 cavity_sealed(dr::DriveState) = dr.enclosure[] !== nothing && _sealed(dr.enclosure[])
 
-# A pocket: nothing escapes from the point, and at most two components bound it (a
-# capsule in its tent, say).
-_sealed(enc) = enc.escape < 1e-3 && length(enc.target.components) <= 2
+# A pocket: nothing escapes from the point, and at most two parts bound it (a capsule in
+# its tent, say).
+_sealed(enc) = enc.escape < 1e-3 && length(Briareus.parts(enc.target)) <= 2
 
-# The cavity around a point, and when films seal it into a pocket, the component of the
+# The cavity around a point, and when films seal it into a pocket, the part of the
 # pocket whose leaving out opens the largest cavity (the film: a tent or a window, tried
-# among the pocket's three largest components). Returns (enclosure, index, film or nothing).
+# among the pocket's three largest parts). Returns (enclosure, index, film or nothing).
 function _open_cavity(t::Target, point, films)
     enc, index = _cavity(t, point, films)
     _sealed(enc) || return enc, index, nothing
     best = nothing
-    for c in sort(enc.target.components; by = c -> -sum(enc.target.elem_area[e] for e in elements(enc.target, c.name)))[1:min(3, end)]
-        e2, i2 = _cavity(t, point, union(films, (c.name,)))
+    tg = enc.target
+    for p in sort(Briareus.parts(tg); by = p -> -sum(tg.elem_area[e] for e in elements(tg, p)))[1:min(3, end)]
+        e2, i2 = _cavity(t, point, union(films, (p,)))
         _sealed(e2) && continue
         A = sum(e2.target.elem_area)
-        (best === nothing || A > best[4]) && (best = (e2, i2, c.name, A))
+        (best === nothing || A > best[4]) && (best = (e2, i2, p, A))
     end
     best === nothing && return enc, index, nothing
     return best[1], best[2], best[3]
@@ -315,14 +381,21 @@ end
 # pocket sealed by a film is opened by leaving that film out too (`_open_cavity`), and
 # a point in the open (most of its rays escape: a backlighter foil and its shields, say)
 # keeps the whole target. `profile` is the deposition's beam model (`nothing`: the
-# f-cone; a `VisRadProfile`: VisRad's, see `set_beam_model!`). Returns `(; s, lookup, enc, index, film, escape)`: the
-# scenario, its flux-map lookup, the cavity's enclosure and element index, the film
-# found (`nothing`s without a cavity), and the point's escaping fraction.
+# f-cone; a `VisRadProfile`: VisRad's, see `set_beam_model!`). `references` (CAD part
+# name => file facets, `_fit_references`) splits those parts into their fitted curved
+# pieces in the drive's target (`_fitted_target`). Returns `(; s, lookup, enc, index, film, escape)`: the
+# scenario, its flux-map lookup, the cavity's enclosure and the target element of each
+# drive element (`nothing` when the drive's elements are the target's), the film found
+# (`nothing` without a cavity), and the point's escaping fraction.
 function _build_scenario(t::Target, beams::Vector{Beam{Float64}}; closed::Bool = false,
                          radiation::Union{Bool,Nothing} = nothing, cavity = nothing,
-                         profile::Union{Nothing,VisRadProfile} = nothing)
+                         profile::Union{Nothing,VisRadProfile} = nothing,
+                         references::AbstractDict = Dict{Symbol,Mesh}())
     enc = index = film = nothing
     escape = NaN
+    # (the fit serves the x-ray view factors only)
+    t, fmap = radiation === false || !radiation_size(t).feasible && cavity === nothing ?
+              (t, nothing) : _fitted_target(t, references)
     if cavity !== nothing
         # the parts are meshed to their element sizes already, so the selection runs on
         # elements (`visrad_target(...; inside)` selects on CAD facets before remeshing)
@@ -335,6 +408,7 @@ function _build_scenario(t::Target, beams::Vector{Beam{Float64}}; closed::Bool =
             closed = false
         end
     end
+    fmap === nothing || (index = index === nothing ? fmap : fmap[index])
     radiation === nothing && (radiation = radiation_size(t).feasible)
     names = component_names(t)
     observe = radiation && :capsule in names ? :capsule : nothing
@@ -444,16 +518,16 @@ function power_rows(ev::Evaluation)
     t = ev.scenario.target
     d = ev.deposition
     P = d.delivered
-    cp = component_power(d, t)
+    cp = component_power(d, t)                  # by part: the drive's fitted pieces summed
+    ps = [p for p in Briareus.parts(t) if t.components[first(part_pieces(t, p))].kind !== :aperture]
     rows = NamedTuple[]
-    for c in t.components
-        c.kind === :aperture && continue
-        v = get(cp, c.name, 0.0)
-        push!(rows, (; name = String(c.name), power = v, fraction = P > 0 ? v / P : 0.0))
+    for p in ps
+        v = get(cp, p, 0.0)
+        push!(rows, (; name = String(p), power = v, fraction = P > 0 ? v / P : 0.0))
     end
-    for c in t.components
-        k = Symbol(c.name, :_outside)
-        haskey(cp, k) && push!(rows, (; name = "$(c.name) (outside)", power = cp[k],
+    for p in ps
+        k = Symbol(p, :_outside)
+        haskey(cp, k) && push!(rows, (; name = "$p (outside)", power = cp[k],
                                       fraction = P > 0 ? cp[k] / P : 0.0))
     end
     m = get(cp, :missed, 0.0)
