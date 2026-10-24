@@ -571,6 +571,7 @@ specific: N170601 is almost identical, N180128 weights the rise more.
 """
 young2020_green() = _data_table("young2020_fig5.csv")
 
+@doc (@doc young2020_green)
 function young2020_kernel()
     d = young2020_green()
     g = [isnan(b) ? c : isnan(c) ? b : (b + c) / 2 for (b, c) in zip(d.panel_b, d.panel_d)]
