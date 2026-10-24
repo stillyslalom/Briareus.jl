@@ -84,6 +84,20 @@ it defines Young's dynamic model; build it with `TabulatedAlbedo`.
 young2020_albedos() = _data_table("young2020_fig3a_albedo.csv")
 
 """
+    chen2020_leh() -> NamedTuple
+
+Measured effective LEH radius against time on five HDC basecamp shots (5.75 × 10.13 mm Au
+hohlraum, 3.37 mm LEHs, r₀ = 1.685 mm, ~400 TW from ~4.2 to 6 ns): H. Chen et al., Phys.
+Plasmas 27, 022702 (2020), Fig. 27, read from the accepted manuscript's vector graphics
+(`data/chen2020_fig27.csv`, provenance in its header). Columns `shot` (N171010, N171212,
+N180102, N180103, N180117), `kind` (`"gleh"`: the gated LEH imager's edge, analysis
+error 10–20 µm; `"lasnex_f003_regional"`, `"lasnex_f003_global"`, `"lasnex_f015_global"`:
+LASNEX images analysed the same way; `"laser"`: the total delivered power), `t` (ns)
+and `value` (radius in mm, power in TW). The calibration data of [`LipClosure`](@ref).
+"""
+chen2020_leh() = _data_table("chen2020_fig27.csv")
+
+"""
     pre109_fig1a_wall() -> NamedTuple
 
 The inner edge of the wall material at 6 ns in the HYDRA simulations of N210808 and

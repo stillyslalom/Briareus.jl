@@ -4038,6 +4038,194 @@ Split with the release: wall 62.7 / LEH 25.6 / capsule 11.7 % of the coupled ene
 - The release closure is calibrated on a static wall; an ablating-wall (hydro) reference
   would test b = 0.62.
 
+## Computed LEH closure (2026-10-24) *calibrated*
+
+ROADMAP 9 ("a computed lip closure") and the late-drive suspects of ROADMAP 16 ("Wall
+re-emission and the capsule radius": the LEH closing faster after the laser turns off,
+the energy stored in the hohlraum plasma). The prescribed lips (`GapClosure`, Young's
+ramp shifted 0.8 ns) stay available and remain the example's default; the computed one
+is `hohlraum(; leh_closure = :computed)`. Dante 1 and Fig. 10 are checks, never fit.
+Confidence: **H** primary text or vector data, **L** our construction.
+
+### Inputs read
+
+| Quantity | Value | Source | Conf. |
+|---|---|---|---|
+| Effective LEH radius vs t, 5 basecamp shots (5.75 × 10.13 mm Au, 3.37 mm LEHs, r₀ 1.685 mm, ~400 TW from 4.2 to 6.05 ns) | 1.54–1.61 mm at 3.6 ns (0.92–0.95 r₀); 1.51–1.58 at 4.0–4.2; 1.40–1.50 through the peak (mean 1.44, 0.855 r₀; shot means ±0.035); after the laser turns off (6.05 ns) N171010 1.46 → 1.44 / 1.42 / 1.43 at 7.07 / 7.44 / 7.75 ns, N171212 1.40 at 6.6–6.9 | Chen et al., PoP 27, 022702 (2020) Fig. 27, vector paths (`chen2020_leh()`, `data/chen2020_fig27.csv`); analysis error 10–20 µm (Sec. II.2b) | H |
+| LASNEX on the same shots (images analysed as the data) | closes at 0.07–0.11 mm/ns after laser-off; rms against the 31 points 0.045 (f = 0.15) to 0.056 mm (f = 0.03), after laser-off 0.09–0.12 mm, all too closed | same | H (rms: L) |
+| Mechanism | a dense ridge forms on the rise where the outer beams cross the lip blow-off; "once the ridge is formed the effective LEH radius is fairly stable, closing only very slowly, until the laser turns off"; then (in LASNEX) "the ridge diffuses inward"; "heating of the plasma inside the LEH region by the lasers keeps the LEH open"; the edge is set by hydrodynamics, not opacity | Chen 2020 Sec. II.2a, Fig. 5b–6 | H |
+| Closure at peak, other platforms | 1.83 → 1.57 mm (SXI end value, depth 0.26 mm; 3.64 mm LEH) | Young et al., PoP 27, 082702 (2020) Fig. 3a | H |
+| | ~0.84 r₀ of 1.55 mm (depth 0.25), ≤ 4 % variation through peak; closes in the low-power part, reopens at the rise | Schneider et al., PoP 22, 122705 (2015) ("Closing entrance holes" above) | H |
+| SXI | time-integrated (3–5 keV clear aperture, 870 eV channel); Dante's correction f (R_LEH/R_CA)² ≈ 1.15 (+10 eV at 300 eV) | Schneider et al., HTPD 2012 (OSTI 1043636); Schneider et al., RSI 81, 10E538 (2010) (OSTI 1009651) | H |
+| Hohlraum gas | He 0.3 mg/cc in N221204; 4.5 % of the incident laser energy heats the gas | n221204_benchmark.md; PRE 109, 025204 App. 3 | H |
+| Gas and window heat capacity | 25–30 % of the picket energy in low-fill hohlraums, a small fraction of the peak's | Callahan et al., PoP 27, 072704 (2020) Sec. II | H |
+| Cooling phase | the 0-D model misses the Dante data "when the laser power drops and the hohlraum starts to cool ... the radiation lost out of the LEH becomes more important" | Callahan 2020 Sec. II | H |
+
+OSTI searches ("laser entrance hole", "hole closure", "LEH closure", hohlraum filling)
+found no other time-resolved LEH-radius data; Hall et al. 2017 (OSTI 1361586) and the
+SXI papers are time-integrated. No published lip temperature or blow-off speed.
+
+### Model (`LipClosure`, `lip_depth`; `drive_history` per lip) *L*
+
+The lip's plasma edge sits a depth d inside r₀ and moves as
+
+    dd/dt = (1 − h) v(T) + h (depth − d)/hold_time,    v(T) = speed (T/100 eV)^½,
+
+T the radiation temperature on the lip (the sound speed of x-ray-ablated gold, c_s ∝
+T^½ at fixed Z̄), h the smooth step of the laser intensity through the hole (beams whose
+port is on that side, after `lpi`, over π r₀²) between `hold` = (6, 17) TW/mm². Below
+`hold[1]` (the foot, and as the power falls) the blow-off expands freely; above it the
+edge is held at `depth`, from either side (a lip that closed further in a long foot is
+pushed back, Schneider's reopening). The lip is meshed in `nr_lip` = 6 equal-area rings
+down to 0.6 r₀; each ring's closed fraction is the share of its area outside r₀ − d,
+so the open area is exact (to 1e-10 against the chord polygon, `test/leh_closure.jl`).
+`drive_history` integrates d per lip with the trapezoidal mean of v and h over each step
+(predictor: last step's T; corrector: the step's own, re-solved until d moves < 1e-5 mm),
+exactly in time for the hold's relaxation, and records `lip_radius`.
+
+### Calibration (`examples`: none; scripts in the session scratchpad) *calibrated*
+
+The lip temperature is the model's own: a coarse basecamp history (h 0.8 / 0.4; 10.13 ×
+5.75 mm, 3.37 mm LEHs, 0.908 mm capsule, `WallLossAlbedo` wall, `nif_conversion()`, the
+Izumi-trends pointing, each shot's Fig. 27 power split by N170827's cone fraction from
+`young2020_pulses()`, prescribed lips): lip T 120–125 eV in the foot, 170–180 at 3–3.5 ns,
+275–288 through the peak, 226 / 170 / 138 eV at 6.25 / 7.0 / 7.75 ns (capsule Tr peak
+292–294 eV); the five shots' lip temperatures differ by < 3 eV.
+
+Grid fit (speed 0–0.06 mm/ns, depth 0.18–0.32 mm, hold_time 0.05–0.8 ns) of the 31 GLEH
+points at hold = (6, 17) TW/mm² (107–303 TW on two 3.37 mm LEHs, the rise):
+
+| Parameter | Fit | Range | Note |
+|---|---|---|---|
+| speed (at 100 eV) | 0.022 mm/ns | 0.010–0.030 (rms within +10 %); 0.020–0.024 over the hold variants | ~0.55 c_s of gold at 100 eV (Z̄ ≈ 30, 39 km/s; *L*) |
+| depth | 0.240 mm | 0.235–0.245 | Young 0.26 (3.64 mm LEH), Schneider 0.25 (3.1 mm) |
+| hold_time | 0.40 ns | 0.2–0.6 (degenerate with `hold`) | the rise's 0.1 mm drop over ~0.5 ns |
+| hold | (6, 17) TW/mm² | (3–10, 12–22) give rms 0.032–0.034 | free at 3.6 ns (110 TW), held at peak |
+
+rms 0.033 mm over the 31 points (rise 0.034, peak 0.034, after laser-off 0.026), mean
+−0.001; LASNEX 0.045–0.056 (after laser-off 0.09–0.12). The floor is the shot scatter:
+at peak N171212 sits at 1.40 and N180117 at 1.49 mm with the same pulse and
+temperatures. After the laser turns off the model's edge moves in at 0.02–0.03 mm/ns
+(T falling from 280 to 140 eV), measured ≤ 0.02 (N171010: −0.03 mm in 1.7 ns), LASNEX
+0.07–0.11: **the measured LEH does not close faster after laser-off**, and the model,
+fitted to the foot and the peak, agrees with that within the analysis error. The
+integrated `drive_history` on the same basecamp with `leh_closure = :computed`
+reproduces the offline integration to 2e-5 mm and the data to rms 0.033 mm.
+
+Depth or fraction: 0.24–0.26 mm on 3.1–3.64 mm LEHs is also 0.84–0.86 r₀; the three
+platforms cannot tell an absolute depth from a fraction. The depth is the model's form
+(the ridge stands where the beams meet the blow-off, which does not scale with the
+hole). On the Zylstra 2022 pair (§5 of "Wall material, conversion and capsule
+energetics") a common depth gives ×1.143 against ×1.122 for a common fraction, the
+data ≥ ×1.19: the right direction, not enough.
+
+The thermal-band radius is smaller than the GLEH (3–5 keV, > 5 keV) edge (longer mean
+free path at higher photon energy; Chen Sec. II.2); calibrating on GLEH, like Young's
+SXI, makes the hole somewhat too open for the x-ray loss (unquantified, *L*).
+
+### N221204 (check, not fit)
+
+`examples/n221204.jl 0.8 0.4 full energetics=new` (coarse; the full model with wall
+re-emission), prescribed lips (Young's ramp shifted 0.8 ns, to 0.857 r₀) against
+`lips=computed`. Edge radius of the lower LEH (mm; prescribed: the radius of equal open
+area):
+
+| t (ns) | 2.0 | 4.5 | 5.5 | 8.0 | 8.5 | 9.0 |
+|---|---|---|---|---|---|---|
+| prescribed | 1.513 | 1.415 | 1.375 | 1.328 | 1.328 | 1.328 |
+| computed | 1.513 | 1.420 | 1.320 | 1.310 | 1.310 | 1.306 |
+
+The computed lip follows the prescribed ramp through the foot (free expansion at
+120–180 eV), is held 0.24 mm in from the rise on (prescribed: still closing to 8 ns), and
+stays held through the droop: the intensity through each hole is 17.8 TW/mm² at 8.6 ns
+and 8.8 at 9.2 ns against the hold's 6–17, so the edge is free again only after ~9 ns.
+
+Capsule Tr / Dante 1 over the initial / open LEH area (eV):
+
+| t (ns) | prescribed | computed | measured Dante 1 |
+|---|---|---|---|
+| 5.0 | 260.9 / 248.4 / 261.8 | 261.5 / 244.0 / 261.9 | 237.9 |
+| 5.5 | 279.9 / 264.4 / 280.7 | 280.9 / 259.5 / 281.1 | 263.1 |
+| 6.0 | 285.8 / 271.0 / 289.4 | 286.9 / 267.0 / 290.1 | 275.5 |
+| 7.0 | 297.8 / 283.5 / 305.5 | 298.7 / 281.5 / 306.2 | 291.3 |
+| 8.0 | 310.6 / 294.6 / 318.2 | 311.5 / 293.2 / 319.0 | 310.1 |
+| 8.5 | 299.5 / 283.1 / 305.8 | 300.4 / 281.9 / 306.6 | 311.3 |
+| 9.0 | 277.0 / 260.4 / 281.3 | 278.0 / 259.0 / 282.2 | 301.5 |
+| LEH / capsule share (%) | 25.5 / 11.7 | 24.8 / 11.8 | HYDRA 25.2 / 16.2 |
+| Fig. 10: min (ns), zero, 8 ns, rms | −0.181 (5.25), 6.24, +0.073, 0.041 | −0.176 (5.25), 6.23, +0.073, 0.041 | −0.170 (5.6), 6.67, +0.095 |
+
++1 eV through the peak (the hole is 0.02 mm smaller from 5.5 ns), the LEH share 0.7
+points lower (HYDRA's 25.2 % lies between), Fig. 10 within 0.005. **The late gap is not
+the LEH**: 8.0 → 8.5 ns the model still falls 11 eV (capsule), Dante rises 1. Bound: to
+hold the drive the losses must fall by ~4 × 3.5 % ≈ 14 % (T^~3.5 at fixed source); with
+the LEH 25 % of the loss that is −56 % of the LEH area, an edge 0.44 mm further in within
+0.45 ns (~1 mm/ns): 25× the fitted free speed at 300 eV, 10× LASNEX's post-laser-off
+closure, and against Chen's data, which show no faster closure after the laser turns
+off. Even LASNEX's 0.1 mm/ns from 8.05 ns would add ~1.5 eV by 8.5 ns.
+
+Standard mesh (0.28 / 0.16), computed lips: capsule Tr / Dante 1 initial / open area
+261.6 / 244.4 / 262.2 at 5.0 ns, 311.4 / 293.4 / 319.2 at 8.0, 300.3 / 282.0 / 306.7 at
+8.5, 278.0 / 258.9 / 282.2 at 9.0 (prescribed, "Wall re-emission and the capsule radius":
+261.0 / 248.8 / 262.3, 310.5 / 295.0 / 318.6, 299.4 / 283.4 / 306.1, 277.0 / 260.5 /
+281.4); LEH / capsule share 24.9 / 11.8 % (25.6 / 11.7); Fig. 10 −0.183 at 5.25 ns,
+crossing 6.22, +0.077 at 8 ns, rms 0.042 (−0.189, 6.23, +0.077, 0.042). Coarse agrees
+within 0.3 eV and 0.007 in P2.
+
+### Plasma-stored energy (estimate; not implemented) *L*
+
+The quasi-static radiosity converts each step's laser power at once; energy held in the
+hohlraum plasma (He gas, gold blow-off) and given back after the droop has no store.
+
+- **He gas** (the one published inventory). 0.3 mg/cc in 0.356 cm³ (6.4 × 11.24 mm less
+  the capsule) is 0.107 mg, 1.6e19 ions; fully ionized at T_e 2.5 / 3 / 5 keV (the LEH
+  T_e ≤ 5.5 keV of the two-zone CBET calibration; Chen's bubble interior 3–6 keV) it
+  holds 4.5 n T_e = 29 / 35 / 58 kJ. PRE 109 App. 3 books 4.5 % of the incident energy
+  (~92 kJ) into the gas over the pulse, consistent with a store of that size drained into
+  the wall as it goes. He radiates nothing to speak of (bremsstrahlung ~0.5 TW at
+  n_e 9e19 cm⁻³); it gives its energy to the gold by conduction, at most the
+  flux-limited f n_e T_e v_e = 5e12 W/cm² (f 0.05, 3 keV) over ~2.75 cm², 14 TW, so
+  ~35 kJ drains over ~2.5 ns: ≲ 12 TW of x-rays after conversion against the ~100 TW
+  the x-ray source loses from 8.05 to 8.5 ns (laser 448 → ~320 TW × 0.89 × 0.87), worth
+  ~1–2 eV at 8.5 ns. Not the gap.
+- **A fast reservoir** (the laser-heated gold corona, which converts the laser at
+  Te 3–5 keV) would act as a lag τ of the source with E = P τ. Sensitivity
+  (`examples/n221204.jl ... lag=<ns>`, the delivered power replaced by its first-order
+  lag; coarse, prescribed lips): capsule Tr / Dante 1 open area (eV), Fig. 10.
+
+  | lag (ns) | stored at 395 TW coupled (kJ) | 4.5 ns | 5.0 ns | 8.0 ns | 8.5 ns | 9.0 ns | Fig. 10 min (5.25 ns), zero, 8 ns, rms |
+  |---|---|---|---|---|---|---|---|
+  | 0 | — | 216.5 / 222.1 | 260.9 / 261.8 | 310.6 / 318.2 | 299.5 / 305.8 | 277.0 / 281.3 | −0.181, 6.24, +0.073, 0.041 |
+  | 0.08 | 32 | 209.9 / 216.0 | 254.9 / 256.6 | 310.4 / 318.1 | 302.7 / 309.4 | 280.8 / 285.4 | −0.169, 6.24, +0.073, 0.041 |
+  | 0.15 | 59 | 204.8 / 211.1 | 249.5 / 251.9 | 310.2 / 317.9 | 304.8 / 311.7 | 284.5 / 289.4 | −0.156, 6.24, +0.074, 0.042 |
+  | 0.25 | 99 | 198.9 / 205.5 | 242.3 / 245.4 | 309.7 / 317.4 | 306.6 / 313.7 | 289.3 / 294.6 | −0.138, 6.23, +0.075, 0.044 |
+  | 0.15, computed lips | 59 | 204.5 / 210.9 | 249.9 / 251.8 | 311.0 / 318.6 | 305.7 / 312.5 | 285.5 / 290.3 | −0.152, 6.23, +0.074, 0.042 |
+  | measured Dante 1 / Fig. 10 | | 203.4 | 237.9 | 310.1 | 311.3 | 301.5 | −0.170 (5.6), 6.67, +0.095 |
+
+  A lag of ~0.15 ns (~60 kJ at 395 TW coupled) brings Dante 1 at 8.5 ns to the measured
+  311 eV, lowers the early-peak excess at 5 ns from +24 to +14 eV (open area), puts the
+  4.5 ns readings around the data (201.7 / 211.1 eV initial / open area against 203.4),
+  and moves Fig. 10's minimum to −0.156 (Fig. 10 −0.170)
+  without moving the crossing. One time constant explaining both the late rise and the
+  early lag (the model's rise was ~0.15 ns ahead) points at a fast plasma store of
+  ~60 kJ, the size of the gas inventory but needing a ~0.15 ns return, which only the
+  radiating gold corona has. Its energy content and the conversion's response time are
+  not published (PRE 109 gives integrals only; Callahan 2020's 0-D model notes the
+  cooling phase as where it fails), so the lag stays a sensitivity in the example, not
+  a model. The energy is conserved: the run's delivered energy drops by the 19 kJ the
+  lag moves past the last step. 9.0 ns stays 7–12 eV low for lags of 0.15–0.25 ns (a
+  slower store, the gas, would add there).
+
+### What remains
+
+- A measured HYBRID-E LEH history (3.1 mm, 440 TW, a longer peak) to test the hold
+  depth's independence of the LEH size and power; the thermal-band radius against the
+  GLEH edge.
+- The hohlraum plasma's energy content and the conversion's response time (a HYDRA
+  inventory, or Dante's delay behind a step in the laser power) to turn the lag into a
+  model.
+- Shot scatter at peak (±0.035 mm across the five shots) is not modeled: N180117's split
+  quads sit 0.05 mm more open, N171212's 1.5× picket 0.05 mm more closed.
+
 ## Backlighter foil on the line of sight (2026-10-24) *derived*
 
 ROADMAP Next 2, second half. `backlighter_foil(los; standoff, width, height, tilt,

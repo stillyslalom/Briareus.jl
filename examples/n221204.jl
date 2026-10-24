@@ -45,7 +45,11 @@
 #   since the pulse start (the earlier runs);
 # - `release=on|off`: the wall re-emits stored energy where the drive falls (default,
 #   `drive_history`'s `wall_release`) or not (research notes, "Wall re-emission and the
-#   capsule radius (2026-10-24)").
+#   capsule radius (2026-10-24)");
+# - `lips=prescribed|computed`: the lips close along the prescribed ramp (default) or by
+#   the computed `LipClosure`; `lag=<ns>`: the power through a first-order lag, a
+#   sensitivity estimate of plasma-stored energy (research notes, "Computed LEH closure
+#   (2026-10-24)").
 # Every run prints its time-integrated energy budget (`energy_budget`) against PRE 109
 # App. 3's N221204 split (wall 54.1 %, LEH 25.2 %, gas 4.5 %, capsule 16.2 %), and its
 # synthetic Dante 1 Tr peak (`dante1()`) beside the capsule-seen Tr, against the measured
@@ -132,6 +136,26 @@ if get(opt, "pulse", "pak") == "pak" && shot != "n210808"
     frac(τ) = (s = oi(τ) + ii(τ); s > 0 ? ii(τ) / s : τ > 5 ? 1.0 : 0.5)
     pt, total = measured.t, measured.power
     inner = total .* frac.(pt)
+end
+# `lag=<ns>`: a sensitivity estimate of energy stored in the hohlraum plasma (gas and
+# gold blow-off) and given back as x-rays: the delivered power (total and inner) is
+# replaced by its first-order lag of that time constant, so the stored energy is
+# P·lag (energy conserved, though the tail past the last step is not solved; CBET,
+# backscatter and the deposition see the lagged power too). *L*, a sensitivity, not a
+# calibrated model; research notes, "Computed LEH closure (2026-10-24)".
+lag = parse(Float64, get(opt, "lag", "0"))
+if lag > 0
+    tl = collect(0.0:0.005:pt[end] + 5lag)
+    Pt, Pi = PulseShape(pt, Float64.(total)), PulseShape(pt, Float64.(inner))
+    function lagged(f)
+        y = zeros(length(tl))
+        for k in 2:length(tl)
+            δ = tl[k] - tl[k-1]
+            y[k] = y[k-1] + (f(tl[k]) - y[k-1]) * (1 - exp(-δ / lag))
+        end
+        return y
+    end
+    pt, total, inner = tl, lagged(Pt), lagged(Pi)
 end
 pulses = cone_fraction_pulses(beams, pt, total, inner ./ max.(total, eps()))
 beams_at = τ -> with_pulses(beams, pulses, τ)
@@ -227,6 +251,12 @@ else
     bubble = BubbleAbsorption(; radius = R0, turn_on, wall = motion, capsule_radius = 1.135,
                               energy = 1.1)
 end
+# `lips=computed`: the lips' closure computed instead of prescribed (`LipClosure`, its
+# speed, depth and hold fitted to Chen 2020's measured LEH radii, `chen2020_leh()`): free
+# expansion at the lip's own gold sound speed in the foot, held 0.24 mm inside the rim
+# while the beams pass, free again as the power falls; the lip reaches down to 0.6 r₀
+# (research notes, "Computed LEH closure (2026-10-24)").
+get(opt, "lips", "prescribed") == "computed" && (lip = :computed; r_open = 0.6)
 geometry = (geometry..., leh_open_radius = r_open * geometry.leh_radius)
 @printf("dynamics %s: wall %.2f mm in at 6 ns, %.2f at 9 ns; bubble t_c %.2f ns, tip %.2f mm at 6 ns\n",
         dynamics, wall_displacement(motion, 6.0), wall_displacement(motion, 9.0), bubble.collision,
@@ -308,6 +338,13 @@ for t in [4.5, 5.0, 5.5, 6.0, 6.5, 7.0, 7.5, 8.0, 8.5, 9.0]
     println(rpad(@sprintf("%.1f", t), 7),
             join([rpad(@sprintf("%.1f / %.1f / %.1f", r.Tr[k], r.record[k]...), 24) for (_, r) in runs]),
             @sprintf("%.1f", measured.dante1[i]))
+end
+for (n, r) in runs
+    isempty(r.lip_radius) && continue
+    rl = r.lip_radius[:leh_bottom_lip]
+    println("computed lip edge radius, lower LEH (mm), ", n, ": ",
+            join([@sprintf("%.2f ns %.3f", t, rl[k]) for t in (2.0, 4.5, 5.5, 8.0, 8.5, 9.0)
+                  for k in (findfirst(≈(t), times),) if k !== nothing], ", "))
 end
 println("\ncapsule Tr peak (eV; drive Trad 313 eV, AS24)")
 for (n, r) in runs

@@ -643,6 +643,21 @@ Research notes, "Wall re-emission and the capsule radius (2026-10-24)". Item 16.
 - **Published capsule albedo** (`examples/n221204.jl capsule_albedo=young`): capsule
   share 12.3 % (HYDRA 16.2 %), not fitted.
 
+## Done (2026-10-24, computed LEH closure)
+Research notes, "Computed LEH closure (2026-10-24)". Items 9 and 16.
+- **`LipClosure`, `hohlraum(; leh_closure = :computed)`**: each lip's plasma edge expands
+  at `speed (T/100 eV)^½` (the gold blow-off's sound speed at the lip's own radiation
+  temperature) and is held `depth` inside the rim while the beams entering that hole
+  exceed the hold intensity; `drive_history` integrates it per lip (`lip_radius`),
+  the lip meshed in `nr_lip` rings with exact open area. `lip_depth` integrates given
+  histories. Fitted to Chen et al. 2020 Fig. 27 (`chen2020_leh()`, five basecamp shots,
+  vector data): speed 0.022 mm/ns at 100 eV, depth 0.24 mm, hold time 0.4 ns; rms
+  0.033 mm (shot scatter ~0.03), after laser-off 0.026 (LASNEX 0.09–0.12). The
+  prescribed `GapClosure` lips stay the default.
+- **N221204** (`examples/n221204.jl lips=computed`; coarse): capsule Tr +1 eV through
+  the peak, LEH share 24.8 % (prescribed 25.5, HYDRA 25.2), Fig. 10 within 0.005; the
+  8.5 ns gap is not the LEH. `lag=<ns>` adds the plasma-stored-energy sensitivity.
+
 ## Open questions (from the 2026-10-18 CAD work)
 Choices made provisionally overnight or left open; the lean is in brackets.
 **Decided (user, 2026-10-22):** the bracketed leans stand. On 1: parts may be split
@@ -936,8 +951,12 @@ the reference's view factors hold through the pulse; items 9 and 10 remove that 
      from the picket energy and quad splitting; PRE 109 Fig. 1a hides N221204's tip under
      its rays, ≥ 1.55 mm at 6 ns against the model's 1.96); a HYBRID-E bubble or thin-wall
      measurement would settle it;
-   - the lip closure history (only Young's end value 0.857 r₀ is measured; the ramp is
-     assumed); a computed lip closure (plasma filling the hole);
+   - ~~the lip closure history; a computed lip closure~~ **Done (2026-10-24, see Done;
+     research notes "Computed LEH closure")**: `hohlraum(; leh_closure = :computed)`,
+     `LipClosure` fitted to Chen 2020's measured LEH radii (rms 0.033 mm on 31 points,
+     LASNEX 0.045–0.056); on N221204 it moves the drive by ~1 eV and Fig. 10 by
+     ≤ 0.005. Open: the thermal-band radius against the 3–5 keV edge it is fitted to,
+     and a HYBRID-E (3.1 mm, 440 TW) LEH-radius history to test the hold depth;
    - the capsule's shrinking radius (Young Fig. 3a has one: 0.83 mm at 5.5 ns, 0.22 at
      7.75 ns; PRE 109 Fig. 1a ~0.92 mm at 6 ns), Izumi 2023's low-contrast stall and
      relaunch;
@@ -1050,8 +1069,18 @@ the reference's view factors hold through the pulse; items 9 and 10 remove that 
       (`examples/wall_reemission.jl`: 0.76–0.78 for 5–30 % drops); rising drives bit
       for bit; `energy_budget` books `released`. Check (not fit): Dante 1 over the open
       area 305.8 eV at 8.5 ns (299.2 before, measured 311.3), 281 at 9 ns (301.5): it
-      does **not** hold 311 eV. Still missing: the hohlraum plasma's stored energy, the
-      LEH after the laser turns off;
+      does **not** hold 311 eV. **The LEH after laser-off ruled out (2026-10-24,
+      research notes "Computed LEH closure")**: the computed lips stay held through the
+      droop (+0.8 eV at 8.5 ns), Chen 2020's data show no faster closure after laser-off,
+      and holding the drive would take ~1 mm/ns of closure. **Plasma-stored energy
+      estimated**: the He gas holds 30–60 kJ at 2.5–5 keV but returns it by conduction
+      over ~2–3 ns (≲ 12 TW, ~1–2 eV); a 0.15 ns first-order lag of the source
+      (`examples/n221204.jl lag=0.15`, ~60 kJ stored) closes the 8.5 ns gap (Dante open
+      311.7 against 311.3) and halves the early-peak excess, so a fast reservoir (the
+      laser-heated gold corona) of that size would explain both; its energy content is
+      unpublished, so it is a sensitivity, not a model. Next: a published plasma-energy
+      inventory or conversion response time (HYDRA), or Dante's rise delay on a shot
+      with a step pulse;
     - the missing sinks: He gas (4.5 %), LEH windows, the M-band (item 13). The capsule
       share with published radius and albedo (Young 2020's HYDRA ablator albedo on the
       ablation-front schedule, `capsule_albedo=young`) is 12.3 % against 16.2 %:

@@ -338,8 +338,8 @@ end
              nz = 36, nphi = 48, nr_cap = 6, nr_leh = 4, capsule_ntheta = 24, capsule_nphi = 32,
              h = nothing, capsule_h = nothing, capsule_mesh = :compact, wall = gold(),
              capsule = ablator(), capsule_center = (0,0,0), windows = (), corner_radius = 0,
-             nr_corner = nothing, leh_closure = nothing, leh_open_radius = 0.84 leh_radius,
-             sombrero = nothing)
+             nr_corner = nothing, leh_closure = nothing, leh_open_radius = nothing,
+             nr_lip = nothing, sombrero = nothing)
 
 Cylindrical hohlraum along `z`, centered on TCC (dimensions in mm), with components
 
@@ -398,6 +398,14 @@ open through the foot, closing over ~0.5 ns at the rise to peak, to
 Young et al. 2020 use 85 % static radii; research notes, "Closing entrance holes"). Beams
 pass the lip unclipped: the laser keeps its own path open (Chen et al. 2020).
 
+`leh_closure = :computed` (or a `LipClosure`) computes the closure instead: each lip's
+plasma edge moves in from `leh_radius` at the sound speed of the gold blown off the lip
+and stands a fixed depth inside the rim while the beams pass at high power
+(`LipClosure`, calibrated on measured LEH radii; `drive_history` integrates it per hole
+from the lip's own temperature and the beams entering that hole). The lip then reaches
+down to `leh_open_radius` (default 0.6 `leh_radius`, the floor of the closure) in
+`nr_lip` rings (default 6; 1 for a `GapClosure`).
+
 `sombrero` (`true` for the measured `Sombrero()`, or a `Sombrero`) adds an annular
 shield around each end, one-sided and facing away from the waist: opaque to beams
 (clipping, deposition: power on its waist side is booked as `sombrero_top_outside`) and
@@ -422,11 +430,20 @@ function hohlraum(; length = 9.4, radius = 2.875, leh_radius = 1.55, capsule_rad
                   wall::Material = gold(), capsule::Material = ablator(),
                   capsule_center = (0.0, 0.0, 0.0), windows = (), corner_radius::Real = 0.0,
                   nr_corner::Union{Nothing,Integer} = nothing,
-                  leh_closure::Union{Nothing,GapClosure} = nothing, leh_open_radius::Real = 0.84 * leh_radius,
+                  leh_closure::Union{Nothing,Symbol,GapClosure,LipClosure} = nothing,
+                  leh_open_radius::Union{Nothing,Real} = nothing, nr_lip::Union{Nothing,Integer} = nothing,
                   sombrero::Union{Nothing,Bool,Sombrero} = nothing)
     0 < leh_radius < radius || throw(ArgumentError("need 0 < leh_radius < radius"))
+    if leh_closure isa Symbol
+        leh_closure === :computed || throw(ArgumentError("leh_closure must be :computed, a GapClosure or a LipClosure"))
+        leh_closure = LipClosure()
+    end
+    computed = leh_closure isa LipClosure
+    leh_open_radius = something(leh_open_radius, (computed ? 0.6 : 0.84) * leh_radius)
+    nr_lip = something(nr_lip, computed ? 6 : 1)
     leh_closure === nothing || 0 < leh_open_radius < leh_radius ||
         throw(ArgumentError("need 0 < leh_open_radius < leh_radius"))
+    nr_lip >= 1 || throw(ArgumentError("nr_lip must be at least 1"))
     rc = Float64(corner_radius)
     0 <= rc < min(radius - leh_radius, length / 2) ||
         throw(ArgumentError("need 0 ≤ corner_radius < min(radius - leh_radius, length / 2)"))
@@ -491,7 +508,7 @@ function hohlraum(; length = 9.4, radius = 2.875, leh_radius = 1.55, capsule_rad
             ro = leh_open_radius
             push!(comps, aperture(name, disk_mesh(ro, sgn * h; nr = max(1, round(Int, nr_leh * ro / leh_radius)),
                                                   nphi = nphi ÷ 2, up = sgn < 0); surface = disk))
-            push!(comps, aperture(Symbol(name, :_lip), annulus_mesh(ro, leh_radius, sgn * h; nr = 1,
+            push!(comps, aperture(Symbol(name, :_lip), annulus_mesh(ro, leh_radius, sgn * h; nr = nr_lip,
                                                                     nphi = nphi ÷ 2, up = sgn < 0);
                                   surface = disk, closure = leh_closure))
         end

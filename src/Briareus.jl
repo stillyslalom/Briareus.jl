@@ -24,7 +24,7 @@ export Vec3, Mesh, npatches, add_polygon!, merge_meshes, split_mesh, transform, 
        cylinder_mesh, annulus_mesh, disk_mesh, sphere_mesh, cubed_sphere_mesh, icosphere_mesh,
        icosphere_frequency, rectangle_mesh, frustum_mesh
 export AlbedoModel, ConstantAlbedo, TabulatedAlbedo, WallLossAlbedo, BurnthroughAlbedo, HeatFront,
-       RosselandTransmission, foil_transmission, GapClosure,
+       RosselandTransmission, foil_transmission, GapClosure, LipClosure, lip_depth,
        heat_front, burnthrough_time, areal_mass, optical_depth, eddington_transmission, albedo, Material, gold, ablator, BLACK,
        TemperatureAlbedo, CapsuleAlbedo, capsule_radius_fraction, du_wall_loss, wall_loss_factor, uranium,
        Conversion, conversion_efficiency, nif_conversion,
@@ -50,7 +50,8 @@ export enclosed_radius, envelope_radius, focal_profile, enclosed_fraction, with_
 export LaserPlasmaModel, apply_lpi, Backscatter, CalibratedTransfer, linear_transfer,
        tabulated_transfer, lpi_summary, BubbleAbsorption, bubble_speed, bubble_depth,
        bubble_transmission, bubble_fractions, iris_fraction, ridge_fraction, lpi_deposit,
-       izumi2021_bubble, izumi2021_absorption, young2020_radii, young2020_albedos, pre109_fig1a_wall
+       izumi2021_bubble, izumi2021_absorption, young2020_radii, young2020_albedos, pre109_fig1a_wall,
+       chen2020_leh
 export CBET, TwoZoneCBET, n221204_cbet, n221204_fig9, n221204_fig10, n221204_pulse, n221204_fig9_beams, CH_IONS, ion_wave_amplitude, receiver_ratio, calibrate_cbet, cbet_gain, cbet_coupling, cbet_plasma, plasma_dispersion
 export UnconvertedColor, nif_unconverted, UnconvertedRow, UnconvertedReport, unconverted_light_check
 export TaLISRow, TaLISReport, talis_check, write_talis_csv, TALIS_SOURCE, TALIS_OUT_OF_SCOPE, talis_requirement

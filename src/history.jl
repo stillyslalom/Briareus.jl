@@ -85,6 +85,8 @@ radiosity at that time (time- and temperature-dependent albedos included), and r
   `energy_budget` integrates them. Like `energy_balance`, `escaped`, `transmitted`,
   `laser`, `source` and `absorbed` are keyed by part, the pieces of a part split by
   `curved_components` summed into it; `front` and `burnthrough` stay per component.
+- `lip_radius` — per computed entrance-hole lip (`LipClosure`, `hohlraum(; leh_closure =
+  :computed)`), the radius of its plasma edge at each step (mm)
 - `record` — with `record = f`, the vector of `f(sol)` for each step's
   `RadiationSolution` (e.g. `sol -> dante(dante1(), sol)` for a synthetic Dante, or a
   `spectral_solve`), otherwise `nothing`.
@@ -129,6 +131,15 @@ element's source. While no element's temperature falls below its running maximum
 history is the heating loss's bit for bit. `released` records the re-emitted power
 per component (`energy_budget` integrates it); `absorbed` is net of it. Research notes,
 "Wall re-emission and the capsule radius (2026-10-24)".
+
+**Computed lip closure.** Each entrance-hole lip with a [`LipClosure`](@ref) albedo
+carries its closure depth `d` (open at `times[1]`), advanced over each step from the
+trapezoidal mean of its free speed `v(T)` (`T` the lip's area-mean incident-flux
+temperature, at the step's start and, corrected, at its end) and of the laser's hold
+(the power of the beams in `beams_at`, after `lpi`, whose ports lie on the hole's side,
+over the hole's initial area), exactly for the hold's relaxation. The step is solved
+with each lip ring closed outside the edge `r₀ − d`, and again until the corrected depth
+moves by less than 1e-5 mm.
 
 Each thin-foil element without an explicit `burnthrough` time tracks its own heat
 front: the drive integral of `heat_front` over that element's incident-flux temperature
@@ -184,8 +195,13 @@ function _drive_history(t::Target, model_at, operator_at, beams_at, times;
     model(e) = element_material(t, e).albedo
     tracked = [e for e in foil_elems if model(e).burnthrough === nothing]
     # transitions a step can resolve (closing entrance-hole lips included)
-    smooth = [e for (ci, c) in enumerate(t.components) if _transmits(c.material.albedo)
+    smooth = [e for (ci, c) in enumerate(t.components)
+              if _transmits(c.material.albedo) && !(c.material.albedo isa LipClosure)
               for e in t.comp_elems[ci] if model(e).width > 0]
+    # entrance-hole lips whose closure is computed (`LipClosure`): their geometry, and
+    # the closure depth, lip temperature and hole intensity at the last step taken
+    lips = _lip_geometry(t)
+    ldepth, lT, lI = zeros(length(lips)), zeros(length(lips)), zeros(length(lips))
     need = zeros(N)
     for e in foil_elems
         need[e] = _front_integral(model(e).front, areal_mass(model(e)))
@@ -229,10 +245,12 @@ function _drive_history(t::Target, model_at, operator_at, beams_at, times;
     released = Dict(n => Float64[] for n in names)
     absorbed = Dict(c.name => Float64[] for c in t.components
                     if c.kind !== :aperture || _transmits(c.material.albedo))
+    lip_radius = Dict(L.name => Float64[] for L in lips)
 
     # The step from τ0 (`nothing` at the first time) to τ: its solution and the
     # thin-foil state at τ. The state at τ0 is left untouched, so a step can be retried.
-    function step(τ0, τ, dep, guess)
+    # `Il`: the laser intensity through each computed lip's hole at τ.
+    function step(τ0, τ, dep, guess, Il)
         Δ = τ0 === nothing ? 0.0 : τ - τ0
         # predictor: each front advanced through the step at its last temperature
         pred = copy(tb)
@@ -248,15 +266,33 @@ function _drive_history(t::Target, model_at, operator_at, beams_at, times;
                           _WallHistory(Iw[e] + Δ * ratew[e] / 2, Δ / 2, Tmax[e],
                                        cooled[e] ? _deficit_sum(model(e), deficits, dtimes, e, τ) : 0.0,
                                        Dw[e], Δ)) for e in lossy)
+        # the lips' closure depths at τ, from the lip temperatures `T1` at τ
+        depths(T1) = [τ0 === nothing ? 0.0 :
+                      clamp(_lip_advance(L.model, ldepth[k], Δ,
+                                         (_lip_speed(L.model, lT[k]) + _lip_speed(L.model, T1[k])) / 2,
+                                         (_lip_hold(L.model, lI[k]) + _lip_hold(L.model, Il[k])) / 2),
+                            0.0, L.r0 - L.rin) for (k, L) in enumerate(lips)]
+        ds = depths(lT)            # predictor: the last step's lip temperatures
         function state(bt)
-            isempty(lossy) && return bt
+            isempty(lossy) && isempty(lips) && return bt
             s = Vector{Any}(bt)
             for e in lossy
                 s[e] = hist[e]
             end
+            for (k, L) in enumerate(lips), (j, e) in enumerate(L.elems)
+                s[e] = _ring_closed(L.ra[j], L.rb[j], L.r0 - ds[k])
+            end
             return s
         end
         sol = solve(mτ, dep; time = τ, burnthrough = state(pred), guess, tol)
+        # corrector: the lips' depths with this step's own lip temperatures
+        for _ in 1:5
+            (isempty(lips) || τ0 === nothing) && break
+            dn = depths(_lip_temperatures(lips, sol))
+            maximum(abs.(dn .- ds)) <= 1e-5 && break
+            ds = dn
+            sol = solve(mτ, dep; time = τ, burnthrough = state(pred), guess = sol, tol)
+        end
         # corrector: the trapezoidal integral with this step's temperatures
         function advance(sol)
             Ik, tk, rk = copy(I), copy(tb), copy(rate)
@@ -292,7 +328,7 @@ function _drive_history(t::Target, model_at, operator_at, beams_at, times;
             rwk[e] = _loss_rate(model(e), T)
             Iwk[e] = τ0 === nothing ? τ * rwk[e] : hist[e].A + Δ * rwk[e] / 2
         end
-        return sol, Ik, tk, rk, Iwk, rwk, hist
+        return sol, Ik, tk, rk, Iwk, rwk, hist, ds
     end
     # the largest advance of a smooth transition from τ0 to τ, given burnthrough times
     advance_of(τ0, τ, tbs) =
@@ -323,12 +359,14 @@ function _drive_history(t::Target, model_at, operator_at, beams_at, times;
                     τ = min(lo, τgoal)
                 end
             end
-            local sol, Ik, tk, rk, Iwk, rwk, hist, a, dep, P0
+            local sol, Ik, tk, rk, Iwk, rwk, hist, ds, Il, a, dep, P0
             while true
                 b0 = beams_at(τ)
                 P0 = sum(b -> ForwardDiff.value(b.power), b0; init = 0.0)
-                dep = lpi_deposit(lpi, operator_at(τ), apply_lpi(lpi, b0, τ), τ)
-                sol, Ik, tk, rk, Iwk, rwk, hist = step(τ0, τ, dep, last)
+                bl = apply_lpi(lpi, b0, τ)
+                dep = lpi_deposit(lpi, operator_at(τ), bl, τ)
+                Il = _lip_intensities(lips, bl)
+                sol, Ik, tk, rk, Iwk, rwk, hist, ds = step(τ0, τ, dep, last, Il)
                 a = legendre_moments(sol.H, sol.model.target, obs; lmax)
                 τ0 === nothing && break
                 h = τ - τ0
@@ -341,6 +379,14 @@ function _drive_history(t::Target, model_at, operator_at, beams_at, times;
             end
             I, tb, rate = Ik, tk, rk
             Iw, ratew = Iwk, rwk
+            if !isempty(lips)
+                ldepth .= ds
+                lT .= _lip_temperatures(lips, sol)
+                lI .= Il
+                for (k, L) in enumerate(lips)
+                    push!(lip_radius[L.name], L.r0 - ds[k])
+                end
+            end
             # the release: power re-emitted from stored energy per component, then each
             # element's running maximum and deficit at τ
             rel = zeros(N)
@@ -424,8 +470,42 @@ function _drive_history(t::Target, model_at, operator_at, beams_at, times;
             ylm = ylm ? _columns(clm, (lmax + 1)^2) : nothing, wall_Tr,
             wall_albedo, escaped, transmitted, window_loss, front, burnthrough,
             albedo = keep_albedo ? albedo_steps : nothing, setup, laser, source, absorbed, lost,
-            released, record = record === nothing ? nothing : [r for r in recorded])
+            released, lip_radius, record = record === nothing ? nothing : [r for r in recorded])
 end
+
+# The computed entrance-hole lips of a target (`LipClosure` apertures): per lip its name,
+# model, hole center and normal, initial (outer) radius `r0`, inner radius `rin` (the
+# floor of the closure), elements and each element's radial span [ra, rb] from the
+# center (its vertices' extreme radii in the hole's plane).
+function _lip_geometry(t::Target)
+    lips = []
+    for (ci, c) in enumerate(t.components)
+        c.kind === :aperture && c.material.albedo isa LipClosure || continue
+        s = c.surface
+        s isa DiskSurface || throw(ArgumentError("a LipClosure lip needs a DiskSurface (component $(c.name))"))
+        es = t.comp_elems[ci]
+        radius(v) = (d = v - s.center; norm(d - dot(d, s.normal) * s.normal))
+        span(e) = extrema(radius(v) for k in t.elem_tris[e]
+                          for v in (t.tri_v0[k], t.tri_v0[k] + t.tri_e1[k], t.tri_v0[k] + t.tri_e2[k]))
+        sp = span.(es)
+        ra, rb = first.(sp), last.(sp)
+        push!(lips, (; name = c.name, model = c.material.albedo, center = s.center, normal = s.normal,
+                     r0 = maximum(rb), rin = minimum(ra), elems = es, ra, rb,
+                     area = t.elem_area[es]))
+    end
+    return lips
+end
+
+# Each lip's incident-flux radiation temperature (area mean of its elements' H).
+_lip_temperatures(lips, sol) =
+    [radiation_temperature(sum(ForwardDiff.value(sol.H[e]) * A for (e, A) in zip(L.elems, L.area)) / sum(L.area))
+     for L in lips]
+
+# The laser intensity through each lip's hole (TW/mm² over its initial area): the power
+# of the beams entering through it (ports on the hole's side of the chamber center).
+_lip_intensities(lips, beams) =
+    [sum((ForwardDiff.value(b.power) for b in beams if dot(b.port, L.center) > 0); init = 0.0) / (π * L.r0^2)
+     for L in lips]
 
 # The wall-release Duhamel sum of element e at time τ over the steps taken: the deficit
 # D (piecewise linear between the steps) convolved with the kernel's integral,

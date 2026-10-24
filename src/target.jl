@@ -4,7 +4,7 @@
     AlbedoModel
 
 Supertype of x-ray albedo models: `ConstantAlbedo`, `TabulatedAlbedo`,
-`WallLossAlbedo`, `BurnthroughAlbedo`, `GapClosure`. Evaluate with `albedo`.
+`WallLossAlbedo`, `BurnthroughAlbedo`, `GapClosure`, `LipClosure`. Evaluate with `albedo`.
 """
 abstract type AlbedoModel end
 
@@ -511,6 +511,118 @@ end
 albedo(m::GapClosure, t, T = nothing) = first(_closure_split(m, t, T))
 
 """
+    LipClosure(; speed = 0.022, exponent = 0.5, depth = 0.24, hold_time = 0.4,
+               hold = (6.0, 17.0), after = WallLossAlbedo())
+
+An entrance-hole lip whose closure is computed from the local conditions
+(`hohlraum(; leh_closure = :computed)`). The gold blown off the lip fills the hole from
+its rim inward; the plasma edge (the radius at which the blow-off turns opaque) sits a
+depth `d(t)` inside the initial radius `r₀` and moves as
+
+    dd/dt = (1 − h) v(T) + h (depth − d)/hold_time,    v(T) = speed (T/100 eV)^exponent,
+
+with `T` the radiation temperature incident on the lip (the sound speed of x-ray-ablated
+gold, `c_s ∝ T^½`, sets the free expansion) and `h ∈ [0, 1]` the laser's hold: the smooth
+step `3x² − 2x³` of the laser intensity through the hole (power of the beams entering it
+over the hole's initial area, TW/mm²) between `hold[1]` and `hold[2]`. While the beams
+pass at high power the blow-off stagnates against the laser-heated plasma in a dense
+ridge `depth` inside the rim (Chen et al., PoP 27, 022702 (2020): the ridge forms on the
+rise to peak where the outer beams cross the lip blow-off, then holds; "heating of the
+plasma inside the LEH region by the lasers keeps the LEH open"); a lip that closed
+further in a long foot is pushed back to it (Schneider et al. 2015: closes in the
+low-power part, reopens at peak). Below `hold[1]` (the foot, and after the laser turns
+off) the edge moves in freely at `v(T)`.
+
+`drive_history` integrates `d(t)` per lip from `times[1]` (open there) and maps it onto
+the lip's elements: a lip meshed in rings between its inner radius and `r₀` (the floor
+of the closure) has each ring the closed fraction `s` of its area outside the edge, so
+the open area is exact at any radial resolution. A closed part re-emits with the albedo
+of `after`, `α = s α_after`, and `1 − s` escapes (as for `GapClosure`). A single
+`solve` treats the lip as open unless given its closed fraction per element as
+`burnthrough`. `lip_depth` integrates the closure for given histories.
+
+Defaults (*calibrated*, research notes "Computed LEH closure (2026-10-24)"): fitted to
+the measured effective LEH radius of five HDC basecamp shots (Chen 2020 Fig. 27, 3.37 mm
+LEHs, `chen2020_leh()`) with the lip temperature of the model's own basecamp
+history: `speed`, `depth` and `hold_time`; the hold intensities bracket the rise
+(free closure at 110 TW, held from ~300 TW of 400); rms 0.033 mm over 31 points, about
+the shot-to-shot scatter. `depth` 0.24 mm matches the closure at peak of Young et al.
+2020 (SXI: 1.83 → 1.57 mm, 0.26) and Schneider et al. 2015 (0.84 of 1.55 mm, 0.25); on
+3.1–3.64 mm LEHs a common depth and a common fraction of r₀ cannot be told apart, and
+the model takes the depth (the ridge stands where the beams meet the blow-off). After
+the laser turns off the measured edge moves in ≤ 0.02 mm/ns over 1.7 ns (LASNEX
+0.07–0.11), as the fitted free speed gives at the falling temperature.
+"""
+struct LipClosure <: AlbedoModel
+    speed::Float64
+    exponent::Float64
+    depth::Float64
+    hold_time::Float64
+    hold::NTuple{2,Float64}
+    after::AlbedoModel
+    function LipClosure(speed, exponent, depth, hold_time, hold, after)
+        speed >= 0 && depth >= 0 || throw(ArgumentError("speed and depth must not be negative"))
+        hold_time > 0 || throw(ArgumentError("hold_time must be positive"))
+        0 <= hold[1] < hold[2] || throw(ArgumentError("need 0 ≤ hold[1] < hold[2]"))
+        new(Float64(speed), Float64(exponent), Float64(depth), Float64(hold_time),
+            (Float64(hold[1]), Float64(hold[2])), _albedo_model(after))
+    end
+end
+LipClosure(; speed = 0.022, exponent = 0.5, depth = 0.24, hold_time = 0.4, hold = (6.0, 17.0),
+           after = WallLossAlbedo()) = LipClosure(speed, exponent, depth, hold_time, hold, after)
+
+# The laser's hold on the lip at intensity I (TW/mm² through the hole): 0 free, 1 held.
+function _lip_hold(m::LipClosure, I)
+    x = clamp((I - m.hold[1]) / (m.hold[2] - m.hold[1]), 0.0, 1.0)
+    return x^2 * (3 - 2x)
+end
+
+# The depth after a step Δ from d0, with the step's mean free speed v and hold h:
+# exact for constant coefficients (the hold's relaxation is stiff on 0.25 ns steps).
+function _lip_advance(m::LipClosure, d0, Δ, v, h)
+    h <= 0 && return d0 + v * Δ
+    b = h / m.hold_time
+    deq = ((1 - h) * v + b * m.depth) / b
+    return deq + (d0 - deq) * exp(-b * Δ)
+end
+_lip_speed(m::LipClosure, T) = m.speed * (max(T, zero(T)) / 100)^m.exponent
+
+"""
+    lip_depth(model::LipClosure, times, Tr, intensity; depth = 0.0, floor = Inf) -> Vector
+
+Closure depth `d` (mm inside the initial LEH radius) of a `LipClosure` lip at `times`
+(ns), given the radiation temperature on the lip `Tr` (eV) and the laser intensity
+through the hole `intensity` (TW/mm² over its initial area) at those times: the
+trapezoidal mean of `v(T)` and of the hold over each step, integrated exactly for the
+hold's relaxation (as `drive_history` does). Starts from `depth` at `times[1]`; `floor`
+caps it (the lip's radial extent).
+"""
+function lip_depth(m::LipClosure, times, Tr, intensity; depth::Real = 0.0, floor::Real = Inf)
+    n = length(times)
+    length(Tr) == n && length(intensity) == n ||
+        throw(ArgumentError("times, temperatures and intensities differ in length"))
+    d = zeros(n)
+    d[1] = min(depth, floor)
+    for k in 2:n
+        v = (_lip_speed(m, Tr[k-1]) + _lip_speed(m, Tr[k])) / 2
+        h = (_lip_hold(m, intensity[k-1]) + _lip_hold(m, intensity[k])) / 2
+        d[k] = clamp(_lip_advance(m, d[k-1], times[k] - times[k-1], v, h), 0.0, floor)
+    end
+    return d
+end
+
+# The closed fraction of a lip ring [ra, rb] (radii from the hole's center) when the
+# plasma edge is at radius r: the share of its area outside r.
+_ring_closed(ra, rb, r) = r <= ra ? 1.0 : r >= rb ? 0.0 : (rb^2 - r^2) / (rb^2 - ra^2)
+
+function _lip_split(m::LipClosure, t, T, s)
+    αa = albedo(m.after, t, T)
+    s = s isa Real && !isnan(s) ? clamp(s, 0.0, 1.0) : 0.0
+    return s * αa, αa, (1 - s) + zero(αa)
+end
+albedo(m::LipClosure, t, T = nothing) = first(_lip_split(m, t, T, 0.0))
+
+"""
     CapsuleAlbedo(; albedo = 0.2, radius = nothing)
 
 Albedo of a capsule that absorbs as a sphere of effective radius `R(t)` inside its
@@ -555,6 +667,7 @@ end
 _albedo_split(m::AlbedoModel, t, T, burnthrough) = (α = albedo(m, t, T); (α, α, zero(α)))
 _albedo_split(m::BurnthroughAlbedo, t, T, burnthrough) = _burnthrough_split(m, t, T, burnthrough)
 _albedo_split(m::GapClosure, t, T, burnthrough) = _closure_split(m, t, T)
+_albedo_split(m::LipClosure, t, T, closed) = _lip_split(m, t, T, closed)
 
 # The wall-loss history of a `WallLossAlbedo` element through a `drive_history` step.
 # Lindl's wall energy at constant T, E_w ∝ T^a t^b (a = 4 + p = 3.3, b = 1 + q = 0.62),
@@ -631,7 +744,7 @@ _albedo_split(m::WallLossAlbedo, t, T, h::_WallHistory) =
     (α = first(_wall_split(m, h, T)); (α, α, zero(α)))
 # Whether a model lets part of the flux on it leave the enclosure.
 _transmits(::AlbedoModel) = false
-_transmits(::Union{BurnthroughAlbedo,GapClosure}) = true
+_transmits(::Union{BurnthroughAlbedo,GapClosure,LipClosure}) = true
 
 # Progress of a model's transition at time t (burnthrough time tb): 0 before, 1 after.
 _transition_step(m::BurnthroughAlbedo, t, tb) = _burnthrough_step(m, t, tb)
@@ -805,7 +918,7 @@ A named piece of a target. `kind = :surface` components are opaque: they block l
 rays and lines of sight, absorb laser light, and radiate from their front side (and
 back side when `two_sided`). `kind = :aperture` components (e.g. laser entrance holes)
 are transparent diagnostic surfaces that record the x-ray flux crossing them and
-re-emit nothing, or, with a `GapClosure` albedo, re-emit what a closing lip of plasma
+re-emit nothing, or, with a `GapClosure` or `LipClosure` albedo, re-emit what a closing lip of plasma
 would (see `aperture`). `surface` is the exact `CurvedSurface` the mesh approximates, if any;
 the radiation model then uses the curved geometry (see `view_factors`).
 
@@ -844,9 +957,10 @@ hole, `hohlraum(; leh_closure)`): it re-emits the fraction α(t) = s α_after of
 incident flux and lets `1 - s` escape, booked as escaped by `energy_balance`. It
 converts no laser light. The Monte Carlo reference (`Briareus.montecarlo_incident`) lets
 paths escape through open apertures and re-emits them diffusely from a lip with the
-lip's albedo (given `albedo = albedos(target, time)`).
+lip's albedo (given `albedo = albedos(target, time)`). With a `LipClosure`, the closed
+fraction of each element is `drive_history`'s state instead of a function of time.
 """
-aperture(name, mesh; surface = nothing, closure::Union{Nothing,GapClosure} = nothing) =
+aperture(name, mesh; surface = nothing, closure::Union{Nothing,GapClosure,LipClosure} = nothing) =
     Component(name, mesh, closure === nothing ? BLACK : Material(:plasma; albedo = closure, conversion = 0.0);
               kind = :aperture, surface)
 
