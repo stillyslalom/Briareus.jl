@@ -1356,7 +1356,45 @@ fits below used Briareus's own operator points with a free-form evaluator.
   element folded across the facets of a convex part (13.5 facets per capsule element)
   that mean lies behind the facets, where every ray is blocked (the failure `Target`
   avoids for the centroid by moving it onto the facets). Fix before relying on
-  `:sampled` CAD targets. **H** (measured locally)
+  `:sampled` CAD targets. **H** (measured locally) Fixed the same day: next entry.
+- **Sampled visibility on folded elements (2026-10-24, local and synthetic).** Cause
+  confirmed on a public synthetic cavity (test/partial_visibility.jl: two `cad_half`
+  halves remeshed at 0.6 mm, a 56 × 112 lat-long `cad_sphere` capsule of 0.9 mm at
+  0.3 mm, 48 facets per capsule element, 978 elements, LEH apertures): 3,608 of the
+  capsule's 3,951 samples (91%) sat behind its facets (0–0.9 µm, mean 0.24 µm; the ray
+  offset ε is 0.55 nm) and were blocked along their own normal; no centroid was.
+  Fix in `_visibility_samples`: on an element of more than two facets that is not
+  planar, each cell mean moves along the normal onto the facet the line meets (the
+  rule of `_onto_patch`), or to the nearest sub-triangle point of its cell if it meets
+  none. That alone gave capsule rows 0.9974 against 0.9986 for `:centroid`: every
+  remaining blocked sample ray of the reduced capsule rows (561k of 561k) hit the
+  emitter's own facets, rays toward the horizon of a sample's own facet that the
+  element model (radiating from the mean plane) already counts. So an element of
+  more than two facets no longer occludes its own sample rays (nor the receiver its
+  own). Primitives keep `:sampled` bit for bit (`==` on the bored cavity at 0.5 mm and
+  `hohlraum(h = 0.8, capsule_h = 0.3)`). Raw factors (`closed = false`), a two-ring
+  source on the driven walls, against `montecarlo_incident` (`:element`, 8,000 paths
+  per receiver):
+
+  | synthetic | capsule rows | capsule flux vs MC | driven wall flux vs MC |
+  |---|---|---|---|
+  | `:centroid` | 0.9986 (0.9963–0.9999) | −0.45% | −0.41% |
+  | `:sampled` before | 0.027 (0.000–0.999) | −97.5% | −4.7% |
+  | `:sampled` fixed | 0.9991 (0.9974–1.0005) | −0.33% | −0.32% |
+
+  (MC 0.51716 ± 0.00029 and 0.55423 ± 0.00025.) NIF CAD cavity at 0.6 mm (as in the
+  previous entry, flat, α = 0.7, 4,000 paths): outer capsule rows 0.16 → 0.961
+  (`:centroid` 0.956), flux −86% → −0.31% (`:centroid` +0.03%; MC σ 0.05%); halves
+  (400 elements) rows 0.79 → 0.915 (0.910), flux −15% → −0.67% (`:centroid` −0.81%).
+  View factors 56 s against 27 s for `:centroid` (4 threads, shared machine). On the
+  NIF capsule `:sampled` is now 0.3% further from the reference than `:centroid`;
+  its capsule rows' own change adds +0.04% at fixed radiosity, so the shift comes from
+  the walls' rows. The driven inner wall (ρ 3.0–3.4, 3,000 paths, σ 0.07–0.08%) shows
+  `:centroid`'s capsule figure to be a cancellation: waist / mid / end bands
+  `:centroid` +0.33 / +0.39 / +0.33%, `:sampled` −0.18 / −0.13 / −0.29%, so `:sampled`
+  is closer on every wall band and uniformly slightly low (the raw factors' loss), while
+  `:centroid` is high on the walls and low in the capsule's rows.
+  **H** (synthetic, measured; NIF measured locally)
 
 ### Result tables and fits
 

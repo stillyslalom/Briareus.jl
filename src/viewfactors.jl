@@ -52,7 +52,9 @@ near its extremes to the other's centroid) test whether the pair straddles an oc
 if they all agree with the centroid ray, the factor is the `:centroid` one bit for bit,
 and otherwise rays between the `visibility_grid²` sample points of each element (its
 area lumped into a g × g grid of its tangent plane) give the kernel-weighted visible
-fraction, which scales the unobstructed factor (reciprocity is kept). On a hohlraum with
+fraction, which scales the unobstructed factor (reciprocity is kept). On an element
+folded across more than two facets (remeshed CAD) the samples are put on its facets, and
+its own facets do not occlude them. On a hohlraum with
 0.1 mm LEH bores and a 20 µm waist gap at 0.5 mm, it brings the largest row-sum error
 before balancing from 1.0% to 0.19% on the walls and from 5.9% to 0.7% on the LEH
 apertures, for 2–4× the time; features narrower than a sample cell (the gap's slot) are
@@ -126,7 +128,7 @@ function view_factors(t::Target; near = 3.0, mid = 12.0, level::Integer = 1, exa
     # partial visibility (`visibility = :sampled`): each element's ray samples and probes
     vis = visibility === :sampled ? [_visibility_samples(t, e, visibility_grid) for e in 1:N] : nothing
     ctx = (; t, bvh = t.bvh, C, Nrm, A, planar, concave, recv, cells, qnear, qmid, qfar, qself,
-           size, slack, ε, tri_surf, inside, near2 = near^2, mid2 = mid^2, level, exact_far, vis)
+           size, slack, ε, tri_surf, inside, near2 = near^2, mid2 = mid^2, level, exact_far, vis, multi)
     # rows have i:N pairs, so they are handed out one at a time, longest first, rather
     # than in equal contiguous chunks (the first chunk would carry most of the work)
     next = Threads.Atomic{Int}(1)
@@ -142,7 +144,7 @@ end
 # threaded loop is specialized on the concrete types in `ctx`.
 function _vf_row!(F, ctx, i)
     (; t, bvh, C, Nrm, A, planar, concave, recv, cells, qnear, qmid, qfar, qself, size, slack, ε,
-       tri_surf, inside, near2, mid2, level, exact_far, vis) = ctx
+       tri_surf, inside, near2, mid2, level, exact_far, vis, multi) = ctx
     near_kernel(e, rc) = cells[e] === nothing ? _adaptive_kernel(t, e, rc; mindepth = level + 1) :
                          _cell_kernel(cells[e], rc)
     N = length(A)
@@ -165,7 +167,13 @@ function _vf_row!(F, ctx, i)
         if vis === nothing
             blocked && continue
         else
-            frac = _visible_fraction(bvh, vis[i], vis[j], oi, oj, oi - C[i], oj - C[j], Nrm[i], Nrm[j], blocked, skip)
+            # a folded element's own facets do not occlude its samples: the element model
+            # radiates from its mean plane, and on a convex part each sample's rays toward
+            # the horizon of its own facet would be blocked by that facet or its fold
+            # neighbors (all of the reduced capsule rows on a remeshed CAD sphere)
+            own(k, e) = multi[e] && (t.tri_front[k] == e || t.tri_back[k] == e)
+            skipv = multi[i] || multi[j] ? (k -> skip(k) || own(k, i) || own(k, j)) : skip
+            frac = _visible_fraction(bvh, vis[i], vis[j], oi, oj, oi - C[i], oj - C[j], Nrm[i], Nrm[j], blocked, skipv)
             frac == 0 && continue
         end
         s2 = max(size[i], size[j])^2
@@ -237,8 +245,50 @@ function _visibility_samples(t::Target, e, g)
     keep = findall(>(0), vec(W))
     points = [vec(P)[c] / vec(W)[c] for c in keep]
     weights = vec(W)[keep]
+    # A folded element (remeshed CAD: facets within a few degrees of one plane) has its
+    # cell means off its facets, behind them on a convex part (a capsule), where their
+    # rays start inside the solid and are blocked by the element's own facets. Each is
+    # moved along the normal onto the facet that line meets, as `Target` moves the
+    # centroid (`_onto_patch`), or, if it meets none (a cell mean outside a non-convex
+    # outline), to the nearest sub-triangle point of its cell. Planar elements, and those
+    # of one or two facets (every primitive), keep their samples bit for bit.
+    tris = t.elem_tris[e]
+    if length(tris) > 2
+        h = maximum(norm(p - C) for p in pts)
+        if any(p -> abs(dot(p - C, n)) > 1e-9 * h, pts)
+            cell = [clamp(floor(Int, (u[k] - u0) / du) + 1, 1, g) + g * (clamp(floor(Int, (v[k] - v0) / dv) + 1, 1, g) - 1)
+                    for k in eachindex(pts)]
+            for (i, c) in enumerate(keep)
+                p, hit = _onto_facets(t, tris, points[i], n, h)
+                if !hit
+                    ks = findall(==(c), cell)
+                    p = pts[ks[argmin([norm(pts[k] - points[i]) for k in ks])]]
+                end
+                points[i] = p
+            end
+        end
+    end
     probes = unique!([argmax(p -> dot(points[p] - C, d), eachindex(points)) for d in (e1, -e1, e2, -e2)])
     return _VisSamples(points, weights, probes)
+end
+
+# `p` moved along `n` onto the nearest of the facets `tris` the line through it meets
+# (the rule of `_onto_patch`), and whether it meets one; a move under 1e-9 h is dropped.
+function _onto_facets(t::Target, tris, p, n, h)
+    best = Inf
+    for k in tris
+        a, nt = t.tri_v0[k], cross(t.tri_e1[k], t.tri_e2[k])
+        den = dot(n, nt)
+        den == 0 && continue
+        s = dot(a - p, nt) / den
+        q = p + s * n
+        b, d = a + t.tri_e1[k], a + t.tri_e2[k]
+        tol = -1e-9 * dot(nt, nt)
+        dot(_tri_cross(a, b, q), nt) >= tol && dot(_tri_cross(b, d, q), nt) >= tol &&
+            dot(_tri_cross(d, a, q), nt) >= tol && abs(s) < abs(best) && (best = s)
+    end
+    isfinite(best) || return p, false
+    return abs(best) > 1e-9 * h ? p + best * n : p, true
 end
 
 # Visible fraction of a pair whose centroid ray (from `oi` to `oj`) is `blocked` or not;

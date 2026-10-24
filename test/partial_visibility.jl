@@ -82,3 +82,47 @@ end
         @test F[i, j] ≈ F[j, i]                              # equal areas
     end
 end
+
+# Remeshed CAD (`cad_half`, `cad_mirror`, `cad_sphere` from cadfit.jl, `facet_soup` from
+# meshops.jl): elements folded across many facets (48 per capsule element here). Their
+# sample cells' mean points lay behind a convex part's facets, which blocked 91% of the
+# capsule's sample rays: capsule row sums 0.03 (0.0–0.999) and flux 40× too low (ROADMAP
+# open question 13). Samples now lie on the facets, and an element's own facets do not
+# occlude its samples.
+@testset "sampled visibility on remeshed CAD" begin
+    R, Rout, Rleh, h, th, rc = 2.875, 2.975, 1.55, 4.7, 0.05, 0.9
+    cavity(m) = split_mesh(m, c -> norm(c[1:2]) < R + 0.01 && abs(c[3]) < h + 1e-6)[1]
+    part(name, F, size) = Component(name, cavity(remesh_mesh(orient_mesh(facet_soup(F)); size)),
+                                    name === :capsule ? ablator() : gold())
+    t = Target([part(:top, cad_half(; R, Rout, Rleh, h, t = th, nphi = 360), 0.6),
+                part(:bottom, cad_mirror(cad_half(; R, Rout, Rleh, h, t = th, nphi = 360)), 0.6),
+                part(:capsule, cad_sphere(rc; ntheta = 56, nphi = 112), 0.3),
+                aperture(:leh_top, disk_mesh(Rleh, h; nr = 3, nphi = 24, up = false)),
+                aperture(:leh_bottom, disk_mesh(Rleh, -h; nr = 3, nphi = 24, up = true))]; visibility = :sampled)
+    cap = elements(t, :capsule)
+    A = t.elem_area
+    capmean(x) = sum(x[cap] .* A[cap]) / sum(A[cap])
+    Fs, Fc = view_factors(t), view_factors(t; visibility = :centroid)
+    rs, rsc = vec(sum(Fs; dims = 2)), vec(sum(Fc; dims = 2))
+    # closed cavity (LEH apertures): measured capsule rows 0.9991 (0.9974–1.0005),
+    # centroid rule 0.9986
+    @test minimum(rs[cap]) > 0.995
+    @test abs(capmean(rs) - capmean(rsc)) < 1e-3
+    # a two-ring source on the walls: the capsule's mean flux against the Monte Carlo
+    # radiosity on the same facets (the element model with exact factors), measured
+    # −0.33% sampled, −0.45% centroid (σ 0.06%)
+    P = zeros(nelements(t))
+    for e in elements(t, :top, :bottom)
+        p, n = t.elem_centroid[e], t.elem_normal[e]
+        dot(n, Vec3(p[1], p[2], 0)) < 0 && (P[e] = exp(-((abs(p[3]) - 3.5) / 0.8)^2) * A[e])
+    end
+    Hs = capmean(solve(RadiationModel(t; F = Fs, closed = false), P).H)
+    Hc = capmean(solve(RadiationModel(t; F = Fc, closed = false), P).H)
+    _, batch = Briareus.montecarlo_incident(t, P, cap; paths = 8_000, reemit = :element)
+    m = batch * (A[cap] ./ sum(A[cap]))
+    nb = length(m)
+    Hm = sum(m) / nb
+    se = sqrt(sum(abs2, m .- Hm) / (nb - 1) / nb) / Hm
+    @test abs(Hs / Hm - 1) < 0.006
+    @test abs(Hs / Hm - 1) < abs(Hc / Hm - 1) + 3se
+end

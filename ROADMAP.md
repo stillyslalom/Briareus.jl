@@ -653,6 +653,26 @@ pick the original parts, not `<part>/cylN` pieces).
     default"). Put each sample on the element's facets (as `Target` does the centroid)
     and add a CAD capsule to the partial-visibility tests. The GUI builds `:centroid`
     targets and is unaffected.
+    **Resolved (2026-10-24).** Cause confirmed on a synthetic CAD cavity (the test
+    suite's `cad_half` halves at 0.6 mm, a 56 × 112 lat-long `cad_sphere` capsule at
+    0.3 mm, 48 facets per capsule element): 91% of the capsule's samples sat up to
+    0.9 µm behind its facets (ray offset 0.55 nm) and were blocked along their own
+    normal; no centroid was. `_visibility_samples` now moves each sample of an element
+    of more than two facets along the normal onto the facet that line meets (or to the
+    nearest sub-triangle point of its cell), and such an element's own facets no longer
+    occlude its sample rays (with the samples on the facets, every remaining blocked
+    ray of the reduced capsule rows was the emitter's own fold toward its horizon,
+    which the element model, radiating from the mean plane, already treats). Primitive
+    `:sampled` factors are unchanged bit for bit (bored cavity, `hohlraum()`).
+    Synthetic, against `montecarlo_incident` (`:element`, 8,000 paths): capsule rows
+    0.027 → 0.9991 (`:centroid` 0.9986), capsule flux −97.5% → −0.33% (`:centroid`
+    −0.45%, σ 0.06%), driven wall −0.32% (`:centroid` −0.41%). NIF CAD cavity at 0.6 mm:
+    outer capsule rows (its 259 outward elements) 0.16 → 0.961 (`:centroid` 0.956), flux −86% → −0.31%
+    (`:centroid` +0.03%, σ 0.05%), halves rows 0.79 → 0.915 (0.910), flux −15% →
+    −0.67% (`:centroid` −0.81%), driven inner wall −0.13 to −0.29% by band
+    (`:centroid` +0.33 to +0.39%: its capsule figure is a cancellation of high walls
+    and low capsule rows); view factors 56 s against 27 s. Test:
+    test/partial_visibility.jl, "sampled visibility on remeshed CAD".
 
 ## Next
 1. **VisRad deposition parity: needs runs in VisRad.** The goal: optimize in
