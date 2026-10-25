@@ -1426,3 +1426,7 @@ the reference's view factors hold through the pulse; items 9 and 10 remove that 
     over 1–1.5 ns against 1-D, r–θ and m-rotation (research notes). Open: a 1 µm 3-D
     shell needs the band, whose cost CompactLES's covered-node timestep and tile
     fragility set today, and the band following the shell over a regrid.
+    *Full-model drive (2026-10-25):* the n221204.jl full model (306 eV peak) at
+    ṁ = 2.85e5 T³: 340 km/s, 5.0 % remaining, 24 kJ, stagnation 10.2 ns (bang 9.53).
+    ṁ source: Olson's planar HDC rates (PoP 18, 032706; A ≈ 5e5 T³); runs at that
+    rate and the grid study pending (research notes).

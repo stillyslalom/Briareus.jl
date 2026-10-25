@@ -3734,6 +3734,37 @@ elsewhere. Limits met: a band's coarse level takes the timestep of its covered n
 (8× the uniform grid's steps), and tiled levels failed on this problem; a 1 µm 3-D
 shell (~10⁹ cells uniform) waits on those.
 
+**Update: the full-model drive and an HDC ablation-rate source (2026-10-25; Briareus
+c54e366, CompactLES `briareus-drive-2`).** The drive is now `examples/n221204.jl`'s full
+model (+bubble: `nif_uranium()`, Young's albedo on the K24 schedule, release 1.0,
+calibrated two-zone CBET, measured backscatter, 11 % degradation, wall, lips, bubble),
+coarse mesh 0.8/0.4, steps of 0.1 ns from 0.2 ns to bang (9.53 ns), l ≤ 6 with every m.
+The capsule Tr peaks at 306 eV at 8.0 ns (297 before) and holds 282 eV at 9.0 ns; P2/P0
++0.05 near 3.2 ns, −0.18 at 5.2 ns, +0.09 over 7.2–7.7 ns. Stage 0, 1 µm, ṁ = 2.85e5 T³,
+P₀ recalibrated to 145 Mbar (*calibrated* as before; the checks are PRE 109 Table I,
+HYDRA, N221204: v_imp 383 km/s, ablator remaining 5.7 %, bang 9.61 ns simulated,
+9.53 ± 0.07 measured):
+
+| | stage 0 (new drive) | check |
+|---|---|---|
+| peak DT velocity | 339.5 km/s at 9.26 ns | 383 km/s |
+| ablator remaining at peak velocity | 4.97 % | 5.7 % |
+| KE (ablator + DT inside the front) | 24.0 kJ | 19–33 kJ |
+| stagnation (min. DT mean radius, peak p(0)) | 10.22 / 10.20 ns | bang 9.53–9.61 ns |
+
+Reading (**L**): the stronger, later peak moves peak velocity to 9.26 ns and stagnation
+0.6–0.7 ns past bang; no burn or radiative loss, so stagnation is not bang, but a
+0.6 ns lag is a drive-or-closure timing error, not a definition. Velocity is unchanged
+within the ±10 % grid band (336 → 340). Ablation-rate source independent of v_imp
+(cite-only): Olson et al., PoP 18, 032706 (2011) (OSTI 1114987, abstract: HDC 2–9
+mg cm⁻² ns⁻¹ at 160–260 eV, ≈ T³, planar Omega halfraum burnthrough, **H**); the HDC
+points of SAND2007-5659C (OSTI 1147367, IFSA07; 10 points read from the slide's vector
+plot, 175–255 eV, e.g. 8.3 at 245 ± 5 eV) give ṁ = A T³ with A = 4.9–5.2×10⁵
+g cm⁻² s⁻¹ (free exponent 3.8), ±11 % from Dante's ±3.5 % (**M**); SAND2011-8633C (OSTI
+1141159) uses 0.415 T³ mg cm⁻² ns⁻¹ (4.15×10⁵) for HDC and Ge-CH together. Lindl's
+3×10⁵ is 1.4–1.7× below the HDC data. Runs at 4.15e5 and 5.0e5 and the grid study at the
+adopted rate are pending.
+
 ## Large radiation models (2026-10-24) *derived*
 
 ROADMAP 14. Goal: make 1e4–5e4-element radiation models (the fine hohlraum preset,
