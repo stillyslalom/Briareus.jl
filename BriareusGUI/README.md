@@ -117,7 +117,7 @@ and each analysis says when it is out of date.
   faces (≈ 7,000 of 20,000 elements on that workspace); a thin film modeled as a solid
   that seals the point into a pocket (a capsule tent) is found and left out, and the
   Drive properties list what the cavity kept of each part. A target whose x-ray view
-  factors would not fit in half the memory (`radiation_size`: ≈ 27,000 elements on
+  factors would not fit in half the memory (`radiation_size`: ≈ 160,000 elements on
   32 GB) gets the laser deposition alone, with the reason and the fix in the status.
   A CAD part whose element size changes (its own, the target's, an undo or a loaded
   session bringing back a size not meshed before) is remeshed on worker threads: the

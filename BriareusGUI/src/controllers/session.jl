@@ -432,13 +432,15 @@ const RADIATION_MAX_ELEMENTS = Ref(0)
 """
     radiation_size(t::Target) -> (; elements, bytes, limit, feasible)
 
-Whether the drive can include the x-ray radiation of `t`, whose view factors are dense:
-up to `Briareus.LARGE_MODEL[]` elements (10⁴) the model keeps them with its radiosity
-factorizations, three `N × N` Float64 matrices (24 N² bytes); above it, a large model,
-in Float32 with factorization-free iterative solves (4 N² bytes, research notes, "Large
-radiation models"). `bytes` must fit in half of this machine's memory; `limit` is the
-largest element count that does (or [`RADIATION_MAX_ELEMENTS`](@ref), which then sets
-`feasible`): about 63,000 elements on 32 GB. The mesh presets of the templates stay far
+Whether the drive can include the x-ray radiation of `t`: up to `Briareus.LARGE_MODEL[]`
+elements (10⁴) the model keeps dense view factors with its radiosity factorizations,
+three `N × N` Float64 matrices (24 N² bytes); up to `Briareus.HMATRIX_MODEL[]` (1.5 × 10⁴)
+dense Float32 with factorization-free iterative solves (4 N² bytes, research notes,
+"Large radiation models"); above it hierarchical view factors (`HMatrix`), budgeted at
+250 N^1.5 bytes (2.5 × their storage on a hohlraum; research notes, "Hierarchical view
+factors"). `bytes` must fit in half of this machine's memory; `limit` is the largest
+element count that does (or [`RADIATION_MAX_ELEMENTS`](@ref), which then sets
+`feasible`): about 160,000 elements on 32 GB. The mesh presets of the templates stay far
 below (16,000 elements at `:fine`), but an imported CAD workspace can hold 10⁵ elements.
 Above the limit [`build_scenario!`](@ref) computes the laser deposition alone.
 """
@@ -448,15 +450,23 @@ function radiation_size(t::Target)
     RADIATION_MAX_ELEMENTS[] > 0 &&
         return (; elements = N, bytes, limit = RADIATION_MAX_ELEMENTS[], feasible = N <= RADIATION_MAX_ELEMENTS[])
     mem = 0.5 * Sys.total_memory()
-    large = Briareus.LARGE_MODEL[]
-    # the largest count that fits: on the Float32 path if any above `large` does
-    big = floor(Int, sqrt(mem / 4))
-    limit = big > large ? big : min(large, floor(Int, sqrt(mem / 24)))
+    # the largest count that fits, on the cheapest path that reaches it
+    large, hmat = Briareus.LARGE_MODEL[], Briareus.HMATRIX_MODEL[]
+    nh = floor(Int, (mem / _HMATRIX_BYTES)^(2 / 3))
+    limit = nh > hmat ? nh :
+            (n32 = floor(Int, sqrt(mem / 4)); n32 > large ? min(n32, hmat) : min(large, floor(Int, sqrt(mem / 24))))
     return (; elements = N, bytes, limit, feasible = bytes <= mem)
 end
 
-# Bytes of a radiation model of N elements (see `radiation_size`).
-_radiation_bytes(N::Integer) = (N > Briareus.LARGE_MODEL[] ? 4.0 : 24.0) * Float64(N)^2
+# Bytes of a radiation model of N elements (see `radiation_size`): dense Float64 with two
+# LU factors up to `LARGE_MODEL[]`, Float32 up to `HMATRIX_MODEL[]`, then a hierarchical
+# matrix, budgeted as `_HMATRIX_BYTES` N^1.5 (its storage grows as N^1.5 on a hohlraum:
+# 92 MB at 10.5k elements, 409 MB at 28.6k; the budget is 2.5 × that, for assembly and
+# Krylov bases; research notes, "Hierarchical view factors").
+_radiation_bytes(N::Integer) =
+    N > Briareus.HMATRIX_MODEL[] ? _HMATRIX_BYTES * Float64(N)^1.5 :
+    (N > Briareus.LARGE_MODEL[] ? 4.0 : 24.0) * Float64(N)^2
+const _HMATRIX_BYTES = 250.0
 
 _gb(x) = x >= 2^30 ? @sprintf("%.0f GB", x / 2^30) : @sprintf("%.0f MB", x / 2^20)
 
