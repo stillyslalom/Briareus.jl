@@ -8,6 +8,98 @@ Briareus models and defaults. Confidence levels:
 
 Numbers marked *derived* are our own computations.
 
+Sections are appended as work is done and are not rewritten afterwards: they are the
+provenance of every number they hold. When a later section changes a value, the earlier
+one carries a **Superseded** callout naming the replacement section; numbers in a
+superseded section are of their day. Cross-references quote section titles (a `##`/`###`
+heading or a bold bullet title).
+
+## Contents
+
+Status: *current* unless marked; "in part" means some values were replaced later (the
+callout in the section says which).
+
+**Laser–plasma, facility data and file formats**
+- Cross-beam energy transfer (CBET); Wavelength detuning (NIF); Backscatter; Unconverted
+  light (NIF); NIF quad names and bundles; Pointing and alignment; VisRad; State of the
+  art (pointing design and tools); Beam clearance methodology (clearance defaults).
+- Later search (2026-10-16): LMF Shot RI Resources and the VisRad manual (NIF beam
+  table, CPP spots, TaLIS rules, OMEGA).
+- VisRad interchange formats (2026-10-16): SST, summary, power and workspace formats;
+  "VisRad workspace files (2026-10-17)"; "VisRad deposition parity: hohlraum runs
+  (2026-10-21)" (`VisRadProfile`: growth 0.67, measured plates, the faint wings); "CAD
+  import, remeshing and surface fits" (bullets "Flat CAD elements", "Tori", "Cost of
+  fitting faces of none of the kinds", "Fitting CAD by default", "Sampled visibility on
+  folded elements", "Parts of fitted CAD"); result tables; items to verify at work.
+
+**Radiation, meshes and scale**
+- Gold wall loss and thin-foil burnthrough (2026-10-16); Hohlraum mesh work-precision
+  (2026-10-16); Compact capsule mesh (2026-10-22); Partial visibility (2026-10-22); Monte
+  Carlo radiosity reference for partial visibility (2026-10-22); Balancing on the curved
+  path against a continuum Monte Carlo (2026-10-22); Default capsule mesh and visibility
+  (2026-10-22) *decision*.
+- Large radiation models (2026-10-24); Hierarchical view factors (2026-10-24) (*in
+  part*: `tol`); The H-matrix's N^1.5 remainder (2026-10-25); Deposition-operator rays
+  and sliver view factors (2026-10-25); Compile latency (2026-10-25).
+
+**Design, errors and shot review**
+- Beam-error budgets (2026-10-17); Retuning to a reference drive (2026-10-17); Implosion
+  metrics (2026-10-22); Young 2020 validation (2026-10-24); LEH shield (sombrero)
+  (2026-10-24); Backlighter foil on the line of sight (2026-10-24); Backlighter
+  conversion efficiency and the photometric chain (2026-10-24).
+
+**Hohlraum dynamics and CBET calibration** (HYBRID-E)
+- HYBRID-E (N210808) hohlraum and LEH size (2026-10-20); Literature review against
+  Kritcher et al. 2024 (2026-10-22); Mock HYBRID-E pointing (2026-10-23).
+- Moving wall on keyframes (2026-10-23) (*in part*: speed); Closing entrance holes
+  (2026-10-23); Inner-beam bubble absorption (2026-10-23) (*in part*: defaults); both
+  refitted in Hohlraum dynamics calibrated to published data (2026-10-24); Computed LEH
+  closure (2026-10-24).
+- Two-zone CBET calibrated to PRE 109 Fig. 9 (2026-10-23) (`n221204_cbet`); Joint
+  multi-shot CBET calibration (2026-10-24) (`hybride_cbet`); Joint multi-shot CBET
+  calibration: the null (2026-10-25) (`hybride_cbet_iraum`); Inner-cone SBS time
+  histories and the late-time refraction (2026-10-25).
+
+**Energetics and the N221204 benchmark** (in order; read the last for the current state)
+- N221204 time-dependent benchmark (2026-10-23) (numbers of their day); PRE 109 Fig. 10
+  digitization (2026-10-24).
+- Wall material, conversion and capsule energetics (2026-10-24) (*in part*); N221204
+  late-time drive (2026-10-24) (`wall_history`; numbers of their day); Wall re-emission
+  and the capsule radius (2026-10-24) (*in part*: `release`); Zylstra 2022 LEH pair,
+  time-dependent (2026-10-25); Energetics defaults and the capsule share (2026-10-25)
+  (*in part*; the DU factor is current); Late-time drive: the wall, the plasma and Dante
+  (2026-10-25); The P2 swing: capsule radius, backscatter and the collision
+  (2026-10-25); **Capsule absorption, conversion and the ablating-wall release
+  (2026-10-25)** (the current energetics defaults and N221204 numbers).
+
+**Spectra and diagnostics**
+- Spectral radiosity, M-band and a synthetic Dante (2026-10-24); Dante channel responses
+  and the unfold (2026-10-24); Laser-spot spectrum (2026-10-24) (α_M 0.55 with thermal
+  spots).
+
+**Hydrodynamics coupling**
+- Capsule drive hand-over and CompactLES stage 0 (2026-10-24).
+
+### Where the current defaults are set
+
+| Default (src) | Value | Section |
+|---|---|---|
+| `WallLossAlbedo` `release` | 1.0 | Capsule absorption, conversion and the ablating-wall release §1 (closure: Wall re-emission and the capsule radius §1) |
+| `drive_history` `wall_history`, `wall_release` | on | N221204 late-time drive; Wall re-emission and the capsule radius |
+| `DU_LOSS_FACTOR` (`du_wall_loss`, `uranium`, `nif_uranium`) | 0.836 at 300 eV, T^-0.2, 0.7 µm Au liner | Energetics defaults and the capsule share (factor); Wall material, conversion and capsule energetics §1 (model) |
+| `gold()`, `uranium()` conversion | 0.75 | Capsule absorption, conversion and the ablating-wall release ("What changed") |
+| `nif_conversion()` (`nif_gold`, `nif_uranium`) | 0.7 t^0.12 ≤ 0.95 | Wall material, conversion and capsule energetics §2 |
+| `CapsuleAlbedo` | α_c 0.2, `outside` 0 | Wall material, conversion and capsule energetics §3 (0.2); Capsule absorption, conversion and the ablating-wall release (`outside`) |
+| `WallMotion` | 0.185 mm/ns from 0.8 ns, stopping 0.45 mm in | Hohlraum dynamics calibrated to published data |
+| `BubbleAbsorption` | speed 0.36 mm/ns, delay 0.25 ns, q 1.8, opacity 0.111 | Hohlraum dynamics calibrated to published data |
+| `LipClosure` | 0.022 mm/ns at 100 eV, depth 0.24 mm, hold 0.4 ns | Computed LEH closure |
+| `VisRadProfile` | growth 0.67, measured plates | VisRad deposition parity: hohlraum runs (2026-10-21) |
+| `hohlraum()` capsule mesh, `Target` visibility | `:compact`; `:centroid` (`:sampled` for CAD targets) | Default capsule mesh and visibility |
+| `curved_components` / CAD `fit` | fit on with `remesh`, `minfraction` 1e-3 | "Fitting CAD by default" (`minfraction`) and "Parts of fitted CAD" (fit on), under CAD import |
+| `LARGE_MODEL[]`, `HMATRIX_MODEL[]`, `HMATRIX_DEFAULTS` | 10,000; 15,000; `tol` 1e-6, η 1, leaf 48, maxrank 32 | Large radiation models; Hierarchical view factors; The H-matrix's N^1.5 remainder (`tol`) |
+| `nif_mband()` | outer 0.20, inner 0.042 | Spectral radiosity, M-band and a synthetic Dante §2 |
+| `spectral_solve` `spot` | `:radiation` | Laser-spot spectrum |
+
 ## Cross-beam energy transfer (CBET)
 
 ### Kinetic ray-pair gain
@@ -990,6 +1082,9 @@ fits below used Briareus's own operator points with a free-form evaluator.
   conserves power: at 0.9 TW per beam, 130 TW on the two hohlraum halves, 28.4 TW on the
   waist part, 6.7 TW on two side parts, < 1 mW on the LEH washers (first run at 1 TW per
   beam, scaled).
+
+#### CAD import, remeshing and surface fits (2026-10-17 to 2026-10-24)
+
 - **CAD windings (2026-10-17).** In the NIF workspace all 15 CAD parts are closed
   solids (no boundary edges once vertices are welded by position; 247 non-manifold
   edges in the largest), with 1–25% of the shared edges joining patches of opposite
