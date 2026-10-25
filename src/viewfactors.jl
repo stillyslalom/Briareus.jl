@@ -2,13 +2,17 @@
 
 """
     view_factors(target; near = 3.0, level = 1, visibility = target.visibility, visibility_grid = 4,
-                 storage = Float64) -> Matrix{Float64} or Float32Matrix
+                 storage = Float64, tol, eta, leaf, maxrank) -> Matrix{Float64}, Float32Matrix or HMatrix
 
 Dense view-factor matrix `F[i, j]`: the fraction of diffuse radiation leaving element
 `i` that arrives at element `j`. Reciprocity `Aᵢ Fᵢⱼ = Aⱼ Fⱼᵢ` holds exactly by
 construction, and rows sum to one for a closed enclosure (counting apertures); see
 `closure_error`. `storage = Float32` assembles into a [`Float32Matrix`](@ref) instead
 (half the memory; each factor rounded to single precision, products in Float64).
+`storage = :hmatrix` assembles a hierarchical [`HMatrix`](@ref): near cluster pairs
+dense, far ones of uniform visibility low rank (keywords `tol`, `eta`, `leaf`,
+`maxrank`; `Briareus.HMATRIX_DEFAULTS`); on a hohlraum its assembly and storage grow as
+N^1.3–1.6 instead of N² (2–3× faster, 5–8× smaller at 17–29k elements).
 
 Flat elements use the exact differential-area-to-polygon view factor onto the other
 element, integrated over the emitter: over `4^level` sub-triangle points for pairs
@@ -65,13 +69,32 @@ the same facets, it cuts the balanced capsule a₂/a₀ error there (0.51 → 0.
 """
 function view_factors(t::Target; near = 3.0, mid = 12.0, level::Integer = 1, exact_far::Bool = true,
                       visibility::Symbol = t.visibility, visibility_grid::Integer = 4,
-                      storage::Type = Float64)
+                      storage = Float64, hmatrix...)
     visibility in (:centroid, :sampled) ||
         throw(ArgumentError("visibility must be :centroid or :sampled, got :$visibility"))
     visibility_grid >= 1 || throw(ArgumentError("visibility_grid must be at least 1"))
-    storage in (Float64, Float32) || throw(ArgumentError("storage must be Float64 or Float32, got $storage"))
+    storage in (Float64, Float32, :hmatrix) ||
+        throw(ArgumentError("storage must be Float64, Float32 or :hmatrix, got $storage"))
+    storage === :hmatrix || isempty(hmatrix) ||
+        throw(ArgumentError("keywords $(join(keys(hmatrix), ", ")) apply to storage = :hmatrix only"))
+    ctx = _vf_context(t; near, mid, level, exact_far, visibility, visibility_grid)
+    storage === :hmatrix && return _hmatrix_view_factors(ctx; hmatrix...)
     N = nelements(t)
     F = storage === Float32 ? Float32Matrix(zeros(Float32, N, N)) : zeros(N, N)
+    # rows have i:N pairs, so they are handed out one at a time, longest first, rather
+    # than in equal contiguous chunks (the first chunk would carry most of the work)
+    next = Threads.Atomic{Int}(1)
+    @sync for _ in 1:min(Threads.nthreads(), N)
+        Threads.@spawn while (i = Threads.atomic_add!(next, 1)) <= N
+            _vf_row!(F, ctx, i)
+        end
+    end
+    return F
+end
+
+# Everything the pair kernel `_vf_pair` reads.
+function _vf_context(t::Target; near, mid, level, exact_far, visibility, visibility_grid)
+    N = nelements(t)
     C, Nrm, A = t.elem_centroid, t.elem_normal, t.elem_area
     curved = t.elem_curved .!= 0
     # planar elements (flat facets and polar sectors) receive through the exact
@@ -130,78 +153,90 @@ function view_factors(t::Target; near = 3.0, mid = 12.0, level::Integer = 1, exa
     end
     # partial visibility (`visibility = :sampled`): each element's ray samples and probes
     vis = visibility === :sampled ? [_visibility_samples(t, e, visibility_grid) for e in 1:N] : nothing
-    ctx = (; t, bvh = t.bvh, C, Nrm, A, planar, concave, recv, cells, qnear, qmid, qfar, qself,
+    return (; t, bvh = t.bvh, C, Nrm, A, planar, concave, recv, cells, qnear, qmid, qfar, qself,
            size, slack, ε, tri_surf, inside, near2 = near^2, mid2 = mid^2, level, exact_far, vis, multi)
-    # rows have i:N pairs, so they are handed out one at a time, longest first, rather
-    # than in equal contiguous chunks (the first chunk would carry most of the work)
-    next = Threads.Atomic{Int}(1)
-    @sync for _ in 1:min(Threads.nthreads(), N)
-        Threads.@spawn while (i = Threads.atomic_add!(next, 1)) <= N
-            _vf_row!(F, ctx, i)
-        end
-    end
-    return F
 end
 
 # Row i of the view-factor matrix (pairs i < j), behind a function barrier so the
 # threaded loop is specialized on the concrete types in `ctx`.
 function _vf_row!(F, ctx, i)
-    (; t, bvh, C, Nrm, A, planar, concave, recv, cells, qnear, qmid, qfar, qself, size, slack, ε,
-       tri_surf, inside, near2, mid2, level, exact_far, vis, multi) = ctx
-    # (`cells` is untyped: assert the kernel's type, or every pair's factor is boxed)
-    near_kernel(e, rc) = (cells[e] === nothing ? _adaptive_kernel(t, e, rc; mindepth = level + 1) :
-                          _cell_kernel(cells[e], rc))::Float64
+    A = ctx.A
     N = length(A)
-    if concave[i]
-        F[i, i] = _self_kernel(qself[i]) / A[i]
+    if ctx.concave[i]
+        F[i, i] = _self_kernel(ctx.qself[i]) / A[i]
     end
     for j in i+1:N
-        d = C[j] - C[i]
-        r2 = dot(d, d)
-        r2 == 0 && continue
-        # elements must face each other (centroid test, relaxed on curved surfaces)
-        r = sqrt(r2)
-        ci, cj = dot(Nrm[i], d) / r, -dot(Nrm[j], d) / r
-        ci > -slack[i] && cj > -slack[j] || continue
-        oi = C[i] + (ε + size[i] * max(0.0, -ci)) * Nrm[i]
-        oj = C[j] + (ε + size[j] * max(0.0, -cj)) * Nrm[j]
-        skip = k -> (s = tri_surf[k]; s != 0 && inside[s, i] && inside[s, j])
-        blocked = any_hit(bvh, oi, oj - oi, 1 - 1e-9, skip)
-        frac = 1.0
-        if vis === nothing
-            blocked && continue
-        else
-            # a folded element's own facets do not occlude its samples: the element model
-            # radiates from its mean plane, and on a convex part each sample's rays toward
-            # the horizon of its own facet would be blocked by that facet or its fold
-            # neighbors (all of the reduced capsule rows on a remeshed CAD sphere)
-            own(k, e) = multi[e] && (t.tri_front[k] == e || t.tri_back[k] == e)
-            skipv = multi[i] || multi[j] ? (k -> skip(k) || own(k, i) || own(k, j)) : skip
-            frac = _visible_fraction(bvh, vis[i], vis[j], oi, oj, oi - C[i], oj - C[j], Nrm[i], Nrm[j], blocked, skipv)
-            frac == 0 && continue
-        end
-        s2 = max(size[i], size[j])^2
-        tier = r2 < near2 * s2 ? :near : r2 < mid2 * s2 ? :mid : :far
-        # G = Aᵢ Fᵢⱼ = Aⱼ Fⱼᵢ
-        if planar[i] && planar[j]
-            if tier === :near
-                G = (near_kernel(i, recv[j]) + near_kernel(j, recv[i])) / 2
-            elseif exact_far
-                G = (_pair_kernel(qfar[i], recv[j]) + _pair_kernel(qfar[j], recv[i])) / 2
-            else
-                G = dot(Nrm[i], d) * -dot(Nrm[j], d) * A[i] * A[j] / (π * r2^2)
-            end
-        else
-            q = tier === :near ? qnear : tier === :mid ? qmid : qfar
-            G = !planar[i] && !planar[j] ? _point_kernel(q[i], q[j]) :
-                tier === :near ? (planar[j] ? near_kernel(i, recv[j]) : near_kernel(j, recv[i])) :
-                planar[j] ? _pair_kernel(q[i], recv[j]) : _pair_kernel(q[j], recv[i])
-        end
-        frac == 1 || (G *= frac)
+        G = _vf_pair(ctx, i, j)
+        G == 0 && continue
         F[i, j] = G / A[i]
         F[j, i] = G / A[j]
     end
     return nothing
+end
+
+# Exchange factor G = Aᵢ Fᵢⱼ = Aⱼ Fⱼᵢ of the pair i < j (zero if they do not face or
+# see each other); `_vf_exchange` takes any order and the diagonal.
+_vf_exchange(ctx, i, j) = i == j ? (ctx.concave[i] ? _self_kernel(ctx.qself[i]) : 0.0) :
+                          i < j ? _vf_pair(ctx, i, j) : _vf_pair(ctx, j, i)
+
+# Visibility of the pair i < j: -1 if they do not face each other (or coincide), else
+# the visible fraction (0 or 1 by the centroid ray, between with `:sampled`); and the
+# centroid separation `d` with its square.
+function _vf_visible(ctx, i, j)
+    (; t, bvh, C, Nrm, size, slack, ε, tri_surf, inside, vis, multi) = ctx
+    d = C[j] - C[i]
+    r2 = dot(d, d)
+    r2 == 0 && return -1.0, d, r2
+    # elements must face each other (centroid test, relaxed on curved surfaces)
+    r = sqrt(r2)
+    ci, cj = dot(Nrm[i], d) / r, -dot(Nrm[j], d) / r
+    ci > -slack[i] && cj > -slack[j] || return -1.0, d, r2
+    oi = C[i] + (ε + size[i] * max(0.0, -ci)) * Nrm[i]
+    oj = C[j] + (ε + size[j] * max(0.0, -cj)) * Nrm[j]
+    skip = k -> (s = tri_surf[k]; s != 0 && inside[s, i] && inside[s, j])
+    blocked = any_hit(bvh, oi, oj - oi, 1 - 1e-9, skip)
+    vis === nothing && return blocked ? 0.0 : 1.0, d, r2
+    # a folded element's own facets do not occlude its samples: the element model
+    # radiates from its mean plane, and on a convex part each sample's rays toward
+    # the horizon of its own facet would be blocked by that facet or its fold
+    # neighbors (all of the reduced capsule rows on a remeshed CAD sphere)
+    own(k, e) = multi[e] && (t.tri_front[k] == e || t.tri_back[k] == e)
+    skipv = multi[i] || multi[j] ? (k -> skip(k) || own(k, i) || own(k, j)) : skip
+    frac = _visible_fraction(bvh, vis[i], vis[j], oi, oj, oi - C[i], oj - C[j], Nrm[i], Nrm[j], blocked, skipv)
+    return frac, d, r2
+end
+
+function _vf_pair(ctx, i, j)
+    frac, d, r2 = _vf_visible(ctx, i, j)
+    frac <= 0 && return 0.0
+    return _vf_kernel(ctx, i, j, frac, d, r2)
+end
+
+# G of the pair i < j that faces and sees itself by the fraction `frac` > 0.
+function _vf_kernel(ctx, i, j, frac, d, r2)
+    (; t, Nrm, A, planar, recv, cells, qnear, qmid, qfar, size, near2, mid2, level, exact_far) = ctx
+    # (`cells` is untyped: assert the kernel's type, or every pair's factor is boxed)
+    near_kernel(e, rc) = (cells[e] === nothing ? _adaptive_kernel(t, e, rc; mindepth = level + 1) :
+                          _cell_kernel(cells[e], rc))::Float64
+    s2 = max(size[i], size[j])^2
+    tier = r2 < near2 * s2 ? :near : r2 < mid2 * s2 ? :mid : :far
+    # G = Aᵢ Fᵢⱼ = Aⱼ Fⱼᵢ
+    if planar[i] && planar[j]
+        if tier === :near
+            G = (near_kernel(i, recv[j]) + near_kernel(j, recv[i])) / 2
+        elseif exact_far
+            G = (_pair_kernel(qfar[i], recv[j]) + _pair_kernel(qfar[j], recv[i])) / 2
+        else
+            G = dot(Nrm[i], d) * -dot(Nrm[j], d) * A[i] * A[j] / (π * r2^2)
+        end
+    else
+        q = tier === :near ? qnear : tier === :mid ? qmid : qfar
+        G = !planar[i] && !planar[j] ? _point_kernel(q[i], q[j]) :
+            tier === :near ? (planar[j] ? near_kernel(i, recv[j]) : near_kernel(j, recv[i])) :
+            planar[j] ? _pair_kernel(q[i], recv[j]) : _pair_kernel(q[j], recv[i])
+    end
+    frac == 1 || (G *= frac)
+    return G::Float64
 end
 
 # ------------------------------------------------------------ partial visibility

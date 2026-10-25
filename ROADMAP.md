@@ -636,6 +636,20 @@ Research notes, "Large radiation models (2026-10-24)". Item 14's first part.
 - View-factor assembly 17–45 % faster, bit for bit (a boxed near-pair factor): 17.6k
   56 → 31 s on 4 threads.
 
+## Done (2026-10-24, hierarchical view factors)
+Research notes, "Hierarchical view factors (2026-10-24)". Item 14's second part.
+- **`HMatrix`** (`view_factors(...; storage = :hmatrix)`, `RadiationModel(...; storage =
+  :hmatrix)`): the symmetric exchange G = A F once per pair on a cluster tree; near and
+  partly visible blocks dense Float32 with `view_factors`' own entries, far blocks of
+  uniform visibility (shaft culling, convex-part and plane exclusions, exact leaf masks;
+  never sampled) by ACA to `tol` = 1e-5. Reciprocity exact; closure by a diagonal
+  scaling through products. Default above `Briareus.HMATRIX_MODEL[]` = 15,000 elements;
+  small models and the dense paths unchanged bit for bit.
+- Against dense Float32: capsule a₀, P2/P0, P4/P0 within 3e-8 at 10.5k and 17.6k.
+  Assembly 13.4 → 7.6 s (10.5k), 31 → 17 s (17.6k), 102 → 35 s (29k); stored 1.2 GB →
+  240 MB at 17.6k; 49.8k in 82 s and 1.0 GB (max RSS 2.3 GB). Grows as N^1.4–1.6, not
+  N log N: the capsule's shadow edges and corner clusters stay dense.
+
 ## Done (2026-10-24, N221204 late-time drive)
 Research notes, "N221204 late-time drive (2026-10-24)". Item 16.
 - **Wall loss from each element's temperature history** (`drive_history(...;
@@ -1127,11 +1141,12 @@ the reference's view factors hold through the pulse; items 9 and 10 remove that 
     time-resolved M-band P2 history against Dewald's Fig. 10 on a moving hohlraum; the
     M-band split in the `CapsuleDrive` handover (item 17).
 14. **Scale.** Float32 storage and iterative radiosity: **done (2026-10-24, see Done)**;
-    above 10⁴ elements by default, 17.6k in 2.3 GB, 29k in 4.5 GB. Still open, in order
-    (research notes, "Large radiation models"): hierarchical (H-matrix) view factors,
-    since assembly and storage stay N² (31 s and 1.2 GB at 17.6k, ~190 s and 6.4 GB
-    extrapolated to 40k; the iterative path needs only products, so an H-matrix plugs
-    in as another matrix type); GPU mat-vecs (≲ 25 % end to end on the RTX 2060 while
+    above 10⁴ elements by default, 17.6k in 2.3 GB, 29k in 4.5 GB. Hierarchical view
+    factors (`HMatrix`): **done (2026-10-24, see Done)**, above 1.5 × 10⁴ by default,
+    49.8k in 82 s and 2.3 GB. Still open, in order (research notes, "Large radiation
+    models", "Hierarchical view factors"): the N^1.5 remainder of the H-matrix (shadow-edge
+    blocks as kernel × mask, corner clusters that do not compress, ACA give-ups ~20 % of
+    assembly); GPU mat-vecs (≲ 25 % end to end on the RTX 2060 while
     assembly stays on the CPU; not worth CUDA.jl yet); `radiation_size` in BriareusGUI
     still budgets three dense Float64 matrices (now 4N² bytes above 10⁴ elements).
 15. **Polar direct drive mode**, benchmarked against published GA optimizers.

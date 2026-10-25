@@ -1129,4 +1129,5 @@ include("capsule_drive.jl")
 include("spectral.jl")
 include("dante_response.jl")
 include("large_models.jl")
+include("hmatrix.jl")
 end

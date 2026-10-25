@@ -58,10 +58,11 @@ unchanged albedos skip the factorization. The cache is thread-safe. Do not mutat
 after the first solve (or call `Briareus.empty_cache!(model)` if you do).
 
 Large models (more than `Briareus.LARGE_MODEL[]` = 10,000 elements by default) keep the
-view factors they compute in a [`Float32Matrix`](@ref) (`storage = :auto`; pass
-`Float64` or `Float32` to choose) and solve by GMRES without factorizations
-(`solver = :auto`; `:direct` or `:iterative` to choose; a given `F` keeps its storage
-unless `storage` names the other one). Each GMRES iteration is one product with `F`
+view factors they compute in a [`Float32Matrix`](@ref), above `Briareus.HMATRIX_MODEL[]`
+= 15,000 in a hierarchical [`HMatrix`](@ref) (`storage = :auto`; pass `Float64`,
+`Float32` or `:hmatrix` to choose), and solve by GMRES without factorizations (`solver =
+:auto`; `:direct` or `:iterative` to choose; a given `F` keeps its storage unless
+`storage` names another; an `HMatrix` is solved iteratively only). Each GMRES iteration is one product with `F`
 accumulated in Float64, so iterative solves reach the same relative residual (1e-12)
 as the preconditioned ones; Float32 storage changes the capsule moments by ~1e-8
 relative (research notes, "Large radiation models"). `RadiationModel(target, F;
@@ -75,9 +76,11 @@ struct RadiationModel{M<:AbstractMatrix{Float64}}
     function RadiationModel(t::Target, F::AbstractMatrix; solver::Symbol = :auto)
         solver in (:auto, :direct, :iterative) ||
             throw(ArgumentError("solver must be :auto, :direct or :iterative, got :$solver"))
-        F = F isa Float32Matrix ? F : convert(Matrix{Float64}, F)
+        F = F isa Union{Float32Matrix,_OperatorMatrix} ? F : convert(Matrix{Float64}, F)
+        F isa _OperatorMatrix && solver === :direct &&
+            throw(ArgumentError("hierarchical view factors (HMatrix) are solved iteratively only"))
         iterative = solver === :iterative ||
-                    (solver === :auto && (F isa Float32Matrix || size(F, 1) > LARGE_MODEL[]))
+                    (solver === :auto && (F isa Union{Float32Matrix,_OperatorMatrix} || size(F, 1) > LARGE_MODEL[]))
         return new{typeof(F)}(t, F, _FactorCache(), iterative)
     end
 end
@@ -93,17 +96,31 @@ default. A dense Float64 model holds the view factors and up to two LU factoriza
 """
 const LARGE_MODEL = Ref(10_000)
 
+"""
+    Briareus.HMATRIX_MODEL[]
+
+Element count above which `RadiationModel` computes hierarchical view factors
+([`HMatrix`](@ref), `storage = :auto`): 15,000 by default. At 17.6k elements (the fine
+hohlraum preset) they assemble in half the time of the Float32 matrix and take a fifth
+of its memory, and change the capsule moments by ~1e-8 (research notes, "Hierarchical
+view factors").
+"""
+const HMATRIX_MODEL = Ref(15_000)
+
 function RadiationModel(t::Target; F = nothing, closed::Union{Bool,Nothing} = nothing,
                         storage = :auto, solver::Symbol = :auto, kwargs...)
-    storage in (:auto, Float64, Float32) ||
-        throw(ArgumentError("storage must be :auto, Float64 or Float32, got $storage"))
+    storage in (:auto, Float64, Float32, :hmatrix) ||
+        throw(ArgumentError("storage must be :auto, Float64, Float32 or :hmatrix, got $storage"))
     closed = something(closed, F === nothing && t.closed)
     if F === nothing
-        st = storage === :auto ? (nelements(t) > LARGE_MODEL[] ? Float32 : Float64) : storage
+        N = nelements(t)
+        st = storage === :auto ? (N > HMATRIX_MODEL[] ? :hmatrix : N > LARGE_MODEL[] ? Float32 : Float64) : storage
         F = view_factors(t; storage = st, kwargs...)
+    elseif storage === :hmatrix && !(F isa HMatrix)
+        throw(ArgumentError("storage = :hmatrix computes the view factors: pass no F"))
     elseif storage === Float32 && !(F isa Float32Matrix)
         F = Float32Matrix(F)
-    elseif storage === Float64 && F isa Float32Matrix
+    elseif storage === Float64 && F isa Union{Float32Matrix,HMatrix}
         F = Matrix{Float64}(F)
     elseif closed
         F = copy(F)                 # balanced below: the caller's matrix is left alone
@@ -138,7 +155,7 @@ end
 
 function Base.show(io::IO, m::RadiationModel)
     print(io, "RadiationModel(", nelements(m.target), " elements",
-          m.F isa Float32Matrix ? ", Float32" : "", m.iterative ? ", iterative" : "", ")")
+          m.F isa Float32Matrix ? ", Float32" : m.F isa _OperatorMatrix ? ", hierarchical" : "", m.iterative ? ", iterative" : "", ")")
 end
 
 # LU factorization of I - diag(α) F, from the model's cache when α was seen recently.
@@ -717,7 +734,7 @@ function flux_response(m::RadiationModel, observed::AbstractVector{<:Integer}; t
         conversions(t, time, laser === nothing ? nothing : ForwardDiff.value.(laser))
     # R = F[obs,:] M⁻¹ diag(η ./ A)  ⇒  Rᵀ = diag(η ./ A) M⁻ᵀ F[obs,:]ᵀ
     rhs = if weights === nothing
-        Matrix(transpose(view(m.F, observed, :)))
+        _rows_transposed(m.F, observed)
     else
         # (weights F[obs,:])ᵀ as one BLAS product over all elements
         Wn = zeros(size(weights, 1), nelements(t))
@@ -726,6 +743,16 @@ function flux_response(m::RadiationModel, observed::AbstractVector{<:Integer}; t
     end
     X = m.iterative ? _iterative_transposed(m, α, rhs) : ldiv!(_radiosity_lu(m, α)', rhs)
     return Matrix(transpose(X .* (η ./ t.elem_area)))
+end
+
+# F[observed, :]ᵀ (an HMatrix by products with unit vectors)
+_rows_transposed(F::AbstractMatrix, observed) = Matrix(transpose(view(F, observed, :)))
+function _rows_transposed(F::_OperatorMatrix, observed)
+    E = zeros(size(F, 1), length(observed))
+    for (k, i) in enumerate(observed)
+        E[i, k] = 1.0
+    end
+    return transpose(F) * E
 end
 
 """

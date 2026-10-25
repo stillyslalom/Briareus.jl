@@ -3843,7 +3843,140 @@ products, block GMRES, solve/flux_response/duals/drive_history/Scenario gradient
   assembly. It needs only `mul!` with F and Fᵀ and row sums: the iterative path here
   already uses nothing else, so an H-matrix type plugs in as another
   `AbstractMatrix{Float64}` (balancing is a diagonal scaling s F s). Reciprocity per
-  block (G = AF symmetric) halves it again.
+  block (G = AF symmetric) halves it again. Built: next section, "Hierarchical view
+  factors".
+
+## Hierarchical view factors (2026-10-24) *derived*
+
+ROADMAP 14, the step after "Large radiation models": view factors whose assembly and
+storage do not grow as N², as another matrix type (`HMatrix`, `src/hmatrix.jl`) that the
+iterative path uses through products only. `view_factors(t; storage = :hmatrix)`,
+`RadiationModel(t; storage = :hmatrix)`, and `RadiationModel`'s default above
+`Briareus.HMATRIX_MODEL[]` = 15,000 elements. Workload and machine as in "Large radiation
+models" (GUI NIF hohlraum 10.1 × 2.875 mm, LEH 1.55, capsule 0.9, `WallLossAlbedo` wall,
+NIF quads aimed at z = ±4; 4 threads, another job sharing the machine); script: the
+session's scratchpad `hmat/bench.jl` (warm: a small target through the same path first).
+
+### Design
+
+- **What is stored.** The exchange matrix G = A F (symmetric), once per unordered pair:
+  a cluster tree by median bisection of the centroids along the longest box axis (leaves
+  ≤ 48 elements), blocks of the upper triangle only (Gᵀ blocks implied), `F = A⁻¹ S G S`
+  with a balancing diagonal S. Reciprocity is exact; `enforce_closure!` (Sinkhorn, one
+  product per iteration) updates S only. Dense blocks (near pairs, leaf pairs that do
+  not compress) are Float32 with the entries `view_factors` computes (`_vf_pair`, now
+  split from the row loop; the dense path is bit for bit unchanged). Low-rank blocks are
+  U Vᵀ (Float32 factors), and "scattered" dense blocks on index lists hold the rows a
+  facing test cuts.
+- **Admissibility.** Cluster boxes (centroids padded by element size) at least η × the
+  larger diameter apart (η = 1). Then, per block:
+  1. *Facing* (box test, no rays): rows whose element faces no corner of the other
+     cluster's centroid box (beyond the facing test's slack) are zero; a block with
+     none is zero. Small blocks (≤ 16 leaf²) take the facing test pair by pair: a block
+     facing itself in under a quarter of its rows × columns (a capsule cluster at the
+     terminator seen by a wall cluster: 93–100% zeros, ACA finds zero rows and stops)
+     is stored dense on those.
+  2. *Shaft culling* (Haines & Wallace 1994): the convex hull of the two boxes (the union
+     box's faces plus the planes through one axis-parallel edge of each box) is searched
+     in the BVH for facets that could occlude a segment between the clusters. Not
+     occluders: facets of a curved surface (cylinder, sphere, cone) both clusters lie
+     inside (`_vf_visible`'s own rule); facets of a convex closed component with
+     outward normals (a capsule; checked vertex against facet, ≤ 2e9 pairs) when one
+     cluster lies on it with one facet per element (a segment leaving a face of a convex
+     polyhedron outward does not come back); facets whose plane has both clusters
+     strictly in front (by 2ε) or in that plane with its normal (caps and LEH discs,
+     corner clusters with the wall in front of the cap). An empty shaft makes every
+     facing pair wholly visible, so its entries skip the ray (`_vf_pair_free`: pairs
+     facing beyond the slack; slack-admitted pairs still take theirs).
+  3. *Hidden by a convex part*: if a convex component's inscribed ball (about the vertex
+     mean) blocks every segment between the boxes — each corner of one box inside the
+     ball's shadow cone from each corner of the other, beyond that corner's polar plane;
+     the shadow beyond the polar plane is convex, which carries the corner test to the
+     boxes — and both boxes lie outside its circumscribed ball, the block is zero.
+  4. An occupied shaft refines to leaf pairs, which cast every pair's ray: wholly hidden
+     → zero, wholly visible → cross approximation, partly seen (a shadow edge,
+     `:sampled` fractions) → dense on the known mask.
+  Visibility is never decided by sampling: rays between 7 representatives per cluster
+  plus 32 random pairs (the first design) passed cap-to-cap blocks 0.5% occluded by the
+  capsule (6 of 1280 entries, each a full entry), a 3% block error, and the sampled
+  check of the cross approximation passed them too. Sampled hidden/visible decisions
+  on occupied blocks of up to 4 leaves a side (with exact leaves) were 1.25× faster at
+  28.6k but left element H errors of 5e-4 (moments 1e-7): dropped.
+- **Low rank.** ACA with partial pivoting on the exact entries, stopped at a relative
+  Frobenius estimate `tol` (1e-5), given up early when the terms' decay extrapolated
+  (over the last 4) misses `3 tol` at `maxrank` (32, and ≤ 3mn/4(m+n) so it pays), QR +
+  SVD recompression to `tol`, then a sampled check ((m+n)/2 entries, error ≤ 10 tol of
+  the block). An empty result never proves a zero block (it did: capsule clusters whose
+  sampled rows were all behind; 5.8e-4 of ‖F‖ dropped). Rows facing the other box
+  wholly get the approximation and the few cut by the facing test (≤ half) stay dense.
+- **Products.** Blocks grouped in row order into one run per thread of about equal
+  cost, each into its own buffer, summed in group order (deterministic for a thread
+  count); 16 columns at a time; fused kernels (one pass over a dense block for its
+  block and its transpose). Dual vectors go through the values-and-partials matrix.
+  Keyframes of hierarchical models interpolate as an operator (`_BlendedExchange`, the
+  two keyframe operators with per-row weights and its own balancing), since their blocks
+  differ.
+
+### Accuracy (defaults tol 1e-5, η 1, leaf 48)
+
+Against the dense Float32 path on the same mesh (balanced, T-dependent albedo solve at
+2 ns), and at 28.6k against an `HMatrix` at tol 1e-7 (dense Float32 there needs 3.3 GB
+of F next to the other job):
+
+| N | capsule a₀ | P2/P0 | P4/P0 | H per element, max (median) | row sums | moment response |
+|---|---|---|---|---|---|---|
+| 10,484 | 3.1e-8 | 4.2e-8 | 2.6e-8 | 8.6e-5 (3.6e-8) | 1.7e-8 | 6.6e-5 |
+| 17,632 | 1.4e-9 | 2.7e-10 | 2.8e-8 | 8.6e-6 (4.7e-8) | 1.1e-8 | 4.6e-6 |
+| 28,628 (vs tol 1e-7) | 5.0e-9 | 9e-9 | 4.5e-9 | 3.5e-6 (6.3e-8) | — | 7.1e-6 |
+
+(a₀ relative, P-ratios absolute, the rest relative.) tol 1e-4 moves the moments by
+2–9e-7 for 3–5% less time; 1e-6 by ≤ 1e-8 for ~30% more. On small targets with rims,
+bores, a waist gap, corner fillets, remeshed CAD (48 facets per capsule element) and
+`:sampled` visibility (`test/hmatrix.jl`, leaves of 16), every G entry matches
+`view_factors` to < 1e-5 of the largest. Non-public CAD was not run.
+
+### Time and memory (warm view-factor assembly; dense rows from "Large radiation models")
+
+| N | 10,484 | 17,632 | 28,628 | 49,800 |
+|---|---|---|---|---|
+| Float32 dense: view factors | 13.4 s | 31.4 s | 101.6 s (29.1k) | ~300 s (est.) |
+| Float32 dense: F | 419 MB | 1,186 MB | 3,278 MB | 9,920 MB (does not fit) |
+| HMatrix: view factors | 7.6 s | 17.3 s | 34.8 s | 82.2 s |
+| HMatrix: stored | 122 MB | 240 MB | 432 MB | 1,004 MB |
+| HMatrix: max RSS, whole run | 0.85 GB | 1.00 GB | 1.36 GB | 2.26 GB |
+| F x (HMatrix) | 7 ms | 19 ms | 34 ms | 81 ms |
+| closure (Sinkhorn) | 0.5 s | 1.2 s | 2.1 s | 5.5 s |
+| T-dep. solve, warm | 0.5 s | 0.7 s | 0.8 s | 1.6 s |
+| 5-row moment response | 0.4 s | 1.1 s | 2.0 s | 5.7 s |
+| mean rank of low-rank blocks | 7.5 | 6.9 | 6.0 | 5.6 |
+| dense entries (incl. scattered) | 27M | 50M | 81M | 199M |
+
+Assembly grows as N^1.4–1.6 and storage as N^1.2–1.5, not N log N: what remains dense
+is the capsule's shadow edges (wall-to-wall leaf pairs partly hidden: 1.4k → 24k mixed
+leaf pairs from 10k to 50k, the N^1.5 of a 3-D boundary in the 4-D pair space), leaf
+pairs that do not compress (corner clusters of cap and wall seen past the capsule's
+terminator; 3k → 100k ACA give-ups), and the near field. Wholly hidden blocks are rare
+(the ball certificate fires on 4 → 2.7k blocks): the capsule's umbra is small against
+the cavity. Profile at 28.6k (before the ray-free entries): rays were half the time;
+with them, ACA ~45% (half of it on blocks that give up), dense leaves ~30%, leaf masks
+~10%.
+
+### Defaults
+
+Above 15,000 elements `RadiationModel` takes the HMatrix (2× faster and 5× smaller at
+17.6k, moments within 1e-8); 10–15k stays Float32 (1.8× faster and 3.4× smaller at
+10.5k too, but the element-wise H error there reaches 8.6e-5 at an LEH element). Small
+models are unchanged bit for bit (dense Float64 + LU), and so is the dense path itself.
+The precompile workload runs a hierarchical model (leaves of 16) on its coarse hohlraum.
+
+### Open
+
+- The N^1.5 terms: low rank of the shadow-edge blocks as kernel × mask (the mask is the
+  costly part: a ray per pair), and a better split of corner clusters (cap + wall in one
+  leaf) so their blocks compress.
+- ACA give-ups cost ~20% of assembly; a cheaper predictor (the facing fraction, the
+  shaft) could skip hopeless attempts.
+- GUI `radiation_size` should budget an HMatrix (~0.2 GB per 10k elements here).
 
 ## N221204 late-time drive (2026-10-24) *derived*
 
