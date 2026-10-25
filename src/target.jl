@@ -1033,7 +1033,17 @@ laser light as a loss but is not modeled radiatively.
 `closed = true` declares that the elements (apertures included) form a closed enclosure,
 so `RadiationModel` balances its view factors by default (`enforce_closure!`).
 `hohlraum` sets it; a target assembled from its components does not, since added parts
-(a foil, a sombrero) may lie outside the enclosure.
+(a foil, a sombrero) may lie outside the enclosure. Declare it (here, or `cad_target(...;
+closed = true)`) when apertures cover every opening ([`open_fraction`](@ref) shows where
+facets leak). On bored entrance holes, waist gaps, windows and CAD cavities so
+closed, balancing brings the loss through the apertures within 0.2 % of a continuum
+Monte Carlo with `:sampled` visibility (raw factors up to 0.8 % off) and the capsule
+drive within 0.07 %, and moves the capsule's a₂/a₀ by at most 0.08 pp (toward the
+reference where it moves it most). With `:centroid`, rims leave the raw loss 2–3 % high
+and balancing brings it within 0.4 %, but moves a₂/a₀ by 0.1–0.3 pp, toward the reference
+or away from it. Flat facets must be watertight for it: balancing a cracked mesh adds the
+exchange the cracks lose (research notes, "Closure on bored, windowed and CAD
+cavities").
 
 `visibility` is the `view_factors` visibility rule `RadiationModel` uses by default:
 `:centroid` (one ray per pair) or `:sampled` (the visible fraction of pairs partly

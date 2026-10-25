@@ -363,7 +363,10 @@ through an open window is `:missed`. The wall, caps, LEHs, windows and capsule c
 their exact `CylinderSurface`, `DiskSurface` and `SphereSurface`, so the radiation
 model uses the true geometry.
 The target is declared `closed`, so `RadiationModel` balances its view factors
-(`enforce_closure!`) unless given `closed = false`.
+(`enforce_closure!`) unless given `closed = false`: windows, their gaps and closing lips
+are apertures, the sombreros see nothing of the cavity, and with open windows and gaps
+the balanced loss and capsule drive agree with a continuum Monte Carlo within 0.1 %
+(research notes, "Closure on bored, windowed and CAD cavities").
 
 With windows, the wall and end-cap meshes contain the windows' edges as grid lines
 (`conforming_grid`; the wall's axial grid gets their `z` edges, wall and caps share

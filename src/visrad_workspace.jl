@@ -615,7 +615,7 @@ end
     visrad_target(workspace; select = o -> o.radiosity || o.laser, materials = Dict(),
                   two_sided = false, orient = false, toward = (0, 0, 0),
                   coarsen = nothing, remesh = nothing, fit = remesh !== nothing,
-                  inside = nothing, visibility = :sampled) -> Target
+                  inside = nothing, visibility = :sampled, closed = false) -> Target
 
 Target built from the components of a VisRad workspace (`read_visrad_workspace`) for
 which `select(object)` is true — by default those VisRad includes in its radiosity or
@@ -641,12 +641,15 @@ kept facets. The CAD meshes go through these steps in `cad_target`, which takes 
 other components as they are (into the selection, but not remeshed or fitted); it
 does the same for CAD read from STL files. `visibility` is the target's default
 `view_factors` visibility rule (`:sampled`, as for `cad_target`: workspaces carry
-entrance-hole washers and CAD with rims).
+entrance-hole washers and CAD with rims), and `closed = true` declares the target a
+closed enclosure (balanced view factors), as for `cad_target`: only when apertures
+close every opening (see [`open_fraction`](@ref)).
 """
 function visrad_target(ws::VisRadWorkspace; select = o -> o.radiosity || o.laser,
                        materials = Dict{String,Material}(), two_sided = false,
                        orient::Bool = false, toward = (0.0, 0.0, 0.0), coarsen = nothing,
-                       remesh = nothing, fit = nothing, inside = nothing, visibility::Symbol = :sampled)
+                       remesh = nothing, fit = nothing, inside = nothing, visibility::Symbol = :sampled,
+                       closed::Bool = false)
     coarsen === nothing || remesh === nothing ||
         throw(ArgumentError("give one of `coarsen` and `remesh`, not both"))
     parts = Union{Component,Pair{Symbol,Mesh}}[]
@@ -668,7 +671,7 @@ function visrad_target(ws::VisRadWorkspace; select = o -> o.radiosity || o.laser
     end
     isempty(parts) && throw(ArgumentError("no VisRad components selected"))
     return cad_target(parts; orient, toward, inside, remesh, coarsen, fit, material = mats, two_sided = sides,
-                      visibility)
+                      visibility, closed)
 end
 
 # ---------------------------------------------------------------------------------------

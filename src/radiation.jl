@@ -153,6 +153,55 @@ function enforce_closure!(F::AbstractMatrix, A::AbstractVector; tol = 1e-12,
     return _balance!(F, s)
 end
 
+"""
+    open_fraction(target; rays = 64, seed = 1) -> (; fraction, element)
+
+Whether the target's facets close an enclosure, apertures counted: the area-weighted
+`fraction` of diffuse rays leaving its elements (`rays` cosine-distributed rays from
+uniform points on each radiating side but the apertures') that meet no facet at all, and
+that fraction per `element` (zero on apertures). Apertures stop the rays here, as walls
+would. A target is closed, and `closed = true` balancing (`enforce_closure!`) applies,
+when every opening carries an aperture: the fraction is then zero up to cracks where
+meshes meet without sharing vertices (a disk aperture of 24 sides in a bore of 20 or
+360, an LEH disk of `nphi ÷ 2` sides in a cap's inner edge of `nphi`): 2–7 × 10⁻⁴ on
+the cavities of the research notes' "Closure on bored, windowed and CAD cavities",
+2.7 × 10⁻³ on the coarse `hohlraum(h = 1)`. An opening left without an aperture shows
+as the share of the view it takes, which may be no larger: a 40 µm waist gap 4 × 10⁻³,
+a CAD cavity's two 3.1 mm LEHs 7 × 10⁻². So the fraction says where to look (`element`),
+not whether to balance; that follows from the apertures given. Curved surfaces are
+ignored: cracks between the facets of a curved part and an aperture do not leak in the
+view factors, which integrate over the true surfaces.
+
+Each element draws from its own stream (from `seed` and the element), so the result
+does not depend on the thread count.
+"""
+function open_fraction(t::Target; rays::Integer = 64, seed::Integer = 1)
+    rays > 0 || throw(ArgumentError("rays must be positive"))
+    N = nelements(t)
+    nt = ntriangles(t)
+    bvh = _sah_bvh(BVH(t.tri_v0, t.tri_e1, t.tri_e2, Int32.(1:nt)))   # apertures included
+    cum = [cumsum(t.tri_area[t.elem_tris[e]]) for e in 1:N]
+    open = [t.components[t.elem_comp[e]].kind !== :aperture for e in 1:N]
+    miss = zeros(N)
+    Threads.@threads for e in 1:N
+        open[e] && (miss[e] = _open_rays(t, bvh, cum, e, Int(rays), Random.Xoshiro(1_000_003 * seed + e)))
+    end
+    A = t.elem_area
+    w = sum(A[open])
+    return (; fraction = w > 0 ? sum(miss[e] * A[e] for e in 1:N if open[e]) / w : 0.0, element = miss)
+end
+
+function _open_rays(t, bvh, cum, e, rays, rng)
+    eps = _ray_eps(t)
+    n = 0
+    for _ in 1:rays
+        x, nrm = _mc_point(t, cum, e, rng)
+        _, k = closest_hit(bvh, x + eps * nrm, _cosine_direction(nrm, rng))
+        k == 0 && (n += 1)
+    end
+    return n / rays
+end
+
 function Base.show(io::IO, m::RadiationModel)
     print(io, "RadiationModel(", nelements(m.target), " elements",
           m.F isa Float32Matrix ? ", Float32" : m.F isa _OperatorMatrix ? ", hierarchical" : "", m.iterative ? ", iterative" : "", ")")

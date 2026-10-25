@@ -393,7 +393,7 @@ Base.show(io::IO, enc::Enclosure) =
 """
     cad_target(parts; orient = true, toward = (0, 0, 0), inside = nothing,
                remesh = nothing, coarsen = nothing, fit = remesh !== nothing, material = gold(),
-               two_sided = false, visibility = :sampled, enclosure_kw = (;)) -> Target
+               two_sided = false, visibility = :sampled, closed = false, enclosure_kw = (;)) -> Target
 
 A radiation-ready target from CAD meshes in one call: what the
 [Radiation in an imported CAD hohlraum](@ref) tutorial does by hand, and what
@@ -433,6 +433,16 @@ The target's view factors default to `visibility = :sampled` (see `view_factors`
 cavities have rims (entrance-hole bores, gaps) that partly shadow element pairs, which
 a single centroid ray decides all or nothing.
 
+`closed = true` declares the target a closed enclosure, so `RadiationModel` balances its
+view factors (`enforce_closure!`): pass it when apertures (`aperture` components among
+the `parts`) cover every opening of the cavity kept ([`open_fraction`](@ref) shows where
+facets leak). On a remeshed, fitted CAD cavity with 0.1 mm bores and a 20 µm waist gap
+closed by apertures, balancing brings the LEH and gap loss from 0.7–0.8 % above a
+continuum Monte Carlo to within 0.2 %, and the capsule drive within 0.06 % (raw: up to
+0.16 %), and moves its a₂/a₀ by under 0.08 pp, toward the reference at 0.5 mm (research
+notes, "Closure on bored, windowed and CAD cavities"). The default is `false` (raw view
+factors): a cavity selected from CAD is open wherever no aperture was given.
+
 `material`, `two_sided`, `remesh` and `coarsen` take one value for every CAD part, a
 function of the part's name (a `Symbol`), or a dictionary keyed by name (`Symbol` or
 `String`). A part missing from a `remesh` or `coarsen` dictionary keeps its facets, one
@@ -443,7 +453,7 @@ drops, call `enclosure` on the target built without `inside`.
 """
 function cad_target(parts; orient::Bool = true, toward = (0.0, 0.0, 0.0), inside = nothing,
                     remesh = nothing, coarsen = nothing, fit = nothing, material = gold(),
-                    two_sided = false, visibility = :sampled, enclosure_kw = (;))
+                    two_sided = false, visibility = :sampled, closed::Bool = false, enclosure_kw = (;))
     coarsen === nothing || remesh === nothing ||
         throw(ArgumentError("give one of `coarsen` and `remesh`, not both"))
     fit isa Union{Nothing,Bool,NamedTuple} ||
@@ -492,10 +502,10 @@ function cad_target(parts; orient::Bool = true, toward = (0.0, 0.0, 0.0), inside
         end
     end
     fit === nothing && (fit = remesh !== nothing)
-    fit === false && return Target(comps; visibility)
+    fit === false && return Target(comps; closed, visibility)
     fkw = fit === true ? (;) : fit
     return Target(reduce(vcat, (cad[i] ? curved_components(comps[i]; reference = redone[i] ? facets[i] : nothing, fkw...) :
-                                [comps[i]] for i in eachindex(comps)); init = Component[]); visibility)
+                                [comps[i]] for i in eachindex(comps)); init = Component[]); closed, visibility)
 end
 
 # A per-part setting: one value, a function of the part's name, or a dictionary by name.

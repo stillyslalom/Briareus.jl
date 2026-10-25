@@ -35,12 +35,15 @@ callout in the section says which).
 **Radiation, meshes and scale**
 - Gold wall loss and thin-foil burnthrough (2026-10-16); Hohlraum mesh work-precision
   (2026-10-16); Compact capsule mesh (2026-10-22); Partial visibility (2026-10-22); Monte
-  Carlo radiosity reference for partial visibility (2026-10-22); Balancing on the curved
-  path against a continuum Monte Carlo (2026-10-22); Default capsule mesh and visibility
+  Carlo radiosity reference for partial visibility (2026-10-22) (*in part*: balancing on
+  flat facets); Balancing on the curved path against a continuum Monte Carlo
+  (2026-10-22); Default capsule mesh and visibility
   (2026-10-22) *decision*.
 - Large radiation models (2026-10-24); Hierarchical view factors (2026-10-24) (*in
   part*: `tol`); The H-matrix's N^1.5 remainder (2026-10-25); Deposition-operator rays
-  and sliver view factors (2026-10-25); Compile latency (2026-10-25).
+  and sliver view factors (2026-10-25); Compile latency (2026-10-25); Closure on bored,
+  windowed and CAD cavities (2026-10-25); Compact capsule rows at capsule_h = h/3
+  (2026-10-25).
 
 **Design, errors and shot review**
 - Beam-error budgets (2026-10-17); Retuning to a reference drive (2026-10-17); Implosion
@@ -95,6 +98,7 @@ callout in the section says which).
 | `LipClosure` | 0.022 mm/ns at 100 eV, depth 0.24 mm, hold 0.4 ns | Computed LEH closure |
 | `VisRadProfile` | growth 0.67, measured plates | VisRad deposition parity: hohlraum runs (2026-10-21) |
 | `hohlraum()` capsule mesh, `Target` visibility | `:compact`; `:centroid` (`:sampled` for CAD targets) | Default capsule mesh and visibility |
+| `Target`/`hohlraum()` `closed`, `cad_target`/`visrad_target` `closed` | `hohlraum()` true; others false (declared when apertures close the cavity) | Closure on bored, windowed and CAD cavities |
 | `curved_components` / CAD `fit` | fit on with `remesh`, `minfraction` 1e-3 | "Fitting CAD by default" (`minfraction`) and "Parts of fitted CAD" (fit on), under CAD import |
 | `LARGE_MODEL[]`, `HMATRIX_MODEL[]`, `HMATRIX_DEFAULTS` | 10,000; 15,000; `tol` 1e-6, η 1, leaf 48, maxrank 32 | Large radiation models; Hierarchical view factors; The H-matrix's N^1.5 remainder (`tol`) |
 | `nif_mband()` | outer 0.20, inner 0.042 | Spectral radiosity, M-band and a synthetic Dante §2 |
@@ -2107,6 +2111,14 @@ ray-traced radiosity reference (done: next entry, the sampled one is closer). **
 
 ## Monte Carlo radiosity reference for partial visibility (2026-10-22) *derived*
 
+> **Superseded in part (2026-10-25).** The comparisons stand, but the last bullet's
+> reading does not: the flat facets of both geometries are cracked (24-sided LEH disks
+> in 20-sided bores and on caps of `nphi` sides, a 180-sided gap aperture on 40-sided
+> gap faces; `open_fraction` 7.5e-4 and 2.4e-4), so rays escape that the curved geometry
+> keeps, and balancing them adds the exchange the cracks lose. On watertight facets and
+> on the curved path balancing does not bias a₂/a₀ upward ("Closure on bored, windowed
+> and CAD cavities (2026-10-25)").
+
 `Briareus.montecarlo_incident` (src/montecarlo.jl, unexported): diffuse transport on the
 facets with no view factors. Paths start at a uniform point on a capsule element's
 facets and go backward (reciprocity of the Lambertian kernel): cosine-weighted
@@ -2241,6 +2253,10 @@ Mean |row sum − 1| before balancing (curved): 7.6e-4 / 4.6e-4 / 2.0e-4, larges
 - Not covered: bored LEHs, gaps and CAD cavities (larger row errors; the flat bored
   cavity of the previous entry is the only data there), sampled visibility, windows.
   **H** for `hohlraum()` at these meshes and albedos; **M** beyond.
+
+> **Covered since (2026-10-25):** bored LEHs, a waist gap, windows with gaps and a
+> remeshed CAD cavity, centroid and sampled visibility, in "Closure on bored, windowed
+> and CAD cavities (2026-10-25)".
 
 ## Default capsule mesh and visibility (2026-10-22) *decision*
 
@@ -6673,3 +6689,155 @@ the post-CBET cone fraction by < 1 point (≲ 0.003 in P2/P0, after the crossing
 - `measured` stays the default; `history` is an option; its 3.1:1 cone split is
   N210808's (Kemp 2026), unpublished for N221204.
 - `refraction` stays a bound (booked as lost; overlaps `BubbleAbsorption`).
+
+## Closure on bored, windowed and CAD cavities (2026-10-25) *derived*
+
+Does `closed = true` (Sinkhorn balancing, `enforce_closure!`) apply beyond the flush-LEH
+`hohlraum()` of "Balancing on the curved path against a continuum Monte Carlo"? ROADMAP
+CAD decision 11. `examples/mc_cavities.jl` (4 threads; ~30 min, cached).
+
+Geometry: the bored cavity of "Partial visibility" (R 2.875, 9.4 mm long, 0.1 mm LEH bores
+of radius 1.55, a 20 µm waist gap, capsule 0.9; apertures on the LEHs and the gap exit);
+the same cavity from CAD-like facets (each half a closed solid of 360 strips, test
+`cad_half`) through `cad_target(...; inside, remesh, fit = true)` (`:sampled`); and
+`hohlraum()` of the same size with an open 1.5 mm circular window at the waist and a
+closed 1 × 2 mm window (α 0.5) at z = 1, each in an open 50 µm gap. Wall α 0.9, η 0.75,
+capsule α 0.3. Every model's capsule is the same geodesic mesh (`icosphere_mesh`,
+n = 15, 4,500 elements); source: the CAD tutorial's two Gaussian rings on the inner wall,
+integrated over each element.
+
+References: `montecarlo_incident(...; reemit = :hit)` (the continuum) on flat copies
+faceted at 0.1 mm (capsule n = 29, 16,820 elements), watertight: bores, LEH disks and gap
+aperture on the walls' polygon (`open_fraction` 0 and 3.4e-5). Bored cavity: 72.7M
+capsule paths, a₀ 0.016511 ± 0.000001 per unit wall power, a₂/a₀ +5.334 ± 0.018 %,
+a₄/a₀ −0.472 ± 0.021 %; the CAD cavity is the same geometry (its 360-gon lies within
+1.1e-4 mm of the circle). Windows: 109M paths, a₀ 0.015232 ± 0.000001, a₂/a₀
++8.595 ± 0.015 %, a₄/a₀ −0.686 ± 0.019 %. The loss through the apertures (LEHs, gaps,
+open window) per unit x-ray source, from the same Monte Carlo with the apertures as
+receivers: 0.36880 ± 0.00005 and 0.40237 ± 0.00006.
+
+**Is the enclosure closed?** In the continuum, yes: the apertures cover the openings
+exactly, and the curved model integrates over the true surfaces. On facets, not as the
+tests and examples build it: `open_fraction` (new; diffuse rays from the elements that
+meet no facet, apertures counted as walls) is 9.2e-4 on the bored cavity (12–25% on
+single bore elements: 24-sided LEH disks in 20-sided bores, bores of `nphi ÷ 2` sides on
+caps of `nphi`, the 180-sided gap aperture on 40-sided gap faces), 7.6e-4 on the CAD
+cavity (24-sided disks in 360-sided bores), 1–5e-4 on `hohlraum()` with or without
+windows (LEH disks of `nphi ÷ 2` sides in caps of `nphi`), 2.7e-3 on `hohlraum(h = 1)`.
+Openings without apertures: the CAD cavity without its LEH apertures 7e-2, the
+40 µm waist gap of test/cadfit.jl 4.2e-3 (6.0e-4 with an aperture). Cracks and small
+openings overlap, so the fraction locates leaks (`element`) but cannot decide closure.
+
+Model − reference (a₀ and loss in %, moments in pp), raw → balanced:
+
+| case | a₀ | a₂/a₀ | a₄/a₀ | loss |
+|---|---|---|---|---|
+| bored 0.5, centroid | +0.31 → −0.02 | −0.288 → +0.010 | +0.051 → −0.107 | +1.93 → +0.24 |
+| bored 0.5, sampled | −0.01 → +0.06 | −0.153 → −0.168 | +0.050 → +0.023 | −0.29 → −0.01 |
+| bored 0.25, centroid | −0.21 → −0.13 | +0.079 → +0.176 | +0.053 → −0.076 | +2.26 → +0.42 |
+| bored 0.25, sampled | −0.05 → −0.06 | +0.028 → +0.022 | +0.050 → +0.028 | +0.60 → +0.16 |
+| CAD 0.5, centroid | +0.34 → −0.10 | −0.262 → −0.012 | +0.022 → −0.092 | +2.82 → +0.33 |
+| CAD 0.5, sampled | +0.16 → +0.03 | −0.254 → −0.176 | +0.048 → +0.039 | +0.73 → +0.09 |
+| CAD 0.25, sampled | −0.06 → −0.06 | −0.014 → +0.020 | +0.045 → +0.032 | +0.76 → +0.19 |
+| windows 0.45, centroid | +0.35 → +0.07 | −0.310 → −0.251 | +0.010 → +0.009 | +0.26 → +0.01 |
+| windows 0.45, sampled | +0.17 → +0.07 | −0.237 → −0.249 | +0.006 → +0.011 | +0.12 → +0.00 |
+| windows 0.28, centroid | +0.13 → −0.02 | −0.072 → −0.088 | +0.017 → +0.003 | +0.23 → +0.07 |
+| windows 0.28, sampled | +0.06 → −0.01 | −0.052 → −0.089 | +0.016 → +0.004 | +0.16 → +0.06 |
+| windows 0.17, centroid | −0.04 → −0.03 | −0.018 → −0.045 | −0.005 → −0.001 | +0.08 → +0.08 |
+| windows 0.17, sampled | +0.04 → −0.03 | −0.045 → −0.042 | −0.004 → −0.002 | +0.16 → +0.08 |
+| bored 0.5 flat, watertight, sampled | +0.71 → +0.23 | −0.071 → −0.015 | +0.043 → +0.040 | +0.53 → −0.08 |
+| bored 0.5 flat, cracked, sampled | +0.71 → +0.49 | −0.072 → +0.128 | +0.043 → −0.051 | −0.63 → −0.61 |
+| bored 0.5 flat, watertight, centroid | +1.04 → +0.18 | −0.207 → +0.158 | +0.044 → −0.060 | +2.51 → +0.10 |
+| bored 0.5 flat, cracked, centroid | +1.04 → +0.41 | −0.207 → +0.329 | +0.044 → −0.220 | +1.59 → −0.37 |
+
+(5,984 / 9,064 / 5,752 / 8,252 / 6,247 / 8,445 / 14,177 elements for the curved
+models.) Largest |row sum − 1| before balancing: apertures 2–6% (centroid) and 1–3%
+(sampled) on the rims, the 50 µm gap faces behind the 20 µm slot ~5% in every model
+("Partial visibility"), 0.04–0.5% with windows. The reference's a₄/a₀ error (±0.02 pp)
+is the size of most a₄ entries.
+
+- **Balancing applies wherever apertures close the cavity, on the curved path.** It
+  brings the aperture loss within 0.2% of the reference in every sampled case (raw
+  −0.3 to +0.8%) and within 0.4% with centroid visibility (raw +1.9 to +2.8% on rims),
+  and a₀ within 0.07% (sampled). With sampled visibility it moves a₂/a₀ by at most
+  0.08 pp (CAD 0.5 mm, toward the reference); with centroid by 0.1–0.3 pp on rims,
+  toward the reference at 0.5 mm and away at 0.25 mm (+0.08 → +0.18): sampled
+  visibility is what gets the rims' a₂/a₀ right, and balancing then fixes the
+  energetics. **H** for these geometries and albedos.
+- **Windows and gaps in `hohlraum()`:** balanced loss within 0.08% and a₀ within 0.07%
+  at every mesh; a₂/a₀ is set by the wall mesh (−0.25 pp at h 0.45, −0.04 at 0.17) and
+  balancing changes it by ≤ 0.06 pp. `closed = true` stays the `hohlraum()` default with
+  windows, gaps and lips (apertures) and sombreros (their rows are zero; test/sombrero.jl
+  checks the hohlraum's solution unchanged to 1e-12).
+- **Flat facets must be watertight.** On the cracked flat bored cavity balancing pushes
+  a₂/a₀ up (+0.13 to +0.33 pp) and the loss low (−0.4 to −0.6%); the same mesh made
+  watertight (matched polygons) balances to the loss within 0.1% and a₂/a₀ within
+  0.02 pp (sampled). The upward bias of "Monte Carlo radiosity reference for partial
+  visibility" is this (both its geometries are cracked). The curved path is immune: its
+  apertures and rims are exact surfaces.
+- **CAD:** the remeshed, fitted cavity behaves as the primitives (raw loss +0.7%,
+  balanced +0.1–0.2%). `cad_target` cannot know whether the user's apertures close the
+  cavity (a missing small opening and polygon cracks give the same `open_fraction`), so
+  closure is declared: `cad_target(...; closed = true)` and `visrad_target(...; closed =
+  true)` (new keyword, default `false`: existing targets are unchanged bit for bit).
+  The GUI's CAD path still builds raw targets.
+- Not covered: thin-film windows that transmit (a transmitting aperture is a partial
+  loss, not a closure) and VisRad workspaces (no public data).
+
+## Compact capsule rows at capsule_h = h/3 (2026-10-25) *derived*
+
+ROADMAP CAD decision 12: on the compact capsule the LEH power-balance tutorial's raw
+error grew from h 0.4 to 0.25 mm. The tutorial's N210808 hohlraum (6.4 × 11.24 mm,
+3.1 mm LEHs, capsule 1.13 mm), capsule_h = h/3 unless stated, Float64 view factors,
+4 threads (scripts in the session scratchpad). Reference for the capsule rows: the
+enclosure is closed, so every capsule element's row sums to 1, and the capsule's exchange
+with the wall, the caps and the LEHs is the solid-angle fraction from its center
+(cos θ_c, cos θ_L − cos θ_c, 1 − cos θ_L), exact for a sphere.
+
+| h / capsule_h | mesh | capsule rows − 1 (mean; largest) | capsule→wall / solid angle − 1 | wall rows − 1 (mean) |
+|---|---|---|---|---|
+| 0.40 / 0.133 | compact | −9.2e-5; 4.4e-4 | −1.0e-4 | −2.3e-4 |
+| 0.40 / 0.133 | lat-long | +1.3e-5; 1.3e-3 | | −2.9e-4 |
+| 0.25 / 0.083 | compact | −3.5e-4; 6.8e-4 | −4.1e-4 | −3.0e-4 |
+| 0.25 / 0.083 | lat-long | −2.3e-4; 1.9e-3 | −2.3e-4 | −1.6e-4 |
+| 0.40 / 0.083 | compact | −7.2e-5 | −8.1e-5 | −3.9e-4 |
+| 0.25 / 0.133 | compact | −5.6e-4 | −6.5e-4 | −1.9e-4 |
+| 0.25 / 0.083, `mid = 24` | compact | −6.2e-6; 8.7e-5 | −1.9e-6 | −3.2e-4 |
+| 0.40 / 0.133, `mid = 24` | compact | +1.4e-5; 5.4e-5 | +1.8e-5 | −3.0e-4 |
+| 0.25 / 0.083, `level = 2` | compact | −4.5e-4 | −5.2e-4 | −3.6e-4 |
+
+The capsule's exchange with the caps and the LEHs is within 4e-5 of the solid angles
+in every case.
+
+- **The capsule rows' error is the wall mesh's, not the geodesic triangles'.** It is the
+  capsule–wall exchange, and it grows when the *wall* is refined (0.4 → 0.25 mm at either
+  capsule size), not the capsule (0.133 → 0.083 at h 0.25 shrinks it). Curved pairs
+  farther than `mid` (12) sizes of the larger element use one point per triangle
+  (`qfar`), whose O((h/r)²) bias does not cancel; at h 0.25 that is 3 mm, so most
+  capsule–wall pairs (2–6.5 mm apart) are far, while at h 0.4 (4.8 mm) most were
+  mid-range (four points per triangle). `mid = 24` removes it (−6e-6), `level` does not
+  (near pairs only). Lat-long elements are two triangles, two far points each, hence
+  their smaller error at the same size.
+- **The source-weighted loss is the wall rows', mostly the capsule's shadow.** Removing
+  the capsule changes the wall–cap–LEH exchange by its shadow, which in a closed
+  enclosure equals the capsule's area exactly. The centroid rule's shadow is
+  0.4–0.9% too large: +5.7e-3 (compact) and +3.7e-3 (lat-long) at h 0.25, +5.8e-3 and
+  +7.2e-3 at 0.4, +8.7e-3 for both at capsule_h 0.067 (h 0.4); on flat facets
+  +8.3e-3 / +1.0e-2, so it is the all-or-nothing sampling of the silhouette, not the
+  surfaces. Sampled visibility overshoots the other way (−1.7e-3 / −2.3e-3 at 0.4).
+  Compact and lat-long differ by its scatter (wall–wall exchange per unit area, compact −
+  lat-long, −1.1e-4 at 0.25 with centroid rays, −1.2e-5 sampled).
+- **Tutorial errors now** (fractions of the source; 2 × 10⁷ histories of the tutorial's
+  exact-geometry walk, σ 7e-5 LEH and 6e-5 capsule): h 0.4 raw LEH −0.8e-4, capsule
+  −1.7e-4 (lost 6.1e-4), balanced +0.9e-4 / −0.1e-4; h 0.25 raw −2.8e-4 / −1.8e-4
+  (lost 1.1e-3), balanced −1.0e-4 / +1.3e-4 (1.4σ / 2.2σ), the same on lat-long
+  (−1.1e-4 / +1.2e-4) and with `mid = 24` (−1.1e-4 / +1.3e-4); the tutorial's default
+  Float32 storage at 10,928 elements agrees to 1e-6. Against the tutorial's own seed-2
+  walk the balanced capsule share is +0.5e-4. The ROADMAP's −3.3e-4 / −5.0e-4 (lost
+  1.4e-3) were of an earlier build.
+- **Decision: documented, no default changed.** Balanced results at capsule_h = h/3 are
+  within 2.2σ (1.3e-4 of the source) of the exact walk on either capsule mesh; the raw
+  rows' 2–6e-4 come from the far-pair rule and the centroid shadow, neither specific to
+  the compact mesh. `mid = 24` fixes the capsule rows for +30–60% view-factor time but
+  not the loss (at h 0.4 it raises the raw loss, 6.1e-4 → 9.1e-4: the shadow's excess
+  then stands alone), so it does not earn a default change. **H**

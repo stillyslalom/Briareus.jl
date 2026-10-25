@@ -109,6 +109,11 @@ item says where it stands, what remains and what data would settle it.
 - **2026-10-25, compile latency and tests.** `drive_history`/`optimize_pointing` compiled
   once for every closure, a wider workload ("Compile latency"); shared test fixtures,
   three CI shards (`BRIAREUS_TEST_SHARD`), `BRIAREUS_LONG_TESTS`.
+- **2026-10-25, closure on rims, windows and CAD.** Balancing checked against continuum
+  Monte Carlos on bored LEHs, a waist gap, windows and a remeshed CAD cavity;
+  `open_fraction`; `cad_target`/`visrad_target(...; closed)` ("Closure on bored,
+  windowed and CAD cavities"). The compact capsule's raw rows at capsule_h = h/3
+  explained ("Compact capsule rows at capsule_h = h/3").
 
 ## Decisions from the CAD work (2026-10-18; the leans confirmed by the user 2026-10-22)
 
@@ -130,18 +135,28 @@ Parts may be split for computation, but the GUI shows and picks the original par
 9. `hohlraum()` uses the compact capsule mesh (GUI presets capsule_h 0.3/0.16/0.09);
    `Target` carries a visibility rule, `:sampled` for `cad_target`/`visrad_target`,
    `:centroid` for `hohlraum()` and hand-built targets ("Default capsule mesh and
-   visibility"). Balancing's own bias (+0.06 to +0.48 pp in a₂/a₀ on flat elements) is
-   item 11 here.
+   visibility"). Balancing's "own bias" on flat elements (+0.06 to +0.48 pp in a₂/a₀) was
+   cracked facets (item 11).
 10. `orient_mesh` faces a hollow solid's inner surface into the material: kept,
     documented.
-11. `closed = true` stays the `hohlraum()` default: on the curved path it moves a₀ and
-    a₂/a₀ toward a continuum Monte Carlo at every preset ("Balancing on the curved path
-    against a continuum Monte Carlo"). Open: unchecked for bored LEHs, gaps and CAD
-    cavities; a Monte Carlo of those would settle it.
-12. Open: on the compact capsule the LEH power-balance tutorial's error grows from 0.4 to
-    0.25 mm (LEH −1.2e-4 → −3.3e-4, capsule −2.8e-4 → −5.0e-4, 3–5σ) with the view
-    factors' lost fraction (7.5e-4 → 1.4e-3). Check the capsule's raw row sums at
-    capsule_h = h/3 (0.083 mm) before trusting balanced results there.
+11. `closed = true` stays the `hohlraum()` default (curved path, against a continuum Monte
+    Carlo at every preset: "Balancing on the curved path ..."). Done 2026-10-25: with
+    windows, gaps, lips and sombreros it stays; bored LEHs, gaps and CAD cavities closed
+    by apertures balance to the reference loss within 0.2 % (raw up to 0.8 %, 2–3 % with
+    centroid rays), a₂/a₀ within the raw factors' ± 0.08 pp with `:sampled`. Closure is
+    declared, not inferred: hand-built targets pass `closed = true`, CAD ones
+    `cad_target(...; closed = true)` (new keyword, default false); `open_fraction` shows
+    where facets leak, but cracks (24-gon disks in 20-gon bores) and small openings give
+    the same fraction. Flat facets must be watertight to balance ("Closure on bored,
+    windowed and CAD cavities"). Open: the GUI's CAD path could pass `closed` when the user
+    adds the LEH apertures.
+12. Compact capsule at capsule_h = h/3: done 2026-10-25, documented. Raw capsule rows
+    −3.5e-4 at h 0.25 (−9e-5 at 0.4) are the far-pair one-point rule on the capsule–wall
+    pairs (the wall's size sets the tier; `mid = 24` removes it), not the geodesic
+    triangles (lat-long −2.3e-4); the source-weighted loss is the centroid rule's capsule
+    shadow, 0.4–0.9 % too large on any capsule mesh. Balanced tutorial results are within
+    2.2σ (1.3e-4 of the source) of the exact walk on both meshes ("Compact capsule rows
+    at capsule_h = h/3").
 13. `:sampled` visibility on remeshed CAD: fixed 2026-10-24 (above).
 
 ## Next

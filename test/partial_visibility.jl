@@ -59,6 +59,12 @@ end
     @test rows(F1, walls) < 0.25rows(F0, walls)
     @test rows(F1, lehs) < 0.2rows(F0, lehs)
     @test rows(F1, (:capsule,)) < 0.5rows(F0, (:capsule,))
+    # its facets crack where the 24-sided LEH disks meet the 20-sided bores and the
+    # 180-sided gap aperture the 40-sided gap faces (open fraction measured 7.5e-4, 12%
+    # on the worst bore element); without the LEH apertures the holes take ~7% of the view
+    o = open_fraction(t)
+    @test 0 < o.fraction < 2e-3 && maximum(o.element[elements(t, :bore_top, :bore_bottom)]) > 0.02
+    @test open_fraction(Target(filter(c -> !startswith(String(c.name), "leh"), t.components))).fraction > 0.03
 
     # A pair half shadowed by a thin plate: two unit squares facing each other 2 apart,
     # and an opaque plate in the mid-plane covering x < 0. A segment from p to q crosses

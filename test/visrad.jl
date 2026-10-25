@@ -339,6 +339,7 @@ end
     @test all(dot(t.elem_normal[i], t.elem_centroid[i] - cad.position) > 0 for i in t.comp_elems[7])
     t2 = visrad_target(ws; select = o -> o.kind === :mesh, two_sided = o -> true)
     @test length(t2.components) == 1 && length(t2.comp_elems[1]) == 8
+    @test !t2.closed && visrad_target(ws; select = o -> o.kind === :mesh, closed = true).closed
     # remeshed into elements of about 0.3 mm (its faces are 1 mm right triangles): the
     # same surface, still facing out; `coarsen` and `remesh` exclude each other
     t3 = visrad_target(ws; select = o -> o.kind === :mesh, orient = true, toward = cad.position, remesh = 0.3)

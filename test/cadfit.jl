@@ -735,6 +735,19 @@ end
     # compact elements of about the size asked
     @test 0.4 < sqrt(area(cyl[1]) / npatches(cyl[1].mesh)) < 0.6
 
+    # closure is declared, not inferred: the waist gap has no aperture here, and its rays
+    # leave the facets (open fraction measured 4.2e-3); with a gap aperture only the
+    # cracks between the 72-sided bores and the 24-sided LEH disks leak (6.0e-4)
+    @test !tc.closed
+    gap = aperture(:gap, cylinder_mesh(Rout, -g, g; nz = 1, nphi = 72, inward = true))
+    tg = cad_target([solids; leh; gap]; inside = (0, 0, 0), remesh = size_of, fit = true, material = mat,
+                    closed = true)
+    og, oc = open_fraction(tg), open_fraction(tc)
+    @test tg.closed && og.fraction < 0.25 * oc.fraction
+    @test all(iszero, og.element[elements(tg, :gap, :leh_top, :leh_bottom)])
+    waist = [e for e in eachindex(oc.element) if abs(tc.elem_centroid[e][3]) < 0.3]
+    @test sum(oc.element[waist] .* tc.elem_area[waist]) > 0.5 * sum(oc.element .* tc.elem_area)
+
     # the same steps by hand: orient, select on the facets, remesh the kept ones, select
     # again on the elements, fit on the kept facets
     kept = enclosure([[Component(n, orient_mesh(m; toward = (0, 0, 0)), mat(Symbol(n))) for (n, m) in solids]; leh]).target.components
