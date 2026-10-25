@@ -120,6 +120,12 @@ What exists:
   - The net depends on the balance, "throughout the pulse".
 - **NC24 (H)**: I-Raum needed 0.5 Å "mostly to negate the flow-induced CBET", and
   HYBRID-E 1–1.55 Å. So Δλ = 0 is **not** zero transfer in a low-fill hohlraum.
+  Both numbers are the Δλ that *minimized hot-spot P2* ("In experiments, 1 ≤ Δλ ≤ 1.55 Å
+  was required to minimize P2 in HYBRID-E designs"), not the transfer null: HYBRID-E's
+  Δλ also compensates bubble absorption of the inner beams, so its transfer null lies
+  below 1 Å; I-Raum's 0.5 Å (little bubble absorption) bounds the null from above
+  (*L* for HYBRID-E). The same paper's pairs are steep and unsaturated: N201101 → N210307,
+  1.75 → 1.55 Å, P2 15.7 ± 0.7 → 0.68 ± 2.8 µm (≈ 75 µm/Å).
 - **K24E Fig. 10 (H, digitized L)**, N221204 per cone, input → post-CBET (TW):
   - 23°: 62 → ~125 at the start of the peak, ~105 at 7.5 ns.
   - 30°: 62 → ~118 / ~100, then ~80 at 8.5 ns.

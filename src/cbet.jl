@@ -409,7 +409,9 @@ end
 The detuning (Å at the beam wavelength; × 3 for NIF's 1ω convention) of the `receivers`
 groups, all other beams at zero, for which `model` leaves the receivers' total power
 unchanged at time `t`: the Δλ that cancels flow-driven transfer ([`TwoZoneCBET`](@ref);
-NC24 report 1–1.55 Å at 1ω for HYBRID-E). Bisection on [`receiver_ratio`](@ref) over
+NC24's I-Raum needed ~0.5 Å at 1ω "mostly to negate" it; their 1–1.55 Å for HYBRID-E is
+the Δλ of round hot spots, which also compensates bubble absorption, so it lies above
+the null). Bisection on [`receiver_ratio`](@ref) over
 [`lo`, `hi`]; `NaN` when the ratio does not cross 1 there.
 """
 function cbet_null(m::LaserPlasmaModel, beams::AbstractVector{<:Beam}, t; receivers,
@@ -790,8 +792,9 @@ shots at three detunings: N210808 (1.8 Å, PRE 109 Fig. 1e with PRE 106 Fig. 1d'
 incident powers, [`pre109_fig1`](@ref), [`n210808_fig1`](@ref)), N220919 (2.5 Å,
 [`n220919_fig9`](@ref)) and N221204 (2.75 Å, [`n221204_fig9`](@ref)), with one plasma
 history for all, under two published constraints: Te ≤ 5.5 keV (the LEH values of
-Michel 2009 and Barrios 2016) and the Δλ null inside NC24's 1–1.55 Å for HYBRID-E.
-HYDRA's hard-minimum saturation (`saturation = :min`) with the clamp schedule switched
+Michel 2009 and Barrios 2016) and the Δλ null inside NC24's 1–1.55 Å for HYBRID-E
+(that band is the Δλ of round hot spots in the 2020–21 shots, not the transfer null:
+[`hybride_cbet_iraum`](@ref) holds the null at I-Raum's ≤ 0.5 Å instead). HYDRA's hard-minimum saturation (`saturation = :min`) with the clamp schedule switched
 at the rise ([`cbet_clamp_schedule`](@ref)) and both clamp values fitted: 1.4×10⁻³ in
 the foot (not binding, unconstrained), 4.8×10⁻⁴ at peak (binding; ±27 %). Outside:
 Mach 1.54, multiplier 0.14 (×/÷ 2); inside: Mach 0, multiplier 0.73 (±18 %); Te(t)
@@ -813,4 +816,46 @@ function hybride_cbet(; leh_z = 5.62, offset::Real = 0.5, delay::Real = 0.0)
     return TwoZoneCBET(; leh_z, offset,
                        outside = (mach = 1.54, multiplier = 0.142, Te, clamp, saturation = :min),
                        inside = (multiplier = 0.729, Te, clamp, saturation = :min))
+end
+
+# LEH electron temperature (eV) and clamp knots of the joint fit with the null at
+# I-Raum's ≤ 0.5 Å
+const _HYBRIDE_IRAUM_TE = ([1.0, 3.0, 4.0, 4.75, 5.5, 6.5, 8.0],
+                           [3223.0, 3899.0, 4522.0, 3806.0, 2544.0, 3031.0, 5500.0])
+const _HYBRIDE_IRAUM_CLAMP = ([3.88, 4.08], [0.000912, 0.0001416])
+
+"""
+    hybride_cbet_iraum(; leh_z = 5.62, offset = 0.5, delay = 0.0) -> TwoZoneCBET
+
+The joint three-shot fit of [`hybride_cbet`](@ref) (same data, model, Te ≤ 5.5 keV bound
+and fitted hard-minimum clamps) with the Δλ null constraint corrected: NC24's
+1–1.55 Å for HYBRID-E is the detuning that minimized hot-spot P2 in the 2020–21 shots,
+which also compensates the inner beams' bubble absorption, so it lies above the
+transfer null; the published statement on the null itself is I-Raum's (0.5 Å "mostly
+to negate the flow-induced CBET", NC24). Here the null at N221204's peak (5.6 and
+7.0 ns) is held in 0.25–0.5 Å (the lower edge, keeping a flow-driven transfer at
+Δλ = 0, is our choice).
+
+Outside: Mach 1.49 (± 0.8), multiplier 0.072 (×/÷ 5); inside: Mach 0, multiplier 1.60
+(± 31 %); clamps 9.1×10⁻⁴ (foot, not binding, unconstrained) and 1.4×10⁻⁴ (peak,
+binding, ± 29 %; below the 5×10⁻⁴–7.5×10⁻³ of HYDRA decks, with which it trades
+against the inside multiplier and Te, correlations −0.92 to −0.97); Te(t) 3.2 keV at
+1 ns, 4.5 at 4, 2.5–3.8 in the peak, 5.5 (the bound) at 8 ns (± 7–15 %).
+
+Fit (107 rows, 0.8–8.4 ns): cone-fraction rms 0.024 (N221204), 0.016 (N220919), 0.028
+(N210808), all 0.024 (`hybride_cbet`: 0.027 / 0.016 / 0.047, all 0.033); loss 0.059
+against 0.120 with the null in 1–1.55 Å. Null 0.24 ± 0.20 Å at 5.6 ns (0.29 at 7 ns);
+dCF/dΔλ 0.137 ± 0.011 per Å at peak (2.5–2.75 Å), linear from 1 Å. HYDRA's cross-shot
+response stays 2–3× flatter, which the measured hot-spot P2 sensitivity does not
+support (research notes). `delay`: as in [`hybride_cbet`](@ref).
+
+*Derived* (research notes, "Joint multi-shot CBET calibration: the null"): effective
+parameters fitted to HYDRA, not a measured plasma state.
+"""
+function hybride_cbet_iraum(; leh_z = 5.62, offset::Real = 0.5, delay::Real = 0.0)
+    Te = (_HYBRIDE_IRAUM_TE[1] .+ delay, _HYBRIDE_IRAUM_TE[2])
+    clamp = (_HYBRIDE_IRAUM_CLAMP[1] .+ delay, _HYBRIDE_IRAUM_CLAMP[2])
+    return TwoZoneCBET(; leh_z, offset,
+                       outside = (mach = 1.489, multiplier = 0.0723, Te, clamp, saturation = :min),
+                       inside = (multiplier = 1.601, Te, clamp, saturation = :min))
 end

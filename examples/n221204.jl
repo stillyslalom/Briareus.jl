@@ -12,8 +12,9 @@
 # `transfer`: `calibrated` (default: the two-zone reduced CBET calibrated to PRE 109
 # Fig. 9, `n221204_cbet()`), `reduced` (the single-zone reduced CBET model at the deck's
 # settings), `fig9b` (the outer-to-inner transfer that gives PRE 109 Fig. 9b's
-# post-transfer cone fraction, HYDRA's own CBET result for this shot) or `joint` (the
-# joint three-shot calibration, `hybride_cbet()`); `table` as 5th
+# post-transfer cone fraction, HYDRA's own CBET result for this shot), `joint` (the
+# joint three-shot calibration, `hybride_cbet()`) or `iraum` (the same with the Δλ null
+# at I-Raum's ≤ 0.5 Å, `hybride_cbet_iraum()`); `table` as 5th
 # argument solves only the comparison times; `dynamics`: `calibrated` (default), `old`
 # (the 2026-10-23 settings) or `late_lips` (see below); `shot`: `n221204` (default),
 # `n220919` or `n210808` (proxies, see below). Writes
@@ -222,7 +223,12 @@ calibrated = n221204_cbet(leh_z = geometry.length / 2)
 # and Δλ-null constraints (`hybride_cbet()`; research notes, "Joint multi-shot CBET
 # calibration"); its time tables follow each shot's rise (N210808's 0.2 ns early).
 joint = hybride_cbet(leh_z = geometry.length / 2, delay = shot == "n210808" ? -0.2 : 0.0)
-cbet = transfer == "fig9b" ? fig9b : transfer == "reduced" ? reduced : transfer == "joint" ? joint : calibrated
+# `iraum`: the same joint fit with the null held at I-Raum's ≤ 0.5 Å, NC24's 1–1.55 Å
+# being the Δλ of round hot spots rather than the null (`hybride_cbet_iraum()`; research
+# notes, "Joint multi-shot CBET calibration: the null")
+iraum = hybride_cbet_iraum(leh_z = geometry.length / 2, delay = shot == "n210808" ? -0.2 : 0.0)
+cbet = transfer == "fig9b" ? fig9b : transfer == "reduced" ? reduced : transfer == "joint" ? joint :
+       transfer == "iraum" ? iraum : calibrated
 
 # Hohlraum dynamics (`dynamics`, 6th argument), calibrated against published data other
 # than Fig. 10 (research notes, "Hohlraum dynamics calibrated to published data

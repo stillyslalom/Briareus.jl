@@ -1099,11 +1099,21 @@ the reference's view factors hold through the pulse; items 9 and 10 remove that 
    2.7 µm/%CF and is not HYDRA's transfer). Unconstrained, the data want the null at 0 Å
    (no flow-driven zone) and Te → 20 keV; with Te ≤ 5.5 keV the null stays at 0 Å for
    little extra misfit: the null, not Te, is what the cross-shot data resist. The 7.4 keV is gone (Te ≤ 5.5 keV, 3.4–3.9 keV in the peak); Fig. 10
-   (blind) moves ≤ 0.016 toward HYDRA on every shot. What remains:
-   - reconcile the null with HYDRA's flat cross-shot response: a profile in the null, a
-     saturation in Δλ (a binding hard clamp, 4.8×10⁻⁴ at peak, scales the gain but does not
-     flatten it) or a transfer region that moves with Δλ; or evidence that NC24's
-     1–1.55 Å is not the transfer null;
+   (blind) moves ≤ 0.016 toward HYDRA on every shot. Done (2026-10-25, research notes
+   "Joint multi-shot CBET calibration: the null"): NC24's 1–1.55 Å is the Δλ that
+   minimized hot-spot P2 (it also compensates bubble absorption), not the transfer null;
+   I-Raum's 0.5 Å "mostly to negate the flow-induced CBET" bounds the null. Refit with
+   the null in 0.25–0.5 Å (`hybride_cbet_iraum()`): loss 0.120 → 0.059 (unconstrained
+   0.055), rms 0.024 / 0.016 / 0.028, flow zone kept (Mach 1.5), null 0.24 ± 0.20 Å,
+   dCF/dΔλ 0.137 ± 0.011 per Å, linear; Fig. 10 (blind) rms 0.040 / 0.044 / 0.052
+   against 0.043 / 0.044 / 0.071. HYDRA's flat cross-shot response contradicts the
+   measured P2 sensitivity (HE21 "no indication of transfer saturation", 48–75 µm/Å)
+   and puts its own null at ≈ −3.5 Å, so no flattening mechanism was added (a scan of
+   saturation, Mach distributions and depletion flattens nothing selectively). What
+   remains:
+   - the fitted Te dips to 2.5 keV at 5.5 ns and the peak clamp (1.4×10⁻⁴) sits below
+     HYDRA's decks, traded against the inside multiplier: test a drive-following Te(t)
+     prior (B16's shape);
    - plasma-state tables as inputs, outer-cone depletion and an inner-quad SBS proxy (the
      N220919 limit and the 2.9 Å overshoot; no N230729 transfer curves are published),
      and the 23.5°/30° split (the model favours 30°, HYDRA splits evenly).

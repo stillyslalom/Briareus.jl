@@ -4,10 +4,13 @@
 # N220919 (2.5 Å) and N221204 (2.75 Å) (PRE 109 Fig. 9). One plasma history (Te(t)), one pair of zone multipliers and one outflow Mach
 # number serve all shots; per shot only what physically differs: its input powers, its
 # Δλ, and its pulse timing (the model's time tables follow each shot's rise to peak).
-# Physical constraints: Te ≤ `temax` (published LEH values), and the Δλ null inside NC24's
-# 1–1.55 Å for HYBRID-E (a penalty on N221204's peak beams). PRE 109 Fig. 10 is not used.
-# Research notes, "Joint multi-shot CBET calibration (2026-10-24)". 15–90 min per fit on
-# 4 threads (`clamp`: 98 iterations; the result is `hybride_cbet()`).
+# Physical constraints: Te ≤ `temax` (published LEH values), and a band for the Δλ null (a
+# penalty on N221204's peak beams): I-Raum's ≤ 0.5 Å (`iraum`, the default; the result is
+# `hybride_cbet_iraum()`), or NC24's 1–1.55 Å for HYBRID-E (`constrained`, `clamp`; the
+# result is `hybride_cbet()`), which is the Δλ of round hot spots, not the null. PRE 109
+# Fig. 10 is not used. Research notes, "Joint multi-shot CBET calibration (2026-10-24)"
+# and "Joint multi-shot CBET calibration: the null". 15–90 min per fit on 4 threads
+# (`clamp`: 98 iterations; `iraum`: 105 iterations, 45 min on 2 threads).
 #
 #   julia --project=. -t 4 examples/hybride_cbet_calibration.jl [variant ...] [key=value ...]
 #
@@ -15,7 +18,9 @@
 # `tebound` (free with Te ≤ temax), `constrained` (Te ≤ temax and the null penalty, the
 # deck's clamps, which do not bind), `clamp` (constrained, plus the foot and peak clamp
 # values fitted with HYDRA's hard-minimum saturation on each shot's pulse-driven
-# schedule, started where the clamp binds). Options: `temax=5500`, `iterations=150`, `n210808=pre109|pre106` (below),
+# schedule, started where the clamp binds), `clampfree` (clamp without the null penalty),
+# `iraum` (clamp with the null in 0.25–0.5 Å instead, below; default). Options:
+# `temax=5500`, `iterations=150`, `n210808=pre109|pre106` (below),
 # `laplace=on|off` (Gauss–Newton covariance at the optimum), `profile=on|off` (best loss
 # with the null pinned at 0.5–2.0 Å). Writes `hybride_cbet_<variant>.txt`.
 
@@ -23,7 +28,7 @@ using Briareus, Printf, ForwardDiff, LinearAlgebra
 
 opt = Dict(String.(split(a, '=', limit = 2)) for a in ARGS if occursin('=', a))
 variants = [a for a in ARGS if !occursin('=', a)]
-isempty(variants) && (variants = ["constrained", "clamp"])
+isempty(variants) && (variants = ["iraum"])
 temax = parse(Float64, get(opt, "temax", "5500"))
 iterations = parse(Int, get(opt, "iterations", "150"))
 
@@ -69,11 +74,17 @@ end
 cal = [(; beams_at = s.beams_at, data = [(t, s.post(t)) for t in s.ts], delay = s.rise - ref.rise)
        for s in shots]
 
-# The Δλ null constraint (NC24: 1–1.55 Å for HYBRID-E): with N221204's peak beams the
-# inner cones must not gain at 1.0 Å and must gain at 1.55 Å. Squared hinge on the
-# inner-power ratio, weight 10 (a 1 % violation costs as much as ~3 cone-fraction
-# residuals of 0.01).
+# The Δλ null constraint: with N221204's peak beams the inner cones must not gain at
+# `lo` and must gain at `hi`. Squared hinge on the inner-power ratio, weight 10 (a 1 %
+# violation costs as much as ~3 cone-fraction residuals of 0.01).
 peak_beams = [(t, ref.beams_at(t)) for t in (5.6, 7.0)]
+# NC24's 1–1.55 Å (`constrained`, `clamp`) is the detuning that minimized hot-spot P2 in
+# the 2020–21 HYBRID-E shots (bubble absorption compensated as well), not the transfer
+# null; the closest published statement on the null is I-Raum's: 0.5 Å "mostly to negate
+# the flow-induced CBET" (NC24). Variant `iraum` holds the null in 0.25–0.5 Å (the lower
+# edge, keeping a flow-driven transfer at Δλ = 0, is our choice); `clampfree` has no null
+# constraint. Research notes, "Joint multi-shot CBET calibration: the null".
+null_band(variant) = startswith(variant, "iraum") ? (0.25, 0.5) : (1.0, 1.55)
 function null_penalty(m; lo = 1.0, hi = 1.55, w = 10.0)
     acc = 0.0
     for (t, bs) in peak_beams
@@ -87,7 +98,7 @@ Te0 = ([1.0, 3.0, 4.0, 4.75, 5.5, 6.5, 8.0], [2790.0, 3550.0, 3720.0, 5190.0, 55
 deck_clamp = ([3.9, 4.1], [0.002, 0.0075])
 function start(variant)
     Te = variant == "free" ? Te0 : (Te0[1], min.(Te0[2], 0.95temax))
-    if variant == "clamp"
+    if variant in ("clamp", "clampfree", "iraum")
         # start where the hard clamp binds at peak (δn/n of the strongest pairs ~1e-3): a
         # clamp above every pair's δn has zero gradient and the fit leaves it there
         clamp = cbet_clamp_schedule((ref.tab.t, (ref.tab.p44_in .+ ref.tab.p50_in) ./ (1 .- ref.tab.cf_in));
@@ -99,7 +110,7 @@ function start(variant)
     return TwoZoneCBET(leh_z = 5.62, outside = (mach = 1.23, multiplier = 0.30, Te, clamp = deck_clamp),
                        inside = (multiplier = 1.23, Te, clamp = deck_clamp))
 end
-fitspec(variant) = variant == "clamp" ?
+fitspec(variant) = variant in ("clamp", "clampfree", "iraum") ?
     ((:outside, :multiplier), (:inside, :multiplier), (:outside, :mach), (:both, :Te), (:both, :clamp)) :
     ((:outside, :multiplier), (:inside, :multiplier), (:outside, :mach), (:both, :Te))
 function bounds_for(variant)
@@ -126,7 +137,9 @@ function report(io, name, m)
                 r[k], s.ts[k], sum(r[i] for i in eachindex(r) if 5.4 <= s.ts[i] <= 7.4) /
                                count(t -> 5.4 <= t <= 7.4, s.ts))
     end
-    @printf(io, "  all rms %.4f (%d rows); null penalty %.2e\n", rms(allr), length(allr), null_penalty(m))
+    lo, hi = null_band(name)
+    @printf(io, "  all rms %.4f (%d rows); null penalty (%.2f–%.2f Å) %.2e\n", rms(allr), length(allr), lo, hi,
+            null_penalty(m; lo, hi))
     for t in (5.6, 7.0, 8.0)
         bs = ref.beams_at(t)
         nl = 3cbet_null(m, bs, t; receivers = INNER)
@@ -205,7 +218,8 @@ for variant in variants
         tee = IOContext(io)
         m0 = start(variant)
         t0 = time()
-        pen = variant in ("free", "tebound") ? nothing : null_penalty
+        lo, hi = null_band(variant)
+        pen = variant in ("free", "tebound", "clampfree") ? nothing : (mm -> null_penalty(mm; lo, hi))
         m, res = calibrate_cbet(m0, cal; receivers = INNER, fit = fitspec(variant), bounds = bounds_for(variant),
                                 penalty = pen, iterations)
         @printf(io, "%s: %d iterations, %d evaluations, %.0f s, loss %.5f, converged %s\n", variant,
@@ -215,7 +229,7 @@ for variant in variants
         report(stdout, variant, m)
         println(io, "model = ", repr(m))
         get(opt, "laplace", "on") == "on" && laplace(io, m, variant)
-        if get(opt, "profile", "off") == "on" && !(variant in ("free", "tebound"))
+        if get(opt, "profile", "off") == "on" && !(variant in ("free", "tebound", "clampfree"))
             # profile: best loss with the null pinned near each Δλ (± 0.05 Å), warm start
             for nl in (0.5, 0.8, 1.2, 1.55, 2.0)
                 pp(mm) = null_penalty(mm; lo = nl - 0.05, hi = nl + 0.05, w = 100.0)

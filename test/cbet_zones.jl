@@ -244,4 +244,12 @@ end
     @test m.inside.saturation === :min && m.inside.clamp[2][2] < 1e-3
     d = hybride_cbet(delay = -0.2)
     @test d.inside.Te[1] ≈ m.inside.Te[1] .- 0.2 && d.outside.clamp[1] ≈ m.outside.clamp[1] .- 0.2
+    # the same fit with the null at I-Raum's ≤ 0.5 Å (0.024 / 0.016 / 0.028): better on
+    # every shot, null 0.24 Å at peak, Te within the bound
+    m = hybride_cbet_iraum()
+    @test rmsres(ref, 2.75) < 0.026
+    @test rmsres(n220919_fig9(), 2.5) < 0.017
+    @test rmsres(t808, 1.8) < 0.03
+    @test 0.15 < 3cbet_null(m, bs, 5.6; receivers = (:inner23, :inner30)) < 0.5
+    @test maximum(m.inside.Te[2]) <= 5500 && m.outside.Te === m.inside.Te
 end
