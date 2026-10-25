@@ -731,6 +731,25 @@ function n221204_pulse()
 end
 
 """
+    zylstra2022_fig2() -> NamedTuple
+
+The HYBRID-E LEH-size pair of Zylstra et al., PRE 106, 025202 (2022) Fig. 2, read from
+the figure's vector paths (`data/zylstra2022_fig2.csv`, provenance in its header): the
+symcaps N191118 (3.64 mm LEH) and N210601 (3.1 mm LEH). Fields `t` (ns, 0–10.85 in
+0.05 ns steps), `power_n191118`, `power_n210601` (TW, total delivered; 1.623 and
+1.663 MJ, peaks 470.6 and 398.9 TW), `dante_n191118`, `dante_n210601` (eV, measured
+with Dante; `NaN` before 3.50 and 1.60 ns, where the curves start) and `bang` (ns, the
+figure's SPIDER bang times: 9.37 and 9.48). Only the total power is published; the
+inner/outer split is not.
+"""
+function zylstra2022_fig2()
+    h, rows = read_csv(joinpath(@__DIR__, "..", "data", "zylstra2022_fig2.csv"))
+    val(s) = isempty(strip(s)) ? NaN : parse(Float64, s)
+    cols = Tuple([val(r[i]) for r in rows] for i in eachindex(h))
+    return (; NamedTuple{Tuple(Symbol.(h))}(cols)..., bang = (n191118 = 9.37, n210601 = 9.48))
+end
+
+"""
     n221204_fig9_beams(beams, fig9, t) -> Vector{Beam}
 
 `beams` (NIF cones `:inner23`, `:inner30`, `:outer44`, `:outer50`) with the powers

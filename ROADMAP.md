@@ -1232,18 +1232,36 @@ the reference's view factors hold through the pulse; items 9 and 10 remove that 
       the keyframes (`moving_hohlraum(...; capsule_shrink)`, `capsule=mesh`) gives the
       same energetics and moves the late P2 down 0.026 (Fig. 10 minimum −0.170 matched,
       8 ns +0.047 against +0.095);
-    - decide whether `energetics=new` becomes the example's default (the default
-      energetics now under-drive the peak: capsule 283 eV at 8 ns);
+    - ~~decide whether `energetics=new` becomes the example's default~~ **Done
+      (2026-10-25, research notes "Zylstra 2022 LEH pair, time-dependent")**: it is the
+      example's default now (`energetics=old` restores the 2026-10-24 settings; no src
+      default changed). On N221204, N191118 and N210601 it captures 64–78 % of Dante's
+      rise through the peak against 39–51 %, sits within −5…+1 eV of Dante (initial
+      area, rms 9 against 16–23), and gives Fig. 10 rms 0.042 against 0.050. The old
+      energetics fit better only on the open-area reading and on HYDRA's capsule share;
+      that share (11.7 % against 16.2) calls for recalibrating α_c on the current drive;
     - ~~a synthetic Dante (item 13) reported beside the capsule-seen temperature~~
       **Done (2026-10-24)**: Dante 1 286 / 306 eV (initial / open LEH area) at 6.25 ns
       against 313 measured at 8.4 ns, capsule 302 eV at 5.5 ns; the model's drive peaks
       ~2.5 ns early and falls ~30 eV by 8.5 ns (default energetics; superseded by the
       wall-history fix above);
-    - the Zylstra 2022 LEH pair: the model needs ×1.10–1.15 more power for the 3.64 mm
-      LEH (lips reduce it), the data ×1.19 or more; the shots' different histories and
-      Dante's view are the likely gap, so a time-dependent run of both pulses is next.
-    Benchmark targets still to check: bang time 9.53 ns as the end of the drive window,
-    and hot-spot P2 ≈ 0 and velocity 36 km/s at (151°, 54°) through item 11. The pointing
+    - ~~the Zylstra 2022 LEH pair~~ **Done (2026-10-25, same notes)**: both shots'
+      measured pulses and Dante from PRE 106 Fig. 2's vector paths
+      (`zylstra2022_fig2()`, `examples/n221204.jl ... n191118|n210601`). The "×1.19 or
+      more" compared peaks at different times. At equal times the 3.64 mm shot is
+      4–8 eV hotter at 5–7 ns, an equal-Tr ratio of ~1.07–1.09. The model gives +8–10 eV
+      on Dante, 2–4 eV (~3–4 % power) too much, energetics-independent; Dante's view
+      *adds* ~4 eV over the capsule's +5 and computed lips widen it. Both shots repeat
+      the late-time deficit, more strongly (N191118 −73 eV at 8.5 ns, initial area): Dante's
+      tail would take ~250–450 kJ more x-ray source after the fall, far more than any
+      published reservoir. The pair is now the cleanest test of the late drive;
+    - **benchmark targets checked (2026-10-25, same notes, `metrics=on`)**: hot-spot
+      velocity 0 to round-off (the mock pointing and hohlraum have no mode 1; the
+      measured 36 km/s needs per-quad powers, window or capsule mode-1 inputs, none
+      public); mean flux P2 over rise→bang within 0.002 of Fig. 10's, and −6.5 µm
+      hot-spot P2 from HYDRA's through the −9.2 µm per % transfer (old energetics +22);
+      bang time as the window end changes P2 by 0.001 but exposes the late deficit (Dante
+      at bang 155 / 186 eV against 226 / 254 on the pair). The pointing
     stays the public mock-up; the non-public export's aim points never enter the
     repository. CPPs, window geometry, corners and the liner thickness are unpublished
     and stay at repository defaults.

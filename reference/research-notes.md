@@ -5442,3 +5442,202 @@ matched to < 5e-4.
 - The per-cone M-band in `drive_history` records: the example's pre-CBET cone weighting
   is a proxy; bubble-absorbed inner light radiating from the outer bubble (Dewald's
   clipping) is not split per cone.
+
+## Zylstra 2022 LEH pair, time-dependent (2026-10-25) *derived*
+
+ROADMAP 16: the LEH-size pair run with each shot's measured pulse, the remaining
+N221204 benchmark targets (bang time, hot-spot P2 and velocity), and the example's
+default energetics. Dante, Fig. 10, the hot-spot data and HYDRA's split are checks
+here; nothing was fitted to them. Confidence: **H** for the primary text or the figure's
+vector data, **L** for our construction.
+
+### Inputs read
+
+| Quantity | Value | Source | Conf. |
+|---|---|---|---|
+| N191118 (3.64 mm LEH) delivered power | 1.623 MJ; peak 470.6 TW at 5.6 ns; 455–466 TW to 6.6 ns, falling from 7.0, half power at 7.65, off at 8.35 ns | Zylstra et al., PRE 106, 025202 (2022) Fig. 2 top, read from the accepted manuscript's vector paths (LLNL-JRNL-835348 p. 5; `zylstra2022_fig2()`, `data/zylstra2022_fig2.csv`) | H |
+| N210601 (3.1 mm LEH) delivered power | 1.663 MJ (text: 1.7 MJ); peak 398.9 TW; 388–397 TW from 5.4 to 7.55 ns, half power at 8.25, off at 9.05 ns | same | H |
+| Dante Tr, N191118 | 237.7 at 5.0 ns, 279.2 at 6.0, 293.0 at 7.0, peak 294.8 at 7.25, 281.4 at 8.0, 238.2 at 9.0, 226.0 at bang | same, Fig. 2 bottom | H |
+| Dante Tr, N210601 | 233.8 at 5.0, 273.3 at 6.0, 288.5 at 7.0, peak 301.2 at 7.9, 292.3 at 8.5, 277.7 at 9.0, 253.8 at bang | same | H |
+| Bang times (SPIDER) | N191118 9.37 ns, N210601 9.48 ns | same, the dashed lines | H |
+| Δλ (1ω) | 1.25 Å (N191118), 1.8 Å (N210601) | Zylstra 2022 text | H |
+| N221204 bang time | 9.53 ± 0.07 ns | K24E Table I | H |
+| N221204 hot spot | P2 0.3 ± 0.1 µm; velocity 36 ± 6 km/s toward (θ, φ) = (151°, 54°) | P24 Fig. 2, K24 Table II | H |
+
+Not published for the pair, so taken from N221204 (*L*): the inner/outer split (DN24's
+cone fraction, with its rise and droop moved onto each shot's own by a piecewise-linear
+time map through `pulse_rise` and the half-power fall), the pointing (the mock HYBRID-E
+pointing; N191118's outer beams sat farther from the midplane), the capsule (the
+N210808 design, 1.1285 mm, for both), the CBET (the joint fit `hybride_cbet`, its tables
+shifted by the rise difference, −0.03 and +0.03 ns), and the capsule schedule (its end
+moved to each shot's bang time). Backscatter is unpublished for the pair and is left
+out; `energetics=new` otherwise (DU, `nif_conversion`, `CapsuleAlbedo` α_c 0.22, 11 %
+degradation).
+
+### 1. The pair: did the histories and Dante's view close the gap?
+
+The static result (§5 of "Wall material, conversion and capsule energetics"): the
+3.64 mm LEH needs ×1.10–1.15 the power for the 3.1 mm LEH's capsule Tr, against "×1.19 or
+more" in the data. That data number compared the peaks (≈295 eV at 7.3 ns, ≈300 at
+8.0 ns) at different times, after N191118's laser had started to fall. **At equal times
+the data show the 3.64 mm shot the hotter one** through the rise and peak: Dante
+N191118 − N210601 = +3.9 / +7.8 / +5.9 / +6.1 / +4.5 eV at 5.0 / 5.5 / 6.0 / 6.5 / 7.0 ns
+at 1.12–1.18× the power, −4.4 eV at 7.5 ns once its laser falls. The equal-Tr power
+ratio this implies at 6.0–6.5 ns is 1.07–1.09 (P ∝ T^3.3–4, *L*); at 5.5 ns 1.05–1.07.
+So the gap was mostly the reading of the data. The static model's ×1.10–1.15 sits at or
+just above it.
+
+Time-dependent, full model (+bubble), standard mesh (0.28 / 0.16), `energetics=new`.
+Cells are capsule Tr / Dante 1 over the initial LEH area / over the open area, then
+measured Dante (eV):
+
+| t (ns) | N191118 | measured | N210601 | measured |
+|---|---|---|---|---|
+| 5.0 | 258.6 / 254.1 / 267.8 | 237.7 | 252.0 / 244.2 / 257.5 | 233.8 |
+| 5.5 | 280.6 / 272.9 / 289.7 | 267.0 | 275.1 / 262.9 / 279.1 | 259.2 |
+| 6.0 | 286.5 / 278.1 / 297.0 | 279.2 | 281.2 / 268.6 / 286.9 | 273.3 |
+| 6.5 | 290.4 / 282.4 / 303.2 | 286.4 | 285.4 / 274.0 / 294.2 | 280.4 |
+| 7.0 | 293.0 / 284.2 / 306.3 | 293.0 | 290.9 / 278.3 / 299.9 | 288.5 |
+| 7.5 | 279.4 / 268.8 / 290.2 | 292.8 | 296.0 / 282.4 / 305.0 | 297.1 |
+| 8.0 | 252.8 / 240.9 / 260.2 | 281.4 | 288.2 / 273.7 / 295.6 | 301.1 |
+| 8.5 | 202.1 / 188.6 / 203.7 | 261.9 | 263.4 / 247.9 / 267.8 | 292.3 |
+| 9.0 | 178.9 / 166.9 / 180.3 | 238.2 | 225.6 / 210.2 / 227.0 | 277.7 |
+| LEH / capsule (% of coupled) | 31.4 / 12.1 | | 25.3 / 12.2 | |
+
+The pair difference, N191118 − N210601 (eV; coarse mesh 0.8 / 0.4, within 0.5 eV of the
+standard mesh), data Dante against model capsule Tr / Dante initial / Dante open:
+
+| run | 5.0 | 5.5 | 6.0 | 6.5 | 7.0 | 7.5 |
+|---|---|---|---|---|---|---|
+| data (Dante) | +3.9 | +7.8 | +5.9 | +6.1 | +4.5 | −4.4 |
+| `energetics=new` | +6.6 / +9.6 / +10.2 | +5.5 / +9.6 / +10.2 | +5.3 / +9.0 / +9.6 | +5.1 / +7.9 / +8.5 | +2.1 / +5.3 / +5.7 | −16.7 / −14.2 / −15.3 |
+| `energetics=old` | +6.4 / +9.7 / +10.2 | +5.5 / +10.0 / +10.6 | +5.5 / +9.5 / +10.2 | +5.6 / +8.7 / +9.3 | +3.2 / +6.6 / +7.1 | −12.9 / −10.6 / −11.5 |
+| new, `lag=0.15` | +7.2 / +10.0 / +10.5 | +5.8 / +9.8 / +10.4 | +5.7 / +9.4 / +10.1 | +5.3 / +8.2 / +8.8 | +3.6 / +6.7 / +7.3 | −10.3 / −7.4 / −7.9 |
+| new, `lips=computed` | +6.0 / +12.9 / +10.1 | +4.9 / +12.9 / +10.0 | +4.5 / +12.1 / +9.2 | +4.0 / +10.9 / +7.8 | +0.8 / +8.2 / +4.8 | −18.1 / −11.5 / −16.3 |
+
+Findings:
+- **The histories close most of the gap.** On the instrument's own reading (Dante) the
+  model puts the 3.64 mm shot 8–10 eV above the 3.1 mm one at 5–6.5 ns, against 4–8 eV
+  measured: 2–4 eV too much, ~1 % in T, ~3–4 % in power (*L*), against ~6 % before.
+  The sign is the same as the static result's (the model's larger LEH loses slightly too
+  little). The difference does not depend on the energetics (old and new agree within
+  1 eV): it is geometry, not wall or conversion physics.
+- **Dante's view widens the model's difference rather than closing it**: the capsule
+  sees +5 eV, Dante +9. Through the larger hole Dante 1 sees deeper into the hohlraum,
+  so the 3.64 mm shot reads hotter relative to its capsule. Comparing the model's capsule
+  Tr with the measured Dante would hide the residual.
+- **Computed lips widen it further** (+11–13 eV on the initial area): `LipClosure`'s
+  absolute depth (0.24 mm) closes the 3.1 mm hole by a larger fraction, so Dante's
+  initial-area reading darkens more on N210601. The prescribed relative closure (0.857
+  r₀) does better here; Young's 0.26 mm on 3.64 mm and Schneider's 0.25 on 3.1 mm cannot
+  separate the two forms (see "Computed LEH closure").
+- **When the laser falls the difference flips sign too hard** (7.5 ns: −14 against
+  −4.4): N191118's model Tr drops with the power while its Dante holds for ~0.3 ns more.
+  A 0.15 ns lag halves that (−7.4). This is the late-time drive problem below.
+- Absolute level, rise and peak: the measured Dante lies between the initial-area and
+  open-area readings on both shots (N191118: +0.8 / +19 eV mean, initial / open,
+  5–7 ns; N210601: −4.1 / +15 eV, 5–7.5 ns, coarse), as on N221204.
+
+### 2. After the laser falls, and the drive at bang
+
+On all three shots the model's drive falls far faster than Dante's after the power
+drops. Model minus measured (initial / open area, `energetics=new`, standard mesh):
+N191118 −41 / −21 eV at 8.0 ns, −73 / −58 at 8.5, −71 / −58 at 9.0; N210601 −27 / −5 at
+8.0, −44 / −24 at 8.5, −68 / −51 at 9.0; N221204 −28 / −5 at 8.5, −41 / −20 at 9.0. At
+bang time Dante reads 226.0 eV (N191118) and 253.8 eV (N210601), the model 154.7 / 167.1
+and 185.5 / 200.4. The ordering Zylstra points to ("by bang time Trad is significantly
+higher on N210601") is reproduced: model +31 eV (initial area), data +28. The level is
+not.
+
+Size of the gap (*L*): the LEH x-ray energy that Dante's Tr implies over the fall
+(σT⁴ over both initial LEH areas, Lambertian) exceeds the model's by 125 kJ (N191118,
+7.25–9.37 ns), 89 kJ (N210601, 7.75–9.48) and 71 kJ (N221204, 8.0–9.4). The LEHs carry
+25–31 % of the model's losses, so holding the hohlraum at Dante's temperature would take
+~250–450 kJ more x-ray source after the laser falls, 15–25 % of the laser energy. That is
+several times the He gas's 30–60 kJ ("Computed LEH closure") and more than the wall
+already gives back in the model (`wall_release`: 137–272 kJ). A 0.15 ns lag of the source
+(~60 kJ stored) recovers only 10–15 eV of it (N191118 at 8.5 ns, coarse: −59 instead of −73). So the
+tail is not a reservoir of the published size. What remains is either physics a gray,
+quasi-static radiosity lacks over a 1–2 ns coast (a hot, optically thick LEH plasma or
+gold blow-off in Dante's view; the wall's re-emission when the drive is fully cut, which
+`release` = 0.77 was calibrated for only up to 30 % drops), or a Dante time base or
+analysis that differs after laser-off. The pair, with N191118's laser off 1 ns before
+bang, is the cleanest data for it. Open.
+
+### 3. Bang time and the hot spot (ROADMAP 11 metrics)
+
+`examples/n221204.jl metrics=on`: the steps run on to bang time, the full model records
+every Y_lm, and the metrics use the drive window from the start of the rise
+(`pulse_rise`, 4.11 ns on N221204) to bang (9.53 ns). Standard mesh:
+
+| | `energetics=new` | `energetics=old` | data / HYDRA |
+|---|---|---|---|
+| hot-spot velocity (flat kernel, 100 km/s per %) | 2e-12 km/s | 1e-12 km/s | 36 ± 6 km/s at (151°, 54°) |
+| mean flux P2/P0, rise to bang | −0.0149 | +0.0057 | — |
+| mean flux P2/P0, rise to 8.9 ns | −0.0163 | −0.0016 | Fig. 10 −0.0147 |
+| mean flux P2/P0, 4.5–6.5 ns | −0.1089 | −0.1402 | Fig. 10 −0.1160 |
+| hot-spot P2 shift from HYDRA's at −9.2 µm per % (4.5–6.5 ns) | −6.5 µm | +22.3 µm | measured 0.3 ± 0.1 µm |
+| Fig. 10 minimum / 8 ns / rms (blind) | −0.189 / +0.077 / 0.042 | −0.235 / +0.150 / 0.050 | −0.170 / +0.095 |
+| capsule Tr / Dante 1 (initial, open) at bang | 233.6 / 217.5, 235.0 eV | 208.6 / 194.5, 210.1 | no Dante after 9.4 ns |
+
+- **Velocity**: zero to round-off. The mock pointing and the hohlraum are mirror
+  symmetric and there are no windows, so the model has no mode 1. N221204's 36 km/s
+  comes from sources that are not in it: per-quad power imbalance (DN24 Fig. 1 left,
+  not attributable per quad), capsule thickness mode 1 (0.13 µm), the three equatorial
+  diagnostic windows and the waist manufacturing gaps (H24), none of them published in a
+  usable form. This check cannot pass with public inputs. It says the drive's own mode 1
+  is not the cause only if those inputs are known.
+- **Hot-spot P2**: with no shipped hot-spot kernel, the comparison is with HYDRA's flux
+  history, whose design gave a near-round hot spot (0.3 µm measured). Over the whole
+  window the published energetics match Fig. 10's mean to 0.002 (old: 0.013 more
+  pole-hot). Over the peak window that the −9.2 µm per % transfer was derived on
+  (Callahan 2018's line on another platform, good to a factor of ~2), `energetics=new`
+  gives a −6.5 µm (oblate) shift and the old energetics +22 µm. Neither is zero within
+  the transfer's uncertainty band; the published energetics are 3× closer.
+- **Bang time as the end of the window**: extending the window from 8.9 ns to bang moves
+  the mean flux P2 by 0.0014 (new): the coast's flux is low and its P2 small, so the
+  window end hardly matters for P2. It matters for the drive. At bang the model's Tr is
+  70 eV below Dante on the pair (§2), and on N221204 the capsule Tr is 234 eV at bang
+  against ~276 eV that HYDRA gives N210808 there (Kr22 Table I; N221204 not tabulated).
+  This is the same late-time deficit. Coast time: the measured pulse's half-power fall
+  is at 8.75 ns, and 9.53 − 8.75 = 0.78 ns is AS24's coast time exactly (a consistency
+  check of the pulse data, not of the model).
+
+### 4. `energetics=new` as the example's default: decided, flipped
+
+Checks independent of anything fitted (standard mesh; the pair's `energetics=old`
+numbers are coarse):
+
+| check | `energetics=new` | `energetics=old` |
+|---|---|---|
+| Dante rise through the peak (convention-free): N221204 5→8 ns, measured +72.2 eV | +46.2 initial / +56.3 open | +28.3 / +36.8 |
+| N191118 5→7 ns, measured +55.3 | +30.1 / +38.5 | +19.4 / — |
+| N210601 5→7.5 ns, measured +63.3 | +38.2 / +47.5 | +23.5 / — |
+| Dante level, initial area (the instrument's convention), mean / rms over rise and peak: N221204, N191118, N210601 | −4.8 / 9.3, +0.8 / 8.9, −4.1 / 9.3 | −18.0 / 23.0, −10.0 / 16.0, −17.0 / 21.6 |
+| same, open area | +14.8 / 15.5, +19.2 / 20.1, +14.6 / 15.5 | +0.7 / 11.5, +7.6 / 12.5, +0.7 / 10.6 |
+| Dante after the fall, initial area mean | −35, −53, −47 | −60, −68, −68 |
+| Fig. 10 (HYDRA, blind) rms, minimum, 8 ns | 0.042, −0.189, +0.077 | 0.050, −0.235, +0.150 |
+| hot-spot P2 via the transfer | −6.5 µm | +22.3 µm |
+| HYDRA LEH / capsule share (25.2 / 16.2 %) | 25.9 / 11.7 | 18.2 / 16.3 |
+| pair difference | same | same |
+
+(The level rows use coarse runs; N221204's standard mesh is within 0.5 eV.)
+
+The published energetics win on Dante's shape, the one check that does not depend on
+how Dante's area is counted (they capture 64–78 % of N221204's rise against 39–51 %; the
+pair alike). They also win on the level in Dante's own convention on all three shots, on
+the late drive, on Fig. 10, on the hot-spot transfer and on HYDRA's LEH share. The old
+energetics win on the level only if the lips are taken to glow like the wall (open
+area), and on the capsule share. That share is HYDRA's, a model, and `energetics=new`
+calibrated α_c on a drive that was then too hot, so it is a recalibration issue
+(ROADMAP 16), not evidence for the old physics. **Decision**: `examples/n221204.jl` now
+defaults to `energetics=new`; `energetics=old` restores the 2026-10-24 settings. Untagged
+runs and CSVs before 2026-10-25 used the old energetics. No src default changed: the
+pieces stay opt-in (`du_wall_loss`, `nif_conversion`, `CapsuleAlbedo` are
+HYBRID-E-specific or calibrated, and the 0.75 materials default anchors every other
+baseline).
+
+Open, with their data: the late-time drive (§2: the pair is the test); the pair
+residual of 2–4 eV (pointing and cone fraction of N191118 are unpublished); the capsule
+share (α_c recalibration on the current drive, or a larger absorbing radius); the
+velocity check (needs per-quad delivered powers or window geometry).

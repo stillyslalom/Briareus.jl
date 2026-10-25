@@ -9,21 +9,24 @@
 #
 # `h`, `capsule_h`: mesh (default 0.28 / 0.16, the standard mesh); `runs`: `all`
 # (default) or `full` (only the full model, e.g. for a fine-mesh confirmation);
-# `transfer`: `calibrated` (default: the two-zone reduced CBET calibrated to PRE 109
-# Fig. 9, `n221204_cbet()`), `reduced` (the single-zone reduced CBET model at the deck's
+# `transfer`: `calibrated` (the default, `joint` for Zylstra's pair below; the two-zone
+# reduced CBET calibrated to PRE 109 Fig. 9, `n221204_cbet()`), `reduced` (the single-zone reduced CBET model at the deck's
 # settings), `fig9b` (the outer-to-inner transfer that gives PRE 109 Fig. 9b's
 # post-transfer cone fraction, HYDRA's own CBET result for this shot), `joint` (the
 # joint three-shot calibration, `hybride_cbet()`) or `iraum` (the same with the Δλ null
 # at I-Raum's ≤ 0.5 Å, `hybride_cbet_iraum()`); `table` as 5th
 # argument solves only the comparison times; `dynamics`: `calibrated` (default), `old`
 # (the 2026-10-23 settings) or `late_lips` (see below); `shot`: `n221204` (default),
-# `n220919` or `n210808` (proxies, see below). Writes
+# `n220919` or `n210808` (proxies, see below), or `n191118` / `n210601`, Zylstra 2022's
+# LEH-size pair of symcaps (3.64 and 3.1 mm LEHs, their measured pulses and Dante;
+# research notes, "Zylstra 2022 LEH pair, time-dependent (2026-10-25)"). Writes
 # `<shot>_<transfer>_<dynamics>_<h>_<capsule_h>[_<energetics>].csv` (P2/P0, P4/P0 and
 # capsule Tr per run) to the current directory.
 #
-# Energetics options, as `key=value` arguments anywhere on the line (defaults: the
-# 2026-10-24 benchmark; research notes, "Wall material, conversion and capsule
-# energetics (2026-10-24)"):
+# Energetics options, as `key=value` arguments anywhere on the line (research notes,
+# "Wall material, conversion and capsule energetics (2026-10-24)"). Each key's default
+# below is its `energetics=old` value; the example's default is `energetics=new`, which
+# sets them all (an explicit key still wins):
 # - `wall=au|du`: gold's Lindl wall loss (default) or the Au-lined DU `du_wall_loss()`;
 # - `conversion=<number>|nif`: 0.75 (default) or `nif_conversion()`, 0.7 t^0.12 ≤ 0.95;
 # - `capsule=ablator|model`: the default ablator (albedo 0.3, initial radius) or a
@@ -37,8 +40,12 @@
 # - `degrade=<fraction>`: HYDRA's laser degradation (PRE 109 App. 3: 9–13 %), default 0;
 # - `backscatter=off|on`: N221204's measured SBS (42 kJ, early in the peak, on the
 #   inner cones) and SRS (6 kJ, through the peak) (AS24), removed before everything else;
-# - `energetics=new`: all of them (du, nif, model with capsule_albedo 0.22, degrade
-#   0.11, backscatter on).
+# - `energetics=new` (the default since 2026-10-25): all of them (du, nif, model with
+#   capsule_albedo 0.22, degrade 0.11, backscatter on; off for Zylstra's pair);
+#   `energetics=old`: none of them, the 2026-10-24 benchmark's settings, which every
+#   untagged run before 2026-10-25 used (research notes, "Zylstra 2022 LEH pair,
+#   time-dependent (2026-10-25)": the published energetics match Dante's rise through
+#   the peak on N221204, N191118 and N210601, the old ones do not).
 # Two further options (research notes, "N221204 late-time drive (2026-10-24)"):
 # - `pulse=pak|dn24`: the delivered total power from Pak et al. PRE 109, 025203 Fig. 1
 #   (default, `n221204_pulse()`) or the earlier by-eye DN24 table;
@@ -53,7 +60,11 @@
 #   sensitivity estimate of plasma-stored energy (research notes, "Computed LEH closure
 #   (2026-10-24)");
 # - `unfold=on`: Dante 1's spectrum, channel voltages and their unfold at 5–8.5 ns in the
-#   full model (research notes, "Dante channel responses and the unfold (2026-10-24)").
+#   full model (research notes, "Dante channel responses and the unfold (2026-10-24)");
+# - `metrics=on`: the steps run on to bang time and the full model prints ROADMAP 11's
+#   implosion metrics (hot-spot velocity, flux P2 over the drive window, the drive at
+#   bang) over the window from the rise to bang (research notes, "Zylstra 2022 LEH pair,
+#   time-dependent (2026-10-25)").
 # Every run prints its time-integrated energy budget (`energy_budget`) against PRE 109
 # App. 3's N221204 split (wall 54.1 %, LEH 25.2 %, gas 4.5 %, capsule 16.2 %), and its
 # synthetic Dante 1 Tr peak (`dante1()`) beside the capsule-seen Tr, against the measured
@@ -64,31 +75,41 @@ using Briareus, Printf, DelimitedFiles
 pos = filter(a -> !occursin('=', a), ARGS)
 opt = Dict(String.(split(a, '=', limit = 2)) for a in ARGS if occursin('=', a))
 given = sort(collect(keys(opt)))          # the options on the command line (the file tag)
-if get(opt, "energetics", "") == "new"
+shot = get(pos, 7, "n221204")
+# Zylstra 2022's LEH pair (`n191118`, `n210601`): no published backscatter, so
+# `energetics=new` leaves it off for them (N221204's measured SBS/SRS would not apply).
+pair = shot in ("n191118", "n210601")
+energetics = get(opt, "energetics", "new")
+energetics in ("new", "old") || error("energetics=new or energetics=old, not $energetics")
+if energetics == "new"
     for (k, v) in ("wall" => "du", "conversion" => "nif", "capsule" => "model",
-                   "capsule_albedo" => "0.22", "degrade" => "0.11", "backscatter" => "on")
+                   "capsule_albedo" => "0.22", "degrade" => "0.11", "backscatter" => pair ? "off" : "on")
         haskey(opt, k) || (opt[k] = v)
     end
 end
 h = parse(Float64, get(pos, 1, "0.28"))
 capsule_h = parse(Float64, get(pos, 2, "0.16"))
 which = get(pos, 3, "all")
-transfer = get(pos, 4, "calibrated")
+transfer = get(pos, 4, pair ? "joint" : "calibrated")   # the pair: the joint multi-shot fit (below)
 
 # Geometry (mm; n221204_benchmark.md §1, PRE 109 Fig. 1a): 11.24 × 6.4 mm Au-lined DU
 # hohlraum, 3.1 mm LEHs, 1.135 mm capsule. Unpublished, so repository defaults: square
-# corners, no diagnostic windows. By default a gold wall with the Au wall-loss albedo
-# and the default ablator held at its initial radius (see the energetics options).
+# corners, no diagnostic windows. With `energetics=old`, a gold wall with the Au
+# wall-loss albedo and the default ablator held at its initial radius (see the
+# energetics options).
 η = get(opt, "conversion", "0.75") == "nif" ? nif_conversion() : parse(Float64, get(opt, "conversion", "0.75"))
 wall_albedo = get(opt, "wall", "au") == "du" ? du_wall_loss() : WallLossAlbedo()
 # The capsule model: HYDRA's ablation front (PRE 109 Fig. 1a: 0.92 mm, 0.81 R₀ at 6 ns)
 # along the shape of the LLNL dynamic view-factor model's front for N170827 (Young 2020
 # Fig. 3a, `young2020_radii()`), its time axis mapped piecewise linearly so that its
 # 0.81 R₀ (5.75 ns) falls at 6.0 ns and its end (0.23 R₀, 7.75 ns) at N221204's bang time
-# 9.53 ns (*L*: one shape, two anchors).
+# 9.53 ns (*L*: one shape, two anchors). Zylstra's pair: the end at each shot's own bang
+# time (Fig. 2, `zylstra2022_fig2().bang`: 9.37 and 9.48 ns), the 6.0 ns anchor kept.
+zy = zylstra2022_fig2()
+bang = pair ? getfield(zy.bang, Symbol(shot)) : 9.53
 yr = young2020_radii()
 ty = yr.t
-tmap = [τ <= 5.75 ? τ * 6.0 / 5.75 : 6.0 + (τ - 5.75) * (9.53 - 6.0) / (7.75 - 5.75) for τ in ty]
+tmap = [τ <= 5.75 ? τ * 6.0 / 5.75 : 6.0 + (τ - 5.75) * (bang - 6.0) / (7.75 - 5.75) for τ in ty]
 capsule_schedule = (tmap, yr.capsule ./ yr.capsule[1])
 # `capsule_albedo=young`: the quasi-1D HYDRA ablator albedo of the same dynamic model
 # (Young 2020 Fig. 3a top, `young2020_albedos()`) on the same time map, instead of a
@@ -98,7 +119,7 @@ capsule_schedule = (tmap, yr.capsule ./ yr.capsule[1])
 # effective radius (`CapsuleAlbedo`'s `radius`).
 ya = young2020_albedos()
 capsule_alpha = get(opt, "capsule_albedo", "0.2") == "young" ?
-    TabulatedAlbedo([τ <= 5.75 ? τ * 6.0 / 5.75 : 6.0 + (τ - 5.75) * (9.53 - 6.0) / (7.75 - 5.75) for τ in ya.t],
+    TabulatedAlbedo([τ <= 5.75 ? τ * 6.0 / 5.75 : 6.0 + (τ - 5.75) * (bang - 6.0) / (7.75 - 5.75) for τ in ya.t],
                     ya.capsule) :
     parse(Float64, get(opt, "capsule_albedo", "0.2"))
 capsule_kind = get(opt, "capsule", "ablator")
@@ -107,7 +128,11 @@ capsule = capsule_kind == "model" ?
     capsule_kind == "mesh" ? Material(:ablator; albedo = CapsuleAlbedo(albedo = capsule_alpha), conversion = 0.3) :
     ablator()
 shrink = capsule_kind == "mesh" ? (; capsule_shrink = capsule_schedule) : (;)
-geometry = (length = 11.24, leh_radius = 1.55, capsule_radius = 1.135, h, capsule_h,
+# Zylstra's pair: N191118's 3.64 mm LEH (N210601's 3.1 mm) and the N210808-design capsule,
+# 1.1285 mm (K22 Fig. 4; N191118's, of the N210207 design, taken the same, *L*).
+leh_radius = shot == "n191118" ? 1.82 : 1.55
+capsule_radius = pair ? 1.1285 : 1.135
+geometry = (length = 11.24, leh_radius, capsule_radius, h, capsule_h,
             wall = gold(albedo = wall_albedo, conversion = η), capsule)
 R0 = 3.2
 
@@ -117,9 +142,10 @@ R0 = 3.2
 # Fig. 10 (*L*): Δλ 2.5 or 1.8 Å on the same mock pointing, CBET calibration and
 # hohlraum; N220919 on N221204's pulse (the same pulse with re-tuned foot powers,
 # K24), N210808 with the rise 0.2 ns earlier and the peak ending 0.45 ns earlier (P24
-# Fig. 1, read by eye).
-shot = get(pos, 7, "n221204")
-dλ = Dict("n221204" => 2.75, "n220919" => 2.5, "n210808" => 1.8)[shot]
+# Fig. 1, read by eye). Zylstra's pair: Δλ 1.25 Å (N191118) and 1.8 Å (N210601) (Zylstra
+# 2022), on the same mock pointing (N191118's outer beams sat farther from the midplane
+# for its larger LEH; unpublished, *L*).
+dλ = Dict("n221204" => 2.75, "n220919" => 2.5, "n210808" => 1.8, "n191118" => 1.25, "n210601" => 1.8)[shot]
 beams = [remake(b; dlambda = b.group in (:inner23, :inner30) ? dλ / 3 : 0.0)
          for b in hybride_mock_pointing(nif_beams())]
 
@@ -135,11 +161,30 @@ total = Float64.(outer .+ inner)
 # `pulse=dn24`: the by-eye DN24 table alone (2.028 MJ; the runs before 2026-10-24's
 # late-time-drive notes).
 measured = n221204_pulse()
-if get(opt, "pulse", "pak") == "pak" && shot != "n210808"
+if get(opt, "pulse", "pak") == "pak" && shot in ("n221204", "n220919")
     oi, ii = PulseShape(pt, Float64.(outer)), PulseShape(pt, Float64.(inner))
     frac(τ) = (s = oi(τ) + ii(τ); s > 0 ? ii(τ) / s : τ > 5 ? 1.0 : 0.5)
     pt, total = measured.t, measured.power
     inner = total .* frac.(pt)
+elseif pair
+    # Zylstra 2022 Fig. 2's total power (`zylstra2022_fig2()`), split by DN24's cone
+    # fraction with its rise and droop moved to the shot's own (the split of these shots
+    # is unpublished, *L*): shot time maps piecewise linearly onto N221204's through the
+    # starts of the rise (`pulse_rise`) and the half-power points of the fall.
+    oi, ii = PulseShape(pt, Float64.(outer)), PulseShape(pt, Float64.(inner))
+    cfrac(τ) = (s = oi(τ) + ii(τ); s > 0 ? ii(τ) / s : τ > 5 ? 1.0 : 0.5)
+    fall(t, P) = t[findlast(>=(maximum(P) / 2), P)]
+    ps = Float64.(getfield(zy, Symbol("power_", shot)))
+    knots_s = [0.0, pulse_rise((zy.t, ps)), fall(zy.t, ps)]
+    knots_r = [0.0, pulse_rise((measured.t, measured.power)), fall(measured.t, measured.power)]
+    to_ref(τ) = τ >= knots_s[3] ? τ - knots_s[3] + knots_r[3] :
+                (k = τ >= knots_s[2] ? 2 : 1;
+                 knots_r[k] + (τ - knots_s[k]) * (knots_r[k+1] - knots_r[k]) / (knots_s[k+1] - knots_s[k]))
+    pt, total = collect(zy.t), ps
+    inner = total .* cfrac.(to_ref.(pt))
+    measured = (; t = zy.t, power = ps, dante1 = getfield(zy, Symbol("dante_", shot)))
+    @printf("%s: rise %.2f ns, half-power fall %.2f ns (N221204 %.2f, %.2f); bang %.2f ns\n",
+            shot, knots_s[2], knots_s[3], knots_r[2], knots_r[3], bang)
 end
 # `lag=<ns>`: a sensitivity estimate of energy stored in the hohlraum plasma (gas and
 # gold blow-off) and given back as x-rays: the delivered power (total and inner) is
@@ -195,8 +240,9 @@ get(opt, "backscatter", "off") == "on" &&
 degrade > 0 && push!(pre, Backscatter((g => degrade for g in (:inner23, :inner30, :outer44, :outer50))...))
 # the laser–plasma models of a run: `pre` first; exactly the given model(s) without it
 with_pre(ms...) = isempty(pre) ? (length(ms) == 1 ? ms[1] : ms) : (pre..., ms...)
-isempty(pre) || @printf("backscatter: SBS %.1f %% of the inner power over 5.5–6.5 ns, SRS %.2f %% over the peak; degradation %.0f %%\n",
-                        100f_sbs, 100f_srs, 100degrade)
+get(opt, "backscatter", "off") == "on" &&
+    @printf("backscatter: SBS %.1f %% of the inner power over 5.5–6.5 ns, SRS %.2f %% over the peak\n", 100f_sbs, 100f_srs)
+degrade > 0 && @printf("degradation %.0f %%\n", 100degrade)
 
 # CBET: the reduced model at the deck's settings, δn/n clamp 0.002 until the start of
 # the rise (≈4.0 ns) and 0.0075 after (PRE 109 App. 1); the other plasma parameters are
@@ -222,11 +268,14 @@ calibrated = n221204_cbet(leh_z = geometry.length / 2)
 # `joint`: the two-zone model fitted jointly to N210808, N220919 and N221204 with the Te
 # and Δλ-null constraints (`hybride_cbet()`; research notes, "Joint multi-shot CBET
 # calibration"); its time tables follow each shot's rise (N210808's 0.2 ns early).
-joint = hybride_cbet(leh_z = geometry.length / 2, delay = shot == "n210808" ? -0.2 : 0.0)
+# Zylstra's pair: the tables follow the shot's own rise (`pulse_rise`, against N221204's).
+cbet_delay = shot == "n210808" ? -0.2 :
+             pair ? pulse_rise((pt, total)) - pulse_rise((n221204_pulse().t, n221204_pulse().power)) : 0.0
+joint = hybride_cbet(leh_z = geometry.length / 2, delay = cbet_delay)
 # `iraum`: the same joint fit with the null held at I-Raum's ≤ 0.5 Å, NC24's 1–1.55 Å
 # being the Δλ of round hot spots rather than the null (`hybride_cbet_iraum()`; research
 # notes, "Joint multi-shot CBET calibration: the null")
-iraum = hybride_cbet_iraum(leh_z = geometry.length / 2, delay = shot == "n210808" ? -0.2 : 0.0)
+iraum = hybride_cbet_iraum(leh_z = geometry.length / 2, delay = cbet_delay)
 cbet = transfer == "fig9b" ? fig9b : transfer == "reduced" ? reduced : transfer == "joint" ? joint :
        transfer == "iraum" ? iraum : calibrated
 
@@ -261,7 +310,7 @@ else
     lip, r_open = dynamics == "late_lips" ?
         (GapClosure(closure = 5.0, width = 0.5, after = WallLossAlbedo()), 0.84) :
         (GapClosure(closure = -0.1, width = 7.85, after = WallLossAlbedo()), 0.857)
-    bubble = BubbleAbsorption(; radius = R0, turn_on, wall = motion, capsule_radius = 1.135,
+    bubble = BubbleAbsorption(; radius = R0, turn_on, wall = motion, capsule_radius,
                               energy = 1.1)
 end
 # `lips=computed`: the lips' closure computed instead of prescribed (`LipClosure`, its
@@ -281,6 +330,11 @@ geometry = (geometry..., leh_open_radius = r_open * geometry.leh_radius)
 tstep = parse(Float64, get(opt, "dt", "0.25"))
 times = get(pos, 5, "") == "table" ? [2.0, 4.0, 4.5, 5.5, 6.5, 7.0, 8.0, 8.5] :
         sort(unique([collect(0.5:tstep:9.25); 9.35; 0.5:0.25:9.25]))
+# `metrics=on`: the drive window runs on to bang time (N221204 9.53 ns, K24E Table I; the
+# pair's from Zylstra Fig. 2), the full model records every Y_lm, and ROADMAP 11's
+# implosion metrics are printed over the window from the rise to bang (below).
+metrics = get(opt, "metrics", "off") == "on"
+metrics && (times = sort(unique([times; filter(>(times[end]), [9.45, bang]); bang])))
 keyframes = range(turn_on, 9.0, 11)
 
 p2(r) = r.moments[3, :] ./ r.moments[1, :]
@@ -362,40 +416,44 @@ if which == "all"
 end
 kl = Keyframes(moving_hohlraum(motion; radius = R0, geometry..., leh_closure = lip, shrink...), keyframes, beams)
 which == "all" && run!("+lips", () -> drive_history(kl, beams_at, times; lpi = with_pre(cbet), record = dante_tr, wall_history, wall_release))
-run!("+bubble", () -> drive_history(kl, beams_at, times; lpi = with_pre(cbet, bubble), record = dante_rec, wall_history, wall_release))
+run!("+bubble", () -> drive_history(kl, beams_at, times; lpi = with_pre(cbet, bubble), record = dante_rec, wall_history, wall_release,
+                                     ylm = metrics))
 
 # PRE 109 Fig. 10, N221204 (HYDRA, post-CBET), digitized (`n221204_fig10()`: ±0.002
 # where the curve is visible, up to ±0.015 where N220919's curve covers it).
 fig10 = n221204_fig10()
-ref, uref = getfield(fig10, Symbol(shot)), getfield(fig10, Symbol("u", shot[2:end]))
-println("\ncapsule flux P2/P0 ($shot)")
-println(rpad("t (ns)", 7), join([rpad(n, 17) for (n, _) in runs]), "PRE 109 Fig. 10")
-for t in [2.0, 4.0, 4.5, 5.5, 6.5, 7.0, 8.0, 8.5]
-    k = findfirst(≈(t), times)
-    i = findfirst(≈(t), fig10.t)
-    k === nothing && continue
-    println(rpad(@sprintf("%.1f", t), 7), join([rpad(@sprintf("%+.3f", p2(r)[k]), 17) for (_, r) in runs]),
-            @sprintf("%+.3f ± %.3f", ref[i], uref[i]))
+if hasproperty(fig10, Symbol(shot))     # no HYDRA curve for Zylstra's pair
+    ref, uref = getfield(fig10, Symbol(shot)), getfield(fig10, Symbol("u", shot[2:end]))
+    println("\ncapsule flux P2/P0 ($shot)")
+    println(rpad("t (ns)", 7), join([rpad(n, 17) for (n, _) in runs]), "PRE 109 Fig. 10")
+    for t in [2.0, 4.0, 4.5, 5.5, 6.5, 7.0, 8.0, 8.5]
+        k = findfirst(≈(t), times)
+        i = findfirst(≈(t), fig10.t)
+        k === nothing && continue
+        println(rpad(@sprintf("%.1f", t), 7), join([rpad(@sprintf("%+.3f", p2(r)[k]), 17) for (_, r) in runs]),
+                @sprintf("%+.3f ± %.3f", ref[i], uref[i]))
+    end
+    # swing shape: minimum after 4.5 ns, the upward zero crossing after it, the value at 8 ns
+    function swing(t, p)
+        s = findall(k -> 4.5 <= t[k] <= 8.95 && isfinite(p[k]), eachindex(t))
+        km = s[argmin(p[s])]
+        kz = findfirst(k -> k > km && p[k - 1] < 0 <= p[k], eachindex(p))
+        tz = kz === nothing ? NaN : t[kz - 1] - p[kz - 1] * (t[kz] - t[kz - 1]) / (p[kz] - p[kz - 1])
+        return (min = p[km], tmin = t[km], zero = tz)
+    end
+    grid = findall(t -> 0.75 < t < 8.95 && isinteger(round(t * 10, digits = 6)), fig10.t)
+    sh = swing(fig10.t[grid], ref[grid])
+    @printf("swing (min, at, upward zero): Fig. 10 %+.3f at %.2f ns, %.2f ns\n", sh.min, sh.tmin, sh.zero)
+    for (n, r) in runs
+        s = swing(times, p2(r))
+        ks = [k for k in eachindex(times) if 2.0 <= times[k] <= 8.5 && findfirst(≈(times[k]), fig10.t) !== nothing]
+        d = [p2(r)[k] - ref[findfirst(≈(times[k]), fig10.t)] for k in ks]
+        @printf("  %-22s %+.3f at %.2f ns, %.2f ns; %+.3f at 8 ns; rms against Fig. 10 (2–8.5 ns) %.3f\n",
+                n, s.min, s.tmin, s.zero, p2(r)[findfirst(≈(8.0), times)], sqrt(sum(abs2, d) / length(d)))
+    end
 end
-# swing shape: minimum after 4.5 ns, the upward zero crossing after it, the value at 8 ns
-function swing(t, p)
-    s = findall(k -> 4.5 <= t[k] <= 8.95 && isfinite(p[k]), eachindex(t))
-    km = s[argmin(p[s])]
-    kz = findfirst(k -> k > km && p[k - 1] < 0 <= p[k], eachindex(p))
-    tz = kz === nothing ? NaN : t[kz - 1] - p[kz - 1] * (t[kz] - t[kz - 1]) / (p[kz] - p[kz - 1])
-    return (min = p[km], tmin = t[km], zero = tz)
-end
-grid = findall(t -> 0.75 < t < 8.95 && isinteger(round(t * 10, digits = 6)), fig10.t)
-sh = swing(fig10.t[grid], ref[grid])
-@printf("swing (min, at, upward zero): Fig. 10 %+.3f at %.2f ns, %.2f ns\n", sh.min, sh.tmin, sh.zero)
-for (n, r) in runs
-    s = swing(times, p2(r))
-    ks = [k for k in eachindex(times) if 2.0 <= times[k] <= 8.5 && findfirst(≈(times[k]), fig10.t) !== nothing]
-    d = [p2(r)[k] - ref[findfirst(≈(times[k]), fig10.t)] for k in ks]
-    @printf("  %-22s %+.3f at %.2f ns, %.2f ns; %+.3f at 8 ns; rms against Fig. 10 (2–8.5 ns) %.3f\n",
-            n, s.min, s.tmin, s.zero, p2(r)[findfirst(≈(8.0), times)], sqrt(sum(abs2, d) / length(d)))
-end
-println("\nradiation temperature (eV): capsule Tr / Dante 1 over the initial LEH area / over the open area; measured Dante 1 (Pak PRE 109 Fig. 1)")
+println("\nradiation temperature (eV): capsule Tr / Dante 1 over the initial LEH area / over the open area; measured Dante ",
+        pair ? "(Zylstra PRE 106 Fig. 2)" : "1 (Pak PRE 109 Fig. 1)")
 println(rpad("t (ns)", 7), join([rpad(n, 24) for (n, _) in runs]), "measured")
 for t in [4.5, 5.0, 5.5, 6.0, 6.5, 7.0, 7.5, 8.0, 8.5, 9.0]
     k = findfirst(≈(t), times)
@@ -411,6 +469,49 @@ for (n, r) in runs
     println("computed lip edge radius, lower LEH (mm), ", n, ": ",
             join([@sprintf("%.2f ns %.3f", t, rl[k]) for t in (2.0, 4.5, 5.5, 8.0, 8.5, 9.0)
                   for k in (findfirst(≈(t), times),) if k !== nothing], ", "))
+end
+# Implosion metrics (`metrics=on`; ROADMAP 11, research notes "Implosion metrics"), over
+# the drive window from the start of the rise (`pulse_rise`) to bang time, against the
+# measured N221204 hot spot (P24 Fig. 2, K24 Table II): velocity 36 ± 6 km/s toward
+# (θ, φ) = (151°, 54°), P2 0.3 ± 0.1 µm. The velocity is the flat-kernel default
+# (100 km/s per % of mode 1, burn-off); the mock pointing is up-down and azimuthally
+# symmetric and the hohlraum has no windows, so its mode 1 is the mesh's and the beams'
+# residual. The flux P2 is compared as a time average with Fig. 10's (HYDRA), and as a
+# hot-spot P2 shift from it at the −9.2 µm per % of flux P2 over 4.5–6.5 ns transfer of
+# the research notes ("Callahan 2018 and Izumi 2018", a sensitivity from another
+# platform, *L*); Briareus ships no hot-spot P2 kernel.
+if metrics
+    rise = pulse_rise((pt, total))
+    println("\nimplosion metrics, drive window $(round(rise, digits = 2))–$(bang) ns (rise to bang)")
+    for (n, r) in runs
+        r.ylm === nothing && continue
+        v = hotspot_velocity(r; window = (rise, bang))
+        m = implosion_metrics(r; window = (rise, bang))
+        sp = sqrt(sum(abs2, v))
+        θ, φ = sp > 0 ? (acosd(v[3] / sp), mod(atand(v[2], v[1]), 360)) : (NaN, NaN)
+        @printf("  %-22s hot-spot velocity %.2g km/s toward (%.0f°, %.0f°) (measured 36 ± 6 at (151°, 54°)); no-α yield factor %.4f\n",
+                n, sp, θ, φ, m.yield_factor)
+        sw = swing_metrics(r; window = (rise, bang))
+        @printf("  %-22s flux P2/P0 over the window: mean %+.4f, min %+.3f, max %+.3f; P4/P0 mean %+.4f\n",
+                "", sw.mean, sw.min, sw.max, swing_metrics(r; l = 4, window = (rise, bang)).mean)
+        k = findfirst(≈(bang), times)
+        @printf("  %-22s at bang: capsule Tr %.1f eV, Dante %.1f (open area %.1f)", "", r.Tr[k], r.record[k]...)
+        i = findfirst(τ -> abs(τ - bang) < 0.026, measured.t)
+        i === nothing || isnan(measured.dante1[i]) || @printf(", measured Dante %.1f", measured.dante1[i])
+        println()
+        if hasproperty(n221204_fig10(), Symbol(shot))
+            f10 = n221204_fig10()
+            hyd = getfield(f10, Symbol(shot))
+            for w in ((rise, 8.9), (4.5, 6.5))
+                kk = findall(τ -> w[1] - 1e-9 <= τ <= w[2] + 1e-9, f10.t)
+                th, yh = f10.t[kk], hyd[kk]
+                mh = sum((th[j+1] - th[j]) * (yh[j] + yh[j+1]) / 2 for j in 1:length(th)-1) / (th[end] - th[1])
+                mb = swing_metrics(r; window = w).mean
+                @printf("  %-22s %.2f–%.2f ns: mean flux P2/P0 %+.4f, Fig. 10 %+.4f; difference %+.4f → hot-spot P2 %+.1f µm from HYDRA's\n",
+                        "", w..., mb, mh, mb - mh, -9.2 * 100 * (mb - mh))
+            end
+        end
+    end
 end
 println("\ncapsule Tr peak (eV; drive Trad 313 eV, AS24)")
 for (n, r) in runs

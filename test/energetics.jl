@@ -315,3 +315,23 @@ end
     @test p.dante1[k] ≈ 311.9 atol = 0.1
     @test p.t[k] ≈ 8.3
 end
+
+@testset "Zylstra 2022 LEH pair: pulses and Dante" begin
+    z = zylstra2022_fig2()
+    @test keys(z) == (:t, :power_n191118, :dante_n191118, :power_n210601, :dante_n210601, :bang)
+    @test z.t[1] == 0 && z.t[end] ≈ 10.85 && all(diff(z.t) .≈ 0.05)
+    @test pulse_energy(PulseShape(z.t, z.power_n191118)) ≈ 1623 rtol = 0.002
+    @test pulse_energy(PulseShape(z.t, z.power_n210601)) ≈ 1663 rtol = 0.002
+    @test maximum(z.power_n191118) ≈ 470.6 atol = 0.5
+    @test maximum(z.power_n210601) ≈ 398.9 atol = 0.5
+    for (d, t0) in ((z.dante_n191118, 3.5), (z.dante_n210601, 1.6))
+        ok = isfinite.(d)
+        @test z.t[ok][1] ≈ t0 atol = 0.05
+        @test all(ok[findfirst(ok):end])
+    end
+    @test z.bang == (n191118 = 9.37, n210601 = 9.48)
+    # "comparable until ~7.5 ns": the 3.64 mm LEH shot is the hotter one before it
+    at(d, x) = d[findfirst(≈(x), z.t)]
+    @test 0 < at(z.dante_n191118, 6.5) - at(z.dante_n210601, 6.5) < 10
+    @test at(z.dante_n210601, 8.0) > at(z.dante_n191118, 8.0)
+end
