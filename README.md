@@ -64,13 +64,18 @@ for the same workflow: target, beams, drive, optimization and shot review.
   1% from 1e-4 to 5% of a beam.
 - **Radiation.** Occlusion-aware view factors `view_factors` (the exact point-to-polygon
   kernel near the emitter, adaptive toward shared edges; about 0.4 s for a
-  3,000-element hohlraum) and gray diffuse radiosity `solve`. Wall albedo can be
-  constant, tabulated in time, or the Marshak wall-loss scaling `WallLossAlbedo`,
-  iterated to self-consistency with the local radiation temperature. For closed
-  enclosures, `closed = true` removes discretization leakage while keeping reciprocity
-  (the default for `hohlraum` targets).
+  3,000-element hohlraum) and gray diffuse radiosity `solve`. Visibility is a centroid
+  ray per pair, or sampled where a pair straddles an occluder (`visibility = :sampled`,
+  the default for CAD targets). Wall albedo can be constant, tabulated in time, or the
+  Marshak wall-loss scaling `WallLossAlbedo`, iterated to self-consistency with the
+  local radiation temperature. For closed enclosures, `closed = true` removes
+  discretization leakage while keeping reciprocity (the default for `hohlraum` targets).
   `flux_response` precomputes the linear map from laser deposition to capsule flux, so
-  optimizers never re-solve.
+  optimizers never re-solve. Large models are never densified: above 10⁴ elements
+  Float32 view factors (`Float32Matrix`) with iterative solves, above 1.5 × 10⁴
+  hierarchical ones (`HMatrix`, ~50k elements in about a minute and 1 GB).
+  `spectral_solve` adds multigroup radiosity about a gray solution, with the
+  laser-produced gold M-band (`MBandEmission`, `nif_mband`).
 - **Analysis.** Legendre moments (`legendre_moments`) and real spherical harmonics
   (`ylm_moments`, `flux_ylm`), both with exact facet solid-angle integration;
   `mode_amplitude` gives the fractional amplitude of each mode (the mode-1 drive
@@ -86,7 +91,12 @@ for the same workflow: target, beams, drive, optimization and shot review.
   - an empirical `CalibratedTransfer` (transfer as a function of Δλ);
   - a reduced kinetic `CBET` model at the LEHs: multi-species Maxwellian ion-acoustic
     response, flow Doppler shift, polarization smoothing, and a smooth δn/n saturation
-    clamp. `calibrate_cbet` fits its multiplier, flow and clamp to transfer data.
+    clamp. `calibrate_cbet` fits its multiplier, flow and clamp to transfer data;
+    `TwoZoneCBET` separates the flowing plasma outside the LEH from the stagnant one
+    inside, with calibrations to published HYDRA transfer for HYBRID-E shots
+    (`n221204_cbet`, `hybride_cbet`, `hybride_cbet_iraum`);
+  - inner-beam absorption in the gold bubble (`BubbleAbsorption`), applied with the
+    other corrections by `lpi_deposit`.
 - **Shot-review checks.** All are judged on the worst case over pointing, target
   positioning, hardware tolerance and focus errors, never on the nominal beams.
   - `clearance` gives the worst-case beam-to-hardware clearance, power and intensity,
@@ -111,7 +121,8 @@ for the same workflow: target, beams, drive, optimization and shot review.
   `cad_target` takes CAD parts (e.g. the solids of a multi-solid STL file,
   `read_stl_solids`) to a radiation-ready target in one call: oriented, cut to the
   cavity around a point (`enclosure`), remeshed, and with the exact cylinders and
-  spheres fitted (`fit_surfaces`); primitive components can be passed with the parts.
+  spheres (and cones and tori) fitted (`fit_surfaces`); primitive components can be
+  passed with the parts. `read_stl`, `read_stl_solids` and `write_stl` exchange STL.
   `visrad_target` uses it for the CAD a VisRad workspace bundles.
   `write_visrad_workspace` writes a design's beams back into a copy of a workspace;
   once VisRad has computed it, `visrad_power_sources` and `visrad_deposition` read
@@ -122,7 +133,18 @@ for the same workflow: target, beams, drive, optimization and shot review.
 - **Time dependence.** `PulseShape` per cone, quad or beam (`with_pulses(...; by)`) and
   `drive_history` give quasi-static T_r(t) and P_l(t). `cone_fraction_pulses` builds
   pulses from a total power and a cone fraction; `read_pulse_table` and
-  `write_pulse_table` read and write them as CSV.
+  `write_pulse_table` read and write them as CSV. Each wall element loses energy by
+  its own temperature history and re-emits stored energy when the drive falls.
+  Hohlraum dynamics are calibrated to published data: a moving wall on keyframes
+  (`WallMotion`, `moving_hohlraum`, `Keyframes`), entrance holes closing as prescribed
+  (`GapClosure`) or computed (`LipClosure`), and the bubble. Energetics:
+  `nif_gold()`/`nif_uranium()` walls (Lindl's loss, an Au-lined DU factor, a rising
+  conversion `nif_conversion()`), `CapsuleAlbedo` on a shrinking absorbing radius, and
+  `energy_budget`. A synthetic Dante (`dante1`, `dante`, channel responses from the
+  hardware, `dante_unfold`) reads the drive as the instrument would.
+  `examples/n221204.jl` benchmarks it all on N221204 against published data.
+- **Implosion metrics.** Mode 1 as a hot-spot velocity, yield-degradation factors,
+  P2-swing metrics, and their uncertainty (`hotspot_velocity`, `implosion_metrics`).
 - **Capsule drive for a hydrodynamics code.** `capsule_drive(history, model)` packages
   a drive history for a capsule-only implosion run (LLNL's two-step method): Tr(t),
   the capsule-averaged incident flux, Legendre ratios aₗ/a₀ (P2 > 0 pole-hot) on a
@@ -147,7 +169,12 @@ for the same workflow: target, beams, drive, optimization and shot review.
   each beam's pointing and power errors, `mode_uncertainty` the asymmetry independent
   errors leave (linear propagation; `sample_modes` is the Monte Carlo check), and the
   objectives' `uncertainty` keyword optimizes the expected symmetry over them (robust
-  design).
+  design). Errors can be shared by a group of beams or be the target's positioning;
+  `infer_errors` finds the most probable errors behind a measured asymmetry.
+- **Backlighters.** `backlighter_foil` and `line_of_sight` place a foil on a
+  diagnostic line of sight and check it against shields (`Sombrero`) and beams;
+  `backlighter_signal` follows the deposition through a He-α conversion efficiency
+  fitted to published foil data (`kshell_ce`) and filters to photons at the detector.
 
 ## Conventions
 
@@ -178,17 +205,28 @@ correlated with the part of the spot they block.
 | OMEGA beams | Truncated icosahedron with edge ratio 1.2 in the hohlraum (P6–P7) frame; reproduces the 21.415/42.020/58.852/81.249° cones | The azimuthal origin is not tied to chamber coordinates. Load the real port table with `beams_from_table`. |
 | OMEGA phase plates | OMEGA Users' Guide (2014) | SG4, SG8, E-IDI-300 |
 | VisRad formats | VisRad manual (prism-cs.com, v21.1.1) | Items to verify against real files are listed in the research notes. |
+| VisRad beam profile away from focus | VisRad 21 runs on NIF hohlraums and a beam-profile probe | `VisRadProfile`'s growth and per-plate semi-axes; the workspaces are not in the repository. |
+| Published shot and simulation data | Digitized or tabulated from the cited papers (`data/*.csv`, each with its provenance header): PRE 109 Figs. 1, 9 and 10, PRE 106, Pak 2024, Zylstra 2022, Young 2020, Izumi 2021, Chen 2020, Kritcher 2024, Kemp 2026, Nora 2023, Rubery 2023, K-shell CE compilations; Henke and NIST attenuation tables | The research notes say which data each calibration was fitted to and which are kept as checks only. |
+
+Non-public facility data (shot pointing exports, CAD, VisRad workspaces) never enters
+the repository; the HYBRID-E pointing in the examples is a public mock-up
+(`hybride_mock_pointing`) fitted to summary metrics.
 
 ## Provenance of physics defaults
 
-`reference/research-notes.md` records sources and confidence levels for:
-- the CBET formulas and benchmark;
+`reference/research-notes.md` records the source and confidence of every default and
+calibrated constant (it starts with a table of contents and marks superseded values),
+among them:
+- the CBET formulas and their calibrations;
 - NIF Δλ conventions (quoted at 1ω since about 2013; `Beam.dlambda` is at the beam's
   own wavelength);
-- backscatter practice;
+- backscatter practice and the measured backscatter histories;
 - unconverted light;
 - error budgets, clearance defaults and the TaLIS rules;
-- the VisRad file formats.
+- the VisRad file formats and beam model;
+- wall loss, re-emission, conversion and capsule absorption;
+- hohlraum dynamics (wall motion, LEH closure, bubble);
+- the M-band, Dante channels and backlighter conversion efficiency.
 
 The `clearance` thresholds and wing models are engineering defaults, not facility
 criteria. Override them with your facility's review requirements and measured far
@@ -197,14 +235,16 @@ fields.
 ## Scope and limitations
 
 Briareus is a geometric view-factor and ray-trace code with reduced laser–plasma
-corrections. It has no hydrodynamics, refraction, wall motion or LEH closure.
+corrections. It solves no hydrodynamics: wall motion, LEH closure and the inner-beam
+bubble are reduced models calibrated to published simulations and measurements, and
+the radiosity is quasi-static (no plasma energy store; the drive after the laser falls
+is low against Dante). It does not trace refraction.
 
 The CBET model assumes uniform LEH plasma and full pairwise overlap. Its unsaturated
 coupling overpredicts transfer, so calibrate it (`calibrate_cbet`) against shot data
 or reference transfer points before trusting magnitudes.
 
-Radiosity is gray, with no spectral resolution. Visibility between elements uses a
-single centroid ray.
+Radiosity is gray unless `spectral_solve` is used, which works about a gray solution.
 
 ## Tests
 
@@ -212,7 +252,9 @@ single centroid ray.
 julia --project=. -t auto -e 'using Pkg; Pkg.test()'
 ```
 
-The suite checks the code against analytic results:
+`BRIAREUS_TEST_SHARD=1|2|3` runs a third of the suite, and `BRIAREUS_LONG_TESTS=true`
+adds the Monte Carlo and convergence checks that local runs skip by default (CI runs
+them). The suite checks the code against analytic results:
 - coaxial-disk, sphere and closed-cylinder view factors, and occlusion;
 - the integrating-sphere radiosity solution and energy conservation;
 - beam power normalization at any defocus, and per-beam power conservation of the
