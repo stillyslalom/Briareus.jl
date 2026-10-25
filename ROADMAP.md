@@ -973,9 +973,12 @@ pick the original parts, not `<part>/cylN` pieces).
      that transmits (or automatic thin-solid detection in the library; the GUI already
      opens a sealed pocket) would let the cavity include the tent region.
    - CAD fits (see Done): tori for fillets are done (2026-10-24: `:torus` in the default
-     kinds, `TorusSurface`; research notes "Tori"; a quarter fillet's cap-rim chords
-     project past the rim, +1.8e-3 of the fillet's area at 64 strips, so a projection
-     that keeps rims would make fillet elements exact); one surface shared across parts
+     kinds, `TorusSurface`; research notes "Tori"; since 2026-10-24 rim chords project
+     onto the rims on the poles, the outer equator and the inner half, so a quarter
+     fillet's elements cover it exactly, where its cap rim overshot by +1.8e-3 at 64
+     strips; rims elsewhere on the outer half, a fillet meeting a cone, stay second
+     order, which no projection of points alone avoids while keeping facets near the
+     poles second order: a facet-aware (φ, ψ) map would); one surface shared across parts
      (the halves' inner walls); a quadrature at a cone apex; TALIS curvature kind for
      cones and tori; fitting by default is done (Open question 1, 2026-10-24;
      `minfraction = 1e-3` since 2026-10-24).

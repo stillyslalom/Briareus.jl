@@ -196,7 +196,8 @@ end
 end
 
 @testset "tori" begin
-    # projection: the nearest point of the torus (R = 2, r = 0.5, tilted and moved)
+    # projection (R = 2, r = 0.5, tilted and moved): inside the tube the nearest point of
+    # the torus, outside it the tube point at the same height on the point's side
     R, r = 2.0, 0.5
     ax = normalize(Vec3(0.2, -0.1, 1.0))
     ctr = Vec3(0.1, -0.2, 0.3)
@@ -204,35 +205,72 @@ end
     e1, e2 = Briareus._perp_basis(ax)
     on(φ, ψ) = ctr + (R + r * cos(ψ)) * (cos(φ) * e1 + sin(φ) * e2) + r * sin(ψ) * ax
     grid = [on(φ, ψ) for φ in range(0, 2π; length = 721)[1:end-1], ψ in range(-π, π; length = 361)[1:end-1]]
-    for ρ in (0.3, 1.0, 1.9, 2.4, 3.0), z in (-0.7, 0.0, 0.4), φ in (0.3, 2.0)
+    for ρ in (0.3, 1.0, 1.7, 1.9, 2.4, 3.0), z in (-0.7, 0.0, 0.2, 0.4), φ in (0.3, 2.0)
         p = ctr + ρ * (cos(φ) * e1 + sin(φ) * e2) + z * ax
         q, n = surface_point(s, p)
         w, c, _ = Briareus._torus_coordinates(s, q)
         @test norm(w) ≈ r rtol = 1e-14                          # on the tube
         @test norm(n - w / r) < 1e-14                           # normal away from the spine
-        @test norm(cross(p - q, n)) < 1e-14                     # along the normal
-        @test norm(p - q) <= minimum(g -> norm(p - g), grid) + 1e-12
         @test first(surface_point(s, q)) ≈ q atol = 1e-14
+        if hypot(ρ - R, z) < r
+            @test norm(cross(p - q, n)) < 1e-14                 # along the normal
+            @test norm(p - q) <= minimum(g -> norm(p - g), grid) + 1e-12
+        else
+            ρq = norm(q - ctr - dot(q - ctr, ax) * ax)
+            @test dot(q - ctr, ax) ≈ clamp(z, -r, r) atol = 1e-14      # its height (or the pole)
+            @test (ρq - R) * (ρ - R) >= 0                        # on its side of the spine
+            @test norm(cross(q - ctr - dot(q - ctr, ax) * ax, p - ctr - z * ax)) < 1e-14   # its meridian
+        end
     end
     for φ in (0.1, 1.7), ψ in (-2.5, -0.4, 0.0, 1.2, 3.0), δ in (-0.3, 0.2)
         q0 = on(φ, ψ)
         n0 = normalize(q0 - (ctr + R * (cos(φ) * e1 + sin(φ) * e2)))
         q, n = surface_point(s, q0 + δ * n0)
-        @test q ≈ q0 atol = 1e-14
-        @test n ≈ n0 atol = 1e-14
+        ζ = (r + δ) * sin(ψ)                # outside: the same height
+        ψq = δ < 0 ? ψ : abs(ζ) >= r ? copysign(π / 2, ζ) : atan(ζ, copysign(sqrt(r^2 - ζ^2), cos(ψ)))
+        @test q ≈ on(φ, ψq) atol = 1e-14
+        @test n ≈ normalize(on(φ, ψq) - (ctr + R * (cos(φ) * e1 + sin(φ) * e2))) atol = 1e-14
     end
+    # chords of a rim (a circle ψ0 about the axis) project onto it for rims on the poles,
+    # the outer equator and the inner half; elsewhere on the outer half to second order
+    axial(q) = (h = dot(q - ctr, ax); (norm(q - ctr - h * ax), h))
+    for ψ0 in (0.0, π / 2, -π / 2, 2.0, 3π / 4, π, -2.5, 0.7), φ in (0.3, 2.0), β in (0.01, 0.1, 0.4)
+        P, Q = on(φ, ψ0), on(φ + β, ψ0)
+        ρ0, z0 = R + r * cos(ψ0), r * sin(ψ0)
+        d = maximum(range(0, 1; length = 11)) do τ
+            ρq, zq = axial(first(surface_point(s, P + τ * (Q - P))))
+            abs(ρq - ρ0) + abs(zq - z0)
+        end
+        # (at the poles the height's round-off ε moves the point by √(2rε), ~1e-8)
+        ψ0 == 0.7 ? (@test d < 0.5β^2) : (@test d < (abs(cos(ψ0)) < 1e-12 ? 1e-7 : 1e-14))
+    end
+    # the nearest point inside the tube; facet points outside it (on the cap rim's chords
+    # here) move from the nearest point by at most the chords' sag, second order
+    errs = map((16, 32, 64)) do n
+        m = facet_soup(cad_torus(R, r, 0.0, 0, π / 2; nψ = n ÷ 2, nphi = n))
+        s1 = TorusSurface(R, r)
+        maximum(m.triangles) do (i, j, k)
+            A, B, C = m.vertices[i], m.vertices[j], m.vertices[k]
+            maximum(((1 / 3, 1 / 3), (0.1, 0.1), (0.8, 0.1), (0.1, 0.8), (0.5, 0.0), (0.0, 0.5), (0.5, 0.5),
+                     (0.02, 0.0), (0.0, 0.02), (0.01, 0.01))) do (u, v)
+                p = A + u * (B - A) + v * (C - A)
+                w, c, _ = Briareus._torus_coordinates(s1, p)
+                norm(first(surface_point(s1, p)) - (c + r * normalize(w)))
+            end
+        end
+    end
+    @test all(k -> 3.9 < errs[k] / errs[k+1] < 4.1, 1:2)
     t2 = Briareus._transform_surface(s, rotation_to(Vec3(1, 0, 0)), Vec3(1, 2, 3))
     @test t2.major_radius == R && t2.minor_radius == r
     @test_throws ArgumentError TorusSurface(0.0, 0.5)
 
-    # areas through the elements: exact where the section's rims lie on the equator
-    # (ψ = 0, π) or the torus is closed; a quarter fillet's chord rim on its cap projects
-    # slightly past the rim circle (second order in the facet size)
+    # areas through the elements: exact where the section's rims project onto their
+    # circles (a quarter fillet's on the cap too) or the torus is closed
     s0 = TorusSurface(R, r; center = (0, 0, 0.3))
-    for (ψ0, ψ1, exact, rtol) in ((0, π, 2π^2 * R * r, 1e-14), (-π, π, 4π^2 * R * r, 1e-14),
-                                  (0, π / 2, 2π * r * (R * π / 2 + r), 2e-3))
+    band(ψ0, ψ1) = 2π * r * (R * (ψ1 - ψ0) + r * (sin(ψ1) - sin(ψ0)))
+    for (ψ0, ψ1) in ((0, π), (-π, π), (0, π / 2), (π / 2, 3π / 2), (-π / 2, π / 2))
         t = Target([Component(:t, facet_soup(cad_torus(R, r, 0.3, ψ0, ψ1; nψ = 8, nphi = 64)), gold(); surface = s0)])
-        @test sum(t.elem_area) ≈ exact rtol = rtol
+        @test sum(t.elem_area) ≈ band(ψ0, ψ1) rtol = 1e-14
         @test all(==(1), t.elem_curved)
         for e in 1:nelements(t)
             pts, ws, ns = element_quadrature(t, e, 2)
@@ -241,8 +279,18 @@ end
             @test all(k -> ns[k] ≈ last(surface_point(s0, pts[k])), eachindex(pts))
         end
     end
-    @test sum(Target([Component(:t, facet_soup(cad_torus(R, r, 0.3, 0, π / 2; nψ = 16, nphi = 128)), gold();
-                                surface = s0)]).elem_area) / (2π * r * (R * π / 2 + r)) - 1 < 5e-4
+    # the quarter fillet at 16 / 32 / 64 strips: exact (its cap rim's chords projected past
+    # the rim before, +7.0e-3 / 1.8e-3 at 32 / 64); a rim at 60° off the poles and the
+    # equator still converges at second order
+    for n in (16, 32, 64)
+        quarter = facet_soup(cad_torus(R, r, 0.3, 0, π / 2; nψ = n ÷ 2, nphi = n))
+        @test sum(Target([Component(:t, quarter, gold(); surface = s0)]).elem_area) ≈ band(0, π / 2) rtol = 1e-14
+    end
+    e60 = map((16, 32, 64)) do n
+        m = facet_soup(cad_torus(R, r, 0.3, 0, π / 3; nψ = n ÷ 2, nphi = n))
+        sum(Target([Component(:t, m, gold(); surface = s0)]).elem_area) / band(0, π / 3) - 1
+    end
+    @test all(>(0), e60) && all(k -> 3.9 < e60[k] / e60[k+1] < 4.2, 1:2)
     # remeshed elements of up to ~30 facets: lumped quadrature, the same exact area
     tl = Target([Component(:t, remesh_mesh(facet_soup(cad_torus(R, r, 0.3, 0, π; nψ = 16, nphi = 128)); size = 0.4),
                            gold(); surface = s0)])
@@ -250,9 +298,10 @@ end
     @test sum(tl.elem_area) ≈ 2π^2 * R * r rtol = 1e-13
     @test all(e -> sum(element_quadrature(tl, e, 1)[2]) ≈ tl.elem_area[e], 1:nelements(tl))
 
-    # the rounded hohlraum's corners as tori: the fillets' areas within the cap rims'
-    # overshoot of the quarter tori (the frusta's chord polygon misses 15% with one band),
-    # and the closed cavity's row sums as close to one as with frusta
+    # the rounded hohlraum's corners as tori: the fillets' areas those of the quarter tori
+    # (the frusta's chord polygon misses 15% with one band), and the closed cavity's row
+    # sums as close to one as with frusta (on the fillets 6.0e-4 with one band: 4.5e-5
+    # before, when the cap rims' +1.8e-3 area overshoot cancelled the quadrature's shortfall)
     kw = (; length = 9.4, radius = 2.875, leh_radius = 1.55, capsule_radius = 0.9)
     rc = 1.0
     for nr_corner in (1, 4)
@@ -266,10 +315,10 @@ end
         tt = Target([[c for c in t.components if !startswith(String(c.name), "corner_")]; fillets]; t.closed)
         f = elements(tt, :fillet_top, :fillet_bottom)
         @test all(==(-1), tt.elem_curved[f])                    # facing the spine
-        @test sum(tt.elem_area[f]) / (2 * 2π * rc * (π / 2 * (2.875 - rc) + rc)) - 1 ≈ 0 atol = 2e-3
+        @test sum(tt.elem_area[f]) / (2 * 2π * rc * (π / 2 * (2.875 - rc) + rc)) - 1 ≈ 0 atol = 1e-14
         F = view_factors(tt)
         @test maximum(abs, closure_error(F)) < 1e-2
-        @test maximum(abs, closure_error(F)[f]) < (nr_corner == 1 ? 1e-4 : 3e-3)
+        @test maximum(abs, closure_error(F)[f]) < (nr_corner == 1 ? 1e-3 : 3e-3)
         @test tt.elem_area .* F ≈ (tt.elem_area .* F)' rtol = 1e-12
     end
 

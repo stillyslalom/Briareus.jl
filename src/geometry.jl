@@ -147,14 +147,19 @@ ConeSurface(half_angle::Real; apex = (0.0, 0.0, 0.0), axis = (0.0, 0.0, 1.0)) = 
 
 Torus: the points at `minor_radius` r from its spine, the circle of `major_radius` R
 about `axis` through `center` (a CAD fillet: a quarter of the tube where a wall meets a
-cap). Points are projected onto it exactly, to the nearest point of the tube circle in
-their meridian half-plane (for a ring torus, R > r, the nearest point of the torus), and
-its normals point away from the spine. Facets' patches have exact areas under that
-projection. A faceted fillet's rims are chords of the rim circles, which the projection
-leaves slightly off them where the surface is not perpendicular to the plane of the rim
-(on a quarter fillet, its rim on the cap), so the elements of a fillet cover it to
-second order in the facet size; rims on the torus's equator (ψ = 0, π) and a closed
-torus are covered exactly.
+cap). In its meridian half-plane a point inside the tube circle is projected to the
+nearest point of the circle (for a ring torus, R > r, the nearest point of the torus),
+and a point outside it, as on a cone, radially from the axis at its height, onto the
+side of the tube it is on (to the pole above or below the tube); normals point away
+from the spine. A faceted fillet's rims are chords of circles about the axis, which
+lie at the rim's height toward the axis: outside the tube for rims on the poles (where
+a quarter fillet meets a cap) and on the inner half, inside it and along the radius on
+the outer equator (where it meets a wall), so on all of these the chords land on the
+rim circle and a fillet's elements cover the torus band exactly. Elsewhere on the outer
+half (a fillet meeting a cone) the rim's chords stay off the circle by their sag, and
+the band is covered to second order in the facet size: no projection of points alone
+can do both there and keep facets near the poles second order. Facets' patches have
+exact areas under the projection.
 """
 struct TorusSurface <: CurvedSurface
     center::Vec3
@@ -188,8 +193,8 @@ DiskSurface(; center = (0.0, 0.0, 0.0), normal = (0.0, 0.0, 1.0)) =
     surface_point(surface, p) -> (point, normal)
 
 Projection of `p` onto the surface (radially from the center or the axis; on a torus
-from the spine) and the outward unit normal there (away from the center, the axis or
-the spine).
+from the spine inside the tube, from the axis outside it) and the outward unit normal
+there (away from the center, the axis or the spine).
 """
 function surface_point(s::SphereSurface, p)
     d = normalize(p - s.center)
@@ -235,10 +240,32 @@ function _torus_coordinates(s::TorusSurface, p)
     return p - c, c, ρ̂
 end
 
+# (cos ψ, sin ψ) of the tube point that a point at (x, z) from the spine point in its
+# meridian half-plane projects to: inside the tube circle (x² + z² < r²) the nearest
+# point, radially from the spine point; on or outside it the point at the same height z
+# on its side of the spine (x' = ±√(r² − z²) with the sign of x; the pole when |z| ≥ r).
+# The two agree on the circle, so the map is continuous. A rim (a circle ψ = ψ0 about the
+# axis) has its chords at the rim's height, displaced from it toward the axis, which is
+# outside the tube for ψ0 in [π/2, 3π/2] (the poles ψ0 = ±π/2 included: a quarter
+# fillet's rim on a cap): there the chords map onto the rim. On the outer equator (ψ0 = 0)
+# the chords are inside and on the rim's radius from the spine point. Facet points
+# outside the tube lie within the chords' sag of it horizontally, so the horizontal map
+# moves them by no more than that sag: second order like the nearest point.
+function _torus_foot(r, x, z)
+    l = hypot(x, z)
+    l < r && return x / l, z / l
+    abs(z) >= r && return 0.0, copysign(1.0, z)
+    return copysign(sqrt((r - z) * (r + z)), x) / r, z / r
+end
+
 function surface_point(s::TorusSurface, p)
     w, c, ρ̂ = _torus_coordinates(s, p)
-    l = norm(w)
-    n = l > 0 ? w / l : ρ̂
+    x, z = dot(w, ρ̂), dot(w, s.axis)
+    if x == 0 && z == 0
+        return c + s.minor_radius * ρ̂, ρ̂
+    end
+    cψ, sψ = _torus_foot(s.minor_radius, x, z)
+    n = cψ * ρ̂ + sψ * s.axis
     return c + s.minor_radius * n, n
 end
 
@@ -437,11 +464,12 @@ function _cone_edge_integral(uP, Δ, C, ζP, dz, t0, t1, depth)
     return (t1 - t0) * i1, (t1 - t0) * i2
 end
 
-# On a torus the projection keeps the azimuth φ and the tube angle ψ (of the point's
-# offset from the spine in its meridian plane, from the equator outward), and the
-# surface element is r (R + r cos ψ) dψ dφ, so the patch has area r |∮ (R ψ + r sin ψ) dφ|
-# (Green's theorem). Along a straight edge dφ/dt = C/|u|² as on the cylinder and ψ is
-# smooth wherever the edge stays off the spine and the axis; ∮ is done by Gauss–Legendre
+# On a torus the projection keeps the azimuth φ and maps the point to a tube angle ψ
+# (from the equator outward; `_torus_foot`), and the surface element is
+# r (R + r cos ψ) dψ dφ, so the patch has area r |∮ (R ψ + r sin ψ) dφ| (Green's
+# theorem). Along a straight edge dφ/dt = C/|u|² as on the cylinder and ψ is smooth
+# wherever the edge stays off the spine and the axis and on one side of the tube circle
+# (pieces are split where it crosses); ∮ is done by Gauss–Legendre
 # on pieces no longer than half the smaller of r and the edge's distance from the axis,
 # within which the nearest singularity lies outside the Bernstein ellipse of parameter
 # ~4, so 16 points converge to round-off. ψ is measured from the first vertex's (and
@@ -450,9 +478,8 @@ end
 function _curved_area(s::TorusSurface, a, b, c)
     ax, R, r = s.axis, s.major_radius, s.minor_radius
     perp(d) = d - dot(d, ax) * ax
-    ua = perp(a - s.center)
-    ψa = atan(dot(a - s.center, ax), norm(ua) - R)
-    sa = sin(ψa)
+    ca, sa = _torus_foot(r, norm(perp(a - s.center)) - R, dot(a - s.center, ax))
+    ψa = atan(sa, ca)
     acc = 0.0
     vs = (a, b, c)
     for k in 1:3
@@ -465,18 +492,63 @@ function _curved_area(s::TorusSurface, a, b, c)
         L = norm(Q - P)
         h = min(r, norm(uP), norm(uP + Δ))
         n = h > 0 ? clamp(ceil(Int, 2L / h), 1, 256) : 256
-        for j in 1:n, i in eachindex(_GL16.x)
-            t = (j - 1 + _GL16.x[i]) / n
-            u = uP + t * Δ
-            z = zP + t * dz
-            x = norm(u) - R
-            l = hypot(x, z)
-            ψ = mod(atan(z, x) - ψa + π, 2π) - π
-            F = R * ψ + r * ((l > 0 ? z / l : 0.0) - sa)
-            acc += (_GL16.w[i] / n) * F * C / dot(u, u)
+        for j in 1:n
+            acc += _torus_edge_piece(uP, Δ, C, zP, dz, R, r, ψa, sa, (j - 1) / n, j / n)
         end
     end
     return r * abs(acc)
+end
+
+# The integrand (R ψ + r sin ψ) dφ/dt at t on the edge (ψ relative to ψa, sin ψ to sa),
+# and whether the point is inside the tube circle.
+@inline function _torus_integrand(uP, Δ, C, zP, dz, R, r, ψa, sa, t)
+    u = uP + t * Δ
+    z = zP + t * dz
+    x = norm(u) - R
+    cψ, sψ = _torus_foot(r, x, z)
+    ψ = mod(atan(sψ, cψ) - ψa + π, 2π) - π
+    return (R * ψ + r * (sψ - sa)) * C / dot(u, u), hypot(x, z) < r
+end
+
+# ∫ over t ∈ [t0, t1] by Gauss–Legendre, split where the edge crosses the tube circle
+# (the projection switches there from the nearest point to the horizontal one: a kink in
+# the integrand, which would cost Gauss–Legendre its round-off convergence). Crossings
+# between neighbouring nodes are located by bisection.
+function _torus_edge_piece(uP, Δ, C, zP, dz, R, r, ψa, sa, t0, t1)
+    f(t) = _torus_integrand(uP, Δ, C, zP, dz, R, r, ψa, sa, t)
+    x, w = _GL16.x, _GL16.w
+    acc = 0.0
+    cls1 = last(f(t0 + (t1 - t0) * x[1]))
+    mixed = false
+    for i in eachindex(x)
+        v, cls = f(t0 + (t1 - t0) * x[i])
+        acc += w[i] * v
+        mixed |= cls != cls1
+    end
+    mixed || return (t1 - t0) * acc
+    breaks = [t0]
+    for i in 1:length(x)-1
+        lo, hi = t0 + (t1 - t0) * x[i], t0 + (t1 - t0) * x[i+1]
+        clo = last(f(lo))
+        clo == last(f(hi)) && continue
+        for _ in 1:60
+            mid = (lo + hi) / 2
+            (mid == lo || mid == hi) && break
+            last(f(mid)) == clo ? (lo = mid) : (hi = mid)
+        end
+        push!(breaks, (lo + hi) / 2)
+    end
+    push!(breaks, t1)
+    acc = 0.0
+    for k in 1:length(breaks)-1
+        b0, b1 = breaks[k], breaks[k+1]
+        sub = 0.0
+        for i in eachindex(x)
+            sub += w[i] * first(f(b0 + (b1 - b0) * x[i]))
+        end
+        acc += (b1 - b0) * sub
+    end
+    return acc
 end
 
 """

@@ -1342,16 +1342,48 @@ fits below used Briareus's own operator points with a free-form evaluator.
   1e-10. Fine fillet (all kinds): 7.9k / 32.8k / 65.5k facets in 0.13 / 0.51 / 1.6 s, one
   region (without tori 4 s at 8k and ~80 s at 33k, quadratic; "Cost of fitting faces of
   none of the kinds", below).
-  `TorusSurface` projects to the nearest point of the tube circle in the point's
-  meridian half-plane (exact for ring tori); patch areas r |∮ (Rψ + r sin ψ) dφ| by
-  Gauss–Legendre on edge pieces. A closed torus and the section ψ ∈ [0, π] (rims on the
-  equator) are covered to 1e-15; a quarter fillet's cap rim chords project past the rim
-  circle, +7.0e-3 / 1.8e-3 / 4.4e-4 at 32 / 64 / 128 strips (second order; the frusta of
-  `hohlraum(corner_radius)` keep rims exact). The rounded hohlraum (rc = 1 mm) with its
-  corners as tori: fillet area +1.8e-3 of the quarter tori (the frusta's chord polygon
-  −15% with one band per corner, −1% with four), raw row sums max |1 − ΣF| 5.7e-3
-  (frusta 7.1e-3), on the fillets 4.5e-5 with one band (frusta 4.7e-3) and 1.8e-3 with
-  four (2.2e-3). Tori are not convex: their facets still occlude pairs inside them.
+  `TorusSurface` projection (rim-preserving since 2026-10-24): in the point's meridian
+  half-plane, inside the tube circle the nearest point of the circle (radially from the
+  spine point), on or outside it the circle's point at the same height on the point's
+  side of the spine (radially from the axis, as on a cone; the pole when above or below
+  the tube). The two agree on the circle. A rim (circle ψ = ψ0 about the axis) has its
+  chords at its height, displaced toward the axis by their sag δ: outside the tube for
+  ψ0 on the poles and the inner half (distance² r² + 2δr|cos ψ0| + δ²), so they map onto
+  the rim; inside it on the outer half, where only the outer equator (ψ0 = 0, the
+  horizontal is the radius) maps exactly. Facet points outside the tube lie within the
+  azimuthal sag of it horizontally (the meridional sag points inward), so the horizontal
+  map moves them by at most that sag: second order like the nearest point (max distance
+  from the nearest point on a quarter fillet 3.8e-2 / 9.6e-3 / 2.4e-3 / 6.0e-4 mm at
+  16 / 32 / 64 / 128 strips, ratio 4.00). Exact rims everywhere are not reachable by a
+  projection of points alone: exactness on every outer-half rim forces the horizontal
+  map throughout the inside of the outer half, whose tangential error ε tan ψ (depth ε)
+  is first order next to the poles (on a quarter fillet's cap strip, ~0.2 r Δψ). A
+  facet-aware map (barycentric in (φ, ψ)) would be exact everywhere but changes every
+  `surface_point` caller. Patch areas r |∮ (Rψ + r sin ψ) dφ| by Gauss–Legendre on edge
+  pieces, split by bisection where an edge crosses the tube circle (the integrand kinks
+  there); a fine subdivision of the projected facet agrees to its own discretization.
+  Covered to round-off (|error| ≤ 7e-16): closed torus, ψ ∈ [0, π], [−π/2, π/2],
+  [π/2, 3π/2], and the quarter fillet at 16 / 32 / 64 strips (before: +7.0e-3 / 1.8e-3
+  at 32 / 64, the cap-rim chords projecting past the rim); ψ ∈ [0, π/3] (rim at 60°)
+  +4.6e-2 / 1.1e-2 / 2.8e-3 (second order). The rounded hohlraum (rc = 1 mm) with its
+  corners as tori: fillet area exact (the frusta's chord polygon −15% / −3.8% / −1.0%
+  with 1 / 2 / 4 bands per corner), raw row sums max |1 − ΣF| 5.6e-3 / 3.0e-3 with 1 / 4
+  bands (frusta 7.1e-3 / 3.0e-3), on the fillets 6.0e-4 / 1.2e-3 (frusta 4.7e-3 /
+  2.2e-3; with the earlier projection 4.5e-5 / 1.8e-3, the one-band value a
+  cancellation of the cap rims' +1.8e-3 area against the quadrature). Exchange against
+  the frusta (Σ A_i F_ij): capsule–fillets −2.9e-3 / +1.5e-3 / +7.1e-4, fillets–LEHs
+  −9.6e-3 / −2.9e-3 / −1.5e-3 with 1 / 2 / 4 bands; `hohlraum` keeps its frusta (the
+  default 4 bands at h = 0.5; baselines). NIF CAD (14 parts other than the mount):
+  fits bit for bit unchanged (fitting uses its own model, not the projection); the 16
+  tori's 11.2k elements 177.64 → 177.74 mm² (+6.0e-4): the full quarter fillets
+  (r 0.9 mm) from +2.1e-3 of their band to −2e-7, inner-half fillets (r 1.5 mm) from
+  −2.4e-3 to ≤ 1e-4, thin tori (r 25 µm, inner-half rims, azimuthal facets long against
+  r) +8–13% (a full one from −11% of its band to −1.3e-5), the convex round between
+  cones (rims −29°, +23°) unchanged to 1e-15, and a fillet (r 1.05 mm) whose region
+  takes a 0.4° sliver of cap past the pole −0.30%: facets lying nearly in the pole's
+  tangent plane are squeezed by the horizontal map (one 1e-3 mm² facet −91%), though
+  the band they tile is kept. Tori are not convex: their facets still occlude pairs
+  inside them.
   NIF CAD workspace, its 14 parts other than the mount, raw facets, default kinds with
   and without `:torus` (and cylinder–cone–sphere, cylinder–sphere): 9 parts bit for bit
   unchanged; on the other 5 every region that changes is a fillet patchwork replaced
