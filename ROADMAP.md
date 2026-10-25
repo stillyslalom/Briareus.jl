@@ -1249,7 +1249,21 @@ the reference's view factors hold through the pulse; items 9 and 10 remove that 
       laser-heated gold corona) of that size would explain both; its energy content is
       unpublished, so it is a sensitivity, not a model. Next: a published plasma-energy
       inventory or conversion response time (HYDRA), or Dante's rise delay on a shot
-      with a step pulse;
+      with a step pulse. **Literature and wall test done (2026-10-25,
+      `reference/litreview/late_time_drive.md`, research notes "Late-time drive: the wall,
+      the plasma and Dante")**: Dante's time response (≤ 5 eV) and the LEH are ruled out;
+      HYDRA keeps the hohlraum hot (internal Tr −29 to −40 eV from maximum to bang,
+      Kritcher 2022) where Briareus's capsule Tr falls −94 to −127 eV. In an independent
+      0-D hohlraum (`examples/late_time_wall.jl`) neither a static nor an ablating 1-D
+      gold wall holds the drive (35–43 % fall against Dante's 19 % on N191118), so the
+      missing ~250–450 kJ is in the plasma (published evidence: Kline 2011's coronal
+      energy, 15–30 % of the energy on NIF; Town 2011 Fig. 2, the model storing more
+      coronal energy follows Dante's fall); its return rate is unpublished, so nothing is
+      fitted. The closure's `release` should be ~1.0 on an ablating wall (0.9–1.07; 0.77
+      was calibrated on a static wall): with 1.0 the Dante deficit at bang shrinks −75 →
+      −43 (N191118) and −71 → −48 eV (N210601), Fig. 10 unchanged. **Decision needed**:
+      make `release = 1.0` the default. Next: HYDRA's energy inventory through the coast,
+      a synthetic Dante for the pair, Dante spectra after laser-off (litreview §4);
     - the missing sinks: He gas (4.5 %), LEH windows, the M-band (item 13). The capsule
       share with published radius and albedo (Young 2020's HYDRA ablator albedo on the
       ablation-front schedule, `capsule_albedo=young`) is 12.3 % against 16.2 %:

@@ -5895,3 +5895,128 @@ f = 0.836, wall history and re-emission, 11 % degradation, measured backscatter,
   outside the ablation front is the open input (a published HYDRA absorption radius, or
   the blow-off's opacity).
 - The late-time drive after the droop (unchanged by these defaults).
+
+## Late-time drive: the wall, the plasma and Dante (2026-10-25) *derived*
+
+ROADMAP 16, the late-time drive ("Zylstra 2022 LEH pair, time-dependent" §2): after the
+laser falls the model's drive falls far faster than Dante on all three shots. Literature
+in `reference/litreview/late_time_drive.md`. Dante, Fig. 10 and HYDRA's Tr are checks
+here; nothing was fitted to them. Confidence: **H** primary text, **H-img** read from a
+rendered figure, **L** our construction.
+
+### Inputs read
+
+| Quantity | Value | Source | Conf. |
+|---|---|---|---|
+| HYDRA internal Tr (1.1–1.5 capsule radii): max / at peak velocity / at bang | N210207 295 / 279 / 260 eV (coast 1.05 ns); N210307 294 / 270 / 254 (1.2 ns); N210808 305 / 291 / 276 (0.86 ns, 3.1 mm LEH) | Kritcher et al., PRE 106, 025201 (2022) Table I | H-img |
+| Dante impulse response | "~400 ps wide Gaussian", cable and XRD; cross-timing ±50 ps | Rubery et al., PRL 132, 065104 (2024) | H |
+| | cable removed by Wiener deconvolution; XRD response ~140 ps FWHM | Rubery et al., RSI 94, 031101 (2023) (OSTI 1975922) | H |
+| Dante Tr convention | initial LEH dimensions, "a lower bound" | Rubery 2024; Swadling et al. arXiv:2501.10350 eq. 12 | H |
+| LASNEX after laser-off | "falls more quickly after the lasers turn off" than Dante; simulated LEH closes too fast after the drive | Swadling et al. (BAH), arXiv:2501.10350 | H |
+| Corona energy | P_corona = (1 − η)(P_L − P_bs) "retained in the hot, under-dense coronal plasma"; 15–30 % of the energy on NIF (5–10 % Nova); η 85–90 % | Kline et al., PRL 106, 085003 (2011) | H |
+| | "up to 40 %" stored in the corona at NIF scale (XSN); after N091204's laser peak the XSN, f = 0.05 model follows Dante's fall, DCA f = 0.15 falls ~20–25 % lower in flux by 1.5–2 ns | Town et al., PoP 18, 056302 (2011) (OSTI 1018446) Fig. 2 | H, H-img |
+| Cooling term in 0-D models | T^3.3 ∝ exp[−3.3 (t − t_laser)/τ_decay] (τ_decay not printed); 0-D fails in the cooling phase | Callahan et al., PoP 27, 072704 (2020) eq. 9, Sec. II; after Moody et al., PoP 24, 042709 (2017) (closed) | H |
+| Cooling rate | set by the laser fall, LEH size, wall area and opacity; drive-pressure cooling "typical[ly] 1.5 ns" | Lindl, Haan & Landen, PoP 30, 012705 (2023) (OSTI 1961756) | H |
+| Ablating gold wall | P = r e/V, r = 0.25; E/A = 0.58 T^3.34 t^0.59 hJ/mm² (k = 0) | Rosen 2005 (OSTI 885380) eqs. 1.26–1.30 | H |
+| Reheating after bang | W-doped detritus heated by the exploding core, Dante peak ~500 ps after bang; 220 ± 30 kJ on N221204 | Rubery 2024 | H |
+
+### 1. Dante's time response: ruled out
+
+The model's Dante 1 history (standard mesh, `metrics=on` runs of "Zylstra 2022 LEH pair")
+convolved in flux with a Gaussian: 140 ps FWHM moves it ≤ 1 eV anywhere in 5–9 ns, 400 ps
+≤ 5 eV (N210601 +5.0 eV at 9.0 ns, N191118 +3.5 at 8.5 ns, N221204 ≤ 1). Against 30–70 eV
+this is not the cause.
+
+### 2. The wall: an independent 0-D hohlraum (`examples/late_time_wall.jl`) *L*
+
+A 0-D hohlraum on each shot's measured pulse, ηP = A_w F_wall(T) + A_open σT⁴ solved
+every step (η 0.75; HYBRID-E 6.4 × 11.24 mm; capsule a 0.7-absorbing sphere at R₀, or
+none with the LEHs at 0.857 r₀), with three walls: the static 1-D diffusion reference of
+`wall_reemission.jl`; a new ablating reference (1-D Lagrangian radiation hydrodynamics,
+Hammer–Rosen power laws, P = 0.25 e/V, flux-limited diffusion, Marshak boundary; energy
+conserved to 1e-3; at constant 300 eV it stores E = 0.0039 T^3.48 t^0.67 MJ/cm², 9 %
+below Lindl's 5.2e-3 T^3.3 t^0.62 at 1–2 ns and 2.4× the static wall); and
+`drive_history`'s closure (Lindl's gold loss, `release` 0.77). Each column falls from its
+own peak; Dante is shown for the shape only.
+
+T (eV) after the laser falls, capsule at R₀ (static / ablating / closure / Dante):
+
+| t (ns) | N191118 | N210601 | N221204 |
+|---|---|---|---|
+| 7.0 | 298 / 273 / 266 / 293 | 299 / 269 / 263 / 289 | 307 / 278 / 271 / 291 |
+| 8.0 | 251 / 239 / 227 / 281 | 290 / 265 / 257 / 301 | 311 / 282 / 275 / 310 |
+| 8.5 | 191 / 198 / 180 / 262 | 261 / 243 / 232 / 292 | 297 / 272 / 264 / 311 |
+| 9.0 | 171 / 177 / 160 / 238 | 214 / 213 / 195 / 278 | 270 / 253 / 242 / 302 |
+| 9.5 | 158 / 163 / 145 / 221 | 187 / 190 / 172 / 254 | 222 / 221 / 204 / — |
+
+- **No gold wall holds the drive.** From 7.0 to 9.0 ns on N191118 the ablating wall falls
+  35 %, the static 43 %, Dante 19 %; on N210601 from 7.5 to 9.5 ns 30 % against 15 %. With
+  no capsule and the LEHs at 0.857 r₀ (the most favourable sinks) N191118's ablating wall
+  still falls 30 % (298 → 210 eV) by 9.0 ns. The ablating wall stores 620–820 kJ at the
+  fall but gives back only 30–45 kJ in the next ns: most of its energy is kinetic or deep.
+  So the slow fall needs a source outside the wall, as HYDRA's internal Tr (−29 to −40 eV
+  from maximum to bang, against −94 to −127 eV for Briareus's capsule Tr on the pair) says
+  it has.
+- **The closure is good to ~10 eV.** It sits 2–3 % below the ablating reference at the
+  peak and 8–10 % below it 1–1.5 ns after the fall (N191118 160 against 177 eV at 9 ns).
+
+**The release factor on an ablating wall** (`late_time_wall.jl release`): the closure
+given the ablating wall's own constant-T scaling needs `release` 1.07 / 0.99 / 0.91 for
+10 / 30 / 50 % drops (static wall 0.76–0.78): the cooled surface throttles the release
+less when the heated layer is expanded. In the 0-D hohlraum itself (closure with the
+ablating scaling against the ablating reference, T normalized at 7 ns), the fall to
+8.5–9.5 ns is matched by 0.92–1.0 on N191118, 0.97–1.05 on N210601 and ~1.06 on N221204;
+0.77 gives 6–15 % too low a T 1.5–2 ns after the fall (*L*). *Calibrated* candidate:
+`release` ≈ 1.0 (0.9–1.07). The present 0.77 was calibrated on a static wall while
+`WallLossAlbedo`'s loss is Lindl's ablative one, so 1.0 is the consistent value.
+**Not adopted** (a default change for the user to decide; see §3).
+
+### 3. The full model with `release` 1.0 (sensitivity)
+
+`examples/n221204.jl 0.8 0.4 full <transfer> x calibrated <shot> metrics=on` on the new
+defaults (commit 2e20e7a), `WallLossAlbedo`'s `release` 0.77 (default) against 1.0 (set
+through a scratch copy of the source). Capsule Tr / Dante 1 initial / open area (eV),
+coarse mesh; measured Dante in the last column:
+
+| shot, t (ns) | release 0.77 | release 1.0 | measured |
+|---|---|---|---|
+| N191118 8.0 | 249.0 / 236.8 / 255.8 | 256.4 / 243.5 / 263.0 | 281.4 |
+| N191118 8.5 | 199.4 / 186.0 / 201.0 | 220.6 / 205.9 / 222.4 | 261.9 |
+| N191118 9.0 | 176.7 / 164.9 / 178.1 | 205.6 / 191.8 / 207.2 | 238.2 |
+| N191118 bang 9.37 | 161.5 / 150.6 / 162.7 | 196.4 / 183.2 / 197.9 | 226.0 |
+| N210601 8.5 | 259.1 / 243.9 / 263.4 | 265.7 / 249.8 / 269.9 | 292.3 |
+| N210601 9.0 | 222.3 / 207.1 / 223.7 | 238.9 / 222.5 / 240.4 | 277.7 |
+| N210601 bang 9.48 | 196.5 / 183.0 / 197.6 | 221.2 / 206.0 / 222.5 | 253.8 |
+| N221204 8.5 | 294.6 / 278.8 / 301.1 | 296.7 / 280.7 / 303.2 | 311.3 |
+| N221204 9.0 | 272.8 / 256.7 / 277.2 | 279.6 / 262.8 / 283.9 | 301.5 |
+| N221204 bang 9.53 | 230.6 / 214.7 / 232.0 | 248.9 / 231.8 / 250.4 | — |
+
+- Bit for bit until the power falls (rising drives are unchanged by construction).
+- The Dante deficit (initial area) at bang falls from −75 to −43 eV (N191118) and −71 to
+  −48 eV (N210601); at 8.5 ns from −76 to −56 and −48 to −43; N221204 at 9.0 ns from −45
+  to −39. So ~30–45 % of the late gap at bang, 6–26 % at 8.5 ns. The rest is the
+  plasma (§4).
+- Fig. 10 (blind) unchanged to 8.5 ns (−0.183 at 5.25, 6.21 ns, +0.085, rms 0.045);
+  mean flux P2 rise→bang −0.0081 against −0.0076 (−6.1 against −6.5 µm). Split (N221204,
+  % of coupled): LEH 24.2 → 24.7, capsule 13.9 → 14.0; wall re-emitted 136 → 145 kJ
+  (N191118: 270 → 295 kJ).
+
+### 4. What remains, with its data
+
+- **A plasma source after the fall.** The published evidence (Kline 2011's definition of
+  1 − η as energy retained in the corona, 15–30 % of the energy on NIF; Town 2011 Fig. 2:
+  the model with more coronal energy follows Dante's fall) points to the laser-heated
+  gold corona/bubble, with the capsule's W-doped exhaust (~100 kJ thermal; it is also
+  where HYDRA's extra 2 points of capsule absorption likely go) and the gas (30–60 kJ) as
+  smaller reservoirs. Size of order the gap (1 − η = 10–25 % of 1.6–2 MJ); its return rate
+  after laser-off is unpublished. Only the thermal part (~60 kJ, ~0.3 ns) is estimable,
+  and that is the 0.15 ns lag already tested. **Not modeled**: no published number
+  constrains the return without fitting Dante.
+- **Data that would settle it**: HYDRA's energy inventory through the coast (radiation,
+  wall internal and kinetic, corona/bubble, capsule exhaust, gas) at laser-off and at
+  bang; a post-shot synthetic Dante 1 for N191118 or N210601; Dante spectra (color
+  against brightness temperature, the >1.8 keV share) between laser-off and bang;
+  Moody 2017's cooling constant (closed access); gated LEH/bubble images after
+  laser-off.
+- **Decision needed** (ROADMAP 16): whether `release` 1.0 (the ablating-wall
+  calibration) becomes the default. Not changed here.
