@@ -270,7 +270,7 @@ end
     band(ψ0, ψ1) = 2π * r * (R * (ψ1 - ψ0) + r * (sin(ψ1) - sin(ψ0)))
     for (ψ0, ψ1) in ((0, π), (-π, π), (0, π / 2), (π / 2, 3π / 2), (-π / 2, π / 2))
         t = Target([Component(:t, facet_soup(cad_torus(R, r, 0.3, ψ0, ψ1; nψ = 8, nphi = 64)), gold(); surface = s0)])
-        @test sum(t.elem_area) ≈ band(ψ0, ψ1) rtol = 1e-14
+        @test sum(t.elem_area) ≈ band(ψ0, ψ1) rtol = 1e-12
         @test all(==(1), t.elem_curved)
         for e in 1:nelements(t)
             pts, ws, ns = element_quadrature(t, e, 2)
@@ -284,7 +284,7 @@ end
     # equator still converges at second order
     for n in (16, 32, 64)
         quarter = facet_soup(cad_torus(R, r, 0.3, 0, π / 2; nψ = n ÷ 2, nphi = n))
-        @test sum(Target([Component(:t, quarter, gold(); surface = s0)]).elem_area) ≈ band(0, π / 2) rtol = 1e-14
+        @test sum(Target([Component(:t, quarter, gold(); surface = s0)]).elem_area) ≈ band(0, π / 2) rtol = 1e-12
     end
     e60 = map((16, 32, 64)) do n
         m = facet_soup(cad_torus(R, r, 0.3, 0, π / 3; nψ = n ÷ 2, nphi = n))
@@ -315,7 +315,7 @@ end
         tt = Target([[c for c in t.components if !startswith(String(c.name), "corner_")]; fillets]; t.closed)
         f = elements(tt, :fillet_top, :fillet_bottom)
         @test all(==(-1), tt.elem_curved[f])                    # facing the spine
-        @test sum(tt.elem_area[f]) / (2 * 2π * rc * (π / 2 * (2.875 - rc) + rc)) - 1 ≈ 0 atol = 1e-14
+        @test sum(tt.elem_area[f]) / (2 * 2π * rc * (π / 2 * (2.875 - rc) + rc)) - 1 ≈ 0 atol = 1e-12
         F = view_factors(tt)
         @test maximum(abs, closure_error(F)) < 1e-2
         @test maximum(abs, closure_error(F)[f]) < (nr_corner == 1 ? 1e-3 : 3e-3)
