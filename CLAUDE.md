@@ -33,8 +33,9 @@ factors) dominate the suite: build one per geometry and share it across testsets
 - New paths must leave existing ones bit for bit unless the change is the point: say so in
   the commit and measure the difference. Screens that skip work (zero weights, culled
   rays) must be exact on Float64.
-- Tolerances: no tighter than ~1e-12 relative on summed quantities (CI CPUs round
-  differently).
+- Tests: tolerances no tighter than ~1e-12 relative on summed quantities (CI CPUs round
+  differently); no `@test` inside loops over elements or points — check the collection
+  with one `@test all(...)` (a per-element loop once tripled the suite's test count).
 - New public names need a docstring rendered by some `@docs`/`@autodocs` block (new src
   files go in a reference page's `Pages`); `test/docrefs.jl` enforces this and that every
   `@ref` resolves. Docs follow CompactLES.jl: Literate tutorials in `docs/literate/`,
