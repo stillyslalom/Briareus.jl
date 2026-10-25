@@ -702,6 +702,9 @@ function _grow_from!(kind, seed, model::_SurfaceModel, members::Vector{Int}, D, 
     end
     tol = _fit_tol(model, norm(hi - lo), rtol, atol)
     nfit = length(members)
+    # the last fit to all the members (members only grow until the final fit, so their
+    # count identifies them): the start's, then each refit's, reused by the final fit
+    fitn, fitm = nfit, model
     rejected = Int[]
     rounds = 0
     # checkpoints at W.check × 2^k members (k = 0, 1, …): the rms over the members of the
@@ -743,6 +746,7 @@ function _grow_from!(kind, seed, model::_SurfaceModel, members::Vector{Int}, D, 
             end
             # refit, and reconsider the rejected patches under the new fit
             mdl = _fit_patches(kind, D, members, scratch)
+            fitn, fitm = length(members), mdl
             if mdl !== nothing
                 model = mdl
                 tol = _fit_tol(model, norm(hi - lo), rtol, atol)
@@ -756,6 +760,7 @@ function _grow_from!(kind, seed, model::_SurfaceModel, members::Vector{Int}, D, 
         rounds += 1
         (isempty(rejected) || nfit == length(members) || rounds > 3) && break
         mdl = _fit_patches(kind, D, members, scratch)
+        fitn, fitm = length(members), mdl
         mdl === nothing || (model = mdl; tol = _fit_tol(model, norm(hi - lo), rtol, atol))
         nfit = length(members)
         for q in rejected
@@ -765,7 +770,7 @@ function _grow_from!(kind, seed, model::_SurfaceModel, members::Vector{Int}, D, 
     end
     # final fit; drop patches that it leaves out of tolerance
     for _ in 1:2
-        mdl = _fit_patches(kind, D, members, scratch)
+        mdl = length(members) == fitn ? fitm : _fit_patches(kind, D, members, scratch)
         mdl === nothing && return nothing
         model = mdl
         tol = _fit_tol(model, _extent(D, members), rtol, atol)
@@ -775,6 +780,7 @@ function _grow_from!(kind, seed, model::_SurfaceModel, members::Vector{Int}, D, 
             mark[p] = 0
         end
         members = keep
+        fitn = -1
         isempty(members) && return nothing
     end
     return members, model
@@ -997,10 +1003,10 @@ _cover_rms(refs, k) = maximum(r -> r[min(k, end)], refs)
 
 # `fit_surfaces` on the mesh itself; also returns the work done (`growths`: growths
 # started, `work`: patches tested while growing, `givenup`: growths given up under a
-# cover, `covers`) for the tests of its cost.
+# cover, `covers`, `pairs`: region pairs tried for merging) for the tests of its cost.
 function _fit_surfaces(m::Mesh, kinds, opts, minpatches, minarea, tol; covermin = _COVER_MIN, check = _COVER_CHECK)
     np = npatches(m)
-    np == 0 && return SurfaceRegion[], (; growths = 0, work = 0, givenup = 0, covers = 0)
+    np == 0 && return SurfaceRegion[], (; growths = 0, work = 0, givenup = 0, covers = 0, pairs = 0)
     D = _fit_data(m, tol)
     nv = length(D.P)
     W = (; mark = zeros(Int, np), queued = zeros(Int, np), gid = Ref(0), heap = _GrowHeap(),
@@ -1083,40 +1089,66 @@ function _fit_surfaces(m::Mesh, kinds, opts, minpatches, minarea, tol; covermin 
             gs === nothing || (standing[gs] .= false)
         end
     end
-    # merge regions of one kind lying on one surface
+    npairs = _merge_regions!(found, D, opts, W.scratch)
+    regions = [_region(k, ps, mdl, D, W.scratch) for (k, ps, mdl) in found]
+    return sort!(regions; by = r -> -r.area),
+           (; growths = W.growths[], work = W.work[], givenup = W.givenup[], covers = length(covers), pairs = npairs)
+end
+
+# Merge regions of one kind lying on one surface: repeatedly, the first pair (i < j, in
+# the order found) that merges becomes region i. Whether a pair merges depends on its two
+# regions only, so a pair is tried once: each region carries a version (new when it takes
+# a merge), and row i, once scanned through without a merge, skips the regions j whose
+# versions existed then (with region i unchanged). Rescanning every pair after each merge
+# made this quadratic in the regions times the merges (73% of a 40k-facet sample of a
+# 133k-facet CAD part: research notes, "Cost of fitting large CAD parts"). The regions'
+# tolerances are kept with them. Returns the number of pairs tried.
+function _merge_regions!(found, D, opts, scratch)
+    n = length(found)
+    ver = collect(1:n)
+    nver = n
+    rowver, rowmax = zeros(Int, n), zeros(Int, n)
+    tols = [k === :torus ? 0.0 : _fit_tol(mdl, _extent(D, ps), opts.rtol, opts.atol) for (k, ps, mdl) in found]
+    npairs = 0
     merged = true
-    apart = Set{Tuple{UInt,UInt}}()                  # torus pairs whose union was tried
     while merged
         merged = false
-        for i in eachindex(found), j in i+1:length(found)
-            (ki, psi, mi), (kj, psj, mj) = found[i], found[j]
-            ki === kj || continue
-            if ki === :torus
-                # tori fitted on small pieces of one fillet are off by more than `atol`
-                # across it: pieces whose boxes touch are merged when their union fits
-                (objectid(psi), objectid(psj)) in apart && continue
-                push!(apart, (objectid(psi), objectid(psj)))
-                _boxes_touch(D, psi, psj, opts.atol) || continue
-            else
-                ti = _fit_tol(mi, _extent(D, psi), opts.rtol, opts.atol)
-                tj = _fit_tol(mj, _extent(D, psj), opts.rtol, opts.atol)
-                all(p -> _patch_on(mi, D, p, ti, opts.cosmax), psj) &&
-                    all(p -> _patch_on(mj, D, p, tj, opts.cosmax), psi) || continue
+        for i in eachindex(found)
+            clean = rowver[i] == ver[i]
+            for j in i+1:length(found)
+                clean && ver[j] <= rowmax[i] && continue
+                (ki, psi, mi), (kj, psj, mj) = found[i], found[j]
+                ki === kj || continue
+                npairs += 1
+                if ki === :torus
+                    # tori fitted on small pieces of one fillet are off by more than `atol`
+                    # across it: pieces whose boxes touch are merged when their union fits
+                    _boxes_touch(D, psi, psj, opts.atol) || continue
+                else
+                    ti, tj = tols[i], tols[j]
+                    all(p -> _patch_on(mi, D, p, ti, opts.cosmax), psj) &&
+                        all(p -> _patch_on(mj, D, p, tj, opts.cosmax), psi) || continue
+                end
+                ps = [psi; psj]
+                mdl = _fit_patches(ki, D, ps, scratch)
+                mdl === nothing && continue
+                t = _fit_tol(mdl, _extent(D, ps), opts.rtol, opts.atol)
+                all(p -> _patch_on(mdl, D, p, t, opts.cosmax), ps) || continue
+                ki === :torus && _deviation(mdl, D, ps, scratch)[1] > _TORUS_RMS * opts.atol && continue
+                found[i] = (ki, ps, mdl)
+                ver[i] = nver += 1
+                tols[i] = ki === :torus ? 0.0 : t
+                for v in (found, ver, rowver, rowmax, tols)
+                    deleteat!(v, j)
+                end
+                merged = true
+                break
             end
-            ps = [psi; psj]
-            mdl = _fit_patches(ki, D, ps, W.scratch)
-            mdl === nothing && continue
-            t = _fit_tol(mdl, _extent(D, ps), opts.rtol, opts.atol)
-            all(p -> _patch_on(mdl, D, p, t, opts.cosmax), ps) || continue
-            ki === :torus && _deviation(mdl, D, ps, W.scratch)[1] > _TORUS_RMS * opts.atol && continue
-            found[i] = (ki, ps, mdl)
-            deleteat!(found, j)
-            merged = true
-            break
+            merged && break
+            rowver[i], rowmax[i] = ver[i], nver
         end
     end
-    regions = [_region(k, ps, mdl, D, W.scratch) for (k, ps, mdl) in found]
-    return sort!(regions; by = r -> -r.area), (; growths = W.growths[], work = W.work[], givenup = W.givenup[], covers = length(covers))
+    return npairs
 end
 
 function _region_model(r::SurfaceRegion)

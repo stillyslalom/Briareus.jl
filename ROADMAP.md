@@ -235,8 +235,9 @@ Parts may be split for computation, but the GUI shows and picks the original par
    remeasured since the 2026-10-25 compile work); `include_components!` 0.3 s on the UI
    thread; a "fit the hohlraum template to CAD parts" action; the foil objective with one
    shared parameter set for beams aimed at one point does not move. `fit_surfaces` cost:
-   a variable-radius fillet is still quadratic; the 133k-facet NIF mount takes ~20 min
-   with the default kinds (not profiled).
+   a variable-radius fillet is quadratic while its tolerance-stopped growths
+   stay under the 512-patch covers (16–50k facets: 16–107 s); the 133k-facet NIF mount
+   now 29 s (was 1100 s; research notes, "Cost of fitting large CAD parts").
 8. **GUI requests.** Frames on a port axis; clipping volumes; STEP import (needs a CAD
    kernel; STL and VisRad workspaces cover CAD meanwhile); an x-ray image that follows
    the camera; adaptive refinement of the radiation mesh where deposition varies fastest

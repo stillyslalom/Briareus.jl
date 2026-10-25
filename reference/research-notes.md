@@ -1564,6 +1564,29 @@ fits below used Briareus's own operator points with a free-form evaluator.
   the tube, too short to show the taper. The thresholds are patch counts, so a part
   faceted several times finer than the NIF parts would bring such marginal pieces
   under covers. **H** (measured locally and synthetic)
+- **Cost of fitting large CAD parts (2026-10-25).** Profiled `fit_surfaces` (default
+  kinds, one thread) on the 133k-facet NIF mount and on samples of it (the N patches
+  nearest its centroid). Before: 40k facets 26–30 s, 73% of it the merge of regions of
+  one kind (every pair rescanned after each merge, each pair recomputing both regions'
+  extents: quadratic in the regions times the merges). The merge now tries each pair of
+  region versions once (a pair's outcome depends on its two regions only) and keeps the
+  tolerances, and the final fit of a growth reuses the last fit when the members are
+  unchanged. Bit for bit unchanged (kind, surface, centroid, normal, patches, area, rms,
+  max deviation, facing) on 90 fits: the 14 other NIF parts with four kind sets, the
+  test shapes and a synthetic boss plate, and the mount samples; the full mount
+  identical to the 2026-10-24 run (1948 regions). Mount 1100 s → 29 s; samples 20k /
+  40k / 80k facets 7.4 / 26 → 2.9 / 6.0 / 17 s (now linear). Of the remaining time 53%
+  is the start fits on the seed rings (tori 29%, cones 13%), 37% refits while growing,
+  7% the merge. Comparisons must use one compile mode: the same code gives tori differing
+  by ~1e-13 compiled in the package image and compiled in the session (likely FMA).
+  Variable-radius fillet (spine ρ = 2 + r, tube r = 0.5(1 + 0.3 cos φ), all kinds):
+  16k / 26k / 37k / 50k facets 16 / 38 / 71 / 107 s; cylinder and cone growths end
+  tolerance-stopped (rms 0.41 of tol) at 200–370 patches, under the 512-patch covers,
+  so the cost is quadratic in that window and drops to ~N^1.3 once growths pass 512
+  (50k: 8,994 given up). No exact bound gives such a growth up early (the tolerance
+  grows with the region's extent, so its rms in tolerance units can fall); smaller
+  covers changed NIF parts before ("Cost of fitting faces of none of the kinds"), so
+  none was adopted. **H** (measured locally and synthetic)
 - **Fitting CAD by default (2026-10-24, local).** Should `fit = true` follow `remesh`
   in `cad_target`/`visrad_target`/the GUI (ROADMAP open question 1)? The NIF CAD
   workspace, its 11 parts near the cavity (no mount, far parts or tent),
