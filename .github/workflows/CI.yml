@@ -20,6 +20,9 @@ jobs:
       JULIA_NUM_THREADS: ${{ matrix.threads }}
       # the one-thread job runs as three shards (test/runtests.jl); unset elsewhere: all tests
       BRIAREUS_TEST_SHARD: ${{ matrix.shard }}
+      # the statistical and convergence checks (test/runtests.jl) run on the shards, which
+      # finish well before the documentation job
+      BRIAREUS_LONG_TESTS: ${{ matrix.shard && 'true' || 'false' }}
     permissions: # needed to allow julia-actions/cache to proactively delete old caches that it has created
       actions: write
       contents: read

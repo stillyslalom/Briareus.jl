@@ -118,11 +118,13 @@ end
     end
     Hs = capmean(solve(RadiationModel(t; F = Fs, closed = false), P).H)
     Hc = capmean(solve(RadiationModel(t; F = Fc, closed = false), P).H)
-    _, batch = Briareus.montecarlo_incident(t, P, cap; paths = 8_000, reemit = :element)
-    m = batch * (A[cap] ./ sum(A[cap]))
-    nb = length(m)
-    Hm = sum(m) / nb
-    se = sqrt(sum(abs2, m .- Hm) / (nb - 1) / nb) / Hm
-    @test abs(Hs / Hm - 1) < 0.006
-    @test abs(Hs / Hm - 1) < abs(Hc / Hm - 1) + 3se
+    if LONG_TESTS
+        _, batch = Briareus.montecarlo_incident(t, P, cap; paths = 8_000, reemit = :element)
+        m = batch * (A[cap] ./ sum(A[cap]))
+        nb = length(m)
+        Hm = sum(m) / nb
+        se = sqrt(sum(abs2, m .- Hm) / (nb - 1) / nb) / Hm
+        @test abs(Hs / Hm - 1) < 0.006
+        @test abs(Hs / Hm - 1) < abs(Hc / Hm - 1) + 3se
+    end
 end

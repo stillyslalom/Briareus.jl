@@ -263,16 +263,18 @@ end
     @test length(hr.Tr) == length(hr.window_loss) == size(hr.moments, 2) == length(hr.time)
     # against a uniformly fine history: the refined one, interpolated linearly between
     # its steps, follows the window loss through the transitions 5 times more closely
-    fine = 0.25:1/32:5.0
-    hf = drive_history(mw, op, f, fine; wall_history = false)
-    interp(h, τ) = (k = clamp(searchsortedlast(h.time, τ), 1, length(h.time) - 1);
-                    w = (τ - h.time[k]) / (h.time[k+1] - h.time[k]);
-                    (1 - w) * h.window_loss[k] + w * h.window_loss[k+1])
-    err(h) = maximum(abs(interp(h, τ) - x) for (τ, x) in zip(hf.time, hf.window_loss)) /
-             maximum(hf.window_loss)
-    @test err(hr) < 0.015 && err(hr) < err(hc) / 5
-    @test maximum(abs.(hr.burnthrough[:window_1] .- hf.burnthrough[:window_1])) < 2e-3
-    @test hr.window_loss[end] ≈ hf.window_loss[end] rtol = 1e-3
+    if LONG_TESTS
+        fine = 0.25:1/32:5.0
+        hf = drive_history(mw, op, f, fine; wall_history = false)
+        interp(h, τ) = (k = clamp(searchsortedlast(h.time, τ), 1, length(h.time) - 1);
+                        w = (τ - h.time[k]) / (h.time[k+1] - h.time[k]);
+                        (1 - w) * h.window_loss[k] + w * h.window_loss[k+1])
+        err(h) = maximum(abs(interp(h, τ) - x) for (τ, x) in zip(hf.time, hf.window_loss)) /
+                 maximum(hf.window_loss)
+        @test err(hr) < 0.015 && err(hr) < err(hc) / 5
+        @test maximum(abs.(hr.burnthrough[:window_1] .- hf.burnthrough[:window_1])) < 2e-3
+        @test hr.window_loss[end] ≈ hf.window_loss[end] rtol = 1e-3
+    end
 
     # flux_change: the observed flux shape H/⟨H⟩ moves by at most the tolerance per
     # step (checked by re-solving at the steps with the final burnthrough times). The

@@ -134,16 +134,18 @@ end
     # velocity covariance against a Monte Carlo of full evaluations
     vimp = 60.0                                 # small, so the yield factor varies
     u = velocity_uncertainty(s, quads; pointing = 0.03, power = 0.02, vimp, chi = 1.0)
-    samples = sample_modes(s, quads; pointing = 0.03, power = 0.02, n = 400, lmax = 1,
-                           rng = MersenneTwister(5))
-    vs = [hotspot_velocity(samples[:, k]) for k in axes(samples, 2)]
-    rms_mc = sqrt(sum(sum(abs2, v - u.velocity) for v in vs) / length(vs))
-    @test abs(rms_mc / u.rms - 1) < 0.08
     @test u.rms_by.beam ≈ u.rms && u.rms_by.group == 0
-    ey = sum(exp(-3.3 * sum(abs2, v) / vimp^2) for v in vs) / length(vs)
-    @test abs(ey / u.expected_yield - 1) < 0.03
-    et = sum(exp(-(3.3 + 2.3) * sum(abs2, v) / vimp^2) for v in vs) / length(vs)
-    @test abs(et / u.expected_total - 1) < 0.05
+    if LONG_TESTS
+        samples = sample_modes(s, quads; pointing = 0.03, power = 0.02, n = 400, lmax = 1,
+                               rng = MersenneTwister(5))
+        vs = [hotspot_velocity(samples[:, k]) for k in axes(samples, 2)]
+        rms_mc = sqrt(sum(sum(abs2, v - u.velocity) for v in vs) / length(vs))
+        @test abs(rms_mc / u.rms - 1) < 0.08
+        ey = sum(exp(-3.3 * sum(abs2, v) / vimp^2) for v in vs) / length(vs)
+        @test abs(ey / u.expected_yield - 1) < 0.03
+        et = sum(exp(-(3.3 + 2.3) * sum(abs2, v) / vimp^2) for v in vs) / length(vs)
+        @test abs(et / u.expected_total - 1) < 0.05
+    end
     @test u.expected_total < u.expected_yield < 1
 
     # the inverse: a 20 µm vertical target offset, measured as a full evaluation's velocity

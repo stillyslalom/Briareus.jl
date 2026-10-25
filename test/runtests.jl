@@ -13,6 +13,10 @@ const R_SPHERE = 2.0
 # meshops.jl, cadfit.jl, partial_visibility.jl, hmatrix.jl; vrw_fixture.jl, visrad.jl.
 const SHARD = get(ENV, "BRIAREUS_TEST_SHARD", "")
 SHARD in ("", "1", "2", "3") || error("BRIAREUS_TEST_SHARD must be 1, 2 or 3, got \"$SHARD\"")
+# BRIAREUS_LONG_TESTS = true also runs the statistical and convergence checks (Monte Carlo
+# against linear propagation, a uniformly fine history; ~3 min at four threads). CI's
+# one-thread shards run them; local full runs skip them unless asked.
+const LONG_TESTS = get(ENV, "BRIAREUS_LONG_TESTS", "false") == "true"
 const SHARDS = Dict(f => 2 for f in ("meshops.jl", "stl.jl", "cadfit.jl", "partial_visibility.jl", "hmatrix.jl"))
 merge!(SHARDS, Dict(f => 3 for f in ("windows.jl", "burnthrough.jl", "uncertainty.jl",
                                      "implosion.jl", "energetics.jl", "spectral.jl", "large_models.jl")))

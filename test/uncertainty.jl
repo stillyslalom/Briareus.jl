@@ -42,15 +42,17 @@ std_rows(A) = sqrt.(sum(abs2, A .- sum(A; dims = 2) ./ size(A, 2); dims = 2) ./ 
     @test u.sigma[1] == 0
     u2 = mode_uncertainty(s, quads; pointing = 0.04, power = 0.04, lmax)
     @test u2.sigma ≈ 2u.sigma rtol = 1e-12                          # linear in the errors
-    samples = sample_modes(s, quads; pointing = 0.02, power = 0.02, n = 400, lmax,
-                           rng = MersenneTwister(11))
-    sd = vec(std_rows(samples))
-    big = findall(>(0.3 * maximum(u.sigma)), u.sigma)
-    @test length(big) >= 3
-    @test all(abs.(sd[big] ./ u.sigma[big] .- 1) .< 0.15)          # MC: ±7% at 2σ for n = 400
-    rms_mc = [sqrt(sum(abs2, samples[l^2+1:(l+1)^2, :] .- sens.c[l^2+1:(l+1)^2]) / size(samples, 2))
-              for l in 1:lmax]
-    @test all(abs.(rms_mc ./ u.rms_mode .- 1) .< 0.12)
+    if LONG_TESTS
+        samples = sample_modes(s, quads; pointing = 0.02, power = 0.02, n = 400, lmax,
+                               rng = MersenneTwister(11))
+        sd = vec(std_rows(samples))
+        big = findall(>(0.3 * maximum(u.sigma)), u.sigma)
+        @test length(big) >= 3
+        @test all(abs.(sd[big] ./ u.sigma[big] .- 1) .< 0.15)      # MC: ±7% at 2σ for n = 400
+        rms_mc = [sqrt(sum(abs2, samples[l^2+1:(l+1)^2, :] .- sens.c[l^2+1:(l+1)^2]) / size(samples, 2))
+                  for l in 1:lmax]
+        @test all(abs.(rms_mc ./ u.rms_mode .- 1) .< 0.12)
+    end
 
     # the robust objectives add exactly the propagated variance
     errs = (; pointing = 0.03, power = 0.01)
@@ -88,9 +90,11 @@ std_rows(A) = sqrt.(sum(abs2, A .- sum(A; dims = 2) ./ size(A, 2); dims = 2) ./ 
     uc = mode_uncertainty(s, quads; errc..., lmax)
     @test uc.rms_mode ≈ sqrt.(uc.rms_by.beam .^ 2 .+ uc.rms_by.group .^ 2 .+ uc.rms_by.positioning .^ 2)
     @test all(uc.rms_by.group .> 0) && all(uc.rms_by.positioning .> 0)
-    sc = sample_modes(s, quads; errc..., n = 400, lmax, rng = MersenneTwister(5))
-    rms_c = [sqrt(sum(abs2, sc[l^2+1:(l+1)^2, :] .- sens.c[l^2+1:(l+1)^2]) / size(sc, 2)) for l in 1:lmax]
-    @test all(abs.(rms_c ./ uc.rms_mode .- 1) .< 0.15)
+    if LONG_TESTS
+        sc = sample_modes(s, quads; errc..., n = 400, lmax, rng = MersenneTwister(5))
+        rms_c = [sqrt(sum(abs2, sc[l^2+1:(l+1)^2, :] .- sens.c[l^2+1:(l+1)^2]) / size(sc, 2)) for l in 1:lmax]
+        @test all(abs.(rms_c ./ uc.rms_mode .- 1) .< 0.15)
+    end
     @test_throws ArgumentError mode_uncertainty(s, quads; positioning = (0.1, 0.1), lmax)
     # robust objectives with shared errors add exactly the propagated variance
     nominal = asymmetry_objective(; modes = (1 => 1.0, 3 => 2.0))
