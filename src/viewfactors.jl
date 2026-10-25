@@ -941,6 +941,10 @@ function _adapt_tri(s, sgn, nflat, a, b, c, rc, depth, mindepth, maxdepth, ratio
     p, n = (s === nothing || sgn == 0) ? (cen, nflat) : (q = surface_point(s, cen); (q[1], sgn * q[2]))
     h = max(norm(b - a), norm(c - b), norm(a - c))
     if depth < mindepth || (depth < maxdepth && _distance_to(p, rc) < ratio * h)
+        h^2 > _SLIVER * norm(cross(b - a, c - a)) &&
+            return _split_sliver(a, b, c) do x, y, z
+                _adapt_tri(s, sgn, nflat, x, y, z, rc, depth + 1, mindepth, maxdepth, ratio)
+            end
         ab, bc, ca = (a + b) / 2, (b + c) / 2, (c + a) / 2
         return _adapt_tri(s, sgn, nflat, a, ab, ca, rc, depth + 1, mindepth, maxdepth, ratio) +
                _adapt_tri(s, sgn, nflat, ab, b, bc, rc, depth + 1, mindepth, maxdepth, ratio) +
@@ -951,12 +955,51 @@ function _adapt_tri(s, sgn, nflat, a, b, c, rc, depth, mindepth, maxdepth, ratio
     return w * _receiver_vf(p, n, rc)
 end
 
+# Slivers. The midpoint split keeps a triangle's shape, so a sliver (a 20 µm gap's
+# chord rectangle, a bore one element tall) stays one at every depth, and the test
+# `distance < ratio × longest edge` holds for every thin row of it near a receiver: such
+# an element took tens of times the cells of a square one. A triangle whose longest edge
+# h has h² > `_SLIVER` × twice its area (a chord rectangle more than ~4:1; primitive
+# walls are ≤ 2.5, geodesic capsules 1.5, latitude-longitude polar caps 5.2) is instead
+# cut across its length, which halves h as the midpoint split does, until its pieces are
+# no longer slivers. Triangles under the bound split as before into children similar to
+# them, so their factors are unchanged bit for bit.
+const _SLIVER = 4.5
+
+# `f` summed over the pieces of the sliver (a, b, c): a needle (one edge under half the
+# longest) is cut parallel to that short edge through the midpoints of the long ones
+# (the tip, similar to it, and the two halves of the base trapezoid); a flat one (an
+# angle near 180°) is bisected at its longest edge.
+function _split_sliver(f, a, b, c)
+    lab, lbc, lca = norm(b - a), norm(c - b), norm(a - c)
+    h = max(lab, lbc, lca)
+    # v opposite the shortest edge s1–s2
+    v, s1, s2, ls = lab <= lbc && lab <= lca ? (c, a, b, lab) :
+                    lbc <= lca ? (a, b, c, lbc) : (b, c, a, lca)
+    if ls < h / 2
+        m1, m2 = (v + s1) / 2, (v + s2) / 2
+        return f(v, m1, m2) + f(m1, s1, s2) + f(m1, s2, m2)
+    end
+    # p–q the longest edge, o opposite it
+    p, q, o = lab >= lbc && lab >= lca ? (a, b, c) : lbc >= lca ? (b, c, a) : (c, a, b)
+    m = (p + q) / 2
+    return f(p, m, o) + f(m, q, o)
+end
+
 function _adapt_sector(s, n, r0, r1, a, b, rc, depth, mindepth, maxdepth, ratio)
     rm = sqrt((r0^2 + r1^2) / 2)
     p = _sector_point(s, rm, (a + b) / 2)
     h = max(r1 - r0, r1 * (b - a))
     if depth < mindepth || (depth < maxdepth && _distance_to(p, rc) < ratio * h)
         φm = (a + b) / 2
+        # a sector long one way (a gap's annulus) is halved across that way only (`_SLIVER`)
+        if r1 * (b - a) > _SLIVER_SECTOR * (r1 - r0)
+            return _adapt_sector(s, n, r0, r1, a, φm, rc, depth + 1, mindepth, maxdepth, ratio) +
+                   _adapt_sector(s, n, r0, r1, φm, b, rc, depth + 1, mindepth, maxdepth, ratio)
+        elseif r1 - r0 > _SLIVER_SECTOR * r1 * (b - a)
+            return _adapt_sector(s, n, r0, rm, a, b, rc, depth + 1, mindepth, maxdepth, ratio) +
+                   _adapt_sector(s, n, rm, r1, a, b, rc, depth + 1, mindepth, maxdepth, ratio)
+        end
         return _adapt_sector(s, n, r0, rm, a, φm, rc, depth + 1, mindepth, maxdepth, ratio) +
                _adapt_sector(s, n, rm, r1, a, φm, rc, depth + 1, mindepth, maxdepth, ratio) +
                _adapt_sector(s, n, r0, rm, φm, b, rc, depth + 1, mindepth, maxdepth, ratio) +
@@ -964,6 +1007,10 @@ function _adapt_sector(s, n, r0, r1, a, b, rc, depth, mindepth, maxdepth, ratio)
     end
     return (r1^2 - r0^2) / 2 * (b - a) * _receiver_vf(p, n, rc)
 end
+
+# Side ratio (arc at the outer radius to radial width) past which a sector is halved one
+# way only.
+const _SLIVER_SECTOR = 4.0
 
 _distance_to(p, r::_Receiver) = minimum(_point_triangle_distance(p, tri...) for tri in r.tris)
 

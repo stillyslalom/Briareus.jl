@@ -1178,6 +1178,15 @@ the reference's view factors hold through the pulse; items 9 and 10 remove that 
     evaluations); rim certificates for non-convex occluders and `:sampled` visibility
     (still a ray per pair of an occupied leaf); GPU mat-vecs (≲ 25 % end to end on the
     RTX 2060 while assembly stays on the CPU; not worth CUDA.jl yet).
+    Deposition-operator rays and sliver view factors: **done (2026-10-25, research notes
+    "Deposition-operator rays and sliver view factors")**: the operator casts one packet
+    per triangle (all points × cone directions, exactly `any_hit`'s answers), 1.4× on 48
+    quads and 1.6× on 192 beams, bit for bit; screening points on the profile's cut-off
+    does not apply (the operator serves every aim) and dropping triangles beyond `reach`
+    would save ≤ 25 % (not adopted). Slivers are cut across their length in the adaptive
+    view-factor kernels, 1.5–1.7× on the bored cavities, primitives unchanged bit for
+    bit. Still open: the bored cavity's gap pairs (~60 % of its time; refinement toward
+    the shared edge onto ~34-edge sector receivers).
 15. **Polar direct drive mode**, benchmarked against published GA optimizers.
 16. **Absolute energetics and an N221204 benchmark** (`reference/litreview/energetics.md`,
     `n221204_benchmark.md`). Done (2026-10-23, see Done): the mock HYBRID-E pointing

@@ -5641,3 +5641,110 @@ Open, with their data: the late-time drive (§2: the pair is the test); the pair
 residual of 2–4 eV (pointing and cone fraction of N191118 are unpublished); the capsule
 share (α_c recalibration on the current drive, or a larger absorbing radius); the
 velocity check (needs per-quad delivered powers or window geometry).
+
+## Deposition-operator rays and sliver view factors (2026-10-25) *derived*
+
+ROADMAP 14. The test-suite profile found two costs: building a `DepositionOperator`
+(~6 s per 48-quad and ~22–30 s per 192-beam operator on one thread, almost all in the
+visibility rays of every triangle × cone direction × beam) and the view factors of
+cavities with sliver elements (the bored cavity's 20 µm waist gap: 70–80 % of its
+time). Scripts in the session scratchpad `depcost/` (`cmp.jl`, `harness.jl`, `vfcmp.jl`,
+`closed.jl`, `conv2.jl`, `plates.jl`); timings on the Ryzen 9 4900HS with other jobs
+sharing it (ratios are from interleaved runs).
+
+### Deposition operator: packet visibility (bit for bit)
+
+- **Screening on the profile's cut-off does not apply.** The operator's points and
+  masks are reused as aims, spots and defocus move (by `reach` with full resolution,
+  beyond it at `level`), so a point that receives an exact zero at the construction aim
+  is still needed after re-aiming; dropping it changes `deposit` there. Only points whose
+  mask is empty (no cone direction reaches them) are dispensable, and they are already
+  dropped. For the record, the rays on triangles outside every beam's `near` region
+  (zero for every aim within `reach`) are 2 % of a quad's (Q15T) and 22–26 % of a
+  single NIF beam's: restricting the operator to `reach` would save at most a quarter on
+  192 beams and lose the level-resolved deposition beyond it. Not adopted.
+- **Where the rays go** (default `hohlraum()`, 6228 opaque triangles): ~0.5 M rays per
+  quad, ~0.43 M per beam; 55–65 % blocked (wall points looking back at the far wall),
+  the rest lit. Per triangle and direction the answer is uniform for 98 % of the rays
+  (all points lit 3–7 %, all blocked 33–46 %, back sides ~50 %, mixed 1.5–2 %). A
+  single `any_hit` costs ~300 ns (≈ 55 node boxes and 4.5 triangle tests; 1.7 of those
+  on triangles the ray moves away from).
+- **Adopted: one packet per triangle** (`_unblocked!`, all its quadrature points × the
+  cone directions facing its lit side). Interior nodes are culled by a slab test that is
+  conservative over the origins' box and the directions' inverse components, leaves by
+  one such test per direction, and then each ray takes its own slab test and triangle
+  tests. fp subtraction and products are monotone, so no ray that passes a box is
+  culled, and the slab test is monotone in box containment, so a ray passes a leaf only
+  if it passes all its ancestors: every ray tests exactly the triangles its own
+  `any_hit` reaches until one blocks it. Each direction's last blocking leaf is tried
+  first (a cache across a work unit's triangles; 38 % of blocked rays settle there).
+  The operator is identical, bit for bit (points, weights, normals, masks, destinations
+  and `deposit`), on the 48-quad and 192-beam NIF operators. The facing test d·n < 0
+  is now summed in a fixed order (`_facing_mask`): StaticArrays' `dot` is an `@simd`
+  reduction whose rounding depends on the calling code, which flipped a direction lying
+  in a back side's plane (d·n = 0 or −3e-17, a zero-weight contribution) when the loop
+  was restructured.
+- Tried (same answers; replaying 37k packets of six quads, `any_hit` 0.95–1.0 s): the
+  adopted packet 0.62–0.65 s; one packet per direction 0.68; direction masks carried down
+  the tree 0.67–0.71; without the leaf cache 0.63 (the cache barely matters once the
+  packet is shared); visiting the child farther along the rays first 0.63 (the current
+  order), nearer first 0.92. The occluder cache with single rays alone gave 1.1×.
+- Not exact, not tried: skipping the triangle tests a ray provably moves away from (the
+  ray's own facet), safe by an error bound of nine orders but not by construction.
+
+| NIF operator, `hohlraum()` | 1 thread | 4 threads |
+|---|---|---|
+| 48 quads, before → after | 6.05 → 4.26 s (1.42×) | 1.61 → 1.14 s (1.41×) |
+| 192 beams, before → after | 22.2 → 13.3 s (1.66×) | 5.72 → 3.54 s (1.61×) |
+
+### View factors: slivers cut across their length
+
+`_adapt_tri` (and `_adapt_sector`) split cells at their midpoints, which keeps a cell's
+shape: a sliver stays a sliver at every depth, and the test `distance < ratio × longest
+edge` holds for every thin row of it near a receiver, so a 5:1 element took ~10 rows of
+cells where a square one takes ~3, and an annular sector 15:1 refined radially 16× more
+than needed. Now a triangle with h² > 4.5 × twice its area (a chord rectangle beyond
+~4:1) is cut across its length instead: a needle parallel to its short edge (its tip and
+the two halves of the base trapezoid), a flat one at its longest edge; a sector whose
+arc is more than 4× its width (or the reverse) is halved one way only. Either halves the
+longest edge, so `mindepth`/`maxdepth` keep their meaning. Primitive triangles are under
+the bound (walls ≤ 2.5, geodesic capsules 1.5, corner bands 2.45; latitude–longitude
+polar caps reach 5.2 but are never adaptive emitters), and their midpoint children are
+similar to them: **`view_factors` is unchanged bit for bit** on `hohlraum()` (4116
+elements), h 0.8/0.4, h 0.6/0.3 with `sombrero = true`, with `corner_radius = 0.5`, and
+with `capsule_mesh = :latlong`. Reciprocity is exact as before (the pair is still
+averaged over both directions); the bored cavities change by ≤ 3.5e-4 in F and ≤ 4.3e-4
+in row sums.
+
+Accuracy against closed forms (relative error of the summed exchange):
+
+| case | before | after | converged quadrature |
+|---|---|---|---|
+| 1 × 0.05 plates 0.02 apart, one 20:1 element each (parallel opposed) | 1.0e-4 | 5.8e-4 | — |
+| same, 5:1 elements | −8.6e-5 | 4.0e-4 | — |
+| same, square elements (unchanged) | 8.8e-4 | 8.8e-4 | — |
+| 1 × 0.05 plate to a 1 × 0.02 plate on its long edge, 20:1 | 8.8e-5 | −3.5e-4 | — |
+| same, 5:1 | −2.6e-4 | −5.5e-4 | — |
+| same, square elements (unchanged) | −1.6e-3 | −1.6e-3 | — |
+| bored cavity (0.8/0.25): gap cylinder → gap annulus | −3.65e-3 | −3.22e-3 | −3.76e-3 |
+| bored cavity: annulus ↔ annulus across the gap | −2.8e-4 | −1.4e-4 | −3.9e-5 |
+
+Closed forms: directly opposed and perpendicular rectangles; coaxial parallel annuli
+and a cylinder's inner surface to its end annulus from the disk–disk formula. The
+"converged" column is the same kernel at maxdepth 12, ratio 8 (before and after agree
+there): the −0.38 % of the gap exchange is the receiver's polygonized arcs (16 chords
+per arc leave a ~0.1 µm slit along the shared corner), not the emitter quadrature.
+Slivers now carry the error of square elements of their width or less (3–6e-4, where
+they were over-resolved to ~1e-4); the gap–annulus exchange is 5e-4 from its converged
+value (1e-4 before) and the annulus pair 1e-4 (2.4e-4 before).
+
+| view factors | 1 thread | 4 threads |
+|---|---|---|
+| `bored_cavity(hw = 0.8, hc = 0.25)` (1068 el.), before → after | 12.2 → 7.0 s | 3.19 → 1.87 s |
+| `bored_cavity()` (2244 el.) | 14.6 → 9.5 s | 3.68 → 2.43 s |
+| `hohlraum(h = 0.6, capsule_h = 0.3, sombrero = true)` (1888 el., identical) | 2.07 → 1.98 s | 0.53 → 0.55 s |
+
+The gap pairs are still ~60 % of the bored cavity's time: refinement toward the shared
+long edge (maxdepth 8) onto sector receivers of ~34 edges each. A maxdepth relative to
+the cell's width, or coarser arcs on receivers far from the point, would be the next
+step; not tried.

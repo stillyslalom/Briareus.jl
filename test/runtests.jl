@@ -144,6 +144,37 @@ i, j = 2 * 16 + 1, 7 * 16 + 9
         1 / (π * r2^2) / m^2
     end for i in 1:m, j in 1:m)
     @test isapprox(exact, quad; rtol = 1e-4)
+
+    # Sliver elements (one 20:1 element per plate) against the closed forms for directly
+    # opposed parallel rectangles and perpendicular ones on a common edge; the same plates
+    # of square elements are off by 9e-4 and 1.6e-3.
+    Rx = [1 0 0; 0 -1 0; 0 0 -1]; Rq = [1 0 0; 0 0 -1; 0 1 0]
+    l, w, g = 1.0, 0.05, 0.02
+    pa = Component(:a, rectangle_mesh(l, w; nu = 1, nv = 1), gold())
+    pb = Component(:b, translate(transform(rectangle_mesh(l, w; nu = 1, nv = 1), Rx), (0, 0, g)), gold())
+    pc = Component(:c, translate(transform(rectangle_mesh(l, g; nu = 1, nv = 1), Rq), (0, w / 2, g / 2)), gold())
+    tp = Target([pa, pb, pc])
+    Fp = view_factors(tp)
+    X, Y = l / g, w / g
+    Fab = 2 / (π * X * Y) * (log(sqrt((1 + X^2) * (1 + Y^2) / (1 + X^2 + Y^2))) +
+                             X * sqrt(1 + Y^2) * atan(X / sqrt(1 + Y^2)) +
+                             Y * sqrt(1 + X^2) * atan(Y / sqrt(1 + X^2)) - X * atan(X) - Y * atan(Y))
+    W, H = w / l, g / l
+    S = W^2 + H^2
+    Fac = (W * atan(1 / W) + H * atan(1 / H) - sqrt(S) * atan(1 / sqrt(S)) +
+           log((1 + W^2) * (1 + H^2) / (1 + S) * (W^2 * (1 + S) / ((1 + W^2) * S))^(W^2) *
+               (H^2 * (1 + S) / ((1 + H^2) * S))^(H^2)) / 4) / (π * W)
+    ea, eb, ec = elements(tp, :a), elements(tp, :b), elements(tp, :c)
+    @test isapprox(sum(Fp[ea, eb]), Fab; rtol = 1e-3)
+    @test isapprox(sum(Fp[ea, ec]), Fac; rtol = 1e-3)
+    # the cut pieces tile the sliver, each about half as long
+    a, b, c = Vec3(0, 0, 0), Vec3(1, 0, 0), Vec3(0, 0.05, 0)
+    area(x, y, z) = norm(cross(y - x, z - x)) / 2
+    for tri in ((a, b, c), (a, b, Vec3(0.5, 0.01, 0)))
+        @test Briareus._split_sliver(area, tri...) ≈ area(tri...) rtol = 1e-14
+        @test Briareus._split_sliver((x, y, z) -> max(norm(y - x), norm(z - y), norm(x - z)), tri...) <
+              1.6 * max(norm(tri[2] - tri[1]), norm(tri[3] - tri[2]), norm(tri[1] - tri[3]))
+    end
 end
 
 @testset "radiosity" begin
