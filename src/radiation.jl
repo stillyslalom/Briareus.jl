@@ -768,7 +768,8 @@ into what it transmits, `τHA` with `τ` its `sol.transmission`, and what it abs
 (`s` the transition's progress), so it absorbs `(1-sT)(1-α_before)HA`; with an
 explicit `after`, `τ = α_before-α` and it absorbs `(1-α_before)HA`, as if intact.
 A capsule with a `CapsuleAlbedo` absorbs `(1-α_c)(R/R₀)² HA`, its effective sphere's
-share (E_cap's power; `energy_budget` integrates it over a `drive_history`).
+share, plus its `outside` share `a_out (1-(R/R₀)²) HA` (E_cap's power; `energy_budget`
+integrates it over a `drive_history`).
 `source ≈ Σabsorbed + Σescaped + Σtransmitted + lost`.
 
 The dictionaries are keyed by part: the pieces of a part split for computation

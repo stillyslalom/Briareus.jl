@@ -27,6 +27,7 @@ export AlbedoModel, ConstantAlbedo, TabulatedAlbedo, WallLossAlbedo, Burnthrough
        RosselandTransmission, foil_transmission, GapClosure, LipClosure, lip_depth,
        heat_front, burnthrough_time, areal_mass, optical_depth, eddington_transmission, albedo, Material, gold, ablator, BLACK,
        TemperatureAlbedo, CapsuleAlbedo, capsule_radius_fraction, du_wall_loss, wall_loss_factor, uranium,
+       nif_gold, nif_uranium,
        Conversion, conversion_efficiency, nif_conversion,
        Component, aperture, Target, nelements, elements, component_index, parts, part_pieces,
        element_quadrature

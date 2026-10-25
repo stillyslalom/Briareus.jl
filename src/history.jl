@@ -122,8 +122,8 @@ potential `φ = (T/100 eV)^a`, is answered by the same self-similar kernel, supe
     F = L(T_h, t_eff) − f_r b C ∫ (t − t′)^(b−1) dD(t′),    C = L t_eff^(1−b) / (b φ(T_h)),
 
 the net flux into the wall (`C`, the loss's own coefficient, is constant for gold's
-Lindl loss; `f_r` is `WallLossAlbedo`'s `release`, 0.77, calibrated against 1-D
-nonlinear diffusion in gold, `examples/wall_reemission.jl`). A constant-T wall loses `C b φ t^(b−1)`; a drop `D` at `t_d` gives back
+Lindl loss; `f_r` is `WallLossAlbedo`'s `release`, 1.0, calibrated against 1-D
+radiation hydrodynamics of an ablating gold wall, `examples/late_time_wall.jl`). A constant-T wall loses `C b φ t^(b−1)`; a drop `D` at `t_d` gives back
 `f_r C D (t − t_d)^b` by `t`, quickly at first (the hot surface layer) and then as the
 heat wave's own `t^b`. The effective albedo `1 − F/H` exceeds 1 where the wall gives
 back more than it takes; `solve` carries the release as an emission added to the

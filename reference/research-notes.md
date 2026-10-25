@@ -5772,6 +5772,11 @@ primary text, **L** our construction.
 | `CapsuleAlbedo` on HYDRA's ablation-front schedule, 11 % degradation, measured backscatter | `examples/n221204.jl` (shot-specific inputs); its `energetics=`, `wall=`, `conversion=`, `backscatter=` options and `capsule=ablator` are removed | `energetics=new` |
 | `CapsuleAlbedo` default α_c 0.2 | unchanged (Swadling 2025's published f_cap, not calibrated on the old drive) | — |
 
+*Superseded in part (2026-10-25, "Capsule absorption, conversion and the ablating-wall
+release")*: `gold()`/`uranium()` now convert at a fixed 0.75 and the drive-history walls
+are the presets `nif_gold()`/`nif_uranium()`; the example's α_c is Young's published
+albedo on N221204's K24 schedule, not the fitted 0; `release` is 1.0.
+
 ### DU loss factor at the wall's effective time (*calibrated*)
 
 The 6.5 % peak-power equivalence (Döppner 2015) was fitted on the high-foot hohlraum
@@ -5865,7 +5870,8 @@ f = 0.836, wall history and re-emission, 11 % degradation, measured backscatter,
 ### Other constants checked
 
 - **Wall re-emission `release` 0.77**: calibrated against 1-D diffusion with its own
-  constant-T scaling, independent of the drive. Unchanged.
+  constant-T scaling, independent of the drive. Unchanged. (Later 2026-10-25: 1.0, the ablating
+  wall's value; "Capsule absorption, conversion and the ablating-wall release".)
 - **`LipClosure`** (speed, depth, hold): fitted on a gold basecamp history with
   `nif_conversion()` (gold walls are unaffected by the DU factor); the speed scales as
   the lip temperature's square root, so the few eV these changes move a drive would move
@@ -6069,14 +6075,14 @@ against the basecamp's ~26 kJ (by eye): a faster bubble, the wrong direction for
 | `capsule=mesh` (shrinking mesh, same schedule) | 6.22 (+0.01) | −0.171 (5.25) | +0.056 | 14.0 % | 0.047 |
 | `capsule=mesh schedule=k24` | 6.18 (−0.03) | −0.176 (5.25) | +0.062 | 16.0 % | 0.050 |
 | `schedule=k24` (model) | 6.17 (−0.04) | −0.179 (5.25) | +0.091 | 16.0 % | 0.049 |
-| `backscatter=hydra` (48 kJ as a uniform multiplier) | 6.26 (+0.05) | −0.196 (5.25) | +0.084 | 14.0 % | 0.042 |
+| `backscatter=uniform` (then `hydra`) (48 kJ as a uniform multiplier) | 6.26 (+0.05) | −0.196 (5.25) | +0.084 | 14.0 % | 0.042 |
 | `backscatter=off` | 6.27 (+0.06) | −0.199 (5.25) | +0.084 | 14.1 % | 0.042 |
 | transfer `fig9b` (HYDRA's post-CBET cone fraction) | 6.32 (+0.11) | −0.203 (5.00) | +0.080 | — | 0.044 |
-| `fig9b` + `backscatter=hydra` (HYDRA-like) | 6.37 (+0.16) | −0.203 (5.00) | +0.079 | — | 0.043 |
+| `fig9b` + `backscatter=uniform` (then `hydra`) (uniform cut) | 6.37 (+0.16) | −0.203 (5.00) | +0.079 | — | 0.043 |
 | `collision=6.39` (t_c + 0.3 ns) | 6.38 (+0.17) | −0.183 (5.25) | +0.085 | 13.9 % | 0.043 |
 | `collision=5.79` (t_c − 0.3 ns) | 6.10 (−0.11) | −0.183 (5.25) | +0.085 | 13.9 % | 0.052 |
 | `bubble_energy=0.8` (t_c 6.38) | 6.54 (+0.33) | −0.205 (5.25) | +0.077 | 14.1 % | 0.040 |
-| `backscatter=hydra capsule=mesh schedule=k24` | 6.23 (+0.02) | −0.189 (5.25) | +0.062 | 16.2 % | 0.047 |
+| `backscatter=uniform capsule=mesh schedule=k24` | 6.23 (+0.02) | −0.189 (5.25) | +0.062 | 16.2 % | 0.047 |
 | PRE 109 Fig. 10 (HYDRA) | 6.67 | −0.170 (5.60) | +0.095 | 16.2 % (App. 3) | — |
 
 1. **Capsule radius** (published: K24 Fig. 1): ≤ 0.04 ns either way, and the K24
@@ -6088,11 +6094,11 @@ against the basecamp's ~26 kJ (by eye): a faster bubble, the wrong direction for
    power over 5.5–6.5 ns, the shape *L*) pulls the post-CBET cone fraction 0.06 below
    Fig. 9b at 5.5–6.5 ns (0.59 / 0.56 / 0.53 at 5.5 / 6.0 / 6.5 ns against 0.65 / 0.62 /
    0.59). Fig. 10's HYDRA books backscatter as a total-power multiplier, so
-   `backscatter=hydra` is the like-for-like setting: +0.05 ns, minimum 0.013 deeper. The
+   `backscatter=uniform` (then `hydra`) is the like-for-like setting: +0.05 ns, minimum 0.013 deeper. The
    measured SBS stays the default (the physics); PRE 109 itself notes that "including
    the measured backscatter time history could impact implosion shape".
 3. **CBET's time dependence**: forcing HYDRA's own post-transfer cone fraction (`fig9b`,
-   read by eye) adds +0.06 more (6.37 with the HYDRA-like backscatter) but moves the
+   read by eye) adds +0.06 more (6.37 with the uniform backscatter cut) but moves the
    minimum *earlier* (5.00 ns) and makes the rise too waist-hot (−0.128 at 4.5 ns against
    −0.092). The calibrated two-zone CBET follows Fig. 9b to rms 0.016 when fed HYDRA's
    inputs; the residual here is the input cone fraction (DN24 delivered against HYDRA
@@ -6111,8 +6117,8 @@ against the basecamp's ~26 kJ (by eye): a faster bubble, the wrong direction for
    (before). Gas fill: in the bubble speed and opacity scalings (0.3 mg/cc on both
    platforms).
 
-So the published inputs move the crossing by −0.04 to +0.16 ns (the HYDRA-like CBET and
-backscatter together); ~0.3 ns remains, and only the two least constrained bubble inputs
+So the published inputs move the crossing by −0.04 to +0.16 ns (HYDRA's CBET result and the
+uniform backscatter cut together); ~0.3 ns remains, and only the two least constrained bubble inputs
 (picket fluence, collision) can carry it. Fig. 10 is itself HYDRA with power and
 cone-fraction multipliers set to in-flight symmetry data of other shots (PRE 109 §II),
 on a design whose swing calibration had not been done (K24): the 0.4 ns is a difference
@@ -6122,7 +6128,7 @@ none of these except the Fig. 9b transfer, which moves it the wrong way.
 
 **Side result: the capsule share.** With K24's radius as the absorbing surface (the
 upper bound), the capsule takes 16.0 % of the coupled energy at α_c = 0 (16.2 % with
-the HYDRA-like backscatter): HYDRA's 16.2 % (App. 3). The 2.3-point "missing capsule
+the uniform backscatter cut): HYDRA's 16.2 % (App. 3). The 2.3-point "missing capsule
 absorption" of "Energetics defaults and the capsule share" comes from the misread
 anchor: the Young-shaped schedule shrinks the absorbing radius too early (0.81 against
 ≤ 0.906 R₀ at 6 ns, and from 2 ns instead of the shock breakout at ~3.6 ns). Capsule Tr
@@ -6164,8 +6170,139 @@ not discriminate between the crossing at 6.2 and at 6.7 ns.
 - Whether the example's capsule schedule becomes K24's (`schedule=k24`, the published
   N221204 history, an upper bound on the front) or a front between the bounds; with it,
   α_c = 0 is no longer at its bound (item 16).
-- Whether `backscatter=hydra` (HYDRA's own bookkeeping) is the setting for the Fig. 10
+- Whether `backscatter=uniform` (then `hydra`) (HYDRA's own bookkeeping) is the setting for the Fig. 10
   comparison (the measured SBS shape stays *L* either way).
 - Whether to shrink the capsule mesh by default (`capsule=mesh`): crossing +0.01 ns,
   minimum 0.012 shallower, late P2 −0.03; the right choice depends on where Fig. 10's
   flux is evaluated, which is not stated.
+
+## Capsule absorption, conversion and the ablating-wall release (2026-10-25) *derived*
+
+ROADMAP 16 (and 9): the user's four decisions of 2026-10-25 on "Energetics defaults and
+the capsule share", "Late-time drive" and "The P2 swing", implemented together. Dante 1,
+PRE 109 Fig. 10 and HYDRA's 16.2 % capsule share are checks here; nothing is fitted to
+them. Runs: `examples/n221204.jl 0.8 0.4 full <transfer> x calibrated <shot> metrics=on`
+(coarse mesh, full model) on the final defaults below. Confidence: **H** primary text,
+**L** our construction.
+
+### What changed
+
+| Piece | Now | Before |
+|---|---|---|
+| capsule albedo α_c (example) | Young 2020's quasi-1D HYDRA ablator albedo on the Young time map (`capsule_albedo=young`, the default; a number still accepted) | 0, fitted to HYDRA's share and stopped at its bound |
+| absorption outside the front | `CapsuleAlbedo(; outside = a_out)`: α_eff = 1 − (1 − α_c)s² − a_out(1 − s²), s = R/R₀; default 0, so the default is the front's alone (`capsule_outside=` in the example) | — |
+| capsule radius schedule (example) | `schedule=k24`, N221204's own HYDRA history (Kritcher 2024 Fig. 1), the default; Zylstra's pair: K24's N210808 capsule, time × bang/9.18 (*L*) | Young's N170827 front through the misread 6 ns anchor (`schedule=young` keeps it) |
+| conversion of `gold()` / `uranium()` | 0.75 whatever the albedo | `nif_conversion()` when the albedo was an `AlbedoModel` |
+| NIF drive-history walls | `nif_gold()` (`WallLossAlbedo()`, `nif_conversion()`), `nif_uranium()` (`du_wall_loss()`, `nif_conversion()`); the example uses `nif_uranium()`, `test/energetics.jl` `nif_gold()` | `gold(albedo = WallLossAlbedo())`, `uranium()` |
+| `WallLossAlbedo` `release` | **1.0** (the ablating wall; §1) | 0.77 (static wall) |
+| example options | `pulse=dn24` (N221204/N220919) and `dynamics=old` removed; the DN24 table stays as N210808's pulse and as every shot's cone-fraction split; `backscatter=hydra` renamed `backscatter=uniform`; `capsule=mesh` stays off | — |
+| Fig. 10 comparison | with the measured backscatter (default) the full model is run again with a uniform 48 kJ power cut ("+bubble, uniform cut"), and Fig. 10 is compared with that run | one run |
+
+**Backscatter wording.** A uniform power cut is one simple treatment, the one PRE 109's
+HYDRA used ("as part of an effective total laser power multiplier", §II); modeled
+backscatter is per cone and time dependent. Kemp et al., PoP 33, 082705 (2026) (LLNL
+news, lmf.llnl.gov, "LLNL researchers improve predictive modeling of laser backscatter")
+find that earlier single-species LASNEX/HYDRA inner-cone SBS models overpredicted it in
+magnitude and duration, that a multispecies (Au/He/D/T) treatment fixes this, and that a
+late-time density spike between capsule and LEH refracts the inner beams and ends the
+backscatter early; see also Higginson et al., PRL 134, 165101 (2025) and the outer-cone
+SBS paper, PoP 31, 042707 (2024). Cited only: a per-cone, time-dependent backscatter
+model from them is a separate task. The measured per-cone SBS/SRS (shapes *L*) stays the
+physics default.
+
+### 1. Wall re-emission: the ablating wall against Rosen's self-similar solution
+
+`examples/late_time_wall.jl rosen` drives the 1-D Lagrangian ablating gold wall with its
+surface temperature held (the solution's boundary condition) and pure diffusion,
+against Hammer & Rosen's ablative self-similar solution as quoted by Rosen (OSTI 885380,
+Lecture 1 after eq. 1.30; **H**): m_F = (9.9, 7.4)×10⁻⁴ T^1.91 t^0.52 g/cm² and E/A =
+(0.58, 0.39) T^3.34 t^0.59 hJ/mm² (T in heV, t in ns) for k = 0 and the ramp
+T = T₀ t^0.18. E is internal plus kinetic; m_F is read where T = T_B/2, divided by the
+zero-order profile's 15/16 there. The solution is first order in ε = 0.29 (energy
+conservation verified to ε², ~8 %).
+
+| case | t (ns) | E/A, 1-D over H&R | m_F, 1-D over H&R |
+|---|---|---|---|
+| T = 2 heV | 0.5 / 1 / 3 | 0.996 / 1.001 / 1.006 | 1.047 / 1.043 / 1.028 |
+| T = 3 heV | 0.5 / 1 / 3 | 0.990 / 0.996 / 1.004 | 1.063 / 1.057 / 1.040 |
+| T = 2.5 t^0.18 (to 3.05 heV) | 0.5 / 1 / 3 | 0.967 / 0.968 / 0.968 | 1.065 / 1.059 / 1.038 |
+
+- **It agrees within the solution's own accuracy**: stored energy to 1–3 %, heated
+  mass 3–7 % high, against ε² ≈ 8 %. Zoning: halving the zone masses moves E ≤ 0.3 % and
+  m_F ≤ 2.5 % (`fine=on`).
+- With the flux limiter the reference otherwise uses (`limiter=on`) E is 9–12 % lower at
+  2–3 ns (0.71–0.77 at 0.25 ns): the limiter, absent from H&R, throttles the low-density
+  blow-off. The fit E = 0.0039 T^3.48 t^0.67 MJ/cm² of "Late-time drive" refers to the
+  incident T_D (Marshak boundary), not the surface T, hence its difference from H&R's.
+- **The release** (`late_time_wall.jl release [limiter=off]`, the closure given the
+  wall's own constant-T scaling, drops of 10 / 30 / 50 %): 1.07 / 0.99 / 0.91 flux
+  limited (as before), 0.98 / 0.90 / 0.84 in pure diffusion; the 0-D hohlraums gave
+  0.92–1.06 (flux limited). **Adopted: `release` = 1.0** (*calibrated*), range
+  0.84–1.07 (drop size and limiter). The static wall's 0.76–0.78 (`wall_reemission.jl`)
+  no longer applies: Lindl's loss, which `WallLossAlbedo` uses, is the ablative one.
+
+### 2. The capsule share with Young's albedo on both radius bounds
+
+N221204, full model, final defaults (release 1.0, `nif_uranium()`), coarse; Dante 1 over
+the initial / open LEH area:
+
+| schedule (front at 6 ns) | capsule share | LEH share | capsule Tr 6.0 / 8.0 / 8.5 | Dante 8.0 | Dante 8.5 | Dante 9.0 | Dante at bang 9.53 | Fig. 10 min, zero, 8 ns, rms: measured backscatter / uniform cut |
+|---|---|---|---|---|---|---|---|---|
+| `k24` (0.906 R₀, upper bound; **default**) | **13.8 %** (14.0 with the uniform cut) | 24.7 % | 278.8 / 306.3 / 298.4 | 290.9 / 314.2 | 282.2 / 304.8 | 264.6 / 285.8 | 233.6 / 252.4 | −0.181 (5.25), 6.19, +0.080, 0.047 / −0.195 (5.25), 6.24, +0.080, 0.044 |
+| `young` (0.81 R₀, near the lower bound 0.79) | 12.0 % (12.1) | 25.4 % | 282.0 / 307.9 / 299.4 | 292.3 / 315.7 | 283.0 / 305.7 | 265.0 / 286.3 | 234.0 / 252.8 | −0.184 (5.25), 6.23, +0.076, 0.044 / −0.197 (5.25), 6.32, +0.075, 0.041 |
+| before (α_c 0, `young`, release 0.77, `uranium()`) | 13.9 % | 23.9 % | — / 305.2 / — | 289.9 / 313.1 | — | — | — | −0.183 (5.25), 6.21, +0.085, 0.045 |
+| HYDRA / measured / Fig. 10 | 16.2 % | 25.2 % | ~300 internal | 310.1 | 311.3 | 301.5 | — | −0.170 (5.6), 6.67, +0.095 |
+
+- With the published ablator albedo, absorption at the front gives 12.0–13.8 % between
+  the radius bounds, against HYDRA's 16.2 %: 2.4–4.2 points remain. That is the share
+  `outside` would carry (a_out ≈ 0.1–0.2 by the share's near-linear response, *L*); it is
+  not set, since no blow-off opacity or absorbing radius is published. Alternatively
+  Young's N170827 albedo is too high for N221204's thicker W-doped ablator. Neither is
+  fixed here.
+- **Default schedule `k24`, on physical grounds**: it is N221204's own published HYDRA
+  history with the right timing (the radius holds until the first shock breaks out,
+  ~3.6–3.9 ns, and reaches its minimum at bang); `young` is another shot's front shape,
+  anchored on a misidentified surface (the ice–gas interface) and shrinking from 2 ns.
+  Its magnitude is the upper bound (a shell that keeps its relative thickness, whereas
+  ablation and compression thin it), so its capsule share is an upper bound for
+  absorption at the front. HYDRA's 16.2 % played no part in the choice (both bounds miss
+  it).
+- The schedule moves the drive by 1–3 eV through the peak (the larger capsule is the
+  larger sink) and the swing by ≤ 0.04 ns. The uniform cut moves the crossing +0.05 to
+  +0.09 ns and deepens the minimum by 0.013–0.014, as before. Mean flux P2/P0 from the
+  rise to bang with the uniform cut: −0.0144 against Fig. 10's −0.0147 (−0.3 µm in
+  hot-spot P2 through the −9.2 µm/% transfer); with the measured backscatter −0.0082.
+
+### 3. Late-time Dante on the three shots (final defaults)
+
+Dante 1 over the initial LEH area (eV), coarse. The "before" columns are "Late-time
+drive" §3 (α_c 0, `young` schedule, the same wall otherwise):
+
+| shot, t (ns) | now | release 1.0 before | release 0.77 before | measured |
+|---|---|---|---|---|
+| N191118 8.0 | 244.1 | 243.5 | 236.8 | 281.4 |
+| N191118 8.5 | 206.8 | 205.9 | 186.0 | 261.9 |
+| N191118 9.0 | 192.8 | 191.8 | 164.9 | 238.2 |
+| N191118 bang 9.37 | 185.5 | 183.2 | 150.6 | 226.0 |
+| N210601 8.5 | 251.0 | 249.8 | 243.9 | 292.3 |
+| N210601 9.0 | 223.9 | 222.5 | 207.1 | 277.7 |
+| N210601 bang 9.48 | 207.3 | 206.0 | 183.0 | 253.8 |
+| N221204 8.5 | 282.2 | 280.7 | 278.8 | 311.3 |
+| N221204 9.0 | 264.6 | 262.8 | 256.7 | 301.5 |
+| N221204 bang 9.53 | 233.6 | 231.8 | 214.7 | — |
+
+- The deficit at bang is now −40.5 eV (N191118) and −46.5 eV (N210601); at 9.0 ns −45 /
+  −54 / −37 eV. The release takes ~30–45 % of the late gap, as in "Late-time drive" §3;
+  the capsule changes (Young's albedo, the K24-shaped schedules) add 1–2 eV. The rest is
+  the plasma source after the fall, still not modeled.
+- Capsule shares on the pair: 14.9 % (N191118), 14.7 % (N210601); wall re-emitted 290
+  and 192 kJ (N221204 143 kJ).
+- Tests: `test/energetics.jl` (presets, `outside`), `dynamics.jl`, `retune.jl`,
+  `capsule_drive.jl`, `docrefs.jl` pass on the new defaults.
+
+### Decisions needed
+
+- Whether to set `outside` (a_out ≈ 0.1–0.2 would close HYDRA's share on the two
+  bounds) without a published blow-off opacity or absorbing radius; it is 0.
+- The pair's K24-shaped schedule (N210808 capsule, time scaled to bang) is *L*; the pair's
+  own radius histories are unpublished.

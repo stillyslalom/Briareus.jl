@@ -6,7 +6,11 @@
 # medium: E ∝ T^((4+α+β)/2) t^0.5, a = 3.55 and b = 0.5; coefficient from the
 # reference's constant-T energy). Prints the release factor each drive needs (the
 # closure is linear in it for a prescribed T_D) and the check at `WallLossAlbedo`'s
-# default. Research notes, "Wall re-emission and the capsule radius (2026-10-24)".
+# default. A static wall needs 0.76–0.78 (the default until 2026-10-25); the default is
+# now the ablating wall's 1.0 (`examples/late_time_wall.jl release`), so the check at
+# the default shows the static wall's overshoot. Research notes, "Wall re-emission and
+# the capsule radius (2026-10-24)" and "Capsule absorption, conversion and the
+# ablating-wall release (2026-10-25)".
 #
 #   julia --project=. examples/wall_reemission.jl [ρ g/cc (19.3)]      # ~10 min
 

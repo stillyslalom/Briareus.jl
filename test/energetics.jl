@@ -47,11 +47,14 @@ _capsule_Tr(sol, t) = (c = elements(t, :capsule);
     nl = du_wall_loss(liner = 0.0)
     @test wall_loss_factor(nl, 8.0, 250.0) ≈ Briareus.DU_LOSS_FACTOR * (250 / 300)^-0.2
     @test uranium().name === :DU && uranium().albedo isa WallLossAlbedo
-    # walls whose albedo follows the drive convert as `nif_conversion()`; constant ones 0.75
-    @test uranium().conversion isa Conversion && gold(albedo = WallLossAlbedo()).conversion isa Conversion
-    @test conversion_efficiency(uranium().conversion, 5.0) == conversion_efficiency(nif_conversion(), 5.0)
-    @test gold().conversion === 0.75 && gold(albedo = 0.85).conversion === 0.75
-    @test uranium(albedo = 0.9).conversion === 0.75
+    # one fixed conversion for `gold` and `uranium`, whatever the albedo; the NIF
+    # drive-history presets convert as `nif_conversion()`
+    @test gold().conversion === 0.75 && gold(albedo = WallLossAlbedo()).conversion === 0.75
+    @test uranium().conversion === 0.75 && uranium(albedo = 0.9).conversion === 0.75
+    @test nif_uranium().name === :DU && nif_uranium().albedo isa WallLossAlbedo
+    @test nif_gold().name === :Au && nif_gold().albedo isa WallLossAlbedo
+    @test conversion_efficiency(nif_uranium().conversion, 5.0) == conversion_efficiency(nif_conversion(), 5.0)
+    @test conversion_efficiency(nif_gold().conversion, 8.0) == conversion_efficiency(nif_conversion(), 8.0)
 
     # Döppner 2015: an Au-lined DU wall is worth 6.5 % of peak laser power on the NIF
     # high-foot hohlraum (5.75 × 9.43 mm, 3.1 mm LEHs) at peak, the wall loss at its
@@ -153,7 +156,7 @@ end
 # the three testsets below (it is most of their cost). Deposition depends on the geometry
 # alone, and their targets differ at most in the capsule's material.
 wl_beams = nif_beams()
-wl_op = DepositionOperator(hohlraum(; h = 0.8, capsule_h = 0.4, wall = gold(albedo = WallLossAlbedo())), wl_beams)
+wl_op = DepositionOperator(hohlraum(; h = 0.8, capsule_h = 0.4, wall = nif_gold()), wl_beams)
 
 @testset "capsule albedo and energy budget" begin
     ca = CapsuleAlbedo(albedo = 0.2, radius = ([0.0, 5.0, 9.0], [1.0, 1.0, 0.5]))
@@ -161,11 +164,17 @@ wl_op = DepositionOperator(hohlraum(; h = 0.8, capsule_h = 0.4, wall = gold(albe
     @test albedo(ca, 7.0) ≈ 1 - 0.8 * 0.75^2
     @test capsule_radius_fraction(ca, 20.0) == 0.5
     @test albedo(CapsuleAlbedo(radius = τ -> 0.5), 1.0) ≈ 1 - 0.8 / 4
+    # absorption outside the front: a share of what misses the effective sphere; none
+    # without a radius, and the default is the front's alone
+    @test albedo(CapsuleAlbedo(radius = τ -> 0.5, outside = 0.4), 1.0) ≈ 1 - 0.8 / 4 - 0.4 * 3 / 4
+    @test albedo(CapsuleAlbedo(outside = 0.4), 1.0) == 0.2
+    @test albedo(CapsuleAlbedo(radius = ca.radius, outside = 0.0), 7.0) == albedo(ca, 7.0)
+    @test_throws ArgumentError CapsuleAlbedo(outside = 1.5)
     ta = TemperatureAlbedo([100.0, 300.0], [0.4, 0.2])
     @test albedo(ta, 0.0, 200.0) ≈ 0.3 && albedo(ta, 0.0) ≈ 0.25
     @test albedo(CapsuleAlbedo(albedo = ta), 0.0, 300.0) ≈ 0.2
 
-    t = hohlraum(; h = 0.8, capsule_h = 0.4, wall = gold(albedo = WallLossAlbedo()),
+    t = hohlraum(; h = 0.8, capsule_h = 0.4, wall = nif_gold(),
                  capsule = Material(:ablator; albedo = CapsuleAlbedo(albedo = ta, radius = ca.radius)))
     m = RadiationModel(t)
     P = zeros(nelements(t))
@@ -197,7 +206,7 @@ wl_op = DepositionOperator(hohlraum(; h = 0.8, capsule_h = 0.4, wall = gold(albe
 end
 
 @testset "wall-loss history" begin
-    t = hohlraum(; h = 0.8, capsule_h = 0.4, wall = gold(albedo = WallLossAlbedo()))
+    t = hohlraum(; h = 0.8, capsule_h = 0.4, wall = nif_gold())
     m = RadiationModel(t)
     beams = wl_beams
     op = wl_op
@@ -237,13 +246,13 @@ end
 end
 
 @testset "wall re-emission" begin
-    t = hohlraum(; h = 0.8, capsule_h = 0.4, wall = gold(albedo = WallLossAlbedo()))
+    t = hohlraum(; h = 0.8, capsule_h = 0.4, wall = nif_gold())
     m = RadiationModel(t)
     beams = wl_beams
     op = wl_op
     w = elements(t, :wall)
     # per step: each element's incident-flux temperature and net flux into it,
-    # (1 − α) H − E with E the emission the history adds to the source (the wall
+    # (1 − α) H − E with E the emission the history adds to the source (`nif_gold()`
     # converts as `nif_conversion()`, at the step's time)
     rec = sol -> (T = radiation_temperature.(sol.H),
                   F = (1 .- sol.albedo) .* sol.H .-
@@ -278,7 +287,7 @@ end
     @test b.absorbed[:wall] < energy_budget(off).absorbed[:wall]
     # each element's net flux is the heating loss at its running maximum less the
     # Duhamel response to its deficit, evaluated here from the recorded temperatures
-    # (wall loss Lindl's: c = 0.32, p = −0.7, q = −0.38; a = 3.3, b = 0.62; release 0.6)
+    # (wall loss Lindl's: c = 0.32, p = −0.7, q = −0.38; a = 3.3, b = 0.62; the model's `release`)
     wm = WallLossAlbedo()
     a_, b_ = 3.3, 0.62
     φ(T) = (T / 100)^a_

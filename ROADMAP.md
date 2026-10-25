@@ -636,6 +636,25 @@ Research notes, "Large radiation models (2026-10-24)". Item 14's first part.
 - View-factor assembly 17–45 % faster, bit for bit (a boxed near-pair factor): 17.6k
   56 → 31 s on 4 threads.
 
+## Done (2026-10-25, capsule absorption, conversion and the ablating-wall release)
+Research notes, "Capsule absorption, conversion and the ablating-wall release
+(2026-10-25)". Items 16 and 9; the user's decisions of 2026-10-25.
+- **Capsule**: the example's α_c is Young 2020's HYDRA ablator albedo (was the fitted 0);
+  `CapsuleAlbedo(; outside)` adds absorption outside the front (default 0); the radius
+  schedule is N221204's own K24 history (`schedule=k24`, the upper bound on the front;
+  chosen for its published timing). Capsule share 13.8 % (`young` schedule 12.0 %;
+  HYDRA 16.2 %, not fitted), LEH 24.7 %, Dante 1 at 8 ns 290.9 / 314.2 (310.1).
+- **Conversion**: `gold()`/`uranium()` convert at a fixed 0.75; NIF drive histories use
+  the presets `nif_gold()`/`nif_uranium()` (`nif_conversion()`).
+- **Release 0.77 → 1.0**: `examples/late_time_wall.jl`'s ablating wall reproduces
+  Hammer & Rosen's self-similar solution to 1–3 % in stored energy and 3–7 % in heated
+  mass (their accuracy ~8 %); it needs 0.84–1.07. Late-time Dante deficit at bang now
+  −40.5 / −46.5 eV (N191118 / N210601).
+- **Example**: `pulse=dn24` and `dynamics=old` removed; `backscatter=hydra` is now
+  `backscatter=uniform` (a uniform 48 kJ power cut, the treatment PRE 109's HYDRA used),
+  and with the measured default the full model is also run with it for Fig. 10
+  (−0.195 at 5.25 ns, crossing 6.24 ns, rms 0.044).
+
 ## Done (2026-10-25, energetics defaults and the capsule share)
 Research notes, "Energetics defaults and the capsule share (2026-10-25)". Item 16.
 - **Defaults**: `gold()` and `uranium()` with an albedo that follows the drive default
@@ -1093,14 +1112,18 @@ the reference's view factors hold through the pulse; items 9 and 10 remove that 
      baseline (6.21 ns, −0.183 at 5.25): N221204's own HYDRA capsule radius (Kritcher
      PoP 31, 070502 Fig. 1, `kritcher2024_capsule()`, `schedule=k24`) −0.03 to −0.04 ns
      (the shrinking mesh +0.01, minimum 0.012 shallower); backscatter booked as HYDRA
-     does (`backscatter=hydra`) +0.05; HYDRA's post-CBET cone fraction on top +0.16 in
+     does (a uniform power cut, `backscatter=uniform`, then `hydra`) +0.05; HYDRA's post-CBET cone fraction on top +0.16 in
      all, minimum moved earlier (5.0 ns); collision ±0.3 ns +0.17 / −0.11; picket
      fluence 0.8 +0.33; glint ≤ −0.03 (estimate). No published HYBRID-E bubble or
      thin-wall measurement exists; Callahan's (1.6–2.1) and Izumi's (1.62× basecamp)
      figures of merit agree with the computed transfer but are time-integrated.
      Found on the way: the "0.92 mm ablation front at 6 ns" anchor is the ice–gas
      interface; with K24's radius as the absorbing surface the capsule share is 16.0 %
-     at α_c = 0 (HYDRA 16.2 %). Open: the decisions listed there (capsule schedule,
+     at α_c = 0 (HYDRA 16.2 %). **Decided (2026-10-25)**: the K24 schedule is the
+     example's default (with Young's albedo), the uniform backscatter cut
+     (`backscatter=uniform`, renamed from `hydra`) is the run Fig. 10 is compared with,
+     `capsule=mesh` stays off; with them the swing is −0.195 at 5.25 ns, crossing
+     6.24 ns, rms 0.044. Open: the decisions listed there (capsule schedule,
      backscatter setting for Fig. 10, shrinking mesh), Izumi 2023's low-contrast stall
      and relaunch, and a HYBRID-E bubble / collision measurement, the only data that
      would close the remaining ~0.3 ns;
@@ -1273,8 +1296,9 @@ the reference's view factors hold through the pulse; items 9 and 10 remove that 
       coronal energy follows Dante's fall); its return rate is unpublished, so nothing is
       fitted. The closure's `release` should be ~1.0 on an ablating wall (0.9–1.07; 0.77
       was calibrated on a static wall): with 1.0 the Dante deficit at bang shrinks −75 →
-      −43 (N191118) and −71 → −48 eV (N210601), Fig. 10 unchanged. **Decision needed**:
-      make `release = 1.0` the default. Next: HYDRA's energy inventory through the coast,
+      −43 (N191118) and −71 → −48 eV (N210601), Fig. 10 unchanged. ~~Decision needed:
+      make `release = 1.0` the default~~ **done (2026-10-25)**, validated against Rosen's
+      ablative self-similar wall. Next: HYDRA's energy inventory through the coast,
       a synthetic Dante for the pair, Dante spectra after laser-off (litreview §4);
     - the missing sinks: He gas (4.5 %), LEH windows, the M-band (item 13). The capsule
       share with published radius and albedo (Young 2020's HYDRA ablator albedo on the
@@ -1304,6 +1328,15 @@ the reference's view factors hold through the pulse; items 9 and 10 remove that 
       Fig. 10 −0.190, 6.20 ns, +0.089, rms 0.046 (blind). Open: the absorbing radius
       outside the front (published HYDRA radius or blow-off opacity); the pair and
       the implosion metrics not rerun on the new defaults;
+    - ~~the four decisions on capsule absorption, conversion, the example's old switches
+      and the wall's release~~ **Done (2026-10-25, research notes "Capsule absorption,
+      conversion and the ablating-wall release")**: Young's albedo on the K24 schedule
+      gives 13.8 % (12.0 % on the lower-bound schedule) against HYDRA's 16.2 %; the
+      remaining 2.4–4.2 points are `CapsuleAlbedo`'s `outside` (default 0, unpublished:
+      **decision needed** whether to set it). `release` 1.0 validated against Rosen's
+      ablative self-similar wall; Dante at bang −40.5 / −46.5 eV on the pair (−75 / −71
+      at 0.77). `gold()`/`uranium()` convert at 0.75; `nif_gold()`/`nif_uranium()` are the
+      drive-history walls;
     - ~~a synthetic Dante (item 13) reported beside the capsule-seen temperature~~
       **Done (2026-10-24)**: Dante 1 286 / 306 eV (initial / open LEH area) at 6.25 ns
       against 313 measured at 8.4 ns, capsule 302 eV at 5.5 ns; the model's drive peaks

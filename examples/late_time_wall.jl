@@ -5,10 +5,14 @@
 # and P = r e/V, r = 0.25 (Rosen, "Fundamentals of ICF hohlraums", 2005, OSTI 885380,
 # Lecture 1 eqs. 1.26, 1.30), flux-limited radiation diffusion and a Marshak boundary.
 # `hydro = false` freezes the wall (the static reference of `examples/wall_reemission.jl`).
-# Research notes, "Late-time drive: the wall, the plasma and Dante (2026-10-25)";
-# reference/litreview/late_time_drive.md.
+# `rosen` validates this wall against Hammer & Rosen's ablative self-similar solution
+# (stored energy and heated mass at constant and ramped surface temperature); `release`
+# calibrates `WallLossAlbedo`'s default `release` (1.0). Research notes, "Late-time drive:
+# the wall, the plasma and Dante (2026-10-25)" and "Capsule absorption, conversion and
+# the ablating-wall release (2026-10-25)"; reference/litreview/late_time_drive.md.
 #
-#   julia --project=. examples/late_time_wall.jl release            # ~3 min
+#   julia --project=. examples/late_time_wall.jl rosen [limiter=on] [fine=on]
+#   julia --project=. examples/late_time_wall.jl release [limiter=off]   # ~3 min
 #   julia --project=. examples/late_time_wall.jl hohlraum [shot]    # ~15 min per shot
 #
 # `release`: the release factor (`WallLossAlbedo`'s `release`) the ablating wall needs
@@ -80,8 +84,10 @@ function hydro!(w, dt)
 end
 
 # backward-Euler diffusion in y = T⁴ (Picard; sum flux limiter), Marshak boundary at the
-# incident T_D; returns the net flux into the wall (MJ/(ns cm²))
-function rad!(w, TD, dt; tol = 1e-9)
+# incident T_D; returns the net flux into the wall (MJ/(ns cm²)). `surface = true` holds
+# the surface temperature at T_D instead (the boundary condition of Hammer & Rosen's
+# self-similar solution); `limiter = false` drops the flux limiter (their pure diffusion).
+function rad!(w, TD, dt; tol = 1e-9, surface = false, limiter = true)
     n = length(w.dm)
     T, V, dm = w.T, w.V, w.dm
     eold = copy(w.e)
@@ -95,12 +101,12 @@ function rad!(w, TD, dt; tol = 1e-9)
             A.d[i] += dm[i] * dedy / dt
             rhs[i] += dm[i] * (dedy * y[i] - (eT(T[i], V[i]) - eold[i])) / dt
         end
-        g0 = 2 / (1 + 3κR(T[1], V[1]) * dm[1] / 4)
+        g0 = surface ? 8 / (3κR(T[1], V[1]) * dm[1]) : 2 / (1 + 3κR(T[1], V[1]) * dm[1] / 4)
         A.d[1] += σ1 * g0
         rhs[1] += σ1 * g0 * TD^4
         for i in 1:n-1
             τ = (κR(T[i], V[i]) * dm[i] + κR(T[i+1], V[i+1]) * dm[i+1]) / 2
-            c = (4σ1 / 3) / (τ + (4 / 3) * abs(y[i+1] - y[i]) / ((y[i] + y[i+1]) / 2))
+            c = (4σ1 / 3) / (τ + (limiter ? (4 / 3) * abs(y[i+1] - y[i]) / ((y[i] + y[i+1]) / 2) : 0.0))
             A.d[i] += c; A.du[i] -= c; A.d[i+1] += c; A.dl[i] -= c
         end
         Tn = max.(A \ rhs, 1e-12) .^ 0.25
@@ -134,14 +140,14 @@ function root(g, a, b; tol = 1e-7)
 end
 
 # prescribed incident T_D(t) (heV): times, net flux, stored energy every `out` ns
-function driven(TD, tend; hydro = true, dtmax = 2e-3, out = 0.05)
+function driven(TD, tend; hydro = true, dtmax = 2e-3, out = 0.05, limiter = true)
     w = Wall(; hydro)
     t, nxt = 0.0, out
     ts, Fs, Es = Float64[], Float64[], Float64[]
     while t < tend - 1e-12
         dt = min(dtmax, hydro_dt(w), tend - t)
         hydro!(w, dt)
-        F = rad!(w, TD(t + dt), dt)
+        F = rad!(w, TD(t + dt), dt; limiter)
         t += dt
         t >= nxt - 1e-9 && (push!(ts, t); push!(Fs, F); push!(Es, energy(w)); nxt += out)
     end
@@ -176,9 +182,11 @@ end
 
 mode = get(ARGS, 1, "release")
 if mode == "release"
+    # `limiter=off`: pure diffusion (as Hammer & Rosen's solution), a sensitivity of the release
+    rlim = get(Dict(String.(split(x, '=', limit = 2)) for x in ARGS if occursin('=', x)), "limiter", "on") == "on"
     # the ablating wall's constant-T scaling E = K T^a t^b (1–2 ns)
-    ts0, _, E3 = driven(t -> 3.0, 2.0)
-    _, _, E2 = driven(t -> 2.0, 2.0)
+    ts0, _, E3 = driven(t -> 3.0, 2.0; limiter = rlim)
+    _, _, E2 = driven(t -> 2.0, 2.0; limiter = rlim)
     k1 = findfirst(t -> t >= 1 - 1e-9, ts0)
     b = log(E3[end] / E3[k1]) / log(2)
     a = log(E3[end] / E2[end]) / log(1.5)
@@ -194,12 +202,59 @@ if mode == "release"
     for (drop, fall) in ((0.10, 0.5), (0.30, 1.0), (0.50, 0.5))
         TD(t) = t < 4 ? 1.0 : t < 5 ? 1.0 + 2.0 * (t - 4) : t < 8 ? 3.0 :
                 t < 8 + fall ? 3.0 * (1 - drop * (t - 8) / fall) : 3.0 * (1 - drop)
-        ts, Fr, Es = driven(TD, 9.5)
+        ts, Fr, Es = driven(TD, 9.5; limiter = rlim)
         i8 = findfirst(t -> t >= 8 - 1e-9, ts)
         ref = ∫(ts[i8:end], Fr[i8:end])
         E0, E1, Ed = (∫(grid[k8:end], closure_flux(f, TD)[k8:end]) for f in (0.0, 1.0, WallLossAlbedo().release))
         @printf("  %2.0f %% over %.1f ns: stored at 8 ns %.4f; reference %+.4f; closure, release 0 %+.4f, %.2f %+.4f; release the reference needs %.3f\n",
                 100drop, fall, Es[i8], ref, E0, WallLossAlbedo().release, Ed, (E0 - ref) / (E0 - E1))
+    end
+elseif mode == "rosen"
+    # Validation against the ablative-wall self-similar solution (Hammer & Rosen 2003, as
+    # quoted by Rosen 2005, Lecture 1 after eq. 1.30), T in heV at the surface, t in ns:
+    # T = T₀ t^k, heated mass m_F = m₀ T^1.91 t^0.52 g/cm², stored (internal + kinetic)
+    # energy E/A = E₀ T^3.34 t^0.59 hJ/mm², with (m₀, E₀) = (9.9e-4, 0.58) at constant T
+    # (k = 0) and (7.4e-4, 0.39) on the ramp k = 0.18. Their solution is a first-order
+    # expansion in ε = 1.6/5.5 = 0.29 (zero order: T = T_B (1 − m/m_F)^(1/4), an isothermal
+    # rarefaction), pure diffusion, the surface held at T_B, so the wall here runs with
+    # `surface = true` and no flux limiter; `limiter=on` adds it back. The heated mass is
+    # read where T falls to T_B/2, divided by the zero-order profile's 15/16 there.
+    # `fine=on` halves the zone masses and doubles their number (a resolution check).
+    ro = Dict(String.(split(x, '=', limit = 2)) for x in ARGS if occursin('=', x))
+    lim = get(ro, "limiter", "off") == "on"
+    wkw = get(ro, "fine", "off") == "on" ? (; n = 400, dm0 = 1e-6, q = 1.022) : (;)
+    function front_mass(w, TB)
+        mc = cumsum(w.dm) .- w.dm ./ 2
+        k = findfirst(<(TB / 2), w.T)
+        k === nothing && return NaN
+        k == 1 && return mc[1]
+        return mc[k-1] + (mc[k] - mc[k-1]) * (w.T[k-1] - TB / 2) / (w.T[k-1] - w.T[k])
+    end
+    function selfsimilar(TB, tend; outs = (0.25, 0.5, 1.0, 2.0, 3.0))
+        w = Wall(; wkw...)
+        t = 0.0
+        rows = []
+        for to in outs
+            while t < to - 1e-12
+                dt = min(2e-3, hydro_dt(w), to - t)
+                hydro!(w, dt)
+                rad!(w, max(TB(t + dt), 0.02), dt; surface = true, limiter = lim)
+                t += dt
+            end
+            push!(rows, (t, TB(t), energy(w), front_mass(w, TB(t)) / (15 / 16)))
+        end
+        return rows
+    end
+    println("ablating gold wall against Hammer & Rosen's self-similar solution (surface T held; ",
+            lim ? "flux-limited" : "pure diffusion", get(ro, "fine", "off") == "on" ? ", fine zoning" : "", ")")
+    println("  case          t (ns)  T (heV)   E/A (MJ/cm²): 1-D / H&R (ratio)     m_F (mg/cm²): 1-D / H&R (ratio)")
+    for (name, TB, m0, E0) in (("T = 2 heV", t -> 2.0, 9.9e-4, 5.8e-3), ("T = 3 heV", t -> 3.0, 9.9e-4, 5.8e-3),
+                               ("2.5 t^0.18", t -> 2.5 * max(t, 0.0)^0.18, 7.4e-4, 3.9e-3))
+        for (t, T, E, mF) in selfsimilar(TB, 3.0)
+            Ehr, mhr = E0 * T^3.34 * t^0.59, m0 * T^1.91 * t^0.52
+            @printf("  %-12s  %5.2f   %5.2f    %.4f / %.4f (%.3f)        %6.3f / %6.3f (%.3f)\n",
+                    name, t, T, E, Ehr, E / Ehr, 1e3mF, 1e3mhr, mF / mhr)
+        end
     end
 else
     shot = get(ARGS, 2, "n191118")

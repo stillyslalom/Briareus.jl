@@ -102,7 +102,7 @@ _front_integral(f::HeatFront, m) = (m / f.coefficient)^(1 / f.time_exponent)
     WallLossAlbedo(; coefficient = 0.32, temperature_exponent = -0.7, time_exponent = -0.38,
                    reference_temperature = 250.0, t0 = 0.1, range = (0.0, 0.95),
                    factor = 1.0, factor_exponent = 0.0, factor_temperature = 300.0,
-                   liner = 0.0, front = HeatFront(), release = 0.77)
+                   liner = 0.0, front = HeatFront(), release = 1.0)
 
 Marshak-wave wall-loss albedo, `1 - α = c (T/100 eV)^p (t/1 ns)^q`, with defaults for
 gold from Lindl's scaling (T in heV, t in ns). `t` is clamped below at `t0`, and α to
@@ -137,12 +137,20 @@ defaults (`factor = 1`, no liner) the albedo is gold's, bit for bit.
 
 **Re-emission.** `release` scales the stored energy the wall gives back under a falling
 drive in a `drive_history` (`wall_release`): the linear (Duhamel) response of the
-wall's own self-similar loss, times `release`. 0.77 is *calibrated* against 1-D
-nonlinear radiation diffusion in gold (Hammer & Rosen 2003 power laws, static, Marshak
-boundary), with the closure given that medium's own constant-T scaling: after a NIF-like
-peak, drops of 5, 10 and 30 % in the drive temperature need 0.76, 0.78 and 0.76 for the
-energy the wall takes in over the next 1.5 ns (a cooled surface is more opaque and
-throttles the release; 1 overshoots the reference's change by ~1.6×). Research notes, "Wall re-emission and the capsule radius (2026-10-24)".
+wall's own self-similar loss, times `release`. 1.0 is *calibrated* against 1-D
+Lagrangian radiation hydrodynamics of an ablating gold wall (`examples/late_time_wall.jl`:
+Hammer & Rosen 2003 power laws, `P = 0.25 e/V`, flux-limited diffusion, Marshak
+boundary), with the closure given that wall's own constant-T scaling: drops of 10, 30
+and 50 % in the drive temperature after a NIF-like peak need 1.07, 0.99 and 0.91 for the
+energy the wall takes in over the next 1.5 ns, and 0-D hohlraums on three NIF shots'
+pulses 0.92–1.06 (range 0.9–1.07). That wall reproduces Hammer & Rosen's ablative
+self-similar solution (Rosen, OSTI 885380 (2005), Lecture 1) to 1–3 % in stored energy
+and 4–7 % in heated mass at constant and ramped temperature, within the solution's own
+first-order accuracy. A static (non-ablating) wall needs 0.77 (the value before
+2026-10-25): its cooled surface throttles the release more, while Lindl's loss, which
+this model uses, is the ablative one. Research notes, "Wall re-emission and the capsule
+radius (2026-10-24)" and "Capsule absorption, conversion and the ablating-wall release
+(2026-10-25)".
 """
 Base.@kwdef struct WallLossAlbedo <: AlbedoModel
     coefficient::Float64 = 0.32
@@ -156,7 +164,7 @@ Base.@kwdef struct WallLossAlbedo <: AlbedoModel
     factor_temperature::Float64 = 300.0
     liner::Float64 = 0.0
     front::HeatFront = HeatFront()
-    release::Float64 = 0.77
+    release::Float64 = 1.0
 end
 
 function albedo(m::WallLossAlbedo, t, T = nothing)
@@ -624,32 +632,43 @@ end
 albedo(m::LipClosure, t, T = nothing) = first(_lip_split(m, t, T, 0.0))
 
 """
-    CapsuleAlbedo(; albedo = 0.2, radius = nothing)
+    CapsuleAlbedo(; albedo = 0.2, radius = nothing, outside = 0.0)
 
 Albedo of a capsule that absorbs as a sphere of effective radius `R(t)` inside its
-fixed mesh of radius `R₀`:
+fixed mesh of radius `R₀`, plus a share `outside` of what crosses the mesh outside that
+sphere:
 
-    α_eff(t) = 1 - (1 - α_c) (R(t)/R₀)²,
+    α_eff(t) = 1 - (1 - α_c) s² - a_out (1 - s²),    s = R(t)/R₀,
 
 so that the capsule mesh absorbs `(1 - α_c) H 4πR(t)²`, the absorption of the smaller
-sphere at the same incident flux, and passes the rest on (re-emitted from the mesh, an
-approximation of light crossing the shrunken capsule's surroundings). `albedo` α_c is
-a number or an `AlbedoModel` (`TabulatedAlbedo` in time, `TemperatureAlbedo` in the
-incident radiation temperature); `radius` is `nothing` (R = R₀), a `(times, R/R₀)`
-table (ns; linear, held at its ends) or a function `t -> R/R₀`. `energy_balance` then
-books the capsule's absorbed power at the effective radius, and `energy_budget` its
-integral E_cap.
+sphere at the same incident flux, plus `a_out H 4π(R₀² - R(t)²)`, and passes the rest
+on (re-emitted from the mesh, an approximation of light crossing the shrunken capsule's
+surroundings). `albedo` α_c is a number or an `AlbedoModel` (`TabulatedAlbedo` in time,
+`TemperatureAlbedo` in the incident radiation temperature); `radius` is `nothing`
+(R = R₀), a `(times, R/R₀)` table (ns; linear, held at its ends) or a function
+`t -> R/R₀`. `outside` a_out (0 ≤ a_out ≤ 1, default 0) is the absorptance of the
+blow-off between the ablation front and `R₀` for the flux that misses the front: an
+explicit term for absorption outside the front (W-doped ablator plasma), unpublished, so
+0 unless a study sets it; with the default the model is the front's alone, and without a
+`radius` the term vanishes. `energy_balance` then books the capsule's absorbed power at
+the effective radius plus the outside term, and `energy_budget` its integral E_cap.
 
 The default α_c = 0.2 is the 0-D value f_cap = 1 − α_cap ≈ 0.8 of Swadling et al., PoP
-32, 052707 (2025); no measured α_cap(t) for W-doped HDC is published.
+32, 052707 (2025). For a NIF HDC capsule in a drive history, Young et al.'s quasi-1D HYDRA
+ablator albedo (PoP 27, 082702 (2020) Fig. 3a, `young2020_albedos()`) is the published
+α_c(t); `examples/n221204.jl` uses it on N221204's time axis.
 """
 struct CapsuleAlbedo{F} <: AlbedoModel
     albedo::AlbedoModel
     radius::F
+    outside::Float64
 end
-CapsuleAlbedo(; albedo = 0.2, radius = nothing) =
-    CapsuleAlbedo(_albedo_model(albedo),
-                  radius isa Tuple ? (collect(Float64, radius[1]), collect(Float64, radius[2])) : radius)
+function CapsuleAlbedo(; albedo = 0.2, radius = nothing, outside::Real = 0.0)
+    0 <= outside <= 1 || throw(ArgumentError("outside must lie in [0, 1]"))
+    return CapsuleAlbedo(_albedo_model(albedo),
+                         radius isa Tuple ? (collect(Float64, radius[1]), collect(Float64, radius[2])) : radius,
+                         Float64(outside))
+end
 
 "Effective radius over the mesh radius, `R(t)/R₀`, of a `CapsuleAlbedo`."
 capsule_radius_fraction(m::CapsuleAlbedo, t) = _radius_fraction(m.radius, t)
@@ -660,7 +679,9 @@ _radius_fraction(r, t) = r(t)
 function albedo(m::CapsuleAlbedo, t, T = nothing)
     αc = albedo(m.albedo, t, T)
     m.radius === nothing && return αc
-    return 1 - (1 - αc) * capsule_radius_fraction(m, t)^2
+    s2 = capsule_radius_fraction(m, t)^2
+    m.outside == 0 && return 1 - (1 - αc) * s2
+    return 1 - (1 - αc) * s2 - m.outside * (1 - s2)
 end
 
 # An albedo model's albedo, the albedo it would have intact (closed), and the fraction of
@@ -877,8 +898,8 @@ of the pulse, ns) capped at 0.95. Extrapolated to a NIF pulse it gives 0.80 at 3
 plateau of Dewald 2008 and the value of the only published VisRad energetics
 calibration (η 0.95 with albedo 0.77, Au, 400 TW; Swadling et al., PoP 32, 052707
 (2025)). *Derived* (research notes, "Wall material, conversion and capsule energetics
-(2026-10-24)"). It is the default conversion of [`gold`](@ref) and [`uranium`](@ref)
-walls whose albedo follows the drive (a constant albedo keeps 0.75).
+(2026-10-24)"). It is the conversion of the drive-history walls [`nif_gold`](@ref) and
+[`nif_uranium`](@ref); [`gold`](@ref) and [`uranium`](@ref) keep the constant 0.75.
 """
 nif_conversion(; efficiency = 0.7, time_exponent = 0.12, range = (0.0, 0.95), kwargs...) =
     Conversion(; efficiency, time_exponent, range, kwargs...)
@@ -903,29 +924,39 @@ Material(name::Symbol; albedo = 0.0, conversion = 0.0) =
 
 albedo(m::Material, t = 0.0) = albedo(m.albedo, t)
 
-# A wall's default laser → x-ray conversion: the constant 0.75 with a constant albedo
-# (a static, VisRad-style solve), and the rising `nif_conversion()` with an albedo model
-# that follows the drive (a wall loss, a table in time, a foil), whose time is the
-# pulse's.
-_wall_conversion(albedo) = albedo isa Real || albedo isa ConstantAlbedo ? 0.75 : nif_conversion()
+"""
+    gold(; albedo = 0.8, conversion = 0.75)
 
+Gold hohlraum wall: a constant laser → x-ray `conversion` 0.75 whatever the `albedo`.
+For a drive history on NIF use [`nif_gold`](@ref), whose albedo and conversion follow
+the drive.
 """
-    gold(; albedo = 0.8, conversion)
+gold(; albedo = 0.8, conversion = 0.75) = Material(:Au; albedo, conversion)
+"""
+    uranium(; albedo = du_wall_loss(), conversion = 0.75)
 
-Gold hohlraum wall. `conversion` (laser → x-ray) defaults to 0.75 with a constant
-`albedo` (static solves) and to [`nif_conversion`](@ref)`()`, `0.7 t^0.12 ≤ 0.95`, with an
-albedo model that follows the drive in time (e.g. `gold(albedo = WallLossAlbedo())` in a
-[`drive_history`](@ref)).
+Au-lined depleted-uranium hohlraum wall: [`du_wall_loss`](@ref)`()` and the constant
+conversion 0.75 of [`gold`](@ref) (the conversion happens in the gold liner). For a
+drive history on NIF use [`nif_uranium`](@ref).
 """
-gold(; albedo = 0.8, conversion = _wall_conversion(albedo)) = Material(:Au; albedo, conversion)
+uranium(; albedo = du_wall_loss(), conversion = 0.75) = Material(:DU; albedo, conversion)
 """
-    uranium(; albedo = du_wall_loss(), conversion = nif_conversion())
+    nif_gold(; albedo = WallLossAlbedo(), conversion = nif_conversion())
 
-Au-lined depleted-uranium hohlraum wall: [`du_wall_loss`](@ref)`()` and the rising
-[`nif_conversion`](@ref)`()` (a constant `albedo` takes gold's static 0.75, as [`gold`](@ref)).
-The conversion happens in the gold liner, so it is gold's.
+The gold wall of a NIF drive history: Lindl's Marshak wall loss, evaluated by
+[`drive_history`](@ref) at each element's own temperature history, and the rising
+[`nif_conversion`](@ref)`()`, `0.7 t^0.12 ≤ 0.95` with `t` the time since the pulse
+start (at `solve`'s default `time = 0` it reads 0.53, so a static solve wants
+[`gold`](@ref)).
 """
-uranium(; albedo = du_wall_loss(), conversion = _wall_conversion(albedo)) = Material(:DU; albedo, conversion)
+nif_gold(; albedo = WallLossAlbedo(), conversion = nif_conversion()) = Material(:Au; albedo, conversion)
+"""
+    nif_uranium(; albedo = du_wall_loss(), conversion = nif_conversion())
+
+The Au-lined depleted-uranium wall of a NIF drive history (HYBRID-E's):
+[`du_wall_loss`](@ref)`()` and the rising [`nif_conversion`](@ref)`()` of its gold liner.
+"""
+nif_uranium(; albedo = du_wall_loss(), conversion = nif_conversion()) = Material(:DU; albedo, conversion)
 "Capsule ablator (defaults: albedo 0.3, conversion 0.3)."
 ablator(; albedo = 0.3, conversion = 0.3) = Material(:ablator; albedo, conversion)
 "Perfect absorber that emits nothing."
