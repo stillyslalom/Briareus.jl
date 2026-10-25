@@ -272,12 +272,10 @@ end
         t = Target([Component(:t, facet_soup(cad_torus(R, r, 0.3, ψ0, ψ1; nψ = 8, nphi = 64)), gold(); surface = s0)])
         @test sum(t.elem_area) ≈ band(ψ0, ψ1) rtol = 1e-12
         @test all(==(1), t.elem_curved)
-        for e in 1:nelements(t)
-            pts, ws, ns = element_quadrature(t, e, 2)
-            @test sum(ws) ≈ t.elem_area[e] rtol = 1e-13
-            @test all(p -> abs(norm(Briareus._torus_coordinates(s0, p)[1]) - r) < 1e-14, pts)
-            @test all(k -> ns[k] ≈ last(surface_point(s0, pts[k])), eachindex(pts))
-        end
+        quads = [element_quadrature(t, e, 2) for e in 1:nelements(t)]
+        @test all(e -> isapprox(sum(quads[e][2]), t.elem_area[e]; rtol = 1e-13), 1:nelements(t))
+        @test all(q -> all(p -> abs(norm(Briareus._torus_coordinates(s0, p)[1]) - r) < 1e-14, q[1]), quads)
+        @test all(q -> all(k -> q[3][k] ≈ last(surface_point(s0, q[1][k])), eachindex(q[1])), quads)
     end
     # the quarter fillet at 16 / 32 / 64 strips: exact (its cap rim's chords projected past
     # the rim before, +7.0e-3 / 1.8e-3 at 32 / 64); a rim at 60° off the poles and the
