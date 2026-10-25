@@ -47,7 +47,8 @@ Near pairs are dense (Float32), with the same entries as `view_factors` (`_vf_pa
 
 On the hohlraum presets (10–29k elements) the default `tol = 1e-6` changes the capsule
 moments by ≤ 1e-8 and the incident flux by ≤ 2e-6 relative per element against the
-Float32 matrix or a tighter `HMatrix` (research notes, "Hierarchical view factors").
+Float32 matrix or a tighter `HMatrix` (research notes, "Hierarchical view factors" and,
+for the surface-split cluster tree and `tol`, "The H-matrix's N^1.5 remainder").
 """
 struct HMatrix <: AbstractMatrix{Float64}
     n::Int
@@ -910,8 +911,8 @@ Defaults of the hierarchical view factors (`view_factors(...; storage = :hmatrix
 `tol` (relative Frobenius accuracy of each low-rank block), `eta` (admissibility:
 cluster boxes at least `eta` × the larger diameter apart), `leaf` (largest leaf
 cluster), `maxrank` (most terms of a cross approximation before the block is refined).
-Engineering defaults, from the work–precision sweep in the research notes
-("Hierarchical view factors").
+Engineering defaults, from the work–precision sweeps in the research notes
+("Hierarchical view factors"; `tol` 1e-5 → 1e-6 in "The H-matrix's N^1.5 remainder").
 """
 const HMATRIX_DEFAULTS = (tol = 1e-6, eta = 1.0, leaf = 48, maxrank = 32)
 

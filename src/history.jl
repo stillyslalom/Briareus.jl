@@ -130,7 +130,8 @@ back more than it takes; `solve` carries the release as an emission added to the
 element's source. While no element's temperature falls below its running maximum the
 history is the heating loss's bit for bit. `released` records the re-emitted power
 per component (`energy_budget` integrates it); `absorbed` is net of it. Research notes,
-"Wall re-emission and the capsule radius (2026-10-24)".
+"Wall re-emission and the capsule radius (2026-10-24)" (the closure) and "Capsule
+absorption, conversion and the ablating-wall release (2026-10-25)" (`release` 1.0).
 
 **Computed lip closure.** Each entrance-hole lip with a [`LipClosure`](@ref) albedo
 carries its closure depth `d` (open at `times[1]`), advanced over each step from the
