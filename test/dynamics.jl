@@ -64,8 +64,10 @@
     @test dyn.Tr ≈ ref.Tr rtol = 1e-10
 
     # a moving wall's history on keyframes at its own times is the per-time rebuild
-    hist = drive_history(Keyframes(build, collect(times), quads), beams_at, times)
-    for (k, τ) in enumerate(times)
+    # (two times: each costs a target, its view factors and its deposition operator)
+    tk2 = [first(times), last(times)]
+    hist = drive_history(Keyframes(build, tk2, quads), beams_at, tk2)
+    for (k, τ) in enumerate(tk2)
         tk = build(τ)
         sol = solve(RadiationModel(tk; closed = true), deposit(DepositionOperator(tk, quads), beams_at(τ)); time = τ)
         @test hist.moments[:, k] ≈ legendre_moments(sol.H, tk, elements(tk, :capsule); lmax = 6) rtol = 1e-10

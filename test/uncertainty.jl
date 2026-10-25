@@ -5,8 +5,8 @@ std_rows(A) = sqrt.(sum(abs2, A .- sum(A; dims = 2) ./ size(A, 2); dims = 2) ./ 
 
 @testset "mode uncertainty" begin
     t = hohlraum(; length = 10.1, radius = 2.875, leh_radius = 1.55, capsule_radius = 0.9,
-                 wall = gold(albedo = 0.85, conversion = 0.8), nz = 16, nphi = 24,
-                 capsule_ntheta = 10, capsule_nphi = 20)
+                 wall = gold(albedo = 0.85, conversion = 0.8), nz = 10, nphi = 16,
+                 capsule_ntheta = 8, capsule_nphi = 12)
     pub = Dict(:outer50 => (5.01, 0.0), :outer44 => (5.20, 0.0),
                :inner30 => (3.63, -0.60), :inner23 => (3.09, -1.09))
     p0 = GroupPointing(nif_quads(power = 8.0); fields = (:z, :r))

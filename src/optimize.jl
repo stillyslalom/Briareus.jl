@@ -236,9 +236,9 @@ function Scenario(t::Target, beams::AbstractVector{<:Beam}; observe = nothing,
                   radiation::Bool = observe !== nothing, time = 0.0, albedo = nothing,
                   parameterization = GroupPointing(beams), deposition_kw = (;),
                   viewfactor_kw = (;), lpi = nothing, model = nothing)
-    op = DepositionOperator(t, beams; deposition_kw...)
     model === nothing || model.target === t ||
         throw(ArgumentError("model is a radiation model of another target"))
+    op = DepositionOperator(t, beams; deposition_kw...)
     obs = observe === nothing ? Int[] : elements(t, (observe isa Symbol ? (observe,) : observe)...)
     model = !radiation ? nothing : model === nothing ? RadiationModel(t; viewfactor_kw...) : model
     W = isempty(obs) ? zeros(0, 0) : legendre_weights(t, obs; lmax = _CACHED_LMAX)

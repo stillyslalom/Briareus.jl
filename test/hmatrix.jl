@@ -37,7 +37,7 @@
     @test rel([ForwardDiff.partials(d)[2] for d in yd], M * x .^ 2) < 1e-12
 
     # the model: balanced through products (the scaling only), iterative
-    m = RadiationModel(t)                                     # dense Float64, LU
+    m = RadiationModel(t; F, closed = true)                   # dense Float64, LU (≡ RadiationModel(t))
     mh = RadiationModel(t; storage = :hmatrix, kw...)
     @test mh.F isa HMatrix && mh.iterative
     @test sprint(show, mh) == "RadiationModel($N elements, hierarchical, iterative)"
@@ -69,16 +69,18 @@
     f(mod) = p -> sum(solve(mod, (1 .+ p[1] .* z .+ p[2] .* z .^ 2) .* dep.element; albedo = α).H[cap])
     @test rel(ForwardDiff.gradient(f(mh), [0.1, 0.2]), ForwardDiff.gradient(f(m), [0.1, 0.2])) < 1e-5
 
-    # the automatic choice above Briareus.HMATRIX_MODEL[]
+    # the automatic choice above Briareus.HMATRIX_MODEL[] (on a coarse target: only the
+    # storage is checked)
+    ts = hohlraum(; h = 1.2, capsule_h = 0.6, wall)
     old = Briareus.HMATRIX_MODEL[]
     try
-        Briareus.HMATRIX_MODEL[] = N - 1
-        @test RadiationModel(t).F isa HMatrix
-        @test RadiationModel(t; storage = Float32).F isa Float32Matrix
+        Briareus.HMATRIX_MODEL[] = nelements(ts) - 1
+        @test RadiationModel(ts).F isa HMatrix
+        @test RadiationModel(ts; storage = Float32).F isa Float32Matrix
     finally
         Briareus.HMATRIX_MODEL[] = old
     end
-    @test RadiationModel(t).F isa Matrix{Float64}
+    @test RadiationModel(ts).F isa Matrix{Float64}
 end
 
 # The visibility rules (shaft culling without rays, the convex and planar exclusions, the
@@ -90,9 +92,10 @@ end
     cavity(m) = split_mesh(m, c -> norm(c[1:2]) < R + 0.01 && abs(c[3]) < h + 1e-6)[1]
     part(name, F, size) = Component(name, cavity(remesh_mesh(orient_mesh(facet_soup(F)); size)),
                                     name === :capsule ? ablator() : gold())
-    cad = Target([part(:top, cad_half(; R, Rout, Rleh, h, t = th, nphi = 360), 0.6),
-                  part(:bottom, cad_mirror(cad_half(; R, Rout, Rleh, h, t = th, nphi = 360)), 0.6),
-                  part(:capsule, cad_sphere(rc; ntheta = 56, nphi = 112), 0.3),
+    # (coarser than partial_visibility.jl's: the sampled factors' cost is in the facets)
+    cad = Target([part(:top, cad_half(; R, Rout, Rleh, h, t = th, nphi = 180), 1.0),
+                  part(:bottom, cad_mirror(cad_half(; R, Rout, Rleh, h, t = th, nphi = 180)), 1.0),
+                  part(:capsule, cad_sphere(rc; ntheta = 28, nphi = 56), 0.5),
                   aperture(:leh_top, disk_mesh(Rleh, h; nr = 3, nphi = 24, up = false)),
                   aperture(:leh_bottom, disk_mesh(Rleh, -h; nr = 3, nphi = 24, up = true))]; visibility = :sampled)
     bored = bored_cavity(; hw = 0.8, hc = 0.25)
