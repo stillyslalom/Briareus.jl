@@ -3329,6 +3329,21 @@ manuscripts, in the user's paper folder, not in the repository): Döppner et al.
 072704 (2020); Zylstra et al., PRE 106, 025202 (2022). Confidence: **H** primary text,
 **L** our arithmetic or construction, *calibrated* / *derived* as marked.
 
+> **Superseded in part (2026-10-25).** The models and inputs stand; these values do not:
+> - the DU factor f = 0.785 (§1) is **0.836**, recalibrated at the wall's effective age
+>   ("Energetics defaults and the capsule share (2026-10-25)");
+> - the "0.92 mm ablation front at 6 ns" (§3) is the ice–gas interface; the example's
+>   capsule schedule is now N221204's own K24 radius history ("The P2 swing: capsule
+>   radius, backscatter and the collision (2026-10-25)");
+> - α_c = 0.22 (§3) became 0, then Young 2020's published ablator albedo in the example;
+>   `CapsuleAlbedo`'s src default stays 0.2 ("Capsule absorption, conversion and the
+>   ablating-wall release (2026-10-25)");
+> - `nif_conversion()` (§2) is the conversion of the drive-history presets `nif_gold()`
+>   and `nif_uranium()`; `gold()` and `uranium()` keep 0.75 (same section);
+> - §4's `energetics=new` and the example's `wall=`/`conversion=` switches are gone; the
+>   table's numbers are of their day (current: "Capsule absorption, conversion and the
+>   ablating-wall release" §2).
+
 ### Inputs read
 
 | Quantity | Value | Source | Conf. |
@@ -3354,7 +3369,8 @@ the loss stays gold's (an energy-content blend w = min(1, liner/m_F) with m_F th
 constant-T `HeatFront` mass; *engineering*). Defaults unchanged (gold, bit for bit).
 
 - δ = −0.2 (Rosen −0.22; Schein's three LASNEX points give −0.19).
-- **f = 0.785, calibrated** to the 6.5 % equivalence: Döppner's high-foot hohlraum
+- **f = 0.785, calibrated** (*superseded*: 0.836 at the wall's effective age, see the
+  note above) to the 6.5 % equivalence: Döppner's high-foot hohlraum
   (5.75 × 9.43 mm, 3.1 mm LEHs, 1.125 mm capsule at albedo 0.3), 390 TW × 0.86 coupling,
   conversion 0.9, a wall source in two bands (30 % at |z| 0.5–1.7 mm, 70 % at 3.0–4.2),
   at 13 ns, h 0.4: the Au wall needs 6.5 % more power for the DU wall's capsule Tr.
@@ -3407,12 +3423,13 @@ effective radius would at the same incident flux; `energy_balance` books it,
 `energy_budget` integrates E_cap. α_c a number or a model (`TabulatedAlbedo` in time,
 the new `TemperatureAlbedo` in Tr); default 0.2 (Swadling 2025's f_cap 0.8).
 
-- **Schedule (example, *L*)**: HYDRA's ablation front, 0.92 mm = 0.81 R₀ at 6 ns (PRE 109
-  Fig. 1a), along the shape of Young 2020 Fig. 3a's N170827 front, its time axis mapped
+- **Schedule (example, *L*; *superseded*: the anchor is the ice–gas interface, and the
+  default schedule is K24's, see the note above)**: HYDRA's ablation front, 0.92 mm =
+  0.81 R₀ at 6 ns (PRE 109 Fig. 1a), along the shape of Young 2020 Fig. 3a's N170827 front, its time axis mapped
   piecewise linearly (Young's 0.81 R₀ at 5.75 ns → 6.0 ns; its end, 0.23 R₀ at 7.75 ns →
   N221204's bang time 9.53 ns): R/R₀ = 0.94 at 4.2, 0.86 at 5.0, 0.81 at 6.0, 0.66 at 7.0, 0.51 at
   8.0, 0.31 at 9.0 ns.
-- **Calibration**: α_c = 0.22 gives E_cap = 16.2 % of the coupled energy (285 kJ of
+- **Calibration** (*superseded*, see the note above): α_c = 0.22 gives E_cap = 16.2 % of the coupled energy (285 kJ of
   1762) in the full energetics configuration below (α_c 0.20: 16.5 %). It is degenerate
   with the schedule and with the hohlraum temperature: in the configuration whose LEH
   share matches HYDRA's (v4 below, Tr 307.7 eV) α_c = 0.2 gives 12.8 %, and 16.2 % would
@@ -3998,6 +4015,10 @@ with them, ACA ~45% (half of it on blocks that give up), dense leaves ~30%, leaf
 
 ### Defaults
 
+> **Superseded in part (2026-10-25).** The default `tol` is now **1e-6** and the cluster
+> tree splits by surface first ("The H-matrix's N^1.5 remainder (2026-10-25)"); the
+> thresholds below (`HMATRIX_MODEL[]` 15,000, Float32 from 10,000) are unchanged.
+
 Above 15,000 elements `RadiationModel` takes the HMatrix (2× faster and 5× smaller at
 17.6k, moments within 1e-8); 10–15k stays Float32 (1.8× faster and 3.4× smaller at
 10.5k too, but the element-wise H error there reaches 8.6e-5 at an LEH element). Small
@@ -4140,6 +4161,14 @@ Dante 1 rises to 312 eV at 8.3 ns. (b) `energetics=new`: capsule Tr 334 eV at 8 
 LEH share of 33 % against HYDRA's 25.2 %. Neither Dante nor Fig. 10 was used to fit
 anything below; both stay checks. Confidence: **H** primary text or figure vector data,
 **L** our construction.
+
+> **Current state.** The fix (`wall_history = true`) stands. The numbers below were run
+> on that day's energetics (α_c 0.22, DU factor 0.785, no re-emission, the misread
+> capsule anchor); `energetics=new`/`old` no longer exist (the new energetics are the
+> example's only settings). Current N221204 numbers: "Capsule absorption, conversion
+> and the ablating-wall release (2026-10-25)" §2–3. The "What remains" items were taken
+> up in "Wall re-emission and the capsule radius", "Late-time drive: the wall, the
+> plasma and Dante" and "The P2 swing: capsule radius, backscatter and the collision".
 
 ### Inputs read
 
@@ -4299,6 +4328,13 @@ calibrated CBET, wall, lips, bubble; DU wall, `nif_conversion`, backscatter, 11 
 degradation, `CapsuleAlbedo` on HYDRA's ablation-front schedule), coarse mesh 0.8 / 0.4
 unless "std" (0.28 / 0.16). Confidence: **H** primary text, **L** our construction,
 *calibrated* as marked.
+
+> **Superseded in part (2026-10-25).** The re-emission closure (§1) stands, but its
+> `release` is **1.0**, calibrated on an ablating wall; the static-wall 0.77 below no
+> longer applies ("Capsule absorption, conversion and the ablating-wall release
+> (2026-10-25)" §1). The capsule "ablation front" of §2 is the ice–gas interface and the
+> example's schedule is now K24's ("The P2 swing: capsule radius, backscatter and the
+> collision"). Numbers here are on that day's energetics (α_c 0.22, DU factor 0.785).
 
 ### Inputs read
 
@@ -5672,7 +5708,10 @@ pieces stay opt-in (`du_wall_loss`, `nif_conversion`, `CapsuleAlbedo` are
 HYBRID-E-specific or calibrated, and the 0.75 materials default anchors every other
 baseline). *Superseded the same day* ("Energetics defaults and the capsule share
 (2026-10-25)"): `energetics=old` is removed, drive-following `gold()`/`uranium()` walls
-default to `nif_conversion()`, the DU factor is 0.836 and the example's α_c is 0.
+default to `nif_conversion()`, the DU factor is 0.836 and the example's α_c is 0. *And
+again* ("Capsule absorption, conversion and the ablating-wall release (2026-10-25)"):
+`gold()`/`uranium()` convert at 0.75 and the drive-history walls are `nif_gold()`/
+`nif_uranium()`; α_c is Young's albedo on the K24 schedule; `release` is 1.0.
 
 Open, with their data: the late-time drive (§2: the pair is the test); the pair
 residual of 2–4 eV (pointing and cone fraction of N191118 are unpublished); the capsule
@@ -5858,7 +5897,9 @@ f = 0.836, wall history and re-emission, 11 % degradation, measured backscatter,
 - The share is linear in α_c to the accuracy needed (−11.4 points per unit α_c), so
   16.2 % would need **α_c = −0.20 ± 0.03** (the range from the 9–13 % degradation and
   the mesh, *L*): unphysical. **The bounded fit is α_c = 0**, with 2.3 points of the
-  share unexplained; the example's default is now 0.
+  share unexplained; the example's default is now 0. (*Superseded*: the 2.3 points came
+  from the misread capsule anchor, "The P2 swing" side result; the example now uses
+  Young's published albedo on the K24 schedule, 13.8 %.)
 - So the missing capsule absorption is not an albedo. As found before ("Wall
   re-emission and the capsule radius"), HYDRA's share needs absorption outside the
   ablation front (the W-doped blow-off) or a larger effective radius than the front's.
@@ -5934,7 +5975,9 @@ f = 0.836, wall history and re-emission, 11 % degradation, measured backscatter,
 
 - The capsule share: 13.9 % against 16.2 % at the albedo's bound; the absorbing surface
   outside the ablation front is the open input (a published HYDRA absorption radius, or
-  the blow-off's opacity).
+  the blow-off's opacity). (Now 13.8 % with Young's albedo on the K24 schedule; the
+  remaining 2.4–4.2 points are `CapsuleAlbedo`'s `outside`, unset: "Capsule
+  absorption, conversion and the ablating-wall release" §2.)
 - The late-time drive after the droop (unchanged by these defaults).
 
 ## Late-time drive: the wall, the plasma and Dante (2026-10-25) *derived*
@@ -6010,7 +6053,9 @@ ablating scaling against the ablating reference, T normalized at 7 ns), the fall
 0.77 gives 6–15 % too low a T 1.5–2 ns after the fall (*L*). *Calibrated* candidate:
 `release` ≈ 1.0 (0.9–1.07). The present 0.77 was calibrated on a static wall while
 `WallLossAlbedo`'s loss is Lindl's ablative one, so 1.0 is the consistent value.
-**Not adopted** (a default change for the user to decide; see §3).
+**Not adopted** (a default change for the user to decide; see §3). *Adopted later the
+same day: `release` = 1.0, "Capsule absorption, conversion and the ablating-wall
+release" §1.*
 
 ### 3. The full model with `release` 1.0 (sensitivity)
 
@@ -6060,7 +6105,8 @@ coarse mesh; measured Dante in the last column:
   Moody 2017's cooling constant (closed access); gated LEH/bubble images after
   laser-off.
 - **Decision needed** (ROADMAP 16): whether `release` 1.0 (the ablating-wall
-  calibration) becomes the default. Not changed here.
+  calibration) becomes the default. Not changed here. *Decided: 1.0 is the default
+  ("Capsule absorption, conversion and the ablating-wall release").*
 
 ## The P2 swing: capsule radius, backscatter and the collision (2026-10-25) *derived*
 
@@ -6201,6 +6247,11 @@ not discriminate between the crossing at 6.2 and at 6.7 ns.
   capsule schedule between the bounds, and the capsule share with it.
 
 ### Decisions needed
+
+*Decided 2026-10-25 ("Capsule absorption, conversion and the ablating-wall release",
+"What changed"): `schedule=k24` is the example's default (with Young's albedo); Fig. 10
+is compared with a uniform backscatter cut (`backscatter=uniform`) beside the measured
+default; `capsule=mesh` stays off.*
 
 - Whether the example's capsule schedule becomes K24's (`schedule=k24`, the published
   N221204 history, an upper bound on the front) or a front between the bounds; with it,
