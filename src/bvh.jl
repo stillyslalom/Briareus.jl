@@ -176,6 +176,124 @@ function any_hit(b::BVH, o::Vec3, d::Vec3, tmax = Inf, skip::S = nothing) where 
 end
 
 """
+    _unblocked!(open, bvh, origins, dirs, invs, cache) -> open
+
+Packet form of `any_hit` with `tmax = Inf` for rays sharing a few directions: on entry
+bit `j-1` of `open[i]` selects the ray `origins[i] + t*dirs[j]` (`length(dirs) ≤ 16`,
+`invs[j] = _safe_inv(dirs[j])`); on exit only the bits of rays that hit nothing remain,
+exactly as `!any_hit(bvh, origins[i], dirs[j])` answers. `cache[j]` is a leaf (node
+index) that blocked direction `j` before, or 0; it is tested first and updated.
+
+The packet is traversed once. Interior nodes are culled by a slab test conservative
+over the origins' bounding box and the directions' inverse components, leaves by one
+per direction; then each ray takes its own slab test and triangle tests. fp subtraction
+and products are monotone, so the conservative tests never cull a node a ray passes,
+and the slab test is monotone in box containment, so a ray passes a leaf's test only if
+it passes every ancestor's: each ray tests only the triangles its own `any_hit`
+traversal reaches, and each of them until one blocks it.
+"""
+function _unblocked!(open::AbstractVector{UInt16}, b::BVH, os::AbstractVector{Vec3},
+                     dirs::AbstractVector{Vec3}, invs::AbstractVector{Vec3},
+                     cache::AbstractVector{Int32})
+    n, nd = length(os), length(dirs)
+    nd <= 16 || throw(ArgumentError("at most 16 directions"))
+    (isempty(b.nodes) || n == 0) && return open
+    alive = 0
+    used = UInt16(0)
+    @inbounds for i in 1:n
+        m = open[i]
+        for j in 1:nd
+            (m >> (j - 1)) & 0x1 == 0x1 || continue
+            c = cache[j]
+            c > 0 && _leaf_blocks(b, b.nodes[c], os[i], dirs[j], invs[j]) &&
+                (m &= ~(UInt16(1) << (j - 1)))
+        end
+        open[i] = m
+        used |= m
+        alive += count_ones(m)
+    end
+    alive == 0 && return open
+    ilo, ihi = Vec3(Inf, Inf, Inf), Vec3(-Inf, -Inf, -Inf)
+    @inbounds for j in 1:nd
+        if (used >> (j - 1)) & 0x1 == 0x1
+            ilo = map(_fmin, ilo, invs[j]); ihi = map(_fmax, ihi, invs[j])
+        end
+    end
+    olo = ohi = os[1]
+    @inbounds for i in 2:n
+        olo = map(_fmin, olo, os[i]); ohi = map(_fmax, ohi, os[i])
+    end
+    stack = MVector{64,Int32}(undef)
+    sp = 1
+    stack[1] = 1
+    @inbounds while sp > 0
+        ni = stack[sp]; sp -= 1
+        node = b.nodes[ni]
+        _packet_slab(node, olo, ohi, ilo, ihi) || continue
+        if node.b < 0
+            live = UInt16(0)
+            for j in 1:nd
+                (used >> (j - 1)) & 0x1 == 0x1 || continue
+                _packet_slab(node, olo, ohi, invs[j], invs[j]) && (live |= UInt16(1) << (j - 1))
+            end
+            live == 0 && continue
+            for i in 1:n
+                m = open[i]
+                r = m & live
+                r == 0 && continue
+                for j in 1:nd
+                    (r >> (j - 1)) & 0x1 == 0x1 || continue
+                    if _leaf_blocks(b, node, os[i], dirs[j], invs[j])
+                        m &= ~(UInt16(1) << (j - 1))
+                        cache[j] = ni
+                        alive -= 1
+                    end
+                end
+                open[i] = m
+            end
+            alive == 0 && return open
+        else
+            stack[sp+1] = node.a
+            stack[sp+2] = node.b
+            sp += 2
+        end
+    end
+    return open
+end
+
+# Whether the ray `o + t*d` (t > 0) passes leaf `node`'s slab test and hits one of its
+# triangles: `any_hit`'s test at that leaf.
+@inline function _leaf_blocks(b::BVH, node::BVHNode, o::Vec3, d::Vec3, inv::Vec3)
+    _slab(node, o, inv, Inf) || return false
+    @inbounds for k in node.a:(node.a - node.b - 1)
+        it = b.items[k]
+        _intersect(o, d, b.v0[it], b.e1[it], b.e2[it], Inf) < Inf && return true
+    end
+    return false
+end
+
+# Slab test passed whenever a ray with origin in [olo, ohi] and inverse direction in
+# [ilo, ihi] passes `_slab(node, o, inv, Inf)`: per axis, the ray's plane crossings lie
+# between the extreme corner products (an axis whose inverse components change sign
+# does not cull).
+@inline function _packet_slab(node::BVHNode, olo::Vec3, ohi::Vec3, ilo::Vec3, ihi::Vec3)
+    tn, tf = -Inf, Inf
+    @inbounds for a in 1:3
+        p, q = ilo[a], ihi[a]
+        (p > 0 || q < 0) || continue
+        x1, x2 = node.lo[a] - ohi[a], node.lo[a] - olo[a]
+        x3, x4 = node.hi[a] - ohi[a], node.hi[a] - olo[a]
+        lo = _fmin(_fmin(_fmin(x1 * p, x1 * q), _fmin(x2 * p, x2 * q)),
+                   _fmin(_fmin(x3 * p, x3 * q), _fmin(x4 * p, x4 * q)))
+        hi = _fmax(_fmax(_fmax(x1 * p, x1 * q), _fmax(x2 * p, x2 * q)),
+                   _fmax(_fmax(x3 * p, x3 * q), _fmax(x4 * p, x4 * q)))
+        tn = _fmax(tn, lo)
+        tf = _fmin(tf, hi)
+    end
+    return tn <= tf && tf >= 0
+end
+
+"""
     _sah_bvh(bvh) -> BVH
 
 The same triangles as `bvh` regrouped by a binned surface-area heuristic, which

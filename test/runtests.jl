@@ -75,6 +75,29 @@ end
         @test tb ≈ best
         @test any_hit(t.bvh, o, d) == (bi != 0)
     end
+    # packets (the deposition operator's visibility rays): the same answers as any_hit,
+    # for coherent bundles off a facet and for scattered origins and directions
+    agree = true
+    cache = zeros(Int32, 16)
+    for trial in 1:200
+        k = rand(rng, findall(t.tri_opaque))
+        side = rand(rng, (-1, 1)) * t.tri_normal[k]
+        k0 = normalize(Vec3(randn(rng, 3)...))
+        dot(k0, side) > 0 || (k0 = -k0)
+        ds = trial % 4 == 0 ? [normalize(Vec3(randn(rng, 3)...)) for _ in 1:16] :
+             [normalize(k0 + 0.06 * Vec3(randn(rng, 3)...)) for _ in 1:13]
+        os = trial % 4 == 0 ? [Vec3(randn(rng, 3)...) .* 2 for _ in 1:7] :
+             [t.tri_v0[k] + u * t.tri_e1[k] + v * t.tri_e2[k] + 1e-6 * side
+              for (u, v) in ((rand(rng), rand(rng)) for _ in 1:16) if u + v <= 1]
+        m0 = [rand(rng, UInt16) & UInt16((1 << length(ds)) - 1) for _ in os]
+        m = Briareus._unblocked!(copy(m0), t.bvh, os, ds, Briareus._safe_inv.(ds), cache)
+        for i in eachindex(os), j in eachindex(ds)
+            (m0[i] >> (j - 1)) & 1 == 1 || continue
+            agree &= ((m[i] >> (j - 1)) & 1 == 1) == !any_hit(t.bvh, os[i], ds[j])
+        end
+        agree &= all(m .& .~m0 .== 0)
+    end
+    @test agree
 end
 
 @testset "view factors" begin

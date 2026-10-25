@@ -242,6 +242,8 @@ function _operator_points(t::Target, g, tris, rules, ε, level, maxlevel, resolu
                           back)
     (; k, ds, amin, extent, focus, cone) = g
     P, W, N, M, D = Vec3[], Float64[], Vec3[], UInt16[], Int32[]
+    # rays toward the lens, and the last leaf that blocked each
+    cache = (; dirs = -ds, invs = [_safe_inv(-d) for d in ds], leaf = zeros(Int32, length(ds)))
     for tri in tris
         n = t.tri_normal[tri]
         c = dot(k, n)
@@ -262,7 +264,7 @@ function _operator_points(t::Target, g, tris, rules, ε, level, maxlevel, resolu
             # unmodeled back side: only its total matters (see `_backside_points!`)
             lv = 0
             if near
-                _backside_points!(P, W, N, M, D, t, tri, back, amin, side_n, target_id, ds, ε) &&
+                _backside_points!(P, W, N, M, D, t, tri, back, amin, side_n, target_id, ds, ε, cache) &&
                     continue
                 # within a spot semi-axis of an open edge: the shoulder of a clipped spot lands here
                 res = back.rimdist[tri] <= extent / 2.5 ? back.resolution : back.coarse
@@ -271,11 +273,11 @@ function _operator_points(t::Target, g, tris, rules, ε, level, maxlevel, resolu
         elseif near && L > resolution * amin * 2^level
             lv = clamp(ceil(Int, log2(L / (resolution * amin))), level, maxlevel)
         end
-        xs, ms = _visible_directions(t, rules[lv+1][1], v0, e1, e2, side_n, ds, ε)
+        xs, ms = _visible_directions(t, rules[lv+1][1], v0, e1, e2, side_n, ds, ε, cache)
         # a shadow edge crosses the triangle: resolve it more finely
         if near && shadow > 0 && lv < maxlevel && any(!=(ms[1]), ms)
             lv = min(lv + shadow, maxlevel)
-            xs, ms = _visible_directions(t, rules[lv+1][1], v0, e1, e2, side_n, ds, ε)
+            xs, ms = _visible_directions(t, rules[lv+1][1], v0, e1, e2, side_n, ds, ε, cache)
         end
         for (x, m, wq) in zip(xs, ms, rules[lv+1][2])
             m == 0 && continue
@@ -286,22 +288,31 @@ function _operator_points(t::Target, g, tris, rules, ε, level, maxlevel, resolu
 end
 
 # Quadrature points of a triangle and, for each, the bitmask of cone directions that
-# reach it unobstructed.
-function _visible_directions(t::Target, bary, v0, e1, e2, side_n, ds, ε)
-    xs = Vec3[]
-    ms = UInt16[]
-    for λ in bary
+# reach it unobstructed: those facing the lit side whose ray toward the lens hits
+# nothing (`any_hit`, asked of all points and directions as one packet; `cache` holds
+# the reversed directions and keeps each one's last blocking leaf across a work unit).
+function _visible_directions(t::Target, bary, v0, e1, e2, side_n, ds, ε, cache)
+    n = length(bary)
+    xs = Vector{Vec3}(undef, n)
+    os = Vector{Vec3}(undef, n)
+    for (i, λ) in enumerate(bary)
         x = v0 + λ[1] * e1 + λ[2] * e2
-        o = x + ε * side_n
-        m = UInt16(0)
-        for (j, d) in enumerate(ds)
-            dot(d, side_n) < 0 || continue
-            any_hit(t.bvh, o, -d) || (m |= UInt16(1) << (j - 1))
-        end
-        push!(xs, x)
-        push!(ms, m)
+        xs[i] = x
+        os[i] = x + ε * side_n
     end
+    ms = fill(_facing_mask(ds, side_n), n)
+    _unblocked!(ms, t.bvh, os, cache.dirs, cache.invs, cache.leaf)
     return xs, ms
+end
+
+# Cone directions that strike the side with normal `n` (d·n < 0, summed in a fixed order
+# so the answer for a direction in the plane does not depend on how `dot` is compiled).
+function _facing_mask(ds, n)
+    m = UInt16(0)
+    for (j, d) in enumerate(ds)
+        (d[1] * n[1] + d[2] * n[2]) + d[3] * n[3] < 0 && (m |= UInt16(1) << (j - 1))
+    end
+    return m
 end
 
 # Open boundary of the opaque surfaces: triangle edges that no other opaque triangle
@@ -391,7 +402,8 @@ end
 # share ~λ/L of the rim's light (λ the tail length, L the edge). Panels are `resolution`
 # spot semi-axes across the triangle and `coarse` along an open edge. Returns false (no
 # points added) for a triangle off the open boundary.
-function _backside_points!(P, W, N, M, D, t::Target, tri, back, amin, side_n, target_id, ds, ε)
+function _backside_points!(P, W, N, M, D, t::Target, tri, back, amin, side_n, target_id, ds, ε,
+                           cache)
     f = back.flags[tri]
     f == 0 && return false
     E(j) = (f >> (mod1(j, 3) - 1)) & 0x1 == 0x1      # edge j: vertex j to j+1
@@ -426,7 +438,7 @@ function _backside_points!(P, W, N, M, D, t::Target, tri, back, amin, side_n, ta
             push!(wq, 2u * (b - a) / 2 * (vcuts[l+1] - vcuts[l]) / 2)
         end
     end
-    xs, ms = _visible_directions(t, bary, v0, e1, e2, side_n, ds, ε)
+    xs, ms = _visible_directions(t, bary, v0, e1, e2, side_n, ds, ε, cache)
     A = t.tri_area[tri]
     for (x, m, w) in zip(xs, ms, wq)
         m == 0 && continue
