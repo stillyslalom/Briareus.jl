@@ -972,11 +972,13 @@ pick the original parts, not `<part>/cylN` pieces).
    - CAD capsule tents and LEH windows are opaque closed solids: a thin-film option
      that transmits (or automatic thin-solid detection in the library; the GUI already
      opens a sealed pocket) would let the cavity include the tent region.
-   - CAD fits (see Done): tori for fillets (fillet pieces now fit as small tilted cones
-     and spheres; `minfraction` hides them); one surface shared across parts (the
-     halves' inner walls); a quadrature at a cone apex; TALIS curvature kind for cones;
-     fitting by default is done (Open question 1, 2026-10-24; `minfraction = 1e-3` since
-     2026-10-24).
+   - CAD fits (see Done): tori for fillets are done (2026-10-24: `:torus` in the default
+     kinds, `TorusSurface`; research notes "Tori"; a quarter fillet's cap-rim chords
+     project past the rim, +1.8e-3 of the fillet's area at 64 strips, so a projection
+     that keeps rims would make fillet elements exact); one surface shared across parts
+     (the halves' inner walls); a quadrature at a cone apex; TALIS curvature kind for
+     cones and tori; fitting by default is done (Open question 1, 2026-10-24;
+     `minfraction = 1e-3` since 2026-10-24).
    - Adjacent flat CAD pairs: near-kernel evaluations scale as shared-edge length over
      r/256 (~700 per pair on a sliver tube even with straight cuts); an exact or coarser
      treatment along straight shared edges would cut them. Banding misses most of the
@@ -997,11 +999,13 @@ pick the original parts, not `<part>/cylN` pieces).
    growth is given up once its rms tracks the cover's (2026-10-24; research notes "Cost
    of fitting faces of none of the kinds"): a tapered tube without cones is linear (171 →
    3.3 s at 18k facets), the NIF capsule with cylinders and spheres 56 → 18 s, every
-   other NIF CAD fit bit for bit unchanged. Left: a fine fillet or torus whose rejected
-   growths stay under 512 patches is still quadratic (~80 s at 33k facets); a torus kind
-   would end that. The capsule's cylinder–sphere fit cuts its tapered tube into
-   different tolerance pieces than before. The 133k-facet NIF mount takes ~22 min with
-   the default kinds (unchanged by the covers; not profiled).
+   other NIF CAD fit bit for bit unchanged. A fine fillet, quadratic while its rejected
+   growths stayed under 512 patches (~80 s at 33k facets), is one torus since tori are a
+   default kind (0.5 s at 33k; research notes "Tori"); a variable-radius fillet would
+   still be quadratic. The capsule's cylinder–sphere fit cuts its tapered tube into
+   different tolerance pieces than before (unchanged by tori). The 133k-facet NIF mount
+   takes ~20 min with the default kinds (with or without covers and tori; not
+   profiled).
 8. **GUI requests:** frames on a port axis (the chamber,
    the entrance holes, the foil and other parts are done); clipping volumes; STEP import (needs a CAD kernel; STL
    and VisRad workspaces cover CAD meanwhile); an x-ray image that follows the camera

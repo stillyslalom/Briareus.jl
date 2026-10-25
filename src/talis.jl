@@ -587,7 +587,7 @@ end
 # cylinder and cone surfaces) of a component.
 function _talis_samples(t::Target, ci, level)
     c = t.components[ci]
-    curved = c.surface isa Union{SphereSurface,CylinderSurface,ConeSurface}
+    curved = c.surface isa Union{SphereSurface,CylinderSurface,ConeSurface,TorusSurface}
     verts, leaves, normals, buf = Vec3[], NTuple{4,Vec3}[], Vec3[], Vec3[]
     for k in eachindex(t.tri_area)
         (t.tri_comp[k] == ci && t.tri_area[k] > 0) || continue

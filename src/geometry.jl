@@ -90,9 +90,10 @@ end
     CurvedSurface
 
 Exact surface that a faceted component approximates: `SphereSurface`,
-`CylinderSurface`, `ConeSurface` or `DiskSurface`. When a component carries one, the
-radiation model integrates over the true surface (points, normals and areas of the
-curved patches), while ray casting and visibility keep using the flat facets. On a
+`CylinderSurface`, `ConeSurface`, `TorusSurface` or `DiskSurface`. When a component
+carries one, the radiation model integrates over the true surface (points, normals and
+areas of the curved patches), while ray casting and visibility keep using the flat
+facets. On a
 curved concave surface the view-factor kernel stays bounded, and flat facets would
 misrepresent the exchange between nearby elements.
 """
@@ -142,6 +143,32 @@ end
 ConeSurface(half_angle::Real; apex = (0.0, 0.0, 0.0), axis = (0.0, 0.0, 1.0)) = ConeSurface(apex, axis, half_angle)
 
 """
+    TorusSurface(major_radius, minor_radius; center = (0, 0, 0), axis = (0, 0, 1))
+
+Torus: the points at `minor_radius` r from its spine, the circle of `major_radius` R
+about `axis` through `center` (a CAD fillet: a quarter of the tube where a wall meets a
+cap). Points are projected onto it exactly, to the nearest point of the tube circle in
+their meridian half-plane (for a ring torus, R > r, the nearest point of the torus), and
+its normals point away from the spine. Facets' patches have exact areas under that
+projection. A faceted fillet's rims are chords of the rim circles, which the projection
+leaves slightly off them where the surface is not perpendicular to the plane of the rim
+(on a quarter fillet, its rim on the cap), so the elements of a fillet cover it to
+second order in the facet size; rims on the torus's equator (ψ = 0, π) and a closed
+torus are covered exactly.
+"""
+struct TorusSurface <: CurvedSurface
+    center::Vec3
+    axis::Vec3
+    major_radius::Float64
+    minor_radius::Float64
+    function TorusSurface(center, axis, R, r)
+        (R > 0 && r > 0) || throw(ArgumentError("a torus needs positive major and minor radii"))
+        return new(Vec3(center...), normalize(Vec3(axis...)), Float64(R), Float64(r))
+    end
+end
+TorusSurface(R::Real, r::Real; center = (0.0, 0.0, 0.0), axis = (0.0, 0.0, 1.0)) = TorusSurface(center, axis, R, r)
+
+"""
     DiskSurface(; center = (0, 0, 0), normal = (0, 0, 1))
 
 Plane through `center` whose elements are polar sectors about `center`, as produced by
@@ -160,8 +187,9 @@ DiskSurface(; center = (0.0, 0.0, 0.0), normal = (0.0, 0.0, 1.0)) =
 """
     surface_point(surface, p) -> (point, normal)
 
-Projection of `p` onto the surface (radially from the center or the axis) and the
-outward unit normal there (away from the center or the axis).
+Projection of `p` onto the surface (radially from the center or the axis; on a torus
+from the spine) and the outward unit normal there (away from the center, the axis or
+the spine).
 """
 function surface_point(s::SphereSurface, p)
     d = normalize(p - s.center)
@@ -194,12 +222,34 @@ function surface_point(s::ConeSurface, p)
     return s.apex + max(z, 0.0) * (s.axis + (sα / cα) * ρ̂), cα * ρ̂ - sα * s.axis
 end
 
+# A point's offset w from the spine point in its meridian half-plane (along ρ̂, the unit
+# vector from the axis toward it) and that spine point.
+function _torus_coordinates(s::TorusSurface, p)
+    d = p - s.center
+    z = dot(d, s.axis)
+    q = d - z * s.axis
+    ρ = norm(q)
+    a = s.axis
+    ρ̂ = ρ > 0 ? q / ρ : normalize(cross(a, abs(a[1]) < 0.9 ? Vec3(1, 0, 0) : Vec3(0, 1, 0)))
+    c = s.center + s.major_radius * ρ̂
+    return p - c, c, ρ̂
+end
+
+function surface_point(s::TorusSurface, p)
+    w, c, ρ̂ = _torus_coordinates(s, p)
+    l = norm(w)
+    n = l > 0 ? w / l : ρ̂
+    return c + s.minor_radius * n, n
+end
+
 _transform_surface(::Nothing, R, t) = nothing
 _transform_surface(s::SphereSurface, R, t) = SphereSurface(Vec3(R * s.center + t), s.radius)
 _transform_surface(s::CylinderSurface, R, t) =
     CylinderSurface(Vec3(R * s.origin + t), normalize(Vec3(R * s.axis)), s.radius)
 _transform_surface(s::ConeSurface, R, t) = ConeSurface(Vec3(R * s.apex + t), Vec3(R * s.axis), s.half_angle)
 _transform_surface(s::DiskSurface, R, t) = DiskSurface(Vec3(R * s.center + t), normalize(Vec3(R * s.normal)))
+_transform_surface(s::TorusSurface, R, t) =
+    TorusSurface(Vec3(R * s.center + t), Vec3(R * s.axis), s.major_radius, s.minor_radius)
 
 surface_point(s::DiskSurface, p) = (p - dot(p - s.center, s.normal) * s.normal, s.normal)
 
@@ -385,6 +435,48 @@ function _cone_edge_integral(uP, Δ, C, ζP, dz, t0, t1, depth)
         i2 += ζ^2 * dφ
     end
     return (t1 - t0) * i1, (t1 - t0) * i2
+end
+
+# On a torus the projection keeps the azimuth φ and the tube angle ψ (of the point's
+# offset from the spine in its meridian plane, from the equator outward), and the
+# surface element is r (R + r cos ψ) dψ dφ, so the patch has area r |∮ (R ψ + r sin ψ) dφ|
+# (Green's theorem). Along a straight edge dφ/dt = C/|u|² as on the cylinder and ψ is
+# smooth wherever the edge stays off the spine and the axis; ∮ is done by Gauss–Legendre
+# on pieces no longer than half the smaller of r and the edge's distance from the axis,
+# within which the nearest singularity lies outside the Bernstein ellipse of parameter
+# ~4, so 16 points converge to round-off. ψ is measured from the first vertex's (and
+# ∮ dφ = 0 around the patch), which keeps a small patch from cancelling terms of size
+# R ψ Δφ.
+function _curved_area(s::TorusSurface, a, b, c)
+    ax, R, r = s.axis, s.major_radius, s.minor_radius
+    perp(d) = d - dot(d, ax) * ax
+    ua = perp(a - s.center)
+    ψa = atan(dot(a - s.center, ax), norm(ua) - R)
+    sa = sin(ψa)
+    acc = 0.0
+    vs = (a, b, c)
+    for k in 1:3
+        P, Q = vs[k], vs[mod1(k + 1, 3)]
+        uP = perp(P - s.center)
+        Δ = perp(Q - P)
+        C = dot(cross(uP, Δ), ax)
+        C == 0 && continue
+        zP, dz = dot(P - s.center, ax), dot(Q - P, ax)
+        L = norm(Q - P)
+        h = min(r, norm(uP), norm(uP + Δ))
+        n = h > 0 ? clamp(ceil(Int, 2L / h), 1, 256) : 256
+        for j in 1:n, i in eachindex(_GL16.x)
+            t = (j - 1 + _GL16.x[i]) / n
+            u = uP + t * Δ
+            z = zP + t * dz
+            x = norm(u) - R
+            l = hypot(x, z)
+            ψ = mod(atan(z, x) - ψa + π, 2π) - π
+            F = R * ψ + r * ((l > 0 ? z / l : 0.0) - sa)
+            acc += (_GL16.w[i] / n) * F * C / dot(u, u)
+        end
+    end
+    return r * abs(acc)
 end
 
 """

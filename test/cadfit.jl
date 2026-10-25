@@ -125,8 +125,9 @@ end
         add_polygon!(para, [p(x0, y0), p(x0 + d, y0), p(x0 + d, y0 + d)])
         add_polygon!(para, [p(x0, y0), p(x0 + d, y0 + d), p(x0, y0 + d)])
     end
-    @test isempty(fit_surfaces(para))
-    @test_throws ArgumentError fit_surfaces(para; kinds = (:torus,))
+    @test isempty(fit_surfaces(para))                      # tori included
+    @test isempty(fit_surfaces(para; kinds = (:plane, :cylinder, :cone, :sphere)))
+    @test_throws ArgumentError fit_surfaces(para; kinds = (:paraboloid,))
 
     # cones: an entrance-hole cone (39°) and a 45° one as single bands (vertices on two
     # rims only, which a sphere fits as well: the cone is taken), a slightly tapered bore
@@ -192,6 +193,134 @@ end
     @test cone.surface.half_angle ≈ 70 rtol = 1e-6
     @test cone.surface.apex ≈ Vec3(0, 0, z0 - ρ0 / tand(70)) atol = 1e-6
     @test any(r -> r.kind === :plane && length(r.patches) == 8n, regs)     # the cap
+end
+
+@testset "tori" begin
+    # projection: the nearest point of the torus (R = 2, r = 0.5, tilted and moved)
+    R, r = 2.0, 0.5
+    ax = normalize(Vec3(0.2, -0.1, 1.0))
+    ctr = Vec3(0.1, -0.2, 0.3)
+    s = TorusSurface(R, r; center = ctr, axis = ax)
+    e1, e2 = Briareus._perp_basis(ax)
+    on(φ, ψ) = ctr + (R + r * cos(ψ)) * (cos(φ) * e1 + sin(φ) * e2) + r * sin(ψ) * ax
+    grid = [on(φ, ψ) for φ in range(0, 2π; length = 721)[1:end-1], ψ in range(-π, π; length = 361)[1:end-1]]
+    for ρ in (0.3, 1.0, 1.9, 2.4, 3.0), z in (-0.7, 0.0, 0.4), φ in (0.3, 2.0)
+        p = ctr + ρ * (cos(φ) * e1 + sin(φ) * e2) + z * ax
+        q, n = surface_point(s, p)
+        w, c, _ = Briareus._torus_coordinates(s, q)
+        @test norm(w) ≈ r rtol = 1e-14                          # on the tube
+        @test norm(n - w / r) < 1e-14                           # normal away from the spine
+        @test norm(cross(p - q, n)) < 1e-14                     # along the normal
+        @test norm(p - q) <= minimum(g -> norm(p - g), grid) + 1e-12
+        @test first(surface_point(s, q)) ≈ q atol = 1e-14
+    end
+    for φ in (0.1, 1.7), ψ in (-2.5, -0.4, 0.0, 1.2, 3.0), δ in (-0.3, 0.2)
+        q0 = on(φ, ψ)
+        n0 = normalize(q0 - (ctr + R * (cos(φ) * e1 + sin(φ) * e2)))
+        q, n = surface_point(s, q0 + δ * n0)
+        @test q ≈ q0 atol = 1e-14
+        @test n ≈ n0 atol = 1e-14
+    end
+    t2 = Briareus._transform_surface(s, rotation_to(Vec3(1, 0, 0)), Vec3(1, 2, 3))
+    @test t2.major_radius == R && t2.minor_radius == r
+    @test_throws ArgumentError TorusSurface(0.0, 0.5)
+
+    # areas through the elements: exact where the section's rims lie on the equator
+    # (ψ = 0, π) or the torus is closed; a quarter fillet's chord rim on its cap projects
+    # slightly past the rim circle (second order in the facet size)
+    s0 = TorusSurface(R, r; center = (0, 0, 0.3))
+    for (ψ0, ψ1, exact, rtol) in ((0, π, 2π^2 * R * r, 1e-14), (-π, π, 4π^2 * R * r, 1e-14),
+                                  (0, π / 2, 2π * r * (R * π / 2 + r), 2e-3))
+        t = Target([Component(:t, facet_soup(cad_torus(R, r, 0.3, ψ0, ψ1; nψ = 8, nphi = 64)), gold(); surface = s0)])
+        @test sum(t.elem_area) ≈ exact rtol = rtol
+        @test all(==(1), t.elem_curved)
+        for e in 1:nelements(t)
+            pts, ws, ns = element_quadrature(t, e, 2)
+            @test sum(ws) ≈ t.elem_area[e] rtol = 1e-13
+            @test all(p -> abs(norm(Briareus._torus_coordinates(s0, p)[1]) - r) < 1e-14, pts)
+            @test all(k -> ns[k] ≈ last(surface_point(s0, pts[k])), eachindex(pts))
+        end
+    end
+    @test sum(Target([Component(:t, facet_soup(cad_torus(R, r, 0.3, 0, π / 2; nψ = 16, nphi = 128)), gold();
+                                surface = s0)]).elem_area) / (2π * r * (R * π / 2 + r)) - 1 < 5e-4
+    # remeshed elements of up to ~30 facets: lumped quadrature, the same exact area
+    tl = Target([Component(:t, remesh_mesh(facet_soup(cad_torus(R, r, 0.3, 0, π; nψ = 16, nphi = 128)); size = 0.4),
+                           gold(); surface = s0)])
+    @test maximum(length, tl.elem_tris) > 2
+    @test sum(tl.elem_area) ≈ 2π^2 * R * r rtol = 1e-13
+    @test all(e -> sum(element_quadrature(tl, e, 1)[2]) ≈ tl.elem_area[e], 1:nelements(tl))
+
+    # the rounded hohlraum's corners as tori: the fillets' areas within the cap rims'
+    # overshoot of the quarter tori (the frusta's chord polygon misses 15% with one band),
+    # and the closed cavity's row sums as close to one as with frusta
+    kw = (; length = 9.4, radius = 2.875, leh_radius = 1.55, capsule_radius = 0.9)
+    rc = 1.0
+    for nr_corner in (1, 4)
+        t = hohlraum(; kw..., h = 0.5, corner_radius = rc, nr_corner)
+        fillets = Component[]
+        for (side, sg) in (("top", 1), ("bottom", -1))
+            cs = [c for c in t.components if startswith(String(c.name), "corner_$(side)_")]
+            push!(fillets, Component(Symbol("fillet_", side), merge_meshes([c.mesh for c in cs]...), gold();
+                                     surface = TorusSurface(2.875 - rc, rc; center = (0, 0, sg * (4.7 - rc)))))
+        end
+        tt = Target([[c for c in t.components if !startswith(String(c.name), "corner_")]; fillets]; t.closed)
+        f = elements(tt, :fillet_top, :fillet_bottom)
+        @test all(==(-1), tt.elem_curved[f])                    # facing the spine
+        @test sum(tt.elem_area[f]) / (2 * 2π * rc * (π / 2 * (2.875 - rc) + rc)) - 1 ≈ 0 atol = 2e-3
+        F = view_factors(tt)
+        @test maximum(abs, closure_error(F)) < 1e-2
+        @test maximum(abs, closure_error(F)[f]) < (nr_corner == 1 ? 1e-4 : 3e-3)
+        @test tt.elem_area .* F ≈ (tt.elem_area .* F)' rtol = 1e-12
+    end
+
+    # fits: a 150° section of the tube (R = 2, r = 0.5) tilted and moved, fine and
+    # coarse (19° bands, under `angle`), through STL, facing out or in, and remeshed
+    Rot = rotation_to(ax)
+    for (nψ, nphi) in ((28, 224), (8, 64)), inward in (false, true)
+        F = [(Rot * a + ctr, Rot * b + ctr, Rot * c + ctr) for (a, b, c) in cad_torus(R, r, 0.0, deg2rad(-60), π / 2; nψ, nphi)]
+        inward && (F = [(a, c, b) for (a, b, c) in F])
+        raw = orient_mesh(stl_roundtrip(F))
+        for mesh in (raw, remesh_mesh(raw; size = 0.3))
+            regs = fit_surfaces(mesh; reference = mesh === raw ? nothing : raw)
+            @test length(regs) == 1 && regs[1].kind === :torus && length(regs[1].patches) == npatches(mesh)
+            t = regs[1].surface
+            @test t isa TorusSurface
+            @test t.major_radius ≈ R rtol = 1e-6
+            @test t.minor_radius ≈ r rtol = 1e-6
+            @test abs(dot(t.axis, ax)) ≈ 1 atol = 1e-10
+            @test t.center ≈ ctr atol = 1e-6
+            @test regs[1].facing == (inward ? -1 : 1)
+            mesh === raw && @test regs[1].maxdev < 1e-6
+        end
+    end
+    # without the torus kind the coarse section's single bands fit as cones
+    coarse = facet_soup(cad_torus(R, r, 0.0, deg2rad(-60), π / 2; nψ = 8, nphi = 64))
+    @test all(x -> x.kind === :cone, fit_surfaces(coarse; kinds = (:plane, :cylinder, :cone, :sphere)))
+    @test only(fit_surfaces(coarse; kinds = (:cone, :torus))).kind === :torus
+
+    # a fillet part (raw facets): wall, quarter-torus fillet, cap
+    part = orient_mesh(stl_roundtrip([cad_frustum(2.5, -1.0, 2.5, 0.0; nz = 4, nphi = 180);
+                                      cad_torus(2.0, 0.5, 0.0, 0.0, π / 2; nψ = 12, nphi = 180);
+                                      cad_fan(2.0, 0.5, true; nphi = 180)]))
+    cs = curved_components(Component(:can, part, gold());
+                           kinds = (:cylinder, :torus), minfraction = 0)
+    @test [x.name for x in cs] == Symbol.(["can/cyl1", "can/tor1", "can/rest"])
+    @test cs[2].surface isa TorusSurface
+    @test cs[2].surface.minor_radius ≈ 0.5 rtol = 1e-6
+    @test sum(Target(cs[2:2]).elem_area) ≈ 2π * 0.5 * (2.0 * π / 2 + 0.5) rtol = 2e-3
+
+    # cost: one torus region, the work linear in the facets (a fine
+    # fillet without the torus kind is quadratic: research notes, "Cost of fitting faces of
+    # none of the kinds")
+    opts = (; rtol = 1e-3, atol = 1e-4, cosmax = cosd(30.0))
+    fillet(n) = facet_soup(cad_torus(2.0, 0.5, 0.0, deg2rad(-60), π / 2; nψ = n ÷ 2, nphi = 4n))
+    st = map((28, 56)) do n
+        m = fillet(n)
+        regs, s = Briareus._fit_surfaces(m, (:plane, :cylinder, :cone, :sphere, :torus), opts, 6, 0.0, 1e-9)
+        @test length(regs) == 1 && regs[1].kind === :torus && length(regs[1].patches) == npatches(m)
+        s
+    end
+    @test st[2].work < 4.4st[1].work && st[2].growths <= 2st[1].growths
 end
 
 @testset "curved_components" begin

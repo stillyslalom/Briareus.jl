@@ -1302,10 +1302,74 @@ fits below used Briareus's own operator points with a free-form evaluator.
   138 are small holes and edge faces); minfraction 1e-3, 3e-3, 1e-2 → 25, 16, 10
   components with 356.6, 353.2, 344.1 mm² curved (of 360.8); minfraction 1e-2 keeps the
   inner walls, outer sheets, steps and the two 84.5° cones. **H** (measured locally)
-- **Tori (fillets), not done.** A torus fit (7 parameters) would turn the CAD fillets
-  that stay unfitted or split into small cones/spheres into one region each; on the NIF
-  halves they are ≤ 1.3 mm² apiece and their flat elements are within the faceting, so
-  the gain is a smaller component count, which `minfraction` already gives. **M**
+- **Tori (2026-10-24).** `fit_surfaces` fits tori (`:torus`, in the default kinds) and
+  `TorusSurface` carries them into the radiation model. Fit: candidate axes from the
+  patch normals (the line their normal lines all meet, a linear complex: the two least
+  eigenvectors of the form left after minimizing over the axis moment; the cone's two
+  axes), each with a circle fit in the meridian half-plane, and starts from the patch's
+  shape operator (spine through x₀ + n₀/κ₁, axis in the plane of n₀ and the tube
+  direction through x₀ + n₀/κ₂, its tilt scanned: on a small patch the axis and R show
+  only in third-order terms); the three best distinct starts are refined by
+  Levenberg–Marquardt on √((ρ − R)² + (z − z₀)²) − r. Plain Gauss–Newton with step
+  halving stalled on 37-patch starts, and of three equally cheap scan starts on such a
+  patch only one reached the exact torus (the others stop at rms 1e-4 of r), hence the
+  distinct-start rule. A 7-parameter fit needs stricter acceptance than the others:
+  - free-form faces: the 20 × 20 paraboloid patch of the tests fits tori at rms 0.23 of
+    the relative tolerance (accepted at the others' 1/4);
+  - neighbouring faces: within the relative tolerance (rtol min(r, L), 5 µm for r = 10
+    mm) a large torus (R 13.5, r 10 mm) took a NIF part's cone and 40% of a cylinder
+    beside it at rms 16 nm, and a fillet torus 9 boundary strips of the cylinder it
+    blends into;
+  - band tessellations: strips with vertices only on their rims lie on any circle
+    through three rims, and four rims placed symmetrically (two cone bands at either end
+    of a cylinder) lie on one circle too: with tolerance `atol` the large torus above
+    came back through such rims, at round-off, over the cone and the cylinder's strips.
+  So tori are held to CAD round-off: tolerance `atol`, rms under `atol/16` (6 nm; the
+  NIF CAD tori fit at 0.1–5 nm), at least four evenly spaced points along the tube
+  circle (largest step under 3× the median past the empty arc), no plane, cylinder,
+  cone or sphere fitting the region, and merges that keep that rms. A torus within
+  2 tol of a sphere (R), cylinder (L²/8R) or cone/plane (L²/8r) is left to it, and a
+  torus growth that becomes one, or that a simpler surface fits to round-off, is given
+  up at its checkpoint; the patches of a rejected torus region (half its radius) grow no
+  torus again, and a torus starts from at most 64 patches (rings around CAD fan apexes
+  hold hundreds). Without these the cylinder–sphere–torus fit of the NIF capsule took
+  103–123 s (torus growths retracing the sphere and the fill tube's fans); with them
+  21 s against 18 s. A boxed closure in the LM step (`ntuple` over a reassigned matrix)
+  had made each torus fit 10× slower.
+  Synthetic (`test/cadfit.jl`): tilted and moved quarter-to-150° sections of R = 2,
+  r = 0.5 mm, fine (12.5k facets) and coarse (19° bands), through Float32 STL, facing out
+  or in, raw and remeshed with `reference`: one torus, R, r, centre to 1e-6, axis to
+  1e-10. Fine fillet (all kinds): 7.9k / 32.8k / 65.5k facets in 0.13 / 0.51 / 1.6 s, one
+  region (without tori 4 s at 8k and ~80 s at 33k, quadratic; "Cost of fitting faces of
+  none of the kinds", below).
+  `TorusSurface` projects to the nearest point of the tube circle in the point's
+  meridian half-plane (exact for ring tori); patch areas r |∮ (Rψ + r sin ψ) dφ| by
+  Gauss–Legendre on edge pieces. A closed torus and the section ψ ∈ [0, π] (rims on the
+  equator) are covered to 1e-15; a quarter fillet's cap rim chords project past the rim
+  circle, +7.0e-3 / 1.8e-3 / 4.4e-4 at 32 / 64 / 128 strips (second order; the frusta of
+  `hohlraum(corner_radius)` keep rims exact). The rounded hohlraum (rc = 1 mm) with its
+  corners as tori: fillet area +1.8e-3 of the quarter tori (the frusta's chord polygon
+  −15% with one band per corner, −1% with four), raw row sums max |1 − ΣF| 5.7e-3
+  (frusta 7.1e-3), on the fillets 4.5e-5 with one band (frusta 4.7e-3) and 1.8e-3 with
+  four (2.2e-3). Tori are not convex: their facets still occlude pairs inside them.
+  NIF CAD workspace, its 14 parts other than the mount, raw facets, default kinds with
+  and without `:torus` (and cylinder–cone–sphere, cylinder–sphere): 9 parts bit for bit
+  unchanged; on the other 5 every region that changes is a fillet patchwork replaced
+  whole, 29 small cones, cylinders and spheres (0.11–5.8 mm² per part) by 16 tori
+  (R 1.6–3.4 mm, r 0.025–1.5 mm, 0.31–61 mm² per part, which also take the fillet facets
+  that stayed unfitted), and on one part two spheres refitted (same patches, centres
+  1e-16 mm apart). The capsule (fill tube) is bit for bit unchanged with every kind set,
+  no tori: with the default kinds its tapered tube is two cones (0.147°, 0.110°) at
+  round-off, with cylinders and spheres the 25 regions of "Cost of fitting faces of none
+  of the kinds" (tolerance-stopped cylinder pieces). Fit time for the 14 parts 9.0 → 4.3 s
+  (fillets no longer seed rejected growths); cylinder–cone–sphere 8.3 → 5.0 s;
+  cylinder–sphere 21.6 → 25 s (capsule 18 → 21 s). The 133k-facet mount (default
+  kinds, one thread): 1911 → 1948 regions, 1278 → 1100 s; 85 tori (347 mm², R 0.02–5.9
+  mm, r 0.02–1 mm, rms ≤ 6 nm) take 54 of the 61 regions that change (39 cones, 19
+  cylinders, 3 spheres; 7.4 mm²) whole, and every other region that changes or appears
+  shares vertices with a torus: a 106 mm² cylinder (R 3.58 mm) that
+  stayed unfitted before, and 0.3 mm² of small cylinders, cones and a sphere re-cut or
+  newly fitted beside fillets. **H** (measured locally and synthetic)
 - **Cost of `fit_surfaces` on finely faceted CAD (2026-10-18).** Not the sphere: a
   finely faceted sphere is one region grown from its first seed (lat-long spheres of
   10k and 40k facets, an icosphere of 20k: 0.01–0.07 s). The NIF CAD capsule part
