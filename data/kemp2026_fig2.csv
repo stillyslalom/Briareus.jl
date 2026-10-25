@@ -1,0 +1,76 @@
+# Measured inner-cone SBS backscatter of NIF shot N210808 (HYBRID-E, 0.3 mg/cc He), per quad,
+# from A. J. Kemp et al., "Modeling stimulated Brillouin backscatter from the inner laser
+# cones during indirect-drive inertial confinement fusion experiments at the National
+# Ignition Facility", Phys. Plasmas 33, 082705 (2026), doi:10.1063/5.0320730; accepted
+# manuscript LLNL-JRNL-2014353, OSTI 3441608. Fig. 2 solid lines ("measured 23 deg",
+# "measured 30 deg"): cone-averaged DrD/FABS signals (GP regression, paper's appendix), the
+# in-lens power multiplied by the lens factor 3.4, i.e. all backscattered SBS light per
+# quad (TW). The paper's energies: 2.8 kJ/quad (23 deg) and 0.9 kJ/quad (30 deg); this
+# table integrates to 2.87 and 0.92. Single-shot error up to
+# 100 % (lens fraction, calibration); 30-50 % between N210808 repeats. The paper notes the
+# 23 deg curve's sharp rise (4.6 ns) may be a processing artifact, and a ~0.3 ns offset
+# between measured and modeled 23 deg onset (DrD timing uncertainty up to 0.2 ns). On the
+# same axis the pre-CBET inner-cone laser power per quad reaches half its 9 TW peak at
+# 4.74 ns (dash-dot curve, read here). Digitized 2026-10-25 from the figure's embedded
+# raster (1852 x 1480 px; 0 and 10 ns at columns 258 and 1615, 0 and 3 TW at rows 1249 and
+# 79, from the gridlines): stroke centres traced column by column on the shallow parts
+# and row by row on the steep ones, read to +/-0.03 TW and +/-0.02 ns, then linearly
+# interpolated onto 0.05 ns. Research notes, "Inner-cone SBS time histories and the
+# late-time refraction (2026-10-25)".
+# Columns: t (ns); inner23, inner30 (backscattered SBS power per quad, TW)
+t,inner23,inner30
+4.40,0.0,0.0
+4.45,0.0,0.0
+4.50,0.0,0.0
+4.55,0.0,0.0
+4.60,0.375,0.0
+4.65,0.792,0.0
+4.70,0.896,0.0
+4.75,1.0,0.0
+4.80,1.167,0.1
+4.85,1.333,0.225
+4.90,1.5,0.38
+4.95,1.643,0.375
+5.00,1.786,0.37
+5.05,1.917,0.395
+5.10,2.0,0.41
+5.15,2.1,0.41
+5.20,2.127,0.4
+5.25,2.153,0.392
+5.30,2.18,0.385
+5.35,2.158,0.405
+5.40,2.136,0.464
+5.45,2.113,0.529
+5.50,2.075,0.6
+5.55,2.012,0.683
+5.60,1.96,0.767
+5.65,1.91,0.84
+5.70,1.827,0.886
+5.75,1.736,0.9
+5.80,1.645,0.875
+5.85,1.555,0.821
+5.90,1.467,0.762
+5.95,1.383,0.7
+6.00,1.3,0.629
+6.05,1.223,0.573
+6.10,1.146,0.527
+6.15,1.071,0.489
+6.20,1.0,0.46
+6.25,0.938,0.432
+6.30,0.867,0.405
+6.35,0.775,0.375
+6.40,0.6,0.345
+6.45,0.4,0.3
+6.50,0.233,0.255
+6.55,0.16,0.2
+6.60,0.144,0.09
+6.65,0.137,0.037
+6.70,0.13,0.03
+6.75,0.109,0.023
+6.80,0.081,0.02
+6.85,0.05,0.017
+6.90,0.025,0.012
+6.95,0.0,0.008
+7.00,0.0,0.0
+7.05,0.0,0.0
+7.10,0.0,0.0

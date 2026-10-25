@@ -1136,7 +1136,17 @@ the reference's view factors hold through the pulse; items 9 and 10 remove that 
      example's default (with Young's albedo), the uniform backscatter cut
      (`backscatter=uniform`, renamed from `hydra`) is the run Fig. 10 is compared with,
      `capsule=mesh` stays off; with them the swing is −0.195 at 5.25 ns, crossing
-     6.24 ns, rms 0.044. Open: the decisions listed there (capsule schedule,
+     6.24 ns, rms 0.044. **Published inner-cone SBS histories (2026-10-25, research notes
+     "Inner-cone SBS time histories and the late-time refraction",
+     `reference/litreview/inner_cone_sbs.md`)**: Kemp et al., PoP 33, 082705 (2026) give
+     N210808's measured SBS per 23° and 30° quad (`kemp2026_sbs()`): early in the peak,
+     gone by ~7 ns, 23° 3.1× the 30°. On N221204 (`backscatter=history`, rise-aligned,
+     scaled to AS24's 42 kJ) the crossing does not move (6.20 against 6.19 ns), the
+     minimum is 0.029 shallower, the late drive unchanged. The late-time on-axis density
+     spike that refracts/absorbs the inner beams (~7 ns in the hydro, maybe ~1 ns earlier;
+     ~half the 30° power at 7 ns) is a `refraction` sensitivity, not yet run (stopped for
+     low memory); it would move the crossing earlier if anything. Decision needed: make
+     `history` the default. Open: the decisions listed there (capsule schedule,
      backscatter setting for Fig. 10, shrinking mesh), Izumi 2023's low-contrast stall
      and relaunch, and a HYBRID-E bubble / collision measurement, the only data that
      would close the remaining ~0.3 ns;
@@ -1365,6 +1375,11 @@ the reference's view factors hold through the pulse; items 9 and 10 remove that 
       the late-time deficit, more strongly (N191118 −73 eV at 8.5 ns, initial area): Dante's
       tail would take ~250–450 kJ more x-ray source after the fall, far more than any
       published reservoir. The pair is now the cleanest test of the late drive;
+    - **backscatter time history (2026-10-25, research notes "Inner-cone SBS time
+      histories and the late-time refraction")**: the published per-cone N210808 SBS
+      (Kemp 2026) as `backscatter=history`; energetics and Dante unchanged (the SBS ends
+      before the late peak in either shape); N221204's own per-cone history is
+      unpublished;
     - **benchmark targets checked (2026-10-25, same notes, `metrics=on`)**: hot-spot
       velocity 0 to round-off (the mock pointing and hohlraum have no mode 1; the
       measured 36 km/s needs per-quad powers, window or capsule mode-1 inputs, none

@@ -150,3 +150,20 @@ function lpi_summary(setup::AbstractVector{<:Beam}, eff::AbstractVector{<:Beam})
     end
     return out
 end
+
+"""
+    kemp2026_sbs() -> NamedTuple
+
+Measured inner-cone SBS backscatter of N210808 per quad against time: Kemp et al., PoP 33,
+082705 (2026) Fig. 2, digitized (`data/kemp2026_fig2.csv`, provenance in its header).
+Columns `t` (ns, 4.4–7.1 every 0.05), `inner23` and `inner30`: all backscattered SBS
+power of one 23° or 30° quad (TW; the in-lens signal × 3.4), cone-averaged over both
+hemispheres. The paper's energies are 2.8 and 0.9 kJ per quad (eight quads per cone);
+single-shot errors reach 100 %, N210808 repeats vary by 30–50 %. SBS starts as the inner
+power reaches its peak (the pre-CBET quad power is at half its 9 TW peak at 4.74 ns on
+this axis), peaks at 5.3 (23°) and 5.75 ns (30°) and ends by 6.6–6.9 ns, the 30° cone
+first (refraction and absorption by an on-axis density spike, the paper's §III C). Used
+by `examples/n221204.jl`'s `backscatter=history`. Research notes, "Inner-cone SBS time
+histories and the late-time refraction (2026-10-25)".
+"""
+kemp2026_sbs() = _data_table("kemp2026_fig2.csv")

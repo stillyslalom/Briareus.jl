@@ -27,6 +27,13 @@
     @test abs(k.n221204[findfirst(==(6.0), k.t)] - 0.92 / 0.985) < 0.03
     @test k.t[argmin(k.n221204)] == 9.5 && minimum(k.n221204) < 0.07
     @test all(k.n210808[k.t .<= 9.0] .<= k.n221204[k.t .<= 9.0] .+ 1e-12)   # thinner shell implodes first
+    # N210808's measured inner-cone SBS per quad (Kemp 2026 Fig. 2): the paper's 2.8 and
+    # 0.9 kJ per quad, the 23° peak at 5.3 ns before the 30°'s at 5.75, both gone by 7 ns
+    s = kemp2026_sbs()
+    dt = s.t[2] - s.t[1]
+    @test abs(sum(s.inner23) * dt - 2.8) < 0.15 && abs(sum(s.inner30) * dt - 0.9) < 0.05
+    @test abs(s.t[argmax(s.inner23)] - 5.3) < 0.03 && abs(s.t[argmax(s.inner30)] - 5.75) < 0.03
+    @test all(s.inner23[s.t .>= 6.95] .== 0) && all(s.inner30[s.t .>= 7.0] .== 0) && all(>=(0), s.inner23)
 
     kw = (length = 10.1, leh_radius = 1.55, capsule_radius = 0.9, h = 0.8, capsule_h = 0.4,
           wall = Material(:Au; albedo = 0.9, conversion = 0.8), corner_radius = 0.3)

@@ -119,6 +119,10 @@ Typical magnitudes:
 - **High-fill NIC.** Inner SRS reached tens of percent at peak. **M**
 - **Low-fill and recent ignition designs.** Small, mostly early inner-beam SBS; 96–99%
   coupling. **H**
+- **HYBRID-E per cone, time resolved** (N210808, Kemp et al., PoP 33, 082705 (2026)
+  Fig. 2, `kemp2026_sbs()`): 2.8 kJ per 23° quad and 0.9 kJ per 30° quad, from the start
+  of peak power to ~2 ns into it. See "Inner-cone SBS time histories and the late-time
+  refraction (2026-10-25)". **H**
 
 ## Unconverted light (NIF)
 
@@ -6374,3 +6378,99 @@ call `drive_history`/`optimize_pointing` with their own closures and now reuse t
 package's precompiled copies. `view_factors` on a CAD target still compiles ~2 s at
 first call when its parts differ from the workload's (sampled visibility on other
 element shapes). A robust objective (`uncertainty = ...`) is not in the workload.
+
+## Inner-cone SBS time histories and the late-time refraction (2026-10-25) *derived*
+
+ROADMAP 9 and 16. Literature: `reference/litreview/inner_cone_sbs.md` (Kemp et al., PoP
+33, 082705 (2026), doi:10.1063/5.0320730, accepted manuscript OSTI 3441608; the AAC 2025
+talk, OSTI 3388898; Higginson et al., PRL 134, 165101 (2025); Izumi et al., RSI 95,
+103510 (2024); Kemp et al., PoP 31, 042707 (2024), abstract only). Fig. 10 and Dante are
+checks; nothing is fitted to them. Confidence: **H** primary text, **H-img** digitized,
+**L** ours.
+
+### What is published
+
+| Quantity | Value | Source | Conf. |
+|---|---|---|---|
+| N210808 measured inner SBS, per quad (all light: in-lens × 3.4) | 23°: 2.8 kJ, peak 2.18 TW at 5.3 ns, gone by 6.95 ns; 30°: 0.9 kJ, shoulder 0.41 TW at 5.1, peak 0.90 TW at 5.75, gone by 6.7–7.0 ns; both start as the inner power reaches peak (half of its 9 TW per quad at 4.74 ns) | K26 Fig. 2 (`kemp2026_sbs()`, `data/kemp2026_fig2.csv`; integrates to 2.87 / 0.92 kJ) | H / H-img |
+| Errors | single shot up to 100 % (lens fraction, calibration); 30–50 % between N210808 repeats; the 23° sharp rise may be a processing artifact; DrD timing ±0.2 ns | K26 §II–III | H |
+| Inner SBS in total (N210808) | ~30 kJ (8 quads per cone; 23°:30° = 3.1:1) | arithmetic | L |
+| Modeled (pF3D on LASNEX maps) | single-species: 30° 2.42 TW at 6.0 ns (2.7× the measured peak), R 0.08 / 0.21 / 0.003 at 5 / 6 / 7 ns; multispecies: 30° 1.20 TW at 5.5 (1.7 kJ, 1.9× measured), 23° 2.0 TW at 5.75 (2.8 kJ, as measured), R(30°) 0.06 / 0.09 / 10⁻⁶; the drop after peak is in both models | K26 Figs. 2, 4; K25s | H, H-img |
+| Axis- vs equator-side beams | ~10:1 in peak in-lens SBS on HYBRID-E | K26 §III E | H |
+| On-axis density spike (N210808 MSH) | at z ≈ ±4.5 mm between capsule and LEH: n_e/n_c 0.01 to 6.0 ns, 0.02 at 6.5, 0.08 at 6.75, 0.15 at 7.0, 0.14 at 7.75 ns; similar in SSH; spectra suggest it forms ~1 ns earlier in the experiment | K26 Fig. 6a inset, §III D | H-img, H |
+| What the spike does to the inner beams | refracts them into the Au bubble and absorbs them on axis, "reducing the incident laser power in the region where SBS backscatter originates"; without it twice the 30° power reaches the ablator at 7 ns; the 30° (closer to the spike) loses its SBS 0.25 ns before the 23° | K26 §III C; K25s slide 11 | H |
+| The spike measured | N230313-002 (DT-filled N210404 hohlraum, power cut after 6.15 ns): bubble–axis neutrons at z ≈ ±3.4 mm, burn peak 8.15 ns; DT compressed to 4.3–5.6 mg/cc on axis (n_e/n_c ≈ 0.12–0.15 at 3ω, L); MSH matches the yield, SSH 3.5× high | H25 | H |
+| N221204 per-cone, time-resolved backscatter | not published (only AS24's 42 ± 11 kJ SBS, "early in peak power and mostly on the inner cones", and 6 ± 1 kJ SRS) | — | — |
+
+The refraction's published effect is less inner power reaching the ablator/waist region
+(absorbed on axis or deposited in the bubble, nearer the LEH), not a displaced spot: the
+transverse spectra broaden by a few hundredths of k₀ (a few degrees, a few tenths of a mm
+over the remaining path, below a spot size; *L*). No energy, 23° fraction or symmetry
+effect is given.
+
+### Against the example's `measured` shapes
+
+`measured` puts AS24's 42 kJ on a shape of our own: zero to 5.0 ns, flat 5.5–6.5, gone
+by 7.5 ns, the same fraction on both inner cones (16.8 % of the inner power over the
+plateau). The published N210808 history, on N221204's axis, is earlier, shorter and
+uneven between the cones: it starts ~0.3 ns earlier (4.73 ns), peaks in the first
+~0.7 ns of the peak (23° at 5.46 ns), is mostly over by 6.7 ns and gone by 7.1 (against
+7.5), and the 23° cone carries 76 % of it. The two agree on the
+energy scale (N210808 ~30 kJ, N221204 42 ± 11) and on "early in peak power".
+
+### `backscatter=history` (new option)
+
+`examples/n221204.jl backscatter=history`: each inner cone loses `kemp2026_sbs()`'s power
+per quad over its share of the delivered inner power, plus the same SRS as `measured`.
+Time map: N221204's inner power reaches half its peak 0.16 ns after N210808's 4.74 ns on
+K26's axis, so the curves move +0.16 ns (*L*: the shut-off follows the hydrodynamics,
+timed here by the rise). Energy: scaled ×1.39 to AS24's 42 kJ with N210808's 3.1:1 split
+(`sbs_energy=<kJ>` changes it; *L* for N221204's split). Result: 23° 31.8 kJ (peak 35.8 %
+of its delivered power), 30° 10.2 kJ (peak 13.9 %).
+
+N221204, full model, final defaults, coarse (0.8 / 0.4); `measured` from "Capsule
+absorption, conversion and the ablating-wall release" §2, reproduced in this tree by the
+identical uniform-cut run:
+
+| backscatter | min (at) | upward zero | 8 ns | rms vs Fig. 10 | P2/P0 at 5.5 / 6.5 ns | capsule / LEH share | Dante 1 8.0 / 8.5 / 9.0 (initial area) |
+|---|---|---|---|---|---|---|---|
+| `measured` (default) | −0.181 (5.25) | 6.19 | +0.080 | 0.047 | — | 13.8 / 24.7 % | 290.9 / 282.2 / 264.6 |
+| `history` | −0.152 (5.25) | 6.20 | +0.080 | 0.043 | −0.150 / +0.039 | 13.8 / 24.2 % | 290.9 / 282.2 / 264.6 |
+| uniform 48 kJ cut (Fig. 10's like-for-like) | −0.195 (5.25) | 6.24 | +0.080 | 0.044 | −0.186 / +0.032 | 14.0 / 24.1 % | 289.7 / 281.1 / 263.8 |
+| PRE 109 Fig. 10 (HYDRA) | −0.170 (5.60) | 6.67 | +0.095 | — | −0.169 / −0.045 | 16.2 / 25.2 % | measured 310.1 / 311.3 / 301.5 |
+
+- **Swing timing: unchanged** (6.20 against 6.19 ns; Fig. 10 6.67). The published
+  history removes the inner power earlier (mostly 4.9–6.3 ns), when the waist is most driven,
+  so the minimum is 0.029 shallower (−0.152 against −0.181; Fig. 10 −0.170), but it is
+  gone by ~7 ns either way, and the crossing at 6.2 ns is set by the bubble's absorption
+  and the collision (ridge stop at 6.09 ns), not by the backscatter. The minimum stays at
+  5.25 ns (Fig. 10 5.6).
+- **Late-time drive: unchanged** (Dante 1 and capsule Tr identical to 0.1 eV from 7.5 ns
+  on): in both shapes the SBS has ended before the late peak. The 6 kJ SRS is the same.
+- rms against Fig. 10 0.043 (0.047 `measured`); the capsule share is the same (13.8 %).
+
+### Refraction as a sensitivity (`refraction=<f>`, `refraction_shift=<ns>`)
+
+Implemented as a time-dependent inner power loss: a fraction f of the 30° power at the
+spike's peak, following the inset's density (normalized), the 23° cone 0.25 ns later, on
+the same time map as `history`; `refraction_shift=-1` puts it ~1 ns earlier (K26's
+hypothesis). K25s's "twice the power without the spike" gives f ≈ 0.5 for the 30° cone at
+7 ns (on N221204's axis 7.16 ns). The light is booked as lost: an upper bound on its
+effect on the wall drive, since part of it is absorbed in the bubble and converts there;
+`BubbleAbsorption` already absorbs 0.57–0.77 of the inner light in the bubble over
+6.5–7.0 ns on this shot, so the spike's "refraction into the bubble" partly double
+counts. **Not run**: the runs (`refraction=0.5`, with and without `refraction_shift=-1`,
+and a `measured` rerun) were stopped by the system for low memory, and are left for the
+next session. Expected direction (*L*): less inner power after ~6.7 ns (or ~5.7 ns
+shifted) makes the waist cooler, i.e. P2 more positive late and, if shifted, the crossing
+earlier: away from Fig. 10, not toward it.
+
+### Decisions needed
+
+- Whether `backscatter=history` replaces `measured` as the default: it is the published
+  per-cone time history (of N210808, rise-aligned and scaled to N221204's energy, both
+  *L*), against shapes of our own; swing timing and late drive are unchanged, the minimum
+  0.029 shallower.
+- Whether to keep N210808's 3.1:1 cone split for N221204 (unpublished) or split by power.
+- Whether to run and keep the `refraction` sensitivity, given the overlap with
+  `BubbleAbsorption`.

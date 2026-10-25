@@ -45,9 +45,14 @@
 # backscatter and the collision (2026-10-25)"):
 # - `schedule=k24|young`: the capsule radius schedule (below): N221204's own HYDRA
 #   radius (Kritcher 2024 Fig. 1, default) or Young's front shape through the 6 ns anchor;
-# - `backscatter=measured|uniform|off`: the measured inner-cone SBS/SRS (default) or a
-#   uniform 48 kJ power cut on every beam, the treatment PRE 109's HYDRA used (with the
-#   measured default, the full model is also run with the uniform cut, for Fig. 10);
+# - `backscatter=measured|history|uniform|off`: the measured inner-cone SBS/SRS energies
+#   on shapes of our own (default), the same energies on N210808's measured per-cone SBS
+#   time histories (`history`, Kemp 2026 Fig. 2), or a uniform 48 kJ power cut on every
+#   beam, the treatment PRE 109's HYDRA used (with `measured` or `history`, the full model
+#   is also run with the uniform cut, for Fig. 10); `sbs_energy=<kJ>` (default 42);
+# - `refraction=<f>`, `refraction_shift=<ns>`: a sensitivity, the inner power lost at the
+#   late-time on-axis density spike (Kemp 2026 §III C; research notes, "Inner-cone SBS time
+#   histories and the late-time refraction (2026-10-25)");
 # - `bubble_energy=<E>` (default 1.1), `collision=<ns>` (default 6.09): the bubble's
 #   picket fluence and the ablator–wall collision time.
 # Further options (research notes, "N221204 late-time drive (2026-10-24)"):
@@ -77,7 +82,7 @@ shot = get(pos, 7, "n221204")
 pair = shot in ("n191118", "n210601")
 for k in keys(opt)
     k in ("capsule", "capsule_albedo", "capsule_outside", "degrade", "lips", "lag", "unfold", "metrics", "dt", "alpha_m",
-          "schedule", "backscatter", "collision", "bubble_energy") ||
+          "schedule", "backscatter", "collision", "bubble_energy", "sbs_energy", "refraction", "refraction_shift") ||
         error("unknown option $k=$(opt[k])")
 end
 h = parse(Float64, get(pos, 1, "0.28"))
@@ -234,30 +239,84 @@ fine = range(0.0, 9.4, 9401)
 ∫(f) = sum(f(τ) for τ in fine) * step(fine)
 sbs_shape = PulseShape([0.0, 5.0, 5.5, 6.5, 7.5, 20.0], [0.0, 0.0, 1.0, 1.0, 0.0, 0.0])
 srs_shape = PulseShape([0.0, 5.4, 5.5, 9.0, 9.1, 20.0], [0.0, 0.0, 1.0, 1.0, 0.0, 0.0])
-f_sbs = 42.0 / ∫(τ -> sbs_shape(τ) * inner_power(τ))
+# `sbs_energy=<kJ>` (default 42, AS24's measured SBS): the SBS energy of `measured`,
+# `history` and (with the 6 kJ SRS) `uniform`, below.
+sbs_energy = parse(Float64, get(opt, "sbs_energy", "42"))
+f_sbs = sbs_energy / ∫(τ -> sbs_shape(τ) * inner_power(τ))
 f_srs = 6.0 / ∫(τ -> srs_shape(τ) * inner_power(τ))
 bs_fraction = PulseShape(collect(fine), [f_sbs * sbs_shape(τ) + f_srs * srs_shape(τ) for τ in fine])
+# `backscatter=history`: the measured per-cone SBS time histories of N210808 (Kemp et al.,
+# PoP 33, 082705 (2026) Fig. 2, `kemp2026_sbs()`; research notes, "Inner-cone SBS time
+# histories and the late-time refraction (2026-10-25)"): all backscattered SBS power of a
+# 23° and of a 30° quad, 2.8 and 0.9 kJ per quad, starting as the inner power reaches
+# peak, peaking at 5.3 and 5.75 ns and gone by 6.6–6.9 ns. On the shot's time axis: shifted
+# by the time the shot's inner power reaches half its peak, less N210808's 4.74 ns on the
+# paper's axis (*L*: the shut-off follows the hydrodynamics, timed here by the rise);
+# scaled to `sbs_energy` with N210808's 23°:30° split (3.1:1, *L* for N221204, whose
+# per-cone split is unpublished). Each cone's fraction is its SBS power over its share of
+# the delivered inner power (eight quads per cone, equal quad powers). SRS as above.
+k26 = kemp2026_sbs()
+function half_rise(t, P)
+    k = findfirst(>=(maximum(P) / 2), P)
+    return t[k-1] + (maximum(P) / 2 - P[k-1]) * (t[k] - t[k-1]) / (P[k] - P[k-1])
+end
+sbs_shift = half_rise(pt, Float64.(inner)) - 4.74
+E_quad = (sum(k26.inner23) + sum(k26.inner30)) * step(range(k26.t[1], k26.t[end], length(k26.t)))   # kJ, a 23° and a 30° quad
+sbs_scale = sbs_energy / (8E_quad)
+sbs_cone = Dict(g => PulseShape(k26.t .+ sbs_shift, getfield(k26, g)) for g in (:inner23, :inner30))
+history_fraction(g) = PulseShape(collect(fine), [inner_power(τ) > 0 ?
+    min(1.0, sbs_scale * sbs_cone[g](τ) / (inner_power(τ) / 16)) + f_srs * srs_shape(τ) : 0.0 for τ in fine])
 degrade = parse(Float64, get(opt, "degrade", "0.11"))
-# `backscatter=measured|uniform|off`: the measured SBS and SRS on the inner cones with the
-# shapes above (default, the physics: modeled backscatter is per cone and time dependent;
-# none for Zylstra's pair), or a uniform 48 kJ power cut, the same fraction of every
+# `backscatter=measured|history|uniform|off`: the measured SBS and SRS on the inner cones
+# with the shapes above (default, the physics: modeled backscatter is per cone and time
+# dependent; none for Zylstra's pair), the same energies on the published per-cone SBS
+# histories (`history`, above), or a uniform 48 kJ power cut, the same fraction of every
 # beam's power: one simple treatment, the one PRE 109's HYDRA used (backscatter "as part
 # of an effective total laser power multiplier", §II), so the like-for-like setting for
-# Fig. 10. With the measured default the full model is run a second time with the
+# Fig. 10. With `measured` or `history` the full model is run a second time with the
 # uniform cut, and Fig. 10 is compared with that run.
 bs_mode = get(opt, "backscatter", pair ? "off" : "measured")
-bs_mode in ("measured", "uniform", "off") || error("backscatter=measured, uniform or off, not $bs_mode")
-backscatter = bs_mode == "measured"
+bs_mode in ("measured", "history", "uniform", "off") ||
+    error("backscatter=measured, history, uniform or off, not $bs_mode")
+backscatter = bs_mode in ("measured", "history")
 measured_cut = Backscatter(:inner23 => bs_fraction, :inner30 => bs_fraction)
-uniform_cut = Backscatter((g => 48.0 / sum(pulse_energy(pulses[b.group]) for b in beams)
+history_cut = Backscatter(:inner23 => history_fraction(:inner23), :inner30 => history_fraction(:inner30))
+uniform_cut = Backscatter((g => (sbs_energy + 6.0) / sum(pulse_energy(pulses[b.group]) for b in beams)
                            for g in (:inner23, :inner30, :outer44, :outer50))...)
 degradation = degrade > 0 ? Any[Backscatter((g => degrade for g in (:inner23, :inner30, :outer44, :outer50))...)] : Any[]
-lpi_pre(mode) = Any[(mode == "measured" ? [measured_cut] : mode == "uniform" ? [uniform_cut] : [])...; degradation...]
+# `refraction=<f>` (default 0), a sensitivity: the inner power lost at the on-axis density
+# spike between capsule and LEH that refracts the inner beams into the gold bubble and
+# absorbs them (Kemp 2026 §III C): a fraction f of the 30° power at the spike's peak,
+# following the spike's density on axis in the paper's MSH simulation of N210808 (Fig. 6a
+# inset: n_e/n_c 0.01 to 6.0 ns, 0.02 at 6.5, 0.08 at 6.75, 0.15 at 7.0, 0.14 at 7.75),
+# the 23° cone the same 0.25 ns later (its SBS ends 0.25 ns after the 30°'s), on the
+# shot's axis as `history`; `refraction_shift=<ns>` moves it (−1: the paper's hypothesis
+# that the spike forms ~1 ns before the hydrodynamics predicts). The paper's only number:
+# without the 7 ns spike, twice the 30° power reaches the ablator (AAC 2025, OSTI
+# 3388898), so f = 0.5 there. The light is booked as lost (an upper bound on its effect
+# on the wall drive: part of it is absorbed in the bubble and converts there). *L*.
+refraction = parse(Float64, get(opt, "refraction", "0"))
+refraction_shift = parse(Float64, get(opt, "refraction_shift", "0"))
+spike = PulseShape([0.0, 6.0, 6.5, 6.75, 7.0, 7.75, 20.0], [0.0, 0.0, 0.01, 0.07, 0.14, 0.13, 0.13] ./ 0.14)
+spike_at(τ, lag) = spike(τ - sbs_shift - refraction_shift - lag)
+refraction_loss = Backscatter(:inner30 => PulseShape(collect(fine), [refraction * spike_at(τ, 0.0) for τ in fine]),
+                              :inner23 => PulseShape(collect(fine), [refraction * spike_at(τ, 0.25) for τ in fine]))
+lpi_pre(mode) = Any[(mode == "measured" ? [measured_cut] : mode == "history" ? [history_cut] :
+                     mode == "uniform" ? [uniform_cut] : [])...;
+                    (refraction > 0 ? [refraction_loss] : [])...; degradation...]
 pre = lpi_pre(bs_mode)
 # the laser–plasma models of a run: `p` (`pre`) first; exactly the given model(s) without it
 with_pre(ms...; p = pre) = isempty(p) ? (length(ms) == 1 ? ms[1] : ms) : (p..., ms...)
-backscatter &&
+bs_mode == "measured" &&
     @printf("backscatter: SBS %.1f %% of the inner power over 5.5–6.5 ns, SRS %.2f %% over the peak\n", 100f_sbs, 100f_srs)
+if bs_mode == "history"
+    e(g) = ∫(τ -> sbs_scale * sbs_cone[g](τ)) * 8
+    pk(g) = maximum(history_fraction(g).(fine)) - f_srs
+    @printf("backscatter: per-cone SBS histories (Kemp 2026, N210808) shifted %+.2f ns, ×%.2f: 23° %.1f kJ (peak %.1f %%), 30° %.1f kJ (peak %.1f %%); SRS %.2f %% over the peak\n",
+            sbs_shift, sbs_scale, e(:inner23), 100pk(:inner23), e(:inner30), 100pk(:inner30), 100f_srs)
+end
+refraction > 0 && @printf("refraction: %.0f %% of the 30° power lost at the spike's peak (%.2f ns on this axis)\n",
+                          100refraction, 7.0 + sbs_shift + refraction_shift)
 degrade > 0 && @printf("degradation %.0f %%\n", 100degrade)
 
 # CBET: the reduced model at the deck's settings, δn/n clamp 0.002 until the start of
