@@ -6384,7 +6384,7 @@ element shapes). A robust objective (`uncertainty = ...`) is not in the workload
 ROADMAP 9 and 16. Literature: `reference/litreview/inner_cone_sbs.md` (Kemp et al., PoP
 33, 082705 (2026), doi:10.1063/5.0320730, accepted manuscript OSTI 3441608; the AAC 2025
 talk, OSTI 3388898; Higginson et al., PRL 134, 165101 (2025); Izumi et al., RSI 95,
-103510 (2024); Kemp et al., PoP 31, 042707 (2024), abstract only). Fig. 10 and Dante are
+103510 (2024); Kemp et al., PoP 31, 042707 (2024), outer cones). Fig. 10 and Dante are
 checks; nothing is fitted to them. Confidence: **H** primary text, **H-img** digitized,
 **L** ours.
 
@@ -6400,6 +6400,7 @@ checks; nothing is fitted to them. Confidence: **H** primary text, **H-img** dig
 | On-axis density spike (N210808 MSH) | at z ≈ ±4.5 mm between capsule and LEH: n_e/n_c 0.01 to 6.0 ns, 0.02 at 6.5, 0.08 at 6.75, 0.15 at 7.0, 0.14 at 7.75 ns; similar in SSH; spectra suggest it forms ~1 ns earlier in the experiment | K26 Fig. 6a inset, §III D | H-img, H |
 | What the spike does to the inner beams | refracts them into the Au bubble and absorbs them on axis, "reducing the incident laser power in the region where SBS backscatter originates"; without it twice the 30° power reaches the ablator at 7 ns; the 30° (closer to the spike) loses its SBS 0.25 ns before the 23° | K26 §III C; K25s slide 11 | H |
 | The spike measured | N230313-002 (DT-filled N210404 hohlraum, power cut after 6.15 ns): bubble–axis neutrons at z ≈ ±3.4 mm, burn peak 8.15 ns; DT compressed to 4.3–5.6 mg/cc on axis (n_e/n_c ≈ 0.12–0.15 at 3ω, L); MSH matches the yield, SSH 3.5× high | H25 | H |
+| Outer 50° cone, N210808 (Q36B, FABS, one quad) | 170 J per quad (50 J into the lens; pF3D 40 J), one burst from ~6.8 ns to 0.20 TW at ~7.4 ns, gone by ~7.9 ns (pF3D peaks ~0.5 ns earlier); noise floor 0.02–0.05 TW; 44° not studied. HYBRID-E peak reflectivity 0.012–0.08 (BigFoot 0.04–0.35) | Kemp et al., PoP 31, 042707 (2024) Figs. 1, 3, 6 | H, H-img |
 | N221204 per-cone, time-resolved backscatter | not published (only AS24's 42 ± 11 kJ SBS, "early in peak power and mostly on the inner cones", and 6 ± 1 kJ SRS) | — | — |
 
 The refraction's published effect is less inner power reaching the ablator/waist region
@@ -6459,18 +6460,39 @@ hypothesis). K25s's "twice the power without the spike" gives f ≈ 0.5 for the 
 effect on the wall drive, since part of it is absorbed in the bubble and converts there;
 `BubbleAbsorption` already absorbs 0.57–0.77 of the inner light in the bubble over
 6.5–7.0 ns on this shot, so the spike's "refraction into the bubble" partly double
-counts. **Not run**: the runs (`refraction=0.5`, with and without `refraction_shift=-1`,
-and a `measured` rerun) were stopped by the system for low memory, and are left for the
-next session. Expected direction (*L*): less inner power after ~6.7 ns (or ~5.7 ns
-shifted) makes the waist cooler, i.e. P2 more positive late and, if shifted, the crossing
-earlier: away from Fig. 10, not toward it.
+counts. The spike's density is held at its last published value (0.14 at 7.75 ns) after that
+(*L*), so the loss holds to the end of the pulse: a bound, not a model. Run on the `measured` default (coarse, full model):
 
-### Decisions needed
+| | min (at) | upward zero | 6.5 / 7.0 / 8.0 ns | rms vs Fig. 10 | Dante 1 8.0 / 8.5 / 9.0 | capsule Tr peak | lost (backscatter + degradation + refraction) |
+|---|---|---|---|---|---|---|---|
+| `measured` | −0.181 (5.25) | 6.19 | — / — / +0.080 | 0.047 | 290.9 / 282.2 / 264.6 | 306 (8.0) | 268 kJ |
+| `refraction=0.5 refraction_shift=-1` (spike at 6.16 ns) | −0.180 (5.25) | **6.09** | +0.085 / +0.099 / +0.085 | 0.057 | 279.4 / 268.8 / 247.0 | 293.6 (8.0) | 458 kJ |
+| the same, uniform cut | −0.194 (5.25) | 6.14 | +0.074 / +0.097 / +0.085 | 0.053 | 278.1 / 267.6 / 246.0 | 292.2 | 465 kJ |
 
-- Whether `backscatter=history` replaces `measured` as the default: it is the published
-  per-cone time history (of N210808, rise-aligned and scaled to N221204's energy, both
-  *L*), against shapes of our own; swing timing and late drive are unchanged, the minimum
-  0.029 shallower.
-- Whether to keep N210808's 3.1:1 cone split for N221204 (unpublished) or split by power.
-- Whether to run and keep the `refraction` sensitivity, given the overlap with
-  `BubbleAbsorption`.
+- Booked as lost from ~6.2 ns to the end, 50 % of the 30° power (and of the 23°, 0.25 ns
+  later) removes ~190 kJ: the crossing moves **0.10 ns earlier** (away from Fig. 10's
+  6.67), P2 rises late (+0.085 to +0.099 at 6.5–7 ns against Fig. 10's −0.045 / +0.046),
+  and Dante falls 11–18 eV through the late peak (the late deficit grows). So the
+  refraction, if it removes inner light from the hohlraum, cannot be what delays HYDRA's
+  swing; on its published numbers it acts the other way. If the refracted light is
+  instead absorbed in the bubble and converted (the bubble model's ridge stop already
+  does this from 6.09 ns), the drive loss shrinks and the symmetry effect stays.
+- `refraction=0.5` at the hydro's own timing (spike at 7.16 ns) crashed on the
+  environmental libuv assertion; command for the next session:
+  `julia --project=. -t 4 examples/n221204.jl 0.8 0.4 full backscatter=measured refraction=0.5`.
+  Expected (*L*): the same direction, after the crossing (P2 more positive from ~7 ns,
+  Dante lower), crossing unchanged.
+
+### Outer cones
+
+Kemp 2024's outer-cone history is one 50° quad on N210808 (FABS; not cone-averaged, 44°
+not studied, noise at a quarter of the peak): ~2.7 kJ over the sixteen 50° quads (*L*),
+10–20 % of the inner SBS, late (7–8 ns). `backscatter=history` stays inner-only: the
+outer history is not published cone-averaged, and ~2 % of the 50° power for ~0.7 ns moves
+the post-CBET cone fraction by < 1 point (≲ 0.003 in P2/P0, after the crossing).
+
+### Decisions (coordinator, 2026-10-25, pending the user)
+
+- `measured` stays the default; `history` is an option; its 3.1:1 cone split is
+  N210808's (Kemp 2026), unpublished for N221204.
+- `refraction` stays a bound (booked as lost; overlaps `BubbleAbsorption`).

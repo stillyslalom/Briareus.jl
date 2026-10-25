@@ -20,7 +20,7 @@ citations, no text or figures reproduced.
 | K25s | Same authors, AAC 2025 talk (Sedona, 2025-05-11), LLNL-CFPRES-2006194, OSTI 3388898 (doi:10.2172/3388898) | full slides | per-time reflectivities, "2× incoming power" without the spike, N210404 |
 | H25 | D. P. Higginson et al., "Direct evidence of multispecies hydrodynamics in ignition-scale hohlraums", PRL 134, 165101 (2025), doi:10.1103/PhysRevLett.134.165101 | full text: LLNL-JRNL-871162, OSTI 2571728 | the bubble–axis stagnation measured with DT gas (N230313-002) |
 | I24 | N. Izumi et al., "Neutron imaging of the deuterium–tritium tamping gas volume in an inertial confinement fusion hohlraum", RSI 95, 103510 (2024), doi:10.1063/5.0219564 | full text: OSTI 2476138 | the imager; the shot's pulse (power halved after 6.4 ns) |
-| K24o | A. J. Kemp, M. Belyaev, N. Lemos, T. Chapman, L. Divol, E. Kur, P. Michel, "Modeling stimulated Brillouin backscatter from outer-cone quads across multiple inertial confinement fusion hohlraum designs", PoP 31, 042707 (2024), doi:10.1063/5.0179693 (LLNL-JRNL-853952) | abstract only (open access, CC BY-NC-ND, but the publisher's PDF is behind a bot check; OSTI has no full text) | **M**: outer-cone pF3D reflected powers, energies and spectra "compare favorably" with measurements |
+| K24o | A. J. Kemp, M. Belyaev, N. Lemos, T. Chapman, L. Divol, E. Kur, P. Michel, "Modeling stimulated Brillouin backscatter from outer-cone quads across multiple inertial confinement fusion hohlraum designs", PoP 31, 042707 (2024), doi:10.1063/5.0179693 (LLNL-JRNL-853952; open access, CC BY-NC-ND) | full text (publisher PDF, supplied by the user) | outer 50° SBS per platform (Figs. 1, 3) and N210808's Q36B history (Fig. 6) |
 | LLNL26 | LLNL news, "LLNL researchers improve predictive modeling of laser backscatter" (lmf.llnl.gov, 2026) | web | summary of K26 |
 
 ## 2. Inner-cone SBS: what is measured (K26 §II, Fig. 2; **H**, **H-img**)
@@ -112,14 +112,37 @@ citations, no text or figures reproduced.
   compresses the DT on axis to 4.3–5.6 mg/cc (14–19×), i.e. n_e/n_c ≈ 0.12–0.15 at 3ω
   (**L**), the spike's density. Its timing on a full-power N221204 pulse is not measured.
 
-## 5. Outer cones (K24o abstract; K26; **M**)
+## 5. Outer cones (K24o; K26; **H**, **H-img**)
 
-- K24o surveys backward SBS on outer-cone quads of several platforms with pF3D (on HYDRA
-  SSH maps) and finds reflected powers, energies and spectra "compare favorably" with
-  measurements; per-shot numbers not read (full text not retrieved).
-- K26: outer-cone SBS was the BigFoot-era design limit (rising, high late-time SBS); in
-  HYBRID it is much reduced by design changes and Δλ (CBET moves power from the outer
-  cones); it originates deeper in the Au bubble and MSH changes it less.
+- **What is measured.** 50° outer quads only (FABS on Q36B, DrDs elsewhere, the same
+  cone-averaging statistics as K26; the 44° quads are not studied). SBS energy *into the
+  lenses* of one 50° quad (Fig. 3, read by eye, ±10 J): HYBRID-E N210808 ~50 J
+  (pF3D 40 J); N190218 ~10, N190320 ~55, N200125 ~105, N191110 ~230 (2019–2021 HYBRID-E
+  shots; pF3D 140, 180, 145, 300 J); BigFoot/Hybrid-B N170702 ~125, N170601 ~265,
+  N180429 ~175, N180319 ~540, N180128 ~715 J (pF3D 25, 85, 215, 310, 410). Errors ~30 %
+  (simulation sampling) and the measured spread around the cone; model and measurement
+  agree to within a factor ~2.
+- **Peak reflectivity** (Fig. 1, R_peak = max over time of P_SBS / P_net, P_net the
+  post-CBET quad power from HYDRA's CBET model): HYBRID-E 0.012–0.08 measured (pF3D
+  0.02–0.05), Hybrid-B 0.05–0.16, BigFoot 0.04–0.35 (pF3D 0.1–0.4); the historical fall
+  came from design changes and from Δλ moving power off the outer cones.
+- **N210808's time history** (Fig. 6, one quad, Q36B, FABS; DrDs were noise-dominated):
+  nothing above the noise (~0.02–0.05 TW) before ~6.5 ns; a single burst rising from
+  ~6.8 ns to 0.20 TW at ~7.4 ns and gone by ~7.9 ns, i.e. late in the peak, after the
+  inner SBS has ended. Integrated 6–8 ns: 170 J per quad, 50 J into the lens (×1/3.4).
+  pF3D peaks ~0.5 ns earlier (R < 10⁻⁴ at 6 ns, 0.024 at 7 ns, from the Au LEH liner's
+  expansion at 7 ns) and gives 40 J into the lens. On a ~9 TW pre-CBET quad (Fig. 4a:
+  the outer cones' 32 quads carry ~300 TW), 0.2 TW is ~2 % at peak (**L**).
+- **Scale** (**L**): 16 quads at 50° × 170 J ≈ 2.7 kJ of outer SBS on N210808 (unknown at
+  44°; ≤ 5.4 kJ if the same), against ~30 kJ on the inner cones: ~10–20 %, consistent
+  with AS24's "mostly on the inner cones" for N221204.
+- K26: outer-cone SBS originates deeper in the Au bubble and MSH changes it less.
+- **Use in Briareus** (**L**): the outer history is one quad on one shot, at one of the two
+  outer cones, with the noise floor at a quarter of its peak; it is not cone-averaged and
+  N221204's is unpublished. `backscatter=history` therefore stays inner-only. Its
+  effect would be small: ~2 % of the 50° power for ~0.7 ns near 7.4 ns raises the
+  post-CBET cone fraction by < 1 point there, ≲ 0.003 in flux P2/P0 by the
+  −0.29 %/% sensitivity, after the swing's zero crossing.
 
 ## 6. Bearing on Briareus
 
@@ -136,7 +159,8 @@ citations, no text or figures reproduced.
    ~7 ns (hydro), possibly ~6 ns (spectra). Briareus's `BubbleAbsorption` already
    absorbs a rising share of the inner light in the bubble (0.22 → 0.57 over 5.5–6.5 ns
    on HYBRID-E) before the ridge stop: the spike's "refraction into the Au bubble" is
-   partly the same physics, so a separate loss would double count. Tried as a bounded
-   sensitivity (`refraction`).
+   partly the same physics, so a separate loss would double count. Tried as a bound
+   (`refraction`, research notes): booked as lost with the spike ~1 ns early, it moves
+   the crossing earlier and lowers the late drive, away from Fig. 10.
 4. Neither paper gives N221204's per-cone SBS. Applying N210808's history to N221204
    needs a time map (rise-aligned, *L*) and an energy (AS24's 42 kJ).

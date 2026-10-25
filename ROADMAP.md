@@ -1144,9 +1144,11 @@ the reference's view factors hold through the pulse; items 9 and 10 remove that 
      scaled to AS24's 42 kJ) the crossing does not move (6.20 against 6.19 ns), the
      minimum is 0.029 shallower, the late drive unchanged. The late-time on-axis density
      spike that refracts/absorbs the inner beams (~7 ns in the hydro, maybe ~1 ns earlier;
-     ~half the 30° power at 7 ns) is a `refraction` sensitivity, not yet run (stopped for
-     low memory); it would move the crossing earlier if anything. Decision needed: make
-     `history` the default. Open: the decisions listed there (capsule schedule,
+     ~half the 30° power at 7 ns) is a `refraction` bound: booked as lost with the spike
+     ~1 ns early, it moves the crossing 0.10 ns *earlier* (6.09) and lowers Dante
+     11–18 eV late, away from Fig. 10. Kemp 2024's outer-cone history (one 50° quad,
+     ~170 J, 7–8 ns) is too small and too sparse to add. Decided (coordinator, pending the
+     user): `measured` stays the default, `history` an option. Open: the decisions listed there (capsule schedule,
      backscatter setting for Fig. 10, shrinking mesh), Izumi 2023's low-contrast stall
      and relaunch, and a HYBRID-E bubble / collision measurement, the only data that
      would close the remaining ~0.3 ns;

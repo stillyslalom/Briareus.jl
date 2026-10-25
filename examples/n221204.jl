@@ -288,7 +288,8 @@ degradation = degrade > 0 ? Any[Backscatter((g => degrade for g in (:inner23, :i
 # spike between capsule and LEH that refracts the inner beams into the gold bubble and
 # absorbs them (Kemp 2026 §III C): a fraction f of the 30° power at the spike's peak,
 # following the spike's density on axis in the paper's MSH simulation of N210808 (Fig. 6a
-# inset: n_e/n_c 0.01 to 6.0 ns, 0.02 at 6.5, 0.08 at 6.75, 0.15 at 7.0, 0.14 at 7.75),
+# inset: n_e/n_c 0.01 to 6.0 ns, 0.02 at 6.5, 0.08 at 6.75, 0.15 at 7.0, 0.14 at 7.75; held
+# after that, *L*),
 # the 23° cone the same 0.25 ns later (its SBS ends 0.25 ns after the 30°'s), on the
 # shot's axis as `history`; `refraction_shift=<ns>` moves it (−1: the paper's hypothesis
 # that the spike forms ~1 ns before the hydrodynamics predicts). The paper's only number:
