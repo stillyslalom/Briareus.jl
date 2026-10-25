@@ -20,6 +20,13 @@
     f1a = pre109_fig1a_wall()
     waist = findall(z -> z <= 0.7, f1a.z)
     @test all(0.33 .< 3.2 .- f1a.n221204[waist] .< 0.42)
+    # N221204's HYDRA capsule radius (Kritcher 2024 Fig. 1): flat to the first shock's
+    # breakout, the 6 ns ice–gas interface (0.92 of 0.985 mm), monotone, minimum at bang
+    k = kritcher2024_capsule()
+    @test all(k.n221204[k.t .<= 3.5] .== 1) && all(diff(k.n221204) .<= 0)
+    @test abs(k.n221204[findfirst(==(6.0), k.t)] - 0.92 / 0.985) < 0.03
+    @test k.t[argmin(k.n221204)] == 9.5 && minimum(k.n221204) < 0.07
+    @test all(k.n210808[k.t .<= 9.0] .<= k.n221204[k.t .<= 9.0] .+ 1e-12)   # thinner shell implodes first
 
     kw = (length = 10.1, leh_radius = 1.55, capsule_radius = 0.9, h = 0.8, capsule_h = 0.4,
           wall = Material(:Au; albedo = 0.9, conversion = 0.8), corner_radius = 0.3)

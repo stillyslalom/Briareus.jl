@@ -1,0 +1,61 @@
+# Simulated scaled capsule radius against time for N221204's 2.05 MJ drive, from A. L. Kritcher
+# et al., Phys. Plasmas 31, 070502 (2024), doi:10.1063/5.0210904 (CC BY 4.0), Fig. 1 bottom
+# right ("Scaled capsule Radius vs time", HYDRA): the thicker as-shot N221204 capsule (red)
+# and the thinner N210808 capsule on the same drive (black). The radius has no axis of its own:
+# it is drawn on the panel's Tr axis with its initial value at the 300 eV line and zero at
+# 0 eV, read as R/R(0). Which radius is not stated; it stays at R(0) until ~3.6 ns (red) /
+# ~3.4 ns (black), the first shock's breakout into the gas (N221204-design keyhole N230110:
+# 3.86-3.91 ns; N210808 design 3.65-3.71 ns, Ruof et al. PoP 33, 052706 (2026) Table II), and
+# its 0.906 at 6 ns matches the ice-gas interface drawn at 6 ns in the paper's Fig. 1 (and
+# PRE 109, 025204 Fig. 1a): 0.92 mm against an initial 0.985 mm (1.050 HDC inner radius
+# minus 65 um of ice). So it is the fuel's inner surface, not the ablation front. Its
+# minimum, 0.055 at 9.54 ns (black 0.055 at 9.18), falls at N221204's bang time
+# (9.53 +/- 0.07 ns). Digitized 2026-10-25 from the figure's embedded raster (1647 x 986 px):
+# time from the bottom and top tick marks (45.4 px per ns, 8 ns at column 1539.5, residual
+# < 2 px, +/-0.04 ns), radius from the left-axis ticks (20 eV = 23.9 px; 300 eV at row 546.5,
+# 0 at 904.5). Each value is the stroke centre (6 px wide, 0.017) tracked column by column
+# and normalized by the curve's own flat start (red 1.004, black 0.999); +/-0.01 where the
+# stroke is clear, 0.02 at 9.25 ns (red hidden under the black rebound, interpolated). The
+# black curve after its minimum (9.18 ns) is not read (NaN). Research notes, "The P2 swing:
+# capsule radius, backscatter and the collision (2026-10-25)".
+# Columns: t (ns); n221204, n210808 (R/R(0)); u (reading error of n221204)
+t,n221204,n210808,u
+0.00,1.000,1.000,0.01
+0.25,1.000,1.000,0.01
+0.50,1.000,1.000,0.01
+0.75,1.000,1.000,0.01
+1.00,1.000,1.000,0.01
+1.25,1.000,1.000,0.01
+1.50,1.000,1.000,0.01
+1.75,1.000,1.000,0.01
+2.00,1.000,1.000,0.01
+2.25,1.000,1.000,0.01
+2.50,1.000,1.000,0.01
+2.75,1.000,1.000,0.01
+3.00,1.000,1.000,0.01
+3.25,1.000,1.000,0.01
+3.50,1.000,0.999,0.01
+3.75,0.995,0.993,0.01
+4.00,0.990,0.987,0.01
+4.25,0.985,0.981,0.01
+4.50,0.978,0.975,0.01
+4.75,0.972,0.968,0.01
+5.00,0.965,0.959,0.01
+5.25,0.954,0.947,0.01
+5.50,0.943,0.931,0.01
+5.75,0.928,0.909,0.01
+6.00,0.906,0.881,0.01
+6.25,0.875,0.849,0.01
+6.50,0.844,0.811,0.01
+6.75,0.808,0.770,0.01
+7.00,0.767,0.720,0.01
+7.25,0.719,0.662,0.01
+7.50,0.666,0.597,0.01
+7.75,0.605,0.527,0.01
+8.00,0.537,0.452,0.01
+8.25,0.463,0.369,0.01
+8.50,0.384,0.284,0.01
+8.75,0.303,0.196,0.01
+9.00,0.220,0.108,0.01
+9.25,0.140,NaN,0.02
+9.50,0.057,NaN,0.01

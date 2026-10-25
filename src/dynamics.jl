@@ -112,6 +112,22 @@ upper bound on the radius. The waist rows (z < 0.9 mm) give the usable number: t
 pre109_fig1a_wall() = _data_table("pre109_fig1a_wall.csv")
 
 """
+    kritcher2024_capsule() -> NamedTuple
+
+HYDRA's scaled capsule radius R/R(0) against time on N221204's 2.05 MJ drive: Kritcher et
+al., PoP 31, 070502 (2024) Fig. 1, digitized (`data/kritcher2024_fig1.csv`, provenance in
+its header). Columns `t` (ns, 0–9.5 every 0.25), `n221204` (the as-shot, thicker capsule),
+`n210808` (the thinner N210808 capsule on the same drive; NaN after its minimum at
+9.18 ns) and `u` (reading error of `n221204`). The radius is the fuel's inner (ice–gas)
+surface, not the ablation front: it holds until the first shock breaks out (~3.6 ns),
+reads 0.906 at 6 ns where the paper's 6 ns picture draws the ice–gas interface at
+0.92 mm (initially 0.985), and reaches its minimum at bang time (9.53 ns). The only
+published radius history of the N221204 capsule. Research notes, "The P2 swing: capsule
+radius, backscatter and the collision (2026-10-25)".
+"""
+kritcher2024_capsule() = _data_table("kritcher2024_fig1.csv")
+
+"""
     moving_hohlraum(motion::WallMotion; radius = 2.875, kwargs...) -> (τ -> Target)
 
 The `hohlraum(; radius, kwargs...)` at time `τ` with its wall moved in by `motion`: the

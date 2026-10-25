@@ -40,6 +40,14 @@
 #   (published, not fitted);
 # - `degrade=<fraction>`: HYDRA's laser degradation (PRE 109 App. 3: 9–13 %), default
 #   0.11, the middle of the range.
+# Sensitivities of the P2 swing (research notes, "The P2 swing: capsule radius,
+# backscatter and the collision (2026-10-25)"):
+# - `schedule=young|k24`: the capsule radius schedule (below): Young's front shape
+#   through the 6 ns anchor (default) or N221204's own HYDRA radius (Kritcher 2024 Fig. 1);
+# - `backscatter=measured|hydra|off`: the measured inner-cone SBS/SRS (default) or the
+#   same energy as a uniform power multiplier, as HYDRA has it;
+# - `bubble_energy=<E>` (default 1.1), `collision=<ns>` (default 6.09): the bubble's
+#   picket fluence and the ablator–wall collision time.
 # Further options (research notes, "N221204 late-time drive (2026-10-24)"):
 # - `pulse=pak|dn24`: the delivered total power from Pak et al. PRE 109, 025203 Fig. 1
 #   (default, `n221204_pulse()`) or the earlier by-eye DN24 table;
@@ -68,7 +76,8 @@ shot = get(pos, 7, "n221204")
 # them (N221204's measured SBS/SRS would not apply).
 pair = shot in ("n191118", "n210601")
 for k in keys(opt)
-    k in ("capsule", "capsule_albedo", "degrade", "pulse", "lips", "lag", "unfold", "metrics", "dt", "alpha_m") ||
+    k in ("capsule", "capsule_albedo", "degrade", "pulse", "lips", "lag", "unfold", "metrics", "dt", "alpha_m",
+          "schedule", "backscatter", "collision", "bubble_energy") ||
         error("unknown option $k=$(opt[k])")
 end
 h = parse(Float64, get(pos, 1, "0.28"))
@@ -92,6 +101,18 @@ yr = young2020_radii()
 ty = yr.t
 tmap = [τ <= 5.75 ? τ * 6.0 / 5.75 : 6.0 + (τ - 5.75) * (bang - 6.0) / (7.75 - 5.75) for τ in ty]
 capsule_schedule = (tmap, yr.capsule ./ yr.capsule[1])
+# The 0.92 mm at 6 ns is the ice–gas interface (K24's caption of the same picture), not
+# the ablation front, which lies outside it: with zero shell thickness the front would be
+# at 0.87 × 0.906 = 0.79 R₀, so this schedule sits near that lower bound (research notes,
+# "The P2 swing: capsule radius, backscatter and the collision (2026-10-25)").
+# `schedule=k24`: N221204's own HYDRA radius history instead (Kritcher et al., PoP 31,
+# 070502 (2024) Fig. 1, `kritcher2024_capsule()`, the fuel's inner surface scaled to its
+# start) applied to the whole capsule, as if the shell kept its relative thickness: an
+# upper bound on the front (0.906 R₀ at 6 ns), on its own time axis (no map).
+if get(opt, "schedule", "young") == "k24"
+    k24 = kritcher2024_capsule()
+    capsule_schedule = (k24.t, k24.n221204)
+end
 # `capsule_albedo=young`: the quasi-1D HYDRA ablator albedo of the same dynamic model
 # (Young 2020 Fig. 3a top, `young2020_albedos()`) on the same time map, instead of a
 # number. `capsule=mesh`: the schedule shrinks the capsule mesh itself on the keyframes
@@ -207,9 +228,18 @@ f_sbs = 42.0 / ∫(τ -> sbs_shape(τ) * inner_power(τ))
 f_srs = 6.0 / ∫(τ -> srs_shape(τ) * inner_power(τ))
 bs_fraction = PulseShape(collect(fine), [f_sbs * sbs_shape(τ) + f_srs * srs_shape(τ) for τ in fine])
 degrade = parse(Float64, get(opt, "degrade", "0.11"))
-backscatter = !pair
+# `backscatter=measured|hydra|off`: the measured SBS and SRS on the inner cones with the
+# shapes above (default; none for Zylstra's pair), or the same 48 kJ as a uniform
+# fraction of every beam's power, as PRE 109's HYDRA treats backscatter ("as part of an
+# effective total laser power multiplier", §II): the like-for-like setting for Fig. 10.
+bs_mode = get(opt, "backscatter", pair ? "off" : "measured")
+bs_mode in ("measured", "hydra", "off") || error("backscatter=measured, hydra or off, not $bs_mode")
+backscatter = bs_mode == "measured"
 pre = Any[]
 backscatter && push!(pre, Backscatter(:inner23 => bs_fraction, :inner30 => bs_fraction))
+bs_mode == "hydra" &&
+    push!(pre, Backscatter((g => 48.0 / sum(pulse_energy(pulses[b.group]) for b in beams)
+                            for g in (:inner23, :inner30, :outer44, :outer50))...))
 degrade > 0 && push!(pre, Backscatter((g => degrade for g in (:inner23, :inner30, :outer44, :outer50))...))
 # the laser–plasma models of a run: `pre` first; exactly the given model(s) without it
 with_pre(ms...) = isempty(pre) ? (length(ms) == 1 ? ms[1] : ms) : (pre..., ms...)
@@ -283,8 +313,12 @@ else
     lip, r_open = dynamics == "late_lips" ?
         (GapClosure(closure = 5.0, width = 0.5, after = WallLossAlbedo()), 0.84) :
         (GapClosure(closure = -0.1, width = 7.85, after = WallLossAlbedo()), 0.857)
+    # `bubble_energy=<E>` (default 1.1) and `collision=<ns>` (default the gap scaling,
+    # 6.09 ns) for sensitivity runs (research notes, "The P2 swing: capsule radius,
+    # backscatter and the collision (2026-10-25)")
+    bkw = haskey(opt, "collision") ? (; collision = parse(Float64, opt["collision"])) : (;)
     bubble = BubbleAbsorption(; radius = R0, turn_on, wall = motion, capsule_radius,
-                              energy = 1.1)
+                              energy = parse(Float64, get(opt, "bubble_energy", "1.1")), bkw...)
 end
 # `lips=computed`: the lips' closure computed instead of prescribed (`LipClosure`, its
 # speed, depth and hold fitted to Chen 2020's measured LEH radii, `chen2020_leh()`): free

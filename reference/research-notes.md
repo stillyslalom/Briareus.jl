@@ -6020,3 +6020,152 @@ coarse mesh; measured Dante in the last column:
   laser-off.
 - **Decision needed** (ROADMAP 16): whether `release` 1.0 (the ablating-wall
   calibration) becomes the default. Not changed here.
+
+## The P2 swing: capsule radius, backscatter and the collision (2026-10-25) *derived*
+
+ROADMAP 9 ("what remains"). The N221204 flux P2/P0 swing turns positive ~0.45 ns before
+PRE 109 Fig. 10 and its minimum comes ~0.3 ns early. Each published input that bears
+on it is checked here for how far it moves the upward zero crossing and the minimum.
+Fig. 10 is the blind check throughout: nothing below is fitted to it, and no default
+changed. Runs: `examples/n221204.jl 0.8 0.4 full <options>` (coarse mesh, full model,
+current energetics defaults; 2–4 min each; coarse reproduces the standard mesh within
+~0.01 ns in the crossing and 0.006 in P2). Confidence: **H** primary text, **L** our
+construction.
+
+### Inputs read
+
+| Quantity | Value | Source | Conf. |
+|---|---|---|---|
+| N221204 capsule radius history (HYDRA) | R/R(0) flat to ~3.6 ns, 0.943 at 5.5, 0.906 at 6.0, 0.767 at 7.0, 0.537 at 8.0, 0.220 at 9.0, minimum 0.055 at 9.54 ns (bang 9.53); the N210808 capsule on the same drive reaches its minimum at 9.18 ns | Kritcher et al., PoP 31, 070502 (2024), doi:10.1063/5.0210904 (CC BY), Fig. 1 bottom right, digitized (`kritcher2024_capsule()`, `data/kritcher2024_fig1.csv`) | H-img |
+| Which radius | the fuel's inner (ice–gas) surface: it holds until the first shock breaks out (keyhole N230110, the N221204 design: 3.86–3.91 ns, Ruof 2026 Table II), and its 0.906 at 6 ns matches the ice–gas interface drawn at 6 ns, 0.92 mm against 0.985 initially (63.0 px at 68.75 px/mm in K24 Fig. 1; PRE 109 Fig. 1a, the same picture, gave 0.92 mm before) | K24 Fig. 1 caption ("the position of the ice-gas interface (red)"); PRE 109, 025204 Fig. 1a caption (ablator light grey, DT ice blue) | H (caption), L (identification) |
+| HYDRA's treatment of backscatter | not modeled explicitly, "but as part of an effective total laser power multiplier and δn/n" | PRE 109, 025204 §II | H |
+| HYDRA's late-time symmetry | set with Callahan's data-based model and measured sensitivity curves; "artificial multipliers on the input laser power ... to match the in-flight symmetry"; late P2 "not currently predictive" (LEH closure, plasma near the bubble, CBET), HYBRID-E needing a 1.065 peak-CF multiplier and, with 4.0 mm LEHs, symmetrized drive from 7.3 ns | PRE 109 §II; Kritcher et al., PoP 28, 072706 (2021) §III | H |
+| N221204 swing calibration | "a calibration experiment for N221204 had not yet been completed"; the swing level "is currently unknown" and was reduced by hand for N230729 | K24 §II | H |
+| Inner-beam glint | < 8 TW (< 2 % of peak) escapes by specular reflection, at 0.3–0.6 mg/cc | Lemos et al., PoP 29, 092705 (2022), doi:10.1063/5.0099937 (abstract) | H |
+
+**The earlier capsule anchor was misread.** The research notes since "Wall material,
+conversion and capsule energetics" call 0.92 mm (0.81 R₀) at 6 ns "HYDRA's ablation
+front". It is the ice–gas interface; the ablation front lies outside it by the shell's
+thickness (DT and remaining HDC, unpublished at 6 ns). Bounds on the front at 6 ns:
+0.79 R₀ (zero thickness, 0.868 × 0.906) to 0.906 R₀ (the shell keeping its relative
+thickness, i.e. K24's scaled curve applied to R₀). The example's Young-shaped schedule
+(0.81 R₀ at 6 ns) sits near the lower bound; `schedule=k24` (new) is the upper.
+
+**No published HYBRID-E bubble measurement was found** (searches 2026-10-25: thin-wall
+windows, gated LEH bubble images, x-ray imaging of the hohlraum interior, for HYBRID-E,
+N210808, N221204, Au-lined DU 6.4 mm). The thin-wall and G-LEH bubble data are all HDC
+SymCap basecamp (Izumi 2018/2021, Meezan 2020, Chen 2020) or foam-lined / I-Raum
+platforms. The HYBRID-E bubble speed stays inferred from the picket energy (`energy`
+1.1) and PRE 109 Fig. 1a's N210808 tip. Reading the outer picket from Pak's delivered
+pulse (`n221204_pulse()` split by DN24's cone fraction) gives 43.9 kJ in the first ns
+after the turn-on (the example's "~40" was by eye), i.e. `energy` ≈ 1.69 × 0.73 = 1.23
+against the basecamp's ~26 kJ (by eye): a faster bubble, the wrong direction for Fig. 10.
+
+### Effect of each mechanism (coarse; crossing, minimum)
+
+| Run | upward zero (ns) | minimum (at ns) | at 8 ns | capsule share | rms vs Fig. 10 |
+|---|---|---|---|---|---|
+| baseline (`capsule=model`, Young-shaped schedule) | 6.21 | −0.183 (5.25) | +0.085 | 13.9 % | 0.045 |
+| `capsule=mesh` (shrinking mesh, same schedule) | 6.22 (+0.01) | −0.171 (5.25) | +0.056 | 14.0 % | 0.047 |
+| `capsule=mesh schedule=k24` | 6.18 (−0.03) | −0.176 (5.25) | +0.062 | 16.0 % | 0.050 |
+| `schedule=k24` (model) | 6.17 (−0.04) | −0.179 (5.25) | +0.091 | 16.0 % | 0.049 |
+| `backscatter=hydra` (48 kJ as a uniform multiplier) | 6.26 (+0.05) | −0.196 (5.25) | +0.084 | 14.0 % | 0.042 |
+| `backscatter=off` | 6.27 (+0.06) | −0.199 (5.25) | +0.084 | 14.1 % | 0.042 |
+| transfer `fig9b` (HYDRA's post-CBET cone fraction) | 6.32 (+0.11) | −0.203 (5.00) | +0.080 | — | 0.044 |
+| `fig9b` + `backscatter=hydra` (HYDRA-like) | 6.37 (+0.16) | −0.203 (5.00) | +0.079 | — | 0.043 |
+| `collision=6.39` (t_c + 0.3 ns) | 6.38 (+0.17) | −0.183 (5.25) | +0.085 | 13.9 % | 0.043 |
+| `collision=5.79` (t_c − 0.3 ns) | 6.10 (−0.11) | −0.183 (5.25) | +0.085 | 13.9 % | 0.052 |
+| `bubble_energy=0.8` (t_c 6.38) | 6.54 (+0.33) | −0.205 (5.25) | +0.077 | 14.1 % | 0.040 |
+| `backscatter=hydra capsule=mesh schedule=k24` | 6.23 (+0.02) | −0.189 (5.25) | +0.062 | 16.2 % | 0.047 |
+| PRE 109 Fig. 10 (HYDRA) | 6.67 | −0.170 (5.60) | +0.095 | 16.2 % (App. 3) | — |
+
+1. **Capsule radius** (published: K24 Fig. 1): ≤ 0.04 ns either way, and the K24
+   schedule moves the crossing *earlier* (a larger capsule sees more of the late
+   pole-hot pattern). Minimum within 0.012. It does not close the gap. The old
+   schedule's time map is confirmed: K24's minimum falls at bang time (9.54 ns), as
+   the map assumed.
+2. **Backscatter as HYDRA has it**: the measured inner-cone SBS (16.8 % of the inner
+   power over 5.5–6.5 ns, the shape *L*) pulls the post-CBET cone fraction 0.06 below
+   Fig. 9b at 5.5–6.5 ns (0.59 / 0.56 / 0.53 at 5.5 / 6.0 / 6.5 ns against 0.65 / 0.62 /
+   0.59). Fig. 10's HYDRA books backscatter as a total-power multiplier, so
+   `backscatter=hydra` is the like-for-like setting: +0.05 ns, minimum 0.013 deeper. The
+   measured SBS stays the default (the physics); PRE 109 itself notes that "including
+   the measured backscatter time history could impact implosion shape".
+3. **CBET's time dependence**: forcing HYDRA's own post-transfer cone fraction (`fig9b`,
+   read by eye) adds +0.06 more (6.37 with the HYDRA-like backscatter) but moves the
+   minimum *earlier* (5.00 ns) and makes the rise too waist-hot (−0.128 at 4.5 ns against
+   −0.092). The calibrated two-zone CBET follows Fig. 9b to rms 0.016 when fed HYDRA's
+   inputs; the residual here is the input cone fraction (DN24 delivered against HYDRA
+   requested) and the backscatter. Kritcher 2021: CBET shifts the swing, not its slope.
+4. **Ablator–wall collision**: the crossing follows t_c at ~0.5 ns per ns (the ridge
+   stop turns on at 6.09 ± 0.2 ns, just before the 6.2 ns crossing). Closing the gap
+   by t_c alone would need t_c ≈ 6.9 ns; PRE 109 Fig. 1a already shows wall and ablator
+   plasma meeting at z 2–3 mm at 6 ns (by eye, *L*), so a collision near 6.1 ns is the
+   published picture. Not changed.
+5. **Bubble speed**: `energy` 0.8 (PRE 109 Fig. 1a's N210808 tip alone) gives +0.33 ns,
+   the largest single lever, as found before; Pak's pulse points the other way (1.23).
+   No HYBRID-E datum separates them.
+6. **Glint** (Lemos 2022, estimated, not run): < 8 TW out of the inner beams, ~1.8
+   points of cone fraction at peak, −0.005 in P2 at the crossing (d(P2/P0)/dCF
+   −0.29 %/%), i.e. ≤ 0.03 ns *earlier*. LEH lips (computed closure): ≤ 0.005 in P2
+   (before). Gas fill: in the bubble speed and opacity scalings (0.3 mg/cc on both
+   platforms).
+
+So the published inputs move the crossing by −0.04 to +0.16 ns (the HYDRA-like CBET and
+backscatter together); ~0.3 ns remains, and only the two least constrained bubble inputs
+(picket fluence, collision) can carry it. Fig. 10 is itself HYDRA with power and
+cone-fraction multipliers set to in-flight symmetry data of other shots (PRE 109 §II),
+on a design whose swing calibration had not been done (K24): the 0.4 ns is a difference
+between two models whose late-time inner-beam propagation is calibrated on different
+data, not a measured discrepancy. The minimum's timing (5.25 against 5.6 ns) moves with
+none of these except the Fig. 9b transfer, which moves it the wrong way.
+
+**Side result: the capsule share.** With K24's radius as the absorbing surface (the
+upper bound), the capsule takes 16.0 % of the coupled energy at α_c = 0 (16.2 % with
+the HYDRA-like backscatter): HYDRA's 16.2 % (App. 3). The 2.3-point "missing capsule
+absorption" of "Energetics defaults and the capsule share" comes from the misread
+anchor: the Young-shaped schedule shrinks the absorbing radius too early (0.81 against
+≤ 0.906 R₀ at 6 ns, and from 2 ns instead of the shock breakout at ~3.6 ns). Capsule Tr
+drops 2–3.5 eV through the peak (276.5 against 280.0 at 6 ns, 303.3 against 305.2 at
+8 ns) and the LEH share falls 23.9 → 23.1 %. The front lies between the bounds, and with
+the published HDC albedo (Young 2020, 0.16 at 6 ns) the k24 schedule would give ~14 %.
+Not adopted: the schedule and α_c = 0 belong to item 16 (decision below).
+
+### Figures of merit beside the swing (derived, not fits)
+
+| Metric | N221204 | Meaning |
+|---|---|---|
+| Callahan 2018 x = √(E_pk,out/(A_out ρ)) τ/R · r_cap/R (A 53 mm², ρ 0.3 mg/cc, R 3.2, r_cap 1.135) | 1.61–2.11 (picket 43.9 kJ in the first ns or 65.4 kJ to the trough at 2.1 ns; τ 8.75 ns half-power fall or 9.40 ns end) | his fitted line (P2_hs − 2.7(CF − 33) = 101.9 − 85.0x µm) gives −35 to −78 µm at 33 % CF without CBET: +13 to +29 points of cone fraction needed from transfer for a round hot spot |
+| Izumi 2021 FoM ∝ (E^0.2 t′/R)^2.5 (ρ/0.3)^0.13 (r_cap/R)^1.1, relative to the HDC basecamp (t′ 5 ns, R 2.875, r_cap 0.908) | 1.62 (E 1.1, t′ 6.33 ns: outer turn-on 0.4 to mid-peak 6.73 ns); 1.39–1.90 over E 0.8–1.5; 1.72 at Pak's E 1.23 | P2 = 90(3CF − FoM) (his Eq. 2, basecamp FoM 1): round at CF_eff ≈ FoM/3 = 0.54 (0.46–0.63) |
+| post-CBET cone fraction, peak | 0.53–0.59 (Briareus, calibrated two-zone); 0.59–0.65 (Fig. 9b) | +20–26 (+26–32) points over 33 % |
+| measured hot-spot P2 | 0.3 ± 0.1 µm (P24) | round |
+
+Both figures of merit, extrapolated beyond their data (Izumi's seven shots span
+0.8–1.4 of the basecamp; Callahan's line was fitted without CBET), put N221204 where
+the transfer HYDRA computes (and Briareus is calibrated to) makes the hot spot round:
+consistent, and blind to the swing's timing, since both are time-integrated. They do
+not discriminate between the crossing at 6.2 and at 6.7 ns.
+
+### What would close it
+
+- A HYBRID-E (6.4 mm Au-lined DU, 0.3 mg/cc) thin-wall or G-LEH measurement of the
+  inner-beam spots or the bubble tip against time (Izumi 2018's platform on this
+  hohlraum): it sets the bubble speed and the collision time directly.
+- The N221204-design 2DConA in-flight shell P2 against radius (the calibration K24 says
+  was pending; Ruof 2026's N240304 surrogate gives only 270–160 µm, at 2.9 Å):
+  integrated constraints on the swing, through a hydro transfer.
+- The HYDRA cone-fraction and power multipliers behind Fig. 10 (unpublished), and
+  whether HYDRA's flux is evaluated at the ablation front or a fixed radius.
+- The shell thickness (or ablation-front radius) at 5–7 ns for N221204: it fixes the
+  capsule schedule between the bounds, and the capsule share with it.
+
+### Decisions needed
+
+- Whether the example's capsule schedule becomes K24's (`schedule=k24`, the published
+  N221204 history, an upper bound on the front) or a front between the bounds; with it,
+  α_c = 0 is no longer at its bound (item 16).
+- Whether `backscatter=hydra` (HYDRA's own bookkeeping) is the setting for the Fig. 10
+  comparison (the measured SBS shape stays *L* either way).
+- Whether to shrink the capsule mesh by default (`capsule=mesh`): crossing +0.01 ns,
+  minimum 0.012 shallower, late P2 −0.03; the right choice depends on where Fig. 10's
+  flux is evaluated, which is not stated.

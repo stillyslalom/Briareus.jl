@@ -1088,10 +1088,22 @@ the reference's view factors hold through the pulse; items 9 and 10 remove that 
      LASNEX 0.045–0.056); on N221204 it moves the drive by ~1 eV and Fig. 10 by
      ≤ 0.005. Open: the thermal-band radius against the 3–5 keV edge it is fitted to,
      and a HYBRID-E (3.1 mm, 440 TW) LEH-radius history to test the hold depth;
-   - the capsule's shrinking radius (Young Fig. 3a has one: 0.83 mm at 5.5 ns, 0.22 at
-     7.75 ns; PRE 109 Fig. 1a ~0.92 mm at 6 ns), Izumi 2023's low-contrast stall and
-     relaunch;
-   - Callahan's and Izumi's figures of merit beside the computed swing;
+   - **worked from published data (2026-10-25; research notes "The P2 swing: capsule
+     radius, backscatter and the collision")**, crossing / minimum against the coarse
+     baseline (6.21 ns, −0.183 at 5.25): N221204's own HYDRA capsule radius (Kritcher
+     PoP 31, 070502 Fig. 1, `kritcher2024_capsule()`, `schedule=k24`) −0.03 to −0.04 ns
+     (the shrinking mesh +0.01, minimum 0.012 shallower); backscatter booked as HYDRA
+     does (`backscatter=hydra`) +0.05; HYDRA's post-CBET cone fraction on top +0.16 in
+     all, minimum moved earlier (5.0 ns); collision ±0.3 ns +0.17 / −0.11; picket
+     fluence 0.8 +0.33; glint ≤ −0.03 (estimate). No published HYBRID-E bubble or
+     thin-wall measurement exists; Callahan's (1.6–2.1) and Izumi's (1.62× basecamp)
+     figures of merit agree with the computed transfer but are time-integrated.
+     Found on the way: the "0.92 mm ablation front at 6 ns" anchor is the ice–gas
+     interface; with K24's radius as the absorbing surface the capsule share is 16.0 %
+     at α_c = 0 (HYDRA 16.2 %). Open: the decisions listed there (capsule schedule,
+     backscatter setting for Fig. 10, shrinking mesh), Izumi 2023's low-contrast stall
+     and relaunch, and a HYBRID-E bubble / collision measurement, the only data that
+     would close the remaining ~0.3 ns;
    - validation (2026-10-24, research notes "Young 2020 validation"): Young's
      static-vs-dynamic test run on `Keyframes` with his digitized radii and albedos: the
      85 % radii reproduce the moving geometry to 2 % in velocity, but his dynamic wall
