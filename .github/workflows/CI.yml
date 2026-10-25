@@ -13,11 +13,13 @@ concurrency:
   cancel-in-progress: ${{ startsWith(github.ref, 'refs/pull/') }}
 jobs:
   test:
-    name: Julia ${{ matrix.version }} - ${{ matrix.os }} - ${{ matrix.threads }} threads
+    name: Julia ${{ matrix.version }} - ${{ matrix.os }} - ${{ matrix.threads }} threads${{ matrix.shard && format(' - shard {0}', matrix.shard) || '' }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     env:
       JULIA_NUM_THREADS: ${{ matrix.threads }}
+      # the one-thread job runs as three shards (test/runtests.jl); unset elsewhere: all tests
+      BRIAREUS_TEST_SHARD: ${{ matrix.shard }}
     permissions: # needed to allow julia-actions/cache to proactively delete old caches that it has created
       actions: write
       contents: read
@@ -34,6 +36,15 @@ jobs:
           - version: 'lts'
             os: ubuntu-latest
             threads: '1'
+            shard: '1'
+          - version: 'lts'
+            os: ubuntu-latest
+            threads: '1'
+            shard: '2'
+          - version: 'lts'
+            os: ubuntu-latest
+            threads: '1'
+            shard: '3'
           - version: '1'
             os: windows-latest
             threads: '4'

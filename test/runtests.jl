@@ -7,10 +7,24 @@ using Test
 
 const R_SPHERE = 2.0
 
+# BRIAREUS_TEST_SHARD = 1, 2 or 3 runs a third of the suite (CI splits the one-thread job
+# three ways); unset, everything runs. Shards 2 and 3 are the files listed here, shard 1
+# the rest and the testsets of this file. Files whose helpers others use share a shard:
+# meshops.jl, cadfit.jl, partial_visibility.jl, hmatrix.jl; vrw_fixture.jl, visrad.jl.
+const SHARD = get(ENV, "BRIAREUS_TEST_SHARD", "")
+SHARD in ("", "1", "2", "3") || error("BRIAREUS_TEST_SHARD must be 1, 2 or 3, got \"$SHARD\"")
+const SHARDS = Dict(f => 2 for f in ("meshops.jl", "stl.jl", "cadfit.jl", "partial_visibility.jl", "hmatrix.jl"))
+merge!(SHARDS, Dict(f => 3 for f in ("windows.jl", "burnthrough.jl", "uncertainty.jl",
+                                     "implosion.jl", "energetics.jl", "spectral.jl", "large_models.jl")))
+in_shard(file) = SHARD == "" || get(SHARDS, file, 1) == parse(Int, SHARD)
+shard_include(file) = in_shard(file) && include(file)
+
 @testset "Briareus" begin
 
 # Docs cross-references, docstrings and @autodocs coverage (cheap; no Documenter).
 include("docrefs.jl")
+
+if in_shard("runtests.jl")   # the testsets of this file (not indented)
 
 @testset "meshes" begin
     s = sphere_mesh(R_SPHERE; ntheta = 16, nphi = 24)
@@ -1096,38 +1110,40 @@ end
     @test sum(t.elem_area[i] * F[i, j] for i in b, j in elements(t, :cone)) / sum(t.elem_area[b]) ≈ 1 rtol = 1e-4
 end
 
-include("talis.jl")
-include("vrw_fixture.jl")
-include("visrad.jl")
-include("solve_cache.jl")
-include("windows.jl")
-include("burnthrough.jl")
-include("meshops.jl")
-include("stl.jl")
-include("cadfit.jl")
-include("uncertainty.jl")
-include("results.jl")
-include("retune.jl")
-include("enclosure.jl")
-include("leh_power_balance.jl")
-include("capsule_mesh.jl")
-include("partial_visibility.jl")
-include("montecarlo.jl")
-include("corners.jl")
-include("dynamics.jl")
-include("leh_closure.jl")
-include("bubble.jl")
-include("implosion.jl")
-include("hybride_mock.jl")
-include("parallel_gradient.jl")
-include("cbet_zones.jl")
-include("sombrero.jl")
-include("backlighter.jl")
-include("backlighter_signal.jl")
-include("energetics.jl")
-include("capsule_drive.jl")
-include("spectral.jl")
-include("dante_response.jl")
-include("large_models.jl")
-include("hmatrix.jl")
+end   # in_shard("runtests.jl")
+
+shard_include("talis.jl")
+shard_include("vrw_fixture.jl")
+shard_include("visrad.jl")
+shard_include("solve_cache.jl")
+shard_include("windows.jl")
+shard_include("burnthrough.jl")
+shard_include("meshops.jl")
+shard_include("stl.jl")
+shard_include("cadfit.jl")
+shard_include("uncertainty.jl")
+shard_include("results.jl")
+shard_include("retune.jl")
+shard_include("enclosure.jl")
+shard_include("leh_power_balance.jl")
+shard_include("capsule_mesh.jl")
+shard_include("partial_visibility.jl")
+shard_include("montecarlo.jl")
+shard_include("corners.jl")
+shard_include("dynamics.jl")
+shard_include("leh_closure.jl")
+shard_include("bubble.jl")
+shard_include("implosion.jl")
+shard_include("hybride_mock.jl")
+shard_include("parallel_gradient.jl")
+shard_include("cbet_zones.jl")
+shard_include("sombrero.jl")
+shard_include("backlighter.jl")
+shard_include("backlighter_signal.jl")
+shard_include("energetics.jl")
+shard_include("capsule_drive.jl")
+shard_include("spectral.jl")
+shard_include("dante_response.jl")
+shard_include("large_models.jl")
+shard_include("hmatrix.jl")
 end
