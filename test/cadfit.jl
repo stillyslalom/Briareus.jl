@@ -534,7 +534,9 @@ end
     @test bal.absorbed[:top] ≈ balc.absorbed[top] + balc.absorbed[toprest] rtol = 1e-12
     @test sum(values(bal.absorbed)) ≈ sum(values(balc.absorbed)) rtol = 1e-12
     beams = nif_quads()
-    dep = deposit(DepositionOperator(tc, beams), beams)
+    # (one deposition operator, the scenario's: the CAD elements make it the costly part)
+    sn = Scenario(tc, beams; observe = :top, radiation = false)
+    dep = deposit(sn.deposition, beams)
     cp, cpc = component_power(dep, tc), component_power(dep, tc; by = :component)
     @test !any(k -> occursin('/', String(k)), keys(cp))
     @test cp[:top] ≈ cpc[top] + cpc[toprest] rtol = 1e-12
@@ -546,7 +548,6 @@ end
     @test split(readline(joinpath(dir, "elements.csv")), ',')[1:4] == ["element", "component", "part", "side"]
     @test first.(read_stl_solids(write_stl(joinpath(dir, "t.stl"), tc; binary = false))) == String.(parts(tc))
     # observe, the direct penalty and the keep-outs take the parts
-    sn = Scenario(tc, beams; observe = :top, radiation = false)
     @test sn.observed == elements(tc, :top)
     ev = evaluate(sn, initial_parameters(sn.param))
     @test power_fraction(ev, :top) > 0

@@ -219,14 +219,15 @@ end
     times = collect(0.25:0.25:7.75)
     beams_at(bs, drop = 0) = t -> [j == drop ? remake(b; power = 0.0) : b
                                    for (j, b) in enumerate(with_pulses(bs, pul, t; by = side))]
-    hist(m, bs, drop = 0) = drive_history(m, DepositionOperator(m.target, bs), beams_at(bs, drop), times;
-                                          ylm = true, lmax = 1)
+    hist(m, bs, drop = 0; op = DepositionOperator(m.target, bs)) =
+        drive_history(m, op, beams_at(bs, drop), times; ylm = true, lmax = 1)
     model = RadiationModel(mk(); closed = true)
+    op = DepositionOperator(model.target, quads)        # (aims move below, ports do not)
     Y = young2020_dropped_quads()
     v = Dict{Symbol,Float64}()
     for (g, vy) in zip(Y.cones, Y.velocity)
         g in (:inner23, :outer50) || continue
-        h = hist(model, quads, findfirst(q -> q.group === g, quads))
+        h = hist(model, quads, findfirst(q -> q.group === g, quads); op)
         m1 = [100norm(mode1_vector(view(h.ylm, :, k))) for k in axes(h.ylm, 2)]
         y = [Briareus._interp(Y.t, getproperty(Y, g), t) for t in times]
         ok = times .>= 0.5
@@ -238,7 +239,7 @@ end
     # whole-target offsets (every aim moves against the target): Young 1.3 and 0.1 km/s/µm
     δ = 0.05
     slope(f) = norm(f(1) - f(-1)) / (2δ * 1000)
-    shift(d) = s -> hotspot_velocity(hist(model, [remake(b; aim = b.aim .- s * δ .* d) for b in quads]); kernel = K)
+    shift(d) = s -> hotspot_velocity(hist(model, [remake(b; aim = b.aim .- s * δ .* d) for b in quads]; op); kernel = K)
     @test abs(slope(shift([0.0, 0.0, 1.0])) - 1.3) < 0.25
     @test slope(shift([1.0, 0.0, 0.0])) < 0.25
     # capsule offset in the hohlraum: Young 1.1 (vertical) and 0.1 (horizontal) km/s/µm;

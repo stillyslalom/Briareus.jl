@@ -44,13 +44,16 @@ using Briareus: RadiationSolution, _planck_tail, _channel_matrix, _color_tempera
     end
 
     # a coarse hohlraum: constant albedos (cached LU path) and the Lindl wall loss
-    # (iterated albedos: the GMRES path)
+    # (iterated albedos: the GMRES path). The walls differ in material only, so they
+    # share the 192-beam deposition operator and the view factors.
+    coarse(; kw...) = hohlraum(; length = 10.1, radius = 2.875, leh_radius = 1.6, capsule_radius = 0.9,
+                               h = 0.9, capsule_h = 0.45, kw...)
+    beams = hybride_mock_pointing(nif_beams(power = 2.0))
+    op = DepositionOperator(coarse(), beams)
+    F0 = view_factors(coarse())
     for wall in (gold(albedo = 0.85, conversion = 0.8), gold(albedo = WallLossAlbedo(), conversion = 0.8))
-        t = hohlraum(; length = 10.1, radius = 2.875, leh_radius = 1.6, capsule_radius = 0.9,
-                     h = 0.9, capsule_h = 0.45, wall)
-        beams = hybride_mock_pointing(nif_beams(power = 2.0))
-        op = DepositionOperator(t, beams)
-        m = RadiationModel(t)
+        t = coarse(; wall)
+        m = RadiationModel(t; F = F0, closed = true)               # ≡ RadiationModel(t)
         sol = solve(m, deposit(op, beams); time = 5.0)
         n = nelements(t)
         cap = elements(t, :capsule)
@@ -186,9 +189,8 @@ using Briareus: RadiationSolution, _planck_tail, _channel_matrix, _color_tempera
     end
 
     @testset "synthetic Dante" begin
-        t = hohlraum(; length = 10.1, radius = 2.875, leh_radius = 1.6, capsule_radius = 0.9,
-                     h = 0.9, capsule_h = 0.45)
-        m = RadiationModel(t)
+        t = coarse()
+        m = RadiationModel(t; F = F0, closed = true)
         n = nelements(t)
         # a blackbody cavity at T0: the hole radiates σT0⁴ over its area
         T0 = 250.0
@@ -242,10 +244,9 @@ using Briareus: RadiationSolution, _planck_tail, _channel_matrix, _color_tempera
         q = [remake(b; aim = (0.0, 0.0, sign(b.port[3]) * 4.0)) for b in nif_quads()]
         pulse = PulseShape([0.0, 1.0, 5.0, 6.0], [0.0, 2.0, 8.0, 0.0])
         v = dante1()
-        h = drive_history(RadiationModel(t), DepositionOperator(t, q), τ -> with_pulses(q, pulse, τ),
-                          [0.5, 2.0, 4.0]; record = sol -> dante(v, sol).Tr)
+        m, op = RadiationModel(t), DepositionOperator(t, q)
+        h = drive_history(m, op, τ -> with_pulses(q, pulse, τ), [0.5, 2.0, 4.0]; record = sol -> dante(v, sol).Tr)
         @test length(h.record) == 3 && issorted(h.record)
-        @test drive_history(RadiationModel(t), DepositionOperator(t, q), τ -> with_pulses(q, pulse, τ),
-                            [1.0]).record === nothing
+        @test drive_history(m, op, τ -> with_pulses(q, pulse, τ), [1.0]).record === nothing
     end
 end

@@ -155,6 +155,7 @@ end
                                                   viewfactor_kw = (; closed = true)), q); lmax = 4)
     oddm(c) = maximum(abs(c[mode_index(l, m)]) for l in 1:4 for m in -l:l if isodd(m)) / c[1]
     c0 = capsule_modes(hohlraum(; kw...))
+    global windowless_modes = c0                  # (the same beams and mesh as below)
     pair = [WallWindow(phi = 30, width = 2.0, height = 2.0, open = true),
             WallWindow(phi = 210, width = 2.0, height = 2.0, open = true)]
     cp2 = capsule_modes(hohlraum(; kw..., windows = pair))
@@ -353,7 +354,7 @@ end
     capsule_modes(t) = flux_ylm(evaluate(Scenario(t, q; observe = :capsule,
                                                   viewfactor_kw = (; closed = true)), q); lmax = 4)
     oddm(c) = maximum(abs(c[mode_index(l, m)]) for l in 1:4 for m in -l:l if isodd(m)) / c[1]
-    c0 = capsule_modes(hohlraum(; kwc...))
+    c0 = windowless_modes                         # diagnostic windows' (same q, mesh)
     cp = capsule_modes(hohlraum(; kwc..., windows = [WallWindow(phi = 78, diameter = d, open = true),
                                                      WallWindow(phi = 258, diameter = d, open = true)]))
     @test oddm(cp) < 1e-10

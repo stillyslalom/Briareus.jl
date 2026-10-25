@@ -143,6 +143,12 @@ end
     end
 end
 
+# The coarse wall-loss hohlraum's deposition operator for all 192 beams, built once for
+# the three testsets below (it is most of their cost). Deposition depends on the geometry
+# alone, and their targets differ at most in the capsule's material.
+wl_beams = nif_beams()
+wl_op = DepositionOperator(hohlraum(; h = 0.8, capsule_h = 0.4, wall = gold(albedo = WallLossAlbedo())), wl_beams)
+
 @testset "capsule albedo and energy budget" begin
     ca = CapsuleAlbedo(albedo = 0.2, radius = ([0.0, 5.0, 9.0], [1.0, 1.0, 0.5]))
     @test albedo(ca, 2.0) ≈ 0.2
@@ -167,8 +173,8 @@ end
           sum((1 .- αc) .* 0.75^2 .* sol.H[c] .* t.elem_area[c]) rtol = 1e-3
 
     # drive_history records the budget; energy_budget closes it
-    beams = nif_beams()
-    op = DepositionOperator(t, beams)
+    beams = wl_beams
+    op = wl_op
     pulse = PulseShape([0.0, 1.0, 6.0, 7.0], [0.0, 1.5, 1.5, 0.0])
     lpi = Backscatter(:inner23 => 0.1, :inner30 => ([0.0, 7.0], [0.0, 0.2]))
     h = drive_history(m, op, τ -> with_pulses(beams, pulse, τ), 0.0:0.5:7.0; lpi)
@@ -187,8 +193,8 @@ end
 @testset "wall-loss history" begin
     t = hohlraum(; h = 0.8, capsule_h = 0.4, wall = gold(albedo = WallLossAlbedo()))
     m = RadiationModel(t)
-    beams = nif_beams()
-    op = DepositionOperator(t, beams)
+    beams = wl_beams
+    op = wl_op
     # a foot at 1/8 of the peak power, then a step: the wall heated in the foot holds
     # little energy at the peak temperature
     pulse = PulseShape([0.0, 0.2, 4.0, 4.2, 9.0], [0.0, 0.2, 0.2, 1.6, 1.6])
@@ -227,8 +233,8 @@ end
 @testset "wall re-emission" begin
     t = hohlraum(; h = 0.8, capsule_h = 0.4, wall = gold(albedo = WallLossAlbedo()))
     m = RadiationModel(t)
-    beams = nif_beams()
-    op = DepositionOperator(t, beams)
+    beams = wl_beams
+    op = wl_op
     w = elements(t, :wall)
     η = conversions(t)
     # per step: each element's incident-flux temperature and net flux into it,
