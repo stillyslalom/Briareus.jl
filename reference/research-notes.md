@@ -6461,8 +6461,8 @@ timed here by the rise). Energy: scaled ×1.39 to AS24's 42 kJ with N210808's 3.
 of its delivered power), 30° 10.2 kJ (peak 13.9 %).
 
 N221204, full model, final defaults, coarse (0.8 / 0.4); `measured` from "Capsule
-absorption, conversion and the ablating-wall release" §2, reproduced in this tree by the
-identical uniform-cut run:
+absorption, conversion and the ablating-wall release" §2, reproduced to the digit by a
+fresh `measured` run in this tree:
 
 | backscatter | min (at) | upward zero | 8 ns | rms vs Fig. 10 | P2/P0 at 5.5 / 6.5 ns | capsule / LEH share | Dante 1 8.0 / 8.5 / 9.0 (initial area) |
 |---|---|---|---|---|---|---|---|
