@@ -161,6 +161,31 @@ include("unconverted.jl")
         flux_response(mh, s.observed; weights = s.moment_weights)
         clearance(t, quads[1:2]; targets = (:wall,), nspot = 5, nangles = 4)
         raytrace_deposition(t, quads[1:2]; nspot = 5)
+        # a drive history on a wall-loss wall (its march is compiled once for every
+        # `beams_at` closure), with CBET, then the spectral solve and the synthetic Dante
+        tw = hohlraum(; length = 10.1, radius = 2.875, leh_radius = 1.55, capsule_radius = 0.9,
+                      h = 1.2, capsule_h = 0.45, wall = Material(:Au; albedo = WallLossAlbedo(), conversion = 0.8))
+        mw = RadiationModel(tw; F = s.model.F, closed = true)
+        pulse = PulseShape([0.0, 1.0, 2.0], [0.0, 4.0, 4.0])
+        hist = drive_history(mw, s.deposition, τ -> with_pulses(quads, pulse, τ), [0.5, 1.0];
+                             record = sol -> sol)
+        drive_history(mw, s.deposition, τ -> with_pulses(quads, pulse, τ), [1.0];
+                      lpi = CBET(leh_z = 5.05))
+        sp = spectral_solve(hist.record[end]; edges = [0, 1000, 2000, Inf])
+        dante(dante1(), sp)
+        talis_check(t, quads[1:2]; capture = (:capsule,))
+        # CAD: orient, select the cavity, remesh and fit (a cylinder, flat caps, a sphere);
+        # the view factors of its lumped curved elements with sampled visibility
+        tc = cad_target(["wall" => cylinder_mesh(2.0, -2.0, 2.0; nz = 4, nphi = 12),
+                         "top" => disk_mesh(2.0, 2.0; nr = 1, nphi = 12, up = false),
+                         "bottom" => disk_mesh(2.0, -2.0; nr = 1, nphi = 12, up = true),
+                         "capsule" => sphere_mesh(0.6; ntheta = 6, nphi = 8)];
+                        inside = (0.0, 0.0, 1.2), remesh = 0.8)
+        view_factors(tc)
+        # the VisRad benchmark kit
+        kit = mktempdir()
+        write_visrad_kit(kit, t, quads[1:2])
+        rm(kit; recursive = true, force = true)
     end
 end
 

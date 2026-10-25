@@ -171,11 +171,17 @@ drive_history(m::RadiationModel, op::DepositionOperator, beams_at, times; kwargs
 
 # The history on the models `model_at(τ)` and deposition operators `operator_at(τ)`, whose
 # elements are those of `t` (a fixed target, or the keyframes of a moving one).
-function _drive_history(t::Target, model_at, operator_at, beams_at, times;
+# Compiled and inferred once for every closure, laser–plasma model and recorder: each
+# call site's `beams_at` closure used to recompile the whole march (~2 s). Their values
+# reach the solves by dynamic dispatch, at no measurable run-time cost, and the march
+# is in the package's precompile workload (research notes, "Compile latency").
+Base.@nospecializeinfer function _drive_history(
+                        t::Target, @nospecialize(model_at), @nospecialize(operator_at),
+                        @nospecialize(beams_at), @nospecialize(times);
                         observe = :capsule, lmax::Integer = 6, wall = (:wall,),
-                        lpi = nothing, holes = nothing, ylm::Bool = false,
+                        @nospecialize(lpi = nothing), holes = nothing, ylm::Bool = false,
                         transition = nothing, flux_change = nothing, min_step::Real = 1e-3,
-                        tol = 1e-4, keep_albedo::Bool = false, record = nothing,
+                        tol = 1e-4, keep_albedo::Bool = false, @nospecialize(record = nothing),
                         wall_history::Bool = true, wall_release::Bool = true)
     transition === nothing || transition > 0 || throw(ArgumentError("transition must be positive"))
     flux_change === nothing || flux_change > 0 || throw(ArgumentError("flux_change must be positive"))

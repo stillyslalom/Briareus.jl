@@ -6306,3 +6306,71 @@ drive" §3 (α_c 0, `young` schedule, the same wall otherwise):
   bounds) without a published blow-off opacity or absorbing radius; it is 0.
 - The pair's K24-shaped schedule (N210808 capsule, time scaled to bang) is *L*; the pair's
   own radius histories are unpublished.
+
+## Compile latency (2026-10-25) *measured*
+
+Where users and the suite pay compilation, and what removed it. Julia 1.13.2, Windows,
+4 threads, on a machine shared with other runs (wall times ±10 %; compile times are
+`@timed`'s `compile_time`). Base = 3950215, new = the same plus this change, each in its
+own worktree and package image. Scripts in the session scratchpad (`compile/ttfr.jl`,
+`cand.jl`, `bench_history.jl`, `bench_opt.jl`, SnoopCompile 3 in a throwaway
+environment, not a dependency).
+
+**Where it went.** `@snoop_inference` over the test files: `_drive_history` was the
+largest single cost, 52 s of inference in energetics/retune/bubble/dynamics/capsule_drive
+and 4 s more in uncertainty/parallel_gradient. Every call site's `beams_at` closure (and
+each `lpi` type, `record` closure and `times` type) is a new type, so each recompiled the
+whole march: ~2 s per call site, and no precompiled copy could serve it. Next:
+`visrad_target(...; remesh)` (42 s inclusive in visrad.jl: `remesh_mesh` 10 s and
+`fit_surfaces` 10 s of inference over ~3,600 concrete method instances; nothing
+pathological, just never precompiled), `talis_check` 7.6 s, `write_visrad_kit` 7.4 s,
+`dante` on a spectral solution 7.6 s, `spectral_solve` 3.7 s, and every new objective
+closure re-inferring `optimize_pointing`'s body and Optim's L-BFGS-B (~1 s). Not
+addressable in src: tests that differentiate through their own closures
+(`ForwardDiff.gradient(fc, x)`) get a new dual tag each, so the deposition stack is
+recompiled per test closure (uncertainty.jl: `_sum_points*` 15 s, `lpi_deposit` on
+duals 13 s); `optimize_pointing`'s fixed `_PointingTag` already avoids this for users.
+
+**Changes.** (1) `_drive_history` is `Base.@nospecializeinfer` with `@nospecialize` on
+`model_at`, `operator_at`, `beams_at`, `times`, `lpi` and `record`: one inferred and
+compiled instance for every closure. `@nospecialize` alone is not enough: the keyword
+wrapper calls the body with concrete types, and inference specializes on them anyway.
+The callables' values reach `solve`, `apply_lpi` and `lpi_deposit` by dynamic dispatch
+once per step. (2) `optimize_pointing` likewise on `objective` and `callback`. (3) The
+precompile workload adds a wall-loss drive history (with and without CBET), a spectral
+solve and `dante`, `talis_check`, a CAD `cad_target` (cavity selection, remesh, cylinder
+and sphere fits) with its view factors, and `write_visrad_kit`.
+
+**Results (first call in a fresh process, wall s / compile s).**
+
+| workflow | base | new |
+|---|---|---|
+| `drive_history`, first | 10.2 / 10.0 | 0.56 / 0.35 |
+| `drive_history`, each new closure | 2.1 / 1.9 | 0.17 / 0.01 |
+| `optimize_pointing` (3 it.), new objective | 1.65 / 1.07 | 0.45 / 0.10 |
+| same, objective with keep-outs | 3.95 / 1.38 | 2.15 / 0.13 |
+| `spectral_solve` | 4.6 / 4.6 | 0.04 / 0.04 |
+| `dante(dante1(), sp)` | 8.9 / 8.4 | 0.21 / 0.03 |
+| `cad_target(...; remesh)` (small can + capsule) | 34.2 / 34.3 | 0.06 / 0.02 |
+| `talis_check` | 6.1 / 8.5 | 0.04 / 0.00 |
+| `write_visrad_kit` | 13.5 / 11.4 | 1.7 / 0.03 |
+| `DepositionOperator`, `view_factors`, `deposit` | ~0 compile | ~0 compile |
+
+Test files visrad, talis, energetics, retune, dynamics, capsule_drive, spectral,
+parallel_gradient (4 threads, run side by side): compile 197 → 113 s, wall 247 → 168 s.
+The package image builds in 162 → 192 s on the loaded machine (95 → 143 s quiet):
+the cost moves from every first call to every rebuild, which `BRIAREUS_NO_WORKLOAD=true`
+still skips.
+
+**Hot loops unchanged.** Drive history, 1,300 elements, 24 steps, wall loss and a
+recorder, warmed: min of 5 runs, four alternating pairs, base 1.80/1.77/1.97/1.89 s, new
+1.98/1.79/1.82/1.84 s (noise), allocations 196 → 182 MiB. Results bit for bit (every
+field of the history, `isequal`). `optimize_pointing` (default NIF hohlraum, keep-outs,
+8 iterations): 0.379 vs 0.389 s, `x`, value and evaluation count bitwise equal.
+
+**Not done.** The GUI's 0.75 s first-import tick and 0.16 s first field-colouring frame
+(ROADMAP 7) were not measured (they need the Qt window); the GUI's time panel and drives
+call `drive_history`/`optimize_pointing` with their own closures and now reuse the
+package's precompiled copies. `view_factors` on a CAD target still compiles ~2 s at
+first call when its parts differ from the workload's (sampled visibility on other
+element shapes). A robust objective (`uncertainty = ...`) is not in the workload.

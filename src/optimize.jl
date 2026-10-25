@@ -608,10 +608,14 @@ the number of iterations completed in every case.
 `(; evaluations, iteration, value, best_value, best_x)`; returning `true` stops the
 optimization. Use it for progress reports and cancellation.
 """
-function optimize_pointing(s::Scenario, objective; x0 = initial_parameters(s.param),
+Base.@nospecializeinfer function optimize_pointing(
+                           s::Scenario, @nospecialize(objective); x0 = initial_parameters(s.param),
                            lower = bounds(s.param, x0)[1], upper = bounds(s.param, x0)[2],
                            iterations::Integer = 200, evaluations::Integer = 20 * iterations,
-                           show_trace::Bool = false, g_tol = 1e-8, callback = nothing)
+                           show_trace::Bool = false, g_tol = 1e-8, @nospecialize(callback = nothing))
+    # Inferred and compiled once for every objective and callback (each objective
+    # closure type used to recompile this body and Optim's L-BFGS-B, ~1 s); the objective
+    # is reached by dynamic dispatch once per evaluation.
     xs = clamp.(x0, lower, upper)
     best_x, best_value, count, iter = copy(xs), Inf, Ref(0), Ref(0)
     J(x) = objective(evaluate(s, x))

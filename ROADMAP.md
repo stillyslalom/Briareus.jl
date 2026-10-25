@@ -798,6 +798,18 @@ Item 8's time request. BriareusGUI's *Time* tab (`BriareusGUI/README.md`).
   step is the table-power drive scaled by the pulse shape), the offscreen chart, and
   Qt window stages.
 
+## Done (2026-10-25, compile latency)
+
+- `drive_history` and `optimize_pointing` are inferred and compiled once for every
+  `beams_at`/`record` closure, `lpi` and objective (`@nospecializeinfer`); each call
+  site used to recompile the march (~2 s) or the optimizer (~1 s). The precompile
+  workload adds a wall-loss history (and with CBET), `spectral_solve`, `dante`,
+  `talis_check`, a remeshed and fitted `cad_target` with its view factors and
+  `write_visrad_kit`. First calls: history 10 → 0.6 s, spectral solve 4.6 → 0.04 s,
+  Dante 8.9 → 0.2 s, CAD target 34 → 0.06 s, TaLIS 6 → 0.04 s; eight test files 43 %
+  less compilation; results bit for bit, run times unchanged; image build +30–50 s
+  (research notes, "Compile latency").
+
 ## Open questions (from the 2026-10-18 CAD work)
 Choices made provisionally overnight or left open; the lean is in brackets.
 **Decided (user, 2026-10-22):** the bracketed leans stand. On 1: parts may be split
@@ -1061,7 +1073,8 @@ pick the original parts, not `<part>/cylN` pieces).
    part-to-component name mapping, or a per-element surface on `Component`; on the NIF
    workspace 1.5× faster view factors and 0.6% on the halves' flux, the plan in Open
    question 1); a 0.75 s first-import tick and a 0.16 s first field-coloring
-   frame (compilation); `include_components!` costs 0.3 s on the UI thread; a "fit the
+   frame (compilation; not measured in the 2026-10-25 compile work, which precompiled the
+   package's histories, optimizer and CAD paths the GUI calls); `include_components!` costs 0.3 s on the UI thread; a "fit the
    hohlraum template to CAD parts" action; the foil objective with one shared parameter
    set for beams aimed at one point does not move (per-beam parameters).
    `fit_surfaces` on a finely faceted face of none of the requested kinds: rejected
