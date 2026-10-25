@@ -636,6 +636,23 @@ Research notes, "Large radiation models (2026-10-24)". Item 14's first part.
 - View-factor assembly 17–45 % faster, bit for bit (a boxed near-pair factor): 17.6k
   56 → 31 s on 4 threads.
 
+## Done (2026-10-25, energetics defaults and the capsule share)
+Research notes, "Energetics defaults and the capsule share (2026-10-25)". Item 16.
+- **Defaults**: `gold()` and `uranium()` with an albedo that follows the drive default
+  to `nif_conversion()` (constant albedos keep 0.75); `uranium()` is the Au-lined DU
+  wall of `examples/n221204.jl`, whose `energetics=`, `wall=`, `conversion=`,
+  `backscatter=`, `history=`, `release=` and `capsule=ablator` options are removed
+  (degradation 0.11, measured backscatter, `CapsuleAlbedo` on the ablation front built
+  in).
+- **DU factor 0.785 → 0.836**, Döppner's 6.5 % at the wall's effective age (2.5 ns;
+  0.827–0.838 over 2–4 ns) instead of 13 ns since the start; T-1 pair +4.8 eV (+5 ± 6).
+- **α_c 0.22 → 0** (the bounded fit to HYDRA's 16.2 %; 13.9 % reached).
+- Checks (standard mesh): split 62.2 / 23.9 / 13.9 % (HYDRA 58.6 / 25.2 / 16.2),
+  capsule Tr 305.1 eV, Dante 1 at 8 ns 290.2 / 313.5 (310.1), Fig. 10 rms 0.046.
+  `mband_dewald2020.jl` and the `leh_power_balance` tutorial evaluate the wall at its
+  effective age (α_M would move 0.55 → 0.57, below the scan step: kept; tutorial's
+  predicted saving 8.3 % against 9.4 %).
+
 ## Done (2026-10-25, the H-matrix's N^1.5 remainder)
 Research notes, "The H-matrix's N^1.5 remainder (2026-10-25)". Item 14.
 - **Clusters by surface**: the cluster tree splits elements of different surfaces
@@ -1249,6 +1266,18 @@ the reference's view factors hold through the pulse; items 9 and 10 remove that 
       area, rms 9 against 16–23), and gives Fig. 10 rms 0.042 against 0.050. The old
       energetics fit better only on the open-area reading and on HYDRA's capsule share;
       that share (11.7 % against 16.2) calls for recalibrating α_c on the current drive;
+    - ~~switch to the new energetics and recalibrate~~ **Done (2026-10-25, research
+      notes "Energetics defaults and the capsule share")**: `energetics=old` and the
+      old-baseline switches are gone; drive-following `gold()`/`uranium()` walls convert
+      as `nif_conversion()`; the example's wall is `uranium()`. The DU factor,
+      recalibrated at the wall's effective age, is 0.836 (0.827–0.838; was 0.785 at
+      13 ns), matching the cocktail estimates. α_c recalibrated to the 16.2 % capsule
+      share stops at its bound, 0 (13.9 %; 16.2 would need −0.20 ± 0.03): the missing
+      absorption is outside the ablation front. Standard mesh: split 62.2 / 23.9 / 13.9 %,
+      capsule Tr 305.1 eV at 8 ns, Dante 1 290 / 314 (initial / open) against 310.1,
+      Fig. 10 −0.190, 6.20 ns, +0.089, rms 0.046 (blind). Open: the absorbing radius
+      outside the front (published HYDRA radius or blow-off opacity); the pair and
+      the implosion metrics not rerun on the new defaults;
     - ~~a synthetic Dante (item 13) reported beside the capsule-seen temperature~~
       **Done (2026-10-24)**: Dante 1 286 / 306 eV (initial / open LEH area) at 6.25 ns
       against 313 measured at 8.4 ns, capsule 302 eV at 5.5 ns; the model's drive peaks

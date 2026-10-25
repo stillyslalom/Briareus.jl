@@ -5635,7 +5635,9 @@ defaults to `energetics=new`; `energetics=old` restores the 2026-10-24 settings.
 runs and CSVs before 2026-10-25 used the old energetics. No src default changed: the
 pieces stay opt-in (`du_wall_loss`, `nif_conversion`, `CapsuleAlbedo` are
 HYBRID-E-specific or calibrated, and the 0.75 materials default anchors every other
-baseline).
+baseline). *Superseded the same day* ("Energetics defaults and the capsule share
+(2026-10-25)"): `energetics=old` is removed, drive-following `gold()`/`uranium()` walls
+default to `nif_conversion()`, the DU factor is 0.836 and the example's α_c is 0.
 
 Open, with their data: the late-time drive (§2: the pair is the test); the pair
 residual of 2–4 eV (pointing and cone fraction of N191118 are unpublished); the capsule
@@ -5748,3 +5750,148 @@ The gap pairs are still ~60 % of the bored cavity's time: refinement toward the 
 long edge (maxdepth 8) onto sector receivers of ~34 edges each. A maxdepth relative to
 the cell's width, or coarser arcs on receivers far from the point, would be the next
 step; not tried.
+
+## Energetics defaults and the capsule share (2026-10-25) *calibrated*
+
+ROADMAP 16. The user's decisions: the published ("new") energetics become the defaults
+wherever they are the physics Briareus uses, the old paths go without deprecation, and
+the constants calibrated on the old, too reflective wall (constant-T loss at the time
+since the pulse start, before "N221204 late-time drive") are recalibrated. Dante 1,
+PRE 109 Fig. 10 and HYDRA's LEH share are checks here, never fit. Confidence: **H**
+primary text, **L** our construction.
+
+### What became a default, and where
+
+| Piece | Where now | Before |
+|---|---|---|
+| `nif_conversion()` (0.7 t^0.12 ≤ 0.95) | src: the default `conversion` of `gold()` and `uranium()` whose albedo follows the drive (any `AlbedoModel` but a constant) | 0.75 for every `gold()` / `uranium()` |
+| static walls (`gold()`, `gold(albedo = 0.85)`) | unchanged, 0.75 (VisRad-style static solves; at `solve`'s default `time = 0` the rising conversion would read 0.53) | — |
+| Au-lined DU wall | the material, `uranium()` (`du_wall_loss()`, now with the rising conversion); `examples/n221204.jl` builds HYBRID-E's wall with it | `gold(albedo = du_wall_loss())` behind `wall=du` |
+| DU loss factor | `DU_LOSS_FACTOR` 0.785 → **0.836** (below) | calibrated at 13 ns, constant T |
+| wall history, re-emission | already `drive_history`'s defaults; the example's `history=` / `release=` switches are gone. `wall_history = false` stays in src for comparing a march with standalone `solve`s (tests, the `diagnostic_windows` tutorial) | — |
+| `CapsuleAlbedo` on HYDRA's ablation-front schedule, 11 % degradation, measured backscatter | `examples/n221204.jl` (shot-specific inputs); its `energetics=`, `wall=`, `conversion=`, `backscatter=` options and `capsule=ablator` are removed | `energetics=new` |
+| `CapsuleAlbedo` default α_c 0.2 | unchanged (Swadling 2025's published f_cap, not calibrated on the old drive) | — |
+
+### DU loss factor at the wall's effective time (*calibrated*)
+
+The 6.5 % peak-power equivalence (Döppner 2015) was fitted on the high-foot hohlraum
+with gold's loss at 13 ns, the time since the pulse start (α_Au 0.944): the
+constant-T evaluation that "N221204 late-time drive" showed to leave the wall too
+reflective. `drive_history` now uses the wall's effective age, t_eff = ∫(T/T_now)^5.32
+dt. From N221204's measured Dante 1 (Pak 2024 Fig. 1; the foot stores almost nothing)
+it is 0.76 / 1.04 / 1.64 / 2.04 ns at 5.5 / 6 / 7 / 8 ns (*L*). The high-foot pulse's
+peak (~3–4 ns at 390 TW, ~1.7 MJ; the 90 eV foot negligible) gives t_eff ≈ 2–4 ns at
+Dante's peak; 2.5 ns is taken (*L*). Same setup as before (h 0.4, 390 TW × 0.86,
+conversion 0.9, two-band wall source, capsule albedo 0.3; session scratch `du_cal.jl`):
+
+| t (ns) | f = 0.785: equivalence, ΔT at equal power | α_Au | f for 6.5 % | ΔT at that f |
+|---|---|---|---|---|
+| 13 (old) | 6.51 %, +4.9 eV | 0.944 | 0.785 | +4.9 |
+| 2.0 | 9.16 %, +6.6 | 0.880 | 0.838 | +4.7 |
+| 2.5 | 8.95 %, +6.5 | 0.891 | **0.836** | +4.8 |
+| 3.0 | 8.74 %, +6.4 | 0.899 | 0.833 | +4.8 |
+| 4.0 | 8.36 %, +6.2 | 0.910 | 0.827 | +4.8 |
+
+- **f = 0.836, range 0.827–0.838** over t_eff 2–4 ns (the t_eff uncertainty dominates;
+  the mesh moves the ratio < 0.3 %). Check, not fitted: Döppner's T-1 pair, +4.8 eV at
+  equal power against the measured +5 ± 6.
+- With a less reflective wall the wall loss is a larger share of the source, so a given
+  loss reduction is worth more power and the fit needs less of it. The new factor
+  agrees with the independent cocktail estimates, Rosen's "about 0.83" and Schein's
+  0.825. The earlier reading ("the calibrated f below Rosen's cocktail value says the
+  Lindl gold loss is low at late times") was an artefact of the constant-T evaluation.
+- `test/energetics.jl` "wall material factor" checks the 6.5 % at 2.5 ns.
+
+### Capsule albedo recalibrated on the current drive (*calibrated*, at its bound)
+
+The target is the original fit's: E_cap = 16.2 % of the coupled energy (PRE 109 App. 3,
+read as a fraction of the degraded laser energy), in the full model of
+`examples/n221204.jl` (calibrated CBET, wall motion, lips, bubble; `uranium()` with
+f = 0.836, wall history and re-emission, 11 % degradation, measured backscatter,
+`CapsuleAlbedo` on HYDRA's ablation-front schedule). Coarse mesh 0.8 / 0.4:
+
+| α_c | capsule share | LEH share | capsule Tr 8.0 ns | Dante 1 initial / open, 8.0 ns | Fig. 10 min, zero, 8 ns, rms |
+|---|---|---|---|---|---|
+| 0.22 (previous default; with f 0.785: 11.7 %) | 11.4 % | 24.8 % | 307.8 | 292.1 / 315.6 | −0.185, 6.24, +0.077, 0.042 |
+| 0 | 13.9 % | 23.9 % | 305.2 | 289.9 / 313.1 | −0.183, 6.21, +0.085, 0.045 |
+
+- The share is linear in α_c to the accuracy needed (−11.4 points per unit α_c), so
+  16.2 % would need **α_c = −0.20 ± 0.03** (the range from the 9–13 % degradation and
+  the mesh, *L*): unphysical. **The bounded fit is α_c = 0**, with 2.3 points of the
+  share unexplained; the example's default is now 0.
+- So the missing capsule absorption is not an albedo. As found before ("Wall
+  re-emission and the capsule radius"), HYDRA's share needs absorption outside the
+  ablation front (the W-doped blow-off) or a larger effective radius than the front's.
+  No published radius of that absorbing surface was found, so nothing else is fitted.
+  α_c = 0 contradicts Young 2020's HYDRA ablator albedo (0.16 at 6 ns, 0.3–0.4 later;
+  `capsule_albedo=young`, 12.3 % before this change): the calibrated value stands in
+  for absorption the schedule leaves out; it is not a material property.
+- The two recalibrations barely interact: at α_c 0.22 the share moved 11.7 → 11.4 %
+  with f 0.785 → 0.836.
+
+### N221204 with the new defaults (standard mesh 0.28 / 0.16, full model; checks)
+
+| t (ns) | 4.5 | 5.0 | 5.5 | 6.0 | 6.5 | 7.0 | 7.5 | 8.0 | 8.5 | 9.0 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| capsule Tr | 212.8 | 256.4 | 274.7 | 280.0 | 283.9 | 291.8 | 299.4 | 305.1 | 294.5 | 272.8 |
+| Dante 1, initial area | 209.6 | 244.5 | 259.7 | 266.1 | 272.3 | 278.7 | 285.2 | 290.2 | 279.0 | 256.8 |
+| Dante 1, open area | 219.4 | 257.8 | 275.7 | 284.2 | 292.3 | 300.4 | 308.0 | 313.5 | 301.4 | 277.4 |
+| measured Dante 1 | 203.4 | 237.9 | 263.1 | 275.5 | 282.9 | 291.3 | 301.7 | 310.1 | 311.3 | 301.5 |
+
+| check | before (α_c 0.22, f 0.785; "Wall re-emission", std) | now | HYDRA / data |
+|---|---|---|---|
+| wall / LEH / capsule (% of coupled) | 62.7 / 25.6 / 11.7 | 62.2 / 23.9 / 13.9 | 58.6 with gas / 25.2 / 16.2 |
+| capsule Tr peak | 310.5 at 8.0 ns | 305.1 at 8.0 ns | ~300 internal; drive Trad 313 |
+| Dante 1 at 8.0 ns, initial / open | 295.0 / 318.6 | 290.2 / 313.5 | 310.1 |
+| Dante 1 level 5–8 ns, initial / open area, mean | −4.8 / +14.8 eV (coarse) | −9.4 / +9.9 eV | — |
+| Dante rise 5 → 8 ns, initial / open | +46.2 / +56.3 | +45.7 / +55.7 | +72.2 |
+| Fig. 10 min, upward zero, 8 ns, rms (blind) | −0.189 (5.25), 6.23, +0.077, 0.042 | −0.190 (5.25), 6.20, +0.089, 0.046 | −0.170 (5.6), 6.67, +0.095 |
+| wall re-emitted | 103 kJ | 101 kJ | — |
+
+- The weaker DU factor takes ~3 eV off the drive and the black capsule ~2.5 eV more:
+  the capsule now peaks at 305 eV (HYDRA ~300), and Dante 1 at 8 ns brackets the
+  measured 310.1 (290 / 314). Over the rise and peak the initial-area reading is 9 eV
+  low on average and the open-area one 10 eV high; the measured history still lies
+  between the two conventions. The shape (the rise through the peak) is unchanged, and
+  so is the deficit after the droop.
+- The LEH share falls to 23.9 % (HYDRA 25.2): the extra capsule sink takes from the
+  LEH as well as from the wall, so an albedo alone cannot match both shares.
+- Fig. 10: the late P2 rises by 0.012 at 8 ns (more capsule sink, less smoothing), the
+  minimum is unchanged; rms 0.042 → 0.046.
+- Not rerun: Zylstra's pair (its difference was independent of the energetics, within
+  1 eV between old and new; its level should drop by about N221204's ~5 eV) and the
+  implosion metrics.
+
+### Other constants checked
+
+- **Wall re-emission `release` 0.77**: calibrated against 1-D diffusion with its own
+  constant-T scaling, independent of the drive. Unchanged.
+- **`LipClosure`** (speed, depth, hold): fitted on a gold basecamp history with
+  `nif_conversion()` (gold walls are unaffected by the DU factor); the speed scales as
+  the lip temperature's square root, so the few eV these changes move a drive would move
+  it ~1 %, inside its fitted range (0.010–0.030 mm/ns). Not refitted.
+- **CBET (`n221204_cbet`, `hybride_cbet`), `BubbleAbsorption`, `WallMotion`**: fitted to
+  cone fractions, HYDRA absorbed fractions and radii, not to the drive temperature.
+  Unchanged.
+- **M-band group albedo α_M** (0.55 with thermal spots, `examples/mband_dewald2020.jl`):
+  calibrated on a static solve with gold's loss at 5.5 ns since the pulse start and
+  η 0.75. With the wall at its effective age (0.8 ns, mid-plateau after a rise at
+  ~4.4 ns, *L*) and `nif_conversion` at 5.5 ns (0.86), cone fraction 1/3, F_M at α_M
+  0.55 / 0.6 is 1.90 / 2.16 (was 2.06 / 2.33): F_M ≈ 2 needs α_M ≈ 0.57. The move is
+  below the scan's 0.05 step and F_M ≈ 2 is itself approximate, so α_M stays 0.55
+  (negative result). The example now uses the consistent wall; its Dante 1 reads
+  277 eV against Dewald's 290 eV peak (292 before, where the too reflective wall and the
+  low conversion compensated), and the share above 1.8 keV at α_M 0.55 is 0.133
+  (Dewald 0.12; 0.114 before).
+- **`docs/literate/leh_power_balance.jl`**: its static wall albedo was gold's loss at
+  6 ns since the start (0.925); it is now `du_wall_loss()` at the effective age from
+  N221204's Dante (1.07 ns), 0.875. The predicted N210307 → N210808 power saving is
+  8.3 % at that albedo (measured 9.4 %; 9.5 % at 0.90, 11 % at the old 0.925); the
+  Monte Carlo agreement is unchanged (2×10⁻⁴ of the source).
+
+### What remains
+
+- The capsule share: 13.9 % against 16.2 % at the albedo's bound; the absorbing surface
+  outside the ablation front is the open input (a published HYDRA absorption radius, or
+  the blow-off's opacity).
+- The late-time drive after the droop (unchanged by these defaults).

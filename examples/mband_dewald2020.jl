@@ -12,7 +12,11 @@
 # (`hybride_mock_pointing`) scaled to this hohlraum, its outer aims moved along the axis
 # until the outer-beam ring sits at the measured z = ±3.3 mm (time-integrated hard x-ray
 # image, their Fig. 2; θ_o ≈ 40°, 4.4 mm from the centre). Square corners, no window
-# or Mo sphere; WallLossAlbedo at 5.5 ns, conversion 0.75.
+# or Mo sphere. At 5.5 ns, mid-plateau (4.9–6.0 ns): `nif_conversion()` there (0.86) and
+# gold's `WallLossAlbedo` at the wall's effective age, 0.8 ns (*L*: `drive_history`'s
+# wall history after the rise at ~4.4 ns; N221204's measured Dante gives 0.76 ns at the
+# start of its plateau), not at the 5.5 ns since the pulse start (research notes,
+# "Energetics defaults and the capsule share (2026-10-25)").
 #
 # Their numbers: Dante sees 12 % of the flux above 1.8 keV at the 290 eV peak (15 % in
 # their Fig. 3); the wall M-band P2/P0 is +0.53 (Mo-sphere P2 0.15 / smoothing 0.28),
@@ -39,7 +43,8 @@ capsule_h = parse(Float64, get(pos, 2, "0.15"))
 spot = Symbol(get(opt, "spot", "radiation"))
 L, R = 10.1, 2.875 - 0.2
 t = hohlraum(; length = L, radius = R, leh_radius = 3.37 / 2, capsule_radius = 0.815, h, capsule_h,
-             wall = gold(albedo = WallLossAlbedo()))
+             wall = gold(albedo = WallLossAlbedo(), conversion = conversion_efficiency(nif_conversion(), 5.5)))
+t_eff = 0.8
 wall, cap = elements(t, :wall), elements(t, :capsule)
 isinner(b) = b.group in (:inner23, :inner30)
 zw = [t.elem_centroid[e][3] for e in wall]
@@ -83,7 +88,7 @@ for cf in (1 / 3, 0.25)
     bs = [remake(b; power = isinner(b) ? cf * 360 / 64 : (1 - cf) * 360 / 128) for b in beams]
     dep = deposit(op, bs)
     PM = mband_power(mb, op, bs)
-    sol = solve(m, dep; time = 5.5)
+    sol = solve(m, dep; time = t_eff)
     g2, g4 = capP(sol.H)
     @printf("\ncone fraction %.3f: laser M-band %.1f TW (%.3f of the absorbed laser); capsule Tr %.1f eV, Dante-1 Tr %.1f eV\n",
             cf, sum(PM), sum(PM) / sum(dep.element), radiation_temperature(mean_cap(sol.H)), dante(d1, sol).Tr)

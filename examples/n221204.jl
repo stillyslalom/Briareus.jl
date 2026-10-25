@@ -20,41 +20,29 @@
 # `n220919` or `n210808` (proxies, see below), or `n191118` / `n210601`, Zylstra 2022's
 # LEH-size pair of symcaps (3.64 and 3.1 mm LEHs, their measured pulses and Dante;
 # research notes, "Zylstra 2022 LEH pair, time-dependent (2026-10-25)"). Writes
-# `<shot>_<transfer>_<dynamics>_<h>_<capsule_h>[_<energetics>].csv` (P2/P0, P4/P0 and
+# `<shot>_<transfer>_<dynamics>_<h>_<capsule_h>[_<options>].csv` (P2/P0, P4/P0 and
 # capsule Tr per run) to the current directory.
 #
-# Energetics options, as `key=value` arguments anywhere on the line (research notes,
-# "Wall material, conversion and capsule energetics (2026-10-24)"). Each key's default
-# below is its `energetics=old` value; the example's default is `energetics=new`, which
-# sets them all (an explicit key still wins):
-# - `wall=au|du`: gold's Lindl wall loss (default) or the Au-lined DU `du_wall_loss()`;
-# - `conversion=<number>|nif`: 0.75 (default) or `nif_conversion()`, 0.7 t^0.12 ≤ 0.95;
-# - `capsule=ablator|model`: the default ablator (albedo 0.3, initial radius) or a
-#   `CapsuleAlbedo` with albedo `capsule_albedo` absorbing at the effective radius of
-#   HYDRA's ablation front (below); `capsule_albedo` defaults to `CapsuleAlbedo`'s 0.2,
-#   and to 0.22 with `energetics=new`, calibrated there (coarse mesh) so that E_cap is
-#   16.2 % of the coupled energy; `capsule_albedo=young` takes Young 2020's quasi-1D
-#   HYDRA ablator albedo on the schedule's time map instead (published, not fitted);
-#   `capsule=mesh` shrinks the capsule mesh itself along the schedule on the keyframes
-#   (the flux on the shrinking sphere; the static runs keep R₀);
-# - `degrade=<fraction>`: HYDRA's laser degradation (PRE 109 App. 3: 9–13 %), default 0;
-# - `backscatter=off|on`: N221204's measured SBS (42 kJ, early in the peak, on the
-#   inner cones) and SRS (6 kJ, through the peak) (AS24), removed before everything else;
-# - `energetics=new` (the default since 2026-10-25): all of them (du, nif, model with
-#   capsule_albedo 0.22, degrade 0.11, backscatter on; off for Zylstra's pair);
-#   `energetics=old`: none of them, the 2026-10-24 benchmark's settings, which every
-#   untagged run before 2026-10-25 used (research notes, "Zylstra 2022 LEH pair,
-#   time-dependent (2026-10-25)": the published energetics match Dante's rise through
-#   the peak on N221204, N191118 and N210601, the old ones do not).
-# Two further options (research notes, "N221204 late-time drive (2026-10-24)"):
+# Energetics (research notes, "Wall material, conversion and capsule energetics
+# (2026-10-24)" and "Energetics defaults and the capsule share (2026-10-25)"): the
+# Au-lined DU wall (`uranium()`: `du_wall_loss()` and the rising `nif_conversion()`),
+# each wall element's loss from its own temperature history with re-emission under a
+# falling drive (`drive_history`'s defaults), the capsule absorbing at the effective
+# radius of HYDRA's ablation front (`CapsuleAlbedo`, below), HYDRA's laser degradation
+# and, on N221204 and its proxies, the measured backscatter. Options, as `key=value`
+# arguments anywhere on the line:
+# - `capsule=model|mesh`: `CapsuleAlbedo` with albedo `capsule_albedo` absorbing at the
+#   effective radius (default), or the capsule mesh itself shrinking along the schedule
+#   on the keyframes (the flux on the shrinking sphere; the static runs keep R₀);
+#   `capsule_albedo=<number>|young`: α_c, default 0 (calibrated to HYDRA's capsule
+#   share, 16.2 % of the coupled energy, the fit stops at its bound: 0 gives 13.9 %),
+#   or Young 2020's quasi-1D HYDRA ablator albedo on the schedule's time map
+#   (published, not fitted);
+# - `degrade=<fraction>`: HYDRA's laser degradation (PRE 109 App. 3: 9–13 %), default
+#   0.11, the middle of the range.
+# Further options (research notes, "N221204 late-time drive (2026-10-24)"):
 # - `pulse=pak|dn24`: the delivered total power from Pak et al. PRE 109, 025203 Fig. 1
 #   (default, `n221204_pulse()`) or the earlier by-eye DN24 table;
-# - `history=on|off`: the wall loss from each element's own temperature history
-#   (default, `drive_history`'s `wall_history`) or Lindl's constant-T form at the time
-#   since the pulse start (the earlier runs);
-# - `release=on|off`: the wall re-emits stored energy where the drive falls (default,
-#   `drive_history`'s `wall_release`) or not (research notes, "Wall re-emission and the
-#   capsule radius (2026-10-24)");
 # - `lips=prescribed|computed`: the lips close along the prescribed ramp (default) or by
 #   the computed `LipClosure`; `lag=<ns>`: the power through a first-order lag, a
 #   sensitivity estimate of plasma-stored energy (research notes, "Computed LEH closure
@@ -76,16 +64,12 @@ pos = filter(a -> !occursin('=', a), ARGS)
 opt = Dict(String.(split(a, '=', limit = 2)) for a in ARGS if occursin('=', a))
 given = sort(collect(keys(opt)))          # the options on the command line (the file tag)
 shot = get(pos, 7, "n221204")
-# Zylstra 2022's LEH pair (`n191118`, `n210601`): no published backscatter, so
-# `energetics=new` leaves it off for them (N221204's measured SBS/SRS would not apply).
+# Zylstra 2022's LEH pair (`n191118`, `n210601`): no published backscatter, so none for
+# them (N221204's measured SBS/SRS would not apply).
 pair = shot in ("n191118", "n210601")
-energetics = get(opt, "energetics", "new")
-energetics in ("new", "old") || error("energetics=new or energetics=old, not $energetics")
-if energetics == "new"
-    for (k, v) in ("wall" => "du", "conversion" => "nif", "capsule" => "model",
-                   "capsule_albedo" => "0.22", "degrade" => "0.11", "backscatter" => pair ? "off" : "on")
-        haskey(opt, k) || (opt[k] = v)
-    end
+for k in keys(opt)
+    k in ("capsule", "capsule_albedo", "degrade", "pulse", "lips", "lag", "unfold", "metrics", "dt", "alpha_m") ||
+        error("unknown option $k=$(opt[k])")
 end
 h = parse(Float64, get(pos, 1, "0.28"))
 capsule_h = parse(Float64, get(pos, 2, "0.16"))
@@ -94,11 +78,8 @@ transfer = get(pos, 4, pair ? "joint" : "calibrated")   # the pair: the joint mu
 
 # Geometry (mm; n221204_benchmark.md §1, PRE 109 Fig. 1a): 11.24 × 6.4 mm Au-lined DU
 # hohlraum, 3.1 mm LEHs, 1.135 mm capsule. Unpublished, so repository defaults: square
-# corners, no diagnostic windows. With `energetics=old`, a gold wall with the Au
-# wall-loss albedo and the default ablator held at its initial radius (see the
-# energetics options).
-η = get(opt, "conversion", "0.75") == "nif" ? nif_conversion() : parse(Float64, get(opt, "conversion", "0.75"))
-wall_albedo = get(opt, "wall", "au") == "du" ? du_wall_loss() : WallLossAlbedo()
+# corners, no diagnostic windows. The wall is `uranium()`: the Au-lined DU loss with
+# the rising conversion of its gold liner.
 # The capsule model: HYDRA's ablation front (PRE 109 Fig. 1a: 0.92 mm, 0.81 R₀ at 6 ns)
 # along the shape of the LLNL dynamic view-factor model's front for N170827 (Young 2020
 # Fig. 3a, `young2020_radii()`), its time axis mapped piecewise linearly so that its
@@ -118,22 +99,22 @@ capsule_schedule = (tmap, yr.capsule ./ yr.capsule[1])
 # and the albedo is α_c alone; `capsule=model` keeps the mesh at R₀ and absorbs at the
 # effective radius (`CapsuleAlbedo`'s `radius`).
 ya = young2020_albedos()
-capsule_alpha = get(opt, "capsule_albedo", "0.2") == "young" ?
+capsule_alpha = get(opt, "capsule_albedo", "0.0") == "young" ?
     TabulatedAlbedo([τ <= 5.75 ? τ * 6.0 / 5.75 : 6.0 + (τ - 5.75) * (bang - 6.0) / (7.75 - 5.75) for τ in ya.t],
                     ya.capsule) :
-    parse(Float64, get(opt, "capsule_albedo", "0.2"))
-capsule_kind = get(opt, "capsule", "ablator")
-capsule = capsule_kind == "model" ?
-    Material(:ablator; albedo = CapsuleAlbedo(albedo = capsule_alpha, radius = capsule_schedule), conversion = 0.3) :
-    capsule_kind == "mesh" ? Material(:ablator; albedo = CapsuleAlbedo(albedo = capsule_alpha), conversion = 0.3) :
-    ablator()
+    parse(Float64, get(opt, "capsule_albedo", "0.0"))
+capsule_kind = get(opt, "capsule", "model")
+capsule_kind in ("model", "mesh") || error("capsule=model or capsule=mesh, not $capsule_kind")
+capsule = Material(:ablator; conversion = 0.3,
+                   albedo = CapsuleAlbedo(albedo = capsule_alpha,
+                                          radius = capsule_kind == "model" ? capsule_schedule : nothing))
 shrink = capsule_kind == "mesh" ? (; capsule_shrink = capsule_schedule) : (;)
 # Zylstra's pair: N191118's 3.64 mm LEH (N210601's 3.1 mm) and the N210808-design capsule,
 # 1.1285 mm (K22 Fig. 4; N191118's, of the N210207 design, taken the same, *L*).
 leh_radius = shot == "n191118" ? 1.82 : 1.55
 capsule_radius = pair ? 1.1285 : 1.135
 geometry = (length = 11.24, leh_radius, capsule_radius, h, capsule_h,
-            wall = gold(albedo = wall_albedo, conversion = η), capsule)
+            wall = uranium(), capsule)
 R0 = 3.2
 
 # Laser: 192 beams at the public mock HYBRID-E pointing; Δλ 2.75 Å (1ω) on the inner
@@ -211,7 +192,7 @@ beams_at = τ -> with_pulses(beams, pulses, τ)
 @printf("laser energy %.3f MJ, peak %.0f TW\n",
         sum(pulse_energy(pulses[b.group]) for b in beams) / 1e3, maximum(total))
 
-# Backscatter and degradation (energetics options), applied before CBET and the bubble.
+# Backscatter (N221204 and its proxies) and degradation, applied before CBET and the bubble.
 # SBS: 42 ± 11 kJ "early in peak power and mostly on the inner cones", SRS 6 ± 1 kJ
 # "throughout peak" (AS24): on the inner cones, SBS as a fraction rising over 5.0–5.5 ns,
 # flat to 6.5 ns and gone by 7.5 ns, SRS flat over 5.5–9.0 ns (the shapes are *L*), each
@@ -225,22 +206,14 @@ srs_shape = PulseShape([0.0, 5.4, 5.5, 9.0, 9.1, 20.0], [0.0, 0.0, 1.0, 1.0, 0.0
 f_sbs = 42.0 / ∫(τ -> sbs_shape(τ) * inner_power(τ))
 f_srs = 6.0 / ∫(τ -> srs_shape(τ) * inner_power(τ))
 bs_fraction = PulseShape(collect(fine), [f_sbs * sbs_shape(τ) + f_srs * srs_shape(τ) for τ in fine])
-degrade = parse(Float64, get(opt, "degrade", "0"))
-# `history=off`: the wall-loss albedo at the time since the pulse start (constant-T
-# Lindl), as before 2026-10-24's late-time-drive notes; default on: each wall element's
-# loss follows its own temperature history (`drive_history`'s `wall_history`).
-wall_history = get(opt, "history", "on") == "on"
-# `release=off`: no re-emission of stored wall energy under a falling drive (the runs
-# before the 2026-10-24 wall re-emission notes); default on (`drive_history`'s
-# `wall_release`).
-wall_release = get(opt, "release", "on") == "on"
+degrade = parse(Float64, get(opt, "degrade", "0.11"))
+backscatter = !pair
 pre = Any[]
-get(opt, "backscatter", "off") == "on" &&
-    push!(pre, Backscatter(:inner23 => bs_fraction, :inner30 => bs_fraction))
+backscatter && push!(pre, Backscatter(:inner23 => bs_fraction, :inner30 => bs_fraction))
 degrade > 0 && push!(pre, Backscatter((g => degrade for g in (:inner23, :inner30, :outer44, :outer50))...))
 # the laser–plasma models of a run: `pre` first; exactly the given model(s) without it
 with_pre(ms...) = isempty(pre) ? (length(ms) == 1 ? ms[1] : ms) : (pre..., ms...)
-get(opt, "backscatter", "off") == "on" &&
+backscatter &&
     @printf("backscatter: SBS %.1f %% of the inner power over 5.5–6.5 ns, SRS %.2f %% over the peak\n", 100f_sbs, 100f_srs)
 degrade > 0 && @printf("degradation %.0f %%\n", 100degrade)
 
@@ -370,7 +343,7 @@ function cone_mband(mb, sol)
     D = [deposit(op, [b.group === g ? b : remake(b; power = 0.0) for b in bs]).element for g in keys(mb.groups)]
     f = collect(values(mb.groups))
     tot = sum(D)
-    return [tot[e] > 0 && !Briareus.is_aperture(t, e) && Briareus.element_material(t, e).name === :Au ?
+    return [tot[e] > 0 && !Briareus.is_aperture(t, e) && Briareus.element_material(t, e).name in (:Au, :DU) ?
             sum(f[i] * D[i][e] for i in eachindex(D)) / tot[e] * Float64(sol.laser[e]) : 0.0 for e in 1:nelements(t)]
 end
 function dante_spectral(sol)
@@ -379,7 +352,7 @@ function dante_spectral(sol)
     k = findfirst(==(1800.0), E)
     t = sol.model.target
     mband_albedo(a) = Dict(c.name => [g >= k ? a : NaN for g in 1:length(E)-1]
-                           for c in t.components if c.kind === :surface && c.material.name === :Au)
+                           for c in t.components if c.kind === :surface && c.material.name in (:Au, :DU))
     mb = nif_mband()
     PM = cone_mband(mb, sol)
     cases = [(; spot = :brightness, mband = nothing), (; spot = :brightness, mband = MBandEmission()),
@@ -409,14 +382,14 @@ if which == "all"
     static = hohlraum(; radius = R0, geometry...)
     model, op = RadiationModel(static), DepositionOperator(static, beams)
     run!("static, no CBET", () -> drive_history(model, op, beams_at, times; lpi = isempty(pre) ? nothing : Tuple(pre),
-                                                record = dante_tr, wall_history, wall_release))
-    run!("static", () -> drive_history(model, op, beams_at, times; lpi = with_pre(cbet), record = dante_tr, wall_history, wall_release))
+                                                record = dante_tr))
+    run!("static", () -> drive_history(model, op, beams_at, times; lpi = with_pre(cbet), record = dante_tr))
     kw = Keyframes(moving_hohlraum(motion; radius = R0, geometry..., shrink...), keyframes, beams)
-    run!("+wall", () -> drive_history(kw, beams_at, times; lpi = with_pre(cbet), record = dante_tr, wall_history, wall_release))
+    run!("+wall", () -> drive_history(kw, beams_at, times; lpi = with_pre(cbet), record = dante_tr))
 end
 kl = Keyframes(moving_hohlraum(motion; radius = R0, geometry..., leh_closure = lip, shrink...), keyframes, beams)
-which == "all" && run!("+lips", () -> drive_history(kl, beams_at, times; lpi = with_pre(cbet), record = dante_tr, wall_history, wall_release))
-run!("+bubble", () -> drive_history(kl, beams_at, times; lpi = with_pre(cbet, bubble), record = dante_rec, wall_history, wall_release,
+which == "all" && run!("+lips", () -> drive_history(kl, beams_at, times; lpi = with_pre(cbet), record = dante_tr))
+run!("+bubble", () -> drive_history(kl, beams_at, times; lpi = with_pre(cbet, bubble), record = dante_rec,
                                      ylm = metrics))
 
 # PRE 109 Fig. 10, N221204 (HYDRA, post-CBET), digitized (`n221204_fig10()`: ±0.002

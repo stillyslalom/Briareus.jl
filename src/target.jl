@@ -191,15 +191,15 @@ function wall_loss_factor(m::WallLossAlbedo, t, T)
 end
 
 # The depleted-uranium loss factor at 300 eV: calibrated so that an Au-lined DU wall is
-# worth 6.5 % of peak laser power on a NIF high-foot hohlraum (research notes, "Wall
-# material, conversion and capsule energetics (2026-10-24)").
-const DU_LOSS_FACTOR = 0.785
+# worth 6.5 % of peak laser power on a NIF high-foot hohlraum, the wall loss at its
+# effective time (research notes, "Energetics defaults and the capsule share (2026-10-25)").
+const DU_LOSS_FACTOR = 0.836
 
 "Areal mass (g/cm²) of the 0.7 µm gold liner of Döppner et al., PRL 115, 055001 (2015)."
 const DU_LINER = 19.3 * 0.7e-4
 
 """
-    du_wall_loss(; factor = 0.785, factor_exponent = -0.2, liner = 19.3 × 0.7e-4, kwargs...)
+    du_wall_loss(; factor = 0.836, factor_exponent = -0.2, liner = 19.3 × 0.7e-4, kwargs...)
 
 `WallLossAlbedo` for an Au-lined depleted-uranium hohlraum wall: gold's loss times
 `r(T) = factor (T/300 eV)^factor_exponent`, gold until the heat front crosses the
@@ -209,19 +209,20 @@ const DU_LINER = 19.3 * 0.7e-4
   Rosen's Hammer–Rosen fits (M. D. Rosen, "Fundamentals of ICF hohlraums", UCRL-JRNL-
   211678 / OSTI 885380 (2005), §VI) and T^-0.19 between LASNEX's 97.6 / 90.8 / 88.6 % at
   185 / 275 / 305 eV (Schein et al., PRL 98, 175003 (2007)).
-- `factor` 0.785 at 300 eV is *calibrated* in this model: on the NIF high-foot hohlraum
+- `factor` 0.836 at 300 eV is *calibrated* in this model: on the NIF high-foot hohlraum
   of Döppner et al. 2015 at peak (5.75 × 9.43 mm, 3.1 mm LEHs, 1.125 mm capsule,
-  390 TW × 0.86 coupling at 13 ns, conversion 0.9, wall source in inner/outer bands) the
-  DU wall is then worth 6.5 % of laser power against gold at the same capsule radiation
-  temperature, the measured equivalence of the first DU shots (Döppner 2015, citing
-  Kline 2013 and Callahan 2012; Callahan et al., PoP 27, 072704 (2020): "in both
-  simulations and experiments ... about 6.5 % in drive"). Range 0.78–0.79 over 12–14 ns
-  and conversion 0.75–0.95. At equal power it raises the capsule Tr by 4.9 eV against
-  the measured +5 ± 6 eV of Döppner's T-1 pair (N140311 Au 317 eV, N140520 DU 322 eV,
-  391/393 TW). Rosen's "about 0.83" and Schein's 17.5 % (0.825), for the U:Dy:Au
-  cocktail, give 5.1 % here: gold's Lindl loss leaves the wall only ~30 % of the x-ray
-  source at a NIF peak, so the measured 6.5 % needs a larger loss reduction than a
-  wall-dominated accounting (Schein's 17.5 % → 10 %) would.
+  390 TW × 0.86 coupling, conversion 0.9, wall source in inner/outer bands, the wall
+  loss at the effective time 2.5 ns that `drive_history`'s wall history gives a wall
+  ~3 ns into a NIF peak) the DU wall is then worth 6.5 % of laser power against gold at
+  the same capsule radiation temperature, the measured equivalence of the first DU
+  shots (Döppner 2015, citing Kline 2013 and Callahan 2012; Callahan et al., PoP 27,
+  072704 (2020): "in both simulations and experiments ... about 6.5 % in drive").
+  Range 0.827–0.838 over effective times 2–4 ns. At equal power it raises the capsule
+  Tr by 4.8 eV against the measured +5 ± 6 eV of Döppner's T-1 pair (N140311 Au 317 eV,
+  N140520 DU 322 eV, 391/393 TW). It agrees with the U:Dy:Au cocktail's ratio, Rosen's
+  "about 0.83" and Schein's 17.5 % (0.825). (Calibrated at the 13 ns since the pulse
+  start, the constant-temperature evaluation before 2026-10-24, the factor was 0.785:
+  that wall was too reflective and the loss reduction worth too little.)
 - `liner` is the 0.7 µm gold of Döppner 2015's DU hohlraums (7 µm DU, 22.3 µm gold
   backing); HYBRID-E's liner thickness is unpublished. The front crosses it in about
   0.4 ns at 150 eV, so it matters only in the picket.
@@ -876,7 +877,8 @@ of the pulse, ns) capped at 0.95. Extrapolated to a NIF pulse it gives 0.80 at 3
 plateau of Dewald 2008 and the value of the only published VisRad energetics
 calibration (η 0.95 with albedo 0.77, Au, 400 TW; Swadling et al., PoP 32, 052707
 (2025)). *Derived* (research notes, "Wall material, conversion and capsule energetics
-(2026-10-24)"); the materials' default stays the constant 0.75.
+(2026-10-24)"). It is the default conversion of [`gold`](@ref) and [`uranium`](@ref)
+walls whose albedo follows the drive (a constant albedo keeps 0.75).
 """
 nif_conversion(; efficiency = 0.7, time_exponent = 0.12, range = (0.0, 0.95), kwargs...) =
     Conversion(; efficiency, time_exponent, range, kwargs...)
@@ -901,10 +903,29 @@ Material(name::Symbol; albedo = 0.0, conversion = 0.0) =
 
 albedo(m::Material, t = 0.0) = albedo(m.albedo, t)
 
-"Gold hohlraum wall (defaults: albedo 0.8, laser→x-ray conversion 0.75)."
-gold(; albedo = 0.8, conversion = 0.75) = Material(:Au; albedo, conversion)
-"Au-lined depleted-uranium hohlraum wall (defaults: `du_wall_loss()`, conversion 0.75, as gold's)."
-uranium(; albedo = du_wall_loss(), conversion = 0.75) = Material(:DU; albedo, conversion)
+# A wall's default laser → x-ray conversion: the constant 0.75 with a constant albedo
+# (a static, VisRad-style solve), and the rising `nif_conversion()` with an albedo model
+# that follows the drive (a wall loss, a table in time, a foil), whose time is the
+# pulse's.
+_wall_conversion(albedo) = albedo isa Real || albedo isa ConstantAlbedo ? 0.75 : nif_conversion()
+
+"""
+    gold(; albedo = 0.8, conversion)
+
+Gold hohlraum wall. `conversion` (laser → x-ray) defaults to 0.75 with a constant
+`albedo` (static solves) and to [`nif_conversion`](@ref)`()`, `0.7 t^0.12 ≤ 0.95`, with an
+albedo model that follows the drive in time (e.g. `gold(albedo = WallLossAlbedo())` in a
+[`drive_history`](@ref)).
+"""
+gold(; albedo = 0.8, conversion = _wall_conversion(albedo)) = Material(:Au; albedo, conversion)
+"""
+    uranium(; albedo = du_wall_loss(), conversion = nif_conversion())
+
+Au-lined depleted-uranium hohlraum wall: [`du_wall_loss`](@ref)`()` and the rising
+[`nif_conversion`](@ref)`()` (a constant `albedo` takes gold's static 0.75, as [`gold`](@ref)).
+The conversion happens in the gold liner, so it is gold's.
+"""
+uranium(; albedo = du_wall_loss(), conversion = _wall_conversion(albedo)) = Material(:DU; albedo, conversion)
 "Capsule ablator (defaults: albedo 0.3, conversion 0.3)."
 ablator(; albedo = 0.3, conversion = 0.3) = Material(:ablator; albedo, conversion)
 "Perfect absorber that emits nothing."

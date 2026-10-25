@@ -47,10 +47,16 @@ _capsule_Tr(sol, t) = (c = elements(t, :capsule);
     nl = du_wall_loss(liner = 0.0)
     @test wall_loss_factor(nl, 8.0, 250.0) ≈ Briareus.DU_LOSS_FACTOR * (250 / 300)^-0.2
     @test uranium().name === :DU && uranium().albedo isa WallLossAlbedo
+    # walls whose albedo follows the drive convert as `nif_conversion()`; constant ones 0.75
+    @test uranium().conversion isa Conversion && gold(albedo = WallLossAlbedo()).conversion isa Conversion
+    @test conversion_efficiency(uranium().conversion, 5.0) == conversion_efficiency(nif_conversion(), 5.0)
+    @test gold().conversion === 0.75 && gold(albedo = 0.85).conversion === 0.75
+    @test uranium(albedo = 0.9).conversion === 0.75
 
     # Döppner 2015: an Au-lined DU wall is worth 6.5 % of peak laser power on the NIF
-    # high-foot hohlraum (5.75 × 9.43 mm, 3.1 mm LEHs) at peak, 13 ns; the calibration
-    # mesh was h = 0.4, here a coarser one (the ratio moves by < 0.3 %)
+    # high-foot hohlraum (5.75 × 9.43 mm, 3.1 mm LEHs) at peak, the wall loss at its
+    # effective time 2.5 ns (`drive_history`'s wall history; the calibration mesh was
+    # h = 0.4, here a coarser one: the ratio moves by < 0.3 %)
     R, h = 2.875, 0.5
     mk(alb) = hohlraum(; length = 9.43, radius = R, leh_radius = 1.55, capsule_radius = 1.125, h,
                        capsule_h = h / 3, wall = Material(:w; albedo = alb, conversion = 0.9),
@@ -60,7 +66,7 @@ _capsule_Tr(sol, t) = (c = elements(t, :capsule);
     md = RadiationModel(td; F = ma.F)
     s = _band_source(ta, R, ((0.30, 0.5, 1.7), (0.70, 3.0, 4.2)))
     P = 0.86 * 390
-    Tr(m, p) = _capsule_Tr(solve(m, p .* s; time = 13.0), ta)
+    Tr(m, p) = _capsule_Tr(solve(m, p .* s; time = 2.5), ta)
     T0 = Tr(md, P)
     lo, hi = P, 1.2P
     for _ in 1:30
@@ -236,11 +242,12 @@ end
     beams = wl_beams
     op = wl_op
     w = elements(t, :wall)
-    η = conversions(t)
     # per step: each element's incident-flux temperature and net flux into it,
-    # (1 − α) H − E with E the emission the history adds to the source
+    # (1 − α) H − E with E the emission the history adds to the source (the wall
+    # converts as `nif_conversion()`, at the step's time)
     rec = sol -> (T = radiation_temperature.(sol.H),
-                  F = (1 .- sol.albedo) .* sol.H .- (sol.source .- η .* sol.laser ./ t.elem_area))
+                  F = (1 .- sol.albedo) .* sol.H .-
+                      (sol.source .- conversions(t, sol.time) .* sol.laser ./ t.elem_area))
     # a rising drive: no element falls below its running maximum, bit for bit
     rise = PulseShape([0.0, 0.2, 4.0, 4.2, 9.0], [0.0, 0.2, 0.2, 1.6, 1.6])
     times = [0.5:0.5:4.0; 4.25; 4.5:0.5:9.0]
