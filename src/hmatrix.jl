@@ -1,7 +1,7 @@
 # Hierarchical (H-matrix) view factors: near pairs dense, far cluster pairs of uniform
 # visibility low rank (adaptive cross approximation on the exact pair kernel), so
 # storage and assembly grow as N^1.3–1.5 rather than N² on a hohlraum (the capsule's
-# shadow edges stay dense). Only products are offered (`mul!` with F and Fᵀ), which is
+# shadow edges and the near field stay dense). Only products are offered (`mul!` with F and Fᵀ), which is
 # all the iterative radiosity path uses.
 
 """
@@ -17,8 +17,10 @@ transposed, and with dual vectors) accumulate in Float64, which is all the itera
 radiosity path uses. Indexing one entry searches the blocks (for inspection only);
 `Matrix(H)` expands it by products with the identity.
 
-Clusters bisect the element centroids along the longest axis of their box down to
-`leaf` elements. A pair of clusters whose boxes are `eta` × the larger diameter apart is
+Clusters split the elements by the surface they lie on (a component's curved surface, or
+the component), then bisect the centroids along the longest axis of their box down to
+`leaf` elements, so that no cluster mixes capsule and wall, or cap and wall at a corner
+(such blocks seldom compress, and their low-rank error falls on the small rows). A pair of clusters whose boxes are `eta` × the larger diameter apart is
 a candidate for low rank, decided block by block:
 - rows and columns whose elements face no centroid of the other cluster are zero (a box
   test), and so is a block that a convex closed part (a capsule) hides wholly (its
@@ -31,16 +33,21 @@ a candidate for low rank, decided block by block:
   pivoting on the exact pair kernel, recompressed by SVD to `tol` relative Frobenius
   error, checked on sampled entries); a block that does not compress within `maxrank`
   terms is refined;
-- an occupied shaft is refined down to leaf pairs, which take every pair's visibility
-  ray: wholly hidden pairs give zero, wholly visible ones a cross approximation, and
-  partly seen ones (a shadow edge, a rim, `:sampled` fractions) stay dense;
+- a shaft holding facets of one convex part only (the capsule, both clusters outside its
+  circumscribed ball) decides each pair exactly by the part's balls: a segment missing
+  the circumscribed ball is visible, one through the inscribed ball hidden, and only the
+  few between take a ray. The mask makes the block zero, low rank without further rays,
+  or refined with it down to dense leaf pairs (a shadow edge);
+- any other occupied shaft is refined down to leaf pairs, which take every pair's
+  visibility ray: wholly hidden pairs give zero, wholly visible ones a cross
+  approximation, and partly seen ones (a rim, `:sampled` fractions) stay dense;
 - rows cut by the facing test (a sphere's terminator) are kept dense beside the low-rank
   rest, and a small block with only a few facing pairs is stored on those.
 Near pairs are dense (Float32), with the same entries as `view_factors` (`_vf_pair`).
 
-On the fine hohlraum preset (17.6k elements) the default `tol = 1e-5` changes the capsule
-moments by ~1e-8 and the incident flux by ≤ 1e-5 relative per element against the Float32
-matrix (research notes, "Hierarchical view factors").
+On the hohlraum presets (10–29k elements) the default `tol = 1e-6` changes the capsule
+moments by ≤ 1e-8 and the incident flux by ≤ 2e-6 relative per element against the
+Float32 matrix or a tighter `HMatrix` (research notes, "Hierarchical view factors").
 """
 struct HMatrix <: AbstractMatrix{Float64}
     n::Int
@@ -136,8 +143,12 @@ _hdist(a::_HCluster, b::_HCluster) =
     norm(max.(zero(Vec3), max.(a.bmin - b.bmax, b.bmin - a.bmax)))
 _hleaf(c::_HCluster) = c.kids == (0, 0)
 
-# Bisection of the centroids along the longest axis of their box, at the median.
-function _hcluster_tree(C::Vector{Vec3}, pad::Vector{Float64}, leaf::Int)
+# Bisection of the centroids along the longest axis of their box, at the median. A
+# cluster whose elements lie on several surfaces (`group`) is first split by surface,
+# the largest one from the rest, so that no cluster mixes, say, capsule and wall
+# elements, or a cap and the wall at a corner (such blocks seldom compress, and a
+# capsule element in a wall cluster keeps it from the capsule's ball certificate).
+function _hcluster_tree(C::Vector{Vec3}, pad::Vector{Float64}, leaf::Int, group::Vector{Int} = zeros(Int, length(C)))
     n = length(C)
     perm = collect(1:n)
     nodes = _HCluster[]
@@ -150,10 +161,21 @@ function _hcluster_tree(C::Vector{Vec3}, pad::Vector{Float64}, leaf::Int)
         center = idx[argmin([norm(C[e] - mid) for e in idx])]
         push!(nodes, _HCluster(lo, hi, cmin .- p, cmax .+ p, cmin, cmax, (0, 0), center))
         me = length(nodes)
-        hi - lo + 1 <= leaf && return me
-        ax = argmax(cmax - cmin)
-        m = (lo + hi) ÷ 2
-        sort!(idx; by = e -> (C[e][ax], e))
+        g1 = group[idx[1]]
+        if hi > lo && any(e -> group[e] != g1, idx)
+            counts = Dict{Int,Int}()
+            for e in idx
+                counts[group[e]] = get(counts, group[e], 0) + 1
+            end
+            gmax = minimum(g for (g, k) in counts if k == maximum(values(counts)))
+            sort!(idx; by = e -> (group[e] != gmax, e))
+            m = lo + counts[gmax] - 1
+        else
+            hi - lo + 1 <= leaf && return me
+            ax = argmax(cmax - cmin)
+            m = (lo + hi) ÷ 2
+            sort!(idx; by = e -> (C[e][ax], e))
+        end
         a = build(lo, m)
         b = build(m + 1, hi)
         c = nodes[me]
@@ -162,6 +184,18 @@ function _hcluster_tree(C::Vector{Vec3}, pad::Vector{Float64}, leaf::Int)
     end
     n > 0 && build(1, n)
     return nodes, perm
+end
+
+# Per element: an index of the surface it lies on (its component's curved surface, or
+# its component if it has none), so that coplanar caps and LEH discs share one.
+function _hsurface_groups(t::Target)
+    keys = Any[]
+    gc = map(t.components) do c
+        k = c.surface === nothing ? c : c.surface
+        i = findfirst(x -> x == k, keys)
+        i === nothing ? (push!(keys, k); length(keys)) : i
+    end
+    return [gc[c] for c in t.elem_comp]
 end
 
 # Cluster pairs (s, t), s before t or s = t, covering the upper triangle of G: geometric
@@ -241,16 +275,18 @@ _box_corners(lo, hi) = (Vec3(lo[1], lo[2], lo[3]), Vec3(hi[1], lo[2], lo[3]), Ve
                         Vec3(hi[1], hi[2], lo[3]), Vec3(lo[1], lo[2], hi[3]), Vec3(hi[1], lo[2], hi[3]),
                         Vec3(lo[1], hi[2], hi[3]), Vec3(hi[1], hi[2], hi[3]))
 
-# Whether a possible occluder meets the shaft between clusters a and b. A facet is not
-# one (for the pairs `_vf_pair_free` evaluates without a ray: facing beyond the slack,
-# so leaving their facets) if
+# What occludes the shaft between clusters a and b: 0 if nothing can occlude a segment
+# between them, c > 0 if only facets of the convex component c can and its balls certify
+# each segment (`_hball_certifies`: neither cluster on it, both outside its circumscribed
+# ball), else -1. A facet is not an occluder (for the pairs `_vf_pair_free` evaluates
+# without a ray: facing beyond the slack, so leaving their facets) if
 # - it lies on a curved surface (cylinder, sphere, cone) both clusters lie inside;
 # - it belongs to a convex component (every vertex behind every facet) one of the
 #   clusters lies on entirely, with one facet per element: a segment leaving a face of a
 #   convex polyhedron outward stays outside it;
 # - each cluster lies strictly in front of its plane, or is planar in that plane facing
 #   the same way: the lifted ray ends are in front, so the segment does not cross it.
-function _shaft_occupied(ctx, opts, sa::Int, sb::Int)
+function _shaft_occluder(ctx, opts, sa::Int, sb::Int)
     (; t, bvh, tri_surf, ε) = ctx
     a, b = opts.nodes[sa], opts.nodes[sb]
     allin, cplane, ccomp, convex = opts.allin, opts.cplane, opts.ccomp, opts.convex
@@ -265,10 +301,17 @@ function _shaft_occupied(ctx, opts, sa::Int, sb::Int)
         end
         return false
     end
-    isempty(bvh.nodes) && return false
+    # components whose facets need no test: convex ones a cluster lies on (never
+    # occluders), and the certified one once a facet of it is in the shaft
+    excluded(c) = c > 0 && convex[c] && (ccomp[sa] == c || ccomp[sb] == c)
+    isempty(bvh.nodes) && return 0
+    found = 0
     stack = Int32[1]
     while !isempty(stack)
-        node = bvh.nodes[pop!(stack)]
+        ni = pop!(stack)
+        node = bvh.nodes[ni]
+        sig = opts.bvh_comp[ni]
+        (excluded(sig) || (found > 0 && sig == found)) && continue
         outside_box(node.lo, node.hi) && continue
         if node.b < 0
             for k in node.a:(node.a - node.b - 1)
@@ -280,17 +323,48 @@ function _shaft_occupied(ctx, opts, sa::Int, sb::Int)
                 sf = tri_surf[id]
                 sf != 0 && allin[sf, sa] && allin[sf, sb] && continue
                 c = t.tri_comp[id]
-                convex[c] && (ccomp[sa] == c || ccomp[sb] == c) && continue
+                excluded(c) && continue
                 n = t.tri_normal[id]
                 d = dot(n, v0)
                 clear(sa, ca, n, d) && clear(sb, cb, n, d) && continue
-                return true
+                c == found && continue
+                found == 0 && _hball_certifies(opts, c, a, b) || return -1
+                found = Int(c)
             end
         else
             push!(stack, node.a, node.b)
         end
     end
-    return false
+    return found
+end
+_shaft_occupied(ctx, opts, sa::Int, sb::Int) = _shaft_occluder(ctx, opts, sa, sb) != 0
+
+# Whether the balls of convex component c decide every pair between clusters a and b
+# (`_hvis_ball`): c has balls (`occluders`), neither cluster lies on c, and both boxes
+# lie outside its circumscribed ball.
+function _hball_certifies(opts, c, a::_HCluster, b::_HCluster)
+    k = opts.ball[c]
+    k == 0 && return false
+    _, ctr, _, rout = opts.occluders[k]
+    return _box_distance(ctr, a.bmin, a.bmax) > rout && _box_distance(ctr, b.bmin, b.bmax) > rout
+end
+
+# Per BVH node: the component of every facet below it, or -1 if they are of several.
+function _bvh_components(bvh, tri_comp)
+    sig = zeros(Int, length(bvh.nodes))
+    function rec(ni)
+        node = bvh.nodes[ni]
+        if node.b < 0
+            cs = unique(Int(tri_comp[bvh.ids[bvh.items[k]]]) for k in node.a:(node.a - node.b - 1))
+            sig[ni] = length(cs) == 1 ? cs[1] : -1
+        else
+            x, y = rec(node.a), rec(node.b)
+            sig[ni] = x == y ? x : -1
+        end
+        return sig[ni]
+    end
+    isempty(bvh.nodes) || rec(1)
+    return sig
 end
 
 # Whether every segment between the boxes a and b crosses the ball (c, r) (exactly, for
@@ -407,11 +481,63 @@ function _hcluster_data(t::Target, nodes, perm)
     return cplane, ccomp, convex, occluders
 end
 
-# G at tree positions (p, q); `free`: the pair's shaft holds no occluder (no ray needed)
+# The exact visibility of every pair of a block (`_vf_visible`'s verdict, by tree
+# positions from (r0, c0)): -1 not facing, 0 hidden, 1 visible.
+struct _HMask
+    v::Matrix{Int8}
+    r0::Int
+    c0::Int
+end
+
+# G at tree positions (p, q); `free`: the pair's shaft holds no occluder (no ray needed),
+# or the block's visibility mask.
 function _hentry_eval(ctx, perm, p, q, free::Bool)
     i, j = perm[p], perm[q]
     (!free || i == j) && return _vf_exchange(ctx, i, j)
     return i < j ? _vf_pair_free(ctx, i, j) : _vf_pair_free(ctx, j, i)
+end
+function _hentry_eval(ctx, perm, p, q, M::_HMask)
+    M.v[p-M.r0+1, q-M.c0+1] > 0 || return 0.0
+    i, j = minmax(perm[p], perm[q])
+    d = ctx.C[j] - ctx.C[i]
+    return _vf_kernel(ctx, i, j, 1.0, d, dot(d, d))
+end
+
+# Visibility of the pair i < j whose shaft holds facets of one convex component only, its
+# inscribed ball (center `ctr`, radius `rin`) and circumscribed ball (`rout`) both
+# clusters' boxes lie outside of (`_hball_certifies`): a segment missing the
+# circumscribed ball hits no facet of it, and one through the inscribed ball crosses the
+# closed surface. Only pairs between the two, or admitted by the facing slack (whose rays
+# start farther off their facets), take `_vf_visible`'s ray. Centroid visibility only.
+function _hvis_ball(ctx, i, j, ctr, rin, rout)
+    (; C, Nrm, slack, ε) = ctx
+    d = C[j] - C[i]
+    r2 = dot(d, d)
+    r2 == 0 && return Int8(-1)
+    r = sqrt(r2)
+    ci, cj = dot(Nrm[i], d) / r, -dot(Nrm[j], d) / r
+    ci > -slack[i] && cj > -slack[j] || return Int8(-1)
+    if ci > slack[i] && cj > slack[j]
+        # the ray ends of `_vf_visible` (lifted by ε)
+        oi, oj = C[i] + ε * Nrm[i], C[j] + ε * Nrm[j]
+        w = oj - oi
+        u = clamp(dot(ctr - oi, w) / dot(w, w), 0.0, 1.0)
+        x = oi + u * w - ctr
+        q2 = dot(x, x)
+        q2 > (rout * (1 + 1e-9))^2 && return Int8(1)
+        q2 < (rin * (1 - 1e-9))^2 && return Int8(0)
+    end
+    return first(_vf_visible(ctx, i, j)) > 0 ? Int8(1) : Int8(0)
+end
+
+# The visibility mask of the block rows × cols whose shaft component c certifies.
+function _hmask(ctx, opts, perm, rows::UnitRange{Int}, cols::UnitRange{Int}, c::Int)
+    _, ctr, rin, rout = opts.occluders[opts.ball[c]]
+    V = Matrix{Int8}(undef, length(rows), length(cols))
+    for (b, q) in enumerate(cols), (a, p) in enumerate(rows)
+        V[a, b] = _hvis_ball(ctx, minmax(perm[p], perm[q])..., ctr, rin, rout)
+    end
+    return _HMask(V, first(rows), first(cols))
 end
 
 # `_vf_pair` of a pair no facet can occlude: a pair facing beyond the slack of the
@@ -431,7 +557,7 @@ end
 
 # Dense block of G at tree positions rows × cols (Float32); a diagonal block is filled
 # from its upper triangle.
-function _hdense(ctx, perm, rows::UnitRange{Int}, cols::UnitRange{Int}, free::Bool)
+function _hdense(ctx, perm, rows::UnitRange{Int}, cols::UnitRange{Int}, free)
     D = Matrix{Float32}(undef, length(rows), length(cols))
     if rows == cols
         for b in eachindex(cols), a in 1:b
@@ -448,7 +574,7 @@ function _hdense(ctx, perm, rows::UnitRange{Int}, cols::UnitRange{Int}, free::Bo
 end
 
 # Dense block at tree positions rows × cols (index lists of two different clusters).
-function _hdense_index(ctx, perm, rows::Vector{Int}, cols::Vector{Int}, free::Bool)
+function _hdense_index(ctx, perm, rows::Vector{Int}, cols::Vector{Int}, free)
     D = Matrix{Float32}(undef, length(rows), length(cols))
     for b in eachindex(cols), a in eachindex(rows)
         D[a, b] = Float32(_hentry_eval(ctx, perm, rows[a], cols[b], free))
@@ -508,7 +634,7 @@ end
 
 # Adaptive cross approximation with partial pivoting of the block rows × cols of G to
 # relative Frobenius accuracy `tol`, at most `kmax` terms. Returns (U, V, converged).
-function _haca(ctx, perm, rows, cols, tol, kmax, i0, free::Bool)
+function _haca(ctx, perm, rows, cols, tol, kmax, i0, free)
     m, n = length(rows), length(cols)
     Us, Vs = Vector{Float64}[], Vector{Float64}[]
     used = falses(m)
@@ -596,7 +722,7 @@ function _hrecompress(Us, Vs, tol)
 end
 
 # Estimated Frobenius error of U Vᵀ against the block, from `ns` sampled entries.
-function _hcheck(ctx, perm, rows, cols, U, V, ns, seed, free::Bool)
+function _hcheck(ctx, perm, rows, cols, U, V, ns, seed, free)
     m, n = length(rows), length(cols)
     rng = Xoshiro(seed)
     e2 = 0.0
@@ -614,17 +740,40 @@ function _hcheck(ctx, perm, rows, cols, U, V, ns, seed, free::Bool)
     return sqrt(e2 * m * n / ns), sqrt(g2 * m * n / ns)
 end
 
+# The exact visibility of the block rows × cols by a ray per pair (`_vf_visible`) on the
+# facing positions ra × cb (the others do not face); centroid visibility only.
+function _hmask_rays(ctx, perm, rows::UnitRange{Int}, cols::UnitRange{Int}, ra, cb)
+    V = fill(Int8(-1), length(rows), length(cols))
+    for q in cb, p in ra
+        f = first(_vf_visible(ctx, minmax(perm[p], perm[q])...))
+        V[p-first(rows)+1, q-first(cols)+1] = f < 0 ? Int8(-1) : f > 0 ? Int8(1) : Int8(0)
+    end
+    return _HMask(V, first(rows), first(cols))
+end
+
+# Visible and hidden facing pairs of a mask on positions ra × cb.
+function _hmask_counts(M::_HMask, ra, cb)
+    nv = nh = 0
+    for q in cb, p in ra
+        f = M.v[p-M.r0+1, q-M.c0+1]
+        nv += f > 0
+        nh += f == 0
+    end
+    return nv, nh
+end
+
 # The blocks of cluster pair (s, t) into `dense`/`lowrank`: low rank when the pair is
 # admissible, of uniform visibility and its cross approximation converges and passes a
-# sampled check; otherwise its children, down to dense leaf pairs.
-function _hassemble!(dense, lowrank, scattered, ctx, nodes, perm, s, t, far, opts)
+# sampled check; otherwise its children, down to dense leaf pairs. `known`: what a parent
+# block found of the pair's visibility (`true`: an empty shaft; a mask), else `nothing`.
+function _hassemble!(dense, lowrank, scattered, ctx, nodes, perm, s, t, far, opts, known = nothing)
     a, b = nodes[s], nodes[t]
     rows, cols = a.lo:a.hi, b.lo:b.hi
     m, n = length(rows), length(cols)
     st = opts.stats
     leaves = _hleaf(a) && _hleaf(b)
-    vis = nothing
-    occupied = true
+    vis = nothing        # visible fractions of a leaf pair (`:sampled` visibility)
+    ev = false           # entries: `true` (empty shaft, no rays), `false` (rays), a mask
     if far
         Threads.atomic_add!(st.candidates, 1)
         # rows (columns) whose element faces no centroid of the other cluster are zero
@@ -636,7 +785,8 @@ function _hassemble!(dense, lowrank, scattered, ctx, nodes, perm, s, t, far, opt
             ra, cb = _hfacing(ctx, perm, ra, cb)
             fa, fb = intersect(fa, ra), intersect(fb, cb)
             if !isempty(ra) && 4 * length(ra) * length(cb) <= m * n
-                push!(scattered, (ra, cb, _hdense_index(ctx, perm, ra, cb, !_shaft_occupied(ctx, opts, s, t))))
+                ev = known !== nothing ? known : !_shaft_occupied(ctx, opts, s, t)
+                push!(scattered, (ra, cb, _hdense_index(ctx, perm, ra, cb, ev)))
                 Threads.atomic_add!(st.sparse, 1)
                 return
             end
@@ -645,24 +795,52 @@ function _hassemble!(dense, lowrank, scattered, ctx, nodes, perm, s, t, far, opt
             Threads.atomic_add!(st.facing, 1)
             return
         end
-        occupied = _shaft_occupied(ctx, opts, s, t)
-        if occupied && _convex_hides(opts, s, t)
-            Threads.atomic_add!(st.shadowed, 1)
-            return                                       # wholly behind a convex part
-        end
-        if occupied && leaves
-            # the exact visibility of every pair: zero, low rank if wholly visible, or dense
-            vis = fill(-1.0, m, n)
-            for q in cb, p in ra
-                vis[p-a.lo+1, q-b.lo+1] = first(_vf_visible(ctx, minmax(perm[p], perm[q])...))
+        if known !== nothing
+            ev = known
+        else
+            occ = _shaft_occluder(ctx, opts, s, t)
+            if occ != 0 && _convex_hides(opts, s, t)
+                Threads.atomic_add!(st.shadowed, 1)
+                return                                   # wholly behind a convex part
             end
-            if !any(>(0), vis)
+            if occ > 0 && ctx.vis === nothing && m * n <= opts.mask_size
+                # only a convex part's facets in the shaft: its balls decide most pairs
+                # (centroid visibility; `:sampled` fractions take the rays below)
+                ev = _hmask(ctx, opts, perm, rows, cols, occ)
+                Threads.atomic_add!(st.masked, 1)
+            elseif occ != 0 && leaves
+                # the exact visibility of every pair: a ray each
+                if ctx.vis === nothing
+                    ev = _hmask_rays(ctx, perm, rows, cols, ra, cb)
+                else
+                    vis = fill(-1.0, m, n)
+                    for q in cb, p in ra
+                        vis[p-a.lo+1, q-b.lo+1] = first(_vf_visible(ctx, minmax(perm[p], perm[q])...))
+                    end
+                    if !any(>(0), vis)
+                        Threads.atomic_add!(st.hidden, 1)
+                        return
+                    end
+                    all(f -> f < 0 || f == 1, vis) || (Threads.atomic_add!(st.mixed, 1); @goto dense)
+                end
+            else
+                ev = occ == 0
+            end
+        end
+        if ev isa _HMask
+            # zero if wholly hidden, low rank if wholly visible (no more rays), else
+            # refined with the mask down to dense leaf pairs
+            nv, nh = _hmask_counts(ev, ra, cb)
+            if nv == 0
                 Threads.atomic_add!(st.hidden, 1)
                 return
             end
-            all(f -> f < 0 || f == 1, vis) || (Threads.atomic_add!(st.mixed, 1); @goto dense)
+            if nh > 0
+                leaves && Threads.atomic_add!(st.mixed, 1)
+                @goto dense
+            end
         end
-        if !occupied || leaves
+        if ev !== false || vis !== nothing
             # rows and columns facing the other cluster wholly get the cross approximation,
             # the few cut by the facing test (if they are few) are kept dense
             split = (length(fa) < length(ra) || length(fb) < length(cb)) &&
@@ -672,13 +850,13 @@ function _hassemble!(dense, lowrank, scattered, ctx, nodes, perm, s, t, far, opt
             kmax = min(opts.maxrank, (3 * ma * na) ÷ (4 * (ma + na)))
             if kmax >= 1
                 i0 = something(findfirst(==(opts.iperm[a.center]), ar), cld(ma, 2))
-                Us, Vs, ok = _haca(ctx, perm, ar, ac, opts.tol, kmax, i0, !occupied)
+                Us, Vs, ok = _haca(ctx, perm, ar, ac, opts.tol, kmax, i0, ev)
                 # a cross approximation that found nothing does not prove a zero block
                 ok &= !isempty(Us)
                 if ok
                     Uc, Vc = _hrecompress(Us, Vs, opts.tol)
                     ns = min(ma * na, max(32, (ma + na) ÷ 2))
-                    err, nrm = _hcheck(ctx, perm, ar, ac, Uc, Vc, ns, hash((a.lo, b.lo)), !occupied)
+                    err, nrm = _hcheck(ctx, perm, ar, ac, Uc, Vc, ns, hash((a.lo, b.lo)), ev)
                     if err <= 10 * opts.tol * nrm
                         if size(Uc, 2) > 0
                             U, V = zeros(Float32, m, size(Uc, 2)), zeros(Float32, n, size(Vc, 2))
@@ -688,8 +866,8 @@ function _hassemble!(dense, lowrank, scattered, ctx, nodes, perm, s, t, far, opt
                         end
                         if split
                             pa, pb = setdiff(ra, fa), setdiff(cb, fb)
-                            isempty(pa) || push!(scattered, (pa, cb, _hdense_index(ctx, perm, pa, cb, !occupied)))
-                            isempty(pb) || push!(scattered, (fa, pb, _hdense_index(ctx, perm, fa, pb, !occupied)))
+                            isempty(pa) || push!(scattered, (pa, cb, _hdense_index(ctx, perm, pa, cb, ev)))
+                            isempty(pb) || push!(scattered, (fa, pb, _hdense_index(ctx, perm, fa, pb, ev)))
                         end
                         Threads.atomic_add!(st.lowrank, 1)
                         return
@@ -706,17 +884,20 @@ function _hassemble!(dense, lowrank, scattered, ctx, nodes, perm, s, t, far, opt
         if vis !== nothing
             D = _hdense_masked(ctx, perm, rows, cols, vis)
         else
-            free = far ? !occupied : !_shaft_occupied(ctx, opts, s, t)
-            D = _hdense(ctx, perm, rows, cols, free)
+            D = _hdense(ctx, perm, rows, cols, far ? ev : !_shaft_occupied(ctx, opts, s, t))
         end
         push!(dense, (a.lo, b.lo, D))
-    elseif _hleaf(b) || (!_hleaf(a) && m >= n)
-        for k in a.kids
-            _hassemble!(dense, lowrank, scattered, ctx, nodes, perm, k, t, far, opts)
-        end
     else
-        for k in b.kids
-            _hassemble!(dense, lowrank, scattered, ctx, nodes, perm, s, k, far, opts)
+        # what this block found of the visibility holds for its children
+        kn = far && ev !== false ? ev : nothing
+        if _hleaf(b) || (!_hleaf(a) && m >= n)
+            for k in a.kids
+                _hassemble!(dense, lowrank, scattered, ctx, nodes, perm, k, t, far, opts, kn)
+            end
+        else
+            for k in b.kids
+                _hassemble!(dense, lowrank, scattered, ctx, nodes, perm, s, k, far, opts, kn)
+            end
         end
     end
     return
@@ -732,7 +913,7 @@ cluster), `maxrank` (most terms of a cross approximation before the block is ref
 Engineering defaults, from the work–precision sweep in the research notes
 ("Hierarchical view factors").
 """
-const HMATRIX_DEFAULTS = (tol = 1e-5, eta = 1.0, leaf = 48, maxrank = 32)
+const HMATRIX_DEFAULTS = (tol = 1e-6, eta = 1.0, leaf = 48, maxrank = 32)
 
 function _hmatrix_view_factors(ctx; tol = HMATRIX_DEFAULTS.tol, eta = HMATRIX_DEFAULTS.eta,
                                leaf::Integer = HMATRIX_DEFAULTS.leaf,
@@ -743,11 +924,11 @@ function _hmatrix_view_factors(ctx; tol = HMATRIX_DEFAULTS.tol, eta = HMATRIX_DE
     t = ctx.t
     N = nelements(t)
     pad = ctx.size ./ sqrt(2)
-    nodes, perm = _hcluster_tree(ctx.C, pad, Int(leaf))
+    nodes, perm = _hcluster_tree(ctx.C, pad, Int(leaf), _hsurface_groups(t))
     iperm = invperm(perm)
     far, near = _hblock_pairs(nodes, eta)
-    stats = NamedTuple{(:candidates, :lowrank, :facing, :sparse, :shadowed, :hidden, :mixed, :unconverged,
-                        :rejected)}(ntuple(_ -> Threads.Atomic{Int}(0), 9))
+    stats = NamedTuple{(:candidates, :lowrank, :facing, :sparse, :shadowed, :masked, :hidden, :mixed, :unconverged,
+                        :rejected)}(ntuple(_ -> Threads.Atomic{Int}(0), 10))
     # allin[k, c]: every element of cluster c inside curved surface k
     ns = size(ctx.inside, 1)
     allin = BitMatrix(undef, ns, length(nodes))
@@ -755,8 +936,13 @@ function _hmatrix_view_factors(ctx; tol = HMATRIX_DEFAULTS.tol, eta = HMATRIX_DE
         allin[k, c] = all(p -> ctx.inside[k, perm[p]], nd.lo:nd.hi)
     end
     cplane, ccomp, convex, occluders = _hcluster_data(t, nodes, perm)
+    ball = zeros(Int, length(t.components))
+    for (k, o) in enumerate(occluders)
+        ball[o[1]] = k
+    end
     opts = (; tol = Float64(tol), maxrank = Int(maxrank), iperm, stats, nodes, allin, cplane, ccomp, convex, occluders,
-            facing_size = 16 * Int(leaf)^2)
+            ball, bvh_comp = _bvh_components(ctx.bvh, t.tri_comp), facing_size = 16 * Int(leaf)^2,
+            mask_size = 64 * Int(leaf)^2)
     tasks = [[(p, true) for p in far]; [(p, false) for p in near]]
     # largest first
     cost((p, _)) = (nodes[p[1]].hi - nodes[p[1]].lo + 1) * (nodes[p[2]].hi - nodes[p[2]].lo + 1)

@@ -12,6 +12,12 @@
     H = view_factors(t; storage = :hmatrix, kw...)
     @test H isa HMatrix && size(H) == (N, N)
     @test !isempty(H.lowrank) && !isempty(H.dense) && !isempty(H.scattered) && H.info.facing > 0
+    @test H.info.masked > 0                       # shafts the capsule's balls decide
+    # no cluster mixes surfaces (capsule, wall, a cap with its LEH disc)
+    g = Briareus._hsurface_groups(t)
+    @test length(unique(g)) == 4
+    nodes, perm = Briareus._hcluster_tree(t.elem_centroid, ones(N), 16, g)
+    @test all(nd -> nd.kids != (0, 0) || allequal(g[perm[nd.lo:nd.hi]]), nodes)
     @test H.info.bytes < 4 * N^2
     @test occursin("HMatrix", sprint(show, MIME"text/plain"(), H))
     M = Matrix(H)

@@ -636,6 +636,23 @@ Research notes, "Large radiation models (2026-10-24)". Item 14's first part.
 - View-factor assembly 17–45 % faster, bit for bit (a boxed near-pair factor): 17.6k
   56 → 31 s on 4 threads.
 
+## Done (2026-10-25, the H-matrix's N^1.5 remainder)
+Research notes, "The H-matrix's N^1.5 remainder (2026-10-25)". Item 14.
+- **Clusters by surface**: the cluster tree splits elements of different surfaces
+  (capsule, wall, each cap with its LEH disc, CAD pieces) before bisecting, so no
+  corner or capsule–wall cluster mixes them. Far candidates 177k → 57k at 28.6k, ACA
+  give-ups 46.5k → 15k; element-wise flux errors 8.6e-5 → 1.2e-7 at 10.5k (the old
+  tree's mixed blocks dropped small capsule entries within their Frobenius tolerance).
+- **Exact ball masks for the capsule's shadow edges**: a shaft whose only occluder is a
+  convex part decides each pair by its inscribed and circumscribed balls (rays only
+  between them), and passes the mask down; leaf ray masks are reused in ACA. Never
+  sampled.
+- Default `tol` 1e-5 → 1e-6. Assembly 17.6k 17 → 13 s, 28.6k 33–42 → 22–25 s, 49.8k
+  90–98 → 57 s (N^1.4); storage unchanged (212 MB at 17.6k, 1.0 GB at 49.8k). Moments
+  within 7e-9 of dense Float32 at 10.5k and 17.6k.
+- BriareusGUI `radiation_size` budgets the HMatrix (250 N^1.5 bytes) above
+  `HMATRIX_MODEL[]` and Float32 (4N²) between 10k and 15k: ≈ 160k elements on 32 GB.
+
 ## Done (2026-10-24, hierarchical view factors)
 Research notes, "Hierarchical view factors (2026-10-24)". Item 14's second part.
 - **`HMatrix`** (`view_factors(...; storage = :hmatrix)`, `RadiationModel(...; storage =
@@ -1152,13 +1169,15 @@ the reference's view factors hold through the pulse; items 9 and 10 remove that 
     M-band split in the `CapsuleDrive` handover (item 17).
 14. **Scale.** Float32 storage and iterative radiosity: **done (2026-10-24, see Done)**;
     above 10⁴ elements by default, 17.6k in 2.3 GB, 29k in 4.5 GB. Hierarchical view
-    factors (`HMatrix`): **done (2026-10-24, see Done)**, above 1.5 × 10⁴ by default,
-    49.8k in 82 s and 2.3 GB. Still open, in order (research notes, "Large radiation
-    models", "Hierarchical view factors"): the N^1.5 remainder of the H-matrix (shadow-edge
-    blocks as kernel × mask, corner clusters that do not compress, ACA give-ups ~20 % of
-    assembly); GPU mat-vecs (≲ 25 % end to end on the RTX 2060 while
-    assembly stays on the CPU; not worth CUDA.jl yet); `radiation_size` in BriareusGUI
-    still budgets three dense Float64 matrices (now 4N² bytes above 10⁴ elements).
+    factors (`HMatrix`): **done (2026-10-24, see Done)**, above 1.5 × 10⁴ by default.
+    The N^1.5 remainder: **done (2026-10-25, see Done)**: clusters by surface and exact
+    ball masks for the capsule's shadow edges, 49.8k in 57 s (90–98 s before) and 2.2 GB,
+    more accurate per element; skipping hopeless ACAs and kernel × mask leaves tried and
+    dropped (no gain). Still open, in order (research notes, "The H-matrix's N^1.5
+    remainder"): the near field and the facing-cut rows (a quarter of assembly, kernel
+    evaluations); rim certificates for non-convex occluders and `:sampled` visibility
+    (still a ray per pair of an occupied leaf); GPU mat-vecs (≲ 25 % end to end on the
+    RTX 2060 while assembly stays on the CPU; not worth CUDA.jl yet).
 15. **Polar direct drive mode**, benchmarked against published GA optimizers.
 16. **Absolute energetics and an N221204 benchmark** (`reference/litreview/energetics.md`,
     `n221204_benchmark.md`). Done (2026-10-23, see Done): the mock HYBRID-E pointing

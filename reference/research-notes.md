@@ -3969,7 +3969,7 @@ Above 15,000 elements `RadiationModel` takes the HMatrix (2× faster and 5× sma
 models are unchanged bit for bit (dense Float64 + LU), and so is the dense path itself.
 The precompile workload runs a hierarchical model (leaves of 16) on its coarse hohlraum.
 
-### Open
+### Open (at the time; see "The H-matrix's N^1.5 remainder" below)
 
 - The N^1.5 terms: low rank of the shadow-edge blocks as kernel × mask (the mask is the
   costly part: a ray per pair), and a better split of corner clusters (cap + wall in one
@@ -3977,6 +3977,124 @@ The precompile workload runs a hierarchical model (leaves of 16) on its coarse h
 - ACA give-ups cost ~20% of assembly; a cheaper predictor (the facing fraction, the
   shaft) could skip hopeless attempts.
 - GUI `radiation_size` should budget an HMatrix (~0.2 GB per 10k elements here).
+
+## The H-matrix's N^1.5 remainder (2026-10-25) *derived*
+
+ROADMAP 14, the three open items above. Same workload, machine and script as
+"Hierarchical view factors" (the session's scratchpad `hmat2/`: `attr.jl` time
+attribution, `bench2.jl`, `vf.jl` interleaved timings, `rowchk.jl`); several other Julia
+jobs shared the machine, so before/after times below are from runs interleaved in one
+sitting (the old code from a worktree at 9e87912).
+
+### Where the time went (before, 28.6k, 155 CPU-s inside block assembly on 4 threads)
+
+| Part | CPU-s | share |
+|---|---|---|
+| near-field dense leaves (no ray / rays) | 18.1 / 3.9 | 14 % |
+| ACA that succeeded (free blocks; occupied leaves, with rays again) | 34.5 / 9.0 | 28 % |
+| ACA that gave up (non-leaf / leaf) | 16.8 / 7.3 | 16 % |
+| dense leaves after a give-up | 10.0 | 6 % |
+| leaf visibility masks (20M rays) | 14.3 | 9 % |
+| mixed (shadow-edge) leaves, kernel on the mask | 7.0 | 5 % |
+| rows cut by the facing test (split, sparse) | 19.3 | 12 % |
+| facing tests, shafts | 14.7 | 9 % |
+
+By cluster pair, the give-ups were capsule–wall (29.6k of 46.5k), cap/LEH–capsule and
+mixed clusters (capsule + wall, cap + wall). The facing fraction predicts them well:
+blocks with fewer than half their rows or columns wholly facing gave up 45.6k times
+(23.6 s) and compressed 3.0k times (5.3 s). The shadow-edge leaves (11.8k) were mostly
+wall–wall across the capsule. Why the capsule's ball certificate (below) could not
+apply at first: 7k shafts per 10k-element model held capsule facets *and* a cluster
+whose box reached into the capsule, because the median bisection put capsule and wall
+elements in one cluster.
+
+### What changed
+
+1. **Clusters by surface.** `_hcluster_tree` splits a cluster whose elements lie on
+   several surfaces (a component's curved surface, else the component; caps and their
+   coplanar LEH discs share one) by surface first, the largest from the rest, then
+   bisects as before. No cluster mixes capsule and wall or cap and wall at a corner.
+   This is the "corner cluster" fix and most of the gain: far candidates 177k → 57k,
+   low-rank blocks 42k → 10k, give-ups 46.5k → 15k at 28.6k. It is also more accurate
+   element by element: the Frobenius tolerance of a mixed block let its small rows
+   (capsule elements next to wall elements) be wrong relative to themselves. A capsule
+   row at 28.6k had 2 entries dropped (G = 0 against 1.7e-8, 1.7 % of the row's
+   largest), its row sum 3.7e-5 low, in the old tree; 4e-11 after.
+2. **Shadow edges decided by the capsule's balls** (`_shaft_occluder`, `_hvis_ball`,
+   `_hmask`). The shaft search now tells apart an empty shaft, one holding facets of a
+   single convex part only (the capsule) with both clusters outside its circumscribed
+   ball, and anything else. In the second case every pair of the block is decided
+   exactly, without sampling: a segment (between the lifted ray ends of `_vf_visible`)
+   that misses the circumscribed ball hits no facet of the part, and one through the
+   inscribed ball crosses its closed surface (margins 1e-9 relative, far above the ray
+   test's 1e-10 barycentric slack). Only pairs between the two balls, or admitted by
+   the facing slack, take the ray. The mask (Int8, blocks up to 64 leaf²) makes the
+   block zero, low rank with entries off the mask (no more rays), or refined with the
+   mask passed down to dense leaves. Children of an empty shaft inherit it, so no shaft
+   is searched twice, and a BVH node whose facets are all of the certified part (or of a
+   convex part a cluster lies on) is skipped whole. Leaf masks by rays now return the
+   same mask type, so a wholly visible occupied leaf no longer re-casts its rays in ACA.
+3. **Default `tol` 1e-5 → 1e-6.** With the surface tree, capsule–wall blocks compress
+   where they used to give up and fall back to exact dense entries. At 1e-5 that moved
+   P4/P0 by 1.7e-7 at 28.6k, against 1.6e-8 for the old tree. At 1e-6 every moment is
+   within ~1e-8 of the references and the time is still well below the old tree's at
+   1e-5.
+
+### After (warm assembly, 4 threads; old = 9e87912 at tol 1e-5, new = tol 1e-6)
+
+| N | 10,484 | 17,632 | 28,628 | 49,800 |
+|---|---|---|---|---|
+| view factors, old | 7.6–8.4 s | 16.6–17.5 s | 33–42 s | 90–98 s |
+| view factors, new | 5.3–6.3 s | 13.2 s | 22–25 s | 56.5 s |
+| stored, old → new | 122 → 99 MB | 240 → 212 MB | 432 → 439 MiB | 1004 → 1014 MiB |
+| max RSS (whole bench), new | 0.80 GB | 0.94 GB | 1.25 GB | 2.15 GB |
+| dense entries, new | 19M | 38M | 82M | 196M |
+| F x, new | 8 ms | 18 ms | 42 ms | 114 ms |
+
+Assembly now grows as N^1.4 from 17.6k to 49.8k (N^1.6 before). Storage is unchanged
+(N^1.5): what is still dense is the near field and the shadow-edge leaves. Profile of
+the new assembly at 28.6k (inclusive samples): ACA 35 %, dense leaves 31 %, rows cut by
+the facing test (scattered) 23 %, shafts 2 %, ball masks 1.6 %, ray masks ~0. The rays
+are gone from the profile; what remains is evaluating the kernel itself.
+
+### Accuracy (balanced, T-dependent solve at 2 ns; a₀ relative, P-ratios absolute)
+
+| N, reference | a₀ | P2/P0 | P4/P0 | H per element, max (median) | moment response |
+|---|---|---|---|---|---|
+| 10,484, dense Float32 | 1.4e-9 | 2.6e-9 | 2.7e-9 | 1.2e-7 (4.7e-9) | 7.8e-7 |
+| (old tree, tol 1e-5) | 3.1e-8 | 4.2e-8 | 2.6e-8 | 8.6e-5 (3.6e-8) | 6.6e-5 |
+| 17,632, dense Float32 | 1.7e-10 | 6.5e-9 | 5.9e-9 | 1.3e-7 (6.7e-9) | 1.1e-6 |
+| (old tree, tol 1e-5) | 1.4e-9 | 2.7e-10 | 2.8e-8 | 8.6e-6 (4.7e-8) | 4.6e-6 |
+| 28,628, new tree at tol 1e-7 | 2.0e-9 | 9.7e-10 | 9.6e-10 | 7.8e-7 (6.6e-9) | 2.4e-6 |
+
+The old tree's tol-1e-7 matrix at 28.6k is off from the new tree's by 1.5e-5 per element
+whatever the tolerance; `rowchk.jl` puts that on the old tree (the dropped capsule
+entries of item 1, checked against `_vf_exchange` pair by pair). The small-target test
+entries (`test/hmatrix.jl`, leaves of 16) still match `view_factors` to < 1e-5 of the
+largest, and the 3.9k hohlraum at leaves of 32, 2.3e-5 before, now matches to 1.5e-6.
+
+### Tried and dropped
+
+- **Skipping ACA on blocks the facing test cuts in most rows** (min wholly-facing
+  fraction < 0.5; the predictor above). With the surface tree it skipped 22k attempts
+  and left 279 give-ups. Time was unchanged (22.0–23.2 s against 22.1–23.0 s at
+  28.6k), and it stored 6 % more (464 MiB) and 10 % more dense entries: the skipped
+  blocks that would have compressed cost as much as the failed attempts saved.
+- **Kernel × mask for shadow-edge leaves** (ACA on the unoccluded kernel, expanded on
+  the mask, sampled check): 21.4 s against 22.2–22.5 s. With the balls the mask is
+  cheap, the leaf's kernel evaluations are only ~15 % of the dense entries, and the
+  product of a Hadamard-stored block costs rank × a dense one. Not worth the code.
+
+### Still open
+
+- The near field and the rows cut by the facing test (a quarter of the time):
+  quadrature-level reuse between neighbouring pairs, or a coarser near-field rule where
+  the exact contour kernel is not needed.
+- `:sampled` visibility and non-convex occluders (LEH rims, CAD) still take a ray per
+  pair of an occupied leaf. A rim certificate (a disc or annulus the segment must
+  cross) would extend the ball test.
+- BriareusGUI `radiation_size` now budgets an HMatrix at 250 N^1.5 bytes (2.5 × the
+  measured storage) above `HMATRIX_MODEL[]` and 4N² between 10k and 15k elements.
 
 ## N221204 late-time drive (2026-10-24) *derived*
 
