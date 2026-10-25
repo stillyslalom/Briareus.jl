@@ -145,7 +145,7 @@ and 50 % in the drive temperature after a NIF-like peak need 1.07, 0.99 and 0.91
 energy the wall takes in over the next 1.5 ns, and 0-D hohlraums on three NIF shots'
 pulses 0.92–1.06 (range 0.9–1.07). That wall reproduces Hammer & Rosen's ablative
 self-similar solution (Rosen, OSTI 885380 (2005), Lecture 1) to 1–3 % in stored energy
-and 4–7 % in heated mass at constant and ramped temperature, within the solution's own
+and 3–7 % in heated mass at constant and ramped temperature, within the solution's own
 first-order accuracy. A static (non-ablating) wall needs 0.77 (the value before
 2026-10-25): its cooled surface throttles the release more, while Lindl's loss, which
 this model uses, is the ablative one. Research notes, "Wall re-emission and the capsule
