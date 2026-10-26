@@ -6687,6 +6687,45 @@ package's precompiled copies. `view_factors` on a CAD target still compiles ~2 s
 first call when its parts differ from the workload's (sampled visibility on other
 element shapes). A robust objective (`uncertainty = ...`) is not in the workload.
 
+### Update (2026-10-25): the workload cut to the common session
+
+The user: the workload should cover what most sessions hit, and the VisRad kit is not
+that. The common session is a GUI-less script: build a `hohlraum`, NIF quads, a
+`Scenario` (deposition operator, view factors, radiation model), evaluate, moments,
+`optimize_pointing` with keep-outs, solve, report, clearance, and a `drive_history`. All
+nine tutorials and eleven examples build a `hohlraum`; four tutorials optimize pointing;
+`drive_history` is in six examples and four tutorials. Dropped from the workload:
+`write_visrad_kit` (GUI export only), `talis_check` (GUI only), `cad_target(...; remesh)`
+and its view factors (one example, one tutorial), `spectral_solve`/`dante` (two/three
+examples, the GUI's Dante panel) and the CBET drive history (three calibration
+examples). The `@nospecializeinfer` changes stay: they are what make each new closure
+cheap, workload or not. The pre-existing large-model, H-matrix and ray-trace items were
+not revisited.
+
+Package image (touch a src file, `julia --project=. -e 'using Briareus'`, same machine
+and session, another agent's runs alongside): 138 s → 96 s (twice 96 s; a first,
+colder build of the old workload took 338 s and is discarded). First call in a fresh
+process, wall s / compile s (scratchpad `ttfr.jl`, small `hohlraum(nz = 10, nphi = 16)`
+for all but the optimize row):
+
+| workflow | old workload | new |
+|---|---|---|
+| import | 1.8 | 1.5 |
+| kept: `Scenario` (default-resolution NIF hohlraum) | 4.58 / 0.02 | 4.57 / 0.02 |
+| kept: `optimize_pointing` with keep-outs, 3 it. | 0.17 / 0.09 | 0.17 / 0.09 |
+| kept: `clearance`, `solve`, `report` | 0.35 / 0 | 0.34 / 0 |
+| kept: `drive_history` (wall loss) | 0.43 / 0.31 | 0.44 / 0.33 |
+| dropped: `drive_history(...; lpi = CBET(...))` | 0.13 / 0.07 | 1.9 / 2.2 |
+| dropped: `spectral_solve` | 0.05 / 0.04 | 3.2 / 3.2 |
+| dropped: `dante(dante1(), sp)` | 0.17 / 0.01 | 8.1 / 7.9 |
+| dropped: `talis_check` | 0.03 / 0 | 4.2 / 5.8 |
+| dropped: `cad_target(...; remesh)` | 0.06 / 0.02 | 24.7 / 24.7 |
+| dropped: `view_factors` on that CAD target | 0.51 / 1.1 | 0.56 / 1.3 |
+| dropped: `write_visrad_kit` | 1.3 / 0.09 | 7.7 / 6.5 |
+
+The kept paths are unchanged; each dropped path pays its compile once per session that
+uses it (CAD import the most, 25 s), against 42 s off every rebuild for everyone.
+
 ## Inner-cone SBS time histories and the late-time refraction (2026-10-25) *derived*
 
 ROADMAP 9 and 16. Literature: `reference/litreview/inner_cone_sbs.md` (Kemp et al., PoP

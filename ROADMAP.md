@@ -108,7 +108,9 @@ item says where it stands, what remains and what data would settle it.
   histories and the late-time refraction").
 - **2026-10-25, compile latency and tests.** `drive_history`/`optimize_pointing` compiled
   once for every closure, a wider workload ("Compile latency"); shared test fixtures,
-  three CI shards (`BRIAREUS_TEST_SHARD`), `BRIAREUS_LONG_TESTS`.
+  three CI shards (`BRIAREUS_TEST_SHARD`), `BRIAREUS_LONG_TESTS`. The workload then
+  cut back to the common scripted session (CAD, TALIS, spectra/Dante, CBET and the VisRad
+  kit compile at first use): package image 138 → 96 s.
 - **2026-10-25, closure on rims, windows and CAD.** Balancing checked against continuum
   Monte Carlos on bored LEHs, a waist gap, windows and a remeshed CAD cavity;
   `open_fraction`; `cad_target`/`visrad_target(...; closed)` ("Closure on bored,
