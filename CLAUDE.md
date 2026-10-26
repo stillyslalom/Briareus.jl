@@ -19,7 +19,8 @@ julia --project=BriareusGUI -e 'using Pkg; Pkg.test()'   # GUI subpackage
 ```
 
 `BRIAREUS_NO_WORKLOAD=true` skips the precompile workload (end of `src/Briareus.jl`) for
-quick rebuilds; caches don't key on it, so touch a source file before timing first results.
+quick rebuilds; caches don't key on it, and Julia 1.13 rebuilds on file content, not
+timestamps (`touch` is not enough): change a source file's content before timing first results.
 The shard map is at the top of `test/runtests.jl`: a new test file goes in it, and files
 whose helpers others use share a shard. Expensive fixtures (deposition operators, view
 factors) dominate the suite: build one per geometry and share it across testsets.
