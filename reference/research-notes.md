@@ -6563,6 +6563,11 @@ drive" §3 (α_c 0, `young` schedule, the same wall otherwise):
 
 ### Decisions needed
 
+*Decided 2026-10-26 (user): `outside` stays 0 until a blow-off opacity or absorbing
+radius is published (a candidate for the 13.8 vs 16.2 % capsule share); the pair's
+K24-shaped schedule is accepted, labelled derived, with room in the API for other
+schedules (research pending, ROADMAP 16).*
+
 - Whether to set `outside` (a_out ≈ 0.1–0.2 would close HYDRA's share on the two
   bounds) without a published blow-off opacity or absorbing radius; it is 0.
 - The pair's K24-shaped schedule (N210808 capsule, time scaled to bang) is *L*; the pair's
@@ -6725,6 +6730,8 @@ counts. The spike's density is held at its last published value (0.14 at 7.75 ns
 | `measured` | −0.181 (5.25) | 6.19 | — / — / +0.080 | 0.047 | 290.9 / 282.2 / 264.6 | 306 (8.0) | 268 kJ |
 | `refraction=0.5 refraction_shift=-1` (spike at 6.16 ns) | −0.180 (5.25) | **6.09** | +0.085 / +0.099 / +0.085 | 0.057 | 279.4 / 268.8 / 247.0 | 293.6 (8.0) | 458 kJ |
 | the same, uniform cut | −0.194 (5.25) | 6.14 | +0.074 / +0.097 / +0.085 | 0.053 | 278.1 / 267.6 / 246.0 | 292.2 | 465 kJ |
+| `refraction=0.5` (spike at 7.16 ns) | −0.181 (5.25) | 6.19 | +0.044 / +0.086 / +0.083 | 0.047 | 280.1 / 269.6 / 247.8 | 294.4 (8.0) | 407 kJ |
+| the same, uniform cut | −0.195 (5.25) | 6.24 | +0.032 / +0.083 / +0.083 | 0.044 | 278.9 / 268.5 / 247.0 | 293.1 | 406 kJ |
 
 - Booked as lost from ~6.2 ns to the end, 50 % of the 30° power (and of the 23°, 0.25 ns
   later) removes ~190 kJ: the crossing moves **0.10 ns earlier** (away from Fig. 10's
@@ -6734,11 +6741,12 @@ counts. The spike's density is held at its last published value (0.14 at 7.75 ns
   swing; on its published numbers it acts the other way. If the refracted light is
   instead absorbed in the bubble and converted (the bubble model's ridge stop already
   does this from 6.09 ns), the drive loss shrinks and the symmetry effect stays.
-- `refraction=0.5` at the hydro's own timing (spike at 7.16 ns) crashed on the
-  environmental libuv assertion; command for the next session:
-  `julia --project=. -t 4 examples/n221204.jl 0.8 0.4 full backscatter=measured refraction=0.5`.
-  Expected (*L*): the same direction, after the crossing (P2 more positive from ~7 ns,
-  Dante lower), crossing unchanged.
+- `refraction=0.5` at the hydro's own timing (spike at 7.16 ns; run 2026-10-26, 4.3 min):
+  ~140 kJ booked as lost. The minimum and the crossing are unchanged (−0.181 at 5.25 ns,
+  6.19 ns; uniform cut 6.24), P2 after it moves by ≤ +0.003 at 8 ns, and Dante falls
+  11–17 eV over 8–9 ns (290.9 / 282.2 / 264.6 → 280.1 / 269.6 / 247.8): as expected, the
+  late drive deficit grows and the swing timing does not move. Neither timing of the
+  published refraction closes the 0.46 ns early crossing.
 
 ### Outer cones
 
@@ -6748,7 +6756,7 @@ not studied, noise at a quarter of the peak): ~2.7 kJ over the sixteen 50° quad
 outer history is not published cone-averaged, and ~2 % of the 50° power for ~0.7 ns moves
 the post-CBET cone fraction by < 1 point (≲ 0.003 in P2/P0, after the crossing).
 
-### Decisions (coordinator, 2026-10-25, pending the user)
+### Decisions (coordinator 2026-10-25; accepted by the user 2026-10-26)
 
 - `measured` stays the default; `history` is an option; its 3.1:1 cone split is
   N210808's (Kemp 2026), unpublished for N221204.
