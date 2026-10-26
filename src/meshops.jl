@@ -1133,7 +1133,15 @@ _element_sums(ms, area, cen, nrm) =
 
 # Elements under `amin` (slivers left between grown elements, pieces cut off by halving)
 # join, smallest first, the neighbor they share the longest edge with among those the
-# union keeps acceptable; the elements are then renumbered 1, 2, ….
+# union keeps acceptable; the elements are then renumbered 1, 2, …. One that no
+# neighbor takes whole is dissolved only if it has at most `_DISSOLVE_MAX` triangles:
+# the dissolutions that succeed on the test meshes have at most 112, on a 40k-facet
+# sphere at 0.6 mm 237, while a finely faceted CAD capsule leaves small elements of up
+# to 4,600, whose dissolution costs ~n² element tests and mostly ends stuck. An engineering
+# default, not a quality criterion (research notes, "GUI on CAD", 2026-10-26: that
+# capsule's remesh at 0.28 mm 12.4 s → 2.0–3.3 s, its mesh changed on 0.17 % of its area).
+const _DISSOLVE_MAX = 256
+
 function _merge_small!(owner, nel, P, rtris, nbr, area, cen, nrm, thin, cosmax, rmax, amin)
     members = [Int[] for _ in 1:nel]
     for t in eachindex(owner)
@@ -1162,7 +1170,8 @@ function _merge_small!(owner, nel, P, rtris, nbr, area, cen, nrm, thin, cosmax, 
             merged = true
             break
         end
-        merged || _dissolve!(owner, members, earea, e, P, rtris, nbr, area, cen, nrm, thin, cosmax, rmax)
+        merged || length(members[e]) > _DISSOLVE_MAX ||
+            _dissolve!(owner, members, earea, e, P, rtris, nbr, area, cen, nrm, thin, cosmax, rmax)
     end
     id = cumsum(.!isempty.(members))
     owner .= id[owner]

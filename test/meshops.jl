@@ -256,6 +256,18 @@ end
     nstrips(p) = length(unique(strip_of(sum(r.vertices[v] for v in r.triangles[k])) for k in r.patches[p]))
     @test all(p -> outline_edges(r, p) <= 2nstrips(p) + 2, 1:npatches(r))
 
+    # a finely faceted sphere (40k facets, as CAD writes a capsule) at a size the angle
+    # bounds: every element is under the merge's minimum area, and those of more than
+    # `_DISSOLVE_MAX` triangles are left whole (three here) rather than shared out;
+    # still the same closed surface, every element acceptable
+    sph = sphere_mesh(1.1; ntheta = 100, nphi = 200)
+    size = 0.6
+    r = remesh_mesh(sph; size)
+    @test mesh_area(r) ≈ mesh_area(sph) rtol = 1e-12
+    @test open_edges(r) == (0, 0.0, 0)
+    q = [element_quality(r, p) for p in 1:npatches(r)]
+    @test all(x -> x.tilt <= 10.0 + 1e-9 && x.reach <= size * (1 + 1e-12) && x.on, q)
+
     @test_throws ArgumentError remesh_mesh(plate; size = 0)
     @test_throws ArgumentError remesh_mesh(plate; size = 0.4, angle = 0)
 end

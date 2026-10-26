@@ -7964,6 +7964,48 @@ and 0.6 mm equal the old code's (`==` on vertices, triangles and patches);
 test/meshops.jl and test/cadfit.jl pass. GUI import of the workspace (coarse, no window,
 first call): 12 s.
 
+**Large small elements are no longer dissolved (H; decision 16).** Most of what was
+left was still `_dissolve!`: 10.8 of 13.9 s at 0.28 mm, 5.2 of 6.7 s at 0.6 (an
+instrumented copy of `_merge_small!` logging each dissolution's triangle count n,
+outcome and time). The capsule's are dominated by a few of n = 10³–4.6 × 10³ at ~n²
+element tests each, mostly stuck (0.28 mm: 446 of 520 stuck, 233 of them over 100
+triangles; 0.6 mm: 656 of 803). Elements of more than `_DISSOLVE_MAX` = 256 refined
+triangles are now left whole. The threshold, from the largest dissolutions that succeed
+elsewhere (every remesh with dissolutions logged, no skip): the test meshes of
+test/meshops.jl and test/cadfit.jl 112 (two of 233 over 100), the remeshes of
+test/hmatrix.jl and test/partial_visibility.jl 49, the cad_hohlraum tutorial (0.5/0.15
+and 0.25/0.1 mm) 24, the 13 other CAD parts of the workspace 60, `sphere_mesh(0.9;
+ntheta = 60, nphi = 120)` at 0.25–0.6 mm 66, and a 40k-facet sphere
+(`sphere_mesh(1.1; ntheta = 100, nphi = 200)`) at 0.6 mm 237; the sliver tubes (test
+meshops' 360 strips, the GUI's 2,000) and `cylinder_mesh(...; nphi = 400)` have none at
+0.25–0.6 mm. A dissolution that ends stuck is undone, so the result changes only where
+a dissolution over 256 would have succeeded: all of the above are `==` the old code's
+(46 meshes compared directly, the test and tutorial meshes by that criterion), and the
+test files pass. Capsule time against the threshold (one run each, s, 0.28 / 0.6 mm):
+none 13.9 / 6.7, 512 2.28 / 1.21, 256 2.07 / 1.01, 128 2.06 / 0.97, 100 2.02 / 0.98; at
+256 the dissolutions take 0.1 / 0.05 s and clustering is the rest. 100 would change two
+test meshes (n 108, 112), 128 the 40k-facet sphere (237) and more of the capsule's
+successful dissolutions (n 131–142 and 192–255); 512 costs 0.2 s more on the capsule.
+256 keeps every public case at no measurable cost over 100. Timed
+three times after a warm-up (8 threads, the machine shared): before 12.4–12.7 s at
+0.28 mm and 4.1–4.2 s at 0.6 (the 8.4 s above was a less loaded run); after 2.0–3.3 s
+and 1.0–1.5 s.
+
+The capsule mesh changes where a dissolution over 256 succeeded in the old run (0.28 mm:
+14, n 318–2,094; 0.6 mm: 8, n 260–1,767): 36 elements (0.17 % of the capsule's area) become
+48 at 0.28 mm, 978 → 990 elements; 21 (0.18 %) become 28 at 0.6, 663 → 670; all in one
+thin band of the sphere. Elements under 0.3 size²: 445 → 457 and 620 → 627 (at 0.6 mm
+the angle, not the size, bounds the capsule's elements, so almost all are "small": the
+merge cannot help there). Unchanged: max tilt 9.995° / 9.997°, max reach 0.9998 /
+0.9996 size, every centroid on its element, max diam/√A 22.3 / 29.9 → 29.8, the area
+to 3e-14, closed and conforming (no open or non-manifold edges). Output triangles
++7 % at 0.28 mm (59,958 → 64,280), +1.6 % at 0.6. The skip also applies to finer CAD
+spheres: `sphere_mesh(1.1; ntheta = 140, nphi = 280)` at 0.6 mm goes 1.6 → 1.2 s and
+238 → 256 elements, at 200 × 400 5.3 → 2.2 s and 244 → 274 (a facet-count threshold
+skips more on finer faceting). Scripts: scratchpad `dsk/` (`instr.jl`,
+`survey_cad.jl`, `survey_tests.jl`, `survey_more.jl`, `time_capsule.jl`,
+`cap_stats.jl`, `mock.jl`).
+
 **The window's GUI-thread stalls (H).** Scripted Qt window (scratchpad
 `gui_timing.jl`: a coarse hohlraum's drive, coloring by a field, a selection, the
 workspace import, the largest part left out and put back, the template and the import
