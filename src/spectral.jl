@@ -165,12 +165,18 @@ end
 
 """
     mband_power(m::MBandEmission, target, laser) -> Vector
-    mband_power(m::MBandEmission, op::DepositionOperator, beams) -> Vector
+    mband_power(m::MBandEmission, op::DepositionOperator, beams; lpi = nothing, time = 0.0) -> Vector
 
 Laser-produced M-band power per element (TW): from the absorbed laser power per element
 `laser` (TW; the default intensity form), or by depositing `beams` with `op` (either
 form; the per-group form deposits each group's beams separately). Elements of other
 materials and apertures emit none. `spectral_solve` takes the result as `mband_power`.
+
+With a laser–plasma model `lpi`, `beams` are its effective beams (`apply_lpi(lpi, b,
+time)`: after CBET, backscatter, the bubble) and each group is deposited through
+[`lpi_deposit`](@ref) at `time`, so light the model deposits off the operator (the
+bubble's ridge stop) converts at its own group's fraction. Every step of a
+[`drive_history`](@ref) with `mband` does this with its own effective beams.
 """
 function mband_power(m::MBandEmission, t::Target, P::AbstractVector)
     m.groups === nothing ||
@@ -184,13 +190,14 @@ function mband_power(m::MBandEmission, t::Target, P::AbstractVector)
     return out
 end
 
-function mband_power(m::MBandEmission, op::DepositionOperator, beams::AbstractVector{<:Beam})
+function mband_power(m::MBandEmission, op::DepositionOperator, beams::AbstractVector{<:Beam};
+                     lpi = nothing, time::Real = 0.0)
     t = op.target
-    m.groups === nothing && return mband_power(m, t, deposit(op, beams).element)
+    m.groups === nothing && return mband_power(m, t, lpi_deposit(lpi, op, beams, time).element)
     out = zeros(nelements(t))
     for (g, f) in m.groups
         any(b -> b.group === g, beams) || continue
-        P = deposit(op, [b.group === g ? b : remake(b; power = 0.0) for b in beams]).element
+        P = lpi_deposit(lpi, op, [b.group === g ? b : remake(b; power = 0.0) for b in beams], time).element
         for e in 1:nelements(t)
             _emits_mband(m, t, e) && (out[e] += f * ForwardDiff.value(P[e]))
         end

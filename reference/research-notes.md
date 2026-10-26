@@ -80,7 +80,7 @@ callout in the section says which).
 **Spectra and diagnostics**
 - Spectral radiosity, M-band and a synthetic Dante (2026-10-24); Dante channel responses
   and the unfold (2026-10-24); Laser-spot spectrum (2026-10-24) (α_M 0.55 with thermal
-  spots).
+  spots); Per-cone M-band in the drive history (2026-10-27).
 
 **Hydrodynamics coupling**
 - Capsule drive hand-over and CompactLES stage 0 (2026-10-24).
@@ -7668,3 +7668,58 @@ VisRad part, ~1.3 s; the first field coloring and the first selection, ~0.2 s ea
 GL-side first drawings too. Drawing the highlight from a degenerate triangle at the
 first frame, as the ghost is, did not remove the first selection's stall (0.57 s in
 one run) and was dropped.
+
+## Per-cone M-band in the drive history (2026-10-27) *derived*
+
+ROADMAP 13. Until now the laser M-band entered only the `unfold=on` spectra of
+`examples/n221204.jl`, with the per-cone conversions of `nif_mband()` (outer 0.20, inner
+0.042; "Spectral radiosity, M-band and a synthetic Dante" §2) applied through a proxy:
+each element's cone shares taken from the *pre-CBET* deposition of `beams_at(t)`, times
+its post-CBET absorbed laser power.
+
+**Change.** `mband_power(m, op, beams; lpi, time)` deposits each cone's *effective* beams
+(after CBET, backscatter and the bubble) through `lpi_deposit`, so light the bubble's
+ridge stop puts off the operator converts at its own cone's fraction. `drive_history(...;
+mband, spectral)` does this at every step with that step's beams, splits the step's gray
+solution by `spectral_solve` (default edges [0, 1.8 keV, ∞]) and records `mband_moments`
+(Legendre moments of the observed flux above 1.8 keV) and `mband` (laser-produced M-band
+power per part). Off by default; it is a diagnostic: the M-band is part of the converted
+x-rays and, thermalized, the group sums are the gray solution's, so the gray history does
+not depend on it.
+
+**Checks.** (`test/spectral.jl`, "drive history M-band", coarse 10.1 × 5.75 mm hohlraum,
+constant-albedo gold, an outer → inner transfer growing in time.) The gray records with
+`mband` equal those without (`==`); the history's M-band moments equal a static solve at
+each time with the M-band summed cone by cone by hand from the post-transfer beams to
+1e-10, its M-band power to 1e-12; with unit fractions the per-cone sum is the deposition
+(1e-12). Against the pre-change code (its `src/history.jl` and `src/spectral.jl`
+re-included): a wall-loss history with a falling pulse, CBET, Dante record, `ylm` and
+`keep_albedo` is `==` field by field with and without `mband`, and `mband_power` without
+`lpi` is `==`. On the N221204 coarse model (`0.8 0.4 full calibrated table`, the comparison
+times), the written P2/P0, P4/P0, capsule Tr and Dante columns are byte-identical with and
+without `mband=on`.
+
+**Effect** (N221204 full model, h 0.8 / 0.4, comparison times; α_M 0.55 thermalized,
+spots at the local Tr, `nif_mband(materials = (:Au, :DU))`):
+
+| t (ns) | capsule M-band P2/P0, per cone post-CBET | pre-CBET weighting | difference | M-band share of capsule flux | laser M-band / laser |
+|---|---|---|---|---|---|
+| 2.0 | +0.237 | +0.234 | +0.0026 | 0.123 | 0.168 |
+| 4.0 | +0.331 | +0.330 | +0.0016 | 0.097 | 0.163 |
+| 4.5 | +0.269 | +0.268 | +0.0011 | 0.102 | 0.155 |
+| 5.5 | −0.014 | −0.011 | −0.0025 | 0.102 | 0.127 |
+| 6.5 | +0.274 | +0.272 | +0.0020 | 0.105 | 0.163 |
+| 7.0 | +0.342 | +0.341 | +0.0015 | 0.108 | 0.180 |
+| 8.0 | +0.371 | +0.371 | −0.0000 | 0.103 | 0.194 |
+| 8.5 | +0.209 | +0.210 | −0.0001 | 0.128 | 0.194 |
+
+- **Negligible**: |Δ| ≤ 0.0026 in the M-band P2/P0, mean +0.0003 over 4.5–8.5 ns; the gray
+  P2/P0 swing, its crossing, capsule Tr and Dante are unchanged by construction (0, not
+  small). The proxy's premise holds: on this pointing nearly every element is lit by one
+  cone, so its pre-CBET cone share is ~0 or 1 and the post-CBET laser power on it already
+  carries the transfer; the bubble moves absorbed inner light to the outer footprint beams
+  in both forms. Only the overlaps and the ridge stop differ.
+- The M-band P2/P0 itself swings with the cone balance: +0.33 at 4 ns, −0.01 at 5.5 ns
+  (the CBET-boosted inners at peak), +0.37 at 8 ns. Dewald 2020's Mo-sphere M-band P2/P0 on
+  his shot, mostly > 0 and +0.15 at 6 ns (Fig. 10, **H-img**), is a check of sign and
+  magnitude only (another shot and pointing; not fitted).

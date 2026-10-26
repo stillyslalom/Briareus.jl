@@ -186,6 +186,46 @@ using Briareus: RadiationSolution, _planck_tail, _channel_matrix, _color_tempera
             @test sum(band_flux(s, 1800.0; field = :source)) > sum(s.mband) * 0.999
             @test 0 < mband_recirculation(s, wall_e) < Inf
         end
+
+        wall.albedo isa WallLossAlbedo && continue
+        @testset "drive history M-band" begin
+            # outer → inner transfer growing in time: the cone balance changes
+            cbet = CalibratedTransfer((:outer44, :outer50), (:inner23, :inner30), (Δλ, τ) -> 0.15τ)
+            pulse = PulseShape([0.0, 1.0, 5.0], [0.0, 2.0, 2.0])
+            beams_at = τ -> with_pulses(beams, pulse, τ)
+            mb = nif_mband()
+            times = [1.0, 3.0]
+            h0 = drive_history(m, op, beams_at, times; lpi = cbet)
+            h = drive_history(m, op, beams_at, times; lpi = cbet, mband = mb)
+            @test h0.mband === nothing && h0.mband_moments === nothing
+            # the gray history is untouched, bit for bit
+            @test all(getfield(h, k) == getfield(h0, k) for k in keys(h0) if !(k in (:mband, :mband_moments)))
+            # reference: a static solve at each time and the M-band summed cone by cone by
+            # hand from the effective (post-transfer) beams
+            au = vcat(elements(t, :wall), elements(t, :cap_top), elements(t, :cap_bottom))
+            ref = map(times) do τ
+                eff = apply_lpi(cbet, beams_at(τ), τ)
+                P = zeros(n)
+                for (g, f) in mb.groups
+                    d = deposit(op, [b.group === g ? b : remake(b; power = 0.0) for b in eff])
+                    P[au] .+= f .* d.element[au]
+                end
+                s = spectral_solve(solve(m, deposit(op, eff); time = τ); edges = [0.0, 1800.0, Inf],
+                                   mband = mb, mband_power = P)
+                (; a = legendre_moments(band_flux(s, 1800.0), t, cap; lmax = 6),
+                   PM = sum(s.mband .* t.elem_area))
+            end
+            @test h.mband_moments ≈ reduce(hcat, [r.a for r in ref]) rtol = 1e-10
+            @test sum(h.mband[k] for k in keys(h.mband)) ≈ [r.PM for r in ref] rtol = 1e-12
+            # the transfer to the low-conversion inner cones lowers the M-band per laser power
+            PL(k) = sum(h.laser[c][k] for c in keys(h.laser))
+            @test h.mband[:wall][2] / PL(2) < h.mband[:wall][1] / PL(1)
+            # with every cone at fraction 1 the per-cone sum is the deposition
+            eff = apply_lpi(cbet, beams_at(3.0), 3.0)
+            one_f = MBandEmission(groups = Dict(g => 1.0 for g in keys(mb.groups)))
+            @test mband_power(one_f, op, eff; lpi = cbet, time = 3.0)[au] ≈ deposit(op, eff).element[au] rtol = 1e-12
+            @test_throws ArgumentError drive_history(m, op, beams_at, times; mband = mb, spectral = (; edges = [0.0, Inf]))
+        end
     end
 
     @testset "synthetic Dante" begin

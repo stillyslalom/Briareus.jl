@@ -312,11 +312,13 @@ Items 9–13 and 16–17 follow the 2026-10-22 literature review against Kritche
     continuum and higher lines in the filter pass band, detector response, the object's
     transmission.
 13. **Spectral radiosity.** Done: multigroup radiosity, the laser M-band, a synthetic
-    Dante with hardware channels, the unfold, Sentinel views, thermal laser spots. Left:
+    Dante with hardware channels, the unfold, Sentinel views, thermal laser spots; the
+    per-cone, post-CBET M-band inside `drive_history` (`mband`; on N221204 within 0.003
+    of the pre-CBET cone weighting in M-band P2/P0: "Per-cone M-band in the drive
+    history"). Left:
     measured Ni XRD and thin-filter transmissions, Dante 2's and Omega's channel
     hardware; a measured soft spectrum of spots in a cavity (the local-Tr spot temperature
-    is an assumption); the per-cone M-band inside `drive_history` (the N221204 example
-    weights cones by their pre-CBET deposition); the M-band conversion's angle dependence
+    is an assumption); the M-band conversion's angle dependence
     (sin⁴θ, Dewald 2020) and its emission from the outer bubble; emission of the closing
     LEH plasma (Dante's initial- and open-area readings differ by 20 eV at N221204's
     peak); a time-resolved M-band P2 against Dewald's Fig. 10 on a moving hohlraum; the
