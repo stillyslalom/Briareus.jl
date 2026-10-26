@@ -551,14 +551,3 @@ function foil(name, center, normal; width, height = width, n::Integer = 20,
     m = transform(m, rotation_to(normal) * Rz, Vec3(center...))
     return Component(name, m, material; two_sided)
 end
-
-"""
-    disk_foil(name, center, normal; radius, nr = 8, nphi = 32, material, two_sided = true)
-
-Circular foil with front face along `normal`.
-"""
-function disk_foil(name, center, normal; radius, nr::Integer = 8, nphi::Integer = 32,
-                   material::Material = gold(conversion = 0.05), two_sided::Bool = true)
-    m = transform(disk_mesh(radius, 0.0; nr, nphi), rotation_to(normal), Vec3(center...))
-    return Component(name, m, material; two_sided)
-end

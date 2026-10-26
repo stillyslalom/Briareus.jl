@@ -32,7 +32,7 @@ export AlbedoModel, ConstantAlbedo, TabulatedAlbedo, WallLossAlbedo, Burnthrough
        Conversion, conversion_efficiency, nif_conversion,
        Component, aperture, Target, nelements, elements, component_index, parts, part_pieces,
        element_quadrature
-export hohlraum, hohlraum_counts, capsule_counts, foil, disk_foil
+export hohlraum, hohlraum_counts, capsule_counts, foil
 export WallWindow, Sombrero, conforming_grid, equal_area_radius
 export SuperGaussianSpot, Beam, port_vector, port_angles, direction, spot_axes, remake, intensity, wavelength,
        beams_from_table, nif_quads, nif_beams, nif_spot, NIF_QUAD_NAMES, nif_port, nif_bundle, nif_bundles, hybride_mock_pointing, omega_ports, omega_beams, omega_spot
@@ -64,7 +64,7 @@ export VisRadObject, VisRadWorkspace, read_visrad_workspace, visrad_component, v
        visrad_power_sources, visrad_deposition
 export legendre, legendre_moments, legendre_weights, solid_angle, ylm_moments, ylm_weights, mode_center,
        ylm_matrix, ylm_frame, mode_index, relative_mode_power, mode_amplitude, mode_power, rms_nonuniformity
-export OrthoCamera, camera_from_port, render, radiance, line_of_sight_power
+export OrthoCamera, render, radiance, line_of_sight_power
 export backlighter_foil, line_of_sight, LineOfSightReport
 export kshell_line_energy, kshell_ce_data, kshell_ce_model, KShellCEModel, kshell_ce,
        mass_attenuation, filter_transmission, backlighter_signal, BacklighterSignal,

@@ -30,14 +30,6 @@ function OrthoCamera(direction; up = Vec3(0, 0, 1), center = zero(Vec3), width,
 end
 
 """
-    camera_from_port(theta, phi; kwargs...)
-
-Camera at the port (θ, φ) in degrees looking at TCC — e.g. an x-ray imager's line of
-sight.
-"""
-camera_from_port(θ, φ; kwargs...) = OrthoCamera(-port_vector(θ, φ); kwargs...)
-
-"""
     render(target, values, camera; background = NaN) -> Matrix
 
 Image of a per-element field: each pixel shows `values[e]` for the element seen first
