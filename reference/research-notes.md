@@ -4892,6 +4892,13 @@ summed over every pair to 1e-11, the out-of-front case, the near pair in
 `view_factors`); `hmatrix.jl`, `partial_visibility.jl`, `corners.jl`, `meshops.jl`,
 `cadfit.jl` pass unchanged.
 
+Effect on the calibrated benchmark (coordinator, same day): `examples/n221204.jl 0.8 0.4
+full`, main (d19d84f) against this change, every time of the CSV: P2/P0 within 1.4e-5,
+P4/P0 within 4e-6, capsule Tr and Dante (both LEH areas) within 1.4e-3 eV, the P2
+crossing unchanged to 1e-3 ns (6.241 ns), capsule energy unchanged (248.7 kJ, 14.0 %).
+The calibrations fitted with the old rule (wall loss, CBET, the N221204 defaults) are not
+moved by it; nothing is refitted.
+
 ## N221204 late-time drive (2026-10-24) *derived*
 
 ROADMAP 16. Two results of the N221204 benchmark (`examples/n221204.jl`) disagreed about
