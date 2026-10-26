@@ -11,6 +11,9 @@
 #   super-Gaussians; σ = 11.9 % (circular, a = b = R₀) and 5.2 % (elliptical, a = 2b,
 #   b = R₀ meridional) centred, minima 1.1 % at Δ/R₀ = 13.7 % and 1.3 % at 7.4 % for a
 #   shift Δ perpendicular to the beam toward the equator.
+# - Temporal et al., HPLSE 2, e8 (2014), §4: LMJ option A (20 quads at 49°/131°, the
+#   hemispheres rotated 18°), elliptical m = 4 quads Δa = 2Δb = 640 µm; minimum over r0
+#   of the intrinsic σ0 = 4.6 % (a 2-D quadrature of all 20 beams here).
 # - Murakami & Nishi, Matter Radiat. Extremes 2, 55 (2017), Eqs. 28–37: ring-averaged
 #   absorbed intensity of parallel-ray super-Gaussian beams whose axes cross the polar
 #   axis at z R₀, re-solved here by direct quadrature.
@@ -125,6 +128,39 @@ function _dd_golden(f, lo, hi; tol = 1e-5)
     end
     x = (a + b) / 2
     return x, f(x)
+end
+
+# Temporal et al. 2014 (HPLSE) LMJ option A: 10 quads per ring at 49° and 131°, the
+# rings 36° apart in azimuth and the hemispheres rotated 18° (uniform spacing assumed),
+# super-Gaussian quads exp(-[(u/Δa)² + (v/Δb)²]^(m/2)) with v meridional, on a sphere of
+# radius r0 (all lengths in units of Δb). Returns the toward-source directions with
+# their (θ̂, φ̂) frames, and σ0 (rms/mean over the sphere, all modes) of the projected
+# intensity I cos ψ fully absorbed, by Gauss–Legendre in μ and the trapezoid rule in φ.
+function _dd_lmj_ports()
+    pv(θ, φ) = (sind(θ) * cosd(φ), sind(θ) * sind(φ), cosd(θ))
+    [(θ, φ, pv(θ, φ), pv(θ + 90, φ), (-sind(φ), cosd(φ), 0.0))
+     for k in 0:9 for (θ, φ) in ((49.0, 36k), (131.0, 36k + 18))]
+end
+function _dd_lmj_sigma(r0, a, b, m; nμ = 200, nφ = 360)
+    ports = _dd_lmj_ports()
+    xg, wg = _dd_gauss(nμ)
+    s1 = s2 = 0.0
+    for (μ, wμ) in zip(xg, wg)
+        st = sqrt(1 - μ^2)
+        for j in 0:nφ-1
+            s = (st * cospi(2j / nφ), st * sinpi(2j / nφ), μ)
+            I = 0.0
+            for (_, _, U, eθ, eφ) in ports
+                c = sum(s .* U)
+                c > 0 || continue
+                u, v = r0 * sum(s .* eφ), r0 * sum(s .* eθ)
+                I += exp(-((u / a)^2 + (v / b)^2)^(m / 2)) * c
+            end
+            s1 += wμ * I / nφ
+            s2 += wμ * I^2 / nφ
+        end
+    end
+    return sqrt(2 * s2 / s1^2 - 1)
 end
 
 # A bare sphere of radius R about the origin (the hard-sphere direct-drive target).
@@ -306,6 +342,28 @@ _dd_coeffs(W, t, dep) = W * (dep.element ./ t.elem_area)
             fds = [(σa(x .+ hs .* (1:2 .== k)) - σa(x .- hs .* (1:2 .== k))) / 2hs for k in 1:2]
             @test isapprox(gs, fds; rtol = 1e-6)
         end
+    end
+
+    @testset "Temporal 2014 LMJ intrinsic σ0" begin
+        # HPLSE 2, e8 (2014), §4 and Fig. 5: LMJ option A (the 20 quads at 49°/131°),
+        # elliptical quads Δb = 320 µm meridional, Δa = 2Δb, m = 4, no beam errors and no
+        # PDD shift; the minimum over the capsule radius r0 of the intrinsic σ0 is 4.6 %
+        # (its curve's minimum lies near r0 = 350 µm in Fig. 5; the r0 = 320 µm of the
+        # text is the optimum of the error-averaged σ̄). Same convention as Te14.
+        σref(ρ) = _dd_lmj_sigma(ρ, 2.0, 1.0, 4.0)          # ρ = r0/Δb
+        ρmin, σmin = _dd_golden(σref, 1.0, 1.25; tol = 1e-4)
+        @test round(100σmin; digits = 1) == 4.6
+        @test 340 < 320ρmin < 360
+        # the quadrature is converged far below the published digit
+        @test abs(_dd_lmj_sigma(ρmin, 2.0, 1.0, 4.0; nμ = 300, nφ = 540) - σmin) < 1e-6
+
+        # Briareus: the same 20 collimated quads on the n = 30 sphere (σ to l = 30)
+        quadsL = [Beam("L$k"; theta = θ, phi = φ) for (k, (θ, φ)) in enumerate(_dd_lmj_ports())]
+        opL = DepositionOperator(t, quadsL; ncone = 1)
+        σL(ρ) = mode_rms(_dd_coeffs(W, t, deposit(opL, [remake(q; spot = SuperGaussianSpot(R0 / ρ, 2R0 / ρ; order = 4))
+                                                         for q in quadsL])), L)
+        @test abs(σL(ρmin) - σmin) < 1e-4 && abs(σL(1.0) - σref(1.0)) < 1e-4
+        @test round(100 * σL(ρmin); digits = 1) == 4.6
     end
 
     @testset "Murakami & Nishi 2017 two-cone PDD" begin

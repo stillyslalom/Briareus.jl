@@ -7883,8 +7883,9 @@ an idle machine; the schedule enters only through these values).
 ## Hard-sphere direct-drive illumination (2026-10-27) *derived*
 
 Polar direct drive, Stage 0 (ROADMAP item 15; `reference/litreview/polar_direct_drive.md`
-§5), the part that does not depend on the pointing parameterization (open decision 5
-there). Tests: `test/direct_drive.jl`. No pointing fields or types were added.
+§5). Tests: `test/direct_drive.jl`. The parameterization-independent part came first;
+the spherical pointing fields of `GroupPointing` (decision 5(a)) and the LMJ check
+(Te14b) followed on 2026-10-26, below.
 
 **What exists and is used.** A bare sphere is a one-component target,
 `Target(Component(:capsule, icosphere_mesh(R; n), material; surface = SphereSurface(R)))`.
@@ -7972,9 +7973,51 @@ than SG4. For σ (l ≤ 30) to ~2 % use n ≥ 30 (18 000 elements; the 961 × 18
 matrix is 140 MB), or extrapolate n = 20/30. Ba24 evaluates σ on HEALPix nside 64 (49 152
 pixels, 0.9°); n = 30 elements are about 2.1°.
 
-**Not done (Stage 0 remainder).** The spherical pointing parameterization (open
-decision 5); the Ba24 OC σ₁ example; a Literate tutorial; `absorption` through
-`Scenario`/`evaluate` (it is a `deposit` keyword only).
+**Spherical pointing fields (2026-10-26) *derived*.** `GroupPointing(beams; radius = R,
+center, fields = (:theta_s, :dphi_s, :split_theta, :split_phi, …))`, decision 5(a): the
+aim is a point on the sphere, `center + R port_vector(θ, φ_port + Δφ)`, with θ mirrored
+to 180° − θ_s in the lower hemisphere and Δφ measured from each beam's own port (Ba24
+Table I's "polar angle, azimuthal offset" form; which of its two readings Ba24 meant is
+still open, review §4 item 3). The splits add ±split_theta / ±split_phi to each beam of
+a quad with the sign of its port's offset from the quad's mean port (Co08 split quads,
+Ye21 left/right Δφ, as angles; mapping Co08's µm shifts to angles is *L*). Defocus is
+measured from the surface aim, as VisRad and NIF measure the focus offset from the
+reference point (section "Pointing and focus conventions", **H**); the PDD papers do not
+all state their defocus origin (*L*). Template angles are where each template axis first
+meets the sphere. Checks (`test/direct_drive.jl`): hand-built aim sets (NIF quads at the
+Ba24 Table I angles, relative shifts, a shifted centre, the 192 beams with splits, signs
+taken from the beam table) to 1e-13 mm; the Te14 ring pointed by θ_s = 49° + asin(Δ/R₀)
+(the same axis as the shift Δ) gives the shifted-axis σ to 1e-10 relative and the
+quadrature reference to 1e-4; dσ/dθ_s and dσ/dΔφ_s by ForwardDiff match central
+differences to 1e-6 relative. The existing (non-spherical) paths are bit for bit:
+`apply`, `bounds`, `initial_parameters`, their Jacobians and the NIF-hohlraum depositions
+and deposition Jacobians of five parameterizations were `isequal` before and after.
+
+**LMJ, Temporal et al. 2014 (HPLSE 2, e8) (2026-10-26) *derived*.** Inputs (paper §2, §4,
+**H**): option A, the 20 quads of the 49°/131° rings (10 each, the hemispheres rotated
+18°); quads as single beams with I = exp(−[(x/Δa)² + (y/Δb)²]^(m/2)), Δb = 320 µm in the
+meridian of the polar and beam axes, Δa = 2Δb, m = 4; static sphere of radius r₀; σ₀ the
+rms/mean of I(θ, φ) over the sphere (their equation in §4), no beam errors, no PDD
+shift. The quad azimuths are not in the text (Fig. 1 only); uniform 36° spacing is
+assumed (*L*). Published: σ₀ = 4.6 % is the minimum of the intrinsic curve (Fig. 5; its
+minimum lies near r₀ = 350 µm), while r₀ = 320 µm is the optimum of the error-averaged σ̄
+= 6.2 %, read from Fig. 5; the review's §4.2 item 13 said "4.6 % at r₀ = 320 µm", which
+is wrong. With Te14's pinned convention (I cos ψ fully absorbed, collimated beams), a
+direct 2-D quadrature of all 20 beams gives σ₀ = 5.231 % at r₀ = 320 µm and a minimum of
+4.589 % at r₀ = 350.4 µm (rounds to the published 4.6 %; converged to 1e-6 absolute);
+with no hemisphere rotation the minimum is 4.64 % (also 4.6). Circular Δ = 450 µm (same
+1/e area) at r₀ = 320 µm: 10.19 %, 1.95× the elliptical value ("almost double" in the
+text). Briareus (n = 30 sphere, σ to l = 30, ncone = 1): 4.587 % at the minimum and
+5.232 % at r₀ = 320 µm (within 1e-4 of the reference; the m ≠ 0 part is 0.15 %). A test
+(`test/direct_drive.jl`). Confidence: inputs **H**, the minimum location from a figure
+reading (**M**), azimuths *L* (the value is insensitive to them at the published digit).
+The PDD numbers (σ̄ = 3.6 % at r₀ = 270 µm, δ/r₀ = 15 %) average Monte Carlo beam errors
+and are not deterministic; not used. LMJ port geometry was not added to the package: the
+paper gives ring angles (33.2°, 49°, 59.5° and supplements, 10/10/2 quads per ring) but
+not the azimuths.
+
+**Not done (Stage 0 remainder).** The Ba24 OC σ₁ example; a Literate tutorial;
+`absorption` through `Scenario`/`evaluate` (it is a `deposit` keyword only).
 
 ## Corona model prototype: impact-parameter kernels vs 3-D ray tracing (2026-10-27) *measured*
 

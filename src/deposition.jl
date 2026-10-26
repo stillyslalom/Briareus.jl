@@ -506,6 +506,14 @@ at normal incidence (ν_ei the collision frequency at critical density, L the sc
 length): Murakami & Nishi, Matter Radiat. Extremes 2, 55 (2017), Eq. 29, after Kruer's
 text. It is a model for hard-sphere direct-drive illumination, derived for that profile,
 not a measured or calibrated absorption: η⊥ has no default and is the user's estimate.
+It holds only for thin coronas (scale length L ≪ the critical radius r_c): measured
+against ray tracing through a spherical exponential corona, an oblique ray's absorption
+approaches η_a only as L/r_c → 0 (at sin ψ = 0.9: 4 % off at L/r_c = 0.0025, 13 % at
+0.01, and 0.33 against η_a = 0.18 at 0.1), and rays that miss the critical sphere still
+absorb. On a 40-beam OMEGA PDD pointing with L/r_c = 0.2, η_a on a hard sphere at r_c
+gives σ = 5.7 % (l ≤ 30) where the corona gives 10.4 % (research notes, "Corona model
+prototype: impact-parameter kernels vs 3-D ray tracing"). Polar direct drive gets its
+equatorial drive from exactly those grazing rays.
 The unabsorbed light is dropped (no reflection is followed), so `element`, `backside`
 and `per_beam` are absorbed powers and `delivered - sum(per_beam)` includes it. `η⊥` may
 be a dual number (the result is differentiable in it too). `η⊥ = 1` is the default's

@@ -75,7 +75,7 @@ that Ba24 calls σ₁ (**L**). What is missing, in order of need:
    `GroupPointing`'s aim fields are cylindrical hohlraum coordinates. Needed: a mapping
    surface (θ_s, φ_s; R) → `aim` (the axis passes through that surface point, first
    intersection along k) and a parameterization in those coordinates, including per-beam
-   split-quad offsets (Co08: split-quad x/y shifts; Ye21: four aim points per quad) (**L**).
+   split-quad offsets (Co08: split-quad x/y shifts; Ye21: four aim points per quad) (**L**). Done 2026-10-26: `GroupPointing`'s spherical fields (decision 5).
 2. **Capsule-frame metrics at high l.** Ba24 uses σ over l ≤ 30 (HEALPix nside 64 in
    Ifriit; Pol); Ye21 splits σ into the m = 0 part and the m ≠ 0 part. Briareus's
    objective cache stops at l = 6 (`_CACHED_YLM_LMAX`), and the capsule meshes are sized
@@ -87,7 +87,9 @@ that Ba24 calls σ₁ (**L**). What is missing, in order of need:
    η = 1 − exp(−8ν_ei L / 3c) (exponential corona of scale length L). The operator knows
    each sample's direction and normal, so a per-sample weight η_a(ψ) is cheap and
    differentiable (**L**). Done 2026-10-27: `deposit(op, beams; absorption = η⊥)`
-   (research notes, "Hard-sphere direct-drive illumination").
+   (research notes, "Hard-sphere direct-drive illumination"); its docstring states the
+   thin-corona limit measured by the corona prototype (decision 3: σ 5.7 % against
+   10.4 % on the OMEGA case), 2026-10-26.
 4. **Refraction and inverse-bremsstrahlung absorption in the corona.** All the
    hydro-based designs (Co08, Ye21, Ho15, CM18, Ba24's σ₂) deposit along refracted rays:
    oblique equatorial rays turn at lower density (n_e = n_c cos²ψ for a planar
@@ -302,7 +304,11 @@ and "PD-R1" spot models, no standard 40-beam PDD case and no σ (**H**, code rea
 Δa = 2Δb, Δb = 320 µm, m = 4, minor axis meridional; static sphere of radius r₀ in the
 authors' illumination model (that of Te14, whose conventions are pinned in the research
 notes). Intrinsic σ₀ = 4.6 % at r₀ = 320 µm without beam errors or PDD shift (text and
-Fig. 5); a circular spot of the same 1/e area (450 µm) gives almost double (Fig. 5). The
+Fig. 5); a circular spot of the same 1/e area (450 µm) gives almost double (Fig. 5).
+*Correction (2026-10-26, paper re-read)*: 4.6 % is the minimum over r₀ of the intrinsic
+curve, near r₀ = 350 µm in Fig. 5; 320 µm is the optimum of the error-averaged σ̄ = 6.2 %.
+Reproduced under the Te14 convention (σ₀ min 4.589 % at 350.4 µm; 5.23 % at 320 µm) and
+now a test (research notes, "LMJ, Temporal et al. 2014"). The
 PDD minimum σ̄ = 3.6 % at r₀ = 270 µm and δ/r₀ = 15 % (Fig. 7) averages Monte Carlo
 draws of beam errors, so it is not deterministic. Missing: the exact quad azimuths
 (uniform 36° spacing is the natural reading, **L**). The best new numerical case.
@@ -386,7 +392,7 @@ SMA), square near field, robustness to ±50 µm pointing and power imbalance thr
 ## 6. Decisions
 
 Decisions 1–8 were posed with this review, 9–11 with Stage 0 (commit 498a969). The user
-decided 1–11 on 2026-10-27 (each marked **Decided**); 12–15 are open.
+decided 1–11 on 2026-10-27 (each marked **Decided**); 12–15 are open (12 decided in part).
 
 1. **What Stage 0 is validated against.**
    - (a) The analytic cases (MN17, Te14, SL83) as tests. + Exact, cheap, independent;
@@ -438,7 +444,9 @@ decided 1–11 on 2026-10-27 (each marked **Decided**); 12–15 are open.
    - (b) A separate `SpherePointing`. + Clean separation. − Duplicates mirroring,
      grouping, bounds and the inference tests.
    - *Recommendation*: (a).
-   - **Decided**: (a).
+   - **Decided**: (a). Done 2026-10-26: `GroupPointing`'s `:theta_s`, `:dphi_s`,
+     `:split_theta`, `:split_phi` with `radius`/`center` (research notes, "Spherical
+     pointing fields").
 6. **Optimizer comparison with "GA optimizers".**
    - (a) Gradient + multistart (existing ForwardDiff/Optim path). + Briareus's
      advantage; reports evaluations to converge. − Not the same algorithm as Ba24.
@@ -513,6 +521,11 @@ decided 1–11 on 2026-10-27 (each marked **Decided**); 12–15 are open.
     - *Recommendation*: (b): Te14b σ₀ as a test if it reproduces under the pinned Te14
       convention (a documented check otherwise), OMEGA Cr05 and Ra12 design C as
       example fixtures; NIF stays the headline.
+    - *LMJ part decided* (user, 2026-10-26): reproduce Te14b σ₀ and add it as a test if it
+      matches. Done: it reproduces (4.589 % against 4.6 %, research notes "LMJ, Temporal
+      et al. 2014") and is in `test/direct_drive.jl`, with the 20 quads built in the test
+      (LMJ azimuths are not published in text, so no LMJ facility function). The OMEGA
+      fixtures remain open.
 13. **A user-set absorption (loss) knob for PDD CBET.** Mu15's 33 ± 5 % equatorial cut and
     Da16's equatorial deficit are model-inferred (§4.3).
     - (a) No new option; document that deposition is linear in beam power, so a
