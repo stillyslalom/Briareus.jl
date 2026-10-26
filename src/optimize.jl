@@ -2,10 +2,14 @@
 
 const _CACHED_LMAX = 12
 
-const _FIELDS = (:z, :r, :phi, :defocus, :power, :spot, :dlambda)
+const _FIELDS = (:z, :r, :phi, :defocus, :power, :spot, :dlambda,
+                 :theta_s, :dphi_s, :split_theta, :split_phi)
+const _CYL_FIELDS = (:z, :r, :phi)
+const _SPH_FIELDS = (:theta_s, :dphi_s, :split_theta, :split_phi)
 
 """
-    GroupPointing(beams; by = :group, fields = (:z, :r, :defocus), mirror = true, relative = false)
+    GroupPointing(beams; by = :group, fields = (:z, :r, :defocus), mirror = true,
+                  relative = false, radius = nothing, center = (0, 0, 0))
 
 Maps a parameter vector to beams. Beams are grouped by `by` (`:group` — e.g. cone —,
 `:quad`, `:beam`, or a function `beam -> key`); each group gets one value per field:
@@ -21,11 +25,44 @@ Maps a parameter vector to beams. Beams are grouped by `by` (`:group` — e.g. c
 
 Fields not listed keep each beam's template value.
 
-`relative = true` makes the aim fields (`:z`, `:r`, `:phi`) shifts added to each beam's
-own template aim instead of values the group's beams share, so a group moves rigidly
-and keeps its members' differences: re-pointing an as-shot table, whose beams within a
-quad aim at different points (a facility's per-beam offsets), by one shift per quad.
-Its initial parameters are then zero; the other fields stay absolute.
+**Pointing on a sphere** (polar direct drive). With `radius = R` (mm) the aim can instead
+be a point on the sphere of radius `R` about `center`, the target surface on which
+direct-drive pointings are published (Barlow et al., PRL 133, 175101, 2024, Table I;
+Yeamans et al., Nucl. Fusion 61, 046031, 2021, Table 1; Hohenberger et al., PoP 22,
+056308, 2015, Table I):
+
+- `:theta_s` — polar angle of the aim point (degrees from `+z`). With `mirror`, beams
+  from the lower hemisphere aim at `180° - theta_s`, so one value describes a
+  top/bottom-symmetric cone pair and a larger value moves both toward the equator.
+- `:dphi_s` — azimuth of the aim point relative to the beam's own port azimuth
+  (degrees, counterclockwise about `z`; the same for both hemispheres).
+- `:split_theta`, `:split_phi` — split of a quad's beams (degrees): each beam's aim
+  moves by `±split_theta` in polar angle and `±split_phi` in azimuth, with the sign of
+  its own port's offset from its quad's mean port (beams at a larger polar angle than
+  their quad's, counted from the beam's own pole when mirrored, take `+split_theta`;
+  beams counterclockwise of it `+split_phi`), so positive values open a quad's aims in
+  the sense of its ports. This is the split-quad pointing of Cok et al. (PoP 15,
+  082705, 2008) and Yeamans et al. 2021 (left/right `Δφ`) as angles on the sphere.
+  A quad given as one beam, or a beam level with its quad's mean, gets no split. Needs
+  `quad` names; other per-beam aims come from `by` (e.g. one group per sub-ring).
+
+The aim is the surface point itself, `aim = center + R * port_vector(θ, φ)`, which the
+axis meets first when it faces the port (`Beam`). Best focus is then at
+`aim + defocus * k`: defocus is measured from the surface aim point, as VisRad measures
+the focus offset from its reference point (research notes, "Pointing and focus
+conventions"). Each template beam's angles are those of the first point where its axis
+meets the sphere (an `ArgumentError` if it misses); listed spherical values are shared
+by a group's members, and an angle that no listed field governs keeps each beam's own
+value. The aim moves to the surface along the template's axis, so the focus moves with
+it unless the template aim was already on the sphere. The spherical fields and the
+hohlraum fields `:z`, `:r`, `:phi` exclude each other.
+
+`relative = true` makes the aim fields (`:z`, `:r`, `:phi`, or the spherical ones) shifts
+added to each beam's own template aim instead of values the group's beams share, so a
+group moves rigidly and keeps its members' differences: re-pointing an as-shot table,
+whose beams within a quad aim at different points (a facility's per-beam offsets), by
+one shift per quad. Its initial parameters are then zero; the other fields stay
+absolute.
 """
 struct GroupPointing{K}
     template::Vector{Beam{Float64}}
@@ -34,15 +71,28 @@ struct GroupPointing{K}
     fields::Vector{Symbol}
     mirror::Bool
     relative::Bool
+    radius::Float64                      # sphere of the spherical fields (NaN: none)
+    center::Vec3
+    sph::Vector{NTuple{5,Float64}}       # per beam: θ' (mirrored frame), Δφ, sθ, sφ, φ_port
+    sph0::Vector{NTuple{4,Float64}}      # per group: mean θ', mean Δφ, θ' split, Δφ split
 end
 
 function GroupPointing(beams::AbstractVector{<:Beam}; by = :group,
-                       fields = (:z, :r, :defocus), mirror::Bool = true, relative::Bool = false)
+                       fields = (:z, :r, :defocus), mirror::Bool = true, relative::Bool = false,
+                       radius::Union{Nothing,Real} = nothing, center = (0.0, 0.0, 0.0))
     for f in fields
         f in _FIELDS || throw(ArgumentError("unknown field $f; choose from $_FIELDS"))
     end
     by === :quad && any(b -> isempty(b.quad), beams) &&
         throw(ArgumentError("by = :quad needs quad names on every beam (OMEGA beams have none)"))
+    spherical = any(in(_SPH_FIELDS), fields)
+    spherical && any(in(_CYL_FIELDS), fields) &&
+        throw(ArgumentError("the spherical fields $_SPH_FIELDS exclude $_CYL_FIELDS"))
+    spherical && radius === nothing &&
+        throw(ArgumentError("the spherical fields $_SPH_FIELDS need the sphere's `radius`"))
+    radius === nothing || radius > 0 || throw(ArgumentError("radius must be positive"))
+    any(in((:split_theta, :split_phi)), fields) && any(b -> isempty(b.quad), beams) &&
+        throw(ArgumentError("split fields need quad names on every beam"))
     key = by === :group ? (b -> b.group) : by === :quad ? (b -> b.quad) :
           by === :beam ? (b -> b.name) : by
     ks = map(key, beams)
@@ -55,7 +105,53 @@ function GroupPointing(beams::AbstractVector{<:Beam}; by = :group,
                                     Float64(ForwardDiff.value(b.spot.b))),
                    dlambda = Float64(ForwardDiff.value(b.dlambda)))
             for b in beams]
-    return GroupPointing(tmpl, uk, members, collect(Symbol, fields), mirror, relative)
+    R = radius === nothing ? NaN : Float64(radius)
+    c = Vec3(center...)
+    sph = spherical ? _sphere_angles(tmpl, R, c, mirror) : NTuple{5,Float64}[]
+    sph0 = spherical ? [_sphere_group0(sph, mem) for mem in members] : NTuple{4,Float64}[]
+    return GroupPointing(tmpl, uk, members, collect(Symbol, fields), mirror, relative, R, c,
+                         sph, sph0)
+end
+
+# Per template beam: the polar angle θ' (degrees; from the beam's own pole when mirrored)
+# and the azimuth offset Δφ from its port of the first point where its axis meets the
+# sphere, its split signs (sθ, sφ) relative to its quad's mean port, and its port azimuth.
+function _sphere_angles(tmpl, R, c, mirror)
+    qsum = Dict{String,Vec3}()
+    for b in tmpl
+        isempty(b.quad) || (qsum[b.quad] = get(qsum, b.quad, zero(Vec3)) + b.port)
+    end
+    return map(tmpl) do b
+        zs = (mirror && b.port[3] < 0) ? -1.0 : 1.0
+        k = -b.port
+        d = b.aim - c
+        dk = dot(d, k)
+        disc = dk^2 - (dot(d, d) - R^2)
+        disc >= 0 || throw(ArgumentError("beam $(b.name)'s axis misses the sphere of radius $R"))
+        s = d + (-dk - sqrt(disc)) * k                  # first hit, relative to the centre
+        θ = acosd(clamp(zs * s[3] / R, -1, 1))
+        φp = atand(b.port[2], b.port[1])
+        Δφ = mod(atand(s[2], s[1]) - φp + 180, 360) - 180
+        sθ = sφ = 0.0
+        if !isempty(b.quad)
+            q = qsum[b.quad]
+            δθ = acosd(clamp(zs * b.port[3], -1, 1)) - acosd(clamp(zs * q[3] / norm(q), -1, 1))
+            δφ = mod(φp - atand(q[2], q[1]) + 180, 360) - 180
+            sθ = abs(δθ) < 1e-9 ? 0.0 : sign(δθ)
+            sφ = abs(δφ) < 1e-9 ? 0.0 : sign(δφ)
+        end
+        (θ, Δφ, sθ, sφ, φp)
+    end
+end
+
+# A group's initial spherical values: mean θ' and Δφ, and the mean split
+# Σ s (x - x̄) / #(s ≠ 0) (zero without split members).
+function _sphere_group0(sph, mem)
+    θm = sum(sph[i][1] for i in mem) / length(mem)
+    φm = sum(sph[i][2] for i in mem) / length(mem)
+    split(j, xm) = (n = count(i -> sph[i][j+2] != 0, mem);
+                    n == 0 ? 0.0 : sum(sph[i][j+2] * (sph[i][j] - xm) for i in mem) / n)
+    return (θm, φm, split(1, θm), split(2, φm))
 end
 
 "Number of parameters of a `GroupPointing` (groups × fields)."
@@ -68,17 +164,23 @@ _pidx(p::GroupPointing, g, fi) = (g - 1) * length(p.fields) + fi
 
 _zsign(p::GroupPointing, b::Beam) = (p.mirror && b.port[3] < 0) ? -1.0 : 1.0
 _radial(b::Beam) = (φ = atan(b.port[2], b.port[1]); (Vec3(cos(φ), sin(φ), 0), Vec3(-sin(φ), cos(φ), 0)))
+_spherical(p::GroupPointing) = !isempty(p.sph)
 
 """
     initial_parameters(p::GroupPointing) -> Vector{Float64}
 
 Parameters reproducing the template beams (group means where members differ; zero
-shifts for the aim fields of a `relative` parameterization).
+shifts for the aim fields of a `relative` parameterization). Spherical fields take the
+angles where each template axis first meets the sphere (see `GroupPointing`).
 """
 function initial_parameters(p::GroupPointing)
     x = zeros(nparams(p))
     for (g, mem) in enumerate(p.members), (fi, f) in enumerate(p.fields)
         p.relative && f in (:z, :r, :phi) && continue
+        if f in _SPH_FIELDS
+            p.relative || (x[_pidx(p, g, fi)] = p.sph0[g][findfirst(==(f), _SPH_FIELDS)])
+            continue
+        end
         vals = map(mem) do bi
             b = p.template[bi]
             er, eφ = _radial(b)
@@ -106,20 +208,28 @@ function apply(p::GroupPointing, x::AbstractVector{T}) where {T}
         val(f) = (fi = findfirst(==(f), p.fields); fi === nothing ? nothing : x[_pidx(p, g, fi)])
         z, r, ϕ, dfc, pw, sp = val(:z), val(:r), val(:phi), val(:defocus), val(:power), val(:spot)
         dl = val(:dlambda)
+        # spherical values as concrete types (whether each is a parameter, and its value)
+        sv = (val(:theta_s), val(:dphi_s), val(:split_theta), val(:split_phi))
+        has = map(!isnothing, sv)
+        vals = map(v -> v === nothing ? zero(T) : v, sv)
         for bi in mem
             b = p.template[bi]
-            er, eφ = _radial(b)
-            aim0 = b.aim
-            if p.relative
-                rr = r === nothing ? dot(aim0, er) : dot(aim0, er) + r
-                tt = ϕ === nothing ? dot(aim0, eφ) : dot(aim0, eφ) + ϕ
-                zz = z === nothing ? aim0[3] : aim0[3] + _zsign(p, b) * z
+            if _spherical(p)
+                aim = _sphere_aim(p, g, bi, has, vals)
             else
-                rr = r === nothing ? dot(aim0, er) : r
-                tt = ϕ === nothing ? dot(aim0, eφ) : ϕ
-                zz = z === nothing ? aim0[3] : _zsign(p, b) * z
+                er, eφ = _radial(b)
+                aim0 = b.aim
+                if p.relative
+                    rr = r === nothing ? dot(aim0, er) : dot(aim0, er) + r
+                    tt = ϕ === nothing ? dot(aim0, eφ) : dot(aim0, eφ) + ϕ
+                    zz = z === nothing ? aim0[3] : aim0[3] + _zsign(p, b) * z
+                else
+                    rr = r === nothing ? dot(aim0, er) : r
+                    tt = ϕ === nothing ? dot(aim0, eφ) : ϕ
+                    zz = z === nothing ? aim0[3] : _zsign(p, b) * z
+                end
+                aim = rr * er + tt * eφ + SVector{3,T}(0, 0, zz)
             end
-            aim = rr * er + tt * eφ + SVector{3,T}(0, 0, zz)
             spot = sp === nothing ? _retype(b.spot, T) :
                    _retype(with_axes(b.spot, sp * b.spot.a, sp * b.spot.b), T)
             out[bi] = remake(b; aim, spot,
@@ -131,17 +241,45 @@ function apply(p::GroupPointing, x::AbstractVector{T}) where {T}
     return out
 end
 
+# The surface aim of template beam `bi` in group `g`: `has` tells which of
+# (:theta_s, :dphi_s, :split_theta, :split_phi) are parameters and `v` holds their values.
+# The polar angle in the beam's mirrored frame and the azimuth offset from its port are
+# each a group value plus the beam's split, or the template beam's own when neither of
+# the two is a parameter (`relative`: shifts of the template beam's own).
+function _sphere_aim(p::GroupPointing, g, bi, has::NTuple{4,Bool}, v::NTuple{4,T}) where {T}
+    θb, Δφb, sθ, sφ, φp = p.sph[bi]
+    Θ0, Φ0, Sθ0, Sφ0 = p.sph0[g]
+    if p.relative
+        θ = θb + v[1] + sθ * v[3]
+        Δφ = Δφb + v[2] + sφ * v[4]
+    else
+        θ = !(has[1] || has[3]) ? T(θb) :
+            (has[1] ? v[1] : T(Θ0)) + sθ * (has[3] ? v[3] : T(Sθ0))
+        Δφ = !(has[2] || has[4]) ? T(Δφb) :
+             (has[2] ? v[2] : T(Φ0)) + sφ * (has[4] ? v[4] : T(Sφ0))
+    end
+    θ = _zsign(p, p.template[bi]) < 0 ? 180 - θ : θ
+    φ = φp + Δφ
+    R, c = p.radius, p.center
+    return SVector{3,T}(c[1] + R * sind(θ) * cosd(φ), c[2] + R * sind(θ) * sind(φ),
+                        c[3] + R * cosd(θ))
+end
+
 """
     bounds(p::GroupPointing, x0; z = 1.0, r = 1.0, phi = 1.0, defocus = 2.0,
-           power = 0.5, spot = 0.5, dlambda = 2.0, power_min = 0.0,
-           power_max = Inf) -> (lower, upper)
+           power = 0.5, spot = 0.5, dlambda = 2.0, theta_s = 5.0, dphi_s = 10.0,
+           split_theta = 5.0, split_phi = 5.0, power_min = 0.0, power_max = Inf)
+           -> (lower, upper)
 
 Box bounds around `x0`: `±z`, `±r`, `±phi`, `±defocus` mm, relative `±power`, `±spot`
-fractions, and `±dlambda` Å. Power bounds are further clipped to the absolute limits
-`power_min ≤ P ≤ power_max` (TW per beam, e.g. a facility's per-quad capability).
+fractions, `±dlambda` Å, and `±theta_s`, `±dphi_s`, `±split_theta`, `±split_phi`
+degrees (engineering defaults, not facility limits). Power bounds are further clipped to
+the absolute limits `power_min ≤ P ≤ power_max` (TW per beam, e.g. a facility's per-quad
+capability).
 """
 function bounds(p::GroupPointing, x0 = initial_parameters(p); z = 1.0, r = 1.0, phi = 1.0,
-                defocus = 2.0, power = 0.5, spot = 0.5, dlambda = 2.0, power_min = 0.0,
+                defocus = 2.0, power = 0.5, spot = 0.5, dlambda = 2.0, theta_s = 5.0,
+                dphi_s = 10.0, split_theta = 5.0, split_phi = 5.0, power_min = 0.0,
                 power_max = Inf)
     lo, hi = copy(x0), copy(x0)
     for g in eachindex(p.members), (fi, f) in enumerate(p.fields)
@@ -153,7 +291,9 @@ function bounds(p::GroupPointing, x0 = initial_parameters(p); z = 1.0, r = 1.0, 
         elseif f === :spot
             lo[i] = x0[i] * (1 - spot); hi[i] = x0[i] * (1 + spot)
         else
-            δ = f === :z ? z : f === :r ? r : f === :phi ? phi : f === :dlambda ? dlambda : defocus
+            δ = f === :z ? z : f === :r ? r : f === :phi ? phi : f === :dlambda ? dlambda :
+                f === :theta_s ? theta_s : f === :dphi_s ? dphi_s :
+                f === :split_theta ? split_theta : f === :split_phi ? split_phi : defocus
             lo[i] = x0[i] - δ; hi[i] = x0[i] + δ
         end
     end
@@ -259,7 +399,8 @@ Scenario for the beams `keep` (indices into the scenario's beams) — e.g. after
 dropping a bundle — reusing the view factors, flux response and mode weights; only the
 deposition operator is restricted. The kept beams' template values (pointing, power)
 come from the scenario's parameterization; the default new parameterization keeps its
-fields and mirroring and groups by `group` (pass one to group by quad or beam).
+fields, mirroring, `relative` and sphere and groups by `group` (pass one to group by quad
+or beam).
 """
 function subset(s::Scenario, keep::AbstractVector{<:Integer}; parameterization = nothing)
     s.param isa GroupPointing || parameterization !== nothing ||
@@ -267,7 +408,9 @@ function subset(s::Scenario, keep::AbstractVector{<:Integer}; parameterization =
     beams = s.param.template[keep]
     param = parameterization === nothing ?
             GroupPointing(beams; fields = Tuple(s.param.fields), mirror = s.param.mirror,
-                          relative = s.param.relative) :
+                          relative = s.param.relative,
+                          radius = _spherical(s.param) ? s.param.radius : nothing,
+                          center = s.param.center) :
             parameterization
     return Scenario(s.target, param, s.deposition[keep], s.model, s.observed,
                     s.moment_weights, s.ylm_weights, s.moment_response, s.ylm_response,

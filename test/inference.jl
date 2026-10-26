@@ -73,6 +73,11 @@ end
     mw = RadiationModel(tw; F = s.model.F, closed = true)
     pulse = PulseShape([0.0, 1.0, 2.0], [0.0, 4.0, 4.0])
     history(beams_at, times; kw...) = drive_history(mw, s.deposition, beams_at, times; kw...)
+    # spherical pointing fields on the capsule (absolute, and relative with split quads)
+    ps = GroupPointing(quads; fields = (:theta_s, :dphi_s, :defocus, :power), radius = 0.9)
+    xs0 = initial_parameters(ps)
+    psr = GroupPointing(nif_beams(power = 2.0)[1:16]; by = :quad, relative = true, radius = 0.9,
+                        fields = (:theta_s, :dphi_s, :split_theta, :split_phi))
 
     @testset "closures compile once" begin
         history(τ -> with_pulses(quads, pulse, τ), [0.5, 1.0]; record = sol -> sol)
@@ -103,6 +108,14 @@ end
             c = flux_ylm(ev)
             @test (@inferred mode_rms(c, 6)) isa T
             @test (@inferred mode_rms(c, 6; m = :nonzero)) isa T
+        end
+        # pointing on the capsule sphere (polar direct drive), with split quads
+        for x in (xs0, _inf_duals(xs0))
+            T = eltype(x)
+            beams = @inferred apply(ps, x)
+            @test beams isa Vector{Beam{T}}
+            @test (@inferred deposit(s.deposition, beams)).element isa Vector{T}
+            @test (@inferred apply(psr, zeros(T, nparams(psr)))) isa Vector{Beam{T}}
         end
         @test (@inferred flux_response(s.model, s.observed)) isa Matrix{Float64}
         # a dual absorption on Float64 beams promotes the deposition
@@ -136,6 +149,17 @@ end
                 @test _inf_jet_clean(JET.report_call, objectives[1], ev)
                 @test _inf_jet_clean(JET.report_call, objectives[2], ev)
                 @test _inf_jet_clean(JET.report_call, mode_rms, flux_ylm(ev), 6)
+            end
+            # spherical pointing fields: no dispatch (from 1.11, as the deposition checks
+            # above), no possible errors
+            for x in (xs0, _inf_duals(xs0))
+                if VERSION >= v"1.11"
+                    @test _inf_jet_clean(JET.report_opt, apply, ps, x)
+                    @test _inf_jet_clean(JET.report_opt, deposit, s.deposition, apply(ps, x))
+                    @test _inf_jet_clean(JET.report_opt, apply, psr, zeros(eltype(x), nparams(psr)))
+                end
+                @test _inf_jet_clean(JET.report_call, apply, ps, x)
+                @test _inf_jet_clean(JET.report_call, apply, psr, zeros(eltype(x), nparams(psr)))
             end
             @test _inf_jet_clean(JET.report_call, flux_response, s.model, s.observed)
             @test _inf_jet_clean(JET.report_call, solve, s.model, dep)

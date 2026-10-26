@@ -284,6 +284,28 @@ _dd_coeffs(W, t, dep) = W * (dep.element ./ t.elem_area)
         g = ForwardDiff.derivative(η -> σbri(0.05, circ; absorption = η), 0.9)
         fd = (σbri(0.05, circ; absorption = 0.9 + h) - σbri(0.05, circ; absorption = 0.9 - h)) / 2h
         @test isapprox(g, fd; rtol = 1e-6)
+
+        @testset "spherical pointing fields" begin
+            # The same ring pointed on the sphere (`GroupPointing`'s `:theta_s`): an axis
+            # shifted by Δ R₀ toward the equator, normal to the beam, first meets the
+            # sphere asin(Δ) further from the pole, so θ_s = 49° + asin(Δ) is the same
+            # axis, and collimated beams (`ncone = 1`) deposit the same pattern.
+            spot = SuperGaussianSpot(R0, R0; order = 4)
+            ringc = [remake(bm; spot) for bm in ring]
+            p = GroupPointing(ringc; fields = (:theta_s, :dphi_s), radius = R0)
+            @test initial_parameters(p) ≈ [49.0, 0.0] atol = 1e-12   # centred template
+            σs(x) = mode_rms(_dd_coeffs(W, t, deposit(op, apply(p, x))), L; m = :zero)
+            θc = 49 + asind(Δc)
+            @test isapprox(σs([θc, 0.0]), σbri(Δc, circ); rtol = 1e-10)
+            @test abs(σs([θc, 0.0]) - σref(Δc, circ)) < 1e-4
+            # dσ/dθ_s and dσ/dΔφ_s (all modes) by ForwardDiff against central differences
+            σa(x) = mode_rms(_dd_coeffs(W, t, deposit(op, apply(p, x))), L)
+            x = [55.0, 3.0]
+            gs = ForwardDiff.gradient(σa, x)
+            hs = 1e-3
+            fds = [(σa(x .+ hs .* (1:2 .== k)) - σa(x .- hs .* (1:2 .== k))) / 2hs for k in 1:2]
+            @test isapprox(gs, fds; rtol = 1e-6)
+        end
     end
 
     @testset "Murakami & Nishi 2017 two-cone PDD" begin
@@ -343,4 +365,73 @@ _dd_coeffs(W, t, dep) = W * (dep.element ./ t.elem_area)
         Bx = richardson(B(1), B(2))
         @test maximum(abs, B(2)) < 5e-4 && maximum(abs, Bx) < 1e-5
     end
+end
+
+@testset "spherical pointing (GroupPointing)" begin
+    # Polar-direct-drive pointings are published as points on the target sphere (polar
+    # angle, azimuth offset from the port; Barlow et al. 2024 Table I). The reference is
+    # the aim set built by hand from those angles, with the mirrored lower hemisphere at
+    # 180° − θ_s.
+    R = 1.1
+    quads = nif_quads(power = 4.0)
+    cones = (:inner23, :inner30, :outer44, :outer50)
+    θs = Dict(zip(cones, (6.36, 14.95, 52.48, 85.62)))     # Ba24 Table I, as an input set
+    Δφs = Dict(zip(cones, (52.02, 160.75, -12.14, 6.90)))
+    p = GroupPointing(quads; fields = (:theta_s, :dphi_s, :defocus), radius = R)
+    x = reduce(vcat, [[θs[k], Δφs[k], 5.0] for k in p.keys])
+    bs = apply(p, x)
+    hand = map(quads) do q
+        θp, φp = port_angles(q)
+        θ = q.port[3] > 0 ? θs[q.group] : 180 - θs[q.group]
+        R * port_vector(θ, φp + Δφs[q.group])
+    end
+    @test all(norm.([b.aim for b in bs] .- hand) .< 1e-14)
+    @test all(b -> b.defocus == 5.0, bs) && all(b -> b.power == 4.0, bs)
+    # every aim faces its port, so the axis first meets the sphere there
+    @test all(b -> dot(b.aim, b.port) > 0, bs)
+    # round trip: the angles read back from the new beams' axes
+    @test isapprox(initial_parameters(GroupPointing(bs; fields = p.fields, radius = R)), x; atol = 1e-11)
+    # relative shifts from that pointing move every aim by the same angles
+    pr = GroupPointing(bs; fields = (:theta_s, :dphi_s), radius = R, relative = true)
+    @test initial_parameters(pr) == zeros(8)
+    @test all(norm.([b.aim for b in apply(pr, zeros(8))] .- hand) .< 1e-14)
+    xr = repeat([2.0, -3.0], 4)
+    hr = map(q -> R * port_vector(q.port[3] > 0 ? θs[q.group] + 2 : 178 - θs[q.group],
+                                  port_angles(q)[2] + Δφs[q.group] - 3), quads)
+    @test all(norm.([b.aim for b in apply(pr, xr)] .- hr) .< 1e-13)
+    # a shifted centre
+    c = (0.1, -0.2, 0.05)
+    pc = GroupPointing(quads; fields = (:theta_s, :dphi_s), radius = R, center = c)
+    xc = reduce(vcat, [[θs[k], Δφs[k]] for k in pc.keys])
+    @test all(norm.([b.aim for b in apply(pc, xc)] .- (hand .+ Ref(Vec3(c...)))) .< 1e-14)
+
+    # split quads on the 192 beams: each beam moves by ±split in θ and Δφ, the signs of
+    # its port's offset from its quad's mean port (here from the beam table directly)
+    beams = nif_beams()
+    ps = GroupPointing(beams; fields = (:theta_s, :dphi_s, :split_theta, :split_phi), radius = R)
+    xs = reduce(vcat, [[θs[k], Δφs[k], 1.5, 4.0] for k in ps.keys])
+    wrap(a) = mod(a + 180, 360) - 180
+    hs = map(beams) do b
+        mates = filter(o -> o.quad == b.quad, beams)
+        θ(o) = b.port[3] > 0 ? port_angles(o)[1] : 180 - port_angles(o)[1]
+        sθ = sign(θ(b) - sum(θ, mates) / 4)
+        sφ = sign(wrap(port_angles(b)[2] - port_angles(mates[1])[2]) -
+                  sum(o -> wrap(port_angles(o)[2] - port_angles(mates[1])[2]), mates) / 4)
+        θb = θs[b.group] + 1.5sθ
+        R * port_vector(b.port[3] > 0 ? θb : 180 - θb, port_angles(b)[2] + Δφs[b.group] + 4sφ)
+    end
+    @test all(norm.([b.aim for b in apply(ps, xs)] .- hs) .< 1e-13)
+    # a 2 × 2 quad: two beams on each side in both directions
+    @test all(q -> count(i -> beams[i].quad == q && ps.sph[i][3] > 0, eachindex(beams)) == 2 &&
+                   count(i -> beams[i].quad == q && ps.sph[i][4] > 0, eachindex(beams)) == 2,
+              unique(b.quad for b in beams))
+    # bounds in degrees
+    lo, hi = bounds(ps, xs; theta_s = 2.0, split_phi = 1.0)
+    @test hi[1:4] - lo[1:4] == [4.0, 20.0, 10.0, 2.0]
+
+    @test_throws ArgumentError GroupPointing(quads; fields = (:theta_s, :z), radius = R)
+    @test_throws ArgumentError GroupPointing(quads; fields = (:theta_s,))
+    @test_throws ArgumentError GroupPointing(omega_beams(); fields = (:split_phi,), radius = R)
+    far = [remake(quads[1]; aim = Vec3(5.0, 5.0, 5.0))]
+    @test_throws ArgumentError GroupPointing(far; fields = (:theta_s,), radius = R)
 end
