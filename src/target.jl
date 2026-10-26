@@ -135,7 +135,7 @@ continuous in `T` and `t`, so the albedo iteration stays smooth; a sharp front w
 switch the loss rate to the substrate's as soon as `m_F` passes the liner). With the
 defaults (`factor = 1`, no liner) the albedo is gold's, bit for bit.
 
-**Re-emission.** `release` scales the stored energy the wall gives back under a falling
+**Re-emission.** `release` scales the stored energy that the wall gives back under a falling
 drive in a `drive_history` (`wall_release`): the linear (Duhamel) response of the
 wall's own self-similar loss, times `release`. 1.0 is *calibrated* against 1-D
 Lagrangian radiation hydrodynamics of an ablating gold wall (`examples/late_time_wall.jl`:
@@ -355,7 +355,7 @@ so `T ≈ 0.33`, `0.235` and `0.17` for 1.7, 2.5 and 3.6 µm of gold. Limitation
   instead; its density dependence is not modeled.
 - Pairing that density with the 2.5 µm as-built thickness is theirs. Taken literally,
   eq. 1 at 1 g/cm³ describes a layer of 0.25 mg/cm², not the foil's 4.8. The scaling
-  with thickness (areal mass) is ours, from eq. 1.
+  with thickness (areal mass) is Briareus's own, from eq. 1.
 - The estimate is gray, planar and quasi-static, and for gold: pass `transmission`
   for another material. Below `τ = 2/3` (0.33 µm of gold) it is capped at 1.
 
@@ -438,7 +438,7 @@ optical_depth(m::BurnthroughAlbedo) = _foil_optical_depth(areal_mass(m))
 """
     foil_transmission(model::BurnthroughAlbedo, T = nothing)
 
-Fraction of the incident flux a burned-through foil transmits when the flux on it has
+Fraction of the incident flux that a burned-through foil transmits when the flux on it has
 radiation temperature `T` (eV): the model's `transmission`, evaluated at `T` for a
 `RosselandTransmission` (at its reference temperature when `T` is `nothing`). `NaN`
 for a model with an explicit `after`.
@@ -1097,7 +1097,7 @@ uranium(; albedo = du_wall_loss(), conversion = 0.75) = Material(:DU; albedo, co
 The gold wall of a NIF drive history: Lindl's Marshak wall loss, evaluated by
 [`drive_history`](@ref) at each element's own temperature history, and the rising
 [`nif_conversion`](@ref)`()`, `0.7 t^0.12 ≤ 0.95` with `t` the time since the pulse
-start (at `solve`'s default `time = 0` it reads 0.53, so a static solve wants
+start (at `solve`'s default `time = 0` it reads 0.53, so a static solve needs
 [`gold`](@ref)).
 """
 nif_gold(; albedo = WallLossAlbedo(), conversion = nif_conversion()) = Material(:Au; albedo, conversion)

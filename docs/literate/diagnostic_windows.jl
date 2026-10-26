@@ -13,7 +13,7 @@
 # Assembly leaves a thin annular gap around each window that leaks from the start.
 #
 # This tutorial meshes circular windows with their gaps into the wall, checks the
-# heat-front model that decides when a window burns through against published
+# heat-front model that predicts when a window burns through against published
 # solutions and measurements, and then follows a pair of windows through a NIF-like
 # drive for three window thicknesses, with and without a gap. It then lets the
 # transmission follow the drive and the gaps close, and restores the drive the windows

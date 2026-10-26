@@ -136,9 +136,9 @@ fig
 # transverse to the group's mean beam direction, so a group must have one: a cone's
 # beams in one hemisphere do, the whole cone (`groups = :group`) does not. It also moves
 # beams along themselves (their focus moves with the aim), so these errors propagate
-# through a fourth per-beam sensitivity. `rms_by` splits the budget by source. Here we
-# take 50 µm pointing per beam, 20 µm shared per cone in each hemisphere and 30 µm
-# target positioning:
+# through a fourth per-beam sensitivity. `rms_by` splits the budget by source. The
+# errors here are 50 µm pointing per beam, 20 µm shared per cone in each hemisphere
+# and 30 µm target positioning:
 
 cone(b) = (b.group, b.port[3] > 0)
 shared = (; pointing = 0.05, group_pointing = 0.02, groups = cone, positioning = 0.03)
@@ -187,7 +187,7 @@ end
 
 # The direction is right, and the positioning is the largest single source, but it
 # explains only a quarter of the measurement and its estimate falls well short of
-# 30 µm. Three numbers cannot tell a target offset from the same mode-1 pattern made
+# 30 µm. Three numbers do not separate a target offset from the same mode-1 pattern made
 # by the 96 independent beam displacements and the cones' shared ones: the prior
 # allows all of them, so the most probable explanation spreads the blame. ``l = 3``,
 # which a translation also drives, separates them a little further:
@@ -213,8 +213,8 @@ inv_pos = infer_errors(scenario, quads, (1 => Δc(1),); sigma = 1e-4, pointing =
 
 # 29 ± 3 µm against the true 30. With the broad prior, the positioning's posterior rms
 # fell only to 0.8 of its prior along x, while the median error kept 99% of its
-# prior spread: the measurement says little about any one error unless the prior
-# says the rest are small. For the broad-prior case, the inferred errors applied to
+# prior spread: the measurement constrains any one error only weakly unless the prior
+# holds the rest small. For the broad-prior case, the inferred errors applied to
 # the beams (`beams`) reproduce the measurement in a full evaluation:
 
 c_back = shape(inv13.beams)

@@ -11,7 +11,7 @@ Result of `enclosure`: the reduced `target`, and how it was cut from `source`.
 - `index[i]`: the element of `source` that element `i` of `target` is.
 - `kept[e]`: whether element `e` of `source` passed the selection. A two-sided patch
   keeps both sides when either passes, so `target` can hold sides with `kept` false.
-- `flux[e]`: the relative flux on element `e` of `source` that decided it (`NaN` for
+- `flux[e]`: the relative flux on element `e` of `source` that determined it (`NaN` for
   elements beyond `radius`, which cast no rays); see `enclosure`.
 - `escape`: the fraction of the rays from the point that leave the bounding sphere
   (or reach infinity): the solid-angle fraction of the openings seen from the point.
@@ -19,7 +19,7 @@ Result of `enclosure`: the reduced `target`, and how it was cut from `source`.
   escape (mm²). By reciprocity this estimates the open area of the cavity (its
   entrance holes, where no aperture or window closes them).
 - `leak_area`: the same sum over rays that end on dropped elements (mm²): radiation
-  the kept set sends to surfaces the reduced target no longer has.
+  that the kept set sends to surfaces that the reduced target no longer has.
 - `return_area`: what those surfaces would send back, Σ over kept elements of area ×
   the mean over the element's rays of `albedo × flux` at the dropped element hit (mm²,
   in units of the reference flux): the error of the cut, to compare with `open_area`
@@ -61,7 +61,7 @@ cost O(n²) in the elements. Only element sides that face the free space are fou
 (fronts of one-sided surfaces, either side of two-sided ones), so CAD windings must be
 consistent first (`orient_mesh`, `visrad_target(...; orient = true)`).
 
-The selection is the flux an isotropic source at the point would put on each element,
+The selection is the flux that an isotropic source at the point would put on each element,
 directly and after diffuse re-emission from the surfaces with the uniform albedo
 `albedo` (a geometric weight, not the materials'). Every element within `radius` of the
 point casts `rays` rays from random points on it in cosine-weighted directions,
@@ -424,14 +424,14 @@ sides when `two_sided`), through these steps:
    fitted on the kept CAD facets, whose vertices lie on the true surfaces, so the
    radiation model integrates over the curved walls. The split is computational: the
    pieces, `<part>/cyl1`, …, `<part>/rest` (a part that is one surface keeps its name),
-   remember their part, and `elements`, `Scenario(...; observe)`, the keep-outs, the
+   record their part, and `elements`, `Scenario(...; observe)`, the keep-outs, the
    clearance and TaLIS checks and the reports (`energy_balance`, `component_power`,
    `write_results`, `report`) take and show the parts (see [`parts`](@ref)).
    `fit = false` keeps flat elements.
 
 The target's view factors default to `visibility = :sampled` (see `view_factors`): CAD
-cavities have rims (entrance-hole bores, gaps) that partly shadow element pairs, which
-a single centroid ray decides all or nothing.
+cavities have rims (entrance-hole bores, gaps) that partly shadow element pairs, whose
+visibility a single centroid ray sets to all or nothing.
 
 `closed = true` declares the target a closed enclosure, so `RadiationModel` balances its
 view factors (`enforce_closure!`): pass it when apertures (`aperture` components among

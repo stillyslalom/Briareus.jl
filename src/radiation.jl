@@ -55,7 +55,7 @@ computed here, and to `false` for a given `F`, which is used as is; pass
 The model caches LU factorizations of the radiosity matrix `I - diag(α) F` keyed on
 the albedo vector (the two most recently used), so `solve` and `flux_response` with
 unchanged albedos skip the factorization. The cache is thread-safe. Do not mutate `F`
-after the first solve (or call `Briareus.empty_cache!(model)` if you do).
+after the first solve (or call `Briareus.empty_cache!(model)` after mutating it).
 
 Large models (more than `Briareus.LARGE_MODEL[]` = 10,000 elements by default) keep the
 view factors they compute in a [`Float32Matrix`](@ref), above `Briareus.HMATRIX_MODEL[]`
@@ -167,7 +167,8 @@ meshes meet without sharing vertices (a disk aperture of 24 sides in a bore of 2
 the cavities of the research notes' "Closure on bored, windowed and CAD cavities",
 2.7 × 10⁻³ on the coarse `hohlraum(h = 1)`. An opening left without an aperture shows
 as the share of the view it takes, which may be no larger: a 40 µm waist gap 4 × 10⁻³,
-a CAD cavity's two 3.1 mm LEHs 7 × 10⁻². So the fraction says where to look (`element`),
+a CAD cavity's two 3.1 mm LEHs 7 × 10⁻². So the fraction indicates where to look
+(`element`),
 not whether to balance; that follows from the apertures given. Curved surfaces are
 ignored: cracks between the facets of a curved part and an aperture do not leak in the
 view factors, which integrate over the true surfaces.

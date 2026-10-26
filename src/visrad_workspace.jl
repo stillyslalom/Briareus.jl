@@ -618,7 +618,7 @@ end
                   inside = nothing, visibility = :sampled, closed = false) -> Target
 
 Target built from the components of a VisRad workspace (`read_visrad_workspace`) for
-which `select(object)` is true — by default those VisRad includes in its radiosity or
+which `select(object)` is true — by default those that VisRad includes in its radiosity or
 direct-laser calculation. `materials` maps object names to a `Material` overriding the
 file's albedo and conversion efficiency. `two_sided` (a `Bool`, or a function of the
 object) makes surfaces radiate from both sides; see `visrad_component` for why CAD

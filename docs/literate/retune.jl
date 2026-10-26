@@ -43,8 +43,8 @@ quads = aimed.(nif_quads())
 # The reference pulse is a total power (a picket, a foot, a second step and a 420 TW
 # peak) and a cone fraction, the inner cones' share of it, that falls from 0.35 in the
 # foot to 0.25 at the peak. [`cone_fraction_pulses`](@ref) turns them into each cone's
-# power per quad; [`write_pulse_table`](@ref) writes them as CSV, the form a reference
-# shot's requested or measured powers come in:
+# power per quad; [`write_pulse_table`](@ref) writes them as CSV, the form in which a
+# reference shot's requested or measured powers come:
 
 tt = [0.0, 0.3, 1.0, 1.4, 4.5, 5.0, 6.0, 7.5, 9.5, 10.0]
 total = [0.0, 60.0, 60.0, 15.0, 15.0, 50.0, 50.0, 420.0, 420.0, 0.0]
@@ -88,7 +88,7 @@ peak(h, x) = (k = findall(t -> 7.6 <= t <= 9.4, h.time); sum(x[k]) / length(k))
 # ## Retuning the quads
 #
 # At any moment the capsule flux is linear in the beams' powers once the albedos are
-# fixed, and the reference history says what the albedos are. So at each reference
+# fixed, and the reference history gives the albedos. So at each reference
 # time [`retune_drive`](@ref) finds each quad's power that brings the capsule flux's
 # shape ``c_{lm}/c_{00}`` back to the reference's for ``l = 1``–``4`` and its level
 # ``c_{00}`` back to the reference's: a least-squares problem with each quad's power
@@ -121,7 +121,7 @@ end
 
 # But it gets there by using the limits: at the peak many quads run at 1.3 times their
 # reference power and a few almost off. Many power sets restore the drive; with
-# `nominal` (the reference's powers) and a weight `stay`, the retune prefers the one
+# `nominal` (the reference's powers) and a weight `stay`, the retune selects the one
 # closest to the reference, trading a little of the match for smaller departures:
 
 k_peak = findfirst(≈(8.8), reference.time)

@@ -554,7 +554,7 @@ end
 """
     split_mesh(mesh, keep) -> (selected, rest)
 
-Split a mesh by patch: `keep(centroid)` decides, from a patch's area-weighted
+Split a mesh by patch: `keep(centroid)` determines, from a patch's area-weighted
 centroid, whether the patch goes to `selected` or `rest`. Use it to cut a port or a
 window out of a surface and make it an `aperture`.
 """

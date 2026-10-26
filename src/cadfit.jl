@@ -838,10 +838,10 @@ round-off) and its normal is within `angle` degrees of the surface normal at its
 centroid (either side: windings do not matter). Regions grow from seed patches, by
 decreasing area, over patches that share a vertex (welded by position to `tol` times the
 mesh's extent), nearest first, refitting by least squares as they grow: planes by
-principal components, spheres by an algebraic fit, cylinders by the axis the patch
-normals are perpendicular to and a circle fit across it, cones by the axis the normals
-make a constant angle with (or the cylinder's, for a small patch) and an algebraic fit of
-the radius linear along it, all refined by Gauss–Newton on the vertex distances; tori
+principal components, spheres by an algebraic fit, cylinders by the axis to which the
+patch normals are perpendicular and a circle fit across it, cones by the axis with which
+the normals make a constant angle (or the cylinder's, for a small patch) and an
+algebraic fit of the radius linear along it, all refined by Gauss–Newton on the vertex distances; tori
 by the axis the normals all meet (or, on a small patch, axes through the patch's
 centres of curvature) and a circle fit in the meridian plane, refined by
 Levenberg–Marquardt. A cone whose apex lies over 1000 extents away is left to the
@@ -1274,7 +1274,7 @@ Planar regions are not given a surface: flat elements are already exact there
 (`DiskSurface` describes polar-sector elements of primitive end caps, not general
 planar CAD faces).
 
-The pieces remember their part (`part`), so the split is computational only:
+The pieces record their part (`part`), so the split is computational only:
 `elements(target, :part)`, the other name-taking functions and the reports
 (`energy_balance`, `component_power`, `write_results`, `report`) see the part, and
 each piece stays reachable by its own name (see [`parts`](@ref)).

@@ -175,7 +175,7 @@ materials and apertures emit none. `spectral_solve` takes the result as `mband_p
 
 With a laser–plasma model `lpi`, `beams` are its effective beams (`apply_lpi(lpi, b,
 time)`: after CBET, backscatter, the bubble) and each group is deposited through
-[`lpi_deposit`](@ref) at `time`, so light the model deposits off the operator (the
+[`lpi_deposit`](@ref) at `time`, so light that the model deposits off the operator (the
 bubble's ridge stop) converts at its own group's fraction. Every step of a
 [`drive_history`](@ref) does this by default with its own effective beams. The groups
 are split in one deposition pass: each group's share of an element is exactly the

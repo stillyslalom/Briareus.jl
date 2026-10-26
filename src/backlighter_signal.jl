@@ -124,7 +124,7 @@ convex in `L`, so it rose steeply toward low `hν` (Cr 4.1%, Ti 9.2%) against th
 (3.0% at 0.93e15) and the held-out Ti foil. Writing the parabola about its optimum
 (`Y`) removes that convexity at the same number of parameters and lowers the
 cross-validated error (leave-one-source-out rms 0.55 → 0.44 in `ln CE`); the
-saturation, one more parameter, is what the Cr points ask for (they sit 0.24 below the
+saturation, one more parameter, is what the Cr points require (they sit 0.24 below the
 power law through Fe–Mo) and what predicts the held-out Ti foil within 1.1σ. Inside the
 data the saturation is weakly determined (it moves the likelihood by 1.1 in `−2 ln L`),
 and with Cr left out `hνₛ` is not identified. Plausible reasons for a plateau below Fe
@@ -156,7 +156,8 @@ the irradiance.
 1.3e15 W/cm²; `fit = 0`) measured 1.6% (the He-α share of a 4–6 keV band, *inferred*;
 2.3% for the whole band) where the fit gives 3.0% ×/÷ 1.48: −0.63 in `ln CE`, 1.1σ with
 the point's own 42%. Ti foils on Gekko XII and Shenguang II gave 1.4–1.8% in the band, so
-the data may turn over below Cr rather than level off; the fit cannot tell. Ti is
+the data may turn over below Cr rather than level off; the fit does not separate the
+two. Ti is
 flagged `extrapolated`; pass a measured `ce` for Ti backlighters when one exists. The
 fitted Fe peak (2.3%) sits below Coppari et al.'s two-sided Fe (2.8–3.25%) and
 Workman's 3.0% at 3.5e15, but agrees with Workman's Fe near 1e15 (2.4%): the sources
@@ -467,7 +468,7 @@ The photometric chain from the laser power on a backlighter foil to He-α photon
 unit area at a detector `distance` mm from `center` on the line of sight `los` ((θ, φ)
 in degrees, or a direction vector, from `center` toward the detector).
 
-1. **Laser energy.** The power each foil element receives in `deposition` (TW; all of
+1. **Laser energy.** The power that each foil element receives in `deposition` (TW; all of
    the incident power, as Briareus deposits it), over a flat-top pulse of `pulse` ns.
 2. **Conversion.** The CE comes from [`kshell_ce`](@ref) for `line` (an element
    `Symbol` or keV). With `irradiance = :mean`, it is evaluated at the foil's

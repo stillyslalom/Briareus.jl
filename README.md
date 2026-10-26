@@ -155,7 +155,8 @@ for the same workflow: target, beams, drive, optimization and shot review.
 - **Retuning to a reference drive.** `retune_drive` finds the power histories, per
   cone, quad or beam, that reproduce a reference shot's capsule drive (its Y_lm shape
   through any l, and its level) through time, under per-key power limits (a dropped
-  quad is a zero limit). It optionally prefers powers near the reference's. Each time
+  quad is a zero limit). An optional penalty pulls the powers toward the reference's.
+  Each time
   is a bounded linear least-squares problem about the reference's converged albedos,
   and a drive history of the result confirms it. With bundle 31 down on NIF, retuning
   the other 46 quads takes the mode-1 drive asymmetry from 2% to 0.02% at the peak.
@@ -229,8 +230,8 @@ among them:
 - the M-band, Dante channels and backlighter conversion efficiency.
 
 The `clearance` thresholds and wing models are engineering defaults, not facility
-criteria. Override them with your facility's review requirements and measured far
-fields.
+criteria; a facility's own review requirements and measured far fields should replace
+them.
 
 ## Scope and limitations
 

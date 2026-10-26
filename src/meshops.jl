@@ -266,7 +266,7 @@ shorten: it only groups whole facets. Here:
    neighboring strips are cut at the same places and a cut across a strip is one
    straight chord; other edges are divided equally;
 3. the refined triangles are clustered: seeds `0.85 size` apart (a Poisson-disk sample)
-   claim triangles nearest first across shared, consistently wound edges (see
+   collect triangles nearest first across shared, consistently wound edges (see
    `orient_mesh`), taking those whose normals are within `angle` degrees of the seed's;
    Lloyd iterations move each seed to its element's centroid and mean normal. On strips
    (facets whose edges longer than `size` are all cut by one family of planes), every

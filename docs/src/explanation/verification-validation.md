@@ -3,15 +3,15 @@
 The tutorials and the test suite carry out four different activities, and their
 results mean different things.
 
-- **Code verification** asks whether the implementation solves the intended discrete
+- **Code verification** checks whether the implementation solves the intended discrete
   equations. Examples are exact view factors of catalog geometries, power conservation
   of the ray trace, symmetry selection rules that must hold to round-off, and
   derivatives checked against finite differences.
-- **Solution verification** asks how large the discretization error of a given
+- **Solution verification** measures how large the discretization error of a given
   calculation is. Examples are the closure error of a view-factor matrix and its
   convergence with mesh refinement, and the agreement of the fast deposition operator
   with the ray trace.
-- **Validation** asks whether the model reproduces an independent reference, either
+- **Validation** tests whether the model reproduces an independent reference, either
   physical or analytic, for the intended use. Examples are the integrating-sphere
   multiplier, the exact convolution of a laser spot with its f-cone, and, eventually,
   comparisons with VisRad calculations and shot data.
@@ -19,7 +19,8 @@ results mean different things.
   transfer model is calibrated, not validated: its multiplier, flow and saturation
   clamp are fitted to measured transfer.
 
-A tutorial states which of these it does in its closing section, "What this checks".
+The closing section of each tutorial, "What this checks", lists which of these it carries
+out.
 
 ## Where each check lives
 

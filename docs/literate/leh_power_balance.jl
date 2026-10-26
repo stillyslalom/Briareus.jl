@@ -38,13 +38,13 @@ set_theme!(fontsize = 15, linewidth = 2.5)
 #
 # Kritcher et al. (Table I and Sec. II C) give the hohlraum: gold-lined depleted
 # uranium, 6.4 mm in diameter and 11.24 mm long, with 3.1 mm LEHs, and a diamond
-# capsule of inner radius 1.05 mm under an ablator 76–80 µm thick; we take an outer
-# radius of 1.13 mm.
+# capsule of inner radius 1.05 mm under an ablator 76–80 µm thick; the outer radius
+# is taken as 1.13 mm.
 #
 # The albedos are engineering estimates, not shot data. The wall's is the Au-lined
 # depleted-uranium wall loss ([`du_wall_loss`](@ref): Lindl's gold scaling with the
 # uranium's lower loss) at 300 eV, 6 ns into the pulse. Its time is the wall's effective
-# age, the time it would have needed at today's temperature to store today's energy,
+# age: the time that the wall would need, at today's temperature, to store today's energy,
 # ``t_\mathrm{eff} = \int (T/T_\mathrm{now})^{5.32}\,dt``, as [`drive_history`](@ref)
 # evaluates it: about 1 ns at 6 ns on the measured Dante history of the same design
 # (N221204, Pak et al., Phys. Rev. E 109, 025203 (2024), Fig. 1; the foot stores little),

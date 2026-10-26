@@ -41,8 +41,8 @@ absorption the corona model does not include).
 
 The second form is the analytic isothermal corona `n_e/n_c = exp(-(r - r_c)/L)` with
 `critical_radius` r_c and `scale_length` L (mm), truncated at `outer_radius`, whose
-absorption rate is set by `absorption`, the fraction η⊥ a planar profile of the same
-scale length absorbs at normal incidence: η⊥ = 1 - exp(-8ν_c L/3c) (Kruer; the η⊥ of
+absorption rate is set by `absorption`, the fraction η⊥ that a planar profile of the
+same scale length absorbs at normal incidence: η⊥ = 1 - exp(-8ν_c L/3c) (Kruer; the η⊥ of
 `deposit(op, beams; absorption)`, Murakami & Nishi 2017, Eq. 29). It is also the exact
 absorption of a radial ray when the truncation is far out (e⁻¹⁴ of n_c by default).
 

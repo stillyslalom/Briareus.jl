@@ -93,7 +93,7 @@ nothing #hide
 # random, are wound the other way, and the facets are shuffled. [`write_stl`](@ref)
 # with `binary = false` writes one `solid … endsolid` block per part, the way CAD
 # exporters write assemblies, and [`read_stl_solids`](@ref) reads them back as named
-# meshes. STL lists every facet with its own three vertices, so nothing in the file says
+# meshes. STL lists every facet with its own three vertices, so the file does not record
 # which facets are neighbors.
 
 rng = Xoshiro(2026)
@@ -336,8 +336,8 @@ fig
 # part, selects the cavity around the point `inside` on the facets, remeshes the kept
 # facets (sizes and materials can be given per part, as functions of the part's name),
 # selects again on the elements, and, since it remeshes, fits the curved surfaces on
-# the kept facets (`fit = false` keeps flat elements). It is the call `visrad_target`
-# makes for the CAD a VisRad workspace bundles; components built otherwise, such as
+# the kept facets (`fit = false` keeps flat elements). `visrad_target` makes this call
+# for the CAD that a VisRad workspace bundles; components built otherwise, such as
 # primitives, can be passed with the parts and take part in the selection as they are.
 # The target it builds is the one built by hand above:
 
@@ -349,7 +349,7 @@ by_hand = Target(fitted)
         [c.name for c in one_call.components] == [c.name for c in by_hand.components] &&
         one_call.elem_area == by_hand.elem_area && one_call.elem_normal == by_hand.elem_normal)
 
-# The split is computational. Each piece remembers its part, and [`parts`](@ref),
+# The split is computational. Each piece records its part, and [`parts`](@ref),
 # `elements(target, :hohlraum_top)`, the keep-outs, the clearance checks and the reports
 # (`energy_balance`, `component_power`, `write_results`) take and show the parts as
 # read; a piece stays reachable by its own name. A part that is one surface, as the
@@ -512,7 +512,7 @@ end
 #   row sums of the wall, caps and capsule miss one by up to 1%, in the primitives as
 #   in the CAD, against 0.14% in `hohlraum()`; the narrow faces and the LEHs miss by up
 #   to 7%. These are the elements that see others partly, past the rim of a bore or
-#   into the gap, where a single line of sight decides visibility; balancing restores
+#   into the gap, where a single line of sight determines visibility; balancing restores
 #   the rows.
 # - At the same element size, the CAD models and the primitives agree on the capsule
 #   flux within 0.06%, on ``a_2/a_0`` within 0.1 percentage points, and on the LEH

@@ -292,7 +292,8 @@ end
 The most probable beam errors behind a measured drive-shape departure: the inverse of
 `mode_uncertainty`, which takes the same error priors. A measured low mode that trends
 from shot to shot (MacGowan et al., HEDP 2021, trend mode 1 of NIF implosions against
-beam and target data) asks which errors could have caused it; this answers it for one
+beam and target data) raises the question of which errors could have caused it; this
+answers it for one
 shot, linearly.
 
 `measured` holds the departures `Δc = (c_lm/c_00)_measured − (c_lm/c_00)_nominal` as
@@ -315,7 +316,7 @@ components, measured, predicted, residual, sources, resolved, beams, J, c)`:
 - `beam`: `nb × 3`, each beam's inferred `a`, `b` displacement (mm) and relative power;
 - `group`: a `Dict` from group key to `(; displacement, power)` (a `Vec3` in mm);
 - `positioning`: the inferred common displacement of every aim relative to the target
-  (the target sits at minus this from where the beams expect it);
+  (the target sits at minus this from where the beams are aimed);
 - `x`, `sigma`, `prior_sigma`, `covariance`, `names`: all errors as one vector (beams'
   `a`, `b`, `power`, then the groups', then x, y, z), their posterior and prior rms,
   the posterior covariance, and labels;
@@ -329,7 +330,7 @@ components, measured, predicted, residual, sources, resolved, beams, J, c)`:
 - `beams`: `beams` with `x̂` applied, for a full `evaluate` (the nonlinear check; the
   errors are applied before a laser–plasma model, which the sensitivities follow).
 
-The name says what comes back: errors, under a prior, not a unique explanation. Many
+The name reflects what comes back: errors, under a prior, not a unique explanation. Many
 errors map to a few modes, so a handful of combinations are determined and every other
 direction keeps its prior: `sigma ./ prior_sigma` stays near 1 for most errors, and
 `resolved` counts what was learned. What the inverse reports is only as good as the

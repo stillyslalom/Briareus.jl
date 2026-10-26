@@ -108,7 +108,7 @@ NIF TaLIS target-configuration checks from the "TCC Configuration Requirements"
 orthogonal to the beam, as the document states, and judged on the worst case over the
 error set and the rule tolerance, never at nominal.
 
-`capture` lists the components beams are meant to land on (backlighter foils, capture
+`capture` lists the components that beams are meant to land on (backlighter foils, capture
 surfaces, a hohlraum wall). Each beam's *landing component* is the first of them its
 nominal axis meets. Here and in `hardware`, `omega1_components`, `diagnostics` and
 `curvature`, a component may be named by its part: a part split for computation

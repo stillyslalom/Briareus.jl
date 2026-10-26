@@ -329,8 +329,9 @@ end
     TwoZoneCBET(outside::CBET, inside::CBET)
     TwoZoneCBET(; leh_z, offset = 0.5, outside = (;), inside = (;))
 
-CBET in two crossing zones per entrance hole, applied in the order the beams meet
-them: `outside` the LEH (supersonic outflow; the flow's Doppler shift moves power from
+CBET in two crossing zones per entrance hole, applied in the order in which the
+beams meet them: `outside` the LEH (supersonic outflow; the flow's Doppler shift moves
+power from
 the inner cones to the outer ones even without detuning) and `inside` it (slow flow;
 the transfer is set by the wavelength detuning, outer → inner for red-detuned inner
 cones). Each zone is a full [`CBET`](@ref) with its own crossing plane, flow (signed
@@ -853,7 +854,7 @@ which also compensates the inner beams' bubble absorption, so it lies above the
 transfer null; the published statement on the null itself is I-Raum's (0.5 Å "mostly
 to negate the flow-induced CBET", NC24). Here the null at N221204's peak (5.6 and
 7.0 ns) is held in 0.25–0.5 Å (the lower edge, keeping a flow-driven transfer at
-Δλ = 0, is our choice).
+Δλ = 0, is a Briareus choice).
 
 Outside: Mach 1.49 (± 0.8), multiplier 0.072 (×/÷ 5); inside: Mach 0, multiplier 1.60
 (± 31 %); clamps 9.1×10⁻⁴ (foot, not binding, unconstrained) and 1.4×10⁻⁴ (peak,

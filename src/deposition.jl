@@ -56,7 +56,7 @@ loss) need only their total per component, and that is set by the open edges the
 passes: an entrance-hole lip clipping 1e-4 of a beam puts the clipped light within
 ~1/50 of a spot semi-axis of the rim. Back sides are sampled at one point per triangle
 away from the beam; within `reach`,
-- a triangle on an open edge (an edge no other opaque triangle shares, such as an
+- a triangle on an open edge (an edge that no other opaque triangle shares, such as an
   entrance-hole rim) or touching one at a vertex gets a Gauss rule graded geometrically
   toward it, from `resolution` down to `edge_resolution` spot semi-axes;
 - a triangle within one (larger) spot semi-axis of an open edge, where the shoulder of a
@@ -86,7 +86,7 @@ capsule at TCC, an LEH edge — are correlated with the part of the spot they bl
 design can be checked in VisRad and its deposition reproduced. The model keeps the
 super-Gaussian's shape along the beam, with semi-axes that grow on a hyperbola and an
 envelope cut-off. Points are then sampled along the beam axis only (`ncone` is
-ignored), and the beam axis through each point decides its shadowing. The two models
+ignored), and the beam axis through each point determines its shadowing. The two models
 agree near focus; away from it VisRad's spot keeps its shape while the f-cone
 convolution softens the edges, and VisRad's spot grows faster (on NIF hohlraum walls
 the f-cone model's peaks are 10% higher than VisRad's). Power on a surface that

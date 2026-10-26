@@ -331,7 +331,7 @@ envelopes and focal length from a workspace.
 Not modeled: the blend toward a square beam (f_sq, zero for beams circular at the
 final optics, as NIF's behave), the envelope's own dependence on n(z) (the cut is at
 ρ in 1/e semi-axes; the profile there is ≲ 10⁻³ of peak), and occultation by VisRad's
-ray grid (here the beam axis through each point decides it).
+ray grid (here the beam axis through each point determines it).
 """
 struct VisRadProfile
     envelope::Union{Nothing,Float64,Dict{String,Float64}}

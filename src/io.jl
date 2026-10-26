@@ -201,7 +201,7 @@ end
 Triangle mesh from an STL file (binary or ASCII), one patch per facet, with vertex
 coordinates multiplied by `scale` (STL carries no units: 1 for millimetres, 10 for
 centimetres, 25.4 for inches). Facet normals in the file are ignored; the winding
-decides the front side, as STL specifies (counterclockwise seen from outside), but
+determines the front side, as STL specifies (counterclockwise seen from outside), but
 exported CAD often mixes windings: pass the mesh through `orient_mesh`, and through
 `coarsen_mesh` before view factors.
 

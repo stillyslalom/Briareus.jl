@@ -2,7 +2,7 @@
 
 Briareus computes laser deposition, view-factor radiation transport and drive symmetry
 for laser-driven high-energy-density experiments: indirect-drive hohlraums,
-backlighter foils and other laser-irradiated targets. It covers the calculations a
+backlighter foils and other laser-irradiated targets. It covers the calculations that a
 view-factor code such as VisRad is used for, and it adds gradient-based optimization of
 pointing, defocus, power balance and wavelength detuning, reduced laser–plasma
 corrections (backscatter, cross-beam energy transfer), and shot-review checks of beam

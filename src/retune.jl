@@ -88,7 +88,7 @@ where `ŝ = r/r_00` is the reference shape, within the bounds `limits` (TW per b
 or a function `(key, t) -> (lo, hi)`, e.g. a quad's power capability, or `(0, 0)` for a
 dropped quad. `smooth` ties each step's powers to the previous step's, and `stay` to
 `nominal` powers (a `Dict` key => `PulseShape`, or a function `(key, t) -> P`, e.g. the
-reference shot's): among the many power sets that restore the drive it prefers the one
+reference shot's): among the many power sets that restore the drive it selects the one
 closest to them, instead of one that runs many quads to their limits. This is a
 box-bounded linear least-squares problem per time; the drive term keeps the level, so
 `drive_weight` must be positive.

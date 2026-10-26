@@ -49,7 +49,7 @@ Plasmas 27, 082702, 2020, Eq. 9), `v = −∫ G₁(t) · 100 p₁(t) dt`, with `
 `flat_kernel(window...; total = per_percent)`, a flat weight over `window` (default:
 the whole history) that gives `per_percent` for a constant 1 %; Young's published
 kernels are negative in the foot and dominated by the rise and peak, so pass `window`
-as the rise and peak, or a kernel of your own. The mode 1 is taken as linear between
+as the rise and peak, or a custom kernel. The mode 1 is taken as linear between
 the history's steps and integrated exactly against a tabulated kernel (two-point Gauss
 on each interval between their breakpoints; a function kernel gets 16 pieces per
 interval); the kernel's weight outside the history's span is dropped.
@@ -339,7 +339,7 @@ picket_max, picket_ok, response)`:
   P2 Green's function (Masse et al., Phys. Plasmas 26, 2019). Without kernels it is an
   empty NamedTuple: the flux history alone does not give a hot-spot shape. Masse's
   hot-spot kernel changes sign before about 4.5 ns while the ρR one does not, so a
-  time-integrated flux P2 says neither, and Briareus reports no µm by default.
+  time-integrated flux P2 determines neither, and Briareus reports no µm by default.
 All fractions (not percent).
 """
 function swing_metrics(h::NamedTuple; l::Integer = 2, window = nothing, picket = nothing,
@@ -480,7 +480,7 @@ nominal, predicted, residual, chi2, chi2_prior)` in km/s: `predicted` is the nom
 the inferred errors' and thickness's velocity; `chi2` is MacGowan's χ²_ν of the nominal
 (the forward prediction) against the measurement, `(v − v₀)ᵀ Σₘ⁻¹ (v − v₀)/3` (Casey et
 al. 2023), and `chi2_prior` the same with the errors' prior spread added to `Σₘ`
-(about 1 when the measurement is what the priors expect).
+(about 1 when the measurement lies within the spread the priors allow).
 """
 function infer_errors(s::Scenario, beams::AbstractVector{<:Beam}, v::AbstractVector{<:Real};
                       sigma = ntof_covariance(v), per_percent::Real = HOTSPOT_VELOCITY_PER_PERCENT,

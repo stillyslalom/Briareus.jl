@@ -243,7 +243,7 @@ their mean.
   sweeps, to `tol`), and where the sweeps do not converge (duplicate channels, e.g.
   Dante 1's 1/8, 10/14 and 7/15, give identical Gaussians, and the sweep then diverges)
   by solving the same equations directly (least squares in the relative voltages,
-  minimum-norm amplitudes; `solver` says which). The spectrum may go negative locally,
+  minimum-norm amplitudes; `solver` selects which). The spectrum may go negative locally,
   as in the original.
 - `method = :smooth`: a positive, smooth unfold: the start Planckian (no M-band) times a
   piecewise-linear factor on `knots` log-spaced knots (50 eV – 20 keV), fitted by

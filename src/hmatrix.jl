@@ -34,7 +34,7 @@ a candidate for low rank, decided block by block:
   error, checked on sampled entries); a block that does not compress within `maxrank`
   terms is refined;
 - a shaft holding facets of one convex part only (the capsule, both clusters outside its
-  circumscribed ball) decides each pair exactly by the part's balls: a segment missing
+  circumscribed ball) resolves each pair exactly by the part's balls: a segment missing
   the circumscribed ball is visible, one through the inscribed ball hidden, and only the
   few between take a ray. The mask makes the block zero, low rank without further rays,
   or refined with it down to dense leaf pairs (a shadow edge);
@@ -46,7 +46,7 @@ a candidate for low rank, decided block by block:
   element lying on it. Other leaf pairs take every pair's visibility ray. Wholly hidden
   pairs give zero, wholly visible ones a cross approximation, and partly seen ones (a
   rim, `:sampled` fractions) stay dense. With `visibility = :sampled` the certificates
-  decide a pair's whole bundle of sample rays at once (margins grown by the samples'
+  resolve a pair's whole bundle of sample rays at once (margins grown by the samples'
   spread), else each of its rays, and the fractions are those of `view_factors`;
 - pairs the facing slack admits (rays that start farther off curved facets) are judged
   on their own ray ends when the shaft's exclusions hold with that margin, and take the

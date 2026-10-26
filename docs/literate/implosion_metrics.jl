@@ -17,7 +17,7 @@
 #   objectives ([`VelocityPenalty`](@ref)).
 #
 # Each model is a published fit for particular NIF platforms. The sensitivities are
-# engineering defaults that you should replace with your design's numbers. Sources and
+# engineering defaults, to be replaced with a design's own numbers. Sources and
 # confidence are in `reference/research-notes.md` ("Implosion metrics").
 
 using Briareus
@@ -55,8 +55,8 @@ scenario = Scenario(target, quads; observe = :capsule, parameterization = p,
 # about 0.7 % on N230729, for 70–75 km/s without burn. `hotspot_velocity` uses
 # [`HOTSPOT_VELOCITY_PER_PERCENT`](@ref) = 100 km/s per % by default. Its input is
 # [`mode1_vector`](@ref), ``\sqrt3\,(c_{11}, c_{1,-1}, c_{10})/c_{00}``, whose norm is
-# `mode_amplitude(c, 1)` (the ``\varepsilon`` of the papers). We test it on a sphere
-# lit with a known dipole:
+# `mode_amplitude(c, 1)` (the ``\varepsilon`` of the papers). It is tested here on a
+# sphere lit with a known dipole:
 
 sphere = Target(Component(:s, icosphere_mesh(1.0; n = 8), gold()))
 W = ylm_weights(sphere, 1:nelements(sphere); lmax = 1)
@@ -110,7 +110,7 @@ end
 # mode 1 opposes, and how well they cancel depends on the hohlraum and pointing: on
 # Young's N170827 setup Briareus gets 0.09 and 1.30 km/s per µm (Young 0.1 and 1.3),
 # and 0.10 and 1.07 for the capsule moved inside the hohlraum (Young 0.1 and 1.1).
-# Check your own platform's derivative before you use it in a tolerance.
+# Another platform's derivative should be computed before it is used in a tolerance.
 
 # ## The piston model
 #
@@ -147,8 +147,8 @@ m = implosion_metrics([0.0, 0.0, 75.0]; vimp = 380, chi = 1.0)
 # et al.'s burn-on/burn-off simulations give 1.27–1.39 for the 2022–23 shots, so the
 # fit is best read as an upper estimate. The stagnated shape changes it too:
 # [`shape_amplification`](@ref)(P2, θ) is Nora's 3D table, about 0.8–1.2 for
-# ``|P_2| < 0.4``. Pass their product as `amplification` when you compare with an nToF
-# measurement.
+# ``|P_2| < 0.4``. Their product is passed as `amplification` for a comparison with an
+# nToF measurement.
 
 # ## The errors' velocity budget
 #
@@ -244,8 +244,8 @@ whole = swing_metrics(hist)
 # Without kernels `response` is empty. A flux P2 history does not give a hot-spot
 # shape in µm. Masse et al. (Phys. Plasmas 26, 2019) found that the hot spot's
 # response changes sign before about 4.5 ns while the shell's ρR does not. The same
-# flux history can therefore make an oblate hot spot and a prolate ρR. Pass your
-# platform's kernels as `kernels = (; hotspot = …, rhoR = …)`.
+# flux history can therefore make an oblate hot spot and a prolate ρR. A platform's
+# own kernels are passed as `kernels = (; hotspot = …, rhoR = …)`.
 
 # ## Reading the errors back from a measured velocity
 #
@@ -268,9 +268,9 @@ for s in r.sources[1:3]
     @printf("  %-22s explains %5.1f%%\n", s.source, 100s.fraction)
 end
 
-# The χ²_ν of 4.5 says the nominal design does not explain the shot. Against the
+# A χ²_ν of 4.5 shows that the nominal design does not explain the shot. Against the
 # spread the priors allow, 0.37, the shot is unremarkable. The inverse then shares the
-# blame by prior size. Three numbers cannot tell a thicker shell from a brighter
+# blame by prior size. Three numbers do not separate a thicker shell from a brighter
 # opposite side. Here it puts about half the true thickness on x, a spurious thickness
 # on z that stands in for the offset, and only 4 µm of the 40 µm offset. With the
 # beams' errors known to be small (zero prior), the offset and the thickness still
