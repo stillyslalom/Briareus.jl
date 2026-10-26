@@ -67,6 +67,14 @@ factors) dominate the suite: build one per geometry and share it across testsets
   runtime eltype captured in a `Threads.@threads` closure boxes and allocates per point).
   Objectives must be thread-safe (gradient chunks run concurrently). Keep heterogeneous
   tuples out of generators and abstract-typed loops on hot paths (inference blow-ups).
+- A long function that takes user callables (closures, objectives, callbacks, schedules
+  like `beams_at`) is `Base.@nospecializeinfer` with `@nospecialize` on those arguments;
+  `@nospecialize` alone still infers per closure type through the keyword wrapper, and
+  each closure then recompiles the whole body. `test/inference.jl` guards this (compiled
+  instances of the keyword body) and checks the optimization path on Float64 and the
+  optimizer's duals with `@inferred` and JET (`report_opt`, `report_call`, `target_modules =
+  (Briareus,)`): add a case there for each such function and each new hot-path function. A
+  Float64 constant (`Inf`, `init = 0.0`) returned beside duals is the usual culprit.
 - Mode analysis integrates Pₗ/Yₗₘ over each facet's exact solid angle; centroid × A cosθ/R²
   leaks P0 into P2 at 0.5 %.
 - Deposition sums the best-focus profile over the f-cone directions; the moment-matched
