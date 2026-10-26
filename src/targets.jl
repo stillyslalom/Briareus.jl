@@ -423,8 +423,8 @@ does not change. Off by default.
 `π capsule_radius / capsule_ntheta`), or `:latlong` (`sphere_mesh`, `capsule_ntheta ×
 capsule_nphi`). The capsule mesh sets the flux's P4: lat-long cells are slivers near
 the poles, and the compact mesh reaches the same P4 error with several times fewer
-elements (research notes, "Compact capsule mesh"). The default was `:latlong` until
-2026-10-22; pass it to reproduce earlier baselines.
+elements (research notes, "Compact capsule mesh"). `:latlong` is the comparison mesh of
+that convergence study (`examples/capsule_mesh.jl`, `test/capsule_mesh.jl`).
 """
 function hohlraum(; length = 9.4, radius = 2.875, leh_radius = 1.55, capsule_radius = 0.9,
                   nz::Integer = 36, nphi::Integer = 48, nr_cap::Integer = 6, nr_leh::Integer = 4,
