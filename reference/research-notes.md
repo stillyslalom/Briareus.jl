@@ -4705,10 +4705,87 @@ is returned when the cap is not reached; and a block with no entries has one tie
 Confidence: the diagnosis and the measurements **H**; the m + n cap and the
 fewest-first order are engineering choices, **M**.
 
-**`:sampled` visibility.** Not addressed: on the bored cavity with `visibility = :sampled`
-the H-matrix build takes 106 s, 93 % of it in rays (48.7M `_vf_visible` calls with their
-sample bundles). A certificate there must clear the bundle (segments between the two
-elements' sample sets), e.g. the planar test on the convex hull of the crossing points.
+**`:sampled` visibility (third pass, adopted).** Same bored cavity with
+`visibility = :sampled` (11,360 elements, 4 threads pinned, warm).
+
+*Measured first* (old build 106 s with `_vf_visible` instrumented): 48.7M calls,
+404 CPU-s, 93 % of the assembly CPU. By caller: 26.7M at occupied leaf pairs (227 CPU-s),
+21.8M entries of near leaves and blocks without a certificate (176 CPU-s), 0.24M slack
+pairs of empty shafts (1.3 CPU-s). 1.5M pairs disagreed with their probes and took all
+256 sample rays. Under `:sampled` the old shaft search took no certificate but the
+whole-ball one, so every occupied leaf took rays.
+
+*What changed* (`src/hmatrix.jl`, `src/viewfactors.jl`):
+
+1. Bundle certificates. All rays of a pair's `_visible_fraction` (the centroid ray, the
+   probes, the 16 × 16 sample segments) run between points within `rvis[i]` of oi and
+   `rvis[j]` of oj. Here `rvis` is the largest sample distance from the centroid. Each
+   point of such a segment lies within ρ = max(rᵢ, rⱼ) of the centroid segment at the
+   same parameter. So each certificate is applied to the centroid segment with margins
+   grown by its tube:
+   - ball: the ends outside the outer ball by rᵢ, rⱼ; clear past rout + ρ; hidden
+     inside rin − ρ;
+   - planar: the end heights shifted by rᵢ, rⱼ. The crossings lie within
+     ρ (1 + |w|/|dh|) of the centroid crossing, since a point at height ≤ ρ on the
+     axis lies that far along it from the crossing. The 1/sin margin uses
+     (|w| + rᵢ + rⱼ)/(|dh| − rᵢ − rⱼ);
+   - hull: axial range widened by ρ, rlo − ρ, rhi + ρ;
+   - an end element's plane clearing a convex part: its own samples within `hdev` (≈ 0)
+     of its plane, the other end's within rⱼ.
+
+   Zero radii reproduce the old arithmetic bit for bit. A bundle is 0 if any part hides
+   it whole, and 1 if all clear it whole. Otherwise `_visible_fraction` runs with each
+   segment decided by the parts that did not clear the bundle (`_HSeen`), or by the ray.
+2. Exclusions valid for the samples. In `:sampled` mode the shaft's plane tests take the
+   box of every element's samples (and centroid) lifted by ε (`opts.qbox`) instead of the
+   centroid box. A cluster's in-plane offset (`cplane`) also comes from those points.
+   Per pair: the ends stay inside the boxes (rvis + lift ≤ the padding); a slack pair
+   needs `occ.slack`; each excluded convex part must be cleared by an end element's plane
+   for the bundle, else per segment, else the ray. Folded elements take `_vf_visible`.
+3. Assembly: `:sampled` blocks take the full shaft search. Blocks up to `mask_size`
+   with only certified parts get a fraction mask (`_HFrac`): wholly visible blocks get
+   the cross approximation at any level, others are refined; near leaves are masked too.
+4. Zero-weight sample pairs (facing away at an end) add nothing to either sum of the
+   fraction, so their segments are tested only when no pair faces (the area-weighted
+   fallback). The output is unchanged, and it removed 41M segments into the capsule.
+5. One rounding for every caller. StaticArrays' `dot` is an `@simd` reduction, so it
+   rounds as its caller is compiled: `ci` differed in the last bit between `_vf_visible`
+   and the bundle code (a slack lift, so a fraction off by 6e-17). The ray ends
+   (`_vf_ends`) and the sample weights (`_vis_weight`) are now `@noinline` with concrete
+   arguments, one compiled instance for all.
+
+| bored cavity 11,360, `:sampled` | old (7ec13bb) | new |
+|---|---|---|
+| H-matrix build, warm (interleaved) | 93.3, 93.6 s | 29.9, 29.7 s (3.1×) |
+| stored | 121.0 MB | 108.3 MB |
+| low-rank / masked blocks | 15,437 / 0 | 4,971 / 4,086 |
+| `_vf_visible` calls | 48.7M | 0.61M |
+| pairs decided by bundle (hidden / visible / per segment) | — | 1.41M / 23.5M / 11.3M |
+| segments per segment (certified clear / hidden / ray) | — | 187M / 116M / 67M |
+| Frobenius error, 300 dense columns | 5.98e-8 | 7.82e-8 |
+| row sums, new − old | | ≤ 2.5e-7 |
+
+The error is at the block tolerance (1e-6) as before; the comparable centroid change was
+6.5e-8 → 7.8e-8. Most of the 67M rays left are segments through the 20 µm waist gap that
+end on the wall. The wall's axisymmetric bounds cannot decide them, since the end lies
+between the inscribed and circumscribed radii. A certificate for the inside of a convex
+faceted wall (prism) would be needed: ~40M rays, roughly a quarter of the build.
+
+*Exactness checks.* On the benchmark all 13,316 certified blocks (leaf pairs and blocks
+up to `mask_size`) were checked. Their 33.2M facing pairs (2.92M hidden, 1.02M partial)
+have `_hfrac` `===` `_vf_visible`'s fraction. The 7,644 empty-shaft blocks have
+`_vf_pair_free` `===` `_vf_pair` per pair. No block of this target needs rays any more.
+`test/hmatrix.jl` "sampled visibility bundles" (1,068 elements) checks:
+- bundle verdicts against the rays of random segments inside the balls (some ends on
+  their surfaces), against that part's facets alone;
+- every certified block's fractions and every empty shaft's factors (`===`).
+
+Centroid-visibility H-matrices are identical block by block (bored cavity 11,360,
+hohlraum 10,484; 5.9 s and 3.5 s, unchanged). Dense centroid factors are bit for bit.
+Dense `:sampled` factors are not: 3.8 % of entries move, by ≤ 4e-14 relative (item 5).
+They are 5 % faster from item 4 (3,156 elements: 10.05 → 9.50 s). The dense path has no
+shafts, so the bundle certificates do not apply to it. Confidence **H** for exactness and
+timings; the gap-certificate estimate is **M**.
 
 ## N221204 late-time drive (2026-10-24) *derived*
 

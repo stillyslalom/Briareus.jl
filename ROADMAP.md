@@ -339,9 +339,14 @@ Items 9–13 and 16–17 follow the 2026-10-22 literature review against Kritche
     sliver was missed: it cost 2.3e-6 in row sums against dense. Measured: −18 % assembly
     and −11 % storage on the bored cavity, row sums 2.6e-7. The hohlraum is not bit for
     bit (one more block refined, errors unchanged to four digits); the capsule-quad shaft
-    rule was dropped (it added nothing). Left, in order:
-    `:sampled` visibility (rays are 93 % of an 11.4k bored cavity's sampled assembly:
-    certificates for a pair's sample-ray bundle); the bored cavity's gap pairs (~60 % of its
+    rule was dropped (it added nothing). `:sampled` visibility certificates: each part's
+    certificate decides a pair's whole sample-ray bundle (a tube about the centroid ray),
+    else each segment, else the ray; shafts searched with the lifted samples' boxes; every
+    fraction `===` `_vf_visible`'s. 11.4k bored cavity 93.5 → 29.8 s (3.1×), 121 → 108 MB;
+    dense `:sampled` −5 % and moved ≤ 4e-14 relative (one rounding for every caller);
+    centroid builds bit for bit ("H-matrix visibility certificates", `:sampled`). Left,
+    in order: a certificate for the wall rays through the waist gap (most of the 67M rays
+    still cast there); the bored cavity's gap pairs (~60 % of its
     view-factor time; refinement toward the shared edge onto ~34-edge sector receivers);
     GPU mat-vecs (≲ 25 % end to end on the RTX 2060 while assembly stays on the CPU; not
     worth CUDA.jl yet).

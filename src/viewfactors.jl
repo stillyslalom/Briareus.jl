@@ -191,15 +191,8 @@ _vf_exchange(ctx, i, j) = i == j ? (ctx.concave[i] ? _self_kernel(ctx.qself[i]) 
 # centroid separation `d` with its square.
 function _vf_visible(ctx, i, j)
     (; t, bvh, C, Nrm, size, slack, ε, tri_surf, inside, vis, multi) = ctx
-    d = C[j] - C[i]
-    r2 = dot(d, d)
-    r2 == 0 && return -1.0, d, r2
-    # elements must face each other (centroid test, relaxed on curved surfaces)
-    r = sqrt(r2)
-    ci, cj = dot(Nrm[i], d) / r, -dot(Nrm[j], d) / r
-    ci > -slack[i] && cj > -slack[j] || return -1.0, d, r2
-    oi = C[i] + (ε + size[i] * max(0.0, -ci)) * Nrm[i]
-    oj = C[j] + (ε + size[j] * max(0.0, -cj)) * Nrm[j]
+    facing, d, r2, _, _, oi, oj = _vf_ends(C, Nrm, size, slack, ε, i, j)
+    facing || return -1.0, d, r2
     skip = k -> (s = tri_surf[k]; s != 0 && inside[s, i] && inside[s, j])
     blocked = any_hit(bvh, oi, oj - oi, 1 - 1e-9, skip)
     vis === nothing && return blocked ? 0.0 : 1.0, d, r2
@@ -209,9 +202,37 @@ function _vf_visible(ctx, i, j)
     # neighbors (all of the reduced capsule rows on a remeshed CAD sphere)
     own(k, e) = multi[e] && (t.tri_front[k] == e || t.tri_back[k] == e)
     skipv = multi[i] || multi[j] ? (k -> skip(k) || own(k, i) || own(k, j)) : skip
-    frac = _visible_fraction(bvh, vis[i], vis[j], oi, oj, oi - C[i], oj - C[j], Nrm[i], Nrm[j], blocked, skipv)
+    seen = _RaySeen(bvh, skipv)
+    frac = _visible_fraction(seen, vis[i], vis[j], oi, oj, oi - C[i], oj - C[j], Nrm[i], Nrm[j], blocked)
     return frac, d, r2
 end
+
+# The ray ends of the pair i < j: whether the elements face each other (centroid test,
+# relaxed on curved surfaces), the centroid separation `d`, its square, the facing
+# cosines and the ends lifted off the facets (by ε, and by the facing slack used). One
+# compiled instance for every caller (`@noinline`, concrete arguments): StaticArrays'
+# `dot` is an `@simd` reduction, rounded as its caller is compiled, and the H-matrix's
+# certificates (`_hvis_bundle`) must start from the same ends, bit for bit.
+@noinline function _vf_ends(C::Vector{Vec3}, Nrm::Vector{Vec3}, size::Vector{Float64}, slack::Vector{Float64},
+                            ε::Float64, i::Int, j::Int)
+    d = C[j] - C[i]
+    r2 = dot(d, d)
+    z = zero(Vec3)
+    r2 == 0 && return false, d, r2, 0.0, 0.0, z, z
+    r = sqrt(r2)
+    ci, cj = dot(Nrm[i], d) / r, -dot(Nrm[j], d) / r
+    ci > -slack[i] && cj > -slack[j] || return false, d, r2, ci, cj, z, z
+    oi = C[i] + (ε + size[i] * max(0.0, -ci)) * Nrm[i]
+    oj = C[j] + (ε + size[j] * max(0.0, -cj)) * Nrm[j]
+    return true, d, r2, ci, cj, oi, oj
+end
+
+# Whether the segment p → q is unobstructed, by the visibility ray (`any_hit` to 1 - 1e-9).
+struct _RaySeen{S}
+    bvh::BVH
+    skip::S
+end
+(s::_RaySeen)(p, q) = !any_hit(s.bvh, p, q - p, 1 - 1e-9, s.skip)
 
 function _vf_pair(ctx, i, j)
     frac, d, r2 = _vf_visible(ctx, i, j)
@@ -350,24 +371,43 @@ end
 
 # Visible fraction of a pair whose centroid ray (from `oi` to `oj`) is `blocked` or not;
 # `li`, `lj` lift the samples off their facets as the centroid ray's ends are lifted.
-function _visible_fraction(bvh, si::_VisSamples, sj::_VisSamples, oi, oj, li, lj, ni, nj, blocked, skip)
-    seen(p, q) = !any_hit(bvh, p, q - p, 1 - 1e-9, skip)
+# `seen(p, q)`: whether the segment p → q is unobstructed (the ray, `_RaySeen`, or the
+# H-matrix's certificates with the ray as fallback, `_HSeen`).
+function _visible_fraction(seen::F, si::_VisSamples, sj::_VisSamples, oi, oj, li, lj, ni, nj, blocked) where {F}
     agree = all(k -> seen(si.points[k] + li, oj) != blocked, si.probes) &&
             all(k -> seen(oi, sj.points[k] + lj) != blocked, sj.probes)
     agree && return blocked ? 0.0 : 1.0
-    vis, tot, visa, tota = 0.0, 0.0, 0.0, 0.0
+    # (a pair of zero kernel weight, facing away at an end, adds nothing to either sum, so
+    # its segment is tested only if no pair faces: then the area weights decide)
+    vis, tot = 0.0, 0.0
     for a in eachindex(si.points), b in eachindex(sj.points)
         p, q = si.points[a] + li, sj.points[b] + lj
-        d = q - p
-        r2 = dot(d, d)
-        r2 > 0 || continue
-        wa = si.weights[a] * sj.weights[b] / r2
-        w = wa * max(dot(ni, d), 0.0) * max(-dot(nj, d), 0.0) / r2
-        s = seen(p, q)
-        tot += w; tota += wa
-        s && (vis += w; visa += wa)
+        ok, w, _ = _vis_weight(p, q, si.weights[a], sj.weights[b], ni, nj)
+        ok && w > 0 || continue
+        tot += w
+        seen(p, q) && (vis += w)
     end
-    return tot > 0 ? vis / tot : tota > 0 ? visa / tota : 0.0
+    tot > 0 && return vis / tot
+    visa, tota = 0.0, 0.0
+    for a in eachindex(si.points), b in eachindex(sj.points)
+        p, q = si.points[a] + li, sj.points[b] + lj
+        ok, _, wa = _vis_weight(p, q, si.weights[a], sj.weights[b], ni, nj)
+        ok || continue
+        tota += wa
+        seen(p, q) && (visa += wa)
+    end
+    return tota > 0 ? visa / tota : 0.0
+end
+
+# The kernel and area weights of the sample pair p, q (weights wp, wq), unless they
+# coincide. One compiled instance for every `seen` (`@noinline`, concrete arguments: see
+# `_vf_ends`), so `_visible_fraction` is bit for bit whichever decides the segments.
+@noinline function _vis_weight(p::Vec3, q::Vec3, wp::Float64, wq::Float64, ni::Vec3, nj::Vec3)
+    d = q - p
+    r2 = dot(d, d)
+    r2 > 0 || return false, 0.0, 0.0
+    wa = wp * wq / r2
+    return true, wa * max(dot(ni, d), 0.0) * max(-dot(nj, d), 0.0) / r2, wa
 end
 
 # Whether `p` lies inside the (convex) curved surface, to round-off.

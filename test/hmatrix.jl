@@ -235,6 +235,62 @@ end
     end
 end
 
+# `:sampled` visibility: bundle certificates (a part's verdict on every segment between
+# two balls) against the ray of each of a bundle's random segments, its ends in the balls
+# (some on their surfaces), against that part's facets alone; and the certified fractions
+# of every block that takes them, and the factors of empty shafts, against `_vf_visible`
+# and `_vf_pair` (`===`), on the bored cavity (LEH bores, caps, a waist gap with washers).
+@testset "hierarchical view factors: sampled visibility bundles" begin
+    B = Briareus
+    rng = Xoshiro(13)
+    t = Target(bored_cavity(; hw = 0.8, hc = 0.25).components; visibility = :sampled)
+    ctx0 = B._vf_context(t; near = 3.0, mid = 12.0, level = 1, exact_far = true, visibility = :sampled,
+                         visibility_grid = 4)
+    ctx, nodes, perm, far, near, opts = B._hsetup(ctx0, 1e-6, 1.0, 16, 32)
+    agree, nv = Bool[], [0, 0, 0]
+    for c in eachindex(t.components)
+        opts.cert[c] != 0 || opts.ball[c] != 0 || continue
+        e0 = findfirst(e -> t.elem_comp[e] != c, 1:nelements(t))
+        ks = findall(==(c), t.tri_comp)
+        vs = [v for k in ks for v in (t.tri_v0[k], t.tri_v0[k] + t.tri_e1[k], t.tri_v0[k] + t.tri_e2[k])]
+        lo, hi = reduce((a, b) -> min.(a, b), vs), reduce((a, b) -> max.(a, b), vs)
+        mid, ext = (lo + hi) / 2, (hi - lo) / 2 .+ 0.5
+        ball(o, r) = o + r * (rand(rng) < 0.3 ? 1.0 : cbrt(rand(rng))) * normalize(randn(rng, B.Vec3))
+        for _ in 1:1500
+            oi, oj = mid + ext .* (2rand(rng, B.Vec3) .- 1), mid + ext .* (2rand(rng, B.Vec3) .- 1)
+            ri, rj = 0.2 * rand(rng), 0.2 * rand(rng)
+            v = B._hcert_verdict(ctx, opts, c, e0, e0, oi, oj, ri, rj)
+            nv[v+2] += 1
+            v < 0 && continue
+            for _ in 1:8
+                p, q = ball(oi, ri), ball(oj, rj)
+                push!(agree, (v == 0) == any_hit(t.bvh, p, q - p, 1 - 1e-9, id -> t.tri_comp[id] != c))
+            end
+        end
+    end
+    @test nv[2] > 0 && nv[3] > 0 && all(agree)              # (hidden and clear bundles)
+    frac, free = Bool[], Bool[]
+    npart = 0
+    for (s, u) in [near; far]
+        a, b = nodes[s], nodes[u]
+        rows, cols = a.lo:a.hi, b.lo:b.hi
+        B._hleaf(a) && B._hleaf(b) || length(rows) * length(cols) <= opts.mask_size || continue
+        occ = B._shaft_occluder(ctx, opts, s, u, true)
+        if occ.n > 0
+            F = B._hfrac(ctx, opts, perm, rows, cols, occ).v
+            R = [first(B._vf_visible(ctx, minmax(perm[p], perm[q])...)) for p in rows, q in cols]
+            push!(frac, all(F .=== R))
+            npart += count(f -> 0 < f < 1, R)
+        elseif occ.n == 0
+            for p in rows, q in cols
+                i, j = minmax(perm[p], perm[q])
+                i == j || push!(free, B._vf_pair_free(ctx, i, j, occ) === B._vf_pair(ctx, i, j))
+            end
+        end
+    end
+    @test npart > 1000 && !isempty(free) && all(frac) && all(free)
+end
+
 # The entries a low-rank block's check adds where G may jump (`_htier_entries`): pairs
 # off the most common quadrature tier of their row or column, the fewest-off lines
 # first. On a latitude–longitude capsule (polar slivers, several sizes larger than their

@@ -45,7 +45,9 @@ a candidate for low rank, decided block by block:
   cone part by its axisymmetric bounds; a convex part by its balls or the plane of an end
   element lying on it. Other leaf pairs take every pair's visibility ray. Wholly hidden
   pairs give zero, wholly visible ones a cross approximation, and partly seen ones (a
-  rim, `:sampled` fractions) stay dense;
+  rim, `:sampled` fractions) stay dense. With `visibility = :sampled` the certificates
+  decide a pair's whole bundle of sample rays at once (margins grown by the samples'
+  spread), else each of its rays, and the fractions are those of `view_factors`;
 - pairs the facing slack admits (rays that start farther off curved facets) are judged
   on their own ray ends when the shaft's exclusions hold with that margin, and take the
   ray otherwise;
@@ -307,7 +309,10 @@ _box_corners(lo, hi) = (Vec3(lo[1], lo[2], lo[3]), Vec3(hi[1], lo[2], lo[3]), Ve
 # (a convex part's balls, a planar part, a cylinder's or cone's axisymmetric bounds:
 # `_hcert_verdict` decides each segment, or leaves it to the ray); or a facet of another
 # component. A facet is not an occluder (for the pairs `_vf_pair_free` evaluates
-# without a ray: facing beyond the slack, so leaving their facets) if
+# without a ray: facing beyond the slack, so leaving their facets; with `:sampled`
+# visibility, for every ray between their samples lifted by ε: the plane tests below
+# take the box of those points, `opts.qbox`, and the least height of a cluster's samples
+# off a plane, `cplane`) if
 # - it lies on a curved surface (cylinder, sphere, cone) both clusters lie inside;
 # - it belongs to a convex component (every vertex behind every facet) one of the
 #   clusters lies on entirely, each element's facets in one plane through its centroid
@@ -318,16 +323,17 @@ _box_corners(lo, hi) = (Vec3(lo[1], lo[2], lo[3]), Vec3(hi[1], lo[2], lo[3]), Ve
 # For the pairs admitted by the slack (`_hslack_verdict`, whose rays start farther off
 # their facets) it also records whether every plane exclusion holds with that margin
 # (`liftx`), and which convex components a cluster lies on were met in the shaft.
-# `full` (centroid visibility): up to 8 certified components, else only a convex part's
-# balls with both boxes outside its circumscribed ball (the search stops at the first
-# other facet: `:sampled` visibility, and the tests for an empty shaft).
+# `full`: up to 8 certified components, else only a convex part's balls with both boxes
+# outside its circumscribed ball (the search stops at the first other facet: the tests
+# for an empty shaft).
 function _shaft_occluder(ctx, opts, sa::Int, sb::Int, full::Bool = false)
     (; t, bvh, tri_surf, ε) = ctx
     a, b = opts.nodes[sa], opts.nodes[sb]
     allin, cplane, ccomp, convex = opts.allin, opts.cplane, opts.ccomp, opts.convex
     planes = _shaft_planes(a.bmin, a.bmax, b.bmin, b.bmax)
     outside_box(lo, hi) = any(((n, d),) -> dot(n, ifelse.(n .> 0, lo, hi)) > d, planes)
-    ca, cb = _box_corners(a.cmin, a.cmax), _box_corners(b.cmin, b.cmax)
+    # (the ray ends' boxes: centroids, or with `:sampled` visibility the samples lifted)
+    ca, cb = _box_corners(opts.qbox[sa]...), _box_corners(opts.qbox[sb]...)
     L = norm(max.(a.cmax, b.cmax) - min.(a.cmin, b.cmin))
     # 0: not clear of the plane; 1: clear; 2: clear also with the slack lifts
     function clear(c, corners, n, d)
@@ -571,15 +577,24 @@ end
 # facet), 0 if it passes through the inscribed ball with both ends outside the
 # circumscribed one (so it crosses the closed surface), else -1. Margins 1e-9 relative
 # on top of those in `rin`, `rout`.
-function _ball_verdict(oi, oj, ctr, rin, rout)
-    ro2 = (rout * (1 + 1e-9))^2
-    (dot(oi - ctr, oi - ctr) > ro2 && dot(oj - ctr, oj - ctr) > ro2) || return Int8(-1)
+#
+# Bundles (every certificate): with `ri`, `rj` > 0 the verdict holds for every segment
+# from a point within `ri` of oi to one within `rj` of oj (`:sampled` visibility: the
+# segments between two elements' ray samples). Such a segment's point at parameter s lies
+# within ρ = max(ri, rj) of the point of oi → oj at s (a tube about it), and its ends'
+# heights over a plane within ri, rj of those of oi, oj. Zero radii give the segment's
+# verdict, bit for bit as without them.
+function _ball_verdict(oi, oj, ctr, rin, rout, ri = 0.0, rj = 0.0)
+    ro = rout * (1 + 1e-9)
+    (dot(oi - ctr, oi - ctr) > (ro + ri)^2 && dot(oj - ctr, oj - ctr) > (ro + rj)^2) || return Int8(-1)
+    ρ = max(ri, rj)
     w = oj - oi
     u = clamp(dot(ctr - oi, w) / dot(w, w), 0.0, 1.0)
     x = oi + u * w - ctr
     q2 = dot(x, x)
-    q2 > (rout * (1 + 1e-9))^2 && return Int8(1)
-    q2 < (rin * (1 - 1e-9))^2 && return Int8(0)
+    q2 > (ro + ρ)^2 && return Int8(1)
+    rr = rin * (1 - 1e-9) - ρ
+    rr > 0 && q2 < rr^2 && return Int8(0)
     return Int8(-1)
 end
 
@@ -587,19 +602,22 @@ end
 # 1 - 1e-9, barycentric slack 1e-10) finds the facets: 1 if the segment stays on one
 # side of the plane or crosses it outside every facet, 0 if it crosses inside a facet
 # with its end and start off the plane, else -1. Margins 1e-9 relative (and the plane's
-# flatness `tp`), grown by 1/sin of the crossing angle in the plane.
-function _planar_verdict(P::_HPlanar, oi, oj)
+# flatness `tp`), grown by 1/sin of the crossing angle in the plane. A bundle's crossings
+# (radii ri, rj) lie within ρ (1 + |w|/|dh|) of oi → oj's (ρ = max(ri, rj)): a point at
+# height ≤ ρ on the tube's axis is that far along it from the crossing.
+function _planar_verdict(P::_HPlanar, oi, oj, ri = 0.0, rj = 0.0)
     hi, hj = dot(P.n, oi - P.c), dot(P.n, oj - P.c)
-    L = max(norm(oi - P.c), norm(oj - P.c), P.rhi)
+    L = max(norm(oi - P.c) + ri, norm(oj - P.c) + rj, P.rhi)
     m = 1e-9 * L + 2 * P.tp
-    ((hi > m && hj > m) || (hi < -m && hj < -m)) && return Int8(1)
-    ((hi > m && hj < -m) || (hi < -m && hj > m)) || return Int8(-1)
+    ((hi - ri > m && hj - rj > m) || (hi + ri < -m && hj + rj < -m)) && return Int8(1)
+    ((hi - ri > m && hj + rj < -m) || (hi + ri < -m && hj - rj > m)) || return Int8(-1)
     w = oj - oi
     dh = hi - hj
     x = oi + (hi / dh) * w - P.c
     X, Y = dot(P.u, x), dot(P.v, x)
     ρ = sqrt(X^2 + Y^2)
-    M = m * (1 + norm(w) / abs(dh))
+    nw, adh = norm(w), abs(dh)
+    M = m * (1 + (nw + ri + rj) / (adh - ri - rj)) + max(ri, rj) * (1 + nw / adh)
     (ρ > P.rhi + M || ρ < P.rlo - M) && return Int8(1)
     dθ = 2π / P.nθ
     2M < min(P.dρ, ρ * dθ) || return Int8(-1)
@@ -607,7 +625,7 @@ function _planar_verdict(P::_HPlanar, oi, oj)
     bρ = clamp(floor(Int, (ρ - P.ρ0) / P.dρ), 0, P.nρ - 1)
     b = bρ * P.nθ + bθ + 1
     # the crossing at a ray parameter well inside (0, 1 - 1e-9)
-    ends = min(abs(hi), abs(hj)) > 4e-9 * abs(dh) + m
+    ends = min(abs(hi) - ri, abs(hj) - rj) > 4e-9 * (adh + ri + rj) + m
     out = true
     @inbounds for q in P.start[b]:(P.start[b+1] - 1)
         f = P.idx[q]
@@ -623,13 +641,14 @@ function _planar_verdict(P::_HPlanar, oi, oj)
 end
 
 # The axisymmetric verdict of the segment oi → oj: 1 if its part within the facets'
-# axial range (widened by the margin) lies inside rlo or outside rhi, else -1.
-function _hull_verdict(H::_HHull, oi, oj)
+# axial range (widened by the margin) lies inside rlo or outside rhi, else -1. A bundle
+# (tube radius ρ) is decided as its axis against bounds widened by ρ.
+function _hull_verdict(H::_HHull, oi, oj, ρ = 0.0)
     pi, pj = oi - H.c, oj - H.c
     zi, zj = dot(H.a, pi), dot(H.a, pj)
-    L = max(norm(pi), norm(pj), H.rhi, abs(H.z0), abs(H.z1))
+    L = max(norm(pi) + ρ, norm(pj) + ρ, H.rhi, abs(H.z0), abs(H.z1))
     m = 1e-9 * L
-    lo, hi = H.z0 - m, H.z1 + m
+    lo, hi = H.z0 - m - ρ, H.z1 + m + ρ
     dz = zj - zi
     if abs(dz) <= 1e-6 * L
         (max(zi, zj) < lo || min(zi, zj) > hi) && return Int8(1)
@@ -642,29 +661,35 @@ function _hull_verdict(H::_HHull, oi, oj)
     Ri = pi - zi * H.a
     Rw = (pj - zj * H.a) - Ri
     xa, xb = Ri + sa * Rw, Ri + sb * Rw
-    H.rlo > m && max(dot(xa, xa), dot(xb, xb)) < (H.rlo - m)^2 && return Int8(1)
+    rlo = H.rlo - ρ
+    rlo > m && max(dot(xa, xa), dot(xb, xb)) < (rlo - m)^2 && return Int8(1)
     ww = dot(Rw, Rw)
     s = ww > 0 ? clamp(-dot(Ri, Rw) / ww, sa, sb) : sa
     x = Ri + s * Rw
-    dot(x, x) > (H.rhi + m)^2 && return Int8(1)
+    dot(x, x) > (H.rhi + ρ + m)^2 && return Int8(1)
     return Int8(-1)
 end
 
 # The verdict of component c's certificate on the segment oi → oj between elements i
 # and j. A convex part is also cleared by the plane of an end's element lying on it
 # (`onconvex`: its facets in that plane): the part lies behind it (within the convexity
-# tolerance), so a segment with both ends in front misses it.
-function _hcert_verdict(ctx, opts, c, i, j, oi, oj)
+# tolerance), so a segment with both ends in front misses it. With radii ri, rj: the
+# verdict of the bundle of segments between points within ri of oi and rj of oj, the
+# ray samples of elements i and j (`_hvis_bundle`); an end element's own samples lie in
+# its plane within `opts.hdev`.
+function _hcert_verdict(ctx, opts, c, i, j, oi, oj, ri = 0.0, rj = 0.0)
     k = opts.ball[c]
     if k != 0
         _, ctr, rin, rout = opts.occluders[k]
         (; C, Nrm, hsep) = ctx
-        opts.onconvex[i] == c && dot(Nrm[i], oi - C[i]) > hsep && dot(Nrm[i], oj - C[i]) > hsep && return Int8(1)
-        opts.onconvex[j] == c && dot(Nrm[j], oi - C[j]) > hsep && dot(Nrm[j], oj - C[j]) > hsep && return Int8(1)
-        return _ball_verdict(oi, oj, ctr, rin, rout)
+        opts.onconvex[i] == c && dot(Nrm[i], oi - C[i]) - min(ri, opts.hdev[i]) > hsep &&
+            dot(Nrm[i], oj - C[i]) - rj > hsep && return Int8(1)
+        opts.onconvex[j] == c && dot(Nrm[j], oi - C[j]) - ri > hsep &&
+            dot(Nrm[j], oj - C[j]) - min(rj, opts.hdev[j]) > hsep && return Int8(1)
+        return _ball_verdict(oi, oj, ctr, rin, rout, ri, rj)
     end
     k = opts.cert[c]
-    return k > 0 ? _planar_verdict(opts.planar[k], oi, oj) : _hull_verdict(opts.hull[-k], oi, oj)
+    return k > 0 ? _planar_verdict(opts.planar[k], oi, oj, ri, rj) : _hull_verdict(opts.hull[-k], oi, oj, max(ri, rj))
 end
 
 # Per BVH node: the component of every facet below it, or -1 if they are of several.
@@ -746,7 +771,7 @@ _box_distance(p, lo, hi) = norm(max.(zero(Vec3), max.(lo - p, p - hi)))
 # with one normal (else a zero normal), and its component if every element is a
 # one-facet element of one component (else 0). Per component: whether its mesh is convex
 # with outward normals (sphere-surface components only).
-function _hcluster_data(t::Target, nodes, perm)
+function _hcluster_data(t::Target, nodes, perm, pts = nothing)
     cplane = Vector{Tuple{Vec3,Float64,Float64}}[]
     ccomp = Int[]
     # elements that are flat patches (flat facets or disk sectors) of facets in one plane
@@ -761,7 +786,8 @@ function _hcluster_data(t::Target, nodes, perm)
         es = perm[nd.lo:nd.hi]
         L = norm(nd.cmax - nd.cmin) + norm(nd.cmax) + norm(nd.cmin)
         # the planes of its flat elements, each with the least height above it of the
-        # cluster's other elements (Inf if none)
+        # cluster's other elements (Inf if none): of their centroids, or of the points
+        # `pts[e]` (`:sampled` visibility: the ray samples lifted)
         planes = Tuple{Vec3,Float64,Float64}[]
         for e in es
             flat[e] || continue
@@ -771,7 +797,14 @@ function _hcluster_data(t::Target, nodes, perm)
             off = Inf
             for f in es
                 on = flat[f] && dot(t.elem_normal[f], n) > 1 - 1e-12 && abs(dot(n, t.elem_centroid[f]) - d) <= 1e-12 * L
-                on || (off = min(off, dot(n, t.elem_centroid[f]) - d))
+                on && continue
+                if pts === nothing
+                    off = min(off, dot(n, t.elem_centroid[f]) - d)
+                else
+                    for x in pts[f]
+                        off = min(off, dot(n, x) - d)
+                    end
+                end
             end
             push!(planes, (n, d, off))
             length(planes) > 4 && break
@@ -807,6 +840,14 @@ struct _HMask
     c0::Int
 end
 
+# The visible fractions (`_vf_visible`'s, -1 if not facing) of every pair of a block, by
+# tree positions from (r0, c0) (`:sampled` visibility).
+struct _HFrac
+    v::Matrix{Float64}
+    r0::Int
+    c0::Int
+end
+
 # G at tree positions (p, q); `ev`: the pair's shaft holds no occluder (an empty `_HOcc`:
 # no ray but for some pairs the facing slack admits), `false` (a ray per pair), or the
 # block's visibility mask.
@@ -824,6 +865,14 @@ function _hentry_eval(ctx, perm, p, q, M::_HMask)
     M.v[p-M.r0+1, q-M.c0+1] > 0 || return 0.0
     d = ctx.C[j] - ctx.C[i]
     return _vf_kernel(ctx, i, j, 1.0, d, dot(d, d))
+end
+function _hentry_eval(ctx, perm, p, q, M::_HFrac)
+    i, j = minmax(perm[p], perm[q])
+    i == j && return _vf_exchange(ctx, i, j)
+    f = M.v[p-M.r0+1, q-M.c0+1]
+    f > 0 || return 0.0
+    d = ctx.C[j] - ctx.C[i]
+    return _vf_kernel(ctx, i, j, f, d, dot(d, d))
 end
 
 # The ray ends of `_vf_visible` for the pair i < j (centroids at distance r, facing
@@ -886,6 +935,99 @@ function _hmask(ctx, opts, perm, rows::UnitRange{Int}, cols::UnitRange{Int}, occ
     end
     return _HMask(V, first(rows), first(cols))
 end
+
+# The `:sampled` visible fraction of the pair i < j whose shaft holds facets of the
+# certified components `occ.c[1:occ.n]` only (`_shaft_occluder`, searched with the
+# clusters' sample boxes), `===` `_vf_visible`'s. Its rays (the centroid ray, the probes',
+# those between the samples) all run between points within `opts.rvis` of the two ray
+# ends, so each certificate decides the bundle (`_hcert_verdict` with radii): hidden if
+# one finds every segment through its facets, visible if all find every segment clear.
+# Otherwise `_visible_fraction` runs as `_vf_visible` does, each segment decided by the
+# certificates that did not clear the bundle (`_HSeen`), or by its ray. The shaft's
+# exclusions must hold for the samples: their ends inside the cluster boxes (rvis + the
+# lift within the padding), the plane exclusions with the slack lifts' margin for a pair
+# the slack admits (`occ.slack`), and each convex part a cluster lies on cleared by an
+# end element's plane (per bundle, else per segment). Folded elements (whose own facets
+# the samples' rays skip) take `_vf_visible`.
+function _hvis_bundle(ctx, opts, i, j, occ::_HOcc)
+    (; t, bvh, C, Nrm, size, slack, ε, tri_surf, inside, vis, multi, onplane, hsep) = ctx
+    facing, _, _, ci, cj, oi, oj = _vf_ends(C, Nrm, size, slack, ε, i, j)    # `_vf_visible`'s
+    facing || return -1.0
+    (multi[i] || multi[j]) && return first(_vf_visible(ctx, i, j))
+    li, lj = oi - C[i], oj - C[j]
+    ri, rj = opts.rvis[i], opts.rvis[j]
+    ok = ((ci > slack[i] && cj > slack[j]) || occ.slack) &&
+         ri + norm(li) <= size[i] / sqrt(2) && rj + norm(lj) <= size[j] / sqrt(2)
+    ok || return first(_vf_visible(ctx, i, j))
+    # convex parts a cluster lies on: cleared for the bundle, else checked per segment
+    xs = (0, 0)
+    for (k, x) in enumerate(occ.x)
+        x == 0 && continue
+        whole = (t.elem_comp[i] == x && onplane[i] && dot(Nrm[i], li) - opts.hdev[i] > hsep &&
+                 dot(Nrm[i], oj - C[i]) - rj > hsep) ||
+                (t.elem_comp[j] == x && onplane[j] && dot(Nrm[j], lj) - opts.hdev[j] > hsep &&
+                 dot(Nrm[j], oi - C[j]) - ri > hsep)
+        whole || (xs = Base.setindex(xs, x, k))
+    end
+    vb = ntuple(_ -> Int8(1), 8)
+    clear = true
+    for k in 1:occ.n
+        v = _hcert_verdict(ctx, opts, occ.c[k], i, j, oi, oj, ri, rj)
+        v == 0 && return 0.0
+        vb = Base.setindex(vb, v, k)
+        clear &= v > 0
+    end
+    clear && xs == (0, 0) && return 1.0
+    skip = k -> (s = tri_surf[k]; s != 0 && inside[s, i] && inside[s, j])
+    seen = _HSeen(ctx, opts, occ, vb, xs, i, j, _RaySeen(bvh, skip))
+    return _visible_fraction(seen, vis[i], vis[j], oi, oj, li, lj, Nrm[i], Nrm[j], !seen(oi, oj))
+end
+
+# Whether the segment p → q between the ray samples of elements i and j is unobstructed:
+# by the certificates of `occ` that did not clear the bundle (`vb[k] != 1`), once the
+# convex parts `xs` a cluster lies on are cleared by an end element's plane; else by the
+# ray.
+struct _HSeen{C,O,R}
+    ctx::C
+    opts::O
+    occ::_HOcc
+    vb::NTuple{8,Int8}
+    xs::NTuple{2,Int}
+    i::Int
+    j::Int
+    ray::R
+end
+function (s::_HSeen)(p, q)
+    (; ctx, opts, occ, vb, xs, i, j) = s
+    (; t, C, Nrm, onplane, hsep) = ctx
+    for x in xs
+        x == 0 && continue
+        (t.elem_comp[i] == x && onplane[i] && dot(Nrm[i], p - C[i]) > hsep && dot(Nrm[i], q - C[i]) > hsep) ||
+            (t.elem_comp[j] == x && onplane[j] && dot(Nrm[j], p - C[j]) > hsep && dot(Nrm[j], q - C[j]) > hsep) ||
+            return s.ray(p, q)
+    end
+    clear = true
+    for k in 1:occ.n
+        vb[k] == 1 && continue
+        v = _hcert_verdict(ctx, opts, occ.c[k], i, j, p, q)
+        v == 0 && return false
+        clear &= v > 0
+    end
+    return clear || s.ray(p, q)
+end
+
+# The visible fractions of the block rows × cols whose shaft `occ` certifies.
+function _hfrac(ctx, opts, perm, rows::UnitRange{Int}, cols::UnitRange{Int}, occ::_HOcc)
+    V = Matrix{Float64}(undef, length(rows), length(cols))
+    for (b, q) in enumerate(cols), (a, p) in enumerate(rows)
+        V[a, b] = _hvis_bundle(ctx, opts, minmax(perm[p], perm[q])..., occ)
+    end
+    return _HFrac(V, first(rows), first(cols))
+end
+
+# The certified visibility of a block: a mask (centroid visibility) or fractions.
+_hcertified(ctx, opts, perm, rows, cols, occ) =
+    ctx.vis === nothing ? _hmask(ctx, opts, perm, rows, cols, occ) : _hfrac(ctx, opts, perm, rows, cols, occ)
 
 # `_vf_pair` of a pair i < j whose shaft `occ` holds no occluder: a pair facing beyond the
 # slack of the facing test leaves its elements' facets, and its ray would be
@@ -1174,6 +1316,16 @@ function _hmask_counts(M::_HMask, ra, cb)
     end
     return nv, nh
 end
+# (fractions: visible, and hidden or partly visible)
+function _hmask_counts(M::_HFrac, ra, cb)
+    nv = nh = 0
+    for q in cb, p in ra
+        f = M.v[p-M.r0+1, q-M.c0+1]
+        nv += f > 0
+        nh += 0 <= f < 1
+    end
+    return nv, nh
+end
 
 # The blocks of cluster pair (s, t) into `dense`/`lowrank`: low rank when the pair is
 # admissible, of uniform visibility and its cross approximation converges and passes a
@@ -1218,17 +1370,17 @@ function _hassemble!(out, ctx, nodes, perm, s, t, far, opts, known = nothing,
         if known !== nothing
             ev = known
         else
-            occ = _shaft_occluder(ctx, opts, s, t, ctx.vis === nothing)
+            occ = _shaft_occluder(ctx, opts, s, t, true)
             if occ.n != 0 && _convex_hides(opts, s, t)
                 Threads.atomic_add!(st.shadowed, 1)
                 return                                   # wholly behind a convex part
             end
-            if occ.n > 0 && ctx.vis === nothing && m * n <= opts.mask_size
+            if occ.n > 0 && m * n <= opts.mask_size
                 # only certified parts' facets in the shaft: their certificates decide
-                # most pairs, at any level (a block of uniform visibility then gets the
-                # cross approximation instead of being refined; centroid visibility:
-                # `:sampled` fractions take the rays below)
-                ev = _hmask(ctx, opts, perm, rows, cols, occ)
+                # most pairs (`:sampled`: whole sample bundles), at any level (a block of
+                # uniform visibility then gets the cross approximation instead of being
+                # refined)
+                ev = _hcertified(ctx, opts, perm, rows, cols, occ)
                 Threads.atomic_add!(st.masked, 1)
             elseif occ.n != 0 && leaves
                 # the exact visibility of every pair: a ray each
@@ -1249,7 +1401,7 @@ function _hassemble!(out, ctx, nodes, perm, s, t, far, opts, known = nothing,
                 ev = _hfree(occ)
             end
         end
-        if ev isa _HMask
+        if ev isa _HMask || ev isa _HFrac
             # zero if wholly hidden, low rank if wholly visible (no more rays), else
             # refined with the mask down to dense leaf pairs
             nv, nh = _hmask_counts(ev, ra, cb)
@@ -1292,7 +1444,7 @@ function _hassemble!(out, ctx, nodes, perm, s, t, far, opts, known = nothing,
                         if split
                             pa, pb = setdiff(ra, fa), setdiff(cb, fb)
                             if isempty(pa)
-                            elseif _hleaf(b) || length(pa) <= 4 || !(ev isa _HOcc || ev isa _HMask)
+                            elseif _hleaf(b) || length(pa) <= 4 || !(ev isa _HOcc || ev isa _HMask || ev isa _HFrac)
                                 _hpush_nonzero!(scattered, (pa, cb, _hdense_index(ctx, perm, pa, cb, ev)))
                             else
                                 # the cut rows against t's children, where most face wholly
@@ -1332,9 +1484,9 @@ function _hassemble!(out, ctx, nodes, perm, s, t, far, opts, known = nothing,
         else
             # a near leaf pair: no ray in an empty shaft, the certificates' mask in a
             # certified one, else a ray per pair
-            occ = _shaft_occluder(ctx, opts, s, t, ctx.vis === nothing)
+            occ = _shaft_occluder(ctx, opts, s, t, true)
             D = _hdense(ctx, perm, rows, cols, occ.n == 0 ? occ :
-                        occ.n > 0 && ctx.vis === nothing ? _hmask(ctx, opts, perm, rows, cols, occ) : false)
+                        occ.n > 0 ? _hcertified(ctx, opts, perm, rows, cols, occ) : false)
         end
         any(!iszero, D) && push!(dense, (a.lo, b.lo, D))     # (a capsule's near field is zero)
     else
@@ -1431,7 +1583,25 @@ function _hsetup(ctx, tol, eta, leaf, maxrank)
     for (c, nd) in enumerate(nodes), k in 1:ns
         allin[k, c] = all(p -> ctx.inside[k, perm[p]], nd.lo:nd.hi)
     end
-    cplane, ccomp, convex, occluders = _hcluster_data(t, nodes, perm)
+    # `:sampled` visibility: per element the ends of its sample rays lifted by ε (as
+    # `_vf_visible` lifts them for a pair facing beyond the slack), their largest distance
+    # from the lifted centroid (`rvis`) and the samples' from the element's plane (`hdev`);
+    # per cluster the box of those ends, for the shaft's plane tests (`qbox`)
+    N = nelements(t)
+    if ctx.vis === nothing
+        pts = nothing
+        rvis, hdev = zeros(N), zeros(N)
+        qbox = [(nd.cmin, nd.cmax) for nd in nodes]
+    else
+        pts = [push!([p + ctx.ε * ctx.Nrm[e] for p in ctx.vis[e].points], ctx.C[e] + ctx.ε * ctx.Nrm[e]) for e in 1:N]
+        rvis = [maximum(p -> norm(p - ctx.C[e]), ctx.vis[e].points) for e in 1:N]
+        hdev = [maximum(p -> abs(dot(ctx.Nrm[e], p - ctx.C[e])), ctx.vis[e].points) for e in 1:N]
+        qbox = map(nodes) do nd
+            ps = (x for p in nd.lo:nd.hi for x in pts[perm[p]])
+            (reduce((a, b) -> min.(a, b), ps), reduce((a, b) -> max.(a, b), ps))
+        end
+    end
+    cplane, ccomp, convex, occluders = _hcluster_data(t, nodes, perm, pts)
     ball = zeros(Int, length(t.components))
     for (k, o) in enumerate(occluders)
         ball[o[1]] = k
@@ -1442,7 +1612,7 @@ function _hsetup(ctx, tol, eta, leaf, maxrank)
     # per cluster: the largest extra lift of a ray the facing slack admits (`_vf_visible`)
     liftx = [maximum(p -> ctx.size[perm[p]] * ctx.slack[perm[p]], nd.lo:nd.hi) for nd in nodes]
     opts = (; tol = Float64(tol), maxrank = Int(maxrank), iperm, stats, nodes, allin, cplane, ccomp, convex, occluders,
-            ball, cert, planar, hull, onconvex, liftx, bvh_comp = _bvh_components(ctx.bvh, t.tri_comp),
+            ball, cert, planar, hull, onconvex, liftx, qbox, rvis, hdev, bvh_comp = _bvh_components(ctx.bvh, t.tri_comp),
             facing_size = 16 * Int(leaf)^2, mask_size = 64 * Int(leaf)^2)
     return ctx, nodes, perm, far, near, opts
 end
