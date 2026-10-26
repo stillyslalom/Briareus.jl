@@ -326,9 +326,14 @@ Items 9–13 and 16–17 follow the 2026-10-22 literature review against Kritche
     nothing and was dropped), the near-field quadrature profiled and its receiver side
     sped up (sector distance by the loop, fused side test, clipped loop: −8 to −9 %
     assembly, round-off; dense bored cavity −16 to −21 %, bit for bit; a coarser rule
-    is not viable at the block tolerance; "H-matrix near-field quadrature"). Left, in
-    order: rim certificates for non-convex occluders and `:sampled` visibility
-    (still a ray per pair of an occupied leaf); the bored cavity's gap pairs (~60 % of its
+    is not viable at the block tolerance; "H-matrix near-field quadrature"), visibility
+    certificates for occupied leaf pairs (washers, caps, bores, convex parts) and for
+    the pairs the facing slack admits (rays 2.9M → 1.0M at 10.5k, 35M → 1.3M on an
+    11.4k bored cavity; −10 to −16 % assembly on the hohlraum, −20 to −30 % on the bored
+    cavity, bit for bit; "H-matrix visibility certificates"). Left, in order:
+    `:sampled` visibility (rays are 93 % of an 11.4k bored cavity's sampled assembly:
+    certificates for a pair's sample-ray bundle); certificates above leaf level (decision
+    in that section); the bored cavity's gap pairs (~60 % of its
     view-factor time; refinement toward the shared edge onto ~34-edge sector receivers);
     GPU mat-vecs (≲ 25 % end to end on the RTX 2060 while assembly stays on the CPU; not
     worth CUDA.jl yet).

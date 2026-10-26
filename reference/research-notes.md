@@ -41,7 +41,7 @@ callout in the section says which).
   (2026-10-22) *decision*.
 - Large radiation models (2026-10-24); Hierarchical view factors (2026-10-24) (*in
   part*: `tol`); The H-matrix's N^1.5 remainder (2026-10-25); H-matrix near field: zero
-  blocks and cut rows (2026-10-26; vectorized sector contour; contiguous quadrature, dropped); Deposition-operator rays
+  blocks and cut rows (2026-10-26; vectorized sector contour; contiguous quadrature, dropped); H-matrix visibility certificates (2026-10-27); Deposition-operator rays
   and sliver view factors (2026-10-25); Compile latency (2026-10-25); Closure on bored,
   windowed and CAD cavities (2026-10-25); Compact capsule rows at capsule_h = h/3
   (2026-10-25).
@@ -4326,7 +4326,8 @@ largest, and the 3.9k hohlraum at leaves of 32, 2.3e-5 before, now matches to 1.
   the exact contour kernel is not needed.
 - `:sampled` visibility and non-convex occluders (LEH rims, CAD) still take a ray per
   pair of an occupied leaf. A rim certificate (a disc or annulus the segment must
-  cross) would extend the ball test.
+  cross) would extend the ball test. (Done for centroid visibility: "H-matrix visibility
+  certificates".)
 - BriareusGUI `radiation_size` now budgets an HMatrix at 250 N^1.5 bytes (2.5 × the
   measured storage) above `HMATRIX_MODEL[]` and 4N² between 10k and 15k elements.
 
@@ -4559,6 +4560,99 @@ a₄/a₀ −0.788 → −0.787 %, LEH and gap losses unchanged to 1e-5. The sli
 sum moves 0.72210 → 0.72197 (the open cylinder's exact 0.72301; the rest is the mid and
 far tiers). Confidence: the method and the closed forms **H**; the ρ thresholds and the
 1e-9 front tolerance engineering choices, **M**.
+
+## H-matrix visibility certificates (2026-10-27) *derived*
+
+ROADMAP 14, "rim certificates for non-convex occluders". Workloads: `bench3.jl`'s hohlraum
+(10,484 and 17,632 elements) and a target where rims occlude, the bored cavity of
+`test/partial_visibility.jl` (LEH bores, cap washers, a 20 µm waist gap with its washers;
+latitude–longitude capsule) at `hw = 0.18, hc = 0.07` (11,360 elements). 4 threads pinned
+to one CCX, `tol` 1e-6, leaf 48; old = abb3129 from a separate worktree, interleaved. Other
+jobs shared the machine: process-to-process spread ~15 %, so ranges below are of 3 builds
+per process, 2 processes each.
+
+**Measured first.** Visibility rays timed by instrumenting `_vf_visible` (CPU-s inside
+it over a warm build):
+
+| | hohlraum 10.5k | bored cavity 11.4k |
+|---|---|---|
+| rays (old) | 2.9M, ~3.8 CPU-s (~23 % of assembly CPU) | 35.4M, 19–23 CPU-s (43 %) |
+| of which occupied leaf pairs | ~0.4 % of assembly | ~32 % far leaves + 9 % near leaves |
+| of which pairs only the facing slack admits, in empty shafts | ~23 % (wall–capsule 1.4M, wall–wall 1.0M, caps–capsule) | ~10 % |
+
+So the rim question was a negative on the standard hohlraum (its occupied leaves are
+~0.4 %) and a large positive where rims occlude; and on the standard hohlraum the rays
+were nearly all of a different kind: pairs that face each other only within the slack of
+the centroid facing test on curved elements, whose rays (lifted farther off the facet) are
+cast even in an empty shaft.
+
+**What changed** (`src/hmatrix.jl`; all exact, so `HMatrix` is **bit for bit**):
+
+1. Certificates per component, built once (`_hrim_data`): a *planar* part (all facets
+   within 1e-10 relative of one plane: washers, LEH caps, discs, foils) keeps its facets
+   as 2-D edge lines binned on a polar grid; a *cylinder or cone* part keeps its axial and
+   radial bounds about the surface axis; a convex part with balls keeps them. The shaft
+   search of a leaf pair (`_shaft_occluder(…, full = true)`) now collects up to 8 such
+   parts instead of giving up at the second one or at a non-convex one.
+2. Each pair of a certified leaf is decided as `_vf_visible`'s ray (`any_hit` to
+   1 − 1e-9, barycentric slack 1e-10) would: hidden if one certificate finds the segment
+   through its facets, visible if all find it clear, else the ray. Planar: one side of
+   the plane (margin 1e-9 relative plus twice the flatness), or the crossing outside every
+   facet in its bin, or inside one with both ends off the plane — margins grown by
+   1/sin of the crossing angle, and undecided when they exceed half a bin. Hull: the
+   segment's part within the axial range (widened) inside the radial lower bound or
+   outside the upper one (visible only). Ball: as before, with the per-pair condition that
+   both ends lie outside the circumscribed ball (so a pair whose cluster box reaches into
+   it no longer forces every pair to the ray), plus a separating plane: an end element
+   lying on the convex part (its facets in one plane through its centroid) clears it when
+   both ends are in front by 1e-8 × the target scale.
+3. Pairs only the slack admits are judged on their own ray ends (`_hslack_ends`), when
+   both ends stay inside their cluster boxes (lift ≤ the padding), every plane exclusion
+   of the shaft held with the clusters' largest extra lift (`liftx`, recorded by the
+   shaft search), and each convex part a cluster lies on (excluded from the search) is
+   cleared by an end element's plane. This applies to empty shafts (the `_HOcc` of the
+   shaft replaces `true` as the block's entry mode) and to certified masks; centroid
+   visibility only.
+4. Blocks above leaf level are unchanged (only the old single-ball masks), so the block
+   structure, ranks and every stored entry stay as they were.
+
+| | hohlraum 10,484 | hohlraum 17,632 | bored cavity 11,360 |
+|---|---|---|---|
+| H-matrix build, warm, old | 4.46–4.69 s | 9.42–9.68 s | 9.79–11.40 s |
+| new | 3.44–4.54 s (typ. 4.0) | 7.87–8.37 s | 7.74–7.92 s |
+| change | ≈ −10 % | −16 % | −20 to −30 % |
+| rays old → new | 2.9M → 0.98M | | 35.4M → 1.34M (0.9 CPU-s) |
+| stored blocks, all entries | identical (`==` on every dense, low-rank, scattered block) | identical | identical |
+
+The remaining hohlraum rays are capsule elements at their terminator facing slightly away
+(c ≤ 0 within the slack), whose own plane does not separate; all visible. The wall-clock
+gain is smaller than the ray CPU saved (bored: ~20 CPU-s of rays → ~10 CPU-s wall × 4):
+the certificates cost ~140 ns per pair, and the shaft search no longer stops early on a
+leaf.
+
+**Exactness checks** (`test/hmatrix.jl`, "visibility certificates"): 57k random segments
+across the parts of the bored cavity and a hohlraum, and segments crossing a washer's plane
+within 1e-3 to 1e-12 (relative) of its inner and outer rims: every decided one (49k, 5,023
+of them hidden) agrees with `any_hit` against that part's facets alone; masks of every
+certified leaf pair equal the ray masks (6,193 leaf pairs over three targets, a
+latitude–longitude capsule among them); the 833k pairs of empty-shaft leaves get
+`_vf_pair`'s factor (`===`). At the benchmark sizes the certified masks equal ray masks on
+all 9,889 certified leaf pairs of the bored cavity (12.4M pairs).
+
+**Tried, not adopted (decision).** The certificates also decide blocks above leaf level
+(masks there, so a block of uniform visibility gets a cross approximation instead of
+being refined), and latitude–longitude capsule quads (two coplanar facets) can count as
+"on the convex part" in the shaft search like one-facet elements. On the bored cavity:
+5.6 s (−45 % from old; 6.5 s with the capsule rule alone), stored 118 → 105 MB, blocks
+change (new approximations at the same `tol`). Against dense Float32 (300 sampled
+columns): Frobenius error 6.5e-8 → 7.8e-8, but row sums 2.4e-7 → 2.3e-6 (from the capsule
+rule: capsule–wall blocks of mixed visibility now compress). Standard hohlraum unchanged
+(identical blocks). Not adopted until the row-sum loss is understood.
+
+**`:sampled` visibility.** Not addressed: on the bored cavity with `visibility = :sampled`
+the H-matrix build takes 106 s, 93 % of it in rays (48.7M `_vf_visible` calls with their
+sample bundles). A certificate there must clear the bundle (segments between the two
+elements' sample sets), e.g. the planar test on the convex hull of the crossing points.
 
 ## N221204 late-time drive (2026-10-24) *derived*
 

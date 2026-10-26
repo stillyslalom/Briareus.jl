@@ -168,6 +168,72 @@ end
     end
 end
 
+# Visibility certificates of occupied shafts (a planar part's facets, a cylinder's
+# axisymmetric bounds, a convex part's balls and its elements' planes) against the
+# visibility ray itself: every segment a certificate decides is decided as the ray
+# against that part's facets alone finds it (random segments, and segments crossing a
+# washer's plane within 1e-3 to 1e-12 of its rims); the certified masks of every leaf
+# pair equal the masks by a ray per pair, and the pairs of empty shafts (those the facing
+# slack admits included) get `_vf_pair`'s factor exactly.
+@testset "hierarchical view factors: visibility certificates" begin
+    B = Briareus
+    rng = Xoshiro(11)
+    for (t, nseg) in ((bored_cavity(; hw = 0.8, hc = 0.25), 3000), (hohlraum(; h = 0.7, capsule_h = 0.2), 3000),
+                      (hohlraum(; h = 0.7, capsule_h = 0.2, capsule_mesh = :latlong), 0))
+        ctx0 = B._vf_context(t; near = 3.0, mid = 12.0, level = 1, exact_far = true, visibility = :centroid,
+                             visibility_grid = 4)
+        ctx, nodes, perm, far, near, opts = B._hsetup(ctx0, 1e-6, 1.0, 16, 32)
+        agree = Bool[]
+        tried = 0
+        for c in eachindex(t.components)
+            (opts.cert[c] != 0 || opts.ball[c] != 0) && nseg > 0 || continue
+            e0 = findfirst(e -> t.elem_comp[e] != c, 1:nelements(t))     # ends on no element of c
+            ks = findall(==(c), t.tri_comp)
+            vs = [v for k in ks for v in (t.tri_v0[k], t.tri_v0[k] + t.tri_e1[k], t.tri_v0[k] + t.tri_e2[k])]
+            lo, hi = reduce((a, b) -> min.(a, b), vs), reduce((a, b) -> max.(a, b), vs)
+            mid, ext = (lo + hi) / 2, (hi - lo) / 2 .+ 0.5
+            segs = [(mid + ext .* (2rand(rng, B.Vec3) .- 1), mid + ext .* (2rand(rng, B.Vec3) .- 1)) for _ in 1:nseg]
+            k = opts.cert[c]
+            if k > 0
+                # through the plane near the inner and outer rims
+                P = opts.planar[k]
+                for _ in 1:nseg
+                    ρ = rand(rng, (P.rlo, P.rhi)) * (1 + rand(rng, (-1, 1)) * 10.0^(-rand(rng, 3:12)))
+                    φ = 2π * rand(rng)
+                    x = P.c + ρ * (cos(φ) * P.u + sin(φ) * P.v)
+                    w = normalize(randn(rng, B.Vec3) + 2 * P.n) * (0.1 + rand(rng))
+                    push!(segs, (x - rand(rng) * w, x + rand(rng) * w))
+                end
+            end
+            for (oi, oj) in segs
+                v = B._hcert_verdict(ctx, opts, c, e0, e0, oi, oj)
+                tried += 1
+                v < 0 && continue
+                hit = any_hit(t.bvh, oi, oj - oi, 1 - 1e-9, id -> t.tri_comp[id] != c)
+                push!(agree, (v == 0) == hit)
+            end
+        end
+        nseg > 0 && @test length(agree) > 0.5 * tried && all(agree)
+        # leaf pairs: certified masks against ray masks, empty shafts against `_vf_pair`
+        masks, free = Bool[], Bool[]
+        for (s, u) in [near; far]
+            a, b = nodes[s], nodes[u]
+            B._hleaf(a) && B._hleaf(b) || continue
+            occ = B._shaft_occluder(ctx, opts, s, u, true)
+            rows, cols = a.lo:a.hi, b.lo:b.hi
+            if occ.n > 0
+                push!(masks, B._hmask(ctx, opts, perm, rows, cols, occ).v == B._hmask_rays(ctx, perm, rows, cols, rows, cols).v)
+            elseif occ.n == 0
+                for p in rows, q in cols
+                    i, j = minmax(perm[p], perm[q])
+                    i == j || push!(free, B._vf_pair_free(ctx, i, j, occ) === B._vf_pair(ctx, i, j))
+                end
+            end
+        end
+        @test all(masks) && all(free) && (nseg == 0 || !isempty(masks))
+    end
+end
+
 # Keyframes of hierarchical models: the interpolated exchange as the two operators.
 @testset "hierarchical keyframes" begin
     kw = (length = 10.1, leh_radius = 1.55, capsule_radius = 0.9, h = 0.8, capsule_h = 0.4,
