@@ -235,6 +235,55 @@ end
     end
 end
 
+# Prism certificates (a wall or bore of chord rectangles as the side lines of its cross-
+# section, `_hprism`): every segment the axisymmetric verdict decides with them, from
+# points on the facets, near the edges and polygon vertices, in the waist gap's slot and
+# anywhere about the part, is decided as the ray against that part's facets alone finds
+# it; and the side lines decide many of the segments through the gap onto a wall that the
+# bounds alone leave to the ray. The bin's arctangent is within 2e-5 rad of `atan`.
+@testset "hierarchical view factors: prism certificates" begin
+    B = Briareus
+    rng = Xoshiro(17)
+    t = bored_cavity(; hw = 0.8, hc = 0.25)
+    ctx0 = B._vf_context(t; near = 3.0, mid = 12.0, level = 1, exact_far = true, visibility = :centroid,
+                         visibility_grid = 4)
+    ctx, nodes, perm, far, near, opts = B._hsetup(ctx0, 1e-6, 1.0, 16, 32)
+    hulls = [(c, opts.hull[-opts.cert[c]]) for c in eachindex(t.components) if opts.cert[c] < 0]
+    @test [H.ns for (_, H) in hulls] == [24, 24, 12, 12]           # walls, bores (nphi = 24)
+    R, Rout = 2.875, 2.925
+    agree, gained, through = Bool[], 0, 0
+    for (c, H) in hulls
+        H0 = B._HHull(H.c, H.a, H.z0, H.z1, H.rlo, H.rhi, H.u, H.v, 0, H.pmin, H.pf, H.cosΔ, H.nb, H.start,
+                      H.idx, H.sides)
+        ks = findall(==(c), t.tri_comp)
+        at(r, φ, z) = H.c + r * (cos(φ) * H.u + sin(φ) * H.v) + z * H.a
+        function onfacet()
+            k = rand(rng, ks)
+            a, b = rand(rng), rand(rng)
+            a + b > 1 && ((a, b) = (1 - a, 1 - b))
+            x = t.tri_v0[k] + a * t.tri_e1[k] + b * t.tri_e2[k]
+            return x + t.tri_normal[k] * rand(rng, (1e-6, 1e-7, 1e-9, 0.0, -1e-9))
+        end
+        nearrim() = at(H.rhi * (1 + rand(rng, (-1, 1)) * 10.0^(-rand(rng, 2:12))) * (rand(rng) < 0.3 ? cospi(1 / H.ns) : 1.0),
+                       2π * rand(rng), rand(rng, (H.z0, H.z1)) + rand(rng, (-1, 1)) * 10.0^(-rand(rng, 1:12)))
+        slot() = at(R + (Rout - R + 0.1) * rand(rng), 2π * rand(rng), 0.06 * (rand(rng) - 0.5))
+        about() = at(1.1 * H.rhi * sqrt(rand(rng)), 2π * rand(rng), H.z0 - 1 + (H.z1 - H.z0 + 2) * rand(rng))
+        for _ in 1:4000
+            g = rand(rng, (onfacet, nearrim, slot, about))
+            p, q = g === slot ? (slot(), onfacet()) : (g(), rand(rng, (onfacet, nearrim, slot, about))())
+            v = B._hull_verdict(H, p, q)
+            v < 0 && continue
+            push!(agree, (v == 0) == any_hit(t.bvh, p, q - p, 1 - 1e-9, id -> t.tri_comp[id] != c))
+            gained += B._hull_verdict(H0, p, q) < 0
+            through += g === slot
+        end
+    end
+    @test length(agree) > 3000 && all(agree)
+    @test gained > 1000 && through > 300
+    x, y = randn(rng, 10^5), randn(rng, 10^5) .* 10.0 .^ rand(rng, -8:8, 10^5)
+    @test maximum(abs.(rem2pi.(B._atan_approx.(y, x) .- atan.(y, x), RoundNearest))) < 2e-5
+end
+
 # `:sampled` visibility: bundle certificates (a part's verdict on every segment between
 # two balls) against the ray of each of a bundle's random segments, its ends in the balls
 # (some on their surfaces), against that part's facets alone; and the certified fractions

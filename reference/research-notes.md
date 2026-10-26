@@ -41,7 +41,8 @@ callout in the section says which).
   (2026-10-22) *decision*.
 - Large radiation models (2026-10-24); Hierarchical view factors (2026-10-24) (*in
   part*: `tol`); The H-matrix's N^1.5 remainder (2026-10-25); H-matrix near field: zero
-  blocks and cut rows (2026-10-26; vectorized sector contour; contiguous quadrature, dropped); H-matrix visibility certificates (2026-10-27); Deposition-operator rays
+  blocks and cut rows (2026-10-26; vectorized sector contour; contiguous quadrature, dropped); H-matrix visibility certificates (2026-10-27); Prism certificates for the waist gap
+  (2026-10-26); Deposition-operator rays
   and sliver view factors (2026-10-25); Compile latency (2026-10-25); Closure on bored,
   windowed and CAD cavities (2026-10-25); Compact capsule rows at capsule_h = h/3
   (2026-10-25).
@@ -4901,6 +4902,84 @@ P4/P0 within 4e-6, capsule Tr and Dante (both LEH areas) within 1.4e-3 eV, the P
 crossing unchanged to 1e-3 ns (6.241 ns), capsule energy unchanged (248.7 kJ, 14.0 %).
 The calibrations fitted with the old rule (wall loss, CBET, the N221204 defaults) are not
 moved by it; nothing is refitted.
+
+## Prism certificates for the waist gap (2026-10-26) *derived*
+
+ROADMAP 14, "a certificate for the wall rays through the waist gap". Workload: the
+`:sampled` bored cavity of "H-matrix visibility certificates" (`bored_cavity(hw = 0.18,
+hc = 0.07)`, 11,360 elements), `tol` 1e-6, leaf 48, 4 threads pinned to one CCX; old =
+3fcf470 from an exported copy, interleaved (another job shared the CCX at times: builds
+of one process agree to 1 %, between processes up to 50 % slower, so the comparison is
+of the quiet runs, with process CPU time beside them).
+
+**Measured first** (`_HSeen`'s fallback rays by component pair and by the certificate
+left undecided, instrumented build): 66.7M rays. The wall's axisymmetric bounds left
+37.7M visible ones to the ray, all between the gap (its aperture, 16.7M; the washers,
+21.0M) and the opposite half's wall; bore–wall, bore–cap and bore–washer pairs 5.4M
+more (the bore's bounds); the capsule's balls ~21M (segments between the inscribed and
+circumscribed balls). The ray of a gap segment costs 0.34 µs (one thread, 0.9M
+segments of gap–wall pairs), so the gap rays were ~13 CPU-s of 112 (~12 %), not the
+quarter estimated above (that came from `_vf_visible`'s cost per call, several rays
+each).
+
+**What changed** (`src/hmatrix.jl`; exact, so `HMatrix` is **bit for bit**). A hull part
+(`_HHull`, a cylinder or cone component) whose facets are all parallel to its axis and,
+seen along it, lie within 1e-10 (relative) of a set of lines that keep the axis inside
+(a wall or bore of chord rectangles) also keeps those side lines (`_hprism`: facets
+grouped by the azimuth of their outward normals; each line through the mid-range of its
+vertices; `pf` the largest half-range, 2e-16 here). The hull verdict then also clears a
+segment whose part within the axial range (the same clipping, widened by the margin)
+has both ends at least m + 2 pf (+ the tube radius ρ for a bundle) inside every line:
+the set where that holds is convex, so the whole part stays that far from every line,
+and so from every facet; outside the axial range the facets are m away. A segment
+through the gap passes the wall's edge below its axial range, so its part within the
+range runs from just inside the edge to the far wall (lifted ε = 1e-7 × scale off it).
+The lines are binned by azimuth: a bin lists every line whose normal lies within
+Δ + 1e-4 of it, cos Δ = 0.999 pmin / rmax, so a point at radius r with r cos Δ ≤ pmin − M
+is at least M inside every line its bin leaves out (≤ 5 lines per bin here); the bin is
+found by an arctangent within 2e-5 rad (Abramowitz & Stegun 4.4.49 on the octant: a
+division and a polynomial instead of `atan`), and a point inside the lines' inscribed
+circle by M needs no bin. The verdict is "visible" only, like the bounds' (no hidden
+verdict: the gap–wall rays that are hidden, 0.6M, still take the ray). Margins are the
+bounds' (m = 1e-9 of the size), and so is the rounding argument (an estimate: the
+facet test's rounding, ~1e-16 of the size over sin θ, reaches the margin only for a
+segment within ~4e-7 rad of a facet's plane that also runs nearly level with an end of
+the axial range).
+
+Cost per segment (one thread, 0.9M gap–wall segments): bounds 41 ns, with the side
+lines 68 ns, against the ray's 338 ns.
+
+| `:sampled` bored cavity 11,360 | old | new |
+|---|---|---|
+| fallback rays (`_HSeen`) | 66.7M | 23.2M |
+| H-matrix build, warm, 4 runs each | 28.4–28.7 s | 25.4–25.5 s (−11 %) |
+| process CPU over the build | 111.8–112.6 s | 99.3–100.3 s (−11 %) |
+| gap–wall pairs, `_hvis_bundle` CPU (4 classes, 1.6M pairs) | 32.3 s | 21.7 s |
+| stored | 108.3 MB | 108.3 MB |
+| blocks, every stored entry, row sums | | identical (`==`) |
+
+So the errors against dense are those of "H-matrix visibility certificates" (`:sampled`:
+Frobenius 7.8e-8 on 300 columns). Centroid builds are identical block for block and not
+faster: bored cavity 11,360 5.07–5.10 → 5.13–5.15 s, hohlraum 10,484 (`bench3.jl`'s, no
+gap) 3.33–3.39 → 3.37–3.42 s (its wall pairs lie inside the wall, whose facets the shaft
+excludes). Pairs whose segments the lines cannot clear pay for the test (cap–washer
+pairs 20.6–20.7 → 21.3–21.6 µs per pair).
+
+*Exactness checks.* At the benchmark size (the `:sampled` pass's check, in eight shards) every block
+that takes certified fractions, 33.2M facing pairs (2.92M hidden, 1.02M partial), has
+`_hfrac` `===` `_vf_visible`'s fraction, and the 7,644 empty-shaft blocks `_vf_pair_free`
+`===` `_vf_pair`. 800k random segments over the 1,068-element cavity's walls and bores
+(ends on facets lifted −1e-9 to 1e-6, within 1e-12 to 1e-1 of their axial ends at the
+polygon's vertex and inscribed radii, in the gap's slot, anywhere about the part): all
+304k decided agree with `any_hit` against that part's facets. `test/hmatrix.jl` "prism
+certificates" keeps 16k of these (half of the decided ones decided by the lines alone)
+and the arctangent's bound; "visibility certificates" and "sampled visibility bundles"
+pass unchanged and now run through the lines too.
+
+What is left: the capsule's ~21M rays (segments between its balls; a per-facet
+certificate for the convex capsule would save ≲ 7 % of this build) and the per-segment
+certificate work itself (a gap–wall pair is 256 segments through up to six parts:
+10–19 µs per pair after this). Confidence **H** for exactness and timings.
 
 ## N221204 late-time drive (2026-10-24) *derived*
 

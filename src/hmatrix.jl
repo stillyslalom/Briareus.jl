@@ -42,7 +42,10 @@ a candidate for low rank, decided block by block:
   facets of up to 8 parts with a certificate is decided the same way, pair by pair and
   exactly as the ray would: a planar part (a washer, an LEH cap, a disc) by where the
   segment crosses its plane, inside or outside its facets with margin; a cylinder or
-  cone part by its axisymmetric bounds; a convex part by its balls or the plane of an end
+  cone part by its axisymmetric bounds, and a prism of facets parallel to its axis (a
+  wall of chord rectangles) also by the side lines of its cross-section (a segment whose
+  part within the prism's axial range stays inside every side's half-plane, as one
+  through a waist gap onto the wall does); a convex part by its balls or the plane of an end
   element lying on it. Other leaf pairs take every pair's visibility ray. Wholly hidden
   pairs give zero, wholly visible ones a cross approximation, and partly seen ones (a
   rim, `:sampled` fractions) stay dense. With `visibility = :sampled` the certificates
@@ -452,7 +455,14 @@ struct _HPlanar
 end
 
 # A component's axisymmetric bounds about the axis (c, a) of its surface: every facet
-# within a·(x - c) ∈ [z0, z1] and at distance [rlo, rhi] from the axis.
+# within a·(x - c) ∈ [z0, z1] and at distance [rlo, rhi] from the axis. If every facet is
+# parallel to the axis and lies, seen along it, on one of `ns` > 0 lines (a prism: a
+# wall of chord rectangles), those side lines in the basis (u, v) of the plane normal to
+# the axis: (νx, νy, p), outward unit normal and distance from the axis, the axis inside
+# every one (p ≥ pmin > 0), each facet within `pf` of its line. Lines are binned by the
+# azimuth of ν (`nb` bins, CSR `start`/`idx`): a bin lists every line whose ν is within Δ
+# of it, cos Δ = `cosΔ`, so a point at distance r from the axis with r cos Δ ≤ pmin - M
+# lies at least M inside every line its bin leaves out (`_hprism_inside`).
 struct _HHull
     c::Vec3
     a::Vec3
@@ -460,6 +470,16 @@ struct _HHull
     z1::Float64
     rlo::Float64
     rhi::Float64
+    u::Vec3
+    v::Vec3
+    ns::Int
+    pmin::Float64
+    pf::Float64
+    cosΔ::Float64
+    nb::Int
+    start::Vector{Int32}
+    idx::Vector{Int32}
+    sides::Vector{NTuple{3,Float64}}
 end
 
 # Distance from the origin to the triangle (A, B, C) in the plane.
@@ -545,7 +565,104 @@ function _hhull(t::Target, ks, c, a)
         rlo = min(rlo, _origin_tri_distance(A, B, C))
         rhi = max(rhi, norm(A), norm(B), norm(C))
     end
-    return _HHull(c, a, z0, z1, rlo, rhi)
+    return _HHull(c, a, z0, z1, rlo, rhi, u, v, _hprism(t, ks, c, a, u, v)...)
+end
+
+# The side lines of facets `ks` (`_HHull`'s ns, pmin, pf, cosΔ, nb, start, idx, sides) if
+# every facet is parallel to the axis (c, a) and, seen along it, lies within 1e-10
+# (relative) of a line that keeps the axis inside (pmin > 1e-6 of the largest radius);
+# else ns = 0. Facets are grouped into lines by the azimuth of their outward normals (runs
+# with one normal to 1e-12 and one offset to 1e-10; a line split into several runs is
+# kept several times, harmlessly), each line through the mid-range of its facets'
+# vertices, `pf` the largest half-range.
+function _hprism(t::Target, ks, c, a, u, v)
+    none = (0, 0.0, 0.0, -1.0, 0, Int32[1], Int32[], NTuple{3,Float64}[])
+    P(x) = SVector(dot(u, x - c), dot(v, x - c))
+    facets = Tuple{Float64,SVector{2,Float64},NTuple{3,SVector{2,Float64}}}[]
+    rmax = 0.0
+    for k in ks
+        n = t.tri_normal[k]
+        abs(dot(n, a)) <= 1e-9 || return none
+        ν = SVector(dot(u, n), dot(v, n))
+        ν = ν / norm(ν)
+        vs = (P(t.tri_v0[k]), P(t.tri_v0[k] + t.tri_e1[k]), P(t.tri_v0[k] + t.tri_e2[k]))
+        sum(x -> dot(ν, x), vs) < 0 && (ν = -ν)
+        rmax = max(rmax, maximum(norm, vs))
+        push!(facets, (atan(ν[2], ν[1]), ν, vs))
+    end
+    isempty(facets) && return none
+    sort!(facets; by = first)
+    tol = 1e-10 * (rmax + norm(c))
+    sides = NTuple{3,Float64}[]
+    pf = 0.0
+    ν0, lo, hi = facets[1][2], Inf, -Inf
+    for (k, (_, ν, vs)) in enumerate(facets)
+        if k > 1 && !(dot(ν, ν0) > 1 - 1e-12 && abs(sum(x -> dot(ν0, x), vs) / 3 - (lo + hi) / 2) <= tol)
+            push!(sides, (ν0[1], ν0[2], (lo + hi) / 2))
+            pf = max(pf, (hi - lo) / 2)
+            ν0, lo, hi = ν, Inf, -Inf
+        end
+        for x in vs
+            h = dot(ν0, x)
+            lo, hi = min(lo, h), max(hi, h)
+        end
+    end
+    push!(sides, (ν0[1], ν0[2], (lo + hi) / 2))
+    pf = max(pf, (hi - lo) / 2)
+    pmin = minimum(last, sides)
+    ns = length(sides)
+    (pf <= tol && pmin > 1e-6 * rmax && ns <= 100_000) || return none
+    cosΔ = 0.999 * pmin / rmax
+    Δ = acos(cosΔ) + 1e-4
+    nb = clamp(ns, 8, 4096)
+    β = 2π / nb
+    bins = [Int32[] for _ in 1:nb]
+    for (k, (νx, νy, _)) in enumerate(sides)
+        α = atan(νy, νx)
+        bs = (floor(Int, (α - Δ + π) / β) - 1):(floor(Int, (α + Δ + π) / β) + 1)
+        length(bs) >= nb && (bs = 0:(nb - 1))
+        for b in bs
+            push!(bins[mod(b, nb) + 1], Int32(k))
+        end
+    end
+    start = Int32[1; 1 .+ cumsum(Int32.(length.(bins)))]
+    return ns, pmin, pf, cosΔ, nb, start, reduce(vcat, bins), sides
+end
+
+# Whether the points xa and xb (from the axis, normal to it) lie at least M inside every
+# side line of the prism H (beyond each line's facets by M, seen along the axis).
+function _hprism_inside(H::_HHull, xa, xb, M)
+    M += 2 * H.pf
+    pm = H.pmin - M
+    pm > 0 || return false
+    Xa, Ya, Xb, Yb = dot(H.u, xa), dot(H.v, xa), dot(H.u, xb), dot(H.v, xb)
+    ra, rb = Xa^2 + Ya^2, Xb^2 + Yb^2
+    c2 = H.cosΔ * abs(H.cosΔ)
+    (ra * c2 <= pm^2 && rb * c2 <= pm^2) || return false
+    # (inside the inscribed circle of the lines by M: inside every one)
+    return (ra <= pm^2 || _hprism_sides(H, Xa, Ya, M)) && (rb <= pm^2 || _hprism_sides(H, Xb, Yb, M))
+end
+
+# Whether (X, Y) lies at least M inside the lines of its bin.
+@inline function _hprism_sides(H::_HHull, X, Y, M)
+    b = clamp(floor(Int, (_atan_approx(Y, X) + π) / (2π) * H.nb), 0, H.nb - 1) + 1
+    @inbounds for q in H.start[b]:(H.start[b+1] - 1)
+        νx, νy, p = H.sides[H.idx[q]]
+        p - (νx * X + νy * Y) >= M || return false
+    end
+    return true
+end
+
+# atan(y, x) within 2e-5 rad (Abramowitz & Stegun 4.4.49 on the octant, 1e-5): the bin
+# of `_hprism_sides`, whose lists have 1e-4 of slack.
+function _atan_approx(y, x)
+    ax, ay = abs(x), abs(y)
+    a = min(ax, ay) / max(ax, ay, floatmin(Float64))
+    s = a * a
+    r = a * (0.9998660 + s * (-0.3302995 + s * (0.1801410 + s * (-0.0851330 + s * 0.0208351))))
+    r = ifelse(ay > ax, π / 2 - r, r)
+    r = ifelse(x < 0, π - r, r)
+    return ifelse(y < 0, -r, r)
 end
 
 # Per component: its certificate (> 0 into `planar`, < 0 into `hull`, 0 none). Convex
@@ -641,8 +758,10 @@ function _planar_verdict(P::_HPlanar, oi, oj, ri = 0.0, rj = 0.0)
 end
 
 # The axisymmetric verdict of the segment oi → oj: 1 if its part within the facets'
-# axial range (widened by the margin) lies inside rlo or outside rhi, else -1. A bundle
-# (tube radius ρ) is decided as its axis against bounds widened by ρ.
+# axial range (widened by the margin) lies inside rlo or outside rhi, or, on a prism,
+# inside every side line by the margin (a segment through a waist gap onto the wall: it
+# passes the wall's edge outside its axial range), else -1. A bundle (tube radius ρ) is
+# decided as its axis against bounds widened by ρ.
 function _hull_verdict(H::_HHull, oi, oj, ρ = 0.0)
     pi, pj = oi - H.c, oj - H.c
     zi, zj = dot(H.a, pi), dot(H.a, pj)
@@ -663,6 +782,8 @@ function _hull_verdict(H::_HHull, oi, oj, ρ = 0.0)
     xa, xb = Ri + sa * Rw, Ri + sb * Rw
     rlo = H.rlo - ρ
     rlo > m && max(dot(xa, xa), dot(xb, xb)) < (rlo - m)^2 && return Int8(1)
+    # a prism: that part inside every side line (it is convex), so beyond its facets
+    H.ns > 0 && _hprism_inside(H, xa, xb, m + ρ) && return Int8(1)
     ww = dot(Rw, Rw)
     s = ww > 0 ? clamp(-dot(Ri, Rw) / ww, sa, sb) : sa
     x = Ri + s * Rw
