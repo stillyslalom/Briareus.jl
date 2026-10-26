@@ -543,7 +543,7 @@ function _deposit(op::DepositionOperator, beams::AbstractVector{<:Beam}, split,
     SB = zeros(T, nback)          # piece totals
     _deposit_units!(E, PB, LB, SB, op, frames, screens, slopes, absorption, split)
     # partial sums reduced in a fixed order
-    per_beam = [sum(@view PB[bi, :]; init = zero(T)) for bi in 1:nb]
+    per_beam = T[sum(@view PB[bi, :]; init = zero(T)) for bi in 1:nb]   # typed: 1.10 infers Any here
     L = zeros(T, nc)
     for (u, (bi, _)) in enumerate(plan.back)
         per_beam[bi] += SB[u]
