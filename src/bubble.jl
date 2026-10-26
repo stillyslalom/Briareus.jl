@@ -409,13 +409,13 @@ _deposits(::BubbleAbsorption) = true
 # The ridge stop: the inner beams' power times g(t) goes to a band of the ridge
 # components at the height where each beam's axis crosses the ridge radius; the rest
 # of every beam is deposited by the operator. Power is conserved and booked per beam.
-function lpi_deposit(m::BubbleAbsorption, op::DepositionOperator,
-                     beams::AbstractVector{<:Beam}, time = 0.0)
+function _lpi_deposit(m::BubbleAbsorption, op::DepositionOperator,
+                      beams::AbstractVector{<:Beam}, time, split)
     g = ridge_fraction(m, time)
-    g == 0 && return deposit(op, beams)
+    g == 0 && return _deposit(op, beams, split)
     isinner = [b.group in m.inner for b in beams]
-    dep = deposit(op, [remake(b; power = b.power * (isinner[i] ? 1 - g : one(g)))
-                       for (i, b) in enumerate(beams)])
+    dep = _deposit(op, [remake(b; power = b.power * (isinner[i] ? 1 - g : one(g)))
+                        for (i, b) in enumerate(beams)], split)
     es = _ridge_elements(m, op.target)
     T = promote_type(eltype(dep.element), typeof(g), map(b -> eltype(b.aim), beams)...)
     E, L, PB = Vector{T}(dep.element), Vector{T}(dep.backside), Vector{T}(dep.per_beam)
@@ -423,7 +423,9 @@ function lpi_deposit(m::BubbleAbsorption, op::DepositionOperator,
     for (i, b) in enumerate(beams)
         isinner[i] || continue
         P = b.power * g
-        E[es] .+= P .* _ridge_weights(m, op.target, es, b)
+        δ = P .* _ridge_weights(m, op.target, es, b)
+        E[es] .+= δ
+        split === nothing || split[1][i] == 0 || (split[2][es, split[1][i]] .+= ForwardDiff.value.(δ))
         PB[i] += P
         added += P
     end

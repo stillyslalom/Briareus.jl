@@ -38,7 +38,7 @@ function _inf_jet_clean(report, f, args...)
 end
 
 # Bytes allocated by the threaded deposition kernel (warmed), behind a function barrier.
-function _inf_kernel_allocs(op, beams)
+function _inf_kernel_allocs(op, beams, split = nothing)
     T = typeof(first(beams).power)
     frames = [Briareus.BeamFrame(b) for b in beams]
     screens = [Briareus._screen_frame(f, b) for (f, b) in zip(frames, beams)]
@@ -46,7 +46,7 @@ function _inf_kernel_allocs(op, beams)
     nblock, nback = size(op.plan.boff, 1) - 1, length(op.plan.back)
     E = zeros(T, nelements(op.target))
     PB, LB, SB = zeros(T, length(beams), nblock), zeros(T, length(op.target.components), nback), zeros(T, nback)
-    run() = Briareus._deposit_units!(E, PB, LB, SB, op, frames, screens, slopes)
+    run() = Briareus._deposit_units!(E, PB, LB, SB, op, frames, screens, slopes, nothing, split)
     run()
     return minimum(@allocated(run()) for _ in 1:3)
 end
@@ -142,6 +142,9 @@ end
             @test _inf_jet_clean(JET.report_call, (m, d) -> solve(m, d; time = 1.0), mw, dep)
             @test _inf_jet_clean(JET.report_call, history,
                                  τ -> with_pulses(quads, pulse, τ), [0.5, 1.0])
+            # the history's deposition with the M-band's per-group split
+            @test _inf_jet_clean(JET.report_opt, Briareus._deposit, s.deposition, quads,
+                                 Briareus._mband_split(nif_mband(), t, quads))
             @test _inf_jet_clean(JET.report_call, (s, o, x) -> optimize_pointing(s, o; x0 = x),
                                  s, objectives[1], x0)
         end
@@ -155,5 +158,8 @@ end
         bound = 4096 * (Threads.nthreads() + 1)
         @test _inf_kernel_allocs(s.deposition, apply(p, x0)) < bound
         @test _inf_kernel_allocs(s.deposition, apply(p, _inf_duals(x0))) < bound
+        # with the per-group (M-band) split of `drive_history`
+        sp = Briareus._mband_split(nif_mband(), t, quads)
+        @test _inf_kernel_allocs(s.deposition, quads, sp) < bound
     end
 end

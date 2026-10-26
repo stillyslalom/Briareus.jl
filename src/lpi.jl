@@ -31,11 +31,15 @@ Deposition of the effective `beams` (from [`apply_lpi`](@ref)) under the laserâ€
 beam lands (the ridge stop of [`BubbleAbsorption`](@ref)). Of a tuple or vector of
 models, at most one may do so.
 """
-lpi_deposit(m, op, beams, time = 0.0) = deposit(op, beams)
-function lpi_deposit(ms::Union{Tuple,AbstractVector}, op, beams, time = 0.0)
+lpi_deposit(m, op, beams, time = 0.0) = _lpi_deposit(m, op, beams, time, nothing)
+
+# `lpi_deposit`, with `split` as in `_deposit` (the light a model deposits off the
+# operator added to its beam's group too).
+_lpi_deposit(m, op, beams, time, split) = _deposit(op, beams, split)
+function _lpi_deposit(ms::Union{Tuple,AbstractVector}, op, beams, time, split)
     ds = [m for m in ms if _deposits(m)]
     length(ds) > 1 && throw(ArgumentError("more than one laserâ€“plasma model deposits light"))
-    return isempty(ds) ? deposit(op, beams) : lpi_deposit(only(ds), op, beams, time)
+    return isempty(ds) ? _deposit(op, beams, split) : _lpi_deposit(only(ds), op, beams, time, split)
 end
 _deposits(m) = false
 

@@ -104,7 +104,9 @@ callout in the section says which).
 | `Target`/`hohlraum()` `closed`, `cad_target`/`visrad_target` `closed` | `hohlraum()` true; others false (declared when apertures close the cavity) | Closure on bored, windowed and CAD cavities |
 | `curved_components` / CAD `fit` | fit on with `remesh`, `minfraction` 1e-3 | "Fitting CAD by default" (`minfraction`) and "Parts of fitted CAD" (fit on), under CAD import |
 | `LARGE_MODEL[]`, `HMATRIX_MODEL[]`, `HMATRIX_DEFAULTS` | 10,000; 15,000; `tol` 1e-6, η 1, leaf 48, maxrank 32 | Large radiation models; Hierarchical view factors; The H-matrix's N^1.5 remainder (`tol`) |
-| `nif_mband()` | outer 0.20, inner 0.042 | Spectral radiosity, M-band and a synthetic Dante §2 |
+| `nif_mband()` | outer 0.20, inner 0.042; materials Au and DU (its gold liner) | Spectral radiosity, M-band and a synthetic Dante §2; Per-cone M-band in the drive history (materials) |
+| `mband_albedo` α_M | 0.55, thermalized | Laser-spot spectrum (recalibration); Spectral radiosity, M-band and a synthetic Dante §2 (first calibration) |
+| `drive_history` `mband`, `spectral` | `nif_mband()`; edges [0, 1.8 keV, ∞], thermalized, α_M `mband_albedo` | Per-cone M-band in the drive history ("On by default") |
 | `spectral_solve` `spot` | `:radiation` | Laser-spot spectrum |
 
 ## Cross-beam energy transfer (CBET)
@@ -8092,7 +8094,7 @@ ridge stop puts off the operator converts at its own cone's fraction. `drive_his
 mband, spectral)` does this at every step with that step's beams, splits the step's gray
 solution by `spectral_solve` (default edges [0, 1.8 keV, ∞]) and records `mband_moments`
 (Legendre moments of the observed flux above 1.8 keV) and `mband` (laser-produced M-band
-power per part). Off by default; it is a diagnostic: the M-band is part of the converted
+power per part). (Off by default when added; on by default since, below.) It is a diagnostic: the M-band is part of the converted
 x-rays and, thermalized, the group sums are the gray solution's, so the gray history does
 not depend on it.
 
@@ -8132,3 +8134,76 @@ spots at the local Tr, `nif_mband(materials = (:Au, :DU))`):
   (the CBET-boosted inners at peak), +0.37 at 8 ns. Dewald 2020's Mo-sphere M-band P2/P0 on
   his shot, mostly > 0 and +0.15 at 6 ns (Fig. 10, **H-img**), is a check of sign and
   magnitude only (another shot and pointing; not fitted).
+
+### On by default, and the unfold's cones (2026-10-26, decisions 21–22)
+
+**Cost first** (warmed, minimum of ≥ 4 runs, 8 threads pinned to one CCX; N221204 = the
+full model `0.8 0.4 full calibrated table`, 1088 elements, 8 steps; test-sized = the
+`test/spectral.jl` hohlraum, 612 elements, 4 steps, CBET):
+
+| `drive_history` | M-band off | on, as added | on, now |
+|---|---|---|---|
+| N221204 0.8/0.4, wall time | 18.3–18.5 s | +2.6 s (+12 %) | ±0.2 s (below the ±0.5 s run-to-run spread) |
+| N221204 0.8/0.4, allocated | 11 051 MiB | +62 MiB | +31 MiB (+0.3 %) |
+| test-sized, constant albedo | 0.334 s, 8.7 MiB | 0.724 s (+117 %) | 0.354 s (+6 %), 17.5 MiB |
+| test-sized, wall loss | 0.357 s, 13.7 MiB | 0.837 s (+119 %) | 0.378 s (+6 %), 22.4 MiB |
+
+As added, the per-cone M-band deposited every cone again with the other beams at zero
+power: four full depositions per step (0.27 s of a 2.3 s N221204 step; on the small case
+a deposition is most of a step). Two changes took it out:
+
+- **The cones split in the step's own deposition pass.** `drive_history` deposits once
+  with a per-group split (`_deposit(op, beams, split)`; the bubble's ridge stop through
+  `_lpi_deposit`): each lit point also adds its value to its beam group's column. The
+  deposition itself is `deposit`'s bit for bit (the same sums in the same order; the
+  history's gray records `==` with and without the M-band), and each column is exactly
+  the group deposited alone, `==` (zero-power beams add exact zeros; checked on the test
+  hohlraum with CBET and on N221204 with the bubble's ridge stop at 8 ns, ridge fraction
+  1). The split pass costs what a plain one does (0.061 / 0.074 s on N221204 0.8/0.4 /
+  0.28/0.16). `mband_power(m, op, beams; lpi)` uses the same pass (from 0.27 to 0.06 s).
+- **The two-group thermalized solve skips its gray-albedo group**: thermalized, the group
+  sums are the gray radiosity, so the one group at the gray albedo is `B_gray − B_M`
+  rather than another gray-type solve (a factorization or GMRES; 0.42 → 0.31 s per step on
+  the standard mesh). The M-band group is untouched (N221204's M-band P2/P0, share and
+  laser M-band columns are identical to the printed digits); the soft group matches the
+  dense solve of the coupled system to 1e-9 (`test/spectral.jl`).
+
+What remains is the M-band group's thermalized GMRES on the dense F: 0.015 s per step at
+0.8/0.4 and 0.31 s at the standard mesh 0.28/0.16 (5528 elements, a gray solve there 0.39
+s; a warmed step there takes ~10 s, so ~3 %, an estimate from the parts: the whole history
+is not yet timed on and off at that mesh).
+
+**Default.** `drive_history`'s `mband` is `nif_mband()` (Dewald's per-cone conversions),
+and the spectral model's unset keywords default to the calibrated pairing: edges [0,
+1.8 keV, ∞], `thermalize = true`, `albedo = mband_albedo(t, mband, edges)` (α_M 0.55 on
+the emitting surfaces at and above 1.8 keV; the calibration above, "Laser-spot spectrum").
+A plain call thus gives the per-cone, post-CBET M-band with the calibrated α_M; the gray
+default before (α_M = α, no thermalization) gave F_M ≈ 7 on Dewald's setup, which no
+calibration supports. `nif_mband()`'s materials are now `(:Au, :DU)`: the DU wall of a
+NIF hohlraum is Au-lined and its liner is what the laser heats (the N221204 example
+already passed `materials = (:Au, :DU)`). The M-band is on only where its inputs exist: a
+target with a surface of the model's materials, lit (per-group model) by a beam of
+`beams_at(times[1])` in its groups; otherwise `mband_moments` and `mband` are `nothing`
+(e.g. an Omega target, whose beam groups `nif_mband()` does not convert; no calibrated
+Omega M-band exists). `mband = nothing` turns it off. The example's `mband=on` option
+(the per-cone M-band beside the pre-CBET proxy) is removed: the full model prints its
+M-band P2/P0 at every run, and the comparison is the table above (commit d19d84f).
+
+**The unfold's "cones" cases** (`examples/n221204.jl unfold=on`, decision 21) now use
+`mband_power` with the step's effective beams and `full_lpi` (CBET + bubble) instead of
+the pre-CBET cone weighting. Change on the coarse model (0.8/0.4, default times), the
+calibrated rows (brightness α_M 0.5 / thermal α_M 0.55):
+
+| t (ns) | Dante > 1.8 keV share | colour temperature Tc | traditional unfold bias | laser → M-band |
+|---|---|---|---|---|
+| 5.0 | −0.0020 / −0.0021 | −0.26 / −0.08 eV | −0.008 / −0.009 eV | 0.1284 → 0.1255 |
+| 6.0 | −0.0019 / −0.0020 | −0.34 / −0.22 eV | −0.006 / −0.006 eV | 0.1470 → 0.1442 |
+| 7.0 | −0.0013 / −0.0014 | −0.29 / −0.22 eV | −0.004 / −0.003 eV | 0.1825 → 0.1804 |
+| 8.0 | −0.0000 / −0.0000 | −0.01 / −0.00 eV | 0 | 0.1934 → 0.1935 |
+| 8.5 | +0.0002 / +0.0002 | +0.04 / +0.04 eV | 0 | 0.1930 → 0.1937 |
+
+So |Δ| ≤ 0.0021 in the share, ≤ 0.34 eV in Tc and ≤ 0.003 in the laser → M-band ratio,
+largest at 5–7 ns, where CBET moves power between the cones; the gray Tr, Tr_open and the
+CSV (P2, P4, Tr, Dante) are byte-identical. The standard-mesh table of "Laser-spot
+spectrum" (N221204 section) predates the switch; at the coarse mesh's |Δ| its 3-digit
+cones columns move by at most 0.002.

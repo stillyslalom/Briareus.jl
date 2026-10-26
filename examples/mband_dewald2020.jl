@@ -73,9 +73,7 @@ end
 
 m = RadiationModel(t)
 E = spectral_edges()
-k = findfirst(==(1800.0), E)
-au = (:wall, :cap_top, :cap_bottom)
-mband_albedo(a) = Dict(c => [g >= k ? a : NaN for g in 1:length(E)-1] for c in au)
+mα(a) = mband_albedo(t, nif_mband(), E; albedo = a)   # α_M on the gold (:wall, :cap_top, :cap_bottom)
 boundary = vcat((elements(t, c) for c in (:wall, :cap_top, :cap_bottom, :leh_top, :leh_bottom))...)
 # P2/P0 of a radiosity over the boundary as seen from the centre (LEHs dark), and of the
 # capsule's incident flux
@@ -95,12 +93,12 @@ for cf in (1 / 3, 0.25)
     @printf("  gray: capsule P2/P0 %+.3f, P4/P0 %+.3f; boundary P2/P0 %+.3f\n", g2, g4, wallP2(sol.B))
     @printf("  spots at :%s\n", spot)
     println("  α_M      F_M   capsule M-band: fraction  P2/P0   P4/P0  (first flight)  boundary P2/P0   Dante-1 > 1.8 keV, Tc")
-    for (name, kw) in (("gray", (;)), ("0.7", (; albedo = mband_albedo(0.7), thermalize = true)),
-                       ("0.6", (; albedo = mband_albedo(0.6), thermalize = true)),
-                       ("0.55", (; albedo = mband_albedo(0.55), thermalize = true)),
-                       ("0.5", (; albedo = mband_albedo(0.5), thermalize = true)),
-                       ("0.3", (; albedo = mband_albedo(0.3), thermalize = true)),
-                       ("0", (; albedo = mband_albedo(0.0), thermalize = true)))
+    for (name, kw) in (("gray", (;)), ("0.7", (; albedo = mα(0.7), thermalize = true)),
+                       ("0.6", (; albedo = mα(0.6), thermalize = true)),
+                       ("0.55", (; albedo = mα(0.55), thermalize = true)),
+                       ("0.5", (; albedo = mα(0.5), thermalize = true)),
+                       ("0.3", (; albedo = mα(0.3), thermalize = true)),
+                       ("0", (; albedo = mα(0.0), thermalize = true)))
         s = spectral_solve(sol; edges = E, mband = mb, mband_power = PM, spot, kw...)
         HM = band_flux(s, 1800.0)
         p2, p4 = capP(HM)

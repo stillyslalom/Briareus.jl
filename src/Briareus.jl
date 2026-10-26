@@ -70,7 +70,7 @@ export kshell_line_energy, kshell_ce_data, kshell_ce_model, KShellCEModel, kshel
        mass_attenuation, filter_transmission, backlighter_signal, BacklighterSignal,
        henke_mass_attenuation, mirror_reflectivity
 export planck_fraction, planck_fractions, spectral_edges, MBandEmission, mband_conversion,
-       nif_mband, mband_power, SpectralSolution, spectral_solve, ngroups, band_flux,
+       nif_mband, mband_power, mband_albedo, SpectralSolution, spectral_solve, ngroups, band_flux,
        mband_recirculation, DanteChannel, dante1_channels, DanteView, dante1, dante2, dante, visible_area,
        AbstractDanteChannel, DanteResponse, dante1_responses, xrd_sensitivity, dante_unfold, sentinel
 export GroupPointing, nparams, parameter_names, initial_parameters, apply, bounds,

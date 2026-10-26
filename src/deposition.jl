@@ -511,8 +511,17 @@ and `per_beam` are absorbed powers and `delivered - sum(per_beam)` includes it. 
 be a dual number (the result is differentiable in it too). `η⊥ = 1` is the default's
 model (η_a ≡ 1), equal to it to rounding; the default itself is unchanged by this option.
 """
-function deposit(op::DepositionOperator, beams::AbstractVector{<:Beam};
-                 absorption::Union{Nothing,Real} = nothing)
+deposit(op::DepositionOperator, beams::AbstractVector{<:Beam};
+        absorption::Union{Nothing,Real} = nothing) = _deposit(op, beams, nothing, absorption)
+
+# `deposit`, and with `split = (key, EG)` also each beam group's share per element in
+# the same pass: beam `bi`'s element powers (values) are added to column `key[bi]` of
+# `EG` (elements × groups; none for `key[bi] == 0`), in the order `deposit` sums them,
+# so each column is exactly `deposit` of that group's beams alone (the others at zero
+# power add exact zeros), with the same `absorption`. The deposition itself is
+# `deposit`'s, bit for bit.
+function _deposit(op::DepositionOperator, beams::AbstractVector{<:Beam}, split,
+                  absorption::Union{Nothing,Real} = nothing)
     length(beams) == length(op.ports) || throw(DimensionMismatch("beam count changed"))
     for (b, p) in zip(beams, op.ports)
         b.port == p || throw(ArgumentError("beam $(b.name) port differs from the operator's"))
@@ -532,7 +541,7 @@ function deposit(op::DepositionOperator, beams::AbstractVector{<:Beam};
     PB = zeros(T, nb, nblock)     # per-beam power by element block
     LB = zeros(T, nc, nback)      # back-side power by piece
     SB = zeros(T, nback)          # piece totals
-    _deposit_units!(E, PB, LB, SB, op, frames, screens, slopes, absorption)
+    _deposit_units!(E, PB, LB, SB, op, frames, screens, slopes, absorption, split)
     # partial sums reduced in a fixed order
     per_beam = [sum(@view PB[bi, :]; init = zero(T)) for bi in 1:nb]
     L = zeros(T, nc)
@@ -555,7 +564,7 @@ _absorbed(η, c) = (1 - (1 - η)^(c^3)) * c
 
 # Function barrier for the threaded loop over `op.plan`'s work units.
 function _deposit_units!(E, PB, LB, SB, op::DepositionOperator, frames, screens, slopes,
-                         η = nothing)
+                         η = nothing, split = nothing)
     plan = op.plan
     nblock = size(plan.boff, 1) - 1
     _tforeach(length(plan.order)) do k
@@ -564,8 +573,10 @@ function _deposit_units!(E, PB, LB, SB, op::DepositionOperator, frames, screens,
             # an element block: every point lands on an element (E is never indexed < 0)
             for bi in axes(plan.boff, 2)
                 r = plan.boff[u, bi]:plan.boff[u+1, bi]-1
-                isempty(r) || (PB[bi, u] = _deposit_points!(E, E, op, bi, frames[bi], screens[bi],
-                                                            slopes[bi], r, η))
+                isempty(r) && continue
+                PB[bi, u] = split === nothing ?
+                            _deposit_points!(E, E, op, bi, frames[bi], screens[bi], slopes[bi], r, η) :
+                            _deposit_points_split!(E, split, op, bi, frames[bi], screens[bi], slopes[bi], r, η)
             end
         else
             v = u - nblock
@@ -573,6 +584,16 @@ function _deposit_units!(E, PB, LB, SB, op::DepositionOperator, frames, screens,
             SB[v] = _deposit_points!(E, view(LB, :, v), op, bi, frames[bi], screens[bi],
                                      slopes[bi], r, η)
         end
+    end
+end
+
+# An element block's points of beam `bi` (all on elements), also into its group's column.
+function _deposit_points_split!(E::AbstractVector{T}, (key, EG), op::DepositionOperator,
+                                bi, f::BeamFrame, fv::BeamFrame{Float64}, slopes, r, η = nothing) where {T}
+    g = key[bi]
+    return _sum_points(op, bi, f, fv, slopes, r, T, η) do d, val
+        @inbounds E[d] += val
+        g > 0 && (@inbounds EG[d, g] += ForwardDiff.value(val))
     end
 end
 

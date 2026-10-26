@@ -159,6 +159,19 @@ using Briareus: RadiationSolution, _planck_tail, _channel_matrix, _color_tempera
             end
             x = (I - K) \ vec(s.source)
             @test vec(s.B) ≈ x rtol = 1e-9
+            # one group at the gray albedo (taken as the gray radiosity less the other), dense
+            E2 = [0.0, 1800.0, Inf]
+            s = spectral_solve(sol; edges = E2, albedo = Dict(:wall => [NaN, 0.5]), temperature = T,
+                               thermalize = true, mband = MBandEmission())
+            b2 = reduce(hcat, [planck_fractions(T[e], E2) for e in 1:n])'
+            K2 = zeros(2n, 2n)
+            for g in 1:2, h in 1:2
+                blk = (g == h ? Diagonal(s.albedo[:, g]) : zero(Diagonal(α))) +
+                      Diagonal(b2[:, g] .* (α .- s.albedo[:, h]))
+                K2[(g-1)*n+1:g*n, (h-1)*n+1:h*n] .= blk * m.F
+            end
+            @test vec(s.B) ≈ (I - K2) \ vec(s.source) rtol = 1e-9
+            @test vec(sum(s.B; dims = 2)) ≈ sol.B rtol = 1e-12
             # all re-emission thermal
             z = Dict(c.name => zeros(G) for c in t.components if c.kind === :surface)
             s = spectral_solve(sol; edges = E, albedo = z, temperature = T, thermalize = true)
@@ -195,11 +208,22 @@ using Briareus: RadiationSolution, _planck_tail, _channel_matrix, _color_tempera
             beams_at = τ -> with_pulses(beams, pulse, τ)
             mb = nif_mband()
             times = [1.0, 3.0]
-            h0 = drive_history(m, op, beams_at, times; lpi = cbet)
-            h = drive_history(m, op, beams_at, times; lpi = cbet, mband = mb)
+            h0 = drive_history(m, op, beams_at, times; lpi = cbet, mband = nothing)
+            h = drive_history(m, op, beams_at, times; lpi = cbet)          # nif_mband() by default
             @test h0.mband === nothing && h0.mband_moments === nothing
             # the gray history is untouched, bit for bit
             @test all(getfield(h, k) == getfield(h0, k) for k in keys(h0) if !(k in (:mband, :mband_moments)))
+            # the default spectral model is the calibrated pairing, spelled out
+            E2 = [0.0, 1800.0, Inf]
+            αM = Dict(c => [NaN, 0.55] for c in (:wall, :cap_top, :cap_bottom))
+            @test isequal(mband_albedo(t, mb, E2), αM)
+            hs = drive_history(m, op, beams_at, times; lpi = cbet, mband = mb,
+                               spectral = (; edges = E2, thermalize = true, albedo = αM))
+            @test hs.mband_moments == h.mband_moments && hs.mband == h.mband
+            @test_throws ArgumentError mband_albedo(t, mb, [0.0, 1000.0, Inf])
+            # off where there is nothing to convert: no beam of the model's groups, or no emitter
+            @test drive_history(m, op, beams_at, times[1:1]; mband = MBandEmission(groups = Dict(:none => 0.2))).mband === nothing
+            @test drive_history(m, op, beams_at, times[1:1]; mband = nif_mband(materials = (:Pt,))).mband_moments === nothing
             # reference: a static solve at each time and the M-band summed cone by cone by
             # hand from the effective (post-transfer) beams
             au = vcat(elements(t, :wall), elements(t, :cap_top), elements(t, :cap_bottom))
@@ -210,8 +234,8 @@ using Briareus: RadiationSolution, _planck_tail, _channel_matrix, _color_tempera
                     d = deposit(op, [b.group === g ? b : remake(b; power = 0.0) for b in eff])
                     P[au] .+= f .* d.element[au]
                 end
-                s = spectral_solve(solve(m, deposit(op, eff); time = τ); edges = [0.0, 1800.0, Inf],
-                                   mband = mb, mband_power = P)
+                s = spectral_solve(solve(m, deposit(op, eff); time = τ); edges = E2, thermalize = true,
+                                   albedo = αM, mband = mb, mband_power = P)
                 (; a = legendre_moments(band_flux(s, 1800.0), t, cap; lmax = 6),
                    PM = sum(s.mband .* t.elem_area))
             end
@@ -224,6 +248,25 @@ using Briareus: RadiationSolution, _planck_tail, _channel_matrix, _color_tempera
             eff = apply_lpi(cbet, beams_at(3.0), 3.0)
             one_f = MBandEmission(groups = Dict(g => 1.0 for g in keys(mb.groups)))
             @test mband_power(one_f, op, eff; lpi = cbet, time = 3.0)[au] ≈ deposit(op, eff).element[au] rtol = 1e-12
+            # each group through the operator restricted to its beams: the sums of every
+            # beam deposited with the others at zero power, exactly
+            Pz = zeros(n)
+            for (g, f) in mb.groups
+                d = lpi_deposit(cbet, op, [b.group === g ? b : remake(b; power = 0.0) for b in eff], 3.0)
+                Pz[au] .+= f .* d.element[au]
+            end
+            @test mband_power(mb, op, eff; lpi = cbet, time = 3.0) == Pz
+            # the split pass, with and without an absorption weight: the deposition is
+            # `deposit`'s and each column the group deposited alone, exactly
+            for η in (nothing, 0.6)
+                key, EG = Briareus._mband_split(mb, t, eff)
+                d = Briareus._deposit(op, eff, (key, EG), η)
+                d0 = deposit(op, eff; absorption = η)
+                alone = [deposit(op, [b.group === g ? b : remake(b; power = 0.0) for b in eff]; absorption = η).element
+                         for g in keys(mb.groups)]
+                @test d.element == d0.element && d.backside == d0.backside && d.per_beam == d0.per_beam
+                @test all(EG[:, k] == alone[k] for k in eachindex(alone))
+            end
             @test_throws ArgumentError drive_history(m, op, beams_at, times; mband = mb, spectral = (; edges = [0.0, Inf]))
         end
     end
