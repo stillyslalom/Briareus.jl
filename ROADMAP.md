@@ -326,7 +326,7 @@ Items 9–13 and 16–17 follow the 2026-10-22 literature review against Kritche
     view-factor time; refinement toward the shared edge onto ~34-edge sector receivers);
     GPU mat-vecs (≲ 25 % end to end on the RTX 2060 while assembly stays on the CPU; not
     worth CUDA.jl yet).
-15. **Polar direct drive mode**, benchmarked against published GA optimizers.
+15. **Polar direct drive mode**, benchmarked against published GA optimizers. *State:* literature review and staged plan in `reference/litreview/polar_direct_drive.md` (2026-10-27): Barlow 2024 is the only published GA PDD optimizer; analytic cases (Murakami & Nishi 2017, Temporal 2014) are the reproducible stage-0 checks; open decisions there.
 16. **Absolute energetics on N221204** (`reference/litreview/energetics.md`,
     `n221204_benchmark.md`, `late_time_drive.md`). *State* (current defaults, coarse;
     "Capsule absorption, conversion and the ablating-wall release" §2–3): capsule share
