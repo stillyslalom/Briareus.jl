@@ -89,6 +89,27 @@
     @test RadiationModel(ts).F isa Matrix{Float64}
 end
 
+# Rows that a facing test cut, refined over the column tree into indexed low-rank blocks:
+# the entries (read block by block) and the products against the dense view factors.
+@testset "hierarchical view factors: cut rows" begin
+    wall = Material(:Au; albedo = WallLossAlbedo(), conversion = 0.8)
+    t = hohlraum(; h = 0.35, capsule_h = 0.15, wall)
+    N, A = nelements(t), t.elem_area
+    rel(x, y) = maximum(abs.(x .- y)) / maximum(abs.(y))
+    H = view_factors(t; storage = :hmatrix, tol = 1e-4, eta = 1.0, leaf = 16)
+    @test !isempty(H.lowrank_index)
+    @test sum(size(U, 2) for (_, _, U, _) in H.lowrank_index) > 0
+    M = Matrix(H)                                    # through the products
+    @test rel(M, view_factors(t)) < 2e-4
+    # entries through `getindex` (the stored blocks, not the products), in each indexed block
+    ij = [(H.perm[a], H.perm[b]) for (rs, cs, _, _) in H.lowrank_index for a in rs for b in cs]
+    @test isapprox([H[i, j] for (i, j) in ij], [M[i, j] for (i, j) in ij]; rtol = 1e-12)
+    G = A .* M
+    @test maximum(abs.(G .- G')) <= 1e-12 * maximum(abs, G)
+    x = rand(Xoshiro(3), N)
+    @test rel(H' * x, M' * x) < 1e-12
+end
+
 # The visibility rules (shaft culling without rays, the convex and planar exclusions, the
 # exact masks of occupied leaf pairs) on targets with rims, gaps, bores, corner fillets,
 # folded CAD elements and partial visibility: every entry as `view_factors` has it, to

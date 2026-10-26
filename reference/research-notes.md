@@ -40,7 +40,8 @@ callout in the section says which).
   (2026-10-22); Default capsule mesh and visibility
   (2026-10-22) *decision*.
 - Large radiation models (2026-10-24); Hierarchical view factors (2026-10-24) (*in
-  part*: `tol`); The H-matrix's N^1.5 remainder (2026-10-25); Deposition-operator rays
+  part*: `tol`); The H-matrix's N^1.5 remainder (2026-10-25); H-matrix near field: zero
+  blocks and cut rows (2026-10-26); Deposition-operator rays
   and sliver view factors (2026-10-25); Compile latency (2026-10-25); Closure on bored,
   windowed and CAD cavities (2026-10-25); Compact capsule rows at capsule_h = h/3
   (2026-10-25).
@@ -4285,6 +4286,40 @@ largest, and the 3.9k hohlraum at leaves of 32, 2.3e-5 before, now matches to 1.
   cross) would extend the ball test.
 - BriareusGUI `radiation_size` now budgets an HMatrix at 250 N^1.5 bytes (2.5 × the
   measured storage) above `HMATRIX_MODEL[]` and 4N² between 10k and 15k elements.
+
+## H-matrix near field: zero blocks and cut rows (2026-10-26) *derived*
+
+ROADMAP 14, the first "still open" item above. Measured here (same hohlraum workload and
+`bench3.jl`-style script, 4 threads, `tol` 1e-6, leaf 48; old = 1f20b2d). Two changes:
+
+1. **All-zero blocks dropped.** A dense leaf pair or scattered block whose Float32
+   entries are all exactly zero is not stored (a capsule's near field against itself
+   across the sphere, rows cut at a terminator against a box's far side). Exact entry
+   for entry: the product skipped `muladd(0, z, y)`. Only the split of blocks into
+   product groups (by cost) moves, so threaded products sum in another order (round-off).
+   At 17.6k: 6.6k of 25.7k dense leaves were zero, and 4.3M zero entries in scattered
+   blocks.
+2. **Facing-cut rows refined over the column tree** (`lowrank_index` blocks). The rows
+   of a low-rank block that face only part of the other cluster (stored dense before)
+   are re-tested against the column cluster's children, where most face wholly
+   (indexed low-rank block, own ACA and sampled check) or not at all; dense only against
+   a leaf or when ≤ 4 rows remain. These are new approximations at the same `tol`.
+
+| N | 10,484 | 17,632 |
+|---|---|---|
+| stored, old → new | 99.4 → 81.8 MiB (−18 %) | 212.0 → 175.1 MiB (−17 %) |
+| dense entries, old → new | 18.9M → 14.1M | 37.8M → 27.6M |
+| indexed low-rank blocks | 52 | 215 |
+| view factors (warm, 2 runs), old / new | 5.9–6.0 / 6.3–6.5 s | 11.5–11.6 / 11.7–11.8 s |
+| F x, old → new | 6.6 → 5.6–5.9 ms | 16.6–17.1 → 13.5–13.7 ms |
+| F X (16 columns), old → new | 93 → 80 ms | 256 → 212–217 ms |
+
+New against old, balanced T-dependent solve at 2 ns (a₀ relative, P-ratios absolute):
+a₀ −7.5e-12 / 1.4e-10, P2/P0 2.5e-11 / 3.8e-11, P4/P0 −1.5e-12 / 3.7e-11, H per element
+max 1.4e-8 / 1.4e-8, moment response 1.4e-8 / 1.6e-8 (10.5k / 17.6k); against dense
+Float32 at 10.5k unchanged (a₀ 1.4e-9, P2/P0 2.7e-9, H max 1.2e-7). The previous
+session measured −15 to −27 % storage over 10.5k–28.6k. Assembly time is unchanged to
++8 %: the cut rows' extra ACA costs about what the dense entries did.
 
 ## N221204 late-time drive (2026-10-24) *derived*
 

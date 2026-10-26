@@ -41,14 +41,18 @@ a candidate for low rank, decided block by block:
 - any other occupied shaft is refined down to leaf pairs, which take every pair's
   visibility ray: wholly hidden pairs give zero, wholly visible ones a cross
   approximation, and partly seen ones (a rim, `:sampled` fractions) stay dense;
-- rows cut by the facing test (a sphere's terminator) are kept dense beside the low-rank
-  rest, and a small block with only a few facing pairs is stored on those.
-Near pairs are dense (Float32), with the same entries as `view_factors` (`_vf_pair`).
+- rows cut by the facing test (a sphere's terminator) are refined against the column
+  cluster's children beside the low-rank rest (low rank on the rows facing a child
+  wholly, dense against a leaf or when few), and a small block with only a few facing
+  pairs is stored on those.
+Near pairs are dense (Float32), with the same entries as `view_factors` (`_vf_pair`);
+blocks whose entries are all zero are not stored.
 
 On the hohlraum presets (10–29k elements) the default `tol = 1e-6` changes the capsule
 moments by ≤ 1e-8 and the incident flux by ≤ 2e-6 relative per element against the
 Float32 matrix or a tighter `HMatrix` (research notes, "Hierarchical view factors" and,
-for the surface-split cluster tree and `tol`, "The H-matrix's N^1.5 remainder").
+for the surface-split cluster tree and `tol`, "The H-matrix's N^1.5 remainder"; for the
+zero blocks and cut rows, "H-matrix near field").
 """
 struct HMatrix <: AbstractMatrix{Float64}
     n::Int
@@ -59,13 +63,14 @@ struct HMatrix <: AbstractMatrix{Float64}
     dense::Vector{Tuple{Int,Int,Matrix{Float32}}}               # (row0, col0, D), tree order
     lowrank::Vector{Tuple{Int,Int,Matrix{Float32},Matrix{Float32}}}   # (row0, col0, U, V)
     scattered::Vector{Tuple{Vector{Int},Vector{Int},Matrix{Float32}}}  # (rows, cols, D), off the diagonal
+    lowrank_index::Vector{Tuple{Vector{Int},Vector{Int},Matrix{Float32},Matrix{Float32}}}  # (rows, cols, U, V)
     groups::Vector{Vector{Tuple{Int,Int}}}    # product work per task: (kind, index)
     info::NamedTuple
 end
 
 Base.size(H::HMatrix) = (H.n, H.n)
 Base.copy(H::HMatrix) = HMatrix(H.n, H.perm, H.iperm, H.area, copy(H.scale), H.dense, H.lowrank, H.scattered,
-                                H.groups, H.info)
+                                H.lowrank_index, H.groups, H.info)
 
 # Stored G entry at tree positions (p, q).
 function _hentry(H::HMatrix, p::Int, q::Int)
@@ -80,18 +85,30 @@ function _hentry(H::HMatrix, p::Int, q::Int)
         a, b = findfirst(==(q), rs), findfirst(==(p), cs)
         a !== nothing && b !== nothing && return Float64(D[a, b])
     end
+    # the indexed blocks before the contiguous ones: a low-rank block's cut rows are zero
+    # in it and stored in scattered or indexed blocks
+    for (rs, cs, U, V) in H.lowrank_index
+        a, b = findfirst(==(p), rs), findfirst(==(q), cs)
+        a !== nothing && b !== nothing && return _hlr_entry(U, V, a, b)
+        a, b = findfirst(==(q), rs), findfirst(==(p), cs)
+        a !== nothing && b !== nothing && return _hlr_entry(U, V, a, b)
+    end
     for (r0, c0, U, V) in H.lowrank
         m, n = size(U, 1), size(V, 1)
         a, b = r0 <= p < r0 + m && c0 <= q < c0 + n ? (p - r0 + 1, q - c0 + 1) :
                r0 <= q < r0 + m && c0 <= p < c0 + n ? (q - r0 + 1, p - c0 + 1) : (0, 0)
         a == 0 && continue
-        s = 0.0
-        for l in axes(U, 2)
-            s += Float64(U[a, l]) * Float64(V[b, l])
-        end
-        return s
+        return _hlr_entry(U, V, a, b)
     end
     return 0.0
+end
+
+function _hlr_entry(U, V, a, b)
+    s = 0.0
+    for l in axes(U, 2)
+        s += Float64(U[a, l]) * Float64(V[b, l])
+    end
+    return s
 end
 
 function Base.getindex(H::HMatrix, i::Int, j::Int)
@@ -119,7 +136,7 @@ Float32Matrix(H::HMatrix) = Float32Matrix(Matrix{Float32}(Matrix(H)))
 
 function Base.show(io::IO, ::MIME"text/plain", H::HMatrix)
     print(io, H.n, "×", H.n, " HMatrix: ", length(H.dense) + length(H.scattered), " dense and ",
-          length(H.lowrank), " low-rank blocks, ", round(H.info.bytes / 2^20; digits = 1), " MiB (",
+          length(H.lowrank) + length(H.lowrank_index), " low-rank blocks, ", round(H.info.bytes / 2^20; digits = 1), " MiB (",
           round(100 * H.info.bytes / (4.0 * H.n^2); digits = 1), "% of Float32 dense)")
 end
 
@@ -602,8 +619,9 @@ end
 # slack); the others' rows of the block are zero. And those that face all of c's box
 # beyond the slack: their rows have no facing cut-off (a kink in the kernel that the
 # cross approximation resolves slowly, at a sphere's terminator).
-function _hactive(ctx, perm, rows, c::_HCluster)
-    corners = _box_corners(c.cmin, c.cmax)
+_hactive(ctx, perm, rows, c::_HCluster) = _hactive(ctx, perm, rows, c.cmin, c.cmax)
+function _hactive(ctx, perm, rows, cmin::Vec3, cmax::Vec3)
+    corners = _box_corners(cmin, cmax)
     act, full = Int[], Int[]
     for p in rows
         e = perm[p]
@@ -767,18 +785,25 @@ end
 # admissible, of uniform visibility and its cross approximation converges and passes a
 # sampled check; otherwise its children, down to dense leaf pairs. `known`: what a parent
 # block found of the pair's visibility (`true`: an empty shaft; a mask), else `nothing`.
-function _hassemble!(dense, lowrank, scattered, ctx, nodes, perm, s, t, far, opts, known = nothing)
+# `sub`: the rows of s that a facing test cut against a parent of t (`split` below),
+# refined over t only: against t's smaller boxes most of them face wholly (low rank) or
+# not at all. Blocks go into `out` = (dense, lowrank, scattered, lowrank_index).
+function _hassemble!(out, ctx, nodes, perm, s, t, far, opts, known = nothing,
+                     sub::Union{Nothing,Vector{Int}} = nothing)
+    dense, lowrank, scattered, lowrank_index = out
     a, b = nodes[s], nodes[t]
-    rows, cols = a.lo:a.hi, b.lo:b.hi
+    rows, cols = sub === nothing ? (a.lo:a.hi) : sub, b.lo:b.hi
     m, n = length(rows), length(cols)
     st = opts.stats
     leaves = _hleaf(a) && _hleaf(b)
     vis = nothing        # visible fractions of a leaf pair (`:sampled` visibility)
     ev = false           # entries: `true` (empty shaft, no rays), `false` (rays), a mask
+    ra, cb = Int[], Int[]
     if far
         Threads.atomic_add!(st.candidates, 1)
         # rows (columns) whose element faces no centroid of the other cluster are zero
-        (ra, fa), (cb, fb) = _hactive(ctx, perm, rows, b), _hactive(ctx, perm, cols, a)
+        amin, amax = sub === nothing ? (a.cmin, a.cmax) : _hcentroid_box(ctx.C, perm, sub)
+        (ra, fa), (cb, fb) = _hactive(ctx, perm, rows, b), _hactive(ctx, perm, cols, amin, amax)
         if !isempty(ra) && !isempty(cb) && length(ra) * length(cb) <= opts.facing_size
             # small blocks: the facing test pair by pair (no rays), which leaves the rows
             # and columns of some facing pair; a block facing itself in a few pairs only
@@ -787,7 +812,7 @@ function _hassemble!(dense, lowrank, scattered, ctx, nodes, perm, s, t, far, opt
             fa, fb = intersect(fa, ra), intersect(fb, cb)
             if !isempty(ra) && 4 * length(ra) * length(cb) <= m * n
                 ev = known !== nothing ? known : !_shaft_occupied(ctx, opts, s, t)
-                push!(scattered, (ra, cb, _hdense_index(ctx, perm, ra, cb, ev)))
+                _hpush_nonzero!(scattered, (ra, cb, _hdense_index(ctx, perm, ra, cb, ev)))
                 Threads.atomic_add!(st.sparse, 1)
                 return
             end
@@ -857,9 +882,12 @@ function _hassemble!(dense, lowrank, scattered, ctx, nodes, perm, s, t, far, opt
                 if ok
                     Uc, Vc = _hrecompress(Us, Vs, opts.tol)
                     ns = min(ma * na, max(32, (ma + na) ÷ 2))
-                    err, nrm = _hcheck(ctx, perm, ar, ac, Uc, Vc, ns, hash((a.lo, b.lo)), ev)
+                    seed = sub === nothing ? hash((a.lo, b.lo)) : hash((ar[1], b.lo, ma))
+                    err, nrm = _hcheck(ctx, perm, ar, ac, Uc, Vc, ns, seed, ev)
                     if err <= 10 * opts.tol * nrm
-                        if size(Uc, 2) > 0
+                        if size(Uc, 2) > 0 && sub !== nothing
+                            push!(lowrank_index, (ar, ac, Uc, Vc))
+                        elseif size(Uc, 2) > 0
                             U, V = zeros(Float32, m, size(Uc, 2)), zeros(Float32, n, size(Vc, 2))
                             U[ar .- (a.lo - 1), :] .= Uc
                             V[ac .- (b.lo - 1), :] .= Vc
@@ -867,8 +895,17 @@ function _hassemble!(dense, lowrank, scattered, ctx, nodes, perm, s, t, far, opt
                         end
                         if split
                             pa, pb = setdiff(ra, fa), setdiff(cb, fb)
-                            isempty(pa) || push!(scattered, (pa, cb, _hdense_index(ctx, perm, pa, cb, ev)))
-                            isempty(pb) || push!(scattered, (fa, pb, _hdense_index(ctx, perm, fa, pb, ev)))
+                            if isempty(pa)
+                            elseif _hleaf(b) || length(pa) <= 4 || !(ev === true || ev isa _HMask)
+                                _hpush_nonzero!(scattered, (pa, cb, _hdense_index(ctx, perm, pa, cb, ev)))
+                            else
+                                # the cut rows against t's children, where most face wholly
+                                # or not at all
+                                for k in b.kids
+                                    _hassemble!(out, ctx, nodes, perm, s, k, true, opts, ev, pa)
+                                end
+                            end
+                            isempty(pb) || _hpush_nonzero!(scattered, (fa, pb, _hdense_index(ctx, perm, fa, pb, ev)))
                         end
                         Threads.atomic_add!(st.lowrank, 1)
                         return
@@ -881,27 +918,50 @@ function _hassemble!(dense, lowrank, scattered, ctx, nodes, perm, s, t, far, opt
         end
     end
     @label dense
-    if leaves
+    if sub !== nothing
+        # cut rows: dense against a leaf or if they are few (low rank would not pay), else
+        # refined over t
+        if _hleaf(b) || length(ra) <= 4
+            _hpush_nonzero!(scattered, (ra, cb, _hdense_index(ctx, perm, ra, cb, ev)))
+        else
+            for k in b.kids
+                _hassemble!(out, ctx, nodes, perm, s, k, true, opts, ev, ra)
+            end
+        end
+    elseif leaves
         if vis !== nothing
             D = _hdense_masked(ctx, perm, rows, cols, vis)
         else
             D = _hdense(ctx, perm, rows, cols, far ? ev : !_shaft_occupied(ctx, opts, s, t))
         end
-        push!(dense, (a.lo, b.lo, D))
+        any(!iszero, D) && push!(dense, (a.lo, b.lo, D))     # (a capsule's near field is zero)
     else
         # what this block found of the visibility holds for its children
         kn = far && ev !== false ? ev : nothing
         if _hleaf(b) || (!_hleaf(a) && m >= n)
             for k in a.kids
-                _hassemble!(dense, lowrank, scattered, ctx, nodes, perm, k, t, far, opts, kn)
+                _hassemble!(out, ctx, nodes, perm, k, t, far, opts, kn)
             end
         else
             for k in b.kids
-                _hassemble!(dense, lowrank, scattered, ctx, nodes, perm, s, k, far, opts, kn)
+                _hassemble!(out, ctx, nodes, perm, s, k, far, opts, kn)
             end
         end
     end
     return
+end
+
+# A scattered block, unless all its entries are zero (rows cut at a sphere's terminator
+# against the far side of a box).
+_hpush_nonzero!(v, blk) = (any(!iszero, blk[3]) && push!(v, blk); v)
+
+# Bounding box of the centroids at tree positions ps.
+function _hcentroid_box(C, perm, ps)
+    lo = hi = C[perm[ps[1]]]
+    for p in ps
+        lo, hi = min.(lo, C[perm[p]]), max.(hi, C[perm[p]])
+    end
+    return lo, hi
 end
 
 """
@@ -950,44 +1010,49 @@ function _hmatrix_view_factors(ctx; tol = HMATRIX_DEFAULTS.tol, eta = HMATRIX_DE
     sort!(tasks; by = cost, rev = true)
     nt = Threads.nthreads()
     outs = [(Tuple{Int,Int,Matrix{Float32}}[], Tuple{Int,Int,Matrix{Float32},Matrix{Float32}}[],
-             Tuple{Vector{Int},Vector{Int},Matrix{Float32}}[]) for _ in 1:nt]
+             Tuple{Vector{Int},Vector{Int},Matrix{Float32}}[],
+             Tuple{Vector{Int},Vector{Int},Matrix{Float32},Matrix{Float32}}[]) for _ in 1:nt]
     next = Threads.Atomic{Int}(1)
     @sync for w in 1:min(nt, max(length(tasks), 1))
         Threads.@spawn begin
-            _hwork!(outs[w]..., ctx, nodes, perm, tasks, next, opts)
+            _hwork!(outs[w], ctx, nodes, perm, tasks, next, opts)
         end
     end
     dense = sort!(reduce(vcat, getindex.(outs, 1)); by = x -> (x[1], x[2]))
     lowrank = sort!(reduce(vcat, getindex.(outs, 2)); by = x -> (x[1], x[2]))
-    scattered = sort!(reduce(vcat, getindex.(outs, 3)); by = x -> (x[1][1], x[2][1]))
-    groups = _hgroups(dense, lowrank, scattered, nt)
+    scattered = sort!(reduce(vcat, getindex.(outs, 3)); by = x -> (x[1][1], x[2][1], length(x[1]), length(x[2])))
+    lowrank_index = sort!(reduce(vcat, getindex.(outs, 4)); by = x -> (x[1][1], x[2][1], length(x[1]), length(x[2])))
+    groups = _hgroups(dense, lowrank, scattered, lowrank_index, nt)
     bytes = 4 * (sum(length(D) for (_, _, D) in dense; init = 0) +
                  sum(length(U) + length(V) for (_, _, U, V) in lowrank; init = 0)) +
-            sum(4 * length(D) + 8 * (length(r) + length(c)) for (r, c, D) in scattered; init = 0)
-    ranks = [size(U, 2) for (_, _, U, _) in lowrank]
+            sum(4 * length(D) + 8 * (length(r) + length(c)) for (r, c, D) in scattered; init = 0) +
+            sum(4 * (length(U) + length(V)) + 8 * (length(r) + length(c)) for (r, c, U, V) in lowrank_index; init = 0)
+    ranks = [[size(U, 2) for (_, _, U, _) in lowrank]; [size(U, 2) for (_, _, U, _) in lowrank_index]]
     info = (; bytes, tol = Float64(tol), eta = Float64(eta), leaf = Int(leaf),
             maxrank = Int(maxrank), meanrank = isempty(ranks) ? 0.0 : sum(ranks) / length(ranks),
             map(x -> x[], stats)...,
             dense_entries = sum(length(D) for (_, _, D) in dense; init = 0) +
                             sum(length(D) for (_, _, D) in scattered; init = 0))
-    return HMatrix(N, perm, iperm, copy(t.elem_area), ones(N), dense, lowrank, scattered, groups, info)
+    return HMatrix(N, perm, iperm, copy(t.elem_area), ones(N), dense, lowrank, scattered, lowrank_index, groups, info)
 end
 
 # Assembly tasks taken one at a time (a function barrier: no captured variables).
-function _hwork!(dense, lowrank, scattered, ctx, nodes, perm, tasks, next, opts)
+function _hwork!(out, ctx, nodes, perm, tasks, next, opts)
     while (k = Threads.atomic_add!(next, 1)) <= length(tasks)
         (s, u), isfar = tasks[k]
-        _hassemble!(dense, lowrank, scattered, ctx, nodes, perm, s, u, isfar, opts)
+        _hassemble!(out, ctx, nodes, perm, s, u, isfar, opts)
     end
     return nothing
 end
 
 # Blocks split into contiguous runs (by row) of about equal product cost.
-function _hgroups(dense, lowrank, scattered, nt)
+function _hgroups(dense, lowrank, scattered, lowrank_index, nt)
     items = [[(0, k, dense[k][1], 2 * length(dense[k][3])) for k in eachindex(dense)];
              [(1, k, lowrank[k][1], 2 * (length(lowrank[k][3]) + length(lowrank[k][4])))
               for k in eachindex(lowrank)];
-             [(2, k, scattered[k][1][1], 2 * length(scattered[k][3])) for k in eachindex(scattered)]]
+             [(2, k, scattered[k][1][1], 2 * length(scattered[k][3])) for k in eachindex(scattered)];
+             [(3, k, lowrank_index[k][1][1], 2 * (length(lowrank_index[k][3]) + length(lowrank_index[k][4])))
+              for k in eachindex(lowrank_index)]]
     sort!(items; by = x -> (x[3], x[1], x[2]))
     total = sum(x[4] for x in items; init = 0)
     ng = total < 200_000 ? 1 : nt
@@ -1007,7 +1072,32 @@ end
 function _hgroup_mul!(Y, H::HMatrix, Z, group, tmp)
     k = size(Z, 2)
     for (kind, idx) in group
-        if kind == 2
+        if kind == 3
+            rs, cs, U, V = H.lowrank_index[idx]
+            r = size(U, 2)
+            for c in 1:k
+                @inbounds for l in 1:r
+                    sv, su = 0.0, 0.0
+                    for b in eachindex(cs)
+                        sv = muladd(Float64(V[b, l]), Z[cs[b], c], sv)
+                    end
+                    for a in eachindex(rs)
+                        su = muladd(Float64(U[a, l]), Z[rs[a], c], su)
+                    end
+                    tmp[l] = sv
+                    tmp[r+l] = su
+                end
+                @inbounds for l in 1:r
+                    sv, su = tmp[l], tmp[r+l]
+                    for a in eachindex(rs)
+                        Y[rs[a], c] = muladd(Float64(U[a, l]), sv, Y[rs[a], c])
+                    end
+                    for b in eachindex(cs)
+                        Y[cs[b], c] = muladd(Float64(V[b, l]), su, Y[cs[b], c])
+                    end
+                end
+            end
+        elseif kind == 2
             rs, cs, D = H.scattered[idx]
             for c in 1:k
                 @inbounds for b in eachindex(cs)
@@ -1082,7 +1172,8 @@ end
 function _hmul_tree(H::HMatrix, Z::Matrix{Float64})
     n, k = size(Z)
     ng = length(H.groups)
-    maxr = maximum((size(x[3], 2) for x in H.lowrank); init = 0)
+    maxr = max(maximum((size(x[3], 2) for x in H.lowrank); init = 0),
+               maximum((size(x[3], 2) for x in H.lowrank_index); init = 0))
     W = zeros(n, k)
     ng == 0 && return W
     if ng == 1
