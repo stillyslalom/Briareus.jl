@@ -632,6 +632,152 @@ end
 albedo(m::LipClosure, t, T = nothing) = first(_lip_split(m, t, T, 0.0))
 
 """
+    RadiusSchedule
+
+A capsule radius history, `R(t)/R₀` against time (ns), for `CapsuleAlbedo`'s `radius`
+and `moving_hohlraum`'s `capsule_shrink`; [`radius_fraction`](@ref)`(s, t)` evaluates it.
+Concrete schedules: [`TabulatedRadius`](@ref) (a table, linear, held at its ends),
+[`ScaledRadius`](@ref) (another schedule with its time and radius axes scaled) and
+[`TrajectoryRadius`](@ref) (a kinematic trajectory through published anchors). A new kind
+(a rocket model, say) subtypes this and defines `radius_fraction`. Both
+keywords also take a `(times, R/R₀)` table, which becomes a `TabulatedRadius`, or a
+function `t -> R/R₀`.
+
+Which radius a published history follows (ablation front, ablator–fuel interface, fuel
+centre of mass) and which shot it belongs to matters: research notes, "Capsule radius
+schedules: published histories and the API (2026-10-26)".
+"""
+abstract type RadiusSchedule end
+
+"""
+    TabulatedRadius(t, r; source = "")
+
+A [`RadiusSchedule`](@ref) from a table: `r` = R/R₀ at the times `t` (ns, strictly
+increasing), linear between them and held at the ends. `source` records where the table
+comes from (paper and figure, and whether it is published or derived).
+[`kritcher2024_radius`](@ref) gives the published N221204 and N210808 tables.
+"""
+struct TabulatedRadius <: RadiusSchedule
+    t::Vector{Float64}
+    r::Vector{Float64}
+    source::String
+end
+function TabulatedRadius(t, r; source::AbstractString = "")
+    length(t) == length(r) && !isempty(t) ||
+        throw(ArgumentError("a radius table needs as many times as radii, at least one"))
+    all(>(0), diff(t)) || throw(ArgumentError("radius table times must increase strictly"))
+    all(x -> isfinite(x) && x >= 0, r) || throw(ArgumentError("R/R₀ must be finite and ≥ 0"))
+    return TabulatedRadius(collect(Float64, t), collect(Float64, r), String(source))
+end
+
+"""
+    ScaledRadius(base; time_scale = 1.0, radius_scale = 1.0, source = "")
+
+The [`RadiusSchedule`](@ref) `base` stretched in time and radius:
+
+    R(t)/R₀ = radius_scale · base(t / time_scale),
+
+so a feature of `base` at time t₁ (its minimum, say) falls at `time_scale · t₁`. For a
+[`TabulatedRadius`](@ref) base the table's times are scaled once (`base.t .* time_scale`,
+interpolated as a table of its own). A scaled schedule is *derived*: it stands in for a
+shot whose own history is unpublished (e.g. Zylstra's LEH pair on Kritcher 2024's
+N210808 capsule, its minimum at 9.18 ns moved to each shot's bang time). `source`
+defaults to the base's with the factors appended.
+"""
+struct ScaledRadius{S} <: RadiusSchedule
+    base::S
+    time_scale::Float64
+    radius_scale::Float64
+    source::String
+    times::Vector{Float64}   # a tabulated base's scaled times (empty otherwise)
+end
+function ScaledRadius(base; time_scale::Real = 1.0, radius_scale::Real = 1.0,
+                      source::AbstractString = "")
+    time_scale > 0 && radius_scale > 0 ||
+        throw(ArgumentError("time_scale and radius_scale must be positive"))
+    b = _radius_schedule(base)
+    b isa Union{RadiusSchedule,Function} ||
+        throw(ArgumentError("ScaledRadius needs a RadiusSchedule, a (times, R/R₀) table or a function"))
+    src = isempty(source) ?
+          string(b isa RadiusSchedule ? b.source : "function", " (derived: time × ", time_scale,
+                 ", R × ", radius_scale, ")") : String(source)
+    times = b isa TabulatedRadius ? b.t .* Float64(time_scale) : Float64[]
+    return ScaledRadius(b, Float64(time_scale), Float64(radius_scale), src, times)
+end
+
+"""
+    TrajectoryRadius(; start, peak_time, peak_radius, velocity, bang, minimum, radius,
+                     source = "")
+
+A kinematic [`RadiusSchedule`](@ref) through an implosion's published anchors, for a shot
+without a published radius history: the surface holds its initial radius `radius` (mm)
+until `start` (ns; the first shock reaching it, e.g. a keyhole's shock-1 breakout from the
+ablator), falls along a cubic Hermite segment to `peak_radius` (mm) at `peak_time` with
+the inward speed `velocity` (km/s; at rest at `start`), then along a second one to
+`minimum` (R/R₀) at `bang`, at rest there, and holds it after (the rebound is not
+modelled). `R/R₀` = R/`radius`. The anchors are what HYDRA tables give (peak implosion
+velocity, its time, the limb-minimum radius at peak velocity: Kritcher et al., PRE 106,
+025201 (2022) Table I) with a keyhole breakout and the bang time; both segments must
+stay monotone (speed ≤ 3× the segment's mean, else an `ArgumentError`).
+
+*Derived*, an interpolant, not a rocket model: it carries no ablation physics. Checked
+against Kritcher 2024 Fig. 1 (not used to build it): N221204's anchors (keyhole start
+3.864 ns, bang 9.53, 383 km/s, peak velocity 0.44 ns before bang at 197 µm, both from
+the N210207/N210307/N210808 HYDRA rows) give R/R₀ within 0.019 of the published history
+(0.029 in R²) from 3 ns to peak velocity. Research notes, "Capsule radius schedules:
+published histories and the API (2026-10-26)".
+"""
+struct TrajectoryRadius <: RadiusSchedule
+    start::Float64
+    peak_time::Float64
+    peak_fraction::Float64
+    peak_speed::Float64      # R₀ per ns
+    bang::Float64
+    minimum::Float64
+    source::String
+end
+function TrajectoryRadius(; start::Real, peak_time::Real, peak_radius::Real, velocity::Real,
+                          bang::Real, minimum::Real, radius::Real, source::AbstractString = "")
+    start < peak_time < bang || throw(ArgumentError("need start < peak_time < bang"))
+    radius > 0 && velocity > 0 || throw(ArgumentError("radius and velocity must be positive"))
+    rv, v = peak_radius / radius, velocity / 1000 / radius
+    1 > rv > minimum >= 0 || throw(ArgumentError("need radius > peak_radius > minimum · radius ≥ 0"))
+    # a cubic Hermite segment with end slopes 0 and the mean slope's β times stays monotone
+    # for β ≤ 3 (Fritsch & Carlson 1980)
+    v <= 3 * (1 - rv) / (peak_time - start) && v <= 3 * (rv - minimum) / (bang - peak_time) ||
+        throw(ArgumentError("velocity too high for a monotone trajectory through these anchors"))
+    return TrajectoryRadius(Float64(start), Float64(peak_time), Float64(rv), Float64(v),
+                            Float64(bang), Float64(minimum), String(source))
+end
+function _hermite(t, t0, r0, d0, t1, r1, d1)
+    L = t1 - t0
+    s = (t - t0) / L
+    return (2s^3 - 3s^2 + 1) * r0 + (s^3 - 2s^2 + s) * L * d0 + (3s^2 - 2s^3) * r1 + (s^3 - s^2) * L * d1
+end
+function radius_fraction(s::TrajectoryRadius, t)
+    t <= s.start && return one(t) * 1.0
+    t >= s.bang && return one(t) * s.minimum
+    t <= s.peak_time && return _hermite(t, s.start, 1.0, 0.0, s.peak_time, s.peak_fraction, -s.peak_speed)
+    return _hermite(t, s.peak_time, s.peak_fraction, -s.peak_speed, s.bang, s.minimum, 0.0)
+end
+
+"""
+    radius_fraction(s, t) -> R(t)/R₀
+
+The capsule radius over its initial radius at time `t` (ns) on the schedule `s`: a
+[`RadiusSchedule`](@ref), a `(times, R/R₀)` table, a function `t -> R/R₀`, or `nothing`
+(R = R₀, 1).
+"""
+radius_fraction(s::TabulatedRadius, t) = _interp(s.t, s.r, t)
+radius_fraction(s::ScaledRadius{TabulatedRadius}, t) = s.radius_scale * _interp(s.times, s.base.r, t)
+radius_fraction(s::ScaledRadius, t) = s.radius_scale * radius_fraction(s.base, t / s.time_scale)
+radius_fraction(s, t) = _radius_fraction(_radius_schedule(s), t)
+
+# A `(times, R/R₀)` table becomes a `TabulatedRadius`; anything else stays as given.
+_radius_schedule(r::Tuple) = TabulatedRadius(r[1], r[2])
+_radius_schedule(r) = r
+
+"""
     CapsuleAlbedo(; albedo = 0.2, radius = nothing, outside = 0.0)
 
 Albedo of a capsule that absorbs as a sphere of effective radius `R(t)` inside its
@@ -645,8 +791,9 @@ sphere at the same incident flux, plus `a_out H 4π(R₀² - R(t)²)`, and passe
 on (re-emitted from the mesh, an approximation of light crossing the shrunken capsule's
 surroundings). `albedo` α_c is a number or an `AlbedoModel` (`TabulatedAlbedo` in time,
 `TemperatureAlbedo` in the incident radiation temperature); `radius` is `nothing`
-(R = R₀), a `(times, R/R₀)` table (ns; linear, held at its ends) or a function
-`t -> R/R₀`. `outside` a_out (0 ≤ a_out ≤ 1, default 0) is the absorptance of the
+(R = R₀), a [`RadiusSchedule`](@ref) ([`TabulatedRadius`](@ref), [`ScaledRadius`](@ref)),
+a `(times, R/R₀)` table (ns; linear, held at its ends; stored as a `TabulatedRadius`) or
+a function `t -> R/R₀`. `outside` a_out (0 ≤ a_out ≤ 1, default 0) is the absorptance of the
 blow-off between the ablation front and `R₀` for the flux that misses the front: an
 explicit term for absorption outside the front (W-doped ablator plasma), unpublished, so
 0 unless a study sets it; with the default the model is the front's alone, and without a
@@ -666,14 +813,13 @@ end
 function CapsuleAlbedo(; albedo = 0.2, radius = nothing, outside::Real = 0.0)
     0 <= outside <= 1 || throw(ArgumentError("outside must lie in [0, 1]"))
     return CapsuleAlbedo(_albedo_model(albedo),
-                         radius isa Tuple ? (collect(Float64, radius[1]), collect(Float64, radius[2])) : radius,
-                         Float64(outside))
+                         _radius_schedule(radius), Float64(outside))
 end
 
 "Effective radius over the mesh radius, `R(t)/R₀`, of a `CapsuleAlbedo`."
 capsule_radius_fraction(m::CapsuleAlbedo, t) = _radius_fraction(m.radius, t)
 _radius_fraction(::Nothing, t) = 1.0
-_radius_fraction(r::Tuple, t) = _interp(r[1], r[2], t)
+_radius_fraction(r::RadiusSchedule, t) = radius_fraction(r, t)
 _radius_fraction(r, t) = r(t)
 
 function albedo(m::CapsuleAlbedo, t, T = nothing)

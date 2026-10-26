@@ -4,11 +4,14 @@
 # and the thinner N210808 capsule on the same drive (black). The radius has no axis of its own:
 # it is drawn on the panel's Tr axis with its initial value at the 300 eV line and zero at
 # 0 eV, read as R/R(0). Which radius is not stated; it stays at R(0) until ~3.6 ns (red) /
-# ~3.4 ns (black), the first shock's breakout into the gas (N221204-design keyhole N230110:
-# 3.86-3.91 ns; N210808 design 3.65-3.71 ns, Ruof et al. PoP 33, 052706 (2026) Table II), and
-# its 0.906 at 6 ns matches the ice-gas interface drawn at 6 ns in the paper's Fig. 1 (and
-# PRE 109, 025204 Fig. 1a): 0.92 mm against an initial 0.985 mm (1.050 HDC inner radius
-# minus 65 um of ice). So it is the fuel's inner surface, not the ablation front. Its
+# ~3.4 ns (black), close to the first shock's breakout from the ablator into the fuel
+# (N221204-design keyhole N230110: 3.86-3.91 ns; N210808 design 3.65-3.71 ns, Ruof et al.
+# PoP 33, 052706 (2026) Table II). The ice-gas surface cannot move until that shock has
+# crossed the 65 um of ice (~5.5 ns at the keyhole's shock speeds, our estimate), so the curve follows the
+# ablator-fuel interface (1.050 mm initially) or the fuel's centre of mass, not the ice-gas
+# surface, and not the ablation front. (Before 2026-10-26 it was read as the ice-gas
+# surface, from its 0.906 at 6 ns against the ice-gas interface drawn at 0.92 mm in the
+# paper's 6 ns picture, 0.934 of the initial 0.985 mm.) Its
 # minimum, 0.055 at 9.54 ns (black 0.055 at 9.18), falls at N221204's bang time
 # (9.53 +/- 0.07 ns). Digitized 2026-10-25 from the figure's embedded raster (1647 x 986 px):
 # time from the bottom and top tick marks (45.4 px per ns, 8 ns at column 1539.5, residual

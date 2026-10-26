@@ -343,12 +343,14 @@ Items 9–13 and 16–17 follow the 2026-10-22 literature review against Kritche
       LEH/bubble images after laser-off; for a fast reservoir, a conversion response time
       or Dante's rise delay on a step pulse.
     - **The capsule share** (2.4–4.2 points below HYDRA's 16.2 % between the radius
-      bounds). *Decision needed:* whether to set `CapsuleAlbedo`'s `outside` (a_out ≈
-      0.1–0.2 would close it) without a published blow-off opacity or absorbing radius
-      (default 0); or Young's N170827 albedo is too high for N221204's thicker W-doped
-      ablator. *Data:* the blow-off opacity or HYDRA's absorbing radius; the shell
-      thickness at 5–7 ns; the pair's own capsule radius histories (theirs is a K24-shaped
-      stand-in).
+      bounds). *Decided 2026-10-26:* `outside` stays 0 until a blow-off opacity or
+      absorbing radius is published; or Young's N170827 albedo is too high for N221204's
+      thicker W-doped ablator. Schedules are `RadiusSchedule`s (`TabulatedRadius`,
+      `ScaledRadius` for the pair's accepted, derived K24-shaped one, `TrajectoryRadius`
+      from published anchors; no rocket model; "Capsule radius schedules", bit for bit).
+      K24's radius is the ablator–fuel interface or fuel centre of mass, so the front at
+      6 ns lies in 0.84–0.906 R₀. *Data:* the blow-off opacity or HYDRA's absorbing
+      radius; the shell thickness at 5–7 ns; the pair's own radius histories or v_imp/RPV.
     - **The early peak**: over the open area the model sits 13–20 eV above Dante at
       5.0–5.5 ns (standard mesh, "Energetics defaults and the capsule share"; its rise
       ~0.15 ns ahead of the measured one).

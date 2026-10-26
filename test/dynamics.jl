@@ -21,7 +21,8 @@
     waist = findall(z -> z <= 0.7, f1a.z)
     @test all(0.33 .< 3.2 .- f1a.n221204[waist] .< 0.42)
     # N221204's HYDRA capsule radius (Kritcher 2024 Fig. 1): flat to the first shock's
-    # breakout, the 6 ns ice–gas interface (0.92 of 0.985 mm), monotone, minimum at bang
+    # breakout into the fuel, near the 6 ns ice–gas interface drawn (0.92 of 0.985 mm),
+    # monotone, minimum at bang
     k = kritcher2024_capsule()
     @test all(k.n221204[k.t .<= 3.5] .== 1) && all(diff(k.n221204) .<= 0)
     @test abs(k.n221204[findfirst(==(6.0), k.t)] - 0.92 / 0.985) < 0.03

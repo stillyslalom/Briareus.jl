@@ -74,7 +74,8 @@ callout in the section says which).
   (*in part*; the DU factor is current); Late-time drive: the wall, the plasma and Dante
   (2026-10-25); The P2 swing: capsule radius, backscatter and the collision
   (2026-10-25); **Capsule absorption, conversion and the ablating-wall release
-  (2026-10-25)** (the current energetics defaults and N221204 numbers).
+  (2026-10-25)** (the current energetics defaults and N221204 numbers); Capsule radius
+  schedules: published histories and the API (2026-10-26).
 
 **Spectra and diagnostics**
 - Spectral radiosity, M-band and a synthetic Dante (2026-10-24); Dante channel responses
@@ -6318,6 +6319,12 @@ coarse mesh; measured Dante in the last column:
 
 ## The P2 swing: capsule radius, backscatter and the collision (2026-10-25) *derived*
 
+> **Superseded in part (2026-10-26).** K24 Fig. 1's radius is not the ice–gas surface:
+> it leaves R(0) at ~3.6 ns, ~2 ns before that surface can move, so it follows the
+> ablator–fuel interface or the fuel's centre of mass, and the lower bound on the front
+> at 6 ns is 0.84 R₀, not 0.79 ("Capsule radius schedules: published histories and the
+> API (2026-10-26)"). The runs and their numbers stand.
+
 ROADMAP 9 ("what remains"). The N221204 flux P2/P0 swing turns positive ~0.45 ns before
 PRE 109 Fig. 10 and its minimum comes ~0.3 ns early. Each published input that bears
 on it is checked here for how far it moves the upward zero crossing and the minimum.
@@ -6471,6 +6478,12 @@ default; `capsule=mesh` stays off.*
   flux is evaluated, which is not stated.
 
 ## Capsule absorption, conversion and the ablating-wall release (2026-10-25) *derived*
+
+> **Superseded in part (2026-10-26).** §2's bounds: the `young` schedule's 0.81 R₀ at
+> 6 ns lies below the lower bound, now 0.84 R₀ (K24's radius is the ablator–fuel
+> interface or fuel centre of mass, not the ice–gas surface); the schedules are
+> `RadiusSchedule`s, bit for bit the same ("Capsule radius schedules: published
+> histories and the API (2026-10-26)"). The numbers stand.
 
 ROADMAP 16 (and 9): the user's four decisions of 2026-10-25 on "Energetics defaults and
 the capsule share", "Late-time drive" and "The P2 swing", implemented together. Dante 1,
@@ -6946,3 +6959,112 @@ in every case.
   the compact mesh. `mid = 24` fixes the capsule rows for +30–60% view-factor time but
   not the loss (at h 0.4 it raises the raw loss, 6.1e-4 → 9.1e-4: the shadow's excess
   then stands alone), so it does not earn a default change. **H**
+
+## Capsule radius schedules: published histories and the API (2026-10-26) *derived*
+
+ROADMAP 16, the user's decision of 2026-10-26 on "Capsule absorption, conversion and the
+ablating-wall release": the pair's K24-shaped schedule is accepted, labelled derived,
+with room in the API for other schedules. What published radius histories exist for the
+HYBRID-E shots in use (N221204, N210808, the Zylstra pair N191118 / N210601), which
+surface each follows, and what the new `RadiusSchedule` types support. No default or
+result changed. Confidence: **H** primary text or table, **H-img** digitized figure,
+**M** known from citing papers only, **L** our construction.
+
+### Published radius histories and anchors
+
+| Source | Shot(s) | Which radius | Times | Uncertainty | Use | Conf. |
+|---|---|---|---|---|---|---|
+| Kritcher et al., PoP 31, 070502 (2024), doi:10.1063/5.0210904, Fig. 1 (`kritcher2024_capsule()`) | N221204 capsule, and the thinner N210808 capsule, on N221204's 2.05 MJ drive (HYDRA) | not stated; the ablator–fuel interface or the fuel's centre of mass (below), as R/R(0) | 0–9.5 ns (N210808 capsule to its minimum, 0.055 at 9.18 ns) | ±0.01 in R/R(0) (0.02 at 9.25 ns), ±0.04 ns | **schedule**: `kritcher2024_radius()`, the default `schedule=k24`; `:n210808` time-scaled for the pair | H-img (curve), L (surface) |
+| Young et al., PoP 27, 082702 (2020) Fig. 3a (`young2020_radii()`) | N170827 (LLNL dynamic view-factor model) | the model's ablation front | 0–7.75 ns | ±0.03 mm | schedule on a piecewise time map (`schedule=young`); another shot's shape | H-img |
+| Kritcher et al., PRE 106, 025201 (2022) Table I (HYDRA post-shot) | N210207 / N210307 / N210808 | limb-minimum radius at peak velocity (RPV) | point anchors | — | `TrajectoryRadius` anchors, checks: v_imp 393 / 387 / 391 km/s at 8.63 / 8.9 / 8.8 ns, RPV 195 / 211 / 185 µm, bang 9.05 / 9.35 / 9.26 ns (measured 9.09 / 9.31 / 9.26 ± 0.03), so peak velocity comes 0.42–0.46 ns before bang | H |
+| Kritcher et al., PRE 109, 025204 (2024) Table I (as read in `litreview/n221204_benchmark.md`; OSTI 2474067 has no full text) | N210808 / N221204 | — | point anchors | — | anchors: v_imp 401 / 383 km/s (HYDRA, recalibrated on the surrogates; PRE 106 had 391 for N210808), ablator remaining 3.8 / 5.7 %, bang 9.28 / 9.53 ± 0.07 ns measured, 9.27 / 9.61 simulated; no time or radius of peak velocity | H |
+| Ruof et al., PoP 33, 052706 (2026) (OSTI 3367476, LLNL-JRNL-2019015) Table II, keyholes | N221106 (N210808 design), N230110 (N221204 design), N231016 | first shock's breakout from the ablator into the liquid D2 (VISAR) | 3.6–6.1 ns | ±0.006–0.06 ns | the time the ablator–fuel interface starts to move: equator / pole 3.714 / 3.650 ns (N221106), 3.864 ± 0.012 / 3.906 ± 0.018 (N230110; HYDRA 3.899 / 3.886), 3.575 / 3.588 (N231016); shock 1 at 32.7–34.0 km/s, merged 1–2 at ~50 km/s from 4.85 ns (N230110) | H |
+| Ruof et al. 2026 Table IV and Figs. 8–9, 2DConA | N220618, N221010 (N210808 design), N240304 (N221204 design, 85.9 µm, D2 gas, lower peak power) | limb minimum and outer slope of the backlit shell (inner and outer boundaries), Legendre P0 | from R < 300 µm to stagnation (the last ~0.6–0.8 ns) | figure; HYDRA trajectory offsets −50 / −35 / +25 µm | **check only**: shell velocity 392 ± 24 / 381 ± 15 / 355 ± 5 km/s (HYDRA 401 / 408 / 344), stagnation 9.170 ± 0.061 / 9.230 ± 0.029 / 9.876 ± 0.090 ns, mass remaining 8.8 ± 1.0 % (N240304; HYDRA 10.2). A surrogate without ice on its own pulse, and R/R₀ < 0.27 (R² < 0.07, where the capsule's absorption hardly matters) | H (the extracted table's rows realigned to their labels by us) |
+| Olson et al., SAND2011-8633C (OSTI 1141159) | NIC CH ConA | centre of mass of the remaining ablator (ConA's radius) | ~19–22 ns, 900 → ~200 µm | — | context: baseline HYDRA over-predicted the ConA velocity by ~18 %, matched with 85–92 % peak-power multipliers; another platform | H (slides) |
+| Hicks et al., PoP 19, 122702 (2012) (1-D streaked ConA) | NIC CH | remaining-mass centre and shell thickness | — | — | not read; another platform | M |
+| Callahan et al., PoP 27, 072704 (2020) §II.B (LLNL-JRNL-809797) | scaling model | shell radius of a rocket model, m dv/dt = −4πr² P_abl, dm/dt = −4πr² ṁ, driven by their T_r(t) fit | — | — | an analytic r(t), but it needs an ablation rate and pressure fitted per design and the drive; not adopted (below) | H |
+| Zylstra et al., PRE 106, 025202 (2022) | N191118, N210601 | none published | — | — | bang times 9.37 / 9.48 ns, which place the pair's scaled schedule; no v_imp or RPV | H |
+
+**Which radius K24 Fig. 1 follows.** The curve holds 1.000 to 3.50 ns and reads 0.995 at
+3.75 (the N210808 capsule 0.999 at 3.50): it starts to move at ~3.6 ns, 0.2–0.3 ns before
+the N221204 design's keyhole breakout (3.86–3.91 ns), as the N210808 capsule (~3.4 ns)
+does before its own (3.65–3.71 ns), a common offset between HYDRA on N221204's drive and
+the keyholes' pulses plus reading. The ice–gas surface cannot move until the first shock
+has crossed the 65 µm of ice: at the keyhole's speeds (32.7 km/s to the 1–2 merge at
+4.85 ns, ~32 µm, then ~50 km/s) that is ~5.5 ns (*L*). So the curve follows the
+ablator–fuel interface (1.050 mm initially) or the fuel's centre of mass, which start
+moving when the shock enters the fuel. The 6 ns picture agrees (*L*): the interface at
+0.906 × 1.050 = 0.951 mm leaves 31 µm of shocked ice (65 µm compressed 2.1×) to the
+ice–gas surface drawn at 0.92 mm. Before today the curve was read as the ice–gas surface
+("The P2 swing"), from that 0.92 mm alone. Consequences:
+- The ablation front at 6 ns lies between **0.84 R₀** (no ablator left outside the
+  interface, 0.906 × 1.050/1.135) and 0.906 R₀ (K24's scaled curve on the outer radius, the
+  shell keeping its relative thickness): narrower than 0.79–0.906. `schedule=k24` stays
+  the upper bound, and the `young` schedule's 0.81 R₀ now lies below the lower bound.
+- The data file's header, `kritcher2024_capsule`'s docstring and the example's comments
+  say so; the digitized numbers are unchanged.
+
+**What a schedule can be built from.** Only K24 Fig. 1 is a radius history of the shots
+in use, and only for N221204's drive (the N210808 capsule on it, not N210808's own
+shot). Young 2020's front belongs to N170827. The 2DConA trajectories (Ruof 2026) cover
+the last ~0.7 ns of surrogates, where R² < 0.07, and are figures. The rest are point
+anchors (breakout, peak velocity and its time and radius, bang).
+
+### The API (`src/target.jl`, `src/dynamics.jl`)
+
+- `RadiusSchedule`: abstract; `radius_fraction(s, t)` gives R/R₀. `CapsuleAlbedo(;
+  radius)` and `moving_hohlraum(; capsule_shrink)` take a schedule, a `(times, R/R₀)`
+  table (now stored as a `TabulatedRadius`) or a function, as before.
+- `TabulatedRadius(t, r; source)`: linear, held at its ends, times strictly increasing;
+  `source` records provenance. `kritcher2024_radius(:n221204 | :n210808)` returns K24's
+  two curves (the N210808 one closed at 0.055, 9.18 ns), labelled published.
+- `ScaledRadius(base; time_scale, radius_scale, source)`: R = radius_scale ·
+  base(t/time_scale); for a tabulated base the times are scaled once and interpolated as
+  a table, which is what the example did, so the pair's schedule
+  (`ScaledRadius(kritcher2024_radius(:n210808); time_scale = bang/9.18)`) is the same
+  table bit for bit. Its `source` says derived.
+- `TrajectoryRadius(; start, peak_time, peak_radius, velocity, bang, minimum, radius)`:
+  a kinematic interpolant through published anchors, for a shot with anchors but no
+  history: R(0) to `start`, a cubic Hermite segment to `peak_radius` at `peak_time` with
+  speed `velocity` (at rest at `start`), a second to `minimum` at `bang` (at rest), held
+  after. Both segments must be monotone (speed ≤ 3× the mean, Fritsch–Carlson), else an
+  `ArgumentError`. *Derived*. Checked against K24 Fig. 1, which it is not built from:
+
+  | anchors | max \|ΔR/R₀\| (3 ns to peak velocity) | max \|Δ(R/R₀)²\| | at 5 / 6 / 7 / 8 ns (K24) |
+  |---|---|---|---|
+  | N221204: start 3.864 (keyhole), bang 9.53, 383 km/s (PRE 109), peak velocity 0.44 ns before bang at 197 µm (the PRE 106 rows' means), R/1.050 mm | 0.019 (7.0 ns) | 0.029 | 0.972 / 0.892 / 0.748 / 0.528 (0.965 / 0.906 / 0.767 / 0.537) |
+  | N210808 capsule: start 3.714, 391 km/s at 8.8 ns, 185 µm (its own drive, PRE 106) | 0.028 (6.75 ns) | 0.043 | 0.959 / 0.861 / 0.693 / 0.442 (0.959 / 0.881 / 0.720 / 0.452; on N221204's drive) |
+
+  N221204's time and radius of peak velocity are borrowed from the N210808 family, so the
+  first row is a check of the form, not of N221204's anchors. The trajectory runs inside
+  K24 by up to 0.02 from 5.5 to 8 ns. Not used by the example; for the pair it would need
+  v_imp and RPV, which are unpublished, so the pair keeps `ScaledRadius`.
+- **Left out: a rocket model.** Callahan 2020's rocket model needs an ablation rate and
+  pressure fitted per design and the drive (a coupled march with `drive_history`, since
+  the capsule's absorption depends on R). CompactLES stage 0 on our full-model drive, at
+  the effective rate fitted to the remaining mass (ṁ = 2.85e5 T³), stagnates at 10.2 ns
+  against bang 9.53 ("Capsule drive hand-over and CompactLES stage 0"), and LLNL's own
+  HYDRA times the surrogates with peak-power multipliers of 0.825–0.86, varying 5 % shot
+  to shot (Ruof 2026; Olson 2011 needed 0.85–0.92 on NIC): a rocket trajectory from our drive would be a 0.5–0.7 ns
+  timing error, not a schedule. A `RadiusSchedule` subtype can take one later, e.g.
+  from CompactLES's trajectory as a `TabulatedRadius`.
+
+### Bit for bit
+
+`examples/n221204.jl` now builds its schedules from the types (`kritcher2024_radius()`,
+`ScaledRadius(...)` for the pair, `TabulatedRadius(...)` for `young`). The capsule
+albedo and R/R₀ of all five configurations (k24; young at bang 9.53 and 9.37; pair at
+9.37 and 9.48), each with `outside` 0 and 0.15, at 992 times from −1 to 12 ns (a 13.7 ps
+grid plus every knot and the bang times), and the shrinking capsule mesh (area and a
+centroid, k24 and the N191118 pair schedule, five times) were written from the old code
+(0c1bd2a) and the new with `repr` (shortest round-trip): the 9930 lines are identical
+(`cmp`). `test/energetics.jl` ("capsule radius schedules") checks the k24 and pair cases
+with `==` against the old tables. The example was not rerun (2–4 min coarse per run on
+an idle machine; the schedule enters only through these values).
+
+### Open
+
+- The front's position inside 0.84–0.906 R₀ (the shell thickness at 5–7 ns) is
+  unpublished; it sets the capsule share between the bounds.
+- `schedule=young` is now below the lower bound; it stays as a sensitivity.
+- The pair's own radius histories, v_imp and RPV are unpublished.

@@ -158,6 +158,54 @@ end
 wl_beams = nif_beams()
 wl_op = DepositionOperator(hohlraum(; h = 0.8, capsule_h = 0.4, wall = nif_gold()), wl_beams)
 
+@testset "capsule radius schedules" begin
+    # a table: linear between its times, held at its ends; a (times, R/R₀) tuple becomes one
+    tab = TabulatedRadius([0.0, 5.0, 9.0], [1.0, 1.0, 0.5]; source = "test")
+    @test radius_fraction(tab, 7.0) == 0.75 && radius_fraction(tab, -1.0) == 1.0 &&
+          radius_fraction(tab, 20.0) == 0.5 && tab.source == "test"
+    @test CapsuleAlbedo(radius = ([0.0, 5.0, 9.0], [1.0, 1.0, 0.5])).radius isa TabulatedRadius
+    @test radius_fraction(nothing, 3.0) == 1.0 && radius_fraction(τ -> 0.5, 3.0) == 0.5
+    @test_throws ArgumentError TabulatedRadius([0.0, 5.0, 5.0], [1.0, 0.9, 0.8])
+    @test_throws ArgumentError TabulatedRadius([0.0, 5.0], [1.0])
+    @test_throws ArgumentError TabulatedRadius([0.0, 5.0], [1.0, -0.1])
+    # scaled: R(t) = radius_scale · base(t / time_scale), on a table and on a function
+    ts = 0.0:0.0371:12.0
+    sc = ScaledRadius(tab; time_scale = 1.1)
+    @test all(isapprox(radius_fraction(sc, 1.1t), radius_fraction(tab, t); rtol = 1e-12) for t in ts)
+    f = t -> 1 - 0.05t
+    @test radius_fraction(ScaledRadius(f; time_scale = 2.0, radius_scale = 0.9), 4.0) ≈ 0.81 rtol = 1e-12
+    nested = ScaledRadius(ScaledRadius(tab; time_scale = 1.1); time_scale = 0.5, radius_scale = 0.8)
+    @test all(isapprox(radius_fraction(nested, 0.55t), 0.8 * radius_fraction(tab, t); rtol = 1e-12) for t in ts)
+    @test occursin("derived", sc.source)
+    @test_throws ArgumentError ScaledRadius(tab; time_scale = 0.0)
+    # the example's schedules, bit for bit against the tables it built before the types:
+    # N221204's own and the Zylstra pair's (N210808 capsule, minimum moved to bang)
+    k = kritcher2024_capsule()
+    ok = findall(isfinite, k.n210808)
+    ya = TabulatedAlbedo([0.0, 6.0, 9.0], [0.05, 0.16, 0.4])
+    same(a, b) = all(albedo(CapsuleAlbedo(albedo = ya, radius = a, outside = 0.1), t) ==
+                     albedo(CapsuleAlbedo(albedo = ya, radius = b, outside = 0.1), t) for t in ts)
+    @test same(kritcher2024_radius(), (k.t, k.n221204))
+    @test all(same(ScaledRadius(kritcher2024_radius(:n210808); time_scale = bang / 9.18),
+                   ([k.t[ok]; 9.18] .* (bang / 9.18), [k.n210808[ok]; 0.055])) for bang in (9.37, 9.48))
+    @test_throws ArgumentError kritcher2024_radius(:n230729)
+    # a kinematic trajectory: its anchors exactly, at rest at start and bang, monotone
+    tr = TrajectoryRadius(; start = 3.864, peak_time = 9.09, peak_radius = 0.197, velocity = 383.0,
+                          bang = 9.53, minimum = 0.055, radius = 1.050)
+    v = 0.383 / 1.050
+    @test radius_fraction(tr, 3.0) == 1.0 && radius_fraction(tr, 10.0) == 0.055
+    @test radius_fraction(tr, 9.09) ≈ 0.197 / 1.050 rtol = 1e-12
+    @test ForwardDiff.derivative(t -> radius_fraction(tr, t), 9.09) ≈ -v rtol = 1e-10
+    @test abs(ForwardDiff.derivative(t -> radius_fraction(tr, t), 3.864 + 1e-9)) < 1e-8
+    @test abs(ForwardDiff.derivative(t -> radius_fraction(tr, t), 9.53 - 1e-9)) < 1e-8
+    @test all(diff([radius_fraction(tr, t) for t in ts]) .<= 0)
+    @test_throws ArgumentError TrajectoryRadius(; start = 3.864, peak_time = 9.09, peak_radius = 0.197,
+                                                velocity = 900.0, bang = 9.53, minimum = 0.055, radius = 1.050)
+    # against Kritcher 2024 Fig. 1 (independent of its anchors): within 0.02 to peak velocity
+    i = findall(t -> 3.0 <= t <= 9.0, k.t)
+    @test maximum(abs(radius_fraction(tr, k.t[j]) - k.n221204[j]) for j in i) < 0.02
+end
+
 @testset "capsule albedo and energy budget" begin
     ca = CapsuleAlbedo(albedo = 0.2, radius = ([0.0, 5.0, 9.0], [1.0, 1.0, 0.5]))
     @test albedo(ca, 2.0) ≈ 0.2

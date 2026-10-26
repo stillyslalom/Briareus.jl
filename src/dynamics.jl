@@ -118,14 +118,38 @@ HYDRA's scaled capsule radius R/R(0) against time on N221204's 2.05 MJ drive: Kr
 al., PoP 31, 070502 (2024) Fig. 1, digitized (`data/kritcher2024_fig1.csv`, provenance in
 its header). Columns `t` (ns, 0–9.5 every 0.25), `n221204` (the as-shot, thicker capsule),
 `n210808` (the thinner N210808 capsule on the same drive; NaN after its minimum at
-9.18 ns) and `u` (reading error of `n221204`). The radius is the fuel's inner (ice–gas)
-surface, not the ablation front: it holds until the first shock breaks out (~3.6 ns),
-reads 0.906 at 6 ns where the paper's 6 ns picture draws the ice–gas interface at
-0.92 mm (initially 0.985), and reaches its minimum at bang time (9.53 ns). The only
-published radius history of the N221204 capsule. Research notes, "The P2 swing: capsule
-radius, backscatter and the collision (2026-10-25)".
+9.18 ns) and `u` (reading error of `n221204`). Which radius is not stated: it holds
+until ~3.6 ns, near the first shock's breakout from the ablator into the fuel (keyhole
+N230110, the N221204 design: 3.86–3.91 ns), ~2 ns before the ice–gas surface can move,
+so it follows the ablator–fuel interface (1.050 mm initially) or the fuel's centre of
+mass, not the ablation front; it reaches its minimum at bang time (9.53 ns). The only
+published radius history of the N221204 capsule. Research notes, "Capsule radius
+schedules: published histories and the API (2026-10-26)"; [`kritcher2024_radius`](@ref)
+gives it as a schedule.
 """
 kritcher2024_capsule() = _data_table("kritcher2024_fig1.csv")
+
+"""
+    kritcher2024_radius(capsule = :n221204) -> TabulatedRadius
+
+[`kritcher2024_capsule`](@ref) as a [`RadiusSchedule`](@ref): `:n221204` the as-shot
+capsule's R/R(0) on N221204's drive (0–9.5 ns), `:n210808` the thinner N210808 capsule on
+the same drive, read to 9.0 ns and closed at its minimum, 0.055 at 9.18 ns (the curve
+after it is not read). Published HYDRA histories (Kritcher et al., PoP 31, 070502 (2024)
+Fig. 1, digitized); applied to the capsule's outer radius they are the upper bound on the
+ablation front (a shell keeping its relative thickness). For another shot,
+[`ScaledRadius`](@ref) moves the minimum to its bang time (derived).
+"""
+function kritcher2024_radius(capsule::Symbol = :n221204)
+    k = kritcher2024_capsule()
+    capsule === :n221204 &&
+        return TabulatedRadius(k.t, k.n221204;
+                               source = "Kritcher et al., PoP 31, 070502 (2024) Fig. 1, N221204 (HYDRA, published)")
+    capsule === :n210808 || throw(ArgumentError("capsule must be :n221204 or :n210808, not :$capsule"))
+    ok = findall(isfinite, k.n210808)
+    return TabulatedRadius([k.t[ok]; 9.18], [k.n210808[ok]; 0.055];
+                           source = "Kritcher et al., PoP 31, 070502 (2024) Fig. 1, N210808 capsule on N221204's drive (HYDRA, published)")
+end
 
 """
     moving_hohlraum(motion::WallMotion; radius = 2.875, kwargs...) -> (τ -> Target)
@@ -137,8 +161,8 @@ follow the wall, and the capsule stays. The mesh counts are those of the initial
 (from `h` when given), so every time has the same elements, as [`Keyframes`](@ref)
 needs.
 
-`capsule_shrink` (`nothing`, a `(times, R/R₀)` table, linear and held at its ends, or a
-function `τ -> R/R₀`) shrinks the capsule mesh itself to `R₀ R/R₀` at `τ`, with the
+`capsule_shrink` (`nothing`, a [`RadiusSchedule`](@ref), a `(times, R/R₀)` table, linear
+and held at its ends, or a function `τ -> R/R₀`) shrinks the capsule mesh itself to `R₀ R/R₀` at `τ`, with the
 initial radius's mesh counts (the `:compact` mesh's frequency, or the lat-long counts):
 the flux is then evaluated on the shrinking sphere, not on the initial one. Its albedo
 should then not shrink it again (`CapsuleAlbedo` without a `radius`).
@@ -156,8 +180,7 @@ function moving_hohlraum(motion::WallMotion; radius::Real = 2.875, length::Real 
     kw = Dict{Symbol,Any}(kwargs)
     R0 = Float64(get(kw, :capsule_radius, 0.9))
     R0 > 0 || throw(ArgumentError("capsule_shrink needs a capsule"))
-    shrink = capsule_shrink isa Tuple ?
-             (collect(Float64, capsule_shrink[1]), collect(Float64, capsule_shrink[2])) : capsule_shrink
+    shrink = _radius_schedule(capsule_shrink)
     hc = get(kw, :capsule_h, nothing)
     if get(kw, :capsule_mesh, :compact) === :compact
         # the initial frequency n; at R the size R atan(2)/(n − ½) gives n again
