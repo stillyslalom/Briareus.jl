@@ -307,10 +307,15 @@ Items 9–13 and 16–17 follow the 2026-10-22 literature review against Kritche
     checks, Nora's high-yield branch and shape term ("Implosion metrics", "Young 2020
     validation"). Left: time-dependent error budgets and multi-shot trending.
 12. **Backlighter physics.** Done: He-α CE(hν, I) with its uncertainty, filters, the
-    photometric chain. Left: pulse-length and spot-size dependence (confounded with the
-    picket in the published data), a weighted, larger low-Z compilation (Ti, V),
-    continuum and higher lines in the filter pass band, detector response, the object's
-    transmission.
+    photometric chain; the weighted compilation (2026-10-26: + Coppari 2019's 31 OMEGA
+    Fe/Cu/Ge points, inverse-variance fit with a random-effects τ, scatter ×1.51 → ×1.44,
+    a held-out check on independent data; research notes "Weighted He-α CE compilation").
+    Left: the low-Z end — the one public Ti foil (OMEGA, held out) sits 5× below the fit,
+    which the `hν` power law cannot follow below Cr, and no V/Sc He-α CE at 351 nm was
+    found; a form change needs Ti/V data at stated conditions. Pulse length (now
+    confounded with the source as well as the picket) and spot size (with the
+    irradiance); continuum and higher lines in the filter pass band, detector response,
+    the object's transmission.
 13. **Spectral radiosity.** Done: multigroup radiosity, the laser M-band, a synthetic
     Dante with hardware channels, the unfold, Sentinel views, thermal laser spots; the
     per-cone, post-CBET M-band inside `drive_history` (`mband`; on N221204 within 0.003

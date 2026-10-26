@@ -50,7 +50,8 @@ callout in the section says which).
 - Beam-error budgets (2026-10-17); Retuning to a reference drive (2026-10-17); Implosion
   metrics (2026-10-22); Young 2020 validation (2026-10-24); LEH shield (sombrero)
   (2026-10-24); Backlighter foil on the line of sight (2026-10-24); Backlighter
-  conversion efficiency and the photometric chain (2026-10-24).
+  conversion efficiency and the photometric chain (2026-10-24); Weighted He-α CE
+  compilation (2026-10-26).
 
 **Hohlraum dynamics and CBET calibration** (HYBRID-E)
 - HYBRID-E (N210808) hohlraum and LEH size (2026-10-20); Literature review against
@@ -5843,8 +5844,9 @@ converts J/sr at one view angle to 4π assuming isotropy.
   (Girard et al., PoP 12 (2005); seen only through abstracts and citing papers, not
   checked against the paper). Gas, aerogel, foam and cavity sources are out of scope.
 
-**Model** (`kshell_ce_model`, fitted from the CSV once per session): least squares on
-ln CE with equal weights, `ln CE = a_c + b L + c_c X + d X² + e X L`, L = ln(hν/10 keV),
+**Model as first fitted** (2026-10-24; superseded by the weighted refit on the extended
+compilation, "Weighted He-α CE compilation (2026-10-26)" below, which also replaces the
+uncertainty and pulse-length bullets here): least squares on ln CE with equal weights, `ln CE = a_c + b L + c_c X + d X² + e X L`, L = ln(hν/10 keV),
 X = ln(I/1e15 W/cm²), class c ∈ {foil (one pulse), prepulsed}. Coefficients: a = −5.694
 (foil), −4.876 (prepulsed); b = −3.92; c = 0.244, 0.209; d = −0.098; e = 0.543. Residual
 scatter **0.41 in ln CE (×1.51)** with 30 degrees of freedom (foil class rms 0.38,
@@ -5898,35 +5900,145 @@ response.
   1e-5; Lambertian pinhole image E_x A_p/(π A q²) exactly at every image point; energy
   through the pinhole = fluence × image area (magnification q/(p + D)); hemispherical
   integrals of per_sr E_x/2 (isotropic) and E_x (Lambertian) to 1e-10; filters vs NIST
-  nodes, edges, power-law interpolation, layer products; the fit's residual rms = its
-  scatter, zero mean residual per class, the optimum a maximum, the hν slope in
-  2.5–4.5.
+  nodes, edges, power-law interpolation, layer products; the fit's weighted χ²/dof = 1
+  and weighted residual sum zero per class, scatter = τ ⊕ rms stated error, the
+  held-out check of the next section, the optimum a maximum, the hν slope in 2.5–4.5.
 
 **Tutorial numbers** (radiography tutorial; bundle 11's two quads, 16 TW for 2 ns with a
 picket, aimed at the center of the 2 mm Ge foil at 14 mm; generic imager: 20 µm pinhole
-at 200 mm, detector at 2 m, 50 µm pixels, 250 µm Be + 50 µm Kapton). *derived*
+at 200 mm, detector at 2 m, 50 µm pixels, 250 µm Be + 50 µm Kapton). *derived*; CE and
+photon numbers from the 2026-10-26 weighted refit (photons scale with the CE at the
+unchanged mean irradiance; the 2026-10-24 values in brackets).
 - 13.6 of 16 TW land on the foil, mean irradiance 5.1e14 W/cm² (just below the NIF
-  data; extrapolated), against Ge's fitted optimum 3.1e15: the CPP spots at best focus
-  fill most of the foil.
-- CE 0.56% (×/÷ 1.62): 154 J of He-α into 4π, 12.2 J/sr toward the detector (= E/4π,
-  asserted), filters 0.95, **~480 photons per pixel** averaged over the capsule's image
-  (295–771 at 1σ); across the image 2e3–5e5 photons/mm², the foil's radiance following
-  the spots.
-- At the same irradiance: Cu 1.35% → ~1340 photons/pixel, Zn 1.0% → ~940, Ge ~480, Zr
-  0.08% → ~43.
+  data; extrapolated), against Ge's fitted optimum 2.5e15 [3.1e15]: the CPP spots at best
+  focus fill most of the foil.
+- CE 0.49% ×/÷ 1.47 [0.56% ×/÷ 1.62]: ~133 J of He-α into 4π [154], ~10.5 J/sr toward the
+  detector (= E/4π, asserted), filters 0.95, **~415 photons per pixel** averaged over the
+  capsule's image (~280–610 at 1σ) [480, 295–771]; across the image 2e3–5e5 photons/mm²,
+  the foil's radiance following the spots.
+- At the same irradiance: Cu 1.32% → ~1320 photons/pixel [1340], Zn 0.94% → ~880 [940],
+  Ge ~415, Zr 0.050% → ~28 [43].
 - `examples/backlighter.jl` (OMEGA Ti foil, 1 ns, point projection at 300 mm behind 25 µm
-  Be) prints the same chain: 8.0 kJ on the foil at 4.6e14 W/cm², near the fitted Ti
-  optimum (4.4e14) but below the fitted lines (Cr is the lowest), so extrapolated: CE
-  6.7% ×/÷ 1.78, 531 J into 4π, 42 J/sr, 5.8e11 photons/mm² (3.3e11–1.0e12). Workman's
-  Cr (> 3% at 1e15) makes a few % plausible; the ~8% quoted (secondhand) for pre-exploded
-  Ti foils lies above it.
+  Be) prints the same chain: 8.0 kJ on the foil at 4.6e14 W/cm², below the fitted lines
+  (Cr is the lowest), so extrapolated: CE 8.9% ×/÷ 1.53 [6.7% ×/÷ 1.78], ~710 J into 4π,
+  ~56 J/sr, ~7.8e11 photons/mm² [531 J, 42 J/sr, 5.8e11]. The held-out OMEGA Ti foil
+  (~1.6% at 1.3e15, next section) says the fit overpredicts Ti about fivefold; the
+  example's comment says to pass a measured `ce`.
 
 **Not modeled / next.** Pulse-length and spot-size dependence (data confounded);
 backside emission of thin foils; the line's opacity and limb brightening (the isotropic
 assumption); continuum and higher lines in a filter's pass band; detector response
-(image plate, CCD QE) and the object's transmission. A larger, weighted compilation
-(Kauffman's handbook tables, Phillion & Hailey for Ti, Girard/Babonneau pre-exploded
-foils) would tighten the low-Z end.
+(image plate, CCD QE) and the object's transmission. The low-Z end: see the next
+section.
+
+## Weighted He-α CE compilation (2026-10-26) *engineering*
+
+ROADMAP 12, "a weighted, larger low-Z compilation (Ti, V)". `data/kshell_ce.csv` grows
+from 42 to 74 rows (68 fitted, from 37); `kshell_ce_model` becomes a weighted fit with a
+`tau` field. The fit numbers follow from the CSV; `test/backlighter_signal.jl` asserts
+the weighting and the C19 held-out check.
+
+**Search** (2026-10-26; OSTI API, OSTI full texts, publisher abstracts, the local paper
+folder). Ti/V/Sc/Ca/Cr/Mn He-α CE at 351 nm on planar foils is scarce in public, citable
+form. Found and used:
+- *Coppari et al., RSI 90, 125113 (2019), LLNL-JRNL-757490, OSTI 1632368* (C19): OMEGA and
+  OMEGA EP, 12.5 µm Fe, Cu, Ge foils, 1 ns flat-top (Fe 0.6–2 ns), with or without a
+  ~1 ns pre-pulse at ~2e14 W/cm² 3–4 ns ahead; He-α complex (continuum subtracted),
+  calibrated flat-crystal spectrometer and image plate, J/sr × 4π (isotropic; Fe s77768:
+  ~20 J of 2.2 kJ), over the **main-pulse** energy (the pre-pulse, ~20–25% of the total,
+  not counted); irradiance on the elliptical footprint of the nominal spot. Stated
+  errors: CE 20%, spot ±50 µm. 31 points **digitized** from Fig. 16 (600 dpi render;
+  reading ±0.0003 in CE, ±0.02e15 in I); Fe irradiances and pulse lengths from Table I
+  (printed with its facility-to-irradiance columns one row below the shot numbers;
+  realigned by the paper's own checks, s72639 = 7.8 kJ at 2e15 and s77768 = 0.3e15 at
+  0.6 ns); Table II's three values exact (Ge 0.006 at 1.3e15 with pre-pulse, Cu 0.01 at
+  1.1e15, Fe 0.008 at 0.3e15). Peaks: Fe ~3% (0.8–2e15), Cu ~2% with pre-pulse, Ge ~1%.
+  Omega shots irradiate both sides of the foil, EP shots one (Barrios 2014's Ge pair:
+  two-sided ≈ 1.3× one-sided); kept in the fit, with a C19 offset tested below.
+  *confidence: medium (digitized; two-sided; main-pulse normalization).*
+- *Ti, OMEGA* (P16): 5–6 µm Ti foil, one side, 1 ns at 1.32e15 W/cm², no pre-pulse:
+  1.8e-3 J/J/sr ±30% in 4–6 keV (DMX at 68.7° from the normal), as quoted in the CEA
+  review, Phys. Plasmas 23, 040501 (2016), Sec. II (the original, Girard et al., PoP 12,
+  092705 (2005), OSTI 20764547 abstract, gave 1.5% in 2π above 4 keV before the
+  recalibration the review mentions). ×4π = 2.26% for the band; ×0.7 for the He-α share
+  (the review's share for its Cu and Ge liner bands, ~70–75%, taken for Ti; *inferred*,
+  ±0.2) = **1.58% ± 0.66** (30% ⊕ 29%). Held out (`fit = 0`) as the low-Z check.
+  *confidence: low (one point; band share inferred).*
+- Context, not in the CSV (conditions or convention not stated in what is public):
+  Tanabe et al., APL 93, 051505 (2008) (Gekko XII, 351 nm): planar Ti foil 1.4 ± 0.9% in
+  4–6 keV (TiO₂ nanofiber cotton 3.7 ± 0.5%); Hu et al., PoP 14, 033103 (2007)
+  (Shenguang II): 5.8 µm Ti foil ~1.75% (half the 3.5% of 3.5 µm foils); Bullock, Landen
+  & Bradley, UCRL-JC-139282 (OSTI 15006503) (OMEGA, Ti and Sc/Ti foils, 3 ns at 5e14):
+  one- vs two-sided ratios only, no absolute CE; Do et al., RSI (2020), OSTI 1708986:
+  continuum at 11–30 keV only; Babonneau et al., PoP 15, 092702 (2008): pre-exploded
+  Ti 9%, Cu 1%, Ge 2.5–3% (2π, bands; pre-exploded, out of class). Phillion & Hailey,
+  PRA 34, 4886 (1986) is 0.53 µm (another wavelength; not used). **No V, Sc or Ca He-α
+  CE at 351 nm was found**; Mn/Co none either.
+
+**Weights.** Inverse variance in ln CE with a random-effects term: σᵢ² = sᵢ² + τ², sᵢ =
+u/ce (the paper's error bar, relative); W01's digitized points (no per-point bar) take
+their stated relative 10% ⊕ 20% reproducibility = 0.22; C19 0.20; B13/B14 their bars
+(0.20–0.58). τ (the scatter beyond the stated errors) is set so that χ²/dof = 1.
+Predictive scatter = √(τ² + s̄²), s̄ = 0.273 the rms sᵢ; σ at a point adds vᵀCv,
+C = (AᵀWA)⁻¹.
+
+**Fit, before → after** (same form). *derived*
+- 2026-10-24 (37 points, equal weights): a = −5.694/−4.876, b = −3.92, c = 0.244/0.209,
+  d = −0.098, e = 0.543; scatter 0.41.
+- Same 37 points, weighted: a = −5.736/−4.846, b = −4.16, c = 0.456/0.218, d = −0.145,
+  e = 0.853; τ = 0.26.
+- **New (68 points, weighted)**: a = −5.597 ± 0.10 (foil), −4.893 ± 0.08 (prepulsed);
+  b = −4.27 ± 0.30; c = 0.571 ± 0.11, 0.315 ± 0.10; d = −0.188 ± 0.027; e = 0.961 ± 0.20;
+  **τ = 0.243, scatter 0.366 (×1.44)** (was 0.41, ×1.51); coefficient σ's 1.5–3.5× smaller than the weighted 37-point fit's.
+  Unweighted residual rms by source: W01 0.46 (mean −0.15), B13 0.44, B14 0.26, C19
+  0.28; foil 0.41, prepulsed 0.30.
+- Optimum / peak (old → new): foil Fe 1.1e15 / 1.6% → 1.6e15 / 2.2%; Cu 2.1e15 / 0.71%
+  → 2.9e15 / 0.97%; Ge 3.8e15 / 0.36% → 4.9e15 / 0.53%; prepulsed Cu 1.8e15 / 1.57% →
+  1.5e15 / 1.63%; Ge 3.1e15 / 0.78% → 2.5e15 / 0.78% (closer to Barrios's 1–1.5e15);
+  Zr 1.1e16 / 0.20% → 8.1e15 / 0.21%. Peak slope Fe→Ge (foil) hν^-3.3, Cu→Ge
+  (prepulsed) hν^-3.6.
+- **CE at representative points, old → new** (%, ratio): foil Cr 1e15 3.09 → 4.14
+  (×1.34); Fe 1e15 1.62 → 2.05 (×1.27); Fe 3e15 1.48 → 2.01 (×1.35); Cu 1e15 0.67 →
+  0.78 (×1.17); Ge 3e15 0.36 → 0.51 (×1.42); prepulsed Cu 1e15 1.52 → 1.59 (×1.05); Zn
+  2e15 1.22 → 1.25 (×1.02); Ge 5.1e14 0.56 → 0.49 (×0.86); Ge 1.5e15 0.74 → 0.74
+  (×1.01); Zr 4.5e15 0.18 → 0.20 (×1.08); Mo 1e16 0.15 → 0.17 (×1.12); Zr 5.1e14 0.078
+  → 0.050 (×0.65, extrapolated). σ 0.43–0.48 → 0.37–0.42 inside the data. Ti foil
+  4.6e14 6.7 → 8.9 (×1.34, extrapolated; see below).
+
+**Held-out checks** (independent data, not the points fitted).
+- The form fitted to the 2026-10-24 rows alone (weighted, 37 points) predicts C19's 31
+  points: mean residual (data − fit) +0.11, rms 0.35; prepulsed −0.04 / 0.26, foil
+  +0.27 / 0.42; normalized by the prediction's σ ⊕ 20%, rms 0.71 (`test/
+  backlighter_signal.jl` asserts < 1.2). The unweighted 2026-10-24 model does about the
+  same (rms 0.44; prepulsed −0.01 / 0.25; Fe +0.48 / 0.63).
+- Leave-one-source-out (new form, weighted): rms 0.43 (B13), 0.31 (B14), 0.40 (C19),
+  0.57 (W01); normalized rms 0.5–1.15, so σ is about right for a new facility.
+- Leave-one-element-out: Cr −0.42 mean (fit too high), Fe +0.41 (too low), Cu −0.22, Zn
+  −0.18, Ge +0.15 (rms 0.27–0.57).
+- **Ti (P16) fails**: the new fit gives 8.4% at 1.32e15 against 1.58% (He-α share) or
+  2.26% (whole band): residual −1.67 in ln CE, **3.3σ**; the old fit gave 5.9% (−1.32
+  unweighted fit; −1.45, 2.6σ, for the weighted fit to the old rows). Gekko (1.4%) and
+  Shenguang II (~1.75%) Ti foils, in 4–6 keV bands, agree with the OMEGA point.
+
+**The functional form is wrong at the low-Z end** (numbers above): the measured peaks
+are flat from Cr to Fe (W01 Cr 3.0% at 0.93e15, unresolved; W01 and C19 Fe 3.0–3.25%)
+and lower at Ti (≤ 2.3% for the whole band at 1.3e15), while `b L` with the `X L` drift
+makes the peak rise steadily toward low hν (fitted Cr 4.2%, Ti 9.2%). The leave-one-
+element-out signs (Cr over, Fe under) show the same tension inside the data. Tested and
+rejected: a shared `L²` term (−0.91 ± 0.60 with Ti, Ti still −1.6 held out) and a
+foil-only `L²` (−0.31 ± 0.84, Ti −1.59, 2.9σ). The form is kept; Ti stays outside the
+fitted lines (flagged `extrapolated`), and the docstring and `examples/backlighter.jl`
+say to pass a measured CE. Changing the form needs Ti/V data at stated conditions (an
+open decision).
+
+**Pulse length and spot size** (the "if cheap" part). A `g ln τ` term on the foil class:
+g = 0.63 ± 0.21 (0.58 ± 0.22 with a C19 offset of 0.10 ± 0.10; 0.60 ± 0.24 without the
+0.6 ns point). It rests on C19's 2 ns Fe (2.8–3.2%) against W01's 1 ns Fe (2.4% at
+0.9e15); within C19, the 1 ns Fe at 1.98e15 (3.25%) is above the 2 ns Fe at 1.75e15
+(2.84–2.89%). So τ stays confounded with the source; not in the model. A C19 amplitude
+offset alone: +0.19 ± 0.11 (two-sided irradiation or calibration; not significant).
+Spot size: every source sets the irradiance with the spot (C19 and W01 change spot and
+beam count together), so a spot term is degenerate with X here. *E*
 
 ## Dante channel responses and the unfold (2026-10-24) *derived*
 
