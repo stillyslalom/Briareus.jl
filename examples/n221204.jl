@@ -36,15 +36,13 @@
 #   effective radius (default), or the capsule mesh itself shrinking along the schedule
 #   on the keyframes (the flux on the shrinking sphere; the static runs keep R₀);
 #   `capsule_albedo=young|<number>`: α_c, Young 2020's quasi-1D HYDRA ablator albedo on
-#   the schedule's time map (default; published, not fitted) or a constant;
+#   a time map to the shot's bang (default; published, not fitted) or a constant;
 #   `capsule_outside=<a>`: `CapsuleAlbedo`'s `outside`, the absorptance of the blow-off
 #   outside the front (default 0: unpublished);
 # - `degrade=<fraction>`: HYDRA's laser degradation (PRE 109 App. 3: 9–13 %), default
 #   0.11, the middle of the range.
 # Sensitivities of the P2 swing (research notes, "The P2 swing: capsule radius,
 # backscatter and the collision (2026-10-25)"):
-# - `schedule=k24|young`: the capsule radius schedule (below): N221204's own HYDRA
-#   radius (Kritcher 2024 Fig. 1, default) or Young's front shape through the 6 ns anchor;
 # - `backscatter=measured|history|uniform|off`: the measured inner-cone SBS/SRS energies
 #   on shapes of our own (default), the same energies on N210808's measured per-cone SBS
 #   time histories (`history`, Kemp 2026 Fig. 2), or a uniform 48 kJ power cut on every
@@ -82,7 +80,7 @@ shot = get(pos, 7, "n221204")
 pair = shot in ("n191118", "n210601")
 for k in keys(opt)
     k in ("capsule", "capsule_albedo", "capsule_outside", "degrade", "lips", "lag", "unfold", "metrics", "dt", "alpha_m",
-          "schedule", "backscatter", "collision", "bubble_energy", "sbs_energy", "refraction", "refraction_shift") ||
+          "backscatter", "collision", "bubble_energy", "sbs_energy", "refraction", "refraction_shift") ||
         error("unknown option $k=$(opt[k])")
 end
 h = parse(Float64, get(pos, 1, "0.28"))
@@ -97,43 +95,33 @@ transfer = get(pos, 4, pair ? "joint" : "calibrated")   # the pair: the joint mu
 # The capsule: a sphere absorbing at its ablation front's radius R(t) inside the fixed
 # R₀ mesh (`CapsuleAlbedo`'s `radius`). HYDRA's front for N221204 is unpublished; at 6 ns
 # it lies between 0.84 R₀ (no ablator left outside the ablator–fuel interface,
-# 0.906 × 1.050/1.135) and 0.906 R₀ (the shell keeping its relative thickness). `schedule` (research notes,
-# "Capsule absorption, conversion and the ablating-wall release (2026-10-25)"):
-# - `k24` (default): N221204's own HYDRA radius history (Kritcher et al., PoP 31, 070502
-#   (2024) Fig. 1, `kritcher2024_radius()`, the ablator–fuel interface or fuel centre of
-#   mass scaled to its start) applied to the whole capsule, on the shot's own time axis: the upper bound on
-#   the front, with the published timing (held until the first shock breaks out,
-#   ~3.6 ns; minimum at bang). Zylstra's pair: K24's thinner N210808 capsule (their
-#   design) on the same drive, its time axis scaled so that its minimum (9.18 ns) falls
-#   at the shot's bang time (`ScaledRadius`, derived, *L*);
-# - `young`: the shape of the LLNL dynamic view-factor model's front for N170827 (Young
-#   2020 Fig. 3a, `young2020_radii()`), its time axis mapped piecewise linearly so that
-#   its 0.81 R₀ (5.75 ns) falls at 6.0 ns and its end (0.23 R₀, 7.75 ns) at bang time
-#   (9.53 ns; the pair's own, `zylstra2022_fig2().bang`). The 0.81 R₀ at 6 ns is the
-#   ice–gas interface (PRE 109 Fig. 1a, read as the front before 2026-10-25), so this
-#   sits below the lower bound (0.84 R₀), and it shrinks from 2 ns.
+# 0.906 × 1.050/1.135) and 0.906 R₀ (the shell keeping its relative thickness). The
+# schedule (research notes, "Capsule absorption, conversion and the ablating-wall release
+# (2026-10-25)"): N221204's own HYDRA radius history (Kritcher et al., PoP 31, 070502
+# (2024) Fig. 1, `kritcher2024_radius()`, the ablator–fuel interface or fuel centre of
+# mass scaled to its start) applied to the whole capsule, on the shot's own time axis: the
+# upper bound on the front, with the published timing (held until the first shock breaks
+# out, ~3.6 ns; minimum at bang). Zylstra's pair: K24's thinner N210808 capsule (their
+# design) on the same drive, its time axis scaled so that its minimum (9.18 ns) falls at
+# the shot's bang time (`ScaledRadius`, derived, *L*). (`schedule=young`, Young 2020's
+# N170827 front, removed 2026-10-26: it lies below the lower bound.)
 zy = zylstra2022_fig2()
 bang = pair ? getfield(zy.bang, Symbol(shot)) : 9.53
-yr = young2020_radii()
-ymap(τ) = τ <= 5.75 ? τ * 6.0 / 5.75 : 6.0 + (τ - 5.75) * (bang - 6.0) / (7.75 - 5.75)
-sched = get(opt, "schedule", "k24")
-sched in ("k24", "young") || error("schedule=k24 or schedule=young, not $sched")
-capsule_schedule = if sched == "young"
-    TabulatedRadius(ymap.(yr.t), yr.capsule ./ yr.capsule[1];
-                    source = "Young et al., PoP 27, 082702 (2020) Fig. 3a front (N170827), time-mapped to $shot (derived)")
-elseif pair
+capsule_schedule = if pair
     ScaledRadius(kritcher2024_radius(:n210808); time_scale = bang / 9.18)
 else
     kritcher2024_radius(:n221204)
 end
 # The albedo α_c (`capsule_albedo`): Young 2020's quasi-1D HYDRA ablator albedo of the
-# same dynamic model (Fig. 3a top, `young2020_albedos()`: 0.01–0.16 to 6 ns, 0.30 at 7,
-# 0.40 from 7.5 ns) on the time map above, for either schedule (default; published, not
-# fitted), or a constant. `capsule_outside`: the absorptance of the blow-off outside the
+# LLNL dynamic view-factor model for N170827 (Fig. 3a top, `young2020_albedos()`: 0.01–0.16
+# to 6 ns, 0.30 at 7, 0.40 from 7.5 ns), its time axis mapped piecewise linearly so that
+# the model's 5.75 ns falls at 6.0 ns and its 7.75 ns at bang time (default; published,
+# not fitted), or a constant. `capsule_outside`: the absorptance of the blow-off outside the
 # front (`CapsuleAlbedo`'s `outside`), default 0. `capsule=mesh`: the schedule shrinks the
 # capsule mesh itself on the keyframes (`moving_hohlraum`'s `capsule_shrink`; the flux is
 # evaluated on the shrinking sphere) and the albedo is α_c alone; `capsule=model` keeps
 # the mesh at R₀ and absorbs at the effective radius (`CapsuleAlbedo`'s `radius`).
+ymap(τ) = τ <= 5.75 ? τ * 6.0 / 5.75 : 6.0 + (τ - 5.75) * (bang - 6.0) / (7.75 - 5.75)
 ya = young2020_albedos()
 capsule_alpha = get(opt, "capsule_albedo", "young") == "young" ? TabulatedAlbedo(ymap.(ya.t), ya.capsule) :
                 parse(Float64, opt["capsule_albedo"])

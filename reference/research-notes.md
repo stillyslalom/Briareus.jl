@@ -6498,7 +6498,7 @@ them. Runs: `examples/n221204.jl 0.8 0.4 full <transfer> x calibrated <shot> met
 |---|---|---|
 | capsule albedo α_c (example) | Young 2020's quasi-1D HYDRA ablator albedo on the Young time map (`capsule_albedo=young`, the default; a number still accepted) | 0, fitted to HYDRA's share and stopped at its bound |
 | absorption outside the front | `CapsuleAlbedo(; outside = a_out)`: α_eff = 1 − (1 − α_c)s² − a_out(1 − s²), s = R/R₀; default 0, so the default is the front's alone (`capsule_outside=` in the example) | — |
-| capsule radius schedule (example) | `schedule=k24`, N221204's own HYDRA history (Kritcher 2024 Fig. 1), the default; Zylstra's pair: K24's N210808 capsule, time × bang/9.18 (*L*) | Young's N170827 front through the misread 6 ns anchor (`schedule=young` keeps it) |
+| capsule radius schedule (example) | `schedule=k24`, N221204's own HYDRA history (Kritcher 2024 Fig. 1), the default; Zylstra's pair: K24's N210808 capsule, time × bang/9.18 (*L*) | Young's N170827 front through the misread 6 ns anchor (`schedule=young` kept it; removed 2026-10-26) |
 | conversion of `gold()` / `uranium()` | 0.75 whatever the albedo | `nif_conversion()` when the albedo was an `AlbedoModel` |
 | NIF drive-history walls | `nif_gold()` (`WallLossAlbedo()`, `nif_conversion()`), `nif_uranium()` (`du_wall_loss()`, `nif_conversion()`); the example uses `nif_uranium()`, `test/energetics.jl` `nif_gold()` | `gold(albedo = WallLossAlbedo())`, `uranium()` |
 | `WallLossAlbedo` `release` | **1.0** (the ablating wall; §1) | 0.77 (static wall) |
@@ -7014,7 +7014,7 @@ result changed. Confidence: **H** primary text or table, **H-img** digitized fig
 | Source | Shot(s) | Which radius | Times | Uncertainty | Use | Conf. |
 |---|---|---|---|---|---|---|
 | Kritcher et al., PoP 31, 070502 (2024), doi:10.1063/5.0210904, Fig. 1 (`kritcher2024_capsule()`) | N221204 capsule, and the thinner N210808 capsule, on N221204's 2.05 MJ drive (HYDRA) | not stated; the ablator–fuel interface or the fuel's centre of mass (below), as R/R(0) | 0–9.5 ns (N210808 capsule to its minimum, 0.055 at 9.18 ns) | ±0.01 in R/R(0) (0.02 at 9.25 ns), ±0.04 ns | **schedule**: `kritcher2024_radius()`, the default `schedule=k24`; `:n210808` time-scaled for the pair | H-img (curve), L (surface) |
-| Young et al., PoP 27, 082702 (2020) Fig. 3a (`young2020_radii()`) | N170827 (LLNL dynamic view-factor model) | the model's ablation front | 0–7.75 ns | ±0.03 mm | schedule on a piecewise time map (`schedule=young`); another shot's shape | H-img |
+| Young et al., PoP 27, 082702 (2020) Fig. 3a (`young2020_radii()`) | N170827 (LLNL dynamic view-factor model) | the model's ablation front | 0–7.75 ns | ±0.03 mm | schedule on a piecewise time map (`schedule=young`, removed 2026-10-26); another shot's shape | H-img |
 | Kritcher et al., PRE 106, 025201 (2022) Table I (HYDRA post-shot) | N210207 / N210307 / N210808 | limb-minimum radius at peak velocity (RPV) | point anchors | — | `TrajectoryRadius` anchors, checks: v_imp 393 / 387 / 391 km/s at 8.63 / 8.9 / 8.8 ns, RPV 195 / 211 / 185 µm, bang 9.05 / 9.35 / 9.26 ns (measured 9.09 / 9.31 / 9.26 ± 0.03), so peak velocity comes 0.42–0.46 ns before bang | H |
 | Kritcher et al., PRE 109, 025204 (2024) Table I (as read in `litreview/n221204_benchmark.md`; OSTI 2474067 has no full text) | N210808 / N221204 | — | point anchors | — | anchors: v_imp 401 / 383 km/s (HYDRA, recalibrated on the surrogates; PRE 106 had 391 for N210808), ablator remaining 3.8 / 5.7 %, bang 9.28 / 9.53 ± 0.07 ns measured, 9.27 / 9.61 simulated; no time or radius of peak velocity | H |
 | Ruof et al., PoP 33, 052706 (2026) (OSTI 3367476, LLNL-JRNL-2019015) Table II, keyholes | N221106 (N210808 design), N230110 (N221204 design), N231016 | first shock's breakout from the ablator into the liquid D2 (VISAR) | 3.6–6.1 ns | ±0.006–0.06 ns | the time the ablator–fuel interface starts to move: equator / pole 3.714 / 3.650 ns (N221106), 3.864 ± 0.012 / 3.906 ± 0.018 (N230110; HYDRA 3.899 / 3.886), 3.575 / 3.588 (N231016); shock 1 at 32.7–34.0 km/s, merged 1–2 at ~50 km/s from 4.85 ns (N230110) | H |
@@ -7105,5 +7105,5 @@ an idle machine; the schedule enters only through these values).
 
 - The front's position inside 0.84–0.906 R₀ (the shell thickness at 5–7 ns) is
   unpublished; it sets the capsule share between the bounds.
-- `schedule=young` is now below the lower bound; it stays as a sensitivity.
+- `schedule=young` is now below the lower bound; removed 2026-10-26.
 - The pair's own radius histories, v_imp and RPV are unpublished.
