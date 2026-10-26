@@ -4364,6 +4364,81 @@ StaticArrays' `dot` carries LLVM `reassoc contract` flags, so where FMAs are fus
 depends on the surrounding code, and a change of data layout in a kernel is not bit for
 bit in general.
 
+## H-matrix near-field quadrature: where the time goes (2026-10-27) *derived*
+
+ROADMAP 14, "the near-field quadrature itself". Same workload (`bench3.jl`, 4 threads
+pinned to one CCX, `tol` 1e-6, leaf 48); old = d238f5d, timed interleaved in one sitting
+(other jobs on the machine's other CCX, so absolute times run ~15 % above the previous
+sections').
+
+**Profile (10.5k, before).** Attribution by category of `_hassemble!` × class of the pair
+kernel (tier × pair type; instrumented, ~1.7× the real time, so shares only):
+near-field dense leaves 27 % of block assembly, ACA 37 %, rows cut by the facing test
+(refined, split, sparse) 13 %, dense after a give-up 8 %, shadow-edge leaves 6 %. Of the
+kernel time, a curved point (wall, capsule) onto an end-cap sector's 34-edge contour
+("pc") is the largest class everywhere: far tier 6.3 s (3.7 s of it inside ACA), mid
+2.1 s, near (adaptive rule) 1.3 s, against far point-to-point 2.3 s and the visibility
+rays of occupied leaves 3.6 s. In the near-field leaves themselves: mid pc 1.6 s (0.5M
+pairs, 3.2 µs), near pc 1.3 s (6.9k pairs, 194 µs each), mid point-to-point 0.8 s, far pc
+0.5 s, rays 0.4 s, near point-to-point 0.3 s. Single pair costs (one thread, 20k random
+pairs per class): far pc 1.24 µs, mid pc 2.84 µs, far sector–sector 2.37 µs, near pc
+200 µs; of a near pc pair, ~half was `_distance_to` (32 point–triangle distances at
+every cell the adaptive rule visits), a quarter the contours.
+
+**Coarser rule: not viable.** The point rules' error is O((h/r)²): at the far tier's
+12 element sizes a point-to-point or one-point-per-cell sector rule is off by ~1e-4 to
+1e-3 relative, 100–1000× the block tolerance, and changes the discretization rather than
+approximating the same matrix. An exact-enough quadrature of the same polygon (Gauss on a
+sector to < 1e-9 needs ~16 points plus the 32 chord segments) costs as much as the
+contour. Quadrature reuse between neighbouring pairs has nothing to share in this
+workload: the dominant pairs are distinct points onto distinct receivers.
+
+**What changed** (all on the receiver side; the cost is in evaluating the same kernel):
+
+1. `_closer_than` on a sector receiver (`_Receiver` with a loop) takes the distance from
+   the loop in its plane's coordinates (height inside the polygon, else the nearest of
+   34 edges, one pass) and asks the 32 triangles only when the verdict is within 1e-9
+   (relative) of the threshold; `_adapt_tri` and `_adapt_sector` ask it through
+   `_within`. The refinement, and so every factor, is unchanged **bit for bit**: `==`
+   on `view_factors` (dense) of `hohlraum(h = 0.6, capsule_h = 0.3)` and both bored
+   cavities, and 0 wrong verdicts of 2.9M (points 1e-4 to 1 mm from sectors, in and off
+   their plane, thresholds at D(1 ± 1e-6), D/2, 2D and D). Near pc pair 167 → 94 µs.
+2. The vectorized contour counts the loop's vertices on or behind the point's tangent
+   plane in the same `@simd` loop (an `Int` sum; a floating-point `min`/`ifelse`
+   reduction did not vectorize and made the loop 2× slower) instead of two scalar
+   `all` passes over the loop.
+3. A loop the tangent plane cuts (1 % of points, 4 µs each through 32 clipped
+   triangles) is clipped as one polygon (`_clipped_loop_vf`, streamed
+   Sutherland–Hodgman; the coincident edges along the cutting line cancel), 2.5 µs.
+   Against the triangles over 44.8k random cutting points: max abs 1.7e-14, within the
+   test's 1e-12 rel + 1e-15 abs.
+4. `_atan_nb` forms (t − 1)/(t + 1) of t = lo/hi as (lo − hi)/(lo + hi), one division
+   instead of two; still ≤ 2 ulp from `Base.atan` (10⁶ arguments over 24 decades).
+
+Pair costs after (same pairs): far pc 1.04 µs (−16 %), mid pc 2.43 µs (−14 %), far
+sector–sector 1.83 µs (−23 %), near pc 114 µs (−43 %).
+
+| | 10,484 | 17,632 |
+|---|---|---|
+| H-matrix build, warm, old → new (interleaved) | 4.30–4.43 → 3.89–4.06 s (−9 %) | 8.84–9.08 → 8.15–8.35 s (−8 %) |
+| entries, 300 sampled rows (all columns) | 63 of 3.1M differ; max abs 8.9e-17 | 88 of 5.3M; max abs 1.9e-17 |
+| blocks, ranks, storage | identical | identical |
+| a₀ (rel), P2/P0, P4/P0 (abs) vs old | 0, −8.3e-17, 4.0e-17 | 0, 0, 5.2e-17 |
+| H per element max (median); moment response vs old | 1.3e-15 (0); 2.5e-15 | 4.9e-15 (0); 3.9e-15 |
+
+Against dense Float32 at 10.5k unchanged: a₀ −1.37e-9, P2/P0 2.67e-9, P4/P0 2.67e-9, H
+max 1.19e-7 (median 4.7e-9), moment response 7.8e-7. (The largest relative entry
+differences, up to 0.7, are factors of ~1e-17 whose contour terms cancel.) Dense
+`view_factors` gains from item 1 alone, bit for bit: `bored_cavity(hw = 0.8, hc = 0.25)`
+1.72–1.75 → 1.35–1.38 s, `bored_cavity()` 2.35–2.36 → 1.98–1.99 s (4 threads).
+
+**What is left.** After this the H assembly is mostly the contour itself (≈ 9 ns per
+edge: a square root and two divisions per edge, vectorized), point-to-point pairs whose
+cost is the scattered loads of three small arrays per element (the contiguous layout
+above did not help), and the rays of occupied leaves. None of the remaining near-field
+ideas measured here is worth 10 %: a further step needs fewer kernel evaluations (rim
+certificates for the rays; fewer ACA give-ups), not cheaper ones.
+
 ## N221204 late-time drive (2026-10-24) *derived*
 
 ROADMAP 16. Two results of the N221204 benchmark (`examples/n221204.jl`) disagreed about

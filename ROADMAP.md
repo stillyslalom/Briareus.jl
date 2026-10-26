@@ -320,8 +320,11 @@ Items 9–13 and 16–17 follow the 2026-10-22 literature review against Kritche
     N^1.5 remainder"), zero near-field blocks dropped and facing-cut rows refined to
     low rank (−17 % storage, −15 % F x; "H-matrix near field"), a vectorized sector
     contour (−24 to −28 % assembly, round-off; a contiguous quadrature layout gained
-    nothing and was dropped). Left, in order: the
-    near-field quadrature itself; rim certificates for non-convex occluders and `:sampled` visibility
+    nothing and was dropped), the near-field quadrature profiled and its receiver side
+    sped up (sector distance by the loop, fused side test, clipped loop: −8 to −9 %
+    assembly, round-off; dense bored cavity −16 to −21 %, bit for bit; a coarser rule
+    is not viable at the block tolerance; "H-matrix near-field quadrature"). Left, in
+    order: rim certificates for non-convex occluders and `:sampled` visibility
     (still a ray per pair of an occupied leaf); the bored cavity's gap pairs (~60 % of its
     view-factor time; refinement toward the shared edge onto ~34-edge sector receivers);
     GPU mat-vecs (≲ 25 % end to end on the RTX 2060 while assembly stays on the CPU; not

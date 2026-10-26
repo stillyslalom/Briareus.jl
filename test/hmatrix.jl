@@ -130,6 +130,14 @@ end
     @test count(>(0), f1) > length(f1) ÷ 10
     # (absolute below ~1e-6: the contour's terms cancel there)
     @test all(abs.(f2 .- f1) .<= 1e-12 .* abs.(f1) .+ 1e-15)
+    # the adaptive rule's distance test by the loop: the triangles' verdict, also at
+    # distances just either side of the exact one and in the sector's plane
+    qs = [(r, v + Vec3(randn(rng), randn(rng), randn(rng)) * exp10(rand(rng, -4:0)))
+          for r in rs for v in r.loop[1:4:end]]
+    qs = [qs; [(r, p - dot(p - r.o, r.nr) * r.nr) for (r, p) in qs[1:2:end]]]
+    D = [Briareus._distance_to(p, r) for (r, p) in qs]
+    @test all(Briareus._closer_than(p, r, D[k] * c) == (D[k] < D[k] * c)
+              for (k, (r, p)) in enumerate(qs) for c in (0.5, 1 - 1e-7, 1.0, 1 + 1e-7, 2.0))
 end
 
 # The visibility rules (shaft culling without rays, the convex and planar exclusions, the

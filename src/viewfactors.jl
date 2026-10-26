@@ -370,10 +370,32 @@ function _one_point(t::Target, e)
 end
 
 # Receiving polygon of a planar element: its triangles, and for a polar sector also the
-# boundary loop of those triangles (same vertices, same orientation).
+# boundary loop of those triangles (same vertices, same orientation), with the loop in
+# 2-D coordinates of its plane for `_closer_than` (origin o, unit normal nr, in-plane axes
+# e1, e2; closed u, v arrays and the inverse squared edge lengths w).
 struct _Receiver
     tris::Vector{NTuple{3,Vec3}}
     loop::Vector{Vec3}
+    o::Vec3
+    nr::Vec3
+    e1::Vec3
+    e2::Vec3
+    u::Vector{Float64}
+    v::Vector{Float64}
+    w::Vector{Float64}
+end
+
+function _Receiver(tris, loop)
+    z = zero(Vec3)
+    isempty(loop) && return _Receiver(tris, loop, z, z, z, z, Float64[], Float64[], Float64[])
+    o = loop[1]
+    nr = normalize(sum(cross(loop[k] - o, loop[mod1(k + 1, end)] - o) for k in eachindex(loop)))
+    e1 = normalize(loop[2] - o - dot(loop[2] - o, nr) * nr)
+    e2 = cross(nr, e1)
+    u = [[dot(x - o, e1) for x in loop]; 0.0]
+    v = [[dot(x - o, e2) for x in loop]; 0.0]
+    w = [(l2 = (u[k+1] - u[k])^2 + (v[k+1] - v[k])^2; l2 > 0 ? 1 / l2 : 0.0) for k in eachindex(loop)]
+    return _Receiver(tris, loop, o, nr, e1, e2, u, v, w)
 end
 
 function _receiver(t::Target, e, sector::Bool, poly::Bool, offset)
@@ -646,7 +668,6 @@ end
 _distance_to(p, r::_PolyReceiver) = minimum(_point_triangle_distance(p, tri...) for tri in r.tris)
 
 # Whether p lies within d of the receiver (the bounding sphere first).
-_closer_than(p, r::_Receiver, d) = _distance_to(p, r) < d
 _closer_than(p, r::_PolyReceiver, d) = norm(p - r.center) - r.radius < d && _distance_to(p, r) < d
 
 # Emitter. The adaptive near-pair rule refines toward the receiver from cells of the
@@ -931,32 +952,63 @@ _soa_receiver(r) = r
 _closer_than(p, r::_SoAReceiver, d) = _closer_than(p, r.r, d)
 _distance_to(p, r::_SoAReceiver) = _distance_to(p, r.r)
 
-# `_receiver_vf(p, n, r.r)` with the contour of `_contour_soa`.
+# `_receiver_vf(p, n, r.r)` to round-off, with the contour of `_contour_soa`, which also
+# counts the loop's vertices on or behind p's tangent plane: the side test rides in the
+# same vectorized loop (a separate scalar pass over the vertices cost about a third as
+# much as the contour). A loop the plane cuts takes `_clipped_loop_vf`.
 function _receiver_vf(p, n, r::_SoAReceiver)
-    loop = r.r.loop
-    all(v -> dot(n, v - p) > 0, loop) && return _contour_soa(p, n, r.x, r.y, r.z)
-    all(v -> dot(n, v - p) <= 0, loop) && return 0.0
-    f = 0.0
-    for tri in r.r.tris
-        f += _point_polygon_vf(p, n, tri)
-    end
-    return f
+    f, nb = _contour_soa(p, n, r.x, r.y, r.z)
+    nb == 0 && return f
+    nb == length(r.x) - 1 && return 0.0
+    return _clipped_loop_vf(p, n, r.r.loop)
 end
 
-# `_contour_vf` over the closed loop x, y, z (@noinline as `_contour_vf` is).
+# The contour over the loop clipped to the half-space in front of p (Sutherland–Hodgman,
+# streamed: no vertex list). On a nonconvex loop (an annular sector) the clipped boundary
+# may run along the cutting line in coincident pairs of opposite edges, whose terms
+# cancel, so this is the sum over the clipped triangles (`_point_polygon_vf`) to
+# round-off, at one term per edge instead of three per triangle.
+function _clipped_loop_vf(p, n, loop)
+    s = 0.0
+    m = length(loop)
+    a = loop[m] - p
+    ha = dot(n, loop[m] - p)
+    first = prev = zero(Vec3)
+    started = false
+    for k in 1:m
+        b = loop[k] - p
+        hb = dot(n, loop[k] - p)
+        # the edge a → b: its crossing of the plane, then b if in front
+        for (emit, x) in (((ha > 0) != (hb > 0) && ha != hb, a + ha / (ha - hb) * (b - a)), (hb > 0, b))
+            emit || continue
+            started ? (s += _edge_term(n, prev, x)) : (first = x; started = true)
+            prev = x
+        end
+        a, ha = b, hb
+    end
+    started && (s += _edge_term(n, prev, first))
+    return abs(s) / (2π)
+end
+
+# `_contour_vf` over the closed loop x, y, z (@noinline as `_contour_vf` is), and the
+# number of its vertices with n·(v - p) ≤ 0 (an integer sum, which vectorizes where a
+# floating-point min does not).
 @noinline function _contour_soa(p, n, X, Y, Z)
     px, py, pz = p
     nx, ny, nz = n
     s = 0.0
+    nb = 0
     @inbounds @simd for k in 1:length(X)-1
         ax, ay, az = X[k] - px, Y[k] - py, Z[k] - pz
         bx, by, bz = X[k+1] - px, Y[k+1] - py, Z[k+1] - pz
+        h = nx * ax + ny * ay + nz * az
+        nb += h <= 0
         cx, cy, cz = ay * bz - az * by, az * bx - ax * bz, ax * by - ay * bx
         nc = sqrt(cx * cx + cy * cy + cz * cz)
         g = (nx * cx + ny * cy + nz * cz) / nc
         s += ifelse(nc == 0, 0.0, _atan_nb(nc, ax * bx + ay * by + az * bz) * g)
     end
-    return abs(s) / (2π)
+    return abs(s) / (2π), nb
 end
 
 # atan(y, x) for y ≥ 0 without branches (so it vectorizes): the ratio of the smaller to
@@ -965,9 +1017,10 @@ end
 # in two parts. Within 2 ulp of `Base.atan` (10⁶ random arguments over 12 decades).
 @inline function _atan_nb(y::Float64, x::Float64)
     ax = abs(x)
-    t = min(y, ax) / max(y, ax)                       # [0, 1]
-    big = t > 0.41421356237309503                     # tan(π/8)
-    u = ifelse(big, (t - 1) / (t + 1), t)
+    lo, hi = min(y, ax), max(y, ax)
+    big = lo > 0.41421356237309503 * hi               # tan(π/8)
+    # (t - 1) / (t + 1) of t = lo / hi in one division
+    u = ifelse(big, lo - hi, lo) / ifelse(big, lo + hi, hi)
     z = u * u
     w = z * z
     s1 = z * evalpoly(w, (3.33333333333329318027e-01, 1.42857142725034663711e-01, 9.09088713343650656196e-02,
@@ -1014,7 +1067,7 @@ function _adapt_tri(s, sgn, nflat, a, b, c, rc, depth, mindepth, maxdepth, ratio
     cen = (a + b + c) / 3
     p, n = (s === nothing || sgn == 0) ? (cen, nflat) : (q = surface_point(s, cen); (q[1], sgn * q[2]))
     h = max(norm(b - a), norm(c - b), norm(a - c))
-    if depth < mindepth || (depth < maxdepth && _distance_to(p, rc) < ratio * h)
+    if depth < mindepth || (depth < maxdepth && _within(p, rc, ratio * h))
         h^2 > _SLIVER * norm(cross(b - a, c - a)) &&
             return _split_sliver(a, b, c) do x, y, z
                 _adapt_tri(s, sgn, nflat, x, y, z, rc, depth + 1, mindepth, maxdepth, ratio)
@@ -1064,7 +1117,7 @@ function _adapt_sector(s, n, r0, r1, a, b, rc, depth, mindepth, maxdepth, ratio)
     rm = sqrt((r0^2 + r1^2) / 2)
     p = _sector_point(s, rm, (a + b) / 2)
     h = max(r1 - r0, r1 * (b - a))
-    if depth < mindepth || (depth < maxdepth && _distance_to(p, rc) < ratio * h)
+    if depth < mindepth || (depth < maxdepth && _within(p, rc, ratio * h))
         φm = (a + b) / 2
         # a sector long one way (a gap's annulus) is halved across that way only (`_SLIVER`)
         if r1 * (b - a) > _SLIVER_SECTOR * (r1 - r0)
@@ -1087,6 +1140,40 @@ end
 const _SLIVER_SECTOR = 4.0
 
 _distance_to(p, r::_Receiver) = minimum(_point_triangle_distance(p, tri...) for tri in r.tris)
+
+# `_distance_to(p, r) < d`, decided the same way. A sector's 32 triangles made the
+# distance about half the cost of its near pairs (the adaptive rule asks it at every
+# cell); its loop in plane coordinates gives the distance in one pass (inside the
+# polygon: the height over its plane; else the nearest edge), which agrees with the
+# triangles' to round-off. Only a verdict within 1e-9 (relative) of d is left to the
+# triangles, so the refinement, and every factor, is unchanged bit for bit.
+function _closer_than(p, r::_Receiver, d)
+    isempty(r.loop) && return _distance_to(p, r) < d
+    x = p - r.o
+    h, qu, qv = dot(r.nr, x), dot(r.e1, x), dot(r.e2, x)
+    U, V, W = r.u, r.v, r.w
+    inside = false
+    d2 = Inf
+    @inbounds for k in eachindex(W)
+        au, av, bu, bv = U[k], V[k], U[k+1], V[k+1]
+        eu, ev, wu, wv = bu - au, bv - av, qu - au, qv - av
+        s = clamp((wu * eu + wv * ev) * W[k], 0.0, 1.0)
+        du, dv = wu - s * eu, wv - s * ev
+        d2 = min(d2, du * du + dv * dv)
+        # crossing number of the ray from q along +u
+        (av > qv) != (bv > qv) && qu < au + (qv - av) * eu / ev && (inside = !inside)
+    end
+    D = inside ? abs(h) : sqrt(h * h + d2)
+    τ = 1e-9 * (abs(h) + abs(qu) + abs(qv) + d)
+    D < d - τ && return true
+    D > d + τ && return false
+    return _distance_to(p, r) < d
+end
+
+# `_distance_to(p, r) < d` exactly (`_closer_than` of a `_PolyReceiver` screens by its
+# bounding sphere without a margin).
+_within(p, r::Union{_Receiver,_SoAReceiver}, d) = _closer_than(p, r, d)
+_within(p, r, d) = _distance_to(p, r) < d
 
 # Distance from p to the triangle (a, b, c) (Ericson, Real-Time Collision Detection 5.1.5).
 function _point_triangle_distance(p, a, b, c)
