@@ -3914,8 +3914,14 @@ points of SAND2007-5659C (OSTI 1147367, IFSA07; 10 points read from the slide's 
 plot, 175–255 eV, e.g. 8.3 at 245 ± 5 eV) give ṁ = A T³ with A = 4.9–5.2×10⁵
 g cm⁻² s⁻¹ (free exponent 3.8), ±11 % from Dante's ±3.5 % (**M**); SAND2011-8633C (OSTI
 1141159) uses 0.415 T³ mg cm⁻² ns⁻¹ (4.15×10⁵) for HDC and Ge-CH together. Lindl's
-3×10⁵ is 1.4–1.7× below the HDC data. Runs at 4.15e5 and 5.0e5 and the grid study at the
-adopted rate are pending.
+3×10⁵ is 1.4–1.7× below the HDC data. At those rates this shell over-ablates (stage 0,
+1 µm, same drive): 4.15e5 leaves 0 % and 5.0e5 fails at 7.33 ns with 0.11 % left. The
+grid study at 2.85e5 fails too: nx 700 and 2000 end on `dt_collapse`, only nx 1400
+completes. A = 2.85e5 is kept as an *effective* rate, *calibrated* to the ablator remaining
+(5–6.6 %, PRE 109 Table I / HYDRA), so that number is a fit target, not a check; v_imp,
+KE and bang time remain checks (decided 2026-10-26). Replacing it with a measured rate
+is CompactLES ROADMAP A22 (rocket-relation pressure tied to ṁ, real carbon EOS, grid
+robustness).
 
 ## Large radiation models (2026-10-24) *derived*
 

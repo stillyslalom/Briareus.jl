@@ -367,8 +367,10 @@ Items 9–13 and 16–17 follow the 2026-10-22 literature review against Kritche
     split (item 13). *State:* stage 0 (an absorbed-flux ablation source, P_abl ∝ T^3.3
     t^−0.09) runs in 1-D, r–z, 3-D and on refined levels. The full-model N221204 drive
     (306 eV peak) at ṁ = 2.85e5 T³ gives 340 km/s, 5.0 % remaining, 24 kJ, stagnation
-    10.2 ns (bang 9.53; targets v_imp 380–400 km/s, 5–6.6 % remaining, 19–33 kJ). *Next:*
-    runs at Olson's planar HDC rates (A ≈ 5e5 T³) and the grid study; then r–θ with the
+    10.2 ns (bang 9.53; targets v_imp 380–400 km/s, 5–6.6 % remaining, 19–33 kJ). A is an
+    effective rate fitted to the remaining mass; Olson's planar HDC rates (4.15–5e5)
+    over-ablate and the grid study fails off nx 1400, so a measured rate is CompactLES
+    ROADMAP A22. *Next:* the stagnation lag (rocket model or drive); then r–θ with the
     a_l (Masse's P2 sign flip near 4.5 ns), r–z with AMR; a 1 µm 3-D shell needs the band
     (set by CompactLES's covered-node timestep and tile fragility) and the band following
     the shell over a regrid. Stage 1: implicit gray flux-limited diffusion with a Marshak
