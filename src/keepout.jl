@@ -107,6 +107,7 @@ function _aperture_clearance(k::ApertureKeepOut, b::Beam)
         dist = _sampson_distance(u, v, A, B) - cone * abs(s) - k.margin
         best = best === nothing ? dist : min(best, dist)
     end
+    best === nothing && return _no_clearance(b)   # an aperture without a rim
     return best - k.transverse - k.focus * cone
 end
 
@@ -254,5 +255,8 @@ end
 
 function _keepout_penalty(k::Union{ApertureKeepOut,SphereKeepOut}, beams)
     c = _keepout_clearance(k, beams)
-    return k.weight * sum(max(zero(ci), k.minimum - ci)^2 for ci in c if isfinite(ci); init = 0.0)
+    # in the beams' number type also when no clearance is finite (a Float64 0.0 beside
+    # dual penalties made the sum over keep-outs a runtime dispatch)
+    J = k.weight * sum(max(zero(ci), k.minimum - ci)^2 for ci in c if isfinite(ci); init = 0.0)
+    return convert(eltype(c), J)
 end

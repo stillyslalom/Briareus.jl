@@ -628,7 +628,7 @@ _xray_source(t::Target, P, time) = _constant_conversion(t) ? conversions(t) .* P
                                    conversions(t, time, P) .* P ./ t.elem_area
 
 _temperature_dependent(t::Target) =
-    any(c -> _temperature_dependent(c.material.albedo), t.components)
+    any(c -> _temperature_dependent(c.material.albedo)::Bool, t.components)
 _temperature_dependent(::AlbedoModel) = false
 _temperature_dependent(::WallLossAlbedo) = true
 _temperature_dependent(::TemperatureAlbedo) = true

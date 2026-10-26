@@ -302,7 +302,9 @@ Base.@nospecializeinfer function _drive_history(
         end
         # corrector: the trapezoidal integral with this step's temperatures
         function advance(sol)
-            Ik, tk, rk = copy(I), copy(tb), copy(rate)
+            # `local`: the step's own `Ik, tk, rk` below would otherwise be captured
+            # (boxed, and possibly undefined here; JET's report_call)
+            local Ik, tk, rk = copy(I), copy(tb), copy(rate)
             for e in foil_elems
                 rk[e] = _front_rate(model(e).front, radiation_temperature(ForwardDiff.value(sol.H[e])))
                 τ0 === nothing && continue

@@ -3,11 +3,20 @@
 # 1. Functions that take user callables are compiled once for every callable: a second call
 #    with new closure types adds no method instance to the body (`Base.@nospecializeinfer`
 #    with `@nospecialize`; `@nospecialize` alone still infers, and so instantiates, the
-#    body per closure type). Counting instances is deterministic, unlike compile times.
-# 2. The optimization path infers concrete types on Float64 and on the optimizer's duals.
+#    body per closure type). Counting instances is deterministic, unlike compile times;
+#    JET checks dispatch and inference, not recompilation per closure.
+# 2. The optimization path infers concrete types on Float64 and on the optimizer's duals
+#    (`@inferred`), and JET finds no runtime dispatch in it (`report_opt`) and no possible
+#    error (`report_call`) in it, the solves or the drive history.
 # 3. The threaded deposition kernel allocates per task, not per point (function barrier).
-# Add a case to 1 for each new function that takes closures, objectives or callbacks.
+# Add a case to 1 for each new function that takes closures, objectives or callbacks,
+# and to 2 for each new function on the optimization path.
 # The fixture's calls have the precompile workload's argument types (fast with it).
+# JET is a test-only dependency (Project.toml [extras]); run standalone without it, its
+# checks are skipped with a warning.
+
+const _INF_JET = Base.find_package("JET") !== nothing
+_INF_JET && @eval using JET
 
 # Method instances of the body of keyword function `f` (its only method), inference-only
 # ones included (`Base.bodyfunction` and `Base.specializations` are internal, present
@@ -16,6 +25,16 @@ function _inf_body_instances(f)
     body = Base.bodyfunction(only(methods(f)))
     body === nothing && error("$f has no keyword body")
     return sum(m -> count(_ -> true, Base.specializations(m)), methods(body))
+end
+
+# Whether JET's analysis `report` (`JET.report_opt` or `JET.report_call`) of `f(args...)`
+# reports nothing in Briareus' own frames; prints the reports otherwise. Base, Optim and
+# ForwardDiff internals are not ours to fix.
+function _inf_jet_clean(report, f, args...)
+    r = report(f, Base.typesof(args...); target_modules = (Briareus,))
+    ok = isempty(JET.get_reports(r))
+    ok || show(stdout, r)
+    return ok
 end
 
 # Bytes allocated by the threaded deposition kernel (warmed), behind a function barrier.
@@ -49,20 +68,20 @@ end
     s = Scenario(t, quads; observe = :capsule, parameterization = p,
                  viewfactor_kw = (; closed = true))
     keepout = (ApertureKeepOut(t), SphereKeepOut(t))
+    objectives = (symmetry_objective(; drive = 1.0, keepout), asymmetry_objective(; keepout))
+    tw = hohlraum(; geometry..., wall = Material(:Au; albedo = WallLossAlbedo(), conversion = 0.8))
+    mw = RadiationModel(tw; F = s.model.F, closed = true)
+    pulse = PulseShape([0.0, 1.0, 2.0], [0.0, 4.0, 4.0])
+    history(beams_at, times; kw...) = drive_history(mw, s.deposition, beams_at, times; kw...)
 
     @testset "closures compile once" begin
-        tw = hohlraum(; geometry..., wall = Material(:Au; albedo = WallLossAlbedo(), conversion = 0.8))
-        mw = RadiationModel(tw; F = s.model.F, closed = true)
-        pulse = PulseShape([0.0, 1.0, 2.0], [0.0, 4.0, 4.0])
-        drive_history(mw, s.deposition, τ -> with_pulses(quads, pulse, τ), [0.5, 1.0];
-                      record = sol -> sol)
+        history(τ -> with_pulses(quads, pulse, τ), [0.5, 1.0]; record = sol -> sol)
         n = _inf_body_instances(Briareus._drive_history)
         # new `beams_at`, `record` and `times` types
-        drive_history(mw, s.deposition, τ -> with_pulses(quads, pulse, 0.9τ), 0.5:0.5:1.0;
-                      record = sol -> sol.H[1])
+        history(τ -> with_pulses(quads, pulse, 0.9τ), 0.5:0.5:1.0; record = sol -> sol.H[1])
         @test _inf_body_instances(Briareus._drive_history) == n
 
-        optimize_pointing(s, symmetry_objective(; keepout); x0, iterations = 1, evaluations = 2)
+        optimize_pointing(s, objectives[1]; x0, iterations = 1, evaluations = 2)
         n = _inf_body_instances(optimize_pointing)
         # a new objective type and a callback
         optimize_pointing(s, asymmetry_objective(; drive = 1.0); x0, iterations = 1,
@@ -71,7 +90,6 @@ end
     end
 
     @testset "optimization path infers" begin
-        objectives = (symmetry_objective(; drive = 1.0, keepout), asymmetry_objective(; keepout))
         for x in (x0, _inf_duals(x0))   # Float64 and the optimizer's duals
             T = eltype(x)
             beams = @inferred apply(p, x)
@@ -85,9 +103,38 @@ end
         @test (@inferred flux_response(s.model, s.observed)) isa Matrix{Float64}
     end
 
+    if _INF_JET
+        @testset "JET" begin
+            dep = deposit(s.deposition, quads)
+            for x in (x0, _inf_duals(x0))
+                beams, ev = apply(p, x), evaluate(s, x)
+                # no runtime dispatch in the per-evaluation kernels (the objectives
+                # dispatch by design on `Evaluation.scenario` in the uncached moments,
+                # as the solves do on albedo models and the model's storage)
+                @test _inf_jet_clean(JET.report_opt, apply, p, x)
+                @test _inf_jet_clean(JET.report_opt, deposit, s.deposition, beams)
+                @test _inf_jet_clean(JET.report_opt, Briareus._keepout_penalty, keepout, beams)
+                # no possible errors
+                @test _inf_jet_clean(JET.report_call, evaluate, s, x)
+                @test _inf_jet_clean(JET.report_call, flux_moments, ev)
+                @test _inf_jet_clean(JET.report_call, objectives[1], ev)
+                @test _inf_jet_clean(JET.report_call, objectives[2], ev)
+            end
+            @test _inf_jet_clean(JET.report_call, flux_response, s.model, s.observed)
+            @test _inf_jet_clean(JET.report_call, solve, s.model, dep)
+            @test _inf_jet_clean(JET.report_call, (m, d) -> solve(m, d; time = 1.0), mw, dep)
+            @test _inf_jet_clean(JET.report_call, history,
+                                 τ -> with_pulses(quads, pulse, τ), [0.5, 1.0])
+            @test _inf_jet_clean(JET.report_call, (s, o, x) -> optimize_pointing(s, o; x0 = x),
+                                 s, objectives[1], x0)
+        end
+    else
+        @warn "JET is not in the environment: test/inference.jl skips its JET checks"
+    end
+
     @testset "threaded kernel allocates per task" begin
-        # a boxed capture allocates per point (1.8 million here); the tasks'
-        # overhead is ~1 kB each
+        # a boxed capture allocates per point (1.8 million here); the tasks' overhead
+        # is ~1 kB each
         bound = 4096 * (Threads.nthreads() + 1)
         @test _inf_kernel_allocs(s.deposition, apply(p, x0)) < bound
         @test _inf_kernel_allocs(s.deposition, apply(p, _inf_duals(x0))) < bound

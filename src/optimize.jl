@@ -225,9 +225,9 @@ _radiative(s::Scenario) = s.model !== nothing && !isempty(s.observed)
 
 function _response(s::Scenario)
     _radiative(s) || return nothing
-    c = getfield(s, :_response)
+    c, m = getfield(s, :_response), s.model::RadiationModel
     lock(c.lock) do
-        c.R === nothing && (c.R = flux_response(s.model, s.observed; time = s.time, s.albedo))
+        c.R === nothing && (c.R = flux_response(m, s.observed; time = s.time, s.albedo))
         c.R
     end
 end
