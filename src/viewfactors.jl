@@ -19,7 +19,12 @@ element, integrated over the emitter: over `4^level` sub-triangle points for pai
 closer than `near` element sizes (√2 × the largest centroid-to-vertex distance, the side
 of a square element), which stays accurate for elements sharing an edge such as the
 wall–cap corner of a hohlraum, and from the centroid beyond that, averaged over the two
-directions.
+directions. A near pair of flat elements (not on a curved surface) that lie wholly in
+front of each other takes their exact exchange instead, the double contour integral
+``A_i F_{ij} = \\frac{1}{2π}\\oint_i\\oint_j \\ln r\\, d\\mathbf{l}_i\\cdot d\\mathbf{l}_j`` over
+their outlines (to ~1e-13; for an element folded across several facets, of the facets
+themselves): elements sharing an edge cost ~100× less than by the point rule, which
+also leaves ~5e-4 on them.
 
 Elements of a component with a `CurvedSurface` are integrated over the curved patch:
 quadrature points on the true surface with its normals and areas, point to point
@@ -153,8 +158,10 @@ function _vf_context(t::Target; near, mid, level, exact_far, visibility, visibil
     end
     # partial visibility (`visibility = :sampled`): each element's ray samples and probes
     vis = visibility === :sampled ? [_visibility_samples(t, e, visibility_grid) for e in 1:N] : nothing
+    # outlines of flat elements, for near flat pairs (`_contour_pair_vf`)
+    outl = Union{Nothing,_Outline}[curved[e] ? nothing : _outline(t, e, offset, size[e]) for e in 1:N]
     return (; t, bvh = t.bvh, C, Nrm, A, planar, concave, recv, cells, qnear, qmid, qfar, qself,
-           size, slack, ε, tri_surf, inside, near2 = near^2, mid2 = mid^2, level, exact_far, vis, multi)
+           size, slack, ε, tri_surf, inside, near2 = near^2, mid2 = mid^2, level, exact_far, vis, multi, outl)
 end
 
 # Row i of the view-factor matrix (pairs i < j), behind a function barrier so the
@@ -214,7 +221,7 @@ end
 
 # G of the pair i < j that faces and sees itself by the fraction `frac` > 0.
 function _vf_kernel(ctx, i, j, frac, d, r2)
-    (; t, Nrm, A, planar, recv, cells, qnear, qmid, qfar, size, near2, mid2, level, exact_far) = ctx
+    (; t, Nrm, A, planar, recv, cells, qnear, qmid, qfar, size, near2, mid2, level, exact_far, outl) = ctx
     # (`cells` is untyped: assert the kernel's type, or every pair's factor is boxed)
     near_kernel(e, rc) = (cells[e] === nothing ? _adaptive_kernel(t, e, rc; mindepth = level + 1) :
                           _cell_kernel(cells[e], rc))::Float64
@@ -223,7 +230,10 @@ function _vf_kernel(ctx, i, j, frac, d, r2)
     # G = Aᵢ Fᵢⱼ = Aⱼ Fⱼᵢ
     if planar[i] && planar[j]
         if tier === :near
-            G = (near_kernel(i, recv[j]) + near_kernel(j, recv[i])) / 2
+            # flat pairs wholly in front of each other: the exact double contour
+            oi, oj = outl[i], outl[j]
+            G = oi === nothing || oj === nothing ? NaN : _contour_pair_vf(oi, oj)
+            isnan(G) && (G = (near_kernel(i, recv[j]) + near_kernel(j, recv[i])) / 2)
         elseif exact_far
             G = (_pair_kernel(qfar[i], recv[j]) + _pair_kernel(qfar[j], recv[i])) / 2
         else
@@ -1031,6 +1041,195 @@ end
     r = ifelse(big, (7.85398163397448278999e-01 + r) + 3.06161699786838301793e-17, r)
     r = ifelse(y > ax, (1.57079632679489655800e+00 - r) + 6.12323399573676603587e-17, r)
     return ifelse(x < 0, (3.14159265358979311600e+00 - r) + 1.22464679914735317723e-16, r)
+end
+
+# --------------------------------------------- near flat pairs: double contour
+#
+# The cell rule of a near pair refines toward the receiver down to maxdepth, so a pair
+# sharing an edge costs the edge's length over the finest cell (10³–10⁴ point-to-polygon
+# factors: 60–90 % of the view-factor time of boxes, remeshed CAD and sliver tubes), and
+# its one-point cells away from the edge still leave ~5e-4. Two flat surfaces that see
+# each other wholly from in front exchange exactly
+#
+#     G = A_i F_ij = (1/2π) Σ_a Σ_b (â·b̂) ∫_a ∫_b ln r ds dt
+#
+# over the directed edges a of i's outline and b of j's (Stokes twice: the contour form
+# of the point-to-polygon factor, then of its integral over i; Sparrow 1963, Mitalas &
+# Stephenson 1966), which holds for a folded element as well as a planar one (interior
+# edges cancel) as long as no facet hides another: every facet lies in front of every
+# other facet's plane, of its own element and of the partner. The inner integral is
+# closed form and the outer one adaptive Gauss–Kronrod, with the s ln s of two edges
+# meeting at a point subtracted, edges on one line in closed form, an edge split where
+# the other ends on it, and product Gauss–Legendre for edges far apart for their lengths.
+# The constant part of ln r integrates to zero over closed outlines, so coordinates are
+# scaled to the pair's size (no large logarithms to cancel). Exact for the facets, where
+# the cell rule emits from the element's mean plane: on remeshed CAD walls, neighbors
+# folded by a few degrees exchanged 10–70 % off (research notes, "Near flat pairs by the
+# double contour").
+
+struct _Outline
+    edges::Vector{NTuple{2,Vec3}}   # directed outline (counterclockwise about the front)
+    verts::Vector{Vec3}             # every vertex of the facets (the front tests)
+    planes::Vector{NTuple{2,Vec3}}  # (normal, point) of each plane of facets
+    concave::Bool                   # every facet in front of every plane
+    size::Float64
+end
+
+# Outline of flat element `e` (not curved): its facets' boundary from the component mesh's
+# vertex ids (exact cancellation of interior edges), straight runs merged.
+function _outline(t::Target, e, offset, size)
+    c = t.elem_comp[e]
+    m = t.components[c].mesh
+    ids = Dict{Vec3,Int}()
+    P = Vec3[]
+    vid(v) = get!(() -> (push!(P, v); length(P)), ids, v)
+    T = [map(i -> vid(m.vertices[i]), m.triangles[k - offset[c]]) for k in t.elem_tris[e]]
+    edges = [(P[a], P[b]) for (a, b) in _merge_straight(P, _boundary_edges(T, eachindex(T)))]
+    tol = 1e-12 * size
+    planes = NTuple{2,Vec3}[]
+    for (a, b, d) in T
+        n = normalize(cross(P[b] - P[a], P[d] - P[a]))
+        any(((q, o),) -> dot(n, q) > 0 && all(i -> abs(dot(q, P[i] - o)) <= tol, (a, b, d)), planes) ||
+            push!(planes, (n, P[a]))
+    end
+    concave = all(_in_front(pl, P, 1e-9 * size) for pl in planes)
+    return _Outline(edges, P, planes, concave, size)
+end
+
+_in_front((n, o), vs, tol) = all(v -> dot(n, v - o) >= -tol, vs)
+
+# G of the flat pair (i, j) by the double contour when each lies wholly in front of the
+# other's planes (to 1e-9 of their size) and neither hides part of itself; else NaN.
+function _contour_pair_vf(oi::_Outline, oj::_Outline)
+    oi.concave && oj.concave || return NaN
+    L = max(oi.size, oj.size)
+    δ = 1e-9 * L
+    all(pl -> _in_front(pl, oj.verts, δ), oi.planes) && all(pl -> _in_front(pl, oi.verts, δ), oj.planes) ||
+        return NaN
+    o = oi.edges[1][1]
+    s = 0.0
+    for (p0, p1) in oi.edges, (q0, q1) in oj.edges
+        a, b = p1 - p0, q1 - q0
+        c = dot(a, b)
+        c == 0 && continue
+        s += c / (norm(a) * norm(b)) * _lnr_edges((p0 - o) / L, (p1 - o) / L, (q0 - o) / L, (q1 - o) / L)
+    end
+    return max(s * L^2 / 2π, 0.0)
+end
+
+# ∫ ln √(τ² + d²) dτ
+@inline function _lnr_prim(τ, d)
+    q = τ * τ + d * d
+    q == 0 && return 0.0
+    return (τ * log(q) - 2τ + (d == 0 ? 0.0 : 2d * atan(τ / d))) / 2
+end
+
+# x² ln|x| / 2 − 3x²/4, whose second derivative is ln|x|
+_lnr_line(x) = x == 0 ? 0.0 : x^2 * log(abs(x)) / 2 - 3x^2 / 4
+
+# ∫_a ∫_b ln |x − y| over the segments a = P0P1 and b = Q0Q1.
+function _lnr_edges(P0, P1, Q0, Q1)
+    La, Lb = norm(P1 - P0), norm(Q1 - Q0)
+    (La == 0 || Lb == 0) && return 0.0
+    # far apart for their lengths: ln r is analytic over both, product Gauss–Legendre
+    ρ = 4norm(P0 + P1 - Q0 - Q1) / 2(La + Lb)
+    ρ >= _FAR_RHO[1] && return _lnr_gauss(P0, P1, Q0, Q1, ρ)
+    â, b̂ = (P1 - P0) / La, (Q1 - Q0) / Lb
+    ε = 1e-12 * max(La, Lb)
+    off(X, A, u) = (t = dot(X - A, u); (norm(X - A - t * u), t))
+    (dQ0, tQ0), (dQ1, tQ1) = off(Q0, P0, â), off(Q1, P0, â)
+    if dQ0 <= ε && dQ1 <= ε                       # on one line
+        b1, b2 = minmax(tQ0, tQ1)
+        return _lnr_line(La - b1) - _lnr_line(-b1) - _lnr_line(La - b2) + _lnr_line(-b2)
+    end
+    # an end of one edge inside the other: split there
+    for (d, t, X) in ((dQ0, tQ0, Q0), (dQ1, tQ1, Q1))
+        d <= ε && ε < t < La - ε && return _lnr_edges(P0, X, Q0, Q1) + _lnr_edges(X, P1, Q0, Q1)
+    end
+    for X in (P0, P1)
+        d, t = off(X, Q0, b̂)
+        d <= ε && ε < t < Lb - ε && return _lnr_edges(P0, P1, Q0, X) + _lnr_edges(P0, P1, X, Q1)
+    end
+    tol = 1e-14 * La * Lb
+    # size of the terms of the inner integral (τ ln q at |τ| ≤ R, the farthest distance)
+    R = max(norm(P0 - Q0), norm(P0 - Q1), norm(P1 - Q0), norm(P1 - Q1))
+    mag = (R + Lb) * (abs(2log(R)) + 4)
+    # meeting at an end: from the common point A along both, the inner integral is
+    # H(Lb − s c; s sθ) − H(−s c; s sθ), and the second term is s(c − c ln s − sθ atan(c/sθ))
+    for (A, B) in ((P0, P1), (P1, P0)), (C, D) in ((Q0, Q1), (Q1, Q0))
+        norm(A - C) <= ε || continue
+        a, b = (B - A) / La, (D - A) / Lb
+        c, sθ = dot(a, b), norm(cross(a, b))
+        I = _gk_adapt(s -> _lnr_prim(Lb - s * c, s * sθ), 0.0, La, tol, mag)
+        return I + La^2 / 2 * (c * (log(La) - 0.5) - c + sθ * atan(c, sθ))
+    end
+    f(s) = (w = P0 + s * â - Q0; t0 = dot(w, b̂); d = norm(w - t0 * b̂); _lnr_prim(Lb - t0, d) - _lnr_prim(-t0, d))
+    return _gk_adapt(f, 0.0, La, tol, mag)
+end
+
+# Gauss–Legendre rules of 1–8 points on [0, 1] (Σw = 1)
+const _GLR = ntuple(8) do n
+    n == 1 && return (; x = [0.5], w = [1.0])
+    F = eigen(SymTridiagonal(zeros(n), [k / sqrt(4k^2 - 1) for k in 1:n-1]))
+    (; x = (F.values .+ 1) ./ 2, w = F.vectors[1, :] .^ 2)
+end
+
+# Thresholds of ρ = 2|mid_a − mid_b| / (La + Lb) (twice the separation over the summed
+# half-lengths, about the Bernstein-ellipse parameter of ln r's nearest singularity)
+# above which n × n points take ∫∫ ln r to 1e-13 of La Lb (its round-off), for n = 6, 5,
+# 4, 3, 2: calibrated on 3000 random segment pairs against 40-point product Gauss on 4 × 4
+# panels (research notes, "Near flat pairs by the double contour").
+const _FAR_RHO = (16.0, 24.0, 40.0, 120.0, 2000.0)
+
+function _lnr_gauss(P0, P1, Q0, Q1, ρ)
+    n = ρ >= _FAR_RHO[5] ? 2 : ρ >= _FAR_RHO[4] ? 3 : ρ >= _FAR_RHO[3] ? 4 : ρ >= _FAR_RHO[2] ? 5 : 6
+    return _lnr_gauss_n(P0, P1, Q0, Q1, n)
+end
+
+function _lnr_gauss_n(P0, P1, Q0, Q1, n)
+    (; x, w) = _GLR[n]
+    a, b = P1 - P0, Q1 - Q0
+    s = 0.0
+    for k in 1:n
+        X = P0 + x[k] * a - Q0
+        sk = 0.0
+        for l in 1:n
+            d = X - x[l] * b
+            sk += w[l] * log(dot(d, d))
+        end
+        s += w[k] * sk
+    end
+    return s * norm(a) * norm(b) / 2
+end
+
+# Gauss–Kronrod 7–15 (QUADPACK's qk15) on [a, b], bisected until the Gauss–Kronrod
+# difference is under tol.
+const _XK15 = (0.991455371120812639206854697526329, 0.949107912342758524526189684047851,
+               0.864864423359769072789712788640926, 0.741531185599394439863864773280788,
+               0.586087235467691130294144845693013, 0.405845151377397166906606412076961,
+               0.207784955007898467600689403773245)
+const _WK15 = (0.022935322010529224963732008058970, 0.063092092629978553290700663189204,
+               0.104790010322250183839876322541518, 0.140653259715525918745189590510238,
+               0.169004726639267902826583426598550, 0.190350578064785409913256402421014,
+               0.204432940075298892414161999234649, 0.209482141084727828012999174891714)
+const _WG7 = (0.129484966168869693270611432679082, 0.279705391489276667901467771423780,
+              0.381830050505118944950369775488975, 0.417959183673469387755102040816327)
+
+function _gk_adapt(f::F, a, b, tol, mag, depth = 0) where {F}
+    c, h = (a + b) / 2, (b - a) / 2
+    fc = f(c)
+    K, G, Kabs = _WK15[8] * fc, _WG7[4] * fc, _WK15[8] * abs(fc)
+    for k in 1:7
+        y1, y2 = f(c - h * _XK15[k]), f(c + h * _XK15[k])
+        K += _WK15[k] * (y1 + y2)
+        Kabs += _WK15[k] * (abs(y1) + abs(y2))
+        iseven(k) && (G += _WG7[k ÷ 2] * (y1 + y2))
+    end
+    # converged, or at the round-off of f, whose terms are of size `mag` (a tolerance
+    # under it would bisect every interval down to the depth limit)
+    E = abs(K - G)
+    (!(E * h > tol && E > 100eps() * (Kabs + mag)) || depth >= 40) && return K * h   # (NaN stops)
+    return _gk_adapt(f, a, c, tol / 2, mag, depth + 1) + _gk_adapt(f, c, b, tol / 2, mag, depth + 1)
 end
 
 """

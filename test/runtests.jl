@@ -152,8 +152,9 @@ i, j = 2 * 16 + 1, 7 * 16 + 9
     @test isapprox(exact, quad; rtol = 1e-4)
 
     # Sliver elements (one 20:1 element per plate) against the closed forms for directly
-    # opposed parallel rectangles and perpendicular ones on a common edge; the same plates
-    # of square elements are off by 9e-4 and 1.6e-3.
+    # opposed parallel rectangles and perpendicular ones on a common edge: near flat pairs
+    # wholly in front of each other take the exact double contour (the cell rule was off
+    # by 1e-4 and 9e-5 here, square elements by 9e-4 and 1.6e-3).
     Rx = [1 0 0; 0 -1 0; 0 0 -1]; Rq = [1 0 0; 0 0 -1; 0 1 0]
     l, w, g = 1.0, 0.05, 0.02
     pa = Component(:a, rectangle_mesh(l, w; nu = 1, nv = 1), gold())
@@ -171,8 +172,34 @@ i, j = 2 * 16 + 1, 7 * 16 + 9
            log((1 + W^2) * (1 + H^2) / (1 + S) * (W^2 * (1 + S) / ((1 + W^2) * S))^(W^2) *
                (H^2 * (1 + S) / ((1 + H^2) * S))^(H^2)) / 4) / (π * W)
     ea, eb, ec = elements(tp, :a), elements(tp, :b), elements(tp, :c)
-    @test isapprox(sum(Fp[ea, eb]), Fab; rtol = 1e-3)
-    @test isapprox(sum(Fp[ea, ec]), Fac; rtol = 1e-3)
+    @test isapprox(sum(Fp[ea, eb]), Fab; rtol = 1e-12)
+    @test isapprox(sum(Fp[ea, ec]), Fac; rtol = 1e-12)
+    # Closed polyhedra of flat elements, every pair near and wholly in front of the
+    # other: a cube of one element per face, a triangular prism (60° and 90° edges) and
+    # the cube with its bottom and front faces one element folded across their edge. Rows
+    # sum to one exactly, but the folded element's, which misses its self-exchange, the
+    # perpendicular unit squares' Hottel factor; opposite faces match the parallel squares.
+    function poly_target(faces, inside; merge = 0)
+        m = Mesh()
+        foreach(f -> add_polygon!(m, f; facing = inside - sum(f) / length(f)), faces)
+        P = merge == 0 ? m.patches : [first(m.patches[1]):last(m.patches[merge]), m.patches[merge+1:end]...]
+        return Target(Component(:p, Mesh(m.vertices, m.triangles, P), gold()))
+    end
+    cv(i, j, k) = Vec3(i, j, k)
+    cube = [[cv(0, 0, 0), cv(1, 0, 0), cv(1, 1, 0), cv(0, 1, 0)], [cv(0, 0, 0), cv(1, 0, 0), cv(1, 0, 1), cv(0, 0, 1)],
+            [cv(0, 0, 1), cv(1, 0, 1), cv(1, 1, 1), cv(0, 1, 1)], [cv(0, 1, 0), cv(1, 1, 0), cv(1, 1, 1), cv(0, 1, 1)],
+            [cv(0, 0, 0), cv(0, 1, 0), cv(0, 1, 1), cv(0, 0, 1)], [cv(1, 0, 0), cv(1, 1, 0), cv(1, 1, 1), cv(1, 0, 1)]]
+    tri = [Vec3(0, 0, 0), Vec3(1, 0, 0), Vec3(0.5, sqrt(3) / 2, 0)]
+    prism = [tri, [t + Vec3(0, 0, 1.5) for t in tri],
+             [[tri[k], tri[mod1(k + 1, 3)], tri[mod1(k + 1, 3)] + Vec3(0, 0, 1.5), tri[k] + Vec3(0, 0, 1.5)] for k in 1:3]...]
+    perp = (2atan(1) - sqrt(2) * atan(1 / sqrt(2)) + log(4 / 3 * (3 / 4)^2) / 4) / π     # Hottel, W = H = 1
+    par = 2 / π * (log(sqrt(4 / 3)) + 2sqrt(2) * atan(1 / sqrt(2)) - 2atan(1))         # X = Y = 1
+    Fc = view_factors(poly_target(cube, Vec3(0.5, 0.5, 0.5)))
+    Fq = view_factors(poly_target(prism, Vec3(0.5, sqrt(3) / 6, 0.75)))
+    Ff = view_factors(poly_target(cube, Vec3(0.5, 0.5, 0.5); merge = 2))
+    @test all(x -> abs(x) < 1e-12, closure_error(Fc)) && all(x -> abs(x) < 1e-12, closure_error(Fq))
+    @test isapprox(Fc[1, 3], par; rtol = 1e-12) && isapprox(Fc[1, 2], perp; rtol = 1e-12)
+    @test isapprox(closure_error(Ff)[1], perp; rtol = 1e-12) && all(x -> abs(x) < 1e-12, closure_error(Ff)[2:end])
     # the cut pieces tile the sliver, each about half as long
     a, b, c = Vec3(0, 0, 0), Vec3(1, 0, 0), Vec3(0, 0.05, 0)
     area(x, y, z) = norm(cross(y - x, z - x)) / 2

@@ -4439,6 +4439,94 @@ above did not help), and the rays of occupied leaves. None of the remaining near
 ideas measured here is worth 10 %: a further step needs fewer kernel evaluations (rim
 certificates for the rays; fewer ACA give-ups), not cheaper ones.
 
+## Near flat pairs by the double contour (2026-10-27) *derived*
+
+ROADMAP 6, "Adjacent flat CAD pairs". Scripts in the session scratchpad `adj/`
+(`workloads.jl`: mock-ups only — a closed box of primitive quads, the flat and fitted
+remeshed CAD hohlraum of the "Radiation in an imported CAD hohlraum" tutorial at
+0.5/0.15 mm, the 2,000-strip sliver tube remeshed at 0.6; `profile.jl`, `compare.jl`,
+`t2.jl`–`t5.jl`, `calib.jl`, `scope.jl`). Ryzen 9 4900HS, pinned to one CCX, other jobs on
+the other.
+
+**Share first (one thread, before; pair kernels classified by tier and by shared
+vertices).** Pairs sharing an edge took 71 % of a box's view-factor time (4 × 4 quads
+per face: 72 pairs at 3.5 ms each), 58 % of the flat CAD hohlraum's (1,959 pairs at
+8 ms; all of them involve an element folded across the wall's strips) and 87 % of the
+sliver tube's (1,482 pairs at 74 ms: 130-facet folded elements). The fitted CAD model
+(walls on their cylinders) has almost none. Not a negligible share wherever flat
+elements meet.
+
+**Where the old rule's error was.** The cell rule refines toward the receiver to
+maxdepth 8, but its one-point cells away from the shared edge set the error: one
+element per plate, against Hottel's perpendicular rectangles, it is −5.6e-4 (1 × 1),
+−4.4e-4 (1 × 0.6), −3.4e-4 (20:1 slivers), −5.0e-3 (shared edge 1/20 of the width);
+maxdepth 13 changes none of these by more than 2e-5. On folded CAD elements the cell
+rule emits from the element's mean plane: neighbors on the wall, folded by a few
+degrees, exchanged 10–70 % off a facet-level converged quadrature (median 16 %, max 24 %
+over 12 sampled edge-sharing pairs; 7 % / 10 % for vertex-sharing, 3 % / 53 % for
+near pairs apart). Their factors are small (G ~ 4e-4 mm² against 0.25 mm² elements),
+so rows moved by ≤ 2.2e-3.
+
+**Adopted: the double contour integral** (Sparrow 1963; Mitalas & Stephenson 1966):
+G = A_i F_ij = (1/2π) Σ_a Σ_b (â·b̂) ∫_a∫_b ln r ds dt over the directed outline edges,
+exact for any two surfaces that see each other wholly from in front, folded or not
+(`_contour_pair_vf`). Used for every near pair of flat elements (not curved, not
+sectors) whose vertices all lie in front of the other's facet planes (to 1e-9 of the
+size) and whose own facets lie in front of one another (no self-hiding fold); otherwise
+the cell rule as before. Inner integral closed form; outer adaptive Gauss–Kronrod 7–15
+with a round-off floor; edges meeting at a point have their s ln s subtracted
+analytically, collinear edges are closed form (x² ln|x|/2 − 3x²/4), an edge is split
+where the other ends on it, and edges far apart for their lengths take product
+Gauss–Legendre (n = 6…2 for ρ = 2|Δmid|/(La + Lb) ≥ 16, 24, 40, 120, 2000: worst error
+over 3,000 random segment pairs ≤ 1e-13 La Lb against 40-point product Gauss on 4 × 4
+panels, the reference's own round-off). Coordinates are scaled to the pair's size; the
+constant part of ln r cancels over closed outlines. The reverse direction is the same
+integral, so reciprocity is exact without averaging.
+
+Accuracy (relative to the independent reference):
+
+| case | old (cell rule) | new |
+|---|---|---|
+| perpendicular rectangles, Hottel: 1 × 1 × 1, 1 × 1 × 0.6, 1 × 0.05 × 0.02, 0.05 × 1 × 1 | −5.6e-4 … −5.0e-3 | ≤ 2.2e-15 |
+| unit squares at 45°, 135°, 170°, 1 × 0.5 × 2 at 60°: cell rule against the contour | +4.5e-4, −9.4e-4, −1.0e-3, −1.8e-3 (maxdepth 13 the same) | (the prism below checks non-right angles) |
+| CAD flat: edge / vertex / apart near pairs vs facet-level quadrature (mindepth 6, maxdepth 12) | median 1.6e-1 / 6.8e-2 / 2.9e-2 | 1.5e-5 / 1.4e-5 / 7.4e-6 (the reference's error) |
+| box: same classes | 5.5e-4 / 1.7e-3 / 1.5e-3 | 6e-6 / 1.1e-5 / 5.7e-6 |
+| closed cube, triangular prism (one element per face): row sums | — | 1 to < 1e-12 |
+| cube with bottom + front one folded element: its row sum | — | 1 − F(Hottel) to 1e-12 |
+| closed box, 4 × 4 per face: closure error max / mean | 5.3e-3 / 2.9e-3 | 5.3e-3 / 2.8e-3 |
+| perpendicular plates n × n, Hottel (H = 1; 0.6), n = 2 / 4 / 8 | +2.3e-4 / +2.4e-3 / +2.2e-3; −1.7e-4 / +1.2e-3 / +2.2e-3 | 2e-16 / +2.2e-3 / +2.1e-3; 4e-16 / +1.0e-3 / +2.1e-3 |
+
+What is left in the plate sums is the mid tier (3–12 element sizes, one centroid point
+onto the exact polygon, O((h/r)²)): taking the contour there too makes every case above
+exact to 3e-15 and the closed box's rows one to 7.7e-15, at 3.4× the box's time (0.07 →
+0.24 s at 8 per face), 2.3× the CAD hohlraum's (2.0 → 4.9 s) and 16× the sliver tube's
+(132-edge outlines; 6.1 → 98 s). Not adopted (an open decision).
+
+Timings, dense `view_factors`, 4 threads (old = the same build with the contour
+disabled, interleaved; identical otherwise):
+
+| model | N | old | new | entries changed | max ΔF / max Δ row sum |
+|---|---|---|---|---|---|
+| `hohlraum(h = 0.6, capsule_h = 0.3, sombrero = true)` | 1,888 | 0.45 s | 0.45 s | 0 (`==`) | — |
+| `bored_cavity(hw = 0.8, hc = 0.25)` | 1,068 | 1.32–1.40 s | 1.32 s | 0 (`==`) | — |
+| box, 8 × 8 quads per face | 832 | 0.24 s | 0.07 s | 7,392 | 1.4e-4 / 4.3e-4 |
+| CAD hohlraum, flat 0.5/0.15 | 1,693 | 7.3–7.4 s | 2.1–2.3 s | 25,402 | 3.5e-3 / 2.2e-3 |
+| CAD hohlraum, fitted 0.5/0.15 | 1,693 | 2.60 s | 2.59 s | 248 | 1.7e-3 / 1.6e-3 |
+| sliver tube 0.6 (open) | 518 | 34.1 s | 7.2 s | 14,190 | 4.9e-4 / 6.4e-4 |
+
+Per pair (one thread): an edge-sharing pair of quads 3.3–7.6 ms → 2–100 µs (slivers the
+most), folded CAD wall pairs 8 ms → 0.4 ms, tube pairs 74 ms → 3.8 ms (132 × 132 outline
+edges). Non-touching near pairs: the box's faster (4 × 4 per face: 0.013 → 0.006 s with them,
+against edge-sharing pairs only), the CAD hohlraum's 25 % faster, the tube's ~15 % slower
+(its total still 4.7× faster). Primitive hohlraums and bored cavities have
+no flat non-curved elements and are unchanged bit for bit; the H-matrix assembly goes
+through the same pair kernel. The flat CAD tutorial's radiation metrics move by little
+(drive of the tutorial, balanced F): capsule flux +4.2e-5, a₂/a₀ 10.587 → 10.584 %,
+a₄/a₀ −0.788 → −0.787 %, LEH and gap losses unchanged to 1e-5. The sliver tube's mean row
+sum moves 0.72210 → 0.72197 (the open cylinder's exact 0.72301; the rest is the mid and
+far tiers). Confidence: the method and the closed forms **H**; the ρ thresholds and the
+1e-9 front tolerance engineering choices, **M**.
+
 ## N221204 late-time drive (2026-10-24) *derived*
 
 ROADMAP 16. Two results of the N221204 benchmark (`examples/n221204.jl`) disagreed about

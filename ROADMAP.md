@@ -225,9 +225,12 @@ Parts may be split for computation, but the GUI shows and picks the original par
      order (a facet-aware (φ, ψ) map would fix it); one surface shared across parts (the
      halves' inner walls); a quadrature at a cone apex; TaLIS curvature kinds for cones
      and tori.
-   - Adjacent flat CAD pairs: near-kernel evaluations scale as shared-edge length over
-     r/256 (~700 per pair on a sliver tube); an exact or coarser rule along straight
-     shared edges would cut them; circular plane families would extend banding to the
+   - ~~Adjacent flat CAD pairs~~ (2026-10-27, research notes "Near flat pairs by the
+     double contour"): near flat pairs wholly in front of each other take the exact
+     double contour integral (view factors 3.3–4.7× faster on a box, the flat CAD
+     hohlraum and a sliver tube; exact for folded elements' facets, where the cell rule
+     was 10–70 % off between folded neighbors). Left: mid-tier flat pairs by the same
+     contour (decision there); circular plane families would extend banding to the
      NIF halves; `_earclip` falls back to raw triangles on pinched outlines.
    - Laser deposition on sliver CAD is slow in `any_hit` (~5 s per beam on the full
      157k-element NIF CAD target; moot on the cavity).
