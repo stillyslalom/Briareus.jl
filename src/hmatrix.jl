@@ -318,8 +318,9 @@ _box_corners(lo, hi) = (Vec3(lo[1], lo[2], lo[3]), Vec3(hi[1], lo[2], lo[3]), Ve
 # For the pairs admitted by the slack (`_hslack_verdict`, whose rays start farther off
 # their facets) it also records whether every plane exclusion holds with that margin
 # (`liftx`), and which convex components a cluster lies on were met in the shaft.
-# `full`: up to 8 certified components (leaf pairs), else only a convex part's balls
-# with both boxes outside its circumscribed ball.
+# `full` (centroid visibility): up to 8 certified components, else only a convex part's
+# balls with both boxes outside its circumscribed ball (the search stops at the first
+# other facet: `:sampled` visibility, and the tests for an empty shaft).
 function _shaft_occluder(ctx, opts, sa::Int, sb::Int, full::Bool = false)
     (; t, bvh, tri_surf, ε) = ctx
     a, b = opts.nodes[sa], opts.nodes[sb]
@@ -413,7 +414,7 @@ const _HOCC_RAYS = _HOcc(-1, ntuple(_ -> 0, 8), false, (0, 0))
 
 # Whether convex component c's balls decide every pair between clusters a and b but those
 # between the balls: c has balls (`occluders`) and both boxes lie outside its
-# circumscribed ball. (The one certificate of blocks above leaf level.)
+# circumscribed ball. (The one certificate of `_shaft_occluder` without `full`.)
 function _hball_whole(opts, c, a::_HCluster, b::_HCluster)
     k = opts.ball[c]
     k == 0 && return false
@@ -1071,7 +1072,11 @@ function _hrecompress(Us, Vs, tol)
     return Matrix{Float32}(Uc), Matrix{Float32}(Vc)
 end
 
-# Estimated Frobenius error of U Vᵀ against the block, from `ns` sampled entries.
+# Estimated Frobenius error of U Vᵀ against the block, from `ns` sampled entries, plus the
+# error of the entries where a row's or a column's quadrature tier switches
+# (`_htier_entries`): G jumps there by the quadrature rules' difference, and an isolated
+# jump (one pair of a capsule's polar sliver past the far boundary) is missed by the
+# cross approximation's pivots and the random samples alike.
 function _hcheck(ctx, perm, rows, cols, U, V, ns, seed, free)
     m, n = length(rows), length(cols)
     rng = Xoshiro(seed)
@@ -1087,7 +1092,65 @@ function _hcheck(ctx, perm, rows, cols, U, V, ns, seed, free)
         e2 += (g - s)^2
         g2 += g^2
     end
-    return sqrt(e2 * m * n / ns), sqrt(g2 * m * n / ns)
+    x2 = 0.0
+    for (a, b) in _htier_entries(ctx, perm, rows, cols)
+        g = _hentry_eval(ctx, perm, rows[a], cols[b], free)
+        s = 0.0
+        for l in axes(U, 2)
+            s += Float64(U[a, l]) * Float64(V[b, l])
+        end
+        x2 += (g - s)^2
+    end
+    return sqrt(e2 * m * n / ns + x2), sqrt(g2 * m * n / ns)
+end
+
+# The positions (a, b) of the block rows × cols where G may jump: in each row (column)
+# whose pairs fall in more than one quadrature tier (`_vf_tier`), the pairs outside its
+# most common tier; at most m + n of them. None, without a pass over the pairs, if the
+# centroid boxes are farther apart than `mid` times the largest element (all far).
+function _htier_entries(ctx, perm, rows, cols)
+    out = Tuple{Int,Int}[]
+    (; C, size, mid2) = ctx
+    m, n = length(rows), length(cols)
+    alo, ahi = _hcentroid_box(C, perm, rows)
+    blo, bhi = _hcentroid_box(C, perm, cols)
+    gap = max.(zero(Vec3), max.(blo - ahi, alo - bhi))
+    smax = max(maximum(p -> size[perm[p]], rows), maximum(q -> size[perm[q]], cols))
+    dot(gap, gap) >= mid2 * smax^2 && return out
+    code(s) = s === :near ? 0x01 : s === :mid ? 0x02 : 0x03
+    T = Matrix{UInt8}(undef, m, n)
+    for (b, q) in enumerate(cols), (a, p) in enumerate(rows)
+        i, j = perm[p], perm[q]
+        d = C[j] - C[i]
+        T[a, b] = code(_vf_tier(ctx, i, j, dot(d, d)))
+    end
+    # lines (a row a > 0 or a column -a) with their pairs outside the most common tier,
+    # the fewest first: an isolated jump is the one the cross approximation misses
+    lines = Tuple{Int,Int,UInt8}[]
+    function line!(k, line)
+        c1, c2, c3 = count(==(0x01), line), count(==(0x02), line), count(==(0x03), line)
+        (c1 > 0) + (c2 > 0) + (c3 > 0) > 1 || return
+        maj = c1 >= c2 && c1 >= c3 ? 0x01 : c2 >= c3 ? 0x02 : 0x03
+        push!(lines, (length(line) - max(c1, c2, c3), k, maj))
+    end
+    for a in 1:m
+        line!(a, view(T, a, :))
+    end
+    for b in 1:n
+        line!(-b, view(T, :, b))
+    end
+    sort!(lines)
+    seen = falses(m, n)
+    for (_, k, maj) in lines
+        for x in 1:(k > 0 ? n : m)
+            a, b = k > 0 ? (k, x) : (x, -k)
+            (T[a, b] == maj || seen[a, b]) && continue
+            seen[a, b] = true
+            push!(out, (a, b))
+            length(out) >= m + n && return out
+        end
+    end
+    return out
 end
 
 # The exact visibility of the block rows × cols by a ray per pair (`_vf_visible`) on the
@@ -1155,16 +1218,16 @@ function _hassemble!(out, ctx, nodes, perm, s, t, far, opts, known = nothing,
         if known !== nothing
             ev = known
         else
-            occ = _shaft_occluder(ctx, opts, s, t, leaves && ctx.vis === nothing)
+            occ = _shaft_occluder(ctx, opts, s, t, ctx.vis === nothing)
             if occ.n != 0 && _convex_hides(opts, s, t)
                 Threads.atomic_add!(st.shadowed, 1)
                 return                                   # wholly behind a convex part
             end
             if occ.n > 0 && ctx.vis === nothing && m * n <= opts.mask_size
                 # only certified parts' facets in the shaft: their certificates decide
-                # most pairs of a leaf pair, and of a larger block if a convex part's
-                # balls are its only certificate (centroid visibility; `:sampled`
-                # fractions take the rays below)
+                # most pairs, at any level (a block of uniform visibility then gets the
+                # cross approximation instead of being refined; centroid visibility:
+                # `:sampled` fractions take the rays below)
                 ev = _hmask(ctx, opts, perm, rows, cols, occ)
                 Threads.atomic_add!(st.masked, 1)
             elseif occ.n != 0 && leaves

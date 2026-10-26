@@ -4614,7 +4614,8 @@ cast even in an empty shaft.
    shaft replaces `true` as the block's entry mode) and to certified masks; centroid
    visibility only.
 4. Blocks above leaf level are unchanged (only the old single-ball masks), so the block
-   structure, ranks and every stored entry stay as they were.
+   structure, ranks and every stored entry stay as they were. (Superseded by the second
+   pass below: certificates above leaf level, with a quadrature-tier check.)
 
 | | hohlraum 10,484 | hohlraum 17,632 | bored cavity 11,360 |
 |---|---|---|---|
@@ -4639,15 +4640,70 @@ latitude–longitude capsule among them); the 833k pairs of empty-shaft leaves g
 `_vf_pair`'s factor (`===`). At the benchmark sizes the certified masks equal ray masks on
 all 9,889 certified leaf pairs of the bored cavity (12.4M pairs).
 
-**Tried, not adopted (decision).** The certificates also decide blocks above leaf level
-(masks there, so a block of uniform visibility gets a cross approximation instead of
-being refined), and latitude–longitude capsule quads (two coplanar facets) can count as
-"on the convex part" in the shaft search like one-facet elements. On the bored cavity:
-5.6 s (−45 % from old; 6.5 s with the capsule rule alone), stored 118 → 105 MB, blocks
-change (new approximations at the same `tol`). Against dense Float32 (300 sampled
-columns): Frobenius error 6.5e-8 → 7.8e-8, but row sums 2.4e-7 → 2.3e-6 (from the capsule
-rule: capsule–wall blocks of mixed visibility now compress). Standard hohlraum unchanged
-(identical blocks). Not adopted until the row-sum loss is understood.
+**Certificates above leaf level (adopted, second pass).** The certificates also decide
+blocks above leaf level (`_shaft_occluder(…, full = true)` for every far block under
+centroid visibility; a mask for blocks up to `mask_size`), so a block of uniform
+visibility gets a cross approximation instead of being refined to leaves. A first try
+also counted latitude–longitude capsule quads (two coplanar facets) as "on the convex
+part" in the shaft search; that rule is **not** adopted (below). The first try lost row
+accuracy against dense Float32 (2.4e-7 → 2.3e-6); the loss was diagnosed as follows.
+
+- *One entry.* Capsule element 7631 is a polar-fan triangle of size 0.265 (3–4× its
+  neighbours). Wall element 1380 lies at r = 3.1825 from it, just past the far boundary
+  12 × 0.2649 = 3.1783. The dense matrix evaluates that pair with one point per triangle
+  (far tier) and the other 42 pairs of the same column with the level-1 rule (mid tier).
+  The rules differ by 0.53 % there: F = 4.2547e-4 (far) and 4.2319e-4 (mid). The
+  converged value (level 4) is 4.2246e-4, so the dense entry is 0.71 % off and the mid
+  value 0.17 %. In the low-rank block (43 wall × 107 capsule), the cross approximation's
+  pivots and the check's 75 random samples all miss the isolated jump, and the block
+  stores the mid-tier value. Its error against dense is 5.1e-5 of the block's norm; the
+  other 4,728 low-rank blocks are all ≤ 7.6e-6. The row sum of 7631 is off by 2.28e-6.
+  The dense row sum of that sliver is itself 1.00188 against 0.999998 converged, so the
+  H-matrix's departure is ~1000× below the dense quadrature's own error, and toward the
+  converged value.
+- *Not the certificates.* The masks of every block that takes one are exact: 11,134
+  blocks (8,763 leaves), 33.5M pairs (3.4M hidden), all equal to the ray masks. The 20.5M
+  pairs of the shafts that the capsule rule empties get `_vf_pair`'s factor (`===`).
+- *Not the capsule rule alone.* Above-leaf certificates alone reach the same block: its
+  parent's shaft holds capsule facets, which the balls certify pair by pair. They give
+  the same 2.28e-6. With both rules the blocks are identical to above-leaf alone, so the
+  capsule rule adds nothing there. By itself it saves ~3 % (7.76 against 7.97 s), and it
+  is dropped.
+- *Fix.* The low-rank check (`_hcheck`) now adds the exact error of the entries where a
+  row's or a column's quadrature tier switches (`_vf_tier`, `_htier_entries`). These are
+  the pairs off their line's most common tier, taking the lines with the fewest such
+  pairs first (an isolated jump is the one the pivots miss), at most m + n of them. There
+  are none, and no pass over the pairs, when the centroid boxes are farther apart than
+  `mid` × the largest element. The block above is rejected and refined. A block with no
+  such entries is checked as before, bit for bit.
+
+Bored cavity (11,360; 4 threads pinned, interleaved in one process, 2–3 builds each);
+balanced solve as `bench3.jl` (NIF quads aimed at z = ±4 mm deposited by
+`DepositionOperator`, `closed = true`, 2 ns), against the dense Float32 matrix:
+
+| | committed | capsule rule | above-leaf | above-leaf + tier check (adopted) |
+|---|---|---|---|---|
+| build, warm | 7.0–8.2 s (typ. 7.9) | 7.8 s | 6.7 s | 5.7–6.6 s (typ. 6.4; ≈ −18 %) |
+| stored | 117.8 MB | 115.7 MB | 104.9 MB | 104.9 MB (−11 %) |
+| Frobenius error, 300 columns | 6.49e-8 | 7.07e-8 | 7.76e-8 | 7.75e-8 |
+| row sums, max \|Δ\| | 2.42e-7 | 2.28e-6 | 2.28e-6 | 2.63e-7 |
+| H per element, max (median) | 1.01e-7 (3.5e-9) | 5.5e-7 | 5.5e-7 (5.7e-9) | 1.10e-7 (5.7e-9) |
+| capsule a0; P2/P0, P4/P0 | −1.7e-11; 1.1e-9, 6.6e-11 | | | −7.2e-10; 3.2e-9, −1.5e-9 |
+
+Hohlraum: above-leaf alone leaves the blocks identical to the committed build (10,484).
+The tier check rejects one more block at each size (10 → 11 at 10,484; 16 → 17 at
+17,632), so the hohlraum is **not bit for bit**. At 10,484 the Frobenius error (2.679e-7)
+and the row sums (3.214e-7) are unchanged to four digits, storage is 85.7 → 85.8 MB, and
+the build stays at 4.0–4.2 s. At 17,632 storage stays 183.6 MB and the build 7.8–8.0 s.
+The dense matrix is bit for bit (`_vf_tier` is `_vf_kernel`'s tier test, factored out).
+
+Tests (`test/hmatrix.jl`): the mask-against-ray and empty-shaft checks of "visibility
+certificates" now cover every block up to `mask_size`, not only leaf pairs. "Quadrature-
+tier entries" uses a latitude–longitude hohlraum (3,254 far blocks): every entry returned
+is off its row's or its column's majority tier; every pair alone off its line's majority
+is returned when the cap is not reached; and a block with no entries has one tier.
+Confidence: the diagnosis and the measurements **H**; the m + n cap and the
+fewest-first order are engineering choices, **M**.
 
 **`:sampled` visibility.** Not addressed: on the bored cavity with `visibility = :sampled`
 the H-matrix build takes 106 s, 93 % of it in rays (48.7M `_vf_visible` calls with their

@@ -330,10 +330,15 @@ Items 9–13 and 16–17 follow the 2026-10-22 literature review against Kritche
     certificates for occupied leaf pairs (washers, caps, bores, convex parts) and for
     the pairs the facing slack admits (rays 2.9M → 1.0M at 10.5k, 35M → 1.3M on an
     11.4k bored cavity; −10 to −16 % assembly on the hohlraum, −20 to −30 % on the bored
-    cavity, bit for bit; "H-matrix visibility certificates"). Left, in order:
+    cavity, bit for bit; "H-matrix visibility certificates"), then certificates above
+    leaf level with the low-rank check also testing the entries where a line's quadrature
+    tier switches. That check is needed because an isolated far/mid jump on a polar
+    sliver was missed: it cost 2.3e-6 in row sums against dense. Measured: −18 % assembly
+    and −11 % storage on the bored cavity, row sums 2.6e-7. The hohlraum is not bit for
+    bit (one more block refined, errors unchanged to four digits); the capsule-quad shaft
+    rule was dropped (it added nothing). Left, in order:
     `:sampled` visibility (rays are 93 % of an 11.4k bored cavity's sampled assembly:
-    certificates for a pair's sample-ray bundle); certificates above leaf level (decision
-    in that section); the bored cavity's gap pairs (~60 % of its
+    certificates for a pair's sample-ray bundle); the bored cavity's gap pairs (~60 % of its
     view-factor time; refinement toward the shared edge onto ~34-edge sector receivers);
     GPU mat-vecs (≲ 25 % end to end on the RTX 2060 while assembly stays on the CPU; not
     worth CUDA.jl yet).

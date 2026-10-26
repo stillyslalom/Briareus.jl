@@ -219,14 +219,22 @@ function _vf_pair(ctx, i, j)
     return _vf_kernel(ctx, i, j, frac, d, r2)
 end
 
+# The quadrature tier of the pair i, j at centroid distance² r2 (`_vf_kernel`): within
+# `near` element sizes (the larger of the two), within `mid`, or beyond. G jumps where a
+# pair crosses a tier boundary (by the rules' difference: 0.5 % on a capsule's polar
+# sliver at the far boundary).
+function _vf_tier(ctx, i, j, r2)
+    s2 = max(ctx.size[i], ctx.size[j])^2
+    return r2 < ctx.near2 * s2 ? :near : r2 < ctx.mid2 * s2 ? :mid : :far
+end
+
 # G of the pair i < j that faces and sees itself by the fraction `frac` > 0.
 function _vf_kernel(ctx, i, j, frac, d, r2)
-    (; t, Nrm, A, planar, recv, cells, qnear, qmid, qfar, size, near2, mid2, level, exact_far, outl) = ctx
+    (; t, Nrm, A, planar, recv, cells, qnear, qmid, qfar, level, exact_far, outl) = ctx
     # (`cells` is untyped: assert the kernel's type, or every pair's factor is boxed)
     near_kernel(e, rc) = (cells[e] === nothing ? _adaptive_kernel(t, e, rc; mindepth = level + 1) :
                           _cell_kernel(cells[e], rc))::Float64
-    s2 = max(size[i], size[j])^2
-    tier = r2 < near2 * s2 ? :near : r2 < mid2 * s2 ? :mid : :far
+    tier = _vf_tier(ctx, i, j, r2)
     # G = Aᵢ Fᵢⱼ = Aⱼ Fⱼᵢ
     if planar[i] && planar[j]
         if tier === :near

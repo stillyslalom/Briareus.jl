@@ -214,13 +214,14 @@ end
             end
         end
         nseg > 0 && @test length(agree) > 0.5 * tried && all(agree)
-        # leaf pairs: certified masks against ray masks, empty shafts against `_vf_pair`
+        # leaf pairs and the larger blocks that take masks: certified masks against ray
+        # masks, empty shafts against `_vf_pair`
         masks, free = Bool[], Bool[]
         for (s, u) in [near; far]
             a, b = nodes[s], nodes[u]
-            B._hleaf(a) && B._hleaf(b) || continue
-            occ = B._shaft_occluder(ctx, opts, s, u, true)
             rows, cols = a.lo:a.hi, b.lo:b.hi
+            B._hleaf(a) && B._hleaf(b) || length(rows) * length(cols) <= opts.mask_size || continue
+            occ = B._shaft_occluder(ctx, opts, s, u, true)
             if occ.n > 0
                 push!(masks, B._hmask(ctx, opts, perm, rows, cols, occ).v == B._hmask_rays(ctx, perm, rows, cols, rows, cols).v)
             elseif occ.n == 0
@@ -232,6 +233,49 @@ end
         end
         @test all(masks) && all(free) && (nseg == 0 || !isempty(masks))
     end
+end
+
+# The entries a low-rank block's check adds where G may jump (`_htier_entries`): pairs
+# off the most common quadrature tier of their row or column, the fewest-off lines
+# first. On a latitude–longitude capsule (polar slivers, several sizes larger than their
+# neighbours) against the wall: every entry returned is off its row's or column's
+# majority tier; every pair that is alone off its line's majority is returned when the
+# cap (m + n) is not reached; and a block without entries has a single tier.
+@testset "hierarchical view factors: quadrature-tier entries" begin
+    B = Briareus
+    t = hohlraum(; h = 0.5, capsule_h = 0.12, capsule_mesh = :latlong)
+    ctx0 = B._vf_context(t; near = 3.0, mid = 12.0, level = 1, exact_far = true, visibility = :centroid,
+                         visibility_grid = 4)
+    ctx, nodes, perm, far, near, opts = B._hsetup(ctx0, 1e-6, 1.0, 16, 32)
+    tier(p, q) = (i = perm[p]; j = perm[q]; d = ctx.C[j] - ctx.C[i]; B._vf_tier(ctx, i, j, dot(d, d)))
+    # (a tie goes to the nearer tier)
+    majority(v) = (ts = (:near, :mid, :far); ts[argmax([count(==(x), v) for x in ts])])
+    offline, alone, screened = Bool[], Bool[], Bool[]
+    nent = 0
+    for (s, u) in far
+        a, b = nodes[s], nodes[u]
+        rows, cols = a.lo:a.hi, b.lo:b.hi
+        length(rows) * length(cols) <= 4096 || continue
+        T = [tier(p, q) for p in rows, q in cols]
+        ent = B._htier_entries(ctx, perm, rows, cols)
+        nent += length(ent)
+        if isempty(ent)
+            push!(screened, all(==(T[1]), T))
+            continue
+        end
+        for (x, y) in ent
+            push!(offline, T[x, y] != majority(T[x, :]) || T[x, y] != majority(T[:, y]))
+        end
+        length(ent) < length(rows) + length(cols) || continue
+        for x in axes(T, 1), y in axes(T, 2)
+            lone = (count(!=(majority(T[x, :])), T[x, :]) == 1 && T[x, y] != majority(T[x, :])) ||
+                   (count(!=(majority(T[:, y])), T[:, y]) == 1 && T[x, y] != majority(T[:, y]))
+            lone && push!(alone, (x, y) in ent)
+        end
+    end
+    @test nent > 0 && !isempty(alone) && all(offline) && all(alone)
+    # (a block with no entries, screened by its boxes or with no line mixing tiers, has one)
+    @test all(screened)
 end
 
 # Keyframes of hierarchical models: the interpolated exchange as the two operators.
