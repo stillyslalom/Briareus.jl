@@ -382,7 +382,7 @@ function build_scenario!(sess::DesignSession)
             dr.status[] = "failed: " * _errmsg(out.err)
             return
         end
-        (; s, lookup, enc, index, film, escape) = out.value
+        (; s, lookup, enc, index, film, escape, leak) = out.value
         dr.build_seconds[] = time() - t0
         # a film found sealing the cavity joins the films (and the scenario's key)
         film === nothing || (_assign!(dr.films, union(dr.films[], (film,)));
@@ -404,6 +404,7 @@ function build_scenario!(sess::DesignSession)
                        "left out of the cavity as a thin film (Properties)") *
                       (enc !== nothing && cavity_sealed(dr) ?
                        " · the cavity is a sealed pocket: mark the film that closes it (Properties ▸ Thin film)" : "") *
+                      (enc === nothing || s.model === nothing ? "" : _closure_note(leak, out.value.closed)) *
                       (s.model === nothing ? _radiation_note(s.target) : _facet_note(s.target))
         _request_evaluation!(sess)
     end)

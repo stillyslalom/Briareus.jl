@@ -702,6 +702,47 @@ end
     @test Controllers._facet_note(s.target.target[]) == ""
 end
 
+@testset "a CAD cavity balanced when apertures close it (no GL)" begin
+    # a mock CAD hohlraum (one STL part: wall and caps with 0.6 mm entrance holes); the
+    # drive's cavity around TCC is balanced once aperture parts close both holes
+    dir = mktempdir()
+    can = joinpath(dir, "hohlraum.stl")
+    write_stl(can, merge_meshes(cylinder_mesh(1.5, -2.0, 2.0; nz = 4, nphi = 96),
+                                annulus_mesh(0.6, 1.5, 2.0; nr = 2, nphi = 96),
+                                annulus_mesh(0.6, 1.5, -2.0; nr = 2, nphi = 96)); binary = false)
+    ts = TargetSetup(kind = :custom)
+    @test add_part!(ts, :mesh; name = :hohlraum, file = can, h = 0.5)
+    beams = nif_quads()[1:4]
+    function drive()
+        refs = Controllers._fit_references(ts.target[], ts.kind[], ts.params[], ts.mesh[], ts.parts[])
+        return Controllers._build_scenario(ts.target[], beams; references = refs,
+                                           cavity = (Briareus.Vec3(0, 0, 0), Set{Symbol}()))
+    end
+    rowsums(o) = vec(sum(o.s.model.F; dims = 2))
+    # no apertures: open (two LEHs, ~4 % of the rays)
+    o = drive()
+    @test !o.closed && !o.leak.apertures && o.leak.fraction > 0.02
+    @test occursin("add apertures", Controllers._closure_note(o.leak, o.closed))
+    # one LEH closed (the top disk faces down, into the cavity): still open
+    @test add_part!(ts, :disk; name = :leh_top, aperture = true, inward = true, z = 2.0, r1 = 0.6, h = 0.3)
+    o = drive()
+    @test !o.closed && o.leak.apertures && o.leak.fraction > Controllers.CAVITY_MAX_LEAK
+    @test occursin("past its apertures", Controllers._closure_note(o.leak, o.closed))
+    @test minimum(rowsums(o)) < 0.99                          # raw view factors
+    # both closed: balanced, the leak down to the cracks where the disks meet the caps
+    @test add_part!(ts, :disk; name = :leh_bottom, aperture = true, z = -2.0, r1 = 0.6, h = 0.3)
+    o = drive()
+    @test o.closed && o.leak.fraction < Controllers.CAVITY_MAX_LEAK / 4
+    @test all(x -> isapprox(x, 1; atol = 1e-9), rowsums(o))
+    @test occursin("balanced", Controllers._closure_note(o.leak, o.closed))
+    # an aperture facing out of the cavity is dropped by the selection: open again
+    @test set_part_flag!(ts, part_index(ts, :leh_top), :inward, false)
+    o = drive()
+    @test !o.closed && !any(c -> c.part === :leh_top, o.s.target.components)
+    # without a cavity nothing is said
+    @test Controllers._closure_note((; fraction = NaN, apertures = false), false) == ""
+end
+
 @testset "CAD remeshing in the background (no GL)" begin
     # a key asked for while it is being computed is computed once
     calls = Threads.Atomic{Int}(0)

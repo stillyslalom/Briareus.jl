@@ -148,8 +148,8 @@ Parts may be split for computation, but the GUI shows and picks the original par
     `cad_target(...; closed = true)` (new keyword, default false); `open_fraction` shows
     where facets leak, but cracks (24-gon disks in 20-gon bores) and small openings give
     the same fraction. Flat facets must be watertight to balance ("Closure on bored,
-    windowed and CAD cavities"). Open: the GUI's CAD path could pass `closed` when the user
-    adds the LEH apertures.
+    windowed and CAD cavities"). The GUI's CAD cavity passes `closed` once the user's
+    apertures close it (`open_fraction` ≤ 1e-2, `CAVITY_MAX_LEAK`): done 2026-10-26.
 12. Compact capsule at capsule_h = h/3: done 2026-10-25, documented. Raw capsule rows
     −3.5e-4 at h 0.25 (−9e-5 at 0.4) are the far-pair one-point rule on the capsule–wall
     pairs (the wall's size sets the tier; `mid = 24` removes it), not the geodesic

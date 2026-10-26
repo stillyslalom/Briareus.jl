@@ -210,7 +210,11 @@ view factors are within reach. `films` (component names) are left out first: thi
 films a CAD file models as closed solids, such as a capsule tent or an entrance-hole
 window, seal the point into a pocket (they transmit x-rays at their thickness). The
 drive's laser deposition then sees the cavity only (light that would clip outer faces
-passes); the clearance and TaLIS checks keep using the whole target.
+passes); the clearance and TaLIS checks keep using the whole target. A CAD cavity is
+open wherever its file is (entrance holes), so its view factors are left raw unless
+aperture parts close its openings: the drive then balances them (`closed = true`,
+`enforce_closure!`), when at most [`CAVITY_MAX_LEAK`](@ref) of the cavity's rays leak,
+and its status says which.
 """
 function set_cavity!(dr::DriveState, on::Bool; point = dr.cavity_point[], films = dr.films[])
     _assign!(dr.cavity_point, Vec3(point...))
@@ -380,19 +384,24 @@ end
 # films)` the scenario is built on the cavity around the point (see `set_cavity!`); a
 # pocket sealed by a film is opened by leaving that film out too (`_open_cavity`), and
 # a point in the open (most of its rays escape: a backlighter foil and its shields, say)
-# keeps the whole target. `profile` is the deposition's beam model (`nothing`: the
-# f-cone; a `VisRadProfile`: VisRad's, see `set_beam_model!`). `references` (CAD part
-# name => file facets, `_fit_references`) splits those parts into their fitted curved
-# pieces in the drive's target (`_fitted_target`). Returns `(; s, lookup, enc, index, film, escape)`: the
-# scenario, its flux-map lookup, the cavity's enclosure and the target element of each
-# drive element (`nothing` when the drive's elements are the target's), the film found
-# (`nothing` without a cavity), and the point's escaping fraction.
+# keeps the whole target. The cavity is balanced when apertures close it
+# (`_cavity_closure`), whatever `closed` says. `profile` is the deposition's beam model
+# (`nothing`: the f-cone; a `VisRadProfile`: VisRad's, see `set_beam_model!`).
+# `references` (CAD part name => file facets, `_fit_references`) splits those parts into
+# their fitted curved pieces in the drive's target (`_fitted_target`). Returns `(; s,
+# lookup, enc, index, film, escape, closed, leak)`: the scenario, its flux-map lookup,
+# the cavity's enclosure and the target element of each drive element (`nothing` when
+# the drive's elements are the target's), the film found (`nothing` without a cavity),
+# the point's escaping fraction, whether the view factors were balanced, and the
+# cavity's leaking fraction (`open_fraction`; `NaN` without a cavity) and whether it
+# has apertures, as `(; fraction, apertures)`.
 function _build_scenario(t::Target, beams::Vector{Beam{Float64}}; closed::Bool = false,
                          radiation::Union{Bool,Nothing} = nothing, cavity = nothing,
                          profile::Union{Nothing,VisRadProfile} = nothing,
                          references::AbstractDict = Dict{Symbol,Mesh}())
     enc = index = film = nothing
     escape = NaN
+    leak = (; fraction = NaN, apertures = false)
     # (the fit serves the x-ray view factors only)
     t, fmap = radiation === false || !radiation_size(t).feasible && cavity === nothing ?
               (t, nothing) : _fitted_target(t, references)
@@ -405,7 +414,7 @@ function _build_scenario(t::Target, beams::Vector{Beam{Float64}}; closed::Bool =
             enc = index = film = nothing
         else
             t = enc.target
-            closed = false
+            closed, leak = _cavity_closure(t)
         end
     end
     fmap === nothing || (index = index === nothing ? fmap : fmap[index])
@@ -413,7 +422,7 @@ function _build_scenario(t::Target, beams::Vector{Beam{Float64}}; closed::Bool =
     names = component_names(t)
     observe = radiation && :capsule in names ? :capsule : nothing
     s = Scenario(t, beams; observe, radiation, viewfactor_kw = (; closed), deposition_kw = (; profile))
-    return (; s, lookup = flux_lookup(s), enc, index, film, escape)
+    return (; s, lookup = flux_lookup(s), enc, index, film, escape, closed, leak)
 end
 
 """
@@ -422,6 +431,41 @@ use the cavity: above it the point is in the open (a backlighter foil's side of 
 chamber) and the drive keeps the whole target.
 """
 const CAVITY_MAX_ESCAPE = 0.5
+
+"""
+The largest fraction of a cavity's diffuse rays that may leak (`Briareus.open_fraction`
+of the cavity selected, apertures stopping the rays) for the drive to balance the view
+factors of a cavity that has apertures (`closed = true`, `enforce_closure!`). Adding
+apertures is the user's declaration that they close the cavity's openings; this guard
+keeps a cavity with an opening left without one, or with an aperture facing out of the
+cavity (dropped by the selection), unbalanced. An engineering default, not a facility
+criterion, set from the fractions measured in the research notes ("Closure on bored,
+windowed and CAD cavities"): cracks where meshes meet 2–7 × 10⁻⁴ (2.7 × 10⁻³ on a coarse
+hohlraum) and a 40 µm waist gap 4 × 10⁻³ lie below it; a CAD cavity's two open LEHs,
+7 × 10⁻², lie well above it.
+"""
+const CAVITY_MAX_LEAK = 1e-2
+
+# Whether the drive balances the view factors of the cavity `t`: when it has apertures
+# (the user's declaration that they close it) and they do (`CAVITY_MAX_LEAK`). Returns
+# `(closed, (; fraction, apertures))`.
+function _cavity_closure(t::Target)
+    apertures = any(c -> c.kind === :aperture, t.components)
+    fraction = open_fraction(t).fraction
+    return apertures && fraction <= CAVITY_MAX_LEAK, (; fraction, apertures)
+end
+
+# The drive status's note on the cavity's closure: balanced, or how much leaks and why.
+function _closure_note(leak, closed::Bool)
+    isnan(leak.fraction) && return ""
+    pct = @sprintf("%.2g %%", 100leak.fraction)
+    closed && return " · closed by its apertures: view factors balanced ($pct of the rays leak)"
+    leak.apertures ||
+        return " · open: $pct of the cavity's rays leak: add apertures to its LEHs to balance its view factors"
+    return " · open: $pct of the cavity's rays leak past its apertures (above " *
+           @sprintf("%.2g %%", 100CAVITY_MAX_LEAK) * "): an opening has no aperture, or one faces out of " *
+           "the cavity (Properties ▸ Inward); view factors not balanced"
+end
 
 # ---------------------------------------------------------------- flux map
 
