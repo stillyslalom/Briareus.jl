@@ -7523,3 +7523,26 @@ pixels, 0.9°); n = 30 elements are about 2.1°.
 **Not done (Stage 0 remainder).** The absorption weight η_a(ψ) (MN17 Eq. 29) per
 operator sample; the spherical pointing parameterization (open decision 5); the Ba24
 OC σ₁ example; a Literate tutorial.
+
+## GUI on CAD: import, parts and first frames, remeasured (2026-10-26) *measured*
+
+Measured locally (8 threads pinned to one CCX, the THOR-shot NIF CAD workspace of the
+2026-10-18 notes: 15 CAD parts, the 133k-facet mount and two far parts drawn only;
+numbers only, the workspace stays outside the repository), coarse mesh (h = 0.6 mm).
+
+**`remesh_mesh` on the CAD capsule (H).** Since the sliver merge of 2026-10-20
+(`_merge_small!`/`_dissolve!`), remeshing the capsule part (38,200 facets, sphere and
+fill tube) did not finish in 3.5 min at h = 0.6 or 0.28 mm (it took ~1 s before that
+commit), so the GUI's import of the workspace never completed. The capsule's small
+elements hold up to 4,000 facets; dissolving one tried every remaining facet against
+every neighbor element after each move, each try a pass over the neighbor (≈2,400
+facets): 1.9 M passes in 160 s, almost all rejected because the new facet itself lay
+beyond `rmax` of the new centroid, and 267 of 298 dissolutions ended stuck and were
+undone. Now a facet is retried only after a neighbor of it moved or an element it tried
+grew, the element sums are extended by the new facet (the same left folds), and the
+new facet's own flatness and reach are tested before the pass over the element (the
+answers are those of the full test). Capsule: 4.1 s at 0.6 mm (663 elements), 8.4 s at
+0.28 mm (978). Bit for bit: the 26 other CAD parts' and two synthetic meshes' remeshes
+at 0.28 and 0.6 mm equal the old code's (`==` on vertices, triangles and patches);
+test/meshops.jl and test/cadfit.jl pass. GUI import of the workspace (coarse, no window,
+first call): 12 s.

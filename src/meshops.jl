@@ -1108,17 +1108,28 @@ function _cluster_elements(P, rtris, size::Float64, angle::Float64; iterations::
 end
 
 # Is a set of triangles an acceptable element: flat within the angle, within `rmax` of
-# its centroid, and with the centroid (moved along the mean normal) on it?
-function _element_ok(P, rtris, ms, area, cen, nrm, thin, cosmax, rmax)
-    A = sum(area[t] for t in ms)
-    c = A > 0 ? sum(area[t] * cen[t] for t in ms) / A : sum(cen[ms]) / length(ms)
-    nv = sum(area[t] * nrm[t] for t in ms)
+# its centroid, and with the centroid (moved along the mean normal) on it? The set is
+# `ms` and, when `new` > 0, triangle `new` too: a caller adding triangles one at a time
+# passes `sums`, the set's area and area-weighted centroid and normal sums (the
+# element's `_element_sums` extended by `new`'s: the same left folds). `new` is tested
+# first, so a triangle that would make the element too large or too bent is rejected
+# without a pass over the element (same answer: each test must hold for every triangle).
+function _element_ok(P, rtris, ms, area, cen, nrm, thin, cosmax, rmax;
+                     new::Int = 0, sums = _element_sums(ms, area, cen, nrm))
+    A, ac, nv = sums
+    c = A > 0 ? ac / A : sum(cen[new > 0 ? [ms; new] : ms]) / (length(ms) + (new > 0))
     norm(nv) > 0 || return false
     nbar = nv / norm(nv)
-    all(t -> thin[t] || dot(nrm[t], nbar) >= cosmax - 1e-12, ms) || return false
-    maximum(t -> maximum(v -> norm(P[v] - c), rtris[t]), ms) <= rmax || return false
-    return _centroid_on(P, rtris, ms, c, nbar)
+    flat(t) = thin[t] || dot(nrm[t], nbar) >= cosmax - 1e-12
+    reach(t) = maximum(v -> norm(P[v] - c), rtris[t])
+    new > 0 && !(flat(new) && reach(new) <= rmax) && return false
+    all(flat, ms) || return false
+    maximum(reach, ms) <= rmax || return false
+    return _centroid_on(P, rtris, ms, c, nbar) || (new > 0 && _centroid_on(P, rtris, (new,), c, nbar))
 end
+
+_element_sums(ms, area, cen, nrm) =
+    (sum(area[t] for t in ms), sum(area[t] * cen[t] for t in ms), sum(area[t] * nrm[t] for t in ms))
 
 # Elements under `amin` (slivers left between grown elements, pieces cut off by halving)
 # join, smallest first, the neighbor they share the longest edge with among those the
@@ -1160,29 +1171,60 @@ end
 
 # A small element no neighbor can take whole (a sliver across the edge between two wall
 # strips: either neighbor would exceed the angle) is shared out triangle by triangle,
-# each to an adjacent element that stays acceptable; all or nothing.
+# each to an adjacent element that stays acceptable; all or nothing. Each round moves
+# the first triangle (in `members[e]` order) that some neighbor takes. A triangle's
+# try depends only on its neighbors' owners and those elements' members, so one that
+# failed is tried again (`stale`) only once a neighbor of it moved or an element it
+# tried grew: the same moves as trying every triangle each round, without the
+# quadratic cost (minutes on a 4 × 10⁴-facet CAD capsule, whose fill tube leaves small
+# elements of thousands of facets).
 function _dissolve!(owner, members, earea, e, P, rtris, nbr, area, cen, nrm, thin, cosmax, rmax)
     rest = copy(members[e])
+    n = length(rest)
+    at = Dict(t => i for (i, t) in enumerate(rest))   # triangle => its place in `rest`
+    left = trues(n)                                   # not moved yet
+    stale = trues(n)                                  # to try (again)
+    tried = Dict{Int,Vector{Int}}()                   # element => places of triangles that tried it
+    sums = Dict{Int,Tuple{Float64,Vec3,Vec3}}()       # element => its `_element_sums`
     moves = Tuple{Int,Int}[]                          # (triangle, element)
-    while !isempty(rest)
-        i = findfirst(rest) do t
+    moved = true
+    while moved
+        moved = false
+        i = findnext(stale, 1)
+        while i !== nothing
+            stale[i] = false
+            t = rest[i]
             for q in view(nbr, :, t)
                 q == 0 && break
                 o = owner[q]
                 o == e && continue
-                ms = push!(copy(members[o]), t)
-                _element_ok(P, rtris, ms, area, cen, nrm, thin, cosmax, rmax) || continue
-                owner[t] = o
-                members[o] = ms
-                push!(moves, (t, o))
-                return true
+                A, ac, an = get!(() -> _element_sums(members[o], area, cen, nrm), sums, o)
+                s = (A + area[t], ac + area[t] * cen[t], an + area[t] * nrm[t])
+                if _element_ok(P, rtris, members[o], area, cen, nrm, thin, cosmax, rmax; new = t, sums = s)
+                    owner[t] = o
+                    push!(members[o], t)
+                    sums[o] = s
+                    push!(moves, (t, o))
+                    left[i] = false
+                    for j in get(tried, o, Int[])     # o grew
+                        stale[j] = left[j]
+                    end
+                    delete!(tried, o)
+                    for r in view(nbr, :, t)          # t's neighbors now see o
+                        r == 0 && break
+                        j = get(at, r, 0)
+                        j > 0 && left[j] && (stale[j] = true)
+                    end
+                    moved = true
+                    break
+                end
+                push!(get!(() -> Int[], tried, o), i)
             end
-            return false
+            moved && break
+            i = findnext(stale, i + 1)
         end
-        i === nothing && break
-        deleteat!(rest, i)
     end
-    if isempty(rest)
+    if !any(left)
         for (t, o) in moves
             earea[o] += area[t]
         end
