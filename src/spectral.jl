@@ -82,11 +82,12 @@ end
 
 """
     MBandEmission(; intensity = [1e14, 1e15], fraction = [0.01, 0.20], groups = nothing,
-                  band = (1800, 2850), materials = (:Au,))
+                  band = (1800, 2850), materials = (:Au, :DU))
 
 Non-Planckian gold M-band emission from laser-heated spots, an **engineering model**:
-elements of a material in `materials` emit part of their absorbed laser power `P` as
-M-band x-rays, flat in photon energy over `band` (eV). The fraction is
+elements of a material in `materials` (gold, and the Au-lined uranium of a NIF wall:
+`:DU`, [`uranium`](@ref), [`nif_uranium`](@ref), where the laser heats the gold liner) emit
+part of their absorbed laser power `P` as M-band x-rays, flat in photon energy over `band` (eV). The fraction is
 
 - by default `fraction(I)`, with `I` the element's absorbed laser flux `P/A` (W/cm²),
   interpolated in log–log between the `(intensity, fraction)` points and held constant
@@ -127,25 +128,23 @@ struct MBandEmission
     end
 end
 MBandEmission(; intensity = [1e14, 1e15], fraction = [0.01, 0.20], groups = nothing,
-              band = (1800.0, 2850.0), materials = (:Au,)) =
+              band = (1800.0, 2850.0), materials = (:Au, :DU)) =
     MBandEmission(intensity, fraction, groups, band, materials)
 
 """
-    nif_mband(; outer = 1.5e15, inner = 3e14, materials = (:Au, :DU), kwargs...) -> MBandEmission
+    nif_mband(; outer = 1.5e15, inner = 3e14, kwargs...) -> MBandEmission
 
 Per-cone NIF M-band emission: each cone's laser → M-band conversion is the default
 `fraction(I)` at its mean wall irradiance, outer 1.5 × 10¹⁵ and inner 3 × 10¹⁴ W/cm²
 (Dewald et al., PoP 27, 2020, **M**): 0.20 (held beyond 10¹⁵) and 0.042. Dewald also
 notes the inner beams' 2.5× lower turning-point density, which lowers their M-band
 further (∝ n_e², ~5×); that factor is not applied (**L**: the inner M-band is an upper
-bound). The emitting materials are gold and the Au-lined uranium of a NIF wall
-(`:DU`, [`uranium`](@ref), [`nif_uranium`](@ref): the laser heats the gold liner).
-`kwargs` pass to `MBandEmission`. [`drive_history`](@ref)'s default M-band model.
+bound). `kwargs` pass to `MBandEmission`. [`drive_history`](@ref)'s default M-band model.
 """
-function nif_mband(; outer::Real = 1.5e15, inner::Real = 3e14, materials = (:Au, :DU), kwargs...)
-    m = MBandEmission(; materials, kwargs...)
+function nif_mband(; outer::Real = 1.5e15, inner::Real = 3e14, kwargs...)
+    m = MBandEmission(; kwargs...)
     fo, fi = mband_conversion(m, outer), mband_conversion(m, inner)
-    return MBandEmission(; materials, kwargs...,
+    return MBandEmission(; kwargs...,
                          groups = Dict(:outer44 => fo, :outer50 => fo, :inner23 => fi, :inner30 => fi))
 end
 

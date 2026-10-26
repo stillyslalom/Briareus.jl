@@ -33,6 +33,7 @@ using Briareus: RadiationSolution, _planck_tail, _channel_matrix, _color_tempera
 
     @testset "M-band conversion" begin
         m = MBandEmission()
+        @test m.materials == [:Au, :DU]   # gold, and the gold liner of a NIF uranium wall
         @test mband_conversion(m, 1e14) ≈ 0.01 && mband_conversion(m, 1e15) ≈ 0.20
         @test mband_conversion(m, 1e13) == 0.01 && mband_conversion(m, 5e15) == 0.20
         @test mband_conversion(m, 3e14) ≈ 0.01 * 3^log10(20) rtol = 1e-12     # log–log
