@@ -6435,47 +6435,53 @@ Cone fraction 1/3 (1/4 in brackets); Dante 1 Tr 291.9 (290.6) eV, Dewald 290.
 ### N221204 (`examples/n221204.jl energetics=new unfold=on`, standard mesh 0.28/0.16)
 
 Dante 1 over the initial LEH area (Tr; open-area Tr_open in brackets), unchanged (gray):
-5 ns 248.8 (262.3), 6 ns 271.4 (289.9), 7 ns 283.8 (305.9), 8 ns 295.0 (318.6), 8.5 ns
-283.4 (306.1) eV. "> 1.8 keV" is the share of what Dante 1 sees; Tc the
+5 ns 243.4 (256.6), 6 ns 265.0 (283.1), 7 ns 277.9 (299.5), 8 ns 291.2 (314.5), 8.5 ns
+282.4 (305.0) eV. "> 1.8 keV" is the share of what Dante 1 sees; Tc the
 hardware-channel colour temperature; "cones" the per-cone M-band (`nif_mband()`, each
-element's conversion weighted by the cones' shares of its pre-CBET deposition; laser →
-M-band 0.13–0.19 of the absorbed laser, the intensity form 0.04–0.13) with the
+cone's own post-CBET, post-bubble deposition, `mband_power`; laser → M-band 0.125–0.194
+of the absorbed laser, the intensity form 0.040–0.130) with the
 calibrated α_M, thermalized.
 
 | t (ns) | brightness | thermal | brightness + `MBandEmission()` | thermal + `MBandEmission()` | brightness, cones, α_M 0.5 | **thermal, cones, α_M 0.55** |
 |---|---|---|---|---|---|---|
-| > 1.8 keV, 5.0 | 0.098 | 0.069 | 0.139 | 0.111 | 0.120 | **0.115** |
-| 6.0 | 0.144 | 0.108 | 0.199 | 0.166 | 0.121 | **0.116** |
-| 7.0 | 0.192 | 0.137 | 0.284 | 0.239 | 0.129 | **0.122** |
-| 8.0 | 0.223 | 0.162 | 0.331 | 0.280 | 0.126 | **0.118** |
-| 8.5 | 0.165 | 0.136 | 0.195 | 0.168 | 0.143 | **0.138** |
-| Tc − Tr_open, 5.0 | +9.9 | −10.3 | +14.6 | −7.5 | +10.9 | **−8.3** |
-| 6.0 | +11.2 | −9.9 | +21.9 | −1.1 | +5.6 | **−9.2** |
-| 7.0 | +22.4 | −7.4 | +46.1 | +14.3 | +5.5 | **−10.2** |
-| 8.0 | +28.0 | −5.7 | +59.0 | +23.9 | +0.8 | **−14.0** |
-| 8.5 | +7.1 | −8.6 | +13.2 | −2.6 | +2.0 | **−7.8** |
+| > 1.8 keV, 5.0 | 0.091 | 0.060 | 0.132 | 0.103 | 0.123 | **0.116** |
+| 6.0 | 0.134 | 0.097 | 0.190 | 0.156 | 0.124 | **0.118** |
+| 7.0 | 0.183 | 0.127 | 0.276 | 0.229 | 0.134 | **0.125** |
+| 8.0 | 0.218 | 0.155 | 0.326 | 0.274 | 0.130 | **0.122** |
+| 8.5 | 0.160 | 0.133 | 0.183 | 0.158 | 0.164 | **0.158** |
+| Tc − Tr_open, 5.0 | +10.3 | −11.7 | +14.4 | −9.7 | +11.9 | **−10.1** |
+| 6.0 | +11.9 | −10.7 | +21.9 | −3.2 | +8.4 | **−8.9** |
+| 7.0 | +23.6 | −7.5 | +46.6 | +12.7 | +9.5 | **−8.2** |
+| 8.0 | +28.8 | −5.6 | +59.6 | +23.3 | +4.0 | **−12.0** |
+| 8.5 | +5.0 | −9.1 | +9.6 | −4.6 | +5.5 | **−4.3** |
+
+Rerun 2026-10-27 at 41e856f (`examples/n221204.jl 0.28 0.16 full calibrated x unfold=on`),
+after the per-cone M-band switched to each cone's post-CBET deposition (decision 21) and
+`MBandEmission()` gained the `:DU` liner. Before that fix the intensity-form columns were
+equal to the columns without M-band on the DU wall (no element emitted); the table of
+2026-10-24 predates the DU wall and the present energetics (its Tr was 248.8 eV at 5 ns).
 
 (Tc − Tr over the initial area, the comparison of the finding: +23 to +52 eV before,
 +3 to +18 thermal, without M-band.) Coarse mesh (0.8/0.4): the rule-only and calibrated
 rows the same to 0.007 in share and 0.5 eV in Tc (thermal) / 2 eV (brightness); the
 intensity-form rows 0.015–0.02 lower (its element-averaged intensity is mesh
-dependent). Unfolds at 8 ns (input 295.0 eV): traditional 296.2 (brightness) → 295.5
-(thermal), 295.4 (calibrated); smooth within 0.25 eV in every case; all 18 voltages
+dependent). Unfolds at 8 ns (input 291.2 eV): traditional 292.4 (brightness) → 291.7
+(thermal), 291.7 (calibrated); smooth within 0.25 eV in every case; all 18 voltages
 matched to < 5e-4.
 
 - **The 0.33 at 8 ns was mostly the M-band pairing, not the spot split**: the example
   used the intensity-form M-band at the gray albedo in the M-band groups (α_M = α,
   F_M ≈ 7 on Dewald's setup), which no calibration supports. With the Dewald-calibrated
   pairing (per-cone M-band, α_M thermalized) both rules give 12–14 %: brightness
-  0.120–0.143, thermal **0.115–0.138**, against Dewald's 12 % (Fig. 1b, at the 290 eV
+  0.123–0.164, thermal **0.116–0.158** (the top of each range at 8.5 ns), against Dewald's 12 % (Fig. 1b, at the 290 eV
   peak) to 15 % (Fig. 3). His shot is a different hohlraum, so agreement to ~2 points is
   all this supports; not fitted to it.
 - **What the spot split changes**: without any M-band, Dante's > 1.8 keV share falls
-  from 0.10–0.22 to 0.07–0.16 (the cavity's own Planck tail: 0.07 at 250 eV, 0.14 at
-  300); the colour temperature goes from 7–28 eV above Tr_open to 6–10 eV below it; the
-  traditional unfold's bias falls from +0.8–1.3 to +0.15–0.5 eV (its Gaussians have
+  from 0.09–0.22 to 0.06–0.16 (the cavity's own Planck tail: 0.07 at 250 eV, 0.14 at
+  300); the colour temperature goes from 5–29 eV above Tr_open to 6–12 eV below it; the
+  traditional unfold's bias falls from +0.8–1.2 to +0.13–0.50 eV (its Gaussians have
   less hard power to spread). With the calibrated M-band the colour temperature sits
-  8–14 eV below Tr_open (brightness rule: 1–11 above).
+  4–12 eV below Tr_open (brightness rule: 4–12 above).
 - Neither is a Dante check: published N221204 colour temperatures are not in hand, and
   the M-band share was compared, not fitted.
 
@@ -6484,9 +6490,9 @@ matched to < 5e-4.
 - A measured spot spectrum (soft part) in a cavity: Dante or a spectrometer at a view
   dominated by spots, or a hohlraum simulation's spot emission, to replace the local-Tr
   assumption (**L**); Dewald 2008's full text (spectra vs intensity) was not reachable.
-- The per-cone M-band in `drive_history` records: the example's pre-CBET cone weighting
-  is a proxy; bubble-absorbed inner light radiating from the outer bubble (Dewald's
-  clipping) is not split per cone.
+- Bubble-absorbed inner light radiating from the outer bubble (Dewald's clipping) is not
+  split per cone. (The per-cone, post-CBET M-band is `drive_history`'s default since
+  2026-10-26; the example's "cones" cases use it.)
 
 ## Zylstra 2022 LEH pair, time-dependent (2026-10-25) *derived*
 
@@ -8368,5 +8374,4 @@ calibrated rows (brightness α_M 0.5 / thermal α_M 0.55):
 So |Δ| ≤ 0.0021 in the share, ≤ 0.34 eV in Tc and ≤ 0.003 in the laser → M-band ratio,
 largest at 5–7 ns, where CBET moves power between the cones; the gray Tr, Tr_open and the
 CSV (P2, P4, Tr, Dante) are byte-identical. The standard-mesh table of "Laser-spot
-spectrum" (N221204 section) predates the switch; at the coarse mesh's |Δ| its 3-digit
-cones columns move by at most 0.002.
+spectrum" (N221204 section) was rerun after the switch (2026-10-27).
