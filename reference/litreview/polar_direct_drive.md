@@ -417,6 +417,11 @@ decided 1–11 on 2026-10-27 (each marked **Decided**); 12–15 are open.
      precomputed-operator design.
    - *Recommendation*: (b), with (a) as its tests.
    - **Decided**: build (b), and prototype (c) (3-D ray tracing) to compare against it.
+     Prototype done 2026-10-27 (`dev/corona/`; research notes, "Corona model prototype:
+     impact-parameter kernels vs 3-D ray tracing"): on a spherical corona the two agree
+     to 1e-5 of the mean in every σ_l (l ≤ 30), (b) is 60–110× faster per pointing
+     change; (c) measures what spherical symmetry drops (a 4 % P2 of the critical
+     radius moves σ₂ by 3 %). Verdict there: (b) as the operator, (c) as its check.
 4. **Drive metric and objective.**
    - (a) Absorbed (or incident) intensity rms only. + Model-free, matches σ₁. − Ignores
      that oblique light drives less (the reason for PDD equatorial power).

@@ -7970,6 +7970,169 @@ pixels, 0.9°); n = 30 elements are about 2.1°.
 decision 5); the Ba24 OC σ₁ example; a Literate tutorial; `absorption` through
 `Scenario`/`evaluate` (it is a `deposit` keyword only).
 
+## Corona model prototype: impact-parameter kernels vs 3-D ray tracing (2026-10-27) *measured*
+
+Decision 3 of `reference/litreview/polar_direct_drive.md` (user, 2026-10-27): build (b),
+prototype (c), compare on evidence. Research code in `dev/corona/` (not package API):
+`Corona.jl` (both methods), `validate.jl` (closed forms), `compare.jl` (the OMEGA case,
+by stages), `table.jl` (the tables below). Both use cold-plasma geometric optics,
+n² = 1 − n_e/n_c, with the ray parameter τ (ds = n dτ): dx/dτ = v, dv/dτ = −∇(n_e/n_c)/2,
+and inverse bremsstrahlung d ln P/dτ = −(ν_ei/c)(n_e/n_c) (Kruer, *The Physics of Laser
+Plasma Interactions*, ch. 5: κ = ν_ei n_e/(n_c c n)), ν_ei the local collision frequency.
+Absorbed power is projected radially onto the sphere (absorbed power per steradian,
+decision 4).
+- **(b)** For a spherical profile each ray stays in its plane and is fixed by its impact
+  parameter b. Per b: the turning radius (r_t n(r_t) = b, bisection), and on N panels of
+  r = r_t + (R_out − r_t)t² (Gauss, 4 points each; the t² substitution removes the
+  1/√ singularity) the swept angle ∫ b dr/(r√(r²n² − b²)) and the depth
+  ∫ g r dr/√(r²n² − b²), g = (ν_ei/c)(n_e/n_c). No ray integration. The deposit nodes
+  (angle from the incoming direction, absorbed fraction) are tabulated on a uniform b
+  grid, and their real-harmonic coefficients κ_lm(b) (m ≥ 0) in the frame z′ = −d. The
+  operator takes its rays from a Briareus `DepositionOperator` built on an icosphere at
+  R_out: each (point, live f-cone direction) is a ray of power W·I·|n·d|/κ/ncone (the
+  operator's own expression, recomputed per pointing, ForwardDiff-generic); a ray at
+  impact azimuth ψ about its sub-beam's axis adds κ_lm(b)·(cos mψ, sin mψ); each
+  sub-beam's sum is rotated to the lab frame by fixed blocks (exact to l = 30 by a
+  product quadrature). The result is exact harmonics, no angular bins.
+- **(c)** RK4 in τ on (x, v, ∫g dτ) through any n_e(x) (radial, planar, P2-perturbed),
+  rays on a square lattice of spacing h_lat in the plane normal to each beam through
+  the target centre, along Briareus's `cone_directions` (the same f-cone quadrature as
+  the operator), weighted by the best-focus profile at their focal-plane crossing times
+  h_lat²/ncone. The lattice is fixed by the port, so only the weights depend on the
+  aims and ForwardDiff goes through them (paths in Float64). Absorption per step is
+  deposited at the step midpoint, cloud-in-cell onto a 720 × 1440 (θ, φ) grid, then
+  projected on Y_lm by rows (FFT-free DFT in φ, exact P̄_lm at bin centres). Nearest-bin
+  assignment instead of cloud-in-cell left a first-order bias of up to 4e-4 of the mean
+  in σ_l (l ≤ 12) on a coarse run, larger than σ₁₀ itself; with cloud-in-cell the grid
+  against exact per-deposit Y_lm is 6e-3 relative at l = 10, 1.5e-3 at l = 30.
+
+**Validation** (`validate.jl`; every reference independent of both methods):
+- *V1, planar linear ramp* n_e/n_c = x/L (L = 0.1 mm, ν_c/c = 5 mm⁻¹), (c): absorption
+  against 1 − exp(−(32/15)(ν_c L/c)cos⁵θ) (Kruer) within 4.5e-8 relative at hτ = 1e-3
+  for θ = 0…75° (2.8e-7 at hτ = 4e-3); re-exit at 2L sin 2θ to 3e-6 mm. Starting a ray
+  exactly on the ramp's kink (∇n_e = 0 in the first RK stage) makes the scheme first
+  order (2e-3): rays must start just inside.
+- *V2, planar exponential* n_e/n_c = e^{x/L}: absorption against
+  1 − exp(−(8/3)(ν_c L/c)cos³θ) (Kruer; MN17 Eq. 29, the Stage-0 η_a weight) within
+  6.7e-10 for θ = 0…80°; turning depth L ln cos²θ to 1e-6 mm.
+- *V3, spherical n_e/n_c = a/r²* (derived closed forms: r_t = √(a + b²); swept angle
+  inside radius R, 2(b/r_t)arccos(r_t/R); depth 2(ν_c/c)a²[√(R² − r_t²)/(2r_t²R²) +
+  arcsec(R/r_t)/(2r_t³)]): (b) r_t to 2e-16 mm, angle to 4e-12 rad, depth to 3e-12;
+  (c) angle to 5e-9 rad, depth to 1.5e-5 (the step that crosses the truncation radius).
+- *V4, spherical exponential*, (b) against (c) ray by ray (r_c = 0.4 mm, L/r_c = 0.2,
+  b/r_c = 0…2): absorbed fraction within 6.7e-7, exit angle within 4.2e-7 rad.
+- *V5*: kernel-table interpolation in b, max error of the absorbed fraction 6.7e-5,
+  4.1e-6, 2.6e-7 for Nb = 256, 1024, 4096 (second order); panel count N = 50…400 all
+  converged to 3e-11; a tabulated profile (cubic Hermite in ln n_e and ln g, a profile
+  with an outward-growing scale length and varying T_e) at Δr = 20, 10, 5, 2.5 µm moves
+  the absorbed fraction by 7e-5, 1.5e-5, 2e-6, 4e-7.
+- *Operator checks* (`compare.jl check`): the rotation blocks reproduce Y_lm(Qx) to
+  1.2e-13 for l ≤ 30; the harmonic operator against exact per-ray harmonics on a hard
+  sphere, σ (l ≤ 30) 19.195913 % vs 19.195938 % (max |Δc_lm|/c₀₀ 3.7e-4, from linear
+  interpolation in b across the sphere's limb). dσ/dΔr through (b) by ForwardDiff
+  matches central differences to 2.7e-9 relative.
+
+**The Stage-0 η_a weight against a spherical corona** (V4 table: absorbed fraction of a
+ray of impact parameter b in an isothermal exponential corona with (8/3)(ν_c L/c) = 2.4,
+η⊥ = 0.909, against η_a(ψ) with sin ψ = b/r_c). Normal incidence agrees exactly at every
+L/r_c; oblique rays converge to η_a as L/r_c → 0 (b/r_c = 0.9: 0.1868 at L/r_c =
+0.0025 vs η_a 0.1803) but at L/r_c = 0.1 and 0.2 absorb 0.332 and 0.406 (η_a 0.180), at
+b/r_c = 0.95 0.261 and 0.349 (η_a 0.070), and rays that miss the critical sphere
+(b > r_c) still absorb (0.12 at b = 1.2 r_c, L/r_c = 0.2), which a hard sphere cannot
+do. So η_a is consistent with the corona only for thin coronas (at b/r_c = 0.9: 4 %
+at L/r_c = 0.0025, 13 % at 0.01); for PDD, where the equatorial drive comes from exactly these grazing
+rays, it is not (OMEGA case below: σ 5.7 % against 10.4 %) (*derived*).
+
+**OMEGA 40-beam PDD comparison** (`compare.jl`; public inputs, review §4.1): rings
+21.4°/42.0°/58.9° of `omega_beams` shifted Δr = 90/150/150 µm normal to the beam toward
+the PDD equator (Mn14 Table 1, Ma16's spherical-shell pointing), SG4 r₀ = 308 µm,
+n = 3.66 (Ma16), f/6.7, ncone = 7, equal powers. Corona (an engineering snapshot, not
+from a simulation): isothermal exponential, r_c = 0.40 mm, L = 0.08 mm, ν_c/c =
+11.25 mm⁻¹ (η⊥ = 0.909 planar; about T_e 3.6 keV, Z 3.5, lnΛ 8 at 351 nm), truncated
+at r_c + 14L = 1.52 mm. σ_l in % of the mean; the last column is max over 1 ≤ l ≤ 30 of
+|σ_l − σ_l(ref)| with ref = (c) at h_lat = 0.01 mm. Odd l vanish by the up–down symmetry
+((b) exactly; (c) ≤ 1e-6).
+
+| model | absorbed | σ (l≤30) | σ₂ | σ₄ | σ₆ | σ₈ | σ₁₀ | σ₁₂ | σ₂₀ | σ₃₀ | max Δσ_l |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| hard sphere at r_c, all absorbed | 0.8914 | 16.17 | 15.88 | 0.323 | 2.342 | 0.984 | 0.212 | 0.288 | 0.291 | 0.800 | 5.8 |
+| hard sphere at r_c, η_a (Stage 0) | 0.5815 | 5.66 | 2.096 | 4.389 | 1.964 | 2.104 | 0.151 | 0.098 | 0.054 | 0.155 | 8.0 |
+| (b), icosphere n = 20 (4.4 M rays) | 0.64592 | 10.4072 | 10.0753 | 1.5143 | 1.7733 | 1.1606 | 0.0860 | 0.0597 | 0.0026 | 0.0239 | 2.3e-2 |
+| (b), n = 30, Nb = 4096 (9.9 M) | 0.64591 | 10.4087 | 10.0771 | 1.5136 | 1.7726 | 1.1614 | 0.0861 | 0.0591 | 0.0007 | 0.0033 | 2.2e-3 |
+| (b), n = 40 (17.6 M) | 0.64591 | 10.4092 | 10.0777 | 1.5133 | 1.7724 | 1.1616 | 0.0862 | 0.0588 | 0.0006 | 0.0003 | 9.9e-4 |
+| (c), h_lat = 0.08 mm (98 k rays) | 0.64591 | 29.13 | 10.0783 | 1.5125 | 1.7726 | 1.1623 | 0.0862 | 0.0566 | 1.948 | 21.8 | 22 |
+| (c), h_lat = 0.04 (391 k) | 0.64591 | 10.4097 | 10.0783 | 1.5124 | 1.7723 | 1.1623 | 0.0857 | 0.0585 | 0.0010 | 0.0018 | 6.6e-4 |
+| (c), h_lat = 0.02 (1.57 M) | 0.64591 | 10.4098 | 10.0783 | 1.5124 | 1.7723 | 1.1623 | 0.0858 | 0.0585 | 0.0009 | 0.0012 | 1.2e-4 |
+| (c), h_lat = 0.01 (6.27 M) | 0.64591 | 10.4098 | 10.0783 | 1.5124 | 1.7723 | 1.1623 | 0.0858 | 0.0585 | 0.0009 | 0.0011 | ref |
+
+(c) at h_lat = 0.04 with hτ = 2e-3, 4e-3, 8e-3 (L/hτ = 40, 20, 10): max Δσ_l 5.9e-4,
+6.6e-4, 1.8e-3. The two methods agree on the absorbed fraction to 1e-5 and on every
+σ_l to 1e-5 of the mean once each is converged; the residual is (b)'s sampling, which
+is the `DepositionOperator`'s second-order quadrature over the R_out sphere: σ₂ moves
+10.0753 → 10.0771 → 10.0777 for n = 20, 30, 40 and Richardson-extrapolates (h²) to
+10.0785 against (c)'s 10.0783. (c)'s square lattice converges faster (the midpoint rule
+on a smooth, compactly supported profile): 391 k rays (~1 400 per beam and f-cone
+direction, spacing 0.13 r₀) give σ_l (l ≤ 30) to 7e-6 of the mean; 98 k rays alias at
+high l (σ₃₀ 22 % of the mean).
+
+| work (8 threads, Ryzen CCX) | (b) n = 20 | (b) n = 40 | (c) h_lat = 0.04 |
+|---|---|---|---|
+| build | operator 0.6 s + kernels 0.6 s + map 8.6 s | 3.2 + 0.6 + 8.4 s | none |
+| memory | 43 MB operator + 234 MB map | 171 + 638 MB | 8 MB grid per thread |
+| per pointing change | 0.16 s | 0.28 s | 18 s |
+| ForwardDiff, 3 ring shifts | 0.56 s | 1.5 s | 22.6 s |
+| ForwardDiff, 80 aim coordinates | 11 s | 32 s | not run; ~7 chunks × ~22 s ≈ 150 s (*L*, estimate) |
+
+About 3 s of the map is the 280 sub-beam rotation blocks (0.09 s each, fixed per port;
+a quadrature, where a Wigner recursion would be cheaper), the rest the per-ray loop. (c)'s gradient costs little more than its
+value because its paths do not depend on the aims; ForwardDiff's chunking retraces
+once per chunk, hence the estimate for 80 parameters. The gradients agree:
+dσ/dΔr = (1.04755, 0.76448, 0.58639) for (b) n = 40 and (1.04751, 0.76453, 0.58645)
+for (c), 1e-4 relative.
+
+**What (c) gives that (b) cannot: a P2-perturbed corona.** n_e/n_c =
+exp(−(r − r_c(1 + ε P₂(cos θ)))/L) (critical surface +ε r_c at the poles, −ε r_c/2 at
+the equator), (c) at h_lat = 0.04. (b) returns the ε = 0 result for every ε.
+
+| ε | absorbed | Δ(c₂₀/c₀₀) | Δ(c₄₀/c₀₀) | σ₂ | σ₁₀ |
+|---|---|---|---|---|---|
+| 0 | 0.64591 | — | — | 10.078 % | 0.086 % |
+| +0.02 (pole +8 µm) | 0.64117 | +0.00137 | +0.00050 | 9.941 % | 0.068 % |
+| +0.04 (pole +16 µm) | 0.63627 | +0.00285 | +0.00099 | 9.793 % | 0.062 % |
+| −0.04 | 0.65482 | −0.00249 | −0.00092 | 10.328 % | 0.140 % |
+
+Linear in ε to 4 % at ε = 0.02 (±0.04 differ by 13 % in Δc₂₀): a P2 of the critical radius of ε moves σ₂ by about
+−7 ε (percentage points) and the absorption by −0.24 ε, i.e. a 16 µm polar bulge on a
+400 µm critical radius changes σ₂ by 0.29 points (3 % of its value) and the absorption
+by 1 point. (b) misses that; but it is a first-order, smooth response that a
+perturbative correction measured with (c) would capture.
+
+**Verdict.**
+1. *Stage 1 operator: (b).* On a spherical corona both methods give the same answer
+   (absorption to 1e-5, σ_l to 1e-5 of the mean), and both are validated against the
+   closed forms; (b) evaluates a pointing change 60–110× faster than converged (c),
+   gives exact harmonics, and its gradient in 80 aims costs 11 s against an estimated
+   150 s. It keeps the operator structure, so it slots into the optimizer like
+   `deposit`. One change from the prototype: take (b)'s rays from a transverse lattice
+   per sub-beam, as (c) does, rather than from the `DepositionOperator`'s points on the
+   R_out sphere: the lattice converged at 391 k rays where the sphere sampling needs
+   17.6 M (n = 40) for the same l ≤ 30 accuracy, so the map and the evaluation would be
+   ~10–40× smaller again (*L*: not built).
+2. *Hybrid: yes, (b) as the operator and (c) as the check.* (c) is ~150 lines of
+   independent code (shared only with the beam model), already validated, and is the
+   only way to measure what spherical symmetry drops (the P2 corona above: 3 % in σ₂
+   at a 4 % critical-surface P2). Keep it as a test reference (converged (b) against
+   (c) at h_lat = 0.04 on a spherical corona, a few seconds on a reduced beam set) and
+   as an offline study tool for non-spherical snapshots.
+3. *The Stage-0 η_a weight* agrees with the corona at normal incidence and in the
+   thin-corona limit only; at L/r_c ~ 0.1–0.2 it underestimates grazing absorption by
+   2–5× and ignores rays outside r_c. On the OMEGA case it gives σ 5.7 % where the
+   corona gives 10.4 %. Its docstring's "thin corona" caveat should name this limit
+   (L/r_c of a few 1e-3 for a few % at b/r_c = 0.9).
+4. *Not settled here*: kernels per snapshot for a time-dependent corona (stage 2; a
+   table costs ~1 s, so rebuilding per snapshot is cheap); non-isothermal ν_ei(r) is
+   already supported by the table form (g(r) given separately).
+
 ## GUI on CAD: import, parts and first frames, remeasured (2026-10-26) *measured*
 
 Measured locally (8 threads pinned to one CCX; the NIF CAD workspace of the 2026-10-18
