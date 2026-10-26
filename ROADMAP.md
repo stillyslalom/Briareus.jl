@@ -241,10 +241,12 @@ Parts may be split for computation, but the GUI shows and picks the original par
    0.2 s each (GL first drawings; 2026-10-26: jobs no longer compile on the GUI thread,
    import call 0.7 s → 0, part left out 0.36 → 0.2 s, put back 0.87 → 0.15 s; research
    notes "GUI on CAD: import, parts and first frames"); the CAD capsule's remesh, 1.0 s
-   at 0.6 mm and 2.0 s at 0.28 mm (2026-10-26, `_DISSOLVE_MAX`; was 4.1 and 12.5 s): next,
-   scale the merge's minimum area by the size the angle limit allows, ~(R·angle)², so it
-   targets real slivers only (627 of 670 capsule elements count as small today; measure on
-   the cadfit and tutorial spheres, whose meshes it changes); a "fit the hohlraum template to CAD parts" action; the
+   at 0.6 mm and 2.0 s at 0.28 mm (2026-10-26, `_DISSOLVE_MAX`; was 4.1 and 12.5 s;
+   scaling the merge's minimum area by (R sin angle)² was measured and dropped: it only
+   stops acceptable merges, +18–29 % elements on curved parts, no speed-up, the slivers
+   untouched; research notes "A curvature-scaled minimum area"); what is left of the
+   capsule's remesh is clustering, and its slivers (diam/√A to 30) are ones no neighbor
+   takes; a "fit the hohlraum template to CAD parts" action; the
    foil objective with one shared parameter set for beams aimed at one point does not
    move. `fit_surfaces` cost: a variable-radius fillet is quadratic while its
    tolerance-stopped growths stay under the 512-patch covers (16–50k facets: 16–107 s); the 133k-facet NIF mount

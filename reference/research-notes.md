@@ -8206,6 +8206,39 @@ skips more on finer faceting). Scripts: scratchpad `dsk/` (`instr.jl`,
 `survey_cad.jl`, `survey_tests.jl`, `survey_more.jl`, `time_capsule.jl`,
 `cap_stats.jl`, `mock.jl`).
 
+**A curvature-scaled minimum area: measured, not adopted (H).** The merge's minimum
+area, `minarea` size² = size²/3, counts almost every element of a curved part as small
+where the angle, not the size, bounds the elements. Tried: scale it per element by
+min(1, R sin(angle)/size)², R sin(angle) being the reach of a spherical cap within
+`angle` of its axis (as `rmax` = size is on flat parts), with 1/R the area-weighted
+curvature of the element's facets (each facet's largest dihedral angle to an edge
+neighbor within `angle`, over the distance between their centroids; 0 on flat parts, so
+those stay bit for bit). Replayed on every remesh of test/meshops.jl, test/cadfit.jl,
+test/partial_visibility.jl, test/hmatrix.jl (54 meshes) and the cad_hohlraum tutorial
+(15), synthetic spheres, tubes and cylinders, and the NIF CAD capsule (timing and counts
+only). 48 of 85 unchanged (flat parts, tubes, the tutorial capsule at 0.15/0.1 mm, the
+finest spheres); 37 changed, all by **more** elements: the merges it stops are unions of
+angle-bounded elements that pass every acceptance test, not slivers.
+`sphere_mesh(1.1; ntheta = 100, nphi = 200)` at 0.6 mm 229 → 270 elements,
+`sphere_mesh(0.9; ntheta = 60, nphi = 120)` at 0.4 and 0.6 mm 221 / 218 → 264, the test
+meshes up to +12 % (cadfit's sphere at 0.3 mm 474 → 531), the tutorial's wall parts at
+0.5 mm 457 → 462, 465 → 468, 21 → 24, and the CAD capsule 670 → 865 at 0.6 mm, 990 → 1,016
+at 0.28. Elements a little more compact (that sphere at 0.6: diam/√A median 1.42 → 1.36,
+95th percentile 1.53 → 1.46; max tilt 9.999 → 9.317°). The capsule's slivers (min area
+3e-6 size², diam/√A to 29.8) are untouched: they are under either minimum, and no
+neighbor takes them in either. Downstream, the inside of the spheres as an integrating
+sphere (F_ij = A_j/A exactly): flat elements, closure max 6.5e-3 → 5.0e-3, 1.1e-2 →
+4.9e-3, 5.8e-3 → 4.7e-3 (the three spheres at 0.6 mm), mean |closure| 4.3e-3 → 3.6e-3,
+but the rms relative error of F_ij worse (6.8e-3 → 7.5e-3, 2.3e-3 → 1.4e-2, 4.5e-3 →
+6.3e-3); fitted spheres exact to 1e-14 either way. Time: the capsule's remesh unchanged
+(1.0 s at 0.6 mm, 2.0 s at 0.28), and `_DISSOLVE_MAX` still needed (without it 4.1 s and
+8.3 s: the slow dissolutions are of elements small under either criterion). Net: +18–29 %
+elements on curved parts at sizes the angle bounds (view-factor cost ~1.4–1.65×) for
+slightly more compact elements, no speed-up and no sliver removed; not adopted. Scripts:
+scratchpad `amin/` (`record.jl` logs every remesh input of the test files and the
+tutorial, `replay.jl` remeshes and compares, `vf.jl` the integrating sphere,
+`meshops_scaled_amin.jl` the variant).
+
 **The window's GUI-thread stalls (H).** Scripted Qt window (scratchpad
 `gui_timing.jl`: a coarse hohlraum's drive, coloring by a field, a selection, the
 workspace import, the largest part left out and put back, the template and the import
