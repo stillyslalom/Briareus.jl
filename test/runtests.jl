@@ -17,7 +17,8 @@ SHARD in ("", "1", "2", "3") || error("BRIAREUS_TEST_SHARD must be 1, 2 or 3, go
 # against linear propagation, a uniformly fine history; ~3 min at four threads). CI's
 # one-thread shards run them; local full runs skip them unless asked.
 const LONG_TESTS = get(ENV, "BRIAREUS_LONG_TESTS", "false") == "true"
-const SHARDS = Dict(f => 2 for f in ("meshops.jl", "stl.jl", "cadfit.jl", "partial_visibility.jl", "hmatrix.jl"))
+const SHARDS = Dict(f => 2 for f in ("meshops.jl", "stl.jl", "cadfit.jl", "partial_visibility.jl", "hmatrix.jl",
+                                     "inference.jl"))
 merge!(SHARDS, Dict(f => 3 for f in ("windows.jl", "burnthrough.jl", "uncertainty.jl",
                                      "implosion.jl", "energetics.jl", "spectral.jl", "large_models.jl")))
 in_shard(file) = SHARD == "" || get(SHARDS, file, 1) == parse(Int, SHARD)
@@ -1204,4 +1205,5 @@ shard_include("spectral.jl")
 shard_include("dante_response.jl")
 shard_include("large_models.jl")
 shard_include("hmatrix.jl")
+shard_include("inference.jl")
 end

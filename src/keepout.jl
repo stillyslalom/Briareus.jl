@@ -86,10 +86,14 @@ in the beams' aim, defocus and spot size.
 aperture_clearance(k::ApertureKeepOut, beams::AbstractVector{<:Beam}) =
     [_aperture_clearance(k, b) for b in beams]
 
+# `Inf` in the beam's number type: a Float64 `Inf` beside dual clearances made the
+# clearance a `Union` and the objectives' keep-out penalty infer as `Any`.
+_no_clearance(::Beam{T}) where {T} = T(Inf)
+
 function _aperture_clearance(k::ApertureKeepOut, b::Beam)
     side = [dot(c, b.port) for c in k.centers]
     j = argmax(side)
-    side[j] > 0 || return Inf
+    side[j] > 0 || return _no_clearance(b)
     ρ = envelope_radius(b.spot, b.power; intensity = k.intensity, peak_fraction = k.peak_fraction)
     A, B = ρ * b.spot.a, ρ * b.spot.b
     kv = direction(b)
@@ -227,7 +231,7 @@ function _sphere_clearance(k::SphereKeepOut, b::Beam)
         dist = _sampson_distance(u, v, A, B) - cone * abs(s) - k.margin - R
         best = best === nothing ? dist : min(best, dist)
     end
-    best === nothing && return Inf
+    best === nothing && return _no_clearance(b)
     return best - k.transverse - k.focus * cone
 end
 
