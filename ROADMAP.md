@@ -317,7 +317,8 @@ Items 9–13 and 16–17 follow the 2026-10-22 literature review against Kritche
     2.2 GB), packet visibility in the deposition operator, sliver cuts ("The H-matrix's
     N^1.5 remainder"), zero near-field blocks dropped and facing-cut rows refined to
     low rank (−17 % storage, −15 % F x; "H-matrix near field"), a vectorized sector
-    contour (−24 to −28 % assembly, round-off). Left, in order: the
+    contour (−24 to −28 % assembly, round-off; a contiguous quadrature layout gained
+    nothing and was dropped). Left, in order: the
     near-field quadrature itself; rim certificates for non-convex occluders and `:sampled` visibility
     (still a ray per pair of an occupied leaf); the bored cavity's gap pairs (~60 % of its
     view-factor time; refinement toward the shared edge onto ~34-edge sector receivers);

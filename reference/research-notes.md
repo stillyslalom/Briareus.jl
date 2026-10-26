@@ -41,7 +41,7 @@ callout in the section says which).
   (2026-10-22) *decision*.
 - Large radiation models (2026-10-24); Hierarchical view factors (2026-10-24) (*in
   part*: `tol`); The H-matrix's N^1.5 remainder (2026-10-25); H-matrix near field: zero
-  blocks and cut rows (2026-10-26; vectorized sector contour); Deposition-operator rays
+  blocks and cut rows (2026-10-26; vectorized sector contour; contiguous quadrature, dropped); Deposition-operator rays
   and sliver view factors (2026-10-25); Compile latency (2026-10-25); Closure on bored,
   windowed and CAD cavities (2026-10-25); Compact capsule rows at capsule_h = h/3
   (2026-10-25).
@@ -4349,6 +4349,16 @@ per contour (714 → 306 ns). Not bit for bit: the terms are summed in another o
 
 (Balanced T-dependent solve at 2 ns, `bench3.jl`.) The largest relative entry
 differences are small factors whose contour terms cancel (7e-7 with 1.1e-17 absolute).
+
+**Contiguous quadrature layout: tried, dropped.** The per-element point rules (`qnear`,
+`qmid`, `qfar`: three small arrays per element) were packed into three arrays with
+offsets, read as views. Neither faster nor bit for bit: H-matrix build +2 % (4.47–4.55 s
+at 10.5k, 9.03–9.05 s at 17.6k, on top of the contour change); dense Float32 11.79 against
+11.82 s and 30.2 against 30.8 s (one run each). Dense F changed in 15 % of entries (max
+rel 3.9e-13), from `_point_kernel` and `_self_kernel` with the weights as views:
+StaticArrays' `dot` carries LLVM `reassoc contract` flags, so where FMAs are fused
+depends on the surrounding code, and a change of data layout in a kernel is not bit for
+bit in general.
 
 ## N221204 late-time drive (2026-10-24) *derived*
 
