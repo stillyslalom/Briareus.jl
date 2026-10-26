@@ -982,6 +982,8 @@ function _hmatrix_view_factors(ctx; tol = HMATRIX_DEFAULTS.tol, eta = HMATRIX_DE
     0 < tol < 1 || throw(ArgumentError("tol must be in (0, 1), got $tol"))
     eta > 0 || throw(ArgumentError("eta must be positive, got $eta"))
     leaf >= 2 || throw(ArgumentError("leaf must be at least 2, got $leaf"))
+    # sectors receive through the vectorized contour (`_SoAReceiver`; round-off)
+    ctx = merge(ctx, (; recv = Union{_Receiver,_SoAReceiver,_PolyReceiver}[_soa_receiver(r) for r in ctx.recv]))
     t = ctx.t
     N = nelements(t)
     pad = ctx.size ./ sqrt(2)

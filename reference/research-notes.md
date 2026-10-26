@@ -41,7 +41,7 @@ callout in the section says which).
   (2026-10-22) *decision*.
 - Large radiation models (2026-10-24); Hierarchical view factors (2026-10-24) (*in
   part*: `tol`); The H-matrix's N^1.5 remainder (2026-10-25); H-matrix near field: zero
-  blocks and cut rows (2026-10-26); Deposition-operator rays
+  blocks and cut rows (2026-10-26; vectorized sector contour); Deposition-operator rays
   and sliver view factors (2026-10-25); Compile latency (2026-10-25); Closure on bored,
   windowed and CAD cavities (2026-10-25); Compact capsule rows at capsule_h = h/3
   (2026-10-25).
@@ -4326,6 +4326,29 @@ max 1.4e-8 / 1.4e-8, moment response 1.4e-8 / 1.6e-8 (10.5k / 17.6k); against de
 Float32 at 10.5k unchanged (a₀ 1.4e-9, P2/P0 2.7e-9, H max 1.2e-7). The previous
 session measured −15 to −27 % storage over 10.5k–28.6k. Assembly time is unchanged to
 +8 %: the cut rows' extra ACA costs about what the dense entries did.
+
+### Vectorized sector contour (H-matrix only)
+
+A profile of the 10.5k assembly put ~45 % of its work in `_contour_vf` over polar-sector
+loops (34 edges, one scalar `atan` each: wall and capsule points onto the end caps). The
+H-matrix assembly now gives sector receivers their loop as x, y, z arrays
+(`_SoAReceiver`) and takes the contour in one `@simd` loop with a branch-free
+`atan(y ≥ 0, x)` (`_atan_nb`: fdlibm's polynomial after reduction to |u| ≤ tan(π/8);
+≤ 2 ulp from `Base.atan` over 10⁶ random arguments, exact at 0, π/4, π/2, π), 2.4× faster
+per contour (714 → 306 ns). Not bit for bit: the terms are summed in another order.
+`view_factors` (dense) keeps `_Receiver` and is bit for bit (`==` on two hohlraums,
+2.0k and 4.0k elements). Measured against 5173a3d (4 threads, tol 1e-6, leaf 48):
+
+| N | 10,484 | 17,632 |
+|---|---|---|
+| H-matrix build, warm (3 runs), old → new | 6.07–6.20 → 4.38–4.45 s (−28 %) | 11.53–11.59 → 8.78–8.89 s (−24 %) |
+| entries, sampled rows (400 / 300 rows, all columns) | 0.77M of 2.0M differ; max abs ΔF 3.9e-17, max rel 2.5e-12 | 0.85M of 2.6M; 4.2e-17, 3.6e-12 |
+| blocks, ranks, storage | identical | identical |
+| a₀ (rel), P2/P0, P4/P0 (abs) | 2.1e-11, 9.4e-12, 3.9e-13 | −5.6e-16, 3.1e-14, 9.8e-15 |
+| H per element max (median); moment response | 7.4e-9 (2.0e-11); 1.2e-8 | 2.6e-12 (3.6e-15); 2.5e-12 |
+
+(Balanced T-dependent solve at 2 ns, `bench3.jl`.) The largest relative entry
+differences are small factors whose contour terms cancel (7e-7 with 1.1e-17 absolute).
 
 ## N221204 late-time drive (2026-10-24) *derived*
 

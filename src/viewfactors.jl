@@ -906,6 +906,80 @@ end
     return abs(s) / (2π)
 end
 
+# ---------------------------------------------- vectorized sector contour (H-matrix)
+#
+# A polar sector's boundary loop has 2m + 2 = 34 edges, and its contour (one `atan` per
+# edge, which does not vectorize) took ~45 % of an H-matrix assembly of a hohlraum (wall
+# and capsule points onto the end caps' sectors). The H-matrix assembly gives sector
+# receivers their loop as component arrays and takes the contour in one `@simd` loop
+# with a branch-free `atan`: 2.4× faster per contour. The terms are summed in another
+# order and the `atan` is within 2 ulp of `Base.atan`, so its factors agree with
+# `_contour_vf`'s to round-off, not bit for bit; `view_factors` itself keeps `_Receiver`.
+
+# A sector receiver with its loop as x, y, z arrays, closed (the first vertex repeated).
+struct _SoAReceiver
+    r::_Receiver
+    x::Vector{Float64}
+    y::Vector{Float64}
+    z::Vector{Float64}
+end
+
+_soa_receiver(r::_Receiver) = isempty(r.loop) ? r :
+    _SoAReceiver(r, ([[v[k] for v in r.loop]; r.loop[1][k]] for k in 1:3)...)
+_soa_receiver(r) = r
+
+_closer_than(p, r::_SoAReceiver, d) = _closer_than(p, r.r, d)
+_distance_to(p, r::_SoAReceiver) = _distance_to(p, r.r)
+
+# `_receiver_vf(p, n, r.r)` with the contour of `_contour_soa`.
+function _receiver_vf(p, n, r::_SoAReceiver)
+    loop = r.r.loop
+    all(v -> dot(n, v - p) > 0, loop) && return _contour_soa(p, n, r.x, r.y, r.z)
+    all(v -> dot(n, v - p) <= 0, loop) && return 0.0
+    f = 0.0
+    for tri in r.r.tris
+        f += _point_polygon_vf(p, n, tri)
+    end
+    return f
+end
+
+# `_contour_vf` over the closed loop x, y, z (@noinline as `_contour_vf` is).
+@noinline function _contour_soa(p, n, X, Y, Z)
+    px, py, pz = p
+    nx, ny, nz = n
+    s = 0.0
+    @inbounds @simd for k in 1:length(X)-1
+        ax, ay, az = X[k] - px, Y[k] - py, Z[k] - pz
+        bx, by, bz = X[k+1] - px, Y[k+1] - py, Z[k+1] - pz
+        cx, cy, cz = ay * bz - az * by, az * bx - ax * bz, ax * by - ay * bx
+        nc = sqrt(cx * cx + cy * cy + cz * cz)
+        g = (nx * cx + ny * cy + nz * cz) / nc
+        s += ifelse(nc == 0, 0.0, _atan_nb(nc, ax * bx + ay * by + az * bz) * g)
+    end
+    return abs(s) / (2π)
+end
+
+# atan(y, x) for y ≥ 0 without branches (so it vectorizes): the ratio of the smaller to
+# the larger of y, |x| is reduced to |u| ≤ tan(π/8), where fdlibm's polynomial (s_atan.c,
+# which `Base.atan` also uses, valid to |u| < 7/16) applies; π/4, π/2 and π are added
+# in two parts. Within 2 ulp of `Base.atan` (10⁶ random arguments over 12 decades).
+@inline function _atan_nb(y::Float64, x::Float64)
+    ax = abs(x)
+    t = min(y, ax) / max(y, ax)                       # [0, 1]
+    big = t > 0.41421356237309503                     # tan(π/8)
+    u = ifelse(big, (t - 1) / (t + 1), t)
+    z = u * u
+    w = z * z
+    s1 = z * evalpoly(w, (3.33333333333329318027e-01, 1.42857142725034663711e-01, 9.09088713343650656196e-02,
+                          6.66107313738753120669e-02, 4.97687799461593236017e-02, 1.62858201153657823623e-02))
+    s2 = w * evalpoly(w, (-1.99999999998764832476e-01, -1.11111104054623557880e-01, -7.69187620504482999495e-02,
+                          -5.83357013379057348645e-02, -3.65315727442169155270e-02))
+    r = u - u * (s1 + s2)
+    r = ifelse(big, (7.85398163397448278999e-01 + r) + 3.06161699786838301793e-17, r)
+    r = ifelse(y > ax, (1.57079632679489655800e+00 - r) + 6.12323399573676603587e-17, r)
+    return ifelse(x < 0, (3.14159265358979311600e+00 - r) + 1.22464679914735317723e-16, r)
+end
+
 """
     closure_error(F) -> Vector
 

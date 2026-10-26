@@ -110,6 +110,28 @@ end
     @test rel(H' * x, M' * x) < 1e-12
 end
 
+# The H-matrix's vectorized sector contour: its branch-free atan against `Base.atan`, and
+# sector factors against the scalar contour (`view_factors`' kernel) from points all
+# around the end caps, in front of, behind and cutting the sectors.
+@testset "hierarchical view factors: vectorized sector contour" begin
+    rng = Xoshiro(5)
+    y = abs.(randn(rng, 10^5)) .* exp10.(rand(rng, -4:4, 10^5))
+    x = randn(rng, 10^5) .* exp10.(rand(rng, -4:4, 10^5))
+    @test all(abs.(Briareus._atan_nb.(y, x) .- atan.(y, x)) .<= 2 .* eps.(atan.(y, x)))
+    @test Briareus._atan_nb.([1.0, 0.0, 0.0, 1.0], [0.0, -1.0, 1.0, 1.0]) == [π / 2, Float64(π), 0, π / 4]
+    t = hohlraum(; h = 0.6, capsule_h = 0.3)
+    rs = [Briareus._receiver(t, e, true, false, nothing) for e in 1:nelements(t)
+          if t.components[t.elem_comp[e]].surface isa DiskSurface && t.elem_curved[e] != 0]
+    @test length(rs) > 10
+    ps = [Vec3(4randn(rng), 4randn(rng), 6randn(rng)) for _ in 1:200]
+    ns = [normalize(Vec3(randn(rng), randn(rng), randn(rng))) for _ in 1:200]
+    f1 = [Briareus._receiver_vf(p, n, r) for r in rs for (p, n) in zip(ps, ns)]
+    f2 = [Briareus._receiver_vf(p, n, Briareus._soa_receiver(r)) for r in rs for (p, n) in zip(ps, ns)]
+    @test count(>(0), f1) > length(f1) ÷ 10
+    # (absolute below ~1e-6: the contour's terms cancel there)
+    @test all(abs.(f2 .- f1) .<= 1e-12 .* abs.(f1) .+ 1e-15)
+end
+
 # The visibility rules (shaft culling without rays, the convex and planar exclusions, the
 # exact masks of occupied leaf pairs) on targets with rims, gaps, bores, corner fillets,
 # folded CAD elements and partial visibility: every entry as `view_factors` has it, to
