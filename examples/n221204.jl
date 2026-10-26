@@ -5,7 +5,7 @@
 # "N221204 time-dependent benchmark (2026-10-23)" and "Wall material, conversion and
 # capsule energetics (2026-10-24)".
 #
-#   julia --project=. -t auto examples/n221204.jl [h capsule_h [runs [transfer [table [dynamics [shot]]]]]]
+#   julia --project=. -t auto examples/n221204.jl [h capsule_h [runs [transfer [table [shot]]]]]
 #
 # `h`, `capsule_h`: mesh (default 0.28 / 0.16, the standard mesh); `runs`: `all`
 # (default) or `full` (only the full model, e.g. for a fine-mesh confirmation);
@@ -15,12 +15,12 @@
 # post-transfer cone fraction, HYDRA's own CBET result for this shot), `joint` (the
 # joint three-shot calibration, `hybride_cbet()`) or `iraum` (the same with the Δλ null
 # at I-Raum's ≤ 0.5 Å, `hybride_cbet_iraum()`); `table` as 5th
-# argument solves only the comparison times; `dynamics`: `calibrated` (the only value;
-# see below); `shot`: `n221204` (default),
+# argument solves only the comparison times (any other word, e.g. `x`, the default
+# times); `shot`: `n221204` (default),
 # `n220919` or `n210808` (proxies, see below), or `n191118` / `n210601`, Zylstra 2022's
 # LEH-size pair of symcaps (3.64 and 3.1 mm LEHs, their measured pulses and Dante;
 # research notes, "Zylstra 2022 LEH pair, time-dependent (2026-10-25)"). Writes
-# `<shot>_<transfer>_<dynamics>_<h>_<capsule_h>[_<options>].csv` (P2/P0, P4/P0 and
+# `<shot>_<transfer>_<h>_<capsule_h>[_<options>].csv` (P2/P0, P4/P0 and
 # capsule Tr per run) to the current directory.
 #
 # Energetics (research notes, "Wall material, conversion and capsule energetics
@@ -74,7 +74,7 @@ using Briareus, Printf, DelimitedFiles
 pos = filter(a -> !occursin('=', a), ARGS)
 opt = Dict(String.(split(a, '=', limit = 2)) for a in ARGS if occursin('=', a))
 given = sort(collect(keys(opt)))          # the options on the command line (the file tag)
-shot = get(pos, 7, "n221204")
+shot = get(pos, 6, "n221204")
 # Zylstra 2022's LEH pair (`n191118`, `n210601`): no published backscatter, so none for
 # them (N221204's measured SBS/SRS would not apply).
 pair = shot in ("n191118", "n210601")
@@ -339,7 +339,7 @@ joint = hybride_cbet(leh_z = geometry.length / 2, delay = cbet_delay)
 iraum = hybride_cbet_iraum(leh_z = geometry.length / 2, delay = cbet_delay)
 cbet = transfer == "fig9b" ? fig9b : transfer == "joint" ? joint : transfer == "iraum" ? iraum : calibrated
 
-# Hohlraum dynamics (`dynamics`, 6th argument), calibrated against published data other
+# Hohlraum dynamics, calibrated against published data other
 # than Fig. 10 (research notes, "Hohlraum dynamics calibrated to published data
 # (2026-10-24)"):
 # - wall: `WallMotion`'s defaults (fitted to the LLNL dynamic view-factor radius of Young
@@ -355,10 +355,8 @@ cbet = transfer == "fig9b" ? fig9b : transfer == "joint" ? joint : transfer == "
 #   6 ns, against 1.85 ± 0.1 for N210808 in PRE 109 Fig. 1a (N221204's is hidden under
 #   its rays, ≥ 1.55). The collision time scales with HYBRID-E's capsule–wall gap
 #   (3.2 − 1.135 mm): t_c 6.09 ns.
-# (`late_lips`, the 2026-10-23 lip closure at 5.0 ns, removed 2026-10-26; the slot stays
-# for the shot argument's position and the output file's name.)
-dynamics = get(pos, 6, "calibrated")
-dynamics == "calibrated" || error("dynamics calibrated, not $dynamics")
+# (`late_lips`, the 2026-10-23 lip closure at 5.0 ns, and with it the `dynamics`
+# argument, removed 2026-10-26.)
 turn_on = 0.4
 motion = WallMotion(start = turn_on + 0.8, saturation = 0.38)
 lip, r_open = GapClosure(closure = -0.1, width = 7.85, after = WallLossAlbedo()), 0.857
@@ -375,8 +373,8 @@ bubble = BubbleAbsorption(; radius = R0, turn_on, wall = motion, capsule_radius,
 # (research notes, "Computed LEH closure (2026-10-24)").
 get(opt, "lips", "prescribed") == "computed" && (lip = :computed; r_open = 0.6)
 geometry = (geometry..., leh_open_radius = r_open * geometry.leh_radius)
-@printf("dynamics %s: wall %.2f mm in at 6 ns, %.2f at 9 ns; bubble t_c %.2f ns, tip %.2f mm at 6 ns\n",
-        dynamics, wall_displacement(motion, 6.0), wall_displacement(motion, 9.0), bubble.collision,
+@printf("dynamics: wall %.2f mm in at 6 ns, %.2f at 9 ns; bubble t_c %.2f ns, tip %.2f mm at 6 ns\n",
+        wall_displacement(motion, 6.0), wall_displacement(motion, 9.0), bubble.collision,
         bubble_depth(bubble, 6.0))
 # Every step is quasi-static (no burnthrough fronts here), so `table` (5th argument)
 # solves only the times of the comparison table, for a fine-mesh check.
@@ -637,7 +635,7 @@ for t in (2.0, 4.0, 4.5, 5.0, 5.5, 6.0, 6.5, 7.0, 8.0, 8.5)
 end
 
 tag = join(("$k-$(opt[k])" for k in given), "_")
-out = "$(shot)_$(transfer)_$(dynamics)_$(h)_$(capsule_h)$(isempty(tag) ? "" : "_" * tag).csv"
+out = "$(shot)_$(transfer)_$(h)_$(capsule_h)$(isempty(tag) ? "" : "_" * tag).csv"
 header = ["time"; ["P2/P0 $n" for (n, _) in runs]; ["P4/P0 $n" for (n, _) in runs]; ["Tr $n" for (n, _) in runs];
           ["Dante $n" for (n, _) in runs]; ["Dante open $n" for (n, _) in runs]]
 writedlm(out, vcat(permutedims(header),

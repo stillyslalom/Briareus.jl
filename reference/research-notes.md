@@ -2811,6 +2811,9 @@ of PRE 109, 025204 Fig. 10 (N221204, post-CBET, digitized ±0.001 where visible,
 superseded by `n221204_fig10()` ("PRE 109 Fig. 10 digitization" below). The table keeps
 them as they were run.
 
+> The example's `dynamics` argument (6th) was removed 2026-10-26: the shot is now the 6th
+> argument and the CSV names drop the dynamics token; run commands here and below are as run.
+
 - **Inputs** (`n221204_benchmark.md` §5). 11.24 × 6.4 mm hohlraum, 3.1 mm LEHs, 1.135 mm
   capsule (**H**). Unpublished, so repository defaults: square corners, no diagnostic
   windows, `gold(albedo = WallLossAlbedo())` wall (conversion 0.75), `ablator()` capsule,
