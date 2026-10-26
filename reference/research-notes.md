@@ -7526,9 +7526,10 @@ OC σ₁ example; a Literate tutorial.
 
 ## GUI on CAD: import, parts and first frames, remeasured (2026-10-26) *measured*
 
-Measured locally (8 threads pinned to one CCX, the THOR-shot NIF CAD workspace of the
-2026-10-18 notes: 15 CAD parts, the 133k-facet mount and two far parts drawn only;
-numbers only, the workspace stays outside the repository), coarse mesh (h = 0.6 mm).
+Measured locally (8 threads pinned to one CCX; the NIF CAD workspace of the 2026-10-18
+notes: 15 CAD objects and a sphere, the 133k-facet mount and two far parts drawn only,
+12 parts in the calculations; numbers only, the workspace stays outside the
+repository), coarse mesh (h = 0.6 mm).
 
 **`remesh_mesh` on the CAD capsule (H).** Since the sliver merge of 2026-10-20
 (`_merge_small!`/`_dissolve!`), remeshing the capsule part (38,200 facets, sphere and
@@ -7542,7 +7543,51 @@ undone. Now a facet is retried only after a neighbor of it moved or an element i
 grew, the element sums are extended by the new facet (the same left folds), and the
 new facet's own flatness and reach are tested before the pass over the element (the
 answers are those of the full test). Capsule: 4.1 s at 0.6 mm (663 elements), 8.4 s at
-0.28 mm (978). Bit for bit: the 26 other CAD parts' and two synthetic meshes' remeshes
-at 0.28 and 0.6 mm equal the old code's (`==` on vertices, triangles and patches);
+0.28 mm (978); before the merge commit ~1 s, so the merge pass still costs 3–7 s on it.
+Bit for bit: the remeshes of the 13 other CAD parts and two synthetic meshes at 0.28
+and 0.6 mm equal the old code's (`==` on vertices, triangles and patches);
 test/meshops.jl and test/cadfit.jl pass. GUI import of the workspace (coarse, no window,
 first call): 12 s.
+
+**The window's GUI-thread stalls (H).** Scripted Qt window (scratchpad
+`gui_timing.jl`: a coarse hohlraum's drive, coloring by a field, a selection, the
+workspace import, the largest part left out and put back, the template and the import
+again), the longest gap between ticks after each step, first and warm, two runs each;
+"before" is the GUI as of 576587b with the remesh fix. Most of the first-call stalls
+were not the GUI's own work but compilation on the GUI thread, of two kinds:
+(1) `_run_job(job, spawn)` was specialized on each job's closure, and inferring its
+inline branch inferred the whole job (the import's reading and meshing, a part's
+remeshing, the drive's scenario) on the GUI thread before spawning it; it is now
+`@nospecializeinfer` on `job`, so the job compiles on its worker. (2) A worker's result
+is applied on the GUI thread by a closure compiled at its first call there; the worker
+now compiles it first (`_deliver_compiled`, a `precompile` of the commit for the
+result's type; a lookup once compiled). Compilation the GUI thread still needs waits
+behind the workers' (the code generator's lock), so a few ms of it can stall for
+hundreds while a worker compiles the CAD remesh.
+
+| step (window) | before | after | warm |
+|---|---|---|---|
+| drive requested (call) | 0.39–0.40 s | 0.01 s | — |
+| first coloring by a field | 0.36 s | 0.21–0.24 s | 0.03 s |
+| first selection | 0.22–0.23 s | 0.20 s | 0.03 s |
+| import requested (call) | 0.72–0.73 s | 0 | 0 |
+| import's commit tick | 2.2–2.4 s (commit 0.95–1.0 s) | 1.5–1.6 s (commit 0.27–0.28 s) | 0.14–0.19 s |
+| a part left out (call; tick) | 0.35–0.38 s; 0.36–0.38 s | 0.09 s; 0.17–0.21 s | 0.03–0.05 s; 0.07–0.16 s |
+| a part put back (call; tick) | 0.86–0.87 s | 0; 0.13–0.17 s | 0; 0.12–0.15 s |
+
+Without a window (scratchpad `gui_import_ticks.jl`, a session with a queue, first
+call): import call 1.33 s → 8 ms, its commit 0.85 → 0.05 s; leave out 0.33 →
+0.05–0.09 s, put back 1.16 s → 0. Also: `import_visrad_workspace!` is
+`@nospecializeinfer` on `include` and `done` (each new `done` closure recompiled its
+body, 0.85 s); the GUI workload leaves its disk part out and puts it back through a
+window-style queue and starts an import of a missing file (the call's path), and
+precompiles the import's `set_beams!` call (0.17 s of its commit). The field colorbar
+warm-up at the window's first frame now sets the field's colormap, scale and label and
+a second scale at the next frame (the colormap and gradient texture updates were
+compiled at the first coloring). Left: the import's commit tick is Makie's first
+drawing of the CAD scene (the ghost and highlight meshes, the beams' line segments,
+camera fitting: compute-graph edges of 50–80 ms each) and the shell's first rows of a
+VisRad part, ~1.3 s; the first field coloring and the first selection, ~0.2 s each, are
+GL-side first drawings too. Drawing the highlight from a degenerate triangle at the
+first frame, as the ghost is, did not remove the first selection's stall (0.57 s in
+one run) and was dropped.

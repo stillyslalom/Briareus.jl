@@ -168,7 +168,31 @@ using PrecompileTools: @setup_workload, @compile_workload
         sc = scene_canvas(sess)
         mc = map_canvas(sess)
         tc = time_canvas(sess)
+        # as in a window (jobs on workers, their results queued for the GUI thread):
+        # leaving a part out of the calculations and putting it back (0.3 s of compilation
+        # on the GUI thread at the first), and a workspace import's call (its body: one
+        # compiled copy for every `done`; this file is missing, so it stops at the read)
+        queue = Channel{Any}(Inf)
+        sess.deliver[] = f -> put!(queue, f)
+        sess.spawn[] = true
+        function drain()
+            t0 = time()
+            while !(isempty(sess.meshing[]) && target_ready(sess.target)) || isready(queue)
+                time() - t0 > 60 && break
+                isready(queue) ? take!(queue)() : sleep(0.01)
+            end
+        end
+        part = sess.target.parts[][end].name
+        include_components!(sess, [part], false)
+        drain()
+        include_components!(sess, [part], true)
+        drain()
+        import_visrad_workspace!(sess, joinpath(@__DIR__, "missing.vrw"); done = () -> nothing)
+        drain()
     end
+    # an import's beams (0.17 s of its commit on the GUI thread)
+    kw = NamedTuple{(:preset, :enabled, :cluster),Tuple{Symbol,Vector{Bool},Vector{Symbol}}}
+    precompile(Core.kwcall, (kw, typeof(set_beams!), BeamTable, Vector{Beam}))
 end
 
 end # module BriareusGUI

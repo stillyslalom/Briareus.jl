@@ -12,8 +12,19 @@ catch err
     (; value = nothing, err)
 end
 
-# Run `job` on a worker thread (`spawn`) or inline.
-_run_job(job, spawn::Bool) = spawn ? errormonitor(Threads.@spawn job()) : job()
+# Run `job` on a worker thread (`spawn`) or inline. Not specialized on `job`: inferring
+# the inline branch for a job's closure inferred the whole job on the calling (GUI)
+# thread before it was spawned (0.6–0.9 s at a first CAD import or part put back).
+Base.@nospecializeinfer _run_job(@nospecialize(job), spawn::Bool) =
+    spawn ? errormonitor(Threads.@spawn job()) : job()
+
+# Hand a worker's outcome `out` to the GUI thread (`deliver`) as `apply(out)`, compiled
+# here first: the first call of a commit otherwise compiles on the GUI thread (most of a
+# second for a workspace import's). Once compiled, `precompile` only looks it up.
+function _deliver_compiled(deliver, apply, out)
+    precompile(apply, (typeof(out),))
+    deliver(() -> apply(out))
+end
 
 # Where background computations run: inline, or (with `spawn[]`) on a worker whose
 # result is applied through `deliver[]` on the GUI thread.

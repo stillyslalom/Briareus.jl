@@ -236,12 +236,15 @@ Parts may be split for computation, but the GUI shows and picks the original par
      157k-element NIF CAD target; moot on the cavity).
 7. **GUI on CAD.** Partial curved fits of CAD parts (1.5× faster view factors and 0.6 %
    on the halves' flux on the NIF workspace; wait for a workspace that benefits); the
-   0.75 s first-import tick and 0.16 s first field-coloring frame (compilation; not
-   remeasured since the 2026-10-25 compile work); `include_components!` 0.3 s on the UI
-   thread; a "fit the hohlraum template to CAD parts" action; the foil objective with one
-   shared parameter set for beams aimed at one point does not move. `fit_surfaces` cost:
-   a variable-radius fillet is quadratic while its tolerance-stopped growths
-   stay under the 512-patch covers (16–50k facets: 16–107 s); the 133k-facet NIF mount
+   first import's commit tick, 1.5 s (Makie's first drawing of the CAD scene and the
+   shell's first VisRad rows; warm 0.15 s), and the first field coloring and selection,
+   0.2 s each (GL first drawings; 2026-10-26: jobs no longer compile on the GUI thread,
+   import call 0.7 s → 0, part left out 0.36 → 0.2 s, put back 0.87 → 0.15 s; research
+   notes "GUI on CAD: import, parts and first frames"); the CAD capsule's remesh, 4 s
+   (1 s before the sliver merge); a "fit the hohlraum template to CAD parts" action; the
+   foil objective with one shared parameter set for beams aimed at one point does not
+   move. `fit_surfaces` cost: a variable-radius fillet is quadratic while its
+   tolerance-stopped growths stay under the 512-patch covers (16–50k facets: 16–107 s); the 133k-facet NIF mount
    now 29 s (was 1100 s; research notes, "Cost of fitting large CAD parts").
 8. **GUI requests.** Frames on a port axis; clipping volumes; STEP import (needs a CAD
    kernel; STL and VisRad workspaces cover CAD meanwhile); an x-ray image that follows

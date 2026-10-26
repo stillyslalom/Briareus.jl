@@ -1090,8 +1090,8 @@ function _try_build!(ts::TargetSetup; kind = ts.kind[], params = ts.params[], me
             _assign!(ts.building, true)
             _assign!(ts.pending, Set{Symbol}(waiting))
             deliver = ts.deliver[]
-            _run_job(() -> (out = _try_job(() -> _targets_of(lists...)); deliver(() -> _built!(ts, g, out))),
-                     true)
+            job = () -> _targets_of(lists...)
+            _run_job(() -> _deliver_compiled(deliver, out -> _built!(ts, g, out), _try_job(job)), true)
         else
             built[1] === ts.target[] || (ts.target[] = built[1])
             _assign!(ts.pending, Set{Symbol}(waiting))
@@ -1138,7 +1138,7 @@ function _mesh_in_background!(ts::TargetSetup, g::Integer, names, kind, params, 
     deliver = ts.deliver[]
     todo = [p for p in parts if p.name in names]
     job = () -> _mesh_parts(todo, kind, params, mesh, Set{Symbol}(), _ -> nothing, ""; all = parts)
-    _run_job(() -> (out = _try_job(job); deliver(() -> _meshed!(ts, g, out))), true)
+    _run_job(() -> _deliver_compiled(deliver, out -> _meshed!(ts, g, out), _try_job(job)), true)
     return nothing
 end
 

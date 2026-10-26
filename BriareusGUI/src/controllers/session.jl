@@ -578,7 +578,7 @@ function include_components!(sess::DesignSession, names, include::Bool; spawn::B
         _try_build!(ts; excluded = ex, prebuilt = same ? out.value : nothing) &&
             (sess.status[] = "$label back in the calculations" * _radiation_note(sess))
     end
-    _run_job(() -> (out = _try_job(job); deliver(() -> commit(out))), true)
+    _run_job(() -> _deliver_compiled(deliver, commit, _try_job(job)), true)
     return sess
 end
 
@@ -624,9 +624,12 @@ in `meshing`, and the design is replaced on the GUI thread when it is ready (the
 `status` then. Inline (`spawn = false`) the import completes before returning and
 throws `ArgumentError` for a workspace it cannot use.
 """
-function import_visrad_workspace!(sess::DesignSession, path::AbstractString;
-                                  include = o -> o.radiosity || o.laser, display_only::Symbol = :far,
-                                  spawn::Bool = sess.spawn[], done = () -> nothing)
+Base.@nospecializeinfer function import_visrad_workspace!(
+        sess::DesignSession, path::AbstractString;
+        @nospecialize(include = o -> o.radiosity || o.laser), display_only::Symbol = :far,
+        spawn::Bool = sess.spawn[], @nospecialize(done = () -> nothing))
+    # one compiled copy serves every `include` and `done` (a window's, a script's): the
+    # body is long, and specialized on each closure it took 0.8 s to compile per caller
     display_only in (:far, :none) || throw(ArgumentError("display_only must be :far or :none"))
     path = abspath(String(path))
     ts = sess.target
@@ -697,7 +700,7 @@ function import_visrad_workspace!(sess::DesignSession, path::AbstractString;
         done()
     end
     if spawn
-        _run_job(() -> (out = _try_job(job); deliver(() -> commit(out))), true)
+        _run_job(() -> _deliver_compiled(deliver, commit, _try_job(job)), true)
     else
         commit(_try_job(job))
     end

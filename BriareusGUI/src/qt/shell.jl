@@ -103,9 +103,10 @@ end
 # left out of the calculations do not stall the window for most of a second each (JIT
 # compilation, measured on a NIF CAD workspace; the package's precompile workload does
 # not keep these). CPU side: a filled flux map and a field colorbar on throwaway
-# canvases (their own session). GL side, at the window's first frame: the transparent
+# canvases (their own session). GL side, at the window's first frames: the transparent
 # ghost plot is drawn from a degenerate triangle (invisible), and the colorbar is shown
-# (as a drive field shows it) and hidden again after that frame.
+# as a drive field shows it, given a second scale (as the next field coloring changes
+# it: the colormap and gradient textures' updates) and hidden again.
 function _warm_canvases!(sh)
     ws = DesignSession(resolution = :coarse)
     mc = map_canvas(ws)
@@ -114,28 +115,40 @@ function _warm_canvases!(sh)
     mc.ax.aspect[] = AxisAspect(2)
     reset_limits!(mc.ax)
     sc = scene_canvas(ws)
-    cb = sc.colorbar
-    cb.colormap[] = FIELD_COLORMAP
-    cb.limits[] = (0.0, 1.3e14)
-    cb.ticks[] = Makie.automatic
-    cb.label[] = Controllers.DRIVE_FIELD_LABELS[:incident]
+    _field_colorbar!(sc.colorbar, 1.3e14)
     _show_colorbar!(sc, true)
     # the window's own canvas
     c = sh.scene
     sh.sess.target.ghost[] === nothing && _update!(c.ghost, _NOTRI...; visible = true)
     if !c.colorbar.blockscene.visible[]
+        _field_colorbar!(c.colorbar, 1.3e14)
         _show_colorbar!(c, true)
         ticks = Ref(0)
         once = Ref{Any}(nothing)
         once[] = on(events(c.fig.scene).tick) do _
-            # a tick precedes each frame's drawing: hide it at the second
-            (ticks[] += 1) < 2 && return
+            # a tick precedes each frame's drawing: a second scale at the second, hidden
+            # at the third, unless a drive field colors the body by then
+            k = (ticks[] += 1)
+            k < 2 && return
+            field = _body_coloring(sh.sess) !== nothing
+            if k == 2
+                field || (_field_colorbar!(c.colorbar, 2.6e14); c.dirty[] = true)
+                return
+            end
             off(once[])
-            # unless a drive field colors the body by now
-            _body_coloring(sh.sess) === nothing && (_show_colorbar!(c, false); c.dirty[] = true)
+            field || (_show_colorbar!(c, false); c.dirty[] = true)
         end
     end
     return nothing
+end
+
+# A colorbar set as a drive field sets it (`_draw_body!`).
+function _field_colorbar!(cb, hi)
+    cb.colormap[] = FIELD_COLORMAP
+    cb.limits[] = (0.0, hi)
+    cb.ticks[] = Makie.automatic
+    cb.label[] = Controllers.DRIVE_FIELD_LABELS[:incident]
+    return cb
 end
 
 # After the window closes Qt has destroyed its GL contexts: forget the canvas's
