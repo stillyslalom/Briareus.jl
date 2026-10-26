@@ -1,9 +1,9 @@
 # N210808 (black) and N221204 (red) inner 23 deg cone power (Fig. 1(d), TW) and inner/total cone fraction (Fig. 1(e)),
 # input (solid) and post-transfer (dashed), from A. L. Kritcher et al., Phys. Rev. E 109, 025204 (2024), Fig. 1 (HYDRA).
 # Source raster: the Fig. 1 image embedded in the PDF (page 2), 2090 x 895 px; panels (d),(e) are ~385 px wide for 10 ns.
-# METHOD as for fig9_n220919.csv (same scripts): colour unmixing (red over black), per-column stroke centroids, solid vs
+# METHOD as for fig9_n220919.csv (same scripts): color unmixing (red over black), per-column stroke centroids, solid vs
 # dashed by side (dashed above the input), merged-stroke splitting, dash-gap interpolation, black fragments touching red
-# re-centred, hidden black = red (flag h); averaged over t +/- 0.05 ns (+/- 2 px).
+# re-centered, hidden black = red (flag h); averaged over t +/- 0.05 ns (+/- 2 px).
 # AXIS CALIBRATION (tick marks, lattice fit with shear; (d) anchored on the "5" and "60" labels, (e) on the 2-ns ticks
 # from the frame corner and the ".4" label):
 #   1(d) 23 deg: frame L1137.0 T500.4 R1524.7 B828.1 px. t: 19 ticks (every 0.5 ns), 38.72 px/ns, t=5 at x=1331.38, rms 0.33 px (max 0.74). y: 48 ticks (every 5 TW), 2.339 px/TW, value 60 at row 689.60, rms 0.52 px (max 1.03); shear 0.0064 px of y per px of x.

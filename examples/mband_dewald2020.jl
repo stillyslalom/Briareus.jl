@@ -11,7 +11,7 @@
 # at 0.815 mm (4.35 ns). Their pointing is not published: the mock HYBRID-E pointing
 # (`hybride_mock_pointing`) scaled to this hohlraum, its outer aims moved along the axis
 # until the outer-beam ring sits at the measured z = ±3.3 mm (time-integrated hard x-ray
-# image, their Fig. 2; θ_o ≈ 40°, 4.4 mm from the centre). Square corners, no window
+# image, their Fig. 2; θ_o ≈ 40°, 4.4 mm from the center). Square corners, no window
 # or Mo sphere. At 5.5 ns, mid-plateau (4.9–6.0 ns): `nif_conversion()` there (0.86) and
 # gold's `WallLossAlbedo` at the wall's effective age, 0.8 ns (*L*: `drive_history`'s
 # wall history after the rise at ~4.4 ns; N221204's measured Dante gives 0.76 ns at the
@@ -75,7 +75,7 @@ m = RadiationModel(t)
 E = spectral_edges()
 mα(a) = mband_albedo(t, nif_mband(), E; albedo = a)   # α_M on the gold (:wall, :cap_top, :cap_bottom)
 boundary = vcat((elements(t, c) for c in (:wall, :cap_top, :cap_bottom, :leh_top, :leh_bottom))...)
-# P2/P0 of a radiosity over the boundary as seen from the centre (LEHs dark), and of the
+# P2/P0 of a radiosity over the boundary as seen from the center (LEHs dark), and of the
 # capsule's incident flux
 wallP2(x) = (a = legendre_moments(x, t, boundary; lmax = 2, center = zero(Vec3)); a[3] / a[1])
 capP(x) = (a = legendre_moments(x, t, cap; lmax = 4); (a[3] / a[1], a[5] / a[1]))

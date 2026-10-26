@@ -97,7 +97,7 @@ end
     end
 
     @testset "thin-corona limit: the η_a weight" begin
-        # one collimated beam aimed at the centre; reference: a hard sphere at r_c
+        # one collimated beam aimed at the center; reference: a hard sphere at r_c
         # absorbing η_a(μ) I cos ψ, Legendre spectrum about the beam axis
         sp = SuperGaussianSpot(0.25; order = 4.0)
         b1 = [Beam("t"; theta = 37.0, phi = 20.0, spot = sp, power = 1.0, fnumber = 6.7)]

@@ -4,8 +4,8 @@
 # SOURCE: PDF page 2. The curves are raster image tiles (the 534 vector drawings on the page are text glyphs and legend
 # swatches; no curve paths), so the clip (380,70)-(560,330) pt was rendered at 8x (pymupdf Matrix(8,8); pixel = 8*(pt -
 # (380,70))); native tile resolution ~4.2 px/pt, so the render is ~2x oversampled.
-# METHOD: colour unmixing (red (210,25,85), black (55,55,55) vs white); per column, alpha-weighted centroid of the red run
-# and the black run nearest the previous column; black fragments on both sides of the red stroke -> black = red centre
+# METHOD: color unmixing (red (210,25,85), black (55,55,55) vs white); per column, alpha-weighted centroid of the red run
+# and the black run nearest the previous column; black fragments on both sides of the red stroke -> black = red center
 # (flag p); black hidden under red (flag h) -> red value. Averaged over t +/- 0.05 ns; isolated outliers rejected.
 # AXIS CALIBRATION (tick marks on all four frame sides, lattice fit with shear term; anchors: x on the "5" label tick,
 # y on major (longer) ticks, every 20 TW in (d) and 0.2 in (e) - the "100" label blobs merge with the axis title and
@@ -17,8 +17,8 @@
 #   1(e): frame L229.9 T1229.5 R1210.0 B1935.8 px. t: 88 ticks (every 0.2 ns), 108.88 px/ns, t=5 at x=773.45, rms 0.55 px (max 1.61). y: 31 ticks (every 0.05 ), 707.008 px/unit, value 0.6 at row 1512.06, rms 0.28 px (max 0.67); shear -0.0011 px of y per px of x.
 # Pixel scale (8x render): (d) 54.0-54.4 px/ns, 2.44 px/TW upper row (y from -20 TW), 2.77 px/TW lower row (y from 0);
 # (e) 108.9 px/ns, 707 px per unit cone fraction. Native resolution is ~2x coarser (1 native px ~ 0.8 TW upper, 0.7 TW lower).
-# FLAGS f_*: v seen directly; p partly covered by the red stroke (re-centred); h hidden under red (value = red); i interpolated.
-# UNCERTAINTY u_* (1 sigma): tick-fit rms + centreline error (v 0.6 px, p 1.2, h half a red stroke) + slope term, in data
+# FLAGS f_*: v seen directly; p partly covered by the red stroke (re-centered); h hidden under red (value = red); i interpolated.
+# UNCERTAINTY u_* (1 sigma): tick-fit rms + centerline error (v 0.6 px, p 1.2, h half a red stroke) + slope term, in data
 # units. Median for directly seen per-cone samples 0.37 TW; recommend +/-0.7 TW on plateaus (native pixel), +/-3-5 TW
 # on the steep rise (4.3-5 ns) and fall (> 8.3 ns). Steep cone-fraction edges (t < 0.5 ns, t > 8.2 ns) are time-sensitive.
 # CAVEATS: black and red overlap in the 23/30 deg foot (t < 2.5 ns, both ~2 TW; values there hidden/partial). Strokes are

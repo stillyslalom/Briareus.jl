@@ -92,7 +92,7 @@ Plasmas 27, 022702 (2020), Fig. 27, read from the accepted manuscript's vector g
 (`data/chen2020_fig27.csv`, provenance in its header). Columns `shot` (N171010, N171212,
 N180102, N180103, N180117), `kind` (`"gleh"`: the gated LEH imager's edge, analysis
 error 10–20 µm; `"lasnex_f003_regional"`, `"lasnex_f003_global"`, `"lasnex_f015_global"`:
-LASNEX images analysed the same way; `"laser"`: the total delivered power), `t` (ns)
+LASNEX images analyzed the same way; `"laser"`: the total delivered power), `t` (ns)
 and `value` (radius in mm, power in TW). The calibration data of [`LipClosure`](@ref).
 """
 chen2020_leh() = _data_table("chen2020_fig27.csv")
@@ -121,7 +121,7 @@ its header). Columns `t` (ns, 0–9.5 every 0.25), `n221204` (the as-shot, thick
 9.18 ns) and `u` (reading error of `n221204`). Which radius is not stated: it holds
 until ~3.6 ns, near the first shock's breakout from the ablator into the fuel (keyhole
 N230110, the N221204 design: 3.86–3.91 ns), ~2 ns before the ice–gas surface can move,
-so it follows the ablator–fuel interface (1.050 mm initially) or the fuel's centre of
+so it follows the ablator–fuel interface (1.050 mm initially) or the fuel's center of
 mass, not the ablation front; it reaches its minimum at bang time (9.53 ns). The only
 published radius history of the N221204 capsule. Research notes, "Capsule radius
 schedules: published histories and the API (2026-10-26)"; [`kritcher2024_radius`](@ref)

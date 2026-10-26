@@ -23,7 +23,7 @@
 # every step, with the static wall, the ablating wall and `drive_history`'s closure
 # (Lindl's gold loss, the default release). The hohlraum is HYBRID-E's 6.4 × 11.24 mm,
 # η = 0.75, the capsule a 0.7-absorbing sphere of its initial radius (`capsule=0` drops
-# it and closes the LEHs to 0.857 r₀, the most favourable case for the wall). Dante is
+# it and closes the LEHs to 0.857 r₀, the most favorable case for the wall). Dante is
 # printed beside it for the shape of the fall only: nothing here is fitted to it.
 
 using Briareus, Printf, LinearAlgebra

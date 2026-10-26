@@ -180,7 +180,7 @@ normals are within `angle` degrees of the seed's and whose vertices lie within
 `size / 2` mm of the seed's centroid. Triangles are unchanged; only their grouping into
 patches (and their order) is. Imported CAD often has hundreds of thousands of facets
 (fine tessellation of curved faces, slivers along edges), far more than view factors
-need: coarsening to a few hundred micrometres makes such parts usable for radiation.
+need: coarsening to a few hundred micrometers makes such parts usable for radiation.
 
 Patches are merged only across edges where both are oriented consistently (see
 `orient_mesh`), so the front side of a merged patch is well defined, and an element

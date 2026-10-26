@@ -2,12 +2,12 @@
 # from A. L. Kritcher et al., Phys. Rev. E 109, 025204 (2024), Fig. 9 (HYDRA; black curves). Panel (a): per-cone power (TW);
 # panel (b): inner/total cone fraction. Source raster: the figure image embedded in the PDF (page 11), 948 x 1618 px.
 # Digitized 2026-10-24 (Briareus scratch, scripts dg.py/track.py/sample.py/run9.py/out9.py).
-# METHOD: colour unmixing per pixel, pixel - white = a_r*(red - white) + a_k*(black - white) with red = (222,40,85),
+# METHOD: color unmixing per pixel, pixel - white = a_r*(red - white) + a_k*(black - white) with red = (222,40,85),
 # black = (68,72,70) (least squares over RGB); a stroke pixel has a > 0.35. Per image column, vertical runs of red and of black
-# pixels; centreline = alpha-weighted centroid of each run (median-of-stroke equivalent). Solid vs dashed: by side
+# pixels; centerline = alpha-weighted centroid of each run (median-of-stroke equivalent). Solid vs dashed: by side
 # (dashed above the input for 23/30 deg and (b), below for 44/50 deg); a single over-thick run in a flat region is split into
 # two strokes (edge +/- half stroke width); dashed values in dash gaps (<= 0.2 ns) linearly interpolated. Black is drawn under
-# red: black fragments touching a red run are re-centred from their free edge (half a black stroke width in); black
+# red: black fragments touching a red run are re-centered from their free edge (half a black stroke width in); black
 # solid/dashed assigned by order (two fragments) or by continuity and side of the red input (one fragment). Columns
 # averaged over t +/- 0.05 ns (about +/- 2 px in (a), +/- 4 px in (b)); isolated outliers (> 2.5 stroke widths from the
 # local median) rejected. Strokes: red ~6-7 px, black ~5 px wide (column runs on flat sections).
@@ -20,14 +20,14 @@
 #   9(a) 50 deg: frame L533.4 T448.4 R936.4 B787.5 px. t: 26 ticks (every 0.5 ns, top+bottom frame, anchored on the "4" label), 40.41 px/ns, t=4 at x=694.95 px, rms 0.69 px (max 1.77). y: 36 ticks (every 5, left+right frame, anchored on the "40" label), 2.433 px/TW, rms 0.44 px (max 1.03). Shear: y-tick lattice drops 0.0054 px per px of x (right side higher; frame top/bottom lines tilt the same way), x 0.0010 px per px of y.
 #   9(b): frame L99.0 T893.1 R909.3 B1515.5 px. t: 16 ticks (every 0.5 ns, top+bottom frame, anchored on the "4" label), 80.84 px/ns, t=4 at x=423.92 px, rms 0.64 px (max 1.99). y: 35 ticks (every 0.05, left+right frame, anchored on the "0.4" label), 622.142 px/unit, rms 0.34 px (max 1.30). Shear: y-tick lattice drops 0.0056 px per px of x (right side higher; frame top/bottom lines tilt the same way), x 0.0015 px per px of y.
 # Pixel scale: (a) 40.3-40.4 px/ns, 2.43 px/TW (1 px = 0.41 TW); (b) 80.8 px/ns, 622 px per unit cone fraction (1 px = 0.0016).
-# FLAGS f_*: v = curve seen directly; p = partly covered by red, re-centred from its free edge; m = merged with the
+# FLAGS f_*: v = curve seen directly; p = partly covered by red, re-centered from its free edge; m = merged with the
 # other line style, split by stroke width; i = interpolated across a dash gap (<= 0.2 ns); c = dashed indistinguishable
 # from the solid (single normal-width run over >= 0.3 ns), value = solid; h = black curve hidden under the red stroke, value =
 # the red curve of the same style (black lies within the red stroke: +/- half a red stroke width). Blank = not readable.
-# UNCERTAINTY u_* (1 sigma, data units): sqrt(tick-fit rms^2 + centreline error by flag (v 0.6 px, p 1.2, m/i 1.5,
+# UNCERTAINTY u_* (1 sigma, data units): sqrt(tick-fit rms^2 + centerline error by flag (v 0.6 px, p 1.2, m/i 1.5,
 # c 0.3 w + 0.6, h w/2 + 0.5 px) + local slope * x-calibration error), converted with the axis scale. On steep edges
 # (rise 3.8-5 ns, fall after 8 ns) the value at a given t is very sensitive to time: a 0.5 px (0.012 ns) time error
-# is several TW there; neighbouring digitizations can differ by 5-10 TW on those edges.
+# is several TW there; neighboring digitizations can differ by 5-10 TW on those edges.
 # GLOBAL per-cone power error: median u for directly seen samples = 0.36 TW (range 0.33-0.41 over the 8 columns);
 # for hidden (h) samples ~1.6 TW; recommend +/-1 TW on plateaus, +/-2 TW in the foot (curves overlap), +/-5 TW on steep edges.
 # CAVEATS (N220919, black): every black curve ends at t = 7.4 ns (last visible black pixels at 7.27-7.43 ns in all five

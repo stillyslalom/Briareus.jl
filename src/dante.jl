@@ -12,7 +12,7 @@ abstract type AbstractDanteChannel end
 """
     DanteChannel(energy, fwhm)
 
-One Dante channel's spectral response, approximated by a unit-peak Gaussian centred on
+One Dante channel's spectral response, approximated by a unit-peak Gaussian centered on
 `energy` (eV) with full width `fwhm` (eV): the fallback of `dante1_channels(model =
 :gaussian)`.
 """

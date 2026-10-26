@@ -199,8 +199,8 @@ end
     read_stl(path; scale = 1.0) -> Mesh
 
 Triangle mesh from an STL file (binary or ASCII), one patch per facet, with vertex
-coordinates multiplied by `scale` (STL carries no units: 1 for millimetres, 10 for
-centimetres, 25.4 for inches). Facet normals in the file are ignored; the winding
+coordinates multiplied by `scale` (STL carries no units: 1 for millimeters, 10 for
+centimeters, 25.4 for inches). Facet normals in the file are ignored; the winding
 determines the front side, as STL specifies (counterclockwise seen from outside), but
 exported CAD often mixes windings: pass the mesh through `orient_mesh`, and through
 `coarsen_mesh` before view factors.
@@ -404,8 +404,8 @@ end
 Write `x` as an STL file for CAD or another code: a `Mesh`, a `Component`, a
 `Target`, or a vector of components or of `name => mesh` pairs. Every triangle
 becomes a facet whose normal is computed from its winding (the front side); vertex
-coordinates are divided by `scale` (STL carries no units: 1 writes millimetres, 10
-centimetres, 25.4 inches), so `read_stl(path; scale)` reads the same geometry back.
+coordinates are divided by `scale` (STL carries no units: 1 writes millimeters, 10
+centimeters, 25.4 inches), so `read_stl(path; scale)` reads the same geometry back.
 
 `binary = true` writes binary STL (Float32 coordinates, so a coordinate of size L
 moves by up to ~6e-8 L; no names: the header lists them). `binary = false` writes ASCII

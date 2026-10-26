@@ -795,7 +795,7 @@ end
     @test only(rs.rows).status === :review
     @test length(violations(rs)) == 1 && isempty(violations(rs; status = (:fail,)))
     # wings: a large foil catches all of the halo and scatter power; the far scatter
-    # reaches hardware the core envelope clears by millimetres
+    # reaches hardware the core envelope clears by millimeters
     wl = nif_wings()
     @test sum(w.fraction for w in wl) ≈ 0.011
     tw = Target(foil(:f, (0, 0, 0), (0, 0, 1); width = 60.0, n = 30),

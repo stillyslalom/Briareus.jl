@@ -234,9 +234,9 @@ matched alone by a Planckian (its `channel_temperatures`), and the start tempera
 their mean.
 
 - `method = :traditional` (Harris's algorithm): the start spectrum is that Planckian
-  plus a Gaussian M-band `mband = (amplitude GW/sr/eV, centre eV, FWHM eV)` (Harris:
+  plus a Gaussian M-band `mband = (amplitude GW/sr/eV, center eV, FWHM eV)` (Harris:
   amplitude 1 at 2.5 keV, "width" 600 eV, taken here as the FWHM). Each channel's
-  response is replaced by a unit-peak Gaussian (here centred between its half-maximum
+  response is replaced by a unit-peak Gaussian (here centered between its half-maximum
   points, FWHM their distance), and the Gaussians' amplitudes are adjusted until every
   channel's computed voltage equals the measured one: by Harris's sweeps (from the
   highest-energy channel down, each amplitude set to match its channel; up to `maxiter`

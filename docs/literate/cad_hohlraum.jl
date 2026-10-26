@@ -38,7 +38,7 @@ include(joinpath(pkgdir(Briareus), "docs", "literate", "_plotting.jl"))   # figu
 # 50 µm thick, and a 50 µm washer on it carries the LEH, so the holes are 0.1 mm deep
 # bores. The capsule has a radius of 0.9 mm, and the tent is a 15 µm film wrapped around
 # it, 30 µm off its surface, made of two cups that meet at the equator. A mounting block
-# sits beside the waist. All lengths are in millimetres.
+# sits beside the waist. All lengths are in millimeters.
 
 R, Rout, Rleh, h = 2.875, 2.925, 1.55, 4.7   # cavity and outer radius, LEH radius, half length
 te, tw, Rw = 0.05, 0.05, 2.4                 # end wall and washer thickness, washer radius

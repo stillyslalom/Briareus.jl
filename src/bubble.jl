@@ -60,7 +60,7 @@ misses the wall, a few 1e-4 through the entrance holes, applies to the moved pow
 the bubble leaves stops at the stagnation ridge, radius `ridge`·R about the axis
 (Izumi 2023), instead of reaching the wall. A fraction g(t) of it ([`ridge_fraction`](@ref),
 rising over ±`ridge_rise` ns about t_c) is deposited, by [`lpi_deposit`](@ref), on an
-axisymmetric band of the `ridge_components` (the hohlraum wall) centred on the height
+axisymmetric band of the `ridge_components` (the hohlraum wall) centered on the height
 where the beam's axis crosses that radius, Gaussian in z with rms `ridge_width` (mm),
 area-weighted: the heated ridge radiates at the wall's conversion, from the wall just
 outside it. The rest of the beam's power is deposited as usual. Power is conserved

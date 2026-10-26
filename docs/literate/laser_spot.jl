@@ -156,7 +156,7 @@ fig
 #
 # ## Shape far from focus
 #
-# Second moments do not fix the shape. Four millimetres from focus the f-cone disk has
+# Second moments do not fix the shape. Four millimeters from focus the f-cone disk has
 # a radius of 0.3 mm, comparable to the spot, and the convolution rounds the flat top
 # into a lower, broader peak with soft shoulders. The exact convolution is
 # evaluated here directly, by averaging the focal profile over 3000 points of the disk
@@ -230,7 +230,7 @@ fig
 # The moment-matched spot keeps a flat top, more than a quarter below the exact peak,
 # and misplaces a sixth of the power, which is why deposition sums over cone
 # directions. In a hohlraum the walls lie several
-# millimetres from focus, often at grazing incidence, and a moment-matched spot there
+# millimeters from focus, often at grazing incidence, and a moment-matched spot there
 # deposits up to 2% more power than the beam carries.
 
 # ## Oblique incidence
@@ -322,7 +322,7 @@ fig
 #   foil and center it at the aim point.
 # - Through focus, the spot's second moment follows the exact geometric-optics growth
 #   ``2a^2m_n + s^2/8F^2`` with both methods. This checks the cone quadrature.
-# - Four millimetres from focus, the operator's footprint matches the exact
+# - Four millimeters from focus, the operator's footprint matches the exact
 #   convolution of the focal spot with the f-cone patch by patch, to within about 1% of
 #   the beam power with the default 13 directions, and converges as directions are
 #   added. A moment-matched super-Gaussian of the right size has the wrong shape.

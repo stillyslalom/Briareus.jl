@@ -362,7 +362,7 @@ for shift in (0.5, -0.5)
             b.leh - at_nominal.leh, b.capsule - at_nominal.capsule)
 end
 
-# Half a millimetre moves either fraction by under 0.5% of the source, about a third
+# Half a millimeter moves either fraction by under 0.5% of the source, about a third
 # of what 0.1 mm of hole diameter does to the LEH loss, so the representative bands do not
 # decide the sweep.
 

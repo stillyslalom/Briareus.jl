@@ -24,7 +24,7 @@ _critical_density(λ_µm) = π * _ME_G * _C_CM^2 / (_E_ESU^2 * (1e-4λ_µm)^2)
 
 A static, spherically symmetric laser corona for [`CoronaOperator`](@ref): the electron
 density `ne` relative to the critical density of the light, and the inverse-bremsstrahlung
-absorption rate, as functions of the radius from the target centre.
+absorption rate, as functions of the radius from the target center.
 
 The first form tabulates a snapshot, such as a 1-D hydrodynamics output: radii `r` (mm,
 increasing, not necessarily uniform), `ne` (n_e/n_c, positive), electron temperature `Te`

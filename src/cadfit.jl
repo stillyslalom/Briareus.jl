@@ -378,7 +378,7 @@ function _fit_torus(X, N, W, Cn, m, ext)
     _torus_osculating!(starts, X, N, W, Cn, m, ext)
     sort!(starts; by = first)
     # the three best distinct starts (major radius 2% or axis 0.02 rad apart: on a small
-    # patch neighbouring starts of the scan cost nearly the same and lead to the same
+    # patch neighboring starts of the scan cost nearly the same and lead to the same
     # local minimum), until one fits to round-off
     best, bestc = nothing, Inf
     tried = 0
@@ -843,7 +843,7 @@ patch normals are perpendicular and a circle fit across it, cones by the axis wi
 the normals make a constant angle (or the cylinder's, for a small patch) and an
 algebraic fit of the radius linear along it, all refined by Gauss–Newton on the vertex distances; tori
 by the axis the normals all meet (or, on a small patch, axes through the patch's
-centres of curvature) and a circle fit in the meridian plane, refined by
+centers of curvature) and a circle fit in the meridian plane, refined by
 Levenberg–Marquardt. A cone whose apex lies over 1000 extents away is left to the
 cylinder, as a surface whose radius of curvature does is left to the plane. From each
 seed all `kinds` are grown and the largest region kept, the earlier of plane, cylinder,
@@ -862,7 +862,7 @@ merged.
 
 Tori (CAD fillets: a quarter of the tube where a wall meets a cap) are held to CAD
 round-off, since with three more parameters than a sphere a torus also follows free-form
-faces and spans neighbouring faces within the relative tolerance: their tolerance is
+faces and spans neighboring faces within the relative tolerance: their tolerance is
 `atol`, their rms must be under `atol/16`, their vertices must fall on at least four
 evenly spaced points of the tube circle (bands of strips with vertices only on their
 rims lie on a circle through any three of them), and patches that a plane, cylinder,

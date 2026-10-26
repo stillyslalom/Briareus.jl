@@ -6,7 +6,7 @@
 # times exp(-G Z rho^2 dz (x_bub/1 mm)^0.5 / Te^1.5), rho = S rho0 R/(R - x_bub), Te 5 keV,
 # transparency 29% at 5.5 ns). Extracted 2026-10-24 from the vector graphics of the
 # accepted manuscript (LLNL-JRNL-812268, p. 21): axes from the tick marks (0-7 ns, 0-1),
-# circle centres from their bounding boxes, the line sampled every 0.1 ns from its Bezier
+# circle centers from their bounding boxes, the line sampled every 0.1 ns from its Bezier
 # path. Research notes, "Hohlraum dynamics calibrated to published data (2026-10-24)".
 # Columns: source (hydra, model); t (ns); absorbed (CF_bub/CF); u (extraction error)
 source,t,absorbed,u

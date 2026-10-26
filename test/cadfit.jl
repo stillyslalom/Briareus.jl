@@ -299,7 +299,7 @@ end
     # the rounded hohlraum's corners as tori: the fillets' areas those of the quarter tori
     # (the frusta's chord polygon misses 15% with one band), and the closed cavity's row
     # sums as close to one as with frusta (on the fillets 6.0e-4 with one band: 4.5e-5
-    # before, when the cap rims' +1.8e-3 area overshoot cancelled the quadrature's shortfall)
+    # before, when the cap rims' +1.8e-3 area overshoot canceled the quadrature's shortfall)
     kw = (; length = 9.4, radius = 2.875, leh_radius = 1.55, capsule_radius = 0.9)
     rc = 1.0
     for nr_corner in (1, 4)

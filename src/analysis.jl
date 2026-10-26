@@ -64,10 +64,10 @@ end
 """
     mode_center(target, elems) -> Vec3
 
-Centre about which the mode analysis of `elems` (`legendre_weights`, `ylm_weights` and
-the scenario caches built from them) measures directions by default: the centre of
-their `SphereSurface` when every element lies on sphere components with one centre (a
-capsule, also when it is offset from chamber centre), otherwise the origin. Analysing
+Center about which the mode analysis of `elems` (`legendre_weights`, `ylm_weights` and
+the scenario caches built from them) measures directions by default: the center of
+their `SphereSurface` when every element lies on sphere components with one center (a
+capsule, also when it is offset from chamber center), otherwise the origin. Analyzing
 an offset capsule about the origin mixes its P2 into a spurious mode 1 at first order
 in the offset (0.74 % of mode 1 per 100 µm on a 0.83 mm capsule with P2/P0 ≈ −0.1).
 """

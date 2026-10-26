@@ -175,8 +175,8 @@ axis its port lies on; NIF User Guide Fig. 4-12 — *derived*, confidence medium
 default side is the User Guide's 22 mm footprint grown by 4.8 − 4.45 = 0.35 mm per
 side, so its near edge is the TaLIS 10 % contour (22.7 mm). Away from that plane the
 footprint is the cone converging to the 1ω focus `omega1_focus` (default 460 mm, from
-`nif_unconverted`) beyond the 3ω focus, with its centre on the chief ray from the lens
-centre `lens_distance` (7.7 m) upstream: at axial position `s` the near edge is
+`nif_unconverted`) beyond the 3ω focus, with its center on the chief ray from the lens
+center `lens_distance` (7.7 m) upstream: at axial position `s` the near edge is
 `4.45 + 0.027 s` mm, i.e. closer to the 3ω axis upstream of focus (*derived*). Pass
 `omega1_focus = Inf, lens_distance = Inf` for a prism (the footprint fixed in the
 transverse plane). `offsets` maps beam names to a footprint direction (degrees from the
@@ -200,7 +200,7 @@ It is combined with the error set of `clearance` by linear addition (no RSS):
 
     worst = nominal − (pointing + target_offset + hardware_tolerance) − focus/(2F) − r·tan(tolerance)
 
-evaluated point by point and minimised over the component (for the 1ω footprint the
+evaluated point by point and minimized over the component (for the 1ω footprint the
 focus term is the footprint shift over `±focus` instead of the f-cone). The
 `target_offset` and `hardware_tolerance` partly overlap what the tolerance is meant to
 cover, so this double counts conservatively; set them to 0 to rely on the tolerance
@@ -505,8 +505,8 @@ function _omega1_distance(x, bl, cx)
     return dn, dw
 end
 
-# Footprint square at axial position s = d·k from the 3ω focus: centre c0(1 + s/L) along
-# ô (chief ray from the lens centre), half-side h0|1 − s/f1| (cone to the 1ω focus).
+# Footprint square at axial position s = d·k from the 3ω focus: center c0(1 + s/L) along
+# ô (chief ray from the lens center), half-side h0|1 − s/f1| (cone to the 1ω focus).
 function _omega1_square(d, k, ô, c0, h0, f1, L)
     s = dot(d, k)
     c = c0 * (1 + s / L)

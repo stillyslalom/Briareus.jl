@@ -389,7 +389,7 @@ function _curved_area(s::CylinderSurface, a, b, c)
     ua, ub, uc = perp(a - s.origin), perp(b - s.origin), perp(c - s.origin)
     ab, bc, ca = b - a, c - b, a - c
     # Σ Δφ = 0 around the patch, so z may be measured from its first vertex; that keeps
-    # a small patch far from z = 0 from cancelling z Δφ terms of size |z| Δφ
+    # a small patch far from z = 0 from canceling z Δφ terms of size |z| Δφ
     zb, zc = dot(ab, ax), dot(c - a, ax)
     acc = _cylinder_edge_integral(ua, ub, perp(ab), 0.0, zb, ax) +
           _cylinder_edge_integral(ub, uc, perp(bc), zb, dot(bc, ax), ax) +
@@ -407,7 +407,7 @@ end
 # needs no halving). With z = z₀ + ζ, z₀ the lowest vertex, and ∮ dφ = 0 around the patch,
 #     ∮ z² dφ = ∮ ζ² dφ + 2 z₀ ∮ ζ dφ,
 # which keeps a small patch far from the apex (a slightly tapered cone, z₀ tan θ = ρ₀ its
-# radius) from cancelling terms of size z₀² Δφ; as θ → 0 the area tends to the
+# radius) from canceling terms of size z₀² Δφ; as θ → 0 the area tends to the
 # cylinder's ρ₀ ∮ ζ dφ.
 const _GL8 = let n = 8
     F = eigen(SymTridiagonal(zeros(n), [k / sqrt(4k^2 - 1) for k in 1:n-1]))
@@ -473,7 +473,7 @@ end
 # on pieces no longer than half the smaller of r and the edge's distance from the axis,
 # within which the nearest singularity lies outside the Bernstein ellipse of parameter
 # ~4, so 16 points converge to round-off. ψ is measured from the first vertex's (and
-# ∮ dφ = 0 around the patch), which keeps a small patch from cancelling terms of size
+# ∮ dφ = 0 around the patch), which keeps a small patch from canceling terms of size
 # R ψ Δφ.
 function _curved_area(s::TorusSurface, a, b, c)
     ax, R, r = s.axis, s.major_radius, s.minor_radius
@@ -513,7 +513,7 @@ end
 # ∫ over t ∈ [t0, t1] by Gauss–Legendre, split where the edge crosses the tube circle
 # (the projection switches there from the nearest point to the horizontal one: a kink in
 # the integrand, which would cost Gauss–Legendre its round-off convergence). Crossings
-# between neighbouring nodes are located by bisection.
+# between neighboring nodes are located by bisection.
 function _torus_edge_piece(uP, Δ, C, zP, dz, R, r, ψa, sa, t0, t1)
     f(t) = _torus_integrand(uP, Δ, C, zP, dz, R, r, ψa, sa, t)
     x, w = _GL16.x, _GL16.w

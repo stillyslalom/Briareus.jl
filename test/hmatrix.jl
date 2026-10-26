@@ -294,7 +294,7 @@ end
 # The entries a low-rank block's check adds where G may jump (`_htier_entries`): pairs
 # off the most common quadrature tier of their row or column, the fewest-off lines
 # first. On a latitude–longitude capsule (polar slivers, several sizes larger than their
-# neighbours) against the wall: every entry returned is off its row's or column's
+# neighbors) against the wall: every entry returned is off its row's or column's
 # majority tier; every pair that is alone off its line's majority is returned when the
 # cap (m + n) is not reached; and a block without entries has a single tier.
 @testset "hierarchical view factors: quadrature-tier entries" begin

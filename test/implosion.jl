@@ -183,8 +183,8 @@ end
 end
 
 @testset "mode analysis about an offset capsule" begin
-    # a pure P2 field about a displaced sphere has no mode 1 about the sphere's centre;
-    # analysed about the origin it would leak into one
+    # a pure P2 field about a displaced sphere has no mode 1 about the sphere's center;
+    # analyzed about the origin it would leak into one
     c = Vec3(0.3, 0.0, 0.2)
     m = translate(icosphere_mesh(0.8; n = 8), c)
     ts = Target(Component(:capsule, m, ablator(); surface = SphereSurface(0.8; center = c)))
@@ -195,7 +195,7 @@ end
     @test mode_amplitude(a, 1) < 1e-4
     @test mode_amplitude(ylm_weights(ts, els; lmax = 2, center = zero(Vec3)) * f, 1) > 5e-3
     @test legendre_moments(f, ts, els; lmax = 2)[3] ≈ 0.1 rtol = 5e-3
-    # a hohlraum's capsule carries its centre; the wall alone has none
+    # a hohlraum's capsule carries its center; the wall alone has none
     th = hohlraum(; length = 6.0, radius = 2.0, leh_radius = 1.0, capsule_radius = 0.5,
                   capsule_center = (0.1, 0.0, -0.05), h = 1.0, capsule_h = 0.4)
     @test mode_center(th, elements(th, :capsule)) == Vec3(0.1, 0.0, -0.05)
@@ -245,7 +245,7 @@ end
     @test abs(slope(shift([0.0, 0.0, 1.0])) - 1.3) < 0.25
     @test slope(shift([1.0, 0.0, 0.0])) < 0.25
     # capsule offset in the hohlraum: Young 1.1 (vertical) and 0.1 (horizontal) km/s/µm;
-    # about TCC instead of the capsule's centre the horizontal one was ~0.7
+    # about TCC instead of the capsule's center the horizontal one was ~0.7
     cap(d) = s -> hotspot_velocity(hist(RadiationModel(mk(s * δ .* d); closed = true), quads); kernel = K)
     @test abs(slope(cap((0.0, 0.0, 1.0))) - 1.1) < 0.25
     @test slope(cap((1.0, 0.0, 0.0))) < 0.25

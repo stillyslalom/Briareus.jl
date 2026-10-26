@@ -8,10 +8,10 @@
 # Al: the others), the maximum of the derivative of 36 wedge lineouts fitted by a circle;
 # analysis error 10-20 um (Chen, Sec. II.2b). Extracted 2026-10-24 from the vector graphics:
 # axes from the tick marks of each panel (0-8 ns; 1200/1400/1600 um; 0/200/400 TW), each
-# GLEH marker (circle with a crosshair, not an error bar) at the centre of its bounding box,
+# GLEH marker (circle with a crosshair, not an error bar) at the center of its bounding box,
 # lines at their path vertices (exact to the drawing, ~2 um / 0.01 ns). kind: gleh
 # (measured), lasnex_f003_regional, lasnex_f003_global, lasnex_f015_global (LASNEX with
-# flux limiter 0.03 in the wall only, 0.03 and 0.15 everywhere; simulated images analysed
+# flux limiter 0.03 in the wall only, 0.03 and 0.15 everywhere; simulated images analyzed
 # as the data), laser (total delivered power, TW). Research notes, "Computed LEH closure
 # (2026-10-24)".
 # Columns: shot; kind; t (ns); value (radius in mm, or power in TW for kind = laser)

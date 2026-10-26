@@ -5,7 +5,7 @@
 # (re-emitted over incident x-ray flux). Digitized 2026-10-24 from the figure's embedded raster
 # (638 x 626 px): time from the frame and gridlines (0 and 8 ns at 80 and 623 px, the 1-7 ns
 # gridlines within 0.5 px), albedo from the frame and gridlines (0 and 1 at 246 and 82 px,
-# gridlines every 0.2 within 0.5 px). Each value is the mean row of the coloured stroke (blue
+# gridlines every 0.2 within 0.5 px). Each value is the mean row of the colored stroke (blue
 # hohlraum, red capsule) over +/-2 px (+/-0.03 ns) of columns, ignoring pixels within 2.5 px of
 # the static dashed line where the solid line is clear of it. Reading error 0.03 (0.05 where
 # the solid line runs on the dashed one, and on the 0.5-0.65 ns drop of the wall albedo, which

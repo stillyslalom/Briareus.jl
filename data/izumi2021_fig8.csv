@@ -3,7 +3,7 @@
 # 0.3 ns), from N. Izumi et al., Phys. Plasmas 28, 022706 (2021), Fig. 8a (measured, Au-He
 # boundary seen through the LEH; error bars +/-40 um) and Fig. 8b (2D HYDRA). Extracted
 # 2026-10-24 from the vector graphics of the accepted manuscript (LLNL-JRNL-812268, p. 15):
-# axes from the tick marks (4.5-6.5 ns, 1.2-2.4 mm), each marker at the centre of its
+# axes from the tick marks (4.5-6.5 ns, 1.2-2.4 mm), each marker at the center of its
 # bounding box (exact to ~0.003 mm; the four times of each shot are drawn offset by up to
 # 0.04 ns for legibility, kept as drawn). Marker coding from the text, not a legend:
 # black = 0.3 mg/cc, red = 0.15 mg/cc; large dots = the 1.18x capsule (inside radius 1.18x,

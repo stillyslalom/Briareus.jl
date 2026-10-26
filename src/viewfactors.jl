@@ -579,7 +579,7 @@ function _poly_receiver(t::Target, e, offset)
                          [(P[a], P[b], P[d]) for (a, b, d) in T], center, radius)
 end
 
-# Directed boundary edges (vertex ids, sorted) of facets `fs` of `T`: edges not cancelled
+# Directed boundary edges (vertex ids, sorted) of facets `fs` of `T`: edges not canceled
 # by an opposite edge of another facet.
 function _boundary_edges(T, fs)
     count = Dict{NTuple{2,Int},Int}()

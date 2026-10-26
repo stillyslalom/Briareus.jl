@@ -5,11 +5,11 @@
 #
 # References (all independent of the operator and of the mode weights):
 # - Skupsky & Lee, J. Appl. Phys. 54, 3662 (1983): for identical axisymmetric beams aimed
-#   at the centre, σₗ = |aₗ/a₀| Gₗ / √(2l+1) with aₗ the single beam's Legendre
+#   at the center, σₗ = |aₗ/a₀| Gₗ / √(2l+1) with aₗ the single beam's Legendre
 #   coefficients (a 1-D quadrature here) and Gₗ² = Σᵢⱼ Pₗ(Uᵢ·Uⱼ)/N² from the ports alone.
 # - Temporal et al., arXiv:1406.7762 (2014): one ring at 49°/131° on R₀ = 0.5 mm, m = 4
 #   super-Gaussians; σ = 11.9 % (circular, a = b = R₀) and 5.2 % (elliptical, a = 2b,
-#   b = R₀ meridional) centred, minima 1.1 % at Δ/R₀ = 13.7 % and 1.3 % at 7.4 % for a
+#   b = R₀ meridional) centered, minima 1.1 % at Δ/R₀ = 13.7 % and 1.3 % at 7.4 % for a
 #   shift Δ perpendicular to the beam toward the equator.
 # - Temporal et al., HPLSE 2, e8 (2014), §4: LMJ option A (20 quads at 49°/131°, the
 #   hemispheres rotated 18°), elliptical m = 4 quads Δa = 2Δb = 640 µm; minimum over r0
@@ -189,7 +189,7 @@ _dd_coeffs(W, t, dep) = W * (dep.element ./ t.elem_area)
         beams = omega_beams(; cones = :all, spot = sp, power = 1.0)
         U = [b.port for b in beams]
         G = [sqrt(abs(sum(_dd_P(l, dot(u, v)) for u in U, v in U))) / length(U) for l in 0:L]
-        # single centred beam: I(θ) = I_L(R₀ sin θ) cos θ on the lit hemisphere
+        # single centered beam: I(θ) = I_L(R₀ sin θ) cos θ on the lit hemisphere
         xg, wg = _dd_gauss(2000)
         a = zeros(L + 1)
         for (x, w) in zip(xg, wg)
@@ -239,7 +239,7 @@ _dd_coeffs(W, t, dep) = W * (dep.element ./ t.elem_area)
             @test isapprox(d1.element, dep.element; rtol = 1e-12)
             @test_throws ArgumentError deposit(op, beams; absorption = 0.0)
             @test_throws ArgumentError deposit(op, beams; absorption = 1.5)
-            # a centred beam's ray at polar angle θ from its axis meets the sphere at
+            # a centered beam's ray at polar angle θ from its axis meets the sphere at
             # ψ = θ, so the weighted single-beam pattern stays axisymmetric and
             # separability holds with aₗ of I_L(R₀ sin θ) η_a(θ) cos θ (1-D quadrature)
             η = 0.6
@@ -329,7 +329,7 @@ _dd_coeffs(W, t, dep) = W * (dep.element ./ t.elem_area)
             spot = SuperGaussianSpot(R0, R0; order = 4)
             ringc = [remake(bm; spot) for bm in ring]
             p = GroupPointing(ringc; fields = (:theta_s, :dphi_s), radius = R0)
-            @test initial_parameters(p) ≈ [49.0, 0.0] atol = 1e-12   # centred template
+            @test initial_parameters(p) ≈ [49.0, 0.0] atol = 1e-12   # centered template
             σs(x) = mode_rms(_dd_coeffs(W, t, deposit(op, apply(p, x))), L; m = :zero)
             θc = 49 + asind(Δc)
             @test isapprox(σs([θc, 0.0]), σbri(Δc, circ); rtol = 1e-10)
@@ -457,7 +457,7 @@ end
     hr = map(q -> R * port_vector(q.port[3] > 0 ? θs[q.group] + 2 : 178 - θs[q.group],
                                   port_angles(q)[2] + Δφs[q.group] - 3), quads)
     @test all(norm.([b.aim for b in apply(pr, xr)] .- hr) .< 1e-13)
-    # a shifted centre
+    # a shifted center
     c = (0.1, -0.2, 0.05)
     pc = GroupPointing(quads; fields = (:theta_s, :dphi_s), radius = R, center = c)
     xc = reduce(vcat, [[θs[k], Δφs[k]] for k in pc.keys])

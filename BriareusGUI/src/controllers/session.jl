@@ -727,7 +727,7 @@ end
 """
     export_target_stl(sess::DesignSession, path; binary = true, apertures = true) -> path
 
-Write the design's target as an STL file in millimetres (`Briareus.write_stl`): the
+Write the design's target as an STL file in millimeters (`Briareus.write_stl`): the
 components in the calculations (those left out are not written), each triangle wound
 toward its radiating side. Binary STL by default; `binary = false` writes ASCII STL with
 one named solid per component, which `read_stl_solids` (or a CAD tool) reads back as

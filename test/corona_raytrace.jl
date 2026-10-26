@@ -5,7 +5,7 @@
 # harmonic projection are its own. With the ray parameter τ (ds = n dτ):
 #     dx/dτ = v,   dv/dτ = -∇(n_e/n_c)/2,   d(optical depth)/dτ = (ν_ei/c)(n_e/n_c),
 # so for an isothermal profile the rate is (ν_c/c)(n_e/n_c)² (Kruer, ch. 5). Rays start
-# on a square lattice (spacing `hlat`) in the plane normal to the beam through the centre,
+# on a square lattice (spacing `hlat`) in the plane normal to the beam through the center,
 # one lattice per f-cone direction, weighted by the best-focus profile where they cross
 # the focal plane × hlat²/ncone. Each RK4 step's absorbed power is put at the step's
 # midpoint, cloud-in-cell on an equal-angle (θ, φ) grid, then projected on real Y_lm

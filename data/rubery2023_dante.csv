@@ -1,7 +1,7 @@
 # Digitized from Rubery et al., "Soft x-ray power diagnostics for fusion experiments at NIF,
 # Omega and Z facilities", RSI (2023), accepted manuscript OSTI 1975922, Figs. 3 and 8
 # (raster images; axes calibrated from the plot frames, whose ends are the first and last
-# tick labels; the curve colour masked per pixel column and its median row taken, so the
+# tick labels; the curve color masked per pixel column and its median row taken, so the
 # narrow XANES spikes at the C K, O K and Cr L edges and the Al K edge are under-read).
 # An overlay of the digitized points on the figures agreed to ~1 px (~0.1 % of full scale).
 # Every 4th pixel column (energy step 3.4 eV in Fig. 3, 11 eV in Fig. 8).

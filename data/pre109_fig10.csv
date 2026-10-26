@@ -2,10 +2,10 @@
 # et al., Phys. Rev. E 109, 025204 (2024), Fig. 10 (HYDRA simulations, post-CBET; P2/P0 < 0
 # is waist-hot). Digitized 2026-10-24 from the figure's embedded raster (874 x 868 px;
 # 77.7 px per ns, 1760 px per unit P2/P0): axes fitted linearly to 18 time ticks (0-9 ns,
-# residual < 1 px) and 21 P2/P0 ticks (-0.2 to 0.2, residual < 1.5 px). Colours unmixed
+# residual < 1 px) and 21 P2/P0 ticks (-0.2 to 0.2, residual < 1.5 px). Colors unmixed
 # per pixel (blue N221204, red N220919, thick black N210808; the thin black power and
-# cone-fraction lines removed by a 5 px opening). Each curve's centreline is the per-column
-# fit of a stroke of the measured width (12 px) covering its own colour and no background,
+# cone-fraction lines removed by a 5 px opening). Each curve's centerline is the per-column
+# fit of a stroke of the measured width (12 px) covering its own color and no background,
 # pixels of curves drawn over it (red over black over blue) counting as unknown, averaged
 # over +/-0.027 ns. The narrow spikes (N220919 at 8.40 ns, N210808 at 7.66 ns) are traced
 # row by row along their flanks. Rows off the 0.1 ns grid are extrema: stroke outer edge

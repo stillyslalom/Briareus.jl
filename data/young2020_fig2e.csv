@@ -4,8 +4,8 @@
 # Digitized 2026-10-24 from the figure's embedded raster (854 x 405 px): time axis from the
 # panel frame (-0.5 and 8.5 ns at 257 and 440 px; the 0 and 8 tick labels fall within 1 px),
 # power axis from the frame (0 and 3 TW at 355 and 201 px; 0.5 TW ticks agree). Each value is
-# the median row of the pure-colour stroke over +/-2 px (+/-0.1 ns) of columns. Reading error
-# ~0.03 TW (stroke width 0.04 TW); NaN where the other colour's stroke covers this one
+# the median row of the pure-color stroke over +/-2 px (+/-0.1 ns) of columns. Reading error
+# ~0.03 TW (stroke width 0.04 TW); NaN where the other color's stroke covers this one
 # (interpolate). Requested, not delivered: every beam of a cone gets the same power.
 # Columns: t (ns); inner, outer (TW per beam)
 t,inner,outer

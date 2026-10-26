@@ -19,7 +19,7 @@ Figs. 1, 9 and 10 of K24E were rendered and read by eye.
 - **Capsule absorbed energy:** 258 kJ for N221204 (H24 Table I caption: Y/G_cap), and 19.4 kJ into the DT fuel.
   - H24's generic low-fill accounting: ~50 % wall, 30–35 % out the LEHs, 10–15 % capsule, ~5 % gas plus LEH windows.
   - H24: f₂ ≈ 0.07 asymmetry roll-up for N221204.
-- **Modelling settings:** CBET clamp δn/n = 0.0075 after the start of the rise (K24E). The PoP rounds it to 0.008.
+- **Modeling settings:** CBET clamp δn/n = 0.0075 after the start of the rise (K24E). The PoP rounds it to 0.008.
 - **Outer-power alternative:** symmetry by power alone would need the outers cut to 150–200 TW.
 
 **Filled (L, digitized by eye):**
@@ -164,11 +164,11 @@ Times are in ns, powers in TW per whole cone.
   - DN24's measured split at peak is 146 TW inner and 296 TW outer, i.e. 73 TW per inner cone and 148 TW per outer cone.
   - Use DN24 for absolute powers and K24E for the design CF shape.
 - K24E text (H): the cone fraction "in the peak (33%)". The outers "droop" late while the inners are held, so CF → 1 at ≈9.2 ns.
-- Foot CF for N221204 was *raised* relative to N220919 (≈0.13 vs 0.09 at ≈3.4 ns in Fig. 9b, L). This followed keyhole N221106, which showed less foot asymmetry than modelled; N230110 verified it.
+- Foot CF for N221204 was *raised* relative to N220919 (≈0.13 vs 0.09 at ≈3.4 ns in Fig. 9b, L). This followed keyhole N221106, which showed less foot asymmetry than modeled; N230110 verified it.
 - Fig. 1e (L): N221204 input CF lies within ≈0.02 of N210808 through the foot and peak. The N221204 droop (CF rise) is ≈0.3 ns later. Its post-transfer CF in the peak is ≈0.05 higher (≈0.6 vs ≈0.55).
 
 **Pointing, spots, wavelengths.**
-- K24E and H24 give no absolute or relative pointing, defocus or CPP values, and no per-cone colour split. K24E Fig. 1a shows only the cone geometry (23°, 30°, 44°, 50°), 3.2 mm radius and 1.55 mm LEH radius.
+- K24E and H24 give no absolute or relative pointing, defocus or CPP values, and no per-cone color split. K24E Fig. 1a shows only the cone geometry (23°, 30°, 44°, 50°), 3.2 mm radius and 1.55 mm LEH radius.
 - 50° beams moved toward the midplane to clear the 3.1 mm LEH. K22 Fig. 1a labels the move "250 µm vs N210307" (H).
 - Outer-quad splitting (K21, H): the focal points of the four beams in each outer quad are separated in azimuth by 450 µm. The 44° and 50° focal points are separated by >430 µm along the axis.
 - Absolute aim points, defocus and CPP types per cone: **not published** in any source read (gap).
@@ -332,7 +332,7 @@ through a transfer function, and the Trad and capsule-energy rows for absolute e
 2. **PRE 109, 025204** is now read. It gives no per-cone Δλ split, pointing, defocus or CPP. Its per-cone "input" powers sum to ≈380 TW at peak against 440 TW delivered. They are probably HYDRA-degraded, but the paper does not say so explicitly.
 3. **Windows.** No public sizes, azimuths or materials for the three equatorial diagnostic windows; K24E and H24 do not add any, and the "THOR" naming did not appear in any source. H24 adds "manufacturing gaps on the waist of the hohlraum" as a mode-1 source. Look in MacGowan HEDP 40, 100944 and Milovich PPCF 63 (2021).
 4. **Hohlraum details.** Corner and lip geometry, Au liner and DU thicknesses, LEH washer dimensions: unpublished in what I read. The SW25 Fig. 3 CAD (BAH hohlraum, 5.75 mm) shows the LEH hardware layout only.
-5. **Per-cone Δλ splits** (23.5°/30°, 44.5°/50°) for N221204: unknown. The 4-colour capability existed (DN24).
+5. **Per-cone Δλ splits** (23.5°/30°, 44.5°/50°) for N221204: unknown. The 4-color capability existed (DN24).
 6. **Pointing, defocus, CPPs** for HYBRID-E: only relative statements (50° moved 250 µm; quad split 450 µm; cones >430 µm apart).
 7. **Energy bookkeeping.** N210808 at 1.89 (corrected) vs 1.92 MJ. Use the 2024 values for both shots.
 8. **2DConA surrogate.** N240304 used Δλ 2.9 Å (not 2.75) and rise CF 0.17, so it is a surrogate of the N221204 *design*, not of the shot.

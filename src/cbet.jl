@@ -390,7 +390,7 @@ end
 """
     cbet_clamp_schedule(pulse; foot = 0.002, peak = 0.0075, width = 0.2) -> (times, values)
 
-CBET saturation clamp δn/n stepping from `foot` to `peak` over `width` (ns) centred on
+CBET saturation clamp δn/n stepping from `foot` to `peak` over `width` (ns) centered on
 the start of the pulse's rise to peak power ([`pulse_rise`](@ref)), as a
 two-knot `(times, values)` table for `CBET`'s `clamp` (constant beyond the knots, so
 fitting `:clamp` fits the foot and peak values). The defaults are PRE 109's HYDRA setting

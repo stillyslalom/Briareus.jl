@@ -432,7 +432,7 @@ end
 # n·(x - c) = 0, in-plane basis (u, v), in-plane distances from c within [rlo, rhi]. Its
 # facets as seen in the plane (inward edge lines, radial range) are binned on a polar
 # grid (nθ × nρ from ρ0 by dρ; CSR `start`/`idx`), each in the bins its angular span and
-# radial range overlap and their neighbours.
+# radial range overlap and their neighbors.
 struct _HPlanar
     c::Vec3
     n::Vec3

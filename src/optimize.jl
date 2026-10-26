@@ -128,7 +128,7 @@ function _sphere_angles(tmpl, R, c, mirror)
         dk = dot(d, k)
         disc = dk^2 - (dot(d, d) - R^2)
         disc >= 0 || throw(ArgumentError("beam $(b.name)'s axis misses the sphere of radius $R"))
-        s = d + (-dk - sqrt(disc)) * k                  # first hit, relative to the centre
+        s = d + (-dk - sqrt(disc)) * k                  # first hit, relative to the center
         θ = acosd(clamp(zs * s[3] / R, -1, 1))
         φp = atand(b.port[2], b.port[1])
         Δφ = mod(atand(s[2], s[1]) - φp + 180, 360) - 180
@@ -507,7 +507,7 @@ power_fraction(ev::Evaluation, names::Symbol...) =
     flux_moments(ev; lmax = 8, axis = ẑ, center = mode_center(target, observed)) -> Vector
 
 Legendre moments `aₗ` of the observed incident flux (index `l+1`), about the observed
-capsule's centre by default (`mode_center`).
+capsule's center by default (`mode_center`).
 """
 function flux_moments(ev::Evaluation; lmax::Integer = 8, axis = Vec3(0, 0, 1),
                       center = nothing)
@@ -601,7 +601,7 @@ end
     flux_ylm(ev; lmax = 6) -> Vector
 
 Real spherical-harmonic coefficients of the observed incident flux in the flat
-`mode_index` order (polar axis ẑ, azimuth from +x, about the observed capsule's centre:
+`mode_index` order (polar axis ẑ, azimuth from +x, about the observed capsule's center:
 `mode_center`, TCC unless the capsule is offset), from the scenario's cached
 `ylm_weights`. Use `ylm_matrix(c, lmax)` for the `C[l+1, lmax+1+m]` layout.
 """

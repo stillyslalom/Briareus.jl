@@ -53,7 +53,7 @@ Hurricane et al., *Phys. Plasmas* **27**, 062704 (2020), doi:10.1063/5.0001335 (
 
 ### 1b. Flux P1 → v_HS (linear transfer and its time weighting)
 Young et al., *Phys. Plasmas* **27**, 082702 (2020), doi:10.1063/5.0009746 (OSTI
-1650438). **H** This is the closest published analogue of a Briareus `drive_history` → v_HS layer.
+1650438). **H** This is the closest published analog of a Briareus `drive_history` → v_HS layer.
 - **Method.** VisRad view factors are run at 100 time points with as-delivered powers
   for all 192 beams. Windows are patches with albedo 0.3 against 0.8 for the wall, and
   the gaps are ignored. **V_x = Σᵢ G(t_f,tᵢ) c₁₁(tᵢ)Δtᵢ, V_y = −Σ G c₁,₋₁ Δt,

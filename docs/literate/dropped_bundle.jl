@@ -261,7 +261,7 @@ end
 # every sample point of the capsule's projected disk, on to the detector, and reports
 # any that hardware stops: all the x-ray paths from the foil through the capsule
 # toward any detector in their cone, more than one imager accepts. Here, with the
-# foil at the standoff that bundle 11 needs, rounded up to a millimetre:
+# foil at the standoff that bundle 11 needs, rounded up to a millimeter:
 
 d_los = ceil(standoff[(348.0, "11")])
 los = line_of_sight(scene(348.0, d_los), (90.0, 348.0))
@@ -635,10 +635,10 @@ show_modes("re-pointed, keep-out", c_repointed)
 review_line("re-pointed, keep-out", cap_review(second_try.beams))
 
 # Re-pointing within the clearance still removes nearly all of mode 1, to a few
-# kilometres per second of hot-spot velocity, and the drive stays within 0.3% of its
+# kilometers per second of hot-spot velocity, and the drive stays within 0.3% of its
 # value after the bundle is freed. The worst-case clearance comes out at 9 µm rather
 # than exactly the 10 µm asked for: the penalty is soft, and the keep-out's distance
-# differs from the clearance check's by a few micrometres. The flux on the capsule
+# differs from the clearance check's by a few micrometers. The flux on the capsule
 # before and after re-pointing, on the same maps and color scales as above:
 
 fig = Figure(size = (800, 470))

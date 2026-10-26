@@ -71,7 +71,7 @@ citations, no text or figures reproduced.
   alike: it is not mixing but the plasma filling the inner-beam path. The model's 23°
   onset trails the measurement by ~0.3 ns (DrD timing up to 0.2 ns, plus the bubble's
   expansion into the inner beams).
-- **Spectra**: pF3D puts SBS from the Au wall near the capsule at 5 ns (spectral centre
+- **Spectra**: pF3D puts SBS from the Au wall near the capsule at 5 ns (spectral center
   +2.5 Å), Au bubble plus ablator at 5.5–6 ns (double-humped), ablator dominated by 6 ns
   (+7 Å); FABS does not show the 7–8 Å ablator peak at 6–7 ns. Hypothesis: the on-axis
   density feature forms ~1 ns earlier than the hydro predicts; adding it at 6 ns removes

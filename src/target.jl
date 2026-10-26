@@ -488,7 +488,7 @@ number):
 with `s = s((t - closure)/width)` the smooth step `3x² - 2x³` on [0, 1], as for
 `BurnthroughAlbedo`. `energy_balance` books `(1 - s) H A` as transmitted, and
 `drive_history` counts it in `window_loss`. The closure time is an input: a gap tens of
-micrometres wide closes as plasma blown off its walls fills it, which this model does
+micrometers wide closes as plasma blown off its walls fills it, which this model does
 not compute. Unlike an aperture, the gap is opaque to laser light and to view-factor
 visibility rays, which matters only for gaps a beam would reach.
 """
@@ -644,7 +644,7 @@ keywords also take a `(times, R/R₀)` table, which becomes a `TabulatedRadius`,
 function `t -> R/R₀`.
 
 Which radius a published history follows (ablation front, ablator–fuel interface, fuel
-centre of mass) and which shot it belongs to matters: research notes, "Capsule radius
+center of mass) and which shot it belongs to matters: research notes, "Capsule radius
 schedules: published histories and the API (2026-10-26)".
 """
 abstract type RadiusSchedule end
@@ -715,7 +715,7 @@ until `start` (ns; the first shock reaching it, e.g. a keyhole's shock-1 breakou
 ablator), falls along a cubic Hermite segment to `peak_radius` (mm) at `peak_time` with
 the inward speed `velocity` (km/s; at rest at `start`), then along a second one to
 `minimum` (R/R₀) at `bang`, at rest there, and holds it after (the rebound is not
-modelled). `R/R₀` = R/`radius`. The anchors are what HYDRA tables give (peak implosion
+modeled). `R/R₀` = R/`radius`. The anchors are what HYDRA tables give (peak implosion
 velocity, its time, the limb-minimum radius at peak velocity: Kritcher et al., PRE 106,
 025201 (2022) Table I) with a keyhole breakout and the bang time; both segments must
 stay monotone (speed ≤ 3× the segment's mean, else an `ArgumentError`).

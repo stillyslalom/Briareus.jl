@@ -5,7 +5,7 @@
 # Fig. 10a (LLNL-JRNL-807170 accepted manuscript). Digitized 2026-10-24 from the embedded
 # raster (1200 x 399 px): time from the panel frame (0 and 8 ns at 50 and 381 px), mode 1 from
 # the frame (0 and 5 % at 344 and 30 px; the 1 % tick falls within 1 px). Each value is the
-# median row of the stroke colour (black 23.5, orange 30, blue 44.5, brown 50 deg) over +/-2 px
+# median row of the stroke color (black 23.5, orange 30, blue 44.5, brown 50 deg) over +/-2 px
 # (+/-0.05 ns) of columns, the legend box excluded. Reading error ~0.03 % (stroke 0.04 %);
 # NaN where another stroke covers the curve. Fig. 10c (the hot-spot velocities from these
 # traces with the N170827 Green's function, km/s; markers read as blob centroids, +/-2 km/s):

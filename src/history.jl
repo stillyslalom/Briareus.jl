@@ -132,7 +132,7 @@ integrated trapezoidally between the steps from each element's incident-flux
 temperature (constant T before `times[1]`). A wall heated in a low foot holds little
 energy at the peak temperature, so its loss early in the peak is several times the
 constant-T value at `t` (`t_eff` ≈ the time since the rise), and the drive rises
-through a flat peak. `wall_history = false` evaluates the albedo at `t` (the behaviour
+through a flat peak. `wall_history = false` evaluates the albedo at `t` (the behavior
 before 2026-10-24). Research notes, "N221204 late-time drive (2026-10-24)".
 
 **Wall re-emission.** The self-similar loss never gives energy back: when `T` falls,

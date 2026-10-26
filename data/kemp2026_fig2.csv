@@ -13,7 +13,7 @@
 # same axis the pre-CBET inner-cone laser power per quad reaches half its 9 TW peak at
 # 4.74 ns (dash-dot curve, read here). Digitized 2026-10-25 from the figure's embedded
 # raster (1852 x 1480 px; 0 and 10 ns at columns 258 and 1615, 0 and 3 TW at rows 1249 and
-# 79, from the gridlines): stroke centres traced column by column on the shallow parts
+# 79, from the gridlines): stroke centers traced column by column on the shallow parts
 # and row by row on the steep ones, read to +/-0.03 TW and +/-0.02 ns, then linearly
 # interpolated onto 0.05 ns. Research notes, "Inner-cone SBS time histories and the
 # late-time refraction (2026-10-25)".

@@ -15,7 +15,7 @@ Build one with [`capsule_drive`](@ref). Fields:
 - `flux` — capsule-averaged incident flux `a₀` (TW/mm²; ×1e14 → W/cm²)
 - `modes` — `(lmax+1) × nt` Legendre ratios `aₗ/a₀` (row `l+1`, so row 1 is 1), of
   the incident flux `F(θ,t) = a₀(t) Σₗ (aₗ/a₀)(t) Pₗ(cos θ)`, `θ` from the hohlraum axis
-  (+z) about the capsule centre. **`P2 > 0` is pole-hot** (Masse 2019's convention).
+  (+z) about the capsule center. **`P2 > 0` is pole-hot** (Masse 2019's convention).
 - `absorbed` — x-ray power absorbed by the capsule (TW), as in `energy_balance`
   (`NaN` where the history does not record it)
 - `radius` — the radius (mm) of the sphere the flux was evaluated on (the capsule mesh)

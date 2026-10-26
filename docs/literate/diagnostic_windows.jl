@@ -3,7 +3,7 @@
 # To see the capsule from the side during the implosion, a diagnostic needs a line of
 # sight through the hohlraum wall. A hole would lose too much drive, so the wall
 # carries a thin-foil window instead: a disk of gold about 2 mm across and a couple of
-# micrometres thick, backed by a low-Z material that x rays above a few keV pass
+# micrometers thick, backed by a low-Z material that x rays above a few keV pass
 # through. Early in the pulse the thin gold re-emits like the rest of the wall. The
 # Marshak heat front that carries the x rays into the wall eats through it during the
 # drive, and from then on part of the radiation that reaches the window passes through
@@ -46,7 +46,7 @@ set_theme!(fontsize = 15, linewidth = 2.5)
 # [Integrating sphere](@ref) tutorial for why curved areas matter). The window's edge
 # is a regular polygon whose radius is enlarged to [`equal_area_radius`](@ref), so the
 # polygon's area is exactly that of the disk. The window and the gap therefore have
-# exact areas, while their edges stay within a few micrometres of the circles.
+# exact areas, while their edges stay within a few micrometers of the circles.
 
 d, gap = 2.0, 0.05
 pair = [WallWindow(phi = φ, diameter = d, gap = gap) for φ in (78, 258)]

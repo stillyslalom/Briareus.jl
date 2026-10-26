@@ -106,7 +106,7 @@ transfer in ("calibrated", "fig9b", "joint", "iraum") ||
 # 0.906 × 1.050/1.135) and 0.906 R₀ (the shell keeping its relative thickness). The
 # schedule (research notes, "Capsule absorption, conversion and the ablating-wall release
 # (2026-10-25)"): N221204's own HYDRA radius history (Kritcher et al., PoP 31, 070502
-# (2024) Fig. 1, `kritcher2024_radius()`, the ablator–fuel interface or fuel centre of
+# (2024) Fig. 1, `kritcher2024_radius()`, the ablator–fuel interface or fuel center of
 # mass scaled to its start) applied to the whole capsule, on the shot's own time axis: the
 # upper bound on the front, with the published timing (held until the first shock breaks
 # out, ~3.6 ns; minimum at bang). Zylstra's pair: K24's thinner N210808 capsule (their

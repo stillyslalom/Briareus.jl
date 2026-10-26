@@ -5,8 +5,8 @@
 # radius its ablation front; the LEH radius estimated from SXI (end value measured, the
 # ramp assumed). Digitized 2026-10-24 from the figure's embedded raster (638 x 626 px):
 # time axis from the frame and gridlines (0 and 8 ns at 80 and 623 px, residual < 1 px),
-# radius axis from the gridlines at 0, 1, 2, 3 (46.9 px per mm). Each value is the centre
-# of the coloured stroke averaged over +/-2 px (+/-0.03 ns) of columns; where the solid
+# radius axis from the gridlines at 0, 1, 2, 3 (46.9 px per mm). Each value is the center
+# of the colored stroke averaged over +/-2 px (+/-0.03 ns) of columns; where the solid
 # line runs within 2.5 px of the dashed static line ("Static, 0.85x") the two cannot be
 # told apart and the error is 0.05 mm, else 0.03 mm. The plotted initial hohlraum radius
 # is 3.0 mm (the paper's Table II lists 3.1 for N170827); use displacements from the first

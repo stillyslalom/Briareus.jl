@@ -153,7 +153,7 @@ quoted temperature the ablation is trans- or supersonic and the scaling weakens.
     incident σT_r⁴.
 
   Reported at t = 8 ns: T ≈ 0.716 keV near the origin and T_r ≈ 158 eV outside the
-  ablation front. Inside the front T_r ≈ 18–30 eV, and ≈ 75 eV in the centre. This is a
+  ablation front. Inside the front T_r ≈ 18–30 eV, and ≈ 75 eV in the center. This is a
   public, fully specified problem with an imposed drive. It is the only one I found.
 - **Angle-resolved BC (**L**).** Set E_s(θ,t) = 4F_inc(θ,t)/c from Briareus's
   F_inc = Σ a_l(t)P_l. For multigroup, split by a Planckian at T_r(t) plus an M-band
