@@ -142,9 +142,12 @@ end
             @test _inf_jet_clean(JET.report_call, (m, d) -> solve(m, d; time = 1.0), mw, dep)
             @test _inf_jet_clean(JET.report_call, history,
                                  τ -> with_pulses(quads, pulse, τ), [0.5, 1.0])
-            # the history's deposition with the M-band's per-group split
-            @test _inf_jet_clean(JET.report_opt, Briareus._deposit, s.deposition, quads,
-                                 Briareus._mband_split(nif_mband(), t, quads))
+            # the history's deposition with the M-band's per-group split (from 1.11, as
+            # the deposition checks above)
+            if VERSION >= v"1.11"
+                @test _inf_jet_clean(JET.report_opt, Briareus._deposit, s.deposition, quads,
+                                     Briareus._mband_split(nif_mband(), t, quads))
+            end
             @test _inf_jet_clean(JET.report_call, (s, o, x) -> optimize_pointing(s, o; x0 = x),
                                  s, objectives[1], x0)
         end
