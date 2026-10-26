@@ -291,12 +291,13 @@ line_of_sight(scene(348.0, 8.0), (90.0, 348.0))
 # of the foil's element, and the imager records what passes its pinhole and filters.
 # [`kshell_ce`](@ref) estimates the CE from published measurements on planar foils
 # ([`kshell_ce_data`](@ref)): OMEGA foils driven by a single 1 ns pulse (Workman and
-# Kyrala, 2001) and NIF foils with a picket 3 ns ahead of a 2–5 ns drive (Barrios et
-# al., 2013 and 2014). [`kshell_ce_model`](@ref) fits `ln CE` as a quadratic in
-# `ln I` for each line, with an optimum irradiance that rises with photon energy and a
-# peak that falls about as ``(h\nu)^{-3.5}``. The fit's residual scatter, a factor of
-# 1.5, is the CE's uncertainty. The data do not separate the pulse length from the
-# picket.
+# Kyrala, 2001), NIF foils with a picket 3 ns ahead of a 2–5 ns drive (Barrios et al.,
+# 2013 and 2014), and OMEGA foils with and without a pre-pulse (Coppari et al., 2019).
+# [`kshell_ce_model`](@ref) fits `ln CE`, weighting each point by its stated error, as a
+# quadratic in `ln I` for each line, with an optimum irradiance that rises with photon
+# energy and a peak that falls about as ``(h\nu)^{-3.5}``. The scatter of the data about
+# the fit, a factor of 1.45, is the CE's uncertainty. The data do not separate the pulse
+# length from the picket or the source.
 #
 # [`backlighter_signal`](@ref) carries the chain through:
 # 1. the laser energy on each foil element, from a deposition calculation;
@@ -325,9 +326,9 @@ signal = backlighter_signal(bl_scene, bl_deposition, (90.0, 348.0); line = :Ge, 
 # The phase-plate spots at best focus spread the quads' light over most of the foil, so
 # the mean irradiance, about ``5\times10^{14}`` W/cm², lies just below the lowest
 # measured NIF point, which flags the result as extrapolated. It is also well below
-# germanium's fitted optimum of about ``3\times10^{15}`` W/cm². About 500 photons per
+# germanium's fitted optimum of about ``2.5\times10^{15}`` W/cm². About 400 photons per
 # 50 µm pixel (6 µm at the capsule), averaged over the capsule's image, is uncertain by
-# a factor of 1.6 either way. Across the image the level varies a hundredfold
+# a factor of 1.5 either way. Across the image the level varies a hundredfold
 # (`signal.photons_range`), because the foil's radiance follows the quads' spots: the
 # capsule's rim is backlit by the foil's weakly irradiated edges. All of the foil's
 # emitting area faces the detector, and through the open windows every element sees
@@ -345,8 +346,7 @@ for line in (:Cu, :Zn, :Ge, :Zr)
             s.transmission, s.photons_pixel, s.photons_lo * 0.05^2, s.photons_hi * 0.05^2)
 end
 
-# (`*`: outside the measured range of its class, here in irradiance, and for Cu also in
-# photon energy.)
+# (`*`: outside the measured range of its class, here in irradiance.)
 
 # ## What each bundle costs
 #
@@ -699,8 +699,10 @@ show_modes("re-pointed, ray-traced", ylm_weights(target, capsule; lmax = 4) * H)
 #   Lambertian foil's uniform image ``E_x A_p/(\pi A q^2)``, energy through the pinhole
 #   equal to the fluence times the image area, the angular distributions' hemispherical
 #   integrals (``E_x/2`` isotropic, ``E_x`` Lambertian), Beer–Lambert filters against
-#   the NIST nodes and edges, and the CE fit's residuals, optimum and ``h\nu`` scaling
-#   against the published ``(h\nu)^{-(2.5\text{–}4)}``.
+#   the NIST nodes and edges, and the CE fit's weighted residuals, optimum and ``h\nu``
+#   scaling against the published ``(h\nu)^{-(2.5\text{–}4)}``; the form fitted without
+#   Coppari et al.'s 31 points predicts them within their stated 20% and the fit's
+#   scatter (held out).
 # - The keep-out's worst-case clearance agrees with the clearance check's, and
 #   re-pointing against it passes that check.
 # - The re-pointed drive, recomputed by ray tracing and a direct radiosity solve,

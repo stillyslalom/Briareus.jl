@@ -8,13 +8,34 @@ using Briareus, LinearAlgebra, Test
     d = kshell_ce_data()
     m = kshell_ce_model()
     k = findall(==(1.0), d.fit)
-    @test m.n == length(k) == 37
-    # the scatter is the residual rms with n − 7 degrees of freedom
+    @test m.n == length(k) == 68
+    # weights 1/(s² + τ²), s the stated relative error (W01's 10% ⊕ 20% where blank), τ
+    # such that χ² per degree of freedom is 1; a constant per class zeroes the weighted
+    # residual sum in each class; the scatter is τ ⊕ the rms stated error
     res = [log(kshell_ce(d.hnu[i]; irradiance = 1e15 * d.irradiance[i],
                          prepulse = d.class[i] == "prepulsed").ce / (d.ce[i] / 100)) for i in k]
-    @test sqrt(sum(abs2, res) / (37 - 7)) ≈ m.scatter rtol = 1e-10
-    @test abs(sum(res)) < 1e-8                     # least squares with a constant per class
-    @test 0.3 < m.scatter < 0.5
+    s = [isnan(d.u[i]) ? sqrt(0.1^2 + 0.2^2) : d.u[i] / d.ce[i] for i in k]
+    w = 1 ./ (s .^ 2 .+ m.tau^2)
+    @test sum(w .* res .^ 2) / (68 - 7) ≈ 1 rtol = 1e-9
+    pre = [d.class[i] == "prepulsed" for i in k]
+    @test abs(sum(w .* res .* pre)) < 1e-8 && abs(sum(w .* res .* .!pre)) < 1e-8
+    @test m.scatter ≈ sqrt(m.tau^2 + sum(abs2, s) / 68) rtol = 1e-12
+    @test 0.15 < m.tau < 0.35 && 0.3 < m.scatter < 0.45
+    # held-out check on independent data: the form fitted to the 2026-10-24 compilation
+    # alone (Workman & Kyrala, Barrios et al.) predicts Coppari et al.'s 31 OMEGA points
+    # within their stated error and the fit's predictive scatter
+    c19 = d.source .== "C19"
+    d0 = merge(d, (; fit = [c ? 0.0 : f for (c, f) in zip(c19, d.fit)]))
+    m0 = Briareus._fit_kshell_ce(d0)
+    @test m0.n == 37
+    z = [log(kshell_ce(d.hnu[i]; irradiance = 1e15 * d.irradiance[i], model = m0,
+                       prepulse = d.class[i] == "prepulsed").ce / (d.ce[i] / 100)) for i in findall(c19)]
+    zs = [kshell_ce(d.hnu[i]; irradiance = 1e15 * d.irradiance[i], model = m0,
+                    prepulse = d.class[i] == "prepulsed").sigma for i in findall(c19)]
+    @test sqrt(sum(abs2, z ./ hypot.(zs, 0.2)) / length(z)) < 1.2
+    # the held-out Ti foil (below the fitted lines) is flagged: the fit overpredicts it
+    iTi = findfirst(==("Ti"), d.element)
+    @test d.fit[iTi] == 0 && kshell_ce(:Ti; irradiance = 1.32e15).extrapolated
     # the line energies of the data are the tabulated ones
     for (el, hν) in zip(d.element, d.hnu)
         @test kshell_line_energy(Symbol(el)) == hν
