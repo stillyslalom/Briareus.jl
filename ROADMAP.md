@@ -309,10 +309,11 @@ Items 9–13 and 16–17 follow the 2026-10-22 literature review against Kritche
 12. **Backlighter physics.** Done: He-α CE(hν, I) with its uncertainty, filters, the
     photometric chain; the weighted compilation (2026-10-26: + Coppari 2019's 31 OMEGA
     Fe/Cu/Ge points, inverse-variance fit with a random-effects τ, scatter ×1.51 → ×1.44,
-    a held-out check on independent data; research notes "Weighted He-α CE compilation").
-    Left: the low-Z end — the one public Ti foil (OMEGA, held out) sits 5× below the fit,
-    which the `hν` power law cannot follow below Cr, and no V/Sc He-α CE at 351 nm was
-    found; a form change needs Ti/V data at stated conditions. Pulse length (now
+    a held-out check on independent data; research notes "Weighted He-α CE compilation");
+    the form written about each line's optimum with the peak flat below a fitted 6.1 keV
+    (2026-10-26: Cr 4.1 → 3.1%, held-out Ti 8.4 → 3.0% against 1.6%, 1.1σ; "He-α CE:
+    saturating peak"). Left: the low-Z end is one Ti point (whether the peak levels off
+    or turns over below Cr), and no V/Sc He-α CE at 351 nm was found. Pulse length (now
     confounded with the source as well as the picket) and spot size (with the
     irradiance); continuum and higher lines in the filter pass band, detector response,
     the object's transmission.

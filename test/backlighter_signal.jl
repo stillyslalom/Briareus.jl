@@ -16,7 +16,7 @@ using Briareus, LinearAlgebra, Test
                          prepulse = d.class[i] == "prepulsed").ce / (d.ce[i] / 100)) for i in k]
     s = [isnan(d.u[i]) ? sqrt(0.1^2 + 0.2^2) : d.u[i] / d.ce[i] for i in k]
     w = 1 ./ (s .^ 2 .+ m.tau^2)
-    @test sum(w .* res .^ 2) / (68 - 7) ≈ 1 rtol = 1e-9
+    @test sum(w .* res .^ 2) / (68 - 8) ≈ 1 rtol = 1e-9
     pre = [d.class[i] == "prepulsed" for i in k]
     @test abs(sum(w .* res .* pre)) < 1e-8 && abs(sum(w .* res .* .!pre)) < 1e-8
     @test m.scatter ≈ sqrt(m.tau^2 + sum(abs2, s) / 68) rtol = 1e-12
@@ -33,9 +33,20 @@ using Briareus, LinearAlgebra, Test
     zs = [kshell_ce(d.hnu[i]; irradiance = 1e15 * d.irradiance[i], model = m0,
                     prepulse = d.class[i] == "prepulsed").sigma for i in findall(c19)]
     @test sqrt(sum(abs2, z ./ hypot.(zs, 0.2)) / length(z)) < 1.2
-    # the held-out Ti foil (below the fitted lines) is flagged: the fit overpredicts it
+    # the held-out Ti foil, below the fitted lines (flagged), is predicted within 1.5σ (the
+    # fit's σ and the point's stated error), on the peak's plateau below hνₛ (Cr to Ti)
     iTi = findfirst(==("Ti"), d.element)
-    @test d.fit[iTi] == 0 && kshell_ce(:Ti; irradiance = 1.32e15).extrapolated
+    rTi = kshell_ce(:Ti; irradiance = 1.32e15)
+    @test d.fit[iTi] == 0 && rTi.extrapolated
+    @test abs(log(d.ce[iTi] / 100 / rTi.ce)) < 1.5hypot(rTi.sigma, d.u[iTi] / d.ce[iTi])
+    @test 5.682 < 10exp(m.coef[8]) < 6.700
+    @test kshell_ce(:Ti; irradiance = 1e15).peak ≈ kshell_ce(:Cr; irradiance = 1e15).peak rtol = 1e-12
+    @test kshell_ce(:Fe; irradiance = 1e15).peak < kshell_ce(:Cr; irradiance = 1e15).peak
+    # the gradient behind σ, against central differences (away from the hinge)
+    fd(L, X, p, j; h = 1e-6) = (Briareus._ce_lncE(m.coef + h * (1:8 .== j), L, X, p) -
+                                Briareus._ce_lncE(m.coef - h * (1:8 .== j), L, X, p)) / 2h
+    @test all(isapprox(Briareus._ce_grad(m.coef, L, X, p), [fd(L, X, p, j) for j in 1:8]; rtol = 1e-7)
+              for (L, X, p) in ((log(0.6), 0.3, false), (log(1.2), -0.5, true)))
     # the line energies of the data are the tabulated ones
     for (el, hν) in zip(d.element, d.hnu)
         @test kshell_line_energy(Symbol(el)) == hν
