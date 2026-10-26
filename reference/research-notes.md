@@ -7110,3 +7110,70 @@ an idle machine; the schedule enters only through these values).
   unpublished; it sets the capsule share between the bounds.
 - `schedule=young` is now below the lower bound; removed 2026-10-26.
 - The pair's own radius histories, v_imp and RPV are unpublished.
+
+## Hard-sphere direct-drive illumination (2026-10-27) *derived*
+
+Polar direct drive, Stage 0 (ROADMAP item 15; `reference/litreview/polar_direct_drive.md`
+§5), the part that does not depend on the pointing parameterization (open decision 5
+there). Tests: `test/direct_drive.jl`. No pointing fields or types were added.
+
+**What exists and is used.** A bare sphere is a one-component target,
+`Target(Component(:capsule, icosphere_mesh(R; n), material; surface = SphereSurface(R)))`.
+`DepositionOperator`/`deposit` on it give hard-sphere illumination: straight rays, the
+incident `I cos ψ` absorbed where it first lands, the far side shadowed by the sphere
+itself; `ncone = 1` makes the beams collimated (the parallel rays of MN17 and Te14).
+Direct-drive pointings are aims (documented in the `Beam` docstring, no new names): a
+surface point `s` is `aim = s` (first intersection when `port·(s − c) > 0`), a shift Δ
+normal to the beam is `aim = c + Δ u` with `u ⟂ port`, an axis crossing the polar axis
+at height z is `aim = (0, 0, z)`.
+
+**New API.** `mode_rms(c, lmax; m = :all | :zero | :nonzero)` (flat real-harmonic
+coefficients; σ = √(Σ_{1≤l≤lmax} Σ_m c_lm²)/|c₀₀|, generic in the number type, in
+`test/inference.jl` with `@inferred` and JET) and `mode_power(C; m)` (the per-l spectrum
+σ_l, total or its m = 0 / m ≠ 0 part; m = :zero is the Legendre spectrum
+|a_l/a₀|/√(2l+1)). Both work on the exact-solid-angle facet weights of `ylm_weights`,
+which now reuse their work array in `_real_ylm!` and evaluate cos mφ, sin mφ once per m
+(bit for bit the same weights; n = 30 icosphere, lmax = 30: 5.3 s → 2.0 s).
+
+**Checks** (R₀ = 0.5 mm; icospheres n = 20 and 30, edges 0.055 R and 0.037 R; σ_l
+absolute in units of the mean):
+- *Skupsky–Lee separability* (J. Appl. Phys. 54, 3662, 1983), OMEGA's 60 ports
+  (`omega_ports`), SG4 spots (`omega_spot(:SG4)`), aimed at the centre: the reference is
+  σ_l = |a_l/a₀| G_l/√(2l+1) with a_l from a 1-D Gauss quadrature of one beam and G_l from
+  the ports. σ (l ≤ 30): reference 0.0821 %; Briareus 0.0792 % (n = 20), 0.0807 % (n = 30),
+  Richardson-extrapolated 0.0819 %. max_l |Δσ_l| = 3.5e-5 and 1.6e-5 (ratio 2.2, the h²
+  rate). Absorbed fraction equals the enclosed fraction of the spot inside the sphere's
+  disk to 1e-4. (Exploration at R = 0.43 mm: 0.1874 % reference, 0.1869 % at n = 30.)
+- *Facet quadrature at l ≤ 30*: the zonal spectrum of `ylm_weights` (level 2) and the
+  Legendre spectrum of `legendre_weights` (level 3) agree to 3.8e-6.
+- *Temporal et al. 2014* (arXiv:1406.7762), one ring at 49°/131°, m = 4: the direct
+  quadrature reference reproduces the published values with incident I cos ψ fully
+  absorbed, the shift normal to the beam axis toward the equator and the a axis
+  azimuthal: σ = 11.93 % (circular, a = b = R₀) and 5.23 % (elliptical, a = 2b, b = R₀)
+  centred (published 11.9, 5.2); minima 1.088 % at Δ/R₀ = 0.1374 and 1.341 % at 0.0743
+  (published 1.1 % at 13.7 %, 1.3 % at 7.4 %). The conventions of the review's §4.2 are
+  therefore pinned. Briareus (8 beams per ring, mirrored, m = 0 part, n = 30) is within
+  6e-5 of the reference at all four points. dσ/dΔ by ForwardDiff through `deposit`
+  matches a central difference to 1e-8 relative.
+- *Murakami & Nishi 2017* §4 (Matter Radiat. Extremes 2, 55), Eqs. 28–37 integrated
+  directly (a = 0.6, b = 6, η⊥ = 0.9, each ring's b_l normalized to its mean as in
+  Eq. 37): the printed solution j = 46°, 53°, z = −0.65, 0.80, E₂ = 0.40 leaves
+  B₂…B₁₀ = 0.048, −0.188, 0.046, 0.009, 0.013, far beyond the rounding of the printed
+  digits. Newton from there converges (residual 5e-15) to j = 48.926°, 51.685°,
+  z = −0.5756, 0.7687, E₂ = 0.4208; weighting the rings by absorbed instead of
+  normalized amplitude gives the same geometry with E₂ = 0.542. So either the printed
+  digits are from a different model detail or the published root is imprecise (*L*).
+  Briareus has no absorption model (η⊥ = 1), so it is checked per ring at the
+  re-solved geometry against the same quadrature with η⊥ = 1: max_l≤30 |Δ(b_l/b₀)| =
+  2.5e-3 / 5.1e-3 (n = 20), 1.1e-3 / 2.3e-3 (n = 30), 4.8e-5 / 7.4e-5 extrapolated.
+
+**Accuracy of element metrics.** The error is the facet averaging of the element
+representation, second order in the element size; the deposition quadrature does not
+set it (operator `level` 1, 2, 3 at n = 20: OMEGA max |Δσ_l| 3.5e-5, 3.4e-5, 3.4e-5). Sharp spots (order 6) need finer meshes
+than SG4. For σ (l ≤ 30) to ~2 % use n ≥ 30 (18 000 elements; the 961 × 18 000 weight
+matrix is 140 MB), or extrapolate n = 20/30. Ba24 evaluates σ on HEALPix nside 64 (49 152
+pixels, 0.9°); n = 30 elements are about 2.1°.
+
+**Not done (Stage 0 remainder).** The absorption weight η_a(ψ) (MN17 Eq. 29) per
+operator sample; the spherical pointing parameterization (open decision 5); the Ba24
+OC σ₁ example; a Literate tutorial.

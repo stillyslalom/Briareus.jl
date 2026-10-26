@@ -61,6 +61,14 @@ One laser beam entering from the port at polar angle `theta` and azimuth `phi`
 (degrees, target-chamber frame, z up). `power` in TW. `group` labels beams that share
 pointing parameters (e.g. a cone). `wavelength` is the nominal vacuum wavelength (µm)
 and `dlambda` the detuning from it (Å), used by laser–plasma models.
+
+The axis keeps the port's direction and passes through `aim`, so direct-drive pointings
+are aims: a point `s` on a target sphere about `c` is `aim = s` (the axis first meets
+the sphere there when `s` faces the port, `port · (s - c) > 0`; for a point on the
+sphere at polar angle θ and azimuth φ, `s = c + R * port_vector(θ, φ)`), a shift `Δ`
+normal to the beam is `aim = c + Δ * u` with `u ⟂ port` (toward the equator for a
+northern port: `u = θ̂` of `port_basis`), and an axis crossing the polar axis at height
+`z` is `aim = (0, 0, z)`. Best focus is at `aim + defocus * k` in each case.
 """
 struct Beam{T<:Real}
     name::String

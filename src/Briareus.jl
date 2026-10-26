@@ -63,7 +63,7 @@ export VisRadObject, VisRadWorkspace, read_visrad_workspace, visrad_component, v
        write_visrad_workspace, VisRadProfile, visrad_profile, visrad_envelope,
        visrad_power_sources, visrad_deposition
 export legendre, legendre_moments, legendre_weights, solid_angle, ylm_moments, ylm_weights, mode_center,
-       ylm_matrix, ylm_frame, mode_index, relative_mode_power, mode_amplitude, mode_power, rms_nonuniformity
+       ylm_matrix, ylm_frame, mode_index, relative_mode_power, mode_amplitude, mode_power, mode_rms, rms_nonuniformity
 export OrthoCamera, render, radiance, line_of_sight_power
 export backlighter_foil, line_of_sight, LineOfSightReport
 export kshell_line_energy, kshell_ce_data, kshell_ce_model, KShellCEModel, kshell_ce,

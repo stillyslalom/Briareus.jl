@@ -99,6 +99,9 @@ end
             @test (@inferred flux_moments(ev)) isa Vector{T}
             @test (@inferred objectives[1](ev)) isa T
             @test (@inferred objectives[2](ev)) isa T
+            c = flux_ylm(ev)
+            @test (@inferred mode_rms(c, 6)) isa T
+            @test (@inferred mode_rms(c, 6; m = :nonzero)) isa T
         end
         @test (@inferred flux_response(s.model, s.observed)) isa Matrix{Float64}
     end
@@ -124,6 +127,7 @@ end
                 @test _inf_jet_clean(JET.report_call, flux_moments, ev)
                 @test _inf_jet_clean(JET.report_call, objectives[1], ev)
                 @test _inf_jet_clean(JET.report_call, objectives[2], ev)
+                @test _inf_jet_clean(JET.report_call, mode_rms, flux_ylm(ev), 6)
             end
             @test _inf_jet_clean(JET.report_call, flux_response, s.model, s.observed)
             @test _inf_jet_clean(JET.report_call, solve, s.model, dep)

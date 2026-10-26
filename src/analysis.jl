@@ -171,11 +171,12 @@ function ylm_weights(t::Target, elems::AbstractVector{<:Integer}; lmax::Integer 
     c = _mode_center(t, elems, center)
     W = zeros((lmax + 1)^2, length(elems))
     Y = zeros(lmax + 1, 2lmax + 1)
+    P = zeros(lmax + 1, lmax + 1)
     Ω = 0.0
     for (k, e) in enumerate(elems)
         for (dΩ, u) in _facet_samples(t, e, c, level)
             Ω += dΩ
-            _real_ylm!(Y, lmax, dot(u, ax), atan(dot(u, ey), dot(u, ex)))
+            _real_ylm!(Y, lmax, dot(u, ax), atan(dot(u, ey), dot(u, ex)), P)
             for l in 0:lmax, m in -l:l
                 W[mode_index(l, m), k] += Y[l+1, lmax+1+m] * dΩ
             end
@@ -231,11 +232,11 @@ dipole drive `1 + ε cos γ`, the quantity hot-spot velocity sensitivities refer
 """
 mode_amplitude(c::AbstractVector, l::Integer) = sqrt((2l + 1) * relative_mode_power(c, l))
 
-# Real orthonormal spherical harmonics via normalized associated Legendre recursion.
-function _real_ylm!(Y, lmax, μ, φ)
+# Real orthonormal spherical harmonics via normalized associated Legendre recursion; `P`
+# is an (lmax+1)² work array (every entry read is written first).
+function _real_ylm!(Y, lmax, μ, φ, P = zeros(lmax + 1, lmax + 1))
     s = sqrt(max(0.0, 1 - μ^2))
     # P̄ₗᵐ fully normalized such that Yₗᵐ = P̄ₗᵐ(μ) * (cos mφ or sin mφ) [* √2 for m≠0]
-    P = zeros(lmax + 1, lmax + 1)
     P[1, 1] = sqrt(1 / (4π))
     for m in 1:lmax
         P[m+1, m+1] = sqrt((2m + 1) / (2m)) * s * P[m, m]     # no Condon–Shortley phase
@@ -250,23 +251,80 @@ function _real_ylm!(Y, lmax, μ, φ)
     end
     for l in 0:lmax
         Y[l+1, lmax+1] = P[l+1, 1]
-        for m in 1:l
-            Y[l+1, lmax+1+m] = sqrt(2) * P[l+1, m+1] * cos(m * φ)
-            Y[l+1, lmax+1-m] = sqrt(2) * P[l+1, m+1] * sin(m * φ)
+    end
+    for m in 1:lmax
+        cm, sm = cos(m * φ), sin(m * φ)
+        for l in m:lmax
+            Y[l+1, lmax+1+m] = sqrt(2) * P[l+1, m+1] * cm
+            Y[l+1, lmax+1-m] = sqrt(2) * P[l+1, m+1] * sm
         end
     end
     return Y
 end
 
 """
-    mode_power(C) -> Vector
+    mode_power(C; m = :all) -> Vector
 
-Per-`l` amplitude `√(Σₘ cₗₘ²) / c₀₀` from `ylm_moments`, a rotation-invariant
-nonuniformity measure (index `l+1`). Equals `|aₗ/a₀|/√(2l+1)` for an axisymmetric field.
+Per-`l` amplitude `σₗ = √(Σₘ cₗₘ²) / c₀₀` from `ylm_moments` (index `l+1`; `ylm_matrix`
+turns flat coefficients into `C`), a rotation-invariant nonuniformity spectrum: the rms
+of the field over the sphere relative to its mean is `√(Σ_{l≥1} σₗ²)` (`mode_rms`).
+Equals `|aₗ/a₀|/√(2l+1)` for an axisymmetric field. `m = :zero` keeps only the zonal
+harmonic `m = 0` of each degree (`|c_l0|/c₀₀`, the spectrum of the azimuthally averaged
+field, `|aₗ/a₀|/√(2l+1)` from its `legendre_moments`) and `m = :nonzero` the rest; their
+squares add to the `:all` spectrum's. The zonal part depends on the polar `axis` the
+coefficients were taken about; `:all` does not.
 """
-function mode_power(C::AbstractMatrix)
+function mode_power(C::AbstractMatrix; m::Symbol = :all)
     lmax = size(C, 1) - 1
-    return [sqrt(sum(abs2, C[l+1, lmax+1-l:lmax+1+l])) / abs(C[1, lmax+1]) for l in 0:lmax]
+    m === :all &&
+        return [sqrt(sum(abs2, C[l+1, lmax+1-l:lmax+1+l])) / abs(C[1, lmax+1]) for l in 0:lmax]
+    m === :zero && return [abs(C[l+1, lmax+1]) / abs(C[1, lmax+1]) for l in 0:lmax]
+    m === :nonzero ||
+        throw(ArgumentError("m must be :all, :zero or :nonzero, got :$m"))
+    return [sqrt(sum(abs2, C[l+1, lmax+1-l:lmax]; init = zero(eltype(C))) +
+                 sum(abs2, C[l+1, lmax+2:lmax+1+l]; init = zero(eltype(C)))) / abs(C[1, lmax+1])
+            for l in 0:lmax]
+end
+
+"""
+    mode_rms(c, lmax; m = :all) -> Real
+
+RMS nonuniformity over degrees `1 ≤ l ≤ lmax`, `σ = √(Σₗ Σₘ c_lm²) / |c₀₀|`, from flat
+real-harmonic coefficients `c` (`mode_index` order: `ylm_weights(…) * values`, or
+`flux_ylm`): the rms deviation of the field over the sphere relative to its mean, with
+the degrees above `lmax` filtered out (`σ² = Σₗ σₗ²` with `σₗ` from `mode_power`). With
+`m = :zero` only the zonal harmonics `m = 0` are summed (the rms of the azimuthally
+averaged field about the coefficients' polar axis), with `m = :nonzero` only the rest;
+`mode_rms(c, l; m = :zero)^2 + mode_rms(c, l; m = :nonzero)^2 == mode_rms(c, l)^2` up to
+rounding. The split is the m = 0 / m ≠ 0 decomposition of polar-direct-drive designs
+(Yeamans et al., Nucl. Fusion 61, 046031, 2021); the filtered `σ` over `l ≤ 30` is the
+illumination nonuniformity of Barlow et al. (PRL 133, 175101, 2024).
+
+Generic in the number type (it sits on the optimization path). It has a square root,
+so its derivative is singular for an exactly uniform field; objectives can sum
+`relative_mode_power` over `l` instead, which is `σ²` without the root.
+
+For hard-sphere laser illumination (no plasma: every ray straight, the incident
+`I cos ψ` absorbed where it lands) the field is the absorbed intensity of a `deposit` on
+a bare sphere, `t = Target(Component(:capsule, icosphere_mesh(R; n), material; surface =
+SphereSurface(R)))`, with `dep.element ./ t.elem_area` projected by
+`W = ylm_weights(t, 1:nelements(t); lmax = 30)`, built once (`DepositionOperator(t,
+beams; ncone = 1)` for collimated beams). The element values average the illumination
+over each facet, which lowers `σₗ` at second order in the element size: on OMEGA's 60
+beams with SG4 spots on R = 0.5 mm, `σ` (l ≤ 30) is 3.5 % low at `n = 20` (edges
+0.055 R) and 1.7 % low at `n = 30`; a Richardson extrapolation of the two is 0.3 % low
+(`reference/research-notes.md`, "Hard-sphere direct-drive illumination").
+"""
+function mode_rms(c::AbstractVector, lmax::Integer; m::Symbol = :all)
+    m in (:all, :zero, :nonzero) ||
+        throw(ArgumentError("m must be :all, :zero or :nonzero, got :$m"))
+    length(c) >= (lmax + 1)^2 ||
+        throw(ArgumentError("coefficients reach l = $(isqrt(length(c)) - 1), not lmax = $lmax"))
+    s = zero(c[1])^2
+    for l in 1:lmax, k in -l:l
+        (m === :all || (m === :zero) == (k == 0)) && (s += c[mode_index(l, k)]^2)
+    end
+    return sqrt(s) / abs(c[1])
 end
 
 """
