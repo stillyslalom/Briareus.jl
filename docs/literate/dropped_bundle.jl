@@ -295,8 +295,9 @@ line_of_sight(scene(348.0, 8.0), (90.0, 348.0))
 # 2013 and 2014), and OMEGA foils with and without a pre-pulse (Coppari et al., 2019).
 # [`kshell_ce_model`](@ref) fits `ln CE`, weighting each point by its stated error, as a
 # quadratic in `ln I` for each line, with an optimum irradiance that rises with photon
-# energy and a peak that falls about as ``(h\nu)^{-3.5}``. The scatter of the data about
-# the fit, a factor of 1.45, is the CE's uncertainty. The data do not separate the pulse
+# energy and a peak that falls as ``(h\nu)^{-3.3}`` above about 6 keV and levels off
+# below. The scatter of the data about the fit, a factor of 1.43, is the CE's
+# uncertainty. The data do not separate the pulse
 # length from the picket or the source.
 #
 # [`backlighter_signal`](@ref) carries the chain through:
@@ -326,7 +327,7 @@ signal = backlighter_signal(bl_scene, bl_deposition, (90.0, 348.0); line = :Ge, 
 # The phase-plate spots at best focus spread the quads' light over most of the foil, so
 # the mean irradiance, about ``5\times10^{14}`` W/cm², lies just below the lowest
 # measured NIF point, which flags the result as extrapolated. It is also well below
-# germanium's fitted optimum of about ``2.5\times10^{15}`` W/cm². About 400 photons per
+# germanium's fitted optimum of about ``2\times10^{15}`` W/cm². About 450 photons per
 # 50 µm pixel (6 µm at the capsule), averaged over the capsule's image, is uncertain by
 # a factor of 1.5 either way. Across the image the level varies a hundredfold
 # (`signal.photons_range`), because the foil's radiance follows the quads' spots: the
@@ -702,7 +703,8 @@ show_modes("re-pointed, ray-traced", ylm_weights(target, capsule; lmax = 4) * H)
 #   the NIST nodes and edges, and the CE fit's weighted residuals, optimum and ``h\nu``
 #   scaling against the published ``(h\nu)^{-(2.5\text{–}4)}``; the form fitted without
 #   Coppari et al.'s 31 points predicts them within their stated 20% and the fit's
-#   scatter (held out).
+#   scatter, and the fit predicts an OMEGA Ti foil below the fitted lines within 1.5σ
+#   (both held out).
 # - The keep-out's worst-case clearance agrees with the clearance check's, and
 #   re-pointing against it passes that check.
 # - The re-pointed drive, recomputed by ray tracing and a direct radiosity solve,

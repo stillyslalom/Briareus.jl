@@ -30,7 +30,8 @@ _line_keV(line::Real) = (line > 0 || throw(ArgumentError("the line energy must b
     KShellCEModel
 
 The fitted He-α conversion-efficiency model returned by [`kshell_ce_model`](@ref):
-`coef` (the seven coefficients of `ln CE` on the basis described there), `cov` (their
+`coef` (the eight parameters `(a_foil, a_prepulsed, b, c_foil, c_prepulsed, d, s, Lₛ)` of
+the form described there; the saturation energy is `hνₛ = 10 keV · exp(Lₛ)`), `cov` (their
 covariance), `tau` (the scatter of `ln CE` beyond the stated measurement errors),
 `scatter` (the predictive scatter of a measured `ln CE`, `√(tau² + s̄²)` with `s̄` the rms
 stated error of the fitted points), `n` (data points fitted), and the data's ranges per
@@ -38,8 +39,8 @@ class: `hnu` (keV), `irradiance` (W/cm²) and `pulse` (ns), each a `Dict` from `
 and `:prepulsed` to `(min, max)`.
 """
 struct KShellCEModel
-    coef::SVector{7,Float64}
-    cov::SMatrix{7,7,Float64,49}
+    coef::SVector{8,Float64}
+    cov::SMatrix{8,8,Float64,64}
     tau::Float64
     scatter::Float64
     n::Int
@@ -49,17 +50,26 @@ struct KShellCEModel
 end
 
 function Base.show(io::IO, ::MIME"text/plain", m::KShellCEModel)
-    @printf(io, "KShellCEModel: %d points, scatter %.2f in ln CE (×%.2f; τ = %.2f)", m.n, m.scatter,
-            exp(m.scatter), m.tau)
+    @printf(io, "KShellCEModel: %d points, scatter %.2f in ln CE (×%.2f; τ = %.2f); peak ∝ hν^%.2f above %.2f keV, flat below; optimum ∝ hν^%.2f",
+            m.n, m.scatter, exp(m.scatter), m.tau, m.coef[3], 10exp(m.coef[8]), m.coef[7])
     for c in (:foil, :prepulsed)
         @printf(io, "\n  %-9s hν %.1f–%.1f keV, I %.2g–%.2g W/cm², τ %g–%g ns", c, m.hnu[c]...,
                 m.irradiance[c]..., m.pulse[c]...)
     end
 end
 
-# basis of ln CE: L = ln(hν/10 keV), X = ln(I/1e15 W/cm²), and the class indicators
-_ce_basis(L, X, prepulsed::Bool) =
-    SVector{7,Float64}(!prepulsed, prepulsed, L, X * !prepulsed, X * prepulsed, X^2, X * L)
+# ln CE = a_c + b max(L − Lₛ, 0) + c_c Y + d Y², Y = X − s L, with L = ln(hν/10 keV),
+# X = ln(I/1e15 W/cm²); for fixed (s, Lₛ) it is linear in the first six parameters on this
+# basis
+_ce_basis(L, X, prepulsed::Bool, s, Ls) = (Y = X - s * L;
+    SVector{6,Float64}(!prepulsed, prepulsed, max(L - Ls, 0.0), Y * !prepulsed, Y * prepulsed, Y^2))
+_ce_lncE(p, L, X, prepulsed::Bool) = dot(_ce_basis(L, X, prepulsed, p[7], p[8]), p[SVector{6}(1:6)])
+# gradient of ln CE in all eight parameters (the hinge's derivative taken one-sided)
+function _ce_grad(p, L, X, prepulsed::Bool)
+    v = _ce_basis(L, X, prepulsed, p[7], p[8])
+    Y = X - p[7] * L
+    return SVector{8,Float64}(v..., -L * ((prepulsed ? p[5] : p[4]) + 2p[6] * Y), L > p[8] ? -p[3] : 0.0)
+end
 
 """
     kshell_ce_data() -> NamedTuple
@@ -94,27 +104,45 @@ Weighted least-squares fit of `ln CE` to the rows of [`kshell_ce_data`](@ref) wi
 incident laser energy, for planar foils driven at 351 nm:
 
 ```math
-\\ln \\mathrm{CE} = a_c + b\\,L + c_c\\,X + d\\,X^2 + e\\,X L,\\qquad
-L = \\ln\\frac{h\\nu}{10\\ \\mathrm{keV}},\\quad X = \\ln\\frac{I}{10^{15}\\ \\mathrm{W/cm^2}}.
+\\ln \\mathrm{CE} = a_c + b\\,\\max(L - L_s, 0) + c_c\\,Y + d\\,Y^2,\\qquad Y = X - s\\,L,
 ```
 
-The class `c`, `:foil` (one main pulse) or `:prepulsed` (a pre-pulse or picket ahead of
-the main drive), carries its own amplitude `a_c` and slope `c_c`; the curvature `d`, the
-line scaling `b` and the drift `e` of the optimum with the line are shared. For each
-line the CE peaks at `X* = −(c_c + e L)/(2d)`, an optimum irradiance that rises with
-photon energy. Across lines the peak falls roughly as `hν^-3.3` (foil, Fe–Ge) to
-`hν^-3.6` (prepulsed, Cu–Ge); Workman & Kyrala report `hν^-(2.5–4)` and Barrios et al.
-`hν^-(3–4)`.
+with ``L = \\ln(h\\nu/10\\ \\mathrm{keV})`` and ``X = \\ln(I/10^{15}\\ \\mathrm{W/cm^2})``.
+Each line's CE is a parabola in `ln I` of shared curvature `d`, peaking at the optimum
+irradiance ``I^* \\propto (h\\nu)^s`` (`Y* = −c_c/2d`). The peak CE falls as
+``(h\\nu)^b`` above the saturation energy ``h\\nu_s = 10\\ \\mathrm{keV}\\, e^{L_s}`` and is
+flat below it. The class `c`, `:foil` (one main pulse) or `:prepulsed` (a pre-pulse or
+picket ahead of the main drive), carries its own amplitude `a_c` and `c_c` (so its own
+peak and optimum); `b`, `d`, `s` and `hνₛ` are shared. Fitted: `b = −3.33 ± 0.25`
+(Workman & Kyrala report `hν^-(2.5–4)`, Barrios et al. `hν^-(3–4)`), `s = 2.5 ± 0.4`,
+`hνₛ = 6.1 ± 0.4 keV`, between Cr and Fe; foil optimum 1.2e15 W/cm² for Cr, 1.8e15 for
+Fe, 5.2e15 for Ge, peak 3.2% at and below hνₛ; prepulsed optimum 2.0e15 for Ge.
+
+Why this form (research notes, "He-α CE: saturating peak (2026-10-26)"): the earlier
+form, `a_c + bL + c_c X + dX² + eXL`, has a peak `a_c + bL + (c_c + eL)²/(4|d|)` that is
+convex in `L`, so it rose steeply toward low `hν` (Cr 4.1%, Ti 9.2%) against the Cr data
+(3.0% at 0.93e15) and the held-out Ti foil. Writing the parabola about its optimum
+(`Y`) removes that convexity at the same number of parameters and lowers the
+cross-validated error (leave-one-source-out rms 0.55 → 0.44 in `ln CE`); the
+saturation, one more parameter, is what the Cr points ask for (they sit 0.24 below the
+power law through Fe–Mo) and what predicts the held-out Ti foil within 1.1σ. Inside the
+data the saturation is weakly determined (it moves the likelihood by 1.1 in `−2 ln L`),
+and with Cr left out `hνₛ` is not identified. Plausible reasons for a plateau below Fe
+(not modeled): absorption and the fraction of it radiated cannot grow without bound, and
+at the lower temperatures that suffice for low-Z lines the energy goes increasingly into
+lower ionization stages and the continuum.
 
 **Weights.** Each point carries `σᵢ² = sᵢ² + τ²`: `sᵢ = u/ce`, the paper's error bar as a
 relative error in `ln CE`; where a row gives none (Workman & Kyrala's digitized points),
 `sᵢ = √(0.1² + 0.2²)`, their stated relative error and shot-to-shot reproducibility.
 `τ`, the scatter the stated errors do not cover (calibrations, spot definitions, bands
 and the model's form), is set so that the weighted χ² per degree of freedom is 1
-(random effects): 0.24. The coefficients' covariance is `(AᵀWA)⁻¹`. The model's
-`scatter`, the spread of a measured CE about the fit, is `√(τ² + s̄²)` with `s̄` the rms
-`sᵢ`: 0.37 in `ln CE` (a factor of 1.44); outside the data the coefficients' covariance
-adds to it (see [`kshell_ce`](@ref)).
+(random effects): 0.23. For given `(s, Lₛ)` the other six parameters are linear;
+`(s, Lₛ)` maximize the likelihood on a refined grid, and the covariance of all eight is
+`(JᵀWJ)⁻¹`, `J` the gradient of `ln CE` at the data. The model's `scatter`, the spread of
+a measured CE about the fit, is `√(τ² + s̄²)` with `s̄` the rms `sᵢ`: 0.35 in `ln CE` (a
+factor of 1.43); outside the data the parameters' covariance adds to it (see
+[`kshell_ce`](@ref)).
 
 **Pulse length and spot size** do not enter. The foil data are 1 ns (OMEGA) except
 Coppari et al.'s Fe at 0.6 and 2 ns; a `ln τ` term on the foil class fits
@@ -124,13 +152,15 @@ stays confounded with the source and, in the prepulsed class, with the picket. E
 source varies the irradiance through the spot size, so the spot size is confounded with
 the irradiance.
 
-**Below Cr the model fails.** The one held-out Ti foil (OMEGA, 1 ns, 1.3e15 W/cm²;
-`fit = 0`) measured 1.6% (the He-α share of a 4–6 keV band, *inferred*; 2.3% for the
-whole band), where the fit gives 8.4%: the residual, −1.7 in `ln CE`, is 3.3σ, and Ti
-foils on Gekko XII and Shenguang II gave 1.4–1.8% in the band. The power law in `hν`
-makes the peak rise toward Ti while the data flatten between Cr and Fe (both near 3%)
-and fall at Ti; neither a shared nor a foil-only `L²` term mends it. Ti is flagged
-`extrapolated`; pass a measured `ce` for Ti backlighters.
+**Below Cr** the plateau is an extrapolation. The one held-out Ti foil (OMEGA, 1 ns,
+1.3e15 W/cm²; `fit = 0`) measured 1.6% (the He-α share of a 4–6 keV band, *inferred*;
+2.3% for the whole band) where the fit gives 3.0% ×/÷ 1.48: −0.63 in `ln CE`, 1.1σ with
+the point's own 42%. Ti foils on Gekko XII and Shenguang II gave 1.4–1.8% in the band, so
+the data may turn over below Cr rather than level off; the fit cannot tell. Ti is
+flagged `extrapolated`; pass a measured `ce` for Ti backlighters when one exists. The
+fitted Fe peak (2.3%) sits below Coppari et al.'s two-sided Fe (2.8–3.25%) and
+Workman's 3.0% at 3.5e15, but agrees with Workman's Fe near 1e15 (2.4%): the sources
+disagree by about the two-sided factor.
 
 *Engineering model*: confidence medium inside the data, low beyond it. The compilation
 mixes facilities, spectrometer calibrations, spot definitions, one- and two-sided
@@ -150,43 +180,74 @@ end
 # stated ±10% relative error and 20% reproducibility in quadrature
 const _KSHELL_UNSTATED = sqrt(0.1^2 + 0.2^2)
 
-# inverse-variance weights 1/(sᵢ² + τ²), τ set so that χ²/(n − m) = 1 (zero when the
-# stated errors already cover the scatter); returns the coefficients, their covariance, τ
-function _kshell_wls(A, y, s)
-    n, m = size(A)
+# inverse-variance weights 1/(sᵢ² + τ²), τ set so that χ² = dof (zero when the stated
+# errors already cover the scatter); returns the coefficients, χ², τ and the weights
+function _kshell_wls(A, y, s, dof)
     function solve(t)
         w = 1 ./ (s .^ 2 .+ t^2)
         β = (A' * (w .* A)) \ (A' * (w .* y))
-        return β, sum(w .* abs2.(y - A * β)) / (n - m), w
+        return β, sum(w .* abs2.(y - A * β)), w
     end
     lo, hi = 0.0, 4.0
-    if solve(0.0)[2] <= 1
+    if solve(0.0)[2] <= dof
         hi = 0.0
     else
-        for _ in 1:100
+        for _ in 1:60
             mid = (lo + hi) / 2
-            solve(mid)[2] > 1 ? (lo = mid) : (hi = mid)
+            solve(mid)[2] > dof ? (lo = mid) : (hi = mid)
         end
     end
-    β, _, w = solve(hi)
-    return β, inv(Symmetric(A' * (w .* A))), hi
+    β, χ², w = solve(hi)
+    return β, χ², hi, w
 end
 
+# For each (s, Lₛ) the other six parameters are a weighted linear least-squares fit with
+# its own τ; (s, Lₛ) minimize the Gaussian −2 ln L, Σ ln(sᵢ² + τ²) + χ², on a grid refined
+# four times (s in 0–5, hνₛ between the data's lowest and highest line). The covariance is
+# (JᵀWJ)⁻¹, J the gradient of ln CE in all eight parameters at the data.
 function _fit_kshell_ce(d)
     k = findall(==(1.0), d.fit)
     pre = [d.class[i] == "prepulsed" for i in k]
-    A = zeros(length(k), 7)
-    for (j, (i, p)) in enumerate(zip(k, pre))
-        A[j, :] = _ce_basis(log(d.hnu[i] / 10), log(d.irradiance[i]), p)
-    end
+    L = [log(d.hnu[i] / 10) for i in k]
+    X = [log(d.irradiance[i]) for i in k]
     y = [log(d.ce[i] / 100) for i in k]
     s = [isnan(d.u[i]) ? _KSHELL_UNSTATED : d.u[i] / d.ce[i] for i in k]
-    β, C, τ = _kshell_wls(A, y, s)
+    dof = length(k) - 8
+    function profile(sl, Ls)
+        A = zeros(length(k), 6)
+        for j in eachindex(k)
+            A[j, :] = _ce_basis(L[j], X[j], pre[j], sl, Ls)
+        end
+        all(iszero, view(A, :, 3)) && return Inf, nothing, 0.0, nothing   # hinge above every line
+        β, χ², τ, w = _kshell_wls(A, y, s, dof)
+        return sum(log, 1 ./ w) + χ², β, τ, w
+    end
+    Lmin, Lmax = extrema(L)
+    best = (Inf, 0.0, 0.0)
+    for sl in range(0, 5; length = 21), Ls in range(Lmin, Lmax; length = 41)
+        f = profile(sl, Ls)[1]
+        f < best[1] && (best = (f, sl, Ls))
+    end
+    hs, hL = 0.25, (Lmax - Lmin) / 40
+    for _ in 1:4
+        hs, hL = hs / 4, hL / 4
+        c = best
+        for sl in c[2] .+ hs .* (-4:4), Ls in c[3] .+ hL .* (-4:4)
+            (0 <= sl <= 5 && Lmin <= Ls <= Lmax) || continue
+            f = profile(sl, Ls)[1]
+            f < best[1] && (best = (f, sl, Ls))
+        end
+    end
+    _, sl, Ls = best
+    _, β, τ, w = profile(sl, Ls)
+    p = SVector{8,Float64}(β..., sl, Ls)
+    J = reduce(vcat, [_ce_grad(p, L[j], X[j], pre[j])' for j in eachindex(k)])
+    C = inv(Symmetric(J' * (w .* J)))
     scatter = sqrt(τ^2 + sum(abs2, s) / length(s))
-    rng(f, c) = extrema(f[i] for (i, p) in zip(k, pre) if p == (c === :prepulsed))
+    rng(f, c) = extrema(f[i] for (i, q) in zip(k, pre) if q == (c === :prepulsed))
     cls = (:foil, :prepulsed)
     # pulse lengths: the data's shortest up to 5 ns (the NIF rows' "2" stands for 2–5 ns)
-    return KShellCEModel(SVector{7}(β), SMatrix{7,7}(Matrix(C)), τ, scatter, length(k),
+    return KShellCEModel(p, SMatrix{8,8}(Matrix(C)), τ, scatter, length(k),
                          Dict(c => rng(d.hnu, c) for c in cls),
                          Dict(c => 1e15 .* rng(d.irradiance, c) for c in cls),
                          Dict(c => (rng(d.pulse, c)[1], 5.0) for c in cls))
@@ -217,17 +278,17 @@ function kshell_ce(line; irradiance::Real, prepulse::Bool = false, pulse = nothi
     irradiance > 0 || throw(ArgumentError("the irradiance must be positive"))
     hν = _line_keV(line)
     L, X = log(hν / 10), log(irradiance / 1e15)
-    β = model.coef
-    v = _ce_basis(L, X, prepulse)
-    σ = sqrt(model.scatter^2 + dot(v, model.cov * v))
-    Xs = -((prepulse ? β[5] : β[4]) + β[7] * L) / (2β[6])
+    p = model.coef
+    g = _ce_grad(p, L, X, prepulse)
+    σ = sqrt(model.scatter^2 + dot(g, model.cov * g))
+    Xs = p[7] * L - (prepulse ? p[5] : p[4]) / (2p[6])
     cls = prepulse ? :prepulsed : :foil
     inside(x, r) = r[1] * (1 - 1e-9) <= x <= r[2] * (1 + 1e-9)
     ext = !(inside(hν, model.hnu[cls]) && inside(irradiance, model.irradiance[cls]) &&
             (pulse === nothing || inside(pulse, model.pulse[cls])))
-    ce = exp(dot(v, β))
+    ce = exp(_ce_lncE(p, L, X, prepulse))
     return (ce = ce, sigma = σ, lo = ce * exp(-σ), hi = ce * exp(σ), optimum = 1e15 * exp(Xs),
-            peak = exp(dot(_ce_basis(L, Xs, prepulse), β)), extrapolated = ext)
+            peak = exp(_ce_lncE(p, L, Xs, prepulse)), extrapolated = ext)
 end
 
 # Mass attenuation coefficients μ/ρ (cm²/g, with coherent scattering) from NIST's X-Ray

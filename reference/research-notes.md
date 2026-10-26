@@ -51,7 +51,7 @@ callout in the section says which).
   metrics (2026-10-22); Young 2020 validation (2026-10-24); LEH shield (sombrero)
   (2026-10-24); Backlighter foil on the line of sight (2026-10-24); Backlighter
   conversion efficiency and the photometric chain (2026-10-24); Weighted He-α CE
-  compilation (2026-10-26).
+  compilation (2026-10-26); He-α CE: saturating peak (2026-10-26).
 
 **Hohlraum dynamics and CBET calibration** (HYBRID-E)
 - HYBRID-E (N210808) hohlraum and LEH size (2026-10-20); Literature review against
@@ -5372,23 +5372,24 @@ response.
 **Tutorial numbers** (radiography tutorial; bundle 11's two quads, 16 TW for 2 ns with a
 picket, aimed at the center of the 2 mm Ge foil at 14 mm; generic imager: 20 µm pinhole
 at 200 mm, detector at 2 m, 50 µm pixels, 250 µm Be + 50 µm Kapton). *derived*; CE and
-photon numbers from the 2026-10-26 weighted refit (photons scale with the CE at the
-unchanged mean irradiance; the 2026-10-24 values in brackets).
+photon numbers from the saturating-peak form ("He-α CE: saturating peak (2026-10-26)",
+tutorial rerun as a script), in brackets the weighted refit of the earlier form
+(2026-10-26) and the 2026-10-24 fit.
 - 13.6 of 16 TW land on the foil, mean irradiance 5.1e14 W/cm² (just below the NIF
-  data; extrapolated), against Ge's fitted optimum 2.5e15 [3.1e15]: the CPP spots at best
-  focus fill most of the foil.
-- CE 0.49% ×/÷ 1.47 [0.56% ×/÷ 1.62]: ~133 J of He-α into 4π [154], ~10.5 J/sr toward the
-  detector (= E/4π, asserted), filters 0.95, **~415 photons per pixel** averaged over the
-  capsule's image (~280–610 at 1σ) [480, 295–771]; across the image 2e3–5e5 photons/mm²,
-  the foil's radiance following the spots.
-- At the same irradiance: Cu 1.32% → ~1320 photons/pixel [1340], Zn 0.94% → ~880 [940],
-  Ge ~415, Zr 0.050% → ~28 [43].
+  data; extrapolated), against Ge's fitted optimum 2.0e15 [2.5e15; 3.1e15]: the CPP spots
+  at best focus fill most of the foil.
+- CE 0.54% ×/÷ 1.47 [0.49% ×/÷ 1.47; 0.56% ×/÷ 1.62]: ~146 J of He-α into 4π [133; 154],
+  ~11.6 J/sr toward the detector (= E/4π, asserted), filters 0.95, **~455 photons per
+  pixel** averaged over the capsule's image (~310–670 at 1σ) [415, 280–610; 480,
+  295–771]; across the image 2e3–5e5 photons/mm², the foil's radiance following the spots.
+- At the same irradiance: Cu 1.33% → ~1330 photons/pixel [1320; 1340], Zn 0.99% → ~930
+  [880; 940], Ge ~455, Zr 0.05% → ~26 [28; 43].
 - `examples/backlighter.jl` (OMEGA Ti foil, 1 ns, point projection at 300 mm behind 25 µm
-  Be) prints the same chain: 8.0 kJ on the foil at 4.6e14 W/cm², below the fitted lines
-  (Cr is the lowest), so extrapolated: CE 8.9% ×/÷ 1.53 [6.7% ×/÷ 1.78], ~710 J into 4π,
-  ~56 J/sr, ~7.8e11 photons/mm² [531 J, 42 J/sr, 5.8e11]. The held-out OMEGA Ti foil
-  (~1.6% at 1.3e15, next section) says the fit overpredicts Ti about fivefold; the
-  example's comment says to pass a measured `ce`.
+  Be), rerun: 8.0 kJ on the foil at 4.6e14 W/cm², below the fitted lines (Cr is the
+  lowest), so extrapolated: CE 3.0% ×/÷ 1.52 [8.9% ×/÷ 1.53; 6.7% ×/÷ 1.78], ~240 J into
+  4π, ~19 J/sr, ~2.6e11 photons/mm² [710 J, 56 J/sr, 7.8e11; 531 J, 42 J/sr, 5.8e11]. The
+  held-out OMEGA Ti foil (~1.6% at 1.3e15) is 1.1σ below the fit there; the example's
+  comment says to pass a measured `ce`.
 
 **Not modeled / next.** Pulse-length and spot-size dependence (data confounded);
 backside emission of thin foils; the line's opacity and limb brightening (the isotropic
@@ -5494,7 +5495,9 @@ rejected: a shared `L²` term (−0.91 ± 0.60 with Ti, Ti still −1.6 held out
 foil-only `L²` (−0.31 ± 0.84, Ti −1.59, 2.9σ). The form is kept; Ti stays outside the
 fitted lines (flagged `extrapolated`), and the docstring and `examples/backlighter.jl`
 say to pass a measured CE. Changing the form needs Ti/V data at stated conditions (an
-open decision).
+open decision). *Superseded the same day by "He-α CE: saturating peak (2026-10-26)"
+below: the convexity is in the form's parametrization, and a peak plateau below a fitted
+hνₛ passes the Ti check without fitting it.*
 
 **Pulse length and spot size** (the "if cheap" part). A `g ln τ` term on the foil class:
 g = 0.63 ± 0.21 (0.58 ± 0.22 with a C19 offset of 0.10 ± 0.10; 0.60 ± 0.24 without the
@@ -5504,6 +5507,116 @@ g = 0.63 ± 0.21 (0.58 ± 0.22 with a C19 offset of 0.10 ± 0.10; 0.60 ± 0.24 w
 offset alone: +0.19 ± 0.11 (two-sided irradiation or calibration; not significant).
 Spot size: every source sets the irradiance with the spot (C19 and W01 change spot and
 beam count together), so a spot term is degenerate with X here. *E*
+
+## He-α CE: saturating peak (2026-10-26) *engineering*
+
+The form of `kshell_ce_model` changes; the data (`data/kshell_ce.csv`, 68 fitted rows),
+the weights and τ rule of the previous section are unchanged. Exploration script not in
+the repository; the package fit reproduces its numbers.
+
+**Diagnosis.** The previous form's peak over lines is `a_c + bL + (c_c + eL)²/(4|d|)`:
+the `X L` drift makes it convex in `L`, so the peak rises faster than any power law
+toward low hν (Cr 4.15%, Ti 9.2%). The shared `L²` term tried before only offsets part of
+that curvature. Writing each line's parabola about its own optimum separates the peak
+from the optimum's drift:
+`ln CE = a_c + P(L) + c_c Y + d Y²`, `Y = X − sL` (optimum `I* ∝ hν^s`, peak `a_c + P(L)
+− c_c²/4d`), linear in the rest for fixed `s`.
+
+**Forms compared** (weighted, τ refitted per fit; nonlinear parameters refitted inside
+every fold; held-out rms of data − prediction in `ln CE`, unweighted). LOSO = leave one
+source out (B13, B14, C19, W01), LOEO = leave one element out (Cr … Mo); Ti = the held-
+out P16 point, z with the prediction's σ ⊕ its stated 42%. *derived*
+
+| form | params | −2 ln L | τ | C19 held out | LOSO pooled | LOEO pooled | Ti fit, z |
+|---|---|---|---|---|---|---|---|
+| previous (a4f1477) | 7 | −82.6 | 0.243 | 0.35 | 0.55 | 0.47 | 8.4%, −2.9 |
+| about the optimum, `P = bL` | 7 | −87.4 | 0.226 | 0.34 | 0.44 | 0.44 | 6.1%, −2.4 |
+| … `P = bL + gL²` | 8 | −88.4 | 0.226 | 0.37 | 0.60 | 0.45 | 7.1%, −2.6 |
+| … `P = b max(L − Lₛ, 0)` (**adopted**) | 8 | −88.5 | 0.226 | 0.34 | 0.45 | 0.45 | 3.0%, −1.1 |
+| … same, hinge fixed at Fe (6.7 keV) | 7 | −85.7 | 0.232 | 0.29 | 0.44 | 0.45 | 2.4%, −0.7 |
+| … hinge smoothed (softplus, width 0.1 in L) | 8 | −87.3 | 0.230 | 0.33 | 0.45 | 0.45 | 4.9%, −2.0 |
+| … hinge + `Y³` (asymmetric in ln I) | 9 | −101.3 | 0.185 | 0.45 | 2.26 | 0.47 | 3.1%, −1.3 |
+| … hinge, curvature per class | 9 | −89.3 | 0.227 | 0.37 | 0.62 | 0.51 | 3.0%, −1.2 |
+| previous form with `b·max(L − Lₛ, 0)` | 8 | −87.4 | 0.230 | 0.34 | 0.54 | 0.49 | 2.9%, −1.1 |
+
+LOSO per source, previous → adopted: B13 0.44 → 0.43, B14 0.30 → 0.40, C19 0.35 → 0.34,
+W01 0.80 → 0.58 (recomputed here; the previous section's LOSO line, 0.43/0.31/0.40/0.57,
+was computed differently and its C19 value disagrees with its own C19 held-out 0.35).
+LOEO, adopted (mean/rms): Cr see below, Fe +0.38/0.54, Ni +0.03, Cu −0.17/0.35, Zn
+−0.29/0.33, Ge +0.10/0.54, Zr +0.12/0.23, Nb +0.44/0.47, Mo +0.30/0.30 (the previous
+form: Cr −0.42, Fe +0.41, Nb −0.03, Mo −0.07). The cubic's in-sample gain is overfitting
+(W01 left out: rms 3.8).
+
+**What the comparison says.** (1) Most of the cross-validated gain is the
+reparametrization at the same parameter count (LOSO 0.55 → 0.44). (2) The plateau adds
+one parameter that the data inside Cr–Mo barely need: for `Lₛ` between Cr and Fe it is
+exactly a free Cr peak level (Fe and above follow `hν^b`), and Cr sits 0.24 below the
+power law, Δ(−2 ln L) = 1.1. Its profile: −2 ln L within 1 of the best for hνₛ 5.85–6.45
+keV, within 3 up to 6.7; above 7 keV the fit degrades fast (hνₛ = 7.5: LOSO 0.87). Ti
+across that range: 3.2–2.4% (z −1.3 to −0.7); with no plateau (hνₛ below Cr) 5.1–6.1%.
+(3) The Ti check therefore selects the plateau, and only a sharp one: a softplus knee
+of width 0.1 in `L` fits slightly worse and runs to the grid's edge (4.8 keV), back to
+the power law. (4) With Cr left out, hνₛ is not identified (any value up to Fe fits the
+rest equally); Cr's held-out residual then ranges from −0.21 (hinge below Cr) to +0.34
+(at Fe; what the refined grid lands on). (5) The prepulsed high-Z end (B14 Zr/Nb/Mo)
+loses: LOSO B14 0.30 → 0.40, Nb/Mo now underpredicted by 0.3–0.45, because the shared peak
+slope `b` is now the Fe–Ge slope.
+
+**Adopted fit** (`kshell_ce_model`, 68 points): `ln CE = a_c + b max(L − Lₛ, 0) + c_c Y
++ d Y²`, a = −3.955 ± 0.20 (foil), −3.175 ± 0.22 (prepulsed); b = −3.33 ± 0.25; c =
+0.639 ± 0.10 (foil), 0.262 ± 0.12 (prepulsed); d = −0.203 ± 0.026; s = 2.48 ± 0.43;
+Lₛ = −0.497 ± 0.065, **hνₛ = 6.09 keV** (5.7–6.5); τ = 0.23, scatter 0.35 (×1.43).
+(s, Lₛ) by maximum likelihood on a refined grid, the other six linear; covariance
+(JᵀWJ)⁻¹ over all eight, J the gradient (the hinge's one-sided), which σ uses.
+Optimum: foil 4.8e15 (hν/10 keV)^2.48 W/cm² (Cr 1.2e15, Fe 1.8e15, Cu 3.1e15, Ge
+5.2e15), prepulsed 1.9e15 × the same (Cu 1.2e15, Ge 2.0e15, Zr 6.4e15). Peak: foil 3.17%
+for hν ≤ 6.09 keV, then ∝ hν^-3.33 (Fe 2.30%, Cu 1.09%, Ge 0.55%); prepulsed Cu 1.56%, Ge
+0.79%, Zr 0.17%. The C19 held-out check (fit without C19, 37 points): mean +0.10, rms
+0.34, normalized 0.69 (was +0.11, 0.35, 0.71).
+
+**CE at representative points** (%, 2026-10-24 main fit → a4f1477 weighted refit →
+adopted; ×/÷ the adopted 1σ factor). *derived*
+
+| point | 2026-10-24 | a4f1477 | adopted |
+|---|---|---|---|
+| foil Ti 1e15 | 6.23 | 8.91 | 3.12 ×/÷ 1.49 |
+| foil Ti 1.32e15 (held-out 1.58 ± 0.66) | 5.91 | 8.43 | 2.97 ×/÷ 1.48 |
+| foil Cr 1e15 (W01 3.02 at 0.93e15) | 3.09 | 4.14 | 3.15 ×/÷ 1.50 |
+| foil Fe 1e15 | 1.62 | 2.05 | 2.15 ×/÷ 1.44 |
+| foil Fe 3e15 | 1.48 | 2.01 | 2.17 ×/÷ 1.44 |
+| foil Cu 1e15 | 0.67 | 0.78 | 0.84 ×/÷ 1.44 |
+| foil Ge 1e15 | 0.30 | 0.33 | 0.32 ×/÷ 1.45 |
+| foil Ge 3e15 | 0.36 | 0.51 | 0.52 ×/÷ 1.44 |
+| prepulsed Cu 1e15 | 1.52 | 1.59 | 1.55 ×/÷ 1.44 |
+| prepulsed Zn 2e15 | 1.22 | 1.25 | 1.21 ×/÷ 1.44 |
+| prepulsed Ge 5.1e14 | 0.56 | 0.49 | 0.54 ×/÷ 1.47 |
+| prepulsed Ge 1.5e15 | 0.74 | 0.74 | 0.78 ×/÷ 1.43 |
+| prepulsed Zr 4.5e15 | 0.18 | 0.20 | 0.17 ×/÷ 1.47 |
+| prepulsed Mo 1e16 | 0.15 | 0.17 | 0.12 ×/÷ 1.48 |
+| prepulsed Zr 5.1e14 (extrapolated) | 0.078 | 0.050 | 0.047 ×/÷ 1.66 |
+
+**Cr–Fe flatness.** The fit does not make the Cr and Fe peaks equal (3.17% vs 2.30%).
+The "flat at ~3%" reading pairs W01's Cr (3.02% at 0.93e15) with C19's two-sided Fe
+(2.84–3.25%) and W01's single Fe point at 3.5e15 (3.0%); within W01 at ~0.9e15, Cr/Fe =
+3.02/2.38 = 1.27, and the fit gives 3.13/2.14 = 1.46 there. Fe stays underpredicted
+(in-sample mean +0.11, LOEO +0.38) in every form tried: the sources disagree by about the
+two-sided factor (previous section). Forcing the plateau to start at Fe (7 parameters,
+table) makes Cr and Fe equal at 2.42%, undershoots W01's Cr by 0.25 in `ln CE`, and costs
+2.8 in −2 ln L.
+
+**Mechanism** (not modeled; plausible, not tested here): the peak CE cannot grow without
+bound toward low Z, because the absorbed fraction and the share of it radiated are
+bounded, and at the lower temperatures that suffice for low-Z He-like ions more of the
+energy goes into lower ionization stages and continuum. The Ti point (and the Gekko XII
+and Shenguang II Ti foils, 1.4–1.8% in 4–6 keV) are below the plateau, which would mean
+a turnover rather than a plateau; one point cannot separate them. *confidence: medium
+inside the data (unchanged), low below Cr.*
+
+**Tests** (`test/backlighter_signal.jl`): χ²/(68 − 8) = 1, weighted residual sums zero
+per class, the C19 held-out check (normalized rms < 1.2), the held-out Ti within 1.5σ,
+hνₛ between Cr and Fe, the Ti and Cr peaks equal (the plateau) and above Fe's, the
+gradient behind σ against central differences, the optimum a maximum, the hν slope in
+2.5–4.5.
 
 ## Dante channel responses and the unfold (2026-10-24) *derived*
 
