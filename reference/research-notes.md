@@ -8166,7 +8166,8 @@ perturbative correction measured with (c) would capture.
    per sub-beam, as (c) does, rather than from the `DepositionOperator`'s points on the
    R_out sphere: the lattice converged at 391 k rays where the sphere sampling needs
    17.6 M (n = 40) for the same l ≤ 30 accuracy, so the map and the evaluation would be
-   ~10–40× smaller again (*L*: not built).
+   ~10–40× smaller again (built 2026-10-27: 7× faster per evaluation, 250× less memory;
+   next section).
 2. *Hybrid: yes, (b) as the operator and (c) as the check.* (c) is ~150 lines of
    independent code (shared only with the beam model), already validated, and is the
    only way to measure what spherical symmetry drops (the P2 corona above: 3 % in σ₂
@@ -8181,6 +8182,111 @@ perturbative correction measured with (c) would capture.
 4. *Not settled here*: kernels per snapshot for a time-dependent corona (stage 2; a
    table costs ~1 s, so rebuilding per snapshot is cheap); non-isothermal ν_ei(r) is
    already supported by the table form (g(r) given separately).
+
+*Superseded (2026-10-27)*: (b) is now package code (next section); `dev/corona/` keeps
+only the 3-D tracer (c) (`Corona.jl`, `validate.jl` V1–V2) and `p2.jl`, the P2 study
+above against the package operator. `compare.jl` and `table.jl` are removed; the
+numbers above are their record.
+
+## Corona absorption operator (2026-10-27) *measured*
+
+Polar direct drive, Stage 1 (ROADMAP item 15; review decision 3 (b), with the
+prototype's verdict above): `CoronaProfile`, `CoronaOperator` and
+`deposit(op::CoronaOperator, beams) -> (; ylm, per_beam, delivered)` in `src/corona.jl`;
+tests `test/corona.jl` with the 3-D tracer as a test helper (`test/corona_raytrace.jl`,
+~150 lines, model (c) restricted to a spherical exponential corona). The output is the
+absorbed power per steradian about the centre as flat real-harmonic coefficients
+(decision 4), for `mode_rms` / `mode_power`. CBET-free (decision 8).
+
+**Model and design.** As (b) above: cold-plasma geometric optics, inverse
+bremsstrahlung, radial projection; per impact parameter the turning radius by
+bisection and N = `panels` (200) panels per pass of r = r_t + (R − r_t)t², Gauss 4 points
+each, a deposit at each panel's mid angle. Changes from the prototype:
+- *Rays from a transverse lattice per sub-beam* (the verdict's item 1): for each beam and
+  f-cone direction d a square lattice of spacing h (default 0.1 × the smallest spot
+  semi-axis) in the plane normal to d through the centre, rays with b < R (the profile's
+  outer radius), weight = best-focus profile at the focal-plane crossing × h²/(k·d)/ncone
+  (the collimated sub-beam's power per lattice cell; the `DepositionOperator`'s
+  expression with n = d). In each sub-beam's own frame (pole −d, x along the lattice's
+  first axis) every sub-beam has the same lattice, so the impact parameters are the
+  distinct values h√(i² + j²): 745 for 7 653 rays at h = 0.0308 mm, R = 1.52 mm. The
+  kernels are computed at exactly those b, so the prototype's linear interpolation in b
+  (Nb = 2048) is gone.
+- *Rotation by a fixed matrix*: the frame is R_z(α)R_y(β) (Euler angles of −d) and its
+  harmonic rotation Z(α) J Z(β) Jᵀ with J the blocks of R_x(−90°) (one 39 711-entry set
+  for l ≤ 30, by product quadrature) and Z the cos/sin mixing per m. The prototype stored
+  a block set per sub-beam (0.09 s and 318 kB each: 790 MB for NIF's 192 × 13). The
+  factorization reproduces the quadrature blocks of R_z(α)R_y(β) to 8.8e-14 (l ≤ 30).
+- *Exact screen*: the lattice rows and columns that can reach the spot are bounded by
+  Cauchy–Schwarz (|h i − c₁| ≤ √qcut ‖(a e₁·e₁′, b e₂·e₁′)‖, plus one index); rays
+  outside add exact zeros. Dual beams are screened on values, as in `deposit`; the dual
+  path's values equal the Float64 path's bitwise (tested).
+- *Profiles*: `CoronaProfile(r, ne, Te; Z, lnΛ, wavelength)` tabulates a snapshot (the
+  hook for the CompactLES example), cubic Hermite in ln(n_e/n_c) and ln of the rate with
+  three-point slopes on a non-uniform grid, so exponential profiles are exact. Rate
+  (ν_ei/c)(n_e/n_c) with Kruer's ν_ei = 4√(2π)Z e⁴ n_e lnΛ/(3 m_e^{1/2} T_e^{3/2}) from
+  CODATA 2018 constants: 2.906e-6 Z n_e lnΛ/T_e^{3/2} s⁻¹ (n_e cm⁻³, T_e eV; the NRL
+  Formulary's 2.91e-6), n_c = π m_e c²/(e²λ²) = 1.1149e21/λ² cm⁻³ (**H**, textbook
+  formulas). `ne[1] ≥ 1` is required (every ray turns inside the table; no hard
+  surface). `CoronaProfile(; critical_radius, scale_length, absorption)` is the analytic
+  isothermal exponential, its rate set by the planar normal-incidence absorption η⊥ of
+  `deposit(...; absorption)`, truncated at r_c + 14L by default.
+
+**Checks** (`test/corona.jl`; references independent of the kernels, lattice and
+rotations):
+- *Closed forms*: the radial ray of the truncated exponential corona,
+  1 − exp(−2(ν_c L/c)(2√w − (2/3)w^{3/2})), w = 1 − e^{−(R−r_c)/L}, to 4e-14 at N =
+  50–400; in n_e/n_c = a/r² (as functions) the swept angle to 2.5e-12 rad and the depth to
+  1.8e-12 relative at b = 0…1.5 (the prototype's V3); absorbed + escaped = 1 to 1e-16.
+  A tabulated isothermal snapshot on a random non-uniform grid (T_e 3.6 keV, Z 3.5, lnΛ 8,
+  351 nm) reproduces the analytic corona of the same ν_c within 2e-3 (the NRL constants'
+  rounding in the reference).
+- *Against 3-D ray tracing* (three OMEGA beams, one per PDD ring with the shifts below,
+  ncone = 3, corona as below): absorbed fraction 0.6502373 against 0.6502378 (5e-7);
+  max_lm |Δc_lm|/c₀₀ (l ≤ 30) 2.9e-5 with the tracer at h_lat = 0.04, hτ = 0.008 and a
+  720 × 1440 grid, 1.3e-5 at h_lat = 0.02, 1.6e-4 with a 360 × 720 grid: the residual is
+  the tracer's angular binning. Test tolerances 5e-6 and 1e-4.
+- *Truncation*: the profile's outer radius is a density step; (b) refracts at it by
+  Bouguer's invariant, the tracer starts rays at |v| = 1 there. At R = r_c + 8L
+  (n_e = 3.4e-4 n_c) the absorbed fractions then differ by 3e-4 relative; at 14L by
+  5e-7. Compare the two only where n_e(R) is negligible.
+- *Thin-corona limit* (one centred collimated SG4 beam, a = 0.25 mm, r_c = 0.4 mm,
+  η⊥ = 0.6, against a hard sphere at r_c absorbing η_a(ψ) I cos ψ by 1-D quadrature):
+  absorbed-fraction error 9.2e-4, 4.8e-4, 2.5e-4, 1.3e-4, 6.4e-5 and max_l |Δσ_l| 9.5e-2,
+  5.1e-2, 2.7e-2, 1.4e-2, 6.9e-3 at L/r_c = 0.04, 0.02, 0.01, 0.005, 0.0025: first order
+  in L/r_c (ratio 1.9–2.0), so η_a is the operator's thin limit (*derived*). The σ_l error
+  at small L/r_c is the grazing rays (V4 above).
+- *Derivatives*: dσ/dΔr (3 ring shifts) by ForwardDiff against central differences
+  1.1e-8 relative; the absorbed power's 1.9e-10.
+
+**OMEGA 40-beam PDD case** (the prototype's case and corona, r_c = 0.40, L = 0.08 mm,
+R = r_c + 14L; ncone = 7): absorbed 0.645914; σ (l ≤ 30) 10.4102 %, σ₂ 10.0788,
+σ₄ 1.5127, σ₆ 1.7720, σ₈ 1.1621, σ₁₀ 0.0862, σ₁₂ 0.0584, σ₂₀ 0.0006 % (identical to four
+decimals at h = 0.04 and 0.02 mm). Against (c) at h_lat = 0.01 (the table above) the
+listed σ_l differ by at most 1.0e-3 % of the mean, as the prototype's (b) at n = 40
+(9.9e-4); the operator's own convergence (max_l |Δσ_l| against h = 0.015 mm and
+400 panels): 5.8e-5 % at the defaults, 7.6e-5 % at h = 0.04, 2.9e-4 % at 100 panels,
+1.2e-3 % at 50. So the residual against (c) is (c)'s. dσ/dΔr = (1.04754, 0.764528,
+0.586444) against (c)'s (1.04751, 0.76453, 0.58645).
+
+| work (8 threads, CCX shared with another job) | operator, defaults | prototype (b), n = 40 | (c), h_lat = 0.04 |
+|---|---|---|---|
+| build | 0.8 s | 12.2 s | none |
+| memory | 3.2 MB (+ 3.2 MB scratch per evaluation) | 809 MB | 8 MB per thread |
+| per pointing change, ncone = 7 / 13 | 0.040 s / 0.075 s | 0.28 s | 18 s |
+| ForwardDiff, 3 ring shifts | 0.065 s | 1.5 s | 22.6 s |
+| ForwardDiff, 80 aim coordinates | 2.1 s | 32 s | ~150 s (estimate) |
+
+NIF scale (cost only: 192 beams aimed at the centre, SG4 a = 0.6 mm, f/22, r_c = 1.1,
+L = 0.15 mm): 8 945 rays and 859 impact parameters per direction, build 0.6–0.8 s,
+4 MB, an evaluation 0.14 s at ncone = 7 and 0.23 s at 13. `test/corona.jl` takes 18 s on
+one thread, compilation included.
+
+**Limits** (in the docstrings): spherical coronas only (a 4 % P2 of r_c moves σ₂ by 3 %,
+above); bare spheres only (no other parts, which would need their own shadowing);
+CBET-free. **Not done**: absorbed power per radius; the P_abl and Ye21 drive proxies
+(decision 4's optional transforms); the CompactLES snapshot example; `Scenario` /
+`evaluate` integration (objectives call `deposit` directly); a tutorial.
 
 ## GUI on CAD: import, parts and first frames, remeasured (2026-10-26) *measured*
 

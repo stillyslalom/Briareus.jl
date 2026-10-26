@@ -78,6 +78,9 @@ end
     xs0 = initial_parameters(ps)
     psr = GroupPointing(nif_beams(power = 2.0)[1:16]; by = :quad, relative = true, radius = 0.9,
                         fields = (:theta_s, :dphi_s, :split_theta, :split_phi))
+    # a corona about the capsule (the quads' spots reach it: live rays on both paths)
+    corona = CoronaOperator(CoronaProfile(; critical_radius = 0.9, scale_length = 0.2, absorption = 0.9),
+                            quads; ncone = 1, lmax = 4, spacing = 0.2, panels = 20)
 
     @testset "closures compile once" begin
         history(τ -> with_pulses(quads, pulse, τ), [0.5, 1.0]; record = sol -> sol)
@@ -101,6 +104,7 @@ end
             @test beams isa Vector{Beam{T}}
             @test (@inferred deposit(s.deposition, beams)).element isa Vector{T}
             @test (@inferred deposit(s.deposition, beams; absorption = T(0.9))).element isa Vector{T}
+            @test (@inferred deposit(corona, beams)).ylm isa Vector{T}
             ev = evaluate(s, x)   # `Scenario.lpi` is dynamic by design: one dispatch per call
             @test (@inferred flux_moments(ev)) isa Vector{T}
             @test (@inferred objectives[1](ev)) isa T
@@ -140,10 +144,12 @@ end
                     @test _inf_jet_clean(JET.report_opt, (o, b, η) -> deposit(o, b; absorption = η),
                                          s.deposition, beams, eltype(x)(0.9))
                     @test _inf_jet_clean(JET.report_opt, Briareus._keepout_penalty, keepout, beams)
+                    @test _inf_jet_clean(JET.report_opt, deposit, corona, beams)
                 end
                 # no possible errors
                 @test _inf_jet_clean(JET.report_call, (o, b, η) -> deposit(o, b; absorption = η),
                                      s.deposition, beams, eltype(x)(0.9))
+                @test _inf_jet_clean(JET.report_call, deposit, corona, beams)
                 @test _inf_jet_clean(JET.report_call, evaluate, s, x)
                 @test _inf_jet_clean(JET.report_call, flux_moments, ev)
                 @test _inf_jet_clean(JET.report_call, objectives[1], ev)

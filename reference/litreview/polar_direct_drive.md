@@ -377,7 +377,9 @@ samples; absorbed power per steradian and radius, total absorption, and the Ba24
 and Ye21 0.72-power proxies. Tests: closed-form absorption for linear (cos⁵) and
 exponential (cos³) profiles, turning radius n_e = n_c cos²ψ, energy conservation, a
 direct 3-D ray integration in the same profile. Benchmarks: MN17 (thin-corona limit),
-Ye21's m ≠ 0 part once a comparable profile is available.
+Ye21's m ≠ 0 part once a comparable profile is available. *Done (2026-10-27)*: the
+operator, profiles and tests (closed forms, energy, thin limit, 3-D ray trace); not yet
+the absorbed power per radius, the P_abl/Ye21 proxies or a snapshot example.
 
 **Stage 2 — time dependence.** A sequence of corona snapshots (from the user's 1-D runs,
 e.g. CompactLES, or tabulated), per-cone pulse shapes and time-varying power balance,
@@ -428,6 +430,11 @@ decided 1–11 on 2026-10-27 (each marked **Decided**); 12–15 are open (12 dec
      to 1e-5 of the mean in every σ_l (l ≤ 30), (b) is 60–110× faster per pointing
      change; (c) measures what spherical symmetry drops (a 4 % P2 of the critical
      radius moves σ₂ by 3 %). Verdict there: (b) as the operator, (c) as its check.
+     Implemented 2026-10-27 (research notes, "Corona absorption operator"):
+     `CoronaProfile` (tabulated r, n_e/n_c, T_e, Z, lnΛ, or the analytic exponential),
+     `CoronaOperator` (rays from a transverse lattice per sub-beam; bare spheres only)
+     and `deposit(op::CoronaOperator, beams)` (absorbed power per steradian as Y_lm
+     coefficients, CBET-free); (c) guards it from `test/corona_raytrace.jl`.
 4. **Drive metric and objective.**
    - (a) Absorbed (or incident) intensity rms only. + Model-free, matches σ₁. − Ignores
      that oblique light drives less (the reason for PDD equatorial power).
