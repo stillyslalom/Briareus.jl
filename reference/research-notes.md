@@ -3927,6 +3927,39 @@ KE and bang time remain checks (decided 2026-10-26). Replacing it with a measure
 is CompactLES ROADMAP A22 (rocket-relation pressure tied to ṁ, real carbon EOS, grid
 robustness).
 
+**Where the stagnation lag comes from (2026-10-27, L).** Eight variants of the run above
+(same drive, 1 µm, nx 1400, one closure changed each), timed against K24's HYDRA radius
+history (Fig. 1, the ablator–fuel interface; lag = stage-0 time minus K24's at the same
+R/R₀, DT mean radius; keyhole N230110 shock timing, Ruof 2026 Table II, as a check only):
+
+| case (change) | shock into ice | v_peak | ablator left | stagnation | lag at R/R₀ 0.95 / 0.85 / 0.50 / 0.20 |
+|---|---|---|---|---|---|
+| baseline | 4.80 ns | 339.5 km/s | 4.97 % | 10.22 ns | +0.98 / +0.68 / +0.57 / +0.55 |
+| p30 (foot P ∝ T^3.0, peak kept) | 4.48 | 324.1 | 5.58 | 10.22 | +0.79 / +0.54 / +0.52 / +0.54 |
+| foot (picket/foot Tr × 1.15 to 3 ns) | 4.16 | 332.7 | 4.64 | 10.12 | +0.65 / +0.46 / +0.44 / +0.44 |
+| g3p30 (p30 + γ_C = 3, stiff carbon) | 3.70 | 301.4 | 7.33 | 10.52 | +0.67 / +0.47 / +0.67 / +0.76 |
+| footg3 (foot + γ_C = 3) | 3.42 | 300.9 | 9.47 | 10.44 | +0.48 / +0.38 / +0.62 / +0.72 |
+| pk160 (P × 1.10) | 4.72 | 344.0 | 5.72 | 10.08 | +0.87 / +0.56 / +0.45 / +0.42 |
+| sh03 (whole drive 0.3 ns earlier) | 4.56 | 339.4 | 5.06 | 9.92 | +0.67 / +0.37 / +0.27 / +0.25 |
+| r33 (ṁ = 3.3e5 T³) | 4.86 | 371.1 | 2.41 | 9.84 | +0.94 / +0.60 / +0.37 / +0.28 |
+| r35 (ṁ = 3.5e5 T³) | 4.86 | 386.1 | 1.45 | 9.70 | +0.92 / +0.56 / +0.29 / +0.16 |
+
+Keyhole check: first shock into the ice 3.86–3.91 ns. Reading: the early lag (R/R₀ ≥ 0.85)
+is the first shock: every change that brings the shock to the keyhole timing (stiff
+carbon, stronger foot) cuts it. But the stiff-carbon shells then accelerate more slowly
+(300 km/s, 7–9 % left) and the lag grows again to +0.7–0.8 ns by R/R₀ 0.2: fixing shock
+timing alone moves stagnation later, not earlier. Only burning more mass closes the late
+lag (r35: 386 km/s, lag +0.16, but 1.45 % left against 5–6.6 %), or a drive 0.3 ns earlier
+(sh03), which Dante rules out (±6 eV over 4.5–7.5 ns). No single closure change matches
+shock timing, v_imp, remaining mass and stagnation together: in a 1-D rocket model
+velocity and remaining mass are tied by the rocket relation through ṁ and the exhaust
+velocity (P/ṁ), and with ideal-gas carbon no ṁ gives HYDRA's 383 km/s *and* 5.7 % left.
+This agrees with the user's reading that the lag is rooted in a 1-D rocket model tuned to
+3-D results (ṁ fitted to remaining mass), and points at A22's items 1–2 (P tied to ṁ, real
+carbon EOS) rather than at the drive. Side note: K24's late slope (335–345 km/s) and Ruof
+2026's 2DConA 355 ± 5 km/s (N240304) are near stage 0's 340, so the 383 km/s target itself
+is model-dependent.
+
 ## Large radiation models (2026-10-24) *derived*
 
 ROADMAP 14. Goal: make 1e4–5e4-element radiation models (the fine hohlraum preset,
