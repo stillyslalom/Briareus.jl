@@ -816,8 +816,13 @@ function CapsuleAlbedo(; albedo = 0.2, radius = nothing, outside::Real = 0.0)
                          _radius_schedule(radius), Float64(outside))
 end
 
-"Effective radius over the mesh radius, `R(t)/R₀`, of a `CapsuleAlbedo`."
-capsule_radius_fraction(m::CapsuleAlbedo, t) = _radius_fraction(m.radius, t)
+"""
+    radius_fraction(m::CapsuleAlbedo, t) -> R(t)/R₀
+
+The effective radius over the mesh radius of a [`CapsuleAlbedo`](@ref) at time `t` (ns):
+its `radius` schedule's, 1 without one.
+"""
+radius_fraction(m::CapsuleAlbedo, t) = _radius_fraction(m.radius, t)
 _radius_fraction(::Nothing, t) = 1.0
 _radius_fraction(r::RadiusSchedule, t) = radius_fraction(r, t)
 _radius_fraction(r, t) = r(t)
@@ -825,7 +830,7 @@ _radius_fraction(r, t) = r(t)
 function albedo(m::CapsuleAlbedo, t, T = nothing)
     αc = albedo(m.albedo, t, T)
     m.radius === nothing && return αc
-    s2 = capsule_radius_fraction(m, t)^2
+    s2 = radius_fraction(m, t)^2
     m.outside == 0 && return 1 - (1 - αc) * s2
     return 1 - (1 - αc) * s2 - m.outside * (1 - s2)
 end

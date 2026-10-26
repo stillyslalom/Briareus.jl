@@ -210,7 +210,7 @@ end
     ca = CapsuleAlbedo(albedo = 0.2, radius = ([0.0, 5.0, 9.0], [1.0, 1.0, 0.5]))
     @test albedo(ca, 2.0) ≈ 0.2
     @test albedo(ca, 7.0) ≈ 1 - 0.8 * 0.75^2
-    @test capsule_radius_fraction(ca, 20.0) == 0.5
+    @test radius_fraction(ca, 20.0) == 0.5
     @test albedo(CapsuleAlbedo(radius = τ -> 0.5), 1.0) ≈ 1 - 0.8 / 4
     # absorption outside the front: a share of what misses the effective sphere; none
     # without a radius, and the default is the front's alone
