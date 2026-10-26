@@ -537,7 +537,7 @@ Implementation (`src/talis.jl`, `talis_check`):
   - It is displaced along φ̂ to the beamlet's own side of the quad axis (User Guide
     Fig. 4-12 top view).
   - Away from that plane it is the cone converging to the 1ω focus 460 mm beyond the
-    3ω focus, with its centre on the chief ray from the lens centre 7.7 m upstream. The
+    3ω focus, with its center on the chief ray from the lens center 7.7 m upstream. The
     centroid offset is then 15.8 mm at 2.05 mrad, consistent with the earlier estimate
     of about 16 mm and 2.0 mrad.
   - Near edge = 4.45 + 0.027 s mm: closer to the 3ω axis upstream of focus.
@@ -847,7 +847,7 @@ test fixture rebuilds the layout from rows copied from these files.
   values differ from it by up to 13% next to the peak). Against Briareus, four beams with a 620/360 µm HWHM
   n = 4.5 spot aimed at the 4 mm foil, tilted ~40° (9 × 9 elements of 0.44 mm):
   - Totals: 3.6000 TW in both.
-  - Elements above 20 TW/cm² (peak 371): within 1.4%, centre within 0.1%.
+  - Elements above 20 TW/cm² (peak 371): within 1.4%, center within 0.1%.
   - The nine brightest elements' power fractions agree within 0.001.
   - Faint wings (2–30 TW/cm²) differ by 8–15%, and VisRad's wings are wider along the
     major axis and narrower across it. Elements near 1 TW/cm² differ by 20–27%, and
@@ -961,7 +961,7 @@ fits below used Briareus's own operator points with a free-form evaluator.
 - **Before (manual z_A, one envelope):** wall elements rms difference 10.2% of mean
   (n210808), correlation 0.9969, Briareus peak 858.8 vs 778.1 TW/cm² (+10%); totals
   within 1e-4. Elements dominated (> 80%) by one quad, binned in focal coordinates:
-  VisRad/Briareus 0.93–0.97 at the spot centre, 1.1–1.7 at q = 1–1.3 (q = elliptical
+  VisRad/Briareus 0.93–0.97 at the spot center, 1.1–1.7 at q = 1–1.3 (q = elliptical
   radius in 1/e units), i.e. VisRad's spots are wider on the wall (3–8 mm past focus).
 - **Free-form profile fit.** With intensity P/(a(z)b(z)) g(q) and g a hat-basis
   function per cone (17 nodes, q ≤ 2.4), least squares over wall and window elements
@@ -1424,7 +1424,7 @@ fits below used Briareus's own operator points with a free-form evaluator.
   distinct-start rule. A 7-parameter fit needs stricter acceptance than the others:
   - free-form faces: the 20 × 20 paraboloid patch of the tests fits tori at rms 0.23 of
     the relative tolerance (accepted at the others' 1/4);
-  - neighbouring faces: within the relative tolerance (rtol min(r, L), 5 µm for r = 10
+  - neighboring faces: within the relative tolerance (rtol min(r, L), 5 µm for r = 10
     mm) a large torus (R 13.5, r 10 mm) took a NIF part's cone and 40% of a cylinder
     beside it at rms 16 nm, and a fillet torus 9 boundary strips of the cylinder it
     blends into;
@@ -1446,7 +1446,7 @@ fits below used Briareus's own operator points with a free-form evaluator.
   had made each torus fit 10× slower.
   Synthetic (`test/cadfit.jl`): tilted and moved quarter-to-150° sections of R = 2,
   r = 0.5 mm, fine (12.5k facets) and coarse (19° bands), through Float32 STL, facing out
-  or in, raw and remeshed with `reference`: one torus, R, r, centre to 1e-6, axis to
+  or in, raw and remeshed with `reference`: one torus, R, r, center to 1e-6, axis to
   1e-10. Fine fillet (all kinds): 7.9k / 32.8k / 65.5k facets in 0.13 / 0.51 / 1.6 s, one
   region (without tori 4 s at 8k and ~80 s at 33k, quadratic; "Cost of fitting faces of
   none of the kinds", below).
@@ -1497,7 +1497,7 @@ fits below used Briareus's own operator points with a free-form evaluator.
   unchanged; on the other 5 every region that changes is a fillet patchwork replaced
   whole, 29 small cones, cylinders and spheres (0.11–5.8 mm² per part) by 16 tori
   (R 1.6–3.4 mm, r 0.025–1.5 mm, 0.31–61 mm² per part, which also take the fillet facets
-  that stayed unfitted), and on one part two spheres refitted (same patches, centres
+  that stayed unfitted), and on one part two spheres refitted (same patches, centers
   1e-16 mm apart). The capsule (fill tube) is bit for bit unchanged with every kind set,
   no tori: with the default kinds its tapered tube is two cones (0.147°, 0.110°) at
   round-off, with cylinders and spheres the 25 regions of "Cost of fitting faces of none
@@ -2723,7 +2723,7 @@ laser–plasma model (`apply_lpi`), so it enters `drive_history(...; lpi)`,
     (R/(R − x))² density factor stands for; it is not modeled further.
   - *Ridge stop.* After t_c a fraction g(t) (C¹ smoothstep over t_c ± 0.2 ns) of each
     inner beam's power left by the bubble is deposited on an axisymmetric band of the
-    wall component centred at the height where the beam's axis crosses r = 0.73 R
+    wall component centered at the height where the beam's axis crosses r = 0.73 R
     (Izumi 2023: ridge at 2.1 mm in 2.88 mm), Gaussian in z with rms 0.5 mm, area-weighted.
     The heated ridge is taken to radiate at the wall's conversion from the wall just
     outside it (Briareus has no volume emitter; a lower ridge conversion would lower
@@ -2909,16 +2909,16 @@ that were inline in `examples/n221204.jl`.
   - Axes: fitted linearly to 18 time ticks (0–9 ns, residual < 1 px) and 21 P2/P0 ticks
     (residual < 1.5 px). The scale is 77.7 px per ns and 1760 px per unit P2/P0, so one
     pixel is 0.013 ns or 0.0006.
-  - Colours: each pixel's optical density is unmixed into blue, red and black. A 5 px
+  - Colors: each pixel's optical density is unmixed into blue, red and black. A 5 px
     opening removes the thin black laser-power and cone-fraction lines.
-  - Centreline: in each pixel column, a 12 px stroke (the measured width) is fitted to
-    cover the curve's own colour and no background. Curves drawn over it count as
+  - Centerline: in each pixel column, a 12 px stroke (the measured width) is fitted to
+    cover the curve's own color and no background. Curves drawn over it count as
     unknown: red is drawn over black, and black over blue.
   - Each sample averages ±0.027 ns of columns, every 0.1 ns over 0.8–8.9 ns.
   - The two narrow spikes (N220919 at 8.40 ns, N210808 at 7.66 ns) are traced row by
     row along their flanks.
   - Each curve's extrema are added as extra rows. Their values are the stroke's outer
-    edge minus half the stroke width; a column centre is biased by up to 0.003 at a
+    edge minus half the stroke width; a column center is biased by up to 0.003 at a
     sharp tip.
   - The overlay of the samples on the figure was checked by eye.
 - **Accuracy** (per-point errors are in the `u*` columns).
@@ -3009,7 +3009,7 @@ at peak, against HYDRA's 0.65. Its Mach-1 outflow outweighs the 0.917 Å (3ω) d
 
     The 44° cone loses more than the 50° cone, as in HYDRA.
   - Inner-cone ratios at 5.6 ns (not fitted): 23° 1.62 and 30° 2.20, against Fig. 9a's
-    1.92 and 1.88. The model favours 30°, as I23 saw in x-ray spots, but HYDRA splits
+    1.92 and 1.88. The model favors 30°, as I23 saw in x-ray spots, but HYDRA splits
     the transfer evenly.
   - Ion-wave amplitude inside at peak: 4×10⁻⁴ median, 1.2×10⁻³ max. The 0.0075 peak
     clamp therefore does not bind, as the lit review expected. The 0.002 foot clamp does
@@ -3163,7 +3163,7 @@ the user's paper folder (not in the repository).
 Digitization: Izumi 2021's figures are vector graphics in the accepted manuscript, so
 markers and lines are read from the PDF paths (axes from the tick marks; exact to the
 drawing). Young Fig. 3a and PRE 109 Fig. 1a are rasters: axes from frames, gridlines and
-the drawn outline, stroke centres per column, overlays checked by eye.
+the drawn outline, stroke centers per column, overlays checked by eye.
 
 ### Fits (each against its own anchor)
 
@@ -3380,9 +3380,9 @@ h 0.6 with the same tolerances):
   `Scenario` caches, hence `drive_history`) measured directions from TCC even when the
   capsule was offset. That mixes the capsule's P2 (−0.1 here) into a spurious mode 1 at
   first order in the offset: 0.0074 %/µm of fake horizontal mode 1 (0.74 km/s/µm)
-  against 0.00005 %/µm about the capsule's centre, and the vertical one had the wrong
-  sign. They now default to `mode_center` (the centre of the observed sphere; TCC
-  otherwise), so centred capsules are unchanged bit for bit.
+  against 0.00005 %/µm about the capsule's center, and the vertical one had the wrong
+  sign. They now default to `mode_center` (the center of the observed sphere; TCC
+  otherwise), so centered capsules are unchanged bit for bit.
 - The 100 km/s/% default against Young's kernel: a flat 100 km/s/% over 4–7.75 ns gives
   11–17 % less than G on these traces (∫G ≈ 117 km/s/%). The default is unchanged.
 
@@ -3781,7 +3781,7 @@ literature numbers below are from there, with its confidence marks). Confidence 
 **L** our construction, *calibrated* as marked.
 
 **Hand-over (`capsule_drive`).** The drive is the history's own `moments` (Legendre
-about +z, about the capsule centre, P2 > 0 pole-hot), interpolated linearly in aₗ and
+about +z, about the capsule center, P2 > 0 pole-hot), interpolated linearly in aₗ and
 divided by a₀; `flux = a₀`, `Tr = radiation_temperature(a₀)`, exactly the history's at
 its times. Default grid 50 ps (hydro_coupling.md §(c)). The radius is the observed
 `SphereSurface`'s (the initial capsule; the flux is not re-evaluated at the moving
@@ -3878,7 +3878,7 @@ history's Y_lm quadrature is one sub-triangle level coarser, < 1e-3 of a₀ apar
 √Σₘ bₗₘ² = `mode_amplitude`. Tested: a known field's ratios recovered to its
 element-constant quadrature, round trip, and a 45°-rotated three-quad pattern on a
 45°-symmetric mesh rotates (cₗₘ, cₗ,₋ₘ) by mα to 1e-7. CompactLES's front search and
-layer normalization are now sums over equal-solid-angle bins about the capsule centre
+layer normalization are now sums over equal-solid-angle bins about the capsule center
 with dV/R² weights (per steradian, so the per-line form is reproduced to 1e-14 in
 1-D), which runs on r–z (axis) and 3-D Cartesian grids, and on refined levels through
 a level-wide hook before each level's right-hand side. Validation (**L**), flat
@@ -4325,7 +4325,7 @@ largest, and the 3.9k hohlraum at leaves of 32, 2.3e-5 before, now matches to 1.
 ### Still open
 
 - The near field and the rows cut by the facing test (a quarter of the time):
-  quadrature-level reuse between neighbouring pairs, or a coarser near-field rule where
+  quadrature-level reuse between neighboring pairs, or a coarser near-field rule where
   the exact contour kernel is not needed.
 - `:sampled` visibility and non-convex occluders (LEH rims, CAD) still take a ray per
   pair of an occupied leaf. A rim certificate (a disc or annulus the segment must
@@ -4427,7 +4427,7 @@ every cell the adaptive rule visits), a quarter the contours.
 1e-3 relative, 100–1000× the block tolerance, and changes the discretization rather than
 approximating the same matrix. An exact-enough quadrature of the same polygon (Gauss on a
 sector to < 1e-9 needs ~16 points plus the 32 chord segments) costs as much as the
-contour. Quadrature reuse between neighbouring pairs has nothing to share in this
+contour. Quadrature reuse between neighboring pairs has nothing to share in this
 workload: the dominant pairs are distinct points onto distinct receivers.
 
 **What changed** (all on the receiver side; the cost is in evaluating the same kernel):
@@ -4652,7 +4652,7 @@ part" in the shaft search; that rule is **not** adopted (below). The first try l
 accuracy against dense Float32 (2.4e-7 → 2.3e-6); the loss was diagnosed as follows.
 
 - *One entry.* Capsule element 7631 is a polar-fan triangle of size 0.265 (3–4× its
-  neighbours). Wall element 1380 lies at r = 3.1825 from it, just past the far boundary
+  neighbors). Wall element 1380 lies at r = 3.1825 from it, just past the far boundary
   12 × 0.2649 = 3.1783. The dense matrix evaluates that pair with one point per triangle
   (far tier) and the other 42 pairs of the same column with the level-1 rule (mid tier).
   The rules differ by 0.53 % there: F = 4.2547e-4 (far) and 4.2319e-4 (mid). The
@@ -4887,7 +4887,7 @@ by its LEH apertures) closes better, max |1 − Σ| 8.7e-4 → 6.3e-4 and mean 3
 1.6e-4 at h = 0.6 (8.5e-4 → 5.8e-4, 2.5e-4 → 1.7e-4 at h = 0.3); its wall → cap exchange
 +1.2e-4 → −1.2e-4 (+2.5e-4 → +1.3e-4 at h = 0.3). With the capsule, the changed rows of
 `hohlraum(h = 0.6, capsule_h = 0.3)` move mean |1 − Σ| 4.0e-4 → 4.3e-4 and max 6.3e-4 →
-1.7e-3 (cap rows +2.3e-4 → +4.5e-4: the old rule's error had cancelled part of the
+1.7e-3 (cap rows +2.3e-4 → +4.5e-4: the old rule's error had canceled part of the
 other tiers' on those rows); `hohlraum()` 5.5e-4 → 4.0e-4 mean. Bored cavity gap rows
 change by < 1e-3 (their 5 % closure error is the slot narrower than a sample cell,
 "Partial visibility"). Tests: `test/runtests.jl` "view factors" (the four closed forms
@@ -5204,7 +5204,7 @@ mapping is the slowest plausible shrink (anchoring only at 6 ns, a pure shift, e
   matter little. With α_c = 0 the share is ~15 % (before). **16.2 % is not reachable
   with absorption at the ablation front** under this drive; HYDRA's "absorbed by the
   capsule" must include absorption outside the front (the blow-off, W-doped, which
-  fills the low-fill hohlraum's centre) or a larger effective radius than the front.
+  fills the low-fill hohlraum's center) or a larger effective radius than the front.
   No published radius of that absorbing surface was found, so nothing is fitted.
 - **The fixed mesh is an energetics-exact stand-in**: shrinking the mesh itself on the
   keyframes (`moving_hohlraum(...; capsule_shrink)`, new) gives the same E_cap (11.7 /
@@ -5262,7 +5262,7 @@ Confidence: **H** primary text or vector data, **L** our construction.
 | Quantity | Value | Source | Conf. |
 |---|---|---|---|
 | Effective LEH radius vs t, 5 basecamp shots (5.75 × 10.13 mm Au, 3.37 mm LEHs, r₀ 1.685 mm, ~400 TW from 4.2 to 6.05 ns) | 1.54–1.61 mm at 3.6 ns (0.92–0.95 r₀); 1.51–1.58 at 4.0–4.2; 1.40–1.50 through the peak (mean 1.44, 0.855 r₀; shot means ±0.035); after the laser turns off (6.05 ns) N171010 1.46 → 1.44 / 1.42 / 1.43 at 7.07 / 7.44 / 7.75 ns, N171212 1.40 at 6.6–6.9 | Chen et al., PoP 27, 022702 (2020) Fig. 27, vector paths (`chen2020_leh()`, `data/chen2020_fig27.csv`); analysis error 10–20 µm (Sec. II.2b) | H |
-| LASNEX on the same shots (images analysed as the data) | closes at 0.07–0.11 mm/ns after laser-off; rms against the 31 points 0.045 (f = 0.15) to 0.056 mm (f = 0.03), after laser-off 0.09–0.12 mm, all too closed | same | H (rms: L) |
+| LASNEX on the same shots (images analyzed as the data) | closes at 0.07–0.11 mm/ns after laser-off; rms against the 31 points 0.045 (f = 0.15) to 0.056 mm (f = 0.03), after laser-off 0.09–0.12 mm, all too closed | same | H (rms: L) |
 | Mechanism | a dense ridge forms on the rise where the outer beams cross the lip blow-off; "once the ridge is formed the effective LEH radius is fairly stable, closing only very slowly, until the laser turns off"; then (in LASNEX) "the ridge diffuses inward"; "heating of the plasma inside the LEH region by the lasers keeps the LEH open"; the edge is set by hydrodynamics, not opacity | Chen 2020 Sec. II.2a, Fig. 5b–6 | H |
 | Closure at peak, other platforms | 1.83 → 1.57 mm (SXI end value, depth 0.26 mm; 3.64 mm LEH) | Young et al., PoP 27, 082702 (2020) Fig. 3a | H |
 | | ~0.84 r₀ of 1.55 mm (depth 0.25), ≤ 4 % variation through peak; closes in the low-power part, reopens at the rise | Schneider et al., PoP 22, 122705 (2015) ("Closing entrance holes" above) | H |
@@ -5505,8 +5505,8 @@ All HYDRA post-processing, not measurements: no published per-shot *measured* tr
 exists for these shots (lit review §2). Figures are rasters (no vector paths, including
 PRE 106 page 2, whose 534 drawings are glyphs and legend swatches). Axes were fitted to
 the tick marks on all four frame sides with a shear term (the PRE 109 rasters are sheared
-by −0.005 to −0.007 px/px: the right side of each panel sits 2–3 px higher); colours were
-unmixed per pixel; centrelines are stroke centroids averaged over ±0.05 ns; samples were
+by −0.005 to −0.007 px/px: the right side of each panel sits 2–3 px higher); colors were
+unmixed per pixel; centerlines are stroke centroids averaged over ±0.05 ns; samples were
 overlaid on the figures and checked by eye.
 
 | Data | Source | Stored | Reading error |
@@ -5585,7 +5585,7 @@ Checks:
   residual): N221204 +0.033, N220919 −0.004, N210808 −0.065 (−0.10 at 5.8 ns). The model's
   Δλ response is linear with a slope 2–3× HYDRA's, so it cannot be right at both 1.8 and
   2.75 Å. Per-cone ratios (not fitted) stay as in the reference: 44° loses more than
-  50° at peak (0.39 / 0.62 against HYDRA's 0.43 / 0.64), the transfer favours 30° (2.16
+  50° at peak (0.39 / 0.62 against HYDRA's 0.43 / 0.64), the transfer favors 30° (2.16
   against 1.88).
 - **What the data alone want** (free): no flow-driven zone (outside Mach → 0, the
   multipliers then degenerate: σ_u ~10³–10⁵), the null at Δλ = 0, a flatter response
@@ -5666,7 +5666,7 @@ shifted. Nothing was fitted to Fig. 10.
   response; or evidence that NC24's 1–1.55 Å is not the transfer null.~~ Done: NC24's
   1–1.55 Å is the Δλ of round hot spots, not the null ("Joint multi-shot CBET
   calibration: the null", below).
-- The 23°/30° split (the joint fit still favours 30°), an inner-quad SBS proxy
+- The 23°/30° split (the joint fit still favors 30°), an inner-quad SBS proxy
   (N220919's limit) and outer depletion reporting; N230729 (2.9 Å) has no published
   transfer curves, so its +6 µm overshoot stays a trend check.
 - The N221204 Fig. 9 digitization could be replaced by the shear-corrected re-digitization
@@ -5763,7 +5763,7 @@ rows and start) with the null penalty at 0.25–0.5 Å; `clampfree` has no null 
   HYDRA's 0.648 / 0.634 / 0.596, so N210808's peak stays 0.03–0.05 low.
 - **Per-cone ratios** (not fitted): N221204 at 5.6 ns, 23/30/44/50, 1.92 / 2.09 /
   0.44 / 0.54 against HYDRA's 1.92 / 1.88 / 0.43 / 0.64 (the 23° ratio is now right;
-  30° still favoured, 50° loses too much).
+  30° still favored, 50° loses too much).
 - **What is not physical about it.** Te dips to 2.5 keV at 5.5 ns between 4.5 keV at
   4 ns and 3.0 at 6.5 ns (B16: Te follows the drive and peaks late, 4.2 keV), and the
   peak clamp 1.4×10⁻⁴ is below HYDRA's deck values (5×10⁻⁴–7.5×10⁻³; our ion-wave
@@ -6179,7 +6179,7 @@ digitized raster figure, **L** our construction or assumption.
 | Channel 2 filter | "47 µm CH" in Fig. 4; 47 µm polyimide in §II.D and Fig. 8 — polyimide used | Rubery 2023 | H |
 | Grids | 8.8 % open tungsten, behind the filters, to keep XRDs below the 500 V Child–Langmuir limit | Rubery 2023 §II.A | H |
 | XRD-31 | reflection-mode planar vacuum diodes, Ni/Al/Cr/Au cathodes, 5 kV bias, 140 ps | Rubery 2023 §II.A | H |
-| Cr XRD sensitivity | 0.07–1 keV, C K (277), O K (525), Cr L (573 eV) structure; axis labelled V/GW | Rubery 2023 Fig. 3b | H-img |
+| Cr XRD sensitivity | 0.07–1 keV, C K (277), O K (525), Cr L (573 eV) structure; axis labeled V/GW | Rubery 2023 Fig. 3b | H-img |
 | Al XRD sensitivity | 1–4.5 keV, MV/GW, Al K edge | Rubery 2023 Fig. 8b | H-img |
 | SiO₂ mirror "3.5°" | measured reflectivity 0–1 keV (0.84 → 0.06) | Rubery 2023 Fig. 3a | H-img |
 | Ti 0.75 µm filter | measured "effective transmission" 0–1 keV | Rubery 2023 Fig. 3a | H-img |
@@ -6192,7 +6192,7 @@ digitized raster figure, **L** our construction or assumption.
 
 Digitization (`data/rubery2023_dante.csv`): the figures are raster images in the
 accepted manuscript; the plot frames were located from the dark frame lines and the
-axis ends taken at the frame (where the end tick labels sit), each curve masked by colour
+axis ends taken at the frame (where the end tick labels sit), each curve masked by color
 and its median row read per pixel column. Overlaying the read points on the figures
 agreed to about a pixel (~0.1 % of full scale); the narrow edge spikes (XANES) are
 under-read by the median. Units: Fig. 3b's axis says V/GW; read as MV/GW like Fig. 8b's
@@ -6246,7 +6246,7 @@ on channel 3 (at the XRD, before attenuators), the scale of Harris's N190721 tra
 
 - `:traditional` — Harris's algorithm: Planckian start at the mean of the per-channel
   brightness temperatures of the channels below 1.5 keV, plus the M-band Gaussian; each
-  response replaced by a unit Gaussian (centre between its half-maximum points, FWHM
+  response replaced by a unit Gaussian (center between its half-maximum points, FWHM
   their distance: Harris fits one but does not say how, **L**); amplitudes adjusted
   channel by channel from the top. With Dante 1's duplicated hardware (1/8 differ only
   by the grid, 7/15 and 10/14 are identical) the Gaussians coincide and the sweep
@@ -6427,9 +6427,9 @@ Cone fraction 1/3 (1/4 in brackets); Dante 1 Tr 291.9 (290.6) eV, Dewald 290.
   **α_M ≈ 0.55** (thermalized). Recalibrated to F_M (Dewald's number, not to Dante):
   Dante 1 then sees 11.4–12.0 % above 1.8 keV against Dewald's measured 12 %
   (11.9–12.5 % before); the capsule M-band P2/P0 moves by +0.002 / −0.018.
-- The colour temperature (channels < 1.5 keV) drops from 3–6 eV above Dante's Tr to
+- The color temperature (channels < 1.5 keV) drops from 3–6 eV above Dante's Tr to
   ~11 eV below it: the walls emit at α^¼ Tr ≈ 0.95 Tr, the spots at Tr, and 11 % of
-  the flux is M-band. Dewald does not publish a colour temperature, so this is no
+  the flux is M-band. Dewald does not publish a color temperature, so this is no
   check either way.
 
 ### N221204 (`examples/n221204.jl energetics=new unfold=on`, standard mesh 0.28/0.16)
@@ -6437,7 +6437,7 @@ Cone fraction 1/3 (1/4 in brackets); Dante 1 Tr 291.9 (290.6) eV, Dewald 290.
 Dante 1 over the initial LEH area (Tr; open-area Tr_open in brackets), unchanged (gray):
 5 ns 243.4 (256.6), 6 ns 265.0 (283.1), 7 ns 277.9 (299.5), 8 ns 291.2 (314.5), 8.5 ns
 282.4 (305.0) eV. "> 1.8 keV" is the share of what Dante 1 sees; Tc the
-hardware-channel colour temperature; "cones" the per-cone M-band (`nif_mband()`, each
+hardware-channel color temperature; "cones" the per-cone M-band (`nif_mband()`, each
 cone's own post-CBET, post-bubble deposition, `mband_power`; laser → M-band 0.125–0.194
 of the absorbed laser, the intensity form 0.040–0.130) with the
 calibrated α_M, thermalized.
@@ -6478,11 +6478,11 @@ matched to < 5e-4.
   all this supports; not fitted to it.
 - **What the spot split changes**: without any M-band, Dante's > 1.8 keV share falls
   from 0.09–0.22 to 0.06–0.16 (the cavity's own Planck tail: 0.07 at 250 eV, 0.14 at
-  300); the colour temperature goes from 5–29 eV above Tr_open to 6–12 eV below it; the
+  300); the color temperature goes from 5–29 eV above Tr_open to 6–12 eV below it; the
   traditional unfold's bias falls from +0.8–1.2 to +0.13–0.50 eV (its Gaussians have
-  less hard power to spread). With the calibrated M-band the colour temperature sits
+  less hard power to spread). With the calibrated M-band the color temperature sits
   4–12 eV below Tr_open (brightness rule: 4–12 above).
-- Neither is a Dante check: published N221204 colour temperatures are not in hand, and
+- Neither is a Dante check: published N221204 color temperatures are not in hand, and
   the M-band share was compared, not fitted.
 
 ### What remains
@@ -6859,7 +6859,7 @@ conversion 0.9, two-band wall source, capsule albedo 0.3; session scratch `du_ca
   loss reduction is worth more power and the fit needs less of it. The new factor
   agrees with the independent cocktail estimates, Rosen's "about 0.83" and Schein's
   0.825. The earlier reading ("the calibrated f below Rosen's cocktail value says the
-  Lindl gold loss is low at late times") was an artefact of the constant-T evaluation.
+  Lindl gold loss is low at late times") was an artifact of the constant-T evaluation.
 - `test/energetics.jl` "wall material factor" checks the 6.5 % at 2.5 ns.
 
 ### Capsule albedo recalibrated on the current drive (*calibrated*, at its bound)
@@ -7016,7 +7016,7 @@ T (eV) after the laser falls, capsule at R₀ (static / ablating / closure / Dan
 
 - **No gold wall holds the drive.** From 7.0 to 9.0 ns on N191118 the ablating wall falls
   35 %, the static 43 %, Dante 19 %; on N210601 from 7.5 to 9.5 ns 30 % against 15 %. With
-  no capsule and the LEHs at 0.857 r₀ (the most favourable sinks) N191118's ablating wall
+  no capsule and the LEHs at 0.857 r₀ (the most favorable sinks) N191118's ablating wall
   still falls 30 % (298 → 210 eV) by 9.0 ns. The ablating wall stores 620–820 kJ at the
   fall but gives back only 30–45 kJ in the next ns: most of its energy is kinetic or deep.
   So the slow fall needs a source outside the wall, as HYDRA's internal Tr (−29 to −40 eV
@@ -7093,7 +7093,7 @@ coarse mesh; measured Dante in the last column:
 
 > **Superseded in part (2026-10-26).** K24 Fig. 1's radius is not the ice–gas surface:
 > it leaves R(0) at ~3.6 ns, ~2 ns before that surface can move, so it follows the
-> ablator–fuel interface or the fuel's centre of mass, and the lower bound on the front
+> ablator–fuel interface or the fuel's center of mass, and the lower bound on the front
 > at 6 ns is 0.84 R₀, not 0.79 ("Capsule radius schedules: published histories and the
 > API (2026-10-26)"). The runs and their numbers stand.
 
@@ -7111,7 +7111,7 @@ construction.
 | Quantity | Value | Source | Conf. |
 |---|---|---|---|
 | N221204 capsule radius history (HYDRA) | R/R(0) flat to ~3.6 ns, 0.943 at 5.5, 0.906 at 6.0, 0.767 at 7.0, 0.537 at 8.0, 0.220 at 9.0, minimum 0.055 at 9.54 ns (bang 9.53); the N210808 capsule on the same drive reaches its minimum at 9.18 ns | Kritcher et al., PoP 31, 070502 (2024), doi:10.1063/5.0210904 (CC BY), Fig. 1 bottom right, digitized (`kritcher2024_capsule()`, `data/kritcher2024_fig1.csv`) | H-img |
-| Which radius | the fuel's inner (ice–gas) surface: it holds until the first shock breaks out (keyhole N230110, the N221204 design: 3.86–3.91 ns, Ruof 2026 Table II), and its 0.906 at 6 ns matches the ice–gas interface drawn at 6 ns, 0.92 mm against 0.985 initially (63.0 px at 68.75 px/mm in K24 Fig. 1; PRE 109 Fig. 1a, the same picture, gave 0.92 mm before) | K24 Fig. 1 caption ("the position of the ice-gas interface (red)"); PRE 109, 025204 Fig. 1a caption (ablator light grey, DT ice blue) | H (caption), L (identification) |
+| Which radius | the fuel's inner (ice–gas) surface: it holds until the first shock breaks out (keyhole N230110, the N221204 design: 3.86–3.91 ns, Ruof 2026 Table II), and its 0.906 at 6 ns matches the ice–gas interface drawn at 6 ns, 0.92 mm against 0.985 initially (63.0 px at 68.75 px/mm in K24 Fig. 1; PRE 109 Fig. 1a, the same picture, gave 0.92 mm before) | K24 Fig. 1 caption ("the position of the ice-gas interface (red)"); PRE 109, 025204 Fig. 1a caption (ablator light gray, DT ice blue) | H (caption), L (identification) |
 | HYDRA's treatment of backscatter | not modeled explicitly, "but as part of an effective total laser power multiplier and δn/n" | PRE 109, 025204 §II | H |
 | HYDRA's late-time symmetry | set with Callahan's data-based model and measured sensitivity curves; "artificial multipliers on the input laser power ... to match the in-flight symmetry"; late P2 "not currently predictive" (LEH closure, plasma near the bubble, CBET), HYBRID-E needing a 1.065 peak-CF multiplier and, with 4.0 mm LEHs, symmetrized drive from 7.3 ns | PRE 109 §II; Kritcher et al., PoP 28, 072706 (2021) §III | H |
 | N221204 swing calibration | "a calibration experiment for N221204 had not yet been completed"; the swing level "is currently unknown" and was reduced by hand for N230729 | K24 §II | H |
@@ -7253,7 +7253,7 @@ default; `capsule=mesh` stays off.*
 
 > **Superseded in part (2026-10-26).** §2's bounds: the `young` schedule's 0.81 R₀ at
 > 6 ns lies below the lower bound, now 0.84 R₀ (K24's radius is the ablator–fuel
-> interface or fuel centre of mass, not the ice–gas surface); the schedules are
+> interface or fuel center of mass, not the ice–gas surface); the schedules are
 > `RadiusSchedule`s, bit for bit the same ("Capsule radius schedules: published
 > histories and the API (2026-10-26)"). The numbers stand.
 
@@ -7383,7 +7383,7 @@ drive" §3 (α_c 0, `young` schedule, the same wall otherwise):
 
 *Decided 2026-10-26 (user): `outside` stays 0 until a blow-off opacity or absorbing
 radius is published (a candidate for the 13.8 vs 16.2 % capsule share); the pair's
-K24-shaped schedule is accepted, labelled derived, with room in the API for other
+K24-shaped schedule is accepted, labeled derived, with room in the API for other
 schedules (research pending, ROADMAP 16).*
 
 - Whether to set `outside` (a_out ≈ 0.1–0.2 would close HYDRA's share on the two
@@ -7452,7 +7452,7 @@ recorder, warmed: min of 5 runs, four alternating pairs, base 1.80/1.77/1.97/1.8
 field of the history, `isequal`). `optimize_pointing` (default NIF hohlraum, keep-outs,
 8 iterations): 0.379 vs 0.389 s, `x`, value and evaluation count bitwise equal.
 
-**Not done.** The GUI's 0.75 s first-import tick and 0.16 s first field-colouring frame
+**Not done.** The GUI's 0.75 s first-import tick and 0.16 s first field-coloring frame
 (ROADMAP 7) were not measured (they need the Qt window); the GUI's time panel and drives
 call `drive_history`/`optimize_pointing` with their own closures and now reuse the
 package's precompiled copies. `view_factors` on a CAD target still compiles ~2 s at
@@ -7774,7 +7774,7 @@ in every case.
 ## Capsule radius schedules: published histories and the API (2026-10-26) *derived*
 
 ROADMAP 16, the user's decision of 2026-10-26 on "Capsule absorption, conversion and the
-ablating-wall release": the pair's K24-shaped schedule is accepted, labelled derived,
+ablating-wall release": the pair's K24-shaped schedule is accepted, labeled derived,
 with room in the API for other schedules. What published radius histories exist for the
 HYBRID-E shots in use (N221204, N210808, the Zylstra pair N191118 / N210601), which
 surface each follows, and what the new `RadiusSchedule` types support. No default or
@@ -7785,14 +7785,14 @@ result changed. Confidence: **H** primary text or table, **H-img** digitized fig
 
 | Source | Shot(s) | Which radius | Times | Uncertainty | Use | Conf. |
 |---|---|---|---|---|---|---|
-| Kritcher et al., PoP 31, 070502 (2024), doi:10.1063/5.0210904, Fig. 1 (`kritcher2024_capsule()`) | N221204 capsule, and the thinner N210808 capsule, on N221204's 2.05 MJ drive (HYDRA) | not stated; the ablator–fuel interface or the fuel's centre of mass (below), as R/R(0) | 0–9.5 ns (N210808 capsule to its minimum, 0.055 at 9.18 ns) | ±0.01 in R/R(0) (0.02 at 9.25 ns), ±0.04 ns | **schedule**: `kritcher2024_radius()`, the default `schedule=k24`; `:n210808` time-scaled for the pair | H-img (curve), L (surface) |
+| Kritcher et al., PoP 31, 070502 (2024), doi:10.1063/5.0210904, Fig. 1 (`kritcher2024_capsule()`) | N221204 capsule, and the thinner N210808 capsule, on N221204's 2.05 MJ drive (HYDRA) | not stated; the ablator–fuel interface or the fuel's center of mass (below), as R/R(0) | 0–9.5 ns (N210808 capsule to its minimum, 0.055 at 9.18 ns) | ±0.01 in R/R(0) (0.02 at 9.25 ns), ±0.04 ns | **schedule**: `kritcher2024_radius()`, the default `schedule=k24`; `:n210808` time-scaled for the pair | H-img (curve), L (surface) |
 | Young et al., PoP 27, 082702 (2020) Fig. 3a (`young2020_radii()`) | N170827 (LLNL dynamic view-factor model) | the model's ablation front | 0–7.75 ns | ±0.03 mm | schedule on a piecewise time map (`schedule=young`, removed 2026-10-26); another shot's shape | H-img |
 | Kritcher et al., PRE 106, 025201 (2022) Table I (HYDRA post-shot) | N210207 / N210307 / N210808 | limb-minimum radius at peak velocity (RPV) | point anchors | — | `TrajectoryRadius` anchors, checks: v_imp 393 / 387 / 391 km/s at 8.63 / 8.9 / 8.8 ns, RPV 195 / 211 / 185 µm, bang 9.05 / 9.35 / 9.26 ns (measured 9.09 / 9.31 / 9.26 ± 0.03), so peak velocity comes 0.42–0.46 ns before bang | H |
 | Kritcher et al., PRE 109, 025204 (2024) Table I (as read in `litreview/n221204_benchmark.md`; OSTI 2474067 has no full text) | N210808 / N221204 | — | point anchors | — | anchors: v_imp 401 / 383 km/s (HYDRA, recalibrated on the surrogates; PRE 106 had 391 for N210808), ablator remaining 3.8 / 5.7 %, bang 9.28 / 9.53 ± 0.07 ns measured, 9.27 / 9.61 simulated; no time or radius of peak velocity | H |
 | Ruof et al., PoP 33, 052706 (2026) (OSTI 3367476, LLNL-JRNL-2019015) Table II, keyholes | N221106 (N210808 design), N230110 (N221204 design), N231016 | first shock's breakout from the ablator into the liquid D2 (VISAR) | 3.6–6.1 ns | ±0.006–0.06 ns | the time the ablator–fuel interface starts to move: equator / pole 3.714 / 3.650 ns (N221106), 3.864 ± 0.012 / 3.906 ± 0.018 (N230110; HYDRA 3.899 / 3.886), 3.575 / 3.588 (N231016); shock 1 at 32.7–34.0 km/s, merged 1–2 at ~50 km/s from 4.85 ns (N230110) | H |
 | Ruof et al. 2026 Table IV and Figs. 8–9, 2DConA | N220618, N221010 (N210808 design), N240304 (N221204 design, 85.9 µm, D2 gas, lower peak power) | limb minimum and outer slope of the backlit shell (inner and outer boundaries), Legendre P0 | from R < 300 µm to stagnation (the last ~0.6–0.8 ns) | figure; HYDRA trajectory offsets −50 / −35 / +25 µm | **check only**: shell velocity 392 ± 24 / 381 ± 15 / 355 ± 5 km/s (HYDRA 401 / 408 / 344), stagnation 9.170 ± 0.061 / 9.230 ± 0.029 / 9.876 ± 0.090 ns, mass remaining 8.8 ± 1.0 % (N240304; HYDRA 10.2). A surrogate without ice on its own pulse, and R/R₀ < 0.27 (R² < 0.07, where the capsule's absorption hardly matters) | H (the extracted table's rows realigned to their labels by us) |
-| Olson et al., SAND2011-8633C (OSTI 1141159) | NIC CH ConA | centre of mass of the remaining ablator (ConA's radius) | ~19–22 ns, 900 → ~200 µm | — | context: baseline HYDRA over-predicted the ConA velocity by ~18 %, matched with 85–92 % peak-power multipliers; another platform | H (slides) |
-| Hicks et al., PoP 19, 122702 (2012) (1-D streaked ConA) | NIC CH | remaining-mass centre and shell thickness | — | — | not read; another platform | M |
+| Olson et al., SAND2011-8633C (OSTI 1141159) | NIC CH ConA | center of mass of the remaining ablator (ConA's radius) | ~19–22 ns, 900 → ~200 µm | — | context: baseline HYDRA over-predicted the ConA velocity by ~18 %, matched with 85–92 % peak-power multipliers; another platform | H (slides) |
+| Hicks et al., PoP 19, 122702 (2012) (1-D streaked ConA) | NIC CH | remaining-mass center and shell thickness | — | — | not read; another platform | M |
 | Callahan et al., PoP 27, 072704 (2020) §II.B (LLNL-JRNL-809797) | scaling model | shell radius of a rocket model, m dv/dt = −4πr² P_abl, dm/dt = −4πr² ṁ, driven by their T_r(t) fit | — | — | an analytic r(t), but it needs an ablation rate and pressure fitted per design and the drive; not adopted (below) | H |
 | Zylstra et al., PRE 106, 025202 (2022) | N191118, N210601 | none published | — | — | bang times 9.37 / 9.48 ns, which place the pair's scaled schedule; no v_imp or RPV | H |
 
@@ -7803,7 +7803,7 @@ does before its own (3.65–3.71 ns), a common offset between HYDRA on N221204's
 the keyholes' pulses plus reading. The ice–gas surface cannot move until the first shock
 has crossed the 65 µm of ice: at the keyhole's speeds (32.7 km/s to the 1–2 merge at
 4.85 ns, ~32 µm, then ~50 km/s) that is ~5.5 ns (*L*). So the curve follows the
-ablator–fuel interface (1.050 mm initially) or the fuel's centre of mass, which start
+ablator–fuel interface (1.050 mm initially) or the fuel's center of mass, which start
 moving when the shock enters the fuel. The 6 ns picture agrees (*L*): the interface at
 0.906 × 1.050 = 0.951 mm leaves 31 µm of shocked ice (65 µm compressed 2.1×) to the
 ice–gas surface drawn at 0.92 mm. Before today the curve was read as the ice–gas surface
@@ -7828,7 +7828,7 @@ anchors (breakout, peak velocity and its time and radius, bang).
   table (now stored as a `TabulatedRadius`) or a function, as before.
 - `TabulatedRadius(t, r; source)`: linear, held at its ends, times strictly increasing;
   `source` records provenance. `kritcher2024_radius(:n221204 | :n210808)` returns K24's
-  two curves (the N210808 one closed at 0.055, 9.18 ns), labelled published.
+  two curves (the N210808 one closed at 0.055, 9.18 ns), labeled published.
 - `ScaledRadius(base; time_scale, radius_scale, source)`: R = radius_scale ·
   base(t/time_scale); for a tabulated base the times are scaled once and interpolated as
   a table, which is what the example did, so the pair's schedule
@@ -7908,7 +7908,7 @@ which now reuse their work array in `_real_ylm!` and evaluate cos mφ, sin mφ o
 **Checks** (R₀ = 0.5 mm; icospheres n = 20 and 30, edges 0.055 R and 0.037 R; σ_l
 absolute in units of the mean):
 - *Skupsky–Lee separability* (J. Appl. Phys. 54, 3662, 1983), OMEGA's 60 ports
-  (`omega_ports`), SG4 spots (`omega_spot(:SG4)`), aimed at the centre: the reference is
+  (`omega_ports`), SG4 spots (`omega_spot(:SG4)`), aimed at the center: the reference is
   σ_l = |a_l/a₀| G_l/√(2l+1) with a_l from a 1-D Gauss quadrature of one beam and G_l from
   the ports. σ (l ≤ 30): reference 0.0821 %; Briareus 0.0792 % (n = 20), 0.0807 % (n = 30),
   Richardson-extrapolated 0.0819 %. max_l |Δσ_l| = 3.5e-5 and 1.6e-5 (ratio 2.2, the h²
@@ -7920,7 +7920,7 @@ absolute in units of the mean):
   quadrature reference reproduces the published values with incident I cos ψ fully
   absorbed, the shift normal to the beam axis toward the equator and the a axis
   azimuthal: σ = 11.93 % (circular, a = b = R₀) and 5.23 % (elliptical, a = 2b, b = R₀)
-  centred (published 11.9, 5.2); minima 1.088 % at Δ/R₀ = 0.1374 and 1.341 % at 0.0743
+  centered (published 11.9, 5.2); minima 1.088 % at Δ/R₀ = 0.1374 and 1.341 % at 0.0743
   (published 1.1 % at 13.7 %, 1.3 % at 7.4 %). The conventions of the review's §4.2 are
   therefore pinned. Briareus (8 beams per ring, mirrored, m = 0 part, n = 30) is within
   6e-5 of the reference at all four points. dσ/dΔ by ForwardDiff through `deposit`
@@ -7947,7 +7947,7 @@ f-cone direction's; the beam axis's with a VisRad profile), MN17 Eq. 29 (they ci
 Kruer's *The Physics of Laser Plasma Interactions* for it): inverse-bremsstrahlung
 absorption in a thin corona with an exponential density profile, η⊥ = 1 − exp(−8ν_ei
 L/3c) at normal incidence. Confidence: the formula **H** (read in MN17, p. 60, and
-again for centred beams in Eq. 40); its use for real coronas **L** (thin corona,
+again for centered beams in Eq. 40); its use for real coronas **L** (thin corona,
 parallel rays, no refraction of the deposition pattern). η⊥ has no default and is the
 user's estimate, not a calibrated or facility number (MN17 use 0.9 in §4 and 0.95 in
 Figs. 5, 12, 13). Unabsorbed light is dropped. Generic in the number type (beams and
@@ -7958,7 +7958,7 @@ Figs. 5, 12, 13). Unabsorbed light is dropped. Generic in the number type (beams
   after the change. `absorption = 1` is the same model but a differently compiled
   expression: equal to ~1 ulp, not bitwise.
 - *Independent check* (`test/direct_drive.jl`): Skupsky–Lee separability still holds
-  for centred beams (ψ equals the polar angle from the beam axis), with aₗ of
+  for centered beams (ψ equals the polar angle from the beam axis), with aₗ of
   I_L(R₀ sin θ) η_a(cos θ) cos θ by 1-D Gauss quadrature. OMEGA 60, SG4, R₀ = 0.5 mm,
   η⊥ = 0.6: max_l |Δσ_l| = 1.25e-4 (n = 20), 5.6e-5 (n = 30), 4.4e-6 extrapolated
   (O(h²); ~3× the unweighted error, because the facets' flat normals now enter η_a as
@@ -7985,7 +7985,7 @@ measured from the surface aim, as VisRad and NIF measure the focus offset from t
 reference point (section "Pointing and focus conventions", **H**); the PDD papers do not
 all state their defocus origin (*L*). Template angles are where each template axis first
 meets the sphere. Checks (`test/direct_drive.jl`): hand-built aim sets (NIF quads at the
-Ba24 Table I angles, relative shifts, a shifted centre, the 192 beams with splits, signs
+Ba24 Table I angles, relative shifts, a shifted center, the 192 beams with splits, signs
 taken from the beam table) to 1e-13 mm; the Te14 ring pointed by θ_s = 49° + asin(Δ/R₀)
 (the same axis as the shift Δ) gives the shifted-axis σ to 1e-10 relative and the
 quadrature reference to 1e-4; dσ/dθ_s and dσ/dΔφ_s by ForwardDiff match central
@@ -8131,12 +8131,12 @@ decision 4).
   product quadrature). The result is exact harmonics, no angular bins.
 - **(c)** RK4 in τ on (x, v, ∫g dτ) through any n_e(x) (radial, planar, P2-perturbed),
   rays on a square lattice of spacing h_lat in the plane normal to each beam through
-  the target centre, along Briareus's `cone_directions` (the same f-cone quadrature as
+  the target center, along Briareus's `cone_directions` (the same f-cone quadrature as
   the operator), weighted by the best-focus profile at their focal-plane crossing times
   h_lat²/ncone. The lattice is fixed by the port, so only the weights depend on the
   aims and ForwardDiff goes through them (paths in Float64). Absorption per step is
   deposited at the step midpoint, cloud-in-cell onto a 720 × 1440 (θ, φ) grid, then
-  projected on Y_lm by rows (FFT-free DFT in φ, exact P̄_lm at bin centres). Nearest-bin
+  projected on Y_lm by rows (FFT-free DFT in φ, exact P̄_lm at bin centers). Nearest-bin
   assignment instead of cloud-in-cell left a first-order bias of up to 4e-4 of the mean
   in σ_l (l ≤ 12) on a coarse run, larger than σ₁₀ itself; with cloud-in-cell the grid
   against exact per-deposit Y_lm is 6e-3 relative at l = 10, 1.5e-3 at l = 30.
@@ -8281,7 +8281,7 @@ prototype's verdict above): `CoronaProfile`, `CoronaOperator` and
 `deposit(op::CoronaOperator, beams) -> (; ylm, per_beam, delivered)` in `src/corona.jl`;
 tests `test/corona.jl` with the 3-D tracer as a test helper (`test/corona_raytrace.jl`,
 ~150 lines, model (c) restricted to a spherical exponential corona). The output is the
-absorbed power per steradian about the centre as flat real-harmonic coefficients
+absorbed power per steradian about the center as flat real-harmonic coefficients
 (decision 4), for `mode_rms` / `mode_power`. CBET-free (decision 8).
 
 **Model and design.** As (b) above: cold-plasma geometric optics, inverse
@@ -8290,7 +8290,7 @@ bisection and N = `panels` (200) panels per pass of r = r_t + (R − r_t)t², Ga
 each, a deposit at each panel's mid angle. Changes from the prototype:
 - *Rays from a transverse lattice per sub-beam* (the verdict's item 1): for each beam and
   f-cone direction d a square lattice of spacing h (default 0.1 × the smallest spot
-  semi-axis) in the plane normal to d through the centre, rays with b < R (the profile's
+  semi-axis) in the plane normal to d through the center, rays with b < R (the profile's
   outer radius), weight = best-focus profile at the focal-plane crossing × h²/(k·d)/ncone
   (the collimated sub-beam's power per lattice cell; the `DepositionOperator`'s
   expression with n = d). In each sub-beam's own frame (pole −d, x along the lattice's
@@ -8336,7 +8336,7 @@ rotations):
   Bouguer's invariant, the tracer starts rays at |v| = 1 there. At R = r_c + 8L
   (n_e = 3.4e-4 n_c) the absorbed fractions then differ by 3e-4 relative; at 14L by
   5e-7. Compare the two only where n_e(R) is negligible.
-- *Thin-corona limit* (one centred collimated SG4 beam, a = 0.25 mm, r_c = 0.4 mm,
+- *Thin-corona limit* (one centered collimated SG4 beam, a = 0.25 mm, r_c = 0.4 mm,
   η⊥ = 0.6, against a hard sphere at r_c absorbing η_a(ψ) I cos ψ by 1-D quadrature):
   absorbed-fraction error 9.2e-4, 4.8e-4, 2.5e-4, 1.3e-4, 6.4e-5 and max_l |Δσ_l| 9.5e-2,
   5.1e-2, 2.7e-2, 1.4e-2, 6.9e-3 at L/r_c = 0.04, 0.02, 0.01, 0.005, 0.0025: first order
@@ -8363,7 +8363,7 @@ listed σ_l differ by at most 1.0e-3 % of the mean, as the prototype's (b) at n 
 | ForwardDiff, 3 ring shifts | 0.065 s | 1.5 s | 22.6 s |
 | ForwardDiff, 80 aim coordinates | 2.1 s | 32 s | ~150 s (estimate) |
 
-NIF scale (cost only: 192 beams aimed at the centre, SG4 a = 0.6 mm, f/22, r_c = 1.1,
+NIF scale (cost only: 192 beams aimed at the center, SG4 a = 0.6 mm, f/22, r_c = 1.1,
 L = 0.15 mm): 8 945 rays and 859 impact parameters per direction, build 0.6–0.8 s,
 4 MB, an evaluation 0.14 s at ncone = 7 and 0.23 s at 13. `test/corona.jl` takes 18 s on
 one thread, compilation included.
@@ -8631,7 +8631,7 @@ M-band P2/P0 at every run, and the comparison is the table above (commit d19d84f
 the pre-CBET cone weighting. Change on the coarse model (0.8/0.4, default times), the
 calibrated rows (brightness α_M 0.5 / thermal α_M 0.55):
 
-| t (ns) | Dante > 1.8 keV share | colour temperature Tc | traditional unfold bias | laser → M-band |
+| t (ns) | Dante > 1.8 keV share | color temperature Tc | traditional unfold bias | laser → M-band |
 |---|---|---|---|---|
 | 5.0 | −0.0020 / −0.0021 | −0.26 / −0.08 eV | −0.008 / −0.009 eV | 0.1284 → 0.1255 |
 | 6.0 | −0.0019 / −0.0020 | −0.34 / −0.22 eV | −0.006 / −0.006 eV | 0.1470 → 0.1442 |

@@ -304,7 +304,7 @@ Items 9–13 and 16–17 follow the 2026-10-22 literature review against Kritche
     dip to 2.5 keV at 5.5 ns and the peak clamp (1.4×10⁻⁴) below HYDRA's decks (test a
     drive-following Te(t) prior, B16's shape); plasma-state tables as inputs, outer-cone
     depletion, an inner-quad SBS proxy (N220919's limit, the 2.9 Å overshoot), the
-    23.5°/30° split (the model favours 30°, HYDRA splits evenly). HYDRA's own knobs for
+    23.5°/30° split (the model favors 30°, HYDRA splits evenly). HYDRA's own knobs for
     comparison: clamp 0.002 (foot) / 0.0075 (peak), 2DConA fits 0.005–0.007, laser
     degraded 9–13 % or peak multipliers 0.825–0.86 (`reference/litreview/cbet_calibration.md`).
     *Data:* N230729 transfer curves (none published); per-shot plasma states.
@@ -393,7 +393,7 @@ Items 9–13 and 16–17 follow the 2026-10-22 literature review against Kritche
       thicker W-doped ablator. Schedules are `RadiusSchedule`s (`TabulatedRadius`,
       `ScaledRadius` for the pair's accepted, derived K24-shaped one, `TrajectoryRadius`
       from published anchors; no rocket model; "Capsule radius schedules", bit for bit).
-      K24's radius is the ablator–fuel interface or fuel centre of mass, so the front at
+      K24's radius is the ablator–fuel interface or fuel center of mass, so the front at
       6 ns lies in 0.84–0.906 R₀. *Data:* the blow-off opacity or HYDRA's absorbing
       radius; the shell thickness at 5–7 ns; the pair's own radius histories or v_imp/RPV.
     - **The early peak**: over the open area the model sits 13–20 eV above Dante at

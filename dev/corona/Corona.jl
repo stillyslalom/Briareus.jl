@@ -60,7 +60,7 @@ g(p::InvSqProfile, r) = p.nuc * ne(p, r)^2
 
 """
 Tabulated 1-D profile: ln(n_e/n_c) and ln(g) on a uniform radius grid, cubic Hermite
-with centred-difference slopes (C¹, so ∇n_e is continuous for the ray tracer), zero
+with centered-difference slopes (C¹, so ∇n_e is continuous for the ray tracer), zero
 beyond the last node. This is the form a 1-D hydro snapshot would take.
 """
 struct TableProfile <: RadialProfile
@@ -214,7 +214,7 @@ sphere_done(R) = (x, v) -> dot(x, x) > R^2 && dot(x, v) > 0
 # Angular bins and spherical-harmonic spectrum (shared by (b) and (c)).
 # ---------------------------------------------------------------------------------------
 
-"Equal-angle (θ, φ) bins on the unit sphere about z, and Ylm tables at bin centres."
+"Equal-angle (θ, φ) bins on the unit sphere about z, and Ylm tables at bin centers."
 struct AngGrid
     nθ::Int
     nφ::Int
@@ -237,7 +237,7 @@ function AngGrid(nθ, lmax)
                    [sin(m * f) for m in 0:lmax, f in φ])
 end
 nbins(G::AngGrid) = G.nθ * G.nφ
-# Cloud-in-cell deposit of `P` at direction x onto the four nearest bin centres
+# Cloud-in-cell deposit of `P` at direction x onto the four nearest bin centers
 # (bilinear in θ, φ): unlike nearest-bin assignment it has no first-order bias in the
 # harmonic projection (nearest-bin was 4e-4 of the mean on a coarse (c) run).
 @inline function deposit_cic!(E, G::AngGrid, x, P)

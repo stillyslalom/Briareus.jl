@@ -17,7 +17,7 @@ reproduced.
 | Key | Reference | Access | Used for |
 |---|---|---|---|
 | Ba24 | D. E. M. Barlow, A. Colaïtis, D. Viala, M. J. Rosenberg, I. Igumenshchev, V. Goncharov, L. Ceurvorst, P. B. Radha, W. Theobald, R. S. Craxton, M. J. V. Streeter, R. H. H. Scott, K. Glize, T. Chapman, J. Mathiaud, "Optimization methodology of polar direct-drive illumination for the National Ignition Facility", PRL 133, 175101 (2024), doi:10.1103/PhysRevLett.133.175101 | full text: accepted manuscript OSTI 2475934; preprint arXiv:2311.18342 (v2) | the only published GA PDD optimizer; Table I (optimized pointing), Table II (σ₁, σ₂, P̄abl, f), appendices (defocus model, pressure proxy) |
-| Pol | D. Barlow, "Polaris" (github.com/DuncanBarlow/Polaris, MIT licence; successor of the "PDDOptimisation" repository cited in Ba24) | code read (README, beam tables, deck generator, Ifriit base input) | how Ba24's σ₁ is evaluated; NIF/LMJ/OMEGA beam tables; a 1-D-averaged Ifriit plasma profile (`plasma_profiles/ifriit_1davg_input.nc`) |
+| Pol | D. Barlow, "Polaris" (github.com/DuncanBarlow/Polaris, MIT license; successor of the "PDDOptimisation" repository cited in Ba24) | code read (README, beam tables, deck generator, Ifriit base input) | how Ba24's σ₁ is evaluated; NIF/LMJ/OMEGA beam tables; a 1-D-averaged Ifriit plasma profile (`plasma_profiles/ifriit_1davg_input.nc`) |
 | Ye21 | C. B. Yeamans, G. E. Kemp, Z. B. Walters, H. D. Whitley, P. W. McKenty, E. M. Garcia, Y. Yang, R. S. Craxton, B. E. Blue, "High yield polar direct drive fusion neutron sources at the National Ignition Facility", Nucl. Fusion 61, 046031 (2021) | full text: LLNL-JRNL-814327, OSTI 1772693 | complete 24-parameter pointing tables (Table 1); SAGE optimization; Eq. 3 azimuthal model; V_rms 2.22 % |
 | Co08 | A. M. Cok, R. S. Craxton, P. W. McKenty, "Polar-drive designs for optimizing neutron yields on the National Ignition Facility", PoP 15, 082705 (2008), doi:10.1063/1.2975213 | full text (author copy, pas.rochester.edu) | Table I pointing/defocus/split quads; CPP 50 % ellipses; geometric-optics defocus model; Table III energy fits |
 | Ho15 | M. Hohenberger et al., "Polar-direct-drive experiments on the National Ignition Facility", PoP 22, 056308 (2015) | full text: OSTI 1182632 | the standard NIF PDD pointing (Table I); absorption with/without CBET; measured P₂–P₆ |
@@ -25,7 +25,7 @@ reproduced.
 | MN17 | M. Murakami, D. Nishi, "Optimization of laser illumination configuration for directly driven inertial confinement fusion", Matter Radiat. Extremes 2, 55 (2017), doi:10.1016/j.mre.2016.12.002 (open access; arXiv:2512.04722) | full text | analytic PDD model (Eqs. 28–31, 37) and a fully specified 2-cone-per-hemisphere solution |
 | Te14 | M. Temporal, B. Canaud, W. J. Garbett, R. Ramis, "Comparison between illumination model and hydrodynamic simulation for a direct drive laser irradiated target", Laser Part. Beams (published version not checked), arXiv:1406.7762 (2014) | full text (arXiv) | single-ring PDD σ vs shift for circular and elliptical super-Gaussians |
 | TM11 | Y. Tsuda, M. Murakami, "Optimization of illumination configuration for polar direct drive", PLASMA2011 poster 23P167-B | full text (2 pp.) | potential-gradient PDD optimizer on ring geometry (qualitative) |
-| SL83 | S. Skupsky, K. Lee, J. Appl. Phys. 54, 3662 (1983) | cited in MN17, Te14, TM11 (**M**) | separability σ_l = |a_l|·G_l for beams aimed at the centre |
+| SL83 | S. Skupsky, K. Lee, J. Appl. Phys. 54, 3662 (1983) | cited in MN17, Te14, TM11 (**M**) | separability σ_l = |a_l|·G_l for beams aimed at the center |
 | Sk04 | S. Skupsky et al., "Polar direct drive on the National Ignition Facility", PoP 11, 2763 (2004), doi:10.1063/1.1689665 | abstract (OSTI 823148) | the concept: repointing, equatorial power, elliptical spots |
 | Cr05 | R. S. Craxton et al., "Polar direct drive: proof-of-principle experiments on OMEGA and prospects for ignition on the NIF", PoP 12, 056304 (2005), doi:10.1063/1.1876252 | read as the LLE Review 102, 67–77 (2005) version (Wayback copy of lle.rochester.edu) | OMEGA 40-beam PDD emulation with complete ring offsets and spot (Fig. 102.7); SAGE absorption and rms (§4.1); absorption vs symmetric repointing (Fig. 102.10); Saturn ring |
 | Ma06 | J. A. Marozas et al., "Polar-direct-drive simulations and experiments", PoP 13, 056311 (2006) | abstract (OSTI 882305) | spot shapes, pulse shapes, Saturn designs |
@@ -40,7 +40,7 @@ reproduced.
 | We15 | F. Weilacher, P. B. Radha, T. J. B. Collins, J. A. Marozas, "The effect of laser spot shapes on polar-direct-drive implosions on the NIF", PoP 22, 032701 (2015), doi:10.1063/1.4913988 | OSTI 1176913 | parametric NIF PDD spots with a secondary ellipse (Tables I–III) |
 | Te14b | M. Temporal, B. Canaud, W. J. Garbett, R. Ramis, S. Weber, "Irradiation uniformity at the Laser MegaJoule facility in the context of the shock ignition scheme", HPLSE 2, e8 (2014), doi:10.1017/hpl.2014.12 | open access | an LMJ static illumination σ (§4.2) |
 | Ig12 | I. V. Igumenshchev et al., "Crossed-beam energy transfer in direct-drive implosions", PoP 19, 056314 (2012), doi:10.1063/1.4718594 | OSTI 1043686 | measured scattered light vs beam-to-target radius, symmetric OMEGA (§4.3) |
-| Ed17, Ed21, Ed25 | D. H. Edgell et al., PoP 24 (2017), doi:10.1063/1.4985315; PRL 127, 075001 (2021); PoP 32, 102701 (2025), doi:10.1063/5.0273559 | OSTI 1366441, 1814199, 2997967 (searched, not read in full) | symmetric-OMEGA CBET modelling and beamlet imaging; no PDD fit data |
+| Ed17, Ed21, Ed25 | D. H. Edgell et al., PoP 24 (2017), doi:10.1063/1.4985315; PRL 127, 075001 (2021); PoP 32, 102701 (2025), doi:10.1063/5.0273559 | OSTI 1366441, 1814199, 2997967 (searched, not read in full) | symmetric-OMEGA CBET modeling and beamlet imaging; no PDD fit data |
 | El18 | C. L. Ellison et al., "Development and modeling of a polar direct drive exploding pusher platform at the NIF", PoP 25 (2018), doi:10.1063/1.5025724 | OSTI 1566028 (searched) | 1-D laser-energy multipliers (Table III) |
 | Hs13, MaS | S. C. Hsu et al., APS-DPP 2013 slides (LA-UR-13-28571, OSTI 1107933); F. J. Marshall, APS-DPP slides 2006, 2008, 2010 | slides (**M**) | further OMEGA PDD pointings; yields relative to symmetric drive |
 
@@ -48,7 +48,7 @@ Not found: any other peer-reviewed GA PDD optimizer (searched NIF, LMJ, OMEGA, S
 any published gradient or adjoint PDD optimizer (the research notes' "Optimization"
 bullet already records this for illumination in general). Polaris's README lists Bayesian
 and gradient-descent drivers besides the GA, unpublished (**M**). The LLE high-school
-reports (Craxton's programme) contain many PDD pointing studies; none was found that
+reports (Craxton's program) contain many PDD pointing studies; none was found that
 uses a GA (**M**).
 
 Not obtained in the second search, and possibly holding OMEGA design tables:
@@ -96,7 +96,7 @@ that Ba24 calls σ₁ (**L**). What is missing, in order of need:
    gradient), deposit less and spread their energy over a wider angle (Co08 §III
    explains SiO₂ vs CH this way; Ye21 reports 94.5 % absorption, all inverse
    bremsstrahlung). Briareus has no corona. In a spherically symmetric profile each ray
-   stays in the plane through the centre, so its deposition depends only on its impact
+   stays in the plane through the center, so its deposition depends only on its impact
    parameter b and rotates with its plane: a 1-D family of kernels K(b; r, Δα) can be
    tabulated once per profile and summed over the existing beam samples, keeping the
    operator structure and differentiability (**L**). Ba24's approximation 2 (an
@@ -112,7 +112,7 @@ that Ba24 calls σ₁ (**L**). What is missing, in order of need:
    increases (Ba24 discussion; Ho15: P₂ prolate without CBET, oblate with it, in 2-D
    DRACO) (**H**). Needed: corona snapshots (Ba24 uses one, at 4 ns, plus the no-plasma
    state), per-cone pulse shapes (Ho15 Fig. 4; `with_pulses` exists) and a multi-snapshot
-   objective. Briareus's `Keyframes` (dynamics.jl) is the hohlraum analogue.
+   objective. Briareus's `Keyframes` (dynamics.jl) is the hohlraum analog.
 7. **Phase plates for PDD.** Indirect-drive CPPs used defocused (Co08, Ye21, Ho15, Ba24;
    Briareus has the LMF-measured NIF CPP fits, `nif_spot`); the planned PDD plates with a
    "secondary ellipse" (Ho15 §IV) and skewed ellipses for the equatorial beams (Ho15 §I);
@@ -142,8 +142,8 @@ that Ba24 calls σ₁ (**L**). What is missing, in order of need:
 | Work | Facility / target | Free parameters | Objective | Evaluator | Search |
 |---|---|---|---|---|---|
 | Ba24 | NIF, solid CD/CH sphere R = 1.1 mm (N190204-003) | 16: per cone pair (θ_s, φ_s) surface aim in a disk of radius R about the port's nearest surface point (area-preserving square-to-disk map), defocus 0–10 mm, power 2–4 TW/quad | maximize f = 10·exp(−√(σ₁²/9 + σ₂²/18))·(P̄abl/50 Mbar)², σ₁ = vacuum surface-intensity rms, σ₂ = ablation-pressure rms in a 4 ns angle-averaged plasma with CBET, both in % of mean over l ≤ 30 (form reconstructed from the garbled extraction and checked: it reproduces Table II's f = 0.18 and 0.35 to two digits) | Ifriit inverse ray trace on a fixed 1-D plasma, ~1000× cheaper than rad-hydro per evaluation | PyGAD GA (185 evaluations) then coordinate descent (365); < 2 M CPU h; > 10,000 evaluations needed to converge σ₁ alone **H** |
-| Ye21 | NIF, CH shells 3 and 4 mm diameter, 1.5 mg/cc DT | 24: per sub-ring (8 per hemisphere: upper/lower beams of each quad ring) θ, Δφ (left/right split), defocus | minimize velocity nonuniformity V: m = 0 from SAGE 2-D centre-of-mass radius, m ≠ 0 from the 3-D time-integrated deposited energy via Eq. 3 (exponent 0.72), combined in quadrature | SAGE 2-D hydro + 3-D ray trace | manual expert iteration; integer degrees only (1° ≈ 35 µm at 2 mm) **H** |
-| Co08 | NIF, 1.1 mm SiO₂/CH thin shell, 350 kJ–1.5 MJ | 16: per ring pointing shift, defocus, split-quad x and y | minimize centre-of-mass radius rms (and V_rms) at 2.8 ns | SAGE 2-D | manual; quadratic fits in energy (Table III) **H** |
+| Ye21 | NIF, CH shells 3 and 4 mm diameter, 1.5 mg/cc DT | 24: per sub-ring (8 per hemisphere: upper/lower beams of each quad ring) θ, Δφ (left/right split), defocus | minimize velocity nonuniformity V: m = 0 from SAGE 2-D center-of-mass radius, m ≠ 0 from the 3-D time-integrated deposited energy via Eq. 3 (exponent 0.72), combined in quadrature | SAGE 2-D hydro + 3-D ray trace | manual expert iteration; integer degrees only (1° ≈ 35 µm at 2 mm) **H** |
+| Co08 | NIF, 1.1 mm SiO₂/CH thin shell, 350 kJ–1.5 MJ | 16: per ring pointing shift, defocus, split-quad x and y | minimize center-of-mass radius rms (and V_rms) at 2.8 ns | SAGE 2-D | manual; quadratic fits in energy (Table III) **H** |
 | Ma06, Co12, CM18 | NIF ignition designs | pointing to 3 rings/hemisphere, spot shapes, per-cone pulse shapes, detuning | shell uniformity, gain | DRACO 2-D + 3-D ray trace (Mazinisin), CBET (Adaawam) | manual; Ma06 automated pulse-shape tuning (**M**) |
 | MN17 | idealized N_C cones (continuous rings) | per cone: axis polar angle j, axis–polar-axis intersection z (stand-off), energy E | zero the Legendre amplitudes B₂…B₁₀ of the absorbed intensity | analytic (Eqs. 28–31: parallel rays, SG profile, η_a(ψ)) | simultaneous nonlinear equations **H** |
 | Te14 | one ring at 49°/131° (LMJ second cone), R₀ = 0.5 mm | shift Δ toward the equator; SG widths a, b and order m | σ_2D of the illumination (Eq. 1) | Skupsky–Lee illumination model, compared with 2-D hydro shock-front rms | parameter scans **H** |
@@ -158,7 +158,7 @@ Ba24 states that the search procedure was not its focus (**H**).
 each an axisymmetric continuous ring of parallel-ray beams whose axes make angle j with
 the polar axis and cross it at z (units of R₀); SG profile exp[−(x/aR₀)^b]; absorption
 η_a(ψ). Published solution: j₁ = 46°, j₂ = 53°, z₁ = −0.65, z₂ = 0.80, E₁ = 1,
-E₂ = 0.40 for a = 0.6, b = 6, η = 0.9, giving B₂ = … = B₁₀ = 0. The 4-cone centred
+E₂ = 0.40 for a = 0.6, b = 6, η = 0.9, giving B₂ = … = B₁₀ = 0. The 4-cone centered
 solution (θ₁ = 70°, θ₂ = 30°, E₂ = 0.53, independent of a, b, η) is also given; checking
 it with the separable formula G_l = ΣE_i P_l(cos θ_i) leaves |G₂| ≈ 0.007 and
 |G₄| ≈ 0.009 (**L**), so the published values are rounded and a test must re-solve
@@ -168,7 +168,7 @@ ring (N → many), f-number → ∞, defocus 0, η_a weight. *Gap*: none beyond 
 
 **2. Te14 single-ring σ_2D (nearly complete; H).** Ring at 49°/131°, R₀ = 0.5 mm, SG
 I₀·exp{−[(x/a)² + (y/b)²]^{m/2}} (same form as `SuperGaussianSpot`), m = 4, y in the
-meridional plane. Centred beams: circular a = b = R₀ → σ_2D = 11.9 %; elliptical
+meridional plane. Centered beams: circular a = b = R₀ → σ_2D = 11.9 %; elliptical
 a = 2b, b = R₀ → 5.2 %. Optimum shift: Δ/R₀ = 13.7 % → 1.1 % (circular), 7.4 % → 1.3 %
 (elliptical). Hydro absorption 85 % vs 61 % (circular vs elliptical, 2-D) is model
 output, not a benchmark. *Ambiguities*: whether the illumination is I·cos ψ with full
@@ -235,7 +235,7 @@ higher. Published metrics are DRACO absorption and implosion speed with and with
 detuning. Use: a PDD-plate fixture.
 
 Also useful as *validation* (not benchmarks): the SL83 separability, exact for beams
-aimed at the centre — σ_l = |a_l|·G_l with a_l the single-beam Legendre coefficients and
+aimed at the center — σ_l = |a_l|·G_l with a_l the single-beam Legendre coefficients and
 G_l the geometric factor of the port set — on OMEGA's 60 beams (`omega_ports`) with SG4
 spots; and converged `raytrace_deposition` (nspot ≥ 121) on the bare sphere.
 
@@ -249,7 +249,7 @@ read; the unobtained ones in §1 may hold more).
 
 Common to all: the 40-beam emulation uses rings at 21.4°, 42.0° and 58.8° from the PDD
 axis, 5, 5 and 10 beams per hemisphere (Ra12 Fig. 130.1; Mn14 Table 1; Jo22). The offset
-Δr is a shift of the beam axis from the target centre, perpendicular to the beam,
+Δr is a shift of the beam axis from the target center, perpendicular to the beam,
 toward the PDD equator, azimuth unchanged (Cr05 Fig. 102.7 caption; Ma16 p. 8; Jo22;
 Mn14) (**H**): in Briareus, `aim = c + Δr u` with u ⟂ port (the `Beam` docstring's
 shift). Ra12 also quotes offsets as the scale-free angle sin⁻¹(Δr/R) (LR130 p. 63:
@@ -260,7 +260,7 @@ shift). Ra12 also quotes offsets as the scale-free angle sin⁻¹(Δr/R) (LR130 
 super-Gaussian), ellipticity 1.0/1.0/1.2, Δr = 16/21/68 µm, energy multipliers
 1.00/1.00/1.25; 11.54 kJ (Fig. 130.8). Output: normalized overlapped on-target intensity
 per ring versus polar angle, normalized to ring 1 at the pole (p. 63), panels (a)/(b)
-SG 3.7/2.2 centred, (c)/(d) the same repointed, circular (solid) and with η₃ = 1.2
+SG 3.7/2.2 centered, (c)/(d) the same repointed, circular (solid) and with η₃ = 1.2
 (dashed). Text (p. 63–64): repointed SG 3.7 under-drives the equator by nearly 20 %
 relative to the pole; SG 2.2 gives nearly equal pole and equator; SG 2.2 with the
 elliptical ring 3 drives the equator about 20 % above the pole. *Ambiguities*: the
@@ -273,8 +273,8 @@ blur are not stated. Use: a digitized-shape comparison (decision 14), not a test
 **9. Cr05 (inputs complete, outputs hydro and absorption; H).** Δr = 91/188/196 µm
 (Fig. 102.7a); SG r₀ = 380 µm, n = 3.7, with 1-THz 2-D SSD and polarization smoothing
 (p. 68, Fig. 102.7b); 865-µm-diameter, 20-µm CH shell, 15 atm D₂; 1-ns pulse at about
-16 kJ (p. 70). SAGE: absorption 66 % (PDD) against 75 % centre-pointed (Fig. 102.9);
-centre-of-mass velocity rms 3.8 % (3.6 % for even l ≤ 8) at 1.1 ns (Fig. 102.15);
+16 kJ (p. 70). SAGE: absorption 66 % (PDD) against 75 % center-pointed (Fig. 102.9);
+center-of-mass velocity rms 3.8 % (3.6 % for even l ≤ 8) at 1.1 ns (Fig. 102.15);
 R_abs rms 7 and 9 µm at 1.25 and 1.5 ns, matching shot 34669 (Fig. 102.13). Fig. 102.10
 (absorption measured against symmetric repointing by 335 and 514 µm on 1600-µm CH
 spheres, with SAGE) bears on Stage 1 obliquity absorption, not Stage 0.
@@ -325,7 +325,7 @@ draws of beam errors, so it is not deterministic. Missing: the exact quad azimut
 surface aim α and defocus: 23.5° → 31.3°, 18 mm; 30° → 37.8°, 19 mm; 44.5° A&B → 42.2°,
 24 mm; 44.5° C&D → 79.9°, 16 mm; 50° → 83.0°, 12 mm; IR wavelengths in Table II; polar
 beams at nominally 80 % of the equatorial power; 2.15-ns square pulses of 319, 462 and
-607 kJ; R = 1100 µm, 42-µm CH. Fig. 3 is the VisRad irradiance on the capsule (colour
+607 kJ; R = 1100 µm, 42-µm CH. Fig. 3 is the VisRad irradiance on the capsule (color
 scale 1250–1600 TW/cm²), no σ; the spots are the indirect-drive CPPs. Directly relevant
 to Briareus as a VisRad replacement, at figure level.
 
@@ -372,7 +372,7 @@ A Briareus PDD CBET model "fitted to data" would be fitted to another code's inf
   `deposit(...; absorption)`).
 - Capsule-frame metrics: σ_rms over l ≤ l_max (30), the σ_l spectrum, the m = 0 / m ≠ 0
   split, as `Evaluation`-level functions on the exact-solid-angle Y_lm weights.
-- Tests: SL83 separability on centred OMEGA beams (closed form); MN17 re-solved B_l
+- Tests: SL83 separability on centered OMEGA beams (closed form); MN17 re-solved B_l
   against direct integration of Eqs. 28–31; Te14's four σ_2D values; converged ray trace.
 - Example/tutorial: Ba24 OC σ₁ with Briareus's LMF CPPs (and with Ba24's linearly scaled
   spots emulated as zero-defocus spots), a 16-parameter σ₁ optimization from the Ho15
@@ -578,7 +578,7 @@ decided 1–11 on 2026-10-27 (each marked **Decided**); 12–15 are open (12 dec
       + No digitization error. − No number.
     - (c) Skip it. + No work. − OMEGA then has no illumination-level check.
     - *Recommendation*: (a), as a documented example, never a test tolerance. Values
-      read from a figure are data with a citation, not a copied figure, and are labelled
+      read from a figure are data with a citation, not a copied figure, and are labeled
       as digitized.
 15. **Illumination convention in comparisons.** None of Te14, Te14b, Ra12 or Ba24 states
     unambiguously whether its intensity is incident (I_L), projected (I_L cos ψ) or
