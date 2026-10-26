@@ -485,7 +485,7 @@ struct Deposition{T}
 end
 
 """
-    deposit(op, beams) -> Deposition
+    deposit(op, beams; absorption = nothing) -> Deposition
 
 Evaluate laser deposition for `beams` (same ports and order as at construction). The
 result is differentiable in every beam's `aim`, `power`, `defocus` and spot axes.
@@ -493,13 +493,33 @@ Power that strikes no opaque surface (e.g. passes through a hohlraum and out the
 other LEH) is `delivered - sum(per_beam)`.
 Threads share the work dynamically, and every sum is taken in a fixed order: the result
 is the same, bit for bit, on any number of threads.
+
+By default every ray deposits all its power where it lands. `absorption = η⊥`
+(0 < η⊥ ≤ 1) keeps only the fraction
+
+    η_a(ψ) = 1 - (1 - η⊥)^(cos³ψ)
+
+of each ray, with ψ its angle of incidence (each f-cone direction's, or the beam axis's
+with a VisRad profile). This is inverse-bremsstrahlung absorption in a thin corona whose
+density falls exponentially with radius, η⊥ = 1 - exp(-8ν_ei L/3c) being the absorption
+at normal incidence (ν_ei the collision frequency at critical density, L the scale
+length): Murakami & Nishi, Matter Radiat. Extremes 2, 55 (2017), Eq. 29, after Kruer's
+text. It is a model for hard-sphere direct-drive illumination, derived for that profile,
+not a measured or calibrated absorption: η⊥ has no default and is the user's estimate.
+The unabsorbed light is dropped (no reflection is followed), so `element`, `backside`
+and `per_beam` are absorbed powers and `delivered - sum(per_beam)` includes it. `η⊥` may
+be a dual number (the result is differentiable in it too). `η⊥ = 1` is the default's
+model (η_a ≡ 1), equal to it to rounding; the default itself is unchanged by this option.
 """
-function deposit(op::DepositionOperator, beams::AbstractVector{<:Beam})
+function deposit(op::DepositionOperator, beams::AbstractVector{<:Beam};
+                 absorption::Union{Nothing,Real} = nothing)
     length(beams) == length(op.ports) || throw(DimensionMismatch("beam count changed"))
     for (b, p) in zip(beams, op.ports)
         b.port == p || throw(ArgumentError("beam $(b.name) port differs from the operator's"))
     end
-    T = mapreduce(b -> typeof(b.power), promote_type, beams)
+    absorption === nothing || 0 < absorption <= 1 ||
+        throw(ArgumentError("absorption must be in (0, 1], got $absorption"))
+    T = _with_eltype(mapreduce(b -> typeof(b.power), promote_type, beams), absorption)
     t = op.target
     ne, nc = nelements(t), length(t.components)
     nb = length(beams)
@@ -512,7 +532,7 @@ function deposit(op::DepositionOperator, beams::AbstractVector{<:Beam})
     PB = zeros(T, nb, nblock)     # per-beam power by element block
     LB = zeros(T, nc, nback)      # back-side power by piece
     SB = zeros(T, nback)          # piece totals
-    _deposit_units!(E, PB, LB, SB, op, frames, screens, slopes)
+    _deposit_units!(E, PB, LB, SB, op, frames, screens, slopes, absorption)
     # partial sums reduced in a fixed order
     per_beam = [sum(@view PB[bi, :]; init = zero(T)) for bi in 1:nb]
     L = zeros(T, nc)
@@ -520,11 +540,22 @@ function deposit(op::DepositionOperator, beams::AbstractVector{<:Beam})
         per_beam[bi] += SB[u]
         L .+= @view LB[:, u]
     end
-    return Deposition(E, L, per_beam, sum(b.power for b in beams))
+    return Deposition(E, L, per_beam, convert(T, sum(b.power for b in beams)))
 end
 
+# Element type of a deposition: the beams' (`T`), promoted with a dual `absorption`'s.
+_with_eltype(T, ::Nothing) = T
+_with_eltype(T, η) = promote_type(T, typeof(η))
+
+# The power a ray at incidence cos ψ = `c` absorbs, per unit of incident flux along it:
+# `c` (all of it), or `η_a(ψ) c` with `η_a` of MN17 Eq. 29 (see `deposit`). `nothing`
+# leaves the expressions it enters as they were without the option (bit for bit).
+_absorbed(::Nothing, c) = c
+_absorbed(η, c) = (1 - (1 - η)^(c^3)) * c
+
 # Function barrier for the threaded loop over `op.plan`'s work units.
-function _deposit_units!(E, PB, LB, SB, op::DepositionOperator, frames, screens, slopes)
+function _deposit_units!(E, PB, LB, SB, op::DepositionOperator, frames, screens, slopes,
+                         η = nothing)
     plan = op.plan
     nblock = size(plan.boff, 1) - 1
     _tforeach(length(plan.order)) do k
@@ -534,13 +565,13 @@ function _deposit_units!(E, PB, LB, SB, op::DepositionOperator, frames, screens,
             for bi in axes(plan.boff, 2)
                 r = plan.boff[u, bi]:plan.boff[u+1, bi]-1
                 isempty(r) || (PB[bi, u] = _deposit_points!(E, E, op, bi, frames[bi], screens[bi],
-                                                            slopes[bi], r))
+                                                            slopes[bi], r, η))
             end
         else
             v = u - nblock
             bi, r = plan.back[v]
             SB[v] = _deposit_points!(E, view(LB, :, v), op, bi, frames[bi], screens[bi],
-                                     slopes[bi], r)
+                                     slopes[bi], r, η)
         end
     end
 end
@@ -562,20 +593,20 @@ _screen_frame(::BeamFrame, b) = BeamFrame(_value_beam(b))
 # them, and for dual beams each remaining direction is screened on values. Skipped
 # points and directions would contribute exact zeros.
 function _deposit_points!(Ec::AbstractVector{T}, Lc::AbstractVector{T}, op::DepositionOperator,
-                          bi, f::BeamFrame, fv::BeamFrame{Float64}, slopes, r) where {T}
-    return _sum_points(op, bi, f, fv, slopes, r, T) do d, val
+                          bi, f::BeamFrame, fv::BeamFrame{Float64}, slopes, r, η = nothing) where {T}
+    return _sum_points(op, bi, f, fv, slopes, r, T, η) do d, val
         @inbounds d > 0 ? (Ec[d] += val) : (Lc[-d] += val)
     end
 end
 
 # The deposition loop: `sink(destination, power)` for every point of beam `bi` in `r`
 # that receives light (`destination` > 0 an element, < 0 a component's back side), and
-# the sum of those powers (of type `T`).
+# the sum of those powers (of type `T`); `η` the `absorption` of `deposit`.
 @inline function _sum_points(sink::F, op::DepositionOperator, bi, f::BeamFrame,
-                             fv::BeamFrame{Float64}, (κ, α, β), r, ::Type{T}) where {F,T}
+                             fv::BeamFrame{Float64}, (κ, α, β), r, ::Type{T}, η = nothing) where {F,T}
     op.profile === nothing ||
         return _sum_points_visrad(sink, op, bi, _VRFrame(f, op.profile, op.envelope[bi]),
-                                  _VRFrame(fv, op.profile, op.envelope[bi]), r, T)
+                                  _VRFrame(fv, op.profile, op.envelope[bi]), r, T, η)
     ds = op.dirs[bi]
     P, W, Nr, M, D = op.pts[bi], op.w[bi], op.normal[bi], op.mask[bi], op.dest[bi]
     αmax, βmax = maximum(abs, α), maximum(abs, β)
@@ -584,7 +615,7 @@ end
         _beyond(fv, αmax, βmax, P[q]) && continue
         m = T === Float64 ? M[q] : _live_directions(fv, α, β, M[q], P[q])
         m == 0 && continue
-        val = W[q] * _cone_intensity(f, ds, α, β, κ, m, P[q], Nr[q])
+        val = W[q] * _cone_intensity(f, ds, α, β, κ, m, P[q], Nr[q], η)
         sink(D[q], val)
         acc += val
     end
@@ -630,13 +661,13 @@ end
 # a Float64 one evaluates them (the profile is exactly zero there, and screening first
 # would compute the semi-axes twice).
 function _sum_points_visrad(sink::F, op::DepositionOperator, bi, f::_VRFrame, fv::_VRFrame{Float64},
-                            r, ::Type{T}) where {F,T}
+                            r, ::Type{T}, η = nothing) where {F,T}
     P, W, Nr, D = op.pts[bi], op.w[bi], op.normal[bi], op.dest[bi]
     k = f.k
     acc = zero(T)
     @inbounds for q in r
         T === Float64 || !_vr_beyond(fv, P[q]) || continue
-        val = W[q] * _vr_intensity(f, P[q]) * abs(dot(Nr[q], k))
+        val = W[q] * _vr_intensity(f, P[q]) * _absorbed(η, abs(dot(Nr[q], k)))
         sink(D[q], val)
         acc += val
     end
@@ -654,19 +685,21 @@ _deposit_beam!(Ec, Lc, op::DepositionOperator, bi, f::BeamFrame) =
 # selects it is exactly consistent with where its light goes, and power is conserved
 # at shadow edges. (Giving each sub-beam a share of the f-cone spread would smooth the
 # footprint but break that consistency: 0.6% of a beam clipped by an LEH edge is lost.)
-@inline function _cone_intensity(f::BeamFrame, ds, α, β, κ, m::UInt16, x, n)
+# With `η` (the `absorption` of `deposit`), each direction's incidence factor carries
+# its absorbed fraction η_a.
+@inline function _cone_intensity(f::BeamFrame, ds, α, β, κ, m::UInt16, x, n, η = nothing)
     d = x - f.focus
     s = dot(d, f.k)
     u0 = dot(d, f.e1)
     v0 = dot(d, f.e2)
-    acc = zero(f.core.power_norm * s)
+    acc = zero(_absorbed(η, f.core.power_norm * s))
     for j in eachindex(ds)
         (m >> (j - 1)) & 0x1 == 0x1 || continue
         u = u0 - s * α[j]                     # crossing of the best-focus plane
         v = v0 - s * β[j]
         I = _sg_focal(f.core, u, v)
         f.has_halo && (I += _sg_focal(f.halo, u, v))
-        acc += I * (abs(dot(n, ds[j])) / κ[j])
+        acc += I * (_absorbed(η, abs(dot(n, ds[j]))) / κ[j])
     end
     return acc / length(ds)
 end

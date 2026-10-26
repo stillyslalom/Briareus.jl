@@ -86,7 +86,8 @@ that Ba24 calls σ₁ (**L**). What is missing, in order of need:
    absorption fraction: MN17 Eq. 29, η_a(ψ) = 1 − (1 − η)^{cos³ψ} with
    η = 1 − exp(−8ν_ei L / 3c) (exponential corona of scale length L). The operator knows
    each sample's direction and normal, so a per-sample weight η_a(ψ) is cheap and
-   differentiable (**L**).
+   differentiable (**L**). Done 2026-10-27: `deposit(op, beams; absorption = η⊥)`
+   (research notes, "Hard-sphere direct-drive illumination").
 4. **Refraction and inverse-bremsstrahlung absorption in the corona.** All the
    hydro-based designs (Co08, Ye21, Ho15, CM18, Ba24's σ₂) deposit along refracted rays:
    oblique equatorial rays turn at lower density (n_e = n_c cos²ψ for a planar
@@ -353,7 +354,8 @@ A Briareus PDD CBET model "fitted to data" would be fitted to another code's inf
 **Stage 0 — static hard-sphere illumination (no plasma).**
 - Bare-sphere target (icosphere at R) and a surface-aim helper; spherical pointing fields
   (θ_s, Δφ_s per group, optional per-beam split offsets) feeding the existing `aim`.
-- Optional absorption weight η_a(ψ) (MN17 Eq. 29), per operator sample.
+- Optional absorption weight η_a(ψ) (MN17 Eq. 29), per operator sample (done:
+  `deposit(...; absorption)`).
 - Capsule-frame metrics: σ_rms over l ≤ l_max (30), the σ_l spectrum, the m = 0 / m ≠ 0
   split, as `Evaluation`-level functions on the exact-solid-angle Y_lm weights.
 - Tests: SL83 separability on centred OMEGA beams (closed form); MN17 re-solved B_l
@@ -485,7 +487,9 @@ decided 1–11 on 2026-10-27 (each marked **Decided**); 12–15 are open.
       + Cheap; completes Stage 0's analytic cases. − A model that Stage 1's corona
       supersedes.
     - (b) Wait for Stage 1. − MN17's weighted design stays unchecked until then.
-    - *Recommendation*: (a). **Decided**: (a).
+    - *Recommendation*: (a). **Decided**: (a). Done: the `absorption` keyword of
+     `deposit`, off by default and bit for bit when off; MN17's re-solved weighted
+     design is reproduced (research notes).
 
 ### Open (for the user)
 

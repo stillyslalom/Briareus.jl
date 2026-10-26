@@ -167,9 +167,10 @@ _dd_coeffs(W, t, dep) = W * (dep.element ./ t.elem_area)
         rmsref = sqrt(sum(abs2, σref[2:end]))
 
         runs = map(meshes) do m
-            d = deposit(DepositionOperator(m.t, beams; ncone = 1), beams)
+            o = DepositionOperator(m.t, beams; ncone = 1)
+            d = deposit(o, beams)
             cc = _dd_coeffs(m.W, m.t, d)
-            (; dep = d, c = cc, σ = mode_power(ylm_matrix(cc, L)))
+            (; dep = d, c = cc, σ = mode_power(ylm_matrix(cc, L)), op = o)
         end
         dep, c, σ = runs[2]
         err20, err30 = (maximum(abs.(r.σ .- σref)) for r in runs)
@@ -191,6 +192,52 @@ _dd_coeffs(W, t, dep) = W * (dep.element ./ t.elem_area)
         al = legendre_moments(dep.element ./ t.elem_area, t, els; lmax = L)
         zl = [abs(al[l+1] / al[1]) / sqrt(2l + 1) for l in 0:L]
         @test all(abs.(mode_power(C; m = :zero) .- zl) .< 2e-5)
+
+        @testset "absorption weight η_a (MN17 Eq. 29)" begin
+            # off is the default, bit for bit (and unchanged from before the option: see the
+            # research notes); η⊥ = 1 (η_a ≡ 1) is the same model, to rounding
+            op = runs[2].op
+            dn = deposit(op, beams; absorption = nothing)
+            @test dn.element == dep.element && dn.per_beam == dep.per_beam
+            d1 = deposit(op, beams; absorption = 1.0)
+            @test isapprox(d1.element, dep.element; rtol = 1e-12)
+            @test_throws ArgumentError deposit(op, beams; absorption = 0.0)
+            @test_throws ArgumentError deposit(op, beams; absorption = 1.5)
+            # a centred beam's ray at polar angle θ from its axis meets the sphere at
+            # ψ = θ, so the weighted single-beam pattern stays axisymmetric and
+            # separability holds with aₗ of I_L(R₀ sin θ) η_a(θ) cos θ (1-D quadrature)
+            η = 0.6
+            ηa(μ) = 1 - (1 - η)^(μ^3)
+            aη = zeros(L + 1)
+            num = den = 0.0
+            for (x, w) in zip(xg, wg)
+                θ = π / 4 * (1 + x)
+                I = exp(-((R0 * sin(θ) / sp.a)^2)^(sp.order / 2)) * cos(θ) * sin(θ)
+                num += w * I * ηa(cos(θ))
+                den += w * I
+                for l in 0:L
+                    aη[l+1] += (2l + 1) / 2 * w * π / 4 * I * ηa(cos(θ)) * _dd_P(l, cos(θ))
+                end
+            end
+            σηref = [abs(aη[l+1] / aη[1]) * G[l+1] / sqrt(2l + 1) for l in 0:L]
+            rη = map(runs, meshes) do r, m
+                d = deposit(r.op, beams; absorption = η)
+                (; dep = d, σ = mode_power(ylm_matrix(_dd_coeffs(m.W, m.t, d), L)))
+            end
+            # σₗ: O(h²) as without the weight (the facets' flat normals now also enter
+            # η_a(ψ), so the error at n = 30 is ~3× the unweighted one)
+            e20, e30 = (maximum(abs.(r.σ .- σηref)) for r in rη)
+            ex = maximum(abs.(richardson(rη[1].σ, rη[2].σ) .- σηref))
+            @test e30 < 1e-4 && ex < 1e-5
+            @test 1.8 < e20 / e30 < 2.8
+            # the weight changes the pattern by far more than the error
+            @test maximum(abs.(σηref .- σref)) > 50 * e30
+            # absorbed power: the enclosed fraction times the η_a-weighted share
+            fη = enclosed_fraction(sp, R0 / sp.a) * num / den
+            f20, f30 = (sum(r.dep.element) / r.dep.delivered for r in rη)
+            @test isapprox(f30, fη; rtol = 5e-4) && isapprox(richardson(f20, f30), fη; rtol = 2e-5)
+            @test sum(rη[2].dep.per_beam) ≈ sum(rη[2].dep.element) rtol = 1e-12
+        end
     end
 
     @testset "Temporal 2014 single ring" begin
@@ -214,11 +261,11 @@ _dd_coeffs(W, t, dep) = W * (dep.element ./ t.elem_area)
         ring = [Beam("N$k"; theta = 49, phi = 45k) for k in 0:N-1]
         ring = vcat(ring, [Beam("S$k"; theta = 131, phi = 45k) for k in 0:N-1])
         op = DepositionOperator(t, ring; ncone = 1)
-        function σbri(Δ, (a, b))
+        function σbri(Δ, (a, b); absorption = nothing)
             spot = SuperGaussianSpot(b * R0, a * R0; order = 4)   # a axis along θ̂ (meridional)
             beams = [remake(bm; spot, aim = Δ * R0 * sign(bm.port[3]) * Briareus.port_basis(bm.port)[1])
                      for bm in ring]
-            return mode_rms(_dd_coeffs(W, t, deposit(op, beams)), L; m = :zero)
+            return mode_rms(_dd_coeffs(W, t, deposit(op, beams; absorption)), L; m = :zero)
         end
         cases = [(0.0, circ), (0.0, ell), (Δc, circ), (Δe, ell)]
         got = [σbri(Δ, s) for (Δ, s) in cases]
@@ -229,6 +276,13 @@ _dd_coeffs(W, t, dep) = W * (dep.element ./ t.elem_area)
         g = ForwardDiff.derivative(Δ -> σbri(Δ, circ), 0.05)
         h = 1e-4
         fd = (σbri(0.05 + h, circ) - σbri(0.05 - h, circ)) / 2h
+        @test isapprox(g, fd; rtol = 1e-6)
+        # and so is the absorption-weighted one, in the pointing and in η⊥ itself
+        g = ForwardDiff.derivative(Δ -> σbri(Δ, circ; absorption = 0.9), 0.05)
+        fd = (σbri(0.05 + h, circ; absorption = 0.9) - σbri(0.05 - h, circ; absorption = 0.9)) / 2h
+        @test isapprox(g, fd; rtol = 1e-6)
+        g = ForwardDiff.derivative(η -> σbri(0.05, circ; absorption = η), 0.9)
+        fd = (σbri(0.05, circ; absorption = 0.9 + h) - σbri(0.05, circ; absorption = 0.9 - h)) / 2h
         @test isapprox(g, fd; rtol = 1e-6)
     end
 
@@ -261,22 +315,32 @@ _dd_coeffs(W, t, dep) = W * (dep.element ./ t.elem_area)
         @test abs(r0[2]) > 0.1
         @test isapprox(x, [48.926, 51.685, -0.5756, 0.7687, 0.4208]; atol = 2e-3)
 
-        # Briareus on each ring of the re-solved design, η⊥ = 1 (no absorption model):
-        # 12 parallel-ray beams aimed through (0, 0, z R₀), spot 1/e radius 0.6 R₀, order 6
+        # Briareus on each ring of the re-solved design, without absorption (η⊥ = 1) and
+        # with MN17's η_a at η⊥ = 0.9 (`absorption`): 12 parallel-ray beams aimed through
+        # (0, 0, z R₀), spot 1/e radius 0.6 R₀, order 6
         rings = [(x[1], x[3]), (x[2], x[4])]
-        errs = map(rings) do (jd, z)
+        res = map(rings) do (jd, z)
             beams = [Beam("R$k"; theta = jd, phi = 30k, spot = SuperGaussianSpot(a * R0; order = b),
                           aim = (0.0, 0.0, z * R0)) for k in 0:11]
-            bl = map(meshes) do m
-                cc = _dd_coeffs(m.W, m.t, deposit(DepositionOperator(m.t, beams; ncone = 1), beams))
-                [sqrt(2l + 1) * cc[mode_index(l, 0)] / cc[1] for l in 0:L]
+            ops = [DepositionOperator(m.t, beams; ncone = 1) for m in meshes]
+            map((nothing, η)) do absorption
+                bl = map(ops, meshes) do o, m
+                    cc = _dd_coeffs(m.W, m.t, deposit(o, beams; absorption))
+                    [sqrt(2l + 1) * cc[mode_index(l, 0)] / cc[1] for l in 0:L]
+                end
+                ref = _dd_ring_legendre(deg2rad(jd), (0.0, 0.0, z), a, a, b,
+                                        something(absorption, 1.0); lmax = L)
+                (; bl, err = (maximum(abs.(bl[1] .- ref)), maximum(abs.(bl[2] .- ref)),
+                              maximum(abs.(richardson(bl...) .- ref))))
             end
-            ref = _dd_ring_legendre(deg2rad(jd), (0.0, 0.0, z), a, a, b, 1.0; lmax = L)
-            (maximum(abs.(bl[1] .- ref)), maximum(abs.(bl[2] .- ref)),
-             maximum(abs.(richardson(bl...) .- ref)))
         end
-        @test all(e -> e[2] < 3e-3, errs)
+        errs = [r.err for rr in res for r in rr]
+        @test all(e -> e[2] < 4e-3, errs)
         @test all(e -> 1.8 < e[1] / e[2] < 2.8, errs)     # O(h²)
         @test all(e -> e[3] < 2e-4, errs)
+        # the absorption-weighted design: Briareus's B₂…B₁₀ (Eq. 37) vanish to the mesh error
+        B(k) = [res[1][2].bl[k][l+1] + x[5] * res[2][2].bl[k][l+1] for l in 2:2:10]
+        Bx = richardson(B(1), B(2))
+        @test maximum(abs, B(2)) < 5e-4 && maximum(abs, Bx) < 1e-5
     end
 end

@@ -95,6 +95,7 @@ end
             beams = @inferred apply(p, x)
             @test beams isa Vector{Beam{T}}
             @test (@inferred deposit(s.deposition, beams)).element isa Vector{T}
+            @test (@inferred deposit(s.deposition, beams; absorption = T(0.9))).element isa Vector{T}
             ev = evaluate(s, x)   # `Scenario.lpi` is dynamic by design: one dispatch per call
             @test (@inferred flux_moments(ev)) isa Vector{T}
             @test (@inferred objectives[1](ev)) isa T
@@ -104,6 +105,9 @@ end
             @test (@inferred mode_rms(c, 6; m = :nonzero)) isa T
         end
         @test (@inferred flux_response(s.model, s.observed)) isa Matrix{Float64}
+        # a dual absorption on Float64 beams promotes the deposition
+        ηd = only(_inf_duals([0.9]))
+        @test (@inferred deposit(s.deposition, quads; absorption = ηd)).element isa Vector{typeof(ηd)}
     end
 
     if _INF_JET
@@ -120,9 +124,13 @@ end
                 @test _inf_jet_clean(JET.report_opt, apply, p, x)
                 if VERSION >= v"1.11"
                     @test _inf_jet_clean(JET.report_opt, deposit, s.deposition, beams)
+                    @test _inf_jet_clean(JET.report_opt, (o, b, η) -> deposit(o, b; absorption = η),
+                                         s.deposition, beams, eltype(x)(0.9))
                     @test _inf_jet_clean(JET.report_opt, Briareus._keepout_penalty, keepout, beams)
                 end
                 # no possible errors
+                @test _inf_jet_clean(JET.report_call, (o, b, η) -> deposit(o, b; absorption = η),
+                                     s.deposition, beams, eltype(x)(0.9))
                 @test _inf_jet_clean(JET.report_call, evaluate, s, x)
                 @test _inf_jet_clean(JET.report_call, flux_moments, ev)
                 @test _inf_jet_clean(JET.report_call, objectives[1], ev)

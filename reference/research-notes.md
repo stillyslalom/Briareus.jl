@@ -7924,9 +7924,38 @@ absolute in units of the mean):
   z = −0.5756, 0.7687, E₂ = 0.4208; weighting the rings by absorbed instead of
   normalized amplitude gives the same geometry with E₂ = 0.542. So either the printed
   digits are from a different model detail or the published root is imprecise (*L*).
-  Briareus has no absorption model (η⊥ = 1), so it is checked per ring at the
-  re-solved geometry against the same quadrature with η⊥ = 1: max_l≤30 |Δ(b_l/b₀)| =
-  2.5e-3 / 5.1e-3 (n = 20), 1.1e-3 / 2.3e-3 (n = 30), 4.8e-5 / 7.4e-5 extrapolated.
+  Briareus is checked per ring at the re-solved geometry against the same quadrature,
+  without absorption (η⊥ = 1): max_l≤30 |Δ(b_l/b₀)| = 2.5e-3 / 5.1e-3 (n = 20),
+  1.1e-3 / 2.3e-3 (n = 30), 4.8e-5 / 7.4e-5 extrapolated; and with `absorption = 0.9`
+  (below): 3.2e-3 / 7.3e-3, 1.4e-3 / 3.3e-3, 1.6e-5 / 3.5e-5. The two rings combined
+  as Eq. 37 (E₂ = 0.4208) give Briareus B₂…B₁₀ ≤ 1.8e-4 at n = 30 and ≤ 7.4e-7
+  extrapolated: the absorption-weighted root is reproduced. MN17 gives no other
+  weighted number (Figs. 5, 10, 12, 13 are figures only).
+
+**Absorption weight η_a(ψ) (2026-10-27) *derived*.** `deposit(op, beams; absorption =
+η⊥)` keeps the fraction η_a(ψ) = 1 − (1 − η⊥)^(cos³ψ) of each ray at incidence ψ (each
+f-cone direction's; the beam axis's with a VisRad profile), MN17 Eq. 29 (they cite
+Kruer's *The Physics of Laser Plasma Interactions* for it): inverse-bremsstrahlung
+absorption in a thin corona with an exponential density profile, η⊥ = 1 − exp(−8ν_ei
+L/3c) at normal incidence. Confidence: the formula **H** (read in MN17, p. 60, and
+again for centred beams in Eq. 40); its use for real coronas **L** (thin corona,
+parallel rays, no refraction of the deposition pattern). η⊥ has no default and is the
+user's estimate, not a calibrated or facility number (MN17 use 0.9 in §4 and 0.95 in
+Figs. 5, 12, 13). Unabsorbed light is dropped. Generic in the number type (beams and
+η⊥ may be duals; `test/inference.jl` has `@inferred` and JET cases).
+- *Off is bit for bit.* With `absorption = nothing` (the default) the expressions are
+  the previous ones: f-cone and VisRad-profile depositions on the NIF test hohlraum, their
+  ForwardDiff Jacobians in (z, r, power) and OMEGA 60 on a sphere were `==` before and
+  after the change. `absorption = 1` is the same model but a differently compiled
+  expression: equal to ~1 ulp, not bitwise.
+- *Independent check* (`test/direct_drive.jl`): Skupsky–Lee separability still holds
+  for centred beams (ψ equals the polar angle from the beam axis), with aₗ of
+  I_L(R₀ sin θ) η_a(cos θ) cos θ by 1-D Gauss quadrature. OMEGA 60, SG4, R₀ = 0.5 mm,
+  η⊥ = 0.6: max_l |Δσ_l| = 1.25e-4 (n = 20), 5.6e-5 (n = 30), 4.4e-6 extrapolated
+  (O(h²); ~3× the unweighted error, because the facets' flat normals now enter η_a as
+  well as cos ψ); absorbed fraction 0.42008 / 0.42018 / 0.4202646 against 0.4202646
+  (enclosed fraction × the η_a-weighted share). The weight moves σ_l by up to 7.3e-3.
+  dσ/dΔ and dσ/dη⊥ by ForwardDiff match central differences to 1e-6 relative (Te14 ring).
 
 **Accuracy of element metrics.** The error is the facet averaging of the element
 representation, second order in the element size; the deposition quadrature does not
@@ -7935,9 +7964,9 @@ than SG4. For σ (l ≤ 30) to ~2 % use n ≥ 30 (18 000 elements; the 961 × 18
 matrix is 140 MB), or extrapolate n = 20/30. Ba24 evaluates σ on HEALPix nside 64 (49 152
 pixels, 0.9°); n = 30 elements are about 2.1°.
 
-**Not done (Stage 0 remainder).** The absorption weight η_a(ψ) (MN17 Eq. 29) per
-operator sample; the spherical pointing parameterization (open decision 5); the Ba24
-OC σ₁ example; a Literate tutorial.
+**Not done (Stage 0 remainder).** The spherical pointing parameterization (open
+decision 5); the Ba24 OC σ₁ example; a Literate tutorial; `absorption` through
+`Scenario`/`evaluate` (it is a `deposit` keyword only).
 
 ## GUI on CAD: import, parts and first frames, remeasured (2026-10-26) *measured*
 
