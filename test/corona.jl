@@ -122,9 +122,10 @@ end
         h = 1e-6
         fd = [(fσ(Δ0 .+ h .* (1:3 .== i)) - fσ(Δ0 .- h .* (1:3 .== i))) / 2h for i in 1:3]
         @test isapprox(g, fd; rtol = 1e-6)                  # 1.1e-8 measured
-        # dual beams give the Float64 values
+        # dual beams give the Float64 values (to round-off: CI CPUs fuse the dual
+        # arithmetic differently, ~1e-16 of the norm)
         dd = deposit(op, pdd(ForwardDiff.Dual.(Δ0, 1.0)))
-        @test ForwardDiff.value.(dd.ylm) == dep.ylm
+        @test isapprox(ForwardDiff.value.(dd.ylm), dep.ylm; rtol = 1e-12)
         @test_throws ArgumentError deposit(op, [remake(beams[1]; port = beams[2].port), beams[2:3]...])
         @test_throws DimensionMismatch deposit(op, beams[1:2])
     end
