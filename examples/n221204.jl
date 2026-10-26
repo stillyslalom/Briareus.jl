@@ -10,13 +10,13 @@
 # `h`, `capsule_h`: mesh (default 0.28 / 0.16, the standard mesh); `runs`: `all`
 # (default) or `full` (only the full model, e.g. for a fine-mesh confirmation);
 # `transfer`: `calibrated` (the default, `joint` for Zylstra's pair below; the two-zone
-# reduced CBET calibrated to PRE 109 Fig. 9, `n221204_cbet()`), `reduced` (the single-zone reduced CBET model at the deck's
-# settings), `fig9b` (the outer-to-inner transfer that gives PRE 109 Fig. 9b's
+# reduced CBET calibrated to PRE 109 Fig. 9, `n221204_cbet()`), `fig9b` (the
+# outer-to-inner transfer that gives PRE 109 Fig. 9b's
 # post-transfer cone fraction, HYDRA's own CBET result for this shot), `joint` (the
 # joint three-shot calibration, `hybride_cbet()`) or `iraum` (the same with the Δλ null
 # at I-Raum's ≤ 0.5 Å, `hybride_cbet_iraum()`); `table` as 5th
-# argument solves only the comparison times; `dynamics`: `calibrated` (default) or
-# `late_lips` (see below); `shot`: `n221204` (default),
+# argument solves only the comparison times; `dynamics`: `calibrated` (the only value;
+# see below); `shot`: `n221204` (default),
 # `n220919` or `n210808` (proxies, see below), or `n191118` / `n210601`, Zylstra 2022's
 # LEH-size pair of symcaps (3.64 and 3.1 mm LEHs, their measured pulses and Dante;
 # research notes, "Zylstra 2022 LEH pair, time-dependent (2026-10-25)"). Writes
@@ -87,6 +87,8 @@ h = parse(Float64, get(pos, 1, "0.28"))
 capsule_h = parse(Float64, get(pos, 2, "0.16"))
 which = get(pos, 3, "all")
 transfer = get(pos, 4, pair ? "joint" : "calibrated")   # the pair: the joint multi-shot fit (below)
+transfer in ("calibrated", "fig9b", "joint", "iraum") ||
+    error("transfer calibrated, fig9b, joint or iraum, not $transfer")
 
 # Geometry (mm; n221204_benchmark.md §1, PRE 109 Fig. 1a): 11.24 × 6.4 mm Au-lined DU
 # hohlraum, 3.1 mm LEHs, 1.135 mm capsule. Unpublished, so repository defaults: square
@@ -306,11 +308,8 @@ refraction > 0 && @printf("refraction: %.0f %% of the 30° power lost at the spi
                           100refraction, 7.0 + sbs_shift + refraction_shift)
 degrade > 0 && @printf("degradation %.0f %%\n", 100degrade)
 
-# CBET: the reduced model at the deck's settings, δn/n clamp 0.002 until the start of
-# the rise (≈4.0 ns) and 0.0075 after (PRE 109 App. 1); the other plasma parameters are
-# the model's defaults (repository defaults, not N221204's).
-reduced = CBET(leh_z = geometry.length / 2, clamp = ([0.0, 3.9, 4.1, 20.0], [0.002, 0.002, 0.0075, 0.0075]))
-# The alternative: move the fraction of the outer power that turns the input cone
+# CBET (`transfer=reduced`, the single-zone model at the deck's settings, which reverses
+# the transfer, removed 2026-10-26). `fig9b`: move the fraction of the outer power that turns the input cone
 # fraction into PRE 109 Fig. 9b's post-transfer one (read by eye, n221204_benchmark.md
 # §2 and the Fig. 9b notes), shared by the inner beams in proportion to their power.
 cf9b = PulseShape([0.0, 1.0, 2.0, 2.5, 3.3, 3.9, 4.5, 5.0, 5.6, 7.0, 8.0, 8.5, 9.0, 9.4],
@@ -338,8 +337,7 @@ joint = hybride_cbet(leh_z = geometry.length / 2, delay = cbet_delay)
 # being the Δλ of round hot spots rather than the null (`hybride_cbet_iraum()`; research
 # notes, "Joint multi-shot CBET calibration: the null")
 iraum = hybride_cbet_iraum(leh_z = geometry.length / 2, delay = cbet_delay)
-cbet = transfer == "fig9b" ? fig9b : transfer == "reduced" ? reduced : transfer == "joint" ? joint :
-       transfer == "iraum" ? iraum : calibrated
+cbet = transfer == "fig9b" ? fig9b : transfer == "joint" ? joint : transfer == "iraum" ? iraum : calibrated
 
 # Hohlraum dynamics (`dynamics`, 6th argument), calibrated against published data other
 # than Fig. 10 (research notes, "Hohlraum dynamics calibrated to published data
@@ -357,15 +355,13 @@ cbet = transfer == "fig9b" ? fig9b : transfer == "reduced" ? reduced : transfer 
 #   6 ns, against 1.85 ± 0.1 for N210808 in PRE 109 Fig. 1a (N221204's is hidden under
 #   its rays, ≥ 1.55). The collision time scales with HYBRID-E's capsule–wall gap
 #   (3.2 − 1.135 mm): t_c 6.09 ns.
-# `late_lips` is `calibrated` with the 2026-10-23 lip closure (at 5.0 ns over 0.5 ns to
-# 0.84 r₀).
+# (`late_lips`, the 2026-10-23 lip closure at 5.0 ns, removed 2026-10-26; the slot stays
+# for the shot argument's position and the output file's name.)
 dynamics = get(pos, 6, "calibrated")
-dynamics in ("calibrated", "late_lips") || error("dynamics calibrated or late_lips, not $dynamics")
+dynamics == "calibrated" || error("dynamics calibrated, not $dynamics")
 turn_on = 0.4
 motion = WallMotion(start = turn_on + 0.8, saturation = 0.38)
-lip, r_open = dynamics == "late_lips" ?
-    (GapClosure(closure = 5.0, width = 0.5, after = WallLossAlbedo()), 0.84) :
-    (GapClosure(closure = -0.1, width = 7.85, after = WallLossAlbedo()), 0.857)
+lip, r_open = GapClosure(closure = -0.1, width = 7.85, after = WallLossAlbedo()), 0.857
 # `bubble_energy=<E>` (default 1.1) and `collision=<ns>` (default the gap scaling,
 # 6.09 ns) for sensitivity runs (research notes, "The P2 swing: capsule radius,
 # backscatter and the collision (2026-10-25)")
