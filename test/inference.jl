@@ -110,10 +110,15 @@ end
                 beams, ev = apply(p, x), evaluate(s, x)
                 # no runtime dispatch in the per-evaluation kernels (the objectives
                 # dispatch by design on `Evaluation.scenario` in the uncached moments,
-                # as the solves do on albedo models and the model's storage)
+                # as the solves do on albedo models and the model's storage). Julia 1.10's
+                # inference leaves per-beam setup dynamic (a comprehension capturing `T`,
+                # `Union{Nothing,…}` profile fields) that later versions resolve, so the
+                # deposition and keep-out checks run from 1.11.
                 @test _inf_jet_clean(JET.report_opt, apply, p, x)
-                @test _inf_jet_clean(JET.report_opt, deposit, s.deposition, beams)
-                @test _inf_jet_clean(JET.report_opt, Briareus._keepout_penalty, keepout, beams)
+                if VERSION >= v"1.11"
+                    @test _inf_jet_clean(JET.report_opt, deposit, s.deposition, beams)
+                    @test _inf_jet_clean(JET.report_opt, Briareus._keepout_penalty, keepout, beams)
+                end
                 # no possible errors
                 @test _inf_jet_clean(JET.report_call, evaluate, s, x)
                 @test _inf_jet_clean(JET.report_call, flux_moments, ev)
