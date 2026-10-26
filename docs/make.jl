@@ -24,6 +24,7 @@ const TUTORIALS = [
     "cad_hohlraum.jl",
     "leh_power_balance.jl",
     "implosion_metrics.jl",
+    "polar_direct_drive.jl",
 ]
 
 const PAGE_TIMES = Dict{String,Float64}()
@@ -83,6 +84,7 @@ tutorial_page(file) = joinpath("tutorials", splitext(file)[1] * ".md")
             "Radiation in an imported CAD hohlraum" => tutorial_page("cad_hohlraum.jl"),
             "Entrance-hole size and the power balance" => tutorial_page("leh_power_balance.jl"),
             "From drive asymmetry to implosion metrics" => tutorial_page("implosion_metrics.jl"),
+            "Polar direct drive: a published NIF pointing" => tutorial_page("polar_direct_drive.jl"),
         ],
         "Explanation" => [
             "Verification and validation" => "explanation/verification-validation.md",

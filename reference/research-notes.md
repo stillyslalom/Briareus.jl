@@ -7977,8 +7977,8 @@ pixels, 0.9°); n = 30 elements are about 2.1°.
 center, fields = (:theta_s, :dphi_s, :split_theta, :split_phi, …))`, decision 5(a): the
 aim is a point on the sphere, `center + R port_vector(θ, φ_port + Δφ)`, with θ mirrored
 to 180° − θ_s in the lower hemisphere and Δφ measured from each beam's own port (Ba24
-Table I's "polar angle, azimuthal offset" form; which of its two readings Ba24 meant is
-still open, review §4 item 3). The splits add ±split_theta / ±split_phi to each beam of
+Table I's "polar angle, azimuthal offset" form, read as its caption states; the other
+reading is ruled out below, "Ba24 σ₁ comparison and optimization"). The splits add ±split_theta / ±split_phi to each beam of
 a quad with the sign of its port's offset from the quad's mean port (Co08 split quads,
 Ye21 left/right Δφ, as angles; mapping Co08's µm shifts to angles is *L*). Defocus is
 measured from the surface aim, as VisRad and NIF measure the focus offset from the
@@ -8016,8 +8016,94 @@ and are not deterministic; not used. LMJ port geometry was not added to the pack
 paper gives ring angles (33.2°, 49°, 59.5° and supplements, 10/10/2 quads per ring) but
 not the azimuths.
 
-**Not done (Stage 0 remainder).** The Ba24 OC σ₁ example; a Literate tutorial;
-`absorption` through `Scenario`/`evaluate` (it is a `deposit` keyword only).
+**Ba24 σ₁ comparison and optimization (2026-10-26) *derived*.** Decisions 1(b), 2 and 6
+of the review: a documented comparison, never a fit target. Tutorial
+`docs/literate/polar_direct_drive.jl` (63 s as a script on 8 threads); optimization
+`examples/ba24_pdd_optimization.jl`; scratch scripts in the session scratchpad `ba24/`.
+- *Inputs* (Barlow et al., PRL 133, 175101, 2024, accepted manuscript OSTI 2475934 and
+  arXiv:2311.18342v2, **H**): Table I, the Optimized Config (OC), per cone 23.5°/30°/
+  44.5°/50°: polar angle 6.36/14.95/52.48/85.62°, azimuthal offset 52.02/160.75/
+  −12.14/6.90°, defocus 8.22/9.07/4.67/6.83 mm, power 66.26/66.26/95.05/82.88 % of
+  4 TW/quad (the post-optimization rescaling to the requested pulse is taken as common to
+  all cones, which leaves σ₁ unchanged, *L*); σ₁ = 6.03 % (Table II), the rms/mean of the
+  vacuum illumination of the 1.1 mm sphere over l ≤ 30; appendix: the beams of a quad
+  overlap exactly at the aim point on the sphere, each beam a plane wave whose
+  super-Gaussian 1/e radii grow as w₀(1 + κd), κ = 0.30/0.40/0.80/0.95 per 50 mm (fitted
+  to pF3D). Not published: w₀ and the profile shapes (Ifriit's internal "NIF-inner-23" …
+  "NIF-outer-50", named in Polaris's deck generator, **H**), and the intensity convention.
+- *Briareus setup.* `GroupPointing(nif_quads(); fields = (:theta_s, :dphi_s, :defocus,
+  :power), radius = 1.1)` at Table I gives the 48 quad aims; each of the 192 `nif_beams`
+  takes its quad's aim, defocus and a quarter of its power (Ba24's overlap; the quad's
+  port is the mean of its beams', as in Polaris). Two beam models: *own* (LMF CPP fits of
+  `nif_spot`, f/20.7 f-cone defocus from the surface aim, ncone 13) and *emulated* (the
+  same fits scaled by 1 + κd at zero defocus, collimated, ncone = 1; decision 2's
+  emulation, no new API). Icospheres n = 20, 30, Richardson-extrapolated.
+- *Independent check* (emulated beams): a plane-wave quadrature written for the purpose
+  (Gauss–Legendre 256 in μ × 512 in φ, normalized associated-Legendre recurrence; the
+  projected σ₁ converged to 1e-7 relative from 128 to 512 nodes, the incident one to
+  1e-4). Briareus's σ_l against it: max |Δσ_l| 7.3e-4 (n = 20), 3.3e-4 (n = 30), 4.0e-6
+  extrapolated (units of the mean); σ₁ 7.8669 % against 7.8674 %.
+
+| case (l ≤ 30, % of the mean) | σ₁ | m = 0 | m ≠ 0 | absorbed | largest σ_l |
+|---|---|---|---|---|---|
+| Ba24 (Ifriit, their spots) | 6.03 | — | — | — | Fig. 2a only |
+| own beams (extrapolated) | 6.569 | 5.266 | 3.926 | 0.936 | σ₈ 3.91, σ₆ 3.32, σ₄ 1.98 |
+| emulated (extrapolated) | 7.867 | 6.936 | 3.712 | 0.924 | σ₄ 3.95, σ₁₀ 3.72, σ₆ 3.55 |
+| emulated, incident I (quadrature) | 14.25 | 13.66 | 4.06 | — | σ₄ 8.71, σ₂ 7.91 |
+| own beams, η_a at η⊥ = 0.9 (n = 30) | 14.36 | — | — | 0.620 | — |
+
+- *Which reading of Table I* (review §4 item 3). Caption: polar angle from the pole,
+  offset from the port's azimuth (reading A, `:theta_s`/`:dphi_s`). Method text and
+  Polaris's `create_run_files_pdd` (**H**, code read): the aim is the port's surface
+  point rotated by θ_o away from the port, in the direction φ_o about it, aim =
+  Rz(φ_p) Ry(θ_p) Rz(φ_o) Ry(θ_o) R ẑ with (θ_p, φ_p) the quad's mean port, defined in
+  the lower hemisphere's frame and carried to the upper by φ_o → 180° − φ_o ("symmetric")
+  or φ_o + 180° ("anti-symmetric", Polaris's default). Emulated beams, quadrature,
+  projected σ₁: A 7.87 %; about the port, symmetric 144.7 %, anti-symmetric 144.7 %, and
+  with φ_o counted from the toward-equator direction 30.0 % (own beams, symmetric: 150 %).
+  About the port, the 50° cone's beams aim 85.6° from their ports and graze the sphere.
+  *Settled*: Table I lists the published aims in the caption's reading (the
+  about-the-port parameters are the search variables of the method; the table gives the
+  resulting aim angles); confidence **H** for the factor 4–20 between the readings, *L*
+  for the interpretation of the text. Reversing the offset's sense in the lower
+  hemisphere (the ports' rotational symmetry instead of Ba24's "same direction in each
+  hemisphere") gives 8.16 % (m = 0 unchanged, m ≠ 0 3.71 → 4.29 %), so σ₁ does not
+  decide it; the text does.
+- *Spot sensitivity* (emulated, quadrature): all spots × 0.8/0.9/1.0/1.1/1.2/1.3/1.4 →
+  σ₁ 15.98/8.78/7.87/9.26/10.50/11.25/11.65 % (the LMF size sits near the minimum, so
+  Ba24's w₀ are probably of that size, *L*); a common order 2/3/4/5/6 with the same 1/e
+  radii → 6.15/6.01/7.20/8.64/9.93 %. The 0.5- and 1.8-point differences from 6.03 % are
+  within this spread. Causes, in order (*L*): the best-focus spot shapes (LMF fits of
+  orders 4.5–8 against Ifriit's internal models); the defocus convention (the f-cone blur
+  smooths the discrete outer spots more than the linear growth, σ₁ 6.57 against 7.87 %
+  with the same w₀); CBET and plasma are absent from σ₁ in both. Ba24's mode spectrum is
+  a figure (Fig. 2a), not compared.
+- *Optimization of σ₁ alone* (decision 6; own beams, n = 20 sphere, Ba24's 16 parameters
+  and bounds θ_s 0–90°, Δφ_s ±180°, defocus 0–10 mm, power 2–4 TW/quad; 8 threads pinned
+  to one CCX, shared with another job, so times are indicative). Evaluation 0.33 s, a
+  ForwardDiff gradient in 16 parameters 1.26 s (≈ 4 evaluations; against central
+  differences 8e-9 relative). The bounds do not enforce Ba24's "visible half of the
+  target" rule; an aim behind the limb is still a well-defined axis.
+
+| run | σ₁ n = 20 | σ₁ n = 30 | evaluations | wall | best so far |
+|---|---|---|---|---|---|
+| OC | 6.492 % | 6.534 % | — | — | — |
+| L-BFGS-B from the OC (200-iteration limit) | 2.112 % | 2.131 % | 229 | 220 s | 4.95 % at 10, 2.94 at 25, 2.61 at 50, 2.19 at 100, 2.12 at 150 |
+| L-BFGS-B, 4 uniform random starts × 75 | 2.416 % | 2.434 % | 300 | 279 s | per start 5.25, 3.36, 2.42, 3.74 % |
+| Nelder–Mead from the OC (unit box) | 2.074 % | 2.092 % | 1 201 | 290 s | 5.19 % at 200, 2.67 at 400, 2.11 at 700, 2.09 at 1 000 |
+| particle swarm (24 particles, unit box) | 2.485 % | 2.504 % | 1 208 | 340 s | 4.81 % at 200, 4.17 at 400, 2.82 at 700, 2.56 at 1 000 |
+
+  The gradient needs ~5× fewer evaluations than Nelder–Mead for the same σ₁ but, at four
+  evaluations per gradient in 16 parameters, only ~1.7× less wall time; it gains with
+  more parameters (per-quad or split pointings). Different starts end at different σ₁
+  (2.4–5.3 % in 75 evaluations), so σ₁ has several optima; the L-BFGS-B optimum puts
+  both inner cones near the pole (θ_s ≈ 0–1°) and the outer ones at 54° and 83°, with
+  defocus and power at bounds. Ba24 report > 10 000 evaluations to settle σ₁ alone with
+  their GA and coordinate descent (*H* for the number; their evaluations are Ifriit runs
+  with a plasma). These optima are CBET-free vacuum illuminations, not designs.
+
+**Not done (Stage 0 remainder).** `absorption` through `Scenario`/`evaluate` (it is a
+`deposit` keyword only).
 
 ## Corona model prototype: impact-parameter kernels vs 3-D ray tracing (2026-10-27) *measured*
 

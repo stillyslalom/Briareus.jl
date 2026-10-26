@@ -40,6 +40,8 @@ out.
 | CBET coupling against an independent Im Γ computation | code verification | "CBET" |
 | CBET transfer against published points | calibration | `calibrate_cbet` |
 | Two-zone CBET against the N221204 HYDRA transfer (PRE 109 Fig. 9, digitized): cone fraction over the pulse, per-cone outer ratios not fitted | calibration | `test/cbet_zones.jl`; `examples/n221204_cbet_calibration.jl` |
+| Hard-sphere direct-drive illumination against Skupsky–Lee separability, Temporal et al. 2014 (one ring; LMJ), Murakami and Nishi 2017 | validation, solution verification | `test/direct_drive.jl` |
+| NIF polar-direct-drive pointing (Barlow et al. 2024's Optimized Config) against an independent plane-wave quadrature; σ₁ compared with Barlow's, not fitted | solution verification, approximate validation | [Polar direct drive: a published NIF pointing](@ref) |
 | Clearance envelopes, wings, worst-case formulas | code verification | "clearance" |
 | Differentiable entrance-hole keep-out against the clearance check | code verification | "clearance"; [Freeing a bundle for radiography](@ref) |
 

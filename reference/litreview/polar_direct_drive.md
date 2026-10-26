@@ -195,6 +195,14 @@ which shot and time it is was not verified). Expected use: a documented consiste
 check (σ₁ within ~1 % absolute, **L**), and an apples-to-apples optimizer comparison:
 Ba24's f with σ₂ dropped (or replaced at Stage 1) evaluated by Briareus at OC and at
 Briareus's own optimum, with evaluation counts.
+*Done 2026-10-26* (tutorial "Polar direct drive: a published NIF pointing", example
+`examples/ba24_pdd_optimization.jl`; research notes, "Ba24 σ₁ comparison and
+optimization"): σ₁ = 6.57 % with Briareus's beams, 7.87 % with Ba24's linear spot growth
+emulated, against 6.03 %, within the spread of the unpublished spots (±10 % in size adds
+~1 point; order-3 spots give 6.0 %). The caption's reading settles both ambiguities: the
+about-the-port reading of the method text (Polaris's search parameters) gives 30–150 %,
+and σ₁ is the projected intensity I cos ψ (incident I gives 14.2 %; the `DIAGNOSE_INPUT_BEAMS`
+guess above was wrong).
 
 **4. Ye21, NIF 3-mm and 4-mm designs (inputs complete, metric not; H).** Table 1 gives
 all 24 parameters for both targets (e.g. 4 mm "Orange": ring-1 A/B θ = 13°/24°,
@@ -368,7 +376,10 @@ A Briareus PDD CBET model "fitted to data" would be fitted to another code's inf
   against direct integration of Eqs. 28–31; Te14's four σ_2D values; converged ray trace.
 - Example/tutorial: Ba24 OC σ₁ with Briareus's LMF CPPs (and with Ba24's linearly scaled
   spots emulated as zero-defocus spots), a 16-parameter σ₁ optimization from the Ho15
-  pointing, and the comparison of optimum, evaluations and wall time with Ba24's.
+  pointing, and the comparison of optimum, evaluations and wall time with Ba24's. Done
+  2026-10-26 (`docs/literate/polar_direct_drive.jl`, `examples/ba24_pdd_optimization.jl`),
+  the optimization from Ba24's OC and from random starts rather than from Ho15 (whose
+  defocus and spots are not tabulated).
 
 **Stage 1 — static corona.** Spherically symmetric n_e(r), T_e(r), Z̄(r) (analytic
 exponential/linear, or tabulated from a 1-D hydro snapshot); refraction and inverse
@@ -404,7 +415,10 @@ decided 1–11 on 2026-10-27 (each marked **Decided**); 12–15 are open (12 dec
      convention ambiguous; agreement can only be approximate.
    - *Recommendation*: (a) as tests, (b) as a documented example comparison with the
      differences measured, never as a fit target.
-   - **Decided**: the recommendation.
+   - **Decided**: the recommendation. **Implemented** 2026-10-26: (a) in
+     `test/direct_drive.jl` (with Te14b's LMJ σ₀); (b) as the tutorial "Polar direct
+     drive: a published NIF pointing" (σ₁ 6.57 % own beams, 7.87 % Ba24's defocus
+     emulated, against 6.03 %; Table I read as its caption states; §4 item 3).
 2. **Defocus model.**
    - (a) Keep Briareus's f-cone geometric optics (Co08's model in substance). + Physical,
      already validated, smooth in defocus. − Disagrees with Ba24's empirical scaling;
@@ -415,7 +429,9 @@ decided 1–11 on 2026-10-27 (each marked **Decided**); 12–15 are open (12 dec
      zero-defocus spots (no new API). Add a square-aperture option only if Ye21 or Co08
      comparisons show it matters.
    - **Decided**: the recommendation; extend the defocus model (square near field,
-     PDD-plate defocus) if PDD becomes a mainline use.
+     PDD-plate defocus) if PDD becomes a mainline use. The emulation is in the Ba24
+     tutorial: with the same best-focus spots, the f-cone gives σ₁ 6.57 % and the linear
+     growth 7.87 %.
 3. **Corona model for Stage 1.**
    - (a) Analytic profiles only. + Closed forms, trivial to test. − Not a real implosion.
    - (b) Tabulated 1-D spherical profiles with tabulated ray kernels. + Covers real
@@ -463,7 +479,10 @@ decided 1–11 on 2026-10-27 (each marked **Decided**); 12–15 are open (12 dec
      dependency.
    - *Recommendation*: (a) + (c); state that Ba24 is the only published GA PDD optimizer
      and that its full objective needs Stage 3 (CBET).
-   - **Decided**: the recommendation.
+   - **Decided**: the recommendation. Done 2026-10-26 for σ₁ alone
+     (`examples/ba24_pdd_optimization.jl`): from the OC, L-BFGS-B reaches 2.6 % in 50
+     evaluations and 2.11 % in 229, Nelder–Mead 2.1 % after ~700, a particle swarm 2.5 %
+     in 1 200; Ba24 report > 10 000 evaluations for σ₁ alone.
 7. **First facility.**
    - (a) NIF 192 beams. + Every quantitative benchmark (Ba24, Ye21, Co08, Ho15, CM18) is
      NIF; ports and CPPs are in the package. − Larger problem.
