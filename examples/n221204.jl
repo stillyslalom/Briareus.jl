@@ -64,15 +64,16 @@
 #   implosion metrics (hot-spot velocity, flux P2 over the drive window, the drive at
 #   bang) over the window from the rise to bang (research notes, "Zylstra 2022 LEH pair,
 #   time-dependent (2026-10-25)");
-# - `mband=on`: the full model's capsule M-band (> 1.8 keV) P2/P0 at every step from each
-#   cone's own post-CBET, post-bubble deposition (`drive_history`'s `mband`), beside the
-#   earlier proxy (the cones weighted by their pre-CBET deposition), against Dewald 2020's
-#   +0.15 at 6 ns on the Mo sphere (a check; research notes, "Per-cone M-band in the drive
-#   history (2026-10-27)").
+# - `alpha_m=<a>`: the M-band group albedo α_M (default 0.55, calibrated) of the full
+#   model's M-band and of the thermal-spot `unfold` case.
 # Every run prints its time-integrated energy budget (`energy_budget`) against PRE 109
 # App. 3's N221204 split (wall 54.1 %, LEH 25.2 %, gas 4.5 %, capsule 16.2 %), and its
 # synthetic Dante 1 Tr peak (`dante1()`) beside the capsule-seen Tr, against the measured
-# 313 eV (research notes, "Spectral radiosity, M-band and a synthetic Dante").
+# 313 eV (research notes, "Spectral radiosity, M-band and a synthetic Dante"). The full
+# model also prints its capsule M-band (> 1.8 keV) P2/P0 at every step, from each cone's
+# own post-CBET, post-bubble deposition (`drive_history`'s default M-band), against
+# Dewald 2020's +0.15 at 6 ns on the Mo sphere (a check; research notes, "Per-cone M-band
+# in the drive history (2026-10-27)").
 
 using Briareus, Printf, DelimitedFiles
 
@@ -84,7 +85,7 @@ shot = get(pos, 6, "n221204")
 # them (N221204's measured SBS/SRS would not apply).
 pair = shot in ("n191118", "n210601")
 for k in keys(opt)
-    k in ("capsule", "capsule_albedo", "capsule_outside", "degrade", "lips", "lag", "unfold", "metrics", "dt", "alpha_m", "mband",
+    k in ("capsule", "capsule_albedo", "capsule_outside", "degrade", "lips", "lag", "unfold", "metrics", "dt", "alpha_m",
           "backscatter", "collision", "bubble_energy", "sbs_energy", "refraction", "refraction_shift") ||
         error("unknown option $k=$(opt[k])")
 end
@@ -413,37 +414,29 @@ dante_tr(sol) = (d = dante(d1, sol); (d.Tr, d.Tr_open))
 # M-band) and, for comparison, by the earlier `:brightness` rule (each element a
 # Planckian at its brightness temperature; research notes, "Laser-spot spectrum").
 # Also, as calibrated on Dewald's setup (`examples/mband_dewald2020.jl`): the per-cone
-# M-band (`nif_mband()`, each element's conversion weighted by the cones' shares of its
-# pre-CBET deposition, a proxy: CBET and the bubble change the cone powers, not which
-# cone lights an element) with the M-band group albedo `alpha_m` of the gold
-# (thermalized), 0.55 with the thermal spots and 0.5 with the brightness rule.
+# M-band (`nif_mband()` on the gold liner of the DU wall, each cone's own post-CBET,
+# post-bubble deposition: `mband_power` with the step's effective beams, as
+# `drive_history` does) with the M-band group albedo `alpha_m` of the gold
+# (`mband_albedo`, thermalized), 0.55 with the thermal spots and 0.5 with the brightness
+# rule.
 unfold_times = get(opt, "unfold", "off") == "on" ? [5.0, 6.0, 7.0, 8.0, 8.5] : Float64[]
 unfolds = Dict{Float64,Any}()
 d1g = dante1(channels = dante1_channels(model = :gaussian))   # the Gaussian fallback, for comparison
 alpha_m = parse(Float64, get(opt, "alpha_m", "0.55"))
-function cone_mband(mb, sol)
-    t = sol.model.target
-    bs = beams_at(sol.time)
-    op = DepositionOperator(t, bs)
-    D = [deposit(op, [b.group === g ? b : remake(b; power = 0.0) for b in bs]).element for g in keys(mb.groups)]
-    f = collect(values(mb.groups))
-    tot = sum(D)
-    return [tot[e] > 0 && !Briareus.is_aperture(t, e) && Briareus.element_material(t, e).name in (:Au, :DU) ?
-            sum(f[i] * D[i][e] for i in eachindex(D)) / tot[e] * Float64(sol.laser[e]) : 0.0 for e in 1:nelements(t)]
-end
+full_lpi = with_pre(cbet, bubble)          # the full model's laser–plasma chain
 function dante_spectral(sol)
     out = Any[]
     E = spectral_edges()
-    k = findfirst(==(1800.0), E)
     t = sol.model.target
-    mband_albedo(a) = Dict(c.name => [g >= k ? a : NaN for g in 1:length(E)-1]
-                           for c in t.components if c.kind === :surface && c.material.name in (:Au, :DU))
+    τ = sol.time
     mb = nif_mband()
-    PM = cone_mband(mb, sol)
+    PM = mband_power(mb, deposition_at(kl, τ), apply_lpi(full_lpi, beams_at(τ), τ); lpi = full_lpi, time = τ)
     cases = [(; spot = :brightness, mband = nothing), (; spot = :brightness, mband = MBandEmission()),
              (; spot = :radiation, mband = nothing), (; spot = :radiation, mband = MBandEmission()),
-             (; spot = :brightness, mband = mb, mband_power = PM, albedo = mband_albedo(0.5), thermalize = true),
-             (; spot = :radiation, mband = mb, mband_power = PM, albedo = mband_albedo(alpha_m), thermalize = true)]
+             (; spot = :brightness, mband = mb, mband_power = PM, albedo = mband_albedo(t, mb, E; albedo = 0.5),
+                thermalize = true),
+             (; spot = :radiation, mband = mb, mband_power = PM, albedo = mband_albedo(t, mb, E; albedo = alpha_m),
+                thermalize = true)]
     for kw in cases
         s = spectral_solve(sol; edges = E, kw...)
         d = dante(d1, s)
@@ -474,28 +467,15 @@ if which == "all"
 end
 kl = Keyframes(moving_hohlraum(motion; radius = R0, geometry..., leh_closure = lip, shrink...), keyframes, beams)
 which == "all" && run!("+lips", () -> drive_history(kl, beams_at, times; lpi = with_pre(cbet), record = dante_tr))
-# `mband=on`: the full model's M-band from each cone's own post-CBET, post-bubble
-# deposition at every step (`drive_history`'s `mband`; Dewald's per-cone conversions
-# `nif_mband()` on the gold liner of the DU wall), two groups split at 1.8 keV with the
-# M-band group albedo `alpha_m` thermalized (the > 1.8 keV flux of a two-group solve is
-# that of the 42-group one: the soft groups keep the gray albedo); and, at the same steps,
-# the earlier proxy `cone_mband` (the cones weighted by their pre-CBET deposition).
-mband_on = get(opt, "mband", "off") == "on"
-mb_cones = nif_mband(materials = (:Au, :DU))
-mband_spectral = (; edges = [0.0, 1800.0, Inf], thermalize = true,
-                  albedo = Dict(c.name => [NaN, alpha_m] for c in kl.reference.components
-                                if c.kind === :surface && c.material.name in (:Au, :DU)))
-mband_proxy = Dict{Float64,Vector{Float64}}()
-function bubble_rec(sol)
-    if mband_on
-        s = spectral_solve(sol; mband_spectral..., mband = mb_cones, mband_power = cone_mband(mb_cones, sol))
-        tg = sol.model.target
-        mband_proxy[sol.time] = legendre_moments(band_flux(s, 1800.0), tg, elements(tg, :capsule); lmax = 6)
-    end
-    return dante_rec(sol)
-end
-mband_kw = mband_on ? (; mband = mb_cones, spectral = mband_spectral) : (;)
-run!("+bubble", () -> drive_history(kl, beams_at, times; lpi = with_pre(cbet, bubble), record = bubble_rec,
+# Every run records the capsule M-band (> 1.8 keV) at every step from each cone's own
+# post-CBET, post-bubble deposition (`drive_history`'s default `mband = nif_mband()`:
+# Dewald's per-cone conversions on the gold liner of the DU wall), two groups split at
+# 1.8 keV with the M-band group albedo α_M 0.55 thermalized (the > 1.8 keV flux of a
+# two-group solve is that of the 42-group one: the soft groups keep the gray albedo);
+# `alpha_m` replaces α_M in the full model.
+mband_kw = haskey(opt, "alpha_m") ?
+           (; spectral = (; albedo = mband_albedo(kl.reference, nif_mband(), [0.0, 1800.0, Inf]; albedo = alpha_m))) : (;)
+run!("+bubble", () -> drive_history(kl, beams_at, times; lpi = full_lpi, record = dante_rec,
                                      ylm = metrics, mband_kw...))
 # the full model with the uniform backscatter cut, for Fig. 10 (`backscatter`, above)
 fig10_run = backscatter && hasproperty(n221204_fig10(), Symbol(shot))
@@ -547,24 +527,18 @@ for t in [4.5, 5.0, 5.5, 6.0, 6.5, 7.0, 7.5, 8.0, 8.5, 9.0]
             join([rpad(@sprintf("%.1f / %.1f / %.1f", r.Tr[k], r.record[k]...), 24) for (_, r) in runs]),
             @sprintf("%.1f", measured.dante1[i]))
 end
-if mband_on
-    r = last(runs[findfirst(p -> first(p) == "+bubble", runs)])
+let r = last(runs[findfirst(p -> first(p) == "+bubble", runs)])
     mp2 = r.mband_moments[3, :] ./ r.mband_moments[1, :]
-    xp2 = [mband_proxy[τ][3] / mband_proxy[τ][1] for τ in times]
-    println("\ncapsule M-band (> 1.8 keV) P2/P0, full model: per cone after CBET and the bubble / the earlier",
-            " pre-CBET cone weighting / difference; M-band share of the capsule flux; laser M-band over absorbed laser",
-            " (Dewald 2020 Fig. 10, Mo sphere, its own shot: mostly > 0, +0.15 at 6 ns)")
+    println("\ncapsule M-band (> 1.8 keV) P2/P0, full model, per cone after CBET and the bubble; M-band share of",
+            " the capsule flux; laser M-band over absorbed laser (Dewald 2020 Fig. 10, Mo sphere, its own shot:",
+            " mostly > 0, +0.15 at 6 ns)")
     for τ in (2.0, 4.0, 4.5, 5.0, 5.5, 6.0, 6.5, 7.0, 7.5, 8.0, 8.5, 9.0)
         k = findfirst(≈(τ), times)
         k === nothing && continue
         PL = sum(r.laser[c][k] for c in keys(r.laser))
-        @printf("  %4.1f ns  %+.3f / %+.3f / %+.4f;  share %.3f;  laser M-band %.3f\n", τ, mp2[k], xp2[k],
-                mp2[k] - xp2[k], r.mband_moments[1, k] / r.moments[1, k], sum(r.mband[c][k] for c in keys(r.mband)) / PL)
+        @printf("  %4.1f ns  %+.3f;  share %.3f;  laser M-band %.3f\n", τ, mp2[k],
+                r.mband_moments[1, k] / r.moments[1, k], sum(r.mband[c][k] for c in keys(r.mband)) / PL)
     end
-    w = findall(τ -> 2.0 <= τ <= 9.0, times)
-    @printf("  max |difference| over 2–9 ns %.4f (at %.2f ns); mean difference over 4.5–8.5 ns %+.4f\n",
-            maximum(abs.(mp2[w] .- xp2[w])), times[w[argmax(abs.(mp2[w] .- xp2[w]))]],
-            (ww = findall(τ -> 4.5 <= τ <= 8.5, times); sum(mp2[ww] .- xp2[ww]) / length(ww)))
 end
 for (n, r) in runs
     isempty(r.lip_radius) && continue
