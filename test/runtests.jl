@@ -200,6 +200,33 @@ i, j = 2 * 16 + 1, 7 * 16 + 9
     @test all(x -> abs(x) < 1e-12, closure_error(Fc)) && all(x -> abs(x) < 1e-12, closure_error(Fq))
     @test isapprox(Fc[1, 3], par; rtol = 1e-12) && isapprox(Fc[1, 2], perp; rtol = 1e-12)
     @test isapprox(closure_error(Ff)[1], perp; rtol = 1e-12) && all(x -> abs(x) < 1e-12, closure_error(Ff)[2:end])
+    # Sectors and inward cylinder patches about one axis: the double contour with exact
+    # arcs (`_arc_pair_vf`), summed over every pair, against the coaxial-disk closed forms:
+    # a 20 µm slot's aperture onto its annulus (sharing the arc), the annuli across it, a
+    # wall onto its end annulus and a bore onto its disk of center fans. The near pairs of
+    # `view_factors` take it.
+    Fdd(a, b, H) = (X = 1 + (1 + (b / H)^2) / (a / H)^2; (X - sqrt(X^2 - 4(b / a)^2)) / 2)
+    Gca(a, r0, H) = π * a^2 * (1 - Fdd(a, a, H)) - (r0 == 0 ? 0.0 : π * r0^2 * (1 - Fdd(r0, a, H)))
+    Gdd(a, b, H) = π * a^2 * Fdd(a, b, H)
+    R0, R1, g2 = 2.875, 2.925, 0.01
+    ta = Target([Component(:slot, cylinder_mesh(R1, -g2, g2; nz = 1, nphi = 90), gold(); surface = CylinderSurface(R1)),
+                 Component(:top, annulus_mesh(R0, R1, g2; nr = 1, nphi = 24, up = false), gold(); surface = DiskSurface(center = (0, 0, g2))),
+                 Component(:bottom, annulus_mesh(R0, R1, -g2; nr = 1, nphi = 32, up = true), gold(); surface = DiskSurface(center = (0, 0, -g2))),
+                 Component(:wall, cylinder_mesh(R0, g2, 1.0; nz = 2, nphi = 24), gold(); surface = CylinderSurface(R0)),
+                 Component(:cap, annulus_mesh(1.55, R0, 1.0; nr = 2, nphi = 24, up = false), gold(); surface = DiskSurface(center = (0, 0, 1.0))),
+                 Component(:bore, cylinder_mesh(1.55, 1.0, 1.1; nz = 1, nphi = 20), gold(); surface = CylinderSurface(1.55)),
+                 Component(:leh, disk_mesh(1.55, 1.1; nr = 2, nphi = 12, up = false), gold(); surface = DiskSurface(center = (0, 0, 1.1)))])
+    cta = Briareus._vf_context(ta; near = 3.0, mid = 12.0, level = 1, exact_far = true, visibility = :centroid, visibility_grid = 1)
+    Garc(a, b) = sum(Briareus._arc_pair_vf(cta.arcs[i], cta.arcs[j]) for i in elements(ta, a), j in elements(ta, b))
+    @test isapprox(Garc(:slot, :top), Gca(R1, R0, 2g2); rtol = 1e-11)
+    @test isapprox(Garc(:top, :bottom), Gdd(R1, R1, 2g2) - Gdd(R1, R0, 2g2) - Gdd(R0, R1, 2g2) + Gdd(R0, R0, 2g2); rtol = 1e-11)
+    @test isapprox(Garc(:wall, :cap), Gca(R0, 1.55, 1.0 - g2); rtol = 1e-11)
+    @test isapprox(Garc(:bore, :leh), Gca(1.55, 0.0, 0.1); rtol = 1e-11)
+    # (not in front of each other: the wall above the slot and the annulus below it)
+    @test isnan(Briareus._arc_pair_vf(cta.arcs[elements(ta, :wall)[1]], cta.arcs[elements(ta, :bottom)[1]]))
+    Fa = view_factors(ta)
+    i, j = elements(ta, :slot)[1], elements(ta, :top)[1]
+    @test Fa[i, j] == Briareus._arc_pair_vf(cta.arcs[i], cta.arcs[j]) / ta.elem_area[i]
     # the cut pieces tile the sliver, each about half as long
     a, b, c = Vec3(0, 0, 0), Vec3(1, 0, 0), Vec3(0, 0.05, 0)
     area(x, y, z) = norm(cross(y - x, z - x)) / 2

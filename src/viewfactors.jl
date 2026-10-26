@@ -31,7 +31,11 @@ quadrature points on the true surface with its normals and areas, point to point
 between two curved elements (`4^level` sub-triangle points per triangle when near, one
 per triangle out to three times that distance, the projected centroid beyond), and onto
 the exact polygon of a planar partner. Elements of a `DiskSurface` are exact polar
-sectors, planar receivers whose arcs are divided finely. A curved concave element also
+sectors, planar receivers whose arcs are divided finely. A near pair of a sector and
+another sector or a chord rectangle of a cylinder seen from inside, all about one axis
+and wholly in front of each other (an end cap and the wall at its corner, a waist gap's
+annuli and its slot, an LEH disk and its bore), takes the double contour above with the
+arcs exact (to ~1e-12; the point rule left 1e-3 to 4e-2 there). A curved concave element also
 sees itself, which gives the diagonal `Fᵢᵢ`. Flat facets standing in for a curved wall misrepresent the
 exchange between nearby elements by an amount of order one relative to its size, which
 matters next to a concentrated source such as a laser spot.
@@ -160,8 +164,11 @@ function _vf_context(t::Target; near, mid, level, exact_far, visibility, visibil
     vis = visibility === :sampled ? [_visibility_samples(t, e, visibility_grid) for e in 1:N] : nothing
     # outlines of flat elements, for near flat pairs (`_contour_pair_vf`)
     outl = Union{Nothing,_Outline}[curved[e] ? nothing : _outline(t, e, offset, size[e]) for e in 1:N]
+    # outlines of arcs and lines (polar sectors, chord rectangles of a cylinder seen from
+    # inside), for near pairs with a sector (`_arc_pair_vf`)
+    arcs = Union{Nothing,_ArcOutline}[curved[e] ? _arc_outline(t, e, size[e]) : nothing for e in 1:N]
     return (; t, bvh = t.bvh, C, Nrm, A, planar, concave, recv, cells, qnear, qmid, qfar, qself,
-           size, slack, ε, tri_surf, inside, near2 = near^2, mid2 = mid^2, level, exact_far, vis, multi, outl)
+           size, slack, ε, tri_surf, inside, near2 = near^2, mid2 = mid^2, level, exact_far, vis, multi, outl, arcs)
 end
 
 # Row i of the view-factor matrix (pairs i < j), behind a function barrier so the
@@ -251,7 +258,7 @@ end
 
 # G of the pair i < j that faces and sees itself by the fraction `frac` > 0.
 function _vf_kernel(ctx, i, j, frac, d, r2)
-    (; t, Nrm, A, planar, recv, cells, qnear, qmid, qfar, level, exact_far, outl) = ctx
+    (; t, Nrm, A, planar, recv, cells, qnear, qmid, qfar, level, exact_far, outl, arcs) = ctx
     # (`cells` is untyped: assert the kernel's type, or every pair's factor is boxed)
     near_kernel(e, rc) = (cells[e] === nothing ? _adaptive_kernel(t, e, rc; mindepth = level + 1) :
                           _cell_kernel(cells[e], rc))::Float64
@@ -260,8 +267,9 @@ function _vf_kernel(ctx, i, j, frac, d, r2)
     if planar[i] && planar[j]
         if tier === :near
             # flat pairs wholly in front of each other: the exact double contour
+            # (and coaxial sectors, with their arcs)
             oi, oj = outl[i], outl[j]
-            G = oi === nothing || oj === nothing ? NaN : _contour_pair_vf(oi, oj)
+            G = oi === nothing || oj === nothing ? _arc_pair_vf(arcs[i], arcs[j]) : _contour_pair_vf(oi, oj)
             isnan(G) && (G = (near_kernel(i, recv[j]) + near_kernel(j, recv[i])) / 2)
         elseif exact_far
             G = (_pair_kernel(qfar[i], recv[j]) + _pair_kernel(qfar[j], recv[i])) / 2
@@ -270,6 +278,9 @@ function _vf_kernel(ctx, i, j, frac, d, r2)
         end
     else
         q = tier === :near ? qnear : tier === :mid ? qmid : qfar
+        # a near sector and cylinder patch about one axis: the double contour with arcs
+        G = tier === :near && planar[i] != planar[j] ? _arc_pair_vf(arcs[i], arcs[j]) : NaN
+        isnan(G) || return (frac == 1 ? G : G * frac)::Float64
         G = !planar[i] && !planar[j] ? _point_kernel(q[i], q[j]) :
             tier === :near ? (planar[j] ? near_kernel(i, recv[j]) : near_kernel(j, recv[i])) :
             planar[j] ? _pair_kernel(q[i], recv[j]) : _pair_kernel(q[j], recv[i])
@@ -1278,6 +1289,247 @@ function _gk_adapt(f::F, a, b, tol, mag, depth = 0) where {F}
     E = abs(K - G)
     (!(E * h > tol && E > 100eps() * (Kabs + mag)) || depth >= 40) && return K * h   # (NaN stops)
     return _gk_adapt(f, a, c, tol / 2, mag, depth + 1) + _gk_adapt(f, c, b, tol / 2, mag, depth + 1)
+end
+
+# ------------------------------------- near coaxial pairs: the double contour with arcs
+#
+# Polar sectors and chord rectangles of a cylinder have outlines of circular arcs about an
+# axis and straight edges. Two such elements about one axis (an end cap's sector and the
+# wall next to it, a gap's annulus and the slot's aperture, the annuli across a gap) that
+# lie wholly in front of each other exchange G = (1/2π) ∮∮ ln r dl_i·dl_j over their
+# outlines with the arcs taken exactly (the surface spanning an outline does not enter,
+# so a cylinder patch takes it as a flat pair does). The cell rule refined such pairs
+# toward the shared arc down to maxdepth onto 34-edge sector receivers whose chords leave
+# a slit along it: 2.3 ms per pair of a 20 µm gap's aperture and annulus (~half of a bored
+# cavity's view-factor time) and 1e-3 to 4e-2 off a converged quadrature. Arc × arc terms
+# reduce to one integral over the azimuth difference; arc × line terms take the line's
+# integral in closed form (research notes, "Near sector pairs by the double contour with
+# arcs").
+
+struct _ArcOutline
+    axis::Vec3                          # the axis (sign canonical) and its frame
+    origin::Vec3
+    e1::Vec3
+    e2::Vec3
+    arcs::Vector{NTuple{4,Float64}}     # (ρ, z, φ0, φ1) in the frame, directed φ0 → φ1
+    segs::Vector{NTuple{2,Vec3}}        # straight edges in frame coordinates (x, y, z)
+    plane::Int8                         # sector: ±1, front along ±axis; 0: inward cylinder patch
+    h::Float64                          # the sector's height z, or the cylinder's radius
+    zlo::Float64
+    zhi::Float64
+    rhi::Float64
+    size::Float64
+end
+
+function _axis_frame(a::Vec3, c::Vec3)
+    k = argmax(abs.(a))
+    a = a[k] < 0 ? -a : a
+    o = c - dot(c, a) * a
+    e1 = normalize(cross(a, abs(a[1]) < 0.9 ? Vec3(1, 0, 0) : Vec3(0, 1, 0)))
+    return a, o, e1, cross(a, e1)
+end
+
+_arc_outline(t::Target, e, size) = _arc_outline(t, e, t.components[t.elem_comp[e]].surface, size)
+_arc_outline(t::Target, e, s, size) = nothing
+
+function _arc_outline(t::Target, e, s::DiskSurface, size)
+    r0, r1, a, b = element_sector(t, e)
+    ax, o, e1, e2 = _axis_frame(s.normal, s.center)
+    d1, d2 = _disk_basis(s)
+    α = atan(dot(d1, e2), dot(d1, e1))
+    σ = dot(cross(d1, d2), ax) > 0 ? 1.0 : -1.0
+    lo, hi = minmax(α + σ * a, α + σ * b)
+    z = dot(s.center - o, ax)
+    P(r, φ) = Vec3(r * cos(φ), r * sin(φ), z)
+    # counterclockwise about +axis
+    arcs = [(r1, z, lo, hi)]
+    segs = [(P(r1, hi), P(r0, hi)), (P(r0, lo), P(r1, lo))]
+    r0 > 0 && push!(arcs, (r0, z, hi, lo))
+    front = dot(t.elem_normal[e], ax) > 0 ? Int8(1) : Int8(-1)
+    if front < 0
+        arcs = [(ρ, zz, φ1, φ0) for (ρ, zz, φ0, φ1) in arcs]
+        segs = [(q, p) for (p, q) in segs]
+    end
+    return _ArcOutline(ax, o, e1, e2, arcs, segs, front, z, z, z, r1, size)
+end
+
+# a chord rectangle of a cylinder seen from inside: two azimuths × two heights
+function _arc_outline(t::Target, e, s::CylinderSurface, size)
+    t.elem_curved[e] < 0 || return nothing
+    ax, o, e1, e2 = _axis_frame(s.axis, s.origin)
+    vs = Vec3[]
+    for k in t.elem_tris[e], v in (t.tri_v0[k], t.tri_v0[k] + t.tri_e1[k], t.tri_v0[k] + t.tri_e2[k])
+        any(w -> norm(w - v) <= 1e-12 * size, vs) || push!(vs, v)
+    end
+    length(vs) == 4 || return nothing
+    R = s.radius
+    cyl(v) = (d = v - o; (hypot(dot(d, e1), dot(d, e2)), atan(dot(d, e2), dot(d, e1)), dot(d, ax)))
+    c = map(cyl, vs)
+    all(x -> abs(x[1] - R) <= 1e-9 * R, c) || return nothing
+    φ1 = c[1][2]
+    φs = [φ1 + rem2pi(x[2] - φ1, RoundNearest) for x in c]
+    zs = [x[3] for x in c]
+    tz, tφ = 1e-9 * size, 1e-9 * size / R
+    zlo, zhi = extrema(zs)
+    φlo, φhi = extrema(φs)
+    zhi - zlo > tz && φhi - φlo > tφ && φhi - φlo < π || return nothing
+    # each corner once
+    corner(z, φ) = count(k -> abs(zs[k] - z) <= tz && abs(φs[k] - φ) <= tφ, 1:4) == 1
+    all(corner(z, φ) for z in (zlo, zhi), φ in (φlo, φhi)) || return nothing
+    P(φ, z) = Vec3(R * cos(φ), R * sin(φ), z)
+    # counterclockwise about the inward normal
+    arcs = [(R, zhi, φlo, φhi), (R, zlo, φhi, φlo)]
+    segs = [(P(φlo, zlo), P(φlo, zhi)), (P(φhi, zhi), P(φhi, zlo))]
+    return _ArcOutline(ax, o, e1, e2, arcs, segs, Int8(0), R, zlo, zhi, R, size)
+end
+
+# G of a near pair of arc outlines about one axis, each wholly in front of the other (to
+# 1e-9 of their size); else NaN.
+function _arc_pair_vf(oi::_ArcOutline, oj::_ArcOutline)
+    L = max(oi.size, oj.size)
+    δ = 1e-9 * L
+    (norm(oi.axis - oj.axis) <= 1e-12 && norm(oi.origin - oj.origin) <= 1e-12 * (L + norm(oi.origin))) || return NaN
+    _arc_front(oi, oj, δ) && _arc_front(oj, oi, δ) || return NaN
+    s = 0.0
+    for (ρ1, z1, a1, b1) in oi.arcs
+        for (ρ2, z2, a2, b2) in oj.arcs
+            s += _lnr_arcs(ρ1 / L, z1 / L, a1, b1, ρ2 / L, z2 / L, a2, b2)
+        end
+        for (q0, q1) in oj.segs
+            s += _lnr_arc_seg(ρ1 / L, z1 / L, a1, b1, q0 / L, q1 / L)
+        end
+    end
+    for (p0, p1) in oi.segs
+        for (ρ2, z2, a2, b2) in oj.arcs
+            s += _lnr_arc_seg(ρ2 / L, z2 / L, a2, b2, p0 / L, p1 / L)
+        end
+        for (q0, q1) in oj.segs
+            a, b = p1 - p0, q1 - q0
+            c = dot(a, b)
+            abs(c) <= 1e-14 * norm(a) * norm(b) && continue
+            s += c / (norm(a) * norm(b)) * _lnr_edges(p0 / L, p1 / L, q0 / L, q1 / L)
+        end
+    end
+    return max(s * L^2 / 2π, 0.0)
+end
+
+_arc_pair_vf(oi, oj) = NaN                  # (either has no arc outline)
+
+# whether `o` lies wholly in front of `self`
+function _arc_front(self::_ArcOutline, o::_ArcOutline, δ)
+    self.plane == 0 && return o.rhi <= self.h + δ
+    return self.plane * (o.zlo - self.h) >= -δ && self.plane * (o.zhi - self.h) >= -δ
+end
+
+# ∫∫ cos(φ − ψ) ln r ρ1 ρ2 dφ dψ over two arcs about one axis (directed a → b): one
+# integral over u = φ − ψ, weighted by the overlap w(u) of the two ranges (linear between
+# breakpoints). r² = c + 4ρ1ρ2 sin²(u/2) with c = (ρ1 − ρ2)² + Δz², whose logarithm is
+# singular (coincident circles) or sharply peaked (circles 20 µm apart) at u = 0: its
+# part ½ ln(c + ρ1ρ2 u²) times w is integrated in closed form on each piece, and the
+# smooth rest by Gauss–Kronrod.
+function _lnr_arcs(ρ1, z1, a1, b1, ρ2, z2, a2, b2)
+    σ = (b1 > a1) == (b2 > a2) ? 1.0 : -1.0
+    Alo, Ahi = minmax(a1, b1)
+    k = round((a1 + b1 - a2 - b2) / 4π)
+    Blo, Bhi = minmax(a2, b2) .+ 2π * k
+    lo, hi = Alo - Bhi, Ahi - Blo
+    c = (ρ1 - ρ2)^2 + (z1 - z2)^2
+    κ = ρ1 * ρ2
+    br = sort!([lo, Alo - Blo, Ahi - Bhi, hi])
+    lo < 0 < hi && (push!(br, 0.0); sort!(br))
+    tol = 1e-14 * (Ahi - Alo) * (Bhi - Blo)
+    mag = min(Ahi - Alo, Bhi - Blo) * (abs(log(c + 4κ)) / 2 + 4)
+    f = _ArcRest(Alo, Ahi, Blo, Bhi, c, κ)
+    I = 0.0
+    for m in 1:length(br)-1
+        p, q = br[m], br[m+1]
+        p < q || continue
+        wp, wq = _overlap(f, p), _overlap(f, q)
+        β = (wq - wp) / (q - p)
+        α = wp - β * p
+        I += α * (_lnq0(q, c, κ) - _lnq0(p, c, κ)) + β * (_lnq1(q, c, κ) - _lnq1(p, c, κ))
+        I += _gk_adapt(f, p, q, tol, mag)
+    end
+    return σ * κ * I
+end
+
+struct _ArcRest
+    Alo::Float64
+    Ahi::Float64
+    Blo::Float64
+    Bhi::Float64
+    c::Float64
+    κ::Float64
+end
+
+_overlap(f::_ArcRest, u) = max(min(f.Ahi, f.Bhi + u) - max(f.Alo, f.Blo + u), 0.0)
+
+# w(u) [cos u ½ ln(c + 4κ sin²(u/2)) − ½ ln(c + κ u²)]
+function (f::_ArcRest)(u)
+    s2 = f.c + f.κ * u * u
+    s2 == 0 && return 0.0
+    h = sin(u / 2)
+    r2 = f.c + 4f.κ * h * h
+    cu = 1 - 2h * h
+    return _overlap(f, u) * (cu * log(r2 / s2) - 2h * h * log(s2)) / 2
+end
+
+# ∫ ½ ln(c + κu²) du and ∫ u ½ ln(c + κu²) du
+function _lnq0(u, c, κ)
+    s2 = c + κ * u * u
+    s2 == 0 && return 0.0
+    return (u * log(s2) - 2u + (c == 0 ? 0.0 : 2sqrt(c / κ) * atan(u * sqrt(κ / c)))) / 2
+end
+function _lnq1(u, c, κ)
+    s2 = c + κ * u * u
+    s2 == 0 && return 0.0
+    return (s2 * log(s2) - κ * u * u) / 4κ
+end
+
+# ∫_arc ∫_seg (t̂_arc·b̂) ln r over the arc (ρ, z, a → b) and the segment Q0 → Q1 (frame
+# coordinates): inner integral closed form, outer adaptive, split at the azimuths of the
+# segment's ends.
+function _lnr_arc_seg(ρ, z, a, b, Q0, Q1)
+    Lb = norm(Q1 - Q0)
+    Lb == 0 && return 0.0
+    bh = (Q1 - Q0) / Lb
+    abs(bh[1]) + abs(bh[2]) <= 1e-14 && return 0.0
+    f = _ArcSeg(ρ, z, Q0, bh, Lb)
+    lo, hi = minmax(a, b)
+    mid = (lo + hi) / 2
+    br = [lo, hi]
+    for Q in (Q0, Q1)
+        hypot(Q[1], Q[2]) > 1e-12 * ρ || continue
+        ψ = atan(Q[2], Q[1])
+        ψ += 2π * round((mid - ψ) / 2π)
+        lo < ψ < hi && push!(br, ψ)
+    end
+    sort!(br)
+    P(φ) = Vec3(ρ * cos(φ), ρ * sin(φ), z)
+    R = max(norm(P(lo) - Q0), norm(P(lo) - Q1), norm(P(hi) - Q0), norm(P(hi) - Q1)) + ρ * (hi - lo)
+    tol = 1e-14 * ρ * (hi - lo) * Lb
+    mag = (R + Lb) * (abs(2log(R)) + 4)
+    I = 0.0
+    for m in 1:length(br)-1
+        br[m] < br[m+1] && (I += _gk_adapt(f, br[m], br[m+1], tol, mag))
+    end
+    return b > a ? I : -I
+end
+
+struct _ArcSeg
+    ρ::Float64
+    z::Float64
+    Q0::Vec3
+    bh::Vec3
+    Lb::Float64
+end
+
+function (f::_ArcSeg)(φ)
+    sφ, cφ = sincos(φ)
+    X = Vec3(f.ρ * cφ, f.ρ * sφ, f.z) - f.Q0
+    t0 = dot(X, f.bh)
+    d = norm(X - t0 * f.bh)
+    return f.ρ * (cφ * f.bh[2] - sφ * f.bh[1]) * (_lnr_prim(f.Lb - t0, d) - _lnr_prim(-t0, d))
 end
 
 """

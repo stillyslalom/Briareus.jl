@@ -346,11 +346,15 @@ Items 9–13 and 16–17 follow the 2026-10-22 literature review against Kritche
     else each segment, else the ray; shafts searched with the lifted samples' boxes; every
     fraction `===` `_vf_visible`'s. 11.4k bored cavity 93.5 → 29.8 s (3.1×), 121 → 108 MB;
     dense `:sampled` −5 % and moved ≤ 4e-14 relative (one rounding for every caller);
-    centroid builds bit for bit ("H-matrix visibility certificates", `:sampled`). Left,
-    in order: a certificate for the wall rays through the waist gap (most of the 67M rays
-    still cast there); the bored cavity's gap pairs (~60 % of its
-    view-factor time; refinement toward the shared edge onto ~34-edge sector receivers);
-    GPU mat-vecs (≲ 25 % end to end on the RTX 2060 while assembly stays on the CPU; not
+    centroid builds bit for bit ("H-matrix visibility certificates", `:sampled`). Near
+    sector pairs (a sector with a coaxial sector or inward cylinder patch: the bored
+    cavity's gap pairs, 45–69 % of its dense time, ~16 % of the 11.4k H build; cap–wall
+    corners, bores) take the double contour with exact arcs: 2.3 ms → 27 µs per gap pair,
+    1e-3–4e-2 → ≤ 1e-12 per pair; dense bored cavity 2.3–5× faster, 11.4k H −12 %
+    (`:sampled` −14 %), hohlraums −8 to −23 %; not bit for bit (corner and gap entries
+    move by ≤ 1.3e-3; "Near sector pairs by the double contour with arcs"). Left, in
+    order: a certificate for the wall rays through the waist gap (most of the 67M rays
+    still cast there); GPU mat-vecs (≲ 25 % end to end on the RTX 2060 while assembly stays on the CPU; not
     worth CUDA.jl yet).
 15. **Polar direct drive mode**, benchmarked against published GA optimizers. *State:* literature review and staged plan in `reference/litreview/polar_direct_drive.md` (2026-10-27): Barlow 2024 is the only published GA PDD optimizer; analytic cases (Murakami & Nishi 2017, Temporal 2014) are the reproducible stage-0 checks; open decisions there. Stage 0, parameterization-independent part (2026-10-27; research notes "Hard-sphere direct-drive illumination"): bare-sphere hard-sphere illumination with the existing operator and aims (documented in `Beam`), `mode_rms` and `mode_power(C; m)` (σ to l = 30, m = 0 / m ≠ 0 split), tested against Skupsky–Lee separability on OMEGA 60, Temporal 2014's four values (reproduced) and Murakami & Nishi's Eqs. 28–37 (their printed root does not zero B₂…B₁₀; re-solved). *Remains:* η_a(ψ) absorption weight, the spherical parameterization (decision 5), the Ba24 σ₁ example.
 16. **Absolute energetics on N221204** (`reference/litreview/energetics.md`,

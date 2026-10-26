@@ -4787,6 +4787,111 @@ They are 5 % faster from item 4 (3,156 elements: 10.05 → 9.50 s). The dense pa
 shafts, so the bundle certificates do not apply to it. Confidence **H** for exactness and
 timings; the gap-certificate estimate is **M**.
 
+## Near sector pairs by the double contour with arcs (2026-10-27) *derived*
+
+ROADMAP 14, "the bored cavity's gap pairs". Scripts in the session scratchpad `gap/`
+(`share.jl`, `attr.jl`, `near.jl`, `ref.jl`, `cmp.jl`, `blocks.jl`, `nocap.jl`); 4 threads
+pinned to one CCX, old = fb62e1b from an exported copy, run back to back (not
+interleaved; other jobs on the other CCX).
+
+**Share first (before).** The "gap pairs" are the near pairs with a gap component: the
+slot's aperture (180 chord rectangles of the cylinder at R_out, 20 µm tall, facing in)
+onto the annuli's sectors (50 µm wide, 9:1 at 0.5 mm), sharing their outer arc. Timed
+one pair at a time on one thread:
+
+| | `bored_cavity()` 2,244 | `(hw = 0.8, hc = 0.25)` 1,068 | `(0.18, 0.07)` 11,360 |
+|---|---|---|---|
+| aperture ↔ annulus, near | 1,520 pairs × 2.28 ms | 1,536 × 2.25 ms | 1,584 × 2.26 ms |
+| annulus ↔ annulus | 200 × 0.48 ms | 120 × 1.79 ms | 520 × 0.52 ms |
+| all gap near pairs | 3.58 CPU-s | 3.69 CPU-s | 3.86 CPU-s |
+| build, 4 threads | dense 1.96 s, H 1.05 s | dense 1.33 s, H 0.78 s | H (centroid) 5.85 s |
+| share (CPU-s / 4 over the build) | dense ~45 %, H ~85 % | dense ~69 % | H ~16 % |
+
+The cost is fixed by the gap (its 180 aperture elements), so the share falls with N but
+is still above 10 % at 11k. Other near pairs of the same kind: cap ↔ wall at the corner
+(1,520 pairs, 184 µs), bore ↔ LEH disk (704, ~300 µs). All were the cell rule refined to
+maxdepth 8 toward the shared arc onto a 34-edge sector receiver.
+
+**Accuracy of the old rule.** Against a converged quadrature (2-D adaptive Gauss–Kronrod
+over the emitter's true patch, (φ, z) on the cylinder or (r, φ) on the sector, of the
+exact point-to-polygon factor onto the sector drawn with 1,024 chords per arc; tolerance
+1e-8): aperture–annulus pairs −7.1e-4 (sharing the arc), −6.2e-4, −4.4e-2, +2.3e-3 at
+0.04–0.9 mm; annulus pairs across the gap +8.4e-4 (opposed), −2.1e-2 (neighbors);
+wall–cap −1.0e-3 … −4.9e-3; bore–LEH up to −1.9e-2. The 16-chord arcs of the receiver
+leave a slit along the shared arc (the −0.38 % of "Deposition-operator rays").
+
+**Adopted: the double contour with exact arcs** (`_arc_pair_vf`). The contour form of
+"Near flat pairs by the double contour" depends only on the two outlines, not on the
+surface spanning them, so it also holds for a cylinder patch seen from inside, as long
+as each element lies wholly in front of the other (every point of a sector's partner on
+its front side; every point of an inward cylinder patch's partner within its radius).
+Outlines of sectors and chord rectangles are arcs about the axis and straight edges:
+
+- arc × arc (coaxial): the double integral of ρ₁ρ₂ cos(φ − ψ) ln r depends on
+  u = φ − ψ only, so it is one integral of it weighted by the overlap w(u) of the two
+  ranges (linear between four breakpoints). ln r² = ln(c + 4ρ₁ρ₂ sin²(u/2)),
+  c = Δρ² + Δz², is singular at u = 0 on coincident circles (the shared arc) and sharply
+  peaked across the 20 µm gap; ½ ln(c + ρ₁ρ₂u²) times w is integrated in closed form on
+  each piece and the smooth rest by adaptive Gauss–Kronrod (a first version without the
+  subtraction took 500 µs per gap pair; an x⁴ grading toward the singular ends was
+  slower still);
+- arc × line: the line's integral in closed form (as for flat pairs), the arc's adaptive,
+  split at the azimuths of the line's ends; axial lines are perpendicular to every arc
+  and radial line, so their terms vanish;
+- line × line: the flat pairs' `_lnr_edges`.
+
+Used for near pairs of a sector and a sector or an inward chord rectangle of a cylinder,
+coaxial (to 1e-12), each in front of the other to 1e-9 of their size; otherwise the cell
+rule as before (the wall above the slot and the annulus below it, outward cylinders,
+cones, spheres, flat facets). Reciprocity is exact (one value for both directions).
+
+Accuracy. Summed over every pair of the bored cavity at 0.5 mm (thousands of pairs, all
+tiers, all taking the new rule), against the coaxial-disk closed forms: aperture → annulus
+7e-13 to 1.7e-12, annulus ↔ annulus −2.9e-13, wall → cap 1.7e-14, bore → LEH disk (center
+fans) 5.8e-14, cap ↔ cap 1.8e-12, LEH disk → far cap −9.8e-13. Per pair against the
+converged quadrature above: ≤ 1.6e-7 on every pair checked (16 pairs, 0.02–2.1 mm apart),
+the reference's own error. **H** for the method and checks.
+
+Cost per near pair, one thread: aperture–annulus 2.29 ms → 27 µs (85×), annuli 0.48 ms
+→ 81 µs, cap–wall 184 → 18 µs, bore–LEH ~300 → 20 µs, LEH disk–wall 23 → 11 µs; all such
+near pairs of `bored_cavity()` 4.6 → 0.19 CPU-s.
+
+| 4 threads, warm | old | new | entries changed | max \|ΔF\| / max \|Δ row sum\| |
+|---|---|---|---|---|
+| `bored_cavity()` 2,244, dense | 1.96 s | 0.86 s (2.3×) | 14,000 | 5.5e-4 / 8.7e-4 |
+| `bored_cavity(hw = 0.8, hc = 0.25)` 1,068, dense | 1.33 s | 0.27 s (5×) | 10,032 | 1.3e-3 / 2.7e-3 |
+| same, H-matrix | 1.05 s / 0.78 s | 0.53 s / 0.18 s | | |
+| bored 11,360, H-matrix, centroid | 5.85 s | 5.15 s (−12 %) | | |
+| bored 11,360, H-matrix, `:sampled` | 33.0–34.1 s | 28.6 s (−14 %) | | |
+| `hohlraum(h = 0.6, capsule_h = 0.3)` 1,120 | 0.43–0.45 s | 0.33–0.35 s | 6,400 | 7.1e-4 / 1.1e-3 |
+| with `sombrero = true` 1,888 | 0.49 s | 0.38–0.39 s | 6,400 | 7.1e-4 / 1.1e-3 |
+| `hohlraum()` 4,116 | 2.35–2.37 s | 2.18–2.21 s | 10,176 | 5.6e-4 / 7.6e-4 |
+
+**Not bit for bit** wherever a sector meets a coaxial sector or inward cylinder near by:
+every primitive hohlraum (cap–wall corner pairs; LEH disk–wall pairs), bored cavities,
+coaxial disks. That is the point of the change. Whole-matrix component exchanges (all
+tiers) against closed forms, old → new:
+
+| | 2,244 | 1,068 |
+|---|---|---|
+| aperture → annulus | −7.9e-4 → −7.5e-6 | −3.2e-3 → −7.5e-6 |
+| annulus ↔ annulus | +1.1e-4 → −1.4e-7 | −1.4e-4 → −5.6e-8 |
+| wall → cap | +2.2e-4 → +4.6e-5 | +2.7e-4 → +6.9e-5 |
+| bore → LEH disk | −2.7e-4 → −5.9e-5 | −8.3e-4 → −2.0e-5 |
+
+(The rest is the mid and far tiers.) Row sums: the hohlraum without its capsule (closed
+by its LEH apertures) closes better, max |1 − Σ| 8.7e-4 → 6.3e-4 and mean 3.4e-4 →
+1.6e-4 at h = 0.6 (8.5e-4 → 5.8e-4, 2.5e-4 → 1.7e-4 at h = 0.3); its wall → cap exchange
++1.2e-4 → −1.2e-4 (+2.5e-4 → +1.3e-4 at h = 0.3). With the capsule, the changed rows of
+`hohlraum(h = 0.6, capsule_h = 0.3)` move mean |1 − Σ| 4.0e-4 → 4.3e-4 and max 6.3e-4 →
+1.7e-3 (cap rows +2.3e-4 → +4.5e-4: the old rule's error had cancelled part of the
+other tiers' on those rows); `hohlraum()` 5.5e-4 → 4.0e-4 mean. Bored cavity gap rows
+change by < 1e-3 (their 5 % closure error is the slot narrower than a sample cell,
+"Partial visibility"). Tests: `test/runtests.jl` "view factors" (the four closed forms
+summed over every pair to 1e-11, the out-of-front case, the near pair in
+`view_factors`); `hmatrix.jl`, `partial_visibility.jl`, `corners.jl`, `meshops.jl`,
+`cadfit.jl` pass unchanged.
+
 ## N221204 late-time drive (2026-10-24) *derived*
 
 ROADMAP 16. Two results of the N221204 benchmark (`examples/n221204.jl`) disagreed about
@@ -6458,7 +6563,8 @@ value (1e-4 before) and the annulus pair 1e-4 (2.4e-4 before).
 The gap pairs are still ~60 % of the bored cavity's time: refinement toward the shared
 long edge (maxdepth 8) onto sector receivers of ~34 edges each. A maxdepth relative to
 the cell's width, or coarser arcs on receivers far from the point, would be the next
-step; not tried.
+step; not tried. (Superseded 2026-10-27: those pairs take the double contour with exact
+arcs, "Near sector pairs by the double contour with arcs".)
 
 ## Energetics defaults and the capsule share (2026-10-25) *calibrated*
 
