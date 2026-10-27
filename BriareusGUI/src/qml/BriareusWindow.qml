@@ -47,7 +47,6 @@ ApplicationWindow {
         Julia.br_select("task:" + key)
         results.show(key)
     }
-    function openKitDialog() { kitDialog.open() }
     function openClearanceExport() { fileDialog.run("export_clearance") }
     function openTalisExport() { fileDialog.run("export_talis") }
 
@@ -95,8 +94,7 @@ ApplicationWindow {
             Action { text: "Export beam table…"; onTriggered: fileDialog.run("export_beams") }
             Action { text: "Export VisRad SST pointing…"; onTriggered: fileDialog.run("export_sst") }
             Action { text: "Export VisRad beam summary…"; onTriggered: fileDialog.run("export_summary") }
-            Action { text: "Write VisRad benchmark kit…"; enabled: app.kitReady && !app.kitRunning; onTriggered: kitDialog.open() }
-            Action { text: "Export results (CSV)…"; enabled: app.kitReady; onTriggered: resultsDialog.open() }
+            Action { text: "Export results (CSV)…"; enabled: app.driveCurrent; onTriggered: resultsDialog.open() }
             Action { text: "Export target as STL…"; onTriggered: exportStlDialog.open() }
             MenuSeparator {}
             Action { text: "Save view as image…"; onTriggered: saveViewDialog.open() }
@@ -234,7 +232,7 @@ ApplicationWindow {
                 onTriggered: checked ? Julia.br_xray_image() : Julia.br_close_image()
             }
             Action { text: "TaLIS (NIF)…"; enabled: app.facility === "nif"; onTriggered: win.showTask("talis") }
-            Action { text: "Retune to a reference drive…"; enabled: app.kitReady; onTriggered: retuneDialog.open() }
+            Action { text: "Retune to a reference drive…"; enabled: app.driveCurrent; onTriggered: retuneDialog.open() }
             Action {
                 text: "Drive history"
                 enabled: app.timeHasPulses && !app.timeRunning
@@ -432,11 +430,6 @@ ApplicationWindow {
         title: "Folder for the results (laser, radiosity and flux per element, modes, powers)"
         onAccepted: Julia.br_export_results(selectedFolder.toString())
     }
-    FolderDialog {
-        id: kitDialog
-        title: "Folder for the VisRad benchmark kit"
-        onAccepted: Julia.br_write_kit(selectedFolder.toString())
-    }
     // retune the enabled beams' pulses to a reference shot's capsule drive
     Dialog {
         id: retuneDialog
@@ -499,7 +492,7 @@ ApplicationWindow {
             RowLayout {
                 Button {
                     text: "Retune"
-                    enabled: app.kitReady && !app.retuneRunning && retuneTable.text !== "" && retuneOut.text !== ""
+                    enabled: app.driveCurrent && !app.retuneRunning && retuneTable.text !== "" && retuneOut.text !== ""
                     onClicked: Julia.br_retune(retuneTable.text, retuneOut.text, retuneBy.currentValue,
                                                retuneCap.text, retuneStay.text)
                 }

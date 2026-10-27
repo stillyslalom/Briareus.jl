@@ -25,7 +25,6 @@ using BriareusGUI.Briareus
     grabbed(path) = isfile(path) && filesize(path) > 0 && time() - t_stage[] > 1
     next!() = (stage[] += 1; t_stage[] = time())
     sst = joinpath(files, "pointing.csv")
-    kit = joinpath(files, "kit")
     talis_csv = joinpath(files, "talis.csv")
     session_file = joinpath(files, "design.briareus.toml")
     reference_csv = joinpath(files, "reference.csv")
@@ -116,10 +115,8 @@ using BriareusGUI.Briareus
         elseif k == 4 && s.drive.result[] !== nothing && !s.drive.evaluating[]
             s.drive.scenario[] !== nothing && push!(seen, :drive)
             B.br_select("task:drive")
-            B.br_write_kit(kit)                                       # on a worker
             B.request_grab(png("drive_scene")); next!()
-        elseif k == 5 && grabbed(png("drive_scene")) && !s.drive.kit_running[]
-            isfile(joinpath(kit, "README.txt")) && push!(seen, :kit)
+        elseif k == 5 && grabbed(png("drive_scene"))
             B.br_set_view("map")
             next!()
         elseif k == 6 && time() - t_stage[] > 1
@@ -286,7 +283,7 @@ using BriareusGUI.Briareus
     @info "window session" seconds = round(time() - t0; digits = 1) shots
     @test stage[] == 28
     @test seen == [:target, :windows, :part, :mesh, :remove, :tree_beams, :visrad, :volumes, :zoom,
-                   :pick, :drive, :kit, :map, :optimize, :capsule, :applied, :clearance, :talis,
+                   :pick, :drive, :map, :optimize, :capsule, :applied, :clearance, :talis,
                    :talis_csv, :group, :split, :undo, :redo, :session, :xray, :side, :port,
                    :retune_started, :retune, :time_retune, :history_started, :history, :time_now, :custom, :stl]
     @test !sess.spawn[]                              # restored when the window closed

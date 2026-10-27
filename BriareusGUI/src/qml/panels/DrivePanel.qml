@@ -1,4 +1,4 @@
-// Drive results: capsule modes, foil spot, laser power accounting, VisRad benchmark kit.
+// Drive results: capsule modes, foil spot, laser power accounting.
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -76,19 +76,5 @@ ScrollPage {
             }
         }
         Item { Layout.fillWidth: true }
-    }
-    RowLayout {
-        spacing: 8
-        Layout.topMargin: 6
-        Button {
-            text: "Write VisRad benchmark kit…"
-            enabled: app.kitReady && !app.kitRunning
-            onClicked: win.openKitDialog()
-            ToolTip.visible: hovered
-            ToolTip.text: "Write the pointing (SST), the beam summary, the beam table, a README with " +
-                          "the geometry and the VisRad steps, and these results to compare against"
-        }
-        BusyIndicator { running: app.kitRunning; visible: running; Layout.preferredHeight: 28; Layout.preferredWidth: 28 }
-        Note { text: app.kitStatus }
     }
 }

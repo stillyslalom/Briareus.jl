@@ -455,7 +455,7 @@ function BriareusShell(sess::DesignSession; queue::Channel{Any} = Channel{Any}(I
                 bt.beams, bt.enabled, bt.preset, bt.by, bt.path, bt.error, bt.warnings,
                 dr.scenario, dr.building, dr.result, dr.evaluating, dr.field, dr.view,
                 dr.cavity, dr.cavity_point, dr.films, dr.beam_model, dr.profile,
-                dr.spot_radius, dr.status, dr.kit_running, dr.kit_status, dr.retune_running,
+                dr.spot_radius, dr.status, dr.retune_running,
                 dr.retune_status,
                 st.by, st.fields, st.deltas, st.objective, st.weights, st.hold_drive, st.keepout,
                 st.keepout_min, st.capsule_keepout, st.capsule_min, st.spill, st.iterations,
@@ -770,9 +770,6 @@ function _refresh_drive!(sh::BriareusShell)
         sh.shown["_enclosure"] = dr.enclosure[]
         _set!(sh, "cavitySummary", cavity_summary(dr))
     end
-    _set!(sh, "kitRunning", dr.kit_running[])
-    _set!(sh, "kitStatus", dr.kit_status[])
-    _set!(sh, "kitReady", Controllers._drive_current(sess))
     _set!(sh, "retuneRunning", dr.retune_running[])
     _set!(sh, "retuneStatus", dr.retune_status[])
     return
@@ -1495,7 +1492,6 @@ end
 br_export_visrad_workspace(url) = _with_shell(sh -> export_visrad_workspace(sh.sess, _url_to_path(String(url))))
 br_export_results(url) = _with_shell(sh -> export_results(sh.sess, _url_to_path(String(url))))
 br_export_stl(url) = _with_shell(sh -> export_target_stl(sh.sess, _url_to_path(String(url))))
-br_write_kit(url) = _with_shell(sh -> write_visrad_kit!(sh.sess, _url_to_path(String(url))))
 # The retune's errors show in its dialog, where it was asked for.
 function br_retune(table, out, by, cap, stay)
     _with_shell() do sh
@@ -1629,7 +1625,7 @@ function _register_qml_functions()
     @qmlfunction br_remove_selected
     @qmlfunction br_load_preset br_set_grouping br_edit_beam br_set_beam_on br_edit_node
     @qmlfunction br_import_beams br_export_beams br_import_sst br_import_summary br_export_sst
-    @qmlfunction br_export_summary br_build br_set_view br_side_view br_xray_image br_close_image br_set_spot_radius br_beam_model br_write_kit br_export_results
+    @qmlfunction br_export_summary br_build br_set_view br_side_view br_xray_image br_close_image br_set_spot_radius br_beam_model br_export_results
     @qmlfunction br_import_visrad_workspace br_export_visrad_workspace br_retune
     @qmlfunction br_time_chart br_time_pulses br_time_shape br_time_run br_time_cancel br_time_step
     @qmlfunction br_time_now br_time_dante
@@ -1668,10 +1664,10 @@ a design tool in the manner of VisRad, not a sequence of steps:
   views, a perspective or orthographic projection, beams as rays to where they land
   or as volumes, coloring by component or by a drive field (computed on request), a
   cutaway, and an orientation triad. The capsule θ–φ (or foil) map shares the canvas.
-- **Results** (bottom): the beam table, the drive (modes, power accounting, VisRad
-  benchmark kit), time (pulses, the drive history and the retune plotted against time,
-  with a time cursor that colors the 3D view by that step), the optimization, the
-  clearance check and the TaLIS rules.
+- **Results** (bottom): the beam table, the drive (modes, power accounting), time
+  (pulses, the drive history and the retune plotted against time, with a time cursor
+  that colors the 3D view by that step), the optimization, the clearance check and the
+  TaLIS rules.
 - **Menus and toolbar**: new targets, parts and windows, beam presets and imports
   (CSV, VisRad SST and Laser Beam Summary) and exports, views, and the analyses.
 
