@@ -471,7 +471,7 @@ four beams); powers and spots stay. As in VisRad, beams absent from the file are
 turned off: here they are disabled at their power. Warnings land in `warnings`.
 """
 import_visrad_sst!(bt::BeamTable, path::AbstractString) =
-    _apply_visrad!(bt, old -> read_visrad_sst(path; template = old, missing = :off), path)
+    _apply_visrad!(bt, old -> read_visrad_sst(path; template = old, absent = :off), path)
 
 """
     import_visrad_summary!(bt::BeamTable, path)
@@ -482,7 +482,7 @@ table's, with a warning). Beams that are "Off" or absent are disabled at their p
 Warnings land in `warnings`.
 """
 import_visrad_summary!(bt::BeamTable, path::AbstractString) =
-    _apply_visrad!(bt, old -> read_visrad_summary(path; template = old, missing = :off), path)
+    _apply_visrad!(bt, old -> read_visrad_summary(path; template = old, absent = :off), path)
 
 """
     export_visrad_sst(bt::BeamTable, path) -> path
