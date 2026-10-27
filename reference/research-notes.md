@@ -467,8 +467,10 @@ distances are measured orthogonal to the beam.
   practice, 2026-10-27): an insertion or assembly error of the target component. The
   beams must still clear with the component rotated up to 0.5° off nominal in the least
   favorable direction, whether the target is inserted rotated or the component is
-  assembled off-square. It applies to the clearances only, not to the 3ω capture rule
-  (the 0.5 mm edge margin or the 70° incidence). Briareus applies it as a lateral
+  assembled off-square. It does not apply to the 70° incidence limit (user,
+  2026-10-27). Briareus applies it to the clearances and, as a conservative extension
+  of the rule text (which puts it on the clearance slides only), to the 0.5 mm capture
+  edge margin. Briareus applies it as a lateral
   allowance r tan 0.5°, with r the distance from the rotation's pivot (TCC by default,
   or the component's mount); the pivot per component remains a modeling choice. **H**
   (meaning), **M** (pivot). VisRad's clearance report enlarges its cone test volume by
@@ -538,8 +540,8 @@ Implementation (`src/talis.jl`, `talis_check`):
   such as the component's mount. It is added linearly to the `clearance` error set:
   pointing 50 µm + target 25 µm + hardware tolerance, and focus/(2F).
   - That double counts the positioning part, conservatively.
-  - Capture and incidence take no rule tolerance (2026-10-27; they took the lateral
-    allowance and +0.5° before). Specular-reflection angles get −1° (a tilt by α turns a
+  - Incidence takes no rule tolerance (2026-10-27; it took +0.5° and the widened
+    footprint before); the capture margin keeps the lateral allowance. Specular-reflection angles get −1° (a tilt by α turns a
     reflection by 2α).
 - **1ω footprint model.** *Derived*, **M**.
   - Each beamlet's 10% 1ω region at its 3ω focal plane is a 22.7 mm square: the User
@@ -605,7 +607,8 @@ metrology/alignment/positioning tolerance") appears only in the clearance defini
 (slides 4 and 5), not in the capture definition. Briareus added the 0.5° to incidence and
 the lateral allowance to capture as a conservative extension until 2026-10-27, when the
 user confirmed that the tolerance (a component rotated off nominal) does not enter the
-capture rule; both were dropped. The template's 23.5° quads then pass incidence.
+70° incidence limit; the +0.5° was dropped, and the capture margin keeps the lateral
+allowance.
 
 All from the manual. **H**
 

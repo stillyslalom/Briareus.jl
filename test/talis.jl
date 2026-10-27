@@ -47,7 +47,7 @@
         rc = talis_check(t, [remake(b; aim = (xa, 0.0, 0.0))]; capture = (:f,))
         cp = trow(rc, :capture_3w, :f)
         @test cp.nominal ≈ 2 - xa - ρ10 atol = 1e-9
-        @test cp.worst ≈ 2 - xa - ρ10 - R - 1 / 16 atol = 1e-9
+        @test cp.worst ≈ 2 - xa - ρ10 - R - 1 / 16 - tan05 * 2 atol = 1e-9
         @test cp.status === (cp.worst >= 0.5 ? :pass : :fail)
         xa > 0 && @test cp.point ≈ Vec3(2, 0, 0) atol = 1e-9
     end
@@ -267,7 +267,7 @@
     io = IOBuffer()
     show(io, MIME"text/plain"(), rs)
     txt = String(take!(io))
-    @test occursin("clearances only", txt) && occursin("r·tan(0.5°)", txt) && occursin("management_1w", txt)
+    @test occursin("70° incidence limit excluded", txt) && occursin("r·tan(0.5°)", txt) && occursin("management_1w", txt)
     path = write_talis_csv(tempname() * ".csv", rs)
     @test countlines(path) == 1 + length(rs.rows)
     @test length(TALIS_OUT_OF_SCOPE) >= 5

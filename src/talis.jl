@@ -108,7 +108,7 @@ _pivot_text(τ::_TaLISTol) =
 NIF TaLIS target-configuration checks from the "TCC Configuration Requirements"
 (NIF User Forum, 27 Oct 2018, LMF Shot RI Resources). Every distance is measured
 orthogonal to the beam, as the document states, and judged on the worst case over the
-error set (and, for the clearances, the rule tolerance), never at nominal.
+error set (and, except for incidence, the rule tolerance), never at nominal.
 
 `capture` lists the components that beams are meant to land on (backlighter foils, capture
 surfaces, a hohlraum wall). Each beam's *landing component* is the first of them its
@@ -131,8 +131,8 @@ like `hardware`, whether or not `hardware` names them. Here and in `hardware`, `
 - `:incidence_3w` — incidence < `max_incidence` (70°) to the target normal, the maximum
   over the landing component's surface inside the worst-case 10 % footprint (visible
   from the beam; exact normals on `SphereSurface`/`CylinderSurface` components).
-  Capture and incidence take the error set but not the rule tolerance, which belongs to
-  the clearances.
+  Incidence takes the error set but not the rule tolerance; the capture margin and the
+  clearances take both.
 - `:clearance_3w` — the `clearance_contour` (1 %)-of-peak contour must clear each
   `hardware` component other than the landing component by > `clearance_margin`
   (0.5 mm); hardware downstream of the landing point is skipped, and everything along
@@ -208,7 +208,7 @@ Light that reaches the lip is LEH clipping, which the deposition computes as suc
 # Tolerance and error set
 
 The document adds "up to 0.5 degrees metrology/alignment/positioning tolerance" to the
-3ω and 1ω clearances. The angle is an insertion or assembly error of the target
+3ω and 1ω clearances; Briareus also applies it to the 3ω capture margin. The angle is an insertion or assembly error of the target
 component: the beams must still clear with the component rotated by up to 0.5° off
 nominal in the least favorable direction, whether the whole target is inserted rotated
 or the component is assembled off-square (user, from facility practice, 2026-10-27; the
@@ -327,7 +327,7 @@ function _talis_beam!(rows, t::Target, b::Beam, bl, cx)
     end
     landed = land == 0 ? Int[] : last(cx.cap_idx[land])
 
-    # 3ω capture and incidence: the error set, not the rule tolerance (clearances only)
+    # 3ω capture (with the rule tolerance) and incidence (error set only)
     if !isempty(cx.cap_idx)
         if land == 0
             push!(rows, TaLISRow(b.name, :capture_3w, :none, :fail, -Inf, :mm, -Inf, -Inf,
@@ -339,7 +339,7 @@ function _talis_beam!(rows, t::Target, b::Beam, bl, cx)
             for x in cx.edges[land]
                 d, _ = envelope_distance(env10, x)
                 nom = min(nom, d)
-                w = d - shift
+                w = d - shift - tol(x, aim)
                 w < worst && ((worst, wp) = (w, x))
             end
             m = worst - cx.capture_margin
@@ -709,7 +709,7 @@ function Base.show(io::IO, ::MIME"text/plain", r::TaLISReport)
     println(io, "TaLISReport: ", nb, " beams, ", length(r.rows), " checks against ", TALIS_SOURCE)
     @printf(io, "  rule tolerance %.3g° applied as a lateral allowance r·tan(%.3g°), %s\n",
             s.tolerance, s.tolerance, s.pivot_text)
-    println(io, "    (component rotated off nominal by insertion or assembly; clearances only, not capture or incidence)")
+    println(io, "    (component rotated off nominal by insertion or assembly; the 70° incidence limit excluded)")
     @printf(io, "  error set (added linearly): transverse %.3g mm (pointing %.3g + target %.3g + hardware %.3g), focus ±%.3g mm, SSD %.3g mm\n",
             s.transverse, s.pointing, s.target_offset, s.hardware_tolerance, s.focus, s.ssd)
     println(io, "  rule           requirement                                           pass review fail   worst margin  beam / component")

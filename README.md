@@ -152,7 +152,7 @@ are engineering defaults, not facility criteria.
 |---|---|---|
 | NIF quad ports | NIF User Guide §4.1, Table 4-1 | Port 63 is misprinted as 62 there. |
 | NIF quad names, beam directions, CPP spots | LMF Shot RI Resources (2020), chamber-geometry figures | `data/nif_beams.csv`; spots converted from HWHM to 1/e. |
-| NIF target-configuration rules | LMF "TCC Configuration Requirements" (2018) | [PDF](https://lmf.llnl.gov/sites/lmf/files/2023-05/TCC-configuration-requirements.pdf). The 0.5° tolerance (a component rotated off nominal) applies to the clearances; see `talis_check`. |
+| NIF target-configuration rules | LMF "TCC Configuration Requirements" (2018) | [PDF](https://lmf.llnl.gov/sites/lmf/files/2023-05/TCC-configuration-requirements.pdf). The 0.5° tolerance (a component rotated off nominal) applies to the clearances, not to the 70° incidence limit; see `talis_check`. |
 | OMEGA beams and phase plates | Truncated icosahedron reproducing the 21.4/42.0/58.9/81.2° cones; OMEGA Users' Guide (2014) | Azimuthal origin not tied to the chamber; real ports via `beams_from_table`. |
 | VisRad formats and beam profile | VisRad manual (v21.1.1); VisRad 21 runs on NIF hohlraums and a beam-profile probe | |
 | Published shot and simulation data | The cited papers, digitized or tabulated in `data/*.csv` with provenance headers | The research notes record which data each calibration was fitted to and which are checks only. |

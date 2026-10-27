@@ -23,12 +23,14 @@ const TALIS_RULE_LABELS = (capture_3w = "3ω capture", incidence_3w = "3ω incid
 What the rule tolerance stands for, carried by every TaLIS report: the requirements'
 "up to 0.5 degrees" of metrology, alignment and positioning tolerance is the target
 component rotated off nominal (insertion or assembly error), in the least favorable
-direction. It applies to the clearances, not to capture or incidence.
+direction. It applies to the clearances and the capture margin, not to the 70°
+incidence limit.
 """
 const TALIS_TOLERANCE_NOTE =
     "The tolerance is the component rotated off nominal (target inserted rotated, or " *
     "assembled off-square), in the least favorable direction; it applies to the " *
-    "clearances, not to capture or incidence. For a component assembled off-square, " *
+    "clearances and the capture margin, not to the 70° incidence limit. For a " *
+    "component assembled off-square, " *
     "set the pivot to its mount."
 
 """
