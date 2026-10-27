@@ -385,7 +385,7 @@ end
     # distance (cm → mm)
     vp = visrad_profile(ws)
     @test vp.envelope["B113"] == 1.53645 && vp.focal_length ≈ 7695 && vp.growth == 0.67
-    @test visrad_profile(ws; growth = nothing).growth === nothing
+    @test visrad_profile(ws; growth = :manual).growth === :manual
     @test_throws ArgumentError read_visrad_workspace(vrfile("not.vrw", "{\"json\": 1}"))
 
     # written back into the workspace: new pointing, focus, power and on/off, in each

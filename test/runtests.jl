@@ -470,8 +470,10 @@ end
     @test_throws ArgumentError VisRadProfile(; envelope = 0)
     @test_throws ArgumentError VisRadProfile(; envelope = Dict("b" => -1.0))
     @test_throws ArgumentError VisRadProfile(; growth = 0)
-    # the manual's z_R (`growth = nothing`): the 1/e radius reaches the f-cone's at the lens
-    pm = VisRadProfile(; envelope = ρe, focal_length = FL, growth = nothing)
+    @test_throws ArgumentError VisRadProfile(; growth = :fitted)
+    @test_throws ArgumentError VisRadProfile(; growth = nothing)
+    # the manual's z_R (`growth = :manual`): the 1/e radius reaches the f-cone's at the lens
+    pm = VisRadProfile(; envelope = ρe, focal_length = FL, growth = :manual)
     for s in (0.0, 5.0, FL)
         x = Vec3(b.aim) + s * direction(b)
         a = 0.6 * sqrt(1 + s^2 * ((FL / (1.2F))^2 - 1) / FL^2)

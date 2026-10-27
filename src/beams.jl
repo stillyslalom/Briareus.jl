@@ -318,8 +318,8 @@ n,
     a(z) = a₀ √((z/z_A)² + 1),   z_A = (γ/ρ) FL [(FL / (2a₀ f#))² − 1]^(-1/2),
 
 and likewise b(z) with ``z_B``, for final-optic distance `FL` (`focal_length`, mm; VisRad's
-port radius, 769.5 cm at NIF) and `growth` γ. The manual gives ``z_A`` without the factor
-γ/ρ (`growth = nothing` uses it so). γ = 0.67 was fitted to VisRad's hohlraum
+port radius, 769.5 cm at NIF) and `growth` γ (a positive number). The manual gives ``z_A``
+without the factor γ/ρ; `growth = :manual` takes the manual's ``z_A``. γ = 0.67 was fitted to VisRad's hohlraum
 deposition before the plates were measured (2.8% element rms there).
 
 `envelope` is the ratio ρ for every beam (a number), per beam name (a `Dict`; beams
@@ -336,7 +336,7 @@ ray grid (here the beam axis through each point determines it).
 struct VisRadProfile
     envelope::Union{Nothing,Float64,Dict{String,Float64}}
     focal_length::Float64
-    growth::Union{Nothing,Float64}
+    growth::Union{Float64,Symbol}
     measured::Bool
     function VisRadProfile(envelope, focal_length, growth, measured = true)
         env = envelope isa AbstractDict ? Dict{String,Float64}(String(k) => v for (k, v) in envelope) :
@@ -344,8 +344,9 @@ struct VisRadProfile
         all(>(0), env isa Dict ? values(env) : something(env, 1.0)) ||
             throw(ArgumentError("envelope must be positive"))
         focal_length > 0 || throw(ArgumentError("focal_length must be positive"))
-        growth === nothing || growth > 0 || throw(ArgumentError("growth must be positive"))
-        return new(env, Float64(focal_length), growth === nothing ? nothing : Float64(growth), Bool(measured))
+        growth === :manual || growth isa Real && growth > 0 ||
+            throw(ArgumentError("growth must be a positive number or :manual"))
+        return new(env, Float64(focal_length), growth === :manual ? :manual : Float64(growth), Bool(measured))
     end
 end
 
@@ -370,7 +371,7 @@ function _vr_envelope(prof::VisRadProfile, b::Beam)
 end
 
 # Factor on z_A² (and z_B²): (γ/ρ)², or 1 for the manual's z_A.
-_vr_zfactor(prof::VisRadProfile, env) = prof.growth === nothing ? 1.0 : (prof.growth / env)^2
+_vr_zfactor(prof::VisRadProfile, env) = (g = prof.growth; g isa Float64 ? (g / env)^2 : 1.0)
 
 # VisRad 21's profile along the beam for the four NIF phase plates, measured with one beam
 # per quad focused onto a plate normal to it at |z| from best focus (48 plates; thor
