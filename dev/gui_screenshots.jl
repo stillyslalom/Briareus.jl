@@ -8,9 +8,9 @@
 # under `xvfb-run`), drives it through its QML callbacks from `BriareusGUI._TICK_HOOK[]`
 # as `BriareusGUI/test/qt_window.jl` does, and grabs the window's contents below the
 # toolbar with `request_grab` (QML `grabToImage`, written asynchronously). Every target and
-# pointing is a built-in public one: the NIF hohlraum template with the NIF quads at the
-# published cone aims, and the OMEGA backlighter set on a foil. The run takes a few minutes
-# (the drive on the standard mesh, a pointing optimization, a drive history, the TaLIS
+# pointing is a built-in public one: the NIF hohlraum template with the NIF quads at
+# illustrative example cone aims, and the OMEGA backlighter set on a foil. The run takes a
+# few minutes (the drive on the standard mesh, a pointing optimization, a drive history, the TaLIS
 # rules on every quad); stages wait for their jobs, so a slower machine gives the same
 # images. Qt's high-DPI scaling is switched off so that the window has its default size
 # (1640 × 1000) in screen pixels on any display scale; on a screen whose free area is

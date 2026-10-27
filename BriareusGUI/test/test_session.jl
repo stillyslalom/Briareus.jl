@@ -19,7 +19,7 @@ const SESS = DesignSession(resolution = :coarse)
     res = dr.result[]
     @test res isa DriveResult
     @test [m.l for m in res.modes] == collect(MODE_DEGREES)
-    # the published pointing is mirrored top/bottom: no odd Legendre moments; the
+    # the example cone pointing is mirrored top/bottom: no odd Legendre moments; the
     # ports' azimuths are not mirror images, so odd m ≠ 0 modes stay small
     m = Dict(r.l => r for r in res.modes)
     @test abs(m[1].legendre) < 1e-9 && abs(m[3].legendre) < 1e-9

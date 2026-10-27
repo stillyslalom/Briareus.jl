@@ -27,8 +27,8 @@ ColumnLayout {
         Button { text: "Load"; onClicked: Julia.br_load_preset(presetBox.currentValue) }
     }
     Note {
-        text: "NIF presets are pointed at the published cone aims; OMEGA sets at the LEH centers " +
-              "or the foil. Beam tables and VisRad pointing or beam-summary files are in File."
+        text: "NIF presets are pointed at illustrative example cone aims; OMEGA sets at the " +
+              "LEH centers or the foil. Beam tables and VisRad pointing or beam-summary files are in File."
     }
 
     SectionLabel { text: "Switch" }
