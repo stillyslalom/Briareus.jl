@@ -108,7 +108,7 @@ callout in the section says which).
 | `LARGE_MODEL[]`, `HMATRIX_MODEL[]`, `HMATRIX_DEFAULTS` | 10,000; 15,000; `tol` 1e-6, η 1, leaf 48, maxrank 32 | Large radiation models; Hierarchical view factors; The H-matrix's N^1.5 remainder (`tol`) |
 | `nif_mband()` | outer 0.20, inner 0.042; materials Au and DU (its gold liner) | Spectral radiosity, M-band and a synthetic Dante §2; Per-cone M-band in the drive history (materials) |
 | `mband_albedo` α_M | 0.55, thermalized | Laser-spot spectrum (recalibration); Spectral radiosity, M-band and a synthetic Dante §2 (first calibration) |
-| `drive_history` `mband`, `spectral` | `nif_mband()`; edges [0, 1.8 keV, ∞], thermalized, α_M `mband_albedo` | Per-cone M-band in the drive history ("On by default") |
+| `drive_history` `mband` (`MBandSplit`) | `nif_mband()`; edges [0, 1.8 keV, ∞], thermalized, α_M 0.55 (`mband_albedo`) | Per-cone M-band in the drive history ("On by default") |
 | `spectral_solve` `spot` | `:radiation` | Laser-spot spectrum |
 
 ## Cross-beam energy transfer (CBET)
@@ -8736,10 +8736,12 @@ What remains is the M-band group's thermalized GMRES on the dense F: 0.015 s per
 s; a warmed step there takes ~10 s, so ~3 %, an estimate from the parts: the whole history
 is not yet timed on and off at that mesh).
 
-**Default.** `drive_history`'s `mband` is `nif_mband()` (Dewald's per-cone conversions),
-and the spectral model's unset keywords default to the calibrated pairing: edges [0,
-1.8 keV, ∞], `thermalize = true`, `albedo = mband_albedo(t, mband, edges)` (α_M 0.55 on
-the emitting surfaces at and above 1.8 keV; the calibration above, "Laser-spot spectrum").
+**Default.** `drive_history`'s `mband` is `MBandSplit()`: `nif_mband()` (Dewald's
+per-cone conversions) in the calibrated pairing, edges [0, 1.8 keV, ∞], `thermalize =
+true`, α_M 0.55 (`mband_albedo(t, emission, edges)` on the emitting surfaces at and above
+1.8 keV; the calibration above, "Laser-spot spectrum"). The split's keywords were first
+`drive_history`'s `spectral` keywords, defaulted when unset; `MBandSplit` carries them
+with the model since 2026-10-27, and `spectral` holds `spectral_solve`'s other keywords.
 A plain call thus gives the per-cone, post-CBET M-band with the calibrated α_M; the gray
 default before (α_M = α, no thermalization) gave F_M ≈ 7 on Dewald's setup, which no
 calibration supports. `nif_mband()`'s materials are now `(:Au, :DU)`: the DU wall of a

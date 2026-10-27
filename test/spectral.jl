@@ -79,7 +79,7 @@ using Briareus: RadiationSolution, _planck_tail, _channel_matrix, _color_tempera
             end
             # thermalized, the totals are the gray ones whatever the group albedos
             k = findfirst(==(1800.0), E)
-            low = Dict(c => [g >= k ? 0.2 : NaN for g in 1:G] for c in (:wall, :cap_top, :cap_bottom))
+            low = Dict(c => [g >= k ? 0.2 : nothing for g in 1:G] for c in (:wall, :cap_top, :cap_bottom))
             s = spectral_solve(sol; edges = E, albedo = low, thermalize = true, mband = MBandEmission())
             @test maximum(abs.(vec(sum(s.B; dims = 2)) .- sol.B)) < 1e-9 * maximum(sol.B)
             @test all(s.albedo[elements(t, :wall), k:end] .== 0.2)
@@ -139,7 +139,7 @@ using Briareus: RadiationSolution, _planck_tail, _channel_matrix, _color_tempera
             E = [0.0, 500.0, 1800.0, 4000.0, Inf]
             G = 4
             T = radiation_temperature.(sol.B) .* (1 .+ 0.1 .* sin.(1:n))   # any fixed split
-            a = Dict(:wall => [NaN, 0.7, 0.3, 0.1], :capsule => [0.2, 0.25, 0.3, 0.35])
+            a = Dict(:wall => [nothing, 0.7, 0.3, 0.1], :capsule => [0.2, 0.25, 0.3, 0.35])
             M(αg) = I - Diagonal(αg) * m.F
             # in group: B_g = (I - diag(α_g) F)⁻¹ S_g
             s = spectral_solve(sol; edges = E, albedo = a, temperature = T, mband = MBandEmission())
@@ -147,6 +147,8 @@ using Briareus: RadiationSolution, _planck_tail, _channel_matrix, _color_tempera
                 @test s.B[:, g] ≈ M(s.albedo[:, g]) \ s.source[:, g] rtol = 1e-10
             end
             @test s.H ≈ m.F * s.B
+            # a NaN group albedo (computed, say) throws: `nothing` is the gray albedo
+            @test_throws ArgumentError spectral_solve(sol; edges = E, albedo = Dict(:wall => [NaN, 0.7, 0.3, 0.1]))
             # thermalized: the coupled system of all groups, dense
             s = spectral_solve(sol; edges = E, albedo = a, temperature = T, thermalize = true,
                                mband = MBandEmission())
@@ -162,7 +164,7 @@ using Briareus: RadiationSolution, _planck_tail, _channel_matrix, _color_tempera
             @test vec(s.B) ≈ x rtol = 1e-9
             # one group at the gray albedo (taken as the gray radiosity less the other), dense
             E2 = [0.0, 1800.0, Inf]
-            s = spectral_solve(sol; edges = E2, albedo = Dict(:wall => [NaN, 0.5]), temperature = T,
+            s = spectral_solve(sol; edges = E2, albedo = Dict(:wall => [nothing, 0.5]), temperature = T,
                                thermalize = true, mband = MBandEmission())
             b2 = reduce(hcat, [planck_fractions(T[e], E2) for e in 1:n])'
             K2 = zeros(2n, 2n)
@@ -210,21 +212,28 @@ using Briareus: RadiationSolution, _planck_tail, _channel_matrix, _color_tempera
             mb = nif_mband()
             times = [1.0, 3.0]
             h0 = drive_history(m, op, beams_at, times; lpi = cbet, mband = nothing)
-            h = drive_history(m, op, beams_at, times; lpi = cbet)          # nif_mband() by default
+            h = drive_history(m, op, beams_at, times; lpi = cbet)          # MBandSplit() by default
             @test h0.mband === nothing && h0.mband_moments === nothing
             # the gray history is untouched, bit for bit
             @test all(getfield(h, k) == getfield(h0, k) for k in keys(h0) if !(k in (:mband, :mband_moments)))
-            # the default spectral model is the calibrated pairing, spelled out
+            # the default split is the calibrated pairing, spelled out (α_M as a number and
+            # as the group albedos it stands for)
             E2 = [0.0, 1800.0, Inf]
-            αM = Dict(c => [NaN, 0.55] for c in (:wall, :cap_top, :cap_bottom))
-            @test isequal(mband_albedo(t, mb, E2), αM)
-            hs = drive_history(m, op, beams_at, times; lpi = cbet, mband = mb,
-                               spectral = (; edges = E2, thermalize = true, albedo = αM))
+            αM = Dict(c => [nothing, 0.55] for c in (:wall, :cap_top, :cap_bottom))
+            @test mband_albedo(t, mb, E2) == αM
+            sd = MBandSplit()
+            @test sd.emission.groups == mb.groups && sd.edges == E2 && sd.thermalize && sd.albedo == 0.55
+            hs = drive_history(m, op, beams_at, times; lpi = cbet,
+                               mband = MBandSplit(mb; edges = E2, thermalize = true, albedo = αM))
             @test hs.mband_moments == h.mband_moments && hs.mband == h.mband
             @test_throws ArgumentError mband_albedo(t, mb, [0.0, 1000.0, Inf])
+            @test_throws ArgumentError MBandSplit(mb; edges = [0.0, 1000.0, Inf])
+            @test_throws ArgumentError MBandSplit(mb; albedo = Dict(:wall => [nothing, 0.5, 0.5]))
             # off where there is nothing to convert: no beam of the model's groups, or no emitter
-            @test drive_history(m, op, beams_at, times[1:1]; mband = MBandEmission(groups = Dict(:none => 0.2))).mband === nothing
-            @test drive_history(m, op, beams_at, times[1:1]; mband = nif_mband(materials = (:Pt,))).mband_moments === nothing
+            @test drive_history(m, op, beams_at, times[1:1];
+                                mband = MBandSplit(MBandEmission(groups = Dict(:none => 0.2)))).mband === nothing
+            @test drive_history(m, op, beams_at, times[1:1];
+                                mband = MBandSplit(nif_mband(materials = (:Pt,)))).mband_moments === nothing
             # reference: a static solve at each time and the M-band summed cone by cone by
             # hand from the effective (post-transfer) beams
             au = vcat(elements(t, :wall), elements(t, :cap_top), elements(t, :cap_bottom))
@@ -268,7 +277,10 @@ using Briareus: RadiationSolution, _planck_tail, _channel_matrix, _color_tempera
                 @test d.element == d0.element && d.backside == d0.backside && d.per_beam == d0.per_beam
                 @test all(EG[:, k] == alone[k] for k in eachindex(alone))
             end
-            @test_throws ArgumentError drive_history(m, op, beams_at, times; mband = mb, spectral = (; edges = [0.0, Inf]))
+            # the split's keywords belong to the MBandSplit; `spectral` alone has no effect
+            @test_throws ArgumentError drive_history(m, op, beams_at, times; spectral = (; edges = [0.0, Inf]))
+            @test_throws ArgumentError drive_history(m, op, beams_at, times; mband = nothing, spectral = (; spot = :wall))
+            @test_throws ArgumentError drive_history(m, op, beams_at, times; mband = mb)
         end
     end
 

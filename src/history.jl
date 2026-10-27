@@ -43,7 +43,7 @@ _beam_key(by) = by === :group ? (b -> b.group) : by === :quad ? (b -> Symbol(b.q
                   wall = (:wall,), lpi = nothing, holes = nothing, ylm = false,
                   transition = nothing, flux_change = nothing, min_step = 1e-3,
                   tol = 1e-4, keep_albedo = false, record = nothing,
-                  wall_history = true, wall_release = true, mband = nif_mband(),
+                  wall_history = true, wall_release = true, mband = MBandSplit(),
                   spectral = nothing) -> NamedTuple
 
 Quasi-static drive history: at each time, deposit `beams_at(t)` with `op` (after the
@@ -92,28 +92,27 @@ radiosity at that time (time- and temperature-dependent albedos included), and r
   `RadiationSolution` (e.g. `sol -> dante(dante1(), sol)` for a synthetic Dante, or a
   `spectral_solve`), otherwise `nothing`.
 - `mband_moments`, `mband` — the `(lmax+1) × nt` Legendre moments of the observed flux
-  at photon energies above the M-band's lower edge (`band_flux(s, mband.band[1])` of the
-  step's spectral solution `s`: laser-produced and recirculating M-band and the thermal
-  tail) and the laser-produced M-band power per component (TW, keyed by part like
+  at photon energies above the M-band's lower edge (`band_flux(s, mband.emission.band[1])`
+  of the step's spectral solution `s`: laser-produced and recirculating M-band and the
+  thermal tail) and the laser-produced M-band power per component (TW, keyed by part like
   `laser`); `nothing` with `mband = nothing`, or when the target has no surface of the
   model's materials or (per-group model) no beam of `beams_at(times[1])` is in its
   groups.
 
-**M-band.** By default (`mband = nif_mband()`: Dewald 2020's per-cone conversions on
-gold and Au-lined uranium) each step's laser-produced M-band comes from that step's own
-effective beams, as `mband_power(mband, op, beams; lpi, time)` gives it with the beams
-after `lpi` (CBET, backscatter, the bubble): each beam group's (cone's) share of every
-element, split off in the step's own deposition pass, so the M-band follows the cone
-balance in time (an intensity-form `MBandEmission()` converts the step's deposition
-itself). The step's gray solution is then split by
-`spectral_solve(sol; spectral..., mband, mband_power)`. `spectral` holds its other
-keywords; those not given default to the calibrated pairing:
-`edges = [0, mband.band[1], ∞]` (must include `mband.band[1]`), `thermalize = true` and
-`albedo = mband_albedo(t, mband, edges)` (``α_M`` 0.55 at and above the band's edge on
-the emitting surfaces; [`mband_albedo`](@ref)). A diagnostic: the gray history (every
-other record) is the same bit for bit with or without it. It costs ~6 % of a small
-history (600 elements) and less than the run-to-run spread on N221204 (research notes,
-"Per-cone M-band in the drive history (2026-10-27)"); `mband = nothing` turns it off.
+**M-band.** `mband` is an [`MBandSplit`](@ref): the M-band emission model and the
+spectral split it is solved with. By default (`MBandSplit()`: `nif_mband()`, Dewald
+2020's per-cone conversions on gold and Au-lined uranium, in the calibrated two-group
+split) each step's laser-produced M-band comes from that step's own effective beams, as
+`mband_power(mband.emission, op, beams; lpi, time)` gives it with the beams after `lpi`
+(CBET, backscatter, the bubble): each beam group's (cone's) share of every element,
+split off in the step's own deposition pass, so the M-band follows the cone balance in
+time (an intensity-form `MBandSplit(MBandEmission())` converts the step's deposition
+itself). The step's gray solution is then split by `spectral_solve` with the split's
+`edges`, `thermalize` and group albedos; `spectral` holds `spectral_solve`'s other
+keywords (`spot`, `tol`, ...). A diagnostic: the gray history (every other record) is
+the same bit for bit with or without it. It costs ~6 % of a small history (600
+elements) and less than the run-to-run spread on N221204 (research notes, "Per-cone
+M-band in the drive history (2026-10-27)"); `mband = nothing` turns it off.
 
 Each step's temperature-dependent albedos are iterated to `tol` (see `solve`), starting
 from the previous step's temperatures.
@@ -208,23 +207,29 @@ Base.@nospecializeinfer function _drive_history(
                         transition = nothing, flux_change = nothing, min_step::Real = 1e-3,
                         tol = 1e-4, keep_albedo::Bool = false, @nospecialize(record = nothing),
                         wall_history::Bool = true, wall_release::Bool = true,
-                        mband = nif_mband(), @nospecialize(spectral = nothing))
-    if mband !== nothing
-        mband isa MBandEmission || throw(ArgumentError("mband must be an MBandEmission"))
+                        mband = MBandSplit(), @nospecialize(spectral = nothing))
+    # the M-band model of each step (`nothing`: off) and its `spectral_solve` keywords
+    emission = nothing
+    if mband === nothing
+        spectral === nothing ||
+            throw(ArgumentError("`spectral` sets the M-band's spectral_solve; with mband = nothing it has no effect"))
+    else
+        mband isa MBandSplit ||
+            throw(ArgumentError("mband must be an MBandSplit (e.g. MBandSplit(nif_mband())) or nothing"))
         spectral = spectral === nothing ? (;) : NamedTuple(spectral)
-        (haskey(spectral, :mband) || haskey(spectral, :mband_power)) &&
-            throw(ArgumentError("pass the M-band model as drive_history's `mband`, not in `spectral`"))
-        haskey(spectral, :edges) || (spectral = (; spectral..., edges = [0.0, mband.band[1], Inf]))
-        mband.band[1] in spectral.edges ||
-            throw(ArgumentError("the spectral edges must include the M-band's lower edge $(mband.band[1]) eV"))
-        haskey(spectral, :thermalize) || (spectral = (; spectral..., thermalize = true))
-        haskey(spectral, :albedo) || (spectral = (; spectral..., albedo = mband_albedo(t, mband, spectral.edges)))
+        split_keys = filter(in((:edges, :thermalize, :albedo, :mband, :mband_power)), collect(keys(spectral)))
+        isempty(split_keys) || throw(ArgumentError("`spectral` takes spectral_solve's other keywords; " *
+                                                   join(split_keys, ", ") * " are the MBandSplit's (`mband`)"))
+        albedo = mband.albedo isa Float64 ?
+                 mband_albedo(t, mband.emission, mband.edges; albedo = mband.albedo) : mband.albedo
+        spectral = (; spectral..., edges = mband.edges, thermalize = mband.thermalize, albedo)
         # on only where there is M-band to make: a target with an emitting surface, lit by
         # a beam group the model converts (any beam, for the intensity form)
-        emits = any(e -> _emits_mband(mband, t, e), 1:nelements(t))
-        lit = mband.groups === nothing || isempty(times) ||
-              any(b -> haskey(mband.groups, b.group), beams_at(first(times)))
-        emits && lit || (mband = nothing)
+        em = mband.emission
+        emits = any(e -> _emits_mband(em, t, e), 1:nelements(t))
+        lit = em.groups === nothing || isempty(times) ||
+              any(b -> haskey(em.groups, b.group), beams_at(first(times)))
+        emits && lit && (emission = em)
     end
     transition === nothing || transition > 0 || throw(ArgumentError("transition must be positive"))
     flux_change === nothing || flux_change > 0 || throw(ArgumentError("flux_change must be positive"))
@@ -418,7 +423,8 @@ Base.@nospecializeinfer function _drive_history(
                 P0 = sum(b -> ForwardDiff.value(b.power), b0; init = 0.0)
                 bl = apply_lpi(lpi, b0, τ)
                 # per-group M-band: the cones split in the same deposition pass
-                msplit = mband === nothing || mband.groups === nothing ? nothing : _mband_split(mband, t, bl)
+                msplit = emission === nothing || emission.groups === nothing ? nothing :
+                         _mband_split(emission, t, bl)
                 dep = _lpi_deposit(lpi, operator_at(τ), bl, τ, msplit)
                 Il = _lip_intensities(lips, bl)
                 sol, Ik, tk, rk, Iwk, rwk, hist, ds = step(τ0, τ, dep, last, Il)
@@ -479,14 +485,15 @@ Base.@nospecializeinfer function _drive_history(
             keep_albedo && push!(albedo_steps, xe === nothing || all(iszero, xe) ? copy(sol.albedo) :
                                    sol.albedo .+ xe ./ max.(ForwardDiff.value.(sol.H), eps()))
             record === nothing || push!(recorded, record(sol))
-            if mband !== nothing
+            if emission !== nothing
                 # the step's own effective beams, each cone's share of the deposition
-                # (its beams alone, = `mband_power(mband, op, bl; lpi, time)`); the
+                # (its beams alone, = `mband_power(emission, op, bl; lpi, time)`); the
                 # intensity form converts the step's deposition itself
                 tm = sol.model.target
-                PM = msplit === nothing ? mband_power(mband, tm, dep.element) : _mband_from_split(mband, tm, msplit)
-                sm = spectral_solve(sol; spectral..., mband, mband_power = PM)
-                push!(mband_moments, legendre_moments(band_flux(sm, mband.band[1]), tm, obs; lmax))
+                PM = msplit === nothing ? mband_power(emission, tm, dep.element) :
+                     _mband_from_split(emission, tm, msplit)
+                sm = spectral_solve(sol; spectral..., mband = emission, mband_power = PM)
+                push!(mband_moments, legendre_moments(band_flux(sm, emission.band[1]), tm, obs; lmax))
                 for (ci, c) in enumerate(tm.components)
                     push!(mband_laser[c.name], sum(sm.mband[e] * tm.elem_area[e] for e in tm.comp_elems[ci]; init = 0.0))
                 end
@@ -532,15 +539,15 @@ Base.@nospecializeinfer function _drive_history(
         escaped, transmitted, laser, source, absorbed, released =
             _by_part(t, escaped), _by_part(t, transmitted), _by_part(t, laser), _by_part(t, source),
             _by_part(t, absorbed), _by_part(t, released)
-        mband === nothing || (mband_laser = _by_part(t, mband_laser))
+        emission === nothing || (mband_laser = _by_part(t, mband_laser))
     end
     return (; time, delivered, flux, Tr, moments = _columns(moments, lmax + 1),
             ylm = ylm ? _columns(clm, (lmax + 1)^2) : nothing, wall_Tr,
             wall_albedo, escaped, transmitted, window_loss, front, burnthrough,
             albedo = keep_albedo ? albedo_steps : nothing, setup, laser, source, absorbed, lost,
             released, lip_radius, record = record === nothing ? nothing : [r for r in recorded],
-            mband_moments = mband === nothing ? nothing : _columns(mband_moments, lmax + 1),
-            mband = mband === nothing ? nothing : mband_laser)
+            mband_moments = emission === nothing ? nothing : _columns(mband_moments, lmax + 1),
+            mband = emission === nothing ? nothing : mband_laser)
 end
 
 # The computed entrance-hole lips of a target (`LipClosure` apertures): per lip its name,

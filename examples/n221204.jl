@@ -468,13 +468,12 @@ end
 kl = Keyframes(moving_hohlraum(motion; radius = R0, geometry..., leh_closure = lip, shrink...), keyframes, beams)
 which == "all" && run!("+lips", () -> drive_history(kl, beams_at, times; lpi = with_pre(cbet), record = dante_tr))
 # Every run records the capsule M-band (> 1.8 keV) at every step from each cone's own
-# post-CBET, post-bubble deposition (`drive_history`'s default `mband = nif_mband()`:
-# Dewald's per-cone conversions on the gold liner of the DU wall), two groups split at
-# 1.8 keV with the M-band group albedo α_M 0.55 thermalized (the > 1.8 keV flux of a
-# two-group solve is that of the 42-group one: the soft groups keep the gray albedo);
-# `alpha_m` replaces α_M in the full model.
-mband_kw = haskey(opt, "alpha_m") ?
-           (; spectral = (; albedo = mband_albedo(kl.reference, nif_mband(), [0.0, 1800.0, Inf]; albedo = alpha_m))) : (;)
+# post-CBET, post-bubble deposition (`drive_history`'s default `mband = MBandSplit()`:
+# `nif_mband()`, Dewald's per-cone conversions on the gold liner of the DU wall), two
+# groups split at 1.8 keV with the M-band group albedo α_M 0.55 thermalized (the > 1.8 keV
+# flux of a two-group solve is that of the 42-group one: the soft groups keep the gray
+# albedo); `alpha_m` replaces α_M in the full model.
+mband_kw = haskey(opt, "alpha_m") ? (; mband = MBandSplit(; albedo = alpha_m)) : (;)
 run!("+bubble", () -> drive_history(kl, beams_at, times; lpi = full_lpi, record = dante_rec,
                                      ylm = metrics, mband_kw...))
 # the full model with the uniform backscatter cut, for Fig. 10 (`backscatter`, above)

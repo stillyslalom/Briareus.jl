@@ -144,12 +144,12 @@ _deposition_profile(dr::DriveState) = dr.beam_model[] === :visrad ? dr.profile[]
 
 # A `VisRadProfile` as plain data (session files, and the scenario's key: profiles
 # compare by value). TOML has no `nothing`: an absent envelope is VisRad's default
-# ratio, an absent growth the manual's z_A.
+# ratio; `growth` is γ or the string "manual" (the manual's z_A).
 function _profile_state(p::VisRadProfile)
     d = Dict{String,Any}("focal_length" => p.focal_length, "measured" => p.measured)
     p.envelope === nothing ||
         (d["envelope"] = p.envelope isa AbstractDict ? Dict{String,Any}(p.envelope) : p.envelope)
-    p.growth === nothing || (d["growth"] = p.growth)
+    d["growth"] = p.growth isa Symbol ? String(p.growth) : p.growth
     return d
 end
 _profile_state(::Nothing) = nothing
@@ -157,8 +157,10 @@ _profile_state(::Nothing) = nothing
 function _state_profile(d::AbstractDict)
     e = get(d, "envelope", nothing)
     envelope = e isa AbstractDict ? Dict{String,Float64}(String(k) => Float64(v) for (k, v) in e) : e
-    return VisRadProfile(; envelope, focal_length = Float64(d["focal_length"]),
-                         growth = get(d, "growth", nothing), measured = Bool(d["measured"]))
+    g = d["growth"]
+    growth = g isa AbstractString ? Symbol(g) : Float64(g)
+    return VisRadProfile(; envelope, focal_length = Float64(d["focal_length"]), growth,
+                         measured = Bool(d["measured"]))
 end
 
 """

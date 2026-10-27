@@ -222,13 +222,16 @@ end
 _emits_mband(m::MBandEmission, t::Target, e) =
     !is_aperture(t, e) && element_material(t, e).name in m.materials
 
+# α_M, calibrated (see `mband_albedo`)
+const _ALPHA_M = 0.55
+
 """
     mband_albedo(t::Target, m::MBandEmission, edges; albedo = 0.55) -> Dict
 
 Group albedos for `spectral_solve`'s `albedo` that pair with the laser M-band `m`: on
 every surface component of `m`'s materials, `albedo` (``α_M``) in each group at or above the
 M-band's lower edge `m.band[1]` (which must be one of `edges`) and the gray albedo
-(`NaN`) below it. Use with `thermalize = true`: the rest of the gray albedo is
+(`nothing`) below it. Use with `thermalize = true`: the rest of the gray albedo is
 re-emitted thermally, so the group sums stay the gray solution's.
 
 The default ``α_M`` = 0.55 is **calibrated** (research notes, "Spectral radiosity, M-band
@@ -238,14 +241,55 @@ gives Dewald et al. 2020's recirculating-to-laser M-band ratio ``F_M`` ≈ 2 on 
 (`examples/mband_dewald2020.jl`; 0.5 under the `:brightness` rule). Fitted to ``F_M`` only;
 Dante's > 1.8 keV share (11.4–12.0 % against the measured 12 %) is the check.
 """
-function mband_albedo(t::Target, m::MBandEmission, edges; albedo::Real = 0.55)
+function mband_albedo(t::Target, m::MBandEmission, edges; albedo::Real = _ALPHA_M)
     E = collect(Float64, edges)
     k = findfirst(==(m.band[1]), E)
     k === nothing && throw(ArgumentError("the edges must include the M-band's lower edge $(m.band[1]) eV"))
     G = length(E) - 1
-    a = [g >= k ? Float64(albedo) : NaN for g in 1:G]
+    a = Union{Nothing,Float64}[g >= k ? Float64(albedo) : nothing for g in 1:G]
     return Dict(c.name => copy(a) for c in t.components
                 if c.kind === :surface && c.material.name in m.materials)
+end
+
+"""
+    MBandSplit(emission = nif_mband(); edges = [0, emission.band[1], ∞], thermalize = true,
+               albedo = 0.55)
+
+The laser-produced M-band of a [`drive_history`](@ref) and the spectral split it is
+solved with. `emission` (an `MBandEmission`) makes each step's M-band source; the step's
+gray solution is then split by `spectral_solve` with group edges `edges` (eV; they must
+include the M-band's lower edge `emission.band[1]`), `thermalize` and the group albedos
+`albedo`: either a number ``α_M``, for `mband_albedo(target, emission, edges; albedo)`
+(``α_M`` at and above the M-band's edge on the emitting surfaces, the gray albedo below),
+or a `Dict` from component name to group albedos as `spectral_solve` takes them
+(`nothing` entries keep the gray albedo).
+
+The defaults are the calibrated pairing: two groups split at the M-band's edge,
+thermalized, with ``α_M`` 0.55 (**calibrated**: [`mband_albedo`](@ref)).
+"""
+struct MBandSplit
+    emission::MBandEmission
+    edges::Vector{Float64}
+    thermalize::Bool
+    albedo::Union{Float64,Dict{Symbol,Vector{Union{Nothing,Float64}}}}
+end
+
+function MBandSplit(emission::MBandEmission = nif_mband(); edges = [0.0, emission.band[1], Inf],
+                    thermalize::Bool = true, albedo = _ALPHA_M)
+    E = collect(Float64, edges)
+    emission.band[1] in E ||
+        throw(ArgumentError("the edges must include the M-band's lower edge $(emission.band[1]) eV"))
+    G = length(E) - 1
+    a = if albedo isa Real
+        Float64(albedo)
+    else
+        d = Dict{Symbol,Vector{Union{Nothing,Float64}}}(Symbol(k) => collect(Union{Nothing,Float64}, v)
+                                                        for (k, v) in albedo)
+        all(v -> length(v) == G, values(d)) ||
+            throw(ArgumentError("albedo: one group albedo per group ($G) for each component"))
+        d
+    end
+    return MBandSplit(emission, E, thermalize, a)
 end
 
 # share of a flat band [a, b] in each group
@@ -327,7 +371,8 @@ e.g. `spectral_edges()`).
 - Group albedos `α_g`: the fraction of an element's incident flux in group g that it
   re-emits in group g. The gray converged albedo `sol.albedo` in every group, except
   for the components in `albedo`, a `Dict` (or pairs) from component name to a vector
-  of group albedos (`NaN` keeps the gray albedo in that group).
+  of group albedos (a `nothing` entry keeps the gray albedo in that group, e.g.
+  `Dict(:wall => [nothing, 0.5])`; a `NaN` entry throws).
 - `thermalize`: what happens to the rest of the gray albedo, `α − α_g`. Lost to the
   wall by default (`B_g = S_g + α_g H_g`, each group a gray-type solve); with
   `thermalize = true` re-emitted thermally, spread over the groups by the element's
@@ -461,8 +506,11 @@ function _group_albedos(t::Target, α::Vector{Float64}, spec, G::Integer)
     spec === nothing && return A
     for (name, a) in spec
         length(a) == G || throw(ArgumentError("$name: $(length(a)) group albedos for $G groups"))
-        for e in elements(t, name), g in 1:G
-            isnan(a[g]) || (A[e, g] = a[g])
+        any(x -> x isa Real && isnan(x), a) &&
+            throw(ArgumentError("$name: NaN group albedo (`nothing` keeps the gray albedo)"))
+        es = elements(t, name)
+        for g in 1:G
+            a[g] === nothing || (A[es, g] .= Float64(a[g]))
         end
     end
     return A
