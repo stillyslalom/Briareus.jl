@@ -97,9 +97,10 @@ followed by `julia --project=Briareus.jl/BriareusGUI/launcher -e "using Pkg; Pkg
 The steps below design the drive of a NIF hohlraum from the built-in template; each
 names the menu entries, and the panels are described in [The window](@ref).
 
-1. **Open.** `briareus` opens on the hohlraum template with the 48 NIF quads at the
-   published cone aims (`nif_quads`). The model tree lists the hohlraum's components
-   (wall, caps, entrance holes, capsule), the beams by cone and quad, and the analyses.
+1. **Open.** `briareus` opens on the hohlraum template with the 48 NIF quads at
+   illustrative example cone aims (`nif_quads`). The model tree lists the hohlraum's
+   components (wall, caps, entrance holes, capsule), the beams by cone and quad, and the
+   analyses.
 2. **The target.** Selecting *Target* in the tree shows the template's dimensions,
    wall material and mesh in Properties. Target ▸ Mesh sets the element sizes:
    presets from a work-precision study on the NIF hohlraum
@@ -115,10 +116,16 @@ names the menu entries, and the panels are described in [The window](@ref).
    worker thread (seconds on the standard mesh). From then on a beam edit re-evaluates
    the drive at once: the view factors depend only on the target and the beam ports.
 5. **Read P2/P0.** The *Drive* tab lists the capsule's mode amplitudes ε₁…ε₄ and the
-   Legendre ratios ``P_l/P_0``, and the laser power accounting (absorbed in the wall, on the
-   caps' outer faces, on the capsule, and missing the target); for a foil it lists the
-   spot statistics instead. *Capsule θ–φ map* in the drive's properties (or View ▸ Capsule
-   θ–φ map) puts the capsule's flux map in the 3D view's place.
+   Legendre ratios ``P_l/P_0``, and the laser power accounting as [`report`](@ref)
+   prints it (absorbed in the wall, on the caps' outer faces and on the capsule, the
+   parts below 0.1 % of the delivered power on one line, and the light that misses the
+   target); for a foil it lists the spot statistics instead. *Capsule θ–φ map* in the
+   drive's properties (or View ▸ Capsule θ–φ map) puts the capsule's flux map in the 3D
+   view's place. On the template at equal power per quad (an inner-cone fraction of
+   1/3), P2/P0 starts near −15 %: a static solve without cross-beam energy transfer or
+   the hohlraum's dynamics is not balanced at a fielded cone fraction (the N221204
+   benchmark's static P2/P0 at 5.5 ns is −26 %; the shot's balance comes from
+   wavelength-detuned transfer, wall motion, the gold bubble and closing entrance holes).
 6. **Optimize.** Compute ▸ Optimize pointing selects the optimization task: the free
    parameters (aim, defocus and power per cone, quad or beam, within ± bounds), the
    objective (axisymmetric ``P_l``, all-m 3D modes, optionally holding the drive level, or
@@ -214,7 +221,7 @@ refused with the reason in the status line.
   NIF quad held as one beam splits into its four beams (their own ports, a quarter of
   the power each) to point them apart, and merges back.
 - **Facility** (Beams ▸ Facility: NIF, OMEGA, OMEGA EP or other): the presets offered
-  (NIF quads or beams at the published cone aims; the OMEGA hohlraum or backlighter
+  (NIF quads or beams at illustrative example cone aims; the OMEGA hohlraum or backlighter
   sets; OMEGA EP's beams are imported, its port geometry is not built in) and the
   checks (the TaLIS rules are NIF's).
 - **Analyses:** the settings and Run of the drive, the optimization, the clearance
