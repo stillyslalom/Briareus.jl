@@ -28,6 +28,11 @@ end
 
 const _LINESTYLES = Dict(:solid => nothing, :dash => :dash, :dot => :dot)
 
+# Ticks on a y axis `h` pixels tall: about one per 45 px, two to five. Makie's
+# `LinearTicks` takes the count as given (PlotUtils' Wilkinson search with a low maximum
+# warns "No strict ticks found" on some spans).
+_yticks_for(h) = LinearTicks(clamp(round(Int, h / 45), 2, 5))
+
 """
     time_canvas(sess::DesignSession) -> TimeCanvas
 
@@ -35,13 +40,20 @@ Build the time chart for `sess` and keep it in sync with the time panel's state.
 """
 function time_canvas(sess::DesignSession)
     fig = Figure(size = (900, 260), figure_padding = (6, 6, 2, 6))
-    ticks = WilkinsonTicks(4; k_min = 3)            # a short panel: few ticks
+    ticks = _yticks_for(220)
     ax = Axis(fig[1, 1]; xlabel = "t (ns)", ylabel = " ", xgridvisible = false, yticks = ticks)
     ax2 = Axis(fig[1, 1]; yaxisposition = :right, ylabel = " ", xgridvisible = false, ygridvisible = false,
                yticks = ticks)
     hidespines!(ax2)
     hidexdecorations!(ax2)
     linkxaxes!(ax, ax2)
+    # the panel's height sets the tick count, so that a short chart's labels do not overlap
+    on(ax.scene.viewport) do vp
+        t = _yticks_for(vp.widths[2])
+        t == ax.yticks[] && return
+        ax.yticks[] = t
+        ax2.yticks[] = t
+    end
     # the chart is for reading and pointing at times: no zoom or pan gestures
     for a in (ax, ax2), name in collect(keys(Makie.interactions(a)))
         deregister_interaction!(a, name)
