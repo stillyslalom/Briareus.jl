@@ -121,6 +121,30 @@ include("qt/shell.jl")
 
 using PrecompileTools: @setup_workload, @compile_workload
 
+# The window's first frames on its screen type, which the workload cannot render (no GL
+# context): the `precompile` signatures dev/gui_first_frame.jl records, each resolved
+# against the loaded packages by name. Signatures that no longer resolve (a dependency's
+# update renamed a closure) are skipped. Returns how many compiled.
+module _PrecompileNames end                      # the loaded packages, by name
+function _replay_precompiles(path)
+    isfile(path) || return 0
+    include_dependency(path)                     # a new recording rebuilds the cache
+    names = _PrecompileNames
+    for mod in values(Base.loaded_modules)
+        isdefined(names, nameof(mod)) || Core.eval(names, :(const $(nameof(mod)) = $mod))
+    end
+    n = 0
+    for line in eachline(path)
+        startswith(line, "precompile(") || continue
+        n += try
+            Core.eval(names, Meta.parse(line)) === true
+        catch
+            false
+        end
+    end
+    return n
+end
+
 # Time-to-first-window workload: the controllers on a coarse hohlraum and the
 # canvases' Figure construction (no GL context at precompile time, so no rendering).
 @setup_workload begin
@@ -189,7 +213,15 @@ using PrecompileTools: @setup_workload, @compile_workload
         drain()
         import_visrad_workspace!(sess, joinpath(@__DIR__, "missing.vrw"); done = () -> nothing)
         drain()
+        # the window's Julia side, short of GL: its shell, property map and item models,
+        # their first refresh, and the QML callbacks (QML's `__init__` has created the Qt
+        # application here as well); 14 s of compilation at the first window otherwise
+        sh = BriareusShell(DesignSession(resolution = :coarse))
+        _refresh!(sh)
+        _register_qml_functions()
     end
+    precompile(br_tick, ())
+    _replay_precompiles(joinpath(@__DIR__, "qt", "first_frame.jl"))
     # an import's beams (0.17 s of its commit on the GUI thread)
     kw = NamedTuple{(:preset, :enabled, :cluster),Tuple{Symbol,Vector{Bool},Vector{Symbol}}}
     precompile(Core.kwcall, (kw, typeof(set_beams!), BeamTable, Vector{Beam}))
