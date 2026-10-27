@@ -31,6 +31,7 @@ QML = "0.13"
 QMLMakie = "0.3"
 Qt6Declarative_jll = "6.8"
 TOML = "1"
+Test = "1"
 julia = "1.10"
 
 [extras]

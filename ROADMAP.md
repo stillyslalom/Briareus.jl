@@ -95,7 +95,7 @@ item says where it stands, what remains and what data would settle it.
   their length ("The H-matrix's N^1.5 remainder", "Deposition-operator rays and sliver
   view factors").
 - **2026-10-26, GUI distribution.** The `briareus` command as a Pkg app
-  (`BriareusGUI/launcher/`, installed from a clone; `BriareusGUI/README.md`): a Qt `qml`
+  (`BriareusLauncher/`, installed from a clone; `BriareusGUI/README.md`): a Qt `qml`
   splash 1.7 s after launch, desktop and menu shortcuts (`briareus --shortcut`), a log and
   an error splash for shortcut launches. First frame 50 → 21 s on Windows (the shell in
   the workload, recorded first-frame signatures replayed). Linux checked under WSLg

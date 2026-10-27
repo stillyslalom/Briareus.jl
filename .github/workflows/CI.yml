@@ -3,7 +3,9 @@ on:
   push:
     branches:
       - main
-    tags: ['*']
+    # root releases (v0.1.0) only: the docs deploy versioned docs for these; the GUI's and
+    # the launcher's tags (BriareusGUI-v0.1.0, BriareusLauncher-v0.1.0) build nothing
+    tags: ['v*']
   pull_request:
   workflow_dispatch:
 concurrency:
@@ -110,7 +112,7 @@ jobs:
         if: matrix.version == '1'
         env:
           QT_QPA_PLATFORM: offscreen
-        run: julia --color=yes --project=BriareusGUI/launcher -e 'using Pkg; Pkg.instantiate(); Pkg.test()'
+        run: julia --color=yes --project=BriareusLauncher -e 'using Pkg; Pkg.instantiate(); Pkg.test()'
   docs:
     name: Documentation
     runs-on: ubuntu-latest
