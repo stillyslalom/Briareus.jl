@@ -74,6 +74,7 @@ tutorial_page(file) = joinpath("tutorials", splitext(file)[1] * ".md")
                              size_threshold = 400 * 1024, example_size_threshold = 0),
     pages = [
         "Home" => "index.md",
+        "Desktop application" => "gui.md",
         "Tutorials" => [
             "Laser spot on a foil" => tutorial_page("laser_spot.jl"),
             "Integrating sphere" => tutorial_page("integrating_sphere.jl"),
