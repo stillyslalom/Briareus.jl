@@ -484,6 +484,8 @@ end
 _num(x::Real) = isfinite(x) ? Controllers.display_number(x) : ""
 _fix(x::Real, d::Integer = 3) = isfinite(x) ? @sprintf("%.*f", d, x) : "–"
 _pct(x::Real, d::Integer = 2) = isfinite(x) ? @sprintf("%.*f %%", d, 100x) : "–"
+# A component's laser power (TW): round-off below 10⁻⁶ of the delivered power reads as 0.
+_power_text(p::Real, delivered::Real) = abs(p) < 1e-6 * abs(delivered) ? "0" : @sprintf("%.4g", p)
 _g(x::Real) = isfinite(x) ? @sprintf("%.3g", x) : "–"
 
 function _refresh!(sh::BriareusShell)
@@ -744,7 +746,8 @@ function _refresh_drive!(sh::BriareusShell)
             [ModeRow(m.l, _pct(m.epsilon), _pct(m.legendre), "", "") for m in res.modes]
     _sync_rows!(sh.rows[:modeModel], sh.models[:modeModel], modes)
     power = res === nothing ? PowerRow[] :
-            [PowerRow(p.name, @sprintf("%.4g", p.power), _pct(p.fraction)) for p in res.power]
+            [PowerRow(p.name, _power_text(p.power, res.evaluation.deposition.delivered), _pct(p.fraction))
+             for p in res.power]
     _sync_rows!(sh.rows[:powerModel], sh.models[:powerModel], power)
     _set!(sh, "delivered", res === nothing ? "" :
                            @sprintf("%.4g TW delivered", res.evaluation.deposition.delivered))
