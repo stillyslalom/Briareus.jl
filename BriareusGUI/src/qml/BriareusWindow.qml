@@ -20,11 +20,19 @@ import "common"
 ApplicationWindow {
     id: win
     title: app.title
-    width: 1640
-    height: 1000
-    minimumWidth: 1100
-    minimumHeight: 680
+    // 1640 × 1000, or 90 % of the screen's free area (less the taskbar) on a smaller or
+    // scaled display, centered on that screen. Set once at start: the bindings are cut in
+    // onCompleted, so moving the window to another screen keeps its size.
+    readonly property int availW: Math.min(Screen.width, Screen.desktopAvailableWidth)
+    readonly property int availH: Math.min(Screen.height, Screen.desktopAvailableHeight)
+    width: Math.min(1640, Math.round(0.9 * availW))
+    height: Math.min(1000, Math.round(0.9 * availH))
+    x: Screen.virtualX + Math.max(0, Math.round((availW - width) / 2))
+    y: Screen.virtualY + Math.max(0, Math.round((availH - height) / 2))
+    minimumWidth: Math.min(1100, availW)
+    minimumHeight: Math.min(680, availH)
     visible: true
+    Component.onCompleted: { width = width; height = height; x = x; y = y }
 
     onClosing: Qt.quit()
     // keys released while another window had focus never reach the canvas

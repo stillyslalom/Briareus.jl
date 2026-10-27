@@ -13,10 +13,11 @@
 # (the drive on the standard mesh, a pointing optimization, a drive history, the TaLIS
 # rules on every quad); stages wait for their jobs, so a slower machine gives the same
 # images. Qt's high-DPI scaling is switched off so that the window has its default size
-# (1640 × 1000) in screen pixels on any display scale; a screen less than 1000 pixels
-# tall shortens it. Each grab is quantized to a 256-color palette by Pillow through uv
-# (`uv run --python 3.12 --with pillow`), which keeps each PNG near 200 kB; without uv the
-# grabs are copied as they are. Rerun after a change to the window's layout or canvases.
+# (1640 × 1000) in screen pixels on any display scale; on a screen whose free area is
+# smaller than about 1820 × 1110 pixels the window opens at 90 % of that area instead.
+# Each grab is quantized to a 256-color palette by Pillow through uv (`uv run --python
+# 3.12 --with pillow`), which keeps each PNG near 200 kB; without uv the grabs are copied
+# as they are. Rerun after a change to the window's layout or canvases.
 root = dirname(@__DIR__)
 gui = joinpath(root, "BriareusGUI")
 out = joinpath(root, "docs", "src", "assets", "gui")
