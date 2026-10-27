@@ -26,22 +26,23 @@ ColumnLayout {
         Label { text: "beams changed since"; visible: app.tlStale; color: "#d08a00" }
         Button { text: "Export CSV…"; enabled: !app.tlRunning; onClicked: win.openTalisExport() }
     }
-    RowLayout {
+    // notes and the rule summary beside every check, split by a draggable handle; the
+    // notes wrap at the width of their side
+    SplitView {
         Layout.fillWidth: true
         Layout.fillHeight: true
-        spacing: 24
-        // notes and the rule summary: narrower than 420 when the panel is, so that the
-        // checks' table (and the Export button above) stay inside it
+        orientation: Qt.Horizontal
         ScrollView {
-            Layout.fillWidth: true
-            Layout.minimumWidth: 260
-            Layout.maximumWidth: 420
-            Layout.preferredWidth: 420
-            Layout.fillHeight: true
+            id: notesView
+            SplitView.preferredWidth: 330
+            SplitView.minimumWidth: 200
+            SplitView.fillWidth: !app.tlHasReport
             contentWidth: availableWidth
+            contentHeight: notesColumn.implicitHeight
             clip: true
             ColumnLayout {
-                width: parent.width
+                id: notesColumn
+                width: notesView.availableWidth - 12          // clear of the split handle
                 spacing: 4
                 Repeater {
                     model: noteModel
@@ -54,23 +55,34 @@ ColumnLayout {
                         Layout.fillWidth: true
                     }
                 }
+                SectionLabel { text: "Rules"; visible: app.tlHasReport }
+                // one rule in two lines: its counts, then its worst check
                 Repeater {
                     model: ruleModel
-                    delegate: RowLayout {
-                        spacing: 6
+                    delegate: ColumnLayout {
+                        spacing: 0
+                        Layout.fillWidth: true
+                        ToolTip.visible: ruleHover.hovered
+                        ToolTip.delay: 400
+                        ToolTip.text: model.requirement
+                        HoverHandler { id: ruleHover }
                         Label {
-                            text: model.label
-                            Layout.preferredWidth: 130
+                            text: model.label + "  <font color='" + palette.windowText + "'>" +
+                                  (model.fail > 0 ? "<font color='#c42b1c'>" + model.fail + " fail</font> · " : "") +
+                                  (model.review > 0 ? "<font color='#d08a00'>" + model.review + " review</font> · " : "") +
+                                  model.pass + " pass</font>"
+                            textFormat: Text.StyledText
                             color: statusColor(model.status)
-                            ToolTip.visible: ruleHover.hovered
-                            ToolTip.text: model.requirement
-                            HoverHandler { id: ruleHover }
+                            font.weight: Font.DemiBold
+                            wrapMode: Text.WordWrap
+                            Layout.fillWidth: true
                         }
-                        Label { text: model.pass + " pass"; Layout.preferredWidth: 56 }
-                        Label { text: model.review + " review"; Layout.preferredWidth: 64; color: model.review > 0 ? "#d08a00" : palette.windowText }
-                        Label { text: model.fail + " fail"; Layout.preferredWidth: 46; color: model.fail > 0 ? "#c42b1c" : palette.windowText }
-                        Label { text: model.worst; Layout.preferredWidth: 90 }
-                        Label { text: model.where_; elide: Text.ElideRight; opacity: 0.7; Layout.fillWidth: true }
+                        Label {
+                            text: "worst " + model.worst + " · " + model.where_
+                            opacity: 0.7
+                            wrapMode: Text.WordWrap
+                            Layout.fillWidth: true
+                        }
                     }
                 }
             }
@@ -78,19 +90,21 @@ ColumnLayout {
         // every check
         ColumnLayout {
             visible: app.tlHasReport
-            Layout.fillWidth: true
-            Layout.fillHeight: true
+            SplitView.fillWidth: app.tlHasReport
+            SplitView.minimumWidth: 300
             spacing: 4
             RowLayout {
                 spacing: 4
+                Layout.leftMargin: 10
                 Repeater {
-                    model: [{ t: "Beam", w: 60 }, { t: "Rule", w: 110 }, { t: "Component", w: 90 },
+                    model: [{ t: "Beam", w: 60 }, { t: "Rule", w: 110 }, { t: "Component", w: 96 },
                             { t: "Status", w: 50 }, { t: "Margin", w: 80 }, { t: "Worst", w: 76 },
                             { t: "Required", w: 70 }]
                     Label { text: modelData.t; Layout.preferredWidth: modelData.w; font.weight: Font.DemiBold }
                 }
             }
             ListView {
+                Layout.leftMargin: 10
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 clip: true
@@ -104,7 +118,7 @@ ColumnLayout {
                     HoverHandler { id: rowHover }
                     Label { text: model.beam; Layout.preferredWidth: 60; elide: Text.ElideRight }
                     Label { text: model.rule; Layout.preferredWidth: 110; elide: Text.ElideRight }
-                    Label { text: model.component; Layout.preferredWidth: 90; elide: Text.ElideRight }
+                    Label { text: model.component; Layout.preferredWidth: 96; elide: Text.ElideRight }
                     Label { text: model.status; Layout.preferredWidth: 50; color: statusColor(model.status) }
                     Label { text: model.margin; Layout.preferredWidth: 80 }
                     Label { text: model.worst; Layout.preferredWidth: 76; opacity: 0.7 }

@@ -293,11 +293,12 @@ The bottom panel's tabs:
   stay-in zone, on the chosen capture components and checked components, with the rule
   tolerance and how it becomes a distance (measured from the target chamber center,
   from the beam's aim point, the larger of the two, or from a given point); the error
-  stack and sampling are the clearance check's. The report shows a per-rule summary,
-  every check colored by status with its margin, and the notes: the tolerance
-  interpretation is marked ASSUMED and stays at the top, followed by the error set, the
-  checks not evaluated and the requirements out of scope
-  ([`TALIS_OUT_OF_SCOPE`](@ref)). CSV export with [`write_talis_csv`](@ref).
+  stack and sampling are the clearance check's. The report shows the notes and a
+  per-rule summary beside every check, colored by status with its margin, with a
+  draggable split between the two. In the notes the tolerance interpretation is marked
+  ASSUMED and stays at the top, followed by the error set, the checks not evaluated and
+  the requirements out of scope ([`TALIS_OUT_OF_SCOPE`](@ref)). CSV export with
+  [`write_talis_csv`](@ref).
 
 ### Files in and out
 
