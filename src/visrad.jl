@@ -637,7 +637,9 @@ Conversions:
   vertical; ρ = 0 puts the major axis "nearly horizontal"). Briareus's `angle` of the
   major axis from θ̂ toward φ̂ is `90° − ρ` for `rotation_sense = :beam` (spot seen
   looking along the beam) and `90° + ρ` for `:target` (seen from TCC). The manual does
-  not say which; `:beam` is an *assumption* to verify. Horizontal is φ̂ of the beam's
+  not say which. VisRad 21's deposition settles it as `:beam`: at ρ = ±30°, 60° and 90°
+  on ten NIF beams its spot axes match `:beam` within 0.04° and differ from `:target` by
+  60°. Horizontal is φ̂ of the beam's
   NIF quad port (`quad` of the template beam), which is turned 1.6–5.3° from the beam's
   own φ̂: measured in VisRad 21 to 0.02° on 48 beams. Beams of no NIF quad use their
   own φ̂.

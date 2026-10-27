@@ -393,57 +393,71 @@ end
 end
 
 @testset "VisRad beam profile" begin
-    # VisRad's model (VR/power_sources/set_laser_profile_props.html): the super-Gaussian
-    # keeps its shape along the beam, with semi-axes r(z) = r₀ √((z/z_R)² + 1),
-    # z_R = (γ/ρ) FL [(FL/(2 r₀ f#))² − 1]^(-1/2) (γ/ρ from VisRad 21 output; 1 in the
-    # manual), cut off at the envelope ρ and renormalized to the beam's power in each
-    # transverse plane. Reference: that closed form, its normalization summed radially
-    # here, integrated over elements by midpoints.
-    FL, F, ρe, n, γ = 7695.0, 6.7, 1.6, 4.5, 0.67
-    prof = VisRadProfile(; envelope = ρe, focal_length = FL)
-    @test prof.growth == γ
-    spot = SuperGaussianSpot(0.6, 0.35; order = n, angle = 0.4)
-    zr(r) = γ / ρe * FL / sqrt((FL / (2r * F))^2 - 1)
-    dr = ρe / 200_000
-    norm_in = 2π * sum(exp(-((i - 0.5) * dr)^n) * (i - 0.5) * dr for i in 1:200_000) * dr
-    function Iref(b, x)
-        e1, e2 = spot_axes(b)
-        d = x - (Vec3(b.aim) + b.defocus * direction(b))
-        s = dot(d, direction(b))
-        a = b.spot.a * sqrt(1 + (s / zr(b.spot.a))^2)
-        bb = b.spot.b * sqrt(1 + (s / zr(b.spot.b))^2)
-        q = (dot(d, e1) / a)^2 + (dot(d, e2) / bb)^2
-        return q > ρe^2 ? 0.0 : b.power / (norm_in * a * bb) * exp(-q^(n / 2))
+    # VisRad's model (`VisRadProfile`): at z from best focus, I = I₀(z) exp(−α), α =
+    # f[(|u|/ΔL)^M + (|v|/ΔL)^M] + (1 − f) q^(n/2), with a(z)² = a₀² + z²/(2F²) (and b),
+    # n = n₀(1 + 0.2|z|/z_A), f = |z|/√(z² + z_A z_B), ΔL = ρa₀/√2 + 0.99605|z|/(2F),
+    # M = 10(1 + |z|/√(z_A z_B)), z_A,B = √2 a₀,b₀ F, cut where α = ln 1000, and I₀(z) the
+    # beam's power over the plane integral. Reference: that law written out here, its plane
+    # integral by a midpoint sum on a Cartesian grid, and at focus the closed form
+    # 2π a b Γ(2/n)/n P(2/n, ln 1000) of the cut super-Gaussian.
+    F, n, a0, b0, P = 6.7, 4.5, 0.6, 0.35, 2.0
+    ρd = visrad_envelope(n)
+    spot = SuperGaussianSpot(a0, b0; order = n, angle = 0.4)
+    b = Beam("b"; theta = 0, phi = 0, power = P, spot, fnumber = F, aim = (0.1, -0.2, 0.0))
+    prof = VisRadProfile()
+    function αref(u, v, s; ρ = ρd)
+        z = abs(s); zA, zB = √2 * a0 * F, √2 * b0 * F
+        a, bb = sqrt(a0^2 + z^2 / (2F^2)), sqrt(b0^2 + z^2 / (2F^2))
+        f = z / sqrt(z^2 + zA * zB)
+        ΔL = ρ * a0 / √2 + 0.99605 * z / (2F)
+        M = 10 * (1 + z / sqrt(zA * zB))
+        α = f * ((abs(u) / ΔL)^M + (abs(v) / ΔL)^M) + (1 - f) * ((u / a)^2 + (v / bb)^2)^(n * (1 + 0.2z / zA) / 2)
+        return α < log(1000) ? α : Inf
     end
-    # element integrals of Iref × |n·k| by an m × m midpoint rule on each triangle
-    function element_ref(t, b; m = 24)
-        k = direction(b)
+    function plane(s; ρ = ρd, h = 0.004, R = 3.0)
+        sum(exp(-αref(u, v, s; ρ)) for u in -R+h/2:h:R, v in -R+h/2:h:R) * h^2
+    end
+    e1, e2 = spot_axes(b)
+    k = direction(b)
+    at(s, u, v) = Vec3(b.aim) + s * k + u * e1 + v * e2
+    # at focus: the cut super-Gaussian, closed form
+    N0 = 2π * a0 * b0 * Briareus.gamma(2 / n) / n * Briareus.gamma_inc(2 / n, log(1000))[1]
+    @test intensity(prof, b, at(0, 0, 0)) ≈ P / N0 rtol = 1e-6
+    @test intensity(prof, b, at(0, 0.999ρd * a0, 0)) > 0 && intensity(prof, b, at(0, 1.001ρd * a0, 0)) == 0
+    # away from focus, at table nodes and between them, before and after focus
+    zs, uvs = (5.0, -8.0, 7.33, 20.0), ((0.0, 0.0), (0.4, 0.1), (-0.5, 0.3), (0.2, -0.45))
+    Ns = Dict(s => plane(s) for s in zs)
+    Iref(s, u, v) = isfinite(αref(u, v, s)) ? P / Ns[s] * exp(-αref(u, v, s)) : 0.0
+    @test all(isapprox(intensity(prof, b, at(s, u, v)), Iref(s, u, v); rtol = 2e-4, atol = 1e-12)
+              for s in zs, (u, v) in uvs)
+    # power through the transverse plane is the beam's
+    h = 0.005
+    @test all(isapprox(sum(intensity(prof, b, at(s, u, v)) for u in -3:h:3, v in -3:h:3) * h^2, P; rtol = 2e-4)
+              for s in zs)
+    # deposition on a foil normal to the beam, at focus and 5 mm from it, and on a foil
+    # tilted 40°; reference: element integrals of the law × |n·k| by an m × m midpoint rule
+    function element_ref(t, bx; m = 24)
+        ex1, ex2 = spot_axes(bx); kx = direction(bx)
+        foc = Vec3(bx.aim) + bx.defocus * kx
+        Nz = Dict{Float64,Float64}()
+        function I(x)
+            d = x - foc; s = dot(d, kx)
+            α = αref(dot(d, ex1), dot(d, ex2), s)
+            isfinite(α) || return 0.0
+            Ns = get!(() -> plane(round(s; digits = 2); h = 0.01), Nz, round(s; digits = 2))
+            return bx.power / Ns * exp(-α)
+        end
         E = zeros(nelements(t))
         for e in 1:nelements(t), tri in t.elem_tris[e]
-            c = abs(dot(t.elem_normal[e], k))
-            dot(t.elem_normal[e], k) < 0 || continue
+            c = abs(dot(t.elem_normal[e], kx))
+            dot(t.elem_normal[e], kx) < 0 || continue
             v0, a1, a2 = t.tri_v0[tri], t.tri_e1[tri], t.tri_e2[tri]
             pts = [((i + 1 / 3) / m, (j + 1 / 3) / m) for i in 0:m-1 for j in 0:m-1-i]
             append!(pts, [((i + 2 / 3) / m, (j + 2 / 3) / m) for i in 0:m-2 for j in 0:m-2-i])
-            E[e] += t.tri_area[tri] / m^2 * c * sum(Iref(b, v0 + λ * a1 + μ * a2) for (λ, μ) in pts)
+            E[e] += t.tri_area[tri] / m^2 * c * sum(I(v0 + λ * a1 + μ * a2) for (λ, μ) in pts)
         end
         return E
     end
-    b = Beam("b"; theta = 0, phi = 0, power = 2.0, spot, fnumber = F, aim = (0.1, -0.2, 0.0))
-    # the profile itself, at and away from focus, inside and outside the envelope
-    e1, e2 = spot_axes(b)
-    for s in (0.0, 5.0, -8.0), (u, v) in ((0.0, 0.0), (0.4, 0.1), (-0.5, 0.3), (2.0, 0.0))
-        x = Vec3(b.aim) + s * direction(b) + u * e1 + v * e2
-        @test intensity(prof, b, x) ≈ Iref(b, x) rtol = 1e-6 atol = 1e-12
-    end
-    # power through transverse planes is the beam's at any distance from focus
-    for s in (0.0, 5.0)
-        h = 0.01
-        c = Vec3(b.aim) + s * direction(b)
-        @test sum(intensity(prof, b, c + u * e1 + v * e2) for u in -2:h:2, v in -2:h:2) * h^2 ≈ 2.0 rtol = 1e-3
-    end
-    # deposition on a foil normal to the beam, at focus and 5 mm from it (the spot grows
-    # by 79% and 174% along its axes), and on a foil tilted 40°
     tf = Target(foil(:f, (0, 0, 0), (0, 0, 1); width = 4.0, n = 24))
     tt = Target(foil(:f, (0, 0, 0), (sind(40), 0, cosd(40)); width = 4.0, n = 24))
     for (tg, bx) in ((tf, b), (tf, remake(b; defocus = 5.0)), (tt, b))
@@ -451,100 +465,52 @@ end
         ref = element_ref(tg, bx)
         @test sum(d.element) ≈ sum(ref) rtol = 2e-3
         # per-plane normalization holds the beam's power on planes normal to it; a tilted
-        # foil spans planes of different widths and catches 0.6% more here
-        @test sum(ref) ≈ 2.0 rtol = (tg === tt ? 1e-2 : 2e-3)
-        bright = ref .> 0.05 * maximum(ref)
-        @test maximum(abs.(d.element[bright] ./ ref[bright] .- 1)) < 0.02
+        # foil spans planes of different widths
+        @test sum(ref) ≈ P rtol = (tg === tt ? 1e-2 : 2e-3)
+        # the operator's default quadrature: within 0.4% rms on bright elements, 2.6% at
+        # worst where the square's steep edge crosses an element 5 mm past focus
+        r = d.element[ref .> 0.05 * maximum(ref)] ./ ref[ref .> 0.05 * maximum(ref)] .- 1
+        @test maximum(abs.(r)) < 0.03 && sqrt(sum(abs2, r) / length(r)) < 0.005
     end
-    # near focus it agrees with the f-cone model, which has no envelope
+    # near focus it agrees with the f-cone model
     op = DepositionOperator(tf, [b]; profile = prof)
     dv, df = deposit(op, [b]).element, deposit(DepositionOperator(tf, [b]), [b]).element
     bright = df .> 0.05 * maximum(df)
     @test maximum(abs.(dv[bright] ./ df[bright] .- 1)) < 0.01
-    # differentiable in the aim; a beam subset keeps the profile; a Scenario passes it on
+    # differentiable in the aim and in the defocus (8 mm past focus, where the square and
+    # the normalization table both enter); a beam subset keeps the profile; a Scenario
+    # passes it on
     g(δ) = (bd = remake(b; aim = b.aim .+ δ .* (1.0, 0.0, 0.0)); E = deposit(op, [bd]).element;
             sum(E .* getindex.(tf.elem_centroid, 1)))
     @test ForwardDiff.derivative(g, 0.05) ≈ (g(0.05 + 1e-5) - g(0.05 - 1e-5)) / 2e-5 rtol = 1e-4
-    @test op[[1]].profile === prof && op[[1]].envelope == [ρe]
+    t8 = Target(foil(:f, Tuple(Vec3(b.aim) + 8 * k), Tuple(-k); width = 6.0, n = 40))
+    op8 = DepositionOperator(t8, [b]; profile = prof)
+    gd(δ) = (bd = remake(b; defocus = δ); E = deposit(op8, [bd]).element;
+             sum(E .* [dot(c - Vec3(b.aim), e1)^2 for c in t8.elem_centroid]))
+    @test ForwardDiff.derivative(gd, 0.37) ≈ (gd(0.37 + 1e-5) - gd(0.37 - 1e-5)) / 2e-5 rtol = 1e-4
+    @test op[[1]].profile === prof && op[[1]].envelope == [ρd]
     @test Scenario(tf, [b]; deposition_kw = (; profile = prof)).deposition.profile === prof
     @test_throws ArgumentError VisRadProfile(; envelope = 0)
     @test_throws ArgumentError VisRadProfile(; envelope = Dict("b" => -1.0))
-    @test_throws ArgumentError VisRadProfile(; growth = 0)
-    @test_throws ArgumentError VisRadProfile(; growth = :fitted)
-    @test_throws ArgumentError VisRadProfile(; growth = nothing)
-    # the manual's z_R (`growth = :manual`): the 1/e radius reaches the f-cone's at the lens
-    pm = VisRadProfile(; envelope = ρe, focal_length = FL, growth = :manual)
-    for s in (0.0, 5.0, FL)
-        x = Vec3(b.aim) + s * direction(b)
-        a = 0.6 * sqrt(1 + s^2 * ((FL / (1.2F))^2 - 1) / FL^2)
-        bb = 0.35 * sqrt(1 + s^2 * ((FL / (0.7F))^2 - 1) / FL^2)
-        @test intensity(pm, b, x) ≈ 2.0 / (norm_in * a * bb) rtol = 1e-6
-    end
-    # envelope per beam: VisRad's default (ln 1000)^(1/n) puts the cut-off where the focal
-    # profile falls to 10⁻³ of its peak, and reproduces the NIF plates' ratios in VisRad
-    # workspaces; a Dict sets it by beam name
+    # the same spot with its axes swapped (a < b, turned 90°) is the same beam
+    bs = remake(b; spot = SuperGaussianSpot(b0, a0; order = n, angle = 0.4 + π / 2))
+    @test all(isapprox(intensity(prof, bs, at(s, u, v)), intensity(prof, b, at(s, u, v)); rtol = 1e-9)
+              for s in (0.0, 6.0), (u, v) in ((0.3, 0.1), (-0.5, 0.2)))
+    # envelope per beam: VisRad's default (ln 1000)^(1/n) puts the focal profile at 10⁻³ of
+    # its peak and reproduces the NIF plates' ratios in VisRad workspaces; a Dict sets it
+    # by beam name; larger ratios are capped at the default; ρ sets the square's width
     @test visrad_envelope.([4.5, 4.8, 8.0, 7.6]) ≈ [1.53645, 1.49576, 1.27326, 1.28955] rtol = 1e-5
     @test exp(-visrad_envelope(n)^n) ≈ 1e-3
     b2 = remake(b; name = "b2", spot = SuperGaussianSpot(0.6, 0.35; order = 8.0, angle = 0.4))
-    pd = VisRadProfile(; envelope = Dict("b" => ρe), focal_length = FL)
-    edge(bx, r) = Vec3(bx.aim) + r * 0.6 * spot_axes(bx)[1]
-    @test intensity(pd, b, edge(b, 0.999ρe)) > 0 && intensity(pd, b, edge(b, 1.001ρe)) == 0
-    ρ8 = visrad_envelope(8.0)
-    @test intensity(pd, b2, edge(b2, 0.999ρ8)) > 0 && intensity(pd, b2, edge(b2, 1.001ρ8)) == 0
-    @test DepositionOperator(tf, [b, b2]; profile = pd).envelope ≈ [ρe, ρ8]
-    @test DepositionOperator(tf, [b, b2]; profile = VisRadProfile()).envelope ≈ [visrad_envelope(4.5), ρ8]
-end
-
-@testset "VisRad measured plate profile" begin
-    # A beam with VisRad's Rev1-Outer-2w spot (n = 4.5, 1/e semi-axes 0.6726 × 0.3905 mm)
-    # takes the measured tables: at |z| on a table node, the profile is the super-Gaussian
-    # with a(z) = a₀ ra(z), b(z) = b₀ rb(z), n(z) = n₀ rn(z) (Rev1-Outer-2w row of the
-    # tables: z = 8 mm → 1.21256, 1.39545, 1.12328), linear between nodes, the last segment
-    # extended beyond; power through each transverse plane is the beam's. Reference: those
-    # values, and sums over transverse planes.
-    n0, a0, b0, F, FL = 4.5, 0.6726, 0.3905, 20.7, 7695.0
-    b = Beam("b"; theta = 30, phi = 20, power = 1.5, fnumber = F, aim = (0.2, 0.0, -0.1),
-             spot = SuperGaussianSpot(a0, b0; order = n0, angle = π / 2))
-    prof = VisRadProfile(; focal_length = FL)
-    e1, e2 = spot_axes(b)
-    k = direction(b)
-    I(s, u, v) = intensity(prof, b, Vec3(b.aim) + s * k + u * e1 + v * e2)
-    for s in (8.0, -8.0)
-        a, bb, n = a0 * 1.21256, b0 * 1.39545, n0 * 1.12328
-        @test I(s, a, 0) / I(s, 0, 0) ≈ exp(-1) rtol = 1e-9
-        @test I(s, 0, bb) / I(s, 0, 0) ≈ exp(-1) rtol = 1e-9
-        @test I(s, 0.5a, 0) / I(s, 0, 0) ≈ exp(-0.5^n) rtol = 1e-9
-    end
-    a9 = a0 * (1.21256 + (1.29637 - 1.21256) / 2)               # between 8 and 10 mm
-    @test I(9.0, a9, 0) / I(9.0, 0, 0) ≈ exp(-1) rtol = 1e-9
-    a20 = a0 * (1.53547 + 5 / 3 * (1.53547 - 1.38807))           # beyond 15 mm
-    @test I(20.0, a20, 0) / I(20.0, 0, 0) ≈ exp(-1) rtol = 1e-9
-    for s in (0.0, 8.0, 15.0)
-        h = 0.01
-        @test sum(I(s, u, v) for u in -3:h:3, v in -3:h:3) * h^2 ≈ 1.5 rtol = 1e-3
-    end
-    # the same spot with its axes swapped (a < b, turned 90°) is the same beam
-    bs = remake(b; spot = SuperGaussianSpot(b0, a0; order = n0, angle = 0.0))
-    for s in (0.0, 6.0), (u, v) in ((0.3, 0.1), (-0.5, 0.2))
-        x = Vec3(b.aim) + s * k + u * e1 + v * e2
-        @test intensity(prof, bs, x) ≈ intensity(prof, b, x) rtol = 1e-9
-    end
-    # `measured = false`, or a spot no plate matches, keeps the hyperbolic model; at focus
-    # they agree
-    pm = VisRadProfile(; focal_length = FL, measured = false)
-    x8 = Vec3(b.aim) + 8 * k + 0.6 * e1
-    @test intensity(pm, b, x8) != intensity(prof, b, x8)
-    @test intensity(pm, b, Vec3(b.aim) + 0.6 * e1) ≈ intensity(prof, b, Vec3(b.aim) + 0.6 * e1) rtol = 1e-12
-    bo = remake(b; spot = SuperGaussianSpot(0.6, 0.35; order = n0, angle = π / 2))
-    @test intensity(prof, bo, x8) == intensity(pm, bo, x8)
-    # deposition on a foil normal to the beam 8 mm past focus holds the beam's power and
-    # is differentiable in the focus
-    tf = Target(foil(:f, Tuple(Vec3(b.aim) + 8 * k), Tuple(-k); width = 6.0, n = 40))
-    op = DepositionOperator(tf, [b]; profile = prof)
-    @test sum(deposit(op, [b]).element) ≈ 1.5 rtol = 2e-3
-    g(δ) = (bd = remake(b; defocus = δ); E = deposit(op, [bd]).element;
-            sum(E .* [dot(c - Vec3(b.aim), e1)^2 for c in tf.elem_centroid]))
-    @test ForwardDiff.derivative(g, 0.3) ≈ (g(0.3 + 1e-5) - g(0.3 - 1e-5)) / 2e-5 rtol = 1e-4
+    pd = VisRadProfile(; envelope = Dict("b" => 1.2, "b2" => 3.0))
+    @test DepositionOperator(tf, [b, b2]; profile = pd).envelope ≈ [1.2, visrad_envelope(8.0)]
+    @test DepositionOperator(tf, [b, b2]; profile = VisRadProfile()).envelope ≈ [ρd, visrad_envelope(8.0)]
+    N12 = plane(10.0; ρ = 1.2)
+    @test all(isapprox(intensity(pd, b, at(10.0, u, v)), P / N12 * exp(-αref(u, v, 10.0; ρ = 1.2)); rtol = 2e-4)
+              for (u, v) in ((0.0, 0.0), (0.5, 0.3)))
+    @test intensity(pd, b, at(10.0, 0.5, 0.3)) != intensity(prof, b, at(10.0, 0.5, 0.3))
+    @test VisRadProfile(; envelope = Dict("b" => 1.2)) == VisRadProfile(; envelope = Dict("b" => 1.2))
+    @test hash(VisRadProfile(; envelope = 1.2)) == hash(VisRadProfile(; envelope = 1.2))
 end
 
 @testset "hohlraum + gradients" begin

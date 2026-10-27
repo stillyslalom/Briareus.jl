@@ -58,23 +58,25 @@ is a reference pointing, the other a re-pointing of it. Briareus read each works
 built the same target and beams, and compared its own deposition per element with the
 direct laser source VisRad wrote into the file.
 
-The beam profile away from focus is the one piece calibrated to VisRad.
-[`VisRadProfile`](@ref) with `measured = true` tabulates the growth of the spot's semi-axes
-and exponent with distance from focus, measured on a separate VisRad workspace that
-deposits one beam per NIF quad on flat plates up to 15 mm from best focus. On the
-hohlraum workspaces, which played no part in those tables:
+The beam profile away from focus is the one piece taken from VisRad.
+[`VisRadProfile`](@ref) is VisRad's own law. Its semi-axes, exponent, square blend and
+square half-width follow the parameters VisRad exports at each beam–target hit. Two
+constants, the square's exponent and the cut-off, were fitted to VisRad's deposition on
+48 plates normal to single beams, each plate within 0.22 % rms per element. Against
+VisRad's deposition on surfaces that played no part in the fit, per element (elements
+above 1 % of VisRad's peak):
 
-- wall deposition differs from VisRad's by 0.9 % rms per element on both workspaces,
-  with peaks of 779.1 against 778.1 TW/cm² and 911.5 against 915.9 TW/cm², and a
-  correlation of 1.0000 on the reference pointing;
-- total wall power is 0.07 % below VisRad's, window power 0.17 % below, and the tilted
-  foil's 0.37 % above;
-- absolute capsule P2 and P4 from the two codes' depositions, through the same
-  Briareus radiosity, agree to 0.014 and 0.004 percentage points, and the re-pointing's
-  change of P2 is 0.104 % against VisRad's 0.092 %.
+- 32 plates tilted up to 53° and normal plates up to 15 mm past focus: 0.12–0.27 % rms;
+- hohlraum walls: 0.62 % rms (N210808-like, reference pointing), 0.69 % (re-pointing)
+  and 0.45 % on a 38 000-element wall; window patches 0.20 %; a foil 0.55 %;
+- total wall power is 0.07 % below VisRad's.
 
-The numbers, the setup and what remains open (the law behind the tabulated semi-axes for plates other than the four
-NIF ones, the per-beam renormalization on tilted surfaces) are in
+With the tabulated profile this law replaced, the absolute capsule P2 and P4 from the
+two codes' depositions, through the same Briareus radiosity, agreed to 0.014 and 0.004
+percentage points. The re-pointing's change of P2 was 0.104 % against VisRad's 0.092 %.
+
+The numbers, the setup and what remains open (VisRad's per-beam renormalization, and its
+shadowing, which is not along the beam axis) are in
 `reference/research-notes.md`. [`write_visrad_kit`](@ref) and [`compare_visrad`](@ref)
 set up the same kind of comparison for any case.
 

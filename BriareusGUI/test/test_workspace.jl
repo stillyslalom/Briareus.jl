@@ -348,15 +348,14 @@ include(joinpath(pkgdir(Briareus), "test", "vrw_fixture.jl"))
     build_scenario!(s)
     @test dr.scenario[].deposition.profile === nothing && !drive_stale(s)
     # the scenario receives the profile; a change of model or profile makes it stale
-    prof = VisRadProfile(; envelope = Dict("Q15T1" => 1.5), focal_length = 7000.0, growth = :manual)
+    prof = VisRadProfile(; envelope = Dict("Q15T1" => 1.2))
     set_beam_model!(dr, :visrad; profile = prof)
     @test drive_stale(s) && dr.result[] === nothing
     @test task_status(s, :drive)[1] === :attention
     build_scenario!(s)
     @test dr.scenario[].deposition.profile === prof && !drive_stale(s)
     @test dr.result[] isa DriveResult
-    set_beam_model!(dr, :visrad; profile = VisRadProfile(; envelope = Dict("Q15T1" => 1.5),
-                                                          focal_length = 7000.0, growth = :manual))
+    set_beam_model!(dr, :visrad; profile = VisRadProfile(; envelope = Dict("Q15T1" => 1.2)))
     @test !drive_stale(s)                                 # profiles compare by value
     set_beam_model!(dr, :visrad; profile = VisRadProfile())
     @test drive_stale(s)
@@ -368,7 +367,7 @@ include(joinpath(pkgdir(Briareus), "test", "vrw_fixture.jl"))
     @test dr.profile[] === prof
     @test undo!(s) && dr.beam_model[] === :visrad && dr.profile[] === prof
     @test redo!(s) && dr.beam_model[] === :fcone
-    # session files keep the model and its parameters (the default envelope and the manual's growth included)
+    # session files keep the model and its envelope ratios
     set_beam_model!(dr, :visrad)
     path = joinpath(mktempdir(), "model.briareus.toml")
     save_session(path, s)
@@ -376,8 +375,7 @@ include(joinpath(pkgdir(Briareus), "test", "vrw_fixture.jl"))
     load_session!(s2, path)
     @test s2.drive.beam_model[] === :visrad
     p2 = s2.drive.profile[]
-    @test p2.envelope == Dict("Q15T1" => 1.5) && p2.focal_length == 7000.0 &&
-          p2.growth === :manual && p2.measured
+    @test p2 == prof
     @test session_state(s2) == session_state(s)
     # sessions from before the choice load with the f-cone
     state = session_state(s)

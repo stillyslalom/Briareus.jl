@@ -83,16 +83,16 @@ distance from focus and any incidence; and shadows cast by objects near focus �
 capsule at TCC, an LEH edge — are correlated with the part of the spot they block.
 
 `profile = VisRadProfile(...)` replaces this with VisRad's beam model, so that a
-design can be checked in VisRad and its deposition reproduced. The model keeps the
-super-Gaussian's shape along the beam, with semi-axes that grow on a hyperbola and an
-envelope cut-off. Points are then sampled along the beam axis only (`ncone` is
-ignored), and the beam axis through each point determines its shadowing. The two models
-agree near focus; away from it VisRad's spot keeps its shape while the f-cone
-convolution softens the edges, and VisRad's spot grows faster (on NIF hohlraum walls
-the f-cone model's peaks are 10% higher than VisRad's). Power on a surface that
+design can be checked in VisRad and its deposition reproduced. The model is a
+super-Gaussian whose semi-axes and exponent grow away from focus and which blends
+toward a square, cut off at 10⁻³ of its local peak. Points are then sampled along the
+beam axis only (`ncone` is ignored), and the beam axis through each point determines
+its shadowing. The two models agree near focus; away from it the f-cone convolution
+softens the edges, while VisRad's spot turns square and grows faster (on NIF hohlraum
+walls the f-cone model's peaks are 10% higher than VisRad's). Power on a surface that
 intercepts the whole beam is the beam's power in planes normal to the beam, and only
-approximately on tilted ones (per-plane normalization: 0.15% high on a foil tilted 20°
-across ±2.5 mm of focus, where VisRad's totals are exact).
+approximately on tilted ones (per-plane normalization: 0.2% high at 40° incidence and
+2.2% at 78°, where VisRad's totals are exact).
 
 The beams' ports must not change after construction.
 """
@@ -218,22 +218,21 @@ function _operator_beam(b::Beam, ncone, profile)
     ds, _ = cone_directions(b, ncone)
     sp = b.spot
     amin = ForwardDiff.value(min(sp.a, sp.b))
-    # footprint: 2.5 semi-axes grown by the f-cone; VisRad's envelope grows as a(z) does,
-    # within ρ (a₀ + |z| a₀/z_A), a₀/z_A < 1/(2f#) × max(1, ρ/γ), or for a measured plate
-    # within ρ times its steepest growth of either semi-axis
-    env = profile === nothing ? 1.0 : _vr_envelope(profile, b)
-    r = max(2.5, env)
+    # footprint: 2.5 semi-axes grown by the f-cone. VisRad's profile is nonzero only where
+    # α < ln 1000: inside its ellipse q < ρ_d² (ρ_d = (ln 1000)^(1/n₀), as n ≥ n₀) or its
+    # square |u|, |v| < ΔL (ln 1000)^(1/M) < 1.22 ΔL (M ≥ 10), so within ρ_d a(z) ≤ ρ_d (a₀ +
+    # |z|/(√2 F)) or 1.22 √2 ΔL = 1.22 (ρ a₀ + √2 · 0.99605 |z|/(2F)) of the axis
     amax = ForwardDiff.value(max(sp.a, sp.b))
+    if profile === nothing
+        r, cone = 2.5, 1 / (2b.fnumber)
+    else
+        ρd = visrad_envelope(sp.order)
+        r = max(ρd, 1.22 * _vr_envelope(profile, b))
+        cone = sqrt(2) * max(ρd, 1.22 * _VR_DL_SLOPE) / (2b.fnumber)
+    end
     extent = r * amax * (sp.halo > 0 ? max(1, sp.halo_scale) : 1)
     aim = Vec3(ForwardDiff.value.(b.aim))
     focus = aim + ForwardDiff.value(b.defocus) * k
-    cone = (profile === nothing ? 1.0 : max(1.0, env) / sqrt(min(1.0, _vr_zfactor(profile, env)))) /
-           (2b.fnumber)
-    m = profile === nothing ? nothing : _vr_measured(profile, sp)
-    if m !== nothing
-        slope(y, r0) = maximum((y[i+1] - y[i]) / (m.z[i+1] - m.z[i]) for i in 1:length(m.z)-1) * r0
-        cone = max(cone, 1.1 * env * max(slope(m.a_ratio, m.a), slope(m.b_ratio, m.b)))
-    end
     return (; k, ds, amin, extent, focus, cone)
 end
 
@@ -636,8 +635,8 @@ end
 @inline function _sum_points(sink::F, op::DepositionOperator, bi, f::BeamFrame,
                              fv::BeamFrame{Float64}, (κ, α, β), r, ::Type{T}, η = nothing) where {F,T}
     op.profile === nothing ||
-        return _sum_points_visrad(sink, op, bi, _VRFrame(f, op.profile, op.envelope[bi]),
-                                  _VRFrame(fv, op.profile, op.envelope[bi]), r, T, η)
+        return _sum_points_visrad(sink, op, bi, _VRFrame(f, op.envelope[bi]),
+                                  _VRFrame(fv, op.envelope[bi]), r, T, η)
     ds = op.dirs[bi]
     P, W, Nr, M, D = op.pts[bi], op.w[bi], op.normal[bi], op.mask[bi], op.dest[bi]
     αmax, βmax = maximum(abs, α), maximum(abs, β)

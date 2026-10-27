@@ -9,8 +9,8 @@ A beam's direction is fixed by its port (``\mathbf{k} = -\hat{\mathbf{p}}``), an
 pointing translates its axis through `aim`. Best focus is at `aim + defocus·k`; positive
 defocus moves the focus along the beam, as in VisRad and the NIF CMT. The spot axes are
 given in the port's (``\hat\theta``, ``\hat\phi``) frame. [`VisRadProfile`](@ref)
-reproduces VisRad's spot growth away from focus, as measured on VisRad runs (research
-notes, "VisRad deposition parity: hohlraum runs").
+reproduces VisRad's beam away from focus, by the law VisRad's own exported parameters
+follow (research notes, "VisRad's beam profile law").
 
 ```@autodocs
 Modules = [Briareus]
