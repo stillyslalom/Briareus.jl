@@ -510,7 +510,8 @@ function _group_albedos(t::Target, α::Vector{Float64}, spec, G::Integer)
             throw(ArgumentError("$name: NaN group albedo (`nothing` keeps the gray albedo)"))
         es = elements(t, name)
         for g in 1:G
-            a[g] === nothing || (A[es, g] .= Float64(a[g]))
+            ag = a[g]                          # bound once: 1.10 does not narrow a[g]
+            ag === nothing || (A[es, g] .= Float64(ag))
         end
     end
     return A
