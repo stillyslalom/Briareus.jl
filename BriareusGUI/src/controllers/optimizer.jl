@@ -194,12 +194,10 @@ function _make_objective(cfg::NamedTuple, s::Scenario, ev0::Evaluation, spot_rad
     cfg.capsule_keepout && :capsule in component_names(s.target) &&
         push!(keepouts, SphereKeepOut(s.target; spheres = (:capsule,), minimum = cfg.capsule_min))
     keepout = isempty(keepouts) ? nothing : Tuple(keepouts)
-    if kind === :legendre
-        drive = cfg.hold_drive ? flux_moments(ev0)[1] : nothing
+    drive = cfg.hold_drive ? mean_flux(ev0) : nothing
+    kind === :legendre &&
         return symmetry_objective(; modes, odd = 0.0, lmax = max(maximum(first, modes), 2),
                                   drive, keepout)
-    end
-    drive = cfg.hold_drive ? flux_ylm(ev0)[1] / sqrt(4π) : nothing
     return asymmetry_objective(; modes, drive, keepout)
 end
 
