@@ -59,7 +59,7 @@ export PartSpec, PART_KINDS, PART_KIND_LABELS, PART_FIELDS, PART_SIZE_FIELDS, pa
        PART_ANCHORS, PART_ANCHOR_LABELS, anchor_frame, set_part_anchor!, set_excluded!,
        PART_COORDINATES, PART_POSITION_FIELDS, part_position, set_part_coords!, part_components,
        all_component_names, PART_ROLES, PART_ROLE_LABELS, part_role, set_part_role!,
-       export_target_stl, add_stl_parts!, fit_sphere, part_size_label
+       export_target_stl, add_stl_parts!, fit_sphere, part_size_unit
 export WindowSpec, WINDOW_FIELDS, add_window!, remove_window!, edit_window!, set_window_open!,
        set_window_round!,
        window_name

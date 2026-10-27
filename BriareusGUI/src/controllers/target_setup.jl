@@ -24,11 +24,11 @@ const TARGET_FIELDS = (
                 (:leh_radius, "LEH radius", "mm", 1.55),
                 (:capsule_radius, "Capsule radius", "mm", 0.9),
                 (:wall_albedo, "Wall albedo", "", 0.85),
-                (:wall_conversion, "Wall laser → x-ray conversion", "", 0.8)),
+                (:wall_conversion, "Wall conversion", "laser → x-ray", 0.8)),
     foil = ((:distance, "Distance from TCC", "mm", 6.0),
             (:width, "Foil width", "mm", 2.0),
-            (:conversion, "Laser → x-ray conversion", "", 0.02),
-            (:main_radius, "Main-target sphere radius", "mm", 1.0)),
+            (:conversion, "Conversion", "laser → x-ray", 0.02),
+            (:main_radius, "TCC sphere radius", "mm (0: none)", 1.0)),
     custom = ())
 
 """
@@ -174,7 +174,7 @@ const PART_SIZE_FIELDS = Dict(
     :cylinder => ((:r1, "Radius", "mm", 0.5), (:length, "Length", "mm", 2.0)),
     :cone => ((:r1, "Radius at −L/2", "mm", 0.2), (:r2, "Radius at +L/2", "mm", 0.6),
               (:length, "Length", "mm", 1.0)),
-    :mesh => ((:scale, "Scale (mm per file unit)", "", 1.0),),
+    :mesh => ((:scale, "Scale", "mm per file unit", 1.0),),
     :visrad => ())
 
 """
@@ -182,13 +182,13 @@ Placement and material fields of every part: `(key, label, unit, default)`. The 
 is rotated by `rotation` about its own axis, then tilted to polar angle `theta` and
 azimuth `phi` (VisRad's Polar/Azimuthal/Rotation order: the axis then points along
 `(θ, φ)`), then moved to `(x, y, z)`. `h` (mm) overrides the mesh element size (0:
-the target's; for a VisRad primitive, VisRad's own grid, see [`part_size_label`](@ref)).
+the target's; for a VisRad primitive, VisRad's own grid, see [`part_size_unit`](@ref)).
 """
 const PART_FIELDS = ((:x, "x", "mm", 0.0), (:y, "y", "mm", 0.0), (:z, "z", "mm", 0.0),
                      (:theta, "Axis polar θ", "°", 0.0), (:phi, "Axis azimuth φ", "°", 0.0),
                      (:rotation, "Rotation about axis", "°", 0.0),
-                     (:albedo, "Albedo", "", 0.0), (:conversion, "Laser → x-ray conversion", "", 0.0),
-                     (:h, "Element size (0: target's)", "mm", 0.0))
+                     (:albedo, "Albedo", "", 0.0), (:conversion, "Conversion", "laser → x-ray", 0.0),
+                     (:h, "Element size", "mm (0: target's)", 0.0))
 
 """
 Frames a part can be placed in (VisRad's reference frames): `:tcc` (the target chamber),
@@ -529,20 +529,20 @@ function _visrad_components(p::PartSpec, h, toward; raw::Bool = false)
 end
 
 """
-    part_size_label(p::PartSpec) -> String
+    part_size_unit(p::PartSpec) -> String
 
-The label of a part's element-size field: what 0 means for it (the target's size, or
-for a VisRad primitive VisRad's own grid).
+The unit text of a part's element-size field, with what 0 means for it (the target's
+size, or for a VisRad primitive VisRad's own grid).
 """
-function part_size_label(p::PartSpec)
-    p.kind === :visrad || return "Element size (0: target's)"
+function part_size_unit(p::PartSpec)
+    p.kind === :visrad || return "mm (0: target's)"
     cad = try
         _visrad_object(p.file, p.object).kind === :mesh
     catch err
         err isa ArgumentError || rethrow()
         true
     end
-    return cad ? "Element size (0: target's)" : "Element size (0: VisRad's grid)"
+    return cad ? "mm (0: target's)" : "mm (0: VisRad's grid)"
 end
 
 "Names of the components a VisRad object makes (without meshing its CAD)."

@@ -417,8 +417,8 @@ end
     # a VisRad primitive keeps VisRad's grid (81 foil elements) unless given a size
     i = part_index(ts, :Rectangle_0)
     @test length(elements(t, :Rectangle_0)) == 81
-    @test part_size_label(ts.parts[][i]) == "Element size (0: VisRad's grid)"
-    @test part_size_label(ts.parts[][part_index(ts, :CAD_0)]) == "Element size (0: target's)"
+    @test part_size_unit(ts.parts[][i]) == "mm (0: VisRad's grid)"
+    @test part_size_unit(ts.parts[][part_index(ts, :CAD_0)]) == "mm (0: target's)"
     @test edit_part!(ts, i, :h, "0.5") && length(elements(ts.target[], :Rectangle_0)) == 64
     @test sum(ts.target[].elem_area[elements(ts.target[], :Rectangle_0)]) ≈ 16
     @test edit_mesh!(ts, :h, "0.4") && length(elements(ts.target[], :Rectangle_0)) == 64

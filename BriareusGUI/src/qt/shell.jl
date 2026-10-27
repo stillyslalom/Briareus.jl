@@ -662,7 +662,7 @@ function _refresh_selection!(sh::BriareusShell)
                        for (k, label, unit, _) in PART_SIZE_FIELDS[p.kind]];
                       [FieldRow(String(k), label, unit, _num(pos[k]))
                        for (k, label, unit) in PART_POSITION_FIELDS[p.coords]];
-                      [FieldRow(String(k), k === :h ? part_size_label(p) : label, unit, _num(p.values[k]))
+                      [FieldRow(String(k), label, k === :h ? part_size_unit(p) : unit, _num(p.values[k]))
                        for (k, label, unit, _) in PART_FIELDS if !(k in (:x, :y, :z))]]
             _sync_rows!(sh.rows[:partFieldModel], sh.models[:partFieldModel], fields)
         end
