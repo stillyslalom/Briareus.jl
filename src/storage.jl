@@ -291,10 +291,12 @@ function LinearAlgebra.mul!(Y::StridedMatrix{Float64}, X::StridedMatrix{Float64}
     return Y
 end
 
-# Products with vectors of first-order Float64 duals: the values and partials as the
-# columns of one matrix product (generic dual products would index element by element).
+# Products with strided vectors of first-order Float64 duals (the radiosities of a dual
+# solve): the values and partials as the columns of one matrix product (generic dual
+# products would index element by element). Strided rather than abstract vectors, so
+# FillArrays zero vectors keep their own methods without an ambiguity.
 for T in (:Float32Matrix, :_F32T)
-    @eval function Base.:*(A::$T, x::AbstractVector{ForwardDiff.Dual{Tag,Float64,N}}) where {Tag,N}
+    @eval function Base.:*(A::$T, x::StridedVector{ForwardDiff.Dual{Tag,Float64,N}}) where {Tag,N}
         X = Matrix{Float64}(undef, length(x), N + 1)
         for (i, d) in enumerate(x)
             X[i, 1] = ForwardDiff.value(d)

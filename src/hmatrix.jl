@@ -2013,9 +2013,10 @@ function LinearAlgebra.mul!(Y::StridedMatrix{Float64}, X::StridedMatrix{Float64}
     return _axpby!(Y, transpose(Z), α, β)
 end
 
-# Products with vectors of first-order Float64 duals (values and partials as columns).
+# Products with strided vectors of first-order Float64 duals (values and partials as
+# columns; strided, so FillArrays zero vectors keep their own methods).
 for T in (:_OperatorMatrix, :_HT)
-    @eval function Base.:*(A::$T, x::AbstractVector{ForwardDiff.Dual{Tag,Float64,N}}) where {Tag,N}
+    @eval function Base.:*(A::$T, x::StridedVector{ForwardDiff.Dual{Tag,Float64,N}}) where {Tag,N}
         X = Matrix{Float64}(undef, length(x), N + 1)
         for (i, d) in enumerate(x)
             X[i, 1] = ForwardDiff.value(d)
