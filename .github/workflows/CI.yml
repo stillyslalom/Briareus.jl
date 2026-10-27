@@ -105,6 +105,12 @@ jobs:
         run: >
           xvfb-run -s '-screen 0 1024x768x24'
           julia --color=yes --project=BriareusGUI -e 'using Pkg; Pkg.test()'
+      - name: Run BriareusLauncher tests
+        # the `briareus` command (Pkg apps: Julia 1.12); its splash runs offscreen
+        if: matrix.version == '1'
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: julia --color=yes --project=BriareusGUI/launcher -e 'using Pkg; Pkg.instantiate(); Pkg.test()'
   docs:
     name: Documentation
     runs-on: ubuntu-latest

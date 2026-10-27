@@ -921,6 +921,7 @@ const _SHELL = Ref{Union{Nothing,BriareusShell}}(nothing)
 # `_TICK_HOOK[](shell)` runs on every tick (scripted smoke tests drive the window
 # through it); `request_close()` closes the window from Julia.
 const _TICK_HOOK = Ref{Any}(nothing)
+const _ON_SHOWN = Ref{Any}(nothing)            # `briareus(; shown)`, until the first tick
 const _CLOSE_REQUESTED = Ref(false)
 const _LAST_REFRESH = Ref(0.0)
 
@@ -996,6 +997,14 @@ function br_tick()
     Base.process_events()
     if _ICON_TRIES[] > 0
         _ICON_TRIES[] = _set_window_icon(get(sh.shown, "title", "")) ? 0 : _ICON_TRIES[] - 1
+    end
+    if _ON_SHOWN[] !== nothing
+        f, _ON_SHOWN[] = _ON_SHOWN[], nothing
+        try
+            f()
+        catch err
+            @error "shown callback failed" exception = (err, catch_backtrace())
+        end
     end
     if _TICK_HOOK[] !== nothing
         try
@@ -1623,7 +1632,7 @@ end
 
 """
     briareus(sess = DesignSession(); kind = :hohlraum, resolution = :standard,
-             preset = nothing, beams = nothing, build = false) -> DesignSession
+             preset = nothing, beams = nothing, build = false, shown = nothing) -> DesignSession
 
 Open the Briareus window and return its session when the window closes. The window is
 a design tool in the manner of VisRad, not a sequence of steps:
@@ -1649,7 +1658,8 @@ a design tool in the manner of VisRad, not a sequence of steps:
   (CSV, VisRad SST and Laser Beam Summary) and exports, views, and the analyses.
 
 The session starts from `sess`, or a fresh `DesignSession(; kind, resolution,
-preset, beams)`; `build = true` starts computing the drive at once. The call blocks
+preset, beams)`; `build = true` starts computing the drive at once, and `shown()`, when
+given, runs once on the window's first tick (the launcher closes its splash then). The call blocks
 while the window is open (Qt runs its event loop on this thread); start Julia with
 several threads (`julia -t auto`) so background jobs leave the window responsive.
 Closing the window cancels an optimization, clearance or TaLIS check in progress.
@@ -1660,7 +1670,7 @@ window cannot share a process.
 """
 function briareus(sess::Union{Nothing,DesignSession} = nothing; kind::Symbol = :hohlraum,
                   resolution::Symbol = :standard, preset = nothing, beams = nothing,
-                  build::Bool = false)
+                  build::Bool = false, shown = nothing)
     if sess === nothing
         sess = preset === nothing ? DesignSession(; kind, resolution, beams) :
                DesignSession(; kind, resolution, preset, beams)
@@ -1686,12 +1696,14 @@ function briareus(sess::Union{Nothing,DesignSession} = nothing; kind::Symbol = :
         _register_qml_functions()
         build && build_scenario!(sess)
         _ICON_TRIES[] = 120                    # about two seconds of ticks
+        _ON_SHOWN[] = shown
         loadqml(joinpath(QML_DIR, "BriareusWindow.qml"); app = sh.app,
                 (k => m for (k, m) in sh.models)...)
         exec()
     finally
         finer && ccall((:timeEndPeriod, "winmm"), UInt32, (UInt32,), 1)
         _SHELL[] = nothing
+        _ON_SHOWN[] = nothing
         Controllers._abandon_jobs!(sess)
         sess.deliver[] = previous_deliver
         sess.spawn[] = previous_spawn

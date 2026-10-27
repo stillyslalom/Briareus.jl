@@ -6,7 +6,62 @@ beams, see the laser deposition and x-ray drive, optimize the pointing, and chec
 clearance from the hardware and the TaLIS target-configuration rules, all in one
 window, with VisRad pointing, beam-summary and benchmark-kit files in and out.
 
-## Open the Briareus window
+## Install the `briareus` command
+
+No Julia knowledge is needed past these steps; they take a terminal, git, and about
+ten minutes (most of it compiling, once).
+
+1. Install Julia 1.12 or later through juliaup: on Windows `winget install --id
+   9NJNWW8PVKMN -e` (Julia from the Microsoft Store), on macOS or Linux
+   `curl -fsSL https://install.julialang.org | sh`. Open a new terminal afterward.
+2. Clone the repository and install the app (the `launcher/` package) from the clone,
+   then compile it:
+
+   ```
+   git clone https://github.com/stillyslalom/Briareus.jl
+   julia -e "using Pkg; Pkg.Apps.develop(path=\"Briareus.jl/BriareusGUI/launcher\")"
+   julia --project=Briareus.jl/BriareusGUI/launcher -e "using Pkg; Pkg.precompile()"
+   ```
+
+3. Put Julia's app folder on the `PATH` (the install prints a warning when it is
+   missing). Windows, in PowerShell:
+
+   ```powershell
+   $p = [Environment]::GetEnvironmentVariable("Path", "User")
+   [Environment]::SetEnvironmentVariable("Path", "$p;$HOME\.julia\bin", "User")
+   ```
+
+   macOS (zsh): `echo 'export PATH="$HOME/.julia/bin:$PATH"' >> ~/.zprofile`; Linux
+   (bash): the same line appended to `~/.bashrc`. Open a new terminal afterward.
+4. Add Briareus to the desktop and the applications menu: `briareus --shortcut`. On
+   Windows this makes Start-menu and desktop shortcuts, on macOS
+   `~/Applications/Briareus.app` (Launchpad and Spotlight list it), on Linux a menu entry.
+
+Then the shortcut, or `briareus` in a terminal, opens the window on a fresh design, and
+`briareus design.briareus.toml` on a saved session. A splash shows within about two
+seconds while the window loads (about 20 s; the first start after an update compiles
+for a few minutes). The command runs Julia with all threads (`--threads=auto`) and
+returns when the window closes. A shortcut has no terminal: its output goes to
+`%LOCALAPPDATA%\Briareus\briareus.log` (macOS: `~/Library/Logs/Briareus/`), and a
+failure to start shows in the splash with the log's location.
+
+To update, pull the clone and compile again:
+
+```
+git -C Briareus.jl pull
+julia --project=Briareus.jl/BriareusGUI/launcher -e "using Pkg; Pkg.resolve(); Pkg.precompile()"
+```
+
+To uninstall, run `julia -e "using Pkg; Pkg.Apps.rm(\"BriareusLauncher\")"`, delete the
+shortcuts, and delete the clone.
+
+The app is installed from a clone rather than with `pkg> app add <url>`: Briareus is
+not registered, and the GUI finds it through the `[sources]` path to the parent
+checkout, which a subdirectory installed from a URL does not have. The launcher is a
+package of its own so that the splash shows before BriareusGUI loads: `julia -m` loads
+the app's whole package, and BriareusGUI's dependencies take 15 s to load.
+
+## Open the Briareus window from Julia
 
 Install Briareus and the GUI in the same Julia environment. While Briareus is not
 registered, develop both from the repository root:
@@ -264,6 +319,17 @@ window test runs in its own process when `BRIAREUSGUI_QT_TESTS=true` is set on a
 machine with a display (`test/qt_window.jl`, also runnable alone; set
 `BRIAREUSGUI_SHOTS` to keep its window images). `BRIAREUSGUI_NO_WORKLOAD=true` skips
 the precompile workload for faster rebuilds while developing.
+
+Time to first window: the workload builds the window's shell and item models (QML's Qt
+application exists while precompiling), but it has no GL context, so the first frame's
+rendering code on the window's screen type comes from `precompile` signatures recorded
+by `julia dev/gui_first_frame.jl` into `src/qt/first_frame.jl` and replayed by the
+workload. Rerun the recorder after updating GLMakie, QMLMakie or Makie, or after
+changing what the canvases plot. On a 16-thread Windows machine the first frame came
+at 50 s without either, 21 s with both; the rest is loading the package images (15 s,
+GLMakie and QML about equally) and QML's `__init__`. The launcher (`launcher/`, the
+`briareus` command) has its own tests: `julia --project=BriareusGUI/launcher -e 'using
+Pkg; Pkg.test()'`.
 
 The package follows HammerheadGUI's architecture: all state and logic lives in the
 framework-free `Controllers` submodule (Briareus + Observables, testable without a GL

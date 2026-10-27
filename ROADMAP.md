@@ -94,6 +94,16 @@ item says where it stands, what remains and what data would settle it.
   GUI budget; one ray packet per triangle in the deposition operator; slivers cut across
   their length ("The H-matrix's N^1.5 remainder", "Deposition-operator rays and sliver
   view factors").
+- **2026-10-26, GUI distribution.** The `briareus` command as a Pkg app
+  (`BriareusGUI/launcher/`, installed from a clone; `BriareusGUI/README.md`): a Qt `qml`
+  splash 1.7 s after launch, desktop and menu shortcuts (`briareus --shortcut`), a log and
+  an error splash for shortcut launches. First frame 50 → 21 s on Windows (the shell in
+  the workload, recorded first-frame signatures replayed). Linux checked under WSLg
+  (Ubuntu 24.04: install from the README, menu entry, launch, error splash). Open: the
+  macOS app bundle and splash are untested (the macOS `qml` tool needs each Qt framework
+  folder on dyld's fallback path); Windows taskbar grouping of the shortcut with the window
+  (AppUserModelID); the remaining 15 s is loading the package images and 3 s of
+  compilation in QML's `__init__` (upstream; a system image would remove both).
 - **2026-10-25, energetics defaults (current).** Zylstra 2022 LEH pair; published
   energetics as the defaults, DU factor 0.836; late-time drive literature and an
   ablating-wall reference; the P2 swing's published inputs (K24 capsule radius, uniform

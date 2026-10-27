@@ -4,7 +4,8 @@
 #
 # Writes the SVG (docs sidebar logo) and a multi-size ICO (docs favicon, Windows title
 # bar and taskbar icon of the GUI window) to docs/src/assets/ and
-# BriareusGUI/src/qml/icons/. The drawing: a backlighter shot, three focusing beam
+# BriareusGUI/src/qml/icons/, and to the latter a 256 px PNG (the launcher splash and the
+# Linux menu entry) and an ICNS (the macOS app bundle). The drawing: a backlighter shot, three focusing beam
 # cones in Julia's green, red and purple converging on one spot of a blue foil. From
 # 64 px up, x-rays fan out of the back of the foil; smaller sizes leave them out.
 using Pkg
@@ -50,6 +51,20 @@ function write_ico(path, pngs::Vector{Pair{Int,Vector{UInt8}}})
     end
 end
 
+# An ICNS holding one PNG per size (macOS 10.7 and later): big-endian type and length
+# (8-byte header included) per entry, after the file header.
+const ICNS_TYPES = Dict(16 => "icp4", 32 => "icp5", 64 => "icp6", 128 => "ic07", 256 => "ic08",
+                        512 => "ic09", 1024 => "ic10")
+function write_icns(path, pngs::Vector{Pair{Int,Vector{UInt8}}})
+    entries = [(ICNS_TYPES[px], data) for (px, data) in pngs if haskey(ICNS_TYPES, px)]
+    open(path, "w") do io
+        write(io, "icns", hton(UInt32(8 + sum(8 + length(d) for (_, d) in entries))))
+        for (t, d) in entries
+            write(io, t, hton(UInt32(8 + length(d))), d)
+        end
+    end
+end
+
 root = dirname(@__DIR__)
 dirs = (joinpath(root, "docs", "src", "assets"), joinpath(root, "BriareusGUI", "src", "qml", "icons"))
 mktempdir() do tmp
@@ -57,7 +72,7 @@ mktempdir() do tmp
     for (d, path) in svgs
         write(path, drawing(; detail = d))
     end
-    pngs = map((16, 24, 32, 48, 64, 128, 256)) do px
+    pngs = map([16, 24, 32, 48, 64, 128, 256, 512, 1024]) do px
         out = joinpath(tmp, "$px.png")
         run(`$(rsvg_convert()) -w $px -h $px -o $out $(svgs[px >= 64])`)
         px => read(out)
@@ -65,7 +80,9 @@ mktempdir() do tmp
     for d in dirs
         mkpath(d)
         write(joinpath(d, d == dirs[1] ? "logo.svg" : "briareus.svg"), drawing(; detail = true))
-        write_ico(joinpath(d, d == dirs[1] ? "favicon.ico" : "briareus.ico"), collect(pngs))
+        write_ico(joinpath(d, d == dirs[1] ? "favicon.ico" : "briareus.ico"), filter(p -> p.first <= 256, pngs))
     end
+    write(joinpath(dirs[2], "briareus.png"), Dict(pngs)[256])
+    write_icns(joinpath(dirs[2], "briareus.icns"), pngs)
 end
 println("wrote the icons to ", join(dirs, " and "))
