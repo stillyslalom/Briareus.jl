@@ -166,7 +166,7 @@ the radiosity system, [`WallLossAlbedo`](@ref) is the Marshak wall loss, and
 [`flux_response`](@ref) is the matrix ``R``. The tutorials [Integrating sphere](@ref) and
 [Entrance-hole size and the power balance](@ref) check these against the sphere's
 closed form, the uniform-flux power balance and a Monte Carlo photon walk; the
-reference page is [Radiation](../reference/radiation.md).
+reference page is [Radiation](@ref).
 
 ## Drive symmetry
 
@@ -272,7 +272,7 @@ and [`drive_history`](@ref) runs the quasi-static history. [`WallMotion`](@ref),
 models; `Beam.dlambda` is the detuning at the beam's own (3ω) wavelength.
 [`dante1`](@ref) reads the drive as the Dante instrument does. The tutorial
 [Retuning a drive to a reference shot](@ref) runs a history; the reference pages are
-[Radiation](../reference/radiation.md) and [Laser–plasma models](@ref), and `examples/n221204.jl` is the
+[Radiation](@ref) and [Laser–plasma models](@ref), and `examples/n221204.jl` is the
 benchmark against N221204.
 
 ## Further reading

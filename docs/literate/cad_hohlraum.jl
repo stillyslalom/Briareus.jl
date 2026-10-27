@@ -411,7 +411,7 @@ models = ["flat 0.5" => flat, "fitted 0.5" => curved, "prim. 0.5" => primitives(
                                    h = 0.25, capsule_h = 0.05)]
 nothing #hide
 
-# ## Radiation
+# ## Radiation from a prescribed wall source
 #
 # A diffusely emitting sphere sends its radiation to every surface that sees all of it
 # as a point source at its center would, so the capsule's view factors to the LEHs, the
