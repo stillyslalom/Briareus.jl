@@ -14,12 +14,10 @@ display(target)
 # the quad's own port azimuth, so the published "back-azimuth" offsets are negative.
 quads = nif_quads(power = 8.0)
 pointing = GroupPointing(quads; fields = (:z, :r, :power))
-published = Dict(:outer50 => (5.01, 0.0), :outer44 => (5.20, 0.0),
-                 :inner30 => (3.63, -0.60), :inner23 => (3.09, -1.09))
-x0 = reduce(vcat, [[published[k]..., 8.0] for k in pointing.keys])
+x0 = parameters(pointing; inner23 = (z = 3.09, r = -1.09), inner30 = (z = 3.63, r = -0.60),
+                outer44 = (z = 5.20, r = 0.0), outer50 = (z = 5.01, r = 0.0))
 
-scenario = Scenario(target, apply(pointing, x0); observe = :capsule,
-                    parameterization = pointing, viewfactor_kw = (; closed = true))
+scenario = Scenario(target, pointing; observe = :capsule)   # closed: the hohlraum default
 println("\nPublished pointing:")
 report(evaluate(scenario, x0))
 
