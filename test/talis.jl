@@ -47,7 +47,7 @@
         rc = talis_check(t, [remake(b; aim = (xa, 0.0, 0.0))]; capture = (:f,))
         cp = trow(rc, :capture_3w, :f)
         @test cp.nominal ≈ 2 - xa - ρ10 atol = 1e-9
-        @test cp.worst ≈ 2 - xa - ρ10 - R - 1 / 16 - tan05 * 2 atol = 1e-9
+        @test cp.worst ≈ 2 - xa - ρ10 - R - 1 / 16 atol = 1e-9
         @test cp.status === (cp.worst >= 0.5 ? :pass : :fail)
         xa > 0 && @test cp.point ≈ Vec3(2, 0, 0) atol = 1e-9
     end
@@ -56,14 +56,14 @@
     # an axis that misses the substrate fails capture outright
     rmiss = talis_check(t, [remake(b; aim = (3.0, 0.0, 0.0))]; capture = (:f,))
     @test trow(rmiss, :capture_3w, :none).status === :fail
-    # incidence: flat foil, beam at θ from its normal; worst = θ + 0.5° tolerance
+    # incidence: flat foil, beam at θ from its normal; worst = θ (no rule tolerance)
     big = Target(foil(:f, (0, 0, 0), (0, 0, 1); width = 12.0, n = 12))
-    for (θ, st) in ((60.0, :pass), (69.4, :pass), (69.6, :fail), (75.0, :fail))
+    for (θ, st) in ((60.0, :pass), (69.9, :pass), (70.1, :fail), (75.0, :fail))
         ri = talis_check(big, [Beam("i"; theta = θ, phi = 30, spot, fnumber = 8.0)]; capture = (:f,))
         inc = trow(ri, :incidence_3w, :f)
         @test inc.nominal ≈ θ atol = 1e-6
-        @test inc.worst ≈ θ + 0.5 atol = 1e-6
-        @test inc.margin ≈ 70 - θ - 0.5 atol = 1e-6
+        @test inc.worst ≈ θ atol = 1e-6
+        @test inc.margin ≈ 70 - θ atol = 1e-6
         @test inc.status === st && inc.unit === :deg
     end
 
@@ -240,14 +240,11 @@
     φof(x) = port_angles(only(b for b in ob if b.name == x.beam))[2]
     @test all(x -> x.nominal <= 2 / max(abs(cosd(φof(x))), abs(sind(φof(x)))) * cosd(θof(x)) -
                                 0.36 * log(10)^(1 / 4.2) + 1e-6, cap)
-    for x in rb.rows
-        x.rule === :incidence_3w || continue
-        θb = port_angles(only(b for b in ob if b.name == x.beam))[1]
-        @test x.worst ≈ θb + 0.5 atol = 1e-6
-        @test x.status === (θb + 0.5 < 70 ? :pass : :fail)
-    end
-    @test count(x -> x.rule === :incidence_3w && x.status === :fail, rb.rows) ==
-          count(b -> port_angles(b)[1] > 69.5, ob) > 0
+    θport(x) = port_angles(only(b for b in ob if b.name == x.beam))[1]
+    inc = [x for x in rb.rows if x.rule === :incidence_3w]
+    @test all(x -> isapprox(x.worst, θport(x); atol = 1e-6) &&
+                   x.status === (θport(x) < 70 ? :pass : :fail), inc)
+    @test count(x -> x.status === :fail, inc) == count(b -> port_angles(b)[1] >= 70, ob)
     st = [x for x in rb.rows if x.rule === :clearance_3w && x.component === :stalk]
     @test all(x -> x.status === :pass && x.worst == Inf, st)           # behind the foil
     # repointing one beam toward the edge fails its capture
@@ -270,7 +267,7 @@
     io = IOBuffer()
     show(io, MIME"text/plain"(), rs)
     txt = String(take!(io))
-    @test occursin("ASSUMED", txt) && occursin("r·tan(0.5°)", txt) && occursin("management_1w", txt)
+    @test occursin("clearances only", txt) && occursin("r·tan(0.5°)", txt) && occursin("management_1w", txt)
     path = write_talis_csv(tempname() * ".csv", rs)
     @test countlines(path) == 1 + length(rs.rows)
     @test length(TALIS_OUT_OF_SCOPE) >= 5

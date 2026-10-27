@@ -463,10 +463,17 @@ distances are measured orthogonal to the beam.
   - Target to TAS: 5 mm above/below, 10 mm radially.
   - Diagnostics to 1ω light: a cone of 10 mm at TCC extruded to 25 mm at 1 m.
   - Diagnostics to the shroud swept volume: 10 mm.
-- **How the 0.5° enters.** VisRad's clearance report implements fixed and z-varying
-  enlargements of a cone test volume; the documentation does not state how the 0.5° is
-  applied. Briareus's interpretation, a lateral allowance of r tan 0.5° with r the
-  distance from TCC, is an assumption to confirm.
+- **How the 0.5° enters.** The document gives no formula. Meaning (user, from facility
+  practice, 2026-10-27): an insertion or assembly error of the target component. The
+  beams must still clear with the component rotated up to 0.5° off nominal in the least
+  favorable direction, whether the target is inserted rotated or the component is
+  assembled off-square. It applies to the clearances only, not to the 3ω capture rule
+  (the 0.5 mm edge margin or the 70° incidence). Briareus applies it as a lateral
+  allowance r tan 0.5°, with r the distance from the rotation's pivot (TCC by default,
+  or the component's mount); the pivot per component remains a modeling choice. **H**
+  (meaning), **M** (pivot). VisRad's clearance report enlarges its cone test volume by
+  fixed and z-varying margins only, with no angular term in the manual; a VisRad probe
+  of the report is pending.
 
 #### Re-read of the source, and `talis_check` (2026-10-16)
 
@@ -531,8 +538,9 @@ Implementation (`src/talis.jl`, `talis_check`):
   such as the component's mount. It is added linearly to the `clearance` error set:
   pointing 50 µm + target 25 µm + hardware tolerance, and focus/(2F).
   - That double counts the positioning part, conservatively.
-  - Angle rules get +0.5° on incidence, and −1° on specular-reflection angles (a tilt by
-    α turns a reflection by 2α).
+  - Capture and incidence take no rule tolerance (2026-10-27; they took the lateral
+    allowance and +0.5° before). Specular-reflection angles get −1° (a tilt by α turns a
+    reflection by 2α).
 - **1ω footprint model.** *Derived*, **M**.
   - Each beamlet's 10% 1ω region at its 3ω focal plane is a 22.7 mm square: the User
     Guide's 22 mm, grown 0.35 mm per side so that its near edge is the TaLIS 4.45 mm.
@@ -594,10 +602,10 @@ from the substrate edge, "and incident with an angle <70 degrees wrt the target 
 It is not restricted to foils or capture substrates, so a hohlraum wall the beam lands on
 falls under it. The rule-tolerance clause ("up to 0.5 degrees
 metrology/alignment/positioning tolerance") appears only in the clearance definitions
-(slides 4 and 5), not in the capture definition. Briareus adds the 0.5° to incidence and
-the lateral allowance to capture as a conservative extension. Without it
-(`tolerance = 0`), the template's 23.5° quads pass incidence. Whether to keep that
-extension is an open decision.
+(slides 4 and 5), not in the capture definition. Briareus added the 0.5° to incidence and
+the lateral allowance to capture as a conservative extension until 2026-10-27, when the
+user confirmed that the tolerance (a component rotated off nominal) does not enter the
+capture rule; both were dropped. The template's 23.5° quads then pass incidence.
 
 All from the manual. **H**
 

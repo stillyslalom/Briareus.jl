@@ -154,7 +154,7 @@ using BriareusGUI.Briareus
             B.br_tl_start(); next!()
         elseif k == 12 && !s.talis.running[] && s.talis.report[] !== nothing
             !isempty(sh.rows[:talisModel]) && !isempty(sh.rows[:ruleModel]) &&
-                sh.rows[:noteModel][1].kind == "assumed" && s.talis.report[].settings.tolerance == 0.4 &&
+                sh.rows[:noteModel][1].kind == "tolerance" && s.talis.report[].settings.tolerance == 0.4 &&
                 push!(seen, :talis)
             B.request_grab(png("talis")); next!()
         elseif k == 13 && grabbed(png("talis"))

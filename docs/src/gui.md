@@ -143,7 +143,7 @@ names the menu entries, and the panels are described in [The window](@ref).
    target-configuration rules, on NIF beams only) run in the background and color the beams by their worst status. A result
    is marked out of date in the tree when the beams or the target change afterward.
 
-   ![The TaLIS rules checked on every NIF quad of the template: the ASSUMED tolerance note, the per-rule summary, and every check with its margin; the beams are colored by their worst status. The eight failures are 3ω incidence on the wall, about 0.4° past the 70° limit on the optimized pointing; the 48 reviews are 3ω clearance at the entrance-hole edges.](assets/gui/talis.png)
+   ![The TaLIS rules checked on every NIF quad of the template: the rule-tolerance note, the per-rule summary, and every check with its margin; the beams are colored by their worst status. The eight failures are 3ω incidence on the wall, about 0.4° past the 70° limit on the optimized pointing; the 48 reviews are 3ω clearance at the entrance-hole edges.](assets/gui/talis.png)
 
 8. **Save.** File ▸ Save session (Ctrl + S) writes the whole design, from the target to
    the analyses' settings and the view, to a plain TOML file; File ▸ Open session
@@ -293,7 +293,7 @@ The bottom panel's tabs:
   from the beam's aim point, the larger of the two, or from a given point); the error
   stack and sampling are the clearance check's. The report shows the notes and a
   per-rule summary beside every check, colored by status with its margin, with a
-  draggable split between the two. The tolerance interpretation, marked ASSUMED, stays
+  draggable split between the two. The note on what the tolerance stands for stays
   at the top, cut to three lines until opened (*more*); the per-rule summary follows,
   then the error set, the checks not evaluated and the requirements out of scope
   ([`TALIS_OUT_OF_SCOPE`](@ref)). CSV export with
@@ -375,7 +375,7 @@ start_clearance!(sess; spawn = false)
 worst_rows(sess.review)
 start_talis!(sess; spawn = false)                # TaLIS rules, same error stack
 talis_rule_rows(sess.talis)
-talis_notes(sess.talis)                          # the ASSUMED tolerance caveat first
+talis_notes(sess.talis)                          # the rule-tolerance note first
 export_results(sess, "results")                  # per-element and per-mode CSV
 retune_to_reference!(sess, "reference.csv", "retuned.csv")  # disabled beams are the dropped ones
 load_pulses!(sess, "reference.csv")              # or use_pulse_shape!(sess): N221204's shape

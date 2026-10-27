@@ -108,7 +108,7 @@ _pivot_text(τ::_TaLISTol) =
 NIF TaLIS target-configuration checks from the "TCC Configuration Requirements"
 (NIF User Forum, 27 Oct 2018, LMF Shot RI Resources). Every distance is measured
 orthogonal to the beam, as the document states, and judged on the worst case over the
-error set and the rule tolerance, never at nominal.
+error set (and, for the clearances, the rule tolerance), never at nominal.
 
 `capture` lists the components that beams are meant to land on (backlighter foils, capture
 surfaces, a hohlraum wall). Each beam's *landing component* is the first of them its
@@ -130,9 +130,9 @@ like `hardware`, whether or not `hardware` names them. Here and in `hardware`, `
   misses every capture component fails with component `:none`.
 - `:incidence_3w` — incidence < `max_incidence` (70°) to the target normal, the maximum
   over the landing component's surface inside the worst-case 10 % footprint (visible
-  from the beam; exact normals on `SphereSurface`/`CylinderSurface` components), plus
-  the tolerance angle (a component tilted by the tolerance changes incidence by up to
-  as much).
+  from the beam; exact normals on `SphereSurface`/`CylinderSurface` components).
+  Capture and incidence take the error set but not the rule tolerance, which belongs to
+  the clearances.
 - `:clearance_3w` — the `clearance_contour` (1 %)-of-peak contour must clear each
   `hardware` component other than the landing component by > `clearance_margin`
   (0.5 mm); hardware downstream of the landing point is skipped, and everything along
@@ -208,14 +208,17 @@ Light that reaches the lip is LEH clipping, which the deposition computes as suc
 # Tolerance and error set
 
 The document adds "up to 0.5 degrees metrology/alignment/positioning tolerance" to the
-3ω and 1ω clearances without saying how an angle becomes a distance. **This
-interpretation is an assumption that the user must confirm with TaLIS.** By default
-(`pivot = :tcc`) it is a lateral allowance `r·tan(tolerance)`, with `r` the distance of
-the hardware point from TCC: the transverse displacement of the point when the target
-assembly rotates by the tolerance about TCC. Alternatives: `pivot = :aim` (rotation
-about the beam's aim point, so the allowance vanishes where the beam lands), `:max`
-(the larger of the two, most conservative), or a point (e.g. the mount of the
-component, `pivot = (0, 0, 12.0)`); `tolerance = 0` drops it.
+3ω and 1ω clearances. The angle is an insertion or assembly error of the target
+component: the beams must still clear with the component rotated by up to 0.5° off
+nominal in the least favorable direction, whether the whole target is inserted rotated
+or the component is assembled off-square (user, from facility practice, 2026-10-27; the
+document gives no formula). It enters as a lateral allowance `r·tan(tolerance)`, with
+`r` the distance of the hardware point from the pivot of the rotation: the largest
+displacement of the point that such a rotation causes, taken in full toward the beam
+(conservative). The default `pivot = :tcc` is the target inserted rotated about TCC; a
+component assembled off-square rotates about its mount, given as a point
+(`pivot = (0, 0, 12.0)`). `:aim` (rotation about the beam's aim point) and `:max` (the
+larger of the TCC and aim distances) are alternatives; `tolerance = 0` drops it.
 
 It is combined with the error set of `clearance` by linear addition (no RSS):
 
@@ -324,7 +327,7 @@ function _talis_beam!(rows, t::Target, b::Beam, bl, cx)
     end
     landed = land == 0 ? Int[] : last(cx.cap_idx[land])
 
-    # 3ω capture and incidence
+    # 3ω capture and incidence: the error set, not the rule tolerance (clearances only)
     if !isempty(cx.cap_idx)
         if land == 0
             push!(rows, TaLISRow(b.name, :capture_3w, :none, :fail, -Inf, :mm, -Inf, -Inf,
@@ -336,15 +339,14 @@ function _talis_beam!(rows, t::Target, b::Beam, bl, cx)
             for x in cx.edges[land]
                 d, _ = envelope_distance(env10, x)
                 nom = min(nom, d)
-                w = d - shift - tol(x, aim)
+                w = d - shift
                 w < worst && ((worst, wp) = (w, x))
             end
             m = worst - cx.capture_margin
             note = !isfinite(worst) ? "no free substrate edge" : m >= 0 ? "" : _TALIS_BLOWBY
             push!(rows, TaLISRow(b.name, :capture_3w, name, m >= 0 ? :pass : :fail, m, :mm, worst,
                                  nom, cx.capture_margin, wp, note))
-            θw, θn, ip = _talis_incidence(t, cx.cap_geo[land], env10, k, aim, shift, tol)
-            worst = θw + cx.tolerance
+            worst, θn, ip = _talis_incidence(t, cx.cap_geo[land], env10, k, aim, shift)
             m = cx.max_incidence - worst
             push!(rows, TaLISRow(b.name, :incidence_3w, name, m > 0 ? :pass : :fail, m, :deg, worst,
                                  θn, cx.max_incidence, ip, m > 0 ? "" : _TALIS_BLOWBY))
@@ -412,21 +414,20 @@ end
 # Largest incidence angle (degrees) on a landing component inside the worst-case and
 # nominal footprints, over sub-triangles visible from upstream. The sub-triangle nearest
 # the beam axis is always included.
-function _talis_incidence(t::Target, g, env, k, aim, shift, tol)
+function _talis_incidence(t::Target, g, env, k, aim, shift)
     far = 4 * (t.scale + norm(aim)) + 1
     ε = 1e3 * _ray_eps(t)
     θw, θn, ip = -Inf, -Inf, aim
     bestd, θc, pc = Inf, NaN, aim
     for (leaf, n) in zip(g.leaves, g.normals)
-        dn = minimum(envelope_distance(env, p)[1] for p in leaf)
-        dw = minimum(envelope_distance(env, p)[1] - tol(p, aim) for p in leaf)
-        (dw <= shift || dn < bestd) || continue
+        d = minimum(envelope_distance(env, p)[1] for p in leaf)
+        (d <= shift || d < bestd) || continue
         m = leaf[4]
         visible(t, m - far * k, m - ε * k) || continue
         θ = acosd(clamp(abs(dot(n, k)), 0.0, 1.0))
-        dn < bestd && ((bestd, θc, pc) = (dn, θ, m))
-        dn <= 0 && (θn = max(θn, θ))
-        dw <= shift && θ > θw && ((θw, ip) = (θ, m))
+        d < bestd && ((bestd, θc, pc) = (d, θ, m))
+        d <= 0 && (θn = max(θn, θ))
+        d <= shift && θ > θw && ((θw, ip) = (θ, m))
     end
     if isfinite(θc)
         θn = max(θn, θc)
@@ -708,7 +709,7 @@ function Base.show(io::IO, ::MIME"text/plain", r::TaLISReport)
     println(io, "TaLISReport: ", nb, " beams, ", length(r.rows), " checks against ", TALIS_SOURCE)
     @printf(io, "  rule tolerance %.3g° applied as a lateral allowance r·tan(%.3g°), %s\n",
             s.tolerance, s.tolerance, s.pivot_text)
-    println(io, "    ASSUMED: the source does not say how the 0.5° is applied; confirm the interpretation with TaLIS")
+    println(io, "    (component rotated off nominal by insertion or assembly; clearances only, not capture or incidence)")
     @printf(io, "  error set (added linearly): transverse %.3g mm (pointing %.3g + target %.3g + hardware %.3g), focus ±%.3g mm, SSD %.3g mm\n",
             s.transverse, s.pointing, s.target_offset, s.hardware_tolerance, s.focus, s.ssd)
     println(io, "  rule           requirement                                           pass review fail   worst margin  beam / component")

@@ -308,7 +308,7 @@ mutable struct TalisRow
 end
 
 mutable struct NoteRow
-    kind::String                                   # assumed, settings, skipped, scope, source
+    kind::String                                   # tolerance, settings, skipped, scope, source
     text::String
 end
 

@@ -16,7 +16,7 @@
 
     # before a check, the notes already carry the tolerance caveat
     n0 = talis_notes(tl)
-    @test n0[1].kind === :assumed && occursin("ASSUMED", n0[1].text) && occursin("TCC", n0[1].text)
+    @test n0[1].kind === :tolerance && occursin("off nominal", n0[1].text) && occursin("TCC", n0[1].text)
     @test talis_brief(tl) == "not run" && isempty(talis_rows(tl))
 
     kw = talis_kwargs(tl, rv)
@@ -38,7 +38,7 @@
     rank(s) = s === :fail ? 0 : s === :review ? 1 : 2
     @test length(rows) == length(r.rows) && issorted([(rank(x.status), x.margin) for x in rows])
     notes = talis_notes(tl)
-    @test notes[1].kind === :assumed && occursin("ASSUMED", notes[1].text)
+    @test notes[1].kind === :tolerance && occursin("clearances", notes[1].text)
     @test any(n -> n.kind === :skipped && occursin("1ω", n.text), notes)    # not a NIF beam
     @test count(n -> n.kind === :scope, notes) == length(TALIS_OUT_OF_SCOPE)
     @test notes[end].kind === :source && occursin(TALIS_SOURCE, notes[end].text)

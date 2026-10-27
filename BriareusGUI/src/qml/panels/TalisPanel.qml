@@ -1,4 +1,4 @@
-// TaLIS report: the ASSUMED tolerance interpretation (cut to three lines until opened),
+// TaLIS report: the rule tolerance note (cut to three lines until opened),
 // the per-rule summary, the other notes, every check colored by status, CSV export.
 import QtQuick
 import QtQuick.Controls
@@ -8,7 +8,7 @@ import "../common"
 
 ColumnLayout {
     spacing: 6
-    property bool caveatOpen: false
+    property bool toleranceOpen: false
     function statusColor(s) {
         if (s === "fail") return "#c42b1c"
         if (s === "review") return "#d08a00"
@@ -45,31 +45,29 @@ ColumnLayout {
                 id: notesColumn
                 width: notesView.availableWidth - 12          // clear of the split handle
                 spacing: 4
-                // the ASSUMED note first, cut to three lines until opened, so that the
+                // the tolerance note first, cut to three lines until opened, so that the
                 // rule summary below it shows at the panel's default height
                 Repeater {
                     model: noteModel
                     delegate: ColumnLayout {
-                        visible: model.kind === "assumed"
+                        visible: model.kind === "tolerance"
                         spacing: 0
                         Layout.fillWidth: true
                         Label {
-                            id: assumedLabel
-                            text: "⚠ " + model.text
-                            color: "#d08a00"
-                            font.weight: Font.DemiBold
+                            id: toleranceLabel
+                            text: model.text
                             wrapMode: Text.WordWrap
-                            maximumLineCount: caveatOpen ? 100 : 3
+                            maximumLineCount: toleranceOpen ? 100 : 3
                             elide: Text.ElideRight
                             Layout.fillWidth: true
                         }
                         Label {
-                            visible: assumedLabel.truncated || caveatOpen
-                            text: caveatOpen ? "less" : "more"
+                            visible: toleranceLabel.truncated || toleranceOpen
+                            text: toleranceOpen ? "less" : "more"
                             color: palette.link
                             font.underline: true
                             HoverHandler { cursorShape: Qt.PointingHandCursor }
-                            TapHandler { onTapped: caveatOpen = !caveatOpen }
+                            TapHandler { onTapped: toleranceOpen = !toleranceOpen }
                         }
                     }
                 }
@@ -107,7 +105,7 @@ ColumnLayout {
                 Repeater {
                     model: noteModel
                     delegate: Label {
-                        visible: model.kind !== "assumed"
+                        visible: model.kind !== "tolerance"
                         text: "· " + model.text
                         opacity: model.kind === "scope" || model.kind === "source" ? 0.7 : 1
                         wrapMode: Text.WordWrap

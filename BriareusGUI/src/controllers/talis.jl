@@ -20,15 +20,16 @@ const TALIS_RULE_LABELS = (capture_3w = "3ω capture", incidence_3w = "3ω incid
                            tas_stay_in = "TAS stay-in zone")
 
 """
-The caveat on the rule tolerance that every TaLIS report carries: the requirements
-add "up to 0.5 degrees" of metrology, alignment and positioning tolerance without
-saying how an angle becomes a distance, so its interpretation (`pivot`) is an
-assumption to confirm.
+What the rule tolerance stands for, carried by every TaLIS report: the requirements'
+"up to 0.5 degrees" of metrology, alignment and positioning tolerance is the target
+component rotated off nominal (insertion or assembly error), in the least favorable
+direction. It applies to the clearances, not to capture or incidence.
 """
-const TALIS_TOLERANCE_CAVEAT =
-    "ASSUMED: the requirements do not say how the angular tolerance becomes a distance; " *
-    "it is applied here as a lateral allowance r·tan(tolerance). Confirm this " *
-    "interpretation with the facility before relying on the margins."
+const TALIS_TOLERANCE_NOTE =
+    "The tolerance is the component rotated off nominal (target inserted rotated, or " *
+    "assembled off-square), in the least favorable direction; it applies to the " *
+    "clearances, not to capture or incidence. For a component assembled off-square, " *
+    "set the pivot to its mount."
 
 """
     TaLISState()
@@ -252,7 +253,7 @@ end
     talis_notes(tl::TaLISState) -> Vector{NamedTuple}
 
 What the report does not settle, as `(; kind, text)` rows: the rule-tolerance
-interpretation (`:assumed`, always first, also before a check), the error set
+interpretation (`:tolerance`, always first, also before a check), the error set
 (`:settings`), the checks the report did not evaluate (`:skipped`), the requirements
 out of scope (`:scope`, `TALIS_OUT_OF_SCOPE`), and the source (`:source`).
 """
@@ -264,14 +265,14 @@ function talis_notes(tl::TaLISState)
         txt = piv === :tcc ? "r = distance from TCC" : piv === :aim ? "r = distance from the beam's aim point" :
               piv === :max ? "r = larger of the distances from TCC and from the aim point" :
               @sprintf("r = distance from (%g, %g, %g) mm", tl.pivot_point[]...)
-        push!(notes, (; kind = :assumed,
+        push!(notes, (; kind = :tolerance,
                       text = @sprintf("Rule tolerance %g° as a lateral allowance r·tan(%g°), %s. ",
-                                      tl.tolerance[], tl.tolerance[], txt) * TALIS_TOLERANCE_CAVEAT))
+                                      tl.tolerance[], tl.tolerance[], txt) * TALIS_TOLERANCE_NOTE))
     else
         s = r.settings
-        push!(notes, (; kind = :assumed,
+        push!(notes, (; kind = :tolerance,
                       text = @sprintf("Rule tolerance %g° as a lateral allowance r·tan(%g°), %s. ",
-                                      s.tolerance, s.tolerance, s.pivot_text) * TALIS_TOLERANCE_CAVEAT))
+                                      s.tolerance, s.tolerance, s.pivot_text) * TALIS_TOLERANCE_NOTE))
         push!(notes, (; kind = :settings,
                       text = @sprintf("Error set added linearly: transverse %g mm (pointing %g + positioning %g + hardware %g), focus ±%g mm.",
                                       s.transverse, s.pointing, s.target_offset,
