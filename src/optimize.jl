@@ -789,13 +789,23 @@ function irradiance_objective(name::Symbol; center, radius, intensity = nothing,
 end
 
 """
-    optimize_pointing(scenario, objective; x0, lower, upper, iterations = 200,
-                      evaluations = 20 * iterations, show_trace = false, g_tol = 1e-8,
-                      callback = nothing) -> NamedTuple
+    optimize_pointing(scenario, objective; x0 = initial_parameters(scenario.param),
+                      lower = bounds(scenario.param, x0)[1], upper = bounds(scenario.param, x0)[2],
+                      iterations = 200, evaluations = 20 * iterations, show_trace = false,
+                      g_tol = 1e-8, callback = nothing) -> PointingResult
 
-Minimize `objective(evaluate(scenario, x))` within box bounds by L-BFGS-B with
-forward-mode automatic-differentiation gradients. Returns `(; x, beams, value,
-initial_value, iterations, evaluations, stopped, reason, result)`.
+Minimize `objective(evaluate(scenario, x))` within the box `lower ≤ x ≤ upper` by
+L-BFGS-B with forward-mode automatic-differentiation gradients, from `x0` (clamped to
+the box). Returns a [`PointingResult`](@ref), whose display lists the parameters that
+end at a bound.
+
+The default box is `bounds(scenario.param, x0)` with its default widths: aims within
+±1 mm of `x0` (`z`, `r`, `phi`), defocus ±2 mm, power and spot scale ±50 %, Δλ ±2 Å and
+the spherical angles ±5–10° (engineering defaults, not facility limits). A parameter at
+its bound usually means the box, not the objective, set it: widen it with keywords of
+[`bounds`](@ref), e.g. `lower, upper = bounds(pointing, x0; z = 1.5, power = 0.4,
+power_max = 12.0)`, or pass any `lower` and `upper` vectors. A parameterization other
+than `GroupPointing` has no `bounds` method and needs `lower` and `upper`.
 
 The run ends after `iterations` L-BFGS-B iterations or `evaluations` objective
 evaluations (each gradient counts one), whichever comes first: a line search may take
@@ -859,16 +869,97 @@ Base.@nospecializeinfer function optimize_pointing(
         err
     end
     if res isa _OptimizationStop
-        return (; x = best_x, beams = apply(s.param, best_x), value = best_value,
-                initial_value, iterations = iter[], evaluations = count[], stopped = true,
-                reason = res.reason, result = nothing)
+        return _pointing_result(s, best_x, best_value, initial_value, iter[], count[], true,
+                                res.reason, nothing, lower, upper)
     end
     x = Optim.minimizer(res)
     n = Optim.iterations(res)
-    return (; x, beams = apply(s.param, x), value = Optim.minimum(res), initial_value,
-            iterations = n, evaluations = count[], stopped = false,
-            reason = Optim.converged(res) || n < iterations ? :converged : :iterations,
-            result = res)
+    return _pointing_result(s, x, Optim.minimum(res), initial_value, n, count[], false,
+                            Optim.converged(res) || n < iterations ? :converged : :iterations,
+                            res, lower, upper)
+end
+
+"""
+    PointingResult
+
+Result of [`optimize_pointing`](@ref). Fields: `x` (the best parameters), `beams`
+(`apply(scenario.param, x)`), `value` and `initial_value` (the objective at `x` and at
+the clamped `x0`), `iterations` (L-BFGS-B iterations completed), `evaluations`
+(objective evaluations, each gradient counting one), `reason` (`:converged`,
+`:iterations`, `:evaluations` or `:callback`), `stopped` (`true` for the last two, which
+return the best design evaluated so far), `result` (Optim's result, `nothing` when
+`stopped`), `names` (`parameter_names` of the parameterization, `x[i]` for one without
+a method), the box `lower`, `upper`, and `at_bounds`: the names of the parameters at a
+bound (within 1e-8 of the box width; parameters fixed by `lower == upper` excluded). Its
+display lists those parameters with their values and bounds.
+"""
+struct PointingResult{B}
+    x::Vector{Float64}
+    beams::B
+    value::Float64
+    initial_value::Float64
+    iterations::Int
+    evaluations::Int
+    stopped::Bool
+    reason::Symbol
+    result::Any
+    names::Vector{String}
+    lower::Vector{Float64}
+    upper::Vector{Float64}
+    at_bounds::Vector{String}
+end
+
+_names(p::GroupPointing, n) = parameter_names(p)
+_names(p, n) = hasmethod(parameter_names, Tuple{typeof(p)}) ?
+               collect(String, parameter_names(p)) : ["x[$i]" for i in 1:n]
+
+# 0: inside the box, -1 at the lower bound, 1 at the upper (within 1e-8 of the width;
+# a parameter fixed by lower == upper is inside)
+function _bound_side(x, lo, hi)
+    lo < hi || return 0
+    tol = isfinite(hi - lo) ? 1e-8 * (hi - lo) : 0.0
+    return x - lo <= tol ? -1 : hi - x <= tol ? 1 : 0
+end
+
+function _pointing_result(s::Scenario, x, value, initial_value, iterations, evaluations,
+                          stopped, reason, result, lower, upper)
+    x = collect(Float64, x)
+    names = _names(s.param, length(x))
+    side = map(_bound_side, x, lower, upper)
+    return PointingResult(x, apply(s.param, x), Float64(value), Float64(initial_value),
+                          Int(iterations), Int(evaluations), stopped, reason, result, names,
+                          collect(Float64, lower), collect(Float64, upper),
+                          names[side .!= 0])
+end
+
+function Base.show(io::IO, r::PointingResult)
+    print(io, "PointingResult(", r.reason, ", objective ", round(r.initial_value; sigdigits = 4),
+          " → ", round(r.value; sigdigits = 4), ", ", length(r.at_bounds), " of ",
+          length(r.x), " parameters at bounds)")
+end
+
+function Base.show(io::IO, ::MIME"text/plain", r::PointingResult)
+    how = r.reason === :converged ? "converged" :
+          r.reason === :iterations ? "reached the iteration limit" :
+          r.reason === :evaluations ? "reached the evaluation limit (best design kept)" :
+          "stopped by the callback (best design kept)"
+    @printf(io, "Pointing optimization %s: objective %.4g → %.4g\n", how, r.initial_value,
+            r.value)
+    @printf(io, "  %d iterations, %d evaluations, %d parameters", r.iterations,
+            r.evaluations, length(r.x))
+    if isempty(r.at_bounds)
+        print(io, ", none at a bound")
+        return nothing
+    end
+    print(io, "; at a bound (widen the box if the objective should set them):")
+    w = maximum(length, r.at_bounds)
+    for n in r.at_bounds
+        i = findfirst(==(n), r.names)
+        lo = _bound_side(r.x[i], r.lower[i], r.upper[i]) < 0
+        @printf(io, "\n    %s = %.6g  (%s bound; box %.6g to %.6g)", rpad(n, w), r.x[i],
+                lo ? "lower" : "upper", r.lower[i], r.upper[i])
+    end
+    return nothing
 end
 
 struct _OptimizationStop <: Exception

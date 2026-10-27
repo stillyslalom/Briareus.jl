@@ -46,11 +46,12 @@ report(evaluate(scenario, x0))       # power accounting, Tr = 262.7 eV, P2/P0 = 
 
 drive = mean_flux(evaluate(scenario, x0))    # mean capsule flux, held fixed
 objective = symmetry_objective(modes = (2 => 1.0, 4 => 1.0); drive)
-result = optimize_pointing(scenario, objective; x0)
+result = optimize_pointing(scenario, objective; x0)  # shows any parameter left at a bound
 report(evaluate(scenario, result.x))  # Tr = 262.7 eV, P2/P0 = -0.000 %, P4/P0 = -0.001 %
 parameter_names(pointing) .=> result.x
 ```
 
+The default box around `x0` is ±1 mm of aim and ±50 % of power (`bounds` widens it).
 After the package loads, the evaluation and the optimization take a few seconds each;
 `examples/nif_hohlraum.jl` adds explicit bounds and a ray-trace check. The
 [documentation](https://stillyslalom.github.io/Briareus.jl/dev/) starts with tutorials

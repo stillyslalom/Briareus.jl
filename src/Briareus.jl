@@ -76,7 +76,7 @@ export planck_fraction, planck_fractions, spectral_edges, MBandEmission, mband_c
 export GroupPointing, nparams, parameter_names, initial_parameters, parameters, apply, bounds,
        Scenario, Evaluation, evaluate, subset, flux_ylm, asymmetry_objective, influence_matrix,
        clipped_fraction, missed_fraction, power_fraction,
-       flux_moments, mean_flux, symmetry_objective, irradiance_objective, optimize_pointing, report,
+       flux_moments, mean_flux, symmetry_objective, irradiance_objective, optimize_pointing, PointingResult, report,
        mode_sensitivity, mode_uncertainty, sample_modes, infer_errors
 export HOTSPOT_VELOCITY_PER_PERCENT, mode1_vector, hotspot_velocity, ResponseKernel, flat_kernel,
        yield_factor, alpha_factor, rke_fraction, reactivity_exponent, burn_amplification,

@@ -62,4 +62,19 @@ end
     full = sprint((io, e) -> report(io, e; minor = 0), ev)
     @test occursin("cap_top_outside", full)
     @test occursin("missed", full) || occursin("quadrature excess", full)
+
+    # the result names the parameters a narrow box holds at a bound
+    lo, hi = bounds(p, x0; z = 1e-3, r = 1e-3, power = 1e-3)
+    res = optimize_pointing(s, symmetry_objective(; drive = mean_flux(ev)); x0, lower = lo,
+                            upper = hi, iterations = 5)
+    @test res isa PointingResult && res.names == parameter_names(p)
+    side = [x <= l ? -1 : x >= h ? 1 : 0 for (x, l, h) in zip(res.x, lo, hi)]
+    @test !isempty(res.at_bounds) && res.at_bounds == res.names[side .!= 0]
+    shown = sprint(show, MIME"text/plain"(), res)
+    @test occursin("at a bound", shown) && all(n -> occursin(n, shown), res.at_bounds)
+    @test occursin("parameters at bounds", sprint(show, res))
+    # infinite and collapsed boxes, and names of a parameterization without parameter_names
+    @test Briareus._bound_side.([0.0, 1.0, 5.0, 2.0], [0.0, 0.0, 0.0, 2.0], [Inf, Inf, 5.0, 2.0]) ==
+          [-1, 0, 1, 0]
+    @test Briareus._names(_Shift(p, x0), 2) == ["x[1]", "x[2]"]
 end

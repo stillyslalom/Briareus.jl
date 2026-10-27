@@ -27,6 +27,7 @@ a0 = mean_flux(evaluate(scenario, x0))
 objective = symmetry_objective(modes = (2 => 1.0, 4 => 1.0, 6 => 0.25), drive = a0)
 lower, upper = bounds(pointing, x0; z = 1.5, r = 1.0, power = 0.4)
 result = optimize_pointing(scenario, objective; x0, lower, upper)
+display(result)   # lists any parameter left at a bound
 
 println("\nOptimized ($(round(result.initial_value; sigdigits = 3)) → ",
         "$(round(result.value; sigdigits = 3))):")
