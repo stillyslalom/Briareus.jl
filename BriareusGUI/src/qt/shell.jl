@@ -1642,7 +1642,7 @@ function _register_qml_functions()
     return
 end
 
-# ---------------------------------------------------------------- launcher
+# ---------------------------------------------------------------- the window
 
 """
     briareus(sess = DesignSession(); kind = :hohlraum, resolution = :standard,
@@ -1673,8 +1673,8 @@ a design tool in the manner of VisRad, not a sequence of steps:
 
 The session starts from `sess`, or a fresh `DesignSession(; kind, resolution,
 preset, beams)`; `build = true` starts computing the drive at once, and `shown()`, when
-given, runs once on the window's first tick (the launcher closes its splash then). The call blocks
-while the window is open (Qt runs its event loop on this thread); start Julia with
+given, runs once on the window's first tick (the `briareus` command closes its splash
+then). The call blocks while the window is open (Qt runs its event loop on this thread); start Julia with
 several threads (`julia -t auto`) so background jobs leave the window responsive.
 Closing the window cancels an optimization, clearance or TaLIS check in progress.
 

@@ -104,6 +104,11 @@ item says where it stands, what remains and what data would settle it.
   folder on dyld's fallback path); Windows taskbar grouping of the shortcut with the window
   (AppUserModelID); the remaining 15 s is loading the package images and 3 s of
   compilation in QML's `__init__` (upstream; a system image would remove both).
+  2026-10-27: the launcher merged into BriareusGUI (`[apps.briareus]`, two registrations
+  instead of three); the splash now comes from the script `briareus --shortcut` writes,
+  so a bare `briareus` in a terminal shows nothing until the window (15-20 s).
+  BriareusGUI's `[sources]` entry is gone: an app installed from the registry keeps `..`
+  (it exists in the installed tree, without a `Project.toml`) and fails to resolve.
 - **2026-10-25, energetics defaults (current).** Zylstra 2022 LEH pair; published
   energetics as the defaults, DU factor 0.836; late-time drive literature and an
   ablating-wall reference; the P2 swing's published inputs (K24 capsule radius, uniform

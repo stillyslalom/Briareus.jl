@@ -4,7 +4,7 @@
 #
 # Writes the SVG (docs sidebar logo) and a multi-size ICO (docs favicon, Windows title
 # bar and taskbar icon of the GUI window) to docs/src/assets/ and
-# BriareusGUI/src/qml/icons/, and to the latter a 256 px PNG (the launcher splash and the
+# BriareusGUI/src/qml/icons/, and to the latter a 256 px PNG (the shortcut's splash and the
 # Linux menu entry) and an ICNS (the macOS app bundle). The drawing: a backlighter shot, three focusing beam
 # cones in Julia's green, red and purple converging on one spot of a blue foil. From
 # 64 px up, x-rays fan out of the back of the foil; smaller sizes leave them out.

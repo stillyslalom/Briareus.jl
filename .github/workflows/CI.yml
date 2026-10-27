@@ -3,8 +3,8 @@ on:
   push:
     branches:
       - main
-    # root releases (v0.1.0) only: the docs deploy versioned docs for these; the GUI's and
-    # the launcher's tags (BriareusGUI-v0.1.0, BriareusLauncher-v0.1.0) build nothing
+    # root releases (v0.1.0) only: the docs deploy versioned docs for these; the GUI's
+    # tags (BriareusGUI-v0.1.0) build nothing
     tags: ['v*']
   pull_request:
   workflow_dispatch:
@@ -88,9 +88,13 @@ jobs:
       - uses: julia-actions/cache@v2
       - name: Install GL system libraries
         run: sudo apt-get update && sudo apt-get install -y xorg-dev mesa-utils xvfb libgl1 freeglut3-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxext-dev
+      - name: No [sources] in BriareusGUI/Project.toml
+        # an app installed from the registry would keep its `..` path, which exists in
+        # the installed tree but holds no package (BriareusGUI/README.md, Development)
+        run: "! grep -q '^\\[sources' BriareusGUI/Project.toml"
       - name: Develop the core package into the GUI environment
-        # [sources] needs Julia 1.11, so develop the core explicitly. Precompilation
-        # waits for the test step, where xvfb provides the display GLMakie needs.
+        # BriareusGUI has no [sources] (above). Precompilation waits for the test step,
+        # where xvfb provides the display GLMakie needs.
         env:
           JULIA_PKG_PRECOMPILE_AUTO: '0'
         shell: julia --project=BriareusGUI --color=yes {0}
@@ -107,12 +111,6 @@ jobs:
         run: >
           xvfb-run -s '-screen 0 1024x768x24'
           julia --color=yes --project=BriareusGUI -e 'using Pkg; Pkg.test()'
-      - name: Run BriareusLauncher tests
-        # the `briareus` command (Pkg apps: Julia 1.12); its splash runs offscreen
-        if: matrix.version == '1'
-        env:
-          QT_QPA_PLATFORM: offscreen
-        run: julia --color=yes --project=BriareusLauncher -e 'using Pkg; Pkg.instantiate(); Pkg.test()'
   docs:
     name: Documentation
     runs-on: ubuntu-latest
