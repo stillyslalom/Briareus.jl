@@ -343,7 +343,7 @@ function time_chart(sess::DesignSession, chart::Symbol = sess.time.chart[])
         right = [_series("a₂/a₀", h.time, 100 .* h.legendre[2, :], "#0072B2"),
                  _series("a₄/a₀", h.time, 100 .* h.legendre[4, :], "#009E73")]
         return (; chart, title = "Capsule drive history" * stale, xlabel = "t (ns)",
-                left = (; label = "Tr (eV)", series = left), right = (; label = "a_l/a₀ (%)", series = right),
+                left = (; label = "Tr (eV)", series = left), right = (; label = "aₗ/a₀ (%)", series = right),
                 legend = [_key(s) for s in vcat(left, right)], cursor, empty = "")
     elseif chart === :energy
         h === nothing && return none("Energy", "Run the drive history to see where the energy goes")

@@ -483,7 +483,12 @@ end
 
 _num(x::Real) = isfinite(x) ? Controllers.display_number(x) : ""
 _fix(x::Real, d::Integer = 3) = isfinite(x) ? @sprintf("%.*f", d, x) : "–"
-_pct(x::Real, d::Integer = 2) = isfinite(x) ? @sprintf("%.*f %%", d, 100x) : "–"
+# A fraction as a percentage; one that rounds to zero prints without a sign ("-0.00 %").
+function _pct(x::Real, d::Integer = 2)
+    isfinite(x) || return "–"
+    t = @sprintf("%.*f %%", d, 100x)
+    return startswith(t, "-") && all(c -> c in "0.", t[2:end-2]) ? t[2:end] : t
+end
 # A component's laser power (TW): round-off below 10⁻⁶ of the delivered power reads as 0.
 _power_text(p::Real, delivered::Real) = abs(p) < 1e-6 * abs(delivered) ? "0" : @sprintf("%.4g", p)
 _g(x::Real) = isfinite(x) ? @sprintf("%.3g", x) : "–"

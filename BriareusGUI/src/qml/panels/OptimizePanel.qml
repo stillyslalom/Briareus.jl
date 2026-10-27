@@ -26,8 +26,8 @@ ScrollPage {
             rowSpacing: 2
             visible: optModeRepeater.count > 0
             Label { text: "l"; font.weight: Font.DemiBold }
-            Label { text: "ε_l before"; font.weight: Font.DemiBold }
-            Label { text: "ε_l after"; font.weight: Font.DemiBold }
+            Label { text: "εₗ before"; font.weight: Font.DemiBold }
+            Label { text: "εₗ after"; font.weight: Font.DemiBold }
             Repeater {
                 id: optModeRepeater
                 model: optModeModel

@@ -29,8 +29,8 @@ ScrollPage {
                 columnSpacing: 24
                 rowSpacing: 2
                 Label { text: "l"; font.weight: Font.DemiBold }
-                Label { text: "ε_l"; font.weight: Font.DemiBold }
-                Label { text: "P_l / P0"; font.weight: Font.DemiBold }
+                Label { text: "εₗ"; font.weight: Font.DemiBold }
+                Label { text: "Pₗ/P₀"; font.weight: Font.DemiBold }
                 Repeater {
                     model: modeModel
                     delegate: Label { Layout.row: model.l; Layout.column: 0; text: model.l }
@@ -44,7 +44,7 @@ ScrollPage {
                     delegate: Label { Layout.row: model.l; Layout.column: 2; text: model.legendre }
                 }
             }
-            Note { text: "ε_l: rotation-invariant amplitude over all m (= |P_l/P0| when axisymmetric)." }
+            Note { text: "εₗ: rotation-invariant amplitude over all m (= |Pₗ/P₀| when axisymmetric)." }
         }
         ColumnLayout {
             visible: app.spotText !== ""

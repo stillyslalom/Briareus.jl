@@ -116,6 +116,31 @@ function _draw_series!(pools, series, at)
     end
 end
 
+# Unicode subscripts (aₗ/a₀), which Makie's font lacks, as rich-text subscripts.
+const _SUBSCRIPTS = Dict(zip("₀₁₂₃₄₅₆₇₈₉ₗ", "0123456789l"))
+function _axis_label(s::AbstractString)
+    any(in(keys(_SUBSCRIPTS)), s) || return s
+    parts = Any[]
+    for (sub, run) in _runs(c -> haskey(_SUBSCRIPTS, c), s)
+        push!(parts, sub ? subscript(map(c -> _SUBSCRIPTS[c], run)) : run)
+    end
+    return rich(parts...)
+end
+
+# Maximal runs of `s` over which `f` is constant, as `(f, run)` pairs.
+function _runs(f, s::AbstractString)
+    out = Tuple{Bool,String}[]
+    for c in s
+        v = f(c)
+        if !isempty(out) && out[end][1] == v
+            out[end] = (v, out[end][2] * c)
+        else
+            push!(out, (v, string(c)))
+        end
+    end
+    return out
+end
+
 function _draw_time!(c::TimeCanvas, sess::DesignSession)
     ch = time_chart(sess)
     sl = ch.left.series
@@ -126,7 +151,7 @@ function _draw_time!(c::TimeCanvas, sess::DesignSession)
     ax.xlabel[] = ch.xlabel
     ax.ylabel[] = isempty(ch.left.label) ? " " : ch.left.label
     two = !isempty(sr)
-    ax2.ylabel[] = two ? ch.right.label : " "
+    ax2.ylabel[] = two ? _axis_label(ch.right.label) : " "
     for a in (ax2.yticklabelsvisible, ax2.yticksvisible, ax2.ylabelvisible)
         a[] = two
     end

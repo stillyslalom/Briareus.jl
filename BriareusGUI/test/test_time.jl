@@ -91,7 +91,7 @@ end
     @test [s.label for s in ch.left.series] == ["Capsule Tr", "Dante 1"]
     @test [s.label for s in ch.right.series] == ["a₂/a₀", "a₄/a₀"]
     @test ch.right.series[1].y ≈ 100 .* h.legendre[2, :]
-    @test ch.left.label == "Tr (eV)" && ch.right.label == "a_l/a₀ (%)"
+    @test ch.left.label == "Tr (eV)" && ch.right.label == "aₗ/a₀ (%)"
     @test time_chart(sess, :energy).left.label == "Energy (kJ)"
 
     # the cursor: the nearest solved time, clamped to the history; colors the 3D view

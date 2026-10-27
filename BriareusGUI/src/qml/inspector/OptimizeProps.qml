@@ -58,7 +58,7 @@ ColumnLayout {
         ComboBox {
             Layout.fillWidth: true
             textRole: "text"; valueRole: "value"
-            model: [{ text: "Capsule symmetry, axisymmetric (P_l/P0)", value: "legendre" },
+            model: [{ text: "Capsule symmetry, axisymmetric (Pₗ/P₀)", value: "legendre" },
                     { text: "Capsule symmetry, 3D (all m)", value: "ylm" },
                     { text: "Foil spot uniformity", value: "irradiance" }]
             currentIndex: Math.max(0, ["legendre", "ylm", "irradiance"].indexOf(app.optObjective))
