@@ -18,9 +18,10 @@ RowLayout {
         text: row.label
         Layout.preferredWidth: row.labelWidth
         elide: Text.ElideRight
-        ToolTip.visible: row.tip !== "" && labelHover.hovered
+        // the tip, or the whole label when it is cut short
+        ToolTip.visible: (row.tip !== "" || truncated) && labelHover.hovered
         ToolTip.delay: 400
-        ToolTip.text: row.tip
+        ToolTip.text: row.tip !== "" ? (truncated ? row.label + ": " : "") + row.tip : row.label
         HoverHandler { id: labelHover }
     }
     TextField {
