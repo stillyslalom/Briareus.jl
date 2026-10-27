@@ -272,6 +272,7 @@ function task_status(sess::DesignSession, task::Symbol)
         r = st.result[]
         r === nothing && return (:todo, isempty(st.status[]) ? "not run" : st.status[])
         txt = @sprintf("objective %.3g → %.3g", r.initial_value, r.value)
+        _optimum_stale(sess.beams.beams[], r) && return (:attention, "beams changed since: " * txt)
         r.applied && return (:ok, txt * " · applied")
         return (:attention, txt * " · not applied")
     elseif task === :clearance
@@ -293,6 +294,15 @@ function task_status(sess::DesignSession, task::Symbol)
         bad = any(x -> x.status !== :pass, tl.report[].rows)
         return (bad ? :attention : :ok, txt)
     end
+end
+
+# An optimization result no longer describes the beam table: its beams left the table
+# (a new preset or target template) or moved to other ports, or, once applied, the
+# optimized beams were edited since.
+function _optimum_stale(bs::AbstractVector, r)
+    all(i -> i <= length(bs), r.indices) || return true
+    r.applied && return any(k -> bs[r.indices[k]] != r.beams[k], eachindex(r.indices))
+    return any(k -> bs[r.indices[k]].port != r.beams[k].port, eachindex(r.indices))
 end
 
 # ---------------------------------------------------------------- drive

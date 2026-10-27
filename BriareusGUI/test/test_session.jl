@@ -110,6 +110,12 @@ end
     rws = beam_rows(sess.beams)
     @test rws[1].z ≈ r.x[1] && rws[1].r ≈ r.x[2]
     @test sess.drive.result[].modes[2].epsilon ≈ r.after.modes[2].epsilon rtol = 1e-6
+    # a beam table that no longer holds the optimized beams marks the result stale
+    bs0 = sess.beams.beams[]
+    sess.beams.beams[] = reverse(bs0)
+    @test task_status(sess, :optimize)[1] === :attention
+    sess.beams.beams[] = bs0
+    @test task_status(sess, :optimize)[1] === :ok
 
     # 3D objective with the LEH keep-out, on a subset of beams (dropped cone)
     set_objective!(st, :ylm)
