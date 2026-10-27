@@ -30,8 +30,7 @@ tilted by β about its `height` axis (`tilt_toward = 0`) presents `width · cos 
 the line of sight.
 
 The defaults (a 2 mm square gold foil) are generic engineering values, not a facility's
-backlighter design: real backlighter dimensions and standoffs are shot-specific, and
-for THOR they are not public. `n` sets the mesh (`n × n` patches for a square foil).
+backlighter design: real backlighter dimensions and standoffs are shot-specific. `n` sets the mesh (`n × n` patches for a square foil).
 """
 function backlighter_foil(los; standoff::Real, width::Real = 2.0, height::Real = width,
                           tilt::Real = 0.0, tilt_toward::Real = 0.0, rotation::Real = 0.0,

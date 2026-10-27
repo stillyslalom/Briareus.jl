@@ -958,7 +958,7 @@ const _VRW_CAPTURE_KINDS = ("3w Capture", "3w Clearance", "1w Clearance", "1w Fo
 
 # A computed template's results (power sources, radiosities, beam capture/clearance)
 # belong to its old beams: reset them to "not up to date", as VisRad writes a workspace
-# that has not been run (VisRad 21 loads such files; thor visrad/vrw_lib.jl), so
+# that has not been run (VisRad 21 loads such files), so
 # `visrad_power_sources` cannot read them back as current. Keeps the line endings.
 function _vrw_stale_results(text::AbstractString)
     nl = occursin("\r\n", text) ? "\r\n" : "\n"

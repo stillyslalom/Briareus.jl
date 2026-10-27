@@ -180,8 +180,7 @@ end
 
 # Mock HYBRID-E pointing, per cone: aim z (mm, upper hemisphere), aim radius r (mm, along
 # the quad's port azimuth; negative = across the axis) and tangential split s (mm).
-# A public stand-in fitted to summary metrics, not a facility pointing: research notes,
-# "Mock HYBRID-E pointing (2026-10-23)".
+# An illustrative stand-in, not a facility pointing.
 const HYBRIDE_MOCK_POINTING = Dict(
     :inner23 => (z = 3.3, r = -1.3, s = 0.0),
     :inner30 => (z = 4.2, r = -0.8, s = 0.0),
@@ -192,7 +191,7 @@ const HYBRIDE_MOCK_POINTING = Dict(
 """
     hybride_mock_pointing(beams = nif_beams(); table = HYBRIDE_MOCK_POINTING) -> Vector{Beam}
 
-A public mock of the HYBRID-E (N221204/N230729-class) NIF pointing: `beams` (NIF beams or
+A mock of the HYBRID-E (N221204/N230729-class) NIF pointing: `beams` (NIF beams or
 quads, with `group` the cone) re-aimed by cone, defocus 0; power, spot and `dlambda` are
 kept. Each cone's quads share one rule in their own frame, mirrored top to bottom: the aim
 sits at `±z` (mm, the bottom hemisphere at `-z`), `r` along the quad's port azimuth
@@ -209,11 +208,8 @@ split.
 | 44.5° | 5.7 | 0 | 0.5 |
 | 50° | 5.8 | 0 | 0.5 |
 
-*Derived*, not a facility pointing: the values were fitted, on a 0.1 mm grid, to the
-capsule-flux moments and LEH beam crossing of a non-public as-shot HYBRID-E pointing on
-the 11.24 × 6.4 mm hohlraum with 3.1 mm LEHs, which they reproduce to within 0.15
-percentage point (P2/P0, P4/P0, P6/P0 and ``Y_{lm}/Y_{00}`` for l ≤ 6, at foot and peak cone
-fractions) and its reduced-model CBET transfer to 0.03 % (research notes, "Mock HYBRID-E pointing (2026-10-23)").
+*Derived*, not a facility pointing: an illustrative HYBRID-E-like rule on a 0.1 mm grid,
+for the 11.24 × 6.4 mm hohlraum with 3.1 mm LEHs.
 """
 function hybride_mock_pointing(beams::AbstractVector{<:Beam} = nif_beams();
                                table = HYBRIDE_MOCK_POINTING)

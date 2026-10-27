@@ -374,8 +374,8 @@ end
 _vr_zfactor(prof::VisRadProfile, env) = (g = prof.growth; g isa Float64 ? (g / env)^2 : 1.0)
 
 # VisRad 21's profile along the beam for the four NIF phase plates, measured with one beam
-# per quad focused onto a plate normal to it at |z| from best focus (48 plates; thor
-# visrad/profile_probe, `reference/research-notes.md`, "VisRad deposition parity"). Each
+# per quad focused onto a plate normal to it at |z| from best focus (48 plates;
+# `reference/research-notes.md`, "VisRad deposition parity"). Each
 # plate was fitted by a rotated super-Gaussian (0–2.5% rms): the semi-axes and exponent
 # over their focal values, the same before and after focus, normalized at z = 0. Matched
 # to a beam by its focal exponent and 1/e semi-axes (mm).

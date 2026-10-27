@@ -142,9 +142,9 @@ end
 # standoff) from its center, facing the detector across the capsule; the radiography
 # beams strike its face toward the target, so the x rays they generate cross the
 # capsule to the detector. The foil's size and standoff here are generic engineering
-# values: real backlighter dimensions are shot-specific and, for this class of
-# target, not public. The radiograph looks through a pair of 3 mm windows in the
-# hohlraum wall, one on each side of the capsule along the line of sight.
+# values: real backlighter dimensions are shot-specific. The radiograph looks through a
+# pair of 3 mm windows in the hohlraum wall, one on each side of the capsule along the
+# line of sight.
 #
 # The scene around the foil is the hohlraum with its entrance-hole shields
 # (`sombrero = true`), the dimpled annular sheets around each end that keep

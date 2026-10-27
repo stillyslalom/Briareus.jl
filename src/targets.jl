@@ -274,17 +274,13 @@ mid-plane `offset` mm from the entrance-hole plane (`length/2`) toward the waist
 patches (equal-area rings; the polygon edges lie within `r (1 − cos(π/nphi))` of the
 circles, 5 µm at 9.2 mm with 96 sides) carrying its exact `DiskSurface`.
 
-The defaults are measured from the CAD of a THOR-class NIF symcap target (2026-10-24,
-research notes "LEH shield (sombrero)"), relative to the entrance-hole washer's inner
-face: bore 4.000 mm and rim 9.200 mm radius (to 0.5 µm in the tessellation), a 39 µm
-sheet whose area-mean mid-plane lies 0.623 mm inside that face (±0.005 mm). The sheet is
-not flat in detail: a hexagonal array of shallow dimples (2.48 mm pitch, centers sunk
-toward the waist, 0.21 mm from dimple floor to the ridges between dimples) puts its faces
-within ±0.12 mm of the mid-plane; the model keeps the mean plane (the dimples are not
-axisymmetric). Both shields are identical (mirror images). Over one azimuthal sector,
-where each shield is mounted, the sheet runs on past 9.2 mm; that is not modeled.
+The defaults are representative of a NIF symcap shield, relative to the entrance-hole
+washer's inner face: bore 4.0 mm and rim 9.2 mm radius, a 39 µm sheet whose mid-plane
+lies 0.623 mm inside that face. Both shields are identical (mirror images). A real sheet
+is dimpled, within about ±0.12 mm of its mean plane, and runs past the rim where it is
+mounted; the model keeps the flat mean plane.
 
-`material` is an engineering default (the CAD carries none): `BLACK`, absorbing laser
+`material` is an engineering default: `BLACK`, absorbing laser
 light and emitting nothing. The shield lies outside the cavity and does not see into it
 (beside the wall, the wall hides the hole from it), so its albedo and conversion do not
 change the hohlraum's radiation.

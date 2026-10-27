@@ -148,7 +148,7 @@ geometry = (length = 11.24, leh_radius, capsule_radius, h, capsule_h,
             wall = nif_uranium(), capsule)
 R0 = 3.2
 
-# Laser: 192 beams at the public mock HYBRID-E pointing; Δλ 2.75 Å (1ω) on the inner
+# Laser: 192 beams at the mock HYBRID-E pointing; Δλ 2.75 Å (1ω) on the inner
 # cones, 0.917 Å at 3ω (the 23.5°/30° and 44.5°/50° splits are unpublished: none).
 # `shot` (7th argument) `n220919` or `n210808` runs a proxy of the two other shots of
 # Fig. 10 (*L*): Δλ 2.5 or 1.8 Å on the same mock pointing, CBET calibration and

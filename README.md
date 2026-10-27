@@ -122,8 +122,7 @@ its port, pointing moves its axis, and positive defocus moves the focus along th
   against the exact f-cone convolution (about 1 % of the beam power), the harmonics the
   NIF port symmetry forbids to round-off, gradients against finite differences.
 - **VisRad**: on two NIF hohlraum workspaces, wall deposition 0.9 % rms per element from
-  VisRad 21's, peaks within 0.5 %, capsule P2 and P4 within 0.014 and 0.004 points. The
-  workspaces are not public.
+  VisRad 21's, peaks within 0.5 %, capsule P2 and P4 within 0.014 and 0.004 points.
 - **Monte Carlo**: LEH escape and capsule fractions agree with a photon walk in the
   exact N210808 geometry within its sampling error (10⁻⁴ of the source).
 - **N221204** (Kritcher et al., PRE 109, 025204 (2024)), with nothing fitted to Fig. 10
@@ -155,13 +154,12 @@ are engineering defaults, not facility criteria.
 | NIF quad names, beam directions, CPP spots | LMF Shot RI Resources (2020), chamber-geometry figures | `data/nif_beams.csv`; spots converted from HWHM to 1/e. |
 | NIF target-configuration rules | LMF "TCC Configuration Requirements" (2018) | How the 0.5° tolerance is applied is not stated; see `talis_check`. |
 | OMEGA beams and phase plates | Truncated icosahedron reproducing the 21.4/42.0/58.9/81.2° cones; OMEGA Users' Guide (2014) | Azimuthal origin not tied to the chamber; real ports via `beams_from_table`. |
-| VisRad formats and beam profile | VisRad manual (v21.1.1); VisRad 21 runs on NIF hohlraums and a beam-profile probe | The workspaces are not in the repository. |
+| VisRad formats and beam profile | VisRad manual (v21.1.1); VisRad 21 runs on NIF hohlraums and a beam-profile probe | |
 | Published shot and simulation data | The cited papers, digitized or tabulated in `data/*.csv` with provenance headers | The research notes record which data each calibration was fitted to and which are checks only. |
 
 `reference/research-notes.md` records the source and confidence of every default and
-calibrated constant. Non-public facility data (shot pointing exports, CAD, VisRad
-workspaces) never enters the repository; the HYBRID-E pointing in the examples is a
-public mock-up (`hybride_mock_pointing`) fitted to summary metrics.
+calibrated constant. The HYBRID-E pointing in the examples is an illustrative mock-up
+(`hybride_mock_pointing`), not a facility pointing.
 
 ## Tests, citing, license
 

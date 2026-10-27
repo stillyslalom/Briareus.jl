@@ -350,7 +350,7 @@ intensity are maxima over aims displaced to `nangles` points on the radius-`R` c
 **Status.** `thresholds` (W/cm² and fraction of beam power): `:fail` above
 `fail_intensity` (1e12, plasma formation) or `fail_fraction` (1e-3), `:review` above
 `review_intensity` (1e9, ablation/debris onset) or `review_fraction` (1e-5). These are
-engineering defaults; NIF (TaLIS/BLIP) and LLE review criteria are not public.
+engineering defaults, not facility review criteria (`talis_check` applies the NIF rules).
 
 Only hardware upstream of each beam's landing is checked: where the beam axis first
 meets one of the `targets` components (the surfaces the beam should hit), or the aim

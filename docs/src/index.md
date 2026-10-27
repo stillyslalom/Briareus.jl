@@ -159,6 +159,5 @@ correlated with the part of the spot they block.
 
 Facility data and physics defaults are sourced in `reference/research-notes.md` in the
 repository, with a confidence level for each number and the data each calibration was
-fitted to. Non-public facility data (shot pointing exports, CAD, VisRad workspaces) is
-not in the repository; the HYBRID-E pointing in the examples is a public mock-up
-([`hybride_mock_pointing`](@ref)).
+fitted to. The HYBRID-E pointing in the examples is an illustrative mock-up
+([`hybride_mock_pointing`](@ref)), not a facility pointing.

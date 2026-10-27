@@ -73,8 +73,7 @@ hohlraum workspaces, which played no part in those tables:
   Briareus radiosity, agree to 0.014 and 0.004 percentage points, and the re-pointing's
   change of P2 is 0.104 % against VisRad's 0.092 %.
 
-The workspaces and comparison scripts are not public; the numbers, the setup and what
-remains open (the law behind the tabulated semi-axes for plates other than the four
+The numbers, the setup and what remains open (the law behind the tabulated semi-axes for plates other than the four
 NIF ones, the per-beam renormalization on tilted surfaces) are in
 `reference/research-notes.md`. [`write_visrad_kit`](@ref) and [`compare_visrad`](@ref)
 set up the same kind of comparison for any case.
@@ -82,7 +81,7 @@ set up the same kind of comparison for any case.
 ## The N221204 benchmark
 
 `examples/n221204.jl` runs the time-dependent drive of NIF shot N221204 (Kritcher et
-al., Phys. Rev. E 109, 025204 (2024)) on a public mock-up of the HYBRID-E pointing, with
+al., Phys. Rev. E 109, 025204 (2024)) on a mock-up of the HYBRID-E pointing, with
 the two-zone CBET model calibrated to that paper's Fig. 9, and the wall motion, LEH
 closure and inner-beam bubble calibrated to other published data. Neither the paper's
 Fig. 10 (the capsule flux P2/P0 against time) nor the measured Dante history is a fit

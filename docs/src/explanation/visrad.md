@@ -60,9 +60,8 @@ foil workspace with four beams, the totals agree to the table's precision (3.600
 elements above 20 TW/cm² within 1.4 %, and the faint wings near focus (2–30 TW/cm²)
 differ by 8–15 % (research notes, "VisRad workspace files (2026-10-17)").
 
-Two limits apply. The workspaces are not public, so these comparisons cannot be rerun
-from the repository; [`write_visrad_kit`](@ref) and [`compare_visrad`](@ref) set up the
-same comparison for any case. And the comparison covers deposition only: VisRad's own
+[`write_visrad_kit`](@ref) and [`compare_visrad`](@ref) set up the same comparison for
+any case. The comparison covers deposition only: VisRad's own
 radiosity, absolute drive levels and mode amplitudes have not yet been compared with
 Briareus's (ROADMAP, "Benchmark against VisRad").
 
