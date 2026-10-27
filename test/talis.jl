@@ -177,6 +177,51 @@
     @test all(x -> x.margin > 0, (x for x in rs.rows if x.rule === :clearance_3w && x.component === :sombrero))
     @test any(x -> x.rule === :tas_stay_in, rs.rows)
 
+    # LEH edges (`leh`): the 23.5° quads aimed as in the GUI's NIF template cannot clear
+    # a 3.1 mm LEH by 0.5 mm; on the caps that is a review, on hardware a failure.
+    # Independent reference: the best-focus 1% ellipse (HWHM table of NIF_SPOTS, 1/e
+    # radius a·log(100)^(1/n)), grown by the f/7.9 cone, against the exact LEH circle,
+    # less the linear error stack and r·tan(0.5°) (r = |rim point| from TCC).
+    hl = hohlraum(length = 10.1, radius = 2.875, leh_radius = 1.55, capsule_radius = 0.9,
+                  nz = 8, nphi = 48, nr_cap = 2)
+    q23 = map(filter(b -> b.group === :inner23 && b.port[3] > 0, nif_quads())) do b
+        φ = port_angles(b)[2]
+        remake(b; aim = (-1.09 * cosd(φ), -1.09 * sind(φ), 3.09))
+    end
+    n23 = 7.37167
+    a23, b23 = (0.88585, 0.65579) ./ log(2)^(1 / n23) .* log(100)^(1 / n23)
+    @test a23 ≈ 1.145 atol = 5e-4                       # the 1% semi-axis along φ̂
+    rim = [Vec3(1.55cos(ψ), 1.55sin(ψ), 5.05) for ψ in range(0, 2π; length = 2881)[1:end-1]]
+    ref = minimum(q23) do b
+        θ, φ = port_angles(b)
+        eθ = Vec3(cosd(θ)cosd(φ), cosd(θ)sind(φ), -sind(θ))
+        eφ = Vec3(-sind(φ), cosd(φ), 0.0)
+        k = direction(b)
+        minimum(rim) do x
+            d = x - Vec3(b.aim)
+            u, v, s = dot(d, eφ), dot(d, eθ), dot(d, k)
+            minimum(hypot(u - a23 * cos(τ), v - b23 * sin(τ)) for τ in range(0, 2π; length = 2001)) -
+                abs(s) / 15.8 - R - 1 / 15.8 - tan05 * norm(x)
+        end
+    end
+    rl = talis_check(hl, q23; capture = (:wall,), hardware = (:cap_top,), leh = (:cap_top,),
+                     omega1 = false)
+    lips = [x for x in rl.rows if x.rule === :clearance_3w]
+    @test length(lips) == 4 && all(x -> x.component === :cap_top && x.status === :review, lips)
+    @test all(x -> occursin("LEH clearance", x.note), lips) && rl.settings.leh == [:cap_top]
+    # chords of the 48-gon lie up to 1.55(1 − cos 3.75°) = 3.3 µm inside the circle
+    @test minimum(x -> x.worst, lips) ≈ ref atol = 5e-3
+    @test minimum(x -> x.margin, lips) ≈ ref - 0.5 atol = 5e-3
+    @test ref - 0.5 ≈ -0.4774 atol = 1e-3
+    # the same cap given as hardware only, and a shield 50 µm outside the lip, fail
+    rh = talis_check(hl, q23; capture = (:wall,), hardware = (:cap_top,), omega1 = false)
+    @test all(x -> x.status === :fail, (x for x in rh.rows if x.rule === :clearance_3w))
+    shield = Component(:shield, annulus_mesh(1.6, 4.0, 5.1; nr = 2, nphi = 48, up = true), gold())
+    rsh = talis_check(Target(vcat(hl.components, [shield])), q23; capture = (:wall,),
+                      hardware = (:shield,), leh = (:cap_top, :cap_bottom), omega1 = false)
+    @test all(x -> x.status === :fail, (x for x in rsh.rows if x.rule === :clearance_3w && x.component === :shield))
+    @test all(x -> x.status === :review, (x for x in rsh.rows if x.rule === :clearance_3w && x.component === :cap_top))
+
     # Backlighter foil with OMEGA beams: capture, incidence, and a stalk behind the foil.
     ob = filter(b -> b.port[3] > 0, omega_beams(; cones = :all, spot = omega_spot(:SG4), fnumber = 6.7))
     tb = Target(foil(:bl, (0, 0, 0), (0, 0, 1); width = 4.0, n = 16),

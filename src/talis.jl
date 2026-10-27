@@ -21,6 +21,8 @@ const TALIS_OUT_OF_SCOPE = [
 ]
 
 const _TALIS_BLOWBY = "TaLIS: configuration must be assessed for blow-by by the backscatter working group"
+const _TALIS_LEH = "LEH clearance (an entrance-hole edge, not hardware): " *
+                   "to be assessed for blow-by by the backscatter working group"
 
 """
     TaLISRow
@@ -97,8 +99,8 @@ _pivot_text(τ::_TaLISTol) =
     @sprintf("r = distance from (%.3g, %.3g, %.3g) mm", τ.point...)
 
 """
-    talis_check(target, beams; capture, hardware = all surfaces, omega1_components = all
-                surfaces, diagnostics = (), tolerance = 0.5, pivot = :tcc,
+    talis_check(target, beams; capture, hardware = all surfaces, leh = (),
+                omega1_components = all surfaces, diagnostics = (), tolerance = 0.5, pivot = :tcc,
                 pointing = 0.05, target_offset = 0.025, hardware_tolerance = 0.0,
                 focus = 1.0, ssd = 0.0, offsets = nothing, open_ports = :nif,
                 curvature = Dict(), level = 2, edge_step = 0.02, ...) -> TaLISReport
@@ -110,8 +112,11 @@ error set and the rule tolerance, never at nominal.
 
 `capture` lists the components that beams are meant to land on (backlighter foils, capture
 surfaces, a hohlraum wall). Each beam's *landing component* is the first of them its
-nominal axis meets. Here and in `hardware`, `omega1_components`, `diagnostics` and
-`curvature`, a component may be named by its part: a part split for computation
+nominal axis meets. `leh` lists the components that form the edge of a laser entrance
+hole the beams pass through (a hohlraum's end caps or LEH lips, e.g.
+`(:cap_top, :cap_bottom)` for [`hohlraum`](@ref)); they are checked for 3ω clearance
+like `hardware`, whether or not `hardware` names them. Here and in `hardware`, `leh`,
+`omega1_components`, `diagnostics` and `curvature`, a component may be named by its part: a part split for computation
 (`curved_components`) is checked as one, its rows under the part's name.
 
 # Rules
@@ -133,7 +138,8 @@ nominal axis meets. Here and in `hardware`, `omega1_components`, `diagnostics` a
   (0.5 mm); hardware downstream of the landing point is skipped, and everything along
   the beam is checked if the beam lands on no capture component. Capture and clearance
   failures carry the TaLIS consequence: blow-by assessment by the backscatter working
-  group.
+  group. On an `leh` component the rule is an LEH-clearance assessment: not clearing it
+  is a `:review`, not a `:fail` (see "Entrance-hole edges").
 - `:clearance_1w` — the 10 % contour of the 1ω footprint must clear each
   `omega1_components` component by > `omega1_margin` (0.2 mm). Not clearing is a
   `:review` (TaLIS: evaluate unconverted-light management), decided by the next rule.
@@ -184,6 +190,21 @@ port's θ̂ toward φ̂, or a vector) and overrides the NIF convention for that 
 focus error moves the footprint with the 3ω focal plane; shadowing is ignored
 (conservative).
 
+# Entrance-hole edges
+
+The TaLIS document states 3ω clearance "to target features" without distinguishing a
+target's own entrance holes from hardware, and gives every 3ω violation the same
+consequence: the configuration "must be assessed for blow-by by the backscatter working
+group", an assessment rather than a prohibition. Reporting LEH edges as `:review` while
+hardware proper (shields, stalks, diagnostics, closed windows) stays `:fail` **is an
+assumption of Briareus, not a TaLIS statement**. Its basis: no NIF hohlraum with
+3.1 mm-diameter LEHs meets the rule on its LEH edge. The best-focus 1 % contour of an
+inner (23.5°) quad has a semi-axis of 1.145 mm along φ̂, which is horizontal and
+orthogonal to the beam; with the axis through the LEH center that leaves
+1.55 − 1.145 = 0.405 mm to the lip before the f-cone, any error or the tolerance
+(0.5 mm required).
+Light that reaches the lip is LEH clipping, which the deposition computes as such.
+
 # Tolerance and error set
 
 The document adds "up to 0.5 degrees metrology/alignment/positioning tolerance" to the
@@ -211,7 +232,7 @@ every `edge_step` mm. Clearance-only far-field wings (`nif_wings`) are not used:
 TaLIS rules refer to contours of the beam spot.
 """
 function talis_check(t::Target, beams::AbstractVector{<:Beam}; capture,
-                     hardware = nothing, omega1_components = nothing, diagnostics = (),
+                     hardware = nothing, leh = (), omega1_components = nothing, diagnostics = (),
                      tolerance = 0.5, pivot = :tcc,
                      pointing = 0.05, target_offset = 0.025, hardware_tolerance = 0.0,
                      focus = 1.0, ssd = 0.0,
@@ -233,6 +254,8 @@ function talis_check(t::Target, beams::AbstractVector{<:Beam}; capture,
     idx(names) = Pair{Symbol,Vector{Int}}[Symbol(n) => part_pieces(t, Symbol(n)) for n in names]
     cap_idx = idx(capture)
     hw_idx = hardware === nothing ? surf : idx(hardware)
+    leh_idx = idx(leh)
+    hw_idx = vcat(hw_idx, [g for g in leh_idx if !any(h -> first(h) === first(g), hw_idx)])
     o1_idx = omega1 ? (omega1_components === nothing ? surf : idx(omega1_components)) : empty(surf)
     dg_idx = omega1 ? idx(diagnostics) : empty(surf)
     geo = Dict(ci => _talis_samples(t, ci, level)
@@ -249,6 +272,7 @@ function talis_check(t::Target, beams::AbstractVector{<:Beam}; capture,
     bls = [omega1 ? _omega1_beamlets(b, offsets, table) : nothing for b in vb]
     ports = _talis_open_ports(open_ports, vb)
     cx = (; tol, R, focus = Float64(focus), ssd = Float64(ssd), cap_idx, hw_idx, o1_idx, dg_idx,
+          leh = Symbol[first(g) for g in leh_idx],
           geo, edges, cap_geo, capture_contour, capture_margin, max_incidence = Float64(max_incidence),
           clearance_contour, clearance_margin, tolerance = Float64(tolerance),
           omega1_margin = Float64(omega1_margin), c0 = omega1_edge + W0 / 2, h0 = W0 / 2, f1,
@@ -280,7 +304,7 @@ function talis_check(t::Target, beams::AbstractVector{<:Beam}; capture,
                 lens_distance = Float64(lens_distance), reflection_angle = Float64(reflection_angle),
                 cylinder_radius = Float64(cylinder_radius), sphere_radius = Float64(sphere_radius),
                 open_ports = length(ports), stay_in = Float64(stay_in),
-                capture = Symbol[first(g) for g in cap_idx])
+                capture = Symbol[first(g) for g in cap_idx], leh = cx.leh)
     return TaLISReport(rows, settings, notes)
 end
 
@@ -339,8 +363,10 @@ function _talis_beam!(rows, t::Target, b::Beam, bl, cx)
             w < worst && ((worst, wp) = (w, x))
         end
         m = worst - cx.clearance_margin
-        note = !isfinite(worst) ? "downstream of the landing point" : m > 0 ? "" : _TALIS_BLOWBY
-        push!(rows, TaLISRow(b.name, :clearance_3w, name, m > 0 ? :pass : :fail, m,
+        lip = name in cx.leh
+        note = !isfinite(worst) ? "downstream of the landing point" : m > 0 ? "" :
+               lip ? _TALIS_LEH : _TALIS_BLOWBY
+        push!(rows, TaLISRow(b.name, :clearance_3w, name, m > 0 ? :pass : lip ? :review : :fail, m,
                              :mm, worst, nom, cx.clearance_margin, wp, note))
     end
 

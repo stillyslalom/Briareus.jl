@@ -69,15 +69,21 @@ TaLISState() = TaLISState(Observable(Symbol[]), Observable(Symbol[]), Observable
     default_selection!(tl::TaLISState, t::Target)
 
 Capture components and hardware for a target's components: a hohlraum's wall or a
-backlighter foil captures the beams; everything else (capsule, LEH caps, closed
-windows, the main target) is checked. Components the selection was already made for
-keep their roles.
+backlighter foil captures the beams; the capsule is left out (light on it is drive
+physics, handled by keep-outs and the drive, not a TaLIS hardware question; an
+engineering default); everything else (LEH caps and lips, closed windows, the main
+target) is checked. Checked LEH caps and lips go to `talis_check` as its `leh`, so
+their 3ω clearance is an LEH-clearance review rather than a failure. Components the
+selection was already made for keep their roles.
 """
 function default_selection!(tl::TaLISState, t::Target)
     _update_roles!(tl.capture, tl.hardware, tl.known, surface_names(t),
-                   n -> n in (:wall, FOIL_NAME) ? 1 : 2)
+                   n -> n in (:wall, FOIL_NAME) ? 1 : n === :capsule ? 0 : 2)
     return tl
 end
+
+# Components of the hohlraum template that form an entrance-hole edge.
+const _LEH_EDGES = (:cap_top, :cap_bottom, :leh_top_lip, :leh_bottom_lip)
 
 """
     set_talis_role!(tl::TaLISState, component::Symbol, role::Symbol)
@@ -140,14 +146,16 @@ end
     talis_kwargs(tl::TaLISState, rv::ReviewState) -> NamedTuple
 
 The keyword arguments of the `talis_check` call: capture and hardware components, the
-rule tolerance and its pivot, the clearance check's error stack (pointing, positioning,
-hardware tolerance, focus) and hardware sampling level.
+checked LEH caps and lips (`leh`), the rule tolerance and its pivot, the clearance
+check's error stack (pointing, positioning, hardware tolerance, focus) and hardware
+sampling level.
 """
 function talis_kwargs(tl::TaLISState, rv::ReviewState)
     e = rv.errors[]
     checked = Tuple(unique([tl.capture[]; tl.hardware[]]))
     pivot = tl.pivot[] === :point ? tl.pivot_point[] : tl.pivot[]
-    return (; capture = Tuple(tl.capture[]), hardware = checked, omega1_components = checked,
+    return (; capture = Tuple(tl.capture[]), hardware = checked,
+            leh = Tuple(n for n in tl.hardware[] if n in _LEH_EDGES), omega1_components = checked,
             omega1 = tl.omega1[], tolerance = tl.tolerance[], pivot,
             pointing = e[:pointing], target_offset = e[:target_offset],
             hardware_tolerance = e[:hardware_tolerance], focus = e[:focus],

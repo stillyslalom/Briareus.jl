@@ -106,10 +106,23 @@ end
     @test add_window!(sess.target)                            # closed, at φ = 90°
     tl = sess.talis
     @test tl.capture[] == [:wall] && :window_1 in tl.hardware[] && :cap_top in tl.hardware[]
+    @test !(:capsule in tl.hardware[]) && !(:capsule in tl.capture[])   # drive physics, not hardware
+    @test talis_kwargs(tl, sess.review).leh == (:cap_top, :cap_bottom)
     @test :window_1 in sess.review.hardware[]                 # clearance checks it too
     @test task_status(sess, :talis)[1] === :todo
     start_talis!(sess; spawn = false)
     r = tl.report[]
+    # the template's pointing grazes the LEH lips (an LEH-clearance review, not a
+    # failure); apart from the closed window (hardware, in the 1% contours of beams
+    # landing beside it), the only failures are the 23.5° quads' incidence on the wall,
+    # below 70° at nominal and over 70° only with the 0.5° rule tolerance
+    lip = [x for x in r.rows if x.rule === :clearance_3w && x.component in (:cap_top, :cap_bottom)]
+    @test any(x -> x.status === :review, lip) && all(x -> x.status in (:pass, :review), lip)
+    @test all(x -> occursin("LEH clearance", x.note), (x for x in lip if x.status === :review))
+    bad = [x for x in r.rows if x.status === :fail && x.component !== :window_1]
+    @test !isempty(bad) && all(x -> x.rule === :incidence_3w && x.component === :wall && x.nominal < 70, bad)
+    @test any(x -> x.status === :fail && x.rule === :clearance_3w, (x for x in r.rows if x.component === :window_1))
+    @test !any(x -> x.component === :capsule && x.rule !== :tas_stay_in, r.rows)   # stay-in: every part
     rules = Set(x.rule for x in r.rows)
     @test :tas_stay_in in rules && :clearance_1w in rules && :clearance_3w in rules
     @test any(x -> x.component === :window_1, r.rows)
@@ -119,11 +132,12 @@ end
     @test all(x -> x.component === :wall, (x for x in r.rows if x.rule === :capture_3w))
     @test occursin("48 beams", talis_brief(tl))
     st, txt = task_status(sess, :talis)
-    @test st === :attention && occursin("48 beams", txt)      # the LEH caps fail 3ω clearance
+    @test st === :attention && occursin("48 beams", txt)      # LEH reviews, incidence fails
     # roles follow the target: a removed window leaves the selection, a new one is checked
-    set_talis_role!(tl, :capsule, :none)
+    set_talis_role!(tl, :capsule, :hardware)
     edit_target!(sess.target, :length, "10.0")
-    @test !(:capsule in tl.hardware[]) && !(:capsule in tl.capture[])      # kept as chosen
+    @test :capsule in tl.hardware[] && !(:capsule in tl.capture[])        # kept as chosen
+    @test !(:capsule in talis_kwargs(tl, sess.review).leh)
     @test talis_stale(tl, sess.target.target[], active_beams(sess.beams))
     @test task_status(sess, :talis)[1] === :attention
     remove_window!(sess.target, 1)

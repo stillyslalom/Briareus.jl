@@ -552,6 +552,52 @@ Implementation (`src/talis.jl`, `talis_check`):
   - The "sombrero" dimpled LEH shield is modeled as a flat annulus flagged
     `(:dimpled, r)`.
 
+#### LEH edges and the capsule (2026-10-27)
+
+The GUI's default NIF hohlraum (10.1 × 5.75 mm, 3.1 mm LEHs, 0.9 mm capsule, the
+`NIF_CONE_POINTING` aims) failed its own TaLIS check: 72 fails.
+- 64 were `clearance_3w` on the end caps at the LEH rim. Worst: Q33T on `cap_top`,
+  worst case 0.020 mm against the required 0.5 mm (margin −0.480 mm; nominal 0.205 mm).
+  An independent pure-Julia check gives the same: the best-focus 1% ellipse from the HWHM
+  table, grown by the f/7.9 cone, against the exact rim circle, nominal 0.207 mm, worst
+  margin −0.477 mm. The difference is the 48-gon chords, which lie up to 3.3 µm inside
+  the circle. **H** (geometry).
+- 8 were `incidence_3w`: the 23.5° quads on the curved wall. Nominal 69.29° over the
+  nominal 10% footprint; worst case 70.57° against 70°. That is 70.07° over the
+  footprint grown by the errors and the lateral rule allowance, plus the 0.5° that
+  Briareus adds to the incidence. With `tolerance = 0` these rows pass.
+- A ray trace at nominal puts no power on the caps.
+
+Closed-form bound: the inner (23.5°) quad's best-focus 1% contour has a semi-axis of
+1.145 mm along φ̂. With the axis through the LEH center, that leaves
+1.55 − 1.145 = 0.405 mm to the lip along φ̂, before the f-cone, errors or tolerance.
+No 3.1 mm-LEH NIF design meets "1% contour > 0.5 mm from the LEH lip".
+
+The rule text does not separate a target's own LEH from hardware. It says "clearance to
+target features", and every 3ω violation leads to the same consequence: the
+configuration "must be assessed for blow-by by the backscatter working group". That is
+an assessment, not a prohibition. Interpretation adopted (**assumption**, not stated by
+TaLIS; confirm with the facility):
+- `talis_check(...; leh)` names a target's entrance-hole edges (hohlraum end caps, LEH
+  lips). Their 3ω clearance is checked, but a violation is reported as `:review` with an
+  "LEH clearance" note, not as `:fail`. Hardware proper (shields or sombreros, stalks,
+  diagnostics, closed windows) still fails.
+- The GUI passes its checked hohlraum caps and lips as `leh` and leaves the capsule out
+  of the default TaLIS hardware. Light on the capsule is drive physics (keep-outs such
+  as `SphereKeepOut`, the deposition), and the rule text does not mention capsules.
+  This is an engineering default; a user can mark the capsule as hardware again.
+
+Incidence was left as it is. Slide 3 defines capture "by a target feature": the beam is
+fully captured if it is "incident on the target substrate" with the 10% contour ≥ 0.5 mm
+from the substrate edge, "and incident with an angle <70 degrees wrt the target normal".
+It is not restricted to foils or capture substrates, so a hohlraum wall the beam lands on
+falls under it. The rule-tolerance clause ("up to 0.5 degrees
+metrology/alignment/positioning tolerance") appears only in the clearance definitions
+(slides 4 and 5), not in the capture definition. Briareus adds the 0.5° to incidence and
+the lateral allowance to capture as a conservative extension. Without it
+(`tolerance = 0`), the template's 23.5° quads pass incidence. Whether to keep that
+extension is an open decision.
+
 All from the manual. **H**
 
 - **Workspaces:** `.vrw`; the manual says JSON since v21.0.0, real 20.0.0/21.0.0 files
