@@ -115,13 +115,13 @@ names the menu entries, and the panels are described in [The window](@ref).
    worker thread (seconds on the standard mesh). From then on a beam edit re-evaluates
    the drive at once: the view factors depend only on the target and the beam ports.
 5. **Read P2/P0.** The *Drive* tab lists the capsule's mode amplitudes ε₁…ε₄ and the
-   Legendre ratios P_l/P₀, and the laser power accounting (absorbed in the wall, on the
+   Legendre ratios ``P_l/P_0``, and the laser power accounting (absorbed in the wall, on the
    caps' outer faces, on the capsule, and missing the target); for a foil it lists the
    spot statistics instead. *Capsule θ–φ map* in the drive's properties (or View ▸ Capsule
    θ–φ map) puts the capsule's flux map in the 3D view's place.
 6. **Optimize.** Compute ▸ Optimize pointing selects the optimization task: the free
    parameters (aim, defocus and power per cone, quad or beam, within ± bounds), the
-   objective (axisymmetric P_l, all-m 3D modes, optionally holding the drive level, or
+   objective (axisymmetric ``P_l``, all-m 3D modes, optionally holding the drive level, or
    a foil spot's nonuniformity) and the keep-outs. *Optimize* starts
    [`optimize_pointing`](@ref) in the background with progress and Cancel; the tab
    then compares the modes, the clipped power and the capsule clearance before and
@@ -253,7 +253,7 @@ The bottom panel's tabs:
   on/off, edited in place.
 - **Drive:** the view factors are computed once per target and beam ports, on a
   worker; beam edits then re-evaluate at once. The tab shows the capsule's mode
-  amplitudes and P_l/P₀, the foil spot's statistics and the laser power accounting.
+  amplitudes and ``P_l/P_0``, the foil spot's statistics and the laser power accounting.
   File ▸ Write VisRad benchmark kit ([`write_visrad_kit`](@ref)) writes the SST
   pointing, the beam summary and beam table, a README with the geometry and the steps
   to reproduce the case in VisRad, and the Briareus results, reusing the drive's view
