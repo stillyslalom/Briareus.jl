@@ -490,8 +490,12 @@ function _pct(x::Real, d::Integer = 2)
     t = @sprintf("%.*f %%", d, 100x)
     return startswith(t, "-") && all(c -> c in "0.", t[2:end-2]) ? t[2:end] : t
 end
-# A component's laser power (TW): round-off below 10⁻⁶ of the delivered power reads as 0.
-_power_text(p::Real, delivered::Real) = abs(p) < 1e-6 * abs(delivered) ? "0" : @sprintf("%.4g", p)
+# A laser power (TW) and its fraction of the delivered power: four significant digits
+# and two decimals of a percent; a power below 1 GW as "< 0.001" and a fraction below
+# 0.005 % as "< 0.01 %" (when the beams reach only the wall, the other parts sum to
+# round-off, ~10⁻¹³ TW).
+_power_text(p::Real) = abs(p) < 1e-3 ? "< 0.001" : @sprintf("%.4g", p)
+_power_pct(x::Real) = isfinite(x) && abs(x) < 5e-5 ? "< 0.01 %" : _pct(x)
 _g(x::Real) = isfinite(x) ? @sprintf("%.3g", x) : "–"
 
 function _refresh!(sh::BriareusShell)
@@ -753,7 +757,7 @@ function _refresh_drive!(sh::BriareusShell)
             [ModeRow(m.l, _pct(m.epsilon), _pct(m.legendre), "", "") for m in res.modes]
     _sync_rows!(sh.rows[:modeModel], sh.models[:modeModel], modes)
     power = res === nothing ? PowerRow[] :
-            [PowerRow(p.name, _power_text(p.power, res.evaluation.deposition.delivered), _pct(p.fraction))
+            [PowerRow(p.name, _power_text(p.power), _power_pct(p.fraction))
              for p in res.power]
     _sync_rows!(sh.rows[:powerModel], sh.models[:powerModel], power)
     _set!(sh, "delivered", res === nothing ? "" :
