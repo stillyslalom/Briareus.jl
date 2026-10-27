@@ -121,8 +121,9 @@ its port, pointing moves its axis, and positive defocus moves the focus along th
 - **Exact references**: the integrating-sphere flux to round-off, the defocused spot
   against the exact f-cone convolution (about 1 % of the beam power), the harmonics the
   NIF port symmetry forbids to round-off, gradients against finite differences.
-- **VisRad**: on two NIF hohlraum workspaces, wall deposition 0.9 % rms per element from
-  VisRad 21's, peaks within 0.5 %, capsule P2 and P4 within 0.014 and 0.004 points.
+- **VisRad**: with VisRad's own beam profile law, wall deposition 0.45–0.7 % rms per element
+  from VisRad 21's on three NIF hohlraum workspaces and 0.1–0.3 % on plates up to 15 mm
+  from focus; capsule P2 and P4 within 0.014 and 0.004 points (earlier profile).
 - **Monte Carlo**: LEH escape and capsule fractions agree with a photon walk in the
   exact N210808 geometry within its sampling error (10⁻⁴ of the source).
 - **N221204** (Kritcher et al., PRE 109, 025204 (2024)), with nothing fitted to Fig. 10

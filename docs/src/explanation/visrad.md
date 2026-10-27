@@ -52,10 +52,11 @@ pulse-shape files; Briareus is in mm, TW/mm², ns and TW. The readers and writer
 VisRad 21 computed the laser deposition on two NIF hohlraum workspaces built from
 Briareus geometry, and Briareus read each one, built the same target and beams, and
 compared its deposition element by element with VisRad's. With
-[`VisRadProfile`](@ref), wall deposition differs from VisRad's by 0.9 % rms per
-element, peaks agree within 0.5 %, and the capsule's P2 and P4, computed from the two
-depositions through the same Briareus radiosity, agree to 0.014 and 0.004 percentage
-points. [Verification and validation](@ref) gives the setup and all the numbers. On a
+[`VisRadProfile`](@ref), wall deposition differs from VisRad's by 0.45–0.7 % rms per
+element and peaks agree within 0.1 %. With the earlier, tabulated profile, the
+capsule's P2 and P4, computed from the two depositions through the same Briareus
+radiosity, agreed to 0.014 and 0.004 percentage points. [Verification and
+validation](@ref) gives the setup and all the numbers. On a
 foil workspace with four beams, the totals agree to the table's precision (3.6000 TW),
 elements above 20 TW/cm² within 1.4 %, and the faint wings near focus (2–30 TW/cm²)
 differ by 8–15 % (research notes, "VisRad workspace files (2026-10-17)").
@@ -85,40 +86,52 @@ differ. Briareus's default model is the geometric-optics one: the best-focus pro
 summed over a quadrature of the f-cone's directions, which is the focal profile
 convolved with the disk of focal points. It conserves power at any distance and
 matches an exact convolution ([Laser spot on a foil](@ref)). VisRad's model is
-analytic: a super-Gaussian whose semi-axes ``a(z)``, ``b(z)`` and order ``n(z)`` change
-with the distance ``z`` from focus, cut off at an envelope ratio (by default the radius
-where the profile falls to 10⁻³ of its peak) and renormalized in each transverse plane.
-The two shapes differ in kind: on flat plates up to 15 mm from focus, VisRad's order
-rises with ``|z|``, and the f-cone sum lowers it, to about half its focal value at
-15 mm.
+analytic. It is a super-Gaussian whose semi-axes ``a(z)``, ``b(z)`` and order ``n(z)``
+grow with the distance ``z`` from focus, blended toward a square of growing weight. It
+is cut off at 10⁻³ of its local peak and renormalized in each transverse plane. The two
+shapes differ in kind: away from focus VisRad's spot turns square-shouldered, while the
+f-cone sum softens the focal profile, to about half its focal order at 15 mm.
 
 On a hohlraum wall, 3–8 mm past focus, the f-cone sum gave 10 % rms per element against
-VisRad's deposition, with peaks 10 % higher. [`VisRadProfile`](@ref) reproduces VisRad's
-model: for the four NIF phase plates it uses the semi-axes and order measured from
-VisRad itself on those plates, and for other spots the manual's hyperbolic semi-axes
-with a growth factor fitted to one workspace. [`visrad_profile`](@ref) reads its
-parameters from a workspace. Neither model is a measurement of the real beams: the
-default is the geometric-optics convolution of the focal profile, and
-[`VisRadProfile`](@ref) is VisRad's model. Use [`VisRadProfile`](@ref) to reproduce a
-VisRad calculation; the measured tables cover only the four NIF plates at VisRad's
-default envelope and lens ratio.
+VisRad's deposition, with peaks 10 % higher. [`VisRadProfile`](@ref) is VisRad's law.
+The semi-axes, order, square weight and square width follow the parameters VisRad
+itself exports, and two constants were fitted to its deposition; the docstring gives the
+forms. [`visrad_profile`](@ref) reads the envelope ratios from a workspace. Neither model
+is a measurement of the real beams: the default is the geometric-optics convolution of
+the focal profile, and [`VisRadProfile`](@ref) is VisRad's model. Use
+[`VisRadProfile`](@ref) to reproduce a VisRad calculation. The law was identified on NIF
+beams at f/20.755 and VisRad's default lens ratio, and checked at envelope ratios 1.2
+and the default.
 
 Smaller differences of the beam model:
 
 - **Spot rotation.** VisRad's rotation 0 is the quad's horizontal, which is turned from
   the beam's own port frame by 1.6–5.3° depending on the cone; the readers and writers
-  convert. The sense of a nonzero rotation (viewed along the beam or from the target) is
-  not stated in the manual; the keyword `rotation_sense` selects it.
+  convert. A positive rotation turns the spot clockwise as seen looking along the beam
+  (`rotation_sense = :beam`, the default): VisRad's deposition at ±30°, 60° and 90° on
+  ten beams matches it within 0.04°, and the other sense is off by 60°.
 - **The beam axis.** VisRad's axis runs from the port on the chamber wall through the
   Reference Point; Briareus's is parallel to the port direction. The difference at focus
   is under 1 µm for millimeter-scale aims.
-- **Occultation.** VisRad tests occultation with a ray grid (25 × 24 per cone by
-  default); Briareus tests each f-cone direction at each point, or, with
-  [`VisRadProfile`](@ref), the beam axis through each point. VisRad puts up to
+- **Occultation.** Briareus tests each f-cone direction at each point, or, with
+  [`VisRadProfile`](@ref), the beam axis through each point. VisRad's shadows are
+  magnified: a point's shadow ray leans away from the axis in proportion to its
+  position in the spot, as if from a source 12–19 mm upstream of focus, and each beam is
+  then rescaled to its full power. Behind a washer or a sphere 5 mm upstream of a foil,
+  the axis test leaves 30 % rms per element against VisRad. VisRad also puts up to
   7 × 10⁻⁴ TW/cm² on LEH washers that Briareus leaves dark.
-- **Tilted surfaces.** VisRad renormalizes each beam's total on a tilted surface;
-  [`VisRadProfile`](@ref) normalizes each transverse plane, which puts 0.15 % too much
-  power on a foil tilted 20°.
+- **Beam totals.** VisRad rescales each beam's deposited total: to its full power on
+  surfaces that catch the whole beam, at any incidence, and to a share within ±2.5 % of
+  the geometric one when part of the beam hits nothing. [`VisRadProfile`](@ref)
+  normalizes each transverse plane instead, which puts 0.2 % too much power on a foil
+  at 40° incidence and 2.2 % at 78°.
+- **Capture/clearance report.** VisRad's report applies the TaLIS margins as fixed
+  widths around its 1 % and 10 % cones (0.5 mm), with no angular allowance. Its cones
+  match Briareus's envelope (best-focus contour grown by the f-cone) to within 0.05 mm,
+  up to 10 mm from focus. Its incident angle is that of the steepest ray of the f-cone
+  (tilt + 1.38°), as in [`talis_check`](@ref). [`talis_check`](@ref) adds the 0.5°
+  insertion and assembly tolerance to the clearances and the capture margin, where the
+  facility applies it.
 - **Laser reflectivity.** VisRad can reflect laser light from a surface; Briareus
   absorbs all of it by default and warns when a workspace object reflects.
 - **Unconverted light.** Under VisRad's "Fraction of Total Beam Power" model, the power

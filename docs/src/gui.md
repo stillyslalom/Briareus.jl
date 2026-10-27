@@ -148,7 +148,7 @@ names the menu entries, and the panels are described in [The window](@ref).
    target-configuration rules, on NIF beams only) run in the background and color the beams by their worst status. A result
    is marked out of date in the tree when the beams or the target change afterward.
 
-   ![The TaLIS rules checked on every NIF quad of the template: the rule-tolerance note, the per-rule summary, and every check with its margin; the beams are colored by their worst status. On the optimized pointing nothing fails (3ω incidence on the wall passes by 0.11°); the 48 reviews are 3ω clearance at the entrance-hole edges.](assets/gui/talis.png)
+   ![The TaLIS rules checked on every NIF quad of the template: the rule-tolerance note, the per-rule summary, and every check with its margin; the beams are colored by their worst status. On the optimized pointing the eight 23.5° quads fail 3ω incidence on the wall: their axes meet it at 69.9°, and the steepest ray of a quad's f/7.9 cone is 3.6° steeper (VisRad's report measures incidence on that ray). The 48 reviews are 3ω clearance at the entrance-hole edges.](assets/gui/talis.png)
 
 8. **Save.** File ▸ Save session (Ctrl + S) writes the whole design, from the target to
    the analyses' settings and the view, to a plain TOML file; File ▸ Open session

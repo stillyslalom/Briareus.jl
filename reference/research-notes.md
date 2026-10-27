@@ -473,9 +473,11 @@ distances are measured orthogonal to the beam.
   edge margin. Briareus applies it as a lateral
   allowance r tan 0.5°, with r the distance from the rotation's pivot (TCC by default,
   or the component's mount); the pivot per component remains a modeling choice. **H**
-  (meaning), **M** (pivot). VisRad's clearance report enlarges its cone test volume by
-  fixed and z-varying margins only, with no angular term in the manual; a VisRad probe
-  of the report is pending.
+  (meaning), **M** (pivot). VisRad's capture/clearance report has no angular term: a
+  VisRad 21 probe (2026-10-27) clears at the fixed 0.5 mm at 20–120 mm from TCC. A
+  VisRad user adds the 0.5° to "Min clearance" by hand, if at all. VisRad's incidence
+  angle is the f-cone's steepest ray (axis + 1.38° at f/20.755), which `talis_check`
+  follows. **H** (VisRad's behavior)
 
 #### Re-read of the source, and `talis_check` (2026-10-16)
 
@@ -627,7 +629,9 @@ All from the manual. **H**
   Beam_10 on OMEGA).
 - **Other exports:** `.bti` beam–target intersection files, and surface-element flux
   files.
-- **Capture/clearance report defaults:** equal to the TaLIS rules.
+- **Capture/clearance report defaults:** equal to the TaLIS rules. The report applies the
+  margins as fixed widths, with no 0.5° term, and measures incidence on the f-cone's
+  steepest ray ("Capture/clearance report", 2026-10-27).
 
 ### OMEGA (partial)
 
@@ -741,9 +745,10 @@ legible in a screenshot; **M** inferred from a worked example; **L** assumption.
   - The rotation is that of the minor axis from vertical, positive clockwise; zero has
     the major axis "nearly horizontal", "coincident with the upper edge of the square
     beam as it enters the target chamber" (same page; revision notes). **H**
-  - Which side "clockwise" is viewed from is not stated. Briareus assumes the beam's-eye
-    view (looking along propagation): ψ_major = 90° − ρ. `rotation_sense = :target`
-    gives 90° + ρ. **L — verify at work**
+  - Which side "clockwise" is viewed from is not stated. VisRad 21's deposition settles
+    it as the beam's-eye view (looking along propagation): ψ_major = 90° − ρ, Briareus's
+    default `rotation_sense = :beam` (`:target` gives 90° + ρ). **H** (2026-10-27; see
+    "VisRad probe kits (2026-10-27): results")
   - NIF spots (major axis along φ̂) have ρ = 0 either way.
 - DPR ("On" splits an OMEGA beam into two cones 85 µm apart) is in the CSV. **H**
   Briareus ignores it with a warning.
@@ -803,7 +808,8 @@ legible in a screenshot; **M** inferred from a worked example; **L** assumption.
   degrees (VR/files/laser_target_intpts_file.html). **H**
   - Format ID 2 adds the beam name and port angles.
   - An optional block adds a(z), b(z), n(z), fSQ, DLW, DLH, M.
-  - The column layout is undocumented. Not implemented.
+  - The column layout is undocumented; Format ID 3 as VisRad 21 writes it is recorded in
+    "VisRad's beam profile law" (2026-10-27). No reader.
 
 ### VisRad workspace files (2026-10-17)
 
@@ -989,6 +995,9 @@ test fixture rebuilds the layout from rows copied from these files.
   barely varies, separates the focal profile from that law.
 
 #### VisRad deposition parity: hohlraum runs (2026-10-21)
+
+The profile model below (growth γ, then the tables `_VR_MEASURED`) is superseded by
+"VisRad's beam profile law" (2026-10-27); the runs and their data stand.
 
 VisRad 21 ran laser deposition on three workspaces built from Briareus geometry
 (below: `n210808`, `n210808_reference` and `repointed`, a re-pointing of the reference): an
@@ -1770,15 +1779,166 @@ fits below used Briareus's own operator points with a free-form evaluator.
   objects is the outer wall; the inner wall lies inward by the Wall Thickness
   (VR/intro/revision_history.html, v21.0.0). **H** The benchmark kit's README says so.
 
+### VisRad probe kits (2026-10-27): results
+
+VisRad 21 ran the probe workspaces of 2026-10-23 and 2026-10-27, each built from
+Briareus geometry with NIF beams at f/20.755, port radius 769.5 cm, and 1 TW 3ω per
+beam. The workspaces, `.bti` exports, report export and readback scripts are kept
+outside the repository with the other VisRad runs. Settings recorded by the user: AMR
+segment length/d(z) 0.5 and distance/d(z) 1.5, beam cone display 24 × 1, and "write beam
+spatial profile parameters" on.
+
+#### VisRad's beam profile law
+
+- **The `.bti` export (Format ID 3, profile data written).** Per beam with power:
+  - index, name, port polar and azimuthal angles, intersection point in the object's
+    frame, object type, and the point in chamber spherical coordinates (cm, degrees);
+  - then a(z), b(z) (µm), n(z), ΔL_x(z), ΔL_y(z) (µm, always equal), a seventh column
+    equal to a(z) in cm (to rounding; labeled m(z)), and f_SQ.
+  **H** (four files, 299 rows)
+- **Closed forms.** With z the hit's distance from best focus along the beam, focal 1/e
+  semi-axes a₀ ≥ b₀, exponent n₀, f-number F and envelope ratio ρ, z_A = √2 a₀ F and
+  z_B = √2 b₀ F, VisRad's exported parameters are:
+  - a(z) = a₀ √(1 + (z/z_A)²), i.e. a(z)² = a₀² + z²/(2F²), and likewise b(z);
+  - n(z) = n₀ (1 + 0.2 |z|/z_A), the manual's form with z₀ = z_A;
+  - f_SQ = |z| / √(z² + z_A z_B), the manual's form with Γ = 1 and "a(z) b(z)" read as
+    z_A z_B;
+  - ΔL(z) = ρ a₀/√2 + 0.023995 |z| mm, a slope of 0.99605/(2F).
+
+  Over 299 hits (four files: normal plates at z = −8…15 mm, tilted plates, envelope
+  plates at ρ = 1.2 and the default, and a hohlraum's wall hits) the forms hold to
+  5 × 10⁻⁵ (a, b), 1.4 × 10⁻⁴ (n), 5 × 10⁻⁴ absolute (f_SQ) and 1.3 × 10⁻³ (ΔL). The ΔL
+  slope is constant to 0.04 % across plates, cones and ρ. **H** (fit to VisRad's own
+  parameters). Not seen: any dependence on the final-optic distance or on F other than
+  through these forms (every run had 769.5 cm and f/20.755). **L** for other F.
+- **The profile.** The manual's blend, I = I₀(z) exp(−α) with
+  α = f_SQ [(|x|/ΔL)^M + (|y|/ΔL)^M] + (1 − f_SQ) q^(n/2), x, y on the spot axes,
+  evaluated with these parameters at each point's own z, leaves one unknown, M(z).
+  - Fitted per plate on the 48 normal plates of the 2026-10-21 profile probe, M rises
+    linearly in |z| with a slope that differs by cone. Every cone fits one form,
+    M = M₀ (1 + |z|/√(z_A z_B)), with M₀ ≈ 9.9: the slope times √(z_A z_B) is 10.02,
+    9.98, 9.90, 9.87 for the 50°, 44.5°, 30° and 23.5° plates. A free scale on ΔL comes
+    back 1.001–1.004.
+  - With M₀ = 10 fixed (a scan over 9–11 has its minimum there) and no per-plate
+    parameter, the 48 plates are within 0.05–0.22 % rms per element (elements above 1 %
+    of peak). The tabulated fit it replaces (`_VR_MEASURED`) left 0.5–4.5 % on the same
+    plates.
+  - The cut-off: on the default-ρ plates an elliptical cut at q = ρ leaves 1.7–2.0 % at
+    15 mm, and a cut on α at ln 1000 (10⁻³ of the local peak) or none leaves 0.13–0.17 %.
+    On ρ = 1.2 plates (z = 0 and 10 mm) a cut at q = ρ leaves 4–6 %; the fit improves up
+    to a cut at ≈ 1.2ρ and is flat beyond, so ρ = 1.2 cuts nothing visible above
+    ~0.5 % of peak. Adopted: cut at α = ln 1000 for every ρ, so ρ enters ΔL only.
+    **M** (the cut at ρ < default is constrained only to lie beyond ~1.45 in q).
+  - I₀(z) normalizes each transverse plane (numerically). The plate totals are within
+    10⁻⁴ of VisRad's on normal and tilted plates.
+  **H** for M and the form on normal plates (fitted), **H** as checked below.
+- **Checks on data not used in the fit** (absolute: Briareus's normalization, not
+  rescaled; rms over elements above 1 % of VisRad's peak):
+
+  | Surfaces | Elements | Law | Tables it replaced |
+  |---|---|---|---|
+  | 32 plates at z = 4–5 mm, cos i = 1–0.6, tilted toward a or b | | 0.12–0.22 % | 1.26–1.46 % |
+  | 23 normal plates, default ρ, z = 0–15 mm | | 0.10–0.27 % | 0.24–4.6 % |
+  | normal plates at ρ = 1.2 (z = 0, 0, 10 mm) | | 0.06, 0.21, 0.14 % | 5.1, 6.3, 10.7 % |
+  | N210808-like hohlraum wall (2388 el.) / windows | | 0.62 % / 0.20 % | 0.68 % / 0.61 % |
+  | re-pointed hohlraum wall / foil (3200 el.) | | 0.69 % / 0.55 % | 0.77 % / 0.54 % |
+  | N230729-like fine wall (38 272 el.) | | 0.45 % | 0.96 % |
+
+  The hohlraum rows are Briareus's `DepositionOperator` at default resolution; the plate
+  rows evaluate the law on 16 sub-triangles per element. **H**
+- **Envelope ratio.** VisRad 21 replaced ratios of 2.0 and 3.0, written into the
+  workspace, with the default (ln 1000)^(1/n₀) (1.53645 and 1.49576 in the saved file);
+  1.2 was kept. `VisRadProfile` caps ρ at the default likewise. The lens radius ratio
+  (0.2, 0.4, 0.8) changes no profile parameter by more than 0.03 %. **H**
+- **Implemented** in `VisRadProfile` (2026-10-27), replacing the tables `_VR_MEASURED`,
+  the hyperbolic semi-axes with growth γ = 0.67, and the `focal_length`, `growth` and
+  `measured` options. The normalization ∫∫ exp(−α) is tabulated per spot in |z| (0.1 mm
+  steps to 60 mm; Gauss–Legendre in scaled polar coordinates out to the cut-off along
+  each direction, within 2 × 10⁻⁶ of a brute-force sum) and interpolated linearly. Its
+  derivative with respect to the spot size enters gradients only through a(z) b(z).
+
+#### Tilted plates and per-beam totals
+
+- **No profile frozen at the axis hit.** On 32 tilted plates the near and far halves of
+  each plate agree with Briareus within 1 % in the same direction (0.986–1.001); VisRad
+  evaluates the profile at each element's own z. The 44.5°/50° wall-shoulder deficit
+  of the old tables (0.84–0.97 on n230729_fine) was the tables' a(z), not incidence:
+  the shoulders are flat in cos i (0.995–0.997). **H**
+- **Per-beam renormalization.** Every fully captured beam's total is its power to 10⁻⁵,
+  at 0–78° incidence (steep foils: per-plane normalization gives +0.23, +0.55, +0.99,
+  +2.2 % at 40, 60, 70, 78°). Not implemented. **H**
+- **Partly lost beams** (a foil alone in part of the spot, against the same foil with a
+  plate catching the rest): the lost foil carries 0.9936, 1.0253 and 1.0029 of its twin
+  for half-plates cut along the major and minor axes and a centered square. That is
+  neither the beam's full power (2.49, 3.26, 1.73) nor no renormalization (1 within
+  2 × 10⁻⁴). It fits a rescale of each beam to P × f_hit, with f_hit the share of some
+  ray grid that hits an object. The grid is not identified: the 25 × 24 "cone power
+  frac" grid of the capture report is ruled out (50 × 48 gives a bit-identical
+  deposition), and a search over polar and square grids found nothing beyond chance.
+  **M**
+
+#### Shadowing
+
+Two 50° quads on foils at focus, one behind a washer (r 0.5–3 mm) and one behind a
+sphere (r 0.4 mm, 0.3 mm off axis), both 5 mm upstream. VisRad conserves each quad's
+4 TW over foil and occluder (3.99996). Neither shadowing along the beam axis (32 % rms
+per element) nor the f-cone (24–28 %) reproduces VisRad, even rescaled to its totals.
+A subagent's search found a model that does far better:
+- each beam is rescaled after shadowing to P × f_hit (f_hit = 1 here: every ray hits
+  something), which explains why the sphere foil's unshadowed side is 1.17 × the axis
+  model's;
+- the shadow ray from a point at spot coordinates (u, v) leans away from the axis:
+  direction −k − tan θ_u (u/a) e₁ − tan θ_v (v/b) e₂, θ_u ≈ 2.0°, θ_v ≈ 1.75° (about
+  1.4 × the cone half-angle per 1/e radius), as from a virtual source 19 mm (major axis)
+  and 12 mm (minor) upstream of focus. Shadows and holes are magnified.
+
+Under it the per-element rms is 5.6 % (washer foil), 6.5 % (washer), 11.6 % (sphere
+foil, mostly single-beam shadow edges) and 0.6 % (sphere), against 20–33 % for the axis
+model. Along element cuts the sphere foil matches element by element. **M** (both
+occluders sit 5 mm upstream, so an angle ∝ spot position and a fixed virtual point
+cannot be told apart; occluders at ~2 and 10 mm would). Not implemented: the shadow
+direction depends on the point's spot coordinates, so the visibility mask would depend
+on aim and spot, which a `DepositionOperator` built once per geometry does not allow.
+
+#### Spot rotation
+
+`spot_rotation`: ten beams (five 50°, five 23.5°) at ρ = 0, ±30, 60, 90° on plates at
+best focus. The fitted major-axis angles match `rotation_sense = :beam` (ψ = 90° − ρ,
+quad frame) within 0.02–0.04° on all ten, and `:target` is 60° off on the six
+discriminating plates. The quad-frame reference holds to 0.04°. **H** The Laser Beam
+Summary export was not saved, so `read_visrad_summary` on a real export is still
+unchecked.
+
+#### Capture/clearance report
+
+`talis_report`: 18 beams; clearance ladders (strips at gaps g = 0.3125–1.7125 mm from
+Briareus's 1 % envelope, along the major or minor axis, at 20–120 mm from TCC, 10 mm
+before and after focus, and on a 23.5° beam), capture plates with an edge m = 0.3–1.15
+mm outside the 10 % contour, and plates tilted 68.0–69.7° through focus. Stored setup:
+0.1 / 0.5 mm / 70° (capture), 0.01 / 0.5 mm (3ω clearance).
+- **Clearance.** Every ladder fails 0.3125–0.4625 and clears from 0.5125: a fixed
+  0.5 mm, with no 0.5° term at any r (the r tan 0.5° reading predicts 0.17, 0.52,
+  1.05 mm more at r = 20, 60, 120). The minor-axis ladder clears at the same rung, so
+  the test volume is elliptical, and the rungs at ±10 mm from focus place VisRad's 1 %
+  cone within 0.05 mm of Briareus's envelope there. **H**
+- **Capture.** Fractions 0.983 and 0.993 at m = 0.3 and 0.4 mm, 1 from 0.6 mm: the
+  fixed 0.5 mm again. **H**
+- **Incidence.** VisRad reads tilt + 1.384–1.390° on all five plates, toward either
+  spot axis: the steepest ray of the f-cone (half-angle 1.380°, stored in each beam row),
+  not the ±1.64° ray-grid model. On normal plates it reads 1.95° = √2 × 1.38°, the
+  corner of a square cone of half-width 1.38°; a square cone also gives the tilted
+  plates' extra 0.005–0.01°. **H** `talis_check` now adds atan(1/(2f#)) to the axis
+  angle.
+
 ### To verify with real files at work
 
 1. Export a Laser Beam Summary CSV from a NIF workspace with elliptical CPPs:
    - the exact headers after "Power", and whether exponent and spot definition appear
    - whether "TC Pt Pos" is the focus (as derived above)
    - cm units for the focus offset with mm preferences set
-2. Set one elliptical beam to rotation +30° and check the spot overlay. Is the minor
-   axis clockwise from vertical when looking along the beam (Briareus's `:beam`) or
-   from TCC (`:target`)?
+   (`spot_rotation.vrw` of the 2026-10-27 kit, step 4 of its README, is set up for it.)
+2. Done (2026-10-27): rotation +30° turns the minor axis clockwise looking along the
+   beam (`:beam`); see "VisRad probe kits (2026-10-27): results".
 3. Export a NIF SST file. Check the header strings, any preamble or extra columns, and
    whether off beams are listed.
 4. Save Data for Object on a sphere. Check the delimiter, the header spellings

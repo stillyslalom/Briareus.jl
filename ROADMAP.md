@@ -44,6 +44,10 @@ item says where it stands, what remains and what data would settle it.
   `enclosure`, straight cuts, `fit_surfaces`/`curved_components` with cones,
   `cad_target`, the GUI on CAD workspaces, the CAD tutorial ("CAD import, remeshing and
   surface fits").
+- **VisRad probe kits (2026-10-27).** VisRad's profile law identified from its `.bti` parameters
+  and implemented (`VisRadProfile`); spot rotation sense `:beam` confirmed; TaLIS report
+  margins fixed (no 0.5°), incidence on the f-cone's steepest ray ("VisRad probe kits
+  (2026-10-27): results").
 - **VisRad deposition parity (2026-10-21).** Defocus growth γ/ρ (γ = 0.67), measured NIF
   plates, spot rotation, per-beam envelopes: wall 0.9 % rms against VisRad ("VisRad
   deposition parity: hohlraum runs").
@@ -178,29 +182,18 @@ Parts may be split for computation, but the GUI shows and picks the original par
 
 ## Next
 
-1. **VisRad deposition parity away from focus.** *State:* `VisRadProfile` with
-   `visrad_profile(ws)` matches VisRad near focus and on the NIF hohlraum runs (wall
-   0.9 % rms); on a third NIF hohlraum run with 0.1 mm wall elements it is 1.16 % rms per
-   wall element, almost all on the 44.5°/50° shoulders (−3 to −16 % at r/ρ 0.6–0.9), and
-   per-cone refits to that run degrade the others. Kits for six cases are built.
-   *Remains:* the law behind the tabulated a(z), b(z) (plates other than the four NIF
-   ones); δ2 0.012 pp high on repointed (the wall); totals (wall 0.07 % low, tilted
-   foil 0.37 % high); the foil wings; the envelope ratio's definition (effective cut-off
-   ~1.64 1/e radii against the file's 1.53645); whether VisRad renormalizes on tilted
-   surfaces (per-plane normalization gives 1.1e-4 too much at ~40°); occultation
-   (VisRad's 25 × 24 ray grid against Briareus's beam axis per point). *Data:* VisRad
-   runs of the kits, each settling one of these:
-   - the intersection-point export (File ▸ Export, with "write beam spatial profile
-     parameters" in Preferences ▸ Lasers): a(z), b(z), n(z), f_SQ(z), ΔL_W/H(z), M(z) at
-     each hit, on a hohlraum (the growth: a(z) ~6 % above a₀ at 4.5 mm for 50°); one cone
-     with a non-default envelope or lens ratio says which sets the growth;
-   - a foil normal to the beams (focal profile apart from the defocus law); a focus sweep
-     (±1, ±3, ±10 mm); envelope 2.0 on a 41 × 41 foil; the tilted-plate probe (cos i
-     0.6–0.8 at 4–5 mm); a ~70° foil; shadowing (a
-     washer or sphere before the foil, a hohlraum with LEH clipping);
-   - end to end: a primitive hohlraum optimized here, exported, run and saved computed in
-     VisRad, read back with `visrad_deposition` (its element order measured first, or
-     the hohlraum given as CAD).
+1. **VisRad deposition parity: shadowing and beam totals.** *State (2026-10-27):*
+   `VisRadProfile` is VisRad's own profile law ("VisRad's beam profile law"): 0.1–0.3 %
+   rms per element on plates up to 15 mm from focus and tilted to 53°, 0.45–0.7 % on
+   hohlraum walls. *Remains:* (a) VisRad rescales each beam's total after shadowing (to
+   its power when every ray hits something; +0.2–2.2 % on steep foils without it), and to
+   a share within ±2.5 % of the geometric one when part of the beam hits nothing (its
+   grid not identified); (b) VisRad's shadow rays lean outward in proportion to spot
+   position (virtual source 12–19 mm upstream), which per-point axis shadowing misses by
+   ~30 % rms behind occluders; an aim-dependent mask clashes with the operator's
+   "built once per geometry"; (c) the LEH-washer leak (≤ 7 × 10⁻⁴ TW/cm²). *Data:*
+   occluders at ~2 and 10 mm upstream and a foil off focus (fixes the shadow law); the
+   Laser Beam Summary export of `spot_rotation.vrw` (the summary reader end to end).
 2. **Backlighter geometry (optional).** Shield and foil are done. Left: the shield's
    mounting sector (the sheet runs past 9.2 mm there); backlighter beams aimed off the
    foil center or foils off the equator (could bring the 13.2 mm standoff in). *Data:* a

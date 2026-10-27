@@ -114,13 +114,14 @@ end
     r = tl.report[]
     # the template's pointing grazes the LEH lips (an LEH-clearance review, not a
     # failure); apart from the closed window (hardware, in the 1% contours of beams
-    # landing beside it), the only failures are the 23.5° quads' incidence on the wall,
-    # below 70° at nominal and over 70° only with the 0.5° rule tolerance
+    # landing beside it), the only failures are quads' incidence on the wall: their axes
+    # meet it below 70°, their f-cones' steepest rays (axis + 3.6° at f/7.9) above
     lip = [x for x in r.rows if x.rule === :clearance_3w && x.component in (:cap_top, :cap_bottom)]
     @test any(x -> x.status === :review, lip) && all(x -> x.status in (:pass, :review), lip)
     @test all(x -> occursin("LEH clearance", x.note), (x for x in lip if x.status === :review))
     bad = [x for x in r.rows if x.status === :fail && x.component !== :window_1]
-    @test !isempty(bad) && all(x -> x.rule === :incidence_3w && x.component === :wall && x.nominal < 70, bad)
+    @test !isempty(bad) && all(x -> x.rule === :incidence_3w && x.component === :wall &&
+                                   x.nominal - atand(1 / (2 * 7.9)) < 70, bad)   # quads: f/7.9
     @test any(x -> x.status === :fail && x.rule === :clearance_3w, (x for x in r.rows if x.component === :window_1))
     @test !any(x -> x.component === :capsule && x.rule !== :tas_stay_in, r.rows)   # stay-in: every part
     rules = Set(x.rule for x in r.rows)

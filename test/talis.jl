@@ -56,16 +56,15 @@
     # an axis that misses the substrate fails capture outright
     rmiss = talis_check(t, [remake(b; aim = (3.0, 0.0, 0.0))]; capture = (:f,))
     @test trow(rmiss, :capture_3w, :none).status === :fail
-    # incidence: flat foil, beam at θ from its normal; worst = θ (no rule tolerance)
+    # incidence: flat foil, beam axis at θ from its normal; worst = θ plus the f-cone's
+    # half-angle atan(1/16) = 3.576° (no rule tolerance), so the limit falls at θ = 66.42°
     big = Target(foil(:f, (0, 0, 0), (0, 0, 1); width = 12.0, n = 12))
-    for (θ, st) in ((60.0, :pass), (69.9, :pass), (70.1, :fail), (75.0, :fail))
-        ri = talis_check(big, [Beam("i"; theta = θ, phi = 30, spot, fnumber = 8.0)]; capture = (:f,))
-        inc = trow(ri, :incidence_3w, :f)
-        @test inc.nominal ≈ θ atol = 1e-6
-        @test inc.worst ≈ θ atol = 1e-6
-        @test inc.margin ≈ 70 - θ atol = 1e-6
-        @test inc.status === st && inc.unit === :deg
-    end
+    hc = atand(1 / 16)
+    incs = [(θ, st, trow(talis_check(big, [Beam("i"; theta = θ, phi = 30, spot, fnumber = 8.0)]; capture = (:f,)),
+                         :incidence_3w, :f)) for (θ, st) in ((60.0, :pass), (66.3, :pass), (66.5, :fail), (75.0, :fail))]
+    @test all(isapprox(i.nominal, θ + hc; atol = 1e-6) && isapprox(i.worst, θ + hc; atol = 1e-6) &&
+              isapprox(i.margin, 70 - θ - hc; atol = 1e-6) && i.status === st && i.unit === :deg
+              for (θ, st, i) in incs)
 
     # 1ω footprint, analytic: one NIF beamlet aimed at TCC. A 0.1 mm square in the 3ω
     # focal plane with its far edge δ inside the 4.45 mm clear radius on the beamlet's own
@@ -242,9 +241,10 @@
                                 0.36 * log(10)^(1 / 4.2) + 1e-6, cap)
     θport(x) = port_angles(only(b for b in ob if b.name == x.beam))[1]
     inc = [x for x in rb.rows if x.rule === :incidence_3w]
-    @test all(x -> isapprox(x.worst, θport(x); atol = 1e-6) &&
-                   x.status === (θport(x) < 70 ? :pass : :fail), inc)
-    @test count(x -> x.status === :fail, inc) == count(b -> port_angles(b)[1] >= 70, ob)
+    hcone(x) = atand(1 / (2only(b for b in ob if b.name == x.beam).fnumber))
+    @test all(x -> isapprox(x.worst, θport(x) + hcone(x); atol = 1e-6) &&
+                   x.status === (θport(x) + hcone(x) < 70 ? :pass : :fail), inc)
+    @test count(x -> x.status === :fail, inc) == count(b -> port_angles(b)[1] + atand(1 / (2b.fnumber)) >= 70, ob)
     st = [x for x in rb.rows if x.rule === :clearance_3w && x.component === :stalk]
     @test all(x -> x.status === :pass && x.worst == Inf, st)           # behind the foil
     # repointing one beam toward the edge fails its capture

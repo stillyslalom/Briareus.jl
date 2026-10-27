@@ -130,7 +130,10 @@ like `hardware`, whether or not `hardware` names them. Here and in `hardware`, `
   misses every capture component fails with component `:none`.
 - `:incidence_3w` — incidence < `max_incidence` (70°) to the target normal, the maximum
   over the landing component's surface inside the worst-case 10 % footprint (visible
-  from the beam; exact normals on `SphereSurface`/`CylinderSurface` components).
+  from the beam; exact normals on `SphereSurface`/`CylinderSurface` components). The
+  angle is that of the f-cone's steepest ray, the beam axis's angle plus the cone's
+  half-angle atan(1/(2f#)) (1.38° at NIF), as VisRad's capture report measures it (VisRad
+  21 reads tilt + 1.384–1.390° on plates tilted 68–69.7° toward either spot axis).
   Incidence takes the error set but not the rule tolerance; the capture margin and the
   clearances take both.
 - `:clearance_3w` — the `clearance_contour` (1 %)-of-peak contour must clear each
@@ -346,7 +349,10 @@ function _talis_beam!(rows, t::Target, b::Beam, bl, cx)
             note = !isfinite(worst) ? "no free substrate edge" : m >= 0 ? "" : _TALIS_BLOWBY
             push!(rows, TaLISRow(b.name, :capture_3w, name, m >= 0 ? :pass : :fail, m, :mm, worst,
                                  nom, cx.capture_margin, wp, note))
+            # the steepest ray of the f-cone: the axis angle plus the cone's half-angle
+            hc = atand(1 / (2b.fnumber))
             worst, θn, ip = _talis_incidence(t, cx.cap_geo[land], env10, k, aim, shift)
+            worst, θn = min(worst + hc, 90.0), min(θn + hc, 90.0)
             m = cx.max_incidence - worst
             push!(rows, TaLISRow(b.name, :incidence_3w, name, m > 0 ? :pass : :fail, m, :deg, worst,
                                  θn, cx.max_incidence, ip, m > 0 ? "" : _TALIS_BLOWBY))
