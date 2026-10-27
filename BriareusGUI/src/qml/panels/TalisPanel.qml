@@ -30,8 +30,12 @@ ColumnLayout {
         Layout.fillWidth: true
         Layout.fillHeight: true
         spacing: 24
-        // notes and the rule summary
+        // notes and the rule summary: narrower than 420 when the panel is, so that the
+        // checks' table (and the Export button above) stay inside it
         ScrollView {
+            Layout.fillWidth: true
+            Layout.minimumWidth: 260
+            Layout.maximumWidth: 420
             Layout.preferredWidth: 420
             Layout.fillHeight: true
             contentWidth: availableWidth
