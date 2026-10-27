@@ -40,7 +40,8 @@ export DepositionOperator, Deposition, deposit, CoronaProfile, CoronaOperator, r
        component_power
 export Enclosure, enclosure, cad_target
 export view_factors, Float32Matrix, HMatrix, closure_error, enforce_closure!, open_fraction, RadiationModel, RadiationSolution, solve,
-       flux_response, energy_balance, radiation_temperature, to_Wcm2, SIGMA_SB, albedos, conversions
+       flux_response, energy_balance, radiation_temperature, to_Wcm2, SIGMA_SB, albedos, conversions,
+       montecarlo_incident
 export WallMotion, wall_radius, wall_displacement, moving_hohlraum, Keyframes, model_at, deposition_at
 export PulseShape, pulse_energy, with_pulses, drive_history, energy_budget, cone_fraction_pulses,
        write_pulse_table, read_pulse_table, retune_drive

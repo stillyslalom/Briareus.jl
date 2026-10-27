@@ -1160,7 +1160,7 @@ With `closure`, a `GapClosure`, it is an opening that plasma closes to x-rays du
 pulse while laser light and lines of sight still pass (the lip of a closing laser entrance
 hole, `hohlraum(; leh_closure)`): it re-emits the fraction ``α(t) = s α_{after}`` of its
 incident flux and lets `1 - s` escape, booked as escaped by `energy_balance`. It
-converts no laser light. The Monte Carlo reference (`Briareus.montecarlo_incident`) lets
+converts no laser light. The Monte Carlo reference ([`montecarlo_incident`](@ref)) lets
 paths escape through open apertures and re-emits them diffusely from a lip with the
 lip's albedo (given `albedo = albedos(target, time)`). With a `LipClosure`, the closed
 fraction of each element is `drive_history`'s state instead of a function of time.

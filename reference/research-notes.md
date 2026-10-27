@@ -2148,7 +2148,7 @@ ray-traced radiosity reference (done: next entry, the sampled one is closer). **
 > on the curved path balancing does not bias a₂/a₀ upward ("Closure on bored, windowed
 > and CAD cavities (2026-10-25)").
 
-`Briareus.montecarlo_incident` (src/montecarlo.jl, unexported): diffuse transport on the
+`montecarlo_incident` (src/montecarlo.jl): diffuse transport on the
 facets with no view factors. Paths start at a uniform point on a capsule element's
 facets and go backward (reciprocity of the Lambertian kernel): cosine-weighted
 direction, first hit by `closest_hit` over all triangles (apertures included: a hit

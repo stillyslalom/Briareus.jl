@@ -1,4 +1,4 @@
-# Monte Carlo radiosity reference (`Briareus.montecarlo_incident`) against closed forms.
+# Monte Carlo radiosity reference (`montecarlo_incident`) against closed forms.
 
 using Briareus, LinearAlgebra, Test
 
@@ -16,7 +16,7 @@ using Briareus, LinearAlgebra, Test
     # Closed, uniform source: B = H = ηP/A/(1 − α) on every face, in either mode.
     t = cube(false)
     for reemit in (:hit, :element)
-        H, _ = Briareus.montecarlo_incident(t, ones(6), 1:6; paths = 20_000, reemit)
+        H, _ = montecarlo_incident(t, ones(6), 1:6; paths = 20_000, reemit)
         @test maximum(abs, H ./ (0.75 / 0.2) .- 1) < 0.01
     end
 
@@ -30,7 +30,7 @@ using Briareus, LinearAlgebra, Test
     F = [i == j ? 0.0 : names[j] === opposite[names[i]] ? Fo : (1 - Fo) / 4 for i in 1:6, j in 1:6]
     P = [n === :bottom ? 1.0 : 0.0 for n in names]
     H = F * ((I - Diagonal(albedos(t)) * F) \ (Briareus.conversions(t) .* P ./ t.elem_area))
-    Hmc, batch = Briareus.montecarlo_incident(t, P, 1:6; paths = 64_000, reemit = :element)
+    Hmc, batch = montecarlo_incident(t, P, 1:6; paths = 64_000, reemit = :element)
     @test all(abs.(Hmc .- H) .< 5stderr_(batch))
     @test maximum(abs, Hmc ./ H .- 1) < 0.01
 
@@ -40,7 +40,7 @@ using Briareus, LinearAlgebra, Test
     t = cube(true, 8)
     P = [t.components[t.elem_comp[e]].name === :bottom ? t.elem_area[e] : 0.0 for e in 1:nelements(t)]
     sol = solve(RadiationModel(t), P)
-    Hmc, _ = Briareus.montecarlo_incident(t, P, 1:nelements(t); paths = 4_000)
+    Hmc, _ = montecarlo_incident(t, P, 1:nelements(t); paths = 4_000)
     face_mean(H, n) = (es = elements(t, n); sum(H[es] .* t.elem_area[es]) / sum(t.elem_area[es]))
     @test all(abs(face_mean(Hmc, n) / face_mean(sol.H, n) - 1) < 0.015 for n in (:bottom, :top, :xm, :yp))
 
@@ -61,7 +61,7 @@ using Briareus, LinearAlgebra, Test
         A = t.elem_area[cap] ./ sum(t.elem_area[cap])
         sol = solve(RadiationModel(t; F = view_factors(t; visibility = :sampled)), P; time = 3.0)
         lip === nothing || @test all(sol.albedo[elements(t, :leh_bottom_lip)] .≈ 0.8)
-        _, batch = Briareus.montecarlo_incident(t, P, cap; paths = 8_000, reemit = :element,
+        _, batch = montecarlo_incident(t, P, cap; paths = 8_000, reemit = :element,
                                                 albedo = albedos(t, 3.0))
         means = batch * A
         nb = length(means)
