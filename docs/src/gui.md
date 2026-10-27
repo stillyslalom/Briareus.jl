@@ -19,7 +19,7 @@ reachable at any time, and each analysis reports when its result is out of date.
 
 ### The `briareus` command
 
-The command needs Julia 1.12 or later and no further Julia knowledge.
+The command needs Julia 1.12.7 or later and no further Julia knowledge.
 
 1. Install Julia through juliaup: on Windows `winget install --id 9NJNWW8PVKMN -e`
    (Julia from the Microsoft Store), on macOS or Linux
@@ -79,9 +79,9 @@ and it cannot share a process with a GLMakie window or an offscreen GLMakie rend
 ### From a development checkout
 
 BriareusGUI lives in the `BriareusGUI/` directory of the Briareus repository and the
-launcher in `BriareusGUI/launcher/`; their `[sources]` entries point each at the
-checkout of the package above it, which Pkg honors for the active project only. A
-checkout runs the window as
+launcher beside it in `BriareusLauncher/`; their `[sources]` entries point each at the
+checkout's copy of the package it depends on, which Pkg honors for the active project
+only. A checkout runs the window as
 
 ```
 git clone https://github.com/stillyslalom/Briareus.jl
@@ -89,8 +89,8 @@ julia --project=Briareus.jl/BriareusGUI -t auto -e "using Pkg; Pkg.instantiate()
 ```
 
 and installs the `briareus` command from the checkout with
-`julia -e "using Pkg; Pkg.Apps.develop(path=\"Briareus.jl/BriareusGUI/launcher\")"`,
-followed by `julia --project=Briareus.jl/BriareusGUI/launcher -e "using Pkg; Pkg.precompile()"`.
+`julia -e "using Pkg; Pkg.Apps.develop(path=\"Briareus.jl/BriareusLauncher\")"`,
+followed by `julia --project=Briareus.jl/BriareusLauncher -e "using Pkg; Pkg.precompile()"`.
 
 ## A first session
 

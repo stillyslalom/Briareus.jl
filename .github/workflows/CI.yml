@@ -112,7 +112,7 @@ jobs:
         if: matrix.version == '1'
         env:
           QT_QPA_PLATFORM: offscreen
-        run: julia --color=yes --project=BriareusGUI/launcher -e 'using Pkg; Pkg.instantiate(); Pkg.test()'
+        run: julia --color=yes --project=BriareusLauncher -e 'using Pkg; Pkg.instantiate(); Pkg.test()'
   docs:
     name: Documentation
     runs-on: ubuntu-latest
