@@ -175,11 +175,11 @@ Parts may be split for computation, but the GUI shows and picks the original par
 
 1. **VisRad deposition parity away from focus.** *State:* `VisRadProfile` with
    `visrad_profile(ws)` matches VisRad near focus and on the NIF hohlraum runs (wall
-   0.9 % rms); on N230729 at 0.1 mm it is 1.16 % rms per wall element, almost all on
-   the 44.5°/50° shoulders (−3 to −16 % at r/ρ 0.6–0.9), and per-cone refits to that run
-   degrade the others. Kits for six cases are built (thor `visrad/kits_2026-10-23`).
+   0.9 % rms); on a third NIF hohlraum run with 0.1 mm wall elements it is 1.16 % rms per
+   wall element, almost all on the 44.5°/50° shoulders (−3 to −16 % at r/ρ 0.6–0.9), and
+   per-cone refits to that run degrade the others. Kits for six cases are built.
    *Remains:* the law behind the tabulated a(z), b(z) (plates other than the four NIF
-   ones); δ2 0.012 pp high on bu34_repointed (the wall); totals (wall 0.07 % low, tilted
+   ones); δ2 0.012 pp high on repointed (the wall); totals (wall 0.07 % low, tilted
    foil 0.37 % high); the foil wings; the envelope ratio's definition (effective cut-off
    ~1.64 1/e radii against the file's 1.53645); whether VisRad renormalizes on tilted
    surfaces (per-plane normalization gives 1.1e-4 too much at ~40°); occultation
@@ -191,7 +191,7 @@ Parts may be split for computation, but the GUI shows and picks the original par
      with a non-default envelope or lens ratio says which sets the growth;
    - a foil normal to the beams (focal profile apart from the defocus law); a focus sweep
      (±1, ±3, ±10 mm); envelope 2.0 on a 41 × 41 foil; the tilted-plate probe (cos i
-     0.6–0.8 at 4–5 mm, thor `visrad/build_profile_probe.jl`); a ~70° foil; shadowing (a
+     0.6–0.8 at 4–5 mm); a ~70° foil; shadowing (a
      washer or sphere before the foil, a hohlraum with LEH clipping);
    - end to end: a primitive hohlraum optimized here, exported, run and saved computed in
      VisRad, read back with `visrad_deposition` (its element order measured first, or
@@ -389,7 +389,7 @@ Items 9–13 and 16–17 follow the 2026-10-22 literature review against Kritche
     "Capsule absorption, conversion and the ablating-wall release" §2–3): capsule share
     13.8 % and LEH 24.7 % (HYDRA 16.2 / 25.2); capsule Tr 306 eV at 8 ns; Dante 1 at
     8 ns 290.9 / 314.2 eV over the initial / open LEH area (measured 310.1); Dante at bang
-    −40.5 / −46.5 eV low on N191118 / N210601. The pointing stays the public mock-up
+    −40.5 / −46.5 eV low on N191118 / N210601. The pointing stays the illustrative mock-up
     (`hybride_mock_pointing()`); CPPs, window geometry, corners and the liner thickness are
     unpublished and stay at repository defaults. *Remains, each with its data:*
     - **The drive after the laser falls.** The model falls far faster than Dante on all

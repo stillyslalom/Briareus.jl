@@ -796,7 +796,7 @@ legible in a screenshot; **M** inferred from a worked example; **L** assumption.
 
 ### VisRad workspace files (2026-10-17)
 
-Read off two real workspaces (not committed): a NIF hohlraum with bundled STEP CAD
+Read off two real workspaces: a NIF hohlraum with bundled STEP CAD
 (VisRad 20.0.0, 17 objects, 192 beams, ~20 MB) and a primitive hohlraum + foil
 (VisRad 21.0.0). Implemented in `src/visrad_workspace.jl`, `read_visrad_workspace`. The
 test fixture rebuilds the layout from rows copied from these files.
@@ -979,13 +979,13 @@ test fixture rebuilds the layout from rows copied from these files.
 
 #### VisRad deposition parity: hohlraum runs (2026-10-21)
 
-VisRad 21 ran laser deposition on three workspaces built from Briareus geometry in the
-thor repo (`visrad/workspaces/{n210808,n210808_reference,bu34_repointed}.vrw`): an
+VisRad 21 ran laser deposition on three workspaces built from Briareus geometry
+(below: `n210808`, `n210808_reference` and `repointed`, a re-pointing of the reference): an
 N210808-like hohlraum (Au wall r = 3.2 mm, 11.24 mm long, open LEHs; 2388 wall
 triangles of ~0.6 mm, one VisRad element each), capsule, two window patches, foam, a
 4 × 4 mm foil tilted 20° (3200 elements), sombreros; 192 NIF beams with the built-in
 CPP spots, f/20.755, port radius 769.5 cm. Each file's `[Power Source Data]` holds the
-per-element direct laser source. Comparison scripts: thor `visrad/compare_*.jl`; the
+per-element direct laser source. The
 fits below used Briareus's own operator points with a free-form evaluator.
 
 - **Manual (re-read).** VR/power_sources/set_laser_profile_props.html: hybrid model,
@@ -1034,8 +1034,8 @@ fits below used Briareus's own operator points with a free-form evaluator.
     with a(z) or not): ≤ 0.1%.
 - **Faster growth, z_A → (γ/ρ) z_A.** Scaling z_A (and z_B) by a per-cone factor, best
   factor 0.45, 0.45, 0.52, 0.48 for n = 4.5, 4.8, 8.0, 7.6 on n210808 and 0.44, 0.45,
-  0.52, 0.49 on bu34_repointed. Times the envelope ratio ρ: 0.69, 0.67, 0.66, 0.62
-  (n210808) and 0.68, 0.67, 0.66, 0.63 (bu34), one constant γ ≈ 0.67. The form
+  0.52, 0.49 on repointed. Times the envelope ratio ρ: 0.69, 0.67, 0.66, 0.62
+  (n210808) and 0.68, 0.67, 0.66, 0.63 (repointed), one constant γ ≈ 0.67. The form
   γ(ln 2)^(1/n)/ρ spreads more (0.65–0.75); z_A ∝ a₀² fails (≥ 5.8%). One γ for all
   beams on n210808: 0.60 4.2%, 0.64 3.2%, 0.68 2.80%, 0.72 3.0%, 0.76 3.5%. Adopted
   γ = 0.67 (`VisRadProfile(; growth)`). Every beam has the default ρ = (ln 1000)^(1/n),
@@ -1050,12 +1050,12 @@ fits below used Briareus's own operator points with a free-form evaluator.
   | n210808 (fit) | wall | 10.21% → 2.81% | 858.8 → 774.4 vs 778.1 | 0.9969 → 0.9997 |
   | n210808 | windows | 2.46% → 0.94% | 315.2 → 308.6 vs 308.5 | 0.9974 → 0.9995 |
   | n210808_reference | wall | 10.21% → 2.81% | as n210808 | |
-  | bu34_repointed | wall | 10.66% → 2.68% | 942.1 → 897.4 vs 915.9 | 0.9969 → 0.9997 |
-  | bu34_repointed | windows | 3.80% → 1.41% | 386.5 → 384.6 vs 374.6 | 0.9899 → 0.9989 |
-  | bu34_repointed | foil (±2.5 mm of focus) | 2.81% → 2.60% | 1039.1 → 1039.2 vs 1032.0 | 0.99991 → 0.99993 |
-  | basic.vrw foil, 4 beams | elements > 20 TW/cm² | max 1.43% → 1.31% | | |
+  | repointed | wall | 10.66% → 2.68% | 942.1 → 897.4 vs 915.9 | 0.9969 → 0.9997 |
+  | repointed | windows | 3.80% → 1.41% | 386.5 → 384.6 vs 374.6 | 0.9899 → 0.9989 |
+  | repointed | foil (±2.5 mm of focus) | 2.81% → 2.60% | 1039.1 → 1039.2 vs 1032.0 | 0.99991 → 0.99993 |
+  | foil workspace, 4 beams | elements > 20 TW/cm² | max 1.43% → 1.31% | | |
 
-  Capsule-drive departures of bu34_repointed from n210808_reference (Briareus
+  Capsule-drive departures of repointed from n210808_reference (Briareus
   radiosity on each deposition; drive ratio, then δ1..4 in %): VisRad 0.9261, 0.006,
   0.092, 0.018, 0.046; before 0.9261, 0.006, 0.054, 0.012, 0.024; after 0.9261, 0.007,
   0.090, 0.019, 0.037. n210808 δ2: VisRad 2.576, before 2.574, after 2.573. δ2 moves by
@@ -1065,20 +1065,21 @@ fits below used Briareus's own operator points with a free-form evaluator.
     peak ring at |z| = 2.7 mm is 3–4% low), inner-dominated ones 1.2%. Per-cone γ
     would give 1.1–2.0% per cone. δ4 stays 0.009 pp below VisRad's.
   - Totals on tilted surfaces: per-plane normalization puts 0.15% too much on the 20°
-    foil (VisRad: 20.80008 TW for 8 × 2.6, exact) and 0.06% on the 40° basic.vrw foil
+    foil (VisRad: 20.80008 TW for 8 × 2.6, exact) and 0.06% on the 40° foil of the
+    foil workspace
     (0.01% with the manual z_A). VisRad renormalizes each beam's total; not modeled.
-  - Window patches in bu34_repointed get 1.0% more than in VisRad (n210808: 0.02%).
+  - Window patches in repointed get 1.0% more than in VisRad (n210808: 0.02%).
   - Near-focus wings on the foil (10⁻³–10⁻² of peak): ±10–40%, as before.
   - Occultation by the ray grid: VisRad puts ≤ 7e-4 TW/cm² on the LEH washers'
     elements, Briareus nothing.
-- **VisRad beam-profile probe (2026-10-21).** Workspace thor
-  `visrad/workspaces/profile_probe.vrw` (`build_profile_probe.jl`):
+- **VisRad beam-profile probe (2026-10-21).** A VisRad 21
+  workspace built for the purpose:
   - **Setup.** One beam per NIF quad (48, 1 TW each, the template's CPP rows), each
     focused 60 mm out along its port and deposited on its own flat plate normal to the
     beam, at |z| = 0–12 mm (inner cones) or 0–15 mm (outer) from best focus, before and
     after it. The plates have 2 × 44² triangles, laser deposition only.
-  - **Fit.** `fit_profiles.jl` fits each plate with a rotated, shifted super-Gaussian
-    averaged over each element (16 sub-triangles), cut at ρ. It leaves 0.0–2.5% rms;
+  - **Fit.** Each plate is fitted with a rotated, shifted super-Gaussian
+    averaged over each element (16 sub-triangles), cut at ρ. The fit leaves 0.0–2.5% rms;
     the fitted power is the beam's within 0.13% and the center is on axis within 1 µm.
     VisRad catches 1.00009 of each beam's power on its plate.
   - **Rotation.** VisRad's spot is turned from Briareus's axes by exactly the angle
@@ -1104,17 +1105,17 @@ fits below used Briareus's own operator points with a free-form evaluator.
     linearly beyond the last node, with the normalization tabulated per node. The
     `.vrw`/CSV readers and writers apply the quad-frame rotation
     (`_vr_reference_angle`).
-  - **Validation through `DepositionOperator`** (thor `compare_deposition.jl`):
+  - **Validation through `DepositionOperator`:**
     - **Probe plates:** element rms 0.1–1.6% (inner), 0.2–4.5% (outer, largest at
       15 mm), against 2.6–20% with γ/ρ.
     - **n210808 wall:** 0.9% rms (from 2.8%), peak 779.1 against 778.1 TW/cm²,
       correlation 1.0000.
-    - **bu34_repointed wall:** 0.9% rms, peak 911.5 against 915.9.
+    - **repointed wall:** 0.9% rms, peak 911.5 against 915.9.
     - **Totals:** wall 0.07% below VisRad (γ/ρ: 1e-4); windows 0.17% below; the 20°
       foil 0.37% above.
     - **Capsule modes:** absolute P2/P4 agree with VisRad's deposition to
-      0.014/0.004 pp (bu34_repointed).
-    - **Departures of bu34_repointed from the reference:** δ1..4 0.008, 0.104, 0.020,
+      0.014/0.004 pp (repointed).
+    - **Departures of repointed from the reference:** δ1..4 0.008, 0.104, 0.020,
       0.045%, against VisRad's 0.006, 0.092, 0.018, 0.046% (γ/ρ: 0.007, 0.090, 0.019,
       0.037). Swapping one component's deposition at a time puts 0.010 of the δ2
       difference on the wall, 0.001 on each window and none on the foil.
@@ -2353,10 +2354,10 @@ targets.
 - **GUI presets.** capsule_h 0.3 / 0.16 / 0.09 mm (320 / 980 / 2,880 capsule elements):
   P2 needs ~2,500 capsule elements for 0.02 pp on any capsule mesh (≈ 50/N pp), so the
   fine preset is not 0.12 as first proposed.
-- **Effect on a study.** thor aps-dpp-2026 (N210808 + two THOR windows, h 0.45 /
+- **Effect on a study.** A backlighter study (N210808 + two diagnostic windows, h 0.45 /
   capsule_h 0.15, closed, tuned NIF beams) moved by ≤ 0.01 pp in every departure and
-  drive (Round 8 vs Round 7); a design optimized on the lat-long capsule evaluates at
-  δ2 = 0.015% on the compact one.
+  drive between the two capsule meshes; a design optimized on the lat-long capsule
+  evaluates at δ2 = 0.015% on the compact one.
 
 ## Literature review against Kritcher et al. 2024 (2026-10-22)
 
@@ -2511,9 +2512,8 @@ Two surfaces move at different speeds, and a view-factor model should treat them
   leaves it (Ruof et al., PoP 2026, OSTI 3367476).
 - Still unpublished: absolute pointing, defocus and CPPs per cone; any 23.5°/30° or
   44.5°/50° wavelength split; window sizes and azimuths; corner/lip geometry; Au liner
-  thickness; tabulated powers (data "available on request"). Pointing is covered
-  non-publicly by the N230729 SST export in thor (`I_Stag_DT_HyE_S08-BeamPointing.csv`,
-  reads with `read_visrad_sst`; see `n221204_benchmark.md`).
+  thickness; tabulated powers (data "available on request"). The benchmark uses
+  an illustrative pointing, `hybride_mock_pointing()` ("Mock HYBRID-E pointing").
 
 ### Briareus → CompactLES (`hydro_coupling.md`)
 - LLNL's capsule-only step applies "a prescribed inward x-ray flux" on a spherical
@@ -2814,44 +2814,27 @@ laser–plasma model (`apply_lpi`), so it enters `drive_history(...; lpi)`,
 
 ## Mock HYBRID-E pointing (2026-10-23) *derived*
 
-`hybride_mock_pointing()` (`src/facilities.jl`, table `HYBRIDE_MOCK_POINTING`) is a
-public stand-in for the HYBRID-E pointing of the N221204 benchmark (ROADMAP 16). The
-user's brief (2026-10-22): the same symmetry, the same static capsule radiosity and
-similar CBET interactions as the shot's pointing, with the non-public N230729 SST export
-(thor, `read_visrad_sst`) used only to fit and check it. Its aim points are not in this
-repository; only the aggregate agreement below is.
+`hybride_mock_pointing()` (`src/facilities.jl`, table `HYBRIDE_MOCK_POINTING`) is an
+illustrative HYBRID-E-like pointing for the N221204 benchmark (ROADMAP 16), not a facility
+or shot pointing. The published papers give only relative statements about the HYBRID-E
+pointing (`n221204_benchmark.md`), so the rule is an engineering choice of the usual
+indirect-drive form.
 - Form: one rule per cone in each quad's own frame, mirrored top to bottom, defocus 0:
   aim z, aim radius r along the quad's port azimuth (inner cones across the axis) and,
   for the outer cones, a tangential split ±s with each beam aiming to the far side of
-  its quad (the 450 µm outer-quad split of Kritcher et al. 2021 is this kind). The
-  export has the same form, so the mock keeps its symmetry class: no top/bottom
-  difference beyond the port pattern, and each cone's quads rotated copies of each
-  other.
-- Fit: the seven numbers (four z, two inner r, one outer s) on a 0.1 mm grid, exhaustive
-  search of the per-cone grid combinations against the export's capsule-flux Legendre
-  P1–P6 and real Y_lm (l ≤ 6) over P0 at a foot (cone fraction 0.15) and a peak (1/3)
-  cone fraction, keeping only candidates whose LEH-plane beam overlaps agree within
-  10 % and ranking ties by clipped power. Several grid points fit about equally well;
-  the one chosen is not the export rounded to the grid.
+  its quad (the 450 µm outer-quad split of Kritcher et al. 2021 is this kind). No
+  top/bottom difference beyond the port pattern, and each cone's quads are rotated copies
+  of each other.
+- Values: the seven numbers (four z, two inner r, one outer s) on a 0.1 mm grid;
+  the beams clip ~1e-5 of the laser power on the LEHs.
 - Geometry (`n221204_benchmark.md` §5): 11.24 × 6.4 mm hohlraum, 3.1 mm LEHs, 1.135 mm
   capsule. Corner radius, windows and the Au/DU liner are unpublished: repository
   defaults (square corners, no windows, `gold()` wall, `ablator()` capsule). All 192
   beams (`nif_beams()`, f/20.7, CPP spots), 440 TW, inner power split evenly over the
   23.5°/30° cones and outer over 44.5°/50°, one static solve per cone fraction.
-- Agreement, mock − export, fine mesh (h 0.17, capsule_h 0.09; the standard mesh 0.3/0.16
-  agrees with it to 0.01 pp): P2/P0 +0.14 pp (foot) and −0.03 pp (peak); P4/P0 and
-  P6/P0 within 0.03 pp; odd P_l zero for both; every Y_lm/Y00 with l ≤ 6 within 0.06 pp
-  (foot) and 0.02 pp (peak), and the largest azimuthal (m ≠ 0) term the same to
-  0.001 pp; capsule-mean flux within 0.1 %; clipped power ~1e-5 of the laser for both.
-- CBET: the reduced model (`CBET`, leh_z 5.62 mm, Δλ 0.917 Å inner at 3ω, clamps 0.0075,
-  0.002 and none) transfers the same power to within 0.03 % of the transfer for every
-  cone. Its pointing dependence is only through each beam's width at the LEH plane,
-  which an aim near the LEH and f/20 optics leave insensitive to 0.1 mm moves; so the
-  check also compares a geometric one, the mean overlap of Gaussian beam footprints
-  (width from `_beam_at_plane`, axes where they cross the LEH plane) per cone pair:
-  within 7.8 % (worst pair, outer44–outer44), 3.5 % rms over the ten pairs.
 - Use: a stand-in for pointing-level studies of the benchmark (moments, CBET, LEH
-  clearance), not a facility pointing. Fit and check scripts: thor `hybride_mock/`.
+  clearance), not a facility pointing. **L** for any claim that it resembles the fielded
+  pointing.
 
 ## N221204 time-dependent benchmark (2026-10-23) *derived*
 
@@ -2869,7 +2852,7 @@ them as they were run.
   capsule (**H**). Unpublished, so repository defaults: square corners, no diagnostic
   windows, `gold(albedo = WallLossAlbedo())` wall (conversion 0.75), `ablator()` capsule,
   the capsule held at its initial radius (HYDRA's is near 0.92 mm at 6 ns, Fig. 1a).
-  192 beams at `hybride_mock_pointing()` (a fitted public stand-in, not the shot's
+  192 beams at `hybride_mock_pointing()` (an illustrative stand-in, not the shot's
   pointing). DN24 Fig. 1 delivered inner/outer powers (**L**; 2.03 MJ, 442 TW),
   `cone_fraction_pulses`; Δλ 2.75 Å (1ω) on the inner cones, 0.917 Å at 3ω, no
   23.5°/30° or 44.5°/50° split. Wall `WallMotion()` (0.10 mm/ns) from the outer turn-on
@@ -3143,9 +3126,9 @@ at peak, against HYDRA's 0.65. Its Mach-1 outflow outweighs the 0.917 Å (3ω) d
 
 ## LEH shield (sombrero) (2026-10-24)
 
-`Sombrero()` and `hohlraum(; sombrero = true)`. Dimensions measured from the CAD of a
-THOR-class NIF symcap target (a non-public VisRad workspace; only the shield's own
-dimensions are recorded here). The CAD is design intent, not metrology. **M**
+`Sombrero()` and `hohlraum(; sombrero = true)`. The defaults are
+representative engineering values for a NIF symcap LEH shield, measured from a CAD model
+of one (design intent, not metrology). **M**
 - **Identification.** Each shield is a thin sheet around one end of the hohlraum, 18.4 mm
   across. The two shields are mirror images to the tessellation's precision.
 - **Measurement.** The sheet's facets were cut by meridional half-planes every 5°, and
@@ -3191,8 +3174,7 @@ dimensions are recorded here). The CAD is design intent, not metrology. **M**
 
 ROADMAP Next 9 and 10. Each piece of the hohlraum dynamics (wall, LEH lips, bubble, ridge
 stop, two-zone CBET) is refitted to its own published anchor. PRE 109 Fig. 10 is not used
-in any fit; it is the blind check at the end. Full texts are the accepted manuscripts in
-the user's paper folder (not in the repository).
+in any fit; it is the blind check at the end. Full texts are the accepted manuscripts.
 
 ### Anchors extracted
 
@@ -3378,8 +3360,8 @@ sensitivity is ~2.5× HYDRA's across shots, ROADMAP 10).
 ## Young 2020 validation (2026-10-24) *derived*
 
 ROADMAP Next 9 ("validation still to run") and 11 (open items). Validation, not tuning: no
-calibrated default changed. Full texts are in the user's paper folder (not in the
-repository); data digitized from them are in `data/` with provenance headers.
+calibrated default changed. Full texts were read; data digitized from them are
+in `data/` with provenance headers.
 
 **New data.** Young et al., PoP 27, 082702 (2020), N170827: requested per-beam pulses
 (Fig. 2e, `young2020_pulses()`), the mode-1 Green's function (Fig. 5b and 5d read
@@ -3513,7 +3495,7 @@ skipped (unpublished pointing).
 ## Wall material, conversion and capsule energetics (2026-10-24) *derived*
 
 ROADMAP Next 16's model changes, each with its data check. Full texts read (accepted
-manuscripts, in the user's paper folder, not in the repository): Döppner et al., PRL 115,
+manuscripts): Döppner et al., PRL 115,
 055001 (2015) (OSTI 1209256); Schein et al., PRL 98, 175003 (2007) (OSTI 908388); Rosen,
 "Fundamentals of ICF hohlraums" (2005, OSTI 885380), §VI; Callahan et al., PoP 27,
 072704 (2020); Zylstra et al., PRE 106, 025202 (2022). Confidence: **H** primary text,
@@ -3701,8 +3683,8 @@ likely difference. The pair checks the trend only (*L*).
 
 ## Spectral radiosity, M-band and a synthetic Dante (2026-10-24) *derived*
 
-ROADMAP Next 13 and item 16's first absolute check. Read (accepted manuscripts in the
-user's paper folder, not in the repository): Dewald et al., "Direct measurement of
+ROADMAP Next 13 and item 16's first absolute check. Read (accepted
+manuscripts): Dewald et al., "Direct measurement of
 hohlraum M-band preheat asymmetry at the ICF capsule", PoP 27 (2020), LLNL-JRNL-813556;
 Rubery et al., "Soft x-ray power diagnostics for fusion experiments at NIF, Omega and Z
 facilities", RSI (2023), OSTI 1975922. Confidence: **H** primary text, **M** quoted
@@ -4214,7 +4196,7 @@ of F next to the other job):
 2–9e-7 for 3–5% less time; 1e-6 by ≤ 1e-8 for ~30% more. On small targets with rims,
 bores, a waist gap, corner fillets, remeshed CAD (48 facets per capsule element) and
 `:sampled` visibility (`test/hmatrix.jl`, leaves of 16), every G entry matches
-`view_factors` to < 1e-5 of the largest. Non-public CAD was not run.
+`view_factors` to < 1e-5 of the largest.
 
 ### Time and memory (warm view-factor assembly; dense rows from "Large radiation models")
 
@@ -5569,9 +5551,8 @@ tilt_toward, rotation)` and `line_of_sight(target, los; ...) -> LineOfSightRepor
 (`src/backlighter.jl`, `test/backlighter.jl`), used in the radiography tutorial
 (`docs/literate/dropped_bundle.jl`).
 - **Defaults are engineering values.** The 2 mm square gold foil and the standoffs tried
-  are generic: real backlighter dimensions and standoffs are shot-specific, and for THOR
-  not public. The radiography windows (two open 3 mm disks in the wall on the line of
-  sight) are likewise generic. **E**
+  are generic: real backlighter dimensions and standoffs are shot-specific. The radiography
+  windows (two open 3 mm disks in the wall on the line of sight) are likewise generic. **E**
 - **Placement.** Centered `standoff` mm from TCC opposite the detector, front face (the
   laser-heated side) toward the detector, normal along the line of sight unless tilted;
   width along the line of sight's θ̂, height along φ̂.
@@ -6487,8 +6468,8 @@ element's whole source as a Planckian at the brightness temperature (B/σ)^¼ of
 radiosity. On a laser spot B = ηI + αH with ηI ≈ 1.1 × 10¹⁵ W/cm² at the outer cones'
 1.5 × 10¹⁵, so a ~300 eV cavity put its spots at ~365 eV, whose Planck tail alone holds
 25 % of the power above 1.8 keV (a 290 eV Planckian 12.4 %, 300 eV 14.0 %), and the
-laser M-band was then carved out of that already hard spectrum. Read (cite only; in the
-user's paper folder): Dewald et al., "X-ray conversion efficiency of high-Z hohlraum wall
+laser M-band was then carved out of that already hard spectrum. Read (cite
+only): Dewald et al., "X-ray conversion efficiency of high-Z hohlraum wall
 materials for indirect drive ignition", PoP 15, 072706 (2008), LLNL-JRNL-402374 (OSTI
 944359; abstract only, the full text is behind the LLNL library); Chen et al., "On the
 deficiency of x-ray flux predictions of indirect-drive ICF experiments at the NIF",
@@ -7837,7 +7818,7 @@ is the size of most a₄ entries.
   true)` (new keyword, default `false`: existing targets are unchanged bit for bit).
   The GUI's CAD path still builds raw targets.
 - Not covered: thin-film windows that transmit (a transmitting aperture is a partial
-  loss, not a closure) and VisRad workspaces (no public data).
+  loss, not a closure) and VisRad workspaces.
 
 ## Compact capsule rows at capsule_h = h/3 (2026-10-25) *derived*
 
@@ -8504,8 +8485,7 @@ CBET-free. **Not done**: absorbed power per radius; the P_abl and Ye21 drive pro
 
 Measured locally (8 threads pinned to one CCX; the NIF CAD workspace of the 2026-10-18
 notes: 15 CAD objects and a sphere, the 133k-facet mount and two far parts drawn only,
-12 parts in the calculations; numbers only, the workspace stays outside the
-repository), coarse mesh (h = 0.6 mm).
+12 parts in the calculations), coarse mesh (h = 0.6 mm).
 
 **`remesh_mesh` on the CAD capsule (H).** Since the sliver merge of 2026-10-20
 (`_merge_small!`/`_dissolve!`), remeshing the capsule part (38,200 facets, sphere and

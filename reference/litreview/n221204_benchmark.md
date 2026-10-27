@@ -30,11 +30,9 @@ Figs. 1, 9 and 10 of K24E were rendered and read by eye.
 
 **Still not public:**
 - Neither paper gives absolute pointing, defocus, CPPs, a per-cone (23.5°/30° or 44.5°/50°) wavelength split, window sizes or azimuths, corner/lip geometry, or the Au liner thickness.
-- **Pointing, non-public (user, 2026-10-22):** an SST export of the N230729 (HYBRID-E, same
-  platform) beam pointing is at `C:\Users\alexa\Dev\thor\I_Stag_DT_HyE_S08-BeamPointing.csv`
-  (192 beams, aim points in chamber mm, quad and beam defocus 0). It reads with
-  `read_visrad_sst(path)` and is the pointing to use for the benchmark. Do not copy its
-  numbers into public documents.
+- **Pointing for the benchmark:** an illustrative HYBRID-E-like rule,
+  `hybride_mock_pointing()` (research notes, "Mock HYBRID-E pointing"), not a facility
+  pointing.
 - K24E treats Δλ as one inner−outer number.
 - H24 lists "manufacturing gaps on the waist of the hohlraum" as an additional mode-1 source.
 
@@ -330,7 +328,7 @@ through a transfer function, and the Trad and capsule-energy rows for absolute e
      - K24E Fig. 9(a, b): all four cones, input vs post-transfer, and CF, N221204 vs N220919.
      - K24E Fig. 10: simulated flux P2/P0(t) with scaled power and CF.
 2. **PRE 109, 025204** is now read. It gives no per-cone Δλ split, pointing, defocus or CPP. Its per-cone "input" powers sum to ≈380 TW at peak against 440 TW delivered. They are probably HYDRA-degraded, but the paper does not say so explicitly.
-3. **Windows.** No public sizes, azimuths or materials for the three equatorial diagnostic windows; K24E and H24 do not add any, and the "THOR" naming did not appear in any source. H24 adds "manufacturing gaps on the waist of the hohlraum" as a mode-1 source. Look in MacGowan HEDP 40, 100944 and Milovich PPCF 63 (2021).
+3. **Windows.** No public sizes, azimuths or materials for the three equatorial diagnostic windows; K24E and H24 do not add any. H24 adds "manufacturing gaps on the waist of the hohlraum" as a mode-1 source. Look in MacGowan HEDP 40, 100944 and Milovich PPCF 63 (2021).
 4. **Hohlraum details.** Corner and lip geometry, Au liner and DU thicknesses, LEH washer dimensions: unpublished in what I read. The SW25 Fig. 3 CAD (BAH hohlraum, 5.75 mm) shows the LEH hardware layout only.
 5. **Per-cone Δλ splits** (23.5°/30°, 44.5°/50°) for N221204: unknown. The 4-color capability existed (DN24).
 6. **Pointing, defocus, CPPs** for HYBRID-E: only relative statements (50° moved 250 µm; quad split 450 µm; cones >430 µm apart).
