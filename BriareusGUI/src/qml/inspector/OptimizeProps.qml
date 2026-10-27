@@ -40,7 +40,7 @@ ColumnLayout {
                 spacing: 8
                 CheckBox {
                     text: modelData.label
-                    Layout.preferredWidth: 150
+                    Layout.preferredWidth: 170
                     checked: app["optFree_" + modelData.key]
                     onToggled: Julia.br_opt_free(modelData.key, checked)
                 }
@@ -93,7 +93,7 @@ ColumnLayout {
             spacing: 8
             CheckBox {
                 text: "Capsule keep-out"
-                Layout.preferredWidth: 150
+                Layout.preferredWidth: 170
                 checked: app.optCapsule
                 onToggled: Julia.br_opt_capsule(checked)
                 ToolTip.visible: hovered
@@ -114,7 +114,7 @@ ColumnLayout {
             spacing: 8
             CheckBox {
                 text: "LEH keep-out"
-                Layout.preferredWidth: 150
+                Layout.preferredWidth: 170
                 checked: app.optKeepout
                 onToggled: Julia.br_opt_keepout(checked)
                 ToolTip.visible: hovered
@@ -147,7 +147,7 @@ ColumnLayout {
         PropRow {
             label: "Evaluations"
             value: "" + app.optMaxEvaluations
-            unit: "objective evaluations"
+            unit: "of the objective"
             tip: "A line search can take many evaluations in one iteration; this bounds the run time"
             onEdited: (text) => Julia.br_opt_edit("max_evaluations", text)
         }
