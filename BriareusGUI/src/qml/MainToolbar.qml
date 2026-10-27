@@ -67,7 +67,8 @@ ToolBar {
                         model: app.cutChoices
                         delegate: MenuItem {
                             required property string modelData
-                            text: modelData
+                            required property int index
+                            text: app.cutLabels[index] || modelData
                             checkable: true
                             checked: app.cutSet.indexOf(modelData) >= 0
                             onTriggered: Julia.br_cut_component(modelData, checked)

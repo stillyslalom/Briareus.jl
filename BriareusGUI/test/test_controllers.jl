@@ -5,6 +5,8 @@
     t0 = ts.target[]
     @test component_names(t0) == [:wall, :cap_top, :cap_bottom, :leh_top, :leh_bottom, :capsule]
     @test surface_names(t0) == [:wall, :cap_top, :cap_bottom, :capsule]
+    # components named as the model tree names them, in every panel
+    @test component_label.([:cap_top, :leh_bottom_lip, :window_1]) == ["Top cap", "Bottom LEH lip", "window_1"]
     @test occursin("hohlraum", target_summary(ts)) && occursin("$(nelements(t0)) elements", target_summary(ts))
 
     # an accepted edit rebuilds; a rejected one keeps the target and reports why

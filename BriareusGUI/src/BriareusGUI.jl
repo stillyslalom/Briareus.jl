@@ -94,7 +94,7 @@ export ViewState, COLOR_MODES, COLOR_LABELS, BEAM_COLORINGS, PALETTE, component_
        cluster_colors, TreeRow, select!, select_add!, select_range!, selected_ids, toggle_expanded!, set_hidden!,
        set_beams_hidden!, selected_components,
        selection_kind, component_id, beam_id, model_tree, node_beams, selected_beams,
-       selected_component
+       selected_component, component_label
 export DesignSession, TASKS, TASK_LABELS, task_status, set_color!, drive_stale,
        build_scenario!, accept_optimum!, write_visrad_kit!, radiation_size, include_components!,
        RADIATION_MAX_ELEMENTS

@@ -254,7 +254,8 @@ mutable struct ParamRow
 end
 
 mutable struct CompRow
-    name::String
+    name::String                                   # the component's name, for the callbacks
+    label::String                                  # as the model tree names it
     role::String                                   # "target", "hardware", "none"
 end
 
@@ -541,6 +542,7 @@ function _refresh_view!(sh::BriareusShell)
     _set!(sh, "cutAzimuth", v.cut_azimuth[])
     t = sh.sess.target.target[]
     _set!(sh, "cutChoices", [String(c.name) for c in t.components if c.kind === :surface])
+    _set!(sh, "cutLabels", [component_label(c.name) for c in t.components if c.kind === :surface])
     _set!(sh, "cutSet", sort([String(n) for n in v.cut_components[]]))
     busy = String[]
     dr, st, rv, tl = sh.sess.drive, sh.sess.optimize, sh.sess.review, sh.sess.talis
@@ -712,7 +714,7 @@ function _refresh_selection!(sh::BriareusShell)
             b = bs[idx[1]]
             p = beam_path(t, b)
             land = n.count > 1 ? "" : p.component === :missed ? " · misses the target" :
-                   " · axis lands on " * String(p.component)
+                   " · axis lands on " * _in_text(p.component)
             spot = @sprintf("spot %.3g × %.3g mm (order %.3g), f/%.3g", b.spot.a, b.spot.b,
                             b.spot.order, b.fnumber)
             θ, φ = port_angles(b)
@@ -846,8 +848,12 @@ function _refresh_optimize!(sh::BriareusShell)
     return
 end
 
+# A component named within a sentence: "the top cap"-style labels in lower case, a
+# user's part name as it is.
+_in_text(n::Symbol) = (l = component_label(n); l == String(n) ? l : lowercasefirst(l))
+
 function _clear_row(x)
-    return ClearRow(x.beam, String(x.component), String(x.status), _fix(x.clearance),
+    return ClearRow(x.beam, component_label(x.component), String(x.status), _fix(x.clearance),
                     _fix(x.nominal), @sprintf("%.3g", x.power), @sprintf("%.3g", x.peak_intensity))
 end
 
@@ -869,7 +875,7 @@ function _refresh_review!(sh::BriareusShell)
     _set!(sh, "rvHasReport", rv.report[] !== nothing)
     _set!(sh, "rvBrief", review_brief(rv))
     _set!(sh, "rvStale", review_stale(rv, sess.target.target[], active_beams(sess.beams)))
-    comps = [CompRow(String(n), n in rv.targets[] ? "target" : n in rv.hardware[] ? "hardware" : "none")
+    comps = [CompRow(String(n), component_label(n), n in rv.targets[] ? "target" : n in rv.hardware[] ? "hardware" : "none")
              for n in surface_names(sess.target.target[])]
     _sync_rows!(sh.rows[:compModel], sh.models[:compModel], comps)
     _sync_rows!(sh.rows[:clearModel], sh.models[:clearModel], ClearRow[_clear_row(x) for x in clearance_rows(rv)])
@@ -885,7 +891,7 @@ _val(x::Real, u::Symbol) = isfinite(x) ? @sprintf("%+.3f %s", x, _unit(u)) : x >
 _val0(x::Real, u::Symbol) = isfinite(x) ? @sprintf("%.3f %s", x, _unit(u)) : x > 0 ? "n/a" : "–"
 
 function _talis_row(x::TaLISRow)
-    return TalisRow(x.beam, get(TALIS_RULE_LABELS, x.rule, String(x.rule)), String(x.component),
+    return TalisRow(x.beam, get(TALIS_RULE_LABELS, x.rule, String(x.rule)), component_label(x.component),
                     String(x.status), _val(x.margin, x.unit), _val0(x.worst, x.unit),
                     _val0(x.nominal, x.unit), _val0(x.required, x.unit), x.note)
 end
@@ -904,14 +910,14 @@ function _refresh_talis!(sh::BriareusShell)
     _set!(sh, "tlHasReport", tl.report[] !== nothing)
     _set!(sh, "tlBrief", talis_brief(tl))
     _set!(sh, "tlStale", talis_stale(tl, sess.target.target[], active_beams(sess.beams)))
-    comps = [CompRow(String(n), n in tl.capture[] ? "capture" : n in tl.hardware[] ? "hardware" : "none")
+    comps = [CompRow(String(n), component_label(n), n in tl.capture[] ? "capture" : n in tl.hardware[] ? "hardware" : "none")
              for n in surface_names(sess.target.target[])]
     _sync_rows!(sh.rows[:talisCompModel], sh.models[:talisCompModel], comps)
     # the rows change only with the report (hundreds of them: not on every refresh)
     if get(sh.shown, "_talisReport", missing) !== tl.report[]
         sh.shown["_talisReport"] = tl.report[]
         rules = [RuleRow(r.label, r.requirement, r.pass, r.review, r.fail,
-                         _val(r.worst.margin, r.worst.unit), r.worst.beam * " / " * String(r.worst.component),
+                         _val(r.worst.margin, r.worst.unit), r.worst.beam * " / " * component_label(r.worst.component),
                          r.fail > 0 ? "fail" : r.review > 0 ? "review" : "pass")
                  for r in talis_rule_rows(tl)]
         _sync_rows!(sh.rows[:ruleModel], sh.models[:ruleModel], rules)

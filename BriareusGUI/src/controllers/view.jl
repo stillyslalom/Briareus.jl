@@ -250,6 +250,19 @@ const _COMPONENT_LABELS = Dict(:wall => "Wall", :cap_top => "Top cap", :cap_bott
                                :leh_top => "Top LEH", :leh_bottom => "Bottom LEH",
                                :capsule => "Capsule", :backlighter => "Foil", :main => "Main target")
 
+"""
+    component_label(name::Symbol) -> String
+
+A component as the model tree names it ("Top cap" for `:cap_top`, "Top LEH lip" for
+`:leh_top_lip`); a name without a label (a CAD part, a window) as it is.
+"""
+function component_label(name::Symbol)
+    haskey(_COMPONENT_LABELS, name) && return _COMPONENT_LABELS[name]
+    hole = shown_component(name)
+    hole !== name && haskey(_COMPONENT_LABELS, hole) && return _COMPONENT_LABELS[hole] * " lip"
+    return String(name)
+end
+
 _nbeams(n::Integer) = n == 1 ? "1 beam" : "$n beams"
 
 """
@@ -272,7 +285,7 @@ function model_tree(sess)
         for c in t.components
             is_lip(c) && continue                   # shown as part of its entrance hole
             id = component_id(ts, c.name)
-            lab = get(_COMPONENT_LABELS, c.name, String(c.name))
+            lab = component_label(c.name)
             kindtxt = c.kind === :aperture ? (c.name in lips ? "aperture · closing" : "aperture") :
                       c.two_sided ? "two-sided" : ""
             push!(rows, _row(id, 1, lab, kindtxt, false, false, c.name in hid ? 0 : 1, "", sel;
@@ -282,7 +295,7 @@ function model_tree(sess)
         if ts.ghost[] !== nothing
             for c in ts.ghost[].components
                 is_lip(c) && continue
-                lab = get(_COMPONENT_LABELS, c.name, String(c.name))
+                lab = component_label(c.name)
                 push!(rows, _row(component_id(ts, c.name), 1, lab, "not in calculations", false,
                                  false, c.name in hid ? 0 : 1, "", sel))
             end

@@ -22,9 +22,10 @@ ColumnLayout {
             id: compRow
             readonly property string compName: model.name
             readonly property string compRole: model.role
+            readonly property string compLabel: model.label
             enabled: !app.rvRunning
             spacing: 8
-            Label { text: compRow.compName; Layout.preferredWidth: 120; elide: Text.ElideRight }
+            Label { text: compRow.compLabel; Layout.preferredWidth: 120; elide: Text.ElideRight }
             ComboBox {
                 Layout.fillWidth: true
                 textRole: "text"; valueRole: "value"

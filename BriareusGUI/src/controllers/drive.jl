@@ -579,11 +579,10 @@ function power_rows(ev::Evaluation; minor::Real = 1e-3)
     frac(v) = P > 0 ? v / P : 0.0
     cp = component_power(d, t)                  # by part: the drive's fitted pieces summed
     ps = [p for p in Briareus.parts(t) if t.components[first(part_pieces(t, p))].kind !== :aperture]
-    label(p) = get(_COMPONENT_LABELS, p, String(p))          # as the model tree names it
-    parts = Tuple{String,Float64}[(label(p), get(cp, p, 0.0)) for p in ps]
+    parts = Tuple{String,Float64}[(component_label(p), get(cp, p, 0.0)) for p in ps]
     for p in ps
         k = Symbol(p, :_outside)
-        haskey(cp, k) && push!(parts, (label(p) * " (outside)", cp[k]))
+        haskey(cp, k) && push!(parts, (component_label(p) * " (outside)", cp[k]))
     end
     rows = NamedTuple[]
     small = 0
