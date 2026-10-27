@@ -115,5 +115,5 @@ ColumnLayout {
         onEdited: (text) => Julia.br_set_spot_radius(text)
     }
     Label { text: app.driveSummary; visible: app.driveHasResult; wrapMode: Text.WordWrap; Layout.fillWidth: true; font.weight: Font.DemiBold }
-    Note { text: "Modes, the power accounting and the VisRad benchmark kit are in the Drive tab below." }
+    Note { text: "The modes and the power accounting are in the Drive tab below." }
 }

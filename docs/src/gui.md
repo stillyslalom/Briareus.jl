@@ -261,10 +261,8 @@ The bottom panel's tabs:
 - **Drive:** the view factors are computed once per target and beam ports, on a
   worker; beam edits then re-evaluate at once. The tab shows the capsule's mode
   amplitudes and ``P_l/P_0``, the foil spot's statistics and the laser power accounting.
-  File ▸ Write VisRad benchmark kit ([`write_visrad_kit`](@ref)) writes the SST
-  pointing, the beam summary and beam table, a README with the geometry and the steps
-  to reproduce the case in VisRad, and the Briareus results, reusing the drive's view
-  factors.
+  A VisRad benchmark kit for the same case is written from a script with
+  [`write_visrad_kit`](@ref).
 - **Time:** the drive through a pulse. *Pulse table…* fires the beams with a pulse
   table ([`read_pulse_table`](@ref): power per beam against time, per cone group, quad
   or beam; disabled beams stay off), and *N221204 shape* with N221204's delivered pulse
@@ -371,7 +369,6 @@ edit_beam_node!(sess.beams, :group, "inner23", :z, "3.2")   # inner 23.5° cone 
 import_visrad_sst!(sess.beams, "pointing.csv")   # or apply a VisRad pointing file
 build_scenario!(sess)                            # view factors + evaluation
 drive_summary(sess.drive.result[])
-write_visrad_kit!(sess, "visrad_kit")            # benchmark kit for VisRad
 start_optimize!(sess; spawn = false)             # blocks; spawn = true runs on a worker
 accept_optimum!(sess)
 start_clearance!(sess; spawn = false)

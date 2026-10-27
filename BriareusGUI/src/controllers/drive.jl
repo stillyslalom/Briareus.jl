@@ -56,8 +56,7 @@ build), `building`/`started`/`build_seconds`, `result` (the latest
 [`DriveResult`](@ref)), `evaluating`, `field` (one of [`DRIVE_FIELDS`](@ref)), `view`
 (`:scene`, the 3D target, `:map`, the capsule θ–φ map or foil face, or `:image`, an
 x-ray image), `spot_radius` (mm; the foil spot over which irradiance statistics and
-the foil objective are taken), `status`, the VisRad benchmark kit's
-`kit_running`/`kit_status` (see [`write_visrad_kit!`](@ref)), the retune's
+the foil objective are taken), `status`, the retune's
 `retune_running`/`retune_status` (see [`retune_to_reference!`](@ref)), the x-ray image's
 `image_request` (its camera, see [`xray_image!`](@ref)) and `image` (the latest
 rendering, `(; x, y, values, title)` in mm and W/cm²/sr, or `nothing`), `side`
@@ -82,8 +81,6 @@ struct DriveState
     view::Observable{Symbol}
     spot_radius::Observable{Float64}
     status::Observable{String}
-    kit_running::Observable{Bool}
-    kit_status::Observable{String}
     retune_running::Observable{Bool}
     retune_status::Observable{String}
     image_request::Observable{Any}           # the x-ray image's camera, or nothing
@@ -106,7 +103,7 @@ DriveState() = DriveState(Observable{Union{Nothing,Scenario}}(nothing), Observab
                           Observable(0.0), Observable(0.0),
                           Observable{Union{Nothing,DriveResult}}(nothing), Observable(false),
                           Observable(:laser), Observable(:scene), Observable(0.5),
-                          Observable(""), Observable(false), Observable(""),
+                          Observable(""),
                           Observable(false), Observable(""), Observable{Any}(nothing), Observable{Any}(nothing), Observable(false),
                           Observable(false), Observable(zero(Vec3)), Observable(Set{Symbol}()),
                           Observable(:fcone), Observable(VisRadProfile()),

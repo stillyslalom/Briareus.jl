@@ -4,8 +4,7 @@
 The Briareus window (`briareus`): a laser-target design tool in the manner of VisRad. A
 target (a hohlraum with diagnostic windows, a backlighter foil, or free parts), its
 beams (with VisRad pointing and beam-summary interchange), and analyses run on them in
-any order: the laser and x-ray drive (and a VisRad benchmark kit), a pointing
-optimization, beam clearance and the TaLIS target-configuration rules, and the drive in
+any order: the laser and x-ray drive, a pointing optimization, beam clearance and the TaLIS target-configuration rules, and the drive in
 time (pulse tables, drive histories and a time cursor on the 3D view). One Qt Quick
 window: model tree, properties, a 3D viewer with CAD-style navigation, and result
 panels. Use `Controllers` to do the same from a script without a window. Controller
@@ -96,7 +95,7 @@ export ViewState, COLOR_MODES, COLOR_LABELS, BEAM_COLORINGS, PALETTE, component_
        selection_kind, component_id, beam_id, model_tree, node_beams, selected_beams,
        selected_component, component_label
 export DesignSession, TASKS, TASK_LABELS, task_status, set_color!, drive_stale,
-       build_scenario!, accept_optimum!, write_visrad_kit!, radiation_size, include_components!,
+       build_scenario!, accept_optimum!, radiation_size, include_components!,
        RADIATION_MAX_ELEMENTS
 
 end # module Controllers
@@ -105,7 +104,7 @@ using .Controllers
 
 export DesignSession, briareus, task_status, set_color!, build_scenario!, start_optimize!,
        cancel_optimize!, accept_optimum!, start_clearance!, cancel_clearance!, start_talis!,
-       cancel_talis!, write_visrad_kit!
+       cancel_talis!
 export TargetSetup, set_target_kind!, set_resolution!, edit_mesh!, edit_target!, add_window!,
        add_part!, edit_part!, remove_part!,
        edit_window!, set_window_open!, remove_window!, BeamTable, load_preset!,

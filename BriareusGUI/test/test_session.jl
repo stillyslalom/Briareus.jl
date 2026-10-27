@@ -353,11 +353,8 @@ end
     @test sess.review.hardware[] == [:cap_top, :cap_bottom]
 end
 
-@testset "windows in the drive and the VisRad kit (no GL)" begin
+@testset "windows in the drive (no GL)" begin
     sess = DesignSession(resolution = :coarse)
-    dir = joinpath(mktempdir(), "kit")
-    write_visrad_kit!(sess, dir)
-    @test occursin("compute the drive first", sess.drive.kit_status[]) && !isdir(dir)
     # a closed and an open window: separate components, a valid closed enclosure
     @test add_window!(sess.target)
     @test add_window!(sess.target; phi = 200.0, z = 2.0, width = 1.5, height = 1.5, open = true)
@@ -371,32 +368,4 @@ end
     @test all(isnan, element_values(res, :laser)[elements(t, :window_2)])    # a hole
     # x-rays leave through the open window: its incident flux is a loss
     @test sum(res.solution.H[e] * t.elem_area[e] for e in elements(t, :window_2)) > 0
-
-    set_enabled!(sess.beams, 4, false)
-    write_visrad_kit!(sess, dir)                             # inline: spawn[] is false
-    dr = sess.drive
-    @test !dr.kit_running[] && startswith(dr.kit_status[], "wrote")
-    @test occursin("VisRad kit", sess.status[])
-    for f in ("pointing_sst.csv", "beam_summary.csv", "briareus_beams.csv", "README.txt",
-              "briareus_results.csv", "briareus_capsule_elements.csv")
-        @test isfile(joinpath(dir, f))
-    end
-    # disabled beams are written at zero power: left out of the SST
-    @test countlines(joinpath(dir, "pointing_sst.csv")) == 1 + 4 * length(active_beams(sess.beams))
-    # the kit's laser accounting is the drive's (same operator, same beams)
-    line = only(l for l in readlines(joinpath(dir, "briareus_results.csv")) if startswith(l, "Laser delivered,"))
-    @test parse(Float64, split(line, ",")[2]) ≈ dr.result[].evaluation.deposition.delivered rtol = 1e-6
-    @test occursin("window_1", read(joinpath(dir, "README.txt"), String))
-
-    # on a worker, through a delivery queue
-    q = Channel{Any}(Inf)
-    sess.deliver[] = f -> put!(q, f)
-    sess.spawn[] = true
-    dir2 = joinpath(mktempdir(), "kit2")
-    write_visrad_kit!(sess, dir2)
-    @test dr.kit_running[]
-    drain_until(() -> !dr.kit_running[], q)
-    @test isfile(joinpath(dir2, "README.txt")) && startswith(dr.kit_status[], "wrote")
-    sess.spawn[] = false
-    sess.deliver[] = f -> f()
 end

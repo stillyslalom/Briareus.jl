@@ -4,7 +4,7 @@
 and view-factor radiation design: build a hohlraum or backlighter target, point the
 beams, see the laser deposition and x-ray drive, optimize the pointing, and check beam
 clearance from the hardware and the TaLIS target-configuration rules, all in one
-window, with VisRad pointing, beam-summary, workspace and benchmark-kit files in and out.
+window, with VisRad pointing, beam-summary and workspace files in and out.
 
 ![The Briareus window](https://raw.githubusercontent.com/stillyslalom/Briareus.jl/main/docs/src/assets/gui/overview.png)
 

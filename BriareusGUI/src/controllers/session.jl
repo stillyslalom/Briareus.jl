@@ -60,7 +60,7 @@ pointed for the target. Changing the target kind swaps a NIF preset for the OMEG
 backlighter set (and back), unless the beams were imported.
 
 Background work: `spawn[]` (`false` by default; a window sets it) runs the scenario
-build, its evaluations and the VisRad kit on worker tasks, handing their results to
+build and its evaluations on worker tasks, handing their results to
 `deliver[]` (a window queues them for its GUI thread). Without it they run inline.
 The optimization, the clearance check and the TaLIS checks take an explicit `spawn`
 keyword.
@@ -794,48 +794,6 @@ function export_results(sess::DesignSession, dir::AbstractString)
     return files
 end
 
-"""
-    write_visrad_kit!(sess::DesignSession, dir)
-
-Write a VisRad benchmark kit for the current target and beam table into `dir` with
-`write_visrad_kit` (SST pointing, beam summary, the canonical beam table, a README with
-the geometry and VisRad steps, and Briareus's results to compare against), on a worker
-when `spawn[]` is set. It reuses the drive's deposition operator and radiation model,
-so the drive must be computed and current. Disabled beams are written at zero power.
-The capsule (or a foil target's main sphere) is the observed surface. Progress and
-the outcome go to `drive.kit_running`/`drive.kit_status`.
-"""
-function write_visrad_kit!(sess::DesignSession, dir::AbstractString)
-    dr = sess.drive
-    dr.kit_running[] && return sess
-    if !_drive_current(sess)
-        dr.kit_status[] = "compute the drive first: the kit reuses its view factors"
-        return sess
-    end
-    s = dr.scenario[]
-    t = s.target                        # the drive's: the cavity, when it has one
-    beams = display_beams(sess.beams)
-    names = component_names(t)
-    observe = :capsule in names ? :capsule : :main in names ? :main : :none
-    dir = String(dir)
-    dr.kit_running[] = true
-    dr.kit_status[] = "writing the VisRad kit…"
-    notes = "Written by BriareusGUI: " * target_summary(sess.target) * "; " * beams_summary(sess.beams)
-    runner = _runner(sess.spawn, sess.deliver)
-    runner(() -> write_visrad_kit(dir, t, beams; op = s.deposition, model = s.model, observe, notes),
-           function (out)
-               dr.kit_running[] = false
-               if out.err === nothing
-                   n = length(out.value.files)
-                   dr.kit_status[] = "wrote $n files to $dir"
-                   sess.status[] = "wrote the VisRad kit to " * basename(rstrip(dir, ['/', '\\']))
-               else
-                   dr.kit_status[] = "kit failed: " * _errmsg(out.err)
-               end
-           end)
-    return sess
-end
-
 # ---------------------------------------------------------------- retune
 
 # The key a pulse table's columns are: the beams' groups, quads or names.
@@ -1087,7 +1045,5 @@ function _abandon_jobs!(sess::DesignSession)
     tm.queued[] = false
     tm.running[] && (tm.generation[] += 1; tm.cancel[] = true; tm.running[] = false;
                      tm.status[] = "abandoned when the window closed")
-    sess.drive.kit_running[] && (sess.drive.kit_running[] = false;
-                                 sess.drive.kit_status[] = "abandoned when the window closed")
     return sess
 end
