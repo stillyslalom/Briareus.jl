@@ -3,7 +3,9 @@ on:
   push:
     branches:
       - main
-    tags: ['*']
+    # root releases (v0.1.0) only: the docs deploy versioned docs for these; the GUI's and
+    # the launcher's tags (BriareusGUI-v0.1.0, BriareusLauncher-v0.1.0) build nothing
+    tags: ['v*']
   pull_request:
   workflow_dispatch:
 concurrency:
