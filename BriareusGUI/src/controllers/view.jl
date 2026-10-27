@@ -250,6 +250,8 @@ const _COMPONENT_LABELS = Dict(:wall => "Wall", :cap_top => "Top cap", :cap_bott
                                :leh_top => "Top LEH", :leh_bottom => "Bottom LEH",
                                :capsule => "Capsule", :backlighter => "Foil", :main => "Main target")
 
+_nbeams(n::Integer) = n == 1 ? "1 beam" : "$n beams"
+
 """
     model_tree(sess) -> Vector{TreeRow}
 
@@ -299,7 +301,7 @@ function model_tree(sess)
             gi = findall(==(g), cl)
             gid = "group:" * String(g)
             P = sum(bs[i].power for i in gi if en[i]; init = 0.0)
-            push!(rows, _row(gid, 1, String(g), @sprintf("%d beams · %.4g TW", length(gi), P), true,
+            push!(rows, _row(gid, 1, String(g), _nbeams(length(gi)) * @sprintf(" · %.4g TW", P), true,
                              gid in ex, _tri(count(en[gi]), length(gi)), "", sel; color = ccol[g]))
             gid in ex || continue
             if hasquads
@@ -310,7 +312,7 @@ function model_tree(sess)
                     θ, φ = port_angles(bs[qi[1]])
                     push!(rows, _row(qid, 2, single ? bs[qi[1]].name : q,
                                      single ? @sprintf("θ %.1f° φ %.1f°", θ, φ) :
-                                              @sprintf("%d beams · θ %.1f° φ %.1f°", length(qi), θ, φ),
+                                              _nbeams(length(qi)) * @sprintf(" · θ %.1f° φ %.1f°", θ, φ),
                                      !single, qid in ex, _tri(count(en[qi]), length(qi)), "", sel))
                     (!single && qid in ex) || continue
                     for i in qi
