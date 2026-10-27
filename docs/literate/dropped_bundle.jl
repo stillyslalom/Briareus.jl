@@ -61,7 +61,7 @@ include(joinpath(pkgdir(Briareus), "docs", "literate", "_plotting.jl"))   # figu
 # hohlraum axis near the entrance-hole planes, at ``z = \pm 5.01`` mm (50° cone) and
 # ``\pm 5.20`` mm (44.5°); the inner quads at ``z = \pm 3.63`` mm (30°) and
 # ``\pm 3.09`` mm (23.5°), displaced 0.60 and 1.09 mm from the axis away from their own
-# port, across the hohlraum.
+# port, across the hohlraum. This pointing is an illustrative example, not a shot's.
 
 target = hohlraum(length = 10.1, radius = 2.875, leh_radius = 1.55, capsule_radius = 0.9,
                   wall = gold(albedo = 0.85, conversion = 0.8))

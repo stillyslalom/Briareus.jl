@@ -9,7 +9,8 @@
 Beam presets:
 
 - `:nif_quads` — the 48 NIF indirect-drive quads (`nif_quads`, 8 TW each), pointed at
-  the published cone (r, z) aims of `examples/nif_hohlraum.jl`;
+  the illustrative cone (r, z) aims of `examples/nif_hohlraum.jl` (an example, not a
+  shot pointing: research notes, "Example NIF cone pointing: unsourced (2026-10-27)");
 - `:nif_beams` — all 192 NIF beams (`nif_beams`, 2 TW each), same cone pointing;
 - `:omega_hohlraum` — the 40 OMEGA hohlraum beams (cones 1–3, `omega_beams`, 0.5 TW),
   aimed at the LEH centers of a hohlraum target (TCC otherwise);
@@ -53,8 +54,9 @@ const BEAM_GROUPINGS = (:group, :quad, :beam)
 "Editable beam-table columns (`GroupPointing` fields): aim z, r, tangential offset, defocus (mm), power (TW)."
 const BEAM_FIELDS = (:z, :r, :phi, :defocus, :power)
 
-# Published NIF cone pointing (r toward the port azimuth, z; mm) used by
-# examples/nif_hohlraum.jl for a 10.1 mm hohlraum.
+# Illustrative NIF cone pointing (r toward the port azimuth, z; mm) used by
+# examples/nif_hohlraum.jl for a 10.1 mm hohlraum: an example with no published source
+# (research notes, "Example NIF cone pointing: unsourced (2026-10-27)").
 const NIF_CONE_POINTING = Dict(:inner23 => (-1.09, 3.09), :inner30 => (-0.60, 3.63),
                                :outer44 => (0.0, 5.20), :outer50 => (0.0, 5.01))
 

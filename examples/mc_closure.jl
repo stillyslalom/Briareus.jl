@@ -3,7 +3,7 @@
 # (`Briareus.montecarlo_incident`, `reemit = :hit`) on a finely faceted flat copy of the
 # hohlraum (wall h = 0.1 mm, capsule_h = 0.05 mm), against the radiosity model on the
 # standard meshes (curved and flat elements, raw and balanced view factors). Source:
-# 48 NIF quads at 8 TW at the published cone aims (examples/mesh_convergence.jl's
+# 48 NIF quads at 8 TW at the example cone aims (examples/mesh_convergence.jl's
 # nominal design), deposited on each mesh by its own `DepositionOperator` and scaled to
 # the reference mesh's total; wall η = 0.8, α = 0.925 and 0.85. Departure: one outer
 # quad off (by linearity, the Monte Carlo traces that quad's source alone). Results are

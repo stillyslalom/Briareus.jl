@@ -37,9 +37,9 @@ set_theme!(fontsize = 15, linewidth = 2.5)
 target = hohlraum(length = 10.1, radius = 2.875, leh_radius = 1.55, capsule_radius = 0.9,
                   wall = gold(albedo = 0.85, conversion = 0.8), h = 0.6, capsule_h = 0.2)
 p = GroupPointing(nif_quads(power = 8.0); fields = (:z, :r))
-published = Dict(:outer50 => (5.01, 0.0), :outer44 => (5.20, 0.0),
-                 :inner30 => (3.63, -0.60), :inner23 => (3.09, -1.09))
-quads = apply(p, reduce(vcat, [[published[k]...] for k in p.keys]))
+example = Dict(:outer50 => (5.01, 0.0), :outer44 => (5.20, 0.0),
+               :inner30 => (3.63, -0.60), :inner23 => (3.09, -1.09))
+quads = apply(p, reduce(vcat, [[example[k]...] for k in p.keys]))
 scenario = Scenario(target, quads; observe = :capsule, viewfactor_kw = (; closed = true))
 @printf("%d elements, %d quads\n", nelements(target), length(quads))
 

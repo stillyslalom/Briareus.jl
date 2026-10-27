@@ -1,6 +1,6 @@
 # Work-precision study of the hohlraum mesh: capsule flux modes, mean drive and laser
 # power accounting versus element size, for the NIF hohlraum of the GUI with NIF quads
-# at the published cone aims ("nominal") and at a pointing with the inner cones pulled
+# at the example cone aims ("nominal") and at a pointing with the inner cones pulled
 # toward the waist and the outer cones past the axis ("tight", as an optimizer leaves
 # them). Two sweeps: the wall/cap element size `h` with a fine capsule, then the
 # capsule element size with a fine wall. Errors are against the finest mesh of each

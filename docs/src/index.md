@@ -14,27 +14,45 @@ target-configuration rules and unconverted light.
 pkg> add Briareus
 ```
 
-A first calculation evaluates a NIF hohlraum at a published cone pointing (aim height
-`z` and radial offset `r`, mm), then re-points and re-balances the cones to null the
-capsule flux's P2 and P4 at the same mean flux, in a few seconds once the package has
-loaded:
+A first calculation evaluates a NIF hohlraum at an illustrative cone pointing (aim
+height `z` and radial offset `r` per cone, mm; an example, not a shot's pointing), then
+moves the inner and outer rings of cones along the axis and re-balances their power to
+null the capsule flux's P2 and P4 at the same mean flux, with the beams kept clear of
+the entrance-hole rims and the capsule. Once the package has loaded, the scenario
+builds in 2.5 s on 16 threads and the optimization takes 5 s on its first call (mostly
+compilation) and 1 s after:
 
 ```julia
 using Briareus
 
 target = hohlraum(length = 10.1, radius = 2.875, leh_radius = 1.55, capsule_radius = 0.9)
-pointing = GroupPointing(nif_quads(power = 8.0); fields = (:z, :r, :power))  # per cone
+cones = GroupPointing(nif_quads(power = 8.0); fields = (:z, :r))
+quads = apply(cones, parameters(cones; inner23 = (z = 3.09, r = -1.09),
+                                inner30 = (z = 3.63, r = -0.60),
+                                outer44 = (z = 5.20,), outer50 = (z = 5.01,)))
+
+ring(b) = b.group in (:inner23, :inner30) ? :inner : :outer
+pointing = GroupPointing(quads; by = ring, fields = (:z, :power), relative = true)
 scenario = Scenario(target, pointing; observe = :capsule)
 
-x0 = parameters(pointing; inner23 = (z = 3.09, r = -1.09), inner30 = (z = 3.63, r = -0.60),
-                          outer44 = (z = 5.20, r = 0.0),   outer50 = (z = 5.01, r = 0.0))
-report(evaluate(scenario, x0))       # power accounting, Tr = 262.7 eV, P2/P0 = -15.7 %
+x0 = initial_parameters(pointing)    # no aim shift, 8 TW per quad
+report(evaluate(scenario, x0))       # 384 TW, Tr = 262.7 eV, P2/P0 = -15.737 %
 
 drive = mean_flux(evaluate(scenario, x0))    # mean capsule flux, held fixed
-objective = symmetry_objective(modes = (2 => 1.0, 4 => 1.0); drive)
-result = optimize_pointing(scenario, objective; x0)  # shows any parameter left at a bound
-report(evaluate(scenario, result.x))  # Tr = 262.7 eV, P2/P0 = -0.000 %, P4/P0 = -0.001 %
+keepout = (ApertureKeepOut(target), SphereKeepOut(target))
+objective = symmetry_objective(modes = (2 => 1.0, 4 => 1.0); drive, keepout)
+lower, upper = bounds(pointing, x0; power = 0.6)     # ±1 mm of aim, ±60 % of power
+result = optimize_pointing(scenario, objective; x0, lower, upper)  # 20 iterations
+report(evaluate(scenario, result.x)) # 422.1 TW, P2/P0 = -0.000 %, P4/P0 = +0.000 %
 ```
+
+The starting P2/P0 of −15.7 % is expected: equal power per quad puts 1/3 of it on the
+inner cones, near HYBRID-E's peak cone fraction, and a static solve without cross-beam
+energy transfer or the hohlraum's dynamics is not balanced there. The N221204 benchmark
+has a static P2/P0 of −26 % at 5.5 ns; the shot's balance comes from wavelength-detuned
+transfer, wall motion, the gold bubble and closing entrance holes, which
+[`drive_history`](@ref) models. The optimum lowers the inner-cone fraction to 0.15 and
+stops where the 30° beams reach the entrance-hole keep-out.
 
 The same workflow runs in a desktop window: see [Desktop application](gui.md).
 

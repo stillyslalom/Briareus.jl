@@ -52,7 +52,8 @@ callout in the section says which).
   metrics (2026-10-22); Young 2020 validation (2026-10-24); LEH shield (sombrero)
   (2026-10-24); Backlighter foil on the line of sight (2026-10-24); Backlighter
   conversion efficiency and the photometric chain (2026-10-24); Weighted He-α CE
-  compilation (2026-10-26); He-α CE: saturating peak (2026-10-26).
+  compilation (2026-10-26); He-α CE: saturating peak (2026-10-26); Example NIF cone
+  pointing: unsourced (2026-10-27) *decision* (the quick start's aims).
 
 **Hohlraum dynamics and CBET calibration** (HYBRID-E)
 - HYBRID-E (N210808) hohlraum and LEH size (2026-10-20); Literature review against
@@ -1948,7 +1949,7 @@ a scanned or garbled PDF; **M** secondary; **L** inference.
 ## Hohlraum mesh work-precision (2026-10-16) *derived*
 
 `examples/mesh_convergence.jl`: the GUI's NIF hohlraum (10.1 × 2.875 mm, LEH 1.55,
-capsule 0.9, wall albedo 0.85, conversion 0.8), NIF quads at the published cone aims
+capsule 0.9, wall albedo 0.85, conversion 0.8), NIF quads at the example cone aims
 ("nominal") and at an optimizer-like pointing with the inner cones pulled to the waist
 ("tight"). Elements are sized with `hohlraum(; h, capsule_h)`. Build = deposition
 operator + view factors + flux response, 16 threads.
@@ -2007,7 +2008,7 @@ power.
   differences of full evaluations to 2e-9 (relative).
 - Linear propagation agrees with a 300-shot Monte Carlo of full evaluations to 1–2% in
   every mode l = 1–4 (the sampling error).
-- Published pointing: rms of the mode amplitude (√Σ_m (δc_lm/c00)²) 0.28, 0.21, 0.13,
+- Example pointing: rms of the mode amplitude (√Σ_m (δc_lm/c00)²) 0.28, 0.21, 0.13,
   0.03% for l = 1–4; pointing and power contribute about equally to l = 1 (0.20% each).
   ε₁ = mode_amplitude: median 0.43%, 90th percentile 0.67% (≈ 67 km/s of hot-spot
   velocity at MacGowan's 100 km/s per percent).
@@ -2265,7 +2266,7 @@ curved path? Reference: `montecarlo_incident(...; reemit = :hit)` (the continuum
 flat copy of the hohlraum faceted at wall/cap h = 0.1 mm, capsule_h = 0.05 mm (33,292
 elements, 6,612 on the capsule; the chord sagitta of the wall is 4e-4 mm). Geometry
 10.1 × 5.75 mm, 3.1 mm LEHs, 0.9 mm capsule; wall gold α = 0.925 and 0.85, η = 0.8.
-Source: 48 NIF quads at 8 TW at the published cone aims (`examples/mesh_convergence.jl`
+Source: 48 NIF quads at 8 TW at the example cone aims (`examples/mesh_convergence.jl`
 "nominal"), deposited on each mesh by its own `DepositionOperator` (totals agree to
 4e-5 between meshes) and scaled to the reference total. Departure: one outer-44 quad
 off; by linearity the Monte Carlo traces that quad's source alone (paired batches give
@@ -3177,7 +3178,7 @@ dimensions are recorded here). The CAD is design intent, not metrology. **M**
   is booked on its elements, light from the waist side (e.g. backlighter beams) as
   `sombrero_*_outside`.
 - **Drive-beam clearance** *derived*. The test's cone-averaged NIF pointing (Build-A-
-  Hohlraum example, 10.1 mm hohlraum, published cone aims) was run as 192 beams. The
+  Hohlraum example, 10.1 mm hohlraum, example cone aims) was run as 192 beams. The
   core 1e-4 envelope clears both shields by ≥ 2.09 mm in the worst case (outer 50°;
   44° 2.50, 30° 2.41, 23° 3.25), and the ray trace puts no core power on them. With
   the engineering `nif_wings()` the envelope clearance is ≥ 1.24 mm. The wings'
@@ -8768,3 +8769,68 @@ So |Δ| ≤ 0.0021 in the share, ≤ 0.34 eV in Tc and ≤ 0.003 in the laser �
 largest at 5–7 ns, where CBET moves power between the cones; the gray Tr, Tr_open and the
 CSV (P2, P4, Tr, Dante) are byte-identical. The standard-mesh table of "Laser-spot
 spectrum" (N221204 section) was rerun after the switch (2026-10-27).
+
+## Example NIF cone pointing: unsourced (2026-10-27) *decision*
+
+The cone aims used by the README quick start, `examples/nif_hohlraum.jl`, the tutorials
+(Freeing a bundle for radiography and those built on it), several examples and tests,
+and BriareusGUI's NIF presets (`NIF_CONE_POINTING`) are, in hohlraum (z, r) coordinates
+with r toward the quad's own port azimuth (mm):
+
+| cone | z | r |
+|---|---|---|
+| 23.5° | 3.09 | −1.09 |
+| 30° | 3.63 | −0.60 |
+| 44.5° | 5.20 | 0 |
+| 50° | 5.01 | 0 |
+
+They date from the initial commit (2026-10-15), labeled "published", with no citation.
+A search of this file, `reference/litreview/`, the `data/` headers, the docstrings and
+the history (`git log -S`) found no source: no paper, report or public file in the
+repository gives them, and Build-A-Hohlraum (Swadling et al., PoP 32, 052707, 2025),
+whose 5.75 mm diameter the example hohlraum shares, is recorded for its LEH closure and
+calibration only, not for aims. They are therefore an **illustrative example pointing**,
+not a facility or shot pointing, and are labeled so everywhere (**L** for any claim that
+they resemble a fielded design). The form is the usual indirect-drive one: outer cones
+aimed on the axis near the LEH planes, inner cones across the axis. Where a shot-like
+pointing matters, `hybride_mock_pointing` (section "Mock HYBRID-E pointing
+(2026-10-23)") is the documented stand-in. Earlier sections that said "published cone
+aims" were relabeled "example" on this date.
+
+**Quick start, re-posed** *derived*. The previous quick start optimized z, r and power
+per cone (12 parameters) against P2, P4 and the mean flux only: a flat valley, stopped at
+the 200-iteration limit (objective 1.9e-8, outer44 r at −0.98 against its −1 bound,
+powers near their bounds), ~25 s on first run. The new one starts from the example aims
+and moves each ring rigidly (`GroupPointing(quads; by = ring, fields = (:z, :power),
+relative = true)`, inner = 23.5° + 30°, outer = 44.5° + 50°): one aim-height shift and
+one power per ring (default hohlraum wall, 5.75 × 10.1 mm, 3.1 mm LEHs, 0.9 mm capsule,
+`nif_quads(power = 8.0)`).
+- Without keep-outs, the 4 parameters against P2, P4, P6 and the mean flux converge in
+  31 iterations, none at a bound (inner −0.607 mm, outer +0.387 mm, 5.42 and 10.54 TW
+  per quad), but the result clips: worst-case LEH clearance (`aperture_clearance`,
+  default 1 % envelope and errors) −0.265 mm on the 30° cone, −0.05 mm on the outer
+  cones, and the 23.5° envelope 0.013 mm into the capsule keep-out. At the start the
+  clearances are +0.066 mm (LEH, 23.5°) and +0.194 mm (capsule).
+- Adopted: `ApertureKeepOut` + `SphereKeepOut` in `symmetry_objective`, P2 and P4 and the
+  mean flux, power box ±60 % (the inner power sits just below the default −50 %). The
+  LEH keep-out is active at the optimum (30° clearance +0.001 mm), so three targets and
+  one active constraint fix the four parameters. 20 iterations, 57 evaluations, none at
+  a bound; objective 0.02477 → 3.50e-8; P2/P0 −15.74 % → −0.000 %, P4/P0 +0.14 % →
+  +0.000 %, P6/P0 +0.046 % → +0.077 %; inner −0.135 mm, outer +0.298 mm, 3.97 and
+  11.21 TW per quad (inner-cone fraction 1/3 → 0.15), delivered power 384 → 422.1 TW at
+  the same mean capsule flux (Tr 262.7 eV); capsule clearance +0.148 mm. Adding P6
+  (weight 1) reaches the same point in 52 iterations and 221 evaluations, so it is left
+  out. The ray trace of `examples/nif_hohlraum.jl` at the optimum gives P2/P0 −0.01 %, P4/P0
+  −0.00 %, P6/P0 +0.08 %.
+- Timing, 16 threads (Ryzen, Julia 1.13.2): `using Briareus` 1.6 s; scenario build
+  (deposition operator, view factors) 2.5 s; optimization 4.9 s on first call
+  (compilation) and 1.0 s after.
+
+**Starting P2 at equal power.** At 8 TW per quad (inner-cone fraction 1/3, near HYBRID-E's
+input peak cone fraction: "N221204 benchmark (`n221204_benchmark.md`)" under "Literature
+review against Kritcher et al. 2024 (2026-10-22)", **L**) the static capsule flux has
+P2/P0 −15.7 %. A static solve is not expected to be balanced at a shot's cone fraction:
+in the N221204 benchmark the static P2/P0 at 5.5 ns is −0.26 even with the calibrated
+CBET transfer (section "Two-zone CBET calibrated to PRE 109 Fig. 9 (2026-10-23)");
+fielded balance relies on wavelength-detuned CBET and the hohlraum's dynamics (wall
+motion, the gold bubble, LEH closure).

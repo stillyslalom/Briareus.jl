@@ -34,9 +34,9 @@ set_theme!(fontsize = 15, linewidth = 2.5)
 target = hohlraum(length = 10.1, radius = 2.875, leh_radius = 1.55, capsule_radius = 0.9,
                   wall = gold(albedo = 0.85, conversion = 0.8), h = 0.45, capsule_h = 0.12)
 p = GroupPointing(nif_quads(power = 8.0); fields = (:z, :r))
-published = Dict(:outer50 => (5.01, 0.0), :outer44 => (5.20, 0.0),
-                 :inner30 => (3.63, -0.60), :inner23 => (3.09, -1.09))
-x0 = reduce(vcat, [[published[k]...] for k in p.keys])
+example = Dict(:outer50 => (5.01, 0.0), :outer44 => (5.20, 0.0),
+               :inner30 => (3.63, -0.60), :inner23 => (3.09, -1.09))
+x0 = reduce(vcat, [[example[k]...] for k in p.keys])
 quads = apply(p, x0)
 scenario = Scenario(target, quads; observe = :capsule, viewfactor_kw = (; closed = true))
 @printf("%d elements, %d quads\n", nelements(target), length(quads))
@@ -185,7 +185,7 @@ for t in inv1.sources[1:4]
 end
 
 # The direction is right, and the positioning is the largest single source, but it
-# explains only a quarter of the measurement and its estimate falls well short of
+# accounts for only a quarter of the measurement and its estimate falls well short of
 # 30 µm. Three numbers do not separate a target offset from the same mode-1 pattern made
 # by the 96 independent beam displacements and the cones' shared ones: the prior
 # allows all of them, so the most probable explanation spreads the blame. ``l = 3``,
@@ -228,7 +228,7 @@ rows13 = [mode_index(l, m) for (l, m) in inv13.components]
 # part of the drive's response moves the shape more for the same displacement. First
 # tune the cones (aim and power per cone, aims within 1.5 mm axially and 1 mm radially,
 # powers within 40%) to null ``l = 1``–``4`` at fixed drive, and compare the budgets of
-# the published and the tuned designs:
+# the example and the tuned designs:
 
 p3 = GroupPointing(quads; fields = (:z, :r, :power))
 s3 = Scenario(target, p3; observe = :capsule, viewfactor_kw = (; closed = true))
@@ -249,7 +249,7 @@ function budget_row(label, x)
     return ur.rms_mode
 end
 println("  design      P₂/P₀     P₄/P₀    rms from the errors: l = 1     2      3      4")
-budget_row("published", x3)
+budget_row("example", x3)
 tuned_budget = budget_row("tuned", tuned.x);
 
 # The tuned design leaves less to the errors (l = 1 from 0.28% to 0.23%). It has also

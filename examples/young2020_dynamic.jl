@@ -8,9 +8,9 @@
 using Briareus, LinearAlgebra, Printf, Random
 using Briareus: _interp, _hohlraum_grid
 const H = parse(Float64, get(ENV, "H", "0.5"))
-pub = Dict(:outer50 => (5.01, 0.0), :outer44 => (5.20, 0.0), :inner30 => (3.63, -0.60), :inner23 => (3.09, -1.09))
+example = Dict(:outer50 => (5.01, 0.0), :outer44 => (5.20, 0.0), :inner30 => (3.63, -0.60), :inner23 => (3.09, -1.09))
 p = GroupPointing(nif_quads(power = 8.0); fields = (:z, :r))
-quads = apply(p, reduce(vcat, [[pub[k][1] * 1.1188, pub[k][2]] for k in p.keys]))
+quads = apply(p, reduce(vcat, [[example[k][1] * 1.1188, example[k][2]] for k in p.keys]))
 P = young2020_pulses(); side(b) = startswith(String(b.group), "inner") ? :inner : :outer
 pul = (; inner = PulseShape(P.inner.t, 4 .* P.inner.p), outer = PulseShape(P.outer.t, 4 .* P.outer.p))
 R = young2020_radii(); A = young2020_albedos()

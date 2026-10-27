@@ -115,10 +115,10 @@ end
 @testset "implosion metrics: uncertainty, inverse, penalty" begin
     t = hohlraum(; length = 10.1, radius = 2.875, leh_radius = 1.55, capsule_radius = 0.9,
                  wall = gold(albedo = 0.85, conversion = 0.8), h = 0.6, capsule_h = 0.2)
-    pub = Dict(:outer50 => (5.01, 0.0), :outer44 => (5.20, 0.0),
-               :inner30 => (3.63, -0.60), :inner23 => (3.09, -1.09))
+    example = Dict(:outer50 => (5.01, 0.0), :outer44 => (5.20, 0.0),
+                   :inner30 => (3.63, -0.60), :inner23 => (3.09, -1.09))
     p0 = GroupPointing(nif_quads(power = 8.0); fields = (:z, :r))
-    x0 = reduce(vcat, [[pub[k]...] for k in p0.keys])
+    x0 = reduce(vcat, [[example[k]...] for k in p0.keys])
     quads = apply(p0, x0)
     s = Scenario(t, GroupPointing(quads; fields = (:z, :r)); observe = :capsule,
                  viewfactor_kw = (; closed = true))
@@ -212,9 +212,9 @@ end
     mk(cc = (0.0, 0.0, 0.0)) = hohlraum(; length = 11.3, radius = 0.85 * 3.1, leh_radius = 0.85 * 1.82,
         capsule_radius = 0.85 * 0.98, corner_radius = 0.85 * 1.05, capsule_center = cc,
         wall = gold(albedo = 0.8, conversion = 0.9), h = 0.6, capsule_h = 0.2)
-    pub = Dict(:outer50 => (5.01, 0.0), :outer44 => (5.20, 0.0), :inner30 => (3.63, -0.60), :inner23 => (3.09, -1.09))
+    example = Dict(:outer50 => (5.01, 0.0), :outer44 => (5.20, 0.0), :inner30 => (3.63, -0.60), :inner23 => (3.09, -1.09))
     p = GroupPointing(nif_quads(power = 8.0); fields = (:z, :r))
-    quads = apply(p, reduce(vcat, [[1.1188 * pub[k][1], pub[k][2]] for k in p.keys]))
+    quads = apply(p, reduce(vcat, [[1.1188 * example[k][1], example[k][2]] for k in p.keys]))
     P = young2020_pulses()
     pul = (; inner = PulseShape(P.inner.t, 4 .* P.inner.p), outer = PulseShape(P.outer.t, 4 .* P.outer.p))
     side(b) = startswith(String(b.group), "inner") ? :inner : :outer

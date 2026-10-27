@@ -29,34 +29,54 @@ drive, optimization and shot review in one window) is installed separately; see
 
 ## First calculation
 
-A NIF hohlraum driven by all 48 quads at 8 TW per beam, evaluated at a published cone
-pointing (aim height `z` and radial offset `r`, mm) and then re-pointed and re-balanced
-at the same mean capsule flux to null its P2 and P4 Legendre modes:
+A NIF hohlraum driven by all 48 quads at 8 TW each, at an illustrative cone pointing
+(aim height `z` and radial offset `r` per cone, mm; an example, not a shot's pointing).
+Each ring of cones, inner (23.5° and 30°) and outer (44.5° and 50°), is then moved as a
+whole along the axis and re-balanced in power to null the capsule flux's P2 and P4 at
+the same mean flux, with the beams kept clear of the entrance-hole rims and the capsule:
+four parameters, fixed at the optimum by the three targets and the entrance-hole
+keep-out.
 
 ```julia
 using Briareus
 
 target = hohlraum(length = 10.1, radius = 2.875, leh_radius = 1.55, capsule_radius = 0.9)
-pointing = GroupPointing(nif_quads(power = 8.0); fields = (:z, :r, :power))  # per cone
+cones = GroupPointing(nif_quads(power = 8.0); fields = (:z, :r))
+quads = apply(cones, parameters(cones; inner23 = (z = 3.09, r = -1.09),
+                                inner30 = (z = 3.63, r = -0.60),
+                                outer44 = (z = 5.20,), outer50 = (z = 5.01,)))
+
+ring(b) = b.group in (:inner23, :inner30) ? :inner : :outer
+pointing = GroupPointing(quads; by = ring, fields = (:z, :power), relative = true)
 scenario = Scenario(target, pointing; observe = :capsule)
 
-x0 = parameters(pointing; inner23 = (z = 3.09, r = -1.09), inner30 = (z = 3.63, r = -0.60),
-                          outer44 = (z = 5.20, r = 0.0),   outer50 = (z = 5.01, r = 0.0))
-report(evaluate(scenario, x0))       # power accounting, Tr = 262.7 eV, P2/P0 = -15.7 %
+x0 = initial_parameters(pointing)    # no aim shift, 8 TW per quad
+report(evaluate(scenario, x0))       # 384 TW, Tr = 262.7 eV, P2/P0 = -15.737 %
 
 drive = mean_flux(evaluate(scenario, x0))    # mean capsule flux, held fixed
-objective = symmetry_objective(modes = (2 => 1.0, 4 => 1.0); drive)
-result = optimize_pointing(scenario, objective; x0)  # shows any parameter left at a bound
-report(evaluate(scenario, result.x))  # Tr = 262.7 eV, P2/P0 = -0.000 %, P4/P0 = -0.001 %
-parameter_names(pointing) .=> result.x
+keepout = (ApertureKeepOut(target), SphereKeepOut(target))
+objective = symmetry_objective(modes = (2 => 1.0, 4 => 1.0); drive, keepout)
+lower, upper = bounds(pointing, x0; power = 0.6)     # ±1 mm of aim, ±60 % of power
+result = optimize_pointing(scenario, objective; x0, lower, upper)  # 20 iterations
+report(evaluate(scenario, result.x)) # 422.1 TW, P2/P0 = -0.000 %, P4/P0 = +0.000 %
+parameter_names(pointing) .=> result.x  # inner.z -0.135 mm, inner.power 3.97 TW,
+                                        # outer.z +0.298 mm, outer.power 11.21 TW
 ```
 
-The default box around `x0` is ±1 mm of aim and ±50 % of power (`bounds` widens it).
-After the package loads, the evaluation and the optimization take a few seconds each;
-`examples/nif_hohlraum.jl` adds explicit bounds and a ray-trace check. The
-[documentation](https://stillyslalom.github.io/Briareus.jl/dev/) starts with tutorials
-that build up the physics and check each step against an exact result; its home page
-has a short glossary (view factor, radiosity, P2/P0, LEH, cone fraction, CBET).
+The starting P2/P0 of −15.7 % is expected: equal power per quad puts 1/3 of it on the
+inner cones, near HYBRID-E's peak cone fraction, and a static solve without cross-beam
+energy transfer or the hohlraum's dynamics is not balanced there (the repository's
+N221204 benchmark has a static P2/P0 of −26 % at 5.5 ns; the shot's balance comes from
+wavelength-detuned transfer, wall motion, the gold bubble and closing entrance holes,
+which `drive_history` models). The optimum lowers the inner-cone fraction to 0.15 and
+stops where the 30° beams reach the entrance-hole keep-out; P6/P0 is left at +0.08 %.
+After the package loads (1.6 s), building the scenario (deposition operator and view
+factors) takes 2.5 s on 16 threads and the optimization 5 s on its first call (mostly
+compilation) and 1 s after. `examples/nif_hohlraum.jl` runs the same case with a
+ray-trace check. The [documentation](https://stillyslalom.github.io/Briareus.jl/dev/)
+starts with tutorials that build up the physics and check each step against an exact
+result; its home page has a short glossary (view factor, radiosity, P2/P0, LEH, cone
+fraction, CBET).
 
 Units are mm, ns, TW (TW·ns = kJ), TW/mm² (`to_Wcm2` multiplies by 10¹⁴) and eV; angles
 are in degrees, θ from +z and φ counterclockwise from +x. A beam's direction is fixed by

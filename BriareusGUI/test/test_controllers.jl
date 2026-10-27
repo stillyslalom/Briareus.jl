@@ -51,7 +51,7 @@ end
     @test all(r -> r.count == 8 || r.count == 16, rows) && sum(r.count for r in rows) == 48
     r23 = rows[1]
     @test r23.z ≈ 3.09 && r23.r ≈ -1.09 && r23.power ≈ 8.0 && r23.enabled === true
-    # published pointing, mirrored for the lower hemisphere
+    # example pointing, mirrored for the lower hemisphere
     @test all(b -> abs(b.aim[3]) ≈ 3.09, bt.beams[][r23.members])
     @test any(b -> b.aim[3] < 0, bt.beams[][r23.members])
     @test occursin("48 of 48 beams on", beams_summary(bt)) && occursin("384 TW", beams_summary(bt))
