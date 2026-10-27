@@ -65,8 +65,7 @@ end
     quads = nif_quads(power = 8.0)
     p = GroupPointing(quads; fields = (:z, :r, :power))
     x0 = initial_parameters(p)
-    s = Scenario(t, quads; observe = :capsule, parameterization = p,
-                 viewfactor_kw = (; closed = true))
+    s = Scenario(t, p; observe = :capsule, viewfactor_kw = (; closed = true))
     keepout = (ApertureKeepOut(t), SphereKeepOut(t))
     objectives = (symmetry_objective(; drive = 1.0, keepout), asymmetry_objective(; keepout))
     tw = hohlraum(; geometry..., wall = Material(:Au; albedo = WallLossAlbedo(), conversion = 0.8))

@@ -38,8 +38,7 @@ published = Dict(:outer50 => (5.01, 0.0), :outer44 => (5.20, 0.0),
                  :inner30 => (3.63, -0.60), :inner23 => (3.09, -1.09))
 x0 = reduce(vcat, [[published[k]...] for k in p.keys])
 quads = apply(p, x0)
-scenario = Scenario(target, quads; observe = :capsule, parameterization = p,
-                    viewfactor_kw = (; closed = true))
+scenario = Scenario(target, quads; observe = :capsule, viewfactor_kw = (; closed = true))
 @printf("%d elements, %d quads\n", nelements(target), length(quads))
 
 # ## How each beam's errors move the drive
@@ -232,8 +231,7 @@ rows13 = [mode_index(l, m) for (l, m) in inv13.components]
 # the published and the tuned designs:
 
 p3 = GroupPointing(quads; fields = (:z, :r, :power))
-s3 = Scenario(target, quads; observe = :capsule, parameterization = p3,
-              viewfactor_kw = (; closed = true))
+s3 = Scenario(target, p3; observe = :capsule, viewfactor_kw = (; closed = true))
 x3 = initial_parameters(p3)
 a0 = flux_moments(evaluate(s3, x3))[1]
 lo, hi = bounds(p3, x3; z = 1.5, r = 1.0, power = 0.4)

@@ -12,8 +12,8 @@ std_rows(A) = sqrt.(sum(abs2, A .- sum(A; dims = 2) ./ size(A, 2); dims = 2) ./ 
     p0 = GroupPointing(nif_quads(power = 8.0); fields = (:z, :r))
     x0 = reduce(vcat, [[pub[k]...] for k in p0.keys])
     quads = apply(p0, x0)
-    s = Scenario(t, quads; observe = :capsule, viewfactor_kw = (; closed = true),
-                 parameterization = GroupPointing(quads; fields = (:z, :r)))
+    s = Scenario(t, GroupPointing(quads; fields = (:z, :r)); observe = :capsule,
+                 viewfactor_kw = (; closed = true))
     lmax = 4
     sens = mode_sensitivity(s, quads; lmax)
     nm = (lmax + 1)^2

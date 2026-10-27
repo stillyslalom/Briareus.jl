@@ -344,12 +344,19 @@ end
 _LazyResponse() = _LazyResponse(ReentrantLock(), nothing)
 
 """
-    Scenario(target, beams; observe = nothing, radiation = true, time = 0.0,
-             albedo = nothing, parameterization = GroupPointing(beams), lpi = nothing,
-             deposition_kw = (;), viewfactor_kw = (;), model = nothing)
-    Scenario(target, parameterization::GroupPointing; kwargs...)
+    Scenario(target, pointing::GroupPointing; observe = nothing, radiation = true,
+             time = 0.0, albedo = nothing, lpi = nothing, deposition_kw = (;),
+             viewfactor_kw = (;), model = nothing)
+    Scenario(target, beams; kwargs...)
+    Scenario(target, parameterization; kwargs...)
 
-The second form takes the beams from the parameterization's template beams.
+The parameterization (`scenario.param`) maps the parameter vectors of `evaluate` and
+`optimize_pointing` to beams. The first form builds the deposition operator for the
+template beams of `pointing`; the second is `Scenario(target, GroupPointing(beams))`
+(fields `:z`, `:r`, `:defocus` per group). The third takes any other parameterization
+with methods of `apply(parameterization, x)` and `initial_parameters(parameterization)`,
+and builds the operator for the beams at its initial parameters. The operator resolves
+the beams' footprints where those beams aim (`reach`, `DepositionOperator`).
 
 Everything precomputed for fast repeated evaluation of a pointing design:
 the `DepositionOperator`, and — when `radiation` and `observe` (component names whose
@@ -407,10 +414,15 @@ function _response(s::Scenario)
     end
 end
 
-function Scenario(t::Target, beams::AbstractVector{<:Beam}; observe = nothing,
-                  radiation::Bool = observe !== nothing, time = 0.0, albedo = nothing,
-                  parameterization = GroupPointing(beams), deposition_kw = (;),
-                  viewfactor_kw = (;), lpi = nothing, model = nothing)
+Scenario(t::Target, p::GroupPointing; kwargs...) = _scenario(t, p.template, p; kwargs...)
+Scenario(t::Target, beams::AbstractVector{<:Beam}; kwargs...) =
+    _scenario(t, beams, GroupPointing(beams); kwargs...)
+Scenario(t::Target, p; kwargs...) = _scenario(t, apply(p, initial_parameters(p)), p; kwargs...)
+
+function _scenario(t::Target, beams::AbstractVector{<:Beam}, parameterization;
+                   observe = nothing, radiation::Bool = observe !== nothing, time = 0.0,
+                   albedo = nothing, deposition_kw = (;), viewfactor_kw = (;), lpi = nothing,
+                   model = nothing)
     model === nothing || model.target === t ||
         throw(ArgumentError("model is a radiation model of another target"))
     op = DepositionOperator(t, beams; deposition_kw...)
@@ -426,9 +438,6 @@ function Scenario(t::Target, beams::AbstractVector{<:Beam}; observe = nothing,
     return Scenario(t, parameterization, op, model, obs, W, Y, WR, YR, lpi, Float64(time),
                     _LazyResponse(), albedo === nothing ? nothing : collect(Float64, albedo))
 end
-
-Scenario(t::Target, p::GroupPointing; kwargs...) =
-    Scenario(t, p.template; parameterization = p, kwargs...)
 
 """
     subset(scenario, keep; parameterization = GroupPointing(kept beams; same fields))

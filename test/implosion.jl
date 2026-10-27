@@ -120,8 +120,8 @@ end
     p0 = GroupPointing(nif_quads(power = 8.0); fields = (:z, :r))
     x0 = reduce(vcat, [[pub[k]...] for k in p0.keys])
     quads = apply(p0, x0)
-    s = Scenario(t, quads; observe = :capsule, viewfactor_kw = (; closed = true),
-                 parameterization = GroupPointing(quads; fields = (:z, :r)))
+    s = Scenario(t, GroupPointing(quads; fields = (:z, :r)); observe = :capsule,
+                 viewfactor_kw = (; closed = true))
 
     # a constant drive history reproduces the static velocity (a dropped inner quad)
     dropped = [b.name == quads[3].name ? remake(b; power = 0.0) : b for b in quads]

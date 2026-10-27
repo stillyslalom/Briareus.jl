@@ -87,9 +87,8 @@ quads = aimed.(nif_quads(power = 8.0))
 # triangle elsewhere. That cuts the operator to a fifth of its points and changes the
 # modes below in the fourth digit.
 
-scenario = Scenario(target, quads; observe = :capsule,
-                    deposition_kw = (; resolution = 0.6, reach = 0.5, level = 0),
-                    parameterization = GroupPointing(quads; by = :quad, fields = (:power,)))
+scenario = Scenario(target, GroupPointing(quads; by = :quad, fields = (:power,));
+                    observe = :capsule, deposition_kw = (; resolution = 0.6, reach = 0.5, level = 0))
 full = flux_ylm(evaluate(scenario, quads); lmax = 4)
 show_modes(label, c) = @printf("%-24s ε₁ %6.3f%%  ε₂ %6.3f%%  ε₃ %6.3f%%  ε₄ %6.3f%%  drive %.4f\n",
                                label, (100 * mode_amplitude(c, l) for l in 1:4)..., c[1] / full[1])

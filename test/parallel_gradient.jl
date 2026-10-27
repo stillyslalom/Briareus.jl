@@ -12,7 +12,7 @@ struct _ChunkStop <: Exception end
     inner = (:inner23, :inner30)
     q = [remake(b; dlambda = b.group in inner ? 1.0 : 0.0) for b in nif_quads(power = 8.0)]
     p = GroupPointing(q; by = :quad, fields = (:z, :power))         # 96 parameters, 8 chunks
-    s = Scenario(t, q; observe = :capsule, parameterization = p, lpi = CBET(leh_z = 5.05),
+    s = Scenario(t, p; observe = :capsule, lpi = CBET(leh_z = 5.05),
                  viewfactor_kw = (; closed = true))
     obj = asymmetry_objective(; keepout = ApertureKeepOut(t))
     J(x) = obj(evaluate(s, x))

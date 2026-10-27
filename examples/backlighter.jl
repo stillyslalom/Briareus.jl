@@ -23,7 +23,7 @@ println(length(beams), " beams drive the backlighter")
 
 # Each beam's aim point is free in 3D within ±0.6 mm.
 pointing = GroupPointing(beams; by = :beam, fields = (:r, :phi, :z), mirror = false)
-scenario = Scenario(target, beams; parameterization = pointing)
+scenario = Scenario(target, pointing)
 x0 = initial_parameters(pointing)
 objective = irradiance_objective(:backlighter; center = foil_center, radius = 0.5, spill = 0.2)
 lower, upper = bounds(pointing, x0; r = 0.6, phi = 0.6, z = 0.6)

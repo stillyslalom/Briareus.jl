@@ -627,10 +627,10 @@ sol_win = solve(win_model, deposit(op0, beams_at(tpeak)); time = tpeak, burnthro
 sol_base = solve(base_model, deposit(base_op, beams_at(tpeak)); time = tpeak)
 peak = beams_at(tpeak)
 quad_power = GroupPointing(peak; by = :quad, fields = (:power,))
-S_win = Scenario(twin, peak; observe = :capsule, time = tpeak, albedo = sol_win.albedo,
-                 parameterization = quad_power, viewfactor_kw = (; F = F0))
-S_base = Scenario(base_target, peak; observe = :capsule, time = tpeak, albedo = sol_base.albedo,
-                  parameterization = quad_power, viewfactor_kw = (; F = base_model.F))
+S_win = Scenario(twin, quad_power; observe = :capsule, time = tpeak, albedo = sol_win.albedo,
+                 viewfactor_kw = (; F = F0))
+S_base = Scenario(base_target, quad_power; observe = :capsule, time = tpeak,
+                  albedo = sol_base.albedo, viewfactor_kw = (; F = base_model.F))
 x0 = initial_parameters(quad_power)
 capsule = elements(twin, :capsule)
 a = legendre_moments(sol_win.H, twin, capsule; lmax = 2)

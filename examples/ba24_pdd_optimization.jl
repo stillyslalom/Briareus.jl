@@ -53,6 +53,8 @@ end
 
 pq = QuadAims()
 x_oc = reduce(vcat, [[OC[k][1], OC[k][2], OC[k][3], 4 * OC[k][4] / 100] for k in pq.quads.keys])
+# the scenario's deposition operator is built for the beams at the initial parameters
+Briareus.initial_parameters(::QuadAims) = x_oc
 lower = repeat([0.0, -180.0, 0.0, 2.0], 4)
 upper = repeat([90.0, 180.0, 10.0, 4.0], 4)
 sphere(n) = Target(Component(:capsule, icosphere_mesh(R; n), Material(:CH); surface = SphereSurface(R)))
@@ -65,7 +67,7 @@ sphere(n) = Target(Component(:capsule, icosphere_mesh(R; n), Material(:CH); surf
 function setup(n)
     t = sphere(n)
     W = ylm_weights(t, collect(1:nelements(t)); lmax = L)
-    s = Scenario(t, apply(pq, x_oc); parameterization = pq)
+    s = Scenario(t, pq)
     σ1(ev) = mode_rms(W * (ev.deposition.element ./ t.elem_area), L)
     return (; t, W, s, σ1)
 end

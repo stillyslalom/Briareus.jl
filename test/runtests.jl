@@ -553,7 +553,7 @@ end
     for k in p.keys
         append!(x0, k in (:inner23, :inner30) ? [3.3, -0.8, 6.0] : [5.0, 0.0, 9.0])
     end
-    sc = Scenario(t, apply(p, x0); observe = :capsule, parameterization = p)
+    sc = Scenario(t, GroupPointing(apply(p, x0); fields = (:z, :r, :power)); observe = :capsule)
     ev = evaluate(sc, x0)
     @test clipped_fraction(ev) < 0.01
     @test abs(missed_fraction(ev)) < 0.01
@@ -674,7 +674,7 @@ end
     @test any(!(a.aim ≈ b.aim) for (a, b) in zip(apply(pa, initial_parameters(pa)), bs))
     # differentiable, and subset keeps the mode
     t = hohlraum(nz = 8, nphi = 16, capsule_ntheta = 6, capsule_nphi = 8)
-    sc = Scenario(t, bs; observe = :capsule, parameterization = p)
+    sc = Scenario(t, p; observe = :capsule)
     g = ForwardDiff.gradient(x -> flux_moments(evaluate(sc, x))[1], initial_parameters(p))
     @test all(isfinite, g) && any(!iszero, g)
     @test subset(sc, findall(b -> b.quad != "Q31T", bs)).param.relative
@@ -685,7 +685,7 @@ end
     beams = [Beam("b$i"; theta = 40, phi = 90i, power = 0.5, spot = omega_spot(:SG4),
                   fnumber = 6.7, group = Symbol(:b, i), aim = (0.3cos(i), 0.3sin(i), 0.0)) for i in 1:4]
     p = GroupPointing(beams; by = :group, fields = (:r, :phi, :z), mirror = false)
-    sc = Scenario(t, beams; parameterization = p)
+    sc = Scenario(t, p)
     @test sc.model === nothing
     obj = irradiance_objective(:bl; center = (0, 0, 0), radius = 0.4, spill = 0.0)
     x0 = initial_parameters(p)
@@ -942,7 +942,7 @@ end
          for b in nif_quads()]
     p = GroupPointing(q; fields = (:dlambda,))
     lpi = CalibratedTransfer((:outer44, :outer50), (:inner23, :inner30), linear_transfer(0.0, 0.05))
-    sc = Scenario(t, q; observe = :capsule, parameterization = p, lpi)
+    sc = Scenario(t, p; observe = :capsule, lpi)
     f(x) = (a = flux_moments(evaluate(sc, x); lmax = 2); a[3] / a[1])
     x0 = zeros(nparams(p))
     x1 = [k in (:inner23, :inner30) ? 1.0 : 0.0 for k in p.keys]
@@ -1064,7 +1064,7 @@ end
     q = [remake(b; aim = (0.0, 0.0, sign(b.port[3]) * (b.group in (:inner23, :inner30) ? 3.3 : 5.0)))
          for b in nif_quads()]
     p = GroupPointing(q; by = :quad, fields = (:power,))
-    sc = Scenario(th, q; observe = :capsule, parameterization = p)
+    sc = Scenario(th, p; observe = :capsule)
     cf = flux_ylm(evaluate(sc, q); lmax = 4)
     forbidden = [(l, m) for l in 0:4 for m in -l:l if (m >= 0 ? isodd(l + m) : iseven(l + m))]
     @test maximum(abs(cf[mode_index(l, m)]) for (l, m) in forbidden) < 1e-10 * cf[1]
