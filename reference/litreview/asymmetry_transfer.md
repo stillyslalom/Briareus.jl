@@ -338,7 +338,7 @@ full text read through a summarizing fetch).
      E[(1−f²)ᵃ] ≈ 1 − a·E[f²], where E[f²] = (|v̄|² + tr Σ)/v_imp² (**L**).
    - Add window albedo and target offset as sources. Young's 5.4 km/s per 10% and
      ~1.2 km/s/µm vertical are checks on the existing derivatives.
-5. **`infer_errors` from v_HS.**
+5. **`infer_errors` from v_HS** (now `infer_velocity_errors`).
    - Accept a measured v_HS vector with nToF covariance (±14 km/s; 13° in θ, 29° in φ)
      as the measurement. Map it to p1 by dividing by `k_v × amp_shape × amp_burn`.
    - Add a capsule-thickness mode-1 nuisance term with *opposite* sign (Casey 2021),

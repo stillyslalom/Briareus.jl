@@ -456,15 +456,15 @@ function ntof_covariance(v; speed::Real = 14.0, theta::Real = 13.0, phi::Real = 
 end
 
 """
-    infer_errors(scenario, beams, v::AbstractVector{<:Real}; sigma = ntof_covariance(v),
+    infer_velocity_errors(scenario, beams, v; sigma = ntof_covariance(v),
                  per_percent, amplification = 1, thickness = 0.002,
                  thickness_per_percent = 110, kwargs...) -> NamedTuple
 
 The most probable beam errors behind a measured hot-spot velocity `v` (km/s, chamber
-x, y, z): `infer_errors` on the mode-1 components, with the measurement mapped to them
+x, y, z): [`infer_errors`](@ref) on the mode-1 components, with the measurement mapped to them
 through `hotspot_velocity` (`per_percent`, `amplification`; divide out a burn
 amplification here) and its covariance `sigma` (3 × 3, km²/s², or one rms number; default
-`ntof_covariance(v)`). The priors are `infer_errors`'s keywords.
+`ntof_covariance(v)`). The priors are [`infer_errors`](@ref)'s keywords.
 
 A capsule-thickness mode 1 competes with the drive (Casey et al., PRL 126, 025002,
 2021): the hot spot moves toward the thicker side, at `thickness_per_percent` km/s per %
@@ -474,7 +474,7 @@ thickness, toward the thicker side) with rms `thickness` per axis (default 0.2 %
 0.15 µm metrology on a 78 µm shell: *derived*; 0 leaves it out), and is inferred with
 the beam errors.
 
-Returns `infer_errors`'s fields, with `measured`, `predicted` and `residual` still in
+Returns [`infer_errors`](@ref)'s fields, with `measured`, `predicted` and `residual` still in
 the mode-1 components, plus `thickness` (the inferred `t`) and `velocity = (; measured,
 nominal, predicted, residual, chi2, chi2_prior)` in km/s: `predicted` is the nominal plus
 the inferred errors' and thickness's velocity; `chi2` is MacGowan's ``χ^2_ν`` of the nominal
@@ -482,10 +482,10 @@ the inferred errors' and thickness's velocity; `chi2` is MacGowan's ``χ^2_ν`` 
 al. 2023), and `chi2_prior` the same with the errors' prior spread added to `Σₘ`
 (about 1 when the measurement lies within the spread the priors allow).
 """
-function infer_errors(s::Scenario, beams::AbstractVector{<:Beam}, v::AbstractVector{<:Real};
-                      sigma = ntof_covariance(v), per_percent::Real = HOTSPOT_VELOCITY_PER_PERCENT,
-                      amplification::Real = 1.0, thickness::Real = 0.002,
-                      thickness_per_percent::Real = 110.0, kwargs...)
+function infer_velocity_errors(s::Scenario, beams::AbstractVector{<:Beam}, v::AbstractVector{<:Real};
+                               sigma = ntof_covariance(v), per_percent::Real = HOTSPOT_VELOCITY_PER_PERCENT,
+                               amplification::Real = 1.0, thickness::Real = 0.002,
+                               thickness_per_percent::Real = 110.0, kwargs...)
     length(v) == 3 || throw(ArgumentError("a hot-spot velocity is a 3-vector (km/s)"))
     thickness >= 0 || throw(ArgumentError("thickness must be a non-negative rms"))
     Σv = sigma isa Real ? Matrix(Diagonal(fill(Float64(sigma)^2, 3))) : Matrix{Float64}(sigma)

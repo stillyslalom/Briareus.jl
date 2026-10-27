@@ -1,7 +1,7 @@
 # Partial visibility against a Monte Carlo radiosity: the capsule's incident flux, a₂/a₀
 # and a₄/a₀ from the radiosity solve with centroid and sampled visibility
 # (`view_factors(...; visibility = :sampled)`), raw and balanced (`closed`), against
-# `Briareus.montecarlo_incident`, which traces diffuse transport on the same facets with
+# `montecarlo_incident`, which traces diffuse transport on the same facets with
 # no view factors. Targets: the bored-LEH cavity of test/partial_visibility.jl (0.1 mm
 # LEH bores, 20 µm waist gap) at 0.5 and 0.25 mm, and the flush-LEH `hohlraum()` as a
 # control. The source is the CAD tutorial's two Gaussian wall rings, integrated over
@@ -80,7 +80,7 @@ end
 function montecarlo(t, reemit)
     cap = elements(t, :capsule)
     W = legendre_weights(t, cap; lmax = 4)
-    sec = @elapsed H, batch = Briareus.montecarlo_incident(t, drive(t), cap; paths = PATHS, reemit, batches = 64)
+    sec = @elapsed H, batch = montecarlo_incident(t, drive(t), cap; paths = PATHS, reemit, batches = 64)
     r = [ratios(W * b) for b in eachrow(batch)]
     nb = length(r)
     err(k) = (x = getindex.(r, k); sqrt(sum(abs2, x .- sum(x) / nb) / (nb - 1) / nb))

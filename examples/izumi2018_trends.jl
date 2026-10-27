@@ -18,7 +18,7 @@ function run(; rcap = 0.908, fill = 0.3, energy = 1.0, finner = 1.0, bubble = tr
         mm = RadiationModel(t; closed = true); (mm, DepositionOperator(t, quads))
     end
     pul = (; inner = PulseShape(P.inner.t, 4finner .* P.inner.p), outer = PulseShape(P.outer.t, 4 .* P.outer.p))
-    lpi = bubble ? BubbleAbsorption(; radius = 2.875, turn_on = 0.25, fill, energy, capsule_radius = rcap) : nothing
+    lpi = bubble ? BubbleAbsorption(; radius = 2.875, turn_on = 0.25, fill, picket_ratio = energy, capsule_radius = rcap) : nothing
     h = drive_history(m, op, t -> with_pulses(quads, pul, t; by = side), times; lpi, lmax = 2)
     p2 = h.moments[3, :] ./ h.moments[1, :]
     return 100 * sum(p2[pk]) / count(pk)

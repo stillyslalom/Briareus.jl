@@ -1,5 +1,5 @@
 # Is view-factor balancing (`closed = true`) right on cavities with rims, windows and CAD
-# walls? Continuum Monte Carlo references (`Briareus.montecarlo_incident`, `reemit =
+# walls? Continuum Monte Carlo references (`montecarlo_incident`, `reemit =
 # :hit`) on watertight flat copies faceted at 0.1 mm, against the radiosity model on the
 # default curved path, raw and balanced, centroid and sampled visibility:
 #
@@ -125,13 +125,13 @@ const ESC_RUNS = Dict("bored" => [(1000, 1), (25000, 2)], "windowed" => [(6000, 
 moments_mc(key, paths, seed) = cached("mc_$(key)_$(paths)_$(seed)") do
     t = REFS[key]()
     P, cap = drive(t), capsule(t)
-    _, batch = Briareus.montecarlo_incident(t, P, cap; paths, batches = 32, seed)
+    _, batch = montecarlo_incident(t, P, cap; paths, batches = 32, seed)
     (; M = (legendre_weights(t, cap; lmax = 4) * batch') ./ sum(P))
 end
 escape_mc(key, paths, seed) = cached("mcesc_$(key)_$(paths)_$(seed)") do
     t = REFS[key]()
     P, ap = drive(t), apertures(t)
-    _, batch = Briareus.montecarlo_incident(t, P, ap; paths, batches = 32, seed)
+    _, batch = montecarlo_incident(t, P, ap; paths, batches = 32, seed)
     (; esc = (batch * t.elem_area[ap]) ./ sum(conversions(t) .* P))
 end
 function reference(key)

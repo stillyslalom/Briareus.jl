@@ -40,7 +40,8 @@ export DepositionOperator, Deposition, deposit, CoronaProfile, CoronaOperator, r
        component_power
 export Enclosure, enclosure, cad_target
 export view_factors, Float32Matrix, HMatrix, closure_error, enforce_closure!, open_fraction, RadiationModel, RadiationSolution, solve,
-       flux_response, energy_balance, radiation_temperature, to_Wcm2, SIGMA_SB, albedos, conversions
+       flux_response, energy_balance, radiation_temperature, to_Wcm2, SIGMA_SB, albedos, conversions,
+       montecarlo_incident
 export WallMotion, wall_radius, wall_displacement, moving_hohlraum, Keyframes, model_at, deposition_at
 export PulseShape, pulse_energy, with_pulses, drive_history, energy_budget, cone_fraction_pulses,
        write_pulse_table, read_pulse_table, retune_drive
@@ -82,7 +83,7 @@ export HOTSPOT_VELOCITY_PER_PERCENT, mode1_vector, hotspot_velocity, ResponseKer
        yield_factor, alpha_factor, rke_fraction, reactivity_exponent, burn_amplification,
        shape_amplification, young2020_green, young2020_kernel, young2020_pulses, young2020_dropped_quads,
        implosion_metrics, mode1_tolerance, swing_metrics,
-       velocity_uncertainty, ntof_covariance, VelocityPenalty
+       velocity_uncertainty, ntof_covariance, infer_velocity_errors, VelocityPenalty
 export CapsuleDrive, capsule_drive
 
 include("geometry.jl")

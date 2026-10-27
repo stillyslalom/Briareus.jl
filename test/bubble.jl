@@ -16,7 +16,7 @@
     tr = izumi2021_bubble()
     meas = findall(==("data"), tr.source)
     @test length(meas) == 28
-    res = [bubble_depth(BubbleAbsorption(radius = 2.88, turn_on = 0.3, energy = tr.energy[i],
+    res = [bubble_depth(BubbleAbsorption(radius = 2.88, turn_on = 0.3, picket_ratio = tr.energy[i],
                                          fill = tr.fill[i], stagnation = Inf), tr.t[i]) - tr.x_bub[i]
            for i in meas]
     @test sqrt(sum(abs2, res) / length(res)) < 0.045 && maximum(abs, res) < 0.1
@@ -30,7 +30,7 @@
     @test 0.5 < bubble_transmission(m15, 5.5) < 0.62           # and 0.54
     @test bubble_depth(m3, 5.5) ≈ 0.36 * (5.5 - 0.55)
     @test bubble_speed(m15) / bubble_speed(m3) ≈ 2^0.2
-    @test bubble_speed(BubbleAbsorption(radius = 2.88, energy = 1.5)) ≈ 0.36 * 1.5^0.2
+    @test bubble_speed(BubbleAbsorption(radius = 2.88, picket_ratio = 1.5)) ≈ 0.36 * 1.5^0.2
     @test m3.density_exponent == 1.8                            # IB ∝ ρ², S ∝ ρ₀^-0.1
     @test bubble_transmission(m3, 0.4) == 1 && bubble_depth(m3, 0.4) == 0
     @test bubble_transmission(BubbleAbsorption(radius = 2.88, stagnation = Inf), 20.0) == 0
@@ -57,7 +57,7 @@
     mc = BubbleAbsorption(radius = 2.875, turn_on = 0.3)
     @test mc.collision ≈ 5.8
     @test BubbleAbsorption(radius = 2.875, turn_on = 0.3, capsule_radius = 1.064).collision ≈ 5.4 atol = 0.05
-    @test BubbleAbsorption(radius = 2.875, turn_on = 0.3, energy = 1.5).collision ≈ 5.45 atol = 0.01
+    @test BubbleAbsorption(radius = 2.875, turn_on = 0.3, picket_ratio = 1.5).collision ≈ 5.45 atol = 0.01
     # a wider capsule–wall gap collides later (HYBRID-E: 3.2 mm wall, 1.135 mm capsule)
     @test BubbleAbsorption(radius = 3.2, turn_on = 0.4, capsule_radius = 1.135).collision ≈
           0.4 + 5.5 * (3.2 - 1.135) / (2.875 - 0.908)

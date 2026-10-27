@@ -25,6 +25,6 @@ reproduce a reference shot's capsule drive under per-key power limits; with NIF 
 
 ```@autodocs
 Modules = [Briareus]
-Pages = ["src/storage.jl", "src/viewfactors.jl", "src/hmatrix.jl", "src/enclosure.jl", "src/radiation.jl", "src/history.jl", "src/spectral.jl", "src/xray_optics.jl", "src/dante.jl", "src/dante_response.jl", "src/dynamics.jl", "src/retune.jl"]
+Pages = ["src/storage.jl", "src/viewfactors.jl", "src/hmatrix.jl", "src/enclosure.jl", "src/radiation.jl", "src/history.jl", "src/spectral.jl", "src/xray_optics.jl", "src/dante.jl", "src/dante_response.jl", "src/dynamics.jl", "src/retune.jl", "src/montecarlo.jl"]
 Private = false
 ```

@@ -13,7 +13,7 @@
 #   [`mode1_tolerance`](@ref));
 # - P2 swing metrics over a pulse ([`swing_metrics`](@ref));
 # - beam errors as a velocity budget ([`velocity_uncertainty`](@ref)), the inverse
-#   from a measured velocity ([`infer_errors`](@ref)), and a velocity penalty for
+#   from a measured velocity ([`infer_velocity_errors`](@ref)), and a velocity penalty for
 #   objectives ([`VelocityPenalty`](@ref)).
 #
 # Each model is a published fit for particular NIF platforms. The sensitivities are
@@ -248,8 +248,9 @@ whole = swing_metrics(hist)
 
 # ## Reading the errors back from a measured velocity
 #
-# `infer_errors` also takes a measured velocity (km/s). Its default measurement error
-# is NIF's nToF: ±14 km/s in magnitude, 13° in θ, and 29° in φ ([`ntof_covariance`](@ref)).
+# [`infer_velocity_errors`](@ref) is [`infer_errors`](@ref) for a measured velocity
+# (km/s). Its default measurement error is NIF's nToF: ±14 km/s in magnitude, 13° in
+# θ, and 29° in φ ([`ntof_covariance`](@ref)).
 # It adds a capsule-thickness mode 1 as a nuisance error, which moves the hot spot
 # toward the thicker side at about 110 km/s per % of thickness (Casey et al. 2021),
 # the opposite sign to flux. A synthetic shot: the target sits 40 µm low, and the
@@ -257,8 +258,8 @@ whole = swing_metrics(hist)
 
 shifted = [remake(b; aim = b.aim + [0.0, 0.0, 0.04]) for b in quads]
 v_meas = hotspot_velocity(evaluate(scenario, shifted)) + 100 * 110 * [0.003, 0.0, 0.0]
-r = infer_errors(scenario, quads, v_meas; pointing = 0.05, power = 0.03, positioning = 0.03,
-                 thickness = 0.003)
+r = infer_velocity_errors(scenario, quads, v_meas; pointing = 0.05, power = 0.03,
+                          positioning = 0.03, thickness = 0.003)
 @printf("measured v = (%.0f, %.0f, %.0f) km/s; χ²_ν of the nominal %.1f, against the prior spread %.2f\n",
         v_meas..., r.velocity.chi2, r.velocity.chi2_prior)
 @printf("inferred: thickness (%+.2f, %+.2f, %+.2f)%%, target offset z %+.0f µm\n",
@@ -277,7 +278,7 @@ end
 # `thickness` prior):
 
 for σt in (0.003, 0.0005)
-    rk = infer_errors(scenario, quads, v_meas; pointing = 0.0, positioning = 0.05, thickness = σt)
+    rk = infer_velocity_errors(scenario, quads, v_meas; pointing = 0.0, positioning = 0.05, thickness = σt)
     @printf("beams known, thickness prior %.2f%%: thickness (%+.2f, %+.2f, %+.2f)%%, offset z %+.0f µm\n",
             100σt, (100 .* rk.thickness)..., 1000rk.positioning[3])
 end

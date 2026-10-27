@@ -326,31 +326,31 @@ material of `density` g/cm³, gold by default) that re-emits like the wall until
 Marshak heat front (`front`, a `HeatFront`) has heated its whole areal mass
 `ρ × thickness`, and then lets part of the flux that reaches it through.
 
-Once burned through, a fraction `T = transmission` of the incident flux passes through
+Once burned through, a fraction `f = transmission` of the incident flux passes through
 the foil and leaves the hohlraum (a number, or `RosselandTransmission()` for a fraction
 that follows the radiation temperature). The rest meets the foil as before and is re-emitted
 with the albedo of `before`. Across the transition
 
-    α(t) = α_before (1 - s T),    transmitted fraction s T,
+    α(t) = α_before (1 - s f),    transmitted fraction s f,
 
 with `s = s((t - t_b)/width)` the smooth step `3x² - 2x³` on [0, 1] and `t_b` the
-burnthrough time, so the burned-through albedo is `(1 - T) α_before`. Of the flux
-`H A` on the foil, `s T H A` is transmitted and `(1 - s T)(1 - α_before) H A` absorbed
+burnthrough time, so the burned-through albedo is `(1 - f) α_before`. Of the flux
+`H A` on the foil, `s f H A` is transmitted and `(1 - s f)(1 - α_before) H A` absorbed
 (`energy_balance`, `drive_history`). `before` is an albedo model or a number, by
 default the wall's Marshak loss (`WallLossAlbedo`).
 
-The default `T` is the gray-foil estimate of R. S. Lester et al., Phys. Rev. E 114,
-L023201 (2026), doi:10.1103/k8dz-pjdx: `T = 4/(3τ + 2)` (their eq. 2,
+The default `f` is the gray-foil estimate of R. S. Lester et al., Phys. Rev. E 114,
+L023201 (2026), doi:10.1103/k8dz-pjdx: `f = 4/(3τ + 2)` (their eq. 2,
 `eddington_transmission`). The optical depth is their eq. 1, `τ = L/λ_Au(T_h)` at a
 fixed Rosseland mean free path ``λ_{Au}``, scaled linearly in areal mass (`optical_depth`)
 from their point `τ ∼ 5` at `L = 2.5 µm`:
 
     τ = 5 × ρ thickness / (19.3 g/cm³ × 2.5 µm),
 
-so `T ≈ 0.33`, `0.235` and `0.17` for 1.7, 2.5 and 3.6 µm of gold. Limitations:
+so `f ≈ 0.33`, `0.235` and `0.17` for 1.7, 2.5 and 3.6 µm of gold. Limitations:
 - ``λ_{Au}`` is held at their evaluation, for a hohlraum radiation temperature `T_h` of
   typically 300–350 eV and an assumed gold density of about 1 g/cm³ (the expanded
-  foil), so `T` is constant once burned through.
+  foil), so `f` is constant once burned through.
   `transmission = RosselandTransmission()` lets ``λ_{Au}`` follow the temperature of the
   flux on the foil instead; its density dependence is not modeled.
 - Pairing that density with the 2.5 µm as-built thickness is theirs. Taken literally,
@@ -778,11 +778,11 @@ _radius_schedule(r::Tuple) = TabulatedRadius(r[1], r[2])
 _radius_schedule(r) = r
 
 """
-    CapsuleAlbedo(; albedo = 0.2, radius = nothing, outside = 0.0)
+    CapsuleAlbedo(; albedo = 0.2, radius = nothing, outside_absorptance = 0.0)
 
 Albedo of a capsule that absorbs as a sphere of effective radius `R(t)` inside its
-fixed mesh of radius `R₀`, plus a share `outside` of what crosses the mesh outside that
-sphere:
+fixed mesh of radius `R₀`, plus a share `outside_absorptance` of what crosses the mesh
+outside that sphere:
 
     α_eff(t) = 1 - (1 - α_c) s² - a_out (1 - s²),    s = R(t)/R₀,
 
@@ -793,9 +793,9 @@ surroundings). `albedo` ``α_c`` is a number or an `AlbedoModel` (`TabulatedAlbe
 `TemperatureAlbedo` in the incident radiation temperature); `radius` is `nothing`
 (R = R₀), a [`RadiusSchedule`](@ref) ([`TabulatedRadius`](@ref), [`ScaledRadius`](@ref)),
 a `(times, R/R₀)` table (ns; linear, held at its ends; stored as a `TabulatedRadius`) or
-a function `t -> R/R₀`. `outside` ``a_{out}`` (``0 ≤ a_{out} ≤ 1``, default 0) is the
-absorptance of the blow-off between the ablation front and `R₀` for the flux that misses
-the front: an explicit term for absorption outside the front (W-doped ablator plasma),
+a function `t -> R/R₀`. `outside_absorptance` ``a_{out}`` (``0 ≤ a_{out} ≤ 1``, default 0)
+is the absorptance of the blow-off between the ablation front and `R₀` for the flux that
+misses the front: an explicit term for absorption outside the front (W-doped ablator plasma),
 unpublished, so 0 unless a study sets it; with the default the model is the front's
 alone, and without a `radius` the term vanishes. `energy_balance` then books the
 capsule's absorbed power at the effective radius plus the outside term, and
@@ -809,12 +809,13 @@ the published ``α_c(t)``; `examples/n221204.jl` uses it on N221204's time axis.
 struct CapsuleAlbedo{F} <: AlbedoModel
     albedo::AlbedoModel
     radius::F
-    outside::Float64
+    outside_absorptance::Float64
 end
-function CapsuleAlbedo(; albedo = 0.2, radius = nothing, outside::Real = 0.0)
-    0 <= outside <= 1 || throw(ArgumentError("outside must lie in [0, 1]"))
+function CapsuleAlbedo(; albedo = 0.2, radius = nothing, outside_absorptance::Real = 0.0)
+    0 <= outside_absorptance <= 1 ||
+        throw(ArgumentError("outside_absorptance must lie in [0, 1]"))
     return CapsuleAlbedo(_albedo_model(albedo),
-                         _radius_schedule(radius), Float64(outside))
+                         _radius_schedule(radius), Float64(outside_absorptance))
 end
 
 """
@@ -832,8 +833,8 @@ function albedo(m::CapsuleAlbedo, t, T = nothing)
     αc = albedo(m.albedo, t, T)
     m.radius === nothing && return αc
     s2 = radius_fraction(m, t)^2
-    m.outside == 0 && return 1 - (1 - αc) * s2
-    return 1 - (1 - αc) * s2 - m.outside * (1 - s2)
+    m.outside_absorptance == 0 && return 1 - (1 - αc) * s2
+    return 1 - (1 - αc) * s2 - m.outside_absorptance * (1 - s2)
 end
 
 # An albedo model's albedo, the albedo it would have intact (closed), and the fraction of
@@ -1159,7 +1160,7 @@ With `closure`, a `GapClosure`, it is an opening that plasma closes to x-rays du
 pulse while laser light and lines of sight still pass (the lip of a closing laser entrance
 hole, `hohlraum(; leh_closure)`): it re-emits the fraction ``α(t) = s α_{after}`` of its
 incident flux and lets `1 - s` escape, booked as escaped by `energy_balance`. It
-converts no laser light. The Monte Carlo reference (`Briareus.montecarlo_incident`) lets
+converts no laser light. The Monte Carlo reference ([`montecarlo_incident`](@ref)) lets
 paths escape through open apertures and re-emits them diffusely from a lip with the
 lip's albedo (given `albedo = albedos(target, time)`). With a `LipClosure`, the closed
 fraction of each element is `drive_history`'s state instead of a function of time.

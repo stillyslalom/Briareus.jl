@@ -384,9 +384,9 @@ function _vr_update(b::Beam, r, angle_tol, spot_definition, sense)
     return remake(b; aim, defocus, power, spot)
 end
 
-function _vr_apply(template::AbstractVector{<:Beam}, recs::Dict, missing::Symbol;
+function _vr_apply(template::AbstractVector{<:Beam}, recs::Dict, absent::Symbol;
                    angle_tol = 0.05, spot_definition = :auto, sense = :beam)
-    missing in (:off, :keep, :error) || throw(ArgumentError("missing must be :off, :keep or :error"))
+    absent in (:off, :keep, :error) || throw(ArgumentError("absent must be :off, :keep or :error"))
     used = Set{String}()
     members = any(b -> _is_nif_quad(b.name), template) ? _nif_quad_members() : nothing
     out = Beam[]
@@ -404,8 +404,8 @@ function _vr_apply(template::AbstractVector{<:Beam}, recs::Dict, missing::Symbol
             end
         end
         if r === nothing
-            missing === :error && throw(ArgumentError("beam $(b.name) is not in the VisRad file"))
-            push!(out, missing === :keep ? b : remake(b; power = zero(b.power)))
+            absent === :error && throw(ArgumentError("beam $(b.name) is not in the VisRad file"))
+            push!(out, absent === :keep ? b : remake(b; power = zero(b.power)))
         else
             push!(out, _vr_update(b, r, _is_nif_quad(b.name) ? Inf : angle_tol, spot_definition, sense))
         end
@@ -479,7 +479,7 @@ function write_visrad_sst(path::AbstractString, beams::AbstractVector{<:Beam};
 end
 
 """
-    read_visrad_sst(path; template = nif_beams(), missing = :off, units = nothing)
+    read_visrad_sst(path; template = nif_beams(), absent = :off, units = nothing)
         -> Vector{Beam}
 
 Read a NIF SST pointing CSV (written by VisRad's File | Export Laser Beam Data | NIF SST
@@ -487,7 +487,7 @@ Beam Data, by the SST, or by `write_visrad_sst`) and apply it to `template`: eac
 found gets the file's aim (mm, chamber Cartesian about TCC, defocus not applied) and
 defocus (mm); power and spot are kept. Following VisRad's import
 (`VR/power_sources/import_laser_beam_data_csv.html`), template beams absent from the file
-are turned off (`missing = :off`, power 0); `:keep` leaves them unchanged and `:error`
+are turned off (`absent = :off`, power 0); `:keep` leaves them unchanged and `:error`
 throws.
 
 Beam names match case-insensitively, with `BL115` read as `B115`. With a quad template
@@ -496,7 +496,7 @@ warning if they differ by more than 1 µm. The header row is found by its
 "Beam Aim Point" columns; lines before it are skipped, extra columns ignored. Units come
 from the headers ("(mm)", "(cm)", "(um)"); `units` (mm per file unit) overrides them.
 """
-function read_visrad_sst(path::AbstractString; template = nif_beams(), missing::Symbol = :off,
+function read_visrad_sst(path::AbstractString; template = nif_beams(), absent::Symbol = :off,
                          units = nothing)
     lines = _vr_lines(path)
     hi = findfirst(l -> occursin(r"beam\s+aim\s+point"i, l), lines)
@@ -526,7 +526,7 @@ function read_visrad_sst(path::AbstractString; template = nif_beams(), missing::
                                spot = nothing)
     end
     template === nothing && throw(ArgumentError("SST files carry no port angles: pass a template beam set"))
-    return _vr_apply(template, recs, missing)
+    return _vr_apply(template, recs, absent)
 end
 
 # ---------------------------------------------------------------------------------------
@@ -602,7 +602,7 @@ function _vr_ref_point(cs::AbstractString, geom::AbstractString, p, scale)
 end
 
 """
-    read_visrad_summary(path; template = nothing, missing = :off, spot_definition = :auto,
+    read_visrad_summary(path; template = nothing, absent = :off, spot_definition = :auto,
                         rotation_sense = :beam, angle_tol = 0.05) -> Vector{Beam}
 
 Read a VisRad Laser Beam Summary CSV (Export Data in the Laser Beams Summary dialog,
@@ -648,11 +648,11 @@ Conversions:
 With a `template`, beams are matched by name (case-insensitive; "BL115" reads as "B115",
 "10" and "BL-10" as `"Beam_10"`), port angles are checked against the file's "Polar
 Ang"/"Azm Ang" (warning beyond `angle_tol` degrees — a frame or naming mismatch),
-template beams absent from the file follow `missing` (`:off`, `:keep`, `:error`; VisRad
+template beams absent from the file follow `absent` (`:off`, `:keep`, `:error`; VisRad
 omits hidden unused beams), and NIF quads aggregate their four beams (mean aim and
 defocus, summed power). Without a template, beams are built from the file's port angles.
 """
-function read_visrad_summary(path::AbstractString; template = nothing, missing::Symbol = :off,
+function read_visrad_summary(path::AbstractString; template = nothing, absent::Symbol = :off,
                              spot_definition = :auto, rotation_sense::Symbol = :beam,
                              angle_tol = 0.05)
     _vr_sense(rotation_sense)
@@ -722,7 +722,7 @@ function read_visrad_summary(path::AbstractString; template = nothing, missing::
     end
     isempty(timedep) || @warn "time-dependent beams: \"Power\" is the peak of their table (import the power file for the history)" beams = timedep
     template === nothing && return _vr_from_records(recs, order, spot_definition, rotation_sense)
-    return _vr_apply(template, recs, missing; angle_tol, spot_definition, sense = rotation_sense)
+    return _vr_apply(template, recs, absent; angle_tol, spot_definition, sense = rotation_sense)
 end
 
 """

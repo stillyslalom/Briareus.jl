@@ -457,7 +457,7 @@ end
 # ---------------------------------------------------------------------------------------
 
 """
-    read_visrad_workspace(path; template = nothing, missing = :off, spot_definition = :auto,
+    read_visrad_workspace(path; template = nothing, absent = :off, spot_definition = :auto,
                           rotation_sense = :beam, angle_tol = 0.05) -> VisRadWorkspace
 
 Read a VisRad workspace (`.vrw`, the text format of VisRad 20–21, "Workspace Format
@@ -486,11 +486,11 @@ normalization and DPR are warned about and not imported.
 
 With a `template` (e.g. `nif_beams()`), the file's pointing, power and spots are
 applied to the template's beams by name and its other properties (halo, wavelength,
-quad, group) are kept; port angles are checked to `angle_tol` degrees and `missing`
-handles template beams absent from the file, as in `read_visrad_summary`. Without one,
+quad, group) are kept; port angles are checked to `angle_tol` degrees and `absent`
+handles template beams missing from the file, as in `read_visrad_summary`. Without one,
 beams are built from the file, grouped by VisRad cluster.
 """
-function read_visrad_workspace(path::AbstractString; template = nothing, missing::Symbol = :off,
+function read_visrad_workspace(path::AbstractString; template = nothing, absent::Symbol = :off,
                                spot_definition = :auto, rotation_sense::Symbol = :beam,
                                angle_tol = 0.05)
     _vr_sense(rotation_sense)
@@ -525,7 +525,7 @@ function read_visrad_workspace(path::AbstractString; template = nothing, missing
         end
         identity.(out)
     else
-        _vr_apply(template, recs, missing; angle_tol, spot_definition, sense = rotation_sense)
+        _vr_apply(template, recs, absent; angle_tol, spot_definition, sense = rotation_sense)
     end
     return VisRadWorkspace(String(path), version, objects, beams, clusters, rows)
 end

@@ -97,7 +97,7 @@ callout in the section says which).
 | `DU_LOSS_FACTOR` (`du_wall_loss`, `uranium`, `nif_uranium`) | 0.836 at 300 eV, T^-0.2, 0.7 µm Au liner | Energetics defaults and the capsule share (factor); Wall material, conversion and capsule energetics §1 (model) |
 | `gold()`, `uranium()` conversion | 0.75 | Capsule absorption, conversion and the ablating-wall release ("What changed") |
 | `nif_conversion()` (`nif_gold`, `nif_uranium`) | 0.7 t^0.12 ≤ 0.95 | Wall material, conversion and capsule energetics §2 |
-| `CapsuleAlbedo` | α_c 0.2, `outside` 0 | Wall material, conversion and capsule energetics §3 (0.2); Capsule absorption, conversion and the ablating-wall release (`outside`) |
+| `CapsuleAlbedo` | α_c 0.2, `outside_absorptance` 0 | Wall material, conversion and capsule energetics §3 (0.2); Capsule absorption, conversion and the ablating-wall release (`outside`) |
 | `WallMotion` | 0.185 mm/ns from 0.8 ns, stopping 0.45 mm in | Hohlraum dynamics calibrated to published data |
 | `BubbleAbsorption` | speed 0.36 mm/ns, delay 0.25 ns, q 1.8, opacity 0.111 | Hohlraum dynamics calibrated to published data |
 | `LipClosure` | 0.022 mm/ns at 100 eV, depth 0.24 mm, hold 0.4 ns | Computed LEH closure |
@@ -2195,7 +2195,7 @@ ray-traced radiosity reference (done: next entry, the sampled one is closer). **
 > on the curved path balancing does not bias a₂/a₀ upward ("Closure on bored, windowed
 > and CAD cavities (2026-10-25)").
 
-`Briareus.montecarlo_incident` (src/montecarlo.jl, unexported): diffuse transport on the
+`montecarlo_incident` (src/montecarlo.jl): diffuse transport on the
 facets with no view factors. Paths start at a uniform point on a capsule element's
 facets and go backward (reciprocity of the Lambertian kernel): cosine-weighted
 direction, first hit by `closest_hit` over all triangles (apertures included: a hit
@@ -2618,7 +2618,7 @@ primary text read, **M** = abstract or secondary, **L** = inference or arithmeti
   - The shape term (Eq. 2) as transcribed does not give the stated 0.8–1.2 range for
     |P2| < 0.4 (0.19 at −0.4). *Resolved 2026-10-24*: that range is Table I's (3D);
     Eq. 2 is the 2D fit. Both are in `shape_amplification`.
-- **Thickness nuisance in `infer_errors`** (Casey 2021, **H**):
+- **Thickness nuisance in `infer_velocity_errors`** (Casey 2021, **H**):
   - 110 km/s per % of thickness mode 1 (simulated; 140 ± 30 measured), toward the
     thicker side.
   - The prior is 0.2 % per axis by default. *Derived* from ~0.15 µm metrology on a
@@ -3225,7 +3225,7 @@ the drawn outline, stroke centers per column, overlays checked by eye.
 | Density exponent q | 1.862 (two-anchor fit) | 1.8 (physics) | — | Izumi Eq. 7: ρ_bub² ∝ (Sρ₀)², S ∝ ρ₀^-0.1 |
 | Opacity τ_b | 0.144 (fit to T_b 29 %/54 %) | 0.111 | 0.100–0.124 stat.; 0.085–0.158 with plane ±0.2 mm and launch | Izumi Fig. 10a HYDRA absorbed fraction |
 | Collision t_c | turn_on + 5.5 − 2.0(s − 1) − 0.7(E − 1) | turn_on + 5.5 (R − r_cap)/1.967 mm · E^-0.16 | ±0.15 ns (frame spacing) | Izumi 2018: 5.8, 5.45 (1.5× picket), −0.4 ns (1.18× capsule; the gap gives −0.44) |
-| HYBRID-E picket fluence `energy` | 1 | 1.1 (example) | 0.8–1.5 | 1.5× basecamp energy (DN24 vs Izumi Fig. 3a) × 0.73 for split outer quads; Fig. 1a N210808 tip 1.85 ± 0.1 mm at 6 ns |
+| HYBRID-E picket fluence `picket_ratio` | 1 | 1.1 (example) | 0.8–1.5 | 1.5× basecamp energy (DN24 vs Izumi Fig. 3a) × 0.73 for split outer quads; Fig. 1a N210808 tip 1.85 ± 0.1 mm at 6 ns |
 | LEH lips (example) | 5.0 ns step over 0.5 ns to 0.84 r₀ | smoothstep from −0.1 ns over 7.85 ns to 0.857 r₀ | half-closed 3.0–3.8 ns (timing mapping) | Young Fig. 3a LEH radius (end value SXI; ramp assumed) shifted 0.8 ns |
 
 Checks of the fits:
@@ -3258,7 +3258,7 @@ Checks of the fits:
   pointing and the measured wall radius, neither of which is published.
 - *HYBRID-E bubble (PRE 109 Fig. 1a, 6 ns).* N210808's tip is 1.85 ± 0.1 mm from the
   wall at z ≈ 2.9–3.5 mm; N221204's is ≥ 1.55 mm (its denser inner-beam rays are drawn
-  over the plasma). The calibrated model with `energy` 1.1 puts it at 1.96 mm, in the
+  over the plasma). The calibrated model with `picket_ratio` 1.1 puts it at 1.96 mm, in the
   plane z_b = 3.49 mm.
 
 ### Two-zone CBET: the 7.4 keV LEH temperature
@@ -3295,8 +3295,8 @@ to the same Fig. 9b data with Te ≤ 5.5 keV (`calibrate_cbet` with an upper bou
 settings), calibrated two-zone CBET, mock HYBRID-E pointing, standard mesh (h 0.28 /
 capsule_h 0.16, 31 min for the five runs on 4 threads). Settings: wall from 1.2 ns at
 0.185 mm/ns stopping 0.38 mm in; lips to 0.857 r₀ along Young's ramp shifted 0.8 ns
-(closure −0.1 ns, width 7.85 ns); bubble defaults with `energy` 1.1 and
-`capsule_radius` 1.135 (t_c 6.09 ns). `energy` was set from the picket energy and quad
+(closure −0.1 ns, width 7.85 ns); bubble defaults with `picket_ratio` 1.1 and
+`capsule_radius` 1.135 (t_c 6.09 ns). `picket_ratio` was set from the picket energy and quad
 splitting before the comparison was run.
 
 | t (ns) | static | +wall | +lips | +bubble (now) | +bubble (2026-10-23) | Fig. 10 |
@@ -3337,7 +3337,7 @@ The coarse mesh (0.8 / 0.4) reproduces these within 0.006. Capsule Tr peaks at 3
    +0.118 at 8 ns, coarse mesh).
 
 **Sensitivity to the least constrained input** (coarse mesh, full model). The HYBRID-E
-picket fluence `energy` is 1.1 from the picket energy (1.5×, by eye) and split outer
+picket fluence `picket_ratio` is 1.1 from the picket energy (1.5×, by eye) and split outer
 quads (−27 %); PRE 109 Fig. 1a's N210808 bubble tip (1.85 ± 0.1 mm at 6 ns) gives 0.8
 (0.6–1.05) on its own. E = 1.5: minimum −0.138 at 5.25 ns, crossing 5.99 ns, +0.121 at
 8 ns. E = 0.8: −0.184 at 5.5 ns, 6.62 ns, +0.109 (rms 0.024). The crossing time follows
@@ -7083,7 +7083,7 @@ f = 0.836, wall history and re-emission, 11 % degradation, measured backscatter,
 - The capsule share: 13.9 % against 16.2 % at the albedo's bound; the absorbing surface
   outside the ablation front is the open input (a published HYDRA absorption radius, or
   the blow-off's opacity). (Now 13.8 % with Young's albedo on the K24 schedule; the
-  remaining 2.4–4.2 points are `CapsuleAlbedo`'s `outside`, unset: "Capsule
+  remaining 2.4–4.2 points are `CapsuleAlbedo`'s `outside_absorptance`, unset: "Capsule
   absorption, conversion and the ablating-wall release" §2.)
 - The late-time drive after the droop (unchanged by these defaults).
 
@@ -7255,10 +7255,10 @@ thickness, i.e. K24's scaled curve applied to R₀). The example's Young-shaped 
 windows, gated LEH bubble images, x-ray imaging of the hohlraum interior, for HYBRID-E,
 N210808, N221204, Au-lined DU 6.4 mm). The thin-wall and G-LEH bubble data are all HDC
 SymCap basecamp (Izumi 2018/2021, Meezan 2020, Chen 2020) or foam-lined / I-Raum
-platforms. The HYBRID-E bubble speed stays inferred from the picket energy (`energy`
+platforms. The HYBRID-E bubble speed stays inferred from the picket energy (`picket_ratio`
 1.1) and PRE 109 Fig. 1a's N210808 tip. Reading the outer picket from Pak's delivered
 pulse (`n221204_pulse()` split by DN24's cone fraction) gives 43.9 kJ in the first ns
-after the turn-on (the example's "~40" was by eye), i.e. `energy` ≈ 1.69 × 0.73 = 1.23
+after the turn-on (the example's "~40" was by eye), i.e. `picket_ratio` ≈ 1.69 × 0.73 = 1.23
 against the basecamp's ~26 kJ (by eye): a faster bubble, the wrong direction for Fig. 10.
 
 ### Effect of each mechanism (coarse; crossing, minimum)
@@ -7302,7 +7302,7 @@ against the basecamp's ~26 kJ (by eye): a faster bubble, the wrong direction for
    by t_c alone would need t_c ≈ 6.9 ns; PRE 109 Fig. 1a already shows wall and ablator
    plasma meeting at z 2–3 mm at 6 ns (by eye, *L*), so a collision near 6.1 ns is the
    published picture. Not changed.
-5. **Bubble speed**: `energy` 0.8 (PRE 109 Fig. 1a's N210808 tip alone) gives +0.33 ns,
+5. **Bubble speed**: `picket_ratio` 0.8 (PRE 109 Fig. 1a's N210808 tip alone) gives +0.33 ns,
    the largest single lever, as found before; Pak's pulse points the other way (1.23).
    No HYBRID-E datum separates them.
 6. **Glint** (Lemos 2022, estimated, not run): < 8 TW out of the inner beams, ~1.8
@@ -7395,7 +7395,7 @@ them. Runs: `examples/n221204.jl 0.8 0.4 full <transfer> x calibrated <shot> met
 | Piece | Now | Before |
 |---|---|---|
 | capsule albedo α_c (example) | Young 2020's quasi-1D HYDRA ablator albedo on the Young time map (`capsule_albedo=young`, the default; a number still accepted) | 0, fitted to HYDRA's share and stopped at its bound |
-| absorption outside the front | `CapsuleAlbedo(; outside = a_out)`: α_eff = 1 − (1 − α_c)s² − a_out(1 − s²), s = R/R₀; default 0, so the default is the front's alone (`capsule_outside=` in the example) | — |
+| absorption outside the front | `CapsuleAlbedo(; outside_absorptance = a_out)`: α_eff = 1 − (1 − α_c)s² − a_out(1 − s²), s = R/R₀; default 0, so the default is the front's alone (`capsule_outside=` in the example) | — |
 | capsule radius schedule (example) | `schedule=k24`, N221204's own HYDRA history (Kritcher 2024 Fig. 1), the default; Zylstra's pair: K24's N210808 capsule, time × bang/9.18 (*L*) | Young's N170827 front through the misread 6 ns anchor (`schedule=young` kept it; removed 2026-10-26) |
 | conversion of `gold()` / `uranium()` | 0.75 whatever the albedo | `nif_conversion()` when the albedo was an `AlbedoModel` |
 | NIF drive-history walls | `nif_gold()` (`WallLossAlbedo()`, `nif_conversion()`), `nif_uranium()` (`du_wall_loss()`, `nif_conversion()`); the example uses `nif_uranium()`, `test/energetics.jl` `nif_gold()` | `gold(albedo = WallLossAlbedo())`, `uranium()` |
@@ -7460,7 +7460,7 @@ the initial / open LEH area:
 
 - With the published ablator albedo, absorption at the front gives 12.0–13.8 % between
   the radius bounds, against HYDRA's 16.2 %: 2.4–4.2 points remain. That is the share
-  `outside` would carry (a_out ≈ 0.1–0.2 by the share's near-linear response, *L*); it is
+  `outside_absorptance` would carry (a_out ≈ 0.1–0.2 by the share's near-linear response, *L*); it is
   not set, since no blow-off opacity or absorbing radius is published. Alternatively
   Young's N170827 albedo is too high for N221204's thicker W-doped ablator. Neither is
   fixed here.
@@ -7512,7 +7512,7 @@ radius is published (a candidate for the 13.8 vs 16.2 % capsule share); the pair
 K24-shaped schedule is accepted, labeled derived, with room in the API for other
 schedules (research pending, ROADMAP 16).*
 
-- Whether to set `outside` (a_out ≈ 0.1–0.2 would close HYDRA's share on the two
+- Whether to set `outside_absorptance` (a_out ≈ 0.1–0.2 would close HYDRA's share on the two
   bounds) without a published blow-off opacity or absorbing radius; it is 0.
 - The pair's K24-shaped schedule (N210808 capsule, time scaled to bang) is *L*; the pair's
   own radius histories are unpublished.
@@ -8433,13 +8433,13 @@ each, a deposit at each panel's mid angle. Changes from the prototype:
   Cauchy–Schwarz (|h i − c₁| ≤ √qcut ‖(a e₁·e₁′, b e₂·e₁′)‖, plus one index); rays
   outside add exact zeros. Dual beams are screened on values, as in `deposit`; the dual
   path's values equal the Float64 path's bitwise (tested).
-- *Profiles*: `CoronaProfile(r, ne, Te; Z, lnΛ, wavelength)` tabulates a snapshot (the
+- *Profiles*: `CoronaProfile(r, ne_over_nc, Te; Z, lnΛ, wavelength)` tabulates a snapshot (the
   hook for the CompactLES example), cubic Hermite in ln(n_e/n_c) and ln of the rate with
   three-point slopes on a non-uniform grid, so exponential profiles are exact. Rate
   (ν_ei/c)(n_e/n_c) with Kruer's ν_ei = 4√(2π)Z e⁴ n_e lnΛ/(3 m_e^{1/2} T_e^{3/2}) from
   CODATA 2018 constants: 2.906e-6 Z n_e lnΛ/T_e^{3/2} s⁻¹ (n_e cm⁻³, T_e eV; the NRL
   Formulary's 2.91e-6), n_c = π m_e c²/(e²λ²) = 1.1149e21/λ² cm⁻³ (**H**, textbook
-  formulas). `ne[1] ≥ 1` is required (every ray turns inside the table; no hard
+  formulas). `ne_over_nc[1] ≥ 1` is required (every ray turns inside the table; no hard
   surface). `CoronaProfile(; critical_radius, scale_length, absorption)` is the analytic
   isothermal exponential, its rate set by the planar normal-incidence absorption η⊥ of
   `deposit(...; absorption)`, truncated at r_c + 14L by default.

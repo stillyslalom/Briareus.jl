@@ -37,8 +37,8 @@
 #   on the keyframes (the flux on the shrinking sphere; the static runs keep R₀);
 #   `capsule_albedo=young|<number>`: α_c, Young 2020's quasi-1D HYDRA ablator albedo on
 #   a time map to the shot's bang (default; published, not fitted) or a constant;
-#   `capsule_outside=<a>`: `CapsuleAlbedo`'s `outside`, the absorptance of the blow-off
-#   outside the front (default 0: unpublished);
+#   `capsule_outside=<a>`: `CapsuleAlbedo`'s `outside_absorptance`, the absorptance of
+#   the blow-off outside the front (default 0: unpublished);
 # - `degrade=<fraction>`: HYDRA's laser degradation (PRE 109 App. 3: 9–13 %), default
 #   0.11, the middle of the range.
 # Sensitivities of the P2 swing (research notes, "The P2 swing: capsule radius,
@@ -125,9 +125,9 @@ end
 # to 6 ns, 0.30 at 7, 0.40 from 7.5 ns), its time axis mapped piecewise linearly so that
 # the model's 5.75 ns falls at 6.0 ns and its 7.75 ns at bang time (default; published,
 # not fitted), or a constant. `capsule_outside`: the absorptance of the blow-off outside the
-# front (`CapsuleAlbedo`'s `outside`), default 0. `capsule=mesh`: the schedule shrinks the
-# capsule mesh itself on the keyframes (`moving_hohlraum`'s `capsule_shrink`; the flux is
-# evaluated on the shrinking sphere) and the albedo is α_c alone; `capsule=model` keeps
+# front (`CapsuleAlbedo`'s `outside_absorptance`), default 0. `capsule=mesh`: the schedule
+# shrinks the capsule mesh itself on the keyframes (`moving_hohlraum`'s `capsule_shrink`;
+# the flux is evaluated on the shrinking sphere) and the albedo is α_c alone; `capsule=model` keeps
 # the mesh at R₀ and absorbs at the effective radius (`CapsuleAlbedo`'s `radius`).
 ymap(τ) = τ <= 5.75 ? τ * 6.0 / 5.75 : 6.0 + (τ - 5.75) * (bang - 6.0) / (7.75 - 5.75)
 ya = young2020_albedos()
@@ -138,7 +138,7 @@ capsule_kind in ("model", "mesh") || error("capsule=model or capsule=mesh, not $
 capsule = Material(:ablator; conversion = 0.3,
                    albedo = CapsuleAlbedo(albedo = capsule_alpha,
                                           radius = capsule_kind == "model" ? capsule_schedule : nothing,
-                                          outside = parse(Float64, get(opt, "capsule_outside", "0"))))
+                                          outside_absorptance = parse(Float64, get(opt, "capsule_outside", "0"))))
 shrink = capsule_kind == "mesh" ? (; capsule_shrink = capsule_schedule) : (;)
 # Zylstra's pair: N191118's 3.64 mm LEH (N210601's 3.1 mm) and the N210808-design capsule,
 # 1.1285 mm (K22 Fig. 4; N191118's, of the N210207 design, taken the same, *L*).
@@ -371,7 +371,7 @@ lip, r_open = GapClosure(closure = -0.1, width = 7.85, after = WallLossAlbedo())
 # backscatter and the collision (2026-10-25)")
 bkw = haskey(opt, "collision") ? (; collision = parse(Float64, opt["collision"])) : (;)
 bubble = BubbleAbsorption(; radius = R0, turn_on, wall = motion, capsule_radius,
-                          energy = parse(Float64, get(opt, "bubble_energy", "1.1")), bkw...)
+                          picket_ratio = parse(Float64, get(opt, "bubble_energy", "1.1")), bkw...)
 # `lips=computed`: the lips' closure computed instead of prescribed (`LipClosure`, its
 # speed, depth and hold fitted to Chen 2020's measured LEH radii, `chen2020_leh()`): free
 # expansion at the lip's own gold sound speed in the foot, held 0.24 mm inside the rim

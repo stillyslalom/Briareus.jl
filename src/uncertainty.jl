@@ -322,7 +322,7 @@ components, measured, predicted, residual, sources, resolved, beams, J, c)`:
   the posterior covariance, and labels;
 - `predicted = J x̂` and `residual = Δc − J x̂`, over `components` (the `(l, m)` list);
 - `sources`: per error source (a beam's pointing, a beam's power, a group's pointing or
-  power, the positioning), the `fraction` of `Δc` its share of `J x̂` explains,
+  power, the positioning), the `fraction` of `Δc` reproduced by its share of `J x̂`,
   `dot(J_s x̂_s, Δc)/|Δc|²`, sorted descending (the fractions sum to
   `dot(predicted, Δc)/|Δc|²`): the few sources that best explain the measurement;
 - `resolved`: Σⱼ (1 − Σⱼⱼ/σⱼ²), the number of error combinations the data determine
@@ -336,6 +336,7 @@ direction keeps its prior: `sigma ./ prior_sigma` stays near 1 for most errors, 
 `resolved` counts what was learned. What the inverse reports is only as good as the
 prior: an error left out of it (`group_pointing = 0`, say) cannot be blamed, and its
 effect is attributed to the sources that are allowed. Linear in the errors.
+[`infer_velocity_errors`](@ref) is the same inverse for a measured hot-spot velocity.
 """
 function infer_errors(s::Scenario, beams::AbstractVector{<:Beam}, measured; sigma, kwargs...)
     comps, Δc = _measured_components(measured)

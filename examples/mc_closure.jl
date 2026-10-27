@@ -1,6 +1,6 @@
 # Does view-factor balancing (`closed = true`, the `hohlraum()` default) bias the
 # capsule drive on the default curved path? A continuum reference by Monte Carlo
-# (`Briareus.montecarlo_incident`, `reemit = :hit`) on a finely faceted flat copy of the
+# (`montecarlo_incident`, `reemit = :hit`) on a finely faceted flat copy of the
 # hohlraum (wall h = 0.1 mm, capsule_h = 0.05 mm), against the radiosity model on the
 # standard meshes (curved and flat elements, raw and balanced view factors). Source:
 # 48 NIF quads at 8 TW at the example cone aims (examples/mesh_convergence.jl's
@@ -62,7 +62,7 @@ function montecarlo(h, ch, α, which, paths; batches = 64, seed = 1)
         P, D = sources(h, ch; curved = false)
         t = target(h, ch, α; curved = false)
         cap = elements(t, :capsule)
-        _, batch = Briareus.montecarlo_incident(t, which === :P ? P : D, cap; paths, batches, seed)
+        _, batch = montecarlo_incident(t, which === :P ? P : D, cap; paths, batches, seed)
         legendre_weights(t, cap; lmax = 4) * batch'
     end
 end
