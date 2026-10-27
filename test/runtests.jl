@@ -586,6 +586,13 @@ end
     # energy accounting closes up to view-factor discretization
     eb = energy_balance(sol_a)
     @test abs(eb.lost) < 0.04 * eb.source
+    # the direct penalty defaults to the observed elements; a name not in the target is an
+    # error, not a penalty that never applies
+    evc = evaluate(sc, repeat([0.0, 0.0, 6.0], length(p.keys)))      # aimed at the capsule
+    @test power_fraction(evc, :capsule) > 0.01
+    @test Briareus._direct_fraction(evc, nothing) == power_fraction(evc, :capsule)
+    @test symmetry_objective()(evc) == symmetry_objective(; direct_names = (:capsule,))(evc)
+    @test_throws ArgumentError symmetry_objective(; direct_names = (:Capsule,))(evc)
 end
 
 @testset "mode analysis" begin

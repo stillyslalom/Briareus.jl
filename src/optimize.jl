@@ -603,14 +603,16 @@ end
 
 """
     symmetry_objective(; modes = (2 => 1.0, 4 => 1.0), odd = 1.0, lmax = 6,
-                       clip = 10.0, missed = 10.0, direct = 10.0, direct_names = (:capsule,),
+                       clip = 10.0, missed = 10.0, direct = 10.0, direct_names = nothing,
                        drive = nothing, drive_weight = 1.0, center = nothing, keepout = nothing,
                        uncertainty = nothing)
 
 Objective for indirect-drive symmetry: `Σ wₗ (aₗ/a₀)²` over `modes`, plus `odd ×` the
 sum of squared odd moments (top/bottom imbalance), plus `clip`, `missed` and `direct`
 times the squared fractions of laser power clipped on the outside of the target,
-missing it, or hitting `direct_names` (e.g. the capsule) directly. When `drive`
+missing it, or hitting the observed elements directly (the scenario's `observe`, the
+capsule whose drive is measured), or with `direct_names` the named parts or components
+instead (a name that is not in the target is an error). When `drive`
 (TW/mm²) is given, adds `drive_weight × (a₀/drive - 1)²`, with `a₀` the
 [`mean_flux`](@ref): `drive = mean_flux(evaluate(scenario, x0))` holds the drive of the
 design `x0`. A `keepout` (an
@@ -628,7 +630,7 @@ a fourth per-beam sensitivity (about four gradients per evaluation).
 """
 function symmetry_objective(; modes = (2 => 1.0, 4 => 1.0), odd = 1.0, lmax::Integer = 6,
                             clip = 10.0, missed = 10.0, direct = 10.0,
-                            direct_names = (:capsule,), drive = nothing, drive_weight = 1.0,
+                            direct_names = nothing, drive = nothing, drive_weight = 1.0,
                             center = nothing, keepout = nothing, uncertainty = nothing)
     errs = _uncertainty_spec(uncertainty)
     errs === nothing || (center === nothing && lmax <= _CACHED_LMAX) ||
@@ -666,11 +668,23 @@ function _penalties(ev::Evaluation; clip, missed, direct, direct_names)
     J = zero(ev.deposition.delivered)
     clip > 0 && (J += clip * clipped_fraction(ev)^2)
     missed > 0 && (J += missed * missed_fraction(ev)^2)
-    # parts or components (a fitted CAD capsule is the part of its pieces)
-    if direct > 0 && all(n -> any(c -> c.name === n || c.part === n, ev.scenario.target.components), direct_names)
-        J += direct * power_fraction(ev, direct_names...)^2
-    end
+    direct > 0 && (J += direct * _direct_fraction(ev, direct_names)^2)
     return J
+end
+
+# The fraction of the delivered laser power absorbed by the observed elements, or by the
+# named parts or components (a fitted CAD capsule is the part of its pieces).
+_direct_fraction(ev::Evaluation, ::Nothing) =
+    sum(ev.deposition.element[e] for e in ev.scenario.observed; init = zero(ev.deposition.delivered)) /
+    ev.deposition.delivered
+function _direct_fraction(ev::Evaluation, names)
+    cs = ev.scenario.target.components
+    for n in names
+        any(c -> c.name === n || c.part === n, cs) ||
+            throw(ArgumentError("direct_names: the target has no part or component $(repr(n)) " *
+                                "(parts: $(join(repr.(parts(ev.scenario.target)), ", ")))"))
+    end
+    return power_fraction(ev, names...)
 end
 
 """
@@ -689,7 +703,7 @@ end
 
 """
     asymmetry_objective(; modes = (1 => 1.0, 2 => 1.0, 3 => 1.0, 4 => 1.0), components = (),
-                        clip = 10.0, missed = 10.0, direct = 10.0, direct_names = (:capsule,),
+                        clip = 10.0, missed = 10.0, direct = 10.0, direct_names = nothing,
                         drive = nothing, drive_weight = 1.0, keepout = nothing,
                         reference = nothing, uncertainty = nothing)
 
@@ -715,7 +729,7 @@ expected values over independent beam errors of those rms sizes (linearized; see
 """
 function asymmetry_objective(; modes = (1 => 1.0, 2 => 1.0, 3 => 1.0, 4 => 1.0),
                              components = (), clip = 10.0, missed = 10.0, direct = 10.0,
-                             direct_names = (:capsule,), drive = nothing, drive_weight = 1.0,
+                             direct_names = nothing, drive = nothing, drive_weight = 1.0,
                              keepout = nothing, reference = nothing, uncertainty = nothing)
     errs = _uncertainty_spec(uncertainty)
     lmax = maximum(vcat([l for (l, _) in modes], [lm[1] for (lm, _) in components], 0))
