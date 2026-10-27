@@ -724,7 +724,7 @@ section's own header (`:surface_index`, `:direct_laser_pwr_source`, `:uniform_so
 column names to the header's units (`"TW/cm2"`, `"deg"`, `""`), and `time` is the
 simulation time (ns) the sources were computed for.
 
-A workspace saved before computing, or changed since, says "Power sources are not up to
+A workspace saved before computing, or changed since, shows "Power sources are not up to
 date" and holds no tables: that is an error, or `nothing` with `stale = :nothing`.
 Tables of the same layout in other sections (beam capture and clearance data) are not
 read. Map the direct laser source onto a Briareus target with `visrad_deposition`.

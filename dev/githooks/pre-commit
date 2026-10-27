@@ -1,0 +1,6 @@
+#!/bin/sh
+# Prose lint on the lines this commit adds (dev/prose/lint.jl): British spelling and we/you
+# in the docs fail, verbs for minds or bodies warn. Enable once per clone with
+#   git config core.hooksPath dev/githooks
+command -v julia >/dev/null 2>&1 || exit 0
+exec julia --startup-file=no --compile=min dev/prose/lint.jl --staged

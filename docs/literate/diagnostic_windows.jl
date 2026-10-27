@@ -276,7 +276,7 @@ pulse = PulseShape([0.0, 0.3, 1.0, 1.4, 4.5, 5.0, 6.0, 7.5, 9.5, 10.0],
 
 # [`drive_history`](@ref) marches the radiosity through the pulse quasi-statically.
 # Each window element tracks its own heat front from its own incident flux, so the
-# windows burn through when the flux on them says they should. With `ylm = true` it
+# windows burn through at the times that flux implies. With `ylm = true` it
 # also records the real spherical harmonics of the capsule flux. The three thicknesses
 # share one geometry, so they share its view factors and its deposition operator.
 #

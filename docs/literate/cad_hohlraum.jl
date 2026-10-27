@@ -324,7 +324,7 @@ stage_panel(fig[1, 2], [c.name => c.mesh for c in remeshed.target.components if 
             (k, m, p) -> colors[String(k)], "remeshed elements")
 kind_color(c) = c.surface isa CylinderSurface ? Makie.wong_colors()[c.surface.radius > 2 ? 1 : 3] :
                 c.surface isa SphereSurface ? Makie.wong_colors()[6] : :gray70
-fitted_top = [c for c in fitted if c.part in top]      # the pieces remember their part
+fitted_top = [c for c in fitted if c.part in top]      # the pieces record their part
 stage_panel(fig[1, 3], [c.name => c.mesh for c in fitted_top],
             (k, m, p) -> kind_color(fitted_top[findfirst(c -> c.name === k, fitted_top)]),
             "fitted: cylinders, sphere, flat")

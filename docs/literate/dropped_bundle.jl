@@ -335,7 +335,7 @@ signal = backlighter_signal(bl_scene, bl_deposition, (90.0, 348.0); line = :Ge, 
 # emitting area faces the detector, and through the open windows every element sees
 # it, so the power per steradian toward the detector is the isotropic ``E_x/4\pi``.
 # Lower-Z lines convert better at this irradiance; the capsule's transmission at each
-# energy decides between them:
+# energy determines the choice between them:
 
 @assert signal.facing ≈ 1 && signal.per_sr ≈ signal.xray_energy / 4π
 println("line   hν (keV)  CE (%, 1σ range)      filters  photons per pixel (1σ range)")

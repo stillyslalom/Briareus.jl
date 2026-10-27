@@ -16,6 +16,7 @@ julia --project=. test/docrefs.jl                        # docs guard, ~3 s
 julia --project=docs -t auto docs/make.jl                # docs; runs every tutorial
 julia --project=docs -t auto docs/literate/<name>.jl     # one tutorial as a script
 julia --project=BriareusGUI -e 'using Pkg; Pkg.test()'   # GUI subpackage
+julia dev/prose/lint.jl [--fix] [files]                  # prose lint; --fix: spelling
 ```
 
 `BRIAREUS_NO_WORKLOAD=true` skips the precompile workload (end of `src/Briareus.jl`) for
@@ -42,6 +43,11 @@ factors) dominate the suite: build one per geometry and share it across testsets
   `@ref` resolves. Docs follow CompactLES.jl: Literate tutorials in `docs/literate/`,
   registered in `docs/make.jl`, each ending in "What this checks" with exact references.
   The docs environment has no ForwardDiff/Optim, and `Vec3` clashes with Makie there.
+- Docs and docstring prose: neutral academic register, no "we"/"you" (passive, or name the
+  thing); software takes literal verbs (a solver solves, a test checks), not verbs for
+  minds or bodies (asks, says, decides, wants). American spelling everywhere, comments and
+  data headers included. `dev/prose/lint.jl` checks each edit (a hook in
+  `.claude/settings.json`) and, with `git config core.hooksPath dev/githooks`, each commit.
 - Provenance: docstrings say when a value is derived or an engineering default rather than
   a facility criterion; numbers go in the research notes with source and confidence.
   Papers are cite-only (numbers with citations, never copied text or figures).

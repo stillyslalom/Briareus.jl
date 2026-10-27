@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=\"$CLAUDE_PROJECT_DIR/dev/prose/lint.jl\"; [ ! -f \"$f\" ] || exec julia --startup-file=no --compile=min \"$f\" --hook",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}
