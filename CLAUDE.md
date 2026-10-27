@@ -51,8 +51,7 @@ factors) dominate the suite: build one per geometry and share it across testsets
 - Provenance: docstrings say when a value is derived or an engineering default rather than
   a facility criterion; numbers go in the research notes with source and confidence.
   Papers are cite-only (numbers with citations, never copied text or figures).
-  Non-public data (anything under `~/Dev/thor`: shot pointing exports, THOR CAD, VisRad
-  workspaces) never enters the repository; public examples use mock-ups.
+  Non-public data *never* enters the repository; public examples use mock-ups.
 - Windows: Python `open()` defaults to cp1252 and writes CRLF in text mode — pass
   `encoding='utf-8', newline='\n'`, or use the Edit tool. Julia triple-quoted strings
   dedent, so multi-line `replace` patterns built from them miss indented code.
