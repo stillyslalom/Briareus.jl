@@ -183,8 +183,8 @@ wl_op = DepositionOperator(hohlraum(; h = 0.8, capsule_h = 0.4, wall = nif_gold(
     k = kritcher2024_capsule()
     ok = findall(isfinite, k.n210808)
     ya = TabulatedAlbedo([0.0, 6.0, 9.0], [0.05, 0.16, 0.4])
-    same(a, b) = all(albedo(CapsuleAlbedo(albedo = ya, radius = a, outside = 0.1), t) ==
-                     albedo(CapsuleAlbedo(albedo = ya, radius = b, outside = 0.1), t) for t in ts)
+    same(a, b) = all(albedo(CapsuleAlbedo(albedo = ya, radius = a, outside_absorptance = 0.1), t) ==
+                     albedo(CapsuleAlbedo(albedo = ya, radius = b, outside_absorptance = 0.1), t) for t in ts)
     @test same(kritcher2024_radius(), (k.t, k.n221204))
     @test all(same(ScaledRadius(kritcher2024_radius(:n210808); time_scale = bang / 9.18),
                    ([k.t[ok]; 9.18] .* (bang / 9.18), [k.n210808[ok]; 0.055])) for bang in (9.37, 9.48))
@@ -214,10 +214,10 @@ end
     @test albedo(CapsuleAlbedo(radius = τ -> 0.5), 1.0) ≈ 1 - 0.8 / 4
     # absorption outside the front: a share of what misses the effective sphere; none
     # without a radius, and the default is the front's alone
-    @test albedo(CapsuleAlbedo(radius = τ -> 0.5, outside = 0.4), 1.0) ≈ 1 - 0.8 / 4 - 0.4 * 3 / 4
-    @test albedo(CapsuleAlbedo(outside = 0.4), 1.0) == 0.2
-    @test albedo(CapsuleAlbedo(radius = ca.radius, outside = 0.0), 7.0) == albedo(ca, 7.0)
-    @test_throws ArgumentError CapsuleAlbedo(outside = 1.5)
+    @test albedo(CapsuleAlbedo(radius = τ -> 0.5, outside_absorptance = 0.4), 1.0) ≈ 1 - 0.8 / 4 - 0.4 * 3 / 4
+    @test albedo(CapsuleAlbedo(outside_absorptance = 0.4), 1.0) == 0.2
+    @test albedo(CapsuleAlbedo(radius = ca.radius, outside_absorptance = 0.0), 7.0) == albedo(ca, 7.0)
+    @test_throws ArgumentError CapsuleAlbedo(outside_absorptance = 1.5)
     ta = TemperatureAlbedo([100.0, 300.0], [0.4, 0.2])
     @test albedo(ta, 0.0, 200.0) ≈ 0.3 && albedo(ta, 0.0) ≈ 0.25
     @test albedo(CapsuleAlbedo(albedo = ta), 0.0, 300.0) ≈ 0.2

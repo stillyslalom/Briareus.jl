@@ -96,7 +96,7 @@ callout in the section says which).
 | `DU_LOSS_FACTOR` (`du_wall_loss`, `uranium`, `nif_uranium`) | 0.836 at 300 eV, T^-0.2, 0.7 µm Au liner | Energetics defaults and the capsule share (factor); Wall material, conversion and capsule energetics §1 (model) |
 | `gold()`, `uranium()` conversion | 0.75 | Capsule absorption, conversion and the ablating-wall release ("What changed") |
 | `nif_conversion()` (`nif_gold`, `nif_uranium`) | 0.7 t^0.12 ≤ 0.95 | Wall material, conversion and capsule energetics §2 |
-| `CapsuleAlbedo` | α_c 0.2, `outside` 0 | Wall material, conversion and capsule energetics §3 (0.2); Capsule absorption, conversion and the ablating-wall release (`outside`) |
+| `CapsuleAlbedo` | α_c 0.2, `outside_absorptance` 0 | Wall material, conversion and capsule energetics §3 (0.2); Capsule absorption, conversion and the ablating-wall release (`outside`) |
 | `WallMotion` | 0.185 mm/ns from 0.8 ns, stopping 0.45 mm in | Hohlraum dynamics calibrated to published data |
 | `BubbleAbsorption` | speed 0.36 mm/ns, delay 0.25 ns, q 1.8, opacity 0.111 | Hohlraum dynamics calibrated to published data |
 | `LipClosure` | 0.022 mm/ns at 100 eV, depth 0.24 mm, hold 0.4 ns | Computed LEH closure |
@@ -7036,7 +7036,7 @@ f = 0.836, wall history and re-emission, 11 % degradation, measured backscatter,
 - The capsule share: 13.9 % against 16.2 % at the albedo's bound; the absorbing surface
   outside the ablation front is the open input (a published HYDRA absorption radius, or
   the blow-off's opacity). (Now 13.8 % with Young's albedo on the K24 schedule; the
-  remaining 2.4–4.2 points are `CapsuleAlbedo`'s `outside`, unset: "Capsule
+  remaining 2.4–4.2 points are `CapsuleAlbedo`'s `outside_absorptance`, unset: "Capsule
   absorption, conversion and the ablating-wall release" §2.)
 - The late-time drive after the droop (unchanged by these defaults).
 
@@ -7348,7 +7348,7 @@ them. Runs: `examples/n221204.jl 0.8 0.4 full <transfer> x calibrated <shot> met
 | Piece | Now | Before |
 |---|---|---|
 | capsule albedo α_c (example) | Young 2020's quasi-1D HYDRA ablator albedo on the Young time map (`capsule_albedo=young`, the default; a number still accepted) | 0, fitted to HYDRA's share and stopped at its bound |
-| absorption outside the front | `CapsuleAlbedo(; outside = a_out)`: α_eff = 1 − (1 − α_c)s² − a_out(1 − s²), s = R/R₀; default 0, so the default is the front's alone (`capsule_outside=` in the example) | — |
+| absorption outside the front | `CapsuleAlbedo(; outside_absorptance = a_out)`: α_eff = 1 − (1 − α_c)s² − a_out(1 − s²), s = R/R₀; default 0, so the default is the front's alone (`capsule_outside=` in the example) | — |
 | capsule radius schedule (example) | `schedule=k24`, N221204's own HYDRA history (Kritcher 2024 Fig. 1), the default; Zylstra's pair: K24's N210808 capsule, time × bang/9.18 (*L*) | Young's N170827 front through the misread 6 ns anchor (`schedule=young` kept it; removed 2026-10-26) |
 | conversion of `gold()` / `uranium()` | 0.75 whatever the albedo | `nif_conversion()` when the albedo was an `AlbedoModel` |
 | NIF drive-history walls | `nif_gold()` (`WallLossAlbedo()`, `nif_conversion()`), `nif_uranium()` (`du_wall_loss()`, `nif_conversion()`); the example uses `nif_uranium()`, `test/energetics.jl` `nif_gold()` | `gold(albedo = WallLossAlbedo())`, `uranium()` |
@@ -7413,7 +7413,7 @@ the initial / open LEH area:
 
 - With the published ablator albedo, absorption at the front gives 12.0–13.8 % between
   the radius bounds, against HYDRA's 16.2 %: 2.4–4.2 points remain. That is the share
-  `outside` would carry (a_out ≈ 0.1–0.2 by the share's near-linear response, *L*); it is
+  `outside_absorptance` would carry (a_out ≈ 0.1–0.2 by the share's near-linear response, *L*); it is
   not set, since no blow-off opacity or absorbing radius is published. Alternatively
   Young's N170827 albedo is too high for N221204's thicker W-doped ablator. Neither is
   fixed here.
@@ -7465,7 +7465,7 @@ radius is published (a candidate for the 13.8 vs 16.2 % capsule share); the pair
 K24-shaped schedule is accepted, labeled derived, with room in the API for other
 schedules (research pending, ROADMAP 16).*
 
-- Whether to set `outside` (a_out ≈ 0.1–0.2 would close HYDRA's share on the two
+- Whether to set `outside_absorptance` (a_out ≈ 0.1–0.2 would close HYDRA's share on the two
   bounds) without a published blow-off opacity or absorbing radius; it is 0.
 - The pair's K24-shaped schedule (N210808 capsule, time scaled to bang) is *L*; the pair's
   own radius histories are unpublished.

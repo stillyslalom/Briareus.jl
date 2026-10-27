@@ -778,11 +778,11 @@ _radius_schedule(r::Tuple) = TabulatedRadius(r[1], r[2])
 _radius_schedule(r) = r
 
 """
-    CapsuleAlbedo(; albedo = 0.2, radius = nothing, outside = 0.0)
+    CapsuleAlbedo(; albedo = 0.2, radius = nothing, outside_absorptance = 0.0)
 
 Albedo of a capsule that absorbs as a sphere of effective radius `R(t)` inside its
-fixed mesh of radius `R₀`, plus a share `outside` of what crosses the mesh outside that
-sphere:
+fixed mesh of radius `R₀`, plus a share `outside_absorptance` of what crosses the mesh
+outside that sphere:
 
     α_eff(t) = 1 - (1 - α_c) s² - a_out (1 - s²),    s = R(t)/R₀,
 
@@ -793,9 +793,9 @@ surroundings). `albedo` ``α_c`` is a number or an `AlbedoModel` (`TabulatedAlbe
 `TemperatureAlbedo` in the incident radiation temperature); `radius` is `nothing`
 (R = R₀), a [`RadiusSchedule`](@ref) ([`TabulatedRadius`](@ref), [`ScaledRadius`](@ref)),
 a `(times, R/R₀)` table (ns; linear, held at its ends; stored as a `TabulatedRadius`) or
-a function `t -> R/R₀`. `outside` ``a_{out}`` (``0 ≤ a_{out} ≤ 1``, default 0) is the
-absorptance of the blow-off between the ablation front and `R₀` for the flux that misses
-the front: an explicit term for absorption outside the front (W-doped ablator plasma),
+a function `t -> R/R₀`. `outside_absorptance` ``a_{out}`` (``0 ≤ a_{out} ≤ 1``, default 0)
+is the absorptance of the blow-off between the ablation front and `R₀` for the flux that
+misses the front: an explicit term for absorption outside the front (W-doped ablator plasma),
 unpublished, so 0 unless a study sets it; with the default the model is the front's
 alone, and without a `radius` the term vanishes. `energy_balance` then books the
 capsule's absorbed power at the effective radius plus the outside term, and
@@ -809,12 +809,13 @@ the published ``α_c(t)``; `examples/n221204.jl` uses it on N221204's time axis.
 struct CapsuleAlbedo{F} <: AlbedoModel
     albedo::AlbedoModel
     radius::F
-    outside::Float64
+    outside_absorptance::Float64
 end
-function CapsuleAlbedo(; albedo = 0.2, radius = nothing, outside::Real = 0.0)
-    0 <= outside <= 1 || throw(ArgumentError("outside must lie in [0, 1]"))
+function CapsuleAlbedo(; albedo = 0.2, radius = nothing, outside_absorptance::Real = 0.0)
+    0 <= outside_absorptance <= 1 ||
+        throw(ArgumentError("outside_absorptance must lie in [0, 1]"))
     return CapsuleAlbedo(_albedo_model(albedo),
-                         _radius_schedule(radius), Float64(outside))
+                         _radius_schedule(radius), Float64(outside_absorptance))
 end
 
 """
@@ -832,8 +833,8 @@ function albedo(m::CapsuleAlbedo, t, T = nothing)
     αc = albedo(m.albedo, t, T)
     m.radius === nothing && return αc
     s2 = radius_fraction(m, t)^2
-    m.outside == 0 && return 1 - (1 - αc) * s2
-    return 1 - (1 - αc) * s2 - m.outside * (1 - s2)
+    m.outside_absorptance == 0 && return 1 - (1 - αc) * s2
+    return 1 - (1 - αc) * s2 - m.outside_absorptance * (1 - s2)
 end
 
 # An albedo model's albedo, the albedo it would have intact (closed), and the fraction of
