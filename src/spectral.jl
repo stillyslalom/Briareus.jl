@@ -228,7 +228,7 @@ _emits_mband(m::MBandEmission, t::Target, e) =
 Group albedos for `spectral_solve`'s `albedo` that pair with the laser M-band `m`: on
 every surface component of `m`'s materials, `albedo` (``α_M``) in each group at or above the
 M-band's lower edge `m.band[1]` (which must be one of `edges`) and the gray albedo
-(`NaN`) below it. Use with `thermalize = true`: the rest of the gray albedo is
+(`nothing`) below it. Use with `thermalize = true`: the rest of the gray albedo is
 re-emitted thermally, so the group sums stay the gray solution's.
 
 The default ``α_M`` = 0.55 is **calibrated** (research notes, "Spectral radiosity, M-band
@@ -243,7 +243,7 @@ function mband_albedo(t::Target, m::MBandEmission, edges; albedo::Real = 0.55)
     k = findfirst(==(m.band[1]), E)
     k === nothing && throw(ArgumentError("the edges must include the M-band's lower edge $(m.band[1]) eV"))
     G = length(E) - 1
-    a = [g >= k ? Float64(albedo) : NaN for g in 1:G]
+    a = Union{Nothing,Float64}[g >= k ? Float64(albedo) : nothing for g in 1:G]
     return Dict(c.name => copy(a) for c in t.components
                 if c.kind === :surface && c.material.name in m.materials)
 end
@@ -327,7 +327,8 @@ e.g. `spectral_edges()`).
 - Group albedos `α_g`: the fraction of an element's incident flux in group g that it
   re-emits in group g. The gray converged albedo `sol.albedo` in every group, except
   for the components in `albedo`, a `Dict` (or pairs) from component name to a vector
-  of group albedos (`NaN` keeps the gray albedo in that group).
+  of group albedos (a `nothing` entry keeps the gray albedo in that group, e.g.
+  `Dict(:wall => [nothing, 0.5])`; a `NaN` entry throws).
 - `thermalize`: what happens to the rest of the gray albedo, `α − α_g`. Lost to the
   wall by default (`B_g = S_g + α_g H_g`, each group a gray-type solve); with
   `thermalize = true` re-emitted thermally, spread over the groups by the element's
@@ -461,8 +462,11 @@ function _group_albedos(t::Target, α::Vector{Float64}, spec, G::Integer)
     spec === nothing && return A
     for (name, a) in spec
         length(a) == G || throw(ArgumentError("$name: $(length(a)) group albedos for $G groups"))
-        for e in elements(t, name), g in 1:G
-            isnan(a[g]) || (A[e, g] = a[g])
+        any(x -> x isa Real && isnan(x), a) &&
+            throw(ArgumentError("$name: NaN group albedo (`nothing` keeps the gray albedo)"))
+        es = elements(t, name)
+        for g in 1:G
+            a[g] === nothing || (A[es, g] .= Float64(a[g]))
         end
     end
     return A
