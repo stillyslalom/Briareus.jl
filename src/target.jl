@@ -326,31 +326,31 @@ material of `density` g/cm³, gold by default) that re-emits like the wall until
 Marshak heat front (`front`, a `HeatFront`) has heated its whole areal mass
 `ρ × thickness`, and then lets part of the flux that reaches it through.
 
-Once burned through, a fraction `T = transmission` of the incident flux passes through
+Once burned through, a fraction `f = transmission` of the incident flux passes through
 the foil and leaves the hohlraum (a number, or `RosselandTransmission()` for a fraction
 that follows the radiation temperature). The rest meets the foil as before and is re-emitted
 with the albedo of `before`. Across the transition
 
-    α(t) = α_before (1 - s T),    transmitted fraction s T,
+    α(t) = α_before (1 - s f),    transmitted fraction s f,
 
 with `s = s((t - t_b)/width)` the smooth step `3x² - 2x³` on [0, 1] and `t_b` the
-burnthrough time, so the burned-through albedo is `(1 - T) α_before`. Of the flux
-`H A` on the foil, `s T H A` is transmitted and `(1 - s T)(1 - α_before) H A` absorbed
+burnthrough time, so the burned-through albedo is `(1 - f) α_before`. Of the flux
+`H A` on the foil, `s f H A` is transmitted and `(1 - s f)(1 - α_before) H A` absorbed
 (`energy_balance`, `drive_history`). `before` is an albedo model or a number, by
 default the wall's Marshak loss (`WallLossAlbedo`).
 
-The default `T` is the gray-foil estimate of R. S. Lester et al., Phys. Rev. E 114,
-L023201 (2026), doi:10.1103/k8dz-pjdx: `T = 4/(3τ + 2)` (their eq. 2,
+The default `f` is the gray-foil estimate of R. S. Lester et al., Phys. Rev. E 114,
+L023201 (2026), doi:10.1103/k8dz-pjdx: `f = 4/(3τ + 2)` (their eq. 2,
 `eddington_transmission`). The optical depth is their eq. 1, `τ = L/λ_Au(T_h)` at a
 fixed Rosseland mean free path ``λ_{Au}``, scaled linearly in areal mass (`optical_depth`)
 from their point `τ ∼ 5` at `L = 2.5 µm`:
 
     τ = 5 × ρ thickness / (19.3 g/cm³ × 2.5 µm),
 
-so `T ≈ 0.33`, `0.235` and `0.17` for 1.7, 2.5 and 3.6 µm of gold. Limitations:
+so `f ≈ 0.33`, `0.235` and `0.17` for 1.7, 2.5 and 3.6 µm of gold. Limitations:
 - ``λ_{Au}`` is held at their evaluation, for a hohlraum radiation temperature `T_h` of
   typically 300–350 eV and an assumed gold density of about 1 g/cm³ (the expanded
-  foil), so `T` is constant once burned through.
+  foil), so `f` is constant once burned through.
   `transmission = RosselandTransmission()` lets ``λ_{Au}`` follow the temperature of the
   flux on the foil instead; its density dependence is not modeled.
 - Pairing that density with the 2.5 µm as-built thickness is theirs. Taken literally,
