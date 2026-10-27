@@ -59,6 +59,8 @@ The same workflow runs in a desktop window: see [Desktop application](gui.md).
 ## Start here
 
 **Evaluating Briareus against VisRad or a design workflow.**
+[For VisRad users](@ref) maps VisRad's concepts and files to Briareus's, states where
+the two codes differ, and walks through porting a VisRad study.
 [Verification and validation](@ref) lists every check by kind (code verification,
 solution verification, validation, calibration), including the comparison of laser
 deposition with VisRad 21 and the N221204 benchmark against published data.
@@ -69,8 +71,10 @@ a reference shot's capsule drive through time after a bundle is lost.
 radiation model. [VisRad interchange](@ref) documents the workspace, pointing and power
 files read and written.
 
-**Learning the physics with the code.** The tutorials build up in order, and each ends
-with "What this checks", the exact references it is held to.
+**Learning the physics with the code.** [Physics background](@ref) introduces indirect
+drive, laser spots, view factors, drive symmetry and the hohlraum's time dependence,
+with pointers into the code and further reading. The tutorials build up in order, and
+each ends with "What this checks", the exact references it is held to.
 
 1. [Laser spot on a foil](@ref): a phase-plate spot, defocus and oblique incidence.
 2. [Integrating sphere](@ref): view factors and radiosity in a cavity with an exact

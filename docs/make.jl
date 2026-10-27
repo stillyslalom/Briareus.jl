@@ -88,6 +88,8 @@ tutorial_page(file) = joinpath("tutorials", splitext(file)[1] * ".md")
             "Polar direct drive: a published NIF pointing" => tutorial_page("polar_direct_drive.jl"),
         ],
         "Explanation" => [
+            "Physics background" => "explanation/background.md",
+            "For VisRad users" => "explanation/visrad.md",
             "Verification and validation" => "explanation/verification-validation.md",
         ],
         "Reference" => [
