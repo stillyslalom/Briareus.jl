@@ -47,13 +47,13 @@ Item {
                 ToolTip.text: "Fire the beams with a pulse table (read_pulse_table); disabled beams stay off"
             }
             Button {
-                text: "N221204"
+                text: "N221204 shape"
                 onClicked: Julia.br_time_shape()
                 ToolTip.visible: hovered
                 ToolTip.text: "N221204's delivered pulse shape (Pak et al. 2024), each beam reaching its table power at the peak"
             }
             Button {
-                text: "Run"
+                text: "Run history"
                 visible: !app.timeRunning
                 enabled: app.timeHasPulses && !app.driveBuilding
                 onClicked: Julia.br_time_run()
