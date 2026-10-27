@@ -9,6 +9,16 @@ time (pulse tables, drive histories and a time cursor on the 3D view). One Qt Qu
 window: model tree, properties, a 3D viewer with CAD-style navigation, and result
 panels. Use `Controllers` to do the same from a script without a window. Controller
 state is exposed through `Observables`.
+
+The package is also the `briareus` command (a Pkg app, `[apps.briareus]` in its
+`Project.toml`), installed as the BriareusGUI README describes:
+
+    briareus                       # the window on a fresh design
+    briareus design.briareus.toml  # on a saved session
+    briareus --shortcut            # add Briareus to the desktop and the applications menu
+
+A shortcut runs a script that shows a splash while the package loads and writes the
+command's output to `BriareusGUI.log_path()`.
 """
 module BriareusGUI
 
@@ -16,7 +26,8 @@ using Briareus
 using GLMakie
 using QML: QML, JuliaPropertyMap, JuliaItemModel, loadqml, exec, @qmlfunction
 import QMLMakie                       # registers the MakieArea QML type
-import Qt6Declarative_jll
+import Qt6Base_jll, Qt6Declarative_jll
+using Base64: base64encode
 import Libdl
 using Printf
 using LinearAlgebra: norm, dot, cross, normalize
@@ -117,6 +128,7 @@ include("canvas/scene_canvas.jl")
 include("canvas/map_canvas.jl")
 include("canvas/time_canvas.jl")
 include("qt/shell.jl")
+include("app/app.jl")                  # the `briareus` command and its shortcuts
 
 using PrecompileTools: @setup_workload, @compile_workload
 

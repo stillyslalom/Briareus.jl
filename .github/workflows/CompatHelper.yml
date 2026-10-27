@@ -17,4 +17,4 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Force-pushes with the deploy key so that CI runs on compat PRs.
           COMPATHELPER_PRIV: ${{ secrets.DOCUMENTER_KEY }}
-        run: julia -e 'using CompatHelper; CompatHelper.main(subdirs=["", "docs", "BriareusGUI", "BriareusLauncher"])'
+        run: julia -e 'using CompatHelper; CompatHelper.main(subdirs=["", "docs", "BriareusGUI"])'

@@ -27,10 +27,10 @@ The command needs Julia 1.12.7 or later and no further Julia knowledge.
 2. Install the app and compile it (about ten minutes, once):
 
    ```
-   julia -e "using Pkg; Pkg.Apps.add(\"BriareusLauncher\")"
+   julia -e "using Pkg; Pkg.Apps.add(\"BriareusGUI\")"
    ```
 
-   or, at the Julia prompt's package mode (`]`), `pkg> app add BriareusLauncher`.
+   or, at the Julia prompt's package mode (`]`), `pkg> app add BriareusGUI`.
 3. Put Julia's app folder on the `PATH` (the install prints a warning when it is
    missing). Windows, in PowerShell:
 
@@ -47,17 +47,19 @@ The command needs Julia 1.12.7 or later and no further Julia knowledge.
    entry.
 
 The shortcut, or `briareus` in a terminal, then opens the window on a fresh design, and
-`briareus design.briareus.toml` opens a saved session. A splash shows within about two
-seconds while the window loads (about 20 s; the first start after an update compiles
-for a few minutes). The command runs Julia on all threads (`--threads=auto`) and returns
-when the window closes. A shortcut has no terminal: its output goes to
+`briareus design.briareus.toml` opens a saved session. The window takes about 20 s to
+open (the first start after an update compiles for a few minutes). A shortcut shows a
+splash within about a second meanwhile; `briareus` in a terminal shows nothing until
+the window, since the command's code runs only once BriareusGUI and its graphics
+libraries have loaded. The command runs Julia on all threads (`--threads=auto`) and
+returns when the window closes. A shortcut has no terminal: its output goes to
 `%LOCALAPPDATA%\Briareus\briareus.log` (macOS: `~/Library/Logs/Briareus/`), and a
 failure to start shows in the splash with the log's location.
 
-`pkg> app update BriareusLauncher` updates the app, and `pkg> app rm BriareusLauncher`
-removes it (the shortcuts are deleted by hand). The launcher is a package of its own so
-that the splash shows before BriareusGUI loads: `julia -m` loads an app's whole package,
-and BriareusGUI's dependencies take about 15 s to load.
+`pkg> app update BriareusGUI` updates the app, and `pkg> app rm BriareusGUI` removes it
+(the shortcuts are deleted by hand). A shortcut runs a script that names the Qt
+libraries of the installed app for its splash, so `briareus --shortcut` is run again
+after an update.
 
 ### From Julia
 
@@ -78,19 +80,22 @@ and it cannot share a process with a GLMakie window or an offscreen GLMakie rend
 
 ### From a development checkout
 
-BriareusGUI lives in the `BriareusGUI/` directory of the Briareus repository and the
-launcher beside it in `BriareusLauncher/`; their `[sources]` entries point each at the
-checkout's copy of the package it depends on, which Pkg honors for the active project
-only. A checkout runs the window as
+BriareusGUI lives in the `BriareusGUI/` directory of the Briareus repository; its
+environment takes the checkout's Briareus once that is developed into it:
 
 ```
 git clone https://github.com/stillyslalom/Briareus.jl
-julia --project=Briareus.jl/BriareusGUI -t auto -e "using Pkg; Pkg.instantiate(); using BriareusGUI; briareus()"
+julia --project=Briareus.jl/BriareusGUI -e "using Pkg; Pkg.develop(path=\"Briareus.jl\")"
+git -C Briareus.jl checkout BriareusGUI/Project.toml
+julia --project=Briareus.jl/BriareusGUI -t auto -e "using BriareusGUI; briareus()"
 ```
 
-and installs the `briareus` command from the checkout with
-`julia -e "using Pkg; Pkg.Apps.develop(path=\"Briareus.jl/BriareusLauncher\")"`,
-followed by `julia --project=Briareus.jl/BriareusLauncher -e "using Pkg; Pkg.precompile()"`.
+`Pkg.develop` also writes a `[sources]` entry into `BriareusGUI/Project.toml`, which the
+`git checkout` discards (the manifest keeps the developed copy). The package carries no
+`[sources]`: an app installed from the registry would keep the entry's path `..`, which
+exists in the installed tree but holds no package, and the install would fail. The
+`briareus` command installs from the checkout with
+`julia -e "using Pkg; Pkg.Apps.develop(path=\"Briareus.jl/BriareusGUI\")"`.
 
 ## A first session
 

@@ -32,6 +32,7 @@ end
     include("test_talis.jl")            # Review step: TaLIS checks (no GL)
     include("test_workspace.jl")        # session files, undo and redo (no GL)
     include("test_time.jl")             # pulses, drive histories, the time cursor (no GL)
+    include("test_app.jl")              # the `briareus` command: shortcuts, script, splash (no GL)
     include("test_canvas.jl")           # 3D and map canvases (offscreen GL)
 end
 

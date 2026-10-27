@@ -1,8 +1,9 @@
-// The launcher's splash (BriareusLauncher.start_splash): shown by Qt's `qml` tool within
-// about a second, while the launcher loads BriareusGUI (15-20 s). Arguments after `--`:
-// the icon's URL and the status file's URL. The file holds the stage shown, "quit", or
-// "error: <message>" (the splash then stays, with a Close link, until clicked). Empty or
-// missing for a second, it quits; after 30 min without "quit" (a lost launcher), too.
+// The splash of a desktop launch (the script `briareus --shortcut` writes, app.jl): shown
+// by Qt's `qml` tool within about a second, while the `briareus` app loads BriareusGUI
+// (15-20 s). Arguments after `--`: the icon's URL and the status file's URL. The file
+// holds the stage shown, "quit" (the window has shown), or "error: <message>" (the splash
+// then stays, with a Close link, until clicked). Empty or missing for a second, it quits;
+// after 30 min without "quit" (a lost app), too.
 import QtQuick
 import QtQuick.Window
 

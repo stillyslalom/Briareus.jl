@@ -16,10 +16,9 @@ the documentation describes the window, a first session and every panel.
 1. Install Julia 1.12.7 or later through juliaup: on Windows `winget install --id
    9NJNWW8PVKMN -e`, on macOS or Linux `curl -fsSL https://install.julialang.org | sh`.
    Open a new terminal afterward.
-2. Install the app (`BriareusLauncher`, in the repository's `BriareusLauncher/`) and
-   compile it, about ten
-   minutes once: `julia -e "using Pkg; Pkg.Apps.add(\"BriareusLauncher\")"`, or
-   `pkg> app add BriareusLauncher` at the Julia prompt.
+2. Install the app and compile it, about ten minutes once:
+   `julia -e "using Pkg; Pkg.Apps.add(\"BriareusGUI\")"`, or `pkg> app add BriareusGUI`
+   at the Julia prompt.
 3. Put Julia's app folder (`~/.julia/bin`) on the `PATH`; the install prints a warning
    when it is missing. Windows, in PowerShell:
 
@@ -30,10 +29,12 @@ the documentation describes the window, a first session and every panel.
 
    macOS (zsh): `echo 'export PATH="$HOME/.julia/bin:$PATH"' >> ~/.zprofile`; Linux
    (bash): the same line appended to `~/.bashrc`.
-4. `briareus --shortcut` adds Briareus to the desktop and the applications menu.
+4. `briareus --shortcut` adds Briareus to the desktop and the applications menu (run it
+   again after `pkg> app update BriareusGUI`).
 
 `briareus` opens the window on a fresh design, and `briareus design.briareus.toml` on a
-saved session. A shortcut has no terminal: its output goes to
+saved session, in about 20 s. A shortcut shows a splash meanwhile (a terminal shows
+nothing until the window), and its output goes to
 `%LOCALAPPDATA%\Briareus\briareus.log` (macOS: `~/Library/Logs/Briareus/`).
 
 ## Open the window from Julia
@@ -48,31 +49,33 @@ julia> sess = briareus()   # returns the session when the window closes
 
 ## Development
 
-The `[sources]` entries in `Project.toml` and `../BriareusLauncher/Project.toml` couple
-each package to the checkout's copy of the one it depends on (Pkg honors them for the
-active project only):
+The environment takes the checkout's Briareus once developed into it (from the
+repository root):
 
 ```
-julia --project=BriareusGUI -t auto -e 'using Pkg; Pkg.instantiate(); Pkg.test()'
-julia -e 'using Pkg; Pkg.Apps.develop(path="BriareusLauncher")'   # `briareus` from the checkout
+julia --project=BriareusGUI -e 'using Pkg; Pkg.develop(path=".")'
+git checkout BriareusGUI/Project.toml          # drop the [sources] entry develop wrote
+julia --project=BriareusGUI -t auto -e 'using Pkg; Pkg.test()'
+julia -e 'using Pkg; Pkg.Apps.develop(path="BriareusGUI")'   # `briareus` from the checkout
 ```
 
-The launcher sits beside BriareusGUI, not inside it: an app installed from the registry
-copies its `Project.toml` into the app environment and resolves relative `[sources]`
-paths against the installed tree, dropping those that do not exist there. From
-`~/.julia/packages/BriareusLauncher/<slug>/`, `..` exists (the package's own folder, with
-no `Project.toml`), so it would stay BriareusGUI's source and break the install;
-`../BriareusGUI` does not exist there, so BriareusGUI comes from the registry. Pkg
-rewrites these paths from Julia 1.12.7 (and 1.13.0); earlier 1.12 releases keep them
-relative to the app environment, hence the launcher's `julia = "1.12.7"`.
+`Project.toml` has no `[sources]` entry for Briareus, and must not get one: an app
+installed from the registry copies its `Project.toml` into the app environment and
+resolves relative `[sources]` paths against the installed tree, dropping only those that
+do not exist there. From `~/.julia/packages/BriareusGUI/<slug>/`, `..` exists (the
+package's own folder, with no `Project.toml`), so it would stay Briareus's source and the
+install would fail to resolve. CI checks that the entry is absent. The manifest keeps the
+developed Briareus, but Pkg writes the entry again whenever it rewrites `Project.toml`
+(`add`, `rm`, `update` in this environment); `git checkout BriareusGUI/Project.toml`
+after such a change, or `git diff` before committing it, keeps it out.
 
 The tests drive every controller without a window and render the canvases offscreen
 (they need a GL context; on a headless Linux machine wrap them in `xvfb-run`). The Qt
 window test runs in its own process when `BRIAREUSGUI_QT_TESTS=true` is set on a
 machine with a display (`test/qt_window.jl`, also runnable alone; set
 `BRIAREUSGUI_SHOTS` to keep its window images). `BRIAREUSGUI_NO_WORKLOAD=true` skips
-the precompile workload for faster rebuilds while developing. The launcher has its own
-tests: `julia --project=BriareusLauncher -e 'using Pkg; Pkg.test()'`.
+the precompile workload for faster rebuilds while developing. `test/test_app.jl` checks
+the command: the shortcuts and their script (in temporary folders), and the splash.
 `julia dev/gui_screenshots.jl` regenerates the documentation's screenshots.
 
 Time to first window: the workload builds the window's shell and item models (QML's Qt
@@ -82,9 +85,10 @@ by `julia dev/gui_first_frame.jl` into `src/qt/first_frame.jl` and replayed by t
 workload. Rerun the recorder after updating GLMakie, QMLMakie or Makie, or after
 changing what the canvases plot. On a 16-thread Windows machine the first frame came
 at 50 s without either, 21 s with both; the rest is loading the package images (15 s,
-GLMakie and QML about equally) and QML's `__init__`. The launcher is a package of its
-own so that its splash shows before BriareusGUI loads: `julia -m` loads an app's whole
-package, and BriareusGUI's dependencies take 15 s to load.
+GLMakie and QML about equally) and QML's `__init__`. `julia -m` loads an app's whole
+package before its `@main` runs, so the splash comes from the shortcut's script
+(`src/app/app.jl`), which starts Qt's `qml` tool on `src/app/splash.qml` and then the
+app; the app closes the splash through a status file once its window shows.
 
 The package follows HammerheadGUI's architecture: all state and logic lives in the
 framework-free `Controllers` submodule (Briareus + Observables, testable without a GL
