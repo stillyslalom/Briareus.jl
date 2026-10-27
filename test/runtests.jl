@@ -1262,5 +1262,6 @@ shard_include("large_models.jl")
 shard_include("direct_drive.jl")
 shard_include("corona.jl")
 shard_include("hmatrix.jl")
+shard_include("parameters.jl")
 shard_include("inference.jl")
 end

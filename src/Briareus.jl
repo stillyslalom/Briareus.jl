@@ -73,7 +73,7 @@ export planck_fraction, planck_fractions, spectral_edges, MBandEmission, mband_c
        nif_mband, mband_power, mband_albedo, SpectralSolution, spectral_solve, ngroups, band_flux,
        mband_recirculation, DanteChannel, dante1_channels, DanteView, dante1, dante2, dante, visible_area,
        AbstractDanteChannel, DanteResponse, dante1_responses, xrd_sensitivity, dante_unfold, sentinel
-export GroupPointing, nparams, parameter_names, initial_parameters, apply, bounds,
+export GroupPointing, nparams, parameter_names, initial_parameters, parameters, apply, bounds,
        Scenario, Evaluation, evaluate, subset, flux_ylm, asymmetry_objective, influence_matrix,
        clipped_fraction, missed_fraction, power_fraction,
        flux_moments, symmetry_objective, irradiance_objective, optimize_pointing, report,

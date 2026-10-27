@@ -197,6 +197,38 @@ function initial_parameters(p::GroupPointing)
 end
 
 """
+    parameters(p::GroupPointing, values::Pair...; group = (field = value, ...), ...)
+        -> Vector{Float64}
+
+The parameter vector of `p` with named values: each keyword (for `Symbol` group keys,
+such as NIF's cones `:inner23` … `:outer50`) or `key => (; field = value, ...)` pair (for
+any key, such as a quad name) sets those fields of that group. Fields and groups not
+named keep [`initial_parameters`](@ref), so only the values that differ from the
+template beams need to be given. An unknown group or a field that is not a parameter of
+`p` is an `ArgumentError`.
+
+```julia
+pointing = GroupPointing(nif_quads(); fields = (:z, :r, :power))
+x0 = parameters(pointing; inner23 = (z = 3.09, r = -1.09), outer50 = (z = 5.01,))
+```
+"""
+function parameters(p::GroupPointing, values::Pair...; kwargs...)
+    x = initial_parameters(p)
+    for (key, fv) in (values..., pairs(kwargs)...)
+        g = findfirst(==(key), p.keys)
+        g === nothing && throw(ArgumentError("no group $(repr(key)); the groups are " *
+                                             join(repr.(p.keys), ", ")))
+        for (f, v) in pairs(fv)
+            fi = findfirst(==(f), p.fields)
+            fi === nothing && throw(ArgumentError("$f is not a parameter; the fields are " *
+                                                  join(p.fields, ", ")))
+            x[_pidx(p, g, fi)] = v
+        end
+    end
+    return x
+end
+
+"""
     apply(p::GroupPointing, x) -> Vector{Beam}
 
 Beams for parameter vector `x` (element type follows `x`, so this is differentiable).
@@ -315,6 +347,9 @@ _LazyResponse() = _LazyResponse(ReentrantLock(), nothing)
     Scenario(target, beams; observe = nothing, radiation = true, time = 0.0,
              albedo = nothing, parameterization = GroupPointing(beams), lpi = nothing,
              deposition_kw = (;), viewfactor_kw = (;), model = nothing)
+    Scenario(target, parameterization::GroupPointing; kwargs...)
+
+The second form takes the beams from the parameterization's template beams.
 
 Everything precomputed for fast repeated evaluation of a pointing design:
 the `DepositionOperator`, and — when `radiation` and `observe` (component names whose
@@ -391,6 +426,9 @@ function Scenario(t::Target, beams::AbstractVector{<:Beam}; observe = nothing,
     return Scenario(t, parameterization, op, model, obs, W, Y, WR, YR, lpi, Float64(time),
                     _LazyResponse(), albedo === nothing ? nothing : collect(Float64, albedo))
 end
+
+Scenario(t::Target, p::GroupPointing; kwargs...) =
+    Scenario(t, p.template; parameterization = p, kwargs...)
 
 """
     subset(scenario, keep; parameterization = GroupPointing(kept beams; same fields))
