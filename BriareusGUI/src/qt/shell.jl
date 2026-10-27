@@ -751,8 +751,8 @@ function _refresh_drive!(sh::BriareusShell)
                                     radiation_temperature(res.mean_flux)))
     s = res === nothing ? nothing : res.spot
     _set!(sh, "spotText", s === nothing ? "" :
-                          @sprintf("mean %.3g W/cm², peak %.3g W/cm², rms nonuniformity %.1f %%, %.1f %% of the delivered power",
-                                   s.mean, s.peak, 100 * s.rms, 100 * s.fraction))
+                          @sprintf("in r ≤ %.3g mm: mean %.2e W/cm², peak %.2e W/cm², rms nonuniformity %.1f %%, %.1f %% of the delivered power",
+                                   s.radius, s.mean, s.peak, 100 * s.rms, 100 * s.fraction))
     modes = res === nothing ? ModeRow[] :
             [ModeRow(m.l, _pct(m.epsilon), _pct(m.legendre), "", "") for m in res.modes]
     _sync_rows!(sh.rows[:modeModel], sh.models[:modeModel], modes)

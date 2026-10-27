@@ -13,7 +13,6 @@ ScrollPage {
                 (app.hasFoil ? "the foil spot" : app.hasCapsule ? "the capsule modes" : "the drive") +
                 " and the laser power accounting."
     }
-    Label { text: app.driveSummary; font.weight: Font.DemiBold; visible: app.driveHasResult; wrapMode: Text.WordWrap; Layout.fillWidth: true }
     RowLayout {
         visible: app.driveHasResult
         spacing: 40
