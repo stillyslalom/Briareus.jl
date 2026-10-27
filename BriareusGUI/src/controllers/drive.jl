@@ -607,9 +607,9 @@ end
 # A fraction as a percentage without trailing zeros: 1e-3 → "0.1 %".
 _pct_text(x::Real) = _nobreak(string(round(100x; sigdigits = 3), " %"))
 
-# Text with a no-break space before each unit, so that a wrapped line keeps a number and
-# its unit together.
-_nobreak(s::AbstractString) = replace(s, r" (?=%|W/cm²|eV|mm|TW)" => string(Char(0xa0)))
+# Text with a no-break space before each unit and after each mode symbol (ε₂), so that a
+# wrapped line keeps a number with its unit and its symbol.
+_nobreak(s::AbstractString) = replace(s, r"(?<=ε[₀-₉]) | (?=%|W/cm²|eV|mm|TW)" => string(Char(0xa0)))
 
 # Foil irradiance within `radius` of the foil center: mean, peak (W/cm²) and RMS
 # nonuniformity; `nothing` without a foil.
