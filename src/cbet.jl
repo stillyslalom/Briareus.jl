@@ -85,7 +85,7 @@ as a laser–plasma model (`apply_lpi`, `Scenario(...; lpi)`).
   for N221204 (Kritcher et al., PRE 109, 025204, 2024); default 0.002.
   [`cbet_clamp_schedule`](@ref) builds the foot/peak schedule from a `PulseShape`.
 - `saturation` — how `clamp` acts: `:smooth` (default, the factor above) or `:min`,
-  the hard limit δn = min(clamp, δn_linear) of Strozzi et al., PRL 118, 025002 (2017),
+  the hard limit `δn = min(clamp, δn_linear)` of Strozzi et al., PRL 118, 025002 (2017),
   i.e. a factor `min(1, clamp/δn)`, as in HYDRA's inline model, so its clamp values carry
   over one to one. At δn = clamp the smooth factor is √2 lower.
 

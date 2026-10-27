@@ -18,7 +18,7 @@ source; the path continues diffusely with its weight multiplied by the element's
 (Russian roulette below 1/20), and ends on an aperture (escape), a one-sided surface's
 back, or a miss. A closing lip (`aperture(...; closure)`, a `GapClosure`) is the
 exception among apertures: like a surface, it re-emits diffusely the fraction `albedo`
-of what reaches it (its own α(t) = s α_after, from `albedos(target, time)` as `solve`
+of what reaches it (its own ``α(t) = s α_{after}``, from `albedos(target, time)` as `solve`
 uses) and lets the rest escape; it has no source. Apertures stay transparent to laser
 rays and lines of sight elsewhere; here the lip plane is the enclosure's boundary.
 `albedo` defaults to the albedos at time 0; pass `albedos(target, time)` (or a

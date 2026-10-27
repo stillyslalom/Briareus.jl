@@ -300,7 +300,7 @@ shot, linearly.
 pairs: `(l, m) => Δc` for a component, `l => [Δc_l,-l, …, Δc_l,l]` for a whole degree
 (`mode_index` order). `sigma` is the measurement's rms error, one number or one per
 component (in the order `measured` expands to). The nominal shape is the scenario's
-for `beams`; components through `l = 6` (the cached Y_lm weights).
+for `beams`; components through `l = 6` (the cached ``Y_{lm}`` weights).
 
 Model: `Δc = J x + ε`, with `x` the errors (zero-mean normal, the variances of
 `mode_uncertainty`: per beam its aim along the spot axes `a`, `b` and its relative

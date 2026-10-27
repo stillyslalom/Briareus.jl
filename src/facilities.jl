@@ -197,9 +197,10 @@ quads, with `group` the cone) re-aimed by cone, defocus 0; power, spot and `dlam
 kept. Each cone's quads share one rule in their own frame, mirrored top to bottom: the aim
 sits at `±z` (mm, the bottom hemisphere at `-z`), `r` along the quad's port azimuth
 (negative: across the axis, toward the opposite wall) and, for the outer cones, `±s` along
-the quad's φ̂, each beam aiming to the side opposite its own port (`-sign(φ_beam − φ_quad)
-s`; the quad's beams cross). The quad azimuth is that of the mean port of its beams in
-`beams`, so a quad given as one beam (`nif_quads()`) gets no split.
+the quad's φ̂, each beam aiming to the side opposite its own port
+(`-sign(φ_beam − φ_quad) s`; the quad's beams cross). The quad azimuth is that of the
+mean port of its beams in `beams`, so a quad given as one beam (`nif_quads()`) gets no
+split.
 
 | cone | z | r | s |
 |---|---|---|---|
@@ -211,7 +212,7 @@ s`; the quad's beams cross). The quad azimuth is that of the mean port of its be
 *Derived*, not a facility pointing: the values were fitted, on a 0.1 mm grid, to the
 capsule-flux moments and LEH beam crossing of a non-public as-shot HYBRID-E pointing on
 the 11.24 × 6.4 mm hohlraum with 3.1 mm LEHs, which they reproduce to within 0.15
-percentage point (P2/P0, P4/P0, P6/P0 and Y_lm/Y00 for l ≤ 6, at foot and peak cone
+percentage point (P2/P0, P4/P0, P6/P0 and ``Y_{lm}/Y_{00}`` for l ≤ 6, at foot and peak cone
 fractions) and its reduced-model CBET transfer to 0.03 % (research notes, "Mock HYBRID-E pointing (2026-10-23)").
 """
 function hybride_mock_pointing(beams::AbstractVector{<:Beam} = nif_beams();

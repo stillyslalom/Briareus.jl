@@ -477,7 +477,7 @@ the beam errors.
 Returns `infer_errors`'s fields, with `measured`, `predicted` and `residual` still in
 the mode-1 components, plus `thickness` (the inferred `t`) and `velocity = (; measured,
 nominal, predicted, residual, chi2, chi2_prior)` in km/s: `predicted` is the nominal plus
-the inferred errors' and thickness's velocity; `chi2` is MacGowan's χ²_ν of the nominal
+the inferred errors' and thickness's velocity; `chi2` is MacGowan's ``χ^2_ν`` of the nominal
 (the forward prediction) against the measurement, `(v − v₀)ᵀ Σₘ⁻¹ (v − v₀)/3` (Casey et
 al. 2023), and `chi2_prior` the same with the errors' prior spread added to `Σₘ`
 (about 1 when the measurement lies within the spread the priors allow).

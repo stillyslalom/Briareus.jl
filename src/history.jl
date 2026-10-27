@@ -107,13 +107,13 @@ element, split off in the step's own deposition pass, so the M-band follows the 
 balance in time (an intensity-form `MBandEmission()` converts the step's deposition
 itself). The step's gray solution is then split by
 `spectral_solve(sol; spectral..., mband, mband_power)`. `spectral` holds its other
-keywords; those not given default to the calibrated pairing: `edges = [0,
-mband.band[1], ∞]` (must include `mband.band[1]`), `thermalize = true` and `albedo =
-mband_albedo(t, mband, edges)` (α_M 0.55 at and above the band's edge on the emitting
-surfaces; [`mband_albedo`](@ref)). A diagnostic: the gray history (every other record)
-is the same bit for bit with or without it. It costs ~6 % of a small history (600
-elements) and less than the run-to-run spread on N221204 (research notes, "Per-cone
-M-band in the drive history (2026-10-27)"); `mband = nothing` turns it off.
+keywords; those not given default to the calibrated pairing:
+`edges = [0, mband.band[1], ∞]` (must include `mband.band[1]`), `thermalize = true` and
+`albedo = mband_albedo(t, mband, edges)` (``α_M`` 0.55 at and above the band's edge on
+the emitting surfaces; [`mband_albedo`](@ref)). A diagnostic: the gray history (every
+other record) is the same bit for bit with or without it. It costs ~6 % of a small
+history (600 elements) and less than the run-to-run spread on N221204 (research notes,
+"Per-cone M-band in the drive history (2026-10-27)"); `mband = nothing` turns it off.
 
 Each step's temperature-dependent albedos are iterated to `tol` (see `solve`), starting
 from the previous step's temperatures.
@@ -616,7 +616,7 @@ outside the solved times only through the trapezoids they bound):
   `unabsorbed` — `coupled − Σ laser`, the light that leaves through the holes;
 - `source` — x-ray energy converted per component (Σ η P); `absorbed` — x-ray energy
   absorbed per surface component (`(1 − α) H A`; a `CapsuleAlbedo` capsule's at its
-  effective radius: E_cap); `escaped` per aperture; `transmitted` per thin-foil or
+  effective radius: ``E_{cap}``); `escaped` per aperture; `transmitted` per thin-foil or
   closing-gap component; `lost` to open space;
 - `heating` — per surface component, what stays in it: unconverted laser plus absorbed
   x-rays, `laser − source + absorbed`;

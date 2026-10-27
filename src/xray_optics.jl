@@ -77,7 +77,7 @@ const _N_A = 6.02214076e23
 
 Photoabsorption mass attenuation coefficient of an element (`:Al`, `:Cr`, …) or compound
 (`:CH`, `:lexan`, `:parylene`, `:saran`, `:polyimide`, `:mylar`, `:SiO2`, …) at photon
-energy `E` (**eV**, 10–30 000) from Henke's f₂: μ/ρ = 2 r_e λ N_A Σ nᵢ f₂ᵢ / Σ nᵢ Aᵢ
+energy `E` (**eV**, 10–30 000) from Henke's f₂: μ/ρ = 2 ``r_e`` λ ``N_A`` Σ nᵢ f₂ᵢ / Σ nᵢ Aᵢ
 (CXRO tables, `data/henke/`; scattering is not included, < 1 % of μ below ~10 keV for
 the filter materials used here). Absorption edges are tabulated as point pairs 0.2 eV
 apart, so log–log interpolation keeps them sharp.
@@ -97,8 +97,8 @@ Specular reflectivity of a thick, flat `material` mirror (an element or compound
 `:SiO2`) at grazing `angle` (degrees from the surface) and photon energy `E` (eV), for
 unpolarized light: the mean of the s and p Fresnel reflectivities with the refractive
 index n = 1 − δ − iβ from Henke's f₁, f₂ (`data/henke/`), and a Névot–Croce factor
-exp(−2 k_z0 k_z1 σ²) for an rms `roughness` σ (nm). `density` (g/cm³) defaults to the
-material's (`SiO2` 2.2).
+exp(−2 ``k_{z0} k_{z1}`` σ²) for an rms `roughness` σ (nm). `density` (g/cm³) defaults
+to the material's (`SiO2` 2.2).
 """
 function mirror_reflectivity(mat::Symbol, angle::Real, E::Real; roughness::Real = 0.0,
                              density = nothing)

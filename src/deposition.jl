@@ -501,23 +501,25 @@ By default every ray deposits all its power where it lands. `absorption = η⊥`
 
 of each ray, with ψ its angle of incidence (each f-cone direction's, or the beam axis's
 with a VisRad profile). This is inverse-bremsstrahlung absorption in a thin corona whose
-density falls exponentially with radius, η⊥ = 1 - exp(-8ν_ei L/3c) being the absorption
-at normal incidence (ν_ei the collision frequency at critical density, L the scale
-length): Murakami & Nishi, Matter Radiat. Extremes 2, 55 (2017), Eq. 29, after Kruer's
-text. It is a model for hard-sphere direct-drive illumination, derived for that profile,
-not a measured or calibrated absorption: η⊥ has no default and is the user's estimate.
-It holds only for thin coronas (scale length L ≪ the critical radius r_c): measured
-against ray tracing through a spherical exponential corona, an oblique ray's absorption
-approaches η_a only as L/r_c → 0 (at sin ψ = 0.9: 4 % off at L/r_c = 0.0025, 13 % at
-0.01, and 0.33 against η_a = 0.18 at 0.1), and rays that miss the critical sphere still
-absorb. On a 40-beam OMEGA PDD pointing with L/r_c = 0.2, η_a on a hard sphere at r_c
-gives σ = 5.7 % (l ≤ 30) where the corona gives 10.4 % (research notes, "Corona model
-prototype: impact-parameter kernels vs 3-D ray tracing"). Polar direct drive gets its
-equatorial drive from exactly those grazing rays.
+density falls exponentially with radius, η⊥ = 1 - exp(-8``ν_{ei}`` L/3c) being the
+absorption at normal incidence (``ν_{ei}`` the collision frequency at critical density, L
+the scale length): Murakami & Nishi, Matter Radiat. Extremes 2, 55 (2017), Eq. 29, after
+Kruer's text. It is a model for hard-sphere direct-drive illumination, derived for that
+profile, not a measured or calibrated absorption: η⊥ has no default and is the user's
+estimate. It holds only for thin coronas (scale length L ≪ the critical radius ``r_c``):
+measured against ray tracing through a spherical exponential corona, an oblique ray's
+absorption approaches ``η_a`` only as ``L/r_c`` → 0 (at sin ψ = 0.9: 4 % off at
+``L/r_c`` = 0.0025, 13 % at 0.01, and 0.33 against ``η_a`` = 0.18 at 0.1), and rays that
+miss the critical sphere still absorb. On a 40-beam OMEGA PDD pointing with
+``L/r_c`` = 0.2, ``η_a`` on a hard sphere at ``r_c`` gives σ = 5.7 % (l ≤ 30) where the
+corona gives 10.4 % (research notes, "Corona model prototype: impact-parameter kernels vs
+3-D ray tracing"). Polar direct drive gets its equatorial drive from exactly those
+grazing rays.
 The unabsorbed light is dropped (no reflection is followed), so `element`, `backside`
 and `per_beam` are absorbed powers and `delivered - sum(per_beam)` includes it. `η⊥` may
 be a dual number (the result is differentiable in it too). `η⊥ = 1` is the default's
-model (η_a ≡ 1), equal to it to rounding; the default itself is unchanged by this option.
+model (``η_a ≡ 1``), equal to it to rounding; the default itself is unchanged by this
+option.
 """
 deposit(op::DepositionOperator, beams::AbstractVector{<:Beam};
         absorption::Union{Nothing,Real} = nothing) = _deposit(op, beams, nothing, absorption)

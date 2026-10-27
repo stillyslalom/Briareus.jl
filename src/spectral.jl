@@ -138,7 +138,7 @@ Per-cone NIF M-band emission: each cone's laser → M-band conversion is the def
 `fraction(I)` at its mean wall irradiance, outer 1.5 × 10¹⁵ and inner 3 × 10¹⁴ W/cm²
 (Dewald et al., PoP 27, 2020, **M**): 0.20 (held beyond 10¹⁵) and 0.042. Dewald also
 notes the inner beams' 2.5× lower turning-point density, which lowers their M-band
-further (∝ n_e², ~5×); that factor is not applied (**L**: the inner M-band is an upper
+further (``∝ n_e^2``, ~5×); that factor is not applied (**L**: the inner M-band is an upper
 bound). `kwargs` pass to `MBandEmission`. [`drive_history`](@ref)'s default M-band model.
 """
 function nif_mband(; outer::Real = 1.5e15, inner::Real = 3e14, kwargs...)
@@ -226,16 +226,16 @@ _emits_mband(m::MBandEmission, t::Target, e) =
     mband_albedo(t::Target, m::MBandEmission, edges; albedo = 0.55) -> Dict
 
 Group albedos for `spectral_solve`'s `albedo` that pair with the laser M-band `m`: on
-every surface component of `m`'s materials, `albedo` (α_M) in each group at or above the
+every surface component of `m`'s materials, `albedo` (``α_M``) in each group at or above the
 M-band's lower edge `m.band[1]` (which must be one of `edges`) and the gray albedo
 (`NaN`) below it. Use with `thermalize = true`: the rest of the gray albedo is
 re-emitted thermally, so the group sums stay the gray solution's.
 
-The default α_M = 0.55 is **calibrated** (research notes, "Spectral radiosity, M-band
+The default ``α_M`` = 0.55 is **calibrated** (research notes, "Spectral radiosity, M-band
 and a synthetic Dante" and "Laser-spot spectrum"): with `nif_mband()`, thermalized and
 the laser spots thermal at the local radiation temperature (`spot = :radiation`), it
-gives Dewald et al. 2020's recirculating-to-laser M-band ratio F_M ≈ 2 on their setup
-(`examples/mband_dewald2020.jl`; 0.5 under the `:brightness` rule). Fitted to F_M only;
+gives Dewald et al. 2020's recirculating-to-laser M-band ratio ``F_M`` ≈ 2 on their setup
+(`examples/mband_dewald2020.jl`; 0.5 under the `:brightness` rule). Fitted to ``F_M`` only;
 Dante's > 1.8 keV share (11.4–12.0 % against the measured 12 %) is the check.
 """
 function mband_albedo(t::Target, m::MBandEmission, edges; albedo::Real = 0.55)
@@ -258,8 +258,8 @@ _band_shares(edges, (a, b)) =
 Result of `spectral_solve`. Fields: `gray` (the `RadiationSolution` it splits),
 `edges` (group edges, eV); per element × group (TW/mm²): `source`, `B` (radiosity), `H`
 (incident flux), `albedo`; per element: `temperature` (eV, the wall temperature: the
-Planckian of the thermal re-emission and of any stored-energy emission; with `spot =
-:brightness` the one temperature of the whole split), `spot_temperature` (eV, the
+Planckian of the thermal re-emission and of any stored-energy emission; with
+`spot = :brightness` the one temperature of the whole split), `spot_temperature` (eV, the
 Planckian of the converted laser x-rays less the M-band), `converted` (the converted
 laser source ηP/A, TW/mm²), `mband` (the laser-produced M-band source, TW/mm²);
 `mband_shares` (its split over the groups); `thermalize`; `spot` (the spot-spectrum
@@ -558,11 +558,11 @@ end
 """
     mband_recirculation(s::SpectralSolution, elems; lo = 1800) -> Float64
 
-Dewald's F_M on the elements `elems`: the ratio of recirculating to laser-produced
+Dewald's ``F_M`` on the elements `elems`: the ratio of recirculating to laser-produced
 M-band flux (photon energies ≥ `lo`, eV), where the laser-produced part is the first
 flight of the laser-heated spots' non-Planckian M-band (`F · S_M`) and the recirculating
 part everything else incident in the band (re-emission and the walls' thermal tail),
-both area-weighted over `elems`. Dewald et al., PoP 27 (2020), infer F_M ≈ 2 on the
+both area-weighted over `elems`. Dewald et al., PoP 27 (2020), infer ``F_M`` ≈ 2 on the
 wall through the peak.
 """
 function mband_recirculation(s::SpectralSolution, elems::AbstractVector{<:Integer}; lo::Real = 1800.0)

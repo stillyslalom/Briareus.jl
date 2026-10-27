@@ -33,7 +33,7 @@ out.
 | Beam power at any defocus; defocus second moments; oblique-incidence correction | code verification | "beam profile"; [Laser spot on a foil](@ref) |
 | Defocused footprint against the exact f-cone convolution | validation | [Laser spot on a foil](@ref) |
 | Fast deposition against the ray trace, with shadowing and at grazing incidence far from focus | solution verification | "deposition vs ray trace"; [Laser spot on a foil](@ref); [Freeing a bundle for radiography](@ref) |
-| Legendre and Y_lm recovery; facet integration | code verification | "mode analysis", "spherical harmonics and 3D symmetry" |
+| Legendre and ``Y_{lm}`` recovery; facet integration | code verification | "mode analysis", "spherical harmonics and 3D symmetry" |
 | NIF D2 selection rule; superposition; influence matrix | code verification | "spherical harmonics and 3D symmetry"; [Freeing a bundle for radiography](@ref) |
 | Gradients against finite differences | code verification | "hohlraum + gradients", "CBET" |
 | Optimizer against the closed-form least-squares solution | code verification | [Freeing a bundle for radiography](@ref) |

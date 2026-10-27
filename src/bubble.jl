@@ -37,18 +37,18 @@ tip has moved
 
 in from the initial wall `radius` R (mm, ns; `energy` is the outer picket fluence over
 the reference design's, `fill` the gas fill in mg/cc) while it is ballistic. It
-stagnates smoothly at the depth `stagnation` x_max ([`bubble_depth`](@ref)): ballistic
-up to x_max − w (w = `stagnation_width`), then x_max − w·exp(−(x_bal − x_max + w)/w).
-In the plane `z_b` of the outer
+stagnates smoothly at the depth `stagnation` ``x_{max}`` ([`bubble_depth`](@ref)):
+ballistic up to ``x_{max} - w`` (w = `stagnation_width`), then
+``x_{max} - w e^{-(x_{bal} - x_{max} + w)/w}``. In the plane `z_b` of the outer
 footprint, at the axial position where the footprint cones' beam axes reach the wall,
-the bubble fills the annulus from R in to radius R − x_bub. Each inner beam loses
+the bubble fills the annulus from R in to radius R − ``x_{bub}``. Each inner beam loses
 
     absorbed = f · (1 − T_b),
     T_b = exp(−τ_b (fill/0.3)^q (x_bub/x_ref)^p (R/(R − x_bub))²),
 
 where `f` is the fraction of its power crossing `z_b` inside the bubble, computed from
 the beam itself (its best-focus spot carried along its `ncone` f-cone directions, as
-deposition does), and `T_b` the bubble's transmission (`opacity` τ_b,
+deposition does), and `T_b` the bubble's transmission (`opacity` ``τ_b``,
 `density_exponent` q, `exponent` p). The absorbed power is conducted to the wall
 under the outer footprint (Ralph et al. 2018): it is shared equally by the `footprint`
 beams of the inner beam's hemisphere (those whose port is on the same side), so it is
@@ -56,10 +56,10 @@ deposited where those beams land. Beam powers are conserved: the model moves pow
 between beams and loses none. (Whatever fraction of the footprint beams themselves
 misses the wall, a few 1e-4 through the entrance holes, applies to the moved power too.)
 
-**Ridge stop.** After the ablator–wall collision at `collision` t_c, the inner power
+**Ridge stop.** After the ablator–wall collision at `collision` ``t_c``, the inner power
 the bubble leaves stops at the stagnation ridge, radius `ridge`·R about the axis
 (Izumi 2023), instead of reaching the wall. A fraction g(t) of it ([`ridge_fraction`](@ref),
-rising over ±`ridge_rise` ns about t_c) is deposited, by [`lpi_deposit`](@ref), on an
+rising over ±`ridge_rise` ns about ``t_c``) is deposited, by [`lpi_deposit`](@ref), on an
 axisymmetric band of the `ridge_components` (the hohlraum wall) centered on the height
 where the beam's axis crosses that radius, Gaussian in z with rms `ridge_width` (mm),
 area-weighted: the heated ridge radiates at the wall's conversion, from the wall just
@@ -79,7 +79,7 @@ CBET as `lpi = (cbet, bubble)` (transfer first, then the bubble takes its share 
 the inner beams carry). `wall`, a [`WallMotion`](@ref), moves the footprint plane with
 the radiating wall (the outer beams' axes reach the moved wall nearer the entrance
 hole); the bubble tip and the ridge are measured from the initial wall either way.
-`footprint_z` fixes |z_b| instead. `stagnation = Inf` keeps the tip ballistic;
+`footprint_z` fixes |``z_b``| instead. `stagnation = Inf` keeps the tip ballistic;
 `collision = Inf` turns the ridge stop off.
 
 Defaults (research notes, "Hohlraum dynamics calibrated to published data (2026-10-24)";
@@ -90,28 +90,30 @@ the data are [`izumi2021_bubble`](@ref) and [`izumi2021_absorption`](@ref)):
   picket 0.73–1.5×; χ²/dof 0.89 with the paper's ±40 µm): 0.360 (0.347–0.372) mm/ns,
   delay 0.25 (0.07–0.42) ns, the two correlated. Meezan et al. 2020 measured
   321–461 µm/ns on the same shots.
-- `density_exponent` q = 1.8: inverse-bremsstrahlung absorption goes as ρ_bub², and Izumi's
-  Eq. 7 has ρ_bub = S ρ₀ R/(R − x) with the shock compression S ∝ ρ₀^-0.1, so
-  ρ_bub² ∝ ρ₀^1.8 (R/(R − x))². `exponent` 0.5 is Eq. 6's chord (x_bub/1 mm)^0.5.
-- `opacity` τ_b 0.111 is *fitted* to the inner-power fraction absorbed in the bubble
+- `density_exponent` q = 1.8: inverse-bremsstrahlung absorption goes as ``ρ_{bub}^2``, and
+  Izumi's Eq. 7 has ``ρ_{bub}`` = S ρ₀ R/(R − x) with the shock compression S ∝ ρ₀^-0.1,
+  so ``ρ_{bub}^2`` ∝ ρ₀^1.8 (R/(R − x))². `exponent` 0.5 is Eq. 6's chord
+  (``x_{bub}``/1 mm)^0.5.
+- `opacity` ``τ_b`` 0.111 is *fitted* to the inner-power fraction absorbed in the bubble
   in Izumi's 2D HYDRA simulation of the 0.3 mg/cc basecamp (Fig. 10a: 0.02, 0.23, 0.55 at
   4, 5, 6 ns), with this model's own clipping of NIF beams pointed for a 5.75 mm hohlraum
   and the bubble plane at Izumi's z = ±3 mm (`footprint_z = 3.0`): absorbed 0.03, 0.20,
   0.36, 0.56 at 4, 5, 5.5, 6 ns, χ² 1.1 at ±0.03. Statistical range 0.100–0.124; the
-  plane (2.8–3.2 mm) and the launch move τ_b over 0.085–0.158 but leave the absorbed
-  fraction within 0.01, which is the calibrated quantity. T_b at 5.5 ns is then 0.36 at
+  plane (2.8–3.2 mm) and the launch move ``τ_b`` over 0.085–0.158 but leave the absorbed
+  fraction within 0.01, which is the calibrated quantity. ``T_b`` at 5.5 ns is then 0.36 at
   0.3 mg/cc and 0.58 at 0.15 (Izumi's own model: 0.29 and 0.54, with an annulus for f).
 - `stagnation` 0.80 R, `stagnation_width` 0.08 R (*engineering*): the tip is exactly
   ballistic to 0.72 R (2.07 mm in a 2.88 mm hohlraum), past the measured depths at
   0.3 mg/cc (2.07 mm at 6.2 ns) and near those at 0.15 (up to 2.28 mm, 0.79 R). Izumi
   2023: the tip slows on back-pressure near the axis. (R − 0.73 R, the ridge's depth at
-  the waist, would stop the tip before it reaches the inner beams at z_b, 1.3 mm from
+  the waist, would stop the tip before it reaches the inner beams at ``z_b``, 1.3 mm from
   the wall.)
-- `collision` t_c = turn_on + 5.5 ns · (R − r_cap)/(2.875 − 0.908 mm) · energy^-0.16
+- `collision` ``t_c`` = `turn_on` + 5.5 ns · (R − ``r_{cap}``)/(2.875 − 0.908 mm) ·
+  energy^-0.16
   (*fitted*, Izumi et al., RSI 89, 10K111, 2018: the inner spots separate at 5.8 ns for
   the basecamp's 0.3 ns turn-on, 5.45 ns with a 1.5× picket, and about 0.4 ns earlier
   with the 1.18× capsule; the gap between the capsule's outer radius `capsule_radius`
-  r_cap and the wall gives 0.44 ns for that capsule, so a constant closing speed of
+  ``r_{cap}`` and the wall gives 0.44 ns for that capsule, so a constant closing speed of
   ablator and wall plasma, 0.36 mm/ns, explains the capsule shot). `ridge` 0.73: Izumi
   2023's ridge at r ≈ 2.1 mm in a 2.88 mm hohlraum. `ridge_width` 0.5 mm and
   `ridge_rise` 0.2 ns are engineering choices (not measured).
@@ -236,7 +238,7 @@ bubble_speed(m::BubbleAbsorption) = m.speed * m.energy^0.2 * (m.fill / 0.3)^-0.2
     bubble_depth(m::BubbleAbsorption, t)
 
 Bubble tip displacement from the initial wall (mm) at time `t` (ns): the ballistic
-depth v_b (t − t_L) up to the knee `stagnation − stagnation_width`, beyond it
+depth ``v_b (t - t_L)`` up to the knee `stagnation − stagnation_width`, beyond it
 `stagnation − w·exp(−(x − knee)/w)`, which stops at `stagnation` (C¹ at the knee).
 """
 function bubble_depth(m::BubbleAbsorption, t)
@@ -355,10 +357,10 @@ end
 """
     bubble_fractions(m::BubbleAbsorption, beams, t) -> NamedTuple
 
-The bubble at time `t` (ns) and what it does to `beams`: `depth` x_bub (mm),
-`transmission` T_b, `footprint_z` (z_b of the upper and lower hemispheres, `nothing`
+The bubble at time `t` (ns) and what it does to `beams`: `depth` ``x_{bub}`` (mm),
+`transmission` ``T_b``, `footprint_z` (``z_b`` of the upper and lower hemispheres, `nothing`
 where there are no footprint beams), `ridge` (the [`ridge_fraction`](@ref) g), and per
-beam `clipped` (f, zero for beams that are not inner) and `absorbed` (f·(1 − T_b)).
+beam `clipped` (f, zero for beams that are not inner) and `absorbed` (``f (1 - T_b)``).
 Of an inner beam's power, `absorbed` goes to the footprint beams, and g(1 − absorbed)
 stops at the ridge.
 """

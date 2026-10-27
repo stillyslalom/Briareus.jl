@@ -27,24 +27,25 @@ density `ne` relative to the critical density of the light, and the inverse-brem
 absorption rate, as functions of the radius from the target center.
 
 The first form tabulates a snapshot, such as a 1-D hydrodynamics output: radii `r` (mm,
-increasing, not necessarily uniform), `ne` (n_e/n_c, positive), electron temperature `Te`
-(eV), and the mean ionization `Z` and Coulomb logarithm `lnΛ` (each a number or a vector
-over `r`; no defaults). `wavelength` is the laser's vacuum wavelength (µm), which sets
-n_c. The absorption rate per unit length of a ray, divided by its refractive index, is
-`(ν_ei/c)(n_e/n_c)` with ν_ei the electron–ion collision frequency of Kruer (*The Physics
-of Laser Plasma Interactions*, ch. 5), `2.91e-6 Z n_e lnΛ / T_e^{3/2}` s⁻¹ (n_e in cm⁻³,
-T_e in eV). Both `ln(n_e/n_c)` and the logarithm of that rate are interpolated by cubic
-Hermite polynomials (three-point slopes), so an exponential profile is represented
-exactly; the profile is zero beyond `r[end]`. `ne[1] ≥ 1` is required: every ray must
-turn before the innermost radius (the light never reaches a hard surface, whose
-absorption the corona model does not include).
+increasing, not necessarily uniform), `ne` (``n_e/n_c``, positive), electron temperature
+`Te` (eV), and the mean ionization `Z` and Coulomb logarithm `lnΛ` (each a number or a
+vector over `r`; no defaults). `wavelength` is the laser's vacuum wavelength (µm), which
+sets ``n_c``. The absorption rate per unit length of a ray, divided by its refractive
+index, is `(ν_ei/c)(n_e/n_c)` with ``ν_{ei}`` the electron–ion collision frequency of
+Kruer (*The Physics of Laser Plasma Interactions*, ch. 5),
+`2.91e-6 Z n_e lnΛ / T_e^{3/2}` s⁻¹ (``n_e`` in cm⁻³, ``T_e`` in eV). Both
+`ln(n_e/n_c)` and the logarithm of that rate are interpolated by cubic Hermite
+polynomials (three-point slopes), so an exponential profile is represented exactly; the
+profile is zero beyond `r[end]`. `ne[1] ≥ 1` is required: every ray must turn before the
+innermost radius (the light never reaches a hard surface, whose absorption the corona
+model does not include).
 
 The second form is the analytic isothermal corona `n_e/n_c = exp(-(r - r_c)/L)` with
-`critical_radius` r_c and `scale_length` L (mm), truncated at `outer_radius`, whose
+`critical_radius` ``r_c`` and `scale_length` L (mm), truncated at `outer_radius`, whose
 absorption rate is set by `absorption`, the fraction η⊥ that a planar profile of the
-same scale length absorbs at normal incidence: η⊥ = 1 - exp(-8ν_c L/3c) (Kruer; the η⊥ of
-`deposit(op, beams; absorption)`, Murakami & Nishi 2017, Eq. 29). It is also the exact
-absorption of a radial ray when the truncation is far out (e⁻¹⁴ of n_c by default).
+same scale length absorbs at normal incidence: η⊥ = 1 - exp(-8``ν_c`` L/3c) (Kruer; the
+η⊥ of `deposit(op, beams; absorption)`, Murakami & Nishi 2017, Eq. 29). It is also the exact
+absorption of a radial ray when the truncation is far out (e⁻¹⁴ of ``n_c`` by default).
 
 Not calibrated: a profile is the user's input (a snapshot or an engineering estimate),
 and `Z`, `lnΛ` and `absorption` have no defaults.
@@ -286,7 +287,7 @@ direct-drive designs (`reference/litreview/polar_direct_drive.md`, decision 4).
 Each beam is `ncone` collimated sub-beams along its f-cone directions
 (`cone_directions`), each carrying the best-focus profile, as in
 [`DepositionOperator`](@ref). Their rays are refracted by the corona (cold-plasma
-geometric optics, n² = 1 - n_e/n_c) and absorbed by inverse bremsstrahlung along their
+geometric optics, ``n^2 = 1 - n_e/n_c``) and absorbed by inverse bremsstrahlung along their
 paths (Kruer, *The Physics of Laser Plasma Interactions*, ch. 5); light that is not
 absorbed leaves the corona. Absorbed power is assigned to the direction from `center` of
 the point where it is absorbed (projected radially). In a spherical corona every ray
@@ -303,7 +304,7 @@ Scope and limits:
   (measured by 3-D ray tracing; research notes, "Corona model prototype").
 - **Bare sphere only.** Nothing but the corona interacts with the light: no other target
   parts, stalks or shields, which would need their own shadowing; the profile must reach
-  n_c (`CoronaProfile`), so no light reaches the surface inside.
+  ``n_c`` (`CoronaProfile`), so no light reaches the surface inside.
 - **No cross-beam energy transfer** (decision 8 of the review; deferred): results are
   CBET-free, and optimistic where CBET matters (the PDD equator).
 

@@ -469,7 +469,7 @@ resolved to the target-chamber frame. Build a Briareus target from the component
 **Components** become `VisRadObject`s. CAD meshes keep VisRad's surface elements as
 patches (one per triangle). Spheres, rectangles and cylindrical hohlraums are meshed on
 VisRad's grid when converted by `visrad_target`. Objects are placed by VisRad's
-orientation angles and position (VR/grid/specifying_orient_angles.html), relative to the
+orientation angles and position (`VR/grid/specifying_orient_angles.html`), relative to the
 chamber or to another component.
 
 **Beams.** Port angles and f-number come from the file. Pointing at TCC or at a point
@@ -477,7 +477,7 @@ given in the chamber's or a component's frame is supported; the point is the aim
 the focus offset (cm) the defocus (mm), as in `read_visrad_summary`. Power is the 3ω
 (blue cone) power in TW for beams with 3ω on, and 0 otherwise: the power column times
 the beam's power multiplier when enabled and, under VisRad's "Fraction of Total Beam
-Power" red/green model (where that column is the total), times 1 − f_G − f_R. Spots are VisRad's super-Gaussian radii (µm), exponent and minor-axis
+Power" red/green model (where that column is the total), times ``1 - f_G - f_R``. Spots are VisRad's super-Gaussian radii (µm), exponent and minor-axis
 rotation, converted as in `read_visrad_summary`: radii that match a built-in phase
 plate (`VISRAD_PHASE_PLATES`) are read at that plate's level (HWHM for NIF CPPs), others
 at `spot_definition` (`:auto` = 1/e), and a NIF beam's rotation is relative to its quad's
@@ -559,7 +559,7 @@ Briareus components for one `VisRadObject`, in the chamber frame (mm). The mater
 defaults to the object's albedo and x-ray conversion efficiency. CAD meshes give one
 component radiating from the front of VisRad's surface elements (counterclockwise
 winding, *assumption*), or from both sides when `two_sided`. VisRad does not let users
-edit the normals of imported CAD (VR/grid/import_export_cad_files.html), and tessellated
+edit the normals of imported CAD (`VR/grid/import_export_cad_files.html`), and tessellated
 CAD often faces the wrong way: in the NIF workspace this reader was built from, the
 inner hohlraum wall faces away from the cavity. `orient = true` repairs the winding
 with `orient_mesh`: consistent across shared edges, closed solids facing out of their

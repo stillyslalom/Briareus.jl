@@ -52,7 +52,7 @@ target = meshes[2].t
 # intensity times the cosine of the incidence angle, ``I\cos\psi``, absorbed where each
 # ray first lands. Its rms relative to the mean over ``1 \le l \le 30`` is
 # [`mode_rms`](@ref) of the flux's coefficients, and [`mode_power`](@ref) is the
-# spectrum σ_l; both split into the zonal part m = 0 (the azimuthal average, set by the
+# spectrum ``σ_l``; both split into the zonal part m = 0 (the azimuthal average, set by the
 # cones' polar angles and powers) and the rest, m ≠ 0 (the beams' discreteness in
 # azimuth).
 
@@ -346,7 +346,7 @@ fig
 # The OC is not an optimum of σ₁ alone: Ba24's fitness also rewards a uniform ablation
 # pressure in a 4-ns plasma with CBET and a high mean pressure, which Briareus cannot yet
 # compute. The example `examples/ba24_pdd_optimization.jl` minimizes σ₁ alone over Ba24's
-# 16 parameters and bounds (θ_s, Δφ_s, defocus 0–10 mm, power 2–4 TW/quad per cone),
+# 16 parameters and bounds (``θ_s``, ``Δφ_s``, defocus 0–10 mm, power 2–4 TW/quad per cone),
 # with Briareus's beams on the n = 20 sphere. L-BFGS-B with ForwardDiff gradients through
 # `deposit` (one gradient costs about four evaluations) goes from 6.49 % to 2.61 % in 50
 # evaluations and 2.11 % in 229 (four minutes on 8 threads); Nelder–Mead needs about 700
@@ -378,7 +378,7 @@ fig
 #   defocus emulated, against their 6.03 %; read about the port, as their method text
 #   and code describe the search parameters, 30–150 %. The caption's reading is the
 #   published design; `GroupPointing`'s `:theta_s`/`:dphi_s` implement it.
-# - On the emulated (collimated) beams, Briareus's σ_l (l ≤ 30) matches an independent
+# - On the emulated (collimated) beams, Briareus's ``σ_l`` (l ≤ 30) matches an independent
 #   plane-wave quadrature to 3.3e-4 of the mean at n = 30 and to 4e-6 extrapolated, at
 #   second order in the element size, as on the analytic cases of the test suite
 #   (Skupsky–Lee, Temporal et al. 2014, Murakami and Nishi 2017); σ₁ to 6e-5 relative.
