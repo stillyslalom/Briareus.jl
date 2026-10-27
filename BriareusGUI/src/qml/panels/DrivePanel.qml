@@ -27,7 +27,7 @@ ScrollPage {
                 columns: 3
                 columnSpacing: 24
                 rowSpacing: 2
-                Label { text: "l"; font.weight: Font.DemiBold }
+                Label { text: "ℓ"; font.weight: Font.DemiBold }
                 Label { text: "εₗ"; font.weight: Font.DemiBold }
                 Label { text: "Pₗ/P₀"; font.weight: Font.DemiBold }
                 Repeater {

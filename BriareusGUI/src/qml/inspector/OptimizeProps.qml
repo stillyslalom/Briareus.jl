@@ -72,7 +72,7 @@ ColumnLayout {
                 model: [1, 2, 3, 4]
                 delegate: RowLayout {
                     spacing: 2
-                    Label { text: "l" + modelData; opacity: 0.7 }
+                    Label { text: "ℓ" + modelData; opacity: 0.7 }
                     TextField {
                         Layout.preferredWidth: 38
                         text: app["optW" + modelData]

@@ -1,5 +1,5 @@
-// TaLIS report: notes (the ASSUMED tolerance interpretation first), per-rule summary,
-// every check colored by status, CSV export.
+// TaLIS report: the ASSUMED tolerance interpretation (cut to three lines until opened),
+// the per-rule summary, the other notes, every check colored by status, CSV export.
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -8,6 +8,7 @@ import "../common"
 
 ColumnLayout {
     spacing: 6
+    property bool caveatOpen: false
     function statusColor(s) {
         if (s === "fail") return "#c42b1c"
         if (s === "review") return "#d08a00"
@@ -44,15 +45,32 @@ ColumnLayout {
                 id: notesColumn
                 width: notesView.availableWidth - 12          // clear of the split handle
                 spacing: 4
+                // the ASSUMED note first, cut to three lines until opened, so that the
+                // rule summary below it shows at the panel's default height
                 Repeater {
                     model: noteModel
-                    delegate: Label {
-                        text: (model.kind === "assumed" ? "⚠ " : "· ") + model.text
-                        color: model.kind === "assumed" ? "#d08a00" : palette.windowText
-                        font.weight: model.kind === "assumed" ? Font.DemiBold : Font.Normal
-                        opacity: model.kind === "scope" || model.kind === "source" ? 0.7 : 1
-                        wrapMode: Text.WordWrap
+                    delegate: ColumnLayout {
+                        visible: model.kind === "assumed"
+                        spacing: 0
                         Layout.fillWidth: true
+                        Label {
+                            id: assumedLabel
+                            text: "⚠ " + model.text
+                            color: "#d08a00"
+                            font.weight: Font.DemiBold
+                            wrapMode: Text.WordWrap
+                            maximumLineCount: caveatOpen ? 100 : 3
+                            elide: Text.ElideRight
+                            Layout.fillWidth: true
+                        }
+                        Label {
+                            visible: assumedLabel.truncated || caveatOpen
+                            text: caveatOpen ? "less" : "more"
+                            color: palette.link
+                            font.underline: true
+                            HoverHandler { cursorShape: Qt.PointingHandCursor }
+                            TapHandler { onTapped: caveatOpen = !caveatOpen }
+                        }
                     }
                 }
                 SectionLabel { text: "Rules"; visible: app.tlHasReport }
@@ -83,6 +101,17 @@ ColumnLayout {
                             wrapMode: Text.WordWrap
                             Layout.fillWidth: true
                         }
+                    }
+                }
+                SectionLabel { text: "Notes"; visible: app.tlHasReport }
+                Repeater {
+                    model: noteModel
+                    delegate: Label {
+                        visible: model.kind !== "assumed"
+                        text: "· " + model.text
+                        opacity: model.kind === "scope" || model.kind === "source" ? 0.7 : 1
+                        wrapMode: Text.WordWrap
+                        Layout.fillWidth: true
                     }
                 }
             }

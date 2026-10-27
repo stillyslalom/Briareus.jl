@@ -223,9 +223,9 @@ ApplicationWindow {
         }
         AutoMenu {
             title: "&Compute"
-            Action { text: "Drive (view factors)"; shortcut: "Ctrl+R"; enabled: !app.driveBuilding; onTriggered: { Julia.br_build(); results.show("drive") } }
-            Action { text: "Optimize pointing…"; onTriggered: win.showTask("optimize") }
-            Action { text: "Check clearance…"; onTriggered: win.showTask("clearance") }
+            Action { text: "Drive"; shortcut: "Ctrl+R"; enabled: !app.driveBuilding; onTriggered: { Julia.br_build(); results.show("drive") } }
+            Action { text: "Optimization…"; onTriggered: win.showTask("optimize") }
+            Action { text: "Clearance…"; onTriggered: win.showTask("clearance") }
             Action {
                 text: "X-ray image along the view"
                 checkable: true
@@ -233,7 +233,7 @@ ApplicationWindow {
                 // unchecked: back to the view shown before
                 onTriggered: checked ? Julia.br_xray_image() : Julia.br_close_image()
             }
-            Action { text: "TaLIS rules (NIF)…"; enabled: app.facility === "nif"; onTriggered: win.showTask("talis") }
+            Action { text: "TaLIS (NIF)…"; enabled: app.facility === "nif"; onTriggered: win.showTask("talis") }
             Action { text: "Retune to a reference drive…"; enabled: app.kitReady; onTriggered: retuneDialog.open() }
             Action {
                 text: "Drive history"

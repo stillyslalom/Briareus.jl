@@ -25,7 +25,7 @@ ScrollPage {
             columnSpacing: 24
             rowSpacing: 2
             visible: optModeRepeater.count > 0
-            Label { text: "l"; font.weight: Font.DemiBold }
+            Label { text: "ℓ"; font.weight: Font.DemiBold }
             Label { text: "εₗ before"; font.weight: Font.DemiBold }
             Label { text: "εₗ after"; font.weight: Font.DemiBold }
             Repeater {

@@ -126,7 +126,7 @@ names the menu entries, and the panels are described in [The window](@ref).
    the hohlraum's dynamics is not balanced at a fielded cone fraction (the N221204
    benchmark's static P2/P0 at 5.5 ns is −26 %; the shot's balance comes from
    wavelength-detuned transfer, wall motion, the gold bubble and closing entrance holes).
-6. **Optimize.** Compute ▸ Optimize pointing selects the optimization task: the free
+6. **Optimize.** Compute ▸ Optimization selects the optimization task: the free
    parameters (aim, defocus and power per cone, quad or beam, within ± bounds), the
    objective (axisymmetric ``P_l``, all-m 3D modes, optionally holding the drive level, or
    a foil spot's nonuniformity) and the keep-outs. *Optimize* starts
@@ -138,12 +138,12 @@ names the menu entries, and the panels are described in [The window](@ref).
 
    ![The Optimization tab after a run on the four cone aims (z within ±2 mm, r within ±1 mm) with the capsule and entrance-hole keep-outs: the modes before and after, the parameters against their bounds, and the capsule's θ–φ flux map of the applied result in the 3D view's place.](assets/gui/optimize.png)
 
-7. **Check clearance.** Compute ▸ Check clearance (the worst-case beam-to-hardware
-   clearance over pointing, positioning and focus errors) and Compute ▸ TaLIS rules
-   (NIF) run in the background and color the beams by their worst status. A result
+7. **Check clearance.** Compute ▸ Clearance (the worst-case beam-to-hardware
+   clearance over pointing, positioning and focus errors) and Compute ▸ TaLIS (the NIF
+   target-configuration rules, on NIF beams only) run in the background and color the beams by their worst status. A result
    is marked out of date in the tree when the beams or the target change afterward.
 
-   ![The TaLIS rules checked on every NIF quad of the template: the ASSUMED tolerance note, the error set, and every check with its margin; the beams are colored by their worst status. The eight failures are 3ω incidence on the wall, about 0.4° past the 70° limit on the optimized pointing; the 48 reviews are 3ω clearance at the entrance-hole edges.](assets/gui/talis.png)
+   ![The TaLIS rules checked on every NIF quad of the template: the ASSUMED tolerance note, the per-rule summary, and every check with its margin; the beams are colored by their worst status. The eight failures are 3ω incidence on the wall, about 0.4° past the 70° limit on the optimized pointing; the 48 reviews are 3ω clearance at the entrance-hole edges.](assets/gui/talis.png)
 
 8. **Save.** File ▸ Save session (Ctrl + S) writes the whole design, from the target to
    the analyses' settings and the view, to a plain TOML file; File ▸ Open session
@@ -295,9 +295,10 @@ The bottom panel's tabs:
   from the beam's aim point, the larger of the two, or from a given point); the error
   stack and sampling are the clearance check's. The report shows the notes and a
   per-rule summary beside every check, colored by status with its margin, with a
-  draggable split between the two. In the notes the tolerance interpretation is marked
-  ASSUMED and stays at the top, followed by the error set, the checks not evaluated and
-  the requirements out of scope ([`TALIS_OUT_OF_SCOPE`](@ref)). CSV export with
+  draggable split between the two. The tolerance interpretation, marked ASSUMED, stays
+  at the top, cut to three lines until opened (*more*); the per-rule summary follows,
+  then the error set, the checks not evaluated and the requirements out of scope
+  ([`TALIS_OUT_OF_SCOPE`](@ref)). CSV export with
   [`write_talis_csv`](@ref).
 
 ### Files in and out
