@@ -1,0 +1,10 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it using these metadata."
+title: "Briareus.jl: view-factor radiation and laser-pointing design for high-energy-density experiments"
+authors:
+  - family-names: Ames
+    given-names: Alex
+license: MIT
+repository-code: "https://github.com/stillyslalom/Briareus.jl"
+version: 0.1.0
+type: software

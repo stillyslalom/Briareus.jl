@@ -2,273 +2,148 @@
 
 [![CI](https://github.com/stillyslalom/Briareus.jl/actions/workflows/CI.yml/badge.svg)](https://github.com/stillyslalom/Briareus.jl/actions/workflows/CI.yml)
 [![Docs](https://img.shields.io/badge/docs-dev-blue.svg)](https://stillyslalom.github.io/Briareus.jl/dev/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 View-factor radiation and laser-pointing design for high-energy-density experiments:
-indirect-drive hohlraums, backlighter foils, and other laser-irradiated targets. Briareus
-covers the core of what VisRad (MacFarlane, JQSRT 81, 287, 2003) is used for — laser
-deposition, 3D view-factor radiosity, capsule drive symmetry, synthetic images — and adds
-gradient-based optimization of pointing, defocus and power balance, worst-case beam
-clearance and target-configuration checks, and file exchange with VisRad.
+indirect-drive hohlraums, backlighter foils and other laser-irradiated targets. Briareus
+covers the core of what VisRad (MacFarlane, JQSRT 81, 287 (2003)) is used for (laser
+deposition, 3D view-factor radiosity, capsule drive symmetry, synthetic x-ray images)
+and reads and writes its files. Beyond that, deposition is differentiable, so pointing,
+defocus, power balance and wavelength detuning are optimized with exact gradients; beam
+clearance and NIF's target-configuration rules are checked on the worst case over
+tolerances; and the drive is followed in time with laser–plasma corrections, a moving
+wall, closing entrance holes and a synthetic Dante.
+
+![The Briareus window](docs/src/assets/gui/overview.png)
+
+## Install
+
+```julia
+pkg> add Briareus
+```
+
+Briareus needs Julia 1.10 or later. The desktop application (BriareusGUI: target, beams,
+drive, optimization and shot review in one window) is installed separately; see
+[Desktop application](https://stillyslalom.github.io/Briareus.jl/dev/gui/) and
+[BriareusGUI/README.md](BriareusGUI/README.md).
+
+## First calculation
+
+A NIF hohlraum driven by all 48 quads at 8 TW per beam, evaluated at a published cone
+pointing (aim height `z` and radial offset `r`, mm) and then re-pointed and re-balanced
+at the same mean capsule flux to null its P2 and P4 Legendre modes:
 
 ```julia
 using Briareus
 
 target = hohlraum(length = 10.1, radius = 2.875, leh_radius = 1.55, capsule_radius = 0.9)
-quads = nif_quads()                                       # 48 NIF quads, official port table
-pointing = GroupPointing(quads; fields = (:z, :r, :power))   # per-cone parameters
-scenario = Scenario(target, quads; observe = :capsule, parameterization = pointing,
-                    viewfactor_kw = (; closed = true))
+pointing = GroupPointing(nif_quads(power = 8.0); fields = (:z, :r, :power))  # per cone
+scenario = Scenario(target, pointing; observe = :capsule)
 
-x0 = [3.09, -1.09, 8.0,  3.63, -0.60, 8.0,  5.20, 0.0, 8.0,  5.01, 0.0, 8.0]
-report(evaluate(scenario, x0))                            # power accounting + P_l/P0
+x0 = parameters(pointing; inner23 = (z = 3.09, r = -1.09), inner30 = (z = 3.63, r = -0.60),
+                          outer44 = (z = 5.20, r = 0.0),   outer50 = (z = 5.01, r = 0.0))
+report(evaluate(scenario, x0))       # power accounting, Tr = 262.7 eV, P2/P0 = -15.7 %
 
-result = optimize_pointing(scenario, symmetry_objective(modes = (2 => 1.0, 4 => 1.0)); x0)
+drive = flux_moments(evaluate(scenario, x0))[1]    # mean capsule flux, held fixed
+objective = symmetry_objective(modes = (2 => 1.0, 4 => 1.0); drive)
+result = optimize_pointing(scenario, objective; x0)
+report(evaluate(scenario, result.x))  # Tr = 262.7 eV, P2/P0 = -0.000 %, P4/P0 = -0.001 %
+parameter_names(pointing) .=> result.x
 ```
 
-See `examples/nif_hohlraum.jl` and `examples/backlighter.jl`, and the documentation,
-whose tutorials double as validation against exact results
-(`julia --project=docs docs/make.jl`). `BriareusGUI/` is a desktop window (GLMakie + QML)
-for the same workflow: target, beams, drive, optimization and shot review.
+After the package loads, the evaluation and the optimization take a few seconds each;
+`examples/nif_hohlraum.jl` adds explicit bounds and a ray-trace check. The
+[documentation](https://stillyslalom.github.io/Briareus.jl/dev/) starts with tutorials
+that build up the physics and check each step against an exact result; its home page
+has a short glossary (view factor, radiosity, P2/P0, LEH, cone fraction, CBET).
 
-## What it computes
+Units are mm, ns, TW (TW·ns = kJ), TW/mm² (`to_Wcm2` multiplies by 10¹⁴) and eV; angles
+are in degrees, θ from +z and φ counterclockwise from +x. A beam's direction is fixed by
+its port, pointing moves its axis, and positive defocus moves the focus along the beam.
 
-- **Geometry.** Targets assembled from meshed primitives (cylinder, annulus/disk, sphere,
-  rectangle, frustum) with per-component materials. `hohlraum()` and `foil()` build common
-  targets. Surfaces are one- or two-sided; laser entrance holes are transparent
-  *apertures* that measure the escaping x-ray flux. A component can carry the exact
-  surface its mesh approximates (`SphereSurface`, `CylinderSurface`, `DiskSurface`), and
-  the radiation model then integrates over the true curved surface; hohlraums do this by
-  default. `hohlraum(windows = [WallWindow(...)])` cuts diagnostic windows into the wall:
-  closed ones re-emit with their own material, open ones are apertures that laser light
-  passes through and x rays escape from, and the mesh conforms to their edges.
-  Windows are rectangles or disks, with optional assembly gaps, at exact areas; a
-  thin-foil window burns through when the Marshak heat front reaches its back
-  (`BurnthroughAlbedo`), and then transmits the gray Eddington fraction `4/(3τ + 2)` of
-  the flux on it (Lester et al., Phys. Rev. E 114, L023201 (2026)), optionally with the
-  optical depth following the radiation temperature (`RosselandTransmission`). Gaps can
-  close during the pulse (`GapClosure`).
-- **Laser deposition.** Beams enter from facility ports with elliptical super-Gaussian
-  phase-plate spots, an f-number cone, pointing, and defocus. Two methods:
-  - `DepositionOperator` + `deposit` — precomputed quadrature with per-direction
-    visibility masks, refined where each beam can land. It is smooth in pointing,
-    defocus, spot size and power, so ForwardDiff gradients flow through it; 48 quads on
-    a 3,000-element hohlraum take about 45 ms on one thread (5 ms on 24), and each
-    beam's power is conserved to 1e-4.
-  - `raytrace_deposition` — an energy-conserving geometric ray trace, used as the
-    reference.
+## What it does
 
-  Power that hits the outside of a target (LEH clipping), misses it, or strikes the
-  capsule directly is accounted for separately. The operator samples a target's
-  outside only for its total, with Gauss rules graded toward the entrance-hole rims,
-  where clipped light concentrates; clipped power agrees with converged ray traces to
-  1% from 1e-4 to 5% of a beam.
-- **Radiation.** Occlusion-aware view factors `view_factors` (the exact point-to-polygon
-  kernel near the emitter, adaptive toward shared edges; about 0.4 s for a
-  3,000-element hohlraum) and gray diffuse radiosity `solve`. Visibility is a centroid
-  ray per pair, or sampled where a pair straddles an occluder (`visibility = :sampled`,
-  the default for CAD targets). Wall albedo can be constant, tabulated in time, or the
-  Marshak wall-loss scaling `WallLossAlbedo`, iterated to self-consistency with the
-  local radiation temperature. For closed enclosures, `closed = true` removes
-  discretization leakage while keeping reciprocity (the default for `hohlraum` targets).
-  `flux_response` precomputes the linear map from laser deposition to capsule flux, so
-  optimizers never re-solve. Large models are never densified: above 10⁴ elements
-  Float32 view factors (`Float32Matrix`) with iterative solves, above 1.5 × 10⁴
-  hierarchical ones (`HMatrix`, ~50k elements in about a minute and 1 GB).
-  `spectral_solve` adds multigroup radiosity about a gray solution, with the
-  laser-produced gold M-band (`MBandEmission`, `nif_mband`).
-- **Analysis.** Legendre moments (`legendre_moments`) and real spherical harmonics
-  (`ylm_moments`, `flux_ylm`), both with exact facet solid-angle integration;
-  `mode_amplitude` gives the fractional amplitude of each mode (the mode-1 drive
-  asymmetry, for example). `influence_matrix` gives each beam's mode response.
-  `energy_balance` covers source, wall/capsule absorption, LEH loss and leakage.
-  `radiation_temperature` converts flux to temperature.
-- **Imaging.** `render` produces orthographic images of any per-element field (x-ray
-  radiance, laser intensity) from any direction or port. `line_of_sight_power` gives
-  the x-ray power toward a distant detector.
-- **Laser–plasma corrections.** Applied between the laser setup and deposition, and
-  differentiable in power and Δλ:
-  - per-cone, time-dependent `Backscatter`;
-  - an empirical `CalibratedTransfer` (transfer as a function of Δλ);
-  - a reduced kinetic `CBET` model at the LEHs: multi-species Maxwellian ion-acoustic
-    response, flow Doppler shift, polarization smoothing, and a smooth δn/n saturation
-    clamp. `calibrate_cbet` fits its multiplier, flow and clamp to transfer data;
-    `TwoZoneCBET` separates the flowing plasma outside the LEH from the stagnant one
-    inside, with calibrations to published HYDRA transfer for HYBRID-E shots
-    (`n221204_cbet`, `hybride_cbet`, `hybride_cbet_iraum`);
-  - inner-beam absorption in the gold bubble (`BubbleAbsorption`), applied with the
-    other corrections by `lpi_deposit`.
-- **Shot-review checks.** All are judged on the worst case over pointing, target
-  positioning, hardware tolerance and focus errors, never on the nominal beams.
-  - `clearance` gives the worst-case beam-to-hardware clearance, power and intensity,
-    with intensity-contour envelopes, clearance-only spot wings (`nif_wings`) and
-    pass/review/fail tiers.
-  - `talis_check` applies NIF's published target-configuration rules: 3ω capture and
-    incidence, 3ω and 1ω clearance, unconverted-light management (curvature, dimpling
-    or the specular 20° rule), and the TAS stay-in zone.
-  - `unconverted_light_check` covers the 1ω/2ω footprints and the 32 mm zone.
-  - `ApertureKeepOut` puts the worst-case clearance of every beam from its entrance
-    hole into an optimization objective.
-- **I/O.** `write_beam_table`/`read_beam_table` read and write a canonical CSV, with
-  column and unit mapping for foreign tables. VisRad interchange: NIF SST pointing and
-  Laser Beam Summary CSVs, power files, a benchmark kit (`write_visrad_kit`,
-  `compare_visrad`) for comparing the same case run in both codes, and VisRad
-  workspaces (`read_visrad_workspace`, `visrad_target`): target components including
-  bundled CAD, and beams with their pointing and spots. CAD windings are repaired
-  (`orient_mesh`: consistent, closed solids facing out of their material) and the
-  surface remeshed into compact, near-planar elements of a chosen size for view
-  factors (`remesh_mesh`, which also cuts the long slivers CAD tessellates curved walls
-  into; `coarsen_mesh` only merges whole facets).
-  `cad_target` takes CAD parts (e.g. the solids of a multi-solid STL file,
-  `read_stl_solids`) to a radiation-ready target in one call: oriented, cut to the
-  cavity around a point (`enclosure`), remeshed, and with the exact cylinders and
-  spheres (and cones and tori) fitted (`fit_surfaces`); primitive components can be
-  passed with the parts. `read_stl`, `read_stl_solids` and `write_stl` exchange STL.
-  `visrad_target` uses it for the CAD a VisRad workspace bundles.
-  `write_visrad_workspace` writes a design's beams back into a copy of a workspace;
-  once VisRad has computed it, `visrad_power_sources` and `visrad_deposition` read
-  its per-element laser deposition back onto the same target.
-  `write_results` exports a calculation for postprocessing: per-element laser,
-  radiosity and flux, per-component and per-beam power, and the capsule's Legendre and
-  Y_lm modes, as CSV.
-- **Time dependence.** `PulseShape` per cone, quad or beam (`with_pulses(...; by)`) and
-  `drive_history` give quasi-static T_r(t) and P_l(t). `cone_fraction_pulses` builds
-  pulses from a total power and a cone fraction; `read_pulse_table` and
-  `write_pulse_table` read and write them as CSV. Each wall element loses energy by
-  its own temperature history and re-emits stored energy when the drive falls.
-  Hohlraum dynamics are calibrated to published data: a moving wall on keyframes
-  (`WallMotion`, `moving_hohlraum`, `Keyframes`), entrance holes closing as prescribed
-  (`GapClosure`) or computed (`LipClosure`), and the bubble. Energetics:
-  `nif_gold()`/`nif_uranium()` walls (Lindl's loss, an Au-lined DU factor, a rising
-  conversion `nif_conversion()`), `CapsuleAlbedo` on a shrinking absorbing radius, and
-  `energy_budget`. A synthetic Dante (`dante1`, `dante`, channel responses from the
-  hardware, `dante_unfold`) reads the drive as the instrument would.
-  `examples/n221204.jl` benchmarks it all on N221204 against published data.
-- **Implosion metrics.** Mode 1 as a hot-spot velocity, yield-degradation factors,
-  P2-swing metrics, and their uncertainty (`hotspot_velocity`, `implosion_metrics`).
-- **Capsule drive for a hydrodynamics code.** `capsule_drive(history, model)` packages
-  a drive history for a capsule-only implosion run (LLNL's two-step method): Tr(t),
-  the capsule-averaged incident flux, Legendre ratios aₗ/a₀ (P2 > 0 pole-hot) on a
-  uniform ≤ 50 ps grid, the radius the flux was evaluated on, and provenance. The
-  [CompactLES.jl](https://github.com/stillyslalom/CompactLES.jl) hydrocode reads it in
-  memory through its `CompactLESBriareusExt` extension (`radiation_drive`, a stage-0
-  ablation-pressure drive); Briareus does not depend on CompactLES.
-- **Retuning to a reference drive.** `retune_drive` finds the power histories, per
-  cone, quad or beam, that reproduce a reference shot's capsule drive (its Y_lm shape
-  through any l, and its level) through time, under per-key power limits (a dropped
-  quad is a zero limit). An optional penalty pulls the powers toward the reference's.
-  Each time
-  is a bounded linear least-squares problem about the reference's converged albedos,
-  and a drive history of the result confirms it. With bundle 31 down on NIF, retuning
-  the other 46 quads takes the mode-1 drive asymmetry from 2% to 0.02% at the peak.
-- **Optimization.** `GroupPointing` maps parameters to beams, per cone, quad or beam:
-  axial/radial/tangential aim, defocus, power, spot scale and Δλ, with top/bottom
-  mirroring. `symmetry_objective` and `asymmetry_objective` target capsule drive
-  symmetry (axisymmetric and three-dimensional), and `irradiance_objective` targets foil
-  uniformity. `optimize_pointing` runs bounded L-BFGS-B with forward-mode AD gradients,
-  with a callback for progress and cancellation.
-- **Beam errors.** `mode_sensitivity` gives the exact sensitivity of the drive shape to
-  each beam's pointing and power errors, `mode_uncertainty` the asymmetry independent
-  errors leave (linear propagation; `sample_modes` is the Monte Carlo check), and the
-  objectives' `uncertainty` keyword optimizes the expected symmetry over them (robust
-  design). Errors can be shared by a group of beams or be the target's positioning;
-  `infer_errors` finds the most probable errors behind a measured asymmetry.
-- **Backlighters.** `backlighter_foil` and `line_of_sight` place a foil on a
-  diagnostic line of sight and check it against shields (`Sombrero`) and beams;
-  `backlighter_signal` follows the deposition through a He-α conversion efficiency
-  fitted to published foil data (`kshell_ce`) and filters to photons at the detector.
+- **Targets**: hohlraums, foils and windows on exact curved surfaces, or CAD (STL or
+  VisRad-bundled) oriented, cut to the cavity, remeshed and fitted with its cylinders
+  and spheres.
+- **Beams**: NIF (per beam or quad, measured phase-plate spots) and OMEGA port tables,
+  f-number cones, pointing, defocus, VisRad's beam profile.
+- **Deposition**: a differentiable quadrature operator that conserves each beam's power,
+  with an energy-conserving ray trace as its reference.
+- **Radiation**: occluded view factors, gray or multigroup radiosity, Marshak wall loss
+  and re-emission; Float32 and hierarchical matrices above 10⁴ elements.
+- **Analysis**: Legendre and real spherical-harmonic moments integrated over each
+  facet's solid angle, energy balance, rendered x-ray and laser images.
+- **Optimization**: bounded L-BFGS-B on ForwardDiff gradients of aim, defocus, power,
+  spot scale and Δλ per cone, quad or beam; robust design over beam errors; retuning to
+  a reference shot's drive.
+- **Laser–plasma corrections**: backscatter, a reduced kinetic CBET model calibrated to
+  published HYDRA transfer, inner-beam absorption in the gold bubble.
+- **Time dependence**: pulses, wall motion, entrance-hole closure, wall re-emission,
+  capsule absorption, a synthetic Dante, the capsule drive for a hydrodynamics code.
+- **Shot review**: worst-case beam clearance, TaLIS rules, unconverted light,
+  entrance-hole keep-out as an objective, backlighter lines of sight and signals.
 
-## Conventions
+## Coming from VisRad
 
-Units are mm, ns, TW (TW·ns = kJ), TW/mm² (`to_Wcm2` multiplies by 1e14) and eV.
-Port angles are in degrees (θ from +z, φ counterclockwise from +x).
+| VisRad | Briareus |
+|---|---|
+| Workspace (`.vrw`): components, bundled CAD, beams | `read_visrad_workspace`, `visrad_target`; `write_visrad_workspace` writes a design back |
+| NIF SST pointing, Laser Beam Summary, power files | `read_visrad_sst`/`write_visrad_sst`, `…_summary`, `…_powers` |
+| Beam profile away from focus | `VisRadProfile`, `visrad_profile(ws)` |
+| Computed per-element deposition | `visrad_power_sources`, `visrad_deposition` |
+| One case run in both codes | `write_visrad_kit`, `compare_visrad` |
 
-A beam's direction is fixed by its port (`k = -port`), and pointing translates its axis
-through `aim`. Best focus is at `aim + defocus·k`; positive defocus moves the focus
-along the beam, as in VisRad and the NIF CMT. Spot axes are given in the port's (θ̂, φ̂)
-frame.
+## Verification and validation
 
-Away from focus, the spot is the focal profile convolved with the f-cone. The
-deposition operator samples that convolution at the cone directions: each surface point
-receives, from each cone direction that reaches it unobstructed, the focal profile where
-that ray crosses the best-focus plane, weighted by the ray's own incidence angle. Power
-is conserved at any distance from focus and incidence, and shadows near focus are
-correlated with the part of the spot they block.
+- **Exact references**: the integrating-sphere flux to round-off, the defocused spot
+  against the exact f-cone convolution (about 1 % of the beam power), the harmonics the
+  NIF port symmetry forbids to round-off, gradients against finite differences.
+- **VisRad**: on two NIF hohlraum workspaces, wall deposition 0.9 % rms per element from
+  VisRad 21's, peaks within 0.5 %, capsule P2 and P4 within 0.014 and 0.004 points. The
+  workspaces are not public.
+- **Monte Carlo**: LEH escape and capsule fractions agree with a photon walk in the
+  exact N210808 geometry within its sampling error (10⁻⁴ of the source).
+- **N221204** (Kritcher et al., PRE 109, 025204 (2024)), with nothing fitted to Fig. 10
+  or to Dante: the capsule flux's P2/P0 swing reaches −0.181 at 5.25 ns and turns
+  positive at 6.19 ns (Fig. 10: −0.170 at 5.6 ns, 6.67 ns); Dante 1 at 8 ns reads
+  291–314 eV between the initial and open LEH areas, against 310 eV measured.
 
-## Facility data and provenance
-
-| Data | Source | Notes |
-|---|---|---|
-| NIF quad ports (θ, φ) | NIF User Guide §4.1, Table 4-1 | Port 63 is misprinted as 62 there. |
-| NIF quad names | LMF chamber-geometry figures, confirmed by the LMF beam table | `nif_bundle`, `nif_bundles` |
-| NIF per-beam directions | LMF Shot RI Resources, beam port locations table (2020) | `nif_beams()`, `data/nif_beams.csv` |
-| NIF CPP spots | LMF Shot RI Resources, measured phase-plate fits (2020) | Converted from HWHM to 1/e semi-axes. |
-| NIF target-configuration rules | LMF "TCC Configuration Requirements" (2018) | How the 0.5° tolerance is applied is not stated; see `talis_check`. |
-| OMEGA beams | Truncated icosahedron with edge ratio 1.2 in the hohlraum (P6–P7) frame; reproduces the 21.415/42.020/58.852/81.249° cones | The azimuthal origin is not tied to chamber coordinates. Load the real port table with `beams_from_table`. |
-| OMEGA phase plates | OMEGA Users' Guide (2014) | SG4, SG8, E-IDI-300 |
-| VisRad formats | VisRad manual (prism-cs.com, v21.1.1) | Items to verify against real files are listed in the research notes. |
-| VisRad beam profile away from focus | VisRad 21 runs on NIF hohlraums and a beam-profile probe | `VisRadProfile`'s growth and per-plate semi-axes; the workspaces are not in the repository. |
-| Published shot and simulation data | Digitized or tabulated from the cited papers (`data/*.csv`, each with its provenance header): PRE 109 Figs. 1, 9 and 10, PRE 106, Pak 2024, Zylstra 2022, Young 2020, Izumi 2021, Chen 2020, Kritcher 2024, Kemp 2026, Nora 2023, Rubery 2023, K-shell CE compilations; Henke and NIST attenuation tables | The research notes say which data each calibration was fitted to and which are kept as checks only. |
-
-Non-public facility data (shot pointing exports, CAD, VisRad workspaces) never enters
-the repository; the HYBRID-E pointing in the examples is a public mock-up
-(`hybride_mock_pointing`) fitted to summary metrics.
-
-## Provenance of physics defaults
-
-`reference/research-notes.md` records the source and confidence of every default and
-calibrated constant (it starts with a table of contents and marks superseded values),
-among them:
-- the CBET formulas and their calibrations;
-- NIF Δλ conventions (quoted at 1ω since about 2013; `Beam.dlambda` is at the beam's
-  own wavelength);
-- backscatter practice and the measured backscatter histories;
-- unconverted light;
-- error budgets, clearance defaults and the TaLIS rules;
-- the VisRad file formats and beam model;
-- wall loss, re-emission, conversion and capsule absorption;
-- hohlraum dynamics (wall motion, LEH closure, bubble);
-- the M-band, Dante channels and backlighter conversion efficiency.
-
-The `clearance` thresholds and wing models are engineering defaults, not facility
-criteria; a facility's own review requirements and measured far fields should replace
-them.
+Each check, its kind and its location:
+[Verification and validation](https://stillyslalom.github.io/Briareus.jl/dev/explanation/verification-validation/).
 
 ## Scope and limitations
 
 Briareus is a geometric view-factor and ray-trace code with reduced laser–plasma
 corrections. It solves no hydrodynamics: wall motion, LEH closure and the inner-beam
-bubble are reduced models calibrated to published simulations and measurements, and
-the radiosity is quasi-static (no plasma energy store; the drive after the laser falls
-is low against Dante). It does not trace refraction.
+bubble are reduced models calibrated to published simulations and measurements, and the
+radiosity is quasi-static, with no plasma energy store (after the laser falls, the
+synthetic Dante reads 37–54 eV below the measured one at 9 ns on three shots). It does
+not trace refraction. The CBET model assumes uniform LEH plasma and full pairwise
+overlap; its unsaturated coupling overpredicts transfer, so calibrate it
+(`calibrate_cbet`) before trusting magnitudes. Radiosity is gray unless `spectral_solve`
+is used, which works about a gray solution. The `clearance` thresholds and wing models
+are engineering defaults, not facility criteria.
 
-The CBET model assumes uniform LEH plasma and full pairwise overlap. Its unsaturated
-coupling overpredicts transfer, so calibrate it (`calibrate_cbet`) against shot data
-or reference transfer points before trusting magnitudes.
+## Facility data and provenance
 
-Radiosity is gray unless `spectral_solve` is used, which works about a gray solution.
+| Data | Source | Notes |
+|---|---|---|
+| NIF quad ports | NIF User Guide §4.1, Table 4-1 | Port 63 is misprinted as 62 there. |
+| NIF quad names, beam directions, CPP spots | LMF Shot RI Resources (2020), chamber-geometry figures | `data/nif_beams.csv`; spots converted from HWHM to 1/e. |
+| NIF target-configuration rules | LMF "TCC Configuration Requirements" (2018) | How the 0.5° tolerance is applied is not stated; see `talis_check`. |
+| OMEGA beams and phase plates | Truncated icosahedron reproducing the 21.4/42.0/58.9/81.2° cones; OMEGA Users' Guide (2014) | Azimuthal origin not tied to the chamber; real ports via `beams_from_table`. |
+| VisRad formats and beam profile | VisRad manual (v21.1.1); VisRad 21 runs on NIF hohlraums and a beam-profile probe | The workspaces are not in the repository. |
+| Published shot and simulation data | The cited papers, digitized or tabulated in `data/*.csv` with provenance headers | The research notes record which data each calibration was fitted to and which are checks only. |
 
-## Tests
+`reference/research-notes.md` records the source and confidence of every default and
+calibrated constant. Non-public facility data (shot pointing exports, CAD, VisRad
+workspaces) never enters the repository; the HYBRID-E pointing in the examples is a
+public mock-up (`hybride_mock_pointing`) fitted to summary metrics.
 
-```bash
-julia --project=. -t auto -e 'using Pkg; Pkg.test()'
-```
+## Tests, citing, license
 
-`BRIAREUS_TEST_SHARD=1|2|3` runs a third of the suite, and `BRIAREUS_LONG_TESTS=true`
-adds the Monte Carlo and convergence checks that local runs skip by default (CI runs
-them). The suite checks the code against analytic results:
-- coaxial-disk, sphere and closed-cylinder view factors, and occlusion;
-- the integrating-sphere radiosity solution and energy conservation;
-- beam power normalization at any defocus, and per-beam power conservation of the
-  deposition operator on fine and coarse meshes, with and without clipping;
-- analytic-versus-ray-trace deposition, including shadowing near focus and grazing
-  incidence far from focus;
-- AD-versus-finite-difference gradients;
-- Legendre and Y_lm recovery, the NIF port symmetry selection rule, and facility
-  geometry checks;
-- clearance, keep-out and TaLIS rules against analytic geometry, and VisRad file
-  round trips.
-
-The documentation's tutorials add exact references: the f-cone convolution of a laser
-spot, the oblique-incidence footprint, the integrating sphere, the symmetry of the
-NIF ports, and the gold heat front against published self-similar solutions and
-measured foil burnthrough.
+`julia --project=. -t auto -e 'using Pkg; Pkg.test()'` runs the suite
+(`BRIAREUS_TEST_SHARD=1|2|3` a third of it; `BRIAREUS_LONG_TESTS=true` adds the Monte
+Carlo and convergence checks CI runs). There is no paper yet: cite the repository, with
+the metadata in [CITATION.cff](CITATION.cff). Briareus is MIT-licensed ([LICENSE](LICENSE)).
