@@ -143,7 +143,7 @@ names the menu entries, and the panels are described in [The window](@ref).
    (NIF) run in the background and color the beams by their worst status. A result
    is marked out of date in the tree when the beams or the target change afterward.
 
-   ![The TaLIS rules checked on every NIF quad of the template: the ASSUMED tolerance note, the error set, and every check with its margin; the beams are colored by their worst status. The failures are 3ω clearance from the entrance-hole caps, which this pointing does not keep with the rule's margin.](assets/gui/talis.png)
+   ![The TaLIS rules checked on every NIF quad of the template: the ASSUMED tolerance note, the error set, and every check with its margin; the beams are colored by their worst status. The eight failures are 3ω incidence on the wall, about 0.4° past the 70° limit on the optimized pointing; the 48 reviews are 3ω clearance at the entrance-hole edges.](assets/gui/talis.png)
 
 8. **Save.** File ▸ Save session (Ctrl + S) writes the whole design, from the target to
    the analyses' settings and the view, to a plain TOML file; File ▸ Open session
