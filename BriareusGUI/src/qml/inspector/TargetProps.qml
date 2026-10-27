@@ -24,8 +24,9 @@ ColumnLayout {
     }
     Note {
         text: app.targetKind === "foil"
-              ? "The foil sits on the +x axis facing TCC; the black sphere at TCC stands in for " +
-                "the main target (it absorbs and emits nothing). Sphere radius 0: none."
+              ? "The foil sits on the +x axis facing TCC; the sphere at TCC stands in for the " +
+                "main target: it absorbs the laser light and x-rays that reach it and emits " +
+                "nothing (albedo and conversion 0). Sphere radius 0: none."
               : app.targetKind === "custom" ? "A target made of free parts only: add them below or from Target ▸ Add part."
               : "Cylindrical hohlraum along z with entrance holes and a capsule at TCC (capsule radius 0: none)."
     }

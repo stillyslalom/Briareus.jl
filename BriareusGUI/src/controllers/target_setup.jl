@@ -6,8 +6,8 @@
 
 """
 Target templates: `:hohlraum` (cylindrical hohlraum with LEHs and an optional capsule,
-`Briareus.hohlraum`), `:foil` (a backlighter foil facing TCC with an optional black
-sphere standing in for the main target) and `:custom` (parts only).
+`Briareus.hohlraum`), `:foil` (a backlighter foil facing TCC with an optional absorbing
+sphere, `BLACK`, standing in for the main target) and `:custom` (parts only).
 """
 const TARGET_KINDS = (:hohlraum, :foil, :custom)
 
@@ -35,7 +35,7 @@ const TARGET_FIELDS = (
     MeshSpec(h, capsule_h)
 
 Element sizes (mm): `h` for the hohlraum wall, end caps and LEHs (`hohlraum_counts`),
-a foil target's black main sphere and the parts; `capsule_h` for the surface whose
+a foil target's main-target sphere and the parts; `capsule_h` for the surface whose
 drive is studied: the capsule (`capsule_counts`) or the backlighter foil. A part may
 override `h` with its own.
 """

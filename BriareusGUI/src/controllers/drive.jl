@@ -195,8 +195,16 @@ function _render_image(dr::DriveState)
     y = range(-h, h; length = cam.ny)
     # rows from the top: as a matrix over (x, y) with y increasing
     values = permutedims(to_Wcm2.(img)[end:-1:1, :])
-    return (; x, y, values, title = "X-ray radiance seen along " *
-                                    join((@sprintf("%.2f", c) for c in cam.dir), ", "))
+    return (; x, y, values, title = "X-ray radiance viewed from " * _view_angles(-cam.dir))
+end
+
+# A direction as polar and azimuth angles (degrees), as ports are given; along ±z the
+# azimuth is left out.
+function _view_angles(d)
+    θ = acosd(clamp(d[3] / norm(d), -1.0, 1.0))
+    s = @sprintf("θ %.0f°", θ)
+    hypot(d[1], d[2]) < 1e-3 * norm(d) && return s
+    return s * @sprintf(", φ %.0f°", mod(atand(d[2], d[1]), 360))
 end
 
 """
@@ -580,6 +588,10 @@ function power_rows(ev::Evaluation)
     return rows
 end
 
+# Text with a no-break space before each unit, so that a wrapped line keeps a number and
+# its unit together.
+_nobreak(s::AbstractString) = replace(s, r" (?=%|W/cm²|eV|mm|TW)" => string(Char(0xa0)))
+
 # Foil irradiance within `radius` of the foil center: mean, peak (W/cm²) and RMS
 # nonuniformity; `nothing` without a foil.
 function _spot_stats(ev::Evaluation, radius::Real)
@@ -629,16 +641,16 @@ spot irradiance and nonuniformity.
 function drive_summary(res::DriveResult)
     if !isempty(res.modes)
         m = Dict(r.l => r.epsilon for r in res.modes)
-        return @sprintf("capsule %s W/cm² (Tr %.0f eV) · ε₂ %.2f %% · ε₄ %.2f %%",
-                        _wcm2(res.mean_flux), radiation_temperature(res.mean_flux),
-                        100 * get(m, 2, NaN), 100 * get(m, 4, NaN))
+        return _nobreak(@sprintf("capsule %s W/cm² (Tr %.0f eV) · ε₂ %.2f %% · ε₄ %.2f %%",
+                                 _wcm2(res.mean_flux), radiation_temperature(res.mean_flux),
+                                 100 * get(m, 2, NaN), 100 * get(m, 4, NaN)))
     elseif res.spot !== nothing
         s = res.spot
-        return @sprintf("spot %.3g W/cm² · rms %.1f %% · %.0f %% of the power in r ≤ %.2g mm",
-                        s.mean, 100 * s.rms, 100 * s.fraction, s.radius)
+        return _nobreak(@sprintf("spot %.3g W/cm² · rms %.1f %% · %.0f %% of the power in r ≤ %.2g mm",
+                                 s.mean, 100 * s.rms, 100 * s.fraction, s.radius))
     end
     d = res.evaluation.deposition
-    return @sprintf("%.4g TW delivered", d.delivered) *
+    return _nobreak(@sprintf("%.4g TW delivered", d.delivered)) *
            (res.solution === nothing ? " (laser only: no x-ray drive)" : "")
 end
 

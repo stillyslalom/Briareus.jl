@@ -9,7 +9,9 @@ ScrollPage {
     Note {
         visible: !app.driveHasResult
         text: app.driveBuilding ? "Computing the view factors… " + app.driveElapsed
-              : "Compute the drive (Compute ▸ Drive, or color the target by a drive field) to see the capsule modes and the power accounting."
+              : "Compute the drive (Compute ▸ Drive, or color the target by a drive field) to see " +
+                (app.hasFoil ? "the foil spot" : app.hasCapsule ? "the capsule modes" : "the drive") +
+                " and the laser power accounting."
     }
     Label { text: app.driveSummary; font.weight: Font.DemiBold; visible: app.driveHasResult; wrapMode: Text.WordWrap; Layout.fillWidth: true }
     RowLayout {
