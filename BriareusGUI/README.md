@@ -1,12 +1,12 @@
 # BriareusGUI.jl
 
-**BriareusGUI** provides a desktop window for [Briareus.jl](../README.md) laser-pointing
+**BriareusGUI** provides a desktop window for [Briareus.jl](https://github.com/stillyslalom/Briareus.jl) laser-pointing
 and view-factor radiation design: build a hohlraum or backlighter target, point the
 beams, see the laser deposition and x-ray drive, optimize the pointing, and check beam
 clearance from the hardware and the TaLIS target-configuration rules, all in one
 window, with VisRad pointing, beam-summary, workspace and benchmark-kit files in and out.
 
-![The Briareus window](../docs/src/assets/gui/overview.png)
+![The Briareus window](https://raw.githubusercontent.com/stillyslalom/Briareus.jl/main/docs/src/assets/gui/overview.png)
 
 The [Desktop application](https://stillyslalom.github.io/Briareus.jl/dev/gui/) page of
 the documentation describes the window, a first session and every panel.

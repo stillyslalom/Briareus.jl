@@ -3,6 +3,7 @@
 [![CI](https://github.com/stillyslalom/Briareus.jl/actions/workflows/CI.yml/badge.svg)](https://github.com/stillyslalom/Briareus.jl/actions/workflows/CI.yml)
 [![Docs](https://img.shields.io/badge/docs-dev-blue.svg)](https://stillyslalom.github.io/Briareus.jl/dev/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Aqua QA](https://raw.githubusercontent.com/JuliaTesting/Aqua.jl/master/badge.svg)](https://github.com/JuliaTesting/Aqua.jl)
 
 View-factor radiation and laser-pointing design for high-energy-density experiments:
 indirect-drive hohlraums, backlighter foils and other laser-irradiated targets. Briareus
