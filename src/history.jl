@@ -26,17 +26,27 @@ pulse_energy(s::PulseShape) =
     with_pulses(beams, pulses, t; by = :group) -> Vector{Beam}
 
 Beams with power set to `pulses[key](t)`, where `key` is each beam's `group` (pulses
-given as a `Dict` or NamedTuple keyed by group), its `quad` (`by = :quad`), its `name`
-(`by = :beam`) or `by(beam)` for a function, or a single `PulseShape` for all.
+given as a `Dict` or NamedTuple keyed by group), its `quad` as a `Symbol` (`by = :quad`),
+its `name` as a `Symbol` (`by = :beam`) or `by(beam)` for a function, or a single
+`PulseShape` for all. Every pulse reader and writer keys by `Symbol`:
+[`read_pulse_table`](@ref) by column header, [`cone_fraction_pulses`](@ref) by group,
+[`read_visrad_powers`](@ref) by beam name (`by = :beam`).
 """
-with_pulses(beams, pulse::PulseShape, t; by = :group) = [remake(b; power = pulse(t)) for b in beams]
 function with_pulses(beams, pulses, t; by = :group)
     key = _beam_key(by)
-    return [remake(b; power = pulses[key(b)](t)) for b in beams]
+    return [remake(b; power = _beam_pulse(pulses, key, b)(t)) for b in beams]
 end
 
 _beam_key(by) = by === :group ? (b -> b.group) : by === :quad ? (b -> Symbol(b.quad)) :
                 by === :beam ? (b -> Symbol(b.name)) : by
+
+# The pulse of beam `b`: one `PulseShape` for all, or `pulses[key(b)]`.
+_beam_pulse(p::PulseShape, key, b) = p
+function _beam_pulse(p, key, b)
+    k = key(b)
+    haskey(p, k) || throw(KeyError(k))
+    return p[k]
+end
 
 """
     drive_history(model, op, beams_at, times; observe = :capsule, lmax = 6,

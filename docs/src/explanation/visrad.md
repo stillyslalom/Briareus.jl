@@ -204,7 +204,8 @@ profile = visrad_profile(ws)   # VisRad's beam model, with this workspace's enve
 
 **2. Check the deposition against VisRad's own.** On a workspace that VisRad has
 computed, a target on VisRad's own elements (no remeshing) takes VisRad's per-element
-deposition:
+deposition. [`visrad_deposition`](@ref) maps only onto components on those elements, so
+this target serves the comparison only; step 3 builds the radiation target:
 
 ```julia
 t0 = visrad_target(ws)
@@ -236,13 +237,13 @@ a = legendre_moments(sol.H, t, capsule)
 a[3] / a[1]                                   # P2/P0
 ```
 
-**5. Time-dependent powers.** VisRad's power file becomes a pulse per beam, and the
-drive history evaluates the beams at each time:
+**5. Time-dependent powers.** VisRad's power file becomes a pulse per beam, keyed by
+beam name, and the drive history evaluates the beams at each time (every beam needs a
+column in the file):
 
 ```julia
 pulses = read_visrad_powers("powers.csv"; template = beams)
-beams_at(time) = [remake(b; power = haskey(pulses, b.name) ? pulses[b.name](time) : 0.0)
-                  for b in beams]
+beams_at(time) = with_pulses(beams, pulses, time; by = :beam)
 history = drive_history(model, op, beams_at, 0.0:0.25:9.0; observe = :Capsule)
 history.moments[3, :] ./ history.moments[1, :]   # P2/P0 against time
 ```
@@ -256,7 +257,7 @@ pointing = GroupPointing(beams; fields = (:z, :power), relative = true)
 scenario = Scenario(t, pointing; observe = :Capsule, deposition_kw = (; profile))
 x0 = initial_parameters(pointing)
 drive = mean_flux(evaluate(scenario, x0))
-objective = symmetry_objective(; drive, direct_names = (:Capsule,))
+objective = symmetry_objective(; drive)   # the direct penalty is on `observe`
 lower, upper = bounds(pointing, x0; power = 0.3)
 result = optimize_pointing(scenario, objective; x0, lower, upper)
 design = apply(pointing, result.x)

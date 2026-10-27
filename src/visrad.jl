@@ -773,17 +773,11 @@ end
 # Power files
 # ---------------------------------------------------------------------------------------
 
-_vr_pulse(p::PulseShape, b::Beam) = p
-_vr_pulse(p::AbstractDict{<:AbstractString}, b::Beam) = p[b.name]
-_vr_pulse(p::AbstractDict{Symbol}, b::Beam) = p[b.group]
-_vr_pulse(p::NamedTuple, b::Beam) = p[b.group]
-_vr_pulse(p::Function, b::Beam) = p(b)
-
 _vr_scale(p::PulseShape, f) = f == 1 ? p : PulseShape(p.t, f .* p.p)
 
 """
-    write_visrad_powers(path, beams, pulses; times = nothing) -> path
-    write_visrad_powers(path, pulses::AbstractDict{String,PulseShape}; times = nothing) -> path
+    write_visrad_powers(path, beams, pulses; by = :group, times = nothing) -> path
+    write_visrad_powers(path, pulses::AbstractDict{Symbol,PulseShape}; times = nothing) -> path
 
 Write a VisRad time-dependent beam-power CSV (`VR/files/laser_beam_data_files.html`):
 header `time (ns)` then one column per beam named as VisRad names beams (`B115` for NIF,
@@ -792,9 +786,10 @@ Import Laser Beam Data | Time-Dependent Powers
 (`VR/power_sources/import_tdep_beam_powers.html`); for NIF VisRad assigns the powers to
 the 3ω (blue) cones.
 
-`pulses` is a `PulseShape` for every beam, a `Dict`/NamedTuple keyed by group (as in
-`with_pulses`), a `Dict` keyed by beam name, or a function `beam -> PulseShape`. NIF
-quads expand to their four beams at a quarter of the quad's power each. Times default to
+`pulses` takes the forms of [`with_pulses`](@ref): a `PulseShape` for every beam, or a
+`Dict`/NamedTuple keyed `by` group (default), quad, beam name (`by = :beam`, as
+[`read_visrad_powers`](@ref) returns them) or a function of the beam. The second form
+writes a `Dict` keyed by beam name as it is. NIF quads expand to their four beams at a quarter of the quad's power each. Times default to
 the union of all pulse knots, so piecewise-linear pulses are reproduced exactly when
 each starts and ends at zero power (a `PulseShape` is zero outside its table; a pulse
 that starts or ends at a finite power gets a ramp to its neighbors' knots instead).
@@ -802,15 +797,16 @@ Briareus beam names that are not facility names (e.g. `omega_beams()`'s hohlraum
 `B01`…) are written as they are; rename them first.
 """
 function write_visrad_powers(path::AbstractString, beams::AbstractVector{<:Beam}, pulses;
-                             times = nothing)
+                             by = :group, times = nothing)
+    key = _beam_key(by)
     cols = Pair{String,PulseShape}[]
     for (b, i, f) in _vr_expand(beams)
-        push!(cols, b.name => _vr_scale(_vr_pulse(pulses, beams[i]), f))
+        push!(cols, b.name => _vr_scale(_beam_pulse(pulses, key, beams[i]), f))
     end
     return _vr_write_powers(path, cols, times)
 end
 
-write_visrad_powers(path::AbstractString, pulses::AbstractDict{<:AbstractString,PulseShape};
+write_visrad_powers(path::AbstractString, pulses::AbstractDict{Symbol,PulseShape};
                     times = nothing) =
     _vr_write_powers(path, [String(k) => pulses[k] for k in sort!(collect(keys(pulses)))], times)
 
@@ -827,17 +823,18 @@ function _vr_write_powers(path, cols, times)
 end
 
 """
-    read_visrad_powers(path; template = nothing) -> Dict{String,PulseShape}
+    read_visrad_powers(path; template = nothing) -> Dict{Symbol,PulseShape}
 
 Read a VisRad time-dependent beam-power CSV: first column time (ns; a "(s)"/"(sec)" or
 "(ps)" unit in its header is converted), then one power column (TW) per beam headed by
 the beam name (`VR/files/laser_beam_data_files.html`). Negative powers are set to zero as
 VisRad does on import (`VR/power_sources/import_tdep_beam_powers.html`).
 
-Without a template the keys are the normalized beam names (`BL115` → `B115`, `Beam_10`).
-With a `template` beam set the keys are the template's names: beams match by name, and a
-NIF quad gets the sum of its four beams' pulses (on the union of their knots). Build
-beams at time `t` with e.g. `[remake(b; power = P[b.name](t)) for b in beams]`.
+Without a template the keys are the normalized beam names as `Symbol`s (`BL115` →
+`:B115`, `:Beam_10`). With a `template` beam set the keys are the template's names:
+beams match by name, and a NIF quad gets the sum of its four beams' pulses (on the union
+of their knots); template beams absent from the file have no key. Beams at time `t` are
+`with_pulses(beams, P, t; by = :beam)` ([`with_pulses`](@ref)).
 """
 function read_visrad_powers(path::AbstractString; template = nothing)
     lines = filter(l -> !isempty(strip(l)), _vr_lines(path))
@@ -851,25 +848,25 @@ function read_visrad_powers(path::AbstractString; template = nothing)
     rows = [r for r in rows if _vr_num(r[1]) !== nothing]
     t = [ts * _vr_num(r[1]) for r in rows]
     p = sortperm(t)
-    out = Dict{String,PulseShape}()
+    out = Dict{String,PulseShape}()   # by normalized file name
     for j in 2:length(header)
         isempty(header[j]) && continue
         P = [j <= length(r) ? max(something(_vr_num(r[j]), 0.0), 0.0) : 0.0 for r in rows]
         out[_vr_key(header[j])] = PulseShape(t[p], P[p])
     end
-    template === nothing && return out
-    res = Dict{String,PulseShape}()
+    template === nothing && return Dict{Symbol,PulseShape}(Symbol(k) => v for (k, v) in out)
+    res = Dict{Symbol,PulseShape}()
     members = any(b -> _is_nif_quad(b.name), template) ? _nif_quad_members() : nothing
     for b in template
         k = _vr_key(b.name)
         if haskey(out, k)
-            res[b.name] = out[k]
+            res[Symbol(b.name)] = out[k]
         elseif _is_nif_quad(b.name)
             ps = [out[_vr_key(n)] for n in members[b.name] if haskey(out, _vr_key(n))]
             isempty(ps) && continue
             length(ps) < 4 && @warn "only $(length(ps)) of 4 beams of quad $(b.name) in the power file"
             tt = sort!(unique!(reduce(vcat, (q.t for q in ps))))
-            res[b.name] = PulseShape(tt, [sum(q(τ) for q in ps) for τ in tt])
+            res[Symbol(b.name)] = PulseShape(tt, [sum(q(τ) for q in ps) for τ in tt])
         end
     end
     return res
@@ -1169,7 +1166,7 @@ function _vr_describe(io, t::Target, sol)
 end
 
 """
-    write_visrad_kit(dir, target, beams; model = nothing, op = nothing, pulses = nothing,
+    write_visrad_kit(dir, target, beams; model = nothing, op = nothing, pulses = nothing, by = :group,
                      time = 0.0, observe = :capsule, terms = (0, 2, 4), lmax = 4,
                      rotation_sense = :beam, notes = "") -> NamedTuple
 
@@ -1182,7 +1179,7 @@ results for comparison (`compare_visrad`), into directory `dir`:
   (`write_visrad_summary`): port angles, pointing, focus, power, 1/e spot radii,
   exponents and rotations.
 - `powers.csv` — per-beam time-dependent powers (`write_visrad_powers`), when `pulses` is
-  given (see `write_visrad_powers` for its forms); beam powers are then evaluated at `time`.
+  given (keyed `by`, as in `write_visrad_powers`); beam powers are then evaluated at `time`.
 - `briareus_beams.csv` — the canonical Briareus beam table (`write_beam_table`).
 - `README.txt` — target geometry (component shapes and dimensions in mm, cm and µm,
   materials, albedos and conversion efficiencies), beam settings, and the VisRad steps.
@@ -1201,15 +1198,15 @@ The deposition uses `op` (default `DepositionOperator(target, beams)`) and the r
 `results` a `Dict` of the quantities in `briareus_results.csv`.
 """
 function write_visrad_kit(dir::AbstractString, target::Target, beams::AbstractVector{<:Beam};
-                          model = nothing, op = nothing, pulses = nothing, time = 0.0,
+                          model = nothing, op = nothing, pulses = nothing, by = :group, time = 0.0,
                           observe = :capsule, terms = (0, 2, 4), lmax::Integer = 4,
                           rotation_sense::Symbol = :beam, notes::AbstractString = "")
     mkpath(dir)
     files = Dict{Symbol,String}()
-    bt = pulses === nothing ? beams : [remake(b; power = _vr_pulse(pulses, b)(time)) for b in beams]
+    bt = pulses === nothing ? beams : with_pulses(beams, pulses, time; by)
     files[:sst] = write_visrad_sst(joinpath(dir, "pointing_sst.csv"), bt)
     files[:summary] = write_visrad_summary(joinpath(dir, "beam_summary.csv"), bt; rotation_sense)
-    pulses === nothing || (files[:powers] = write_visrad_powers(joinpath(dir, "powers.csv"), beams, pulses))
+    pulses === nothing || (files[:powers] = write_visrad_powers(joinpath(dir, "powers.csv"), beams, pulses; by))
     files[:beams] = write_beam_table(joinpath(dir, "briareus_beams.csv"), bt)
 
     op = op === nothing ? DepositionOperator(target, bt) : op

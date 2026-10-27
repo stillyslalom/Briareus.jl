@@ -619,8 +619,9 @@ end
 
 Target built from the components of a VisRad workspace (`read_visrad_workspace`) for
 which `select(object)` is true — by default those that VisRad includes in its radiosity or
-direct-laser calculation. `materials` maps object names to a `Material` overriding the
-file's albedo and conversion efficiency. `two_sided` (a `Bool`, or a function of the
+direct-laser calculation. `materials` maps object names (`String`s or `Symbol`s) to a
+`Material` overriding the file's albedo and conversion efficiency; a name that is not an
+object of the workspace is an error. `two_sided` (a `Bool`, or a function of the
 object) makes surfaces radiate from both sides; see `visrad_component` for why CAD
 meshes often need it, and for `orient`, `toward`, `remesh`, `coarsen` and `fit` (which
 apply to CAD meshes: repaired windings, elements of about `remesh` or `coarsen` mm, and
@@ -644,6 +645,14 @@ does the same for CAD read from STL files. `visibility` is the target's default
 entrance-hole washers and CAD with rims), and `closed = true` declares the target a
 closed enclosure (balanced view factors), as for `cad_target`: only when apertures
 close every opening (see [`open_fraction`](@ref)).
+
+A comparison with VisRad and a radiation study usually take two targets from the same
+workspace. [`visrad_deposition`](@ref) maps VisRad's per-element deposition only onto
+components on VisRad's own elements, so it takes a target built without `remesh`,
+`coarsen`, `fit` and `inside` (e.g. `visrad_target(ws)`, with the same `select`), on
+which a `DepositionOperator` reproduces VisRad's calculation element by element; the
+view factors take the remeshed, cut target. The beams serve both, with one
+`DepositionOperator` per target.
 """
 function visrad_target(ws::VisRadWorkspace; select = o -> o.radiosity || o.laser,
                        materials = Dict{String,Material}(), two_sided = false,
@@ -652,6 +661,12 @@ function visrad_target(ws::VisRadWorkspace; select = o -> o.radiosity || o.laser
                        closed::Bool = false)
     coarsen === nothing || remesh === nothing ||
         throw(ArgumentError("give one of `coarsen` and `remesh`, not both"))
+    # object names as `String`s or `Symbol`s; a name that is no object is a mistake
+    materials = Dict{String,Material}(String(k) => v for (k, v) in materials)
+    for k in keys(materials)
+        any(o -> o.name == k, ws.objects) ||
+            throw(ArgumentError("materials: the workspace has no object \"$k\" (objects: $(join(repr.(getfield.(ws.objects, :name)), ", ")))"))
+    end
     parts = Union{Component,Pair{Symbol,Mesh}}[]
     mats = Dict{Symbol,Material}()        # of the CAD parts, for cad_target
     sides = Dict{Symbol,Bool}()
@@ -811,7 +826,9 @@ per component (`sum(P[elements(target, :wall)])`).
 `target` must hold the workspace's objects as `visrad_target(workspace)` or
 `visrad_component` build them, one component per object (named after it) on VisRad's
 own elements. Each component is checked against the object's elements; a component
-remeshed, coarsened, fitted or cut to a cavity is refused. Elements are matched by:
+remeshed, coarsened, fitted or cut to a cavity is refused, so the target compared with
+VisRad is not the one a radiation study remeshes (see [`visrad_target`](@ref)): build
+both from the workspace, and compare depositions on this one. Elements are matched by:
 
 - CAD meshes (generalized meshes): one Briareus patch per VisRad surface element, in
   the file's connectivity order. The order is VisRad's own; it is confirmed by

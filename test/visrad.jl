@@ -186,24 +186,28 @@ end
     @test startswith(readline(p), "time (ns),B")
     raw = read_visrad_powers(p)
     @test length(raw) == 192
-    b = first(n for n in keys(raw))
-    @test raw["B115"](3.0) ≈ pulses[q[findfirst(x -> x.name == "Q11B", q)].group](3.0) / 4
+    @test raw[:B115](3.0) ≈ pulses[q[findfirst(x -> x.name == "Q11B", q)].group](3.0) / 4
     rq = read_visrad_powers(p; template = nif_quads())
     ts = range(-1, 8; length = 91)
-    @test all(isapprox(rq[x.name].(ts), pulses[x.group].(ts); atol = 1e-8) for x in q)
+    @test all(isapprox(rq[Symbol(x.name)].(ts), pulses[x.group].(ts); atol = 1e-8) for x in q)
+    # the readers key by Symbol, so the pulses compose with with_pulses by beam name
+    @test [b.power for b in with_pulses(q, rq, 3.0; by = :beam)] ≈ [b.power for b in with_pulses(q, pulses, 3.0)]
+    @test_throws KeyError with_pulses(nif_beams(), rq, 3.0; by = :beam)
+    rt = write_visrad_powers(joinpath(vrdir, "rt.csv"), q, rq; by = :beam)
+    @test all(isapprox(read_visrad_powers(rt; template = q)[Symbol(x.name)].(ts), rq[Symbol(x.name)].(ts); atol = 1e-8) for x in q)
     # the manual's examples: NIF "BL" names (import_tdep_laser_powers.jpg), OMEGA "Beam_10",
     # negative powers set to zero (import_tdep_beam_powers.html)
     pf = vrfile("tdep.csv", "time (ns),BL115,BL116,Beam_10\n0,0,0,0\n1,2.5,-0.1,0.5\n2,0,0,0\n")
     f = read_visrad_powers(pf)
-    @test f["B115"](1.0) == 2.5 && f["B116"](1.0) == 0 && f["Beam_10"](0.5) == 0.25
+    @test f[:B115](1.0) == 2.5 && f[:B116](1.0) == 0 && f[:Beam_10](0.5) == 0.25
     fb = read_visrad_powers(pf; template = nif_beams())
-    @test keys(fb) == Set(["B115", "B116"])
-    @test pulse_energy(fb["B115"]) ≈ 2.5
+    @test keys(fb) == Set([:B115, :B116])
+    @test pulse_energy(fb[:B115]) ≈ 2.5
     # seconds in the header; direct Dict form
     ps = vrfile("tdep_s.csv", "time (s),B111\n0,0\n1e-9,1\n2e-9,0\n")
-    @test read_visrad_powers(ps)["B111"](1.0) ≈ 1
-    pd = write_visrad_powers(joinpath(vrdir, "pd.csv"), Dict("B111" => PulseShape([0, 1, 2], [0, 3, 0])))
-    @test read_visrad_powers(pd)["B111"](0.5) ≈ 1.5
+    @test read_visrad_powers(ps)[:B111](1.0) ≈ 1
+    pd = write_visrad_powers(joinpath(vrdir, "pd.csv"), Dict(:B111 => PulseShape([0, 1, 2], [0, 3, 0])))
+    @test read_visrad_powers(pd)[:B111](0.5) ≈ 1.5
     # standard pulse-shape library file: W versus s
     pl = vrfile("pulse.dat", "# square\n0.0 0.0\n1.0e-10 5.0e11\n1.1e-9 5.0e11\n1.2e-9 0.0\n")
     sh = read_visrad_pulse_shape(pl)
@@ -307,6 +311,10 @@ end
         :Cyl_Hohlraum_0_cap_bottom, :Cyl_Hohlraum_0_leh_top, :Cyl_Hohlraum_0_leh_bottom, :CAD_0]
     np = [npatches(c.mesh) for c in t.components]
     @test np[1] == 81 && sum(np[2:6]) == 216 && np[7] == 4
+    # materials by object name, a String or a Symbol; a name that is no object is an error
+    tm = visrad_target(ws; materials = Dict(:Rectangle_0 => gold()))
+    @test tm.components[1].material == gold() && tm.components[7].material == t.components[7].material
+    @test_throws ArgumentError visrad_target(ws; materials = Dict(:Rectangle => gold()))
     # foil: 4 × 4 mm at x = 1 mm, tilted 90° so its +z normal turns to +x
     e = t.comp_elems[1]
     @test all(n -> n ≈ Vec3(1, 0, 0), t.elem_normal[e])
