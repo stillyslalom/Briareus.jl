@@ -132,7 +132,7 @@ end
     @test all(x -> x.component === :wall, (x for x in r.rows if x.rule === :capture_3w))
     @test occursin("48 beams", talis_brief(tl))
     st, txt = task_status(sess, :talis)
-    @test st === :attention && occursin("48 beams", txt)      # LEH reviews, incidence fails
+    @test st === :attention && occursin(r"\d+ fail, \d+ review", txt)  # LEH reviews, incidence fails
     # roles follow the target: a removed window leaves the selection, a new one is checked
     set_talis_role!(tl, :capsule, :hardware)
     edit_target!(sess.target, :length, "10.0")

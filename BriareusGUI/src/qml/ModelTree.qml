@@ -103,7 +103,11 @@ Pane {
                         text: model.label
                         font.weight: model.depth === 0 ? Font.DemiBold : Font.Normal
                         elide: Text.ElideRight
-                        Layout.maximumWidth: list.width * 0.55
+                        Layout.maximumWidth: list.width * (model.depth === 0 ? 0.7 : 0.55)   // a heading's detail is a count
+                        ToolTip.visible: labelHover.hovered && truncated
+                        ToolTip.delay: 400
+                        ToolTip.text: model.label
+                        HoverHandler { id: labelHover }
                     }
                     Label {
                         text: model.detail
@@ -112,6 +116,7 @@ Pane {
                         elide: Text.ElideRight
                         Layout.fillWidth: true
                         ToolTip.visible: detailHover.hovered && truncated
+                        ToolTip.delay: 400
                         ToolTip.text: model.detail
                         HoverHandler { id: detailHover }
                     }

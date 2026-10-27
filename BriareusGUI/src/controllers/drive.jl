@@ -651,12 +651,18 @@ function element_values(res::DriveResult, field::Symbol)
 end
 
 """
-    drive_summary(res::DriveResult) -> String
+    drive_summary(res::DriveResult; short = false) -> String
 
 The drive in a line: capsule mean flux, radiation temperature, and ε₂/ε₄; or the foil
-spot irradiance and nonuniformity.
+spot irradiance and nonuniformity. `short`: the model tree's detail, the capsule's
+radiation temperature and ε₂, or the foil spot's nonuniformity.
 """
-function drive_summary(res::DriveResult)
+function drive_summary(res::DriveResult; short::Bool = false)
+    if short && (!isempty(res.modes) || res.spot !== nothing)
+        isempty(res.modes) && return _nobreak(@sprintf("spot rms %.1f %%", 100 * res.spot.rms))
+        e2 = only(r.epsilon for r in res.modes if r.l == 2)
+        return _nobreak(@sprintf("Tr %.0f eV · ε₂ %.2f %%", radiation_temperature(res.mean_flux), 100 * e2))
+    end
     if !isempty(res.modes)
         m = Dict(r.l => r.epsilon for r in res.modes)
         return _nobreak(@sprintf("capsule %s W/cm² (Tr %.0f eV) · ε₂ %.2f %% · ε₄ %.2f %%",

@@ -304,7 +304,7 @@ function model_tree(sess)
     bt = sess.beams
     bs, en = bt.beams[], bt.enabled[]
     push!(rows, _row("beams", 0, "Beams: " * get(PRESET_LABELS, bt.preset[], String(bt.preset[])),
-                     @sprintf("%d of %d on", count(en), length(bs)), !isempty(bs), "beams" in ex,
+                     !isempty(bs) && all(en) ? "all on" : @sprintf("%d of %d on", count(en), length(bs)), !isempty(bs), "beams" in ex,
                      isempty(bs) ? -1 : _tri(count(en), length(bs)), "", sel))
     if "beams" in ex && !isempty(bs)
         cl = bt.cluster[]

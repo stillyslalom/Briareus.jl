@@ -20,8 +20,8 @@ without the TaLIS rules (NIF's) elsewhere.
 """
 session_tasks(sess) = sess.beams.facility[] === :nif ? TASKS : filter(!=(:talis), TASKS)
 
-const TASK_LABELS = Dict(:drive => "Drive (view factors)", :optimize => "Pointing optimization",
-                         :clearance => "Beam clearance", :talis => "TaLIS rules")
+const TASK_LABELS = Dict(:drive => "Drive", :optimize => "Optimization", :clearance => "Clearance",
+                         :talis => "TaLIS")
 
 """
     EditHistory(; limit = 200)
@@ -252,8 +252,9 @@ end
 """
     task_status(sess::DesignSession, task) -> (state, summary)
 
-`state` is `:todo`, `:ok`, `:attention`, or `:busy`, with a one-line summary for the
-model tree (`task` one of [`TASKS`](@ref)).
+`state` is `:todo`, `:ok`, `:attention`, or `:busy`, with a summary short enough for
+the model tree's default width (`task` one of [`TASKS`](@ref)); the analysis's
+Properties and its results tab give it in full.
 """
 function task_status(sess::DesignSession, task::Symbol)
     task in TASKS || throw(ArgumentError("unknown analysis :$task"))
@@ -262,38 +263,52 @@ function task_status(sess::DesignSession, task::Symbol)
         sess.build_queued[] && return (:busy, dr.status[])
         dr.building[] && return (:busy, "computing view factors… " * _seconds(time() - dr.started[]))
         dr.scenario[] === nothing && return (:todo, isempty(dr.status[]) ? "not computed" : dr.status[])
-        drive_stale(sess) && return (:attention, "target, beam ports or beam model changed: compute again")
+        drive_stale(sess) && return (:attention, "out of date: compute again")
         dr.evaluating[] && return (:busy, "evaluating…")
         dr.result[] === nothing && return (:attention, isempty(dr.status[]) ? "no evaluation" : dr.status[])
-        return (:ok, drive_summary(dr.result[]))
+        return (:ok, drive_summary(dr.result[]; short = true))
     elseif task === :optimize
         st = sess.optimize
         st.running[] && return (:busy, optimize_progress(st))
         r = st.result[]
         r === nothing && return (:todo, isempty(st.status[]) ? "not run" : st.status[])
-        txt = @sprintf("objective %.3g → %.3g", r.initial_value, r.value)
-        _optimum_stale(sess.beams.beams[], r) && return (:attention, "beams changed since: " * txt)
-        r.applied && return (:ok, txt * " · applied")
-        return (:attention, txt * " · not applied")
+        txt = @sprintf("%.3g → %.3g", r.initial_value, r.value)
+        _optimum_stale(sess.beams.beams[], r) && return (:attention, "out of date: " * txt)
+        r.applied && return (:ok, txt * ", applied")
+        return (:attention, txt * ", not applied")
     elseif task === :clearance
         rv = sess.review
         rv.running[] && return (:busy, "checking: $(rv.progress[][1]) of $(rv.progress[][2]) beams")
         rv.report[] === nothing && return (:todo, isempty(rv.status[]) ? "not run" : rv.status[])
-        txt = review_brief(rv)
+        rows = rv.report[].rows
+        txt = _counts_brief(rows) *
+              (isempty(rows) ? "" : @sprintf(" · worst %.3f mm", minimum(x -> x.clearance, rows)))
+        rv.report[].canceled && (txt = "partial: " * txt)
         review_stale(rv, sess.target.target[], active_beams(sess.beams)) &&
-            return (:attention, "beams or target changed since: " * txt)
+            return (:attention, "out of date: " * txt)
         bad = rv.report[].canceled || any(x -> x.status !== :pass, rv.report[].rows)
         return (bad ? :attention : :ok, txt)
     else
         tl = sess.talis
         tl.running[] && return (:busy, "checking… " * _seconds(time() - tl.started[]))
         tl.report[] === nothing && return (:todo, isempty(tl.status[]) ? "not run" : tl.status[])
-        txt = talis_brief(tl)
+        txt = _counts_brief(tl.report[].rows)
         talis_stale(tl, sess.target.target[], active_beams(sess.beams)) &&
-            return (:attention, "beams or target changed since: " * txt)
+            return (:attention, "out of date: " * txt)
         bad = any(x -> x.status !== :pass, tl.report[].rows)
         return (bad ? :attention : :ok, txt)
     end
+end
+
+# A check's outcome in a few words, for the model tree: "8 fail, 48 review", "all pass".
+function _counts_brief(rows)
+    isempty(rows) && return "no checks"
+    nf = count(x -> x.status === :fail, rows)
+    nr = count(x -> x.status === :review, rows)
+    parts = String[]
+    nf > 0 && push!(parts, "$nf fail")
+    nr > 0 && push!(parts, "$nr review")
+    return isempty(parts) ? "all pass" : join(parts, ", ")
 end
 
 # An optimization result no longer describes the beam table: its beams left the table

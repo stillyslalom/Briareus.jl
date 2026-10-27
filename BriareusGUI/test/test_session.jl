@@ -28,7 +28,7 @@ const SESS = DesignSession(resolution = :coarse)
     @test m[2].epsilon ≈ abs(m[2].legendre) rtol = 0.05        # nearly axisymmetric
     @test 1e14 < to_Wcm2(res.mean_flux) < 1e16
     @test occursin("capsule", drive_summary(res)) && occursin("ε₂", drive_summary(res))
-    @test task_status(sess, :drive)[1] === :ok
+    @test task_status(sess, :drive)[1] === :ok && startswith(task_status(sess, :drive)[2], "Tr ")
     # power accounting sums to the delivered power, less a residual below 1e-3 of it;
     # parts below that fraction share one row, as in `report`
     P = res.evaluation.deposition.delivered
