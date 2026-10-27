@@ -18,27 +18,27 @@ const _NU_EI = 4sqrt(2π) / 3 * _E_ESU^4 / (sqrt(_ME_G) * _EV_ERG^1.5)
 _critical_density(λ_µm) = π * _ME_G * _C_CM^2 / (_E_ESU^2 * (1e-4λ_µm)^2)
 
 """
-    CoronaProfile(r, ne, Te; Z, lnΛ, wavelength = 0.351)
+    CoronaProfile(r, ne_over_nc, Te; Z, lnΛ, wavelength = 0.351)
     CoronaProfile(; critical_radius, scale_length, absorption,
                   outer_radius = critical_radius + 14scale_length)
 
-A static, spherically symmetric laser corona for [`CoronaOperator`](@ref): the electron
-density `ne` relative to the critical density of the light, and the inverse-bremsstrahlung
-absorption rate, as functions of the radius from the target center.
+A static, spherically symmetric laser corona for [`CoronaOperator`](@ref), given by the
+electron density as a fraction ``n_e/n_c`` of the light's critical density (not in cm⁻³):
+that ratio and the inverse-bremsstrahlung absorption rate as functions of the radius from
+the target center.
 
 The first form tabulates a snapshot, such as a 1-D hydrodynamics output: radii `r` (mm,
-increasing, not necessarily uniform), `ne` (``n_e/n_c``, positive), electron temperature
-`Te` (eV), and the mean ionization `Z` and Coulomb logarithm `lnΛ` (each a number or a
-vector over `r`; no defaults). `wavelength` is the laser's vacuum wavelength (µm), which
-sets ``n_c``. The absorption rate per unit length of a ray, divided by its refractive
-index, is `(ν_ei/c)(n_e/n_c)` with ``ν_{ei}`` the electron–ion collision frequency of
-Kruer (*The Physics of Laser Plasma Interactions*, ch. 5),
-`2.91e-6 Z n_e lnΛ / T_e^{3/2}` s⁻¹ (``n_e`` in cm⁻³, ``T_e`` in eV). Both
-`ln(n_e/n_c)` and the logarithm of that rate are interpolated by cubic Hermite
-polynomials (three-point slopes), so an exponential profile is represented exactly; the
-profile is zero beyond `r[end]`. `ne[1] ≥ 1` is required: every ray must turn before the
-innermost radius (the light never reaches a hard surface, whose absorption the corona
-model does not include).
+increasing, not necessarily uniform), `ne_over_nc` (``n_e/n_c``, positive), electron
+temperature `Te` (eV), and the mean ionization `Z` and Coulomb logarithm `lnΛ` (each a
+number or a vector over `r`; no defaults). `wavelength` is the laser's vacuum wavelength
+(µm), which sets ``n_c``. The absorption rate per unit length of a ray, divided by its
+refractive index, is `(ν_ei/c)(n_e/n_c)` with ``ν_{ei}`` the electron–ion collision
+frequency of Kruer (*The Physics of Laser Plasma Interactions*, ch. 5),
+`2.91e-6 Z n_e lnΛ / T_e^{3/2}` s⁻¹ (``n_e`` in cm⁻³, ``T_e`` in eV). Both `ln(n_e/n_c)` and the logarithm of
+that rate are interpolated by cubic Hermite polynomials (three-point slopes), so an
+exponential profile is represented exactly; the profile is zero beyond `r[end]`.
+`ne_over_nc[1] ≥ 1` is required: every ray must turn before the innermost radius (the
+light never reaches a hard surface, whose absorption the corona model does not include).
 
 The second form is the analytic isothermal corona `n_e/n_c = exp(-(r - r_c)/L)` with
 `critical_radius` ``r_c`` and `scale_length` L (mm), truncated at `outer_radius`, whose
@@ -58,21 +58,21 @@ struct CoronaProfile
     dlrate::Vector{Float64}
 end
 
-function CoronaProfile(r::AbstractVector{<:Real}, ne::AbstractVector{<:Real},
+function CoronaProfile(r::AbstractVector{<:Real}, ne_over_nc::AbstractVector{<:Real},
                        Te::AbstractVector{<:Real}; Z, lnΛ, wavelength::Real = 0.351)
     n = length(r)
-    n >= 2 && length(ne) == n && length(Te) == n ||
-        throw(DimensionMismatch("r, ne and Te need the same length (at least 2)"))
+    n >= 2 && length(ne_over_nc) == n && length(Te) == n ||
+        throw(DimensionMismatch("r, ne_over_nc and Te need the same length (at least 2)"))
     for (name, v) in (("Z", Z), ("lnΛ", lnΛ))
         v isa Real || length(v) == n ||
             throw(DimensionMismatch("$name must be a number or a vector over r"))
     end
-    all(>(0), ne) && all(>(0), Te) && all(>(0), Z) && all(>(0), lnΛ) ||
-        throw(ArgumentError("ne, Te, Z and lnΛ must be positive"))
+    all(>(0), ne_over_nc) && all(>(0), Te) && all(>(0), Z) && all(>(0), lnΛ) ||
+        throw(ArgumentError("ne_over_nc, Te, Z and lnΛ must be positive"))
     wavelength > 0 || throw(ArgumentError("wavelength must be positive"))
     nc = _critical_density(wavelength)
-    rate = @. _NU_EI * Z * lnΛ * nc * ne^2 / Te^1.5 / (10 * _C_CM)     # mm⁻¹
-    return _corona_profile(collect(Float64, r), log.(Float64.(ne)), log.(Float64.(rate)))
+    rate = @. _NU_EI * Z * lnΛ * nc * ne_over_nc^2 / Te^1.5 / (10 * _C_CM)     # mm⁻¹
+    return _corona_profile(collect(Float64, r), log.(Float64.(ne_over_nc)), log.(Float64.(rate)))
 end
 
 function CoronaProfile(; critical_radius::Real, scale_length::Real, absorption::Real,
@@ -92,7 +92,7 @@ function _corona_profile(r, lne, lrate)
     r[1] > 0 || throw(ArgumentError("radii must be positive"))
     lne[1] >= 0 ||
         throw(ArgumentError("the profile must reach the critical density at its first radius " *
-                            "(ne[1] = $(exp(lne[1])) < 1): light would reach a hard surface"))
+                            "(ne_over_nc[1] = $(exp(lne[1])) < 1): light would reach a hard surface"))
     return CoronaProfile(r, lne, _hermite_slopes(r, lne), lrate, _hermite_slopes(r, lrate))
 end
 

@@ -8386,13 +8386,13 @@ each, a deposit at each panel's mid angle. Changes from the prototype:
   Cauchy–Schwarz (|h i − c₁| ≤ √qcut ‖(a e₁·e₁′, b e₂·e₁′)‖, plus one index); rays
   outside add exact zeros. Dual beams are screened on values, as in `deposit`; the dual
   path's values equal the Float64 path's bitwise (tested).
-- *Profiles*: `CoronaProfile(r, ne, Te; Z, lnΛ, wavelength)` tabulates a snapshot (the
+- *Profiles*: `CoronaProfile(r, ne_over_nc, Te; Z, lnΛ, wavelength)` tabulates a snapshot (the
   hook for the CompactLES example), cubic Hermite in ln(n_e/n_c) and ln of the rate with
   three-point slopes on a non-uniform grid, so exponential profiles are exact. Rate
   (ν_ei/c)(n_e/n_c) with Kruer's ν_ei = 4√(2π)Z e⁴ n_e lnΛ/(3 m_e^{1/2} T_e^{3/2}) from
   CODATA 2018 constants: 2.906e-6 Z n_e lnΛ/T_e^{3/2} s⁻¹ (n_e cm⁻³, T_e eV; the NRL
   Formulary's 2.91e-6), n_c = π m_e c²/(e²λ²) = 1.1149e21/λ² cm⁻³ (**H**, textbook
-  formulas). `ne[1] ≥ 1` is required (every ray turns inside the table; no hard
+  formulas). `ne_over_nc[1] ≥ 1` is required (every ray turns inside the table; no hard
   surface). `CoronaProfile(; critical_radius, scale_length, absorption)` is the analytic
   isothermal exponential, its rate set by the planar normal-incidence absorption η⊥ of
   `deposit(...; absorption)`, truncated at r_c + 14L by default.
