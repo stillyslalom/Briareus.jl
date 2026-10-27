@@ -291,7 +291,7 @@ intensity(b::Beam, x) = intensity(BeamFrame(b), x)
 """
     VisRadProfile(; envelope = nothing, focal_length = 7695.0, growth = 0.67, measured = true)
 
-VisRad's analytic beam model (VR/power_sources/set_laser_profile_props.html), for
+VisRad's analytic beam model (`VR/power_sources/set_laser_profile_props.html`), for
 deposition that reproduces VisRad 21's (`DepositionOperator(...; profile)`). The beam is
 not the focal spot convolved over the f-cone, as in Briareus's default model, but a
 super-Gaussian whose semi-axes a(z), b(z) and exponent n(z) change with the distance `z`
@@ -317,8 +317,8 @@ n,
 
     a(z) = a₀ √((z/z_A)² + 1),   z_A = (γ/ρ) FL [(FL / (2a₀ f#))² − 1]^(-1/2),
 
-and likewise b(z) with z_B, for final-optic distance `FL` (`focal_length`, mm; VisRad's
-port radius, 769.5 cm at NIF) and `growth` γ. The manual gives z_A without the factor
+and likewise b(z) with ``z_B``, for final-optic distance `FL` (`focal_length`, mm; VisRad's
+port radius, 769.5 cm at NIF) and `growth` γ. The manual gives ``z_A`` without the factor
 γ/ρ (`growth = nothing` uses it so). γ = 0.67 was fitted to VisRad's hohlraum
 deposition before the plates were measured (2.8% element rms there).
 
@@ -328,7 +328,7 @@ radius where the focal profile falls to 10⁻³ of its peak (it reproduces the N
 plates' ratios 1.53645, 1.49576, 1.27326 and 1.28955). `visrad_profile` takes the
 envelopes and focal length from a workspace.
 
-Not modeled: the blend toward a square beam (f_sq, zero for beams circular at the
+Not modeled: the blend toward a square beam (``f_{sq}``, zero for beams circular at the
 final optics, as NIF's behave), the envelope's own dependence on n(z) (the cut is at
 ρ in 1/e semi-axes; the profile there is ≲ 10⁻³ of peak), and occultation by VisRad's
 ray grid (here the beam axis through each point determines it).

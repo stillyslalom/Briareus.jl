@@ -23,7 +23,10 @@
 #   3. every exported or public name Briareus owns has a docstring, and each of its
 #      docstrings (signatures) is rendered by some block — stricter than `checkdocs`,
 #      which ignores an exported name with no docstring at all;
-#   4. no docstring is rendered twice (Documenter's "duplicate docs found").
+#   4. no docstring is rendered twice (Documenter's "duplicate docs found");
+#   5. the Markdown of every docstring, page and tutorial renders as written: no `_`
+#      emphasis from bare identifiers, paths or subscripts, no broken code spans (see
+#      `MDLint` below).
 #
 # Standalone: julia --project=. test/docrefs.jl. runtests.jl includes it first.
 
@@ -354,6 +357,150 @@ function check(; mods = MODULES, docs = docstrings(mods), texts = page_texts(),
     return (; unresolved, unknown_entries, undocumented, duplicates, captured)
 end
 
+# ---------------------------------------------------------------------------------------
+# Markdown that renders other than written
+# ---------------------------------------------------------------------------------------
+#
+# Documenter parses docstrings and pages with Julia's Markdown (the `julia` flavor), which
+# is not CommonMark: an `_` inside a word opens emphasis, so a bare path such as
+# VR/power_sources/x.html or a subscript such as n_e/n_c pairs with the next `_` in the
+# paragraph, italicizes the text between and drops both underscores; a code span the
+# emphasis swallowed half of then renders with literal backticks. The check parses each
+# text with that flavor, its emphasis, math and interpolation parsers wrapped to mark
+# what they produced, and walks the tree. Flagged:
+#   - `_`/`__` emphasis (intended emphasis is written `*...*`);
+#   - `*`/`**` emphasis opened inside a word (`T*` ... `P*`);
+#   - `$...$` math and `$name` interpolation (math is written ``...``);
+#   - a backtick or an HTML tag in rendered text (a code span that did not close; raw
+#     HTML, which this Markdown prints as text);
+#   - any other literal `_` in rendered text. It renders now, but the next `_` written in
+#     the same paragraph pairs with it: identifiers, paths and subscripts go in code
+#     (`n_e`) or math (``n_e``), or are escaped (`\_`).
+
+module MDLint
+
+using Markdown
+const MD = Markdown
+
+# A node produced by a wrapped parser, with the reason it was flagged.
+struct Flagged <: MD.MarkdownElement
+    kind::Symbol
+    node::Any
+end
+# A backslash escape (`\_`), whose character is meant literally.
+struct Escaped <: MD.MarkdownElement
+    char::String
+end
+
+prevchar(stream::IO) = position(stream) == 0 ? ' ' :
+    (skip(stream, -1); c = read(stream, Char); c)
+
+# `f`, its result wrapped as `Flagged(kind, ·)` (with `intraword`, only when the
+# delimiter follows a letter or digit).
+function flagging(f, kind; intraword = false)
+    g = function (stream::IO, md::MD.MD)
+        p = position(stream)
+        c = prevchar(stream)
+        seek(stream, p)
+        r = f(stream, md)
+        r === nothing && return nothing
+        intraword && !(isletter(c) || isdigit(c)) && return r
+        return Flagged(kind, r)
+    end
+    MD.triggers!(g, MD.triggers(f))
+    return g
+end
+
+function escaping(f)
+    g = (stream::IO, md::MD.MD) -> (r = f(stream, md); r === nothing ? nothing : Escaped(r))
+    MD.triggers!(g, MD.triggers(f))
+    return g
+end
+
+function blockmath(stream::IO, md::MD.MD)
+    MD.blocktex(stream, md) || return false
+    push!(md, Flagged(:dollar_math, pop!(md.content)))
+    return true
+end
+
+# The `julia` flavor with the parsers above swapped in.
+const FLAVOR = let jl = MD.julia
+    swap = Dict{Function,Function}(
+        MD.underscore_italic => flagging(MD.underscore_italic, :underscore_emphasis),
+        MD.underscore_bold => flagging(MD.underscore_bold, :underscore_emphasis),
+        MD.asterisk_italic => flagging(MD.asterisk_italic, :intraword_asterisk; intraword = true),
+        MD.asterisk_bold => flagging(MD.asterisk_bold, :intraword_asterisk; intraword = true),
+        MD.tex => flagging(MD.tex, :dollar_math),
+        MD.interp => flagging(MD.interp, :interpolation),
+        MD.escapes => escaping(MD.escapes))
+    inner = MD.InnerConfig(c => Function[get(swap, f, f) for f in fs] for (c, fs) in jl.inner)
+    MD.Config(Function[f === MD.blocktex ? blockmath : f for f in jl.breaking],
+              copy(jl.regular), inner)
+end
+
+const HTML_TAG = r"</?(?:a|b|i|em|strong|br|sub|sup|span|div|p|img|code|pre|table|tr|td|th|ul|ol|li|hr|h[1-6])\b[^>]*>"i
+const ADVICE = Dict(
+    :underscore_emphasis => "`_` opened emphasis (write intended emphasis as `*...*`; put identifiers, paths and subscripts in code or ``math``, or escape `\\_`)",
+    :intraword_asterisk => "`*` inside a word opened emphasis (escape it, `\\*`, or use code)",
+    :dollar_math => "`\$` math (write ``math``)",
+    :interpolation => "`\$` interpolation in Markdown (escape `\\\$` or use code)",
+    :backtick => "backtick in rendered text (a code span did not close; keep each span on one line, out of `_` emphasis)",
+    :html => "HTML tag in rendered text (printed as text)",
+    :underscore => "literal `_` in rendered text (the next `_` in the paragraph pairs with it: code, ``math`` or `\\_`)")
+
+excerpt(x) = (s = replace(x isa AbstractString ? x : MD.plain(MD.Paragraph(Any[x])), r"\s+" => " ");
+              s = strip(s); length(s) > 90 ? first(s, 87) * "..." : s)
+
+const SKIPPED_FIELDS = (:url, :category, :language, :align, :ordered, :loose, :id, :title)
+
+function walk!(out, x)
+    if x isa Flagged
+        push!(out, (x.kind, excerpt(x.node)))
+        walk!(out, x.node)
+    elseif x isa AbstractString
+        occursin('`', x) && push!(out, (:backtick, excerpt(x)))
+        occursin(HTML_TAG, x) && push!(out, (:html, excerpt(x)))
+        occursin('_', x) && push!(out, (:underscore, excerpt(x)))
+    elseif x isa Union{Escaped,MD.Code,MD.LaTeX,MD.HorizontalRule,MD.LineBreak,MD.Image}
+    elseif x isa Union{Expr,Symbol}
+        push!(out, (:interpolation, string(x)))
+    elseif x isa AbstractVector
+        foreach(y -> walk!(out, y), x)
+    elseif x isa Union{MD.MarkdownElement,MD.MD}
+        for f in fieldnames(typeof(x))
+            f in SKIPPED_FIELDS || walk!(out, getfield(x, f))
+        end
+    end
+    return out
+end
+
+"""
+    issues(text) -> Vector{Tuple{Symbol,String}}
+
+The places where the Markdown `text` renders other than written, as (kind, excerpt).
+"""
+issues(text::AbstractString) = walk!(Tuple{Symbol,String}[], MD.parse(text; flavor = FLAVOR))
+
+end # module MDLint
+
+"""
+    markdown_issues(; docs, texts) -> Vector{String}
+
+Every place in the docstrings `docs` and the page texts `texts` where the Markdown
+renders other than written (see `MDLint`), one line each.
+"""
+function markdown_issues(; docs = docstrings(), texts = page_texts())
+    out = String[]
+    for d in docs, (kind, s) in MDLint.issues(d.text)
+        push!(out, "docstring of `$(d.name)` ($(relpath(d.path, ROOT))): " *
+                   "$(MDLint.ADVICE[kind]): «$s»")
+    end
+    for (page, text) in texts, (kind, s) in MDLint.issues(text)
+        push!(out, "$(relpath(page, ROOT)): $(MDLint.ADVICE[kind]): «$s»")
+    end
+    return out
+end
+
 end # module DocRefs
 
 @testset "docs cross-references resolve" begin
@@ -370,4 +517,17 @@ end # module DocRefs
     @test isempty(r.unknown_entries)
     @test isempty(r.undocumented)
     @test isempty(r.duplicates)
+end
+
+@testset "docs Markdown renders as written" begin
+    bad = DocRefs.markdown_issues()
+    foreach(line -> @warn(line), bad)
+    @test isempty(bad)
+    # the guard itself: the failure it was written for, and text that must pass
+    lint = DocRefs.MDLint.issues
+    @test Set(first.(lint("See (VR/power_sources/x.html) and `visrad_spot`."))) ==
+          Set([:underscore_emphasis, :backtick])
+    @test isempty(lint("A *word*, **bold**, `a_b`, ``n_e``, a\\_b, [`f_g`](@ref) and\n\n```julia\nx_1 = 2\n```"))
+    @test first.(lint("n_e only")) == [:underscore]
+    @test :intraword_asterisk in first.(lint("T*a and P*b"))
 end

@@ -141,7 +141,7 @@ m = implosion_metrics([0.0, 0.0, 75.0]; vimp = 380, chi = 1.0)
         m.f, m.rke_fraction, m.yield_factor, m.alpha_factor, m.total)
 
 # α heating also amplifies the measured velocity. Nora et al. (Phys. Plasmas 30,
-# 092705, 2023) fit this as [`burn_amplification`](@ref)(Y_amp), about 1.8 at
+# 092705, 2023) fit this as [`burn_amplification`](@ref)(``Y_{amp}``), about 1.8 at
 # ``Y_{amp} = 30`` (their Table IV divides N210808's measured speed by 1.75). Kritcher
 # et al.'s burn-on/burn-off simulations give 1.27–1.39 for the 2022–23 shots, so the
 # fit is best read as an upper estimate. The stagnated shape changes it too:
@@ -267,7 +267,7 @@ for s in r.sources[1:3]
     @printf("  %-22s explains %5.1f%%\n", s.source, 100s.fraction)
 end
 
-# A χ²_ν of 4.5 shows that the nominal design does not explain the shot. Against the
+# A ``χ^2_ν`` of 4.5 shows that the nominal design does not explain the shot. Against the
 # spread the priors allow, 0.37, the shot is unremarkable. The inverse then shares the
 # blame by prior size. Three numbers do not separate a thicker shell from a brighter
 # opposite side. Here it puts about half the true thickness on x, a spurious thickness

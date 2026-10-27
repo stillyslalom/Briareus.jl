@@ -342,17 +342,17 @@ default the wall's Marshak loss (`WallLossAlbedo`).
 The default `T` is the gray-foil estimate of R. S. Lester et al., Phys. Rev. E 114,
 L023201 (2026), doi:10.1103/k8dz-pjdx: `T = 4/(3τ + 2)` (their eq. 2,
 `eddington_transmission`). The optical depth is their eq. 1, `τ = L/λ_Au(T_h)` at a
-fixed Rosseland mean free path λ_Au, scaled linearly in areal mass (`optical_depth`)
+fixed Rosseland mean free path ``λ_{Au}``, scaled linearly in areal mass (`optical_depth`)
 from their point `τ ∼ 5` at `L = 2.5 µm`:
 
     τ = 5 × ρ thickness / (19.3 g/cm³ × 2.5 µm),
 
 so `T ≈ 0.33`, `0.235` and `0.17` for 1.7, 2.5 and 3.6 µm of gold. Limitations:
-- λ_Au is held at their evaluation, for a hohlraum radiation temperature `T_h` of
+- ``λ_{Au}`` is held at their evaluation, for a hohlraum radiation temperature `T_h` of
   typically 300–350 eV and an assumed gold density of about 1 g/cm³ (the expanded
-  foil), so `T` is constant once burned through. `transmission =
-  RosselandTransmission()` lets λ_Au follow the temperature of the flux on the foil
-  instead; its density dependence is not modeled.
+  foil), so `T` is constant once burned through.
+  `transmission = RosselandTransmission()` lets ``λ_{Au}`` follow the temperature of the
+  flux on the foil instead; its density dependence is not modeled.
 - Pairing that density with the 2.5 µm as-built thickness is theirs. Taken literally,
   eq. 1 at 1 g/cm³ describes a layer of 0.25 mg/cm², not the foil's 4.8. The scaling
   with thickness (areal mass) is Briareus's own, from eq. 1.
@@ -789,21 +789,22 @@ sphere:
 so that the capsule mesh absorbs `(1 - α_c) H 4πR(t)²`, the absorption of the smaller
 sphere at the same incident flux, plus `a_out H 4π(R₀² - R(t)²)`, and passes the rest
 on (re-emitted from the mesh, an approximation of light crossing the shrunken capsule's
-surroundings). `albedo` α_c is a number or an `AlbedoModel` (`TabulatedAlbedo` in time,
+surroundings). `albedo` ``α_c`` is a number or an `AlbedoModel` (`TabulatedAlbedo` in time,
 `TemperatureAlbedo` in the incident radiation temperature); `radius` is `nothing`
 (R = R₀), a [`RadiusSchedule`](@ref) ([`TabulatedRadius`](@ref), [`ScaledRadius`](@ref)),
 a `(times, R/R₀)` table (ns; linear, held at its ends; stored as a `TabulatedRadius`) or
-a function `t -> R/R₀`. `outside` a_out (0 ≤ a_out ≤ 1, default 0) is the absorptance of the
-blow-off between the ablation front and `R₀` for the flux that misses the front: an
-explicit term for absorption outside the front (W-doped ablator plasma), unpublished, so
-0 unless a study sets it; with the default the model is the front's alone, and without a
-`radius` the term vanishes. `energy_balance` then books the capsule's absorbed power at
-the effective radius plus the outside term, and `energy_budget` its integral E_cap.
+a function `t -> R/R₀`. `outside` ``a_{out}`` (``0 ≤ a_{out} ≤ 1``, default 0) is the
+absorptance of the blow-off between the ablation front and `R₀` for the flux that misses
+the front: an explicit term for absorption outside the front (W-doped ablator plasma),
+unpublished, so 0 unless a study sets it; with the default the model is the front's
+alone, and without a `radius` the term vanishes. `energy_balance` then books the
+capsule's absorbed power at the effective radius plus the outside term, and
+`energy_budget` its integral ``E_{cap}``.
 
-The default α_c = 0.2 is the 0-D value f_cap = 1 − α_cap ≈ 0.8 of Swadling et al., PoP
-32, 052707 (2025). For a NIF HDC capsule in a drive history, Young et al.'s quasi-1D HYDRA
-ablator albedo (PoP 27, 082702 (2020) Fig. 3a, `young2020_albedos()`) is the published
-α_c(t); `examples/n221204.jl` uses it on N221204's time axis.
+The default ``α_c`` = 0.2 is the 0-D value ``f_{cap} = 1 - α_{cap} ≈ 0.8`` of Swadling et
+al., PoP 32, 052707 (2025). For a NIF HDC capsule in a drive history, Young et al.'s
+quasi-1D HYDRA ablator albedo (PoP 27, 082702 (2020) Fig. 3a, `young2020_albedos()`) is
+the published ``α_c(t)``; `examples/n221204.jl` uses it on N221204's time axis.
 """
 struct CapsuleAlbedo{F} <: AlbedoModel
     albedo::AlbedoModel
@@ -1156,7 +1157,7 @@ its incident x-ray flux is the flux escaping through it.
 
 With `closure`, a `GapClosure`, it is an opening that plasma closes to x-rays during the
 pulse while laser light and lines of sight still pass (the lip of a closing laser entrance
-hole, `hohlraum(; leh_closure)`): it re-emits the fraction α(t) = s α_after of its
+hole, `hohlraum(; leh_closure)`): it re-emits the fraction ``α(t) = s α_{after}`` of its
 incident flux and lets `1 - s` escape, booked as escaped by `energy_balance`. It
 converts no laser light. The Monte Carlo reference (`Briareus.montecarlo_incident`) lets
 paths escape through open apertures and re-emits them diffusely from a lip with the

@@ -35,7 +35,7 @@ Build one with [`capsule_drive`](@ref). Fields:
 
 The angular structure is that of the flux on the initial capsule radius; applying it
 at a moving ablation front far inside that radius changes the geometric smoothing
-(hydro_coupling.md §2, pitfall 2). Gray: no spectral (M-band) split yet (ROADMAP 13).
+(`hydro_coupling.md` §2, pitfall 2). Gray: no spectral (M-band) split yet (ROADMAP 13).
 """
 struct CapsuleDrive
     time::Vector{Float64}
@@ -100,16 +100,16 @@ end
                   ylm = history.ylm !== nothing, provenance = (;)) -> CapsuleDrive
 
 The capsule drive of a [`drive_history`](@ref) result for a capsule-only hydrodynamics
-run, on a uniform grid of spacing `≤ dt` (ns; 50 ps by default, hydro_coupling.md §(c))
-spanning the history's solved times, or on the given `times` (within them). The
+run, on a uniform grid of spacing `≤ dt` (ns; 50 ps by default, `hydro_coupling.md`
+§(c)) spanning the history's solved times, or on the given `times` (within them). The
 Legendre moments `aₗ` are interpolated linearly between the history's steps and
 divided by the interpolated `a₀`; `flux` is `a₀` and `Tr` its radiation temperature,
 exactly the history's `flux` and `Tr` at its own times. Run `drive_history(...; lmax = 8)`
 for the moments through `l = 8` the hand-over calls for; `lmax` here may only truncate.
 
-With `ylm` (the default when the history recorded them, `drive_history(...; ylm =
-true)`), the drive carries every `m` as well: the history's orthonormal coefficients
-`cₗₘ`, interpolated linearly like `aₗ`, become the Schmidt ratios
+With `ylm` (the default when the history recorded them,
+`drive_history(...; ylm = true)`), the drive carries every `m` as well: the history's
+orthonormal coefficients `cₗₘ`, interpolated linearly like `aₗ`, become the Schmidt ratios
 `bₗₘ = √((2l+1)/4π) cₗₘ / a₀` of the `ylm` field, whose `m = 0` rows are then set to
 `modes`, so the two agree exactly. (The history integrates its Legendre moments one
 sub-triangle level finer than its `Y_lm`; the replaced rows differ by less than 1e-3
