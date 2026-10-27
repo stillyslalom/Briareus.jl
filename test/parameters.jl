@@ -49,6 +49,9 @@ end
                     outer44 = (z = 5.20,), outer50 = (z = 5.01,))
     ev = evaluate(s, x0)
     @test mean_flux(ev) == flux_moments(ev)[1]
+    # a given model fixes the view factors: viewfactor_kw beside it is an error
+    @test_throws ArgumentError Scenario(t, p; observe = :capsule, model = s.model,
+                                        viewfactor_kw = (; closed = false))
 
     # report: one line per part above `minor` of the delivered power, the rest summed
     lpi = CalibratedTransfer((:outer44, :outer50), (:inner23, :inner30), linear_transfer(0.0, 0.05))

@@ -344,9 +344,9 @@ end
 _LazyResponse() = _LazyResponse(ReentrantLock(), nothing)
 
 """
-    Scenario(target, pointing::GroupPointing; observe = nothing, radiation = true,
-             time = 0.0, albedo = nothing, lpi = nothing, deposition_kw = (;),
-             viewfactor_kw = (;), model = nothing)
+    Scenario(target, pointing::GroupPointing; observe = nothing,
+             radiation = observe !== nothing, time = 0.0, albedo = nothing, lpi = nothing,
+             deposition_kw = (;), viewfactor_kw = (;), model = nothing)
     Scenario(target, beams; kwargs...)
     Scenario(target, parameterization; kwargs...)
 
@@ -375,8 +375,23 @@ response contracted with the Legendre (`lmax = 12`) and real-harmonic (`lmax = 6
 weights: per evaluation a 13 × n and a 49 × n product, and a 62-column solve at setup.
 The full observed × n response `scenario.response` (and an evaluation's `flux`) is
 computed when first read; on a large (iterative) model an evaluation's `flux` is one
-solve instead, until the response has been read. `model`, a `RadiationModel` of the
-target, is used instead of building one from `viewfactor_kw`.
+solve instead, until the response has been read.
+
+The operators' own options pass through two named tuples:
+- `deposition_kw` to [`DepositionOperator`](@ref): `profile` (a
+  [`VisRadProfile`](@ref): VisRad's beam model instead of the f-cone superposition),
+  `ncone` (f-cone directions, 13), `reach` (the aim motion, in mm, that the operator
+  stays accurate for, 2.0), `resolution`, `level`, `maxlevel` and `shadow` (the
+  quadrature's refinement);
+- `viewfactor_kw` to [`RadiationModel`](@ref) and through it to
+  [`view_factors`](@ref): `closed` (the closure correction; by default the target's own
+  declaration, which `hohlraum` makes), `F` (given view factors, e.g. those of a target
+  that differs only in its materials), `storage` (`Float64`, `Float32` or `:hmatrix`),
+  `solver`, `visibility` (`:centroid` or `:sampled`), `visibility_grid`, `level` and
+  `near`.
+
+`model`, a `RadiationModel` of the target, is used instead of building one; it excludes
+`viewfactor_kw` (an `ArgumentError`).
 """
 struct Scenario{P}
     target::Target
@@ -425,6 +440,8 @@ function _scenario(t::Target, beams::AbstractVector{<:Beam}, parameterization;
                    model = nothing)
     model === nothing || model.target === t ||
         throw(ArgumentError("model is a radiation model of another target"))
+    model === nothing || isempty(viewfactor_kw) ||
+        throw(ArgumentError("give a model or viewfactor_kw, not both (the model's view factors are fixed)"))
     op = DepositionOperator(t, beams; deposition_kw...)
     obs = observe === nothing ? Int[] : elements(t, (observe isa Symbol ? (observe,) : observe)...)
     model = !radiation ? nothing : model === nothing ? RadiationModel(t; viewfactor_kw...) : model
