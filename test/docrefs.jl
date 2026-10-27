@@ -381,14 +381,16 @@ module MDLint
 
 using Markdown
 const MD = Markdown
+# Markdown's node supertype (Julia 1.11 and later; on 1.10 the nodes subtype nothing).
+const Element = isdefined(MD, :MarkdownElement) ? MD.MarkdownElement : Any
 
 # A node produced by a wrapped parser, with the reason it was flagged.
-struct Flagged <: MD.MarkdownElement
+struct Flagged <: Element
     kind::Symbol
     node::Any
 end
 # A backslash escape (`\_`), whose character is meant literally.
-struct Escaped <: MD.MarkdownElement
+struct Escaped <: Element
     char::String
 end
 
@@ -466,7 +468,7 @@ function walk!(out, x)
         push!(out, (:interpolation, string(x)))
     elseif x isa AbstractVector
         foreach(y -> walk!(out, y), x)
-    elseif x isa Union{MD.MarkdownElement,MD.MD}
+    elseif x isa MD.MD || parentmodule(typeof(x)) === MD
         for f in fieldnames(typeof(x))
             f in SKIPPED_FIELDS || walk!(out, getfield(x, f))
         end
