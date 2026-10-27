@@ -49,4 +49,17 @@ end
                     outer44 = (z = 5.20,), outer50 = (z = 5.01,))
     ev = evaluate(s, x0)
     @test mean_flux(ev) == flux_moments(ev)[1]
+
+    # report: one line per part above `minor` of the delivered power, the rest summed
+    lpi = CalibratedTransfer((:outer44, :outer50), (:inner23, :inner30), linear_transfer(0.0, 0.05))
+    out = sprint(report, evaluate(Scenario(t, p; observe = :capsule, lpi), x0))
+    lines = split(out, '\n')
+    @test startswith(lines[1], "Setup laser power: 384 TW; after the laser–plasma model:")
+    @test startswith(lines[2], "  inner23 ")
+    @test count(l -> startswith(l, "  wall "), lines) == 1
+    @test count(l -> occursin("parts < 0.1%", l), lines) == 1
+    @test !occursin("cap_top_outside", out) && !occursin("imbalance", out)
+    full = sprint((io, e) -> report(io, e; minor = 0), ev)
+    @test occursin("cap_top_outside", full)
+    @test occursin("missed", full) || occursin("quadrature excess", full)
 end

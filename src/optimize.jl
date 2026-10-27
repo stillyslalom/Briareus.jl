@@ -920,31 +920,48 @@ function _gradient_chunk!(G, vals, f, x, seeds::NTuple{N,ForwardDiff.Partials{N,
 end
 
 """
-    report(ev; lmax = 6) -> nothing
+    report([io = stdout,] ev; lmax = 6, minor = 1e-3) -> nothing
 
-Print a power accounting and flux-moment summary of an evaluation.
+Print a power accounting and flux-moment summary of an evaluation: the setup and
+effective power per group when the scenario has a laser–plasma model; the delivered
+laser power and its split over the parts (`component_power`), with the parts below
+`minor` × the delivered power summed on one line; the residual, if not below that
+fraction; and the observed flux's mean ([`mean_flux`](@ref)), radiation temperature and
+Legendre moments `Pₗ/P₀` up to `lmax`.
+
+The residual is the delivered power minus the power absorbed and clipped: light that
+strikes no surface plus the deposition quadrature's error (`DepositionOperator`
+conserves each beam's power to 1e-4 when nothing clips). It prints as `missed` when
+positive and as `quadrature excess` when negative (the quadrature counts more power
+than the beams deliver).
 """
-function report(io::IO, ev::Evaluation; lmax::Integer = 6)
+function report(io::IO, ev::Evaluation; lmax::Integer = 6, minor::Real = 1e-3)
     d = ev.deposition
     P = ForwardDiff.value(d.delivered)
     if ev.scenario.lpi !== nothing
         Ps = sum(ForwardDiff.value(b.power) for b in ev.beams)
-        @printf(io, "Setup laser power: %.4g TW; after laser–plasma model:
-", Ps)
+        @printf(io, "Setup laser power: %.4g TW; after the laser–plasma model:\n", Ps)
         for (g, v) in sort(collect(lpi_summary(ev.beams, ev.effective)); by = first)
-            @printf(io, "  %-20s %9.4g → %9.4g TW  (×%.3f)
-", g, v.setup, v.effective, v.ratio)
+            @printf(io, "  %-20s %9.4g → %9.4g TW  (×%.3f)\n", g, v.setup, v.effective, v.ratio)
         end
     end
     @printf(io, "Delivered laser power: %.4g TW\n", P)
     cp = component_power(d, ev.scenario.target)
     missed = pop!(cp, :missed)
-    for (k, v) in sort(collect(cp); by = first)
-        v > 1e-6 * P && @printf(io, "  %-20s %9.4g TW  (%6.2f%%)\n", k, v, 100v / P)
+    rows = sort(collect(cp); by = first)
+    small = filter(kv -> abs(kv[2]) < minor * P, rows)
+    for (k, v) in rows
+        abs(v) < minor * P || @printf(io, "  %-20s %9.4g TW  (%6.2f%%)\n", k, v, 100v / P)
     end
-    # negative values are quadrature imbalance of the analytic deposition
-    abs(missed) > 1e-6 * P &&
-        @printf(io, "  %-20s %9.4g TW  (%6.2f%%)\n", missed > 0 ? "missed" : "imbalance", missed, 100missed / P)
+    if !isempty(small)
+        v = sum(last, small)
+        @printf(io, "  %-20s %9.4g TW  (%6.2f%%)\n",
+                string(length(small), length(small) == 1 ? " part" : " parts", " < ",
+                       100minor, "%"), v, 100v / P)
+    end
+    abs(missed) < minor * P ||
+        @printf(io, "  %-20s %9.4g TW  (%6.2f%%)\n", missed > 0 ? "missed" : "quadrature excess",
+                missed, 100missed / P)
     if _radiative(ev.scenario)
         a = ForwardDiff.value.(flux_moments(ev; lmax))
         @printf(io, "Observed flux: mean %.4g TW/mm² (%.4g W/cm², Tr = %.1f eV)\n", a[1],
