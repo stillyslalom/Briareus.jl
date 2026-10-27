@@ -11,7 +11,7 @@ ColumnLayout {
     Note {
         text: "The NIF target-configuration rules for each enabled beam: 3ω capture, incidence " +
               "and clearance, 1ω clearance and unconverted light, and the TAS stay-in zone, " +
-              "each judged on the worst case over the clearance error set plus the rule tolerance."
+              "each judged on the worst case over the clearance error set plus the rule tolerance (not on incidence)."
     }
     SectionLabel { text: "Components" }
     Repeater {

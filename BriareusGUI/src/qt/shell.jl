@@ -46,6 +46,9 @@ function _qt_init!()
         style = get(ENV, "QT_QUICK_CONTROLS_STYLE", "FluentWinUI3")
         ENV["QT_QUICK_CONTROLS_STYLE"] = style
         ccall((:_putenv_s, "msvcrt"), Cint, (Cstring, Cstring), "QT_QUICK_CONTROLS_STYLE", style)
+        ccall((:SetCurrentProcessExplicitAppUserModelID, "shell32"), Clong, (Cwstring,),
+              APP_USER_MODEL_ID)
+        _ENUM_QT_WINDOWS[] = _enum_qt_windows_ptr()
     end
     _QT_READY[] = true
     return
@@ -984,25 +987,56 @@ end
 const ICON_ICO = joinpath(QML_DIR, "icons", "briareus.ico")
 const _ICON_TRIES = Ref(0)
 
+# The taskbar identity of the process (Windows): set before the first window, it keeps
+# the window out of julia.exe's taskbar group, whose button shows julia.exe's icon.
+const APP_USER_MODEL_ID = "Briareus.DesignWindow"
+
 # Windows: show the icon in the title bar and taskbar. Qt Quick windows have no icon
-# property and QML.jl does not expose QGuiApplication's, so the icon is sent to the
-# window (found by its title) on the first ticks after it opens. Elsewhere the window
-# keeps the platform default.
-function _set_window_icon(title::AbstractString)
+# property and QML.jl does not expose QGuiApplication's, so the icon is sent to this
+# process's top-level Qt windows on the first ticks after the window opens, and set on
+# their window class, so that a native window Qt creates later carries it too. Windows
+# are found by process, not by title: the title changes while a design loads. Returns
+# true once a visible window has the icon. Elsewhere the window keeps the platform
+# default.
+function _set_window_icon()
     Sys.iswindows() || return true
-    hwnd = ccall((:FindWindowW, "user32"), Ptr{Cvoid}, (Ptr{Cvoid}, Cwstring), C_NULL, title)
-    hwnd == C_NULL && return false
-    for (which, metric) in ((0, 49), (1, 11))     # ICON_SMALL/SM_CXSMICON, ICON_BIG/SM_CXICON
+    empty!(_QT_HWNDS)
+    ccall((:EnumWindows, "user32"), Cint, (Ptr{Cvoid}, Int), _ENUM_QT_WINDOWS[], 0)
+    isempty(_QT_HWNDS) && return false
+    shown = false
+    for (which, index, metric) in ((0, -34, 49), (1, -14, 11))  # ICON_SMALL/GCLP_HICONSM/SM_CXSMICON, ICON_BIG/GCLP_HICON/SM_CXICON
         px = ccall((:GetSystemMetrics, "user32"), Cint, (Cint,), metric)
         icon = ccall((:LoadImageW, "user32"), Ptr{Cvoid},
                      (Ptr{Cvoid}, Cwstring, Cuint, Cint, Cint, Cuint),
                      C_NULL, ICON_ICO, 1, px, px, 0x10)      # IMAGE_ICON, LR_LOADFROMFILE
-        icon == C_NULL ||
+        icon == C_NULL && continue
+        for hwnd in _QT_HWNDS
+            ccall((:SetClassLongPtrW, "user32"), Csize_t, (Ptr{Cvoid}, Cint, Ptr{Cvoid}),
+                  hwnd, index, icon)
             ccall((:SendMessageW, "user32"), Ptr{Cvoid}, (Ptr{Cvoid}, Cuint, Csize_t, Ptr{Cvoid}),
                   hwnd, 0x0080, which, icon)                 # WM_SETICON
+            shown |= ccall((:IsWindowVisible, "user32"), Cint, (Ptr{Cvoid},), hwnd) != 0
+        end
     end
-    return true
+    return shown
 end
+
+const _QT_HWNDS = Ptr{Cvoid}[]
+
+# EnumWindows callback: collect this process's top-level Qt windows (class "Qt…QWindow…").
+function _collect_qt_window(hwnd::Ptr{Cvoid}, ::Int)::Cint
+    pid = Ref{UInt32}(0)
+    ccall((:GetWindowThreadProcessId, "user32"), UInt32, (Ptr{Cvoid}, Ref{UInt32}), hwnd, pid)
+    pid[] == getpid() || return 1
+    buf = Vector{UInt16}(undef, 256)
+    n = ccall((:GetClassNameW, "user32"), Cint, (Ptr{Cvoid}, Ptr{UInt16}, Cint), hwnd, buf, 256)
+    cls = transcode(String, buf[1:max(n, 0)])
+    startswith(cls, "Qt") && occursin("QWindow", cls) && push!(_QT_HWNDS, hwnd)
+    return 1
+end
+
+const _ENUM_QT_WINDOWS = Ref(C_NULL)
+_enum_qt_windows_ptr() = @cfunction(_collect_qt_window, Cint, (Ptr{Cvoid}, Int))
 
 # Returns 0 (nothing to draw), 1 (redraw the canvas), or 2 (close the window).
 function br_tick()
@@ -1011,7 +1045,7 @@ function br_tick()
     # Only thread 1 runs libuv's event loop, and it sits in Qt's exec(): pump it here.
     Base.process_events()
     if _ICON_TRIES[] > 0
-        _ICON_TRIES[] = _set_window_icon(get(sh.shown, "title", "")) ? 0 : _ICON_TRIES[] - 1
+        _ICON_TRIES[] = _set_window_icon() ? 0 : _ICON_TRIES[] - 1
     end
     if _ON_SHOWN[] !== nothing
         f, _ON_SHOWN[] = _ON_SHOWN[], nothing
