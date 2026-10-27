@@ -82,7 +82,7 @@ export HOTSPOT_VELOCITY_PER_PERCENT, mode1_vector, hotspot_velocity, ResponseKer
        yield_factor, alpha_factor, rke_fraction, reactivity_exponent, burn_amplification,
        shape_amplification, young2020_green, young2020_kernel, young2020_pulses, young2020_dropped_quads,
        implosion_metrics, mode1_tolerance, swing_metrics,
-       velocity_uncertainty, ntof_covariance, VelocityPenalty
+       velocity_uncertainty, ntof_covariance, infer_velocity_errors, VelocityPenalty
 export CapsuleDrive, capsule_drive
 
 include("geometry.jl")

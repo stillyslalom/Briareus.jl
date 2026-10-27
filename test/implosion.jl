@@ -152,7 +152,7 @@ end
     D = Vec3(0, 0, 0.02)
     shifted = [remake(b; aim = Vec3(b.aim) + D) for b in quads]
     vm = hotspot_velocity(evaluate(s, shifted))
-    ie = infer_errors(s, quads, vm; sigma = 0.5, pointing = 0.0, positioning = 0.05, thickness = 0.0)
+    ie = infer_velocity_errors(s, quads, vm; sigma = 0.5, pointing = 0.0, positioning = 0.05, thickness = 0.0)
     @test ie.positioning[3] ≈ 0.02 rtol = 0.05
     @test norm(ie.velocity.residual) < 2
     @test ie.velocity.chi2 ≈ sum(abs2, vm) / 0.25 / 3 rtol = 1e-6       # nominal is round
@@ -160,7 +160,7 @@ end
     # to a +x flux mode 1
     tt = Vec3(0.003, 0.0, 0.0)
     vt = 100 * 110 * tt
-    it = infer_errors(s, quads, vt; sigma = 1.0, pointing = 0.0, thickness = 0.01)
+    it = infer_velocity_errors(s, quads, vt; sigma = 1.0, pointing = 0.0, thickness = 0.01)
     @test it.thickness ≈ tt rtol = 0.01 atol = 1e-6
     @test it.sources[1].source == "capsule thickness"
     @test hotspot_velocity([1.0, 0.0, 0.0, 0.01])[1] < 0 < vt[1]

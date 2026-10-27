@@ -2571,7 +2571,7 @@ primary text read, **M** = abstract or secondary, **L** = inference or arithmeti
   - The shape term (Eq. 2) as transcribed does not give the stated 0.8–1.2 range for
     |P2| < 0.4 (0.19 at −0.4). *Resolved 2026-10-24*: that range is Table I's (3D);
     Eq. 2 is the 2D fit. Both are in `shape_amplification`.
-- **Thickness nuisance in `infer_errors`** (Casey 2021, **H**):
+- **Thickness nuisance in `infer_velocity_errors`** (Casey 2021, **H**):
   - 110 km/s per % of thickness mode 1 (simulated; 140 ± 30 measured), toward the
     thicker side.
   - The prior is 0.2 % per axis by default. *Derived* from ~0.15 µm metrology on a
