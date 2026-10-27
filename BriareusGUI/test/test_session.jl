@@ -29,9 +29,13 @@ const SESS = DesignSession(resolution = :coarse)
     @test 1e14 < to_Wcm2(res.mean_flux) < 1e16
     @test occursin("capsule", drive_summary(res)) && occursin("ε₂", drive_summary(res))
     @test task_status(sess, :drive)[1] === :ok
-    # power accounting sums to the delivered power
-    @test sum(p.power for p in res.power) ≈ res.evaluation.deposition.delivered rtol = 1e-6
-    @test any(p -> p.name == "wall", res.power)
+    # power accounting sums to the delivered power, less a residual below 1e-3 of it;
+    # parts below that fraction share one row, as in `report`
+    P = res.evaluation.deposition.delivered
+    @test sum(p.power for p in res.power) ≈ P rtol = 1e-3
+    @test any(p -> p.name == "Wall", res.power)
+    @test all(p -> abs(p.power) >= 1e-3 * P || occursin(" < ", p.name), res.power)
+    @test count(p -> occursin(" < ", p.name), res.power) <= 1
     # element fields (W/cm²)
     t = sess.target.target[]
     lv = element_values(res, :laser)
@@ -361,7 +365,7 @@ end
     res = sess.drive.result[]
     t = sess.target.target[]
     @test res isa DriveResult && res.evaluation.scenario.target === t
-    @test sum(p.power for p in res.power) ≈ res.evaluation.deposition.delivered rtol = 1e-6
+    @test sum(p.power for p in res.power) ≈ res.evaluation.deposition.delivered rtol = 1e-3
     @test any(p -> p.name == "window_1", res.power)
     @test all(isfinite, element_values(res, :radiosity))
     @test all(isnan, element_values(res, :laser)[elements(t, :window_2)])    # a hole

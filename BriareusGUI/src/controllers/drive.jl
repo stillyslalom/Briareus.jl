@@ -561,32 +561,49 @@ function _evaluate_drive(s::Scenario, beams, lookup, spot_radius::Real)
 end
 
 """
-    power_rows(ev::Evaluation) -> Vector{NamedTuple}
+    power_rows(ev::Evaluation; minor = 1e-3) -> Vector{NamedTuple}
 
-Laser power accounting rows `(; name, power, fraction)` (TW, fraction of delivered):
-each component's absorbed power, back-side (outside) losses, and missed power.
+Laser power accounting rows `(; name, power, fraction)` (TW, fraction of delivered), as
+`Briareus.report` prints them: each part's absorbed power and back-side (outside) loss,
+in the target's order and named as in the model tree, with the parts below `minor` × the
+delivered power summed on one row; then the residual (delivered less absorbed and
+clipped), when not below that fraction, as `missed` (positive: light that strikes nothing) or `quadrature excess`
+(negative: the deposition quadrature counts more power than the beams deliver).
 """
-function power_rows(ev::Evaluation)
+function power_rows(ev::Evaluation; minor::Real = 1e-3)
     t = ev.scenario.target
     d = ev.deposition
     P = d.delivered
+    frac(v) = P > 0 ? v / P : 0.0
     cp = component_power(d, t)                  # by part: the drive's fitted pieces summed
     ps = [p for p in Briareus.parts(t) if t.components[first(part_pieces(t, p))].kind !== :aperture]
-    rows = NamedTuple[]
-    for p in ps
-        v = get(cp, p, 0.0)
-        push!(rows, (; name = String(p), power = v, fraction = P > 0 ? v / P : 0.0))
-    end
+    label(p) = get(_COMPONENT_LABELS, p, String(p))          # as the model tree names it
+    parts = Tuple{String,Float64}[(label(p), get(cp, p, 0.0)) for p in ps]
     for p in ps
         k = Symbol(p, :_outside)
-        haskey(cp, k) && push!(rows, (; name = "$p (outside)", power = cp[k],
-                                      fraction = P > 0 ? cp[k] / P : 0.0))
+        haskey(cp, k) && push!(parts, (label(p) * " (outside)", cp[k]))
     end
+    rows = NamedTuple[]
+    small = 0
+    rest = 0.0
+    for (name, v) in parts
+        if abs(v) < minor * P
+            small += 1
+            rest += v
+        else
+            push!(rows, (; name, power = v, fraction = frac(v)))
+        end
+    end
+    small > 0 && push!(rows, (; name = string(small, small == 1 ? " part" : " parts", " < ",
+                                              _pct_text(minor)), power = rest, fraction = frac(rest)))
     m = get(cp, :missed, 0.0)
-    abs(m) > 1e-6 * P &&
-        push!(rows, (; name = m > 0 ? "missed" : "imbalance", power = m, fraction = P > 0 ? m / P : 0.0))
+    abs(m) < minor * P ||
+        push!(rows, (; name = m > 0 ? "missed" : "quadrature excess", power = m, fraction = frac(m)))
     return rows
 end
+
+# A fraction as a percentage without trailing zeros: 1e-3 → "0.1 %".
+_pct_text(x::Real) = _nobreak(string(round(100x; sigdigits = 3), " %"))
 
 # Text with a no-break space before each unit, so that a wrapped line keeps a number and
 # its unit together.
