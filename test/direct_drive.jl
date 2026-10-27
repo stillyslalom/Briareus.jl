@@ -1,4 +1,4 @@
-# Hard-sphere direct-drive illumination (polar direct drive, Stage 0; ROADMAP item 15 and
+# Hard-sphere direct-drive illumination (polar direct drive, Stage 0; ROADMAP "Polar direct drive" and
 # reference/litreview/polar_direct_drive.md): the deposition operator on a bare sphere
 # with collimated beams (`ncone = 1`) against independent references, and the
 # capsule-frame metrics `mode_rms` / `mode_power(C; m)` to l = 30.

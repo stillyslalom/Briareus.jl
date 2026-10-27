@@ -1,6 +1,6 @@
 # Late-time hohlraum drive and Dante after the laser falls: literature review (2026-10-25)
 
-ROADMAP item 16. After the laser power falls, Briareus's drive falls much faster than Dante 1
+ROADMAP, "Absolute energetics on N221204". After the laser power falls, Briareus's drive falls much faster than Dante 1
 on all three benchmark shots. Model minus measured over the initial LEH area, at 8.5 ns:
 N191118 −73 eV, N210601 −44 eV, N221204 −28 eV. At bang time Dante reads 226 / 254 eV on
 the Zylstra pair, the model 155 / 186 eV (research notes, "Zylstra 2022 LEH pair,

@@ -1,6 +1,6 @@
 # Hohlraum dynamics and the P2 swing: what a time-dependent view factor needs
 
-Literature review, 2026-10-22, for ROADMAP "Next 9" (time-dependent view factor) and
+Literature review, 2026-10-22, for ROADMAP "The P2 swing" (time-dependent view factor) and
 "Next 10" (shot calibration). Confidence follows `reference/research-notes.md`:
 **H** = primary text read (the full LLNL preprint or the journal text), **M** = abstract or
 secondary source only, **L** = our inference. Numbers marked *derived* are our own

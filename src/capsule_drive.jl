@@ -1,4 +1,4 @@
-# The drive handed to a capsule-only hydrodynamics run (ROADMAP 17, LLNL's two-step
+# The drive handed to a capsule-only hydrodynamics run (ROADMAP "Briareus → CompactLES", LLNL's two-step
 # method; reference/litreview/hydro_coupling.md §(c)).
 
 """
@@ -35,7 +35,7 @@ Build one with [`capsule_drive`](@ref). Fields:
 
 The angular structure is that of the flux on the initial capsule radius; applying it
 at a moving ablation front far inside that radius changes the geometric smoothing
-(`hydro_coupling.md` §2, pitfall 2). Gray: no spectral (M-band) split yet (ROADMAP 13).
+(`hydro_coupling.md` §2, pitfall 2). Gray: no spectral (M-band) split yet (ROADMAP "Spectral radiosity").
 """
 struct CapsuleDrive
     time::Vector{Float64}

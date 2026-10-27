@@ -1,4 +1,4 @@
-# CapsuleDrive: the drive handed to a capsule-only hydrodynamics run (ROADMAP 17).
+# CapsuleDrive: the drive handed to a capsule-only hydrodynamics run (ROADMAP "Briareus → CompactLES").
 
 @testset "capsule drive" begin
     t = hohlraum(nz = 10, nphi = 16, capsule_ntheta = 8, capsule_nphi = 12,

@@ -92,8 +92,8 @@ end
 # Remeshed CAD (`cad_half`, `cad_mirror`, `cad_sphere` from cadfit.jl, `facet_soup` from
 # meshops.jl): elements folded across many facets (48 per capsule element here). Their
 # sample cells' mean points lay behind a convex part's facets, which blocked 91% of the
-# capsule's sample rays: capsule row sums 0.03 (0.0–0.999) and flux 40× too low (ROADMAP
-# open question 13). Samples now lie on the facets, and an element's own facets do not
+# capsule's sample rays: capsule row sums 0.03 (0.0–0.999) and flux 40× too low (an open
+# question of 2026-10). Samples now lie on the facets, and an element's own facets do not
 # occlude its samples.
 @testset "sampled visibility on remeshed CAD" begin
     R, Rout, Rleh, h, th, rc = 2.875, 2.975, 1.55, 4.7, 0.05, 0.9

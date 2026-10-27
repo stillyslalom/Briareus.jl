@@ -988,8 +988,8 @@ test fixture rebuilds the layout from rows copied from these files.
   (`VisRadProfile`), gives 3.60041 TW on this ~40° foil. VisRad therefore also
   renormalizes each beam's deposited total, perhaps by its ray-grid capture fraction
   (1.00000 for all four beams here). **M**
-- **What would settle it.** The VisRad runs listed in ROADMAP, "VisRad deposition
-  parity". The intersection-point export (VR/files/laser_target_intpts_file.html:
+- **What would settle it.** The VisRad runs of the probe kits ("VisRad probe kits
+  (2026-10-27): results"). The intersection-point export (VR/files/laser_target_intpts_file.html:
   a(z), b(z), n(z), f_SQ(z), ΔL_W(z), ΔL_H(z), M(z) at each hit) gives the defocus law
   directly. Rerunning with the foil normal to the beams, where the distance from focus
   barely varies, separates the focal profile from that law.
@@ -2706,7 +2706,7 @@ Two surfaces move at different speeds, and a view-factor model should treat them
 
 ## Moving wall on keyframes (2026-10-23) *derived*
 
-`WallMotion` / `moving_hohlraum` / `Keyframes` (ROADMAP Next 9, first piece). The radiating
+`WallMotion` / `moving_hohlraum` / `Keyframes` (ROADMAP "The P2 swing", first piece). The radiating
 wall cylinder shrinks at `speed` from `start`; caps keep their planes, LEHs their radius,
 the capsule stays; mesh counts are frozen at R₀ so every time has the same elements.
 Between keyframes the exchange matrix Aᵢ Fᵢⱼ is interpolated linearly in time and divided
@@ -2814,7 +2814,7 @@ primary text read, **M** = abstract or secondary, **L** = inference or arithmeti
   - Young's G₁(t) and Masse's P2 kernels, which are printed only as figures. Briareus
     ships `flat_kernel` (flat over a window, the static sensitivity; *derived*) and
     takes user kernels.
-  - Time-dependent error budgets and multi-shot trending remain (ROADMAP 11).
+  - Time-dependent error budgets and multi-shot trending remain (ROADMAP "Implosion metrics and UQ").
 
 ## Closing entrance holes (2026-10-23)
 
@@ -2858,7 +2858,7 @@ primary text read, **M** = abstract or secondary, **L** = inference or arithmeti
 
 ## Inner-beam bubble absorption (2026-10-23)
 
-`BubbleAbsorption` (`src/bubble.jl`, ROADMAP Next 9, third piece; `test/bubble.jl`). A
+`BubbleAbsorption` (`src/bubble.jl`, ROADMAP "The P2 swing", third piece; `test/bubble.jl`). A
 laser–plasma model (`apply_lpi`), so it enters `drive_history(...; lpi)`,
 `Scenario(...; lpi)` and composes with CBET (`lpi = (cbet, bubble)`). Sources are in
 `reference/litreview/hohlraum_dynamics.md` §1 and "What Briareus should implement" §3.
@@ -2986,7 +2986,7 @@ laser–plasma model (`apply_lpi`), so it enters `drive_history(...; lpi)`,
 ## Mock HYBRID-E pointing (2026-10-23) *derived*
 
 `hybride_mock_pointing()` (`src/facilities.jl`, table `HYBRIDE_MOCK_POINTING`) is an
-illustrative HYBRID-E-like pointing for the N221204 benchmark (ROADMAP 16), not a facility
+illustrative HYBRID-E-like pointing for the N221204 benchmark (ROADMAP "Absolute energetics on N221204"), not a facility
 or shot pointing. The published papers give only relative statements about the HYBRID-E
 pointing (`n221204_benchmark.md`), so the rule is an engineering choice of the usual
 indirect-drive form.
@@ -3009,7 +3009,7 @@ indirect-drive form.
 
 ## N221204 time-dependent benchmark (2026-10-23) *derived*
 
-`examples/n221204.jl` (ROADMAP Next 9 and 16): capsule flux P2/P0(t) of an N221204-class
+`examples/n221204.jl` (ROADMAP "The P2 swing" and "Absolute energetics on N221204"): capsule flux P2/P0(t) of an N221204-class
 HYBRID-E hohlraum, each hohlraum-dynamics piece added in turn, against the HYDRA curve
 of PRE 109, 025204 Fig. 10 (N221204, post-CBET, digitized ±0.001 where visible, up to
 ±0.024 where covered; notes in the 2026-10-22 PRE 109 reading). These by-eye values are
@@ -3073,7 +3073,7 @@ them as they were run.
      default Mach-1 axial outflow Doppler-shifts the outer beams to the receiving side
      and overwhelms the 0.917 Å detuning. With (a) the static P2 is near zero and every
      dynamic piece pushes it positive, so (a) cannot show the swing; the comparison is
-     informative only with (b). This is the CBET item of ROADMAP Next 10: two crossing
+     informative only with (b). This is the CBET item of ROADMAP "Shot-data calibration": two crossing
      zones per LEH (outer → inner inside), plasma-state (flow, Te, ne) inputs and a
      multi-epoch `calibrate_cbet` against the published post-CBET per-cone powers
      (Fig. 9a/b, Fig. 1d) would fix it (done: "Two-zone CBET calibrated to PRE 109
@@ -3343,7 +3343,7 @@ of one (design intent, not metrology). **M**
 
 ## Hohlraum dynamics calibrated to published data (2026-10-24) *derived*
 
-ROADMAP Next 9 and 10. Each piece of the hohlraum dynamics (wall, LEH lips, bubble, ridge
+ROADMAP "The P2 swing" and "Shot-data calibration". Each piece of the hohlraum dynamics (wall, LEH lips, bubble, ridge
 stop, two-zone CBET) is refitted to its own published anchor. PRE 109 Fig. 10 is not used
 in any fit; it is the blind check at the end. Full texts are the accepted manuscripts.
 
@@ -3438,7 +3438,7 @@ to the same Fig. 9b data with Te ≤ 5.5 keV (`calibrate_cbet` with an upper bou
   0.01 at 4.75–5.5 ns) and moves the null to 0.05 Å: rejected.
 - Not adopted: `n221204_cbet()` is unchanged. Constraining Te trades one unfitted check
   (the null) for another (N210808). A joint fit to N210808 / N220919 with the null as a
-  constraint (ROADMAP 10) is what can fix the temperature scale. Done: "Joint multi-shot
+  constraint (ROADMAP "Shot-data calibration") is what can fix the temperature scale. Done: "Joint multi-shot
   CBET calibration (2026-10-24)" below. Te ≤ 5.5 keV costs the three-shot fit little; the
   null in 1–1.55 Å is what the cross-shot data resist.
 
@@ -3512,7 +3512,7 @@ calibration and hohlraum; N220919 on N221204's pulse with Δλ 2.5 Å; N210808 w
 N220919 behaves like N221204. N210808's proxy has a positive foot (+0.03 at 4 ns against
 −0.05) and a shallow minimum: its pulse and foot cone fraction are only approximated
 (N221204's DN24 powers, shifted), and the CBET calibration is N221204's (its Δλ
-sensitivity is ~2.5× HYDRA's across shots, ROADMAP 10).
+sensitivity is ~2.5× HYDRA's across shots, ROADMAP "Shot-data calibration").
 
 **Remaining discrepancies and likely causes.**
 - Crossing ~0.4 ns early: the HYBRID-E bubble speed (above), and the bubble plane:
@@ -3530,7 +3530,7 @@ sensitivity is ~2.5× HYDRA's across shots, ROADMAP 10).
 
 ## Young 2020 validation (2026-10-24) *derived*
 
-ROADMAP Next 9 ("validation still to run") and 11 (open items). Validation, not tuning: no
+ROADMAP "The P2 swing" (validation) and "Implosion metrics and UQ". Validation, not tuning: no
 calibrated default changed. Full texts were read; data digitized from them are
 in `data/` with provenance headers.
 
@@ -3569,7 +3569,7 @@ h 0.6 with the same tolerances):
 | capsule offset in the hohlraum, horizontal / vertical | 0.10 / 1.07 | 0.1 / 1.1 |
 
 **Findings.**
-- *Setup difference:* the ROADMAP 11 mismatches (inner/outer 1.3–1.6, horizontal offset
+- *Setup difference:* the ROADMAP "Implosion metrics and UQ" mismatches (inner/outer 1.3–1.6, horizontal offset
   0.60 km/s/µm) came from the implosion-metrics tutorial's hohlraum (10.1 × 5.75 mm,
   0.9 mm capsule, albedo 0.85, a static velocity at 100 km/s/%). A horizontal
   whole-target offset moves the inner and outer footprints so that their mode 1
@@ -3614,7 +3614,7 @@ delivered per-beam powers would settle it. The mean-difference numbers are on Yo
 scale (0.10 against 0.14 % at peak for a similar peak mode 1) but depend on the source's
 amplitude.
 
-**Nora 2023 (ROADMAP 11): the transcription, checked against the paper.**
+**Nora 2023 (ROADMAP "Implosion metrics and UQ"): the transcription, checked against the paper.**
 - Eq. 4's high branch is printed with rounded coefficients (13 ln(Y + 1585) − 95). The
   fit drawn in Fig. 6 has a = 13.105, b = 1585.225, c = −95.539; since ln(Y + b) ≈ 7.4,
   the rounding moves the result by −0.24 (1.43 against 1.67 at Y_amp = 80). The two
@@ -3665,7 +3665,7 @@ skipped (unpublished pointing).
 
 ## Wall material, conversion and capsule energetics (2026-10-24) *derived*
 
-ROADMAP Next 16's model changes, each with its data check. Full texts read (accepted
+ROADMAP "Absolute energetics on N221204": model changes, each with its data check. Full texts read (accepted
 manuscripts): Döppner et al., PRL 115,
 055001 (2015) (OSTI 1209256); Schein et al., PRL 98, 175003 (2007) (OSTI 908388); Rosen,
 "Fundamentals of ICF hohlraums" (2005, OSTI 885380), §VI; Callahan et al., PoP 27,
@@ -3854,7 +3854,7 @@ likely difference. The pair checks the trend only (*L*).
 
 ## Spectral radiosity, M-band and a synthetic Dante (2026-10-24) *derived*
 
-ROADMAP Next 13 and item 16's first absolute check. Read (accepted
+ROADMAP "Spectral radiosity" and the first absolute check of "Absolute energetics on N221204". Read (accepted
 manuscripts): Dewald et al., "Direct measurement of
 hohlraum M-band preheat asymmetry at the ICF capsule", PoP 27 (2020), LLNL-JRNL-813556;
 Rubery et al., "Soft x-ray power diagnostics for fusion experiments at NIF, Omega and Z
@@ -3977,7 +3977,7 @@ N221204 (`examples/n221204.jl` full model, standard mesh, default energetics):
 
 ## Capsule drive hand-over and CompactLES stage 0 (2026-10-24) *derived*
 
-ROADMAP Next 17, stage 0. Sources: `reference/litreview/hydro_coupling.md` (all
+ROADMAP "Briareus → CompactLES", stage 0. Sources: `reference/litreview/hydro_coupling.md` (all
 literature numbers below are from there, with its confidence marks). Confidence here:
 **L** our construction, *calibrated* as marked.
 
@@ -4166,7 +4166,7 @@ is model-dependent.
 
 ## Large radiation models (2026-10-24) *derived*
 
-ROADMAP 14. Goal: make 1e4–5e4-element radiation models (the fine hohlraum preset,
+ROADMAP "Scale". Goal: make 1e4–5e4-element radiation models (the fine hohlraum preset,
 remeshed CAD) practical on a laptop (Ryzen 9 4900HS, 4 threads of 8 used, 16 GB, another
 job sharing the machine). Workload, as a design session runs it: the GUI NIF hohlraum
 (10.1 × 2.875 mm, LEH 1.55, capsule 0.9) with a `WallLossAlbedo` wall, NIF quads;
@@ -4282,7 +4282,7 @@ products, block GMRES, solve/flux_response/duals/drive_history/Scenario gradient
 
 ## Hierarchical view factors (2026-10-24) *derived*
 
-ROADMAP 14, the step after "Large radiation models": view factors whose assembly and
+ROADMAP "Scale", the step after "Large radiation models": view factors whose assembly and
 storage do not grow as N², as another matrix type (`HMatrix`, `src/hmatrix.jl`) that the
 iterative path uses through products only. `view_factors(t; storage = :hmatrix)`,
 `RadiationModel(t; storage = :hmatrix)`, and `RadiationModel`'s default above
@@ -4418,7 +4418,7 @@ The precompile workload runs a hierarchical model (leaves of 16) on its coarse h
 
 ## The H-matrix's N^1.5 remainder (2026-10-25) *derived*
 
-ROADMAP 14, the three open items above. Same workload, machine and script as
+ROADMAP "Scale", the three open items above. Same workload, machine and script as
 "Hierarchical view factors" (the session's scratchpad `hmat2/`: `attr.jl` time
 attribution, `bench2.jl`, `vf.jl` interleaved timings, `rowchk.jl`); several other Julia
 jobs shared the machine, so before/after times below are from runs interleaved in one
@@ -4537,7 +4537,7 @@ largest, and the 3.9k hohlraum at leaves of 32, 2.3e-5 before, now matches to 1.
 
 ## H-matrix near field: zero blocks and cut rows (2026-10-26) *derived*
 
-ROADMAP 14, the first "still open" item above. Measured here (same hohlraum workload and
+ROADMAP "Scale", the first "still open" item above. Measured here (same hohlraum workload and
 `bench3.jl`-style script, 4 threads, `tol` 1e-6, leaf 48; old = 1f20b2d). Two changes:
 
 1. **All-zero blocks dropped.** A dense leaf pair or scattered block whose Float32
@@ -4604,7 +4604,7 @@ bit in general.
 
 ## H-matrix near-field quadrature: where the time goes (2026-10-27) *derived*
 
-ROADMAP 14, "the near-field quadrature itself". Same workload (`bench3.jl`, 4 threads
+ROADMAP "Scale", "the near-field quadrature itself". Same workload (`bench3.jl`, 4 threads
 pinned to one CCX, `tol` 1e-6, leaf 48); old = d238f5d, timed interleaved in one sitting
 (other jobs on the machine's other CCX, so absolute times run ~15 % above the previous
 sections').
@@ -4679,7 +4679,7 @@ certificates for the rays; fewer ACA give-ups), not cheaper ones.
 
 ## Near flat pairs by the double contour (2026-10-27) *derived*
 
-ROADMAP 6, "Adjacent flat CAD pairs". Scripts in the session scratchpad `adj/`
+ROADMAP "CAD", "Adjacent flat CAD pairs". Scripts in the session scratchpad `adj/`
 (`workloads.jl`: mock-ups only — a closed box of primitive quads, the flat and fitted
 remeshed CAD hohlraum of the "Radiation in an imported CAD hohlraum" tutorial at
 0.5/0.15 mm, the 2,000-strip sliver tube remeshed at 0.6; `profile.jl`, `compare.jl`,
@@ -4767,7 +4767,7 @@ far tiers). Confidence: the method and the closed forms **H**; the ρ thresholds
 
 ## H-matrix visibility certificates (2026-10-27) *derived*
 
-ROADMAP 14, "rim certificates for non-convex occluders". Workloads: `bench3.jl`'s hohlraum
+ROADMAP "Scale", "rim certificates for non-convex occluders". Workloads: `bench3.jl`'s hohlraum
 (10,484 and 17,632 elements) and a target where rims occlude, the bored cavity of
 `test/partial_visibility.jl` (LEH bores, cap washers, a 20 µm waist gap with its washers;
 latitude–longitude capsule) at `hw = 0.18, hc = 0.07` (11,360 elements). 4 threads pinned
@@ -4993,7 +4993,7 @@ timings; the gap-certificate estimate is **M**.
 
 ## Near sector pairs by the double contour with arcs (2026-10-27) *derived*
 
-ROADMAP 14, "the bored cavity's gap pairs". Scripts in the session scratchpad `gap/`
+ROADMAP "Scale", "the bored cavity's gap pairs". Scripts in the session scratchpad `gap/`
 (`share.jl`, `attr.jl`, `near.jl`, `ref.jl`, `cmp.jl`, `blocks.jl`, `nocap.jl`); 4 threads
 pinned to one CCX, old = fb62e1b from an exported copy, run back to back (not
 interleaved; other jobs on the other CCX).
@@ -5105,7 +5105,7 @@ moved by it; nothing is refitted.
 
 ## Prism certificates for the waist gap (2026-10-26) *derived*
 
-ROADMAP 14, "a certificate for the wall rays through the waist gap". Workload: the
+ROADMAP "Scale", "a certificate for the wall rays through the waist gap". Workload: the
 `:sampled` bored cavity of "H-matrix visibility certificates" (`bored_cavity(hw = 0.18,
 hc = 0.07)`, 11,360 elements), `tol` 1e-6, leaf 48, 4 threads pinned to one CCX; old =
 3fcf470 from an exported copy, interleaved (another job shared the CCX at times: builds
@@ -5183,7 +5183,7 @@ certificate work itself (a gap–wall pair is 256 segments through up to six par
 
 ## N221204 late-time drive (2026-10-24) *derived*
 
-ROADMAP 16. Two results of the N221204 benchmark (`examples/n221204.jl`) disagreed about
+ROADMAP "Absolute energetics on N221204". Two results of the N221204 benchmark (`examples/n221204.jl`) disagreed about
 the late drive. (a) Default energetics: capsule Tr peaked at 301.8 eV at 5.5 ns and was
 flat to 8 ns; synthetic Dante 1 (open LEH area) peaked at 306 eV at 6.25 ns; measured
 Dante 1 rises to 312 eV at 8.3 ns. (b) `energetics=new`: capsule Tr 334 eV at 8 ns and an
@@ -5340,7 +5340,7 @@ rise; the DU wall adds 5–8 eV throughout. The capsule model takes the late P2 
 - **Capsule share** 11.6 % against 16.2 % with α_c 0.22, which was calibrated on the
   old, too hot drive. Even α_c = 0 would give only ~15 %, so 16.2 % needs a larger
   effective radius than the ablation-front schedule, not a lower albedo. The
-  recalibration is still open (ROADMAP 16) and is not done here.
+  recalibration is still open (ROADMAP "Absolute energetics on N221204") and is not done here.
 - **Default energetics** (Au, η 0.75, the capsule at R₀) now under-drive the peak
   (capsule Tr 283 eV at 8 ns, Dante 270 / 292 eV). `energetics=new` is the configuration
   that matches Dante's level and shape through 8 ns and the LEH share. The example's
@@ -5349,7 +5349,7 @@ rise; the DU wall adds 5–8 eV throughout. The capsule model takes the late P2 
 
 ## Wall re-emission and the capsule radius (2026-10-24) *derived*
 
-ROADMAP 16, the two open items of "N221204 late-time drive": (1) after the laser droop
+ROADMAP "Absolute energetics on N221204", the two open items of "N221204 late-time drive": (1) after the laser droop
 (8.05 ns) the model's drive fell with the power while Dante 1 holds 311 eV to 8.6 ns;
 (2) the capsule share, 11.6 % against HYDRA's 16.2 %. Dante 1 and Fig. 10 are checks
 here, never fit. All runs `examples/n221204.jl ... full energetics=new` (the full model:
@@ -5529,7 +5529,7 @@ Split with the release: wall 62.7 / LEH 25.6 / capsule 11.7 % of the coupled ene
 
 ## Computed LEH closure (2026-10-24) *calibrated*
 
-ROADMAP 9 ("a computed lip closure") and the late-drive suspects of ROADMAP 16 ("Wall
+ROADMAP "The P2 swing" ("a computed lip closure") and the late-drive suspects of ROADMAP "Absolute energetics on N221204" ("Wall
 re-emission and the capsule radius": the LEH closing faster after the laser turns off,
 the energy stored in the hohlraum plasma). The prescribed lips (`GapClosure`, Young's
 ramp shifted 0.8 ns) stay available and remain the example's default; the computed one
@@ -5717,7 +5717,7 @@ hohlraum plasma (He gas, gold blow-off) and given back after the droop has no st
 
 ## Backlighter foil on the line of sight (2026-10-24) *derived*
 
-ROADMAP Next 2, second half. `backlighter_foil(los; standoff, width, height, tilt,
+ROADMAP "Backlighter geometry", second half. `backlighter_foil(los; standoff, width, height, tilt,
 tilt_toward, rotation)` and `line_of_sight(target, los; ...) -> LineOfSightReport`
 (`src/backlighter.jl`, `test/backlighter.jl`), used in the radiography tutorial
 (`docs/literate/dropped_bundle.jl`).
@@ -5770,7 +5770,7 @@ tilt_toward, rotation)` and `line_of_sight(target, los; ...) -> LineOfSightRepor
 
 ## Joint multi-shot CBET calibration (2026-10-24) *derived*
 
-ROADMAP 10 (CBET bullets). `n221204_cbet()` was fitted to one HYDRA run of one shot; its
+ROADMAP "Shot-data calibration" (CBET bullets). `n221204_cbet()` was fitted to one HYDRA run of one shot; its
 Te(t) reaches 7.4 keV and a Te ≤ 5.5 keV refit fitted Fig. 9b as well but moved the Δλ
 null from 1.2 to 0.5 Å ("Hohlraum dynamics calibrated", above). Here the two-zone model is
 fitted to three shots at three detunings at once, with the published constraints as
@@ -6090,7 +6090,7 @@ reproduce the previous section's rows to the last digit. Nothing was fitted to F
 
 ## Backlighter conversion efficiency and the photometric chain (2026-10-24) *engineering*
 
-ROADMAP Next 12. `kshell_line_energy`, `kshell_ce_data`, `kshell_ce_model`, `kshell_ce`,
+ROADMAP "Backlighter physics". `kshell_line_energy`, `kshell_ce_data`, `kshell_ce_model`, `kshell_ce`,
 `mass_attenuation`, `filter_transmission`, `backlighter_signal` (`src/backlighter_signal.jl`,
 `test/backlighter_signal.jl`, `data/kshell_ce.csv`); used in the radiography tutorial
 (`docs/literate/dropped_bundle.jl`, "The radiograph's signal") and `examples/backlighter.jl`.
@@ -6214,7 +6214,7 @@ section.
 
 ## Weighted He-α CE compilation (2026-10-26) *engineering*
 
-ROADMAP 12, "a weighted, larger low-Z compilation (Ti, V)". `data/kshell_ce.csv` grows
+ROADMAP "Backlighter physics", "a weighted, larger low-Z compilation (Ti, V)". `data/kshell_ce.csv` grows
 from 42 to 74 rows (68 fitted, from 37); `kshell_ce_model` becomes a weighted fit with a
 `tau` field. The fit numbers follow from the CSV; `test/backlighter_signal.jl` asserts
 the weighting and the C19 held-out check.
@@ -6435,7 +6435,7 @@ gradient behind σ against central differences, the optimum a maximum, the hν s
 
 ## Dante channel responses and the unfold (2026-10-24) *derived*
 
-ROADMAP 13, what remained of the synthetic Dante: the 18 Dante 1 channels built from
+ROADMAP "Spectral radiosity", what remained of the synthetic Dante: the 18 Dante 1 channels built from
 their hardware in place of Gaussians, the Dante unfold, and XRD lines of sight
 (`src/xray_optics.jl`, `src/dante_response.jl`, `examples/dante_channels.jl`,
 `test/dante_response.jl`). Read: Rubery et al., RSI (2023), OSTI 1975922 (Fig. 4
@@ -6634,7 +6634,7 @@ on the hohlraum axis chosen per shot and is left to `DanteView`.
 
 ## Laser-spot spectrum (2026-10-24) *derived*
 
-ROADMAP 13: the finding above ("hot laser spots"). `spectral_solve` split each
+ROADMAP "Spectral radiosity": the finding above ("hot laser spots"). `spectral_solve` split each
 element's whole source as a Planckian at the brightness temperature (B/σ)^¼ of its total
 radiosity. On a laser spot B = ηI + αH with ηI ≈ 1.1 × 10¹⁵ W/cm² at the outer cones'
 1.5 × 10¹⁵, so a ~300 eV cavity put its spots at ~365 eV, whose Planck tail alone holds
@@ -6774,7 +6774,7 @@ matched to < 5e-4.
 
 ## Zylstra 2022 LEH pair, time-dependent (2026-10-25) *derived*
 
-ROADMAP 16: the LEH-size pair run with each shot's measured pulse, the remaining
+ROADMAP "Absolute energetics on N221204": the LEH-size pair run with each shot's measured pulse, the remaining
 N221204 benchmark targets (bang time, hot-spot P2 and velocity), and the example's
 default energetics. Dante, Fig. 10, the hot-spot data and HYDRA's split are checks
 here; nothing was fitted to them. Confidence: **H** for the primary text or the figure's
@@ -6893,7 +6893,7 @@ gold blow-off in Dante's view; the wall's re-emission when the drive is fully cu
 analysis that differs after laser-off. The pair, with N191118's laser off 1 ns before
 bang, is the cleanest data for it. Open.
 
-### 3. Bang time and the hot spot (ROADMAP 11 metrics)
+### 3. Bang time and the hot spot (ROADMAP "Implosion metrics and UQ" metrics)
 
 `examples/n221204.jl metrics=on`: the steps run on to bang time, the full model records
 every Y_lm, and the metrics use the drive window from the start of the rise
@@ -6959,7 +6959,7 @@ the late drive, on Fig. 10, on the hot-spot transfer and on HYDRA's LEH share. T
 energetics win on the level only if the lips are taken to glow like the wall (open
 area), and on the capsule share. That share is HYDRA's, a model, and `energetics=new`
 calibrated α_c on a drive that was then too hot, so it is a recalibration issue
-(ROADMAP 16), not evidence for the old physics. **Decision**: `examples/n221204.jl` now
+(ROADMAP "Absolute energetics on N221204"), not evidence for the old physics. **Decision**: `examples/n221204.jl` now
 defaults to `energetics=new`; `energetics=old` restores the 2026-10-24 settings. Untagged
 runs and CSVs before 2026-10-25 used the old energetics. No src default changed: the
 pieces stay opt-in (`du_wall_loss`, `nif_conversion`, `CapsuleAlbedo` are
@@ -6978,7 +6978,7 @@ velocity check (needs per-quad delivered powers or window geometry).
 
 ## Deposition-operator rays and sliver view factors (2026-10-25) *derived*
 
-ROADMAP 14. The test-suite profile found two costs: building a `DepositionOperator`
+ROADMAP "Scale". The test-suite profile found two costs: building a `DepositionOperator`
 (~6 s per 48-quad and ~22–30 s per 192-beam operator on one thread, almost all in the
 visibility rays of every triangle × cone direction × beam) and the view factors of
 cavities with sliver elements (the bored cavity's 20 µm waist gap: 70–80 % of its
@@ -7086,7 +7086,7 @@ arcs, "Near sector pairs by the double contour with arcs".)
 
 ## Energetics defaults and the capsule share (2026-10-25) *calibrated*
 
-ROADMAP 16. The user's decisions: the published ("new") energetics become the defaults
+ROADMAP "Absolute energetics on N221204". The user's decisions: the published ("new") energetics become the defaults
 wherever they are the physics Briareus uses, the old paths go without deprecation, and
 the constants calibrated on the old, too reflective wall (constant-T loss at the time
 since the pulse start, before "N221204 late-time drive") are recalibrated. Dante 1,
@@ -7241,7 +7241,7 @@ f = 0.836, wall history and re-emission, 11 % degradation, measured backscatter,
 
 ## Late-time drive: the wall, the plasma and Dante (2026-10-25) *derived*
 
-ROADMAP 16, the late-time drive ("Zylstra 2022 LEH pair, time-dependent" §2): after the
+ROADMAP "Absolute energetics on N221204", the late-time drive ("Zylstra 2022 LEH pair, time-dependent" §2): after the
 laser falls the model's drive falls far faster than Dante on all three shots. Literature
 in `reference/litreview/late_time_drive.md`. Dante, Fig. 10 and HYDRA's Tr are checks
 here; nothing was fitted to them. Confidence: **H** primary text, **H-img** read from a
@@ -7363,7 +7363,7 @@ coarse mesh; measured Dante in the last column:
   against brightness temperature, the >1.8 keV share) between laser-off and bang;
   Moody 2017's cooling constant (closed access); gated LEH/bubble images after
   laser-off.
-- **Decision needed** (ROADMAP 16): whether `release` 1.0 (the ablating-wall
+- **Decision needed** (ROADMAP "Absolute energetics on N221204"): whether `release` 1.0 (the ablating-wall
   calibration) becomes the default. Not changed here. *Decided: 1.0 is the default
   ("Capsule absorption, conversion and the ablating-wall release").*
 
@@ -7375,7 +7375,7 @@ coarse mesh; measured Dante in the last column:
 > at 6 ns is 0.84 R₀, not 0.79 ("Capsule radius schedules: published histories and the
 > API (2026-10-26)"). The runs and their numbers stand.
 
-ROADMAP 9 ("what remains"). The N221204 flux P2/P0 swing turns positive ~0.45 ns before
+ROADMAP "The P2 swing" ("what remains"). The N221204 flux P2/P0 swing turns positive ~0.45 ns before
 PRE 109 Fig. 10 and its minimum comes ~0.3 ns early. Each published input that bears
 on it is checked here for how far it moves the upward zero crossing and the minimum.
 Fig. 10 is the blind check throughout: nothing below is fitted to it, and no default
@@ -7535,7 +7535,7 @@ default; `capsule=mesh` stays off.*
 > `RadiusSchedule`s, bit for bit the same ("Capsule radius schedules: published
 > histories and the API (2026-10-26)"). The numbers stand.
 
-ROADMAP 16 (and 9): the user's four decisions of 2026-10-25 on "Energetics defaults and
+ROADMAP "Absolute energetics on N221204" (and 9): the user's four decisions of 2026-10-25 on "Energetics defaults and
 the capsule share", "Late-time drive" and "The P2 swing", implemented together. Dante 1,
 PRE 109 Fig. 10 and HYDRA's 16.2 % capsule share are checks here; nothing is fitted to
 them. Runs: `examples/n221204.jl 0.8 0.4 full <transfer> x calibrated <shot> metrics=on`
@@ -7662,7 +7662,7 @@ drive" §3 (α_c 0, `young` schedule, the same wall otherwise):
 *Decided 2026-10-26 (user): `outside` stays 0 until a blow-off opacity or absorbing
 radius is published (a candidate for the 13.8 vs 16.2 % capsule share); the pair's
 K24-shaped schedule is accepted, labeled derived, with room in the API for other
-schedules (research pending, ROADMAP 16).*
+schedules (research pending, ROADMAP "Absolute energetics on N221204").*
 
 - Whether to set `outside_absorptance` (a_out ≈ 0.1–0.2 would close HYDRA's share on the two
   bounds) without a published blow-off opacity or absorbing radius; it is 0.
@@ -7731,7 +7731,7 @@ field of the history, `isequal`). `optimize_pointing` (default NIF hohlraum, kee
 8 iterations): 0.379 vs 0.389 s, `x`, value and evaluation count bitwise equal.
 
 **Not done.** The GUI's 0.75 s first-import tick and 0.16 s first field-coloring frame
-(ROADMAP 7) were not measured (they need the Qt window); the GUI's time panel and drives
+(ROADMAP "GUI on CAD") were not measured (they need the Qt window); the GUI's time panel and drives
 call `drive_history`/`optimize_pointing` with their own closures and now reuse the
 package's precompiled copies. `view_factors` on a CAD target still compiles ~2 s at
 first call when its parts differ from the workload's (sampled visibility on other
@@ -7778,7 +7778,7 @@ uses it (CAD import the most, 25 s), against 42 s off every rebuild for everyone
 
 ## Inner-cone SBS time histories and the late-time refraction (2026-10-25) *derived*
 
-ROADMAP 9 and 16. Literature: `reference/litreview/inner_cone_sbs.md` (Kemp et al., PoP
+ROADMAP "The P2 swing" and "Absolute energetics on N221204". Literature: `reference/litreview/inner_cone_sbs.md` (Kemp et al., PoP
 33, 082705 (2026), doi:10.1063/5.0320730, accepted manuscript OSTI 3441608; the AAC 2025
 talk, OSTI 3388898; Higginson et al., PRL 134, 165101 (2025); Izumi et al., RSI 95,
 103510 (2024); Kemp et al., PoP 31, 042707 (2024), outer cones). Fig. 10 and Dante are
@@ -7900,8 +7900,8 @@ the post-CBET cone fraction by < 1 point (≲ 0.003 in P2/P0, after the crossing
 ## Closure on bored, windowed and CAD cavities (2026-10-25) *derived*
 
 Does `closed = true` (Sinkhorn balancing, `enforce_closure!`) apply beyond the flush-LEH
-`hohlraum()` of "Balancing on the curved path against a continuum Monte Carlo"? ROADMAP
-CAD decision 11. `examples/mc_cavities.jl` (4 threads; ~30 min, cached).
+`hohlraum()` of "Balancing on the curved path against a continuum Monte Carlo"? CAD
+decision 11 (2026-10-18, closed). `examples/mc_cavities.jl` (4 threads; ~30 min, cached).
 
 Geometry: the bored cavity of "Partial visibility" (R 2.875, 9.4 mm long, 0.1 mm LEH bores
 of radius 1.55, a 20 µm waist gap, capsule 0.9; apertures on the LEHs and the gap exit);
@@ -7993,7 +7993,7 @@ is the size of most a₄ entries.
 
 ## Compact capsule rows at capsule_h = h/3 (2026-10-25) *derived*
 
-ROADMAP CAD decision 12: on the compact capsule the LEH power-balance tutorial's raw
+CAD decision 12 (2026-10-18, closed): on the compact capsule the LEH power-balance tutorial's raw
 error grew from h 0.4 to 0.25 mm. The tutorial's N210808 hohlraum (6.4 × 11.24 mm,
 3.1 mm LEHs, capsule 1.13 mm), capsule_h = h/3 unless stated, Float64 view factors,
 4 threads (scripts in the session scratchpad). Reference for the capsule rows: the
@@ -8051,7 +8051,7 @@ in every case.
 
 ## Capsule radius schedules: published histories and the API (2026-10-26) *derived*
 
-ROADMAP 16, the user's decision of 2026-10-26 on "Capsule absorption, conversion and the
+ROADMAP "Absolute energetics on N221204", the user's decision of 2026-10-26 on "Capsule absorption, conversion and the
 ablating-wall release": the pair's K24-shaped schedule is accepted, labeled derived,
 with room in the API for other schedules. What published radius histories exist for the
 HYBRID-E shots in use (N221204, N210808, the Zylstra pair N191118 / N210601), which
@@ -8160,7 +8160,7 @@ an idle machine; the schedule enters only through these values).
 
 ## Hard-sphere direct-drive illumination (2026-10-27) *derived*
 
-Polar direct drive, Stage 0 (ROADMAP item 15; `reference/litreview/polar_direct_drive.md`
+Polar direct drive, Stage 0 (ROADMAP "Polar direct drive"; `reference/litreview/polar_direct_drive.md`
 §5). Tests: `test/direct_drive.jl`. The parameterization-independent part came first;
 the spherical pointing fields of `GroupPointing` (decision 5(a)) and the LMJ check
 (Te14b) followed on 2026-10-26, below.
@@ -8554,7 +8554,7 @@ numbers above are their record.
 
 ## Corona absorption operator (2026-10-27) *measured*
 
-Polar direct drive, Stage 1 (ROADMAP item 15; review decision 3 (b), with the
+Polar direct drive, Stage 1 (ROADMAP "Polar direct drive"; review decision 3 (b), with the
 prototype's verdict above): `CoronaProfile`, `CoronaOperator` and
 `deposit(op::CoronaOperator, beams) -> (; ylm, per_beam, delivered)` in `src/corona.jl`;
 tests `test/corona.jl` with the 3-D tracer as a test helper (`test/corona_raytrace.jl`,
@@ -8796,7 +8796,7 @@ one run) and was dropped.
 
 ## Per-cone M-band in the drive history (2026-10-27) *derived*
 
-ROADMAP 13. Until now the laser M-band entered only the `unfold=on` spectra of
+ROADMAP "Spectral radiosity". Until now the laser M-band entered only the `unfold=on` spectra of
 `examples/n221204.jl`, with the per-cone conversions of `nif_mband()` (outer 0.20, inner
 0.042; "Spectral radiosity, M-band and a synthetic Dante" §2) applied through a proxy:
 each element's cone shares taken from the *pre-CBET* deposition of `beams_at(t)`, times

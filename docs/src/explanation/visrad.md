@@ -176,7 +176,7 @@ the two codes compare in TW per element.
 
 ### What VisRad has that Briareus does not
 
-From the import warnings and ROADMAP ("VisRad import and CAD: what is skipped", "GUI
+From the import warnings and ROADMAP ("VisRad import: what is skipped", "CAD", "GUI
 requests"):
 
 - STEP CAD import (Briareus reads STL and the CAD bundled in workspaces), and the NIF

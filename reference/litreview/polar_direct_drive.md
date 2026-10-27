@@ -1,6 +1,6 @@
 # Polar direct drive: literature, benchmarks and a staged plan (2026-10-26)
 
-ROADMAP item 15: "Polar direct drive mode, benchmarked against published GA optimizers."
+ROADMAP, "Polar direct drive": benchmarked against published GA optimizers.
 This review asks what a PDD mode needs that Briareus lacks, which published optimizers
 and objectives exist, which published numbers a Briareus PDD mode could be checked
 against (and whether their inputs are complete), and in what order to build it. Research

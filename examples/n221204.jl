@@ -60,7 +60,7 @@
 #   (2026-10-24)");
 # - `unfold=on`: Dante 1's spectrum, channel voltages and their unfold at 5–8.5 ns in the
 #   full model (research notes, "Dante channel responses and the unfold (2026-10-24)");
-# - `metrics=on`: the steps run on to bang time and the full model prints ROADMAP 11's
+# - `metrics=on`: the steps run on to bang time and the full model prints ROADMAP "Implosion metrics and UQ"'s
 #   implosion metrics (hot-spot velocity, flux P2 over the drive window, the drive at
 #   bang) over the window from the rise to bang (research notes, "Zylstra 2022 LEH pair,
 #   time-dependent (2026-10-25)");
@@ -390,7 +390,7 @@ tstep = parse(Float64, get(opt, "dt", "0.25"))
 times = get(pos, 5, "") == "table" ? [2.0, 4.0, 4.5, 5.5, 6.5, 7.0, 8.0, 8.5] :
         sort(unique([collect(0.5:tstep:9.25); 9.35; 0.5:0.25:9.25]))
 # `metrics=on`: the drive window runs on to bang time (N221204 9.53 ns, K24E Table I; the
-# pair's from Zylstra Fig. 2), the full model records every Y_lm, and ROADMAP 11's
+# pair's from Zylstra Fig. 2), the full model records every Y_lm, and ROADMAP "Implosion metrics and UQ"'s
 # implosion metrics are printed over the window from the rise to bang (below).
 metrics = get(opt, "metrics", "off") == "on"
 metrics && (times = sort(unique([times; filter(>(times[end]), [9.45, bang]); bang])))
@@ -546,7 +546,7 @@ for (n, r) in runs
             join([@sprintf("%.2f ns %.3f", t, rl[k]) for t in (2.0, 4.5, 5.5, 8.0, 8.5, 9.0)
                   for k in (findfirst(≈(t), times),) if k !== nothing], ", "))
 end
-# Implosion metrics (`metrics=on`; ROADMAP 11, research notes "Implosion metrics"), over
+# Implosion metrics (`metrics=on`; ROADMAP "Implosion metrics and UQ", research notes "Implosion metrics"), over
 # the drive window from the start of the rise (`pulse_rise`) to bang time, against the
 # measured N221204 hot spot (P24 Fig. 2, K24 Table II): velocity 36 ± 6 km/s toward
 # (θ, φ) = (151°, 54°), P2 0.3 ± 0.1 µm. The velocity is the flat-kernel default

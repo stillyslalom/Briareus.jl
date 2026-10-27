@@ -1,6 +1,6 @@
 # Inner-cone SBS time histories and the late-time refraction: literature (2026-10-25)
 
-ROADMAP items 9 and 16. `examples/n221204.jl` removes the measured N221204 backscatter
+ROADMAP "The P2 swing" and "Absolute energetics on N221204". `examples/n221204.jl` removes the measured N221204 backscatter
 (AS24: SBS 42 ± 11 kJ "early in peak power and mostly on the inner cones", SRS 6 ± 1 kJ
 "throughout peak") from the inner cones on time shapes of our own (*L*). This review asks
 what is published about the per-cone, time-resolved backscatter of HYBRID-E shots and

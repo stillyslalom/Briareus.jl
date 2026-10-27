@@ -17,7 +17,7 @@ run takes (LLNL's two-step method): Tr(t), the capsule-averaged incident flux,
 Legendre ratios aₗ/a₀ (P2 > 0 pole-hot) on a uniform ≤ 50 ps grid, the radius the flux
 was evaluated on, and provenance. CompactLES reads it in memory through its
 `CompactLESBriareusExt` extension (`radiation_drive(drive)`, loaded when both packages
-are). Sources: `reference/litreview/hydro_coupling.md`; ROADMAP item 17.
+are). Sources: `reference/litreview/hydro_coupling.md`; ROADMAP, "Briareus → CompactLES".
 
 ```@autodocs
 Modules = [Briareus]

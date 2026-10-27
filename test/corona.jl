@@ -1,4 +1,4 @@
-# Corona absorption operator (polar direct drive, Stage 1; ROADMAP item 15,
+# Corona absorption operator (polar direct drive, Stage 1; ROADMAP "Polar direct drive",
 # reference/litreview/polar_direct_drive.md decision 3 (b); research notes "Corona
 # absorption operator"). References, all independent of the operator's kernels, lattice
 # and rotations:

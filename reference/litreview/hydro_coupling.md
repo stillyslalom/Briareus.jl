@@ -163,7 +163,7 @@ quoted temperature the ablation is trans- or supersonic and the scaling weakens.
     (Dewald Fig. 6).
   - That is why Masse applies the asymmetry 100 µm outside the moving ablation front.
   - Pitfall 2: Briareus computes the flux on the initial capsule radius. Its
-    flux-at-radius-R(t) must match where the BC sits (ROADMAP item 9).
+    flux-at-radius-R(t) must match where the BC sits (ROADMAP, "The P2 swing").
 - **Opacity data access** (**M**):
   - LANL TOPS web (aphysics2.lanl.gov) returns gray Rosseland/Planck means by default, with
     multigroup optional; frequency-dependent runs are limited to 6 (T,ρ) points; data dated
@@ -274,7 +274,7 @@ Clark 2019, **H**). For a Briareus-driven run it is the first **prediction**.
   Briareus drive scaled to Dante T_r.
 
 **Stage 2: multigroup + M-band.**
-- Briareus spectral radiosity (ROADMAP 13) supplies a Planck component plus an Au M-band
+- Briareus spectral radiosity (ROADMAP "Spectral radiosity") supplies a Planck component plus an Au M-band
   component (~15 % > 1.8 keV, pole-hot, its own a_l).
 - Multigroup diffusion; the group count is not public, so pick it by convergence (**L**).
 - Two-temperature model with electron–ion coupling.
