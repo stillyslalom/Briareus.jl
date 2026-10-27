@@ -567,6 +567,16 @@ function flux_moments(ev::Evaluation; lmax::Integer = 8, axis = Vec3(0, 0, 1),
     return legendre_moments(_full(ev), s.target, s.observed; lmax, axis, center)
 end
 
+"""
+    mean_flux(ev) -> Real
+
+Mean incident x-ray flux on the observed elements (TW/mm²): the solid-angle mean seen
+from the mode center, `flux_moments(ev)[1]`. It is the drive level that the `drive`
+keyword of [`symmetry_objective`](@ref) and [`asymmetry_objective`](@ref) holds, so
+`drive = mean_flux(evaluate(scenario, x0))` keeps the drive of the starting design.
+"""
+mean_flux(ev::Evaluation) = flux_moments(ev; lmax = 0)[1]
+
 function _full(ev::Evaluation)
     ev.flux === nothing && throw(ArgumentError("scenario has no radiation response"))
     v = zeros(eltype(ev.flux), nelements(ev.scenario.target))
@@ -584,7 +594,9 @@ Objective for indirect-drive symmetry: `Σ wₗ (aₗ/a₀)²` over `modes`, plu
 sum of squared odd moments (top/bottom imbalance), plus `clip`, `missed` and `direct`
 times the squared fractions of laser power clipped on the outside of the target,
 missing it, or hitting `direct_names` (e.g. the capsule) directly. When `drive`
-(TW/mm²) is given, adds `drive_weight × (a₀/drive - 1)²`. A `keepout` (an
+(TW/mm²) is given, adds `drive_weight × (a₀/drive - 1)²`, with `a₀` the
+[`mean_flux`](@ref): `drive = mean_flux(evaluate(scenario, x0))` holds the drive of the
+design `x0`. A `keepout` (an
 `ApertureKeepOut` for the entrance-hole rims, a `SphereKeepOut` for the capsule, or a
 tuple of them) adds its penalty on the beams' worst-case clearance. The `direct`
 penalty only sees power already on the capsule; keep a margin with a `SphereKeepOut`.

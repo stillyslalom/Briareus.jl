@@ -1,4 +1,5 @@
-# Named parameter vectors (`parameters`) and the scenario built from a parameterization.
+# Named parameter vectors (`parameters`), the scenario built from a parameterization,
+# the drive level (`mean_flux`), optimization results and `report`.
 
 using Briareus, Test
 
@@ -38,4 +39,14 @@ Briareus.initial_parameters(s::_Shift) = zeros(length(s.x0))
     c = Scenario(t, _Shift(p, x))
     @test evaluate(c, zeros(nparams(p))).deposition.element ==
           evaluate(Scenario(t, apply(p, x)), apply(p, x)).deposition.element
+end
+
+@testset "drive level, optimization result, report" begin
+    t = hohlraum(nz = 8, nphi = 16, capsule_ntheta = 6, capsule_nphi = 8)
+    p = GroupPointing(nif_quads(power = 8.0); fields = (:z, :r, :power))
+    s = Scenario(t, p; observe = :capsule)
+    x0 = parameters(p; inner23 = (z = 3.09, r = -1.09), inner30 = (z = 3.63, r = -0.60),
+                    outer44 = (z = 5.20,), outer50 = (z = 5.01,))
+    ev = evaluate(s, x0)
+    @test mean_flux(ev) == flux_moments(ev)[1]
 end

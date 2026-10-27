@@ -23,7 +23,7 @@ report(evaluate(scenario, x0))
 
 # Null P2, P4 (and keep P6 small) while holding the drive at its initial level, without
 # clipping the LEH or hitting the capsule.
-a0 = flux_moments(evaluate(scenario, x0))[1]
+a0 = mean_flux(evaluate(scenario, x0))
 objective = symmetry_objective(modes = (2 => 1.0, 4 => 1.0, 6 => 0.25), drive = a0)
 lower, upper = bounds(pointing, x0; z = 1.5, r = 1.0, power = 0.4)
 result = optimize_pointing(scenario, objective; x0, lower, upper)

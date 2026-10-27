@@ -233,7 +233,7 @@ rows13 = [mode_index(l, m) for (l, m) in inv13.components]
 p3 = GroupPointing(quads; fields = (:z, :r, :power))
 s3 = Scenario(target, p3; observe = :capsule, viewfactor_kw = (; closed = true))
 x3 = initial_parameters(p3)
-a0 = flux_moments(evaluate(s3, x3))[1]
+a0 = mean_flux(evaluate(s3, x3))
 lo, hi = bounds(p3, x3; z = 1.5, r = 1.0, power = 0.4)
 keepout = (ApertureKeepOut(target), SphereKeepOut(target))
 modes = (1 => 1.0, 2 => 1.0, 3 => 1.0, 4 => 1.0)

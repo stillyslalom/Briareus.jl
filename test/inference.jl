@@ -106,6 +106,7 @@ end
             @test (@inferred deposit(corona, beams)).ylm isa Vector{T}
             ev = evaluate(s, x)   # `Scenario.lpi` is dynamic by design: one dispatch per call
             @test (@inferred flux_moments(ev)) isa Vector{T}
+            @test (@inferred mean_flux(ev)) isa T
             @test (@inferred objectives[1](ev)) isa T
             @test (@inferred objectives[2](ev)) isa T
             c = flux_ylm(ev)

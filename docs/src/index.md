@@ -30,7 +30,7 @@ x0 = parameters(pointing; inner23 = (z = 3.09, r = -1.09), inner30 = (z = 3.63, 
                           outer44 = (z = 5.20, r = 0.0),   outer50 = (z = 5.01, r = 0.0))
 report(evaluate(scenario, x0))       # power accounting, Tr = 262.7 eV, P2/P0 = -15.7 %
 
-drive = flux_moments(evaluate(scenario, x0))[1]    # mean capsule flux, held fixed
+drive = mean_flux(evaluate(scenario, x0))    # mean capsule flux, held fixed
 objective = symmetry_objective(modes = (2 => 1.0, 4 => 1.0); drive)
 result = optimize_pointing(scenario, objective; x0)
 report(evaluate(scenario, result.x))  # Tr = 262.7 eV, P2/P0 = -0.000 %, P4/P0 = -0.001 %
