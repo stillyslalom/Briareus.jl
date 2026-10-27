@@ -279,7 +279,7 @@ Items 9–13 and 16–17 follow the 2026-10-22 literature review against Kritche
    post-CBET cone fraction, glint, Kemp 2026's SBS history, the late refraction as a
    bound) moves the crossing by −0.10 to +0.16 ns ("The P2 swing", "Inner-cone SBS time
    histories"); ~0.3 ns remains, which only the least constrained bubble inputs can carry
-   (picket fluence `energy` 0.8: +0.33 ns; collision ±0.3 ns: +0.17 / −0.11). The
+   (picket fluence `picket_ratio` 0.8: +0.33 ns; collision ±0.3 ns: +0.17 / −0.11). The
    minimum's timing moves with none of them. *Remains:* the HYBRID-E bubble speed and
    collision time; Izumi 2023's low-contrast stall and relaunch; the computed lips'
    thermal-band radius against the 3–5 keV edge they are fitted to; the refraction at the

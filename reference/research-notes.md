@@ -3178,7 +3178,7 @@ the drawn outline, stroke centers per column, overlays checked by eye.
 | Density exponent q | 1.862 (two-anchor fit) | 1.8 (physics) | — | Izumi Eq. 7: ρ_bub² ∝ (Sρ₀)², S ∝ ρ₀^-0.1 |
 | Opacity τ_b | 0.144 (fit to T_b 29 %/54 %) | 0.111 | 0.100–0.124 stat.; 0.085–0.158 with plane ±0.2 mm and launch | Izumi Fig. 10a HYDRA absorbed fraction |
 | Collision t_c | turn_on + 5.5 − 2.0(s − 1) − 0.7(E − 1) | turn_on + 5.5 (R − r_cap)/1.967 mm · E^-0.16 | ±0.15 ns (frame spacing) | Izumi 2018: 5.8, 5.45 (1.5× picket), −0.4 ns (1.18× capsule; the gap gives −0.44) |
-| HYBRID-E picket fluence `energy` | 1 | 1.1 (example) | 0.8–1.5 | 1.5× basecamp energy (DN24 vs Izumi Fig. 3a) × 0.73 for split outer quads; Fig. 1a N210808 tip 1.85 ± 0.1 mm at 6 ns |
+| HYBRID-E picket fluence `picket_ratio` | 1 | 1.1 (example) | 0.8–1.5 | 1.5× basecamp energy (DN24 vs Izumi Fig. 3a) × 0.73 for split outer quads; Fig. 1a N210808 tip 1.85 ± 0.1 mm at 6 ns |
 | LEH lips (example) | 5.0 ns step over 0.5 ns to 0.84 r₀ | smoothstep from −0.1 ns over 7.85 ns to 0.857 r₀ | half-closed 3.0–3.8 ns (timing mapping) | Young Fig. 3a LEH radius (end value SXI; ramp assumed) shifted 0.8 ns |
 
 Checks of the fits:
@@ -3211,7 +3211,7 @@ Checks of the fits:
   pointing and the measured wall radius, neither of which is published.
 - *HYBRID-E bubble (PRE 109 Fig. 1a, 6 ns).* N210808's tip is 1.85 ± 0.1 mm from the
   wall at z ≈ 2.9–3.5 mm; N221204's is ≥ 1.55 mm (its denser inner-beam rays are drawn
-  over the plasma). The calibrated model with `energy` 1.1 puts it at 1.96 mm, in the
+  over the plasma). The calibrated model with `picket_ratio` 1.1 puts it at 1.96 mm, in the
   plane z_b = 3.49 mm.
 
 ### Two-zone CBET: the 7.4 keV LEH temperature
@@ -3248,8 +3248,8 @@ to the same Fig. 9b data with Te ≤ 5.5 keV (`calibrate_cbet` with an upper bou
 settings), calibrated two-zone CBET, mock HYBRID-E pointing, standard mesh (h 0.28 /
 capsule_h 0.16, 31 min for the five runs on 4 threads). Settings: wall from 1.2 ns at
 0.185 mm/ns stopping 0.38 mm in; lips to 0.857 r₀ along Young's ramp shifted 0.8 ns
-(closure −0.1 ns, width 7.85 ns); bubble defaults with `energy` 1.1 and
-`capsule_radius` 1.135 (t_c 6.09 ns). `energy` was set from the picket energy and quad
+(closure −0.1 ns, width 7.85 ns); bubble defaults with `picket_ratio` 1.1 and
+`capsule_radius` 1.135 (t_c 6.09 ns). `picket_ratio` was set from the picket energy and quad
 splitting before the comparison was run.
 
 | t (ns) | static | +wall | +lips | +bubble (now) | +bubble (2026-10-23) | Fig. 10 |
@@ -3290,7 +3290,7 @@ The coarse mesh (0.8 / 0.4) reproduces these within 0.006. Capsule Tr peaks at 3
    +0.118 at 8 ns, coarse mesh).
 
 **Sensitivity to the least constrained input** (coarse mesh, full model). The HYBRID-E
-picket fluence `energy` is 1.1 from the picket energy (1.5×, by eye) and split outer
+picket fluence `picket_ratio` is 1.1 from the picket energy (1.5×, by eye) and split outer
 quads (−27 %); PRE 109 Fig. 1a's N210808 bubble tip (1.85 ± 0.1 mm at 6 ns) gives 0.8
 (0.6–1.05) on its own. E = 1.5: minimum −0.138 at 5.25 ns, crossing 5.99 ns, +0.121 at
 8 ns. E = 0.8: −0.184 at 5.5 ns, 6.62 ns, +0.109 (rms 0.024). The crossing time follows
@@ -7208,10 +7208,10 @@ thickness, i.e. K24's scaled curve applied to R₀). The example's Young-shaped 
 windows, gated LEH bubble images, x-ray imaging of the hohlraum interior, for HYBRID-E,
 N210808, N221204, Au-lined DU 6.4 mm). The thin-wall and G-LEH bubble data are all HDC
 SymCap basecamp (Izumi 2018/2021, Meezan 2020, Chen 2020) or foam-lined / I-Raum
-platforms. The HYBRID-E bubble speed stays inferred from the picket energy (`energy`
+platforms. The HYBRID-E bubble speed stays inferred from the picket energy (`picket_ratio`
 1.1) and PRE 109 Fig. 1a's N210808 tip. Reading the outer picket from Pak's delivered
 pulse (`n221204_pulse()` split by DN24's cone fraction) gives 43.9 kJ in the first ns
-after the turn-on (the example's "~40" was by eye), i.e. `energy` ≈ 1.69 × 0.73 = 1.23
+after the turn-on (the example's "~40" was by eye), i.e. `picket_ratio` ≈ 1.69 × 0.73 = 1.23
 against the basecamp's ~26 kJ (by eye): a faster bubble, the wrong direction for Fig. 10.
 
 ### Effect of each mechanism (coarse; crossing, minimum)
@@ -7255,7 +7255,7 @@ against the basecamp's ~26 kJ (by eye): a faster bubble, the wrong direction for
    by t_c alone would need t_c ≈ 6.9 ns; PRE 109 Fig. 1a already shows wall and ablator
    plasma meeting at z 2–3 mm at 6 ns (by eye, *L*), so a collision near 6.1 ns is the
    published picture. Not changed.
-5. **Bubble speed**: `energy` 0.8 (PRE 109 Fig. 1a's N210808 tip alone) gives +0.33 ns,
+5. **Bubble speed**: `picket_ratio` 0.8 (PRE 109 Fig. 1a's N210808 tip alone) gives +0.33 ns,
    the largest single lever, as found before; Pak's pulse points the other way (1.23).
    No HYBRID-E datum separates them.
 6. **Glint** (Lemos 2022, estimated, not run): < 8 TW out of the inner beams, ~1.8

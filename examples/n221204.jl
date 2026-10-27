@@ -371,7 +371,7 @@ lip, r_open = GapClosure(closure = -0.1, width = 7.85, after = WallLossAlbedo())
 # backscatter and the collision (2026-10-25)")
 bkw = haskey(opt, "collision") ? (; collision = parse(Float64, opt["collision"])) : (;)
 bubble = BubbleAbsorption(; radius = R0, turn_on, wall = motion, capsule_radius,
-                          energy = parse(Float64, get(opt, "bubble_energy", "1.1")), bkw...)
+                          picket_ratio = parse(Float64, get(opt, "bubble_energy", "1.1")), bkw...)
 # `lips=computed`: the lips' closure computed instead of prescribed (`LipClosure`, its
 # speed, depth and hold fitted to Chen 2020's measured LEH radii, `chen2020_leh()`): free
 # expansion at the lip's own gold sound speed in the foot, held 0.24 mm inside the rim

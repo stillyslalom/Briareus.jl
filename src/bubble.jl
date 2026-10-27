@@ -19,26 +19,19 @@ const _BUBBLE_Q = 1.8           # ρ_bub² ∝ (S ρ₀)², S ∝ ρ₀^-0.1 (Iz
 const _BASECAMP = (radius = 2.875, capsule = 0.908, collision = 5.5)
 
 """
-    BubbleAbsorption(; radius, turn_on = 0.0, delay = 0.25, speed = 0.36, fill = 0.3,
-                     energy = 1.0, opacity = 0.111, density_exponent = 1.8,
-                     exponent = 0.5, x_ref = 1.0, stagnation = 0.80 radius,
-                     stagnation_width = 0.08 radius, collision = <t_c>, capsule_radius = 0.908,
-                     ridge = 0.73, ridge_width = 0.5, ridge_rise = 0.2,
-                     inner = (:inner23, :inner30), footprint = (:outer50,),
-                     ridge_components = (:wall,), wall = nothing, footprint_z = nothing,
-                     edge = 0.05, nr = 12, nangle = 24, ncone = 13)
+    BubbleAbsorption(; radius, turn_on = 0.0, fill = 0.3, picket_ratio = 1.0, kwargs...)
 
 Inner-beam absorption in the wall bubble (a [`LaserPlasmaModel`](@ref)). The outer
 cones' picket launches a bubble of wall plasma from the wall under their footprint. Its
 tip has moved
 
     x_bal(t) = v_b · max(0, t − t_L),   t_L = turn_on + delay,
-    v_b = speed · energy^0.2 · (fill / 0.3)^-0.2
+    v_b = speed · E^0.2 · (fill / 0.3)^-0.2
 
-in from the initial wall `radius` R (mm, ns; `energy` is the outer picket fluence over
-the reference design's, `fill` the gas fill in mg/cc) while it is ballistic. It
-stagnates smoothly at the depth `stagnation` ``x_{max}`` ([`bubble_depth`](@ref)):
-ballistic up to ``x_{max} - w`` (w = `stagnation_width`), then
+in from the initial wall `radius` R (mm, ns; E = `picket_ratio`, the outer picket
+fluence over the reference design's, dimensionless; `fill` the gas fill in mg/cc) while
+it is ballistic. It stagnates smoothly at the depth `stagnation` ``x_{max}``
+([`bubble_depth`](@ref)): ballistic up to ``x_{max} - w`` (w = `stagnation_width`), then
 ``x_{max} - w e^{-(x_{bal} - x_{max} + w)/w}``. In the plane `z_b` of the outer
 footprint, at the axial position where the footprint cones' beam axes reach the wall,
 the bubble fills the annulus from R in to radius R − ``x_{bub}``. Each inner beam loses
@@ -48,13 +41,14 @@ the bubble fills the annulus from R in to radius R − ``x_{bub}``. Each inner b
 
 where `f` is the fraction of its power crossing `z_b` inside the bubble, computed from
 the beam itself (its best-focus spot carried along its `ncone` f-cone directions, as
-deposition does), and `T_b` the bubble's transmission (`opacity` ``τ_b``,
-`density_exponent` q, `exponent` p). The absorbed power is conducted to the wall
-under the outer footprint (Ralph et al. 2018): it is shared equally by the `footprint`
-beams of the inner beam's hemisphere (those whose port is on the same side), so it is
-deposited where those beams land. Beam powers are conserved: the model moves power
-between beams and loses none. (Whatever fraction of the footprint beams themselves
-misses the wall, a few 1e-4 through the entrance holes, applies to the moved power too.)
+deposition does), and `T_b` the bubble's transmission (`opacity` ``τ_b``; the exponent
+q = `density_exponent` of the fill density, p = `depth_exponent` of the depth). The
+absorbed power is conducted to the wall under the outer footprint (Ralph et al. 2018):
+it is shared equally by the `footprint` beams of the inner beam's hemisphere (those
+whose port is on the same side), so it is deposited where those beams land. Beam powers
+are conserved: the model moves power between beams and loses none. (Whatever fraction
+of the footprint beams themselves misses the wall, a few 1e-4 through the entrance
+holes, applies to the moved power too.)
 
 **Ridge stop.** After the ablator–wall collision at `collision` ``t_c``, the inner power
 the bubble leaves stops at the stagnation ridge, radius `ridge`·R about the axis
@@ -70,17 +64,32 @@ evaluations, the beam-error sensitivities ([`mode_sensitivity`](@ref) and the re
 `uncertainty.jl`) and [`influence_matrix`](@ref).
 
 The edge of the bubble is smoothed over `edge` (mm, a logistic step), which keeps `f`
-smooth in time, in the bubble depth and in the beams' pointing. Spot points: `nr`
-equal-power radii by `nangle` angles per f-cone direction. Everything is generic in the
-number type: `speed`, `opacity`, `stagnation` and `collision` (and the beams) can carry
-ForwardDiff duals ([`remake`](@ref)), so the model enters
+smooth in time, in the bubble depth and in the beams' pointing. Everything is generic in
+the number type: `speed`, `opacity`, `stagnation` and `collision` (and the beams) can
+carry ForwardDiff duals ([`remake`](@ref)), so the model enters
 [`drive_history`](@ref)`(...; lpi)`, `Scenario(...; lpi)` and calibrations. Compose with
 CBET as `lpi = (cbet, bubble)` (transfer first, then the bubble takes its share of what
-the inner beams carry). `wall`, a [`WallMotion`](@ref), moves the footprint plane with
-the radiating wall (the outer beams' axes reach the moved wall nearer the entrance
-hole); the bubble tip and the ridge are measured from the initial wall either way.
-`footprint_z` fixes |``z_b``| instead. `stagnation = Inf` keeps the tip ballistic;
-`collision = Inf` turns the ridge stop off.
+the inner beams carry).
+
+**Keywords**, by role (defaults in parentheses):
+- Shot and geometry: `radius` R (required; the initial wall radius, mm), `turn_on`
+  (0.0; the outer cones' turn-on, ns), `fill` (0.3 mg/cc), `picket_ratio` E (1.0),
+  `capsule_radius` ``r_{cap}`` (0.908 mm), `inner` (`(:inner23, :inner30)`) and
+  `footprint` (`(:outer50,)`), the beam groups that lose and receive the power;
+  `wall` (`nothing`), a [`WallMotion`](@ref) that moves the footprint plane with the
+  radiating wall (the outer beams' axes reach the moved wall nearer the entrance hole;
+  the bubble tip and the ridge are measured from the initial wall either way);
+  `footprint_z` (`nothing`), which fixes |``z_b``| instead.
+- Calibration: `speed` (0.36 mm/ns), `delay` (0.25 ns), `opacity` ``τ_b`` (0.111),
+  `density_exponent` q (1.8), `depth_exponent` p (0.5) and its reference depth `x_ref`
+  (1.0 mm).
+- Tip stagnation: `stagnation` (0.80 R) and `stagnation_width` (0.08 R), both defaulting
+  to fractions of `radius`; `stagnation = Inf` keeps the tip ballistic.
+- Ridge sub-model: `collision` ``t_c`` (derived from the other keywords, below;
+  `collision = Inf` turns the ridge stop off), `ridge` (0.73), `ridge_width` (0.5 mm),
+  `ridge_rise` (0.2 ns), `ridge_components` (`(:wall,)`).
+- Numerics: `edge` (0.05 mm); spot points, `nr` (12) equal-power radii by `nangle` (24)
+  angles per f-cone direction, over `ncone` (13) directions.
 
 Defaults (research notes, "Hohlraum dynamics calibrated to published data (2026-10-24)";
 the data are [`izumi2021_bubble`](@ref) and [`izumi2021_absorption`](@ref)):
@@ -92,7 +101,7 @@ the data are [`izumi2021_bubble`](@ref) and [`izumi2021_absorption`](@ref)):
   321–461 µm/ns on the same shots.
 - `density_exponent` q = 1.8: inverse-bremsstrahlung absorption goes as ``ρ_{bub}^2``, and
   Izumi's Eq. 7 has ``ρ_{bub}`` = S ρ₀ R/(R − x) with the shock compression S ∝ ρ₀^-0.1,
-  so ``ρ_{bub}^2`` ∝ ρ₀^1.8 (R/(R − x))². `exponent` 0.5 is Eq. 6's chord
+  so ``ρ_{bub}^2`` ∝ ρ₀^1.8 (R/(R − x))². `depth_exponent` 0.5 is Eq. 6's chord
   (``x_{bub}``/1 mm)^0.5.
 - `opacity` ``τ_b`` 0.111 is *fitted* to the inner-power fraction absorbed in the bubble
   in Izumi's 2D HYDRA simulation of the 0.3 mg/cc basecamp (Fig. 10a: 0.02, 0.23, 0.55 at
@@ -108,13 +117,12 @@ the data are [`izumi2021_bubble`](@ref) and [`izumi2021_absorption`](@ref)):
   2023: the tip slows on back-pressure near the axis. (R − 0.73 R, the ridge's depth at
   the waist, would stop the tip before it reaches the inner beams at ``z_b``, 1.3 mm from
   the wall.)
-- `collision` ``t_c`` = `turn_on` + 5.5 ns · (R − ``r_{cap}``)/(2.875 − 0.908 mm) ·
-  energy^-0.16
+- `collision` ``t_c`` = `turn_on` + 5.5 ns · (R − ``r_{cap}``)/(2.875 − 0.908 mm) · E^-0.16
   (*fitted*, Izumi et al., RSI 89, 10K111, 2018: the inner spots separate at 5.8 ns for
   the basecamp's 0.3 ns turn-on, 5.45 ns with a 1.5× picket, and about 0.4 ns earlier
   with the 1.18× capsule; the gap between the capsule's outer radius `capsule_radius`
   ``r_{cap}`` and the wall gives 0.44 ns for that capsule, so a constant closing speed of
-  ablator and wall plasma, 0.36 mm/ns, explains the capsule shot). `ridge` 0.73: Izumi
+  ablator and wall plasma, 0.36 mm/ns, accounts for the capsule shot). `ridge` 0.73: Izumi
   2023's ridge at r ≈ 2.1 mm in a 2.88 mm hohlraum. `ridge_width` 0.5 mm and
   `ridge_rise` 0.2 ns are engineering choices (not measured).
 """
@@ -124,9 +132,9 @@ struct BubbleAbsorption{S<:Real} <: LaserPlasmaModel
     speed::S
     opacity::S
     fill::Float64
-    energy::Float64
+    picket_ratio::Float64
     density_exponent::Float64
-    exponent::Float64
+    depth_exponent::Float64
     x_ref::Float64
     stagnation::S
     stagnation_width::Float64
@@ -146,20 +154,20 @@ struct BubbleAbsorption{S<:Real} <: LaserPlasmaModel
 end
 
 # Ablator–wall collision time (Izumi 2018): the basecamp's 5.5 ns after the outer turn-on,
-# scaled with the capsule–wall gap and the picket energy.
-_collision_time(turn_on, radius, capsule_radius, energy) =
+# scaled with the capsule–wall gap and the picket fluence ratio.
+_collision_time(turn_on, radius, capsule_radius, picket_ratio) =
     turn_on + _BASECAMP.collision * (radius - capsule_radius) /
-              (_BASECAMP.radius - _BASECAMP.capsule) * energy^-0.16
+              (_BASECAMP.radius - _BASECAMP.capsule) * picket_ratio^-0.16
 
 function BubbleAbsorption(; radius::Real, turn_on::Real = 0.0, delay::Real = _BUBBLE_DELAY,
                           speed::Real = _BUBBLE_SPEED, opacity::Real = _BUBBLE_OPACITY,
-                          fill::Real = 0.3, energy::Real = 1.0,
+                          fill::Real = 0.3, picket_ratio::Real = 1.0,
                           density_exponent::Real = _BUBBLE_Q,
-                          exponent::Real = 0.5, x_ref::Real = 1.0,
+                          depth_exponent::Real = 0.5, x_ref::Real = 1.0,
                           stagnation::Real = 0.80 * radius,
                           stagnation_width::Real = 0.08 * radius,
                           capsule_radius::Real = _BASECAMP.capsule,
-                          collision::Real = _collision_time(turn_on, radius, capsule_radius, energy),
+                          collision::Real = _collision_time(turn_on, radius, capsule_radius, picket_ratio),
                           ridge::Real = 0.73, ridge_width::Real = 0.5, ridge_rise::Real = 0.2,
                           inner = (:inner23, :inner30), footprint = (:outer50,),
                           ridge_components = (:wall,),
@@ -167,7 +175,7 @@ function BubbleAbsorption(; radius::Real, turn_on::Real = 0.0, delay::Real = _BU
                           edge::Real = 0.05, nr::Integer = 12, nangle::Integer = 24,
                           ncone::Integer = 13)
     radius > 0 || throw(ArgumentError("radius must be positive"))
-    fill > 0 && energy > 0 || throw(ArgumentError("fill and energy must be positive"))
+    fill > 0 && picket_ratio > 0 || throw(ArgumentError("fill and picket_ratio must be positive"))
     edge > 0 || throw(ArgumentError("edge must be positive"))
     stagnation_width > 0 && stagnation > stagnation_width ||
         throw(ArgumentError("stagnation must exceed stagnation_width > 0"))
@@ -176,7 +184,7 @@ function BubbleAbsorption(; radius::Real, turn_on::Real = 0.0, delay::Real = _BU
     nr >= 1 && nangle >= 1 && 1 <= ncone <= 16 || throw(ArgumentError("bad sampling counts"))
     s, τ, xs, tc = promote(speed, opacity, stagnation, collision)
     return BubbleAbsorption(Float64(radius), Float64(turn_on + delay), s, τ, Float64(fill),
-                            Float64(energy), Float64(density_exponent), Float64(exponent),
+                            Float64(picket_ratio), Float64(density_exponent), Float64(depth_exponent),
                             Float64(x_ref), xs, Float64(stagnation_width), tc, Float64(ridge),
                             Float64(ridge_width), Float64(ridge_rise), Symbol[inner...],
                             Symbol[footprint...], Symbol[ridge_components...], wall,
@@ -193,8 +201,8 @@ The model with new calibration parameters (e.g. ForwardDiff duals in a fit).
 function remake(m::BubbleAbsorption; speed = m.speed, opacity = m.opacity,
                 stagnation = m.stagnation, collision = m.collision)
     s, τ, xs, tc = promote(speed, opacity, stagnation, collision)
-    return BubbleAbsorption(m.radius, m.launch, s, τ, m.fill, m.energy, m.density_exponent,
-                            m.exponent, m.x_ref, xs, m.stagnation_width, tc, m.ridge,
+    return BubbleAbsorption(m.radius, m.launch, s, τ, m.fill, m.picket_ratio, m.density_exponent,
+                            m.depth_exponent, m.x_ref, xs, m.stagnation_width, tc, m.ridge,
                             m.ridge_width, m.ridge_rise, m.inner, m.footprint, m.ridge_components,
                             m.wall, m.footprint_z, m.edge, m.nr, m.nangle, m.ncone)
 end
@@ -231,8 +239,8 @@ vector graphics (`data/izumi2021_fig10a.csv`): `source` `"hydra"` (the 2D simula
 """
 izumi2021_absorption() = _data_table("izumi2021_fig10a.csv")
 
-"Bubble tip speed (mm/ns): `speed · energy^0.2 · (fill/0.3)^-0.2`."
-bubble_speed(m::BubbleAbsorption) = m.speed * m.energy^0.2 * (m.fill / 0.3)^-0.2
+"Bubble tip speed (mm/ns): `speed · picket_ratio^0.2 · (fill/0.3)^-0.2`."
+bubble_speed(m::BubbleAbsorption) = m.speed * m.picket_ratio^0.2 * (m.fill / 0.3)^-0.2
 
 """
     bubble_depth(m::BubbleAbsorption, t)
@@ -277,7 +285,7 @@ function bubble_transmission(m::BubbleAbsorption, t)
     x <= 0 && return one(x)
     R = m.radius
     x >= R && return zero(x)
-    return exp(-m.opacity * (m.fill / 0.3)^m.density_exponent * (x / m.x_ref)^m.exponent *
+    return exp(-m.opacity * (m.fill / 0.3)^m.density_exponent * (x / m.x_ref)^m.depth_exponent *
                (R / (R - x))^2)
 end
 
