@@ -13,6 +13,9 @@ Pane {
     readonly property var keys: ["beams", "drive", "time", "optimize", "clearance", "talis"]
     function show(key) { const i = keys.indexOf(key); if (i >= 0) tabs.currentIndex = i }
     function redrawTime() { timePanel.redraw() }
+    // leaving NIF hides the TaLIS tab: show the drive rather than its stale page
+    readonly property bool talisShown: app.facility === "nif"
+    onTalisShownChanged: if (!talisShown && tabs.currentIndex === keys.indexOf("talis")) show("drive")
 
     ColumnLayout {
         anchors.fill: parent
