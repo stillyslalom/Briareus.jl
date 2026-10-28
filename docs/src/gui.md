@@ -47,7 +47,7 @@ The command needs Julia 1.12.7 or later and no further Julia knowledge.
    entry.
 
 The shortcut, or `briareus` in a terminal, then opens the window on a fresh design, and
-`briareus design.briareus.toml` opens a saved session. The window takes about 20 s to
+`briareus design.briar` opens a saved session. The window takes about 20 s to
 open (the first start after an update compiles for a few minutes). A shortcut shows a
 splash within about a second meanwhile; `briareus` in a terminal shows nothing until
 the window, since the command's code runs only once BriareusGUI and its graphics
@@ -151,10 +151,16 @@ names the menu entries, and the panels are described in [The window](@ref).
    ![The TaLIS rules checked on every NIF quad of the template: the rule-tolerance note, the per-rule summary, and every check with its margin; the beams are colored by their worst status. On the optimized pointing the eight 23.5° quads fail 3ω incidence on the wall: their axes meet it at 69.9°, and the steepest ray of a quad's f/7.9 cone is 3.6° steeper (VisRad's report measures incidence on that ray). The 48 reviews are 3ω clearance at the entrance-hole edges.](assets/gui/talis.png)
 
 8. **Save.** File ▸ Save session (Ctrl + S) writes the whole design, from the target to
-   the analyses' settings and the view, to a plain TOML file; File ▸ Open session
-   (Ctrl + O), or `briareus design.briareus.toml`, reads it back. Results are computed
-   again on load. Edit ▸ Undo (Ctrl + Z) and Redo (Ctrl + Y) step through every design
-   edit, typed, from a menu, from a file or from an applied optimization.
+   the analyses' settings and the view, to a `.briar` file: a zip archive of the
+   design as TOML and a copy of every CAD file it reads (STL parts, VisRad workspaces),
+   so the file opens on another computer. File ▸ Save session without CAD files writes
+   the TOML alone (`.briar.toml`, CAD files by path), for CAD that is not to travel
+   with the design. File ▸ Open session (Ctrl + O), or `briareus design.briar`, reads
+   either back; results are computed again on load. The design reads the CAD copies
+   saved with it; a source file that changed on disk since the save is offered in its
+   place, and a part's properties can relink its file or read it from the source again.
+   Edit ▸ Undo (Ctrl + Z) and Redo (Ctrl + Y) step through every design edit, typed, from
+   a menu, from a file or from an applied optimization.
 
 Two further steps use the drive's view factors without computing them again: an x-ray
 image of the target (Compute ▸ X-ray image along the view) and the drive through a pulse
@@ -390,7 +396,8 @@ load_pulses!(sess, "reference.csv")              # or use_pulse_shape!(sess): N2
 start_history!(sess)                             # drive_history on the drive's view factors
 time_chart(sess, :drive)                         # what the Time tab plots (also :pulses, :energy, :retune)
 set_time_cursor!(sess, 6.0)                      # the 3D view at the history step nearest 6 ns
-save_session("design.briareus.toml", sess)       # the design as TOML; load_session! reads it
+save_session("design.briar", sess)               # the design and its CAD files; load_session! reads it
+save_session("design.briar.toml", sess)          # the design alone as TOML, CAD files by path
 record!(sess); undo!(sess)                       # undo/redo steps (a window records them itself)
 ```
 

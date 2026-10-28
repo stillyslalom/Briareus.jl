@@ -1,10 +1,11 @@
 # Saving and restoring a design: the session as plain data (`session_state`), written to
-# and read from a TOML session file, and the undo/redo history built on the same
-# snapshots. Results (the drive, an optimization, a clearance report) are not saved:
-# they are computed again from the restored design.
+# and read from a session file (a zip of the TOML and the CAD files it reads, or the TOML
+# alone), and the undo/redo history built on the same snapshots. Results (the drive, an
+# optimization, a clearance report) are not saved: they are computed again from the
+# restored design.
 
 const SESSION_FORMAT = "BriareusGUI session"
-const SESSION_VERSION = 1
+const SESSION_VERSION = 2               # 2: `.briar` archives with the CAD files
 
 _strs(xs) = [String(x) for x in xs]
 _syms(xs) = Symbol[Symbol(x) for x in xs]
@@ -78,8 +79,8 @@ function session_state(sess::DesignSession; view::Bool = true)
         "quality" => String(rv.quality[]))
     talis = Dict{String,Any}(
         "capture" => _strs(tl.capture[]), "hardware" => _strs(tl.hardware[]),
-        "tolerance" => tl.tolerance[], "pivot" => String(tl.pivot[]),
         "diagnostics" => _strs(tl.diagnostics[]),
+        "tolerance" => tl.tolerance[], "pivot" => String(tl.pivot[]),
         "pivot_point" => collect(tl.pivot_point[]), "omega1" => tl.omega1[])
     state = Dict{String,Any}("format" => SESSION_FORMAT, "version" => SESSION_VERSION,
                              "visrad_source" => sess.visrad_source[],
@@ -182,8 +183,8 @@ function restore!(sess::DesignSession, state::AbstractDict)
             c = state["talis"]
             _assign!(sess.talis.capture, _syms(c["capture"]))
             _assign!(sess.talis.hardware, _syms(c["hardware"]))
-        end
             _assign!(sess.talis.diagnostics, _syms(get(c, "diagnostics", String[])))
+        end
     end
     roles()
     _after_build!(roles, ts)
@@ -217,36 +218,202 @@ function restore!(sess::DesignSession, state::AbstractDict)
     return sess
 end
 
-"""
-    save_session(path, sess::DesignSession) -> path
+# ---------------------------------------------------------------- CAD files in sessions
 
-Write the design ([`session_state`](@ref), view included) to a TOML file (by
-convention `.briareus.toml`). The file is plain text: beams, windows and parts can be
-read and edited by hand.
+_sha256(file) = bytes2hex(open(sha256, file))
+
+# The folder saved CAD copies are extracted to: one subfolder per content hash, so a
+# copy's path (and the remesh caches keyed on it) is the same in every session that has it.
+_cad_cache(hash) = joinpath(tempdir(), "BriareusGUI-cad", hash)
+
 """
-function save_session(path::AbstractString, sess::DesignSession)
+    cad_source(sess::DesignSession, file) -> String
+
+The file a CAD part's `file` was saved from: for a copy extracted from a `.briar`
+session, the path it had when the session was saved; otherwise `file` itself.
+"""
+cad_source(sess::DesignSession, file::AbstractString) = get(sess.cad_sources, file, String(file))
+
+# The CAD files the design reads: its STL and VisRad parts and the VisRad export template.
+function _cad_files(sess::DesignSession)
+    files = String[p.file for p in sess.target.parts[] if p.kind in (:mesh, :visrad) && !isempty(p.file)]
+    isempty(sess.visrad_source[]) || push!(files, sess.visrad_source[])
+    return unique!(files)
+end
+
+# The state as written to a file: each CAD file by the path it was saved from and its
+# content hash. Returns the state and the hash => file of each file found.
+function _portable_state(sess::DesignSession)
     state = session_state(sess)
-    open(path, "w") do io
-        println(io, "# ", SESSION_FORMAT, ": a Briareus design (target, beams, analysis settings).")
-        println(io, "# Lengths in mm, power in TW, angles in degrees; results are not saved.")
-        TOML.print(io, state; sorted = true)
+    hashes = Dict{String,String}()
+    for f in _cad_files(sess)
+        isfile(f) && (hashes[f] = _sha256(f))
     end
-    sess.status[] = "Saved the session to $(basename(path))"
+    blobs = Dict{String,String}(h => f for (f, h) in hashes)
+    for p in state["target"]["parts"]
+        f = p["file"]
+        isempty(f) && continue
+        haskey(hashes, f) && (p["sha256"] = hashes[f])
+        p["file"] = cad_source(sess, f)
+    end
+    v = sess.visrad_source[]
+    if !isempty(v)
+        haskey(hashes, v) && (state["visrad_sha256"] = hashes[v])
+        state["visrad_source"] = cad_source(sess, v)
+    end
+    return state, blobs
+end
+
+# The zip entry of a CAD file: its hash and its source's extension.
+_cad_entry(hash, source) = "cad/" * hash * lowercase(splitext(source)[2])
+
+function _write_toml(io::IO, state)
+    println(io, "# ", SESSION_FORMAT, ": a Briareus design (target, beams, analysis settings).")
+    println(io, "# Lengths in mm, power in TW, angles in degrees; results are not saved.")
+    TOML.print(io, state; sorted = true)
+end
+
+"""
+    save_session(path, sess::DesignSession; embed = !endswith(path, ".toml")) -> path
+
+Write the design ([`session_state`](@ref), view included) to a session file.
+
+- `embed = true` (a `.briar` file): a zip archive of the design as TOML
+  (`session.toml`) and a copy of every CAD file it reads (`cad/<sha256>.<ext>`: STL
+  parts, VisRad workspaces), so the file opens on another computer. A file used by
+  several parts is stored once.
+- `embed = false` (a `.briar.toml` file): the TOML alone, plain text that can be read
+  and edited by hand. CAD parts are referenced by path, so the file travels without
+  its geometry (for CAD that may not leave the computer it is on).
+
+Either way each CAD part records the path it was read from and its content's SHA-256,
+which [`load_session!`](@ref) checks.
+"""
+function save_session(path::AbstractString, sess::DesignSession; embed::Bool = !endswith(path, ".toml"))
+    state, blobs = _portable_state(sess)
+    if embed
+        tmp = path * ".part"
+        ZipWriter(tmp) do w
+            zip_newfile(w, "session.toml"; compress = true)
+            _write_toml(w, state)
+            zip_commitfile(w)
+            for (h, f) in sort!(collect(blobs))
+                zip_newfile(w, _cad_entry(h, cad_source(sess, f)); compress = true)
+                write(w, read(f))
+                zip_commitfile(w)
+            end
+        end
+        mv(tmp, path; force = true)            # an interrupted save leaves the old file
+        mb = sum(filesize, values(blobs); init = 0) / 2^20
+        sess.status[] = "Saved the session to $(basename(path))" *
+                        (isempty(blobs) ? "" : @sprintf(" with %d CAD file%s (%.1f MB)", length(blobs),
+                                                        length(blobs) == 1 ? "" : "s", mb))
+    else
+        open(io -> _write_toml(io, state), path, "w")
+        sess.status[] = "Saved the session to $(basename(path))" *
+                        (isempty(blobs) ? "" : " (CAD files by path, not embedded)")
+    end
     return path
+end
+
+# Point a saved CAD reference at a file the session reads: the embedded copy when the
+# archive has one (extracted to the cache), else the path itself. Returns that file and
+# whether its source on disk differs from what was saved.
+function _resolve_cad!(sess::DesignSession, zr, source::AbstractString, hash)
+    hash === nothing && return String(source), false
+    changed = isfile(source) && _sha256(source) != hash
+    entry = zr === nothing ? nothing : _cad_entry(hash, source)
+    if entry === nothing || zip_findlast_entry(zr, entry) === nothing
+        return String(source), changed      # by reference: the design reads the source
+    end
+    dir = _cad_cache(hash)
+    file = joinpath(dir, basename(source))
+    if !(isfile(file) && _sha256(file) == hash)
+        mkpath(dir)
+        tmp = file * ".part"
+        write(tmp, zip_readentry(zr, entry))
+        mv(tmp, file; force = true)
+    end
+    sess.cad_sources[file] = source
+    return file, changed
 end
 
 """
     load_session!(sess::DesignSession, path) -> sess
 
-Read a session file written by [`save_session`](@ref) into the session
-([`restore!`](@ref)). The edit history starts over at the loaded design.
+Read a session file written by [`save_session`](@ref) (a `.briar` archive or a
+`.briar.toml` file; older sessions too) into the session ([`restore!`](@ref)). The
+edit history starts over at the loaded design.
+
+A CAD file embedded in the archive is the one the design reads (extracted to a cache
+folder; [`cad_source`](@ref) gives the path it was saved from). When that source still
+exists but its content changed since the save, the copy is kept and the source is listed
+in `sess.cad_changed`; [`reload_cad_sources!`](@ref) switches to the sources and
+[`relink_cad!`](@ref) to another file. A session saved without its CAD reads each
+file from its path; the status names those whose content changed since the save.
 """
 function load_session!(sess::DesignSession, path::AbstractString)
-    state = TOML.parsefile(path)
+    bytes = read(path)
+    zr = length(bytes) >= 4 && bytes[1:4] == b"PK\x03\x04" ? ZipReader(bytes) : nothing
+    state = TOML.parse(zr === nothing ? String(bytes) : zip_readentry(zr, "session.toml", String))
+    changed = String[]
+    if haskey(state, "target") && haskey(state["target"], "parts")
+        for p in state["target"]["parts"]
+            isempty(get(p, "file", "")) && continue
+            f, c = _resolve_cad!(sess, zr, p["file"], get(p, "sha256", nothing))
+            p["file"] = f
+            c && push!(changed, f)
+        end
+    end
+    if !isempty(get(state, "visrad_source", ""))
+        f, c = _resolve_cad!(sess, zr, state["visrad_source"], get(state, "visrad_sha256", nothing))
+        state["visrad_source"] = f
+        c && push!(changed, f)
+    end
     restore!(sess, state)
     reset_history!(sess)
-    sess.status[] = "Loaded the session from $(basename(path))"
+    unique!(changed)
+    copies = filter(f -> haskey(sess.cad_sources, f), changed)
+    ondisk = setdiff(changed, copies)
+    listed(fs) = join(basename.(cad_source.(Ref(sess), fs)), ", ")
+    sess.cad_changed[] = copies
+    sess.status[] = "Loaded the session from $(basename(path))" *
+                    (isempty(copies) ? "" : "; CAD changed on disk since the save (the design reads " *
+                                             "the saved copies): " * listed(copies)) *
+                    (isempty(ondisk) ? "" : "; CAD read from disk, changed since the save: " * listed(ondisk))
     return sess
+end
+
+"""
+    relink_cad!(sess::DesignSession, file, newfile) -> Bool
+
+Read every CAD part that reads `file` (and the VisRad export template, if it is `file`)
+from `newfile` instead, and rebuild the target. Returns whether the target accepted it
+(an error is in `sess.target.error` otherwise, and the design is unchanged).
+"""
+function relink_cad!(sess::DesignSession, file::AbstractString, newfile::AbstractString)
+    ts = sess.target
+    newfile = String(newfile)
+    isfile(newfile) || (ts.error[] = "file not found: $newfile"; return false)
+    ps = [p.file == file ? _with(p; file = newfile) : p for p in ts.parts[]]
+    ps == ts.parts[] || _try_build!(ts; parts = ps) || return false
+    sess.visrad_source[] == file && (sess.visrad_source[] = newfile)
+    sess.cad_changed[] = filter(!=(file), sess.cad_changed[])
+    return true
+end
+
+"""
+    reload_cad_sources!(sess::DesignSession, files = sess.cad_changed[]) -> Bool
+
+Read each of `files` (saved CAD copies) from the path it was saved from
+([`cad_source`](@ref)), for a source that changed since the save. Returns whether every
+one was accepted ([`relink_cad!`](@ref)).
+"""
+function reload_cad_sources!(sess::DesignSession, files = copy(sess.cad_changed[]))
+    ok = all([relink_cad!(sess, f, cad_source(sess, f)) for f in files])
+    ok && !isempty(files) && (sess.status[] = "Read the CAD from its source: " *
+                                              join(unique(basename.(cad_source.(Ref(sess), files))), ", "))
+    return ok
 end
 
 # ---------------------------------------------------------------- undo and redo

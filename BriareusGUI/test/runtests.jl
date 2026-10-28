@@ -3,6 +3,8 @@ using BriareusGUI
 using BriareusGUI.Controllers
 using BriareusGUI.GLMakie
 using BriareusGUI.Briareus
+using SHA: sha256
+using ZipArchives: ZipReader, zip_names, zip_readentry
 
 # Drain a window-style delivery queue until `done()` (background-job tests).
 function drain_until(done, queue; timeout = 300)

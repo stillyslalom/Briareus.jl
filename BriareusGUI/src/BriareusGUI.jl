@@ -14,7 +14,7 @@ The package is also the `briareus` command (a Pkg app, `[apps.briareus]` in its
 `Project.toml`), installed as the BriareusGUI README describes:
 
     briareus                       # the window on a fresh design
-    briareus design.briareus.toml  # on a saved session
+    briareus design.briar          # on a saved session
     briareus --shortcut            # add Briareus to the desktop and the applications menu
 
 A shortcut runs a script that shows a splash while the package loads and writes the
@@ -41,6 +41,8 @@ using Observables
 using Printf
 using LinearAlgebra: dot, norm, normalize, cross, eigen, Symmetric
 import TOML
+using SHA: sha256
+using ZipArchives: ZipWriter, ZipReader, zip_newfile, zip_commitfile, zip_findlast_entry, zip_readentry
 
 include("controllers/shared.jl")
 include("controllers/target_setup.jl")
@@ -57,7 +59,8 @@ include("controllers/workspace.jl")           # session files, undo and redo
 
 export display_number
 export import_visrad_workspace!, export_visrad_workspace, export_results, retune_pulses,
-       retune_to_reference!, session_state, restore!, save_session, load_session!, EditHistory, record!, undo!,
+       retune_to_reference!, session_state, restore!, save_session, load_session!, cad_source, relink_cad!,
+       reload_cad_sources!, EditHistory, record!, undo!,
        redo!, can_undo, can_redo, reset_history!
 export TargetSetup, TARGET_KINDS, TARGET_KIND_LABELS, TARGET_FIELDS, MeshSpec, MESH_PRESETS,
        MESH_RESOLUTIONS, FOIL_NAME, build_target, foil_center, set_target_kind!,

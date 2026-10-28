@@ -31,7 +31,7 @@ const A = BriareusGUI
         @static if isdefined(Base, Symbol("@main"))
             @test isdefined(A, :main)
         end
-        @test A._main(["--from-shortcut", "/no/such/design.briareus.toml"]) == 1
+        @test A._main(["--from-shortcut", "/no/such/design.briar.toml"]) == 1
     end
 
     @testset "shortcut scripts" begin

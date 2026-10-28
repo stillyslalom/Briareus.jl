@@ -420,6 +420,7 @@ function BriareusShell(sess::DesignSession; queue::Channel{Any} = Channel{Any}(I
     _set!(sh, "canUndo", false)
     _set!(sh, "canRedo", false)
     _set!(sh, "visradSource", "")
+    _set!(sh, "cadPrompt", "")
     for k in ("compInfo", "selTitle", "partKind", "partName", "partFile", "bnBy", "bn_z", "bn_r", "bn_phi",
               "bn_defocus", "bn_power", "bn_aim_x", "bn_aim_y", "bn_aim_z", "bnInfo",
               "bnCluster", "bnQuad")
@@ -434,7 +435,7 @@ function BriareusShell(sess::DesignSession; queue::Channel{Any} = Channel{Any}(I
     _set!(sh, "bnAimRef", 0)
     _set!(sh, "beamNames", String[])
     _set!(sh, "facility", "nif")
-    for k in ("compHidden", "partTwoSided", "partInward", "partAperture")
+    for k in ("compHidden", "partTwoSided", "partInward", "partAperture", "partCopy", "partSourceExists")
         _set!(sh, k, false)
     end
     _set!(sh, "bnOn", 0)
@@ -453,8 +454,8 @@ function BriareusShell(sess::DesignSession; queue::Channel{Any} = Channel{Any}(I
     mark = (_...) -> (sh.dirty[] = true)
     ts, bt, dr, st, rv, tl, v, tm = sess.target, sess.beams, sess.drive, sess.optimize, sess.review,
                                     sess.talis, sess.view, sess.time
-    for obs in (sess.status, sess.meshing, ts.kind, ts.params, ts.mesh, ts.resolution, ts.windows, ts.parts,
-                ts.target, ts.error, ts.pending, ts.building, ts.fitting,
+    for obs in (sess.status, sess.meshing, sess.cad_changed, ts.kind, ts.params, ts.mesh, ts.resolution,
+                ts.windows, ts.parts, ts.target, ts.error, ts.pending, ts.building, ts.fitting,
                 bt.beams, bt.enabled, bt.preset, bt.by, bt.path, bt.error, bt.warnings,
                 dr.scenario, dr.building, dr.result, dr.evaluating, dr.field, dr.view,
                 dr.cavity, dr.cavity_point, dr.films, dr.beam_model, dr.profile,
@@ -508,7 +509,12 @@ function _refresh!(sh::BriareusShell)
     _set!(sh, "sessionPath", sh.session_path)
     _set!(sh, "canUndo", can_undo(sess))
     _set!(sh, "canRedo", can_redo(sess))
-    _set!(sh, "visradSource", basename(sess.visrad_source[]))
+    _set!(sh, "visradSource", basename(cad_source(sess, sess.visrad_source[])))
+    changed = sess.cad_changed[]
+    _set!(sh, "cadPrompt", isempty(changed) ? "" :
+                           "These CAD files changed on disk since the session was saved:\n\n" *
+                           join(cad_source.(Ref(sess), changed), "\n") *
+                           "\n\nThe design reads the copies saved in the session. Read the changed files instead?")
     _set!(sh, "status", sess.status[])
     _refresh_view!(sh)
     _refresh_target!(sh)
@@ -659,7 +665,10 @@ function _refresh_selection!(sh::BriareusShell)
             _set!(sh, "partNumber", i)
             _set!(sh, "partKind", PART_KIND_LABELS[p.kind])
             _set!(sh, "partName", String(p.name))
-            _set!(sh, "partFile", p.file)
+            src = cad_source(sess, p.file)
+            _set!(sh, "partFile", src)
+            _set!(sh, "partCopy", src != p.file)            # reads the copy saved in the session
+            _set!(sh, "partSourceExists", src != p.file && isfile(src))
             # its frame: the target's, or another part's
             anchors = _part_anchor_choices(sess, p)
             _set!(sh, "anchorLabels", [a in PART_ANCHORS ? PART_ANCHOR_LABELS[a] : "Part: " * String(a)
@@ -1447,13 +1456,32 @@ function br_open_session(url)
         select!(sh.sess.view, "target")
     end
 end
-# An empty url saves to the current session file.
-function br_save_session(url)
+# An empty url saves to the current session file; `refs` saves the CAD files by path only.
+function br_save_session(url, refs)
     _with_shell() do sh
         path = isempty(String(url)) ? sh.session_path : _url_to_path(String(url))
         isempty(path) && throw(ArgumentError("choose a file to save the session to"))
-        save_session(path, sh.sess)
+        save_session(path, sh.sess; embed = !Bool(refs) && !endswith(path, ".toml"))
         sh.session_path = path
+    end
+end
+# CAD copies saved with a session: read the changed sources, or keep the copies.
+# (the prompt is answered either way: a file the target rejects stays a saved copy)
+br_reload_cad_sources() = _with_shell(sh -> (reload_cad_sources!(sh.sess); sh.sess.cad_changed[] = String[]))
+br_keep_cad_copies() = _with_shell(sh -> (sh.sess.cad_changed[] = String[]))
+# The selected part's CAD file read from `newfile` (every part reading that file moves).
+function _relink_part(sh, newfile)
+    i = part_index(sh.sess.target, Symbol(selection_kind(sh.sess.view.selection[])[2]))
+    i === nothing && return
+    file = sh.sess.target.parts[][i].file
+    relink_cad!(sh.sess, file, newfile) &&
+        (sh.sess.status[] = "read the parts of $(basename(cad_source(sh.sess, file))) from $newfile")
+end
+br_relink_part(url) = _with_shell(sh -> _relink_part(sh, _url_to_path(String(url))))
+function br_part_from_source()
+    _with_shell() do sh
+        i = part_index(sh.sess.target, Symbol(selection_kind(sh.sess.view.selection[])[2]))
+        i === nothing || _relink_part(sh, cad_source(sh.sess, sh.sess.target.parts[][i].file))
     end
 end
 br_import_beams(url) = _with_shell(sh -> (import_beams!(sh.sess.beams, _url_to_path(String(url)));
@@ -1649,7 +1677,8 @@ br_canvas_focus(on) = (sh = _SHELL[]; sh === nothing || Bool(on) || release_inpu
 function _register_qml_functions()
     @qmlfunction br_tick br_grab_started br_select br_select_add br_toggle_expand br_tree_on
     @qmlfunction br_select_range br_node_flags br_node_show br_node_include
-    @qmlfunction br_undo br_redo br_open_session br_save_session
+    @qmlfunction br_undo br_redo br_open_session br_save_session br_reload_cad_sources br_keep_cad_copies
+    @qmlfunction br_relink_part br_part_from_source
     @qmlfunction br_set_cluster br_rename_cluster br_split_quad br_merge_quad br_window_round
     @qmlfunction br_set_facility br_aim_at
     @qmlfunction br_set_target_kind br_set_resolution br_edit_mesh br_edit_target br_leh_closure

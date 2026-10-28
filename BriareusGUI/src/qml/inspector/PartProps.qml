@@ -3,6 +3,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import QtQuick.Dialogs
 import jlqml
 import "../common"
 
@@ -16,9 +17,36 @@ ColumnLayout {
     }
     Note {
         visible: app.partFile !== ""
-        text: "File: " + app.partFile + "\nWindings repaired (closed solids face out of their " +
+        text: "File: " + app.partFile +
+              (app.partCopy ? "\nRead from the copy saved in the session" +
+                              (app.partSourceExists ? "." : " (the file is not on this computer).") : "") +
+              "\nWindings repaired (closed solids face out of their " +
               "material, open sheets the target center) and its surface remeshed into elements of " +
               "the part's size; a part left out of the calculations is drawn from its file's facets."
+    }
+    RowLayout {
+        visible: app.partFile !== ""
+        Button {
+            text: "Relink…"
+            ToolTip.visible: hovered
+            ToolTip.text: "Read this file's parts from another file"
+            onClicked: relinkDialog.open()
+        }
+        Button {
+            text: "Read from the file"
+            visible: app.partCopy
+            enabled: app.partSourceExists
+            ToolTip.visible: hovered
+            ToolTip.text: "Read this file's parts from the file on disk instead of the saved copy"
+            onClicked: Julia.br_part_from_source()
+        }
+    }
+    FileDialog {
+        id: relinkDialog
+        title: "Read the part's CAD from another file"
+        fileMode: FileDialog.OpenFile
+        nameFilters: ["CAD files (*.stl *.STL *.vrw)", "All files (*)"]
+        onAccepted: Julia.br_relink_part(selectedFile.toString())
     }
     PropRow {
         label: "Name"

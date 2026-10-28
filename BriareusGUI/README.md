@@ -32,7 +32,7 @@ the documentation describes the window, a first session and every panel.
 4. `briareus --shortcut` adds Briareus to the desktop and the applications menu (run it
    again after `pkg> app update BriareusGUI`).
 
-`briareus` opens the window on a fresh design, and `briareus design.briareus.toml` on a
+`briareus` opens the window on a fresh design, and `briareus design.briar` on a
 saved session, in about 20 s. A shortcut shows a splash meanwhile (a terminal shows
 nothing until the window), and its output goes to
 `%LOCALAPPDATA%\Briareus\briareus.log` (macOS: `~/Library/Logs/Briareus/`).

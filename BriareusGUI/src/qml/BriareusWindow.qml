@@ -68,9 +68,10 @@ ApplicationWindow {
             Action {
                 text: "&Save session"
                 shortcut: StandardKey.Save
-                onTriggered: app.sessionPath === "" ? sessionDialog.run("save") : Julia.br_save_session("")
+                onTriggered: app.sessionPath === "" ? sessionDialog.run("save") : Julia.br_save_session("", false)
             }
             Action { text: "Save session &as…"; shortcut: StandardKey.SaveAs; onTriggered: sessionDialog.run("save") }
+            Action { text: "Save session without CAD files…"; onTriggered: sessionDialog.run("save_refs") }
             MenuSeparator {}
             AutoMenu {
                 title: "New target"
@@ -380,20 +381,40 @@ ApplicationWindow {
             else Julia.br_tl_export(url)
         }
     }
-    // session files: the whole design (target, beams, settings) as TOML
+    // session files: the whole design (target, beams, settings) and the CAD files it reads
+    // (.briar, a zip), or the design alone as TOML with the CAD files by path
     FileDialog {
         id: sessionDialog
         property string mode: "open"
         function run(m) { mode = m; open() }
-        title: mode === "open" ? "Open a Briareus session" : "Save the Briareus session"
+        title: mode === "open" ? "Open a Briareus session" :
+               mode === "save" ? "Save the Briareus session with its CAD files" :
+               "Save the Briareus session without its CAD files (by path)"
         fileMode: mode === "open" ? FileDialog.OpenFile : FileDialog.SaveFile
-        defaultSuffix: "toml"
-        nameFilters: ["Briareus session (*.briareus.toml *.toml)", "All files (*)"]
+        defaultSuffix: mode === "save_refs" ? "toml" : "briar"
+        nameFilters: mode === "open" ? ["Briareus session (*.briar *.briar.toml *.toml)", "All files (*)"] :
+                     mode === "save" ? ["Briareus session with its CAD files (*.briar)"] :
+                     ["Briareus session, CAD files by path (*.briar.toml)"]
         onAccepted: {
             const url = selectedFile.toString()
             if (mode === "open") Julia.br_open_session(url)
-            else Julia.br_save_session(url)
+            else Julia.br_save_session(url, mode === "save_refs")
         }
+    }
+    // after opening a session: CAD files changed on disk since it was saved
+    Dialog {
+        id: cadDialog
+        title: "CAD files changed"
+        anchors.centerIn: parent
+        modal: true
+        closePolicy: Popup.NoAutoClose
+        footer: DialogButtonBox {
+            Button { text: "Read the changed files"; DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole }
+            Button { text: "Keep the saved copies"; DialogButtonBox.buttonRole: DialogButtonBox.RejectRole }
+        }
+        Label { text: app.cadPrompt }
+        onAccepted: Julia.br_reload_cad_sources()
+        onRejected: Julia.br_keep_cad_copies()
     }
     FileDialog {
         id: stlDialog
@@ -553,7 +574,7 @@ ApplicationWindow {
                   "The model tree selects the same things; its boxes switch beams on and off\n" +
                   "and show or hide components. View ▸ Turntable keeps z up while orbiting.\n\n" +
                   "Ctrl + Z / Ctrl + Y: undo / redo a design edit (target, beams, settings)\n" +
-                  "Ctrl + S / Ctrl + O: save / open the session (the design as a TOML file)"
+                  "Ctrl + S / Ctrl + O: save / open the session (the design and its CAD files)"
         }
     }
 
@@ -563,6 +584,7 @@ ApplicationWindow {
         repeat: true
         onTriggered: {
             const r = Julia.br_tick()
+            if (app.cadPrompt !== "" && !cadDialog.opened) cadDialog.open()
             if (app.grabPath !== "") {
                 const path = app.grabPath
                 Julia.br_grab_started()

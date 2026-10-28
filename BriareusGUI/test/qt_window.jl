@@ -26,7 +26,7 @@ using BriareusGUI.Briareus
     next!() = (stage[] += 1; t_stage[] = time())
     sst = joinpath(files, "pointing.csv")
     talis_csv = joinpath(files, "talis.csv")
-    session_file = joinpath(files, "design.briareus.toml")
+    session_file = joinpath(files, "design.briar")
     reference_csv = joinpath(files, "reference.csv")
     retuned_csv = joinpath(files, "retuned.csv")
     target_stl = joinpath(files, "target.stl")
@@ -195,7 +195,7 @@ using BriareusGUI.Briareus
         elseif k == 17 && grabbed(png("split"))
             # undo the split (one step: the tick recorded it with the defocus edit),
             # after saving the session with the quad split
-            B.br_save_session(session_file)
+            B.br_save_session(session_file, false)
             B.br_undo(); next!()
         elseif k == 18 && time() - t_stage[] > 0.2
             q = first(b.quad for b in s.beams.beams[] if b.group === :inner23)

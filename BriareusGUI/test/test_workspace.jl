@@ -20,7 +20,7 @@
     s.drive.spot_radius[] = 0.6
     s.view.beams[] = :volumes
     s.view.hidden[] = Set([:capsule])
-    path = joinpath(mktempdir(), "design.briareus.toml")
+    path = joinpath(mktempdir(), "design.briar.toml")
     save_session(path, s)
     @test occursin("BriareusGUI session", read(path, String))
 
@@ -126,12 +126,74 @@ end
     @test length(elements(ts.target[], name)) == 24
     @test !edit_part!(ts, length(ts.parts[]), :scale, "-1")       # rejected
     # in a session file
-    f = joinpath(mktempdir(), "with_stl.briareus.toml")
+    f = joinpath(mktempdir(), "with_stl.briar.toml")
     save_session(f, s)
     s2 = DesignSession(resolution = :coarse)
     load_session!(s2, f)
     @test s2.target.parts[][end].file == path && s2.target.parts[][end].kind === :mesh
     @test nelements(s2.target.target[]) == nelements(ts.target[])
+end
+
+@testset "CAD files saved in sessions (no GL)" begin
+    # mock CAD: a tube 1 mm in radius, taller in each later version (binary STL)
+    tube(h) = cylinder_mesh(1.0, 0.0, h; nz = 1, nphi = 8)
+    dir = mktempdir()
+    src = joinpath(dir, "shield.stl")
+    write_stl(src, tube(1.0))
+    bytes = read(src)
+    s = DesignSession(resolution = :coarse)
+    ts = s.target
+    @test add_part!(ts, :mesh; file = src, z = 7.5)
+    @test add_part!(ts, :mesh; file = src, z = -9.5)       # the same file twice
+    n0 = nelements(ts.target[])
+    f = joinpath(dir, "design.briar")
+    save_session(f, s)
+    @test occursin("1 CAD file", s.status[])                              # stored once
+    zr = ZipReader(read(f))
+    @test zip_names(zr) == ["session.toml", "cad/" * bytes2hex(sha256(bytes)) * ".stl"]
+    @test zip_readentry(zr, zip_names(zr)[2]) == bytes
+
+    # opened where the source is gone: the design reads the saved copy
+    mv(src, src * ".moved")
+    s2 = DesignSession(resolution = :coarse)
+    load_session!(s2, f)
+    copy = s2.target.parts[][end].file
+    @test copy != src && isfile(copy) && read(copy) == bytes
+    @test all(p -> p.file == copy, s2.target.parts[]) && cad_source(s2, copy) == src
+    @test isempty(s2.cad_changed[]) && nelements(s2.target.target[]) == n0
+    # saved again, the parts keep the path they were first read from
+    f2 = joinpath(dir, "again.briar")
+    save_session(f2, s2)
+    s2b = DesignSession(resolution = :coarse)
+    load_session!(s2b, f2)
+    @test cad_source(s2b, s2b.target.parts[][end].file) == src
+
+    # the source changed since the save: listed, and read only on request
+    write_stl(src, tube(2.0))
+    s3 = DesignSession(resolution = :coarse)
+    load_session!(s3, f)
+    @test s3.cad_changed[] == [copy] && occursin("shield.stl", s3.status[])
+    @test nelements(s3.target.target[]) == n0
+    @test reload_cad_sources!(s3)
+    @test all(p -> p.file == src, s3.target.parts[]) && isempty(s3.cad_changed[])
+    @test nelements(s3.target.target[]) > n0                              # the taller tube
+    @test undo!(s3) && all(p -> p.file == copy, s3.target.parts[])        # back to the copy
+    # relinked to another file, or refused a missing one
+    other = joinpath(dir, "other.stl")
+    write_stl(other, tube(1.0))
+    @test relink_cad!(s3, copy, other) && all(p -> p.file == other, s3.target.parts[])
+    @test !relink_cad!(s3, other, joinpath(dir, "missing.stl"))
+    @test all(p -> p.file == other, s3.target.parts[])
+
+    # without the CAD files: paths only, and a changed file named on load
+    g = joinpath(dir, "refs.briar.toml")
+    save_session(g, s3)
+    @test startswith(read(g, String), "# BriareusGUI session")
+    write_stl(other, tube(3.0))
+    s4 = DesignSession(resolution = :coarse)
+    load_session!(s4, g)
+    @test all(p -> p.file == other, s4.target.parts[]) && isempty(s4.cad_changed[])
+    @test occursin("changed since the save: other.stl", s4.status[])
 end
 
 @testset "x-ray image (no GL)" begin
@@ -189,7 +251,7 @@ end
     @test !set_part_anchor!(ts, i, :foil) && occursin("backlighter", ts.error[])
     @test !set_target_kind!(ts, :custom) && ts.kind[] === :hohlraum
     # in a session file
-    f = joinpath(mktempdir(), "frames.briareus.toml")
+    f = joinpath(mktempdir(), "frames.briar.toml")
     save_session(f, s)
     s2 = DesignSession(resolution = :coarse)
     load_session!(s2, f)
@@ -228,7 +290,7 @@ end
     select!(v, "comp:capsule")
     edit_target!(ts, :length, "10.5")                              # a rebuild keeps both
     @test v.selection[] == "comp:capsule" && ts.ghost[] !== nothing
-    f = joinpath(mktempdir(), "excluded.briareus.toml")
+    f = joinpath(mktempdir(), "excluded.briar.toml")
     save_session(f, s)
     s2 = DesignSession(resolution = :coarse)
     load_session!(s2, f)
@@ -270,10 +332,10 @@ end
     dir = mktempdir()
     files = export_results(s, dir)
     @test Set(basename.(files)) == Set(["elements.csv", "components.csv", "beams.csv", "legendre.csv",
-                                        "ylm.csv", "summary.txt", "session.briareus.toml"])
+                                        "ylm.csv", "summary.txt", "session.briar.toml"])
     @test length(readlines(joinpath(dir, "elements.csv"))) == nelements(s.target.target[]) + 1
     s2 = DesignSession(resolution = :coarse)
-    load_session!(s2, joinpath(dir, "session.briareus.toml"))
+    load_session!(s2, joinpath(dir, "session.briar.toml"))
     @test session_state(s2) == session_state(s)
     # facilities: presets set them, the facility gates the TaLIS rules
     @test s.beams.facility[] === :nif && :talis in session_tasks(s)
@@ -327,7 +389,7 @@ end
     @test p1 - p0 ≈ V(0, 0, 1.0) atol = 1e-9
     @test all(i -> s.beams.beams[][i].aim ≈ V(0.3, p1[2], p1[3]), idx)
     @test s.beams.aim_ref[][idx] == [:lid, :lid] && count(!=(:none), s.beams.aim_ref[]) == 2
-    f = joinpath(mktempdir(), "refs.briareus.toml")
+    f = joinpath(mktempdir(), "refs.briar.toml")
     save_session(f, s)
     s2 = DesignSession(resolution = :coarse)
     load_session!(s2, f)
@@ -369,7 +431,7 @@ include(joinpath(pkgdir(Briareus), "test", "vrw_fixture.jl"))
     @test redo!(s) && dr.beam_model[] === :fcone
     # session files keep the model and its envelope ratios
     set_beam_model!(dr, :visrad)
-    path = joinpath(mktempdir(), "model.briareus.toml")
+    path = joinpath(mktempdir(), "model.briar.toml")
     save_session(path, s)
     s2 = DesignSession(resolution = :coarse)
     load_session!(s2, path)
@@ -432,13 +494,22 @@ end
     @test back.beams[3].power == 0
     @test count(k -> readlines(src)[k] != readlines(out)[k], eachindex(readlines(src))) == 3
     # sessions remember the template
-    f = joinpath(dir, "vrw.briareus.toml")
+    f = joinpath(dir, "vrw.briar.toml")
     save_session(f, s)
     s2 = DesignSession(resolution = :coarse)
     load_session!(s2, f)
     @test s2.visrad_source[] == abspath(src)
     @test s2.drive.beam_model[] === :visrad && s2.drive.profile[].envelope == s.drive.profile[].envelope
     @test component_names(s2.target.target[]) == names
+    # with its CAD: the parts and the export template share one saved copy
+    fz = joinpath(dir, "vrw.briar")
+    save_session(fz, s)
+    @test length(zip_names(ZipReader(read(fz)))) == 2
+    s3 = DesignSession(resolution = :coarse)
+    load_session!(s3, fz)
+    @test s3.visrad_source[] != abspath(src) && cad_source(s3, s3.visrad_source[]) == abspath(src)
+    @test all(p -> p.file == s3.visrad_source[], s3.target.parts[])
+    @test component_names(s3.target.target[]) == names
     # a design's targets are built once: an edit to a part left out of the calculations
     # keeps the calculation target, and an undo or a redo finds its target again
     t1 = ts.target[]
@@ -794,7 +865,7 @@ end
     ref = build_target(ts)
     @test n2 == count(==(findfirst(c -> c.name === :CAD_0, ref.components)), ref.elem_comp)
     # a session saved with a size not meshed yet loads at once in a window
-    f = joinpath(dir, "cad.briareus.toml")
+    f = joinpath(dir, "cad.briar.toml")
     edit_part!(ts, i, :h, "0.19")
     save_session(f, s)
     s2 = DesignSession(resolution = :coarse)

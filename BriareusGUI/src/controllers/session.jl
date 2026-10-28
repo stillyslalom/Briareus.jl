@@ -53,7 +53,9 @@ selection, model tree), `status` (the last message), `history` (the
 progress of a VisRad workspace import or of CAD parts put back into the calculations,
 `""` when none runs; see [`import_visrad_workspace!`](@ref) and
 [`include_components!`](@ref)). Designs are saved and
-loaded with [`save_session`](@ref) and [`load_session!`](@ref).
+loaded with [`save_session`](@ref) and [`load_session!`](@ref); `cad_sources` maps each CAD
+copy extracted from a saved session to the file it was saved from, and `cad_changed` lists
+the copies whose source changed since the save.
 
 The table starts from `beams` (a vector of `Beam`s) or a [`BEAM_PRESETS`](@ref) entry
 pointed for the target. Changing the target kind swaps a NIF preset for the OMEGA
@@ -82,6 +84,8 @@ struct DesignSession
     meshing::Observable{String}            # a workspace import or CAD meshing in progress ("" when none)
     mesh_generation::Base.RefValue{Int}    # import and meshing requests (latest wins)
     build_queued::Base.RefValue{Bool}      # a drive asked for while CAD parts remesh
+    cad_sources::Dict{String,String}       # a saved CAD copy => the file it was saved from
+    cad_changed::Observable{Vector{String}} # saved copies whose source changed since the save
 end
 
 function DesignSession(; kind::Symbol = :hohlraum, resolution::Symbol = :standard,
@@ -95,7 +99,8 @@ function DesignSession(; kind::Symbol = :hohlraum, resolution::Symbol = :standar
     ts.deliver[] = deliver
     sess = DesignSession(ts, bt, DriveState(), OptimizeState(), ReviewState(), TaLISState(),
                          TimeState(), ViewState(), Observable(""), ts.deliver, ts.spawn, EditHistory(),
-                         Ref(""), Observable(""), Ref(0), Ref(false))
+                         Ref(""), Observable(""), Ref(0), Ref(false), Dict{String,String}(),
+                         Observable(String[]))
     default_selection!(sess.review, ts.target[])
     default_selection!(sess.talis, ts.target[])
     _connect!(sess)
@@ -775,7 +780,7 @@ end
 Write the current drive's results to the folder `dir` for postprocessing
 (`Briareus.write_results`: per-element laser and x-ray fields, per-component and per-beam
 power, the capsule flux's Legendre and Y_lm modes, a summary) and the design that
-produced them (`session.briareus.toml`, see [`save_session`](@ref)). The drive must be
+produced them (`session.briar.toml`, see [`save_session`](@ref)). The drive must be
 computed and current; disabled beams appear at zero power. Returns the files written.
 """
 function export_results(sess::DesignSession, dir::AbstractString)
@@ -789,7 +794,7 @@ function export_results(sess::DesignSession, dir::AbstractString)
     observe = :capsule in names ? :capsule : nothing
     files = write_results(dir, t, ev.deposition; sol = res.solution, beams = ev.effective,
                           observe = res.solution === nothing ? nothing : observe)
-    push!(files, save_session(joinpath(dir, "session.briareus.toml"), sess))
+    push!(files, save_session(joinpath(dir, "session.briar.toml"), sess))
     sess.status[] = "exported the results to $(basename(normpath(dir)))"
     return files
 end
