@@ -48,7 +48,8 @@
     @test edit_talis!(tl, :tolerance, "0") && tl.tolerance[] == 0
     start_talis!(tl, rv, t, [b]; spawn = false)
     c0 = only(x for x in tl.report[].rows if x.rule === :clearance_3w && x.component === :plate)
-    @test c0.worst - c3.worst ≈ tand(0.5) * hypot(x0, 2.0) atol = 1e-9
+    # (each worst is a lower bound within max(1e-4, 0.01 |worst|), the defaults)
+    @test c0.worst - c3.worst ≈ tand(0.5) * hypot(x0, 2.0) atol = 0.01 * (c0.worst + c3.worst) + 2e-4
     @test edit_talis!(tl, :tolerance, "0.5")
     # a pivot at the edge point gives no allowance there
     @test edit_talis!(tl, :pivot_point, "1.6, 0, 2")
@@ -56,7 +57,7 @@
     @test talis_kwargs(tl, rv).pivot == (1.6, 0.0, 2.0)
     start_talis!(tl, rv, t, [b]; spawn = false)
     cP = only(x for x in tl.report[].rows if x.rule === :clearance_3w && x.component === :plate)
-    @test cP.worst ≈ c0.worst atol = 1e-9
+    @test cP.worst ≈ c0.worst atol = 0.01 * c0.worst + 1e-4
     @test occursin("(1.6, 0, 2)", talis_notes(tl)[1].text)
     set_talis_pivot!(tl, :aim)
     @test talis_kwargs(tl, rv).pivot === :aim
@@ -68,10 +69,32 @@
     rv.quality[] = :standard
     @test talis_kwargs(tl, rv).pointing == 0.1 && talis_kwargs(tl, rv).level == 2
 
+    start_talis!(tl, rv, t, [b]; spawn = false)                    # on the current settings
     path = export_talis(tl, joinpath(mktempdir(), "talis.csv"))
-    @test countlines(path) == 1 + length(tl.report[].rows) && tl.status[] == "wrote talis.csv"
+    lines = readlines(path)
+    @test count(!startswith("#"), lines) == 1 + length(tl.report[].rows) && tl.status[] == "wrote talis.csv"
+    @test "# setting pivot = aim" in lines && any(startswith("# out of scope: "), lines)
     @test_throws ArgumentError export_talis(TaLISState(), path)
-    @test !talis_stale(tl, t, [b]) && talis_stale(tl, t, [remake(b; aim = (0.1, 0.0, 0.0))])
+    # stale on the target, the beams, or any setting the check used
+    @test !talis_stale(tl, rv, t, [b]) && talis_stale(tl, rv, t, [remake(b; aim = (0.1, 0.0, 0.0))])
+    changes = (() -> edit_talis!(tl, :tolerance, "0.3"), () -> set_talis_pivot!(tl, :tcc),
+               () -> (tl.omega1[] = false), () -> (rv.quality[] = :quick),
+               () -> edit_review!(rv, :focus, "2"), () -> set_talis_role!(tl, :plate, :none))
+    stale = map(changes) do change!
+        start_talis!(tl, rv, t, [b]; spawn = false)
+        fresh = !talis_stale(tl, rv, t, [b])
+        change!()
+        fresh && talis_stale(tl, rv, t, [b])
+    end
+    @test all(stale)
+
+    # diagnostic hardware: 3ω-checked as hardware, given to the 1ω diagnostic rule
+    # instead of the 0.2 mm 1ω clearance
+    set_talis_role!(tl, :plate, :diagnostic)
+    @test talis_role(tl, :plate) === :diagnostic && talis_role(tl, :f) === :capture
+    kd = talis_kwargs(tl, rv)
+    @test kd.diagnostics == (:plate,) && :plate in kd.hardware && !(:plate in kd.omega1_components)
+    @test_throws ArgumentError set_talis_role!(tl, :plate, :diagnostics)
 
     # no capture component, no beams
     tl2 = TaLISState()
@@ -139,7 +162,7 @@ end
     edit_target!(sess.target, :length, "10.0")
     @test :capsule in tl.hardware[] && !(:capsule in tl.capture[])        # kept as chosen
     @test !(:capsule in talis_kwargs(tl, sess.review).leh)
-    @test talis_stale(tl, sess.target.target[], active_beams(sess.beams))
+    @test talis_stale(tl, sess.review, sess.target.target[], active_beams(sess.beams))
     @test task_status(sess, :talis)[1] === :attention
     remove_window!(sess.target, 1)
     @test !(:window_1 in tl.hardware[]) && !(:window_1 in sess.review.hardware[])

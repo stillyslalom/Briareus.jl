@@ -79,6 +79,7 @@ function session_state(sess::DesignSession; view::Bool = true)
     talis = Dict{String,Any}(
         "capture" => _strs(tl.capture[]), "hardware" => _strs(tl.hardware[]),
         "tolerance" => tl.tolerance[], "pivot" => String(tl.pivot[]),
+        "diagnostics" => _strs(tl.diagnostics[]),
         "pivot_point" => collect(tl.pivot_point[]), "omega1" => tl.omega1[])
     state = Dict{String,Any}("format" => SESSION_FORMAT, "version" => SESSION_VERSION,
                              "visrad_source" => sess.visrad_source[],
@@ -182,6 +183,7 @@ function restore!(sess::DesignSession, state::AbstractDict)
             _assign!(sess.talis.capture, _syms(c["capture"]))
             _assign!(sess.talis.hardware, _syms(c["hardware"]))
         end
+            _assign!(sess.talis.diagnostics, _syms(get(c, "diagnostics", String[])))
     end
     roles()
     _after_build!(roles, ts)

@@ -259,7 +259,7 @@ end
 mutable struct CompRow
     name::String                                   # the component's name, for the callbacks
     label::String                                  # as the model tree names it
-    role::String                                   # "target", "hardware", "none"
+    role::String                                   # "target"/"capture", "hardware", "diagnostic", "none"
 end
 
 mutable struct ClearRow
@@ -466,7 +466,7 @@ function BriareusShell(sess::DesignSession; queue::Channel{Any} = Channel{Any}(I
                 st.error, st.result, bt.cluster, v.extra,
                 rv.targets, rv.hardware, rv.peak_fraction, rv.wings, rv.errors, rv.quality,
                 rv.running, rv.progress, rv.status, rv.error, rv.report,
-                tl.capture, tl.hardware, tl.tolerance, tl.pivot, tl.pivot_point, tl.omega1,
+                tl.capture, tl.hardware, tl.diagnostics, tl.tolerance, tl.pivot, tl.pivot_point, tl.omega1,
                 tl.running, tl.status, tl.error, tl.report,
                 v.color, v.beams, v.beam_color, v.show_off, v.cut_components, v.beam_length, v.cutaway, v.hidden, v.selection,
                 v.expanded, tm.pulses, tm.history, tm.retune, tm.chart, tm.cursor, tm.dante, tm.running,
@@ -913,8 +913,8 @@ function _refresh_talis!(sh::BriareusShell)
     _set!(sh, "tlError", tl.error[])
     _set!(sh, "tlHasReport", tl.report[] !== nothing)
     _set!(sh, "tlBrief", talis_brief(tl))
-    _set!(sh, "tlStale", talis_stale(tl, sess.target.target[], active_beams(sess.beams)))
-    comps = [CompRow(String(n), component_label(n), n in tl.capture[] ? "capture" : n in tl.hardware[] ? "hardware" : "none")
+    _set!(sh, "tlStale", talis_stale(tl, sess.review, sess.target.target[], active_beams(sess.beams)))
+    comps = [CompRow(String(n), component_label(n), String(talis_role(tl, n)))
              for n in surface_names(sess.target.target[])]
     _sync_rows!(sh.rows[:talisCompModel], sh.models[:talisCompModel], comps)
     # the rows change only with the report (hundreds of them: not on every refresh)

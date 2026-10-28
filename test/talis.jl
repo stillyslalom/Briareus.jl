@@ -5,6 +5,8 @@
         only(x for x in r.rows if x.rule === rule && x.component === c && (beam === nothing || x.beam == beam))
     tan05 = tand(0.5)
     R = 0.05 + 0.025                                   # default pointing + target offset
+    # distances are lower bounds of the exact minimum, within the resolution (1e-4 mm)
+    lowerbound(v, exact; ε = 1e-4) = exact - ε - 1e-9 <= v <= exact + 1e-9
 
     # 3ω clearance, analytic: beam straight down onto a foil at z = 0; a plate upstream at
     # z = 2 whose edge runs along x = x0. Worst case = x0 − (1% contour + f-cone at s = −2)
@@ -15,26 +17,41 @@
     plate = Component(:plate, translate(rectangle_mesh(w, w; nu = 4, nv = 4), (x0 + w / 2, 0, 2.0)), gold();
                       two_sided = true)
     t = Target(foil(:f, (0, 0, 0), (0, 0, 1); width = 4.0, n = 8), plate)
-    r = talis_check(t, [b]; capture = (:f,))
+    r = talis_check(t, [b]; capture = (:f,), rtol = 0)
     ρ1 = log(100)^(1 / 4) * 0.3                         # 1%-of-peak contour of exp(-ρ⁴)
     nominal = x0 - (ρ1 + 2 / 16)
     worst = nominal - R - 1 / 16 - tan05 * hypot(x0, 2.0)
     c3 = trow(r, :clearance_3w, :plate)
-    @test c3.nominal ≈ nominal atol = 1e-9
-    @test c3.worst ≈ worst atol = 1e-9
-    @test c3.margin ≈ worst - 0.5 atol = 1e-9
+    @test lowerbound(c3.nominal, nominal)
+    @test lowerbound(c3.worst, worst)
+    @test c3.margin == c3.worst - 0.5
     @test c3.point ≈ Vec3(x0, 0, 2.0)
     @test c3.status === :pass && c3.unit === :mm
     # the tolerance term: dropping it, or moving the pivot, changes only r·tan(0.5°)
-    c0 = trow(talis_check(t, [b]; capture = (:f,), tolerance = 0), :clearance_3w, :plate)
-    @test c0.worst - c3.worst ≈ tan05 * hypot(x0, 2.0) atol = 1e-9
+    c0 = trow(talis_check(t, [b]; capture = (:f,), tolerance = 0, rtol = 0), :clearance_3w, :plate)
+    @test c0.worst - c3.worst ≈ tan05 * hypot(x0, 2.0) atol = 1e-4
     bA = remake(b; aim = (0.0, 0.0, 0.5))               # aim 0.5 mm up the axis
-    cA = trow(talis_check(t, [bA]; capture = (:f,), pivot = :aim), :clearance_3w, :plate)
-    @test cA.worst ≈ x0 - (ρ1 + 1.5 / 16) - R - 1 / 16 - tan05 * hypot(x0, 1.5) atol = 1e-9
-    cP = trow(talis_check(t, [b]; capture = (:f,), pivot = (x0, 0.0, 2.0)), :clearance_3w, :plate)
-    @test cP.worst ≈ nominal - R - 1 / 16 atol = 1e-9    # no allowance at the pivot itself
-    cM = trow(talis_check(t, [bA]; capture = (:f,), pivot = :max), :clearance_3w, :plate)
-    @test cM.worst <= min(cA.worst, trow(talis_check(t, [bA]; capture = (:f,)), :clearance_3w, :plate).worst) + 1e-12
+    cA = trow(talis_check(t, [bA]; capture = (:f,), pivot = :aim, rtol = 0), :clearance_3w, :plate)
+    @test lowerbound(cA.worst, x0 - (ρ1 + 1.5 / 16) - R - 1 / 16 - tan05 * hypot(x0, 1.5))
+    # pivot on the edge point: no allowance there, but r·tan(0.5°) grows linearly along
+    # the edge and the distance only quadratically, so the minimum sits off the pivot
+    # (|y| ≈ 0.5° · x0 = 14 µm) and lies below the vertex value; reference: the exact
+    # edge distance on a 0.1 µm grid
+    cP = trow(talis_check(t, [b]; capture = (:f,), pivot = (x0, 0.0, 2.0), rtol = 0), :clearance_3w, :plate)
+    refP = minimum(hypot(x0, y) - (ρ1 + 2 / 16) - R - 1 / 16 - tan05 * abs(y) for y in 0:1e-7:0.1)
+    @test refP < nominal - R - 1 / 16 - 5e-5 && lowerbound(cP.worst, refP)
+    cM = trow(talis_check(t, [bA]; capture = (:f,), pivot = :max, rtol = 0), :clearance_3w, :plate)
+    @test cM.worst <= min(cA.worst, trow(talis_check(t, [bA]; capture = (:f,), rtol = 0), :clearance_3w, :plate).worst) + 1e-4
+    # A plate crossed by the beam between its vertices (one quad, corners ≥ 50 mm off
+    # the axis): the minimum over the whole triangle, on the axis, not at the vertices.
+    # Exact: −ρ1 − 2/16 (inside the envelope) less the error stack and 2·tan(0.5°). At
+    # the default rtol the bound lies within 1 % of its distance from the 0.5 mm rule.
+    wide = Component(:plate, translate(rectangle_mesh(100.0, 100.0; nu = 1, nv = 1), (8.0, 8.0, 2.0)), gold();
+                     two_sided = true)
+    cw = trow(talis_check(Target(foil(:f, (0, 0, 0), (0, 0, 1); width = 4.0, n = 8), wide), [b];
+                          capture = (:f,), level = 0), :clearance_3w, :plate)
+    exw = -ρ1 - 2 / 16 - R - 1 / 16 - 2tan05
+    @test cw.status === :fail && lowerbound(cw.worst, exw; ε = 0.01 * (0.5 - exw))
     # moving the plate in fails the rule, with the blow-by consequence
     tin = Target(foil(:f, (0, 0, 0), (0, 0, 1); width = 4.0, n = 8),
                  translate(plate, (-0.5, 0.0, 0.0)))
@@ -44,10 +61,10 @@
     # 3ω capture, analytic: the 10% contour sits 2 − xa − ρ10 from the foil edge at x = 2.
     ρ10 = log(10)^(1 / 4) * 0.3
     for xa in (0.0, 0.6, 1.0)
-        rc = talis_check(t, [remake(b; aim = (xa, 0.0, 0.0))]; capture = (:f,))
+        rc = talis_check(t, [remake(b; aim = (xa, 0.0, 0.0))]; capture = (:f,), rtol = 0)
         cp = trow(rc, :capture_3w, :f)
-        @test cp.nominal ≈ 2 - xa - ρ10 atol = 1e-9
-        @test cp.worst ≈ 2 - xa - ρ10 - R - 1 / 16 - tan05 * 2 atol = 1e-9
+        @test lowerbound(cp.nominal, 2 - xa - ρ10)
+        @test lowerbound(cp.worst, 2 - xa - ρ10 - R - 1 / 16 - tan05 * 2)
         @test cp.status === (cp.worst >= 0.5 ? :pass : :fail)
         xa > 0 && @test cp.point ≈ Vec3(2, 0, 0) atol = 1e-9
     end
@@ -82,25 +99,38 @@
                             two_sided = true)
     tc = 4.45 - δ - 0.05
     t1 = Target(sq(:own, tc * ô), sq(:other, -tc * ô))
-    r1 = talis_check(t1, [bl]; capture = (), open_ports = [pq])
+    r1 = talis_check(t1, [bl]; capture = (), open_ports = [pq], rtol = 0)
     c0w, h0w = 4.45 + 22.7 / 2, 22.7 / 2
     taper = c0w / 7700 + h0w / 460
     o1 = trow(r1, :clearance_1w, :own)
     @test r1.settings.omega1_size ≈ 22.7
-    @test o1.nominal ≈ δ atol = 1e-9
-    @test o1.worst ≈ δ - taper - R - tan05 * hypot(4.45 - δ, 0.05) atol = 1e-9
+    @test lowerbound(o1.nominal, δ)
+    @test lowerbound(o1.worst, δ - taper - R - tan05 * hypot(4.45 - δ, 0.05))
     @test o1.status === :pass                              # 0.5 mm in: clears by > 0.2 mm
     @test trow(r1, :clearance_1w, :other).nominal > 8      # the other side is dark
     # prism model: no taper
-    rp = talis_check(t1, [bl]; capture = (), omega1_focus = Inf, lens_distance = Inf)
-    @test trow(rp, :clearance_1w, :own).worst ≈ δ - R - tan05 * hypot(4.45 - δ, 0.05) atol = 1e-9
+    rp = talis_check(t1, [bl]; capture = (), omega1_focus = Inf, lens_distance = Inf, rtol = 0)
+    @test lowerbound(trow(rp, :clearance_1w, :own).worst, δ - R - tan05 * hypot(4.45 - δ, 0.05))
+    # a 100 mm plate in the focal plane over the whole footprint, corners ≥ 20 mm out of
+    # it: the footprint is found between the vertices; deepest point −h0 at its center
+    # (with the focus error, the tapered square of the −1 mm plane)
+    wp = Component(:wide, transform(rectangle_mesh(100.0, 100.0; nu = 1, nv = 1), Rm, 50.0 * ô), gold();
+                   two_sided = true)
+    rw = talis_check(Target(wp), [bl]; capture = (), open_ports = [pq], level = 0, rtol = 0)
+    ow = trow(rw, :clearance_1w, :wide)
+    @test ow.status === :review && lowerbound(ow.nominal, -h0w)
+    # no `diagnostics`: their 1ω rule is reported as not evaluated; given, it is checked
+    @test any(n -> occursin("diagnostics to 1ω", n), rw.notes)
+    rdg = talis_check(Target(wp), [bl]; capture = (), open_ports = [pq], level = 0, diagnostics = (:wide,))
+    @test trow(rdg, :diagnostic_1w, :wide).status === :fail && !any(n -> occursin("diagnostics to 1ω", n), rdg.notes)
+    @test rdg.settings.diagnostics == [:wide]
     # the whole quad lights both sides
     q = only(b for b in nif_quads() if b.quad == bl.quad)
     rq = talis_check(t1, [q]; capture = (), open_ports = [pq])
     @test trow(rq, :clearance_1w, :other).nominal < 1
     # an explicit offset direction overrides the NIF convention
-    ro = talis_check(t1, [bl]; capture = (), offsets = Dict(bl.name => -ô))
-    @test trow(ro, :clearance_1w, :other).nominal ≈ δ atol = 1e-9
+    ro = talis_check(t1, [bl]; capture = (), offsets = Dict(bl.name => -ô), rtol = 0)
+    @test lowerbound(trow(ro, :clearance_1w, :other).nominal, δ)
 
     # Uncleared flat plate facing the beamlet: the specular 1ω goes straight back along
     # the port, at the beamlet-to-quad-axis angle from its own quad's FOA.
@@ -140,11 +170,14 @@
     @test trow(talis_check(Target(cyl(1.5)), [bl]; capture = (), open_ports = [-k]), :management_1w, :stalk).status === :pass
     ms = trow(talis_check(Target(cyl(2.5)), [bl]; capture = (), open_ports = [-k]), :management_1w, :stalk)
     @test ms.unit === :deg && ms.status === :fail          # its rim line reflects straight back
-    # curvature overrides: dimpled, too-fine dimples, and undetermined meshes
-    @test trow(talis_check(Target(pl), [bl]; capture = (), open_ports = [pq],
-                           curvature = Dict(:mirror => (:dimpled, 1.0))), :management_1w, :mirror).status === :pass
-    @test trow(talis_check(Target(pl), [bl]; capture = (), open_ports = [pq],
-                           curvature = Dict(:mirror => (:dimpled, 1.0, 0.1))), :management_1w, :mirror).status === :review
+    # curvature overrides: dimpled, too-fine dimples, dimples of unknown spacing (User
+    # Guide §5.6.2 needs half-side/radius ≥ 0.25), and undetermined meshes
+    dimpled(c) = trow(talis_check(Target(pl), [bl]; capture = (), open_ports = [pq],
+                                  curvature = Dict(:mirror => c)), :management_1w, :mirror)
+    @test dimpled((:dimpled, 1.0, 0.25)).status === :pass
+    @test dimpled((:dimpled, 1.0, 0.1)).status === :review
+    du = dimpled((:dimpled, 1.0))
+    @test du.status === :review && occursin("spacing unknown", du.note)
     ub = Component(:ball, translate(sphere_mesh(6.0; ntheta = 24, nphi = 48), 12.0 * ô), gold())   # no surface tag
     @test trow(talis_check(Target(ub), [bl]; capture = (), open_ports = [-k]), :management_1w, :ball).status === :review
 
@@ -168,7 +201,7 @@
     @test !isempty(flat) && all(x -> x.status === :fail, flat)
     @test all(x -> occursin("flat", x.note), flat)
     rd = talis_check(ts, qs; capture = (:wall, :capsule), level = 1,
-                     curvature = Dict(:sombrero => (:dimpled, 2.5)))
+                     curvature = Dict(:sombrero => (:dimpled, 2.5, 1.0)))
     dimp = [x for x in rd.rows if x.rule === :management_1w && x.component === :sombrero]
     @test length(dimp) == length(flat) && all(x -> x.status === :pass, dimp)
     # beams entering through the LEH: no capture rows fail on the wall, and the caps clear
@@ -204,7 +237,7 @@
         end
     end
     rl = talis_check(hl, q23; capture = (:wall,), hardware = (:cap_top,), leh = (:cap_top,),
-                     omega1 = false)
+                     omega1 = false, rtol = 0)
     lips = [x for x in rl.rows if x.rule === :clearance_3w]
     @test length(lips) == 4 && all(x -> x.component === :cap_top && x.status === :review, lips)
     @test all(x -> occursin("LEH clearance", x.note), lips) && rl.settings.leh == [:cap_top]
@@ -269,6 +302,12 @@
     txt = String(take!(io))
     @test occursin("70° incidence limit excluded", txt) && occursin("r·tan(0.5°)", txt) && occursin("management_1w", txt)
     path = write_talis_csv(tempname() * ".csv", rs)
-    @test countlines(path) == 1 + length(rs.rows)
+    lines = readlines(path)
+    @test count(!startswith("#"), lines) == 1 + length(rs.rows)
+    # the header carries the scope: source, settings, skipped checks, out-of-scope items
+    @test occursin(TALIS_SOURCE, lines[1]) && "# setting tolerance = 0.5" in lines &&
+          "# setting pivot = tcc" in lines && "# setting resolution = 0.0001" in lines
+    @test count(startswith("# out of scope: "), lines) == length(TALIS_OUT_OF_SCOPE)
+    @test count(startswith("# not evaluated: "), lines) == length(rs.notes)
     @test length(TALIS_OUT_OF_SCOPE) >= 5
 end

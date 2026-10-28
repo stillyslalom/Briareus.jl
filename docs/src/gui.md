@@ -293,7 +293,8 @@ The bottom panel's tabs:
   ([`write_clearance_csv`](@ref)).
 - **TaLIS:** the NIF target-configuration checks ([`talis_check`](@ref)): 3ω capture,
   incidence and clearance, 1ω clearance and unconverted-light management, and the TAS
-  stay-in zone, on the chosen capture components and checked components, with the rule
+  stay-in zone, on the chosen capture components, checked components and diagnostics
+  (checked for 3ω clearance and kept 10–25 mm from 1ω light), with the rule
   tolerance and how it becomes a distance (measured from the target chamber center,
   from the beam's aim point, the larger of the two, or from a given point); the error
   stack and sampling are the clearance check's. The report shows the notes and a
@@ -301,8 +302,10 @@ The bottom panel's tabs:
   draggable split between the two. The note on what the tolerance stands for stays
   at the top, cut to three lines until opened (*more*); the per-rule summary follows,
   then the error set, the checks not evaluated and the requirements out of scope
-  ([`TALIS_OUT_OF_SCOPE`](@ref)). CSV export with
-  [`write_talis_csv`](@ref).
+  ([`TALIS_OUT_OF_SCOPE`](@ref)). A report is marked out of date when the target, the
+  beams or any setting it used changes. CSV export with [`write_talis_csv`](@ref),
+  whose header carries the settings, the checks not evaluated and the requirements out
+  of scope.
 
 ### Files in and out
 

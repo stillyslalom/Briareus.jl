@@ -563,7 +563,32 @@ Implementation (`src/talis.jl`, `talis_check`):
     TCC.
   - Open quads default to all 48 FOAs.
   - The "sombrero" dimpled LEH shield is modeled as a flat annulus flagged
-    `(:dimpled, r)`.
+    `(:dimpled, r, half_side)`. The User Guide (§5.6.2) also needs dimple
+    half-side/radius ≥ 0.25, so a dimpled surface without `half_side` is a `:review`
+    (2026-10-28; it passed on the radius alone before).
+- **Distances over whole triangles (2026-10-28).** An independent review found a 100 mm
+  plate at z = 2 mm, crossed by a vertical beam but meshed as one quad, reported as
+  passing 3ω clearance by 10.6 mm: the rules were evaluated only at triangle vertices
+  and `4^level` sub-triangle points (substrate edges every 20 µm). Every distance in the
+  rules is now minimized over each whole triangle (or edge) by a branch-and-bound on a
+  Lipschitz bound (`envelope_distance` √(1 + cone²); 1ω footprint 1 + its taper; the
+  tolerance allowance tan 0.5°). The reported value is a lower bound, within
+  max(1e-4 mm, 1 % of its distance from the rule threshold), so a status never
+  flips on the bound. On the plate the check now fails at −0.719 mm, the analytic
+  value. One analytic test was itself a sampling artifact: with the pivot on a plate
+  edge point, r·tan 0.5° grows linearly along the edge and the distance quadratically,
+  so the minimum is 14 µm off the vertex and 6e-5 mm lower. **H** (method; checked
+  against closed forms and a 0.1 µm grid).
+  - Cost: the 48-quad hohlraum test geometry takes 0.9 s (level 1) and 1.4 s (level 2)
+    on 4 threads, against 0.2 s and 0.8 s with vertex sampling. Most of it is rims
+    nearly concentric with a beam, where the distance is almost constant along an arc.
+  - `clearance` minimizes its envelope distance the same way (the same routine). Its
+    reachability rule is decided per `4^level` sub-triangle: one counts whole when any
+    vertex or its centroid is reached, asked only for sub-triangles that could hold the
+    minimum. Peak intensity stays a maximum over the reached vertices, plus the point of
+    least clearance. On the 48-quad hohlraum (caps as hardware) the cost is unchanged
+    (3.8 s quick, 11.6 s standard on 4 threads; the power ray trace dominates) and the
+    worst cap clearance drops 7.5 µm, the minimum the vertices missed.
 
 #### LEH edges and the capsule (2026-10-27)
 

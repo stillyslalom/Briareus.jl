@@ -24,7 +24,7 @@ ColumnLayout {
         visible: app.tlHasReport
         spacing: 8
         Label { text: app.tlBrief; font.weight: Font.DemiBold; Layout.fillWidth: true; elide: Text.ElideRight }
-        Label { text: "beams changed since"; visible: app.tlStale; color: "#d08a00" }
+        Label { text: "inputs changed since"; visible: app.tlStale; color: "#d08a00" }
         Button { text: "Export CSV…"; enabled: !app.tlRunning; onClicked: win.openTalisExport() }
     }
     // notes and the rule summary beside every check, split by a draggable handle; the

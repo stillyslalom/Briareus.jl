@@ -235,6 +235,9 @@ end
     export_clearance(rv, path)
     @test countlines(path) == 1 + length(rep.rows)
     @test !review_stale(sess)
+    # a setting changed since the check also makes it stale, and changing it back does not
+    @test edit_review!(rv, :pointing, "0.2") && review_stale(sess)
+    @test edit_review!(rv, :pointing, "0.05") && !review_stale(sess)
     edit_beams!(bt, 1, :z, "3.2")
     @test review_stale(sess) && task_status(sess, :clearance)[1] === :attention
 

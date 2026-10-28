@@ -293,7 +293,7 @@ function task_status(sess::DesignSession, task::Symbol)
         tl.running[] && return (:busy, "checking… " * _seconds(time() - tl.started[]))
         tl.report[] === nothing && return (:todo, isempty(tl.status[]) ? "not run" : tl.status[])
         txt = _counts_brief(tl.report[].rows)
-        talis_stale(tl, sess.target.target[], active_beams(sess.beams)) &&
+        talis_stale(tl, sess.review, sess.target.target[], active_beams(sess.beams)) &&
             return (:attention, "out of date: " * txt)
         bad = any(x -> x.status !== :pass, tl.report[].rows)
         return (bad ? :attention : :ok, txt)
@@ -1001,11 +1001,12 @@ cancel_talis!(sess::DesignSession) = (cancel_talis!(sess.talis); sess)
 """
     review_stale(sess::DesignSession) -> Bool
 
-Whether the target or the enabled beams changed since the clearance or TaLIS check.
+Whether the target, the enabled beams or a setting changed since the clearance or TaLIS
+check.
 """
 function review_stale(sess::DesignSession)
     t, bs = sess.target.target[], active_beams(sess.beams)
-    return review_stale(sess.review, t, bs) || talis_stale(sess.talis, t, bs)
+    return review_stale(sess.review, t, bs) || talis_stale(sess.talis, sess.review, t, bs)
 end
 
 """

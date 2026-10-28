@@ -319,6 +319,7 @@ end
               wings = nif_wings(), pointing = 0.05, target_offset = 0.025,
               hardware_tolerance = 0.0, focus = 1.0, margin = 0.0, ssd = 0.0,
               thresholds = DEFAULT_CLEARANCE_THRESHOLDS, nangles = 16, level = 2,
+              resolution = 1e-4, rtol = 0.01,
               op = nothing, nspot = 61, callback = nothing,
               batch = Threads.nthreads()) -> ClearanceReport
 
@@ -354,17 +355,24 @@ engineering defaults, not facility review criteria (`talis_check` applies the NI
 
 Only hardware upstream of each beam's landing is checked: where the beam axis first
 meets one of the `targets` components (the surfaces the beam should hit), or the aim
-plane if it misses them. Hardware is sampled at triangle vertices and `4^level`
-sub-triangle points, and a sample counts only if beam light can reach it past the
-target's opaque surfaces (apertures are transparent; the component's own triangles
-never block it): the straight segment to it from the beam axis at the same axial
-position is unobstructed; or, outside the envelope, the segment from the nearest
-envelope point along the same transverse ray, provided that point is lit (some f-cone
-direction reaches it from upstream: envelope behind a surface the beam edge already
-struck carries no light); or, inside the envelope, the sample itself is lit. So
-hardware outside a hohlraum wall is not judged against a beam inside it, while
-hardware beside the beam path before an entrance hole still is. The rule is
-conservative: a sample is dropped only when every one of these paths is blocked. Power
+plane if it misses them. Hardware is split into `4^level` sub-triangles per triangle,
+and a point counts only if beam light can reach it past the target's opaque surfaces
+(apertures are transparent; the component's own triangles never block it): the
+straight segment to it from the beam axis at the same axial position is unobstructed;
+or, outside the envelope, the segment from the nearest envelope point along the same
+transverse ray, provided that point is lit (some f-cone direction reaches it from
+upstream: envelope behind a surface the beam edge already struck carries no light);
+or, inside the envelope, the point itself is lit. So hardware outside a hohlraum wall
+is not judged against a beam inside it, while hardware beside the beam path before an
+entrance hole still is. A sub-triangle counts whole when any of its vertices or its
+centroid is reached (conservative: it is dropped only when every path to each of
+them is blocked). The clearance is minimized over the whole of each counted
+sub-triangle, not at its vertices: the envelope distance is Lipschitz in the point
+(constant √(1 + cone²)), so a branch-and-bound subdivision bounds the minimum from
+below, within `resolution` (mm) or `rtol` times its distance from zero worst-case
+clearance, whichever is larger; a plate crossed by a beam between its vertices is
+found. The reported clearance is that lower bound. Peak intensity is the largest over
+the reached vertices and the point of least clearance. Power
 on hardware comes from the reference ray trace (`nspot` grid per core component; wings
 on equal-power polar grids), or for the core from `op`, a `DepositionOperator` for these
 ports, when given.
@@ -383,7 +391,7 @@ function clearance(t::Target, beams::AbstractVector{<:Beam}; targets,
                    enclosed = nothing, wings = nif_wings(), pointing = 0.05,
                    target_offset = 0.025, hardware_tolerance = 0.0, focus = 1.0,
                    margin = 0.0, ssd = 0.0, thresholds = DEFAULT_CLEARANCE_THRESHOLDS,
-                   nangles::Integer = 16, level::Integer = 2,
+                   nangles::Integer = 16, level::Integer = 2, resolution = 1e-4, rtol = 0.01,
                    op::Union{Nothing,DepositionOperator} = nothing, nspot::Integer = 61,
                    callback = nothing, batch::Integer = Threads.nthreads())
     all(isnothing, (intensity, peak_fraction, enclosed)) && (peak_fraction = 1e-4)
@@ -399,7 +407,10 @@ function clearance(t::Target, beams::AbstractVector{<:Beam}; targets,
          Symbol[hardware...]
     hw_idx = [hardware === nothing ? setdiff(part_pieces(t, n), tgt_idx) : part_pieces(t, n)
               for n in hw]
-    samples = Dict{Int,Vector{Vec3}}()
+    resolution > 0 || throw(ArgumentError("resolution must be > 0"))
+    0 <= rtol < 1 || throw(ArgumentError("rtol must be in [0, 1)"))
+    # per hardware item: its sub-triangles (the distance's roots) and their vertices
+    samples = Dict{Int,Tuple{Vector{NTuple{3,Vec3}},Vector{Vec3}}}()
     for (j, cis) in enumerate(hw_idx)
         pts = Vec3[]
         for k in eachindex(t.tri_area)
@@ -407,7 +418,7 @@ function clearance(t::Target, beams::AbstractVector{<:Beam}; targets,
             v0, e1, e2 = t.tri_v0[k], t.tri_e1[k], t.tri_e2[k]
             _subtri_vertices!(pts, v0, v0 + e1, v0 + e2, level)
         end
-        samples[j] = unique(pts)
+        samples[j] = ([(pts[i], pts[i+1], pts[i+2]) for i in 1:3:length(pts)], unique(pts))
     end
     errs = (; pointing = Float64(pointing), target_offset = Float64(target_offset),
             hardware_tolerance = Float64(hardware_tolerance), focus = Float64(focus),
@@ -415,7 +426,7 @@ function clearance(t::Target, beams::AbstractVector{<:Beam}; targets,
     finish(rows, canceled) = ClearanceReport(rows, contour, R, errs, Float64(margin), tgt,
                                              thresholds, canceled)
     rowsof(bs) = _clearance_rows(t, bs, samples, hw, hw_idx, tgt_idx, wings, op, nspot, R,
-                                 focus, nangles, thresholds;
+                                 focus, nangles, thresholds, (Float64(resolution), Float64(rtol));
                                  intensity, peak_fraction, enclosed, margin = margin + ssd)
     callback === nothing && return finish(rowsof(beams), false)
 
@@ -434,7 +445,7 @@ end
 
 # Rows of the clearance check for `beams` (all beams of a non-batched call).
 function _clearance_rows(t::Target, beams, samples, hw, hw_idx, tgt_idx, wings, op, nspot, R,
-                         focus, nangles, thresholds; intensity, peak_fraction, enclosed,
+                         focus, nangles, thresholds, acc; intensity, peak_fraction, enclosed,
                          margin)
     nc = length(t.components)
     # beam variants over the error set (nominal first for each beam)
@@ -476,10 +487,12 @@ function _clearance_rows(t::Target, beams, samples, hw, hw_idx, tgt_idx, wings, 
         cone = cone_directions(b, _CLEARANCE_NCONE)[1]
         rhs = map(w -> w isa PowerLawWing ? _wing_rh(w, b) : 0.0, wt)
         P = b.power
+        shift = R + focus * envs[1].cone
         for (j, cis) in enumerate(hw_idx)
-            best, bp, bs, Imax = _scan_hardware(t, cis, samples[j], envs[1], wingc, s_stop,
-                                                frames, cone, wt, rhs, P)
-            worst = best - R - focus * envs[1].cone
+            # the worst clearance best − shift is judged against 0
+            best, bp, bs, Imax = _scan_hardware(t, cis, samples[j]..., envs[1], wingc, s_stop,
+                                                frames, cone, wt, rhs, P, (acc..., shift))
+            worst = best - shift
             pw = maximum(sum(ci -> Pc[v, ci], cis; init = 0.0) for v in vids)
             frac = P > 0 ? pw / P : 0.0
             Iw = to_Wcm2(Imax)
@@ -493,32 +506,54 @@ end
 
 const _CLEARANCE_NCONE = 37
 
-# Nearest reachable sample of hardware components `ci` to the envelope (distance, point,
-# axial position) upstream of `s_stop`, and the largest intensity over the error-set
-# variants `frames` there.
-function _scan_hardware(t::Target, ci, samples, env::BeamEnvelope, wingc, s_stop, frames,
-                        cone, wings::Tuple, rhs, P)
-    best, bp, bs, Imax = Inf, zero(Vec3), NaN, 0.0
+# Hardware components `ci` against the envelope upstream of `s_stop`: the smallest
+# distance (a lower bound, see `_lipschitz_minimum`; accuracy `acc`) over the reachable
+# sub-triangles `leaves`, its point and axial position, and the largest intensity over
+# the error-set variants `frames` at the reachable vertices `verts` and at that point.
+# A sub-triangle is reachable if one of its vertices or its centroid is (`_reachable`).
+function _scan_hardware(t::Target, ci, leaves, verts, env::BeamEnvelope, wingc, s_stop,
+                        frames, cone, wings::Tuple, rhs, P, acc)
+    Imax = 0.0
     # transverse slopes of the cone directions (all variants share the port)
     f1 = frames[1]
     αmax = maximum(dj -> abs(dot(dj, f1.e1) / dot(dj, f1.k)), cone)
     βmax = maximum(dj -> abs(dot(dj, f1.e2) / dot(dj, f1.k)), cone)
-    for x in samples
+    reach = Dict{Vec3,Bool}()
+    for x in verts
         d, s = _envelope_union_distance((env,), wingc, x)
         s <= s_stop || continue
-        _reachable(t, ci, env, cone, x, d, s) || continue
-        d < best && ((best, bp, bs) = (d, x, s))
-        for f in frames
-            I = _beyond(f, αmax, βmax, x) ? 0.0 : _cone_mean_intensity(f, cone, x)
-            if !isempty(wings)
-                dv = x - f.focus
-                r = hypot(dot(dv, f.e1), dot(dv, f.e2))
-                I += _wing_sum(wings, rhs, P, r)
-            end
-            Imax = max(Imax, I)
-        end
+        reach[x] = _reachable(t, ci, env, cone, x, d, s)
+        reach[x] && (Imax = max(Imax, _variant_intensity(frames, αmax, βmax, cone, wings, rhs, P, x)))
     end
-    return best, bp, bs, Imax
+    dist = x -> _envelope_union_distance((env,), wingc, x)[1]
+    axial = x -> dot(x - env.focus, env.k)
+    admit = function (leaf)
+        any(x -> get(reach, x, false), leaf) && return true
+        m = sum(leaf) / 3
+        d, s = _envelope_union_distance((env,), wingc, m)
+        return s <= s_stop && _reachable(t, ci, env, cone, m, d, s)
+    end
+    best, bp = _lipschitz_minimum(dist, leaves, sqrt(1 + env.cone^2), acc, zero(Vec3), axial, s_stop;
+                                  admit)
+    isfinite(best) || return best, bp, NaN, Imax
+    Imax = max(Imax, _variant_intensity(frames, αmax, βmax, cone, wings, rhs, P, bp))
+    return best, bp, axial(bp), Imax
+end
+
+# Largest intensity at `x` over the error-set variants `frames` (core and halo through
+# the f-cone, plus the wings).
+function _variant_intensity(frames, αmax, βmax, cone, wings::Tuple, rhs, P, x)
+    Imax = 0.0
+    for f in frames
+        I = _beyond(f, αmax, βmax, x) ? 0.0 : _cone_mean_intensity(f, cone, x)
+        if !isempty(wings)
+            dv = x - f.focus
+            r = hypot(dot(dv, f.e1), dot(dv, f.e2))
+            I += _wing_sum(wings, rhs, P, r)
+        end
+        Imax = max(Imax, I)
+    end
+    return Imax
 end
 
 # Whether beam light can reach hardware sample `x` (of components `ci`) at axial position `s`
@@ -639,6 +674,108 @@ function _subtri_vertices!(pts, a, b, c, level)
     _subtri_vertices!(pts, ab, b, bc, level - 1)
     _subtri_vertices!(pts, ca, bc, c, level - 1)
     _subtri_vertices!(pts, ab, bc, ca, level - 1)
+end
+
+# Lower bound of the minimum of `f` over the simplices `roots` (segments or triangles,
+# tuples of points) and the point of the smallest value found (`x0` if none), within
+# max(ε, rtol·|value − thr|) for `acc = (ε, rtol, thr)`: the bound never crosses the
+# threshold `thr` the value is judged against, so precision is spent only near it.
+# `f` is Lipschitz with constant `lip`, so on a simplex with centroid m and vertices
+# within ρ of it f ≥ f(m) − lip·ρ. Best first: the simplex of lowest bound is bisected
+# until that bound is within the accuracy of the smallest value found (or lip·ρ is
+# within it). Only points with `axial(x) ≤ s_stop` count; `axial` is linear, so a
+# simplex whose vertices all lie beyond lies beyond. With `admit`, a root counts only
+# if `admit(root)`, asked when the root first comes up (so only roots that could hold
+# the minimum are asked); values found on roots not yet admitted are not used.
+# `(Inf, x0)` when no point counts.
+function _lipschitz_minimum(f, roots::AbstractVector{S}, lip, acc, x0, axial = nothing,
+                            s_stop = Inf; admit = nothing) where {S}
+    ε0, rtol, thr = acc
+    inside = x -> axial === nothing || axial(x) <= s_stop
+    ub, xb = Inf, x0
+    if admit === nothing
+        for r in roots, x in r
+            inside(x) || continue
+            v = f(x)
+            v < ub && ((ub, xb) = (v, x))
+        end
+    end
+    heap = Tuple{Float64,Float64,S,Bool}[]      # (bound, lip·ρ, simplex, admitted), a min-heap
+    for r in roots
+        ub, xb = _simplex_bound!(heap, f, inside, lip, r, ub, xb, admit === nothing)
+    end
+    lb = Inf
+    while !isempty(heap)
+        low, lρ, sx, ok = _heap_pop!(heap)
+        ε = isfinite(ub) ? max(ε0, rtol * abs(ub - thr)) : ε0
+        if low >= ub - ε                        # every simplex left is bounded by `low`
+            lb = min(lb, low)
+            break
+        elseif !ok                              # a root not yet admitted
+            admit(sx) || continue
+            ub, xb = _simplex_bound!(heap, f, inside, lip, sx, ub, xb, true)
+            for x in sx
+                inside(x) || continue
+                v = f(x)
+                v < ub && ((ub, xb) = (v, x))
+            end
+        elseif lρ <= max(ε0, rtol * abs(low + lρ - thr))    # relative to f(m) = low + lρ
+            lb = min(lb, low)
+            for x in sx                         # a settled simplex across s_stop
+                inside(x) || continue
+                v = f(x)
+                v < ub && ((ub, xb) = (v, x))
+            end
+        else
+            for c in _simplex_split(sx)
+                ub, xb = _simplex_bound!(heap, f, inside, lip, c, ub, xb, true)
+            end
+        end
+    end
+    return isfinite(ub) ? (lb, xb) : (Inf, x0)
+end
+
+# Push simplex `sx` with its bound f(m) − lip·ρ (unless it lies beyond); the smallest
+# value found and its point, updated with f(m) on an admitted simplex.
+function _simplex_bound!(heap, f, inside, lip, sx, ub, xb, ok::Bool)
+    any(inside, sx) || return ub, xb
+    m = sum(sx) / length(sx)
+    lρ = lip * maximum(x -> norm(x - m), sx)
+    fm = f(m)
+    ok && inside(m) && fm < ub && ((ub, xb) = (fm, m))
+    _heap_push!(heap, (fm - lρ, lρ, sx, ok))
+    return ub, xb
+end
+
+function _heap_push!(h, x)
+    push!(h, x)
+    i = length(h)
+    while i > 1 && h[i>>1][1] > h[i][1]
+        h[i>>1], h[i] = h[i], h[i>>1]
+        i >>= 1
+    end
+    return h
+end
+
+function _heap_pop!(h)
+    top, last = h[1], pop!(h)
+    isempty(h) && return top
+    h[1] = last
+    i, n = 1, length(h)
+    while 2i <= n
+        c = 2i < n && h[2i+1][1] < h[2i][1] ? 2i + 1 : 2i
+        h[i][1] <= h[c][1] && break
+        h[i], h[c] = h[c], h[i]
+        i = c
+    end
+    return top
+end
+
+_simplex_split(s::NTuple{2,Vec3}) = (m = (s[1] + s[2]) / 2; ((s[1], m), (m, s[2])))
+function _simplex_split(s::NTuple{3,Vec3})
+    a, b, c = s
+    ab, bc, ca = (a + b) / 2, (b + c) / 2, (c + a) / 2
+    return ((a, ab, ca), (ab, b, bc), (ca, bc, c), (ab, bc, ca))
 end
 
 """

@@ -97,7 +97,8 @@ export ReviewState, REVIEW_QUALITY, REVIEW_VIEWS, review_batch, default_selectio
        clearance_rows, worst_rows, review_brief, export_clearance, review_stale
 export TaLISState, TALIS_PIVOTS, TALIS_RULE_LABELS, TALIS_TOLERANCE_NOTE, set_talis_role!,
        set_talis_pivot!, edit_talis!, talis_kwargs, start_talis!, cancel_talis!, talis_rows,
-       talis_rule_rows, talis_notes, talis_brief, export_talis, talis_stale
+       talis_rule_rows, talis_notes, talis_brief, export_talis, talis_stale,
+       talis_role
 export BEAM_STYLES, BeamPath, beam_path, beam_paths, beam_volume, beam_hit_distance
 export ViewState, COLOR_MODES, COLOR_LABELS, BEAM_COLORINGS, PALETTE, component_colors,
        DEFAULT_CUT_COMPONENTS, set_cut!, is_cut,

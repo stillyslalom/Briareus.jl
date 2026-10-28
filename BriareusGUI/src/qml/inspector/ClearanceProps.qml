@@ -80,7 +80,7 @@ ColumnLayout {
     }
     Note {
         text: app.rvRunning ? "checked " + app.rvDone + " of " + app.rvTotal + " beams" :
-              app.rvStale ? "The beams or the target changed since this check. " + app.rvBrief : app.rvStatus
+              app.rvStale ? "The beams, the target or the settings changed since this check. " + app.rvBrief : app.rvStatus
         color: app.rvStale && !app.rvRunning ? "#d08a00" : palette.windowText
         opacity: 1
     }

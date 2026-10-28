@@ -103,7 +103,7 @@ _pivot_text(τ::_TaLISTol) =
                 omega1_components = all surfaces, diagnostics = (), tolerance = 0.5, pivot = :tcc,
                 pointing = 0.05, target_offset = 0.025, hardware_tolerance = 0.0,
                 focus = 1.0, ssd = 0.0, offsets = nothing, open_ports = :nif,
-                curvature = Dict(), level = 2, edge_step = 0.02, ...) -> TaLISReport
+                curvature = Dict(), level = 2, resolution = 1e-4, rtol = 0.01, ...) -> TaLISReport
 
 NIF TaLIS target-configuration checks from the "TCC Configuration Requirements"
 (NIF User Forum, 27 Oct 2018, LMF Shot RI Resources). Every distance is measured
@@ -126,7 +126,7 @@ like `hardware`, whether or not `hardware` names them. Here and in `hardware`, `
   over the edge of the transverse distance to the beam envelope (best-focus contour grown
   by the f-cone at each point's axial position, see `BeamEnvelope`). Substrate edges are
   the free edges of the opaque mesh (edges with a single triangle; edges shared with
-  another component are not edges), sampled every `edge_step` mm. A beam whose axis
+  another component are not edges). A beam whose axis
   misses every capture component fails with component `:none`.
 - `:incidence_3w` — incidence < `max_incidence` (70°) to the target normal, the maximum
   over the landing component's surface inside the worst-case 10 % footprint (visible
@@ -155,8 +155,9 @@ like `hardware`, whether or not `hardware` names them. Here and in `hardware`, `
   `(:dimpled, r, half_side)` for a surface covered with spherical dimples of radius of
   curvature `r` (e.g. the dimpled 1ω "sombrero" shield around an ignition hohlraum's
   LEH, modeled as a flat `annulus_mesh`), judged like a sphere against
-  `sphere_radius`; with `half_side`, a dimple half-side/radius below 0.25 (NIF User
-  Guide §5.6.2) makes it a `:review` — else from the component's
+  `sphere_radius`; the NIF User Guide (§5.6.2) also requires a dimple half-side/radius
+  ≥ 0.25, so a dimpled surface passes only with `half_side` given and that ratio met,
+  and is a `:review` otherwise — else from the component's
   `CylinderSurface`/`SphereSurface`, or a planar mesh. For other meshes the curvature is
   unknown and a failing reflection check is a `:review`. A flat component without a
   `curvature` entry gets the reflection check, which a horizontal plate usually fails
@@ -164,7 +165,9 @@ like `hardware`, whether or not `hardware` names them. Here and in `hardware`, `
 - `:diagnostic_1w` — the `diagnostics` components (diagnostic hardware modeled in the
   target) must stay ≥ 10 mm from 1ω light at TCC, growing linearly to 25 mm at 1 m
   (`10 + 0.015 r` mm, r the distance from TCC; interpretation of "a cone of 10 mm at TCC
-  extruded to 25 mm at 1 m").
+  extruded to 25 mm at 1 m"). With no `diagnostics` the rule is listed in the report's
+  `notes` as not evaluated: diagnostic hardware given only as `hardware` gets the 3ω
+  and 0.2 mm 1ω clearances, not this one.
 - `:tas_stay_in` — (NIF beams) no component may extend more than `stay_in` (19 mm)
   above the lowest aim point of an upper beam or below the highest aim point of a lower
   beam (TAS alignment stay-in zone; violating it may require a different alignment
@@ -233,9 +236,19 @@ focus term is the footprint shift over `±focus` instead of the f-cone). The
 cover, so this double counts conservatively; set them to 0 to rely on the tolerance
 alone. `ssd` (mm) widens the 3ω envelopes as in `clearance`.
 
-Hardware is sampled at triangle vertices and `4^level` sub-triangles; substrate edges
-every `edge_step` mm. Clearance-only far-field wings (`nif_wings`) are not used: the
-TaLIS rules refer to contours of the beam spot.
+Distances are minimized over the whole of each triangle (and each substrate edge), not
+at sample points: every distance in these rules is Lipschitz in the point (the beam
+envelope's by √(1 + cone²), the 1ω footprint's by 1 plus its taper, the tolerance
+allowance's by tan(tolerance)), so a branch-and-bound subdivision bounds the minimum
+from below. The reported worst and nominal values are those lower bounds, never above
+the exact minimum and within `resolution` (mm) or `rtol` times the value's distance from
+the rule's threshold, whichever is larger: a bound never crosses the threshold, so the
+status is exact (up to `resolution`), and only large margins are reported coarser
+(1 % by default). A plate crossed by a beam between its vertices fails. The incidence
+and specular-reflection rules take each of the `4^level` sub-triangles of a component
+(with its normal) that has any point inside the footprint, decided the same way.
+Clearance-only far-field wings (`nif_wings`) are not used: the TaLIS rules refer to
+contours of the beam spot.
 """
 function talis_check(t::Target, beams::AbstractVector{<:Beam}; capture,
                      hardware = nothing, leh = (), omega1_components = nothing, diagnostics = (),
@@ -248,7 +261,9 @@ function talis_check(t::Target, beams::AbstractVector{<:Beam}; capture,
                      omega1_size = nothing, omega1_focus = nothing, lens_distance = 7700.0,
                      offsets = nothing, open_ports = :nif, reflection_angle = 20.0,
                      cylinder_radius = 2.0, sphere_radius = 5.0, curvature = Dict{Symbol,Any}(),
-                     stay_in = 19.0, level::Integer = 2, edge_step = 0.02)
+                     stay_in = 19.0, level::Integer = 2, resolution = 1e-4, rtol = 0.01)
+    resolution > 0 || throw(ArgumentError("resolution must be > 0"))
+    0 <= rtol < 1 || throw(ArgumentError("rtol must be in [0, 1)"))
     tol = _talis_tol(tolerance, pivot)
     R = pointing + target_offset + hardware_tolerance
     # checked items: name => its components (a part's pieces, or one component)
@@ -266,8 +281,8 @@ function talis_check(t::Target, beams::AbstractVector{<:Beam}; capture,
     dg_idx = omega1 ? idx(diagnostics) : empty(surf)
     geo = Dict(ci => _talis_samples(t, ci, level)
                for ci in unique(Int[ci for g in (cap_idx, hw_idx, o1_idx, dg_idx) for p in g for ci in last(p)]))
-    pe = _free_edge_points(t, unique(vcat(Int[], last.(cap_idx)...)), edge_step)
-    edges = [unique(vcat(Vec3[], (pe[ci] for ci in last(g))...)) for g in cap_idx]
+    pe = _free_edges(t, unique(vcat(Int[], last.(cap_idx)...)))
+    edges = [vcat(NTuple{2,Vec3}[], (pe[ci] for ci in last(g))...) for g in cap_idx]
     cap_geo = [length(last(g)) == 1 ? geo[only(last(g))] : _merge_samples([geo[ci] for ci in last(g)])
                for g in cap_idx]
     uc = first(c for c in nif_unconverted() if c.name === :omega1)
@@ -284,7 +299,10 @@ function talis_check(t::Target, beams::AbstractVector{<:Beam}; capture,
           omega1_margin = Float64(omega1_margin), c0 = omega1_edge + W0 / 2, h0 = W0 / 2, f1,
           L = Float64(lens_distance), ports, reflection_angle = Float64(reflection_angle),
           cylinder_radius = Float64(cylinder_radius), sphere_radius = Float64(sphere_radius),
-          curvature)
+          curvature, ε = Float64(resolution), rtol = Float64(rtol),
+          # Lipschitz constant of the 1ω footprint distance: 1 plus the taper of the
+          # footprint's center (c0/L) and half-side (h0/f1) along the beam
+          lip1 = 1 + hypot((omega1_edge + W0 / 2) / lens_distance + W0 / 2 / f1, W0 / 2 / f1))
     out = [TaLISRow[] for _ in vb]
     Threads.@threads for bi in eachindex(vb)
         _talis_beam!(out[bi], t, vb[bi], bls[bi], cx)
@@ -297,6 +315,8 @@ function talis_check(t::Target, beams::AbstractVector{<:Beam}; capture,
         push!(notes, "1ω rules for beams without a NIF quad name or an `offsets` entry: " *
                      join(first(skipped, 12), ", ") * (length(skipped) > 12 ? ", …" : ""))
     omega1 || push!(notes, "1ω rules (omega1 = false)")
+    omega1 && isempty(dg_idx) && any(!isnothing, bls) &&
+        push!(notes, "diagnostics to 1ω light (10 mm at TCC to 25 mm at 1 m): no `diagnostics` given")
     any(_is_nif, vb) || push!(notes, "TAS stay-in zone (no NIF beams)")
     settings = (; tolerance = Float64(tolerance), pivot = tol.pivot, pivot_point = tol.point,
                 pivot_text = _pivot_text(tol), transverse = Float64(R),
@@ -310,7 +330,9 @@ function talis_check(t::Target, beams::AbstractVector{<:Beam}; capture,
                 lens_distance = Float64(lens_distance), reflection_angle = Float64(reflection_angle),
                 cylinder_radius = Float64(cylinder_radius), sphere_radius = Float64(sphere_radius),
                 open_ports = length(ports), stay_in = Float64(stay_in),
-                capture = Symbol[first(g) for g in cap_idx], leh = cx.leh)
+                level = Int(level), resolution = Float64(resolution), rtol = Float64(rtol),
+                capture = Symbol[first(g) for g in cap_idx], leh = cx.leh,
+                diagnostics = Symbol[first(g) for g in dg_idx])
     return TaLISReport(rows, settings, notes)
 end
 
@@ -323,6 +345,7 @@ function _talis_beam!(rows, t::Target, b::Beam, bl, cx)
     env1 = BeamEnvelope(b; peak_fraction = cx.clearance_contour, margin = cx.ssd)
     env10 = BeamEnvelope(b; peak_fraction = cx.capture_contour, margin = cx.ssd)
     shift = cx.R + cx.focus * env1.cone          # exact worst-case transverse loss
+    L3 = sqrt(1 + env1.cone^2)                   # Lipschitz constant of envelope_distance
     land, s_stop = 0, Inf                        # index of the landing item in cap_idx
     for (j, g) in enumerate(cx.cap_idx)
         s = _landing(t, env1, last(g); miss = Inf)
@@ -338,20 +361,17 @@ function _talis_beam!(rows, t::Target, b::Beam, bl, cx)
                                  "beam axis misses every capture component; " * _TALIS_BLOWBY))
         else
             name = first(cx.cap_idx[land])
-            worst, nom, wp = Inf, Inf, aim
-            for x in cx.edges[land]
-                d, _ = envelope_distance(env10, x)
-                nom = min(nom, d)
-                w = d - shift - tol(x, aim)
-                w < worst && ((worst, wp) = (w, x))
-            end
+            dist10 = x -> envelope_distance(env10, x)[1]
+            worst, wp = _lipschitz_minimum(x -> dist10(x) - shift - tol(x, aim), cx.edges[land],
+                                       L3 + tol.tanα, (cx.ε, cx.rtol, cx.capture_margin), aim)
+            nom, _ = _lipschitz_minimum(dist10, cx.edges[land], L3, (cx.ε, cx.rtol, cx.capture_margin), aim)
             m = worst - cx.capture_margin
             note = !isfinite(worst) ? "no free substrate edge" : m >= 0 ? "" : _TALIS_BLOWBY
             push!(rows, TaLISRow(b.name, :capture_3w, name, m >= 0 ? :pass : :fail, m, :mm, worst,
                                  nom, cx.capture_margin, wp, note))
             # the steepest ray of the f-cone: the axis angle plus the cone's half-angle
             hc = atand(1 / (2b.fnumber))
-            worst, θn, ip = _talis_incidence(t, cx.cap_geo[land], env10, k, aim, shift)
+            worst, θn, ip = _talis_incidence(t, cx.cap_geo[land], env10, k, aim, shift, L3, cx.ε)
             worst, θn = min(worst + hc, 90.0), min(θn + hc, 90.0)
             m = cx.max_incidence - worst
             push!(rows, TaLISRow(b.name, :incidence_3w, name, m > 0 ? :pass : :fail, m, :deg, worst,
@@ -360,16 +380,14 @@ function _talis_beam!(rows, t::Target, b::Beam, bl, cx)
     end
 
     # 3ω clearance
+    dist1 = x -> envelope_distance(env1, x)[1]
+    axial = x -> dot(x - env1.focus, env1.k)     # s of envelope_distance
     for (name, cis) in cx.hw_idx
         any(in(landed), cis) && continue
-        worst, nom, wp = Inf, Inf, aim
-        for ci in cis, x in cx.geo[ci].verts
-            d, s = envelope_distance(env1, x)
-            s <= s_stop || continue
-            nom = min(nom, d)
-            w = d - shift - tol(x, aim)
-            w < worst && ((worst, wp) = (w, x))
-        end
+        tris = _talis_tris(cx, cis)
+        worst, wp = _lipschitz_minimum(x -> dist1(x) - shift - tol(x, aim), tris, L3 + tol.tanα,
+                                   (cx.ε, cx.rtol, cx.clearance_margin), aim, axial, s_stop)
+        nom, _ = _lipschitz_minimum(dist1, tris, L3, (cx.ε, cx.rtol, cx.clearance_margin), aim, axial, s_stop)
         m = worst - cx.clearance_margin
         lip = name in cx.leh
         note = !isfinite(worst) ? "downstream of the landing point" : m > 0 ? "" :
@@ -380,14 +398,12 @@ function _talis_beam!(rows, t::Target, b::Beam, bl, cx)
 
     bl === nothing && return rows
     # 1ω clearance and management
+    fw = x -> _omega1_distance(x, bl, cx)[2] - cx.R - tol(x, aim)
+    fn = x -> _omega1_distance(x, bl, cx)[1]
     for (name, cis) in cx.o1_idx
-        worst, nom, wp = Inf, Inf, aim
-        for ci in cis, x in cx.geo[ci].verts
-            dn, dw = _omega1_distance(x, bl, cx)
-            nom = min(nom, dn)
-            w = dw - cx.R - tol(x, aim)
-            w < worst && ((worst, wp) = (w, x))
-        end
+        tris = _talis_tris(cx, cis)
+        worst, wp = _lipschitz_minimum(fw, tris, cx.lip1 + tol.tanα, (cx.ε, cx.rtol, cx.omega1_margin), aim)
+        nom, _ = _lipschitz_minimum(fn, tris, cx.lip1, (cx.ε, cx.rtol, cx.omega1_margin), aim)
         m = worst - cx.omega1_margin
         if m > 0
             push!(rows, TaLISRow(b.name, :clearance_1w, name, :pass, m, :mm, worst, nom,
@@ -401,15 +417,12 @@ function _talis_beam!(rows, t::Target, b::Beam, bl, cx)
     end
     # diagnostics to 1ω light
     for (name, cis) in cx.dg_idx
-        worst, nom, req, wp = Inf, Inf, NaN, aim
-        best = Inf
-        for ci in cis, x in cx.geo[ci].verts
-            dn, dw = _omega1_distance(x, bl, cx)
-            w = dw - cx.R - tol(x, aim)
-            r = 10 + 0.015 * norm(x)
-            nom = min(nom, dn)
-            w - r < best && ((best, worst, req, wp) = (w - r, w, r, x))
-        end
+        tris = _talis_tris(cx, cis)
+        best, wp = _lipschitz_minimum(x -> fw(x) - (10 + 0.015 * norm(x)), tris,
+                                  cx.lip1 + tol.tanα + 0.015, (cx.ε, cx.rtol, 0.0), aim)
+        nom, _ = _lipschitz_minimum(fn, tris, cx.lip1, (cx.ε, cx.rtol, 10.0), aim)
+        req = 10 + 0.015 * norm(wp)
+        worst = best + req
         push!(rows, TaLISRow(b.name, :diagnostic_1w, name, best >= 0 ? :pass : :fail,
                              best, :mm, worst, nom, req, wp,
                              "required clearance 10 mm at TCC → 25 mm at 1 m (linear in distance from TCC)"))
@@ -418,22 +431,26 @@ function _talis_beam!(rows, t::Target, b::Beam, bl, cx)
 end
 
 # Largest incidence angle (degrees) on a landing component inside the worst-case and
-# nominal footprints, over sub-triangles visible from upstream. The sub-triangle nearest
-# the beam axis is always included.
-function _talis_incidence(t::Target, g, env, k, aim, shift)
+# nominal footprints, over sub-triangles visible from upstream that reach into them
+# anywhere (`_talis_reaches`, `lip` the Lipschitz constant of `envelope_distance`). The
+# sub-triangle nearest the beam axis is always included.
+function _talis_incidence(t::Target, g, env, k, aim, shift, lip, res)
     far = 4 * (t.scale + norm(aim)) + 1
     ε = 1e3 * _ray_eps(t)
     θw, θn, ip = -Inf, -Inf, aim
     bestd, θc, pc = Inf, NaN, aim
+    dist = x -> envelope_distance(env, x)[1]
     for (leaf, n) in zip(g.leaves, g.normals)
-        d = minimum(envelope_distance(env, p)[1] for p in leaf)
-        (d <= shift || d < bestd) || continue
+        d = minimum(dist, leaf)
+        tri = (leaf[1], leaf[2], leaf[3])
+        inw = d <= shift || _talis_reaches(dist, tri, lip, shift, res)
+        (inw || d < bestd) || continue
         m = leaf[4]
         visible(t, m - far * k, m - ε * k) || continue
         θ = acosd(clamp(abs(dot(n, k)), 0.0, 1.0))
         d < bestd && ((bestd, θc, pc) = (d, θ, m))
-        d <= 0 && (θn = max(θn, θ))
-        d <= shift && θ > θw && ((θw, ip) = (θ, m))
+        inw && (d <= 0 || _talis_reaches(dist, tri, lip, 0.0, res)) && (θn = max(θn, θ))
+        inw && θ > θw && ((θw, ip) = (θ, m))
     end
     if isfinite(θc)
         θn = max(θn, θc)
@@ -468,7 +485,10 @@ function _talis_management(t::Target, ci::Integer, b::Beam, bl, cx)
         what = kind === :dimpled ? "spherical dimple" : string(kind)
         note = @sprintf("%s radius of curvature %.3g mm < %.3g mm scatters 1ω", what, rc, lim)
         # NIF User Guide §5.6.2: dimple half-side / radius must not be below 0.25
-        if kind === :dimpled && isfinite(half) && half / rc < 0.25
+        if kind === :dimpled && !isfinite(half)
+            return TaLISRow(b.name, :management_1w, c.name, :review, lim - rc, :mm, rc, rc, lim, aim,
+                            note * "; dimple spacing unknown: give (:dimpled, r, half_side) to check half-side/radius ≥ 0.25 (User Guide §5.6.2)")
+        elseif kind === :dimpled && half / rc < 0.25
             return TaLISRow(b.name, :management_1w, c.name, :review, lim - rc, :mm, rc, rc, lim, aim,
                             note * @sprintf("; dimple half-side/radius %.3g < 0.25 (User Guide §5.6.2: periodicity too short)",
                                             half / rc))
@@ -477,14 +497,12 @@ function _talis_management(t::Target, ci::Integer, b::Beam, bl, cx)
     end
     g = cx.geo[ci]
     αw, αn, wp = Inf, Inf, aim
+    fw = x -> _omega1_distance(x, bl, cx)[2] - cx.R - cx.tol(x, aim)
+    fn = x -> _omega1_distance(x, bl, cx)[1]
     for (leaf, n) in zip(g.leaves, g.normals)
-        hit, hitn = false, false
-        for p in leaf
-            dn, dw = _omega1_distance(p, bl, cx)
-            dw - cx.R - cx.tol(p, aim) <= cx.omega1_margin && (hit = true)
-            dn <= 0 && (hitn = true)
-        end
-        hit || continue
+        tri = (leaf[1], leaf[2], leaf[3])
+        _talis_reaches(fw, tri, cx.lip1 + cx.tol.tanα, cx.omega1_margin, cx.ε) || continue
+        hitn = _talis_reaches(fn, tri, cx.lip1, 0.0, cx.ε)
         for (kb, _, _) in bl
             r = kb - 2 * dot(kb, n) * n
             α = minimum(acosd(clamp(dot(r, p), -1.0, 1.0)) for p in cx.ports)
@@ -616,18 +634,18 @@ function _talis_stay_in(t::Target, beams, surf, limit, htol)
     return rows
 end
 
-# Vertices, sub-triangles (a, b, c, centroid) and their normals (exact on sphere,
+# Mesh triangles, sub-triangles (a, b, c, centroid) and their normals (exact on sphere,
 # cylinder and cone surfaces) of a component.
 function _talis_samples(t::Target, ci, level)
     c = t.components[ci]
     curved = c.surface isa Union{SphereSurface,CylinderSurface,ConeSurface,TorusSurface}
-    verts, leaves, normals, buf = Vec3[], NTuple{4,Vec3}[], Vec3[], Vec3[]
+    tris, leaves, normals, buf = NTuple{3,Vec3}[], NTuple{4,Vec3}[], Vec3[], Vec3[]
     for k in eachindex(t.tri_area)
         (t.tri_comp[k] == ci && t.tri_area[k] > 0) || continue
         v0, e1, e2 = t.tri_v0[k], t.tri_e1[k], t.tri_e2[k]
+        push!(tris, (v0, v0 + e1, v0 + e2))
         empty!(buf)
         _subtri_vertices!(buf, v0, v0 + e1, v0 + e2, level)
-        append!(verts, buf)
         for j in 1:3:length(buf)
             a, bb, d = buf[j], buf[j+1], buf[j+2]
             m = (a + bb + d) / 3
@@ -635,17 +653,33 @@ function _talis_samples(t::Target, ci, level)
             push!(normals, curved ? last(surface_point(c.surface, m)) : t.tri_normal[k])
         end
     end
-    return (; verts = unique(verts), leaves, normals)
+    return (; tris, leaves, normals)
+end
+
+# The mesh triangles of the components `cis`.
+_talis_tris(cx, cis) = length(cis) == 1 ? cx.geo[only(cis)].tris :
+                       reduce(vcat, (cx.geo[ci].tris for ci in cis))
+
+# Whether `f` (Lipschitz constant `lip`) is ≤ `thr` somewhere on the simplex `s`;
+# undecided down to lip·ρ ≤ `ε`, it counts as reached (conservative).
+function _talis_reaches(f, s, lip, thr, ε)
+    m = sum(s) / length(s)
+    fm = f(m)
+    fm <= thr && return true
+    ρ = maximum(x -> norm(x - m), s)
+    fm - lip * ρ > thr && return false
+    lip * ρ <= ε && return true
+    return any(c -> _talis_reaches(f, c, lip, thr, ε), _simplex_split(s))
 end
 
 # The samples of several components (the pieces of a part) as one.
-_merge_samples(gs) = (; verts = unique(reduce(vcat, (g.verts for g in gs))),
+_merge_samples(gs) = (; tris = reduce(vcat, (g.tris for g in gs)),
                       leaves = reduce(vcat, (g.leaves for g in gs)),
                       normals = reduce(vcat, (g.normals for g in gs)))
 
-# Points every ≤ `step` mm along the free edges (one opaque triangle) of the given
-# components; vertices are merged by position across components.
-function _free_edge_points(t::Target, comps, step)
+# The free edges (one opaque triangle) of the given components, as segments; vertices
+# are merged by position across components.
+function _free_edges(t::Target, comps)
     q = 1e-7 * max(t.scale, 1.0)
     key(v) = (round(Int, v[1] / q), round(Int, v[2] / q), round(Int, v[3] / q))
     seen = Dict{NTuple{6,Int},Tuple{Int,Int,Vec3,Vec3}}()
@@ -659,15 +693,12 @@ function _free_edge_points(t::Target, comps, step)
             seen[e] = (n + 1, ci, va, vb)
         end
     end
-    pts = Dict(ci => Vec3[] for ci in comps)
+    segs = Dict(ci => NTuple{2,Vec3}[] for ci in comps)
     for (n, ci, a, b) in values(seen)
-        (n == 1 && haskey(pts, ci)) || continue
-        m = max(1, ceil(Int, norm(b - a) / step))
-        for i in 0:m
-            push!(pts[ci], a + (i / m) * (b - a))
-        end
+        (n == 1 && haskey(segs, ci)) || continue
+        push!(segs[ci], (a, b))
     end
-    return Dict(ci => unique(p) for (ci, p) in pts)
+    return segs
 end
 
 const _TALIS_RULE_ORDER = (:capture_3w, :incidence_3w, :clearance_3w, :clearance_1w,
@@ -747,10 +778,30 @@ end
 """
     write_talis_csv(path, report)
 
-Write every row of a TaLIS report as CSV (margins in the row's `unit`).
+Write every row of a TaLIS report as CSV (margins in the row's `unit`), after a header
+of `#` comment lines that makes the file stand alone: the source of the rules, every
+setting (`settings`: thresholds, error set, rule tolerance and pivot, capture, LEH and
+diagnostic components, resolution), the requirement of each rule, the checks not
+evaluated (`notes`) and the requirements out of scope (`TALIS_OUT_OF_SCOPE`). Readers
+skip the header with a comment option (`CSV.File(path; comment = "#")`).
 """
 function write_talis_csv(path::AbstractString, r::TaLISReport)
     open(path, "w") do io
+        println(io, "# TaLIS checks (Briareus talis_check), rules from ", TALIS_SOURCE)
+        println(io, "# partial assessment: the requirements out of scope below are not checked")
+        for (k, v) in pairs(r.settings)
+            println(io, "# setting ", k, " = ", v isa AbstractVector ? join(v, " ") : v)
+        end
+        for rule in _TALIS_RULE_ORDER
+            any(x -> x.rule === rule, r.rows) &&
+                println(io, "# rule ", rule, ": ", talis_requirement(rule, r.settings))
+        end
+        for n in r.notes
+            println(io, "# not evaluated: ", n)
+        end
+        for n in TALIS_OUT_OF_SCOPE
+            println(io, "# out of scope: ", n)
+        end
         println(io, "beam,rule,component,status,margin,unit,worst,nominal,required,x_mm,y_mm,z_mm,note")
         for x in r.rows
             println(io, join((x.beam, x.rule, x.component, x.status,

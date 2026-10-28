@@ -33,7 +33,7 @@ the clearance-only `nif_wings` far field), the error stack `pointing`,
 `quality` (a [`REVIEW_QUALITY`](@ref) key). `view` is the shown part of the step (one
 of [`REVIEW_VIEWS`](@ref)). Job: `running`, `progress` `(beams done, total)`,
 `started`, `status`, `report` (a core `ClearanceReport`, partial with `canceled` set
-after a cancel), and `inputs` (the target and beams it checked).
+after a cancel), and `inputs` (the target, beams and `clearance` keywords it checked).
 """
 struct ReviewState
     targets::Observable{Vector{Symbol}}
@@ -196,7 +196,7 @@ function start_clearance!(rv::ReviewState, t::Target, beams::AbstractVector;
     kw = clearance_kwargs(rv)
     bs = collect(beams)
     rv.cancel[] = false
-    rv.inputs[] = (t, bs)
+    rv.inputs[] = (t, bs, kw)
     rv.progress[] = (0, length(bs))
     rv.started[] = time()
     rv.status[] = "checking…"
@@ -292,10 +292,12 @@ end
 """
     review_stale(rv::ReviewState, target, beams) -> Bool
 
-Whether the target or the enabled beams changed since the last check.
+Whether anything the last check depends on changed since: the target, the enabled
+beams, or any setting (`clearance_kwargs`: landing targets and hardware, contour,
+wings, error stack, sampling).
 """
 function review_stale(rv::ReviewState, t::Target, beams::AbstractVector)
     inp = rv.inputs[]
     inp === nothing && return false
-    return inp[1] !== t || inp[2] != beams
+    return inp[1] !== t || inp[2] != beams || inp[3] != clearance_kwargs(rv)
 end

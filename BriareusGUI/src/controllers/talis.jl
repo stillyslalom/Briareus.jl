@@ -39,15 +39,18 @@ const TALIS_TOLERANCE_NOTE =
 State of the TaLIS checks. Settings: `capture` (components beams are
 meant to land on: backlighter foils, capture surfaces, a hohlraum wall), `hardware`
 (other components checked for 3ω and 1ω clearance; capture components are checked
-too, for beams landing elsewhere), `tolerance` (rule tolerance, degrees), `pivot` (one
-of [`TALIS_PIVOTS`](@ref)) and `pivot_point` (mm, for `:point`), and `omega1` (run the
-1ω rules). The error stack and the hardware sampling come from the
-[`ReviewState`](@ref). Job: `running`, `started`, `status`, `error`, `report` (a core
-`TaLISReport`) and `inputs` (the target and beams it checked).
+too, for beams landing elsewhere), `diagnostics` (diagnostic hardware: checked for 3ω
+clearance and kept 10–25 mm from 1ω light, `talis_check`'s `diagnostics`),
+`tolerance` (rule tolerance, degrees), `pivot` (one of [`TALIS_PIVOTS`](@ref)) and
+`pivot_point` (mm, for `:point`), and `omega1` (run the 1ω rules). The error stack and
+the hardware sampling come from the [`ReviewState`](@ref). Job: `running`, `started`,
+`status`, `error`, `report` (a core `TaLISReport`) and `inputs` (the target, beams and
+`talis_check` keywords it checked).
 """
 struct TaLISState
     capture::Observable{Vector{Symbol}}
     hardware::Observable{Vector{Symbol}}
+    diagnostics::Observable{Vector{Symbol}}
     tolerance::Observable{Float64}
     pivot::Observable{Symbol}
     pivot_point::Observable{NTuple{3,Float64}}
@@ -62,7 +65,8 @@ struct TaLISState
     generation::Base.RefValue{Int}
 end
 
-TaLISState() = TaLISState(Observable(Symbol[]), Observable(Symbol[]), Observable(0.5),
+TaLISState() = TaLISState(Observable(Symbol[]), Observable(Symbol[]), Observable(Symbol[]),
+                          Observable(0.5),
                           Observable(:tcc), Observable((0.0, 0.0, 0.0)), Observable(true),
                           Observable(false), Observable(0.0), Observable(""), Observable(""),
                           Observable{Union{Nothing,TaLISReport}}(nothing), Ref{Any}(nothing),
@@ -76,12 +80,18 @@ backlighter foil captures the beams; the capsule is left out (light on it is dri
 physics, handled by keep-outs and the drive, not a TaLIS hardware question; an
 engineering default); everything else (LEH caps and lips, closed windows, the main
 target) is checked. Checked LEH caps and lips go to `talis_check` as its `leh`, so
-their 3ω clearance is an LEH-clearance review rather than a failure. Components the
-selection was already made for keep their roles.
+their 3ω clearance is an LEH-clearance review rather than a failure. No component is a
+diagnostic by default. Components the selection was already made for keep their roles
+(a selection made afresh clears the diagnostics too).
 """
 function default_selection!(tl::TaLISState, t::Target)
-    _update_roles!(tl.capture, tl.hardware, tl.known, surface_names(t),
+    names = surface_names(t)
+    fresh = !any(in(names), tl.capture[])
+    _update_roles!(tl.capture, tl.hardware, tl.known, names,
                    n -> n in (:wall, FOIL_NAME) ? 1 : n === :capsule ? 0 : 2)
+    _assign!(tl.diagnostics,
+             fresh ? Symbol[] : filter(n -> n in names && !(n in tl.capture[]) && !(n in tl.hardware[]),
+                                       tl.diagnostics[]))
     return tl
 end
 
@@ -91,19 +101,32 @@ const _LEH_EDGES = (:cap_top, :cap_bottom, :leh_top_lip, :leh_bottom_lip)
 """
     set_talis_role!(tl::TaLISState, component::Symbol, role::Symbol)
 
-Make a component a `:capture` surface, checked `:hardware`, or neither (`:none`).
+Make a component a `:capture` surface, checked `:hardware`, `:diagnostic` hardware
+(the 1ω diagnostic clearance instead of the 0.2 mm one), or none of them (`:none`).
 """
 function set_talis_role!(tl::TaLISState, name::Symbol, role::Symbol)
-    role in (:capture, :hardware, :none) ||
-        throw(ArgumentError("role must be :capture, :hardware or :none"))
+    role in (:capture, :hardware, :diagnostic, :none) ||
+        throw(ArgumentError("role must be :capture, :hardware, :diagnostic or :none"))
     cp = filter(!=(name), tl.capture[])
     hw = filter(!=(name), tl.hardware[])
+    dg = filter(!=(name), tl.diagnostics[])
     role === :capture && push!(cp, name)
     role === :hardware && push!(hw, name)
+    role === :diagnostic && push!(dg, name)
     _assign!(tl.capture, cp)
     _assign!(tl.hardware, hw)
+    _assign!(tl.diagnostics, dg)
     return tl
 end
+
+"""
+    talis_role(tl::TaLISState, component::Symbol) -> Symbol
+
+`:capture`, `:hardware`, `:diagnostic` or `:none` (see [`set_talis_role!`](@ref)).
+"""
+talis_role(tl::TaLISState, name::Symbol) =
+    name in tl.capture[] ? :capture : name in tl.hardware[] ? :hardware :
+    name in tl.diagnostics[] ? :diagnostic : :none
 
 """
     set_talis_pivot!(tl::TaLISState, pivot::Symbol)
@@ -149,16 +172,18 @@ end
     talis_kwargs(tl::TaLISState, rv::ReviewState) -> NamedTuple
 
 The keyword arguments of the `talis_check` call: capture and hardware components, the
-checked LEH caps and lips (`leh`), the rule tolerance and its pivot, the clearance
-check's error stack (pointing, positioning, hardware tolerance, focus) and hardware
-sampling level.
+checked LEH caps and lips (`leh`), the diagnostics (3ω-checked as hardware, and kept
+from 1ω light by the diagnostic rule instead of the 0.2 mm 1ω clearance), the rule
+tolerance and its pivot, the clearance check's error stack (pointing, positioning,
+hardware tolerance, focus) and hardware sampling level.
 """
 function talis_kwargs(tl::TaLISState, rv::ReviewState)
     e = rv.errors[]
     checked = Tuple(unique([tl.capture[]; tl.hardware[]]))
     pivot = tl.pivot[] === :point ? tl.pivot_point[] : tl.pivot[]
-    return (; capture = Tuple(tl.capture[]), hardware = checked,
+    return (; capture = Tuple(tl.capture[]), hardware = Tuple(unique([checked...; tl.diagnostics[]])),
             leh = Tuple(n for n in tl.hardware[] if n in _LEH_EDGES), omega1_components = checked,
+            diagnostics = Tuple(tl.diagnostics[]),
             omega1 = tl.omega1[], tolerance = tl.tolerance[], pivot,
             pointing = e[:pointing], target_offset = e[:target_offset],
             hardware_tolerance = e[:hardware_tolerance], focus = e[:focus],
@@ -182,7 +207,7 @@ function start_talis!(tl::TaLISState, rv::ReviewState, t::Target, beams::Abstrac
     kw = talis_kwargs(tl, rv)
     bs = collect(beams)
     g = (tl.generation[] += 1)
-    tl.inputs[] = (t, bs)
+    tl.inputs[] = (t, bs, kw)
     tl.started[] = time()
     tl.status[] = "checking…"
     tl.running[] = true
@@ -318,12 +343,14 @@ function export_talis(tl::TaLISState, path::AbstractString)
 end
 
 """
-    talis_stale(tl::TaLISState, target, beams) -> Bool
+    talis_stale(tl::TaLISState, rv::ReviewState, target, beams) -> Bool
 
-Whether the target or the enabled beams changed since the last check.
+Whether anything the last check depends on changed since: the target, the enabled
+beams, or any setting (the `talis_kwargs` of `tl` and `rv`: component roles, rule
+tolerance and pivot, 1ω rules, error stack, sampling).
 """
-function talis_stale(tl::TaLISState, t::Target, beams::AbstractVector)
+function talis_stale(tl::TaLISState, rv::ReviewState, t::Target, beams::AbstractVector)
     inp = tl.inputs[]
     inp === nothing && return false
-    return inp[1] !== t || inp[2] != beams
+    return inp[1] !== t || inp[2] != beams || inp[3] != talis_kwargs(tl, rv)
 end

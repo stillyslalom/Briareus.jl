@@ -732,11 +732,12 @@ end
     down = translate(Component(:down, disk_mesh(0.05, 0.0; nr = 1, nphi = 32), gold()), (0.2, 0, -1.0))
     t = Target(foil(:f, (0, 0, 0), (0, 0, 1); width = 4.0, n = 8), up, down)
     r = clearance(t, [b]; targets = (:f,), enclosed = 0.99, margin = 0.1, pointing = 0.05,
-                  target_offset = 0.02, hardware_tolerance = 0.03, focus = 0.4, wings = [])
+                  target_offset = 0.02, hardware_tolerance = 0.03, focus = 0.4, wings = [], rtol = 0)
     row(c) = only(x for x in r.rows if x.component === c)
     nominal = 1.0 - (enclosed_radius(4.0, 0.99) * 0.3 + 2.0 / 16 + 0.1)
-    @test row(:up).nominal ≈ nominal atol = 1e-9
-    @test row(:up).clearance ≈ nominal - (0.05 + 0.02 + 0.03) - 0.4 / 16 atol = 1e-9
+    # the clearance is a lower bound of the minimum over the whole disk, within 1e-4 mm
+    @test nominal - 1e-4 <= row(:up).nominal <= nominal + 1e-9
+    @test row(:up).clearance ≈ row(:up).nominal - (0.05 + 0.02 + 0.03) - 0.4 / 16 atol = 1e-12
     @test row(:up).s ≈ -2.0
     @test row(:down).clearance == Inf
     @test isempty(violations(r))
@@ -758,12 +759,12 @@ end
     # pointing toward hardware raises the worst-case power and intensity on it
     near = translate(Component(:near, disk_mesh(0.2, 0.0; nr = 2, nphi = 32), gold()), (0.75, 0, 1.0))
     tn = Target(foil(:f, (0, 0, 0), (0, 0, 1); width = 4.0, n = 8), near)
-    nowing = (; wings = [], target_offset = 0.0, focus = 0.0)
+    nowing = (; wings = [], target_offset = 0.0, focus = 0.0, rtol = 0)
     r0 = only(clearance(tn, [b]; targets = (:f,), pointing = 0.0, nowing...).rows)
     rep1 = clearance(tn, [b]; targets = (:f,), pointing = 0.1, nowing...)
     r1 = only(rep1.rows)
     @test r1.power > r0.power && r1.peak_intensity > r0.peak_intensity
-    @test r1.clearance ≈ r0.clearance - 0.1
+    @test r1.clearance ≈ r0.clearance - 0.1 atol = 1e-4
     strict = (fail_intensity = Inf, fail_fraction = Inf, review_intensity = 0.5 * r1.peak_intensity,
               review_fraction = Inf)
     rs = clearance(tn, [b]; targets = (:f,), pointing = 0.1, thresholds = strict, nowing...)
@@ -792,6 +793,16 @@ end
     @test only(r2.rows).intercepted ≈ 1 rtol = 1e-3
     @test only(r2.rows).status === :fail
     @test length(violations(r2)) == 1
+    # The same plate made 100 mm wide in one quad, its corners ≥ 50 mm off the axis: the
+    # clearance is the minimum over the whole triangle, on the axis, not at the vertices.
+    # Exact: −ρ (the 1e-4 contour's radius) − 1/16 (f-cone at s = −1), less the errors.
+    wide = Component(:plate, translate(rectangle_mesh(100.0, 100.0; nu = 1, nv = 1), (8.0, 8.0, 1.0)), gold();
+                     two_sided = true)
+    rwide = only(clearance(Target(foil(:f, (0, 0, 0), (0, 0, 1); width = 4.0, n = 8), wide), [b];
+                           targets = (:f,), wings = [], level = 0, rtol = 0).rows)
+    exw = -0.3 * envelope_radius(spot, 1.0; peak_fraction = 1e-4) - 1 / 16 - (0.05 + 0.025) - 1 / 16
+    @test exw - 1e-4 <= rwide.clearance <= exw + 1e-9
+    @test isapprox(rwide.point[1:2], [0, 0]; atol = 1e-3) && rwide.status === :fail
     path = write_clearance_csv(tempname() * ".csv", r)
     @test countlines(path) == 1 + length(r.rows)
 
@@ -834,7 +845,7 @@ end
     end
     ko = ApertureKeepOut(th; peak_fraction = 0.01)
     rk = clearance(th, qs; targets = (:wall, :capsule), hardware = (:cap_top, :cap_bottom),
-                   peak_fraction = 0.01, wings = [], nangles = 8)
+                   peak_fraction = 0.01, wings = [], nangles = 8, rtol = 0)
     worst = [minimum(x.clearance for x in rk.rows if x.beam == b.name) for b in qs]
     @test aperture_clearance(ko, qs) ≈ worst atol = 0.005
     p = GroupPointing(qs; by = :beam, fields = (:z, :phi))
@@ -855,7 +866,7 @@ end
     kc = SphereKeepOut(tc)
     @test kc.names == [:capsule]
     rc = clearance(tc, close; targets = (:wall, :cap_top, :cap_bottom), hardware = (:capsule,),
-                   peak_fraction = 0.01, wings = [], nangles = 8)
+                   peak_fraction = 0.01, wings = [], nangles = 8, rtol = 0)
     sc = sphere_clearance(kc, close)
     worst = [only(x.clearance for x in rc.rows if x.beam == b.name) for b in close]
     @test any(<(0), sc)

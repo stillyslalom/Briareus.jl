@@ -23,7 +23,7 @@ ColumnLayout {
         visible: app.rvHasReport
         spacing: 8
         Label { text: app.rvBrief; font.weight: Font.DemiBold; Layout.fillWidth: true; elide: Text.ElideRight }
-        Label { text: "beams changed since"; visible: app.rvStale; color: "#d08a00" }
+        Label { text: "inputs changed since"; visible: app.rvStale; color: "#d08a00" }
         Button { text: "Export CSV…"; enabled: !app.rvRunning; onClicked: win.openClearanceExport() }
     }
     Repeater {

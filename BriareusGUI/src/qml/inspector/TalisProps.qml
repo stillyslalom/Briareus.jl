@@ -29,8 +29,9 @@ ColumnLayout {
                 textRole: "text"; valueRole: "value"
                 model: [{ text: "capture: beams land on it", value: "capture" },
                         { text: "check 3ω and 1ω clearance", value: "hardware" },
+                        { text: "diagnostic: 3ω, and 10–25 mm from 1ω", value: "diagnostic" },
                         { text: "ignore", value: "none" }]
-                currentIndex: Math.max(0, ["capture", "hardware", "none"].indexOf(compRow.compRole))
+                currentIndex: Math.max(0, ["capture", "hardware", "diagnostic", "none"].indexOf(compRow.compRole))
                 onActivated: Julia.br_tl_role(compRow.compName, currentValue)
             }
         }
@@ -75,7 +76,7 @@ ColumnLayout {
     }
     Note {
         text: app.tlRunning ? "checking… " + app.tlElapsed :
-              app.tlStale ? "The beams or the target changed since this check. " + app.tlBrief : app.tlStatus
+              app.tlStale ? "The beams, the target or the settings changed since this check. " + app.tlBrief : app.tlStatus
         color: app.tlStale && !app.tlRunning ? "#d08a00" : palette.windowText
         opacity: 1
     }
