@@ -40,10 +40,12 @@ the sections named here.
    (deposition alone is compared so far).
 5. **VisRad import: what is skipped.** Each case is warned about or refused; most need a
    sample workspace that uses the feature.
-   - Beams: unconverted light (2ω/1ω on) as colors or extra beams; time-dependent powers
-     (power mode ≠ 0; VisRad's time unit is seconds), energy-normalized beams, named pulse
-     shapes; DPR beams; pointing method 1 and target-mount or diagnostic-port frames;
-     objects placed by a key point other than the centroid.
+   - Beams: unconverted light (2ω/1ω on): read VisRad's green/red powers into the ratios
+     of `unconverted_deposition` (the model exists; the import still takes 3ω only);
+     time-dependent powers (power mode ≠ 0; VisRad's time unit is seconds),
+     energy-normalized beams, named pulse shapes; DPR beams; pointing method 1 and
+     target-mount or diagnostic-port frames; objects placed by a key point other than
+     the centroid.
    - Objects: the `Time-Dependent …` tables, laser reflectivity, power self-emission;
      wall thickness, partial spheres and the other primitives (cylinder, cone, disk, box,
      polygon, halfraum, rugby and slotted hohlraums, surfaces of revolution,
@@ -108,30 +110,66 @@ Items 7–12 follow the 2026-10-22 literature review against Kritcher et al. 202
     351 nm); pulse length and spot size as variables; continuum and higher lines in the
     filter pass band, detector response, the object's transmission.
 
+13. **Unconverted light over time.** *State:* `unconverted_deposition` is a steady
+    source, and the GUI drive adds it. 1ω and 2ω light does not enter the hohlraum and is
+    neglected there. *Remains:* irradiance histories on clipped components and
+    backlighter foils, from the pulse shape and an unconverted fraction in time:
+    - whether a surface stays below the irradiance at which it stops being specular;
+    - whether a foil forms a pre-plasma before its backlighter beams arrive (NIF User
+      Guide §4.4: plasma above ~10⁸ W/cm² on metals; the 1ω prepulse passes that
+      3–5 ns before the pulse).
+
+    *Data:* the unconverted fraction vs. pulse shape; plasma and damage thresholds of
+    Au, Al and Si at 1ω and 2ω.
+14. **Per-color x-ray sources and a materials library.** *State:* the GUI drive weights
+    each color's x-ray source as an equivalent 3ω power, exact only for a conversion
+    independent of intensity. *Remains:*
+    - a `solve` that takes each color's source with its own intensity-dependent
+      conversion;
+    - a library of material defaults (albedo, conversion vs. intensity and wavelength,
+      absorption, cold reflectance), each with its data source and uncertainty, in
+      place of the per-template constants.
+
+    *Data:* the sources under "Unconverted light: absorption and conversion vs.
+    wavelength", with the gaps listed there.
+
 ## Coupling and new modes
 
-13. **Briareus → CompactLES** (`reference/litreview/hydro_coupling.md`; "Capsule drive
+15. **Briareus → CompactLES** (`reference/litreview/hydro_coupling.md`; "Capsule drive
     hand-over and CompactLES stage 0"). *State:* the extension `CompactLESBriareusExt`
     (CompactLES branch `briareus-drive`, unmerged); stage 0 runs in 1-D, r–z and 3-D; the
     N221204 drive gives 340 km/s and stagnation 10.2 ns (bang 9.53); the late lag is the
     rocket closure (CompactLES A22). *Next:* r–θ with the a_l, r–z with AMR, a 1 µm 3-D
     shell; stage 1, gray flux-limited diffusion with a Marshak boundary, validated on
     Shestakov 1998 and then Kritcher 2024 Table III; stage 2, multigroup with the M-band.
-14. **Polar direct drive** (`reference/litreview/polar_direct_drive.md`). *State:* stage 0
+16. **Polar direct drive** (`reference/litreview/polar_direct_drive.md`). *State:* stage 0
     (hard-sphere illumination, `mode_rms`, spherical pointing, the LMJ fixture), the corona
     operator (stage 1), the Ba24 σ₁ comparison and optimization. *Remains:* stage 1's
     absorbed power per radius, the P_abl/Ye21 proxies, `Scenario`/`evaluate` integration,
     the CompactLES snapshot example; OMEGA fixtures; open decisions 13–15 in the review.
 
+17. **Photometric forward modeling of x-ray sources.** From a source's spectrum and
+    history (a backlighter's He-α chain, the hohlraum's re-emission, `spectral.jl`)
+    through cold opacities of filters, shields and the object to a detector's response,
+    to aid design and the choice of diagnostics:
+    - the best scintillator, and the best gate time for time-integrated detectors;
+    - the expected signal on film and image plates;
+    - the shielding a radiograph needs next to an igniting hohlraum.
+
+    It builds on `backlighter_signal` and "Backlighter conversion efficiency and the
+    photometric chain". *Data:* public cold opacities (Henke, NIST XCOM), detector
+    responses (image plate, film, scintillators), the x-ray, neutron and γ backgrounds of
+    igniting shots.
+
 ## Targets, CAD and the GUI
 
-15. **Backlighter geometry (optional).** The shield's mounting sector (the sheet runs past
+18. **Backlighter geometry (optional).** The shield's mounting sector (the sheet runs past
     9.2 mm there); backlighter beams aimed off the foil center, or foils off the equator.
     *Data:* a shot's real backlighter dimensions.
-16. **Diagnostic windows.** The expanded foil's density (held at 1 g/cm³), a backing that
+19. **Diagnostic windows.** The expanded foil's density (held at 1 g/cm³), a backing that
     absorbs and re-emits part of what the gold transmits, a computed gap-closure time, and
     the windows' l = 4, which neither quad powers nor pointing removed.
-17. **CAD.**
+20. **CAD.**
     - A transmitting thin-film option for CAD tents and LEH windows, so the cavity can
       include the tent region.
     - Remeshed CAD: receivers through an element's outline; an adaptive `angle` for thin
@@ -144,15 +182,15 @@ Items 7–12 follow the 2026-10-22 literature review against Kritcher et al. 202
     - Laser deposition on sliver CAD is slow in `any_hit` (~5 s per beam on the full
       157k-element NIF CAD target).
     - `fit_surfaces` cost: a variable-radius fillet is quadratic (16–50k facets: 16–107 s).
-18. **GUI on CAD.** Partial curved fits of CAD parts (wait for a workspace that benefits);
+21. **GUI on CAD.** Partial curved fits of CAD parts (wait for a workspace that benefits);
     the first import's commit tick (1.5 s) and first field coloring and selection (0.2 s
     each); the CAD capsule's remesh (1.0–2.0 s, now clustering); a "fit the hohlraum
     template to CAD parts" action; the foil objective with one shared parameter set for
     beams aimed at one point does not move ("GUI on CAD: import, parts and first frames").
-19. **GUI requests.** Frames on a port axis; clipping volumes; STEP import (needs a CAD
+22. **GUI requests.** Frames on a port axis; clipping volumes; STEP import (needs a CAD
     kernel); an x-ray image that follows the camera; adaptive refinement of the radiation
     mesh where deposition varies fastest.
-20. **Scale.** Segments between the capsule's balls (~21M rays left in the 11.4k bored
+23. **Scale.** Segments between the capsule's balls (~21M rays left in the 11.4k bored
     cavity's `:sampled` build, ≲ 7 % of it); GPU mat-vecs (≲ 25 % end to end; not worth
     CUDA.jl yet) ("H-matrix visibility certificates", "Prism certificates for the waist
     gap").

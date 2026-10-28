@@ -245,6 +245,97 @@ The 1ω focus is 46 cm beyond the 3ω focus (MacFarlane 2003). **H**
   right of the 3ω spot along ±φ, each column of a quad to its own side. Sources: NIF
   User Guide Fig. 4-12 (top/side views) and VisRad's "NIF Unconverted Light in 3ω
   Focus Plane" sample. **H/M**
+- **Rechecked against the User Guide (revision 2024-09, 2026-10-28).**
+  - §4.5 and §5.6.1: 1ω ≈ 22 mm square at ≥ 4.8 mm, 2ω ≈ 12 mm square at ≥ 2.9 mm,
+    an envelope of about 32 mm from TCC. Most of the unconverted light is 1ω, and
+    shaped pulses leave more of it. No fraction is given.
+  - Fig. 4-12: 1ω focus 460 mm beyond the 3ω focus, 2ω focus between the two. Each
+    column of a quad puts its footprints on its own side. The figure's 4.9 mm edge and
+    31 mm outer dimension are schematic (its squares are not to scale), so the text's
+    4.8 mm and 32 mm are used. **H** for the text, **M** for reading the figure.
+- **Deposition model (`unconverted_deposition`, 2026-10-28).** *Derived*, **M**.
+  - Each beamlet's color is the uniform square beam of the TaLIS footprint geometry
+    ("1ω footprint model" under TaLIS), at the User Guide's nominal size (22 mm with a
+    4.8 mm edge; 12 mm with a 2.9 mm edge), converging to its focus. The 2ω focus is
+    the derived +270 mm.
+  - Flat top: the light at the target is the near-field aperture's image. The phase
+    plate's angular spread blurs the edge by ~0.1 mm, which is not modeled.
+  - Without shadowing, the power per flat triangle is exact: its projection from the
+    focus onto the 3ω focal plane, clipped to the square. Shadowing is resolved by
+    rays toward the lens, refined where a shadow edge crosses a piece.
+  - Checks:
+    - A plate in the focal plane: the totals are exact, and every element inside the
+      square gets P·A/22² (or /12²).
+    - A 40°-tilted plate 10 mm upstream, shadowed by a 3 mm sphere: against a 10⁶-ray
+      Monte Carlo of the same beam, every lit element is within 5σ (4·10⁶ rays: max
+      z = 3.5 over 447 elements).
+    - A quad splits evenly between its two sides.
+  - Cost: 48 quads, both colors, on the 4116-element NIF hohlraum: 0.06 s on 4
+    threads. No light reaches it except 1.8 mW of 2ω on the wall's outer side.
+  - **Power fraction:** an input with no default (`ratio`, per color, relative to the
+    beam's 3ω power). Not found: a measured unconverted fraction vs. pulse shape (see
+    "Still not found"). VisRad workspaces seen so far carry 5 % / 5 % of the total.
+
+### Unconverted light: absorption and conversion vs. wavelength (2026-10-28)
+
+*Engineering default*, **L**. `nif_unconverted` scales the 1ω and 2ω light relative to
+3ω. The `absorption` factor scales the absorbed share of the incident light (3ω
+deposition takes all of it as absorbed). The `conversion` factor scales the x-ray
+conversion of the absorbed energy (it multiplies the material's 3ω conversion in a
+drive).
+
+**Measured (gold disks, Argus/Novette, ~0.5–1 ns):**
+
+| λ (µm) | I (W/cm²) | Absorption | CE of absorbed | Source |
+|---|---|---|---|---|
+| 1.06 | 2.7e13 / 3e14 / 1.6e15 | 0.82 / 0.52 / 0.38 | – | Ze et al., UCRL-86414 (1981; OSTI 5947742), Fig. 4 **H** |
+| 0.53 | 3e13 / 3e14 / 1e15 | ≈0.93 / 0.80 / 0.72 | – | same |
+| 0.35 | 3e13 / 1.5e14 / 3e14 | ≈0.93 / 0.95 / 0.91 | – | same |
+| 1.06 | 3.5e13 / 3e14 / 1e15 | – | 0.50 / 0.41 / 0.35 | Mead et al., LA-UR-86-300 (1985; OSTI 5918786), Fig. 16 **H** |
+| 0.53 Argus (small spots) | 3.5e13 / 3e14 | – | 0.41 / 0.49 | same |
+| 0.53 Novette (large spots) | 4e13 / 2.3e14 | – | 0.66 / 0.59 | same |
+| 0.35 | 2e13 / 1e14 / 4e14 | – | 0.57 / 0.59 / 0.51 | same |
+
+- Mead Fig. 21: on an Iλ² axis every wavelength plateaus at 0.4–0.6 below Iλ² ≈ 10¹⁴.
+  The LASNEX fit CE ∝ I^-0.15 λ^-0.3 holds above that. **M**
+- The Argus low-intensity conversion deficit disappears with larger spots (Mead, pp.
+  9–10). NIF footprints are 22 mm, the large-spot limit. **M**
+- At 2.7e13 W/cm² and 1ω, absorption falls with Z: Au 0.82, Ti ≈0.76, Be 0.68 (Ze,
+  Fig. 7). **H**
+- Hogan, UCRL-94321 (1986), Fig. 6, at 3e14: absorption 0.35 / 0.66 / 0.91 and CE
+  0.32 / 0.51 / 0.65 for 1ω / 2ω / 3ω. These are high-intensity ratios, not used.
+
+**The rule:** take the ratio to 3ω at the lowest intensity measured and hold it below
+that.
+- 1ω: absorption 0.82/0.93 = 0.88, conversion 0.50/0.57 = 0.88 (same laboratory).
+- 2ω: absorption 1.0. Conversion is the geometric mean of 0.72 (Argus/Argus) and 1.16
+  (Novette/Argus), 0.9.
+- Ranges: 1ω absorption 0.6–1.0 and conversion 0.65–1.0; 2ω absorption 0.8–1.0 and
+  conversion 0.72–1.16. In total the 1ω x-ray source is 0.77 of 3ω's, the 2ω one 0.9.
+
+**Why low confidence:**
+- Unconverted light reaches hardware at ~1e10–1e12 W/cm², 1.5–3.5 decades below every
+  measurement found.
+- The ratios rise toward 1 as intensity falls, and inverse-bremsstrahlung absorption is
+  nearly complete in that regime (a tens-of-eV gold corona). That favors values nearer 1.
+- Against that, before a plasma forms cold surfaces reflect or transmit 1ω: Au ≈0.98,
+  Al ≈0.94 and Cu ≈0.97 reflectance at normal incidence, and Si is nearly transparent
+  (Johnson & Christy / Palik optical constants; approximate, **M**). The NIF User Guide
+  (§4.4) puts plasma formation on metals above ~1e8 W/cm², with the 1ω prepulse past
+  that 3–5 ns before the pulse. The time before ignition at 1e10–1e11 was not found.
+- The absolute conversion is lower than the 3ω value Briareus uses for gold (0.75,
+  calibrated in hohlraums). Open 3ω disks give 0.55–0.6 of the absorbed energy at
+  2e13–1e14. At tens of eV the emission is also softer than 0.1 keV, below the
+  measured bands (0.1–1.5 keV).
+
+**Not found:**
+- Garban-Labaune et al., PRL 48, 1018 (1982): CH absorption at 1.06/0.53/0.26 µm down
+  to 1e10 W/cm²; only the abstract was available.
+- Eidmann & Schwanda, Laser Part. Beams 9, 551 (1991): Au/Cu/Al at 0.53 µm,
+  1e12–1e14; only the abstract was available.
+- Celliers & Eidmann, PRA 41, 3270 (1990).
+- Any absorption or conversion of metals or Si at ≤ 1e12 W/cm² at 1ω or 2ω.
+- A NIF measurement of unconverted-light coupling to hardware.
 
 ## NIF quad names and bundles
 

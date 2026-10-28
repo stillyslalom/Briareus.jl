@@ -56,7 +56,8 @@ export LaserPlasmaModel, apply_lpi, Backscatter, CalibratedTransfer, linear_tran
        izumi2021_bubble, izumi2021_absorption, young2020_radii, young2020_albedos, pre109_fig1a_wall,
        kritcher2024_capsule, kritcher2024_radius, chen2020_leh, kemp2026_sbs
 export CBET, TwoZoneCBET, n221204_cbet, hybride_cbet, hybride_cbet_iraum, pulse_rise, cbet_clamp_schedule, cbet_null, n221204_fig9, n220919_fig9, n210808_fig1, pre109_fig1, hybride_shots, n221204_fig10, n221204_pulse, zylstra2022_fig2, n221204_fig9_beams, CH_IONS, ion_wave_amplitude, receiver_ratio, calibrate_cbet, cbet_gain, cbet_coupling, cbet_plasma, plasma_dispersion
-export UnconvertedColor, nif_unconverted, UnconvertedRow, UnconvertedReport, unconverted_light_check
+export UnconvertedColor, nif_unconverted, UnconvertedRow, UnconvertedReport, unconverted_light_check,
+       unconverted_deposition
 export TaLISRow, TaLISReport, talis_check, write_talis_csv, TALIS_SOURCE, TALIS_OUT_OF_SCOPE, talis_requirement
 export BEAM_COLUMNS, write_beam_table, read_beam_table, read_csv, write_element_table, write_moments, read_stl, read_stl_solids, write_stl, write_results
 export VISRAD_SST_COLUMNS, VISRAD_PHASE_PLATES, visrad_spot, write_visrad_sst, read_visrad_sst, write_visrad_summary, read_visrad_summary, write_visrad_powers, read_visrad_powers, read_visrad_pulse_shape, read_visrad_table, visrad_legendre_fit, visrad_ylm_fit, write_visrad_kit, compare_visrad

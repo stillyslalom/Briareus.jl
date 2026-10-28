@@ -8,7 +8,9 @@ tiers; its thresholds and wing models are engineering defaults, not facility cri
 and a facility's own review requirements and measured far fields should replace them.
 [`talis_check`](@ref) applies NIF's published target-configuration rules (3ω capture and
 incidence, 3ω and 1ω clearance, unconverted-light management, the TAS stay-in zone), and
-[`unconverted_light_check`](@ref) covers the 1ω and 2ω footprints and the 32 mm zone.
+[`unconverted_light_check`](@ref) covers the 1ω and 2ω footprints and the 32 mm zone, and
+[`unconverted_deposition`](@ref) puts their power on the target (a uniform square beam
+per beamlet and color, with shadowing; the unconverted fraction is an input).
 [`ApertureKeepOut`](@ref) puts each beam's worst-case clearance from its entrance hole
 into an optimization objective. [`backlighter_foil`](@ref) and [`line_of_sight`](@ref)
 place a foil on a diagnostic line of sight and check it against shields and beams, and
