@@ -318,6 +318,21 @@ mutable struct NoteRow
     text::String
 end
 
+# One step of the placement sweep; numbers as text.
+mutable struct SweepRowItem
+    number::Int
+    value::String
+    clearance::String
+    worst::String
+    fails::Int
+    reviews::Int
+    los::String
+    blocked::String
+    covered::String
+    captured::String
+    objective::String
+end
+
 # One entry of the time chart's key.
 mutable struct LegendRow
     label::String
@@ -379,7 +394,8 @@ const _MODEL_ROWS = (treeModel = TreeItem, targetFieldModel = FieldRow, partFiel
                      powerModel = PowerRow, optModeModel = ModeRow, paramModel = ParamRow,
                      compModel = CompRow, clearModel = ClearRow, worstModel = ClearRow,
                      talisCompModel = CompRow, ruleModel = RuleRow, talisModel = TalisRow,
-                     noteModel = NoteRow, timeLegendModel = LegendRow)
+                     noteModel = NoteRow, timeLegendModel = LegendRow, sweepModel = SweepRowItem,
+                     sweepLegendModel = LegendRow)
 
 """
 State shared between a `DesignSession` and its QML window: the property map `app`,
@@ -391,6 +407,7 @@ mutable struct BriareusShell
     scene::SceneCanvas
     map::MapCanvas
     time::TimeCanvas
+    sweep::TimeCanvas
     app::JuliaPropertyMap
     rows::Dict{Symbol,Vector}
     models::Dict{Symbol,JuliaItemModel}
@@ -407,11 +424,12 @@ function BriareusShell(sess::DesignSession; queue::Channel{Any} = Channel{Any}(I
     rows = Dict{Symbol,Vector}(k => R[] for (k, R) in pairs(_MODEL_ROWS))
     models = Dict{Symbol,JuliaItemModel}(k => JuliaItemModel(rows[k]) for k in keys(_MODEL_ROWS))
     scene = scene_canvas(sess)
-    sh = BriareusShell(sess, scene, map_canvas(sess), time_canvas(sess), JuliaPropertyMap(), rows, models, queue,
-                       Ref(true), Dict{String,Any}(), scene.fig, "", nothing,
-                       Figure(size = (40, 40)))
+    sh = BriareusShell(sess, scene, map_canvas(sess), time_canvas(sess), sweep_canvas(sess),
+                       JuliaPropertyMap(), rows, models, queue, Ref(true), Dict{String,Any}(),
+                       scene.fig, "", nothing, Figure(size = (40, 40)))
     sh.app["canvas"] = scene.fig
     sh.app["timeCanvas"] = sh.time.fig
+    sh.app["sweepCanvas"] = sh.sweep.fig
     # a figure is shown on one canvas at a time: the side canvas holds a blank one
     # unless the map sits beside the 3D view
     sh.side_figure = sh.blank
@@ -434,8 +452,9 @@ function BriareusShell(sess::DesignSession; queue::Channel{Any} = Channel{Any}(I
     end
     _set!(sh, "bnCount", 0)
     _set!(sh, "clusterNames", String[])
-    _set!(sh, "aimChoices", ["(free)"])
-    _set!(sh, "bnAimRef", 0)
+    _set!(sh, "aimChoices", ["Target chamber (TCC)"])
+    _set!(sh, "bnAimFrame", 0)
+    _set!(sh, "bnAimFrameLabel", "")
     _set!(sh, "beamNames", String[])
     _set!(sh, "cutSettingsRequest", false)
     _set!(sh, "cutGrabPath", "")
@@ -448,14 +467,18 @@ function BriareusShell(sess::DesignSession; queue::Channel{Any} = Channel{Any}(I
     _set!(sh, "compDisplay", 0)
     _set!(sh, "displayLabels", [DISPLAY_LABELS[m] for m in DISPLAY_MODES])
     _set!(sh, "partNumber", 0)
-    _set!(sh, "partAnchor", 0)
+    _set!(sh, "partFrame", 0)
+    _set!(sh, "moveFrames", String[])
+    _set!(sh, "moveFrame", 0)
+    _set!(sh, "moveAxis", 2)
+    _set!(sh, "moveStep", "0.1")
     _set!(sh, "partRole", 0)
     _set!(sh, "partFilm", false)
     _set!(sh, "cavitySummary", "")
     _set!(sh, "compIncluded", true)
     _set!(sh, "roleLabels", [PART_ROLE_LABELS[r] for r in PART_ROLES])
     _set!(sh, "partCoords", 0)
-    _set!(sh, "anchorLabels", [PART_ANCHOR_LABELS[a] for a in PART_ANCHORS])
+    _set!(sh, "frameLabels", [FRAME_LABELS[a] for a in TEMPLATE_FRAMES])
     _set!(sh, "windowNumber", 0)
     _set!(sh, "ortho", false)
     _set!(sh, "turntable", true)
@@ -472,7 +495,12 @@ function BriareusShell(sess::DesignSession; queue::Channel{Any} = Channel{Any}(I
                 st.by, st.fields, st.deltas, st.objective, st.weights, st.hold_drive, st.keepout,
                 st.keepout_min, st.capsule_keepout, st.capsule_min, st.spill, st.iterations,
                 st.max_evaluations, st.running, st.evaluations, st.iteration, st.status,
-                st.error, st.result, bt.cluster, v.extra,
+                st.error, st.result, bt.cluster, bt.aim_frame, ts.frames, v.extra,
+                sess.sweep.subject, sess.sweep.frame, sess.sweep.axis, sess.sweep.start, sess.sweep.stop,
+                sess.sweep.step, sess.sweep.clearance, sess.sweep.los, sess.sweep.los_theta,
+                sess.sweep.los_phi, sess.sweep.los_object, sess.sweep.capture, sess.sweep.optimize,
+                sess.sweep.quality, sess.sweep.running, sess.sweep.progress, sess.sweep.status,
+                sess.sweep.error, sess.sweep.result, sess.sweep.selected,
                 rv.targets, rv.hardware, rv.peak_fraction, rv.wings, rv.errors, rv.quality,
                 rv.running, rv.progress, rv.status, rv.error, rv.report,
                 tl.capture, tl.hardware, tl.diagnostics, tl.tolerance, tl.pivot, tl.pivot_point, tl.omega1,
@@ -535,6 +563,7 @@ function _refresh!(sh::BriareusShell)
     _refresh_time!(sh)
     _refresh_optimize!(sh)
     _refresh_review!(sh)
+    _refresh_sweep!(sh)
     tree = [TreeItem(r...) for r in model_tree(sess)]
     _set!(sh, "selectionCount", length(selected_ids(sess.view)))
     _sync_rows!(sh.rows[:treeModel], sh.models[:treeModel], tree)
@@ -601,6 +630,8 @@ function _refresh_view!(sh::BriareusShell)
     dr.building[] && push!(busy, "drive " * Controllers._seconds(time() - dr.started[]))
     st.running[] && push!(busy, "optimizing")
     rv.running[] && push!(busy, "clearance $(rv.progress[][1])/$(rv.progress[][2])")
+    sw = sh.sess.sweep
+    sw.running[] && push!(busy, "sweep $(sw.progress[][1])/$(sw.progress[][2])")
     tl.running[] && push!(busy, "TaLIS")
     tm = sh.sess.time
     tm.running[] && push!(busy, "drive history $(tm.progress[][1])/$(tm.progress[][2])")
@@ -706,10 +737,16 @@ function _refresh_selection!(sh::BriareusShell)
             _set!(sh, "partCopy", src != p.file)            # reads the copy saved in the session
             _set!(sh, "partSourceExists", src != p.file && isfile(src))
             # its frame: the target's, or another part's
-            anchors = _part_anchor_choices(sess, p)
-            _set!(sh, "anchorLabels", [a in PART_ANCHORS ? PART_ANCHOR_LABELS[a] : "Part: " * String(a)
-                                       for a in anchors])
-            _set!(sh, "partAnchor", something(findfirst(==(p.anchor), anchors), 0) - 1)
+            frames = _part_frame_choices(sess, p)
+            _set!(sh, "frameLabels", [_frame_label(f) for f in frames])
+            _set!(sh, "partFrame", something(findfirst(==(p.frame), frames), 0) - 1)
+            # the move row: along an axis of any frame (the part's own frame by default)
+            mf = _move_frame_choices(sess)
+            _set!(sh, "moveFrames", [_frame_label(f) for f in mf])
+            # (the part's own frame when another part is selected; kept by name as frames come and go)
+            get(sh.shown, "_movePart", nothing) === p.name || (sh.shown["_movePart"] = p.name;
+                                                                sh.shown["_moveFrameName"] = p.name)
+            _set!(sh, "moveFrame", something(findfirst(==(_move_frame(sh)), mf), 1) - 1)
             _set!(sh, "partCoords", findfirst(==(p.coords), PART_COORDINATES) - 1)
             _set!(sh, "partTwoSided", p.two_sided)
             _set!(sh, "partInward", p.inward)
@@ -741,7 +778,7 @@ function _refresh_selection!(sh::BriareusShell)
                                   "Beam " * key)
             _set!(sh, "bnBy", nsel > 1 ? "set" : String(_BY_OF_KIND[kind]))
             for (f, v) in ((:z, n.z), (:r, n.r), (:phi, n.phi), (:defocus, n.defocus),
-                           (:aim_x, n.aim[1]), (:aim_y, n.aim[2]), (:aim_z, n.aim[3]))
+                           (:aim_x, n.aim_local[1]), (:aim_y, n.aim_local[2]), (:aim_z, n.aim_local[3]))
                 _set!(sh, "bn_" * String(f), _fix(v))
             end
             _set!(sh, "bn_power", _num(n.power))
@@ -752,11 +789,13 @@ function _refresh_selection!(sh::BriareusShell)
             cls = unique(bt.cluster[][idx])
             _set!(sh, "bnCluster", length(cls) == 1 ? String(cls[1]) : "")
             _set!(sh, "clusterNames", String.(clusters(bt)))
-            # the component the beams' aims follow: "(free)" first, then the components
+            # the frame the beams aim in (its axes and origin for the aim point's fields)
             choices = _aim_choices(sess)
-            refs = unique(bt.aim_ref[][idx])
-            _set!(sh, "aimChoices", [c === :none ? "(free)" : String(c) for c in choices])
-            _set!(sh, "bnAimRef", length(refs) == 1 ? something(findfirst(==(refs[1]), choices), 1) - 1 : -1)
+            _set!(sh, "aimChoices", [_frame_label(c) for c in choices])
+            f = n.aim_frame
+            _set!(sh, "bnAimFrame", f === nothing ? -1 : something(findfirst(==(f), choices), 1) - 1)
+            _set!(sh, "bnAimFrameLabel", f === nothing ? "the chamber (the beams aim in different frames)" :
+                                         f === :tcc ? "the chamber" : _frame_label(f))
             # quads: one NIF quad beam can be split; a quad's four beams merged
             qs = unique(bs[i].quad for i in idx)
             q = length(qs) == 1 ? qs[1] : ""
@@ -859,7 +898,7 @@ end
 function _refresh_optimize!(sh::BriareusShell)
     st = sh.sess.optimize
     _set!(sh, "optBy", String(st.by[]))
-    for f in BEAM_FIELDS
+    for f in OPTIMIZE_FIELDS
         _set!(sh, "optFree_" * String(f), f in st.fields[])
         _set!(sh, "optDelta_" * String(f), _num(st.deltas[][f]))
     end
@@ -939,6 +978,58 @@ function _refresh_review!(sh::BriareusShell)
     return
 end
 
+function _refresh_sweep!(sh::BriareusShell)
+    sess = sh.sess
+    sw = sess.sweep
+    subs = sweep_subjects(sess)
+    _set!(sh, "swSubjects", [s === :backlighter && sess.target.kind[] === :foil ? "Backlighter foil (template)" :
+                             String(s) for s in subs])
+    _set!(sh, "swSubject", something(findfirst(==(sweep_subject(sess)), subs), 0) - 1)
+    mf = _move_frame_choices(sess)
+    _set!(sh, "swFrames", [_frame_label(f) for f in mf])
+    _set!(sh, "swFrame", something(findfirst(==(sweep_frame(sess)), mf), 1) - 1)
+    _set!(sh, "swAxis", something(findfirst(==(sw.axis[]), SWEEP_AXES), 3) - 1)
+    for k in (:start, :stop, :step, :los_theta, :los_phi)
+        _set!(sh, "sw_" * String(k), _num(getfield(sw, k)[]))
+    end
+    for k in (:clearance, :los, :capture, :optimize)
+        _set!(sh, "sw_" * String(k), getfield(sw, k)[])
+    end
+    objs = [:none; surface_names(sess.target.target[])]
+    _set!(sh, "swObjects", [o === :none ? "(none)" : component_label(o) for o in objs])
+    _set!(sh, "swObject", something(findfirst(==(sweep_los_object(sess)), objs), 1) - 1)
+    _set!(sh, "swQuality", String(sw.quality[]))
+    _set!(sh, "swRunning", sw.running[])
+    _set!(sh, "swDone", sw.progress[][1])
+    _set!(sh, "swTotal", sw.progress[][2])
+    _set!(sh, "swStatus", sw.status[])
+    _set!(sh, "swError", sw.error[])
+    _set!(sh, "swHasResult", sw.result[] !== nothing)
+    _set!(sh, "swBrief", sweep_brief(sw))
+    _set!(sh, "swStale", sweep_stale(sess))
+    _set!(sh, "swSelected", sw.selected[])
+    steps = try
+        length(sweep_values(sw))
+    catch
+        0
+    end
+    _set!(sh, "swSteps", steps)
+    if get(sh.shown, "_sweepResult", missing) !== sw.result[]
+        sh.shown["_sweepResult"] = sw.result[]
+        rows = [SweepRowItem(k, @sprintf("%+.4g", w.value), _fix(w.clearance), w.worst, w.fails, w.reviews, w.los,
+                             _pct(w.blocked, 1), _pct(w.covered, 1), _pct(w.captured, 2),
+                             isnan(w.objective_after) ? "–" : @sprintf("%.3g → %.3g", w.objective_before, w.objective_after))
+                for (k, w) in enumerate(sweep_rows(sw))]
+        _sync_rows!(sh.rows[:sweepModel], sh.models[:sweepModel], rows)
+    end
+    ch = sweep_chart(sess)
+    _set!(sh, "swEmpty", ch.empty)
+    _set!(sh, "swTitle", ch.title)
+    _sync_rows!(sh.rows[:sweepLegendModel], sh.models[:sweepLegendModel],
+                LegendRow[LegendRow(r.label, r.color, String(r.style)) for r in ch.legend])
+    return
+end
+
 _unit(u::Symbol) = u === :deg ? "°" : String(u)
 # A margin or distance; ±Inf means the rule found nothing to measure (no free edge, all
 # hardware downstream of the landing point).
@@ -1014,7 +1105,7 @@ br_grab_started() = (sh = _SHELL[]; sh === nothing || _set!(sh, "grabPath", "");
     request_tab(key)
 
 Show a results tab of the open window (`"beams"`, `"drive"`, `"time"`, `"optimize"`,
-`"clearance"`, `"talis"`), as its menus do.
+`"clearance"`, `"sweep"`, `"talis"`), as its menus do.
 """
 request_tab(key::AbstractString) = (sh = _SHELL[]; sh === nothing ||
                                     (_set!(sh, "resultsRequest", ""); _set!(sh, "resultsRequest", String(key))); nothing)
@@ -1147,7 +1238,8 @@ function br_tick()
         _refresh!(sh)
         _LAST_REFRESH[] = time()
     elseif (sess.drive.building[] || sess.optimize.running[] || sess.review.running[] ||
-            sess.talis.running[] || sess.time.running[] || !target_ready(sess.target)) &&
+            sess.talis.running[] || sess.time.running[] || sess.sweep.running[] ||
+            !target_ready(sess.target)) &&
            time() - _LAST_REFRESH[] > 0.25
         # running jobs report elapsed time, four times a second (not a design edit: a
         # snapshot for undo every tick took a third of the GUI thread during a drive)
@@ -1156,10 +1248,12 @@ function br_tick()
     end
     redraw = sh.scene.dirty[] || sh.map.dirty[]
     chart = sh.time.dirty[]
+    swchart = sh.sweep.dirty[]
     sh.scene.dirty[] = false
     sh.map.dirty[] = false
     sh.time.dirty[] = false
-    return (redraw ? 1 : 0) | (chart ? 4 : 0)
+    sh.sweep.dirty[] = false
+    return (redraw ? 1 : 0) | (chart ? 4 : 0) | (swchart ? 8 : 0)
 end
 
 _sym(x) = Symbol(String(x))
@@ -1385,22 +1479,72 @@ function br_part_flag(flag, on)
         end
     end
 end
+# A frame's name in the menus: a template frame's label, or the part's name.
+_frame_label(f::Symbol) = haskey(FRAME_LABELS, f) ? FRAME_LABELS[f] : "Part: " * String(f)
+# Frames a part can be placed in: the template's, then the other parts.
+function _part_frame_choices(sess, p)
+    fr = part_frames(sess.target)
+    return [[f for f in TEMPLATE_FRAMES if haskey(fr, f) && !(f in (q.name for q in sess.target.parts[]))];
+            [q.name for q in sess.target.parts[] if q.name !== p.name]]
+end
+# Frames to move along or aim in: the template's, then every part's.
+function _move_frame_choices(sess)
+    fr = part_frames(sess.target)
+    names = [q.name for q in sess.target.parts[]]
+    return [[f for f in TEMPLATE_FRAMES if haskey(fr, f) && !(f in names)]; names]
+end
 # Move the selected part to another frame, keeping it where it is (index into
-# `anchorKeys`).
-# Frames a part can be placed in: the target's, then the other parts.
-_part_anchor_choices(sess, p) =
-    [collect(PART_ANCHORS); [q.name for q in sess.target.parts[] if q.name !== p.name]]
-function br_part_anchor(index)
+# `frameLabels`).
+function br_part_frame(index)
     _with_shell() do sh
         ts = sh.sess.target
         idx = _selected_parts(sh)
         isempty(idx) && return
-        anchor = _part_anchor_choices(sh.sess, ts.parts[][idx[1]])[Int(index)+1]
+        frame = _part_frame_choices(sh.sess, ts.parts[][idx[1]])[Int(index)+1]
         ok = true
         for i in idx
-            ok &= set_part_anchor!(ts, i, anchor)
+            ok &= set_part_frame!(ts, i, frame)
         end
-        ok || _set!(sh, "partAnchor", -1)
+        ok || _set!(sh, "partFrame", -1)
+    end
+end
+# The move row: the frame (index into `moveFrames`) and axis (0 x, 1 y, 2 z) it moves
+# along, and the step as text.
+br_move_frame(index) = _with_shell(sh -> (sh.shown["_moveFrameName"] = _move_frame_choices(sh.sess)[Int(index)+1]))
+# The frame the move row moves along: the chosen one while the design has it, else the chamber's.
+function _move_frame(sh)
+    f = get(sh.shown, "_moveFrameName", :tcc)
+    return f in _move_frame_choices(sh.sess) ? f : :tcc
+end
+br_move_axis(index) = _with_shell(sh -> _set!(sh, "moveAxis", Int(index)))
+br_move_step(text) = _with_shell(sh -> (_parse(text, "the step"); _set!(sh, "moveStep", String(strip(string(text))))))
+# Move the selected part by ± the step along the chosen axis (`sign` +1 or -1): one edit.
+function br_nudge_part(sign)
+    _with_shell() do sh
+        ts = sh.sess.target
+        idx = _selected_parts(sh)
+        isempty(idx) && return
+        Δ = Float64(sign) * Controllers._parse_number(sh.shown["moveStep"], "the step"; positive = true)
+        frame = _move_frame(sh)
+        axis = SWEEP_AXES[sh.shown["moveAxis"]+1]
+        for i in idx
+            nudge_part!(ts, i, Δ; frame, axis)
+        end
+        sh.sess.status[] = @sprintf("moved %s by %+g mm along %s of %s", ts.parts[][idx[1]].name, Δ, axis,
+                                    _frame_label(frame))
+    end
+end
+# Set up a sweep of the selected part along the move row's axis, and show it.
+function br_sweep_part()
+    _with_shell() do sh
+        idx = _selected_parts(sh)
+        isempty(idx) && return
+        p = sh.sess.target.parts[][idx[1]]
+        set_sweep!(sh.sess.sweep; subject = p.name,
+                   frame = _move_frame(sh),
+                   axis = SWEEP_AXES[sh.shown["moveAxis"]+1])
+        select!(sh.sess.view, "task:sweep")
+        request_tab("sweep")
     end
 end
 # The selected part's role in the analyses (index into `roleLabels`); a refused role
@@ -1492,16 +1636,27 @@ function br_rename_cluster(new)
             select!(sh.sess.view, "group:" * strip(string(new)))
     end
 end
-_aim_choices(sess) = [:none; component_names(sess.target.target[])]
-# Aim the selected beams at a component and keep them on it (index into `aimChoices`).
-function br_aim_at(index)
+_aim_choices(sess) = _move_frame_choices(sess)
+# Hold the selected beams' aims in a frame, where they are (index into `aimChoices`).
+function br_aim_frame(index)
     _with_shell() do sh
         idx = selected_beams(sh.sess)
         isempty(idx) && return
-        name = _aim_choices(sh.sess)[Int(index)+1]
-        aim_at_component!(sh.sess, idx, name)
-        sh.sess.status[] = name === :none ? "the beams' aims no longer follow a component" :
-                           "the beams aim at $name and follow it"
+        f = _aim_choices(sh.sess)[Int(index)+1]
+        set_aim_frame!(sh.sess, idx, f)
+        sh.sess.status[] = f === :tcc ? "the beams aim in the chamber frame" :
+                           "the beams aim in the frame of " * _frame_label(f) * " and follow it"
+    end
+end
+# Aim the selected beams at their frame's point (a part's centroid, a template frame's origin).
+function br_aim_at_frame()
+    _with_shell() do sh
+        idx = selected_beams(sh.sess)
+        isempty(idx) && return
+        fs = unique(sh.sess.beams.aim_frame[][idx])
+        length(fs) == 1 || throw(ArgumentError("the beams aim in different frames: choose one first"))
+        set_aim_frame!(sh.sess, idx, fs[1]; keep = false)
+        sh.sess.status[] = "the beams aim at the center of " * _frame_label(fs[1])
     end
 end
 function br_set_facility(f)
@@ -1698,6 +1853,19 @@ br_rv_start() = _with_shell(sh -> (start_clearance!(sh.sess);
                                    Controllers._assign!(sh.sess.view.beam_color, :clearance)))
 br_rv_cancel() = _with_shell(sh -> cancel_clearance!(sh.sess))
 br_rv_export(url) = _with_shell(sh -> export_clearance(sh.sess.review, _url_to_path(String(url))))
+# Sweep
+br_sw_subject(i) = _with_shell(sh -> set_sweep!(sh.sess.sweep; subject = sweep_subjects(sh.sess)[Int(i)+1]))
+br_sw_frame(i) = _with_shell(sh -> set_sweep!(sh.sess.sweep; frame = _move_frame_choices(sh.sess)[Int(i)+1]))
+br_sw_axis(i) = _with_shell(sh -> set_sweep!(sh.sess.sweep; axis = SWEEP_AXES[Int(i)+1]))
+br_sw_edit(key, text) = _with_shell(sh -> edit_sweep!(sh.sess.sweep, _sym(key), string(text)))
+br_sw_check(key, on) = _with_shell(sh -> set_sweep!(sh.sess.sweep; (_sym(key) => Bool(on),)...))
+br_sw_object(i) = _with_shell(sh -> set_sweep!(sh.sess.sweep;
+                                              los_object = [:none; surface_names(sh.sess.target.target[])][Int(i)+1]))
+br_sw_quality(q) = _with_shell(sh -> set_sweep!(sh.sess.sweep; quality = _sym(q)))
+br_sw_start() = _with_shell(sh -> (start_sweep!(sh.sess); request_tab("sweep")))
+br_sw_cancel() = _with_shell(sh -> cancel_sweep!(sh.sess))
+br_sw_select(k) = _with_shell(sh -> select_sweep_step!(sh.sess.sweep, round(Int, k)))
+br_sw_apply(k) = _with_shell(sh -> apply_sweep_step!(sh.sess, round(Int, k)))
 # TaLIS
 br_tl_role(name, role) = _with_shell(sh -> set_talis_role!(sh.sess.talis, _sym(name), _sym(role)))
 br_tl_edit(key, text) = _with_shell(sh -> edit_talis!(sh.sess.talis, _sym(key), string(text)))
@@ -1708,7 +1876,7 @@ br_tl_start() = _with_shell(sh -> (start_talis!(sh.sess);
 br_tl_cancel() = _with_shell(sh -> cancel_talis!(sh.sess))
 br_tl_export(url) = _with_shell(sh -> export_talis(sh.sess.talis, _url_to_path(String(url))))
 br_cancel_all() = _with_shell(sh -> (cancel_optimize!(sh.sess); cancel_clearance!(sh.sess);
-                                     cancel_talis!(sh.sess)))
+                                     cancel_talis!(sh.sess); cancel_sweep!(sh.sess)))
 # Viewer
 br_set_color(mode) = _with_shell(sh -> set_color!(sh.sess, _sym(mode)))
 br_beam_style(s) = _with_shell(sh -> (s = _sym(s); s in BEAM_STYLES && Controllers._assign!(sh.sess.view.beams, s)))
@@ -1865,10 +2033,13 @@ function _register_qml_functions()
     @qmlfunction br_undo br_redo br_open_session br_save_session br_reload_cad_sources br_keep_cad_copies
     @qmlfunction br_relink_part br_part_from_source
     @qmlfunction br_set_cluster br_rename_cluster br_split_quad br_merge_quad br_window_round
-    @qmlfunction br_set_facility br_aim_at
+    @qmlfunction br_set_facility br_aim_frame br_aim_at_frame
     @qmlfunction br_set_target_kind br_set_resolution br_edit_mesh br_edit_target br_leh_closure
     @qmlfunction br_add_window br_remove_window br_edit_window br_window_open
-    @qmlfunction br_add_part br_add_stl br_edit_part br_part_flag br_part_anchor br_part_coords
+    @qmlfunction br_add_part br_add_stl br_edit_part br_part_flag br_part_frame br_part_coords
+    @qmlfunction br_move_frame br_move_axis br_move_step br_nudge_part br_sweep_part
+    @qmlfunction br_sw_subject br_sw_frame br_sw_axis br_sw_edit br_sw_check br_sw_object
+    @qmlfunction br_sw_quality br_sw_start br_sw_cancel br_sw_select br_sw_apply
     @qmlfunction br_part_role br_export_stl br_cavity br_cavity_point br_part_film
     @qmlfunction br_remove_selected
     @qmlfunction br_load_preset br_set_grouping br_edit_beam br_set_beam_on br_edit_node

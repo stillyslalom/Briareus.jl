@@ -293,11 +293,12 @@ function _fit_references(t::Target, kind::Symbol, params, mesh, parts)
     refs = Dict{Symbol,Mesh}()
     FIT_CAD[] || return refs
     flat = Set(c.name for c in t.components if c.kind === :surface && c.surface === nothing)
+    frames = isempty(parts) ? Dict{Symbol,Frame}() : part_frames(kind, params, parts)
     for p in parts
         p.kind in (:visrad, :mesh) && p.name in flat || continue
         try
             p.kind === :visrad && _visrad_object(p.file, p.object).kind !== :mesh && continue
-            cs = part_components(p, mesh.h; frame = anchor_frame(p.anchor, kind, params, parts), raw = true)
+            cs = part_components(p, mesh.h; frame = frames[p.frame], raw = true)
             length(cs) == 1 && only(cs).name === p.name && (refs[p.name] = only(cs).mesh)
         catch err
             err isa ArgumentError || rethrow()

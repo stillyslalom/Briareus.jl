@@ -16,7 +16,8 @@ Beam presets:
   aimed at the LEH centers of a hohlraum target (TCC otherwise);
 - `:omega_backlighter` — the 60-port OMEGA set reduced to the beams that reach the
   driven face of a foil target from at least 20° off the foil axis, aimed at the foil
-  center (0.4 TW, SG4 spots), as in `examples/backlighter.jl`.
+  center (0.4 TW, SG4 spots), as in `examples/backlighter.jl`; on a foil target in the
+  `:backlighter` frame ([`preset_aim_frame`](@ref)), so they follow the foil.
 """
 const BEAM_PRESETS = (:nif_quads, :nif_beams, :omega_hohlraum, :omega_backlighter)
 
@@ -72,13 +73,19 @@ name, as VisRad's beam clusters: the beam's cone `group` by default; a group edi
 grouping, one of [`BEAM_GROUPINGS`](@ref)), `path` (the last imported or exported
 file), `error` (the last rejected edit), `warnings` (what the last VisRad import warned
 about: unmatched beams, port-angle mismatches, …), `facility` (one of
-[`FACILITIES`](@ref); set by a preset, or with [`set_facility!`](@ref)), `aim_ref` (per
-beam, the target component its aim follows, or `:none`; see
-[`set_aim_reference!`](@ref)), `ref_point` (where that component's reference point
-was when the aim last followed it) and `unconverted` (per beam, whether its unconverted
-1ω and 2ω light takes part in the calculations: design state, saved and undone, that no
-calculation reads yet, as Briareus has no unconverted-light deposition model; see
-[`set_participation!`](@ref)).
+[`FACILITIES`](@ref); set by a preset, or with [`set_facility!`](@ref)), `aim_frame`
+(per beam, the named frame its aim is held in: `:tcc`, a template's frame or a part's,
+see [`set_aim_frame!`](@ref)), `aim_local` (each aim's coordinates in that frame),
+`frames` (the frames the local aims refer to: the design's, [`part_frames`](@ref), kept
+current by [`follow_frames!`](@ref)) and `unconverted` (per beam, whether its
+unconverted 1ω and 2ω light takes part in the calculations: design state, saved and
+undone, that no calculation reads yet, as Briareus has no unconverted-light deposition
+model; see [`set_participation!`](@ref)).
+
+Every beam keeps `aim ≈ to_chamber(frames[aim_frame], aim_local)` (to round-off; exactly
+after a frame moved, when [`follow_frames!`](@ref) sets the aims from the local
+coordinates): every write of the beams goes through one path, which re-expresses the
+aims that changed in their frames, so a later move of a frame carries them along.
 """
 struct BeamTable
     beams::Observable{Vector{Beam{Float64}}}
@@ -90,19 +97,60 @@ struct BeamTable
     error::Observable{String}
     warnings::Observable{Vector{String}}
     facility::Observable{Symbol}
-    aim_ref::Observable{Vector{Symbol}}
-    ref_point::Base.RefValue{Vector{Vec3}}
+    aim_frame::Observable{Vector{Symbol}}
+    aim_local::Base.RefValue{Vector{Vec3}}
+    frames::Base.RefValue{Dict{Symbol,Frame}}
     unconverted::Observable{Vector{NTuple{2,Bool}}}
 end
 
-function BeamTable(beams::AbstractVector = Beam{Float64}[]; preset::Symbol = :custom)
+function BeamTable(beams::AbstractVector = Beam{Float64}[]; preset::Symbol = :custom,
+                   frames::AbstractDict = Dict(:tcc => CHAMBER), aim_frame = :tcc)
     bs = Beam{Float64}[_float_beam(b) for b in beams]
-    return BeamTable(Observable(bs), Observable(fill(true, length(bs))),
-                     Observable(Symbol[b.group for b in bs]), Observable(preset),
-                     Observable(:group), Observable(""), Observable(""), Observable(String[]),
-                     Observable(something(facility_of(preset), :custom)),
-                     Observable(fill(:none, length(bs))), Ref(fill(zero(Vec3), length(bs))),
-                     Observable(fill((false, false), length(bs))))
+    fr = Dict{Symbol,Frame}(frames)
+    haskey(fr, :tcc) || (fr[:tcc] = CHAMBER)
+    af = aim_frame isa Symbol ? fill(aim_frame, length(bs)) : collect(Symbol, aim_frame)
+    bt = BeamTable(Observable(Beam{Float64}[]), Observable(fill(true, length(bs))),
+                   Observable(Symbol[b.group for b in bs]), Observable(preset),
+                   Observable(:group), Observable(""), Observable(""), Observable(String[]),
+                   Observable(something(facility_of(preset), :custom)),
+                   Observable(Symbol[]), Ref(Vec3[]), Ref(fr),
+                   Observable(fill((false, false), length(bs))))
+    _set_aims!(bt, bs; aim_frame = af)
+    return bt
+end
+
+# The chamber frame named `name` that the table's local aims refer to.
+function _table_frame(bt::BeamTable, name::Symbol)
+    F = get(bt.frames[], name, nothing)
+    F === nothing && throw(ArgumentError("no frame named $name to aim in"))
+    return F
+end
+
+# The one path that writes the table's beams: `bs` with each beam's aim frame
+# (`aim_frame`) and local aim, `aim_local` when given (the caller's exact coordinates,
+# `follow_frames!`), otherwise each aim that changed (or whose frame did) re-expressed in
+# its frame and the others' kept. `force` notifies the beams' observers even when the
+# beams are equal. Keeps `aim ≈ to_chamber(frame, aim_local)` for every beam.
+function _set_aims!(bt::BeamTable, beams::AbstractVector; aim_frame::AbstractVector = bt.aim_frame[],
+                    aim_local = nothing, force::Bool = false)
+    bs = Beam{Float64}[_float_beam(b) for b in beams]
+    length(aim_frame) == length(bs) || throw(DimensionMismatch("one aim frame per beam"))
+    af = collect(Symbol, aim_frame)
+    old, oldf, oldl = bt.beams[], bt.aim_frame[], bt.aim_local[]
+    same = length(old) == length(bs) == length(oldf) == length(oldl)
+    loc = if aim_local !== nothing
+        length(aim_local) == length(bs) || throw(DimensionMismatch("one local aim per beam"))
+        Vec3[Vec3(a...) for a in aim_local]
+    else
+        Vec3[same && old[i].aim == bs[i].aim && oldf[i] === af[i] ? oldl[i] :
+             Vec3(to_frame(_table_frame(bt, af[i]), bs[i].aim)) for i in eachindex(bs)]
+    end
+    bt.aim_local[] = loc
+    fchanged = af != oldf
+    fchanged && (bt.aim_frame.val = af)
+    (force || bs != old) && (bt.beams[] = bs)
+    fchanged && notify(bt.aim_frame)
+    return bt
 end
 
 _float_beam(b::Beam{Float64}) = b
@@ -128,13 +176,22 @@ function preset_beams(preset::Symbol; target_kind::Symbol = :hohlraum,
         h = params[:length] / 2
         return _cone_pointing(bs, Dict(g => (0.0, h) for g in (:cone1, :cone2, :cone3)))
     elseif preset === :omega_backlighter
-        c = target_kind === :foil ? foil_center(params) : Vec3(0, 0, 0)
+        c = target_kind === :foil ? backlighter_frame(params).origin : Vec3(0, 0, 0)
         return [remake(b; aim = c, power = 0.4)
                 for b in omega_beams(cones = :all, spot = omega_spot(:SG4))
                 if b.port[1] < -cosd(70)]
     end
     throw(ArgumentError("unknown beam preset :$preset; choose from $BEAM_PRESETS"))
 end
+
+"""
+    preset_aim_frame(preset, target_kind) -> Symbol
+
+The frame a preset's beams aim in: `:backlighter` for `:omega_backlighter` on a foil
+target (the beams then follow the foil), `:tcc` otherwise.
+"""
+preset_aim_frame(preset::Symbol, target_kind::Symbol) =
+    preset === :omega_backlighter && target_kind === :foil ? :backlighter : :tcc
 
 # Point each cone at (r, z) with top/bottom mirroring.
 function _cone_pointing(bs, rz)
@@ -165,104 +222,106 @@ function set_facility!(bt::BeamTable, facility::Symbol; kwargs...)
 end
 
 """
-    set_aim_reference!(bt::BeamTable, idx, name::Symbol, point = nothing) -> bt
+    set_aim_frame!(bt::BeamTable, idx, frame::Symbol; at = nothing) -> bt
 
-Aim beams `idx` at `point` (the reference point of target component `name`, such as
-its centroid: a backlighter foil, an entrance hole) and keep them on it: when the
-target changes, [`follow_references!`](@ref) moves their aims with the component.
-Pointing edits afterwards set offsets from it, which the aims keep as they follow.
-`name = :none` releases the beams (their aims stay where they are).
+Hold the aims of beams `idx` in the frame named `frame` (one of the table's `frames`:
+`:tcc`, a template's frame, a part's), so they follow it when it moves or turns
+([`follow_frames!`](@ref)). With `at = nothing` the aims stay where they are and are
+re-expressed in the frame; with a chamber point `at` every beam aims there. Pointing
+edits afterwards change the local coordinates, which the aims keep as they follow.
 """
-function set_aim_reference!(bt::BeamTable, idx, name::Symbol, point = nothing)
-    name === :none || point !== nothing || throw(ArgumentError("give the point to aim at"))
-    refs, pts, bs = copy(bt.aim_ref[]), copy(bt.ref_point[]), copy(bt.beams[])
+function set_aim_frame!(bt::BeamTable, idx, frame::Symbol; at = nothing)
+    _table_frame(bt, frame)
+    af, bs = copy(bt.aim_frame[]), copy(bt.beams[])
     for i in idx
-        refs[i] = name
-        name === :none && continue
-        pts[i] = Vec3(point...)
-        bs[i] = remake(bs[i]; aim = Vec3(point...))
+        af[i] = frame
+        at === nothing || (bs[i] = remake(bs[i]; aim = Vec3(at...)))
     end
-    bt.ref_point[] = pts
-    bt.aim_ref[] = refs
-    bs == bt.beams[] || (bt.beams[] = bs)
+    _set_aims!(bt, bs; aim_frame = af)
     return bt
 end
 
 """
-    follow_references!(bt::BeamTable, points::AbstractDict) -> Bool
+    beam_frames(bt::BeamTable) -> Vector{Frame}
 
-Move every beam that follows a component ([`set_aim_reference!`](@ref)) by how far that
-component's reference point moved since the aim last followed it (`points`: component
-name → its point now). A beam whose component is gone is released. Returns whether
-anything changed.
+The chamber frame each beam aims in (its `aim_frame` in the table's `frames`).
 """
-function follow_references!(bt::BeamTable, points::AbstractDict)
-    refs, pts, bs = copy(bt.aim_ref[]), copy(bt.ref_point[]), copy(bt.beams[])
+beam_frames(bt::BeamTable) = Frame[_table_frame(bt, f) for f in bt.aim_frame[]]
+
+"""
+    follow_frames!(bt::BeamTable, frames::AbstractDict) -> Bool
+
+Carry the aims along with the design's frames (`frames`: name → chamber `Frame`, see
+[`part_frames`](@ref)): every beam whose frame moved or turned since the table last saw
+it aims at its local coordinates in the frame as it is now, `to_chamber(frame,
+aim_local)`, rigidly. A beam whose frame is gone keeps its aim and is held in `:tcc`.
+`frames` then become the table's. Returns whether an aim or frame changed.
+"""
+function follow_frames!(bt::BeamTable, frames::AbstractDict)
+    fr = Dict{Symbol,Frame}(frames)
+    haskey(fr, :tcc) || (fr[:tcc] = CHAMBER)
+    old = bt.frames[]
+    af, loc, bs = copy(bt.aim_frame[]), copy(bt.aim_local[]), copy(bt.beams[])
     changed = false
-    for i in eachindex(refs)
-        r = refs[i]
-        r === :none && continue
-        if !haskey(points, r)
-            refs[i] = :none
+    for i in eachindex(bs)
+        F = get(fr, af[i], nothing)
+        if F === nothing                       # the frame went away: the aim stays
+            af[i], loc[i] = :tcc, Vec3(bs[i].aim)
             changed = true
-            continue
+        elseif get(old, af[i], nothing) != F
+            a = Vec3(to_chamber(F, loc[i]))
+            a == bs[i].aim || (bs[i] = remake(bs[i]; aim = a); changed = true)
         end
-        p = Vec3(points[r]...)
-        δ = p - pts[i]
-        iszero(δ) && continue
-        bs[i] = remake(bs[i]; aim = Vec3(bs[i].aim) + δ)
-        pts[i] = p
-        changed = true
     end
-    changed || return false
-    bt.ref_point[] = pts
-    refs == bt.aim_ref[] || (bt.aim_ref[] = refs)
-    bs == bt.beams[] || (bt.beams[] = bs)
-    return true
+    bt.frames[] = fr
+    changed && _set_aims!(bt, bs; aim_frame = af, aim_local = loc)
+    return changed
 end
 
 """
-    load_preset!(bt::BeamTable, preset; target_kind, params)
+    load_preset!(bt::BeamTable, preset; target_kind = :hohlraum, params)
 
-Replace the table with a preset's beams (see [`preset_beams`](@ref)), all enabled.
+Replace the table with a preset's beams (see [`preset_beams`](@ref)), all enabled, their
+aims in [`preset_aim_frame`](@ref).
 """
-function load_preset!(bt::BeamTable, preset::Symbol; kwargs...)
-    set_beams!(bt, preset_beams(preset; kwargs...); preset)
+function load_preset!(bt::BeamTable, preset::Symbol; target_kind::Symbol = :hohlraum, kwargs...)
+    set_beams!(bt, preset_beams(preset; target_kind, kwargs...); preset,
+               aim_frame = preset_aim_frame(preset, target_kind))
     return bt
 end
 
 """
     set_beams!(bt::BeamTable, beams; preset = :custom, enabled = all, cluster = cones,
-               aim_ref, ref_point, unconverted = none)
+               aim_frame = :tcc, aim_local = nothing, unconverted = none)
 
 Replace the table's beams (all enabled unless `enabled` is given, grouped by cone
-unless `cluster` is given, their unconverted light out of the calculations unless
-`unconverted` is given).
+unless `cluster` is given, their aims held in `aim_frame` (one name, or one per beam;
+`aim_local` gives their local coordinates, otherwise the aims are re-expressed in their
+frames), their unconverted light out of the calculations unless `unconverted` is
+given).
 """
 function set_beams!(bt::BeamTable, beams::AbstractVector; preset::Symbol = :custom,
                     enabled::AbstractVector{Bool} = fill(true, length(beams)),
                     cluster::AbstractVector{Symbol} = Symbol[b.group for b in beams],
-                    aim_ref::AbstractVector{Symbol} = fill(:none, length(beams)),
-                    ref_point::AbstractVector = fill(zero(Vec3), length(beams)),
+                    aim_frame = :tcc, aim_local = nothing,
                     unconverted::AbstractVector = fill((false, false), length(beams)))
+    af = aim_frame isa Symbol ? fill(aim_frame, length(beams)) : collect(Symbol, aim_frame)
     length(enabled) == length(beams) || throw(DimensionMismatch("one enabled flag per beam"))
     length(unconverted) == length(beams) || throw(DimensionMismatch("one 1ω, 2ω pair per beam"))
     length(cluster) == length(beams) || throw(DimensionMismatch("one group per beam"))
-    length(aim_ref) == length(ref_point) == length(beams) ||
-        throw(DimensionMismatch("one aim reference per beam"))
+    length(af) == length(beams) || throw(DimensionMismatch("one aim frame per beam"))
+    foreach(f -> _table_frame(bt, f), unique(af))
     bt.enabled.val = collect(Bool, enabled)          # observers see consistent lengths
     bt.cluster.val = collect(Symbol, cluster)
-    bt.aim_ref.val = collect(Symbol, aim_ref)
     bt.unconverted.val = NTuple{2,Bool}[(Bool(u[1]), Bool(u[2])) for u in unconverted]
-    bt.ref_point[] = Vec3[Vec3(p...) for p in ref_point]
     bt.preset[] = preset
     f = facility_of(preset)
     f === nothing || _assign!(bt.facility, f)
     bt.by[] === :quad && any(b -> isempty(b.quad), beams) && (bt.by[] = :group)
-    bt.beams[] = Beam{Float64}[_float_beam(b) for b in beams]
+    _set_aims!(bt, beams; aim_frame = af, aim_local, force = true)
     notify(bt.enabled)
     notify(bt.cluster)
-    notify(bt.aim_ref)
+    notify(bt.aim_frame)
     notify(bt.unconverted)
     bt.error[] = ""
     isempty(bt.warnings[]) || (bt.warnings[] = String[])
@@ -355,7 +414,7 @@ function edit_beams!(bt::BeamTable, row::Integer, field::Symbol, text; by::Symbo
         for i in p.members[row]
             bs[i] = _float_beam(new[i])
         end
-        bt.beams[] = bs
+        _set_aims!(bt, bs)
         bt.error[] = ""
         return true
     catch err
@@ -468,7 +527,7 @@ function _apply_visrad!(bt::BeamTable, read, path::AbstractString)
         push!(bs, b)
     end
     set_beams!(bt, bs; preset = bt.preset[], enabled = en, cluster = bt.cluster[],
-               unconverted = bt.unconverted[])
+               aim_frame = bt.aim_frame[], unconverted = bt.unconverted[])
     noff > 0 && pushfirst!(warns, (noff == 1 ? "1 beam of the table is" : "$noff beams of the table are") *
                                   " off or absent in $(basename(path)): disabled (power kept)")
     bt.warnings[] = warns
@@ -603,8 +662,10 @@ end
 
 Mean `z`, `r`, `phi` (tangential offset), `defocus` (mm) and `power` (TW per beam) of
 the beams `idx`, as [`edit_beam_set!`](@ref) reads them (z mirrored when the set spans
-both hemispheres: `mirrored`), their mean Cartesian `aim`, `count`, and `enabled`
-(`true`, `false`, or `missing` for some).
+both hemispheres: `mirrored`), their mean Cartesian `aim` in the chamber, `aim_frame`
+(the frame they all aim in, or `nothing` when they differ), `aim_local` (their mean aim
+in that frame, or in the chamber when they differ), `count`, and `enabled` (`true`,
+`false`, or `missing` for some).
 """
 function beam_set_values(bt::BeamTable, idx)
     idx = _check_set(bt, idx)
@@ -614,9 +675,12 @@ function beam_set_values(bt::BeamTable, idx)
     v(f) = x[(g-1)*nf+findfirst(==(f), BEAM_FIELDS)]
     bs = bt.beams[]
     aim = sum(bs[i].aim for i in idx) / length(idx)
+    fs = unique(bt.aim_frame[][idx])
+    aim_frame = length(fs) == 1 ? fs[1] : nothing
+    aim_local = aim_frame === nothing ? aim : sum(bt.aim_local[][i] for i in idx) / length(idx)
     on = count(i -> bt.enabled[][i], idx)
     return (; z = v(:z), r = v(:r), phi = v(:phi), defocus = v(:defocus), power = v(:power), aim,
-            count = length(idx), mirrored = _set_mirror(bs, idx),
+            aim_frame, aim_local, count = length(idx), mirrored = _set_mirror(bs, idx),
             enabled = on == length(idx) ? true : on == 0 ? false : missing)
 end
 
@@ -625,9 +689,10 @@ end
 
 Set `field` (one of [`SET_FIELDS`](@ref)) of every beam in `idx` from text: a
 [`BEAM_FIELDS`](@ref) value as a group edit does (only that field changes), or one
-coordinate of the aim point (`:aim_x`, `:aim_y`, `:aim_z`, mm), which every beam of the
-set then shares, as VisRad points a cluster at a reference point. A rejected value sets
-`error` and returns `false`.
+coordinate of the aim point (`:aim_x`, `:aim_y`, `:aim_z`, mm) in the frame the beams
+aim in (the chamber when they aim in different frames), which every beam of the set then
+shares, as VisRad points a cluster at a reference point. A rejected value sets `error`
+and returns `false`.
 """
 function edit_beam_set!(bt::BeamTable, idx, field::Symbol, text)
     field in SET_FIELDS || throw(ArgumentError("beam field must be one of $SET_FIELDS"))
@@ -646,13 +711,15 @@ function edit_beam_set!(bt::BeamTable, idx, field::Symbol, text)
             end
         else
             k = field === :aim_x ? 1 : field === :aim_y ? 2 : 3
+            fs = unique(bt.aim_frame[][idx])
+            F = length(fs) == 1 ? _table_frame(bt, fs[1]) : CHAMBER
             for i in idx
-                a = collect(bs[i].aim)
+                a = collect(F === CHAMBER ? bs[i].aim : bt.aim_local[][i])
                 a[k] = v
-                bs[i] = remake(bs[i]; aim = Vec3(a...))
+                bs[i] = remake(bs[i]; aim = Vec3(to_chamber(F, a)))
             end
         end
-        bt.beams[] = bs
+        _set_aims!(bt, bs)
         bt.error[] = ""
         return true
     catch err
@@ -764,11 +831,11 @@ function split_quad!(bt::BeamTable, quad::AbstractString)
         nb = vcat(bs[1:i-1], parts, bs[i+1:end])
         en = vcat(bt.enabled[][1:i-1], fill(bt.enabled[][i], 4), bt.enabled[][i+1:end])
         cl = vcat(bt.cluster[][1:i-1], fill(bt.cluster[][i], 4), bt.cluster[][i+1:end])
-        rf = vcat(bt.aim_ref[][1:i-1], fill(bt.aim_ref[][i], 4), bt.aim_ref[][i+1:end])
-        rp = vcat(bt.ref_point[][1:i-1], fill(bt.ref_point[][i], 4), bt.ref_point[][i+1:end])
+        af = vcat(bt.aim_frame[][1:i-1], fill(bt.aim_frame[][i], 4), bt.aim_frame[][i+1:end])
+        al = vcat(bt.aim_local[][1:i-1], fill(bt.aim_local[][i], 4), bt.aim_local[][i+1:end])
         uc = vcat(bt.unconverted[][1:i-1], fill(bt.unconverted[][i], 4), bt.unconverted[][i+1:end])
-        set_beams!(bt, nb; preset = bt.preset[], enabled = en, cluster = cl, aim_ref = rf,
-                   ref_point = rp, unconverted = uc)
+        set_beams!(bt, nb; preset = bt.preset[], enabled = en, cluster = cl, aim_frame = af,
+                   aim_local = al, unconverted = uc)
         return true
     catch err
         err isa ArgumentError || rethrow()
@@ -799,8 +866,8 @@ function merge_quad!(bt::BeamTable, quad::AbstractString)
         nb = copy(bs)
         nb[idx[1]] = q
         set_beams!(bt, nb[keep]; preset = bt.preset[], enabled = bt.enabled[][keep],
-                   cluster = bt.cluster[][keep], aim_ref = bt.aim_ref[][keep],
-                   ref_point = bt.ref_point[][keep], unconverted = bt.unconverted[][keep])
+                   cluster = bt.cluster[][keep], aim_frame = bt.aim_frame[][keep],
+                   unconverted = bt.unconverted[][keep])
         return true
     catch err
         err isa ArgumentError || rethrow()

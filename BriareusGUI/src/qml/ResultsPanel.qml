@@ -1,5 +1,5 @@
 // The bottom panel: the beam table and each analysis's results, one tab each (Time:
-// pulses, drive histories and the retune over time).
+// pulses, drive histories and the retune over time; Sweep: a placement sweep's steps).
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -10,9 +10,10 @@ Pane {
     id: results
     padding: 0
     property alias currentIndex: tabs.currentIndex
-    readonly property var keys: ["beams", "drive", "time", "optimize", "clearance", "talis"]
+    readonly property var keys: ["beams", "drive", "time", "optimize", "clearance", "sweep", "talis"]
     function show(key) { const i = keys.indexOf(key); if (i >= 0) tabs.currentIndex = i }
     function redrawTime() { timePanel.redraw() }
+    function redrawSweep() { sweepPanel.redraw() }
     // leaving NIF hides the TaLIS tab: show the drive rather than its stale page
     readonly property bool talisShown: app.facility === "nif"
     onTalisShownChanged: if (!talisShown && tabs.currentIndex === keys.indexOf("talis")) show("drive")
@@ -28,6 +29,7 @@ Pane {
             TabButton { text: "Time"; width: implicitWidth }
             TabButton { text: "Optimization"; width: implicitWidth }
             TabButton { text: "Clearance"; width: implicitWidth }
+            TabButton { text: "Sweep"; width: implicitWidth }
             // NIF's rules: the tab only for NIF beams
             TabButton { text: "TaLIS"; width: app.facility === "nif" ? implicitWidth : 0; visible: app.facility === "nif" }
         }
@@ -44,6 +46,7 @@ Pane {
             Item {
                 ClearancePanel { anchors.fill: parent; anchors.margins: 10 }
             }
+            SweepPanel { id: sweepPanel }
             Item {
                 TalisPanel { anchors.fill: parent; anchors.margins: 10 }
             }

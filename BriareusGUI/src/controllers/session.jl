@@ -8,9 +8,10 @@
 """
 Analyses of a design, in the model tree's order: `:drive` (view factors, laser
 deposition and x-ray drive), `:optimize` (pointing optimization), `:clearance`
-(worst-case beam clearance) and `:talis` (NIF target-configuration rules).
+(worst-case beam clearance), `:sweep` (a placement sweep, [`SweepState`](@ref)) and
+`:talis` (NIF target-configuration rules).
 """
-const TASKS = (:drive, :optimize, :clearance, :talis)
+const TASKS = (:drive, :optimize, :clearance, :sweep, :talis)
 
 """
     session_tasks(sess) -> Tuple
@@ -21,7 +22,7 @@ without the TaLIS rules (NIF's) elsewhere.
 session_tasks(sess) = sess.beams.facility[] === :nif ? TASKS : filter(!=(:talis), TASKS)
 
 const TASK_LABELS = Dict(:drive => "Drive", :optimize => "Optimization", :clearance => "Clearance",
-                         :talis => "TaLIS")
+                         :sweep => "Placement sweep", :talis => "TaLIS")
 
 """
     EditHistory(; limit = 200)
@@ -46,7 +47,8 @@ EditHistory(; limit::Integer = 200) = EditHistory(Dict{String,Any}[], Dict{Strin
 State of the Briareus window: `target` ([`TargetSetup`](@ref)), `beams`
 ([`BeamTable`](@ref)), the analyses `drive` ([`DriveState`](@ref)), `optimize`
 ([`OptimizeState`](@ref)), `review` ([`ReviewState`](@ref), the clearance check) and
-`talis` ([`TaLISState`](@ref)), `time` ([`TimeState`](@ref): pulses, the drive history
+`talis` ([`TaLISState`](@ref)), `sweep` ([`SweepState`](@ref), the placement sweep),
+`time` ([`TimeState`](@ref): pulses, the drive history
 and the time cursor), `view` ([`ViewState`](@ref): coloring, beam drawing,
 selection, model tree), `status` (the last message), `history` (the
 [`EditHistory`](@ref) of [`undo!`](@ref) and [`redo!`](@ref)) and `meshing` (the
@@ -86,6 +88,7 @@ struct DesignSession
     build_queued::Base.RefValue{Bool}      # a drive asked for while CAD parts remesh
     cad_sources::Dict{String,String}       # a saved CAD copy => the file it was saved from
     cad_changed::Observable{Vector{String}} # saved copies whose source changed since the save
+    sweep::SweepState
 end
 
 function DesignSession(; kind::Symbol = :hohlraum, resolution::Symbol = :standard,
@@ -93,14 +96,15 @@ function DesignSession(; kind::Symbol = :hohlraum, resolution::Symbol = :standar
                        beams = nothing, deliver = f -> f())
     ts = TargetSetup(; kind, resolution)
     bt = beams === nothing ?
-         BeamTable(preset_beams(preset; target_kind = kind, params = ts.params[]); preset) :
-         BeamTable(beams)
+         BeamTable(preset_beams(preset; target_kind = kind, params = ts.params[]); preset,
+                   frames = part_frames(ts), aim_frame = preset_aim_frame(preset, kind)) :
+         BeamTable(beams; frames = part_frames(ts))
     # the target remeshes CAD parts on the session's workers (the same switches)
     ts.deliver[] = deliver
     sess = DesignSession(ts, bt, DriveState(), OptimizeState(), ReviewState(), TaLISState(),
                          TimeState(), ViewState(), Observable(""), ts.deliver, ts.spawn, EditHistory(),
                          Ref(""), Observable(""), Ref(0), Ref(false), Dict{String,String}(),
-                         Observable(String[]))
+                         Observable(String[]), SweepState())
     default_selection!(sess.review, ts.target[])
     default_selection!(sess.talis, ts.target[])
     _connect!(sess)
@@ -122,6 +126,9 @@ function _connect!(sess::DesignSession)
             load_preset!(bt, :nif_quads; target_kind = kind, params = ts.params[])
         end
     end
+    # beams aimed in a frame move and turn with it (the frames change with the committed
+    # inputs, before a target built on a worker is in place)
+    on(fr -> follow_frames!(bt, fr), ts.frames)
     on(ts.target) do t
         default_selection!(sess.review, t)
         default_selection!(sess.talis, t)
@@ -131,8 +138,6 @@ function _connect!(sess::DesignSession)
         d == sess.view.display[] || (sess.view.display[] = d)
         c = selected_component(sess)
         c === nothing || c in names || select!(sess.view, "target")
-        # beams that follow a component move with it
-        any(!=(:none), bt.aim_ref[]) && follow_references!(bt, component_points(t))
         _drive_inputs_changed!(sess)
     end
     # a beam selection whose beams went away (a preset, a split, a regrouping)
@@ -176,36 +181,37 @@ function _connect!(sess::DesignSession)
 end
 
 """
-    component_points(t::Target) -> Dict{Symbol,Vec3}
+    set_aim_frame!(sess::DesignSession, idx, frame::Symbol; keep = true) -> sess
 
-Reference point of each component, for aiming beams at it: the area-weighted centroid
-of its surface (the center of an entrance hole, a foil, a disk).
+Hold the aims of beams `idx` in the frame named `frame` (`:tcc`, a template's frame or a
+part's, [`part_frames`](@ref)), so they move and turn with it. With `keep` the aims stay
+where they are; with `keep = false` the beams aim at the frame's point
+([`frame_point`](@ref): a part's centroid, a template frame's origin).
 """
-function component_points(t::Target)
-    acc = Dict{Symbol,Tuple{Vec3,Float64}}()
-    for k in eachindex(t.tri_area)
-        n = t.components[t.tri_comp[k]].name
-        c, a = get(acc, n, (zero(Vec3), 0.0))
-        A = t.tri_area[k]
-        acc[n] = (c + A * (t.tri_v0[k] + (t.tri_e1[k] + t.tri_e2[k]) / 3), a + A)
-    end
-    return Dict(n => (a > 0 ? c / a : c) for (n, (c, a)) in acc)
+function set_aim_frame!(sess::DesignSession, idx, frame::Symbol; keep::Bool = true)
+    haskey(part_frames(sess.target), frame) || throw(ArgumentError("no frame named $frame"))
+    at = keep ? nothing : frame_point(sess, frame)
+    set_aim_frame!(sess.beams, idx, frame; at)
+    return sess
 end
 
 """
-    aim_at_component!(sess::DesignSession, idx, name::Symbol) -> sess
+    frame_point(sess::DesignSession, frame::Symbol) -> Vec3
 
-Aim beams `idx` at component `name`'s reference point ([`component_points`](@ref)) and
-keep them on it as the target changes (see [`set_aim_reference!`](@ref)); `:none`
-releases them.
+The point a beam aims at in a frame when told to aim at the frame itself
+([`set_aim_frame!`](@ref) with `keep = false`): a part's centroid (`part_centroid`, the
+center of a disk or a foil; a CAD part's origin may lie anywhere), or the frame's origin
+for a template frame (TCC, an entrance hole's center, the foil's center) and for a part
+left out of the calculations.
 """
-function aim_at_component!(sess::DesignSession, idx, name::Symbol)
-    name === :none && return (set_aim_reference!(sess.beams, idx, :none); sess)
+function frame_point(sess::DesignSession, frame::Symbol)
+    F = part_frames(sess.target)[frame]
+    i = part_index(sess.target, frame)
+    i === nothing && return F.origin
     await_target!(sess.target)
-    pts = component_points(sess.target.target[])
-    haskey(pts, name) || throw(ArgumentError("no component $name in the calculations"))
-    set_aim_reference!(sess.beams, idx, name, pts[name])
-    return sess
+    t = sess.target.target[]
+    frame in Briareus.parts(t) || return F.origin
+    return part_centroid(t, frame)
 end
 
 """
@@ -294,6 +300,16 @@ function task_status(sess::DesignSession, task::Symbol)
             return (:attention, "out of date: " * txt)
         bad = rv.report[].canceled || any(x -> x.status !== :pass, rv.report[].rows)
         return (bad ? :attention : :ok, txt)
+    elseif task === :sweep
+        sw = sess.sweep
+        sw.running[] && return (:busy, "step $(sw.progress[][1]) of $(sw.progress[][2])")
+        r = sw.result[]
+        r === nothing && return (:todo, isempty(sw.status[]) ? "not run" : sw.status[])
+        nf = count(w -> w.fails > 0 || w.los_clear === false, r.rows)
+        txt = "$(length(r.rows)) steps" * (nf == 0 ? "" : ", $nf with a failure or blocked")
+        r.canceled && (txt = "partial: " * txt)
+        sweep_stale(sess) && return (:attention, "out of date: " * txt)
+        return (nf > 0 || r.canceled ? :attention : :ok, txt)
     else
         tl = sess.talis
         tl.running[] && return (:busy, "checking… " * _seconds(time() - tl.started[]))
@@ -967,7 +983,7 @@ function start_optimize!(sess::DesignSession; spawn::Bool = true)
     idx = findall(bt.enabled[])
     start_optimize!(st, s, bt.beams[][idx], idx;
                     spot_radius = sess.drive.spot_radius[], clusters = bt.cluster[][idx],
-                    deliver = sess.deliver[], spawn)
+                    frames = beam_frames(bt)[idx], deliver = sess.deliver[], spawn)
     return sess
 end
 
@@ -988,7 +1004,7 @@ function accept_optimum!(sess::DesignSession)
                                                 eachindex(r.indices)) ||
         throw(ArgumentError("the beam table changed since the optimization; run it again"))
     bs[r.indices] = r.beams
-    bt.beams[] = bs
+    _set_aims!(bt, bs)
     r.applied = true
     notify(sess.optimize.result)
     sess.status[] = "applied the optimized pointing to $(length(r.indices)) beams"
@@ -1060,8 +1076,9 @@ function _abandon_jobs!(sess::DesignSession)
     sess.drive.eval_generation[] += 1
     sess.drive.building[] = false
     sess.drive.evaluating[] = false
+    sess.sweep.cancel[] = true
     for (job, cancel!) in ((sess.optimize, cancel_optimize!), (sess.review, cancel_clearance!),
-                           (sess.talis, cancel_talis!))
+                           (sess.talis, cancel_talis!), (sess.sweep, _ -> nothing))
         job.running[] || continue
         cancel!(job)                       # the worker stops at its next check
         job.running[] = false

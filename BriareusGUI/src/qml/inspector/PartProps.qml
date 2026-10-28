@@ -1,5 +1,5 @@
-// Properties of a free part: name, size, placement (center, axis angles, rotation),
-// material, sidedness, element size.
+// Properties of a free part: name, size, placement (the frame it is placed in, center,
+// axis angles, rotation), a move along any frame's axis, material, sidedness, element size.
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -85,10 +85,58 @@ ColumnLayout {
         Label { text: "Placed in"; Layout.preferredWidth: 110 }
         ComboBox {
             Layout.fillWidth: true
-            model: app.anchorLabels
+            model: app.frameLabels
             // -1 after a rejected change: show the part's frame again
-            currentIndex: app.partAnchor < 0 ? 0 : app.partAnchor
-            onActivated: (index) => Julia.br_part_anchor(index)
+            currentIndex: app.partFrame < 0 ? 0 : app.partFrame
+            onActivated: (index) => Julia.br_part_frame(index)
+        }
+    }
+    // Move along [axis] of [frame] by [Δ] [−][+]: each click one edit (undone as one)
+    RowLayout {
+        id: moveRow
+        objectName: "moveRow"
+        spacing: 4
+        Layout.fillWidth: true
+        Label { text: "Move along"; Layout.preferredWidth: 110 }
+        ComboBox {
+            Layout.preferredWidth: 52
+            model: ["x", "y", "z"]
+            currentIndex: app.moveAxis
+            onActivated: (index) => Julia.br_move_axis(index)
+        }
+        Label { text: "of" }
+        ComboBox {
+            Layout.fillWidth: true
+            Layout.minimumWidth: 90
+            model: app.moveFrames
+            currentIndex: app.moveFrame
+            onActivated: (index) => Julia.br_move_frame(index)
+            ToolTip.visible: hovered
+            ToolTip.delay: 400
+            ToolTip.text: "The frame whose axis the part moves along: a template's, or a part's own (its axis is z)"
+        }
+    }
+    RowLayout {
+        spacing: 4
+        Layout.fillWidth: true
+        Label { text: "by"; Layout.preferredWidth: 110; horizontalAlignment: Text.AlignRight }
+        TextField {
+            Layout.preferredWidth: 64
+            text: app.moveStep
+            selectByMouse: true
+            onEditingFinished: if (text !== app.moveStep) Julia.br_move_step(text)
+        }
+        Label { text: "mm"; opacity: 0.7 }
+        Button { text: "−"; Layout.preferredWidth: 34; onClicked: Julia.br_nudge_part(-1)
+                 ToolTip.visible: hovered; ToolTip.text: "Move back along the axis (one edit)" }
+        Button { text: "+"; Layout.preferredWidth: 34; onClicked: Julia.br_nudge_part(1)
+                 ToolTip.visible: hovered; ToolTip.text: "Move forward along the axis (one edit)" }
+        Item { Layout.fillWidth: true }
+        Button {
+            text: "Sweep…"
+            onClicked: Julia.br_sweep_part()
+            ToolTip.visible: hovered
+            ToolTip.text: "Step the part along this axis and check each step (clearance, line of sight, capture)"
         }
     }
     RowLayout {
@@ -131,7 +179,10 @@ ColumnLayout {
               "moved to (x, y, z) in the frame it is placed in. A disk, washer or rectangle " +
               "faces along its axis. An entrance hole's frame has its origin at the hole and z " +
               "pointing out of the hohlraum, so a part there moves with the hole and mirrors " +
-              "between the two; changing the frame keeps the part where it is."
+              "between the two; the backlighter foil's frame has z along its front normal, " +
+              "toward TCC. Every part has its own frame (origin at its center, z its axis): " +
+              "parts placed in it and beams aimed in it move and turn with the part. Changing " +
+              "the frame keeps the part where it is."
     }
     DisplayRow {}
     ErrorText { text: app.targetError }

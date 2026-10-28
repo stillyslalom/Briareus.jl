@@ -54,6 +54,7 @@ include("controllers/talis.jl")
 include("controllers/beam_geometry.jl")
 include("controllers/view.jl")
 include("controllers/cutaway.jl")            # the cut regions and clipped triangles
+include("controllers/sweep.jl")               # placement sweeps
 include("controllers/session.jl")             # links the parts
 include("controllers/timeline.jl")            # pulses, drive histories, the time cursor
 include("controllers/workspace.jl")           # session files, undo and redo
@@ -70,7 +71,8 @@ export TargetSetup, TARGET_KINDS, TARGET_KIND_LABELS, TARGET_FIELDS, MeshSpec, M
        is_lip, shown_component, with_lips
 export PartSpec, PART_KINDS, PART_KIND_LABELS, PART_FIELDS, PART_SIZE_FIELDS, part_component,
        part_axis, part_center, add_part!, remove_part!, edit_part!, set_part_flag!, part_index,
-       PART_ANCHORS, PART_ANCHOR_LABELS, anchor_frame, set_part_anchor!, set_excluded!,
+       TEMPLATE_FRAMES, FRAME_LABELS, backlighter_frame, template_frames, part_frame_def,
+       part_frames, set_part_frame!, nudge_part!, set_excluded!,
        PART_COORDINATES, PART_POSITION_FIELDS, part_position, set_part_coords!, part_components,
        all_component_names, PART_ROLES, PART_ROLE_LABELS, part_role, set_part_role!,
        export_target_stl, add_stl_parts!, fit_sphere, part_size_unit
@@ -78,7 +80,10 @@ export WindowSpec, WINDOW_FIELDS, add_window!, remove_window!, edit_window!, set
        set_window_round!,
        window_name
 export FACILITIES, FACILITY_LABELS, FACILITY_PRESETS, facility_of, set_facility!, session_tasks
-export set_aim_reference!, follow_references!, component_points, aim_at_component!
+export set_aim_frame!, follow_frames!, frame_point, beam_frames, preset_aim_frame
+export SweepState, SWEEP_QUALITY, SWEEP_AXES, SWEEP_MAX_STEPS, set_sweep!, edit_sweep!, sweep_values,
+       sweep_subjects, sweep_subject, sweep_frame, sweep_los, sweep_los_object, start_sweep!, cancel_sweep!,
+       sweep_stale, apply_sweep_step!, sweep_brief, sweep_rows, sweep_chart, select_sweep_step!
 export BeamTable, BEAM_PRESETS, BEAM_GROUPINGS, BEAM_FIELDS, PRESET_LABELS, preset_beams,
        load_preset!, set_beams!, set_grouping!, beam_rows, edit_beams!, set_enabled!,
        beam_node, edit_beam_node!, set_node_enabled!, SET_FIELDS, beam_set_values,
@@ -94,7 +99,7 @@ export DriveState, DriveResult, DRIVE_FIELDS, DRIVE_FIELD_LABELS, MODE_DEGREES, 
 export TimeState, DriveHistory, TIME_CHARTS, TIME_CHART_LABELS, set_chart!, load_pulses!,
        use_pulse_shape!, start_history!, cancel_history!, history_stale, set_time_cursor!,
        set_time_step!, time_step, cursor_values, cursor_range, time_label, time_chart
-export OptimizeState, OptimizeResult, OBJECTIVES, OBJECTIVE_LABELS, set_free!,
+export OptimizeState, OptimizeResult, OBJECTIVES, OBJECTIVE_LABELS, OPTIMIZE_FIELDS, set_free!,
        edit_optimize!, set_objective!, start_optimize!, cancel_optimize!, optimize_progress,
        parameter_rows
 export ReviewState, REVIEW_QUALITY, REVIEW_VIEWS, review_batch, default_selection!, set_role!,

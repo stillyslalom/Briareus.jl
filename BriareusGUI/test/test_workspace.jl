@@ -232,8 +232,8 @@ end
                     sum(t.elem_centroid[e] * t.elem_area[e] for e in es) / sum(t.elem_area[es]))
     normal(name) = (t = ts.target[]; t.elem_normal[first(elements(t, name))])
     # shields 0.5 mm outside each entrance hole, from the same placement
-    @test add_part!(ts, :disk; name = :shield_top, anchor = :leh_top, z = 0.5, r1 = 2.0)
-    @test add_part!(ts, :disk; name = :shield_bottom, anchor = :leh_bottom, z = 0.5, r1 = 2.0)
+    @test add_part!(ts, :disk; name = :shield_top, frame = :leh_top, z = 0.5, r1 = 2.0)
+    @test add_part!(ts, :disk; name = :shield_bottom, frame = :leh_bottom, z = 0.5, r1 = 2.0)
     @test center(:shield_top) ≈ Briareus.Vec3(0, 0, L / 2 + 0.5) atol = 1e-12
     @test center(:shield_bottom) ≈ Briareus.Vec3(0, 0, -L / 2 - 0.5) atol = 1e-12
     @test normal(:shield_top) ≈ Briareus.Vec3(0, 0, 1) && normal(:shield_bottom) ≈ Briareus.Vec3(0, 0, -1)
@@ -242,24 +242,25 @@ end
     @test center(:shield_top)[3] ≈ 6.0 && center(:shield_bottom)[3] ≈ -6.0
     # to the chamber frame, staying put
     i = part_index(ts, :shield_bottom)
-    @test set_part_anchor!(ts, i, :tcc)
+    @test set_part_frame!(ts, i, :tcc)
     p = ts.parts[][i]
-    @test p.anchor === :tcc && p.values[:z] ≈ -6.0 && p.values[:theta] ≈ 180
+    @test p.frame === :tcc && p.values[:z] ≈ -6.0 && p.values[:theta] ≈ 180
     @test center(:shield_bottom) ≈ Briareus.Vec3(0, 0, -6.0) atol = 1e-12
     @test normal(:shield_bottom) ≈ Briareus.Vec3(0, 0, -1)
     # a frame the template lacks is refused, and so is a template the frames need
-    @test !set_part_anchor!(ts, i, :foil) && occursin("backlighter", ts.error[])
+    @test !set_part_frame!(ts, i, :backlighter) && occursin("backlighter", ts.error[])
     @test !set_target_kind!(ts, :custom) && ts.kind[] === :hohlraum
     # in a session file
     f = joinpath(mktempdir(), "frames.briar.toml")
     save_session(f, s)
     s2 = DesignSession(resolution = :coarse)
     load_session!(s2, f)
-    @test [p.anchor for p in s2.target.parts[]] == [:leh_top, :tcc]
+    @test [p.frame for p in s2.target.parts[]] == [:leh_top, :tcc]
     @test s2.target.target[].elem_centroid == ts.target[].elem_centroid
-    # a backlighter's foil frame: z along the foil's back normal, away from TCC
+    # a backlighter's foil frame: z along the foil's front normal, toward TCC; a disk
+    # turned over (θ = 180°) 0.3 mm behind the foil faces away from TCC
     b = DesignSession(kind = :foil, resolution = :coarse)
-    @test add_part!(b.target, :disk; anchor = :foil, z = 0.3, r1 = 1.5, name = :substrate)
+    @test add_part!(b.target, :disk; frame = :backlighter, z = -0.3, theta = 180, r1 = 1.5, name = :substrate)
     d = b.target.params[][:distance]
     t = b.target.target[]
     es = elements(t, :substrate)
@@ -367,37 +368,41 @@ end
     @test center(:post) ≈ V(0, 0, 3.5) atol = 1e-9
     @test !edit_part!(ts, i, :pos_r, "-1")
     # a part in another part's frame moves and turns with it
-    @test add_part!(ts, :disk; name = :shield, anchor = :leh_top, z = 0.5, r1 = 2.0)
-    @test add_part!(ts, :sphere; name = :marker, anchor = :shield, z = 1.0, r1 = 0.1)
+    @test add_part!(ts, :disk; name = :shield, frame = :leh_top, z = 0.5, r1 = 2.0)
+    @test add_part!(ts, :sphere; name = :marker, frame = :shield, z = 1.0, r1 = 0.1)
     L = ts.params[][:length]
     @test center(:marker) ≈ V(0, 0, L / 2 + 1.5) atol = 1e-9
     @test edit_part!(ts, part_index(ts, :shield), :theta, "90")       # tilt the shield
     @test center(:marker) ≈ V(1.0, 0, L / 2 + 0.5) atol = 1e-9
     # renaming the frame's part keeps its children attached; loops are refused
     @test edit_part!(ts, part_index(ts, :shield), :name, "lid")
-    @test ts.parts[][part_index(ts, :marker)].anchor === :lid
-    @test !set_part_anchor!(ts, part_index(ts, :lid), :marker) && occursin("loop", ts.error[])
+    @test ts.parts[][part_index(ts, :marker)].frame === :lid
+    @test !set_part_frame!(ts, part_index(ts, :lid), :marker) && occursin("loop", ts.error[])
     @test !remove_part!(ts, part_index(ts, :lid))                     # its child needs it
-    # backlighter-style aiming: beams on a component, following it when it moves
+    # backlighter-style aiming: beams at a part's center, held in its frame, following it
     idx = findall(==(:outer50), s.beams.cluster[])[1:2]
-    aim_at_component!(s, idx, :lid)
-    p0 = component_points(ts.target[])[:lid]
+    set_aim_frame!(s, idx, :lid; keep = false)
+    p0 = part_centroid(ts.target[], :lid)
     @test all(i -> s.beams.beams[][i].aim ≈ p0, idx)
-    edit_beam_set!(s.beams, idx, :aim_x, "0.3")                         # an offset from it
+    edit_beam_set!(s.beams, idx, :aim_x, "0.3")                         # 0.3 mm along the lid's x
+    a0 = [s.beams.beams[][i].aim for i in idx]
+    # the lid's x axis: tilted by θ = 90° in the entrance hole's frame, along chamber -z
+    @test all(a -> a ≈ p0 + V(0, 0, -0.3), a0)
     @test edit_part!(ts, part_index(ts, :lid), :z, "1.5")              # move the lid up 1 mm
-    p1 = component_points(ts.target[])[:lid]
+    p1 = part_centroid(ts.target[], :lid)
     @test p1 - p0 ≈ V(0, 0, 1.0) atol = 1e-9
-    @test all(i -> s.beams.beams[][i].aim ≈ V(0.3, p1[2], p1[3]), idx)
-    @test s.beams.aim_ref[][idx] == [:lid, :lid] && count(!=(:none), s.beams.aim_ref[]) == 2
+    @test all(k -> s.beams.beams[][idx[k]].aim - a0[k] ≈ V(0, 0, 1.0), eachindex(idx))
+    @test s.beams.aim_frame[][idx] == [:lid, :lid] && count(!=(:tcc), s.beams.aim_frame[]) == 2
     f = joinpath(mktempdir(), "refs.briar.toml")
     save_session(f, s)
     s2 = DesignSession(resolution = :coarse)
     load_session!(s2, f)
-    @test s2.beams.aim_ref[] == s.beams.aim_ref[] && s2.beams.beams[] == s.beams.beams[]
+    @test s2.beams.aim_frame[] == s.beams.aim_frame[] && s2.beams.beams[] == s.beams.beams[]
+    @test s2.beams.aim_local[] == s.beams.aim_local[]
     @test s2.target.parts[][part_index(s2.target, :post)].coords === :spherical
-    aim_at_component!(s, idx, :none)
-    @test all(==(:none), s.beams.aim_ref[])
-    @test_throws ArgumentError aim_at_component!(s, idx, :nothing_here)
+    set_aim_frame!(s, idx, :tcc)
+    @test all(==(:tcc), s.beams.aim_frame[]) && s.beams.beams[] == s2.beams.beams[]
+    @test_throws ArgumentError set_aim_frame!(s, idx, :nothing_here)
 end
 
 include(joinpath(pkgdir(Briareus), "test", "vrw_fixture.jl"))

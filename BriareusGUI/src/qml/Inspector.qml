@@ -19,6 +19,7 @@ Pane {
             if (app.selKey === "drive") return "Drive"
             if (app.selKey === "optimize") return "Pointing optimization"
             if (app.selKey === "clearance") return "Beam clearance"
+            if (app.selKey === "sweep") return "Placement sweep"
             if (app.selKey === "talis") return "TaLIS rules"
         }
         return "Properties"
@@ -34,6 +35,7 @@ Pane {
             if (app.selKey === "drive") return "inspector/DriveProps.qml"
             if (app.selKey === "optimize") return "inspector/OptimizeProps.qml"
             if (app.selKey === "clearance") return "inspector/ClearanceProps.qml"
+            if (app.selKey === "sweep") return "inspector/SweepProps.qml"
             if (app.selKey === "talis") return "inspector/TalisProps.qml"
         }
         return ""

@@ -1,5 +1,6 @@
-# The Optimize step: a GroupPointing parameterization of the enabled beams (fields,
-# grouping, box bounds), an objective (capsule symmetry, axisymmetric or 3D, or foil
+# The Optimize step: a GroupPointing parameterization of the enabled beams (chamber aim
+# fields), or a FramePointing one (aims in each beam's aim frame), with grouping and box
+# bounds, an objective (capsule symmetry, axisymmetric or 3D, or foil
 # uniformity) and `optimize_pointing` on a worker. Its callback reports each objective
 # evaluation (progress) and stops the optimization on cancel, which then returns the
 # best design found so far.
@@ -16,8 +17,22 @@ const OBJECTIVE_LABELS = Dict(:legendre => "Capsule symmetry, axisymmetric (Pₗ
                               :ylm => "Capsule symmetry, 3D (all m)",
                               :irradiance => "Foil spot uniformity")
 
-# Default bound half-widths: mm for z, r, phi, defocus; a fraction of the start for power.
-const DEFAULT_DELTAS = Dict(:z => 1.0, :r => 1.0, :phi => 1.0, :defocus => 2.0, :power => 0.4)
+"""
+Fields the optimizer can free: the chamber aim fields `:z`, `:r`, `:phi` (a
+`GroupPointing`), the local aim fields `:u`, `:v`, `:w` (a `FramePointing` in each
+beam's aim frame: on the `:backlighter` frame, `u` and `v` across the foil's face and `w`
+along its normal), and `:defocus` and `:power`. The two kinds of aim field exclude each
+other.
+"""
+const OPTIMIZE_FIELDS = (:z, :r, :phi, :u, :v, :w, :defocus, :power)
+
+const _CHAMBER_AIM = (:z, :r, :phi)
+const _LOCAL_AIM = (:u, :v, :w)
+
+# Default bound half-widths: mm for z, r, phi, u, v, w, defocus (engineering defaults, as
+# the core `bounds`); a fraction of the start for power.
+const DEFAULT_DELTAS = Dict(:z => 1.0, :r => 1.0, :phi => 1.0, :u => 1.0, :v => 1.0, :w => 1.0,
+                            :defocus => 2.0, :power => 0.4)
 
 """
     OptimizeResult
@@ -56,8 +71,8 @@ end
     OptimizeState()
 
 State of the pointing optimization. Settings: `by` (grouping, one of
-[`BEAM_GROUPINGS`](@ref)), `fields` (free `GroupPointing` fields, a subset of
-[`BEAM_FIELDS`](@ref)), `deltas` (bound half-widths per field: mm, or for `:power` a
+[`BEAM_GROUPINGS`](@ref)), `fields` (free fields, a subset of
+[`OPTIMIZE_FIELDS`](@ref)), `deltas` (bound half-widths per field: mm, or for `:power` a
 fraction of the start), `objective` (one of [`OBJECTIVES`](@ref)), `weights` (mode
 weight per degree `l`), `hold_drive` (keep the capsule drive at its start value),
 `keepout`/`keepout_min` (an `ApertureKeepOut` on the LEH rims with this minimum
@@ -107,27 +122,36 @@ OptimizeState() =
 """
     set_free!(st::OptimizeState, field::Symbol, on::Bool)
 
-Free (`true`) or fix a `GroupPointing` field (one of [`BEAM_FIELDS`](@ref)).
+Free (`true`) or fix a field (one of [`OPTIMIZE_FIELDS`](@ref)). Freeing a local aim
+field (`:u`, `:v`, `:w`) fixes the chamber aim fields (`:z`, `:r`, `:phi`), and the other
+way around: the aims are parameterized one way or the other.
 """
 function set_free!(st::OptimizeState, field::Symbol, on::Bool)
-    field in BEAM_FIELDS || throw(ArgumentError("field must be one of $BEAM_FIELDS"))
+    field in OPTIMIZE_FIELDS || throw(ArgumentError("field must be one of $OPTIMIZE_FIELDS"))
     fs = filter(!=(field), st.fields[])
-    on && push!(fs, field)
-    _assign!(st.fields, [f for f in BEAM_FIELDS if f in fs])     # canonical order
+    if on
+        field in _LOCAL_AIM && filter!(!in(_CHAMBER_AIM), fs)
+        field in _CHAMBER_AIM && filter!(!in(_LOCAL_AIM), fs)
+        push!(fs, field)
+    end
+    _assign!(st.fields, [f for f in OPTIMIZE_FIELDS if f in fs])     # canonical order
     return st
 end
+
+# Whether the free fields parameterize the aims in their frames (`FramePointing`).
+_frame_fields(fields) = any(in(_LOCAL_AIM), fields)
 
 """
     edit_optimize!(st::OptimizeState, key::Symbol, text) -> Bool
 
-Edit a setting from text: a bound half-width (`:z`, `:r`, `:phi`, `:defocus`,
-`:power`), a mode weight (`:w1`…`:w4`), `:keepout_min`, `:capsule_min`, `:spill`,
+Edit a setting from text: a bound half-width (`:z`, `:r`, `:phi`, `:u`, `:v`, `:w`,
+`:defocus`, `:power`), a mode weight (`:w1`…`:w4`), `:keepout_min`, `:capsule_min`, `:spill`,
 `:iterations` or `:max_evaluations`.
 A rejected value sets `error` and returns `false`.
 """
 function edit_optimize!(st::OptimizeState, key::Symbol, text)
     try
-        if key in BEAM_FIELDS
+        if key in OPTIMIZE_FIELDS
             v = _parse_number(text, "the $key bound"; positive = true)
             key === :power && v >= 1 && throw(ArgumentError("the power bound is a fraction below 1"))
             d = copy(st.deltas[]); d[key] = v; _assign!(st.deltas, d)
@@ -176,8 +200,9 @@ _objective_settings(st::OptimizeState) =
      keepout = st.keepout[], keepout_min = st.keepout_min[],
      capsule_keepout = st.capsule_keepout[], capsule_min = st.capsule_min[], spill = st.spill[])
 
-# The objective for a scenario of the enabled beams, given its start evaluation `ev0`.
-function _make_objective(cfg::NamedTuple, s::Scenario, ev0::Evaluation, spot_radius::Real)
+# The objective for a scenario of the enabled beams, given its start evaluation `ev0`
+# (`nothing`: evaluated here at the scenario's initial parameters when the drive is held).
+function _make_objective(cfg::NamedTuple, s::Scenario, ev0, spot_radius::Real)
     kind = cfg.kind
     if kind === :irradiance
         FOIL_NAME in component_names(s.target) ||
@@ -186,7 +211,8 @@ function _make_objective(cfg::NamedTuple, s::Scenario, ev0::Evaluation, spot_rad
             length(elements(s.target, FOIL_NAME))
         return irradiance_objective(FOIL_NAME; center = c, radius = spot_radius, spill = cfg.spill)
     end
-    _has_flux(ev0) || throw(ArgumentError("capsule symmetry needs a hohlraum with a capsule"))
+    s.model !== nothing && !isempty(s.observed) ||
+        throw(ArgumentError("capsule symmetry needs a hohlraum with a capsule"))
     modes = Tuple(l => w for (l, w) in sort(collect(cfg.weights)) if w > 0)
     isempty(modes) && throw(ArgumentError("give at least one mode a positive weight"))
     keepouts = Any[]
@@ -194,7 +220,8 @@ function _make_objective(cfg::NamedTuple, s::Scenario, ev0::Evaluation, spot_rad
     cfg.capsule_keepout && :capsule in component_names(s.target) &&
         push!(keepouts, SphereKeepOut(s.target; spheres = (:capsule,), minimum = cfg.capsule_min))
     keepout = isempty(keepouts) ? nothing : Tuple(keepouts)
-    drive = cfg.hold_drive ? mean_flux(ev0) : nothing
+    drive = !cfg.hold_drive ? nothing :
+            mean_flux(something(ev0, evaluate(s, initial_parameters(s.param))))
     kind === :legendre &&
         return symmetry_objective(; modes, odd = 0.0, lmax = max(maximum(first, modes), 2),
                                   drive, keepout)
@@ -226,19 +253,23 @@ end
 
 """
     start_optimize!(st::OptimizeState, scenario, beams, indices; spot_radius = 0.5,
-                    deliver = f -> f(), spawn = true)
+                    clusters = nothing, frames = nothing, deliver = f -> f(), spawn = true)
 
 Optimize the enabled `beams` (positions `indices` in the beam table; `scenario` is
 built for the whole table) with the current settings. Runs `optimize_pointing` on a
 worker with `spawn`; per-group parameters follow `clusters` (the beams' group names in
-the beam table) when given, otherwise the beams' cones. Its callback hands progress (`evaluations`, `current`, `best`,
+the beam table) when given, otherwise the beams' cones. With a local aim field free
+(`:u`, `:v`, `:w`) the aims are a `FramePointing` in `frames`, each beam's aim frame
+(chamber `Frame`s, one per beam; the chamber's when not given): a group then shares its
+local aim, and moves in its frame. Its callback hands progress (`evaluations`, `current`, `best`,
 at most every 0.1 s) to `deliver`, and so does the result. [`cancel_optimize!`](@ref)
 makes the callback stop the optimization after the next objective evaluation; the
 result is then the best design found so far.
 """
 function start_optimize!(st::OptimizeState, s::Scenario, beams::AbstractVector,
                          indices::AbstractVector{<:Integer}; spot_radius::Real = 0.5,
-                         clusters = nothing, deliver = f -> f(), spawn::Bool = true)
+                         clusters = nothing, frames = nothing, deliver = f -> f(),
+                         spawn::Bool = true)
     st.running[] && return st
     try
         isempty(beams) && throw(ArgumentError("no beams are enabled"))
@@ -264,12 +295,10 @@ function start_optimize!(st::OptimizeState, s::Scenario, beams::AbstractVector,
         t0 = time()
         key = by === :group && clusters !== nothing ?
               (d = Dict(b.name => c for (b, c) in zip(beams, clusters)); b -> d[b.name]) : by
-        p = GroupPointing(beams; by = key, fields, mirror = _mirror(by))
+        p = _parameterization(beams, frames, key, by, fields)
         sub = subset(s, collect(indices); parameterization = p)
         x0 = initial_parameters(p)
-        d = settings.deltas
-        lower, upper = bounds(p, x0; z = d[:z], r = d[:r], phi = d[:phi],
-                              defocus = d[:defocus], power = d[:power])
+        lower, upper = _bounds(p, x0, settings.deltas)
         ev0 = evaluate(sub, x0)
         before = _quick_summary(ev0, spot_radius)
         obj = _make_objective(cfg, sub, ev0, spot_radius)
@@ -301,6 +330,19 @@ function start_optimize!(st::OptimizeState, s::Scenario, beams::AbstractVector,
     _run_job(run, spawn)
     return st
 end
+
+# The parameterization of the free fields: a `FramePointing` in the beams' frames when a
+# local aim field is free, else a `GroupPointing` (z mirrored per cone).
+function _parameterization(beams, frames, key, by::Symbol, fields)
+    _frame_fields(fields) || return GroupPointing(beams; by = key, fields, mirror = _mirror(by))
+    fr = frames === nothing ? CHAMBER : collect(Frame, frames)
+    return FramePointing(beams, fr; by = key, fields)
+end
+
+_bounds(p::GroupPointing, x0, d) =
+    bounds(p, x0; z = d[:z], r = d[:r], phi = d[:phi], defocus = d[:defocus], power = d[:power])
+_bounds(p::FramePointing, x0, d) =
+    bounds(p, x0; u = d[:u], v = d[:v], w = d[:w], defocus = d[:defocus], power = d[:power])
 
 function _finish_optimize!(st::OptimizeState, out)
     if out.err === nothing

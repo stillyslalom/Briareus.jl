@@ -1,9 +1,11 @@
 # The time panel's chart: what `time_chart` describes (pulses, the drive history, the
 # energy split, the retune), on a left and an optional right y axis over time, and the
 # time cursor. A click or drag on the chart moves the cursor, which colors the 3D view
-# by that step of the history. Lines are created up front, a pool per axis; updates set
-# their inputs and hide the unused ones (see scene_canvas.jl). The key is drawn by the
-# panel (QML), as the model tree keys the 3D view's colors.
+# by that step of the history. The sweep panel's chart (`sweep_chart`: the least
+# clearance and the blocked line of sight against the shift, the selected step as the
+# cursor) is the same canvas on another description. Lines are created up front, a pool
+# per axis; updates set their inputs and hide the unused ones (see scene_canvas.jl). The
+# key is drawn by the panel (QML), as the model tree keys the 3D view's colors.
 
 # Series per axis and line style, at most (a line's style is fixed when it is created)
 const _TIME_LINES = Dict(:solid => 24, :dash => 12, :dot => 4)           # left axis
@@ -12,9 +14,10 @@ const _TIME_RIGHT = Dict(:solid => 4, :dash => 2, :dot => 2)             # right
 """
     TimeCanvas
 
-The time chart of the Briareus window: `fig`, the axes `ax` (left) and `ax2` (right),
-the line pools `left` and `right` (by line style), the `cursor` line, and a `dirty` flag the shell reads
-to request a redraw.
+A chart of the Briareus window (the time chart, or the sweep's): `fig`, the axes `ax`
+(left) and `ax2` (right), the line pools `left` and `right` (by line style), the `cursor`
+line, a `dirty` flag the shell reads to request a redraw, and `chart` (the function
+returning what to plot: `time_chart`'s description, or `sweep_chart`'s).
 """
 struct TimeCanvas
     fig::Figure
@@ -24,6 +27,7 @@ struct TimeCanvas
     right::Dict{Symbol,Vector{Any}}
     cursor::Any
     dirty::Base.RefValue{Bool}
+    chart::Any
 end
 
 const _LINESTYLES = Dict(:solid => nothing, :dash => :dash, :dot => :dot)
@@ -39,6 +43,39 @@ _yticks_for(h) = LinearTicks(clamp(round(Int, h / 45), 2, 5))
 Build the time chart for `sess` and keep it in sync with the time panel's state.
 """
 function time_canvas(sess::DesignSession)
+    tm = sess.time
+    c = _chart_canvas(() -> time_chart(sess))
+    onany((_...) -> _draw_time!(c, sess), tm.chart, tm.history, tm.pulses, tm.retune, sess.beams.beams,
+          sess.beams.enabled, sess.beams.cluster)
+    on(_ -> _draw_cursor!(c, sess), tm.cursor)
+    # a click on the chart, or a drag along it, puts the cursor at that time
+    _on_chart_click(x -> sess.time.history[] === nothing || set_time_cursor!(sess, x), c)
+    _draw_time!(c, sess)
+    return c
+end
+
+"""
+    sweep_canvas(sess::DesignSession) -> TimeCanvas
+
+Build the sweep panel's chart (`sweep_chart`) for `sess`: a click on it selects the
+nearest step.
+"""
+function sweep_canvas(sess::DesignSession)
+    sw = sess.sweep
+    c = _chart_canvas(() -> sweep_chart(sess))
+    onany((_...) -> _draw_time!(c, sess), sw.result, sw.running, sess.target.target, sess.beams.beams)
+    on(_ -> _draw_cursor!(c, sess), sw.selected)
+    _on_chart_click(c) do x
+        r = sw.result[]
+        r === nothing || isempty(r.rows) ||
+            select_sweep_step!(sw, argmin(k -> abs(r.rows[k].value - x), eachindex(r.rows)))
+    end
+    _draw_time!(c, sess)
+    return c
+end
+
+# A chart's figure, axes and line pools; `chart()` describes what to draw.
+function _chart_canvas(chart)
     fig = Figure(size = (900, 260), figure_padding = (6, 6, 2, 6))
     ticks = _yticks_for(220)
     ax = Axis(fig[1, 1]; xlabel = "t (ns)", ylabel = " ", xgridvisible = false, yticks = ticks)
@@ -64,35 +101,27 @@ function time_canvas(sess::DesignSession)
                       for st in keys(n))
     left, right = pool(ax, _TIME_LINES), pool(ax2, _TIME_RIGHT)
     cursor = vlines!(ax, [0.0]; color = RGBAf(0.1, 0.1, 0.1, 0.55), linewidth = 1.5, visible = false)
-    c = TimeCanvas(fig, ax, ax2, left, right, cursor, Ref(true))
-    tm = sess.time
-    onany((_...) -> _draw_time!(c, sess), tm.chart, tm.history, tm.pulses, tm.retune, sess.beams.beams,
-          sess.beams.enabled, sess.beams.cluster)
-    on(_ -> _draw_cursor!(c, sess), tm.cursor)
-    # a click on the chart, or a drag along it, puts the cursor at that time
+    return TimeCanvas(fig, ax, ax2, left, right, cursor, Ref(true), chart)
+end
+
+# A click on the chart, or a drag along it, calls `f(x)` at the pointer's abscissa.
+function _on_chart_click(f, c::TimeCanvas)
     pressed = Ref(false)
-    on(events(fig).mousebutton) do e
+    on(events(c.fig).mousebutton) do e
         e.button == Mouse.left || return Consume(false)
-        if e.action == Mouse.press && is_mouseinside(ax.scene)
+        if e.action == Mouse.press && is_mouseinside(c.ax.scene)
             pressed[] = true
-            _point_cursor!(c, sess)
+            f(mouseposition(c.ax.scene)[1])
             return Consume(true)
         end
         e.action == Mouse.release && (pressed[] = false)
         return Consume(false)
     end
-    on(events(fig).mouseposition) do _
-        pressed[] && _point_cursor!(c, sess)
+    on(events(c.fig).mouseposition) do _
+        pressed[] && f(mouseposition(c.ax.scene)[1])
         return Consume(false)
     end
-    _draw_time!(c, sess)
     return c
-end
-
-function _point_cursor!(c::TimeCanvas, sess::DesignSession)
-    sess.time.history[] === nothing && return
-    set_time_cursor!(sess, mouseposition(c.ax.scene)[1])
-    return
 end
 
 function _set_line!(p, s)
@@ -142,7 +171,7 @@ function _runs(f, s::AbstractString)
 end
 
 function _draw_time!(c::TimeCanvas, sess::DesignSession)
-    ch = time_chart(sess)
+    ch = c.chart()
     sl = ch.left.series
     sr = ch.right === nothing ? NamedTuple[] : ch.right.series
     _draw_series!(c.left, sl, isempty(sl) ? Point2f(0, 0) : Point2f(sl[1].x[1], sl[1].y[1]))
@@ -155,20 +184,22 @@ function _draw_time!(c::TimeCanvas, sess::DesignSession)
     for a in (ax2.yticklabelsvisible, ax2.yticksvisible, ax2.ylabelvisible)
         a[] = two
     end
-    # powers and energies from zero; temperatures and modes where they lie
-    ax.limits[] = ch.chart === :drive ? (nothing, nothing) : (nothing, (0, nothing))
+    # powers and energies from zero; temperatures, modes and clearances where they lie
+    ax.limits[] = ch.chart in (:drive, :sweep) ? (nothing, nothing) : (nothing, (0, nothing))
     reset_limits!(ax)
     two && reset_limits!(ax2)
     _draw_cursor!(c, sess)
     return c
 end
 
+# The cursor at the chart's `cursor` (the time chart's step, the sweep's selected step;
+# `NaN`: none).
 function _draw_cursor!(c::TimeCanvas, sess::DesignSession)
-    k = time_step(sess.time)
-    if k === nothing
+    x = c.chart().cursor
+    if isnan(x)
         _update!(c.cursor; visible = false)
     else
-        _update!(c.cursor, [sess.time.history[].time[k]]; visible = true)
+        _update!(c.cursor, [x]; visible = true)
     end
     c.dirty[] = true
     return c

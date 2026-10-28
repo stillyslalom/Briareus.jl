@@ -1,0 +1,340 @@
+# BriareusGUI session: a Briareus design (target, beams, analysis settings).
+# Lengths in mm, power in TW, angles in degrees; results are not saved.
+format = "BriareusGUI session"
+version = 2
+visrad_source = ""
+
+[beams]
+by = "group"
+facility = "omega"
+preset = "custom"
+
+    [[beams.beam]]
+    aim = [6.0, 0.25, -2.9490299091605696e-17]
+    aim_ref = "backlighter"
+    cluster = "cone2"
+    defocus = 0.0
+    dlambda = 0.0
+    enabled = true
+    fnumber = 6.7
+    group = "cone2"
+    name = "B08"
+    omega1 = false
+    omega2 = false
+    port = [-0.5415469129039316, 0.39345686313472145, 0.7429122680212022]
+    power = 0.4
+    quad = ""
+    ref_point = [6.0, 5.204170427930417e-18, -2.9490299091605696e-17]
+    wavelength = 0.351
+
+        [beams.beam.spot]
+        a = 0.36
+        angle = 0.0
+        b = 0.36
+        halo = 0.0
+        halo_order = 2.0
+        halo_scale = 3.0
+        order = 4.2
+    [[beams.beam]]
+    aim = [6.0, 0.25, -2.9490299091605696e-17]
+    aim_ref = "backlighter"
+    cluster = "cone2"
+    defocus = 0.0
+    dlambda = 0.0
+    enabled = true
+    fnumber = 6.7
+    group = "cone2"
+    name = "B09"
+    omega1 = false
+    omega2 = false
+    port = [-0.5415469129039316, -0.39345686313472145, 0.7429122680212022]
+    power = 0.4
+    quad = ""
+    ref_point = [6.0, 5.204170427930417e-18, -2.9490299091605696e-17]
+    wavelength = 0.351
+
+        [beams.beam.spot]
+        a = 0.36
+        angle = 0.0
+        b = 0.36
+        halo = 0.0
+        halo_order = 2.0
+        halo_scale = 3.0
+        order = 4.2
+    [[beams.beam]]
+    aim = [6.300000000000002, 0.1, -0.20000000000000018]
+    aim_ref = "substrate"
+    cluster = "cone3"
+    defocus = 0.0
+    dlambda = 0.0
+    enabled = true
+    fnumber = 6.7
+    group = "cone3"
+    name = "B14"
+    omega1 = false
+    omega2 = false
+    port = [-0.4287182687802648, 0.7407077236759367, 0.5172549797738681]
+    power = 0.4
+    quad = ""
+    ref_point = [6.300000000000002, 0.1, -0.20000000000000018]
+    wavelength = 0.351
+
+        [beams.beam.spot]
+        a = 0.36
+        angle = 0.0
+        b = 0.36
+        halo = 0.0
+        halo_order = 2.0
+        halo_scale = 3.0
+        order = 4.2
+    [[beams.beam]]
+    aim = [6.0, 0.0, 0.0]
+    aim_ref = "none"
+    cluster = "cone3"
+    defocus = 0.0
+    dlambda = 0.0
+    enabled = true
+    fnumber = 6.7
+    group = "cone3"
+    name = "B15"
+    omega1 = false
+    omega2 = false
+    port = [-0.836936138124258, 0.17884402869760052, 0.5172549797738681]
+    power = 0.4
+    quad = ""
+    ref_point = [0.0, 0.0, 0.0]
+    wavelength = 0.351
+
+        [beams.beam.spot]
+        a = 0.36
+        angle = 0.0
+        b = 0.36
+        halo = 0.0
+        halo_order = 2.0
+        halo_scale = 3.0
+        order = 4.2
+    [[beams.beam]]
+    aim = [6.0, 0.0, 0.0]
+    aim_ref = "none"
+    cluster = "cone3"
+    defocus = 0.0
+    dlambda = 0.0
+    enabled = true
+    fnumber = 6.7
+    group = "cone3"
+    name = "B16"
+    omega1 = false
+    omega2 = false
+    port = [-0.8369361381242579, -0.1788440286976005, 0.5172549797738684]
+    power = 0.4
+    quad = ""
+    ref_point = [0.0, 0.0, 0.0]
+    wavelength = 0.351
+
+        [beams.beam.spot]
+        a = 0.36
+        angle = 0.0
+        b = 0.36
+        halo = 0.0
+        halo_order = 2.0
+        halo_scale = 3.0
+        order = 4.2
+
+[drive]
+beam_model = "fcone"
+cavity = false
+cavity_point = [0.0, 0.0, 0.0]
+films = []
+spot_radius = 0.5
+unconverted_ratio = [0.0, 0.0]
+
+    [drive.profile]
+
+[optimize]
+by = "group"
+capsule_keepout = true
+capsule_min = 0.0
+fields = ["z", "r"]
+hold_drive = true
+iterations = 100
+keepout = false
+keepout_min = 0.0
+max_evaluations = 1000
+objective = "legendre"
+spill = 0.2
+
+    [optimize.deltas]
+    defocus = 2.0
+    phi = 1.0
+    power = 0.4
+    r = 1.0
+    z = 1.0
+
+    [optimize.weights]
+    1 = 1.0
+    2 = 1.0
+    3 = 1.0
+    4 = 1.0
+
+[review]
+hardware = ["main", "substrate", "washer", "post", "shield"]
+peak_fraction = 0.0001
+quality = "quick"
+targets = ["backlighter"]
+wings = true
+
+    [review.errors]
+    focus = 1.0
+    hardware_tolerance = 0.0
+    pointing = 0.05
+    target_offset = 0.025
+
+[talis]
+capture = ["backlighter"]
+diagnostics = []
+hardware = ["main", "substrate", "washer", "post", "shield"]
+omega1 = true
+pivot = "tcc"
+pivot_point = [0.0, 0.0, 0.0]
+tolerance = 0.5
+
+[target]
+excluded = []
+kind = "foil"
+windows = []
+
+    [target.mesh]
+    capsule_h = 0.3
+    h = 0.6
+
+    [target.params]
+    capsule_radius = 0.9
+    conversion = 0.02
+    distance = 6.0
+    leh_closure = 0.0
+    leh_closure_time = 5.0
+    leh_closure_width = 0.5
+    leh_open_fraction = 0.84
+    leh_radius = 1.55
+    length = 10.1
+    main_radius = 1.0
+    radius = 2.875
+    wall_albedo = 0.85
+    wall_conversion = 0.8
+    width = 2.0
+
+    [[target.parts]]
+    anchor = "foil"
+    aperture = false
+    coords = "cartesian"
+    file = ""
+    inward = false
+    kind = "disk"
+    name = "substrate"
+    object = ""
+    two_sided = false
+
+        [target.parts.values]
+        albedo = 0.0
+        conversion = 0.0
+        h = 0.0
+        phi = 40.0
+        r1 = 0.8
+        rotation = 50.0
+        theta = 30.0
+        x = 0.2
+        y = 0.1
+        z = 0.3
+    [[target.parts]]
+    anchor = "substrate"
+    aperture = false
+    coords = "cartesian"
+    file = ""
+    inward = false
+    kind = "annulus"
+    name = "washer"
+    object = ""
+    two_sided = false
+
+        [target.parts.values]
+        albedo = 0.0
+        conversion = 0.0
+        h = 0.0
+        phi = 200.0
+        r1 = 0.2
+        r2 = 0.5
+        rotation = 15.0
+        theta = 10.0
+        x = 0.0
+        y = 0.0
+        z = 0.4
+    [[target.parts]]
+    anchor = "tcc"
+    aperture = false
+    coords = "cartesian"
+    file = ""
+    inward = false
+    kind = "sphere"
+    name = "post"
+    object = ""
+    two_sided = false
+
+        [target.parts.values]
+        albedo = 0.0
+        conversion = 0.0
+        h = 0.0
+        phi = 0.0
+        r1 = 0.3
+        rotation = 0.0
+        theta = 0.0
+        x = -2.0
+        y = 1.0
+        z = 0.5
+    [[target.parts]]
+    anchor = "foil"
+    aperture = false
+    coords = "cartesian"
+    file = ""
+    inward = false
+    kind = "rectangle"
+    name = "shield"
+    object = ""
+    two_sided = false
+
+        [target.parts.values]
+        albedo = 0.0
+        conversion = 0.0
+        h = 0.0
+        phi = 0.0
+        r1 = 1.0
+        r2 = 0.6
+        rotation = 33.0
+        theta = 170.0
+        x = 0.0
+        y = 0.0
+        z = -0.5
+
+[view]
+beam_color = "group"
+beam_length = 0.0
+beams = "rays"
+color = "component"
+cut_axis = "z"
+cut_azimuth = 225.0
+cut_components = ["cap_bottom", "cap_top", "wall"]
+cut_kind = "sector"
+cut_line = [0.0, 0.0, 0.0]
+cut_normal = [0.0, -1.0, 0.0]
+cut_point = [0.0, 0.0, 0.0]
+cut_range = [-inf, +inf]
+cut_rotation = 0.0
+cut_shift = 0.0
+cut_width = 90.0
+cutaway = true
+hidden_beams = []
+show_off = true
+shown_1w = []
+shown_2w = []
+side = false
+
+    [view.display]

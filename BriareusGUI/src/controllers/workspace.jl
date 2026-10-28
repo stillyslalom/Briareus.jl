@@ -5,13 +5,13 @@
 # restored design.
 
 const SESSION_FORMAT = "BriareusGUI session"
-const SESSION_VERSION = 2               # 2: `.briar` archives with the CAD files
+const SESSION_VERSION = 3               # 2: `.briar` archives with the CAD files; 3: frames
 
 _strs(xs) = [String(x) for x in xs]
 _syms(xs) = Symbol[Symbol(x) for x in xs]
 _fdict(d) = Dict{String,Any}(String(k) => Float64(v) for (k, v) in d)
 
-function _beam_state(b::Beam, enabled::Bool, cluster::Symbol, ref::Symbol, refpt, uc)
+function _beam_state(b::Beam, enabled::Bool, cluster::Symbol, frame::Symbol, loc, uc)
     sp = b.spot
     return Dict{String,Any}("name" => b.name, "port" => collect(b.port), "aim" => collect(b.aim),
                             "power" => b.power, "defocus" => b.defocus, "fnumber" => b.fnumber,
@@ -22,7 +22,7 @@ function _beam_state(b::Beam, enabled::Bool, cluster::Symbol, ref::Symbol, refpt
                                                        "halo_scale" => sp.halo_scale,
                                                        "halo_order" => sp.halo_order),
                             "enabled" => enabled, "cluster" => String(cluster),
-                            "aim_ref" => String(ref), "ref_point" => collect(refpt),
+                            "aim_frame" => String(frame), "aim_local" => collect(loc),
                             "omega1" => uc[1], "omega2" => uc[2])
 end
 
@@ -41,8 +41,9 @@ end
 The design as plain data, ready for TOML: the target (template, dimensions, element
 sizes, windows, parts), the beams (each beam's port, aim, power, focus, spot, cone and
 quad, group, whether it is on, and whether its unconverted 1ω and 2ω light takes part),
-the settings of the drive (beam model included), the optimization, the clearance check
-and the TaLIS checks, and (with `view`) the 3D view's coloring, beam drawing (which
+the frame each beam aims in and its aim there, the settings of the drive (beam model
+included), the optimization, the clearance check, the TaLIS checks and the placement
+sweep, and (with `view`) the 3D view's coloring, beam drawing (which
 beams' 1ω, 2ω and 3ω light is drawn), cutaway and component display modes. Results are
 not part of it; they are
 computed again. Restore it with [`restore!`](@ref).
@@ -60,14 +61,14 @@ function session_state(sess::DesignSession; view::Bool = true)
         "parts" => [Dict{String,Any}("kind" => String(p.kind), "name" => String(p.name),
                                      "values" => _fdict(p.values), "two_sided" => p.two_sided,
                                      "inward" => p.inward, "aperture" => p.aperture, "file" => p.file,
-                                     "anchor" => String(p.anchor), "coords" => String(p.coords),
+                                     "frame" => String(p.frame), "coords" => String(p.coords),
                                      "object" => p.object)
                     for p in ts.parts[]])
     beams = Dict{String,Any}("preset" => String(bt.preset[]), "by" => String(bt.by[]),
                              "facility" => String(bt.facility[]),
                              "beam" => [_beam_state(b, e, c, r, p, u) for (b, e, c, r, p, u) in
-                                        zip(bt.beams[], bt.enabled[], bt.cluster[], bt.aim_ref[],
-                                            bt.ref_point[], bt.unconverted[])])
+                                        zip(bt.beams[], bt.enabled[], bt.cluster[], bt.aim_frame[],
+                                            bt.aim_local[], bt.unconverted[])])
     optimize = Dict{String,Any}(
         "by" => String(op.by[]), "fields" => _strs(op.fields[]), "deltas" => _fdict(op.deltas[]),
         "objective" => String(op.objective[]),
@@ -95,7 +96,8 @@ function session_state(sess::DesignSession; view::Bool = true)
                                                          "beam_model" => String(dr.beam_model[]),
                                                          "profile" => _profile_state(dr.profile[]),
                                                          "unconverted_ratio" => collect(dr.unconverted_ratio[])),
-                             "optimize" => optimize, "review" => review, "talis" => talis)
+                             "optimize" => optimize, "review" => review, "talis" => talis,
+                             "sweep" => _sweep_state(sess.sweep))
     if view
         v = sess.view
         state["view"] = Dict{String,Any}("color" => String(v.color[]), "beams" => String(v.beams[]),
@@ -129,6 +131,14 @@ the view too). The target is rebuilt once; analyses whose inputs changed become 
 as after any edit. Throws `ArgumentError` for a state of another format, or one the
 geometry rejects (the session is then left as it was before the target, if the
 target fails, or partly restored otherwise).
+
+Sessions before version 3 are converted as they load: a part placed in the old foil
+frame (`anchor = "foil"`: `z` along the foil's back normal) is re-expressed in the
+`:backlighter` frame ([`backlighter_frame`](@ref)), so it stays where it was in the
+chamber (to round-off); other anchors are frame names already. A beam that followed a
+component (`aim_ref`) aims in that component's frame when it has one (a part's, a
+template's), else in `:tcc`; the saved chamber aims are kept as they are and re-expressed
+in their frames.
 """
 function restore!(sess::DesignSession, state::AbstractDict)
     get(state, "format", "") == SESSION_FORMAT ||
@@ -145,13 +155,8 @@ function restore!(sess::DesignSession, state::AbstractDict)
     windows = WindowSpec[WindowSpec(; phi = w["phi"], z = w["z"], width = w["width"], height = w["height"],
                                     open = w["open"], albedo = w["albedo"], conversion = w["conversion"],
                                     round = w["round"]) for w in t["windows"]]
-    parts = PartSpec[PartSpec(Symbol(p["kind"]); name = Symbol(p["name"]),
-                              values = Dict{Symbol,Float64}(Symbol(k) => v for (k, v) in p["values"]),
-                              two_sided = p["two_sided"], inward = p["inward"], aperture = p["aperture"],
-                              file = get(p, "file", ""), anchor = Symbol(get(p, "anchor", "tcc")),
-                              coords = Symbol(get(p, "coords", "cartesian")),
-                              object = get(p, "object", ""))
-                     for p in t["parts"]]
+    old = get(state, "version", 0) < 3
+    parts = PartSpec[_state_part(p, old ? params : nothing) for p in t["parts"]]
     _cancel_fits!(ts)                     # a capsule fit in flight was for another design
     _try_build!(ts; kind = Symbol(t["kind"]), params, mesh, windows, parts,
                 excluded = Set(_syms(get(t, "excluded", String[])))) ||
@@ -159,10 +164,17 @@ function restore!(sess::DesignSession, state::AbstractDict)
     sess.visrad_source[] = get(state, "visrad_source", "")
     b = state["beams"]
     rows = b["beam"]
+    # aims in their frames: version 3 saves the local aims; before it, a beam that followed
+    # a component aims in that component's frame (the saved chamber aims are kept)
+    frames = part_frames(ts)
+    frame_of(r) = (f = Symbol(get(r, "aim_frame", get(r, "aim_ref", "tcc")));
+                   f === :none || !haskey(frames, f) ? :tcc : f)
+    af = Symbol[frame_of(r) for r in rows]
+    local_saved = all(r -> haskey(r, "aim_local") && haskey(frames, Symbol(get(r, "aim_frame", ""))), rows)
     set_beams!(bt, [_state_beam(r) for r in rows]; preset = Symbol(b["preset"]),
                enabled = Bool[r["enabled"] for r in rows], cluster = Symbol[Symbol(r["cluster"]) for r in rows],
-               aim_ref = Symbol[Symbol(get(r, "aim_ref", "none")) for r in rows],
-               ref_point = [Vec3(get(r, "ref_point", [0.0, 0.0, 0.0])...) for r in rows],
+               aim_frame = af,
+               aim_local = local_saved ? [Vec3(Float64.(r["aim_local"])...) for r in rows] : nothing,
                unconverted = [(Bool(get(r, "omega1", false)), Bool(get(r, "omega2", false))) for r in rows])
     _assign!(bt.by, Symbol(b["by"]))
     haskey(b, "facility") && _assign!(bt.facility, Symbol(b["facility"]))
@@ -181,7 +193,8 @@ function restore!(sess::DesignSession, state::AbstractDict)
         o, op = state["optimize"], sess.optimize
         _assign!(op.by, Symbol(o["by"]))
         _assign!(op.fields, _syms(o["fields"]))
-        _assign!(op.deltas, Dict{Symbol,Float64}(Symbol(k) => v for (k, v) in o["deltas"]))
+        # (sessions before the frame fields: their default bounds)
+        _assign!(op.deltas, merge(DEFAULT_DELTAS, Dict{Symbol,Float64}(Symbol(k) => v for (k, v) in o["deltas"])))
         _assign!(op.objective, Symbol(o["objective"]))
         _assign!(op.weights, Dict{Int,Float64}(parse(Int, k) => v for (k, v) in o["weights"]))
         for k in (:hold_drive, :keepout, :keepout_min, :capsule_keepout, :capsule_min, :spill,
@@ -221,6 +234,7 @@ function restore!(sess::DesignSession, state::AbstractDict)
         _assign!(tl.pivot_point, Tuple(Float64.(c["pivot_point"])))
         _assign!(tl.omega1, c["omega1"])
     end
+    haskey(state, "sweep") && _restore_sweep!(sess.sweep, state["sweep"])
     if haskey(state, "view")
         v, vs = state["view"], sess.view
         _assign!(vs.color, Symbol(v["color"]))
@@ -258,6 +272,29 @@ function restore!(sess::DesignSession, state::AbstractDict)
         haskey(v, "show_off") && _assign!(vs.show_off, Bool(v["show_off"]))
     end
     return sess
+end
+
+# A saved part. `params` (the target's dimensions) for a session before version 3: a part
+# in the old foil frame (`anchor = "foil"`, axes the columns of [0 0 1; 0 1 0; -1 0 0],
+# `z` along the foil's back normal) is re-expressed in the `:backlighter` frame, its
+# chamber placement unchanged.
+function _state_part(p, params)
+    vals = Dict{Symbol,Float64}(Symbol(k) => v for (k, v) in p["values"])
+    frame = Symbol(get(p, "frame", get(p, "anchor", "tcc")))
+    if params !== nothing && frame === :foil
+        Rold = Frame([0.0 0.0 1.0; 0.0 1.0 0.0; -1.0 0.0 0.0], foil_center(params))
+        F = backlighter_frame(params)
+        c = Vec3(get(vals, :x, 0.0), get(vals, :y, 0.0), get(vals, :z, 0.0))
+        vals[:x], vals[:y], vals[:z] = to_frame(F, to_chamber(Rold, c))
+        R = F.R' * (Rold.R * euler_rotation(get(vals, :theta, 0.0), get(vals, :phi, 0.0),
+                                            get(vals, :rotation, 0.0)))
+        vals[:theta], vals[:phi], vals[:rotation] = _euler_angles(R)
+        frame = :backlighter
+    end
+    return PartSpec(Symbol(p["kind"]); name = Symbol(p["name"]), values = vals,
+                    two_sided = p["two_sided"], inward = p["inward"], aperture = p["aperture"],
+                    file = get(p, "file", ""), frame, coords = Symbol(get(p, "coords", "cartesian")),
+                    object = get(p, "object", ""))
 end
 
 # ---------------------------------------------------------------- CAD files in sessions

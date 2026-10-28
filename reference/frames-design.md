@@ -146,8 +146,31 @@ was built.
        through `cos`) differs from `euler_rotation` by ≤ 1e-15 absolute: the GUI half
        must accept that change in the last bits or keep its own.
      - `Frame` does not clash with CairoMakie, Documenter or Literate exports.
-   - GUI: frames through `resolve_frames`, `aim_frame`, the u, v, w fields, the sweep,
-     and session version 3.
+   - GUI: **done (2026-10-28, uncommitted).** Part frames through `resolve_frames`
+     (`part_frames`, the `TargetSetup.frames` observable), the `:backlighter` template
+     frame, `nudge_part!`, `aim_frame`/`aim_local` with `_set_aims!` and
+     `follow_frames!`, the u, v, w fields, `SweepState` (`controllers/sweep.jl`,
+     `SweepProps.qml`, `SweepPanel.qml`), session version 3, `test/test_frames.jl`.
+     Deviations from the model above:
+     - The invariant holds to round-off, `aim ≈ to_chamber(frame, aim_local)`: writers
+       set chamber aims, which stay authoritative, and their local coordinates are
+       derived; `follow_frames!` sets aims from local coordinates exactly.
+     - `set_aim_frame!(sess, idx, frame; keep)`: `keep = false` aims at `frame_point`
+       (a part's `part_centroid`, a template frame's origin), not at the frame's origin,
+       as a CAD part's origin may lie anywhere.
+     - The sweep's subject is a part or the `:backlighter` template frame; it moves the
+       parts placed in its frames and the beams aimed in them. It runs the core's
+       `design` form (template components move too; a `GroupPointing` is rebuilt per
+       step, warm-started only for frame fields). Applying a step moves a part's center,
+       or the template foil's `distance` (chamber x only). Re-optimization makes the
+       objective per step's target (foil center, keep-outs, held drive from the step's
+       start). The line of sight defaults to the foil → object direction. No ghost of
+       the selected step yet.
+     - A beam whose frame goes away (a part removed, or renamed by a role) keeps its aim
+       and is held in `:tcc`, as `aim_ref` released it.
+     - The part placement now uses `euler_rotation` (`cosd`) and `compose` (static
+       matrices): part vertices move by ≤ 1.1e-15 mm against the old `_part_rotation`;
+       version-2 parts in the old foil frame convert to within 9e-16 mm.
 2. **Placement steps:** `PlacementReport`, a step list in the part inspector, and a
    sweep that varies a step's number.
 3. **User frames:** port-axis frames, a Frames folder in the tree, the coordinate

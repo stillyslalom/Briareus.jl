@@ -159,6 +159,10 @@ names the menu entries, and the panels are described in [The window](@ref).
    either back; results are computed again on load. The design reads the CAD copies
    saved with it; a source file that changed on disk since the save is offered in its
    place, and a part's properties can relink its file or read it from the source again.
+   Sessions saved before frames (version 2 and older) load converted: a part placed in
+   the old foil frame (z along the foil's back normal) is re-expressed in the
+   backlighter foil's frame, where it was, and beams that followed a component aim in
+   that component's frame, their saved aims kept.
    Edit ▸ Undo (Ctrl + Z) and Redo (Ctrl + Y) step through every design edit, typed, from
    a menu, from a file or from an applied optimization.
 
@@ -224,12 +228,19 @@ refused with the reason in the status line.
   efficiency. Overlapping windows, or a window past the end of the wall, are refused.
 - **Parts:** spheres, disks, washers, rectangles, cylinders and cones placed anywhere,
   with their own albedo, conversion, sidedness, aperture flag and element size: a
-  shield, a stalk, a detector aperture, a second foil. A part is placed in the
-  chamber's frame, at an entrance hole (z pointing out of the hohlraum, so one placement
-  mirrors between the two), at the backlighter foil, or in another part's frame, and
-  moves with it when the target's dimensions or that part change; its position is given
-  in Cartesian, cylindrical or spherical coordinates of that frame, and its orientation
-  by the axis polar and azimuth angles and a rotation, in VisRad's order.
+  shield, a stalk, a detector aperture, a second foil. A part is placed in a named
+  frame ([`Frame`](@ref), resolved with [`resolve_frames`](@ref)): the chamber's, an
+  entrance hole's (z pointing out of the hohlraum, so one placement mirrors between the
+  two), the backlighter foil's (origin at its center, z along its front normal, toward
+  TCC), or another part's own frame (origin at its center, z its axis); it moves and
+  turns with that frame when the target's dimensions or that part change. Its position
+  is given in Cartesian, cylindrical or spherical coordinates of that frame
+  ([`coords_of`](@ref)), and its orientation by the axis polar and azimuth angles and a
+  rotation, in VisRad's order ([`euler_rotation`](@ref)). Changing the frame keeps the
+  part where it is. The *Move along* row steps the part by ± a distance along the x, y
+  or z axis of any frame (its own z: along its axis), one edit per click; parts placed
+  in its frame and beams aimed in it move along. *Sweep…* sets up a placement sweep of
+  the part along that axis (below).
   A *mesh* part reads an STL file (Target ▸ Add part ▸ Mesh from STL file), scaled to
   mm, with its windings repaired ([`orient_mesh`](@ref)) and its surface remeshed into
   elements of the part's size ([`remesh_mesh`](@ref)); a multi-body ASCII STL of named
@@ -241,10 +252,13 @@ refused with the reason in the status line.
   count), *Backlighter foil* (the foil objective's spot), or *Thin film* (left out of the
   drive's cavity, below).
 - **Beams** (a group, quad, beam, or any Ctrl-selected set): the aim relative to the
-  ports (z, r and a tangential offset), a common aim point (x, y, z, as VisRad points a
-  cluster at a reference point), or *Aim at* a component's centroid (the foil, an
-  entrance hole, a part), which the beams then follow when it moves; defocus, power,
-  on/off, and where the axis lands. *Look along beam* views the target from the beam's
+  ports (z, r and a tangential offset), or a common aim point (x, y, z, as VisRad points
+  a cluster at a reference point) in the beams' *Aim frame*: the chamber, an entrance
+  hole, the backlighter foil, or a part. The beams keep their coordinates in that frame
+  when it moves or turns (an aim 0.3 mm off a foil's center stays 0.3 mm off it), and
+  *Aim at its center* points them at the frame's center (a part's centroid). The OMEGA
+  backlighter beams aim in the foil's frame; defocus, power, on/off, and where the axis
+  lands. *Look along beam* views the target from the beam's
   port. Beams belong to groups, as VisRad's clusters do: the cone by default, or any
   named set ("backlighter") made with *Move to group*; a group is edited, switched and
   optimized together, and its members keep their cone for the laser–plasma models. A
@@ -255,7 +269,7 @@ refused with the reason in the status line.
   sets; OMEGA EP's beams are imported, its port geometry is not built in) and the
   checks (the TaLIS rules are NIF's).
 - **Analyses:** the settings and Run of the drive, the optimization, the clearance
-  check and the TaLIS rules.
+  check, the placement sweep and the TaLIS rules.
 
 ### 3D view
 
@@ -340,13 +354,33 @@ The bottom panel's tabs:
 - **Optimization:** the free parameters, objective and limits described in the first
   session; a capsule keep-out ([`SphereKeepOut`](@ref), on by default) keeps every
   beam's worst-case envelope off the capsule, and an entrance-hole keep-out
-  ([`ApertureKeepOut`](@ref)) off the hole rims. The run stops at the iteration or the
-  evaluation limit, whichever comes first; canceling keeps the best design so far.
+  ([`ApertureKeepOut`](@ref)) off the hole rims. The aims are free either in the
+  chamber (z, r and the tangential offset of [`GroupPointing`](@ref)) or in each beam's
+  aim frame (u, v, w of [`FramePointing`](@ref): on the foil's frame, u and v across its
+  face and w along its normal), where a group shares one point of its frame: a group
+  converged on a foil then moves its common point across the foil's face. The run stops
+  at the iteration or the evaluation limit, whichever comes first; canceling keeps the
+  best design so far.
 - **Clearance:** the worst-case beam-to-hardware clearance ([`clearance`](@ref)) over
   pointing, positioning, hardware and focus errors on the chosen components, with
   progress per batch of beams and Cancel (keeping the beams already checked); rows
   colored pass, review or fail, the closest beam per component, and CSV export
   ([`write_clearance_csv`](@ref)).
+- **Sweep:** a placement sweep ([`placement_sweep`](@ref)) steps a part (or a
+  backlighter target's foil) through a range of shifts along an axis of any frame, with
+  the parts placed in its frame and the beams aimed in those frames, and checks each
+  step on a worker: the clearance check (its components, envelope and errors), the line
+  of sight from the foil through an object (by default from the foil's center through
+  the object's, [`line_of_sight`](@ref)), the least fraction of a beam's power the foil
+  captures, and optionally the pointing re-optimized with the optimization's settings
+  (warm-started from the previous step when the aims are free in their frames). The
+  quick sampling, the default, keeps a sweep's many steps short. The table lists each
+  step's least clearance and where, the failing and review pairs, the line of sight and
+  the captured power; the chart plots the least clearance and the blocked fraction of
+  the line of sight against the shift. A click on the chart or a row selects a step,
+  and *Apply step* (or a double click) moves the part there as one edit, with the
+  re-optimized pointing when the sweep re-optimized. A sweep is marked out of date when
+  the design or a setting it used changes.
 - **TaLIS:** the NIF target-configuration checks ([`talis_check`](@ref)): 3ω capture,
   incidence and clearance, 1ω clearance and unconverted-light management, and the TAS
   stay-in zone, on the chosen capture components, checked components and diagnostics
@@ -446,6 +480,12 @@ load_pulses!(sess, "reference.csv")              # or use_pulse_shape!(sess): N2
 start_history!(sess)                             # drive_history on the drive's view factors
 time_chart(sess, :drive)                         # what the Time tab plots (also :pulses, :energy, :retune)
 set_time_cursor!(sess, 6.0)                      # the 3D view at the history step nearest 6 ns
+nudge_part!(sess.target, 1, 0.5; frame = :leh_top, axis = :z)   # part 1 up 0.5 mm, one edit
+set_aim_frame!(sess, 1:4, :disk_1; keep = false)     # four beams at the disk's center, following it
+set_sweep!(sess.sweep; subject = :disk_1, frame = :tcc, axis = :x)
+edit_sweep!(sess.sweep, :step, "0.25")           # shifts from start to stop, mm
+start_sweep!(sess; spawn = false)                # placement_sweep with the window's checks
+apply_sweep_step!(sess, 3)                       # the third step into the design, one edit
 save_session("design.briar", sess)               # the design and its CAD files; load_session! reads it
 save_session("design.briar.toml", sess)          # the design alone as TOML, CAD files by path
 record!(sess); undo!(sess)                       # undo/redo steps (a window records them itself)

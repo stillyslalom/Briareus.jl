@@ -10,7 +10,10 @@ ColumnLayout {
     Note {
         text: "Free pointing fields per cone, quad or beam within ± bounds around the beam " +
               "table (power bounds: a fraction of the start) and minimize an objective with " +
-              "L-BFGS-B and exact gradients, in the background. Canceling keeps the best design."
+              "L-BFGS-B and exact gradients, in the background. Canceling keeps the best design. " +
+              "The aims are free either in the chamber (z, r, tangential offset) or in each " +
+              "beam's aim frame (u, v, w: on the backlighter foil's frame, u and v across its " +
+              "face and w along its normal); a group shares its frame coordinates."
     }
     ColumnLayout {
         spacing: 6
@@ -31,9 +34,12 @@ ColumnLayout {
 
         SectionLabel { text: "Free fields and bounds" }
         Repeater {
-            model: [{ key: "z", label: "Aim z", unit: "± mm" },
-                    { key: "r", label: "Aim r", unit: "± mm" },
+            model: [{ key: "z", label: "Aim z (chamber)", unit: "± mm" },
+                    { key: "r", label: "Aim r (chamber)", unit: "± mm" },
                     { key: "phi", label: "Tangential offset", unit: "± mm" },
+                    { key: "u", label: "Aim u (frame x)", unit: "± mm in the aim frame" },
+                    { key: "v", label: "Aim v (frame y)", unit: "± mm in the aim frame" },
+                    { key: "w", label: "Aim w (frame z)", unit: "± mm in the aim frame" },
                     { key: "defocus", label: "Defocus", unit: "± mm" },
                     { key: "power", label: "Power", unit: "± fraction" }]
             delegate: RowLayout {

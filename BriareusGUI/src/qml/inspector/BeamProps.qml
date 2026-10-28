@@ -1,8 +1,8 @@
 // Properties of the selected beams (a group, quad, beam, or a Ctrl-selected set): their
 // 1ω, 2ω and 3ω light in the calculations and in the view,
-// pointing relative to the ports or at a common aim point, defocus and power for all of
-// them at once (only the edited field changes); their group; splitting and merging
-// NIF quads.
+// pointing relative to the ports or at a common aim point in their aim frame, defocus and
+// power for all of them at once (only the edited field changes); their group; splitting
+// and merging NIF quads.
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -73,28 +73,35 @@ ColumnLayout {
     }
 
     SectionLabel { text: "Aim point (x, y, z)" }
+    RowLayout {
+        Label { text: "Aim frame"; Layout.preferredWidth: 110 }
+        ComboBox {
+            id: aimFrameBox
+            objectName: "aimFrame"
+            Layout.fillWidth: true
+            model: app.aimChoices
+            // -1: the selected beams aim in different frames
+            currentIndex: app.bnAimFrame
+            displayText: app.bnAimFrame < 0 ? "(several)" : currentText
+            onActivated: (index) => Julia.br_aim_frame(index)
+        }
+        Button {
+            text: "Aim at its center"
+            enabled: app.bnAimFrame >= 0
+            onClicked: Julia.br_aim_at_frame()
+            ToolTip.visible: hovered
+            ToolTip.text: "Point the beams at the frame's center (a part's centroid, a template frame's origin)"
+        }
+    }
     Note {
-        text: "Point every selected beam at one point, as VisRad points a cluster at a " +
-              "reference point (e.g. a backlighter foil). Shown: the mean aim."
+        text: "Coordinates in " + app.bnAimFrameLabel + ". Point every selected beam at one " +
+              "point, as VisRad points a cluster at a reference point (e.g. a backlighter " +
+              "foil). Shown: the mean aim. Beams aimed in a part's or a template's frame keep " +
+              "these coordinates in it when it moves or turns."
     }
     PropRow { label: "x"; value: app.bn_aim_x; unit: "mm"; onEdited: (text) => Julia.br_edit_node("aim_x", text) }
     PropRow { label: "y"; value: app.bn_aim_y; unit: "mm"; onEdited: (text) => Julia.br_edit_node("aim_y", text) }
     PropRow { label: "z"; value: app.bn_aim_z; unit: "mm"; onEdited: (text) => Julia.br_edit_node("aim_z", text) }
-    RowLayout {
-        Label { text: "Aim at"; Layout.preferredWidth: 110 }
-        ComboBox {
-            Layout.fillWidth: true
-            model: app.aimChoices
-            // -1: the selected beams follow different components
-            currentIndex: app.bnAimRef
-            displayText: app.bnAimRef < 0 ? "(several)" : currentText
-            onActivated: (index) => Julia.br_aim_at(index)
-        }
-    }
-    Note {
-        text: "Aiming at a component (its centroid: a foil, an entrance hole, a part) keeps " +
-              "the beams on it when the target changes; pointing edits become offsets from it."
-    }
     ErrorText { text: app.beamsError }
 
     SectionLabel { text: "Group" }

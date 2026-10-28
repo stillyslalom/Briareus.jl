@@ -337,6 +337,7 @@ ToolBar {
         }
         Tool { text: "Optimize…"; tip: "Pointing optimization settings"; onClicked: win.showTask("optimize") }
         Tool { text: "Clearance…"; tip: "Beam clearance check settings"; onClicked: win.showTask("clearance") }
+        Tool { text: "Sweep…"; tip: "Placement sweep settings"; onClicked: win.showTask("sweep") }
         Tool { text: "TaLIS…"; tip: "TaLIS rule check settings"; onClicked: win.showTask("talis") }
         Item { Layout.fillWidth: true }
     }

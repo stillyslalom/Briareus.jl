@@ -225,6 +225,7 @@ ApplicationWindow {
             Action { text: "Drive"; shortcut: "Ctrl+R"; enabled: !app.driveBuilding; onTriggered: { Julia.br_build(); results.show("drive") } }
             Action { text: "Optimization…"; onTriggered: win.showTask("optimize") }
             Action { text: "Clearance…"; onTriggered: win.showTask("clearance") }
+            Action { text: "Placement sweep…"; onTriggered: win.showTask("sweep") }
             Action {
                 text: "X-ray image along the view"
                 checkable: true
@@ -593,12 +594,13 @@ ApplicationWindow {
             if (r === 2) {
                 win.close()
             } else {
-                // 1: the 3D view or the map changed, 4: the time chart
+                // 1: the 3D view or the map changed, 4: the time chart, 8: the sweep chart
                 if (r & 1) {
                     canvas.update()
                     if (app.sideView) sideCanvas.update()
                 }
                 if (r & 4) results.redrawTime()
+                if (r & 8) results.redrawSweep()
             }
         }
     }
