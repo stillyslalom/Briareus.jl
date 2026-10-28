@@ -51,6 +51,10 @@ function _inf_kernel_allocs(op, beams, split = nothing)
     return minimum(@allocated(run()) for _ in 1:3)
 end
 
+# Method instances of the positional function `f` (all its methods), inference-only ones
+# included.
+_inf_instances(f) = sum(m -> count(_ -> true, Base.specializations(m)), methods(f))
+
 # The optimizer's duals at `x` (its tag and chunk size; see `optimize_pointing`).
 function _inf_duals(x)
     N = min(length(x), 12)
@@ -78,6 +82,11 @@ end
     psr = GroupPointing(nif_beams(power = 2.0)[1:16]; by = :quad, relative = true, radius = 0.9,
                         fields = (:theta_s, :dphi_s, :split_theta, :split_phi))
     # a corona about the capsule (the quads' spots reach it: live rays on both paths)
+    # pointing in the entrance holes' frames (the bottom one mirrored), one local aim per cone
+    L = geometry.length
+    lehs = (Frame(Matrix(1.0I, 3, 3), (0.0, 0.0, L / 2)), Frame(Diagonal([1.0, -1.0, -1.0]), (0.0, 0.0, -L / 2)))
+    pf = FramePointing(quads, b -> b.port[3] > 0 ? lehs[1] : lehs[2]; fields = (:u, :v, :w, :power))
+    xf0 = initial_parameters(pf)
     corona = CoronaOperator(CoronaProfile(; critical_radius = 0.9, scale_length = 0.2, absorption = 0.9),
                             quads; ncone = 1, lmax = 4, spacing = 0.2, panels = 20)
 
@@ -94,6 +103,14 @@ end
         optimize_pointing(s, asymmetry_objective(; drive = 1.0); x0, iterations = 1,
                           evaluations = 2, callback = st -> false)
         @test _inf_body_instances(optimize_pointing) == n
+
+        # a placement sweep: new design and callback types reuse the compiled sweep
+        foilt = Target([backlighter_foil((90.0, 0.0); standoff = 5.0, n = 2)])
+        sweep(d, cb) = placement_sweep(d, [0.0]; callback = cb)
+        sweep(v -> (; target = foilt, beams = quads[1:1]), st -> false)
+        n = _inf_instances(Briareus._sweep)
+        sweep(v -> (; target = foilt, beams = quads[1:2]), st -> st.done > 5)
+        @test _inf_instances(Briareus._sweep) == n
     end
 
     @testset "optimization path infers" begin
@@ -120,6 +137,14 @@ end
             @test beams isa Vector{Beam{T}}
             @test (@inferred deposit(s.deposition, beams)).element isa Vector{T}
             @test (@inferred apply(psr, zeros(T, nparams(psr)))) isa Vector{Beam{T}}
+        end
+        # pointing in frames
+        for x in (xf0, _inf_duals(xf0))
+            T = eltype(x)
+            beams = @inferred apply(pf, x)
+            @test beams isa Vector{Beam{T}}
+            @test (@inferred deposit(s.deposition, beams)).element isa Vector{T}
+            @test (@inferred to_chamber(lehs[2], x[1:3])) isa Briareus.SVector{3,T}
         end
         @test (@inferred flux_response(s.model, s.observed)) isa Matrix{Float64}
         # a dual absorption on Float64 beams promotes the deposition
@@ -166,6 +191,14 @@ end
                 end
                 @test _inf_jet_clean(JET.report_call, apply, ps, x)
                 @test _inf_jet_clean(JET.report_call, apply, psr, zeros(eltype(x), nparams(psr)))
+            end
+            # pointing in frames: no dispatch, no possible errors
+            for x in (xf0, _inf_duals(xf0))
+                @test _inf_jet_clean(JET.report_call, apply, pf, x)
+                if VERSION >= v"1.11"
+                    @test _inf_jet_clean(JET.report_opt, apply, pf, x)
+                    @test _inf_jet_clean(JET.report_opt, deposit, s.deposition, apply(pf, x))
+                end
             end
             @test _inf_jet_clean(JET.report_call, flux_response, s.model, s.observed)
             @test _inf_jet_clean(JET.report_call, solve, s.model, dep)

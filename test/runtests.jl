@@ -21,7 +21,7 @@ const SHARDS = Dict(f => 2 for f in ("meshops.jl", "stl.jl", "cadfit.jl", "parti
                                      "inference.jl"))
 merge!(SHARDS, Dict(f => 3 for f in ("windows.jl", "burnthrough.jl", "uncertainty.jl",
                                      "implosion.jl", "energetics.jl", "spectral.jl", "large_models.jl",
-                                     "direct_drive.jl", "corona.jl", "aqua.jl")))
+                                     "direct_drive.jl", "corona.jl", "frames.jl", "aqua.jl")))
 in_shard(file) = SHARD == "" || get(SHARDS, file, 1) == parse(Int, SHARD)
 shard_include(file) = in_shard(file) && include(file)
 
@@ -1241,6 +1241,7 @@ shard_include("unconverted.jl")
 shard_include("sombrero.jl")
 shard_include("backlighter.jl")
 shard_include("backlighter_signal.jl")
+shard_include("frames.jl")
 shard_include("energetics.jl")
 shard_include("capsule_drive.jl")
 shard_include("spectral.jl")

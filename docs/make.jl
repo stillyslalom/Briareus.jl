@@ -25,6 +25,7 @@ const TUTORIALS = [
     "leh_power_balance.jl",
     "implosion_metrics.jl",
     "polar_direct_drive.jl",
+    "backlighter_sweep.jl",
 ]
 
 const PAGE_TIMES = Dict{String,Float64}()
@@ -87,6 +88,7 @@ tutorial_page(file) = joinpath("tutorials", splitext(file)[1] * ".md")
             "Entrance-hole size and the power balance" => tutorial_page("leh_power_balance.jl"),
             "From drive asymmetry to implosion metrics" => tutorial_page("implosion_metrics.jl"),
             "Polar direct drive: a published NIF pointing" => tutorial_page("polar_direct_drive.jl"),
+            "Backlighter placement sweep" => tutorial_page("backlighter_sweep.jl"),
         ],
         "Explanation" => [
             "Physics background" => "explanation/background.md",
@@ -100,6 +102,7 @@ tutorial_page(file) = joinpath("tutorials", splitext(file)[1] * ".md")
             "Radiation" => "reference/radiation.md",
             "Mode analysis" => "reference/analysis.md",
             "Optimization" => "reference/optimization.md",
+            "Frames and placement" => "reference/frames.md",
             "Implosion metrics" => "reference/implosion.md",
             "Laser–plasma models" => "reference/lpi.md",
             "Shot review" => "reference/review.md",

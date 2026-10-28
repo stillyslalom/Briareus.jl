@@ -1,13 +1,6 @@
 # Backlighter foils placed on a diagnostic line of sight, and the check that the line
 # of sight from the foil through the object to the detector is unobstructed.
 
-# Unit vector `los` rotated by `tilt` (rad) toward `e` (a unit vector ⟂ los), and the
-# rotation that does it, applied to `v`.
-function _tilted(v::Vec3, los::Vec3, e::Vec3, tilt)
-    k = cross(los, e)                       # rotation axis (unit: los ⟂ e)
-    return cos(tilt) * v + sin(tilt) * cross(k, v) + (1 - cos(tilt)) * dot(k, v) * k
-end
-
 """
     backlighter_foil(los; standoff, width = 2.0, height = width, tilt = 0.0,
                      tilt_toward = 0.0, rotation = 0.0, center = (0, 0, 0), n = 8,
@@ -19,7 +12,8 @@ degrees, the direction from the object (`center`, default TCC) toward the detect
 foil sits on the far side, centered `standoff` mm from `center` at
 `center − standoff · port_vector(θ, φ)`, with its front face (the face the
 backlighter beams heat, whose x rays cross the object to the detector) toward the
-detector.
+detector. The placement is [`foil_frame`](@ref) with the same keywords: the mesh lies in
+that frame's `x`–`y` plane, `width` along its `x` axis.
 
 By default the foil's normal lies along the line of sight. `tilt` (degrees) turns it
 off the line of sight, toward `cos(ψ) θ̂ + sin(ψ) φ̂` with `ψ = tilt_toward` (degrees,
@@ -38,16 +32,9 @@ function backlighter_foil(los; standoff::Real, width::Real = 2.0, height::Real =
                           material::Material = gold(conversion = 0.05), two_sided::Bool = true)
     standoff > 0 || throw(ArgumentError("the backlighter standoff must be positive"))
     width > 0 && height > 0 || throw(ArgumentError("the foil width and height must be positive"))
-    d = port_vector(los...)
-    eθ, eφ = port_basis(d)
-    u = cosd(rotation) * eθ + sind(rotation) * eφ
-    v = -sind(rotation) * eθ + cosd(rotation) * eφ
-    e = cosd(tilt_toward) * eθ + sind(tilt_toward) * eφ
-    β = deg2rad(tilt)
-    u, v, nrm = _tilted(u, d, e, β), _tilted(v, d, e, β), _tilted(d, d, e, β)
+    f = foil_frame(los; standoff, tilt, tilt_toward, rotation, center)
     m = rectangle_mesh(width, height; nu = n, nv = max(1, round(Int, n * height / width)))
-    R = SMatrix{3,3,Float64}(u[1], u[2], u[3], v[1], v[2], v[3], nrm[1], nrm[2], nrm[3])
-    m = transform(m, R, Vec3(center...) - standoff * d)
+    m = transform(m, f.R, f.origin)
     return Component(name, m, material; two_sided)
 end
 

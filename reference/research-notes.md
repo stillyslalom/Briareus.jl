@@ -53,7 +53,8 @@ callout in the section says which).
   (2026-10-24); Backlighter foil on the line of sight (2026-10-24); Backlighter
   conversion efficiency and the photometric chain (2026-10-24); Weighted He-α CE
   compilation (2026-10-26); He-α CE: saturating peak (2026-10-26); Example NIF cone
-  pointing: unsourced (2026-10-27) *decision* (the quick start's aims).
+  pointing: unsourced (2026-10-27) *decision* (the quick start's aims); Frames and
+  placement (2026-10-28) (port-frame x̂, Euler order, `component_frame` rules).
 
 **Hohlraum dynamics and CBET calibration** (HYBRID-E)
 - HYBRID-E (N210808) hohlraum and LEH size (2026-10-20); Literature review against
@@ -9103,3 +9104,31 @@ in the N221204 benchmark the static P2/P0 at 5.5 ns is −0.26 even with the cal
 CBET transfer (section "Two-zone CBET calibrated to PRE 109 Fig. 9 (2026-10-23)");
 fielded balance relies on wavelength-detuned CBET and the hohlraum's dynamics (wall
 motion, the gold bubble, LEH closure).
+
+## Frames and placement (2026-10-28)
+
+Frames, frame-relative pointing and placement sweeps (`src/frames.jl`,
+`src/frame_pointing.jl`, `src/sweep.jl`; design in `reference/frames-design.md`). The
+conventions below are assumed, not taken from a facility document.
+- **Port frame x̂** **L**. `port_frame(θ, φ; roll)` puts `z` toward the port and `x`
+  along the port's θ̂ (turned by `roll` toward φ̂). That equals
+  `euler_frame(origin, θ, φ, roll)`, VisRad's angle order (Polar, Azimuthal, Rotation)
+  read as for its objects. VisRad's port (pointing-method 1) frames have not been seen
+  in a sample workspace; check the x̂ there before relying on a port frame's roll.
+- **Euler order and sense** **L**. `euler_rotation(polar, azimuth, rotation) =
+  Rz(azimuth) Ry(polar) Rz(rotation)`, right-handed, the reading already assumed for
+  VisRad object orientation ("VisRad workspace files (2026-10-17)"); the VisRad
+  workspace reader now calls it, bit for bit the same matrices as before.
+- **Cylindrical coordinates** *decision*. `coords_of`/`point_of` order cylindrical
+  coordinates (r, φ, z), as the GUI's part positions do; VisRad's summary table is
+  read as (r, z, φ) (`_vrw_point`, an assumption of its own). The two are kept apart.
+- **`component_frame` rules** *decision*. Origin at the area-weighted centroid; `z`
+  from the exact surface's axis, else the area-weighted mean normal when its length is
+  at least 0.1 of the area (an engineering threshold: a flat foil 1, a hemispherical
+  cup 0.5, a closed body 0), else the principal axis of the area moments that differs
+  most from the other two, signed toward chamber `+z`. A sphere or cube falls back to
+  chamber `z`. Ambiguous by nature; scripts that care give the frame.
+- **Sweep defaults** *decision*. A sweep's re-optimization box is `bounds` about each
+  step's own initial parameters (not about the warm start), so the box does not drift
+  along the sweep. The backlighter tutorial's clearance check drops the NIF clearance
+  wings (`nif_wings`, NIF engineering defaults) for its OMEGA-style mock-up.

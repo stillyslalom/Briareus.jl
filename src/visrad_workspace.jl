@@ -114,9 +114,7 @@ end
 # then about the original z by the Azimuthal angle. The workspace stores "Tilt angle",
 # "Rotation angle" and "Spin angle"; reading them as Polar, Azimuthal and Rotation, and
 # the right-hand sense, are an *assumption* (the workspaces seen have only a 90° tilt).
-_vrw_Rz(a) = SMatrix{3,3,Float64}(cosd(a), sind(a), 0, -sind(a), cosd(a), 0, 0, 0, 1)
-_vrw_Ry(a) = SMatrix{3,3,Float64}(cosd(a), 0, -sind(a), 0, 1, 0, sind(a), 0, cosd(a))
-_vrw_rotation(tilt, rot, spin) = _vrw_Rz(rot) * _vrw_Ry(tilt) * _vrw_Rz(spin)
+# The rotation is `euler_rotation(tilt, rot, spin)` (src/frames.jl).
 
 # Position (cm, degrees) in Cartesian (0), cylindrical (1: r, z, φ, as in the summary
 # table; *assumption*) or spherical (2: r, θ, φ) coordinates, to mm.
@@ -286,8 +284,8 @@ function _vrw_objects(lines, a, b)
         R0, t0 = _vrw_frame_of(ref, n -> haskey(byname, n) ? frame(n, depth + 1) : nothing)
         x = _vrw_point(_vrw_int(p, "Coord. sys. geometry type"), _vrw_float(p, "Position 1"),
                        _vrw_float(p, "Position 2"), _vrw_float(p, "Position 3"))
-        R = _vrw_rotation(_vrw_float(p, "Tilt angle"), _vrw_float(p, "Rotation angle"),
-                          _vrw_float(p, "Spin angle"))
+        R = euler_rotation(_vrw_float(p, "Tilt angle"), _vrw_float(p, "Rotation angle"),
+                           _vrw_float(p, "Spin angle"))
         return frames[name] = (R0 * R, R0 * x + t0)
     end
     objs = VisRadObject[]

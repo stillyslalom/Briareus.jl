@@ -262,15 +262,22 @@ function apply(p::GroupPointing, x::AbstractVector{T}) where {T}
                 end
                 aim = rr * er + tt * eφ + SVector{3,T}(0, 0, zz)
             end
-            spot = sp === nothing ? _retype(b.spot, T) :
-                   _retype(with_axes(b.spot, sp * b.spot.a, sp * b.spot.b), T)
-            out[bi] = remake(b; aim, spot,
-                             power = pw === nothing ? T(b.power) : pw,
-                             defocus = dfc === nothing ? T(b.defocus) : dfc,
-                             dlambda = dl === nothing ? T(b.dlambda) : dl)
+            out[bi] = _pointed(b, aim, T, sp, pw, dfc, dl)
         end
     end
     return out
+end
+
+# Template beam `b` with aim `aim` and the parameterizations' non-aim fields: spot scale
+# `sp`, power `pw`, defocus `dfc` and detuning `dl` (`nothing`: the template's value),
+# in element type `T`. Shared by `GroupPointing` and `FramePointing`.
+@inline function _pointed(b::Beam, aim, ::Type{T}, sp, pw, dfc, dl) where {T}
+    spot = sp === nothing ? _retype(b.spot, T) :
+           _retype(with_axes(b.spot, sp * b.spot.a, sp * b.spot.b), T)
+    return remake(b; aim, spot,
+                  power = pw === nothing ? T(b.power) : pw,
+                  defocus = dfc === nothing ? T(b.defocus) : dfc,
+                  dlambda = dl === nothing ? T(b.dlambda) : dl)
 end
 
 # The surface aim of template beam `bi` in group `g`: `has` tells which of
@@ -352,7 +359,7 @@ _LazyResponse() = _LazyResponse(ReentrantLock(), nothing)
 
 The parameterization (`scenario.param`) maps the parameter vectors of `evaluate` and
 `optimize_pointing` to beams. The first form builds the deposition operator for the
-template beams of `pointing`; the second is `Scenario(target, GroupPointing(beams))`
+template beams of `pointing` (a [`FramePointing`](@ref) too); the second is `Scenario(target, GroupPointing(beams))`
 (fields `:z`, `:r`, `:defocus` per group). The third takes any other parameterization
 with methods of `apply(parameterization, x)` and `initial_parameters(parameterization)`,
 and builds the operator for the beams at its initial parameters. The operator resolves
@@ -464,26 +471,29 @@ dropping a bundle — reusing the view factors, flux response and mode weights; 
 deposition operator is restricted. The kept beams' template values (pointing, power)
 come from the scenario's parameterization; the default new parameterization keeps its
 fields, mirroring, `relative` and sphere and groups by `group` (pass one to group by quad
-or beam).
+or beam). For a [`FramePointing`](@ref) scenario, the default keeps the kept beams'
+frames, groups, fields and `relative`. Any other parameterization needs one.
 """
 function subset(s::Scenario, keep::AbstractVector{<:Integer}; parameterization = nothing)
-    s.param isa GroupPointing || parameterization !== nothing ||
-        throw(ArgumentError("give a parameterization for a non-GroupPointing scenario"))
-    beams = s.param.template[keep]
-    param = parameterization === nothing ?
-            GroupPointing(beams; fields = Tuple(s.param.fields), mirror = s.param.mirror,
-                          relative = s.param.relative,
-                          radius = _spherical(s.param) ? s.param.radius : nothing,
-                          center = s.param.center) :
-            parameterization
+    param = parameterization === nothing ? _subset_param(s.param, keep) : parameterization
     return Scenario(s.target, param, s.deposition[keep], s.model, s.observed,
                     s.moment_weights, s.ylm_weights, s.moment_response, s.ylm_response,
                     s.lpi, s.time, getfield(s, :_response), s.albedo)
 end
 
+_subset_param(p::GroupPointing, keep) =
+    GroupPointing(p.template[keep]; fields = Tuple(p.fields), mirror = p.mirror,
+                  relative = p.relative, radius = _spherical(p) ? p.radius : nothing,
+                  center = p.center)
+_subset_param(p, keep) =
+    throw(ArgumentError("give a parameterization for a scenario that is not on a GroupPointing or FramePointing"))
+
+_nparams_shown(p::GroupPointing) = nparams(p)
+_nparams_shown(p) = "?"
+
 function Base.show(io::IO, s::Scenario)
     print(io, "Scenario(", nelements(s.target), " elements, ", length(s.deposition.ports),
-          " beams, ", s.param isa GroupPointing ? nparams(s.param) : "?", " parameters, ",
+          " beams, ", _nparams_shown(s.param), " parameters, ",
           length(s.observed), " observed elements)")
 end
 
@@ -836,7 +846,8 @@ the spherical angles ±5–10° (engineering defaults, not facility limits). A p
 its bound usually means the box, not the objective, set it: widen it with keywords of
 [`bounds`](@ref), e.g. `lower, upper = bounds(pointing, x0; z = 1.5, power = 0.4,
 power_max = 12.0)`, or pass any `lower` and `upper` vectors. A parameterization other
-than `GroupPointing` has no `bounds` method and needs `lower` and `upper`.
+than `GroupPointing` and [`FramePointing`](@ref) has no `bounds` method and needs
+`lower` and `upper`.
 
 The run ends after `iterations` L-BFGS-B iterations or `evaluations` objective
 evaluations (each gradient counts one), whichever comes first: a line search may take

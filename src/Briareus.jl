@@ -68,6 +68,9 @@ export legendre, legendre_moments, legendre_weights, solid_angle, ylm_moments, y
        ylm_matrix, ylm_frame, mode_index, relative_mode_power, mode_amplitude, mode_power, mode_rms, rms_nonuniformity
 export OrthoCamera, render, radiance, line_of_sight_power
 export backlighter_foil, line_of_sight, LineOfSightReport
+export Frame, CHAMBER, to_chamber, to_frame, compose, euler_rotation, euler_frame, port_frame,
+       foil_frame, part_centroid, component_frame, coords_of, point_of, FrameDef, resolve_frames,
+       FramePointing, placement_sweep, SweepRow, SweepResult, write_sweep_csv
 export kshell_line_energy, kshell_ce_data, kshell_ce_model, KShellCEModel, kshell_ce,
        mass_attenuation, filter_transmission, backlighter_signal, BacklighterSignal,
        henke_mass_attenuation, mirror_reflectivity
@@ -95,6 +98,7 @@ include("targets.jl")
 include("cadfit.jl")
 include("beams.jl")
 include("facilities.jl")
+include("frames.jl")
 include("deposition.jl")
 include("storage.jl")
 include("viewfactors.jl")
@@ -106,6 +110,7 @@ include("analysis.jl")
 include("corona.jl")
 include("imaging.jl")
 include("optimize.jl")
+include("frame_pointing.jl")
 include("history.jl")
 include("spectral.jl")
 include("xray_optics.jl")
@@ -115,6 +120,7 @@ include("dynamics.jl")
 include("retune.jl")
 include("clearance.jl")
 include("backlighter.jl")
+include("sweep.jl")
 include("backlighter_signal.jl")
 include("keepout.jl")
 include("uncertainty.jl")
