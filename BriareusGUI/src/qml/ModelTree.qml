@@ -1,8 +1,9 @@
 // The model tree: target components (with their colors in the 3D view), beams by
 // group and quad, analyses. Click selects (in the 3D view too), Ctrl + click adds beams
-// to the selection, double click fits the view to it, the arrow expands, the box
-// switches a beam set on or off or shows and hides a component, right click opens the
-// node's actions.
+// to the selection, double click fits the view to it, the arrow expands, a beam row's
+// dots switch its 1ω, 2ω and 3ω light in the calculations (top) and in the view
+// (bottom), a component's box shows or hides it and its glyph sets its display mode,
+// right click opens the node's actions.
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -41,6 +42,7 @@ Pane {
                 height: 28
                 readonly property string nodeId: model.id
                 readonly property string nodeKind: model.kind
+                readonly property string nodeDisplay: model.drawmode
                 readonly property color hl: palette.highlight
                 color: model.selected ? Qt.rgba(hl.r, hl.g, hl.b, 0.28)
                      : hover.hovered ? Qt.rgba(hl.r, hl.g, hl.b, 0.08) : "transparent"
@@ -77,8 +79,14 @@ Pane {
                         opacity: 0.7
                         TapHandler { onTapped: Julia.br_toggle_expand(node.nodeId) }
                     }
+                    BeamDots {
+                        visible: model.matrix !== ""
+                        matrix: model.matrix
+                        nodeId: node.nodeId
+                        Layout.preferredWidth: implicitWidth
+                    }
                     CheckBox {
-                        visible: model.on >= 0
+                        visible: model.on >= 0 && model.matrix === ""
                         checked: model.on !== 0
                         opacity: model.on === 2 ? 0.55 : 1
                         padding: 0
@@ -87,8 +95,22 @@ Pane {
                         onToggled: Julia.br_tree_on(node.nodeId, checked)
                         ToolTip.visible: hovered
                         ToolTip.delay: 500
-                        ToolTip.text: node.nodeKind === "comp" || node.nodeKind === "part" || node.nodeKind === "window"
-                                      ? "Show or hide in the 3D view" : "Switch these beams on or off"
+                        ToolTip.text: "Show or hide in the 3D view (it stays in the calculations)"
+                    }
+                    Label {
+                        // the display mode: click for the choices
+                        visible: model.drawmode !== ""
+                        text: ({ opaque: "■", transparent: "◧", wireframe: "▦", invisible: "□" })[model.drawmode] || ""
+                        opacity: 0.75
+                        Layout.preferredWidth: 14
+                        horizontalAlignment: Text.AlignHCenter
+                        HoverHandler { id: modeHover }
+                        ToolTip.visible: modeHover.hovered
+                        ToolTip.delay: 400
+                        ToolTip.text: "Display: " + ({ opaque: "opaque", transparent: "semi-transparent",
+                                                       wireframe: "wireframe", invisible: "invisible" })[model.drawmode] +
+                                      " (click to change)"
+                        TapHandler { onTapped: displayMenu.popup() }
                     }
                     StatusDot { visible: model.status !== ""; status: model.status }
                     Rectangle {
@@ -122,15 +144,71 @@ Pane {
                     }
                 }
                 AutoMenu {
+                    id: displayMenu
+                    MenuItem {
+                        text: app.displayLabels[0]
+                        checkable: true
+                        checked: node.nodeDisplay === "opaque"
+                        onTriggered: Julia.br_set_display(node.nodeId, "opaque")
+                    }
+                    MenuItem {
+                        text: app.displayLabels[1]
+                        checkable: true
+                        checked: node.nodeDisplay === "transparent"
+                        onTriggered: Julia.br_set_display(node.nodeId, "transparent")
+                    }
+                    MenuItem {
+                        text: app.displayLabels[2]
+                        checkable: true
+                        checked: node.nodeDisplay === "wireframe"
+                        onTriggered: Julia.br_set_display(node.nodeId, "wireframe")
+                    }
+                    MenuItem {
+                        text: app.displayLabels[3]
+                        checkable: true
+                        checked: node.nodeDisplay === "invisible"
+                        onTriggered: Julia.br_set_display(node.nodeId, "invisible")
+                    }
+                }
+                AutoMenu {
                     id: menu
                     readonly property bool showable: ["comp", "part", "window", "group", "quad", "beam", "beams"].indexOf(node.nodeKind) >= 0
+                    readonly property bool isComp: node.nodeDisplay !== ""
                     MenuItem {
                         id: showItem
-                        text: "Show in the 3D view"
+                        text: "Show 3ω light in the 3D view"
                         checkable: true
-                        visible: menu.showable
+                        visible: menu.showable && !menu.isComp
                         height: visible ? implicitHeight : 0
                         onTriggered: Julia.br_node_show(node.nodeId, checked)
+                    }
+                    MenuItem {
+                        text: app.displayLabels[0]
+                        checkable: true
+                        checked: node.nodeDisplay === "opaque"
+                        visible: menu.isComp; height: visible ? implicitHeight : 0
+                        onTriggered: Julia.br_set_display(node.nodeId, "opaque")
+                    }
+                    MenuItem {
+                        text: app.displayLabels[1]
+                        checkable: true
+                        checked: node.nodeDisplay === "transparent"
+                        visible: menu.isComp; height: visible ? implicitHeight : 0
+                        onTriggered: Julia.br_set_display(node.nodeId, "transparent")
+                    }
+                    MenuItem {
+                        text: app.displayLabels[2]
+                        checkable: true
+                        checked: node.nodeDisplay === "wireframe"
+                        visible: menu.isComp; height: visible ? implicitHeight : 0
+                        onTriggered: Julia.br_set_display(node.nodeId, "wireframe")
+                    }
+                    MenuItem {
+                        text: app.displayLabels[3]
+                        checkable: true
+                        checked: node.nodeDisplay === "invisible"
+                        visible: menu.isComp; height: visible ? implicitHeight : 0
+                        onTriggered: Julia.br_set_display(node.nodeId, "invisible")
                     }
                     MenuItem {
                         id: includeItem

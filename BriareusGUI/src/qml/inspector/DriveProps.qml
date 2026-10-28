@@ -114,6 +114,22 @@ ColumnLayout {
         tip: "The spot over which the irradiance statistics and the foil objective are taken"
         onEdited: (text) => Julia.br_set_spot_radius(text)
     }
+    SectionLabel { text: "Unconverted light" }
+    PropRow {
+        label: "1ω power ratio"; value: app.ucRatio1; unit: "of each beam's 3ω power (empty: off)"
+        tip: "No default: the NIF User Guide gives no fraction (most unconverted light is 1ω, more for shaped pulses)"
+        onEdited: (text) => Julia.br_unconverted_ratio(1, text)
+    }
+    PropRow {
+        label: "2ω power ratio"; value: app.ucRatio2; unit: "of each beam's 3ω power (empty: off)"
+        onEdited: (text) => Julia.br_unconverted_ratio(2, text)
+    }
+    Note {
+        text: "Beams whose 1ω or 2ω dot is on in the calculations row (model tree, beam " +
+              "properties) add that light's absorbed power to the drive, converted to x-rays as the " +
+              "3ω light is. Only NIF beams and quads have footprints."
+    }
+    Label { text: app.unconvertedText; visible: app.unconvertedText !== ""; wrapMode: Text.WordWrap; Layout.fillWidth: true }
     Label { text: app.driveSummary; visible: app.driveHasResult; wrapMode: Text.WordWrap; Layout.fillWidth: true; font.weight: Font.DemiBold }
     Note { text: "The modes and the power accounting are in the Drive tab below." }
 }

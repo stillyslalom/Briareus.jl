@@ -1,4 +1,5 @@
-// Properties of the selected beams (a group, quad, beam, or a Ctrl-selected set): on/off,
+// Properties of the selected beams (a group, quad, beam, or a Ctrl-selected set): their
+// 1ω, 2ω and 3ω light in the calculations and in the view,
 // pointing relative to the ports or at a common aim point, defocus and power for all of
 // them at once (only the edited field changes); their group; splitting and merging
 // NIF quads.
@@ -11,10 +12,46 @@ import "../common"
 ColumnLayout {
     spacing: 8
     Note { text: app.bnInfo; opacity: 0.9 }
-    CheckBox {
-        text: app.bnOn === 2 ? "On (some beams are off)" : "On"
-        checked: app.bnOn !== 0
-        onToggled: Julia.br_tree_on(app.selection, checked)
+    // the beams' light by harmonic: in the calculations, drawn (the model tree's dots)
+    GridLayout {
+        id: matrix
+        columns: 4
+        columnSpacing: 6
+        rowSpacing: 0
+        component Box: CheckBox {
+            property int at: 0                       // index into app.bnMatrix
+            property string tip: ""
+            readonly property string st: app.bnMatrix.charAt(at)
+            checked: st === "1" || st === "2"
+            opacity: st === "2" ? 0.55 : 1
+            padding: 2
+            ToolTip.visible: hovered && tip !== ""
+            ToolTip.delay: 400
+            ToolTip.text: tip
+            onToggled: Julia.br_beam_dot(app.selection, at < 3 ? "use" : "draw", at % 3 + 1, checked)
+        }
+        Label { text: "" }
+        Label { text: "1ω"; color: "#d62728"; font.bold: true; Layout.alignment: Qt.AlignHCenter }
+        Label { text: "2ω"; color: "#2ca02c"; font.bold: true; Layout.alignment: Qt.AlignHCenter }
+        Label { text: "3ω"; color: "#1f5fd6"; font.bold: true; Layout.alignment: Qt.AlignHCenter }
+        Label { text: "In calculations" }
+        Box { at: 0; enabled: st !== "-" && app.ucLive[0]
+              tip: st === "-" ? "No 1ω footprint for these beams (NIF quads and beams only)"
+                 : app.ucLive[0] ? "The 1ω light's absorbed power adds to the drive"
+                 : "Set the 1ω power ratio in the Drive's properties first" }
+        Box { at: 1; enabled: st !== "-" && app.ucLive[1]
+              tip: st === "-" ? "No 2ω footprint for these beams (NIF quads and beams only)"
+                 : app.ucLive[1] ? "The 2ω light's absorbed power adds to the drive"
+                 : "Set the 2ω power ratio in the Drive's properties first" }
+        Box { at: 2; tip: app.bnOn === 2 ? "Some of these beams are off" : "Laser drive, clearance and optimization" }
+        Label { text: "Drawn" }
+        Box { at: 3; enabled: st !== "-"
+              tip: st === "-" ? "No 1ω footprint for these beams (NIF quads and beams only)"
+                              : "The 1ω footprint, and the light converging to it" }
+        Box { at: 4; enabled: st !== "-"
+              tip: st === "-" ? "No 2ω footprint for these beams (NIF quads and beams only)"
+                              : "The 2ω footprint at the 3ω best-focus plane" }
+        Box { at: 5; tip: "Hiding a beam keeps it in every calculation" }
     }
 
     SectionLabel { text: "Pointing" }

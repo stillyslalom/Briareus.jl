@@ -125,10 +125,10 @@ function _connect!(sess::DesignSession)
     on(ts.target) do t
         default_selection!(sess.review, t)
         default_selection!(sess.talis, t)
-        # forget hidden components and a selection that no longer exist
+        # forget display modes and a selection of components that no longer exist
         names = Set(all_component_names(ts))
-        h = filter(in(names), sess.view.hidden[])
-        h == sess.view.hidden[] || (sess.view.hidden[] = h)
+        d = filter(p -> first(p) in names, sess.view.display[])
+        d == sess.view.display[] || (sess.view.display[] = d)
         c = selected_component(sess)
         c === nothing || c in names || select!(sess.view, "target")
         # beams that follow a component move with it
@@ -144,7 +144,7 @@ function _connect!(sess::DesignSession)
         sess.view.selection[] in gone ? select!(sess.view, "beams") :
         (sess.view.extra[] = filter(id -> !(id in gone), sess.view.extra[]))
     end
-    onany((_...) -> _drive_inputs_changed!(sess), bt.beams, bt.enabled)
+    onany((_...) -> _drive_inputs_changed!(sess), bt.beams, bt.enabled, bt.unconverted)
     # a rejected edit's message belongs to what was being edited
     on(sess.view.selection) do _
         isempty(ts.error[]) || (ts.error[] = "")
@@ -153,6 +153,7 @@ function _connect!(sess::DesignSession)
     on(_ -> _request_evaluation!(sess), dr.spot_radius)
     onany((_...) -> _drive_inputs_changed!(sess), dr.cavity, dr.cavity_point, dr.films,
           dr.beam_model, dr.profile)
+    on(_ -> _drive_inputs_changed!(sess), dr.unconverted_ratio)
     # a drive asked for while CAD parts remeshed, the target was built or a capsule was
     # fitted runs when the target is ready
     onany(ts.pending, ts.building, ts.fitting) do _...
@@ -544,16 +545,35 @@ function _facet_note(t::Target)
            "spheres to CAD parts; this face is none of them, or the fit is off)"
 end
 
+"""
+    unconverted_ratios(sess) -> Union{Nothing,NamedTuple}
+
+The unconverted power of each beam of the table as a fraction of its 3ω power,
+`(; omega1, omega2)` (vectors in table order): the drive's ratio
+([`set_unconverted_ratio!`](@ref)) for the beams whose 1ω or 2ω light takes part
+([`participates`](@ref)), zero for the others; `nothing` when no unconverted light takes
+part (the drive is then the 3ω drive alone, bit for bit).
+"""
+function unconverted_ratios(sess)
+    bt = sess.beams
+    r1, r2 = sess.drive.unconverted_ratio[]
+    o1 = [r1 * u[1] for u in bt.unconverted[]]
+    o2 = [r2 * u[2] for u in bt.unconverted[]]
+    any(>(0), o1) || any(>(0), o2) || return nothing
+    return (; omega1 = o1, omega2 = o2)
+end
+
 # Evaluate the table's current pointing on the scenario (latest request wins).
 function _request_evaluation!(sess::DesignSession)
     dr = sess.drive
     _drive_current(sess) || return sess
     s, lookup, radius = dr.scenario[], dr.lookup[], dr.spot_radius[]
     beams = display_beams(sess.beams)
+    ratio = unconverted_ratios(sess)
     g = (dr.eval_generation[] += 1)
     dr.evaluating[] = true
     runner = _runner(sess.spawn, sess.deliver)
-    runner(() -> _evaluate_drive(s, beams, lookup, radius), function (out)
+    runner(() -> _evaluate_drive(s, beams, lookup, radius; ratio), function (out)
         g == dr.eval_generation[] || return
         dr.evaluating[] = false
         if out.err === nothing

@@ -19,7 +19,7 @@
     s.talis.tolerance[] = 0.7
     s.drive.spot_radius[] = 0.6
     s.view.beams[] = :volumes
-    s.view.hidden[] = Set([:capsule])
+    set_display!(s.view, :capsule, :invisible)
     path = joinpath(mktempdir(), "design.briar.toml")
     save_session(path, s)
     @test occursin("BriareusGUI session", read(path, String))
@@ -34,7 +34,7 @@
     @test [p.values for p in s2.target.parts[]] == [p.values for p in s.target.parts[]]
     @test nelements(s2.target.target[]) == nelements(s.target.target[])
     @test s2.optimize.weights[] == Dict(2 => 1.0, 4 => 0.5) && s2.optimize.iterations[] == 37
-    @test s2.view.beams[] === :volumes && s2.view.hidden[] == Set([:capsule])
+    @test s2.view.beams[] === :volumes && display_mode(s2.view, :capsule) === :invisible
     @test count(b -> b.quad == "Q31T", s2.beams.beams[]) == 4    # the split quad
     @test !can_undo(s2)                                          # history starts at the load
     # results are not saved: the drive is computed again
@@ -319,9 +319,9 @@ end
     sel = selected_components(s)
     @test first(sel) === :wall && :capsule in sel && :cap_bottom in sel && length(sel) >= 4
     # hidden beams are a view setting, separate from switching them off
-    set_beams_hidden!(v, [b.name for b in s.beams.beams[][1:3]], true)
+    set_beams_drawn!(v, [b.name for b in s.beams.beams[][1:3]], 3, false)
     @test length(v.hidden_beams[]) == 3 && all(s.beams.enabled[])
-    set_beams_hidden!(v, [s.beams.beams[][1].name], false)
+    set_beams_drawn!(v, [s.beams.beams[][1].name], 3, true)
     @test length(v.hidden_beams[]) == 2
 end
 

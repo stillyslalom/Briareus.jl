@@ -34,8 +34,14 @@ beams: every beam of the table, disabled ones at zero power), `solution` (the
 radiosity `RadiationSolution`, or `nothing` without a radiation model), `modes` (rows
 `(; l, epsilon, legendre)` of the capsule flux, empty without a capsule), `mean_flux`
 (TW/mm², `NaN` without a capsule), `power` (rows `(; name, power, fraction)`), `spot`
-(foil irradiance statistics, or `nothing`), `map` (see [`flux_map`](@ref)), and
-`seconds`.
+(foil irradiance statistics, or `nothing`), `map` (see [`flux_map`](@ref)),
+`seconds`, and `unconverted` (`nothing`, or the unconverted light's share when it takes
+part: `(; omega1, omega2)`, each `(; absorbed, delivered, conversion)` (TW, and its x-ray
+conversion relative to 3ω), and `skipped`, the beams without a footprint; see
+[`set_unconverted_ratio!`](@ref)). With unconverted light, `evaluation`'s deposition is
+the absorbed power of the 3ω light plus the 1ω and 2ω `unconverted_deposition`, and the
+x-ray source (`solution`, the capsule flux) counts each unconverted color's power at the
+material's conversion times the color's `conversion` (`UnconvertedColor`).
 """
 struct DriveResult
     evaluation::Evaluation
@@ -46,6 +52,7 @@ struct DriveResult
     spot::Any
     map::Any
     seconds::Float64
+    unconverted::Any
 end
 
 """
@@ -68,7 +75,9 @@ assembly's hohlraum cavity without its outer faces and mounting hardware), `film
 capsule tent or an entrance-hole window, which would seal the point into a pocket) and
 `enclosure` (the latest cavity selection, with `cavity_index`, the target element of
 each drive element), and the beam model (see [`set_beam_model!`](@ref)): `beam_model`
-(one of [`BEAM_MODELS`](@ref)) and `profile` (the `VisRadProfile` of `:visrad`).
+(one of [`BEAM_MODELS`](@ref)) and `profile` (the `VisRadProfile` of `:visrad`), and
+`unconverted_ratio` (the 1ω and 2ω power as fractions of each beam's 3ω power; 0: that
+color off; see [`set_unconverted_ratio!`](@ref)).
 """
 struct DriveState
     scenario::Observable{Union{Nothing,Scenario}}
@@ -97,6 +106,7 @@ struct DriveState
     lookup::Base.RefValue{Any}               # flux-map raster lookup of the scenario
     generation::Base.RefValue{Int}           # build requests
     eval_generation::Base.RefValue{Int}      # evaluation requests
+    unconverted_ratio::Observable{NTuple{2,Float64}}   # 1ω, 2ω power / 3ω power
 end
 
 DriveState() = DriveState(Observable{Union{Nothing,Scenario}}(nothing), Observable(false),
@@ -108,7 +118,7 @@ DriveState() = DriveState(Observable{Union{Nothing,Scenario}}(nothing), Observab
                           Observable(false), Observable(zero(Vec3)), Observable(Set{Symbol}()),
                           Observable(:fcone), Observable(VisRadProfile()),
                           Ref{Any}(nothing), Ref{Any}(nothing),
-                          Ref{Any}(nothing), Ref{Any}(nothing), Ref(0), Ref(0))
+                          Ref{Any}(nothing), Ref{Any}(nothing), Ref(0), Ref(0), Observable((0.0, 0.0)))
 
 """
     set_field!(dr::DriveState, field::Symbol)
@@ -133,6 +143,22 @@ function set_beam_model!(dr::DriveState, model::Symbol; profile::VisRadProfile =
     model in BEAM_MODELS || throw(ArgumentError("beam model must be one of $BEAM_MODELS"))
     _profile_state(profile) == _profile_state(dr.profile[]) || (dr.profile[] = profile)
     _assign!(dr.beam_model, model)
+    return dr
+end
+
+"""
+    set_unconverted_ratio!(dr::DriveState, omega1, omega2) -> dr
+
+The unconverted 1ω and 2ω power of every beam as a fraction of its 3ω power (≥ 0; 0
+turns the color off). The beams whose 1ω or 2ω light takes part
+([`set_participation!`](@ref)) then add `unconverted_deposition`'s absorbed power to the
+drive. There is no default: the NIF User Guide gives no fraction (most of the light is
+1ω, more for shaped pulses), so the ratio is an input, as in VisRad.
+"""
+function set_unconverted_ratio!(dr::DriveState, omega1::Real, omega2::Real)
+    (isfinite(omega1) && isfinite(omega2) && omega1 >= 0 && omega2 >= 0) ||
+        throw(ArgumentError("the unconverted power ratios must be finite and ≥ 0"))
+    _assign!(dr.unconverted_ratio, (Float64(omega1), Float64(omega2)))
     return dr
 end
 
@@ -539,10 +565,39 @@ end
 # ---------------------------------------------------------------- evaluation
 
 # Evaluate beams on a scenario: deposition, radiosity, modes, power accounting, map.
-function _evaluate_drive(s::Scenario, beams, lookup, spot_radius::Real)
+# `ratio`: `nothing`, or the unconverted power fractions per beam, `(; omega1, omega2)`
+# (vectors), deposited with `colors` (`UnconvertedColor`s: footprints, and absorption and
+# x-ray conversion relative to 3ω).
+#
+# With unconverted light, the evaluation's deposition is the absorbed power of every
+# color (what the laser coloring, power accounting and back-side losses show:
+# `unconverted_deposition` has applied each color's `absorption`). The x-ray source is
+# kept per color: the 3ω power at the material's conversion, each unconverted color's at
+# the material's conversion times the color's `conversion`. The radiosity solve and the
+# capsule flux take their sum as an equivalent 3ω power, P₃ + Σ c P_c (exact for a
+# conversion independent of intensity; with an intensity-dependent conversion, it is
+# evaluated at that equivalent power's intensity).
+function _evaluate_drive(s::Scenario, beams, lookup, spot_radius::Real; ratio = nothing,
+                         colors = nif_unconverted())
     t0 = time()
     ev = evaluate(s, beams)
-    sol = s.model === nothing ? nothing : solve(s.model, ev.deposition)
+    uc = nothing
+    source = ev.deposition.element                   # the x-ray source's equivalent 3ω power
+    if ratio !== nothing
+        u = unconverted_deposition(s.target, beams; ratio, colors)
+        d = ev.deposition
+        tot = Deposition(d.element .+ u.omega1.element .+ u.omega2.element,
+                         d.backside .+ u.omega1.backside .+ u.omega2.backside,
+                         d.per_beam .+ u.omega1.per_beam .+ u.omega2.per_beam,
+                         d.delivered + u.omega1.delivered + u.omega2.delivered)
+        conv = Dict(c.name => c.conversion for c in colors)
+        source = d.element .+ conv[:omega1] .* u.omega1.element .+ conv[:omega2] .* u.omega2.element
+        flux = Briareus._radiative(s) ? Briareus._observed_flux(s, source) : nothing
+        ev = Evaluation(s, ev.beams, ev.effective, tot, Ref{Union{Nothing,Vector{Float64}}}(flux))
+        share(x, h) = (; absorbed = sum(x.per_beam), delivered = x.delivered, conversion = conv[h])
+        uc = (; omega1 = share(u.omega1, :omega1), omega2 = share(u.omega2, :omega2), u.skipped)
+    end
+    sol = s.model === nothing ? nothing : solve(s.model, source)
     modes = NamedTuple[]
     mean = NaN
     if _has_flux(ev)
@@ -552,7 +607,24 @@ function _evaluate_drive(s::Scenario, beams, lookup, spot_radius::Real)
         modes = [(; l, epsilon = mode_amplitude(c, l), legendre = a[l+1] / a[1]) for l in MODE_DEGREES]
     end
     return DriveResult(ev, sol, modes, mean, power_rows(ev), _spot_stats(ev, spot_radius),
-                       _flux_map(lookup, ev, sol), time() - t0)
+                       _flux_map(lookup, ev, sol), time() - t0, uc)
+end
+
+"""
+    unconverted_summary(res::DriveResult) -> String
+
+The unconverted light's share of the drive in a line (absorbed and delivered 1ω and 2ω
+power), `""` when none takes part.
+"""
+function unconverted_summary(res::DriveResult)
+    u = res.unconverted
+    u === nothing && return ""
+    parts = String[]
+    for (name, x) in (("1ω", u.omega1), ("2ω", u.omega2))
+        x.delivered > 0 && push!(parts, @sprintf("%s %.4g TW absorbed of %.4g TW", name, x.absorbed, x.delivered))
+    end
+    isempty(u.skipped) || push!(parts, "$(length(u.skipped)) beams without a footprint left out")
+    return _nobreak("unconverted light: " * join(parts, " · "))
 end
 
 """

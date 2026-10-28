@@ -208,6 +208,9 @@ mutable struct TreeItem
     status::String
     selected::Bool
     color::String                                  # swatch (hex), "" for none
+    drawmode::String                               # a component's display mode, "" for none (not
+                                                   # `display`: Qt's DisplayRole name)
+    matrix::String                                 # a beam row's 2 × 3 dots, "" for none
 end
 
 # An editable field of the inspector: key, label, unit, value as text.
@@ -434,11 +437,16 @@ function BriareusShell(sess::DesignSession; queue::Channel{Any} = Channel{Any}(I
     _set!(sh, "aimChoices", ["(free)"])
     _set!(sh, "bnAimRef", 0)
     _set!(sh, "beamNames", String[])
+    _set!(sh, "cutSettingsRequest", false)
+    _set!(sh, "cutGrabPath", "")
     _set!(sh, "facility", "nif")
-    for k in ("compHidden", "partTwoSided", "partInward", "partAperture", "partCopy", "partSourceExists")
+    for k in ("partTwoSided", "partInward", "partAperture", "partCopy", "partSourceExists")
         _set!(sh, k, false)
     end
     _set!(sh, "bnOn", 0)
+    _set!(sh, "bnMatrix", "")
+    _set!(sh, "compDisplay", 0)
+    _set!(sh, "displayLabels", [DISPLAY_LABELS[m] for m in DISPLAY_MODES])
     _set!(sh, "partNumber", 0)
     _set!(sh, "partAnchor", 0)
     _set!(sh, "partRole", 0)
@@ -459,7 +467,7 @@ function BriareusShell(sess::DesignSession; queue::Channel{Any} = Channel{Any}(I
                 bt.beams, bt.enabled, bt.preset, bt.by, bt.path, bt.error, bt.warnings,
                 dr.scenario, dr.building, dr.result, dr.evaluating, dr.field, dr.view,
                 dr.cavity, dr.cavity_point, dr.films, dr.beam_model, dr.profile,
-                dr.spot_radius, dr.status, dr.retune_running,
+                dr.spot_radius, dr.status, dr.retune_running, dr.unconverted_ratio,
                 dr.retune_status,
                 st.by, st.fields, st.deltas, st.objective, st.weights, st.hold_drive, st.keepout,
                 st.keepout_min, st.capsule_keepout, st.capsule_min, st.spill, st.iterations,
@@ -469,7 +477,10 @@ function BriareusShell(sess::DesignSession; queue::Channel{Any} = Channel{Any}(I
                 rv.running, rv.progress, rv.status, rv.error, rv.report,
                 tl.capture, tl.hardware, tl.diagnostics, tl.tolerance, tl.pivot, tl.pivot_point, tl.omega1,
                 tl.running, tl.status, tl.error, tl.report,
-                v.color, v.beams, v.beam_color, v.show_off, v.cut_components, v.beam_length, v.cutaway, v.hidden, v.selection,
+                v.color, v.beams, v.beam_color, v.show_off, v.cut_components, v.beam_length, v.cutaway, v.display, v.selection,
+                v.hidden_beams, v.shown_1w, v.shown_2w, bt.unconverted, v.cut_kind, v.cut_axis,
+                v.cut_range, v.cut_point, v.cut_normal, v.cut_shift, v.cut_line, v.cut_rotation,
+                v.cut_azimuth, v.cut_width,
                 v.expanded, tm.pulses, tm.history, tm.retune, tm.chart, tm.cursor, tm.dante, tm.running,
                 tm.progress, tm.status)
         on(mark, obs)
@@ -553,6 +564,31 @@ function _refresh_view!(sh::BriareusShell)
     _set!(sh, "showOff", v.show_off[])
     _set!(sh, "cutWidth", v.cut_width[])
     _set!(sh, "cutAzimuth", v.cut_azimuth[])
+    _set!(sh, "cutKind", String(v.cut_kind[]))
+    _set!(sh, "cutAxis", String(v.cut_axis[]))
+    lo, hi = v.cut_range[]
+    _set!(sh, "cutLo", isfinite(lo) ? _num(lo) : "")
+    _set!(sh, "cutHi", isfinite(hi) ? _num(hi) : "")
+    n = v.cut_normal[]
+    # (components below the digits shown print as 0, not as -0 or 1e-17)
+    _set!(sh, "cutNormal", join((@sprintf("%.3g", abs(x) < 5e-4 ? 0.0 : x) for x in n), ", "))
+    _set!(sh, "cutOffset", cut_offset(v))
+    θ, φ = cut_angles(v)
+    _set!(sh, "cutTheta", @sprintf("%.2f", θ))
+    _set!(sh, "cutPhi", @sprintf("%.2f", φ))
+    _set!(sh, "cutPoint", [_num(round(x; digits = 4) + 0.0) for x in v.cut_point[]])
+    line = v.cut_line[]
+    _set!(sh, "cutLine", any(!=(0), line))
+    lθ, lφ = acosd(clamp(line[3], -1.0, 1.0)), mod(atand(line[2], line[1]), 360)
+    _set!(sh, "cutLineText", any(!=(0), line) ? @sprintf("θ = %.1f°, φ = %.1f°", lθ, lφ) : "")
+    # the Direction fields start at the line's angles (or 90°, 0°), its origin at TCC or not
+    _set!(sh, "cutLineTheta", any(!=(0), line) ? @sprintf("%.2f", lθ) : "90")
+    _set!(sh, "cutLinePhi", any(!=(0), line) ? @sprintf("%.2f", lφ) : "0")
+    _set!(sh, "cutAtTcc", norm(Briareus.Vec3(v.cut_point[]...)) < 1e-9)
+    _set!(sh, "cutRotation", v.cut_rotation[])
+    sel = selected_component(sh.sess)
+    _set!(sh, "cutSelected", sel === nothing ? "" : component_label(sel))
+    _set!(sh, "cutScale", 1.1 * sh.sess.target.target[].scale)
     t = sh.sess.target.target[]
     _set!(sh, "cutChoices", [String(c.name) for c in t.components if c.kind === :surface])
     _set!(sh, "cutLabels", [component_label(c.name) for c in t.components if c.kind === :surface])
@@ -654,7 +690,7 @@ function _refresh_selection!(sh::BriareusShell)
             surf = c.surface === nothing ? "faceted" : "exact " * replace(string(nameof(typeof(c.surface))), "Surface" => "") * " surface"
             _set!(sh, "compInfo", @sprintf("%s · %d elements · %.4g mm² · %s%s%s", what, length(es), A,
                                            surf, mat, tc === t ? "" : " · not in the calculations"))
-            _set!(sh, "compHidden", name in sess.view.hidden[])
+            _set!(sh, "compDisplay", findfirst(==(display_mode(sess.view, name)), DISPLAY_MODES) - 1)
             _set!(sh, "selTitle", String(name))
         end
     end
@@ -711,6 +747,7 @@ function _refresh_selection!(sh::BriareusShell)
             _set!(sh, "bn_power", _num(n.power))
             _set!(sh, "bnMirrored", n.mirrored)
             _set!(sh, "bnOn", n.enabled === missing ? 2 : n.enabled ? 1 : 0)
+            _set!(sh, "bnMatrix", beam_matrix(sess, idx))
             _set!(sh, "bnCount", n.count)
             cls = unique(bt.cluster[][idx])
             _set!(sh, "bnCluster", length(cls) == 1 ? String(cls[1]) : "")
@@ -757,6 +794,11 @@ function _refresh_drive!(sh::BriareusShell)
     _set!(sh, "driveField", String(dr.field[]))
     _set!(sh, "driveView", String(dr.view[]))
     _set!(sh, "spotRadius", _num(dr.spot_radius[]))
+    r1, r2 = dr.unconverted_ratio[]
+    _set!(sh, "ucRatio1", r1 > 0 ? _num(r1) : "")
+    _set!(sh, "ucRatio2", r2 > 0 ? _num(r2) : "")
+    _set!(sh, "ucLive", [r1 > 0, r2 > 0])
+    _set!(sh, "unconvertedText", res === nothing ? "" : unconverted_summary(res))
     _set!(sh, "driveSummary", res === nothing ? "" : drive_summary(res))
     _set!(sh, "driveMean", res === nothing || isnan(res.mean_flux) ? "" :
                            @sprintf("%.3g W/cm² · Tr %.1f eV", to_Wcm2(res.mean_flux),
@@ -977,6 +1019,22 @@ Show a results tab of the open window (`"beams"`, `"drive"`, `"time"`, `"optimiz
 request_tab(key::AbstractString) = (sh = _SHELL[]; sh === nothing ||
                                     (_set!(sh, "resultsRequest", ""); _set!(sh, "resultsRequest", String(key))); nothing)
 
+"""
+    request_cut_settings(path = "")
+
+Open the cutaway's Cut settings popup of the open window, as the Cutaway button's
+context menu does, and with a `path` save an image of the popup there (PNG, written
+asynchronously, as by [`request_grab`](@ref)).
+"""
+function request_cut_settings(path::AbstractString = "")
+    sh = _SHELL[]
+    sh === nothing && return nothing
+    _set!(sh, "cutGrabPath", String(path))
+    _set!(sh, "cutSettingsRequest", false)
+    _set!(sh, "cutSettingsRequest", true)
+    return nothing
+end
+
 # Run a callback body on the current shell, reporting errors in the status line
 # instead of letting them escape into Qt.
 function _with_shell(f)
@@ -1135,24 +1193,51 @@ function br_node_flags(id)
     sess = sh.sess
     c = _node_component(sess, String(id))
     if c !== nothing
-        return [!(c in sess.view.hidden[]), !(c in sess.target.excluded[])]
+        return [display_mode(sess.view, c) !== :invisible, !(c in sess.target.excluded[])]
     end
     idx = node_beams(sess.beams, String(id))
     isempty(idx) && return [true, true]
-    hid = sess.view.hidden_beams[]
     bs = sess.beams.beams[]
-    return [all(i -> !(bs[i].name in hid), idx), all(i -> sess.beams.enabled[][i], idx)]
+    return [all(i -> beam_drawn(sess.view, bs[i].name, 3), idx), all(i -> sess.beams.enabled[][i], idx)]
 end
+# Show or hide nodes: a component becomes opaque or invisible, a beam's 3ω light drawn or not.
 function br_node_show(id, on)
     _with_shell() do sh
         sess = sh.sess
         for n in _acted_nodes(sh, id)
             c = _node_component(sess, n)
             if c !== nothing
-                set_hidden!(sess.view, c, !Bool(on))
+                _show_component!(sess.view, c, Bool(on))
             else
-                set_beams_hidden!(sess.view, _node_beam_names(sess, n), !Bool(on))
+                set_beams_drawn!(sess.view, _node_beam_names(sess, n), 3, Bool(on))
             end
+        end
+    end
+end
+# Showing an invisible component makes it opaque; another mode is kept.
+_show_component!(v, c, on) = on ? (display_mode(v, c) === :invisible && set_display!(v, c, :opaque)) :
+                                  set_display!(v, c, :invisible)
+# Display mode of the components among the nodes acted on (the tree's or Properties').
+function br_set_display(id, mode)
+    _with_shell() do sh
+        m = mode isa Real ? DISPLAY_MODES[round(Int, mode) + 1] : _sym(mode)
+        cs = filter(!isnothing, [_node_component(sh.sess, n) for n in _acted_nodes(sh, id)])
+        isempty(cs) || set_display!(sh.sess.view, cs, m)
+    end
+end
+# A dot of the beam matrix: `row` "use" (takes part in the calculations) or "draw", of
+# `harmonic` 1, 2 or 3, for the beams under the nodes acted on (every beam for "beams").
+function br_beam_dot(id, row, h, on)
+    _with_shell() do sh
+        sess = sh.sess
+        idx = sort!(unique!(reduce(vcat, (node_beams(sess.beams, n) for n in _acted_nodes(sh, id));
+                                   init = Int[])))
+        isempty(idx) && return
+        h, on = Int(h), Bool(on)
+        if String(row) == "use"
+            set_participation!(sess.beams, idx, h, on)
+        else
+            set_beams_drawn!(sess.view, [sess.beams.beams[][i].name for i in idx], h, on)
         end
     end
 end
@@ -1185,8 +1270,11 @@ function br_tree_on(id, on)
         elseif kind === :beams
             Controllers._assign!(sess.beams.enabled, fill(on, length(sess.beams.beams[])))
         elseif kind in (:comp, :part, :window)
-            name = kind === :window ? window_name(parse(Int, key)) : Symbol(key)
-            set_hidden!(sess.view, name, !on)
+            # every selected component when the box is on a selected one
+            for n in _acted_nodes(sh, id)
+                c = _node_component(sess, n)
+                c === nothing || _show_component!(sess.view, c, on)
+            end
         end
     end
 end
@@ -1542,6 +1630,17 @@ function br_part_film(on)
     end
 end
 br_beam_model(model) = _with_shell(sh -> set_beam_model!(sh.sess.drive, _sym(model)))
+# The 1ω (`h` = 1) or 2ω (2) power as a fraction of the 3ω power, as text (empty: off).
+function br_unconverted_ratio(h, text)
+    _with_shell() do sh
+        dr = sh.sess.drive
+        x = isempty(strip(string(text))) ? 0.0 :
+            Controllers._parse_number(string(text), "the power ratio"; nonnegative = true)
+        r = collect(dr.unconverted_ratio[])
+        r[round(Int, h)] = x
+        set_unconverted_ratio!(dr, r...)
+    end
+end
 br_set_spot_radius(text) = _with_shell(sh -> (sh.sess.drive.spot_radius[] =
                                                   Controllers._parse_number(string(text), "the spot radius"; positive = true)))
 function br_import_visrad_workspace(url)
@@ -1622,20 +1721,106 @@ br_beam_length(text) = _with_shell(sh -> Controllers._assign!(sh.sess.view.beam_
 br_show_off(on) = _with_shell(sh -> Controllers._assign!(sh.sess.view.show_off, Bool(on)))
 br_set_cutaway(on) = _with_shell(sh -> Controllers._assign!(sh.sess.view.cutaway, Bool(on)))
 # Cut parameters (the Cutaway button's right-click menu); any change turns the cut on.
-br_cut_width(w) = _with_shell(sh -> (set_cut!(sh.sess.view; width = Float64(w));
+br_cut_width(w) = _with_shell(sh -> (set_cut!(sh.sess.view; width = Float64(w), kind = :sector);
                                      Controllers._assign!(sh.sess.view.cutaway, true)))
-br_cut_azimuth(a) = _with_shell(sh -> (set_cut!(sh.sess.view; azimuth = Float64(a));
+br_cut_azimuth(a) = _with_shell(sh -> (set_cut!(sh.sess.view; azimuth = Float64(a), kind = :sector);
                                        Controllers._assign!(sh.sess.view.cutaway, true)))
 # Center the cut on the side the 3D view looks from.
 function br_cut_toward_view()
     _with_shell() do sh
         c = sh.scene.camera
         d = c.eye - c.lookat
-        hypot(d[1], d[2]) > 0 || return
-        set_cut!(sh.sess.view; azimuth = atand(d[2], d[1]))
+        _, e1, e2 = Controllers._cut_basis(sh.sess.view.cut_axis[])
+        x, y = dot(d, e1), dot(d, e2)
+        hypot(x, y) > 0 || return
+        set_cut!(sh.sess.view; azimuth = atand(y, x), kind = :sector)
         Controllers._assign!(sh.sess.view.cutaway, true)
     end
 end
+# The cut's kind ("sector" or "plane") and the sector's axis ("x", "y", "z").
+br_cut_kind(k) = _with_shell(sh -> (set_cut!(sh.sess.view; kind = _sym(k));
+                                    Controllers._assign!(sh.sess.view.cutaway, true)))
+br_cut_axis(a) = _with_shell(sh -> (set_cut!(sh.sess.view; axis = _sym(a), kind = :sector);
+                                    Controllers._assign!(sh.sess.view.cutaway, true)))
+# The sector's bounds along its axis, as text (empty: unbounded).
+function br_cut_range(lo, hi)
+    _with_shell() do sh
+        val(x, d, what) = isempty(strip(string(x))) ? d : _parse(x, what)
+        set_cut!(sh.sess.view; range = (val(lo, -Inf, "the lower bound"), val(hi, Inf, "the upper bound")))
+        Controllers._assign!(sh.sess.view.cutaway, true)
+    end
+end
+# The cut plane: normal along an axis ("x", "y", "z", "-x", …) or toward the view
+# ("view": the side facing the eye is removed), through the plane's point at offset 0;
+# or the other side kept ("flip": the same plane, its normal turned over).
+function br_cut_plane(which)
+    _with_shell() do sh
+        v = sh.sess.view
+        w = String(which)
+        if w == "flip"
+            flip_cut!(v)
+        else
+            n = if w == "view"
+                c = sh.scene.camera
+                Briareus.Vec3((c.eye - c.lookat)...)
+            else
+                (startswith(w, "-") ? -1 : 1) * Controllers._axis_vector(Symbol(lstrip(w, '-')))
+            end
+            set_cut_plane!(v; normal = n, offset = 0.0)
+        end
+        Controllers._assign!(v.cutaway, true)
+    end
+end
+br_cut_offset(x) = _with_shell(sh -> (set_cut_plane!(sh.sess.view; offset = Float64(x));
+                                      Controllers._assign!(sh.sess.view.cutaway, true)))
+# The plane's normal typed as port angles θ, φ (degrees) or as a vector "x, y, z".
+br_cut_angles(theta, phi) =
+    _with_shell(sh -> (set_cut_plane!(sh.sess.view; angles = (_parse(theta, "the polar angle θ"),
+                                                               _parse(phi, "the azimuth φ")));
+                       Controllers._assign!(sh.sess.view.cutaway, true)))
+br_cut_normal(text) = _with_shell(sh -> (set_cut_plane!(sh.sess.view; normal = _parse_vector(text, "the normal"));
+                                         Controllers._assign!(sh.sess.view.cutaway, true)))
+# The plane's point, typed (mm), or the target center (TCC).
+br_cut_point(x, y, z) =
+    _with_shell(sh -> (set_cut_plane!(sh.sess.view; point = (_parse(x, "x"), _parse(y, "y"), _parse(z, "z")));
+                       Controllers._assign!(sh.sess.view.cutaway, true)))
+function _parse_vector(text, what)
+    xs = split(strip(string(text), ['(', ')', '[', ']', ' ']), r"[,\s]+"; keepempty = false)
+    length(xs) == 3 || throw(ArgumentError("$what is three numbers, x, y, z"))
+    return Tuple(_parse(x, what) for x in xs)
+end
+# The plane through the selected component's centroid, with its normal if it is flat.
+function br_cut_through_selected()
+    _with_shell() do sh
+        name = selected_component(sh.sess)
+        name === nothing && throw(ArgumentError("select a component, window or part to cut through"))
+        Controllers.await_target!(sh.sess.target)
+        v = sh.sess.view
+        cut_through_component!(v, sh.sess.target.target[], name)
+        Controllers._assign!(v.cutaway, true)
+        sh.sess.status[] = "cut plane through $(component_label(name))" *
+                           (v.cut_line[] == (0.0, 0.0, 0.0) ? "" : ", containing the line of sight")
+    end
+end
+# The plane containing the line of sight at port angles θ, φ from the target center or
+# (`from_selected`) the selected component's centroid, turned `rotation` degrees about it.
+function br_cut_line(theta, phi, from_selected, rotation)
+    _with_shell() do sh
+        v = sh.sess.view
+        origin = (0.0, 0.0, 0.0)
+        if Bool(from_selected)
+            name = selected_component(sh.sess)
+            name === nothing && throw(ArgumentError("select a component, window or part for the line's origin"))
+            Controllers.await_target!(sh.sess.target)
+            origin = Tuple(component_plane(sh.sess.target.target[], name)[1])
+        end
+        set_cut_line!(v; angles = (_parse(theta, "the polar angle θ"), _parse(phi, "the azimuth φ")),
+                      origin, rotation = Float64(rotation))
+        Controllers._assign!(v.cutaway, true)
+    end
+end
+br_cut_rotation(a) = _with_shell(sh -> (set_cut_line!(sh.sess.view; rotation = Float64(a));
+                                        Controllers._assign!(sh.sess.view.cutaway, true)))
 function br_cut_component(name, on)
     _with_shell() do sh
         v = sh.sess.view
@@ -1688,7 +1873,7 @@ function _register_qml_functions()
     @qmlfunction br_remove_selected
     @qmlfunction br_load_preset br_set_grouping br_edit_beam br_set_beam_on br_edit_node
     @qmlfunction br_import_beams br_export_beams br_import_sst br_import_summary br_export_sst
-    @qmlfunction br_export_summary br_build br_set_view br_side_view br_xray_image br_close_image br_set_spot_radius br_beam_model br_export_results
+    @qmlfunction br_export_summary br_build br_set_view br_side_view br_xray_image br_close_image br_set_spot_radius br_unconverted_ratio br_beam_model br_export_results
     @qmlfunction br_import_visrad_workspace br_export_visrad_workspace br_retune
     @qmlfunction br_time_chart br_time_pulses br_time_shape br_time_run br_time_cancel br_time_step
     @qmlfunction br_time_now br_time_dante
@@ -1699,6 +1884,10 @@ function _register_qml_functions()
     @qmlfunction br_tl_cancel br_tl_export br_cancel_all
     @qmlfunction br_set_color br_beam_style br_beam_color br_beam_length br_set_cutaway br_show_off
     @qmlfunction br_cut_width br_cut_azimuth br_cut_toward_view br_cut_component
+    @qmlfunction br_cut_kind br_cut_axis br_cut_range br_cut_plane br_cut_offset
+    @qmlfunction br_cut_angles br_cut_normal br_cut_point br_cut_through_selected br_cut_line
+    @qmlfunction br_cut_rotation
+    @qmlfunction br_set_display br_beam_dot
     @qmlfunction br_standard_view br_fit_all br_fit_selection br_look_along_beam
     @qmlfunction br_look_from_port br_port_angles
     @qmlfunction br_projection br_turntable br_canvas_focus
@@ -1715,8 +1904,9 @@ Open the Briareus window and return its session when the window closes. The wind
 a design tool in the manner of VisRad, not a sequence of steps:
 
 - **Model tree** (left): the target's components (a hohlraum's wall, caps, LEHs and
-  capsule, its diagnostic windows, free parts), the beams by cone, quad and beam (with
-  on/off switches), and the analyses with their state. Selecting a node selects it in
+  capsule, its diagnostic windows, free parts; each with its display mode), the beams by
+  cone, quad and beam (with VisRad's dots: 1ω, 2ω and 3ω light in the calculations and
+  drawn), and the analyses with their state. Selecting a node selects it in
   the 3D view and shows it in Properties.
 - **Properties** (right): the selection's settings: the target template, dimensions,
   materials and mesh element sizes; a window or part's size, placement and material;
@@ -1726,7 +1916,8 @@ a design tool in the manner of VisRad, not a sequence of steps:
   or Shift-drag pans, double click fits the clicked part, `f` fits all), standard
   views, a perspective or orthographic projection, beams as rays to where they land
   or as volumes, coloring by component or by a drive field (computed on request), a
-  cutaway, and an orientation triad. The capsule θ–φ (or foil) map shares the canvas.
+  cutaway (a pie slice or a section plane, clipped exactly), and an orientation triad.
+  The capsule θ–φ (or foil) map shares the canvas.
 - **Results** (bottom): the beam table, the drive (modes, power accounting), time
   (pulses, the drive history and the retune plotted against time, with a time cursor
   that colors the 3D view by that step), the optimization, the clearance check and the

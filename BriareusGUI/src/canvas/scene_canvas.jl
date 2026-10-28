@@ -25,6 +25,11 @@ const GHOST = RGBAf(0.6, 0.6, 0.65, 0.18)       # components left out of the cal
 const BEAM_SELECTED = RGBAf(1.0, 0.95, 0.2, 1.0)
 const BEAM_OFF = RGBAf(0.5, 0.5, 0.5, 0.25)
 const VOLUME_ALPHA = 0.22f0
+const TRANSLUCENT_ALPHA = 0.3f0                  # semi-transparent components
+const SECTION_COLOR = RGBAf(0.08, 0.08, 0.1, 1)  # where a cut crosses a surface
+# unconverted light: 1ω red, 2ω green (VisRad's colors), volumes faint
+const UNCONVERTED_COLORS = (RGBAf(0.85, 0.1, 0.1, 1), RGBAf(0.1, 0.65, 0.2, 1))
+const UNCONVERTED_ALPHA = 0.1f0
 const _NOPOINT3 = [Point3f(NaN, NaN, NaN)]
 const _NOSEG3 = [Point3f(NaN, NaN, NaN), Point3f(NaN, NaN, NaN)]
 const _NOTRI = ([Point3f(0, 0, 0), Point3f(0, 0, 0), Point3f(0, 0, 0)], [GLTriangleFace(1, 2, 3)])
@@ -35,9 +40,11 @@ const _PICK_PIXELS = 7.0           # how near (pixels) a click must fall to a be
 
 The 3D viewer of the Briareus window: `fig`, the `lscene`, the `camera` (a
 [`CadCamera`](@ref)), plots (`body`, `highlight`, `rays`, `selected_rays`, `aims`,
-`hits`, `volumes`, `outlines`), the `colorbar`, the triad scene, the beam `paths` last
-drawn, which triangles are drawn (`drawn`, for picking), and a `dirty` flag the shell
-reads to request a redraw.
+`hits`, `volumes`, `outlines`; `translucent` and `wire` for semi-transparent and
+wireframe components, `sections` for the cut's edges, `uc_volumes` and `uc_lines` for
+unconverted light), the `colorbar`, the triad scene, the beam `paths` last drawn, how
+each triangle is drawn (`drawn`: 0 not, 1 opaque, 2 see-through) and the cut (`cut`), for
+picking, and a `dirty` flag the shell reads to request a redraw.
 """
 struct SceneCanvas
     fig::Figure
@@ -54,11 +61,17 @@ struct SceneCanvas
     colorbar::Colorbar
     triad::Scene
     paths::Base.RefValue{Vector{BeamPath}}
-    drawn::Base.RefValue{BitVector}
+    drawn::Base.RefValue{Vector{UInt8}}
     fitted::Base.RefValue{Any}                  # the target the camera was last fitted to
     dirty::Base.RefValue{Bool}
     ntriangles::Base.RefValue{Int}               # triangles drawn (tests)
     ghost::Any                                   # components left out of the calculations
+    translucent::Any
+    wire::Any
+    sections::Any
+    uc_volumes::Any
+    uc_lines::Any
+    cut::Base.RefValue{CutRegion}
 end
 
 """
@@ -77,6 +90,15 @@ function scene_canvas(sess::DesignSession)
     volumes = mesh!(sc, tri...; color = fill(RGBAf(0, 0, 0, 0), 3), transparency = true,
                     visible = false)
     ghost = mesh!(sc, tri...; color = GHOST, transparency = true, visible = false)
+    translucent = mesh!(sc, tri...; color = fill(RGBAf(0, 0, 0, 0), 3), transparency = true,
+                        visible = false)
+    wire = linesegments!(sc, _NOSEG3; color = [NAN_COLOR, NAN_COLOR], linewidth = 1, visible = false)
+    sections = linesegments!(sc, _NOSEG3; color = SECTION_COLOR, linewidth = 2, depth_shift = -1f-4,
+                             visible = false)
+    uc_volumes = mesh!(sc, tri...; color = fill(RGBAf(0, 0, 0, 0), 3), transparency = true,
+                       visible = false)
+    uc_lines = linesegments!(sc, _NOSEG3; color = [NAN_COLOR, NAN_COLOR], linewidth = 1.5,
+                             visible = false)
     rays = linesegments!(sc, _NOSEG3; color = [NAN_COLOR, NAN_COLOR], linewidth = 1.5)
     selected_rays = linesegments!(sc, _NOSEG3; color = BEAM_SELECTED, linewidth = 4)
     aims = scatter!(sc, _NOPOINT3; color = [NAN_COLOR], markersize = 6, strokewidth = 0.5,
@@ -88,8 +110,9 @@ function scene_canvas(sess::DesignSession)
     triad = _triad_scene(sc)
     cam = CadCamera()
     c = SceneCanvas(fig, ls, cam, body, highlight, rays, selected_rays, aims, hits, volumes,
-                    outlines, cb, triad, Ref(BeamPath[]), Ref(falses(0)), Ref{Any}(nothing),
-                    Ref(true), Ref(0), ghost)
+                    outlines, cb, triad, Ref(BeamPath[]), Ref(UInt8[]), Ref{Any}(nothing),
+                    Ref(true), Ref(0), ghost, translucent, wire, sections, uc_volumes, uc_lines,
+                    Ref(cut_region(sess.view)))
     cam.pick = (o, d) -> min(_pick_surface(c, sess, o, d)[1], _pick_ghost(sess, o, d)[1])
     cam.pivot = () -> selection_center(sess)
     cam.on_click = (o, d, px) -> _click!(c, sess, o, d, px)
@@ -98,15 +121,17 @@ function scene_canvas(sess::DesignSession)
     attach_cad_camera!(sc, cam)
     dr, v = sess.drive, sess.view
     onany((_...) -> _draw_body!(c, sess), sess.target.target, dr.result, v.color, dr.field,
-          sess.time.cursor, sess.time.history, v.cutaway, v.hidden, v.cut_azimuth, v.cut_width, v.cut_components)
+          sess.time.cursor, sess.time.history, v.cutaway, v.display, v.cut_azimuth, v.cut_width,
+          v.cut_components, v.cut_kind, v.cut_axis, v.cut_range, v.cut_point, v.cut_normal,
+          v.cut_shift)
     onany((_...) -> _draw_beams!(c, sess), sess.target.target, sess.beams.beams,
           sess.beams.enabled, sess.beams.cluster, v.beams, v.beam_color, v.beam_length, sess.review.report,
-          sess.talis.report, v.hidden_beams, v.show_off)
+          sess.talis.report, v.hidden_beams, v.show_off, v.shown_1w, v.shown_2w)
     onany((_...) -> _draw_selection!(c, sess), v.selection, v.extra, sess.target.target,
-          v.cutaway, v.cut_azimuth, v.cut_width, v.cut_components, sess.beams.beams,
-          sess.beams.cluster)
+          v.cutaway, v.cut_azimuth, v.cut_width, v.cut_components, v.cut_kind, v.cut_axis,
+          v.cut_range, v.cut_point, v.cut_normal, v.cut_shift, sess.beams.beams, sess.beams.cluster)
     on(_ -> _draw_windows!(c, sess), sess.target.target)
-    onany((_...) -> _draw_ghost!(c, sess), sess.target.ghost, v.hidden)
+    onany((_...) -> _draw_ghost!(c, sess), sess.target.ghost, v.display)
     _draw_ghost!(c, sess)
     _draw_body!(c, sess)
     _draw_beams!(c, sess)
@@ -180,40 +205,45 @@ release_input!(c::SceneCanvas) = (release_input!(c.lscene.scene, c.camera); c)
 
 # ---------------------------------------------------------------- picking
 
-# Triangles drawn (visible, not cut away): picking passes through the others.
+# How each triangle is drawn, by its component's display mode: 0 not drawn (invisible,
+# or an aperture), 1 opaque, 2 see-through (semi-transparent or wireframe). An entrance
+# hole's closing lip is drawn as its hole.
 function _drawn_triangles(t::Target, v::ViewState)
-    hid = v.hidden[]
-    out = falses(length(t.tri_area))
+    out = zeros(UInt8, length(t.tri_area))
     for k in eachindex(t.tri_area)
         t.tri_opaque[k] || continue
-        name = t.components[t.tri_comp[k]].name
-        name in hid && continue
-        # whole patches (the element's centroid), so the cut edge follows the grid
-        e = t.tri_front[k]
-        m = e > 0 ? t.elem_centroid[e] : t.tri_v0[k] + (t.tri_e1[k] + t.tri_e2[k]) / 3
-        is_cut(v, name, m) && continue
-        out[k] = true
+        m = display_mode(v, shown_component(t.components[t.tri_comp[k]].name))
+        out[k] = m === :opaque ? 0x01 : m === :invisible ? 0x00 : 0x02
     end
     return out
 end
 
-# First drawn surface along a ray: (distance, triangle), (Inf, 0) when none.
+# First drawn surface along a ray: (distance, triangle), (Inf, 0) when none. Cut-away
+# points and invisible components are passed through; the first opaque surface is
+# picked, or else the first see-through one (selecting through a semi-transparent or
+# wireframe component, as CAD tools do).
 function _pick_surface(c::SceneCanvas, sess::DesignSession, o, d)
     t = sess.target.target[]
     drawn = c.drawn[]
+    r = c.cut[]
     length(drawn) == length(t.tri_area) || return (Inf, 0)
     o, d = Briareus.Vec3(o...), Briareus.Vec3(d...)
     traveled = 0.0
-    for _ in 1:64
+    see = (Inf, 0)
+    for _ in 1:256
         τ, tri = Briareus.closest_hit(t.bvh, o, d)
-        tri == 0 && return (Inf, 0)
+        tri == 0 && break
         traveled += τ
-        drawn[tri] && return (traveled, Int(tri))
+        x = o + τ * d
+        if drawn[tri] > 0 && !is_cut(r, t.components[t.tri_comp[tri]].name, x)
+            drawn[tri] == 1 && return (traveled, Int(tri))
+            see[2] == 0 && (see = (traveled, Int(tri)))
+        end
         step = 1e-6 * max(t.scale, 1.0)
-        o = o + (τ + step) * d
+        o = x + step * d
         traveled += step
     end
-    return (Inf, 0)
+    return see
 end
 
 # First shown ghost (a component left out of the calculations) along a ray: (distance,
@@ -221,7 +251,7 @@ end
 function _pick_ghost(sess::DesignSession, o, d)
     g = sess.target.ghost[]
     g === nothing && return (Inf, :none)
-    hid = sess.view.hidden[]
+    v = sess.view
     o, d = Briareus.Vec3(o...), Briareus.Vec3(d...)
     traveled = 0.0
     for _ in 1:64
@@ -229,7 +259,7 @@ function _pick_ghost(sess::DesignSession, o, d)
         tri == 0 && return (Inf, :none)
         traveled += τ
         name = g.components[g.tri_comp[tri]].name
-        name in hid || return (traveled, name)
+        display_mode(v, name) === :invisible || return (traveled, name)
         step = 1e-6 * max(g.scale, 1.0)
         o = o + (τ + step) * d
         traveled += step
@@ -241,11 +271,10 @@ end
 function _pick_beam(c::SceneCanvas, sess::DesignSession, px)
     sess.view.beams[] === :off && return nothing
     best, bi = _PICK_PIXELS, nothing
-    hid = sess.view.hidden_beams[]
     bs = sess.beams.beams[]
     en, off = sess.beams.enabled[], sess.view.show_off[]
     for (i, p) in enumerate(c.paths[])
-        i <= length(bs) && (bs[i].name in hid || !(off || en[i])) && continue
+        i <= length(bs) && (!beam_drawn(sess.view, bs[i].name, 3) || !(off || en[i])) && continue
         a, b = project_point(c.camera, Makie.Vec3d(p.start...)), project_point(c.camera, Makie.Vec3d(p.stop...))
         d = _segment_distance(px, a, b)
         d < best && ((best, bi) = (d, i))
@@ -355,14 +384,14 @@ function _body_coloring(sess::DesignSession)
 end
 
 # Components left out of the calculations, drawn faint (not pickable: rays and the
-# picker see only the calculation target).
+# picker see only the calculation target); an invisible one is not drawn.
 function _draw_ghost!(c::SceneCanvas, sess::DesignSession)
     g = sess.target.ghost[]
-    hid = sess.view.hidden[]
+    v = sess.view
     pts = Point3f[]
     if g !== nothing
         for k in eachindex(g.tri_area)
-            g.components[g.tri_comp[k]].name in hid && continue
+            display_mode(v, g.components[g.tri_comp[k]].name) === :invisible && continue
             v0, e1, e2 = g.tri_v0[k], g.tri_e1[k], g.tri_e2[k]
             push!(pts, Point3f(v0...), Point3f((v0 + e1)...), Point3f((v0 + e2)...))
         end
@@ -377,6 +406,12 @@ function _draw_ghost!(c::SceneCanvas, sess::DesignSession)
     return c
 end
 
+_faces(n) = [GLTriangleFace(3i - 2, 3i - 1, 3i) for i in 1:n]
+
+# The target: each drawn triangle in its component's display mode (opaque in `body`,
+# semi-transparent in `translucent`, edges in `wire`), clipped exactly to what the
+# cutaway keeps (`cut_triangle`), with the cut's edges in `sections`. Every piece takes
+# its triangle's color: its component's, or its element's value of a drive field.
 function _draw_body!(c::SceneCanvas, sess::DesignSession)
     t = sess.target.target[]
     g = sess.target.ghost[]
@@ -389,51 +424,98 @@ function _draw_body!(c::SceneCanvas, sess::DesignSession)
         orient_camera!(c.camera, :iso)
         c.fitted[] = t
     end
+    v = sess.view
     vals = _body_coloring(sess)
-    drawn = _drawn_triangles(t, sess.view)
+    drawn = _drawn_triangles(t, v)
     c.drawn[] = drawn
-    shown = [i for (i, comp) in enumerate(t.components) if comp.kind === :surface]
-    legend = Dict(ci => k for (k, ci) in enumerate(shown))
-    pts = Point3f[]
-    tvals = Float64[]
+    r = cut_region(v; scale = t.scale)
+    c.cut[] = r
+    # the pieces drawn, each with the triangle it comes from
+    opaque, otri = Point3f[], Int[]
+    clear, ctri = Point3f[], Int[]
+    wire, wtri = Point3f[], Int[]
+    secs = Point3f[]
+    P(x) = Point3f(x...)
     for k in eachindex(t.tri_area)
-        drawn[k] || continue
+        drawn[k] == 0 && continue
+        name = t.components[t.tri_comp[k]].name
+        mode = display_mode(v, shown_component(name))
         v0, e1, e2 = t.tri_v0[k], t.tri_e1[k], t.tri_e2[k]
-        push!(pts, Point3f(v0...), Point3f((v0 + e1)...), Point3f((v0 + e2)...))
-        e = t.tri_front[k]
-        push!(tvals, vals === nothing ? legend[t.tri_comp[k]] : e > 0 ? vals[e] : NaN)
+        if mode === :opaque && (r.kind === :none || !(name in r.components))
+            push!(opaque, P(v0), P(v0 + e1), P(v0 + e2))       # untouched: no allocation
+            push!(otri, k)
+            continue
+        end
+        tris, wires, ss = cut_triangle(r, name, v0, v0 + e1, v0 + e2)
+        for (a, b, cc) in tris
+            if mode === :opaque
+                push!(opaque, P(a), P(b), P(cc))
+                push!(otri, k)
+            elseif mode === :transparent
+                push!(clear, P(a), P(b), P(cc))
+                push!(ctri, k)
+            end
+        end
+        if mode === :wireframe
+            for (a, b) in wires
+                push!(wire, P(a), P(b))
+                push!(wtri, k)
+            end
+        end
+        for (a, b) in ss
+            push!(secs, P(a), P(b))
+        end
     end
-    n = length(tvals)
+    # each triangle's color
     cb = c.colorbar
-    if n == 0
-        _update!(c.body, _NOTRI...; color = fill(RGBAf(0, 0, 0, 0), 3))
-    elseif vals === nothing
+    used = unique!(sort!(vcat(otri, ctri, wtri)))
+    col = Dict{Int,RGBAf}()
+    if vals === nothing
         # component colors are keyed in the model tree (its swatches), not on the canvas
         pal = component_colors(t)
-        cmap = [_hexcolor(pal[t.components[i].name]) for i in shown]
-        cols = [cmap[Int(v)] for v in tvals]
-        _show_colorbar!(c, false)
-        _update!(c.body, pts, [GLTriangleFace(3i - 2, 3i - 1, 3i) for i in 1:n];
-                 color = repeat(cols; inner = 3))
-    else
-        fin = filter(isfinite, tvals)
+        for k in used
+            col[k] = _hexcolor(pal[t.components[t.tri_comp[k]].name])
+        end
+        isempty(used) || _show_colorbar!(c, false)
+    elseif !isempty(used)
+        tv(k) = (e = t.tri_front[k]; e > 0 ? vals[e] : NaN)
+        fin = filter(isfinite, [tv(k) for k in used])
         lo, hi = isempty(fin) ? (0.0, 1.0) : extrema(fin)
-        sess.view.color[] === :laser && (lo = 0.0)
+        v.color[] === :laser && (lo = 0.0)
         hi > lo || (hi = lo + 1)
         # a drive history's step: one scale for the whole history
-        rng = cursor_range(sess, sess.view.color[])
+        rng = cursor_range(sess, v.color[])
         rng === nothing || ((lo, hi) = rng)
         at = time_label(sess)
         cmap = Makie.to_colormap(FIELD_COLORMAP)
-        cols = [isfinite(v) ? _cmap_color(cmap, (v - lo) / (hi - lo)) : NAN_COLOR for v in tvals]
+        for k in used
+            x = tv(k)
+            col[k] = isfinite(x) ? _cmap_color(cmap, (x - lo) / (hi - lo)) : NAN_COLOR
+        end
         cb.colormap[] = FIELD_COLORMAP
         cb.limits[] = (lo, hi)
         cb.ticks[] = Makie.automatic
-        cb.label[] = DRIVE_FIELD_LABELS[sess.view.color[]] * (isempty(at) ? "" : " at " * at[5:end])
+        cb.label[] = DRIVE_FIELD_LABELS[v.color[]] * (isempty(at) ? "" : " at " * at[5:end])
         _show_colorbar!(c, true)
-        _update!(c.body, pts, [GLTriangleFace(3i - 2, 3i - 1, 3i) for i in 1:n];
-                 color = repeat(cols; inner = 3))
     end
+    n = length(otri)
+    if n == 0
+        _update!(c.body, _NOTRI...; color = fill(RGBAf(0, 0, 0, 0), 3))
+    else
+        _update!(c.body, opaque, _faces(n); color = repeat([col[k] for k in otri]; inner = 3))
+    end
+    if isempty(ctri)
+        _update!(c.translucent, _NOTRI...; color = fill(RGBAf(0, 0, 0, 0), 3), visible = false)
+    else
+        cc = [RGBAf(x.r, x.g, x.b, TRANSLUCENT_ALPHA) for x in (col[k] for k in ctri)]
+        _update!(c.translucent, clear, _faces(length(ctri)); color = repeat(cc; inner = 3), visible = true)
+    end
+    if isempty(wtri)
+        _update!(c.wire, _NOSEG3; color = [NAN_COLOR, NAN_COLOR], visible = false)
+    else
+        _update!(c.wire, wire; color = repeat([col[k] for k in wtri]; inner = 2), visible = true)
+    end
+    _update!(c.sections, isempty(secs) ? _NOSEG3 : secs; visible = !isempty(secs))
     c.ntriangles[] = n
     c.dirty[] = true
     return c
@@ -466,11 +548,15 @@ function _draw_selection!(c::SceneCanvas, sess::DesignSession)
         tt = ci === nothing && g !== nothing ? g : t
         # an entrance hole with its closing lip
         cis = findall(x -> x.name in with_lips((name,)), tt.components)
+        # what the cutaway keeps (a ghost is drawn whole: no cut)
+        r = cut_region(sess.view; scale = t.scale, on = tt === t)
         for k in eachindex(tt.tri_area)
             tt.tri_comp[k] in cis || continue
-            # apertures and cut-away parts are not drawn; highlight them anyway
+            # apertures and invisible parts are not drawn; highlight them anyway
             v0, e1, e2 = tt.tri_v0[k], tt.tri_e1[k], tt.tri_e2[k]
-            push!(pts, Point3f(v0...), Point3f((v0 + e1)...), Point3f((v0 + e2)...))
+            for (a, b, cc) in first(cut_triangle(r, tt.components[tt.tri_comp[k]].name, v0, v0 + e1, v0 + e2))
+                push!(pts, Point3f(a...), Point3f(b...), Point3f(cc...))
+            end
         end
     end
     if isempty(pts)
@@ -494,9 +580,9 @@ function _beam_colors(sess::DesignSession)
     en = sess.beams.enabled[]
     pal = cluster_colors(sess.beams)
     status = _beam_status(sess)
-    hid = sess.view.hidden_beams[]
+    v = sess.view
     return map(zip(bs, en, sess.beams.cluster[])) do (b, on, g)
-        b.name in hid && return RGBAf(0, 0, 0, 0)               # not drawn
+        beam_drawn(v, b.name, 3) || return RGBAf(0, 0, 0, 0)    # not drawn
         on || return sess.view.show_off[] ? BEAM_OFF : RGBAf(0, 0, 0, 0)
         status !== nothing && return get(STATUS_COLORS, get(status, b.name, :none), NAN_COLOR)
         _hexcolor(pal[g])
@@ -535,8 +621,7 @@ function _draw_beams!(c::SceneCanvas, sess::DesignSession)
         faces = GLTriangleFace[]
         vcols = RGBAf[]
         for (b, col) in zip(bs, cols)
-            b.name in sess.view.hidden_beams[] && continue
-            col.alpha == 0 && continue                          # an off beam not drawn
+            col.alpha == 0 && continue                  # not drawn, or an off beam not shown
             v, f = beam_volume(t, b; length = L)
             o = length(verts)
             append!(verts, Point3f.(v))
@@ -547,8 +632,44 @@ function _draw_beams!(c::SceneCanvas, sess::DesignSession)
     else
         _update!(c.volumes, _NOTRI...; color = fill(RGBAf(0, 0, 0, 0), 3), visible = false)
     end
+    _draw_unconverted!(c, sess, style === :off ? Beam{Float64}[] : bs, style, L)
     _draw_selected_beams!(c, sess)
     c.dirty[] = true
+    return c
+end
+
+# The unconverted 1ω and 2ω light of the beams it is drawn for (`shown_1w`, `shown_2w`):
+# each beamlet's footprint square at the 3ω best-focus plane and, as rays, its center
+# line or, as volumes, the converging square beam (`unconverted_light`, the geometry
+# `talis_check` checks). Drawn whether or not the beam is on: no calculation uses it.
+function _draw_unconverted!(c::SceneCanvas, sess::DesignSession, bs, style, L)
+    v = sess.view
+    segs, scols = Point3f[], RGBAf[]
+    verts, faces, vcols = Point3f[], GLTriangleFace[], RGBAf[]
+    for b in bs, h in 1:2
+        beam_drawn(v, b.name, h) || continue
+        col = UNCONVERTED_COLORS[h]
+        u = unconverted_light(b, h; length = L)
+        for (a, z) in (style === :rays ? vcat(u.outlines, u.axes) : u.outlines)
+            push!(segs, Point3f(a...), Point3f(z...))
+            push!(scols, col, col)
+        end
+        style === :volumes || continue
+        o = length(verts)
+        append!(verts, Point3f.(u.vertices))
+        append!(faces, (GLTriangleFace(x[1] + o, x[2] + o, x[3] + o) for x in u.faces))
+        append!(vcols, fill(RGBAf(col.r, col.g, col.b, UNCONVERTED_ALPHA), length(u.vertices)))
+    end
+    if isempty(segs)
+        _update!(c.uc_lines, _NOSEG3; color = [NAN_COLOR, NAN_COLOR], visible = false)
+    else
+        _update!(c.uc_lines, segs; color = scols, visible = true)
+    end
+    if isempty(faces)
+        _update!(c.uc_volumes, _NOTRI...; color = fill(RGBAf(0, 0, 0, 0), 3), visible = false)
+    else
+        _update!(c.uc_volumes, verts, faces; color = vcols, visible = true)
+    end
     return c
 end
 

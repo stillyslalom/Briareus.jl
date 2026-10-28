@@ -11,7 +11,7 @@ _strs(xs) = [String(x) for x in xs]
 _syms(xs) = Symbol[Symbol(x) for x in xs]
 _fdict(d) = Dict{String,Any}(String(k) => Float64(v) for (k, v) in d)
 
-function _beam_state(b::Beam, enabled::Bool, cluster::Symbol, ref::Symbol, refpt)
+function _beam_state(b::Beam, enabled::Bool, cluster::Symbol, ref::Symbol, refpt, uc)
     sp = b.spot
     return Dict{String,Any}("name" => b.name, "port" => collect(b.port), "aim" => collect(b.aim),
                             "power" => b.power, "defocus" => b.defocus, "fnumber" => b.fnumber,
@@ -22,7 +22,8 @@ function _beam_state(b::Beam, enabled::Bool, cluster::Symbol, ref::Symbol, refpt
                                                        "halo_scale" => sp.halo_scale,
                                                        "halo_order" => sp.halo_order),
                             "enabled" => enabled, "cluster" => String(cluster),
-                            "aim_ref" => String(ref), "ref_point" => collect(refpt))
+                            "aim_ref" => String(ref), "ref_point" => collect(refpt),
+                            "omega1" => uc[1], "omega2" => uc[2])
 end
 
 function _state_beam(d)
@@ -39,9 +40,11 @@ end
 
 The design as plain data, ready for TOML: the target (template, dimensions, element
 sizes, windows, parts), the beams (each beam's port, aim, power, focus, spot, cone and
-quad, group, and whether it is on), the settings of the drive (beam model included), the optimization, the
-clearance check and the TaLIS checks, and (with `view`) the 3D view's coloring, beam
-drawing, cutaway and hidden components. Results are not part of it; they are
+quad, group, whether it is on, and whether its unconverted 1ω and 2ω light takes part),
+the settings of the drive (beam model included), the optimization, the clearance check
+and the TaLIS checks, and (with `view`) the 3D view's coloring, beam drawing (which
+beams' 1ω, 2ω and 3ω light is drawn), cutaway and component display modes. Results are
+not part of it; they are
 computed again. Restore it with [`restore!`](@ref).
 """
 function session_state(sess::DesignSession; view::Bool = true)
@@ -62,9 +65,9 @@ function session_state(sess::DesignSession; view::Bool = true)
                     for p in ts.parts[]])
     beams = Dict{String,Any}("preset" => String(bt.preset[]), "by" => String(bt.by[]),
                              "facility" => String(bt.facility[]),
-                             "beam" => [_beam_state(b, e, c, r, p) for (b, e, c, r, p) in
+                             "beam" => [_beam_state(b, e, c, r, p, u) for (b, e, c, r, p, u) in
                                         zip(bt.beams[], bt.enabled[], bt.cluster[], bt.aim_ref[],
-                                            bt.ref_point[])])
+                                            bt.ref_point[], bt.unconverted[])])
     optimize = Dict{String,Any}(
         "by" => String(op.by[]), "fields" => _strs(op.fields[]), "deltas" => _fdict(op.deltas[]),
         "objective" => String(op.objective[]),
@@ -90,7 +93,8 @@ function session_state(sess::DesignSession; view::Bool = true)
                                                          "cavity_point" => collect(dr.cavity_point[]),
                                                          "films" => sort(_strs(dr.films[])),
                                                          "beam_model" => String(dr.beam_model[]),
-                                                         "profile" => _profile_state(dr.profile[])),
+                                                         "profile" => _profile_state(dr.profile[]),
+                                                         "unconverted_ratio" => collect(dr.unconverted_ratio[])),
                              "optimize" => optimize, "review" => review, "talis" => talis)
     if view
         v = sess.view
@@ -99,7 +103,19 @@ function session_state(sess::DesignSession; view::Bool = true)
                                          "beam_length" => v.beam_length[], "cutaway" => v.cutaway[],
                                          "cut_azimuth" => v.cut_azimuth[], "cut_width" => v.cut_width[],
                                          "cut_components" => sort(_strs(v.cut_components[])),
-                                         "hidden" => sort(_strs(v.hidden[])),
+                                         "cut_kind" => String(v.cut_kind[]),
+                                         "cut_axis" => String(v.cut_axis[]),
+                                         "cut_range" => collect(v.cut_range[]),
+                                         "cut_point" => collect(v.cut_point[]),
+                                         "cut_normal" => collect(v.cut_normal[]),
+                                         "cut_shift" => v.cut_shift[],
+                                         "cut_line" => collect(v.cut_line[]),
+                                         "cut_rotation" => v.cut_rotation[],
+                                         "display" => Dict{String,Any}(String(k) => String(m)
+                                                                       for (k, m) in v.display[]),
+                                         "hidden_beams" => sort(collect(v.hidden_beams[])),
+                                         "shown_1w" => sort(collect(v.shown_1w[])),
+                                         "shown_2w" => sort(collect(v.shown_2w[])),
                                          "side" => dr.side[], "show_off" => v.show_off[])
     end
     return state
@@ -146,7 +162,8 @@ function restore!(sess::DesignSession, state::AbstractDict)
     set_beams!(bt, [_state_beam(r) for r in rows]; preset = Symbol(b["preset"]),
                enabled = Bool[r["enabled"] for r in rows], cluster = Symbol[Symbol(r["cluster"]) for r in rows],
                aim_ref = Symbol[Symbol(get(r, "aim_ref", "none")) for r in rows],
-               ref_point = [Vec3(get(r, "ref_point", [0.0, 0.0, 0.0])...) for r in rows])
+               ref_point = [Vec3(get(r, "ref_point", [0.0, 0.0, 0.0])...) for r in rows],
+               unconverted = [(Bool(get(r, "omega1", false)), Bool(get(r, "omega2", false))) for r in rows])
     _assign!(bt.by, Symbol(b["by"]))
     haskey(b, "facility") && _assign!(bt.facility, Symbol(b["facility"]))
     if haskey(state, "drive")
@@ -157,6 +174,8 @@ function restore!(sess::DesignSession, state::AbstractDict)
         # sessions before the beam-model choice deposited with the f-cone
         set_beam_model!(sess.drive, Symbol(get(d, "beam_model", "fcone"));
                         profile = haskey(d, "profile") ? _state_profile(d["profile"]) : VisRadProfile())
+        # sessions before the unconverted-light deposition: off
+        set_unconverted_ratio!(sess.drive, Float64.(get(d, "unconverted_ratio", [0.0, 0.0]))...)
     end
     if haskey(state, "optimize")
         o, op = state["optimize"], sess.optimize
@@ -209,9 +228,32 @@ function restore!(sess::DesignSession, state::AbstractDict)
         _assign!(vs.beam_color, Symbol(v["beam_color"]))
         _assign!(vs.beam_length, Float64(v["beam_length"]))
         _assign!(vs.cutaway, v["cutaway"])
+        # sessions before the plane cut and the axis and range of the sector: a sector
+        # about z, unbounded
         haskey(v, "cut_width") && set_cut!(vs; azimuth = v["cut_azimuth"], width = v["cut_width"],
-                                           components = _syms(v["cut_components"]))
-        _assign!(vs.hidden, Set(_syms(v["hidden"])))
+                                           components = _syms(v["cut_components"]),
+                                           kind = Symbol(get(v, "cut_kind", "sector")),
+                                           axis = Symbol(get(v, "cut_axis", "z")),
+                                           range = Tuple(Float64.(get(v, "cut_range", [-Inf, Inf]))))
+        # sessions before the plane's offset and line of sight kept the shifted point and
+        # no line
+        if haskey(v, "cut_normal")
+            set_cut_plane!(vs; normal = Float64.(v["cut_normal"]), point = Float64.(v["cut_point"]),
+                           offset = Float64(get(v, "cut_shift", 0.0)))
+            _assign!(vs.cut_line, Tuple(Float64.(get(v, "cut_line", [0.0, 0.0, 0.0]))))
+            _assign!(vs.cut_rotation, Float64(get(v, "cut_rotation", 0.0)))
+            _assign!(vs.cut_kind, Symbol(get(v, "cut_kind", "sector")))
+        end
+        # sessions before display modes listed hidden components: invisible
+        disp = Dict{Symbol,Symbol}(Symbol(k) => Symbol(m) for (k, m) in get(v, "display", Dict()))
+        for n in get(v, "hidden", String[])
+            disp[Symbol(n)] = :invisible
+        end
+        filter!(p -> last(p) in DISPLAY_MODES && last(p) !== :opaque, disp)
+        _assign!(vs.display, disp)
+        _assign!(vs.hidden_beams, Set{String}(get(v, "hidden_beams", String[])))
+        _assign!(vs.shown_1w, Set{String}(get(v, "shown_1w", String[])))
+        _assign!(vs.shown_2w, Set{String}(get(v, "shown_2w", String[])))
         haskey(v, "side") && _assign!(sess.drive.side, Bool(v["side"]))
         haskey(v, "show_off") && _assign!(vs.show_off, Bool(v["show_off"]))
     end

@@ -112,7 +112,7 @@ const B = BriareusGUI
     @test mc.ax.title[] == "Foil laser irradiance" && !mc.ax.yreversed[]
     # hidden components are not drawn and not picked
     n = sc.ntriangles[]
-    set_hidden!(sess.view, :main, true)
+    set_display!(sess.view, :main, :invisible)
     @test sc.ntriangles[] < n
     B.reset_view!(sc)
     @test !isempty(colorbuffer(sc.fig; px_per_unit = 1))

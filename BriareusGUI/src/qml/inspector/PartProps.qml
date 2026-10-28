@@ -133,11 +133,7 @@ ColumnLayout {
               "pointing out of the hohlraum, so a part there moves with the hole and mirrors " +
               "between the two; changing the frame keeps the part where it is."
     }
-    CheckBox {
-        text: "Show in the 3D view"
-        checked: !app.compHidden
-        onToggled: Julia.br_tree_on(app.selection, checked)
-    }
+    DisplayRow {}
     ErrorText { text: app.targetError }
     Button { text: "Remove part"; onClicked: Julia.br_remove_selected() }
 }

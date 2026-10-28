@@ -183,14 +183,33 @@ offers the foil-uniformity objective.
 
 The left panel lists the target's components (a hohlraum's wall, caps, entrance holes
 and capsule; diagnostic windows; free parts) with a swatch of their color in the 3D
-view, so the tree is the color key; the beams by group, quad and beam with on/off boxes;
-and the analyses (drive, optimization, clearance, TaLIS) with their state. Selecting a
-node selects it in the 3D view and shows it in Properties; Ctrl + click adds components
-or beams to the selection and Shift + click a range, which Properties then edits
-together; a double click fits the view to it. The context menu holds the node's
-actions, among them *Show* (draw it or not) and *Include in calculations*: a component
-left out is drawn as a gray ghost and removed from the target (which becomes an open
-enclosure), and beams left out are switched off.
+view, so the tree is the color key; the beams by group, quad and beam; and the analyses
+(drive, optimization, clearance, TaLIS) with their state. Selecting a node selects it in
+the 3D view and shows it in Properties; Ctrl + click adds components or beams to the
+selection and Shift + click a range, which Properties then edits together; a double
+click fits the view to it.
+
+Taking part in the calculations and being drawn are separate settings. Each beam row
+carries VisRad's 2 × 3 matrix of dots: the top row is whether the beams' 1ω (red), 2ω
+(green) and 3ω (blue) light takes part in the calculations, the bottom row whether it
+is drawn (a filled dot is on, a ring off, a pale dot on for some of the beams; a click
+switches the dot for the row's beams, or for the whole selection when the row is in it;
+the beam properties hold the same matrix as check boxes). 3ω participation is the beam's
+on/off switch: the drive, clearance check and optimization see only the beams that are
+on. A beam can be hidden to see the surface it lights, or its unconverted light drawn
+while it stays out of the way, without changing any result. The unconverted 1ω and 2ω
+light is drawn for NIF quads and beams as `unconverted_deposition` deposits it: per
+beamlet, the `nif_unconverted` footprint square at the 3ω best-focus plane, displaced to
+the beamlet's side of its quad, and the square beam converging to its own focus
+(outlines and center lines as rays, the converging beam as a volume). Its participation
+dots switch once the drive has a power ratio for that color (below).
+
+A component's box shows or hides it, and its glyph (also the context menu and
+Properties ▸ *Display*) sets its display mode: opaque, semi-transparent, wireframe or
+invisible. A click selects through semi-transparent and wireframe components to an
+opaque one behind them. *Include in calculations* is separate: a component left out is
+drawn as a gray ghost and removed from the target (which becomes an open enclosure),
+and beams left out are switched off.
 
 ### Properties
 
@@ -246,10 +265,31 @@ pointer, a right drag, Shift + drag or Ctrl + middle drag pans, a click selects 
 component or beam, a double click fits it, `f` fits everything and the arrow keys
 orbit by 15°. The near and far planes follow the eye, so nothing is clipped however
 close the view. The View menu holds the standard views, a perspective or orthographic
-projection, turntable (z up) or free rotation, the cutaway (its context menu sets its
-width, its azimuth or the side facing the view, and the components it cuts), Look from
-port (a beam's port or any θ, φ) and Save view as image. Help ▸ Mouse and keys lists
-the bindings.
+projection, turntable (z up) or free rotation, the cutaway, Look from port (a beam's
+port or any θ, φ) and Save view as image. Help ▸ Mouse and keys lists the bindings.
+
+The cutaway is a pie slice or a section plane through the chosen components (the
+Cutaway button's context menu: presets, the components cut, and *Cut settings…*). A
+slice has a center azimuth and a width about the x, y or z axis, optionally bounded
+along it. A section plane removes the side its normal points to. Its normal is a preset
+(x, y, z, toward the view), typed port angles θ, φ (Briareus's convention: θ from +z,
+φ from +x toward +y) or a typed vector; it passes through a typed point (TCC by default),
+moved along the normal by an offset slider; *Flip* keeps the other side of the same
+plane. A plane can also come from the geometry: *Through* the selected component puts
+the point at its centroid and, for a flat component (a window, a foil, a disk), takes
+its mean normal; *Facing it* turns the normal toward a direction (a beam port picked
+from the table or typed θ, φ); *Containing the line of sight* lays the plane along the
+line from TCC or the selected component's centroid toward that direction, turned about
+the line by a rotation slider (at 0° the plane is vertical, at 90° it holds the line's
+horizontal perpendicular). The last is the section through a diagnostic window along
+its view: the cut halves the window along the diagnostic's line of sight. The
+plane, its point and offset, and the line and rotation are saved with the session.
+Cut components are clipped
+exactly at the cut, not by whole elements: each triangle is split by the planes that
+bound the removed region and keeps the pieces outside it, colored as its element, and
+the cut's edges are outlined. (A slice narrower than 180° removes the intersection of two
+half-spaces, so what remains is a union that one set of GPU clip planes cannot express;
+splitting the triangles also keeps picking and the outline exact.)
 
 Beams are drawn as rays (each axis from the lens side to the surface it lands on, with
 the aim point marked) or as volumes, and colored by group or by their worst clearance or
@@ -273,7 +313,17 @@ The bottom panel's tabs:
   worker; beam edits then re-evaluate at once. The tab shows the capsule's mode
   amplitudes and ``P_l/P_0``, the foil spot's statistics and the laser power accounting.
   A VisRad benchmark kit for the same case is written from a script with
-  [`write_visrad_kit`](@ref).
+  [`write_visrad_kit`](@ref). The Drive properties take the unconverted 1ω and 2ω power
+  as fractions of each beam's 3ω power (empty: off; there is no default, as the NIF
+  User Guide gives no fraction). The beams whose 1ω or 2ω dot is on in the calculations
+  row then add [`unconverted_deposition`](@ref)'s absorbed power to the 3ω deposition,
+  wherever it enters: the absorbed-laser coloring, the power accounting, the back-side
+  losses and the x-ray source. The unconverted totals are listed separately. The
+  unconverted light's absorption and x-ray conversion are scaled by the wavelength
+  factors of [`nif_unconverted`](@ref) (see [`UnconvertedColor`](@ref): `absorption`
+  and `conversion`, relative to 3ω): its x-ray source is the material's conversion
+  efficiency times the color's `conversion`. The pointing optimization and the drive
+  history use the 3ω light alone.
 - **Time:** the drive through a pulse. *Pulse table…* fires the beams with a pulse
   table ([`read_pulse_table`](@ref): power per beam against time, per cone group, quad
   or beam; disabled beams stay off), and *N221204 shape* with N221204's delivered pulse

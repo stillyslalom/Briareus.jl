@@ -45,11 +45,7 @@ ColumnLayout {
                       onEdited: (text) => Julia.br_edit_window(w.rowNumber, "conversion", text) }
         }
     }
-    CheckBox {
-        text: "Show in the 3D view"
-        checked: !app.compHidden
-        onToggled: Julia.br_tree_on(app.selection, checked)
-    }
+    DisplayRow {}
     ErrorText { text: app.targetError }
     Button { text: "Remove window"; onClicked: Julia.br_remove_selected() }
 }

@@ -74,8 +74,11 @@ file), `error` (the last rejected edit), `warnings` (what the last VisRad import
 about: unmatched beams, port-angle mismatches, …), `facility` (one of
 [`FACILITIES`](@ref); set by a preset, or with [`set_facility!`](@ref)), `aim_ref` (per
 beam, the target component its aim follows, or `:none`; see
-[`set_aim_reference!`](@ref)) and `ref_point` (where that component's reference point
-was when the aim last followed it).
+[`set_aim_reference!`](@ref)), `ref_point` (where that component's reference point
+was when the aim last followed it) and `unconverted` (per beam, whether its unconverted
+1ω and 2ω light takes part in the calculations: design state, saved and undone, that no
+calculation reads yet, as Briareus has no unconverted-light deposition model; see
+[`set_participation!`](@ref)).
 """
 struct BeamTable
     beams::Observable{Vector{Beam{Float64}}}
@@ -89,6 +92,7 @@ struct BeamTable
     facility::Observable{Symbol}
     aim_ref::Observable{Vector{Symbol}}
     ref_point::Base.RefValue{Vector{Vec3}}
+    unconverted::Observable{Vector{NTuple{2,Bool}}}
 end
 
 function BeamTable(beams::AbstractVector = Beam{Float64}[]; preset::Symbol = :custom)
@@ -97,7 +101,8 @@ function BeamTable(beams::AbstractVector = Beam{Float64}[]; preset::Symbol = :cu
                      Observable(Symbol[b.group for b in bs]), Observable(preset),
                      Observable(:group), Observable(""), Observable(""), Observable(String[]),
                      Observable(something(facility_of(preset), :custom)),
-                     Observable(fill(:none, length(bs))), Ref(fill(zero(Vec3), length(bs))))
+                     Observable(fill(:none, length(bs))), Ref(fill(zero(Vec3), length(bs))),
+                     Observable(fill((false, false), length(bs))))
 end
 
 _float_beam(b::Beam{Float64}) = b
@@ -227,23 +232,28 @@ function load_preset!(bt::BeamTable, preset::Symbol; kwargs...)
 end
 
 """
-    set_beams!(bt::BeamTable, beams; preset = :custom, enabled = all, cluster = cones)
+    set_beams!(bt::BeamTable, beams; preset = :custom, enabled = all, cluster = cones,
+               aim_ref, ref_point, unconverted = none)
 
 Replace the table's beams (all enabled unless `enabled` is given, grouped by cone
-unless `cluster` is given).
+unless `cluster` is given, their unconverted light out of the calculations unless
+`unconverted` is given).
 """
 function set_beams!(bt::BeamTable, beams::AbstractVector; preset::Symbol = :custom,
                     enabled::AbstractVector{Bool} = fill(true, length(beams)),
                     cluster::AbstractVector{Symbol} = Symbol[b.group for b in beams],
                     aim_ref::AbstractVector{Symbol} = fill(:none, length(beams)),
-                    ref_point::AbstractVector = fill(zero(Vec3), length(beams)))
+                    ref_point::AbstractVector = fill(zero(Vec3), length(beams)),
+                    unconverted::AbstractVector = fill((false, false), length(beams)))
     length(enabled) == length(beams) || throw(DimensionMismatch("one enabled flag per beam"))
+    length(unconverted) == length(beams) || throw(DimensionMismatch("one 1ω, 2ω pair per beam"))
     length(cluster) == length(beams) || throw(DimensionMismatch("one group per beam"))
     length(aim_ref) == length(ref_point) == length(beams) ||
         throw(DimensionMismatch("one aim reference per beam"))
     bt.enabled.val = collect(Bool, enabled)          # observers see consistent lengths
     bt.cluster.val = collect(Symbol, cluster)
     bt.aim_ref.val = collect(Symbol, aim_ref)
+    bt.unconverted.val = NTuple{2,Bool}[(Bool(u[1]), Bool(u[2])) for u in unconverted]
     bt.ref_point[] = Vec3[Vec3(p...) for p in ref_point]
     bt.preset[] = preset
     f = facility_of(preset)
@@ -253,6 +263,7 @@ function set_beams!(bt::BeamTable, beams::AbstractVector; preset::Symbol = :cust
     notify(bt.enabled)
     notify(bt.cluster)
     notify(bt.aim_ref)
+    notify(bt.unconverted)
     bt.error[] = ""
     isempty(bt.warnings[]) || (bt.warnings[] = String[])
     return bt
@@ -456,7 +467,8 @@ function _apply_visrad!(bt::BeamTable, read, path::AbstractString)
         end
         push!(bs, b)
     end
-    set_beams!(bt, bs; preset = bt.preset[], enabled = en, cluster = bt.cluster[])
+    set_beams!(bt, bs; preset = bt.preset[], enabled = en, cluster = bt.cluster[],
+               unconverted = bt.unconverted[])
     noff > 0 && pushfirst!(warns, (noff == 1 ? "1 beam of the table is" : "$noff beams of the table are") *
                                   " off or absent in $(basename(path)): disabled (power kept)")
     bt.warnings[] = warns
@@ -661,6 +673,40 @@ function set_set_enabled!(bt::BeamTable, idx, on::Bool)
     return bt
 end
 
+"""
+    participates(bt::BeamTable, i, harmonic) -> Bool
+
+Whether beam `i`'s light of `harmonic` takes part in the calculations: 3 (the 3ω
+drive) is its enabled flag; 1 and 2 (unconverted 1ω, 2ω light) are its `unconverted`
+flags, which no calculation reads yet.
+"""
+function participates(bt::BeamTable, i::Integer, h::Integer)
+    h == 3 && return bt.enabled[][i]
+    1 <= h <= 2 || throw(ArgumentError("the harmonic is 1, 2 or 3"))
+    return bt.unconverted[][i][h]
+end
+
+"""
+    set_participation!(bt::BeamTable, idx, harmonic, on::Bool) -> bt
+
+Put the light of `harmonic` (1, 2 or 3) of the beams `idx` in the calculations or take
+it out. For 3ω this is [`set_set_enabled!`](@ref) (the drive, clearance and
+optimization see only enabled beams); for 1ω and 2ω it records the choice in the
+design (saved, undone) for an unconverted-light deposition model that Briareus does
+not have yet: no calculation changes.
+"""
+function set_participation!(bt::BeamTable, idx, h::Integer, on::Bool)
+    h == 3 && return set_set_enabled!(bt, idx, on)
+    1 <= h <= 2 || throw(ArgumentError("the harmonic is 1, 2 or 3"))
+    idx = _check_set(bt, idx)
+    uc = copy(bt.unconverted[])
+    for i in idx
+        uc[i] = h == 1 ? (on, uc[i][2]) : (uc[i][1], on)
+    end
+    _assign!(bt.unconverted, uc)
+    return bt
+end
+
 "Group (cluster) names of the table, in order of first appearance."
 clusters(bt::BeamTable) = unique(bt.cluster[])
 
@@ -699,7 +745,8 @@ rename_cluster!(bt::BeamTable, old, new) =
 Replace a NIF quad that the table holds as one beam (`nif_quads`) by its four beams
 (`nif_beams`: their own ports and f/20.7 cones), each with the quad's aim, defocus,
 detuning, spot and group, and a quarter of its power, so its beams can be pointed
-apart (split quads). The quad's enabled flag carries over. Ports change, so the drive
+apart (split quads). The quad's enabled flag and unconverted-light participation carry
+over. Ports change, so the drive
 must be computed again.
 """
 function split_quad!(bt::BeamTable, quad::AbstractString)
@@ -719,8 +766,9 @@ function split_quad!(bt::BeamTable, quad::AbstractString)
         cl = vcat(bt.cluster[][1:i-1], fill(bt.cluster[][i], 4), bt.cluster[][i+1:end])
         rf = vcat(bt.aim_ref[][1:i-1], fill(bt.aim_ref[][i], 4), bt.aim_ref[][i+1:end])
         rp = vcat(bt.ref_point[][1:i-1], fill(bt.ref_point[][i], 4), bt.ref_point[][i+1:end])
+        uc = vcat(bt.unconverted[][1:i-1], fill(bt.unconverted[][i], 4), bt.unconverted[][i+1:end])
         set_beams!(bt, nb; preset = bt.preset[], enabled = en, cluster = cl, aim_ref = rf,
-                   ref_point = rp)
+                   ref_point = rp, unconverted = uc)
         return true
     catch err
         err isa ArgumentError || rethrow()
@@ -733,7 +781,8 @@ end
     merge_quad!(bt::BeamTable, quad) -> Bool
 
 Replace the four beams of a NIF quad by the quad as one beam (`nif_quads`): their mean
-aim and defocus, their total power, the first beam's spot, group and enabled flag.
+aim and defocus, their total power, the first beam's spot, group, enabled flag and
+unconverted-light participation.
 """
 function merge_quad!(bt::BeamTable, quad::AbstractString)
     try
@@ -751,7 +800,7 @@ function merge_quad!(bt::BeamTable, quad::AbstractString)
         nb[idx[1]] = q
         set_beams!(bt, nb[keep]; preset = bt.preset[], enabled = bt.enabled[][keep],
                    cluster = bt.cluster[][keep], aim_ref = bt.aim_ref[][keep],
-                   ref_point = bt.ref_point[][keep])
+                   ref_point = bt.ref_point[][keep], unconverted = bt.unconverted[][keep])
         return true
     catch err
         err isa ArgumentError || rethrow()

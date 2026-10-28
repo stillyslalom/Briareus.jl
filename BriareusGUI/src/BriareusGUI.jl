@@ -53,6 +53,7 @@ include("controllers/review.jl")
 include("controllers/talis.jl")
 include("controllers/beam_geometry.jl")
 include("controllers/view.jl")
+include("controllers/cutaway.jl")            # the cut regions and clipped triangles
 include("controllers/session.jl")             # links the parts
 include("controllers/timeline.jl")            # pulses, drive histories, the time cursor
 include("controllers/workspace.jl")           # session files, undo and redo
@@ -81,14 +82,15 @@ export set_aim_reference!, follow_references!, component_points, aim_at_componen
 export BeamTable, BEAM_PRESETS, BEAM_GROUPINGS, BEAM_FIELDS, PRESET_LABELS, preset_beams,
        load_preset!, set_beams!, set_grouping!, beam_rows, edit_beams!, set_enabled!,
        beam_node, edit_beam_node!, set_node_enabled!, SET_FIELDS, beam_set_values,
-       edit_beam_set!, set_set_enabled!, clusters, set_cluster!, rename_cluster!, split_quad!,
+       edit_beam_set!, set_set_enabled!, participates, set_participation!, clusters, set_cluster!, rename_cluster!, split_quad!,
        merge_quad!,
        active_beams, display_beams, import_beams!, export_beams, beams_summary
 export import_visrad_sst!, import_visrad_summary!, export_visrad_sst, export_visrad_summary
 export DriveState, DriveResult, DRIVE_FIELDS, DRIVE_FIELD_LABELS, MODE_DEGREES, set_field!, xray_image!,
        set_side_view!, set_cavity!, cavity_rows, cavity_summary, cavity_sealed,
        set_view!, flux_lookup, flux_map, power_rows, element_values, drive_summary,
-       BEAM_MODELS, BEAM_MODEL_LABELS, set_beam_model!
+       BEAM_MODELS, BEAM_MODEL_LABELS, set_beam_model!, set_unconverted_ratio!, unconverted_ratios,
+       unconverted_summary
 export TimeState, DriveHistory, TIME_CHARTS, TIME_CHART_LABELS, set_chart!, load_pulses!,
        use_pulse_shape!, start_history!, cancel_history!, history_stale, set_time_cursor!,
        set_time_step!, time_step, cursor_values, cursor_range, time_label, time_chart
@@ -102,11 +104,16 @@ export TaLISState, TALIS_PIVOTS, TALIS_RULE_LABELS, TALIS_TOLERANCE_NOTE, set_ta
        set_talis_pivot!, edit_talis!, talis_kwargs, start_talis!, cancel_talis!, talis_rows,
        talis_rule_rows, talis_notes, talis_brief, export_talis, talis_stale,
        talis_role
-export BEAM_STYLES, BeamPath, beam_path, beam_paths, beam_volume, beam_hit_distance
+export BEAM_STYLES, BeamPath, beam_path, beam_paths, beam_volume, beam_hit_distance,
+       has_unconverted, unconverted_footprint, unconverted_beamlets, unconverted_square,
+       unconverted_light
 export ViewState, COLOR_MODES, COLOR_LABELS, BEAM_COLORINGS, PALETTE, component_colors,
-       DEFAULT_CUT_COMPONENTS, set_cut!, is_cut,
-       cluster_colors, TreeRow, select!, select_add!, select_range!, selected_ids, toggle_expanded!, set_hidden!,
-       set_beams_hidden!, selected_components,
+       DEFAULT_CUT_COMPONENTS, set_cut!, is_cut, CUT_KINDS, set_cut_plane!, cut_offset, CutRegion,
+       cut_region, cut_pieces, cut_triangle, cut_angles, set_cut_line!, flip_cut!, CUT_FLATNESS,
+       component_plane, cut_through_component!, DISPLAY_MODES, DISPLAY_LABELS, display_mode, set_display!,
+       beam_drawn, set_beams_drawn!, beam_matrix,
+       cluster_colors, TreeRow, select!, select_add!, select_range!, selected_ids, toggle_expanded!,
+       selected_components,
        selection_kind, component_id, beam_id, model_tree, node_beams, selected_beams,
        selected_component, component_label
 export DesignSession, TASKS, TASK_LABELS, task_status, set_color!, drive_stale,

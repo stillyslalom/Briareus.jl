@@ -387,7 +387,7 @@ end
     @test model_tree(sess)[findfirst(r -> r.id == "beams", model_tree(sess))].on == 2
     @test !edit_beam_node!(bt, :quad, "nope", :z, "1") && occursin("no quad", bt.error[])
     # hidden components
-    set_hidden!(sess.view, :wall, true)
+    set_display!(sess.view, :wall, :invisible)
     toggle_expanded!(sess.view, "target")
     toggle_expanded!(sess.view, "target")
     @test only(r for r in model_tree(sess) if r.id == "comp:wall").on == 0
