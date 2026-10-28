@@ -22,50 +22,51 @@ ColumnLayout {
     RowLayout {
         visible: app.rvHasReport
         spacing: 8
-        Label { text: app.rvBrief; font.weight: Font.DemiBold; Layout.fillWidth: true; elide: Text.ElideRight }
+        Cell { text: app.rvBrief; font.weight: Font.DemiBold; Layout.fillWidth: true }
         Label { text: "inputs changed since"; visible: app.rvStale; color: "#d08a00" }
         Button { text: "Export CSV…"; enabled: !app.rvRunning; onClicked: win.openClearanceExport() }
     }
     Repeater {
         model: worstModel
-        delegate: Label {
+        delegate: Cell {
             text: model.component + ": " + model.beam + " · " +
                   (model.worst === "–" ? "no hardware point before the landing"
                                        : "clearance " + model.worst + " mm (nominal " + model.nominal + " mm)") +
                   " · " + model.power + " TW · " + model.status
             color: statusColor(model.status)
-            elide: Text.ElideRight
             Layout.fillWidth: true
         }
     }
-    RowLayout {
-        visible: app.rvHasReport
-        spacing: 4
-        Repeater {
-            model: [{ t: "Beam", w: 64 }, { t: "Component", w: 110 }, { t: "Status", w: 56 },
-                    { t: "Worst (mm)", w: 80 }, { t: "Nominal", w: 72 },
-                    { t: "Power (TW)", w: 80 }, { t: "Peak (W/cm²)", w: 96 }]
-            Label { text: modelData.t; Layout.preferredWidth: modelData.w; font.weight: Font.DemiBold }
-        }
-    }
-    ListView {
+    HScroll {
         visible: app.rvHasReport
         Layout.fillWidth: true
         Layout.fillHeight: true
-        Layout.minimumHeight: 60
-        clip: true
-        model: clearModel
-        boundsBehavior: Flickable.StopAtBounds
-        ScrollBar.vertical: ScrollBar {}
-        delegate: RowLayout {
-            spacing: 4
-            Label { text: model.beam; Layout.preferredWidth: 64 }
-            Label { text: model.component; Layout.preferredWidth: 110; elide: Text.ElideRight }
-            Label { text: model.status; Layout.preferredWidth: 56; color: statusColor(model.status) }
-            Label { text: model.worst; Layout.preferredWidth: 80 }
-            Label { text: model.nominal; Layout.preferredWidth: 72; opacity: 0.7 }
-            Label { text: model.power; Layout.preferredWidth: 80 }
-            Label { text: model.intensity; Layout.preferredWidth: 96 }
+        Layout.minimumHeight: 80
+        minimumContentWidth: head.totalWidth
+        TableHeader {
+            id: head
+            columns: [{ t: "Beam", w: 64 }, { t: "Component", w: 110 }, { t: "Status", w: 56 },
+                      { t: "Worst (mm)", w: 80 }, { t: "Nominal", w: 72 },
+                      { t: "Power (TW)", w: 80 }, { t: "Peak (W/cm²)", w: 96 }]
+        }
+        ListView {
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            Layout.minimumHeight: 60
+            clip: true
+            model: clearModel
+            boundsBehavior: Flickable.StopAtBounds
+            ScrollBar.vertical: ScrollBar {}
+            delegate: RowLayout {
+                spacing: 4
+                Cell { text: model.beam; Layout.preferredWidth: head.widths[0] }
+                Cell { text: model.component; Layout.preferredWidth: head.widths[1] }
+                Cell { text: model.status; Layout.preferredWidth: head.widths[2]; color: statusColor(model.status) }
+                Cell { text: model.worst; Layout.preferredWidth: head.widths[3] }
+                Cell { text: model.nominal; Layout.preferredWidth: head.widths[4]; opacity: 0.7 }
+                Cell { text: model.power; Layout.preferredWidth: head.widths[5] }
+                Cell { text: model.intensity; Layout.preferredWidth: head.widths[6] }
+            }
         }
     }
 }

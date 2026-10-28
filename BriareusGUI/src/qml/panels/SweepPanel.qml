@@ -23,7 +23,9 @@ Item {
         RowLayout {
             Layout.fillWidth: true
             spacing: 8
-            Label { text: app.swTitle; font.weight: Font.DemiBold; Layout.fillWidth: true; elide: Text.ElideRight }
+            Cell { text: app.swTitle; font.weight: Font.DemiBold; Layout.fillWidth: true; Layout.maximumWidth: implicitWidth }
+            Info { topic: "sweep.results" }
+            Item { Layout.fillWidth: true }
             Label { text: "inputs changed since"; visible: app.swStale; color: "#d08a00" }
             Button {
                 text: "Apply step"
@@ -46,65 +48,71 @@ Item {
             // the table
             ColumnLayout {
                 Layout.fillHeight: true
-                Layout.preferredWidth: 520
-                Layout.maximumWidth: 520
+                Layout.preferredWidth: head.totalWidth + 12
+                Layout.maximumWidth: head.totalWidth + 12
+                Layout.minimumWidth: 200
                 spacing: 2
-                RowLayout {
-                    visible: app.swHasResult
-                    spacing: 4
-                    Repeater {
-                        model: [{ t: "Shift", w: 58 }, { t: "Clearance", w: 70 }, { t: "Worst", w: 110 },
-                                { t: "Fail", w: 32 }, { t: "Rev.", w: 32 }, { t: "LOS", w: 56 },
-                                { t: "Blocked", w: 58 }, { t: "Captured", w: 66 }]
-                        Label { text: modelData.t; Layout.preferredWidth: modelData.w; font.weight: Font.DemiBold }
-                    }
-                }
-                ListView {
-                    id: rowsView
+                HScroll {
                     visible: app.swHasResult
                     Layout.fillWidth: true
                     Layout.fillHeight: true
-                    Layout.minimumHeight: 60
-                    clip: true
-                    model: sweepModel
-                    boundsBehavior: Flickable.StopAtBounds
-                    ScrollBar.vertical: ScrollBar {}
-                    delegate: Rectangle {
-                        width: rowsView.width
-                        height: line.implicitHeight + 2
-                        color: model.number === app.swSelected ? palette.highlight : "transparent"
-                        readonly property color ink: model.number === app.swSelected ? palette.highlightedText
-                                                     : statusColor(model.fails, model.reviews, model.los)
-                        RowLayout {
-                            id: line
-                            spacing: 4
-                            Label { text: model.value; Layout.preferredWidth: 58; color: parent.parent.ink }
-                            Label { text: model.clearance; Layout.preferredWidth: 70; color: parent.parent.ink }
-                            Label { text: model.worst; Layout.preferredWidth: 110; elide: Text.ElideRight; color: parent.parent.ink }
-                            Label { text: model.fails; Layout.preferredWidth: 32; color: parent.parent.ink }
-                            Label { text: model.reviews; Layout.preferredWidth: 32; color: parent.parent.ink }
-                            Label { text: model.los === "" ? "–" : model.los; Layout.preferredWidth: 56; color: parent.parent.ink }
-                            Label { text: model.blocked; Layout.preferredWidth: 58; color: parent.parent.ink }
-                            Label { text: model.captured; Layout.preferredWidth: 66; color: parent.parent.ink }
-                        }
-                        MouseArea {
-                            anchors.fill: parent
-                            onClicked: Julia.br_sw_select(model.number)
-                            onDoubleClicked: Julia.br_sw_apply(model.number)
+                    minimumContentWidth: head.totalWidth
+                    spacing: 2
+                    TableHeader {
+                        id: head
+                        visible: app.swHasResult
+                        columns: [{ t: "Shift", w: 58 }, { t: "Clearance", w: 70 }, { t: "Worst", w: 110 },
+                                  { t: "Fail", w: 32 }, { t: "Rev.", w: 32 }, { t: "LOS", w: 56 },
+                                  { t: "Blocked", w: 58 }, { t: "Captured", w: 66 }]
+                    }
+                    ListView {
+                        id: rowsView
+                        visible: app.swHasResult
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        Layout.minimumHeight: 60
+                        clip: true
+                        model: sweepModel
+                        boundsBehavior: Flickable.StopAtBounds
+                        ScrollBar.vertical: ScrollBar {}
+                        delegate: Rectangle {
+                            width: rowsView.width
+                            height: line.implicitHeight + 2
+                            color: model.number === app.swSelected ? palette.highlight : "transparent"
+                            readonly property color ink: model.number === app.swSelected ? palette.highlightedText
+                                                         : statusColor(model.fails, model.reviews, model.los)
+                            RowLayout {
+                                id: line
+                                spacing: 4
+                                readonly property var w: head.widths
+                                Cell { text: model.value; Layout.preferredWidth: line.w[0]; color: parent.parent.ink }
+                                Cell { text: model.clearance; Layout.preferredWidth: line.w[1]; color: parent.parent.ink }
+                                Cell { text: model.worst; Layout.preferredWidth: line.w[2]; color: parent.parent.ink }
+                                Cell { text: model.fails; Layout.preferredWidth: line.w[3]; color: parent.parent.ink }
+                                Cell { text: model.reviews; Layout.preferredWidth: line.w[4]; color: parent.parent.ink }
+                                Cell { text: model.los === "" ? "–" : model.los; Layout.preferredWidth: line.w[5]; color: parent.parent.ink }
+                                Cell { text: model.blocked; Layout.preferredWidth: line.w[6]; color: parent.parent.ink }
+                                Cell { text: model.captured; Layout.preferredWidth: line.w[7]; color: parent.parent.ink }
+                            }
+                            MouseArea {
+                                anchors.fill: parent
+                                onClicked: Julia.br_sw_select(model.number)
+                                onDoubleClicked: Julia.br_sw_apply(model.number)
+                            }
                         }
                     }
                 }
                 Note {
                     visible: !app.swHasResult
                     text: app.swRunning ? "" : "Set up the sweep in Properties (select it in the model tree, or " +
-                                               "Sweep… on a part) and run it."
+                                               "Sweep along this axis… on a part) and run it."
                 }
             }
             // the chart and its key
             Item {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                Layout.minimumWidth: 240
+                Layout.minimumWidth: 200
                 // the canvas lives as long as the window (see BriareusWindow.qml)
                 MakieArea {
                     id: sweepCanvas
@@ -147,7 +155,6 @@ Item {
                         Label { text: model.label; font.pixelSize: 12 }
                     }
                 }
-                Note { text: "Click the chart or a row to select a step; double-click a row to apply it." }
             }
         }
     }

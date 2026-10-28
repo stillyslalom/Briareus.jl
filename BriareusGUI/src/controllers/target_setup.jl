@@ -809,7 +809,8 @@ sizes match, one of [`MESH_RESOLUTIONS`](@ref), or `:custom`), `windows` (the
 hohlraum's diagnostic windows, [`WindowSpec`](@ref)s; other templates ignore them),
 `parts` (free parts, [`PartSpec`](@ref)s), `frames` (every named frame of the design
 in the chamber, [`part_frames`](@ref): updated with the parts, before the target is
-built), the built `target`, `error` (the last
+built), `renames` (while an edit updates `frames`, the parts it renamed, old name →
+new, so that beams aimed in their frames follow; empty otherwise), the built `target`, `error` (the last
 rejected edit), `excluded` (component names left out of the calculations, see
 [`set_excluded!`](@ref)) and `ghost` (those components, for drawing, or `nothing`).
 
@@ -854,6 +855,7 @@ struct TargetSetup
     fit_jobs::Dict{Symbol,Int}             # their jobs (a fit whose job is gone is dropped)
     after_build::Vector{Any}               # run once the target being built is committed
     frames::Observable{Dict{Symbol,Frame}} # the named frames of the committed design (`part_frames`)
+    renames::Base.RefValue{Dict{Symbol,Symbol}} # old => new part names of the edit committing `frames`
 end
 
 function TargetSetup(; kind::Symbol = :hohlraum, resolution::Symbol = :standard,
@@ -881,7 +883,7 @@ function TargetSetup(; kind::Symbol = :hohlraum, resolution::Symbol = :standard,
                        Observable{Union{Nothing,Target}}(nothing), Observable(Set{Symbol}()),
                        Ref(false), Ref{Any}(f -> f()), Ref(0), Observable(false),
                        Observable(Set{Symbol}()), Dict{Symbol,Int}(), Any[],
-                       Observable(part_frames(kind, params, ps)))
+                       Observable(part_frames(kind, params, ps)), Ref(Dict{Symbol,Symbol}()))
 end
 
 part_frames(ts::TargetSetup) = ts.frames[]
@@ -1087,7 +1089,7 @@ end
 # worker (`building`) unless `sync`, the inputs committed at once.
 function _try_build!(ts::TargetSetup; kind = ts.kind[], params = ts.params[], mesh = ts.mesh[],
                      windows = ts.windows[], parts = ts.parts[], excluded = ts.excluded[],
-                     prebuilt = nothing, sync::Bool = !ts.spawn[])
+                     prebuilt = nothing, sync::Bool = !ts.spawn[], renames = Dict{Symbol,Symbol}())
     try
         frames = part_frames(kind, params, parts)
         waiting = prebuilt === nothing && ts.spawn[] ?
@@ -1103,8 +1105,14 @@ function _try_build!(ts::TargetSetup; kind = ts.kind[], params = ts.params[], me
         end
         _assign!(ts.excluded, Set{Symbol}(excluded))
         built === nothing || (ts.ghost[] === built[2] || (ts.ghost[] = built[2]))
-        # (first: what follows a frame, or a new kind's beams, sees the design's frames)
-        _assign!(ts.frames, frames)
+        # (first: what follows a frame, or a new kind's beams, sees the design's frames;
+        # beams aimed in a renamed part's frame follow its new name)
+        ts.renames[] = Dict{Symbol,Symbol}(renames)
+        try
+            _assign!(ts.frames, frames)
+        finally
+            ts.renames[] = Dict{Symbol,Symbol}()
+        end
         kind == ts.kind[] || (ts.kind[] = kind)
         params === ts.params[] || (ts.params[] = params)
         if mesh != ts.mesh[]
@@ -1489,7 +1497,7 @@ function edit_part!(ts::TargetSetup, i::Integer, key::Symbol, text)
             # parts placed in this one's frame follow the rename
             ps = [q.frame === p.name ? _with(q; frame = Symbol(s)) : q for q in ts.parts[]]
             ps[i] = new
-            return _try_build!(ts; parts = ps)
+            return _try_build!(ts; parts = ps, renames = Dict(p.name => new.name))
         elseif key in (:pos_r, :pos_phi, :pos_theta)
             x, y, z = _set_position(p, key, _parse_number(text, String(key)))
             vals = copy(p.values)
@@ -1707,6 +1715,7 @@ function set_part_role!(ts::TargetSetup, i::Integer, role::Symbol; done = () -> 
     p = ps[i]
     part_role(p) === role && (done(); return true)
     ex = copy(ts.excluded[])
+    renames = Dict{Symbol,Symbol}()
     try
         shape = _part_shape(p)
         if role === :capsule && shape !== :sphere
@@ -1719,6 +1728,7 @@ function set_part_role!(ts::TargetSetup, i::Integer, role::Symbol; done = () -> 
         taken = Set{Symbol}(q.name for q in ps)
         function rename(k, new)
             old = ps[k].name
+            renames[old] = new
             ps[k] = _with(ps[k]; name = new)
             for j in eachindex(ps)
                 ps[j].frame === old && (ps[j] = _with(ps[j]; frame = new))
@@ -1738,7 +1748,7 @@ function set_part_role!(ts::TargetSetup, i::Integer, role::Symbol; done = () -> 
         ts.error[] = _errmsg(err)
         return false
     end
-    ok = _try_build!(ts; parts = ps, excluded = ex)
+    ok = _try_build!(ts; parts = ps, excluded = ex, renames)
     ok && done()
     return ok
 end
@@ -1870,9 +1880,14 @@ function _apply_capsule!(ts::TargetSetup, i::Integer, c, r)
     ex = copy(ts.excluded[])
     taken = Set{Symbol}(q.name for q in ps)
     j = findfirst(q -> q.name === :capsule, ps)
+    renames = Dict{Symbol,Symbol}()
     if j !== nothing
         old = ps[j].name
         ps[j] = _with(ps[j]; name = _plain_name(ps[j], taken))
+        renames[old] = ps[j].name
+        for k in eachindex(ps)
+            ps[k].frame === old && (ps[k] = _with(ps[k]; frame = ps[j].name))
+        end
         old in ex && (delete!(ex, old); push!(ex, ps[j].name))
     end
     push!(ps, PartSpec(:sphere; name = :capsule,
@@ -1880,7 +1895,7 @@ function _apply_capsule!(ts::TargetSetup, i::Integer, c, r)
                                      :h => ts.mesh[].capsule_h, :albedo => p.values[:albedo],
                                      :conversion => p.values[:conversion])))
     push!(ex, p.name)
-    return _try_build!(ts; parts = ps, excluded = ex)
+    return _try_build!(ts; parts = ps, excluded = ex, renames)
 end
 
 """

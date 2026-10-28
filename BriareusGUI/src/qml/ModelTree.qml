@@ -13,6 +13,8 @@ import "common"
 Pane {
     id: tree
     padding: 0
+    property alias groupDialog: groupDialog
+    function openGroupDialog() { groupDialog.open() }
 
     ColumnLayout {
         anchors.fill: parent

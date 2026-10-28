@@ -24,14 +24,31 @@ Pane {
         TabBar {
             id: tabs
             Layout.fillWidth: true
-            TabButton { text: "Beam table"; width: implicitWidth }
-            TabButton { text: "Drive"; width: implicitWidth }
-            TabButton { text: "Time"; width: implicitWidth }
-            TabButton { text: "Optimization"; width: implicitWidth }
-            TabButton { text: "Clearance"; width: implicitWidth }
-            TabButton { text: "Sweep"; width: implicitWidth }
+            // the tabs' side padding, less when the panel is narrow, so that every tab shows
+            // its whole name rather than being scrolled out of sight (from the names' widths,
+            // which do not depend on the padding)
+            readonly property var names: ["Beam table", "Drive", "Time", "Optimization", "Clearance", "Sweep", "TaLIS"]
+            FontMetrics { id: tabFont; font: tabs.font }
+            readonly property real pad: {
+                const shown = app.facility === "nif" ? names : names.slice(0, -1)   // (TaLIS: NIF beams)
+                const w = shown.reduce((s, t) => s + tabFont.advanceWidth(t), 0)
+                // less the spacing between tabs and a margin for the bar's own padding
+                const room = results.width - w - spacing * (shown.length - 1) - leftPadding - rightPadding - 24
+                return Math.max(4, Math.min(18, Math.floor(room / (2 * shown.length))))
+            }
+            component Tab: TabButton {
+                leftPadding: tabs.pad
+                rightPadding: tabs.pad
+                width: Math.ceil(tabFont.advanceWidth(text)) + 2 * tabs.pad + 2
+            }
+            Tab { text: "Beam table" }
+            Tab { text: "Drive" }
+            Tab { text: "Time" }
+            Tab { text: "Optimization" }
+            Tab { text: "Clearance" }
+            Tab { text: "Sweep" }
             // NIF's rules: the tab only for NIF beams
-            TabButton { text: "TaLIS"; width: app.facility === "nif" ? implicitWidth : 0; visible: app.facility === "nif" }
+            Tab { text: "TaLIS"; visible: app.facility === "nif"; width: visible ? Math.ceil(tabFont.advanceWidth(text)) + 2 * tabs.pad + 2 : 0 }
         }
         StackLayout {
             Layout.fillWidth: true

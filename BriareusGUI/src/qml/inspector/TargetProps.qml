@@ -22,15 +22,6 @@ ColumnLayout {
             onActivated: Julia.br_set_target_kind(currentValue)
         }
     }
-    Note {
-        text: app.targetKind === "foil"
-              ? "The foil sits on the +x axis facing TCC; the sphere at TCC stands in for the " +
-                "main target: it absorbs the laser light and x-rays that reach it and emits " +
-                "nothing (albedo and conversion 0). Sphere radius 0: none."
-              : app.targetKind === "custom" ? "A target made of free parts only: add them below or from Target ▸ Add part."
-              : "Cylindrical hohlraum along z with entrance holes and a capsule at TCC (capsule radius 0: none)."
-    }
-
     SectionLabel { text: "Dimensions and wall"; visible: app.targetKind !== "custom" }
     Repeater {
         model: targetFieldModel
@@ -41,13 +32,12 @@ ColumnLayout {
             onEdited: (text) => Julia.br_edit_target(model.key, text)
         }
     }
-    CheckBox {
+    CheckLine {
         visible: app.targetKind === "hohlraum"
         text: "Closing entrance holes"
         checked: app.lehClosure
         onToggled: Julia.br_leh_closure(checked)
-        ToolTip.visible: hovered
-        ToolTip.text: "Plasma closes each LEH to x-rays down to the open radius during the pulse; " +
+        tip: "Plasma closes each LEH to x-rays down to the open radius during the pulse; " +
                       "laser light still passes. Closed, the lip re-emits like the wall"
     }
     PropRow {
@@ -68,7 +58,7 @@ ColumnLayout {
         onEdited: (text) => Julia.br_edit_target("leh_open_fraction", text)
     }
 
-    SectionLabel { text: "Mesh" }
+    SectionLabel { text: "Mesh"; info: "target.mesh" }
     RowLayout {
         spacing: 8
         Label { text: "Preset"; Layout.preferredWidth: 150 }
@@ -96,11 +86,6 @@ ColumnLayout {
         unit: "mm"
         tip: "The surface whose drive is studied. The capsule mesh sets the accuracy of P4: its error falls as the square of this size"
         onEdited: (text) => Julia.br_edit_mesh("capsule_h", text)
-    }
-    Note {
-        text: "Presets come from a work-precision study on the NIF hohlraum " +
-              "(examples/mesh_convergence.jl): errors in the capsule P2/P0 and P4/P0 of about " +
-              "0.5, 0.1 and 0.02 percentage points. A part can set its own element size."
     }
 
     SectionLabel { text: "Add to the target" }

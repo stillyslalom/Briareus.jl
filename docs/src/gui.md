@@ -218,7 +218,10 @@ and beams left out are switched off.
 ### Properties
 
 The right panel edits the selection. A value the geometry or a check rejects is
-refused with the reason in the status line.
+refused with the reason in the status line. The pages hold controls and short status
+lines; an ⓘ beside a page title, a section heading or a control shows its explanation on
+hover and, when clicked, opens it on the Help screen (Help ▸ Help topics, F1), which
+collects every explanation by page. Help ▸ Documentation opens this page.
 
 - **Target:** the template (hohlraum with capsule, backlighter foil, or custom parts
   only), its dimensions and wall material, and the mesh: a preset (above) or element
@@ -239,8 +242,8 @@ refused with the reason in the status line.
   rotation, in VisRad's order ([`euler_rotation`](@ref)). Changing the frame keeps the
   part where it is. The *Move along* row steps the part by ± a distance along the x, y
   or z axis of any frame (its own z: along its axis), one edit per click; parts placed
-  in its frame and beams aimed in it move along. *Sweep…* sets up a placement sweep of
-  the part along that axis (below).
+  in its frame and beams aimed in it move along. *Sweep along this axis…* sets up a
+  placement sweep of the part along that axis (below).
   A *mesh* part reads an STL file (Target ▸ Add part ▸ Mesh from STL file), scaled to
   mm, with its windings repaired ([`orient_mesh`](@ref)) and its surface remeshed into
   elements of the part's size ([`remesh_mesh`](@ref)); a multi-body ASCII STL of named
@@ -255,8 +258,9 @@ refused with the reason in the status line.
   ports (z, r and a tangential offset), or a common aim point (x, y, z, as VisRad points
   a cluster at a reference point) in the beams' *Aim frame*: the chamber, an entrance
   hole, the backlighter foil, or a part. The beams keep their coordinates in that frame
-  when it moves or turns (an aim 0.3 mm off a foil's center stays 0.3 mm off it), and
-  *Aim at its center* points them at the frame's center (a part's centroid). The OMEGA
+  when it moves or turns (an aim 0.3 mm off a foil's center stays 0.3 mm off it) and when
+  the part is renamed or given a role, and
+  *Aim at the frame's center* points them at the frame's center (a part's centroid). The OMEGA
   backlighter beams aim in the foil's frame; defocus, power, on/off, and where the axis
   lands. *Look along beam* views the target from the beam's
   port. Beams belong to groups, as VisRad's clusters do: the cone by default, or any
@@ -389,9 +393,8 @@ The bottom panel's tabs:
   from the beam's aim point, the larger of the two, or from a given point); the error
   stack and sampling are the clearance check's. The report shows the notes and a
   per-rule summary beside every check, colored by status with its margin, with a
-  draggable split between the two. The note on what the tolerance stands for stays
-  at the top, cut to three lines until opened (*more*); the per-rule summary follows,
-  then the error set, the checks not evaluated and the requirements out of scope
+  draggable split between the two. Each note takes one line, the whole note on hover:
+  what the tolerance stands for at the top, then the per-rule summary, then the error set, the checks not evaluated and the requirements out of scope
   ([`TALIS_OUT_OF_SCOPE`](@ref)). A report is marked out of date when the target, the
   beams or any setting it used changes. CSV export with [`write_talis_csv`](@ref),
   whose header carries the settings, the checks not evaluated and the requirements out

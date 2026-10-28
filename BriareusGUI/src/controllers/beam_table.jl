@@ -249,26 +249,32 @@ The chamber frame each beam aims in (its `aim_frame` in the table's `frames`).
 beam_frames(bt::BeamTable) = Frame[_table_frame(bt, f) for f in bt.aim_frame[]]
 
 """
-    follow_frames!(bt::BeamTable, frames::AbstractDict) -> Bool
+    follow_frames!(bt::BeamTable, frames::AbstractDict; renames = Dict()) -> Bool
 
 Carry the aims along with the design's frames (`frames`: name → chamber `Frame`, see
 [`part_frames`](@ref)): every beam whose frame moved or turned since the table last saw
 it aims at its local coordinates in the frame as it is now, `to_chamber(frame,
-aim_local)`, rigidly. A beam whose frame is gone keeps its aim and is held in `:tcc`.
-`frames` then become the table's. Returns whether an aim or frame changed.
+aim_local)`, rigidly. A beam aimed in a frame named in `renames` (old name → new, a
+part renamed or given a role in the same edit) aims in the new name. A beam whose frame
+is gone keeps its aim and is held in `:tcc`. `frames` then become the table's. Returns
+whether an aim or frame changed.
 """
-function follow_frames!(bt::BeamTable, frames::AbstractDict)
+function follow_frames!(bt::BeamTable, frames::AbstractDict; renames::AbstractDict = Dict{Symbol,Symbol}())
     fr = Dict{Symbol,Frame}(frames)
     haskey(fr, :tcc) || (fr[:tcc] = CHAMBER)
     old = bt.frames[]
     af, loc, bs = copy(bt.aim_frame[]), copy(bt.aim_local[]), copy(bt.beams[])
     changed = false
     for i in eachindex(bs)
+        was = af[i]
+        # a renamed frame first: its old name may now be another part's (a role passed on)
+        new = get(renames, was, was)
+        new === was || (af[i] = new; changed = true)
         F = get(fr, af[i], nothing)
         if F === nothing                       # the frame went away: the aim stays
             af[i], loc[i] = :tcc, Vec3(bs[i].aim)
             changed = true
-        elseif get(old, af[i], nothing) != F
+        elseif get(old, was, nothing) != F
             a = Vec3(to_chamber(F, loc[i]))
             a == bs[i].aim || (bs[i] = remake(bs[i]; aim = a); changed = true)
         end

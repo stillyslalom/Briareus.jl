@@ -41,6 +41,16 @@ Pane {
         return ""
     }
 
+    // the Help topic that introduces the page (its ⓘ beside the title)
+    readonly property string intro: {
+        if (kind === "target") return "target." + app.targetKind
+        if (kind === "comp") return "component.intro"
+        if (kind === "part") return "part.placement"
+        if (kind === "task") return app.selKey + ".intro"
+        if (kind === "") return "start.select"
+        return ""
+    }
+
     ColumnLayout {
         anchors.fill: parent
         spacing: 0
@@ -53,12 +63,19 @@ Pane {
                 anchors.right: parent.right
                 spacing: 0
                 Label { text: "PROPERTIES"; font.pixelSize: 11; font.letterSpacing: 1; opacity: 0.6 }
-                Label {
-                    text: inspector.title
-                    font.pixelSize: 18
-                    font.weight: Font.DemiBold
-                    elide: Text.ElideRight
+                RowLayout {
+                    spacing: 8
                     Layout.fillWidth: true
+                    Label {
+                        text: inspector.title
+                        font.pixelSize: 18
+                        font.weight: Font.DemiBold
+                        elide: Text.ElideRight
+                        Layout.fillWidth: true
+                        Layout.maximumWidth: implicitWidth
+                    }
+                    Info { topic: inspector.intro; font.pixelSize: 15 }
+                    Item { Layout.fillWidth: true }
                 }
             }
         }

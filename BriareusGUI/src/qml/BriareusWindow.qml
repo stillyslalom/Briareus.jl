@@ -53,6 +53,53 @@ ApplicationWindow {
     // a results tab asked for from Julia (`request_tab`)
     readonly property string resultsRequest: app.resultsRequest
     onResultsRequestChanged: if (resultsRequest !== "") results.show(resultsRequest)
+    // a window size asked for from Julia (`request_window_size`, "width x height")
+    readonly property string sizeRequest: app.sizeRequest
+    onSizeRequestChanged: if (sizeRequest !== "") {
+        const wh = sizeRequest.split("x")
+        width = parseInt(wh[0])
+        height = parseInt(wh[1])
+    }
+    // a dialog or menu asked for from Julia (`request_popup`), and an image of it when
+    // `app.popupGrabPath` is set (scripted screenshots)
+    property var openPopup: null
+    readonly property string popupRequest: app.popupRequest
+    onPopupRequestChanged: {
+        if (openPopup) openPopup.close()
+        openPopup = null
+        const key = popupRequest
+        if (key === "") return
+        // "window": no popup (an image of the toolbar)
+        const dialogs = { retune: retuneDialog, port: portDialog, help: helpDialog }
+        if (key.startsWith("topics")) { helpTopics.openAt(key.substring(7)); openPopup = helpTopics }
+        else if (key === "group") { tree.openGroupDialog(); openPopup = tree.groupDialog }
+        else if (dialogs[key]) { openPopup = dialogs[key]; openPopup.open() }
+        else if (key !== "window") {
+            for (let i = 0; i < menuBar.count; ++i) {
+                const m = menuBar.menuAt(i)
+                if (m && m.title.replace("&", "") === key) {
+                    const it = menuBar.itemAt(i)
+                    m.popup(it, 0, it.height)
+                    openPopup = m
+                }
+            }
+        }
+        if (app.popupGrabPath !== "") popupGrabTimer.start()
+    }
+    Timer {
+        id: popupGrabTimer
+        interval: 500
+        onTriggered: {
+            const path = app.popupGrabPath
+            // the popup alone (the window's root item cannot be grabbed), or the toolbar
+            const item = openPopup ? openPopup.contentItem.parent : win.header
+            item.grabToImage(function (img) { img.saveToFile(path) })
+        }
+    }
+    // the Help screen at a topic (an ⓘ clicked, `br_help`)
+    readonly property string helpRequest: app.helpRequest
+    onHelpRequestChanged: if (helpRequest.startsWith("topic:")) helpTopics.openAt(helpRequest.substring(6))
+    HelpDialog { id: helpTopics }
     // follow the selection with the result tabs
     readonly property string selectionWatch: app.selKind + ":" + app.selKey
     onSelectionWatchChanged: followSelection()
@@ -245,6 +292,8 @@ ApplicationWindow {
         }
         AutoMenu {
             title: "&Help"
+            Action { text: "Help topics"; shortcut: StandardKey.HelpContents; onTriggered: helpTopics.openAt("") }
+            Action { text: "Documentation"; onTriggered: Qt.openUrlExternally(Julia.br_docs_url()) }
             Action { text: "Mouse and keys"; onTriggered: helpDialog.open() }
         }
     }
@@ -274,6 +323,7 @@ ApplicationWindow {
         orientation: Qt.Horizontal
 
         ModelTree {
+            id: tree
             SplitView.preferredWidth: 290
             SplitView.minimumWidth: 200
         }
@@ -477,14 +527,9 @@ ApplicationWindow {
         }
         ColumnLayout {
             spacing: 8
-            Label {
-                Layout.preferredWidth: 520
-                wrapMode: Text.WordWrap
-                text: "The reference shot fired every beam of the table with the pulses of a pulse table " +
-                      "(power per beam in TW against time_ns, one column per cone group, quad or beam). " +
-                      "The disabled beams are the ones this shot loses: the enabled beams' powers are " +
-                      "retuned, at each time of the table, to give the capsule the reference's drive " +
-                      "level and its modes through l = 4."
+            RowLayout {
+                Label { text: "The enabled beams' pulses, retuned to a reference shot's capsule drive" }
+                Info { topic: "drive.retune" }
             }
             GridLayout {
                 columns: 3

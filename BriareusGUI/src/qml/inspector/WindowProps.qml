@@ -22,19 +22,18 @@ ColumnLayout {
                       onEdited: (text) => Julia.br_edit_window(w.rowNumber, "phi", text) }
             PropRow { label: "Center z"; value: model.z; unit: "mm"
                       onEdited: (text) => Julia.br_edit_window(w.rowNumber, "z", text) }
-            CheckBox {
+            CheckLine {
                 text: "Round"
                 checked: w.isRound
                 onToggled: Julia.br_window_round(w.rowNumber, checked)
-                ToolTip.visible: hovered
-                ToolTip.text: "A disk on the unrolled wall (otherwise a rectangle)"
+                tip: "A disk on the unrolled wall (otherwise a rectangle)"
             }
             PropRow { label: w.isRound ? "Diameter" : "Width"; value: model.width
                       unit: w.isRound ? "mm" : "mm of arc"
                       onEdited: (text) => Julia.br_edit_window(w.rowNumber, "width", text) }
             PropRow { visible: !w.isRound; label: "Height"; value: model.height; unit: "mm along z"
                       onEdited: (text) => Julia.br_edit_window(w.rowNumber, "height", text) }
-            CheckBox {
+            CheckLine {
                 text: "Open (a hole: laser light and x-rays leave through it)"
                 checked: w.isOpen
                 onToggled: Julia.br_window_open(w.rowNumber, checked)

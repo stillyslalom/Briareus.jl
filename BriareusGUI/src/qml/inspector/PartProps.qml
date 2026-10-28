@@ -9,20 +9,26 @@ import "../common"
 
 ColumnLayout {
     spacing: 8
-    Note { text: app.partKind + " · " + app.compInfo; opacity: 0.9 }
+    RowLayout {
+        Layout.fillWidth: true
+        Note { text: app.partKind + " · " + app.compInfo; opacity: 0.9 }
+        Info { topic: "part.visrad"; visible: app.partKind === "VisRad object"; Layout.alignment: Qt.AlignTop }
+    }
     Note {
         visible: app.selectionCount > 1
         text: app.selectionCount + " components selected: edits apply to every selected part " +
               "that has the field (shown: the first)."
     }
-    Note {
+    RowLayout {
         visible: app.partFile !== ""
-        text: "File: " + app.partFile +
-              (app.partCopy ? "\nRead from the copy saved in the session" +
-                              (app.partSourceExists ? "." : " (the file is not on this computer).") : "") +
-              "\nWindings repaired (closed solids face out of their " +
-              "material, open sheets the target center) and its surface remeshed into elements of " +
-              "the part's size; a part left out of the calculations is drawn from its file's facets."
+        Layout.fillWidth: true
+        Cell { text: "File: " + app.partFile; opacity: 0.72; Layout.fillWidth: true }
+        Info { topic: "part.cad" }
+    }
+    Note {
+        visible: app.partFile !== "" && app.partCopy
+        text: "Read from the copy saved in the session" +
+              (app.partSourceExists ? "." : " (the file is not on this computer).")
     }
     RowLayout {
         visible: app.partFile !== ""
@@ -62,21 +68,14 @@ ColumnLayout {
             currentIndex: app.partRole
             onActivated: (index) => Julia.br_part_role(index)
         }
+        Info { topic: "part.role" }
     }
-    Note {
-        visible: app.partKind === "VisRad object"
-        text: "A VisRad CAD part's element size (below; 0: the target's) sets its remeshing; a " +
-              "VisRad rectangle, sphere or hohlraum keeps VisRad's grid unless given a size. " +
-              "Mounting hardware far from the target is drawn only after an import; put it back " +
-              "in the calculations for the laser and clearance to see it (the drive's cavity " +
-              "leaves it out of the x-ray view factors either way)."
-    }
-    CheckBox {
+    CheckLine {
         text: "Thin film: left out of the drive's cavity (a capsule tent, an LEH window)"
         checked: app.partFilm
         onToggled: Julia.br_part_film(checked)
     }
-    CheckBox {
+    CheckLine {
         text: "Include in calculations (laser, x-ray drive, clearance)"
         checked: app.compIncluded
         onToggled: Julia.br_node_include(app.selection, checked)
@@ -90,6 +89,7 @@ ColumnLayout {
             currentIndex: app.partFrame < 0 ? 0 : app.partFrame
             onActivated: (index) => Julia.br_part_frame(index)
         }
+        Info { topic: "part.placement" }
     }
     // Move along [axis] of [frame] by [Δ] [−][+]: each click one edit (undone as one)
     RowLayout {
@@ -131,13 +131,13 @@ ColumnLayout {
                  ToolTip.visible: hovered; ToolTip.text: "Move back along the axis (one edit)" }
         Button { text: "+"; Layout.preferredWidth: 34; onClicked: Julia.br_nudge_part(1)
                  ToolTip.visible: hovered; ToolTip.text: "Move forward along the axis (one edit)" }
-        Item { Layout.fillWidth: true }
-        Button {
-            text: "Sweep…"
-            onClicked: Julia.br_sweep_part()
-            ToolTip.visible: hovered
-            ToolTip.text: "Step the part along this axis and check each step (clearance, line of sight, capture)"
-        }
+    }
+    Button {
+        text: "Sweep along this axis…"
+        Layout.leftMargin: 114
+        onClicked: Julia.br_sweep_part()
+        ToolTip.visible: hovered
+        ToolTip.text: "Step the part along this axis and check each step (clearance, line of sight, capture)"
     }
     RowLayout {
         Label { text: "Position in"; Layout.preferredWidth: 110 }
@@ -157,32 +157,21 @@ ColumnLayout {
             onEdited: (text) => Julia.br_edit_part(model.key, text)
         }
     }
-    CheckBox {
+    CheckLine {
         text: "Two-sided (both sides radiate and absorb)"
         checked: app.partTwoSided
         enabled: !app.partAperture
         onToggled: Julia.br_part_flag("two_sided", checked)
     }
-    CheckBox {
+    CheckLine {
         text: "Inward (radiates from its inside, or a flat part from its back)"
         checked: app.partInward
         onToggled: Julia.br_part_flag("inward", checked)
     }
-    CheckBox {
+    CheckLine {
         text: "Aperture (transparent: rays pass, its flux is what escapes)"
         checked: app.partAperture
         onToggled: Julia.br_part_flag("aperture", checked)
-    }
-    Note {
-        text: "The axis of a part is its local z: the part is turned by the rotation about " +
-              "that axis, tilted to polar angle θ and azimuth φ (as VisRad orders them), then " +
-              "moved to (x, y, z) in the frame it is placed in. A disk, washer or rectangle " +
-              "faces along its axis. An entrance hole's frame has its origin at the hole and z " +
-              "pointing out of the hohlraum, so a part there moves with the hole and mirrors " +
-              "between the two; the backlighter foil's frame has z along its front normal, " +
-              "toward TCC. Every part has its own frame (origin at its center, z its axis): " +
-              "parts placed in it and beams aimed in it move and turn with the part. Changing " +
-              "the frame keeps the part where it is."
     }
     DisplayRow {}
     ErrorText { text: app.targetError }

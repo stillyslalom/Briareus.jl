@@ -7,14 +7,6 @@ import "../common"
 
 ColumnLayout {
     spacing: 8
-    Note {
-        text: "Worst-case clearance of each enabled beam from the hardware over pointing, " +
-              "positioning, hardware and focus errors that add linearly. The envelope is each " +
-              "spot's contour at the given fraction of its peak grown by the f-cone; with wings, " +
-              "the far field also counts. Only hardware before a beam lands is checked. Status " +
-              "thresholds are engineering defaults (fail: 10¹² W/cm² or 10⁻³ of the beam power; " +
-              "review: 10⁹ W/cm² or 10⁻⁵)."
-    }
     SectionLabel { text: "Components" }
     Repeater {
         model: compModel
@@ -37,10 +29,11 @@ ColumnLayout {
             }
         }
     }
-    SectionLabel { text: "Envelope and errors" }
+    SectionLabel { text: "Envelope and errors"; info: "clearance.errors" }
     ColumnLayout {
         spacing: 6
         enabled: !app.rvRunning && !app.tlRunning
+        Layout.fillWidth: true
         PropRow { label: "Contour"; value: app.rvPeak; unit: "of each spot's peak"
                   onEdited: (text) => Julia.br_rv_edit("peak_fraction", text) }
         PropRow { label: "Pointing error"; value: app.rv_pointing; unit: "mm"
@@ -51,7 +44,7 @@ ColumnLayout {
                   onEdited: (text) => Julia.br_rv_edit("hardware_tolerance", text) }
         PropRow { label: "Focus error"; value: app.rv_focus; unit: "± mm"
                   onEdited: (text) => Julia.br_rv_edit("focus", text) }
-        CheckBox { text: "Far-field wings (1 % halo, 10⁻³ scatter)"; checked: app.rvWings; onToggled: Julia.br_rv_wings(checked) }
+        CheckLine { text: "Far-field wings (1 % halo, 10⁻³ scatter)"; checked: app.rvWings; onToggled: Julia.br_rv_wings(checked) }
         RowLayout {
             spacing: 8
             Label { text: "Sampling"; Layout.preferredWidth: 150 }
@@ -64,7 +57,6 @@ ColumnLayout {
             }
         }
     }
-    Note { text: "The errors and the sampling also apply to the TaLIS checks." }
     ErrorText { text: app.rvError }
     RowLayout {
         spacing: 8

@@ -437,6 +437,10 @@ function BriareusShell(sess::DesignSession; queue::Channel{Any} = Channel{Any}(I
     _set!(sh, "sideView", false)
     _set!(sh, "grabPath", "")
     _set!(sh, "resultsRequest", "")
+    _set!(sh, "sizeRequest", "")
+    _set!(sh, "popupRequest", "")
+    _set!(sh, "popupGrabPath", "")
+    _set!(sh, "helpRequest", "")
     _set!(sh, "sessionPath", "")
     _set!(sh, "canUndo", false)
     _set!(sh, "canRedo", false)
@@ -1109,6 +1113,59 @@ Show a results tab of the open window (`"beams"`, `"drive"`, `"time"`, `"optimiz
 """
 request_tab(key::AbstractString) = (sh = _SHELL[]; sh === nothing ||
                                     (_set!(sh, "resultsRequest", ""); _set!(sh, "resultsRequest", String(key))); nothing)
+
+"""
+    request_window_size(width, height)
+
+Resize the open window to `width × height` (in Qt's device-independent pixels), for
+scripted screenshots of the layout at several window sizes.
+"""
+request_window_size(width::Integer, height::Integer) =
+    (sh = _SHELL[]; sh === nothing || _set!(sh, "sizeRequest", string(width, "x", height)); nothing)
+
+"""
+    br_help(topic)
+
+Open the window's Help screen at `topic` (a key of `qml/common/help.js`, e.g.
+`"talis.tolerance"`; `""` for the first page), as an ⓘ does when clicked.
+"""
+br_help(topic) = (sh = _SHELL[]; sh === nothing ||
+                  (_set!(sh, "helpRequest", ""); _set!(sh, "helpRequest", "topic:" * String(topic))); nothing)
+
+"The documentation's Desktop application page online (Help ▸ Documentation)."
+const DOCS_URL = "https://stillyslalom.github.io/Briareus.jl/dev/gui/"
+
+"""
+    br_docs_url() -> String
+
+The Desktop application page of the documentation: a local build of a development
+checkout (`docs/build`, from `docs/make.jl`) when there is one, otherwise `DOCS_URL`.
+"""
+function br_docs_url()
+    build = normpath(joinpath(@__DIR__, "..", "..", "..", "docs", "build"))
+    for page in (joinpath(build, "gui.html"), joinpath(build, "gui", "index.html"))
+        isfile(page) && return "file:///" * replace(page, '\\' => '/')
+    end
+    return DOCS_URL
+end
+
+"""
+    request_popup(key, path = "")
+
+Open a dialog or menu of the open window: `"retune"`, `"port"`, `"help"` or `"group"`
+(the dialogs), `"topics"` or `"topics:<topic>"` (the Help screen, see `br_help`), a menu
+bar menu by its title without the `&` (`"File"`, `"View"`, …), or `"window"` for none.
+With a `path`, save an image of the popup there (for `"window"`, of the toolbar; PNG,
+written asynchronously, as by [`request_grab`](@ref)); `request_popup("")` closes it.
+"""
+function request_popup(key::AbstractString, path::AbstractString = "")
+    sh = _SHELL[]
+    sh === nothing && return nothing
+    _set!(sh, "popupGrabPath", String(path))
+    _set!(sh, "popupRequest", "")
+    _set!(sh, "popupRequest", String(key))
+    return nothing
+end
 
 """
     request_cut_settings(path = "")
@@ -2041,7 +2098,7 @@ function _register_qml_functions()
     @qmlfunction br_sw_subject br_sw_frame br_sw_axis br_sw_edit br_sw_check br_sw_object
     @qmlfunction br_sw_quality br_sw_start br_sw_cancel br_sw_select br_sw_apply
     @qmlfunction br_part_role br_export_stl br_cavity br_cavity_point br_part_film
-    @qmlfunction br_remove_selected
+    @qmlfunction br_remove_selected br_help br_docs_url
     @qmlfunction br_load_preset br_set_grouping br_edit_beam br_set_beam_on br_edit_node
     @qmlfunction br_import_beams br_export_beams br_import_sst br_import_summary br_export_sst
     @qmlfunction br_export_summary br_build br_set_view br_side_view br_xray_image br_close_image br_set_spot_radius br_unconverted_ratio br_beam_model br_export_results

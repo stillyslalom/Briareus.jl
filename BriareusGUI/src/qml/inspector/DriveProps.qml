@@ -8,12 +8,6 @@ import "../common"
 
 ColumnLayout {
     spacing: 8
-    Note {
-        text: "View factors, the laser deposition operator and the capsule flux response, " +
-              "once per target and beam ports (seconds on the standard mesh). Pointing, power " +
-              "and on/off edits then re-evaluate the drive at once. Coloring the target by a " +
-              "drive field computes it when needed."
-    }
     RowLayout {
         spacing: 8
         Button {
@@ -36,7 +30,7 @@ ColumnLayout {
         color: app.driveStale ? "#d08a00" : palette.windowText
     }
 
-    SectionLabel { text: "Beam model" }
+    SectionLabel { text: "Beam model"; info: "drive.model" }
     ComboBox {
         Layout.fillWidth: true
         textRole: "text"; valueRole: "value"
@@ -45,15 +39,9 @@ ColumnLayout {
         currentIndex: Math.max(0, ["fcone", "visrad"].indexOf(app.beamModel))
         onActivated: Julia.br_beam_model(currentValue)
     }
-    Note {
-        text: app.beamModel === "visrad" ?
-              "VisRad's beam model (a super-Gaussian cut at each beam's envelope), so the design " +
-              "deposits in VisRad as here; an imported workspace sets its envelopes and focal length." :
-              "The focal spot summed over the f-cone's directions, each with its own incidence."
-    }
 
-    SectionLabel { text: "Cavity" }
-    CheckBox {
+    SectionLabel { text: "Cavity"; info: "drive.cavity" }
+    CheckLine {
         text: "Compute the drive on the cavity around a point"
         checked: app.driveCavity
         onToggled: Julia.br_cavity(checked)
@@ -66,14 +54,6 @@ ColumnLayout {
         fieldWidth: 140
         tip: "A point in the free space of the cavity (inside the capsule is fine)"
         onEdited: (text) => Julia.br_cavity_point(text)
-    }
-    Note {
-        visible: app.driveCavity
-        text: "Only the elements that bound the free space around the point take part in the " +
-              "drive: a CAD assembly's outer faces and mounting hardware drop out of the view " +
-              "factors. Mark thin films modeled as solids (a capsule tent, an entrance-hole " +
-              "window) in their Properties, or they seal the point into a pocket. The clearance " +
-              "and TaLIS checks use the whole target."
     }
     Note { visible: app.driveCavity && app.cavitySummary !== ""; text: app.cavitySummary }
 
@@ -114,7 +94,7 @@ ColumnLayout {
         tip: "The spot over which the irradiance statistics and the foil objective are taken"
         onEdited: (text) => Julia.br_set_spot_radius(text)
     }
-    SectionLabel { text: "Unconverted light" }
+    SectionLabel { text: "Unconverted light"; info: "drive.unconverted" }
     PropRow {
         label: "1ω power ratio"; value: app.ucRatio1; unit: "of each beam's 3ω power (empty: off)"
         tip: "No default: the NIF User Guide gives no fraction (most unconverted light is 1ω, more for shaped pulses)"
@@ -124,12 +104,6 @@ ColumnLayout {
         label: "2ω power ratio"; value: app.ucRatio2; unit: "of each beam's 3ω power (empty: off)"
         onEdited: (text) => Julia.br_unconverted_ratio(2, text)
     }
-    Note {
-        text: "Beams whose 1ω or 2ω dot is on in the calculations row (model tree, beam " +
-              "properties) add that light's absorbed power to the drive, converted to x-rays as the " +
-              "3ω light is. Only NIF beams and quads have footprints."
-    }
     Label { text: app.unconvertedText; visible: app.unconvertedText !== ""; wrapMode: Text.WordWrap; Layout.fillWidth: true }
     Label { text: app.driveSummary; visible: app.driveHasResult; wrapMode: Text.WordWrap; Layout.fillWidth: true; font.weight: Font.DemiBold }
-    Note { text: "The modes and the power accounting are in the Drive tab below." }
 }

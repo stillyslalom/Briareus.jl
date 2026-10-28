@@ -7,14 +7,6 @@ import "../common"
 
 ColumnLayout {
     spacing: 8
-    Note {
-        text: "Free pointing fields per cone, quad or beam within ± bounds around the beam " +
-              "table (power bounds: a fraction of the start) and minimize an objective with " +
-              "L-BFGS-B and exact gradients, in the background. Canceling keeps the best design. " +
-              "The aims are free either in the chamber (z, r, tangential offset) or in each " +
-              "beam's aim frame (u, v, w: on the backlighter foil's frame, u and v across its " +
-              "face and w along its normal); a group shares its frame coordinates."
-    }
     ColumnLayout {
         spacing: 6
         enabled: !app.optRunning
@@ -42,21 +34,15 @@ ColumnLayout {
                     { key: "w", label: "Aim w (frame z)", unit: "± mm in the aim frame" },
                     { key: "defocus", label: "Defocus", unit: "± mm" },
                     { key: "power", label: "Power", unit: "± fraction" }]
-            delegate: RowLayout {
-                spacing: 8
-                CheckBox {
-                    text: modelData.label
-                    Layout.preferredWidth: 170
-                    checked: app["optFree_" + modelData.key]
-                    onToggled: Julia.br_opt_free(modelData.key, checked)
-                }
-                TextField {
-                    Layout.preferredWidth: 90
-                    text: app["optDelta_" + modelData.key]
-                    onEditingFinished: if (text !== app["optDelta_" + modelData.key])
-                                           Julia.br_opt_edit(modelData.key, text)
-                }
-                Label { text: modelData.unit; opacity: 0.7 }
+            delegate: PropRow {
+                check: true
+                label: modelData.label
+                labelWidth: 170
+                checked: app["optFree_" + modelData.key]
+                onToggled: (on) => Julia.br_opt_free(modelData.key, on)
+                value: app["optDelta_" + modelData.key]
+                unit: modelData.unit
+                onEdited: (text) => Julia.br_opt_edit(modelData.key, text)
             }
         }
 
@@ -88,52 +74,38 @@ ColumnLayout {
                 }
             }
         }
-        CheckBox {
+        CheckLine {
             visible: app.optObjective !== "irradiance"
             text: "Hold the mean capsule drive"
             checked: app.optHold
             onToggled: Julia.br_opt_hold(checked)
         }
-        RowLayout {
+        PropRow {
             visible: app.optObjective !== "irradiance" && app.hasCapsule
-            spacing: 8
-            CheckBox {
-                text: "Capsule keep-out"
-                Layout.preferredWidth: 170
-                checked: app.optCapsule
-                onToggled: Julia.br_opt_capsule(checked)
-                ToolTip.visible: hovered
-                ToolTip.delay: 400
-                ToolTip.text: "Keep every beam's worst-case envelope (1 % of peak, with pointing, " +
-                              "positioning and focus errors) off the capsule by at least this much"
-            }
-            TextField {
-                Layout.preferredWidth: 90
-                enabled: app.optCapsule
-                text: app.optCapsuleMin
-                onEditingFinished: if (text !== app.optCapsuleMin) Julia.br_opt_edit("capsule_min", text)
-            }
-            Label { text: "mm clearance"; opacity: 0.7 }
+            check: true
+            label: "Capsule keep-out"
+            labelWidth: 170
+            checked: app.optCapsule
+            onToggled: (on) => Julia.br_opt_capsule(on)
+            fieldEnabled: app.optCapsule
+            value: app.optCapsuleMin
+            unit: "mm clearance"
+            tip: "Keep every beam's worst-case envelope (1 % of peak, with pointing, " +
+                 "positioning and focus errors) off the capsule by at least this much"
+            onEdited: (text) => Julia.br_opt_edit("capsule_min", text)
         }
-        RowLayout {
+        PropRow {
             visible: app.optObjective !== "irradiance"
-            spacing: 8
-            CheckBox {
-                text: "LEH keep-out"
-                Layout.preferredWidth: 170
-                checked: app.optKeepout
-                onToggled: Julia.br_opt_keepout(checked)
-                ToolTip.visible: hovered
-                ToolTip.delay: 400
-                ToolTip.text: "Keep every beam's worst-case envelope off the LEH rims by at least this much"
-            }
-            TextField {
-                Layout.preferredWidth: 90
-                enabled: app.optKeepout
-                text: app.optKeepoutMin
-                onEditingFinished: if (text !== app.optKeepoutMin) Julia.br_opt_edit("keepout_min", text)
-            }
-            Label { text: "mm clearance"; opacity: 0.7 }
+            check: true
+            label: "LEH keep-out"
+            labelWidth: 170
+            checked: app.optKeepout
+            onToggled: (on) => Julia.br_opt_keepout(on)
+            fieldEnabled: app.optKeepout
+            value: app.optKeepoutMin
+            unit: "mm clearance"
+            tip: "Keep every beam's worst-case envelope off the LEH rims by at least this much"
+            onEdited: (text) => Julia.br_opt_edit("keepout_min", text)
         }
         PropRow {
             visible: app.optObjective === "irradiance"

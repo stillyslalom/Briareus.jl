@@ -111,6 +111,34 @@ end
     @test _aims_held(bt)
 end
 
+@testset "beams follow a renamed part (no GL)" begin
+    s = DesignSession(kind = :custom, resolution = :coarse)
+    ts, bt = s.target, s.beams
+    @test add_part!(ts, :disk; name = :shield, x = 3.0, r1 = 0.5)
+    @test add_part!(ts, :rectangle; name = :plate, x = -3.0, theta = 90, r1 = 0.5, r2 = 0.5)
+    a, b = 1:3, 4:6
+    set_aim_frame!(s, a, :shield; keep = false)
+    set_aim_frame!(s, b, :plate; keep = false)
+    edit_beam_set!(bt, a, :aim_y, "0.2")
+    aims = copy(bt.beams[])
+    loc = copy(bt.aim_local[])
+    # renamed: the beams aim in the new name, where they were
+    @test edit_part!(ts, part_index(ts, :shield), :name, "screen")
+    @test all(==(:screen), bt.aim_frame[][a]) && bt.beams[] == aims && bt.aim_local[] == loc
+    # the backlighter foil's role renames the plate; then the screen takes the role over
+    # and the plate goes back to a plain name: each set of beams follows its own part
+    @test set_part_role!(ts, part_index(ts, :plate), :foil)
+    @test all(==(FOIL_NAME), bt.aim_frame[][b]) && bt.beams[] == aims
+    @test set_part_role!(ts, part_index(ts, :screen), :foil)
+    plain = ts.parts[][findfirst(p -> p.kind === :rectangle, ts.parts[])].name
+    @test plain !== FOIL_NAME && all(==(FOIL_NAME), bt.aim_frame[][a]) &&
+          all(==(plain), bt.aim_frame[][b]) && bt.beams[] == aims && bt.aim_local[] == loc
+    # and they still move with their parts
+    @test nudge_part!(ts, part_index(ts, plain), 0.5; frame = :tcc, axis = :x)
+    @test all(i -> isapprox(bt.beams[][i].aim, aims[i].aim + V3(0.5, 0, 0); atol = 1e-12), b)
+    @test _aims_held(bt)
+end
+
 @testset "every aim writer keeps the local aims (no GL)" begin
     s = DesignSession(resolution = :coarse)
     ts, bt = s.target, s.beams

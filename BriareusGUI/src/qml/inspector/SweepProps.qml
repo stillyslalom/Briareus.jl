@@ -8,13 +8,6 @@ import "../common"
 
 ColumnLayout {
     spacing: 8
-    Note {
-        text: "Step a part (with the parts placed in its frame and the beams aimed in those " +
-              "frames) along an axis of any frame, and check each step in the background: beam " +
-              "clearance with the clearance check's settings, the backlighter's line of sight, " +
-              "the power the foil captures, and optionally the pointing re-optimized with the " +
-              "optimization's settings. The sweep translates; it does not turn."
-    }
     ColumnLayout {
         spacing: 6
         enabled: !app.swRunning
@@ -55,12 +48,12 @@ ColumnLayout {
                   onEdited: (text) => Julia.br_sw_edit("step", text) }
 
         SectionLabel { text: "Checks at each step" }
-        CheckBox {
+        CheckLine {
             text: "Beam clearance (the clearance check's components, envelope and errors)"
             checked: app.sw_clearance
             onToggled: Julia.br_sw_check("clearance", checked)
         }
-        CheckBox {
+        CheckLine {
             text: "Line of sight from the backlighter foil"
             checked: app.sw_los
             enabled: app.hasFoil
@@ -70,6 +63,7 @@ ColumnLayout {
             visible: app.sw_los
             spacing: 6
             Layout.leftMargin: 24
+            Layout.fillWidth: true
             RowLayout {
                 Label { text: "Through"; Layout.preferredWidth: 86 }
                 ComboBox {
@@ -84,20 +78,18 @@ ColumnLayout {
             PropRow { label: "φ"; labelWidth: 86; value: app.sw_los_phi; unit: "°"
                       onEdited: (text) => Julia.br_sw_edit("los_phi", text) }
         }
-        CheckBox {
+        CheckLine {
             text: "Power the foil captures (least fraction per beam)"
             checked: app.sw_capture
             enabled: app.hasFoil
             onToggled: Julia.br_sw_check("capture", checked)
         }
-        CheckBox {
+        CheckLine {
             text: "Re-optimize the pointing at each step (Optimization's settings)"
             checked: app.sw_optimize
             onToggled: Julia.br_sw_check("optimize", checked)
-            ToolTip.visible: hovered
-            ToolTip.delay: 400
-            ToolTip.text: "Slow: an optimization per step. Aims free in their frame (u, v, w) warm-start " +
-                          "from the previous step, as the frame moves with the part."
+            tip: "Slow: an optimization per step. Aims free in their frame (u, v, w) warm-start " +
+                 "from the previous step, as the frame moves with the part."
         }
         RowLayout {
             spacing: 8

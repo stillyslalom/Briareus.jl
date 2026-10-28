@@ -1,5 +1,5 @@
-// TaLIS report: the rule tolerance note (cut to three lines until opened),
-// the per-rule summary, the other notes, every check colored by status, CSV export.
+// TaLIS report: the notes, one line each (the whole note on hover), the per-rule
+// summary, every check colored by status, CSV export.
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -8,7 +8,6 @@ import "../common"
 
 ColumnLayout {
     spacing: 6
-    property bool toleranceOpen: false
     function statusColor(s) {
         if (s === "fail") return "#c42b1c"
         if (s === "review") return "#d08a00"
@@ -23,12 +22,13 @@ ColumnLayout {
     RowLayout {
         visible: app.tlHasReport
         spacing: 8
-        Label { text: app.tlBrief; font.weight: Font.DemiBold; Layout.fillWidth: true; elide: Text.ElideRight }
+        Cell { text: app.tlBrief; font.weight: Font.DemiBold; Layout.fillWidth: true; Layout.maximumWidth: implicitWidth }
+        Info { topic: "talis.report" }
+        Item { Layout.fillWidth: true }
         Label { text: "inputs changed since"; visible: app.tlStale; color: "#d08a00" }
         Button { text: "Export CSV…"; enabled: !app.tlRunning; onClicked: win.openTalisExport() }
     }
-    // notes and the rule summary beside every check, split by a draggable handle; the
-    // notes wrap at the width of their side
+    // notes and the rule summary beside every check, split by a draggable handle
     SplitView {
         Layout.fillWidth: true
         Layout.fillHeight: true
@@ -45,30 +45,14 @@ ColumnLayout {
                 id: notesColumn
                 width: notesView.availableWidth - 12          // clear of the split handle
                 spacing: 4
-                // the tolerance note first, cut to three lines until opened, so that the
-                // rule summary below it shows at the panel's default height
+                // the tolerance note first, then the rule summary, then the other notes
                 Repeater {
                     model: noteModel
-                    delegate: ColumnLayout {
+                    delegate: Cell {
                         visible: model.kind === "tolerance"
-                        spacing: 0
+                        text: model.text
+                        opacity: 0.72
                         Layout.fillWidth: true
-                        Label {
-                            id: toleranceLabel
-                            text: model.text
-                            wrapMode: Text.WordWrap
-                            maximumLineCount: toleranceOpen ? 100 : 3
-                            elide: Text.ElideRight
-                            Layout.fillWidth: true
-                        }
-                        Label {
-                            visible: toleranceLabel.truncated || toleranceOpen
-                            text: toleranceOpen ? "less" : "more"
-                            color: palette.link
-                            font.underline: true
-                            HoverHandler { cursorShape: Qt.PointingHandCursor }
-                            TapHandler { onTapped: toleranceOpen = !toleranceOpen }
-                        }
                     }
                 }
                 SectionLabel { text: "Rules"; visible: app.tlHasReport }
@@ -80,7 +64,7 @@ ColumnLayout {
                         Layout.fillWidth: true
                         ToolTip.visible: ruleHover.hovered
                         ToolTip.delay: 400
-                        ToolTip.text: model.requirement
+                        ToolTip.text: model.requirement + "\nworst " + model.worst + " · " + model.where_
                         HoverHandler { id: ruleHover }
                         Label {
                             text: model.label + "  <font color='" + palette.windowText + "'>" +
@@ -96,7 +80,7 @@ ColumnLayout {
                         Label {
                             text: "worst " + model.worst + " · " + model.where_
                             opacity: 0.7
-                            wrapMode: Text.WordWrap
+                            elide: Text.ElideRight
                             Layout.fillWidth: true
                         }
                     }
@@ -104,11 +88,10 @@ ColumnLayout {
                 SectionLabel { text: "Notes"; visible: app.tlHasReport }
                 Repeater {
                     model: noteModel
-                    delegate: Label {
+                    delegate: Cell {
                         visible: model.kind !== "tolerance"
                         text: "· " + model.text
                         opacity: model.kind === "scope" || model.kind === "source" ? 0.7 : 1
-                        wrapMode: Text.WordWrap
                         Layout.fillWidth: true
                     }
                 }
@@ -120,36 +103,38 @@ ColumnLayout {
             SplitView.fillWidth: app.tlHasReport
             SplitView.minimumWidth: 300
             spacing: 4
-            RowLayout {
-                spacing: 4
-                Layout.leftMargin: 10
-                Repeater {
-                    model: [{ t: "Beam", w: 60 }, { t: "Rule", w: 110 }, { t: "Component", w: 96 },
-                            { t: "Status", w: 50 }, { t: "Margin", w: 80 }, { t: "Worst", w: 76 },
-                            { t: "Required", w: 70 }]
-                    Label { text: modelData.t; Layout.preferredWidth: modelData.w; font.weight: Font.DemiBold }
-                }
-            }
-            ListView {
-                Layout.leftMargin: 10
+            HScroll {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                clip: true
-                model: talisModel
-                boundsBehavior: Flickable.StopAtBounds
-                ScrollBar.vertical: ScrollBar {}
-                delegate: RowLayout {
-                    spacing: 4
-                    ToolTip.visible: rowHover.hovered && model.note !== ""
-                    ToolTip.text: model.note
-                    HoverHandler { id: rowHover }
-                    Label { text: model.beam; Layout.preferredWidth: 60; elide: Text.ElideRight }
-                    Label { text: model.rule; Layout.preferredWidth: 110; elide: Text.ElideRight }
-                    Label { text: model.component; Layout.preferredWidth: 96; elide: Text.ElideRight }
-                    Label { text: model.status; Layout.preferredWidth: 50; color: statusColor(model.status) }
-                    Label { text: model.margin; Layout.preferredWidth: 80 }
-                    Label { text: model.worst; Layout.preferredWidth: 76; opacity: 0.7 }
-                    Label { text: model.required; Layout.preferredWidth: 70; opacity: 0.7 }
+                minimumContentWidth: head.totalWidth + 10
+                TableHeader {
+                    id: head
+                    Layout.leftMargin: 10
+                    columns: [{ t: "Beam", w: 60 }, { t: "Rule", w: 110 }, { t: "Component", w: 96 },
+                              { t: "Status", w: 50 }, { t: "Margin", w: 80 }, { t: "Worst", w: 76 },
+                              { t: "Required", w: 70 }]
+                }
+                ListView {
+                    Layout.leftMargin: 10
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    clip: true
+                    model: talisModel
+                    boundsBehavior: Flickable.StopAtBounds
+                    ScrollBar.vertical: ScrollBar {}
+                    delegate: RowLayout {
+                        spacing: 4
+                        ToolTip.visible: rowHover.hovered && model.note !== ""
+                        ToolTip.text: model.note
+                        HoverHandler { id: rowHover }
+                        Cell { text: model.beam; Layout.preferredWidth: head.widths[0] }
+                        Cell { text: model.rule; Layout.preferredWidth: head.widths[1] }
+                        Cell { text: model.component; Layout.preferredWidth: head.widths[2] }
+                        Cell { text: model.status; Layout.preferredWidth: head.widths[3]; color: statusColor(model.status) }
+                        Cell { text: model.margin; Layout.preferredWidth: head.widths[4] }
+                        Cell { text: model.worst; Layout.preferredWidth: head.widths[5]; opacity: 0.7 }
+                        Cell { text: model.required; Layout.preferredWidth: head.widths[6]; opacity: 0.7 }
+                    }
                 }
             }
         }

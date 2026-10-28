@@ -128,7 +128,7 @@ function _connect!(sess::DesignSession)
     end
     # beams aimed in a frame move and turn with it (the frames change with the committed
     # inputs, before a target built on a worker is in place)
-    on(fr -> follow_frames!(bt, fr), ts.frames)
+    on(fr -> follow_frames!(bt, fr; renames = ts.renames[]), ts.frames)
     on(ts.target) do t
         default_selection!(sess.review, t)
         default_selection!(sess.talis, t)

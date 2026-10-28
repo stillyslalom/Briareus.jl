@@ -25,10 +25,11 @@ Item {
         anchors.margins: 8
         spacing: 4
 
-        RowLayout {
+        // the charts (as one segmented control), then the pulses and the run; the buttons
+        // wrap to a second row on a narrow panel
+        Flow {
             Layout.fillWidth: true
             spacing: 6
-            // the charts, as one segmented control
             Repeater {
                 model: [{ key: "pulses", label: "Pulses" }, { key: "drive", label: "Drive history" },
                         { key: "energy", label: "Energy" }, { key: "retune", label: "Retune" }]
@@ -39,7 +40,7 @@ Item {
                     onClicked: Julia.br_time_chart(modelData.key)
                 }
             }
-            Item { Layout.fillWidth: true }
+            ToolSeparator {}
             Button {
                 text: "Pulse table…"
                 onClicked: pulseDialog.open()

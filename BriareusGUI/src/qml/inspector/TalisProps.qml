@@ -8,11 +8,6 @@ import "../common"
 
 ColumnLayout {
     spacing: 8
-    Note {
-        text: "The NIF target-configuration rules for each enabled beam: 3ω capture, incidence " +
-              "and clearance, 1ω clearance and unconverted light, and the TAS stay-in zone, " +
-              "each judged on the worst case over the clearance error set plus the rule tolerance (not on incidence)."
-    }
     SectionLabel { text: "Components" }
     Repeater {
         model: talisCompModel
@@ -36,10 +31,18 @@ ColumnLayout {
             }
         }
     }
-    SectionLabel { text: "Rule tolerance" }
+    SectionLabel {
+        text: "Rule tolerance"
+        info: "talis.tolerance"
+        infoTip: "The angular tolerance becomes a lateral allowance r·tan(tolerance) at each hardware " +
+                 "point. Error set (from the clearance check): pointing " + app.rv_pointing +
+                 " mm, positioning " + app.rv_target_offset + " mm, hardware " + app.rv_hardware_tolerance +
+                 " mm, focus ± " + app.rv_focus + " mm; " + app.rvQuality + " sampling."
+    }
     ColumnLayout {
         spacing: 6
         enabled: !app.tlRunning
+        Layout.fillWidth: true
         PropRow { label: "Tolerance"; value: app.tlTolerance; unit: "degrees (0: none)"
                   onEdited: (text) => Julia.br_tl_edit("tolerance", text) }
         RowLayout {
@@ -59,13 +62,7 @@ ColumnLayout {
         PropRow { visible: app.tlPivot === "point"; label: "Pivot point"; value: app.tlPivotPoint
                   fieldWidth: 140; unit: "x, y, z (mm)"
                   onEdited: (text) => Julia.br_tl_edit("pivot_point", text) }
-        CheckBox { text: "1ω rules (NIF beams only)"; checked: app.tlOmega1; onToggled: Julia.br_tl_omega1(checked) }
-    }
-    Note {
-        text: "The angular tolerance becomes a lateral allowance r·tan(tolerance) at each hardware " +
-              "point. Error set (from the clearance check): pointing " + app.rv_pointing +
-              " mm, positioning " + app.rv_target_offset + " mm, hardware " + app.rv_hardware_tolerance +
-              " mm, focus ± " + app.rv_focus + " mm; " + app.rvQuality + " sampling."
+        CheckLine { text: "1ω rules (NIF beams only)"; checked: app.tlOmega1; onToggled: Julia.br_tl_omega1(checked) }
     }
     ErrorText { text: app.tlError }
     RowLayout {

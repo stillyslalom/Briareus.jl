@@ -23,10 +23,12 @@ ToolBar {
             cutPopup.contentItem.parent.grabToImage(function (img) { img.saveToFile(path) })
         }
     }
-    RowLayout {
-        anchors.fill: parent
-        anchors.leftMargin: 8
-        anchors.rightMargin: 8
+    // the tools wrap to a second row when the window is too narrow for one
+    contentHeight: tools.implicitHeight
+    Flow {
+        id: tools
+        x: 8
+        width: parent.width - 16
         spacing: 2
 
         component Tool: ToolButton {
@@ -157,10 +159,9 @@ ToolBar {
                             label: "To"; value: app.cutHi; unit: "mm (empty: no bound)"
                             onEdited: (text) => Julia.br_cut_range(app.cutLo, text)
                         }
-                        Note {
-                            Layout.maximumWidth: 380
-                            text: "Azimuth about z runs from +x toward +y, about x from +y toward +z, " +
-                                  "about y from +z toward +x."
+                        RowLayout {
+                            Label { text: "Azimuth directions"; opacity: 0.72 }
+                            Info { topic: "view.cut" }
                         }
                     }
                     ColumnLayout {
@@ -299,9 +300,10 @@ ToolBar {
             }
         }
         ToolSeparator {}
-        Label { text: "Beams"; opacity: 0.7; leftPadding: 4; rightPadding: 4 }
+        Label { text: "Beams"; opacity: 0.7; leftPadding: 4; rightPadding: 4; height: beamStyleBox.height; verticalAlignment: Text.AlignVCenter }
         ComboBox {
-            Layout.preferredWidth: 110
+            id: beamStyleBox
+            width: 110
             focusPolicy: Qt.NoFocus
             textRole: "text"; valueRole: "value"
             model: [{ text: "Rays", value: "rays" }, { text: "Volumes", value: "volumes" },
@@ -309,9 +311,9 @@ ToolBar {
             currentIndex: Math.max(0, ["rays", "volumes", "off"].indexOf(app.beamStyle))
             onActivated: Julia.br_beam_style(currentValue)
         }
-        Label { text: "Color"; opacity: 0.7; leftPadding: 8; rightPadding: 4 }
+        Label { text: "Color"; opacity: 0.7; leftPadding: 8; rightPadding: 4; height: beamStyleBox.height; verticalAlignment: Text.AlignVCenter }
         ComboBox {
-            Layout.preferredWidth: 180
+            width: 180
             focusPolicy: Qt.NoFocus
             textRole: "text"; valueRole: "value"
             model: [{ text: "Components", value: "component" },
@@ -339,6 +341,5 @@ ToolBar {
         Tool { text: "Clearance…"; tip: "Beam clearance check settings"; onClicked: win.showTask("clearance") }
         Tool { text: "Sweep…"; tip: "Placement sweep settings"; onClicked: win.showTask("sweep") }
         Tool { text: "TaLIS…"; tip: "TaLIS rule check settings"; onClicked: win.showTask("talis") }
-        Item { Layout.fillWidth: true }
     }
 }

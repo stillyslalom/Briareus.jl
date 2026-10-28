@@ -21,7 +21,7 @@ ScrollPage {
             visible: app.driveMean !== ""
             Layout.alignment: Qt.AlignTop
             spacing: 4
-            SectionLabel { text: "Capsule drive"; Layout.topMargin: 0 }
+            SectionLabel { text: "Capsule drive"; info: "drive.modes"; Layout.topMargin: 0 }
             Label { text: "Mean incident flux " + app.driveMean }
             GridLayout {
                 columns: 3
@@ -43,7 +43,6 @@ ScrollPage {
                     delegate: Label { Layout.row: model.l; Layout.column: 2; text: model.legendre }
                 }
             }
-            Note { text: "εₗ: rotation-invariant amplitude over all m (= |Pₗ/P₀| when axisymmetric)." }
         }
         ColumnLayout {
             visible: app.spotText !== ""

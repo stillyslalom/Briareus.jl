@@ -54,7 +54,7 @@ ColumnLayout {
         Box { at: 5; tip: "Hiding a beam keeps it in every calculation" }
     }
 
-    SectionLabel { text: "Pointing" }
+    SectionLabel { text: "Pointing"; info: "beams.pointing" }
     PropRow { label: "Aim z"; value: app.bn_z
               unit: app.bnMirrored ? "mm, mirrored below TCC" : "mm"
               tip: "Along the hohlraum axis; for beams from both hemispheres the lower ones aim at −z"
@@ -67,12 +67,8 @@ ColumnLayout {
               onEdited: (text) => Julia.br_edit_node("defocus", text) }
     PropRow { label: "Power"; value: app.bn_power; unit: "TW per beam"
               onEdited: (text) => Julia.br_edit_node("power", text) }
-    Note {
-        text: "Values are the mean over the selection; an edit sets that field on every beam " +
-              "and leaves the others. The beam direction is fixed by its port."
-    }
 
-    SectionLabel { text: "Aim point (x, y, z)" }
+    SectionLabel { text: "Aim point (x, y, z)"; info: "beams.aim" }
     RowLayout {
         Label { text: "Aim frame"; Layout.preferredWidth: 110 }
         ComboBox {
@@ -85,31 +81,22 @@ ColumnLayout {
             displayText: app.bnAimFrame < 0 ? "(several)" : currentText
             onActivated: (index) => Julia.br_aim_frame(index)
         }
-        Button {
-            text: "Aim at its center"
-            enabled: app.bnAimFrame >= 0
-            onClicked: Julia.br_aim_at_frame()
-            ToolTip.visible: hovered
-            ToolTip.text: "Point the beams at the frame's center (a part's centroid, a template frame's origin)"
-        }
     }
-    Note {
-        text: "Coordinates in " + app.bnAimFrameLabel + ". Point every selected beam at one " +
-              "point, as VisRad points a cluster at a reference point (e.g. a backlighter " +
-              "foil). Shown: the mean aim. Beams aimed in a part's or a template's frame keep " +
-              "these coordinates in it when it moves or turns."
+    Button {
+        text: "Aim at the frame's center"
+        enabled: app.bnAimFrame >= 0
+        onClicked: Julia.br_aim_at_frame()
+        ToolTip.visible: hovered
+        ToolTip.text: "Point the beams at the frame's center (a part's centroid, a template frame's origin)"
     }
+    Note { text: "Coordinates in " + app.bnAimFrameLabel + "; shown: the mean aim." }
     PropRow { label: "x"; value: app.bn_aim_x; unit: "mm"; onEdited: (text) => Julia.br_edit_node("aim_x", text) }
     PropRow { label: "y"; value: app.bn_aim_y; unit: "mm"; onEdited: (text) => Julia.br_edit_node("aim_y", text) }
     PropRow { label: "z"; value: app.bn_aim_z; unit: "mm"; onEdited: (text) => Julia.br_edit_node("aim_z", text) }
     ErrorText { text: app.beamsError }
 
-    SectionLabel { text: "Group" }
-    Note {
-        text: app.bnCluster === "" ? "The selection spans several groups."
-              : "In group " + app.bnCluster + ". Groups gather beams for pointing, power and " +
-                "on/off together, and are the optimizer's per-group parameters."
-    }
+    SectionLabel { text: "Group"; info: "beams.group" }
+    Note { text: app.bnCluster === "" ? "The selection spans several groups." : "In group " + app.bnCluster + "." }
     RowLayout {
         spacing: 8
         Layout.fillWidth: true
@@ -137,14 +124,10 @@ ColumnLayout {
         onEdited: (text) => Julia.br_rename_cluster(text)
     }
 
-    SectionLabel { text: "Quad"; visible: app.bnCanSplit || app.bnCanMerge }
+    SectionLabel { text: "Quad"; info: "beams.quad"; visible: app.bnCanSplit || app.bnCanMerge }
     Note {
         visible: app.bnCanSplit || app.bnCanMerge
-        text: app.bnCanSplit
-              ? "Quad " + app.bnQuad + " is one beam. Split it into its four beams (own ports, " +
-                "a quarter of the power each) to point them apart; the drive is then recomputed."
-              : "Quad " + app.bnQuad + " is split into its four beams. Merge them back into one beam " +
-                "(mean aim and defocus, total power)."
+        text: app.bnCanSplit ? "Quad " + app.bnQuad + " is one beam." : "Quad " + app.bnQuad + " is split into its four beams."
     }
     Flow {
         Layout.fillWidth: true
