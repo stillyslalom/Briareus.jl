@@ -204,11 +204,11 @@ Items 7–12 follow the 2026-10-22 literature review against Kritcher et al. 202
     - The toolbar's two combo boxes keep the style's height: the compact ones lose
       their background in that bar (seen in grabs of the header, not in a bare QML
       test), so the bar is 42 px rather than about 34.
-    - Whether a template is a property of the assembly at all (now only a way to start
-      one), and the next pass on what still takes room once the user has used it.
-    - Assemblies: "hohlraum with capsule" is one fixed template. Check that the model
-      extends to compound targets, e.g. two halfraums driving a shock-tube physics package
-      between them (Nagel's Rayleigh–Taylor experiments): several drive sources, a package
-      that is not a capsule, frames placing the sub-assemblies (phase 3 frames).
+    - The next pass on what still takes room once the user has used it.
+    - Assemblies: the built-in hohlraum is a special assembly (beams cannot aim relative
+      to its wall, caps or capsule), and compound targets (two halfraums driving a shock
+      tube, opacity halfraums, the double-backlighter ARC target) need parts that are
+      hohlraums and roles instead of fixed names. Design and phases:
+      `reference/assemblies-design.md` (three decisions open there).
     - Principle: frequent commands near at hand, explanations in tooltips and Help, and
       the 3D view and its inspection given the most room.
