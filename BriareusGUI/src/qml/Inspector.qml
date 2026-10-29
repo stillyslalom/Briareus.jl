@@ -54,30 +54,27 @@ Pane {
     ColumnLayout {
         anchors.fill: parent
         spacing: 0
-        Pane {
+        // the selection's name heads the page (the panel needs no caption of its own)
+        RowLayout {
+            spacing: 6
             Layout.fillWidth: true
-            padding: 12
-            bottomPadding: 6
-            ColumnLayout {
-                anchors.left: parent.left
-                anchors.right: parent.right
-                spacing: 0
-                Label { text: "PROPERTIES"; font.pixelSize: 11; font.letterSpacing: 1; opacity: 0.6 }
-                RowLayout {
-                    spacing: 8
-                    Layout.fillWidth: true
-                    Label {
-                        text: inspector.title
-                        font.pixelSize: 18
-                        font.weight: Font.DemiBold
-                        elide: Text.ElideRight
-                        Layout.fillWidth: true
-                        Layout.maximumWidth: implicitWidth
-                    }
-                    Info { topic: inspector.intro; font.pixelSize: 15 }
-                    Item { Layout.fillWidth: true }
-                }
+            Layout.leftMargin: 8
+            Layout.rightMargin: 8
+            Layout.topMargin: 6
+            Label {
+                text: inspector.title
+                font.pixelSize: 15
+                font.weight: Font.DemiBold
+                elide: Text.ElideRight
+                Layout.fillWidth: true
+                Layout.maximumWidth: implicitWidth
+                ToolTip.visible: truncated && titleHover.hovered
+                ToolTip.delay: 400
+                ToolTip.text: inspector.title
+                HoverHandler { id: titleHover }
             }
+            Info { topic: inspector.intro }
+            Item { Layout.fillWidth: true }
         }
         ScrollPage {
             Layout.fillWidth: true

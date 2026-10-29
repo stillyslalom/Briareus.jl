@@ -210,8 +210,9 @@ dots switch once the drive has a power ratio for that color (below).
 
 ![The beam matrix: each beam row of the model tree carries 2 × 3 dots (1ω, 2ω, 3ω; the top row in the calculations, the bottom row drawn), and the properties of the inner quad Q15T hold the same matrix as check boxes. With illustrative 1ω and 2ω power ratios of 5 % each, Q15T's unconverted light is drawn (each color's outlines and center lines as rays) while its 3ω light alone takes part in the calculations; the rows of its group and of all the beams show the 1ω and 2ω drawing dots pale, on for one of their beams.](assets/gui/beam_matrix.png)
 
-A component's box shows or hides it, and its glyph (also the context menu and
-Properties ▸ *Display*) sets its display mode: opaque, semi-transparent, wireframe or
+A component's box, in its color, shows or hides it; the box's fill is its display mode
+(solid opaque, pale semi-transparent, an outline as wireframe, empty when hidden), which
+the context menu and Properties ▸ *Display* set: opaque, semi-transparent, wireframe or
 invisible. A click selects through semi-transparent and wireframe components to an
 opaque one behind them. *Include in calculations* is separate: a component left out is
 drawn as a gray ghost and removed from the target (which becomes an open enclosure),
@@ -227,9 +228,9 @@ collects every explanation by page. Help ▸ Documentation opens this page.
 
 ![The Help screen at the placement sweep's page: the explanations behind the ⓘ marks, listed by page, with a link to this documentation.](assets/gui/help.png)
 
-- **Target:** the template (hohlraum with capsule, backlighter foil, or custom parts
-  only), its dimensions and wall material, and the mesh: a preset (above) or element
-  sizes in mm for the wall and the capsule.
+- **Target:** its dimensions and wall material, and the mesh: a preset (above) or
+  element sizes in mm for the wall and the capsule. The template (hohlraum with capsule,
+  backlighter foil, or custom parts only) starts a target: File ▸ New target.
 - **Windows** ([`WallWindow`](@ref)): azimuth, height, round (the default, with the
   exact disk area) or rectangular, open or closed with their own albedo and conversion
   efficiency. Overlapping windows, or a window past the end of the wall, are refused.

@@ -2,8 +2,8 @@
 // group and quad, analyses. Click selects (in the 3D view too), Ctrl + click adds beams
 // to the selection, double click fits the view to it, the arrow expands, a beam row's
 // dots switch its 1ω, 2ω and 3ω light in the calculations (top) and in the view
-// (bottom), a component's box shows or hides it and its glyph sets its display mode,
-// right click opens the node's actions.
+// (bottom), a component's box (its color, filled by its display mode) shows or hides
+// it, right click opens the node's actions (a component's display mode among them).
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -19,16 +19,24 @@ Pane {
     ColumnLayout {
         anchors.fill: parent
         spacing: 0
-        Pane {
+        // a title row as high as the Properties panel's, with the size of a multiple selection
+        RowLayout {
             Layout.fillWidth: true
-            padding: 12
-            bottomPadding: 6
-            Label { text: "MODEL"; font.pixelSize: 11; font.letterSpacing: 1; opacity: 0.6 }
-        }
-        Note {
-            visible: app.selectionCount > 1
-            text: app.selectionCount + " selected (Ctrl + click adds or removes)"
-            Layout.leftMargin: 12
+            Layout.leftMargin: 8
+            Layout.rightMargin: 8
+            Layout.topMargin: 6
+            Label { text: "Model"; font.pixelSize: 15; font.weight: Font.DemiBold }
+            Label {
+                visible: app.selectionCount > 1
+                text: app.selectionCount + " selected"
+                opacity: 0.6
+                Layout.fillWidth: true
+                horizontalAlignment: Text.AlignRight
+                HoverHandler { id: countHover }
+                ToolTip.visible: countHover.hovered
+                ToolTip.delay: 400
+                ToolTip.text: "Ctrl + click adds or removes; Shift + click selects a range"
+            }
         }
         ListView {
             id: list
@@ -41,7 +49,7 @@ Pane {
             delegate: Rectangle {
                 id: node
                 width: list.width
-                height: 28
+                height: 22
                 readonly property string nodeId: model.id
                 readonly property string nodeKind: model.kind
                 readonly property string nodeDisplay: model.drawmode
@@ -71,12 +79,12 @@ Pane {
                 }
                 RowLayout {
                     anchors.fill: parent
-                    anchors.leftMargin: 8 + 16 * model.depth
-                    anchors.rightMargin: 8
+                    anchors.leftMargin: 6 + 14 * model.depth
+                    anchors.rightMargin: 6
                     spacing: 4
                     Label {
                         text: model.expandable ? (model.expanded ? "▾" : "▸") : ""
-                        Layout.preferredWidth: 14
+                        Layout.preferredWidth: 12
                         horizontalAlignment: Text.AlignHCenter
                         opacity: 0.7
                         TapHandler { onTapped: Julia.br_toggle_expand(node.nodeId) }
@@ -87,36 +95,44 @@ Pane {
                         nodeId: node.nodeId
                         Layout.preferredWidth: implicitWidth
                     }
-                    CheckBox {
-                        visible: model.on >= 0 && model.matrix === ""
-                        checked: model.on !== 0
-                        opacity: model.on === 2 ? 0.55 : 1
-                        padding: 0
-                        Layout.preferredHeight: 22
-                        Layout.preferredWidth: 22
-                        onToggled: Julia.br_tree_on(node.nodeId, checked)
-                        ToolTip.visible: hovered
-                        ToolTip.delay: 500
-                        ToolTip.text: "Show or hide in the 3D view (it stays in the calculations)"
-                    }
-                    Label {
-                        // the display mode: click for the choices
+                    // a component: one box in its color, checked while drawn; the fill is its
+                    // display mode (solid opaque, pale semi-transparent, an outline as
+                    // wireframe, empty hidden). A click shows or hides it; its menu sets the mode.
+                    Rectangle {
+                        id: compBox
                         visible: model.drawmode !== ""
-                        text: ({ opaque: "■", transparent: "◧", wireframe: "▦", invisible: "□" })[model.drawmode] || ""
-                        opacity: 0.75
-                        Layout.preferredWidth: 14
-                        horizontalAlignment: Text.AlignHCenter
-                        HoverHandler { id: modeHover }
-                        ToolTip.visible: modeHover.hovered
+                        readonly property color base: model.color === "" ? palette.mid : model.color
+                        readonly property bool shown: model.drawmode !== "invisible"
+                        readonly property bool dark: 0.299 * base.r + 0.587 * base.g + 0.114 * base.b < 0.6
+                        implicitWidth: 14
+                        implicitHeight: 14
+                        radius: 3
+                        color: model.drawmode === "opaque" ? base
+                             : model.drawmode === "transparent" ? Qt.rgba(base.r, base.g, base.b, 0.35) : "transparent"
+                        border.color: shown ? base : Qt.rgba(base.r, base.g, base.b, 0.6)
+                        border.width: model.drawmode === "wireframe" ? 2 : 1.2
+                        Label {
+                            anchors.centerIn: parent
+                            visible: compBox.shown
+                            text: "✓"
+                            font.pixelSize: 11
+                            font.bold: true
+                            color: model.drawmode === "opaque" ? (compBox.dark ? "white" : "black") : palette.text
+                        }
+                        HoverHandler { id: boxHover; cursorShape: Qt.PointingHandCursor }
+                        ToolTip.visible: boxHover.hovered
                         ToolTip.delay: 400
-                        ToolTip.text: "Display: " + ({ opaque: "opaque", transparent: "semi-transparent",
-                                                       wireframe: "wireframe", invisible: "invisible" })[model.drawmode] +
-                                      " (click to change)"
-                        TapHandler { onTapped: displayMenu.popup() }
+                        ToolTip.text: (compBox.shown ? "Drawn " : "Hidden") +
+                                      ({ opaque: "opaque", transparent: "semi-transparent", wireframe: "as wireframe",
+                                         invisible: "" })[model.drawmode] +
+                                      ": click to " + (compBox.shown ? "hide" : "show") + ", right-click for the " +
+                                      "display mode (drawing only: it stays in the calculations)"
+                        TapHandler { onTapped: Julia.br_tree_on(node.nodeId, !compBox.shown) }
                     }
                     StatusDot { visible: model.status !== ""; status: model.status }
+                    // a beam set's color (a component's is its box)
                     Rectangle {
-                        visible: model.color !== ""
+                        visible: model.color !== "" && model.drawmode === ""
                         implicitWidth: 12
                         implicitHeight: 12
                         radius: 2
@@ -143,33 +159,6 @@ Pane {
                         ToolTip.delay: 400
                         ToolTip.text: model.detail
                         HoverHandler { id: detailHover }
-                    }
-                }
-                AutoMenu {
-                    id: displayMenu
-                    MenuItem {
-                        text: app.displayLabels[0]
-                        checkable: true
-                        checked: node.nodeDisplay === "opaque"
-                        onTriggered: Julia.br_set_display(node.nodeId, "opaque")
-                    }
-                    MenuItem {
-                        text: app.displayLabels[1]
-                        checkable: true
-                        checked: node.nodeDisplay === "transparent"
-                        onTriggered: Julia.br_set_display(node.nodeId, "transparent")
-                    }
-                    MenuItem {
-                        text: app.displayLabels[2]
-                        checkable: true
-                        checked: node.nodeDisplay === "wireframe"
-                        onTriggered: Julia.br_set_display(node.nodeId, "wireframe")
-                    }
-                    MenuItem {
-                        text: app.displayLabels[3]
-                        checkable: true
-                        checked: node.nodeDisplay === "invisible"
-                        onTriggered: Julia.br_set_display(node.nodeId, "invisible")
                     }
                 }
                 AutoMenu {

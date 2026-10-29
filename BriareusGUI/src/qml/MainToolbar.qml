@@ -1,6 +1,7 @@
 // The toolbar: views, display, and the analyses. Everything here is also in the menus.
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Controls as Style
 import QtQuick.Layouts
 import QtQml.Models
 import jlqml
@@ -24,12 +25,14 @@ ToolBar {
         }
     }
     // the tools wrap to a second row when the window is too narrow for one
+    topPadding: 2
+    bottomPadding: 2
     contentHeight: tools.implicitHeight
     Flow {
         id: tools
-        x: 8
-        width: parent.width - 16
-        spacing: 2
+        x: 4
+        width: parent.width - 8
+        spacing: 1
 
         component Tool: ToolButton {
             property string tip: ""
@@ -37,6 +40,11 @@ ToolBar {
             ToolTip.delay: 500
             ToolTip.text: tip
             focusPolicy: Qt.NoFocus
+            topPadding: 3
+            bottomPadding: 3
+            leftPadding: 8
+            rightPadding: 8
+            implicitHeight: 28
         }
 
         Tool { text: "Fit"; tip: "Fit the whole target (F in the view)"; onClicked: Julia.br_fit_all() }
@@ -300,10 +308,12 @@ ToolBar {
             }
         }
         ToolSeparator {}
-        Label { text: "Beams"; opacity: 0.7; leftPadding: 4; rightPadding: 4; height: beamStyleBox.height; verticalAlignment: Text.AlignVCenter }
-        ComboBox {
+        Label { text: "Beams"; opacity: 0.7; leftPadding: 2; rightPadding: 4; height: beamStyleBox.height; verticalAlignment: Text.AlignVCenter }
+        // the style's own combo boxes: the compact ones of "common" lose their background
+        // in this bar (seen in grabs of the header)
+        Style.ComboBox {
             id: beamStyleBox
-            width: 110
+            width: 96
             focusPolicy: Qt.NoFocus
             textRole: "text"; valueRole: "value"
             model: [{ text: "Rays", value: "rays" }, { text: "Volumes", value: "volumes" },
@@ -312,8 +322,8 @@ ToolBar {
             onActivated: Julia.br_beam_style(currentValue)
         }
         Label { text: "Color"; opacity: 0.7; leftPadding: 8; rightPadding: 4; height: beamStyleBox.height; verticalAlignment: Text.AlignVCenter }
-        ComboBox {
-            width: 180
+        Style.ComboBox {
+            width: 160
             focusPolicy: Qt.NoFocus
             textRole: "text"; valueRole: "value"
             model: [{ text: "Components", value: "component" },

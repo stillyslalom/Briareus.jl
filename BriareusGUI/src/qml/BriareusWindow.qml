@@ -32,6 +32,9 @@ ApplicationWindow {
     y: Screen.virtualY + Math.max(0, Math.round((availH - height) / 2))
     minimumWidth: Math.min(1100, availW)
     minimumHeight: Math.min(680, availH)
+    // a denser text than the style's 14 px, as in an Office ribbon: the controls in "common"
+    // follow it with their own tighter padding
+    font.pixelSize: 13
     visible: true
     readonly property bool smallScreen: availW < 1800 || availH < 1100
     Component.onCompleted: {
@@ -306,12 +309,15 @@ ApplicationWindow {
     header: MainToolbar {}
 
     footer: ToolBar {
+        topPadding: 0
+        bottomPadding: 0
+        contentHeight: 22
         RowLayout {
             anchors.fill: parent
             anchors.leftMargin: 10
             anchors.rightMargin: 10
             spacing: 10
-            BusyIndicator { running: app.busy !== ""; visible: running; Layout.preferredHeight: 20; Layout.preferredWidth: 20 }
+            BusyIndicator { running: app.busy !== ""; visible: running; Layout.preferredHeight: 18; Layout.preferredWidth: 18 }
             Label { text: app.busy; visible: text !== ""; color: "#2f7fd8" }
             Label { text: app.status; elide: Text.ElideRight; Layout.fillWidth: true; opacity: 0.8 }
             Label {

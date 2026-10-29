@@ -7,7 +7,7 @@ import QtQuick.Layouts
 ScrollView {
     id: scroll
     default property alias content: column.data
-    property int margin: 14
+    property int margin: 8
     contentWidth: availableWidth
     contentHeight: column.implicitHeight + 2 * margin
     clip: true
@@ -16,6 +16,6 @@ ScrollView {
         x: scroll.margin
         y: scroll.margin
         width: scroll.availableWidth - 2 * scroll.margin
-        spacing: 8
+        spacing: 5
     }
 }

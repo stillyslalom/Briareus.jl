@@ -1,5 +1,6 @@
-// Properties of the target: template, dimensions and materials, mesh element sizes,
-// and adding windows and parts.
+// Properties of the target: dimensions and materials, mesh element sizes, and adding
+// windows and parts. The template (hohlraum, foil, parts only) starts a target: File ▸
+// New target.
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -7,22 +8,9 @@ import jlqml
 import "../common"
 
 ColumnLayout {
-    spacing: 8
+    spacing: 5
 
-    RowLayout {
-        spacing: 8
-        Label { text: "Template"; Layout.preferredWidth: 150 }
-        ComboBox {
-            Layout.fillWidth: true
-            textRole: "text"; valueRole: "value"
-            model: [{ text: "Hohlraum with capsule", value: "hohlraum" },
-                    { text: "Backlighter foil", value: "foil" },
-                    { text: "Custom (parts only)", value: "custom" }]
-            currentIndex: Math.max(0, ["hohlraum", "foil", "custom"].indexOf(app.targetKind))
-            onActivated: Julia.br_set_target_kind(currentValue)
-        }
-    }
-    SectionLabel { text: "Dimensions and wall"; visible: app.targetKind !== "custom" }
+    SectionLabel { text: "Dimensions and wall"; visible: app.targetKind !== "custom"; Layout.topMargin: 0 }
     Repeater {
         model: targetFieldModel
         delegate: PropRow {
@@ -61,9 +49,11 @@ ColumnLayout {
     SectionLabel { text: "Mesh"; info: "target.mesh" }
     RowLayout {
         spacing: 8
-        Label { text: "Preset"; Layout.preferredWidth: 150 }
+        Label { text: "Preset"; Layout.preferredWidth: 140 }
         ComboBox {
             Layout.fillWidth: true
+            // the name in the box, the accuracy and time in its list
+            displayText: ["Coarse", "Standard", "Fine", "Custom element sizes"][currentIndex] ?? ""
             textRole: "text"; valueRole: "value"
             model: [{ text: "Coarse · ≈0.5 % in P2, P4 · < 1 s", value: "coarse" },
                     { text: "Standard · ≈0.1 % · seconds", value: "standard" },

@@ -36,9 +36,15 @@ Pane {
                 const room = results.width - w - spacing * (shown.length - 1) - leftPadding - rightPadding - 24
                 return Math.max(4, Math.min(18, Math.floor(room / (2 * shown.length))))
             }
+            topPadding: 0
+            bottomPadding: 0
+            implicitHeight: 32
             component Tab: TabButton {
                 leftPadding: tabs.pad
                 rightPadding: tabs.pad
+                topPadding: 4
+                bottomPadding: 6
+                implicitHeight: 30
                 width: Math.ceil(tabFont.advanceWidth(text)) + 2 * tabs.pad + 2
             }
             Tab { text: "Beam table" }
@@ -55,17 +61,17 @@ Pane {
             Layout.fillHeight: true
             currentIndex: tabs.currentIndex
             Item {
-                BeamTablePanel { anchors.fill: parent; anchors.margins: 10 }
+                BeamTablePanel { anchors.fill: parent; anchors.margins: 6 }
             }
             DrivePanel {}
             TimePanel { id: timePanel }
             OptimizePanel {}
             Item {
-                ClearancePanel { anchors.fill: parent; anchors.margins: 10 }
+                ClearancePanel { anchors.fill: parent; anchors.margins: 6 }
             }
             SweepPanel { id: sweepPanel }
             Item {
-                TalisPanel { anchors.fill: parent; anchors.margins: 10 }
+                TalisPanel { anchors.fill: parent; anchors.margins: 6 }
             }
         }
     }

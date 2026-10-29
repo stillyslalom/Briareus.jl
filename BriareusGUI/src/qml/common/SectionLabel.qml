@@ -9,7 +9,7 @@ RowLayout {
     property string info: ""
     property string infoTip: ""
     spacing: 6
-    Layout.topMargin: 10
+    Layout.topMargin: 6
     Label { id: heading; font.weight: Font.DemiBold }
     Info { visible: parent.info !== "" && explanation !== ""; topic: parent.info; tip: parent.infoTip }
     Item { Layout.fillWidth: true }

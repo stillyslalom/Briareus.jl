@@ -61,7 +61,7 @@ ColumnLayout {
             delegate: Rectangle {
                 id: beamRow
                 width: table.width
-                height: 34
+                height: 28
                 readonly property int rowNumber: model.number
                 readonly property string nodeId: (app.beamsBy === "group" ? "group:" : app.beamsBy === "quad" ? "quad:" : "beam:") + model.key
                 readonly property var cells: [

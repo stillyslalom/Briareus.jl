@@ -22,7 +22,7 @@ Item {
 
     ColumnLayout {
         anchors.fill: parent
-        anchors.margins: 8
+        anchors.margins: 6
         spacing: 4
 
         // the charts (as one segmented control), then the pulses and the run; the buttons

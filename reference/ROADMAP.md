@@ -196,17 +196,16 @@ Items 7–12 follow the 2026-10-22 literature review against Kritcher et al. 202
     gap").
 24. **GUI density and layout (user review, 2026-10-29).** The GUI works but spends screen
     space a CAD tool needs for the model; aim toward Office-ribbon density, not all the way.
-    - Margins and padding: generous around the toolbar and menu bar, the results panel's
-      tab bar (above it and below it, taking room from the content), and in text fields.
-    - Model tree rows: each component carries a large check box, a display box and a color
-      box, misaligned with the beam rows' dots. Make them one control: a check box filled
-      with the component's color.
-    - Inspector: text still clipped (the template choice "Hohlraum with capsu…", the mesh
-      preset menu "Coarse · ≈0.5 % in P2, …"), against the no-clipped-text rule.
-    - Inspector order: *Template* heads the Target page, though it is chosen once and
-      rarely changed; the frequently edited fields belong first. Whether a template is a
-      property of the assembly at all is open: perhaps a way to start one (File ▸ New
-      target), after which the assembly is its parts.
+    *Done:* a 13 px window font; compact text fields, buttons, combo boxes, check and
+    radio boxes for every page (`common/` shadows the style's controls); a tighter
+    toolbar, status bar, results tab bar, beam table and panel margins; one-line panel
+    titles; one colored box per tree component (fill = display mode); the template only
+    in File ▸ New target; combo lists as wide as their widest entry. *Left:*
+    - The toolbar's two combo boxes keep the style's height: the compact ones lose
+      their background in that bar (seen in grabs of the header, not in a bare QML
+      test), so the bar is 42 px rather than about 34.
+    - Whether a template is a property of the assembly at all (now only a way to start
+      one), and the next pass on what still takes room once the user has used it.
     - Assemblies: "hohlraum with capsule" is one fixed template. Check that the model
       extends to compound targets, e.g. two halfraums driving a shock-tube physics package
       between them (Nagel's Rayleigh–Taylor experiments): several drive sources, a package
