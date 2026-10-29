@@ -64,8 +64,8 @@ ReviewState() = ReviewState(Observable(Symbol[]), Observable(Symbol[]), Observab
                             Ref(Symbol[]), Threads.Atomic{Bool}(false))
 
 # Whether a component is where beams are meant to land by default (a hohlraum wall or
-# capsule, a backlighter foil); everything else is hardware to check.
-_lands_on(name::Symbol) = name in (:wall, :capsule, FOIL_NAME)
+# capsule, a backlighter foil: one of `foils`); everything else is hardware to check.
+_lands_on(name::Symbol, foils) = name in (:wall, :capsule) || name in foils
 
 # Keep two role lists (`first`, `second`) in step with a target's components: roles of
 # known components stay; new components get `role(name)` (`1`, `2`, or `0` for none);
@@ -92,17 +92,18 @@ function _update_roles!(first::Observable, second::Observable, known::Base.RefVa
 end
 
 """
-    default_selection!(rv::ReviewState, t::Target)
+    default_selection!(rv::ReviewState, t::Target; foils = (FOIL_NAME,))
 
 Choose the landing targets and hardware for a target's components: a hohlraum's beams
 land on the wall and capsule and everything else (LEH caps, closed diagnostic
-windows) is checked; a foil's beams land on the foil and the main target is checked.
+windows) is checked; the beams land on every backlighter foil (`foils`, component names:
+a session passes [`foil_components`](@ref)) and the main target is checked.
 Components the selection was already made for keep their roles; new components get
 the default role.
 """
-function default_selection!(rv::ReviewState, t::Target)
+function default_selection!(rv::ReviewState, t::Target; foils = (FOIL_NAME,))
     _update_roles!(rv.targets, rv.hardware, rv.known, surface_names(t),
-                   n -> _lands_on(n) ? 1 : 2)
+                   n -> _lands_on(n, foils) ? 1 : 2)
     return rv
 end
 

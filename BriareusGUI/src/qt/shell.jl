@@ -506,7 +506,7 @@ function BriareusShell(sess::DesignSession; queue::Channel{Any} = Channel{Any}(I
     ts, bt, dr, st, rv, tl, v, tm = sess.target, sess.beams, sess.drive, sess.optimize, sess.review,
                                     sess.talis, sess.view, sess.time
     for obs in (sess.status, sess.meshing, sess.cad_changed, ts.kind, ts.params, ts.mesh, ts.resolution,
-                ts.windows, ts.parts, ts.target, ts.error, ts.pending, ts.building, ts.fitting,
+                ts.windows, ts.parts, ts.target, ts.error, ts.pending, ts.building, ts.fitting, ts.active_foil,
                 bt.beams, bt.enabled, bt.preset, bt.by, bt.path, bt.error, bt.warnings,
                 dr.scenario, dr.building, dr.result, dr.evaluating, dr.field, dr.view,
                 dr.cavity, dr.cavity_point, dr.films, dr.beam_model, dr.profile,
@@ -679,7 +679,12 @@ function _refresh_target!(sh::BriareusShell)
     _set!(sh, "partCount", length(ts.parts[]))
     names = component_names(ts.target[])
     _set!(sh, "hasCapsule", :capsule in names)
-    _set!(sh, "hasFoil", FOIL_NAME in names)
+    foil = active_foil(ts)
+    _set!(sh, "hasFoil", foil !== nothing && Controllers._has_part(ts.target[], foil))
+    # the foils to choose the active one from (shown with two or more)
+    fs = foil_names(ts)
+    _set!(sh, "foilNames", [n === FOIL_NAME && ts.kind[] === :foil ? "Backlighter foil (template)" : String(n) for n in fs])
+    _set!(sh, "activeFoil", something(findfirst(==(foil), fs), 1) - 1)
     _set!(sh, "lehClosure", get(ts.params[], :leh_closure, 0.0) != 0)
     for (k, _, _, _) in LEH_CLOSURE_FIELDS
         _set!(sh, String(k), _num(ts.params[][k]))
@@ -1764,7 +1769,7 @@ function br_part_role(index)
         # once given (a CAD capsule's sphere may be fitted on a worker first): select the
         # part holding the role, the fitted sphere for a CAD capsule
         done = function ()
-            i = role === :none ? nothing : part_index(ts, Controllers._ROLE_NAMES[role])
+            i = role === :capsule ? part_index(ts, :capsule) : nothing
             p = i === nothing ? ts.parts[][something(part_index(ts, name), idx[1])] : ts.parts[][i]
             select!(sh.sess.view, "part:" * String(p.name))
             sh.sess.status[] = "$(p.name): " * lowercase(PART_ROLE_LABELS[part_role(p)])
@@ -1775,6 +1780,17 @@ function br_part_role(index)
         else
             delete!(sh.shown, "partRole")
         end
+    end
+end
+# The foil the foil analyses take (index into `foilNames`).
+function br_active_foil(index)
+    _with_shell() do sh
+        fs = foil_names(sh.sess.target)
+        k = Int(index) + 1
+        1 <= k <= length(fs) || return
+        set_active_foil!(sh.sess.target, fs[k]) &&
+            (sh.sess.status[] = "the foil analyses take $(fs[k])")
+        delete!(sh.shown, "activeFoil")
     end
 end
 function br_part_coords(index)
@@ -2272,7 +2288,7 @@ function _register_qml_functions()
     @qmlfunction br_sw_subject br_sw_frame br_sw_axis br_sw_edit br_sw_check br_sw_object
     @qmlfunction br_sw_quality br_sw_start br_sw_cancel br_sw_select br_sw_apply
     @qmlfunction br_sw_mode br_sw_step br_sw_number br_step_sweep
-    @qmlfunction br_part_role br_export_stl br_cavity br_cavity_point br_part_film
+    @qmlfunction br_part_role br_active_foil br_export_stl br_cavity br_cavity_point br_part_film
     @qmlfunction br_remove_selected br_help br_docs_url
     @qmlfunction br_load_preset br_set_grouping br_edit_beam br_set_beam_on br_edit_node
     @qmlfunction br_import_beams br_export_beams br_import_sst br_import_summary br_export_sst

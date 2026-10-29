@@ -5,7 +5,8 @@
 # restored design.
 
 const SESSION_FORMAT = "BriareusGUI session"
-const SESSION_VERSION = 4               # 2: `.briar` archives with the CAD files; 3: frames; 4: placement steps
+const SESSION_VERSION = 5               # 2: `.briar` archives with the CAD files; 3: frames; 4: placement steps;
+                                        # 5: foil roles as a flag, and the active foil
 
 _strs(xs) = [String(x) for x in xs]
 _syms(xs) = Symbol[Symbol(x) for x in xs]
@@ -58,11 +59,13 @@ function session_state(sess::DesignSession; view::Bool = true)
                                        "conversion" => w.conversion, "round" => w.round)
                       for w in ts.windows[]],
         "excluded" => sort(_strs(ts.excluded[])),
+        "active_foil" => String(something(active_foil(ts), Symbol(""))),
         "parts" => [Dict{String,Any}("kind" => String(p.kind), "name" => String(p.name),
                                      "values" => _fdict(p.values), "two_sided" => p.two_sided,
                                      "inward" => p.inward, "aperture" => p.aperture, "file" => p.file,
                                      "frame" => String(p.frame), "coords" => String(p.coords),
-                                     "object" => p.object, "steps" => _step_state.(p.steps))
+                                     "object" => p.object, "steps" => _step_state.(p.steps),
+                                     "foil" => p.foil)
                     for p in ts.parts[]])
     beams = Dict{String,Any}("preset" => String(bt.preset[]), "by" => String(bt.by[]),
                              "facility" => String(bt.facility[]),
@@ -139,6 +142,9 @@ chamber (to round-off); other anchors are frame names already. A beam that follo
 component (`aim_ref`) aims in that component's frame when it has one (a part's, a
 template's), else in `:tcc`; the saved chamber aims are kept as they are and re-expressed
 in their frames.
+
+Sessions before version 5 named the part with the role of the backlighter foil
+`backlighter`: that part loads as a foil (keeping the name) and the active one.
 """
 function restore!(sess::DesignSession, state::AbstractDict)
     get(state, "format", "") == SESSION_FORMAT ||
@@ -155,12 +161,15 @@ function restore!(sess::DesignSession, state::AbstractDict)
     windows = WindowSpec[WindowSpec(; phi = w["phi"], z = w["z"], width = w["width"], height = w["height"],
                                     open = w["open"], albedo = w["albedo"], conversion = w["conversion"],
                                     round = w["round"]) for w in t["windows"]]
-    old = get(state, "version", 0) < 3
-    parts = PartSpec[_state_part(p, old ? params : nothing) for p in t["parts"]]
+    version = get(state, "version", 0)
+    old = version < 3
+    parts = PartSpec[_state_part(p, old ? params : nothing; named_foil = version < 5) for p in t["parts"]]
     _cancel_fits!(ts)                     # a capsule fit in flight was for another design
     _try_build!(ts; kind = Symbol(t["kind"]), params, mesh, windows, parts,
                 excluded = Set(_syms(get(t, "excluded", String[])))) ||
         throw(ArgumentError("the saved target was rejected: $(ts.error[])"))
+    a = version < 5 ? (any(p -> p.foil, parts) ? FOIL_NAME : "") : t["active_foil"]
+    ts.active_foil[] = isempty(String(a)) ? nothing : Symbol(a)
     sess.visrad_source[] = get(state, "visrad_source", "")
     b = state["beams"]
     rows = b["beam"]
@@ -278,8 +287,9 @@ end
 # A saved part. `params` (the target's dimensions) for a session before version 3: a part
 # in the old foil frame (`anchor = "foil"`, axes the columns of [0 0 1; 0 1 0; -1 0 0],
 # `z` along the foil's back normal) is re-expressed in the `:backlighter` frame, its
-# chamber placement unchanged.
-function _state_part(p, params)
+# chamber placement unchanged. `named_foil` (before version 5): the foil role is the
+# name `backlighter`.
+function _state_part(p, params; named_foil::Bool = false)
     vals = Dict{Symbol,Float64}(Symbol(k) => v for (k, v) in p["values"])
     frame = Symbol(get(p, "frame", get(p, "anchor", "tcc")))
     if params !== nothing && frame === :foil
@@ -295,7 +305,8 @@ function _state_part(p, params)
     return PartSpec(Symbol(p["kind"]); name = Symbol(p["name"]), values = vals,
                     two_sided = p["two_sided"], inward = p["inward"], aperture = p["aperture"],
                     file = get(p, "file", ""), frame, coords = Symbol(get(p, "coords", "cartesian")),
-                    object = get(p, "object", ""), steps = _state_step.(get(p, "steps", Dict[])))
+                    object = get(p, "object", ""), steps = _state_step.(get(p, "steps", Dict[])),
+                    foil = named_foil ? p["name"] == String(FOIL_NAME) : p["foil"])
 end
 
 # ---------------------------------------------------------------- CAD files in sessions

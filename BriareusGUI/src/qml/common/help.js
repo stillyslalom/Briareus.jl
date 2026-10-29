@@ -56,11 +56,14 @@ var pages = [
                 "values). The part follows the frames its steps refer to, as it follows the " +
                 "frame it is placed in." },
         { key: "part.role", title: "Role",
-          text: "A role names the part as the analyses expect it: the capsule (a sphere, or a CAD " +
-                "part a sphere is fitted to) whose x-ray drive is observed, or the backlighter foil " +
-                "(a flat part or a mesh) whose spot the foil objective makes uniform. Renaming a " +
-                "part, or giving it a role, keeps the parts placed in its frame and the beams aimed " +
-                "in it." },
+          text: "A role marks the part for the analyses: the capsule (a sphere, or a CAD part a " +
+                "sphere is fitted to, named capsule) whose x-ray drive is observed, or a backlighter " +
+                "foil (a flat part or a mesh, keeping its name). Any number of parts can be foils; " +
+                "the active foil (Drive ▸ Active foil, or the part's own check) is the one whose " +
+                "spot statistics, map and objective the drive and the optimization take, and whose " +
+                "line of sight and captured power the sweep checks. The clearance and TaLIS checks " +
+                "take every foil as a surface the beams land on. Renaming a part, or giving it a " +
+                "role, keeps the parts placed in its frame and the beams aimed in it." },
         { key: "part.cad", title: "Parts from CAD files",
           text: "Windings repaired (closed solids face out of their material, open sheets the " +
                 "target center) and the surface remeshed into elements of the part's size; a part " +

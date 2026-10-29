@@ -86,6 +86,21 @@ ColumnLayout {
             onClicked: Julia.br_set_view("map")
         }
     }
+    RowLayout {
+        visible: app.foilNames.length > 1
+        spacing: 8
+        Layout.fillWidth: true
+        Label { text: "Active foil"; Layout.preferredWidth: 140 }
+        ComboBox {
+            Layout.fillWidth: true
+            model: app.foilNames
+            currentIndex: app.activeFoil
+            onActivated: (index) => Julia.br_active_foil(index)
+            ToolTip.visible: hovered
+            ToolTip.delay: 400
+            ToolTip.text: "The foil whose spot statistics, map and objective the drive and the optimization take, and the sweep's line of sight and captured power"
+        }
+    }
     PropRow {
         visible: app.hasFoil
         label: "Spot radius"

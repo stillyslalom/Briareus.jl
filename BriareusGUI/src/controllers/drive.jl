@@ -406,6 +406,13 @@ function _open_cavity(t::Target, point, films)
     return best[1], best[2], best[3]
 end
 
+# Whether `t` has a part or component named `name` (`false` for `nothing`).
+_has_part(t::Target, name) =
+    name !== nothing && (name in component_names(t) || any(c -> c.part === name, t.components))
+
+# The foil a flux-map lookup was made for (`nothing`: none, or a capsule map).
+_lookup_foil(lk) = lk !== nothing && lk.kind === :foil ? lk.foil : nothing
+
 # Build a scenario for a target and the table's beams (all of them: disabled beams are
 # evaluated at zero power, so on/off needs no rebuild). Hohlraums observe the capsule;
 # `closed` (a hohlraum and nothing outside it) balances the view factors of the
@@ -418,7 +425,8 @@ end
 # (`_cavity_closure`), whatever `closed` says. `profile` is the deposition's beam model
 # (`nothing`: the f-cone; a `VisRadProfile`: VisRad's, see `set_beam_model!`).
 # `references` (CAD part name => file facets, `_fit_references`) splits those parts into
-# their fitted curved pieces in the drive's target (`_fitted_target`). Returns `(; s,
+# their fitted curved pieces in the drive's target (`_fitted_target`). `foil`: the
+# backlighter foil of the flux map (`active_foil`). Returns `(; s,
 # lookup, enc, index, film, escape, closed, leak)`: the scenario, its flux-map lookup,
 # the cavity's enclosure and the target element of each drive element (`nothing` when
 # the drive's elements are the target's), the film found (`nothing` without a cavity),
@@ -428,7 +436,8 @@ end
 function _build_scenario(t::Target, beams::Vector{Beam{Float64}}; closed::Bool = false,
                          radiation::Union{Bool,Nothing} = nothing, cavity = nothing,
                          profile::Union{Nothing,VisRadProfile} = nothing,
-                         references::AbstractDict = Dict{Symbol,Mesh}())
+                         references::AbstractDict = Dict{Symbol,Mesh}(),
+                         foil::Union{Nothing,Symbol} = nothing)
     enc = index = film = nothing
     escape = NaN
     leak = (; fraction = NaN, apertures = false)
@@ -452,7 +461,7 @@ function _build_scenario(t::Target, beams::Vector{Beam{Float64}}; closed::Bool =
     names = component_names(t)
     observe = radiation && :capsule in names ? :capsule : nothing
     s = Scenario(t, beams; observe, radiation, viewfactor_kw = (; closed), deposition_kw = (; profile))
-    return (; s, lookup = flux_lookup(s), enc, index, film, escape, closed, leak)
+    return (; s, lookup = flux_lookup(s; foil), enc, index, film, escape, closed, leak)
 end
 
 """
@@ -500,14 +509,16 @@ end
 # ---------------------------------------------------------------- flux map
 
 """
-    flux_lookup(s::Scenario; ntheta = 90, nphi = 180, npix = 100)
+    flux_lookup(s::Scenario; foil = nothing, ntheta = 90, nphi = 180, npix = 100)
 
 Raster lookup for [`flux_map`](@ref): for a scenario observing a capsule, the observed
-element seen in each direction of a θ–φ grid about the capsule center; for a foil
-target, the front element nearest each pixel of the foil face (y–z plane). `nothing`
-otherwise.
+element seen in each direction of a θ–φ grid about the capsule center; otherwise, with
+a backlighter foil `foil` (a part or component name of the scenario's target, see
+[`active_foil`](@ref)), the front element nearest each pixel of the foil face (y–z
+plane; the lookup records the foil as `foil`). `nothing` otherwise.
 """
-function flux_lookup(s::Scenario; ntheta::Integer = 90, nphi::Integer = 180, npix::Integer = 100)
+function flux_lookup(s::Scenario; foil::Union{Nothing,Symbol} = nothing, ntheta::Integer = 90,
+                     nphi::Integer = 180, npix::Integer = 100)
     t = s.target
     if !isempty(s.observed)
         obs = s.observed
@@ -525,8 +536,9 @@ function flux_lookup(s::Scenario; ntheta::Integer = 90, nphi::Integer = 180, npi
                 xlabel = "φ (°)", ylabel = "θ (°)",
                 title = "Capsule incident x-ray flux (W/cm²)")
     end
-    FOIL_NAME in component_names(t) || return nothing
-    es = [e for e in elements(t, FOIL_NAME) if t.elem_side[e] == 1]
+    _has_part(t, foil) || return nothing
+    es = [e for e in elements(t, foil) if t.elem_side[e] == 1]
+    isempty(es) && return nothing
     us = [t.elem_centroid[e][2] for e in es]
     vs = [t.elem_centroid[e][3] for e in es]
     ylo, yhi = extrema(us)
@@ -538,7 +550,7 @@ function flux_lookup(s::Scenario; ntheta::Integer = 90, nphi::Integer = 180, npi
     for (j, z) in enumerate(zs), (i, y) in enumerate(ys)
         idx[i, j] = argmin(k -> (us[k] - y)^2 + (vs[k] - z)^2, eachindex(es))
     end
-    return (; kind = :foil, x = collect(ys), y = collect(zs), index = idx, elems = es,
+    return (; kind = :foil, foil, x = collect(ys), y = collect(zs), index = idx, elems = es,
             xlabel = "y (mm)", ylabel = "z (mm)", title = "Foil laser irradiance (W/cm²)")
 end
 
@@ -579,7 +591,7 @@ end
 # conversion independent of intensity; with an intensity-dependent conversion, it is
 # evaluated at that equivalent power's intensity).
 function _evaluate_drive(s::Scenario, beams, lookup, spot_radius::Real; ratio = nothing,
-                         colors = nif_unconverted())
+                         colors = nif_unconverted(), foil = _lookup_foil(lookup))
     t0 = time()
     ev = evaluate(s, beams)
     uc = nothing
@@ -607,7 +619,7 @@ function _evaluate_drive(s::Scenario, beams, lookup, spot_radius::Real; ratio = 
         mean = a[1]
         modes = [(; l, epsilon = mode_amplitude(c, l), legendre = a[l+1] / a[1]) for l in MODE_DEGREES]
     end
-    return DriveResult(ev, sol, modes, mean, power_rows(ev), _spot_stats(ev, spot_radius),
+    return DriveResult(ev, sol, modes, mean, power_rows(ev), _spot_stats(ev, spot_radius, foil),
                        _flux_map(lookup, ev, sol), time() - t0, uc)
 end
 
@@ -676,12 +688,13 @@ _pct_text(x::Real) = _nobreak(string(round(100x; sigdigits = 3), " %"))
 # wrapped line keeps a number with its unit and its symbol.
 _nobreak(s::AbstractString) = replace(s, r"(?<=ε[₀-₉]) | (?=%|W/cm²|eV|mm|TW)" => string(Char(0xa0)))
 
-# Foil irradiance within `radius` of the foil center: mean, peak (W/cm²) and RMS
-# nonuniformity; `nothing` without a foil.
-function _spot_stats(ev::Evaluation, radius::Real)
+# Irradiance of foil `foil` (a part or component name) within `radius` of its center:
+# mean, peak (W/cm²) and RMS nonuniformity; `nothing` without that foil.
+function _spot_stats(ev::Evaluation, radius::Real, foil::Union{Nothing,Symbol})
     t = ev.scenario.target
-    FOIL_NAME in component_names(t) || return nothing
-    front = [e for e in elements(t, FOIL_NAME) if t.elem_side[e] == 1]
+    _has_part(t, foil) || return nothing
+    front = [e for e in elements(t, foil) if t.elem_side[e] == 1]
+    isempty(front) && return nothing
     A = t.elem_area[front]
     c0 = sum(A .* t.elem_centroid[front]) / sum(A)
     es = [e for e in front if norm(t.elem_centroid[e] - c0) <= radius]

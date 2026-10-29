@@ -196,9 +196,10 @@ function set_objective!(st::OptimizeState, objective::Symbol)
     return st
 end
 
-# The objective settings, captured on the GUI thread when a job starts.
-_objective_settings(st::OptimizeState) =
-    (; kind = st.objective[], weights = copy(st.weights[]), hold_drive = st.hold_drive[],
+# The objective settings, captured on the GUI thread when a job starts (`foil`: the
+# backlighter foil of the foil objective, `active_foil`).
+_objective_settings(st::OptimizeState; foil::Union{Nothing,Symbol} = nothing) =
+    (; kind = st.objective[], foil, weights = copy(st.weights[]), hold_drive = st.hold_drive[],
      keepout = st.keepout[], keepout_min = st.keepout_min[],
      capsule_keepout = st.capsule_keepout[], capsule_min = st.capsule_min[], spill = st.spill[])
 
@@ -207,11 +208,11 @@ _objective_settings(st::OptimizeState) =
 function _make_objective(cfg::NamedTuple, s::Scenario, ev0, spot_radius::Real)
     kind = cfg.kind
     if kind === :irradiance
-        FOIL_NAME in component_names(s.target) ||
-            throw(ArgumentError("the foil objective needs a foil target"))
-        c = sum(s.target.elem_centroid[e] for e in elements(s.target, FOIL_NAME)) /
-            length(elements(s.target, FOIL_NAME))
-        return irradiance_objective(FOIL_NAME; center = c, radius = spot_radius, spill = cfg.spill)
+        foil = cfg.foil
+        _has_part(s.target, foil) || throw(ArgumentError("the foil objective needs a backlighter foil"))
+        es = elements(s.target, foil)
+        c = sum(s.target.elem_centroid[e] for e in es) / length(es)
+        return irradiance_objective(foil; center = c, radius = spot_radius, spill = cfg.spill)
     end
     s.model !== nothing && !isempty(s.observed) ||
         throw(ArgumentError("capsule symmetry needs a hohlraum with a capsule"))
@@ -234,8 +235,9 @@ end
 # `ev.flux` would compute the full flux response, which the moments do not need).
 _has_flux(ev::Evaluation) = ev.scenario.model !== nothing && !isempty(ev.scenario.observed)
 
-# Capsule modes / foil spot and clipping of an evaluation, for before/after tables.
-function _quick_summary(ev::Evaluation, spot_radius::Real)
+# Capsule modes / foil spot (of foil `foil`) and clipping of an evaluation, for
+# before/after tables.
+function _quick_summary(ev::Evaluation, spot_radius::Real, foil::Union{Nothing,Symbol} = nothing)
     modes = NamedTuple[]
     mean = NaN
     if _has_flux(ev)
@@ -248,14 +250,15 @@ function _quick_summary(ev::Evaluation, spot_radius::Real)
     has = :capsule in component_names(t)
     cap = has ? minimum(sphere_clearance(SphereKeepOut(t; spheres = (:capsule,)), ev.beams);
                         init = Inf) : Inf
-    return (; modes, mean_flux = mean, spot = _spot_stats(ev, spot_radius),
+    return (; modes, mean_flux = mean, spot = _spot_stats(ev, spot_radius, foil),
             clipped = clipped_fraction(ev), capsule = has ? power_fraction(ev, :capsule) : 0.0,
             capsule_clearance = cap)
 end
 
 """
     start_optimize!(st::OptimizeState, scenario, beams, indices; spot_radius = 0.5,
-                    clusters = nothing, frames = nothing, deliver = f -> f(), spawn = true)
+                    foil = nothing, clusters = nothing, frames = nothing, deliver = f -> f(),
+                    spawn = true)
 
 Optimize the enabled `beams` (positions `indices` in the beam table; `scenario` is
 built for the whole table) with the current settings. Runs `optimize_pointing` on a
@@ -263,14 +266,16 @@ worker with `spawn`; per-group parameters follow `clusters` (the beams' group na
 the beam table) when given, otherwise the beams' cones. With a local aim field free
 (`:u`, `:v`, `:w`) the aims are a `FramePointing` in `frames`, each beam's aim frame
 (chamber `Frame`s, one per beam; the chamber's when not given): a group then shares its
-local aim, and moves in its frame. Its callback hands progress (`evaluations`, `current`, `best`,
+local aim, and moves in its frame. `foil` names the backlighter foil (a part or component
+of the scenario's target) whose spot the foil objective (`:irradiance`) makes uniform and
+the before/after summaries report ([`active_foil`](@ref)). Its callback hands progress (`evaluations`, `current`, `best`,
 at most every 0.1 s) to `deliver`, and so does the result. [`cancel_optimize!`](@ref)
 makes the callback stop the optimization after the next objective evaluation; the
 result is then the best design found so far.
 """
 function start_optimize!(st::OptimizeState, s::Scenario, beams::AbstractVector,
                          indices::AbstractVector{<:Integer}; spot_radius::Real = 0.5,
-                         clusters = nothing, frames = nothing, deliver = f -> f(),
+                         foil::Union{Nothing,Symbol} = nothing, clusters = nothing, frames = nothing, deliver = f -> f(),
                          spawn::Bool = true)
     st.running[] && return st
     try
@@ -293,7 +298,7 @@ function start_optimize!(st::OptimizeState, s::Scenario, beams::AbstractVector,
     st.running[] = true
     gen = st.generation[]
     settings = (; deltas = copy(st.deltas[]))
-    cfg = _objective_settings(st)
+    cfg = _objective_settings(st; foil)
     job = function ()
         t0 = time()
         key = by === :group && clusters !== nothing ?
@@ -303,7 +308,7 @@ function start_optimize!(st::OptimizeState, s::Scenario, beams::AbstractVector,
         x0 = initial_parameters(p)
         lower, upper = _bounds(p, x0, settings.deltas)
         ev0 = evaluate(sub, x0)
-        before = _quick_summary(ev0, spot_radius)
+        before = _quick_summary(ev0, spot_radius, foil)
         obj = _make_objective(cfg, sub, ev0, spot_radius)
         # called on this task after every objective evaluation; `true` stops
         reported = Ref(0.0)
@@ -319,7 +324,7 @@ function start_optimize!(st::OptimizeState, s::Scenario, beams::AbstractVector,
         end
         res = optimize_pointing(sub, obj; x0, lower, upper, iterations, evaluations,
                                 callback = progress)
-        after = _quick_summary(evaluate(sub, res.x), spot_radius)
+        after = _quick_summary(evaluate(sub, res.x), spot_radius, foil)
         return OptimizeResult(parameter_names(p), x0, collect(Float64, res.x), lower, upper,
                               res.initial_value, res.value,
                               Beam{Float64}[_float_beam(b) for b in res.beams],

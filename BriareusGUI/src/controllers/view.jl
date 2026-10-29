@@ -494,6 +494,12 @@ function model_tree(sess)
     if "target" in ex
         cols = component_colors(t)
         lips = Set(shown_component(c.name) for c in t.components if is_lip(c))
+        # the backlighter foils, the active one marked when there are several
+        foils = foil_components(ts, t)
+        act = active_foil(ts)
+        several = length(foil_names(ts)) > 1
+        foiltxt(c) = !(c.name in foils) ? "" :
+                     several && (c.name === act || c.part === act) ? "foil · active" : "foil"
         crow(id, lab, detail, name; color = "") =
             (m = display_mode(v, name);
              _row(id, 1, lab, detail, false, false, m === :invisible ? 0 : 1, "", sel; color,
@@ -502,6 +508,7 @@ function model_tree(sess)
             is_lip(c) && continue                   # shown as part of its entrance hole
             kindtxt = c.kind === :aperture ? (c.name in lips ? "aperture · closing" : "aperture") :
                       c.two_sided ? "two-sided" : ""
+            kindtxt = join(filter(!isempty, [foiltxt(c), kindtxt]), " · ")
             push!(rows, crow(component_id(ts, c.name), component_label(c.name), kindtxt, c.name;
                              color = get(cols, c.name, "")))
         end

@@ -162,7 +162,9 @@ names the menu entries, and the panels are described in [The window](@ref).
    Sessions saved before frames (version 2 and older) load converted: a part placed in
    the old foil frame (z along the foil's back normal) is re-expressed in the
    backlighter foil's frame, where it was, and beams that followed a component aim in
-   that component's frame, their saved aims kept.
+   that component's frame, their saved aims kept. In sessions before version 5 the
+   part with the foil role was named `backlighter`; it loads as the active foil, its
+   name kept.
    Edit ▸ Undo (Ctrl + Z) and Redo (Ctrl + Y) step through every design edit, typed, from
    a menu, from a file or from an applied optimization.
 
@@ -262,11 +264,16 @@ collects every explanation by page. Help ▸ Documentation opens this page.
   elements of the part's size ([`remesh_mesh`](@ref)); a multi-body ASCII STL of named
   solids gives one part per solid. A *VisRad object* part is a component of an imported
   VisRad workspace; a VisRad rectangle, sphere or cylindrical hohlraum keeps VisRad's
-  own element grid unless the part is given an element size. A part's *Role* names it
-  for the analyses: *Capsule* (the observed surface; a CAD capsule is replaced in the
-  calculations by a sphere fitted to it, `fit_sphere`, so a fill tube does not
-  count), *Backlighter foil* (the foil objective's spot), or *Thin film* (left out of the
-  drive's cavity, below).
+  own element grid unless the part is given an element size. A part's *Role* marks it
+  for the analyses: *Capsule* (the observed surface, named `capsule`; a CAD capsule is
+  replaced in the calculations by a sphere fitted to it, `fit_sphere`, so a fill tube does
+  not count), *Backlighter foil* (a flat part or a mesh, keeping its name), or *Thin film*
+  (left out of the drive's cavity, below). Any number of parts can be foils; the *active
+  foil* (Drive ▸ Active foil, or the check in the part's properties, shown with two or
+  more foils) is the one whose spot statistics, map and objective the drive and the
+  optimization take and whose line of sight and captured power the sweep checks, while
+  the clearance and TaLIS checks take every foil as a surface the beams land on. The model
+  tree marks the foils, and the active one among several.
 - **Beams** (a group, quad, beam, or any Ctrl-selected set): the aim relative to the
   ports (z, r and a tangential offset), or a common aim point (x, y, z, as VisRad points
   a cluster at a reference point) in the beams' *Aim frame*: the chamber, an entrance

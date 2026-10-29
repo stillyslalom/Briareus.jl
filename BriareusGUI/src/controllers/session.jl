@@ -105,8 +105,8 @@ function DesignSession(; kind::Symbol = :hohlraum, resolution::Symbol = :standar
                          TimeState(), ViewState(), Observable(""), ts.deliver, ts.spawn, EditHistory(),
                          Ref(""), Observable(""), Ref(0), Ref(false), Dict{String,String}(),
                          Observable(String[]), SweepState())
-    default_selection!(sess.review, ts.target[])
-    default_selection!(sess.talis, ts.target[])
+    default_selection!(sess.review, ts.target[]; foils = foil_components(ts))
+    default_selection!(sess.talis, ts.target[]; foils = foil_components(ts))
     _connect!(sess)
     record!(sess)
     return sess
@@ -132,8 +132,8 @@ function _connect!(sess::DesignSession)
     # inputs, before a target built on a worker is in place)
     on(fr -> follow_frames!(bt, fr; renames = ts.renames[]), ts.frames)
     on(ts.target) do t
-        default_selection!(sess.review, t)
-        default_selection!(sess.talis, t)
+        default_selection!(sess.review, t; foils = foil_components(ts, t))
+        default_selection!(sess.talis, t; foils = foil_components(ts, t))
         # forget display modes and a selection of components that no longer exist
         names = Set(all_component_names(ts))
         d = filter(p -> first(p) in names, sess.view.display[])
@@ -152,6 +152,29 @@ function _connect!(sess::DesignSession)
         (sess.view.extra[] = filter(id -> !(id in gone), sess.view.extra[]))
     end
     onany((_...) -> _drive_inputs_changed!(sess), bt.beams, bt.enabled, bt.unconverted)
+    # a part given or relieved of the foil role (its components unchanged): the clearance
+    # and TaLIS checks take it as a landing surface, or as hardware; another active foil
+    # re-evaluates the drive's foil statistics
+    foils = Ref(Set(foil_components(ts)))
+    active = Ref{Union{Nothing,Symbol}}(active_foil(ts))
+    onany(ts.parts, ts.target, ts.active_foil) do _...
+        now = Set(foil_components(ts))
+        if now != foils[]
+            for n in setdiff(now, foils[])
+                set_role!(sess.review, n, :target)
+                set_talis_role!(sess.talis, n, :capture)
+            end
+            names = Set(component_names(ts.target[]))
+            for n in setdiff(foils[], now)
+                n in names || continue
+                set_role!(sess.review, n, :hardware)
+                set_talis_role!(sess.talis, n, :hardware)
+            end
+            foils[] = now
+        end
+        a = active_foil(ts)
+        a === active[] || (active[] = a; _request_evaluation!(sess))
+    end
     # a rejected edit's message belongs to what was being edited
     on(sess.view.selection) do _
         isempty(ts.error[]) || (ts.error[] = "")
@@ -420,10 +443,11 @@ function build_scenario!(sess::DesignSession)
     t0 = time()
     closed = _closed_enclosure(sess.target)
     kind, params, mesh, parts = ts.kind[], ts.params[], ts.mesh[], ts.parts[]
+    foil = active_foil(ts)
     runner(function ()
                # the CAD parts' file facets, for the drive's fit of their curved faces
                references = _fit_references(t, kind, params, mesh, parts)
-               _build_scenario(t, beams; closed, cavity, profile, references)
+               _build_scenario(t, beams; closed, cavity, profile, references, foil)
            end, function (out)
         g == dr.generation[] || return
         dr.building[] = false
@@ -581,17 +605,28 @@ function unconverted_ratios(sess)
     return (; omega1 = o1, omega2 = o2)
 end
 
+# The scenario's flux-map lookup for the active foil `foil`: the one built with the
+# scenario, made again when another foil became active since (a capsule map stays).
+function _foil_lookup!(dr::DriveState, s::Scenario, foil)
+    lk = dr.lookup[]
+    lk !== nothing && lk.kind === :capsule && return lk
+    _lookup_foil(lk) === foil && return lk
+    return dr.lookup[] = flux_lookup(s; foil)
+end
+
 # Evaluate the table's current pointing on the scenario (latest request wins).
 function _request_evaluation!(sess::DesignSession)
     dr = sess.drive
     _drive_current(sess) || return sess
-    s, lookup, radius = dr.scenario[], dr.lookup[], dr.spot_radius[]
+    s, radius = dr.scenario[], dr.spot_radius[]
+    foil = active_foil(sess.target)
+    lookup = _foil_lookup!(dr, s, foil)
     beams = display_beams(sess.beams)
     ratio = unconverted_ratios(sess)
     g = (dr.eval_generation[] += 1)
     dr.evaluating[] = true
     runner = _runner(sess.spawn, sess.deliver)
-    runner(() -> _evaluate_drive(s, beams, lookup, radius; ratio), function (out)
+    runner(() -> _evaluate_drive(s, beams, lookup, radius; ratio, foil), function (out)
         g == dr.eval_generation[] || return
         dr.evaluating[] = false
         if out.err === nothing
@@ -968,8 +1003,9 @@ function start_optimize!(sess::DesignSession; spawn::Bool = true)
     end
     s = sess.drive.scenario[]
     # objectives the drive cannot serve: say why and what to do, instead of a failed job
+    foil = active_foil(sess.target)
     if st.objective[] === :irradiance
-        FOIL_NAME in component_names(s.target) ||
+        _has_part(s.target, foil) ||
             (st.status[] = "the foil objective needs a foil: a foil target's, or a part with the role " *
                            "Backlighter foil (Properties ▸ Role)"; return sess)
     elseif s.model === nothing
@@ -984,7 +1020,7 @@ function start_optimize!(sess::DesignSession; spawn::Bool = true)
     bt = sess.beams
     idx = findall(bt.enabled[])
     start_optimize!(st, s, bt.beams[][idx], idx;
-                    spot_radius = sess.drive.spot_radius[], clusters = bt.cluster[][idx],
+                    spot_radius = sess.drive.spot_radius[], foil, clusters = bt.cluster[][idx],
                     frames = beam_frames(bt)[idx], deliver = sess.deliver[], spawn)
     return sess
 end

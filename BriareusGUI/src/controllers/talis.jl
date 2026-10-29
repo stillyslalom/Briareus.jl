@@ -73,10 +73,11 @@ TaLISState() = TaLISState(Observable(Symbol[]), Observable(Symbol[]), Observable
                           Ref(Symbol[]), Ref(0))
 
 """
-    default_selection!(tl::TaLISState, t::Target)
+    default_selection!(tl::TaLISState, t::Target; foils = (FOIL_NAME,))
 
 Capture components and hardware for a target's components: a hohlraum's wall or a
-backlighter foil captures the beams; the capsule is left out (light on it is drive
+backlighter foil (one of `foils`, component names: a session passes
+[`foil_components`](@ref)) captures the beams; the capsule is left out (light on it is drive
 physics, handled by keep-outs and the drive, not a TaLIS hardware question; an
 engineering default); everything else (LEH caps and lips, closed windows, the main
 target) is checked. Checked LEH caps and lips go to `talis_check` as its `leh`, so
@@ -84,11 +85,11 @@ their 3ω clearance is an LEH-clearance review rather than a failure. No compone
 diagnostic by default. Components the selection was already made for keep their roles
 (a selection made afresh clears the diagnostics too).
 """
-function default_selection!(tl::TaLISState, t::Target)
+function default_selection!(tl::TaLISState, t::Target; foils = (FOIL_NAME,))
     names = surface_names(t)
     fresh = !any(in(names), tl.capture[])
     _update_roles!(tl.capture, tl.hardware, tl.known, names,
-                   n -> n in (:wall, FOIL_NAME) ? 1 : n === :capsule ? 0 : 2)
+                   n -> n === :wall || n in foils ? 1 : n === :capsule ? 0 : 2)
     _assign!(tl.diagnostics,
              fresh ? Symbol[] : filter(n -> n in names && !(n in tl.capture[]) && !(n in tl.hardware[]),
                                        tl.diagnostics[]))

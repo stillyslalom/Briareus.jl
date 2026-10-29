@@ -125,16 +125,22 @@ end
     # renamed: the beams aim in the new name, where they were
     @test edit_part!(ts, part_index(ts, :shield), :name, "screen")
     @test all(==(:screen), bt.aim_frame[][a]) && bt.beams[] == aims && bt.aim_local[] == loc
-    # the backlighter foil's role renames the plate; then the screen takes the role over
-    # and the plate goes back to a plain name: each set of beams follows its own part
+    # the capsule's role renames the screen (a sphere is needed: a disk is refused), the
+    # foil's keeps the plate's name: each set of beams stays with its own part
+    @test !set_part_role!(ts, part_index(ts, :screen), :capsule)
     @test set_part_role!(ts, part_index(ts, :plate), :foil)
-    @test all(==(FOIL_NAME), bt.aim_frame[][b]) && bt.beams[] == aims
-    @test set_part_role!(ts, part_index(ts, :screen), :foil)
-    plain = ts.parts[][findfirst(p -> p.kind === :rectangle, ts.parts[])].name
-    @test plain !== FOIL_NAME && all(==(FOIL_NAME), bt.aim_frame[][a]) &&
-          all(==(plain), bt.aim_frame[][b]) && bt.beams[] == aims && bt.aim_local[] == loc
+    @test all(==(:plate), bt.aim_frame[][b]) && bt.beams[] == aims && bt.aim_local[] == loc
+    @test add_part!(ts, :sphere; name = :ball, z = 4.0, r1 = 0.3)
+    set_aim_frame!(s, 7:8, :ball; keep = false)
+    aims = copy(bt.beams[])
+    @test set_part_role!(ts, part_index(ts, :ball), :capsule)
+    @test all(==(:capsule), bt.aim_frame[][7:8]) && all(==(:screen), bt.aim_frame[][a]) &&
+          all(==(:plate), bt.aim_frame[][b]) && bt.beams[] == aims
+    @test set_part_role!(ts, part_index(ts, :capsule), :none)
+    plain = ts.parts[][end].name
+    @test plain === :sphere_2 && all(==(plain), bt.aim_frame[][7:8]) && bt.beams[] == aims
     # and they still move with their parts
-    @test nudge_part!(ts, part_index(ts, plain), 0.5; frame = :tcc, axis = :x)
+    @test nudge_part!(ts, part_index(ts, :plate), 0.5; frame = :tcc, axis = :x)
     @test all(i -> isapprox(bt.beams[][i].aim, aims[i].aim + V3(0.5, 0, 0); atol = 1e-12), b)
     @test _aims_held(bt)
 end
@@ -328,7 +334,7 @@ end
     set_sweep!(s.sweep; subject = :substrate, axis = :x, los = true)
     edit_sweep!(s.sweep, :step, "0.25")
     save_session(f, s)
-    @test TOML.parsefile(f)["version"] == 4
+    @test TOML.parsefile(f)["version"] == Controllers.SESSION_VERSION
     s3 = DesignSession(resolution = :coarse)
     load_session!(s3, f)
     @test session_state(s3) == session_state(s)
@@ -460,4 +466,84 @@ end
     sw2 = SweepState()
     Controllers._restore_sweep!(sw2, st)
     @test sw2.mode[] === :step && sw2.step_index[] == 3 && sw2.step_key[] === :angle
+end
+
+@testset "several backlighter foils, one active (no GL)" begin
+    s = DesignSession(kind = :custom, resolution = :coarse)
+    ts, bt = s.target, s.beams
+    # two disks facing TCC from either side along x
+    @test add_part!(ts, :disk; name = :foil_a, x = 3.0, theta = 90, phi = 180, r1 = 0.6)
+    @test add_part!(ts, :disk; name = :foil_b, x = -3.0, theta = 90, r1 = 0.6)
+    @test active_foil(ts) === nothing && isempty(foil_names(ts))
+    # both take the role and keep their names; the first one given it is active
+    @test set_part_role!(ts, part_index(ts, :foil_a), :foil)
+    @test set_part_role!(ts, part_index(ts, :foil_b), :foil)
+    @test [p.name for p in ts.parts[] if part_role(p) === :foil] == [:foil_a, :foil_b]
+    @test foil_names(ts) == [:foil_a, :foil_b] && active_foil(ts) === :foil_a
+    # the clearance and TaLIS checks land the beams on both
+    @test :foil_a in s.review.targets[] && :foil_b in s.review.targets[] &&
+          :foil_a in s.talis.capture[] && :foil_b in s.talis.capture[]
+    # every other beam aimed at each foil's center
+    n = length(bt.beams[])
+    set_aim_frame!(s, 1:2:n, :foil_a; keep = false)
+    set_aim_frame!(s, 2:2:n, :foil_b; keep = false)
+    build_scenario!(s)
+    dr = s.drive
+    r = dr.spot_radius[]
+    spot(name) = Controllers._spot_stats(dr.result[].evaluation, r, name)
+    @test dr.result[] !== nothing && isequal(dr.result[].spot, spot(:foil_a)) &&
+          dr.result[].map.title == "Foil laser irradiance (W/cm²)" && dr.lookup[].foil === :foil_a
+    @test dr.result[].spot.mean > 0 && spot(:foil_b).mean > 0 && !isequal(spot(:foil_a), spot(:foil_b))
+    record!(s)
+    # another active foil: the drive's statistics and map follow without a rebuild
+    sc = dr.scenario[]
+    @test !set_active_foil!(ts, :sphere_1) && occursin("not a backlighter foil", ts.error[])
+    @test set_active_foil!(ts, :foil_b) && active_foil(ts) === :foil_b
+    @test dr.scenario[] === sc && dr.lookup[].foil === :foil_b && isequal(dr.result[].spot, spot(:foil_b))
+    "target" in s.view.expanded[] || toggle_expanded!(s.view, "target")
+    detail(n) = only(x for x in model_tree(s) if x.label == n).detail
+    @test detail("foil_b") == "foil · active" && detail("foil_a") == "foil" && detail("sphere_1") == ""
+    # the optimizer's foil objective and the sweep take the active foil
+    st = s.optimize
+    set_objective!(st, :irradiance)
+    st.fields[] = [:r]
+    st.by[] = :beam
+    st.iterations[] = 1
+    start_optimize!(s; spawn = false)
+    @test st.result[] !== nothing && isapprox(st.result[].before.spot.mean, spot(:foil_b).mean; rtol = 1e-10)
+    @test Controllers._objective_settings(st; foil = active_foil(ts)).foil === :foil_b
+    s.sweep.capture[] = true
+    s.sweep.clearance[] = false
+    @test Controllers._sweep_inputs(s).foil === :foil_b
+    # the session round trip keeps the flags and the active foil; undo restores the first
+    state = session_state(s)
+    @test state["target"]["active_foil"] == "foil_b" && count(p -> p["foil"], state["target"]["parts"]) == 2
+    record!(s)
+    @test undo!(s) && active_foil(ts) === :foil_a
+    @test redo!(s) && active_foil(ts) === :foil_b
+    # left out, then removed: the active foil falls back to the remaining one
+    @test set_excluded!(ts, :foil_b, true) && active_foil(ts) === :foil_a && foil_names(ts) == [:foil_a]
+    @test set_excluded!(ts, :foil_b, false) && active_foil(ts) === :foil_b
+    @test remove_part!(ts, part_index(ts, :foil_b)) && active_foil(ts) === :foil_a
+    # the role cleared: no foil, and the part is checked hardware
+    @test set_part_role!(ts, part_index(ts, :foil_a), :none) && active_foil(ts) === nothing &&
+          ts.parts[][part_index(ts, :foil_a)].name === :foil_a && :foil_a in s.review.hardware[]
+    # a renamed active foil stays active
+    @test set_part_role!(ts, part_index(ts, :foil_a), :foil) && active_foil(ts) === :foil_a
+    @test edit_part!(ts, part_index(ts, :foil_a), :name, "shield") && ts.active_foil[] === :shield &&
+          active_foil(ts) === :shield
+
+    # a version 4 session: the part named `backlighter` loads as the active foil
+    s4 = DesignSession(kind = :custom, resolution = :coarse)
+    @test add_part!(s4.target, :disk; name = :plate, x = 3.0, theta = 90, phi = 180, r1 = 0.6)
+    @test add_part!(s4.target, :disk; name = :backlighter, x = -3.0, theta = 90, r1 = 0.6)
+    old = session_state(s4)
+    old["version"] = 4
+    delete!(old["target"], "active_foil")
+    foreach(p -> delete!(p, "foil"), old["target"]["parts"])
+    s5 = DesignSession(kind = :hohlraum, resolution = :coarse)
+    restore!(s5, old)
+    ps = s5.target.parts[]
+    @test [p.name for p in ps] == [:sphere_1, :plate, :backlighter] &&
+          [part_role(p) for p in ps] == [:none, :none, :foil] && active_foil(s5.target) === :backlighter
 end

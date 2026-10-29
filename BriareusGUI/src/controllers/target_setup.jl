@@ -236,14 +236,16 @@ end
 
 """
     PartSpec(kind; name, values, two_sided = false, inward = false, aperture = false,
-             file = "", frame = :tcc, coords = :cartesian, object = "", steps = [])
+             file = "", frame = :tcc, coords = :cartesian, object = "", steps = [],
+             foil = false)
 
 A free target part: `kind` (one of [`PART_KINDS`](@ref)), its component `name`,
 `values` (every [`PART_FIELDS`](@ref) key and its kind's [`PART_SIZE_FIELDS`](@ref)),
 `two_sided` (both sides radiate and absorb), `inward` (a sphere, cylinder or cone
 radiates from its inside; a flat part from its back; a mesh from the other side) and
 `aperture` (a transparent diagnostic surface: rays pass, its incident flux is what
-escapes through it). A `:mesh` part reads its triangles from the STL `file`. The
+escapes through it). `foil` marks a part with the role of a backlighter foil
+([`set_part_role!`](@ref), [`active_foil`](@ref)). A `:mesh` part reads its triangles from the STL `file`. The
 placement fields are in the frame named `frame` (one of [`TEMPLATE_FRAMES`](@ref), or
 another part's name: see [`part_frames`](@ref)); `coords` ([`PART_COORDINATES`](@ref)) is
 how its position is shown and edited (the values keep `x`, `y`, `z`). The placement
@@ -263,6 +265,7 @@ struct PartSpec
     coords::Symbol
     object::String
     steps::Vector{PlacementStep}
+    foil::Bool
 end
 
 """
@@ -300,7 +303,7 @@ end
 function PartSpec(kind::Symbol; name = kind, values = Dict{Symbol,Float64}(),
                   two_sided::Bool = false, inward::Bool = false, aperture::Bool = false,
                   file::AbstractString = "", frame::Symbol = :tcc, coords::Symbol = :cartesian,
-                  object::AbstractString = "", steps = PlacementStep[])
+                  object::AbstractString = "", steps = PlacementStep[], foil::Bool = false)
     kind in PART_KINDS || throw(ArgumentError("part kind must be one of $PART_KINDS"))
     frame === Symbol(name) && throw(ArgumentError("a part cannot be placed in its own frame"))
     coords in PART_COORDINATES || throw(ArgumentError("coordinates must be one of $PART_COORDINATES"))
@@ -315,13 +318,13 @@ function PartSpec(kind::Symbol; name = kind, values = Dict{Symbol,Float64}(),
     any(st -> Symbol(name) in Briareus._step_refs(st), steps) &&
         throw(ArgumentError("a part's placement step cannot refer to its own frame"))
     return PartSpec(kind, Symbol(name), v, two_sided, inward, aperture, String(file), frame,
-                    coords, String(object), collect(PlacementStep, steps))
+                    coords, String(object), collect(PlacementStep, steps), foil)
 end
 
 _with(p::PartSpec; kind = p.kind, name = p.name, values = p.values, two_sided = p.two_sided,
       inward = p.inward, aperture = p.aperture, file = p.file, frame = p.frame,
-      coords = p.coords, object = p.object, steps = p.steps) =
-    PartSpec(kind, name, values, two_sided, inward, aperture, file, frame, coords, object, steps)
+      coords = p.coords, object = p.object, steps = p.steps, foil = p.foil) =
+    PartSpec(kind, name, values, two_sided, inward, aperture, file, frame, coords, object, steps, foil)
 
 # A part with the frame named `old` renamed `new`: the frame it is placed in and the
 # frames its placement steps refer to.
@@ -833,7 +836,9 @@ in the chamber, [`part_frames`](@ref): updated with the parts, before the target
 built), `renames` (while an edit updates `frames`, the parts it renamed, old name →
 new, so that beams aimed in their frames follow; empty otherwise), the built `target`, `error` (the last
 rejected edit), `excluded` (component names left out of the calculations, see
-[`set_excluded!`](@ref)) and `ghost` (those components, for drawing, or `nothing`).
+[`set_excluded!`](@ref)), `ghost` (those components, for drawing, or `nothing`) and
+`active_foil` (the foil chosen with [`set_active_foil!`](@ref), or `nothing`; it follows
+a rename, and [`active_foil`](@ref) gives the foil the analyses take).
 
 CAD parts (VisRad CAD, STL) are remeshed when their element size, the target's, or
 their placement changes, and when an undo or a session brings back a size not meshed
@@ -877,6 +882,7 @@ struct TargetSetup
     after_build::Vector{Any}               # run once the target being built is committed
     frames::Observable{Dict{Symbol,Frame}} # the named frames of the committed design (`part_frames`)
     renames::Base.RefValue{Dict{Symbol,Symbol}} # old => new part names of the edit committing `frames`
+    active_foil::Observable{Union{Nothing,Symbol}} # the chosen foil (`active_foil` resolves it)
 end
 
 function TargetSetup(; kind::Symbol = :hohlraum, resolution::Symbol = :standard,
@@ -904,7 +910,8 @@ function TargetSetup(; kind::Symbol = :hohlraum, resolution::Symbol = :standard,
                        Observable{Union{Nothing,Target}}(nothing), Observable(Set{Symbol}()),
                        Ref(false), Ref{Any}(f -> f()), Ref(0), Observable(false),
                        Observable(Set{Symbol}()), Dict{Symbol,Int}(), Any[],
-                       Observable(part_frames(kind, params, ps)), Ref(Dict{Symbol,Symbol}()))
+                       Observable(part_frames(kind, params, ps)), Ref(Dict{Symbol,Symbol}()),
+                       Observable{Union{Nothing,Symbol}}(nothing))
 end
 
 part_frames(ts::TargetSetup) = ts.frames[]
@@ -1141,6 +1148,9 @@ function _try_build!(ts::TargetSetup; kind = ts.kind[], params = ts.params[], me
             _assign!(ts.resolution, _preset_of(mesh))
         end
         windows === ts.windows[] || (ts.windows[] = windows)
+        # the chosen foil keeps its role through a rename
+        a = ts.active_foil[]
+        a !== nothing && haskey(renames, a) && (ts.active_foil[] = renames[a])
         parts === ts.parts[] || (ts.parts[] = parts)
         g = (ts.mesh_job[] += 1)                  # a meshing or build job for earlier inputs is dropped
         ts.error[] = ""
@@ -1942,20 +1952,91 @@ function _axis_vector3(axis)
 end
 
 """
-Roles a part can take in the analyses, by the component name the drive and the
-optimizer look for: `:none`, `:capsule` (the observed surface: its x-ray drive's modes
-and the capsule keep-out; a sphere) and `:foil` (the backlighter foil, `FOIL_NAME`: its
-spot statistics and the foil objective; a flat part or a mesh).
+Roles a part can take in the analyses: `:none`, `:capsule` (the observed surface: its
+x-ray drive's modes and the capsule keep-out; a sphere, named `:capsule` as the drive and
+the optimizer look for it) and `:foil` (a backlighter foil, a flat part or a mesh that
+keeps its name: any number of parts can be foils, and the active one
+([`active_foil`](@ref)) is the foil whose spot statistics, map, objective, line of sight
+and captured power the analyses take).
 """
 const PART_ROLES = (:none, :capsule, :foil)
 
 const PART_ROLE_LABELS = Dict(:none => "None", :capsule => "Capsule (observed x-ray drive)",
                               :foil => "Backlighter foil (spot uniformity)")
 
-const _ROLE_NAMES = Dict(:capsule => :capsule, :foil => FOIL_NAME)
+"Role of a part (one of [`PART_ROLES`](@ref)): the capsule by its name, a foil by its flag."
+part_role(p::PartSpec) = p.name === :capsule ? :capsule : p.foil ? :foil : :none
 
-"Role of a part (one of [`PART_ROLES`](@ref)): which analysis name it carries."
-part_role(p::PartSpec) = p.name === :capsule ? :capsule : p.name === FOIL_NAME ? :foil : :none
+"""
+    foil_names(ts::TargetSetup) -> Vector{Symbol}
+
+The backlighter foils of the design in the calculations: a foil target's foil
+(`FOIL_NAME`), then each part with the role `:foil` in the parts' order. Foils left out of
+the calculations are not listed.
+"""
+function foil_names(ts::TargetSetup)
+    out = Symbol[]
+    ex = ts.excluded[]
+    ts.kind[] === :foil && !(FOIL_NAME in ex) && push!(out, FOIL_NAME)
+    for p in ts.parts[]
+        p.foil && !(p.name in ex) && push!(out, p.name)
+    end
+    return out
+end
+
+"""
+    active_foil(ts::TargetSetup) -> Union{Symbol,Nothing}
+
+The foil the foil analyses take (the drive's spot statistics and foil map, the foil
+objective, the sweep's line of sight and captured power): the one chosen with
+[`set_active_foil!`](@ref) while it is still a foil in the calculations, else the first
+of [`foil_names`](@ref) (a foil target's foil, then the first foil part), else `nothing`.
+A part given the foil role when the design has no foil becomes the chosen one.
+"""
+function active_foil(ts::TargetSetup)
+    fs = foil_names(ts)
+    isempty(fs) && return nothing
+    a = ts.active_foil[]
+    return a in fs ? a : first(fs)
+end
+
+"""
+    set_active_foil!(ts::TargetSetup, name::Symbol) -> Bool
+
+Make foil `name` (one of [`foil_names`](@ref)) the one the foil analyses take
+([`active_foil`](@ref)). A name that is not a foil in the calculations sets `error` and
+returns `false`. Saved with the session, and undone like any edit.
+"""
+function set_active_foil!(ts::TargetSetup, name::Symbol)
+    if !(name in foil_names(ts))
+        ts.error[] = "$name is not a backlighter foil in the calculations"
+        return false
+    end
+    ts.error[] = ""
+    ts.active_foil[] === name || (ts.active_foil[] = name)
+    return true
+end
+
+"""
+    foil_components(ts::TargetSetup, t = ts.target[]) -> Vector{Symbol}
+
+The components of `t` that belong to a backlighter foil, active or not: a foil target's
+foil and the components of each part with the foil role (a VisRad part's carry its name
+as a prefix). The clearance and TaLIS checks take them as surfaces the beams land on.
+"""
+function foil_components(ts::TargetSetup, t::Target = ts.target[])
+    fs = Set{Symbol}(p.name for p in ts.parts[] if p.foil)
+    vr = Set{Symbol}(p.name for p in ts.parts[] if p.foil && p.kind === :visrad)
+    out = Symbol[]
+    for c in t.components
+        n = c.name
+        if (ts.kind[] === :foil && n === FOIL_NAME) || n in fs || c.part in fs ||
+           any(v -> startswith(String(n), String(v)), vr)
+            push!(out, n)
+        end
+    end
+    return out
+end
 
 # The object kind a part stands for (a VisRad object's own kind).
 function _part_shape(p::PartSpec)
@@ -1977,18 +2058,20 @@ end
 """
     set_part_role!(ts::TargetSetup, i, role::Symbol; done = () -> nothing) -> Bool
 
-Give part `i` a role in the analyses (one of [`PART_ROLES`](@ref)) by naming it as the
-drive and the optimizer expect: `:capsule` or `:foil` (a disk, rectangle or mesh, or a
-VisRad rectangle or CAD part: the backlighter whose spot the foil objective makes
-uniform). The capsule is a sphere (the mode analysis and the keep-out take its center
-and radius): a sphere part or a VisRad sphere is renamed; a CAD part (a capsule with
-its fill tube, say) is replaced in the calculations by a sphere part `:capsule` fitted
-to it ([`fit_sphere`](@ref): its element size the target's capsule size, its albedo and
-conversion the part's), and left out of the calculations itself. A part that held the
-role gives it up (back to its own name); `:none` renames the part to its own name (a
-VisRad object's, or its kind and a number). Parts placed in its frame follow. A role
-the part cannot take, or one a template component already holds (a hohlraum's
-capsule, a foil target's foil), sets `error` and returns `false`. In a window
+Give part `i` a role in the analyses (one of [`PART_ROLES`](@ref)). `:foil` (a disk,
+rectangle or mesh, or a VisRad rectangle or CAD part: a backlighter whose spot the foil
+objective makes uniform) marks the part as a foil and keeps its name; other foils keep
+theirs, and the part becomes the active foil ([`active_foil`](@ref)) when the design had
+none. `:capsule` names the part as the drive and the optimizer expect. The capsule is a
+sphere (the mode analysis and the keep-out take its center and radius): a sphere part or
+a VisRad sphere is renamed; a CAD part (a capsule with its fill tube, say) is replaced
+in the calculations by a sphere part `:capsule` fitted to it ([`fit_sphere`](@ref): its
+element size the target's capsule size, its albedo and conversion the part's), and left
+out of the calculations itself. A part that held the capsule role gives it up (back to
+its own name). `:none` clears the foil role, or renames the capsule to its own name (a
+VisRad object's, or its kind and a number). Parts placed in a renamed part's frame
+follow. A role the part cannot take, or the capsule role a hohlraum's capsule already
+holds, sets `error` and returns `false`. In a window
 (`spawn[]`) a large CAD capsule is fitted on a worker (see [`TargetSetup`](@ref)):
 `true` then means the fit is under way, and `done()` runs once the role is given (at
 once otherwise).
@@ -2020,12 +2103,13 @@ function set_part_role!(ts::TargetSetup, i::Integer, role::Symbol; done = () -> 
             end
             old in ex && (delete!(ex, old); push!(ex, new))    # stays left out
         end
-        if role !== :none
-            new = _ROLE_NAMES[role]
-            j = findfirst(q -> q.name === new, ps)
+        # the foil role is a flag; the capsule's is the name `:capsule`
+        ps[i] = _with(ps[i]; foil = role === :foil)
+        if role === :capsule
+            j = findfirst(q -> q.name === :capsule, ps)
             j === nothing || rename(j, _plain_name(ps[j], taken))
-            rename(i, new)
-        else
+            rename(i, :capsule)
+        elseif p.name === :capsule
             rename(i, _plain_name(p, taken))
         end
     catch err
@@ -2033,7 +2117,9 @@ function set_part_role!(ts::TargetSetup, i::Integer, role::Symbol; done = () -> 
         ts.error[] = _errmsg(err)
         return false
     end
+    first_foil = role === :foil && active_foil(ts) === nothing
     ok = _try_build!(ts; parts = ps, excluded = ex, renames)
+    ok && first_foil && (ts.active_foil[] = ps[i].name)
     ok && done()
     return ok
 end

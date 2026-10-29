@@ -72,6 +72,17 @@ ColumnLayout {
         Info { topic: "part.role" }
     }
     CheckLine {
+        // with two or more foils: the one the foil analyses take (Drive ▸ Active foil too)
+        visible: app.partRole === 2 && app.foilNames.length > 1
+        text: "Active foil (the foil analyses take it)"
+        checked: app.foilNames[app.activeFoil] === app.partName
+        tip: "Another foil is made active from its own part, or in Drive ▸ Active foil"
+        onToggled: {
+            if (checked) Julia.br_active_foil(app.foilNames.indexOf(app.partName))
+            checked = Qt.binding(() => app.foilNames[app.activeFoil] === app.partName)
+        }
+    }
+    CheckLine {
         text: "Thin film: left out of the drive's cavity (a capsule tent, an LEH window)"
         checked: app.partFilm
         onToggled: Julia.br_part_film(checked)

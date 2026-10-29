@@ -231,9 +231,9 @@ end
     sweep_los(sess) -> (θ, φ)
 
 The direction of the sweep's line of sight (degrees, from the object toward the
-detector): `los_theta`, `los_phi` when both are set, otherwise from the backlighter
-foil's centroid through the object's ([`sweep_los_object`](@ref)), as the foil
-backlights it, at the sweep's start.
+detector): `los_theta`, `los_phi` when both are set, otherwise from the active backlighter
+foil's centroid ([`active_foil`](@ref)) through the object's ([`sweep_los_object`](@ref)),
+as the foil backlights it, at the sweep's start.
 """
 function sweep_los(sess)
     sw = sess.sweep
@@ -241,8 +241,9 @@ function sweep_los(sess)
     isfinite(θ) && isfinite(φ) && return (θ, φ)
     t = sess.target.target[]
     o = sweep_los_object(sess)
-    (o === :none || !(FOIL_NAME in component_names(t))) && return (90.0, 0.0)
-    d = part_centroid(t, o) - part_centroid(t, FOIL_NAME)
+    foil = active_foil(sess.target)
+    (o === :none || !_has_part(t, foil)) && return (90.0, 0.0)
+    d = part_centroid(t, o) - part_centroid(t, foil)
     return (acosd(clamp(d[3] / norm(d), -1, 1)), mod(atand(d[2], d[1]), 360))
 end
 
@@ -276,7 +277,8 @@ function _moved_frames(parts, subject::Symbol)
 end
 
 # The target components that move with the subject: the parts of the moved frames (a
-# VisRad part's components carry its name as a prefix) and, for `:backlighter`, the foil.
+# VisRad part's components carry its name as a prefix) and, for `:backlighter` (a foil
+# target's frame), the template's foil.
 function _moved_components(t::Target, parts, frames::Set{Symbol})
     moved = Set{Symbol}()
     :backlighter in frames && push!(moved, FOIL_NAME)
@@ -478,8 +480,8 @@ function _sweep_inputs(sess)
     any((sw.clearance[], sw.los[], sw.capture[], sw.optimize[])) ||
         throw(ArgumentError("choose at least one check"))
     values = sweep_values(sw)
-    names = component_names(ts.target[])
-    (sw.los[] || sw.capture[]) && !(FOIL_NAME in names) &&
+    foil = active_foil(ts)
+    (sw.los[] || sw.capture[]) && !_has_part(ts.target[], foil) &&
         throw(ArgumentError("the line of sight and the captured power need the backlighter foil " *
                             "(a foil target's, or a part with the role Backlighter foil)"))
     obj = sweep_los_object(sess)
@@ -494,7 +496,7 @@ function _sweep_inputs(sess)
     q = sw.quality[]
     st = sess.optimize
     opt = sw.optimize[] ? (; by = st.by[], fields = Tuple(st.fields[]), deltas = copy(st.deltas[]),
-                           cfg = _objective_settings(st), iterations = st.iterations[],
+                           cfg = _objective_settings(st; foil), iterations = st.iterations[],
                            evaluations = st.max_evaluations[], spot_radius = sess.drive.spot_radius[]) :
           nothing
     if opt !== nothing
@@ -507,7 +509,7 @@ function _sweep_inputs(sess)
             clusters = bt.cluster[][idx],
             clearance = sw.clearance[] ? merge(clearance_kwargs(rv), REVIEW_QUALITY[q]) : nothing,
             los = sw.los[] ? sweep_los(sess) : nothing, los_object = obj,
-            capture = sw.capture[], quality = q, optimize = opt, profile = _deposition_profile(sess.drive))
+            capture = sw.capture[], foil, quality = q, optimize = opt, profile = _deposition_profile(sess.drive))
 end
 
 """
@@ -537,7 +539,7 @@ function start_sweep!(sess; spawn::Bool = true)
     opt = inp.optimize
     q = SWEEP_QUALITY[inp.quality]
     los_kw = inp.los === nothing ? (;) :
-             (; foil = FOIL_NAME, object = inp.los_object, center = part_centroid(t, inp.los_object),
+             (; inp.foil, object = inp.los_object, center = part_centroid(t, inp.los_object),
               level = q.level, nrings = q.nrings)
     optimize = if opt === nothing
         nothing
@@ -553,7 +555,7 @@ function start_sweep!(sess; spawn::Bool = true)
         (; objective = _StepObjective(opt.cfg, opt.spot_radius), scenario_kw, bounds_kw,
          warm = frame_fields, iterations = opt.iterations, evaluations = opt.evaluations)
     end
-    capture = inp.capture ? FOIL_NAME : nothing
+    capture = inp.capture ? inp.foil : nothing
     capture_kw = (; resolution = q.resolution, inp.profile)
     deliver = sess.deliver[]
     sw.cancel[] = false
@@ -622,6 +624,7 @@ function sweep_stale(sess)
            now.axis !== inp.axis || now.values != inp.values || now.mode !== inp.mode ||
            now.step_index != inp.step_index || now.step_key !== inp.step_key || now.clearance != inp.clearance ||
            now.los != inp.los || now.los_object !== inp.los_object || now.capture != inp.capture ||
+           now.foil !== inp.foil ||
            now.quality !== inp.quality || !isequal(now.optimize, inp.optimize) ||
            _profile_state(now.profile) != _profile_state(inp.profile)
 end

@@ -77,6 +77,7 @@ export PartSpec, PART_KINDS, PART_KIND_LABELS, PART_FIELDS, PART_SIZE_FIELDS, pa
        edit_part_step!, part_placement,
        PART_COORDINATES, PART_POSITION_FIELDS, part_position, set_part_coords!, part_components,
        all_component_names, PART_ROLES, PART_ROLE_LABELS, part_role, set_part_role!,
+       foil_names, active_foil, set_active_foil!, foil_components,
        export_target_stl, add_stl_parts!, fit_sphere, part_size_unit
 export WindowSpec, WINDOW_FIELDS, add_window!, remove_window!, edit_window!, set_window_open!,
        set_window_round!,

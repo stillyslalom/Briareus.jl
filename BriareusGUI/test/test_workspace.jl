@@ -562,12 +562,13 @@ end
     s.deliver[] = f -> f()
     @test_throws ArgumentError import_visrad_workspace!(s, bad)              # inline: throws
 
-    # roles: the imported rectangle becomes the backlighter foil, and back
+    # roles: the imported rectangle becomes the backlighter foil, keeping its name
     ts = s.target
     i = part_index(ts, :Rectangle_0)
-    @test part_role(ts.parts[][i]) === :none
+    @test part_role(ts.parts[][i]) === :none && active_foil(ts) === nothing
     @test set_part_role!(ts, i, :foil)
-    @test ts.parts[][i].name === FOIL_NAME && FOIL_NAME in component_names(ts.target[])
+    @test ts.parts[][i].name === :Rectangle_0 && part_role(ts.parts[][i]) === :foil &&
+          active_foil(ts) === :Rectangle_0 && :Rectangle_0 in component_names(ts.target[])
     @test !set_part_role!(ts, part_index(ts, :Cyl_Hohlraum_0), :capsule)      # not a sphere
     @test occursin("is a sphere", ts.error[])
     # a CAD capsule: a sphere fitted to it takes its place in the calculations
@@ -639,7 +640,7 @@ end
     @test add_stl_parts!(ts2, f; h = 0.5)
     @test length(ts2.parts[]) - n0 == length(solids)
     @test all(p -> p.kind === :mesh && !isempty(p.object), ts2.parts[][n0+1:end])
-    @test FOIL_NAME in component_names(ts2.target[])                          # named after its solid
+    @test :Rectangle_0 in component_names(ts2.target[])                       # named after its solid
     @test add_stl_parts!(ts2, fb) && isempty(ts2.parts[][end].object)
 end
 
