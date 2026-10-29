@@ -119,6 +119,19 @@ D. **Profiles:** frustraums and multi-section hohlraums (a radius per section; f
 E. **Double backlighter with ARC:** the starter, ARC beams as a facility beam set (public
    description only; mock-up timing), per-foil results if one active foil is not enough.
 
+## Phase A starting point (2026-10-29)
+
+The several-foils change (5bef323) is phase A's pattern for one role: a flag on
+`PartSpec` (`foil`), a session-level choice (`active_foil`), the analyses given the name
+(`flux_lookup(s; foil)`, the optimizer's and sweep's `foil`), every holder counted as a
+landing surface (`foil_components`), a session watcher for role changes that do not
+rebuild the target. `observed` (today `:capsule` by name) and `wall` follow it. Uses of
+the fixed names (`:capsule`, `:wall`, the LEHs, caps, lips, `FOIL_NAME`) in the GUI, by
+file: `target_setup.jl` 35 (mostly the template build, which phase B replaces),
+`view.jl` 9, `timeline.jl` 8, `session.jl` 6, `optimizer.jl` 5, `talis.jl` 4,
+`shell.jl` 4, `sweep.jl` 3, `review.jl` 3, `drive.jl` 3, `workspace.jl` 2. Core takes
+these as keywords already (`observe`, `wall`, `foil`, `object`, `targets`).
+
 ## Decisions (user, 2026-10-29)
 
 1. Piece names `<part>_wall`, VisRad's scheme (shown in the tree as "hohlraum ▸ wall").
