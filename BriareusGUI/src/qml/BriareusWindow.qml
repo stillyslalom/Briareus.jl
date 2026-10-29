@@ -116,7 +116,19 @@ ApplicationWindow {
         else if (["beams", "group", "quad", "beam"].indexOf(app.selKind) >= 0) results.show("beams")
     }
 
+    // as dense as the toolbar: the style gives the bar a toolbar's height and each title
+    // a button's
     menuBar: MenuBar {
+        topPadding: 0
+        bottomPadding: 0
+        implicitHeight: contentItem.implicitHeight
+        delegate: MenuBarItem {
+            topPadding: 3
+            bottomPadding: 3
+            leftPadding: 8
+            rightPadding: 8
+            implicitHeight: 24
+        }
         AutoMenu {
             title: "&File"
             Action { text: "&Open session…"; shortcut: StandardKey.Open; onTriggered: sessionDialog.run("open") }

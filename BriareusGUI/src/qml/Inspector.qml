@@ -66,8 +66,9 @@ Pane {
                 font.pixelSize: 15
                 font.weight: Font.DemiBold
                 elide: Text.ElideRight
-                Layout.fillWidth: true
-                Layout.maximumWidth: implicitWidth
+                // its whole name, cut short only when the panel is narrower than it
+                Layout.preferredWidth: implicitWidth
+                Layout.minimumWidth: 40
                 ToolTip.visible: truncated && titleHover.hovered
                 ToolTip.delay: 400
                 ToolTip.text: inspector.title
