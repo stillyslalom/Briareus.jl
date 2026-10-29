@@ -194,3 +194,22 @@ Items 7–12 follow the 2026-10-22 literature review against Kritcher et al. 202
     cavity's `:sampled` build, ≲ 7 % of it); GPU mat-vecs (≲ 25 % end to end; not worth
     CUDA.jl yet) ("H-matrix visibility certificates", "Prism certificates for the waist
     gap").
+24. **GUI density and layout (user review, 2026-10-29).** The GUI works but spends screen
+    space a CAD tool needs for the model; aim toward Office-ribbon density, not all the way.
+    - Margins and padding: generous around the toolbar and menu bar, the results panel's
+      tab bar (above it and below it, taking room from the content), and in text fields.
+    - Model tree rows: each component carries a large check box, a display box and a color
+      box, misaligned with the beam rows' dots. Make them one control: a check box filled
+      with the component's color.
+    - Inspector: text still clipped (the template choice "Hohlraum with capsu…", the mesh
+      preset menu "Coarse · ≈0.5 % in P2, …"), against the no-clipped-text rule.
+    - Inspector order: *Template* heads the Target page, though it is chosen once and
+      rarely changed; the frequently edited fields belong first. Whether a template is a
+      property of the assembly at all is open: perhaps a way to start one (File ▸ New
+      target), after which the assembly is its parts.
+    - Assemblies: "hohlraum with capsule" is one fixed template. Check that the model
+      extends to compound targets, e.g. two halfraums driving a shock-tube physics package
+      between them (Nagel's Rayleigh–Taylor experiments): several drive sources, a package
+      that is not a capsule, frames placing the sub-assemblies (phase 3 frames).
+    - Principle: frequent commands near at hand, explanations in tooltips and Help, and
+      the 3D view and its inspection given the most room.
