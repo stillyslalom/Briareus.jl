@@ -72,6 +72,30 @@ phase lands; the docstrings and research notes then hold what was built.
    flat `observed` face gets the foil map's face view and spot statistics. One `observed`
    surface at a time, like the active foil.
 
+7. **Nested assemblies (a component tree).** Components are managed as a tree, as the
+   beams are (groups, quads, beams):
+   - An `Assembly` has a name, a frame (a `FrameDef`, so it can be placed and swept like
+     a part) and children: parts or other assemblies. Parts and assemblies may both sit
+     at the top level, as in VisRad.
+   - Membership is a field (`PartSpec.assembly`, an assembly's `parent`), separate from
+     placement: a member's placement defaults to its assembly's frame but may refer to
+     any frame through its steps. Moving an assembly moves its members and the beams
+     aimed in their frames.
+   - Show/hide (drawing) and include/exclude (calculations) act on a subtree, with the
+     tree's mixed state for a partly shown assembly, as for beam groups. Roles stay on
+     parts and pieces; an excluded subtree gives up its roles until included again (the
+     active foil and the `observed` surface fall back as for a removed part).
+   - A part with several pieces (a hohlraum part, a CAD part split into pieces) shows
+     its pieces as children, like a quad's beams; pieces are not separately movable.
+   - Tree editing: new assembly, move into an assembly (keeping the members where they
+     are, as `set_part_frame!` does), ungroup, rename, remove a subtree. Sessions store
+     the tree; the analyses see the flattened components and never the tree.
+
+   One workflow this serves: a CAD workspace imported as one part or assembly, proposed
+   add-ons mocked up as separate assemblies, and configurations compared by including
+   or excluding them. The design does not depend on that workflow: the tree is general
+   (any nesting, any mix of parts and assemblies, any number at the top).
+
 ## Bit for bit
 
 The starter *Hohlraum with capsule* calls the same core `hohlraum(...)` at the identity
@@ -86,6 +110,8 @@ A. **Roles in the GUI** (no visible change, bit for bit): `observed`, `wall`,
    `lands_on` read from roles; the capsule role stops renaming; sessions version up.
 B. **Hohlraum part, piece aim points, starters:** the reported bug fixed; target kinds
    removed; sessions with a template convert to parts.
+B2. **Assembly tree:** `Assembly`, membership, subtree show/hide and include/exclude,
+   the tree's editing commands, sessions; a CAD import as one assembly of its parts.
 C. **Halfraum ends and packages:** open ends, a package `observed` face, the shock-tube
    and opacity starters.
 D. **Profiles:** frustraums and multi-section hohlraums (a radius per section; four
@@ -93,14 +119,14 @@ D. **Profiles:** frustraums and multi-section hohlraums (a radius per section; f
 E. **Double backlighter with ARC:** the starter, ARC beams as a facility beam set (public
    description only; mock-up timing), per-foil results if one active foil is not enough.
 
-## Open decisions (for the user)
+## Decisions (user, 2026-10-29)
 
-1. Piece names `<part>_wall` (VisRad's scheme, shown as "hohlraum ▸ wall") or
-   `<part>.wall`.
-2. Whether `TargetSetup.kind` disappears entirely (proposed) or stays as a label of the
-   starter used.
-3. One `observed` surface at a time (proposed, as the active foil) or several drive
-   views at once (two packages, say).
+1. Piece names `<part>_wall`, VisRad's scheme (shown in the tree as "hohlraum ▸ wall").
+2. `TargetSetup.kind` disappears entirely; the starters leave only parts and assemblies.
+3. One `observed` surface at a time to start (as the active foil); several later if a
+   case needs it.
+4. Components form a tree of nested assemblies (item 7), general enough for any
+   workflow of top-level parts and assemblies, not built around one.
 
 ## Risks
 

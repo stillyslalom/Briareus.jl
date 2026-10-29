@@ -209,6 +209,7 @@ Items 7–12 follow the 2026-10-22 literature review against Kritcher et al. 202
       to its wall, caps or capsule), and compound targets (two halfraums driving a shock
       tube, opacity halfraums, the double-backlighter ARC target) need parts that are
       hohlraums and roles instead of fixed names. Design and phases:
-      `reference/assemblies-design.md` (three decisions open there).
+      `reference/assemblies-design.md` (decided 2026-10-29: roles, a hohlraum part kind, no
+      target kinds, one observed surface, a nested assembly tree).
     - Principle: frequent commands near at hand, explanations in tooltips and Help, and
       the 3D view and its inspection given the most room.
