@@ -13,7 +13,15 @@ spherical coordinates in a frame.
 
 [`FrameDef`](@ref) places a named frame in a parent frame by an offset and three angles,
 and [`resolve_frames`](@ref) resolves a set of them, depth first, from base frames such
-as target-chamber center.
+as target-chamber center. A definition's [`PlacementStep`](@ref)s then move it relative
+to other frames, in order, each in closed form: relations ([`Coincident`](@ref),
+[`OnAxis`](@ref), [`Concentric`](@ref), [`Distance`](@ref), [`Facing`](@ref),
+[`Parallel`](@ref), [`Roll`](@ref)) fix degrees of freedom, and relative moves
+([`Offset`](@ref), [`Rotate`](@ref)) fix none. A relation that undoes an earlier one is
+an error naming both; [`placement_report`](@ref) gives the degrees of freedom each step
+fixes, redundant steps, what stays free, and the residuals left by relative moves. The
+steps run in sequence rather than through a simultaneous solver: every relation has a
+closed form, the result is deterministic, and an error names one step.
 
 [`FramePointing`](@ref) parameterizes beam aims as local coordinates `(u, v, w)` of a
 frame per beam, with the non-aim fields of [`GroupPointing`](@ref): a backlighter's
@@ -30,6 +38,6 @@ re-optimizing the pointing with a warm start. [`SweepResult`](@ref) holds one
 
 ```@autodocs
 Modules = [Briareus]
-Pages = ["src/frames.jl", "src/frame_pointing.jl", "src/sweep.jl"]
+Pages = ["src/frames.jl", "src/placement.jl", "src/frame_pointing.jl", "src/sweep.jl"]
 Private = false
 ```

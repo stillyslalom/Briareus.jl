@@ -9132,3 +9132,14 @@ conventions below are assumed, not taken from a facility document.
   step's own initial parameters (not about the warm start), so the box does not drift
   along the sweep. The backlighter tutorial's clearance check drops the NIF clearance
   wings (`nif_wings`, NIF engineering defaults) for its OMEGA-style mock-up.
+- **Placement steps** *decision* (`src/placement.jl`). Steps apply in order, each in
+  closed form, not through a simultaneous solver. A turn is the smallest rotation taking
+  the frame's `z` to the target direction; `z` exactly opposite turns 180° about the
+  frame's own `x` (a branch chosen for determinism). A relation conflicts with an
+  earlier one when it raises that relation's residual by more than 1e-9 mm or 1e-7°
+  (engineering tolerances, far above Float64 round-off on mm-scale frames and far below
+  any placement that matters); relative moves (`Offset`, `Rotate`, `Roll` without a
+  reference) never conflict and leave residuals instead. Degrees of freedom are counted
+  as fixed translation directions and rotation axes at the orientation after each step,
+  a linearization: a later tilt of `z` can change a fixed roll, which the residual check
+  then catches as a conflict.

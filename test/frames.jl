@@ -138,6 +138,97 @@ using Briareus: Vec3, SVector, SMatrix
         @test_throws ArgumentError resolve_frames([:a => FrameDef(), :a => FrameDef()])
     end
 
+    @testset "placement steps" begin
+        snout = Frame((10.0, -2.0, 5.0); z = (0.3, 0.1, 1.0))
+        base = Dict(:snout => snout)
+        start = FrameDef(:tcc; offset = (1.0, 3.0, -0.5), rotation = (40.0, 70.0, 20.0))
+        F0 = euler_frame(start.offset, start.rotation...)
+        place(steps...) = resolve_frames(Dict(:a => FrameDef(:tcc; offset = start.offset,
+                                                             rotation = start.rotation, steps = collect(steps))), base)[:a]
+        report(steps...) = placement_report(Dict(:a => FrameDef(:tcc; offset = start.offset,
+                                                                rotation = start.rotation, steps = collect(steps))), base)[:a]
+        q = to_chamber(snout, (0.5, 0.0, 1.0))
+        a = snout.R[:, 3]
+        # each step against its closed form; a turn keeps the axis across the old and new z
+        # (the smallest rotation) and the origin
+        Fc = place(Coincident(:snout; point = (0.5, 0.0, 1.0)))
+        @test isapprox(Fc.origin, q; atol = 1e-14) && Fc.R == F0.R
+        Fd = place(Distance(:snout, 2.5; point = (0.5, 0.0, 1.0)))
+        @test isapprox(Fd.origin, q + 2.5 * normalize(F0.origin - q); atol = 1e-14) && Fd.R == F0.R
+        Fo = place(OnAxis(:snout; distance = -1.5))
+        @test Fo.origin ≈ snout.origin - 1.5a atol = 1e-14
+        Fl = place(OnAxis(:snout))
+        @test Fl.origin ≈ snout.origin + dot(F0.origin - snout.origin, a) * a atol = 1e-14
+        k(F, t) = normalize(cross(F.R[:, 3], t))
+        Ff = place(Facing(:snout; point = (0.5, 0.0, 1.0)))
+        t = normalize(q - F0.origin)
+        Q = Ff.R * F0.R'
+        @test isapprox(Ff.R[:, 3], t; atol = 1e-14) && isapprox(Q * k(F0, t), k(F0, t); atol = 1e-14) &&
+              Ff.origin == F0.origin
+        @test place(Facing(:snout; side = :back)).R[:, 3] ≈ normalize(F0.origin - snout.origin) atol = 1e-14
+        Fp = place(Parallel(:snout; flip = true))
+        @test isapprox(Fp.R[:, 3], -a; atol = 1e-14) && isapprox(Fp.R * F0.R' * k(F0, -a), k(F0, -a); atol = 1e-14)
+        Fk = place(Concentric(:snout))
+        @test isapprox(Fk.R[:, 3], a; atol = 1e-14) && norm(cross(Fk.origin - snout.origin, a)) < 1e-13 &&
+              isapprox(dot(Fk.origin - snout.origin, a), dot(F0.origin - snout.origin, a); atol = 1e-13)
+        # antiparallel: half a turn about the frame's own x
+        @test resolve_frames(Dict(:a => FrameDef(steps = [Parallel(:tcc; flip = true)])))[:a].R ≈
+              Diagonal([1.0, -1.0, -1.0]) atol = 1e-15
+        # a roll from chamber x about chamber z
+        Fr = resolve_frames(Dict(:a => FrameDef(steps = [Roll(30.0; from = :tcc)])))[:a]
+        @test Fr.R ≈ euler_rotation(0, 0, 30) atol = 1e-15
+        Fz = place(Parallel(:snout), Roll(-25.0; from = (:snout, :y)))
+        e = normalize(snout.R[:, 2] - dot(snout.R[:, 2], a) * a)
+        @test Fz.R[:, 1] ≈ cosd(-25) * e + sind(-25) * cross(a, e) atol = 1e-14
+        # relative moves are compositions in the frame's own coordinates
+        @test place(Offset(0.2, -0.4, 1.1)) ≈ compose(F0, Frame(I(3), (0.2, -0.4, 1.1)))
+        @test place(Offset(0.2, -0.4, 1.1; frame = :snout)).origin ≈ F0.origin + snout.R * Vec3(0.2, -0.4, 1.1)
+        @test place(Rotate(:z, 35.0)) ≈ compose(F0, euler_frame((0, 0, 0), 0, 0, 35))
+        @test place(Rotate(:y, 35.0)) ≈ compose(F0, euler_frame((0, 0, 0), 35, 0, 0))
+        @test place(Roll(35.0)) ≈ place(Rotate(:z, 35.0))
+
+        # degrees of freedom: what each step fixes, what stays free, redundancy
+        r = report(Distance(:tcc, 2.0), Facing(:snout), Roll(30.0; from = :tcc))
+        @test r.fixed == [(1, 0), (0, 2), (0, 1)] && length(r.free_translation) == 2 &&
+              isempty(r.free_rotation) && isempty(r.redundant)
+        rf = place(r.steps...)
+        @test all(u -> abs(dot(u, normalize(rf.origin))) < 1e-14, r.free_translation)
+        r = report(Concentric(:snout), Parallel(:snout), OnAxis(:snout; distance = 1.0))
+        @test r.fixed == [(2, 2), (0, 0), (1, 0)] && r.redundant == [2] &&
+              isempty(r.free_translation) && length(r.free_rotation) == 1 &&
+              abs(dot(only(r.free_rotation), a)) ≈ 1
+        @test report(Coincident(:tcc)).fixed == [(3, 0)] && length(report().free_rotation) == 3
+        # a relative move after a relation leaves a residual; an unmoved relation none
+        r = report(OnAxis(:snout; distance = 2.0), Facing(:tcc), Offset(0.5, 0.0, 0.0))
+        @test r.residuals[1][1] ≈ 0.5 && r.residuals[2][2] > 1 && r.residuals[3] == (0.0, 0.0)
+        @test all(x -> all(<(1e-9), x), report(Concentric(:snout), Roll(10.0; from = :tcc)).residuals)
+
+        # a relation that undoes an earlier one names both steps and the change
+        err = try place(Coincident(:tcc), Coincident(:tcc; point = (0.0, 2.0, 0.0))); nothing catch e; e end
+        @test err isa ArgumentError &&
+              occursin("step 2 (Coincident tcc) conflicts with step 1 (Coincident tcc)", err.msg) &&
+              occursin("moves it by 2 mm", err.msg)
+        err = try place(Facing(:snout), Parallel(:tcc)); nothing catch e; e end
+        @test err isa ArgumentError && occursin("step 2 (Parallel tcc) conflicts with step 1 (Facing snout)", err.msg) &&
+              occursin("°", err.msg)
+        # moving along the line to the faced point keeps the facing: no conflict
+        @test place(Facing(:snout), Distance(:snout, 1.0)).R[:, 3] ≈ normalize(snout.origin - F0.origin) atol = 1e-14
+        # undefined directions, bad arguments
+        @test_throws ArgumentError place(Coincident(:snout), Facing(:snout))
+        @test_throws ArgumentError place(Parallel(:tcc), Roll(0.0; from = (:tcc, :z)))
+        @test_throws ArgumentError Distance(:tcc, -1.0)
+        @test_throws ArgumentError Facing(:tcc; side = :left)
+        @test_throws ArgumentError Parallel(:tcc; axis = :w)
+        # a frame follows the frames its steps name; they resolve first, and loops through
+        # them are named
+        defs = Dict(:mount => FrameDef(:tcc; offset = (0.0, 0.0, 8.0)),
+                    :foil => FrameDef(:tcc; offset = (2.0, 0.0, 0.0), steps = [Facing(:mount)]))
+        @test resolve_frames(defs)[:foil].R[:, 3] ≈ normalize(Vec3(-2.0, 0, 8)) atol = 1e-14
+        err = try resolve_frames(Dict(:a => FrameDef(steps = [Facing(:b)]), :b => FrameDef(steps = [Facing(:a)]))); nothing catch e; e end
+        @test err isa ArgumentError && occursin(r"loop: ([ab]) → [ab] → \1$", err.msg)
+        @test_throws ArgumentError resolve_frames(Dict(:a => FrameDef(steps = [Facing(:nowhere)])))
+    end
+
     @testset "FramePointing" begin
         quads = nif_quads(power = 8.0)[1:8]
         # chamber frame: the initial parameters reproduce the template aims exactly

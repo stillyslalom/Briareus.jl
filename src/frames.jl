@@ -280,24 +280,31 @@ function point_of(c, system::Symbol = :cartesian; frame::Frame = CHAMBER)
     return Vec3(to_chamber(frame, Vec3(a * sind(b) * cosd(d), a * sind(b) * sind(d), a * cosd(b))))
 end
 
+abstract type PlacementStep end
+
 """
-    FrameDef(parent = :tcc; offset = (0, 0, 0), rotation = (0, 0, 0))
+    FrameDef(parent = :tcc; offset = (0, 0, 0), rotation = (0, 0, 0), steps = [])
 
 A frame placed in another: its origin at `offset` (mm) in the frame named `parent`, and
 its axes turned by `rotation` = (polar, azimuth, rotation) in degrees in the parent
-([`euler_rotation`](@ref)). Its chamber frame is
-`compose(parent's frame, euler_frame(offset, rotation...))`. A port's frame is
-`FrameDef(:tcc; rotation = (θ, φ, roll))` ([`port_frame`](@ref)). Resolve a set of named
-definitions with [`resolve_frames`](@ref).
+([`euler_rotation`](@ref)), so its chamber frame is
+`compose(parent's frame, euler_frame(offset, rotation...))`; then the
+[`PlacementStep`](@ref)s `steps` apply in order (relations to other frames, relative
+moves). Degrees of freedom no step fixes keep the values of `offset` and `rotation`. A
+port's frame is `FrameDef(:tcc; rotation = (θ, φ, roll))` ([`port_frame`](@ref)).
+Resolve a set of named definitions with [`resolve_frames`](@ref).
 """
 struct FrameDef
     parent::Symbol
     offset::Vec3
     rotation::NTuple{3,Float64}
+    steps::Vector{PlacementStep}
 end
 
-FrameDef(parent::Symbol = :tcc; offset = (0.0, 0.0, 0.0), rotation = (0.0, 0.0, 0.0)) =
-    FrameDef(parent, Vec3(offset...), Tuple(Float64.(rotation))::NTuple{3,Float64})
+FrameDef(parent::Symbol = :tcc; offset = (0.0, 0.0, 0.0), rotation = (0.0, 0.0, 0.0),
+         steps = PlacementStep[]) =
+    FrameDef(parent, Vec3(offset...), Tuple(Float64.(rotation))::NTuple{3,Float64},
+             collect(PlacementStep, steps))
 
 """
     resolve_frames(defs, base = Dict(:tcc => CHAMBER)) -> Dict{Symbol,Frame}
@@ -305,12 +312,18 @@ FrameDef(parent::Symbol = :tcc; offset = (0.0, 0.0, 0.0), rotation = (0.0, 0.0, 
 Chamber frames of the named definitions `defs` (a dictionary or a collection of
 `name => FrameDef` pairs), each placed in its parent, which is another definition or one
 of the `base` frames (analytic frames: TCC, a template's entrance holes, a foil; `:tcc`
-is added as [`CHAMBER`](@ref) when absent). The result holds the base frames too.
-Definitions resolve depth first, so a frame follows every ancestor exactly. A
-definition that reuses a base frame's name, a name given twice, an unknown parent, or
-parents in a loop (the error names the loop, e.g. `a → b → a`) is an `ArgumentError`.
+is added as [`CHAMBER`](@ref) when absent), then moved by its placement steps. The
+result holds the base frames too. Definitions resolve depth first, the frames a
+definition's steps name before it, so a frame follows every ancestor and every frame its
+steps refer to exactly. A definition that reuses a base frame's name, a name given
+twice, an unknown parent or step frame, frames that depend on each other in a loop (the
+error names the loop, e.g. `a → b → a`), a step that cannot apply (a facing point at the
+origin) and a step that undoes an earlier one (see [`placement_report`](@ref)) are each
+an `ArgumentError`.
 """
-function resolve_frames(defs, base::AbstractDict = Dict(:tcc => CHAMBER))
+resolve_frames(defs, base::AbstractDict = Dict(:tcc => CHAMBER)) = first(_resolve_frames(defs, base))
+
+function _resolve_frames(defs, base::AbstractDict)
     out = Dict{Symbol,Frame}(Symbol(k) => v for (k, v) in base)
     haskey(out, :tcc) || (out[:tcc] = CHAMBER)
     pending = Dict{Symbol,FrameDef}()
@@ -320,6 +333,7 @@ function resolve_frames(defs, base::AbstractDict = Dict(:tcc => CHAMBER))
         haskey(pending, name) && throw(ArgumentError("frame $name is defined twice"))
         pending[name] = d
     end
+    reports = Dict{Symbol,PlacementReport}()
     path = Symbol[]
     function visit(name::Symbol)
         haskey(out, name) && return out[name]
@@ -332,13 +346,17 @@ function resolve_frames(defs, base::AbstractDict = Dict(:tcc => CHAMBER))
         push!(path, name)
         d = pending[name]
         parent = visit(d.parent)
+        for s in d.steps, r in _step_refs(s)
+            visit(r)
+        end
         pop!(path)
-        f = compose(parent, euler_frame(d.offset, d.rotation...))
+        f, reports[name] = _apply_steps(name, compose(parent, euler_frame(d.offset, d.rotation...)),
+                                        d.steps, out)
         out[name] = f
         return f
     end
     for name in keys(pending)
         visit(name)
     end
-    return out
+    return out, reports
 end

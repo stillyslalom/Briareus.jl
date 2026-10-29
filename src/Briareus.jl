@@ -70,7 +70,9 @@ export OrthoCamera, render, radiance, line_of_sight_power
 export backlighter_foil, line_of_sight, LineOfSightReport
 export Frame, CHAMBER, to_chamber, to_frame, compose, euler_rotation, euler_frame, port_frame,
        foil_frame, part_centroid, component_frame, coords_of, point_of, FrameDef, resolve_frames,
-       FramePointing, placement_sweep, SweepRow, SweepResult, write_sweep_csv
+       FramePointing, placement_sweep, SweepRow, SweepResult, write_sweep_csv,
+       PlacementStep, Coincident, OnAxis, Concentric, Distance, Facing, Parallel, Roll, Offset,
+       Rotate, PlacementReport, placement_report
 export kshell_line_energy, kshell_ce_data, kshell_ce_model, KShellCEModel, kshell_ce,
        mass_attenuation, filter_transmission, backlighter_signal, BacklighterSignal,
        henke_mass_attenuation, mirror_reflectivity
@@ -99,6 +101,7 @@ include("cadfit.jl")
 include("beams.jl")
 include("facilities.jl")
 include("frames.jl")
+include("placement.jl")
 include("deposition.jl")
 include("storage.jl")
 include("viewfactors.jl")
