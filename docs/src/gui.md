@@ -208,6 +208,8 @@ the beamlet's side of its quad, and the square beam converging to its own focus
 (outlines and center lines as rays, the converging beam as a volume). Its participation
 dots switch once the drive has a power ratio for that color (below).
 
+![The beam matrix: each beam row of the model tree carries 2 × 3 dots (1ω, 2ω, 3ω; the top row in the calculations, the bottom row drawn), and the properties of the inner quad Q15T hold the same matrix as check boxes. With illustrative 1ω and 2ω power ratios of 5 % each, Q15T's unconverted light is drawn (each color's outlines and center lines as rays) while its 3ω light alone takes part in the calculations; the rows of its group and of all the beams show the 1ω and 2ω drawing dots pale, on for one of their beams.](assets/gui/beam_matrix.png)
+
 A component's box shows or hides it, and its glyph (also the context menu and
 Properties ▸ *Display*) sets its display mode: opaque, semi-transparent, wireframe or
 invisible. A click selects through semi-transparent and wireframe components to an
@@ -222,6 +224,8 @@ refused with the reason in the status line. The pages hold controls and short st
 lines; an ⓘ beside a page title, a section heading or a control shows its explanation on
 hover and, when clicked, opens it on the Help screen (Help ▸ Help topics, F1), which
 collects every explanation by page. Help ▸ Documentation opens this page.
+
+![The Help screen at the placement sweep's page: the explanations behind the ⓘ marks, listed by page, with a link to this documentation.](assets/gui/help.png)
 
 - **Target:** the template (hohlraum with capsule, backlighter foil, or custom parts
   only), its dimensions and wall material, and the mesh: a preset (above) or element
@@ -309,6 +313,12 @@ the cut's edges are outlined. (A slice narrower than 180° removes the intersect
 half-spaces, so what remains is a union that one set of GPU clip planes cannot express;
 splitting the triangles also keeps picking and the outline exact.)
 
+![Display modes and a bounded sector cut on the hohlraum template, colored by the incident x-ray flux: the top cap drawn as a wireframe (its Display setting in Properties), the bottom cap semi-transparent, and a 120° slice of the wall toward the view removed between z = −3 mm and z = 3 mm, clipped at the cut rather than by whole elements.](assets/gui/display_cut.png)
+
+![A round diagnostic window 2 mm across in the wall at φ = 90°, z = 0, cut by the plane that contains its line of sight (from the window's centroid along θ = 90°, φ = 90°, at a rotation of 0°: the vertical plane with normal −x), so that the cut halves the window along the line. The drive, computed again with the window, puts 4.47 TW (1.17 %) of the 384 TW delivered on it.](assets/gui/cut_plane.png)
+
+![The Cut settings popup for that plane: the normal θ = 90°, φ = 180° (the vector −1, 0, 0) through the window's centroid at (0, 2.83, 0) mm, the offset slider, and the direction θ = 90°, φ = 90° whose line from the selected component the plane contains.](assets/gui/cut_settings.png)
+
 Beams are drawn as rays (each axis from the lens side to the surface it lands on, with
 the aim point marked) or as volumes, and colored by group or by their worst clearance or
 TaLIS status, in the tree's colors. The target is colored by component or by the
@@ -385,6 +395,8 @@ The bottom panel's tabs:
   and *Apply step* (or a double click) moves the part there as one edit, with the
   re-optimized pointing when the sweep re-optimized. A sweep is marked out of date when
   the design or a setting it used changes.
+
+  ![A placement sweep of the backlighter foil along its front normal, from 2 mm farther from the target chamber center to 2 mm nearer it in 1 mm steps (the foil 8 mm to 4 mm from it), with the clearance check, the line of sight from the foil through the main target, and the power the foil captures. The least clearance falls from −1.130 mm to −1.901 mm (beams B35 and B36 on the main target), the line of sight stays clear, and the least fraction of a beam's power on the foil drops from 95.62 % at no shift to 63.50 % at +2 mm; the step at +1 mm is selected.](assets/gui/sweep.png)
 - **TaLIS:** the NIF target-configuration checks ([`talis_check`](@ref)): 3ω capture,
   incidence and clearance, 1ω clearance and unconverted-light management, and the TAS
   stay-in zone, on the chosen capture components, checked components and diagnostics
