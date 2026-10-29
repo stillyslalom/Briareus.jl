@@ -20,9 +20,10 @@ import "common"
 ApplicationWindow {
     id: win
     title: app.title
-    // 1640 × 1000, or 90 % of the screen's free area (less the taskbar) on a smaller or
-    // scaled display, centered on that screen. Set once at start: the bindings are cut in
-    // onCompleted, so moving the window to another screen keeps its size.
+    // 1640 × 1000, centered on the screen; on a screen whose free area (less the taskbar)
+    // is smaller than that with a margin (a laptop, a scaled display), maximized. Set once
+    // at start: the bindings are cut in onCompleted, so moving the window to another
+    // screen keeps its size.
     readonly property int availW: Math.min(Screen.width, Screen.desktopAvailableWidth)
     readonly property int availH: Math.min(Screen.height, Screen.desktopAvailableHeight)
     width: Math.min(1640, Math.round(0.9 * availW))
@@ -32,7 +33,11 @@ ApplicationWindow {
     minimumWidth: Math.min(1100, availW)
     minimumHeight: Math.min(680, availH)
     visible: true
-    Component.onCompleted: { width = width; height = height; x = x; y = y }
+    readonly property bool smallScreen: availW < 1800 || availH < 1100
+    Component.onCompleted: {
+        width = width; height = height; x = x; y = y
+        if (smallScreen) showMaximized()
+    }
 
     onClosing: Qt.quit()
     // keys released while another window had focus never reach the canvas
@@ -324,8 +329,9 @@ ApplicationWindow {
 
         ModelTree {
             id: tree
-            SplitView.preferredWidth: 290
-            SplitView.minimumWidth: 200
+            // side panels and the results take a share of a small window, the 3D view the rest
+            SplitView.preferredWidth: Math.min(290, Math.round(0.17 * win.availW))
+            SplitView.minimumWidth: 170
         }
 
         SplitView {
@@ -390,14 +396,14 @@ ApplicationWindow {
             }
             ResultsPanel {
                 id: results
-                SplitView.preferredHeight: 300
-                SplitView.minimumHeight: 120
+                SplitView.preferredHeight: Math.min(300, Math.round(0.27 * win.availH))
+                SplitView.minimumHeight: 100
             }
         }
 
         Inspector {
-            SplitView.preferredWidth: 400
-            SplitView.minimumWidth: 300
+            SplitView.preferredWidth: Math.min(400, Math.round(0.24 * win.availW))
+            SplitView.minimumWidth: 260
         }
     }
 
