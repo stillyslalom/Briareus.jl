@@ -119,6 +119,8 @@ end
 function _connect!(sess::DesignSession)
     ts, bt, dr = sess.target, sess.beams, sess.drive
     on(ts.kind) do kind
+        # an optimization of the previous target does not apply to the new one
+        clear_optimize!(sess.optimize)
         p = bt.preset[]
         if kind === :foil && p in (:nif_quads, :nif_beams, :omega_hohlraum)
             load_preset!(bt, :omega_backlighter; target_kind = kind, params = ts.params[])

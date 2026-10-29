@@ -161,6 +161,16 @@ end
     @test rc.x ≈ rc.x0 && occursin("canceled; kept the best design", st.status[])
     @test task_status(sess, :optimize)[1] === :attention
 
+    notify(sess.target.kind)                                 # File ▸ New target
+    @test st.result[] === nothing && isempty(st.status[])
+
+    # clearing (a new or reopened target) forgets the result and discards a run in flight:
+    # the run cleared at its first progress delivers nothing
+    clear_after_first = f -> (f(); st.evaluations[] >= 1 && st.running[] && clear_optimize!(st))
+    start_optimize!(st, sess.drive.scenario[], sess.beams.beams[][idx], idx;
+                    deliver = clear_after_first, spawn = false)
+    @test st.result[] === nothing && isempty(st.status[]) && !st.running[] && st.cancel[]
+
     # the evaluation budget ends a run whatever the line searches do
     st.iterations[] = 50
     @test edit_optimize!(st, :max_evaluations, "3") && st.max_evaluations[] == 3

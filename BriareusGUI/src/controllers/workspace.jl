@@ -189,6 +189,7 @@ function restore!(sess::DesignSession, state::AbstractDict)
         # sessions before the unconverted-light deposition: off
         set_unconverted_ratio!(sess.drive, Float64.(get(d, "unconverted_ratio", [0.0, 0.0]))...)
     end
+    clear_optimize!(sess.optimize)
     if haskey(state, "optimize")
         o, op = state["optimize"], sess.optimize
         _assign!(op.by, Symbol(o["by"]))

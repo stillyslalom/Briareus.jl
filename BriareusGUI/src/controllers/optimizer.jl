@@ -108,6 +108,7 @@ struct OptimizeState
     error::Observable{String}
     result::Observable{Union{Nothing,OptimizeResult}}
     cancel::Threads.Atomic{Bool}
+    generation::Base.RefValue{Int}
 end
 
 OptimizeState() =
@@ -117,7 +118,8 @@ OptimizeState() =
                   Observable(0.0), Observable(0.2), Observable(100), Observable(1000),
                   Observable(false), Observable(0), Observable(0), Observable(NaN),
                   Observable(NaN), Observable(0.0), Observable(""), Observable(""),
-                  Observable{Union{Nothing,OptimizeResult}}(nothing), Threads.Atomic{Bool}(false))
+                  Observable{Union{Nothing,OptimizeResult}}(nothing), Threads.Atomic{Bool}(false),
+                  Ref(0))
 
 """
     set_free!(st::OptimizeState, field::Symbol, on::Bool)
@@ -289,6 +291,7 @@ function start_optimize!(st::OptimizeState, s::Scenario, beams::AbstractVector,
     st.started[] = time()
     st.status[] = "starting…"
     st.running[] = true
+    gen = st.generation[]
     settings = (; deltas = copy(st.deltas[]))
     cfg = _objective_settings(st)
     job = function ()
@@ -308,7 +311,8 @@ function start_optimize!(st::OptimizeState, s::Scenario, beams::AbstractVector,
             if time() - reported[] > 0.1
                 reported[] = time()
                 n, it, J, b = info.evaluations, info.iteration, info.value, info.best_value
-                deliver(() -> (st.evaluations[] = n; st.iteration[] = it; st.current[] = J;
+                deliver(() -> st.generation[] == gen &&
+                              (st.evaluations[] = n; st.iteration[] = it; st.current[] = J;
                                st.best[] = b))
             end
             return st.cancel[]
@@ -325,7 +329,8 @@ function start_optimize!(st::OptimizeState, s::Scenario, beams::AbstractVector,
     end
     run = function ()
         out = _try_job(job)
-        deliver(() -> _finish_optimize!(st, out))
+        # a run discarded by `clear_optimize!` leaves the cleared state alone
+        deliver(() -> st.generation[] == gen && _finish_optimize!(st, out))
     end
     _run_job(run, spawn)
     return st
@@ -372,6 +377,24 @@ Stop the optimization after the objective evaluation in progress (the
 the result.
 """
 cancel_optimize!(st::OptimizeState) = (st.cancel[] = true; st)
+
+"""
+    clear_optimize!(st::OptimizeState)
+
+Forget the result and progress of the last optimization (a new or reopened target); a
+run in progress stops and its result is discarded. The settings stay.
+"""
+function clear_optimize!(st::OptimizeState)
+    st.generation[] += 1
+    st.running[] && (st.cancel[] = true; st.running[] = false)
+    st.evaluations[] = 0
+    st.iteration[] = 0
+    st.current[] = NaN
+    st.best[] = NaN
+    st.status[] = ""
+    st.result[] === nothing || (st.result[] = nothing)
+    return st
+end
 
 """
     optimize_progress(st::OptimizeState) -> String
