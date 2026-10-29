@@ -43,6 +43,18 @@ var pages = [
                 "toward TCC. Every part has its own frame (origin at its center, z its axis): " +
                 "parts placed in it and beams aimed in it move and turn with the part. Changing " +
                 "the frame keeps the part where it is." },
+        { key: "part.steps", title: "Placement steps",
+          text: "Steps apply in order after the placement fields, each in closed form. Relations " +
+                "fix degrees of freedom: Coincident (the origin at a point of a frame), On axis, " +
+                "Concentric (z along a frame's axis, the origin on it), Distance (from a point, " +
+                "along the line through the origin), Facing (z toward a point, by the smallest " +
+                "turn), Parallel (z along an axis) and Roll (x at an angle from a frame's axis). " +
+                "Offset and Rotate are relative moves and fix nothing. What no step fixes keeps " +
+                "the values of the placement fields. A relation that undoes an earlier one is " +
+                "refused: reorder the steps or remove one. A new step leaves the part where it " +
+                "is where it can (a coincident point, a distance and a roll start at the current " +
+                "values). The part follows the frames its steps refer to, as it follows the " +
+                "frame it is placed in." },
         { key: "part.role", title: "Role",
           text: "A role names the part as the analyses expect it: the capsule (a sphere, or a CAD " +
                 "part a sphere is fitted to) whose x-ray drive is observed, or the backlighter foil " +
@@ -143,7 +155,15 @@ var pages = [
                 "frames) along an axis of any frame, and check each step in the background: beam " +
                 "clearance with the clearance check's settings, the backlighter's line of sight, " +
                 "the power the foil captures, and optionally the pointing re-optimized with the " +
-                "optimization's settings. The sweep translates; it does not turn." },
+                "optimization's settings. Along an axis, the sweep translates; it does not turn." },
+        { key: "sweep.steps", title: "Sweeping a placement step",
+          text: "Instead of a shift along an axis, the sweep can step a number of one of the " +
+                "part's placement steps (a distance, an angle, a point's or an offset's " +
+                "coordinate) through a range of values. At each value the frames are resolved " +
+                "again, and every part whose frame changes moves rigidly with it, turns " +
+                "included: the parts placed in it, and those whose steps refer to it (a part " +
+                "facing it). Beams aimed in those frames move with them. A sweep along an axis " +
+                "does the same when other parts' steps refer to the moving part." },
         { key: "sweep.results", title: "Results",
           text: "A row per step: the least clearance and where, the failing and review pairs, the " +
                 "line of sight, the captured power and the objective. Click the chart or a row to " +

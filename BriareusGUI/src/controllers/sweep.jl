@@ -28,7 +28,11 @@ placed in its frame and the beams aimed in those frames; or `:backlighter`, a ba
 target's foil frame; `:none` until chosen, see [`sweep_subject`](@ref)), `frame` and
 `axis` (the move is along `axis`, one of [`SWEEP_AXES`](@ref), of the named frame,
 [`part_frames`](@ref)), `start`, `stop`, `step` (the shifts, mm; the sweep translates,
-it does not turn), the checks `clearance` (the clearance check's components, envelope
+it does not turn); or, with `mode = :step` (`:translate` by default), the number
+`step_key` ([`step_numbers`](@ref)) of placement step `step_index` of the subject part
+takes the values `start`, `start + step`, … `stop` (mm or degrees), and every part whose
+frame that changes moves rigidly with it ([`set_sweep_step!`](@ref)); the checks
+`clearance` (the clearance check's components, envelope
 and errors), `los` (the line of sight at polar angle `los_theta` and azimuth `los_phi`,
 degrees, from the backlighter foil through `los_object`; `NaN`, the default, for the
 direction from the foil's center through the object's, see [`sweep_los`](@ref)),
@@ -64,7 +68,13 @@ struct SweepState
     selected::Observable{Int}
     inputs::Base.RefValue{Any}
     cancel::Threads.Atomic{Bool}
+    mode::Observable{Symbol}
+    step_index::Observable{Int}
+    step_key::Observable{Symbol}
 end
+
+"Sweep modes: `:translate` (along a frame's axis) and `:step` (a placement step's number)."
+const SWEEP_MODES = (:translate, :step)
 
 SweepState() = SweepState(Observable(:none), Observable(:none), Observable(:z), Observable(-1.0),
                           Observable(1.0), Observable(0.5), Observable(true), Observable(false),
@@ -72,18 +82,22 @@ SweepState() = SweepState(Observable(:none), Observable(:none), Observable(:z), 
                           Observable(false), Observable(:quick), Observable(false), Observable((0, 0)),
                           Observable(0.0), Observable(""), Observable(""),
                           Observable{Union{Nothing,SweepResult}}(nothing), Observable(0), Ref{Any}(nothing),
-                          Threads.Atomic{Bool}(false))
+                          Threads.Atomic{Bool}(false), Observable(:translate), Observable(0),
+                          Observable(:none))
 
 """
     set_sweep!(sw::SweepState; subject, frame, axis, clearance, los, los_object, capture,
-               optimize, quality) -> sw
+               optimize, quality, mode) -> sw
 
 Set any of the sweep's choices (see [`SweepState`](@ref)); the numbers are edited with
-[`edit_sweep!`](@ref).
+[`edit_sweep!`](@ref), and the placement step a `:step` sweep varies is chosen with
+[`set_sweep_step!`](@ref).
 """
 function set_sweep!(sw::SweepState; subject = nothing, frame = nothing, axis = nothing,
                     clearance = nothing, los = nothing, los_object = nothing, capture = nothing,
-                    optimize = nothing, quality = nothing)
+                    optimize = nothing, quality = nothing, mode = nothing)
+    mode === nothing || mode in SWEEP_MODES || throw(ArgumentError("the mode is one of $SWEEP_MODES"))
+    mode === nothing || _assign!(sw.mode, mode)
     axis === nothing || axis in SWEEP_AXES || throw(ArgumentError("the axis is one of $SWEEP_AXES"))
     quality === nothing || haskey(SWEEP_QUALITY, quality) ||
         throw(ArgumentError("quality is one of $(Tuple(keys(SWEEP_QUALITY)))"))
@@ -93,6 +107,47 @@ function set_sweep!(sw::SweepState; subject = nothing, frame = nothing, axis = n
         v === nothing || _assign!(obs, v)
     end
     return sw
+end
+
+"""
+    set_sweep_step!(sess, part, k, key) -> Bool
+
+Sweep the number `key` ([`step_numbers`](@ref)) of placement step `k` of the part named
+`part`: the mode becomes `:step`, the subject the part, and the range the number's
+current value ± 1 mm (± 10°, a distance from 0 at least) in steps of a quarter of that.
+A step or number the part lacks sets `error` and returns `false`.
+"""
+function set_sweep_step!(sess, part::Symbol, k::Integer, key::Symbol)
+    sw, ts = sess.sweep, sess.target
+    try
+        st = _sweep_step(ts, part, k, key)
+        unit = only(u for (n, _, u) in step_numbers(st) if n === key)
+        v, h = step_number(st, key), unit == "°" ? 10.0 : 1.0
+        _assign!(sw.mode, :step)
+        _assign!(sw.subject, part)
+        _assign!(sw.step_index, Int(k))
+        _assign!(sw.step_key, key)
+        _assign!(sw.start, key === :distance ? max(0.0, v - h) : v - h)
+        _assign!(sw.stop, v + h)
+        _assign!(sw.step, h / 4)
+        sw.error[] = ""
+        return true
+    catch err
+        err isa ArgumentError || rethrow()
+        sw.error[] = _errmsg(err)
+        return false
+    end
+end
+
+# Placement step `k` of part `part`, which has the number `key`.
+function _sweep_step(ts, part::Symbol, k::Integer, key::Symbol)
+    i = part_index(ts, part)
+    i === nothing && throw(ArgumentError("no part $part to sweep a placement step of"))
+    steps = ts.parts[][i].steps
+    1 <= k <= length(steps) || throw(ArgumentError("$part has no placement step $k"))
+    any(n -> n[1] === key, step_numbers(steps[k])) ||
+        throw(ArgumentError("placement step $k of $part has no number $key"))
+    return steps[k]
 end
 
 """
@@ -263,6 +318,131 @@ function (d::_SweepDesign)(value)
     return (; target, beams, pointing)
 end
 
+# The frames that change when the frames `moved` move: theirs, and those of the parts
+# placed in them or with placement steps that refer to them, repeatedly.
+function _dependent_frames(parts, moved::Set{Symbol})
+    out = copy(moved)
+    grew = true
+    while grew
+        grew = false
+        for p in parts
+            p.name in out && continue
+            (p.frame in out || any(st -> any(in(out), Briareus._step_refs(st)), p.steps)) || continue
+            push!(out, p.name)
+            grew = true
+        end
+    end
+    return out
+end
+
+# The part each target component moves with (a VisRad part's components carry its name
+# as a prefix).
+function _component_owners(t::Target, parts)
+    owner = Dict{Symbol,Symbol}()
+    for p in parts, c in t.components
+        (c.name === p.name || p.kind === :visrad && startswith(String(c.name), String(p.name))) &&
+            (owner[c.name] = p.name)
+    end
+    return owner
+end
+
+# The design of a sweep step that edits the parts (`edit(parts, value)`: a part's center,
+# a placement step's number) and re-resolves their frames: each part whose frame changes
+# moves rigidly by its own map from the sweep's start (`frames`), and so do the beams
+# aimed in it, exactly as a rebuilt design would place them (to round-off).
+struct _FrameSweepDesign
+    target::Target
+    kind::Symbol
+    params::Any
+    parts::Vector{PartSpec}
+    edit::Any
+    frames::Dict{Symbol,Frame}
+    owner::Dict{Symbol,Symbol}
+    beams::Vector{Beam{Float64}}
+    aim_frame::Vector{Symbol}
+    bframes::Vector{Frame}
+    pointing::Any                      # nothing, or (; key, fields, by)
+end
+
+# The rigid maps (chamber to chamber) of the frames a sweep value moves.
+function _sweep_maps(d::_FrameSweepDesign, value)
+    fr = part_frames(d.kind, d.params, d.edit(d.parts, value))
+    return Dict{Symbol,Frame}(n => compose(F, inv(d.frames[n])) for (n, F) in fr if F != d.frames[n])
+end
+
+function (d::_FrameSweepDesign)(value)
+    maps = _sweep_maps(d, value)
+    t = d.target
+    moved(c) = (M = get(maps, get(d.owner, c.name, :none), nothing); M === nothing ? c : transform(c, M.R, M.origin))
+    target = Target(Component[moved(c) for c in t.components]; closed = t.closed, visibility = t.visibility)
+    beams = Beam{Float64}[haskey(maps, f) ? remake(b; aim = Vec3(to_chamber(maps[f], b.aim))) : b
+                          for (b, f) in zip(d.beams, d.aim_frame)]
+    pointing = if d.pointing === nothing
+        nothing
+    else
+        frames = Frame[haskey(maps, f) ? compose(maps[f], F) : F for (F, f) in zip(d.bframes, d.aim_frame)]
+        _parameterization(beams, frames, d.pointing.key, d.pointing.by, d.pointing.fields)
+    end
+    return (; target, beams, pointing)
+end
+
+# The parts at a sweep value: the subject part's center moved by `value * dir` (chamber),
+# or its placement step's number set to `value`.
+struct _MoveCenter
+    part::Int
+    dir::Vec3
+    parent::Frame
+end
+function (e::_MoveCenter)(parts, value)
+    ps = copy(parts)
+    q = ps[e.part]
+    vals = copy(q.values)
+    vals[:x], vals[:y], vals[:z] = part_center(q) + to_frame(e.parent, value * e.dir; direction = true)
+    ps[e.part] = _with(q; values = vals)
+    return ps
+end
+
+struct _SetStepNumber
+    part::Int
+    step::Int
+    key::Symbol
+end
+function (e::_SetStepNumber)(parts, value)
+    ps = copy(parts)
+    q = ps[e.part]
+    steps = copy(q.steps)
+    steps[e.step] = _step_with(steps[e.step], e.key, value)
+    ps[e.part] = _with(q; steps)
+    return ps
+end
+
+# The sweep's design (value -> target, beams, pointing) for the inputs `inp`
+# (`_sweep_inputs`), the translation's chamber direction and which beams follow it.
+function _sweep_design(inp)
+    t = inp.target
+    moved_frames = _moved_frames(inp.parts, inp.subject)
+    moved = _moved_components(t, inp.parts, moved_frames)
+    dir = Vec3(to_chamber(inp.frames[inp.frame], _axis_vector3(inp.axis); direction = true))
+    follow = Bool[f in moved_frames for f in inp.aim_frame]
+    bframes = Frame[inp.frames[f] for f in inp.aim_frame]
+    opt = inp.optimize
+    key = opt === nothing ? nothing :
+          opt.by === :group ? (d = Dict(b.name => c for (b, c) in zip(inp.beams, inp.clusters)); b -> d[b.name]) :
+          opt.by
+    pointing = opt === nothing ? nothing : (; key, by = opt.by, fields = opt.fields)
+    # parts with steps that refer to a moved frame (a part facing the subject) do not just
+    # translate: re-resolve the frames per step
+    if inp.mode !== :step && _dependent_frames(inp.parts, moved_frames) == moved_frames
+        return _SweepDesign(t, moved, dir, inp.beams, follow, bframes, pointing), dir, follow
+    end
+    i = findfirst(p -> p.name === inp.subject, inp.parts)   # (a part: `_sweep_inputs`)
+    edit = inp.mode === :step ? _SetStepNumber(i, inp.step_index, inp.step_key) :
+           _MoveCenter(i, dir, inp.frames[inp.parts[i].frame])
+    design = _FrameSweepDesign(t, inp.kind, inp.params, inp.parts, edit, inp.frames,
+                               _component_owners(t, inp.parts), inp.beams, inp.aim_frame, bframes, pointing)
+    return design, dir, follow
+end
+
 # The optimization's objective, made for each step's target (the foil's center, the
 # keep-outs and the held drive are the step's): made once per target, under a lock, as
 # gradient chunks evaluate it concurrently.
@@ -287,6 +467,13 @@ function _sweep_inputs(sess)
     sw, ts, bt = sess.sweep, sess.target, sess.beams
     subject = sweep_subject(sess)
     subject === :none && throw(ArgumentError("add a part (or use a backlighter target) to sweep"))
+    mode = sw.mode[]
+    mode === :step && _sweep_step(ts, subject, sw.step_index[], sw.step_key[])
+    if subject === :backlighter
+        moved = _moved_frames(ts.parts[], subject)
+        _dependent_frames(ts.parts[], moved) == moved ||
+            throw(ArgumentError("parts with placement steps refer to the backlighter frame: sweep a part instead"))
+    end
     frame = sweep_frame(sess)
     any((sw.clearance[], sw.los[], sw.capture[], sw.optimize[])) ||
         throw(ArgumentError("choose at least one check"))
@@ -315,7 +502,8 @@ function _sweep_inputs(sess)
         _check_grouping(bt.beams[][idx], opt.by)
     end
     return (; target = ts.target[], frames = part_frames(ts), parts = ts.parts[], subject, frame,
-            axis = sw.axis[], values, idx, beams = bt.beams[][idx], aim_frame = bt.aim_frame[][idx],
+            axis = sw.axis[], values, idx, mode, step_index = sw.step_index[], step_key = sw.step_key[],
+            kind = ts.kind[], params = ts.params[], beams = bt.beams[][idx], aim_frame = bt.aim_frame[][idx],
             clusters = bt.cluster[][idx],
             clearance = sw.clearance[] ? merge(clearance_kwargs(rv), REVIEW_QUALITY[q]) : nothing,
             los = sw.los[] ? sweep_los(sess) : nothing, los_object = obj,
@@ -345,17 +533,8 @@ function start_sweep!(sess; spawn::Bool = true)
         return sess
     end
     t = inp.target
-    moved_frames = _moved_frames(inp.parts, inp.subject)
-    moved = _moved_components(t, inp.parts, moved_frames)
-    dir = Vec3(to_chamber(inp.frames[inp.frame], _axis_vector3(inp.axis); direction = true))
-    follow = Bool[f in moved_frames for f in inp.aim_frame]
-    bframes = Frame[inp.frames[f] for f in inp.aim_frame]
+    design, dir, follow = _sweep_design(inp)
     opt = inp.optimize
-    key = opt === nothing ? nothing :
-          opt.by === :group ? (d = Dict(b.name => c for (b, c) in zip(inp.beams, inp.clusters)); b -> d[b.name]) :
-          opt.by
-    design = _SweepDesign(t, moved, dir, inp.beams, follow, bframes,
-                          opt === nothing ? nothing : (; key, by = opt.by, fields = opt.fields))
     q = SWEEP_QUALITY[inp.quality]
     los_kw = inp.los === nothing ? (;) :
              (; foil = FOIL_NAME, object = inp.los_object, center = part_centroid(t, inp.los_object),
@@ -440,7 +619,8 @@ function sweep_stale(sess)
     end
     return now.target !== inp.target || now.beams != inp.beams || now.aim_frame != inp.aim_frame ||
            now.frames != inp.frames || now.subject !== inp.subject || now.frame !== inp.frame ||
-           now.axis !== inp.axis || now.values != inp.values || now.clearance != inp.clearance ||
+           now.axis !== inp.axis || now.values != inp.values || now.mode !== inp.mode ||
+           now.step_index != inp.step_index || now.step_key !== inp.step_key || now.clearance != inp.clearance ||
            now.los != inp.los || now.los_object !== inp.los_object || now.capture != inp.capture ||
            now.quality !== inp.quality || !isequal(now.optimize, inp.optimize) ||
            _profile_state(now.profile) != _profile_state(inp.profile)
@@ -469,14 +649,19 @@ function apply_sweep_step!(sess, k::Integer)
     ts = sess.target
     row = r.rows[k]
     Δ = row.value * inp.dir
-    ok = if inp.subject === :backlighter && ts.kind[] === :foil
+    ok = if inp.mode === :step
+        i = part_index(ts, inp.subject)
+        steps = copy(ts.parts[][i].steps)
+        steps[inp.step_index] = _step_with(steps[inp.step_index], inp.step_key, row.value)
+        _set_steps!(ts, i, steps)
+    elseif inp.subject === :backlighter && ts.kind[] === :foil
         abs(abs(inp.dir[1]) - 1) < 1e-12 ||
             throw(ArgumentError("the backlighter foil moves along chamber x only (its distance from TCC)"))
         p = copy(ts.params[])
         p[:distance] += Δ[1]
         _try_build!(ts; params = p)
     else
-        i = part_index(ts, inp.subject)
+        i = part_index(sess.target, inp.subject)
         i === nothing && throw(ArgumentError("no part $(inp.subject)"))
         q = ts.parts[][i]
         c = part_center(q) + to_frame(inp.frames[q.frame], Δ; direction = true)
@@ -493,7 +678,8 @@ function apply_sweep_step!(sess, k::Integer)
         bs[inp.idx] = row.beams
         _set_aims!(bt, bs)
     end
-    sw.status[] = @sprintf("applied the step at %+.4g mm", row.value)
+    sw.status[] = inp.mode === :step ? @sprintf("applied the step at %s = %.4g", inp.step_key, row.value) :
+                  @sprintf("applied the step at %+.4g mm", row.value)
     return true
 end
 
@@ -548,7 +734,7 @@ function sweep_chart(sess)
     sw = sess.sweep
     r = sw.result[]
     inp = sw.inputs[]
-    xlabel = inp === nothing ? "shift (mm)" : "shift along $(inp.axis) of $(inp.frame) (mm)"
+    xlabel = inp === nothing ? "shift (mm)" : _sweep_variable(inp)
     r === nothing && return (; chart = :sweep, title = "Placement sweep", xlabel,
                              left = (; label = "", series = NamedTuple[]), right = nothing,
                              legend = NamedTuple[], cursor = NaN,
@@ -585,7 +771,9 @@ function _sweep_state(sw::SweepState)
                          "axis" => String(sw.axis[]), "start" => sw.start[], "stop" => sw.stop[],
                          "step" => sw.step[], "clearance" => sw.clearance[], "los" => sw.los[],
                          "los_object" => String(sw.los_object[]), "capture" => sw.capture[],
-                         "optimize" => sw.optimize[], "quality" => String(sw.quality[]))
+                         "optimize" => sw.optimize[], "quality" => String(sw.quality[]),
+                         "mode" => String(sw.mode[]), "step_index" => sw.step_index[],
+                         "step_key" => String(sw.step_key[]))
     for k in (:los_theta, :los_phi)
         x = getfield(sw, k)[]
         isfinite(x) && (d[String(k)] = x)
@@ -594,7 +782,7 @@ function _sweep_state(sw::SweepState)
 end
 
 function _restore_sweep!(sw::SweepState, d::AbstractDict)
-    for k in (:subject, :frame, :axis, :los_object, :quality)
+    for k in (:subject, :frame, :axis, :los_object, :quality, :mode, :step_key)
         haskey(d, String(k)) && _assign!(getfield(sw, k), Symbol(d[String(k)]))
     end
     for k in (:start, :stop, :step)
@@ -606,5 +794,44 @@ function _restore_sweep!(sw::SweepState, d::AbstractDict)
     for k in (:clearance, :los, :capture, :optimize)
         haskey(d, String(k)) && _assign!(getfield(sw, k), Bool(d[String(k)]))
     end
+    haskey(d, "step_index") && _assign!(sw.step_index, Int(d["step_index"]))
     return sw
+end
+
+# What a sweep varies, with its unit: the axis label of its chart.
+function _sweep_variable(inp)
+    inp.mode === :step || return "shift along $(inp.axis) of $(inp.frame) (mm)"
+    p = inp.parts[findfirst(q -> q.name === inp.subject, inp.parts)]
+    st = p.steps[inp.step_index]
+    label, unit = only((l, u) for (k, l, u) in step_numbers(st) if k === inp.step_key)
+    return "$label of step $(inp.step_index) ($(PART_STEP_LABELS[step_kind(st)])) of $(inp.subject) ($unit)"
+end
+
+# The components a sweep design moves, as placed at `value` (no target built).
+_moved_at(d::_SweepDesign, value) =
+    Component[translate(c, value * d.dir) for c in d.target.components if c.name in d.moved]
+
+function _moved_at(d::_FrameSweepDesign, value)
+    maps = _sweep_maps(d, value)
+    out = Component[]
+    for c in d.target.components
+        M = get(maps, get(d.owner, c.name, :none), nothing)
+        M === nothing || push!(out, transform(c, M.R, M.origin))
+    end
+    return out
+end
+
+"""
+    sweep_ghost(sess) -> Vector{Component}
+
+The components the sweep moves, placed as at the selected step ([`select_sweep_step!`](@ref)),
+for drawing beside the design as it is; empty with no step selected, or when the design
+or the sweep's settings changed since it ran ([`sweep_stale`](@ref)).
+"""
+function sweep_ghost(sess)
+    sw = sess.sweep
+    r, k, inp = sw.result[], sw.selected[], sw.inputs[]
+    (r === nothing || inp === nothing || !(1 <= k <= length(r.rows)) || sweep_stale(sess)) &&
+        return Component[]
+    return _moved_at(first(_sweep_design(inp)), r.rows[k].value)
 end

@@ -236,7 +236,7 @@ end
 
 """
     PartSpec(kind; name, values, two_sided = false, inward = false, aperture = false,
-             file = "", frame = :tcc)
+             file = "", frame = :tcc, coords = :cartesian, object = "", steps = [])
 
 A free target part: `kind` (one of [`PART_KINDS`](@ref)), its component `name`,
 `values` (every [`PART_FIELDS`](@ref) key and its kind's [`PART_SIZE_FIELDS`](@ref)),
@@ -246,7 +246,10 @@ radiates from its inside; a flat part from its back; a mesh from the other side)
 escapes through it). A `:mesh` part reads its triangles from the STL `file`. The
 placement fields are in the frame named `frame` (one of [`TEMPLATE_FRAMES`](@ref), or
 another part's name: see [`part_frames`](@ref)); `coords` ([`PART_COORDINATES`](@ref)) is
-how its position is shown and edited (the values keep `x`, `y`, `z`).
+how its position is shown and edited (the values keep `x`, `y`, `z`). The placement
+`steps` (`PlacementStep`s: relations to other frames, relative moves) apply in order
+after the placement fields; the degrees of freedom they leave free keep the fields'
+values ([`part_placement`](@ref)).
 """
 struct PartSpec
     kind::Symbol
@@ -259,6 +262,7 @@ struct PartSpec
     frame::Symbol
     coords::Symbol
     object::String
+    steps::Vector{PlacementStep}
 end
 
 """
@@ -296,7 +300,7 @@ end
 function PartSpec(kind::Symbol; name = kind, values = Dict{Symbol,Float64}(),
                   two_sided::Bool = false, inward::Bool = false, aperture::Bool = false,
                   file::AbstractString = "", frame::Symbol = :tcc, coords::Symbol = :cartesian,
-                  object::AbstractString = "")
+                  object::AbstractString = "", steps = PlacementStep[])
     kind in PART_KINDS || throw(ArgumentError("part kind must be one of $PART_KINDS"))
     frame === Symbol(name) && throw(ArgumentError("a part cannot be placed in its own frame"))
     coords in PART_COORDINATES || throw(ArgumentError("coordinates must be one of $PART_COORDINATES"))
@@ -308,14 +312,28 @@ function PartSpec(kind::Symbol; name = kind, values = Dict{Symbol,Float64}(),
         haskey(v, k) || throw(ArgumentError("a $kind has no field :$k"))
         v[k] = x
     end
+    any(st -> Symbol(name) in Briareus._step_refs(st), steps) &&
+        throw(ArgumentError("a part's placement step cannot refer to its own frame"))
     return PartSpec(kind, Symbol(name), v, two_sided, inward, aperture, String(file), frame,
-                    coords, String(object))
+                    coords, String(object), collect(PlacementStep, steps))
 end
 
 _with(p::PartSpec; kind = p.kind, name = p.name, values = p.values, two_sided = p.two_sided,
       inward = p.inward, aperture = p.aperture, file = p.file, frame = p.frame,
-      coords = p.coords, object = p.object) =
-    PartSpec(kind, name, values, two_sided, inward, aperture, file, frame, coords, object)
+      coords = p.coords, object = p.object, steps = p.steps) =
+    PartSpec(kind, name, values, two_sided, inward, aperture, file, frame, coords, object, steps)
+
+# A part with the frame named `old` renamed `new`: the frame it is placed in and the
+# frames its placement steps refer to.
+_renamed(p::PartSpec, old::Symbol, new::Symbol) =
+    _with(p; frame = p.frame === old ? new : p.frame,
+          steps = PlacementStep[_rename_step(st, old, new) for st in p.steps])
+
+function _rename_step(st::PlacementStep, old::Symbol, new::Symbol)
+    T = typeof(st)
+    old in Briareus._step_refs(st) || return st
+    return T((f === :ref ? new : getfield(st, f) for f in fieldnames(T))...)
+end
 
 "Axis (unit vector) of a part in its frame: polar `theta` and azimuth `phi` in degrees."
 part_axis(p::PartSpec) = Vec3(sind(p.values[:theta]) * cosd(p.values[:phi]),
@@ -324,9 +342,10 @@ part_axis(p::PartSpec) = Vec3(sind(p.values[:theta]) * cosd(p.values[:phi]),
 "Center of a part in its frame."
 part_center(p::PartSpec) = Vec3(p.values[:x], p.values[:y], p.values[:z])
 
-# The part's own frame in the chamber, placed in its parent's chamber frame `frame`: the
-# rotation `euler_rotation(theta, phi, rotation)` (VisRad's order) at its center.
-_own_frame(p::PartSpec, frame::Frame) =
+# The part's own frame in the chamber before its placement steps, placed in its parent's
+# chamber frame `frame`: the rotation `euler_rotation(theta, phi, rotation)` (VisRad's
+# order) at its center.
+_own_frame(p::PartSpec, frame::Frame = CHAMBER) =
     compose(frame, euler_frame(part_center(p), p.values[:theta], p.values[:phi], p.values[:rotation]))
 
 """
@@ -334,10 +353,12 @@ _own_frame(p::PartSpec, frame::Frame) =
 
 A part's own frame as placed in its parent `p.frame`: origin at its center
 ([`part_center`](@ref)), axes turned by its `theta`, `phi` and `rotation`
-(`euler_rotation`), so its `z` axis is the part's axis.
+(`euler_rotation`), so its `z` axis is the part's axis; then moved by its placement
+`steps`.
 """
 part_frame_def(p::PartSpec) =
-    FrameDef(p.frame; offset = part_center(p), rotation = (p.values[:theta], p.values[:phi], p.values[:rotation]))
+    FrameDef(p.frame; offset = part_center(p), rotation = (p.values[:theta], p.values[:phi], p.values[:rotation]),
+             steps = p.steps)
 
 """
     part_frames(kind, params, parts) -> Dict{Symbol,Frame}
@@ -367,22 +388,24 @@ end
 _count(len, h; min = 1, multiple = 1) = multiple * max(cld(min, multiple), ceil(Int, len / h / multiple))
 
 """
-    part_component(p::PartSpec, h; frame = CHAMBER) -> Component
+    part_component(p::PartSpec, h; frame) -> Component
 
 The core component of a part, meshed with elements of size `h` (mm) unless the part
 gives its own, carrying its exact curved surface (sphere, disk, washer, cylinder) for
-the view factors, and placed in the chamber through `frame`, the chamber `Frame` of the
-frame the part is placed in (`p.frame`, see [`part_frames`](@ref)).
+the view factors, and placed in the chamber by `frame`, the part's own chamber `Frame`
+(its entry in [`part_frames`](@ref), placement steps included). By default the part is
+placed by its placement fields in the chamber frame, without its steps.
 """
-function part_component(p::PartSpec, h::Real; frame::Frame = CHAMBER)
+function part_component(p::PartSpec, h::Real; frame::Frame = _own_frame(p))
     p.kind === :visrad && throw(ArgumentError("a VisRad object can make several components: use part_components"))
     return only(part_components(p, h; frame))
 end
 
 """
-    part_components(p::PartSpec, h; frame = CHAMBER, raw = false) -> Vector{Component}
+    part_components(p::PartSpec, h; frame, raw = false) -> Vector{Component}
 
-The core components of a part: one for every kind but `:visrad`, whose object can be a
+The core components of a part, placed by its own chamber `frame` as in
+[`part_component`](@ref): one for every kind but `:visrad`, whose object can be a
 primitive hohlraum (wall, caps and entrance holes). A VisRad object keeps its own place
 in the chamber (VisRad's frames), moved further by the part's placement; its windings
 are repaired and its CAD surface remeshed into elements of the part's size. A VisRad
@@ -391,7 +414,7 @@ reproduces VisRad's element table, unless the part sets its own element size. Wi
 a VisRad CAD part keeps its file's facets as they are (no winding repair, no remeshing:
 for drawing a part left out of the calculations, at no meshing cost).
 """
-function part_components(p::PartSpec, h::Real; frame::Frame = CHAMBER, raw::Bool = false)
+function part_components(p::PartSpec, h::Real; frame::Frame = _own_frame(p), raw::Bool = false)
     # the same components (identical objects) for the same part, size and frame, so the
     # targets built from them are found again (`_target_of`): an edit elsewhere, an undo
     lock(() -> length(_PART_MEMO) > 512 && empty!(_PART_MEMO), _STL_LOCK)
@@ -407,8 +430,7 @@ function _part_key(p::PartSpec, h::Real, frame, raw::Bool)
 end
 
 function _part_components(p::PartSpec, h::Real, frame::Frame, raw::Bool)
-    F = _own_frame(p, frame)
-    R, center = F.R, F.origin
+    R, center = frame.R, frame.origin
     v = p.values
     hp = v[:h] > 0 ? v[:h] : Float64(h)
     hp > 0 || throw(ArgumentError("$(p.name): the element size must be positive"))
@@ -696,15 +718,14 @@ function _stl_solids(file::AbstractString)
     return _cached(() -> read_stl_solids(file), _STL_SOLIDS, key)
 end
 
-# Whether part `p` (element size `h`, placed through `frame`) is meshed already: CAD
-# parts (VisRad CAD, STL) remesh for seconds to minutes and are cached; the other kinds
-# mesh at once. A part the geometry rejects counts as ready (the build says why).
+# Whether part `p` (element size `h`, placed by its own chamber `frame`) is meshed
+# already: CAD parts (VisRad CAD, STL) remesh for seconds to minutes and are cached; the
+# other kinds mesh at once. A part the geometry rejects counts as ready (the build says why).
 function _part_ready(p::PartSpec, h::Real, frame::Frame)
     p.kind in (:visrad, :mesh) || return true
     _iscached(_PART_MEMO, _part_key(p, h, frame, false)) && return true
     try
-        F = _own_frame(p, frame)
-        R, center = F.R, F.origin
+        R, center = frame.R, frame.origin
         hp = p.values[:h] > 0 ? p.values[:h] : Float64(h)
         toward = transpose(R) * (zero(Vec3) - center)
         if p.kind === :visrad
@@ -731,7 +752,7 @@ function _unmeshed_parts(kind, params, mesh::MeshSpec, parts, excluded)
     end
     for p in parts
         (p.kind in (:visrad, :mesh) && !(p.name in excluded)) || continue
-        _part_ready(p, mesh.h, frames[p.frame]) || push!(out, p.name)
+        _part_ready(p, mesh.h, frames[p.name]) || push!(out, p.name)
     end
     return out
 end
@@ -746,7 +767,7 @@ function _mesh_parts(parts, kind, params, mesh, raw, report, label; all = parts)
     frames = part_frames(kind, params, all)
     tasks = map(parts) do p
         Threads.@spawn begin
-            part_components(p, mesh.h; frame = frames[p.frame], raw = p.name in raw)
+            part_components(p, mesh.h; frame = frames[p.name], raw = p.name in raw)
             k = Threads.atomic_add!(finished, 1) + 1
             k < n && report("$label: meshed $k of $n parts…")
         end
@@ -1000,7 +1021,7 @@ function _target_components(kind::Symbol, p::AbstractDict, mesh::MeshSpec,
     end
     frames = isempty(parts) ? Dict{Symbol,Frame}() : part_frames(kind, p, parts)
     for part in parts
-        new = part_components(part, mesh.h; frame = frames[part.frame], raw = part.name in raw)
+        new = part_components(part, mesh.h; frame = frames[part.name], raw = part.name in raw)
         for c in new
             any(d -> d.name === c.name, comps) && throw(ArgumentError("two components are named $(c.name)"))
         end
@@ -1494,8 +1515,8 @@ function edit_part!(ts::TargetSetup, i::Integer, key::Symbol, text)
                 throw(ArgumentError("a part name is letters, digits and _, starting with a letter"))
             Symbol(s) == p.name && return true
             new = _with(p; name = Symbol(s))
-            # parts placed in this one's frame follow the rename
-            ps = [q.frame === p.name ? _with(q; frame = Symbol(s)) : q for q in ts.parts[]]
+            # parts placed in this one's frame, or with steps that refer to it, follow the rename
+            ps = [_renamed(q, p.name, Symbol(s)) for q in ts.parts[]]
             ps[i] = new
             return _try_build!(ts; parts = ps, renames = Dict(p.name => new.name))
         elseif key in (:pos_r, :pos_phi, :pos_theta)
@@ -1595,6 +1616,265 @@ function set_part_frame!(ts::TargetSetup, i::Integer, frame::Symbol; keep::Bool 
 end
 
 """
+Kinds of placement step a part can have ([`add_part_step!`](@ref)), in menu order:
+relations that fix degrees of freedom (`:coincident`, `:on_axis`, `:concentric`,
+`:distance`, `:facing`, `:parallel`, `:roll`) and relative moves (`:offset`, `:rotate`).
+"""
+const PART_STEP_KINDS = (:coincident, :on_axis, :concentric, :distance, :facing, :parallel,
+                         :roll, :offset, :rotate)
+
+const _STEP_TYPES = Dict(:coincident => Coincident, :on_axis => OnAxis, :concentric => Concentric,
+                         :distance => Distance, :facing => Facing, :parallel => Parallel,
+                         :roll => Roll, :offset => Offset, :rotate => Rotate)
+
+"Menu labels of [`PART_STEP_KINDS`](@ref)."
+const PART_STEP_LABELS = Dict(:coincident => "Coincident", :on_axis => "On axis",
+                              :concentric => "Concentric", :distance => "Distance",
+                              :facing => "Facing", :parallel => "Parallel", :roll => "Roll",
+                              :offset => "Offset", :rotate => "Rotate")
+
+"""
+    step_kind(step) -> Symbol
+
+The [`PART_STEP_KINDS`](@ref) entry of a placement step.
+"""
+step_kind(st::PlacementStep) = only(k for (k, T) in _STEP_TYPES if st isa T)
+
+# A step as a dictionary of its fields (the session file; `nothing` fields left out), and back.
+function _step_state(st::PlacementStep)
+    d = Dict{String,Any}("kind" => String(step_kind(st)))
+    for f in fieldnames(typeof(st))
+        v = getfield(st, f)
+        v === nothing && continue
+        d[String(f)] = v isa Symbol ? String(v) : v isa Vec3 ? collect(v) : v
+    end
+    return d
+end
+
+function _state_step(d::AbstractDict)
+    kind = Symbol(d["kind"])
+    haskey(_STEP_TYPES, kind) || throw(ArgumentError("unknown placement step \"$kind\""))
+    T = _STEP_TYPES[kind]
+    args = map(fieldnames(T)) do f
+        v, FT = get(d, String(f), nothing), fieldtype(T, f)
+        if v === nothing
+            Nothing <: FT || throw(ArgumentError("a $kind step needs its $f"))
+            return nothing
+        end
+        FT === Vec3 ? Vec3(Float64.(v)...) :
+        FT <: Union{Nothing,Symbol} ? Symbol(v) :
+        FT === Bool ? Bool(v) : Float64(v)
+    end
+    return _checked_step(T(args...))
+end
+
+# The checks of the steps' keyword constructors, for steps built from their fields.
+function _checked_step(st::PlacementStep)
+    st isa Distance && st.distance < 0 && throw(ArgumentError("a distance must not be negative"))
+    st isa Facing && !(st.side in (:front, :back)) && throw(ArgumentError("side must be front or back"))
+    for f in (:axis, :point, :delta)
+        hasfield(typeof(st), f) || continue
+        all(isfinite, getfield(st, f)) || throw(ArgumentError("the $f must be finite"))
+    end
+    return st
+end
+
+# A new step of `kind` on the frame `ref`, with values that leave the part's frame `F`
+# where it is where the step allows (`fr`: the design's frames).
+function _step_default(kind::Symbol, ref::Symbol, F::Frame, fr)
+    R = fr[ref]
+    z = F.R[:, 3]
+    kind === :coincident && return Coincident(ref; point = to_frame(R, F.origin))
+    kind === :on_axis && return OnAxis(ref)
+    kind === :concentric && return Concentric(ref; flip = dot(z, R.R[:, 3]) < 0)
+    kind === :distance && return Distance(ref, norm(F.origin - R.origin))
+    kind === :facing && return Facing(ref; side = dot(z, R.origin - F.origin) < 0 ? :back : :front)
+    kind === :parallel && return Parallel(ref; flip = dot(z, R.R[:, 3]) < 0)
+    if kind === :roll
+        for a in (:x, :y)
+            r = to_chamber(R, Briareus._step_axis(a); direction = true)
+            e = r - dot(r, z) * z
+            norm(e) > 1e-9 || continue
+            e = normalize(e)
+            return Roll(atand(dot(F.R[:, 1], cross(z, e)), dot(F.R[:, 1], e)); from = (ref, a))
+        end
+    end
+    kind === :offset && return Offset(0.0, 0.0, 0.0)
+    kind === :rotate && return Rotate(:z, 0.0)
+    throw(ArgumentError("placement step kind must be one of $PART_STEP_KINDS"))
+end
+
+function _set_steps!(ts::TargetSetup, i::Integer, steps)
+    ps = copy(ts.parts[])
+    ps[i] = _with(ps[i]; steps = collect(PlacementStep, steps))
+    return _try_build!(ts; parts = ps)
+end
+
+function _step_edit(f, ts::TargetSetup)
+    try
+        return f()
+    catch err
+        err isa ArgumentError || rethrow()
+        ts.error[] = _errmsg(err)
+        return false
+    end
+end
+
+"""
+    add_part_step!(ts::TargetSetup, i, kind; ref = the part's frame) -> Bool
+
+Append a placement step of `kind` ([`PART_STEP_KINDS`](@ref)) to part `i`, referring to
+the frame `ref`, with values that leave the part where it is where the step allows
+(coincident at its origin's current place, the current distance, roll and flips); a
+relative move starts at zero. A step that cannot apply, or that undoes an earlier one,
+is refused with `error` set.
+"""
+function add_part_step!(ts::TargetSetup, i::Integer, kind::Symbol; ref::Union{Nothing,Symbol} = nothing)
+    _check_part_index(ts, i)
+    p = ts.parts[][i]
+    return _step_edit(ts) do
+        fr = part_frames(ts)
+        r = something(ref, p.frame)
+        r === p.name && throw(ArgumentError("a part's placement step cannot refer to its own frame"))
+        haskey(fr, r) || throw(ArgumentError("no frame named $r"))
+        _set_steps!(ts, i, [p.steps; _step_default(kind, r, fr[p.name], fr)])
+    end
+end
+
+"""
+    remove_part_step!(ts::TargetSetup, i, k) -> Bool
+    move_part_step!(ts::TargetSetup, i, k, by) -> Bool
+
+Remove placement step `k` of part `i`, or move it `by` places (−1 earlier, +1 later;
+the order matters: steps apply in sequence).
+"""
+function remove_part_step!(ts::TargetSetup, i::Integer, k::Integer)
+    _check_part_index(ts, i)
+    steps = copy(ts.parts[][i].steps)
+    checkbounds(steps, k)
+    deleteat!(steps, k)
+    return _step_edit(() -> _set_steps!(ts, i, steps), ts)
+end
+
+function move_part_step!(ts::TargetSetup, i::Integer, k::Integer, by::Integer)
+    _check_part_index(ts, i)
+    steps = copy(ts.parts[][i].steps)
+    checkbounds(steps, k)
+    j = clamp(k + by, 1, length(steps))
+    j == k && return true
+    st = popat!(steps, k)
+    insert!(steps, j, st)
+    return _step_edit(() -> _set_steps!(ts, i, steps), ts)
+end
+
+"""
+    edit_part_step!(ts::TargetSetup, i, k, key, value) -> Bool
+
+Set a field of placement step `k` of part `i`: `:ref` (a frame name; `""` for none: the
+part's own axes for an offset, a relative roll), `:px`/`:py`/`:pz` (the point in `ref`,
+mm), `:dx`/`:dy`/`:dz` (an offset, mm), `:distance` (mm; `""` for none on an on-axis
+step), `:angle` (degrees), `:axis` (`"x"`, `"y"` or `"z"`), `:flip` (Bool) or `:side`
+(`"front"` or `"back"`); numbers as text. A rejected value sets `error`.
+"""
+function edit_part_step!(ts::TargetSetup, i::Integer, k::Integer, key::Symbol, value)
+    _check_part_index(ts, i)
+    p = ts.parts[][i]
+    checkbounds(p.steps, k)
+    st = p.steps[k]
+    return _step_edit(ts) do
+        d = _step_state(st)
+        kind = d["kind"]
+        coord = _STEP_COORDS
+        if key === :ref
+            s = strip(string(value))
+            hasfield(typeof(st), :ref) || throw(ArgumentError("a $kind step has no frame"))
+            isempty(s) && !(st isa Union{Roll,Offset}) && throw(ArgumentError("a $kind step needs a frame"))
+            Symbol(s) === p.name && throw(ArgumentError("a part's placement step cannot refer to its own frame"))
+            isempty(s) ? delete!(d, "ref") : (d["ref"] = s)
+        elseif haskey(coord, key)
+            f, c = coord[key]
+            haskey(d, f) || throw(ArgumentError("a $kind step has no $f"))
+            d[f][c] = _parse_number(value, String(key))
+        elseif key === :distance && st isa OnAxis && isempty(strip(string(value)))
+            delete!(d, "distance")
+        elseif key in (:distance, :angle)
+            hasfield(typeof(st), key) || throw(ArgumentError("a $kind step has no $key"))
+            d[String(key)] = _parse_number(value, String(key))
+        elseif key === :axis
+            haskey(d, "axis") || throw(ArgumentError("a $kind step has no axis"))
+            d["axis"] = collect(Briareus._step_axis(Symbol(value)))
+        elseif key === :flip
+            haskey(d, "flip") || throw(ArgumentError("a $kind step has no flip"))
+            d["flip"] = Bool(value)
+        elseif key === :side
+            haskey(d, "side") || throw(ArgumentError("a $kind step has no side"))
+            d["side"] = String(value)
+        else
+            throw(ArgumentError("unknown placement step field :$key"))
+        end
+        new = _state_step(d)
+        _step_state(new) == _step_state(st) && (ts.error[] = ""; return true)
+        steps = copy(p.steps)
+        steps[k] = new
+        _set_steps!(ts, i, steps)
+    end
+end
+
+"""
+    part_placement(ts::TargetSetup, i) -> PlacementReport
+
+What part `i`'s placement steps fix (`placement_report`): the degrees of freedom per
+step, redundant steps, what stays free, and the residuals left by relative moves.
+"""
+function part_placement(ts::TargetSetup, i::Integer)
+    _check_part_index(ts, i)
+    ps = ts.parts[]
+    return placement_report([p.name => part_frame_def(p) for p in ps],
+                            template_frames(ts.kind[], ts.params[]))[ps[i].name]
+end
+
+# The fields of a step's point and offset coordinates: (field, index).
+const _STEP_COORDS = Dict(:px => ("point", 1), :py => ("point", 2), :pz => ("point", 3),
+                          :dx => ("delta", 1), :dy => ("delta", 2), :dz => ("delta", 3))
+
+"""
+    step_numbers(step) -> Vector{Tuple{Symbol,String,String}}
+
+The numbers of a placement step, as `(key, label, unit)`, keys as in
+[`edit_part_step!`](@ref): a point's or an offset's coordinates (mm), a distance (mm;
+an on-axis step's only when set) and an angle (degrees). A sweep can vary each
+([`set_sweep_step!`](@ref)).
+"""
+function step_numbers(st::PlacementStep)
+    out = Tuple{Symbol,String,String}[]
+    hasfield(typeof(st), :point) && append!(out, [(:px, "point x", "mm"), (:py, "point y", "mm"), (:pz, "point z", "mm")])
+    hasfield(typeof(st), :delta) && append!(out, [(:dx, "offset x", "mm"), (:dy, "offset y", "mm"), (:dz, "offset z", "mm")])
+    (st isa Distance || st isa OnAxis && st.distance !== nothing) && push!(out, (:distance, "distance", "mm"))
+    hasfield(typeof(st), :angle) && push!(out, (:angle, "angle", "°"))
+    return out
+end
+
+"""
+    step_number(step, key) -> Float64
+
+The value of the number `key` of a placement step ([`step_numbers`](@ref)).
+"""
+function step_number(st::PlacementStep, key::Symbol)
+    haskey(_STEP_COORDS, key) && return Float64(getfield(st, Symbol(_STEP_COORDS[key][1]))[_STEP_COORDS[key][2]])
+    v = hasfield(typeof(st), key) ? getfield(st, key) : nothing
+    v isa Real || throw(ArgumentError("a $(step_kind(st)) step has no number $key"))
+    return Float64(v)
+end
+
+# The step with its number `key` set to `v` (the checks of `_state_step`).
+function _step_with(st::PlacementStep, key::Symbol, v::Real)
+    step_number(st, key)                              # (a number the step has)
+    d = _step_state(st)
+    haskey(_STEP_COORDS, key) ? (d[_STEP_COORDS[key][1]][_STEP_COORDS[key][2]] = v) : (d[String(key)] = v)
+    return _state_step(d)
+end
+
+"""
     _euler_angles(R) -> (polar, azimuth, rotation)
 
 Angles (degrees) of a rotation matrix in `euler_rotation`'s order, so that
@@ -1637,6 +1917,11 @@ function nudge_part!(ts::TargetSetup, i::Integer, Δ::Real; frame::Union{Nothing
         vals[:x], vals[:y], vals[:z] = c
         ps = copy(ts.parts[])
         ps[i] = _with(p; values = vals)
+        # placement steps that fix the position along the move leave nothing to move
+        if !isempty(p.steps) && Δ != 0 &&
+           norm(part_frames(ts.kind[], ts.params[], ps)[p.name].origin - fr[p.name].origin) < 1e-12 * abs(Δ)
+            throw(ArgumentError("its placement steps fix its position along this axis: edit or sweep a step instead"))
+        end
         return _try_build!(ts; parts = ps)
     catch err
         err isa ArgumentError || rethrow()
@@ -1731,7 +2016,7 @@ function set_part_role!(ts::TargetSetup, i::Integer, role::Symbol; done = () -> 
             renames[old] = new
             ps[k] = _with(ps[k]; name = new)
             for j in eachindex(ps)
-                ps[j].frame === old && (ps[j] = _with(ps[j]; frame = new))
+                ps[j] = _renamed(ps[j], old, new)
             end
             old in ex && (delete!(ex, old); push!(ex, new))    # stays left out
         end
@@ -1808,7 +2093,7 @@ end
 # as it is then (fitted again if it moved meanwhile; dropped if it went away).
 function _capsule_from_part!(ts::TargetSetup, i::Integer; done = () -> nothing)
     p = ts.parts[][i]
-    cs = part_components(p, ts.mesh[].h; frame = part_frames(ts)[p.frame], raw = true)
+    cs = part_components(p, ts.mesh[].h; frame = part_frames(ts)[p.name], raw = true)
     if ts.spawn[] && sum(c -> length(c.mesh.triangles), cs; init = 0) > BACKGROUND_TRIANGLES[]
         job = ts.fit_jobs[p.name] = get(ts.fit_jobs, p.name, 0) + 1
         _assign!(ts.fitting, union(ts.fitting[], (p.name,)))

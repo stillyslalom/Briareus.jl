@@ -9143,3 +9143,11 @@ conventions below are assumed, not taken from a facility document.
   as fixed translation directions and rotation axes at the orientation after each step,
   a linearization: a later tilt of `z` can change a fixed roll, which the residual check
   then catches as a conflict.
+- **Placement steps in the GUI** *decision*. A new step starts where it leaves the part in
+  place when the step allows: a coincident point at the origin's current place, the
+  current distance, the current roll from the reference frame's `x` (its `y` when `x`
+  lies along the part's `z`), flips and the facing side chosen to the nearer turn; an
+  on-axis step projects (no distance); relative moves start at zero. A step sweep
+  re-resolves the frames at each value and moves each part whose frame changes by
+  `F(v) ∘ F(v₀)⁻¹`; the tests check that against the design rebuilt with the value, to
+  1e-12 mm on vertices and aims. Session version 4 stores the steps.

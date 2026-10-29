@@ -5,7 +5,7 @@
 # restored design.
 
 const SESSION_FORMAT = "BriareusGUI session"
-const SESSION_VERSION = 3               # 2: `.briar` archives with the CAD files; 3: frames
+const SESSION_VERSION = 4               # 2: `.briar` archives with the CAD files; 3: frames; 4: placement steps
 
 _strs(xs) = [String(x) for x in xs]
 _syms(xs) = Symbol[Symbol(x) for x in xs]
@@ -62,7 +62,7 @@ function session_state(sess::DesignSession; view::Bool = true)
                                      "values" => _fdict(p.values), "two_sided" => p.two_sided,
                                      "inward" => p.inward, "aperture" => p.aperture, "file" => p.file,
                                      "frame" => String(p.frame), "coords" => String(p.coords),
-                                     "object" => p.object)
+                                     "object" => p.object, "steps" => _step_state.(p.steps))
                     for p in ts.parts[]])
     beams = Dict{String,Any}("preset" => String(bt.preset[]), "by" => String(bt.by[]),
                              "facility" => String(bt.facility[]),
@@ -295,7 +295,7 @@ function _state_part(p, params)
     return PartSpec(Symbol(p["kind"]); name = Symbol(p["name"]), values = vals,
                     two_sided = p["two_sided"], inward = p["inward"], aperture = p["aperture"],
                     file = get(p, "file", ""), frame, coords = Symbol(get(p, "coords", "cartesian")),
-                    object = get(p, "object", ""))
+                    object = get(p, "object", ""), steps = _state_step.(get(p, "steps", Dict[])))
 end
 
 # ---------------------------------------------------------------- CAD files in sessions

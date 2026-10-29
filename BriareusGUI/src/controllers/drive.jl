@@ -298,7 +298,7 @@ function _fit_references(t::Target, kind::Symbol, params, mesh, parts)
         p.kind in (:visrad, :mesh) && p.name in flat || continue
         try
             p.kind === :visrad && _visrad_object(p.file, p.object).kind !== :mesh && continue
-            cs = part_components(p, mesh.h; frame = frames[p.frame], raw = true)
+            cs = part_components(p, mesh.h; frame = frames[p.name], raw = true)
             length(cs) == 1 && only(cs).name === p.name && (refs[p.name] = only(cs).mesh)
         catch err
             err isa ArgumentError || rethrow()

@@ -22,6 +22,7 @@ const STATUS_COLORS = Dict(:fail => RGBAf(0.85, 0.15, 0.15, 1), :review => RGBAf
 const FIELD_COLORMAP = :inferno
 const HIGHLIGHT = RGBAf(0.1, 0.6, 1.0, 0.8)
 const GHOST = RGBAf(0.6, 0.6, 0.65, 0.18)       # components left out of the calculations
+const SWEEP_GHOST = RGBAf(0.9, 0.6, 0.0, 0.35)  # the moved parts at the selected sweep step
 const BEAM_SELECTED = RGBAf(1.0, 0.95, 0.2, 1.0)
 const BEAM_OFF = RGBAf(0.5, 0.5, 0.5, 0.25)
 const VOLUME_ALPHA = 0.22f0
@@ -72,6 +73,7 @@ struct SceneCanvas
     uc_volumes::Any
     uc_lines::Any
     cut::Base.RefValue{CutRegion}
+    sweep_ghost::Any                             # the moved parts at the selected sweep step
 end
 
 """
@@ -90,6 +92,7 @@ function scene_canvas(sess::DesignSession)
     volumes = mesh!(sc, tri...; color = fill(RGBAf(0, 0, 0, 0), 3), transparency = true,
                     visible = false)
     ghost = mesh!(sc, tri...; color = GHOST, transparency = true, visible = false)
+    sweep_ghost = mesh!(sc, tri...; color = SWEEP_GHOST, transparency = true, visible = false)
     translucent = mesh!(sc, tri...; color = fill(RGBAf(0, 0, 0, 0), 3), transparency = true,
                         visible = false)
     wire = linesegments!(sc, _NOSEG3; color = [NAN_COLOR, NAN_COLOR], linewidth = 1, visible = false)
@@ -112,7 +115,7 @@ function scene_canvas(sess::DesignSession)
     c = SceneCanvas(fig, ls, cam, body, highlight, rays, selected_rays, aims, hits, volumes,
                     outlines, cb, triad, Ref(BeamPath[]), Ref(UInt8[]), Ref{Any}(nothing),
                     Ref(true), Ref(0), ghost, translucent, wire, sections, uc_volumes, uc_lines,
-                    Ref(cut_region(sess.view)))
+                    Ref(cut_region(sess.view)), sweep_ghost)
     cam.pick = (o, d) -> min(_pick_surface(c, sess, o, d)[1], _pick_ghost(sess, o, d)[1])
     cam.pivot = () -> selection_center(sess)
     cam.on_click = (o, d, px) -> _click!(c, sess, o, d, px)
@@ -132,6 +135,8 @@ function scene_canvas(sess::DesignSession)
           v.cut_range, v.cut_point, v.cut_normal, v.cut_shift, sess.beams.beams, sess.beams.cluster)
     on(_ -> _draw_windows!(c, sess), sess.target.target)
     onany((_...) -> _draw_ghost!(c, sess), sess.target.ghost, v.display)
+    onany((_...) -> _draw_sweep_ghost!(c, sess), sess.sweep.selected, sess.sweep.result,
+          sess.target.target, sess.beams.beams)
     _draw_ghost!(c, sess)
     _draw_body!(c, sess)
     _draw_beams!(c, sess)
@@ -407,6 +412,20 @@ function _draw_ghost!(c::SceneCanvas, sess::DesignSession)
 end
 
 _faces(n) = [GLTriangleFace(3i - 2, 3i - 1, 3i) for i in 1:n]
+
+# The parts the sweep moves, as at its selected step (`sweep_ghost`), drawn faint in
+# their own color beside the design as it is (not pickable).
+function _draw_sweep_ghost!(c::SceneCanvas, sess::DesignSession)
+    pts = Point3f[]
+    for comp in sweep_ghost(sess), (i, j, k) in comp.mesh.triangles
+        vs = comp.mesh.vertices
+        push!(pts, Point3f(vs[i]...), Point3f(vs[j]...), Point3f(vs[k]...))
+    end
+    isempty(pts) ? _update!(c.sweep_ghost, _NOTRI...; visible = false) :
+                   _update!(c.sweep_ghost, pts, _faces(length(pts) ÷ 3); visible = true)
+    c.dirty[] = true
+    return c
+end
 
 # The target: each drawn triangle in its component's display mode (opaque in `body`,
 # semi-transparent in `translucent`, edges in `wire`), clipped exactly to what the

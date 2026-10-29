@@ -1,5 +1,5 @@
-// The placement sweep: what moves and along which frame's axis, the shifts, the checks
-// at each step, the sampling, run.
+// The placement sweep: what moves, along which frame's axis or through which number of
+// its placement steps, the values, the checks at each step, the sampling, run.
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -24,6 +24,40 @@ ColumnLayout {
             }
         }
         RowLayout {
+            Label { text: "Vary"; Layout.preferredWidth: 110 }
+            ComboBox {
+                Layout.fillWidth: true
+                model: ["Its place along a frame's axis", "A number of its placement steps"]
+                currentIndex: app.swMode
+                onActivated: (index) => Julia.br_sw_mode(index)
+            }
+            Info { topic: "sweep.steps" }
+        }
+        RowLayout {
+            visible: app.swMode === 1
+            Label { text: "Step"; Layout.preferredWidth: 110 }
+            ComboBox {
+                Layout.fillWidth: true
+                model: app.swStepChoices
+                currentIndex: app.swStepIndex
+                displayText: app.swStepChoices.length === 0 ? "(the part has no placement steps)" :
+                             app.swStepIndex < 0 ? "(choose a step)" : currentText
+                onActivated: (index) => Julia.br_sw_step(index)
+            }
+        }
+        RowLayout {
+            visible: app.swMode === 1
+            Label { text: "Number"; Layout.preferredWidth: 110 }
+            ComboBox {
+                Layout.fillWidth: true
+                model: app.swNumbers
+                currentIndex: app.swNumber
+                displayText: app.swNumber < 0 ? "(choose a step)" : currentText
+                onActivated: (index) => Julia.br_sw_number(index)
+            }
+        }
+        RowLayout {
+            visible: app.swMode === 0
             spacing: 4
             Label { text: "Along"; Layout.preferredWidth: 110 }
             ComboBox {
@@ -40,11 +74,13 @@ ColumnLayout {
                 onActivated: (index) => Julia.br_sw_frame(index)
             }
         }
-        PropRow { label: "From"; value: app.sw_start; unit: "mm (shift from where it is)"
+        PropRow { label: "From"; value: app.sw_start
+                  unit: app.swMode === 1 ? app.swUnit : "mm (shift from where it is)"
                   onEdited: (text) => Julia.br_sw_edit("start", text) }
-        PropRow { label: "To"; value: app.sw_stop; unit: "mm"
+        PropRow { label: "To"; value: app.sw_stop; unit: app.swMode === 1 ? app.swUnit : "mm"
                   onEdited: (text) => Julia.br_sw_edit("stop", text) }
-        PropRow { label: "Step"; value: app.sw_step; unit: app.swSteps > 0 ? "mm · " + app.swSteps + " steps" : "mm"
+        PropRow { label: "Increment"; value: app.sw_step
+                  unit: (app.swMode === 1 ? app.swUnit : "mm") + (app.swSteps > 0 ? " · " + app.swSteps + " steps" : "")
                   onEdited: (text) => Julia.br_sw_edit("step", text) }
 
         SectionLabel { text: "Checks at each step" }

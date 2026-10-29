@@ -221,6 +221,19 @@ mutable struct FieldRow
     value::String
 end
 
+# A placement step's heading or field: `kind` head, number, choice or check; `choices`
+# joined by "|"; `pick` the chosen index, or 1 for a checked box.
+mutable struct StepRow
+    step::Int
+    kind::String
+    key::String
+    label::String
+    unit::String
+    value::String
+    choices::String
+    pick::Int
+end
+
 # One beam-table row; numbers travel as text-field text. `on`: 0 off, 1 on, 2 mixed.
 mutable struct BeamRow
     number::Int                                    # "index" is reserved in QML delegates
@@ -390,6 +403,7 @@ end
 # ---------------------------------------------------------------- shell
 
 const _MODEL_ROWS = (treeModel = TreeItem, targetFieldModel = FieldRow, partFieldModel = FieldRow,
+                     stepModel = StepRow,
                      windowModel = WindowRow, beamModel = BeamRow, modeModel = ModeRow,
                      powerModel = PowerRow, optModeModel = ModeRow, paramModel = ParamRow,
                      compModel = CompRow, clearModel = ClearRow, worstModel = ClearRow,
@@ -483,6 +497,8 @@ function BriareusShell(sess::DesignSession; queue::Channel{Any} = Channel{Any}(I
     _set!(sh, "roleLabels", [PART_ROLE_LABELS[r] for r in PART_ROLES])
     _set!(sh, "partCoords", 0)
     _set!(sh, "frameLabels", [FRAME_LABELS[a] for a in TEMPLATE_FRAMES])
+    _set!(sh, "stepKindLabels", [PART_STEP_LABELS[k] for k in PART_STEP_KINDS])
+    _set!(sh, "placementNote", "")
     _set!(sh, "windowNumber", 0)
     _set!(sh, "ortho", false)
     _set!(sh, "turntable", true)
@@ -765,6 +781,9 @@ function _refresh_selection!(sh::BriareusShell)
                       [FieldRow(String(k), label, k === :h ? part_size_unit(p) : unit, _num(p.values[k]))
                        for (k, label, unit, _) in PART_FIELDS if !(k in (:x, :y, :z))]]
             _sync_rows!(sh.rows[:partFieldModel], sh.models[:partFieldModel], fields)
+            rows, note = _step_rows(sess, i)
+            _sync_rows!(sh.rows[:stepModel], sh.models[:stepModel], rows)
+            _set!(sh, "placementNote", note)
         end
     elseif kind === :window
         _set!(sh, "windowNumber", parse(Int, key))
@@ -993,6 +1012,18 @@ function _refresh_sweep!(sh::BriareusShell)
     _set!(sh, "swFrames", [_frame_label(f) for f in mf])
     _set!(sh, "swFrame", something(findfirst(==(sweep_frame(sess)), mf), 1) - 1)
     _set!(sh, "swAxis", something(findfirst(==(sw.axis[]), SWEEP_AXES), 3) - 1)
+    # a placement step's number: the subject part's steps, and the numbers of the chosen one
+    _set!(sh, "swMode", sw.mode[] === :step ? 1 : 0)
+    i = part_index(sess.target, sweep_subject(sess))
+    psteps = i === nothing ? PlacementStep[] : sess.target.parts[][i].steps
+    _set!(sh, "swStepChoices", ["$k · " * PART_STEP_LABELS[step_kind(st)] for (k, st) in enumerate(psteps)])
+    k = sw.step_index[]
+    _set!(sh, "swStepIndex", 1 <= k <= length(psteps) ? k - 1 : -1)
+    nums = 1 <= k <= length(psteps) ? step_numbers(psteps[k]) : Tuple{Symbol,String,String}[]
+    _set!(sh, "swNumbers", [l for (_, l, _) in nums])
+    j = findfirst(n -> n[1] === sw.step_key[], nums)
+    _set!(sh, "swNumber", something(j, 0) - 1)
+    _set!(sh, "swUnit", j === nothing ? "mm" : nums[j][3])
     for k in (:start, :stop, :step, :los_theta, :los_phi)
         _set!(sh, "sw_" * String(k), _num(getfield(sw, k)[]))
     end
@@ -1565,6 +1596,123 @@ function br_part_frame(index)
         ok || _set!(sh, "partFrame", -1)
     end
 end
+
+# The frames a placement step of part `p` can refer to (every frame but the part's own),
+# with "" first for none where the step allows it, and their menu labels.
+function _step_ref_options(sess, p, st)
+    frames = [f for f in _move_frame_choices(sess) if f !== p.name]
+    labels = _frame_label.(frames)
+    st isa Roll && return [Symbol(""); frames], ["(relative: from the current roll)"; labels]
+    st isa Offset && return [Symbol(""); frames], ["(the part's own axes)"; labels]
+    return frames, labels
+end
+
+const _STEP_AXES = ("x", "y", "z")
+
+# What step `k` fixes, from the placement report `r`, and how far the part ends from it.
+function _step_note(r, k, st)
+    t, q = r.fixed[k]
+    plural(n, w) = "$n $w" * (n == 1 ? "" : "s")
+    note = Briareus._relative(st) ? "relative move" :
+           k in r.redundant ? "redundant: fixes nothing new" :
+           "fixes " * join(filter(!isempty, [t > 0 ? plural(t, "translation") : "",
+                                            q > 0 ? plural(q, "rotation") : ""]), ", ")
+    mm, deg = r.residuals[k]
+    off = filter(!isempty, [mm > 1e-9 ? _num(mm) * " mm" : "", deg > 1e-7 ? _num(deg) * "°" : ""])
+    isempty(off) || (note *= "; off by " * join(off, ", ") * " after later moves")
+    return note
+end
+
+# The inspector rows of part `i`'s placement steps, and a note on what stays free.
+function _step_rows(sess, i)
+    ts = sess.target
+    p = ts.parts[][i]
+    rows = StepRow[]
+    isempty(p.steps) && return rows, ""
+    r = try
+        part_placement(ts, i)
+    catch err
+        err isa ArgumentError || rethrow()
+        nothing
+    end
+    for (k, st) in enumerate(p.steps)
+        kind = step_kind(st)
+        push!(rows, StepRow(k, "head", "", "$k · " * PART_STEP_LABELS[kind], "",
+                            r === nothing ? "" : _step_note(r, k, st), "", 0))
+        if hasfield(typeof(st), :ref)
+            opts, labels = _step_ref_options(sess, p, st)
+            cur = something(st.ref, Symbol(""))
+            label = st isa Offset ? "Along the axes of" : st isa Roll ? "From the axes of" : "Frame"
+            push!(rows, StepRow(k, "choice", "ref", label, "", "", join(labels, "|"),
+                                something(findfirst(==(cur), opts), 1) - 1))
+        end
+        if hasfield(typeof(st), :point)
+            for (c, key) in enumerate(("px", "py", "pz"))
+                push!(rows, StepRow(k, "number", key, "Point " * _STEP_AXES[c] * " (in the frame)", "mm",
+                                    _num(st.point[c]), "", 0))
+            end
+        end
+        if hasfield(typeof(st), :delta)
+            for (c, key) in enumerate(("dx", "dy", "dz"))
+                push!(rows, StepRow(k, "number", key, "Offset " * _STEP_AXES[c], "mm", _num(st.delta[c]), "", 0))
+            end
+        end
+        if hasfield(typeof(st), :axis) && !(st isa Roll && st.ref === nothing)
+            j = findfirst(a -> st.axis == Briareus._step_axis(Symbol(a)), _STEP_AXES)
+            choices = j === nothing ? [_STEP_AXES...; "(" * join(_num.(st.axis), ", ") * ")"] : [_STEP_AXES...]
+            label = st isa Rotate ? "About its axis" : st isa Roll ? "Reference axis" : "Axis of the frame"
+            push!(rows, StepRow(k, "choice", "axis", label, "", "", join(choices, "|"),
+                                something(j, length(choices)) - 1))
+        end
+        st isa Union{OnAxis,Distance} &&
+            push!(rows, StepRow(k, "number", "distance", st isa OnAxis ? "Distance along the axis" : "Distance",
+                                st isa OnAxis ? "mm; blank: the nearest point of the axis" : "mm",
+                                st.distance === nothing ? "" : _num(st.distance), "", 0))
+        hasfield(typeof(st), :angle) &&
+            push!(rows, StepRow(k, "number", "angle", "Angle", "°", _num(st.angle), "", 0))
+        st isa Facing && push!(rows, StepRow(k, "choice", "side", "z axis", "", "",
+                                             "toward the point|away from the point", st.side === :front ? 0 : 1))
+        hasfield(typeof(st), :flip) &&
+            push!(rows, StepRow(k, "check", "flip", "Opposite direction", "", "", "", st.flip ? 1 : 0))
+    end
+    r === nothing && return rows, ""
+    nt, nr = length(r.free_translation), length(r.free_rotation)
+    note = nt + nr == 0 ? "The steps fix the part's place and orientation." :
+           "Free: $nt translation" * (nt == 1 ? "" : "s") * ", $nr rotation" * (nr == 1 ? "" : "s") *
+           " (the placement fields above set them)."
+    return rows, note
+end
+
+# Edits of the shown part's placement steps (`k` from 1); a rejected one shows the rows again.
+function _step_action(f, sh)
+    ts = sh.sess.target
+    idx = _selected_parts(sh)
+    isempty(idx) && return
+    f(ts, idx[1]) === false || return
+    rows = sh.rows[:stepModel]
+    for i in eachindex(rows)
+        sh.models[:stepModel][i] = rows[i]
+    end
+end
+br_step_add(index) = _with_shell(sh -> _step_action((ts, i) -> add_part_step!(ts, i, PART_STEP_KINDS[Int(index)+1]), sh))
+br_step_remove(k) = _with_shell(sh -> _step_action((ts, i) -> remove_part_step!(ts, i, Int(k)), sh))
+br_step_move(k, by) = _with_shell(sh -> _step_action((ts, i) -> move_part_step!(ts, i, Int(k), Int(by)), sh))
+br_step_edit(k, key, text) =
+    _with_shell(sh -> _step_action((ts, i) -> edit_part_step!(ts, i, Int(k), _sym(key), string(text)), sh))
+function br_step_choice(k, key, index)
+    _with_shell() do sh
+        _step_action(sh) do ts, i
+            st = ts.parts[][i].steps[Int(k)]
+            j, key = Int(index) + 1, _sym(key)
+            value = key === :ref ? String(first(_step_ref_options(sh.sess, ts.parts[][i], st))[j]) :
+                    key === :axis ? (j <= 3 ? _STEP_AXES[j] : return true) :
+                    key === :side ? ("front", "back")[j] :
+                    key === :flip ? j == 2 : throw(ArgumentError("unknown step choice $key"))
+            edit_part_step!(ts, i, Int(k), key, value)
+        end
+    end
+end
+
 # The move row: the frame (index into `moveFrames`) and axis (0 x, 1 y, 2 z) it moves
 # along, and the step as text.
 br_move_frame(index) = _with_shell(sh -> (sh.shown["_moveFrameName"] = _move_frame_choices(sh.sess)[Int(index)+1]))
@@ -1597,7 +1745,7 @@ function br_sweep_part()
         idx = _selected_parts(sh)
         isempty(idx) && return
         p = sh.sess.target.parts[][idx[1]]
-        set_sweep!(sh.sess.sweep; subject = p.name,
+        set_sweep!(sh.sess.sweep; subject = p.name, mode = :translate,
                    frame = _move_frame(sh),
                    axis = SWEEP_AXES[sh.shown["moveAxis"]+1])
         select!(sh.sess.view, "task:sweep")
@@ -1914,6 +2062,31 @@ br_rv_export(url) = _with_shell(sh -> export_clearance(sh.sess.review, _url_to_p
 br_sw_subject(i) = _with_shell(sh -> set_sweep!(sh.sess.sweep; subject = sweep_subjects(sh.sess)[Int(i)+1]))
 br_sw_frame(i) = _with_shell(sh -> set_sweep!(sh.sess.sweep; frame = _move_frame_choices(sh.sess)[Int(i)+1]))
 br_sw_axis(i) = _with_shell(sh -> set_sweep!(sh.sess.sweep; axis = SWEEP_AXES[Int(i)+1]))
+br_sw_mode(i) = _with_shell(sh -> set_sweep!(sh.sess.sweep; mode = SWEEP_MODES[Int(i)+1]))
+# A `:step` sweep of placement step `k` of the subject part (its first number), or of
+# the chosen step's `j`-th number (indices from 0).
+function _sweep_step_number!(sess, part::Symbol, k::Integer, j::Integer = 0)
+    i = part_index(sess.target, part)
+    i === nothing && return (sess.sweep.error[] = "choose a part with placement steps"; false)
+    steps = sess.target.parts[][i].steps
+    1 <= k <= length(steps) || return false
+    nums = step_numbers(steps[k])
+    isempty(nums) && return (sess.sweep.error[] = "placement step $k has no number to sweep"; false)
+    return set_sweep_step!(sess, part, k, nums[clamp(j + 1, 1, length(nums))][1])
+end
+br_sw_step(i) = _with_shell(sh -> _sweep_step_number!(sh.sess, sweep_subject(sh.sess), Int(i) + 1))
+br_sw_number(j) = _with_shell(sh -> _sweep_step_number!(sh.sess, sweep_subject(sh.sess),
+                                                        sh.sess.sweep.step_index[], Int(j)))
+# Set up a sweep of the shown part's placement step `k` and show it.
+function br_step_sweep(k)
+    _with_shell() do sh
+        idx = _selected_parts(sh)
+        isempty(idx) && return
+        _sweep_step_number!(sh.sess, sh.sess.target.parts[][idx[1]].name, Int(k)) || return
+        select!(sh.sess.view, "task:sweep")
+        request_tab("sweep")
+    end
+end
 br_sw_edit(key, text) = _with_shell(sh -> edit_sweep!(sh.sess.sweep, _sym(key), string(text)))
 br_sw_check(key, on) = _with_shell(sh -> set_sweep!(sh.sess.sweep; (_sym(key) => Bool(on),)...))
 br_sw_object(i) = _with_shell(sh -> set_sweep!(sh.sess.sweep;
@@ -2095,8 +2268,10 @@ function _register_qml_functions()
     @qmlfunction br_add_window br_remove_window br_edit_window br_window_open
     @qmlfunction br_add_part br_add_stl br_edit_part br_part_flag br_part_frame br_part_coords
     @qmlfunction br_move_frame br_move_axis br_move_step br_nudge_part br_sweep_part
+    @qmlfunction br_step_add br_step_remove br_step_move br_step_edit br_step_choice
     @qmlfunction br_sw_subject br_sw_frame br_sw_axis br_sw_edit br_sw_check br_sw_object
     @qmlfunction br_sw_quality br_sw_start br_sw_cancel br_sw_select br_sw_apply
+    @qmlfunction br_sw_mode br_sw_step br_sw_number br_step_sweep
     @qmlfunction br_part_role br_export_stl br_cavity br_cavity_point br_part_film
     @qmlfunction br_remove_selected br_help br_docs_url
     @qmlfunction br_load_preset br_set_grouping br_edit_beam br_set_beam_on br_edit_node

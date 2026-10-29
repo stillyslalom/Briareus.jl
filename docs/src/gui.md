@@ -247,7 +247,15 @@ collects every explanation by page. Help ▸ Documentation opens this page.
   part where it is. The *Move along* row steps the part by ± a distance along the x, y
   or z axis of any frame (its own z: along its axis), one edit per click; parts placed
   in its frame and beams aimed in it move along. *Sweep along this axis…* sets up a
-  placement sweep of the part along that axis (below).
+  placement sweep of the part along that axis (below). *Placement steps* then place
+  the part relative to other frames, in order ([`PlacementStep`](@ref)): coincident
+  with a point, on or concentric with an axis, at a distance from a point, facing a
+  point, parallel to an axis, rolled from a direction, and relative offsets and
+  rotations. Each step's heading names what it fixes; a step that undoes an earlier
+  one is refused, with both named ([`placement_report`](@ref)); and the degrees of
+  freedom no step fixes keep the placement fields' values. A new step starts where it
+  leaves the part in place (the current point, distance and roll). The part follows
+  the frames its steps refer to, as it follows the frame it is placed in.
   A *mesh* part reads an STL file (Target ▸ Add part ▸ Mesh from STL file), scaled to
   mm, with its windings repaired ([`orient_mesh`](@ref)) and its surface remeshed into
   elements of the part's size ([`remesh_mesh`](@ref)); a multi-body ASCII STL of named
@@ -391,8 +399,12 @@ The bottom panel's tabs:
   quick sampling, the default, keeps a sweep's many steps short. The table lists each
   step's least clearance and where, the failing and review pairs, the line of sight and
   the captured power; the chart plots the least clearance and the blocked fraction of
-  the line of sight against the shift. A click on the chart or a row selects a step,
-  and *Apply step* (or a double click) moves the part there as one edit, with the
+  the line of sight against the shift. Instead of a shift, the sweep can step a number
+  of one of the part's placement steps (a distance, an angle, a coordinate; *Sweep…* on
+  the step's heading): every part whose frame changes, the parts facing it included,
+  moves rigidly with it at each value. A click on the chart or a row selects a step,
+  drawn as an orange ghost of the moved parts beside the design, and *Apply step* (or
+  a double click) moves the part there as one edit, with the
   re-optimized pointing when the sweep re-optimized. A sweep is marked out of date when
   the design or a setting it used changes.
 

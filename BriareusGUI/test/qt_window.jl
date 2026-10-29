@@ -17,6 +17,7 @@ using BriareusGUI.Briareus
     t_stage = Ref(time())
     t_start = time()
     seen = Symbol[]
+    refused = false
     shots = get(ENV, "BRIAREUSGUI_SHOTS", mktempdir())     # keep the images: set the variable
     mkpath(shots)
     files = mktempdir()
@@ -58,11 +59,27 @@ using BriareusGUI.Briareus
             s.view.selection[] == "part:" * name && s.target.parts[][end].values[:z] == 7.5 &&
                 s.target.parts[][end].values[:r1] == 2.5 && !isempty(s.target.error[]) &&
                 any(r -> r.id == "part:" * name, model_tree(s)) && push!(seen, :part)
+            # placement steps from the inspector: facing TCC (the nearer side: z stays up),
+            # then 6 mm from it; a step
+            # that undoes the facing is refused
+            B.br_step_add(findfirst(==(:facing), PART_STEP_KINDS) - 1)
+            B.br_step_add(findfirst(==(:distance), PART_STEP_KINDS) - 1)
+            B.br_step_edit(2, "distance", "6")
+            B.br_step_add(findfirst(==(:coincident), PART_STEP_KINDS) - 1)
+            B.br_step_edit(3, "px", "1")
+            refused = occursin("conflicts", s.target.error[])
             B.br_edit_mesh("h", "0.5")
             s.target.resolution[] === :custom && s.target.mesh[].h == 0.5 && push!(seen, :mesh)
             B.br_set_resolution("coarse")
             B.request_grab(png("part")); next!()
         elseif k == 2 && grabbed(png("part"))
+            ps = s.target.parts[][end]
+            F = part_frames(s.target)[ps.name]
+            checks = (; refused, steps = length(ps.steps) == 3,
+                      origin = isapprox(F.origin, Briareus.Vec3(0, 0, 6); atol = 1e-12),
+                      axis = isapprox(F.R[:, 3], Briareus.Vec3(0, 0, 1); atol = 1e-12),
+                      rows = count(r -> r.kind == "head", sh.rows[:stepModel]) == 3)
+            all(checks) ? push!(seen, :steps) : @info "placement steps in the window" checks
             B.br_remove_selected()
             isempty(s.target.parts[]) && s.view.selection[] == "target" && push!(seen, :remove)
             # beams: a quad from the tree, the table per quad, VisRad round trip
@@ -282,7 +299,7 @@ using BriareusGUI.Briareus
     end
     @info "window session" seconds = round(time() - t0; digits = 1) shots
     @test stage[] == 28
-    @test seen == [:target, :windows, :part, :mesh, :remove, :tree_beams, :visrad, :volumes, :zoom,
+    @test seen == [:target, :windows, :part, :mesh, :steps, :remove, :tree_beams, :visrad, :volumes, :zoom,
                    :pick, :drive, :map, :optimize, :capsule, :applied, :clearance, :talis,
                    :talis_csv, :group, :split, :undo, :redo, :session, :xray, :side, :port,
                    :retune_started, :retune, :time_retune, :history_started, :history, :time_now, :custom, :stl]

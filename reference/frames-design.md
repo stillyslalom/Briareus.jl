@@ -125,54 +125,18 @@ was built.
 
 ## Phases
 
-1. **Frames, frame pointing, sweep: the backlighter-foil case end to end.**
-   - Core: **done (2026-10-28, uncommitted).** `src/frames.jl`,
-     `src/frame_pointing.jl`, `src/sweep.jl`, the reference page "Frames and placement",
-     the tutorial `backlighter_sweep.jl`, `test/frames.jl` (shard 3). Deviations from
-     the model above:
-     - `FrameDef` has no `steps` field yet; phase 2 adds it.
-     - `FramePointing` lives in its own file after `optimize.jl`. `frames` is one
-       `Frame`, a vector, or `beam -> Frame`; default fields `(:u, :v, :defocus)`.
-       `subset` keeps the kept beams' frames and groups.
-     - `placement_sweep`: the design callback returns `(; target, beams, pointing)`;
-       the line of sight and capture take `los` + `los_kw` and `capture` +
-       `capture_kw`; the convenience method translates parts only (no rotation), and
-       `follow` is a Bool, indices or a predicate. The re-optimization box is `bounds`
-       about each step's own initial parameters. Rows are `SweepRow`s.
-     - `part_centroid(t, part)` is keyed by part (the GUI's `component_points` by
-       component).
-     - `_vrw_rotation` is gone: the workspace reader calls `euler_rotation`, the same
-       matrices bit for bit (it was `cosd` already). The GUI's `_part_rotation` (radians
-       through `cos`) differs from `euler_rotation` by ≤ 1e-15 absolute: the GUI half
-       must accept that change in the last bits or keep its own.
-     - `Frame` does not clash with CairoMakie, Documenter or Literate exports.
-   - GUI: **done (2026-10-28, uncommitted).** Part frames through `resolve_frames`
-     (`part_frames`, the `TargetSetup.frames` observable), the `:backlighter` template
-     frame, `nudge_part!`, `aim_frame`/`aim_local` with `_set_aims!` and
-     `follow_frames!`, the u, v, w fields, `SweepState` (`controllers/sweep.jl`,
-     `SweepProps.qml`, `SweepPanel.qml`), session version 3, `test/test_frames.jl`.
-     Deviations from the model above:
-     - The invariant holds to round-off, `aim ≈ to_chamber(frame, aim_local)`: writers
-       set chamber aims, which stay authoritative, and their local coordinates are
-       derived; `follow_frames!` sets aims from local coordinates exactly.
-     - `set_aim_frame!(sess, idx, frame; keep)`: `keep = false` aims at `frame_point`
-       (a part's `part_centroid`, a template frame's origin), not at the frame's origin,
-       as a CAD part's origin may lie anywhere.
-     - The sweep's subject is a part or the `:backlighter` template frame; it moves the
-       parts placed in its frames and the beams aimed in them. It runs the core's
-       `design` form (template components move too; a `GroupPointing` is rebuilt per
-       step, warm-started only for frame fields). Applying a step moves a part's center,
-       or the template foil's `distance` (chamber x only). Re-optimization makes the
-       objective per step's target (foil center, keep-outs, held drive from the step's
-       start). The line of sight defaults to the foil → object direction. No ghost of
-       the selected step yet.
-     - A beam whose frame goes away (a part removed, or renamed by a role) keeps its aim
-       and is held in `:tcc`, as `aim_ref` released it.
-     - The part placement now uses `euler_rotation` (`cosd`) and `compose` (static
-       matrices): part vertices move by ≤ 1.1e-15 mm against the old `_part_rotation`;
-       version-2 parts in the old foil frame convert to within 9e-16 mm.
-2. **Placement steps:** `PlacementReport`, a step list in the part inspector, and a
-   sweep that varies a step's number.
+1. **Frames, frame pointing, sweep** (the backlighter-foil case end to end): landed in
+   bfad517 (core) and f347394 (GUI). What was built, and where it departs from the
+   model above, is in the docstrings of `src/frames.jl`, `src/frame_pointing.jl`,
+   `src/sweep.jl` and the GUI's `controllers/sweep.jl`, and in the research notes
+   ("Frames and placement").
+2. **Placement steps:** landed in 700e0a7 (core: `src/placement.jl`) and the GUI commit
+   after it (`PartSpec.steps`, the step list in the part inspector, a sweep of a step's
+   number, the ghost of the selected sweep step). Departures: `FrameDef.steps` apply
+   after the offset and rotation, so the fields keep the free degrees of freedom; a
+   conflict is a raised residual of an earlier relation, not a subspace test; a sweep
+   re-resolves the frames per value and moves each changed part by its own rigid map
+   (also a translation sweep when other parts' steps refer to the moving part).
 3. **User frames:** port-axis frames, a Frames folder in the tree, the coordinate
    transform, and frame triads drawn in the view.
 4. **VisRad frames,** import and export. (`_vrw_rotation` was unified in phase 1, bit

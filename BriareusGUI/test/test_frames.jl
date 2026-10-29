@@ -1,7 +1,7 @@
 # Frames in the GUI: part frames through `resolve_frames`, beams held in frames, the
 # optimizer's frame fields, the placement sweep, and sessions before version 3.
 
-using LinearAlgebra: norm, I
+using LinearAlgebra: norm, normalize, I
 import TOML
 
 const V3 = Briareus.Vec3
@@ -328,7 +328,7 @@ end
     set_sweep!(s.sweep; subject = :substrate, axis = :x, los = true)
     edit_sweep!(s.sweep, :step, "0.25")
     save_session(f, s)
-    @test TOML.parsefile(f)["version"] == 3
+    @test TOML.parsefile(f)["version"] == 4
     s3 = DesignSession(resolution = :coarse)
     load_session!(s3, f)
     @test session_state(s3) == session_state(s)
@@ -336,4 +336,128 @@ end
     @test s3.target.target[].tri_v0 == ts.target[].tri_v0
     @test s3.sweep.subject[] === :substrate && s3.sweep.step[] == 0.25 && s3.sweep.los[]
     @test isnan(s3.sweep.los_theta[])
+end
+
+@testset "placement steps on parts (no GL)" begin
+    s = DesignSession(kind = :custom, resolution = :coarse)
+    ts, bt = s.target, s.beams
+    @test add_part!(ts, :disk; name = :snout, x = 6.0, z = 2.0, theta = 90, r1 = 0.5)
+    @test add_part!(ts, :rectangle; name = :plate, x = -2.0, y = 1.0, theta = 30, phi = 20, r1 = 0.5, r2 = 0.5)
+    i = part_index(ts, :plate)
+    set_aim_frame!(s, 1:3, :plate; keep = false)
+    F0 = part_frames(ts)[:plate]
+    # new steps leave the part where it is where they can
+    for k in (:coincident, :distance, :roll)
+        @test add_part_step!(ts, i, k; ref = :snout)
+    end
+    @test part_frames(ts)[:plate] ≈ F0
+    @test step_kind.(ts.parts[][i].steps) == [:coincident, :distance, :roll]
+    @test all(k -> remove_part_step!(ts, i, 1), 1:3) && isempty(ts.parts[][i].steps)
+    # facing the snout, then 3 mm from it: the closed forms, and the mesh and the beams
+    # aimed in the part's frame follow
+    sn = part_frames(ts)[:snout].origin
+    @test add_part_step!(ts, i, :facing; ref = :snout) && add_part_step!(ts, i, :distance; ref = :snout)
+    @test edit_part_step!(ts, i, 2, :distance, "3")
+    F = part_frames(ts)[:plate]
+    @test isapprox(F.origin, sn + 3 * normalize(F0.origin - sn); atol = 1e-12) &&
+          isapprox(F.R[:, 3], normalize(sn - F0.origin); atol = 1e-12)
+    loc = part_component(PartSpec(:rectangle; name = :plate, values = Dict(:r1 => 0.5, :r2 => 0.5)),
+                         ts.mesh[].h).mesh.vertices
+    got = ts.target[].components[findfirst(c -> c.name === :plate, ts.target[].components)].mesh.vertices
+    @test maximum(norm(g - (F.R * v + F.origin)) for (g, v) in zip(got, loc)) < 1e-12
+    @test _aims_held(bt)
+    r = part_placement(ts, i)
+    @test r.fixed == [(0, 2), (1, 0)] && length(r.free_translation) == 2 && length(r.free_rotation) == 1
+    # a step that undoes an earlier one is refused, the part unchanged
+    @test add_part_step!(ts, i, :coincident; ref = :tcc)
+    @test !edit_part_step!(ts, i, 3, :px, "1.0") && occursin("conflicts with step 1 (Facing snout)", ts.error[])
+    @test part_frames(ts)[:plate] ≈ F && length(ts.parts[][i].steps) == 3
+    @test remove_part_step!(ts, i, 3)
+    # a nudge along the line to the snout is undone by the distance step: refused
+    @test !nudge_part!(ts, i, 0.5; frame = :plate, axis = :z) && occursin("fix its position", ts.error[])
+    @test nudge_part!(ts, i, 0.5; frame = :tcc, axis = :y)            # across it: moves
+    @test !isapprox(part_frames(ts)[:plate], F; atol = 1e-3)
+    @test nudge_part!(ts, i, -0.5; frame = :tcc, axis = :y) && part_frames(ts)[:plate] ≈ F
+    @test !edit_part_step!(ts, i, 1, :angle, "3") && occursin("no angle", ts.error[])
+    @test !edit_part_step!(ts, i, 2, :distance, "-1") && occursin("negative", ts.error[])
+    # reordered: the distance first, then the facing turn, the same frame here
+    @test move_part_step!(ts, i, 2, -1) && step_kind.(ts.parts[][i].steps) == [:distance, :facing]
+    @test part_frames(ts)[:plate] ≈ F
+    # renaming the referred part renames the steps' frame
+    @test edit_part!(ts, part_index(ts, :snout), :name, "nozzle")
+    @test all(st -> st.ref === :nozzle, ts.parts[][i].steps) && part_frames(ts)[:plate] ≈ F
+    # saved and read back: the same steps and vertices
+    f = joinpath(mktempdir(), "steps.briar.toml")
+    save_session(f, s)
+    s2 = DesignSession(resolution = :coarse)
+    load_session!(s2, f)
+    @test s2.target.parts[][i].steps == ts.parts[][i].steps
+    @test s2.target.target[].tri_v0 == ts.target[].tri_v0
+end
+
+@testset "sweeping a placement step (no GL)" begin
+    s = DesignSession(kind = :foil, resolution = :coarse)
+    ts, bt, sw = s.target, s.beams, s.sweep
+    @test add_part!(ts, :disk; name = :snout, x = 4.0, y = 3.0, z = 1.0, r1 = 0.4)
+    @test add_part!(ts, :rectangle; name = :shield, x = 3.0, y = -2.0, r1 = 0.6, r2 = 0.4)
+    @test add_part!(ts, :disk; name = :tab, frame = :shield, x = 0.3, z = 0.2, r1 = 0.2)
+    i = part_index(ts, :shield)
+    @test add_part_step!(ts, i, :facing; ref = :snout) && add_part_step!(ts, i, :distance; ref = :snout)
+    @test add_part_step!(ts, i, :roll; ref = :tcc)
+    set_aim_frame!(s, 1:2, :shield; keep = false)
+    @test last(step_numbers(ts.parts[][i].steps[2])) == (:distance, "distance", "mm")
+    @test set_sweep_step!(s, :shield, 2, :distance)
+    d0 = step_number(ts.parts[][i].steps[2], :distance)
+    @test sw.mode[] === :step && sw.start[] == d0 - 1 && sw.stop[] == d0 + 1 && sw.step[] == 0.25
+    @test !set_sweep_step!(s, :shield, 1, :distance) && occursin("no number distance", sw.error[])
+    # the rigidly moved design against the design rebuilt with each value
+    verts(t) = Dict(c.name => c.mesh.vertices for c in t.components if c.name in (:shield, :tab, :snout))
+    function against_rebuilt(design, values, rebuild!)
+        worst = 0.0
+        for v in values
+            got = design(v)
+            rebuild!(v)
+            want = verts(ts.target[])
+            worst = max(worst, maximum(maximum(norm.(verts(got.target)[n] .- want[n])) for n in keys(want)),
+                        maximum(norm(a.aim - b.aim) for (a, b) in zip(got.beams, active_beams(bt))))
+            undo!(s)
+        end
+        return worst
+    end
+    set_sweep!(sw; clearance = true)
+    edit_sweep!(sw, :step, "1")
+    record!(s)
+    design, _, _ = Controllers._sweep_design(Controllers._sweep_inputs(s))
+    @test design isa Controllers._FrameSweepDesign
+    @test against_rebuilt(design, (d0 - 1, d0 + 0.7),
+                          v -> (edit_part_step!(ts, i, 2, :distance, string(v)); record!(s))) < 1e-12
+    # the sweep runs, and a step applies as one edit
+    start_sweep!(s; spawn = false)
+    r = sw.result[]
+    @test length(r.rows) == 3 && occursin("distance of step 2 (Distance) of shield (mm)", sweep_chart(s).xlabel)
+    @test isempty(sweep_ghost(s))                               # no step selected
+    select_sweep_step!(sw, 3)
+    g = Dict(c.name => c.mesh.vertices for c in sweep_ghost(s))
+    @test keys(g) == Set([:shield, :tab])
+    @test apply_sweep_step!(s, 3) && step_number(ts.parts[][i].steps[2], :distance) == d0 + 1
+    # the ghost was where the applied step puts the parts; now the sweep is out of date
+    @test maximum(maximum(norm.(g[n] .- verts(ts.target[])[n])) for n in keys(g)) < 1e-12
+    @test isempty(sweep_ghost(s))
+    @test undo!(s) && step_number(ts.parts[][i].steps[2], :distance) == d0
+    # a translation of the snout turns the shield that faces it: re-resolved per step
+    set_sweep!(sw; mode = :translate, subject = :snout, frame = :tcc, axis = :y)
+    design, _, _ = Controllers._sweep_design(Controllers._sweep_inputs(s))
+    @test design isa Controllers._FrameSweepDesign
+    record!(s)
+    @test against_rebuilt(design, (-0.5, 1.2),
+                          v -> (nudge_part!(ts, part_index(ts, :snout), v; frame = :tcc, axis = :y); record!(s))) < 1e-12
+    # a part nothing refers to translates as before
+    set_sweep!(sw; subject = :tab)
+    @test Controllers._sweep_design(Controllers._sweep_inputs(s))[1] isa Controllers._SweepDesign
+    # saved with the sweep's step settings
+    set_sweep_step!(s, :shield, 3, :angle)
+    st = Controllers._sweep_state(sw)
+    sw2 = SweepState()
+    Controllers._restore_sweep!(sw2, st)
+    @test sw2.mode[] === :step && sw2.step_index[] == 3 && sw2.step_key[] === :angle
 end

@@ -1,5 +1,6 @@
 // Properties of a free part: name, size, placement (the frame it is placed in, center,
-// axis angles, rotation), a move along any frame's axis, material, sidedness, element size.
+// axis angles, rotation, placement steps), a move along any frame's axis, material,
+// sidedness, element size.
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -157,6 +158,7 @@ ColumnLayout {
             onEdited: (text) => Julia.br_edit_part(model.key, text)
         }
     }
+    PlacementSteps { visible: app.selectionCount <= 1 }
     CheckLine {
         text: "Two-sided (both sides radiate and absorb)"
         checked: app.partTwoSided
