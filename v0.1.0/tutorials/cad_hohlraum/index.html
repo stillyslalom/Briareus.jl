@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Radiation in an imported CAD hohlraum · Briareus.jl</title><meta name="title" content="Radiation in an imported CAD hohlraum · Briareus.jl"/><meta property="og:title" content="Radiation in an imported CAD hohlraum · Briareus.jl"/><meta property="twitter:title" content="Radiation in an imported CAD hohlraum · Briareus.jl"/><meta name="description" content="Documentation for Briareus.jl."/><meta property="og:description" content="Documentation for Briareus.jl."/><meta property="twitter:description" content="Documentation for Briareus.jl."/><meta property="og:url" content="https://stillyslalom.github.io/Briareus.jl/stable/tutorials/cad_hohlraum/"/><meta property="twitter:url" content="https://stillyslalom.github.io/Briareus.jl/stable/tutorials/cad_hohlraum/"/><link rel="canonical" href="https://stillyslalom.github.io/Briareus.jl/stable/tutorials/cad_hohlraum/"/><script data-outdated-warner src="../../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.63.2/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../assets/documenter.js"></script><script src="../../search_index.js"></script><script src="../../siteinfo.js"></script><script src="../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../assets/themeswap.js"></script><link href="../../assets/favicon.ico" rel="icon" type="image/x-icon"/></head><body><div id="documenter"><nav class="docs-sidebar"><a class="docs-logo" href="../../"><img src="../../assets/logo.svg" alt="Briareus.jl logo"/></a><div class="docs-package-name"><span class="docs-autofit"><a href="../../">Briareus.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../../">Home</a></li><li><a class="tocitem" href="../../gui/">Desktop application</a></li><li><span class="tocitem">Tutorials</span><ul><li><a class="tocitem" href="../laser_spot/">Laser spot on a foil</a></li><li><a class="tocitem" href="../integrating_sphere/">Integrating sphere</a></li><li><a class="tocitem" href="../dropped_bundle/">Freeing a bundle for radiography</a></li><li><a class="tocitem" href="../diagnostic_windows/">Diagnostic windows in the hohlraum wall</a></li><li><a class="tocitem" href="../beam_errors/">Pointing and power errors</a></li><li><a class="tocitem" href="../retune/">Retuning a drive to a reference shot</a></li><li class="is-active"><a class="tocitem" href>Radiation in an imported CAD hohlraum</a><ul class="internal"><li><a class="tocitem" href="#A-CAD-like-assembly"><span>A CAD-like assembly</span></a></li><li><a class="tocitem" href="#The-cavity"><span>The cavity</span></a></li><li><a class="tocitem" href="#Elements"><span>Elements</span></a></li><li><a class="tocitem" href="#Curved-surfaces"><span>Curved surfaces</span></a></li><li><a class="tocitem" href="#In-one-call"><span>In one call</span></a></li><li><a class="tocitem" href="#Openings-and-references"><span>Openings and references</span></a></li><li><a class="tocitem" href="#Radiation-from-a-prescribed-wall-source"><span>Radiation from a prescribed wall source</span></a></li><li><a class="tocitem" href="#What-this-checks"><span>What this checks</span></a></li></ul></li><li><a class="tocitem" href="../leh_power_balance/">Entrance-hole size and the power balance</a></li><li><a class="tocitem" href="../implosion_metrics/">From drive asymmetry to implosion metrics</a></li><li><a class="tocitem" href="../polar_direct_drive/">Polar direct drive: a published NIF pointing</a></li></ul></li><li><span class="tocitem">Explanation</span><ul><li><a class="tocitem" href="../../explanation/background/">Physics background</a></li><li><a class="tocitem" href="../../explanation/visrad/">For VisRad users</a></li><li><a class="tocitem" href="../../explanation/verification-validation/">Verification and validation</a></li></ul></li><li><span class="tocitem">Reference</span><ul><li><a class="tocitem" href="../../reference/geometry/">Geometry and targets</a></li><li><a class="tocitem" href="../../reference/beams/">Beams and facilities</a></li><li><a class="tocitem" href="../../reference/deposition/">Laser deposition</a></li><li><a class="tocitem" href="../../reference/radiation/">Radiation</a></li><li><a class="tocitem" href="../../reference/analysis/">Mode analysis</a></li><li><a class="tocitem" href="../../reference/optimization/">Optimization</a></li><li><a class="tocitem" href="../../reference/implosion/">Implosion metrics</a></li><li><a class="tocitem" href="../../reference/lpi/">Laser–plasma models</a></li><li><a class="tocitem" href="../../reference/review/">Shot review</a></li><li><a class="tocitem" href="../../reference/io/">Input and output</a></li><li><a class="tocitem" href="../../reference/visrad/">VisRad interchange</a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Tutorials</a></li><li class="is-active"><a href>Radiation in an imported CAD hohlraum</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Radiation in an imported CAD hohlraum</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/stillyslalom/Briareus.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/stillyslalom/Briareus.jl/blob/main/docs/literate/cad_hohlraum.jl" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Radiation-in-an-imported-CAD-hohlraum"><a class="docs-heading-anchor" href="#Radiation-in-an-imported-CAD-hohlraum">Radiation in an imported CAD hohlraum</a><a id="Radiation-in-an-imported-CAD-hohlraum-1"></a><a class="docs-heading-anchor-permalink" href="#Radiation-in-an-imported-CAD-hohlraum" title="Permalink"></a></h1><p>Target designers draw hohlraums in CAD, and the assembly that reaches a view-factor code is a set of tessellated solids: two hohlraum halves with thick walls, entrance hole washers, the capsule, the tent films that hold it, and the structure that mounts the target. As a radiation model it has three problems. Every part is a closed solid, so most of its surface (outer walls, back faces, the mount) never exchanges radiation with the cavity, while view factors cost the square of the element count. The tessellation is made for drawing, not for radiosity: a cylindrical wall comes as strips running its full length, flat rings as radial slivers, with the facets&#39; windings (which side is the front) mixed. And the curved walls are polygons: flat facets standing in for a cylinder or a sphere misstate the exchange between nearby elements (see the <a href="../integrating_sphere/#Integrating-sphere">Integrating sphere</a> tutorial).</p><p>This tutorial builds such an assembly, with the flaws of real exports, writes it as a multi-solid STL file and takes it to a radiation calculation: <a href="../../reference/geometry/#Briareus.orient_mesh-Tuple{Mesh}"><code>orient_mesh</code></a> repairs the windings, <a href="../../reference/radiation/#Briareus.enclosure"><code>enclosure</code></a> keeps the surfaces that bound the cavity around the capsule, <a href="../../reference/geometry/#Briareus.remesh_mesh-Tuple{Mesh}"><code>remesh_mesh</code></a> divides them into compact elements, <a href="../../reference/geometry/#Briareus.fit_surfaces-Tuple{Mesh}"><code>fit_surfaces</code></a> and <a href="../../reference/geometry/#Briareus.curved_components-Tuple{Component}"><code>curved_components</code></a> find the cylinders and spheres and attach their exact surfaces; <a href="../../reference/radiation/#Briareus.cad_target-Tuple{Any}"><code>cad_target</code></a> then takes these steps in one call. The radiosity solution is checked against the same hohlraum built from Briareus&#39;s primitives and against closed forms.</p><pre><code class="language-julia hljs">using Briareus
+using CairoMakie
+using LinearAlgebra
+using Printf
+using Random
+using Briareus: Vec3                     # Makie exports a Vec3 too
+CairoMakie.activate!(type = &quot;png&quot;, px_per_unit = 2)
+include(joinpath(pkgdir(Briareus), &quot;docs&quot;, &quot;literate&quot;, &quot;_plotting.jl&quot;))   # figure helpers</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">cutaway! (generic function with 1 method)</code></pre><h2 id="A-CAD-like-assembly"><a class="docs-heading-anchor" href="#A-CAD-like-assembly">A CAD-like assembly</a><a id="A-CAD-like-assembly-1"></a><a class="docs-heading-anchor-permalink" href="#A-CAD-like-assembly" title="Permalink"></a></h2><p>The hohlraum has a cavity of radius 2.875 mm and length 9.4 mm with 1.55 mm entrance holes (LEHs), as the primitive <a href="../../reference/geometry/#Briareus.hohlraum-Tuple{}"><code>hohlraum</code></a> has by default. In CAD it is two halves with 50 µm walls that meet at the waist across a 20 µm gap; each end wall is 50 µm thick, and a 50 µm washer on it carries the LEH, so the holes are 0.1 mm deep bores. The capsule has a radius of 0.9 mm, and the tent is a 15 µm film wrapped around it, 30 µm off its surface, made of two cups that meet at the equator. A mounting block sits beside the waist. All lengths are in millimeters.</p><pre><code class="language-julia hljs">R, Rout, Rleh, h = 2.875, 2.925, 1.55, 4.7   # cavity and outer radius, LEH radius, half length
+te, tw, Rw = 0.05, 0.05, 2.4                 # end wall and washer thickness, washer radius
+g2 = 0.01                                    # half the waist gap
+rc, ri, ro = 0.9, 0.93, 0.945                # capsule, tent film inside and outside
+zL = h + te + tw                             # the outer end of the LEH bores</code></pre><p>Every part is a solid of revolution, tessellated the way CAD exports cylinders: one facet pair per azimuthal step and profile segment, whatever the segment&#39;s length. A wall segment becomes strips running its full length, a flat ring radial slivers, and a sphere latitude bands with fans of slivers at the poles. <code>revolve</code> turns a closed profile of <span>$(r, z)$</span> points into such facets; the bottom half is the top half mirrored.</p><pre><code class="language-julia hljs">pt(r, φ, z) = Vec3(r * cos(φ), r * sin(φ), z)
+function revolve(profile; nphi)
+    facets = NTuple{3,Vec3}[]
+    φs = range(0, 2π; length = nphi + 1)
+    for (i, (r1, z1)) in enumerate(profile)
+        r2, z2 = profile[mod1(i + 1, length(profile))]
+        r1 == r2 == 0 &amp;&amp; continue                               # along the axis
+        for j in 1:nphi
+            a, b = pt(r1, φs[j], z1), pt(r1, φs[j+1], z1)
+            c, d = pt(r2, φs[j+1], z2), pt(r2, φs[j], z2)
+            r1 == 0 ? push!(facets, (a, c, d)) :                # fans at the poles
+            r2 == 0 ? push!(facets, (a, b, c)) : push!(facets, (a, b, c), (a, c, d))
+        end
+    end
+    return facets
+end
+arc(r, a, b, n) = [(r * sinpi(x), r * cospi(x)) for x in range(a, b; length = n + 1)]  # polar angles in units of π
+mirror(facets) = [map(v -&gt; v .* Vec3(1, 1, -1), f) for f in facets]
+function block(lo, hi)
+    c = [Vec3(x, y, z) for x in (lo[1], hi[1]), y in (lo[2], hi[2]), z in (lo[3], hi[3])]
+    quads = ((1, 3, 7, 5), (2, 6, 8, 4), (1, 5, 6, 2), (3, 4, 8, 7), (1, 2, 4, 3), (5, 7, 8, 6))
+    return [f for q in quads for f in ((c[q[1]], c[q[2]], c[q[3]]), (c[q[1]], c[q[3]], c[q[4]]))]
+end
+
+half = revolve([(R, g2), (Rout, g2), (Rout, h + te), (Rleh, h + te), (Rleh, h), (R, h)]; nphi = 120)
+washer = revolve([(Rleh, h + te), (Rw, h + te), (Rw, zL), (Rleh, zL)]; nphi = 120)
+capsule = revolve(arc(rc, 0, 1, 40); nphi = 80)
+cup = revolve([arc(ro, 0, 1 / 2, 20); reverse(arc(ri, 0, 1 / 2, 20))]; nphi = 80)
+assembly = [&quot;hohlraum_top&quot; =&gt; half, &quot;hohlraum_bottom&quot; =&gt; mirror(half),
+         &quot;washer_top&quot; =&gt; washer, &quot;washer_bottom&quot; =&gt; mirror(washer),
+         &quot;capsule&quot; =&gt; capsule, &quot;tent_top&quot; =&gt; cup, &quot;tent_bottom&quot; =&gt; mirror(cup),
+         &quot;mount&quot; =&gt; block((Rout + 0.3, -1.0, -1.5), (Rout + 2.3, 1.0, 1.5))]</code></pre><p>CAD faces are stitched with either orientation: here 30% of the facets, chosen at random, are wound the other way, and the facets are shuffled. <a href="../../reference/io/#Briareus.write_stl-Tuple{AbstractString, Any}"><code>write_stl</code></a> with <code>binary = false</code> writes one <code>solid … endsolid</code> block per part, the way CAD exporters write assemblies, and <a href="../../reference/io/#Briareus.read_stl_solids-Tuple{AbstractString}"><code>read_stl_solids</code></a> reads them back as named meshes. STL lists every facet with its own three vertices, so the file does not record which facets are neighbors.</p><pre><code class="language-julia hljs">rng = Xoshiro(2026)
+function cad_mesh(facets)
+    m = Briareus.Mesh()
+    for (a, b, c) in shuffle(rng, facets)
+        add_polygon!(m, rand(rng) &lt; 0.3 ? [a, c, b] : [a, b, c])
+    end
+    return m
+end
+path = joinpath(mktempdir(), &quot;assembly.stl&quot;)
+write_stl(path, [name =&gt; cad_mesh(f) for (name, f) in assembly]; binary = false)
+solids = read_stl_solids(path)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">8-element Vector{Pair{String, Mesh}}:
+    &quot;hohlraum_top&quot; =&gt; Mesh(1440 patches, 1440 triangles)
+ &quot;hohlraum_bottom&quot; =&gt; Mesh(1440 patches, 1440 triangles)
+      &quot;washer_top&quot; =&gt; Mesh(960 patches, 960 triangles)
+   &quot;washer_bottom&quot; =&gt; Mesh(960 patches, 960 triangles)
+         &quot;capsule&quot; =&gt; Mesh(6240 patches, 6240 triangles)
+        &quot;tent_top&quot; =&gt; Mesh(6400 patches, 6400 triangles)
+     &quot;tent_bottom&quot; =&gt; Mesh(6400 patches, 6400 triangles)
+           &quot;mount&quot; =&gt; Mesh(12 patches, 12 triangles)</code></pre><p>The facets&#39; shapes, as the longest edge over the height across it (1.15 for an equilateral triangle), and the solids&#39; signed volumes, <span>$\sum a\cdot(b\times c)/6$</span> over the facets, which is the material&#39;s volume for a closed solid wound to face out of it, before and after <a href="../../reference/geometry/#Briareus.orient_mesh-Tuple{Mesh}"><code>orient_mesh</code></a>:</p><pre><code class="language-julia hljs">function aspect(m, k)
+    a, b, c = (m.vertices[i] for i in m.triangles[k])
+    L = maximum(norm, (b - a, c - b, a - c))
+    return L^2 / norm(cross(b - a, c - a))
+end
+signed_volume(m) = sum(dot(m.vertices[a], cross(m.vertices[b], m.vertices[c])) for (a, b, c) in m.triangles) / 6
+volume(name) = name == &quot;capsule&quot; ? 4π / 3 * rc^3 : startswith(name, &quot;hohlraum&quot;) ?
+               π * (Rout^2 - R^2) * (h - g2) + π * (Rout^2 - Rleh^2) * te :
+               startswith(name, &quot;washer&quot;) ? π * (Rw^2 - Rleh^2) * tw :
+               startswith(name, &quot;tent&quot;) ? 2π / 3 * (ro^3 - ri^3) : 2 * 2 * 3
+oriented = [name =&gt; orient_mesh(m) for (name, m) in solids]
+println(&quot;part              facets  aspect: median   max    volume (mm³): as read  oriented   exact&quot;)
+for ((name, m), (_, o)) in zip(solids, oriented)
+    as = sort([aspect(m, k) for k in eachindex(m.triangles)])
+    @printf(&quot;%-16s %7d %13.1f %7.0f %19.4f %9.4f %8.4f\n&quot;, name, length(m.triangles), as[end ÷ 2],
+            as[end], signed_volume(m), signed_volume(o), volume(name))
+end</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">part              facets  aspect: median   max    volume (mm³): as read  oriented   exact
+hohlraum_top        1440           9.0      31              9.1329    5.2370   5.2394
+hohlraum_bottom     1440           9.0      31             -6.5550    5.2370   5.2394
+washer_top           960           2.9      11             -1.2464    0.5272   0.5274
+washer_bottom        960           2.9      11              1.6148    0.5272   0.5274
+capsule             6240           2.1      13             -1.2071    3.0458   3.0536
+tent_top            6400           2.1      13             -0.0509    0.0826   0.0828
+tent_bottom         6400           2.1      13              0.0405    0.0826   0.0828
+mount                 12           2.2       2             14.9000   12.0000  12.0000</code></pre><p>The wall strips are 4.7 mm long and 0.15 mm wide. As read, the signed volumes are meaningless. <a href="../../reference/geometry/#Briareus.orient_mesh-Tuple{Mesh}"><code>orient_mesh</code></a> welds vertices by position, makes the windings consistent across every shared edge, and turns each closed surface to face out of the volume it encloses. Every part here is closed, and its oriented volume is the exact volume of the solid less the faceting (a 120-gon has <span>$1 - (2\pi/120)^2/6$</span>, 0.05% less area than its circle). A hohlraum half&#39;s inner wall is the same surface as its outer wall, so it now faces the axis: the cavity side.</p><p>Each closed surface is oriented as a whole, so a hollow part whose inner surface is a separate closed surface (a shell modeled with its gas volume) gets that inner surface facing into the material as well. None of these parts has one; the tent cups and the washers are each a single closed surface.</p><h2 id="The-cavity"><a class="docs-heading-anchor" href="#The-cavity">The cavity</a><a id="The-cavity-1"></a><a class="docs-heading-anchor-permalink" href="#The-cavity" title="Permalink"></a></h2><p>The radiation problem is the free space around the capsule. <a href="../../reference/radiation/#Briareus.enclosure"><code>enclosure</code></a> finds the element sides that bound it: each element casts 64 diffuse rays and gathers the flux that an isotropic source at the point would put on it, directly and after re-emission, and the elements that receive at least 5% of the cavity&#39;s typical flux are kept. The point is the capsule center; lines of sight from it pass through surfaces seen from behind, such as the capsule&#39;s own.</p><pre><code class="language-julia hljs">part_target(ps) = Target([Component(Symbol(n), m, n == &quot;capsule&quot; ? ablator() : gold()) for (n, m) in ps])
+with_tent = enclosure(part_target(oriented))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">Enclosure of (0.0, 0.0, 0.0): 12480 of 23852 elements (12480 selected), 3 of 8 components
+  escape 0.0000 of the rays from the point; open area 0 mm², leak area 0 mm² (returning 0 mm²), back sides 0 mm² (64 rays per element)
+  hohlraum_top                0 / 1440     elements  area          0 / 210.9      mm²
+  hohlraum_bottom             0 / 1440     elements  area          0 / 210.9      mm²
+  washer_top                  0 / 960      elements  area          0 / 22.33      mm²
+  washer_bottom               0 / 960      elements  area          0 / 22.33      mm²
+  capsule                  6240 / 6240     elements  area      10.17 / 10.17      mm²
+  tent_top                 3120 / 6400     elements  area      5.427 / 11.12      mm²
+  tent_bottom              3120 / 6400     elements  area      5.427 / 11.12      mm²
+  mount                       0 / 12       elements  area          0 / 32         mm²
+</code></pre><p>The tent&#39;s two cups are closed solids, and their inner faces enclose the capsule completely: from the center, the free space is the 30 µm pocket between the capsule and the film, and nothing escapes it. CAD gives the film a thickness to make it a solid; the real tent is a polymer film thin enough that the drive&#39;s x rays cross it, and it is left out of the radiation model, as an entrance-hole window would be. That opens the cavity:</p><pre><code class="language-julia hljs">no_tent = filter(p -&gt; !startswith(p[1], &quot;tent&quot;), oriented)
+cavity = enclosure(part_target(no_tent))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">Enclosure of (0.0, 0.0, 0.0): 8640 of 11052 elements (8640 selected), 5 of 6 components
+  escape 0.0513 of the rays from the point; open area 14.99 mm², leak area 0.03588 mm² (returning 7.67e-05 mm²), back sides 0 mm² (64 rays per element)
+  hohlraum_top              960 / 1440     elements  area      104.5 / 210.9      mm²
+  hohlraum_bottom           960 / 1440     elements  area      104.5 / 210.9      mm²
+  washer_top                240 / 960      elements  area     0.4869 / 22.33      mm²
+  washer_bottom             240 / 960      elements  area     0.4869 / 22.33      mm²
+  capsule                  6240 / 6240     elements  area      10.17 / 10.17      mm²
+  mount                       0 / 12       elements  area          0 / 32         mm²
+</code></pre><p>The kept surfaces are the inner wall of each half, its end cap, the bores of the end wall and of the washer, and the two faces of the waist gap; the outer walls, the washers&#39; faces and the mount are dropped. By reciprocity, the rays that escape estimate the open area of the cavity: the two LEHs (120-gons of radius 1.55 mm) and the outer end of the waist gap, <span>$2\pi r g$</span>, less what the mount intercepts beyond the gap (<code>leak_area</code>). The estimate is a Monte Carlo sum, with a spread of about 2% at 64 rays per element and 0.4% at 512:</p><pre><code class="language-julia hljs">leh_area = 2 * 60 * Rleh^2 * sin(2π / 120)
+gap_exit = 2π * Rout * 2g2
+@printf(&quot;LEHs %.3f mm² + gap exit %.3f mm² - leak to the mount %.3f mm² = %.3f mm²\n&quot;,
+        leh_area, gap_exit, cavity.leak_area, leh_area + gap_exit - cavity.leak_area)
+for rays in (64, 512)
+    e = rays == 64 ? cavity : enclosure(part_target(no_tent); rays)
+    @printf(&quot;%3d rays per element: open area %.3f mm² (%+.1f%%), %d elements chosen otherwise\n&quot;, rays,
+            e.open_area, 100 * (e.open_area / (leh_area + gap_exit - cavity.leak_area) - 1),
+            count(e.kept .!= cavity.kept))
+end</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">LEHs 15.088 mm² + gap exit 0.368 mm² - leak to the mount 0.036 mm² = 15.420 mm²
+ 64 rays per element: open area 14.988 mm² (-2.8%), 0 elements chosen otherwise
+512 rays per element: open area 15.328 mm² (-0.6%), 0 elements chosen otherwise</code></pre><p>The cutaways show the far half of the assembly from the front and a little above: in color what each selection keeps, in gray what it drops. The pocket is drawn close up, with the capsule&#39;s upper half left out to show the tent&#39;s inner face behind it.</p><pre><code class="language-julia hljs">colors = Dict{String,Any}(zip(first.(assembly), Makie.wong_colors()[[1, 1, 3, 3, 6, 4, 4, 2]]))
+function cutaway_panel(pos, enc, title; limits, show = (name, poly) -&gt; true)
+    ax = Axis(pos; title, aspect = DataAspect(), limits)
+    hidedecorations!(ax); hidespines!(ax)
+    t = enc.source
+    polys, cols = Vector{Vec3}[], Any[]
+    for (i, c) in enumerate(t.components), (p, e) in zip(eachindex(c.mesh.patches), t.comp_elems[i])
+        poly = patch_outline(c.mesh, p)
+        show(c.name, poly) || continue
+        push!(polys, poly)
+        push!(cols, enc.kept[e] ? colors[String(c.name)] : :gray88)
+    end
+    cutaway!(ax, polys, cols; strokewidth = 0.1)
+    return ax
+end
+far_half(name, poly) = name in (:capsule, :mount) || sum(v[2] for v in poly) &gt; 0
+lower_capsule(name, poly) = name === :capsule ? sum(v[3] for v in poly) &lt; 0 : far_half(name, poly)
+fig = Figure(size = (800, 500))
+cutaway_panel(fig[1, 1], with_tent, &quot;with the tent: a pocket&quot;;
+              limits = ((-1.6, 1.6), (-1.2, 1.6)), show = lower_capsule)
+cutaway_panel(fig[1, 2], cavity, &quot;tent left out: the cavity&quot;; limits = ((-3.3, 5.4), (-5.0, 5.7)),
+              show = far_half)
+colsize!(fig.layout, 1, Relative(0.42))
+fig</code></pre><img src="b1f64c80.png" alt="Example block output"/><h2 id="Elements"><a class="docs-heading-anchor" href="#Elements">Elements</a><a id="Elements-1"></a><a class="docs-heading-anchor-permalink" href="#Elements" title="Permalink"></a></h2><p>The kept facets are still the CAD&#39;s: 960 per half, a quarter of them the wall strips. Radiosity elements must be compact, because the radiosity is constant over an element and the view factor of a pair is integrated over both. <a href="../../reference/geometry/#Briareus.coarsen_mesh-Tuple{Mesh}"><code>coarsen_mesh</code></a> only groups whole facets into elements, which cannot shorten a strip; <a href="../../reference/geometry/#Briareus.remesh_mesh-Tuple{Mesh}"><code>remesh_mesh</code></a> divides the surface itself into near-planar elements of about the given size. The element diameter over the square root of its area is 1.4 for a square and grows with elongation:</p><pre><code class="language-julia hljs">kept = cavity.target.components
+facets = Dict(c.name =&gt; c.mesh for c in kept)
+size_of(name) = name === :capsule ? 0.15 : 0.5
+function shape(m)
+    d = map(m.patches) do r
+        vs = unique(v for k in r for v in m.triangles[k])
+        A = sum(norm(cross(m.vertices[b] - m.vertices[a], m.vertices[c] - m.vertices[a])) / 2 for (a, b, c) in m.triangles[r])
+        maximum(norm(m.vertices[u] - m.vertices[v]) for u in vs, v in vs) / sqrt(A)
+    end
+    sort!(d)
+    return d[end ÷ 2], d[end]
+end
+println(&quot;part              facets   size | remesh_mesh  diam/√A: median  max | coarsen_mesh  median   max&quot;)
+for c in kept
+    s = size_of(c.name)
+    rm, cm = remesh_mesh(c.mesh; size = s), coarsen_mesh(c.mesh; size = s)
+    @printf(&quot;%-16s %7d %6.2f | %8d %20.2f %5.1f | %9d %10.2f %5.1f\n&quot;, c.name, npatches(c.mesh), s,
+            npatches(rm), shape(rm)..., npatches(cm), shape(cm)...)
+end</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">part              facets   size | remesh_mesh  diam/√A: median  max | coarsen_mesh  median   max
+hohlraum_top         960   0.50 |      457                 1.44   4.7 |       594       5.74   7.9
+hohlraum_bottom      960   0.50 |      465                 1.44   4.7 |       594       5.74   7.9
+washer_top           240   0.50 |       21                 2.86   3.4 |        35       2.25   2.9
+washer_bottom        240   0.50 |       22                 2.86   3.4 |        35       2.25   2.9
+capsule             6240   0.15 |      406                 1.39   1.6 |      2234       1.42   2.7</code></pre><p>On the walls and the capsule the remeshed elements are as compact as squares, about one per size² (the 104.5 mm² of a half&#39;s cavity side in about 470 elements of 0.5 mm). Faces narrower than the size, the 50 µm bores and gap faces, give elements as narrow: that is the geometry&#39;s own scale. Coarsening leaves the strips whole, and five times as many elements on the capsule. The capsule is remeshed finer (0.15 mm) than the walls (0.5 mm), as a primitive hohlraum&#39;s capsule is.</p><p>The selection is then repeated on the elements, since an element straddling the edge of the lit region averages its flux over its own area. Selecting on the facets first and remeshing only the kept ones saves remeshing the mount and the outsides. The remeshed surface has the area of the facets to round-off.</p><pre><code class="language-julia hljs">remesh_cavity(wall, capsule) =
+    enclosure([Component(c.name, remesh_mesh(c.mesh; size = c.name === :capsule ? capsule : wall), c.material)
+               for c in kept])
+remeshed = remesh_cavity(0.5, 0.15)
+@printf(&quot;%d elements, %.2f mm² (the kept facets: %.2f mm²), all kept: %s\n&quot;, nelements(remeshed.target),
+        sum(remeshed.target.elem_area), sum(cavity.target.elem_area), all(remeshed.kept))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">1371 elements, 220.18 mm² (the kept facets: 220.18 mm²), all kept: true</code></pre><h2 id="Curved-surfaces"><a class="docs-heading-anchor" href="#Curved-surfaces">Curved surfaces</a><a id="Curved-surfaces-1"></a><a class="docs-heading-anchor-permalink" href="#Curved-surfaces" title="Permalink"></a></h2><p><a href="../../reference/geometry/#Briareus.fit_surfaces-Tuple{Mesh}"><code>fit_surfaces</code></a> finds the planes, cylinders and spheres in a mesh by region growing with least-squares fits. Remeshing puts new points inside the CAD facets, which lie inside a curved wall by up to the facets&#39; sagitta, so the fits are made on the CAD facets (<code>reference</code>) and carried over to the elements. For the top half:</p><pre><code class="language-julia hljs">regions = Dict(c.name =&gt; fit_surfaces(c.mesh; reference = facets[c.name]) for c in remeshed.target.components)
+foreach(println, regions[:hohlraum_top])</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">SurfaceRegion(:cylinder, radius 2.875 mm, axis (-7.539e-34, 9.233e-34, 1) through (-1.419e-16, -8.486e-17, 2.355), 334 patches, 84.71 mm², rms 0.00036 mm, max 0.00098 mm, facing in)
+SurfaceRegion(:plane, normal (-0, -0, -1), 78 patches, 18.41 mm², rms 1.3e-14 mm, max 1.3e-14 mm)
+SurfaceRegion(:plane, normal (-0, -0, -1), 25 patches, 0.9106 mm², rms 6.9e-18 mm, max 6.9e-18 mm)
+SurfaceRegion(:cylinder, radius 1.55 mm, axis (-4.312e-32, -7.225e-32, 1) through (5.817e-17, 4.194e-18, 4.725), 20 patches, 0.4869 mm², rms 7e-17 mm, max 2.2e-16 mm, facing in)</code></pre><p>The inner wall (2.875 mm, facing in), the end wall&#39;s LEH bore (1.55 mm) and two planes (the end cap and the gap face) are found. The CAD vertices lie on the true surfaces, so the radii come out exact; the residuals measure the facets, whose middles lie inside the wall by up to their sagitta, <span>$2.875 (2\pi/120)^2/8$</span> = 0.98 µm. <a href="../../reference/geometry/#Briareus.curved_components-Tuple{Component}"><code>curved_components</code></a> splits each part into its curved regions, each carrying the fitted <code>CylinderSurface</code> or <code>SphereSurface</code>, and the rest; planar faces stay flat elements, which are exact. So do curved regions of under 10⁻³ of the part&#39;s area (<code>minfraction</code>): in real CAD those are fillet pieces, small holes and edge faces, each of which would otherwise become a component of its own (the bore here is about 5×10⁻³ of its half&#39;s kept area).</p><pre><code class="language-julia hljs">fitted = reduce(vcat, [curved_components(c; regions = regions[c.name]) for c in remeshed.target.components])</code></pre><p>Fitted radii, axes and centers:</p><pre><code class="language-julia hljs">for c in fitted
+    @printf(&quot;%-22s %4d elements  %s\n&quot;, c.name, npatches(c.mesh),
+            c.surface isa CylinderSurface ? @sprintf(&quot;cylinder r = %.9f mm, axis %s&quot;, c.surface.radius, round.(c.surface.axis; digits = 9)) :
+            c.surface isa SphereSurface ? @sprintf(&quot;sphere r = %.9f mm at %s&quot;, c.surface.radius, round.(c.surface.center; digits = 9)) : &quot;flat&quot;)
+end</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">hohlraum_top/cyl1       334 elements  cylinder r = 2.875000000 mm, axis [-0.0, 0.0, 1.0]
+hohlraum_top/cyl2        20 elements  cylinder r = 1.550000000 mm, axis [-0.0, -0.0, 1.0]
+hohlraum_top/rest       103 elements  flat
+hohlraum_bottom/cyl1    337 elements  cylinder r = 2.875000000 mm, axis [-0.0, 0.0, 1.0]
+hohlraum_bottom/cyl2     22 elements  cylinder r = 1.550000000 mm, axis [0.0, 0.0, 1.0]
+hohlraum_bottom/rest    106 elements  flat
+washer_top               21 elements  cylinder r = 1.550000000 mm, axis [0.0, -0.0, 1.0]
+washer_bottom            22 elements  cylinder r = 1.550000000 mm, axis [-0.0, -0.0, 1.0]
+capsule                 406 elements  sphere r = 0.900000000 mm at [0.0, -0.0, -0.0]</code></pre><p>The three stages of one half, cut away as before: the CAD facets as read (dark where a facet&#39;s front faces away from the viewer: the mixed windings), the remeshed elements, and the fitted components.</p><pre><code class="language-julia hljs">function stage_panel(pos, meshes, colorof, title; strokewidth = 0.25)
+    ax = Axis(pos; title, aspect = DataAspect(), limits = ((-3.1, 3.1), (-0.4, 5.6)))
+    hidedecorations!(ax); hidespines!(ax)
+    polys, cols = Vector{Vec3}[], Any[]
+    for (key, m) in meshes, p in eachindex(m.patches)
+        poly = patch_outline(m, p)
+        (key === :capsule || sum(v[2] for v in poly) &gt; 0) &amp;&amp; sum(v[3] for v in poly) &gt; 0 || continue
+        push!(polys, poly)
+        push!(cols, colorof(key, m, p))
+    end
+    cutaway!(ax, polys, cols; strokewidth)
+end
+function facing(m, p)
+    a, b, c = (m.vertices[i] for i in m.triangles[first(m.patches[p])])
+    return dot(cross(b - a, c - a), Vec3(0, 1, -0.3)) &lt; 0          # toward the viewer
+end
+top = (:hohlraum_top, :washer_top, :capsule)
+raw = [Symbol(n) =&gt; m for (n, m) in solids if Symbol(n) in top]
+fig = Figure(size = (820, 330))
+stage_panel(fig[1, 1], raw, (k, m, p) -&gt; facing(m, p) ? colors[String(k)] : :gray20, &quot;CAD facets as read&quot;;
+            strokewidth = 0.05)
+stage_panel(fig[1, 2], [c.name =&gt; c.mesh for c in remeshed.target.components if c.name in top],
+            (k, m, p) -&gt; colors[String(k)], &quot;remeshed elements&quot;)
+kind_color(c) = c.surface isa CylinderSurface ? Makie.wong_colors()[c.surface.radius &gt; 2 ? 1 : 3] :
+                c.surface isa SphereSurface ? Makie.wong_colors()[6] : :gray70
+fitted_top = [c for c in fitted if c.part in top]      # the pieces record their part
+stage_panel(fig[1, 3], [c.name =&gt; c.mesh for c in fitted_top],
+            (k, m, p) -&gt; kind_color(fitted_top[findfirst(c -&gt; c.name === k, fitted_top)]),
+            &quot;fitted: cylinders, sphere, flat&quot;)
+fig</code></pre><img src="4d3bc265.png" alt="Example block output"/><h2 id="In-one-call"><a class="docs-heading-anchor" href="#In-one-call">In one call</a><a id="In-one-call-1"></a><a class="docs-heading-anchor-permalink" href="#In-one-call" title="Permalink"></a></h2><p><a href="../../reference/radiation/#Briareus.cad_target-Tuple{Any}"><code>cad_target</code></a> takes the parts as read and runs the same steps: it orients each part, selects the cavity around the point <code>inside</code> on the facets, remeshes the kept facets (sizes and materials can be given per part, as functions of the part&#39;s name), selects again on the elements, and, since it remeshes, fits the curved surfaces on the kept facets (<code>fit = false</code> keeps flat elements). <code>visrad_target</code> makes this call for the CAD that a VisRad workspace bundles; components built otherwise, such as primitives, can be passed with the parts and take part in the selection as they are. The target it builds is the one built by hand above:</p><pre><code class="language-julia hljs">one_call = cad_target(filter(p -&gt; !startswith(p[1], &quot;tent&quot;), solids); inside = (0, 0, 0),
+                      remesh = size_of, material = n -&gt; n === :capsule ? ablator() : gold())
+by_hand = Target(fitted)
+@printf(&quot;%d elements in %d components (by hand: %d in %d); same names, areas and normals: %s\n&quot;,
+        nelements(one_call), length(one_call.components), nelements(by_hand), length(by_hand.components),
+        [c.name for c in one_call.components] == [c.name for c in by_hand.components] &amp;&amp;
+        one_call.elem_area == by_hand.elem_area &amp;&amp; one_call.elem_normal == by_hand.elem_normal)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">1371 elements in 9 components (by hand: 1371 in 9); same names, areas and normals: true</code></pre><p>The split is computational. Each piece records its part, and <a href="../../reference/geometry/#Briareus.parts-Tuple{Target}"><code>parts</code></a>, <code>elements(target, :hohlraum_top)</code>, the keep-outs, the clearance checks and the reports (<code>energy_balance</code>, <code>component_power</code>, <code>write_results</code>) take and show the parts as read; a piece stays reachable by its own name. A part that is one surface, as the capsule is, keeps its name:</p><pre><code class="language-julia hljs">println(parts(one_call))
+one_call</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">Target with 5 parts (9 components), 1371 elements, 21070 triangles
+  hohlraum_top   surface  Au           457 elements  area  104.5296 mm²  (3 pieces)
+  hohlraum_bottom surface  Au           465 elements  area  104.5296 mm²  (3 pieces)
+  washer_top     surface  Au            21 elements  area    0.4869 mm²
+  washer_bottom  surface  Au            22 elements  area    0.4869 mm²
+  capsule        surface  ablator      406 elements  area   10.1788 mm²
+</code></pre><h2 id="Openings-and-references"><a class="docs-heading-anchor" href="#Openings-and-references">Openings and references</a><a id="Openings-and-references-1"></a><a class="docs-heading-anchor-permalink" href="#Openings-and-references" title="Permalink"></a></h2><p>The cavity is closed with apertures where the radiation leaves: the two LEHs at the outer ends of the bores and the outer end of the waist gap. Apertures are transparent and record the flux through them. With them, every element&#39;s view factors should sum to one, so the view factors can be balanced by Sinkhorn scaling.</p><pre><code class="language-julia hljs">openings = [aperture(:leh_top, disk_mesh(Rleh, zL; nr = 3, nphi = 24, up = false); surface = DiskSurface(center = (0, 0, zL))),
+            aperture(:leh_bottom, disk_mesh(Rleh, -zL; nr = 3, nphi = 24, up = true); surface = DiskSurface(center = (0, 0, -zL))),
+            aperture(:gap, cylinder_mesh(Rout, -g2, g2; nz = 1, nphi = 180, inward = true); surface = CylinderSurface(Rout))]
+flat = Target([remeshed.target.components; openings])
+curved = Target([fitted; openings])</code></pre><p>A second CAD model takes the same steps at half the element size on the walls, 0.25 mm, and 0.1 mm on the capsule:</p><pre><code class="language-julia hljs">fine = remesh_cavity(0.25, 0.1).target
+curved_fine = Target([reduce(vcat, [curved_components(c; reference = facets[c.name]) for c in fine.components]);
+                      openings])
+@printf(&quot;%d elements\n&quot;, nelements(curved_fine))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">4725 elements</code></pre><p>The reference is the same cavity built from Briareus&#39;s primitives on structured grids, every piece on its exact surface: the walls of the two halves, the end caps, the bores, the two faces of the waist gap and the capsule. The primitive <a href="../../reference/geometry/#Briareus.hohlraum-Tuple{}"><code>hohlraum</code></a> with the same dimensions is the thin-walled idealization of it, with flush LEHs and no gap.</p><pre><code class="language-julia hljs">function primitives(; hw, hc)
+    nphi = 8 * ceil(Int, 2π * R / hw / 8)
+    nz, nr = ceil(Int, (h - g2) / hw), ceil(Int, (R - Rleh) / hw)
+    (; capsule_ntheta, capsule_nphi) = capsule_counts(rc, hc)
+    au = gold()
+    wall(z0, z1) = cylinder_mesh(R, z0, z1; nz, nphi, inward = true)
+    disk(z) = DiskSurface(center = (0, 0, z))
+    parts = [Component(:wall_top, wall(g2, h), au; surface = CylinderSurface(R)),
+             Component(:wall_bottom, wall(-h, -g2), au; surface = CylinderSurface(R)),
+             Component(:cap_top, annulus_mesh(Rleh, R, h; nr, nphi, up = false), au; surface = disk(h)),
+             Component(:cap_bottom, annulus_mesh(Rleh, R, -h; nr, nphi, up = true), au; surface = disk(-h)),
+             Component(:bore_top, cylinder_mesh(Rleh, h, zL; nz = 1, nphi = nphi ÷ 2), au; surface = CylinderSurface(Rleh)),
+             Component(:bore_bottom, cylinder_mesh(Rleh, -zL, -h; nz = 1, nphi = nphi ÷ 2), au; surface = CylinderSurface(Rleh)),
+             Component(:gap_top, annulus_mesh(R, Rout, g2; nr = 1, nphi, up = false), au; surface = disk(g2)),
+             Component(:gap_bottom, annulus_mesh(R, Rout, -g2; nr = 1, nphi, up = true), au; surface = disk(-g2)),
+             Component(:capsule, sphere_mesh(rc; ntheta = capsule_ntheta, nphi = capsule_nphi), ablator();
+                       surface = SphereSurface(rc))]
+    return Target([parts; openings])
+end
+models = [&quot;flat 0.5&quot; =&gt; flat, &quot;fitted 0.5&quot; =&gt; curved, &quot;prim. 0.5&quot; =&gt; primitives(hw = 0.5, hc = 0.15),
+          &quot;fitted 0.25&quot; =&gt; curved_fine, &quot;prim. 0.25&quot; =&gt; primitives(hw = 0.25, hc = 0.05),
+          &quot;hohlraum()&quot; =&gt; hohlraum(; length = 2h, radius = R, leh_radius = Rleh, capsule_radius = rc,
+                                   h = 0.25, capsule_h = 0.05)]</code></pre><h2 id="Radiation-from-a-prescribed-wall-source"><a class="docs-heading-anchor" href="#Radiation-from-a-prescribed-wall-source">Radiation from a prescribed wall source</a><a id="Radiation-from-a-prescribed-wall-source-1"></a><a class="docs-heading-anchor-permalink" href="#Radiation-from-a-prescribed-wall-source" title="Permalink"></a></h2><p>A diffusely emitting sphere sends its radiation to every surface that sees all of it as a point source at its center would, so the capsule&#39;s view factors to the LEHs, the bores, the caps and the wall are the solid angles they subtend from the center over 4π: per end, <span>$(1 - \cos\theta_L)/2$</span> for the LEH, with <span>$\cos\theta_L = z_L/\sqrt{z_L^2 + r_L^2}$</span>, and differences of such cosines for the bore, the cap and the wall. (The faces and the exit of the waist gap see the capsule through a 20 µm slot, partly hidden, so the identity does not hold for them.) Elements are grouped by where they are, so that the CAD&#39;s components and the primitives&#39; are compared alike.</p><pre><code class="language-julia hljs">function group(t, e)
+    c = t.components[t.elem_comp[e]]
+    c.kind === :aperture &amp;&amp; return startswith(String(c.name), &quot;leh&quot;) ? :leh : :gap_exit
+    startswith(String(c.name), &quot;capsule&quot;) &amp;&amp; return :capsule
+    p, n = t.elem_centroid[e], t.elem_normal[e]
+    abs(n[3]) &gt; 0.5 &amp;&amp; return abs(p[3]) &gt; h - 0.01 ? :cap : :gap_faces
+    return hypot(p[1], p[2]) &lt; (Rleh + R) / 2 ? :bore : :wall
+end
+cosine(z, r) = z / hypot(z, r)
+solid_angle_fraction = Dict(:leh =&gt; 1 - cosine(zL, Rleh), :bore =&gt; cosine(zL, Rleh) - cosine(h, Rleh),
+                            :cap =&gt; cosine(h, Rleh) - cosine(h, R), :wall =&gt; cosine(h, R) - cosine(g2, R))</code></pre><p>In place of the laser, the inner wall carries a prescribed source: two Gaussian rings per half, at <span>$|z| = 3.9$</span> mm and 2.2 mm, standing in for the outer and inner cones&#39; spots. Each element gets the source integrated over it by quadrature, so every model receives the same power wherever its elements are, and the gold converts 75% of it into x rays. (A laser drive goes the same way: <a href="../../reference/deposition/#Briareus.DepositionOperator"><code>DepositionOperator</code></a> traces the beams onto the CAD elements, washers and bores included.)</p><pre><code class="language-julia hljs">source(z) = exp(-((abs(z) - 3.9) / 0.8)^2) + 0.6 * exp(-((abs(z) - 2.2) / 0.8)^2)   # TW/mm²
+function drive(t)
+    P = zeros(nelements(t))
+    for e in 1:nelements(t)
+        group(t, e) === :wall || continue
+        points, weights, _ = element_quadrature(t, e, 2)
+        P[e] = sum(w * source(p[3]) for (p, w) in zip(points, weights))
+    end
+    return P
+end</code></pre><p>For each model: the view factors and the time they take, the largest error of a row sum before balancing, the capsule&#39;s view factors to the LEHs, bores, caps and wall against the solid angles (the largest relative error), and, after Sinkhorn balancing, the radiosity solution: the capsule&#39;s mean incident flux, its Legendre moments <span>$a_2/a_0$</span> and <span>$a_4/a_0$</span> (<a href="../../reference/analysis/#Briareus.legendre_moments-Tuple{AbstractVector, Target, AbstractVector{&lt;:Integer}}"><code>legendre_moments</code></a>), and the fractions of the x-ray source lost through the LEHs and the gap (<a href="../../reference/radiation/#Briareus.energy_balance-Tuple{RadiationSolution}"><code>energy_balance</code></a>).</p><pre><code class="language-julia hljs">function analyze(t)
+    seconds = @elapsed F = view_factors(t)
+    groups = [group(t, e) for e in 1:nelements(t)]
+    ce = closure_error(F)
+    closure(gs) = maximum(abs(ce[e]) for e in eachindex(ce) if groups[e] in gs)
+    cap = findall(==(:capsule), groups)
+    A = t.elem_area
+    row(g) = sum(A[i] * F[i, j] for i in cap for j in findall(==(g), groups); init = 0.0) / sum(A[cap])
+    rows = :bore in groups ? maximum(abs(row(g) / f - 1) for (g, f) in solid_angle_fraction) : NaN
+    enforce_closure!(F, A)
+    sol = solve(RadiationModel(t; F), drive(t))
+    a = legendre_moments(sol.H, t, cap; lmax = 4)
+    b = energy_balance(sol)
+    lost(prefix) = sum((v for (k, v) in b.escaped if startswith(String(k), prefix)); init = 0.0) / b.source
+    return (; N = nelements(t), seconds, closure = closure((:wall, :cap, :capsule)),
+            closure_narrow = closure((:bore, :gap_faces, :leh)), rows, area = sum(A[cap]) / (4π * rc^2) - 1,
+            H = sum(sol.H[cap] .* A[cap]) / sum(A[cap]), P2 = a[3] / a[1], P4 = a[5] / a[1],
+            leh = lost(&quot;leh&quot;), gap = lost(&quot;gap&quot;), sol, cap, t)
+end
+results = [name =&gt; analyze(t) for (name, t) in models]
+let ref = results[5][2]
+    function rowfmt(label, f, fmt)
+        print(rpad(label, 34))
+        foreach(r -&gt; print(lpad(Printf.format(Printf.Format(fmt), f(r[2])), 12)), results)
+        println()
+    end
+    print(rpad(&quot;&quot;, 34)); foreach(r -&gt; print(lpad(r[1], 12)), results); println()
+    rowfmt(&quot;elements&quot;, r -&gt; r.N, &quot;%d&quot;)
+    rowfmt(&quot;view factors (s)&quot;, r -&gt; r.seconds, &quot;%.1f&quot;)
+    rowfmt(&quot;|row sum - 1|: wall, caps, capsule&quot;, r -&gt; r.closure, &quot;%.1e&quot;)
+    rowfmt(&quot;  bores, gap faces, LEHs&quot;, r -&gt; r.closure_narrow, &quot;%.1e&quot;)
+    rowfmt(&quot;capsule rows / solid angles - 1&quot;, r -&gt; r.rows, &quot;%.1e&quot;)
+    rowfmt(&quot;capsule area / 4πr² - 1&quot;, r -&gt; r.area, &quot;%.1e&quot;)
+    rowfmt(&quot;capsule flux H (TW/mm²)&quot;, r -&gt; r.H, &quot;%.5f&quot;)
+    rowfmt(&quot;H / H(prim. 0.25) - 1&quot;, r -&gt; r.H / ref.H - 1, &quot;%+.1e&quot;)
+    rowfmt(&quot;a₂/a₀ (%)&quot;, r -&gt; 100r.P2, &quot;%+.3f&quot;)
+    rowfmt(&quot;a₄/a₀ (%)&quot;, r -&gt; 100r.P4, &quot;%+.3f&quot;)
+    rowfmt(&quot;LEH loss / source&quot;, r -&gt; r.leh, &quot;%.5f&quot;)
+    rowfmt(&quot;gap loss / source&quot;, r -&gt; r.gap, &quot;%.5f&quot;)
+end</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">                                      flat 0.5  fitted 0.5   prim. 0.5 fitted 0.25  prim. 0.25  hohlraum()
+elements                                  1695        1695        2244        4725       11176       12560
+view factors (s)                           3.8         4.1         1.2        11.7        13.9        15.4
+|row sum - 1|: wall, caps, capsule     8.6e-03     8.6e-03     9.8e-03     9.6e-03     9.0e-03     1.3e-03
+  bores, gap faces, LEHs               7.0e-02     6.9e-02     6.0e-02     6.8e-02     6.1e-02     7.5e-04
+capsule rows / solid angles - 1        1.2e-03     1.0e-03     3.7e-04     8.2e-04     4.3e-04         NaN
+capsule area / 4πr² - 1               -1.3e-03    -2.2e-16     0.0e+00     4.4e-16    -2.2e-16    -2.2e-16
+capsule flux H (TW/mm²)                0.84761     0.84776     0.84814     0.84672     0.84699     0.84544
+H / H(prim. 0.25) - 1                 +7.3e-04    +9.1e-04    +1.3e-03    -3.2e-04    +0.0e+00    -1.8e-03
+a₂/a₀ (%)                              +10.574     +10.447     +10.541     +10.825     +10.880     +10.114
+a₄/a₀ (%)                               -0.781      -0.793      -1.006      -0.807      -0.822      -0.631
+LEH loss / source                      0.25304     0.25288     0.25316     0.25396     0.25389     0.26237
+gap loss / source                      0.00207     0.00207     0.00159     0.00175     0.00161     0.00000</code></pre><p>The columns are the CAD model with flat and with fitted elements at 0.5 mm (0.15 mm on the capsule), the primitives at the same sizes, the fitted CAD model and the primitives at 0.25 mm (0.1 and 0.05 mm on the capsule), and the thin-walled <a href="../../reference/geometry/#Briareus.hohlraum-Tuple{}"><code>hohlraum</code></a> at 0.25 mm.</p><ul><li>The capsule&#39;s view factors match the solid angles within 1.2e-3 in every model. The row sums of the wall, caps and capsule miss one by up to 1%, in the primitives as in the CAD, against 0.14% in <code>hohlraum()</code>; the narrow faces and the LEHs miss by up to 7%. These are the elements that see others partly, past the rim of a bore or into the gap, where a single line of sight determines visibility; balancing restores the rows.</li><li>At the same element size, the CAD models and the primitives agree on the capsule flux within 0.06%, on <span>$a_2/a_0$</span> within 0.1 percentage points, and on the LEH loss within 0.11%; at 0.25 mm within 0.03%, 0.05 points and 0.02%. Both move by more than that between 0.5 and 0.25 mm: <span>$a_2/a_0$</span> rises by 0.35 points (the primitives at 0.2 mm give 10.92%, so 0.25 mm is not yet converged in it).</li><li><span>$a_4/a_0$</span> is set by the capsule mesh. The remeshed CAD capsule, with compact elements, gives −0.78% to −0.81% at every size tried (0.15 and 0.1 mm); the latitude-longitude capsule of the primitives gives −1.01% at 0.15 mm and −0.82% at 0.05 mm.</li><li>Flat and fitted CAD agree on these integrated quantities within the same margins (the flat capsule is 0.13% short of its area): flat facets misstate the exchange between neighbors, which sums out over a cavity, as the <a href="../integrating_sphere/#Integrating-sphere">Integrating sphere</a> tutorial shows. The two models&#39; view factors cost about the same: neighboring flat elements, folded across the wall&#39;s strips, exchange by the exact double contour over their outlines (14 edges on average), and curved ones point to point on their surface.</li><li>The thin-walled <code>hohlraum()</code> loses 3.3% more through its flush LEHs, and its <span>$a_2/a_0$</span> is 0.77 points lower: the 0.1 mm bores and the gap matter at this level, and the CAD model keeps them.</li></ul><p>The capsule&#39;s incident flux against the cosine of its polar angle, element by element for the CAD models. The primitives&#39; capsule is divided into latitude bands, on which the flux is the same at every azimuth: their band means, joined by straight lines, are the reference curves, and the right panel shows each model&#39;s difference from the curve of the primitives at 0.25 mm.</p><pre><code class="language-julia hljs">function band_curve(r)
+    μ = [round(normalize(r.t.elem_centroid[e])[3]; digits = 6) for e in r.cap]
+    bands = sort(unique(μ))
+    mean_H = [sum(r.sol.H[r.cap][μ .== b]) / count(==(b), μ) / r.H for b in bands]
+    return function (x)
+        bands[1] &lt;= x &lt;= bands[end] || return NaN                 # beyond the polar bands
+        k = min(searchsortedlast(bands, x), length(bands) - 1)
+        w = (x - bands[k]) / (bands[k+1] - bands[k])
+        return (1 - w) * mean_H[k] + w * mean_H[k+1]
+    end
+end
+reference = band_curve(results[5][2])
+fig = Figure(size = (820, 380))
+ax = Axis(fig[1, 1], xlabel = &quot;cos θ on the capsule&quot;, ylabel = &quot;H / ⟨H⟩&quot;, title = &quot;Incident flux on the capsule&quot;)
+dx = Axis(fig[1, 2], xlabel = &quot;cos θ on the capsule&quot;, ylabel = &quot;difference (%)&quot;,
+          title = &quot;Difference from prim. 0.25&quot;)
+for (name, marker, markersize) in ((&quot;flat 0.5&quot;, :rect, 5), (&quot;fitted 0.5&quot;, :circle, 5), (&quot;fitted 0.25&quot;, :circle, 3))
+    r = Dict(results)[name]
+    μ = [normalize(r.t.elem_centroid[e])[3] for e in r.cap]
+    y = r.sol.H[r.cap] ./ r.H
+    scatter!(ax, μ, y; marker, markersize, label = &quot;CAD, $name&quot;)
+    scatter!(dx, μ, 100 .* (y .- reference.(μ)); marker, markersize)
+end
+μs = range(-1, 1; length = 401)
+for (k, linestyle) in ((3, :dash), (5, :solid))
+    name, r = results[k]
+    curve = band_curve(r)
+    lines!(ax, μs, curve.(μs); color = :black, linestyle, label = name)
+    lines!(dx, μs, 100 .* (curve.(μs) .- reference.(μs)); color = :black, linestyle)
+end
+axislegend(ax; position = :ct)
+fig</code></pre><img src="33919af6.png" alt="Example block output"/><p>Element by element, the CAD model at 0.25 mm follows the primitives at 0.25 mm within a few hundredths of a percent of the mean flux. At 0.5 mm the CAD models and the primitives depart from that curve alike, by up to 0.3% toward the poles: the walls&#39; resolution, which the CAD model shares with the primitives. Flat and fitted elements differ by less than that.</p><h2 id="What-this-checks"><a class="docs-heading-anchor" href="#What-this-checks">What this checks</a><a id="What-this-checks-1"></a><a class="docs-heading-anchor-permalink" href="#What-this-checks" title="Permalink"></a></h2><ul><li>Windings: <a href="../../reference/geometry/#Briareus.orient_mesh-Tuple{Mesh}"><code>orient_mesh</code></a> turns every part, read with 30% of its facets reversed, into a closed solid whose signed volume is its exact volume less the faceting (to 5e-4, a 120-gon&#39;s area deficit).</li><li>Cavity selection: from the capsule center, the tent&#39;s cups seal a pocket with no open area; without them, <a href="../../reference/radiation/#Briareus.enclosure"><code>enclosure</code></a> keeps exactly the cavity&#39;s surfaces (inner walls, caps, bores, gap faces, capsule), and its open-area estimate matches the LEHs&#39; area plus the gap&#39;s exit, less what the mount intercepts, within its sampling noise (0.6% at 512 rays per element).</li><li>Remeshing: <a href="../../reference/geometry/#Briareus.remesh_mesh-Tuple{Mesh}"><code>remesh_mesh</code></a> turns 4.7 mm strips into elements as compact as squares where <a href="../../reference/geometry/#Briareus.coarsen_mesh-Tuple{Mesh}"><code>coarsen_mesh</code></a> cannot, and keeps the area to round-off.</li><li>Fitting: <a href="../../reference/geometry/#Briareus.fit_surfaces-Tuple{Mesh}"><code>fit_surfaces</code></a> recovers the radii of the wall (2.875 mm), the bores (1.55 mm) and the capsule (0.9 mm) to nine digits from the CAD facets, and the fitted capsule has the area 4πr² to round-off.</li><li>One call: <a href="../../reference/radiation/#Briareus.cad_target-Tuple{Any}"><code>cad_target</code></a> on the parts as read builds the target built by hand, with the same components, element areas and normals, exactly; its <a href="../../reference/geometry/#Briareus.parts-Tuple{Target}"><code>parts</code></a> are the parts as read, in order.</li><li>Radiation: the capsule&#39;s view factors to the LEHs, bores, caps and wall match the solid angles they subtend from its center to 1e-3. The capsule flux, its <span>$a_2/a_0$</span> and <span>$a_4/a_0$</span>, and the LEH and gap losses of the CAD models, flat or fitted, match the same cavity built from Briareus&#39;s primitives at the same element size, within less than the change that halving the element size makes; the flat and fitted models&#39; view factors cost about the same. The thin-walled <a href="../../reference/geometry/#Briareus.hohlraum-Tuple{}"><code>hohlraum</code></a> differs from both by more: its LEH loss by 3.3%, its <span>$a_2/a_0$</span> by 0.8 points.</li></ul><hr/><p><em>This page was generated using <a href="https://github.com/fredrikekre/Literate.jl">Literate.jl</a>.</em></p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../retune/">« Retuning a drive to a reference shot</a><a class="docs-footer-nextpage" href="../leh_power_balance/">Entrance-hole size and the power balance »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.19.0 on <span class="colophon-date" title="Friday 30 October 2026 22:32">Friday 30 October 2026</span>. Using Julia version 1.13.3.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>

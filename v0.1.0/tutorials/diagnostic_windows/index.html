@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Diagnostic windows in the hohlraum wall · Briareus.jl</title><meta name="title" content="Diagnostic windows in the hohlraum wall · Briareus.jl"/><meta property="og:title" content="Diagnostic windows in the hohlraum wall · Briareus.jl"/><meta property="twitter:title" content="Diagnostic windows in the hohlraum wall · Briareus.jl"/><meta name="description" content="Documentation for Briareus.jl."/><meta property="og:description" content="Documentation for Briareus.jl."/><meta property="twitter:description" content="Documentation for Briareus.jl."/><meta property="og:url" content="https://stillyslalom.github.io/Briareus.jl/stable/tutorials/diagnostic_windows/"/><meta property="twitter:url" content="https://stillyslalom.github.io/Briareus.jl/stable/tutorials/diagnostic_windows/"/><link rel="canonical" href="https://stillyslalom.github.io/Briareus.jl/stable/tutorials/diagnostic_windows/"/><script data-outdated-warner src="../../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.63.2/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../assets/documenter.js"></script><script src="../../search_index.js"></script><script src="../../siteinfo.js"></script><script src="../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../assets/themeswap.js"></script><link href="../../assets/favicon.ico" rel="icon" type="image/x-icon"/></head><body><div id="documenter"><nav class="docs-sidebar"><a class="docs-logo" href="../../"><img src="../../assets/logo.svg" alt="Briareus.jl logo"/></a><div class="docs-package-name"><span class="docs-autofit"><a href="../../">Briareus.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../../">Home</a></li><li><a class="tocitem" href="../../gui/">Desktop application</a></li><li><span class="tocitem">Tutorials</span><ul><li><a class="tocitem" href="../laser_spot/">Laser spot on a foil</a></li><li><a class="tocitem" href="../integrating_sphere/">Integrating sphere</a></li><li><a class="tocitem" href="../dropped_bundle/">Freeing a bundle for radiography</a></li><li class="is-active"><a class="tocitem" href>Diagnostic windows in the hohlraum wall</a><ul class="internal"><li><a class="tocitem" href="#A-circular-window-on-the-wall"><span>A circular window on the wall</span></a></li><li><a class="tocitem" href="#When-a-thin-gold-foil-burns-through"><span>When a thin gold foil burns through</span></a></li><li><a class="tocitem" href="#A-pair-of-windows-in-a-NIF-like-hohlraum"><span>A pair of windows in a NIF-like hohlraum</span></a></li><li><a class="tocitem" href="#Restoring-the-drive-around-the-windows"><span>Restoring the drive around the windows</span></a></li><li><a class="tocitem" href="#What-a-gray-view-factor-model-leaves-out"><span>What a gray view-factor model leaves out</span></a></li><li><a class="tocitem" href="#What-this-checks"><span>What this checks</span></a></li></ul></li><li><a class="tocitem" href="../beam_errors/">Pointing and power errors</a></li><li><a class="tocitem" href="../retune/">Retuning a drive to a reference shot</a></li><li><a class="tocitem" href="../cad_hohlraum/">Radiation in an imported CAD hohlraum</a></li><li><a class="tocitem" href="../leh_power_balance/">Entrance-hole size and the power balance</a></li><li><a class="tocitem" href="../implosion_metrics/">From drive asymmetry to implosion metrics</a></li><li><a class="tocitem" href="../polar_direct_drive/">Polar direct drive: a published NIF pointing</a></li></ul></li><li><span class="tocitem">Explanation</span><ul><li><a class="tocitem" href="../../explanation/background/">Physics background</a></li><li><a class="tocitem" href="../../explanation/visrad/">For VisRad users</a></li><li><a class="tocitem" href="../../explanation/verification-validation/">Verification and validation</a></li></ul></li><li><span class="tocitem">Reference</span><ul><li><a class="tocitem" href="../../reference/geometry/">Geometry and targets</a></li><li><a class="tocitem" href="../../reference/beams/">Beams and facilities</a></li><li><a class="tocitem" href="../../reference/deposition/">Laser deposition</a></li><li><a class="tocitem" href="../../reference/radiation/">Radiation</a></li><li><a class="tocitem" href="../../reference/analysis/">Mode analysis</a></li><li><a class="tocitem" href="../../reference/optimization/">Optimization</a></li><li><a class="tocitem" href="../../reference/implosion/">Implosion metrics</a></li><li><a class="tocitem" href="../../reference/lpi/">Laser–plasma models</a></li><li><a class="tocitem" href="../../reference/review/">Shot review</a></li><li><a class="tocitem" href="../../reference/io/">Input and output</a></li><li><a class="tocitem" href="../../reference/visrad/">VisRad interchange</a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Tutorials</a></li><li class="is-active"><a href>Diagnostic windows in the hohlraum wall</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Diagnostic windows in the hohlraum wall</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/stillyslalom/Briareus.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/stillyslalom/Briareus.jl/blob/main/docs/literate/diagnostic_windows.jl" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Diagnostic-windows-in-the-hohlraum-wall"><a class="docs-heading-anchor" href="#Diagnostic-windows-in-the-hohlraum-wall">Diagnostic windows in the hohlraum wall</a><a id="Diagnostic-windows-in-the-hohlraum-wall-1"></a><a class="docs-heading-anchor-permalink" href="#Diagnostic-windows-in-the-hohlraum-wall" title="Permalink"></a></h1><p>To see the capsule from the side during the implosion, a diagnostic needs a line of sight through the hohlraum wall. A hole would lose too much drive, so the wall carries a thin-foil window instead: a disk of gold about 2 mm across and a couple of micrometers thick, backed by a low-Z material that x rays above a few keV pass through. Early in the pulse the thin gold re-emits like the rest of the wall. The Marshak heat front that carries the x rays into the wall eats through it during the drive, and from then on part of the radiation that reaches the window passes through it and leaves: the waist of the capsule loses drive, and the poles, relatively, gain it. Two windows facing each other on the waist give a positive <span>$P_2$</span> and an <span>$m = 2$</span> asymmetry, and they cost drive. Assembly leaves a thin annular gap around each window that leaks from the start.</p><p>This tutorial meshes circular windows with their gaps into the wall, checks the heat-front model that predicts when a window burns through against published solutions and measurements, and then follows a pair of windows through a NIF-like drive for three window thicknesses, with and without a gap. It then lets the transmission follow the drive and the gaps close, and restores the drive the windows take, with quad powers or quad pointing. It introduces <code>WallWindow</code> disks and gaps, the <code>BurnthroughAlbedo</code> thin-foil model with its <code>HeatFront</code> and its transmission after burnthrough, <code>GapClosure</code>, the window accounting of <a href="../../reference/radiation/#Briareus.drive_history-Tuple{RadiationModel, DepositionOperator, Any, Any}"><code>drive_history</code></a> and <a href="../../reference/radiation/#Briareus.energy_balance-Tuple{RadiationSolution}"><code>energy_balance</code></a>, and a <a href="../../reference/optimization/#Briareus.Scenario"><code>Scenario</code></a> linearized about a solution.</p><pre><code class="language-julia hljs">using Briareus
+using CairoMakie
+using Printf
+CairoMakie.activate!(type = &quot;png&quot;, px_per_unit = 2)
+include(joinpath(pkgdir(Briareus), &quot;docs&quot;, &quot;literate&quot;, &quot;_plotting.jl&quot;))   # figure helpers
+set_theme!(fontsize = 15, linewidth = 2.5)</code></pre><h2 id="A-circular-window-on-the-wall"><a class="docs-heading-anchor" href="#A-circular-window-on-the-wall">A circular window on the wall</a><a id="A-circular-window-on-the-wall-1"></a><a class="docs-heading-anchor-permalink" href="#A-circular-window-on-the-wall" title="Permalink"></a></h2><p>A <a href="../../reference/geometry/#Briareus.WallWindow"><code>WallWindow</code></a> with a <code>diameter</code> is a disk drawn on the unrolled wall: arc length <span>$s = R\phi$</span> along the wall by <span>$z$</span> along the axis. Unrolling a cylinder is an isometry, so the window&#39;s area is <span>$\pi d^2/4$</span>. A <code>gap</code> adds a ring of that width around it, its own component (here the default, an open aperture).</p><p><a href="../../reference/geometry/#Briareus.hohlraum-Tuple{}"><code>hohlraum</code></a> cuts a square box around the window and its gap out of the conforming wall grid, half a wall cell wider than the gap, and re-meshes it with triangles: polar rings inside the window, one band of triangles across the gap, and a band joining the gap&#39;s outer edge to the vertices the box shares with the grid around it, so the mesh has no T-junctions. Every vertex lies on the cylinder. A triangle with its vertices on the cylinder has a curved area of exactly <span>$R$</span> times its area in <span>$(\phi, z)$</span>; the radiation model already uses that exact area (see the <a href="../integrating_sphere/#Integrating-sphere">Integrating sphere</a> tutorial for why curved areas matter). The window&#39;s edge is a regular polygon whose radius is enlarged to <a href="../../reference/geometry/#Briareus.equal_area_radius-Tuple{Any, Any}"><code>equal_area_radius</code></a>, so the polygon&#39;s area is exactly that of the disk. The window and the gap therefore have exact areas, while their edges stay within a few micrometers of the circles.</p><pre><code class="language-julia hljs">d, gap = 2.0, 0.05
+pair = [WallWindow(phi = φ, diameter = d, gap = gap) for φ in (78, 258)]
+target = hohlraum(length = 10.1, radius = 2.875, leh_radius = 1.55, capsule_radius = 0.9,
+                  windows = pair)
+area(name) = sum(target.elem_area[elements(target, name)])
+exact = (window = π * d^2 / 4, gap = π * ((d / 2 + gap)^2 - (d / 2)^2))
+for (name, ref) in ((:window_1, exact.window), (:window_1_gap, exact.gap),
+                    (:window_2, exact.window), (:window_2_gap, exact.gap))
+    @printf(&quot;%-14s %4d elements  area %.12f mm²  exact %.12f  relative error %.1e\n&quot;, name,
+            length(elements(target, name)), area(name), ref, area(name) / ref - 1)
+end
+R, L = 2.875, 10.1
+@printf(&quot;wall + windows + gaps: %.12f mm², 2πRL = %.12f\n&quot;,
+        area(:wall) + area(:window_1) + area(:window_1_gap) + area(:window_2) + area(:window_2_gap),
+        2π * R * L)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">window_1        112 elements  area 3.141592653590 mm²  exact 3.141592653590  relative error 2.2e-16
+window_1_gap     64 elements  area 0.322013246993 mm²  exact 0.322013246993  relative error 3.1e-15
+window_2        112 elements  area 3.141592653590 mm²  exact 3.141592653590  relative error -4.4e-16
+window_2_gap     64 elements  area 0.322013246993 mm²  exact 0.322013246993  relative error 7.1e-15
+wall + windows + gaps: 182.447993357227 mm², 2πRL = 182.447993357227</code></pre><p>The unrolled mesh around the first window. The box&#39;s outer vertices are the grid&#39;s own, the gap is one band of triangles 50 µm wide, and the window&#39;s elements are about the size of the wall&#39;s:</p><pre><code class="language-julia hljs">function unrolled(target, φc)
+    fig = Figure(size = (800, 640))
+    ax = Axis(fig[1, 1], aspect = DataAspect(), xlabel = &quot;arc length from the window center (mm)&quot;,
+              ylabel = &quot;z (mm)&quot;, title = &quot;Window, gap and wall near φ = $(φc)°&quot;)
+    colors = Dict(:wall =&gt; (:gray85, &quot;wall&quot;), :window_1 =&gt; (:goldenrod1, &quot;window&quot;),
+                  :window_1_gap =&gt; (:dodgerblue3, &quot;gap&quot;))
+    uv(p) = Point2f(R * (mod(atan(p[2], p[1]) - deg2rad(φc) + π, 2π) - π), p[3])
+    for k in eachindex(target.tri_area)
+        name = target.components[target.tri_comp[k]].name
+        haskey(colors, name) || continue
+        v = target.tri_v0[k]
+        pts = uv.((v, v + target.tri_e1[k], v + target.tri_e2[k]))
+        all(p -&gt; abs(p[1]) &lt; 1.6 &amp;&amp; abs(p[2]) &lt; 1.6, pts) || continue
+        poly!(ax, collect(pts); color = colors[name][1], strokecolor = :gray20, strokewidth = 0.6)
+    end
+    limits!(ax, -1.6, 1.6, -1.6, 1.6)
+    Legend(fig[1, 2], [PolyElement(color = c, strokecolor = :gray20, strokewidth = 0.6)
+                       for (c, _) in values(colors)], [l for (_, l) in values(colors)])
+    return fig
+end
+unrolled(target, 78)</code></pre><img src="d5176b7d.png" alt="Example block output"/><h2 id="When-a-thin-gold-foil-burns-through"><a class="docs-heading-anchor" href="#When-a-thin-gold-foil-burns-through">When a thin gold foil burns through</a><a id="When-a-thin-gold-foil-burns-through-1"></a><a class="docs-heading-anchor-permalink" href="#When-a-thin-gold-foil-burns-through" title="Permalink"></a></h2><p>Radiation of temperature <span>$T$</span> drives a subsonic, ablative heat front into a gold wall. Hammer and Rosen solved this Marshak wave self-similarly with power-law fits to gold&#39;s opacity and equation of state (Phys. Plasmas 10, 1829, 2003). At constant <span>$T$</span> the areal mass behind the front is</p><p class="math-container">\[m_F = 9.51\times10^{-4}\,\left(\frac{T}{100\ \mathrm{eV}}\right)^{1.914}
+      \left(\frac{t}{1\ \mathrm{ns}}\right)^{0.5156}\ \mathrm{g/cm^2}\]</p><p>(their eq. 112 for a constant drive), the default <a href="../../reference/geometry/#Briareus.HeatFront"><code>HeatFront</code></a>. A window burns through when <span>$m_F$</span> reaches its own areal mass, <span>$19.3\ \mathrm{g/cm^3}$</span> times its thickness, 3.86 mg/cm² for 2 µm. A hohlraum&#39;s temperature is far from constant, so the front is integrated over the drive history:</p><p class="math-container">\[m_F(t) = c\left[\int_0^t \left(\frac{T(t&#39;)}{100\ \mathrm{eV}}\right)^{a/b} dt&#39;\right]^b ,
+\qquad c = 9.51\times10^{-4},\ a = 1.914,\ b = 0.5156 .\]</p><p>This depends only on the drive history and is exact at constant <span>$T$</span>. For a ramp <span>$T = T_0 t^k$</span> it gives <span>$m_F = c\,(1 + ka/b)^{-b}\,T(t)^a t^b$</span>. The exact self-similar solutions for ramps are independent references for it.</p><p><a href="../../reference/geometry/#Briareus.heat_front-Tuple{HeatFront, Any, Any}"><code>heat_front</code></a> integrates the drive by the trapezoidal rule. At constant temperature on an uneven grid it reproduces the closed form:</p><pre><code class="language-julia hljs">front = HeatFront()
+(; coefficient, temperature_exponent, time_exponent) = front
+ts = [0.0, 0.05, 0.3, 0.31, 1.0, 2.2, 4.0]
+m = heat_front(front, ts, fill(300.0, length(ts)))
+@printf(&quot;constant 300 eV: largest relative error %.1e\n&quot;,
+        maximum(abs.(m[2:end] ./ (coefficient * 3.0^temperature_exponent .* ts[2:end] .^ time_exponent) .- 1)))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">constant 300 eV: largest relative error 2.2e-16</code></pre><p>For ramps, compare with two exact solutions:</p><ul><li>Hammer and Rosen give <span>$9.51\times10^{-4}$</span> at constant temperature and <span>$7.13\times10^{-4}$</span> for <span>$T \propto t^{0.182}$</span> (their eq. 112, <span>$q_0 = 1$</span>).</li><li>Shussman and Heizler&#39;s exact solution of the same problem (Phys. Plasmas 22, 082109, 2015, eqs. 35–36) gives <span>$10.17\times10^{-4}$</span> at constant temperature and <span>$8.32\times10^{-4}$</span> at constant absorbed flux, <span>$T \propto t^{0.123}$</span>.</li></ul><p>The two solutions differ by 7% at constant temperature, so the test is the ratio of each ramp to its own constant-temperature coefficient. Hammer and Rosen also plot the ablated mass at 4 ns for <span>$T_s = (t/1\,\mathrm{ns})^{0.182}$</span> hectovolts: about 2.2–2.4 mg/cm² from both HYDRA and the analytic curve (their Fig. 4b).</p><pre><code class="language-julia hljs">ramp_mass(k, T0, t) = heat_front(front, range(0, t; length = 40001),
+                                 T0 .* range(0, t; length = 40001) .^ k)[end]
+for (k, exact_ratio, source) in ((0.182, 7.13 / 9.51, &quot;Hammer &amp; Rosen&quot;),
+                                 (0.123, 8.32 / 10.17, &quot;Shussman &amp; Heizler&quot;))
+    ratio = ramp_mass(k, 100.0, 1.0) / ramp_mass(0.0, 100.0, 1.0)
+    @printf(&quot;T ∝ t^%.3f: m(k)/m(0) = %.4f, exact %.4f (%s): %+.1f%%\n&quot;, k, ratio, exact_ratio,
+            source, 100 * (ratio / exact_ratio - 1))
+end
+@printf(&quot;ablated mass at 4 ns, T = t^0.182 heV: %.2f mg/cm² (HYDRA and analytic: 2.2–2.4)\n&quot;,
+        1e3 * ramp_mass(0.182, 100.0, 4.0))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">T ∝ t^0.182: m(k)/m(0) = 0.7663, exact 0.7497 (Hammer &amp; Rosen): +2.2%
+T ∝ t^0.123: m(k)/m(0) = 0.8237, exact 0.8181 (Shussman &amp; Heizler): +0.7%
+ablated mass at 4 ns, T = t^0.182 heV: 2.41 mg/cm² (HYDRA and analytic: 2.2–2.4)</code></pre><p>The integrated front is 2.2% too heavy for Hammer and Rosen&#39;s ramp and 0.7% for Shussman and Heizler&#39;s. The residual has a known cause: the shape of the self-similar profile depends on the drive history, which a single integral of the temperature cannot carry. Two percent in mass is four percent in burnthrough time.</p><h3 id="Against-measured-burnthrough"><a class="docs-heading-anchor" href="#Against-measured-burnthrough">Against measured burnthrough</a><a id="Against-measured-burnthrough-1"></a><a class="docs-heading-anchor-permalink" href="#Against-measured-burnthrough" title="Permalink"></a></h3><p>The Nova experiments measured burnthrough of gold foils of 0.8–3 µm on the wall of a hohlraum near 260 eV. In those experiments the radiation temperature rose as about <span>$t^{0.15}$</span> under a flat laser pulse (Lindl et al., Phys. Plasmas 11, 339, 2004, Fig. 4-6, which compares the data with a heat-front curve for that drive). The times below are the half-signal times read from that figure, to about ±0.03 ns. <a href="../../reference/geometry/#Briareus.burnthrough_time-Tuple{BurnthroughAlbedo, Any, Any}"><code>burnthrough_time</code></a> gives the heat front&#39;s arrival for the same drive, and <a href="../../reference/geometry/#Briareus.BurnthroughAlbedo"><code>BurnthroughAlbedo</code></a> starts its transition there, reaching half transmission <code>width/2</code> (0.2 ns by default) later:</p><pre><code class="language-julia hljs">nova = [(0.77, 0.33), (1.07, 0.565), (1.55, 0.78), (1.93, 0.86), (2.05, 1.03), (2.27, 1.14),
+        (3.0, 1.52)]
+tn = range(0, 2.5; length = 2501)
+Tnova = 260 .* tn .^ 0.15
+println(&quot;  Au (µm)   measured (ns)   front arrival   + width/2   constant 260 eV&quot;)
+offsets = Float64[]
+for (x, measured) in nova
+    model = BurnthroughAlbedo(thickness = x)
+    tb = burnthrough_time(model, tn, Tnova)
+    push!(offsets, measured - tb)
+    @printf(&quot;  %5.2f     %5.2f           %5.2f           %5.2f       %5.2f\n&quot;, x, measured, tb,
+            tb + model.width / 2, burnthrough_time(model, [0.0, 2.5], [260.0, 260.0]))
+end
+@printf(&quot;measured − front arrival: %.2f ns on average (%.2f–%.2f)\n&quot;,
+        sum(offsets) / length(offsets), extrema(offsets)...)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">  Au (µm)   measured (ns)   front arrival   + width/2   constant 260 eV
+   0.77      0.33            0.24            0.44        0.07
+   1.07      0.56            0.36            0.56        0.13
+   1.55      0.78            0.57            0.77        0.27
+   1.93      0.86            0.75            0.95        0.41
+   2.05      1.03            0.80            1.00        0.46
+   2.27      1.14            0.91            1.11        0.56
+   3.00      1.52            1.29            1.49        0.96
+measured − front arrival: 0.19 ns on average (0.09–0.23)</code></pre><p>The front tracks the data&#39;s thickness dependence: about 0.8 ns from 0.8 to 2.3 µm, and 1.2 ns out to 3 µm. The measured half signal comes 0.1–0.25 ns after the front arrives, and the default transition width puts half transmission there. A constant-temperature estimate would burn the foils through three times too early.</p><p>Before the front arrives, the foil absorbs exactly what a thick wall does: in the diffusion picture the cold gold ahead of a nonlinear front does not change the flux into it, and the measurements show no early transmission. So the thin-foil albedo follows the wall&#39;s own Marshak scaling, <a href="../../reference/geometry/#Briareus.WallLossAlbedo"><code>WallLossAlbedo</code></a>, until burnthrough.</p><h3 id="After-burnthrough"><a class="docs-heading-anchor" href="#After-burnthrough">After burnthrough</a><a id="After-burnthrough-1"></a><a class="docs-heading-anchor-permalink" href="#After-burnthrough" title="Permalink"></a></h3><p>A burned-through foil does not vanish. It is hot, held in place by its backing, and still optically thick. A gray, planar foil of optical depth <span>$\tau$</span> in the Eddington approximation with a Marshak boundary condition transmits</p><p class="math-container">\[\frac{F_\mathrm{trans}}{F_\mathrm{inc}} = \frac{4/3}{\tau + 2/3} = \frac{4}{3\tau + 2}\]</p><p>of the flux on it (R. S. Lester et al., Phys. Rev. E 114, L023201, 2026, eq. 2; <a href="../../reference/geometry/#Briareus.eddington_transmission-Tuple{Any}"><code>eddington_transmission</code></a>). Their eq. 1 sets <span>$\tau = L/\lambda_\mathrm{Au}(T_h)$</span>, with <span>$\lambda_\mathrm{Au}$</span> the Rosseland mean free path of gold at the hohlraum&#39;s radiation temperature, and gives <span>$\tau \sim 5$</span> for <span>$L = 2.5$</span> µm (gold at an assumed density of about 1 g/cm³, <span>$T_h$</span> typically 300–350 eV). <a href="../../reference/geometry/#Briareus.BurnthroughAlbedo"><code>BurnthroughAlbedo</code></a> keeps that mean free path and scales <span>$\tau$</span> with the foil&#39;s areal mass (<a href="../../reference/geometry/#Briareus.optical_depth-Tuple{BurnthroughAlbedo}"><code>optical_depth</code></a>). A fraction <span>$\mathcal{T}$</span> of the flux on a burned-through window leaves the hohlraum. The rest meets the foil as before and is re-emitted with the wall&#39;s Marshak albedo, so across the transition the albedo falls smoothly from <span>$\alpha_\mathrm{before}$</span> to <span>$(1 - \mathcal{T})\,\alpha_\mathrm{before}$</span>. For the windows below:</p><pre><code class="language-julia hljs">for x in (1.7, 2.5, 3.6)
+    model = BurnthroughAlbedo(thickness = x)
+    @printf(&quot;%.1f µm: τ = %.1f, transmission %.3f\n&quot;, x, optical_depth(model),
+            model.transmission)
+end</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">1.7 µm: τ = 3.4, transmission 0.328
+2.5 µm: τ = 5.0, transmission 0.235
+3.6 µm: τ = 7.2, transmission 0.169</code></pre><p>This is a gray estimate with the mean free path held at one temperature. The limit it replaces, <code>after = 0</code>, makes a burned-through window an open hole: everything that reaches it leaves, an upper bound on the loss.</p><p>Gold&#39;s Rosseland mean free path grows with temperature. Hammer and Rosen&#39;s power-law fit to its opacity, <span>$1/K = g\,T^{1.5}\rho^{-0.2}$</span> with <span>$g = 1/7200$</span> g/cm² and <span>$T$</span> in hectovolts (their eq. 31, fitted over 100–200 eV), puts the as-built areal mass of a 2.5 µm foil, at the expanded density of 1 g/cm³ that Lester et al. assume, at <span>$\tau = 5.9$</span> for 325 eV: within 20% of their <span>$\tau \sim 5$</span>, from independent physics. <code>transmission = RosselandTransmission()</code> keeps their point at 325 eV, the middle of their 300–350 eV, and scales <span>$\tau$</span> as <span>$T^{-1.5}$</span> with the radiation temperature of the flux on the foil (<a href="../../reference/geometry/#Briareus.foil_transmission"><code>foil_transmission</code></a>):</p><pre><code class="language-julia hljs">@printf(&quot;Hammer &amp; Rosen, 2.5 µm at 1 g/cm³ and 325 eV: τ = %.2f\n&quot;, 19.3 * 2.5e-4 * 7200 * 3.25^-1.5)
+println(&quot;  Au (µm)   transmission at 250, 300, 325, 350 eV&quot;)
+for x in (1.7, 2.5, 3.6)
+    model = BurnthroughAlbedo(thickness = x, transmission = RosselandTransmission())
+    @printf(&quot;  %.1f       %s\n&quot;, x, join((@sprintf(&quot;%.3f&quot;, foil_transmission(model, T))
+                                         for T in (250, 300, 325, 350)), &quot;  &quot;))
+end</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">Hammer &amp; Rosen, 2.5 µm at 1 g/cm³ and 325 eV: τ = 5.93
+  Au (µm)   transmission at 250, 300, 325, 350 eV
+  1.7       0.234  0.296  0.328  0.359
+  2.5       0.165  0.211  0.235  0.259
+  3.6       0.118  0.152  0.169  0.188</code></pre><p>A foil that burns through while the hohlraum is cooler than 325 eV transmits less than the constant estimate, and one in a hotter hohlraum more.</p><h2 id="A-pair-of-windows-in-a-NIF-like-hohlraum"><a class="docs-heading-anchor" href="#A-pair-of-windows-in-a-NIF-like-hohlraum">A pair of windows in a NIF-like hohlraum</a><a id="A-pair-of-windows-in-a-NIF-like-hohlraum-1"></a><a class="docs-heading-anchor-permalink" href="#A-pair-of-windows-in-a-NIF-like-hohlraum" title="Permalink"></a></h2><p>The hohlraum of the <a href="../dropped_bundle/#Freeing-a-bundle-for-radiography">Freeing a bundle for radiography</a> tutorial (10.1 × 5.75 mm, 3.1 mm entrance holes, a 0.9 mm capsule) has a gold wall with the Marshak albedo of <a href="../../reference/geometry/#Briareus.WallLossAlbedo"><code>WallLossAlbedo</code></a> and a laser-to-x-ray conversion of 0.8. Its 48 quads are pointed as there. Each quad follows a pulse with a picket, a long foot, a second step and a 2 ns peak at 9.5 TW per quad (456 TW, 1.6 MJ in all). Two windows 2 mm across sit at the waist at φ = 78° and 258°, a pair related by the 180° rotation about the axis, which the NIF ports share; their foils are 1.7, 2.5 or 3.6 µm of gold. The mesh is coarser than the default to keep the tutorial quick.</p><pre><code class="language-julia hljs">wall = Material(:Au; albedo = WallLossAlbedo(), conversion = 0.8)
+resolution = (; nz = 24, nphi = 32, capsule_ntheta = 12, capsule_nphi = 24)
+build(windows) = hohlraum(; length = 10.1, radius = 2.875, leh_radius = 1.55,
+                          capsule_radius = 0.9, wall, windows, resolution...)
+foil(thickness; kw...) = Material(:Au; albedo = BurnthroughAlbedo(; thickness, kw...), conversion = 0.8)
+windows(thickness; gap = 0.0, kw...) =
+    [WallWindow(; phi, diameter = 2.0, gap, material = foil(thickness; kw...)) for phi in (78, 258)]
+
+pointing = Dict(:outer50 =&gt; (0.0, 5.01), :outer44 =&gt; (0.0, 5.20),
+                :inner30 =&gt; (0.60, 3.63), :inner23 =&gt; (1.09, 3.09))
+function aimed(b)
+    r, z = pointing[b.group]
+    φ = port_angles(b)[2]
+    return remake(b; aim = (-r * cosd(φ), -r * sind(φ), sign(b.port[3]) * z))
+end
+quads = aimed.(nif_quads())
+pulse = PulseShape([0.0, 0.3, 1.0, 1.4, 4.5, 5.0, 6.0, 7.5, 9.5, 10.0],
+                   [0.0, 1.2, 1.2, 0.3, 0.3, 1.0, 1.0, 9.5, 9.5, 0.0])
+@printf(&quot;laser energy %.2f MJ, peak power %.0f TW\n&quot;, 48 * pulse_energy(pulse) / 1e3, 48 * 9.5)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">laser energy 1.58 MJ, peak power 456 TW</code></pre><p><a href="../../reference/radiation/#Briareus.drive_history-Tuple{RadiationModel, DepositionOperator, Any, Any}"><code>drive_history</code></a> marches the radiosity through the pulse quasi-statically. Each window element tracks its own heat front from its own incident flux, so the windows burn through at the times that flux implies. With <code>ylm = true</code> it also records the real spherical harmonics of the capsule flux. The three thicknesses share one geometry, so they share its view factors and its deposition operator.</p><p>The steps are 0.2 ns, but a window&#39;s albedo falls to <span>$(1 - \mathcal{T})\,\alpha_\mathrm{before}$</span> over the 0.4 ns <code>width</code> of its transition, which two steps would jump across. With <code>transition = 0.05</code> the march inserts steps wherever an element&#39;s transition would advance by more than a twentieth of the way in one step, planned from each element&#39;s known or predicted burnthrough time. It returns the times it took in <code>time</code>.</p><p>The open-hole bound and the linearized scenarios below are standalone <code>solve</code>s, which evaluate the wall&#39;s <a href="../../reference/geometry/#Briareus.WallLossAlbedo"><code>WallLossAlbedo</code></a> at the time since the pulse start. The histories do the same here (<code>wall_history = false</code>), so that every comparison is like with like; by default a drive history follows each wall element&#39;s own temperature history instead, which lowers the wall albedo early in the peak.</p><pre><code class="language-julia hljs">times = 0.2:0.2:9.8
+beams_at(τ) = with_pulses(quads, pulse, τ)
+history(model, op, times) = drive_history(model, op, beams_at, times; lmax = 6, ylm = true,
+                                          transition = 0.05, wall_history = false)
+runs = Dict{Tuple{Float64,Float64},Any}()
+shared = Dict{Float64,Any}()                       # view factors and operator per gap
+for g in (0.0, 0.05), thickness in (1.7, 2.5, 3.6)
+    t = build(windows(thickness; gap = g))
+    if !haskey(shared, g)
+        shared[g] = (RadiationModel(t; closed = true).F, DepositionOperator(t, quads))
+    end
+    F, op = shared[g]
+    runs[(thickness, g)] = history(RadiationModel(t; F), op, times)
+end
+@printf(&quot;steps: %d given, %d–%d taken\n&quot;, length(times),
+        extrema(length(h.time) for h in values(runs))...)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">steps: 49 given, 67–71 taken</code></pre><p>The hohlraum without windows is the reference. It is solved at every time any of the windowed runs took, so the differences below compare like with like.</p><pre><code class="language-julia hljs">base_target = build(())
+base_model, base_op = RadiationModel(base_target; closed = true), DepositionOperator(base_target, quads)
+rebase(hs) = history(base_model, base_op, sort(unique(reduce(vcat, [h.time for h in hs]))))
+base = rebase(values(runs))
+@printf(&quot;reference steps: %d\n&quot;, length(base.time))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">reference steps: 168</code></pre><p>The change in the capsule&#39;s radiation temperature and in <span>$P_2$</span> from the hohlraum without windows, the <span>$m = 2$</span> amplitude <span>$\sqrt{c_{22}^2 + c_{2,-2}^2}/c_{00}$</span> of the capsule flux, and each window&#39;s heat front as a fraction of its foil. Without windows the capsule&#39;s radiation temperature peaks at the value printed below:</p><pre><code class="language-julia hljs">on(h, x) = x[indexin(h.time, base.time)]              # base values at the times of run h
+P2(h) = h.moments[3, :] ./ h.moments[1, :]
+P4(h) = h.moments[5, :] ./ h.moments[1, :]
+m2(h) = hypot.(h.ylm[mode_index(2, 2), :], h.ylm[mode_index(2, -2), :]) ./ h.ylm[1, :]
+palette = Makie.wong_colors()
+colors = Dict(1.7 =&gt; palette[6], 2.5 =&gt; palette[2], 3.6 =&gt; palette[1])
+fig = Figure(size = (820, 700))
+axT = Axis(fig[1, 1], ylabel = &quot;ΔTᵣ (eV)&quot;, title = &quot;Change in capsule Tᵣ&quot;)
+axP = Axis(fig[1, 2], ylabel = &quot;ΔP₂/P₀ (%)&quot;, title = &quot;Change in P₂ from the windows&quot;)
+axM = Axis(fig[2, 1], xlabel = &quot;time (ns)&quot;, ylabel = &quot;|c₂,±₂|/c₀₀ (%)&quot;, title = &quot;m = 2 amplitude&quot;)
+axF = Axis(fig[2, 2], xlabel = &quot;time (ns)&quot;, ylabel = &quot;heat front / foil areal mass&quot;,
+           title = &quot;Heat front in window 1&quot;)
+hlines!(axT, [0.0], color = :black)
+hlines!(axP, [0.0], color = :black)
+for thickness in (1.7, 2.5, 3.6), g in (0.0, 0.05)
+    h = runs[(thickness, g)]
+    kw = (; color = colors[thickness], linestyle = g == 0 ? :solid : :dash)
+    lines!(axT, h.time, h.Tr .- on(h, base.Tr); kw...)
+    lines!(axP, h.time, 100 .* (P2(h) .- on(h, P2(base))); kw...)
+    lines!(axM, h.time, 100 .* m2(h); kw...)
+    g == 0 &amp;&amp; lines!(axF, h.time, h.front[:window_1]; kw...)
+end
+hlines!(axF, [1.0], color = :gray50, linestyle = :dot)
+ylims!(axF, 0, 2)
+Legend(fig[3, 1:2],
+       [[LineElement(color = :black)];
+        [LineElement(color = colors[x]) for x in (1.7, 2.5, 3.6)];
+        [LineElement(color = :gray30), LineElement(color = :gray30, linestyle = :dash)]],
+       [&quot;no windows (reference)&quot;, &quot;1.7 µm&quot;, &quot;2.5 µm&quot;, &quot;3.6 µm&quot;, &quot;no gap&quot;, &quot;50 µm open gap&quot;],
+       orientation = :horizontal, framevisible = false, nbanks = 1)
+@printf(&quot;capsule Tᵣ without windows: %.0f eV at the peak\n&quot;, maximum(base.Tr))
+fig</code></pre><img src="8dc7dbf2.png" alt="Example block output"/><p>Without a gap the windows cost nothing until they burn through: an intact window re-emits like the wall, and its <span>$\Delta P_2$</span> and <span>$m = 2$</span> stay below 0.05%, the size of the remeshing. Then the waist goes cold. Thinner foils burn through earlier (1.7 µm during the second step of the pulse, 2.5 µm on the rise, and 3.6 µm just before the peak) and transmit more. At the peak, <span>$P_2$</span> is up by 0.9–1.7%, the <span>$m = 2$</span> amplitude reaches 0.7–1.3%, and the capsule&#39;s radiation temperature is down by 2.5–4.7 eV, from 3.6 µm to 1.7 µm. An open 50 µm gap leaks from the start. Before burnthrough the gaps alone give about 0.5% of <span>$P_2$</span>, 0.4% of <span>$m = 2$</span> and 1.3 eV; at the peak they add 0.58% and 1.7–1.8 eV to the windows&#39; cost.</p><p>A capsule&#39;s shape integrates the drive asymmetry over the pulse. The table therefore gives the change in <span>$P_2$</span>, <span>$P_4$</span> and <span>$m = 2$</span> weighted by the capsule flux from 5 ns on, as well as at the peak. It also gives the drive cost: the radiation temperature at the peak, the capsule&#39;s absorbed energy over the pulse, and the energy that leaves through the windows and gaps (<code>window_loss</code>). Each history is summed over its own steps, each step weighted by half the time to its neighbors (the first and last by a whole step), which on the uniform <code>times</code> is the plain sum times the step.</p><pre><code class="language-julia hljs">function weights(τ)
+    w = [(τ[min(k + 1, end)] - τ[max(k - 1, 1)]) / 2 for k in eachindex(τ)]
+    w[1] *= 2
+    w[end] *= 2
+    return w
+end
+integral(h, x) = sum(weights(h.time) .* x)
+function flux_weighted(h, x; from = 5.0)
+    w = weights(h.time) .* (h.time .&gt;= from) .* h.moments[1, :]
+    return sum(w .* x) / sum(w)
+end
+function peak_mean(h, x)
+    w = weights(h.time) .* (7.6 .&lt;= h.time .&lt;= 9.4)
+    return sum(w .* x) / sum(w)
+end
+println(&quot;  Au    gap   burnthrough  ΔTᵣ peak  capsule energy  window loss   ΔP₂     ΔP₂     ΔP₄      m=2&quot;)
+println(&quot; (µm)  (µm)     (ns)        (eV)       (%)           (kJ)       peak   weighted weighted weighted&quot;)
+for g in (0.0, 0.05), thickness in (1.7, 2.5, 3.6)
+    h = runs[(thickness, g)]
+    tb = h.burnthrough[:window_1]
+    @printf(&quot; %.1f   %3.0f     %5.2f      %+6.1f      %+6.1f        %6.0f       %+5.2f%%  %+5.2f%%  %+5.2f%%   %4.2f%%\n&quot;,
+            thickness, 1e3g, sum(tb) / length(tb), peak_mean(h, h.Tr) - peak_mean(base, base.Tr),
+            100 * (integral(h, h.flux) / integral(base, base.flux) - 1), integral(h, h.window_loss),
+            100 * (peak_mean(h, P2(h)) - peak_mean(base, P2(base))),
+            100 * (flux_weighted(h, P2(h)) - flux_weighted(base, P2(base))),
+            100 * (flux_weighted(h, P4(h)) - flux_weighted(base, P4(base))),
+            100 * flux_weighted(h, m2(h)))
+end</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">  Au    gap   burnthrough  ΔTᵣ peak  capsule energy  window loss   ΔP₂     ΔP₂     ΔP₄      m=2
+ (µm)  (µm)     (ns)        (eV)       (%)           (kJ)       peak   weighted weighted weighted
+ 1.7     0      4.77        -4.7        -5.4            58       +1.72%  +1.71%  -0.22%   1.30%
+ 2.5     0      6.34        -3.4        -3.7            40       +1.22%  +1.12%  -0.14%   0.86%
+ 3.6     0      7.05        -2.5        -2.3            24       +0.87%  +0.68%  -0.08%   0.52%
+ 1.7    50      4.79        -6.4        -7.4            76       +2.30%  +2.28%  -0.28%   1.73%
+ 2.5    50      6.35        -5.2        -5.8            58       +1.80%  +1.69%  -0.20%   1.28%
+ 3.6    50      7.06        -4.2        -4.4            43       +1.45%  +1.24%  -0.14%   0.93%</code></pre><p>A thinner foil burns through earlier and transmits more, so the thin foils cost the most. The flux-weighted <span>$\Delta P_2$</span> rises from 0.7% for 3.6 µm to 1.7% for 1.7 µm (1.2–2.3% with the gaps), and the capsule loses 2.3–5.4% of its energy (4.4–7.4% with the gaps).</p><p>The open hole bounds these losses from above. At the peak every window has burned through, so the albedos no longer depend on when each element did: a solve at each peak step with <code>after = 0</code> and every window element burned through gives the open-hole history there exactly. It reuses the view factors and the deposition operator of the runs above.</p><pre><code class="language-julia hljs">peak_times = filter(τ -&gt; 7.6 &lt;= τ &lt;= 9.4, collect(times))
+at_peak(h, x) = (w = weights(peak_times); sum(w .* x[indexin(peak_times, h.time)]) / sum(w))
+function open_hole(g)
+    hole = Material(:Au; albedo = BurnthroughAlbedo(thickness = 2.5, after = 0), conversion = 0.8)
+    t = build([WallWindow(; phi, diameter = 2.0, gap = g, material = hole) for phi in (78, 258)])
+    F, op = shared[g]
+    model = RadiationModel(t; F)
+    obs = elements(t, :capsule)
+    W = ylm_weights(t, obs; lmax = 6)
+    burned = zeros(nelements(t))                   # burnthrough times: all at 0 ns
+    sols = [solve(model, deposit(op, beams_at(τ)); time = τ, burnthrough = burned)
+            for τ in peak_times]
+    moments = reduce(hcat, [legendre_moments(s.H, t, obs; lmax = 6) for s in sols])
+    return (; time = peak_times, moments, Tr = radiation_temperature.(moments[1, :]),
+            ylm = reduce(hcat, [W * s.H[obs] for s in sols]))
+end
+println(&quot;  peak, 7.6–9.4 ns              gap    ΔTᵣ     ΔP₂      m=2&quot;)
+println(&quot;                                (µm)   (eV)&quot;)
+for g in (0.0, 0.05)
+    transmitting = [(@sprintf(&quot;transmission %.3f (%.1f µm)&quot;,
+                              BurnthroughAlbedo(thickness = x).transmission, x), runs[(x, g)])
+                    for x in (1.7, 2.5, 3.6)]
+    for (label, r) in [(&quot;open hole (after = 0)&quot;, open_hole(g)); transmitting]
+        @printf(&quot;  %-28s  %3.0f   %+5.1f   %+5.2f%%   %4.2f%%\n&quot;, label, 1e3g,
+                at_peak(r, r.Tr) - at_peak(base, base.Tr),
+                100 * (at_peak(r, P2(r)) - at_peak(base, P2(base))), 100 * at_peak(r, m2(r)))
+    end
+end</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">  peak, 7.6–9.4 ns              gap    ΔTᵣ     ΔP₂      m=2
+                                (µm)   (eV)
+  open hole (after = 0)           0   -13.6   +5.41%   4.13%
+  transmission 0.328 (1.7 µm)     0    -4.7   +1.72%   1.31%
+  transmission 0.235 (2.5 µm)     0    -3.4   +1.22%   0.93%
+  transmission 0.169 (3.6 µm)     0    -2.5   +0.87%   0.66%
+  open hole (after = 0)          50   -15.2   +6.03%   4.59%
+  transmission 0.328 (1.7 µm)    50    -6.4   +2.30%   1.74%
+  transmission 0.235 (2.5 µm)    50    -5.2   +1.80%   1.35%
+  transmission 0.169 (3.6 µm)    50    -4.2   +1.45%   1.08%</code></pre><p>At the peak the open hole costs three to six times as much as the transmitting foils: 13.6 eV of radiation temperature and 5.4% of <span>$P_2$</span> without gaps. The gaps add about the same in either model, 0.58–0.62% of <span>$P_2$</span> and 1.6–1.8 eV.</p><p>The pair of windows adds no odd-<span>$m$</span> harmonics, because it shares the ports&#39; 180° symmetry:</p><pre><code class="language-julia hljs">h = runs[(2.5, 0.05)]
+odd = maximum(abs(h.ylm[mode_index(l, m), k]) / h.ylm[1, k]
+              for l in 1:4 for m in -l:l if isodd(m) for k in eachindex(h.time))
+@printf(&quot;largest odd-m |c_lm|/c₀₀ over the pulse: %.1e\n&quot;, odd)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">largest odd-m |c_lm|/c₀₀ over the pulse: 3.2e-16</code></pre><p>The capsule flux at the end of the peak, as equal-area (Hammer) maps seen from outside, centered between the windows, which face the capsule&#39;s waist at φ = 78° and 258° (circles). The maps are drawn from the spherical harmonics through <span>$l = 6$</span>, which carry the low modes a capsule responds to, rather than from the coarse capsule mesh. The top row shows the flux relative to its own mean, without windows and with the 2.5 µm pair and its gaps. Without windows this untuned pointing already drives the waist hot, so the bottom row subtracts that map and shows what the windows change: on the left without gaps, on the right with them.</p><pre><code class="language-julia hljs">function ylm_field(c; lmax = 6)
+    C = ylm_matrix(c, lmax)
+    Y = zeros(lmax + 1, 2lmax + 1)
+    mean = c[1] / sqrt(4π)                          # c₀₀ Y₀₀
+    return (θ, φ) -&gt; (Briareus._real_ylm!(Y, lmax, cosd(θ), deg2rad(φ)); 100 * (sum(C .* Y) / mean - 1))
+end
+φ0 = 168.0                                         # map center, between the windows
+deviation_map(h) = sphere_map(ylm_field(h.ylm[:, findfirst(≈(9.4), h.time)]); φ0)
+base_map = deviation_map(base)
+change_map(h) = (m = deviation_map(h); (m[1], m[2], m[3] .- base_map[3]))
+rows = ([&quot;no windows&quot; =&gt; base_map, &quot;2.5 µm windows, 50 µm gaps&quot; =&gt; deviation_map(h)],
+        [&quot;2.5 µm windows, no gap&quot; =&gt; change_map(runs[(2.5, 0.0)]),
+         &quot;2.5 µm windows, 50 µm gaps&quot; =&gt; change_map(h)])
+limits = [ceil(maximum(maximum(abs, filter(isfinite, m[3])) for (_, m) in row)) for row in rows]
+fig = Figure(size = (800, 470))
+for (i, row) in enumerate(rows), (j, (title, m)) in enumerate(row)
+    ax = sphere_axis(fig[i, j]; title, φ0)
+    sphere_heatmap!(ax, m; colormap = :balance, colorrange = (-limits[i], limits[i]))
+    mark_directions!(ax, [(90, 78), (90, 258)]; φ0, marker = :circle, markersize = 14,
+                     color = :transparent, strokecolor = :black, strokewidth = 2)
+end
+Colorbar(fig[1, 3]; colormap = :balance, colorrange = (-limits[1], limits[1]),
+         height = Relative(0.8), label = &quot;H/⟨H⟩ − 1 (%)&quot;)
+Colorbar(fig[2, 3]; colormap = :balance, colorrange = (-limits[2], limits[2]),
+         height = Relative(0.8), label = &quot;change from no windows (%)&quot;)
+rowgap!(fig.layout, 6)
+fig</code></pre><img src="0f0b31c0.png" alt="Example block output"/><p>Without windows this untuned pointing drives the waist hot (<span>$P_2/P_0 \approx -12\%$</span>, which cone tuning would remove). With the windows open, the waist facing them cools to about the mean while the waist between them gains, relative to the mean, and the poles gain too. The waist&#39;s mean excess drops, which is the positive <span>$\Delta P_2$</span>, and the pattern <span>$\cos 2(\phi - 78°)$</span> is the <span>$m = 2$</span> asymmetry. The gaps add to it about half again.</p><h3 id="The-window-energy-balance"><a class="docs-heading-anchor" href="#The-window-energy-balance">The window energy balance</a><a id="The-window-energy-balance-1"></a><a class="docs-heading-anchor-permalink" href="#The-window-energy-balance" title="Permalink"></a></h3><p>At any time, <a href="../../reference/radiation/#Briareus.energy_balance-Tuple{RadiationSolution}"><code>energy_balance</code></a> splits a thin-foil window&#39;s loss <span>$(1 - \alpha) H A$</span> into what it transmits, <span>$s\mathcal{T} H A$</span> with <span>$s$</span> the progress of its transition (0 intact, 1 burned through), and what it absorbs like the wall, <span>$(1 - s\mathcal{T})(1 - \alpha_\mathrm{before}) H A$</span>. The transmitted part with the open gap&#39;s escape is <code>window_loss</code>. At the end of the peak, for 2.5 µm windows with a 50 µm gap:</p><pre><code class="language-julia hljs">t = build(windows(2.5; gap = 0.05))
+F, op = shared[0.05]
+model = RadiationModel(t; F)
+tb = fill(NaN, nelements(t))
+for n in (:window_1, :window_2)
+    tb[elements(t, n)] .= h.burnthrough[n]
+end
+sol = solve(model, deposit(op, beams_at(9.4)); time = 9.4, burnthrough = tb)
+bal = energy_balance(sol)
+@printf(&quot;source %.1f TW: absorbed %.1f, entrance holes %.1f, windows transmit %.1f, gaps %.1f, lost %.1e\n&quot;,
+        bal.source, sum(values(bal.absorbed)), bal.escaped[:leh_top] + bal.escaped[:leh_bottom],
+        bal.transmitted[:window_1] + bal.transmitted[:window_2],
+        bal.escaped[:window_1_gap] + bal.escaped[:window_2_gap],
+        bal.source - sum(values(bal.absorbed)) - sum(values(bal.escaped)) - sum(values(bal.transmitted)))
+@printf(&quot;window loss from the history at 9.4 ns: %.1f TW\n&quot;, h.window_loss[findfirst(≈(9.4), h.time)])
+incident = sum(sol.H[e] * t.elem_area[e] for n in (:window_1, :window_2) for e in elements(t, n))
+@printf(&quot;incident on the windows %.1f TW, transmitted fraction %.6f (transmission %.6f)\n&quot;,
+        incident, (bal.transmitted[:window_1] + bal.transmitted[:window_2]) / incident,
+        BurnthroughAlbedo(thickness = 2.5).transmission)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">source 363.6 TW: absorbed 193.6, entrance holes 150.5, windows transmit 13.6, gaps 5.9, lost 1.6e-11
+window loss from the history at 9.4 ns: 19.6 TW
+incident on the windows 57.9 TW, transmitted fraction 0.235294 (transmission 0.235294)</code></pre><p>The accounting closes to round-off, and the burned-through windows transmit the fraction <span>$\mathcal{T}$</span> of the power on them.</p><h3 id="A-transmission-that-follows-the-drive"><a class="docs-heading-anchor" href="#A-transmission-that-follows-the-drive">A transmission that follows the drive</a><a id="A-transmission-that-follows-the-drive-1"></a><a class="docs-heading-anchor-permalink" href="#A-transmission-that-follows-the-drive" title="Permalink"></a></h3><p>The same pairs of windows without gaps, with the transmission following the temperature of the flux on each window element, against the constant transmission above. Each history is compared with the hohlraum without windows solved at its own times, with the measures of the table above:</p><pre><code class="language-julia hljs">function costs(h, b)
+    on_b(x) = x[indexin(h.time, b.time)]
+    return (; burnthrough = sum(h.burnthrough[:window_1]) / length(h.burnthrough[:window_1]),
+            energy = 100 * (integral(h, h.flux) / integral(b, b.flux) - 1),
+            loss = integral(h, h.window_loss),
+            P2 = 100 * (flux_weighted(h, P2(h)) - flux_weighted(b, P2(b))),
+            m2 = 100 * flux_weighted(h, m2(h)), Tr = peak_mean(h, h.Tr) - peak_mean(h, on_b(b.Tr)))
+end
+F0, op0 = shared[0.0]
+follows = Dict(x =&gt; history(RadiationModel(build(windows(x; transmission = RosselandTransmission())); F = F0),
+                            op0, times) for x in (1.7, 2.5, 3.6))
+base_follows = rebase([collect(values(follows)); [runs[(x, 0.0)] for x in (1.7, 2.5, 3.6)]])
+println(&quot;  Au    transmission   burnthrough  ΔTᵣ peak  capsule energy  window loss  ΔP₂ weighted  m=2 weighted&quot;)
+println(&quot; (µm)                    (ns)        (eV)       (%)            (kJ)&quot;)
+for x in (1.7, 2.5, 3.6), (label, h) in ((&quot;constant&quot;, runs[(x, 0.0)]), (&quot;follows Tᵣ&quot;, follows[x]))
+    c = costs(h, base_follows)
+    @printf(&quot; %.1f   %-12s    %5.2f      %+5.1f      %+5.1f         %5.0f        %+5.2f%%        %4.2f%%\n&quot;,
+            x, label, c.burnthrough, c.Tr, c.energy, c.loss, c.P2, c.m2)
+end
+@printf(&quot;wall Tᵣ at burnthrough: %s eV; at the peak %.0f eV\n&quot;,
+        join((@sprintf(&quot;%.0f&quot;, runs[(x, 0.0)].wall_Tr[findfirst(≥(costs(runs[(x, 0.0)], base).burnthrough),
+                                                                 runs[(x, 0.0)].time)])
+              for x in (1.7, 2.5, 3.6)), &quot;, &quot;), peak_mean(base, base.wall_Tr))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">  Au    transmission   burnthrough  ΔTᵣ peak  capsule energy  window loss  ΔP₂ weighted  m=2 weighted
+ (µm)                    (ns)        (eV)       (%)            (kJ)
+ 1.7   constant         4.77       -4.7       -5.4            58        +1.71%        1.30%
+ 1.7   follows Tᵣ       4.77       -4.4       -4.8            51        +1.49%        1.13%
+ 2.5   constant         6.34       -3.4       -3.7            40        +1.12%        0.86%
+ 2.5   follows Tᵣ       6.34       -3.2       -3.3            36        +1.01%        0.77%
+ 3.6   constant         7.05       -2.5       -2.3            24        +0.68%        0.52%
+ 3.6   follows Tᵣ       7.05       -2.3       -2.1            22        +0.62%        0.48%
+wall Tᵣ at burnthrough: 149, 227, 285 eV; at the peak 309 eV</code></pre><p>These windows burn through while the wall is at 150–285 eV, and even at the peak it stays near 310 eV, below the 325 eV the constant transmission is pinned at. The transmission that follows the drive therefore loses about a tenth less: the 1.7 µm pair&#39;s flux-weighted <span>$\Delta P_2$</span> drops from 1.71% to 1.49% and its capsule-energy cost from 5.4% to 4.8%, and the 3.6 µm pair&#39;s from 0.68% to 0.62% and 2.3% to 2.1%. The burnthrough times do not change: the transmission starts only once the front is through.</p><h3 id="Gaps-that-close"><a class="docs-heading-anchor" href="#Gaps-that-close">Gaps that close</a><a id="Gaps-that-close-1"></a><a class="docs-heading-anchor-permalink" href="#Gaps-that-close" title="Permalink"></a></h3><p>The 50 µm gaps above stay open through the pulse, but plasma blown off their gold walls fills them. <a href="../../reference/geometry/#Briareus.GapClosure"><code>GapClosure</code></a> makes a gap open (all the flux on it leaves) until a closure time and wall-like after it, across a 0.4 ns step; the closure time is an input this model does not compute. For the 2.5 µm pair with gaps closing at 3 ns (before the windows burn through) and at 7 ns (after):</p><pre><code class="language-julia hljs">closing_gap(tc) = Material(:Au; albedo = GapClosure(closure = tc), conversion = 0.8)
+gapped(tc) = build([WallWindow(; phi, diameter = 2.0, gap = 0.05, gap_material = closing_gap(tc),
+                               material = foil(2.5)) for phi in (78, 258)])
+Fg = RadiationModel(gapped(3.0); closed = true).F          # one geometry for both closures
+opg = DepositionOperator(gapped(3.0), quads)
+closes = Dict(tc =&gt; history(RadiationModel(gapped(tc); F = Fg), opg, times) for tc in (3.0, 7.0))
+base_closes = rebase([collect(values(closes)); runs[(2.5, 0.0)]; runs[(2.5, 0.05)]])
+println(&quot;  2.5 µm windows        ΔTᵣ peak  capsule energy  window loss  ΔP₂ weighted  m=2 weighted&quot;)
+for (label, h) in ((&quot;no gap&quot;, runs[(2.5, 0.0)]), (&quot;gap closing at 3 ns&quot;, closes[3.0]),
+                   (&quot;gap closing at 7 ns&quot;, closes[7.0]), (&quot;gap open throughout&quot;, runs[(2.5, 0.05)]))
+    c = costs(h, base_closes)
+    @printf(&quot;  %-20s   %+5.1f      %+5.1f          %5.0f        %+5.2f%%        %4.2f%%\n&quot;,
+            label, c.Tr, c.energy, c.loss, c.P2, c.m2)
+end</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">  2.5 µm windows        ΔTᵣ peak  capsule energy  window loss  ΔP₂ weighted  m=2 weighted
+  no gap                  -3.4       -3.7             40        +1.13%        0.86%
+  gap closing at 3 ns     -3.4       -3.7             40        +1.14%        0.85%
+  gap closing at 7 ns     -3.4       -4.1             44        +1.23%        0.92%
+  gap open throughout     -5.2       -5.7             58        +1.70%        1.28%</code></pre><p>A gap that closes at 3 ns costs nothing measurable beyond the windows: it leaks only during the picket and the foot. Closing at 7 ns, after the windows have burned through but before the peak, it adds 0.4% of capsule energy and 0.10% of <span>$P_2$</span>, a fifth of what a gap open throughout adds (2.0% and 0.57%). How long a gap stays open thus matters more than its width, and the open-gap rows of the first table are the bound.</p><h2 id="Restoring-the-drive-around-the-windows"><a class="docs-heading-anchor" href="#Restoring-the-drive-around-the-windows">Restoring the drive around the windows</a><a id="Restoring-the-drive-around-the-windows-1"></a><a class="docs-heading-anchor-permalink" href="#Restoring-the-drive-around-the-windows" title="Permalink"></a></h2><p>The windows take drive from the waist facing them: at the peak the 2.5 µm pair raises <span>$P_2$</span> by 1.2% and adds an <span>$m = 2$</span> of 0.9%. Cone pointing and power can restore <span>$P_2$</span>, but no cone setting can remove <span>$m = 2$</span>, which needs quads set apart. Two ways to set them: per-quad powers (NIF quads take their own pulse shapes), and per-quad pointing.</p><p>The optimizer needs a linear model of the capsule flux at the peak, with the windows burned through and the wall at its peak albedo. A <a href="../../reference/optimization/#Briareus.Scenario"><code>Scenario</code></a> with <code>albedo</code> set to a solution&#39;s converged albedos is exactly that: its flux response holds the albedos fixed, so it reproduces the solution it was taken from.</p><pre><code class="language-julia hljs">tpeak = 8.6
+w25 = runs[(2.5, 0.0)]
+twin = build(windows(2.5))
+burned = fill(NaN, nelements(twin))
+for n in (:window_1, :window_2)
+    burned[elements(twin, n)] .= w25.burnthrough[n]
+end
+win_model = RadiationModel(twin; F = F0)
+sol_win = solve(win_model, deposit(op0, beams_at(tpeak)); time = tpeak, burnthrough = burned)
+sol_base = solve(base_model, deposit(base_op, beams_at(tpeak)); time = tpeak)
+peak = beams_at(tpeak)
+quad_power = GroupPointing(peak; by = :quad, fields = (:power,))
+S_win = Scenario(twin, quad_power; observe = :capsule, time = tpeak, albedo = sol_win.albedo,
+                 viewfactor_kw = (; F = F0))
+S_base = Scenario(base_target, quad_power; observe = :capsule, time = tpeak,
+                  albedo = sol_base.albedo, viewfactor_kw = (; F = base_model.F))
+x0 = initial_parameters(quad_power)
+capsule = elements(twin, :capsule)
+a = legendre_moments(sol_win.H, twin, capsule; lmax = 2)
+@printf(&quot;P₂/P₀ at %.1f ns with windows: solve %+.6f%%, linearized scenario %+.6f%%\n&quot;, tpeak,
+        100 * a[3] / a[1], 100 * (b = flux_moments(evaluate(S_win, x0); lmax = 2); b[3] / b[1]))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">P₂/P₀ at 8.6 ns with windows: solve -10.861095%, linearized scenario -10.861095%</code></pre><p>The design without windows is the reference shape: the coefficients <span>$c_{lm}/c_{00}$</span> of its capsule flux at the peak. <a href="../../reference/optimization/#Briareus.asymmetry_objective-Tuple{}"><code>asymmetry_objective</code></a> with <code>reference</code> measures the departure from them for every <span>$(l, m)$</span> through <span>$l = 4$</span>, and <code>drive</code> holds the mean flux at the reference&#39;s. Each quad&#39;s power may change by 20%:</p><pre><code class="language-julia hljs">ref = flux_ylm(evaluate(S_base, x0))
+restore = asymmetry_objective(; modes = (1 =&gt; 1.0, 2 =&gt; 1.0, 3 =&gt; 1.0, 4 =&gt; 1.0), reference = ref,
+                              drive = ref[1] / sqrt(4π))
+lo, hi = bounds(quad_power, x0; power = 0.2)
+trim = optimize_pointing(S_win, restore; x0, lower = lo, upper = hi, iterations = 300)
+function departure(ev)
+    c = flux_ylm(ev; lmax = 4)
+    d = c ./ c[1] .- ref[1:length(c)] ./ ref[1]
+    return [100 * sqrt(sum(abs2, d[l^2+1:(l+1)^2])) for l in 1:4]
+end
+factors = trim.x ./ x0
+@printf(&quot;%s after %d iterations; quad powers ×%.2f–%.2f (%d at a limit), total ×%.3f\n&quot;,
+        trim.reason, trim.iterations, extrema(factors)..., count(f -&gt; abs(abs(f - 1) - 0.2) &lt; 1e-6, factors),
+        sum(trim.x) / sum(x0))
+for (label, ev) in ((&quot;as designed&quot;, evaluate(S_win, x0)), (&quot;quad powers&quot;, evaluate(S_win, trim.x)))
+    @printf(&quot;  %-12s  departure from the reference shape, l = 1–4: %s %%\n&quot;, label,
+            join((@sprintf(&quot;%.3f&quot;, d) for d in departure(ev)), &quot;, &quot;))
+end
+for g in (:inner23, :inner30, :outer44, :outer50)
+    f = factors[[b.group === g for b in peak]]
+    @printf(&quot;  %-8s quads ×%.3f on average (%.2f–%.2f)\n&quot;, g, sum(f) / length(f), extrema(f)...)
+end</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">converged after 137 iterations; quad powers ×0.80–1.20 (36 at a limit), total ×1.039
+  as designed   departure from the reference shape, l = 1–4: 0.001, 1.103, 0.003, 0.149 %
+  quad powers   departure from the reference shape, l = 1–4: 0.002, 0.077, 0.013, 0.190 %
+  inner23  quads ×1.082 on average (0.91–1.20)
+  inner30  quads ×1.167 on average (1.07–1.20)
+  outer44  quads ×0.999 on average (0.80–1.20)
+  outer50  quads ×0.993 on average (0.80–1.20)</code></pre><p>The trim moves power to the inner cones, as the cold waist needs (the 30° cone by 17%), and spreads the quads within each cone over the whole ±20%. It brings the <span>$l = 2$</span> departure from 1.10% to 0.07% and keeps <span>$l = 1$</span> and <span>$l = 3$</span> below 0.02%, but not <span>$l = 4$</span>, which stays near 0.15–0.19%: these windows&#39; <span>$l = 4$</span> pattern is out of reach of quad powers within the limits. Pointing can do the same: below, the quads are re-pointed at fixed power, up to 0.3 mm in <span>$z$</span> and along the wall (<code>phi</code>). The windows and the NIF ports share the 180° rotation about the axis, so each quad moves with its partner across the axis, and the entrance-hole and capsule keep-outs hold.</p><pre><code class="language-julia hljs">partner(b) = (b.group, sign(b.port[3]), round(Int, mod(port_angles(b)[2], 180)))
+pairs = GroupPointing(peak; by = partner, fields = (:z, :phi), mirror = false)
+S_pairs = subset(S_win, eachindex(peak); parameterization = pairs)
+xp = initial_parameters(pairs)
+lo, hi = bounds(pairs, xp; z = 0.3, phi = 0.3)
+shape_only = asymmetry_objective(; modes = (1 =&gt; 1.0, 2 =&gt; 1.0, 3 =&gt; 1.0, 4 =&gt; 1.0), reference = ref,
+                                 keepout = (ApertureKeepOut(twin), SphereKeepOut(twin)))
+repoint = optimize_pointing(S_pairs, shape_only; x0 = xp, lower = lo, upper = hi, iterations = 200)
+moves = reshape(repoint.x .- xp, 2, :)
+@printf(&quot;%d quad pairs re-pointed: rms %.0f µm in z, %.0f µm along the wall (largest %.0f, %.0f)\n&quot;,
+        size(moves, 2), 1e3 * sqrt(sum(abs2, moves[1, :]) / size(moves, 2)),
+        1e3 * sqrt(sum(abs2, moves[2, :]) / size(moves, 2)), 1e3 .* maximum(abs, moves; dims = 2)...)
+ev = evaluate(S_pairs, repoint.x)
+@printf(&quot;  re-pointed    departure from the reference shape, l = 1–4: %s %%; mean flux %+.1f%%\n&quot;,
+        join((@sprintf(&quot;%.3f&quot;, d) for d in departure(ev)), &quot;, &quot;), 100 * (flux_ylm(ev)[1] / ref[1] - 1))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">24 quad pairs re-pointed: rms 159 µm in z, 109 µm along the wall (largest 300, 219)
+  re-pointed    departure from the reference shape, l = 1–4: 0.001, 0.012, 0.006, 0.148 %; mean flux -3.5%</code></pre><p>Moves of 0.11–0.15 mm rms (two to three times NIF&#39;s 50 µm rms pointing specification, the largest 0.29 mm) restore <span>$l = 1$</span>–<span>$3$</span> to 0.02%, better than the powers, and leave the same <span>$l = 4$</span>; pointing alone cannot give back the 3.4% of drive the windows take.</p><p>Both settings were found at the peak, with the windows burned through. Before they burn through, the windows cost nothing, and a trim that is on throughout the pulse then makes the asymmetry it was meant to remove. NIF can set each quad&#39;s pulse shape, so the power trim can instead come on with the burnthrough, across the windows&#39; 0.4 ns transition; pointing cannot change during the shot. The four designs through the pulse, against the hohlraum without windows:</p><pre><code class="language-julia hljs">tb_mean = sum(w25.burnthrough[:window_1]) / length(w25.burnthrough[:window_1])
+switch(τ) = (x = clamp((τ - tb_mean) / 0.4, 0, 1); x^2 * (3 - 2x))
+repointed = apply(pairs, repoint.x)
+designs = [&quot;as designed&quot; =&gt; beams_at,
+           &quot;quad powers throughout&quot; =&gt; τ -&gt; [remake(b; power = b.power * f)
+                                             for (b, f) in zip(beams_at(τ), factors)],
+           &quot;quad powers at burnthrough&quot; =&gt; τ -&gt; [remake(b; power = b.power * (1 + switch(τ) * (f - 1)))
+                                                 for (b, f) in zip(beams_at(τ), factors)],
+           &quot;re-pointed&quot; =&gt; τ -&gt; with_pulses(repointed, pulse, τ)]
+restored = Dict(label =&gt; drive_history(win_model, op0, f, times; lmax = 6, ylm = true, transition = 0.05,
+                                               wall_history = false)
+                for (label, f) in designs)
+base_restored = rebase(values(restored))
+fig = Figure(size = (820, 380))
+axP = Axis(fig[1, 1], xlabel = &quot;time (ns)&quot;, ylabel = &quot;ΔP₂/P₀ (%)&quot;, title = &quot;Change in P₂ from no windows&quot;)
+axM = Axis(fig[1, 2], xlabel = &quot;time (ns)&quot;, ylabel = &quot;|c₂,±₂|/c₀₀ (%)&quot;, title = &quot;m = 2 amplitude&quot;)
+hlines!(axP, [0.0], color = :black)
+vspan!(axP, tb_mean, tb_mean + 0.4, color = (:gray, 0.2))
+vspan!(axM, tb_mean, tb_mean + 0.4, color = (:gray, 0.2))
+for ((label, _), color) in zip(designs, palette)
+    h = restored[label]
+    lines!(axP, h.time, 100 .* (P2(h) .- P2(base_restored)[indexin(h.time, base_restored.time)]); color, label)
+    lines!(axM, h.time, 100 .* m2(h); color, label)
+end
+xlims!(axP, 4, 10); xlims!(axM, 4, 10)
+Legend(fig[2, 1:2], axP, orientation = :horizontal, framevisible = false, nbanks = 2)
+fig</code></pre><img src="ee66403c.png" alt="Example block output"/><pre><code class="language-julia hljs">span_mean(h, x, a, b) = (w = weights(h.time) .* (a .&lt;= h.time .&lt;= b); sum(w .* x) / sum(w))
+println(&quot;  design                      laser    ΔTᵣ      ΔP₂ (%)                    m=2 (%)&quot;)
+println(&quot;                              energy   peak     before  peak  weighted    before  peak  weighted&quot;)
+for (label, f) in designs
+    h = restored[label]
+    c = costs(h, base_restored)
+    energy = integral(h, h.delivered) / integral(base_restored, base_restored.delivered) - 1
+    dP2 = 100 .* (P2(h) .- P2(base_restored)[indexin(h.time, base_restored.time)])
+    @printf(&quot;  %-26s  %+5.1f%%   %+5.1f    %+5.2f  %+5.2f   %+5.2f       %4.2f  %4.2f   %4.2f\n&quot;,
+            label, 100 * energy, c.Tr, span_mean(h, dP2, 5.0, tb_mean), peak_mean(h, dP2), c.P2,
+            100 * span_mean(h, m2(h), 5.0, tb_mean), 100 * peak_mean(h, m2(h)), c.m2)
+end</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">  design                      laser    ΔTᵣ      ΔP₂ (%)                    m=2 (%)
+                              energy   peak     before  peak  weighted    before  peak  weighted
+<span class="sgr33"><span class="sgr1">┌ Warning: </span></span>Assignment to `h` in soft scope is ambiguous because a global variable by the same name exists: `h` will be treated as a new local. Disambiguate by using `local h` to suppress this warning or `global h` to assign to the existing global variable.
+<span class="sgr33"><span class="sgr1">└ </span></span><span class="sgr90">@ diagnostic_windows.md:793</span>
+  as designed                  -0.0%    -3.4    -0.02  +1.22   +1.13       0.04  0.93   0.86
+  quad powers throughout       +3.9%    +0.2    -1.31  +0.14   +0.03       1.13  0.03   0.10
+  quad powers at burnthrough   +3.3%    +0.2    -0.02  +0.14   +0.11       0.04  0.03   0.03
+  re-pointed                   +0.0%    -2.8    -1.47  -0.01   -0.13       1.18  0.03   0.12</code></pre><p>(&quot;Before&quot; is from 5 ns to the burnthrough.) The settings that act throughout overshoot before burnthrough: the trimmed powers and the re-pointed quads drive the waist the windows will cool while they are still intact, so <span>$P_2$</span> falls by 1.3–1.5% and an <span>$m = 2$</span> of 1.1–1.2% in the opposite phase appears until the windows open, which the flux-weighted averages largely hide. Switched on with the burnthrough, the trimmed powers keep <span>$P_2$</span> and <span>$m = 2$</span> at the no-window values before it (−0.02% and 0.04%) and hold <span>$m = 2$</span> at 0.03% after it; the 0.13% of <span>$P_2$</span> left at the peak is what the ±20% limits leave (the <span>$l = 2$</span> departure above). The trims cost 3.3–3.9% more laser energy, the drive the windows take. The switch time comes from this model&#39;s heat front, so it inherits the front&#39;s uncertainty (about 0.2 ns against the Nova data, above).</p><h2 id="What-a-gray-view-factor-model-leaves-out"><a class="docs-heading-anchor" href="#What-a-gray-view-factor-model-leaves-out">What a gray view-factor model leaves out</a><a id="What-a-gray-view-factor-model-leaves-out-1"></a><a class="docs-heading-anchor-permalink" href="#What-a-gray-view-factor-model-leaves-out" title="Permalink"></a></h2><p>The model gives the geometry of the loss exactly, but its physics after burnthrough is the gray estimate above. The foil is planar and steady. Its mean free path follows the temperature only through the opacity fit&#39;s <span>$T^{1.5}$</span>, at a density held at the assumed expansion, and the fit is extrapolated from 100–200 eV. The open hole, <code>after = 0</code>, bounds the loss from above. The heated backing absorbs part of what the gold transmits and radiates part back; here all of it is lost. A closing gap needs its closure time from elsewhere (a hydrodynamic estimate or a measurement). The restored designs are linear about the peak; they hold the no-window shape in the quasi-static histories, which use the full temperature-dependent albedos. The view-factor model also has no capsule hydrodynamics: it gives flux asymmetries, not the shape they imprint.</p><h2 id="What-this-checks"><a class="docs-heading-anchor" href="#What-this-checks">What this checks</a><a id="What-this-checks-1"></a><a class="docs-heading-anchor-permalink" href="#What-this-checks" title="Permalink"></a></h2><ul><li>A circular window and its gap have the areas <span>$\pi d^2/4$</span> and <span>$\pi[(d/2 + g)^2 - (d/2)^2]$</span> to round-off. The equal-area edge polygon and the exact curved areas of triangles on the cylinder make them exact, and wall, windows and gaps tile the cylinder exactly.</li><li>The integrated heat front reproduces the constant-temperature closed form to round-off. For ramps it agrees with the exact self-similar solutions of Hammer and Rosen to 2.2% and of Shussman and Heizler to 0.7%, and with Hammer and Rosen&#39;s simulated ablated mass. The cause of the residual is identified.</li><li>Over 0.8–3 µm, the heat front and the transition width reproduce the measured burnthrough times of gold foils on a 260 eV hohlraum wall to within the scatter of the data. A constant-temperature estimate does not.</li><li>The thin-foil energy accounting closes to round-off at a single time, the burned-through windows transmit the fraction <span>$\mathcal{T} = 4/(3\tau + 2)$</span> of the power on them to round-off, and the accounting agrees with the window loss the drive history tracks.</li><li>A pair of windows related by the 180° rotation about the axis adds no odd-<span>$m$</span> harmonics.</li><li>The temperature-following transmission equals the constant one at its 325 eV reference, and Hammer and Rosen&#39;s gold opacity fit puts the 2.5 µm foil at <span>$\tau = 5.9$</span> there, within 20% of the <span>$\tau \sim 5$</span> of Lester et al.</li><li>A scenario linearized about the peak solution&#39;s albedos reproduces that solution&#39;s <span>$P_2$</span> to round-off.</li></ul><p>The test suite (<code>test/windows.jl</code>, <code>test/burnthrough.jl</code>) adds seven more checks. The view-factor rows of a windowed hohlraum close as well as those without windows. Reciprocity holds. Each window element&#39;s burnthrough time in the drive history matches the standalone estimate from that element&#39;s own temperature history. Once a window has burned through, the drive history sends exactly the fraction <span>$\mathcal{T}$</span> of the power on it to <code>transmitted</code>. A history refined through the transitions follows a uniformly fine one five times more closely than the unrefined steps do. The temperature-following transmission of each burned-through element is the one for its own converged temperature. An open <code>GapClosure</code> gap matches the open (aperture) gap, a closed one the wall, and halfway closed it transmits half the power on it.</p><hr/><p><em>This page was generated using <a href="https://github.com/fredrikekre/Literate.jl">Literate.jl</a>.</em></p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../dropped_bundle/">« Freeing a bundle for radiography</a><a class="docs-footer-nextpage" href="../beam_errors/">Pointing and power errors »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.19.0 on <span class="colophon-date" title="Friday 30 October 2026 22:32">Friday 30 October 2026</span>. Using Julia version 1.13.3.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
