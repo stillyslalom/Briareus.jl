@@ -1,0 +1,25 @@
+# NIF Dante 2: θ 64°, φ 350°, a shallow view of the upper entrance hole (Rubery et al.,
+# RSI 2023 §II; port P64-350, NIF User Guide 2024-09 Table 5-1). Its channel set and solid
+# angles are not public (16 channels set up like Dante 1 in 2009, Fournier et al. 2010; "like
+# Dante 1 but missing several 3–5 keV channels" in 2012–14, May et al. 2015; normalized
+# responses only in Opachich et al. 2021 Fig. 5): supply [[channel]] tables in a file that
+# extends this one.
+
+schema = 1
+id = "nif_dante2"
+name = "NIF Dante 2"
+kind = "xray_power"
+facility = "NIF"
+public = true
+source = "Rubery et al., RSI (2023) §II"
+confidence = "H"
+
+[line_of_sight]
+theta_deg = 64.0
+phi_deg = 350.0
+
+[view]
+through = "leh_top"
+
+[recording]
+mode = "history"

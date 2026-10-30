@@ -1,0 +1,146 @@
+# Omega Dante as configured at the time of Rubery et al., RSI (2023), OSTI 1975922, Fig. 13
+# (channels 1 and 2 then offline), read from the page image. Public: filters, mirrors,
+# XRD cathodes, nominal energies, XRD apertures (ch 1 10.5 mm, ch 2–4 8.3 mm, ch 5–18
+# 13.2 mm) and the port. Not public: the standoff, so no solid angles (Ω = aperture area /
+# standoff²): supply solid_angle_sr in a file that extends this one. Mirrors (carbon,
+# beryllium) as uncalibrated Fresnel mirrors; the XRD cathodes as NIF's XRD-31 model
+# (assumed). The hohlraum axis on Omega is P6–P7 or P5–P8 (37.37° to this line of
+# sight, May et al. 2012), not the chamber's z axis: place the target accordingly.
+
+schema = 1
+id = "omega_dante"
+name = "Omega Dante"
+kind = "xray_power"
+facility = "Omega"
+public = true
+source = "Rubery et al., RSI (2023), OSTI 1975922, Fig. 13 and §IV"
+confidence = "H"
+
+[line_of_sight]
+theta_deg = 142.62
+phi_deg = 126.0
+source = "Rubery et al. (2023) §IV: port H16I"
+
+[view]
+through = "leh_bottom"
+
+[recording]
+mode = "history"
+
+[[channel]]
+number = 1
+energy_eV = 60
+filters = [{ material = "Al", thickness_um = 1.5 }]
+mirror = { kind = "fresnel", material = "C", angle_deg = 7.0 }
+cathode = "Cr"
+note = "offline (2023); aperture 10.5 mm"
+
+[[channel]]
+number = 2
+energy_eV = 170
+filters = [{ material = "B", thickness_um = 0.4 }, { material = "lexan", thickness_um = 0.8 }]
+mirror = { kind = "fresnel", material = "C", angle_deg = 5.0 }
+cathode = "Al"
+note = "offline (2023); aperture 8.3 mm"
+
+[[channel]]
+number = 3
+energy_eV = 270
+filters = [{ material = "lexan", thickness_um = 4 }]
+mirror = { kind = "fresnel", material = "Be", angle_deg = 3.5 }
+cathode = "Al"
+note = "aperture 8.3 mm"
+
+[[channel]]
+number = 4
+energy_eV = 490
+filters = [{ material = "V", thickness_um = 2 }]
+mirror = { kind = "fresnel", material = "C", angle_deg = 2.5 }
+cathode = "Al"
+note = "aperture 8.3 mm"
+
+[[channel]]
+number = 5
+energy_eV = 790
+filters = [{ material = "Co", thickness_um = 1.4 }, { material = "lexan", thickness_um = 0.2 }]
+cathode = "Cr"
+
+[[channel]]
+number = 6
+energy_eV = 940
+filters = [{ material = "Cu", thickness_um = 1.2 }]
+grid = 0.088
+cathode = "Cr"
+
+[[channel]]
+number = 7
+energy_eV = 1020
+filters = [{ material = "Zn", thickness_um = 1.3 }, { material = "CH", thickness_um = 0.2 }]
+grid = 0.088
+cathode = "Ni"
+
+[[channel]]
+number = 8
+energy_eV = 1250
+filters = [{ material = "Mg", thickness_um = 11 }]
+cathode = "Ni"
+
+[[channel]]
+number = 9
+energy_eV = 1400
+filters = [{ material = "Al", thickness_um = 10 }]
+cathode = "Al"
+
+[[channel]]
+number = 10
+energy_eV = 1700
+filters = [{ material = "Si", thickness_um = 20 }]
+cathode = "Al"
+
+[[channel]]
+number = 11
+energy_eV = 3500
+filters = [{ material = "Fe", thickness_um = 1 }, { material = "Cr", thickness_um = 0.65 }, { material = "parylene", thickness_um = 5 }]
+cathode = "Al"
+
+[[channel]]
+number = 12
+energy_eV = 2150
+filters = [{ material = "saran", thickness_um = 75 }]
+cathode = "Al"
+
+[[channel]]
+number = 13
+energy_eV = 2920
+filters = [{ material = "Ag", thickness_um = 5.0 }]
+cathode = "Al"
+
+[[channel]]
+number = 14
+energy_eV = 4000
+filters = [{ material = "Ti", thickness_um = 22 }]
+cathode = "Ni"
+
+[[channel]]
+number = 15
+energy_eV = 5300
+filters = [{ material = "Mn", thickness_um = 30 }]
+cathode = "Ni"
+
+[[channel]]
+number = 16
+energy_eV = 6150
+filters = [{ material = "Fe", thickness_um = 30 }]
+cathode = "Ni"
+
+[[channel]]
+number = 17
+energy_eV = 8400
+filters = [{ material = "Zn", thickness_um = 50 }]
+cathode = "Ni"
+
+[[channel]]
+number = 18
+energy_eV = 15000
+filters = [{ material = "Al", thickness_um = 250 }]
+cathode = "Ni"

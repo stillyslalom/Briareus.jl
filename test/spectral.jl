@@ -392,6 +392,25 @@ using Briareus: RadiationSolution, _planck_tail, _channel_matrix, _color_tempera
         @test dante(side, sol_of(lone)).intensity == 0
         @test dante(DanteView(0, 0; through = nothing, field_of_view = D, pixels = 400, center = :emitter),
                     sol_of(lone)).intensity ≈ clip.intensity rtol = 1e-2
+
+        # Tr over the closing hole (`area = :open`, the lip's open fraction at the solution)
+        # and over a measured area history (at the solution's time)
+        tl = hohlraum(; length = 10.1, radius = 2.875, leh_radius = 1.6, capsule_radius = 0.9,
+                      h = 0.9, capsule_h = 0.45, leh_closure = GapClosure(closure = 5.0), leh_open_radius = 1.2)
+        nl = nelements(tl)
+        Bl = [c.kind === :aperture ? 0.0 : SIGMA_SB * T0^4 for c in tl.components[tl.elem_comp]]
+        τ = zeros(nl)
+        τ[elements(tl, :leh_bottom_lip)] .= 0.5
+        zl = zeros(nl)
+        soll = RadiationSolution(RadiationModel(tl; F = zeros(nl, nl)), zl, zl, Bl, zl, zl, zl, τ, 3.0)
+        ref, open = dante(dante1(), soll), dante(dante1(area = :open), soll)
+        Ao, Al = (sum(tl.elem_area[elements(tl, c)]) for c in (:leh_bottom, :leh_bottom_lip))
+        @test open.area ≈ Ao + 0.5Al rtol = 1e-12
+        @test open.Tr == ref.Tr_open && open.intensity == ref.intensity
+        hist = dante(dante1(area = TabulatedCurve([0.0, 10.0], [20.0, 10.0])), soll)  # 17 mm² at 3 ns
+        @test hist.area ≈ 17.0 rtol = 1e-12
+        @test hist.Tr ≈ ref.Tr * (ref.area / 17.0)^0.25 rtol = 1e-12
+        @test_throws ArgumentError DanteView(0, 0; through = nothing, field_of_view = 10.0, area = :open)
     end
 
     @testset "drive history record" begin

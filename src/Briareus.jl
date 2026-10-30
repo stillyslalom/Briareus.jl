@@ -81,7 +81,8 @@ export kshell_line_energy, kshell_ce_data, kshell_ce_model, KShellCEModel, kshel
 export planck_fraction, planck_fractions, spectral_edges, MBandEmission, mband_conversion,
        nif_mband, mband_power, mband_albedo, MBandSplit, SpectralSolution, spectral_solve, ngroups, band_flux,
        mband_recirculation, DanteChannel, dante1_channels, DanteView, dante1, dante2, dante, visible_area,
-       AbstractDanteChannel, DanteResponse, dante1_responses, xrd_sensitivity, dante_unfold, sentinel
+       AbstractDanteChannel, DanteResponse, GrazingMirror, dante1_responses, xrd_sensitivity, dante_unfold,
+       sentinel
 export GroupPointing, nparams, parameter_names, initial_parameters, parameters, apply, bounds,
        Scenario, Evaluation, evaluate, subset, flux_ylm, asymmetry_objective, influence_matrix,
        clipped_fraction, missed_fraction, power_fraction,

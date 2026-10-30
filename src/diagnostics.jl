@@ -237,13 +237,12 @@ function _merge(parent::AbstractDict, child::AbstractDict)
 end
 
 # keys that exclude each other: a file that gives one drops the other it inherits
-const _EXCLUSIVE_KEYS = (("area_mm2", "area_part"), ("center_part", "center_mm"))
+const _EXCLUSIVE_KEYS = (("area_mm2", "area_part", "area_open", "area_history_csv"), ("center_part", "center_mm"))
 
 function _merge_table(a::AbstractDict, b::AbstractDict)
     out = deepcopy(Dict{String,Any}(a))
-    for (x, y) in _EXCLUSIVE_KEYS
-        haskey(b, x) && delete!(out, y)
-        haskey(b, y) && delete!(out, x)
+    for group in _EXCLUSIVE_KEYS
+        any(k -> haskey(b, k), group) && foreach(k -> haskey(b, k) || delete!(out, k), group)
     end
     for (k, v) in b
         out[k] = v isa AbstractDict && get(out, k, nothing) isa AbstractDict ? _merge_table(out[k], v) : deepcopy(v)
@@ -567,13 +566,16 @@ const _FILTER_SPEC = Dict(
     "transmission_csv" => DiagnosticField(String; doc = "measured transmission (energy eV, fraction)"))
 
 const _MIRROR_SPEC = Dict(
-    "kind" => DiagnosticField(String; doc = "SiO2 (grazing incidence) or mlm (Rubery 2023's Cr/Sc multilayer)"),
+    "kind" => DiagnosticField(String; doc = "SiO2 (calibrated), mlm (Rubery 2023's multilayer) or fresnel"),
     "angle_deg" => DiagnosticField(Real; doc = "grazing angle, degrees"),
+    "material" => DiagnosticField(String; doc = "a fresnel mirror's material, e.g. C, Be, B4C"),
+    "roughness_nm" => DiagnosticField(Real; doc = "a fresnel mirror's rms roughness; default 0"),
+    "density_g_cm3" => DiagnosticField(Real; doc = "a fresnel mirror's density; default the material's"),
     "reflectivity_csv" => DiagnosticField(String; doc = "measured reflectivity (energy eV, fraction)"))
 
 const _CHANNEL_SPEC = Dict(
     "number" => DiagnosticField(Integer; required = true),
-    "energy_eV" => DiagnosticField(Real; required = true, doc = "nominal band energy"),
+    "energy_eV" => DiagnosticField(Real; doc = "nominal band energy; default the response's peak"),
     "solid_angle_sr" => DiagnosticField(Real; required = true),
     "filters" => DiagnosticField([_FILTER_SPEC]),
     "grid" => DiagnosticField(Real; doc = "open fraction of the grid or sieve; default 1"),
@@ -593,7 +595,9 @@ const _XRAY_POWER_SPEC = Dict(
         "center_part" => DiagnosticField(String; doc = "the field's center: a part's centroid"),
         "center_mm" => DiagnosticField(Vector{Real}; doc = "the field's center: x, y, z"),
         "area_mm2" => DiagnosticField(Real; doc = "the area Tr is quoted over; default the aperture's"),
-        "area_part" => DiagnosticField(String; doc = "Tr over this part's visible projected area"))),
+        "area_part" => DiagnosticField(String; doc = "Tr over this part's visible projected area"),
+        "area_open" => DiagnosticField(Bool; doc = "Tr over the hole's open area at each time (its closure)"),
+        "area_history_csv" => DiagnosticField(String; doc = "Tr over a measured area history (time ns, mm²)"))),
     "recording" => DiagnosticField(Dict(
         "mode" => DiagnosticField(String; doc = "history (a voltage history per channel)"))),
     "channel" => DiagnosticField([_CHANNEL_SPEC]; required = true),
@@ -611,13 +615,13 @@ function _channel(c::AbstractDict)
     n = c["number"]
     key(k) = "channel[$n].$k"
     Ω = Float64(c["solid_angle_sr"])
-    E0 = c["energy_eV"]
+    E0 = get(c, "energy_eV", NaN)
     if haskey(c, "response_csv")
         for k in ("filters", "grid", "mirror", "cathode", "sensitivity_csv")
             haskey(c, k) && throw(_KeyedError(key(k), "a channel with response_csv takes no $k"))
         end
-        return DanteResponse(n, E0; solid_angle = Ω,
-                             response = _curve(c["response_csv"], key("response_csv"); extrapolate = :zero))
+        return _peak_energy(DanteResponse(n, E0; solid_angle = Ω,
+                                          response = _curve(c["response_csv"], key("response_csv"); extrapolate = :zero)))
     end
     filters = Pair{Symbol,Any}[]
     tables = TabulatedCurve[]
@@ -650,11 +654,26 @@ function _channel(c::AbstractDict)
             (haskey(m, "kind") && haskey(m, "angle_deg")) ||
                 throw(_KeyedError(key("mirror"), "give kind and angle_deg, or reflectivity_csv"))
             k = Symbol(m["kind"])
-            k in (:SiO2, :mlm) || throw(_KeyedError(key("mirror.kind"), "SiO2 or mlm (or reflectivity_csv)"))
+            k in (:SiO2, :mlm, :fresnel) ||
+                throw(_KeyedError(key("mirror.kind"), "SiO2, mlm or fresnel (or reflectivity_csv)"))
+            k === :fresnel || all(x -> !haskey(m, x), ("material", "roughness_nm", "density_g_cm3")) ||
+                throw(_KeyedError(key("mirror"), "material, roughness_nm and density_g_cm3 belong to a fresnel mirror"))
             k === :mlm && m["angle_deg"] != 1.9 &&
                 throw(_KeyedError(key("mirror.angle_deg"),
                                   "the mlm reflectivity is Rubery 2023 Fig. 8a at 1.9°; give reflectivity_csv for another"))
-            mirror = (k, Float64(m["angle_deg"]))
+            if k === :fresnel
+                haskey(m, "material") || throw(_MissingValue(key("mirror.material"), "a fresnel mirror's material"))
+                mat = Symbol(m["material"])
+                try
+                    _composition(mat)
+                catch e
+                    throw(_KeyedError(key("mirror.material"), sprint(showerror, e)))
+                end
+                mirror = GrazingMirror(mat, m["angle_deg"]; roughness = get(m, "roughness_nm", 0.0),
+                                       density = get(m, "density_g_cm3", nothing))
+            else
+                mirror = (k, Float64(m["angle_deg"]))
+            end
         end
     end
     if haskey(c, "sensitivity_csv")
@@ -668,8 +687,13 @@ function _channel(c::AbstractDict)
     end
     g = Float64(get(c, "grid", 1.0))
     0 < g <= 1 || throw(_KeyedError(key("grid"), "an open fraction in (0, 1]"))
-    return DanteResponse(n, E0; filters, grid = g, mirror, cathode, solid_angle = Ω, tables)
+    return _peak_energy(DanteResponse(n, E0; filters, grid = g, mirror, cathode, solid_angle = Ω, tables))
 end
+
+# a channel without a nominal energy takes its response's peak
+_peak_energy(c::DanteResponse) =
+    isnan(c.energy) ? DanteResponse(c.number, c.E[argmax(c.R)], c.filters, c.tables, c.grid, c.mirror, c.cathode,
+                                    c.response, c.solid_angle, c.E, c.R) : c
 
 # channels built once per content (the responses take ~0.1 s per channel set)
 const _CHANNEL_CACHE = Dict{UInt,Vector{DanteResponse}}()
@@ -694,8 +718,9 @@ function _build_xray_power(def::DiagnosticDefinition; kwargs...)
     mode == "history" || throw(_KeyedError("recording.mode", "xray_power records a history"))
     cs = get(d, "channel", Any[])
     isempty(cs) && throw(_MissingValue("channel", "no channels: supply [[channel]] tables (extend \"$(def.id)\")"))
-    for (x, y) in (("area_mm2", "area_part"), ("center_part", "center_mm"))
-        haskey(v, x) && haskey(v, y) && throw(_KeyedError("view." * y, "give $x or $y, not both"))
+    for group in _EXCLUSIVE_KEYS
+        given = [k for k in group if haskey(v, k)]
+        length(given) > 1 && throw(_KeyedError("view." * given[end], "give one of " * join(group, ", ")))
     end
     fov = haskey(v, "field_of_view_mm") ? Float64(v["field_of_view_mm"]) : nothing
     fov === nothing && (haskey(v, "center_part") || haskey(v, "center_mm")) &&
@@ -710,7 +735,11 @@ function _build_xray_power(def::DiagnosticDefinition; kwargs...)
     # entrance hole); with one, `through` is only the reference for Tr
     through = haskey(v, "through") ? Symbol(v["through"]) : fov === nothing ? :leh_bottom : nothing
     area = haskey(v, "area_mm2") ? Float64(v["area_mm2"]) :
-           haskey(v, "area_part") ? Symbol(v["area_part"]) : nothing
+           haskey(v, "area_part") ? Symbol(v["area_part"]) :
+           get(v, "area_open", false) ? :open :
+           haskey(v, "area_history_csv") ? _curve(v["area_history_csv"], "view.area_history_csv") : nothing
+    area === :open && through === nothing &&
+        throw(_KeyedError("view.area_open", "the open area is that of `through`; give through"))
     kw = (; through, pixels = Int(get(v, "pixels", 400)), channels = _channels(cs), area,
           field_of_view = fov, center)
     return DanteView(los["theta_deg"], los["phi_deg"]; merge(kw, values(kwargs))...)

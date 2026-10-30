@@ -323,7 +323,8 @@ const _FILTER_DENSITY = Dict(:Be => 1.848, :Al => 2.699, :Ti => 4.54, :Fe => 7.8
                              :Mo => 10.22, :Ta => 16.65, :mylar => 1.38, :kapton => 1.42,
                              :polyethylene => 0.93, :Mg => 1.738, :Si => 2.329, :V => 6.11,
                              :Cr => 7.19, :Co => 8.90, :Ni => 8.908, :Zn => 7.134, :Ag => 10.49,
-                             :Au => 19.32)
+                             :Au => 19.32, :B => 2.34, :Sc => 2.985, :Mn => 7.3, :Ge => 5.323,
+                             :Y => 4.472, :C => 2.2)   # the last six: handbook values; C as graphite (assumed)
 
 """
     mass_attenuation(material, hν; table = :auto) -> cm²/g
@@ -337,9 +338,10 @@ Mass attenuation coefficient μ/ρ of a filter `material` at photon energy `hν`
   exactly on an edge takes the value above it); between the tables' 1–5 keV spaced
   energies good to a few percent away from edges.
 - `table = :henke`: photoabsorption from Henke's f₂ ([`henke_mass_attenuation`](@ref),
-  0.01–30 keV), for the elements H, Be, C, N, O, Mg, Al, Si, Cl, Ti, V, Cr, Fe, Co, Ni,
-  Cu, Zn, Ag, Au and the compounds `:CH`, `:lexan`, `:parylene`, `:parylene_c`,
-  `:saran`, `:polyimide` (= `:kapton`), `:mylar`, `:polyethylene`, `:SiO2`.
+  0.01–30 keV), for the elements H, B, Be, C, N, O, F, Mg, Al, Si, Cl, Ca, Sc, Ti, V,
+  Cr, Mn, Fe, Co, Ni, Cu, Zn, Ge, Y, Mo, Ag, Au and the compounds `:CH`, `:lexan`,
+  `:parylene`, `:parylene_c`, `:saran`, `:polyimide` (= `:kapton`), `:mylar`,
+  `:polyethylene`, `:SiO2`, `:CaF2`, `:B4C`.
 - `table = :auto` (default): NIST where it covers the material and energy, Henke
   elsewhere (so the backlighter filters keep NIST's values).
 """
@@ -366,9 +368,10 @@ Transmission `exp(−Σ (μ/ρ) ρ t)` at normal incidence through `filters`, a 
 materials and μ/ρ are those of [`mass_attenuation`](@ref) (`table` passed on); the
 densities are Be 1.848, Al 2.699, Ti 4.54, Fe 7.874, Cu 8.96, Mo 10.22, Ta 16.65, Mylar
 1.38, Kapton 1.42, polyethylene 0.93, Mg 1.738, Si 2.329, V 6.11, Cr 7.19, Co 8.90, Ni
-8.908, Zn 7.134, Ag 10.49 and Au 19.32 g/cm³; the other compounds of
-[`henke_mass_attenuation`](@ref) carry CH 1.05, Lexan 1.20, parylene (N) 1.11, Saran
-1.70 and SiO₂ 2.2 g/cm³ (CH, parylene and Saran densities assumed). Pass
+8.908, Zn 7.134, Ag 10.49, Au 19.32, B 2.34, Sc 2.985, Mn 7.3, Ge 5.323, Y 4.472 and C
+2.2 (graphite, assumed) g/cm³; the other compounds of [`henke_mass_attenuation`](@ref)
+carry CH 1.05, Lexan 1.20, parylene (N) 1.11, Saran 1.70, SiO₂ 2.2, CaF₂ 3.18 and B₄C
+2.52 g/cm³ (CH, parylene and Saran densities assumed). Pass
 `material => (thickness, density)` to override a density.
 """
 function filter_transmission(filters, hν::Real; table::Symbol = :auto)

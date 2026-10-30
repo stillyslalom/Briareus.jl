@@ -43,9 +43,9 @@ The kind `xray_power` (Dante, Sentinel) takes:
 | Table | Keys |
 |---|---|
 | `[line_of_sight]` (required) | `theta_deg`, `phi_deg`: the instrument's direction from TCC |
-| `[view]` | `field_of_view_mm` (the collimated field, a disk of this diameter normal to the line of sight; without it the view looks through `through` alone), `center_part` or `center_mm` (the field's center, a part's centroid or a point; default TCC), `through` (the aperture looked through, and the reference for Tr; default `leh_bottom` without a field of view, none with one), `pixels` (rays per side; default 400), `area_mm2` (the area Tr is quoted over; default the aperture's initial area) or `area_part` (Tr over that part's visible projected area) |
+| `[view]` | `field_of_view_mm` (the collimated field, a disk of this diameter normal to the line of sight; without it the view looks through `through` alone), `center_part` or `center_mm` (the field's center, a part's centroid or a point; default TCC), `through` (the aperture looked through, and the reference for Tr; default `leh_bottom` without a field of view, none with one), `pixels` (rays per side; default 400), `area_mm2` (the area Tr is quoted over; default the aperture's initial area), `area_part` (Tr over that part's visible projected area), `area_open = true` (Tr over the hole's open area at each time, from the model's entrance-hole closure) or `area_history_csv` (a measured area history: time in ns, area in mm²) |
 | `[recording]` | `mode = "history"` |
-| `[[channel]]` (one per channel) | `number`, `energy_eV` (nominal band energy) and `solid_angle_sr` (required); `filters` (an array of `{ material, thickness_um }`, optionally `density_g_cm3`, or `{ transmission_csv }`); `grid` (open fraction; default 1); `mirror` (`{ kind = "SiO2", angle_deg }`, `{ kind = "mlm", angle_deg = 1.9 }` or `{ reflectivity_csv }`); `cathode` (`"Al"`, `"Cr"` or `"Ni"`, [`xrd_sensitivity`](@ref)) or `sensitivity_csv`; or a measured `response_csv` in place of all of these |
+| `[[channel]]` (one per channel) | `number` and `solid_angle_sr` (required); `energy_eV` (nominal band energy; default the response's peak); `filters` (an array of `{ material, thickness_um }`, optionally `density_g_cm3`, or `{ transmission_csv }`); `grid` (open fraction; default 1); `mirror` (`{ kind = "SiO2", angle_deg }`, calibrated; `{ kind = "mlm", angle_deg = 1.9 }`; `{ kind = "fresnel", material, angle_deg }`, optionally `roughness_nm` and `density_g_cm3`, an uncalibrated [`GrazingMirror`](@ref) for C, Be, B₄C and other coatings; or `{ reflectivity_csv }`); `cathode` (`"Al"`, `"Cr"` or `"Ni"`, [`xrd_sensitivity`](@ref)) or `sensitivity_csv`; or a measured `response_csv` in place of all of these |
 | top level | `remove_channels` (numbers dropped from the definition extended) |
 
 A field of view takes in every surface of the target facing the instrument, occluded by
@@ -60,6 +60,26 @@ and value (a fraction, or V/GW for a sensitivity or a response), at a path relat
 the definition file ([`TabulatedCurve`](@ref)); outside a table a factor holds its end
 values and a whole response is zero, and [`check_diagnostics`](@ref) warns when a table
 does not cover 50 eV – 20 keV.
+
+## Built-in definitions
+
+The package holds the public configurations that the literature documents (research
+notes, "Dante-family hardware and geometry: what is public"), each read from the
+source's table and checked against the energies the source tabulates:
+
+| `id` | Instrument and configuration | Not public (reported as missing) |
+|---|---|---|
+| `nif_dante1` | NIF Dante 1, latest public configuration (extends `nif_dante1_2021`) | — |
+| `nif_dante1_2021` | from October 2021 (Rubery et al. 2023, Fig. 4) | — |
+| `nif_dante1_N180604`, `_N180129`, `_N170924` | single shots, 2017–18 (Kemp et al. 2020, Tables I–III) | — |
+| `nif_dante1_2012` | 2012–14 (May et al. 2015, Table IV) | — |
+| `nif_dante1_2009` | N091104 (Fournier et al. 2010, Table II) | — |
+| `nif_dante2` | NIF Dante 2: the line of sight | the channels |
+| `nif_sentinel_N170924` | NIF Sentinel on N170924-003 (Kemp et al. 2020, Table II) | the equatorial DIM (`phi_deg`); the MiniXRD responses |
+| `omega_dante` | Omega Dante (Rubery et al. 2023, Fig. 13) | the solid angles (the standoff) |
+
+A user group completes one by extending it with the values it holds, e.g. Omega's
+solid angles, one `[[channel]]` table per channel with `number` and `solid_angle_sr`.
 
 ## Extending a definition
 

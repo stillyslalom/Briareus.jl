@@ -88,7 +88,30 @@ function _mlm_reflectivity(E::Real)
     return (R[i] + (E - Et[i]) / (Et[i+1] - Et[i]) * (R[i+1] - R[i])) / 100
 end
 
+"""
+    GrazingMirror(material, angle; roughness = 0, density = nothing)
+
+A grazing-incidence mirror of `material` (an element or compound of
+[`henke_mass_attenuation`](@ref), e.g. `:C`, `:Be`, `:B4C`) at `angle` (degrees from
+the surface), its reflectivity [`mirror_reflectivity`](@ref) with `roughness` (nm rms)
+and `density` (g/cm³; default the material's): Fresnel from Henke's constants,
+*uncalibrated*. The SiO₂ mirrors of NIF Dante take `(:SiO2, angle)` instead, the model
+calibrated to Rubery et al. 2023 Fig. 3a ([`DanteResponse`](@ref)).
+"""
+struct GrazingMirror
+    material::Symbol
+    angle::Float64
+    roughness::Float64
+    density::Union{Nothing,Float64}
+end
+GrazingMirror(material::Symbol, angle::Real; roughness::Real = 0.0, density = nothing) =
+    GrazingMirror(material, Float64(angle), Float64(roughness), density === nothing ? nothing : Float64(density))
+
+Base.show(io::IO, m::GrazingMirror) = print(io, m.material, " ", m.angle, "°")
+
 _mirror_reflectivity(m::TabulatedCurve, E) = m(E)
+_mirror_reflectivity(m::GrazingMirror, E) =
+    mirror_reflectivity(m.material, m.angle, E; roughness = m.roughness, density = m.density)
 function _mirror_reflectivity(m, E)
     m === nothing && return 1.0
     kind, angle = m
@@ -108,7 +131,8 @@ thickness in mm, or `material => (thickness, density)`; transmission from Henke'
 tables, [`filter_transmission`](@ref) with `table = :henke`), measured filter
 transmissions `tables` ([`TabulatedCurve`](@ref)s), a 25 µm tantalum mesh of open
 fraction `grid` (opaque wires), a `mirror` (`(:SiO2, angle°)` grazing-incidence,
-`(:mlm, 1.9)` for channel 2's Cr/Sc multilayer, or a measured reflectivity as a
+calibrated to Rubery 2023 Fig. 3a; `(:mlm, 1.9)` for channel 2's Cr/Sc multilayer; a
+[`GrazingMirror`](@ref) of another material; or a measured reflectivity as a
 `TabulatedCurve`) and a `cathode`: an XRD (`:Al`, `:Cr`, `:Ni`;
 [`xrd_sensitivity`](@ref)) or a measured sensitivity (a `TabulatedCurve` in V/GW). The
 second form takes a measured whole-channel `response` (V/GW). `energy` (eV) is the
@@ -122,7 +146,7 @@ struct DanteResponse <: AbstractDanteChannel
     filters::Vector{Pair{Symbol,Union{Float64,Tuple{Float64,Float64}}}}
     tables::Vector{TabulatedCurve}
     grid::Float64
-    mirror::Union{Nothing,Tuple{Symbol,Float64},TabulatedCurve}
+    mirror::Union{Nothing,Tuple{Symbol,Float64},GrazingMirror,TabulatedCurve}
     cathode::Union{Symbol,TabulatedCurve}
     response::Union{Nothing,TabulatedCurve}
     solid_angle::Float64
@@ -145,7 +169,10 @@ function DanteResponse(number::Integer, energy::Real; filters = (), grid::Real =
     end
     cathode === nothing && throw(ArgumentError("a cathode (an XRD symbol or a TabulatedCurve) is required"))
     f = Pair{Symbol,Union{Float64,Tuple{Float64,Float64}}}[k => _filter_spec(v) for (k, v) in filters]
-    m = mirror === nothing || mirror isa TabulatedCurve ? mirror : (Symbol(mirror[1]), Float64(mirror[2]))
+    m = mirror === nothing || mirror isa Union{TabulatedCurve,GrazingMirror} ? mirror :
+        (Symbol(mirror[1]), Float64(mirror[2]))
+    m isa Tuple && !(m[1] in (:SiO2, :mlm)) &&
+        throw(ArgumentError("a (kind, angle) mirror is :SiO2 or :mlm; use GrazingMirror(:$(m[1]), $(m[2]))"))
     tb = collect(TabulatedCurve, tables)
     R = map(E) do e
         t = filter_transmission(f, e / 1000; table = :henke)
@@ -171,6 +198,7 @@ function Base.show(io::IO, c::DanteResponse)
     parts = [[_show_filter(k, v) for (k, v) in c.filters]; ["filter " * _show_part(t) for t in c.tables]]
     print(io, join(parts, " + "), c.grid < 1 ? " + $(round(100c.grid; digits = 1)) % grid" : "",
           c.mirror === nothing ? "" : c.mirror isa TabulatedCurve ? ", mirror " * _show_part(c.mirror) :
+          c.mirror isa GrazingMirror ? ", " * sprint(show, c.mirror) :
           ", $(c.mirror[1]) $(c.mirror[2])°",
           ", ", c.cathode isa Symbol ? "$(c.cathode) XRD" : "detector " * _show_part(c.cathode), ")")
 end

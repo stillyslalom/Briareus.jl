@@ -74,7 +74,11 @@ area seen from the detector: by default `A` is the full initial area of `through
 between the line of sight and its normal; `area = A` (mm²) replaces `A` (with the
 aperture's `θ_v`, or `cos θ_v = 1` without `through`); `area = :part` takes the part's
 visible projected area as `A cos θ_v` (the convention of Fournier et al. 2010: the
-projected wall and cap). With a field of view, `through = nothing` and no `area` give
+projected wall and cap); `area = :open` takes the hole's open area at the solution's
+time (the aperture plus each closing-lip element's area times its open fraction, the
+model's entrance-hole closure: `Tr` then equals `Tr_open`); `area = TabulatedCurve(t,
+A)` takes a measured area history (time in ns, area in mm², end values held outside;
+Glenzer et al. 2010 used the hole's area from SXI images). With a field of view, `through = nothing` and no `area` give
 `Tr = NaN` (the power is still computed). The footprint is computed once per target
 (each keyframe of a moving target). `dante1()` and `dante2()` give NIF's two.
 """
@@ -85,7 +89,7 @@ struct DanteView
     through::Union{Nothing,Symbol}
     pixels::Int
     channels::Vector{<:AbstractDanteChannel}
-    area::Union{Nothing,Float64,Symbol}
+    area::Union{Nothing,Float64,Symbol,TabulatedCurve}
     field_of_view::Union{Nothing,Float64}
     center::Union{Vec3,Symbol}
     cache::IdDict{Target,Any}
@@ -99,7 +103,8 @@ function DanteView(theta::Real, phi::Real; through::Union{Nothing,Symbol} = :leh
     field_of_view === nothing && through === nothing &&
         throw(ArgumentError("a view without a field of view looks through an aperture (`through`)"))
     field_of_view === nothing || field_of_view > 0 || throw(ArgumentError("field_of_view must be positive"))
-    a = area === nothing || area isa Symbol ? area : Float64(area)
+    a = area === nothing || area isa Union{Symbol,TabulatedCurve} ? area : Float64(area)
+    a === :open && through === nothing && throw(ArgumentError("area = :open is the open area of `through`"))
     c = center isa Symbol ? center : Vec3(center...)
     return DanteView(Float64(theta), Float64(phi), port_vector(theta, phi), through, Int(pixels),
                      collect(channels), a, field_of_view === nothing ? nothing : Float64(field_of_view),
@@ -229,7 +234,8 @@ function _dante_footprint(t::Target, v::DanteView)
         lip_elems = setdiff(h.hole, h.open)
     end
     # the reference area seen from the detector, A cos θ_v (`DanteView`)
-    A, cref = if v.area isa Symbol
+    # (`:open` and an area history depend on the solution: `_reference`)
+    A, cref = if v.area isa Symbol && v.area !== :open
         cis = Set(part_pieces(t, v.area))
         sum((a for (e, a) in zip(elems, area) if t.elem_comp[e] in cis); init = 0.0), 1.0
     elseif v.area isa Float64
@@ -295,14 +301,21 @@ within each group, and there is no unfold.
 function dante(v::DanteView, sol::RadiationSolution)
     fp = _footprint(v, sol.model.target)
     I = _los_intensity(fp, sol.B, sol.transmission)
-    A, c = fp.ref_area, fp.ref_cos
+    A, c = _reference(v, fp, sol.transmission, sol.time)
     return (; intensity = I, Tr = radiation_temperature(π * I / (A * c)), area = A,
             cos = c, Tr_open = _open_temperature(fp, I, sol.transmission))
 end
 
-function _open_temperature(fp, I, τ)
-    A = fp.open_area + sum(fp.lip_area[k] * τ[e] for (k, e) in enumerate(fp.lip_elems); init = 0.0)
-    return radiation_temperature(π * I / (A * fp.cosv))
+# the hole's open area: the aperture plus each closing-lip element times its open fraction
+_open_area(fp, τ) = fp.open_area + sum(fp.lip_area[k] * τ[e] for (k, e) in enumerate(fp.lip_elems); init = 0.0)
+
+_open_temperature(fp, I, τ) = radiation_temperature(π * I / (_open_area(fp, τ) * fp.cosv))
+
+# the reference area A and cos θ_v for a solution with lip transmissions τ at `time` (ns)
+function _reference(v::DanteView, fp, τ, time)
+    v.area === :open && return (_open_area(fp, τ), fp.cosv)
+    v.area isa TabulatedCurve && return (v.area(time), isnan(fp.cosv) ? 1.0 : fp.cosv)
+    return (fp.ref_area, fp.ref_cos)
 end
 
 function dante(v::DanteView, s::SpectralSolution; unfold = :traditional, kwargs...)
@@ -311,7 +324,7 @@ function dante(v::DanteView, s::SpectralSolution; unfold = :traditional, kwargs.
     G = ngroups(s)
     spectrum = [_los_intensity(fp, view(s.B, :, g), sol.transmission) for g in 1:G]
     I = sum(spectrum)
-    A, c = fp.ref_area, fp.ref_cos
+    A, c = _reference(v, fp, sol.transmission, sol.time)
     Tr_open = _open_temperature(fp, I, sol.transmission)
     # without a reference area: the visible projected area for the in-group spectrum and
     # the unfold (a brightness temperature over what the view sees)

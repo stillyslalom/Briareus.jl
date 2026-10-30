@@ -9,14 +9,17 @@
 # transmission, and reflection at E = 50–30000 eV, Z = 1–92", At. Data Nucl. Data Tables
 # 54, 181 (1993), with CXRO's later updates (Mg, Si, Be; Cr from Delmotte et al., J. Appl.
 # Phys. 124, 035107, 2018). Columns E (eV), f1, f2; f1 = -9999 where it is not tabulated.
+# B, F, Ca, Sc, Mn, Ge, Y and Mo fetched 2026-10-29 (line endings made LF).
 
-const _HENKE_ELEMENTS = (:H, :Be, :C, :N, :O, :Mg, :Al, :Si, :Cl, :Ti, :V, :Cr, :Fe, :Co,
-                         :Ni, :Cu, :Zn, :Ag, :Au)
+const _HENKE_ELEMENTS = (:H, :B, :Be, :C, :N, :O, :F, :Mg, :Al, :Si, :Cl, :Ca, :Sc, :Ti, :V, :Cr,
+                         :Mn, :Fe, :Co, :Ni, :Cu, :Zn, :Ge, :Y, :Mo, :Ag, :Au)
 # standard atomic weights (g/mol)
 const _ATOMIC_WEIGHT = Dict(:H => 1.008, :Be => 9.0122, :C => 12.011, :N => 14.007, :O => 15.999,
                             :Mg => 24.305, :Al => 26.982, :Si => 28.085, :Cl => 35.45, :Ti => 47.867,
                             :V => 50.942, :Cr => 51.996, :Fe => 55.845, :Co => 58.933, :Ni => 58.693,
-                            :Cu => 63.546, :Zn => 65.38, :Ag => 107.87, :Au => 196.97)
+                            :Cu => 63.546, :Zn => 65.38, :Ag => 107.87, :Au => 196.97, :B => 10.81,
+                            :F => 18.998, :Ca => 40.078, :Sc => 44.956, :Mn => 54.938, :Ge => 72.630,
+                            :Y => 88.906, :Mo => 95.95)
 # compounds: atoms per formula unit and the density (g/cm³) used for filters; the
 # densities marked *assumed* are typical values, not the Dante parts' own.
 const _COMPOUNDS = Dict{Symbol,Tuple{Vector{Pair{Symbol,Int}},Float64}}(
@@ -30,7 +33,9 @@ const _COMPOUNDS = Dict{Symbol,Tuple{Vector{Pair{Symbol,Int}},Float64}}(
     :kapton => ([:C => 22, :H => 10, :N => 2, :O => 5], 1.42),
     :mylar => ([:C => 10, :H => 8, :O => 4], 1.38),
     :polyethylene => ([:C => 2, :H => 4], 0.93),
-    :SiO2 => ([:Si => 1, :O => 2], 2.2))                        # fused silica
+    :SiO2 => ([:Si => 1, :O => 2], 2.2),                        # fused silica
+    :CaF2 => ([:Ca => 1, :F => 2], 3.18),
+    :B4C => ([:B => 4, :C => 1], 2.52))                         # bulk; a mirror coating's is not public
 
 const _HENKE_CACHE = Dict{Symbol,NTuple{3,Vector{Float64}}}()
 const _HENKE_LOCK = ReentrantLock()
@@ -128,11 +133,12 @@ end
     TabulatedCurve(E, values; extrapolate = :hold, file = "")
     TabulatedCurve(file; extrapolate = :hold)
 
-A measured curve against photon energy `E` (eV, increasing), interpolated linearly in
-`E`: a filter's transmission, a mirror's reflectivity, a detector's sensitivity (V/GW)
-or a whole channel's response (V/GW). Outside the table it holds its end values
-(`extrapolate = :hold`, for factors) or is zero (`:zero`, for a whole response). The
-file form reads a CSV with a header line and two columns, energy (eV) and value.
+A measured curve, interpolated linearly in its abscissa `E` (increasing): against
+photon energy (eV), a filter's transmission, a mirror's reflectivity, a detector's
+sensitivity (V/GW) or a whole channel's response (V/GW); against time (ns), an area
+history ([`DanteView`](@ref)). Outside the table it holds its end values (`extrapolate
+= :hold`, for factors and histories) or is zero (`:zero`, for a whole response). The
+file form reads a CSV with a header line and two columns, the abscissa and the value.
 """
 struct TabulatedCurve
     E::Vector{Float64}

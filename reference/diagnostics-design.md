@@ -18,7 +18,12 @@ lands; the docstrings and research notes then hold what was built.
 - Field of view and reference area (phase 2, 2026-10-29): `DanteView(...;
   field_of_view, center, area)`, `[view]` keys `field_of_view_mm`, `center_part`,
   `center_mm`, `area_part`; the view through a hole is unchanged (bit for bit).
-- Not yet: port names, an area history (Tr over A(t), Glenzer 2010), a field of view
+- Public definitions and the time-dependent Tr area (phase 3, 2026-10-29): Dante 1 by
+  date and shot, Dante 2, Sentinel N170924, Omega Dante in `data/diagnostics`; fresnel
+  mirrors (`GrazingMirror`); `area = :open` and an area history (`area_open`,
+  `area_history_csv`). Research notes, "Public diagnostic definitions and the
+  time-dependent Tr area".
+- Not yet: port names, a field of view
   per channel (the multilayer channel's 12 mm; Rubery 2022 finds it covers every NIF
   hohlraum), time response, uncertainty, the recording modes other than `history`,
   session embedding. `dante2()` and `sentinel(dim)` construct views in code with Dante
@@ -111,9 +116,6 @@ lands; the docstrings and research notes then hold what was built.
 
 ## Phases
 
-3. Public definitions from the research notes: Dante 1 by date (2009, 2012–14, the three
-   2017–18 shots), Sentinel (N170924), Omega Dante (current; no solid angles, so
-   `:missing` until a user supplies them), Dante 2 (line of sight only).
 4. GUI: the folders preference, the diagnostics list, several diagnostics per history.
 5. Next kinds, in the user's order (2026-10-29): x-ray imagers (gated and integrated,
    from the existing `OrthoCamera` rendering through filters); backlit radiography (the

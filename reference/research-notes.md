@@ -87,7 +87,7 @@ callout in the section says which).
   spots); Per-cone M-band in the drive history (2026-10-27); Dante-family hardware and
   geometry: what is public (2026-10-29); X-ray imagers, radiography and streaked
   diagnostics: what is public (2026-10-29); Dante field of view and reference area
-  (2026-10-29).
+  (2026-10-29); Public diagnostic definitions and the time-dependent Tr area (2026-10-29).
 
 **Hydrodynamics coupling**
 - Capsule drive hand-over and CompactLES stage 0 (2026-10-24).
@@ -9454,3 +9454,54 @@ Checks (`test/spectral.jl`, "Dante field of view"):
   field narrower than the disk sees π(D/2)² to 2e-3; a dark sheet over half the disk
   halves I to 1e-12 (the pixel grid and the polygon share the symmetry); Tr over the
   emitter's visible projected area is its own temperature to 1e-12, shielded or not.
+
+## Public diagnostic definitions and the time-dependent Tr area (2026-10-29) *derived*
+
+Built-in definitions in `data/diagnostics` (docs page "Diagnostic definitions"), each
+transcribed from the source table as read from the page image (not from text
+extraction): `nif_dante1_2009` (Fournier 2010 Table II), `nif_dante1_2012` (May 2015
+Table IV), `nif_dante1_N170924`, `_N180129`, `_N180604` (Kemp 2020 Tables I–III),
+`nif_dante1_2021` (Rubery 2023 Fig. 4, phase 1), `nif_dante2` (line of sight only),
+`nif_sentinel_N170924` (Kemp 2020 Sentinel Table II), `omega_dante` (Rubery 2023 Fig. 13).
+
+Transcription decisions (each stated in its file):
+- **Stacked foils.** Fournier's "Number" and May's "Qty" multiply the listed thickness:
+  May's Mn 13.2 + Ni 1.8 × 2, Ti 13 × 2, Fe 15 × 2 and Cu 0.55 × 2 are Kemp's single
+  Mn 26.4 + Ni 3.6, Ti 26, Fe 30 and Cu 1.1. Each foil is listed once per count.
+- **Kemp N180604 ch 3** "Lexan/4.0 + Ta grid + Ta grid": two grids as printed (0.088²).
+  **Ch 9** "Ge/42 C/375": read as Ge 42 µm + C 375 µm (C as graphite, 2.2 g/cm³,
+  assumed); its modeled half-maximum midpoint is 1.00 × Kemp's peak energy.
+- **Grids** "Yes" without a transmission (May 2015): 0.088 (Kemp 2020), assumed for
+  2012–14; Fournier's 0.091 kept for 2009.
+- **Mirrors.** B₄C 7°, amorphous C 5° (NIF 2009–18), C 7°, 5°, 2.5° and Be 3.5° (Omega) as
+  `GrazingMirror`: Fresnel from Henke's constants at bulk densities (B₄C 2.52, C 2.2, Be
+  1.848 g/cm³), no roughness, **L** (uncalibrated; the SiO₂ model's calibration to Rubery
+  Fig. 3a does not carry over). The coatings' densities and roughness are not public.
+- **Sentinel.** Equatorial DIM not published (φ left missing); MiniXRD responses not
+  public (the NIF cross-calibration needed the Al MiniXRDs 3–4 × as responsive as an
+  XRD-31, Kemp 2020 Sentinel §III B), so no cathode is given; solid angle 12.9 mm² /
+  (7 m)² = 2.633e-7 sr (derived, **L**); "35 % transmission sieve" as grid 0.35; no
+  nominal energies published (each channel takes its response's peak).
+- **Omega.** Standoff not public, so no solid angles; XRD cathodes as NIF's XRD-31 model
+  (assumed); the hohlraum axis on Omega is P6–P7 or P5–P8, not the chamber z axis.
+
+Materials added: Henke f₁, f₂ for B, F, Ca, Sc, Mn, Ge, Y, Mo (CXRO, fetched 2026-10-29);
+densities B 2.34, Sc 2.985, Mn 7.3, Ge 5.323, Y 4.472, C 2.2 (graphite) g/cm³ (handbook
+values, **M**); CaF₂ 3.18, B₄C 2.52 g/cm³.
+
+Check (`test/diagnostics.jl`, "public definitions"): each channel's modeled half-maximum
+midpoint against the energy its source tabulates (Kemp: peak sensitivity from the
+calibrated responses; Fournier, May: band centers; Rubery: nominal energies), 108
+channels in six NIF Dante 1 configurations: 97 within 5 %, all within 20 %; the outliers
+are broad multi-edge channels (Fe + Cr + parylene near 3.5 keV, 0.82–0.92; Lexan + CaF₂ +
+CH, 1.08), where a half-maximum midpoint is ill-defined. Kemp's tabulated widths are 20 %
+of the energy on most broad channels (a fitting default), not a response measure, and are
+not compared. Nothing is fitted.
+
+Time-dependent Tr area (`DanteView(...; area)`): `area = :open` is the hole's open area
+at the solution (aperture plus each closing-lip element times its open fraction, the
+entrance-hole closure of `GapClosure` / `LipClosure`), so `Tr` equals `Tr_open`; `area =
+TabulatedCurve(t, A)` is a measured history at the solution's time (Glenzer 2010 took
+A_LEH(t) from SXI). Checks (`test/spectral.jl`, "Dante field of view"): the open area
+equals aperture + ½ lip at open fraction ½ to 1e-12; a history's Tr scales as A^(-¼) to
+1e-12.

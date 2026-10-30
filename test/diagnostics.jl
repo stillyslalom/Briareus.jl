@@ -59,8 +59,8 @@ csv(dir, name, E, v) = (open(joinpath(dir, name), "w") do io
         @test all(v.channels .=== dante1_responses())
         @test dante1(pixels = 50).pixels == 50
         @test dante1(channels = dante1_channels(model = :gaussian)).channels[1] isa DanteChannel
-        # every built-in builds without issues
-        @test isempty(check_diagnostics(; paths = diagnostic_paths(builtin = true)[1:1]))
+        # the built-ins report only values that are not public ("public definitions")
+        @test all(i -> i.level === :missing, check_diagnostics(; paths = diagnostic_paths(builtin = true)[1:1]))
         defs = diagnostics(; paths = diagnostic_paths()[1:1])
         @test defs["nif_dante1"].chain == [defs["nif_dante1_2021"].file, defs["nif_dante1"].file]
         @test defs["nif_dante1"].name == "NIF Dante 1" && defs["nif_dante1"].public
@@ -112,7 +112,7 @@ csv(dir, name, E, v) = (open(joinpath(dir, name), "w") do io
             @test length(diagnostic("nif_dante1"; paths = [builtin, b]).channels) == 1
             # group_dante1 now extends the one-channel nif_dante1: its partial channel 6
             # lacks the values the built-in gave it, reported and not built
-            @test any(i -> basename(i.file) == "campaign.toml" && i.key == "channel[6].energy_eV" &&
+            @test any(i -> basename(i.file) == "campaign.toml" && startswith(i.key, "channel[6].") &&
                       i.level === :missing, issues)
             @test_throws ArgumentError diagnostic("group_dante1"; paths = [builtin, a, b])
             @test length(dante1().channels) == 18                  # the built-in one is unchanged
@@ -132,7 +132,7 @@ csv(dir, name, E, v) = (open(joinpath(dir, name), "w") do io
             t1 = diagnostic("tabulated"; paths = [a]).channels[1]
             @test t1.R ≈ c1.R rtol = 1e-12
             @test t1.cathode isa TabulatedCurve && length(t1.tables) == 1
-            @test isempty(filter(i -> i.level !== :warning, check_diagnostics(; paths = [builtin, a])))
+            @test !any(i -> startswith(i.file, a) && i.level !== :warning, check_diagnostics(; paths = [builtin, a]))
         end
     end
 
@@ -168,6 +168,46 @@ csv(dir, name, E, v) = (open(joinpath(dir, name), "w") do io
         end
     end
 
+    @testset "public definitions" begin
+        builtin = diagnostic_paths()[1:1]
+        issues = check_diagnostics(; paths = builtin)
+        # only values that are not public are reported, and nothing else
+        @test all(i -> i.level === :missing, issues)
+        @test Set((basename(i.file), i.key) for i in issues) ==
+              Set([("nif_dante2.toml", "channel"); ("nif_sentinel_N170924.toml", "line_of_sight.phi_deg");
+                   [("omega_dante.toml", "channel[$n].solid_angle_sr") for n in 1:18]])
+        # each channel's half-maximum midpoint (the modeled filters, grid, mirror and XRD)
+        # against the energy the source tabulates (Kemp 2020: peak sensitivity from the
+        # calibrated responses; Fournier 2010, May 2015: band centers; Rubery 2023):
+        # an independent check of the transcriptions and the models, nothing fitted
+        mid(c) = (k = argmax(c.R); i = findprev(<(c.R[k] / 2), c.R, k); j = findnext(<(c.R[k] / 2), c.R, k);
+                  (c.E[i+1] + c.E[j-1]) / 2)
+        ids = ["nif_dante1_2009", "nif_dante1_2012", "nif_dante1_N170924", "nif_dante1_N180129",
+               "nif_dante1_N180604", "nif_dante1_2021"]
+        r = [mid(c) / c.energy for id in ids for c in diagnostic(id; paths = builtin).channels]
+        @test length(r) == 108
+        @test all(x -> abs(x - 1) < 0.2, r)
+        @test count(x -> abs(x - 1) <= 0.05, r) >= 95             # 97 of 108 (2026-10-29)
+        # the values that are not public, supplied: Omega's solid angles (its C and Be
+        # mirrors build), Sentinel's line of sight and cathodes (nominal energies from the
+        # responses' peaks)
+        mktempdir() do dir
+            put(dir, "o.toml", "schema = 1\nid = \"o\"\nextends = \"omega_dante\"\n" *
+                join("[[channel]]\nnumber = $n\nsolid_angle_sr = 1e-6\n" for n in 1:18))
+            cat = ["Ni", "Ni", "Cr", "Cr", "Al", "Cr", "Al", "Al", "Ni", "Al", "Cr", "Cr", "Ni", "Al", "Ni", "Al"]
+            put(dir, "s.toml", "schema = 1\nid = \"s\"\nextends = \"nif_sentinel_N170924\"\n" *
+                "[line_of_sight]\nphi_deg = 315.0\n" * join("[[channel]]\nnumber = $n\ncathode = \"$(cat[n])\"\n" for n in 1:16))
+            o = diagnostic("o"; paths = [builtin; dir])
+            @test o.channels[3].mirror == GrazingMirror(:Be, 3.5)
+            @test all(c -> all(isfinite, c.R) && maximum(c.R) > 0, o.channels)
+            s = diagnostic("s"; paths = [builtin; dir])
+            @test (s.theta, s.phi) == (90.0, 315.0) && length(s.channels) == 16
+            @test all(c -> c.energy == c.E[argmax(c.R)], s.channels)
+            @test s.channels[3].grid == 0.35
+        end
+        @test_throws ArgumentError DanteResponse(1, 500; cathode = :Al, solid_angle = 1e-6, mirror = (:C, 5.0))
+    end
+
     @testset "field of view and reference area" begin
         mktempdir() do dir
             put(dir, "base.toml", defn("base", chan("cathode = \"Cr\"\n")))
@@ -178,6 +218,12 @@ csv(dir, name, E, v) = (open(joinpath(dir, name), "w") do io
             put(dir, "both.toml", "schema = 1\nid = \"both\"\nextends = \"base\"\n[view]\n" *
                 "field_of_view_mm = 60\narea_mm2 = 5.0\narea_part = \"wall\"\n")
             put(dir, "nofov.toml", "schema = 1\nid = \"nofov\"\nextends = \"base\"\n[view]\ncenter_mm = [0, 0, 1]\n")
+            put(dir, "open.toml", "schema = 1\nid = \"open\"\nextends = \"wide\"\n[view]\nthrough = \"leh_bottom\"\narea_open = true\n")
+            csv(dir, "a.csv", [0.0, 10.0], [8.0, 4.0])
+            put(dir, "hist.toml", "schema = 1\nid = \"hist\"\nextends = \"open\"\n[view]\narea_history_csv = \"a.csv\"\n")
+            @test diagnostic("open"; paths = [dir]).area === :open                # area_part dropped
+            h = diagnostic("hist"; paths = [dir]).area
+            @test h isa TabulatedCurve && h(5.0) == 6.0
             v = diagnostic("wide"; paths = [dir])
             @test (v.field_of_view, v.center, v.area, v.through) == (60.0, :capsule, :wall, nothing)
             w = diagnostic("wider"; paths = [dir])                  # the inherited alternatives dropped

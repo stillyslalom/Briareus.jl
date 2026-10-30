@@ -1,0 +1,126 @@
+# NIF Sentinel on shot N170924-003 (16 MiniXRD channels, no mirrors; filters chosen to
+# emulate that shot's Dante 2 without its mirror channels). Public values: Kemp et al.
+# (2020), OSTI 1736345, Table II, read from the page image; "35 % transmission sieve" as
+# grid = 0.35. Not public, so absent: the equatorial DIM it was fielded on (90-78 or
+# 90-315: phi_deg), and the MiniXRDs' responsivity (the cross-calibration against Dante on
+# this shot needed the Al MiniXRDs 3–4 times as responsive as an XRD-31): supply cathode
+# (to take the XRD-31 model) or sensitivity_csv per channel. Solid angle derived: the
+# 12.9 mm² entrance at ≈ 7 m (Kemp 2020 §II), 2.633e-7 sr. No nominal energies are
+# published: each channel takes its response's peak.
+
+schema = 1
+id = "nif_sentinel_N170924"
+name = "NIF Sentinel (N170924-003)"
+kind = "xray_power"
+facility = "NIF"
+public = true
+shots = ["N170924-003"]
+source = "Kemp et al. (2020), OSTI 1736345, Table II and §II"
+confidence = "H"
+
+[line_of_sight]
+theta_deg = 90.0
+note = "an equatorial DIM, 90-78 (phi 78.75) or 90-315 (phi 315); which one is not published"
+
+[recording]
+mode = "history"
+
+[[channel]]
+number = 1
+filters = [{ material = "Mg", thickness_um = 22 }]
+solid_angle_sr = 2.633e-7
+note = "MiniXRD, Ni"
+
+[[channel]]
+number = 2
+filters = [{ material = "Mn", thickness_um = 13.2 }, { material = "Ni", thickness_um = 1.8 }]
+solid_angle_sr = 2.633e-7
+note = "MiniXRD, Ni"
+
+[[channel]]
+number = 3
+filters = [{ material = "Al", thickness_um = 5.0 }]
+grid = 0.35
+solid_angle_sr = 2.633e-7
+note = "MiniXRD, Cr"
+
+[[channel]]
+number = 4
+filters = [{ material = "B", thickness_um = 5.0 }, { material = "CH", thickness_um = 1.0 }]
+grid = 0.35
+solid_angle_sr = 2.633e-7
+note = "MiniXRD, Cr"
+
+[[channel]]
+number = 5
+filters = [{ material = "lexan", thickness_um = 2 }, { material = "CaF2", thickness_um = 14 }, { material = "CH", thickness_um = 18 }]
+solid_angle_sr = 2.633e-7
+note = "MiniXRD, Al"
+
+[[channel]]
+number = 6
+filters = [{ material = "parylene", thickness_um = 10 }]
+grid = 0.35
+solid_angle_sr = 2.633e-7
+note = "MiniXRD, Cr"
+
+[[channel]]
+number = 7
+filters = [{ material = "Sc", thickness_um = 1.6 }, { material = "Ti", thickness_um = 1 }]
+grid = 0.35
+solid_angle_sr = 2.633e-7
+note = "MiniXRD, Al"
+
+[[channel]]
+number = 8
+filters = [{ material = "Ti", thickness_um = 11 }]
+solid_angle_sr = 2.633e-7
+note = "MiniXRD, Al"
+
+[[channel]]
+number = 9
+filters = [{ material = "V", thickness_um = 2 }]
+solid_angle_sr = 2.633e-7
+note = "MiniXRD, Ni"
+
+[[channel]]
+number = 10
+filters = [{ material = "Fe", thickness_um = 15 }]
+solid_angle_sr = 2.633e-7
+note = "MiniXRD, Al"
+
+[[channel]]
+number = 11
+filters = [{ material = "Co", thickness_um = 1.4 }, { material = "CH", thickness_um = 0.2 }]
+solid_angle_sr = 2.633e-7
+note = "MiniXRD, Cr"
+
+[[channel]]
+number = 12
+filters = [{ material = "Si", thickness_um = 20 }]
+solid_angle_sr = 2.633e-7
+note = "MiniXRD, Cr"
+
+[[channel]]
+number = 13
+filters = [{ material = "Al", thickness_um = 20 }]
+solid_angle_sr = 2.633e-7
+note = "MiniXRD, Ni"
+
+[[channel]]
+number = 14
+filters = [{ material = "saran", thickness_um = 44 }]
+solid_angle_sr = 2.633e-7
+note = "MiniXRD, Al"
+
+[[channel]]
+number = 15
+filters = [{ material = "Ti", thickness_um = 26 }]
+solid_angle_sr = 2.633e-7
+note = "MiniXRD, Ni"
+
+[[channel]]
+number = 16
+filters = [{ material = "Ag", thickness_um = 2.2 }]
+solid_angle_sr = 2.633e-7
+note = "MiniXRD, Al"

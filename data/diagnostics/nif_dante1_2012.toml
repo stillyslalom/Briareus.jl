@@ -1,0 +1,164 @@
+# NIF Dante 1 in its configuration for the shots N120627-002, N120628-001, N140220-002 and
+# N140221-001 (2012–14). Public values: May et al. (2015), OSTI 1234624, Table IV ("Qty"
+# foils of each listed thickness; nominal energy-range centers as nominal energies), read
+# from the page image. "Ta Grids: Yes" without a transmission: 0.088 (Kemp et al. 2020,
+# assumed for 2012–14). Mirrors as in nif_dante1_2009.
+
+schema = 1
+id = "nif_dante1_2012"
+name = "NIF Dante 1 (2012–14)"
+kind = "xray_power"
+facility = "NIF"
+public = true
+shots = ["N120627-002", "N120628-001", "N140220-002", "N140221-001"]
+source = "May et al. (2015), OSTI 1234624, Table IV"
+confidence = "H"
+
+[line_of_sight]
+theta_deg = 143.0
+phi_deg = 274.0
+
+[view]
+through = "leh_bottom"
+
+[recording]
+mode = "history"
+
+[[channel]]
+number = 1
+energy_eV = 58.5
+filters = [{ material = "Al", thickness_um = 0.8 }, { material = "Al", thickness_um = 0.8 }]
+mirror = { kind = "fresnel", material = "B4C", angle_deg = 7 }
+cathode = "Cr"
+solid_angle_sr = 6.026e-7
+
+[[channel]]
+number = 2
+energy_eV = 166.9
+filters = [{ material = "B", thickness_um = 0.5 }, { material = "B", thickness_um = 0.5 }, { material = "CH", thickness_um = 0.4 }, { material = "CH", thickness_um = 0.4 }]
+mirror = { kind = "fresnel", material = "C", angle_deg = 5 }
+cathode = "Al"
+solid_angle_sr = 5.929e-7
+note = "2 × (0.5 µm B + 0.4 µm CH); mirror amorphous C"
+
+[[channel]]
+number = 3
+energy_eV = 248.8
+filters = [{ material = "lexan", thickness_um = 2.0 }, { material = "lexan", thickness_um = 2.0 }]
+mirror = { kind = "SiO2", angle_deg = 3.5 }
+cathode = "Al"
+solid_angle_sr = 5.786e-7
+
+[[channel]]
+number = 4
+energy_eV = 477.5
+filters = [{ material = "V", thickness_um = 1.0 }, { material = "V", thickness_um = 1.0 }]
+mirror = { kind = "SiO2", angle_deg = 2.5 }
+cathode = "Ni"
+solid_angle_sr = 5.603e-7
+
+[[channel]]
+number = 5
+energy_eV = 4137.7
+filters = [{ material = "Ti", thickness_um = 13 }, { material = "Ti", thickness_um = 13 }]
+cathode = "Cr"
+solid_angle_sr = 6.514e-7
+
+[[channel]]
+number = 6
+energy_eV = 7330.7
+filters = [{ material = "Ni", thickness_um = 10 }, { material = "Ni", thickness_um = 10 }]
+cathode = "Cr"
+solid_angle_sr = 6.514e-7
+
+[[channel]]
+number = 7
+energy_eV = 942.3
+filters = [{ material = "Mg", thickness_um = 5.0 }, { material = "Zn", thickness_um = 1.0 }, { material = "CH", thickness_um = 0.1 }]
+grid = 0.088
+cathode = "Ni"
+solid_angle_sr = 6.514e-7
+
+[[channel]]
+number = 8
+energy_eV = 1182.8
+filters = [{ material = "Mg", thickness_um = 11 }, { material = "Mg", thickness_um = 11 }]
+grid = 0.088
+cathode = "Ni"
+solid_angle_sr = 6.514e-7
+
+[[channel]]
+number = 9
+energy_eV = 1430.5
+filters = [{ material = "Al", thickness_um = 10 }, { material = "Al", thickness_um = 10 }]
+grid = 0.088
+cathode = "Ni"
+solid_angle_sr = 6.514e-7
+
+[[channel]]
+number = 10
+energy_eV = 1712.7
+filters = [{ material = "Si", thickness_um = 10 }, { material = "Si", thickness_um = 10 }]
+cathode = "Al"
+solid_angle_sr = 6.514e-7
+
+[[channel]]
+number = 11
+energy_eV = 828.9
+filters = [{ material = "Cu", thickness_um = 0.55 }, { material = "Cu", thickness_um = 0.55 }]
+grid = 0.088
+cathode = "Al"
+solid_angle_sr = 6.514e-7
+
+[[channel]]
+number = 12
+energy_eV = 2573.4
+filters = [{ material = "saran", thickness_um = 22 }, { material = "saran", thickness_um = 22 }, { material = "saran", thickness_um = 22 }]
+cathode = "Al"
+solid_angle_sr = 6.514e-7
+
+[[channel]]
+number = 13
+energy_eV = 3024.2
+filters = [{ material = "Ag", thickness_um = 2.2 }, { material = "Ag", thickness_um = 2.2 }]
+cathode = "Al"
+solid_angle_sr = 6.514e-7
+
+[[channel]]
+number = 14
+energy_eV = 709.3
+filters = [{ material = "Co", thickness_um = 1.0 }, { material = "Co", thickness_um = 0.4 }, { material = "CH", thickness_um = 0.2 }]
+grid = 0.088
+cathode = "Al"
+solid_angle_sr = 6.514e-7
+
+[[channel]]
+number = 15
+energy_eV = 5805.2
+filters = [{ material = "Mn", thickness_um = 13.2 }, { material = "Mn", thickness_um = 13.2 }, { material = "Ni", thickness_um = 1.8 }, { material = "Ni", thickness_um = 1.8 }]
+cathode = "Ni"
+solid_angle_sr = 6.514e-7
+note = "2 × (13.2 µm Mn + 1.8 µm Ni)"
+
+[[channel]]
+number = 16
+energy_eV = 6750.4
+filters = [{ material = "Fe", thickness_um = 15 }, { material = "Fe", thickness_um = 15 }]
+cathode = "Ni"
+solid_angle_sr = 6.514e-7
+
+[[channel]]
+number = 17
+energy_eV = 400.0
+filters = [{ material = "Ti", thickness_um = 0.5 }, { material = "Ti", thickness_um = 0.5 }]
+grid = 0.088
+mirror = { kind = "SiO2", angle_deg = 2.5 }
+cathode = "Al"
+solid_angle_sr = 5.603e-7
+
+[[channel]]
+number = 18
+energy_eV = 5740.9
+filters = [{ material = "Fe", thickness_um = 15 }]
+cathode = "Ni"
+solid_angle_sr = 1.773e-6

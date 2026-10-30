@@ -1,0 +1,164 @@
+# NIF Dante 1 on shot N180604-002. Public values: Kemp et al., RSI 91, 083507 (2020), OSTI
+# 1736341, Table III, read from the page image; peak-sensitivity energies as nominal
+# energies; the Ta grids 25 µm, 8.8 % open. Mirrors: SiO2 (the calibrated model) and
+# "aC" 5° as an uncalibrated Fresnel amorphous-carbon mirror (C 2.2 g/cm³, assumed).
+
+schema = 1
+id = "nif_dante1_N180604"
+name = "NIF Dante 1 (N180604-002)"
+kind = "xray_power"
+facility = "NIF"
+public = true
+shots = ["N180604-002"]
+source = "Kemp et al., RSI 91, 083507 (2020), OSTI 1736341, Table III"
+confidence = "H"
+
+[line_of_sight]
+theta_deg = 143.0
+phi_deg = 274.0
+
+[view]
+through = "leh_bottom"
+
+[recording]
+mode = "history"
+
+[[channel]]
+number = 1
+energy_eV = 353.32
+filters = [{ material = "Sc", thickness_um = 0.8 }, { material = "Ti", thickness_um = 0.5 }]
+grid = 0.088
+mirror = { kind = "SiO2", angle_deg = 3.5 }
+cathode = "Al"
+solid_angle_sr = 5.74e-7
+
+[[channel]]
+number = 2
+energy_eV = 166.7
+filters = [{ material = "B", thickness_um = 1.0 }, { material = "CH", thickness_um = 0.8 }]
+grid = 0.088
+mirror = { kind = "fresnel", material = "C", angle_deg = 5 }
+cathode = "Al"
+solid_angle_sr = 5.929e-7
+
+[[channel]]
+number = 3
+energy_eV = 249.55
+filters = [{ material = "lexan", thickness_um = 4.0 }]
+grid = 0.007743999999999999
+mirror = { kind = "SiO2", angle_deg = 3.5 }
+cathode = "Al"
+solid_angle_sr = 5.786e-7
+note = "'Lexan/4.0 + Ta grid + Ta grid' as printed: two grids"
+
+[[channel]]
+number = 4
+energy_eV = 475.46
+filters = [{ material = "V", thickness_um = 2.0 }]
+grid = 0.088
+mirror = { kind = "SiO2", angle_deg = 2.5 }
+cathode = "Ni"
+solid_angle_sr = 5.603e-7
+
+[[channel]]
+number = 5
+energy_eV = 711.48
+filters = [{ material = "Co", thickness_um = 1.4 }, { material = "CH", thickness_um = 0.2 }]
+grid = 0.088
+cathode = "Cr"
+solid_angle_sr = 6.514e-7
+
+[[channel]]
+number = 6
+energy_eV = 14300
+filters = [{ material = "Al", thickness_um = 250 }]
+cathode = "Cr"
+solid_angle_sr = 6.514e-7
+
+[[channel]]
+number = 7
+energy_eV = 15400
+filters = [{ material = "Mo", thickness_um = 32 }]
+cathode = "Ni"
+solid_angle_sr = 6.514e-7
+
+[[channel]]
+number = 8
+energy_eV = 13000
+filters = [{ material = "Y", thickness_um = 50 }, { material = "Al", thickness_um = 10 }]
+cathode = "Ni"
+solid_angle_sr = 6.514e-7
+
+[[channel]]
+number = 9
+energy_eV = 9746.42
+filters = [{ material = "Ge", thickness_um = 42 }, { material = "C", thickness_um = 375 }]
+cathode = "Ni"
+solid_angle_sr = 6.514e-7
+note = "'Ge/42 C/375' as printed, read as Ge 42 µm + C 375 µm (C as graphite, assumed)"
+
+[[channel]]
+number = 10
+energy_eV = 1707.2
+filters = [{ material = "Si", thickness_um = 20 }]
+cathode = "Al"
+solid_angle_sr = 6.514e-7
+
+[[channel]]
+number = 11
+energy_eV = 5599.46
+filters = [{ material = "Mg", thickness_um = 16.4 }, { material = "Ni", thickness_um = 3.6 }]
+cathode = "Al"
+solid_angle_sr = 6.514e-7
+
+[[channel]]
+number = 12
+energy_eV = 2585.91
+filters = [{ material = "saran", thickness_um = 66 }]
+cathode = "Al"
+solid_angle_sr = 6.514e-7
+
+[[channel]]
+number = 13
+energy_eV = 2958.99
+filters = [{ material = "Ag", thickness_um = 4.4 }]
+cathode = "Al"
+solid_angle_sr = 6.514e-7
+
+[[channel]]
+number = 14
+energy_eV = 1156.77
+filters = [{ material = "Mg", thickness_um = 22 }]
+grid = 0.088
+cathode = "Al"
+solid_angle_sr = 6.514e-7
+
+[[channel]]
+number = 15
+energy_eV = 1427.94
+filters = [{ material = "Al", thickness_um = 20 }]
+cathode = "Ni"
+solid_angle_sr = 6.514e-7
+
+[[channel]]
+number = 16
+energy_eV = 944.71
+filters = [{ material = "Mg", thickness_um = 5.0 }, { material = "Zn", thickness_um = 1.0 }, { material = "CH", thickness_um = 0.1 }]
+grid = 0.088
+cathode = "Ni"
+solid_angle_sr = 6.514e-7
+
+[[channel]]
+number = 17
+energy_eV = 834.28
+filters = [{ material = "Cu", thickness_um = 1.1 }]
+grid = 0.088
+cathode = "Cr"
+solid_angle_sr = 6.514e-7
+
+[[channel]]
+number = 18
+energy_eV = 14400
+filters = [{ material = "Al", thickness_um = 250 }]
+cathode = "Ni"
+solid_angle_sr = 1.773e-6
