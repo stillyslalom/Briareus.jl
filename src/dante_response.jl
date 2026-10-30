@@ -103,7 +103,7 @@ end
 
 One Dante channel built from its hardware: `filters` (`material => thickness` pairs,
 thickness in mm, transmission from Henke's tables, [`filter_transmission`](@ref) with
-`table = :henke`), a tungsten mesh of open fraction `grid` (opaque wires), a `mirror`
+`table = :henke`), a 25 µm tantalum mesh of open fraction `grid` (opaque wires), a `mirror`
 (`(:SiO2, angle°)` grazing-incidence, or `(:mlm, 1.9)` for channel 2's Cr/Sc multilayer)
 and an XRD `cathode` ([`xrd_sensitivity`](@ref)); `energy` (eV) is the nominal band
 energy and `solid_angle` (sr) the channel's. Fields `E` (eV) and `R` (V/GW) tabulate the
@@ -148,9 +148,10 @@ function _response(c::DanteResponse, E::Real)
 end
 
 # NIF Dante 1 hardware for ICF experiments, Rubery et al., RSI 2023, Fig. 4 (thicknesses
-# µm; "grid" the 8.8 % open tungsten mesh, §II.A). Channel 2's "47 µm CH" is the
-# polyimide of the 2–4 keV multilayer channel (§II.D, Fig. 8); "CH" elsewhere is taken
-# as polystyrene and "parylene" as parylene N (*assumed*).
+# µm; "grid" the 8.8 % open mesh, §II.A: 25 µm Ta per Kemp 2020, "tungsten" in
+# Rubery). Channel 2's "47 µm CH" is the polyimide of the 2–4 keV multilayer channel
+# (§II.D, Fig. 8); "CH" elsewhere is taken as polystyrene and "parylene" as parylene N
+# (*assumed*).
 const _DANTE1_HARDWARE = [
     (1, 1170, [:Mg => 22], false, nothing, :Al, 6.51e-7),
     (2, 3060, [:polyimide => 47], false, (:mlm, 1.9), :Al, 1.90e-7),

@@ -84,7 +84,9 @@ callout in the section says which).
 **Spectra and diagnostics**
 - Spectral radiosity, M-band and a synthetic Dante (2026-10-24); Dante channel responses
   and the unfold (2026-10-24); Laser-spot spectrum (2026-10-24) (α_M 0.55 with thermal
-  spots); Per-cone M-band in the drive history (2026-10-27).
+  spots); Per-cone M-band in the drive history (2026-10-27); Dante-family hardware and
+  geometry: what is public (2026-10-29); X-ray imagers, radiography and streaked
+  diagnostics: what is public (2026-10-29).
 
 **Hydrodynamics coupling**
 - Capsule drive hand-over and CompactLES stage 0 (2026-10-24).
@@ -6552,6 +6554,10 @@ gradient behind σ against central differences, the optimum a maximum, the hν s
 
 ## Dante channel responses and the unfold (2026-10-24) *derived*
 
+> **Corrected in part (2026-10-29).** The grids are 25 µm tantalum (Kemp 2020, Fournier
+> 2010, May 2015), not tungsten; as opaque wires the responses do not change. See
+> "Dante-family hardware and geometry: what is public (2026-10-29)".
+
 ROADMAP "Spectral radiosity", what remained of the synthetic Dante: the 18 Dante 1 channels built from
 their hardware in place of Gaussians, the Dante unfold, and XRD lines of sight
 (`src/xray_optics.jl`, `src/dante_response.jl`, `examples/dante_channels.jl`,
@@ -9151,3 +9157,276 @@ conventions below are assumed, not taken from a facility document.
   re-resolves the frames at each value and moves each part whose frame changes by
   `F(v) ∘ F(v₀)⁻¹`; the tests check that against the design rebuilt with the value, to
   1e-12 mm on vertices and aims. Session version 4 stores the steps.
+
+## Dante-family hardware and geometry: what is public (2026-10-29)
+
+For the diagnostic definitions (`reference/diagnostics-design.md`): what a synthetic
+Dante, Sentinel, Omega Dante or Z XRD can take from public sources, and what a user
+supplies. Gathered by a literature pass and then checked by a second, independent pass
+against the PDFs (tables read from page images); the field of view, standoffs, Chen's
+flux pair, Kemp's solid angles and grids, the MLM channel's geometry and the BAH
+occlusion were checked again against the text. Papers (OSTI IDs): Dewald et al., RSI 75,
+3759 (2004), 15014120; Campbell et al., RSI 75 (2004), 15014117; May et al., RSI 81,
+10E505 (2010), 1009652; Fournier et al. (2010), 1012430; Glenzer et al., PRL 104 (2010),
+1119940; May et al. (2012), 1226204; May et al. (2015), 1234624; Marrs et al. (2015),
+1366953; Kemp et al., RSI 91, 083507 (2020), 1736341 (Dante 1 configurations); Kemp et
+al. (2020), 1736345 (Sentinel); Opachich et al. (2021), 1736342; Harris et al., RSI 92,
+033505 (2021), 1820019; Rubery et al. (2022), 1959490 (the multilayer channel); Rubery
+et al., RSI (2023), 1975922; Rubery et al., PRL 132, 065104 (2024); Chen et al. (2024),
+2429360; arXiv 2501.10350 (the BAH platform); Schoenzeit, 3363346; Jones et al.,
+SAND2014-4261J, 1145734 (Z); Fournier (2007), 920482 (Omega); NIF User Guide (2024-09).
+Not obtained: Sorce et al., RSI 77, 10E518 (2006) (Omega Dante; no full text); Girard
+et al., RSI 80 (2009), OSTI 22053575 (abstract only; first pass misattributed it to
+Kline).
+
+### Corrections to the earlier sections
+
+- **Grids are tantalum.** 25 µm Ta, 8.8 % open (Kemp 2020 Tables I–III; Fournier 2010;
+  May 2015); only Rubery 2023 §II.A says tungsten ("Spectral radiosity, M-band and a
+  synthetic Dante", "Dante channel responses and the unfold": "W grids"). The model
+  treats a grid as opaque wires (transmission = open fraction), so nothing changes for
+  the current channels; a grid on a channel above ~10 keV would need the Ta transmission.
+- **Mirrored channels changed over time**, not a contradiction: Dante 1 had 4 in 2009,
+  5 in 2012–15, 4 in 2017–18 and 3 from October 2021 (Rubery 2023); Dante 2 8 in 2015
+  (User Guide, from a 2015 LLNL news item), 11 from 2021 (Rubery 2023). A channel set
+  belongs to a date or shot.
+- **Dante 1's port** is θ 143.25°, φ 274° (User Guide Table 5-1; 36.75° to the axis; the
+  BAH paper uses 36.75°); Rubery, Kline, Marrs and Fournier give 37°, Chen 2024 37.4°.
+  `dante1()` keeps θ 143° (Rubery) until the port table is adopted, with the change
+  measured then. Dante 2: θ 64°, φ 350°.
+- **Tr's area is an analysis choice.** Rubery 2024 and the BAH paper (its eq. 12) use the
+  initial LEH area; Glenzer 2010 used A_LEH(t) from the 3–5 keV SXI images (diameter to
+  83 %) and a 10–15 eV view-factor correction to the capsule; Fournier 2010 used 19.65 /
+  19.89 mm² (Dante 1 / 2), the projected area of the cylinder wall and end cap as each
+  Dante saw them.
+
+### 1. Field of view, distances, apertures
+
+| Quantity | Value | Source | Conf. |
+|---|---|---|---|
+| NIF Dante standoff | 8.5 m average, collimators at 5.5 m (2004 design) | Dewald 2004 text, Fig. 2 | H |
+| NIF Dante standoff (fielded) | 8.8 m | Fournier 2010 §II | H |
+| Filter wheel; MLM filter | 8 m; 8.9 m | Rubery 2022 | H |
+| Field of view | ±30 mm at TCC, set by collimators (2004 design) | Dewald 2004 text | H |
+| Field of view (fielded) | "centimeter-wide"; it took in the target support lit by unconverted light, raising the foot Tr in the first two channels | Girard 2009 abstract | M |
+| What a channel sees | the whole target, not the chamber | Marrs 2015 Fig. 1; Harris 2021 Fig. 1 | H |
+| Channel solid angle | set by an aperture in front of each XRD | Rubery 2023 §II.A | H |
+| Dante 1 Ω (2017–18) | 0.6514 µsr unmirrored; ch 18 1.773 µsr; mirrored 0.5558–0.5929 µsr | Kemp 2020 Tables I–III | H |
+| Implied XRD apertures | 8.0 mm and 13.2 mm at 8.78 m give 0.6514 and 1.773 µsr | derived | L |
+| MLM channel (ch 2) | 3.2 × 14 mm elliptical aperture at the mirror box, 2.6 × 8 mm at the XRD; FOV 12 mm diameter; Ω 1.91e-7 sr (GEANT4); acceptance ±0.05° | Rubery 2022 | H |
+| Omega Dante port | H16I, θ 142.62°, φ 126° | Rubery 2023 §IV | H |
+| Omega view angle | 37.37° to a P6–P7 or P5–P8 axis (37.3°, OSTI 920482) | May 2012 | H |
+| Omega XRD apertures | ch 1 10.5 mm, ch 2–4 8.3 mm, ch 5–18 13.2 mm | Rubery 2023 Fig. 13 | H |
+| Sentinel | ≈ 7 m (can be closer); entrance 12.9 mm² (1.45 × 8.89 mm), 18.1 mm² active, plates at 45° to the axis | Kemp 2020 Sentinel §II | H |
+| Z LOS50 | 12° polar, 50° azimuth: XRD 23.20 m (11.6°), bolometer 18.84 m, PCD 18.36 m; sees the bottom 75 % of a 10 mm array | Jones 2014 Tables 1–2 | H |
+
+Not public: the NIF collimators and field of view as fielded (only the 2004 design and
+the MLM channel's 12 mm), the large-aperture channels' geometry, Omega Dante's standoff
+and solid angles, Dante 2's solid angles, current grid transmissions.
+
+Consequence: a NIF Dante sees the whole target, so the synthetic view is limited by
+occlusion and the target's extent, not by the collimator, except the MLM channel (12 mm)
+and large assemblies (a halfraum pair, a package off TCC).
+
+### 2. Channel sets
+
+Notation: cathode / filters (µm; "g" 8.8 % Ta grid) / mirror / Ω (µsr; 0.6514 where
+not given).
+
+**NIF Dante 1, N170924-003** (Kemp 2020 Table I): 1 Al / Sc 0.8 + Ti 0.5 + g / SiO₂
+3.5° / 0.5786; 2 Al / B 1.0 + CH 0.8 + g / a-C 5° / 0.5929; 3 Al / Lexan 4.0 + g / SiO₂
+3.5° / 0.5786; 4 Ni / V 2.0 / SiO₂ 2.5° / 0.5603; 5 Cr / Co 1.4 + CH 0.2 + g; 6 Cr / Cu
+1.1 + g; 7 Ni / Mg 5 + Zn 1.0 + CH 0.1 + g; 8 Ni / Mg 22 + g; 9 Ni / Al 20; 10 Al / Si 20;
+11 Al / Ti 26; 12 Al / Saran 66; 13 Al / Ag 4.4; 14 Al / Lexan 2 + CaF₂ 21 + CH 3; 15 Ni /
+Fe 30; 16 Ni / Ti 26; 17 Cr / Mn 26.4 + Ni 3.6; 18 Ni / Mn 26.4 + Ni 3.6 / 1.773.
+
+**N180129-001** (Table II; mirrors and cathodes as Table I; Ω ch 1–4 0.5740, 0.5881,
+0.5740, 0.5558): 1 Sc 0.8 + Ti 0.5; 2 B 1.5 + CH 1.2; 3 Lexan 4 + g; 4 Ni / V 1.75; 5 Co
+1.4 + CH 0.2 + g; 6 Cu 2.0 + g; 7 Mg 5 + Zn 0.65 + CH 0.1 + g; 8 Mg 22 + g; 9 Al 20 + g;
+10 Si 20; 11 Al / Fe 1 + Cr 0.65 + parylene 5 + g; 12 Saran 66; 13 Ag 4.4; 14 Al / Ti 13;
+15 Ni / Zn 25; 16 Ni / Al 250; 17 Cr / Ni 10; 18 Ni / Fe 1 + Cr 0.65 + parylene 5 / 1.773.
+
+**N180604-002** (Table III; Ω ch 1–4 0.5740, 0.5929, 0.5786, 0.5603): 1 Sc 0.8 + Ti 0.5
++ g; 2 B 1.0 + CH 0.8 + g; 3 Lexan 4 + g (grid printed twice); 4 V 2.0 + g; 5 Co 1.4 + CH
+0.2 + g; 6 Cr / Al 250; 7 Ni / Mo 32; 8 Ni / Y 50 + Al 10; 9 Ni / Ge 42 (a "C/375" entry
+as printed, unresolved); 10 Si 20; 11 Al / Mg 16.4 + Ni 3.6; 12 Saran 66; 13 Ag 4.4; 14
+Al / Mg 22 + g; 15 Ni / Al 20; 16 Ni / Mg 5 + Zn 1.0 + CH 0.1 + g; 17 Cr / Cu 1.1 + g; 18
+Ni / Al 250 / 1.773.
+
+**From October 2021** (Rubery 2023 Fig. 4): `_DANTE1_HARDWARE`, checked channel by
+channel against the figure (the one difference, ch 2's "47 µm CH" as polyimide, follows
+Rubery 2022 and 2023 §II.D). Unresolved: Fig. 4 gives ch 16 and 18 both 1.77 µsr where
+every earlier table has the large aperture on ch 18 only; Rubery's text calls ch 17 a
+duplicate of ch 5, which the figure does not show.
+
+**N091104 (2009)** (Fournier 2010 Table II; per-foil thickness × count, the count
+multiplying as May 2015 Table IV shows; Ω 0.6490 on ch 5–17): 1 Cr / Al 0.75 × 2 / B₄C
+7° / 0.598; 2 Al / (B 0.2 + Lexan 0.4) × 4 / a-C 5° / 0.588; 3 Al / Lexan 2 × 2 / SiO₂
+3.5° / 0.574; 4 Ni / V 1 × 2 / SiO₂ 2.5° / 0.556; 5 Cr / Ni 12 × 2; 6 Cr / Cu 0.6 × 2 +
+grid (T 0.091); 7 Ni / (Zn 0.65 + CH 0.1) × 2 + grid; 8 Ni / Mg 5.5 × 3 + grid; 9 Ni / Al
+5 × 3 + grid; 10 Al / Si 11 × 2; 11 Al / (CaF₂ 7 + parylene 1) × 3; 12 Al / Saran 25 × 3;
+13 Al / Ag 2.5 × 2; 14 Al / Ti 11 × 2; 15 Ni / Fe 15 × 2; 16 Ni / Zn 25; 17 Ni / Al 250;
+18 Ni / Fe 1 + Cr 0.65 + parylene 5 + grid / 1.773.
+
+**2012–14** (May 2015 Table IV, "typical" for N120627/28, N140220/21): five mirrors (ch
+1 B₄C 7°, 2 a-C 5°, 3 SiO₂ 3.5°, 4 and 17 SiO₂ 2.5°); Ω ch 1 0.6026, 2 0.5929, 3 0.5786,
+4 and 17 0.5603, 18 1.773, others 0.6514.
+
+**Omega Dante, current** (Rubery 2023 Fig. 13; ch 1–2 offline; no solid angles):
+cathode / filters / mirror / aperture mm, energy keV — 1 Cr / Al 1.5 / C 7° / 10.5, 0.06;
+2 Al / B 0.4 + Lexan 0.8 / C 5° / 8.3, 0.17; 3 Al / Lexan 4 / Be 3.5° / 8.3, 0.27; 4 Al /
+V 2 / C 2.5° / 8.3, 0.49; then 13.2 mm, no mirror: 5 Cr / Co 1.4 + Lexan 0.2, 0.79; 6 Cr /
+Cu 1.2 + grid, 0.94; 7 Ni / Zn 1.3 + CH 0.2 + grid, 1.02; 8 Ni / Mg 11, 1.25; 9 Al / Al
+10, 1.40; 10 Al / Si 20, 1.70; 11 Al / Fe 1 + Cr 0.65 + parylene 5, 3.50; 12 Al / Saran
+75, 2.15; 13 Al / Ag 5, 2.92; 14 Ni / Ti 22, 4.00; 15 Ni / Mn 30, 5.30; 16 Ni / Fe 30,
+6.15; 17 Ni / Zn 50, 8.40; 18 Ni / Al 250, 15.0. Channel counts disagree across sources
+(13 in 2006, OSTI 920482; 15, May 2012; 18 on 15-position hardware, Rubery 2023).
+
+**Omega, 2003–04** (Campbell 2004 Table 1; 12 channels, no thicknesses): bands, cathodes,
+mirrors (C 2.5°, 5°, 7°; Be 3.5°) and filter elements only.
+
+**Sentinel, N170924-003** (Kemp 2020 Sentinel Table II; filters chosen to emulate that
+shot's Dante 2 without its mirror channels; "s" 35 % sieve): 1 Ni / Mg 22; 2 Ni / Mn 13.2
++ Ni 1.8; 3 Cr / Al 5 + s; 4 Cr / B 5 + CH 1 + s; 5 Al / Lexan 2 + CaF₂ 14 + CH 18; 6 Cr
+/ parylene 10 + s; 7 Al / Sc 1.6 + Ti 1 + s; 8 Al / Ti 11; 9 Ni / V 2; 10 Al / Fe 15; 11
+Cr / Co 1.4 + CH 0.2; 12 Cr / Si 20; 13 Ni / Al 20; 14 Al / Saran 44; 15 Ni / Ti 26; 16 Al
+/ Ag 2.2. Relative responsivities ±10–20 %, absolute calibration crude.
+
+**Dante 2:** no channel table is public (16 channels like Dante 1 in 2009, Fournier
+2010; "like Dante 1 but missing several 3–5 keV channels" in 2012–14, May 2015;
+normalized responses only in Opachich 2021 Fig. 5). Users supply it.
+
+**Z** (Jones 2014): five XRD filters (µm): Kimfol 4; V 1; Zn 0.75 + parylene N 0.5; Be 8
++ parylene N 1; Be 10 + V 0.8.
+
+### 3. Power to Tr; other surfaces; published synthetic views
+
+| Item | Value | Source | Conf. |
+|---|---|---|---|
+| Relation | F = A cos θ σ Tr⁴; V_i = P Ω_i ∫ R_i S dE | May 2010 eq. 1; Harris 2021 eq. 1 | H |
+| Flux band | to ≈ 13 keV (NIF); 0–2 or 0–3 keV (Omega) | Harris 2021; May 2010 | H |
+| Area uncertainty | excluded from published error bars; emission outside the LEH is recorded | May 2010 §IV | H |
+| Thin walls | A_eff(E) = A_LEH cos θ + T_wall(E) A_wall sin θ; halves an Fe K-shell yield (Ti ÷ 1.5) | May 2012 eq. 2 | H |
+| Lambertian LEHs | Dante 1 / Dante 2 below 3 keV 1.8 = cos 37° / cos 64° (1.82) | May 2015 | H |
+| Simulations through the instrument | LASNEX spectra through the channel responses and the same unfold as data | May 2015 | H |
+| Synthetic Dante by view factors | VisRad with the Dante 2 line of sight occluded by an annular window-retaining ring: irradiance on a small element 6 m out, 27 % blocked (≈ 20 % by a simple estimate); I uncertainty 5 % (Dante 1), 10 % (Dante 2) | arXiv 2501.10350 §V.B | H |
+| Side views | Dante 2 through a window onto the back wall, two LEH shields; in/out albedo correction; LASNEX synthetic Dante, method unpublished | Opachich 2021 | H |
+| Obstructions | a gas-pipe stalk blocks Dante 2 | Schoenzeit | H |
+| Orientation | through the LEH ≈ 15 TW/sr peak; through an open end ≈ 35 TW/sr (a larger, cooler area; higher M-band share through the LEH) | Chen 2024 pp. 3–4, Figs. 1–2 | H |
+| Keeping clear of the views | a 10 µm polyethylene filter ≈ 5 cm from the target, outside both Dante views | Kemp 2020 Sentinel §III | H |
+
+Checks for the field-of-view path (never fit targets): Chen 2024's LEH / open-end pair;
+the BAH 27 % occlusion; May 2015's cos 37° / cos 64° ratio.
+
+### 4. Timing
+
+| Item | Value | Source | Conf. |
+|---|---|---|---|
+| XRD-31 impulse response | ≈ 140 ps FWHM at 5 kV | Rubery 2023 Fig. 5 | H |
+| NIF bandwidth | 2.5 GHz (54 m LMR-600); Wiener deconvolution; attenuation 0–62 dB + 19.1 dB fixed (Fig. 2 labels 12 dB) | Rubery 2023 §II.A | H |
+| Digitizers | 10-bit Keysight, 10 GS/s: Dante 1 from summer 2016, Dante 2 from June 2017 (SCD5000 before) | LLNL news 2016-11-15; Opachich 2021 | M; H |
+| Effective response; timing | ≈ 400 ps Gaussian; absolute 50–75 ps (±50 ps) | Rubery 2024; Rubery 2023 | H |
+| Omega | 16 SCD5000, 5 GHz; 100–200 ps | Rubery 2023 §IV; May 2010 | H |
+| Sentinel MiniXRD | ≈ 250 ps at 1.5 kV | Kemp 2020 Sentinel | H |
+
+### 5. Uncertainty
+
+| Item | Value | Source | Conf. |
+|---|---|---|---|
+| NIF at peak (1σ) | flux 4 %, Tr 1.5 % | Rubery 2023 §II.C | H |
+| Dante 1 per channel | 8.4–16.4 %; MLM 8.7 % | Rubery 2023 Fig. 4, §II.D | H |
+| Component calibration (2009) | 10–20 % per channel | Fournier 2010 | H |
+| Omega per channel | ≈ 20 % at 200 eV to ≈ 5 % at 2 keV; ΔF, ΔTr fits eqs. 3–6 | May 2010 | H |
+| Omega 2004 | systematic 17.4 % (60 eV) to 2.3 %; Tr 2.7 / 1.6 / 1.2 / 0.7 % at 50 / 100 / 200 / 300 eV | Campbell 2004 Table 2 | H |
+| Opacity campaign | flux ±5 %; Tr 2.1 % at 100 eV, 1.5 % at 200 eV | Opachich 2021 | H |
+| Unfold with channels lost | 1–3 % typical; 14 / 23 / 15 % with ch 1–2, 6–9, 11 and 18 off (summer 2019) | Harris 2021 | H |
+| XRD aging | response falls over years (C, O contamination) | Campbell 2004 Fig. 1 | H |
+
+## X-ray imagers, radiography and streaked diagnostics: what is public (2026-10-29)
+
+For the next diagnostic kinds (`reference/diagnostics-design.md`, phase 5). Gathered by a
+literature pass and checked by a second, independent pass against the PDFs (tables from
+page images); Gregor's Table II, Izumi 2018's spot-temperature statement and the
+P18-123 port were checked again against the text. "D" design, "F" as fielded, "S" one
+shot or campaign.
+
+### Corrections to the first pass
+
+- Izumi 2018 does **not** state that 3–5 keV hohlraum images are dominated by laser
+  spots: its thin-wall camera images 7–12 keV, a photon energy 3–5 × Te (Te 2.2–2.7 keV
+  simulated at 2–3 × 10¹⁴ W/cm²), so that signal rises faster than the fourth power of
+  the laser intensity. Schneider 2010 §I and Chen 2020 say only that the SXI images show
+  beam spots and expanding plasma. A thermal (Tr) model's adequacy for the 3–5 keV
+  channel is open, to be measured, not assumed.
+- The SXI soft channel is 870 eV in Schneider 2010/2012 and 900 eV in the User Guide.
+- G-LEH-1's specifications are in Chen 2021 Table I, not Chen 2020; its filters are Ti
+  5–25 µm (Chen 2018), not "Ti 10 or Al 30 µm".
+- The 2015 K-mirror and SOP upgrade paper is Manuel et al. (SPIE 2015), OSTI 1240931.
+- Omega ASBO is F/3.3, 15.3× to the interferometers, 25.5× to the slit.
+- Lanier et al. is RSI 87 (2016).
+
+### 1. Ports (NIF User Guide Tables 5-1, 6-1, App. E; H)
+
+(θ, φ) in degrees: P18-123 (18, 123.75), the SXI-U port; P161-326 (161, 326.25), SXI-L
+and G-LEH (Chen 2020 §II.1, Chen 2021 §II); DIMs P0-0 (0, 0), P90-315 (90, 315), P90-78
+(90, 78.75); P90-123 (90, 123.75) and P90-348 (90, 348.75); P90-89, P90-100. VISAR and SOP
+share the 90-315 DIM. SPIDER at (7, 90), through the upper LEH. That SXI-U's line of
+sight is its port axis is inferred (M) from SXI-L's.
+
+### 2. X-ray imagers
+
+| Instrument | Values | Source | Conf. |
+|---|---|---|---|
+| SXI hard channel (F) | M = 2; detector 4.97 m (2010), 4.88 m (2012, upper); four 25 µm pinholes; 75 µm Be + 50 µm Ti, 3–5 keV; ≈ 60 µm | Schneider 2010 §II (OSTI 1009651); Schneider 2012 §II (1043636, a draft) | H |
+| SXI detector | back-thinned Si CCD, 15 µm Si, 24 µm pixels, 2k × 2k, absolutely calibrated | Schneider 2010 §II | H |
+| SXI soft channel | W/B₄C multilayer, 30 bilayers, 43.1 Å period (W 21.55 Å), 40 Å SiC cap, 10°, 0.7 mm Si substrate; 45 µm pinhole; Cu 2 µm + polyimide 0.5 µm (2010) / 1 µm (2012) | Schneider 2010, 2012 | H |
+| G-LEH-1 (F) | Furi hCMOS 1024 × 448, 25 µm, 2 frames, ≥ 2 ns gate; 22 pinholes at 0.9–1.2×, up to 8 images by timing skew; 56 µm at 2×, 87 µm at 1×; Ti 5–25 µm | Chen 2021 Table I (1860726); Chen 2018 §III (1524285) | H |
+| G-LEH-2 (F, from April 2020) | two Icarus sensors 1024 × 512, 25 µm, 4 frames each; gates 1, 2 or 38 ns, fastest "1 on / 2 off" (FWHM 1.4 / 1.0 / 1.4 / 1.0 ns); 0.7–10 keV; M 0.6–4×, at 1× pinholes 3.25 m and camera 6.5 m; 25 µm pinholes, ≈ 70 µm; Ti 5–40 µm; light-tight 0.5 µm polyimide + 1 µm Al + 0.5 µm polycarbonate; the halves' relative frame timing 2.86 / 2.60 / 6.84 / 6.60 / 10.90 / 10.65 / 14.98 / 14.74 ns | Chen 2021 Table I, text | H |
+| G-LEH field | ≈ 80° in azimuth, a little over half the hohlraum length (N171227-001) | Chen 2020 §II.1 (1632379) | H |
+| Gated response | S = G ∫ g(t − t₀(x)) I(t) dt per pixel, t₀ varying across the sensor | Chen 2018 §I | H |
+| GXD (D) | Au photocathode, 30 mm, four 7.5 mm strips; gate 70–1500 ps; strip delays to 44 ns; ≈ 50 µm; P43; 4k × 4k CCD | Oertel, UCRL-TR-224211 (896014) | H |
+| Camera standard | one, two or four strips, up to 50 ns apart; Kodak 16801E 4096², 9 µm | Kimbrough (1124976) | H |
+| Implosion GXD | 10 µm pinholes in 70 µm Ta, 200 µm pitch, M = 15, array 80 mm from TCC; yield limits CCD ≈ 10¹³, film ≈ 10¹⁵ | Bell (1124981) | H |
+| Detector MTF | ≈ 0 near 15 mm⁻¹ (detector plane) | Trosseille 2018 (1479070) | H |
+| Izumi's three cameras (S: N171010-001 … N181010-001; 5.75 × 10.13 mm, LEH 3.37 mm; ≈ 100 ps gates, 12 frames) | axis: 2×, 100 µm × 24, 380 mm to detector, Fe 12 µm + Kapton 650 µm (< 7.1 and ≈ 14 keV); φ 315°: 0.75×, 80 µm × 16, 250 mm, Kapton 1.15 mm (7–12 keV); φ 78.75°: 12×, 10 µm × 186, 1200 mm, Au 2.5 µm + HDC 162 µm + polycarbonate 1.5 mm + Kapton 1.025 mm (≈ 15 keV) | Izumi, RSI 89, 10K111 (2018) Table I | H |
+| Omega XRFC (S: CEA 2013, 2015) | 4-strip MCP, Au, 4096²; 4 images per strip 50 ps apart, strips 200 ps apart | Poujade, arXiv 1705.10147 §IV | H |
+| Omega SLOS-TRXI | port H4F (45.2°, 234°); 10 µm pinholes at 166.5 mm; cathode 2238 mm, M 12.4; 4–9 keV; Icarus, 2 ns; ≈ 40 ps | Theobald (1477184) | H |
+
+### 3. Radiography
+
+| Platform | Values | Source | Conf. |
+|---|---|---|---|
+| NIF in-flight radiography (S) | Ge foil 12 mm from the capsule, equatorial; 8 beams, 52 kJ; Ge He-α 10.25 keV; ≈ 1 mm source, ≈ 2 ns; hohlraum holes 0.9 × 0.83 mm, HDC windows; GXD 8×, two strips, ≈ 90 ps, 20–25 µm pinholes | Rygg 2014 (1184746) | H |
+| NIF area foils | 3 × 3 or 1 × 1 mm, 10–15 µm; 4–8 beams, 16–60 kJ at 40° to the normal; 2–5 ns after a 1 ns picket 3 ns earlier | Barrios (1162253) | H |
+| ARC | 4 beamlets of Q35T (8 planned); 1 kJ at 38 ps … 0.25 kJ at ≈ 1 ps; B353 delayable 3.6 ns after B354; pointing ±50, ±50, +10/−45 mm | User Guide §4.10 | H |
+| ARC dual backlighter (no shot numbers) | two Au wires (25 or 10 µm) tipped 3–6° to the line of sight, two 900 J / 30 ps beamlets each; wires 7 and 8 mm from the target, ≈ 5° apart; MS image plate ≈ 600 mm, M ≈ 75 (87 and 76 recomputed); Cu 500 + Al 500 µm; frames at bang time −50, −10, +160 ps, ±40 ps | Tommasini, PRL 125, 155003 (2020) (1718992) | H |
+| AXIS | two gated thick-MCP imagers at DIMs 90-78 and 90-124; 40–200 keV; 8° pore bias | User Guide Table 6-1; Hall 2016 (1258550) | H |
+| ARC Dy flag | 300 × 300 × 5 µm edge-on, ≈ 2.5 kJ / 10 ps, ≈ 100 keV effective; object 41 mm, plates 500 mm beyond, M 13.2; 10 Fuji SR | Hill 2021 (1811762) | H |
+| Omega Compton | Au wire 10 µm on a 300 µm square; plate ≈ 400 mm; ≈ 10 µm, ≈ 10 ps | Tommasini 2011 (1016984) | H |
+| Omega streaked radiography (S) | V 5 µm foil (5.2 keV), 8 beams ≈ 320 J; slots 1000 × 300 / 1000 × 100 µm; slit M 20; Au cathode, 4 ns, ≈ 40 ps; P6–P7 hohlraum, H7–H14 axis | Hicks 2010 (1113950) | H |
+| Image plates (NIF) | Fuji MS/SR/TR; FLA-7000 at 25/50/100 µm; S1272/S4000/S10000 = 500/588/678 V; fade correction | Holder (1479074) | H |
+| Image-plate response | PSL = (1/W) ∫ e^(−z/L) (dE/dz) dz, SR W 2.1–2.3 MeV, L 40–50 µm; mPSL/photon at S1000/S4000/S10000 — SR 1.80/2.00/2.10 (5.9 keV), 2.03/2.33/2.44 (22.4), 0.72/1.14/1.29 (59.5); MS 4.24/4.50/4.72, 7.91/8.42/8.82, 4.73/5.61/6.07; S labels are scanner-specific; MS fades 58 % in 105 min; ±8.7 % | Rosenberg, RSI 90, 013506 (2019) (1497010) | H |
+
+### 4. Streaked optical and x-ray
+
+| Instrument | Values | Source | Conf. |
+|---|---|---|---|
+| VISAR fringe constant | τ = 2h(n − 1/n)/c; VPF₀ = λ/[2τ(1 + δ)], δ 0.0318 (fused silica, 532 nm); window and in-dielectric corrections; 2 mm fused silica 24.9 km/s, 30 mm 1.66 (recomputed) | Celliers 2004 eqs. 1–5 (926409) | H |
+| NIF VISAR (D) | 90-315 DIM; probe 659.5 nm; f/3 fused-silica triplet ≥ 500 mm from TCC; objects 1–5 mm; two interferometers; Dove prism, later K-mirror; 19 mm slit | Malone 2004 (15014809, 15014425); Manuel 2015 (1240931) | H |
+| NIF VISAR fields | 1 and 2 mm; 660 nm with a VPF correction | Celliers & Millot, RSI 94, 011101 (2023) (2005084) | H |
+| NIF VISAR performance | < 0.35 km/s; < 50 ps; keyhole field ≈ 350 µm | Celliers 2011 (1035299); Robey 2013 (1113420) | H |
+| NIF SOP | 540–645 nm, f/5, 2 mm (2005, D); 560–640 nm, ≈ 12 µm, gated cathode (2015) | Malone 2005 (15016768); Manuel 2015 | H |
+| NIF optical streak camera | P510 tube, P43; windows 2–90 ns, four per camera; 4096², 9 µm, binned 3 × 3; one calibration: 3/6/16/40 ns windows, 19.1/28.5/54.7/159.3 ps | Datte 2013 slides (1092512) | H |
+| Omega ASBO | 532 nm; F/3.3, 146 mm; 15.3× and 25.5×; ≈ 760 µm field; ≈ 4 µm; etalons 2–30 mm (25–1.7 km/s per fringe) | Celliers 2004 | H |
+| Omega SOP (from 2011) | OG590 to S20 (≈ 590–850 nm); P510; windows 6/17/46/96 ns; slit ≤ 80 µm apparent (≈ 20 / 50 ps at 6 / 17 ns); M ≈ 21; 800 µm slit recommended; ≥ 0.5 eV | Gregor, RSI 87, 114903 (2016) (1341873, accepted manuscript) | H |
+| Omega SOP calibration | T = T₀ / ln(1 + A/I), A = A₀ X(WS₀)/η; ND 0 → T₀ 1.909 eV, A₀ 481,000 ADU/ns … ND 2.5 → 1.789, 3016 (Table II, 15 rows); for shots ≥ 74528; A₀ × 0.434 / 0.831 / 0.886 for shots 68276–70551 / 70552–71572 / 71573–74527; ±3.5 % (A₀), ±0.2 % (T₀) | same, eqs. 7–8, Tables I–II | H |
+| NIF DISC | 263 nm fiducials, 45 ps, ≈ 300 ps apart; 500 Å Al fiducial cathode | Opachich 2012 (1044234) | H |
+| X-ray streak | windows 1–100 ns; a hardened camera records 680 ps at ≈ 30 ps, CsI, cathode 1.2 m from target | Kimbrough; MacPhee (1891708) | H |
+| VISAR on hohlraum witnesses | Al mirrors tamped with Be on the axis (−9° to +13°) and side-on (+37° to +47°) | Lanier, RSI 87 (2016) (1394969) | H |
+
+### Not public, or not found
+
+NIF VISAR sweep windows and etalon sets; NIF SOP's absolute calibration; Omega TIM port
+assignments (PI portal); ARC radiography shot numbers; the AXIS 128× / 300 µm figure
+(news item only); G-LEH-1's original filter set; fused silica's δ at 659.5 nm; the
+Meadowcroft (2008) and Maddox (2011) image-plate papers (quoted by Rosenberg only).

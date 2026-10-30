@@ -109,13 +109,18 @@ it.
 A. **Roles in the GUI** (no visible change, bit for bit): `observed`, `wall`,
    `lands_on` read from roles; the capsule role stops renaming; sessions version up.
 B. **Hohlraum part, piece aim points, starters:** the reported bug fixed; target kinds
-   removed; sessions with a template convert to parts.
+   removed; sessions with a template convert to parts; starters inserted in a selected
+   frame (decision 5).
 B2. **Assembly tree:** `Assembly`, membership, subtree show/hide and include/exclude,
-   the tree's editing commands, sessions; a CAD import as one assembly of its parts.
+   the tree's editing commands, sessions; a CAD import as one assembly of its parts; the
+   placement triad (decision 6).
 C. **Halfraum ends and packages:** open ends, a package `observed` face, the shock-tube
    and opacity starters.
 D. **Profiles:** frustraums and multi-section hohlraums (a radius per section; four
    sections for the tentless design).
+C2. **Per-cavity drive and whole-assembly Dante** (decisions 8, 10, 11): Tr per hohlraum
+   part, a cavity selector in Drive; `DanteView` with a collimator FOV and a reference
+   area; Dante FOVs sourced first.
 E. **Double backlighter with ARC:** the starter, ARC beams as a facility beam set (public
    description only; mock-up timing), per-foil results if one active foil is not enough.
 
@@ -140,6 +145,44 @@ these as keywords already (`observe`, `wall`, `foil`, `object`, `targets`).
    case needs it.
 4. Components form a tree of nested assemblies (item 7), general enough for any
    workflow of top-level parts and assemblies, not built around one.
+5. Starters are insertable assemblies (Insert ▸ Hohlraum, Halfraum, Shock tube, Foil, …),
+   placed in a selected frame (the selected part's, piece's or assembly's; TCC with
+   nothing selected); File ▸ New is an empty target plus one insert. Inserted names are
+   made unique (`hohlraum_2`).
+6. Placement in the 3D view by a triad (SolidWorks' "move with triad"): arrows translate
+   along, rings rotate about, the axes of the frame chosen in "Placed in"; each drag
+   commits one placement step (one undo), as the Move-along row does, so placement stays
+   parametric and the beams aimed in the moved frames follow.
+7. A hohlraum part gives its wall and caps the `wall` role automatically; a piece's row in
+   the tree can change a piece's role (a cap `observed`, say). Roles live on parts and
+   pieces.
+8. Drive is per cavity: each hohlraum part reports Tr from the area-weighted flux incident
+   on its own `wall` pieces; the `observed` surface keeps its own Tr beside them, and for
+   a single hohlraum with a capsule the capsule's Tr stays the headline (today's value).
+9. `foil` (laser-driven: spot uniformity, the foil objective, line of sight) and
+   `observed` (x-ray-driven: a capsule, a package face, an opacity sample) stay two roles;
+   a flat `observed` face reuses the foil map's face view.
+10. Synthetic Dante views the whole assembly, not one LEH: rays across a collimator
+    field of view (a disk of given diameter at a center frame, TCC by default) sum every
+    visible element's radiance, occluded by any geometry. Shock-tube walls and thinned
+    windows count. The primary output is power per steradian (and the channel voltages);
+    Tr is quoted over a chosen reference area (an LEH, a window or a typed area; default
+    the nominal LEH, Dante's convention). Each Dante's FOV diameter goes in the research
+    notes with a source before it becomes a default.
+11. Dante shields (dimpled shielding that hides the LEH so other regions can be measured)
+    are ordinary parts: they absorb, re-emit and occlude in every calculation.
+
+Taken without a question (reverse any):
+- Frames outlive exclusion: a beam aimed in an excluded part's frame still aims there
+  (an excluded add-on does not move the beams of the configuration compared against).
+- The aim-frame list is a nested menu (part ▸ piece); CAD parts with many pieces list
+  them the same way, collapsed.
+- Old template sessions convert to top-level parts (a hohlraum part and the capsule
+  sphere `observed`), no wrapping assembly, so the bit-for-bit test compares like with
+  like.
+- The cropped-through-a-hole `DanteView` stays as the special case of a FOV equal to the
+  hole; the FOV path is checked against it on a closed hohlraum (the wall's outside is
+  one-sided and dark, so the two agree to pixel convergence, not bit for bit).
 
 ## Risks
 
