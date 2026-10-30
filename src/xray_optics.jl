@@ -121,3 +121,50 @@ function mirror_reflectivity(mat::Symbol, angle::Real, E::Real; roughness::Real 
     rp = (ε * kz0 - kz1) / (ε * kz0 + kz1) * nc
     return (abs2(rs) + abs2(rp)) / 2
 end
+
+# ---- tabulated curves ------------------------------------------------------------------
+
+"""
+    TabulatedCurve(E, values; extrapolate = :hold, file = "")
+    TabulatedCurve(file; extrapolate = :hold)
+
+A measured curve against photon energy `E` (eV, increasing), interpolated linearly in
+`E`: a filter's transmission, a mirror's reflectivity, a detector's sensitivity (V/GW)
+or a whole channel's response (V/GW). Outside the table it holds its end values
+(`extrapolate = :hold`, for factors) or is zero (`:zero`, for a whole response). The
+file form reads a CSV with a header line and two columns, energy (eV) and value.
+"""
+struct TabulatedCurve
+    E::Vector{Float64}
+    v::Vector{Float64}
+    extrapolate::Symbol
+    file::String
+    function TabulatedCurve(E::AbstractVector{<:Real}, v::AbstractVector{<:Real};
+                            extrapolate::Symbol = :hold, file::AbstractString = "")
+        length(E) == length(v) || throw(ArgumentError("one value per energy"))
+        length(E) >= 2 || throw(ArgumentError("a curve needs at least two points"))
+        all(>(0), diff(E)) || throw(ArgumentError("energies must increase"))
+        extrapolate in (:hold, :zero) || throw(ArgumentError("extrapolate must be :hold or :zero"))
+        all(isfinite, v) || throw(ArgumentError("values must be finite"))
+        return new(Float64.(E), Float64.(v), extrapolate, String(file))
+    end
+end
+
+function TabulatedCurve(file::AbstractString; extrapolate::Symbol = :hold)
+    _, rows = read_csv(file)
+    all(r -> length(r) >= 2, rows) || throw(ArgumentError("$file: two columns (energy eV, value) expected"))
+    E = [parse(Float64, r[1]) for r in rows]
+    v = [parse(Float64, r[2]) for r in rows]
+    return TabulatedCurve(E, v; extrapolate, file)
+end
+
+function (c::TabulatedCurve)(E::Real)
+    E < c.E[1] && return c.extrapolate === :zero ? 0.0 : c.v[1]
+    E > c.E[end] && return c.extrapolate === :zero ? 0.0 : c.v[end]
+    i = min(searchsortedlast(c.E, E), length(c.E) - 1)
+    return c.v[i] + (E - c.E[i]) / (c.E[i+1] - c.E[i]) * (c.v[i+1] - c.v[i])
+end
+
+Base.show(io::IO, c::TabulatedCurve) =
+    print(io, "TabulatedCurve(", length(c.E), " points, ", c.E[1], "–", c.E[end], " eV",
+          isempty(c.file) ? "" : ", " * basename(c.file), ")")

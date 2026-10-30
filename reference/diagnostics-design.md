@@ -10,12 +10,16 @@ lands; the docstrings and research notes then hold what was built.
 
 ## Today
 
+- Definitions (phase 1, 2026-10-29): `src/diagnostics.jl`, the docs page "Diagnostic
+  definitions" (schema, search path, extends, CSV curves, kinds); the kind
+  `xray_power`; built-ins `nif_dante1_2021` and `nif_dante1` in `data/diagnostics`,
+  from which `dante1()` and `dante1_responses()` build (bit for bit with the table they
+  replaced). Not yet: the fields of model items 8–10 below that are not in the
+  `xray_power` schema (field of view, port names, Tr-area modes, time response,
+  uncertainty, the recording modes other than `history`), session embedding.
 - `DanteView(θ, φ; through, pixels, channels, area)`: parallel rays across the
-  `through` aperture (and its `_lip`); Tr over the hole's initial area; `dante1()`,
-  `dante2()`, `sentinel(dim)` construct views in code.
-- Channels: `DanteResponse(number, energy; filters, grid, mirror, cathode,
-  solid_angle)`, built from hardware; Dante 1's 18 in `_DANTE1_HARDWARE` (Rubery 2023
-  Fig. 4). Dante 2's, Sentinel's and Omega's hardware are absent (ROADMAP item 10).
+  `through` aperture (and its `_lip`); Tr over the hole's initial area; `dante2()` and
+  `sentinel(dim)` construct views in code with Dante 1's channels.
 - XRD cathodes `:Al`, `:Cr`, `:Ni` (a Henke-yield model fitted to Rubery's curves),
   SiO₂ mirrors (Fresnel, angle and roughness scaled to Rubery Fig. 3a), the Cr/Sc
   multilayer as Rubery's digitized curve; filters by Henke's tables.
@@ -104,11 +108,11 @@ lands; the docstrings and research notes then hold what was built.
 
 ## Phases
 
-1. Schema, loader, search path, configuration file, checks; Dante 1 as a built-in file,
-   bit for bit.
 2. Collimator field of view and reference area in `DanteView`; the cropped hole as the
    special case, checked against it.
-3. Public Dante 2, Sentinel and Omega definitions (whatever the research gives).
+3. Public definitions from the research notes: Dante 1 by date (2009, 2012–14, the three
+   2017–18 shots), Sentinel (N170924), Omega Dante (current; no solid angles, so
+   `:missing` until a user supplies them), Dante 2 (line of sight only).
 4. GUI: the folders preference, the diagnostics list, several diagnostics per history.
 5. Next kinds, in the user's order (2026-10-29): x-ray imagers (gated and integrated,
    from the existing `OrthoCamera` rendering through filters); backlit radiography (the

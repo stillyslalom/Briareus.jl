@@ -1,0 +1,8 @@
+# NIF Dante 1 in its latest public configuration. Extend this id to describe a shot's
+# or a campaign's channels; a user file with id = "nif_dante1" later on the search path
+# shadows this one.
+
+schema = 1
+id = "nif_dante1"
+extends = "nif_dante1_2021"
+name = "NIF Dante 1"

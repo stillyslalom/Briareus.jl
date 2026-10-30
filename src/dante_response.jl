@@ -88,6 +88,7 @@ function _mlm_reflectivity(E::Real)
     return (R[i] + (E - Et[i]) / (Et[i+1] - Et[i]) * (R[i+1] - R[i])) / 100
 end
 
+_mirror_reflectivity(m::TabulatedCurve, E) = m(E)
 function _mirror_reflectivity(m, E)
     m === nothing && return 1.0
     kind, angle = m
@@ -98,46 +99,80 @@ end
 # ---- channels -----------------------------------------------------------------------------
 
 """
-    DanteResponse(number, energy; filters, grid = 1, mirror = nothing, cathode,
-                  solid_angle)
+    DanteResponse(number, energy; filters = [], grid = 1, mirror = nothing, cathode,
+                  solid_angle, tables = [])
+    DanteResponse(number, energy; solid_angle, response::TabulatedCurve)
 
 One Dante channel built from its hardware: `filters` (`material => thickness` pairs,
-thickness in mm, transmission from Henke's tables, [`filter_transmission`](@ref) with
-`table = :henke`), a 25 µm tantalum mesh of open fraction `grid` (opaque wires), a `mirror`
-(`(:SiO2, angle°)` grazing-incidence, or `(:mlm, 1.9)` for channel 2's Cr/Sc multilayer)
-and an XRD `cathode` ([`xrd_sensitivity`](@ref)); `energy` (eV) is the nominal band
-energy and `solid_angle` (sr) the channel's. Fields `E` (eV) and `R` (V/GW) tabulate the
-response on 50 eV – 30 keV; a spectrum `dI/dE` (GW/sr/eV) gives the voltage
+thickness in mm, or `material => (thickness, density)`; transmission from Henke's
+tables, [`filter_transmission`](@ref) with `table = :henke`), measured filter
+transmissions `tables` ([`TabulatedCurve`](@ref)s), a 25 µm tantalum mesh of open
+fraction `grid` (opaque wires), a `mirror` (`(:SiO2, angle°)` grazing-incidence,
+`(:mlm, 1.9)` for channel 2's Cr/Sc multilayer, or a measured reflectivity as a
+`TabulatedCurve`) and a `cathode`: an XRD (`:Al`, `:Cr`, `:Ni`;
+[`xrd_sensitivity`](@ref)) or a measured sensitivity (a `TabulatedCurve` in V/GW). The
+second form takes a measured whole-channel `response` (V/GW). `energy` (eV) is the
+nominal band energy and `solid_angle` (sr) the channel's. Fields `E` (eV) and `R` (V/GW)
+tabulate the response on 50 eV – 30 keV; a spectrum `dI/dE` (GW/sr/eV) gives the voltage
 `V = Ω ∫ (dI/dE) R dE` (Harris et al., RSI 92, 033505, 2021, eq. 1).
 """
 struct DanteResponse <: AbstractDanteChannel
     number::Int
     energy::Float64
-    filters::Vector{Pair{Symbol,Float64}}
+    filters::Vector{Pair{Symbol,Union{Float64,Tuple{Float64,Float64}}}}
+    tables::Vector{TabulatedCurve}
     grid::Float64
-    mirror::Union{Nothing,Tuple{Symbol,Float64}}
-    cathode::Symbol
+    mirror::Union{Nothing,Tuple{Symbol,Float64},TabulatedCurve}
+    cathode::Union{Symbol,TabulatedCurve}
+    response::Union{Nothing,TabulatedCurve}
     solid_angle::Float64
     E::Vector{Float64}
     R::Vector{Float64}
 end
 
-function DanteResponse(number::Integer, energy::Real; filters, grid::Real = 1.0, mirror = nothing,
-                       cathode::Symbol, solid_angle::Real)
-    f = Pair{Symbol,Float64}[k => Float64(v) for (k, v) in filters]
-    m = mirror === nothing ? nothing : (Symbol(mirror[1]), Float64(mirror[2]))
+_filter_spec(v::Real) = Float64(v)
+_filter_spec(v::Tuple) = (Float64(v[1]), Float64(v[2]))
+
+function DanteResponse(number::Integer, energy::Real; filters = (), grid::Real = 1.0, mirror = nothing,
+                       cathode = nothing, solid_angle::Real, tables = (), response = nothing)
     E = _DANTE_GRID
-    R = [grid * filter_transmission(f, e / 1000; table = :henke) * _mirror_reflectivity(m, e) *
-         xrd_sensitivity(cathode, e) for e in E]
-    return DanteResponse(Int(number), Float64(energy), f, Float64(grid), m, cathode,
+    if response !== nothing
+        response isa TabulatedCurve || throw(ArgumentError("response must be a TabulatedCurve"))
+        (isempty(filters) && isempty(tables) && grid == 1 && mirror === nothing && cathode === nothing) ||
+            throw(ArgumentError("a measured response replaces filters, grid, mirror and cathode"))
+        return DanteResponse(Int(number), Float64(energy), [], TabulatedCurve[], 1.0, nothing, response,
+                             response, Float64(solid_angle), E, [response(e) for e in E])
+    end
+    cathode === nothing && throw(ArgumentError("a cathode (an XRD symbol or a TabulatedCurve) is required"))
+    f = Pair{Symbol,Union{Float64,Tuple{Float64,Float64}}}[k => _filter_spec(v) for (k, v) in filters]
+    m = mirror === nothing || mirror isa TabulatedCurve ? mirror : (Symbol(mirror[1]), Float64(mirror[2]))
+    tb = collect(TabulatedCurve, tables)
+    R = map(E) do e
+        t = filter_transmission(f, e / 1000; table = :henke)
+        for c in tb
+            t *= c(e)
+        end
+        grid * t * _mirror_reflectivity(m, e) * _sensitivity(cathode, e)
+    end
+    return DanteResponse(Int(number), Float64(energy), f, tb, Float64(grid), m, cathode, nothing,
                          Float64(solid_angle), E, R)
 end
 
+_sensitivity(c::Symbol, E) = xrd_sensitivity(c, E)
+_sensitivity(c::TabulatedCurve, E) = c(E)
+
+_show_filter(k, v::Float64) = "$(k) $(round(1000v; digits = 3)) µm"
+_show_filter(k, v::Tuple) = "$(k) $(round(1000v[1]; digits = 3)) µm ($(v[2]) g/cm³)"
+_show_part(x::TabulatedCurve) = isempty(x.file) ? "measured" : basename(x.file)
+
 function Base.show(io::IO, c::DanteResponse)
-    print(io, "DanteResponse(", c.number, ", ", c.energy, " eV, ",
-          join(("$(k) $(round(1000v; digits = 3)) µm" for (k, v) in c.filters), " + "),
-          c.grid < 1 ? " + $(round(100c.grid; digits = 1)) % grid" : "",
-          c.mirror === nothing ? "" : ", $(c.mirror[1]) $(c.mirror[2])°", ", ", c.cathode, " XRD)")
+    print(io, "DanteResponse(", c.number, ", ", c.energy, " eV, ")
+    c.response === nothing || return print(io, "measured response ", _show_part(c.response), ")")
+    parts = [[_show_filter(k, v) for (k, v) in c.filters]; ["filter " * _show_part(t) for t in c.tables]]
+    print(io, join(parts, " + "), c.grid < 1 ? " + $(round(100c.grid; digits = 1)) % grid" : "",
+          c.mirror === nothing ? "" : c.mirror isa TabulatedCurve ? ", mirror " * _show_part(c.mirror) :
+          ", $(c.mirror[1]) $(c.mirror[2])°",
+          ", ", c.cathode isa Symbol ? "$(c.cathode) XRD" : "detector " * _show_part(c.cathode), ")")
 end
 
 # response at E (linear interpolation on the grid, 0 outside it)
@@ -147,50 +182,17 @@ function _response(c::DanteResponse, E::Real)
     return c.R[i] + (E - c.E[i]) / (c.E[i+1] - c.E[i]) * (c.R[i+1] - c.R[i])
 end
 
-# NIF Dante 1 hardware for ICF experiments, Rubery et al., RSI 2023, Fig. 4 (thicknesses
-# µm; "grid" the 8.8 % open mesh, §II.A: 25 µm Ta per Kemp 2020, "tungsten" in
-# Rubery). Channel 2's "47 µm CH" is the polyimide of the 2–4 keV multilayer channel
-# (§II.D, Fig. 8); "CH" elsewhere is taken as polystyrene and "parylene" as parylene N
-# (*assumed*).
-const _DANTE1_HARDWARE = [
-    (1, 1170, [:Mg => 22], false, nothing, :Al, 6.51e-7),
-    (2, 3060, [:polyimide => 47], false, (:mlm, 1.9), :Al, 1.90e-7),
-    (3, 250, [:lexan => 4], true, (:SiO2, 3.5), :Al, 5.74e-7),
-    (4, 470, [:V => 1.75], false, (:SiO2, 2.5), :Al, 5.56e-7),
-    (5, 710, [:Co => 1.4, :CH => 0.2], true, nothing, :Al, 6.51e-7),
-    (6, 870, [:Cu => 2], true, nothing, :Cr, 6.51e-7),
-    (7, 940, [:Mg => 5, :Zn => 0.65, :CH => 0.1], true, nothing, :Ni, 6.51e-7),
-    (8, 1170, [:Mg => 22], true, nothing, :Al, 6.51e-7),
-    (9, 1430, [:Al => 20], true, nothing, :Ni, 6.51e-7),
-    (10, 1710, [:Si => 20], false, nothing, :Al, 6.51e-7),
-    (11, 3430, [:Fe => 1, :Cr => 0.65, :parylene => 5], true, nothing, :Al, 6.51e-7),
-    (12, 2580, [:saran => 66], false, nothing, :Al, 6.51e-7),
-    (13, 3000, [:Ag => 4.4], false, nothing, :Al, 6.51e-7),
-    (14, 1700, [:Si => 20], false, nothing, :Al, 6.51e-7),
-    (15, 940, [:Mg => 5, :Zn => 0.65, :CH => 0.1], true, nothing, :Ni, 6.51e-7),
-    (16, 14370, [:Al => 250], false, nothing, :Ni, 1.77e-6),
-    (17, 690, [:Co => 1], true, nothing, :Cr, 6.51e-7),
-    (18, 3660, [:Fe => 1, :Cr => 0.65, :parylene => 5], false, nothing, :Ni, 1.77e-6)]
-
-const _DANTE1_RESPONSES = Ref{Union{Nothing,Vector{DanteResponse}}}(nothing)
-const _DANTE1_RESPONSES_LOCK = ReentrantLock()
-
 """
     dante1_responses() -> Vector{DanteResponse}
 
-The 18 NIF Dante 1 channels as configured for ICF experiments (Rubery et al., RSI 2023,
-Fig. 4: filters, 8.8 % grids, two SiO₂ mirrors and the 2–4 keV multilayer, Al/Cr/Ni
-XRDs, solid angles), each built as a [`DanteResponse`](@ref). Computed once.
+The 18 NIF Dante 1 channels as configured for ICF experiments from October 2021 (Rubery
+et al., RSI 2023, Fig. 4: filters, 8.8 % grids, two SiO₂ mirrors and the 2–4 keV
+multilayer, Al/Cr/Ni XRDs, solid angles), each built as a [`DanteResponse`](@ref) from
+the built-in definition `nif_dante1_2021` ([`diagnostic`](@ref); the file
+`data/diagnostics/nif_dante1_2021.toml` records the transcription and its assumptions).
+Built once.
 """
-function dante1_responses()
-    lock(_DANTE1_RESPONSES_LOCK) do
-        _DANTE1_RESPONSES[] === nothing || return _DANTE1_RESPONSES[]
-        _DANTE1_RESPONSES[] = [DanteResponse(n, E; filters = [k => 1e-3t for (k, t) in f],
-                                             grid = g ? 0.088 : 1.0, mirror = m, cathode = x,
-                                             solid_angle = Ω)
-                               for (n, E, f, g, m, x, Ω) in _DANTE1_HARDWARE]
-    end
-end
+dante1_responses() = _channels(_builtin_definition("nif_dante1_2021").data["channel"])
 
 # W[c, g]: channel c's voltage per GW/sr in group g, spread over the group as a
 # Planckian at `T` (eV; flat for `nothing`), solid angle included

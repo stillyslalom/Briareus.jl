@@ -10,6 +10,8 @@ temperature eV, angles in degrees at the user interface.
 module Briareus
 
 using LinearAlgebra
+import Dates
+import TOML
 using Printf
 using Random
 using StaticArrays
@@ -91,6 +93,9 @@ export HOTSPOT_VELOCITY_PER_PERCENT, mode1_vector, hotspot_velocity, ResponseKer
        implosion_metrics, mode1_tolerance, swing_metrics,
        velocity_uncertainty, ntof_covariance, infer_velocity_errors, VelocityPenalty
 export CapsuleDrive, capsule_drive
+export DIAGNOSTIC_SCHEMA, TabulatedCurve, DiagnosticField, DiagnosticIssue, DiagnosticDefinition,
+       register_diagnostic_kind, diagnostic_config_path, diagnostic_paths, add_diagnostic_path,
+       remove_diagnostic_path, diagnostics, diagnostic, check_diagnostics
 
 include("geometry.jl")
 include("meshops.jl")
@@ -133,6 +138,7 @@ include("talis.jl")
 include("lpi.jl")
 include("bubble.jl")
 include("io.jl")
+include("diagnostics.jl")
 include("visrad.jl")
 include("visrad_workspace.jl")
 include("cbet.jl")

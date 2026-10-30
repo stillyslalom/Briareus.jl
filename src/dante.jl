@@ -86,9 +86,12 @@ end
     dante1(; kwargs...)
 
 NIF Dante 1: θ 143°, φ 274°, viewing the lower entrance hole at 37° to the hohlraum axis
-(Rubery et al., RSI 2023; Rubery et al., PRL 132, 065104, 2024).
+(Rubery et al., RSI 2023; Rubery et al., PRL 132, 065104, 2024), with the channels of
+[`dante1_responses`](@ref), from the built-in definition `nif_dante1`; definitions on the
+search path do not change it (`diagnostic("nif_dante1")` takes them, [`diagnostic`](@ref)).
+`kwargs` replace the definition's values (those of [`DanteView`](@ref)).
 """
-dante1(; kwargs...) = DanteView(143, 274; through = :leh_bottom, kwargs...)
+dante1(; kwargs...) = _builtin_diagnostic("nif_dante1"; kwargs...)
 
 """
     dante2(; kwargs...)
