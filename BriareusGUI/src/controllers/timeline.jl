@@ -1,9 +1,10 @@
 # Time in the window: the pulses the beams fire (a pulse table, or a pulse shape scaled
 # to the table's powers), the drive history they give on the drive's scenario (capsule
-# Tᵣ, its Legendre modes, a synthetic Dante 1 and the energy split, `drive_history` and
-# `energy_budget`), the latest retune's power histories, and the time cursor that colors
-# the 3D view by a step of the history. Each step's element fields are kept with the
-# history, so moving the cursor recomputes nothing.
+# Tᵣ, its Legendre modes, the synthetic diagnostics ticked in the list of diagnostic
+# definitions and the energy split, `drive_history` and `energy_budget`), the latest
+# retune's power histories, and the time cursor that colors the 3D view by a step of the
+# history. Each step's element fields are kept with the history, so moving the cursor
+# recomputes nothing.
 
 # ---------------------------------------------------------------- pulses
 
@@ -86,8 +87,8 @@ end
 Compute the drive history of the table's beams on the pulses ([`load_pulses!`](@ref),
 [`use_pulse_shape!`](@ref)) with the drive's deposition operator and radiation model
 (`drive_history`, quasi-static: one radiosity solve per time of the pulses where they
-fire), recording each step's element fields for the time cursor, a synthetic Dante 1
-(`dante`, when `dante[]` and the target has a lower entrance hole), and the energy split
+fire), recording each step's element fields for the time cursor, each ticked diagnostic
+([`set_diagnostic!`](@ref); `dante` for the soft x-ray power kind), and the energy split
 (`energy_budget`). It runs on a worker when `spawn[]` is set, with progress per step and
 [`cancel_history!`](@ref). A drive that is missing or stale is computed first, as a
 coloring by a drive field computes it.
@@ -121,12 +122,12 @@ function start_history!(sess::DesignSession)
     tm.progress[] = (0, n)
     tm.started[] = time()
     tm.status[] = "computing the drive history: $n steps…"
-    with_dante = tm.dante[]
+    diags = _recorded_definitions(sess)
     deliver = sess.deliver[]
     progress(k) = deliver(() -> g == tm.generation[] && _assign!(tm.progress, (k, n)))
     cancel = tm.cancel
     runner = _runner(sess.spawn, sess.deliver)
-    runner(() -> _history_job(s, beams, enabled, src, times; with_dante, progress, cancel, key), function (out)
+    runner(() -> _history_job(s, beams, enabled, src, times; diags, progress, cancel, key), function (out)
         g == tm.generation[] || return
         tm.running[] = false
         if out.err isa _HistoryCanceled
@@ -153,14 +154,14 @@ Stop the drive history in progress at its next step (nothing is kept).
 cancel_history!(sess::DesignSession) = (sess.time.running[] && (sess.time.cancel[] = true); sess)
 
 # The drive history of `beams` on the pulses `src` at `times` on scenario `s` (worker).
-function _history_job(s::Scenario, beams, enabled, src, times; with_dante::Bool = true,
+function _history_job(s::Scenario, beams, enabled, src, times; diags = NamedTuple[],
                         progress = k -> nothing, cancel = Threads.Atomic{Bool}(false), key = nothing)
     t0 = time()
     t = s.target
     names = component_names(t)
     observe = Tuple(unique([t.components[t.elem_comp[e]].part for e in s.observed]))
     wall = :wall in names ? (:wall,) : observe
-    dview = with_dante && :leh_bottom in names ? dante1() : nothing
+    views = _diagnostic_views(diags, names)
     A = t.elem_area
     aperture = [t.components[t.elem_comp[e]].kind === :aperture for e in 1:nelements(t)]
     steps = Ref(0)
@@ -168,17 +169,9 @@ function _history_job(s::Scenario, beams, enabled, src, times; with_dante::Bool 
         cancel[] && throw(_HistoryCanceled())
         laser = Float32.(to_Wcm2.(sol.laser ./ A))
         laser[aperture] .= NaN32
-        Td = NaN
-        if dview !== nothing
-            Td = try
-                dante(dview, sol).Tr
-            catch err
-                err isa ArgumentError || rethrow()
-                NaN
-            end
-        end
+        diag = [_record_diagnostic!(v, sol) for v in views]
         progress(steps[] += 1)
-        return (; laser, radiosity = Float32.(to_Wcm2.(sol.B)), incident = Float32.(to_Wcm2.(sol.H)), dante = Td)
+        return (; laser, radiosity = Float32.(to_Wcm2.(sol.B)), incident = Float32.(to_Wcm2.(sol.H)), diag)
     end
     h = drive_history(s.model, s.deposition, τ -> _pulse_beams(src, beams, enabled, τ), times;
                       observe, wall, lmax = 4, record)
@@ -191,7 +184,10 @@ function _history_job(s::Scenario, beams, enabled, src, times; with_dante::Bool 
         ranges[f] = (lo, hi > lo ? hi : lo + 1)
     end
     legendre = h.moments[2:5, :] ./ h.moments[1:1, :]
-    return DriveHistory(h.time, h.Tr, legendre, [r.dante for r in h.record], _energy_series(h, t),
+    recorded = NamedTuple[(; v.id, v.name, Tr = [r.diag[j][1] for r in h.record],
+                           intensity = [r.diag[j][2] for r in h.record], note = v.note[])
+                          for (j, v) in enumerate(views)]
+    return DriveHistory(h.time, h.Tr, legendre, recorded, _energy_series(h, t),
                         fields, ranges, h, key, time() - t0)
 end
 
@@ -311,7 +307,10 @@ plot (then no series).
 
 - `:pulses`: the laser power of each beam group (the sum over its enabled beams, TW;
   groups colored as in the model tree) and the total.
-- `:drive`: the capsule's Tr and Dante 1's (eV), and a₂/a₀ and a₄/a₀ (%).
+- `:drive`: the capsule's Tr and each recorded diagnostic's (eV, dashed), and a₂/a₀ and
+  a₄/a₀ (%).
+- `:diagnostics`: each recorded diagnostic's Tr (eV) and the intensity toward it
+  (TW/sr, dashed).
 - `:energy`: the laser energy delivered by each time and where it went (kJ).
 - `:retune`: each group's power on the reference pulses (all beams, dashed) and on the
   retuned ones (enabled beams), and the capsule's mode 1 ε₁ before and after (%).
@@ -339,11 +338,27 @@ function time_chart(sess::DesignSession, chart::Symbol = sess.time.chart[])
                                                       "Load pulses, then Run the drive history" :
                                                       "Run the drive history on these pulses")
         left = [_series("Capsule Tr", h.time, h.Tr, _INK)]
-        any(isfinite, h.dante) && push!(left, _series("Dante 1", h.time, h.dante, "#D55E00"; style = :dash))
+        for (j, d) in enumerate(h.diagnostics)
+            any(isfinite, d.Tr) && push!(left, _series(d.name, h.time, d.Tr, _diagnostic_color(j); style = :dash))
+        end
         right = [_series("a₂/a₀", h.time, 100 .* h.legendre[2, :], "#0072B2"),
                  _series("a₄/a₀", h.time, 100 .* h.legendre[4, :], "#009E73")]
         return (; chart, title = "Capsule drive history" * stale, xlabel = "t (ns)",
                 left = (; label = "Tr (eV)", series = left), right = (; label = "aₗ/a₀ (%)", series = right),
+                legend = [_key(s) for s in vcat(left, right)], cursor, empty = "")
+    elseif chart === :diagnostics
+        h === nothing && return none("Diagnostics", "Tick diagnostics below, then Run the drive history")
+        isempty(h.diagnostics) && return none("Diagnostics", "No diagnostic was recorded: tick one, then Run the drive history")
+        left = [_series(d.name * " Tr", h.time, d.Tr, _diagnostic_color(j))
+                for (j, d) in enumerate(h.diagnostics) if any(isfinite, d.Tr)]
+        right = [_series(d.name * " intensity", h.time, d.intensity, _diagnostic_color(j); style = :dash)
+                 for (j, d) in enumerate(h.diagnostics) if any(isfinite, d.intensity)]
+        notes = [d.name * ": " * d.note for d in h.diagnostics if !isempty(d.note)]
+        isempty(left) && isempty(right) &&
+            return none("Diagnostics", "No recorded diagnostic sees the target: " * join(notes, "; "))
+        return (; chart, title = "Synthetic diagnostics" * stale, xlabel = "t (ns)",
+                left = (; label = "Tr (eV)", series = left),
+                right = isempty(right) ? nothing : (; label = "Intensity (TW/sr)", series = right),
                 legend = [_key(s) for s in vcat(left, right)], cursor, empty = "")
     elseif chart === :energy
         h === nothing && return none("Energy", "Run the drive history to see where the energy goes")
@@ -396,4 +411,196 @@ function _group_series(table, x, beams_at; total::Bool = true, style::Symbol = :
     end
     total && length(series) > 1 && push!(series, _series("total", x, vec(sum(M; dims = 1)), _INK; style = :dash))
     return series
+end
+
+# ---------------------------------------------------------------- diagnostics
+
+# Colors of the recorded diagnostics on the charts (Okabe–Ito, after those of Tr and
+# the modes).
+const _DIAGNOSTIC_COLORS = ("#D55E00", "#CC79A7", "#E69F00", "#56B4E9", "#F0E442", "#000000")
+_diagnostic_color(j) = _DIAGNOSTIC_COLORS[mod1(j, length(_DIAGNOSTIC_COLORS))]
+
+_builtin_file(f) = startswith(normpath(f), normpath(Briareus._BUILTIN_DIAGNOSTICS))
+
+"""
+    refresh_diagnostics!(sess::DesignSession) -> Vector{NamedTuple}
+
+Read the diagnostic definitions on the search path again (`diagnostic_paths`: the
+built-ins, the saved folders, `BRIAREUS_DIAGNOSTICS`) with their problems
+(`check_diagnostics`, in `sess.time.issues`), and list them with those saved with the
+session in `sess.time.catalog`, one row `(; id, name, kind, origin, file, chain,
+public, usable, problem, changed)` per id: `origin` is `:builtin`, `:user` (a folder on
+the search path) or `:session` (saved with the session and not on the search path);
+`usable` whether it builds, else `problem` says why; `changed` the keys in which a
+definition saved with the session differs from the search path's of that id
+(`diagnostic_diff`; the session's is used). The built-ins first, then by id.
+"""
+function refresh_diagnostics!(sess::DesignSession)
+    tm = sess.time
+    issues = check_diagnostics()
+    raws = Briareus._read_all(diagnostic_paths(), DiagnosticIssue[])
+    found = Briareus._checked(raws, DiagnosticIssue[])
+    problem(d) = join([i.message * (isempty(i.key) ? "" : " [" * i.key * "]") for i in issues
+                       if i.file == d.file && i.level !== :warning], "; ")
+    # listed too: those that lack values (not public) but have no error
+    for id in setdiff(keys(raws), keys(found))
+        any(i -> i.file == raws[id].file && i.level === :error, issues) && continue
+        d = Briareus._resolve(id, raws, DiagnosticIssue[])
+        d === nothing || (found[id] = d)
+    end
+    rows = NamedTuple[]
+    for id in union(keys(found), keys(tm.embedded[]))
+        e = get(tm.embedded[], id, nothing)
+        p = get(found, id, nothing)
+        d = e === nothing ? p : e.def
+        chain = e === nothing ? d.chain : e.chain
+        msg = e === nothing ? problem(d) : ""
+        push!(rows, (; id, d.name, d.kind, origin = p === nothing ? :session : _builtin_file(p.file) ? :builtin : :user,
+                     file = e === nothing ? d.file : e.file, chain, d.public, usable = isempty(msg), problem = msg,
+                     changed = e === nothing || p === nothing ? String[] : diagnostic_diff(e.def, p)))
+    end
+    sort!(rows; by = r -> (r.origin !== :builtin, r.id))
+    tm.issues[] = issues
+    tm.catalog[] = rows
+    return rows
+end
+
+"""
+    diagnostic_catalog(sess::DesignSession) -> Vector{NamedTuple}
+
+The rows of [`refresh_diagnostics!`](@ref), read from the search path the first time.
+"""
+diagnostic_catalog(sess::DesignSession) =
+    isempty(sess.time.catalog[]) ? refresh_diagnostics!(sess) : sess.time.catalog[]
+
+# The definition a session uses for `id`: the one saved with it, else the search path's
+# (`nothing` without either).
+function _definition(sess::DesignSession, id::AbstractString)
+    e = get(sess.time.embedded[], id, nothing)
+    e === nothing || return e.def
+    r = findfirst(r -> r.id == id, diagnostic_catalog(sess))
+    r === nothing && return nothing
+    row = diagnostic_catalog(sess)[r]
+    return row.origin === :session ? nothing : Briareus._definitions(diagnostic_paths(), DiagnosticIssue[])[id]
+end
+
+"""
+    set_diagnostic!(sess::DesignSession, id, on::Bool = true) -> sess
+
+Record the diagnostic of definition `id` in the next drive history (`on`), or not.
+"""
+function set_diagnostic!(sess::DesignSession, id::AbstractString, on::Bool = true)
+    tm = sess.time
+    ids = filter(!=(String(id)), tm.diagnostics[])
+    on && push!(ids, String(id))
+    ids == tm.diagnostics[] || (tm.diagnostics[] = ids)
+    return sess
+end
+
+"""
+    use_path_diagnostic!(sess::DesignSession, id) -> sess
+
+Use the search path's definition of `id` instead of the one saved with the session
+(when the two differ, see [`refresh_diagnostics!`](@ref)).
+"""
+function use_path_diagnostic!(sess::DesignSession, id::AbstractString)
+    e = copy(sess.time.embedded[])
+    pop!(e, String(id), nothing) === nothing && return sess
+    sess.time.embedded[] = e
+    refresh_diagnostics!(sess)
+    return sess
+end
+
+# The ticked definitions, in the order ticked: `(; id, name, def, note)`, `def` nothing
+# (and `note` why) for one the session cannot build.
+function _recorded_definitions(sess::DesignSession)
+    rows = Dict(r.id => r for r in diagnostic_catalog(sess))
+    out = NamedTuple[]
+    for id in sess.time.diagnostics[]
+        r = get(rows, id, nothing)
+        if r === nothing
+            push!(out, (; id, name = id, def = nothing, note = "not on the diagnostic search path"))
+        elseif !r.usable
+            push!(out, (; id, r.name, def = nothing, note = r.problem))
+        else
+            push!(out, (; id, r.name, def = _definition(sess, id), note = ""))
+        end
+    end
+    return out
+end
+
+# The instrument of each recorded definition on a target with components `names`
+# (worker): `(; id, name, view, note)`, `view` nothing (and `note` why) when it records
+# nothing in a history: a kind other than the soft x-ray power one, or a view through an
+# aperture the target lacks.
+function _diagnostic_views(diags, names)
+    out = NamedTuple[]
+    for d in diags
+        view, note = nothing, d.note
+        if d.def !== nothing
+            if d.def.kind !== :xray_power
+                note = "a $(d.def.kind) diagnostic is not recorded in a drive history"
+            else
+                v = diagnostic(d.def)
+                v.through === nothing || v.through in names ? (view = v) :
+                    (note = "the target has no $(v.through) to look through")
+            end
+        end
+        push!(out, (; d.id, d.name, view, note = Ref(note)))
+    end
+    return out
+end
+
+# One step of a recorded diagnostic: (Tr in eV, intensity in TW/sr); NaN, with the
+# reason kept, where the view gives none.
+function _record_diagnostic!(v, sol)
+    v.view === nothing && return (NaN, NaN)
+    try
+        r = dante(v.view, sol)
+        return (Float64(r.Tr), Float64(r.intensity))
+    catch err
+        err isa ArgumentError || rethrow()
+        isempty(v.note[]) && (v.note[] = sprint(showerror, err))
+        return (NaN, NaN)
+    end
+end
+
+"""
+    diagnostic_folders() -> Vector{NamedTuple}
+
+The folders on the diagnostic search path besides the built-ins, `(; path, saved)`:
+`saved` for those kept in the configuration file (Diagnostics ▸ Folders), not for those
+of `BRIAREUS_DIAGNOSTICS` or added for this Julia session only.
+"""
+function diagnostic_folders()
+    saved = Set(normpath.(Briareus._saved_paths()))
+    return [(; path, saved = normpath(path) in saved) for path in diagnostic_paths(; builtin = false)]
+end
+
+"""
+    add_diagnostic_folder!(sess::DesignSession, dir) -> Bool
+
+Add the folder `dir` to the diagnostic search path and keep it for later sessions
+(`add_diagnostic_path`), then read the definitions again. Returns whether it was added
+(the status says why not).
+"""
+function add_diagnostic_folder!(sess::DesignSession, dir::AbstractString)
+    isdir(dir) || (sess.time.status[] = "no such folder: $dir"; return false)
+    add_diagnostic_path(dir; save = true)
+    rows = refresh_diagnostics!(sess)
+    n = count(r -> r.origin === :user && startswith(normpath(r.file), normpath(abspath(dir))), rows)
+    sess.time.status[] = "diagnostic folder added: $n definition$(n == 1 ? "" : "s") in $(basename(normpath(dir)))"
+    return true
+end
+
+"""
+    remove_diagnostic_folder!(sess::DesignSession, dir) -> sess
+
+Take the folder `dir` off the saved diagnostic search path and read the definitions
+again.
+"""
+function remove_diagnostic_folder!(sess::DesignSession, dir::AbstractString)
+    remove_diagnostic_path(dir; save = true)
+    refresh_diagnostics!(sess)
+    return sess
 end

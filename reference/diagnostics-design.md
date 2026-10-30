@@ -23,15 +23,24 @@ lands; the docstrings and research notes then hold what was built.
   mirrors (`GrazingMirror`); `area = :open` and an area history (`area_open`,
   `area_history_csv`). Research notes, "Public diagnostic definitions and the
   time-dependent Tr area".
+- The GUI (phase 4, 2026-10-29): Time lists the definitions on the search path and
+  those saved with the session (tooltip: files, origin, problems, keys changed); each
+  ticked one is recorded in the drive history (Tr and intensity per step; a *Diagnostics*
+  chart). Diagnostics ▸ Folders… edits the saved folders and lists `check_diagnostics`.
+  Sessions (version 6) save the ticked ids and each one's resolved definition
+  (`diagnostic_table`, CSVs in the archive as `diagnostics/<sha256>.csv`); on opening,
+  the saved definition is used, one that differs from the search path's is reported
+  (`diagnostic_diff`) and ↺ switches to the search path's; the save status names
+  definitions from outside the built-ins and non-public ones.
 - Not yet: port names, a field of view
   per channel (the multilayer channel's 12 mm; Rubery 2022 finds it covers every NIF
   hohlraum), time response, uncertainty, the recording modes other than `history`,
-  session embedding. `dante2()` and `sentinel(dim)` construct views in code with Dante
+  channel voltages and the unfold in the GUI (its histories are gray: they need a
+  spectral history). `dante2()` and `sentinel(dim)` construct views in code with Dante
   1's channels.
 - XRD cathodes `:Al`, `:Cr`, `:Ni` (a Henke-yield model fitted to Rubery's curves),
   SiO₂ mirrors (Fresnel, angle and roughness scaled to Rubery Fig. 3a), the Cr/Sc
   multilayer as Rubery's digitized curve; filters by Henke's tables.
-- The GUI records "Dante 1" only, and only when the target has `:leh_bottom`.
 
 ## Model
 
@@ -116,7 +125,6 @@ lands; the docstrings and research notes then hold what was built.
 
 ## Phases
 
-4. GUI: the folders preference, the diagnostics list, several diagnostics per history.
 5. Next kinds, in the user's order (2026-10-29): x-ray imagers (gated and integrated,
    from the existing `OrthoCamera` rendering through filters); backlit radiography (the
    backlighter-signal path as a definition; ARC and opacity radiographs); streaked

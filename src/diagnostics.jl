@@ -192,6 +192,11 @@ function _read_raw(file::AbstractString, issues)
         push!(issues, DiagnosticIssue(file, "", "not valid TOML: " * sprint(showerror, e), :error))
         return nothing
     end
+    return _raw(d, file, dirname(abspath(file)), issues)
+end
+
+# a parsed table: its header checked, CSV paths made absolute against `dir`
+function _raw(d::AbstractDict, file::AbstractString, dir::AbstractString, issues)
     for (k, f) in _HEADER_KEYS
         haskey(d, k) && !_check_value(d[k], f.type) &&
             (push!(issues, DiagnosticIssue(file, k, "must be " * _typename(f.type), :error)); return nothing)
@@ -203,7 +208,7 @@ function _read_raw(file::AbstractString, issues)
          return nothing)
     haskey(d, "kind") || haskey(d, "extends") ||
         (push!(issues, DiagnosticIssue(file, "kind", "required (or extends)", :error)); return nothing)
-    return _Raw(String(file), _absolute_csv!(d, dirname(abspath(file))))
+    return _Raw(String(file), _absolute_csv!(d, dir))
 end
 
 # merge child into parent: tables key by key, channels by number, other values replaced
@@ -438,8 +443,11 @@ function diagnostics(; paths = diagnostic_paths())
     return out
 end
 
-function _definitions(paths, issues)
-    raws = _read_all(paths, issues)
+_definitions(paths, issues) = _checked(_read_all(paths, issues), issues)
+
+# resolve and check every definition of `raws`, leaving out those with errors or
+# missing values
+function _checked(raws::Dict{String,_Raw}, issues)
     out = Dict{String,DiagnosticDefinition}()
     for id in sort(collect(keys(raws)))
         n = length(issues)
@@ -552,6 +560,95 @@ function _csv_keys(d::AbstractDict, path = "")
             for (i, x) in enumerate(v)
                 x isa AbstractDict && append!(out, _csv_keys(x, key * "[$i]"))
             end
+        end
+    end
+    return out
+end
+
+# ---- standalone tables: a resolved definition carried elsewhere (a saved session) -------
+
+"""
+    diagnostic_table(def::DiagnosticDefinition; csv = identity) -> Dict{String,Any}
+
+The resolved definition as one standalone table, with no `extends`: the table of a
+definition file that [`diagnostic_definition`](@ref) reads back to the same definition
+(a session embeds its diagnostics this way; `TOML.print` writes it as a file). Each CSV
+path (absolute in `def`) is replaced by `csv(path)`, e.g. the name of a copy stored
+beside the table.
+"""
+function diagnostic_table(def::DiagnosticDefinition; csv = identity)
+    d = deepcopy(def.data)
+    d["name"] = def.name
+    d["public"] = def.public
+    _map_csv!(d, csv)
+    return d
+end
+
+function _map_csv!(d::AbstractDict, f)
+    for (k, v) in d
+        if endswith(k, "_csv") && v isa AbstractString
+            d[k] = String(f(v))
+        elseif v isa AbstractDict
+            _map_csv!(v, f)
+        elseif v isa AbstractVector
+            foreach(x -> x isa AbstractDict && _map_csv!(x, f), v)
+        end
+    end
+    return d
+end
+
+"""
+    diagnostic_definition(table; file = "", dir = pwd()) -> DiagnosticDefinition
+
+The definition of a standalone table ([`diagnostic_table`](@ref): a definition file's
+table with `kind` and no `extends`), checked as a file on the search path is; CSV
+paths are relative to `dir`. `file` names the table in the definition and in errors.
+Throws `ArgumentError` listing the problems when the table has errors or lacks values
+it needs.
+"""
+function diagnostic_definition(table::AbstractDict; file::AbstractString = "", dir::AbstractString = pwd())
+    issues = DiagnosticIssue[]
+    haskey(table, "extends") &&
+        throw(ArgumentError("a standalone definition has no extends (\"$(table["extends"])\")"))
+    r = _raw(deepcopy(Dict{String,Any}(table)), file, abspath(dir), issues)
+    defs = r === nothing ? Dict{String,DiagnosticDefinition}() :
+           _checked(Dict(r.data["id"] => r), issues)
+    isempty(defs) && throw(ArgumentError("not a usable diagnostic definition:\n" *
+                                         join(sprint.(show, issues), "\n")))
+    return only(values(defs))
+end
+
+"""
+    diagnostic_diff(a::DiagnosticDefinition, b::DiagnosticDefinition) -> Vector{String}
+
+The keys whose values differ between two definitions (as in [`DiagnosticIssue`](@ref),
+e.g. `channel[6].filters`), sorted; empty when they define the same instrument and
+provenance. CSV files are compared by content, not path; `name` and `public` count.
+"""
+function diagnostic_diff(a::DiagnosticDefinition, b::DiagnosticDefinition)
+    fa, fb = _flat(diagnostic_table(a)), _flat(diagnostic_table(b))
+    out = String[]
+    for k in union(keys(fa), keys(fb))
+        (haskey(fa, k) && haskey(fb, k) && isequal(_leaf(k, fa[k]), _leaf(k, fb[k]))) || push!(out, k)
+    end
+    return sort!(out)
+end
+
+# a CSV path's value is its content
+_leaf(k, v) = endswith(k, "_csv") && v isa AbstractString && isfile(v) ? read(v) : v
+
+# key paths => leaf values; arrays of tables by `number` where they have one
+function _flat(d::AbstractDict, path = "", out = Dict{String,Any}())
+    for (k, v) in d
+        key = isempty(path) ? k : path * "." * k
+        if v isa AbstractDict
+            _flat(v, key, out)
+        elseif v isa AbstractVector && !isempty(v) && all(x -> x isa AbstractDict, v)
+            for (i, x) in enumerate(v)
+                _flat(x, key * (haskey(x, "number") ? "[$(x["number"])]" : "[$i]"), out)
+            end
+        else
+            out[key] = v
         end
     end
     return out

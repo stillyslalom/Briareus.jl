@@ -763,20 +763,23 @@ end
 
 """
 Charts of the time panel: `:pulses` (laser power per beam group), `:drive` (capsule
-Tᵣ, Dante 1 and a_l/a_0), `:energy` (where the laser energy has gone by each time) and
-`:retune` (the latest retune's reference and retuned powers and its mode 1).
+Tᵣ, the recorded diagnostics' Tᵣ and a_l/a_0), `:diagnostics` (each recorded
+diagnostic's Tᵣ and intensity), `:energy` (where the laser energy has gone by each time)
+and `:retune` (the latest retune's reference and retuned powers and its mode 1).
 """
-const TIME_CHARTS = (:pulses, :drive, :energy, :retune)
+const TIME_CHARTS = (:pulses, :drive, :diagnostics, :energy, :retune)
 
-const TIME_CHART_LABELS = Dict(:pulses => "Pulses", :drive => "Drive history", :energy => "Energy",
-                               :retune => "Retune")
+const TIME_CHART_LABELS = Dict(:pulses => "Pulses", :drive => "Drive history", :diagnostics => "Diagnostics",
+                               :energy => "Energy", :retune => "Retune")
 
 """
     DriveHistory
 
 A drive history of the session ([`start_history!`](@ref)): `time` (ns), `Tr` (capsule
-radiation temperature, eV), `legendre` (rows l = 1…4 of a_l/a_0 per step), `dante`
-(Dante 1 brightness temperature, eV, `NaN` without one), `energy` (series `(; name,
+radiation temperature, eV), `legendre` (rows l = 1…4 of a_l/a_0 per step),
+`diagnostics` (one `(; id, name, Tr, intensity, note)` per recorded diagnostic: its
+brightness temperature in eV and intensity toward it in TW/sr per step, `NaN` where it
+gives none, and `note` why), `energy` (series `(; name,
 values)` in kJ, cumulative), `fields` (per [`DRIVE_FIELDS`](@ref) an elements × steps
 matrix in W/cm², on the drive's elements), `range` (each field's finite extremes over
 the history), `history` (the core `drive_history`), `key` (what it was computed for)
@@ -786,7 +789,7 @@ struct DriveHistory
     time::Vector{Float64}
     Tr::Vector{Float64}
     legendre::Matrix{Float64}
-    dante::Vector{Float64}
+    diagnostics::Vector{NamedTuple}
     energy::Vector{NamedTuple}
     fields::Dict{Symbol,Matrix{Float32}}
     range::Dict{Symbol,Tuple{Float64,Float64}}
@@ -796,15 +799,24 @@ struct DriveHistory
 end
 
 """
+The diagnostics a new session records in a drive history: NIF Dante 1.
+"""
+const DEFAULT_DIAGNOSTICS = ["nif_dante1"]
+
+"""
     TimeState()
 
 State of the time panel: `pulses` (the pulses the beams fire, see
 [`load_pulses!`](@ref) and [`use_pulse_shape!`](@ref); `nothing` before one), `history`
 (the latest [`DriveHistory`](@ref)), `retune` (the latest retune's histories, see
 [`retune_to_reference!`](@ref)), `chart` (one of [`TIME_CHARTS`](@ref)), `cursor` (the
-time shown in the 3D view, ns; `NaN`: the drive at the table's powers), `dante` (record
-a synthetic Dante 1), and the history job's `running`, `progress` (steps done, steps),
-`started` and `status`.
+time shown in the 3D view, ns; `NaN`: the drive at the table's powers), `diagnostics`
+(the ids of the diagnostic definitions recorded in the next history, see
+[`set_diagnostic!`](@ref)), `catalog` (the definitions on the search path and those
+saved with the session, see [`refresh_diagnostics!`](@ref)), `embedded` (the
+definitions read from a saved session, by id: the ones used for those ids), `issues`
+(the search path's problems, `check_diagnostics`), and the history job's `running`,
+`progress` (steps done, steps), `started` and `status`.
 """
 struct TimeState
     pulses::Observable{Any}
@@ -812,7 +824,10 @@ struct TimeState
     retune::Observable{Any}
     chart::Observable{Symbol}
     cursor::Observable{Float64}
-    dante::Observable{Bool}
+    diagnostics::Observable{Vector{String}}
+    catalog::Observable{Vector{NamedTuple}}
+    embedded::Observable{Dict{String,Any}}
+    issues::Observable{Vector{DiagnosticIssue}}
     running::Observable{Bool}
     progress::Observable{Tuple{Int,Int}}
     started::Observable{Float64}
@@ -823,7 +838,9 @@ struct TimeState
 end
 
 TimeState() = TimeState(Observable{Any}(nothing), Observable{Any}(nothing), Observable{Any}(nothing),
-                        Observable(:pulses), Observable(NaN), Observable(true), Observable(false),
+                        Observable(:pulses), Observable(NaN), Observable(copy(DEFAULT_DIAGNOSTICS)),
+                        Observable(NamedTuple[]), Observable(Dict{String,Any}()),
+                        Observable(DiagnosticIssue[]), Observable(false),
                         Observable((0, 0)), Observable(0.0), Observable(""), Ref(0),
                         Threads.Atomic{Bool}(false), Ref(false))
 

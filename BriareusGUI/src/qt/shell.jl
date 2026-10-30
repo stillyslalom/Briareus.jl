@@ -346,6 +346,29 @@ mutable struct SweepRowItem
     objective::String
 end
 
+# One diagnostic definition of the time panel's list.
+mutable struct DiagRow
+    id::String
+    name::String
+    ticked::Bool
+    usable::Bool
+    changed::Bool                                  # saved with the session, differs from the search path's
+    tip::String
+end
+
+# One folder of the diagnostic search path; one problem found in its definitions.
+mutable struct FolderRow
+    path::String
+    saved::Bool
+end
+
+mutable struct IssueRow
+    level::String
+    where_::String                                 # file name [key]
+    message::String
+    file::String
+end
+
 # One entry of the time chart's key.
 mutable struct LegendRow
     label::String
@@ -409,7 +432,8 @@ const _MODEL_ROWS = (treeModel = TreeItem, targetFieldModel = FieldRow, partFiel
                      compModel = CompRow, clearModel = ClearRow, worstModel = ClearRow,
                      talisCompModel = CompRow, ruleModel = RuleRow, talisModel = TalisRow,
                      noteModel = NoteRow, timeLegendModel = LegendRow, sweepModel = SweepRowItem,
-                     sweepLegendModel = LegendRow)
+                     sweepLegendModel = LegendRow, diagModel = DiagRow, folderModel = FolderRow,
+                     issueModel = IssueRow)
 
 """
 State shared between a `DesignSession` and its QML window: the property map `app`,
@@ -529,7 +553,8 @@ function BriareusShell(sess::DesignSession; queue::Channel{Any} = Channel{Any}(I
                 v.hidden_beams, v.shown_1w, v.shown_2w, bt.unconverted, v.cut_kind, v.cut_axis,
                 v.cut_range, v.cut_point, v.cut_normal, v.cut_shift, v.cut_line, v.cut_rotation,
                 v.cut_azimuth, v.cut_width,
-                v.expanded, tm.pulses, tm.history, tm.retune, tm.chart, tm.cursor, tm.dante, tm.running,
+                v.expanded, tm.pulses, tm.history, tm.retune, tm.chart, tm.cursor, tm.diagnostics,
+                tm.catalog, tm.issues, tm.running,
                 tm.progress, tm.status)
         on(mark, obs)
     end
@@ -896,6 +921,17 @@ function _refresh_drive!(sh::BriareusShell)
     return
 end
 
+# A diagnostic's tooltip: where its definition comes from, and what keeps it from use.
+function _diag_tip(r)
+    origin = r.origin === :builtin ? "built-in" : r.origin === :user ? "from a diagnostic folder" :
+             "saved with the session (not on the search path)"
+    lines = [r.id * " · " * origin * (r.public ? "" : " · not public"), join(r.chain, " ← ")]
+    r.usable || push!(lines, "cannot be built: " * r.problem)
+    isempty(r.changed) ||
+        push!(lines, "the session's definition (used) differs from the search path's in: " * join(r.changed, ", "))
+    return join(lines, "\n")
+end
+
 function _refresh_time!(sh::BriareusShell)
     sess = sh.sess
     tm = sess.time
@@ -917,7 +953,21 @@ function _refresh_time!(sh::BriareusShell)
     step = time_step(tm)
     _set!(sh, "timeStep", step === nothing ? 0 : step)
     _set!(sh, "timeLabel", time_label(sess))
-    _set!(sh, "timeDante", tm.dante[])
+    rows = diagnostic_catalog(sess)
+    _sync_rows!(sh.rows[:diagModel], sh.models[:diagModel],
+                DiagRow[DiagRow(r.id, r.name, r.id in tm.diagnostics[], r.usable, !isempty(r.changed), _diag_tip(r))
+                        for r in rows])
+    if get(sh.shown, "_catalog", nothing) !== rows             # the folders and problems, once per reading
+        sh.shown["_catalog"] = rows
+        _sync_rows!(sh.rows[:folderModel], sh.models[:folderModel],
+                    FolderRow[FolderRow(f.path, f.saved) for f in diagnostic_folders()])
+        _sync_rows!(sh.rows[:issueModel], sh.models[:issueModel],
+                    IssueRow[IssueRow(String(i.level), basename(i.file) * (isempty(i.key) ? "" : " [" * i.key * "]"),
+                                      i.message, i.file) for i in tm.issues[]])
+        _set!(sh, "diagCount", length(rows))
+        _set!(sh, "diagFolders", length(sh.rows[:folderModel]))
+        _set!(sh, "diagIssues", count(i -> i.level !== :warning, tm.issues[]))
+    end
     _sync_rows!(sh.rows[:timeLegendModel], sh.models[:timeLegendModel],
                 LegendRow[LegendRow(r.label, r.color, String(r.style)) for r in ch.legend])
     return
@@ -2051,7 +2101,11 @@ br_time_run() = _with_shell(sh -> start_history!(sh.sess))
 br_time_cancel() = _with_shell(sh -> cancel_history!(sh.sess))
 br_time_step(k) = _with_shell(sh -> set_time_step!(sh.sess, round(Int, k)))
 br_time_now() = _with_shell(sh -> set_time_cursor!(sh.sess, NaN))
-br_time_dante(on) = _with_shell(sh -> Controllers._assign!(sh.sess.time.dante, Bool(on)))
+br_time_diagnostic(id, on) = _with_shell(sh -> set_diagnostic!(sh.sess, String(id), Bool(on)))
+br_diag_use_path(id) = _with_shell(sh -> use_path_diagnostic!(sh.sess, String(id)))
+br_diag_reload() = _with_shell(sh -> refresh_diagnostics!(sh.sess))
+br_diag_add_folder(url) = _with_shell(sh -> add_diagnostic_folder!(sh.sess, _url_to_path(String(url))))
+br_diag_remove_folder(path) = _with_shell(sh -> remove_diagnostic_folder!(sh.sess, String(path)))
 # Optimize
 br_opt_set_by(by) = _with_shell(sh -> (by = _sym(by); by in BEAM_GROUPINGS &&
                                                       Controllers._assign!(sh.sess.optimize.by, by)))
@@ -2295,7 +2349,8 @@ function _register_qml_functions()
     @qmlfunction br_export_summary br_build br_set_view br_side_view br_xray_image br_close_image br_set_spot_radius br_unconverted_ratio br_beam_model br_export_results
     @qmlfunction br_import_visrad_workspace br_export_visrad_workspace br_retune
     @qmlfunction br_time_chart br_time_pulses br_time_shape br_time_run br_time_cancel br_time_step
-    @qmlfunction br_time_now br_time_dante
+    @qmlfunction br_time_now br_time_diagnostic br_diag_use_path br_diag_reload br_diag_add_folder
+    @qmlfunction br_diag_remove_folder
     @qmlfunction br_opt_set_by br_opt_free br_opt_edit br_opt_objective br_opt_hold
     @qmlfunction br_opt_keepout br_opt_capsule br_opt_start br_opt_cancel br_opt_accept
     @qmlfunction br_rv_role br_rv_edit br_rv_wings br_rv_quality br_rv_start br_rv_cancel

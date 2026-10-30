@@ -114,6 +114,17 @@ response_csv = "calibrations/ch19.csv"
 to be built (Dante 2's channels are not public, for example) are reported as
 `:missing` by [`check_diagnostics`](@ref), with the key to supply.
 
+## Definitions in sessions
+
+A saved GUI session holds the definitions of the diagnostics it records, so that it
+records the same instruments on any computer. [`diagnostic_table`](@ref) writes a
+resolved definition as one standalone table (no `extends`; each CSV path mapped, e.g.
+to a copy stored beside it), [`diagnostic_definition`](@ref) reads such a table back,
+checked as a file on the search path is, and [`diagnostic_diff`](@ref) lists the keys
+in which two definitions differ, CSV files compared by content: on opening a session,
+a saved definition that differs from the search path's of the same `id` is reported
+with those keys, and the saved one is used unless the search path's is chosen.
+
 ## New kinds
 
 [`register_diagnostic_kind`](@ref) adds a kind: a schema of

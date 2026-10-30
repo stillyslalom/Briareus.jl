@@ -1,6 +1,7 @@
-// Time: the pulses the beams fire, the drive history they give (capsule Tr, Dante 1,
-// a_l/a_0), where the energy goes, and the latest retune; a time cursor (click or drag
-// the chart, or the slider) colors the 3D view by that step of the history.
+// Time: the pulses the beams fire, the drive history they give (capsule Tr, the ticked
+// synthetic diagnostics, a_l/a_0), where the energy goes, and the latest retune; a time
+// cursor (click or drag the chart, or the slider) colors the 3D view by that step of the
+// history.
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -32,7 +33,8 @@ Item {
             spacing: 6
             Repeater {
                 model: [{ key: "pulses", label: "Pulses" }, { key: "drive", label: "Drive history" },
-                        { key: "energy", label: "Energy" }, { key: "retune", label: "Retune" }]
+                        { key: "diagnostics", label: "Diagnostics" }, { key: "energy", label: "Energy" },
+                        { key: "retune", label: "Retune" }]
                 delegate: Button {
                     text: modelData.label
                     flat: app.timeChart !== modelData.key
@@ -161,16 +163,45 @@ Item {
             Button { text: "Now"; enabled: app.timeLabel !== ""; onClicked: Julia.br_time_now()
                      ToolTip.visible: hovered; ToolTip.text: "Back to the drive at the beam table's powers" }
         }
-        RowLayout {
+        // the diagnostic definitions found (built-in, the folders', the session's): each
+        // ticked one is recorded in the next history
+        Flow {
             Layout.fillWidth: true
-            Note { text: app.timeStatus }
-            CheckBox {
-                text: "Dante 1"
-                checked: app.timeDante
-                onToggled: Julia.br_time_dante(checked)
+            spacing: 2
+            Label { text: "Record"; opacity: 0.75; height: 28; verticalAlignment: Text.AlignVCenter }
+            Repeater {
+                model: diagModel
+                delegate: Row {
+                    required property string id
+                    required property string name
+                    required property bool ticked
+                    required property bool usable
+                    required property bool changed
+                    required property string tip
+                    CheckBox {
+                        text: name + (changed ? " *" : "")
+                        checked: ticked
+                        enabled: usable
+                        onToggled: Julia.br_time_diagnostic(id, checked)
+                        ToolTip.visible: hovered
+                        ToolTip.text: tip
+                    }
+                    ToolButton {
+                        visible: changed
+                        text: "↺"
+                        onClicked: Julia.br_diag_use_path(id)
+                        ToolTip.visible: hovered
+                        ToolTip.text: "Use the search path's definition of " + id + " instead of the session's"
+                    }
+                }
+            }
+            ToolButton {
+                text: "Folders…"
+                onClicked: win.openDiagnostics()
                 ToolTip.visible: hovered
-                ToolTip.text: "Record a synthetic Dante 1 in the next history (θ 143°, φ 274°, through the lower entrance hole)"
+                ToolTip.text: "Diagnostic definition folders, and the problems found in them"
             }
         }
+        Note { text: app.timeStatus; Layout.fillWidth: true }
     }
 }

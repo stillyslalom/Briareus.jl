@@ -164,7 +164,12 @@ names the menu entries, and the panels are described in [The window](@ref).
    backlighter foil's frame, where it was, and beams that followed a component aim in
    that component's frame, their saved aims kept. In sessions before version 5 the
    part with the foil role was named `backlighter`; it loads as the active foil, its
-   name kept.
+   name kept. A session also holds the definition of each diagnostic it records (see
+   *Time* below), CSV files included, and its histories use those definitions wherever
+   it is opened; one that differs from the definition of the same id on the
+   diagnostic search path is marked `*` in the list, its tooltip names the keys, and ↺
+   switches to the search path's. The status after a save names the definitions from
+   outside the built-ins and those not public, which the file then carries.
    Edit ▸ Undo (Ctrl + Z) and Redo (Ctrl + Y) step through every design edit, typed, from
    a menu, from a file or from an applied optimization.
 
@@ -373,9 +378,18 @@ The bottom panel's tabs:
   or beam; disabled beams stay off), and *N221204 shape* with N221204's delivered pulse
   shape ([`n221204_pulse`](@ref)), each beam reaching its table power at the peak.
   *Run history* solves the drive at each time of the pulses on the drive's view factors
-  ([`drive_history`](@ref)). Four charts, in the tree's colors: *Pulses* (each group's
-  power and the total, TW), *Drive history* (capsule Tᵣ and a synthetic Dante 1,
-  [`dante`](@ref), in eV; a₂/a₀ and a₄/a₀ in % on the right axis), *Energy* (the laser
+  ([`drive_history`](@ref)), recording each synthetic diagnostic ticked under the
+  chart: the definitions on the diagnostic search path ([Diagnostic
+  definitions](reference/diagnostics.md): the built-ins, then the folders of
+  Diagnostics ▸ Folders…, kept for later sessions) and those saved with the session,
+  each with a tooltip naming its files; NIF Dante 1 is ticked in a new session, and a
+  definition that cannot be built (Dante 2's channels are not public) cannot be ticked.
+  The Folders dialog lists the problems found in the definitions
+  ([`check_diagnostics`](@ref)). Five charts, in the tree's colors: *Pulses* (each group's
+  power and the total, TW), *Drive history* (capsule Tᵣ and each recorded diagnostic's,
+  [`dante`](@ref), in eV; a₂/a₀ and a₄/a₀ in % on the right axis), *Diagnostics* (each
+  recorded diagnostic's Tᵣ, and the intensity toward it in TW/sr on the right axis),
+  *Energy* (the laser
   energy delivered by each time and where it went, kJ, [`energy_budget`](@ref)) and
   *Retune* (below). A click or drag on the chart, or the slider under it, moves the
   time cursor: the 3D view shows that step of the history on one color scale for the
@@ -513,7 +527,8 @@ export_results(sess, "results")                  # per-element and per-mode CSV
 retune_to_reference!(sess, "reference.csv", "retuned.csv")  # disabled beams are the dropped ones
 load_pulses!(sess, "reference.csv")              # or use_pulse_shape!(sess): N221204's shape
 start_history!(sess)                             # drive_history on the drive's view factors
-time_chart(sess, :drive)                         # what the Time tab plots (also :pulses, :energy, :retune)
+set_diagnostic!(sess, "nif_dante1_2012")          # also record Dante 1 as fielded in 2012–14
+time_chart(sess, :drive)                         # what the Time tab plots (also :pulses, :diagnostics, :energy, :retune)
 set_time_cursor!(sess, 6.0)                      # the 3D view at the history step nearest 6 ns
 nudge_part!(sess.target, 1, 0.5; frame = :leh_top, axis = :z)   # part 1 up 0.5 mm, one edit
 set_aim_frame!(sess, 1:4, :disk_1; keep = false)     # four beams at the disk's center, following it

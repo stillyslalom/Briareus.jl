@@ -1,12 +1,14 @@
 # Saving and restoring a design: the session as plain data (`session_state`), written to
 # and read from a session file (a zip of the TOML and the CAD files it reads, or the TOML
-# alone), and the undo/redo history built on the same snapshots. Results (the drive, an
+# alone, with the diagnostic definitions the design records), and the undo/redo history
+# built on the same snapshots. Results (the drive, an
 # optimization, a clearance report) are not saved: they are computed again from the
 # restored design.
 
 const SESSION_FORMAT = "BriareusGUI session"
-const SESSION_VERSION = 5               # 2: `.briar` archives with the CAD files; 3: frames; 4: placement steps;
-                                        # 5: foil roles as a flag, and the active foil
+const SESSION_VERSION = 6               # 2: `.briar` archives with the CAD files; 3: frames; 4: placement steps;
+                                        # 5: foil roles as a flag, and the active foil; 6: the diagnostics
+                                        # recorded, and their definitions
 
 _strs(xs) = [String(x) for x in xs]
 _syms(xs) = Symbol[Symbol(x) for x in xs]
@@ -44,7 +46,8 @@ sizes, windows, parts), the beams (each beam's port, aim, power, focus, spot, co
 quad, group, whether it is on, and whether its unconverted 1ω and 2ω light takes part),
 the frame each beam aims in and its aim there, the settings of the drive (beam model
 included), the optimization, the clearance check, the TaLIS checks and the placement
-sweep, and (with `view`) the 3D view's coloring, beam drawing (which
+sweep, the diagnostics a drive history records (their ids; a session file carries their
+definitions too, see [`save_session`](@ref)), and (with `view`) the 3D view's coloring, beam drawing (which
 beams' 1ω, 2ω and 3ω light is drawn), cutaway and component display modes. Results are
 not part of it; they are
 computed again. Restore it with [`restore!`](@ref).
@@ -100,7 +103,8 @@ function session_state(sess::DesignSession; view::Bool = true)
                                                          "profile" => _profile_state(dr.profile[]),
                                                          "unconverted_ratio" => collect(dr.unconverted_ratio[])),
                              "optimize" => optimize, "review" => review, "talis" => talis,
-                             "sweep" => _sweep_state(sess.sweep))
+                             "sweep" => _sweep_state(sess.sweep),
+                             "time" => Dict{String,Any}("diagnostics" => copy(sess.time.diagnostics[])))
     if view
         v = sess.view
         state["view"] = Dict{String,Any}("color" => String(v.color[]), "beams" => String(v.beams[]),
@@ -145,6 +149,7 @@ in their frames.
 
 Sessions before version 5 named the part with the role of the backlighter foil
 `backlighter`: that part loads as a foil (keeping the name) and the active one.
+Sessions before version 6 record [`DEFAULT_DIAGNOSTICS`](@ref).
 """
 function restore!(sess::DesignSession, state::AbstractDict)
     get(state, "format", "") == SESSION_FORMAT ||
@@ -245,6 +250,8 @@ function restore!(sess::DesignSession, state::AbstractDict)
         _assign!(tl.omega1, c["omega1"])
     end
     haskey(state, "sweep") && _restore_sweep!(sess.sweep, state["sweep"])
+    ids = String[String(x) for x in get(get(state, "time", Dict()), "diagnostics", DEFAULT_DIAGNOSTICS)]
+    ids == sess.time.diagnostics[] || (sess.time.diagnostics[] = ids)
     if haskey(state, "view")
         v, vs = state["view"], sess.view
         _assign!(vs.color, Symbol(v["color"]))
@@ -333,8 +340,10 @@ function _cad_files(sess::DesignSession)
 end
 
 # The state as written to a file: each CAD file by the path it was saved from and its
-# content hash. Returns the state and the hash => file of each file found.
-function _portable_state(sess::DesignSession)
+# content hash, and the definition of each recorded diagnostic (`_diagnostic_state`).
+# Returns the state, the hash => file of each CAD file found and of each CSV file of a
+# definition (stored in an archive when `embed`).
+function _portable_state(sess::DesignSession; embed::Bool = true)
     state = session_state(sess)
     hashes = Dict{String,String}()
     for f in _cad_files(sess)
@@ -352,7 +361,69 @@ function _portable_state(sess::DesignSession)
         haskey(hashes, v) && (state["visrad_sha256"] = hashes[v])
         state["visrad_source"] = cad_source(sess, v)
     end
-    return state, blobs
+    csvs = Dict{String,String}()
+    defs = _diagnostic_state(sess, csvs; embed)
+    isempty(defs) || (state["diagnostic_definitions"] = defs)
+    return state, blobs, csvs
+end
+
+# ---------------------------------------------------------------- diagnostic definitions in sessions
+
+# The definition of each recorded diagnostic the session can build, by id: `file` (the
+# file that defines it), `chain` (the files it was resolved from), `origin` (builtin,
+# user, session) and `definition` (`diagnostic_table`). Each CSV file is named
+# `diagnostics/<sha256>.csv` and listed in `csvs` (hash => file) when `embed`, else
+# referenced by its path.
+function _diagnostic_state(sess::DesignSession, csvs; embed::Bool)
+    rows = Dict(r.id => r for r in diagnostic_catalog(sess))
+    out = Dict{String,Any}()
+    for id in sess.time.diagnostics[]
+        r = get(rows, id, nothing)
+        (r === nothing || !r.usable) && continue
+        def = Controllers._definition(sess, id)
+        def === nothing && continue
+        csv = function (f)
+            (embed && isfile(f)) || return f
+            h = _sha256(f)
+            csvs[h] = f
+            return _csv_entry(h)
+        end
+        out[id] = Dict{String,Any}("file" => r.file, "chain" => copy(r.chain), "origin" => String(r.origin),
+                                   "definition" => diagnostic_table(def; csv))
+    end
+    return out
+end
+
+_csv_entry(hash) = "diagnostics/" * hash * ".csv"
+_csv_cache() = joinpath(tempdir(), "BriareusGUI-diagnostics")
+
+# The definitions saved in a session file, by id: `(; def, file, chain)`; an embedded
+# CSV is extracted to a cache folder. A definition that no longer builds is left out
+# and named in `bad`.
+function _read_diagnostic_state(state, zr, bad::Vector{String})
+    out = Dict{String,Any}()
+    for (id, e) in get(state, "diagnostic_definitions", Dict())
+        table = Briareus._map_csv!(deepcopy(e["definition"]), function (v)
+            (zr === nothing || !startswith(v, "diagnostics/")) && return v
+            zip_findlast_entry(zr, v) === nothing && return v
+            f = joinpath(_csv_cache(), basename(v))
+            if !isfile(f)
+                mkpath(dirname(f))
+                write(f * ".part", zip_readentry(zr, v))
+                mv(f * ".part", f; force = true)
+            end
+            return f
+        end)
+        def = try
+            diagnostic_definition(table; file = e["file"])
+        catch err
+            err isa ArgumentError || rethrow()
+            push!(bad, id)
+            continue
+        end
+        out[id] = (; def, file = String(e["file"]), chain = String.(e["chain"]))
+    end
+    return out
 end
 
 # The zip entry of a CAD file: its hash and its source's extension.
@@ -372,16 +443,21 @@ Write the design ([`session_state`](@ref), view included) to a session file.
 - `embed = true` (a `.briar` file): a zip archive of the design as TOML
   (`session.toml`) and a copy of every CAD file it reads (`cad/<sha256>.<ext>`: STL
   parts, VisRad workspaces), so the file opens on another computer. A file used by
-  several parts is stored once.
+  several parts is stored once. The definition of each diagnostic the design records
+  is saved in the TOML (`diagnostic_table`) with its CSV files
+  (`diagnostics/<sha256>.csv`), so the session records the same instruments
+  anywhere; the status names those from outside the built-ins and those not public,
+  which the file then carries.
 - `embed = false` (a `.briar.toml` file): the TOML alone, plain text that can be read
   and edited by hand. CAD parts are referenced by path, so the file travels without
-  its geometry (for CAD that may not leave the computer it is on).
+  its geometry (for CAD that may not leave the computer it is on); diagnostic
+  definitions are saved in it, their CSV files referenced by path.
 
 Either way each CAD part records the path it was read from and its content's SHA-256,
 which [`load_session!`](@ref) checks.
 """
 function save_session(path::AbstractString, sess::DesignSession; embed::Bool = !endswith(path, ".toml"))
-    state, blobs = _portable_state(sess)
+    state, blobs, csvs = _portable_state(sess; embed)
     if embed
         tmp = path * ".part"
         ZipWriter(tmp) do w
@@ -393,18 +469,34 @@ function save_session(path::AbstractString, sess::DesignSession; embed::Bool = !
                 write(w, read(f))
                 zip_commitfile(w)
             end
+            for (h, f) in sort!(collect(csvs))
+                zip_newfile(w, _csv_entry(h); compress = true)
+                write(w, read(f))
+                zip_commitfile(w)
+            end
         end
         mv(tmp, path; force = true)            # an interrupted save leaves the old file
         mb = sum(filesize, values(blobs); init = 0) / 2^20
         sess.status[] = "Saved the session to $(basename(path))" *
                         (isempty(blobs) ? "" : @sprintf(" with %d CAD file%s (%.1f MB)", length(blobs),
-                                                        length(blobs) == 1 ? "" : "s", mb))
+                                                        length(blobs) == 1 ? "" : "s", mb)) *
+                        _diagnostics_note(state)
     else
         open(io -> _write_toml(io, state), path, "w")
         sess.status[] = "Saved the session to $(basename(path))" *
-                        (isempty(blobs) ? "" : " (CAD files by path, not embedded)")
+                        (isempty(blobs) ? "" : " (CAD files by path, not embedded)") *
+                        _diagnostics_note(state)
     end
     return path
+end
+
+# What a saved session carries of diagnostic definitions beyond the built-ins.
+function _diagnostics_note(state)
+    defs = get(state, "diagnostic_definitions", Dict())
+    other = sort([id for (id, e) in defs if e["origin"] != "builtin"])
+    private = sort([id for (id, e) in defs if !get(e["definition"], "public", true)])
+    return (isempty(other) ? "" : "; with diagnostic definitions from outside the built-ins: " * join(other, ", ")) *
+           (isempty(private) ? "" : "; not public: " * join(private, ", "))
 end
 
 # Point a saved CAD reference at a file the session reads: the embedded copy when the
@@ -442,6 +534,11 @@ exists but its content changed since the save, the copy is kept and the source i
 in `sess.cad_changed`; [`reload_cad_sources!`](@ref) switches to the sources and
 [`relink_cad!`](@ref) to another file. A session saved without its CAD reads each
 file from its path; the status names those whose content changed since the save.
+
+The diagnostic definitions saved with the session are the ones its drive histories
+use; the status names those that differ from the search path's definition of the same
+id (the keys are in `diagnostic_catalog`), and [`use_path_diagnostic!`](@ref) switches
+to the search path's.
 """
 function load_session!(sess::DesignSession, path::AbstractString)
     bytes = read(path)
@@ -461,7 +558,12 @@ function load_session!(sess::DesignSession, path::AbstractString)
         state["visrad_source"] = f
         c && push!(changed, f)
     end
+    bad = String[]
+    embedded = _read_diagnostic_state(state, zr, bad)
     restore!(sess, state)
+    sess.time.embedded[] = embedded
+    rows = refresh_diagnostics!(sess)
+    differ = [r.id for r in rows if !isempty(r.changed)]
     reset_history!(sess)
     unique!(changed)
     copies = filter(f -> haskey(sess.cad_sources, f), changed)
@@ -471,7 +573,10 @@ function load_session!(sess::DesignSession, path::AbstractString)
     sess.status[] = "Loaded the session from $(basename(path))" *
                     (isempty(copies) ? "" : "; CAD changed on disk since the save (the design reads " *
                                              "the saved copies): " * listed(copies)) *
-                    (isempty(ondisk) ? "" : "; CAD read from disk, changed since the save: " * listed(ondisk))
+                    (isempty(ondisk) ? "" : "; CAD read from disk, changed since the save: " * listed(ondisk)) *
+                    (isempty(differ) ? "" : "; diagnostics saved with the session differ from the search path's " *
+                                            "(the saved ones are used): " * join(differ, ", ")) *
+                    (isempty(bad) ? "" : "; saved diagnostic definitions that no longer build: " * join(bad, ", "))
     return sess
 end
 

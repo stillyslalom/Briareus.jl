@@ -96,7 +96,8 @@ export HOTSPOT_VELOCITY_PER_PERCENT, mode1_vector, hotspot_velocity, ResponseKer
 export CapsuleDrive, capsule_drive
 export DIAGNOSTIC_SCHEMA, TabulatedCurve, DiagnosticField, DiagnosticIssue, DiagnosticDefinition,
        register_diagnostic_kind, diagnostic_config_path, diagnostic_paths, add_diagnostic_path,
-       remove_diagnostic_path, diagnostics, diagnostic, check_diagnostics
+       remove_diagnostic_path, diagnostics, diagnostic, check_diagnostics, diagnostic_table, diagnostic_definition,
+       diagnostic_diff
 
 include("geometry.jl")
 include("meshops.jl")

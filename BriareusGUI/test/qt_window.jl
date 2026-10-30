@@ -265,6 +265,7 @@ using BriareusGUI.Briareus
             B.request_grab(png("time_retune")); next!()
         elseif k == 23 && grabbed(png("time_retune"))
             B.br_time_shape()
+            B.br_time_diagnostic("nif_dante1_2012", true)           # a second Dante in the history
             B.br_time_run()
             s.time.running[] && push!(seen, :history_started)
             next!()
@@ -274,7 +275,9 @@ using BriareusGUI.Briareus
             B.request_grab(png("time_drive")); next!()
         elseif k == 25 && grabbed(png("time_drive"))
             sh.app["timeLabel"] == time_label(s) && startswith(time_label(s), "t = ") &&
-                s.view.color[] !== :component && length(sh.rows[:timeLegendModel]) == 4 && push!(seen, :history)
+                s.view.color[] !== :component && length(sh.rows[:timeLegendModel]) == 5 &&
+                length(sh.rows[:diagModel]) == length(diagnostic_catalog(s)) &&
+                count(r -> r.ticked, sh.rows[:diagModel]) == 2 && push!(seen, :history)
             B.br_time_chart("energy")
             B.request_grab(png("time_energy")); next!()
         elseif k == 26 && grabbed(png("time_energy"))

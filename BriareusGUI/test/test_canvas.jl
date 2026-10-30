@@ -274,7 +274,7 @@ end
     # the drive chart: Tr and Dante 1 on the left, a2/a0 and a4/a0 on the right
     @test shown(tc.left) == 2 && shown(tc.right) == 2 && tc.ax2.ylabelvisible[]
     @test tc.left[:solid][1][1][] == [Point2f(x, y) for (x, y) in zip(h.time, h.Tr)]
-    @test tc.left[:dash][1][1][] == [Point2f(x, y) for (x, y) in zip(h.time, h.dante)]
+    @test tc.left[:dash][1][1][] == [Point2f(x, y) for (x, y) in zip(h.time, h.diagnostics[1].Tr)]
     @test tc.left[:dash][1].visible[]                       # Dante 1, dashed
     set_chart!(sess.time, :energy)
     @test shown(tc.left) == length(h.energy) && shown(tc.right) == 0

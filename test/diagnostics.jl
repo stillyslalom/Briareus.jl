@@ -136,6 +136,44 @@ csv(dir, name, E, v) = (open(joinpath(dir, name), "w") do io
         end
     end
 
+    @testset "standalone tables (sessions)" begin
+        mktempdir() do dir
+            a, b = mkpath(joinpath(dir, "a")), mkpath(joinpath(dir, "b"))
+            csv(a, "ch19.csv", [100.0, 1000.0, 20_000.0], [0.0, 2.0e6, 0.0])
+            put(a, "campaign.toml", """
+                schema = 1
+                id = "group_dante1"
+                extends = "nif_dante1"
+                public = false
+                [[channel]]
+                number = 19
+                energy_eV = 1000
+                solid_angle_sr = 6.5e-7
+                response_csv = "ch19.csv"
+                """)
+            d = diagnostics(; paths = [diagnostic_paths()[1], a])["group_dante1"]
+            # the table, its CSV copied beside it under another name, reads back to the
+            # same definition and builds the same channels
+            t = diagnostic_table(d; csv = f -> (cp(f, joinpath(b, "copy.csv")); "copy.csv"))
+            @test !haskey(t, "extends") && t["kind"] == "xray_power" && t["public"] == false
+            @test t["channel"][end]["response_csv"] == "copy.csv"
+            e = diagnostic_definition(t; file = "session", dir = b)
+            @test e.id == d.id && e.name == d.name && !e.public && e.chain == ["session"]
+            @test isempty(diagnostic_diff(d, e))
+            @test all(x.R == y.R for (x, y) in zip(diagnostic(d).channels, diagnostic(e).channels))
+            # the difference in keys, a CSV by content
+            write(joinpath(b, "copy.csv"), "energy_eV,value\n100,0\n1000,3e6\n20000,0\n")
+            t2 = deepcopy(t)
+            t2["view"]["pixels"] = 200
+            @test diagnostic_diff(d, diagnostic_definition(t2; dir = b)) ==
+                  ["channel[19].response_csv", "view.pixels"]
+            @test_throws ArgumentError diagnostic_definition(merge(t, Dict("extends" => "nif_dante1")))
+            bad = deepcopy(t)
+            bad["view"]["pixelz"] = 1
+            @test_throws "view.pixelz" diagnostic_definition(bad; dir = b)
+        end
+    end
+
     @testset "schema checks" begin
         mktempdir() do dir
             put(dir, "typo.toml", defn("typo", chan("cathode = \"Cr\"\nthicknes_um = 3\n")))

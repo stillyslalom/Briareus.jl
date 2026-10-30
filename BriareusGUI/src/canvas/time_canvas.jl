@@ -9,7 +9,7 @@
 
 # Series per axis and line style, at most (a line's style is fixed when it is created)
 const _TIME_LINES = Dict(:solid => 24, :dash => 12, :dot => 4)           # left axis
-const _TIME_RIGHT = Dict(:solid => 4, :dash => 2, :dot => 2)             # right axis
+const _TIME_RIGHT = Dict(:solid => 4, :dash => 8, :dot => 2)             # right axis
 
 """
     TimeCanvas

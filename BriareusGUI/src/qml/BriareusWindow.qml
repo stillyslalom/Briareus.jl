@@ -57,6 +57,7 @@ ApplicationWindow {
     }
     function openClearanceExport() { fileDialog.run("export_clearance") }
     function openTalisExport() { fileDialog.run("export_talis") }
+    function openDiagnostics() { diagnosticsDialog.open() }
 
     // a results tab asked for from Julia (`request_tab`)
     readonly property string resultsRequest: app.resultsRequest
@@ -309,6 +310,11 @@ ApplicationWindow {
             }
             MenuSeparator {}
             Action { text: "Cancel running analyses"; onTriggered: Julia.br_cancel_all() }
+        }
+        AutoMenu {
+            title: "&Diagnostics"
+            Action { text: "Folders…"; onTriggered: diagnosticsDialog.open() }
+            Action { text: "Read the definitions again"; onTriggered: Julia.br_diag_reload() }
         }
         AutoMenu {
             title: "&Help"
@@ -627,6 +633,65 @@ ApplicationWindow {
             TextField { id: portPhi; text: "0"; Layout.preferredWidth: 100 }
         }
         onAccepted: Julia.br_look_from_port(portTheta.text, portPhi.text)
+    }
+    // the diagnostic search path's folders (saved for later sessions) and the problems
+    // found in their definitions (check_diagnostics)
+    Dialog {
+        id: diagnosticsDialog
+        title: "Diagnostic definitions: " + app.diagCount + " found"
+        anchors.centerIn: parent
+        width: Math.min(win.width - 40, 760)
+        height: Math.min(win.height - 40, 520)
+        standardButtons: Dialog.Close
+        FolderDialog {
+            id: diagFolderDialog
+            title: "Folder of diagnostic definitions (.toml)"
+            onAccepted: Julia.br_diag_add_folder(selectedFolder.toString())
+        }
+        ColumnLayout {
+            anchors.fill: parent
+            spacing: 4
+            RowLayout {
+                SectionLabel { text: "Folders"; Layout.fillWidth: true }
+                Info { tip: "Read after the built-in definitions, in this order; a definition with the id of an earlier one replaces it. Saved folders are kept for later sessions; the others come from BRIAREUS_DIAGNOSTICS." }
+                Button { text: "Add folder…"; onClicked: diagFolderDialog.open() }
+                Button { text: "Read again"; onClicked: Julia.br_diag_reload() }
+            }
+            Label { visible: app.diagFolders === 0; text: "Built-in definitions only"; opacity: 0.6 }
+            Repeater {
+                model: folderModel
+                delegate: RowLayout {
+                    required property string path
+                    required property bool saved
+                    Layout.fillWidth: true
+                    Label { text: path; elide: Text.ElideMiddle; Layout.fillWidth: true
+                            ToolTip.visible: hov.hovered; ToolTip.text: path
+                            HoverHandler { id: hov } }
+                    Label { visible: !saved; text: "environment"; opacity: 0.6 }
+                    Button { visible: saved; text: "Remove"; flat: true; onClicked: Julia.br_diag_remove_folder(path) }
+                }
+            }
+            SectionLabel { text: "Problems (" + app.diagIssues + ")" }
+            ListView {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                clip: true
+                model: issueModel
+                ScrollBar.vertical: ScrollBar {}
+                delegate: RowLayout {
+                    required property string level
+                    required property string where_
+                    required property string message
+                    required property string file
+                    width: ListView.view.width
+                    Label { text: level; Layout.preferredWidth: 60; opacity: 0.75
+                            color: level === "error" ? "#D55E00" : palette.windowText }
+                    Label { text: where_ + ": " + message; elide: Text.ElideRight; Layout.fillWidth: true
+                            ToolTip.visible: ih.hovered; ToolTip.text: file + "\n" + message
+                            HoverHandler { id: ih } }
+                }
+            }
+        }
     }
     Dialog {
         id: helpDialog

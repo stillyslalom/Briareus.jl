@@ -5,6 +5,7 @@ using BriareusGUI.GLMakie
 using BriareusGUI.Briareus
 using SHA: sha256
 using ZipArchives: ZipReader, zip_names, zip_readentry
+using TOML
 
 # Drain a window-style delivery queue until `done()` (background-job tests).
 function drain_until(done, queue; timeout = 300)
@@ -36,6 +37,7 @@ end
     include("test_frames.jl")           # frames, aims in frames, the placement sweep (no GL)
     include("test_display.jl")          # participation, visibility, cutaway (no GL)
     include("test_time.jl")             # pulses, drive histories, the time cursor (no GL)
+    include("test_diagnostics.jl")      # diagnostic definitions: list, folders, sessions (no GL)
     include("test_app.jl")              # the `briareus` command: shortcuts, script, splash (no GL)
     include("test_canvas.jl")           # 3D and map canvases (offscreen GL)
 end

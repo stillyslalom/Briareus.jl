@@ -75,7 +75,9 @@ end
     end
     lf = element_values(res, :laser)
     @test all(isnan.(h.fields[:laser][:, 1]) .== isnan.(lf))
-    @test isfinite(h.dante[1]) && 0.5 < h.dante[argmax(h.Tr)] / maximum(h.Tr) < 1.5
+    d1 = only(h.diagnostics)
+    @test d1.id == "nif_dante1" && isempty(d1.note) && isfinite(d1.Tr[1]) &&
+          0.5 < d1.Tr[argmax(h.Tr)] / maximum(h.Tr) < 1.5
     # the energy split: cumulative, and the laser's energy accounted for
     E = Dict(s.name => s.values for s in h.energy)
     @test Set(keys(E)) == Set([:laser, :wall, :capsule, :holes])
@@ -88,7 +90,7 @@ end
         @test isempty(ch.empty) && all(s -> length(s.x) == length(s.y) == length(h.time), ch.left.series)
     end
     ch = time_chart(sess, :drive)
-    @test [s.label for s in ch.left.series] == ["Capsule Tr", "Dante 1"]
+    @test [s.label for s in ch.left.series] == ["Capsule Tr", "NIF Dante 1"]
     @test [s.label for s in ch.right.series] == ["a₂/a₀", "a₄/a₀"]
     @test ch.right.series[1].y ≈ 100 .* h.legendre[2, :]
     @test ch.left.label == "Tr (eV)" && ch.right.label == "aₗ/a₀ (%)"
