@@ -45,41 +45,65 @@ end
 
 """
     DanteView(theta, phi; through = :leh_bottom, pixels = 400, channels = dante1_channels(),
-              area = nothing)
+              area = nothing, field_of_view = nothing, center = (0, 0, 0))
 
-A broadband spectrometer at port (θ, φ) (degrees) viewing a target through the aperture
-component `through` (with its closing lip `<through>_lip`, if the target has one). The
-visible surface is found by casting `pixels × pixels` parallel rays (the detector is
-distant) across the hole, so every element counts with its visible projected area,
-partial views past the rim included; a ray through a closing lip is weighted by the
-lip's open fraction (`sol.transmission`). The brightness temperature is
+A broadband spectrometer at port (θ, φ) (degrees). The visible surface is found by
+casting `pixels × pixels` parallel rays toward the target (the detector is distant), so
+every element counts with its visible projected area, partial views and occlusion by
+any part included; a ray through a transmitting aperture (a closing lip) is weighted by
+its open fraction (`sol.transmission`). What the rays cover:
+
+- `field_of_view = nothing` (default): a square just enclosing the aperture component
+  `through` (with its closing lip `<through>_lip`, if the target has one), the view
+  through one entrance hole;
+- `field_of_view = D` (mm): the collimated view, a disk of diameter `D` normal to the
+  line of sight about `center` (a point, mm, or a part name: its area-weighted
+  centroid), cut to the target's extent (the rays sample the part of the disk the
+  target covers, `pixels` across it). A NIF Dante's field of view is ±30 mm at TCC (the
+  2004 design; research notes, "Dante-family hardware and geometry"), so it takes in
+  every surface of a target that faces it: the wall seen through windows, packages,
+  shields.
+
+The brightness temperature is
 
     T = (π I / (σ A cos θ_v))^¼,
 
-with `I` the power per steradian toward the detector, `θ_v` the angle between the line
-of sight and the hole's normal and `A` the hole's full initial area (aperture plus lip;
-Dante's convention of the pre-shot LEH size) unless `area` (mm²) is given. The footprint is
-computed once per target (each keyframe of a moving target). `dante1()` and `dante2()`
-give NIF's two.
+with `I` the power per steradian toward the detector and `A cos θ_v` the reference
+area seen from the detector: by default `A` is the full initial area of `through`
+(aperture plus lip; Dante's convention of the pre-shot LEH size) and `θ_v` the angle
+between the line of sight and its normal; `area = A` (mm²) replaces `A` (with the
+aperture's `θ_v`, or `cos θ_v = 1` without `through`); `area = :part` takes the part's
+visible projected area as `A cos θ_v` (the convention of Fournier et al. 2010: the
+projected wall and cap). With a field of view, `through = nothing` and no `area` give
+`Tr = NaN` (the power is still computed). The footprint is computed once per target
+(each keyframe of a moving target). `dante1()` and `dante2()` give NIF's two.
 """
 struct DanteView
     theta::Float64
     phi::Float64
     direction::Vec3
-    through::Symbol
+    through::Union{Nothing,Symbol}
     pixels::Int
     channels::Vector{<:AbstractDanteChannel}
-    area::Union{Nothing,Float64}
+    area::Union{Nothing,Float64,Symbol}
+    field_of_view::Union{Nothing,Float64}
+    center::Union{Vec3,Symbol}
     cache::IdDict{Target,Any}
     lock::ReentrantLock
 end
 
-function DanteView(theta::Real, phi::Real; through::Symbol = :leh_bottom, pixels::Integer = 400,
-                   channels = dante1_channels(), area = nothing)
+function DanteView(theta::Real, phi::Real; through::Union{Nothing,Symbol} = :leh_bottom,
+                   pixels::Integer = 400, channels = dante1_channels(), area = nothing,
+                   field_of_view = nothing, center = zero(Vec3))
     pixels >= 1 || throw(ArgumentError("pixels must be positive"))
+    field_of_view === nothing && through === nothing &&
+        throw(ArgumentError("a view without a field of view looks through an aperture (`through`)"))
+    field_of_view === nothing || field_of_view > 0 || throw(ArgumentError("field_of_view must be positive"))
+    a = area === nothing || area isa Symbol ? area : Float64(area)
+    c = center isa Symbol ? center : Vec3(center...)
     return DanteView(Float64(theta), Float64(phi), port_vector(theta, phi), through, Int(pixels),
-                     collect(channels), area === nothing ? nothing : Float64(area),
-                     IdDict{Target,Any}(), ReentrantLock())
+                     collect(channels), a, field_of_view === nothing ? nothing : Float64(field_of_view),
+                     c, IdDict{Target,Any}(), ReentrantLock())
 end
 
 """
@@ -122,24 +146,53 @@ function sentinel(dim::Symbol = :polar; through = nothing, kwargs...)
 end
 
 function Base.show(io::IO, v::DanteView)
-    print(io, "DanteView(θ = ", v.theta, "°, φ = ", v.phi, "° through :", v.through, ")")
+    print(io, "DanteView(θ = ", v.theta, "°, φ = ", v.phi, "°",
+          v.field_of_view === nothing ? "" : ", field of view $(v.field_of_view) mm",
+          v.through === nothing ? "" : " through :$(v.through)", ")")
 end
 
-# Visible projected area (mm², normal to the line of sight) per (element, lip element
-# the ray crossed or 0), the hole's area and the cosine of the viewing angle.
-function _dante_footprint(t::Target, v::DanteView)
+# The reference aperture `through` (and its lip): elements, area, centroid and the
+# cosine of the viewing angle; `nothing` when the view has none or the target lacks it
+# (a field-of-view view only).
+function _dante_hole(t::Target, v::DanteView)
+    v.through === nothing && return nothing
+    if !any(c -> c.name === v.through, t.components)
+        v.field_of_view === nothing && throw(ArgumentError("the target has no component :$(v.through)"))
+        return nothing
+    end
     names = [v.through]
     lip = Symbol(v.through, :_lip)
     any(c -> c.name === lip, t.components) && push!(names, lip)
     open = elements(t, v.through)
     hole = elements(t, names...)
-    hole_area = sum(t.elem_area[hole])
     c = sum(t.elem_centroid[e] * t.elem_area[e] for e in open) / sum(t.elem_area[open])
-    cosv = abs(dot(v.direction, t.elem_normal[first(hole)]))
-    pts = [p for e in hole for k in t.elem_tris[e]
-           for p in (t.tri_v0[k], t.tri_v0[k] + t.tri_e1[k], t.tri_v0[k] + t.tri_e2[k])]
-    half = 1.05 * maximum(norm(p - c) for p in pts)
+    return (; open, hole, area = sum(t.elem_area[hole]), centroid = c,
+            cosv = abs(dot(v.direction, t.elem_normal[first(hole)])))
+end
+
+# Visible projected area (mm², normal to the line of sight) per (element, lip element
+# the ray crossed or 0), the reference hole's area and the cosine of the viewing angle.
+function _dante_footprint(t::Target, v::DanteView)
+    h = _dante_hole(t, v)
     d = v.direction
+    if v.field_of_view === nothing
+        c = h.centroid
+        pts = [p for e in h.hole for k in t.elem_tris[e]
+               for p in (t.tri_v0[k], t.tri_v0[k] + t.tri_e1[k], t.tri_v0[k] + t.tri_e2[k])]
+        half = 1.05 * maximum(norm(p - c) for p in pts)
+        R2 = Inf
+    else
+        c = v.center isa Symbol ? part_centroid(t, v.center) : v.center
+        # the target's extent across the line of sight about c
+        ext = 0.0
+        for k in eachindex(t.tri_v0), p in (t.tri_v0[k], t.tri_v0[k] + t.tri_e1[k], t.tri_v0[k] + t.tri_e2[k])
+            q = p - c
+            ext = max(ext, norm(q - dot(q, d) * d))
+        end
+        R = v.field_of_view / 2
+        half = min(R, 1.0001 * ext)
+        R2 = R^2
+    end
     r = normalize(cross(d, abs(d[3]) < 0.9 ? Vec3(0, 0, 1) : Vec3(1, 0, 0)))
     u = cross(r, d)
     far = 4 * (t.scale + norm(c)) + 1
@@ -152,7 +205,9 @@ function _dante_footprint(t::Target, v::DanteView)
             for e in t.comp_elems[ci] for k in t.elem_tris[e]]
     acc = Dict{Tuple{Int,Int},Float64}()
     for i in 1:np, j in 1:np
-        o = c + (-half + (i - 0.5) * px) * r + (-half + (j - 0.5) * px) * u + far * d
+        x, y = -half + (i - 0.5) * px, -half + (j - 0.5) * px
+        x^2 + y^2 > R2 && continue
+        o = c + x * r + y * u + far * d
         th, tri = closest_hit(t.bvh, o, ray)
         tri == 0 && continue
         e = Int(dot(ray, t.tri_normal[tri]) < 0 ? t.tri_front[tri] : t.tri_back[tri])
@@ -165,9 +220,25 @@ function _dante_footprint(t::Target, v::DanteView)
         acc[(e, l)] = get(acc, (e, l), 0.0) + px^2
     end
     ks = collect(keys(acc))
-    lip_elems = setdiff(hole, open)
-    return (; elems = first.(ks), lips = last.(ks), area = [acc[k] for k in ks], hole_area, cosv,
-            open_area = sum(t.elem_area[open]), lip_elems, lip_area = t.elem_area[lip_elems])
+    elems, area = first.(ks), [acc[k] for k in ks]
+    if h === nothing
+        hole_area = cosv = open_area = NaN
+        lip_elems = Int[]
+    else
+        hole_area, cosv, open_area = h.area, h.cosv, sum(t.elem_area[h.open])
+        lip_elems = setdiff(h.hole, h.open)
+    end
+    # the reference area seen from the detector, A cos θ_v (`DanteView`)
+    A, cref = if v.area isa Symbol
+        cis = Set(part_pieces(t, v.area))
+        sum((a for (e, a) in zip(elems, area) if t.elem_comp[e] in cis); init = 0.0), 1.0
+    elseif v.area isa Float64
+        v.area, h === nothing ? 1.0 : cosv
+    else
+        hole_area, cosv
+    end
+    return (; elems, lips = last.(ks), area, hole_area, cosv, open_area, lip_elems,
+            lip_area = t.elem_area[lip_elems], ref_area = A, ref_cos = cref)
 end
 
 _footprint(v::DanteView, t::Target) = lock(() -> get!(() -> _dante_footprint(t, v), v.cache, t), v.lock)
@@ -180,9 +251,9 @@ _los_intensity(fp, B, τ) =
 """
     visible_area(view::DanteView, target) -> Dict{Symbol,Float64}
 
-Projected area (mm², normal to the line of sight) of each part that the view sees
-through its hole (closing lips counted fully open); the pieces of a part split for
-computation are summed into it.
+Projected area (mm², normal to the line of sight) of each part that the view sees,
+through its hole or within its field of view (closing lips counted fully open); the
+pieces of a part split for computation are summed into it.
 """
 function visible_area(v::DanteView, t::Target)
     fp = _footprint(v, t)
@@ -199,10 +270,13 @@ end
     dante(view::DanteView, s::SpectralSolution; unfold = :traditional, kwargs...) -> NamedTuple
 
 Synthetic Dante signal: `intensity` (TW/sr toward the detector), `Tr` (eV, the
-brightness temperature over the hole; see `DanteView`), `area` (mm²) and `cos` of the
-viewing angle; `Tr_open`, the brightness temperature over the hole's open area (the
-aperture plus each closing-lip element's area times its open fraction), the radiation
-temperature behind the hole that the view samples (equal to `Tr` without lips). For a
+brightness temperature over the reference area; see `DanteView`), `area` (mm²) and
+`cos` of the reference area (`area × cos` its projection toward the detector);
+`Tr_open`, the brightness temperature over the hole's open area (the aperture plus each
+closing-lip element's area times its open fraction), the radiation temperature behind
+the hole that the view samples (equal to `Tr` without lips; `NaN` without `through`).
+Without a reference area `Tr` is `NaN`, and the in-group spectrum and the unfold take
+the visible projected area instead (a brightness temperature over what is seen). For a
 `SpectralSolution` also `spectrum` (TW/sr per group), `edges`, `channels` (each
 channel's signal; the open-ended top group contributes nothing), `color_temperature`
 (eV, the Planckian whose channel signals best match, in log, those of the channels
@@ -221,9 +295,9 @@ within each group, and there is no unfold.
 function dante(v::DanteView, sol::RadiationSolution)
     fp = _footprint(v, sol.model.target)
     I = _los_intensity(fp, sol.B, sol.transmission)
-    A = something(v.area, fp.hole_area)
-    return (; intensity = I, Tr = radiation_temperature(π * I / (A * fp.cosv)), area = A,
-            cos = fp.cosv, Tr_open = _open_temperature(fp, I, sol.transmission))
+    A, c = fp.ref_area, fp.ref_cos
+    return (; intensity = I, Tr = radiation_temperature(π * I / (A * c)), area = A,
+            cos = c, Tr_open = _open_temperature(fp, I, sol.transmission))
 end
 
 function _open_temperature(fp, I, τ)
@@ -237,19 +311,24 @@ function dante(v::DanteView, s::SpectralSolution; unfold = :traditional, kwargs.
     G = ngroups(s)
     spectrum = [_los_intensity(fp, view(s.B, :, g), sol.transmission) for g in 1:G]
     I = sum(spectrum)
-    A = something(v.area, fp.hole_area)
+    A, c = fp.ref_area, fp.ref_cos
     Tr_open = _open_temperature(fp, I, sol.transmission)
+    # without a reference area: the visible projected area for the in-group spectrum and
+    # the unfold (a brightness temperature over what the view sees)
+    seen = sum(fp.area; init = 0.0)
+    Tshape = isfinite(Tr_open) ? Tr_open : radiation_temperature(π * I / seen)
+    Au, cu = isfinite(A * c) ? (A, c) : (seen, 1.0)
     hw = eltype(v.channels) <: DanteResponse
-    W = hw ? _channel_matrix(v.channels, s.edges; T = Tr_open) : _channel_matrix(v.channels, s.edges)
+    W = hw ? _channel_matrix(v.channels, s.edges; T = Tshape) : _channel_matrix(v.channels, s.edges)
     signals = hw ? W * (1e3 .* spectrum) : W * spectrum
     k = findfirst(==(1800.0), s.edges)
     mband_fraction = k === nothing ? NaN : sum(spectrum[k:end]) / I
-    base = (; intensity = I, Tr = radiation_temperature(π * I / (A * fp.cosv)), area = A,
-            cos = fp.cosv, Tr_open, spectrum, edges = s.edges, channels = signals,
+    base = (; intensity = I, Tr = radiation_temperature(π * I / (A * c)), area = A,
+            cos = c, Tr_open, spectrum, edges = s.edges, channels = signals,
             color_temperature = _color_temperature(v.channels, s.edges, W, signals),
             mband_fraction)
     (hw && unfold !== nothing) || return base
-    u = dante_unfold(v.channels, signals; area = A, cos = fp.cosv, method = unfold, kwargs...)
+    u = dante_unfold(v.channels, signals; area = Au, cos = cu, method = unfold, kwargs...)
     return (; base..., unfold = u, Tr_unfold = u.Tr)
 end
 

@@ -334,6 +334,66 @@ using Briareus: RadiationSolution, _planck_tail, _channel_matrix, _color_tempera
         @test all(W[:, end] .== 0)
     end
 
+    @testset "Dante field of view" begin
+        # the blackbody cavity of "synthetic Dante": a 60 mm field (a NIF Dante's) sees
+        # the cavity only through the hole (the outside of every one-sided surface is
+        # dark), so it reads what the view through the hole reads, to pixel resolution
+        t = coarse()
+        n = nelements(t)
+        T0 = 250.0
+        B = [c.kind === :aperture ? 0.0 : SIGMA_SB * T0^4 for c in t.components[t.elem_comp]]
+        z = zeros(n)
+        sol = RadiationSolution(RadiationModel(t; F = zeros(n, n)), z, z, B, z, z, z, z, 0.0)
+        hole, wide = dante(dante1(), sol), dante(dante1(field_of_view = 60.0, pixels = 800), sol)
+        @test wide.area == hole.area && wide.cos == hole.cos        # the same reference
+        @test wide.intensity ≈ hole.intensity rtol = 2e-3
+        @test Set(keys(visible_area(dante1(field_of_view = 60.0, pixels = 800), t))) ==
+              Set(keys(visible_area(dante1(), t)))
+        @test_throws ArgumentError DanteView(143, 274; through = nothing)
+        @test isnan(dante(dante1(field_of_view = 60.0, through = nothing), sol).Tr)
+        @test_throws ArgumentError dante(DanteView(143, 274; through = :window), sol)
+
+        # a flat Lambertian disk facing the detector: I = B/π × the area seen
+        R, Bd = 2.0, 1.0
+        disk = Component(:emitter, disk_mesh(R, 0.0; nr = 4, nphi = 32), gold())
+        lone = Target(disk)
+        # half of it hidden by a dark two-sided sheet over y > 0 (the pixel grid is
+        # symmetric about the disk's center, and so is the 32-gon)
+        shield = foil(:shield, (0.0, 3R / 2, 1.0), (0, 0, 1); width = 3R, n = 6)
+        shielded = Target(disk, shield)
+        sol_of(tt) = (m = nelements(tt);
+                      Bt = [tt.components[tt.elem_comp[e]].name === :emitter ? Bd : 0.0 for e in 1:m];
+                      RadiationSolution(RadiationModel(tt; F = zeros(m, m)), zeros(m), zeros(m), Bt,
+                                        zeros(m), zeros(m), zeros(m), zeros(m), 0.0))
+        A32 = 16 * R^2 * sin(2π / 32)                          # the 32-gon's area
+        top = DanteView(0, 0; through = nothing, field_of_view = 100.0, pixels = 1000)
+        full = dante(top, sol_of(lone))
+        @test full.intensity ≈ Bd / π * A32 rtol = 2e-3
+        # against the same sheet behind the disk (the same extent, so the same rays)
+        behind = Target(disk, foil(:shield, (0.0, 3R / 2, -1.0), (0, 0, 1); width = 3R, n = 6))
+        unblocked = dante(DanteView(0, 0; through = nothing, field_of_view = 100.0, pixels = 1000), sol_of(behind))
+        half = dante(DanteView(0, 0; through = nothing, field_of_view = 100.0, pixels = 1000), sol_of(shielded))
+        @test unblocked.intensity ≈ full.intensity rtol = 2e-3
+        @test half.intensity ≈ unblocked.intensity / 2 rtol = 1e-12
+        # Tr over the part's visible projected area: the emitter's own temperature, exactly
+        Tb = (π * Bd / π / SIGMA_SB)^0.25
+        for tt in (lone, shielded)
+            r = dante(DanteView(0, 0; through = nothing, field_of_view = 100.0, pixels = 200, area = :emitter),
+                      sol_of(tt))
+            @test r.Tr ≈ Tb rtol = 1e-12
+        end
+        # a field narrower than the disk: the field's disk is what is seen
+        D = 2.0
+        clip = dante(DanteView(0, 0; through = nothing, field_of_view = D, pixels = 1000), sol_of(lone))
+        @test clip.intensity ≈ Bd / π * π * (D / 2)^2 rtol = 2e-3
+        off = DanteView(0, 0; through = nothing, field_of_view = D, pixels = 400, center = (0.0, 0.0, 5.0))
+        @test dante(off, sol_of(lone)).intensity ≈ clip.intensity rtol = 1e-2   # along the line of sight
+        side = DanteView(0, 0; through = nothing, field_of_view = D, pixels = 400, center = (10.0, 0.0, 0.0))
+        @test dante(side, sol_of(lone)).intensity == 0
+        @test dante(DanteView(0, 0; through = nothing, field_of_view = D, pixels = 400, center = :emitter),
+                    sol_of(lone)).intensity ≈ clip.intensity rtol = 1e-2
+    end
+
     @testset "drive history record" begin
         t = hohlraum(nz = 10, nphi = 16, capsule_ntheta = 8, capsule_nphi = 12,
                      wall = Material(:Au; albedo = WallLossAlbedo(), conversion = 0.8))

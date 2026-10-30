@@ -168,6 +168,28 @@ csv(dir, name, E, v) = (open(joinpath(dir, name), "w") do io
         end
     end
 
+    @testset "field of view and reference area" begin
+        mktempdir() do dir
+            put(dir, "base.toml", defn("base", chan("cathode = \"Cr\"\n")))
+            put(dir, "wide.toml", "schema = 1\nid = \"wide\"\nextends = \"base\"\n[view]\n" *
+                "field_of_view_mm = 60\ncenter_part = \"capsule\"\narea_part = \"wall\"\n")
+            put(dir, "wider.toml", "schema = 1\nid = \"wider\"\nextends = \"wide\"\n[view]\n" *
+                "area_mm2 = 5.0\ncenter_mm = [0, 0, 1]\nthrough = \"leh_top\"\n")
+            put(dir, "both.toml", "schema = 1\nid = \"both\"\nextends = \"base\"\n[view]\n" *
+                "field_of_view_mm = 60\narea_mm2 = 5.0\narea_part = \"wall\"\n")
+            put(dir, "nofov.toml", "schema = 1\nid = \"nofov\"\nextends = \"base\"\n[view]\ncenter_mm = [0, 0, 1]\n")
+            v = diagnostic("wide"; paths = [dir])
+            @test (v.field_of_view, v.center, v.area, v.through) == (60.0, :capsule, :wall, nothing)
+            w = diagnostic("wider"; paths = [dir])                  # the inherited alternatives dropped
+            @test (w.field_of_view, w.center, w.area, w.through) == (60.0, Briareus.Vec3(0, 0, 1), 5.0, :leh_top)
+            @test diagnostic("base"; paths = [dir]).field_of_view === nothing
+            @test diagnostic("base"; paths = [dir]).through === :leh_bottom
+            issues = check_diagnostics(; paths = [dir])
+            @test any(i -> basename(i.file) == "both.toml" && i.key == "view.area_part" && i.level === :error, issues)
+            @test any(i -> basename(i.file) == "nofov.toml" && i.key == "view" && i.level === :error, issues)
+        end
+    end
+
     @testset "configuration file and search path" begin
         mktempdir() do dir
             cfg = joinpath(dir, "cfg", "config.toml")

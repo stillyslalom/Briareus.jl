@@ -86,7 +86,8 @@ callout in the section says which).
   and the unfold (2026-10-24); Laser-spot spectrum (2026-10-24) (α_M 0.55 with thermal
   spots); Per-cone M-band in the drive history (2026-10-27); Dante-family hardware and
   geometry: what is public (2026-10-29); X-ray imagers, radiography and streaked
-  diagnostics: what is public (2026-10-29).
+  diagnostics: what is public (2026-10-29); Dante field of view and reference area
+  (2026-10-29).
 
 **Hydrodynamics coupling**
 - Capsule drive hand-over and CompactLES stage 0 (2026-10-24).
@@ -9430,3 +9431,26 @@ NIF VISAR sweep windows and etalon sets; NIF SOP's absolute calibration; Omega T
 assignments (PI portal); ARC radiography shot numbers; the AXIS 128× / 300 µm figure
 (news item only); G-LEH-1's original filter set; fused silica's δ at 659.5 nm; the
 Meadowcroft (2008) and Maddox (2011) image-plate papers (quoted by Rosenberg only).
+
+## Dante field of view and reference area (2026-10-29) *derived*
+
+`DanteView(...; field_of_view, center, area)` (`src/dante.jl`; design in
+`reference/diagnostics-design.md`). A field of view casts the parallel rays over a disk
+of the given diameter normal to the line of sight about `center`, cut to the target's
+extent; the view through a hole (no field of view) is the square about the hole, as
+before. Every surface facing the instrument counts, occluded by any part; the outsides
+of one-sided surfaces are dark. Tr's reference: the aperture's initial area (default),
+a number, or a part's visible projected area (`area = :part`, Fournier 2010's
+convention). No value here is fitted.
+
+Checks (`test/spectral.jl`, "Dante field of view"):
+- Through-hole path unchanged: `dante1()`, `dante2()`, an area override and `sentinel()`
+  on the coarse hohlraum with random radiosity give `isequal` intensity, Tr, area, cos,
+  Tr_open and visible areas before and after the change.
+- The blackbody cavity of "synthetic Dante" seen with a 60 mm field (800 pixels): the
+  intensity of the view through the hole to 2e-3 and the same visible parts (the
+  cavity is seen only through its hole).
+- A flat Lambertian 32-gon facing the detector: I = (B/π) A to 2e-3 (1000 pixels); a
+  field narrower than the disk sees π(D/2)² to 2e-3; a dark sheet over half the disk
+  halves I to 1e-12 (the pixel grid and the polygon share the symmetry); Tr over the
+  emitter's visible projected area is its own temperature to 1e-12, shielded or not.

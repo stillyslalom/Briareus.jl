@@ -14,12 +14,15 @@ lands; the docstrings and research notes then hold what was built.
   definitions" (schema, search path, extends, CSV curves, kinds); the kind
   `xray_power`; built-ins `nif_dante1_2021` and `nif_dante1` in `data/diagnostics`,
   from which `dante1()` and `dante1_responses()` build (bit for bit with the table they
-  replaced). Not yet: the fields of model items 8–10 below that are not in the
-  `xray_power` schema (field of view, port names, Tr-area modes, time response,
-  uncertainty, the recording modes other than `history`), session embedding.
-- `DanteView(θ, φ; through, pixels, channels, area)`: parallel rays across the
-  `through` aperture (and its `_lip`); Tr over the hole's initial area; `dante2()` and
-  `sentinel(dim)` construct views in code with Dante 1's channels.
+  replaced).
+- Field of view and reference area (phase 2, 2026-10-29): `DanteView(...;
+  field_of_view, center, area)`, `[view]` keys `field_of_view_mm`, `center_part`,
+  `center_mm`, `area_part`; the view through a hole is unchanged (bit for bit).
+- Not yet: port names, an area history (Tr over A(t), Glenzer 2010), a field of view
+  per channel (the multilayer channel's 12 mm; Rubery 2022 finds it covers every NIF
+  hohlraum), time response, uncertainty, the recording modes other than `history`,
+  session embedding. `dante2()` and `sentinel(dim)` construct views in code with Dante
+  1's channels.
 - XRD cathodes `:Al`, `:Cr`, `:Ni` (a Henke-yield model fitted to Rubery's curves),
   SiO₂ mirrors (Fresnel, angle and roughness scaled to Rubery Fig. 3a), the Cr/Sc
   multilayer as Rubery's digitized curve; filters by Henke's tables.
@@ -102,14 +105,12 @@ lands; the docstrings and research notes then hold what was built.
 - **Not public, so absent from the built-ins**: Dante 2's channels and solid angles,
   Omega Dante's standoff and solid angles, the fielded NIF collimators. The definitions
   say so in their comments; `check_diagnostics` names the keys to supply.
-- **Checks of the field-of-view path** (never fit targets): Chen 2024's LEH / open-end
-  pair (≈ 15 / 35 TW/sr), the BAH paper's 27 % occlusion of Dante 2 by a ring, May 2015's
-  cos 37° / cos 64° ratio.
+- **Checks of the field-of-view path** (never fit targets), still to run on modeled
+  targets: Chen 2024's LEH / open-end pair (≈ 15 / 35 TW/sr), the BAH paper's 27 %
+  occlusion of Dante 2 by a ring, May 2015's cos 37° / cos 64° ratio.
 
 ## Phases
 
-2. Collimator field of view and reference area in `DanteView`; the cropped hole as the
-   special case, checked against it.
 3. Public definitions from the research notes: Dante 1 by date (2009, 2012–14, the three
    2017–18 shots), Sentinel (N170924), Omega Dante (current; no solid angles, so
    `:missing` until a user supplies them), Dante 2 (line of sight only).

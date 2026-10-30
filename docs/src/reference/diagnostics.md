@@ -43,10 +43,16 @@ The kind `xray_power` (Dante, Sentinel) takes:
 | Table | Keys |
 |---|---|
 | `[line_of_sight]` (required) | `theta_deg`, `phi_deg`: the instrument's direction from TCC |
-| `[view]` | `through` (the aperture component looked through; default `leh_bottom`), `pixels` (rays per side; default 400), `area_mm2` (the area Tr is quoted over; default the aperture's initial area) |
+| `[view]` | `field_of_view_mm` (the collimated field, a disk of this diameter normal to the line of sight; without it the view looks through `through` alone), `center_part` or `center_mm` (the field's center, a part's centroid or a point; default TCC), `through` (the aperture looked through, and the reference for Tr; default `leh_bottom` without a field of view, none with one), `pixels` (rays per side; default 400), `area_mm2` (the area Tr is quoted over; default the aperture's initial area) or `area_part` (Tr over that part's visible projected area) |
 | `[recording]` | `mode = "history"` |
 | `[[channel]]` (one per channel) | `number`, `energy_eV` (nominal band energy) and `solid_angle_sr` (required); `filters` (an array of `{ material, thickness_um }`, optionally `density_g_cm3`, or `{ transmission_csv }`); `grid` (open fraction; default 1); `mirror` (`{ kind = "SiO2", angle_deg }`, `{ kind = "mlm", angle_deg = 1.9 }` or `{ reflectivity_csv }`); `cathode` (`"Al"`, `"Cr"` or `"Ni"`, [`xrd_sensitivity`](@ref)) or `sensitivity_csv`; or a measured `response_csv` in place of all of these |
 | top level | `remove_channels` (numbers dropped from the definition extended) |
+
+A field of view takes in every surface of the target facing the instrument, occluded by
+any part: a NIF Dante's is ±30 mm at TCC (the 2004 design), wider than any hohlraum, so
+windows, packages and shields enter the signal as they would on the shot. Within an
+extended definition, giving one of `area_mm2` / `area_part` or `center_part` /
+`center_mm` drops the other inherited from the base.
 
 The response of a channel is the product of its parts ([`DanteResponse`](@ref)).
 Measured curves are CSV files with a header line and two columns, photon energy (eV)

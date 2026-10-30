@@ -236,8 +236,15 @@ function _merge(parent::AbstractDict, child::AbstractDict)
     return out
 end
 
+# keys that exclude each other: a file that gives one drops the other it inherits
+const _EXCLUSIVE_KEYS = (("area_mm2", "area_part"), ("center_part", "center_mm"))
+
 function _merge_table(a::AbstractDict, b::AbstractDict)
     out = deepcopy(Dict{String,Any}(a))
+    for (x, y) in _EXCLUSIVE_KEYS
+        haskey(b, x) && delete!(out, y)
+        haskey(b, y) && delete!(out, x)
+    end
     for (k, v) in b
         out[k] = v isa AbstractDict && get(out, k, nothing) isa AbstractDict ? _merge_table(out[k], v) : deepcopy(v)
     end
@@ -580,9 +587,13 @@ const _XRAY_POWER_SPEC = Dict(
         "theta_deg" => DiagnosticField(Real; required = true),
         "phi_deg" => DiagnosticField(Real; required = true)); required = true),
     "view" => DiagnosticField(Dict(
-        "through" => DiagnosticField(String; doc = "the aperture component the view looks through"),
-        "pixels" => DiagnosticField(Integer; doc = "rays across the aperture, per side"),
-        "area_mm2" => DiagnosticField(Real; doc = "the area Tr is quoted over; default the aperture's"))),
+        "through" => DiagnosticField(String; doc = "the aperture looked through (Tr's reference)"),
+        "pixels" => DiagnosticField(Integer; doc = "rays per side"),
+        "field_of_view_mm" => DiagnosticField(Real; doc = "collimated field: a disk of this diameter about the center"),
+        "center_part" => DiagnosticField(String; doc = "the field's center: a part's centroid"),
+        "center_mm" => DiagnosticField(Vector{Real}; doc = "the field's center: x, y, z"),
+        "area_mm2" => DiagnosticField(Real; doc = "the area Tr is quoted over; default the aperture's"),
+        "area_part" => DiagnosticField(String; doc = "Tr over this part's visible projected area"))),
     "recording" => DiagnosticField(Dict(
         "mode" => DiagnosticField(String; doc = "history (a voltage history per channel)"))),
     "channel" => DiagnosticField([_CHANNEL_SPEC]; required = true),
@@ -683,8 +694,25 @@ function _build_xray_power(def::DiagnosticDefinition; kwargs...)
     mode == "history" || throw(_KeyedError("recording.mode", "xray_power records a history"))
     cs = get(d, "channel", Any[])
     isempty(cs) && throw(_MissingValue("channel", "no channels: supply [[channel]] tables (extend \"$(def.id)\")"))
-    kw = (; through = Symbol(get(v, "through", "leh_bottom")), pixels = Int(get(v, "pixels", 400)),
-          channels = _channels(cs), area = haskey(v, "area_mm2") ? Float64(v["area_mm2"]) : nothing)
+    for (x, y) in (("area_mm2", "area_part"), ("center_part", "center_mm"))
+        haskey(v, x) && haskey(v, y) && throw(_KeyedError("view." * y, "give $x or $y, not both"))
+    end
+    fov = haskey(v, "field_of_view_mm") ? Float64(v["field_of_view_mm"]) : nothing
+    fov === nothing && (haskey(v, "center_part") || haskey(v, "center_mm")) &&
+        throw(_KeyedError("view", "a center needs field_of_view_mm"))
+    if haskey(v, "center_mm")
+        length(v["center_mm"]) == 3 || throw(_KeyedError("view.center_mm", "three coordinates, mm"))
+        center = Vec3(Float64.(v["center_mm"])...)
+    else
+        center = haskey(v, "center_part") ? Symbol(v["center_part"]) : zero(Vec3)
+    end
+    # without a field of view the view looks through an aperture (default the lower
+    # entrance hole); with one, `through` is only the reference for Tr
+    through = haskey(v, "through") ? Symbol(v["through"]) : fov === nothing ? :leh_bottom : nothing
+    area = haskey(v, "area_mm2") ? Float64(v["area_mm2"]) :
+           haskey(v, "area_part") ? Symbol(v["area_part"]) : nothing
+    kw = (; through, pixels = Int(get(v, "pixels", 400)), channels = _channels(cs), area,
+          field_of_view = fov, center)
     return DanteView(los["theta_deg"], los["phi_deg"]; merge(kw, values(kwargs))...)
 end
 
