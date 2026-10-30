@@ -213,6 +213,7 @@ csv(dir, name, E, v) = (open(joinpath(dir, name), "w") do io
         @test all(i -> i.level === :missing, issues)
         @test Set((basename(i.file), i.key) for i in issues) ==
               Set([("nif_dante2.toml", "channel"); ("nif_sentinel_N170924.toml", "line_of_sight.phi_deg");
+                   ("nif_gleh2.toml", "filters");
                    [("omega_dante.toml", "channel[$n].solid_angle_sr") for n in 1:18]])
         # each channel's half-maximum midpoint (the modeled filters, grid, mirror and XRD)
         # against the energy the source tabulates (Kemp 2020: peak sensitivity from the

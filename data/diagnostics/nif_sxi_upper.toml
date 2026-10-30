@@ -1,0 +1,22 @@
+# NIF Static X-ray Imager, upper (SXI-U), hard channel, 18° from the hohlraum axis: the
+# lower one's hardware at port P18-123 with the detector 4.88 m from the target (Schneider
+# et al. 2012, OSTI 1043636, §II; a draft with open "(CHECK)" marks, so M), the pinhole at
+# 4880/3 = 1626.7 mm (derived). Schneider 2010 gives the hard channel's filters without
+# saying which SXI fielded them; that the upper one used the same is assumed (M). That the
+# line of sight is the port's axis is inferred from SXI-L's (research notes).
+
+schema = 1
+id = "nif_sxi_upper"
+extends = "nif_sxi_lower"
+name = "NIF SXI upper (hard channel)"
+source = "Schneider et al. (2012), OSTI 1043636, §II (draft); Schneider et al. (2010)"
+confidence = "M"
+
+[line_of_sight]
+theta_deg = 18.0
+phi_deg = 123.75
+source = "port P18-123, NIF User Guide 2024-09"
+
+[optic]
+distance_mm = 1626.7
+note = "distance derived: detector 4.88 m from the target at 2x"

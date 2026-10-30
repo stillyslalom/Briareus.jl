@@ -1,0 +1,48 @@
+# NIF Static X-ray Imager, lower (SXI-L), hard channel: a time-integrated pinhole image of
+# the lower entrance hole and the wall seen through it, 19° from the hohlraum axis.
+# Schneider et al. (2010), OSTI 1009651, §II (as read from the text): 2× magnification,
+# detector 4.97 m from the target, so the pinhole at 4970/3 = 1656.7 mm (derived); four
+# 25 µm pinholes, differentially filtered; the channel of 75 µm Be + 50 µm Ti (3–5 keV,
+# ≈ 60 µm resolution); a thinned, back-illuminated Si CCD, 15 µm thick, 24 µm pixels,
+# 2k × 2k. Port P161-326 (NIF User Guide 2024-09; Chen 2020 §II.1). The diffraction energy
+# 4 keV is the middle of the paper's 3–5 keV (derived). The CCD is modeled as 15 µm of Si
+# absorbing every photon it stops (no dead layer; the paper's calibrated QE, Fig. 2a, is
+# not tabulated): give detector.efficiency_csv for a measured curve. The soft channel
+# (W/B4C multilayer at 870 eV) needs the mirror's reflectivity, not modeled here.
+
+schema = 1
+id = "nif_sxi_lower"
+name = "NIF SXI lower (hard channel)"
+kind = "xray_imager"
+facility = "NIF"
+public = true
+source = "Schneider et al., RSI 81, 10E538 (2010), OSTI 1009651, §II"
+confidence = "H"
+filters = [{ material = "Be", thickness_um = 75 }, { material = "Ti", thickness_um = 50 }]
+
+[line_of_sight]
+theta_deg = 161.0
+phi_deg = 326.25
+source = "port P161-326, NIF User Guide 2024-09"
+
+[optic]
+kind = "pinhole"
+diameter_um = 25
+distance_mm = 1656.7
+magnification = 2
+energy_eV = 4000
+note = "distance derived: detector 4.97 m from the target at 2x; energy the middle of 3-5 keV"
+
+[detector]
+kind = "ccd"
+pixel_um = 24
+pixels = [2048, 2048]
+absorber = "Si"
+absorber_um = 15
+
+[view]
+pixels = 1024
+note = "object-plane sampling 24 um (two detector pixels); the field is the detector's, 24.6 mm"
+
+[recording]
+mode = "integrated"

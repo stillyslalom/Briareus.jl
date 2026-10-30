@@ -48,6 +48,23 @@ The kind `xray_power` (Dante, Sentinel) takes:
 | `[[channel]]` (one per channel) | `number` and `solid_angle_sr` (required); `energy_eV` (nominal band energy; default the response's peak); `filters` (an array of `{ material, thickness_um }`, optionally `density_g_cm3`, or `{ transmission_csv }`); `grid` (open fraction; default 1); `mirror` (`{ kind = "SiO2", angle_deg }`, calibrated; `{ kind = "mlm", angle_deg = 1.9 }`; `{ kind = "fresnel", material, angle_deg }`, optionally `roughness_nm` and `density_g_cm3`, an uncalibrated [`GrazingMirror`](@ref) for C, Be, B₄C and other coatings; or `{ reflectivity_csv }`); `cathode` (`"Al"`, `"Cr"` or `"Ni"`, [`xrd_sensitivity`](@ref)) or `sensitivity_csv`; or a measured `response_csv` in place of all of these |
 | top level | `remove_channels` (numbers dropped from the definition extended) |
 
+The kind `xray_imager` (the SXI, G-LEH and gated imagers) builds an
+[`XrayImager`](@ref) and takes:
+
+| Table | Keys |
+|---|---|
+| `[line_of_sight]` (required) | `theta_deg`, `phi_deg` |
+| `[optic]` (required) | `kind = "pinhole"`, `diameter_um`, `distance_mm` (the pinhole from the object), `magnification`; `energy_eV` (the photon energy of the diffraction blur) |
+| top level | `filters` (required; as a channel's, an empty array for none), `mirror` (as a channel's) |
+| `[detector]` (required) | `absorber` and `absorber_um` (the absorbing layer, e.g. Si 15 µm) or `efficiency_csv`; `kind`, `pixel_um`, `pixels` (across, down) |
+| `[view]` | `width_mm` (the object-plane field; default the detector's extent over the magnification), `pixels` (samples per side; default 256), `center_part` or `center_mm`, `up` (the image's up, a chamber direction) |
+| `[recording]` | `mode = "integrated"` (default) or `"gated"` with `times_ns`, `gate_ns` (FWHM) and `gate_shape` (`"gaussian"` or `"square"`) |
+
+[`detected_radiance`](@ref) weighs each element's radiance by the imager's response
+over its spectrum, [`imager_image`](@ref) renders it on the object plane and blurs it
+by the pinhole, and [`imager_record`](@ref) integrates the images of a history over
+the recording's gates.
+
 A field of view takes in every surface of the target facing the instrument, occluded by
 any part: a NIF Dante's is ±30 mm at TCC (the 2004 design), wider than any hohlraum, so
 windows, packages and shields enter the signal as they would on the shot. Within an
@@ -77,6 +94,9 @@ source's table and checked against the energies the source tabulates:
 | `nif_dante2` | NIF Dante 2: the line of sight | the channels |
 | `nif_sentinel_N170924` | NIF Sentinel on N170924-003 (Kemp et al. 2020, Table II) | the equatorial DIM (`phi_deg`); the MiniXRD responses |
 | `omega_dante` | Omega Dante (Rubery et al. 2023, Fig. 13) | the solid angles (the standoff) |
+| `nif_sxi_lower` | NIF SXI lower, hard channel: 25 µm pinhole at 2×, Be 75 + Ti 50 µm, Si CCD (Schneider et al. 2010) | — |
+| `nif_sxi_upper` | NIF SXI upper, hard channel (extends `nif_sxi_lower`; Schneider et al. 2012, a draft) | — |
+| `nif_gleh2` | NIF G-LEH-2, gated, 1× (Chen et al. 2021, Table I) | the Ti filter, the sensor's absorbing layer, frame times and gate |
 
 A user group completes one by extending it with the values it holds, e.g. Omega's
 solid angles, one `[[channel]]` table per channel with `number` and `solid_angle_sr`.
@@ -135,6 +155,6 @@ the repository.
 
 ```@autodocs
 Modules = [Briareus]
-Pages = ["src/diagnostics.jl"]
+Pages = ["src/diagnostics.jl", "src/imager.jl"]
 Private = false
 ```

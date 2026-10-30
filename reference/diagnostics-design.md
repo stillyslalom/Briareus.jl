@@ -32,6 +32,11 @@ lands; the docstrings and research notes then hold what was built.
   the saved definition is used, one that differs from the search path's is reported
   (`diagnostic_diff`) and ↺ switches to the search path's; the save status names
   definitions from outside the built-ins and non-public ones.
+- X-ray pinhole imagers (phase 5, first part, 2026-10-29): `XrayImager`, kind
+  `xray_imager` (pinhole, filters, mirror, detector absorber; integrated or gated
+  recording from a history); built-ins `nif_sxi_lower`, `nif_sxi_upper`, `nif_gleh2`.
+  Research notes, "The x-ray pinhole imager model and its public definitions". The GUI
+  lists imagers but does not yet record them.
 - Not yet: port names, a field of view
   per channel (the multilayer channel's 12 mm; Rubery 2022 finds it covers every NIF
   hohlraum), time response, uncertainty, the recording modes other than `history`,
@@ -125,8 +130,10 @@ lands; the docstrings and research notes then hold what was built.
 
 ## Phases
 
-5. Next kinds, in the user's order (2026-10-29): x-ray imagers (gated and integrated,
-   from the existing `OrthoCamera` rendering through filters); backlit radiography (the
+5. Next kinds, in the user's order (2026-10-29): x-ray imagers (core done: the GUI's
+   images of a history at the cursor and per gate; the SXI soft channel needs the W/B₄C
+   multilayer's reflectivity; per-pixel gate times across a strip, Chen 2018; the
+   perspective of near pinholes, Izumi's 0.38 m camera); backlit radiography (the
    backlighter-signal path as a definition; ARC and opacity radiographs); streaked
    VISAR and SOP. SOP needs optical emission and VISAR a moving reflector, neither of
    which the radiation model has: they need a hydro coupling (CompactLES, ROADMAP item

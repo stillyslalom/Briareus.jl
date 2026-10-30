@@ -87,7 +87,8 @@ callout in the section says which).
   spots); Per-cone M-band in the drive history (2026-10-27); Dante-family hardware and
   geometry: what is public (2026-10-29); X-ray imagers, radiography and streaked
   diagnostics: what is public (2026-10-29); Dante field of view and reference area
-  (2026-10-29); Public diagnostic definitions and the time-dependent Tr area (2026-10-29).
+  (2026-10-29); Public diagnostic definitions and the time-dependent Tr area (2026-10-29);
+  The x-ray pinhole imager model and its public definitions (2026-10-29).
 
 **Hydrodynamics coupling**
 - Capsule drive hand-over and CompactLES stage 0 (2026-10-24).
@@ -9505,3 +9506,49 @@ TabulatedCurve(t, A)` is a measured history at the solution's time (Glenzer 2010
 A_LEH(t) from SXI). Checks (`test/spectral.jl`, "Dante field of view"): the open area
 equals aperture + ½ lip at open fraction ½ to 1e-12; a history's Tr scales as A^(-¼) to
 1e-12.
+
+## The x-ray pinhole imager model and its public definitions (2026-10-29) *derived*
+
+`XrayImager` (`src/imager.jl`, kind `xray_imager`; design in
+`reference/diagnostics-design.md`, phase 5). No value here is fitted.
+
+Model (each an approximation, stated in the docstring):
+- **Response** R(E): the filters (Henke), an optional mirror, and the detector's
+  absorbing layer, 1 − e^(−μρt), with no dead layer.
+- **Spectrum** per element: the Planckian of its brightness temperature, (B/σ)^¼, for a
+  gray solution (the reflected part of a radiosity really carries the incident
+  spectrum), or the wall-temperature Planckian within each group of a spectral one.
+  ⟨R⟩(T) is tabulated on 600 temperatures, 1 eV–5 keV, and interpolated in log ⟨R⟩ and
+  log T: linear in ⟨R⟩ it was 0.4 % off at 200 eV for the SXI hard channel, where
+  ⟨R⟩ ∝ e^(−E/T) with E/T ≈ 22.
+- **Point-spread function**: the penumbra disk, d(1 + 1/M), convolved with one Gaussian
+  of the variances of the Fraunhofer FWHM, 1.03 λ p / d at the definition's energy, and
+  of the detector pixel's box, (pixel/M)²/12. Projection is orthographic; the SXI
+  pinhole is 1.66 m away, against a hohlraum of ≈ 10 mm.
+
+Definitions (`data/diagnostics`):
+- **`nif_sxi_lower`** (Schneider 2010 §II, read from the text): 2× magnification, the
+  detector 4.97 m from the target, so the pinhole at 1656.7 mm (derived). One channel of
+  the four 25 µm pinholes: Be 75 + Ti 50 µm. CCD of 15 µm Si with 24 µm pixels, 2k × 2k.
+  Port P161-326. Diffraction energy 4 keV, the middle of the paper's 3–5 keV (derived).
+- **`nif_sxi_upper`**: P18-123, the detector 4.88 m away (Schneider 2012, a draft with
+  open "(CHECK)" marks: M); the filters are taken to be the lower one's (assumed, M).
+- **`nif_gleh2`** (Chen 2021 Table I; P161-326, the 3.25 m pinhole distance at 1× and
+  the filters checked against the PDF): what the paper fixes. The Ti thickness
+  (5–40 µm per campaign), the Icarus sensor's absorbing layer, the frame times and the
+  gate are left to a file that extends it.
+
+Consistency, not a check of the model: Schneider 2010 calls diffraction and geometry
+"about equal" for the 25 µm pinhole at 3–5 keV, with ≈ 60 µm resolution. The model's
+penumbra is 37.5 µm and its diffraction FWHM 21.2 µm at 4 keV; their variances are
+equal to 5 %, and their sum is 59 µm. The quoted resolution's definition is not stated.
+
+Checks (`test/imager.jl`):
+- The detected radiance of a 200 eV Lambertian disk against a direct trapezoid of
+  R × Planck on its own 10⁵-point grid, to 2e-3.
+- The blur conserves an image's total to 1e-12, and the rendered area matches the
+  32-gon's to 1e-2.
+- The point-spread function's variance per axis equals D²/16 + σ² to 1e-2 (1 µm
+  sampling).
+- Integrated and Gaussian-gated records of a signal linear in time match their closed
+  forms to 1e-12 and 1e-6 (a square gate to 1e-3, the sampling of its edges).

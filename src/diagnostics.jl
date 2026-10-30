@@ -708,6 +708,61 @@ function _curve(path, key; extrapolate = :hold)
     end
 end
 
+# filter tables (`_FILTER_SPEC`) as `filter_transmission` pairs and measured curves;
+# `key(suffix)` names a value in errors
+function _filters(fs::AbstractVector, key)
+    filters = Pair{Symbol,Any}[]
+    tables = TabulatedCurve[]
+    for (i, f) in enumerate(fs)
+        if haskey(f, "transmission_csv")
+            (haskey(f, "material") || haskey(f, "thickness_um")) &&
+                throw(_KeyedError(key("[$i]"), "give material and thickness_um, or transmission_csv"))
+            push!(tables, _curve(f["transmission_csv"], key("[$i].transmission_csv")))
+        else
+            (haskey(f, "material") && haskey(f, "thickness_um")) ||
+                throw(_KeyedError(key("[$i]"), "give material and thickness_um, or transmission_csv"))
+            m = Symbol(f["material"])
+            t = 1e-3 * f["thickness_um"]
+            push!(filters, haskey(f, "density_g_cm3") ? m => (t, Float64(f["density_g_cm3"])) : m => t)
+            try
+                filter_transmission([filters[end]], 1.0; table = :henke)
+            catch e
+                throw(_KeyedError(key("[$i].material"), sprint(showerror, e)))
+            end
+        end
+    end
+    return filters, tables
+end
+
+# a mirror table (`_MIRROR_SPEC`) as a `DanteResponse` mirror
+function _mirror(m::AbstractDict, key)
+    if haskey(m, "reflectivity_csv")
+        (haskey(m, "kind") || haskey(m, "angle_deg")) &&
+            throw(_KeyedError(key(""), "give kind and angle_deg, or reflectivity_csv"))
+        return _curve(m["reflectivity_csv"], key(".reflectivity_csv"))
+    end
+    (haskey(m, "kind") && haskey(m, "angle_deg")) ||
+        throw(_KeyedError(key(""), "give kind and angle_deg, or reflectivity_csv"))
+    k = Symbol(m["kind"])
+    k in (:SiO2, :mlm, :fresnel) ||
+        throw(_KeyedError(key(".kind"), "SiO2, mlm or fresnel (or reflectivity_csv)"))
+    k === :fresnel || all(x -> !haskey(m, x), ("material", "roughness_nm", "density_g_cm3")) ||
+        throw(_KeyedError(key(""), "material, roughness_nm and density_g_cm3 belong to a fresnel mirror"))
+    k === :mlm && m["angle_deg"] != 1.9 &&
+        throw(_KeyedError(key(".angle_deg"),
+                          "the mlm reflectivity is Rubery 2023 Fig. 8a at 1.9°; give reflectivity_csv for another"))
+    k === :fresnel || return (k, Float64(m["angle_deg"]))
+    haskey(m, "material") || throw(_MissingValue(key(".material"), "a fresnel mirror's material"))
+    mat = Symbol(m["material"])
+    try
+        _composition(mat)
+    catch e
+        throw(_KeyedError(key(".material"), sprint(showerror, e)))
+    end
+    return GrazingMirror(mat, m["angle_deg"]; roughness = get(m, "roughness_nm", 0.0),
+                         density = get(m, "density_g_cm3", nothing))
+end
+
 function _channel(c::AbstractDict)
     n = c["number"]
     key(k) = "channel[$n].$k"
@@ -720,59 +775,8 @@ function _channel(c::AbstractDict)
         return _peak_energy(DanteResponse(n, E0; solid_angle = Ω,
                                           response = _curve(c["response_csv"], key("response_csv"); extrapolate = :zero)))
     end
-    filters = Pair{Symbol,Any}[]
-    tables = TabulatedCurve[]
-    for (i, f) in enumerate(get(c, "filters", Any[]))
-        if haskey(f, "transmission_csv")
-            (haskey(f, "material") || haskey(f, "thickness_um")) &&
-                throw(_KeyedError(key("filters[$i]"), "give material and thickness_um, or transmission_csv"))
-            push!(tables, _curve(f["transmission_csv"], key("filters[$i].transmission_csv")))
-        else
-            (haskey(f, "material") && haskey(f, "thickness_um")) ||
-                throw(_KeyedError(key("filters[$i]"), "give material and thickness_um, or transmission_csv"))
-            m = Symbol(f["material"])
-            t = 1e-3 * f["thickness_um"]
-            push!(filters, haskey(f, "density_g_cm3") ? m => (t, Float64(f["density_g_cm3"])) : m => t)
-            try
-                filter_transmission([filters[end]], 1.0; table = :henke)
-            catch e
-                throw(_KeyedError(key("filters[$i].material"), sprint(showerror, e)))
-            end
-        end
-    end
-    mirror = nothing
-    if haskey(c, "mirror")
-        m = c["mirror"]
-        if haskey(m, "reflectivity_csv")
-            (haskey(m, "kind") || haskey(m, "angle_deg")) &&
-                throw(_KeyedError(key("mirror"), "give kind and angle_deg, or reflectivity_csv"))
-            mirror = _curve(m["reflectivity_csv"], key("mirror.reflectivity_csv"))
-        else
-            (haskey(m, "kind") && haskey(m, "angle_deg")) ||
-                throw(_KeyedError(key("mirror"), "give kind and angle_deg, or reflectivity_csv"))
-            k = Symbol(m["kind"])
-            k in (:SiO2, :mlm, :fresnel) ||
-                throw(_KeyedError(key("mirror.kind"), "SiO2, mlm or fresnel (or reflectivity_csv)"))
-            k === :fresnel || all(x -> !haskey(m, x), ("material", "roughness_nm", "density_g_cm3")) ||
-                throw(_KeyedError(key("mirror"), "material, roughness_nm and density_g_cm3 belong to a fresnel mirror"))
-            k === :mlm && m["angle_deg"] != 1.9 &&
-                throw(_KeyedError(key("mirror.angle_deg"),
-                                  "the mlm reflectivity is Rubery 2023 Fig. 8a at 1.9°; give reflectivity_csv for another"))
-            if k === :fresnel
-                haskey(m, "material") || throw(_MissingValue(key("mirror.material"), "a fresnel mirror's material"))
-                mat = Symbol(m["material"])
-                try
-                    _composition(mat)
-                catch e
-                    throw(_KeyedError(key("mirror.material"), sprint(showerror, e)))
-                end
-                mirror = GrazingMirror(mat, m["angle_deg"]; roughness = get(m, "roughness_nm", 0.0),
-                                       density = get(m, "density_g_cm3", nothing))
-            else
-                mirror = (k, Float64(m["angle_deg"]))
-            end
-        end
-    end
+    filters, tables = _filters(get(c, "filters", Any[]), k -> key("filters" * k))
+    mirror = haskey(c, "mirror") ? _mirror(c["mirror"], k -> key("mirror" * k)) : nothing
     if haskey(c, "sensitivity_csv")
         haskey(c, "cathode") && throw(_KeyedError(key("cathode"), "give cathode or sensitivity_csv, not both"))
         cathode = _curve(c["sensitivity_csv"], key("sensitivity_csv"))
@@ -847,3 +851,90 @@ register_diagnostic_kind(:xray_power, _XRAY_POWER_SPEC, _build_xray_power)
 # the built-in definitions alone (the public ones; user files cannot change these)
 _builtin_diagnostic(id; kwargs...) = diagnostic(_builtin_definition(id); kwargs...)
 _builtin_definition(id) = _definitions([normpath(_BUILTIN_DIAGNOSTICS)], DiagnosticIssue[])[id]
+
+# ---- kind "xray_imager": pinhole x-ray imagers (SXI, G-LEH, GXD) -----------------------
+
+const _XRAY_IMAGER_SPEC = Dict(
+    "line_of_sight" => DiagnosticField(Dict(
+        "theta_deg" => DiagnosticField(Real; required = true),
+        "phi_deg" => DiagnosticField(Real; required = true)); required = true),
+    "optic" => DiagnosticField(Dict(
+        "kind" => DiagnosticField(String; required = true, doc = "pinhole"),
+        "diameter_um" => DiagnosticField(Real; required = true, doc = "µm"),
+        "distance_mm" => DiagnosticField(Real; required = true, doc = "pinhole from the object (TCC), mm"),
+        "magnification" => DiagnosticField(Real; required = true),
+        "energy_eV" => DiagnosticField(Real; doc = "photon energy of the diffraction blur; default as XrayImager")); required = true),
+    "filters" => DiagnosticField([_FILTER_SPEC]; required = true),
+    "mirror" => DiagnosticField(_MIRROR_SPEC),
+    "detector" => DiagnosticField(Dict(
+        "kind" => DiagnosticField(String; doc = "ccd, hcmos, mcp or image_plate (descriptive)"),
+        "pixel_um" => DiagnosticField(Real; doc = "detector pixel, µm"),
+        "pixels" => DiagnosticField(Vector{Real}; doc = "detector pixels across and down"),
+        "absorber" => DiagnosticField(String; doc = "the absorbing layer's material, e.g. Si"),
+        "absorber_um" => DiagnosticField(Real; doc = "the absorbing layer's thickness, µm"),
+        "efficiency_csv" => DiagnosticField(String; doc = "measured detection efficiency (energy eV, fraction)"));
+        required = true),
+    "view" => DiagnosticField(Dict(
+        "width_mm" => DiagnosticField(Real; doc = "object-plane field; default the detector's extent / M"),
+        "pixels" => DiagnosticField(Integer; doc = "object-plane samples per side; default 256"),
+        "center_part" => DiagnosticField(String; doc = "the field's center: a part's centroid"),
+        "center_mm" => DiagnosticField(Vector{Real}; doc = "the field's center: x, y, z"),
+        "up" => DiagnosticField(Vector{Real}; doc = "the image's up, a chamber direction; default z"))),
+    "recording" => DiagnosticField(Dict(
+        "mode" => DiagnosticField(String; doc = "integrated or gated"),
+        "times_ns" => DiagnosticField(Vector{Real}; doc = "gated: the frames' times"),
+        "gate_ns" => DiagnosticField(Real; doc = "gated: the gate's FWHM"),
+        "gate_shape" => DiagnosticField(String; doc = "gated: gaussian (default) or square"))))
+
+function _build_xray_imager(def::DiagnosticDefinition; kwargs...)
+    d = def.data
+    los, o, det = d["line_of_sight"], d["optic"], d["detector"]
+    v = get(d, "view", Dict{String,Any}())
+    rec = get(d, "recording", Dict{String,Any}())
+    o["kind"] == "pinhole" || throw(_KeyedError("optic.kind", "pinhole (the one optic so far)"))
+    M = Float64(o["magnification"])
+    filters, tables = _filters(d["filters"], k -> "filters" * k)
+    mirror = haskey(d, "mirror") ? _mirror(d["mirror"], k -> "mirror" * k) : nothing
+    if haskey(det, "efficiency_csv")
+        (haskey(det, "absorber") || haskey(det, "absorber_um")) &&
+            throw(_KeyedError("detector.efficiency_csv", "give absorber and absorber_um, or efficiency_csv"))
+        detector = _curve(det["efficiency_csv"], "detector.efficiency_csv")
+    elseif haskey(det, "absorber") || haskey(det, "absorber_um")
+        (haskey(det, "absorber") && haskey(det, "absorber_um")) ||
+            throw(_KeyedError("detector", "give absorber and absorber_um together"))
+        detector = (Symbol(det["absorber"]), 1e-3 * det["absorber_um"])
+        try
+            _detection(detector, 1000.0)
+        catch e
+            throw(_KeyedError("detector.absorber", sprint(showerror, e)))
+        end
+    else
+        throw(_MissingValue("detector", "the detector's absorber and absorber_um, or efficiency_csv"))
+    end
+    pixel = 1e-3 * get(det, "pixel_um", 0.0)
+    width = if haskey(v, "width_mm")
+        Float64(v["width_mm"])
+    elseif haskey(det, "pixels") && haskey(det, "pixel_um")
+        maximum(det["pixels"]) * pixel / M
+    else
+        throw(_MissingValue("view.width_mm", "the object-plane field (or the detector's pixels and pixel_um)"))
+    end
+    haskey(v, "center_part") && haskey(v, "center_mm") &&
+        throw(_KeyedError("view.center_mm", "give one of center_part, center_mm"))
+    center = haskey(v, "center_part") ? Symbol(v["center_part"]) :
+             haskey(v, "center_mm") ? Vec3(Float64.(v["center_mm"])...) : zero(Vec3)
+    mode = Symbol(get(rec, "mode", "integrated"))
+    mode in (:integrated, :gated) || throw(_KeyedError("recording.mode", "xray_imager records integrated or gated"))
+    if mode === :gated
+        haskey(rec, "times_ns") || throw(_MissingValue("recording.times_ns", "the frames' times"))
+        haskey(rec, "gate_ns") || throw(_MissingValue("recording.gate_ns", "the gate's FWHM"))
+    end
+    kw = (; pinhole = 1e-3 * o["diameter_um"], distance = Float64(o["distance_mm"]), magnification = M,
+          width, pixels = Int(get(v, "pixels", 256)), center,
+          up = Vec3(Float64.(get(v, "up", [0.0, 0.0, 1.0]))...), filters, tables, mirror, detector,
+          detector_pixel = pixel, energy = haskey(o, "energy_eV") ? Float64(o["energy_eV"]) : nothing, mode, times = Float64.(get(rec, "times_ns", Float64[])),
+          gate = Float64(get(rec, "gate_ns", 0.0)), gate_shape = Symbol(get(rec, "gate_shape", "gaussian")))
+    return XrayImager(los["theta_deg"], los["phi_deg"]; merge(kw, values(kwargs))...)
+end
+
+register_diagnostic_kind(:xray_imager, _XRAY_IMAGER_SPEC, _build_xray_imager)

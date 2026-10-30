@@ -1,0 +1,43 @@
+# NIF gated LEH imager, second version (G-LEH-2, from April 2020): gated pinhole images of
+# the lower entrance hole through port P161-326. Chen et al. (2021), OSTI 1860726, Table I
+# and text: two Icarus hCMOS sensors, 1024 × 512, 25 µm pixels, four frames each; gates 1,
+# 2 or 38 ns; 0.7–10 keV; magnification 0.6–4×, at 1× the pinholes 3.25 m and the camera
+# 6.5 m from the target; 25 µm pinholes (≈ 70 µm resolution); light-tight filter 0.5 µm
+# polyimide + 1 µm Al + 0.5 µm polycarbonate, with Ti 5–40 µm chosen per campaign.
+# Not public or set per shot, so absent, to be supplied by a file that extends this one
+# (check_diagnostics names the first it meets): the Ti filter (filters, the light-tight
+# foils included), the sensor's absorbing layer (detector.absorber and absorber_um, or
+# efficiency_csv), the frame times (recording.times_ns) and the gate (recording.gate_ns).
+
+schema = 1
+id = "nif_gleh2"
+name = "NIF G-LEH-2"
+kind = "xray_imager"
+facility = "NIF"
+public = true
+valid_from = 2020-04-01
+source = "Chen et al. (2021), OSTI 1860726, Table I"
+confidence = "H"
+
+[line_of_sight]
+theta_deg = 161.0
+phi_deg = 326.25
+source = "port P161-326 (Chen 2020 §II.1, Chen 2021 §II)"
+
+[optic]
+kind = "pinhole"
+diameter_um = 25
+distance_mm = 3250
+magnification = 1
+note = "the 1x configuration; 0.6-4x are fielded"
+
+[detector]
+kind = "hcmos"
+pixel_um = 25
+pixels = [1024, 512]
+
+[view]
+pixels = 512
+
+[recording]
+mode = "gated"
