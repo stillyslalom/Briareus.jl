@@ -8,6 +8,7 @@ Literate = "98b081ad-f1c9-55d3-8b20-4c87d4299306"
 path = ".."
 
 [compat]
+Briareus = "0.1"
 CairoMakie = "0.15"
 Documenter = "1"
 Literate = "2"
