@@ -368,6 +368,7 @@ Base.@nospecializeinfer function _drive_history(
         end
         mτ = model_at(τ)
         uc = ulight === nothing ? nothing : _unconverted_at!(ulight, mτ.target, b0, τ)
+        ucs = uc === nothing ? nothing : _with_colors(uc, ulight.colors)   # as `solve` takes it
         # the per-element state the albedos see: burnthrough times, and the wall-loss
         # history of the `lossy` elements (`_WallHistory`)
         hist = Dict(e => (τ0 === nothing ? _WallHistory(0.0, τ) :
@@ -393,14 +394,14 @@ Base.@nospecializeinfer function _drive_history(
             end
             return s
         end
-        sol = solve(mτ, dep; time = τ, burnthrough = state(pred), guess, tol, unconverted = uc, colors)
+        sol = solve(mτ, dep; time = τ, burnthrough = state(pred), guess, tol, unconverted = ucs)
         # corrector: the lips' depths with this step's own lip temperatures
         for _ in 1:5
             (isempty(lips) || τ0 === nothing) && break
             dn = depths(_lip_temperatures(lips, sol))
             maximum(abs.(dn .- ds)) <= 1e-5 && break
             ds = dn
-            sol = solve(mτ, dep; time = τ, burnthrough = state(pred), guess = sol, tol, unconverted = uc, colors)
+            sol = solve(mτ, dep; time = τ, burnthrough = state(pred), guess = sol, tol, unconverted = ucs)
         end
         # corrector: the trapezoidal integral with this step's temperatures (from the
         # state at τ0, `I0, tb0, rate0`: the march's own `I, tb, rate` are reassigned
@@ -431,7 +432,7 @@ Base.@nospecializeinfer function _drive_history(
                        !(abs(tk[e] - used[e]) <= 1e-12 * max(abs(τ), 1.0))
             any(moved, tracked) || break
             used = tk
-            sol = solve(mτ, dep; time = τ, burnthrough = state(used), guess = sol, tol, unconverted = uc, colors)
+            sol = solve(mτ, dep; time = τ, burnthrough = state(used), guess = sol, tol, unconverted = ucs)
             Ik, tk, rk = advance(sol)
         end
         # the wall-energy integrals at τ, with this step's temperatures (the heating

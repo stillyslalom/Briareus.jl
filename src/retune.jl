@@ -197,7 +197,7 @@ Base.@nospecializeinfer function retune_drive(m::RadiationModel, op::DepositionO
             # each color's response; its conversion independent of intensity (as the 3ω
             # response requires), so the secant's powers do not enter
             R = flux_response(m, obs; time = τ, albedo = ref.albedo[k], weights = Y,
-                              unconverted = Dict(c.name => zeros(ne) for c in ul.colors), colors = ul.colors)
+                              unconverted = _with_colors(Dict(c.name => zeros(ne) for c in ul.colors), ul.colors))
             M = R[:omega3] * E
             for c in ul.colors
                 rc = _fraction_at(ul.ratio[c.name], τ)

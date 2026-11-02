@@ -190,9 +190,11 @@ end
         -> NamedTuple
 
 Laser power of the unconverted (1ω, 2ω) light absorbed by the target: one
-[`Deposition`](@ref) per color of `colors`, keyed by its name (`:omega1`, `:omega2`),
-and `skipped`, the beams whose footprints cannot be placed (no NIF quad name and no
-`offsets` entry).
+[`Deposition`](@ref) per color of `colors`, keyed by its name (`:omega1`, `:omega2`);
+`skipped`, the beams whose footprints cannot be placed (no NIF quad name and no
+`offsets` entry); and `colors`, the [`UnconvertedColor`](@ref)s themselves, so that
+[`solve`](@ref) and [`flux_response`](@ref) take the result's x-ray conversions with
+its light.
 
 Each beamlet's light of one color is a uniform square beam converging to its own focus.
 At the 3ω best-focus plane it is a square of side `footprint` whose nearest edge lies
@@ -240,8 +242,8 @@ function unconverted_deposition(t::Target, beams::AbstractVector{<:Beam}; ratio,
     bls = [_omega1_beamlets(b, offsets, table) for b in vb]
     tris = findall(t.tri_opaque)
     ε = _ray_eps(t)
+    _check_color_keys(ratio, Symbol[c.name for c in colors], "ratio")
     out = map(colors) do col
-        haskey(ratio, col.name) || throw(ArgumentError("ratio has no value for $(col.name)"))
         r = ratio[col.name]
         rs = r isa Real ? fill(Float64(r), length(vb)) : Float64.(collect(r))
         length(rs) == length(vb) || throw(DimensionMismatch("ratio for $(col.name): one per beam"))
@@ -270,7 +272,7 @@ function unconverted_deposition(t::Target, beams::AbstractVector{<:Beam}; ratio,
         col.name => Deposition(E, L, per_beam, delivered)
     end
     skipped = String[vb[bi].name for bi in eachindex(vb) if bls[bi] === nothing]
-    return (; out..., skipped)
+    return (; out..., skipped, colors = collect(UnconvertedColor, colors))
 end
 
 # One beamlet's share (a fraction of its power) per destination: an element (> 0) or a
@@ -444,6 +446,24 @@ function _add_outer!(M, I, s)
     return M
 end
 
+# A per-color input (`ratio`, `prepulse`, a Dict or NamedTuple) is keyed by the colors'
+# names, Symbols, as `pulses` is keyed by the beams' keys exactly: any other key (a
+# String, a misspelled or unknown name) is an error, so no entry goes unused. With
+# `complete`, every color needs an entry.
+function _check_color_keys(d, names, what; complete::Bool = true)
+    for n in keys(d)
+        n isa Symbol && n in names ||
+            throw(ArgumentError("$what has an entry for $(repr(n)), which is not one of the colors " *
+                                "$(join(repr.(names), ", ")) (keys are the colors' names, Symbols)"))
+    end
+    if complete
+        for n in names
+            haskey(d, n) || throw(ArgumentError("$what has no value for $n"))
+        end
+    end
+    return nothing
+end
+
 _fraction_at(r::Real, τ) = Float64(r)
 _fraction_at(r, τ) = Float64(r(τ))
 
@@ -478,9 +498,11 @@ its name; or `by(beam)`). For each color `c` of `colors`, the light of one beam 
   number or a function of time (ns), e.g. a `PulseShape(times, fractions)` table (zero
   outside its times). It has no default: the fraction and its dependence on the pulse
   shape are not public (NIF User Guide §4.5: most of the unconverted light is 1ω, and
-  shaped pulses leave more of it). Every color needs an entry (0 for none).
+  shaped pulses leave more of it). Every color needs an entry (0 for none), keyed by its
+  name, a `Symbol`: any other key (a `String`, an unknown name) is an error.
 - `prepulse` — per color (optional), light not proportional to the 3ω pulse, in TW per
-  beam: one function of time (a `PulseShape`) for all beams, or keyed as `pulses`. An
+  beam: one function of time (a `PulseShape`) for all beams, or keyed as `pulses`, keyed
+  by color as `ratio` is. An
   example is the 1ω prepulse, which the User Guide (§4.4) puts above 10⁸ W/cm² 3–5 ns before the nominal
   start of the pulse, with no level given. As a *derived* scale, the 22 mm 1ω footprint
   (4.84 cm² in the 3ω focal plane) is at 10⁸ W/cm² when a beamlet carries 0.48 GW
@@ -511,12 +533,8 @@ Base.@nospecializeinfer function unconverted_history(t::Target, beams::AbstractV
     ts = collect(Float64, times)
     issorted(ts) || throw(ArgumentError("times must be sorted"))
     names = Symbol[c.name for c in colors]
-    for n in names
-        haskey(ratio, n) || throw(ArgumentError("ratio has no value for $n"))
-    end
-    for n in keys(prepulse)
-        Symbol(n) in names || throw(ArgumentError("prepulse for $n, which is not one of the colors"))
-    end
+    _check_color_keys(ratio, names, "ratio")
+    _check_color_keys(prepulse, names, "prepulse"; complete = false)
     key = _beam_key(by)
     vb = Beam[_value_beam(b) for b in beams]
     pre(b) = Tuple(haskey(prepulse, n) ? _schedule_of(prepulse[n], key, b) : nothing for n in names)
@@ -571,19 +589,9 @@ end
 
 function _UnconvertedLight(ratio, prepulse, by, colors, kw)
     cs = collect(UnconvertedColor, colors)
-    for c in cs
-        haskey(ratio, c.name) || throw(ArgumentError("unconverted has no fraction for $(c.name)"))
-    end
-    for n in keys(ratio)
-        any(c -> c.name === Symbol(n), cs) ||
-            throw(ArgumentError("unconverted fraction for $n, which is not one of the colors"))
-    end
-    if prepulse !== nothing
-        for n in keys(prepulse)
-            any(c -> c.name === Symbol(n), cs) ||
-                throw(ArgumentError("prepulse for $n, which is not one of the colors"))
-        end
-    end
+    names = Symbol[c.name for c in cs]
+    _check_color_keys(ratio, names, "unconverted")
+    prepulse === nothing || _check_color_keys(prepulse, names, "prepulse"; complete = false)
     bad = filter(k -> !(k in (:offsets, :lens_distance, :coarse, :resolution)), collect(keys(kw)))
     isempty(bad) || throw(ArgumentError("unconverted_kw takes unconverted_deposition's offsets, " *
                                         "lens_distance, coarse and resolution, not " * join(bad, ", ")))
@@ -591,6 +599,9 @@ function _UnconvertedLight(ratio, prepulse, by, colors, kw)
                              Tuple{String,Vec3,SVector{3,Float64},Float64,String}[], Vector{Int}[], Any[],
                              Any[], String[])
 end
+
+# Per-color depositions with the colors they were deposited with: `solve`'s `unconverted`.
+_with_colors(d::AbstractDict, colors) = (u = Dict{Symbol,Any}(d); u[:colors] = colors; u)
 
 # A beam's prepulse schedule per color (a tuple; `nothing` for a color without one).
 _prepulse_of(u::_UnconvertedLight, b) =

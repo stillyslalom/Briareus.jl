@@ -622,7 +622,7 @@ function _evaluate_drive(s::Scenario, beams, lookup, spot_radius::Real; ratio = 
         ev = Evaluation(s, ev.beams, ev.effective, tot, Ref{Union{Nothing,Vector{Float64}}}(flux))
         share(x, h) = (; absorbed = sum(x.per_beam), delivered = x.delivered, conversion = conv[h])
         uc = (; omega1 = share(u.omega1, :omega1), omega2 = share(u.omega2, :omega2), u.skipped)
-        sol_kw = (; unconverted = u, colors)
+        sol_kw = (; unconverted = u)               # `u` carries its colors
     end
     sol = s.model === nothing ? nothing : solve(s.model, P3; sol_kw...)
     modes = NamedTuple[]

@@ -251,7 +251,7 @@ end
             @test _inf_jet_clean(JET.report_call, solve, s.model, dep)
             @test _inf_jet_clean(JET.report_call, (m, d) -> solve(m, d; time = 1.0), mw, dep)
             # per-color x-ray sources of unconverted light
-            ucp = (omega1 = 0.01 .* dep.element, omega2 = 0.002 .* dep.element)
+            ucp = (omega1 = 0.01 .* dep.element, omega2 = 0.002 .* dep.element, colors = nif_unconverted())
             @test _inf_jet_clean(JET.report_call, (m, d, u) -> solve(m, d; unconverted = u), s.model, dep, ucp)
             @test _inf_jet_clean(JET.report_call, (m, o, u) -> flux_response(m, o; unconverted = u),
                                  s.model, s.observed, ucp)

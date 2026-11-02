@@ -23,9 +23,9 @@
     @test nelements(t2) == 2 && all(≈(1.0), t2.elem_area)
     m = RadiationModel(t2, F)
     P = [3.0, 0.4]                                 # TW on 1 mm²: 3e14 and 4e13 W/cm²
-    u = (omega1 = [0.5, 0.1], omega2 = [2.0, 0.0])
+    u = (omega1 = [0.5, 0.1], omega2 = [2.0, 0.0], colors = uc)
     τ = 2.0
-    sol = solve(m, P; time = τ, unconverted = u, colors = uc)
+    sol = solve(m, P; time = τ, unconverted = u)
     # by hand: η(I) = 0.95 - 0.15 log₁₀(I/1e14), held at 0.95 below 1e14 W/cm²
     η(I) = 0.95 - 0.15 * log10(clamp(I, 1e14, 1e15) / 1e14)
     S1 = η(3e14) * 3.0 + r1 * 0.95 * 0.5 + r2 * η(2e14) * 2.0
@@ -41,14 +41,24 @@
     @test abs(Seq[1] - S1) > 1e-3 * S1 && isapprox(Seq[2], S2; rtol = 1e-12)
     # a `Deposition` per color and a `Dict` give the same solution
     dz = zeros(2)
-    ud = Dict(:omega1 => Deposition(u.omega1, [0.0, 0.0], [0.6], 0.6), :omega2 => Deposition(u.omega2, dz, [2.0], 2.0))
+    ud = Dict(:omega1 => Deposition(u.omega1, [0.0, 0.0], [0.6], 0.6), :omega2 => Deposition(u.omega2, dz, [2.0], 2.0),
+              :colors => uc)
     @test isequal(solve(m, P; time = τ, unconverted = ud).B, sol.B)
     # derivative in the 3ω power on plate 1: d(ηP)/dP = η + dη/dlnI = η(I) - 0.15/ln 10
     dB = ForwardDiff.derivative(x -> solve(m, [x, 0.4]; time = τ, unconverted = u).B, 3.0)
     dS1 = η(3e14) - 0.15 / log(10)
     @test isapprox(dB, [dS1, α2 * fx * dS1] ./ (1 - α1 * α2 * fx^2); rtol = 1e-12)
-    @test_throws ArgumentError solve(m, P; unconverted = (omega1 = u.omega1,))
-    @test_throws DimensionMismatch solve(m, P; unconverted = (omega1 = [1.0], omega2 = [1.0]))
+    @test_throws ArgumentError solve(m, P; unconverted = (omega1 = u.omega1, colors = uc))
+    @test_throws DimensionMismatch solve(m, P; unconverted = (omega1 = [1.0], omega2 = [1.0], colors = uc))
+    # the conversions are those of the colors the light comes with: none, an error;
+    # an entry for no color, an error; other conversions (0.5) change the source by hand
+    @test_throws ArgumentError solve(m, P; unconverted = (omega1 = u.omega1, omega2 = u.omega2))
+    @test_throws ArgumentError solve(m, P; unconverted = (u..., omega3 = u.omega1))
+    half = [UnconvertedColor(c.name; footprint = c.footprint, edge = c.edge, focal_shift = c.focal_shift,
+                             absorption = c.absorption, conversion = 0.5) for c in uc]
+    sh = solve(m, P; time = τ, unconverted = (u..., colors = half))
+    S1h = η(3e14) * 3.0 + 0.5 * 0.95 * 0.5 + 0.5 * η(2e14) * 2.0
+    @test isapprox(sh.source, [S1h, 0.5 * τ^0.2 * (0.4 + 0.5 * 0.1)]; rtol = 1e-12)
 
     # A hohlraum: the 3ω path bit for bit, and the equivalent 3ω power for conversions
     # independent of intensity (constant gold; nif_gold's time-dependent conversion with a
@@ -57,8 +67,8 @@
     mh = RadiationModel(th)
     rng = Xoshiro(11)
     Ph = 0.1 .* rand(rng, nelements(th))
-    uh = (omega1 = 0.01 .* rand(rng, nelements(th)), omega2 = 0.002 .* rand(rng, nelements(th)))
-    zero_u = (omega1 = zeros(nelements(th)), omega2 = zeros(nelements(th)))
+    uh = (omega1 = 0.01 .* rand(rng, nelements(th)), omega2 = 0.002 .* rand(rng, nelements(th)), colors = uc)
+    zero_u = (omega1 = zeros(nelements(th)), omega2 = zeros(nelements(th)), colors = uc)
     s0, sz = solve(mh, Ph), solve(mh, Ph; unconverted = zero_u)
     @test all(isequal(getfield(s0, f), getfield(sz, f)) for f in (:laser, :source, :B, :H, :albedo))
     Peq = Ph .+ r1 .* uh.omega1 .+ r2 .* uh.omega2
@@ -93,7 +103,7 @@ end
                 Component(:b, transform(sq, [1 0 0; 0 -1 0; 0 0 -1], Vec3(0, 0, 1)), m2))
     m = RadiationModel(t2, F)
     P = [3.0, 0.4]
-    u = (omega1 = [0.5, 0.1], omega2 = [2.0, 0.0])
+    u = (omega1 = [0.5, 0.1], omega2 = [2.0, 0.0], colors = uc)
     τ = 2.0
     sol = solve(m, P; time = τ, unconverted = u)
     R = flux_response(m, [1, 2]; time = τ, laser = P, unconverted = u)
@@ -105,7 +115,7 @@ end
     # the table; the 1ω flux (5.5e13) stays below it and plate 2's conversion depends on
     # time only. The response's error is the source change r₂ [η(2e14) − η(2.2e14)] 2.2
     # on plate 1 through the 2×2 radiosity solve.
-    u2 = (omega1 = 1.1 .* u.omega1, omega2 = 1.1 .* u.omega2)
+    u2 = (omega1 = 1.1 .* u.omega1, omega2 = 1.1 .* u.omega2, colors = uc)
     η(I) = 0.95 - 0.15 * log10(clamp(I, 1e14, 1e15) / 1e14)
     ΔS = r2 * (η(2e14) - η(2.2e14)) * 2.2
     ΔB1 = ΔS / (1 - 0.6 * 0.3 * fx^2)
@@ -123,13 +133,14 @@ end
     mh = RadiationModel(th)
     rng = Xoshiro(5)
     Ph = 0.1 .* rand(rng, nelements(th))
-    uh = (omega1 = 0.01 .* rand(rng, nelements(th)), omega2 = 0.002 .* rand(rng, nelements(th)))
+    uh = (omega1 = 0.01 .* rand(rng, nelements(th)), omega2 = 0.002 .* rand(rng, nelements(th)), colors = uc)
     obs = elements(th, :capsule)
     Rh = flux_response(mh, obs; unconverted = uh)
     Hh(s) = Rh[:omega3] * Ph .+ s .* (Rh[:omega1] * uh.omega1 .+ Rh[:omega2] * uh.omega2)
-    Hs(s) = solve(mh, Ph; unconverted = (omega1 = s .* uh.omega1, omega2 = s .* uh.omega2)).H[obs]
+    Hs(s) = solve(mh, Ph; unconverted = (omega1 = s .* uh.omega1, omega2 = s .* uh.omega2, colors = uc)).H[obs]
     @test isapprox(Hh(1.0), Hs(1.0); rtol = 1e-12) && isapprox(Hh(1.7), Hs(1.7); rtol = 1e-12)
-    @test_throws ArgumentError flux_response(mh, obs; unconverted = (omega1 = uh.omega1,))
+    @test_throws ArgumentError flux_response(mh, obs; unconverted = (omega1 = uh.omega1, colors = uc))
+    @test_throws ArgumentError flux_response(mh, obs; unconverted = (omega1 = uh.omega1, omega2 = uh.omega2))
 end
 
 @testset "unconverted light in drive histories" begin
@@ -251,6 +262,17 @@ end
     mock = [UnconvertedColor(:omega1; footprint = 2.0, edge = 0.0, focal_shift = 100.0, absorption = 0.88,
                              conversion = 0.88),
             UnconvertedColor(:omega2; footprint = 1.5, edge = 0.3, focal_shift = 60.0, absorption = 1.0, conversion = 0.9)]
+    # the deposition carries its colors' conversions into `solve`: the mock squares with
+    # conversion 0.5 (NIF's are 0.88 and 0.9), against each color's conversion by hand
+    m05 = [UnconvertedColor(c.name; footprint = c.footprint, edge = c.edge, focal_shift = c.focal_shift,
+                            absorption = c.absorption, conversion = 0.5) for c in mock]
+    u05 = unconverted_deposition(th, quads; ratio = (omega1 = 0.05, omega2 = 0.01), colors = m05)
+    P05 = deposit(oph, quads).element
+    ηs(p) = conversions(th, 1.0, p) .* p ./ th.elem_area
+    S05 = ηs(P05) .+ 0.5 .* (ηs(u05.omega1.element) .+ ηs(u05.omega2.element))
+    s05 = solve(mh, P05; time = 1.0, unconverted = u05)
+    @test u05.colors == m05 && sum(u05.omega1.element) > 1e-3 * sum(P05)
+    @test isapprox(s05.source, S05; rtol = 1e-12)
     pre1 = Dict(:outer44 => PulseShape([0.0, 4.0], [0.02, 0.01]), :outer50 => PulseShape([0.0, 4.0], [0.03, 0.0]),
                 :inner23 => τ -> 0.0, :inner30 => τ -> 0.0)
     pre2 = PulseShape([0.0, 4.0], [0.004, 0.004])
@@ -262,11 +284,12 @@ end
         b = bat(τ)
         d = deposit(oph, b)
         pc = (omega1 = [fω1(τ) * x.power + pre1[x.group](τ) for x in b], omega2 = [0.01 * x.power + pre2(τ) for x in b])
-        u = Dict(n => unconverted_deposition(th, [remake(x; power = p) for (x, p) in zip(b, pc[n])];
+        u = Dict{Symbol,Any}(n => unconverted_deposition(th, [remake(x; power = p) for (x, p) in zip(b, pc[n])];
                                              ratio = (omega1 = 1.0, omega2 = 1.0), colors = mock)[n]
                  for n in (:omega1, :omega2))
+        u[:colors] = mock
         push!(inside, sum(u[:omega1].element) / sum(d.element))
-        ref = solve(mh, d; time = τ, unconverted = u, colors = mock)
+        ref = solve(mh, d; time = τ, unconverted = u)
         s = hpp.record[j]
         lz = d.delivered + u[:omega1].delivered + u[:omega2].delivered
         maximum(f -> maximum(abs.(getfield(s, f) .- getfield(ref, f))) / maximum(abs.(getfield(ref, f))),
@@ -283,6 +306,10 @@ end
     @test_throws ArgumentError drive_history(mh, oph, bat, times; prepulse = (omega1 = pre2,))
     @test_throws ArgumentError drive_history(mh, oph, bat, times; unconverted = (omega1 = 0.0, omega2 = 0.0),
                                              prepulse = (omega3 = pre2,))
+    # keys are the colors' Symbols: a String key is an error, never a dropped prepulse
+    @test_throws ArgumentError drive_history(mh, oph, bat, times; unconverted = (omega1 = 0.0, omega2 = 0.0),
+                                             prepulse = Dict("omega1" => pre2))
+    @test_throws ArgumentError drive_history(mh, oph, bat, times; unconverted = Dict("omega1" => 0.0, "omega2" => 0.0))
 
     # zero fractions: the 3ω history, bit for bit
     h0 = drive_history(mh, oph, τ -> with_pulses(quads, pulse, τ), times; record = sol -> sol.B)

@@ -674,8 +674,7 @@ RadiationSolution(m, laser, source, B, H, albedo, intact, transmission, time) =
 
 """
     solve(model, dep::Deposition; time = 0.0, albedo = nothing, burnthrough = nothing,
-          tol = 1e-4, maxiter = 50, guess = nothing, unconverted = nothing,
-          colors = nif_unconverted())
+          tol = 1e-4, maxiter = 50, guess = nothing, unconverted = nothing)
     solve(model, laser_power::AbstractVector; ...)
 
 Solve the radiosity system for the given absorbed laser power per element. Albedos come
@@ -687,9 +686,12 @@ elements; without it a thin-foil element uses its model's explicit `burnthrough`
 is intact (`drive_history` tracks it from the flux history instead).
 
 `unconverted` adds the x-ray source of unconverted (1ω, 2ω) light absorbed by the
-target: the result of [`unconverted_deposition`](@ref), or any collection keyed by color
-name (a `NamedTuple` or `Dict`) holding a `Deposition` or a per-element absorbed power
-(TW) for each of `colors` ([`UnconvertedColor`](@ref)s). Element i's source flux is then
+target: the result of [`unconverted_deposition`](@ref), which carries the
+[`UnconvertedColor`](@ref)s it was deposited with (its `colors`), or any collection (a
+`NamedTuple`, or a `Dict` keyed by `Symbol`) with an entry `colors`, the
+`UnconvertedColor`s, and, under each color's name, a `Deposition` or a per-element
+absorbed power (TW). The conversions used are those of these colors, so a deposition
+and the source made from it share one set of colors. Element i's source flux is then
 
     Sᵢ = [ηᵢ(t, Pᵢ/Aᵢ) Pᵢ + Σ_c r_c ηᵢ(t, P_c,ᵢ/Aᵢ) P_c,ᵢ] / Aᵢ,
 
@@ -736,12 +738,12 @@ solve(m::RadiationModel, d::Deposition; kwargs...) = solve(m, d.element; kwargs.
 
 function solve(m::RadiationModel, P::AbstractVector; time = 0.0, albedo = nothing,
                burnthrough = nothing, tol = 1e-4, maxiter::Integer = 50, guess = nothing,
-               unconverted = nothing, colors = nif_unconverted())
+               unconverted = nothing)
     t = m.target
     S = _xray_source(t, P, time)
     laser = collect(P)
     if unconverted !== nothing
-        Sc, Pc = _unconverted_source(t, unconverted, colors, time)
+        Sc, Pc = _unconverted_source(t, unconverted, time)
         S = S .+ Sc
         laser = laser .+ Pc
     end
@@ -794,16 +796,30 @@ end
 # Σ_c P_c per element, each color's conversion at its own absorbed flux.
 _color_power(d::Deposition) = d.element
 _color_power(p::AbstractVector) = p
-function _check_unconverted(t::Target, u, colors)
+# The colors of `solve`'s `unconverted` (its entry `colors`, the `UnconvertedColor`s its
+# light was deposited with), after checking that it holds a power per element for each
+# and nothing else but `skipped`.
+function _unconverted_colors(t::Target, u)
+    haskey(u, :colors) ||
+        throw(ArgumentError("unconverted needs the colors its light was deposited with: the result of " *
+                            "`unconverted_deposition`, or a collection with an entry `colors` " *
+                            "(`UnconvertedColor`s) beside each color's power"))
+    colors = u[:colors]
     for c in colors
+        c isa UnconvertedColor || throw(ArgumentError("unconverted's `colors` must be `UnconvertedColor`s"))
         haskey(u, c.name) || throw(ArgumentError("unconverted has no power for $(c.name)"))
         length(_color_power(u[c.name])) == nelements(t) ||
             throw(DimensionMismatch("unconverted power of $(c.name): one entry per element"))
     end
+    for k in keys(u)
+        k in (:colors, :skipped) || any(c -> c.name === k, colors) ||
+            throw(ArgumentError("unconverted has an entry $(repr(k)), which is not one of its colors"))
+    end
+    return colors
 end
-function _unconverted_source(t::Target, u, colors, time)
+function _unconverted_source(t::Target, u, time)
     n = nelements(t)
-    _check_unconverted(t, u, colors)
+    colors = _unconverted_colors(t, u)
     T = mapreduce(c -> eltype(_color_power(u[c.name])), promote_type, colors; init = Float64)
     S = zeros(T, n)
     Pc = zeros(T, n)
@@ -817,7 +833,7 @@ end
 
 """
     flux_response(model, observed; time = 0.0, albedo = nothing, weights = nothing,
-                  laser = nothing, unconverted = nothing, colors = nif_unconverted()) -> Matrix
+                  laser = nothing, unconverted = nothing) -> Matrix
 
 Linear operator `R` with `H[observed] = R * P`: incident x-ray flux on the observed
 elements (TW/mm²) per unit absorbed laser power on every element (TW). It is fixed
@@ -837,8 +853,8 @@ makes the source nonlinear in `P`: pass the absorbed laser power `laser` (TW per
 element) to linearize about, i.e. to fix each element's conversion at its value for
 that deposition (the secant, exact at `laser` itself).
 
-With `unconverted` (as in [`solve`](@ref): per color of `colors`, a `Deposition` or a
-per-element absorbed power), returns a `Dict` of responses keyed by color: `:omega3`,
+With `unconverted` (as in [`solve`](@ref): its `colors` and, per color, a `Deposition`
+or a per-element absorbed power), returns a `Dict` of responses keyed by color: `:omega3`,
 the 3ω response above, and one per unconverted color `c`, the response to that color's
 absorbed power: the 3ω response with each element's conversion `η(t, P/A)` replaced by
 `r_c η(t, P_c/A)`, `r_c` the color's `conversion`, so that
@@ -854,12 +870,12 @@ of the table (held at its end values, as for unconverted light below 10¹⁴ W/c
 """
 function flux_response(m::RadiationModel, observed::AbstractVector{<:Integer}; time = 0.0,
                        albedo = nothing, weights = nothing, laser = nothing,
-                       unconverted = nothing, colors = nif_unconverted())
+                       unconverted = nothing)
     t = m.target
     α = albedo === nothing ? albedos(t, time) : collect(Float64, albedo)
     η = _constant_conversion(t) ? conversions(t) :
         conversions(t, time, laser === nothing ? nothing : ForwardDiff.value.(laser))
-    unconverted === nothing || _check_unconverted(t, unconverted, colors)
+    colors = unconverted === nothing ? nothing : _unconverted_colors(t, unconverted)
     # R = F[obs,:] M⁻¹ diag(η ./ A)  ⇒  Rᵀ = diag(η ./ A) M⁻ᵀ F[obs,:]ᵀ
     rhs = if weights === nothing
         _rows_transposed(m.F, observed)

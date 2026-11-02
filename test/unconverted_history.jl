@@ -110,6 +110,13 @@
     @test_throws ArgumentError unconverted_history(t, [bl], pulse, times; ratio = (omega1 = 0.1,))
     @test_throws ArgumentError unconverted_history(t, [bl], pulse, times; ratio,
                                                    prepulse = (omega3 = pre,))
+    # keys are the colors' Symbols: a String key is an error, never a dropped entry
+    @test_throws ArgumentError unconverted_history(t, [bl], pulse, times; ratio,
+                                                   prepulse = Dict("omega1" => pre))
+    @test_throws ArgumentError unconverted_history(t, [bl], pulse, times;
+                                                   ratio = Dict(:omega1 => 0.1, :omega2 => 0.0, "omega1" => 0.2))
+    @test_throws ArgumentError unconverted_deposition(t, [bl]; ratio = Dict("omega1" => 0.1, "omega2" => 0.0))
+    @test_throws ArgumentError unconverted_deposition(t, [bl]; ratio = (omega1 = 0.1, omega2 = 0.0, omega3 = 0.1))
     @test_throws ArgumentError unconverted_history(t, [bl], pulse, [1.0, 0.0]; ratio)
     @test_throws ArgumentError unconverted_history(t, [bl], pulse, times; ratio = (omega1 = -0.1, omega2 = 0.0))
     @test_throws ArgumentError threshold_crossing(h, 1e8; colors = (:omega3,))
