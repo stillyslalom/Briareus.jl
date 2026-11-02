@@ -66,7 +66,8 @@ end
     retune_drive(model, op, beams, reference; by = :group, limits = nothing,
                  modes = (1 => 1.0, 2 => 1.0, 3 => 1.0, 4 => 1.0), components = (),
                  drive_weight = 1.0, smooth = 0.0, nominal = nothing, stay = 0.0,
-                 observe = :capsule) -> NamedTuple
+                 observe = :capsule, unconverted = nothing, prepulse = nothing,
+                 colors = nif_unconverted(), unconverted_kw = (;)) -> NamedTuple
 
 Power histories for `beams` (grouped `by` `:group`, `:quad`, `:beam` or a function
 `beam -> key`; one power per beam of a group at each time) that reproduce a reference
@@ -93,6 +94,18 @@ closest to them, instead of one that runs many quads to their limits. This is a
 box-bounded linear least-squares problem per time; the drive term keeps the level, so
 `drive_weight` must be positive.
 
+**Unconverted light.** A reference run with unconverted (1ω, 2ω) light takes that
+history's `unconverted`, `prepulse`, `colors` and `unconverted_kw` here (see
+[`drive_history`](@ref)), so that the retune solves with the same per-color sources:
+the flux is then `c = (R₃ E + Σ_c r_c(t) R_c E_c) P + Σ_c R_c Q_c p_c(t)`, with `R₃` and
+`R_c` the 3ω and per-color responses (`flux_response(...; unconverted)`), `E` and `E_c`
+each group's 3ω and color-`c` absorbed power at 1 TW per beam
+([`unconverted_deposition`](@ref) of the group's beams), `r_c(t)` the color's fraction
+and `p_c(t)` its prepulse, fixed powers deposited by `Q_c` (keyed by `by`, as the
+retuned groups). The prepulse is not retuned: it shifts the target of the least squares.
+As for the 3ω response, the conversions must not depend on intensity. A reference with
+unconverted light and no `unconverted` here is an error.
+
 Returns `(; time, keys, power, pulses, shape, reference_shape, drive, residual)`: the
 per-beam powers (`length(keys) × nt`), the same as `PulseShape`s for `with_pulses`
 (`by` the same key), the predicted and reference `c_lm/c_00` (`(lmax+1)² × nt`), the
@@ -100,17 +113,29 @@ predicted `c_00/r_00` and the weighted residual norm per time. The prediction is
 linear about the reference's albedos: confirm with a `drive_history` of the pulses,
 where the albedos follow the new drive.
 """
-function retune_drive(m::RadiationModel, op::DepositionOperator, beams::AbstractVector{<:Beam},
-                      ref; by = :group, limits = nothing,
+Base.@nospecializeinfer function retune_drive(m::RadiationModel, op::DepositionOperator,
+                      beams::AbstractVector{<:Beam}, ref; @nospecialize(by = :group),
+                      @nospecialize(limits = nothing),
                       modes = (1 => 1.0, 2 => 1.0, 3 => 1.0, 4 => 1.0), components = (),
-                      drive_weight = 1.0, smooth = 0.0, nominal = nothing, stay = 0.0,
-                      observe = :capsule)
+                      drive_weight = 1.0, smooth = 0.0, @nospecialize(nominal = nothing), stay = 0.0,
+                      observe = :capsule, @nospecialize(unconverted = nothing),
+                      @nospecialize(prepulse = nothing), colors = nif_unconverted(),
+                      @nospecialize(unconverted_kw = (;)))
     drive_weight > 0 || throw(ArgumentError("drive_weight must be positive (it keeps the drive level)"))
     stay > 0 && nominal === nothing && throw(ArgumentError("stay needs nominal powers"))
     nom(k, τ) = nominal isa AbstractDict ? nominal[k](τ) : nominal(k, τ)
     ref.ylm === nothing && throw(ArgumentError("the reference history needs ylm = true"))
     get(ref, :albedo, nothing) === nothing &&
         throw(ArgumentError("the reference history needs keep_albedo = true"))
+    # the unconverted light, as the reference history's (`nothing`: none)
+    ul = unconverted === nothing ? nothing : _UnconvertedLight(unconverted, prepulse, by, colors, unconverted_kw)
+    if unconverted === nothing
+        (prepulse === nothing && isempty(unconverted_kw)) ||
+            throw(ArgumentError("prepulse and unconverted_kw set the unconverted light; they need `unconverted`"))
+        get(ref, :unconverted, nothing) === nothing ||
+            throw(ArgumentError("the reference history has unconverted light: pass its `unconverted` " *
+                                "(and `prepulse`, `colors`, `unconverted_kw`)"))
+    end
     t = m.target
     obs = elements(t, (observe isa Symbol ? (observe,) : observe)...)
     lmax = maximum(vcat([l for (l, _) in modes], [lm[1] for (lm, _) in components], 0))
@@ -122,6 +147,29 @@ function retune_drive(m::RadiationModel, op::DepositionOperator, beams::Abstract
     # each group's deposition at 1 TW per beam: the pointing holds through the pulse
     E = reduce(hcat, [deposit(op, [remake(b; power = key(b) == k ? 1.0 : 0.0) for b in beams]).element
                       for k in ks])
+    # with unconverted light, each color's absorbed power per group at 1 TW per beam
+    # (`Eu`), and per set of beams on one prepulse schedule at 1 TW per beam (`Q`, with
+    # the schedules `qs`); the beams' setup powers carry it, as in `drive_history`
+    ne = nelements(t)
+    unit_light(bs) = unconverted_deposition(t, [remake(b; power = 1.0) for b in bs];
+                                            ratio = Dict(c.name => 1.0 for c in ul.colors),
+                                            colors = ul.colors, ul.kw...)
+    Eu = Dict{Symbol,Matrix{Float64}}()
+    Q = Dict{Symbol,Matrix{Float64}}()
+    qs = Any[]
+    if ul !== nothing
+        du = [unit_light([b for b in beams if key(b) == k]) for k in ks]
+        for c in ul.colors
+            Eu[c.name] = reduce(hcat, [d[c.name].element for d in du]; init = zeros(ne, 0))
+        end
+        if prepulse !== nothing
+            qs, qgroups = _schedule_groups(beams, b -> _prepulse_of(ul, b))
+            dq = [unit_light(beams[g]) for g in qgroups]
+            for c in ul.colors
+                Q[c.name] = reduce(hcat, [d[c.name].element for d in dq]; init = zeros(ne, 0))
+            end
+        end
+    end
     Y = ylm_weights(t, obs; lmax)
     # weighted rows: (index, weight) of the shape terms
     rows = Tuple{Int,Float64}[]
@@ -141,17 +189,40 @@ function retune_drive(m::RadiationModel, op::DepositionOperator, beams::Abstract
     rshape = ref.ylm[1:nm, :] ./ ref.ylm[1:1, :]
     prev = nothing
     for (k, τ) in enumerate(ref.time)
-        M = flux_response(m, obs; time = τ, albedo = ref.albedo[k], weights = Y) * E   # nm × ng
+        # the flux coefficients at powers P: c = M P (+ c0, the prepulse's)
+        c0 = nothing
+        if ul === nothing
+            M = flux_response(m, obs; time = τ, albedo = ref.albedo[k], weights = Y) * E   # nm × ng
+        else
+            # each color's response; its conversion independent of intensity (as the 3ω
+            # response requires), so the secant's powers do not enter
+            R = flux_response(m, obs; time = τ, albedo = ref.albedo[k], weights = Y,
+                              unconverted = Dict(c.name => zeros(ne) for c in ul.colors), colors = ul.colors)
+            M = R[:omega3] * E
+            for c in ul.colors
+                rc = _fraction_at(ul.ratio[c.name], τ)
+                rc >= 0 || throw(ArgumentError("the unconverted fractions must not be negative (at $τ ns)"))
+                M .+= rc .* (R[c.name] * Eu[c.name])
+            end
+            if !isempty(qs)
+                c0 = zeros(nm)
+                for (j, c) in enumerate(ul.colors)
+                    w = Float64[q[j] === nothing ? 0.0 : Float64(q[j](τ)) for q in qs]
+                    all(>=(0), w) || throw(ArgumentError("the prepulse power must not be negative (at $τ ns)"))
+                    c0 .+= R[c.name] * (Q[c.name] * w)
+                end
+            end
+        end
         r00 = ref.ylm[1, k]
         s = rshape[:, k]
         A = zeros(0, ng)
         b = Float64[]
         for (i, w) in rows
             A = [A; sqrt(w) .* (M[i, :] .- s[i] .* M[1, :])' ./ r00]
-            push!(b, 0.0)
+            push!(b, c0 === nothing ? 0.0 : -sqrt(w) * (c0[i] - s[i] * c0[1]) / r00)
         end
         A = [A; sqrt(drive_weight) .* M[1, :]' ./ r00]
-        push!(b, sqrt(drive_weight))
+        push!(b, c0 === nothing ? sqrt(drive_weight) : sqrt(drive_weight) * (r00 - c0[1]) / r00)
         bounds = [lim(kk, τ) for kk in ks]
         lo, hi = first.(bounds), last.(bounds)
         all(lo .<= hi) || throw(ArgumentError("empty power limits at $τ ns"))
@@ -169,7 +240,7 @@ function retune_drive(m::RadiationModel, op::DepositionOperator, beams::Abstract
         x0 = prev === nothing ? clamp.(fill(r00 / max(sum(M[1, :]), eps()), ng), lo, hi) : clamp.(prev, lo, hi)
         P = _bounded_lsq(A, b, lo, hi, x0)
         power[:, k] = P
-        c = M * P
+        c = c0 === nothing ? M * P : M * P .+ c0
         shape[:, k] = c ./ c[1]
         drive[k] = c[1] / r00
         residual[k] = norm(A * P - b)

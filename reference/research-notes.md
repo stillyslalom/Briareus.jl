@@ -411,6 +411,28 @@ absorbed: the squares, 2.9 mm or more off the 3ω axis, miss the 1.55 mm entranc
 and almost all of the case (the absorbed share includes the case's outside). The capsule's Tr and P2/P0 agree to the printed 1e-3 eV and
 1e-4.
 
+**Prepulse and retune (2026-11-02):** no new physics; the rule above with a power not
+proportional to the 3ω pulse. `drive_history`'s `prepulse` adds, per color, a power per
+beam (a function of time, one for all beams or keyed by group, quad or beam) to the
+fraction times the 3ω power, as `unconverted_history`'s does; the prepulse level is an
+input (the NIF User Guide gives none; "Unconverted light over time"). Beams share a
+unit-power deposition when their 3ω powers are equal at every step and their prepulse
+schedules are the same object. `retune_drive` with `unconverted` adds each group's
+per-color response at its 1 TW-per-beam light (times the step's fraction) to the 3ω
+response, and the prepulse's flux as a fixed offset of the least squares (it is not
+retuned). As for the 3ω response, the conversions must not depend on intensity, so the
+per-color secant does not enter. Checks: `test/unconverted_source.jl`, a 1ω prepulse
+alone on the two-plate system by hand at a step before and one during the 3ω pulse
+(1e-12), and per-cone prepulses on per-cone pulses against `solve` with each color's
+`unconverted_deposition` at r_c P₃ω + prepulse_c (1e-12; mock squares near the axis,
+since NIF's miss the hohlraum's inside); a zero prepulse gives the history without one
+bit for bit. `test/retune.jl` (constant albedo and conversion, mock squares that raise
+the drive 5 %): the reference retuned with its own powers pinned gives its drive and
+shape (9e-16, 2e-16); the free retune returns those powers to 1e-9 (the bounded solver's
+tolerance; 1e-8 for the 3ω-only reference); a dropped bundle's retuned powers, run
+through `drive_history`, give the retune's predicted drive and shape (1e-15, 2e-16);
+zero fractions give the retune without unconverted light bit for bit.
+
 **Not found:**
 - Garban-Labaune et al., PRL 48, 1018 (1982): CH absorption at 1.06/0.53/0.26 µm down
   to 1e10 W/cm²; only the abstract was available.

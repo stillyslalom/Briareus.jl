@@ -108,6 +108,23 @@ end
         uq(PulseShape([0.0, 1.0], [0.05, 0.02]))
         uq(τ -> 0.04τ)
         @test _inf_body_instances(Briareus._drive_history) == n
+        # and new prepulse functions, one for all beams or keyed
+        up(pre) = history(τ -> with_pulses(quads, pulse, τ), [0.5, 1.0]; unconverted = (omega1 = 0.05, omega2 = 0.0),
+                          prepulse = (omega1 = pre,))
+        up(τ -> 1e-3)
+        n = _inf_body_instances(Briareus._drive_history)
+        up(PulseShape([0.0, 1.0], [1e-3, 0.0]))
+        up(Dict(g => (τ -> 2e-3) for g in unique(b.group for b in quads)))
+        @test _inf_body_instances(Briareus._drive_history) == n
+
+        # retuning: new limit, nominal, fraction and prepulse functions reuse the body
+        rref = history(τ -> with_pulses(quads, pulse, τ), [0.5, 1.0]; ylm = true, keep_albedo = true, mband = nothing)
+        rt(lim, nom, r) = retune_drive(mw, s.deposition, quads, rref; limits = lim, nominal = nom, stay = 0.1,
+                                       unconverted = (omega1 = r, omega2 = 0.0), prepulse = (omega1 = τ -> 0.0,))
+        rt((k, τ) -> (0.0, 10.0), (k, τ) -> 4.0, 0.0)
+        n = _inf_body_instances(retune_drive)
+        rt((k, τ) -> (0.0, 9.0), (k, τ) -> 3.0, τ -> 0.0)
+        @test _inf_body_instances(retune_drive) == n
 
         optimize_pointing(s, objectives[1]; x0, iterations = 1, evaluations = 2)
         n = _inf_body_instances(optimize_pointing)
