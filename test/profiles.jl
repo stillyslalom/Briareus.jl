@@ -3,7 +3,7 @@
 # sections that meet vertex for vertex; a closed frustraum's exchanges against the
 # coaxial-disk closed form, and its drive and LEH loss against Monte Carlo transport.
 
-using Briareus, LinearAlgebra, Statistics, Test
+using Briareus, LinearAlgebra, Test
 
 @testset "Hohlraum profiles" begin
     same(a, b) = length(a.components) == length(b.components) &&
@@ -115,6 +115,6 @@ using Briareus, LinearAlgebra, Statistics, Test
     A = t.elem_area
     _, batch = montecarlo_incident(t, P, vcat(leh, cap); paths = 4000, batches = 16, reemit = :element)
     nl = length(leh)
-    @test sum(A[leh] .* sol.H[leh]) ≈ mean(sum(A[leh] .* batch[b, 1:nl]) for b in axes(batch, 1)) rtol = 5e-3
-    @test sum(A[cap] .* sol.H[cap]) ≈ mean(sum(A[cap] .* batch[b, nl+1:end]) for b in axes(batch, 1)) rtol = 5e-3
+    @test sum(A[leh] .* sol.H[leh]) ≈ sum(sum(A[leh] .* batch[b, 1:nl]) for b in axes(batch, 1)) / size(batch, 1) rtol = 5e-3
+    @test sum(A[cap] .* sol.H[cap]) ≈ sum(sum(A[cap] .* batch[b, nl+1:end]) for b in axes(batch, 1)) / size(batch, 1) rtol = 5e-3
 end
