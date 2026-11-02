@@ -211,6 +211,9 @@ end
             @test _inf_jet_clean(JET.report_call, flux_response, s.model, s.observed)
             @test _inf_jet_clean(JET.report_call, solve, s.model, dep)
             @test _inf_jet_clean(JET.report_call, (m, d) -> solve(m, d; time = 1.0), mw, dep)
+            # per-color x-ray sources of unconverted light
+            ucp = (omega1 = 0.01 .* dep.element, omega2 = 0.002 .* dep.element)
+            @test _inf_jet_clean(JET.report_call, (m, d, u) -> solve(m, d; unconverted = u), s.model, dep, ucp)
             @test _inf_jet_clean(JET.report_call, history,
                                  τ -> with_pulses(quads, pulse, τ), [0.5, 1.0])
             # the history's deposition with the M-band's per-group split (from 1.11, as

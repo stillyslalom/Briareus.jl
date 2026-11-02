@@ -11,7 +11,8 @@ a port-dependent direction; its focus lies `focal_shift` mm beyond the 3ω focus
 to the 3ω light (which the deposition takes as fully absorbed), and `conversion` the
 x-ray conversion efficiency of the absorbed light relative to a material's 3ω
 conversion. [`unconverted_deposition`](@ref) deposits `absorption` times the incident
-power; a drive multiplies a material's conversion by `conversion` for this color.
+power; [`solve`](@ref) with `unconverted` multiplies a material's conversion, at this
+color's own absorbed flux, by `conversion`.
 """
 struct UnconvertedColor
     name::Symbol

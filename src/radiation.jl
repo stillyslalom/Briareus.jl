@@ -643,7 +643,8 @@ _temperature_dependent(m::LipClosure) = _temperature_dependent(m.after)
 """
     RadiationSolution
 
-Fields: `laser` (absorbed laser power per element, TW), `source` (x-ray source flux
+Fields: `laser` (absorbed laser power per element, TW; of every color with `solve`'s
+`unconverted`), `source` (x-ray source flux
 ηP/A, plus the emission of wall elements re-emitting stored energy in a
 `drive_history` step), `B` (radiosity), `H` (incident flux), all per element in TW/mm²; `albedo` per
 element (the albedos the radiosity was solved with, so `B = source + albedo .* H`
@@ -666,7 +667,8 @@ end
 
 """
     solve(model, dep::Deposition; time = 0.0, albedo = nothing, burnthrough = nothing,
-          tol = 1e-4, maxiter = 50, guess = nothing)
+          tol = 1e-4, maxiter = 50, guess = nothing, unconverted = nothing,
+          colors = nif_unconverted())
     solve(model, laser_power::AbstractVector; ...)
 
 Solve the radiosity system for the given absorbed laser power per element. Albedos come
@@ -676,6 +678,26 @@ each element's incident-flux temperature (to `tol` in albedo). `burnthrough` (ns
 element, `NaN` where not given) sets the burnthrough times of `BurnthroughAlbedo`
 elements; without it a thin-foil element uses its model's explicit `burnthrough`, or
 is intact (`drive_history` tracks it from the flux history instead).
+
+`unconverted` adds the x-ray source of unconverted (1ω, 2ω) light absorbed by the
+target: the result of [`unconverted_deposition`](@ref), or any collection keyed by color
+name (a `NamedTuple` or `Dict`) holding a `Deposition` or a per-element absorbed power
+(TW) for each of `colors` ([`UnconvertedColor`](@ref)s). Element i's source flux is then
+
+    Sᵢ = [ηᵢ(t, Pᵢ/Aᵢ) Pᵢ + Σ_c r_c ηᵢ(t, P_c,ᵢ/Aᵢ) P_c,ᵢ] / Aᵢ,
+
+with ηᵢ its material's [`conversion_efficiency`](@ref), `P` the 3ω power, `P_c` the
+color's absorbed power and `r_c` the color's `conversion` relative to 3ω. Each color's
+conversion is evaluated at that color's own absorbed flux, an *engineering default*:
+the relative conversions come from gold disks irradiated at one wavelength at a time,
+and no measurement of the conversion of overlapping colors was found (research notes,
+"Unconverted light: absorption and conversion vs. wavelength"). A conversion
+independent of intensity makes this the 3ω solve of the equivalent power
+`P + Σ_c r_c P_c`, to rounding. `sol.laser` is then the absorbed power of all colors,
+`P + Σ_c P_c` ([`spectral_solve`](@ref) estimates the converted share of the source from
+that total at the 3ω conversion, clamped to the source: exact for `r_c ≤ 1` and a
+conversion independent of intensity). Without `unconverted` the source is the 3ω one, unchanged. Generic in the number type of the
+powers of every color.
 
 The factorization of the system for the initial albedo (the materials' at `time`, or the
 explicit `albedo`) is cached on the model, so repeated solves with unchanged albedos
@@ -707,9 +729,16 @@ value and partials sharing each product with `F`.
 solve(m::RadiationModel, d::Deposition; kwargs...) = solve(m, d.element; kwargs...)
 
 function solve(m::RadiationModel, P::AbstractVector; time = 0.0, albedo = nothing,
-               burnthrough = nothing, tol = 1e-4, maxiter::Integer = 50, guess = nothing)
+               burnthrough = nothing, tol = 1e-4, maxiter::Integer = 50, guess = nothing,
+               unconverted = nothing, colors = nif_unconverted())
     t = m.target
     S = _xray_source(t, P, time)
+    laser = collect(P)
+    if unconverted !== nothing
+        Sc, Pc = _unconverted_source(t, unconverted, colors, time)
+        S = S .+ Sc
+        laser = laser .+ Pc
+    end
     iterate = albedo === nothing && _temperature_dependent(t)
     warm = iterate && guess !== nothing
     warm && nelements(guess.model.target) != nelements(t) &&
@@ -752,7 +781,29 @@ function solve(m::RadiationModel, P::AbstractVector; time = 0.0, albedo = nothin
         S = E === nothing ? S0 : S0 .+ E
         it == maxiter && @warn "albedo iteration did not converge" δ
     end
-    return RadiationSolution(m, collect(P), S, B, H, α, intact, tr, Float64(time))
+    return RadiationSolution(m, laser, S, B, H, α, intact, tr, Float64(time))
+end
+
+# The unconverted colors' x-ray source flux Σ_c r_c η(t, P_c/A) P_c/A and absorbed power
+# Σ_c P_c per element, each color's conversion at its own absorbed flux.
+_color_power(d::Deposition) = d.element
+_color_power(p::AbstractVector) = p
+function _unconverted_source(t::Target, u, colors, time)
+    n = nelements(t)
+    for c in colors
+        haskey(u, c.name) || throw(ArgumentError("unconverted has no power for $(c.name)"))
+        length(_color_power(u[c.name])) == n ||
+            throw(DimensionMismatch("unconverted power of $(c.name): one entry per element"))
+    end
+    T = mapreduce(c -> eltype(_color_power(u[c.name])), promote_type, colors; init = Float64)
+    S = zeros(T, n)
+    Pc = zeros(T, n)
+    for c in colors
+        p = _color_power(u[c.name])
+        S .+= c.conversion .* _xray_source(t, p, time)
+        Pc .+= p
+    end
+    return S, Pc
 end
 
 """

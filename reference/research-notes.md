@@ -379,6 +379,14 @@ that.
   2e13–1e14. At tens of eV the emission is also softer than 0.1 keV, below the
   measured bands (0.1–1.5 keV).
 
+**In `solve` (2026-11-01):** *engineering default*, **L**. With `unconverted`, each
+color's x-ray source is the material's 3ω conversion at that color's own absorbed flux,
+times the color's `conversion` ratio. The data above were taken one wavelength at a
+time, so they say nothing about overlapping colors. Mead's Iλ² plateau would suggest
+evaluating a 1ω or 2ω conversion at (λ/0.351 µm)² times its flux. Briareus does not do
+that: below 10¹⁴ W/cm² the 3ω table (Dewald 2008) is held at its low-intensity end
+either way, and unconverted light lies below that.
+
 **Not found:**
 - Garban-Labaune et al., PRL 48, 1018 (1982): CH absorption at 1.06/0.53/0.26 µm down
   to 1e10 W/cm²; only the abstract was available.
