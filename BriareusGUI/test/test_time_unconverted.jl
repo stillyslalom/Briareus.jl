@@ -69,15 +69,25 @@ end
     @test history_stale(sess) && occursin("out of date", time_chart(sess, :drive).title)
     set_unconverted_ratio!(dr, 0.05, 0.02)
     @test !history_stale(sess)
-    # a color on a disabled beam only does not count; on some enabled beams only, no history
+    # a color on a disabled beam only does not count
     bt.enabled[] = [i != 1 for i in all_beams]
     set_participation!(bt, [1], 1, false)
     @test Controllers._history_unconverted(sess) == (omega1 = 0.05, omega2 = 0.02)
+    # 1ω on some of the enabled beams only (all but the first): a fraction per beam, the
+    # core's history with the same fractions keyed by beam name
     bt.enabled[] = fill(true, length(beams))
     @test history_stale(sess)
     start_history!(sess)
-    @test startswith(tm.status[], "no drive history: the 1ω light takes part on some of the beams only")
-    @test tm.history[] === h1
+    h2 = tm.history[]
+    @test h2 !== h1 && !history_stale(sess) && h2.time == h0.time
+    @test allunique(Symbol(b.name) for b in beams)
+    keyed = Dict(Symbol(b.name) => (i == 1 ? 0.0 : 0.05) for (i, b) in enumerate(beams))
+    uk = core(; unconverted = (omega1 = keyed, omega2 = 0.02), by = :beam, colors = nif_unconverted())
+    @test all(near.(fields(h2.history), fields(uk)))
+    @test all(near(h2.history.unconverted.delivered[c], uk.unconverted.delivered[c]) for c in (:omega1, :omega2))
+    # (the first beam's 1ω light is left out: less 1ω delivered than on every beam, the same 2ω)
+    @test all(0 .< uk.unconverted.delivered[:omega1] .< uc.unconverted.delivered[:omega1]) &&
+          near(uk.unconverted.delivered[:omega2], uc.unconverted.delivered[:omega2])
 end
 
 @testset "time panel: a retune with unconverted light (no GL)" begin
@@ -90,28 +100,45 @@ end
     out = joinpath(dir, "retuned.csv")
     build_scenario!(s)
     all_beams = collect(eachindex(beams))
-    set_unconverted_ratio!(s.drive, 0.05, 0.02)
-    set_participation!(s.beams, all_beams[2:end], 1, true)        # 1ω on all but one beam
-    retune_to_reference!(s, table, out; cap = 1.5)
-    @test startswith(s.drive.retune_status[], "no retune: the 1ω light takes part on some") && !isfile(out)
-    set_participation!(s.beams, all_beams, 1, true)
-    set_participation!(s.beams, all_beams, 2, true)
     s.beams.enabled[] = [nif_bundle(b) != "31" for b in beams]          # bundle 31 down
-    retune_to_reference!(s, table, out; cap = 1.5)
-    @test isfile(out)
-    r = s.time.retune[]
-    @test r.reference.unconverted !== nothing && r.after.unconverted !== nothing
-
-    # the retuned drive: a core history of the kept beams on the new pulses, with the
-    # same unconverted light
-    sc = s.drive.scenario[]
     keep = findall(s.beams.enabled[])
     kept = beams[keep]
-    back = r.pulses
+    # 1ω on all but one kept beam: the retuned drive is a core history of the kept beams
+    # on the new pulses with the same fractions, keyed by beam name
+    set_unconverted_ratio!(s.drive, 0.05, 0.02)
+    off = first(keep)
+    set_participation!(s.beams, [i for i in all_beams if i != off], 1, true)
+    retune_to_reference!(s, table, out; cap = 1.5)
+    @test isfile(out)
+    rm(out)
+    r = s.time.retune[]
+    sc = s.drive.scenario[]
     observe = Controllers._observed_parts(sc)
     names = component_names(sc.target)
     walls = Tuple(n for n in wall_names(s.target) if n in names)
     wall = isempty(walls) ? observe : walls
+    @test r.reference.unconverted !== nothing && r.after.unconverted !== nothing
+    @test allunique(Symbol(b.name) for b in beams)
+    keyed = Dict(Symbol(b.name) => (i == off ? 0.0 : 0.05) for (i, b) in enumerate(beams))
+    after = drive_history(sc.model, sc.deposition[keep], τ -> with_pulses(kept, r.pulses, τ; by = :quad), r.after.time;
+                          observe, wall, lmax = 4, ylm = true, unconverted = (omega1 = keyed, omega2 = 0.0), by = :beam,
+                          colors = nif_unconverted())
+    @test isapprox(after.Tr, r.after.Tr; rtol = 1e-12) && isapprox(after.moments, r.after.moments; rtol = 1e-12)
+    @test isapprox(after.unconverted.delivered[:omega1], r.after.unconverted.delivered[:omega1]; rtol = 1e-12) &&
+          all(>(0), after.unconverted.delivered[:omega1])
+
+    # every beam's 1ω and 2ω light
+    set_participation!(s.beams, all_beams, 1, true)
+    set_participation!(s.beams, all_beams, 2, true)
+    retune_to_reference!(s, table, out; cap = 1.5)
+    @test isfile(out)
+    r = s.time.retune[]
+    sc = s.drive.scenario[]
+    @test r.reference.unconverted !== nothing && r.after.unconverted !== nothing
+
+    # the retuned drive: a core history of the kept beams on the new pulses, with the
+    # same unconverted light
+    back = r.pulses
     uc = (; unconverted = (omega1 = 0.05, omega2 = 0.02), colors = nif_unconverted())
     after = drive_history(sc.model, sc.deposition[keep], τ -> with_pulses(kept, back, τ; by = :quad), r.after.time;
                           observe, wall, lmax = 4, ylm = true, uc...)

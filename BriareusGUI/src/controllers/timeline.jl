@@ -70,22 +70,18 @@ _history_key(sess::DesignSession) = (sess.drive.scenario[], sess.beams.beams[], 
 
 # The unconverted light of a drive history of the table's beams `idx`, as
 # `drive_history`'s and `retune_drive`'s `unconverted`: per color, the drive's fraction
-# of the 3ω power (`unconverted_ratios`), `(; omega1, omega2)`; `nothing` when no
-# unconverted light of the beams `idx` takes part (the history is then the 3ω one, bit
-# for bit). A history takes one fraction per color for every beam it fires, so a color
-# that takes part on some of the beams `idx` only gives a `String` (why) instead.
+# of the 3ω power (`unconverted_ratios`), `(; omega1, omega2)`, one number when it is
+# the same on every beam of `idx`, else a vector with one per beam of the table (zero on
+# the beams whose light does not take part); `nothing` when no unconverted light of the
+# beams `idx` takes part (the history is then the 3ω one, bit for bit).
 function _history_unconverted(sess::DesignSession, idx = findall(sess.beams.enabled[]))
     u = unconverted_ratios(sess)
     u === nothing && return nothing
-    f = Float64[]
-    for (name, o) in (("1ω", u.omega1), ("2ω", u.omega2))
+    f = map((u.omega1, u.omega2)) do o
         v = unique(o[idx])
-        length(v) > 1 &&
-            return "the $name light takes part on some of the beams only: a drive history takes one " *
-                   "fraction per color for every beam it fires ($name on all of them, or on none)"
-        push!(f, isempty(v) ? 0.0 : v[1])
+        length(v) > 1 ? copy(o) : isempty(v) ? 0.0 : v[1]
     end
-    all(iszero, f) && return nothing
+    all(x -> x isa Real && iszero(x), f) && return nothing
     return (; omega1 = f[1], omega2 = f[2])
 end
 
@@ -118,8 +114,8 @@ Compute the drive history of the table's beams on the pulses ([`load_pulses!`](@
 fire), recording each step's element fields for the time cursor, each ticked diagnostic
 ([`set_diagnostic!`](@ref); `dante` for the soft x-ray power kind), and the energy split
 (`energy_budget`). The unconverted 1ω and 2ω light takes part as in the drive
-([`set_unconverted_ratio!`](@ref), `drive_history`'s `unconverted`), when each color is
-on every enabled beam or on none (one fraction per color; `status` says so otherwise).
+([`set_unconverted_ratio!`](@ref), `drive_history`'s `unconverted`), on the beams whose
+1ω or 2ω light takes part ([`participates`](@ref)).
 It runs on a worker when `spawn[]` is set, with progress per step and
 [`cancel_history!`](@ref). A drive that is missing or stale is computed first, as a
 coloring by a drive field computes it.
@@ -146,7 +142,6 @@ function start_history!(sess::DesignSession)
     times = filter(τ -> sum(b -> b.power, _pulse_beams(src, beams, enabled, τ)) > 0, src.times)
     isempty(times) && (tm.status[] = "the pulses fire no enabled beam"; return sess)
     unconverted = _history_unconverted(sess)
-    unconverted isa String && (tm.status[] = "no drive history: " * unconverted; return sess)
     key = _history_key(sess)
     g = (tm.generation[] += 1)
     tm.cancel[] = false

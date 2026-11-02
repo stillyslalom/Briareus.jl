@@ -400,8 +400,10 @@ The bottom panel's tabs:
   unconverted light's absorption and x-ray conversion are scaled by the wavelength
   factors of [`nif_unconverted`](@ref) (see [`UnconvertedColor`](@ref): `absorption`
   and `conversion`, relative to 3ω): its x-ray source is the material's conversion
-  efficiency times the color's `conversion`. The pointing optimization and the drive
-  history use the 3ω light alone.
+  efficiency times the color's `conversion`. The drive history and the retune take the
+  unconverted light of the same beams (`drive_history`'s `unconverted`, a fraction per
+  beam where only some beams' light takes part); the pointing optimization uses the 3ω
+  light alone.
 - **Time:** the drive through a pulse. *Pulse table…* fires the beams with a pulse
   table ([`read_pulse_table`](@ref): power per beam against time, per cone group, quad
   or beam; disabled beams stay off), and *N221204 shape* with N221204's delivered pulse

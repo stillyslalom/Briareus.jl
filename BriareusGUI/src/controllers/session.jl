@@ -934,10 +934,11 @@ reference is), the `retune`, and drive histories of the `reference`, of the enab
 beams on the reference pulses (`before`) and on the new ones (`after`); the histories'
 wall temperature is that of the names `wall` in the scenario's target (a session passes
 its [`wall_names`](@ref)), else the capsule's. With `unconverted` (per color, the
-unconverted power as a fraction of each beam's 3ω power, `(; omega1, omega2)`), every
-history and the retune take the unconverted 1ω and 2ω light (`drive_history`'s and
-`retune_drive`'s `unconverted`, NIF's colors); without it they are the 3ω ones, bit for
-bit.
+unconverted power as a fraction of each beam's 3ω power, `(; omega1, omega2)`: a number
+for every beam, or a vector with one per beam of `beams`), every history and the retune
+take the unconverted 1ω and 2ω light (`drive_history`'s and `retune_drive`'s
+`unconverted`, NIF's colors; the enabled beams' fractions in the retune); without it
+they are the 3ω ones, bit for bit.
 """
 function retune_pulses(s::Scenario, beams::AbstractVector{<:Beam}, enabled::AbstractVector{Bool},
                        pulses::AbstractDict; by::Symbol = :quad, cap::Real = 1.3, stay::Real = 0.0,
@@ -964,6 +965,7 @@ function retune_pulses(s::Scenario, beams::AbstractVector{<:Beam}, enabled::Abst
     keep = findall(enabled)
     kept = beams[keep]
     opk = op[keep]
+    uc = _unconverted_kw(_kept_unconverted(unconverted, keep))     # the kept beams' fractions
     # a key's reference power: its beams' mean (the table may be finer than the retune)
     members = Dict(k => [refkey(b) for b in kept if key(b) == k] for k in unique(key.(kept)))
     nominal(k, τ) = sum(pulses[r](τ) for r in members[k]) / length(members[k])
@@ -981,6 +983,11 @@ function retune_pulses(s::Scenario, beams::AbstractVector{<:Beam}, enabled::Abst
     return (; pulses = out, retune = r, reference = ref, before, after)
 end
 
+# The unconverted light `u` (`retune_pulses`'s `unconverted`) of the beams `keep`: each
+# color's fraction per beam, if it has one, at those beams.
+_kept_unconverted(::Nothing, keep) = nothing
+_kept_unconverted(u::NamedTuple, keep) = map(f -> f isa AbstractVector ? f[keep] : f, u)
+
 """
     retune_to_reference!(sess::DesignSession, table, out; by = :quad, cap = 1.3, stay = 0.0)
 
@@ -990,8 +997,8 @@ Retune the enabled beams to the reference shot whose pulses are the table `table
 new pulses to `out` (`write_pulse_table`), on a worker when `spawn[]` is set. The
 disabled beams are the ones the shot loses. The unconverted 1ω and 2ω light takes part
 as in the drive ([`set_unconverted_ratio!`](@ref); `retune_pulses`'s `unconverted`), in
-the reference shot and in the retune, when each color is on every beam of the table or
-on none. Progress and the outcome (the capsule drive's worst-time mode 1 before and
+the reference shot and in the retune, on the beams whose 1ω or 2ω light takes part
+([`participates`](@ref)). Progress and the outcome (the capsule drive's worst-time mode 1 before and
 after) go to `drive.retune_running`/`retune_status`.
 """
 function retune_to_reference!(sess::DesignSession, table::AbstractString, out::AbstractString;
@@ -1002,9 +1009,8 @@ function retune_to_reference!(sess::DesignSession, table::AbstractString, out::A
         dr.retune_status[] = "compute the drive first: the retune reuses its operator and radiation model"
         return sess
     end
-    # the unconverted light, on every beam (the reference fires them all) or on none
+    # the unconverted light of every beam (the reference fires them all)
     unconverted = _history_unconverted(sess, eachindex(sess.beams.beams[]))
-    unconverted isa String && (dr.retune_status[] = "no retune: " * unconverted; return sess)
     pulses = read_pulse_table(table)
     s = dr.scenario[]
     beams = sess.beams.beams[]
