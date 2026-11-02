@@ -242,7 +242,8 @@ Item {
                 text: "Images (" + imageRepeater.count + ") ▾"
                 onClicked: imagesPopup.opened ? imagesPopup.close() : imagesPopup.open()
                 ToolTip.visible: hovered && !imagesPopup.opened
-                ToolTip.text: "The images the history holds of its recorded imagers; each opens in the image view"
+                ToolTip.text: "The images the history holds of its recorded imagers; each opens in the image view, " +
+                              "zoomed to its region with signal (Ctrl + Shift + click there: the whole field; Ctrl + click: back)"
             }
         }
         // the images of the recorded imagers, one entry each (opens above its button)

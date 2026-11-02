@@ -229,10 +229,11 @@ Items 7–12 follow the 2026-10-22 literature review against Kritcher et al. 202
     radio boxes for every page (`common/` shadows the style's controls); a tighter
     toolbar, status bar, results tab bar, beam table and panel margins; one-line panel
     titles; one colored box per tree component (fill = display mode); the template only
-    in File ▸ New target; combo lists as wide as their widest entry. *Left:*
-    - The toolbar's two combo boxes keep the style's height: the compact ones lose
-      their background in that bar (seen in grabs of the header, not in a bare QML
-      test), so the bar is 42 px rather than about 34.
+    in File ▸ New target; combo lists as wide as their widest entry; a 32 px toolbar
+    (was 52) with compact combo boxes (in the Flow, the FluentWinUI3 background's
+    ItemGroup left its image at height 0; the box now sizes it), separators at the
+    tools' height and the bar at its content's height rather than the style's 48 px.
+    *Left:*
     - The next pass on what still takes room once the user has used it.
     - Assemblies: the built-in hohlraum is a special assembly (beams cannot aim relative
       to its wall, caps or capsule), and compound targets (two halfraums driving a shock

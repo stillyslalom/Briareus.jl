@@ -230,7 +230,12 @@ var pages = [
     ] },
     { key: "view", title: "3D view", items: [
         { key: "view.cut", title: "Cutaway angles",
-          text: "Azimuth about z runs from +x toward +y, about x from +y toward +z, about y from +z toward +x." }
+          text: "Azimuth about z runs from +x toward +y, about x from +y toward +z, about y from +z toward +x." },
+        { key: "view.image", title: "Maps and images",
+          text: "The capsule map, the foil face and the x-ray and diagnostic images zoom with the wheel " +
+                "and to a box dragged with the left button, and pan with the right. A diagnostic image " +
+                "opens zoomed to its region with signal: Ctrl + Shift + click shows the whole field, " +
+                "Ctrl + click returns to the opening view." }
     ] }
 ]
 

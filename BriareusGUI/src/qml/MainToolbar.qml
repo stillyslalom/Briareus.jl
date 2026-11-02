@@ -1,7 +1,6 @@
 // The toolbar: views, display, and the analyses. Everything here is also in the menus.
 import QtQuick
 import QtQuick.Controls
-import QtQuick.Controls as Style
 import QtQuick.Layouts
 import QtQml.Models
 import jlqml
@@ -28,6 +27,8 @@ ToolBar {
     topPadding: 2
     bottomPadding: 2
     contentHeight: tools.implicitHeight
+    // the tools' height, not the style's toolbar background (48 px)
+    implicitHeight: contentHeight + topPadding + bottomPadding
     Flow {
         id: tools
         x: 4
@@ -59,7 +60,7 @@ ToolBar {
             enabled: ["group", "quad", "beam"].indexOf(app.selKind) >= 0
             onClicked: Julia.br_look_along_beam()
         }
-        ToolSeparator {}
+        ToolSeparator { height: 28 }
         Tool {
             text: "Ortho"; checkable: true; checked: app.ortho
             tip: "Orthographic projection (otherwise perspective)"
@@ -307,13 +308,12 @@ ToolBar {
                 }
             }
         }
-        ToolSeparator {}
+        ToolSeparator { height: 28 }
         Label { text: "Beams"; opacity: 0.7; leftPadding: 2; rightPadding: 4; height: beamStyleBox.height; verticalAlignment: Text.AlignVCenter }
-        // the style's own combo boxes: the compact ones of "common" lose their background
-        // in this bar (seen in grabs of the header)
-        Style.ComboBox {
+        ComboBox {
             id: beamStyleBox
             width: 96
+            height: 28                                  // the tool buttons' height
             focusPolicy: Qt.NoFocus
             textRole: "text"; valueRole: "value"
             model: [{ text: "Rays", value: "rays" }, { text: "Volumes", value: "volumes" },
@@ -322,8 +322,9 @@ ToolBar {
             onActivated: Julia.br_beam_style(currentValue)
         }
         Label { text: "Color"; opacity: 0.7; leftPadding: 8; rightPadding: 4; height: beamStyleBox.height; verticalAlignment: Text.AlignVCenter }
-        Style.ComboBox {
+        ComboBox {
             width: 160
+            height: 28
             focusPolicy: Qt.NoFocus
             textRole: "text"; valueRole: "value"
             model: [{ text: "Components", value: "component" },
@@ -340,7 +341,7 @@ ToolBar {
             tip: "Show the capsule θ–φ flux map (or the foil face) instead of the 3D view"
             onClicked: Julia.br_set_view(checked ? "map" : "scene")
         }
-        ToolSeparator {}
+        ToolSeparator { height: 28 }
         Tool {
             text: app.driveCurrent ? "Drive ✓" : "Compute drive"
             enabled: !app.driveBuilding

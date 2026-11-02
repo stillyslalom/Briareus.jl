@@ -21,4 +21,21 @@ T.ComboBox {
         return w
     }
     popup.width: Math.max(width, Math.ceil(widestEntry) + 48)
+    // The FluentWinUI3 background is an ItemGroup around a nine-patch image. Placed by a
+    // positioner (the toolbar's Flow) rather than a layout, the box keeps the image at
+    // height 0 (measured: group 26 px, image 0 px), drawn as its top edge alone, so the
+    // background's children follow its size here.
+    function fitBackground() {
+        if (!background) return
+        for (const c of background.children) {
+            c.width = background.width
+            c.height = background.height
+        }
+    }
+    Connections {
+        target: box.background
+        function onWidthChanged() { box.fitBackground() }
+        function onHeightChanged() { box.fitBackground() }
+    }
+    Component.onCompleted: fitBackground()
 }

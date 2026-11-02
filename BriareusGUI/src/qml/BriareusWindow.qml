@@ -353,7 +353,10 @@ ApplicationWindow {
             Label { text: app.busy; visible: text !== ""; color: "#2f7fd8" }
             Label { text: app.status; elide: Text.ElideRight; Layout.fillWidth: true; opacity: 0.8 }
             Label {
-                text: "wheel zoom · drag orbit · right-drag pan · double-click fit · F fit all"
+                // the gestures of the view on the canvas: the 3D view's, or a map's or image's
+                text: app.driveView === "scene" || app.sideView
+                      ? "wheel zoom · drag orbit · right-drag pan · double-click fit · F fit all"
+                      : "wheel zoom · drag box zoom · right-drag pan · Ctrl+click opening view · Ctrl+Shift+click whole field"
                 opacity: 0.55
                 font.pixelSize: 11
             }
@@ -721,6 +724,10 @@ ApplicationWindow {
                   "Click: select a component or beam (empty space clears); Ctrl + click adds beams\n" +
                   "Double click: fit the view to what was clicked (empty space: everything)\n" +
                   "F: fit everything · arrow keys: orbit 15°\n\n" +
+                  "In a map or image (the capsule map, a foil face, an x-ray or diagnostic image)\n\n" +
+                  "Wheel: zoom · left drag: zoom to a box · right drag: pan\n" +
+                  "Ctrl + click: back to the opening view (a diagnostic image: its region with signal)\n" +
+                  "Ctrl + Shift + click: the whole field\n\n" +
                   "The model tree selects the same things; its boxes switch beams on and off\n" +
                   "and show or hide components. View ▸ Turntable keeps z up while orbiting.\n\n" +
                   "Ctrl + Z / Ctrl + Y: undo / redo a design edit (target, beams, settings)\n" +
