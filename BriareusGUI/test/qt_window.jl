@@ -197,7 +197,8 @@ using BriareusGUI.Briareus
                  length(node_beams(s.beams, "group:backlighter")) == 2
             B.br_edit_node("aim_x", "6.0")
             B.br_edit_node("aim_z", "0.0")
-            ok && all(i -> s.beams.beams[][i].aim ≈ Briareus.Vec3(6.0, s.beams.beams[][i].aim[2], 0.0),
+            # (the preset aims both quads in the top entrance hole's frame: the edit is in it)
+            ok && all(i -> s.beams.aim_local[][i] ≈ Briareus.Vec3(6.0, s.beams.aim_local[][i][2], 0.0),
                       node_beams(s.beams, "group:backlighter")) && push!(seen, :group)
             B.br_fit_all()
             B.request_grab(png("group")); next!()
@@ -307,10 +308,12 @@ using BriareusGUI.Briareus
     end
     @info "window session" seconds = round(time() - t0; digits = 1) shots
     @test stage[] == 28
-    @test seen == [:target, :windows, :part, :mesh, :steps, :remove, :tree_beams, :visrad, :volumes, :zoom,
+    expected = [:target, :windows, :part, :mesh, :steps, :remove, :tree_beams, :visrad, :volumes, :zoom,
                    :pick, :drive, :map, :optimize, :capsule, :applied, :clearance, :talis,
                    :talis_csv, :group, :split, :undo, :redo, :session, :xray, :side, :port,
                    :retune_started, :retune, :time_retune, :history_started, :history, :time_now, :custom, :stl]
+    seen == expected || @info "window stages" missing = setdiff(expected, seen) extra = setdiff(seen, expected)
+    @test seen == expected
     @test !sess.spawn[]                              # restored when the window closed
     @test all(isfile ∘ png, ("target", "part", "beams", "drive_scene", "drive_map", "optimize",
                              "clearance", "talis", "along_beam", "group", "split", "cut_port", "time_retune",
