@@ -335,7 +335,7 @@ end
              h = nothing, capsule_h = nothing, capsule_mesh = :compact, wall = gold(),
              capsule = ablator(), capsule_center = (0,0,0), windows = (), corner_radius = 0,
              nr_corner = nothing, leh_closure = nothing, leh_open_radius = nothing,
-             nr_lip = nothing, sombrero = nothing)
+             nr_lip = nothing, sombrero = nothing, top_end = nothing, bottom_end = nothing)
 
 Cylindrical hohlraum along `z`, centered on TCC (dimensions in mm), with components
 
@@ -363,6 +363,17 @@ The target is declared `closed`, so `RadiationModel` balances its view factors
 are apertures, the sombreros see nothing of the cavity, and with open windows and gaps
 the balanced loss and capsule drive agree with a continuum Monte Carlo within 0.1 %
 (research notes, "Closure on bored, windowed and CAD cavities").
+
+Each end (`top_end` at `+length/2`, `bottom_end` at `−length/2`) is, by default, an
+entrance hole of radius `leh_radius`; given a number, an entrance hole of that radius
+(its cap's and hole's ring counts from `h` when given, else `nr_cap` and `nr_leh`; with
+`leh_closure`, its open radius `leh_open_radius` scaled by the ratio of the radii);
+`:closed`, a cap with no hole (the hole's mesh, and its lip's, merged into the cap, of
+the wall's material); `:open`, neither cap nor hole: the cavity is open there, to a
+physics package placed against it or to nothing (a halfraum). A target with an open end
+is not declared `closed` (its view factors are not balanced: what leaves through the
+open end and strikes nothing is lost), and has no fillet (`corner_radius = 0`) or
+sombrero. The defaults leave the hohlraum exactly as without these keywords.
 
 With windows, the wall and end-cap meshes contain the windows' edges as grid lines
 (`conforming_grid`; the wall's axial grid gets their `z` edges, wall and caps share
@@ -431,7 +442,9 @@ function hohlraum(; length = 9.4, radius = 2.875, leh_radius = 1.55, capsule_rad
                   nr_corner::Union{Nothing,Integer} = nothing,
                   leh_closure::Union{Nothing,Symbol,GapClosure,LipClosure} = nothing,
                   leh_open_radius::Union{Nothing,Real} = nothing, nr_lip::Union{Nothing,Integer} = nothing,
-                  sombrero::Union{Nothing,Bool,Sombrero} = nothing)
+                  sombrero::Union{Nothing,Bool,Sombrero} = nothing,
+                  top_end::Union{Nothing,Real,Symbol} = nothing,
+                  bottom_end::Union{Nothing,Real,Symbol} = nothing)
     0 < leh_radius < radius || throw(ArgumentError("need 0 < leh_radius < radius"))
     if leh_closure isa Symbol
         leh_closure === :computed || throw(ArgumentError("leh_closure must be :computed, a GapClosure or a LipClosure"))
@@ -451,6 +464,13 @@ function hohlraum(; length = 9.4, radius = 2.875, leh_radius = 1.55, capsule_rad
         throw(ArgumentError("capsule_mesh must be :latlong or :compact, got :$capsule_mesh"))
     (; nz, nphi, nr_cap, nr_leh, nr_corner) =
         _hohlraum_grid(; length, radius, leh_radius, h, rc, nz, nphi, nr_cap, nr_leh, nr_corner)
+    ends = (_hohlraum_end(top_end, :top_end; leh_radius, radius, rc, h, nr_cap, nr_leh),
+            _hohlraum_end(bottom_end, :bottom_end; leh_radius, radius, rc, h, nr_cap, nr_leh))
+    opened = any(e -> e.kind === :open, ends)
+    opened && rc > 0 &&
+        throw(ArgumentError("an open end has no corner to round: give corner_radius = 0"))
+    opened && sombrero !== nothing && sombrero !== false &&
+        throw(ArgumentError("a sombrero shields entrance holes: an open end has none"))
     if capsule_mesh === :compact && capsule_radius > 0
         capsule_n = icosphere_frequency(capsule_radius, something(capsule_h, π * capsule_radius / capsule_ntheta))
     elseif capsule_h !== nothing && capsule_radius > 0
@@ -490,26 +510,43 @@ function hohlraum(; length = 9.4, radius = 2.875, leh_radius = 1.55, capsule_rad
     end
     comps = Component[
         Component(:wall, wall_mesh, wall; surface = cyl),
-        Component(:cap_top, annulus_mesh(leh_radius, radius - rc, h; nr = nr_cap, nphi, up = false,
-                                         phibreaks), wall;
+        Component(:cap_top, annulus_mesh(ends[1].radius, radius - rc, h; nr = ends[1].nr_cap, nphi,
+                                         up = false, phibreaks), wall;
                   surface = DiskSurface(center = (0, 0, h))),
-        Component(:cap_bottom, annulus_mesh(leh_radius, radius - rc, -h; nr = nr_cap, nphi, up = true,
-                                            phibreaks), wall;
+        Component(:cap_bottom, annulus_mesh(ends[2].radius, radius - rc, -h; nr = ends[2].nr_cap, nphi,
+                                            up = true, phibreaks), wall;
                   surface = DiskSurface(center = (0, 0, -h))),
     ]
-    for (sgn, name) in ((1, :leh_top), (-1, :leh_bottom))
+    for (sgn, name, e) in ((1, :leh_top, ends[1]), (-1, :leh_bottom, ends[2]))
+        e.kind === :open && continue
         disk = DiskSurface(center = (0, 0, sgn * h))
+        rl = e.radius
         if leh_closure === nothing
-            push!(comps, aperture(name, disk_mesh(leh_radius, sgn * h; nr = nr_leh, nphi = nphi ÷ 2,
+            push!(comps, aperture(name, disk_mesh(rl, sgn * h; nr = e.nr_leh, nphi = nphi ÷ 2,
                                                   up = sgn < 0); surface = disk))
         else
             # the hole open at the peak, and the lip that closes around it
-            ro = leh_open_radius
-            push!(comps, aperture(name, disk_mesh(ro, sgn * h; nr = max(1, round(Int, nr_leh * ro / leh_radius)),
+            ro = rl == leh_radius ? leh_open_radius : leh_open_radius * rl / leh_radius
+            push!(comps, aperture(name, disk_mesh(ro, sgn * h; nr = max(1, round(Int, e.nr_leh * ro / rl)),
                                                   nphi = nphi ÷ 2, up = sgn < 0); surface = disk))
-            push!(comps, aperture(Symbol(name, :_lip), annulus_mesh(ro, leh_radius, sgn * h; nr = nr_lip,
+            push!(comps, aperture(Symbol(name, :_lip), annulus_mesh(ro, rl, sgn * h; nr = nr_lip,
                                                                     nphi = nphi ÷ 2, up = sgn < 0);
                                   surface = disk, closure = leh_closure))
+        end
+    end
+    # a closed end: its hole (and lip) merged into its cap, of the wall's material; an
+    # open end: neither cap nor hole
+    for (cap, leh, e) in ((:cap_top, :leh_top, ends[1]), (:cap_bottom, :leh_bottom, ends[2]))
+        e.kind === :leh && continue
+        k = findfirst(c -> c.name === cap, comps)
+        if e.kind === :closed
+            hole = filter(c -> c.name in (leh, Symbol(leh, :_lip)), comps)
+            c = comps[k]
+            comps[k] = Component(cap, merge_meshes(c.mesh, (d.mesh for d in hole)...), c.material;
+                                 surface = c.surface)
+            filter!(c -> !(c in hole), comps)
+        else
+            deleteat!(comps, k)
         end
     end
     if rc > 0
@@ -528,8 +565,31 @@ function hohlraum(; length = 9.4, radius = 2.875, leh_radius = 1.55, capsule_rad
     end
     append!(comps, window_comps)
     sombrero === true && (sombrero = Sombrero())
-    sombrero isa Sombrero && append!(comps, _sombreros(sombrero, h, radius, leh_radius))
-    return Target(comps; closed = true)
+    sombrero isa Sombrero &&
+        append!(comps, _sombreros(sombrero, h, radius, max(ends[1].radius, ends[2].radius)))
+    return Target(comps; closed = !opened)
+end
+
+# One end of `hohlraum` (keyword `key`): `(; kind, radius, nr_cap, nr_leh)`, `kind` one
+# of `:leh` (an entrance hole of `radius`), `:closed` (the cap covers the hole of
+# `radius`) and `:open` (neither cap nor hole; `radius` and the counts unused). An end
+# of the default radius keeps the hohlraum's counts; another radius takes counts from
+# the element size `h` when given.
+function _hohlraum_end(e, key::Symbol; leh_radius, radius, rc, h, nr_cap, nr_leh)
+    e === nothing && return (; kind = :leh, radius = Float64(leh_radius), nr_cap, nr_leh)
+    if e isa Symbol
+        e in (:closed, :open) ||
+            throw(ArgumentError("$key must be an LEH radius, :closed or :open, got :$e"))
+        return (; kind = e, radius = Float64(leh_radius), nr_cap, nr_leh)
+    end
+    e isa Real || throw(ArgumentError("$key must be an LEH radius, :closed or :open"))
+    0 < e < radius - rc || throw(ArgumentError("need 0 < $key < radius - corner_radius"))
+    r = Float64(e)
+    if r != leh_radius && h !== nothing
+        nr_cap = max(1, ceil(Int, (radius - rc - r) / h))
+        nr_leh = max(1, ceil(Int, r / h))
+    end
+    return (; kind = :leh, radius = r, nr_cap, nr_leh)
 end
 
 """
