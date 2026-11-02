@@ -4,7 +4,7 @@
 // available at any time, and analyses say when they are out of date.
 //
 // All state lives in Julia: `app` (property map) and the item models (`treeModel`,
-// `targetFieldModel`, `partFieldModel`, `windowModel`, `beamModel`, `modeModel`,
+// `partFieldModel`, `windowModel`, `beamModel`, `modeModel`,
 // `powerModel`, `optModeModel`, `paramModel`, `compModel`, `clearModel`, `worstModel`,
 // `talisCompModel`, `ruleModel`, `talisModel`, `noteModel`, `timeLegendModel`); actions
 // call Julia.br_*.
@@ -145,9 +145,9 @@ ApplicationWindow {
             MenuSeparator {}
             AutoMenu {
                 title: "New target"
-                Action { text: "Hohlraum"; onTriggered: { Julia.br_set_target_kind("hohlraum"); Julia.br_select("target") } }
-                Action { text: "Backlighter foil"; onTriggered: { Julia.br_set_target_kind("foil"); Julia.br_select("target") } }
-                Action { text: "Custom (parts only)"; onTriggered: { Julia.br_set_target_kind("custom"); Julia.br_select("target") } }
+                Action { text: "Hohlraum with capsule"; onTriggered: { Julia.br_new_target("hohlraum"); Julia.br_select("target") } }
+                Action { text: "Backlighter foil"; onTriggered: { Julia.br_new_target("foil"); Julia.br_select("target") } }
+                Action { text: "Empty (parts only)"; onTriggered: { Julia.br_new_target("empty"); Julia.br_select("target") } }
             }
             MenuSeparator {}
             Action { text: "Import VisRad workspace…"; onTriggered: vrwDialog.run("import") }
@@ -178,6 +178,12 @@ ApplicationWindow {
             Action { text: "&Redo"; shortcut: StandardKey.Redo; enabled: app.canRedo; onTriggered: Julia.br_redo() }
         }
         AutoMenu {
+            // starters, placed in the selected part's or piece's frame (TCC with none)
+            title: "&Insert"
+            Action { text: "Hohlraum with capsule"; onTriggered: Julia.br_insert("hohlraum") }
+            Action { text: "Backlighter foil"; onTriggered: Julia.br_insert("foil") }
+        }
+        AutoMenu {
             title: "&Target"
             Action { text: "Properties"; onTriggered: Julia.br_select("target") }
             AutoMenu {
@@ -191,7 +197,7 @@ ApplicationWindow {
                 MenuSeparator {}
                 Action { text: "Mesh from STL file…"; onTriggered: stlDialog.open() }
             }
-            Action { text: "Add diagnostic window"; enabled: app.targetKind === "hohlraum"; onTriggered: Julia.br_add_window() }
+            Action { text: "Add diagnostic window"; enabled: app.hasHohlraum; onTriggered: Julia.br_add_window() }
             Action {
                 text: "Remove selected part or window"
                 enabled: app.selKind === "part" || app.selKind === "window"

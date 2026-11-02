@@ -43,7 +43,7 @@ Pane {
 
     // the Help topic that introduces the page (its ⓘ beside the title)
     readonly property string intro: {
-        if (kind === "target") return "target." + app.targetKind
+        if (kind === "target") return "target.insert"
         if (kind === "comp") return "component.intro"
         if (kind === "part") return "part.placement"
         if (kind === "task") return app.selKey + ".intro"

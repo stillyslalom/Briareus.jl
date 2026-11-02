@@ -3,11 +3,11 @@
 @testset "session files (no GL)" begin
     s = DesignSession(resolution = :coarse)
     # a design touching every part of the state
-    edit_target!(s.target, :length, "10.4")
+    edit_part!(s.target, 1, :length, "10.4")
     add_window!(s.target; phi = 40.0, width = 1.5)
     set_window_open!(s.target, 1, true)
     add_part!(s.target, :disk; z = 7.5)
-    edit_part!(s.target, 1, :theta, "20")
+    edit_part!(s.target, part_index(s.target, :disk_1), :theta, "20")
     split_quad!(s.beams, "Q31T")
     set_cluster!(s.beams, findall(b -> b.group === :inner23, s.beams.beams[]), :backlighter)
     edit_beam_set!(s.beams, findall(==(:backlighter), s.beams.cluster[]), :z, "3.4")
@@ -30,7 +30,7 @@
     @test session_state(s2) == session_state(s)
     @test s2.beams.beams[] == s.beams.beams[]                # ports and aims exact
     @test s2.beams.enabled[] == s.beams.enabled[] && s2.beams.cluster[] == s.beams.cluster[]
-    @test s2.target.windows[] == s.target.windows[] && s2.target.mesh[] == s.target.mesh[]
+    @test hohlraum_windows(s2.target) == hohlraum_windows(s.target) && s2.target.mesh[] == s.target.mesh[]
     @test [p.values for p in s2.target.parts[]] == [p.values for p in s.target.parts[]]
     @test nelements(s2.target.target[]) == nelements(s.target.target[])
     @test s2.optimize.weights[] == Dict(2 => 1.0, 4 => 0.5) && s2.optimize.iterations[] == 37
@@ -51,9 +51,9 @@ end
 @testset "undo and redo (no GL)" begin
     s = DesignSession(resolution = :coarse)
     @test !can_undo(s) && !can_redo(s) && !undo!(s) && !redo!(s)
-    L0 = s.target.params[][:length]
+    L0 = s.target.parts[][1].values[:length]
     # each recorded edit is one step
-    edit_target!(s.target, :length, "11.0")
+    edit_part!(s.target, 1, :length, "11.0")
     @test record!(s)
     @test !record!(s)                                    # nothing new
     add_window!(s.target; phi = 90.0)
@@ -68,20 +68,20 @@ end
     @test !record!(s)
     # undo walks back: the power, the window, the length
     @test undo!(s) && s.beams.beams[][1] == b0
-    @test undo!(s) && isempty(s.target.windows[])
+    @test undo!(s) && isempty(hohlraum_windows(s.target))
     @test can_redo(s)
-    @test undo!(s) && s.target.params[][:length] == L0
+    @test undo!(s) && s.target.parts[][1].values[:length] == L0
     @test !undo!(s) && !can_undo(s)
     @test s.view.beams[] === :volumes                     # the view stays as it is
     # redo walks forward again, and the target is rebuilt each time
-    @test redo!(s) && s.target.params[][:length] == 11.0
-    @test redo!(s) && length(s.target.windows[]) == 1
-    @test :window_1 in component_names(s.target.target[])
+    @test redo!(s) && s.target.parts[][1].values[:length] == 11.0
+    @test redo!(s) && length(hohlraum_windows(s.target)) == 1
+    @test :hohlraum_window_1 in component_names(s.target.target[])
     # a new edit drops the redo steps
-    edit_target!(s.target, :capsule_radius, "0.8")
+    edit_part!(s.target, 2, :r1, "0.8")
     @test !can_redo(s) || (record!(s); !can_redo(s))
-    @test undo!(s) && s.target.params[][:capsule_radius] == 0.9
-    @test undo!(s) && isempty(s.target.windows[])
+    @test undo!(s) && s.target.parts[][2].values[:r1] == 0.9
+    @test undo!(s) && isempty(hohlraum_windows(s.target))
     # an edit that is not recorded yet is undone too (undo records first)
     set_resolution!(s.target, :standard)
     @test undo!(s) && s.target.resolution[] === :coarse
@@ -159,7 +159,7 @@ end
     load_session!(s2, f)
     copy = s2.target.parts[][end].file
     @test copy != src && isfile(copy) && read(copy) == bytes
-    @test all(p -> p.file == copy, s2.target.parts[]) && cad_source(s2, copy) == src
+    @test all(p -> p.file == copy, filter(p -> p.kind === :mesh, s2.target.parts[])) && cad_source(s2, copy) == src
     @test isempty(s2.cad_changed[]) && nelements(s2.target.target[]) == n0
     # saved again, the parts keep the path they were first read from
     f2 = joinpath(dir, "again.briar")
@@ -175,15 +175,15 @@ end
     @test s3.cad_changed[] == [copy] && occursin("shield.stl", s3.status[])
     @test nelements(s3.target.target[]) == n0
     @test reload_cad_sources!(s3)
-    @test all(p -> p.file == src, s3.target.parts[]) && isempty(s3.cad_changed[])
+    @test all(p -> p.file == src, filter(p -> p.kind === :mesh, s3.target.parts[])) && isempty(s3.cad_changed[])
     @test nelements(s3.target.target[]) > n0                              # the taller tube
-    @test undo!(s3) && all(p -> p.file == copy, s3.target.parts[])        # back to the copy
+    @test undo!(s3) && all(p -> p.file == copy, filter(p -> p.kind === :mesh, s3.target.parts[]))        # back to the copy
     # relinked to another file, or refused a missing one
     other = joinpath(dir, "other.stl")
     write_stl(other, tube(1.0))
-    @test relink_cad!(s3, copy, other) && all(p -> p.file == other, s3.target.parts[])
+    @test relink_cad!(s3, copy, other) && all(p -> p.file == other, filter(p -> p.kind === :mesh, s3.target.parts[]))
     @test !relink_cad!(s3, other, joinpath(dir, "missing.stl"))
-    @test all(p -> p.file == other, s3.target.parts[])
+    @test all(p -> p.file == other, filter(p -> p.kind === :mesh, s3.target.parts[]))
 
     # without the CAD files: paths only, and a changed file named on load
     g = joinpath(dir, "refs.briar.toml")
@@ -192,7 +192,7 @@ end
     write_stl(other, tube(3.0))
     s4 = DesignSession(resolution = :coarse)
     load_session!(s4, g)
-    @test all(p -> p.file == other, s4.target.parts[]) && isempty(s4.cad_changed[])
+    @test all(p -> p.file == other, filter(p -> p.kind === :mesh, s4.target.parts[])) && isempty(s4.cad_changed[])
     @test occursin("changed since the save: other.stl", s4.status[])
 end
 
@@ -227,18 +227,18 @@ end
 @testset "part frames (no GL)" begin
     s = DesignSession(resolution = :coarse)
     ts = s.target
-    L = ts.params[][:length]
+    L = ts.parts[][1].values[:length]
     center(name) = (t = ts.target[]; es = elements(t, name);
                     sum(t.elem_centroid[e] * t.elem_area[e] for e in es) / sum(t.elem_area[es]))
     normal(name) = (t = ts.target[]; t.elem_normal[first(elements(t, name))])
     # shields 0.5 mm outside each entrance hole, from the same placement
-    @test add_part!(ts, :disk; name = :shield_top, frame = :leh_top, z = 0.5, r1 = 2.0)
-    @test add_part!(ts, :disk; name = :shield_bottom, frame = :leh_bottom, z = 0.5, r1 = 2.0)
+    @test add_part!(ts, :disk; name = :shield_top, frame = Symbol("hohlraum.leh_top"), z = 0.5, r1 = 2.0)
+    @test add_part!(ts, :disk; name = :shield_bottom, frame = Symbol("hohlraum.leh_bottom"), z = 0.5, r1 = 2.0)
     @test center(:shield_top) ≈ Briareus.Vec3(0, 0, L / 2 + 0.5) atol = 1e-12
     @test center(:shield_bottom) ≈ Briareus.Vec3(0, 0, -L / 2 - 0.5) atol = 1e-12
     @test normal(:shield_top) ≈ Briareus.Vec3(0, 0, 1) && normal(:shield_bottom) ≈ Briareus.Vec3(0, 0, -1)
     # they follow the hohlraum's length
-    @test edit_target!(ts, :length, "11.0")
+    @test edit_part!(ts, 1, :length, "11.0")
     @test center(:shield_top)[3] ≈ 6.0 && center(:shield_bottom)[3] ≈ -6.0
     # to the chamber frame, staying put
     i = part_index(ts, :shield_bottom)
@@ -247,21 +247,21 @@ end
     @test p.frame === :tcc && p.values[:z] ≈ -6.0 && p.values[:theta] ≈ 180
     @test center(:shield_bottom) ≈ Briareus.Vec3(0, 0, -6.0) atol = 1e-12
     @test normal(:shield_bottom) ≈ Briareus.Vec3(0, 0, -1)
-    # a frame the template lacks is refused, and so is a template the frames need
+    # a frame the design lacks is refused, and so is removing a part whose frames are used
     @test !set_part_frame!(ts, i, :backlighter) && occursin("backlighter", ts.error[])
-    @test !set_target_kind!(ts, :custom) && ts.kind[] === :hohlraum
+    @test !remove_part!(ts, 1) && occursin("no frame named hohlraum", ts.error[]) && length(ts.parts[]) == 4
     # in a session file
     f = joinpath(mktempdir(), "frames.briar.toml")
     save_session(f, s)
     s2 = DesignSession(resolution = :coarse)
     load_session!(s2, f)
-    @test [p.frame for p in s2.target.parts[]] == [:leh_top, :tcc]
+    @test [p.frame for p in s2.target.parts[]] == [:tcc, :hohlraum, Symbol("hohlraum.leh_top"), :tcc]
     @test s2.target.target[].elem_centroid == ts.target[].elem_centroid
     # a backlighter's foil frame: z along the foil's front normal, toward TCC; a disk
     # turned over (θ = 180°) 0.3 mm behind the foil faces away from TCC
-    b = DesignSession(kind = :foil, resolution = :coarse)
-    @test add_part!(b.target, :disk; frame = :backlighter, z = -0.3, theta = 180, r1 = 1.5, name = :substrate)
-    d = b.target.params[][:distance]
+    b = DesignSession(starter = :foil, resolution = :coarse)
+    @test add_part!(b.target, :disk; frame = :foil, z = -0.3, theta = 180, r1 = 1.5, name = :substrate)
+    d = b.target.parts[][1].values[:x]
     t = b.target.target[]
     es = elements(t, :substrate)
     @test sum(t.elem_centroid[e] for e in es) / length(es) ≈ Briareus.Vec3(d + 0.3, 0, 0) atol = 1e-9
@@ -273,13 +273,13 @@ end
     v, ts = s.view, s.target
     # the cut: quadrant facing −x −y by default, then a half facing +x
     @test v.cutaway[] && v.cut_width[] == 90 && v.cut_azimuth[] == 225
-    @test is_cut(v, :wall, (-1.0, -1.0, 0.0)) && !is_cut(v, :wall, (1.0, -1.0, 0.0))
+    @test is_cut(v, :hohlraum_wall, (-1.0, -1.0, 0.0)) && !is_cut(v, :hohlraum_wall, (1.0, -1.0, 0.0))
     @test !is_cut(v, :capsule, (-1.0, -1.0, 0.0))                # not a cut component
-    set_cut!(v; width = 180, azimuth = 0, components = [:wall, :capsule])
-    @test is_cut(v, :capsule, (1.0, 0.9, 0.0)) && !is_cut(v, :wall, (-1.0, 0.2, 0.0))
+    set_cut!(v; width = 180, azimuth = 0, components = [:hohlraum_wall, :capsule])
+    @test is_cut(v, :capsule, (1.0, 0.9, 0.0)) && !is_cut(v, :hohlraum_wall, (-1.0, 0.2, 0.0))
     @test_throws ArgumentError set_cut!(v; width = 0)
     v.cutaway[] = false
-    @test !is_cut(v, :wall, (1.0, 0.0, 0.0))
+    @test !is_cut(v, :hohlraum_wall, (1.0, 0.0, 0.0))
     # leaving the capsule out of the calculations: gone from the target, drawn as a ghost,
     # still listed in the tree
     n0 = nelements(ts.target[])
@@ -287,19 +287,19 @@ end
     @test !(:capsule in component_names(ts.target[])) && ts.ghost[] !== nothing
     @test :capsule in all_component_names(ts) && nelements(ts.target[]) < n0
     rows = model_tree(s)
-    @test any(r -> r.id == "comp:capsule" && occursin("not in calculations", r.detail), rows)
-    select!(v, "comp:capsule")
-    edit_target!(ts, :length, "10.5")                              # a rebuild keeps both
-    @test v.selection[] == "comp:capsule" && ts.ghost[] !== nothing
+    @test any(r -> r.id == "part:capsule" && occursin("not in calculations", r.detail), rows)
+    select!(v, "part:capsule")
+    edit_part!(ts, 1, :length, "10.5")                             # a rebuild keeps both
+    @test v.selection[] == "part:capsule" && ts.ghost[] !== nothing
     f = joinpath(mktempdir(), "excluded.briar.toml")
     save_session(f, s)
     s2 = DesignSession(resolution = :coarse)
     load_session!(s2, f)
     @test s2.target.excluded[] == Set([:capsule]) && s2.target.ghost[] !== nothing
-    @test s2.view.cut_width[] == 180 && s2.view.cut_components[] == Set([:wall, :capsule])
+    @test s2.view.cut_width[] == 180 && s2.view.cut_components[] == Set([:hohlraum_wall, :capsule])
     @test set_excluded!(ts, :capsule, false) && ts.ghost[] === nothing
     @test :capsule in component_names(ts.target[])
-    for c in component_names(ts.target[])
+    for c in Briareus.parts(ts.target[])
         set_excluded!(ts, c, true)
     end
     @test occursin("every component", ts.error[])                   # the last one stays
@@ -309,16 +309,16 @@ end
     end
     @test ts.ghost[] === nothing
     # Ctrl adds components to components (and beams to beams), Shift a range in tree order
-    select!(v, "comp:wall")
-    select_add!(v, "comp:cap_top")
-    @test selected_components(s) == [:wall, :cap_top]
+    select!(v, "comp:hohlraum_wall")
+    select_add!(v, "comp:hohlraum_cap_top")
+    @test selected_components(s) == [:hohlraum_wall, :hohlraum_cap_top]
     select_add!(v, "beams")                                          # another family: alone
     @test selected_ids(v) == ["beams"]
     order = [r.id for r in model_tree(s)]
-    select!(v, "comp:wall")
-    select_range!(v, order, "comp:capsule")
+    select!(v, "comp:hohlraum_wall")
+    select_range!(v, order, "part:capsule")
     sel = selected_components(s)
-    @test first(sel) === :wall && :capsule in sel && :cap_bottom in sel && length(sel) >= 4
+    @test first(sel) === :hohlraum_wall && :capsule in sel && :hohlraum_cap_bottom in sel && length(sel) >= 4
     # hidden beams are a view setting, separate from switching them off
     set_beams_drawn!(v, [b.name for b in s.beams.beams[][1:3]], 3, false)
     @test length(v.hidden_beams[]) == 3 && all(s.beams.enabled[])
@@ -368,9 +368,9 @@ end
     @test center(:post) ≈ V(0, 0, 3.5) atol = 1e-9
     @test !edit_part!(ts, i, :pos_r, "-1")
     # a part in another part's frame moves and turns with it
-    @test add_part!(ts, :disk; name = :shield, frame = :leh_top, z = 0.5, r1 = 2.0)
+    @test add_part!(ts, :disk; name = :shield, frame = Symbol("hohlraum.leh_top"), z = 0.5, r1 = 2.0)
     @test add_part!(ts, :sphere; name = :marker, frame = :shield, z = 1.0, r1 = 0.1)
-    L = ts.params[][:length]
+    L = ts.parts[][1].values[:length]
     @test center(:marker) ≈ V(0, 0, L / 2 + 1.5) atol = 1e-9
     @test edit_part!(ts, part_index(ts, :shield), :theta, "90")       # tilt the shield
     @test center(:marker) ≈ V(1.0, 0, L / 2 + 0.5) atol = 1e-9
@@ -460,7 +460,7 @@ end
     @test_throws ArgumentError export_visrad_workspace(s, joinpath(dir, "out.vrw"))
     import_visrad_workspace!(s, src)
     ts = s.target
-    @test ts.kind[] === :custom && all(p -> p.kind === :visrad, ts.parts[])
+    @test all(p -> p.kind === :visrad, ts.parts[])
     names = component_names(ts.target[])
     # the foil, the hohlraum's five components and the CAD tetrahedron take part; the
     # reference cone (not meshed) is skipped and the marker sphere, which VisRad leaves
@@ -547,7 +547,7 @@ end
         f()
     end
     @test done[] && isempty(s.meshing[]) && startswith(s.status[], "imported work.vrw")
-    @test s.target.kind[] === :custom && :CAD_0 in component_names(s.target.target[])
+    @test all(p -> p.kind === :visrad, s.target.parts[]) && :CAD_0 in component_names(s.target.target[])
     @test length(s.beams.beams[]) == 3 && s.visrad_source[] == abspath(src)
     # a failed import says why and keeps the design
     bad = joinpath(dir, "empty.vrw")
@@ -636,7 +636,7 @@ end
     export_target_stl(s, fb)                                                  # binary
     @test length(read_stl(fb).triangles) == length(ts.target[].tri_area)
     # and back in as parts: one per solid of the ASCII file, one for the binary file
-    ts2 = TargetSetup(kind = :custom)
+    ts2 = TargetSetup(starter = :none)
     n0 = length(ts2.parts[])
     @test add_stl_parts!(ts2, f; h = 0.5)
     @test length(ts2.parts[]) - n0 == length(solids)
@@ -725,7 +725,7 @@ end
     # an STL tube of 400 slivers (r = 1.5 mm): its cylinder, under its own name
     tube = joinpath(dir, "tube.stl")
     write_stl(tube, cylinder_mesh(1.5, -2.0, 2.0; nz = 1, nphi = 400); binary = false)
-    ts = TargetSetup(kind = :custom)
+    ts = TargetSetup(starter = :none)
     @test add_part!(ts, :mesh; name = :tube, file = tube, h = 0.5)
     c = only(c for c in ts.target[].components if c.name === :tube)
     @test c.surface isa Briareus.CylinderSurface && isapprox(c.surface.radius, 1.5; rtol = 1e-9)
@@ -743,7 +743,7 @@ end
     # the drive fits a part of several faces (the can: its wall and its lid) in its own
     # target; the pieces map back to the part's elements, and the drive reports the part
     t = ts.target[]
-    refs = Controllers._fit_references(t, ts.kind[], ts.params[], ts.mesh[], ts.parts[])
+    refs = Controllers._fit_references(t, ts.mesh[], ts.parts[])
     @test collect(keys(refs)) == [:can]                     # the tube and the shell are fitted whole
     tf, fmap = Controllers._fitted_target(t, refs)
     @test length(tf.components) == length(t.components) + 1 && Briareus.parts(tf) == Briareus.parts(t)
@@ -759,7 +759,7 @@ end
     @test Controllers._build_scenario(t, beams).index === nothing
     Controllers.FIT_CAD[] = false
     try
-        @test isempty(Controllers._fit_references(t, ts.kind[], ts.params[], ts.mesh[], ts.parts[]))
+        @test isempty(Controllers._fit_references(t, ts.mesh[], ts.parts[]))
     finally
         Controllers.FIT_CAD[] = true
     end
@@ -786,11 +786,11 @@ end
     write_stl(can, merge_meshes(cylinder_mesh(1.5, -2.0, 2.0; nz = 4, nphi = 96),
                                 annulus_mesh(0.6, 1.5, 2.0; nr = 2, nphi = 96),
                                 annulus_mesh(0.6, 1.5, -2.0; nr = 2, nphi = 96)); binary = false)
-    ts = TargetSetup(kind = :custom)
+    ts = TargetSetup(starter = :none)
     @test add_part!(ts, :mesh; name = :hohlraum, file = can, h = 0.5)
     beams = nif_quads()[1:4]
     function drive()
-        refs = Controllers._fit_references(ts.target[], ts.kind[], ts.params[], ts.mesh[], ts.parts[])
+        refs = Controllers._fit_references(ts.target[], ts.mesh[], ts.parts[])
         return Controllers._build_scenario(ts.target[], beams; references = refs,
                                            cavity = (Briareus.Vec3(0, 0, 0), Set{Symbol}()))
     end

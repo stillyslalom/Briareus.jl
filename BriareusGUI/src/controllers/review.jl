@@ -88,17 +88,15 @@ function _update_roles!(first::Observable, second::Observable, known::Base.RefVa
 end
 
 """
-    default_selection!(rv::ReviewState, t::Target; lands_on = (:wall, :capsule, FOIL_NAME))
+    default_selection!(rv::ReviewState, t::Target; lands_on = ())
 
 Choose the landing targets and hardware for a target's components: the beams land on
 the surfaces `lands_on` (names; a session passes the holders of the wall, observed and
 foil roles: a hohlraum's wall and capsule, every backlighter foil) and everything else
-(LEH caps, closed diagnostic windows, a foil target's main sphere) is checked. The
-default names are the templates' components. Components the selection was already made
-for keep their roles; new components get the default role.
+(LEH caps, closed diagnostic windows, a main-target sphere) is checked. Components the
+selection was already made for keep their roles; new components get the default role.
 """
-function default_selection!(rv::ReviewState, t::Target;
-                            lands_on = (_TEMPLATE_WALL, _TEMPLATE_CAPSULE, FOIL_NAME))
+function default_selection!(rv::ReviewState, t::Target; lands_on = ())
     _update_roles!(rv.targets, rv.hardware, rv.known, surface_names(t),
                    n -> n in lands_on ? 1 : 2)
     return rv

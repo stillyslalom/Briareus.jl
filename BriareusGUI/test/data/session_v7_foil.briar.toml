@@ -1,0 +1,925 @@
+# BriareusGUI session: a Briareus design (target, beams, analysis settings).
+# Lengths in mm, power in TW, angles in degrees; results are not saved.
+format = "BriareusGUI session"
+version = 7
+visrad_source = ""
+
+[beams]
+by = "group"
+facility = "omega"
+preset = "omega_backlighter"
+
+    [[beams.beam]]
+    aim = [6.0, 0.0, 0.0]
+    aim_frame = "backlighter"
+    aim_local = [0.0, 0.0, 0.0]
+    cluster = "cone2"
+    defocus = 0.0
+    dlambda = 0.0
+    enabled = true
+    fnumber = 6.7
+    group = "cone2"
+    name = "B08"
+    omega1 = false
+    omega2 = false
+    port = [-0.5415469129039316, 0.39345686313472145, 0.7429122680212022]
+    power = 0.4
+    quad = ""
+    wavelength = 0.351
+
+        [beams.beam.spot]
+        a = 0.36
+        angle = 0.0
+        b = 0.36
+        halo = 0.0
+        halo_order = 2.0
+        halo_scale = 3.0
+        order = 4.2
+    [[beams.beam]]
+    aim = [6.0, 0.0, 0.0]
+    aim_frame = "backlighter"
+    aim_local = [0.0, 0.0, 0.0]
+    cluster = "cone2"
+    defocus = 0.0
+    dlambda = 0.0
+    enabled = true
+    fnumber = 6.7
+    group = "cone2"
+    name = "B09"
+    omega1 = false
+    omega2 = false
+    port = [-0.5415469129039316, -0.39345686313472145, 0.7429122680212022]
+    power = 0.4
+    quad = ""
+    wavelength = 0.351
+
+        [beams.beam.spot]
+        a = 0.36
+        angle = 0.0
+        b = 0.36
+        halo = 0.0
+        halo_order = 2.0
+        halo_scale = 3.0
+        order = 4.2
+    [[beams.beam]]
+    aim = [6.0, 0.0, 0.0]
+    aim_frame = "backlighter"
+    aim_local = [0.0, 0.0, 0.0]
+    cluster = "cone3"
+    defocus = 0.0
+    dlambda = 0.0
+    enabled = true
+    fnumber = 6.7
+    group = "cone3"
+    name = "B14"
+    omega1 = false
+    omega2 = false
+    port = [-0.4287182687802648, 0.7407077236759367, 0.5172549797738681]
+    power = 0.4
+    quad = ""
+    wavelength = 0.351
+
+        [beams.beam.spot]
+        a = 0.36
+        angle = 0.0
+        b = 0.36
+        halo = 0.0
+        halo_order = 2.0
+        halo_scale = 3.0
+        order = 4.2
+    [[beams.beam]]
+    aim = [6.0, 0.0, 0.0]
+    aim_frame = "backlighter"
+    aim_local = [0.0, 0.0, 0.0]
+    cluster = "cone3"
+    defocus = 0.0
+    dlambda = 0.0
+    enabled = true
+    fnumber = 6.7
+    group = "cone3"
+    name = "B15"
+    omega1 = false
+    omega2 = false
+    port = [-0.836936138124258, 0.17884402869760052, 0.5172549797738681]
+    power = 0.4
+    quad = ""
+    wavelength = 0.351
+
+        [beams.beam.spot]
+        a = 0.36
+        angle = 0.0
+        b = 0.36
+        halo = 0.0
+        halo_order = 2.0
+        halo_scale = 3.0
+        order = 4.2
+    [[beams.beam]]
+    aim = [6.0, 0.0, 0.0]
+    aim_frame = "backlighter"
+    aim_local = [0.0, 0.0, 0.0]
+    cluster = "cone3"
+    defocus = 0.0
+    dlambda = 0.0
+    enabled = true
+    fnumber = 6.7
+    group = "cone3"
+    name = "B16"
+    omega1 = false
+    omega2 = false
+    port = [-0.8369361381242579, -0.1788440286976005, 0.5172549797738684]
+    power = 0.4
+    quad = ""
+    wavelength = 0.351
+
+        [beams.beam.spot]
+        a = 0.36
+        angle = 0.0
+        b = 0.36
+        halo = 0.0
+        halo_order = 2.0
+        halo_scale = 3.0
+        order = 4.2
+    [[beams.beam]]
+    aim = [6.0, 0.0, 0.0]
+    aim_frame = "backlighter"
+    aim_local = [0.0, 0.0, 0.0]
+    cluster = "cone3"
+    defocus = 0.0
+    dlambda = 0.0
+    enabled = true
+    fnumber = 6.7
+    group = "cone3"
+    name = "B17"
+    omega1 = false
+    omega2 = false
+    port = [-0.42871826878026476, -0.7407077236759366, 0.5172549797738684]
+    power = 0.4
+    quad = ""
+    wavelength = 0.351
+
+        [beams.beam.spot]
+        a = 0.36
+        angle = 0.0
+        b = 0.36
+        halo = 0.0
+        halo_order = 2.0
+        halo_scale = 3.0
+        order = 4.2
+    [[beams.beam]]
+    aim = [6.0, 0.0, 0.0]
+    aim_frame = "backlighter"
+    aim_local = [0.0, 0.0, 0.0]
+    cluster = "cone4"
+    defocus = 0.0
+    dlambda = 0.0
+    enabled = true
+    fnumber = 6.7
+    group = "cone4"
+    name = "B24"
+    omega1 = false
+    omega2 = false
+    port = [-0.6543755570275985, 0.7407077236759372, 0.15213381758054928]
+    power = 0.4
+    quad = ""
+    wavelength = 0.351
+
+        [beams.beam.spot]
+        a = 0.36
+        angle = 0.0
+        b = 0.36
+        halo = 0.0
+        halo_order = 2.0
+        halo_scale = 3.0
+        order = 4.2
+    [[beams.beam]]
+    aim = [6.0, 0.0, 0.0]
+    aim_frame = "backlighter"
+    aim_local = [0.0, 0.0, 0.0]
+    cluster = "cone4"
+    defocus = 0.0
+    dlambda = 0.0
+    enabled = true
+    fnumber = 6.7
+    group = "cone4"
+    name = "B25"
+    omega1 = false
+    omega2 = false
+    port = [-0.9066680750972502, 0.39345686313472167, 0.15213381758054928]
+    power = 0.4
+    quad = ""
+    wavelength = 0.351
+
+        [beams.beam.spot]
+        a = 0.36
+        angle = 0.0
+        b = 0.36
+        halo = 0.0
+        halo_order = 2.0
+        halo_scale = 3.0
+        order = 4.2
+    [[beams.beam]]
+    aim = [6.0, 0.0, 0.0]
+    aim_frame = "backlighter"
+    aim_local = [0.0, 0.0, 0.0]
+    cluster = "cone4"
+    defocus = 0.0
+    dlambda = 0.0
+    enabled = true
+    fnumber = 6.7
+    group = "cone4"
+    name = "B26"
+    omega1 = false
+    omega2 = false
+    port = [-0.9066680750972502, -0.39345686313472167, 0.15213381758054928]
+    power = 0.4
+    quad = ""
+    wavelength = 0.351
+
+        [beams.beam.spot]
+        a = 0.36
+        angle = 0.0
+        b = 0.36
+        halo = 0.0
+        halo_order = 2.0
+        halo_scale = 3.0
+        order = 4.2
+    [[beams.beam]]
+    aim = [6.0, 0.0, 0.0]
+    aim_frame = "backlighter"
+    aim_local = [0.0, 0.0, 0.0]
+    cluster = "cone4"
+    defocus = 0.0
+    dlambda = 0.0
+    enabled = true
+    fnumber = 6.7
+    group = "cone4"
+    name = "B27"
+    omega1 = false
+    omega2 = false
+    port = [-0.6543755570275989, -0.7407077236759367, 0.15213381758054928]
+    power = 0.4
+    quad = ""
+    wavelength = 0.351
+
+        [beams.beam.spot]
+        a = 0.36
+        angle = 0.0
+        b = 0.36
+        halo = 0.0
+        halo_order = 2.0
+        halo_scale = 3.0
+        order = 4.2
+    [[beams.beam]]
+    aim = [6.0, 0.0, 0.0]
+    aim_frame = "backlighter"
+    aim_local = [0.0, 0.0, 0.0]
+    cluster = "cone4"
+    defocus = 0.0
+    dlambda = 0.0
+    enabled = true
+    fnumber = 6.7
+    group = "cone4"
+    name = "B34"
+    omega1 = false
+    omega2 = false
+    port = [-0.5022417394470495, 0.8512394120960156, -0.15213381758054953]
+    power = 0.4
+    quad = ""
+    wavelength = 0.351
+
+        [beams.beam.spot]
+        a = 0.36
+        angle = 0.0
+        b = 0.36
+        halo = 0.0
+        halo_order = 2.0
+        halo_scale = 3.0
+        order = 4.2
+    [[beams.beam]]
+    aim = [6.0, 0.0, 0.0]
+    aim_frame = "backlighter"
+    aim_local = [0.0, 0.0, 0.0]
+    cluster = "cone4"
+    defocus = 0.0
+    dlambda = 0.0
+    enabled = true
+    fnumber = 6.7
+    group = "cone4"
+    name = "B35"
+    omega1 = false
+    omega2 = false
+    port = [-0.964778022574744, 0.21461283443712065, -0.15213381758054953]
+    power = 0.4
+    quad = ""
+    wavelength = 0.351
+
+        [beams.beam.spot]
+        a = 0.36
+        angle = 0.0
+        b = 0.36
+        halo = 0.0
+        halo_order = 2.0
+        halo_scale = 3.0
+        order = 4.2
+    [[beams.beam]]
+    aim = [6.0, 0.0, 0.0]
+    aim_frame = "backlighter"
+    aim_local = [0.0, 0.0, 0.0]
+    cluster = "cone4"
+    defocus = 0.0
+    dlambda = 0.0
+    enabled = true
+    fnumber = 6.7
+    group = "cone4"
+    name = "B36"
+    omega1 = false
+    omega2 = false
+    port = [-0.964778022574744, -0.21461283443712065, -0.15213381758054953]
+    power = 0.4
+    quad = ""
+    wavelength = 0.351
+
+        [beams.beam.spot]
+        a = 0.36
+        angle = 0.0
+        b = 0.36
+        halo = 0.0
+        halo_order = 2.0
+        halo_scale = 3.0
+        order = 4.2
+    [[beams.beam]]
+    aim = [6.0, 0.0, 0.0]
+    aim_frame = "backlighter"
+    aim_local = [0.0, 0.0, 0.0]
+    cluster = "cone4"
+    defocus = 0.0
+    dlambda = 0.0
+    enabled = true
+    fnumber = 6.7
+    group = "cone4"
+    name = "B37"
+    omega1 = false
+    omega2 = false
+    port = [-0.5022417394470491, -0.8512394120960158, -0.15213381758054953]
+    power = 0.4
+    quad = ""
+    wavelength = 0.351
+
+        [beams.beam.spot]
+        a = 0.36
+        angle = 0.0
+        b = 0.36
+        halo = 0.0
+        halo_order = 2.0
+        halo_scale = 3.0
+        order = 4.2
+    [[beams.beam]]
+    aim = [6.0, 0.0, 0.0]
+    aim_frame = "backlighter"
+    aim_local = [0.0, 0.0, 0.0]
+    cluster = "cone3"
+    defocus = 0.0
+    dlambda = 0.0
+    enabled = true
+    fnumber = 6.7
+    group = "cone3"
+    name = "B44"
+    omega1 = false
+    omega2 = false
+    port = [-0.5719736764200414, 0.6366265776588951, -0.517254979773868]
+    power = 0.4
+    quad = ""
+    wavelength = 0.351
+
+        [beams.beam.spot]
+        a = 0.36
+        angle = 0.0
+        b = 0.36
+        halo = 0.0
+        halo_order = 2.0
+        halo_scale = 3.0
+        order = 4.2
+    [[beams.beam]]
+    aim = [6.0, 0.0, 0.0]
+    aim_frame = "backlighter"
+    aim_local = [0.0, 0.0, 0.0]
+    cluster = "cone3"
+    defocus = 0.0
+    dlambda = 0.0
+    enabled = true
+    fnumber = 6.7
+    group = "cone3"
+    name = "B45"
+    omega1 = false
+    omega2 = false
+    port = [-0.7822174414780846, 0.34725086054121557, -0.517254979773868]
+    power = 0.4
+    quad = ""
+    wavelength = 0.351
+
+        [beams.beam.spot]
+        a = 0.36
+        angle = 0.0
+        b = 0.36
+        halo = 0.0
+        halo_order = 2.0
+        halo_scale = 3.0
+        order = 4.2
+    [[beams.beam]]
+    aim = [6.0, 0.0, 0.0]
+    aim_frame = "backlighter"
+    aim_local = [0.0, 0.0, 0.0]
+    cluster = "cone3"
+    defocus = 0.0
+    dlambda = 0.0
+    enabled = true
+    fnumber = 6.7
+    group = "cone3"
+    name = "B46"
+    omega1 = false
+    omega2 = false
+    port = [-0.7822174414780847, -0.3472508605412151, -0.517254979773868]
+    power = 0.4
+    quad = ""
+    wavelength = 0.351
+
+        [beams.beam.spot]
+        a = 0.36
+        angle = 0.0
+        b = 0.36
+        halo = 0.0
+        halo_order = 2.0
+        halo_scale = 3.0
+        order = 4.2
+    [[beams.beam]]
+    aim = [6.0, 0.0, 0.0]
+    aim_frame = "backlighter"
+    aim_local = [0.0, 0.0, 0.0]
+    cluster = "cone3"
+    defocus = 0.0
+    dlambda = 0.0
+    enabled = true
+    fnumber = 6.7
+    group = "cone3"
+    name = "B47"
+    omega1 = false
+    omega2 = false
+    port = [-0.5719736764200414, -0.6366265776588951, -0.517254979773868]
+    power = 0.4
+    quad = ""
+    wavelength = 0.351
+
+        [beams.beam.spot]
+        a = 0.36
+        angle = 0.0
+        b = 0.36
+        halo = 0.0
+        halo_order = 2.0
+        halo_scale = 3.0
+        order = 4.2
+    [[beams.beam]]
+    aim = [6.0, 0.0, 0.0]
+    aim_frame = "backlighter"
+    aim_local = [0.0, 0.0, 0.0]
+    cluster = "cone2"
+    defocus = 0.0
+    dlambda = 0.0
+    enabled = true
+    fnumber = 6.7
+    group = "cone2"
+    name = "B53"
+    omega1 = false
+    omega2 = false
+    port = [-0.6693887973544173, 0.0, -0.7429122680212025]
+    power = 0.4
+    quad = ""
+    wavelength = 0.351
+
+        [beams.beam.spot]
+        a = 0.36
+        angle = 0.0
+        b = 0.36
+        halo = 0.0
+        halo_order = 2.0
+        halo_scale = 3.0
+        order = 4.2
+    [[beams.beam]]
+    aim = [6.0, 0.0, 0.0]
+    aim_frame = "backlighter"
+    aim_local = [0.0, 0.0, 0.0]
+    cluster = "cone1"
+    defocus = 0.0
+    dlambda = 0.0
+    enabled = true
+    fnumber = 6.7
+    group = "cone1"
+    name = "B58"
+    omega1 = false
+    omega2 = false
+    port = [-0.3651211621933184, 0.0, -0.930960008227314]
+    power = 0.4
+    quad = ""
+    wavelength = 0.351
+
+        [beams.beam.spot]
+        a = 0.36
+        angle = 0.0
+        b = 0.36
+        halo = 0.0
+        halo_order = 2.0
+        halo_scale = 3.0
+        order = 4.2
+
+[diagnostic_definitions.nif_dante1]
+chain = ["C:\\Users\\alexa\\.julia\\dev\\Briareus\\.claude\\worktrees\\agent-ab64e6f7dca634647\\data\\diagnostics\\nif_dante1_2021.toml", "C:\\Users\\alexa\\.julia\\dev\\Briareus\\.claude\\worktrees\\agent-ab64e6f7dca634647\\data\\diagnostics\\nif_dante1.toml"]
+file = "C:\\Users\\alexa\\.julia\\dev\\Briareus\\.claude\\worktrees\\agent-ab64e6f7dca634647\\data\\diagnostics\\nif_dante1.toml"
+origin = "builtin"
+
+    [diagnostic_definitions.nif_dante1.definition]
+    facility = "NIF"
+    id = "nif_dante1"
+    kind = "xray_power"
+    name = "NIF Dante 1"
+    public = true
+    schema = 1
+
+        [[diagnostic_definitions.nif_dante1.definition.channel]]
+        cathode = "Al"
+        energy_eV = 1170
+        number = 1
+        solid_angle_sr = 6.51e-7
+
+            [[diagnostic_definitions.nif_dante1.definition.channel.filters]]
+            material = "Mg"
+            thickness_um = 22
+        [[diagnostic_definitions.nif_dante1.definition.channel]]
+        cathode = "Al"
+        energy_eV = 3060
+        number = 2
+        solid_angle_sr = 1.9e-7
+
+            [[diagnostic_definitions.nif_dante1.definition.channel.filters]]
+            material = "polyimide"
+            thickness_um = 47
+
+            [diagnostic_definitions.nif_dante1.definition.channel.mirror]
+            angle_deg = 1.9
+            kind = "mlm"
+        [[diagnostic_definitions.nif_dante1.definition.channel]]
+        cathode = "Al"
+        energy_eV = 250
+        grid = 0.088
+        number = 3
+        solid_angle_sr = 5.74e-7
+
+            [[diagnostic_definitions.nif_dante1.definition.channel.filters]]
+            material = "lexan"
+            thickness_um = 4
+
+            [diagnostic_definitions.nif_dante1.definition.channel.mirror]
+            angle_deg = 3.5
+            kind = "SiO2"
+        [[diagnostic_definitions.nif_dante1.definition.channel]]
+        cathode = "Al"
+        energy_eV = 470
+        number = 4
+        solid_angle_sr = 5.56e-7
+
+            [[diagnostic_definitions.nif_dante1.definition.channel.filters]]
+            material = "V"
+            thickness_um = 1.75
+
+            [diagnostic_definitions.nif_dante1.definition.channel.mirror]
+            angle_deg = 2.5
+            kind = "SiO2"
+        [[diagnostic_definitions.nif_dante1.definition.channel]]
+        cathode = "Al"
+        energy_eV = 710
+        grid = 0.088
+        number = 5
+        solid_angle_sr = 6.51e-7
+
+            [[diagnostic_definitions.nif_dante1.definition.channel.filters]]
+            material = "Co"
+            thickness_um = 1.4
+            [[diagnostic_definitions.nif_dante1.definition.channel.filters]]
+            material = "CH"
+            thickness_um = 0.2
+        [[diagnostic_definitions.nif_dante1.definition.channel]]
+        cathode = "Cr"
+        energy_eV = 870
+        grid = 0.088
+        number = 6
+        solid_angle_sr = 6.51e-7
+
+            [[diagnostic_definitions.nif_dante1.definition.channel.filters]]
+            material = "Cu"
+            thickness_um = 2
+        [[diagnostic_definitions.nif_dante1.definition.channel]]
+        cathode = "Ni"
+        energy_eV = 940
+        grid = 0.088
+        number = 7
+        solid_angle_sr = 6.51e-7
+
+            [[diagnostic_definitions.nif_dante1.definition.channel.filters]]
+            material = "Mg"
+            thickness_um = 5.0
+            [[diagnostic_definitions.nif_dante1.definition.channel.filters]]
+            material = "Zn"
+            thickness_um = 0.65
+            [[diagnostic_definitions.nif_dante1.definition.channel.filters]]
+            material = "CH"
+            thickness_um = 0.1
+        [[diagnostic_definitions.nif_dante1.definition.channel]]
+        cathode = "Al"
+        energy_eV = 1170
+        grid = 0.088
+        number = 8
+        solid_angle_sr = 6.51e-7
+
+            [[diagnostic_definitions.nif_dante1.definition.channel.filters]]
+            material = "Mg"
+            thickness_um = 22
+        [[diagnostic_definitions.nif_dante1.definition.channel]]
+        cathode = "Ni"
+        energy_eV = 1430
+        grid = 0.088
+        number = 9
+        solid_angle_sr = 6.51e-7
+
+            [[diagnostic_definitions.nif_dante1.definition.channel.filters]]
+            material = "Al"
+            thickness_um = 20
+        [[diagnostic_definitions.nif_dante1.definition.channel]]
+        cathode = "Al"
+        energy_eV = 1710
+        number = 10
+        solid_angle_sr = 6.51e-7
+
+            [[diagnostic_definitions.nif_dante1.definition.channel.filters]]
+            material = "Si"
+            thickness_um = 20
+        [[diagnostic_definitions.nif_dante1.definition.channel]]
+        cathode = "Al"
+        energy_eV = 3430
+        grid = 0.088
+        number = 11
+        solid_angle_sr = 6.51e-7
+
+            [[diagnostic_definitions.nif_dante1.definition.channel.filters]]
+            material = "Fe"
+            thickness_um = 1.0
+            [[diagnostic_definitions.nif_dante1.definition.channel.filters]]
+            material = "Cr"
+            thickness_um = 0.65
+            [[diagnostic_definitions.nif_dante1.definition.channel.filters]]
+            material = "parylene"
+            thickness_um = 5.0
+        [[diagnostic_definitions.nif_dante1.definition.channel]]
+        cathode = "Al"
+        energy_eV = 2580
+        number = 12
+        solid_angle_sr = 6.51e-7
+
+            [[diagnostic_definitions.nif_dante1.definition.channel.filters]]
+            material = "saran"
+            thickness_um = 66
+        [[diagnostic_definitions.nif_dante1.definition.channel]]
+        cathode = "Al"
+        energy_eV = 3000
+        number = 13
+        solid_angle_sr = 6.51e-7
+
+            [[diagnostic_definitions.nif_dante1.definition.channel.filters]]
+            material = "Ag"
+            thickness_um = 4.4
+        [[diagnostic_definitions.nif_dante1.definition.channel]]
+        cathode = "Al"
+        energy_eV = 1700
+        number = 14
+        solid_angle_sr = 6.51e-7
+
+            [[diagnostic_definitions.nif_dante1.definition.channel.filters]]
+            material = "Si"
+            thickness_um = 20
+        [[diagnostic_definitions.nif_dante1.definition.channel]]
+        cathode = "Ni"
+        energy_eV = 940
+        grid = 0.088
+        number = 15
+        solid_angle_sr = 6.51e-7
+
+            [[diagnostic_definitions.nif_dante1.definition.channel.filters]]
+            material = "Mg"
+            thickness_um = 5.0
+            [[diagnostic_definitions.nif_dante1.definition.channel.filters]]
+            material = "Zn"
+            thickness_um = 0.65
+            [[diagnostic_definitions.nif_dante1.definition.channel.filters]]
+            material = "CH"
+            thickness_um = 0.1
+        [[diagnostic_definitions.nif_dante1.definition.channel]]
+        cathode = "Ni"
+        energy_eV = 14370
+        number = 16
+        solid_angle_sr = 1.77e-6
+
+            [[diagnostic_definitions.nif_dante1.definition.channel.filters]]
+            material = "Al"
+            thickness_um = 250
+        [[diagnostic_definitions.nif_dante1.definition.channel]]
+        cathode = "Cr"
+        energy_eV = 690
+        grid = 0.088
+        number = 17
+        solid_angle_sr = 6.51e-7
+
+            [[diagnostic_definitions.nif_dante1.definition.channel.filters]]
+            material = "Co"
+            thickness_um = 1
+        [[diagnostic_definitions.nif_dante1.definition.channel]]
+        cathode = "Ni"
+        energy_eV = 3660
+        number = 18
+        solid_angle_sr = 1.77e-6
+
+            [[diagnostic_definitions.nif_dante1.definition.channel.filters]]
+            material = "Fe"
+            thickness_um = 1.0
+            [[diagnostic_definitions.nif_dante1.definition.channel.filters]]
+            material = "Cr"
+            thickness_um = 0.65
+            [[diagnostic_definitions.nif_dante1.definition.channel.filters]]
+            material = "parylene"
+            thickness_um = 5.0
+
+        [diagnostic_definitions.nif_dante1.definition.line_of_sight]
+        phi_deg = 274.0
+        source = "Rubery et al., RSI (2023) §II"
+        theta_deg = 143.0
+
+        [diagnostic_definitions.nif_dante1.definition.recording]
+        mode = "history"
+
+        [diagnostic_definitions.nif_dante1.definition.view]
+        through = "leh_bottom"
+
+[drive]
+beam_model = "fcone"
+cavity = false
+cavity_point = [0.0, 0.0, 0.0]
+films = []
+spot_radius = 0.5
+unconverted_ratio = [0.0, 0.0]
+
+    [drive.profile]
+
+[optimize]
+by = "group"
+capsule_keepout = true
+capsule_min = 0.0
+fields = ["z", "r"]
+hold_drive = true
+iterations = 100
+keepout = false
+keepout_min = 0.0
+max_evaluations = 1000
+objective = "legendre"
+spill = 0.2
+
+    [optimize.deltas]
+    defocus = 2.0
+    phi = 1.0
+    power = 0.4
+    r = 1.0
+    u = 1.0
+    v = 1.0
+    w = 1.0
+    z = 1.0
+
+    [optimize.weights]
+    1 = 1.0
+    2 = 1.0
+    3 = 1.0
+    4 = 1.0
+
+[review]
+hardware = ["main", "substrate"]
+peak_fraction = 0.0001
+quality = "quick"
+targets = ["backlighter"]
+wings = true
+
+    [review.errors]
+    focus = 1.0
+    hardware_tolerance = 0.0
+    pointing = 0.05
+    target_offset = 0.025
+
+[sweep]
+axis = "z"
+capture = false
+clearance = true
+frame = "none"
+los = false
+los_object = "none"
+mode = "translate"
+optimize = false
+quality = "quick"
+start = -1.0
+step = 0.5
+step_index = 0
+step_key = "none"
+stop = 1.0
+subject = "none"
+
+[talis]
+capture = ["backlighter"]
+diagnostics = []
+hardware = ["main", "substrate"]
+omega1 = true
+pivot = "tcc"
+pivot_point = [0.0, 0.0, 0.0]
+tolerance = 0.5
+
+[target]
+active_foil = "backlighter"
+excluded = []
+kind = "foil"
+windows = []
+
+    [target.mesh]
+    capsule_h = 0.3
+    h = 0.6
+
+    [target.params]
+    capsule_radius = 0.9
+    conversion = 0.02
+    distance = 6.0
+    leh_closure = 0.0
+    leh_closure_time = 5.0
+    leh_closure_width = 0.5
+    leh_open_fraction = 0.84
+    leh_radius = 1.55
+    length = 10.1
+    main_radius = 1.0
+    radius = 2.875
+    wall_albedo = 0.85
+    wall_conversion = 0.8
+    width = 2.0
+
+    [[target.parts]]
+    aperture = false
+    coords = "cartesian"
+    file = ""
+    foil = false
+    frame = "backlighter"
+    inward = false
+    kind = "disk"
+    name = "substrate"
+    object = ""
+    observed = false
+    steps = []
+    two_sided = false
+    wall = false
+
+        [target.parts.values]
+        albedo = 0.0
+        conversion = 0.0
+        h = 0.0
+        phi = 0.0
+        r1 = 1.5
+        rotation = 0.0
+        theta = 180.0
+        x = 0.0
+        y = 0.0
+        z = -0.3
+
+[time]
+diagnostics = ["nif_dante1"]
+
+[view]
+beam_color = "group"
+beam_length = 0.0
+beams = "rays"
+color = "component"
+cut_axis = "z"
+cut_azimuth = 225.0
+cut_components = ["cap_bottom", "cap_top", "wall"]
+cut_kind = "sector"
+cut_line = [0.0, 0.0, 0.0]
+cut_normal = [0.0, -1.0, 0.0]
+cut_point = [0.0, 0.0, 0.0]
+cut_range = [-inf, +inf]
+cut_rotation = 0.0
+cut_shift = 0.0
+cut_width = 90.0
+cutaway = true
+hidden_beams = []
+show_off = true
+shown_1w = []
+shown_2w = []
+side = false
+
+    [view.display]

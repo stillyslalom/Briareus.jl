@@ -87,7 +87,7 @@ ColumnLayout {
         enabled: app.bnAimFrame >= 0
         onClicked: Julia.br_aim_at_frame()
         ToolTip.visible: hovered
-        ToolTip.text: "Point the beams at the frame's center (a part's centroid, a template frame's origin)"
+        ToolTip.text: "Point the beams at the frame's center (a part's centroid, a piece frame's origin)"
     }
     Note { text: "Coordinates in " + app.bnAimFrameLabel + "; shown: the mean aim." }
     PropRow { label: "x"; value: app.bn_aim_x; unit: "mm"; onEdited: (text) => Julia.br_edit_node("aim_x", text) }

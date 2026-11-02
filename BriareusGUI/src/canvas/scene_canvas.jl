@@ -561,12 +561,12 @@ function _draw_selection!(c::SceneCanvas, sess::DesignSession)
     drawn = c.drawn[]
     pts = Point3f[]
     if name !== nothing && length(drawn) == length(t.tri_area)
-        ci = findfirst(x -> x.name === name, t.components)
+        ci = findfirst(x -> x.name === name || x.part === name, t.components)
         # a part left out of the calculations is highlighted on its ghost
         g = sess.target.ghost[]
         tt = ci === nothing && g !== nothing ? g : t
-        # an entrance hole with its closing lip
-        cis = findall(x -> x.name in with_lips((name,)), tt.components)
+        # an entrance hole with its closing lip; a part made in pieces with all of them
+        cis = findall(x -> x.name in with_lips((name,)) || x.part === name, tt.components)
         # what the cutaway keeps (a ghost is drawn whole: no cut)
         r = cut_region(sess.view; scale = t.scale, on = tt === t)
         for k in eachindex(tt.tri_area)
@@ -727,23 +727,25 @@ end
 
 const WINDOW_COLORS = (closed = RGBAf(0.08, 0.08, 0.08, 1), open = RGBAf(0.9, 0.3, 0.1, 1))
 
-# Outline each diagnostic window of a hohlraum on the wall, just inside and just
-# outside it (an open window is a hole; a closed one is a patch colored as its own
-# component): arcs along φ at its z edges and axial lines at its φ edges.
+# Outline each diagnostic window of the hohlraum parts on their walls, just inside and
+# just outside them (an open window is a hole; a closed one is a patch colored as its own
+# component): arcs along φ at its z edges and axial lines at its φ edges, in the part's
+# frame.
 function _draw_windows!(c::SceneCanvas, sess::DesignSession)
     ts = sess.target
-    ws = ts.kind[] === :hohlraum ? ts.windows[] : WindowSpec[]
-    if isempty(ws)
+    hs = [p for p in ts.parts[] if p.kind === :hohlraum && !isempty(p.windows)]
+    if isempty(hs)
         _update!(c.outlines, _NOSEG3; color = [NAN_COLOR, NAN_COLOR])
         c.dirty[] = true
         return c
     end
-    R = ts.params[][:radius]
+    frames = part_frames(ts)
     segs = Point3f[]
     cols = RGBAf[]
     narc = 12
-    for w in ws, r in (R - 0.01, R + 0.01)
-        p(φ, z) = Point3f(r * cos(φ), r * sin(φ), z)
+    for h in hs, w in h.windows, r in (h.values[:radius] - 0.01, h.values[:radius] + 0.01)
+        R, F = h.values[:radius], frames[h.name]
+        p(φ, z) = Point3f(to_chamber(F, (r * cos(φ), r * sin(φ), z)))
         col = w.open ? WINDOW_COLORS.open : WINDOW_COLORS.closed
         if w.round
             # a circle on the unrolled wall: arc length R φ by z

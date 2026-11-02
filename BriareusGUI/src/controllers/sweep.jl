@@ -24,8 +24,7 @@ const SWEEP_MAX_STEPS = 201
     SweepState()
 
 State of the placement sweep. Settings: `subject` (the part moved, with the parts
-placed in its frame and the beams aimed in those frames; or `:backlighter`, a backlighter
-target's foil frame; `:none` until chosen, see [`sweep_subject`](@ref)), `frame` and
+placed in its frame and the beams aimed in those frames; `:none` until chosen, see [`sweep_subject`](@ref)), `frame` and
 `axis` (the move is along `axis`, one of [`SWEEP_AXES`](@ref), of the named frame,
 [`part_frames`](@ref)), `start`, `stop`, `step` (the shifts, mm; the sweep translates,
 it does not turn); or, with `mode = :step` (`:translate` by default), the number
@@ -193,17 +192,15 @@ end
 """
     sweep_subjects(sess) -> Vector{Symbol}
 
-What a sweep can move: the backlighter foil's frame (`:backlighter`, a foil target's)
-and every part.
+What a sweep can move: every part.
 """
-sweep_subjects(sess) =
-    [sess.target.kind[] === :foil ? [:backlighter] : Symbol[]; [p.name for p in sess.target.parts[]]]
+sweep_subjects(sess) = Symbol[p.name for p in sess.target.parts[]]
 
 """
     sweep_subject(sess) -> Symbol
 
 The subject the sweep moves: the chosen one when the design still has it, otherwise the
-first of [`sweep_subjects`](@ref) (the foil of a backlighter target), or `:none`.
+first of [`sweep_subjects`](@ref) (a starter's first part: the foil of a backlighter), or `:none`.
 """
 function sweep_subject(sess)
     subs = sweep_subjects(sess)
@@ -251,7 +248,7 @@ end
     sweep_los_object(sess) -> Symbol
 
 The object the sweep's line of sight passes: the chosen one when the target has it,
-otherwise a foil target's main sphere (`:main`) or the observed surface
+otherwise a backlighter starter's main-target sphere (`:main`) or the observed surface
 ([`observed_name`](@ref)), or `:none`.
 """
 function sweep_los_object(sess)
@@ -285,11 +282,9 @@ function _moved_frames(parts, subject::Symbol)
 end
 
 # The target components that move with the subject: the parts of the moved frames (a
-# VisRad part's components carry its name as a prefix) and, for `:backlighter` (a foil
-# target's frame), the template's foil.
+# VisRad part's components carry its name as a prefix, a hohlraum part's are its pieces).
 function _moved_components(t::Target, parts, frames::Set{Symbol})
     moved = Set{Symbol}()
-    :backlighter in frames && push!(moved, FOIL_NAME)
     for p in parts
         p.name in frames || continue
         for c in t.components
@@ -364,8 +359,6 @@ end
 # aimed in it, exactly as a rebuilt design would place them (to round-off).
 struct _FrameSweepDesign
     target::Target
-    kind::Symbol
-    params::Any
     parts::Vector{PartSpec}
     edit::Any
     frames::Dict{Symbol,Frame}
@@ -378,7 +371,7 @@ end
 
 # The rigid maps (chamber to chamber) of the frames a sweep value moves.
 function _sweep_maps(d::_FrameSweepDesign, value)
-    fr = part_frames(d.kind, d.params, d.edit(d.parts, value))
+    fr = part_frames(d.edit(d.parts, value))
     return Dict{Symbol,Frame}(n => compose(F, inv(d.frames[n])) for (n, F) in fr if F != d.frames[n])
 end
 
@@ -450,7 +443,7 @@ function _sweep_design(inp)
     i = findfirst(p -> p.name === inp.subject, inp.parts)   # (a part: `_sweep_inputs`)
     edit = inp.mode === :step ? _SetStepNumber(i, inp.step_index, inp.step_key) :
            _MoveCenter(i, dir, inp.frames[inp.parts[i].frame])
-    design = _FrameSweepDesign(t, inp.kind, inp.params, inp.parts, edit, inp.frames,
+    design = _FrameSweepDesign(t, inp.parts, edit, inp.frames,
                                _component_owners(t, inp.parts), inp.beams, inp.aim_frame, bframes, pointing)
     return design, dir, follow
 end
@@ -478,14 +471,9 @@ end
 function _sweep_inputs(sess)
     sw, ts, bt = sess.sweep, sess.target, sess.beams
     subject = sweep_subject(sess)
-    subject === :none && throw(ArgumentError("add a part (or use a backlighter target) to sweep"))
+    subject === :none && throw(ArgumentError("add a part to sweep"))
     mode = sw.mode[]
     mode === :step && _sweep_step(ts, subject, sw.step_index[], sw.step_key[])
-    if subject === :backlighter
-        moved = _moved_frames(ts.parts[], subject)
-        _dependent_frames(ts.parts[], moved) == moved ||
-            throw(ArgumentError("parts with placement steps refer to the backlighter frame: sweep a part instead"))
-    end
     frame = sweep_frame(sess)
     any((sw.clearance[], sw.los[], sw.capture[], sw.optimize[])) ||
         throw(ArgumentError("choose at least one check"))
@@ -493,7 +481,7 @@ function _sweep_inputs(sess)
     foil = active_foil(ts)
     (sw.los[] || sw.capture[]) && !_has_part(ts.target[], foil) &&
         throw(ArgumentError("the line of sight and the captured power need the backlighter foil " *
-                            "(a foil target's, or a part with the role Backlighter foil)"))
+                            "(a part with the role Backlighter foil)"))
     obj = sweep_los_object(sess)
     sw.los[] && obj === :none && throw(ArgumentError("choose the object the line of sight passes"))
     idx = findall(bt.enabled[])
@@ -516,7 +504,7 @@ function _sweep_inputs(sess)
     end
     return (; target = ts.target[], frames = part_frames(ts), parts = ts.parts[], subject, frame,
             axis = sw.axis[], values, idx, mode, step_index = sw.step_index[], step_key = sw.step_key[],
-            kind = ts.kind[], params = ts.params[], beams = bt.beams[][idx], aim_frame = bt.aim_frame[][idx],
+            beams = bt.beams[][idx], aim_frame = bt.aim_frame[][idx],
             clusters = bt.cluster[][idx],
             clearance = sw.clearance[] ? merge(clearance_kwargs(rv), REVIEW_QUALITY[q]) : nothing,
             los = sw.los[] ? sweep_los(sess) : nothing, los_object = obj,
@@ -645,7 +633,7 @@ end
 
 Put step `k` of the sweep into the design, as one edit (undone as one): the subject moves
 by the step's shift along the sweep's axis from where it was when the sweep ran (a part's
-center; the backlighter foil's distance, which moves it along chamber `x` only), the
+center), the
 parts placed in its frame and the beams aimed in those frames with it, and with
 re-optimization on, the enabled beams take the step's optimized pointing. Refused (with
 `status` set, returning `false`) when the design changed since the sweep.
@@ -668,12 +656,6 @@ function apply_sweep_step!(sess, k::Integer)
         steps = copy(ts.parts[][i].steps)
         steps[inp.step_index] = _step_with(steps[inp.step_index], inp.step_key, row.value)
         _set_steps!(ts, i, steps)
-    elseif inp.subject === :backlighter && ts.kind[] === :foil
-        abs(abs(inp.dir[1]) - 1) < 1e-12 ||
-            throw(ArgumentError("the backlighter foil moves along chamber x only (its distance from TCC)"))
-        p = copy(ts.params[])
-        p[:distance] += Δ[1]
-        _try_build!(ts; params = p)
     else
         i = part_index(sess.target, inp.subject)
         i === nothing && throw(ArgumentError("no part $(inp.subject)"))

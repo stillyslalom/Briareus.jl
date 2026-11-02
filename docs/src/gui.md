@@ -10,7 +10,7 @@ summary and workspace files. It serves target designers who would otherwise iter
 VisRad, and anyone who wants the library's results without writing a script; every
 action in the window is a call into the same functions the scripts and tutorials use.
 
-![The Briareus window: the NIF hohlraum template after a pointing optimization, cut away and colored by the incident x-ray flux, with the NIF quads drawn as rays colored by cone; the model tree on the left, the drive's properties on the right, and the capsule modes and laser power accounting in the results panel below.](assets/gui/overview.png)
+![The Briareus window: the NIF hohlraum starter after a pointing optimization, cut away and colored by the incident x-ray flux, with the NIF quads drawn as rays colored by cone; the model tree on the left, the drive's properties on the right, and the capsule modes and laser power accounting in the results panel below.](assets/gui/overview.png)
 
 The window is laid out as a CAD tool rather than as a sequence of steps: everything is
 reachable at any time, and each analysis reports when its result is out of date.
@@ -99,15 +99,15 @@ exists in the installed tree but holds no package, and the install would fail. T
 
 ## A first session
 
-The steps below design the drive of a NIF hohlraum from the built-in template; each
+The steps below design the drive of a NIF hohlraum from the *Hohlraum with capsule* starter; each
 names the menu entries, and the panels are described in [The window](@ref).
 
-1. **Open.** `briareus` opens on the hohlraum template with the 48 NIF quads at
-   illustrative example cone aims (`nif_quads`). The model tree lists the hohlraum's
-   components (wall, caps, entrance holes, capsule), the beams by cone and quad, and the
-   analyses.
-2. **The target.** Selecting *Target* in the tree shows the template's dimensions,
-   wall material and mesh in Properties. Target ▸ Mesh sets the element sizes:
+1. **Open.** `briareus` opens on the *Hohlraum with capsule* starter (a hohlraum part and
+   a capsule sphere) with the 48 NIF quads at illustrative example cone aims
+   (`nif_quads`). The model tree lists the hohlraum part with its pieces under it (wall,
+   caps, entrance holes), the capsule, the beams by cone and quad, and the analyses.
+2. **The target.** Selecting the hohlraum part in the tree shows its dimensions and
+   wall material in Properties, and *Target* the mesh. Target ▸ Mesh sets the element sizes:
    presets from a work-precision study on the NIF hohlraum
    (`examples/mesh_convergence.jl`) give the capsule P2/P0 and P4/P0 to about 0.5
    (coarse), 0.1 (standard) and 0.02 (fine, converged) percentage points.
@@ -126,7 +126,7 @@ names the menu entries, and the panels are described in [The window](@ref).
    parts below 0.1 % of the delivered power on one line, and the light that misses the
    target); for a foil it lists the spot statistics instead. *Capsule θ–φ map* in the
    drive's properties (or View ▸ Capsule θ–φ map) puts the capsule's flux map in the 3D
-   view's place. On the template at equal power per quad (an inner-cone fraction of
+   view's place. On the starter at equal power per quad (an inner-cone fraction of
    1/3), P2/P0 starts near −15 %: a static solve without cross-beam energy transfer or
    the hohlraum's dynamics is not balanced at a fielded cone fraction (the N221204
    benchmark's static P2/P0 at 5.5 ns is −26 %; the shot's balance comes from
@@ -148,7 +148,7 @@ names the menu entries, and the panels are described in [The window](@ref).
    target-configuration rules, on NIF beams only) run in the background and color the beams by their worst status. A result
    is marked out of date in the tree when the beams or the target change afterward.
 
-   ![The TaLIS rules checked on every NIF quad of the template: the rule-tolerance note, the per-rule summary, and every check with its margin; the beams are colored by their worst status. On the optimized pointing the eight 23.5° quads fail 3ω incidence on the wall: their axes meet it at 69.9°, and the steepest ray of a quad's f/7.9 cone is 3.6° steeper (VisRad's report measures incidence on that ray). The 48 reviews are 3ω clearance at the entrance-hole edges.](assets/gui/talis.png)
+   ![The TaLIS rules checked on every NIF quad of the starter hohlraum: the rule-tolerance note, the per-rule summary, and every check with its margin; the beams are colored by their worst status. On the optimized pointing the eight 23.5° quads fail 3ω incidence on the wall: their axes meet it at 69.9°, and the steepest ray of a quad's f/7.9 cone is 3.6° steeper (VisRad's report measures incidence on that ray). The 48 reviews are 3ω clearance at the entrance-hole edges.](assets/gui/talis.png)
 
 8. **Save.** File ▸ Save session (Ctrl + S) writes the whole design, from the target to
    the analyses' settings and the view, to a `.briar` file: a zip archive of the
@@ -181,8 +181,9 @@ image of the target (Compute ▸ X-ray image along the view) and the drive throu
 
 ![The Time tab after a drive history on N221204's pulse shape: the capsule radiation temperature, a synthetic Dante 1 and a₂/a₀, a₄/a₀ against time, with the 3D view colored by the history's step at peak temperature.](assets/gui/time_history.png)
 
-A backlighter design starts from File ▸ New target ▸ Backlighter foil, which loads the
-OMEGA backlighter beams; the drive then reports the foil spot's mean and peak intensity,
+A backlighter design starts from File ▸ New target ▸ Backlighter foil (the *Backlighter
+foil* starter: a foil part with the foil role, 6 mm from TCC facing it, and an absorbing
+sphere at TCC standing in for the main target), which loads the OMEGA backlighter beams; the drive then reports the foil spot's mean and peak intensity,
 its nonuniformity and the fraction of the power inside the spot, and the optimization
 offers the foil-uniformity objective.
 
@@ -192,8 +193,8 @@ offers the foil-uniformity objective.
 
 ### Model tree
 
-The left panel lists the target's components (a hohlraum's wall, caps, entrance holes
-and capsule; diagnostic windows; free parts) with a swatch of their color in the 3D
+The left panel lists the target's parts (a hohlraum part with its pieces under it: wall,
+caps, entrance holes and diagnostic windows; the capsule; other parts) with a swatch of their color in the 3D
 view, so the tree is the color key; the beams by group, quad and beam; and the analyses
 (drive, optimization, clearance, TaLIS) with their state. Selecting a node selects it in
 the 3D view and shows it in Properties; Ctrl + click adds components or beams to the
@@ -235,20 +236,32 @@ collects every explanation by page. Help ▸ Documentation opens this page.
 
 ![The Help screen at the placement sweep's page: the explanations behind the ⓘ marks, listed by page, with a link to this documentation.](assets/gui/help.png)
 
-- **Target:** its dimensions and wall material, and the mesh: a preset (above) or
-  element sizes in mm for the wall and the capsule. The template (hohlraum with capsule,
-  backlighter foil, or custom parts only) starts a target: File ▸ New target.
-- **Windows** ([`WallWindow`](@ref)): azimuth, height, round (the default, with the
-  exact disk area) or rectangular, open or closed with their own albedo and conversion
+- **Target:** the mesh: a preset (above) or element sizes in mm for the walls and parts
+  and for the capsule. A target is made of parts: Insert ▸ *Hohlraum with capsule* or
+  *Backlighter foil* adds a starter assembly in the selected part's or piece's frame (TCC
+  with nothing selected), its names made unique (`hohlraum_2`), and File ▸ New target
+  starts a target of one starter (*Empty*: a sphere at TCC). The starters' dimensions are
+  illustrative; a session saved with the former hohlraum or foil template loads as these
+  parts.
+- **Hohlraum parts:** a cylindrical hohlraum ([`hohlraum`](@ref)) along the part's z,
+  in pieces named after the part (`hohlraum_wall`, `hohlraum_cap_top`, …): its length,
+  radius, entrance-hole radius, wall albedo and conversion, each end an entrance hole or
+  closed (covered by its cap), the closing entrance holes, and its windows. Its wall and
+  caps hold the *Wall* role (the drive history's wall temperature); the clearance and
+  TaLIS checks keep the caps as hardware, the entrance holes' edges. Each end has a frame
+  (`hohlraum.leh_top`, `hohlraum.leh_bottom`: origin at the end's center, z pointing out
+  of the hohlraum, so one placement or aim mirrors between the two) and each window one
+  at its center on the wall (`hohlraum.window_1`).
+- **Windows** ([`WallWindow`](@ref)) in a hohlraum part's wall (its properties ▸ *Add
+  window*): azimuth, height, round (the default, with the exact disk area) or rectangular, open or closed with their own albedo and conversion
   efficiency. Overlapping windows, or a window past the end of the wall, are refused.
 - **Parts:** spheres, disks, washers, rectangles, cylinders and cones placed anywhere,
   with their own albedo, conversion, sidedness, aperture flag and element size: a
   shield, a stalk, a detector aperture, a second foil. A part is placed in a named
-  frame ([`Frame`](@ref), resolved with [`resolve_frames`](@ref)): the chamber's, an
-  entrance hole's (z pointing out of the hohlraum, so one placement mirrors between the
-  two), the backlighter foil's (origin at its center, z along its front normal, toward
-  TCC), or another part's own frame (origin at its center, z its axis); it moves and
-  turns with that frame when the target's dimensions or that part change. Its position
+  frame ([`Frame`](@ref), resolved with [`resolve_frames`](@ref)): the chamber's, another
+  part's own frame (origin at its center, z its axis: a foil's z is its front normal),
+  or a hohlraum part's end or window frame; it moves and turns with that frame when that
+  part changes. Its position
   is given in Cartesian, cylindrical or spherical coordinates of that frame
   ([`coords_of`](@ref)), and its orientation by the axis polar and azimuth angles and a
   rotation, in VisRad's order ([`euler_rotation`](@ref)). Changing the frame keeps the
@@ -271,11 +284,11 @@ collects every explanation by page. Help ▸ Documentation opens this page.
   VisRad workspace; a VisRad rectangle, sphere or cylindrical hohlraum keeps VisRad's
   own element grid unless the part is given an element size. A part's *Role* marks it
   for the analyses, and the part keeps its name: *Capsule* (the observed surface, one at
-  a time, taken from a hohlraum template's capsule; a CAD capsule is replaced in the
+  a time; a CAD capsule is replaced in the
   calculations by a sphere fitted to it, `fit_sphere`, so a fill tube does not count),
   *Backlighter foil* (a flat part or a mesh), *Wall* (a re-emitting cavity surface: the
   drive history's wall temperature, and a surface the clearance and TaLIS checks land the
-  beams on, as the template's wall), or *Thin film* (left out of the drive's cavity,
+  beams on, as a hohlraum part's wall), or *Thin film* (left out of the drive's cavity,
   below). Any number of parts can be foils or walls; the *active
   foil* (Drive ▸ Active foil, or the check in the part's properties, shown with two or
   more foils) is the one whose spot statistics, map and objective the drive and the
@@ -284,12 +297,12 @@ collects every explanation by page. Help ▸ Documentation opens this page.
   tree marks the foils, and the active one among several.
 - **Beams** (a group, quad, beam, or any Ctrl-selected set): the aim relative to the
   ports (z, r and a tangential offset), or a common aim point (x, y, z, as VisRad points
-  a cluster at a reference point) in the beams' *Aim frame*: the chamber, an entrance
-  hole, the backlighter foil, or a part. The beams keep their coordinates in that frame
+  a cluster at a reference point) in the beams' *Aim frame*: the chamber, a part, or a
+  hohlraum part's end (its entrance hole and cap) or window, listed after their part. The beams keep their coordinates in that frame
   when it moves or turns (an aim 0.3 mm off a foil's center stays 0.3 mm off it) and when
   the part is renamed or given a role, and
   *Aim at the frame's center* points them at the frame's center (a part's centroid). The OMEGA
-  backlighter beams aim in the foil's frame; defocus, power, on/off, and where the axis
+  backlighter beams aim in the active foil's frame; defocus, power, on/off, and where the axis
   lands. *Look along beam* views the target from the beam's
   port. Beams belong to groups, as VisRad's clusters do: the cone by default, or any
   named set ("backlighter") made with *Move to group*; a group is edited, switched and
@@ -337,7 +350,7 @@ the cut's edges are outlined. (A slice narrower than 180° removes the intersect
 half-spaces, so what remains is a union that one set of GPU clip planes cannot express;
 splitting the triangles also keeps picking and the outline exact.)
 
-![Display modes and a bounded sector cut on the hohlraum template, colored by the incident x-ray flux: the top cap drawn as a wireframe (its Display setting in Properties), the bottom cap semi-transparent, and a 120° slice of the wall toward the view removed between z = −3 mm and z = 3 mm, clipped at the cut rather than by whole elements.](assets/gui/display_cut.png)
+![Display modes and a bounded sector cut on the starter hohlraum, colored by the incident x-ray flux: the top cap drawn as a wireframe (its Display setting in Properties), the bottom cap semi-transparent, and a 120° slice of the wall toward the view removed between z = −3 mm and z = 3 mm, clipped at the cut rather than by whole elements.](assets/gui/display_cut.png)
 
 ![A round diagnostic window 2 mm across in the wall at φ = 90°, z = 0, cut by the plane that contains its line of sight (from the window's centroid along θ = 90°, φ = 90°, at a rotation of 0°: the vertical plane with normal −x), so that the cut halves the window along the line. The drive, computed again with the window, puts 4.47 TW (1.17 %) of the 384 TW delivered on it.](assets/gui/cut_plane.png)
 

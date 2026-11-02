@@ -41,7 +41,7 @@ end
 EditHistory(; limit::Integer = 200) = EditHistory(Dict{String,Any}[], Dict{String,Any}[], nothing, limit)
 
 """
-    DesignSession(; kind = :hohlraum, resolution = :standard, preset = :nif_quads,
+    DesignSession(; starter = :hohlraum, resolution = :standard, preset = :nif_quads,
                   beams = nothing, deliver = f -> f())
 
 State of the Briareus window: `target` ([`TargetSetup`](@ref)), `beams`
@@ -60,8 +60,8 @@ copy extracted from a saved session to the file it was saved from, and `cad_chan
 the copies whose source changed since the save.
 
 The table starts from `beams` (a vector of `Beam`s) or a [`BEAM_PRESETS`](@ref) entry
-pointed for the target. Changing the target kind swaps a NIF preset for the OMEGA
-backlighter set (and back), unless the beams were imported.
+pointed for the target ([`preset_beams`](@ref)); `starter` is the parts the target
+starts from ([`TargetSetup`](@ref)).
 
 Background work: `spawn[]` (`false` by default; a window sets it) runs the scenario
 build and its evaluations on worker tasks, handing their results to
@@ -91,13 +91,13 @@ struct DesignSession
     sweep::SweepState
 end
 
-function DesignSession(; kind::Symbol = :hohlraum, resolution::Symbol = :standard,
-                       preset::Symbol = kind === :foil ? :omega_backlighter : :nif_quads,
+function DesignSession(; starter::Symbol = :hohlraum, resolution::Symbol = :standard,
+                       preset::Symbol = starter === :foil ? :omega_backlighter : :nif_quads,
                        beams = nothing, deliver = f -> f())
-    ts = TargetSetup(; kind, resolution)
+    ts = TargetSetup(; starter, resolution)
     bt = beams === nothing ?
-         BeamTable(preset_beams(preset; target_kind = kind, params = ts.params[]); preset,
-                   frames = part_frames(ts), aim_frame = preset_aim_frame(preset, kind)) :
+         BeamTable(preset_beams(preset; target = ts); preset,
+                   frames = part_frames(ts), aim_frame = preset_aim_frame(preset, ts)) :
          BeamTable(beams; frames = part_frames(ts))
     # the target remeshes CAD parts on the session's workers (the same switches)
     ts.deliver[] = deliver
@@ -115,7 +115,7 @@ function Base.show(io::IO, s::DesignSession)
     print(io, "DesignSession(", target_summary(s.target), "; ", beams_summary(s.beams), ")")
 end
 
-# The checks' default roles for the components of `t`, from the parts' and the template's
+# The checks' default roles for the components of `t`, from the parts'
 # roles (walls, the observed surface and the foils are where the beams land).
 function _default_selections!(sess::DesignSession, t::Target)
     l = _landing(sess.target, t)
@@ -126,16 +126,6 @@ end
 
 function _connect!(sess::DesignSession)
     ts, bt, dr = sess.target, sess.beams, sess.drive
-    on(ts.kind) do kind
-        # an optimization of the previous target does not apply to the new one
-        clear_optimize!(sess.optimize)
-        p = bt.preset[]
-        if kind === :foil && p in (:nif_quads, :nif_beams, :omega_hohlraum)
-            load_preset!(bt, :omega_backlighter; target_kind = kind, params = ts.params[])
-        elseif kind === :hohlraum && p === :omega_backlighter
-            load_preset!(bt, :nif_quads; target_kind = kind, params = ts.params[])
-        end
-    end
     # beams aimed in a frame move and turn with it (the frames change with the committed
     # inputs, before a target built on a worker is in place)
     on(fr -> follow_frames!(bt, fr; renames = ts.renames[]), ts.frames)
@@ -244,10 +234,10 @@ end
 """
     set_aim_frame!(sess::DesignSession, idx, frame::Symbol; keep = true) -> sess
 
-Hold the aims of beams `idx` in the frame named `frame` (`:tcc`, a template's frame or a
-part's, [`part_frames`](@ref)), so they move and turn with it. With `keep` the aims stay
+Hold the aims of beams `idx` in the frame named `frame` (`:tcc`, a part's or a hohlraum
+part's piece frame, [`part_frames`](@ref)), so they move and turn with it. With `keep` the aims stay
 where they are; with `keep = false` the beams aim at the frame's point
-([`frame_point`](@ref): a part's centroid, a template frame's origin).
+([`frame_point`](@ref): a part's centroid, a piece frame's origin).
 """
 function set_aim_frame!(sess::DesignSession, idx, frame::Symbol; keep::Bool = true)
     haskey(part_frames(sess.target), frame) || throw(ArgumentError("no frame named $frame"))
@@ -262,7 +252,7 @@ end
 The point a beam aims at in a frame when told to aim at the frame itself
 ([`set_aim_frame!`](@ref) with `keep = false`): a part's centroid (`part_centroid`, the
 center of a disk or a foil; a CAD part's origin may lie anywhere), or the frame's origin
-for a template frame (TCC, an entrance hole's center, the foil's center) and for a part
+for TCC, a piece frame (a hohlraum part's entrance hole or window center) and a part
 left out of the calculations.
 """
 function frame_point(sess::DesignSession, frame::Symbol)
@@ -395,7 +385,7 @@ function _counts_brief(rows)
 end
 
 # An optimization result no longer describes the beam table: its beams left the table
-# (a new preset or target template) or moved to other ports, or, once applied, the
+# (a new preset or target) or moved to other ports, or, once applied, the
 # optimized beams were edited since.
 function _optimum_stale(bs::AbstractVector, r)
     all(i -> i <= length(bs), r.indices) || return true
@@ -479,12 +469,12 @@ function build_scenario!(sess::DesignSession)
     runner = _runner(sess.spawn, sess.deliver)
     t0 = time()
     closed = _closed_enclosure(sess.target)
-    kind, params, mesh, parts = ts.kind[], ts.params[], ts.mesh[], ts.parts[]
+    mesh, parts = ts.mesh[], ts.parts[]
     foil = active_foil(ts)
     observed = observed_name(ts)
     runner(function ()
                # the CAD parts' file facets, for the drive's fit of their curved faces
-               references = _fit_references(t, kind, params, mesh, parts)
+               references = _fit_references(t, mesh, parts)
                _build_scenario(t, beams; closed, cavity, profile, references, foil, observed)
            end, function (out)
         g == dr.generation[] || return
@@ -523,23 +513,14 @@ function build_scenario!(sess::DesignSession)
 end
 
 # Whether the drive's target is a closed hohlraum enclosure, whose view factors are
-# balanced so its rows sum to one: one hohlraum (the template's components, or the
-# pieces of a single hohlraum part) and the part with the observed role only (other
-# free parts lie outside it), none of them left out (that leaves a hole).
-const _TEMPLATE_HOHLRAUM = (_TEMPLATE_WALL, :cap_top, :cap_bottom, :leh_top, :leh_bottom, :leh_top_lip,
-                            :leh_bottom_lip, _TEMPLATE_CAPSULE)
-_template_component(n::Symbol) = n in _TEMPLATE_HOHLRAUM || occursin(r"^window_\d+$", String(n))
+# balanced so its rows sum to one: the pieces of a single hohlraum part and the part with
+# the observed role only (other free parts lie outside it), none of them left out (that
+# leaves a hole).
 function _closed_enclosure(ts::TargetSetup)
     hs = [p.name for p in ts.parts[] if p.kind === :hohlraum]
-    if ts.kind[] === :hohlraum
-        isempty(hs) || return false
-        cavity = _template_component
-    else
-        length(hs) == 1 || return false
-        cavity = n -> n === hs[1]
-    end
+    length(hs) == 1 || return false
     obs = Set{Symbol}(p.name for p in ts.parts[] if p.observed)    # (left out or not)
-    inside(c) = (ts.kind[] === :hohlraum ? cavity(c.name) : cavity(c.part)) || c.name in obs || c.part in obs
+    inside(c) = c.part === hs[1] || c.name in obs || c.part in obs
     all(inside, ts.target[].components) || return false
     g = ts.ghost[]
     return g === nothing || !any(inside, g.components)
@@ -562,7 +543,7 @@ dense Float32 with factorization-free iterative solves (4 N² bytes, research no
 250 N^1.5 bytes (2.5 × their storage on a hohlraum; research notes, "Hierarchical view
 factors"). `bytes` must fit in half of this machine's memory; `limit` is the largest
 element count that does (or [`RADIATION_MAX_ELEMENTS`](@ref), which then sets
-`feasible`): about 160,000 elements on 32 GB. The mesh presets of the templates stay far
+`feasible`): about 160,000 elements on 32 GB. The mesh presets of the starters stay far
 below (16,000 elements at `:fine`), but an imported CAD workspace can hold 10⁵ elements.
 Above the limit [`build_scenario!`](@ref) computes the laser deposition alone.
 """
@@ -705,7 +686,7 @@ function include_components!(sess::DesignSession, names, include::Bool; spawn::B
         _try_build!(ts; excluded = ex)
         return sess
     end
-    kind, params, mesh, windows, parts = ts.kind[], ts.params[], ts.mesh[], ts.windows[], ts.parts[]
+    mesh, parts = ts.mesh[], ts.parts[]
     g = (sess.mesh_generation[] += 1)
     deliver = sess.deliver[]
     label = join(string.(names), ", ")
@@ -713,8 +694,8 @@ function include_components!(sess::DesignSession, names, include::Bool; spawn::B
     report(msg) = deliver(() -> g == sess.mesh_generation[] && _assign!(sess.meshing, msg))
     job = function ()
         back = [p for p in parts if p.name in names]
-        _mesh_parts(back, kind, params, mesh, ex, report, label; all = parts)
-        return _split_components(_target_components(kind, params, mesh, windows, parts; raw = ex), ex)
+        _mesh_parts(back, mesh, ex, report, label; all = parts)
+        return _split_components(_target_components(mesh, parts; raw = ex), ex)
     end
     commit = function (out)
         g == sess.mesh_generation[] || return
@@ -724,8 +705,7 @@ function include_components!(sess::DesignSession, names, include::Bool; spawn::B
             sess.status[] = "could not put $label back: " * ts.error[]
             return
         end
-        same = ts.kind[] === kind && ts.params[] === params && ts.mesh[] == mesh &&
-               ts.windows[] === windows && ts.parts[] === parts
+        same = ts.mesh[] == mesh && ts.parts[] === parts
         _try_build!(ts; excluded = ex, prebuilt = same ? out.value : nothing) &&
             (sess.status[] = "$label back in the calculations" * _radiation_note(sess))
     end
@@ -784,7 +764,7 @@ Base.@nospecializeinfer function import_visrad_workspace!(
     display_only in (:far, :none) || throw(ArgumentError("display_only must be :far or :none"))
     path = abspath(String(path))
     ts = sess.target
-    params, mesh = ts.params[], ts.mesh[]
+    mesh = ts.mesh[]
     g = (sess.mesh_generation[] += 1)
     deliver = sess.deliver[]
     file = basename(path)
@@ -807,9 +787,9 @@ Base.@nospecializeinfer function import_visrad_workspace!(
         far = display_only === :far ? _far_objects(filter(include, supported), ws.beams) : String[]
         length(far) < count(include, supported) || (far = String[])
         union!(names, Symbol.(far))
-        _mesh_parts(parts, :custom, params, mesh, names, report, file)
+        _mesh_parts(parts, mesh, names, report, file)
         report("$file: building the target…")
-        built = _split_components(_target_components(:custom, params, mesh, WindowSpec[], parts; raw = names),
+        built = _split_components(_target_components(mesh, parts; raw = names),
                                   names)
         return (; ws, parts, names, far, built, profile = visrad_profile(ws))
     end
@@ -823,8 +803,8 @@ Base.@nospecializeinfer function import_visrad_workspace!(
         end
         (; ws, parts, names, far, built, profile) = out.value
         # a target edit while the worker ran: build again from the current settings
-        same = ts.params[] === params && ts.mesh[] == mesh
-        if !_try_build!(ts; kind = :custom, windows = WindowSpec[], parts, excluded = names,
+        same = ts.mesh[] == mesh
+        if !_try_build!(ts; parts, excluded = names,
                         prebuilt = same ? built : nothing)
             sess.status[] = "the workspace's target was rejected: $(ts.error[])"
             spawn || throw(ArgumentError(sess.status[]))
@@ -934,8 +914,8 @@ function _pulse_key(beams, pulses)
 end
 
 """
-    retune_pulses(s::Scenario, beams, enabled, pulses; by = :quad, cap = 1.3, stay = 0.0)
-        -> NamedTuple
+    retune_pulses(s::Scenario, beams, enabled, pulses; by = :quad, cap = 1.3, stay = 0.0,
+                  wall = ()) -> NamedTuple
 
 Retune the enabled beams' powers to the drive of a reference shot in which every beam of
 `beams` (the scenario's, in its order) fired `pulses` (power per beam against time, keyed
@@ -945,11 +925,18 @@ the reference fires, the capsule flux's modes through l = 4 and its level are ma
 `cap` times its reference power, preferring the reference powers with weight `stay`.
 Disabled beams are the dropped ones. Returns the new `pulses` (by `by`, zero where the
 reference is), the `retune`, and drive histories of the `reference`, of the enabled
-beams on the reference pulses (`before`) and on the new ones (`after`).
+beams on the reference pulses (`before`) and on the new ones (`after`); the histories'
+wall temperature is that of the names `wall` in the scenario's target (a session passes
+its [`wall_names`](@ref)), else the capsule's.
 """
 function retune_pulses(s::Scenario, beams::AbstractVector{<:Beam}, enabled::AbstractVector{Bool},
-                       pulses::AbstractDict; by::Symbol = :quad, cap::Real = 1.3, stay::Real = 0.0)
+                       pulses::AbstractDict; by::Symbol = :quad, cap::Real = 1.3, stay::Real = 0.0,
+                       wall = ())
     observe = _observed_parts(s)
+    # the histories' wall: the walls in the scenario's target (`wall_names`), else the capsule
+    names = component_names(s.target)
+    walls = Tuple(n for n in wall if n in names)
+    wall = isempty(walls) ? observe : walls
     s.model !== nothing && !isempty(observe) ||
         throw(ArgumentError("the retune matches the capsule's drive: compute the drive of a target with a capsule"))
     by in (:quad, :group, :beam) || throw(ArgumentError("retune by :quad, :group or :beam, not :$by"))
@@ -962,7 +949,7 @@ function retune_pulses(s::Scenario, beams::AbstractVector{<:Beam}, enabled::Abst
     isempty(times) && throw(ArgumentError("the reference pulses have no power"))
     op = s.deposition
     ref = drive_history(s.model, op, τ -> with_pulses(beams, pulses, τ; by = ref_by), times;
-                        observe, lmax = 4, ylm = true, keep_albedo = true)
+                        observe, wall, lmax = 4, ylm = true, keep_albedo = true)
     keep = findall(enabled)
     kept = beams[keep]
     opk = op[keep]
@@ -973,9 +960,9 @@ function retune_pulses(s::Scenario, beams::AbstractVector{<:Beam}, enabled::Abst
     r = retune_drive(s.model, opk, kept, ref; by, limits, stay, observe,
                      nominal = stay > 0 ? nominal : nothing)
     before = drive_history(s.model, opk, τ -> with_pulses(kept, pulses, τ; by = ref_by), times;
-                           observe, lmax = 4, ylm = true)
+                           observe, wall, lmax = 4, ylm = true)
     after = drive_history(s.model, opk, τ -> with_pulses(kept, r.pulses, τ; by), times;
-                          observe, lmax = 4, ylm = true)
+                          observe, wall, lmax = 4, ylm = true)
     # the new pulses on the table's times, off where the reference is
     at(g, τ) = (k = findfirst(==(τ), times); k === nothing ? 0.0 : r.power[g, k])
     out = Dict{Symbol,PulseShape}(Symbol(k) => PulseShape(nodes, [at(g, τ) for τ in nodes])
@@ -1009,7 +996,8 @@ function retune_to_reference!(sess::DesignSession, table::AbstractString, out::A
     dr.retune_running[] = true
     dr.retune_status[] = "retuning to $(basename(table))…"
     runner = _runner(sess.spawn, sess.deliver)
-    runner(() -> retune_pulses(s, beams, enabled, pulses; by, cap, stay), function (res)
+    wall = Tuple(wall_names(sess.target))
+    runner(() -> retune_pulses(s, beams, enabled, pulses; by, cap, stay, wall), function (res)
         dr.retune_running[] = false
         if res.err !== nothing
             dr.retune_status[] = "retune failed: " * _errmsg(res.err)
@@ -1146,8 +1134,27 @@ end
 Load a beam preset pointed for the current target (see [`preset_beams`](@ref)).
 """
 load_preset!(sess::DesignSession, preset::Symbol) =
-    (load_preset!(sess.beams, preset; target_kind = sess.target.kind[],
-                  params = sess.target.params[]); sess)
+    (load_preset!(sess.beams, preset; target = sess.target); sess)
+
+"""
+    new_target!(sess::DesignSession, starter = :hohlraum) -> Bool
+
+Start a new target from `starter` ([`new_target!`](@ref) on the session's target). An
+optimization of the previous target is cleared; a backlighter foil swaps a NIF or OMEGA
+hohlraum preset for the OMEGA backlighter beams (aimed at the new foil), and a hohlraum
+the OMEGA backlighter beams for the NIF quads; imported beams are kept.
+"""
+function new_target!(sess::DesignSession, starter::Symbol = :hohlraum)
+    new_target!(sess.target, starter) || return false
+    clear_optimize!(sess.optimize)
+    p = sess.beams.preset[]
+    if starter === :foil && p in (:nif_quads, :nif_beams, :omega_hohlraum)
+        load_preset!(sess, :omega_backlighter)
+    elseif starter === :hohlraum && p === :omega_backlighter
+        load_preset!(sess, :nif_quads)
+    end
+    return true
+end
 
 # Abandon jobs in flight: their results are dropped when they arrive (a closing
 # window restores inline delivery).

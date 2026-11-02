@@ -132,7 +132,7 @@ ColumnLayout {
             onActivated: (index) => Julia.br_move_frame(index)
             ToolTip.visible: hovered
             ToolTip.delay: 400
-            ToolTip.text: "The frame whose axis the part moves along: a template's, or a part's own (its axis is z)"
+            ToolTip.text: "The frame whose axis the part moves along: TCC, a part's own (its axis is z) or a piece's"
         }
     }
     RowLayout {
@@ -192,6 +192,13 @@ ColumnLayout {
                 ToolTip.text: "An entrance hole of the LEH radius, or a closed end"
             }
         }
+    }
+    Button {
+        visible: hohlraum
+        text: "Add window"
+        onClicked: Julia.br_add_window()
+        ToolTip.visible: hovered
+        ToolTip.text: "A closed 1 mm diagnostic window in this hohlraum's wall at its midplane, where it fits"
     }
     CheckLine {
         visible: hohlraum

@@ -12,7 +12,7 @@ _tris_area(ts) = sum((_area(t...) for t in ts); init = 0.0)
     # the square plate [-1, 1]² at z = 0, as two triangles
     P(x, y) = Briareus.Vec3(x, y, 0.0)
     sq = [(P(-1, -1), P(1, -1), P(1, 1)), (P(-1, -1), P(1, 1), P(-1, 1))]
-    kept(v; name = :wall) = (r = cut_region(v); sum(_tris_area(cut_triangle(r, name, t...)[1]) for t in sq))
+    kept(v; name = :hohlraum_wall) = (r = cut_region(v); sum(_tris_area(cut_triangle(r, name, t...)[1]) for t in sq))
     # the default quadrant facing −x −y; another component is not cut
     @test kept(v) ≈ 3 rtol = 1e-12
     @test kept(v; name = :capsule) ≈ 4 rtol = 1e-12
@@ -36,7 +36,7 @@ _tris_area(ts) = sum((_area(t...) for t in ts); init = 0.0)
     @test kept(v) ≈ 4 - (2 - 0.5 * sqrt(2))^2 / 2 rtol = 1e-12
     # the section edge of a plane cut lies on the plane, its length the chord
     r = cut_region(v)
-    secs = reduce(vcat, (cut_triangle(r, :wall, t...)[3] for t in sq))
+    secs = reduce(vcat, (cut_triangle(r, :hohlraum_wall, t...)[3] for t in sq))
     @test all(s -> all(p -> abs(dot(Briareus.Vec3(1, 1, 0) / sqrt(2), p) - 0.5) < 1e-12, s), secs)
     @test sum(s -> norm(s[2] - s[1]), secs) ≈ sqrt(2) * (2 - 0.5 * sqrt(2)) rtol = 1e-12
     # every cell of any split is wholly kept or removed; the cells tile the triangle
@@ -49,7 +49,7 @@ _tris_area(ts) = sum((_area(t...) for t in ts); init = 0.0)
               cells) ≈ _area(tri...) rtol = 1e-12
     # (each cell's corners, nudged into it, fall on its side of the cut)
     inner(c) = (m = sum(c.polygon) / length(c.polygon); [p + 1e-6 * (m - p) for p in c.polygon])
-    @test all(c -> all(p -> is_cut(r, :wall, p) == c.removed, inner(c)), cells)
+    @test all(c -> all(p -> is_cut(r, :hohlraum_wall, p) == c.removed, inner(c)), cells)
     @test any(c -> c.removed, cells) && !all(c -> c.removed, cells)
     @test_throws ArgumentError set_cut!(v; range = (1.0, 0.0))
     @test_throws ArgumentError set_cut_plane!(v; normal = (0, 0, 0))
@@ -116,17 +116,17 @@ end
     @test all(isapprox.(v.cut_point[], Tuple(c); atol = 1e-12)) && cut_offset(v) == 0
     plate = [(V(-1, -1, 3), V(1, -1, 3), V(1, 1, 3)), (V(-1, -1, 3), V(1, 1, 3), V(-1, 1, 3))]
     r = cut_region(v)
-    secs = reduce(vcat, (cut_triangle(r, :wall, tr...)[3] for tr in plate))
+    secs = reduce(vcat, (cut_triangle(r, :hohlraum_wall, tr...)[3] for tr in plate))
     @test sum(s -> norm(s[2] - s[1]), secs) ≈ 2 / cosd(30) rtol = 1e-12
     @test all(s -> all(q -> abs(dot(r.n, q) - dot(r.n, c)) < 1e-12, s), secs)
-    @test _tris_area(reduce(vcat, (cut_triangle(r, :wall, tr...)[1] for tr in plate))) < 4
+    @test _tris_area(reduce(vcat, (cut_triangle(r, :hohlraum_wall, tr...)[1] for tr in plate))) < 4
     # a window on the wall at φ = 90° is flat enough: its normal is radial (±ŷ); the
     # closed wall is not, and a cut through it keeps the current normal
-    pw, nw = component_plane(t, Controllers.window_name(1))
+    pw, nw = component_plane(t, piece_name(:hohlraum, window_name(1)))
     @test nw !== nothing && abs(nw[2]) > 0.99 && abs(pw[1]) < 1e-9 && pw[2] > 0
-    @test component_plane(t, :wall)[2] === nothing
+    @test component_plane(t, :hohlraum_wall)[2] === nothing
     n_before = v.cut_normal[]
-    cut_through_component!(v, t, :wall)
+    cut_through_component!(v, t, :hohlraum_wall)
     @test v.cut_normal[] == n_before
     @test_throws ArgumentError component_plane(t, :nothing_here)
 end
@@ -135,16 +135,16 @@ end
     sess = DesignSession(resolution = :coarse)
     v, bt = sess.view, sess.beams
     # display modes: per component and for several at once; opaque is the default
-    @test display_mode(v, :wall) === :opaque
-    set_display!(v, [:wall, :cap_top], :transparent)
+    @test display_mode(v, :hohlraum_wall) === :opaque
+    set_display!(v, [:hohlraum_wall, :hohlraum_cap_top], :transparent)
     set_display!(v, :capsule, :wireframe)
-    @test display_mode(v, :wall) === display_mode(v, :cap_top) === :transparent
-    set_display!(v, :wall, :opaque)
-    @test !haskey(v.display[], :wall) && display_mode(v, :capsule) === :wireframe
-    @test_throws ArgumentError set_display!(v, :wall, :ghost)
+    @test display_mode(v, :hohlraum_wall) === display_mode(v, :hohlraum_cap_top) === :transparent
+    set_display!(v, :hohlraum_wall, :opaque)
+    @test !haskey(v.display[], :hohlraum_wall) && display_mode(v, :capsule) === :wireframe
+    @test_throws ArgumentError set_display!(v, :hohlraum_wall, :ghost)
     set_display!(v, :capsule, :invisible)
     rows = model_tree(sess)
-    cap = only(r for r in rows if r.id == "comp:capsule")
+    cap = only(r for r in rows if r.id == "part:capsule")
     @test cap.display == "invisible" && cap.on == 0 && cap.matrix == ""
     # the beam matrix: 3ω in the calculations and drawn, unconverted light neither
     beams = only(r for r in rows if r.id == "beams")
@@ -253,12 +253,12 @@ end
     s = DesignSession(resolution = :coarse)
     v = s.view
     set_display!(v, :capsule, :wireframe)
-    set_display!(v, :cap_top, :invisible)
+    set_display!(v, :hohlraum_cap_top, :invisible)
     set_beams_drawn!(v, [s.beams.beams[][3].name], 3, false)
     set_beams_drawn!(v, [s.beams.beams[][4].name], 2, true)
     set_participation!(s.beams, [5], 1, true)
     set_unconverted_ratio!(s.drive, 0.03, 0.01)
-    set_cut!(v; axis = :x, azimuth = 30, width = 120, range = (-1.0, Inf), components = [:wall])
+    set_cut!(v; axis = :x, azimuth = 30, width = 120, range = (-1.0, Inf), components = [:hohlraum_wall])
     set_cut_plane!(v; normal = :y, offset = 0.4)
     path = joinpath(mktempdir(), "display.briar.toml")
     s_los = DesignSession(resolution = :coarse)

@@ -20,19 +20,21 @@ _aims_held(bt; atol = 1e-12) =
         eachindex(bt.beams[]))
 
 @testset "part frames and the foil frame (no GL)" begin
-    # the foil template built from its frame, bit for bit with the core's `foil`
-    s = DesignSession(kind = :foil, resolution = :coarse)
+    # the foil starter built from its frame, bit for bit with the core's `foil`
+    s = DesignSession(starter = :foil, resolution = :coarse)
     ts = s.target
-    p = ts.params[]
-    n = max(4, ceil(Int, p[:width] / ts.mesh[].capsule_h))
-    ref = foil(FOIL_NAME, foil_center(p), (-1, 0, 0); width = p[:width], n,
-               material = Material(:Ti; conversion = p[:conversion]), two_sided = false)
-    c = ts.target[].components[findfirst(c -> c.name === FOIL_NAME, ts.target[].components)]
+    w = ts.parts[][part_index(ts, :foil)].values[:r1]
+    n = max(4, ceil(Int, w / ts.mesh[].capsule_h))
+    ref = foil(:foil, V3(6.0, 0, 0), (-1, 0, 0); width = w, n,
+               material = Material(:Ti; conversion = 0.02), two_sided = false)
+    c = ts.target[].components[findfirst(c -> c.name === :foil, ts.target[].components)]
     @test c.mesh.vertices == ref.mesh.vertices && c.mesh.triangles == ref.mesh.triangles
-    F = backlighter_frame(p)
-    @test F.origin == V3(p[:distance], 0, 0) && F.R[:, 3] == V3(-1, 0, 0)    # front: toward TCC
-    @test keys(template_frames(:foil, p)) == Set([:tcc, :backlighter])
-    @test keys(template_frames(:hohlraum, p)) == Set([:tcc, :leh_top, :leh_bottom])
+    F = part_frames(ts)[:foil]
+    @test F.origin == V3(6.0, 0, 0) && F.R[:, 3] == V3(-1, 0, 0)    # front: toward TCC
+    @test F == Frame(rotation_to(V3(-1, 0, 0)), V3(6.0, 0, 0))     # the former template's foil frame
+    @test keys(part_frames(ts)) == Set([:tcc, :foil, :main])
+    @test keys(part_frames(TargetSetup(resolution = :coarse))) ==
+          Set([:tcc, :hohlraum, :capsule, Symbol("hohlraum.leh_top"), Symbol("hohlraum.leh_bottom")])
 
     # `euler_rotation` against the old radians formula: the last bits only
     angles = [(θ, φ, ψ) for θ in (0.0, 12.5, 90.0, 133.0, 180.0) for φ in (0.0, 47.0, 270.0)
@@ -47,11 +49,11 @@ _aims_held(bt; atol = 1e-12) =
     # a grandchild follows its grandparent exactly; vertices against the frames written out
     h = DesignSession(resolution = :coarse)
     th = h.target
-    @test add_part!(th, :disk; name = :shield, frame = :leh_top, x = 0.1, z = 0.5, theta = 12,
+    @test add_part!(th, :disk; name = :shield, frame = Symbol("hohlraum.leh_top"), x = 0.1, z = 0.5, theta = 12,
                     phi = 77, rotation = 31, r1 = 2.0)
     @test add_part!(th, :rectangle; name = :plate, frame = :shield, y = 0.4, z = 0.3, theta = 47.5,
                     phi = 333, rotation = 211, r1 = 0.6, r2 = 0.9)
-    L = th.params[][:length]
+    L = th.parts[][1].values[:length]
     pl = th.parts[][part_index(th, :plate)]
     local_mesh = part_component(PartSpec(:rectangle; name = :plate, values = Dict(:r1 => 0.6, :r2 => 0.9)),
                                 th.mesh[].h).mesh.vertices
@@ -66,7 +68,7 @@ _aims_held(bt; atol = 1e-12) =
     @test !set_part_frame!(th, part_index(th, :shield), :plate) && occursin("loop", th.error[])
     # changing frames keeps a tilted part where it is (the exact angles)
     v0 = copy(got)
-    @test set_part_frame!(th, part_index(th, :plate), :leh_bottom)
+    @test set_part_frame!(th, part_index(th, :plate), Symbol("hohlraum.leh_bottom"))
     got = th.target[].components[findfirst(c -> c.name === :plate, th.target[].components)].mesh.vertices
     @test maximum(norm(a - b) for (a, b) in zip(got, v0)) < 1e-12
 end
@@ -112,7 +114,7 @@ end
 end
 
 @testset "beams follow a renamed part (no GL)" begin
-    s = DesignSession(kind = :custom, resolution = :coarse)
+    s = DesignSession(starter = :none, resolution = :coarse)
     ts, bt = s.target, s.beams
     @test add_part!(ts, :disk; name = :shield, x = 3.0, r1 = 0.5)
     @test add_part!(ts, :rectangle; name = :plate, x = -3.0, theta = 90, r1 = 0.5, r2 = 0.5)
@@ -148,20 +150,20 @@ end
 @testset "every aim writer keeps the local aims (no GL)" begin
     s = DesignSession(resolution = :coarse)
     ts, bt = s.target, s.beams
-    @test add_part!(ts, :disk; name = :lid, frame = :leh_top, z = 0.5, theta = 20, phi = 30, r1 = 2.0)
+    @test add_part!(ts, :disk; name = :lid, frame = Symbol("hohlraum.leh_top"), z = 0.5, theta = 20, phi = 30, r1 = 2.0)
     held = Ref(true)
     calls = Ref(0)
     on(_ -> (calls[] += 1; held[] &= _aims_held(bt)), bt.beams)
     record!(s)
     set_aim_frame!(s, 1:8, :lid)
-    set_aim_frame!(s, 9:12, :leh_bottom; keep = false)
+    set_aim_frame!(s, 9:12, Symbol("hohlraum.leh_bottom"); keep = false)
     edit_beams!(bt, 1, :z, "3.3")
     edit_beam_set!(bt, 1:8, :aim_x, "0.4")
     edit_beam_set!(bt, [1, 9], :aim_y, "0.1")                       # two frames: chamber y
     edit_beam_set!(bt, 1:4, :power, "6.0")
     nudge_part!(ts, part_index(ts, :lid), 0.3; frame = :tcc, axis = :x)
     edit_part!(ts, part_index(ts, :lid), :rotation, "40")
-    edit_target!(ts, :length, "10.4")                               # the entrance holes move
+    edit_part!(ts, 1, :length, "10.4")                              # the entrance holes move
     q = bt.beams[][1].quad
     @test split_quad!(bt, q) && merge_quad!(bt, q)
     f = joinpath(mktempdir(), "beams.csv")
@@ -202,9 +204,9 @@ end
 end
 
 @testset "frame fields of the optimizer (no GL)" begin
-    s = DesignSession(kind = :foil, resolution = :coarse)
+    s = DesignSession(starter = :foil, resolution = :coarse)
     bt, st = s.beams, s.optimize
-    @test all(==(:backlighter), bt.aim_frame[]) && all(iszero, bt.aim_local[])  # at the foil's center
+    @test all(==(:foil), bt.aim_frame[]) && all(iszero, bt.aim_local[])  # at the foil's center
     @test st.fields[] == [:z, :r]
     set_free!(st, :u, true)
     set_free!(st, :v, true)
@@ -225,7 +227,7 @@ end
     @test all(n -> endswith(n, ".u") || endswith(n, ".v"), r.names) && all(abs.(r.x) .<= 0.3 + 1e-12)
     accept_optimum!(s)
     # each group's common point moved across the foil's face (w = 0: chamber x = distance)
-    d = s.target.params[][:distance]
+    d = s.target.parts[][1].values[:x]
     groups = unique(bt.cluster[])
     loc = bt.aim_local[]
     @test all(g -> (m = findall(==(g), bt.cluster[]); all(i -> isapprox(loc[i], loc[m[1]]; atol = 1e-12), m)), groups)
@@ -235,9 +237,9 @@ end
 end
 
 @testset "placement sweep (no GL)" begin
-    s = DesignSession(kind = :foil, resolution = :coarse)
+    s = DesignSession(starter = :foil, resolution = :coarse)
     ts, bt, sw = s.target, s.beams, s.sweep
-    @test sweep_subject(s) === :backlighter && sweep_frame(s) === :backlighter
+    @test sweep_subject(s) === :foil && sweep_frame(s) === :foil
     @test sweep_los_object(s) === :main
     θ, φ = sweep_los(s)                                              # foil (+x) → TCC → detector
     @test isapprox(θ, 90; atol = 1e-9) && isapprox(φ, 180; atol = 1e-9)
@@ -257,7 +259,7 @@ end
     t = ts.target[]
     op = DepositionOperator(t, active_beams(bt); resolution = SWEEP_QUALITY[:quick].resolution)
     M = beam_component_power(op, active_beams(bt))
-    fc = [sum(M[i, part_pieces(t, FOIL_NAME)]) / b.power for (i, b) in enumerate(active_beams(bt))]
+    fc = [sum(M[i, part_pieces(t, :foil)]) / b.power for (i, b) in enumerate(active_beams(bt))]
     @test r.rows[2].min_captured ≈ minimum(fc) rtol = 1e-12
     ch = sweep_chart(s)
     @test ch.chart === :sweep && length(ch.left.series) == 1 && ch.left.series[1].x == [-1.0, 0.0, 1.0]
@@ -265,15 +267,15 @@ end
     @test sweep_chart(s).cursor == 1.0 && length(sweep_rows(sw)) == 3
     # the step applied as one edit, and undone as one
     record!(s)
-    before = (copy(ts.params[]), bt.beams[])
+    before = (ts.parts[], bt.beams[])
     @test apply_sweep_step!(s, 3)
-    @test ts.params[][:distance] == before[1][:distance] - 1
+    @test ts.parts[][1].values[:x] == before[1][1].values[:x] - 1
     @test all(k -> isapprox(bt.beams[][k].aim, aims0[k] + V3(-1, 0, 0); atol = 1e-12), eachindex(aims0))
     @test sweep_stale(s) && !apply_sweep_step!(s, 1)                # the design moved since
     @test undo!(s)
-    @test ts.params[] == before[1] && bt.beams[] == before[2]
+    @test [p.values for p in ts.parts[]] == [p.values for p in before[1]] && bt.beams[] == before[2]
     # a part as the subject: it and what is placed in its frame move
-    @test add_part!(ts, :disk; name = :shield, frame = :backlighter, z = -0.5, r1 = 0.4)
+    @test add_part!(ts, :disk; name = :shield, frame = :foil, z = -0.5, r1 = 0.4)
     set_sweep!(sw; subject = :shield, frame = :tcc, axis = :y, los = false, capture = false)
     start_sweep!(s; spawn = false)
     @test length(sw.result[].rows) == 3 && apply_sweep_step!(s, 1)
@@ -303,12 +305,13 @@ end
     ts, bt = s.target, s.beams
     # the saved chamber aims are kept; each beam that followed a component aims in its frame
     @test [b.aim for b in bt.beams[]] == [V3(r["aim"]...) for r in saved["beams"]["beam"]]
-    @test bt.aim_frame[] == [:backlighter, :backlighter, :substrate, :tcc, :tcc]
+    @test bt.aim_frame[] == [:foil, :foil, :substrate, :tcc, :tcc]        # the template's foil: a part
     @test _aims_held(bt)
-    # the old foil frame re-expressed in the backlighter frame: the vertices where they were,
+    # the old foil frame re-expressed in the foil part's frame: the vertices where they were,
     # against the old frames written out (axes [0 0 1; 0 1 0; -1 0 0] at the foil's center)
-    @test [p.frame for p in ts.parts[]] == [:backlighter, :substrate, :tcc, :backlighter]
-    d = ts.params[][:distance]
+    @test [p.name for p in ts.parts[]][1:2] == [:foil, :main]
+    @test [p.frame for p in ts.parts[][3:end]] == [:foil, :substrate, :tcc, :foil]
+    d = ts.parts[][1].values[:x]
     Rfoil, tfoil = [0.0 0.0 1.0; 0.0 1.0 0.0; -1.0 0.0 0.0], [d, 0.0, 0.0]
     old = Dict(p["name"] => p for p in saved["target"]["parts"])
     vals(n) = old[n]["values"]
@@ -345,7 +348,7 @@ end
 end
 
 @testset "placement steps on parts (no GL)" begin
-    s = DesignSession(kind = :custom, resolution = :coarse)
+    s = DesignSession(starter = :none, resolution = :coarse)
     ts, bt = s.target, s.beams
     @test add_part!(ts, :disk; name = :snout, x = 6.0, z = 2.0, theta = 90, r1 = 0.5)
     @test add_part!(ts, :rectangle; name = :plate, x = -2.0, y = 1.0, theta = 30, phi = 20, r1 = 0.5, r2 = 0.5)
@@ -402,7 +405,7 @@ end
 end
 
 @testset "sweeping a placement step (no GL)" begin
-    s = DesignSession(kind = :foil, resolution = :coarse)
+    s = DesignSession(starter = :foil, resolution = :coarse)
     ts, bt, sw = s.target, s.beams, s.sweep
     @test add_part!(ts, :disk; name = :snout, x = 4.0, y = 3.0, z = 1.0, r1 = 0.4)
     @test add_part!(ts, :rectangle; name = :shield, x = 3.0, y = -2.0, r1 = 0.6, r2 = 0.4)
@@ -469,7 +472,7 @@ end
 end
 
 @testset "several backlighter foils, one active (no GL)" begin
-    s = DesignSession(kind = :custom, resolution = :coarse)
+    s = DesignSession(starter = :none, resolution = :coarse)
     ts, bt = s.target, s.beams
     # two disks facing TCC from either side along x
     @test add_part!(ts, :disk; name = :foil_a, x = 3.0, theta = 90, phi = 180, r1 = 0.6)
@@ -534,14 +537,14 @@ end
           active_foil(ts) === :shield
 
     # a version 4 session: the part named `backlighter` loads as the active foil
-    s4 = DesignSession(kind = :custom, resolution = :coarse)
+    s4 = DesignSession(starter = :none, resolution = :coarse)
     @test add_part!(s4.target, :disk; name = :plate, x = 3.0, theta = 90, phi = 180, r1 = 0.6)
     @test add_part!(s4.target, :disk; name = :backlighter, x = -3.0, theta = 90, r1 = 0.6)
     old = session_state(s4)
     old["version"] = 4
     delete!(old["target"], "active_foil")
     foreach(p -> delete!(p, "foil"), old["target"]["parts"])
-    s5 = DesignSession(kind = :hohlraum, resolution = :coarse)
+    s5 = DesignSession(resolution = :coarse)
     restore!(s5, old)
     ps = s5.target.parts[]
     @test [p.name for p in ps] == [:sphere_1, :plate, :backlighter] &&
@@ -549,11 +552,11 @@ end
 end
 
 @testset "observed and wall roles held by parts, not names (no GL)" begin
-    # a hohlraum without the template's capsule, and a sphere part named ball in its place
+    # a hohlraum without the starter's capsule, and a sphere part named ball in its place
     s = DesignSession(resolution = :coarse)
     ts = s.target
-    @test edit_target!(ts, :capsule_radius, "0") && observed_name(ts) === nothing
-    @test wall_names(ts) == [:wall]
+    @test remove_part!(ts, part_index(ts, :capsule)) && observed_name(ts) === nothing
+    @test wall_names(ts) == [:hohlraum_wall, :hohlraum_cap_top, :hohlraum_cap_bottom]
     @test add_part!(ts, :sphere; name = :ball, r1 = 0.9, h = 0.16)
     @test :ball in s.review.hardware[] && :ball in s.talis.hardware[]
     # the role: the name stays, the target is not rebuilt, the checks follow
@@ -581,7 +584,7 @@ end
     old["review"]["targets"] = replace(old["review"]["targets"], "ball" => "capsule")
     s6 = DesignSession(resolution = :coarse)
     restore!(s6, old)
-    @test observed_name(s6.target) === :capsule && part_role(only(s6.target.parts[])) === :capsule
+    @test observed_name(s6.target) === :capsule && part_role(s6.target.parts[][end]) === :capsule
     build_scenario!(s6)
     r6 = s6.drive.result[]
     @test r6.modes == r1.modes && r6.mean_flux == r1.mean_flux && r6.solution.H == r1.solution.H &&
@@ -593,9 +596,9 @@ end
     @test s.time.history[].Tr == s6.time.history[].Tr && length(s.time.history[].Tr) > 1
     # from version 7 the name carries no role
     st7 = session_state(s6)
-    st7["target"]["parts"][1]["observed"] = false
+    st7["target"]["parts"][end]["observed"] = false
     restore!(s6, st7)
-    @test observed_name(s6.target) === nothing && only(s6.target.parts[]).name === :capsule &&
+    @test observed_name(s6.target) === nothing && s6.target.parts[][end].name === :capsule &&
           drive_stale(s6)
 
     # role changes: the target stays, the drive goes stale (its scenario observes the old
@@ -606,15 +609,13 @@ end
     @test :ball in s.review.hardware[] && :ball in s.talis.hardware[] && !Controllers._closed_enclosure(ts)
     @test undo!(s) && observed_name(ts) === :ball
     @test redo!(s) && observed_name(ts) === nothing
-    # one observed surface at a time; a template capsule yields to a part
+    # one observed surface at a time
     @test set_part_role!(ts, part_index(ts, :ball), :capsule)
     @test add_part!(ts, :sphere; name = :bead, x = 2.0, r1 = 0.2)
     @test set_part_role!(ts, part_index(ts, :bead), :capsule)
     @test observed_name(ts) === :bead && part_role(ts.parts[][part_index(ts, :ball)]) === :none
-    @test edit_target!(ts, :capsule_radius, "0.5") && observed_name(ts) === :bead
-    @test remove_part!(ts, part_index(ts, :bead)) && observed_name(ts) === :capsule
+    @test remove_part!(ts, part_index(ts, :bead)) && observed_name(ts) === nothing
     # a rename keeps the role; a part renamed capsule does not take it
-    @test edit_target!(ts, :capsule_radius, "0")
     @test set_part_role!(ts, part_index(ts, :ball), :capsule)
     @test edit_part!(ts, part_index(ts, :ball), :name, "core") && observed_name(ts) === :core
     @test add_part!(ts, :sphere; name = :other, x = -2.0, r1 = 0.2)
@@ -628,11 +629,11 @@ end
     t = ts.target[]
     k = Controllers._history_key(s)
     @test set_part_role!(ts, part_index(ts, :shield), :wall)
-    @test ts.target[] === t && wall_names(ts) == [:wall, :shield] && wall_components(ts) == [:wall, :shield]
+    @test ts.target[] === t && wall_names(ts) == [:hohlraum_wall, :hohlraum_cap_top, :hohlraum_cap_bottom, :shield] && wall_components(ts) == [:hohlraum_wall, :hohlraum_cap_top, :hohlraum_cap_bottom, :shield]
     @test :shield in s.review.targets[] && :shield in s.talis.capture[]
     @test Controllers._history_key(s)[end] != k[end]
     @test !set_part_role!(ts, part_index(ts, :hole), :wall) && occursin("aperture", ts.error[])
-    @test set_part_role!(ts, part_index(ts, :shield), :none) && wall_names(ts) == [:wall]
+    @test set_part_role!(ts, part_index(ts, :shield), :none) && wall_names(ts) == [:hohlraum_wall, :hohlraum_cap_top, :hohlraum_cap_bottom]
     @test :shield in s.review.hardware[] && :shield in s.talis.hardware[]
     @test session_state(s)["target"]["parts"][end-1]["wall"] == false
 end

@@ -6,10 +6,10 @@
 # restored design.
 
 const SESSION_FORMAT = "BriareusGUI session"
-const SESSION_VERSION = 7               # 2: `.briar` archives with the CAD files; 3: frames; 4: placement steps;
+const SESSION_VERSION = 8               # 2: `.briar` archives with the CAD files; 3: frames; 4: placement steps;
                                         # 5: foil roles as a flag, and the active foil; 6: the diagnostics
                                         # recorded, and their definitions; 7: the observed and wall roles
-                                        # as flags
+                                        # as flags; 8: parts only (no template), hohlraum parts
 
 _strs(xs) = [String(x) for x in xs]
 _syms(xs) = Symbol[Symbol(x) for x in xs]
@@ -42,8 +42,8 @@ end
 """
     session_state(sess::DesignSession; view = true) -> Dict{String,Any}
 
-The design as plain data, ready for TOML: the target (template, dimensions, element
-sizes, windows, parts), the beams (each beam's port, aim, power, focus, spot, cone and
+The design as plain data, ready for TOML: the target (element sizes, parts with their
+windows, what is left out, the active foil), the beams (each beam's port, aim, power, focus, spot, cone and
 quad, group, whether it is on, and whether its unconverted 1ω and 2ω light takes part),
 the frame each beam aims in and its aim there, the settings of the drive (beam model
 included), the optimization, the clearance check, the TaLIS checks and the placement
@@ -56,12 +56,7 @@ computed again. Restore it with [`restore!`](@ref).
 function session_state(sess::DesignSession; view::Bool = true)
     ts, bt, dr, op, rv, tl = sess.target, sess.beams, sess.drive, sess.optimize, sess.review, sess.talis
     target = Dict{String,Any}(
-        "kind" => String(ts.kind[]), "params" => _fdict(ts.params[]),
         "mesh" => Dict{String,Any}("h" => ts.mesh[].h, "capsule_h" => ts.mesh[].capsule_h),
-        "windows" => [Dict{String,Any}("phi" => w.phi, "z" => w.z, "width" => w.width,
-                                       "height" => w.height, "open" => w.open, "albedo" => w.albedo,
-                                       "conversion" => w.conversion, "round" => w.round)
-                      for w in ts.windows[]],
         "excluded" => sort(_strs(ts.excluded[])),
         "active_foil" => String(something(active_foil(ts), Symbol(""))),
         "parts" => [Dict{String,Any}("kind" => String(p.kind), "name" => String(p.name),
@@ -69,7 +64,8 @@ function session_state(sess::DesignSession; view::Bool = true)
                                      "inward" => p.inward, "aperture" => p.aperture, "file" => p.file,
                                      "frame" => String(p.frame), "coords" => String(p.coords),
                                      "object" => p.object, "steps" => _step_state.(p.steps),
-                                     "foil" => p.foil, "observed" => p.observed, "wall" => p.wall)
+                                     "foil" => p.foil, "observed" => p.observed, "wall" => p.wall,
+                                     "windows" => _window_state.(p.windows))
                     for p in ts.parts[]])
     beams = Dict{String,Any}("preset" => String(bt.preset[]), "by" => String(bt.by[]),
                              "facility" => String(bt.facility[]),
@@ -140,19 +136,30 @@ as after any edit. Throws `ArgumentError` for a state of another format, or one 
 geometry rejects (the session is then left as it was before the target, if the
 target fails, or partly restored otherwise).
 
-Sessions before version 3 are converted as they load: a part placed in the old foil
-frame (`anchor = "foil"`: `z` along the foil's back normal) is re-expressed in the
-`:backlighter` frame ([`backlighter_frame`](@ref)), so it stays where it was in the
-chamber (to round-off); other anchors are frame names already. A beam that followed a
-component (`aim_ref`) aims in that component's frame when it has one (a part's, a
-template's), else in `:tcc`; the saved chamber aims are kept as they are and re-expressed
-in their frames.
-
-Sessions before version 5 named the part with the role of the backlighter foil
-`backlighter`: that part loads as a foil (keeping the name) and the active one.
-Sessions before version 6 record [`DEFAULT_DIAGNOSTICS`](@ref). Sessions before version 7
-named the part with the observed role `capsule`: that part loads with the role (keeping
-the name). A hohlraum template's capsule and wall hold their roles in every version.
+Older sessions convert as they load, through this one path:
+- Before version 8 a target had a template, which becomes parts placed ahead of the
+  saved ones, so the elements keep their order ([`starter_parts`](@ref) has the same
+  geometry): a hohlraum template the hohlraum part `hohlraum` (its dimensions, wall,
+  closing entrance holes and windows) and, with a capsule, the sphere `capsule` (meshed as
+  the template's capsule, placed in the hohlraum's frame, with the observed role unless a
+  part holds it); a foil template the rectangle `foil` (the foil role, its element size
+  the capsule size) and the sphere `main`. The names are made unique against the saved
+  parts (`hohlraum_2`, …). The template's component names in the saved lists (left out,
+  the active foil, the checks' roles, thin films, display modes, the cut, the sweep) and
+  its frames (`leh_top`, `leh_bottom`, `backlighter`, where parts are placed and beams aim)
+  take the new parts' names: `wall` is `hohlraum_wall`, `leh_top` the frame
+  `hohlraum.leh_top`, `backlighter` the foil part. The converted hohlraum's caps hold the
+  wall role with its wall.
+- Before version 3 a part placed in the old foil frame (`anchor = "foil"`: `z` along the
+  foil's back normal) is re-expressed in the foil's frame, so it stays where it was in
+  the chamber (to round-off); other anchors are frame names already. A beam that followed
+  a component (`aim_ref`) aims in that component's frame when it has one, else in `:tcc`;
+  the saved chamber aims are kept as they are and re-expressed in their frames.
+- Before version 5 the part with the role of the backlighter foil was named
+  `backlighter`: that part loads as a foil (keeping the name) and the active one.
+- Before version 6 a session records [`DEFAULT_DIAGNOSTICS`](@ref).
+- Before version 7 the part with the observed role was named `capsule`: that part loads
+  with the role (keeping the name).
 """
 function restore!(sess::DesignSession, state::AbstractDict)
     get(state, "format", "") == SESSION_FORMAT ||
@@ -161,34 +168,40 @@ function restore!(sess::DesignSession, state::AbstractDict)
         throw(ArgumentError("session version $(state["version"]) is newer than this program's $SESSION_VERSION"))
     ts, bt = sess.target, sess.beams
     t = state["target"]
-    params = copy(ts.params[])
-    for (k, v) in t["params"]
-        params[Symbol(k)] = v
-    end
-    mesh = MeshSpec(t["mesh"]["h"], t["mesh"]["capsule_h"])
-    windows = WindowSpec[WindowSpec(; phi = w["phi"], z = w["z"], width = w["width"], height = w["height"],
-                                    open = w["open"], albedo = w["albedo"], conversion = w["conversion"],
-                                    round = w["round"]) for w in t["windows"]]
     version = get(state, "version", 0)
-    old = version < 3
-    parts = PartSpec[_state_part(p, old ? params : nothing; named_foil = version < 5,
+    mesh = MeshSpec(t["mesh"]["h"], t["mesh"]["capsule_h"])
+    params = version < 8 ? merge(_TEMPLATE_DEFAULTS, Dict{Symbol,Float64}(Symbol(k) => v for (k, v) in get(t, "params", Dict()))) :
+             nothing
+    parts = PartSpec[_state_part(p, version < 3 ? params : nothing; named_foil = version < 5,
                                    named_capsule = version < 7) for p in t["parts"]]
+    # sessions before version 8: the template as parts, and its names as theirs
+    names, renamed = Dict{Symbol,Symbol}(), Dict{Symbol,Symbol}()
+    if version < 8
+        parts, names, renamed = _template_parts(Symbol(get(t, "kind", "custom")), params,
+                                                WindowSpec[_state_window(w) for w in get(t, "windows", [])],
+                                                parts, mesh.capsule_h)
+    end
+    rn(x) = get(names, Symbol(x), Symbol(x))                 # a template component's name now
+    rns(xs) = Symbol[rn(x) for x in xs]
+    rf(x) = get(renamed, Symbol(x), Symbol(x))               # a template frame's
     _cancel_fits!(ts)                     # a capsule fit in flight was for another design
-    _try_build!(ts; kind = Symbol(t["kind"]), params, mesh, windows, parts,
-                excluded = Set(_syms(get(t, "excluded", String[])))) ||
+    _try_build!(ts; mesh, parts, excluded = Set(rns(get(t, "excluded", String[])))) ||
         throw(ArgumentError("the saved target was rejected: $(ts.error[])"))
-    a = version < 5 ? (any(p -> p.foil, parts) ? FOIL_NAME : "") : t["active_foil"]
-    ts.active_foil[] = isempty(String(a)) ? nothing : Symbol(a)
+    a = version < 5 ? (any(p -> p.foil, parts) ? rn(:backlighter) : Symbol("")) : rn(t["active_foil"])
+    ts.active_foil[] = isempty(String(a)) ? nothing : a
     sess.visrad_source[] = get(state, "visrad_source", "")
     b = state["beams"]
     rows = b["beam"]
     # aims in their frames: version 3 saves the local aims; before it, a beam that followed
     # a component aims in that component's frame (the saved chamber aims are kept)
     frames = part_frames(ts)
-    frame_of(r) = (f = Symbol(get(r, "aim_frame", get(r, "aim_ref", "tcc")));
-                   f === :none || !haskey(frames, f) ? :tcc : f)
+    function frame_of(r)
+        f = rf(get(r, "aim_frame", get(r, "aim_ref", "tcc")))
+        haskey(frames, f) || (f = rn(f))
+        return f === :none || !haskey(frames, f) ? :tcc : f
+    end
     af = Symbol[frame_of(r) for r in rows]
-    local_saved = all(r -> haskey(r, "aim_local") && haskey(frames, Symbol(get(r, "aim_frame", ""))), rows)
+    local_saved = all(r -> haskey(r, "aim_local") && haskey(frames, rf(get(r, "aim_frame", ""))), rows)
     set_beams!(bt, [_state_beam(r) for r in rows]; preset = Symbol(b["preset"]),
                enabled = Bool[r["enabled"] for r in rows], cluster = Symbol[Symbol(r["cluster"]) for r in rows],
                aim_frame = af,
@@ -200,7 +213,7 @@ function restore!(sess::DesignSession, state::AbstractDict)
         d = state["drive"]
         _assign!(sess.drive.spot_radius, Float64(d["spot_radius"]))
         set_cavity!(sess.drive, get(d, "cavity", false); point = Float64.(get(d, "cavity_point", [0.0, 0.0, 0.0])),
-                    films = _syms(get(d, "films", String[])))
+                    films = rns(get(d, "films", String[])))
         # sessions before the beam-model choice deposited with the f-cone
         set_beam_model!(sess.drive, Symbol(get(d, "beam_model", "fcone"));
                         profile = haskey(d, "profile") ? _state_profile(d["profile"]) : VisRadProfile())
@@ -227,14 +240,14 @@ function restore!(sess::DesignSession, state::AbstractDict)
     roles = function ()
         if haskey(state, "review")
             r = state["review"]
-            _assign!(sess.review.targets, _syms(r["targets"]))
-            _assign!(sess.review.hardware, _syms(r["hardware"]))
+            _assign!(sess.review.targets, rns(r["targets"]))
+            _assign!(sess.review.hardware, rns(r["hardware"]))
         end
         if haskey(state, "talis")
             c = state["talis"]
-            _assign!(sess.talis.capture, _syms(c["capture"]))
-            _assign!(sess.talis.hardware, _syms(c["hardware"]))
-            _assign!(sess.talis.diagnostics, _syms(get(c, "diagnostics", String[])))
+            _assign!(sess.talis.capture, rns(c["capture"]))
+            _assign!(sess.talis.hardware, rns(c["hardware"]))
+            _assign!(sess.talis.diagnostics, rns(get(c, "diagnostics", String[])))
         end
     end
     roles()
@@ -253,7 +266,13 @@ function restore!(sess::DesignSession, state::AbstractDict)
         _assign!(tl.pivot_point, Tuple(Float64.(c["pivot_point"])))
         _assign!(tl.omega1, c["omega1"])
     end
-    haskey(state, "sweep") && _restore_sweep!(sess.sweep, state["sweep"])
+    if haskey(state, "sweep")
+        sw = copy(state["sweep"])
+        for (k, f) in (("subject", rf), ("frame", rf), ("los_object", rn))
+            haskey(sw, k) && (sw[k] = String(f(sw[k])))
+        end
+        _restore_sweep!(sess.sweep, sw)
+    end
     ids = String[String(x) for x in get(get(state, "time", Dict()), "diagnostics", DEFAULT_DIAGNOSTICS)]
     ids == sess.time.diagnostics[] || (sess.time.diagnostics[] = ids)
     if haskey(state, "view")
@@ -266,7 +285,7 @@ function restore!(sess::DesignSession, state::AbstractDict)
         # sessions before the plane cut and the axis and range of the sector: a sector
         # about z, unbounded
         haskey(v, "cut_width") && set_cut!(vs; azimuth = v["cut_azimuth"], width = v["cut_width"],
-                                           components = _syms(v["cut_components"]),
+                                           components = rns(v["cut_components"]),
                                            kind = Symbol(get(v, "cut_kind", "sector")),
                                            axis = Symbol(get(v, "cut_axis", "z")),
                                            range = Tuple(Float64.(get(v, "cut_range", [-Inf, Inf]))))
@@ -280,9 +299,9 @@ function restore!(sess::DesignSession, state::AbstractDict)
             _assign!(vs.cut_kind, Symbol(get(v, "cut_kind", "sector")))
         end
         # sessions before display modes listed hidden components: invisible
-        disp = Dict{Symbol,Symbol}(Symbol(k) => Symbol(m) for (k, m) in get(v, "display", Dict()))
+        disp = Dict{Symbol,Symbol}(rn(k) => Symbol(m) for (k, m) in get(v, "display", Dict()))
         for n in get(v, "hidden", String[])
-            disp[Symbol(n)] = :invisible
+            disp[rn(n)] = :invisible
         end
         filter!(p -> last(p) in DISPLAY_MODES && last(p) !== :opaque, disp)
         _assign!(vs.display, disp)
@@ -295,18 +314,19 @@ function restore!(sess::DesignSession, state::AbstractDict)
     return sess
 end
 
-# A saved part. `params` (the target's dimensions) for a session before version 3: a part
-# in the old foil frame (`anchor = "foil"`, axes the columns of [0 0 1; 0 1 0; -1 0 0],
-# `z` along the foil's back normal) is re-expressed in the `:backlighter` frame, its
-# chamber placement unchanged. `named_foil` (before version 5): the foil role is the
-# name `backlighter`; `named_capsule` (before version 7): the observed role is the name
+# A saved part. `params` (the template's dimensions) for a session before version 3: a
+# part in the old foil frame (`anchor = "foil"`, axes the columns of [0 0 1; 0 1 0;
+# -1 0 0], `z` along the foil's back normal) is re-expressed in the foil's frame (the
+# template's `:backlighter`, which becomes the foil part's: `_template_parts`), its chamber
+# placement unchanged. `named_foil` (before version 5): the foil role is the name
+# `backlighter`; `named_capsule` (before version 7): the observed role is the name
 # `capsule`.
 function _state_part(p, params; named_foil::Bool = false, named_capsule::Bool = false)
     vals = Dict{Symbol,Float64}(Symbol(k) => v for (k, v) in p["values"])
     frame = Symbol(get(p, "frame", get(p, "anchor", "tcc")))
     if params !== nothing && frame === :foil
-        Rold = Frame([0.0 0.0 1.0; 0.0 1.0 0.0; -1.0 0.0 0.0], foil_center(params))
-        F = backlighter_frame(params)
+        Rold = Frame([0.0 0.0 1.0; 0.0 1.0 0.0; -1.0 0.0 0.0], Vec3(params[:distance], 0, 0))
+        F = _template_foil_frame(params)
         c = Vec3(get(vals, :x, 0.0), get(vals, :y, 0.0), get(vals, :z, 0.0))
         vals[:x], vals[:y], vals[:z] = to_frame(F, to_chamber(Rold, c))
         R = F.R' * (Rold.R * euler_rotation(get(vals, :theta, 0.0), get(vals, :phi, 0.0),
@@ -318,9 +338,85 @@ function _state_part(p, params; named_foil::Bool = false, named_capsule::Bool = 
                     two_sided = p["two_sided"], inward = p["inward"], aperture = p["aperture"],
                     file = get(p, "file", ""), frame, coords = Symbol(get(p, "coords", "cartesian")),
                     object = get(p, "object", ""), steps = _state_step.(get(p, "steps", Dict[])),
-                    foil = named_foil ? p["name"] == String(FOIL_NAME) : p["foil"],
+                    foil = named_foil ? p["name"] == "backlighter" : p["foil"],
                     observed = named_capsule ? p["name"] == "capsule" : p["observed"],
-                    wall = named_capsule ? false : p["wall"])
+                    wall = named_capsule ? false : p["wall"],
+                    windows = WindowSpec[_state_window(w) for w in get(p, "windows", [])])
+end
+
+_window_state(w::WindowSpec) =
+    Dict{String,Any}("phi" => w.phi, "z" => w.z, "width" => w.width, "height" => w.height,
+                     "open" => w.open, "albedo" => w.albedo, "conversion" => w.conversion, "round" => w.round)
+
+_state_window(w) = WindowSpec(; phi = w["phi"], z = w["z"], width = w["width"], height = w["height"],
+                              open = w["open"], albedo = w["albedo"], conversion = w["conversion"],
+                              round = w["round"])
+
+# The dimensions of the templates before version 8, their defaults: a saved session
+# carries every one of them, an older one may lack the later ones.
+const _TEMPLATE_DEFAULTS = Dict(:length => 10.1, :radius => 2.875, :leh_radius => 1.55, :capsule_radius => 0.9,
+                                :wall_albedo => 0.85, :wall_conversion => 0.8, :distance => 6.0, :width => 2.0,
+                                :conversion => 0.02, :main_radius => 1.0, :leh_closure => 0.0,
+                                :leh_closure_time => 5.0, :leh_closure_width => 0.5, :leh_open_fraction => 0.84)
+
+# The placement of a foil template's foil (the template's `:backlighter` frame, `z` toward
+# TCC, `x` along chamber `z`): the converted foil part's own frame.
+_template_foil_frame(p) = euler_frame(Vec3(p[:distance], 0, 0), 90.0, 180.0, 180.0)
+
+# The parts a session's template (`kind`, dimensions `p`, the hohlraum's `windows`)
+# becomes, ahead of the session's own `parts` (so the elements keep their order), with
+# the names its components take (old => new) and its frames (old => new); the session's
+# parts placed in a template frame (or with steps referring to one) refer to the new one.
+function _template_parts(kind::Symbol, p::AbstractDict, windows, parts, capsule_h::Real)
+    taken = Set{Symbol}(q.name for q in parts)
+    function uniq(base::Symbol)
+        n, k = base, 1
+        while n in taken
+            k += 1
+            n = Symbol(base, :_, k)
+        end
+        push!(taken, n)
+        return n
+    end
+    new, names, frames = PartSpec[], Dict{Symbol,Symbol}(), Dict{Symbol,Symbol}()
+    if kind === :hohlraum
+        h = uniq(:hohlraum)
+        v = Dict(:length => p[:length], :radius => p[:radius], :leh_radius => p[:leh_radius],
+                 :albedo => p[:wall_albedo], :conversion => p[:wall_conversion],
+                 :leh_closure => p[:leh_closure], :leh_closure_time => p[:leh_closure_time],
+                 :leh_closure_width => p[:leh_closure_width], :leh_open_fraction => p[:leh_open_fraction])
+        push!(new, PartSpec(:hohlraum; name = h, values = v, windows))
+        for n in (:wall, :cap_top, :cap_bottom, :leh_top, :leh_bottom, :leh_top_lip, :leh_bottom_lip)
+            names[n] = piece_name(h, n)
+        end
+        for k in eachindex(windows)
+            names[window_name(k)] = piece_name(h, window_name(k))
+        end
+        frames[:leh_top], frames[:leh_bottom] = Symbol(h, ".leh_top"), Symbol(h, ".leh_bottom")
+        if p[:capsule_radius] > 0
+            c = uniq(:capsule)
+            push!(new, PartSpec(:sphere; name = c, frame = h, observed = !any(q -> q.observed, parts),
+                                values = Dict(:r1 => p[:capsule_radius], :albedo => 0.3, :conversion => 0.3,
+                                              :capsule_mesh => 1.0)))
+            names[:capsule] = c
+        end
+    elseif kind === :foil
+        f = uniq(:foil)
+        push!(new, PartSpec(:rectangle; name = f, foil = true,
+                            values = Dict(:x => p[:distance], :theta => 90.0, :phi => 180.0, :rotation => 180.0,
+                                          :r1 => p[:width], :r2 => p[:width], :conversion => p[:conversion],
+                                          :h => Float64(capsule_h))))
+        names[:backlighter] = frames[:backlighter] = f
+        if p[:main_radius] > 0
+            m = uniq(:main)
+            push!(new, PartSpec(:sphere; name = m, values = Dict(:r1 => p[:main_radius])))
+            names[:main] = m
+        end
+    elseif kind !== :custom
+        throw(ArgumentError("unknown target template :$kind"))
+    end
+    moved = PartSpec[foldl((q, (a, b)) -> _renamed(q, a, b), frames; init = q) for q in parts]
+    return [new; moved], names, frames
 end
 
 # ---------------------------------------------------------------- CAD files in sessions

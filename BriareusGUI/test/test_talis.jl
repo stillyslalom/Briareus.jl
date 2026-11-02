@@ -128,10 +128,10 @@ end
     sess = DesignSession(resolution = :coarse)
     @test add_window!(sess.target)                            # closed, at φ = 90°
     tl = sess.talis
-    @test tl.capture[] == [:wall] && :window_1 in tl.hardware[] && :cap_top in tl.hardware[]
+    @test tl.capture[] == [:hohlraum_wall] && :hohlraum_window_1 in tl.hardware[] && :hohlraum_cap_top in tl.hardware[]
     @test !(:capsule in tl.hardware[]) && !(:capsule in tl.capture[])   # drive physics, not hardware
-    @test talis_kwargs(tl, sess.review).leh == (:cap_top, :cap_bottom)
-    @test :window_1 in sess.review.hardware[]                 # clearance checks it too
+    @test talis_kwargs(tl, sess.review).leh == (:hohlraum_cap_top, :hohlraum_cap_bottom)
+    @test :hohlraum_window_1 in sess.review.hardware[]                 # clearance checks it too
     @test task_status(sess, :talis)[1] === :todo
     start_talis!(sess; spawn = false)
     r = tl.report[]
@@ -139,38 +139,38 @@ end
     # failure); apart from the closed window (hardware, in the 1% contours of beams
     # landing beside it), the only failures are quads' incidence on the wall: their axes
     # meet it below 70°, their f-cones' steepest rays (axis + 3.6° at f/7.9) above
-    lip = [x for x in r.rows if x.rule === :clearance_3w && x.component in (:cap_top, :cap_bottom)]
+    lip = [x for x in r.rows if x.rule === :clearance_3w && x.component in (:hohlraum_cap_top, :hohlraum_cap_bottom)]
     @test any(x -> x.status === :review, lip) && all(x -> x.status in (:pass, :review), lip)
     @test all(x -> occursin("LEH clearance", x.note), (x for x in lip if x.status === :review))
-    bad = [x for x in r.rows if x.status === :fail && x.component !== :window_1]
-    @test !isempty(bad) && all(x -> x.rule === :incidence_3w && x.component === :wall &&
+    bad = [x for x in r.rows if x.status === :fail && x.component !== :hohlraum_window_1]
+    @test !isempty(bad) && all(x -> x.rule === :incidence_3w && x.component === :hohlraum_wall &&
                                    x.nominal - atand(1 / (2 * 7.9)) < 70, bad)   # quads: f/7.9
-    @test any(x -> x.status === :fail && x.rule === :clearance_3w, (x for x in r.rows if x.component === :window_1))
+    @test any(x -> x.status === :fail && x.rule === :clearance_3w, (x for x in r.rows if x.component === :hohlraum_window_1))
     @test !any(x -> x.component === :capsule && x.rule !== :tas_stay_in, r.rows)   # stay-in: every part
     rules = Set(x.rule for x in r.rows)
     @test :tas_stay_in in rules && :clearance_1w in rules && :clearance_3w in rules
-    @test any(x -> x.component === :window_1, r.rows)
+    @test any(x -> x.component === :hohlraum_window_1, r.rows)
     @test length(unique(x.beam for x in r.rows if x.rule !== :tas_stay_in)) == 48
-    @test r.settings.capture == [:wall]
+    @test r.settings.capture == [:hohlraum_wall]
     # every quad lands on the wall: capture rows have no free substrate edge to measure
-    @test all(x -> x.component === :wall, (x for x in r.rows if x.rule === :capture_3w))
+    @test all(x -> x.component === :hohlraum_wall, (x for x in r.rows if x.rule === :capture_3w))
     @test occursin("48 beams", talis_brief(tl))
     st, txt = task_status(sess, :talis)
     @test st === :attention && occursin(r"\d+ fail, \d+ review", txt)  # LEH reviews, incidence fails
     # roles follow the target: a removed window leaves the selection, a new one is checked
     set_talis_role!(tl, :capsule, :hardware)
-    edit_target!(sess.target, :length, "10.0")
+    edit_part!(sess.target, 1, :length, "10.0")
     @test :capsule in tl.hardware[] && !(:capsule in tl.capture[])        # kept as chosen
     @test !(:capsule in talis_kwargs(tl, sess.review).leh)
     @test talis_stale(tl, sess.review, sess.target.target[], active_beams(sess.beams))
     @test task_status(sess, :talis)[1] === :attention
     remove_window!(sess.target, 1)
-    @test !(:window_1 in tl.hardware[]) && !(:window_1 in sess.review.hardware[])
+    @test !(:hohlraum_window_1 in tl.hardware[]) && !(:hohlraum_window_1 in sess.review.hardware[])
     add_window!(sess.target)
-    @test :window_1 in tl.hardware[] && :window_1 in sess.review.hardware[]
+    @test :hohlraum_window_1 in tl.hardware[] && :hohlraum_window_1 in sess.review.hardware[]
     # switching to a foil chooses afresh
-    set_target_kind!(sess.target, :foil)
-    @test tl.capture[] == [FOIL_NAME] && tl.hardware[] == [:main]
+    @test new_target!(sess, :foil)
+    @test tl.capture[] == [:foil] && tl.hardware[] == [:main]
     set_review_view!(sess.review, :talis)
     @test sess.review.view[] === :talis
     @test_throws ArgumentError set_review_view!(sess.review, :tally)

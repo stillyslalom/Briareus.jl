@@ -434,7 +434,7 @@ end
 
 # ---------------------------------------------------------------- shell
 
-const _MODEL_ROWS = (treeModel = TreeItem, targetFieldModel = FieldRow, partFieldModel = FieldRow,
+const _MODEL_ROWS = (treeModel = TreeItem, partFieldModel = FieldRow,
                      stepModel = StepRow,
                      windowModel = WindowRow, beamModel = BeamRow, modeModel = ModeRow,
                      powerModel = PowerRow, optModeModel = ModeRow, paramModel = ParamRow,
@@ -531,17 +531,18 @@ function BriareusShell(sess::DesignSession; queue::Channel{Any} = Channel{Any}(I
     _set!(sh, "compIncluded", true)
     _set!(sh, "roleLabels", [PART_ROLE_LABELS[r] for r in PART_ROLES])
     _set!(sh, "partCoords", 0)
-    _set!(sh, "frameLabels", [FRAME_LABELS[a] for a in TEMPLATE_FRAMES])
+    _set!(sh, "frameLabels", [FRAME_LABELS[:tcc]])
     _set!(sh, "stepKindLabels", [PART_STEP_LABELS[k] for k in PART_STEP_KINDS])
     _set!(sh, "placementNote", "")
     _set!(sh, "windowNumber", 0)
+    _set!(sh, "hasHohlraum", false)
     _set!(sh, "ortho", false)
     _set!(sh, "turntable", true)
     mark = (_...) -> (sh.dirty[] = true)
     ts, bt, dr, st, rv, tl, v, tm = sess.target, sess.beams, sess.drive, sess.optimize, sess.review,
                                     sess.talis, sess.view, sess.time
-    for obs in (sess.status, sess.meshing, sess.cad_changed, ts.kind, ts.params, ts.mesh, ts.resolution,
-                ts.windows, ts.parts, ts.target, ts.error, ts.pending, ts.building, ts.fitting, ts.active_foil,
+    for obs in (sess.status, sess.meshing, sess.cad_changed, ts.mesh, ts.resolution,
+                ts.parts, ts.target, ts.error, ts.pending, ts.building, ts.fitting, ts.active_foil,
                 bt.beams, bt.enabled, bt.preset, bt.by, bt.path, bt.error, bt.warnings,
                 dr.scenario, dr.building, dr.result, dr.evaluating, dr.field, dr.view,
                 dr.cavity, dr.cavity_point, dr.films, dr.beam_model, dr.profile,
@@ -697,21 +698,20 @@ end
 
 function _refresh_target!(sh::BriareusShell)
     ts = sh.sess.target
-    _set!(sh, "targetKind", String(ts.kind[]))
     _set!(sh, "targetResolution", String(ts.resolution[]))
     _set!(sh, "mesh_h", _num(ts.mesh[].h))
     _set!(sh, "mesh_capsule_h", _num(ts.mesh[].capsule_h))
     _set!(sh, "targetSummary", target_summary(ts))
     _set!(sh, "targetError", ts.error[])
-    fields = [FieldRow(String(k), label, unit, _num(ts.params[][k]))
-              for (k, label, unit, _) in getfield(TARGET_FIELDS, ts.kind[])]
-    _sync_rows!(sh.rows[:targetFieldModel], sh.models[:targetFieldModel], fields)
-    ws = ts.kind[] === :hohlraum ? ts.windows[] : WindowSpec[]
-    rows = [WindowRow(i, String(window_name(i)), _num(w.phi), _num(w.z), _num(w.width),
+    # the windows of the selected window's hohlraum (or the selected or first hohlraum part)
+    i = _window_part_index(sh.sess)
+    ws = i === nothing ? WindowSpec[] : ts.parts[][i].windows
+    rows = [WindowRow(k, String(window_name(k)), _num(w.phi), _num(w.z), _num(w.width),
                       _num(w.height), w.open, _num(w.albedo), _num(w.conversion), w.round)
-            for (i, w) in enumerate(ws)]
+            for (k, w) in enumerate(ws)]
     _sync_rows!(sh.rows[:windowModel], sh.models[:windowModel], rows)
     _set!(sh, "windowCount", length(ws))
+    _set!(sh, "hasHohlraum", any(p -> p.kind === :hohlraum, ts.parts[]))
     _set!(sh, "partCount", length(ts.parts[]))
     names = component_names(ts.target[])
     obs = observed_name(ts)
@@ -720,13 +720,26 @@ function _refresh_target!(sh::BriareusShell)
     _set!(sh, "hasFoil", foil !== nothing && Controllers._has_part(ts.target[], foil))
     # the foils to choose the active one from (shown with two or more)
     fs = foil_names(ts)
-    _set!(sh, "foilNames", [n === FOIL_NAME && ts.kind[] === :foil ? "Backlighter foil (template)" : String(n) for n in fs])
+    _set!(sh, "foilNames", String.(fs))
     _set!(sh, "activeFoil", something(findfirst(==(foil), fs), 1) - 1)
-    _set!(sh, "lehClosure", get(ts.params[], :leh_closure, 0.0) != 0)
-    for (k, _, _, _) in LEH_CLOSURE_FIELDS
-        _set!(sh, String(k), _num(ts.params[][k]))
-    end
     return
+end
+
+# The hohlraum part whose windows the window page and Add window take: the selected
+# window's, else the selected hohlraum part (or a piece of one), else the first.
+function _window_part_index(sess)
+    ts = sess.target
+    kind, key = selection_kind(sess.view.selection[])
+    if kind === :window
+        w = window_of(ts, Symbol(key))
+        w === nothing || return w[1]
+    elseif kind in (:part, :comp)
+        n = Symbol(key)
+        for (i, p) in enumerate(ts.parts[])
+            p.kind === :hohlraum && (p.name === n || startswith(key, String(p.name) * "_")) && return i
+        end
+    end
+    return findfirst(p -> p.kind === :hohlraum, ts.parts[])
 end
 
 function _refresh_beams!(sh::BriareusShell)
@@ -845,7 +858,8 @@ function _refresh_selection!(sh::BriareusShell)
             _set!(sh, "placementNote", note)
         end
     elseif kind === :window
-        _set!(sh, "windowNumber", parse(Int, key))
+        w = window_of(sess.target, Symbol(key))
+        _set!(sh, "windowNumber", w === nothing ? 0 : w[2])
     elseif kind in (:group, :quad, :beam)
         bt = sess.beams
         idx = selected_beams(sess)
@@ -1092,8 +1106,7 @@ function _refresh_sweep!(sh::BriareusShell)
     sess = sh.sess
     sw = sess.sweep
     subs = sweep_subjects(sess)
-    _set!(sh, "swSubjects", [s === :backlighter && sess.target.kind[] === :foil ? "Backlighter foil (template)" :
-                             String(s) for s in subs])
+    _set!(sh, "swSubjects", String.(subs))
     _set!(sh, "swSubject", something(findfirst(==(sweep_subject(sess)), subs), 0) - 1)
     mf = _move_frame_choices(sess)
     _set!(sh, "swFrames", [_frame_label(f) for f in mf])
@@ -1450,7 +1463,7 @@ end
 function _node_component(sess, id)
     kind, key = selection_kind(id)
     kind in (:comp, :part) && return Symbol(key)
-    kind === :window && return window_name(parse(Int, key))
+    kind === :window && return Symbol(key)
     return nothing
 end
 _node_beam_names(sess, id) = [sess.beams.beams[][i].name for i in node_beams(sess.beams, id)]
@@ -1549,38 +1562,77 @@ function br_tree_on(id, on)
     end
 end
 # Target
-br_set_target_kind(kind) = _with_shell(sh -> set_target_kind!(sh.sess.target, _sym(kind)))
-br_set_resolution(r) = _with_shell(sh -> set_resolution!(sh.sess.target, _sym(r)))
-br_edit_mesh(key, text) = _with_shell(sh -> edit_mesh!(sh.sess.target, _sym(key), string(text)))
-br_edit_target(key, text) = _with_shell(sh -> edit_target!(sh.sess.target, _sym(key), string(text)))
-br_leh_closure(on) = _with_shell(sh -> set_leh_closure!(sh.sess.target, Bool(on)))
-function br_add_window()
+# File ▸ New target: a starter alone ("empty": a sphere at TCC).
+function br_new_target(starter)
     _with_shell() do sh
-        n = length(sh.sess.target.windows[])
-        add_window!(sh.sess.target) && select!(sh.sess.view, "window:$(n + 1)")
+        s = _sym(starter)
+        new_target!(sh.sess, s === :empty ? :none : s) &&
+            (sh.sess.status[] = "new target: " * get(STARTER_LABELS, s, "a sphere at TCC"))
     end
 end
-br_remove_window(row) = _with_shell(sh -> (remove_window!(sh.sess.target, round(Int, row));
+# Insert ▸ a starter, placed in the selected part's or piece's frame (TCC with none).
+function br_insert(starter)
+    _with_shell() do sh
+        sess = sh.sess
+        s = _sym(starter)
+        frame = _selected_frame(sess)
+        before = Set(p.name for p in sess.target.parts[])
+        insert_starter!(sess.target, s; frame) || return
+        new = [p.name for p in sess.target.parts[] if !(p.name in before)]
+        isempty(new) || select!(sess.view, "part:" * String(new[1]))
+        sess.status[] = "inserted " * STARTER_LABELS[s] * (frame === :tcc ? " at TCC" : " in " * _frame_label(frame)) *
+                        ": " * join(String.(new), ", ")
+    end
+end
+# The frame of the selection, where Insert places a starter: a part's, a piece's (its
+# part's piece frame), a window's; TCC otherwise.
+function _selected_frame(sess)
+    ts = sess.target
+    kind, key = selection_kind(sess.view.selection[])
+    kind in (:part, :comp, :window) || return :tcc
+    n = Symbol(key)
+    part_index(ts, n) === nothing || return n
+    for c in ts.target[].components
+        c.name === n && c.part !== n && return piece_frame(n, c.part)
+    end
+    return :tcc
+end
+br_set_resolution(r) = _with_shell(sh -> set_resolution!(sh.sess.target, _sym(r)))
+br_edit_mesh(key, text) = _with_shell(sh -> edit_mesh!(sh.sess.target, _sym(key), string(text)))
+# Add a window to the selected (or first) hohlraum part's wall, and select it.
+function br_add_window()
+    _with_shell() do sh
+        ts = sh.sess.target
+        i = _window_part_index(sh.sess)
+        part = i === nothing ? nothing : ts.parts[][i].name
+        add_window!(ts; part) || return
+        p = ts.parts[][_window_part_index(sh.sess)]
+        select!(sh.sess.view, "window:" * String(piece_name(p.name, window_name(length(p.windows)))))
+    end
+end
+# The hohlraum part of the window page (`_window_part_index`).
+_window_part(sh) = (i = _window_part_index(sh.sess); i === nothing ? nothing : sh.sess.target.parts[][i].name)
+br_remove_window(row) = _with_shell(sh -> (remove_window!(sh.sess.target, round(Int, row); part = _window_part(sh));
                                            select!(sh.sess.view, "target")))
 function br_edit_window(row, key, text)
     _with_shell() do sh
         k = round(Int, row)
         # a rejected edit keeps the window: re-send its row so the field shows it again
-        edit_window!(sh.sess.target, k, _sym(key), string(text)) ||
+        edit_window!(sh.sess.target, k, _sym(key), string(text); part = _window_part(sh)) ||
             (k <= length(sh.rows[:windowModel]) && (sh.models[:windowModel][k] = sh.rows[:windowModel][k]))
     end
 end
 function br_window_round(row, on)
     _with_shell() do sh
         k = round(Int, row)
-        set_window_round!(sh.sess.target, k, Bool(on)) ||
+        set_window_round!(sh.sess.target, k, Bool(on); part = _window_part(sh)) ||
             (k <= length(sh.rows[:windowModel]) && (sh.models[:windowModel][k] = sh.rows[:windowModel][k]))
     end
 end
 function br_window_open(row, on)
     _with_shell() do sh
         k = round(Int, row)
-        set_window_open!(sh.sess.target, k, Bool(on)) ||
+        set_window_open!(sh.sess.target, k, Bool(on); part = _window_part(sh)) ||
             (k <= length(sh.rows[:windowModel]) && (sh.models[:windowModel][k] = sh.rows[:windowModel][k]))
     end
 end
@@ -1655,7 +1707,7 @@ function br_part_flag(flag, on)
         end
     end
 end
-# A frame's name in the menus: a template frame's label, or the part's name.
+# A frame's name in the menus: TCC's label, a part's name, or a piece frame's (part ▸ piece).
 function _frame_label(f::Symbol)
     haskey(FRAME_LABELS, f) && return FRAME_LABELS[f]
     s = String(f)
@@ -1667,17 +1719,13 @@ end
 const _PIECE_FRAME_LABELS = Dict("leh_top" => "top LEH and cap", "leh_bottom" => "bottom LEH and cap")
 # A part's frame and its pieces' (`piece_frame_defs`), in order.
 _with_piece_frames(ps) = Symbol[n for q in ps for n in (q.name, first.(piece_frame_defs(q))...)]
-# Frames a part can be placed in: the template's, then the other parts and their pieces.
+# Frames a part can be placed in: TCC, then the other parts and their pieces.
 function _part_frame_choices(sess, p)
-    fr = part_frames(sess.target)
-    return [[f for f in TEMPLATE_FRAMES if haskey(fr, f) && !(f in (q.name for q in sess.target.parts[]))];
-            _with_piece_frames(q for q in sess.target.parts[] if q.name !== p.name)]
+    return [:tcc; _with_piece_frames(q for q in sess.target.parts[] if q.name !== p.name)]
 end
-# Frames to move along or aim in: the template's, then every part's and its pieces'.
+# Frames to move along or aim in: TCC, then every part and its pieces.
 function _move_frame_choices(sess)
-    fr = part_frames(sess.target)
-    names = [q.name for q in sess.target.parts[]]
-    return [[f for f in TEMPLATE_FRAMES if haskey(fr, f) && !(f in names)]; _with_piece_frames(sess.target.parts[])]
+    return [:tcc; _with_piece_frames(sess.target.parts[])]
 end
 # Move the selected part to another frame, keeping it where it is (index into
 # `frameLabels`).
@@ -1902,7 +1950,8 @@ function br_remove_selected()
             i = part_index(sess.target, Symbol(key))
             i === nothing || (remove_part!(sess.target, i); select!(sess.view, "target"))
         elseif kind === :window
-            remove_window!(sess.target, parse(Int, key))
+            w = window_of(sess.target, Symbol(key))
+            w === nothing || remove_window!(sess.target, w[2]; part = sess.target.parts[][w[1]].name)
             select!(sess.view, "target")
         else
             sess.status[] = "only parts and windows can be removed (hide a component instead)"
@@ -1977,7 +2026,7 @@ end
 function br_set_facility(f)
     _with_shell() do sh
         s = sh.sess
-        set_facility!(s.beams, _sym(f); target_kind = s.target.kind[], params = s.target.params[])
+        set_facility!(s.beams, _sym(f); target = s.target)
         s.status[] = "facility: " * FACILITY_LABELS[_sym(f)]
     end
 end
@@ -2385,7 +2434,7 @@ function _register_qml_functions()
     @qmlfunction br_relink_part br_part_from_source
     @qmlfunction br_set_cluster br_rename_cluster br_split_quad br_merge_quad br_window_round
     @qmlfunction br_set_facility br_aim_frame br_aim_at_frame
-    @qmlfunction br_set_target_kind br_set_resolution br_edit_mesh br_edit_target br_leh_closure
+    @qmlfunction br_new_target br_insert br_set_resolution br_edit_mesh
     @qmlfunction br_add_window br_remove_window br_edit_window br_window_open
     @qmlfunction br_add_part br_add_stl br_edit_part br_part_flag br_part_frame br_part_coords
     @qmlfunction br_move_frame br_move_axis br_move_step br_nudge_part br_sweep_part

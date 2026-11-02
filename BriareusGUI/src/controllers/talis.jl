@@ -73,8 +73,7 @@ TaLISState() = TaLISState(Observable(Symbol[]), Observable(Symbol[]), Observable
                           Ref(Symbol[]), Ref(0))
 
 """
-    default_selection!(tl::TaLISState, t::Target; capture = (:wall, FOIL_NAME),
-                       observed = (:capsule,))
+    default_selection!(tl::TaLISState, t::Target; capture = (), observed = ())
 
 Capture components and hardware for a target's components: the surfaces `capture`
 (names; a session passes the holders of the wall and foil roles: a hohlraum's wall,
@@ -86,8 +85,7 @@ their 3ω clearance is an LEH-clearance review rather than a failure. No compone
 diagnostic by default. Components the selection was already made for keep their roles
 (a selection made afresh clears the diagnostics too).
 """
-function default_selection!(tl::TaLISState, t::Target; capture = (_TEMPLATE_WALL, FOIL_NAME),
-                            observed = (_TEMPLATE_CAPSULE,))
+function default_selection!(tl::TaLISState, t::Target; capture = (), observed = ())
     names = surface_names(t)
     fresh = !any(in(names), tl.capture[])
     _update_roles!(tl.capture, tl.hardware, tl.known, names,
@@ -98,9 +96,9 @@ function default_selection!(tl::TaLISState, t::Target; capture = (_TEMPLATE_WALL
     return tl
 end
 
-# Components that form an entrance-hole edge: the hohlraum template's caps and lips, and a
-# hohlraum part's (`<part>_cap_top`, …).
-_leh_edge(n::Symbol) = occursin(r"(^|_)(cap_top|cap_bottom|leh_top_lip|leh_bottom_lip)$", String(n))
+# Components that form an entrance-hole edge: a hohlraum part's caps and lips
+# (`<part>_cap_top`, …).
+_leh_edge(n::Symbol) = occursin(r"_(cap_top|cap_bottom|leh_top_lip|leh_bottom_lip)$", String(n))
 
 """
     set_talis_role!(tl::TaLISState, component::Symbol, role::Symbol)

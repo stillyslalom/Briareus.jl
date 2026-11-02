@@ -64,14 +64,14 @@ export import_visrad_workspace!, export_visrad_workspace, export_results, retune
        retune_to_reference!, session_state, restore!, save_session, load_session!, cad_source, relink_cad!,
        reload_cad_sources!, EditHistory, record!, undo!,
        redo!, can_undo, can_redo, reset_history!
-export TargetSetup, TARGET_KINDS, TARGET_KIND_LABELS, TARGET_FIELDS, MeshSpec, MESH_PRESETS,
-       MESH_RESOLUTIONS, FOIL_NAME, build_target, foil_center, set_target_kind!,
-       set_resolution!, edit_mesh!, edit_target!, target_summary, component_names, surface_names,
+export TargetSetup, MeshSpec, MESH_PRESETS,
+       MESH_RESOLUTIONS, build_target, new_target!,
+       set_resolution!, edit_mesh!, target_summary, component_names, surface_names,
        target_ready, await_target!, BACKGROUND_TRIANGLES, LEH_CLOSURE_FIELDS, set_leh_closure!,
        is_lip, shown_component, with_lips
 export PartSpec, PART_KINDS, PART_KIND_LABELS, PART_FIELDS, PART_SIZE_FIELDS, part_component,
        part_axis, part_center, add_part!, remove_part!, edit_part!, set_part_flag!, part_index,
-       TEMPLATE_FRAMES, FRAME_LABELS, backlighter_frame, template_frames, part_frame_def,
+       FRAME_LABELS, part_frame_def,
        part_frames, set_part_frame!, nudge_part!, set_excluded!, PART_STEP_KINDS,
        PART_STEP_LABELS, step_kind, add_part_step!, remove_part_step!, move_part_step!,
        edit_part_step!, part_placement,
@@ -84,7 +84,7 @@ export HOHLRAUM_VALUES, SPHERE_VALUES, hohlraum_pieces, piece_name, piece_frame_
        STARTERS, STARTER_LABELS, starter_parts, insert_starter!
 export WindowSpec, WINDOW_FIELDS, add_window!, remove_window!, edit_window!, set_window_open!,
        set_window_round!,
-       window_name
+       window_name, hohlraum_windows
 export FACILITIES, FACILITY_LABELS, FACILITY_PRESETS, facility_of, set_facility!, session_tasks
 export set_aim_frame!, follow_frames!, frame_point, beam_frames, preset_aim_frame
 export SweepState, SWEEP_QUALITY, SWEEP_AXES, SWEEP_MAX_STEPS, SWEEP_MODES, set_sweep!, set_sweep_step!,
@@ -131,7 +131,7 @@ export ViewState, COLOR_MODES, COLOR_LABELS, BEAM_COLORINGS, PALETTE, component_
        cluster_colors, TreeRow, select!, select_add!, select_range!, selected_ids, toggle_expanded!,
        selected_components,
        selection_kind, component_id, beam_id, model_tree, node_beams, selected_beams,
-       selected_component, component_label, piece_label
+       selected_component, component_label, piece_label, window_of
 export DesignSession, TASKS, TASK_LABELS, task_status, set_color!, drive_stale,
        build_scenario!, accept_optimum!, radiation_size, include_components!,
        RADIATION_MAX_ELEMENTS
@@ -143,7 +143,7 @@ using .Controllers
 export DesignSession, briareus, task_status, set_color!, build_scenario!, start_optimize!,
        cancel_optimize!, accept_optimum!, start_clearance!, cancel_clearance!, start_talis!,
        cancel_talis!
-export TargetSetup, set_target_kind!, set_resolution!, edit_mesh!, edit_target!, add_window!,
+export TargetSetup, new_target!, set_resolution!, edit_mesh!, add_window!,
        add_part!, edit_part!, remove_part!,
        edit_window!, set_window_open!, remove_window!, BeamTable, load_preset!,
        set_grouping!, beam_rows, edit_beams!, set_enabled!, import_beams!, export_beams,
@@ -189,7 +189,7 @@ end
     # BRIAREUSGUI_NO_WORKLOAD=true skips the workload (faster rebuilds while developing)
     get(ENV, "BRIAREUSGUI_NO_WORKLOAD", "") == "true" || @compile_workload begin
         sess = DesignSession(resolution = :coarse)
-        edit_target!(sess.target, :length, "10.0")
+        edit_part!(sess.target, 1, :length, "10.0")
         add_window!(sess.target)
         edit_window!(sess.target, 1, :z, "0.5")
         remove_window!(sess.target, 1)
@@ -202,7 +202,7 @@ end
         Controllers._fit_capsule(part_components(PartSpec(:sphere; name = :s), 0.3), :s)
         # the first undo and redo (0.3 s of compilation otherwise)
         record!(sess)
-        edit_target!(sess.target, :length, "10.2")
+        edit_part!(sess.target, 1, :length, "10.2")
         record!(sess)
         undo!(sess)
         redo!(sess)

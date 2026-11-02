@@ -15,25 +15,23 @@ assembly. Cases named:
 This file records the design and the phased plan. Remove each phase from it once that
 phase lands; the docstrings and research notes then hold what was built.
 
-## Today
+## Today (after phase B)
 
-- **Target kinds.** `TargetSetup.kind` is `:hohlraum`, `:foil` or `:custom`
-  (`controllers/target_setup.jl`). A hohlraum builds core `hohlraum(...)` in the chamber
-  frame (wall, caps, LEHs, lips, capsule, windows); a foil target builds its foil and the
-  main-target sphere. Parts (`PartSpec`) are added on top.
-- **Frames.** Every part has a frame (`part_frames`), so beams aim relative to any part.
-  The template has only `TEMPLATE_FRAMES` (TCC, the two LEHs, the backlighter foil); its
-  wall, caps and capsule have none. This is the reported bug.
-- **Names carry meaning.** The GUI finds what to analyze by component name: `:capsule`
-  (37 uses: modes, keep-out, Dante, TaLIS and clearance roles), `:wall` (9), the LEHs and
-  lips, `FOIL_NAME`. A part took the capsule role by being renamed `:capsule` (until
-  phase A: roles are now flags on parts).
+- **Parts only.** A target is its parts (`PartSpec`, `controllers/target_setup.jl`); the
+  hohlraum is a `:hohlraum` part (core `hohlraum(...)` placed by its frame, pieces
+  `<part>_wall`, … with `Component.part = <part>`, its windows on the part). Starters
+  (`starter_parts`, `insert_starter!`: *Hohlraum with capsule*, *Backlighter foil*)
+  insert parts in a frame; File ▸ New target is one starter.
+- **Frames.** Every part has a frame, and a hohlraum part its pieces' (`<part>.leh_top`,
+  `<part>.leh_bottom`, `<part>.window_k`), so beams aim relative to the wall, caps,
+  entrance holes, windows and capsule.
+- **Roles, not names.** The observed, foil and wall roles are flags on parts; a hohlraum
+  part's wall and caps hold the wall role.
 - **Core is already generic.** Core analyses take the names as keywords (`observe`,
-  `wall`, `foil`, `object`, `targets`), and the VisRad import already builds a
-  cylindrical hohlraum as one part with prefixed pieces (`<name>_wall`, …,
-  `src/visrad_workspace.jl`). `Component.part` and `parts`/`part_pieces` already group a
-  part's pieces. The radiation model is global over components, so two cavities in one
-  target need nothing new.
+  `wall`, `foil`, `object`, `targets`), and the VisRad import builds a cylindrical
+  hohlraum as one part with prefixed pieces (`<name>_wall`, …,
+  `src/visrad_workspace.jl`). The radiation model is global over components, so two
+  cavities in one target need nothing new.
 
 ## Model
 
@@ -100,18 +98,15 @@ phase lands; the docstrings and research notes then hold what was built.
 ## Bit for bit
 
 The starter *Hohlraum with capsule* calls the same core `hohlraum(...)` at the identity
-frame, so its meshes, view factors and drive equal today's template's exactly; only the
-names change. A test builds both and compares element tables and the drive on Float64
-(names mapped). The foil starter changes mesh counts (frames phase 5): measure and state
-it.
+frame, so its meshes, view factors and drive equal the former template's exactly; only
+the names change (checked: see "Phase B as built").
 
 ## Phases
 
 A. Landed (roles in the GUI, bit for bit; session version 7): commit 3a07a50.
-B1. Landed (the hohlraum part kind, piece aim points; the starter *Hohlraum with capsule*
-   bit for bit with the template): see "Phase B as built" below.
-B. **Target kinds removed, starters:** sessions with a template convert to parts;
-   starters inserted in a selected frame (decision 5).
+B. Landed (the hohlraum part kind, piece aim points, target kinds removed, sessions with a
+   template converted to parts, Insert ▸ starters; session version 8): commit cd46de8 and
+   the commit after it.
 B2. **Assembly tree:** `Assembly`, membership, subtree show/hide and include/exclude,
    the tree's editing commands, sessions; a CAD import as one assembly of its parts; the
    placement triad (decision 6).
@@ -130,12 +125,7 @@ E. **Double backlighter with ARC:** the starter, ARC beams as a facility beam se
 - The role is the flag `PartSpec.observed`, but its key in `PART_ROLES` stays `:capsule`
   (the existing API and tests use it; phase A's observed surface is a sphere). Rename it
   `:observed` when flat observed faces arrive (phase C).
-- The template's wall role is its `:wall` component only, not the caps (today's drive
-  history and checks); the caps join with the hohlraum part (decision 7).
-- A part given the observed role now takes it from a template capsule (before, the name
-  clash refused it); a VisRad object named `capsule` imports with the role.
-- Template names left for phase B: the cutaway's default components, the LEHs, caps and
-  lips, `:main`, `FOIL_NAME`; the model tree marks no role yet (tree-wide roles come later).
+- A VisRad object named `capsule` imports with the observed role.
 
 ## Phase B as built (2026-11-02): what departs from the design
 
@@ -149,15 +139,22 @@ E. **Double backlighter with ARC:** the starter, ARC beams as a facility beam se
   center). A VisRad primitive's pieces have no frames of their own yet.
 - The aim-frame and placement lists are flat, each part followed by its piece frames
   (`hohlraum ▸ top LEH and cap`), not a nested menu.
-- The caps hold the wall role for the drive history (decision 7), but the clearance and
-  TaLIS checks keep them as hardware, the entrance holes' edges (the template's checks):
-  a hohlraum part's caps landing the beams would hide LEH clipping.
+- The caps hold the wall role for the drive history (decision 7; converted templates
+  too: the wall Tr rises by at most 0.11 eV, 0.04 %, the capsule Tr is unchanged), but
+  the clearance and TaLIS checks keep them as hardware, the entrance holes' edges (the
+  template's checks): a hohlraum part's caps landing the beams would hide LEH clipping.
 - A sphere meshes as the template's capsule only with `capsule_mesh` set (the starter's
   capsule sets it); the observed role does not change a sphere's mesh, so existing
   sessions keep theirs.
 - The model tree lists a hohlraum part's row with its pieces under it (a step toward B2's
   tree); the part has no display switch of its own (its pieces do).
-
+- The foil starter meshes as the foil template did (its rectangle's element size is the
+  capsule size at the insert, so the counts are unchanged); afterwards the foil keeps
+  that size instead of following the capsule size.
+- File ▸ New target ▸ Empty starts with a sphere at TCC (a target is never empty), as the
+  custom template did.
+- Starters insert in the selected part's or piece's frame; the capsule is placed in its
+  hohlraum's frame, so moving the hohlraum carries it.
 ## Decisions (user, 2026-10-29)
 
 1. Piece names `<part>_wall`, VisRad's scheme (shown in the tree as "hohlraum ▸ wall").

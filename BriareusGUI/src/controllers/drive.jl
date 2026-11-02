@@ -292,11 +292,11 @@ const _FIT_MEMO = Dict{Tuple{UInt,UInt},Pair{Component,Vector{Component}}}()
 # The file facets of a design's CAD parts (STL, VisRad CAD) in the target `t` (one flat
 # component named after the part), by name, in the chamber frame: what `_fitted_target`
 # fits them on.
-function _fit_references(t::Target, kind::Symbol, params, mesh, parts)
+function _fit_references(t::Target, mesh, parts)
     refs = Dict{Symbol,Mesh}()
     FIT_CAD[] || return refs
     flat = Set(c.name for c in t.components if c.kind === :surface && c.surface === nothing)
-    frames = isempty(parts) ? Dict{Symbol,Frame}() : part_frames(kind, params, parts)
+    frames = isempty(parts) ? Dict{Symbol,Frame}() : part_frames(parts)
     for p in parts
         p.kind in (:visrad, :mesh) && p.name in flat || continue
         try

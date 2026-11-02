@@ -1,0 +1,1664 @@
+# BriareusGUI session: a Briareus design (target, beams, analysis settings).
+# Lengths in mm, power in TW, angles in degrees; results are not saved.
+format = "BriareusGUI session"
+version = 7
+visrad_source = ""
+
+[beams]
+by = "group"
+facility = "nif"
+preset = "nif_quads"
+
+    [[beams.beam]]
+    aim = [-0.2126484509975799, -1.0690559556395212, 3.09]
+    aim_frame = "tcc"
+    aim_local = [-0.2126484509975799, -1.0690559556395212, 3.09]
+    cluster = "inner23"
+    defocus = 0.0
+    dlambda = 0.0
+    enabled = true
+    fnumber = 7.9
+    group = "inner23"
+    name = "Q15T"
+    omega1 = false
+    omega2 = false
+    port = [0.0777920842602576, 0.39108721737637464, 0.917060074385124]
+    power = 8.0
+    quad = "Q15T"
+    wavelength = 0.351
+
+        [beams.beam.spot]
+        a = 0.9310069596346806
+        angle = 1.5707963267948966
+        b = 0.6892194548273717
+        halo = 0.0
+        halo_order = 2.0
+        halo_scale = 3.0
+        order = 7.37167
+    [[beams.beam]]
+    aim = [1.0690559556395212, -0.2126484509975797, 3.09]
+    aim_frame = "tcc"
+    aim_local = [1.0690559556395212, -0.2126484509975797, 3.09]
+    cluster = "inner23"
+    defocus = 0.0
+    dlambda = 0.0
+    enabled = true
+    fnumber = 7.9
+    group = "inner23"
+    name = "Q42T"
+    omega1 = false
+    omega2 = false
+    port = [-0.39108721737637464, 0.0777920842602576, 0.917060074385124]
+    power = 8.0
+    quad = "Q42T"
+    wavelength = 0.351
+
+        [beams.beam.spot]
+        a = 0.9310069596346806
+        angle = 1.5707963267948966
+        b = 0.6892194548273717
+        halo = 0.0
+        halo_order = 2.0
+        halo_scale = 3.0
+        order = 7.37167
+    [[beams.beam]]
+    aim = [0.21264845099757998, 1.0690559556395212, 3.09]
+    aim_frame = "tcc"
+    aim_local = [0.21264845099757998, 1.0690559556395212, 3.09]
+    cluster = "inner23"
+    defocus = 0.0
+    dlambda = 0.0
+    enabled = true
+    fnumber = 7.9
+    group = "inner23"
+    name = "Q33T"
+    omega1 = false
+    omega2 = false
+    port = [-0.0777920842602576, -0.39108721737637464, 0.917060074385124]
+    power = 8.0
+    quad = "Q33T"
+    wavelength = 0.351
+
+        [beams.beam.spot]
+        a = 0.9310069596346806
+        angle = 1.5707963267948966
+        b = 0.6892194548273717
+        halo = 0.0
+        halo_order = 2.0
+        halo_scale = 3.0
+        order = 7.37167
+    [[beams.beam]]
+    aim = [-1.0690559556395212, 0.2126484509975798, 3.09]
+    aim_frame = "tcc"
+    aim_local = [-1.0690559556395212, 0.2126484509975798, 3.09]
+    cluster = "inner23"
+    defocus = 0.0
+    dlambda = 0.0
+    enabled = true
+    fnumber = 7.9
+    group = "inner23"
+    name = "Q24T"
+    omega1 = false
+    omega2 = false
+    port = [0.39108721737637464, -0.0777920842602576, 0.917060074385124]
+    power = 8.0
+    quad = "Q24T"
+    wavelength = 0.351
+
+        [beams.beam.spot]
+        a = 0.9310069596346806
+        angle = 1.5707963267948966
+        b = 0.6892194548273717
+        halo = 0.0
+        halo_order = 2.0
+        halo_scale = 3.0
+        order = 7.37167
+    [[beams.beam]]
+    aim = [-0.49548187183214293, -0.33837510943583876, 3.63]
+    aim_frame = "tcc"
+    aim_local = [-0.49548187183214293, -0.33837510943583876, 3.63]
+    cluster = "inner30"
+    defocus = 0.0
+    dlambda = 0.0
+    enabled = true
+    fnumber = 7.9
+    group = "inner30"
+    name = "Q13T"
+    omega1 = false
+    omega2 = false
+    port = [0.42011984637706934, 0.2869087792623991, 0.8609196635356098]
+    power = 8.0
+    quad = "Q13T"
+    wavelength = 0.351
+
+        [beams.beam.spot]
+        a = 0.8983853368300844
+        angle = 1.5707963267948966
+        b = 0.6341488145561597
+        halo = 0.0
+        halo_order = 2.0
+        halo_scale = 3.0
+        order = 8.046
+    [[beams.beam]]
+    aim = [0.33334213981176114, -0.4988817673815272, 3.63]
+    aim_frame = "tcc"
+    aim_local = [0.33334213981176114, -0.4988817673815272, 3.63]
+    cluster = "inner30"
+    defocus = 0.0
+    dlambda = 0.0
+    enabled = true
+    fnumber = 7.9
+    group = "inner30"
+    name = "Q41T"
+    omega1 = false
+    omega2 = false
+    port = [-0.2777851165098011, 0.4157348061512726, 0.8660254037844386]
+    power = 8.0
+    quad = "Q41T"
+    wavelength = 0.351
+
+        [beams.beam.spot]
+        a = 0.8983853368300844
+        angle = 1.5707963267948966
+        b = 0.6341488145561597
+        halo = 0.0
+        halo_order = 2.0
+        halo_scale = 3.0
+        order = 8.046
+    [[beams.beam]]
+    aim = [0.4954818718321429, 0.33837510943583887, 3.63]
+    aim_frame = "tcc"
+    aim_local = [0.4954818718321429, 0.33837510943583887, 3.63]
+    cluster = "inner30"
+    defocus = 0.0
+    dlambda = 0.0
+    enabled = true
+    fnumber = 7.9
+    group = "inner30"
+    name = "Q36T"
+    omega1 = false
+    omega2 = false
+    port = [-0.4201198463770693, -0.2869087792623992, 0.8609196635356098]
+    power = 8.0
+    quad = "Q36T"
+    wavelength = 0.351
+
+        [beams.beam.spot]
+        a = 0.8983853368300844
+        angle = 1.5707963267948966
+        b = 0.6341488145561597
+        halo = 0.0
+        halo_order = 2.0
+        halo_scale = 3.0
+        order = 8.046
+    [[beams.beam]]
+    aim = [-0.3333421398117613, 0.4988817673815271, 3.63]
+    aim_frame = "tcc"
+    aim_local = [-0.3333421398117613, 0.4988817673815271, 3.63]
+    cluster = "inner30"
+    defocus = 0.0
+    dlambda = 0.0
+    enabled = true
+    fnumber = 7.9
+    group = "inner30"
+    name = "Q26T"
+    omega1 = false
+    omega2 = false
+    port = [0.2777851165098011, -0.4157348061512726, 0.8660254037844386]
+    power = 8.0
+    quad = "Q26T"
+    wavelength = 0.351
+
+        [beams.beam.spot]
+        a = 0.8983853368300844
+        angle = 1.5707963267948966
+        b = 0.6341488145561597
+        halo = 0.0
+        halo_order = 2.0
+        halo_scale = 3.0
+        order = 8.046
+    [[beams.beam]]
+    aim = [0.0, 0.0, 5.2]
+    aim_frame = "leh_bottom"
+    aim_local = [0.0, 0.0, -10.25]
+    cluster = "outer44"
+    defocus = 0.0
+    dlambda = 0.0
+    enabled = true
+    fnumber = 7.9
+    group = "outer44"
+    name = "Q14T"
+    omega1 = false
+    omega2 = false
+    port = [0.6727707452709364, 0.19660447881202261, 0.7132504491541816]
+    power = 8.0
+    quad = "Q14T"
+    wavelength = 0.351
+
+        [beams.beam.spot]
+        a = 0.6879180932766106
+        angle = 1.5707963267948966
+        b = 0.4019323408455022
+        halo = 0.0
+        halo_order = 2.0
+        halo_scale = 3.0
+        order = 4.7925
+    [[beams.beam]]
+    aim = [0.0, 0.0, 5.2]
+    aim_frame = "leh_bottom"
+    aim_local = [0.0, 0.0, -10.25]
+    cluster = "outer44"
+    defocus = 0.0
+    dlambda = 0.0
+    enabled = true
+    fnumber = 7.9
+    group = "outer44"
+    name = "Q12T"
+    omega1 = false
+    omega2 = false
+    port = [0.32407784021811814, 0.6214880129663951, 0.7132504491541816]
+    power = 8.0
+    quad = "Q12T"
+    wavelength = 0.351
+
+        [beams.beam.spot]
+        a = 0.6879180932766106
+        angle = 1.5707963267948966
+        b = 0.4019323408455022
+        halo = 0.0
+        halo_order = 2.0
+        halo_scale = 3.0
+        order = 4.7925
+    [[beams.beam]]
+    aim = [0.0, 0.0, 5.2]
+    aim_frame = "tcc"
+    aim_local = [0.0, 0.0, 5.2]
+    cluster = "outer44"
+    defocus = 0.0
+    dlambda = 0.0
+    enabled = true
+    fnumber = 7.9
+    group = "outer44"
+    name = "Q43T"
+    omega1 = false
+    omega2 = false
+    port = [-0.1966044788120227, 0.6727707452709364, 0.7132504491541816]
+    power = 8.0
+    quad = "Q43T"
+    wavelength = 0.351
+
+        [beams.beam.spot]
+        a = 0.6879180932766106
+        angle = 1.5707963267948966
+        b = 0.4019323408455022
+        halo = 0.0
+        halo_order = 2.0
+        halo_scale = 3.0
+        order = 4.7925
+    [[beams.beam]]
+    aim = [0.0, 0.0, 5.2]
+    aim_frame = "tcc"
+    aim_local = [0.0, 0.0, 5.2]
+    cluster = "outer44"
+    defocus = 0.0
+    dlambda = 0.0
+    enabled = true
+    fnumber = 7.9
+    group = "outer44"
+    name = "Q45T"
+    omega1 = false
+    omega2 = false
+    port = [-0.6214880129663951, 0.3240778402181181, 0.7132504491541816]
+    power = 8.0
+    quad = "Q45T"
+    wavelength = 0.351
+
+        [beams.beam.spot]
+        a = 0.6879180932766106
+        angle = 1.5707963267948966
+        b = 0.4019323408455022
+        halo = 0.0
+        halo_order = 2.0
+        halo_scale = 3.0
+        order = 4.7925
+    [[beams.beam]]
+    aim = [0.0, 0.0, 5.2]
+    aim_frame = "tcc"
+    aim_local = [0.0, 0.0, 5.2]
+    cluster = "outer44"
+    defocus = 0.0
+    dlambda = 0.0
+    enabled = true
+    fnumber = 7.9
+    group = "outer44"
+    name = "Q35T"
+    omega1 = false
+    omega2 = false
+    port = [-0.6727707452709364, -0.19660447881202253, 0.7132504491541816]
+    power = 8.0
+    quad = "Q35T"
+    wavelength = 0.351
+
+        [beams.beam.spot]
+        a = 0.6879180932766106
+        angle = 1.5707963267948966
+        b = 0.4019323408455022
+        halo = 0.0
+        halo_order = 2.0
+        halo_scale = 3.0
+        order = 4.7925
+    [[beams.beam]]
+    aim = [0.0, 0.0, 5.2]
+    aim_frame = "tcc"
+    aim_local = [0.0, 0.0, 5.2]
+    cluster = "outer44"
+    defocus = 0.0
+    dlambda = 0.0
+    enabled = true
+    fnumber = 7.9
+    group = "outer44"
+    name = "Q32T"
+    omega1 = false
+    omega2 = false
+    port = [-0.3240778402181181, -0.6214880129663951, 0.7132504491541816]
+    power = 8.0
+    quad = "Q32T"
+    wavelength = 0.351
+
+        [beams.beam.spot]
+        a = 0.6879180932766106
+        angle = 1.5707963267948966
+        b = 0.4019323408455022
+        halo = 0.0
+        halo_order = 2.0
+        halo_scale = 3.0
+        order = 4.7925
+    [[beams.beam]]
+    aim = [0.0, 0.0, 5.2]
+    aim_frame = "tcc"
+    aim_local = [0.0, 0.0, 5.2]
+    cluster = "outer44"
+    defocus = 0.0
+    dlambda = 0.0
+    enabled = true
+    fnumber = 7.9
+    group = "outer44"
+    name = "Q25T"
+    omega1 = false
+    omega2 = false
+    port = [0.19660447881202286, -0.6727707452709363, 0.7132504491541816]
+    power = 8.0
+    quad = "Q25T"
+    wavelength = 0.351
+
+        [beams.beam.spot]
+        a = 0.6879180932766106
+        angle = 1.5707963267948966
+        b = 0.4019323408455022
+        halo = 0.0
+        halo_order = 2.0
+        halo_scale = 3.0
+        order = 4.7925
+    [[beams.beam]]
+    aim = [0.0, 0.0, 5.2]
+    aim_frame = "tcc"
+    aim_local = [0.0, 0.0, 5.2]
+    cluster = "outer44"
+    defocus = 0.0
+    dlambda = 0.0
+    enabled = true
+    fnumber = 7.9
+    group = "outer44"
+    name = "Q22T"
+    omega1 = false
+    omega2 = false
+    port = [0.621488012966395, -0.32407784021811836, 0.7132504491541816]
+    power = 8.0
+    quad = "Q22T"
+    wavelength = 0.351
+
+        [beams.beam.spot]
+        a = 0.6879180932766106
+        angle = 1.5707963267948966
+        b = 0.4019323408455022
+        halo = 0.0
+        halo_order = 2.0
+        halo_scale = 3.0
+        order = 4.7925
+    [[beams.beam]]
+    aim = [0.0, 0.0, 5.01]
+    aim_frame = "tcc"
+    aim_local = [0.0, 0.0, 5.01]
+    cluster = "outer50"
+    defocus = 0.0
+    dlambda = 0.0
+    enabled = true
+    fnumber = 7.9
+    group = "outer50"
+    name = "Q11T"
+    omega1 = false
+    omega2 = false
+    port = [0.5896503826057627, 0.489015863880041, 0.6427876096865394]
+    power = 8.0
+    quad = "Q11T"
+    wavelength = 0.351
+
+        [beams.beam.spot]
+        a = 0.6714125052727125
+        angle = 1.5707963267948966
+        b = 0.3924471705427822
+        halo = 0.0
+        halo_order = 2.0
+        halo_scale = 3.0
+        order = 4.51833
+    [[beams.beam]]
+    aim = [0.0, 0.0, 5.01]
+    aim_frame = "tcc"
+    aim_local = [0.0, 0.0, 5.01]
+    cluster = "outer50"
+    defocus = 0.0
+    dlambda = 0.0
+    enabled = true
+    fnumber = 7.9
+    group = "outer50"
+    name = "Q16T"
+    omega1 = false
+    omega2 = false
+    port = [0.07501895730627574, 0.7623622792859994, 0.6427876096865394]
+    power = 8.0
+    quad = "Q16T"
+    wavelength = 0.351
+
+        [beams.beam.spot]
+        a = 0.6714125052727125
+        angle = 1.5707963267948966
+        b = 0.3924471705427822
+        halo = 0.0
+        halo_order = 2.0
+        halo_scale = 3.0
+        order = 4.51833
+    [[beams.beam]]
+    aim = [0.0, 0.0, 5.01]
+    aim_frame = "tcc"
+    aim_local = [0.0, 0.0, 5.01]
+    cluster = "outer50"
+    defocus = 0.0
+    dlambda = 0.0
+    enabled = true
+    fnumber = 7.9
+    group = "outer50"
+    name = "Q46T"
+    omega1 = false
+    omega2 = false
+    port = [-0.48602512397515124, 0.5921179508327746, 0.6427876096865394]
+    power = 8.0
+    quad = "Q46T"
+    wavelength = 0.351
+
+        [beams.beam.spot]
+        a = 0.6714125052727125
+        angle = 1.5707963267948966
+        b = 0.3924471705427822
+        halo = 0.0
+        halo_order = 2.0
+        halo_scale = 3.0
+        order = 4.51833
+    [[beams.beam]]
+    aim = [0.0, 0.0, 5.01]
+    aim_frame = "tcc"
+    aim_local = [0.0, 0.0, 5.01]
+    cluster = "outer50"
+    defocus = 0.0
+    dlambda = 0.0
+    enabled = true
+    fnumber = 7.9
+    group = "outer50"
+    name = "Q44T"
+    omega1 = false
+    omega2 = false
+    port = [-0.7623622792859994, 0.07501895730627574, 0.6427876096865394]
+    power = 8.0
+    quad = "Q44T"
+    wavelength = 0.351
+
+        [beams.beam.spot]
+        a = 0.6714125052727125
+        angle = 1.5707963267948966
+        b = 0.3924471705427822
+        halo = 0.0
+        halo_order = 2.0
+        halo_scale = 3.0
+        order = 4.51833
+    [[beams.beam]]
+    aim = [0.0, 0.0, 5.01]
+    aim_frame = "tcc"
+    aim_local = [0.0, 0.0, 5.01]
+    cluster = "outer50"
+    defocus = 0.0
+    dlambda = 0.0
+    enabled = true
+    fnumber = 7.9
+    group = "outer50"
+    name = "Q34T"
+    omega1 = false
+    omega2 = false
+    port = [-0.5896503826057629, -0.4890158638800408, 0.6427876096865394]
+    power = 8.0
+    quad = "Q34T"
+    wavelength = 0.351
+
+        [beams.beam.spot]
+        a = 0.6714125052727125
+        angle = 1.5707963267948966
+        b = 0.3924471705427822
+        halo = 0.0
+        halo_order = 2.0
+        halo_scale = 3.0
+        order = 4.51833
+    [[beams.beam]]
+    aim = [0.0, 0.0, 5.01]
+    aim_frame = "tcc"
+    aim_local = [0.0, 0.0, 5.01]
+    cluster = "outer50"
+    defocus = 0.0
+    dlambda = 0.0
+    enabled = true
+    fnumber = 7.9
+    group = "outer50"
+    name = "Q31T"
+    omega1 = false
+    omega2 = false
+    port = [-0.07501895730627574, -0.7623622792859994, 0.6427876096865394]
+    power = 8.0
+    quad = "Q31T"
+    wavelength = 0.351
+
+        [beams.beam.spot]
+        a = 0.6714125052727125
+        angle = 1.5707963267948966
+        b = 0.3924471705427822
+        halo = 0.0
+        halo_order = 2.0
+        halo_scale = 3.0
+        order = 4.51833
+    [[beams.beam]]
+    aim = [0.0, 0.0, 5.01]
+    aim_frame = "tcc"
+    aim_local = [0.0, 0.0, 5.01]
+    cluster = "outer50"
+    defocus = 0.0
+    dlambda = 0.0
+    enabled = true
+    fnumber = 7.9
+    group = "outer50"
+    name = "Q23T"
+    omega1 = false
+    omega2 = false
+    port = [0.48602512397515124, -0.5921179508327746, 0.6427876096865394]
+    power = 8.0
+    quad = "Q23T"
+    wavelength = 0.351
+
+        [beams.beam.spot]
+        a = 0.6714125052727125
+        angle = 1.5707963267948966
+        b = 0.3924471705427822
+        halo = 0.0
+        halo_order = 2.0
+        halo_scale = 3.0
+        order = 4.51833
+    [[beams.beam]]
+    aim = [0.0, 0.0, 5.01]
+    aim_frame = "tcc"
+    aim_local = [0.0, 0.0, 5.01]
+    cluster = "outer50"
+    defocus = 0.0
+    dlambda = 0.0
+    enabled = true
+    fnumber = 7.9
+    group = "outer50"
+    name = "Q21T"
+    omega1 = false
+    omega2 = false
+    port = [0.7623622792859994, -0.07501895730627574, 0.6427876096865394]
+    power = 8.0
+    quad = "Q21T"
+    wavelength = 0.351
+
+        [beams.beam.spot]
+        a = 0.6714125052727125
+        angle = 1.5707963267948966
+        b = 0.3924471705427822
+        halo = 0.0
+        halo_order = 2.0
+        halo_scale = 3.0
+        order = 4.51833
+    [[beams.beam]]
+    aim = [0.0, 0.0, -5.01]
+    aim_frame = "tcc"
+    aim_local = [0.0, 0.0, -5.01]
+    cluster = "outer50"
+    defocus = 0.0
+    dlambda = 0.0
+    enabled = true
+    fnumber = 7.9
+    group = "outer50"
+    name = "Q13B"
+    omega1 = false
+    omega2 = false
+    port = [0.7623622792859994, 0.07501895730627568, -0.6427876096865394]
+    power = 8.0
+    quad = "Q13B"
+    wavelength = 0.351
+
+        [beams.beam.spot]
+        a = 0.6714125052727125
+        angle = 1.5707963267948966
+        b = 0.3924471705427822
+        halo = 0.0
+        halo_order = 2.0
+        halo_scale = 3.0
+        order = 4.51833
+    [[beams.beam]]
+    aim = [0.0, 0.0, -5.01]
+    aim_frame = "tcc"
+    aim_local = [0.0, 0.0, -5.01]
+    cluster = "outer50"
+    defocus = 0.0
+    dlambda = 0.0
+    enabled = true
+    fnumber = 7.9
+    group = "outer50"
+    name = "Q11B"
+    omega1 = false
+    omega2 = false
+    port = [0.48602512397515124, 0.5921179508327745, -0.6427876096865394]
+    power = 8.0
+    quad = "Q11B"
+    wavelength = 0.351
+
+        [beams.beam.spot]
+        a = 0.6714125052727125
+        angle = 1.5707963267948966
+        b = 0.3924471705427822
+        halo = 0.0
+        halo_order = 2.0
+        halo_scale = 3.0
+        order = 4.51833
+    [[beams.beam]]
+    aim = [0.0, 0.0, -5.01]
+    aim_frame = "tcc"
+    aim_local = [0.0, 0.0, -5.01]
+    cluster = "outer50"
+    defocus = 0.0
+    dlambda = 0.0
+    enabled = true
+    fnumber = 7.9
+    group = "outer50"
+    name = "Q41B"
+    omega1 = false
+    omega2 = false
+    port = [-0.07501895730627574, 0.7623622792859994, -0.6427876096865394]
+    power = 8.0
+    quad = "Q41B"
+    wavelength = 0.351
+
+        [beams.beam.spot]
+        a = 0.6714125052727125
+        angle = 1.5707963267948966
+        b = 0.3924471705427822
+        halo = 0.0
+        halo_order = 2.0
+        halo_scale = 3.0
+        order = 4.51833
+    [[beams.beam]]
+    aim = [0.0, 0.0, -5.01]
+    aim_frame = "tcc"
+    aim_local = [0.0, 0.0, -5.01]
+    cluster = "outer50"
+    defocus = 0.0
+    dlambda = 0.0
+    enabled = true
+    fnumber = 7.9
+    group = "outer50"
+    name = "Q46B"
+    omega1 = false
+    omega2 = false
+    port = [-0.5896503826057629, 0.4890158638800408, -0.6427876096865394]
+    power = 8.0
+    quad = "Q46B"
+    wavelength = 0.351
+
+        [beams.beam.spot]
+        a = 0.6714125052727125
+        angle = 1.5707963267948966
+        b = 0.3924471705427822
+        halo = 0.0
+        halo_order = 2.0
+        halo_scale = 3.0
+        order = 4.51833
+    [[beams.beam]]
+    aim = [0.0, 0.0, -5.01]
+    aim_frame = "tcc"
+    aim_local = [0.0, 0.0, -5.01]
+    cluster = "outer50"
+    defocus = 0.0
+    dlambda = 0.0
+    enabled = true
+    fnumber = 7.9
+    group = "outer50"
+    name = "Q36B"
+    omega1 = false
+    omega2 = false
+    port = [-0.7623622792859994, -0.07501895730627574, -0.6427876096865394]
+    power = 8.0
+    quad = "Q36B"
+    wavelength = 0.351
+
+        [beams.beam.spot]
+        a = 0.6714125052727125
+        angle = 1.5707963267948966
+        b = 0.3924471705427822
+        halo = 0.0
+        halo_order = 2.0
+        halo_scale = 3.0
+        order = 4.51833
+    [[beams.beam]]
+    aim = [0.0, 0.0, -5.01]
+    aim_frame = "tcc"
+    aim_local = [0.0, 0.0, -5.01]
+    cluster = "outer50"
+    defocus = 0.0
+    dlambda = 0.0
+    enabled = true
+    fnumber = 7.9
+    group = "outer50"
+    name = "Q34B"
+    omega1 = false
+    omega2 = false
+    port = [-0.48602512397515124, -0.5921179508327746, -0.6427876096865394]
+    power = 8.0
+    quad = "Q34B"
+    wavelength = 0.351
+
+        [beams.beam.spot]
+        a = 0.6714125052727125
+        angle = 1.5707963267948966
+        b = 0.3924471705427822
+        halo = 0.0
+        halo_order = 2.0
+        halo_scale = 3.0
+        order = 4.51833
+    [[beams.beam]]
+    aim = [0.0, 0.0, -5.01]
+    aim_frame = "tcc"
+    aim_local = [0.0, 0.0, -5.01]
+    cluster = "outer50"
+    defocus = 0.0
+    dlambda = 0.0
+    enabled = true
+    fnumber = 7.9
+    group = "outer50"
+    name = "Q26B"
+    omega1 = false
+    omega2 = false
+    port = [0.07501895730627574, -0.7623622792859994, -0.6427876096865394]
+    power = 8.0
+    quad = "Q26B"
+    wavelength = 0.351
+
+        [beams.beam.spot]
+        a = 0.6714125052727125
+        angle = 1.5707963267948966
+        b = 0.3924471705427822
+        halo = 0.0
+        halo_order = 2.0
+        halo_scale = 3.0
+        order = 4.51833
+    [[beams.beam]]
+    aim = [0.0, 0.0, -5.01]
+    aim_frame = "tcc"
+    aim_local = [0.0, 0.0, -5.01]
+    cluster = "outer50"
+    defocus = 0.0
+    dlambda = 0.0
+    enabled = true
+    fnumber = 7.9
+    group = "outer50"
+    name = "Q23B"
+    omega1 = false
+    omega2 = false
+    port = [0.5896503826057625, -0.48901586388004115, -0.6427876096865394]
+    power = 8.0
+    quad = "Q23B"
+    wavelength = 0.351
+
+        [beams.beam.spot]
+        a = 0.6714125052727125
+        angle = 1.5707963267948966
+        b = 0.3924471705427822
+        halo = 0.0
+        halo_order = 2.0
+        halo_scale = 3.0
+        order = 4.51833
+    [[beams.beam]]
+    aim = [0.0, 0.0, -5.2]
+    aim_frame = "tcc"
+    aim_local = [0.0, 0.0, -5.2]
+    cluster = "outer44"
+    defocus = 0.0
+    dlambda = 0.0
+    enabled = true
+    fnumber = 7.9
+    group = "outer44"
+    name = "Q14B"
+    omega1 = false
+    omega2 = false
+    port = [0.6214880129663951, 0.32407784021811814, -0.7132504491541816]
+    power = 8.0
+    quad = "Q14B"
+    wavelength = 0.351
+
+        [beams.beam.spot]
+        a = 0.6879180932766106
+        angle = 1.5707963267948966
+        b = 0.4019323408455022
+        halo = 0.0
+        halo_order = 2.0
+        halo_scale = 3.0
+        order = 4.7925
+    [[beams.beam]]
+    aim = [0.0, 0.0, -5.2]
+    aim_frame = "tcc"
+    aim_local = [0.0, 0.0, -5.2]
+    cluster = "outer44"
+    defocus = 0.0
+    dlambda = 0.0
+    enabled = true
+    fnumber = 7.9
+    group = "outer44"
+    name = "Q12B"
+    omega1 = false
+    omega2 = false
+    port = [0.1966044788120227, 0.6727707452709364, -0.7132504491541816]
+    power = 8.0
+    quad = "Q12B"
+    wavelength = 0.351
+
+        [beams.beam.spot]
+        a = 0.6879180932766106
+        angle = 1.5707963267948966
+        b = 0.4019323408455022
+        halo = 0.0
+        halo_order = 2.0
+        halo_scale = 3.0
+        order = 4.7925
+    [[beams.beam]]
+    aim = [0.0, 0.0, -5.2]
+    aim_frame = "tcc"
+    aim_local = [0.0, 0.0, -5.2]
+    cluster = "outer44"
+    defocus = 0.0
+    dlambda = 0.0
+    enabled = true
+    fnumber = 7.9
+    group = "outer44"
+    name = "Q43B"
+    omega1 = false
+    omega2 = false
+    port = [-0.32407784021811825, 0.6214880129663951, -0.7132504491541816]
+    power = 8.0
+    quad = "Q43B"
+    wavelength = 0.351
+
+        [beams.beam.spot]
+        a = 0.6879180932766106
+        angle = 1.5707963267948966
+        b = 0.4019323408455022
+        halo = 0.0
+        halo_order = 2.0
+        halo_scale = 3.0
+        order = 4.7925
+    [[beams.beam]]
+    aim = [0.0, 0.0, -5.2]
+    aim_frame = "tcc"
+    aim_local = [0.0, 0.0, -5.2]
+    cluster = "outer44"
+    defocus = 0.0
+    dlambda = 0.0
+    enabled = true
+    fnumber = 7.9
+    group = "outer44"
+    name = "Q45B"
+    omega1 = false
+    omega2 = false
+    port = [-0.6727707452709364, 0.19660447881202253, -0.7132504491541816]
+    power = 8.0
+    quad = "Q45B"
+    wavelength = 0.351
+
+        [beams.beam.spot]
+        a = 0.6879180932766106
+        angle = 1.5707963267948966
+        b = 0.4019323408455022
+        halo = 0.0
+        halo_order = 2.0
+        halo_scale = 3.0
+        order = 4.7925
+    [[beams.beam]]
+    aim = [0.0, 0.0, -5.2]
+    aim_frame = "tcc"
+    aim_local = [0.0, 0.0, -5.2]
+    cluster = "outer44"
+    defocus = 0.0
+    dlambda = 0.0
+    enabled = true
+    fnumber = 7.9
+    group = "outer44"
+    name = "Q35B"
+    omega1 = false
+    omega2 = false
+    port = [-0.6214880129663951, -0.3240778402181181, -0.7132504491541816]
+    power = 8.0
+    quad = "Q35B"
+    wavelength = 0.351
+
+        [beams.beam.spot]
+        a = 0.6879180932766106
+        angle = 1.5707963267948966
+        b = 0.4019323408455022
+        halo = 0.0
+        halo_order = 2.0
+        halo_scale = 3.0
+        order = 4.7925
+    [[beams.beam]]
+    aim = [0.0, 0.0, -5.2]
+    aim_frame = "tcc"
+    aim_local = [0.0, 0.0, -5.2]
+    cluster = "outer44"
+    defocus = 0.0
+    dlambda = 0.0
+    enabled = true
+    fnumber = 7.9
+    group = "outer44"
+    name = "Q32B"
+    omega1 = false
+    omega2 = false
+    port = [-0.19660447881202253, -0.6727707452709364, -0.7132504491541816]
+    power = 8.0
+    quad = "Q32B"
+    wavelength = 0.351
+
+        [beams.beam.spot]
+        a = 0.6879180932766106
+        angle = 1.5707963267948966
+        b = 0.4019323408455022
+        halo = 0.0
+        halo_order = 2.0
+        halo_scale = 3.0
+        order = 4.7925
+    [[beams.beam]]
+    aim = [0.0, 0.0, -5.2]
+    aim_frame = "tcc"
+    aim_local = [0.0, 0.0, -5.2]
+    cluster = "outer44"
+    defocus = 0.0
+    dlambda = 0.0
+    enabled = true
+    fnumber = 7.9
+    group = "outer44"
+    name = "Q25B"
+    omega1 = false
+    omega2 = false
+    port = [0.32407784021811836, -0.621488012966395, -0.7132504491541816]
+    power = 8.0
+    quad = "Q25B"
+    wavelength = 0.351
+
+        [beams.beam.spot]
+        a = 0.6879180932766106
+        angle = 1.5707963267948966
+        b = 0.4019323408455022
+        halo = 0.0
+        halo_order = 2.0
+        halo_scale = 3.0
+        order = 4.7925
+    [[beams.beam]]
+    aim = [0.0, 0.0, -5.2]
+    aim_frame = "tcc"
+    aim_local = [0.0, 0.0, -5.2]
+    cluster = "outer44"
+    defocus = 0.0
+    dlambda = 0.0
+    enabled = true
+    fnumber = 7.9
+    group = "outer44"
+    name = "Q22B"
+    omega1 = false
+    omega2 = false
+    port = [0.6727707452709363, -0.19660447881202286, -0.7132504491541816]
+    power = 8.0
+    quad = "Q22B"
+    wavelength = 0.351
+
+        [beams.beam.spot]
+        a = 0.6879180932766106
+        angle = 1.5707963267948966
+        b = 0.4019323408455022
+        halo = 0.0
+        halo_order = 2.0
+        halo_scale = 3.0
+        order = 4.7925
+    [[beams.beam]]
+    aim = [-0.3333421398117613, -0.4988817673815271, -3.63]
+    aim_frame = "tcc"
+    aim_local = [-0.3333421398117613, -0.4988817673815271, -3.63]
+    cluster = "inner30"
+    defocus = 0.0
+    dlambda = 0.0
+    enabled = true
+    fnumber = 7.9
+    group = "inner30"
+    name = "Q16B"
+    omega1 = false
+    omega2 = false
+    port = [0.2777851165098011, 0.4157348061512726, -0.8660254037844386]
+    power = 8.0
+    quad = "Q16B"
+    wavelength = 0.351
+
+        [beams.beam.spot]
+        a = 0.8983853368300844
+        angle = 1.5707963267948966
+        b = 0.6341488145561597
+        halo = 0.0
+        halo_order = 2.0
+        halo_scale = 3.0
+        order = 8.046
+    [[beams.beam]]
+    aim = [0.4954818718321429, -0.33837510943583887, -3.63]
+    aim_frame = "tcc"
+    aim_local = [0.4954818718321429, -0.33837510943583887, -3.63]
+    cluster = "inner30"
+    defocus = 0.0
+    dlambda = 0.0
+    enabled = true
+    fnumber = 7.9
+    group = "inner30"
+    name = "Q44B"
+    omega1 = false
+    omega2 = false
+    port = [-0.4201198463770695, 0.2869087792623993, -0.8609196635356097]
+    power = 8.0
+    quad = "Q44B"
+    wavelength = 0.351
+
+        [beams.beam.spot]
+        a = 0.8983853368300844
+        angle = 1.5707963267948966
+        b = 0.6341488145561597
+        halo = 0.0
+        halo_order = 2.0
+        halo_scale = 3.0
+        order = 8.046
+    [[beams.beam]]
+    aim = [0.33334213981176114, 0.4988817673815272, -3.63]
+    aim_frame = "tcc"
+    aim_local = [0.33334213981176114, 0.4988817673815272, -3.63]
+    cluster = "inner30"
+    defocus = 0.0
+    dlambda = 0.0
+    enabled = true
+    fnumber = 7.9
+    group = "inner30"
+    name = "Q31B"
+    omega1 = false
+    omega2 = false
+    port = [-0.2777851165098011, -0.4157348061512726, -0.8660254037844386]
+    power = 8.0
+    quad = "Q31B"
+    wavelength = 0.351
+
+        [beams.beam.spot]
+        a = 0.8983853368300844
+        angle = 1.5707963267948966
+        b = 0.6341488145561597
+        halo = 0.0
+        halo_order = 2.0
+        halo_scale = 3.0
+        order = 8.046
+    [[beams.beam]]
+    aim = [-0.495481871832143, 0.33837510943583865, -3.63]
+    aim_frame = "tcc"
+    aim_local = [-0.495481871832143, 0.33837510943583865, -3.63]
+    cluster = "inner30"
+    defocus = 0.0
+    dlambda = 0.0
+    enabled = true
+    fnumber = 7.9
+    group = "inner30"
+    name = "Q21B"
+    omega1 = false
+    omega2 = false
+    port = [0.4201198463770696, -0.2869087792623991, -0.8609196635356097]
+    power = 8.0
+    quad = "Q21B"
+    wavelength = 0.351
+
+        [beams.beam.spot]
+        a = 0.8983853368300844
+        angle = 1.5707963267948966
+        b = 0.6341488145561597
+        halo = 0.0
+        halo_order = 2.0
+        halo_scale = 3.0
+        order = 8.046
+    [[beams.beam]]
+    aim = [-1.0690559556395212, -0.2126484509975798, -3.09]
+    aim_frame = "tcc"
+    aim_local = [-1.0690559556395212, -0.2126484509975798, -3.09]
+    cluster = "inner23"
+    defocus = 0.0
+    dlambda = 0.0
+    enabled = true
+    fnumber = 7.9
+    group = "inner23"
+    name = "Q15B"
+    omega1 = false
+    omega2 = false
+    port = [0.39108721737637464, 0.0777920842602576, -0.917060074385124]
+    power = 8.0
+    quad = "Q15B"
+    wavelength = 0.351
+
+        [beams.beam.spot]
+        a = 0.9310069596346806
+        angle = 1.5707963267948966
+        b = 0.6892194548273717
+        halo = 0.0
+        halo_order = 2.0
+        halo_scale = 3.0
+        order = 7.37167
+    [[beams.beam]]
+    aim = [0.21264845099757998, -1.0690559556395212, -3.09]
+    aim_frame = "tcc"
+    aim_local = [0.21264845099757998, -1.0690559556395212, -3.09]
+    cluster = "inner23"
+    defocus = 0.0
+    dlambda = 0.0
+    enabled = true
+    fnumber = 7.9
+    group = "inner23"
+    name = "Q42B"
+    omega1 = false
+    omega2 = false
+    port = [-0.0777920842602576, 0.39108721737637464, -0.917060074385124]
+    power = 8.0
+    quad = "Q42B"
+    wavelength = 0.351
+
+        [beams.beam.spot]
+        a = 0.9310069596346806
+        angle = 1.5707963267948966
+        b = 0.6892194548273717
+        halo = 0.0
+        halo_order = 2.0
+        halo_scale = 3.0
+        order = 7.37167
+    [[beams.beam]]
+    aim = [1.0690559556395212, 0.2126484509975797, -3.09]
+    aim_frame = "tcc"
+    aim_local = [1.0690559556395212, 0.2126484509975797, -3.09]
+    cluster = "inner23"
+    defocus = 0.0
+    dlambda = 0.0
+    enabled = true
+    fnumber = 7.9
+    group = "inner23"
+    name = "Q33B"
+    omega1 = false
+    omega2 = false
+    port = [-0.39108721737637464, -0.0777920842602576, -0.917060074385124]
+    power = 8.0
+    quad = "Q33B"
+    wavelength = 0.351
+
+        [beams.beam.spot]
+        a = 0.9310069596346806
+        angle = 1.5707963267948966
+        b = 0.6892194548273717
+        halo = 0.0
+        halo_order = 2.0
+        halo_scale = 3.0
+        order = 7.37167
+    [[beams.beam]]
+    aim = [-0.2126484509975799, 1.0690559556395212, -3.09]
+    aim_frame = "tcc"
+    aim_local = [-0.2126484509975799, 1.0690559556395212, -3.09]
+    cluster = "inner23"
+    defocus = 0.0
+    dlambda = 0.0
+    enabled = true
+    fnumber = 7.9
+    group = "inner23"
+    name = "Q24B"
+    omega1 = false
+    omega2 = false
+    port = [0.0777920842602576, -0.39108721737637464, -0.917060074385124]
+    power = 8.0
+    quad = "Q24B"
+    wavelength = 0.351
+
+        [beams.beam.spot]
+        a = 0.9310069596346806
+        angle = 1.5707963267948966
+        b = 0.6892194548273717
+        halo = 0.0
+        halo_order = 2.0
+        halo_scale = 3.0
+        order = 7.37167
+
+[diagnostic_definitions.nif_dante1]
+chain = ["C:\\Users\\alexa\\.julia\\dev\\Briareus\\.claude\\worktrees\\agent-ab64e6f7dca634647\\data\\diagnostics\\nif_dante1_2021.toml", "C:\\Users\\alexa\\.julia\\dev\\Briareus\\.claude\\worktrees\\agent-ab64e6f7dca634647\\data\\diagnostics\\nif_dante1.toml"]
+file = "C:\\Users\\alexa\\.julia\\dev\\Briareus\\.claude\\worktrees\\agent-ab64e6f7dca634647\\data\\diagnostics\\nif_dante1.toml"
+origin = "builtin"
+
+    [diagnostic_definitions.nif_dante1.definition]
+    facility = "NIF"
+    id = "nif_dante1"
+    kind = "xray_power"
+    name = "NIF Dante 1"
+    public = true
+    schema = 1
+
+        [[diagnostic_definitions.nif_dante1.definition.channel]]
+        cathode = "Al"
+        energy_eV = 1170
+        number = 1
+        solid_angle_sr = 6.51e-7
+
+            [[diagnostic_definitions.nif_dante1.definition.channel.filters]]
+            material = "Mg"
+            thickness_um = 22
+        [[diagnostic_definitions.nif_dante1.definition.channel]]
+        cathode = "Al"
+        energy_eV = 3060
+        number = 2
+        solid_angle_sr = 1.9e-7
+
+            [[diagnostic_definitions.nif_dante1.definition.channel.filters]]
+            material = "polyimide"
+            thickness_um = 47
+
+            [diagnostic_definitions.nif_dante1.definition.channel.mirror]
+            angle_deg = 1.9
+            kind = "mlm"
+        [[diagnostic_definitions.nif_dante1.definition.channel]]
+        cathode = "Al"
+        energy_eV = 250
+        grid = 0.088
+        number = 3
+        solid_angle_sr = 5.74e-7
+
+            [[diagnostic_definitions.nif_dante1.definition.channel.filters]]
+            material = "lexan"
+            thickness_um = 4
+
+            [diagnostic_definitions.nif_dante1.definition.channel.mirror]
+            angle_deg = 3.5
+            kind = "SiO2"
+        [[diagnostic_definitions.nif_dante1.definition.channel]]
+        cathode = "Al"
+        energy_eV = 470
+        number = 4
+        solid_angle_sr = 5.56e-7
+
+            [[diagnostic_definitions.nif_dante1.definition.channel.filters]]
+            material = "V"
+            thickness_um = 1.75
+
+            [diagnostic_definitions.nif_dante1.definition.channel.mirror]
+            angle_deg = 2.5
+            kind = "SiO2"
+        [[diagnostic_definitions.nif_dante1.definition.channel]]
+        cathode = "Al"
+        energy_eV = 710
+        grid = 0.088
+        number = 5
+        solid_angle_sr = 6.51e-7
+
+            [[diagnostic_definitions.nif_dante1.definition.channel.filters]]
+            material = "Co"
+            thickness_um = 1.4
+            [[diagnostic_definitions.nif_dante1.definition.channel.filters]]
+            material = "CH"
+            thickness_um = 0.2
+        [[diagnostic_definitions.nif_dante1.definition.channel]]
+        cathode = "Cr"
+        energy_eV = 870
+        grid = 0.088
+        number = 6
+        solid_angle_sr = 6.51e-7
+
+            [[diagnostic_definitions.nif_dante1.definition.channel.filters]]
+            material = "Cu"
+            thickness_um = 2
+        [[diagnostic_definitions.nif_dante1.definition.channel]]
+        cathode = "Ni"
+        energy_eV = 940
+        grid = 0.088
+        number = 7
+        solid_angle_sr = 6.51e-7
+
+            [[diagnostic_definitions.nif_dante1.definition.channel.filters]]
+            material = "Mg"
+            thickness_um = 5.0
+            [[diagnostic_definitions.nif_dante1.definition.channel.filters]]
+            material = "Zn"
+            thickness_um = 0.65
+            [[diagnostic_definitions.nif_dante1.definition.channel.filters]]
+            material = "CH"
+            thickness_um = 0.1
+        [[diagnostic_definitions.nif_dante1.definition.channel]]
+        cathode = "Al"
+        energy_eV = 1170
+        grid = 0.088
+        number = 8
+        solid_angle_sr = 6.51e-7
+
+            [[diagnostic_definitions.nif_dante1.definition.channel.filters]]
+            material = "Mg"
+            thickness_um = 22
+        [[diagnostic_definitions.nif_dante1.definition.channel]]
+        cathode = "Ni"
+        energy_eV = 1430
+        grid = 0.088
+        number = 9
+        solid_angle_sr = 6.51e-7
+
+            [[diagnostic_definitions.nif_dante1.definition.channel.filters]]
+            material = "Al"
+            thickness_um = 20
+        [[diagnostic_definitions.nif_dante1.definition.channel]]
+        cathode = "Al"
+        energy_eV = 1710
+        number = 10
+        solid_angle_sr = 6.51e-7
+
+            [[diagnostic_definitions.nif_dante1.definition.channel.filters]]
+            material = "Si"
+            thickness_um = 20
+        [[diagnostic_definitions.nif_dante1.definition.channel]]
+        cathode = "Al"
+        energy_eV = 3430
+        grid = 0.088
+        number = 11
+        solid_angle_sr = 6.51e-7
+
+            [[diagnostic_definitions.nif_dante1.definition.channel.filters]]
+            material = "Fe"
+            thickness_um = 1.0
+            [[diagnostic_definitions.nif_dante1.definition.channel.filters]]
+            material = "Cr"
+            thickness_um = 0.65
+            [[diagnostic_definitions.nif_dante1.definition.channel.filters]]
+            material = "parylene"
+            thickness_um = 5.0
+        [[diagnostic_definitions.nif_dante1.definition.channel]]
+        cathode = "Al"
+        energy_eV = 2580
+        number = 12
+        solid_angle_sr = 6.51e-7
+
+            [[diagnostic_definitions.nif_dante1.definition.channel.filters]]
+            material = "saran"
+            thickness_um = 66
+        [[diagnostic_definitions.nif_dante1.definition.channel]]
+        cathode = "Al"
+        energy_eV = 3000
+        number = 13
+        solid_angle_sr = 6.51e-7
+
+            [[diagnostic_definitions.nif_dante1.definition.channel.filters]]
+            material = "Ag"
+            thickness_um = 4.4
+        [[diagnostic_definitions.nif_dante1.definition.channel]]
+        cathode = "Al"
+        energy_eV = 1700
+        number = 14
+        solid_angle_sr = 6.51e-7
+
+            [[diagnostic_definitions.nif_dante1.definition.channel.filters]]
+            material = "Si"
+            thickness_um = 20
+        [[diagnostic_definitions.nif_dante1.definition.channel]]
+        cathode = "Ni"
+        energy_eV = 940
+        grid = 0.088
+        number = 15
+        solid_angle_sr = 6.51e-7
+
+            [[diagnostic_definitions.nif_dante1.definition.channel.filters]]
+            material = "Mg"
+            thickness_um = 5.0
+            [[diagnostic_definitions.nif_dante1.definition.channel.filters]]
+            material = "Zn"
+            thickness_um = 0.65
+            [[diagnostic_definitions.nif_dante1.definition.channel.filters]]
+            material = "CH"
+            thickness_um = 0.1
+        [[diagnostic_definitions.nif_dante1.definition.channel]]
+        cathode = "Ni"
+        energy_eV = 14370
+        number = 16
+        solid_angle_sr = 1.77e-6
+
+            [[diagnostic_definitions.nif_dante1.definition.channel.filters]]
+            material = "Al"
+            thickness_um = 250
+        [[diagnostic_definitions.nif_dante1.definition.channel]]
+        cathode = "Cr"
+        energy_eV = 690
+        grid = 0.088
+        number = 17
+        solid_angle_sr = 6.51e-7
+
+            [[diagnostic_definitions.nif_dante1.definition.channel.filters]]
+            material = "Co"
+            thickness_um = 1
+        [[diagnostic_definitions.nif_dante1.definition.channel]]
+        cathode = "Ni"
+        energy_eV = 3660
+        number = 18
+        solid_angle_sr = 1.77e-6
+
+            [[diagnostic_definitions.nif_dante1.definition.channel.filters]]
+            material = "Fe"
+            thickness_um = 1.0
+            [[diagnostic_definitions.nif_dante1.definition.channel.filters]]
+            material = "Cr"
+            thickness_um = 0.65
+            [[diagnostic_definitions.nif_dante1.definition.channel.filters]]
+            material = "parylene"
+            thickness_um = 5.0
+
+        [diagnostic_definitions.nif_dante1.definition.line_of_sight]
+        phi_deg = 274.0
+        source = "Rubery et al., RSI (2023) §II"
+        theta_deg = 143.0
+
+        [diagnostic_definitions.nif_dante1.definition.recording]
+        mode = "history"
+
+        [diagnostic_definitions.nif_dante1.definition.view]
+        through = "leh_bottom"
+
+[drive]
+beam_model = "fcone"
+cavity = false
+cavity_point = [0.0, 0.0, 0.0]
+films = []
+spot_radius = 0.5
+unconverted_ratio = [0.0, 0.0]
+
+    [drive.profile]
+
+[optimize]
+by = "group"
+capsule_keepout = true
+capsule_min = 0.0
+fields = ["z", "r"]
+hold_drive = true
+iterations = 100
+keepout = false
+keepout_min = 0.0
+max_evaluations = 1000
+objective = "legendre"
+spill = 0.2
+
+    [optimize.deltas]
+    defocus = 2.0
+    phi = 1.0
+    power = 0.4
+    r = 1.0
+    u = 1.0
+    v = 1.0
+    w = 1.0
+    z = 1.0
+
+    [optimize.weights]
+    1 = 1.0
+    2 = 1.0
+    3 = 1.0
+    4 = 1.0
+
+[review]
+hardware = ["cap_top", "cap_bottom", "window_1", "shield"]
+peak_fraction = 0.0001
+quality = "quick"
+targets = ["wall", "capsule"]
+wings = true
+
+    [review.errors]
+    focus = 1.0
+    hardware_tolerance = 0.0
+    pointing = 0.05
+    target_offset = 0.025
+
+[sweep]
+axis = "z"
+capture = false
+clearance = true
+frame = "none"
+los = false
+los_object = "none"
+mode = "translate"
+optimize = false
+quality = "quick"
+start = -1.0
+step = 0.5
+step_index = 0
+step_key = "none"
+stop = 1.0
+subject = "none"
+
+[talis]
+capture = ["wall"]
+diagnostics = []
+hardware = ["cap_top", "cap_bottom", "window_1", "shield"]
+omega1 = true
+pivot = "tcc"
+pivot_point = [0.0, 0.0, 0.0]
+tolerance = 0.5
+
+[target]
+active_foil = ""
+excluded = []
+kind = "hohlraum"
+
+    [target.mesh]
+    capsule_h = 0.3
+    h = 0.6
+
+    [target.params]
+    capsule_radius = 0.9
+    conversion = 0.02
+    distance = 6.0
+    leh_closure = 1.0
+    leh_closure_time = 5.0
+    leh_closure_width = 0.5
+    leh_open_fraction = 0.84
+    leh_radius = 1.55
+    length = 10.1
+    main_radius = 1.0
+    radius = 2.875
+    wall_albedo = 0.85
+    wall_conversion = 0.8
+    width = 2.0
+
+    [[target.parts]]
+    aperture = false
+    coords = "cartesian"
+    file = ""
+    foil = false
+    frame = "leh_top"
+    inward = false
+    kind = "disk"
+    name = "shield"
+    object = ""
+    observed = false
+    steps = []
+    two_sided = false
+    wall = false
+
+        [target.parts.values]
+        albedo = 0.0
+        conversion = 0.0
+        h = 0.0
+        phi = 0.0
+        r1 = 2.2
+        rotation = 0.0
+        theta = 0.0
+        x = 0.0
+        y = 0.0
+        z = 0.6
+
+    [[target.windows]]
+    albedo = 0.85
+    conversion = 0.8
+    height = 1.0
+    open = false
+    phi = 60.0
+    round = true
+    width = 1.2
+    z = 0.0
+
+[time]
+diagnostics = ["nif_dante1"]
+
+[view]
+beam_color = "group"
+beam_length = 0.0
+beams = "rays"
+color = "component"
+cut_axis = "z"
+cut_azimuth = 225.0
+cut_components = ["cap_bottom", "cap_top", "wall"]
+cut_kind = "sector"
+cut_line = [0.0, 0.0, 0.0]
+cut_normal = [0.0, -1.0, 0.0]
+cut_point = [0.0, 0.0, 0.0]
+cut_range = [-inf, +inf]
+cut_rotation = 0.0
+cut_shift = 0.0
+cut_width = 90.0
+cutaway = true
+hidden_beams = []
+show_off = true
+shown_1w = []
+shown_2w = []
+side = false
+
+    [view.display]
+    leh_top = "transparent"
+    wall = "wireframe"

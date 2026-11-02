@@ -3,46 +3,48 @@
 @testset "TargetSetup (no GL)" begin
     ts = TargetSetup(resolution = :coarse)
     t0 = ts.target[]
-    @test component_names(t0) == [:wall, :cap_top, :cap_bottom, :leh_top, :leh_bottom, :capsule]
-    @test surface_names(t0) == [:wall, :cap_top, :cap_bottom, :capsule]
+    @test [p.name for p in ts.parts[]] == [:hohlraum, :capsule]
+    @test component_names(t0) == [:hohlraum, :capsule, :hohlraum_wall, :hohlraum_cap_top, :hohlraum_cap_bottom,
+                                  :hohlraum_leh_top, :hohlraum_leh_bottom]
+    @test surface_names(t0) == [:hohlraum_wall, :hohlraum_cap_top, :hohlraum_cap_bottom, :capsule]
     # components named as the model tree names them, in every panel
     @test component_label.([:cap_top, :leh_bottom_lip, :window_1]) == ["Top cap", "Bottom LEH lip", "window_1"]
+    @test piece_label(:hohlraum_cap_top, :hohlraum) == "Top cap"
     @test occursin("hohlraum", target_summary(ts)) && occursin("$(nelements(t0)) elements", target_summary(ts))
 
     # an accepted edit rebuilds; a rejected one keeps the target and reports why
-    @test edit_target!(ts, :length, "9.4")
-    @test ts.target[] !== t0 && ts.params[][:length] == 9.4 && ts.error[] == ""
+    h = part_index(ts, :hohlraum)
+    @test edit_part!(ts, h, :length, "9.4")
+    @test ts.target[] !== t0 && ts.parts[][h].values[:length] == 9.4 && ts.error[] == ""
     t1 = ts.target[]
-    @test !edit_target!(ts, :leh_radius, "3.5")               # wider than the hohlraum
-    @test ts.target[] === t1 && ts.params[][:leh_radius] == 1.55 && occursin("leh_radius", ts.error[])
-    @test !edit_target!(ts, :wall_albedo, "1.2")
+    @test !edit_part!(ts, h, :leh_radius, "3.5")               # wider than the hohlraum
+    @test ts.target[] === t1 && ts.parts[][h].values[:leh_radius] == 1.55 && occursin("leh_radius", ts.error[])
+    @test !edit_part!(ts, h, :albedo, "1.2")
     @test occursin("between 0 and 1", ts.error[])
-    @test !edit_target!(ts, :radius, "abc")
+    @test !edit_part!(ts, h, :radius, "abc")
     @test occursin("must be a number", ts.error[])
-    @test edit_target!(ts, :radius, "2.875") && ts.error[] == ""      # unchanged value
-    @test_throws ArgumentError edit_target!(ts, :height, "1")
+    @test edit_part!(ts, h, :radius, "2.875") && ts.error[] == ""      # unchanged value
+    @test !edit_part!(ts, h, :height, "1") && occursin("no field", ts.error[])
 
     # no capsule
-    @test edit_target!(ts, :capsule_radius, "0")
+    @test remove_part!(ts, part_index(ts, :capsule))
     @test !(:capsule in component_names(ts.target[]))
-    edit_target!(ts, :capsule_radius, "0.9")
 
-    # resolution and kind
+    # resolution, a new target
     n = nelements(ts.target[])
     set_resolution!(ts, :standard)
     @test nelements(ts.target[]) > 4n
     set_resolution!(ts, :coarse)
     @test_throws ArgumentError set_resolution!(ts, :ultra)
-    set_target_kind!(ts, :foil)
-    @test component_names(ts.target[]) == [FOIL_NAME, :main]
-    @test foil_center(ts) == Briareus.Vec3(6.0, 0, 0)
-    @test !edit_target!(ts, :distance, "1.2")                 # inside the sphere
-    @test edit_target!(ts, :main_radius, "0")
-    @test component_names(ts.target[]) == [FOIL_NAME]
-    @test_throws ArgumentError set_target_kind!(ts, :sphere)
-    set_target_kind!(ts, :hohlraum)
-    @test :capsule in component_names(ts.target[])            # the hohlraum edits were kept
-    @test ts.params[][:length] == 9.4
+    @test new_target!(ts, :foil)
+    @test component_names(ts.target[]) == [:foil, :main] && active_foil(ts) === :foil
+    @test part_frames(ts)[:foil].origin == Briareus.Vec3(6.0, 0, 0)
+    @test remove_part!(ts, part_index(ts, :main))
+    @test component_names(ts.target[]) == [:foil]
+    @test !new_target!(ts, :sphere) && occursin("starter", ts.error[])
+    @test new_target!(ts, :hohlraum)
+    @test :capsule in component_names(ts.target[]) && ts.parts[][1].values[:length] == 10.1
+    @test new_target!(ts, :none) && component_names(ts.target[]) == [:sphere_1]
 end
 
 @testset "BeamTable (no GL)" begin
@@ -117,11 +119,12 @@ end
         @test !isempty(preset_beams(p))
     end
     @test length(preset_beams(:nif_beams)) == 192
-    om = preset_beams(:omega_hohlraum; params = TargetSetup(resolution = :coarse).params[])
+    om = preset_beams(:omega_hohlraum; target = TargetSetup(resolution = :coarse))
     @test length(om) == 40 && all(b -> abs(b.aim[3]) ≈ 10.1 / 2, om)
-    foilp = TargetSetup(kind = :foil, resolution = :coarse).params[]
-    bl = preset_beams(:omega_backlighter; target_kind = :foil, params = foilp)
-    @test all(b -> b.aim ≈ foil_center(foilp) && b.port[1] < -cosd(70), bl)
+    foilts = TargetSetup(starter = :foil, resolution = :coarse)
+    bl = preset_beams(:omega_backlighter; target = foilts)
+    @test all(b -> b.aim ≈ Briareus.Vec3(6.0, 0, 0) && b.port[1] < -cosd(70), bl)
+    @test preset_aim_frame(:omega_backlighter, foilts) === :foil
     @test_throws ArgumentError preset_beams(:lmj)
     set_grouping!(bt, :quad)
     load_preset!(bt, :omega_hohlraum)
@@ -136,24 +139,24 @@ end
     t0 = ts.target[]
     n0 = nelements(t0)
     @test add_window!(ts)                                   # closed, 1 × 1 mm at φ = 90°
-    w1 = only(ts.windows[])
-    @test w1.phi == 90 && w1.z == 0 && !w1.open && w1.albedo == ts.params[][:wall_albedo]
-    @test :window_1 in surface_names(ts.target[]) && window_name(1) === :window_1
+    w1 = only(hohlraum_windows(ts))
+    @test w1.phi == 90 && w1.z == 0 && !w1.open && w1.albedo == ts.parts[][1].values[:albedo]
+    @test :hohlraum_window_1 in surface_names(ts.target[]) && window_name(1) === :window_1
     @test occursin("with 1 window", target_summary(ts))
-    @test add_window!(ts) && ts.windows[][2].phi == 270     # the next free default place
+    @test add_window!(ts) && hohlraum_windows(ts)[2].phi == 270     # the next free default place
     t = ts.target[]
 
     # the geometry's rejections surface as messages and keep the target
     @test !edit_window!(ts, 2, :phi, "90.2")
-    @test occursin("overlap", ts.error[]) && ts.target[] === t && ts.windows[][2].phi == 270
+    @test occursin("overlap", ts.error[]) && ts.target[] === t && hohlraum_windows(ts)[2].phi == 270
     @test !edit_window!(ts, 1, :z, "5.0")                   # past the end of the 10.1 mm wall
-    @test occursin("past the end", ts.error[]) && ts.windows[][1].z == 0
+    @test occursin("past the end", ts.error[]) && hohlraum_windows(ts)[1].z == 0
     @test startswith(ts.error[], "window 1")                  # which window, for the user
     @test !edit_window!(ts, 1, :width, "0") && occursin("positive", ts.error[])
     @test !edit_window!(ts, 1, :albedo, "1.5") && occursin("between 0 and 1", ts.error[])
     @test !edit_window!(ts, 1, :height, "tall") && occursin("must be a number", ts.error[])
     @test !add_window!(ts; phi = 92.0) && occursin("overlap", ts.error[])
-    @test length(ts.windows[]) == 2 && ts.target[] === t
+    @test length(hohlraum_windows(ts)) == 2 && ts.target[] === t
     @test_throws ArgumentError edit_window!(ts, 1, :depth, "1")
     @test_throws ArgumentError edit_window!(ts, 3, :z, "1")
     @test_throws ArgumentError remove_window!(ts, 3)
@@ -162,36 +165,36 @@ end
     @test edit_window!(ts, 1, :z, "1.5") && ts.error[] == "" && ts.target[] !== t
     @test edit_window!(ts, 1, :albedo, "0.3") && edit_window!(ts, 1, :conversion, "0.1")
     tw = ts.target[]
-    c1 = tw.components[component_index(tw, :window_1)]
+    c1 = tw.components[component_index(tw, :hohlraum_window_1)]
     @test c1.kind === :surface && albedo(c1.material) ≈ 0.3 && c1.material.conversion ≈ 0.1
-    zs = [tw.elem_centroid[e][3] for e in elements(tw, :window_1)]
+    zs = [tw.elem_centroid[e][3] for e in elements(tw, :hohlraum_window_1)]
     @test all(z -> 1.0 < z < 2.0, zs)                       # the mesh conforms to the window
     # an open window is a hole (an aperture)
     @test set_window_open!(ts, 2, true)
-    @test ts.target[].components[component_index(ts.target[], :window_2)].kind === :aperture
-    @test !(:window_2 in surface_names(ts.target[]))
+    @test ts.target[].components[component_index(ts.target[], :hohlraum_window_2)].kind === :aperture
+    @test !(:hohlraum_window_2 in surface_names(ts.target[]))
     # a dimension edit that leaves a window off the wall is rejected
-    @test !edit_target!(ts, :length, "3.0") && occursin("past the end", ts.error[])
-    @test ts.params[][:length] == 10.1
-    # resolution and kind keep the windows; a foil has none
+    @test !edit_part!(ts, 1, :length, "3.0") && occursin("past the end", ts.error[])
+    @test ts.parts[][1].values[:length] == 10.1
+    # the resolution keeps the windows; a design without a hohlraum has none
     set_resolution!(ts, :standard)
-    @test :window_1 in component_names(ts.target[]) && nelements(ts.target[]) > 4n0
+    @test :hohlraum_window_1 in component_names(ts.target[]) && nelements(ts.target[]) > 4n0
     set_resolution!(ts, :coarse)
-    set_target_kind!(ts, :foil)
-    @test !any(n -> startswith(String(n), "window"), component_names(ts.target[]))
-    @test !occursin("window", target_summary(ts))
-    @test !add_window!(ts) && occursin("hohlraum", ts.error[])
-    set_target_kind!(ts, :hohlraum)
-    @test component_names(ts.target[])[end-1:end] == [:window_1, :window_2]
+    @test component_names(ts.target[])[end-1:end] == [:hohlraum_window_1, :hohlraum_window_2]
+    tf = TargetSetup(starter = :foil, resolution = :coarse)
+    @test isempty(hohlraum_windows(tf)) && !occursin("window", target_summary(tf))
+    @test !add_window!(tf) && occursin("hohlraum", tf.error[])
+    @test !add_window!(ts; part = :capsule) && occursin("hohlraum wall", ts.error[])
     # removing renumbers: the open window becomes window_1
     remove_window!(ts, 1)
-    @test length(ts.windows[]) == 1 && ts.windows[][1].open
-    @test ts.target[].components[component_index(ts.target[], :window_1)].kind === :aperture
+    @test length(hohlraum_windows(ts)) == 1 && hohlraum_windows(ts)[1].open
+    @test ts.target[].components[component_index(ts.target[], :hohlraum_window_1)].kind === :aperture
     remove_window!(ts, 1)
-    @test isempty(ts.windows[]) && nelements(ts.target[]) == n0
+    @test isempty(hohlraum_windows(ts)) && nelements(ts.target[]) == n0
     # windows given up front
-    ts2 = TargetSetup(resolution = :coarse, windows = [WindowSpec(phi = 0.0, height = 2.0, open = true)])
-    @test :window_1 in component_names(ts2.target[])
+    ts2 = TargetSetup(resolution = :coarse,
+                      parts = [PartSpec(:hohlraum; windows = [WindowSpec(phi = 0.0, height = 2.0, open = true)])])
+    @test :hohlraum_window_1 in component_names(ts2.target[])
 end
 
 @testset "VisRad interchange through the beam table (no GL)" begin
@@ -255,7 +258,7 @@ end
     @test_throws ArgumentError edit_mesh!(ts, :n, "1")
     # the hohlraum counts follow the element size
     t = ts.target[]
-    wall = elements(t, :wall)
+    wall = elements(t, :hohlraum_wall)
     hmax = maximum(sqrt(t.elem_area[e]) for e in wall)
     @test hmax <= 0.6 * 1.01
     @test set_resolution!(ts, :fine) && ts.mesh[] == MESH_PRESETS.fine
@@ -264,38 +267,40 @@ end
 @testset "closing entrance holes (no GL)" begin
     sess = DesignSession(resolution = :coarse)
     ts = sess.target
-    @test ts.params[][:leh_closure] == 0 && ts.params[][:leh_open_fraction] == 0.84
+    hv() = ts.parts[][1].values
+    @test hv()[:leh_closure] == 0 && hv()[:leh_open_fraction] == 0.84
     @test !any(is_lip, ts.target[].components)
     @test set_leh_closure!(ts, true) && ts.error[] == ""
     t = ts.target[]
-    lip = t.components[component_index(t, :leh_top_lip)]
+    lip = t.components[component_index(t, :hohlraum_leh_top_lip)]
     @test is_lip(lip) && lip.material.albedo.closure == 5.0 && lip.material.albedo.width == 0.5
-    @test albedo(lip.material.albedo, 6.0) ≈ ts.params[][:wall_albedo]       # closed: the wall's
-    hole = elements(t, :leh_top)
+    @test albedo(lip.material.albedo, 6.0) ≈ hv()[:albedo]       # closed: the wall's
+    hole = elements(t, :hohlraum_leh_top)
     @test sqrt(maximum(sum(abs2, t.elem_centroid[e][1:2]) for e in hole)) < 0.84 * 1.55
-    # the settings are edited as dimensions, and rejected values keep the target
-    @test edit_target!(ts, :leh_closure_time, "4.5")
-    @test ts.target[].components[component_index(ts.target[], :leh_top_lip)].material.albedo.closure == 4.5
+    # the settings are edited as the hohlraum's values, and rejected values keep the target
+    @test edit_part!(ts, 1, :leh_closure_time, "4.5")
+    @test ts.target[].components[component_index(ts.target[], :hohlraum_leh_top_lip)].material.albedo.closure == 4.5
     t = ts.target[]
-    @test !edit_target!(ts, :leh_open_fraction, "1.2") && ts.target[] === t && occursin("open radius", ts.error[])
-    @test edit_target!(ts, :leh_open_fraction, "0.8")
+    @test !edit_part!(ts, 1, :leh_open_fraction, "1.2") && ts.target[] === t && occursin("open radius", ts.error[])
+    @test edit_part!(ts, 1, :leh_open_fraction, "0.8")
     # lips are shown, selected and left out with their holes
     rows = model_tree(sess)
     @test !any(r -> occursin("lip", r.id), rows)
-    @test only(r for r in rows if r.id == "comp:leh_top").detail == "aperture · closing"
-    @test component_id(ts, :leh_top_lip) == "comp:leh_top"
-    @test with_lips([:wall, :leh_top]) == [:wall, :leh_top, :leh_top_lip]
+    @test only(r for r in rows if r.id == "comp:hohlraum_leh_top").detail == "aperture · closing"
+    @test component_id(ts, :hohlraum_leh_top_lip) == "comp:hohlraum_leh_top"
+    @test with_lips([:hohlraum_wall, :hohlraum_leh_top]) == [:hohlraum_wall, :hohlraum_leh_top, :hohlraum_leh_top_lip]
     @test Controllers._closed_enclosure(ts)
-    @test set_excluded!(ts, :leh_top, true)
-    @test !(:leh_top_lip in component_names(ts.target[])) && :leh_top_lip in component_names(ts.ghost[])
+    @test set_excluded!(ts, :hohlraum_leh_top, true)
+    @test !(:hohlraum_leh_top_lip in component_names(ts.target[])) &&
+          :hohlraum_leh_top_lip in component_names(ts.ghost[])
     @test !any(r -> occursin("lip", r.id), model_tree(sess))
-    @test set_excluded!(ts, :leh_top, false) && :leh_top_lip in component_names(ts.target[])
+    @test set_excluded!(ts, :hohlraum_leh_top, false) && :hohlraum_leh_top_lip in component_names(ts.target[])
     # saved and restored with the session
     state = session_state(sess)
     @test set_leh_closure!(ts, false) && !any(is_lip, ts.target[].components)
     restore!(sess, state)
-    @test ts.params[][:leh_closure] == 1 && ts.params[][:leh_open_fraction] == 0.8
-    @test :leh_bottom_lip in component_names(ts.target[])
+    @test hv()[:leh_closure] == 1 && hv()[:leh_open_fraction] == 0.8
+    @test :hohlraum_leh_bottom_lip in component_names(ts.target[])
 end
 
 @testset "free parts (no GL)" begin
@@ -309,7 +314,8 @@ end
         @test ts.error[] == ""
     end
     t = ts.target[]
-    @test [p.name for p in ts.parts[]] == [:sphere_1, :disk_1, :annulus_1, :rectangle_1, :cylinder_1, :cone_1]
+    @test [p.name for p in ts.parts[]] == [:hohlraum, :capsule, :sphere_1, :disk_1, :annulus_1, :rectangle_1,
+                                           :cylinder_1, :cone_1]
     @test all(n -> n in component_names(t), (:sphere_1, :cone_1))
     # placement: a disk tilted to θ = 180° faces −z, at its center
     es = elements(t, :disk_1)
@@ -326,7 +332,7 @@ end
     @test edit_part!(ts, i, :r1, "1.5") && ts.parts[][i].values[:r1] == 1.5
     @test !edit_part!(ts, i, :r1, "0") && occursin("positive", ts.error[])
     @test !edit_part!(ts, i, :albedo, "2") && occursin("between 0 and 1", ts.error[])
-    @test !edit_part!(ts, i, :name, "wall") && occursin("two components", ts.error[])
+    @test !edit_part!(ts, i, :name, "hohlraum_wall") && occursin("two components", ts.error[])
     @test !edit_part!(ts, i, :name, "1bad") && occursin("letters", ts.error[])
     @test edit_part!(ts, i, :name, "shield") && :shield in component_names(ts.target[])
     @test set_part_flag!(ts, i, :aperture, true)
@@ -338,12 +344,8 @@ end
     @test !add_part!(ts, :annulus; r1 = 2.0, r2 = 1.0) && occursin("outer radius", ts.error[])
     @test !add_part!(ts, :torus) && occursin("part kind", ts.error[])
     @test remove_part!(ts, i) && !(:shield in component_names(ts.target[]))
-    # parts survive a change of template; a custom target starts with a sphere
-    np = length(ts.parts[])
-    @test set_target_kind!(ts, :foil) && length(ts.parts[]) == np
-    @test set_target_kind!(ts, :custom)
-    @test component_names(ts.target[]) == [p.name for p in ts.parts[]]
-    ts2 = TargetSetup(kind = :custom, resolution = :coarse)
+    # a target without a starter starts with a sphere, and is never empty
+    ts2 = TargetSetup(starter = :none, resolution = :coarse)
     @test component_names(ts2.target[]) == [:sphere_1]
     @test !remove_part!(ts2, 1) && occursin("empty", ts2.error[])
 end
@@ -352,13 +354,13 @@ end
     sess = DesignSession(resolution = :coarse)
     rows = model_tree(sess)
     ids = [r.id for r in rows]
-    @test ids[1] == "target" && "comp:wall" in ids && "comp:capsule" in ids && "beams" in ids
+    @test ids[1] == "target" && "comp:hohlraum_wall" in ids && "part:capsule" in ids && "beams" in ids
     @test "group:inner23" in ids && !("quad:Q15T" in ids)          # cones collapsed
     @test count(r -> r.kind == "task", rows) == length(TASKS)
     @test all(r -> r.status == "todo", filter(r -> r.kind == "task", rows))
     toggle_expanded!(sess.view, "group:inner23")
     rows = model_tree(sess)
-    kids = [r for r in rows if r.depth == 2]
+    kids = [r for r in rows if r.depth == 2 && !(r.kind in ("comp", "window"))]   # (not the hohlraum's pieces)
     @test length(kids) == 8 && all(r -> r.kind == "beam", kids)      # NIF quads: one beam each
     # selection by id: beams under it, components
     select!(sess.view, "group:inner23")
@@ -366,12 +368,13 @@ end
     @test only(r for r in model_tree(sess) if r.id == "group:inner23").selected
     select!(sess.view, kids[1].id)
     @test length(selected_beams(sess)) == 1
-    select!(sess.view, "comp:wall")
-    @test selected_component(sess) === :wall && isempty(selected_beams(sess))
+    select!(sess.view, "comp:hohlraum_wall")
+    @test selected_component(sess) === :hohlraum_wall && isempty(selected_beams(sess))
     add_window!(sess.target)
-    @test component_id(sess.target, :window_1) == "window:1"
-    select!(sess.view, "window:1")
-    @test selected_component(sess) === :window_1
+    @test component_id(sess.target, :hohlraum_window_1) == "window:hohlraum_window_1"
+    @test window_of(sess.target, :hohlraum_window_1) == (1, 1) && window_of(sess.target, :hohlraum_window_2) === nothing
+    select!(sess.view, "window:hohlraum_window_1")
+    @test selected_component(sess) === :hohlraum_window_1
     remove_window!(sess.target, 1)
     @test sess.view.selection[] == "target"                         # the selection went away
     @test selection_kind("part:shield") == (:part, "shield") && selection_kind("") == (:none, "")
@@ -387,10 +390,10 @@ end
     @test model_tree(sess)[findfirst(r -> r.id == "beams", model_tree(sess))].on == 2
     @test !edit_beam_node!(bt, :quad, "nope", :z, "1") && occursin("no quad", bt.error[])
     # hidden components
-    set_display!(sess.view, :wall, :invisible)
+    set_display!(sess.view, :hohlraum_wall, :invisible)
     toggle_expanded!(sess.view, "target")
     toggle_expanded!(sess.view, "target")
-    @test only(r for r in model_tree(sess) if r.id == "comp:wall").on == 0
+    @test only(r for r in model_tree(sess) if r.id == "comp:hohlraum_wall").on == 0
 end
 
 @testset "beam geometry (no GL)" begin
@@ -399,7 +402,7 @@ end
     bs = sess.beams.beams[]
     ps = beam_paths(t, bs)
     # every published NIF quad lands on the wall, past its aim in the LEH plane
-    @test all(p -> p.component === :wall, ps)
+    @test all(p -> p.component === :hohlraum_wall, ps)
     @test all(p -> abs(p.stop[3]) < abs(p.aim[3]), ps)
     @test all(p -> abs(hypot(p.stop[1], p.stop[2]) - 2.875) < 0.05, ps)
     # the start is `length` before the aim, against the beam direction
@@ -479,12 +482,12 @@ end
     rows = model_tree(sess)
     @test count(r -> r.selected, rows) == 2
     @test only(r for r in rows if r.id == "group:inner23").color == cluster_colors(sess.beams)[:inner23]
-    @test only(r for r in rows if r.id == "comp:capsule").color == component_colors(sess.target.target[])[:capsule]
-    @test only(r for r in rows if r.id == "comp:leh_top").color == ""          # a hole
+    @test only(r for r in rows if r.id == "part:capsule").color == component_colors(sess.target.target[])[:capsule]
+    @test only(r for r in rows if r.id == "comp:hohlraum_leh_top").color == ""          # a hole
     select_add!(v, "group:inner23")                                            # toggles off
     @test selected_ids(v) == ["group:inner30"]
-    select_add!(v, "comp:wall")                                                # not a beam: replaces
-    @test selected_ids(v) == ["comp:wall"]
+    select_add!(v, "comp:hohlraum_wall")                                       # not a beam: replaces
+    @test selected_ids(v) == ["comp:hohlraum_wall"]
     # moving the selection to a new group keeps it selectable
     select!(v, "group:outer44")
     set_cluster!(sess.beams, selected_beams(sess), "drive")
@@ -499,13 +502,13 @@ end
     @test length(node_beams(sess.beams, "quad:" * q * "@" * g)) == 4
     # windows are round by default; rectangles on request
     ts = sess.target
-    @test add_window!(ts) && ts.windows[][1].round
+    @test add_window!(ts) && hohlraum_windows(ts)[1].round
     t = ts.target[]
-    A = sum(t.elem_area[e] for e in elements(t, :window_1))
+    A = sum(t.elem_area[e] for e in elements(t, :hohlraum_window_1))
     @test A ≈ π * 0.5^2 rtol = 1e-6                                           # exact disk area
-    @test set_window_round!(ts, 1, false) && !ts.windows[][1].round
+    @test set_window_round!(ts, 1, false) && !hohlraum_windows(ts)[1].round
     t = ts.target[]
-    @test sum(t.elem_area[e] for e in elements(t, :window_1)) ≈ 1.0 rtol = 1e-6
+    @test sum(t.elem_area[e] for e in elements(t, :hohlraum_window_1)) ≈ 1.0 rtol = 1e-6
 end
 
 @testset "model rows inserted where a tree changes (no GL)" begin

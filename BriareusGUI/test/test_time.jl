@@ -127,7 +127,7 @@ end
     @test !history_stale(sess) && tm.history[] !== h
     @test tm.history[].time[3] == 2.0 && time_label(sess) == "t = 2.00 ns"
     # a target without a capsule: no history, and why
-    set_target_kind!(sess.target, :foil)
+    new_target!(sess, :foil)
     use_pulse_shape!(sess; step = 1.0)
     start_history!(sess)
     @test occursin("follows the capsule", tm.status[])

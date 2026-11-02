@@ -37,8 +37,8 @@ using BriareusGUI.Briareus
         time() - t_start > 600 && return B.request_close()
         k = stage[]
         if k == 0 && time() - t_stage[] > 1
-            B.br_select("target")
-            B.br_edit_target("length", "10.0")                     # through the bridge
+            B.br_select("part:hohlraum")
+            B.br_edit_part("length", "10.0")                       # through the bridge
             B.br_add_window()                                      # closed, at φ = 90°
             B.br_add_window()                                      # at φ = 270°
             B.br_edit_window(1, "phi", "60")
@@ -46,8 +46,8 @@ using BriareusGUI.Briareus
             B.br_edit_window(2, "z", "9")                          # off the wall: rejected
             B.request_grab(png("target")); next!()
         elseif k == 1 && grabbed(png("target"))
-            s.target.params[][:length] == 10.0 && push!(seen, :target)
-            ws = s.target.windows[]
+            s.target.parts[][1].values[:length] == 10.0 && push!(seen, :target)
+            ws = hohlraum_windows(s.target)
             length(sh.rows[:windowModel]) == 2 && ws[1].phi == 60 && ws[2].z == 0 && ws[2].open &&
                 occursin("past the end", s.target.error[]) && push!(seen, :windows)
             # a shield disk above the top LEH, edited from the inspector
@@ -222,9 +222,10 @@ using BriareusGUI.Briareus
             q = first(b.quad for b in s.beams.beams[] if b.group === :inner23)
             count(b -> b.quad == q, s.beams.beams[]) == 4 && push!(seen, :redo)
             # a change, then the saved session back
-            B.br_edit_target("length", "11.0")
+            B.br_select("part:hohlraum")
+            B.br_edit_part("length", "11.0")
             B.br_open_session(session_file)
-            s.target.params[][:length] == 10.0 && count(b -> b.quad == q, s.beams.beams[]) == 4 &&
+            s.target.parts[][1].values[:length] == 10.0 && count(b -> b.quad == q, s.beams.beams[]) == 4 &&
                 sh.session_path == session_file && push!(seen, :session)
             # an x-ray image down the axis, through the top entrance hole (the drive is
             # stale after the load: computed first)
@@ -283,10 +284,10 @@ using BriareusGUI.Briareus
         elseif k == 26 && grabbed(png("time_energy"))
             B.br_time_now()
             time_label(s) == "" && push!(seen, :time_now)
-            B.br_set_target_kind("custom"); next!()                # no template fields
+            B.br_new_target("empty"); next!()                      # a sphere, no hohlraum
         elseif k == 27 && time() - t_stage[] > 0.5
-            s.target.kind[] === :custom && sh.app["targetKind"] == "custom" &&
-                isempty(sh.rows[:targetFieldModel]) && push!(seen, :custom)
+            [p.name for p in s.target.parts[]] == [:sphere_1] && !sh.app["hasHohlraum"] &&
+                isempty(sh.rows[:windowModel]) && push!(seen, :custom)
             # File ▸ Export target as STL; View ▸ Beams ▸ Show beams that are off
             B.br_export_stl(target_stl)
             B.br_show_off(false)

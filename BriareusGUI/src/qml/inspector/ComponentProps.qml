@@ -1,4 +1,4 @@
-// Properties of a template component (wall, caps, LEHs, capsule, foil): what it is,
+// Properties of a component of the target (a hohlraum part's piece, a CAD part's): what it is,
 // and how the 3D view draws it.
 import QtQuick
 import QtQuick.Controls

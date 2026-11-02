@@ -19,7 +19,7 @@ const B = BriareusGUI
     @test !sc.colorbar.blockscene.visible[]
     @test length(sc.body.color[]) == 3 * sc.ntriangles[]
     pal = component_colors(t)
-    @test collect(keys(pal)) ⊆ [:wall, :cap_top, :cap_bottom, :capsule] && length(pal) == 4
+    @test collect(keys(pal)) ⊆ [:hohlraum_wall, :hohlraum_cap_top, :hohlraum_cap_bottom, :capsule] && length(pal) == 4
     @test B._hexcolor(pal[:capsule]) in sc.body.color[]
     sess.view.cutaway[] = false
     @test sc.ntriangles[] == opaque
@@ -71,15 +71,15 @@ const B = BriareusGUI
 
     # selection: a component is highlighted, a beam drawn bold
     @test !sc.highlight.visible[]
-    select!(sess.view, "comp:capsule")
+    select!(sess.view, "part:capsule")
     @test sc.highlight.visible[] && length(sc.highlight[1][]) == count(==(6), t.tri_comp)   # faces
     # an entrance hole is highlighted with its closing lip
     set_leh_closure!(sess.target, true)
     tl = sess.target.target[]
-    select!(sess.view, "comp:leh_top")
-    nleh = count(k -> tl.components[k].name in (:leh_top, :leh_top_lip), tl.tri_comp)
+    select!(sess.view, "comp:hohlraum_leh_top")
+    nleh = count(k -> tl.components[k].name in (:hohlraum_leh_top, :hohlraum_leh_top_lip), tl.tri_comp)
     @test sc.highlight.visible[] && length(sc.highlight[1][]) == nleh &&
-          nleh > count(k -> tl.components[k].name === :leh_top, tl.tri_comp)
+          nleh > count(k -> tl.components[k].name === :hohlraum_leh_top, tl.tri_comp)
     set_leh_closure!(sess.target, false)
     select!(sess.view, "group:inner23")
     @test !sc.highlight.visible[] && sc.selected_rays.visible[] && finite(sc.selected_rays[1][]) == 2 * 8
@@ -103,11 +103,11 @@ const B = BriareusGUI
     @test B._beam_status(sess) === nothing
 
     # a target change: new mesh, map cleared until the drive is computed again
-    edit_target!(sess.target, :radius, "3.0")
+    edit_part!(sess.target, 1, :radius, "3.0")
     @test sess.drive.result[] === nothing
     @test mc.ax.title[] == "Compute the drive to see the flux map"
-    set_target_kind!(sess.target, :foil)
-    @test Set(keys(component_colors(sess.target.target[]))) == Set([:backlighter, :main])
+    new_target!(sess, :foil)
+    @test Set(keys(component_colors(sess.target.target[]))) == Set([:foil, :main])
     build_scenario!(sess)
     @test mc.ax.title[] == "Foil laser irradiance" && !mc.ax.yreversed[]
     # hidden components are not drawn and not picked
@@ -199,7 +199,7 @@ end
     B.camera_release!(c, (mid[1] + 50, mid[2]))
     @test sess.view.selection[] == sel && c.eye != e0
     # double click fits the clicked component
-    B.select!(sess.view, "comp:capsule")
+    B.select!(sess.view, "part:capsule")
     B.fit_selection!(sc, sess)
     @test B.norm(c.lookat) < 0.1                       # the capsule is at TCC
     @test B.norm(c.eye - c.lookat) < 0.5 * t.scale / sind(c.fov / 2)
@@ -224,12 +224,12 @@ end
     add_window!(sess.target; phi = 200.0, open = true)
     # round windows: inside and outside circles of 48 pieces each
     @test finite(sc.outlines[1][]) == 2 * 2 * 48 * 2
-    R = sess.target.params[][:radius]
+    R = sess.target.parts[][1].values[:radius]
     @test all(p -> abs(hypot(p[1], p[2]) - R) < 0.02, filter(p -> all(isfinite, p), sc.outlines[1][]))
     @test sc.outlines.color[][end] == B.WINDOW_COLORS.open
     # the closed window has a color; the open one is a hole
     pal = component_colors(sess.target.target[])
-    @test haskey(pal, :window_1) && !haskey(pal, :window_2)
+    @test haskey(pal, :hohlraum_window_1) && !haskey(pal, :hohlraum_window_2)
     # a rectangular window: two arcs and two axial edges per loop
     set_window_round!(sess.target, 1, false)
     @test finite(sc.outlines[1][]) == 2 * 48 * 2 + 2 * (2 * 12 + 2) * 2

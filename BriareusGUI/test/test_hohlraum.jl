@@ -1,23 +1,17 @@
-# The hohlraum part and its pieces: the starter "Hohlraum with capsule" against the
-# former hohlraum template (meshes and drive, names mapped), pieces and ends, the
+# The hohlraum part and its pieces: the starter "Hohlraum with capsule" against core
+# `hohlraum` (the former template's geometry, names mapped), sessions with a template
+# converted to parts against the template-era GUI's own drives, pieces and ends, the
 # entrance-hole and window frames, beams aimed in piece frames, roles, unique names on
 # insert.
 
 using LinearAlgebra: norm
 
-# The template's component name of a starter component (`hohlraum_wall` → `wall`).
+# The former template's component name of a starter component (`hohlraum_wall` → `wall`).
 _template_name(n::Symbol) = Symbol(replace(String(n), r"^hohlraum_" => ""))
 
-# A coarse session of the starter "Hohlraum with capsule" alone (the template's design).
-function _starter_session(; windows = WindowSpec[], closure = false)
-    sess = DesignSession(resolution = :coarse)
-    ps = starter_parts(:hohlraum)
-    v = copy(ps[1].values)
-    v[:leh_closure] = closure ? 1.0 : 0.0
-    ps[1] = Controllers._with(ps[1]; values = v, windows)
-    @test Controllers._try_build!(sess.target; kind = :custom, parts = ps)
-    return sess
-end
+# Whether every beam aims where its frame and local aim put it.
+_in_frames(bt) = all(i -> isapprox(bt.beams[][i].aim, to_chamber(bt.frames[][bt.aim_frame[][i]], bt.aim_local[][i]); atol = 1e-12),
+                     eachindex(bt.beams[]))
 
 # Whether two components are the same up to their names and parts.
 _same_component(a, b) =
@@ -26,51 +20,90 @@ _same_component(a, b) =
     a.surface == b.surface && albedo(a.material) == albedo(b.material) &&
     a.material.conversion == b.material.conversion
 
-@testset "hohlraum part: the starter equals the template (no GL)" begin
-    tmpl = DesignSession(resolution = :coarse)
-    st = _starter_session()
-    ta, tb = tmpl.target.target[], st.target.target[]
-    # element for element, in the same order, names mapped
-    @test _template_name.(c.name for c in tb.components) == [c.name for c in ta.components]
-    @test all(_same_component(a, b) for (a, b) in zip(ta.components, tb.components))
-    @test all(c -> c.part === :hohlraum, tb.components[1:end-1]) && tb.components[end].part === :capsule
-    @test ta.elem_area == tb.elem_area && ta.elem_centroid == tb.elem_centroid && ta.elem_normal == tb.elem_normal
-    @test Controllers._closed_enclosure(st.target) && Controllers._closed_enclosure(tmpl.target)
-    @test observed_name(st.target) === :capsule
-    # the drive on Float64: bit for bit
-    build_scenario!(tmpl)
-    build_scenario!(st)
-    ra, rb = tmpl.drive.result[], st.drive.result[]
-    @test [(m.l, m.legendre, m.epsilon) for m in ra.modes] == [(m.l, m.legendre, m.epsilon) for m in rb.modes]
-    @test ra.mean_flux == rb.mean_flux
-    @test all(element_values(ra, f) == element_values(rb, f) for f in (:incident, :radiosity))
-    @test isequal(element_values(ra, :laser), element_values(rb, :laser))      # (NaN on apertures)
-    @test flux_map(tmpl.drive).values == flux_map(st.drive).values
-    # the power accounting: a row per piece, named as the template's components
-    @test [(p.name, p.power) for p in ra.power] == [(p.name, p.power) for p in rb.power]
-    # the checks' default roles: the wall lands the beams, the caps stay hardware (LEH edges)
-    @test sort(_template_name.(st.review.targets[])) == sort(tmpl.review.targets[])
-    @test sort(_template_name.(st.talis.capture[])) == sort(tmpl.talis.capture[])
-    @test sort(_template_name.(st.review.hardware[])) == sort(tmpl.review.hardware[])
-
-    # a window and closing entrance holes: the same meshes; the capsule comes after the
-    # window now (a part of its own), so the drive agrees to round-off
+@testset "hohlraum part: the starter meshes as the former template (no GL)" begin
+    ts = TargetSetup(resolution = :coarse)
+    m = ts.mesh[]
+    # the former template's call: core `hohlraum` at TCC, its capsule the geodesic mesh
+    ref = hohlraum(; length = 10.1, radius = 2.875, leh_radius = 1.55, capsule_radius = 0.9,
+                   wall = gold(albedo = 0.85, conversion = 0.8), h = m.h, capsule_h = m.capsule_h,
+                   leh_open_radius = 0.84 * 1.55)
+    t = ts.target[]
+    @test _template_name.(c.name for c in t.components) == [c.name for c in ref.components]
+    @test all(_same_component(a, b) for (a, b) in zip(t.components, ref.components))
+    @test all(c -> c.part === :hohlraum, t.components[1:end-1]) && t.components[end].part === :capsule
+    tr = Target(ref.components)
+    @test t.elem_area == tr.elem_area && t.elem_centroid == tr.elem_centroid && t.elem_normal == tr.elem_normal
+    @test Controllers._closed_enclosure(ts) && observed_name(ts) === :capsule
+    # with a window and closing entrance holes: the same meshes, the capsule after the window
+    h = ts.parts[][1]
+    v = copy(h.values)
+    v[:leh_closure] = 1.0
     w = WindowSpec(; phi = 90.0, albedo = 0.85, conversion = 0.8)
-    add_window!(tmpl.target)
-    set_leh_closure!(tmpl.target, true)
-    stw = _starter_session(; windows = [w], closure = true)
-    ta, tb = tmpl.target.target[], stw.target.target[]
-    @test tmpl.target.windows[] == [w]
-    byname = Dict(_template_name(c.name) => c for c in tb.components)
-    @test Set(keys(byname)) == Set(c.name for c in ta.components)
-    @test all(_same_component(c, byname[c.name]) for c in ta.components)
-    build_scenario!(tmpl)
-    build_scenario!(stw)
-    ra, rb = tmpl.drive.result[], stw.drive.result[]
-    @test isapprox(ra.mean_flux, rb.mean_flux; rtol = 1e-10)
-    @test all(isapprox(a.legendre, b.legendre; rtol = 1e-8, atol = 1e-12) for (a, b) in zip(ra.modes, rb.modes))
-    inc(t, r, n) = element_values(r, :incident)[elements(t, n)]
-    @test all(isapprox(inc(ta, ra, c.name), inc(tb, rb, byname[c.name].name); rtol = 1e-9) for c in ta.components)
+    tw = TargetSetup(resolution = :coarse, parts = [Controllers._with(h; values = v, windows = [w]), ts.parts[][2]])
+    refw = hohlraum(; length = 10.1, radius = 2.875, leh_radius = 1.55, capsule_radius = 0.9,
+                    wall = gold(albedo = 0.85, conversion = 0.8), h = m.h, capsule_h = m.capsule_h,
+                    windows = [Controllers._wall_window(w, 1)],
+                    leh_closure = GapClosure(closure = 5.0, width = 0.5, after = 0.85), leh_open_radius = 0.84 * 1.55)
+    byname = Dict(_template_name(c.name) => c for c in tw.target[].components)
+    @test Set(keys(byname)) == Set(c.name for c in refw.components)
+    @test all(_same_component(c, byname[c.name]) for c in refw.components)
+end
+
+@testset "hohlraum part: sessions with a template convert to parts (no GL)" begin
+    data = joinpath(@__DIR__, "data")
+    old = TOML.parsefile(joinpath(data, "session_v7_expected.toml"))
+    # a hohlraum template with a window, closing holes, a shield at the top LEH, beams
+    # aimed in the bottom LEH's frame and display modes
+    s = DesignSession(resolution = :coarse)
+    load_session!(s, joinpath(data, "session_v7_hohlraum.briar.toml"))
+    ts, bt = s.target, s.beams
+    e = old["hohlraum"]
+    @test [p.name for p in ts.parts[]] == [:hohlraum, :capsule, :shield]
+    @test ts.parts[][1].kind === :hohlraum && ts.parts[][1].values[:leh_closure] == 1 &&
+          only(ts.parts[][1].windows).phi == 60 && ts.parts[][2].observed && ts.parts[][2].frame === :hohlraum
+    @test ts.parts[][3].frame === Symbol("hohlraum.leh_top")
+    @test bt.aim_frame[] == [f == "tcc" ? :tcc : Symbol("hohlraum.", f) for f in e["aim_frames"]]
+    @test [collect(b.aim) for b in bt.beams[]] == e["aims"] && _in_frames(bt)
+    @test display_mode(s.view, :hohlraum_wall) === :wireframe && display_mode(s.view, :hohlraum_leh_top) === :transparent
+    t = ts.target[]
+    @test sort(_template_name.(c.name for c in t.components)) == sort(Symbol.(e["components"]))
+    @test sort(_template_name.(s.review.targets[])) == sort(Symbol.(e["review_targets"]))
+    @test sort(_template_name.(s.review.hardware[])) == sort(Symbol.(e["review_hardware"]))
+    @test _template_name.(s.talis.capture[]) == Symbol.(e["talis_capture"])
+    # the drive of the template-era GUI on the same session (its capsule now comes after the
+    # window: to round-off)
+    build_scenario!(s)
+    r = s.drive.result[]
+    @test isapprox(r.mean_flux, e["mean_flux"]; rtol = 1e-10)
+    @test all(isapprox(m.legendre, l; rtol = 1e-8, atol = 1e-12) for (m, l) in zip(r.modes, e["legendre"]))
+    inc = element_values(r, :incident)
+    sums = Dict(_template_name(c.name) => sum(inc[t.comp_elems[ci]]) for (ci, c) in enumerate(t.components))
+    @test all(isapprox(sums[Symbol(k)], x; rtol = 1e-10) for (k, x) in e["incident_sum"])
+    # saved again: version 8, read back the same
+    f = joinpath(mktempdir(), "v8.briar.toml")
+    save_session(f, s)
+    @test TOML.parsefile(f)["version"] == Controllers.SESSION_VERSION == 8
+    s8 = DesignSession(resolution = :coarse)
+    load_session!(s8, f)
+    @test session_state(s8) == session_state(s)
+
+    # a foil template with a substrate in the foil's frame and the OMEGA backlighter beams
+    b = DesignSession(starter = :foil, resolution = :coarse)
+    load_session!(b, joinpath(data, "session_v7_foil.briar.toml"))
+    e = old["foil"]
+    @test [p.name for p in b.target.parts[]] == [:foil, :main, :substrate]
+    @test b.target.parts[][1].foil && active_foil(b.target) === :foil && b.target.parts[][3].frame === :foil
+    @test b.beams.aim_frame[] == [f == "backlighter" ? :foil : Symbol(f) for f in e["aim_frames"]]
+    @test [collect(x.aim) for x in b.beams.beams[]] == e["aims"]
+    t = b.target.target[]
+    @test nelements(t) == e["elements"]
+    build_scenario!(b)
+    r = b.drive.result[]
+    las = element_values(r, :laser)
+    names(n) = n === :foil ? :backlighter : n
+    sums = Dict(names(c.name) => sum(filter(isfinite, las[t.comp_elems[ci]]); init = 0.0) for (ci, c) in enumerate(t.components))
+    @test all(isapprox(sums[Symbol(k)], x; rtol = 1e-12) for (k, x) in e["laser_sum"])
+    @test isapprox(r.spot.mean, e["spot_mean"]; rtol = 1e-12) && isapprox(r.spot.peak, e["spot_peak"]; rtol = 1e-12)
 end
 
 @testset "hohlraum part: pieces, ends, frames, aims (no GL)" begin
@@ -98,9 +131,9 @@ end
 
     # the frames: the ends' (z out of the hohlraum at either end) and the window's, which
     # follow the part when it moves and turns
-    sess = DesignSession(resolution = :coarse)
+    sess = DesignSession(starter = :none, resolution = :coarse)
     ts = sess.target
-    @test insert_starter!(ts, :hohlraum)
+    @test insert_starter!(ts, :hohlraum) && [p.name for p in ts.parts[]] == [:sphere_1, :hohlraum, :capsule]
     i = part_index(ts, :hohlraum)
     @test edit_part!(ts, i, :z, "0.4") && edit_part!(ts, i, :theta, "90") && edit_part!(ts, i, :length, "8")
     fr = part_frames(ts)
@@ -110,9 +143,8 @@ end
     @test bot.origin ≈ to_chamber(F, (0.0, 0.0, -4.0)) atol = 1e-12
     @test isapprox(top.R[:, 3], F.R[:, 3]; atol = 1e-12) && isapprox(bot.R[:, 3], -F.R[:, 3]; atol = 1e-12)
     @test bot.R[:, 1] ≈ F.R[:, 1] atol = 1e-12
-    # the capsule placed in the hohlraum's frame moved with it (`capsule_2`: the
-    # template's capsule has the name)
-    @test ts.parts[][2].name === :capsule_2 && isapprox(fr[:capsule_2].origin, F.origin; atol = 1e-12)
+    # the capsule placed in the hohlraum's frame moved with it
+    @test ts.parts[][3].frame === :hohlraum && isapprox(fr[:capsule].origin, F.origin; atol = 1e-12)
     @test piece_frame(:hohlraum_cap_bottom, :hohlraum) === Symbol("hohlraum.leh_bottom")
     @test piece_frame(:hohlraum_leh_top_lip, :hohlraum) === Symbol("hohlraum.leh_top")
     @test piece_frame(:hohlraum_wall, :hohlraum) === :hohlraum
@@ -134,7 +166,6 @@ end
 @testset "hohlraum part: roles, exclusion, unique names on insert (no GL)" begin
     sess = DesignSession(resolution = :coarse)
     ts = sess.target
-    @test Controllers._try_build!(ts; kind = :custom, parts = starter_parts(:hohlraum))
     @test wall_names(ts) == [:hohlraum_wall, :hohlraum_cap_top, :hohlraum_cap_bottom]
     @test Set(wall_components(ts)) == Set(wall_names(ts))
     # the checks land the beams on the wall and the capsule, the caps are LEH edges

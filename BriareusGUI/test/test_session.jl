@@ -40,7 +40,7 @@ const SESS = DesignSession(resolution = :coarse)
     t = sess.target.target[]
     lv = element_values(res, :laser)
     @test length(lv) == nelements(t)
-    @test all(isnan, lv[elements(t, :leh_top)]) && maximum(filter(isfinite, lv)) > 1e13
+    @test all(isnan, lv[elements(t, :hohlraum_leh_top)]) && maximum(filter(isfinite, lv)) > 1e13
     @test all(isfinite, element_values(res, :radiosity)) && all(isfinite, element_values(res, :incident))
     @test_throws ArgumentError set_field!(dr, :temperature)
     set_field!(dr, :radiosity)
@@ -67,11 +67,12 @@ const SESS = DesignSession(resolution = :coarse)
     edit_beams!(sess.beams, 1, :z, "3.09")
 
     # a target change makes the scenario stale and clears the evaluation
-    edit_target!(sess.target, :length, "10.0")
+    t10 = sess.target.target[]
+    edit_part!(sess.target, 1, :length, "10.0")
     @test drive_stale(sess) && dr.result[] === nothing
     @test task_status(sess, :drive)[1] === :attention
-    edit_target!(sess.target, :length, "10.1")
-    @test drive_stale(sess)                                  # a new Target object
+    edit_part!(sess.target, 1, :length, "10.1")
+    @test sess.target.target[] === t10                       # the same parts: the same Target, found again
     build_scenario!(sess)
     @test !drive_stale(sess) && dr.result[] isa DriveResult
 end
@@ -161,7 +162,7 @@ end
     @test rc.x ≈ rc.x0 && occursin("canceled; kept the best design", st.status[])
     @test task_status(sess, :optimize)[1] === :attention
 
-    notify(sess.target.kind)                                 # File ▸ New target
+    new_target!(sess, :hohlraum)                             # File ▸ New target
     @test st.result[] === nothing && isempty(st.status[])
 
     # clearing (a new or reopened target) forgets the result and discards a run in flight:
@@ -206,17 +207,17 @@ end
 @testset "clearance (no GL)" begin
     sess = SESS
     rv = sess.review
-    @test rv.targets[] == [:wall, :capsule] && rv.hardware[] == [:cap_top, :cap_bottom]
-    @test_throws ArgumentError set_role!(rv, :wall, :ignore)
+    @test rv.targets[] == [:hohlraum_wall, :capsule] && rv.hardware[] == [:hohlraum_cap_top, :hohlraum_cap_bottom]
+    @test_throws ArgumentError set_role!(rv, :hohlraum_wall, :ignore)
     set_role!(rv, :capsule, :none)
-    @test rv.targets[] == [:wall]
+    @test rv.targets[] == [:hohlraum_wall]
     set_role!(rv, :capsule, :target)
     @test !edit_review!(rv, :peak_fraction, "2")
     @test edit_review!(rv, :peak_fraction, "1e-3") && rv.peak_fraction[] == 1e-3
     @test !edit_review!(rv, :pointing, "-0.1")
     @test edit_review!(rv, :focus, "0.5") && rv.errors[][:focus] == 0.5
     kw = clearance_kwargs(rv)
-    @test kw.targets == (:wall, :capsule) && kw.level == 1 && kw.focus == 0.5
+    @test kw.targets == (:hohlraum_wall, :capsule) && kw.level == 1 && kw.focus == 0.5
 
     # three quads
     bt = sess.beams
@@ -233,7 +234,7 @@ end
     rows = clearance_rows(rv)
     rank(s) = s === :fail ? 0 : s === :review ? 1 : 2
     @test issorted([(rank(x.status), x.clearance) for x in rows])
-    @test [x.component for x in worst_rows(rv)] == [:cap_top, :cap_bottom]
+    @test [x.component for x in worst_rows(rv)] == [:hohlraum_cap_top, :hohlraum_cap_bottom]
     @test occursin("3 beams", review_brief(rv))
     @test !rep.canceled
     # the batched check equals one clearance call without a callback
@@ -334,9 +335,9 @@ end
 end
 
 @testset "foil target (no GL)" begin
-    sess = DesignSession(kind = :foil, resolution = :coarse)
+    sess = DesignSession(starter = :foil, resolution = :coarse)
     @test sess.beams.preset[] === :omega_backlighter
-    @test sess.review.targets[] == [FOIL_NAME] && sess.review.hardware[] == [:main]
+    @test sess.review.targets[] == [:foil] && sess.review.hardware[] == [:main]
     build_scenario!(sess)
     res = sess.drive.result[]
     @test isempty(res.modes) && isnan(res.mean_flux)
@@ -361,9 +362,9 @@ end
     @test occursin("needs a hohlraum", st.status[])
 
     # back to a hohlraum: the NIF quads return
-    set_target_kind!(sess.target, :hohlraum)
+    @test new_target!(sess, :hohlraum)
     @test sess.beams.preset[] === :nif_quads && drive_stale(sess)
-    @test sess.review.hardware[] == [:cap_top, :cap_bottom]
+    @test sess.review.hardware[] == [:hohlraum_cap_top, :hohlraum_cap_bottom]
 end
 
 @testset "windows in the drive (no GL)" begin
@@ -378,7 +379,7 @@ end
     @test sum(p.power for p in res.power) ≈ res.evaluation.deposition.delivered rtol = 1e-3
     @test any(p -> p.name == "window_1", res.power)
     @test all(isfinite, element_values(res, :radiosity))
-    @test all(isnan, element_values(res, :laser)[elements(t, :window_2)])    # a hole
+    @test all(isnan, element_values(res, :laser)[elements(t, :hohlraum_window_2)])    # a hole
     # x-rays leave through the open window: its incident flux is a loss
-    @test sum(res.solution.H[e] * t.elem_area[e] for e in elements(t, :window_2)) > 0
+    @test sum(res.solution.H[e] * t.elem_area[e] for e in elements(t, :hohlraum_window_2)) > 0
 end

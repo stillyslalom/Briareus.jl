@@ -13,11 +13,11 @@ Beam presets:
   shot pointing: research notes, "Example NIF cone pointing: unsourced (2026-10-27)");
 - `:nif_beams` — all 192 NIF beams (`nif_beams`, 2 TW each), same cone pointing;
 - `:omega_hohlraum` — the 40 OMEGA hohlraum beams (cones 1–3, `omega_beams`, 0.5 TW),
-  aimed at the LEH centers of a hohlraum target (TCC otherwise);
+  aimed at the LEH centers of the first hohlraum part (TCC otherwise);
 - `:omega_backlighter` — the 60-port OMEGA set reduced to the beams that reach the
   driven face of a foil target from at least 20° off the foil axis, aimed at the foil
-  center (0.4 TW, SG4 spots), as in `examples/backlighter.jl`; on a foil target in the
-  `:backlighter` frame ([`preset_aim_frame`](@ref)), so they follow the foil.
+  center (0.4 TW, SG4 spots), as in `examples/backlighter.jl`; in the active foil's frame
+  ([`preset_aim_frame`](@ref)), so they follow the foil.
 """
 const BEAM_PRESETS = (:nif_quads, :nif_beams, :omega_hohlraum, :omega_backlighter)
 
@@ -74,7 +74,7 @@ grouping, one of [`BEAM_GROUPINGS`](@ref)), `path` (the last imported or exporte
 file), `error` (the last rejected edit), `warnings` (what the last VisRad import warned
 about: unmatched beams, port-angle mismatches, …), `facility` (one of
 [`FACILITIES`](@ref); set by a preset, or with [`set_facility!`](@ref)), `aim_frame`
-(per beam, the named frame its aim is held in: `:tcc`, a template's frame or a part's,
+(per beam, the named frame its aim is held in: `:tcc`, a part's or a piece's,
 see [`set_aim_frame!`](@ref)), `aim_local` (each aim's coordinates in that frame),
 `frames` (the frames the local aims refer to: the design's, [`part_frames`](@ref), kept
 current by [`follow_frames!`](@ref)) and `unconverted` (per beam, whether its
@@ -160,23 +160,27 @@ _float_beam(b::Beam) = remake(b; aim = Float64.(b.aim), power = Float64(b.power)
                               dlambda = Float64(b.dlambda))
 
 """
-    preset_beams(preset; target_kind = :hohlraum, params = TargetSetup().params[]) -> Vector{Beam}
+    preset_beams(preset; target = nothing) -> Vector{Beam}
 
-The beams of a [`BEAM_PRESETS`](@ref) entry, pointed for a target of `target_kind`
-with dimensions `params` (see [`TARGET_FIELDS`](@ref)).
+The beams of a [`BEAM_PRESETS`](@ref) entry, pointed for the design `target` (a
+[`TargetSetup`](@ref), or `nothing` for none): the OMEGA hohlraum beams at the entrance
+holes of its first hohlraum part (`±length/2` along chamber `z`, the part centered on
+TCC; at TCC without one), the OMEGA backlighter beams at the center of its active foil
+([`active_foil`](@ref); TCC without one).
 """
-function preset_beams(preset::Symbol; target_kind::Symbol = :hohlraum,
-                      params::AbstractDict = Dict(k => v for fs in TARGET_FIELDS for (k, _, _, v) in fs))
+function preset_beams(preset::Symbol; target = nothing)
     if preset === :nif_quads || preset === :nif_beams
         bs = preset === :nif_quads ? nif_quads(power = 8.0) : nif_beams(power = 2.0)
         return _cone_pointing(bs, NIF_CONE_POINTING)
     elseif preset === :omega_hohlraum
         bs = omega_beams(power = 0.5)
-        target_kind === :hohlraum || return bs
-        h = params[:length] / 2
+        i = target === nothing ? nothing : findfirst(p -> p.kind === :hohlraum, target.parts[])
+        i === nothing && return bs
+        h = target.parts[][i].values[:length] / 2
         return _cone_pointing(bs, Dict(g => (0.0, h) for g in (:cone1, :cone2, :cone3)))
     elseif preset === :omega_backlighter
-        c = target_kind === :foil ? backlighter_frame(params).origin : Vec3(0, 0, 0)
+        f = preset_aim_frame(preset, target)
+        c = f === :tcc ? Vec3(0, 0, 0) : part_frames(target)[f].origin
         return [remake(b; aim = c, power = 0.4)
                 for b in omega_beams(cones = :all, spot = omega_spot(:SG4))
                 if b.port[1] < -cosd(70)]
@@ -185,13 +189,17 @@ function preset_beams(preset::Symbol; target_kind::Symbol = :hohlraum,
 end
 
 """
-    preset_aim_frame(preset, target_kind) -> Symbol
+    preset_aim_frame(preset, target = nothing) -> Symbol
 
-The frame a preset's beams aim in: `:backlighter` for `:omega_backlighter` on a foil
-target (the beams then follow the foil), `:tcc` otherwise.
+The frame a preset's beams aim in: the active foil's (its part's frame) for
+`:omega_backlighter` on a design with a foil (the beams then follow the foil), `:tcc`
+otherwise.
 """
-preset_aim_frame(preset::Symbol, target_kind::Symbol) =
-    preset === :omega_backlighter && target_kind === :foil ? :backlighter : :tcc
+function preset_aim_frame(preset::Symbol, target = nothing)
+    preset === :omega_backlighter && target !== nothing || return :tcc
+    f = active_foil(target)
+    return f === nothing ? :tcc : f
+end
 
 # Point each cone at (r, z) with top/bottom mirroring.
 function _cone_pointing(bs, rz)
@@ -205,11 +213,11 @@ function _cone_pointing(bs, rz)
 end
 
 """
-    set_facility!(bt::BeamTable, facility; target_kind = :hohlraum, params) -> bt
+    set_facility!(bt::BeamTable, facility; target = nothing) -> bt
 
 Choose the facility ([`FACILITIES`](@ref)). If the table's preset belongs to another
-facility, the new facility's first preset replaces it (for a target of `target_kind`
-with dimensions `params`); a facility without presets keeps the beams.
+facility, the new facility's first preset replaces it (pointed for the design `target`,
+[`preset_beams`](@ref)); a facility without presets keeps the beams.
 """
 function set_facility!(bt::BeamTable, facility::Symbol; kwargs...)
     facility in FACILITIES || throw(ArgumentError("facility must be one of $FACILITIES"))
@@ -225,7 +233,7 @@ end
     set_aim_frame!(bt::BeamTable, idx, frame::Symbol; at = nothing) -> bt
 
 Hold the aims of beams `idx` in the frame named `frame` (one of the table's `frames`:
-`:tcc`, a template's frame, a part's), so they follow it when it moves or turns
+`:tcc`, a part's, a piece's), so they follow it when it moves or turns
 ([`follow_frames!`](@ref)). With `at = nothing` the aims stay where they are and are
 re-expressed in the frame; with a chamber point `at` every beam aims there. Pointing
 edits afterwards change the local coordinates, which the aims keep as they follow.
@@ -285,14 +293,13 @@ function follow_frames!(bt::BeamTable, frames::AbstractDict; renames::AbstractDi
 end
 
 """
-    load_preset!(bt::BeamTable, preset; target_kind = :hohlraum, params)
+    load_preset!(bt::BeamTable, preset; target = nothing)
 
 Replace the table with a preset's beams (see [`preset_beams`](@ref)), all enabled, their
-aims in [`preset_aim_frame`](@ref).
+aims in [`preset_aim_frame`](@ref), pointed for the design `target`.
 """
-function load_preset!(bt::BeamTable, preset::Symbol; target_kind::Symbol = :hohlraum, kwargs...)
-    set_beams!(bt, preset_beams(preset; target_kind, kwargs...); preset,
-               aim_frame = preset_aim_frame(preset, target_kind))
+function load_preset!(bt::BeamTable, preset::Symbol; target = nothing)
+    set_beams!(bt, preset_beams(preset; target); preset, aim_frame = preset_aim_frame(preset, target))
     return bt
 end
 

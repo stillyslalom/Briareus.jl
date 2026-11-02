@@ -90,7 +90,8 @@ line of sight also keeps the line's direction `cut_line` (zero otherwise) and th
 plane's rotation `cut_rotation` (degrees) about it. See [`set_cut!`](@ref),
 [`set_cut_plane!`](@ref) and [`set_cut_line!`](@ref).
 
-Tree node ids: `"target"`, `"comp:<name>"`, `"window:<k>"`, `"part:<name>"`,
+Tree node ids: `"target"`, `"comp:<name>"`, `"window:<name>"` (a hohlraum part's window
+`<part>_window_k`), `"part:<name>"`,
 `"beams"`, `"group:<group>"` (a beam group, see `BeamTable`'s `cluster`),
 `"quad:<quad>@<group>"` (a quad's beams in a group), `"beam:<name>"`, `"analyses"`,
 `"task:drive"`, `"task:optimize"`, `"task:clearance"`, `"task:talis"`.
@@ -122,8 +123,8 @@ struct ViewState
     cut_rotation::Observable{Float64}
 end
 
-"Components the cutaway cuts by default: a hohlraum's shell."
-const DEFAULT_CUT_COMPONENTS = (:wall, :cap_top, :cap_bottom)
+"Components the cutaway cuts by default: the starter hohlraum's shell."
+const DEFAULT_CUT_COMPONENTS = (:hohlraum_wall, :hohlraum_cap_top, :hohlraum_cap_bottom)
 
 ViewState() = ViewState(Observable(:component), Observable(:rays), Observable(:group),
                         Observable(0.0), Observable(true), Observable(Dict{Symbol,Symbol}()),
@@ -405,12 +406,27 @@ end
 """Tree node id of a target component (window and part components get their own kinds;
 an entrance hole's closing lip is its hole's)."""
 function component_id(ts, name::Symbol)
-    m = match(r"^window_(\d+)$", String(name))
-    m !== nothing && ts.kind[] === :hohlraum && parse(Int, m[1]) <= length(ts.windows[]) &&
-        return "window:" * m[1]
+    window_of(ts, name) === nothing || return "window:" * String(name)
     any(p -> p.name === name, ts.parts[]) && return "part:" * String(name)
-    ts.kind[] === :hohlraum && return "comp:" * String(shown_component(name))
-    return "comp:" * String(name)
+    return "comp:" * String(shown_component(name))
+end
+
+"""
+    window_of(ts, name::Symbol) -> Union{Nothing,Tuple{Int,Int}}
+
+The hohlraum part (its index in `ts.parts[]`) and the number `k` of window component
+`name` (`<part>_window_k`), or `nothing` for any other name.
+"""
+function window_of(ts, name::Symbol)
+    s = String(name)
+    for (i, p) in enumerate(ts.parts[])
+        p.kind === :hohlraum || continue
+        pre = String(p.name) * "_window_"
+        startswith(s, pre) || continue
+        k = tryparse(Int, s[ncodeunits(pre)+1:end])
+        k !== nothing && 1 <= k <= length(p.windows) && return (i, k)
+    end
+    return nothing
 end
 
 "Tree node id of a beam."
@@ -461,7 +477,7 @@ end
 
 const _COMPONENT_LABELS = Dict(:wall => "Wall", :cap_top => "Top cap", :cap_bottom => "Bottom cap",
                                :leh_top => "Top LEH", :leh_bottom => "Bottom LEH",
-                               :capsule => "Capsule", :backlighter => "Foil", :main => "Main target")
+                               :capsule => "Capsule", :foil => "Foil", :main => "Main target")
 
 """
     component_label(name::Symbol) -> String
@@ -502,7 +518,7 @@ function model_tree(sess)
     rows = TreeRow[]
     ts = sess.target
     t = ts.target[]
-    push!(rows, _row("target", 0, "Target: " * TARGET_KIND_LABELS[ts.kind[]],
+    push!(rows, _row("target", 0, "Target",
                      @sprintf("%d elements", nelements(t)), true, "target" in ex, -1, "", sel))
     if "target" in ex
         cols = component_colors(t)
@@ -640,7 +656,7 @@ function selected_components(sess)
     for id in selected_ids(sess.view)
         kind, key = selection_kind(id)
         kind in (:comp, :part) && push!(out, Symbol(key))
-        kind === :window && push!(out, window_name(parse(Int, key)))
+        kind === :window && push!(out, Symbol(key))
     end
     return out
 end
@@ -653,6 +669,6 @@ The target component of the selected tree node, if it is one.
 function selected_component(sess)
     kind, key = selection_kind(sess.view.selection[])
     kind in (:comp, :part) && return Symbol(key)
-    kind === :window && return window_name(parse(Int, key))
+    kind === :window && return Symbol(key)
     return nothing
 end

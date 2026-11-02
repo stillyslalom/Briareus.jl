@@ -14,33 +14,33 @@ var pages = [
                 "documentation; Help ▸ Mouse and keys lists the bindings of the 3D view." }
     ] },
     { key: "target", title: "Target", items: [
-        { key: "target.hohlraum", title: "Hohlraum with capsule",
-          text: "Cylindrical hohlraum along z with entrance holes and a capsule at TCC (capsule radius 0: none)." },
-        { key: "target.foil", title: "Backlighter foil",
-          text: "The foil sits on the +x axis facing TCC; the sphere at TCC stands in for the main " +
-                "target: it absorbs the laser light and x-rays that reach it and emits nothing (albedo " +
-                "and conversion 0). Sphere radius 0: none." },
-        { key: "target.custom", title: "Custom (parts only)",
-          text: "A target made of free parts only: add them from the target's Properties or from Target ▸ Add part." },
+        { key: "target.insert", title: "Starters",
+          text: "A target is made of parts. Insert ▸ adds a starter assembly in the selected part's " +
+                "or piece's frame (TCC with nothing selected), its names made unique (hohlraum_2): " +
+                "Hohlraum with capsule, a hohlraum part along z with a capsule sphere at its center " +
+                "that holds the capsule role; Backlighter foil, a foil 6 mm along x facing the frame's " +
+                "origin and a sphere there standing in for the main target (it absorbs the laser " +
+                "light and x-rays that reach it and emits nothing). File ▸ New target starts a " +
+                "target with one starter. The dimensions are illustrative." },
         { key: "target.mesh", title: "Mesh presets",
           text: "Presets come from a work-precision study on the NIF hohlraum " +
                 "(examples/mesh_convergence.jl): errors in the capsule P2/P0 and P4/P0 of about " +
                 "0.5, 0.1 and 0.02 percentage points. A part can set its own element size." }
     ] },
-    { key: "component", title: "Template components", items: [
-        { key: "component.intro", title: "Wall, caps, entrance holes, capsule, foil",
-          text: "Template components are sized from the target dimensions: select Target to edit " +
-                "them. However a component is drawn (invisible included), it takes part in every calculation." }
+    { key: "component", title: "Pieces", items: [
+        { key: "component.intro", title: "Wall, caps, entrance holes, windows",
+          text: "A hohlraum part's pieces are sized from the part: select the part to edit them. " +
+                "However a piece is drawn (invisible included), it takes part in every calculation." }
     ] },
     { key: "part", title: "Parts", items: [
         { key: "part.placement", title: "Placement and frames",
           text: "The axis of a part is its local z: the part is turned by the rotation about " +
                 "that axis, tilted to polar angle θ and azimuth φ (as VisRad orders them), then " +
                 "moved to (x, y, z) in the frame it is placed in. A disk, washer or rectangle " +
-                "faces along its axis. An entrance hole's frame has its origin at the hole and z " +
-                "pointing out of the hohlraum, so a part there moves with the hole and mirrors " +
-                "between the two; the backlighter foil's frame has z along its front normal, " +
-                "toward TCC. Every part has its own frame (origin at its center, z its axis): " +
+                "faces along its axis. A hohlraum part's entrance-hole frames have their origin at the " +
+                "hole and z pointing out of the hohlraum, so a part there moves with the hole and " +
+                "mirrors between the two; a foil's frame has z along its front normal. Every part " +
+                "has its own frame (origin at its center, z its axis): " +
                 "parts placed in it and beams aimed in it move and turn with the part. Changing " +
                 "the frame keeps the part where it is." },
         { key: "part.steps", title: "Placement steps",
@@ -58,10 +58,10 @@ var pages = [
         { key: "part.role", title: "Role",
           text: "A role marks the part for the analyses; the part keeps its name. The capsule (a " +
                 "sphere, or a CAD part a sphere is fitted to) is the surface whose x-ray drive is " +
-                "observed: one part at a time, and a hohlraum template's capsule yields it. A " +
+                "observed: one part at a time. A " +
                 "backlighter foil is a flat part or a mesh. A wall is a re-emitting cavity surface: " +
                 "the drive history's wall temperature, and a surface the clearance and TaLIS checks " +
-                "land the beams on (a hohlraum template's wall holds the role too). Any number of " +
+                "land the beams on (a hohlraum part's wall and caps hold the role for the drive history). Any number of " +
                 "parts can be foils or walls; " +
                 "the active foil (Drive ▸ Active foil, or the part's own check) is the one whose " +
                 "spot statistics, map and objective the drive and the optimization take, and whose " +
@@ -103,7 +103,7 @@ var pages = [
         { key: "beams.aim", title: "Aim point and aim frame",
           text: "Coordinates in the aim frame. Point every selected beam at one point, as VisRad " +
                 "points a cluster at a reference point (e.g. a backlighter foil). Shown: the mean " +
-                "aim. Beams aimed in a part's or a template's frame keep these coordinates in it " +
+                "aim. Beams aimed in a part's or a piece's frame keep these coordinates in it " +
                 "when it moves or turns, or when the part is renamed." },
         { key: "beams.group", title: "Groups",
           text: "Groups gather beams for pointing, power and on/off together, and are the " +

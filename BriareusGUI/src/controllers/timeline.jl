@@ -160,7 +160,7 @@ cancel_history!(sess::DesignSession) = (sess.time.running[] && (sess.time.cancel
 # history's wall temperature, else the observed surface does.
 function _history_job(s::Scenario, beams, enabled, src, times; diags = NamedTuple[],
                         progress = k -> nothing, cancel = Threads.Atomic{Bool}(false), key = nothing,
-                        wall = (_TEMPLATE_WALL,))
+                        wall = ())
     t0 = time()
     t = s.target
     names = component_names(t)
@@ -177,7 +177,10 @@ function _history_job(s::Scenario, beams, enabled, src, times; diags = NamedTupl
         laser[aperture] .= NaN32
         diag = [_record_diagnostic!(v, sol) for v in views]
         progress(steps[] += 1)
-        return (; laser, radiosity = Float32.(to_Wcm2.(sol.B)), incident = Float32.(to_Wcm2.(sol.H)), diag)
+        # (per component: the history sums a part's pieces, a hohlraum's holes into its walls)
+        escaped = energy_balance(sol; by = :component).escaped
+        return (; laser, radiosity = Float32.(to_Wcm2.(sol.B)), incident = Float32.(to_Wcm2.(sol.H)), diag,
+                escaped)
     end
     h = drive_history(s.model, s.deposition, τ -> _pulse_beams(src, beams, enabled, τ), times;
                       observe, wall, lmax = 4, record)
@@ -201,18 +204,30 @@ end
 # `observed`), the x-rays out of the entrance holes, and out of windows (other apertures
 # and thin foils).
 function _energy_series(h, t::Target, observed)
-    # (by component: the budget's keys; a hohlraum part's entrance holes are its pieces)
     holes = Set(c.name for c in t.components if c.kind === :aperture && !(c.surface isa CylinderSurface))
-    capsule = Set(c.name for c in t.components if c.name in observed || c.part in observed)
+    capsule = Set(c.part for c in t.components if c.name in observed || c.part in observed)
     eb = [energy_budget(h; to = τ) for τ in h.time]
     sumof(d, keep) = sum((v for (k, v) in d if keep(k)); init = 0.0)
+    # the escape through each aperture up to each time, from the steps' records (the
+    # budget's are by part), integrated as `energy_budget` integrates
+    tt = h.time
+    function upto(p)
+        out, acc = zeros(length(p)), 0.0
+        for k in 2:length(p)
+            acc += (tt[k] - tt[k-1]) * (p[k-1] + p[k]) / 2
+            out[k] = acc
+        end
+        return out
+    end
+    esc = isempty(h.record) ? Dict{Symbol,Vector{Float64}}() :
+          Dict(n => upto([r.escaped[n] for r in h.record]) for n in keys(first(h.record).escaped))
+    out(keep) = [sum((v[k] for (n, v) in esc if keep(n)); init = 0.0) for k in eachindex(tt)]
     series = NamedTuple[
         (; name = :laser, values = [e.setup for e in eb]),
         (; name = :wall, values = [sumof(e.heating, k -> !(k in capsule)) for e in eb]),
         (; name = :capsule, values = [sumof(e.heating, in(capsule)) for e in eb]),
-        (; name = :holes, values = [sumof(e.escaped, in(holes)) for e in eb]),
-        (; name = :windows, values = [sumof(e.escaped, k -> !(k in holes)) + sumof(e.transmitted, _ -> true)
-                                      for e in eb])]
+        (; name = :holes, values = out(in(holes))),
+        (; name = :windows, values = out(n -> !(n in holes)) .+ [sumof(e.transmitted, _ -> true) for e in eb])]
     # (a hohlraum without windows, or a target without a capsule, has no such series)
     return filter(s -> s.name === :laser || any(>(1e-9), s.values), series)
 end
@@ -551,7 +566,7 @@ function _diagnostic_views(diags, names)
             if !(d.def.kind in (:xray_power, :xray_imager))
                 note = "a $(d.def.kind) diagnostic is not recorded in a drive history"
             else
-                v = diagnostic(d.def)
+                v = _view_on(diagnostic(d.def), names)
                 if v isa DanteView && !(v.through === nothing || v.through in names)
                     note = "the target has no $(v.through) to look through"
                 elseif v.center isa Symbol && !(v.center in names)
