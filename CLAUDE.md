@@ -15,7 +15,7 @@ BRIAREUS_TEST_SHARD=2 julia --project=. -t auto -e 'using Pkg; Pkg.test()'  # a 
 julia --project=. test/docrefs.jl                        # docs guard, ~3 s
 julia --project=docs -t auto docs/make.jl                # docs; runs every tutorial
 julia --project=docs -t auto docs/literate/<name>.jl     # one tutorial as a script
-julia --project=BriareusGUI -e 'using Pkg; Pkg.test()'   # GUI subpackage
+julia --project=BriareusGUI -t auto -e 'using Pkg; Pkg.test(; julia_args = ["--heap-size-hint=2G"])'  # GUI (~7 min)
 julia dev/prose/lint.jl [--fix] [files]                  # prose lint; --fix: spelling
 ```
 
@@ -24,7 +24,9 @@ quick rebuilds; caches don't key on it, and Julia 1.13 rebuilds on file content,
 timestamps (`touch` is not enough): change a source file's content before timing first results.
 The shard map is at the top of `test/runtests.jl`: a new test file goes in it, and files
 whose helpers others use share a shard. Expensive fixtures (deposition operators, view
-factors) dominate the suite: build one per geometry and share it across testsets.
+factors) dominate the suite: build one per geometry and share it across testsets, and
+release a global one after its last testset. Testsets go in included files, never the body
+of runtests.jl's outer `@testset` (one top-level expression: its locals live to the end).
 
 ## Working rules
 
