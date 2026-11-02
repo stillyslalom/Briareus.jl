@@ -10,7 +10,7 @@
 # toolbar with `request_grab` (QML `grabToImage`, written asynchronously); the Cut
 # settings popup and the Help screen are grabbed alone (`request_cut_settings`,
 # `request_popup`). Nothing outside the window is captured. Every target and pointing is a
-# built-in public one: the NIF hohlraum template with the NIF quads at illustrative example
+# built-in public one: the hohlraum starter with the NIF quads at illustrative example
 # cone aims, and the OMEGA backlighter set on a foil; the 1ω and 2ω power ratios of the
 # beam-matrix image are illustrative. The run takes a few minutes (the drive on the
 # standard mesh, a pointing optimization, a drive history, the TaLIS rules on every quad,
@@ -154,9 +154,9 @@ B._TICK_HOOK[] = function (sh)
         B.br_unconverted_ratio(2, "")
         B.br_toggle_expand("group:inner23")
         B.br_set_color("incident")
-        B.br_set_display("comp:cap_bottom", "transparent")
-        B.br_select("comp:cap_top")
-        B.br_set_display("comp:cap_top", "wireframe")
+        B.br_set_display("comp:hohlraum_cap_bottom", "transparent")
+        B.br_select("comp:hohlraum_cap_top")
+        B.br_set_display("comp:hohlraum_cap_top", "wireframe")
         B.br_standard_view("iso")
         B.br_cut_kind("sector")
         B.br_cut_width(120)
@@ -168,8 +168,8 @@ B._TICK_HOOK[] = function (sh)
     elseif k == 19 && grabbed("display_cut")
         # a 2 × 2 mm diagnostic window in the wall at φ = 90°, cut by the plane that
         # contains its line of sight (from the window's centroid along +y)
-        B.br_set_display("comp:cap_top", "opaque")
-        B.br_set_display("comp:cap_bottom", "opaque")
+        B.br_set_display("comp:hohlraum_cap_top", "opaque")
+        B.br_set_display("comp:hohlraum_cap_bottom", "opaque")
         B.br_set_color("component")
         B.br_add_window()
         B.br_edit_window(1, "width", "2")
@@ -178,7 +178,7 @@ B._TICK_HOOK[] = function (sh)
         # the drive and the TaLIS rules on the target with its window, so nothing is out of date
         B.br_build()
         "cut_plane" in wanted && B.br_tl_start()
-        B.br_select("window:1")
+        B.br_select("window:hohlraum_window_1")
         B.br_cut_line("90", "90", true, 0)
         B.br_look_from_port("70", "135"); next!()
     elseif k == 21 && idle(s) && !s.talis.running[] && after(2)
@@ -191,14 +191,10 @@ B._TICK_HOOK[] = function (sh)
     elseif k == 24 && grabbed("cut_settings")
         # a backlighter foil with the OMEGA backlighter beams, colored by the absorbed
         # laser intensity: the 3D view toward the foil's front, the foil's face beside it.
-        # The hohlraum's optimization does not apply to the foil: it is cleared, as in a
-        # window opened on the foil.
         B.br_remove_window(1)
         B.br_set_cutaway(false)
         if "backlighter" in wanted || "sweep" in wanted
-            s.optimize.result[] = nothing
-            s.optimize.status[] = ""
-            B.br_set_target_kind("foil")
+            B.br_new_target("foil")             # clears the optimization; OMEGA backlighter beams
             B.br_set_color("laser")
         end
         B.br_select("target")

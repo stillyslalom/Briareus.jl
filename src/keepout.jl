@@ -45,15 +45,12 @@ function ApertureKeepOut(t::Target; apertures = nothing, peak_fraction = nothing
     # `CylinderSurface`) are not entrance holes, and a closing lip (an aperture with a
     # `GapClosure`) widens the hole whose plane and center it shares
     lip(c) = c.kind === :aperture && _transmits(c.material.albedo)
-    names = apertures === nothing ?
-            unique!([c.part for c in t.components
-                     if c.kind === :aperture && !(c.surface isa CylinderSurface) && !lip(c)]) :
-            Symbol[apertures...]
+    names, holes = apertures === nothing ? _default_apertures(t, lip) :
+                   (ns = Symbol[apertures...]; (ns, [Set(part_pieces(t, n)) for n in ns]))
     lips = [findall(==(ci), t.tri_comp) for (ci, c) in enumerate(t.components) if lip(c)]
     isempty(names) && throw(ArgumentError("target has no apertures"))
     centers, rims = Vec3[], Vector{Vec3}[]
-    for name in names
-        cis = Set(part_pieces(t, name))           # a part: all its pieces
+    for cis in holes
         tris = findall(in(cis), t.tri_comp)
         A = sum(t.tri_area[tris])
         c = sum(t.tri_area[k] * (t.tri_v0[k] + (t.tri_e1[k] + t.tri_e2[k]) / 3) for k in tris) / A
@@ -74,6 +71,34 @@ function ApertureKeepOut(t::Target; apertures = nothing, peak_fraction = nothing
     return ApertureKeepOut(names, centers, rims, peak_fraction, intensity,
                            pointing + target_offset + hardware_tolerance, focus, margin,
                            minimum, weight)
+end
+
+# The default entrance holes: the planar aperture components (not lips), one hole per part
+# and plane. A part's pieces in one plane are one hole (a CAD part's hole split into
+# pieces); a part with holes in several planes (a hohlraum part: `Component.part` is the
+# part on every piece) has one per plane, named by its first piece there. Returns the
+# names and each hole's component indices.
+function _default_apertures(t::Target, lip)
+    cs = [ci for (ci, c) in enumerate(t.components)
+          if c.kind === :aperture && !(c.surface isa CylinderSurface) && !lip(c)]
+    plane(ci) = (k = findfirst(==(ci), t.tri_comp); n = t.tri_normal[k]; (n, dot(n, t.tri_v0[k])))
+    names, holes, keys = Symbol[], Set{Int}[], Tuple{Symbol,Vec3,Float64}[]
+    for ci in cs
+        p = t.components[ci].part
+        n, d = plane(ci)
+        j = findfirst(((q, m, e),) -> q === p && abs(dot(m, n)) > 1 - 1e-9 &&
+                                      abs(e - sign(dot(m, n)) * d) <= 1e-9 * max(1.0, abs(d)), keys)
+        if j === nothing
+            push!(keys, (p, n, d)); push!(holes, Set(ci)); push!(names, p)
+        else
+            push!(holes[j], ci)
+        end
+    end
+    # a part with several holes: each by its first piece's name
+    for j in eachindex(names)
+        count(==(keys[j][1]), first.(keys)) > 1 && (names[j] = t.components[minimum(holes[j])].name)
+    end
+    return names, holes
 end
 
 """

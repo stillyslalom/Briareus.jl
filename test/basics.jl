@@ -826,6 +826,13 @@ end
     @test Briareus._keepout_penalty(ApertureKeepOut(th; minimum = -1.0), qs) == 0
     @test Briareus._keepout_penalty(ApertureKeepOut(th; minimum = 1.0, weight = 2.0), qs) ≈
           2 * sum((1 .- aperture_clearance(ApertureKeepOut(th), qs)) .^ 2)
+    # every piece of one part (as a GUI hohlraum part's): one hole per plane, the same
+    # rims and clearances as the hohlraum whose holes are parts of their own
+    tp = Target([Component(c.name, c.mesh, c.material; kind = c.kind, two_sided = c.two_sided,
+                           surface = c.surface, part = :h) for c in th.components]; closed = th.closed)
+    kp = ApertureKeepOut(tp; peak_fraction = 0.01)
+    @test kp.names == ko.names == [:leh_top, :leh_bottom] && kp.centers == ko.centers && kp.rims == ko.rims
+    @test aperture_clearance(kp, qs) == aperture_clearance(ko, qs)
 
     # capsule keep-out against the clearance check on a fine capsule mesh (vertices on
     # the sphere), with the inner cones pulled in toward it
