@@ -13,6 +13,8 @@ Pane {
     readonly property var keys: ["beams", "drive", "time", "optimize", "clearance", "sweep", "talis"]
     function show(key) { const i = keys.indexOf(key); if (i >= 0) tabs.currentIndex = i }
     function redrawTime() { timePanel.redraw() }
+    function openDiagnosticPicker() { return timePanel.openPicker() }
+    function openImageList() { return timePanel.openImages() }
     function redrawSweep() { sweepPanel.redraw() }
     // leaving NIF hides the TaLIS tab: show the drive rather than its stale page
     readonly property bool talisShown: app.facility === "nif"

@@ -54,6 +54,7 @@ function _draw_map!(c::MapCanvas, sess::DesignSession)
         ax.aspect[] = m.kind === :capsule ? AxisAspect(2) : DataAspect()     # equal degrees / mm
         ax.title[] = m.kind === :capsule ? "Capsule incident x-ray flux" : "Foil laser irradiance"
         c.colorbar.label[] = "W/cm²"
+        ax.limits[] = (nothing, nothing)                  # not an image's window
         reset_limits!(ax)
     end
     c.dirty[] = true
@@ -79,6 +80,10 @@ function _draw_image!(c::MapCanvas, sess::DesignSession)
         ax.aspect[] = DataAspect()
         ax.title[] = im.title
         c.colorbar.label[] = get(im, :unit, "W/cm²/sr")
+        # an imager's image opens on its region with signal: Ctrl + click returns to it,
+        # Ctrl + Shift + click (Makie's autolimits) shows the whole field
+        w = get(im, :window, nothing)
+        ax.limits[] = w === nothing ? (nothing, nothing) : ((w[1], w[2]), (w[3], w[4]))
         reset_limits!(ax)
     end
     c.dirty[] = true

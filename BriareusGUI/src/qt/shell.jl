@@ -354,6 +354,8 @@ mutable struct DiagRow
     usable::Bool
     changed::Bool                                  # saved with the session, differs from the search path's
     tip::String
+    group::String                                  # the kind's group in the picker
+    head::Bool                                     # the first row of its group
 end
 
 # One folder of the diagnostic search path; one problem found in its definitions.
@@ -965,8 +967,9 @@ function _refresh_time!(sh::BriareusShell)
                 ImageRow[ImageRow(r.id, r.label, r.frame) for r in diagnostic_images(sess)])
     rows = diagnostic_catalog(sess)
     _sync_rows!(sh.rows[:diagModel], sh.models[:diagModel],
-                DiagRow[DiagRow(r.id, r.name, r.id in tm.diagnostics[], r.usable, !isempty(r.changed), _diag_tip(r))
-                        for r in rows])
+                DiagRow[DiagRow(g.row.id, g.row.name, g.row.id in tm.diagnostics[], g.row.usable,
+                                !isempty(g.row.changed), _diag_tip(g.row), g.group, g.head)
+                        for g in Controllers._diagnostic_groups(rows)])
     if get(sh.shown, "_catalog", nothing) !== rows             # the folders and problems, once per reading
         sh.shown["_catalog"] = rows
         _sync_rows!(sh.rows[:folderModel], sh.models[:folderModel],
@@ -1249,7 +1252,8 @@ end
     request_popup(key, path = "")
 
 Open a dialog or menu of the open window: `"retune"`, `"port"`, `"help"` or `"group"`
-(the dialogs), `"topics"` or `"topics:<topic>"` (the Help screen, see `br_help`), a menu
+(the dialogs), `"diagnostics"` and `"images"` (the Time tab's lists of diagnostic definitions and of
+a history's images), `"topics"` or `"topics:<topic>"` (the Help screen, see `br_help`), a menu
 bar menu by its title without the `&` (`"File"`, `"View"`, …), or `"window"` for none.
 With a `path`, save an image of the popup there (for `"window"`, of the toolbar; PNG,
 written asynchronously, as by [`request_grab`](@ref)); `request_popup("")` closes it.

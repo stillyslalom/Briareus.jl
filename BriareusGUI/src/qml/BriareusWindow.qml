@@ -82,6 +82,8 @@ ApplicationWindow {
         const dialogs = { retune: retuneDialog, port: portDialog, help: helpDialog }
         if (key.startsWith("topics")) { helpTopics.openAt(key.substring(7)); openPopup = helpTopics }
         else if (key === "group") { tree.openGroupDialog(); openPopup = tree.groupDialog }
+        else if (key === "diagnostics") { results.show("time"); openPopup = results.openDiagnosticPicker() }
+        else if (key === "images") { results.show("time"); openPopup = results.openImageList() }
         else if (dialogs[key]) { openPopup = dialogs[key]; openPopup.open() }
         else if (key !== "window") {
             for (let i = 0; i < menuBar.count; ++i) {

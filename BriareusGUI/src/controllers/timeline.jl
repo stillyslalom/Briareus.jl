@@ -636,7 +636,9 @@ Show an image of recorded imager `id` of the latest drive history in the image v
 (as Compute ▸ X-ray image does, [`set_view!`](@ref) `:image`): `frame` 0 the image at
 the time cursor's step (detected radiance, W/cm²/sr; the last step without a cursor),
 else frame `frame` of its recording (detected fluence per steradian, J/cm²/sr: the
-integral over the shot or against a gate). The image stays until another is asked
+integral over the shot or against a gate). The view opens on the region with signal
+(`window`, or the whole field when that covers most of it); Ctrl + Shift + click on the
+image shows the whole field. The image stays until another is asked
 for: a drive edit does not replace it.
 """
 function show_diagnostic_image!(sess::DesignSession, id::AbstractString, frame::Integer = 0)
@@ -661,10 +663,53 @@ function show_diagnostic_image!(sess::DesignSession, id::AbstractString, frame::
     cam = d.view.camera
     w = cam.width / 2
     x = range(-w, w; length = cam.nx)
+    values = permutedims(img[end:-1:1, :])
     sess.drive.image_request[] = nothing                     # not the drive's camera image
-    sess.drive.image[] = (; x, y = x, values = permutedims(img[end:-1:1, :]), title, unit)
+    sess.drive.image[] = (; x, y = x, values, title, unit, window = _signal_window(x, x, values))
     set_view!(sess.drive, :image)
     return sess
+end
+
+# The region of an image with signal, for the image view's first limits: `(x0, x1, y0,
+# y1)` (mm) bounding the pixels above `frac` of the peak, widened by `margin` of its
+# extent on each side (at least 4 pixels) and clamped to the field; `nothing` when that
+# region covers most of the field or the image is empty. `values[i, j]` is at `(x[i],
+# y[j])`. The threshold and margin are display defaults, not instrument criteria.
+function _signal_window(x, y, values; frac = 1e-3, margin = 0.15)
+    fin = filter(isfinite, values)
+    peak = isempty(fin) ? 0.0 : maximum(fin)
+    peak > 0 || return nothing
+    hot = findall(v -> isfinite(v) && v > frac * peak, values)
+    is, js = extrema(i[1] for i in hot), extrema(i[2] for i in hot)
+    dx, dy = step(x), step(y)
+    function span(r, lo, hi, d)
+        pad = max(margin * (r[hi] - r[lo]), 4 * abs(d))
+        return max(first(r) - abs(d) / 2, r[lo] - pad), min(last(r) + abs(d) / 2, r[hi] + pad)
+    end
+    x0, x1 = span(x, is..., dx)
+    y0, y1 = span(y, js..., dy)
+    (x1 - x0) * (y1 - y0) > 0.5 * (last(x) - first(x)) * (last(y) - first(y)) && return nothing
+    return (x0, x1, y0, y1)
+end
+
+# The group of a diagnostic kind in the time panel's definition picker.
+const _DIAGNOSTIC_GROUPS = (:xray_power => "X-ray power", :xray_imager => "X-ray imagers",
+                            :radiography => "Radiography")
+_diagnostic_group(kind::Symbol) =
+    something(get(Dict(_DIAGNOSTIC_GROUPS), kind, nothing), uppercasefirst(replace(String(kind), '_' => ' ')))
+
+# The catalog's rows grouped by kind for the picker (the groups of `_DIAGNOSTIC_GROUPS`
+# in that order, then the other kinds by name; the catalog's order within a group):
+# `(; row, group, head)`, `head` for the first row of its group.
+function _diagnostic_groups(rows)
+    rank(k) = something(findfirst(p -> p.first === k, _DIAGNOSTIC_GROUPS), length(_DIAGNOSTIC_GROUPS) + 1)
+    order = sort(collect(eachindex(rows)); by = i -> (rank(rows[i].kind), _diagnostic_group(rows[i].kind)))
+    out = NamedTuple[]
+    for i in order
+        g = _diagnostic_group(rows[i].kind)
+        push!(out, (; row = rows[i], group = g, head = isempty(out) || out[end].group != g))
+    end
+    return out
 end
 
 """

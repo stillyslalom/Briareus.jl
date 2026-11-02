@@ -20,6 +20,24 @@ end
         @test !byid["nif_dante2"].usable && occursin("channel", byid["nif_dante2"].problem)
         @test all(r -> r.origin === :builtin, rows) && issorted([r.id for r in rows])
         @test isempty(diagnostic_folders())
+        # the picker's groups: every row once, by kind in the fixed order, the catalog's
+        # order within a group, a heading on each group's first row
+        gs = Controllers._diagnostic_groups(rows)
+        @test sort([g.row.id for g in gs]) == sort([r.id for r in rows])
+        @test unique([g.group for g in gs]) == ["X-ray power", "X-ray imagers", "Radiography"]
+        @test [g.group for g in gs if g.head] == unique([g.group for g in gs])
+        @test all(g -> Controllers._diagnostic_group(g.row.kind) == g.group, gs)
+        @test [g.row.id for g in gs if g.row.kind === :xray_power] == [r.id for r in rows if r.kind === :xray_power]
+        @test Controllers._diagnostic_group(:neutron_yield) == "Neutron yield"
+        # the image view's first limits: the pixels above 1e-3 of the peak plus 15 % (at
+        # least 4 pixels) each side, none for an image filling the field or an empty one
+        xs = range(-10.0, 10.0; length = 201)
+        img = zeros(201, 201)
+        img[101:121, 91:101] .= 1.0                               # x 0..2, y -1..0
+        img[150, 150] = 1e-4                                      # below the threshold
+        @test all(Controllers._signal_window(xs, xs, img) .≈ (-0.4, 2.4, -1.4, 0.4))
+        @test Controllers._signal_window(xs, xs, ones(201, 201)) === nothing
+        @test Controllers._signal_window(xs, xs, zeros(201, 201)) === nothing
 
         # a group's folder: Dante 1 with a 60 mm field of view (Tr over the lower hole), a
         # measured channel from a CSV, and a view through a hole the target lacks
@@ -79,6 +97,10 @@ end
         im1 = sess.drive.image[]
         @test sess.drive.view[] === :image && im1.unit == "J/cm²/sr (detected)" && size(im1.values) == (1024, 1024)
         @test sum(im1.values) ≈ 1e5 * sum(sxi.frames.images[1]) rtol = 1e-12
+        # it opens on its region with signal, inside the field
+        w = im1.window
+        @test w !== nothing && first(im1.x) - step(im1.x) <= w[1] < w[2] <= last(im1.x) + step(im1.x) &&
+              first(im1.y) - step(im1.y) <= w[3] < w[4] <= last(im1.y) + step(im1.y)
         set_time_step!(sess, argmax(sxi.intensity))
         show_diagnostic_image!(sess, "nif_sxi_lower")
         @test sess.drive.image[].unit == "W/cm²/sr (detected)"

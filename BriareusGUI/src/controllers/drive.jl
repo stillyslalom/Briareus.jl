@@ -68,7 +68,8 @@ x-ray image), `spot_radius` (mm; the foil spot over which irradiance statistics 
 the foil objective are taken), `status`, the retune's
 `retune_running`/`retune_status` (see [`retune_to_reference!`](@ref)), the x-ray image's
 `image_request` (its camera, see [`xray_image!`](@ref)) and `image` (the latest
-rendering, `(; x, y, values, title)` in mm and W/cm²/sr, or `nothing`), `side`
+rendering, `(; x, y, values, title)` in mm and W/cm²/sr, or `nothing`; an imager's
+image also has `unit` and `window`, the limits the view opens on), `side`
 (show the map or the image beside the 3D target instead of in its place), and the
 cavity (see [`set_cavity!`](@ref)): `cavity` (compute the drive on the elements that
 bound the free space around `cavity_point` only, `Briareus.enclosure`: an imported CAD
