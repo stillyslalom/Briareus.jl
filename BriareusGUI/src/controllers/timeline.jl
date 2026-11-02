@@ -1,6 +1,7 @@
 # Time in the window: the pulses the beams fire (a pulse table, or a pulse shape scaled
 # to the table's powers), the drive history they give on the drive's scenario (capsule
-# Tᵣ, its Legendre modes, the synthetic diagnostics ticked in the list of diagnostic
+# Tᵣ and its Legendre modes, or a flat observed face's Tᵣ and nonuniformity, the
+# synthetic diagnostics ticked in the list of diagnostic
 # definitions and the energy split, `drive_history` and `energy_budget`), the latest
 # retune's power histories, and the time cursor that colors the 3D view by a step of the
 # history. Each step's element fields are kept with the history, so moving the cursor
@@ -277,6 +278,7 @@ function _history_job(s::Scenario, beams, enabled, src, times; diags = NamedTupl
     A = t.elem_area
     aperture = [t.components[t.elem_comp[e]].kind === :aperture for e in 1:nelements(t)]
     steps = Ref(0)
+    flat = _observed_flat(s)
     record = function (sol)
         cancel[] && throw(_HistoryCanceled())
         laser = Float32.(to_Wcm2.(sol.laser ./ A))
@@ -285,8 +287,10 @@ function _history_job(s::Scenario, beams, enabled, src, times; diags = NamedTupl
         progress(steps[] += 1)
         # (per component: the history sums a part's pieces, a hohlraum's holes into its walls)
         escaped = energy_balance(sol; by = :component).escaped
-        return (; laser, radiosity = Float32.(to_Wcm2.(sol.B)), incident = Float32.(to_Wcm2.(sol.H)), diag,
-                escaped)
+        rec = (; laser, radiosity = Float32.(to_Wcm2.(sol.B)), incident = Float32.(to_Wcm2.(sol.H)), diag,
+               escaped)
+        # a flat observed face: its statistics over the face, as the drive's (`_face_stats`)
+        return flat ? merge(rec, (; face = _face_stats(s, sol))) : rec
     end
     h = drive_history(s.model, s.deposition, τ -> _pulse_beams(src, beams, enabled, τ), times;
                       observe, wall, lmax = 4, record, light...)
@@ -298,9 +302,20 @@ function _history_job(s::Scenario, beams, enabled, src, times; diags = NamedTupl
         f === :laser && (lo = 0.0)
         ranges[f] = (lo, hi > lo ? hi : lo + 1)
     end
-    legendre = h.moments[2:5, :] ./ h.moments[1:1, :]
     recorded = NamedTuple[_recorded(v, j, h, t) for (j, v) in enumerate(views)]
-    return DriveHistory(h.time, h.Tr, legendre, recorded, _energy_series(h, t, observe),
+    if flat
+        # the face's Tr from its area-mean incident flux, as the drive's `mean_flux` (the
+        # core history's `Tr` is from the Legendre moment P0, meaningless on a plane)
+        rs = [r.face for r in h.record]
+        face = (; mean = [f.mean for f in rs], peak = [f.peak for f in rs], low = [f.low for f in rs],
+                rms = [f.rms for f in rs])
+        Tr = [radiation_temperature(m / to_Wcm2(1.0)) for m in face.mean]
+        legendre = Matrix{Float64}(undef, 0, length(h.time))
+    else
+        face, Tr = nothing, h.Tr
+        legendre = h.moments[2:5, :] ./ h.moments[1:1, :]
+    end
+    return DriveHistory(h.time, Tr, legendre, face, recorded, _energy_series(h, t, observe),
                         fields, ranges, h, key, time() - t0)
 end
 
@@ -652,7 +667,9 @@ plot (then no series); `scale` (`:log`), on a chart whose left axis is logarithm
 - `:pulses`: the laser power of each beam group (the sum over its enabled beams, TW;
   groups colored as in the model tree) and the total.
 - `:drive`: the capsule's Tr and each recorded diagnostic's (eV, dashed), and a₂/a₀ and
-  a₄/a₀ (%).
+  a₄/a₀ (%); for a flat observed face, its Tr (from its area-mean flux) and, on the
+  right, its RMS nonuniformity and its peak and lowest flux relative to its mean (%,
+  dashed), as [`DriveHistory`](@ref)'s `face`.
 - `:diagnostics`: each recorded diagnostic's Tr (eV) and the intensity toward it
   (TW/sr, dashed).
 - `:energy`: the laser energy delivered by each time and where it went (kJ), and the
@@ -686,14 +703,25 @@ function time_chart(sess::DesignSession, chart::Symbol = sess.time.chart[])
         h === nothing && return none("Drive history", tm.pulses[] === nothing ?
                                                       "Load pulses, then Run the drive history" :
                                                       "Run the drive history on these pulses")
-        left = [_series("Capsule Tr", h.time, h.Tr, _INK)]
+        f = h.face
+        left = [_series(f === nothing ? "Capsule Tr" : "Face Tr", h.time, h.Tr, _INK)]
         for (j, d) in enumerate(h.diagnostics)
             any(isfinite, d.Tr) && push!(left, _series(d.name, h.time, d.Tr, _diagnostic_color(j); style = :dash))
         end
-        right = [_series("a₂/a₀", h.time, 100 .* h.legendre[2, :], "#0072B2"),
-                 _series("a₄/a₀", h.time, 100 .* h.legendre[4, :], "#009E73")]
-        return (; chart, title = "Capsule drive history" * stale, xlabel = "t (ns)",
-                left = (; label = "Tr (eV)", series = left), right = (; label = "aₗ/a₀ (%)", series = right),
+        if f === nothing
+            right = [_series("a₂/a₀", h.time, 100 .* h.legendre[2, :], "#0072B2"),
+                     _series("a₄/a₀", h.time, 100 .* h.legendre[4, :], "#009E73")]
+            title, rlabel = "Capsule drive history", "aₗ/a₀ (%)"
+        else
+            # a flat observed face: its RMS nonuniformity, and its peak and lowest flux
+            # relative to its mean
+            right = [_series("RMS", h.time, 100 .* f.rms, "#0072B2"),
+                     _series("peak", h.time, 100 .* (f.peak ./ f.mean .- 1), "#D55E00"; style = :dash),
+                     _series("lowest", h.time, 100 .* (f.low ./ f.mean .- 1), "#009E73"; style = :dash)]
+            title, rlabel = "Observed face drive history", "Face nonuniformity (%)"
+        end
+        return (; chart, title = title * stale, xlabel = "t (ns)",
+                left = (; label = "Tr (eV)", series = left), right = (; label = rlabel, series = right),
                 legend = [_key(s) for s in vcat(left, right)], cursor, empty = "")
     elseif chart === :diagnostics
         h === nothing && return none("Diagnostics", "Tick diagnostics below, then Run the drive history")

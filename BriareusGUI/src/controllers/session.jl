@@ -960,7 +960,8 @@ adds light not proportional to the 3ω pulse, `(; omega1, omega2, window)`: per 
 power per beam of `beams` (TW, a vector), flat over `window = (start, stop)` (ns); the
 histories and the retune take it as `drive_history`'s and `retune_drive`'s `prepulse`,
 keyed by `by` (the beams of one key must carry the same prepulse), and the retune does
-not retune it. Without either they are the 3ω ones, bit for bit.
+not retune it. Without either they are the 3ω ones, bit for bit. A scenario that observes
+a flat face (no capsule modes to restore) throws an `ArgumentError`.
 """
 function retune_pulses(s::Scenario, beams::AbstractVector{<:Beam}, enabled::AbstractVector{Bool},
                        pulses::AbstractDict; by::Symbol = :quad, cap::Real = 1.3, stay::Real = 0.0,
@@ -973,6 +974,7 @@ function retune_pulses(s::Scenario, beams::AbstractVector{<:Beam}, enabled::Abst
     wall = isempty(walls) ? observe : walls
     s.model !== nothing && !isempty(observe) ||
         throw(ArgumentError("the retune matches the capsule's drive: compute the drive of a target with a capsule"))
+    _observed_flat(s) && throw(ArgumentError(_RETUNE_FLAT))
     by in (:quad, :group, :beam) || throw(ArgumentError("retune by :quad, :group or :beam, not :$by"))
     cap > 0 || throw(ArgumentError("the power limit must be positive"))
     any(enabled) || throw(ArgumentError("every beam is disabled"))
@@ -1008,6 +1010,11 @@ function retune_pulses(s::Scenario, beams::AbstractVector{<:Beam}, enabled::Abst
     return (; pulses = out, retune = r, reference = ref, before, after)
 end
 
+# Why the retune refuses a flat observed face: it restores the capsule's Legendre and
+# Yₗₘ modes, which a plane does not have.
+const _RETUNE_FLAT = "the retune restores a capsule's drive modes, and the observed surface is a flat face: " *
+                     "observe a sphere part (Properties ▸ Role) to retune"
+
 # The unconverted light `u` (`retune_pulses`'s `unconverted`) of the beams `keep`: each
 # color's fraction per beam, if it has one, at those beams.
 _kept_unconverted(::Nothing, keep) = nothing
@@ -1025,7 +1032,8 @@ as in the drive ([`set_unconverted_ratio!`](@ref); `retune_pulses`'s `unconverte
 the prepulse ([`set_prepulse!`](@ref); `retune_pulses`'s `prepulse`), in the reference
 shot and in the retune, on the beams whose 1ω or 2ω light takes part
 ([`participates`](@ref)). Progress and the outcome (the capsule drive's worst-time mode 1 before and
-after) go to `drive.retune_running`/`retune_status`.
+after) go to `drive.retune_running`/`retune_status`. A drive that observes a flat face
+is refused with a status message: the retune restores capsule modes.
 """
 function retune_to_reference!(sess::DesignSession, table::AbstractString, out::AbstractString;
                               by::Symbol = :quad, cap::Real = 1.3, stay::Real = 0.0)
@@ -1035,6 +1043,7 @@ function retune_to_reference!(sess::DesignSession, table::AbstractString, out::A
         dr.retune_status[] = "compute the drive first: the retune reuses its operator and radiation model"
         return sess
     end
+    _observed_flat(dr.scenario[]) && (dr.retune_status[] = _RETUNE_FLAT; return sess)
     # the unconverted light of every beam (the reference fires them all)
     unconverted = _history_unconverted(sess, eachindex(sess.beams.beams[]))
     prepulse = _history_prepulse(sess, eachindex(sess.beams.beams[]))

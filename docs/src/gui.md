@@ -426,7 +426,9 @@ The bottom panel's tabs:
   The Folders dialog lists the problems found in the definitions
   ([`check_diagnostics`](@ref)). Six charts, in the tree's colors: *Pulses* (each group's
   power and the total, TW), *Drive history* (capsule Tᵣ and each recorded diagnostic's,
-  [`dante`](@ref), in eV; a₂/a₀ and a₄/a₀ in % on the right axis), *Diagnostics* (each
+  [`dante`](@ref), in eV; a₂/a₀ and a₄/a₀ in % on the right axis; for a flat observed
+  face, its Tᵣ from the area-mean flux, and its RMS nonuniformity and peak and lowest
+  flux relative to the mean on the right axis), *Diagnostics* (each
   recorded diagnostic's Tᵣ, and the intensity toward it in TW/sr on the right axis),
   *Energy* (the laser
   energy delivered by each time and where it went, kJ, [`energy_budget`](@ref)),
@@ -521,7 +523,7 @@ The bottom panel's tabs:
   loses. The new pulses are written as a pulse table; the dialog reports the worst-time
   mode 1 and Tᵣ change before and after, from drive histories of both, and the Time
   tab plots each group's power on the reference and retuned pulses and ε₁ before and
-  after.
+  after. A drive that observes a flat face is refused: it has no modes to restore.
 
 ### CAD workspaces and large targets
 

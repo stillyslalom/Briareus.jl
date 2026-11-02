@@ -237,10 +237,16 @@ E. **Double backlighter with ARC:** the starter, ARC beams as a facility beam se
   leaves it unbalanced (as any target with more than one hohlraum part), and a single
   hohlraum part with an open end too. The beam presets do not aim in the starters' frames
   (model item 5's presets): `nif_quads` keeps its cone pointing at TCC.
-- Not built: the drive history (`timeline.jl`, left to the Time tab's work) still
-  computes Legendre moments of a flat observed face (finite and meaningless); its Tr from
-  P0 is within 0.2 % of the face's area mean on the opacity starter. A piece's role
-  (decision 7, a cap observed) is not built.
+- The drive history of a flat observed face (built after phase C): `DriveHistory.face`
+  holds the face's mean, peak, lowest and RMS nonuniformity per step (`_face_stats` on
+  each step's solution, as the steady drive), `Tr` comes from the area-mean flux (the
+  core history's `Tr` is from P0, within 0.2 % on the opacity starter), `legendre` has
+  no rows, and the drive chart's right axis shows the RMS and the peak and lowest flux
+  relative to the mean. The retune restores capsule modes and refuses a flat face
+  (status message; `retune_pulses` throws). Sphere-observed histories are unchanged:
+  the default session's history fields and drive chart serialized before and after are
+  equal.
+- Not built: a piece's role (decision 7, a cap observed).
 
 ## Decisions (user, 2026-10-29)
 

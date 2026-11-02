@@ -887,8 +887,13 @@ const DEFAULT_THRESHOLD = 1e8
 """
     DriveHistory
 
-A drive history of the session ([`start_history!`](@ref)): `time` (ns), `Tr` (capsule
-radiation temperature, eV), `legendre` (rows l = 1…4 of a_l/a_0 per step),
+A drive history of the session ([`start_history!`](@ref)): `time` (ns), `Tr` (the
+observed surface's radiation temperature, eV: the capsule's from its moment P0, or a
+flat observed face's from its area-mean incident flux, as [`DriveResult`](@ref)'s
+`mean_flux`), `legendre` (rows l = 1…4 of a_l/a_0 per step; no rows for a flat
+observed face), `face` (a flat observed face's incident x-ray flux over the whole face
+per step, `(; mean, peak, low, rms)`, vectors in W/cm² and the RMS nonuniformity, as
+`DriveResult.face`; `nothing` for a capsule),
 `diagnostics` (one `(; id, name, Tr, intensity, note)` per recorded diagnostic: its
 brightness temperature in eV and intensity toward it in TW/sr per step, `NaN` where it
 gives none, and `note` why), `energy` (series `(; name,
@@ -901,6 +906,7 @@ struct DriveHistory
     time::Vector{Float64}
     Tr::Vector{Float64}
     legendre::Matrix{Float64}
+    face::Any
     diagnostics::Vector{NamedTuple}
     energy::Vector{NamedTuple}
     fields::Dict{Symbol,Matrix{Float32}}

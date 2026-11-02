@@ -1,7 +1,8 @@
 # Halfraum ends and packages (assemblies phase C): a hohlraum part's open ends and
 # per-end entrance holes against core `hohlraum(; top_end, bottom_end)`, the walls and
 # enclosure of a halfraum, the flat observed face (its face map and flux statistics, no
-# capsule modes), and the two halfraum starters.
+# capsule modes; its drive history and chart, the retune's refusal), and the two
+# halfraum starters.
 
 @testset "halfraum: open ends and per-end holes against core (no GL)" begin
     ts = TargetSetup(resolution = :coarse)
@@ -73,4 +74,46 @@ end
     eb = energy_balance(res.solution)
     @test eb.lost > 0
     @test sum(values(eb.absorbed)) + sum(values(eb.escaped)) + eb.lost ≈ eb.source rtol = 1e-10
+
+    # the drive history of the flat face: per step, the face's statistics and its Tr from
+    # the area-mean flux, not Legendre moments
+    use_pulse_shape!(sess; step = 1.0)
+    start_history!(sess)
+    h = sess.time.history[]
+    @test h isa DriveHistory && h.face !== nothing && size(h.legendre) == (0, length(h.time))
+    # independent check: the core `drive_history` on the same scenario, pulses and wall,
+    # recording each step's radiosity solution's incident flux, reduced here directly
+    s = sess.drive.scenario[]
+    src, beams, enabled = sess.time.pulses[], sess.beams.beams[], sess.beams.enabled[]
+    observe = Controllers._observed_parts(s)
+    walls = Tuple(n for n in wall_names(ts) if n in component_names(s.target))
+    core = drive_history(s.model, s.deposition, τ -> Controllers._pulse_beams(src, beams, enabled, τ), h.time;
+                         observe, wall = isempty(walls) ? observe : walls, lmax = 4,
+                         record = sol -> sol.H[s.observed])
+    @test core.time == h.time
+    A = s.target.elem_area[s.observed]
+    ks = unique([1, cld(length(h.time), 2), length(h.time)])
+    Hs = [core.record[k] for k in ks]
+    μ = [sum(H .* A) / sum(A) for H in Hs]
+    rms = [sqrt(sum(A .* (H .- m) .^ 2) / sum(A)) / m for (H, m) in zip(Hs, μ)]
+    @test isapprox(h.face.mean[ks], 1e14 .* μ; rtol = 1e-12)
+    @test isapprox(h.face.peak[ks], 1e14 .* maximum.(Hs); rtol = 1e-12)
+    @test isapprox(h.face.low[ks], 1e14 .* minimum.(Hs); rtol = 1e-12)
+    @test isapprox(h.face.rms[ks], rms; rtol = 1e-12)
+    @test isapprox(h.Tr[ks], radiation_temperature.(μ); rtol = 1e-12)
+    # (the core's Tr is from the Legendre moment P0 over the face: close, not the same)
+    @test h.Tr != core.Tr && isapprox(h.Tr, core.Tr; rtol = 0.01)
+    # the drive chart: the face's Tr, and its statistics on the right axis
+    ch = time_chart(sess, :drive)
+    @test isempty(ch.empty) && startswith(ch.title, "Observed face") && ch.left.series[1].label == "Face Tr"
+    @test ch.left.series[1].y == h.Tr && ch.right.label == "Face nonuniformity (%)"
+    @test [q.label for q in ch.right.series] == ["RMS", "peak", "lowest"]
+    @test ch.right.series[1].y == 100 .* h.face.rms
+    @test ch.right.series[2].y ≈ 100 .* (h.face.peak ./ h.face.mean .- 1) rtol = 1e-12
+    @test all(ch.right.series[3].y .<= 0 .<= ch.right.series[2].y)
+    # the retune restores capsule modes: refused on a flat face, before reading the table
+    retune_to_reference!(sess, joinpath(mktempdir(), "absent.csv"), joinpath(mktempdir(), "out.csv"))
+    @test !sess.drive.retune_running[] && sess.drive.retune_status[] == Controllers._RETUNE_FLAT &&
+          sess.time.retune[] === nothing
+    @test_throws ArgumentError retune_pulses(s, beams, enabled, Dict{Symbol,PulseShape}())
 end
