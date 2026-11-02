@@ -125,14 +125,76 @@ euler_frame(origin, polar, azimuth, rotation = 0.0) =
 """
     port_frame(theta, phi; roll = 0, origin = (0, 0, 0)) -> Frame
 
+    port_frame(beam::Beam; roll = 0, origin = (0, 0, 0)) -> Frame
+    port_frame(facility::Symbol, port; roll = 0, origin = (0, 0, 0)) -> Frame
+
 The frame of the port at polar angle `theta` and azimuth `phi` (degrees): `z` toward the
-port (`port_vector(theta, phi)`, so a beam from it travels along `-z`), `x` the port's
-θ̂ turned by `roll` (degrees) toward φ̂, at `origin` (TCC by default). It equals
-[`euler_frame`](@ref)`(origin, theta, phi, roll)`. The `x` axis along θ̂ is an
-assumption at low confidence (research notes, "Frames and placement (2026-10-28)"):
-VisRad's port frames have not been seen in a sample workspace.
+port (`port_vector(theta, phi)`, so a beam from it travels along `-z`, the beam
+convention `k = -port`), `x` the port's θ̂ turned by `roll` (degrees) toward φ̂, at
+`origin` (TCC by default). It equals [`euler_frame`](@ref)`(origin, theta, phi, roll)`.
+The second form takes a beam's port ([`port_angles`](@ref)), the third a facility's
+port by name ([`port_angles`](@ref)`(facility, port)`). VisRad's diagnostic-port frames
+share the origin and `z` (its coordinate transform tool's documentation); the `x` axis
+along θ̂ is an assumption at low confidence (research notes, "Frames and placement
+(2026-10-28)"): VisRad's port frames have not been seen in a sample workspace.
 """
 port_frame(θ, φ; roll = 0.0, origin = (0.0, 0.0, 0.0)) = euler_frame(origin, θ, φ, roll)
+port_frame(b::Beam; roll = 0.0, origin = (0.0, 0.0, 0.0)) = port_frame(port_angles(b)...; roll, origin)
+port_frame(facility::Symbol, port; roll = 0.0, origin = (0.0, 0.0, 0.0)) =
+    port_frame(port_angles(facility, port)...; roll, origin)
+
+"""
+    port_angles(facility::Symbol, port) -> (theta, phi)
+
+Polar angle and azimuth (degrees) of a facility port from the facility's table:
+- `:nif`: an indirect-drive quad port, by its number (`NIF_PORTS`, NIF User Guide
+  Table 4-1) or its quad name such as `"Q31B"` ([`nif_port`](@ref));
+- `:omega`: a beam port by name, `"B01"`–`"B60"`, in the hohlraum frame of
+  [`omega_ports`](@ref).
+An unknown port is a `KeyError`, another facility an `ArgumentError`.
+"""
+function port_angles(facility::Symbol, port)
+    if facility === :nif
+        n = port isa Integer ? Int(port) : nif_port(String(port))
+        k = findfirst(r -> r[1] == n, NIF_PORTS)
+        k === nothing && throw(KeyError(port))
+        return (Float64(NIF_PORTS[k][2]), Float64(NIF_PORTS[k][3]))
+    elseif facility === :omega
+        k = findfirst(r -> r.name == String(port), omega_ports())
+        k === nothing && throw(KeyError(port))
+        r = omega_ports()[k]
+        return (r.theta, r.phi)
+    end
+    throw(ArgumentError("facility must be :nif or :omega"))
+end
+
+"""
+    transform_point(from::Frame, to::Frame, c; input = :cartesian, output = :cartesian,
+                    direction = false) -> NTuple{3,Float64}
+    transform_point(frames, from::Symbol, to::Symbol, c; …)
+
+Coordinates in frame `to` of the point with coordinates `c` in frame `from` (after
+VisRad's coordinate transform tool): `c` in the coordinates `input` and the result in
+`output`, each `:cartesian`, `:cylindrical` or `:spherical` ([`coords_of`](@ref),
+[`point_of`](@ref); mm and degrees). With `direction` the three numbers are a vector,
+turned by the frames' rotations and not moved by their origins; its cylindrical or
+spherical coordinates are those of the vector's tip from the origin. The second form
+looks the frames up by name in `frames` (a dictionary such as [`resolve_frames`](@ref)
+returns); a missing name is an `ArgumentError`.
+"""
+function transform_point(from::Frame, to::Frame, c; input::Symbol = :cartesian,
+                         output::Symbol = :cartesian, direction::Bool = false)
+    direction || return coords_of(point_of(c, input; frame = from), output; frame = to)
+    v = to_chamber(from, point_of(c, input); direction = true)
+    return coords_of(to_frame(to, v; direction = true), output)
+end
+
+function transform_point(frames::AbstractDict, from::Symbol, to::Symbol, c; kwargs...)
+    F, T = get(frames, from, nothing), get(frames, to, nothing)
+    F === nothing && throw(ArgumentError("no frame named $from"))
+    T === nothing && throw(ArgumentError("no frame named $to"))
+    return transform_point(F, T, c; kwargs...)
+end
 
 """
     foil_frame(los; standoff, tilt = 0.0, tilt_toward = 0.0, rotation = 0.0,

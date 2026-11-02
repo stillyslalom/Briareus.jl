@@ -52,6 +52,58 @@ using Briareus: Vec3, SVector, SMatrix
         @test_throws ArgumentError Frame((0, 0, 0); z = (0, 0, 0))
     end
 
+    @testset "facility port frames and the coordinate transform" begin
+        # a NIF quad port by name and by number, against the User Guide table (Q31B is port 67)
+        @test port_angles(:nif, "Q31B") == (150.0, 236.25) == port_angles(:nif, 67)
+        @test port_angles(:nif, "Q15T") == (23.5, 78.75)
+        F = port_frame(:nif, "Q31B")
+        @test F.R[:, 3] ≈ Vec3(sind(150) * cosd(236.25), sind(150) * sind(236.25), cosd(150)) atol = 1e-15
+        @test F == port_frame(150.0, 236.25) && F.origin == zero(Vec3)
+        # every NIF port frame is orthonormal and right-handed
+        Fs = [port_frame(:nif, p[1]; roll = 17.0) for p in Briareus.NIF_PORTS]
+        @test all(G -> G.R' * G.R ≈ I && det(G.R) ≈ 1, Fs)
+        # a beam's port frame: z along its port, the beam traveling along -z; the mean
+        # port of a quad's four beams (the beam CSV) within 0.004° of the table's port
+        bs = nif_beams()
+        q = [b for b in bs if b.quad == "Q31B"]
+        @test all(b -> port_frame(b).R[:, 3] ≈ b.port && direction(b) ≈ -port_frame(b).R[:, 3], q)
+        m = normalize(sum(b.port for b in q))
+        @test acosd(clamp(dot(m, F.R[:, 3]), -1, 1)) < 0.004
+        # OMEGA ports by name from `omega_ports`
+        r = omega_ports()[7]
+        @test port_angles(:omega, r.name) == (r.theta, r.phi)
+        @test_throws KeyError port_angles(:nif, "Q99Z")
+        @test_throws KeyError port_angles(:omega, "B99")
+        @test_throws ArgumentError port_angles(:custom, 1)
+
+        # by hand: the port frame at θ = 90°, φ = 0 has x = -ẑ, y = ŷ, z = x̂
+        P = port_frame(90.0, 0.0)
+        @test all(isapprox.(transform_point(CHAMBER, P, (1.0, 2.0, 3.0)), (-3.0, 2.0, 1.0); atol = 1e-15))
+        # the same point in spherical coordinates: r = √14, θ = acos(1/√14), φ = 180° - atan(2/3)
+        s = transform_point(CHAMBER, P, (1.0, 2.0, 3.0); output = :spherical)
+        @test all(isapprox.(s, (√14, acosd(1 / √14), 180 - atand(2 / 3)); atol = 1e-12))
+        # a direction turns and does not move: frames with the same axes leave it as it is
+        A, B = Frame(I(3), (1.0, -2.0, 4.0)), Frame(I(3), (-5.0, 0.5, 2.0))
+        @test transform_point(A, B, (0.3, 0.4, 0.5); direction = true) == (0.3, 0.4, 0.5)
+        @test all(isapprox.(transform_point(A, B, (0.3, 0.4, 0.5)), (6.3, -2.1, 2.5); atol = 1e-15))
+        # the port's axis seen from the chamber, as a direction in spherical coordinates
+        @test all(isapprox.(transform_point(F, CHAMBER, (0.0, 0.0, 1.0); direction = true, output = :spherical),
+                            (1.0, 150.0, 236.25); atol = 1e-12))
+        # round trips through every pair of coordinate systems
+        G = euler_frame((0.3, -1.2, 2.5), 37.0, 211.0, 20.0)
+        sys = (:cartesian, :cylindrical, :spherical)
+        c0 = (1.7, 0.6, -2.2)
+        @test all(begin
+                      c = transform_point(CHAMBER, G, c0; output = o)
+                      back = transform_point(G, CHAMBER, c; input = o, output = i0)
+                      all(isapprox.(point_of(back, i0), Vec3(c0...); atol = 1e-12))
+                  end for o in sys, i0 in sys)
+        # by name in resolved frames
+        fr = resolve_frames([:port => FrameDef(:tcc; rotation = (90.0, 0.0, 0.0))])
+        @test transform_point(fr, :tcc, :port, (1.0, 2.0, 3.0)) == transform_point(CHAMBER, P, (1.0, 2.0, 3.0))
+        @test_throws ArgumentError transform_point(fr, :tcc, :nowhere, (0, 0, 0))
+    end
+
     @testset "foil frame and backlighter_foil" begin
         # the pre-frame construction of backlighter_foil, kept as the reference
         function old_foil_vertices(los; standoff, width = 2.0, height = width, tilt = 0.0,

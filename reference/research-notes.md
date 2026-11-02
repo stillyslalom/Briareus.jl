@@ -9310,7 +9310,12 @@ conventions below are assumed, not taken from a facility document.
   along the port's θ̂ (turned by `roll` toward φ̂). That equals
   `euler_frame(origin, θ, φ, roll)`, VisRad's angle order (Polar, Azimuthal, Rotation)
   read as for its objects. VisRad's port (pointing-method 1) frames have not been seen
-  in a sample workspace; check the x̂ there before relying on a port frame's roll.
+  in a sample workspace; check the x̂ there before relying on a port frame's roll. The
+  origin at TCC and `z` toward the port are **H**: VisRad's coordinate transform tool
+  documents its diagnostic-port-axis frame so
+  (prism-cs.com/Manuals/VisRad/additional_topics/coord_transform_tool.html, read
+  2026-11-02); the page gives no `x`. `port_frame(facility, port)` takes NIF quad ports
+  from `NIF_PORTS` (NIF User Guide Table 4-1) and OMEGA ports from `omega_ports`.
 - **Euler order and sense** **L**. `euler_rotation(polar, azimuth, rotation) =
   Rz(azimuth) Ry(polar) Rz(rotation)`, right-handed, the reading already assumed for
   VisRad object orientation ("VisRad workspace files (2026-10-17)"); the VisRad

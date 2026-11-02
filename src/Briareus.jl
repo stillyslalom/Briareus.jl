@@ -74,7 +74,8 @@ export XrayImager, detected_radiance, imager_image, imager_record, pinhole_solid
 export Radiograph, radiograph
 export backlighter_foil, line_of_sight, LineOfSightReport
 export Frame, CHAMBER, to_chamber, to_frame, compose, euler_rotation, euler_frame, port_frame,
-       foil_frame, part_centroid, component_frame, coords_of, point_of, FrameDef, resolve_frames,
+       foil_frame, part_centroid, component_frame, coords_of, point_of, transform_point,
+       FrameDef, resolve_frames,
        FramePointing, placement_sweep, SweepRow, SweepResult, write_sweep_csv,
        PlacementStep, Coincident, OnAxis, Concentric, Distance, Facing, Parallel, Roll, Offset,
        Rotate, PlacementReport, placement_report
