@@ -1639,7 +1639,7 @@ function br_insert(starter)
         s = _sym(starter)
         frame = _selected_frame(sess)
         before = Set(p.name for p in sess.target.parts[])
-        insert_starter!(sess.target, s; frame) || return
+        insert_starter!(sess, s; frame) || return
         new = [p.name for p in sess.target.parts[] if !(p.name in before)]
         # inserted in an assembly's frame: its members
         k = part_index(sess.target, frame)

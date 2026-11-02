@@ -235,8 +235,8 @@ E. **Double backlighter with ARC:** the starter, ARC beams as a facility beam se
   assembly, as the earlier starters. The package's end disks have the halfraums' radius
   and close their open ends; the shock-tube pair is two cavities, so `_closed_enclosure`
   leaves it unbalanced (as any target with more than one hohlraum part), and a single
-  hohlraum part with an open end too. The beam presets do not aim in the starters' frames
-  (model item 5's presets): `nif_quads` keeps its cone pointing at TCC.
+  hohlraum part with an open end too. The beam presets did not aim in the starters'
+  frames at first; see "Item 5 as built".
 - The drive history of a flat observed face (built after phase C): `DriveHistory.face`
   holds the face's mean, peak, lowest and RMS nonuniformity per step (`_face_stats` on
   each step's solution, as the steady drive), `Tr` comes from the area-mean flux (the
@@ -247,6 +247,42 @@ E. **Double backlighter with ARC:** the starter, ARC beams as a facility beam se
   the default session's history fields and drive chart serialized before and after are
   equal.
 - Not built: a piece's role (decision 7, a cap observed).
+
+## Item 5 as built (2026-11-02): presets in the starters' frames
+
+- The hohlraum presets (`HOHLRAUM_PRESETS`: `nif_quads`, `nif_beams`, `omega_hohlraum`)
+  aim in the entrance holes' frames (`preset_pointing`): beams with port θ < 90° in the
+  hole that faces up (`<part>.leh_top` or `<part>.leh_bottom` whose `z` points up), the
+  others in the hole facing down (`facing_lehs`). Of several holes facing one way the
+  highest (lowest) wins, a hole under another hohlraum being shadowed by it; a tie goes
+  to the first part. Closed and open ends are not holes. The shock-tube pair thus sends
+  the upper beams to `halfraum_top.leh_top` and the lower to `halfraum_bottom.leh_bottom`,
+  and moving a hohlraum part carries its beams.
+- Offsets: the NIF cone pointing keeps its offsets from the default hohlraum part's holes
+  at TCC (the pointing is for the 10.1 mm default), so a hohlraum of another length gets
+  the pointing at the same offsets from its holes (before, at fixed chamber points). The
+  OMEGA beams aim at the holes' centers (offset zero), as before for a hohlraum centered
+  on TCC. When the hole's frame equals the reference frame (the default hohlraum at TCC),
+  the aim is the reference aim itself, not a round trip through the frame.
+- Bit for bit: the default design's chamber aims equal the cone pointing's (`isequal`,
+  signs of zero included) and its drive (modes, mean flux, H, beam powers) equals the
+  drive of the same beams held at TCC; the OMEGA hohlraum aims equal the former formula's
+  (test, `test_halfraum.jl`).
+- The opacity halfraum (decision taken): its one hole faces up, so the upper hemisphere
+  drives it and the lower beams are disabled, aimed as without a hohlraum (at TCC). The
+  lower beams would reach the sample's back through the open end, not the cavity.
+  Without any hole (the foil, an empty target) every beam aims in `:tcc` as before.
+- When it applies: loading a preset (`load_preset!`, the session's default table), File ▸
+  New target when the beams of a hohlraum preset do not aim in the new target's holes as
+  the preset would (a halfraum pair after a hohlraum: the preset is loaded again; a new
+  hohlraum after a hohlraum keeps the beams and their edits), and Insert of a starter
+  into a design whose beams drive no hole (`insert_starter!` on the session, then
+  `aim_in_lehs!`): the beams held at TCC move to the new holes keeping their offsets from
+  the reference holes (edits made at TCC carry over), enabled flags untouched. Inserting
+  next to a hohlraum the beams already drive leaves them with it.
+- Sessions: aims are saved with their frames and local coordinates and loaded through
+  `set_beams!`, never re-aimed; a session saved before this change (aims at TCC) loads
+  with its aims at TCC (test).
 
 ## Decisions (user, 2026-10-29)
 

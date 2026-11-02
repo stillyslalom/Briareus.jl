@@ -124,7 +124,7 @@ end
     foilts = TargetSetup(starter = :foil, resolution = :coarse)
     bl = preset_beams(:omega_backlighter; target = foilts)
     @test all(b -> b.aim ≈ Briareus.Vec3(6.0, 0, 0) && b.port[1] < -cosd(70), bl)
-    @test preset_aim_frame(:omega_backlighter, foilts) === :foil
+    @test all(==(:foil), preset_pointing(:omega_backlighter; target = foilts).aim_frame)
     @test_throws ArgumentError preset_beams(:lmj)
     set_grouping!(bt, :quad)
     load_preset!(bt, :omega_hohlraum)

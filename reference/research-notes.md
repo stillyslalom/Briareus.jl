@@ -9263,6 +9263,12 @@ pointing matters, `hybride_mock_pointing` (section "Mock HYBRID-E pointing
 (2026-10-23)") is the documented stand-in. Earlier sections that said "published cone
 aims" were relabeled "example" on this date.
 
+Since 2026-11-02 BriareusGUI's NIF presets hold these aims as offsets from the default
+10.1 mm hohlraum part's entrance holes (z − 5.05 mm in the hole's frame), so on a
+halfraum or a hohlraum of another length they keep the same offsets from its holes
+(`preset_pointing`; reference/assemblies-design.md, "Item 5 as built"). That carry-over
+is an engineering default for illustrative designs (**L**), not a pointing rule.
+
 **Quick start, re-posed** *derived*. The previous quick start optimized z, r and power
 per cone (12 parameters) against P2, P4 and the mean flux only: a flat valley, stopped at
 the 200-iteration limit (objective 1.9e-8, outer44 r at −0.98 against its −1 bound,

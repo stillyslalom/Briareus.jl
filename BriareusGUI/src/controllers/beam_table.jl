@@ -13,11 +13,15 @@ Beam presets:
   shot pointing: research notes, "Example NIF cone pointing: unsourced (2026-10-27)");
 - `:nif_beams` — all 192 NIF beams (`nif_beams`, 2 TW each), same cone pointing;
 - `:omega_hohlraum` — the 40 OMEGA hohlraum beams (cones 1–3, `omega_beams`, 0.5 TW),
-  aimed at the LEH centers of the first hohlraum part (TCC otherwise);
+  aimed at the centers of the entrance holes (TCC without a hohlraum);
 - `:omega_backlighter` — the 60-port OMEGA set reduced to the beams that reach the
   driven face of a foil target from at least 20° off the foil axis, aimed at the foil
-  center (0.4 TW, SG4 spots), as in `examples/backlighter.jl`; in the active foil's frame
-  ([`preset_aim_frame`](@ref)), so they follow the foil.
+  center (0.4 TW, SG4 spots), as in `examples/backlighter.jl`; in the active foil's frame,
+  so they follow the foil.
+
+The hohlraum presets aim in the frames of the entrance holes, upper beams in the hole
+facing up and lower beams in the one facing down, so they follow the hohlraum parts
+([`preset_pointing`](@ref)).
 """
 const BEAM_PRESETS = (:nif_quads, :nif_beams, :omega_hohlraum, :omega_backlighter)
 
@@ -158,47 +162,123 @@ _float_beam(b::Beam) = remake(b; aim = Float64.(b.aim), power = Float64(b.power)
                               spot = with_axes(b.spot, Float64(b.spot.a), Float64(b.spot.b)),
                               dlambda = Float64(b.dlambda))
 
+"The presets that drive hohlraums: their beams aim in the entrance holes' frames ([`preset_pointing`](@ref))."
+const HOHLRAUM_PRESETS = (:nif_quads, :nif_beams, :omega_hohlraum)
+
 """
     preset_beams(preset; target = nothing) -> Vector{Beam}
 
 The beams of a [`BEAM_PRESETS`](@ref) entry, pointed for the design `target` (a
-[`TargetSetup`](@ref), or `nothing` for none): the OMEGA hohlraum beams at the entrance
-holes of its first hohlraum part (`±length/2` along chamber `z`, the part centered on
-TCC; at TCC without one), the OMEGA backlighter beams at the center of its active foil
-([`active_foil`](@ref); TCC without one).
+[`TargetSetup`](@ref), or `nothing` for none): the beams of [`preset_pointing`](@ref).
 """
-function preset_beams(preset::Symbol; target = nothing)
-    if preset === :nif_quads || preset === :nif_beams
-        bs = preset === :nif_quads ? nif_quads(power = 8.0) : nif_beams(power = 2.0)
-        return _cone_pointing(bs, NIF_CONE_POINTING)
-    elseif preset === :omega_hohlraum
-        bs = omega_beams(power = 0.5)
-        i = target === nothing ? nothing : findfirst(p -> p.kind === :hohlraum, target.parts[])
-        i === nothing && return bs
-        h = target.parts[][i].values[:length] / 2
-        return _cone_pointing(bs, Dict(g => (0.0, h) for g in (:cone1, :cone2, :cone3)))
+preset_beams(preset::Symbol; target = nothing) = preset_pointing(preset; target).beams
+
+"""
+    preset_pointing(preset; target = nothing) -> (; beams, aim_frame, enabled)
+
+The beams of a [`BEAM_PRESETS`](@ref) entry pointed for the design `target` (a
+[`TargetSetup`](@ref), or `nothing` for none), the frame each one aims in, and which are
+enabled.
+
+- The hohlraum presets ([`HOHLRAUM_PRESETS`](@ref)) aim in the entrance holes' frames
+  ([`facing_lehs`](@ref)): the upper hemisphere's beams (port θ < 90°) in the frame of
+  the entrance hole that faces up, the lower ones' in the one that faces down, so moving
+  a hohlraum part carries its beams. The NIF beams keep the offsets of the example cone
+  pointing (`NIF_CONE_POINTING`, set for the 10.1 mm default) from the default
+  hohlraum part's entrance holes at TCC, the OMEGA beams aim at the holes' centers. For
+  the default hohlraum part at TCC the aims are the cone pointing's own, bit for bit.
+  When the target has an entrance hole facing one hemisphere only (the opacity halfraum),
+  the other hemisphere's beams are disabled and aim as without a hohlraum. Without any
+  entrance hole every beam aims in `:tcc`: the NIF beams at the cone pointing, the OMEGA
+  beams at TCC.
+- `:omega_backlighter` aims every beam at the center of the active foil
+  ([`active_foil`](@ref)), in its part's frame, so the beams follow the foil; at TCC
+  without one.
+
+The aims in the entrance holes' frames are an engineering default for illustrative
+designs, not a facility's pointing.
+"""
+function preset_pointing(preset::Symbol; target = nothing)
+    if preset in HOHLRAUM_PRESETS
+        bs = if preset === :omega_hohlraum
+            omega_beams(power = 0.5)
+        else
+            _cone_pointing(preset === :nif_quads ? nif_quads(power = 8.0) : nif_beams(power = 2.0),
+                           NIF_CONE_POINTING)
+        end
+        af = fill(:tcc, length(bs))
+        en = fill(true, length(bs))
+        target === nothing && return (; beams = bs, aim_frame = af, enabled = en)
+        frames = part_frames(target)
+        up, down = facing_lehs(target; frames)
+        (up === nothing && down === nothing) && return (; beams = bs, aim_frame = af, enabled = en)
+        ref = _leh_reference(preset)
+        out = copy(bs)
+        for (i, b) in enumerate(bs)
+            upper = b.port[3] > 0
+            f = upper ? up : b.port[3] < 0 ? down : nothing
+            if f === nothing
+                en[i] = false
+                continue
+            end
+            out[i] = remake(b; aim = _reaim(b.aim, frames[f], upper ? ref[1] : ref[2]))
+            af[i] = f
+        end
+        return (; beams = out, aim_frame = af, enabled = en)
     elseif preset === :omega_backlighter
-        f = preset_aim_frame(preset, target)
-        c = f === :tcc ? Vec3(0, 0, 0) : part_frames(target)[f].origin
-        return [remake(b; aim = c, power = 0.4)
-                for b in omega_beams(cones = :all, spot = omega_spot(:SG4))
-                if b.port[1] < -cosd(70)]
+        f = target === nothing ? nothing : active_foil(target)
+        c = f === nothing ? Vec3(0, 0, 0) : part_frames(target)[f].origin
+        bs = [remake(b; aim = c, power = 0.4)
+              for b in omega_beams(cones = :all, spot = omega_spot(:SG4))
+              if b.port[1] < -cosd(70)]
+        return (; beams = bs, aim_frame = fill(something(f, :tcc), length(bs)), enabled = fill(true, length(bs)))
     end
     throw(ArgumentError("unknown beam preset :$preset; choose from $BEAM_PRESETS"))
 end
 
 """
-    preset_aim_frame(preset, target = nothing) -> Symbol
+    facing_lehs(target; frames = part_frames(target)) -> (up, down)
 
-The frame a preset's beams aim in: the active foil's (its part's frame) for
-`:omega_backlighter` on a design with a foil (the beams then follow the foil), `:tcc`
-otherwise.
+The entrance-hole frames that the hohlraum presets' upper and lower beams aim in
+([`preset_pointing`](@ref)): of the hohlraum parts' ends that are entrance holes (not
+closed or open, [`HOHLRAUM_ENDS`](@ref)), `up` is the frame (`<part>.leh_top` or
+`<part>.leh_bottom`) whose `z`, out of the hohlraum, points up (chamber `z > 0`), the
+highest one when several do (a hole below another hohlraum is shadowed by it), the first
+of the parts on a tie; `down` likewise the lowest that faces down. `nothing` when no hole
+faces that way.
 """
-function preset_aim_frame(preset::Symbol, target = nothing)
-    preset === :omega_backlighter && target !== nothing || return :tcc
-    f = active_foil(target)
-    return f === nothing ? :tcc : f
+function facing_lehs(target; frames::AbstractDict = part_frames(target))
+    up = down = nothing
+    zu, zd = -Inf, Inf
+    for p in target.parts[]
+        p.kind === :hohlraum || continue
+        for (e, leh) in ((:top_end, ".leh_top"), (:bottom_end, ".leh_bottom"))
+            _end_kind(p.values, e) === :leh || continue
+            f = Symbol(p.name, leh)
+            F = frames[f]
+            z, o = F.R[3, 3], F.origin[3]
+            if z > 0 && o > zu
+                up, zu = f, o
+            elseif z < 0 && o < zd
+                down, zd = f, o
+            end
+        end
+    end
+    return up, down
 end
+
+# The entrance-hole frames a hohlraum preset's chamber aims are offsets from (upper,
+# lower): the default hohlraum part's at TCC for the NIF cone pointing, the chamber's (the
+# holes' centers) for the OMEGA beams.
+function _leh_reference(preset::Symbol)
+    preset === :omega_hohlraum && return (CHAMBER, CHAMBER)
+    fr = part_frames([PartSpec(:hohlraum; name = :hohlraum)])
+    return fr[Symbol("hohlraum.leh_top")], fr[Symbol("hohlraum.leh_bottom")]
+end
+
+# The aim `a`, an offset from the reference frame `ref`, carried to frame `F`; `a` itself
+# when `F` is the reference (the default hohlraum at TCC: bit for bit).
+_reaim(a, F::Frame, ref::Frame) = F == ref ? Vec3(a) : Vec3(to_chamber(F, to_frame(ref, a)))
 
 # Point each cone at (r, z) with top/bottom mirroring.
 function _cone_pointing(bs, rz)
@@ -294,12 +374,48 @@ end
 """
     load_preset!(bt::BeamTable, preset; target = nothing)
 
-Replace the table with a preset's beams (see [`preset_beams`](@ref)), all enabled, their
-aims in [`preset_aim_frame`](@ref), pointed for the design `target`.
+Replace the table with a preset's beams pointed for the design `target`, each aimed in
+its frame and enabled or not as [`preset_pointing`](@ref) gives them. With a `target`
+the table's frames become the target's first ([`follow_frames!`](@ref)).
 """
 function load_preset!(bt::BeamTable, preset::Symbol; target = nothing)
-    set_beams!(bt, preset_beams(preset; target); preset, aim_frame = preset_aim_frame(preset, target))
+    target === nothing || follow_frames!(bt, part_frames(target))
+    p = preset_pointing(preset; target)
+    set_beams!(bt, p.beams; preset, aim_frame = p.aim_frame, enabled = p.enabled)
     return bt
+end
+
+"""
+    aim_in_lehs!(bt::BeamTable, target) -> Bool
+
+Aim the beams of a hohlraum preset ([`HOHLRAUM_PRESETS`](@ref)) that are held in `:tcc`
+in the entrance holes' frames of `target` ([`facing_lehs`](@ref)), as
+[`preset_pointing`](@ref) does: each keeps its offset from the preset's reference hole,
+so pointing edits made at TCC carry over. Beams in a hemisphere that no hole faces, beams
+held in another frame, and a table of another preset are left as they are, as are the
+enabled flags. Returns whether an aim changed.
+"""
+function aim_in_lehs!(bt::BeamTable, target)
+    preset = bt.preset[]
+    preset in HOHLRAUM_PRESETS || return false
+    frames = part_frames(target)
+    follow_frames!(bt, frames)
+    up, down = facing_lehs(target; frames)
+    (up === nothing && down === nothing) && return false
+    ref = _leh_reference(preset)
+    bs, af = copy(bt.beams[]), copy(bt.aim_frame[])
+    changed = false
+    for (i, b) in enumerate(bs)
+        af[i] === :tcc || continue
+        upper = b.port[3] > 0
+        f = upper ? up : b.port[3] < 0 ? down : nothing
+        f === nothing && continue
+        bs[i] = remake(b; aim = _reaim(b.aim, frames[f], upper ? ref[1] : ref[2]))
+        af[i] = f
+        changed = true
+    end
+    changed && _set_aims!(bt, bs; aim_frame = af)
+    return changed
 end
 
 """

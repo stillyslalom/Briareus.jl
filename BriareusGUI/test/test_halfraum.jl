@@ -1,8 +1,10 @@
 # Halfraum ends and packages (assemblies phase C): a hohlraum part's open ends and
 # per-end entrance holes against core `hohlraum(; top_end, bottom_end)`, the walls and
 # enclosure of a halfraum, the flat observed face (its face map and flux statistics, no
-# capsule modes; its drive history and chart, the retune's refusal), and the two
-# halfraum starters.
+# capsule modes; its drive history and chart, the retune's refusal), the two halfraum
+# starters, and the hohlraum presets aimed in their entrance holes.
+
+using LinearAlgebra: norm
 
 @testset "halfraum: open ends and per-end holes against core (no GL)" begin
     ts = TargetSetup(resolution = :coarse)
@@ -116,4 +118,106 @@ end
     @test !sess.drive.retune_running[] && sess.drive.retune_status[] == Controllers._RETUNE_FLAT &&
           sess.time.retune[] === nothing
     @test_throws ArgumentError retune_pulses(s, beams, enabled, Dict{Symbol,PulseShape}())
+end
+
+@testset "hohlraum presets aim in the starters' entrance holes (no GL)" begin
+    V = Briareus.Vec3
+    top, bot = Symbol("hohlraum.leh_top"), Symbol("hohlraum.leh_bottom")
+    upper(bs) = [b.port[3] > 0 for b in bs]
+    # the default design: the quads in its entrance holes' frames, their chamber aims the
+    # example cone pointing's own, bit for bit (`isequal` tells -0.0 from 0.0)
+    cone = Controllers._cone_pointing(nif_quads(power = 8.0), Controllers.NIF_CONE_POINTING)
+    s = DesignSession(resolution = :coarse)
+    bt = s.beams
+    up = upper(bt.beams[])
+    @test all(isequal(a.aim, b.aim) for (a, b) in zip(bt.beams[], cone)) && bt.beams[] == cone
+    @test bt.aim_frame[] == [u ? top : bot for u in up] && all(bt.enabled[])
+    # the drive equals the drive of the same beams held at TCC (the former preset), bit for bit
+    s0 = DesignSession(resolution = :coarse, beams = cone)
+    @test all(==(:tcc), s0.beams.aim_frame[])
+    build_scenario!(s)
+    build_scenario!(s0)
+    r, r0 = s.drive.result[], s0.drive.result[]
+    @test r.modes == r0.modes && r.mean_flux == r0.mean_flux && r.solution.H == r0.solution.H &&
+          [x.power for x in r.power] == [x.power for x in r0.power]
+    # the OMEGA hohlraum beams at the entrance holes' centers, as before (±length/2 on z)
+    om = preset_pointing(:omega_hohlraum; target = s.target)
+    old = Controllers._cone_pointing(omega_beams(power = 0.5), Dict(g => (0.0, 10.1 / 2) for g in (:cone1, :cone2, :cone3)))
+    @test om.beams == old && om.aim_frame == [u ? top : bot for u in upper(om.beams)]
+    @test all(==(:tcc), preset_pointing(:nif_quads).aim_frame)   # no target: at TCC
+
+    # the hohlraum moved: its beams by the same displacement
+    loc = copy(bt.aim_local[])
+    aims = [b.aim for b in bt.beams[]]
+    i = part_index(s.target, :hohlraum)
+    @test nudge_part!(s.target, i, 0.4; frame = :tcc, axis = :x) && nudge_part!(s.target, i, -0.25; frame = :tcc, axis = :z)
+    d = V(0.4, 0, -0.25)
+    @test maximum(norm(b.aim - (a + d)) for (a, b) in zip(aims, bt.beams[])) < 1e-12 && bt.aim_local[] == loc
+
+    # the shock tube: upper beams in the upper halfraum's hole, lower in the lower one's,
+    # at the default design's offsets in those frames
+    st = DesignSession(starter = :shock_tube, resolution = :coarse)
+    sb = st.beams
+    ft, fb = Symbol("halfraum_top.leh_top"), Symbol("halfraum_bottom.leh_bottom")
+    @test facing_lehs(st.target) == (ft, fb)
+    @test sb.aim_frame[] == [u ? ft : fb for u in upper(sb.beams[])] && all(sb.enabled[])
+    @test maximum(norm.(sb.aim_local[] .- loc)) < 1e-12
+    fr = part_frames(st.target)
+    @test fr[ft].origin == V(0, 0, 3.5) && fr[fb].origin == V(0, 0, -3.5)
+    # the upper aims lie at the default offsets from the upper hole's plane (z = 3.5 here,
+    # 5.05 in the default hohlraum), the lower ones mirrored about the lower hole's
+    @test all(abs((b.aim[3] - 3.5) - (c.aim[3] - 10.1 / 2)) < 1e-12 && norm(b.aim[1:2] - c.aim[1:2]) < 1e-12
+              for (b, c, u) in zip(sb.beams[], cone, upper(cone)) if u)
+    @test all(abs((b.aim[3] + 3.5) - (c.aim[3] + 10.1 / 2)) < 1e-12 for (b, c, u) in zip(sb.beams[], cone, upper(cone)) if !u)
+    # moving the upper halfraum carries only its beams
+    a0 = [b.aim for b in sb.beams[]]
+    @test nudge_part!(st.target, part_index(st.target, :halfraum_top), 0.3; frame = :tcc, axis = :z)
+    moved = [norm(b.aim - a) for (a, b) in zip(a0, sb.beams[])]
+    @test all(abs(m - (u ? 0.3 : 0.0)) < 1e-12 for (m, u) in zip(moved, upper(sb.beams[])))
+    # another preset: the OMEGA beams at each hole's center
+    load_preset!(st, :omega_hohlraum)
+    fr = part_frames(st.target)
+    @test all(b.aim == fr[f].origin for (b, f) in zip(sb.beams[], sb.aim_frame[])) &&
+          sb.aim_frame[] == [u ? ft : fb for u in upper(sb.beams[])]
+
+    # the opacity halfraum: one hole, facing up; the lower beams are disabled at TCC
+    op = DesignSession(starter = :opacity, resolution = :coarse)
+    ob = op.beams
+    u = upper(ob.beams[])
+    @test facing_lehs(op.target) == (Symbol("halfraum.leh_top"), nothing)
+    @test ob.enabled[] == u && all(ob.aim_frame[][u] .=== Symbol("halfraum.leh_top")) && all(ob.aim_frame[][.!u] .=== :tcc)
+    @test [b.aim for b in ob.beams[][.!u]] == [b.aim for b in cone[.!u]]
+    @test maximum(norm.(ob.aim_local[][u] .- loc[u])) < 1e-12
+
+    # inserted into a design whose beams drive no hohlraum: the beams at TCC go to the new
+    # holes, edits kept as offsets; a second hohlraum leaves them with the first
+    e = DesignSession(starter = :none, resolution = :coarse)
+    eb = e.beams
+    @test all(==(:tcc), eb.aim_frame[])
+    edit_beam_set!(eb, [1], :aim_x, "0.2")
+    @test insert_starter!(e, :shock_tube)
+    @test eb.aim_frame[] == [u ? ft : fb for u in up] && all(eb.enabled[])
+    want = Controllers._reaim(V(0.2, cone[1].aim[2], cone[1].aim[3]), part_frames(e.target)[eb.aim_frame[][1]],
+                              Controllers._leh_reference(:nif_quads)[up[1] ? 1 : 2])
+    @test eb.beams[][1].aim == want
+    held = copy(eb.aim_frame[])
+    @test insert_starter!(e, :hohlraum) && eb.aim_frame[] == held
+    # File ▸ New target: a hohlraum preset is loaded again for holes it does not aim in
+    @test new_target!(e, :hohlraum)
+    @test eb.beams[] == cone && eb.aim_frame[] == [u ? top : bot for u in up]
+
+    # sessions: the frames and local aims round trip; an older session (aims at TCC) loads
+    # as saved, not aimed again
+    f = joinpath(mktempdir(), "lehs.briar.toml")
+    save_session(f, st)
+    s2 = DesignSession(resolution = :coarse)
+    load_session!(s2, f)
+    @test s2.beams.aim_frame[] == sb.aim_frame[] && s2.beams.aim_local[] == sb.aim_local[] &&
+          s2.beams.beams[] == sb.beams[]
+    state = session_state(s0)
+    @test all(r -> r["aim_frame"] == "tcc", state["beams"]["beam"])
+    state["beams"]["preset"] = "nif_quads"
+    s3 = DesignSession(starter = :shock_tube, resolution = :coarse)
+    restore!(s3, state)
+    @test all(==(:tcc), s3.beams.aim_frame[]) && s3.beams.beams[] == cone && s3.beams.preset[] === :nif_quads
 end

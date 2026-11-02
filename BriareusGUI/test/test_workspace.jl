@@ -392,7 +392,7 @@ end
     p1 = part_centroid(ts.target[], :lid)
     @test p1 - p0 ≈ V(0, 0, 1.0) atol = 1e-9
     @test all(k -> s.beams.beams[][idx[k]].aim - a0[k] ≈ V(0, 0, 1.0), eachindex(idx))
-    @test s.beams.aim_frame[][idx] == [:lid, :lid] && count(!=(:tcc), s.beams.aim_frame[]) == 2
+    @test s.beams.aim_frame[][idx] == [:lid, :lid] && count(==(:lid), s.beams.aim_frame[]) == 2
     f = joinpath(mktempdir(), "refs.briar.toml")
     save_session(f, s)
     s2 = DesignSession(resolution = :coarse)
@@ -401,7 +401,7 @@ end
     @test s2.beams.aim_local[] == s.beams.aim_local[]
     @test s2.target.parts[][part_index(s2.target, :post)].coords === :spherical
     set_aim_frame!(s, idx, :tcc)
-    @test all(==(:tcc), s.beams.aim_frame[]) && s.beams.beams[] == s2.beams.beams[]
+    @test all(==(:tcc), s.beams.aim_frame[][idx]) && s.beams.beams[] == s2.beams.beams[]
     @test_throws ArgumentError set_aim_frame!(s, idx, :nothing_here)
 end
 

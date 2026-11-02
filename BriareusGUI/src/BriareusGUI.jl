@@ -91,7 +91,8 @@ export WindowSpec, WINDOW_FIELDS, add_window!, remove_window!, edit_window!, set
        set_window_round!,
        window_name, hohlraum_windows
 export FACILITIES, FACILITY_LABELS, FACILITY_PRESETS, facility_of, set_facility!, session_tasks
-export set_aim_frame!, follow_frames!, frame_point, beam_frames, preset_aim_frame
+export set_aim_frame!, follow_frames!, frame_point, beam_frames, preset_pointing,
+       HOHLRAUM_PRESETS, facing_lehs, aim_in_lehs!
 export SweepState, SWEEP_QUALITY, SWEEP_AXES, SWEEP_MAX_STEPS, SWEEP_MODES, set_sweep!, set_sweep_step!,
        edit_sweep!, sweep_values, step_numbers, step_number,
        sweep_subjects, sweep_subject, sweep_frame, sweep_los, sweep_los_object, start_sweep!, cancel_sweep!,

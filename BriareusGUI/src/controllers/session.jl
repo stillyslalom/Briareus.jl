@@ -60,7 +60,7 @@ copy extracted from a saved session to the file it was saved from, and `cad_chan
 the copies whose source changed since the save.
 
 The table starts from `beams` (a vector of `Beam`s) or a [`BEAM_PRESETS`](@ref) entry
-pointed for the target ([`preset_beams`](@ref)); `starter` is the parts the target
+pointed for the target ([`preset_pointing`](@ref)); `starter` is the parts the target
 starts from ([`TargetSetup`](@ref)).
 
 Background work: `spawn[]` (`false` by default; a window sets it) runs the scenario
@@ -95,10 +95,14 @@ function DesignSession(; starter::Symbol = :hohlraum, resolution::Symbol = :stan
                        preset::Symbol = starter === :foil ? :omega_backlighter : :nif_quads,
                        beams = nothing, deliver = f -> f())
     ts = TargetSetup(; starter, resolution)
-    bt = beams === nothing ?
-         BeamTable(preset_beams(preset; target = ts); preset,
-                   frames = part_frames(ts), aim_frame = preset_aim_frame(preset, ts)) :
-         BeamTable(beams; frames = part_frames(ts))
+    bt = if beams === nothing
+        p = preset_pointing(preset; target = ts)
+        b = BeamTable(p.beams; preset, frames = part_frames(ts), aim_frame = p.aim_frame)
+        b.enabled[] = p.enabled
+        b
+    else
+        BeamTable(beams; frames = part_frames(ts))
+    end
     # the target remeshes CAD parts on the session's workers (the same switches)
     ts.deliver[] = deliver
     sess = DesignSession(ts, bt, DriveState(), OptimizeState(), ReviewState(), TaLISState(),
@@ -1201,18 +1205,39 @@ load_preset!(sess::DesignSession, preset::Symbol) =
 
 Start a new target from `starter` ([`new_target!`](@ref) on the session's target). An
 optimization of the previous target is cleared; a backlighter foil swaps a NIF or OMEGA
-hohlraum preset for the OMEGA backlighter beams (aimed at the new foil), and a hohlraum
-the OMEGA backlighter beams for the NIF quads; imported beams are kept.
+hohlraum preset for the OMEGA backlighter beams (aimed at the new foil), and a starter
+with a hohlraum the OMEGA backlighter beams for the NIF quads; a hohlraum preset whose
+beams do not aim in the new target's entrance holes as [`preset_pointing`](@ref) aims them
+(a halfraum pair after a hohlraum) is loaded again for the new target; imported beams
+are kept.
 """
 function new_target!(sess::DesignSession, starter::Symbol = :hohlraum)
     new_target!(sess.target, starter) || return false
     clear_optimize!(sess.optimize)
     p = sess.beams.preset[]
-    if starter === :foil && p in (:nif_quads, :nif_beams, :omega_hohlraum)
+    if starter === :foil && p in HOHLRAUM_PRESETS
         load_preset!(sess, :omega_backlighter)
-    elseif starter === :hohlraum && p === :omega_backlighter
+    elseif starter in (:hohlraum, :shock_tube, :opacity) && p === :omega_backlighter
         load_preset!(sess, :nif_quads)
+    elseif p in HOHLRAUM_PRESETS && sess.beams.aim_frame[] != preset_pointing(p; target = sess.target).aim_frame
+        load_preset!(sess, p)
     end
+    return true
+end
+
+"""
+    insert_starter!(sess::DesignSession, kind; frame = :tcc) -> Bool
+
+Insert starter `kind` ([`insert_starter!`](@ref) on the session's target). When a hohlraum
+preset is active ([`HOHLRAUM_PRESETS`](@ref)) and no beam aimed in an entrance hole
+before, the beams held in `:tcc` then aim in the new entrance holes
+([`aim_in_lehs!`](@ref)); beams that already drive a hohlraum stay with it.
+"""
+function insert_starter!(sess::DesignSession, kind::Symbol; frame::Symbol = :tcc)
+    bt = sess.beams
+    driving = any(f -> occursin(r"\.leh_(top|bottom)$", String(f)), bt.aim_frame[])
+    insert_starter!(sess.target, kind; frame) || return false
+    driving || aim_in_lehs!(bt, sess.target)
     return true
 end
 
