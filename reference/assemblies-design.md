@@ -120,8 +120,9 @@ B2. Landed (the assembly tree: assemblies, membership, subtree show/hide and
 C. Landed (halfraum ends and packages: per-end entrance holes and open ends in core
    `hohlraum`, the role key `:observed`, flat observed faces, the shock-tube and opacity
    starters; no session version change): see "Phase C as built".
-D. **Profiles:** frustraums and multi-section hohlraums (a radius per section; four
-   sections for the tentless design).
+D. Landed (profiles: frustraums and multi-section hohlraums, core `hohlraum(; profile)`
+   and the GUI hohlraum part's *Profile*, the frustraum starter; no session version
+   change): see "Phase D as built".
 C2. **Per-cavity drive and whole-assembly Dante** (decisions 8, 10, 11): Tr per hohlraum
    part, a cavity selector in Drive; `DanteView` with a collimator FOV and a reference
    area; Dante FOVs sourced first.
@@ -283,6 +284,52 @@ E. **Double backlighter with ARC:** the starter, ARC beams as a facility beam se
 - Sessions: aims are saved with their frames and local coordinates and loaded through
   `set_beams!`, never re-aimed; a session saved before this change (aims at TCC) loads
   with its aims at TCC (test).
+
+## Phase D as built (2026-11-02): what departs from the design
+
+- Core: `HohlraumProfile(z, r)`, breaks from `−L/2` to `L/2` with a wall radius each;
+  between breaks a cylinder (equal radii), a cone (unequal) or a flat ring (two breaks at
+  one height: a step). `frustraum_profile(; length, waist_radius, end_radius,
+  bottom_end_radius)`. `hohlraum(; profile)` takes no `length` or `radius` with it.
+- One wall piece per section (decision taken: a `Component` carries one exact surface):
+  `wall_1`, `wall_2`, … from the bottom, each with `part = :wall`, so `:wall` still names
+  the whole wall in `elements`, `drive_history(; wall)`, clearance and the other
+  name-taking analyses. A profile of one cylindrical section is the cylindrical hohlraum
+  exactly (`:wall`). In the GUI the pieces are `<part>_wall_1`, …, all holding the wall
+  role (`_hohlraum_walls`).
+- Each end's cap runs from its hole to that end's radius; ends, lips, closed and open
+  ends, the capsule (checked against every section in its meridian half-plane) and
+  sombreros (the bore must clear the widest radius) work as on the cylinder. Windows are
+  cut into cylindrical sections only, each within one; a window on a cone or across a
+  break is refused, and so are corner fillets.
+- Bit for bit: the cylinder path was refactored into shared helpers; the phase C
+  snapshots (core: nine `hohlraum` configurations and a coarse NIF drive; GUI: five
+  hohlraum parts) serialized before and after are identical. Validation: a closed
+  frustraum against coaxial-disk closed forms, and LEH loss and capsule drive against
+  Monte Carlo (`test/profiles.jl`; research notes, "Hohlraum profiles").
+- GUI: `HOHLRAUM_VALUES` gains `profile` (0 cylinder, 1 frustraum, 2 sections,
+  `HOHLRAUM_PROFILES`), `end_radius` and `bottom_end_radius` (a frustraum's; its waist is
+  `radius`), and `PartSpec.sections` holds the breaks `(z, r)`, the end heights following
+  the length (`hohlraum_profile`). Switching fills what is missing: a frustraum's end
+  radius (60 % of the waist, at least 1.2 LEH radii), a section list from the current
+  profile's breaks (a cylinder in four equal sections: the tentless four-section
+  hohlraum's sections are a fabrication split with no public radii). The properties page
+  has a *Profile* choice and, for sections, a table of breaks (z, r, remove; *Add break*
+  splits the longest section), explained in tooltips and Help ▸ Hohlraum profiles.
+- Starter `:frustraum` (*Frustraum with capsule*, Insert and File ▸ New target): the
+  stated size of Baker et al. 2023's NIF frustraum (12.24 mm long, waist radius 4.88 mm,
+  holes of 1.55 mm), end radius 2.282 mm derived from its 23° wall angle, capsule radius
+  1.281 mm; a mock-up of the shape (its wall area is not the paper's quoted 270 mm²). The
+  NIF presets aim in its entrance holes with the cylinder's offsets (item 5), not a
+  frustraum pointing.
+- Sessions store `sections` beside `windows` and the new values by key; missing keys take
+  their defaults, so older sessions load unchanged (test) and the version stays.
+- Window frames and the canvas's window outlines use the wall radius at the window's
+  height (`_wall_radius_at`).
+- Not built: windows on cones; fillets on a profile; the cutaway's default components
+  (`DEFAULT_CUT_COMPONENTS`, the starter's `hohlraum_wall` and caps) do not name section
+  walls, so a frustraum is not cut away by default; a frustraum pointing preset; the
+  tentless membranes (not geometry here); GUI screenshots not regenerated.
 
 ## Decisions (user, 2026-10-29)
 

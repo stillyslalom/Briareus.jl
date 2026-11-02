@@ -68,6 +68,7 @@ function session_state(sess::DesignSession; view::Bool = true)
                                      "object" => p.object, "steps" => _step_state.(p.steps),
                                      "foil" => p.foil, "observed" => p.observed, "wall" => p.wall,
                                      "windows" => _window_state.(p.windows),
+                                     "sections" => [[z, r] for (z, r) in p.sections],
                                      "assembly" => String(p.assembly))
                     for p in ts.parts[]])
     beams = Dict{String,Any}("preset" => String(bt.preset[]), "by" => String(bt.by[]),
@@ -359,6 +360,7 @@ function _state_part(p, params; named_foil::Bool = false, named_capsule::Bool = 
                     observed = named_capsule ? p["name"] == "capsule" : p["observed"],
                     wall = named_capsule ? false : p["wall"],
                     windows = WindowSpec[_state_window(w) for w in get(p, "windows", [])],
+                    sections = NTuple{2,Float64}[(s[1], s[2]) for s in get(p, "sections", [])],
                     assembly = Symbol(get(p, "assembly", "")))
 end
 

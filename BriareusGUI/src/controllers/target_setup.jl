@@ -170,12 +170,83 @@ to 0.85 and 0.8 for a hohlraum, as the former hohlraum template had), each end's
 `bottom_end`: 1 an entrance hole, 0 closed: the cap covers the end, 2 open: neither cap
 nor hole, the cavity open to a package placed there or to nothing, as a halfraum's; see
 [`HOHLRAUM_ENDS`](@ref)), `bottom_leh_radius` (mm: the bottom entrance hole's radius; 0,
-the default, `leh_radius`, which is the top's), and the closing entrance holes:
-`leh_closure` (1 on, 0 off) with the [`LEH_CLOSURE_FIELDS`](@ref).
+the default, `leh_radius`, which is the top's), the closing entrance holes:
+`leh_closure` (1 on, 0 off) with the [`LEH_CLOSURE_FIELDS`](@ref), and the wall's profile
+(`profile`, see [`HOHLRAUM_PROFILES`](@ref)): for a frustraum `end_radius` (mm, the top
+end's radius; `radius` is the waist's) and `bottom_end_radius` (mm; 0, the default:
+`end_radius`).
 """
 const HOHLRAUM_VALUES = (:albedo => 0.85, :conversion => 0.8, :top_end => 1.0, :bottom_end => 1.0,
                          :bottom_leh_radius => 0.0, :leh_closure => 0.0,
-                         (k => d for (k, _, _, d) in LEH_CLOSURE_FIELDS)...)
+                         (k => d for (k, _, _, d) in LEH_CLOSURE_FIELDS)...,
+                         :profile => 0.0, :end_radius => 0.0, :bottom_end_radius => 0.0)
+
+"""
+The wall profiles of a hohlraum part, by value of its `profile`
+([`HOHLRAUM_VALUES`](@ref)): 0 `:cylinder` (one radius, `radius`), 1 `:frustraum` (two
+cones meeting at the waist: `radius` at the waist, `end_radius` and `bottom_end_radius`
+at the ends, core `frustraum_profile`) and 2 `:sections` (the part's `sections`, a radius
+per break, core `HohlraumProfile`). See [`hohlraum_profile`](@ref).
+"""
+const HOHLRAUM_PROFILES = (:cylinder, :frustraum, :sections)
+
+# The profile kind of hohlraum values `v`.
+function _profile_kind(v)
+    x = v[:profile]
+    x in (0.0, 1.0, 2.0) || throw(ArgumentError("a profile is a cylinder (0), a frustraum (1) or sections (2)"))
+    return HOHLRAUM_PROFILES[Int(x)+1]
+end
+
+"""
+    hohlraum_profile(p::PartSpec) -> Union{Nothing,HohlraumProfile}
+
+The wall profile of hohlraum part `p` for core `hohlraum(; profile)`: `nothing` for a
+cylinder, `frustraum_profile` of its length, waist radius (`radius`) and end radii for a
+frustraum, and for sections a `HohlraumProfile` of its `sections` with the first and
+last breaks moved to `∓length/2`. Throws `ArgumentError` for a profile the core refuses
+(fewer than two breaks, unsorted heights, a radius not positive).
+"""
+function hohlraum_profile(p)                    # p::PartSpec
+    v = p.values
+    k = _profile_kind(v)
+    k === :cylinder && return nothing
+    L = v[:length]
+    if k === :frustraum
+        re = v[:end_radius]
+        rb = v[:bottom_end_radius] > 0 ? v[:bottom_end_radius] : re
+        re > 0 || throw(ArgumentError("a frustraum needs its end radius"))
+        return frustraum_profile(; length = L, waist_radius = v[:radius], end_radius = re, bottom_end_radius = rb)
+    end
+    s = p.sections
+    length(s) >= 2 || throw(ArgumentError("a section profile needs at least two breaks"))
+    z = [first(b) for b in s]
+    z[1], z[end] = -L / 2, L / 2
+    return HohlraumProfile(z, [last(b) for b in s])
+end
+
+# The length of hohlraum part `p` (its ends at ±length/2 in its frame) and the wall radius
+# at height `z` (the narrower side of a step).
+_hohlraum_length(p) = p.values[:length]
+function _wall_radius_at(p, z)
+    prof = try
+        hohlraum_profile(p)
+    catch err
+        err isa ArgumentError || rethrow()
+        nothing                                 # a profile the geometry refuses
+    end
+    prof === nothing && return p.values[:radius]
+    r = Briareus._profile_radius(prof, z)
+    return isfinite(r) ? r : p.values[:radius]
+end
+
+# The profile a hohlraum part's sections start from when switched to a section list:
+# the breaks of its current profile, a cylinder split in four equal sections.
+function _default_sections(p)
+    prof = hohlraum_profile(_with(p; values = merge(p.values, Dict(:profile => min(p.values[:profile], 1.0)))))
+    L, R = p.values[:length], p.values[:radius]
+    prof === nothing && return [(z, R) for z in (-L / 2, -L / 4, 0.0, L / 4, L / 2)]
+    return collect(zip(prof.z, prof.r))
+end
 
 """
 Values of a `:sphere` part besides its radius (`key => default`): `capsule_mesh` (1:
@@ -209,14 +280,15 @@ _kind_values(kind::Symbol) = kind === :hohlraum ? HOHLRAUM_VALUES : kind === :sp
 
 The piece names of a `:hohlraum` part `p` without its prefix, in the order of its
 components (each component is named `<part>_<piece>` and carries `part = <part>`):
-`:wall`, then `:cap_top` and `:cap_bottom` for each end that is not open, then for each
-end with an entrance hole `:leh_top` or `:leh_bottom` (and its closing lip
-`:leh_top_lip`, … with `leh_closure`), then the windows `:window_1`, ….
+`:wall` (with a profile of several sections, `:wall_1`, `:wall_2`, … from the bottom),
+then `:cap_top` and `:cap_bottom` for each end that is not open, then for each end with
+an entrance hole `:leh_top` or `:leh_bottom` (and its closing lip `:leh_top_lip`, … with
+`leh_closure`), then the windows `:window_1`, ….
 """
 function hohlraum_pieces(p)                     # p::PartSpec (defined below)
     p.kind === :hohlraum || throw(ArgumentError("$(p.name) is not a hohlraum"))
     v = p.values
-    out = [:wall]
+    out = _wall_pieces(p)
     for (e, cap) in ((:top_end, :cap_top), (:bottom_end, :cap_bottom))
         _end_kind(v, e) === :open || push!(out, cap)
     end
@@ -227,6 +299,20 @@ function hohlraum_pieces(p)                     # p::PartSpec (defined below)
     end
     append!(out, (window_name(k) for k in eachindex(p.windows)))
     return out
+end
+
+# The wall pieces of hohlraum part `p`: `:wall`, or one per section of its profile (a
+# profile of one cylindrical section is the cylinder's `:wall`, as in core `hohlraum`).
+function _wall_pieces(p)
+    prof = try
+        hohlraum_profile(p)
+    catch err
+        err isa ArgumentError || rethrow()
+        nothing                                 # a profile the geometry refuses
+    end
+    n = prof === nothing ? 1 : length(prof.z) - 1
+    n == 1 && (prof === nothing || prof.r[1] == prof.r[2]) && return [:wall]
+    return [Symbol(:wall_, k) for k in 1:n]
 end
 
 "The component name of piece `piece` of hohlraum part `name`: `<name>_<piece>`."
@@ -257,7 +343,7 @@ const FRAME_LABELS = Dict(:tcc => "Target chamber (TCC)")
     PartSpec(kind; name, values, two_sided = false, inward = false, aperture = false,
              file = "", frame = :tcc, coords = :cartesian, object = "", steps = [],
              foil = false, observed = false, wall = false, windows = [],
-             assembly = TOP_LEVEL)
+             assembly = TOP_LEVEL, sections = [])
 
 A free target part: `kind` (one of [`PART_KINDS`](@ref)), its component `name`,
 `values` (every [`PART_FIELDS`](@ref) key and its kind's [`PART_SIZE_FIELDS`](@ref)),
@@ -275,7 +361,9 @@ how its position is shown and edited (the values keep `x`, `y`, `z`). The placem
 `steps` (`PlacementStep`s: relations to other frames, relative moves) apply in order
 after the placement fields; the degrees of freedom they leave free keep the fields'
 values ([`part_placement`](@ref)). A `:hohlraum` part has its [`HOHLRAUM_VALUES`](@ref)
-too and `windows`, its diagnostic windows ([`WindowSpec`](@ref)s; other kinds have none).
+too, `windows`, its diagnostic windows ([`WindowSpec`](@ref)s; other kinds have none),
+and `sections`, the `(z, r)` breaks of its wall when its profile is a section list
+([`hohlraum_profile`](@ref); the first and last `z` follow its length).
 A `:frame` part is a user frame: its placement fields and steps define the frame and it
 has no components. With `object` set it is a port frame ([`is_port_frame`](@ref)): the
 frame of the port named `object`, at TCC with `z` toward the port (`theta`, `phi` the
@@ -304,6 +392,7 @@ struct PartSpec
     wall::Bool
     windows::Vector{WindowSpec}
     assembly::Symbol
+    sections::Vector{NTuple{2,Float64}}
 end
 
 """
@@ -349,7 +438,7 @@ function PartSpec(kind::Symbol; name = kind, values = Dict{Symbol,Float64}(),
                   file::AbstractString = "", frame::Symbol = :tcc, coords::Symbol = :cartesian,
                   object::AbstractString = "", steps = PlacementStep[], foil::Bool = false,
                   observed::Bool = false, wall::Bool = false, windows = WindowSpec[],
-                  assembly::Symbol = TOP_LEVEL)
+                  assembly::Symbol = TOP_LEVEL, sections = NTuple{2,Float64}[])
     kind in PART_KINDS || throw(ArgumentError("part kind must be one of $PART_KINDS"))
     _own_frame_name(Symbol(name), frame) && throw(ArgumentError("a part cannot be placed in its own frame"))
     coords in PART_COORDINATES || throw(ArgumentError("coordinates must be one of $PART_COORDINATES"))
@@ -361,6 +450,7 @@ function PartSpec(kind::Symbol; name = kind, values = Dict{Symbol,Float64}(),
         v[k] = d
     end
     kind === :hohlraum || isempty(windows) || throw(ArgumentError("only a hohlraum has windows"))
+    kind === :hohlraum || isempty(sections) || throw(ArgumentError("only a hohlraum has sections"))
     for (k, x) in values
         haskey(v, k) || throw(ArgumentError("a $kind has no field :$k"))
         v[k] = x
@@ -369,7 +459,8 @@ function PartSpec(kind::Symbol; name = kind, values = Dict{Symbol,Float64}(),
         throw(ArgumentError("a part's placement step cannot refer to its own frame"))
     return _port_checked(PartSpec(kind, Symbol(name), v, two_sided, inward, aperture, String(file), frame,
                                   coords, String(object), collect(PlacementStep, steps), foil, observed, wall,
-                                  collect(WindowSpec, windows), assembly))
+                                  collect(WindowSpec, windows), assembly,
+                                  NTuple{2,Float64}[(Float64(z), Float64(r)) for (z, r) in sections]))
 end
 
 # A port frame stays at TCC, in `:tcc`, without steps (`_with` checks every edit).
@@ -388,9 +479,10 @@ _own_frame_name(name::Symbol, frame::Symbol) = frame === name || startswith(Stri
 _with(p::PartSpec; kind = p.kind, name = p.name, values = p.values, two_sided = p.two_sided,
       inward = p.inward, aperture = p.aperture, file = p.file, frame = p.frame,
       coords = p.coords, object = p.object, steps = p.steps, foil = p.foil,
-      observed = p.observed, wall = p.wall, windows = p.windows, assembly = p.assembly) =
+      observed = p.observed, wall = p.wall, windows = p.windows, assembly = p.assembly,
+      sections = p.sections) =
     _port_checked(PartSpec(kind, name, values, two_sided, inward, aperture, file, frame, coords, object, steps,
-                           foil, observed, wall, windows, assembly))
+                           foil, observed, wall, windows, assembly, sections))
 
 # A part with the frame named `old` renamed `new`: the frame it is placed in, the frames
 # its placement steps refer to, and the assembly it is a member of.
@@ -471,11 +563,12 @@ centroid is the part's center). Other kinds have none.
 function piece_frame_defs(p::PartSpec)
     out = Pair{Symbol,FrameDef}[]
     p.kind === :hohlraum || return out
-    L, R = p.values[:length], p.values[:radius]
+    L = p.values[:length]
     push!(out, Symbol(p.name, ".leh_top") => FrameDef(p.name; offset = (0.0, 0.0, L / 2)),
           Symbol(p.name, ".leh_bottom") => FrameDef(p.name; offset = (0.0, 0.0, -L / 2),
                                                     rotation = (180.0, 0.0, 180.0)))
     for (k, w) in enumerate(p.windows)
+        R = _wall_radius_at(p, w.z)
         push!(out, Symbol(p.name, ".", window_name(k)) =>
                    FrameDef(p.name; offset = (R * cosd(w.phi), R * sind(w.phi), w.z)))
     end
@@ -555,7 +648,7 @@ _capsule_meshed(p::PartSpec) = p.kind === :sphere && p.values[:capsule_mesh] != 
 function _part_key(p::PartSpec, h::Real, frame, raw::Bool, hc::Real = 0.0)
     stamp = isfile(p.file) ? (mtime(p.file), filesize(p.file)) : nothing
     return (p.kind, p.name, sort!(collect(p.values)), p.two_sided, p.inward, p.aperture, p.file,
-            p.object, stamp, Float64(h), frame.R, frame.origin, raw, Float64(hc), p.windows)
+            p.object, stamp, Float64(h), frame.R, frame.origin, raw, Float64(hc), p.windows, p.sections)
 end
 
 function _part_components(p::PartSpec, h::Real, frame::Frame, raw::Bool, hc::Real = 0.0)
@@ -642,8 +735,9 @@ function _hohlraum_components(p::PartSpec, h::Real, frame::Frame)
             k = _end_kind(v, e)
             k === :leh ? (e === :bottom_end && rb > 0 && rb != v[:leh_radius] ? rb : nothing) : k
         end
-        hohlraum(; length = v[:length], radius = v[:radius], leh_radius = v[:leh_radius],
-                 capsule_radius = 0.0, wall,
+        prof = hohlraum_profile(p)
+        dims = prof === nothing ? (; length = v[:length], radius = v[:radius]) : (; profile = prof)
+        hohlraum(; dims..., leh_radius = v[:leh_radius], capsule_radius = 0.0, wall,
                  windows = [_wall_window(w, k) for (k, w) in enumerate(p.windows)], h,
                  leh_closure = lip, leh_open_radius = fopen * v[:leh_radius],
                  top_end = ends[1], bottom_end = ends[2])
@@ -1811,11 +1905,109 @@ function edit_part!(ts::TargetSetup, i::Integer, key::Symbol, text)
             v == p.values[key] && (ts.error[] = ""; return true)
             vals = copy(p.values)
             vals[key] = v
-            new = _with(p; values = vals)
+            new = key === :profile ? _switched_profile(p, vals) : _with(p; values = vals)
         end
         ps = copy(ts.parts[])
         ps[i] = new
         return _try_build!(ts; parts = ps)
+    catch err
+        err isa ArgumentError || rethrow()
+        ts.error[] = _errmsg(err)
+        return false
+    end
+end
+
+# Hohlraum part `p` with values `vals`, whose `profile` changed: a frustraum without an end
+# radius gets one (60 % of the waist radius, at least 1.2 times the LEH radius, to the
+# micrometer), and a section list without breaks starts from the current profile's
+# (`_default_sections`: a cylinder in four equal sections).
+function _switched_profile(p, vals)
+    p.kind === :hohlraum || return _with(p; values = vals)
+    _profile_kind(vals)                         # a valid profile
+    if vals[:profile] == 1 && vals[:end_radius] == 0
+        vals[:end_radius] = round(max(0.6 * vals[:radius], 1.2 * vals[:leh_radius]); digits = 3)
+    end
+    sections = vals[:profile] == 2 && isempty(p.sections) ? _default_sections(p) : p.sections
+    return _with(p; values = vals, sections)
+end
+
+# Commit hohlraum part `i` with the section breaks `s` if the geometry accepts them.
+function _set_sections!(ts::TargetSetup, i::Integer, s)
+    ps = copy(ts.parts[])
+    ps[i] = _with(ps[i]; sections = s)
+    return _try_build!(ts; parts = ps)
+end
+
+function _section_part(ts::TargetSetup, i::Integer)
+    _check_part_index(ts, i)
+    p = ts.parts[][i]
+    p.kind === :hohlraum && _profile_kind(p.values) === :sections ||
+        throw(ArgumentError("$(p.name) has no section list: set its profile to sections"))
+    return p
+end
+
+"""
+    edit_hohlraum_break!(ts::TargetSetup, i, k, field, text) -> Bool
+
+Set the height (`field = :z`, mm) or the wall radius (`:r`, mm) of break `k` of hohlraum
+part `i`'s section list ([`hohlraum_profile`](@ref)) from text-field text. The first and
+last breaks' heights follow the part's length (edit the length instead). A value the
+geometry rejects (breaks out of order, a radius not positive, an entrance hole wider
+than its end) sets `error` and returns `false`, the target unchanged.
+"""
+function edit_hohlraum_break!(ts::TargetSetup, i::Integer, k::Integer, field::Symbol, text)
+    try
+        p = _section_part(ts, i)
+        s = copy(p.sections)
+        1 <= k <= length(s) || throw(ArgumentError("no break $k"))
+        field in (:z, :r) || throw(ArgumentError("a break has a height z and a radius r"))
+        v = _parse_number(text, String(field))
+        field === :z && k in (1, length(s)) &&
+            throw(ArgumentError("the end breaks are at ±length/2: edit the length"))
+        s[k] = field === :z ? (v, s[k][2]) : (s[k][1], v)
+        return _set_sections!(ts, i, s)
+    catch err
+        err isa ArgumentError || rethrow()
+        ts.error[] = _errmsg(err)
+        return false
+    end
+end
+
+"""
+    add_hohlraum_break!(ts::TargetSetup, i) -> Bool
+
+Split the longest section of hohlraum part `i`'s section list at its middle (a break on
+the wall, so the shape is unchanged and the section becomes two pieces).
+"""
+function add_hohlraum_break!(ts::TargetSetup, i::Integer)
+    try
+        p = _section_part(ts, i)
+        prof = hohlraum_profile(p)
+        z, r = prof.z, prof.r
+        k = argmax([hypot(z[j+1] - z[j], r[j+1] - r[j]) for j in 1:length(z)-1])
+        s = copy(p.sections)
+        insert!(s, k + 1, ((z[k] + z[k+1]) / 2, (r[k] + r[k+1]) / 2))
+        return _set_sections!(ts, i, s)
+    catch err
+        err isa ArgumentError || rethrow()
+        ts.error[] = _errmsg(err)
+        return false
+    end
+end
+
+"""
+    remove_hohlraum_break!(ts::TargetSetup, i, k) -> Bool
+
+Remove break `k` of hohlraum part `i`'s section list, joining the two sections beside it;
+the end breaks stay.
+"""
+function remove_hohlraum_break!(ts::TargetSetup, i::Integer, k::Integer)
+    try
+        p = _section_part(ts, i)
+        1 < k < length(p.sections) || throw(ArgumentError("the end breaks stay: remove an inner break"))
+        s = copy(p.sections)
+        deleteat!(s, k)
+        return _set_sections!(ts, i, s)
     catch err
         err isa ArgumentError || rethrow()
         ts.error[] = _errmsg(err)
@@ -2302,9 +2494,10 @@ function wall_names(ts::TargetSetup)
     return out
 end
 
-# The pieces of a hohlraum part that hold the wall role: its wall and the caps it has.
-const _HOHLRAUM_WALL = (:wall, :cap_top, :cap_bottom)
-_hohlraum_walls(p) = (ps = hohlraum_pieces(p); [piece_name(p.name, s) for s in _HOHLRAUM_WALL if s in ps])
+# The pieces of a hohlraum part that hold the wall role: its wall (each section of it) and
+# the caps it has.
+_hohlraum_walls(p) = (ps = hohlraum_pieces(p);
+                      [piece_name(p.name, s) for s in [_wall_pieces(p); :cap_top; :cap_bottom] if s in ps])
 
 """
     foil_names(ts::TargetSetup) -> Vector{Symbol}
@@ -2642,13 +2835,16 @@ capsule*: a hohlraum part and a capsule sphere with the observed role), `:foil`
 the main target), `:shock_tube` (*Halfraum pair with shock tube*: two halfraums facing
 each other across a cylinder package whose end face has the observed role) and
 `:opacity` (*Opacity halfraum*: a halfraum with a sample foil, observed, at its open
-end). Their dimensions are illustrative (the NIF-scale defaults of the former
-templates; mock-ups for the halfraums), not a facility's design.
+end) and `:frustraum` (*Frustraum with capsule*: a hohlraum part with a frustraum
+profile and a capsule). Their dimensions are illustrative (the NIF-scale defaults of the
+former templates; mock-ups for the halfraums; the frustraum at a published platform's
+stated size), not a facility's design.
 """
-const STARTERS = (:hohlraum, :foil, :shock_tube, :opacity)
+const STARTERS = (:hohlraum, :foil, :shock_tube, :opacity, :frustraum)
 
 const STARTER_LABELS = Dict(:hohlraum => "Hohlraum with capsule", :foil => "Backlighter foil",
-                            :shock_tube => "Halfraum pair with shock tube", :opacity => "Opacity halfraum")
+                            :shock_tube => "Halfraum pair with shock tube", :opacity => "Opacity halfraum",
+                            :frustraum => "Frustraum with capsule")
 
 """
     starter_parts(kind; frame = :tcc, taken = (), capsule_h = 0.3) -> Vector{PartSpec}
@@ -2678,9 +2874,17 @@ The parts of starter `kind` (one of [`STARTERS`](@ref)), placed in the frame nam
   1 mm square rectangle, albedo 0.3, conversion 0, with the observed role) in its open
   end's plane, facing into it; the radiation that misses the sample leaves through the
   open end.
+- `:frustraum`: a `:hohlraum` part `frustraum` with the frustraum profile (length
+  12.24 mm, waist radius 4.88 mm, end radius 2.282 mm, entrance holes of 1.55 mm radius)
+  and, at its center, the capsule sphere `capsule` (radius 1.281 mm, as the hohlraum
+  starter's capsule otherwise) with the observed role. The length, waist and holes are
+  the stated dimensions of the NIF frustraum of Baker et al., Phys. Plasmas 30, 092708
+  (2023); the end radius is derived from its 23° wall angle taken from the axis, and the
+  capsule is its 1.2 mm inner radius plus the ~81 µm shell. An illustrative mock-up: its
+  wall area is not the paper's quoted one, and the beams are not its pointing.
 
-The two halfraum starters are mock-ups at an illustrative scale (reference/research-notes.md,
-"Halfraum starters"), not any experiment's design.
+The two halfraum starters are mock-ups at an illustrative scale; reference/research-notes.md,
+"Halfraum ends and starters" and "Hohlraum profiles", has the sources.
 """
 function starter_parts(kind::Symbol; frame::Symbol = :tcc, taken = (), capsule_h::Real = 0.3)
     kind in STARTERS || throw(ArgumentError("a starter is one of $STARTERS"))
@@ -2700,6 +2904,15 @@ function starter_parts(kind::Symbol; frame::Symbol = :tcc, taken = (), capsule_h
         return [PartSpec(:hohlraum; name = h, frame),
                 PartSpec(:sphere; name = c, frame = h, observed = true,
                          values = Dict(:r1 => 0.9, :albedo => 0.3, :conversion => 0.3, :capsule_mesh => 1.0))]
+    end
+    if kind === :frustraum
+        h = unique_name(:frustraum)
+        c = unique_name(:capsule)
+        return [PartSpec(:hohlraum; name = h, frame,
+                         values = Dict(:profile => 1.0, :length => 12.24, :radius => 4.88, :end_radius => 2.282,
+                                       :leh_radius => 1.55)),
+                PartSpec(:sphere; name = c, frame = h, observed = true,
+                         values = Dict(:r1 => 1.281, :albedo => 0.3, :conversion => 0.3, :capsule_mesh => 1.0))]
     end
     if kind === :shock_tube
         a, b = unique_name(:halfraum_top), unique_name(:halfraum_bottom)

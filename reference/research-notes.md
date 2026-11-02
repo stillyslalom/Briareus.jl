@@ -9899,9 +9899,10 @@ checked against the page image of Fig. 1.
   capsule. No section lengths or radii are given. Science & Technology Review, March 2018
   (https://str.llnl.gov/2018-03/stadermann) describes a hohlraum made in four segments
   whose walls clamp the tents' edges, also without dimensions. The four sections are a
-  fabrication split; whether their radii differ is not public. The GUI's *sections* profile starts from a
-  mock-up of four sections (breaks at 0, ±2.5 and ±5.05 mm, radii 2.875 mm at the ends and
-  at ±2.5 mm, 3.1 mm at the waist): illustrative only, no experiment's numbers.
+  fabrication split; whether their radii differ is not public. A cylindrical hohlraum part
+  switched to *Sections* in the GUI therefore starts as the same cylinder in four equal
+  sections (a radius at each of five breaks, all the cylinder's), with no radii invented;
+  a radius per break is then the user's.
 - **Mesh.** Each section between breaks is a component (`wall_1`, … from the bottom,
   `part = :wall`) with its exact surface: `CylinderSurface`, `ConeSurface` or, for a step
   in radius, `DiskSurface`. A cone section's patches are trapezoids between parallel

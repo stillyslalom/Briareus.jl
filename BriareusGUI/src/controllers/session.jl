@@ -1217,7 +1217,7 @@ function new_target!(sess::DesignSession, starter::Symbol = :hohlraum)
     p = sess.beams.preset[]
     if starter === :foil && p in HOHLRAUM_PRESETS
         load_preset!(sess, :omega_backlighter)
-    elseif starter in (:hohlraum, :shock_tube, :opacity) && p === :omega_backlighter
+    elseif starter in (:hohlraum, :shock_tube, :opacity, :frustraum) && p === :omega_backlighter
         load_preset!(sess, :nif_quads)
     elseif p in HOHLRAUM_PRESETS && sess.beams.aim_frame[] != preset_pointing(p; target = sess.target).aim_frame
         load_preset!(sess, p)

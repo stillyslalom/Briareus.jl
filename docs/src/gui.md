@@ -240,7 +240,8 @@ collects every explanation by page. Help ▸ Documentation opens this page.
   and for the capsule. A target is made of parts: Insert ▸ *Hohlraum with capsule*,
   *Backlighter foil*, *Halfraum pair with shock tube* (two halfraums facing each other
   across a cylinder package whose end faces close them, the top face observed) or
-  *Opacity halfraum* (a halfraum with an observed sample foil in its open end) adds a
+  *Opacity halfraum* (a halfraum with an observed sample foil in its open end) or
+  *Frustraum with capsule* (a hohlraum part with a frustraum profile) adds a
   starter assembly in the selected part's or piece's frame (TCC
   with nothing selected), its names made unique (`hohlraum_2`), and File ▸ New target
   starts a target of one starter (*Empty*: a sphere at TCC). The starters' dimensions are
@@ -256,7 +257,12 @@ collects every explanation by page. Help ▸ Documentation opens this page.
   TaLIS checks keep the caps as hardware, the entrance holes' edges. Each end has a frame
   (`hohlraum.leh_top`, `hohlraum.leh_bottom`: origin at the end's center, z pointing out
   of the hohlraum, so one placement or aim mirrors between the two) and each window one
-  at its center on the wall (`hohlraum.window_1`).
+  at its center on the wall (`hohlraum.window_1`). Its *Profile* is a cylinder, a
+  frustraum (two cones meeting at the waist: the waist radius and each end's,
+  [`frustraum_profile`](@ref)) or sections (a table of breaks, each a height and a wall
+  radius, the end breaks at ±length/2: [`HohlraumProfile`](@ref)); the wall is then one
+  piece per section (`hohlraum_wall_1`, …), each holding the *Wall* role, and windows go
+  in cylindrical sections only.
 - **Windows** ([`WallWindow`](@ref)) in a hohlraum part's wall (its properties ▸ *Add
   window*): azimuth, height, round (the default, with the exact disk area) or rectangular, open or closed with their own albedo and conversion
   efficiency. Overlapping windows, or a window past the end of the wall, are refused.

@@ -83,7 +83,9 @@ export PartSpec, PART_KINDS, PART_KIND_LABELS, PART_FIELDS, PART_SIZE_FIELDS, pa
        foil_names, active_foil, set_active_foil!, foil_components, observed_name, observed_flat, wall_names,
        observed_components, wall_components,
        export_target_stl, add_stl_parts!, fit_sphere, part_size_unit
-export HOHLRAUM_VALUES, HOHLRAUM_ENDS, SPHERE_VALUES, hohlraum_pieces, piece_name, piece_frame_defs, piece_frame,
+export HOHLRAUM_VALUES, HOHLRAUM_ENDS, HOHLRAUM_PROFILES, hohlraum_profile, edit_hohlraum_break!,
+       add_hohlraum_break!, remove_hohlraum_break!,
+       SPHERE_VALUES, hohlraum_pieces, piece_name, piece_frame_defs, piece_frame,
        STARTERS, STARTER_LABELS, starter_parts, insert_starter!
 export TOP_LEVEL, is_assembly, assemblies, check_tree, assembly_children, assembly_members, assembly_parts,
        assembly_frame, add_assembly!, move_into_assembly!, ungroup_assembly!

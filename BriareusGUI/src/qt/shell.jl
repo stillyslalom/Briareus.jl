@@ -520,6 +520,9 @@ function BriareusShell(sess::DesignSession; queue::Channel{Any} = Channel{Any}(I
     _set!(sh, "partNumber", 0)
     _set!(sh, "partTopEnd", 1)
     _set!(sh, "partBottomEnd", 1)
+    _set!(sh, "partProfile", 0)
+    _set!(sh, "partSectionZ", String[])
+    _set!(sh, "partSectionR", String[])
     _set!(sh, "partFrame", 0)
     _set!(sh, "moveFrames", String[])
     _set!(sh, "moveFrame", 0)
@@ -886,6 +889,23 @@ function _refresh_selection!(sh::BriareusShell)
                                  _num(p.values[:bottom_leh_radius])))
             hoh && p.values[:leh_closure] != 0 &&
                 append!(fields, [FieldRow(String(k), label, unit, _num(p.values[k])) for (k, label, unit, _) in LEH_CLOSURE_FIELDS])
+            # a hohlraum's profile: a frustraum's waist and end radii; a section list's
+            # breaks are a table of their own (its radius field unused)
+            prof = hoh ? Int(p.values[:profile]) : 0
+            _set!(sh, "partProfile", prof)
+            _set!(sh, "partSectionZ", hoh && prof == 2 ? [_num(z) for (z, _) in p.sections] : String[])
+            _set!(sh, "partSectionR", hoh && prof == 2 ? [_num(r) for (_, r) in p.sections] : String[])
+            if hoh && prof != 0
+                k = findfirst(f -> f.key == "radius", fields)
+                if prof == 1
+                    fields[k] = FieldRow("radius", "Waist radius", "mm", fields[k].value)
+                    insert!(fields, k + 1, FieldRow("end_radius", "End radius", "mm (top)", _num(p.values[:end_radius])))
+                    insert!(fields, k + 2, FieldRow("bottom_end_radius", "Bottom end radius", "mm (0: the end radius)",
+                                                    _num(p.values[:bottom_end_radius])))
+                else
+                    deleteat!(fields, k)
+                end
+            end
             _sync_rows!(sh.rows[:partFieldModel], sh.models[:partFieldModel], fields)
             rows, note = _step_rows(sess, i)
             _sync_rows!(sh.rows[:stepModel], sh.models[:stepModel], rows)
@@ -1772,6 +1792,22 @@ function br_edit_part(key, text)
         ok || _resend_part_fields!(sh)
     end
 end
+# A hohlraum part's section list: break k's height or radius, a break added in the longest
+# section, an inner break removed (the first selected part; k from 0 in QML).
+function _section_edit(f)
+    _with_shell() do sh
+        idx = _selected_parts(sh)
+        isempty(idx) && return
+        f(sh.sess.target, idx[1]) && return
+        for k in ("partSectionZ", "partSectionR")       # a rejected edit: show the table again
+            haskey(sh.shown, k) && (sh.app[k] = copy(sh.shown[k]))
+        end
+    end
+end
+br_section_edit(k, field, text) =
+    _section_edit((ts, i) -> edit_hohlraum_break!(ts, i, Int(k) + 1, _sym(field), string(text)))
+br_section_add() = _section_edit((ts, i) -> add_hohlraum_break!(ts, i))
+br_section_remove(k) = _section_edit((ts, i) -> remove_hohlraum_break!(ts, i, Int(k) + 1))
 function br_part_flag(flag, on)
     _with_shell() do sh
         ts = sh.sess.target
@@ -2749,6 +2785,7 @@ function _register_qml_functions()
     @qmlfunction br_set_facility br_aim_frame br_aim_at_frame
     @qmlfunction br_new_target br_insert br_set_resolution br_edit_mesh
     @qmlfunction br_add_window br_remove_window br_edit_window br_window_open
+    @qmlfunction br_section_edit br_section_add br_section_remove
     @qmlfunction br_add_part br_add_stl br_edit_part br_part_flag br_part_frame br_part_coords
     @qmlfunction br_move_frame br_move_axis br_move_step br_nudge_part br_sweep_part
     @qmlfunction br_step_add br_step_remove br_step_move br_step_edit br_step_choice

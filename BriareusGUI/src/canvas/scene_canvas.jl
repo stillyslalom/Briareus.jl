@@ -753,8 +753,8 @@ function _draw_windows!(c::SceneCanvas, sess::DesignSession)
     segs = Point3f[]
     cols = RGBAf[]
     narc = 12
-    for h in hs, w in h.windows, r in (h.values[:radius] - 0.01, h.values[:radius] + 0.01)
-        R, F = h.values[:radius], frames[h.name]
+    for h in hs, w in h.windows, r in (Controllers._wall_radius_at(h, w.z) .+ (-0.01, 0.01))
+        R, F = Controllers._wall_radius_at(h, w.z), frames[h.name]
         p(φ, z) = Point3f(to_chamber(F, (r * cos(φ), r * sin(φ), z)))
         col = w.open ? WINDOW_COLORS.open : WINDOW_COLORS.closed
         if w.round

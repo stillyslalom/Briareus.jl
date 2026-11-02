@@ -149,6 +149,7 @@ ApplicationWindow {
                 Action { text: "Backlighter foil"; onTriggered: { Julia.br_new_target("foil"); Julia.br_select("target") } }
                 Action { text: "Halfraum pair with shock tube"; onTriggered: { Julia.br_new_target("shock_tube"); Julia.br_select("target") } }
                 Action { text: "Opacity halfraum"; onTriggered: { Julia.br_new_target("opacity"); Julia.br_select("target") } }
+                Action { text: "Frustraum with capsule"; onTriggered: { Julia.br_new_target("frustraum"); Julia.br_select("target") } }
                 Action { text: "Empty (parts only)"; onTriggered: { Julia.br_new_target("empty"); Julia.br_select("target") } }
             }
             MenuSeparator {}
@@ -186,6 +187,7 @@ ApplicationWindow {
             Action { text: "Backlighter foil"; onTriggered: Julia.br_insert("foil") }
             Action { text: "Halfraum pair with shock tube"; onTriggered: Julia.br_insert("shock_tube") }
             Action { text: "Opacity halfraum"; onTriggered: Julia.br_insert("opacity") }
+            Action { text: "Frustraum with capsule"; onTriggered: Julia.br_insert("frustraum") }
         }
         AutoMenu {
             title: "&Target"

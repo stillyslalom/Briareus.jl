@@ -167,6 +167,70 @@ ColumnLayout {
             onActivated: (index) => Julia.br_part_coords(index)
         }
     }
+    // a hohlraum part's wall profile: one radius, a frustraum, or a radius per break
+    RowLayout {
+        visible: hohlraum
+        Label { text: "Profile"; Layout.preferredWidth: 110 }
+        ComboBox {
+            Layout.fillWidth: true
+            model: ["Cylinder", "Frustraum", "Sections"]
+            currentIndex: app.partProfile
+            onActivated: (index) => Julia.br_edit_part("profile", String(index))
+            ToolTip.visible: hovered
+            ToolTip.delay: 400
+            ToolTip.text: "The wall's shape: one radius; two cones meeting at the waist (its radius and " +
+                          "the ends'); or a radius per break, a cone between unequal radii and a " +
+                          "cylinder between equal ones"
+        }
+        Info { topic: "part.profile" }
+    }
+    ColumnLayout {
+        id: sectionTable
+        visible: hohlraum && app.partProfile === 2
+        spacing: 2
+        readonly property int count: app.partSectionZ.length
+        TableHeader {
+            id: sectionHead
+            columns: [{ t: "Break", w: 40 }, { t: "z (mm)", w: 72 }, { t: "r (mm)", w: 72 }, { t: "", w: 30 }]
+        }
+        Repeater {
+            model: sectionTable.count
+            delegate: RowLayout {
+                spacing: sectionHead.spacing
+                readonly property bool inner: index > 0 && index < sectionTable.count - 1
+                Label { text: String(index + 1); Layout.preferredWidth: sectionHead.widths[0] }
+                TextField {
+                    Layout.preferredWidth: sectionHead.widths[1]
+                    text: app.partSectionZ[index] || ""
+                    enabled: inner
+                    selectByMouse: true
+                    onEditingFinished: if (text !== app.partSectionZ[index]) Julia.br_section_edit(index, "z", text)
+                    ToolTip.visible: hovered && !inner
+                    ToolTip.text: "An end break: at ±length/2 (edit the length)"
+                }
+                TextField {
+                    Layout.preferredWidth: sectionHead.widths[2]
+                    text: app.partSectionR[index] || ""
+                    selectByMouse: true
+                    onEditingFinished: if (text !== app.partSectionR[index]) Julia.br_section_edit(index, "r", text)
+                }
+                Button {
+                    text: "−"
+                    Layout.preferredWidth: sectionHead.widths[3]
+                    enabled: inner
+                    onClicked: Julia.br_section_remove(index)
+                    ToolTip.visible: hovered
+                    ToolTip.text: "Remove this break, joining the sections beside it"
+                }
+            }
+        }
+        Button {
+            text: "Add break"
+            onClicked: Julia.br_section_add()
+            ToolTip.visible: hovered
+            ToolTip.text: "Split the longest section at its middle (the shape is unchanged)"
+        }
+    }
     Repeater {
         model: partFieldModel
         delegate: PropRow {

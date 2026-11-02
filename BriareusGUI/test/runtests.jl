@@ -38,6 +38,7 @@ end
     include("test_user_frames.jl")      # user and port frames, the coordinate transform (no GL)
     include("test_hohlraum.jl")         # the hohlraum part, its pieces and frames, starters (no GL)
     include("test_halfraum.jl")         # open ends, the flat observed face, the halfraum starters (no GL)
+    include("test_profiles.jl")         # frustraums and section lists, the frustraum starter (no GL)
     include("test_assemblies.jl")       # the model tree: assemblies, its commands, sessions (no GL)
     include("test_display.jl")          # participation, visibility, cutaway (no GL)
     include("test_time.jl")             # pulses, drive histories, the time cursor (no GL)

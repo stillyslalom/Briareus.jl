@@ -122,13 +122,23 @@ var pages = [
                 "take every foil as a surface the beams land on. Renaming a part keeps the parts " +
                 "placed in its frame and the beams aimed in it." },
         { key: "part.hohlraum", title: "Hohlraum parts",
-          text: "A cylindrical hohlraum along its part's z axis, in pieces: the wall, the two caps, " +
+          text: "A hohlraum along its part's z axis (a cylinder, a frustraum or sections: see " +
+                "Profile), in pieces: the wall (one piece per section), the two caps, " +
                 "each end's entrance hole (or a closed end, covered by its cap) and the windows. " +
                 "The wall and caps hold the wall role for the drive history; the clearance and " +
                 "TaLIS checks keep the caps as hardware, the entrance holes' edges. Each end has a " +
                 "frame (origin at the end's center, z pointing out of the hohlraum, so one aim or " +
                 "placement mirrors between the two), and each window one at its center on the " +
                 "wall: beams aim and parts are placed in them, and they follow the hohlraum." },
+        { key: "part.profile", title: "Hohlraum profiles",
+          text: "Cylinder: one radius. Frustraum: two cones meeting at the waist (z = 0), the " +
+                "waist radius and each end's radius (the bottom's 0: the top's). Sections: a " +
+                "radius at each break, a cone between unequal radii, a cylinder between equal " +
+                "ones and a flat step where two breaks share a height; the end breaks sit at " +
+                "±length/2. Each section is its own wall piece with its exact surface. Windows " +
+                "are cut into cylindrical sections only. The frustraum starter has the stated " +
+                "size of a published NIF frustraum (Baker et al. 2023), its end radius derived " +
+                "from the 23° wall angle: a mock-up of the shape, not that platform." },
         { key: "part.cad", title: "Parts from CAD files",
           text: "Windings repaired (closed solids face out of their material, open sheets the " +
                 "target center) and the surface remeshed into elements of the part's size; a part " +
