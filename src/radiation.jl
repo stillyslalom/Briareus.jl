@@ -802,7 +802,9 @@ end
 # The unconverted colors' x-ray source flux Σ_c r_c η(t, P_c/A) P_c/A and absorbed power
 # Σ_c P_c per element, each color's conversion at its own absorbed flux.
 _color_power(d::Deposition) = d.element
-_color_power(p::AbstractVector) = p
+_color_power(p::AbstractVector{<:Number}) = p
+_color_power(x) =      # (an entry of a NamedTuple read by a runtime name may be `colors`)
+    throw(ArgumentError("an unconverted color's power is a Deposition or a per-element vector, not $(typeof(x))"))
 # The colors of `solve`'s `unconverted` (its entry `colors`, the `UnconvertedColor`s its
 # light was deposited with), after checking that it holds a power per element for each
 # and nothing else but `skipped`.
