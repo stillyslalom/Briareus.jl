@@ -275,6 +275,8 @@ end
     @test v.cutaway[] && v.cut_width[] == 90 && v.cut_azimuth[] == 225
     @test is_cut(v, :hohlraum_wall, (-1.0, -1.0, 0.0)) && !is_cut(v, :hohlraum_wall, (1.0, -1.0, 0.0))
     @test !is_cut(v, :capsule, (-1.0, -1.0, 0.0))                # not a cut component
+    # a profiled hohlraum's numbered wall sections are cut with the wall
+    @test is_cut(v, :hohlraum_wall_2, (-1.0, -1.0, 0.0)) && !is_cut(v, :hohlraum_wallx_2, (-1.0, -1.0, 0.0))
     set_cut!(v; width = 180, azimuth = 0, components = [:hohlraum_wall, :capsule])
     @test is_cut(v, :capsule, (1.0, 0.9, 0.0)) && !is_cut(v, :hohlraum_wall, (-1.0, 0.2, 0.0))
     @test_throws ArgumentError set_cut!(v; width = 0)

@@ -82,8 +82,16 @@ its bounds along the axis; a plane, the points on the side its normal points to.
 """
 function is_cut(r::CutRegion, name::Symbol, p)
     r.kind === :none && return false
-    name in r.components || return false
+    _in_cut(r, name) || return false
     return _removed(r, Vec3(p...))
+end
+
+# Whether the cut takes component `name`: named in the set, or a numbered section of a
+# named one (a profiled hohlraum's `hohlraum_wall_1`, `_2`, … under `hohlraum_wall`).
+function _in_cut(r::CutRegion, name::Symbol)
+    name in r.components && return true
+    m = match(r"^(.+)_[0-9]+$", String(name))
+    return m !== nothing && Symbol(m.captures[1]) in r.components
 end
 
 function _removed(r::CutRegion, p::Vec3)
@@ -164,7 +172,7 @@ function cut_triangle(r::CutRegion, name::Symbol, a, b, c)
     wires = NTuple{2,Vec3}[]
     secs = NTuple{2,Vec3}[]
     A, B, C = Vec3(a...), Vec3(b...), Vec3(c...)
-    if r.kind === :none || !(name in r.components)
+    if r.kind === :none || !_in_cut(r, name)
         push!(tris, (A, B, C))
         push!(wires, (A, B), (B, C), (C, A))
         return tris, wires, secs
