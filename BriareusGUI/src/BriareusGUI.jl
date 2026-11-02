@@ -81,7 +81,7 @@ export PartSpec, PART_KINDS, PART_KIND_LABELS, PART_FIELDS, PART_SIZE_FIELDS, pa
        PART_COORDINATES, PART_POSITION_FIELDS, part_position, set_part_coords!, part_components,
        all_component_names, PART_ROLES, PART_ROLE_LABELS, part_role, set_part_role!,
        foil_names, active_foil, set_active_foil!, foil_components, observed_name, observed_flat, wall_names,
-       observed_components, wall_components,
+       observed_components, wall_components, cavity_walls, observed_cavity,
        export_target_stl, add_stl_parts!, fit_sphere, part_size_unit
 export HOHLRAUM_VALUES, HOHLRAUM_ENDS, HOHLRAUM_PROFILES, hohlraum_profile, edit_hohlraum_break!,
        add_hohlraum_break!, remove_hohlraum_break!,
@@ -111,7 +111,7 @@ export DriveState, DriveResult, DRIVE_FIELDS, DRIVE_FIELD_LABELS, MODE_DEGREES, 
        set_side_view!, set_cavity!, cavity_rows, cavity_summary, cavity_sealed,
        set_view!, flux_lookup, flux_map, power_rows, element_values, drive_summary,
        BEAM_MODELS, BEAM_MODEL_LABELS, set_beam_model!, set_unconverted_ratio!, unconverted_ratios,
-       unconverted_summary
+       unconverted_summary, drive_cavity, set_drive_cavity!
 export TimeState, DriveHistory, TIME_CHARTS, TIME_CHART_LABELS, set_chart!, load_pulses!,
        use_pulse_shape!, start_history!, cancel_history!, history_stale, set_time_cursor!,
        set_time_step!, time_step, cursor_values, cursor_range, time_label, time_chart,

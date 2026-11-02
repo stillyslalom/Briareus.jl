@@ -41,7 +41,11 @@ share when it takes part: `(; omega1, omega2)`, each `(; absorbed, delivered,
 conversion)` (TW, and its x-ray conversion relative to 3ω), and `skipped`, the beams
 without a footprint; see [`set_unconverted_ratio!`](@ref)) and `face` (a flat observed
 face's incident x-ray flux over the whole face, `(; mean, peak, low, rms)` in W/cm² and
-the RMS nonuniformity, or `nothing`). With unconverted light, `evaluation`'s deposition is
+the RMS nonuniformity, or `nothing`) and `cavities` (per cavity of the design,
+[`cavity_walls`](@ref), whose walls the drive's target has: `(; name, flux, Tr)`, the
+area-weighted mean incident x-ray flux on that hohlraum part's own wall pieces in TW/mm²
+and its radiation temperature in eV, core `wall_temperature`; empty without a radiation
+model or a hohlraum part). With unconverted light, `evaluation`'s deposition is
 the absorbed power of the 3ω light plus the 1ω and 2ω `unconverted_deposition`, and the
 x-ray source (`solution`, the capsule flux) counts each unconverted color's power at the
 material's conversion, at that color's own absorbed flux, times the color's `conversion`
@@ -59,6 +63,7 @@ struct DriveResult
     seconds::Float64
     unconverted::Any
     face::Any
+    cavities::Vector{NamedTuple}
 end
 
 """
@@ -84,7 +89,9 @@ capsule tent or an entrance-hole window, which would seal the point into a pocke
 each drive element), and the beam model (see [`set_beam_model!`](@ref)): `beam_model`
 (one of [`BEAM_MODELS`](@ref)) and `profile` (the `VisRadProfile` of `:visrad`), and
 `unconverted_ratio` (the 1ω and 2ω power as fractions of each beam's 3ω power; 0: that
-color off; see [`set_unconverted_ratio!`](@ref)).
+color off; see [`set_unconverted_ratio!`](@ref)), and `wall_cavity` (the hohlraum part whose
+wall temperature the Drive panel shows, chosen with [`set_drive_cavity!`](@ref);
+`nothing`: the default, see [`drive_cavity`](@ref)).
 """
 struct DriveState
     scenario::Observable{Union{Nothing,Scenario}}
@@ -114,6 +121,7 @@ struct DriveState
     generation::Base.RefValue{Int}           # build requests
     eval_generation::Base.RefValue{Int}      # evaluation requests
     unconverted_ratio::Observable{NTuple{2,Float64}}   # 1ω, 2ω power / 3ω power
+    wall_cavity::Observable{Union{Nothing,Symbol}}     # the cavity the Drive panel shows
 end
 
 DriveState() = DriveState(Observable{Union{Nothing,Scenario}}(nothing), Observable(false),
@@ -125,7 +133,8 @@ DriveState() = DriveState(Observable{Union{Nothing,Scenario}}(nothing), Observab
                           Observable(false), Observable(zero(Vec3)), Observable(Set{Symbol}()),
                           Observable(:fcone), Observable(VisRadProfile()),
                           Ref{Any}(nothing), Ref{Any}(nothing),
-                          Ref{Any}(nothing), Ref{Any}(nothing), Ref(0), Ref(0), Observable((0.0, 0.0)))
+                          Ref{Any}(nothing), Ref{Any}(nothing), Ref(0), Ref(0), Observable((0.0, 0.0)),
+                          Observable{Union{Nothing,Symbol}}(nothing))
 
 """
     set_field!(dr::DriveState, field::Symbol)
@@ -659,7 +668,7 @@ end
 # goes through the scenario's linear response with the equivalent 3ω power P₃ + Σ c P_c,
 # which is exact there: that response holds only conversions independent of intensity.
 function _evaluate_drive(s::Scenario, beams, lookup, spot_radius::Real; ratio = nothing,
-                         colors = nif_unconverted(), foil = _lookup_foil(lookup))
+                         colors = nif_unconverted(), foil = _lookup_foil(lookup), cavities = ())
     t0 = time()
     ev = evaluate(s, beams)
     uc = nothing
@@ -693,7 +702,34 @@ function _evaluate_drive(s::Scenario, beams, lookup, spot_radius::Real; ratio = 
         mean = face.mean / to_Wcm2(1.0)                  # back to TW/mm²
     end
     return DriveResult(ev, sol, modes, mean, power_rows(ev), _spot_stats(ev, spot_radius, foil),
-                       _flux_map(lookup, ev, sol), time() - t0, uc, face)
+                       _flux_map(lookup, ev, sol), time() - t0, uc, face, _cavity_rows(s, sol, cavities))
+end
+
+# The cavities of `cavities` (`cavity_walls`: part => wall pieces) whose walls the scenario's
+# target has (a CAD cavity selection may leave some out), as core `drive_history`'s
+# `cavities` takes them.
+function _drive_cavities(s::Scenario, cavities)
+    names = Set(component_names(s.target))
+    out = Pair{Symbol,Vector{Symbol}}[]
+    for (p, ws) in cavities
+        own = Symbol[w for w in ws if w in names]
+        isempty(own) || push!(out, p => own)
+    end
+    return out
+end
+
+# Each cavity's wall flux (TW/mm²) and temperature (eV) in solution `sol`: `(; name, flux,
+# Tr)` rows, none without a solution.
+function _cavity_rows(s::Scenario, sol, cavities)
+    sol === nothing && return NamedTuple[]
+    t = s.target
+    rows = NamedTuple[]
+    for (p, ws) in _drive_cavities(s, cavities)
+        es = elements(t, ws...)
+        flux = sum(sol.H[es] .* t.elem_area[es]) / sum(t.elem_area[es])
+        push!(rows, (; name = p, flux, Tr = wall_temperature(sol, ws...)))
+    end
+    return rows
 end
 
 """
@@ -899,8 +935,10 @@ brightness temperature in eV and intensity toward it in TW/sr per step, `NaN` wh
 gives none, and `note` why), `energy` (series `(; name,
 values)` in kJ, cumulative), `fields` (per [`DRIVE_FIELDS`](@ref) an elements × steps
 matrix in W/cm², on the drive's elements), `range` (each field's finite extremes over
-the history), `history` (the core `drive_history`), `key` (what it was computed for)
-and `seconds`.
+the history), `history` (the core `drive_history`), `key` (what it was computed for),
+`seconds` and `cavities` (per cavity of the design, [`cavity_walls`](@ref), `(; name,
+Tr)`: its own walls' radiation temperature per step in eV, the core history's
+`cavity_Tr`).
 """
 struct DriveHistory
     time::Vector{Float64}
@@ -914,6 +952,7 @@ struct DriveHistory
     history::Any
     key::Any
     seconds::Float64
+    cavities::Vector{NamedTuple}
 end
 
 """

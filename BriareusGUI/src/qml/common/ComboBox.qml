@@ -10,11 +10,13 @@ T.ComboBox {
     bottomPadding: 2
     implicitHeight: Math.max(26, implicitContentHeight + topPadding + bottomPadding)
     FontMetrics { id: metrics; font: box.font }
-    // the widest entry of a list model (an item model: the box's own width)
+    // the widest entry of a list model, a JavaScript array or a list from Julia (an item
+    // model: the box's own width)
     readonly property real widestEntry: {
-        if (!Array.isArray(model)) return 0
+        if (model === null || model === undefined || typeof model.length !== "number") return 0
         let w = 0
-        for (const m of model) {
+        for (let i = 0; i < model.length; i++) {
+            const m = model[i]
             const t = typeof m === "object" && m !== null ? String(m[textRole] ?? "") : String(m)
             w = Math.max(w, metrics.advanceWidth(t))
         }

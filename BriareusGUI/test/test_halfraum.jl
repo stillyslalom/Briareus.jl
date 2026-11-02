@@ -221,3 +221,87 @@ end
     restore!(s3, state)
     @test all(==(:tcc), s3.beams.aim_frame[]) && s3.beams.beams[] == cone && s3.beams.preset[] === :nif_quads
 end
+
+@testset "per-cavity wall temperature (no GL)" begin
+    # the default design, one cavity: its drive and drive history equal those computed
+    # without cavities (the path before them), bit for bit, and the cavity's wall
+    # temperature is the history's wall temperature
+    sess = DesignSession(resolution = :coarse)
+    ts = sess.target
+    @test cavity_walls(ts) == [:hohlraum => [:hohlraum_wall, :hohlraum_cap_top, :hohlraum_cap_bottom]]
+    @test observed_cavity(ts) === :hohlraum
+    build_scenario!(sess)
+    dr = sess.drive
+    s, res = dr.scenario[], dr.result[]
+    old = Controllers._evaluate_drive(s, display_beams(sess.beams), dr.lookup[], dr.spot_radius[];
+                                      ratio = unconverted_ratios(sess), foil = active_foil(ts))
+    @test isempty(old.cavities) && [c.name for c in res.cavities] == [:hohlraum]
+    @test res.modes == old.modes && res.mean_flux == old.mean_flux && res.solution.H == old.solution.H &&
+          res.solution.B == old.solution.B && [x.power for x in res.power] == [x.power for x in old.power] &&
+          res.map.values == old.map.values && res.face === old.face === nothing
+    @test drive_cavity(sess) === :hohlraum
+    use_pulse_shape!(sess; step = 1.0)
+    start_history!(sess)
+    h = sess.time.history[]
+    src, beams, enabled = sess.time.pulses[], sess.beams.beams[], sess.beams.enabled[]
+    h0 = Controllers._history_job(s, beams, enabled, src, h.time; diags = Controllers._recorded_definitions(sess),
+                                  wall = Tuple(wall_names(ts)))
+    @test isempty(h0.cavities) && isempty(h0.history.cavity_Tr)
+    @test all(k -> k === :cavity_Tr || isequal(h.history[k], h0.history[k]), keys(h.history))
+    # (`isequal`: the laser field is NaN on apertures)
+    @test isequal((h.Tr, h.legendre, h.fields, h.range, h.energy), (h0.Tr, h0.legendre, h0.fields, h0.range, h0.energy)) &&
+          isequal([(d.Tr, d.intensity) for d in h.diagnostics], [(d.Tr, d.intensity) for d in h0.diagnostics])
+    @test [c.name for c in h.cavities] == [:hohlraum] && h.cavities[1].Tr == h.history.wall_Tr
+    # one cavity: the drive chart as before (the observed surface's Tr is the headline)
+    @test !any(q -> endswith(q.label, "wall Tr"), time_chart(sess, :drive).left.series)
+
+    # the shock tube, two cavities, half the lower beams off: each halfraum's wall temperature
+    # against Σ H A / Σ A of its own wall pieces' elements (found by component name here)
+    st = DesignSession(starter = :shock_tube, resolution = :coarse)
+    ts = st.target
+    walls = [:halfraum_top => [:halfraum_top_wall, :halfraum_top_cap_top],
+             :halfraum_bottom => [:halfraum_bottom_wall, :halfraum_bottom_cap_bottom]]
+    @test cavity_walls(ts) == walls
+    # the observed package face closes the upper halfraum's open end
+    @test observed_cavity(ts) === :halfraum_top
+    st.beams.enabled[] = [b.port[3] > 0 || isodd(k) for (k, b) in enumerate(st.beams.beams[])]
+    build_scenario!(st)
+    r = st.drive.result[]
+    t = st.drive.scenario[].target
+    function direct(H, ws)
+        es = [e for e in 1:nelements(t) if t.components[t.elem_comp[e]].name in ws]
+        return radiation_temperature(sum(H[e] * t.elem_area[e] for e in es) / sum(t.elem_area[e] for e in es))
+    end
+    @test [c.name for c in r.cavities] == first.(walls)
+    @test all(isapprox(c.Tr, direct(r.solution.H, last(w)); rtol = 1e-12) for (c, w) in zip(r.cavities, walls))
+    @test r.cavities[1].Tr > r.cavities[2].Tr + 1     # the lit halfraum is the hotter
+    @test all(c -> isapprox(c.Tr, radiation_temperature(c.flux); rtol = 1e-12), r.cavities)
+    # the panel's cavity: the observed surface's, until another is chosen
+    @test drive_cavity(st) === :halfraum_top
+    @test set_drive_cavity!(st, :halfraum_bottom) && drive_cavity(st) === :halfraum_bottom
+    @test !set_drive_cavity!(st, :package) && drive_cavity(st) === :halfraum_bottom
+    # the drive history: each halfraum's wall temperature per step, against the core
+    # history's recorded incident flux reduced here
+    use_pulse_shape!(st; step = 1.0)
+    set_diagnostic!(st, "nif_dante1_field")       # the whole target in a 60 mm field
+    start_history!(st)
+    hs = st.time.history[]
+    s = st.drive.scenario[]
+    src, beams, enabled = st.time.pulses[], st.beams.beams[], st.beams.enabled[]
+    observe = Controllers._observed_parts(s)
+    core = drive_history(s.model, s.deposition, τ -> Controllers._pulse_beams(src, beams, enabled, τ), hs.time;
+                         observe, wall = Tuple(wall_names(ts)), lmax = 4, record = sol -> copy(sol.H))
+    @test [c.name for c in hs.cavities] == first.(walls)
+    @test all(isapprox(c.Tr, [direct(H, last(w)) for H in core.record]; rtol = 1e-12)
+              for (c, w) in zip(hs.cavities, walls))
+    # the drive chart: a wall series per cavity
+    ser = Dict(q.label => q for q in time_chart(st, :drive).left.series)
+    @test ser["halfraum_top wall Tr"].y == hs.cavities[1].Tr && ser["halfraum_bottom wall Tr"].y == hs.cavities[2].Tr
+    @test ser["halfraum_top wall Tr"].color != ser["halfraum_bottom wall Tr"].color
+    # Dante 1 over the whole pair: from below it sees the lower halfraum through its hole
+    # (the package is black, every one-sided outside dark), as the view through that hole
+    d = Dict(x.id => x for x in hs.diagnostics)
+    whole, hole = d["nif_dante1_field"], d["nif_dante1"]
+    @test isempty(whole.note) && whole.view.field_of_view == 60.0 && whole.view.through === :halfraum_bottom_leh_bottom
+    @test all(>(0), whole.intensity) && isapprox(whole.intensity, hole.intensity; rtol = 2e-3)   # 3.5e-4
+end

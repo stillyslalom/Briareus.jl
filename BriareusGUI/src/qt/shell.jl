@@ -565,7 +565,7 @@ function BriareusShell(sess::DesignSession; queue::Channel{Any} = Channel{Any}(I
                 dr.scenario, dr.building, dr.result, dr.evaluating, dr.field, dr.view,
                 dr.cavity, dr.cavity_point, dr.films, dr.beam_model, dr.profile,
                 dr.spot_radius, dr.status, dr.retune_running, dr.unconverted_ratio,
-                dr.retune_status,
+                dr.retune_status, dr.wall_cavity,
                 st.by, st.fields, st.deltas, st.objective, st.weights, st.hold_drive, st.keepout,
                 st.keepout_min, st.capsule_keepout, st.capsule_min, st.spill, st.iterations,
                 st.max_evaluations, st.running, st.evaluations, st.iteration, st.status,
@@ -998,6 +998,15 @@ function _refresh_drive!(sh::BriareusShell)
     _set!(sh, "driveMean", res === nothing || isnan(res.mean_flux) ? "" :
                            @sprintf("%.3g W/cm² · Tr %.1f eV", to_Wcm2(res.mean_flux),
                                     radiation_temperature(res.mean_flux)))
+    _set!(sh, "driveFace", res !== nothing && res.face !== nothing)
+    # each cavity's wall temperature, the one shown chosen in the Drive panel
+    cavs = res === nothing ? NamedTuple[] : res.cavities
+    shown = drive_cavity(sess)
+    k = something(findfirst(r -> r.name === shown, cavs), 1)
+    _set!(sh, "cavityNames", String[String(r.name) for r in cavs])
+    _set!(sh, "cavityIndex", k - 1)
+    _set!(sh, "cavityTr", isempty(cavs) ? "" :
+                          @sprintf("%.3g W/cm² · Tr %.1f eV", to_Wcm2(cavs[k].flux), cavs[k].Tr))
     s = res === nothing ? nothing : res.spot
     _set!(sh, "spotText", s === nothing ? "" :
                           @sprintf("in r ≤ %.3g mm: mean %.2e W/cm², peak %.2e W/cm², rms nonuniformity %.1f %%, %.1f %% of the delivered power",
@@ -2134,6 +2143,16 @@ function br_active_foil(index)
         delete!(sh.shown, "activeFoil")
     end
 end
+# The cavity whose wall temperature the Drive panel shows (index into `cavityNames`).
+function br_drive_cavity(index)
+    _with_shell() do sh
+        res = sh.sess.drive.result[]
+        k = Int(index) + 1
+        (res === nothing || !(1 <= k <= length(res.cavities))) && return
+        set_drive_cavity!(sh.sess, res.cavities[k].name)
+        delete!(sh.shown, "cavityIndex")
+    end
+end
 function br_part_coords(index)
     _with_shell() do sh
         for i in _selected_parts(sh)
@@ -2792,7 +2811,7 @@ function _register_qml_functions()
     @qmlfunction br_sw_subject br_sw_frame br_sw_axis br_sw_edit br_sw_check br_sw_object
     @qmlfunction br_sw_quality br_sw_start br_sw_cancel br_sw_select br_sw_apply
     @qmlfunction br_sw_mode br_sw_step br_sw_number br_step_sweep
-    @qmlfunction br_part_role br_active_foil br_export_stl br_cavity br_cavity_point br_part_film
+    @qmlfunction br_part_role br_active_foil br_drive_cavity br_export_stl br_cavity br_cavity_point br_part_film
     @qmlfunction br_remove_selected br_help br_docs_url
     @qmlfunction br_new_assembly br_move_into_assembly br_ungroup_assembly br_rename_node
     @qmlfunction br_add_frame br_add_port_frame br_set_triad br_tf_set br_tf_open br_tf_create br_open_transform

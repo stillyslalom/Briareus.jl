@@ -674,10 +674,11 @@ function _request_evaluation!(sess::DesignSession)
     lookup = _foil_lookup!(dr, s, foil)
     beams = display_beams(sess.beams)
     ratio = unconverted_ratios(sess)
+    cavities = cavity_walls(sess.target)
     g = (dr.eval_generation[] += 1)
     dr.evaluating[] = true
     runner = _runner(sess.spawn, sess.deliver)
-    runner(() -> _evaluate_drive(s, beams, lookup, radius; ratio, foil), function (out)
+    runner(() -> _evaluate_drive(s, beams, lookup, radius; ratio, foil, cavities), function (out)
         g == dr.eval_generation[] || return
         dr.evaluating[] = false
         if out.err === nothing
@@ -688,6 +689,42 @@ function _request_evaluation!(sess::DesignSession)
         end
     end)
     return sess
+end
+
+"""
+    drive_cavity(sess::DesignSession) -> Union{Symbol,Nothing}
+
+The cavity (a hohlraum part, [`cavity_walls`](@ref)) whose wall temperature the Drive
+panel shows: the one chosen with [`set_drive_cavity!`](@ref) while the latest drive has
+it, else the one that holds the observed surface ([`observed_cavity`](@ref)), else the
+first; `nothing` before a drive with a cavity. The choice selects what is shown only:
+the drive and its history compute every cavity's temperature.
+"""
+function drive_cavity(sess::DesignSession)
+    res = sess.drive.result[]
+    (res === nothing || isempty(res.cavities)) && return nothing
+    names = [r.name for r in res.cavities]
+    c = sess.drive.wall_cavity[]
+    c in names && return c
+    o = observed_cavity(sess.target)
+    return o in names ? o : first(names)
+end
+
+"""
+    set_drive_cavity!(sess::DesignSession, name::Symbol) -> Bool
+
+Show the wall temperature of cavity `name` (a hohlraum part in the calculations,
+[`cavity_walls`](@ref)) in the Drive panel ([`drive_cavity`](@ref)). Another name sets
+the drive's status and returns `false`. A display choice: not saved with the session and
+not undone.
+"""
+function set_drive_cavity!(sess::DesignSession, name::Symbol)
+    if !(name in first.(cavity_walls(sess.target)))
+        sess.drive.status[] = "$name is not a hohlraum part in the calculations"
+        return false
+    end
+    _assign!(sess.drive.wall_cavity, name)
+    return true
 end
 
 """

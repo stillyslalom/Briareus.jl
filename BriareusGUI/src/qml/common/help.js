@@ -198,6 +198,13 @@ var pages = [
           text: "Beams whose 1ω or 2ω dot is on in the calculations row (model tree, beam " +
                 "properties) add that light's absorbed power to the drive, converted to x-rays as the " +
                 "3ω light is. Only NIF beams and quads have footprints." },
+        { key: "drive.walls", title: "Hohlraum wall",
+          text: "The radiation temperature of the area-weighted mean x-ray flux incident on one " +
+                "hohlraum part's own wall and caps (its entrance holes and windows excluded). A " +
+                "target with several cavities (a halfraum pair) has one per hohlraum part: the " +
+                "panel opens on the one that holds the observed surface, and the drive history " +
+                "charts each one. Parts given the wall role outside a hohlraum part (a shield) " +
+                "are not a cavity of their own." },
         { key: "drive.modes", title: "Capsule modes",
           text: "εₗ: rotation-invariant amplitude over all m (= |Pₗ/P₀| when axisymmetric)." },
         { key: "drive.retune", title: "Retune to a reference drive",

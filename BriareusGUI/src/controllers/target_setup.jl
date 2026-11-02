@@ -2500,6 +2500,48 @@ _hohlraum_walls(p) = (ps = hohlraum_pieces(p);
                       [piece_name(p.name, s) for s in [_wall_pieces(p); :cap_top; :cap_bottom] if s in ps])
 
 """
+    cavity_walls(ts::TargetSetup) -> Vector{Pair{Symbol,Vector{Symbol}}}
+
+The cavities of the design for the drive's per-cavity wall temperature: one per
+hohlraum part in the calculations, in the parts' order, `part => its wall pieces` (its
+wall, each section of it, and the caps it has; [`wall_names`](@ref) lists them all
+together). Parts that hold the wall role without being a hohlraum part (a shield, a
+VisRad hohlraum) count in the drive history's wall temperature, not as a cavity of
+their own. A cavity's walls are named piece by piece: every piece of a hohlraum part,
+its entrance holes included, carries the part's name as `Component.part`.
+"""
+cavity_walls(ts::TargetSetup) =
+    Pair{Symbol,Vector{Symbol}}[p.name => _hohlraum_walls(p) for p in ts.parts[]
+                                if p.kind === :hohlraum && !(p.name in ts.excluded[])]
+
+"""
+    observed_cavity(ts::TargetSetup) -> Union{Symbol,Nothing}
+
+The hohlraum part ([`cavity_walls`](@ref)) that holds the observed surface
+([`observed_name`](@ref)): the first whose closed volume (its profile about its axis, ends
+included, to 10⁻⁶ of its length) contains the observed part's area-weighted centroid in
+the built target. A capsule at a hohlraum's center is in it; a shock-tube package's face
+closing a halfraum's open end lies in that end's plane, so it is in that halfraum.
+`nothing` without an observed surface or when no cavity holds it.
+"""
+function observed_cavity(ts::TargetSetup)
+    o = observed_name(ts)
+    t = ts.target[]
+    (o === nothing || t === nothing || !any(c -> c.part === o, t.components)) && return nothing
+    c = Briareus.part_centroid(t, o)
+    frames = part_frames(ts)
+    for p in ts.parts[]
+        (p.kind === :hohlraum && !(p.name in ts.excluded[]) && haskey(frames, p.name)) || continue
+        q = to_frame(frames[p.name], c)
+        L = _hohlraum_length(p)
+        tol = 1e-6 * L
+        abs(q[3]) <= L / 2 + tol && hypot(q[1], q[2]) <= _wall_radius_at(p, clamp(q[3], -L / 2, L / 2)) + tol &&
+            return p.name
+    end
+    return nothing
+end
+
+"""
     foil_names(ts::TargetSetup) -> Vector{Symbol}
 
 The backlighter foils of the design in the calculations: each part with the role

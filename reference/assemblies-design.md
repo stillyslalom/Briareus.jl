@@ -123,9 +123,10 @@ C. Landed (halfraum ends and packages: per-end entrance holes and open ends in c
 D. Landed (profiles: frustraums and multi-section hohlraums, core `hohlraum(; profile)`
    and the GUI hohlraum part's *Profile*, the frustraum starter; no session version
    change): see "Phase D as built".
-C2. **Per-cavity drive and whole-assembly Dante** (decisions 8, 10, 11): Tr per hohlraum
-   part, a cavity selector in Drive; `DanteView` with a collimator FOV and a reference
-   area; Dante FOVs sourced first.
+C2. Landed (per-cavity wall Tr in core `drive_history(; cavities)` and `wall_temperature`,
+   the Drive panel's cavity selector and the history's per-cavity series; the whole-target
+   Dante definition `nif_dante1_field`; no session version change): see "Phase C2 as
+   built".
 E. **Double backlighter with ARC:** the starter, ARC beams as a facility beam set (public
    description only; mock-up timing), per-foil results if one active foil is not enough.
 
@@ -330,6 +331,54 @@ E. **Double backlighter with ARC:** the starter, ARC beams as a facility beam se
   (`DEFAULT_CUT_COMPONENTS`, the starter's `hohlraum_wall` and caps) do not name section
   walls, so a frustraum is not cut away by default; a frustraum pointing preset; the
   tentless membranes (not geometry here); GUI screenshots not regenerated.
+
+## Phase C2 as built (2026-11-02): what departs from the design
+
+- Core: `wall_temperature(sol, names...)`, the radiation temperature of the area-weighted
+  mean incident flux on the named components; `drive_history(; cavities)` takes pairs
+  `name => wall names` and returns `cavity_Tr`, one series per cavity (empty by
+  default). A cavity's walls are named piece by piece, never by `Component.part`: a
+  hohlraum part's entrance holes carry the part's name too (the trap of d5e6606).
+- A cavity is a hohlraum part (decision taken): `cavity_walls(ts)` gives each included
+  hohlraum part with its wall pieces (each section) and caps. A part holding the wall
+  role without being a hohlraum part (a shield, a VisRad hohlraum) still counts in the
+  history's combined `wall_Tr`, not as a cavity of its own.
+- The Drive panel's result row stacks *Hohlraum wall* under the observed surface's drive:
+  the chosen cavity's mean incident flux and Tr, a choice box with two or more cavities
+  (tooltip; Help ▸ Hohlraum wall). The default (`drive_cavity`) is the cavity holding
+  the observed surface (`observed_cavity`: the observed part's centroid inside the
+  hohlraum part's profile, ends included, in the part's frame; a package face closing a
+  halfraum's open end lies in it), else the first. The choice is a display choice in
+  `DriveState.wall_cavity` (decision taken): not saved with the session and not undone;
+  the drive and the history compute every cavity.
+- The drive chart adds a dotted wall-Tr series per cavity when there are two or more
+  (colored as each cavity's wall); with one cavity it is unchanged, the observed surface
+  the headline (decision 8). `DriveResult.cavities` and `DriveHistory.cavities` hold the
+  rows. The panel's heading reads *Observed face* without the empty mode table for a flat
+  observed face, and the common choice box sizes its list for lists from Julia.
+- Dante: `DanteView`'s collimated field of view, its center and the reference area
+  already existed (diagnostics phase 2, 2026-10-29), as did the sourced field: ±30 mm at
+  TCC, the 2004 design (Dewald et al. 2004, research notes "Dante-family hardware and
+  geometry", H); the fielded collimators are not public. New: the built-in
+  `nif_dante1_field` (Dante 1's channels and line of sight over a 60 mm field at TCC,
+  Tr over the lower entrance hole). `nif_dante1` stays the view through the hole
+  (decision taken: the default session's Dante history unchanged), and the field view
+  is a tick in Time ▸ Diagnostics.
+- Bit for bit: the default design's drive (modes, mean flux, H, B, powers, map) and drive
+  history (every core field, the GUI's Tr, modes, fields, ranges, energy, diagnostics)
+  equal those computed without cavities, the path before this phase (test); its one
+  cavity's wall Tr equals the history's `wall_Tr` exactly. Core: a history without
+  `cavities` equals one with them in every other field.
+- Validation (`test/cavities.jl`; GUI `test_halfraum.jl`): each cavity's Tr against Σ H A
+  / Σ A over its wall elements found by component name in the test, per step of the
+  core history's recorded flux, to 1e-12 (two hohlraums side by side driven unequally;
+  the shock-tube starter with half its lower beams off). Dante: a field of 8 mm about
+  one hohlraum receives exactly nothing from a blackbody in the other; the field reads
+  the view through that hohlraum's hole to 1.2e-4, a 60 mm field both holes' sum to
+  1.4e-4; on the shock tube `nif_dante1_field` reads `nif_dante1` to 3.5e-4.
+- Not built: a cavity holding a piece's role (decision 7); per-cavity albedo or energy
+  series; a Dante field centered on a part from the GUI (a definition's `center_part`
+  serves).
 
 ## Decisions (user, 2026-10-29)
 

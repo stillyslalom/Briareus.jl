@@ -234,7 +234,9 @@ function start_history!(sess::DesignSession)
     cancel = tm.cancel
     runner = _runner(sess.spawn, sess.deliver)
     wall = Tuple(wall_names(sess.target))
-    runner(() -> _history_job(s, beams, enabled, src, times; diags, progress, cancel, key, wall, light),
+    cavities = cavity_walls(sess.target)
+    runner(() -> _history_job(s, beams, enabled, src, times; diags, progress, cancel, key, wall, light,
+                              cavities),
            function (out)
         g == tm.generation[] || return
         tm.running[] = false
@@ -264,10 +266,11 @@ cancel_history!(sess::DesignSession) = (sess.time.running[] && (sess.time.cancel
 # The drive history of `beams` on the pulses `src` at `times` on scenario `s` (worker).
 # `wall`: the wall-role holders (`wall_names`); those in the scenario's target give the
 # history's wall temperature, else the observed surface does. `light`: the unconverted
-# light's keywords of `drive_history` (`_light_kw`; empty: none).
+# light's keywords of `drive_history` (`_light_kw`; empty: none). `cavities`: the hohlraum
+# parts' walls (`cavity_walls`), each cavity's wall temperature per step.
 function _history_job(s::Scenario, beams, enabled, src, times; diags = NamedTuple[],
                         progress = k -> nothing, cancel = Threads.Atomic{Bool}(false), key = nothing,
-                        wall = (), light = (;))
+                        wall = (), light = (;), cavities = ())
     t0 = time()
     t = s.target
     names = component_names(t)
@@ -292,8 +295,9 @@ function _history_job(s::Scenario, beams, enabled, src, times; diags = NamedTupl
         # a flat observed face: its statistics over the face, as the drive's (`_face_stats`)
         return flat ? merge(rec, (; face = _face_stats(s, sol))) : rec
     end
+    cavs = _drive_cavities(s, cavities)
     h = drive_history(s.model, s.deposition, τ -> _pulse_beams(src, beams, enabled, τ), times;
-                      observe, wall, lmax = 4, record, light...)
+                      observe, wall, lmax = 4, record, cavities = cavs, light...)
     fields = Dict{Symbol,Matrix{Float32}}(f => reduce(hcat, [r[f] for r in h.record]) for f in DRIVE_FIELDS)
     ranges = Dict{Symbol,Tuple{Float64,Float64}}()
     for (f, M) in fields
@@ -315,8 +319,9 @@ function _history_job(s::Scenario, beams, enabled, src, times; diags = NamedTupl
         face, Tr = nothing, h.Tr
         legendre = h.moments[2:5, :] ./ h.moments[1:1, :]
     end
+    walls = NamedTuple[(; name = first(c), Tr = h.cavity_Tr[first(c)]) for c in cavs]
     return DriveHistory(h.time, Tr, legendre, face, recorded, _energy_series(h, t, observe),
-                        fields, ranges, h, key, time() - t0)
+                        fields, ranges, h, key, time() - t0, walls)
 end
 
 # Where the laser energy has gone by each time of a history (kJ, `energy_budget` up to
@@ -705,6 +710,18 @@ function time_chart(sess::DesignSession, chart::Symbol = sess.time.chart[])
                                                       "Run the drive history on these pulses")
         f = h.face
         left = [_series(f === nothing ? "Capsule Tr" : "Face Tr", h.time, h.Tr, _INK)]
+        # with several cavities, each one's wall temperature (colored as its wall); one
+        # cavity's wall is in the drive's summary, its observed surface the headline
+        if length(h.cavities) > 1
+            cc = component_colors(sess.drive.scenario[] === nothing ? sess.target.target[] :
+                                  sess.drive.scenario[].target)
+            walls = Dict(cavity_walls(sess.target))
+            for (k, c) in enumerate(h.cavities)
+                w = get(walls, c.name, Symbol[])
+                color = isempty(w) ? palette_color(k) : get(cc, first(w), palette_color(k))
+                push!(left, _series(String(c.name) * " wall Tr", h.time, c.Tr, color; style = :dot))
+            end
+        end
         for (j, d) in enumerate(h.diagnostics)
             any(isfinite, d.Tr) && push!(left, _series(d.name, h.time, d.Tr, _diagnostic_color(j); style = :dash))
         end
