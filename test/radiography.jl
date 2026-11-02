@@ -84,9 +84,10 @@ end
         rn = radiograph(rg, tn, depn; object = [:outer => (:Al, 2.699), :inner => (:Al, -2.699)])
         @test all(isapprox.(rn.transmission, exp.(-κAl * 0.1 ./ cosα); rtol = 1e-7))
         # the open field of a Lambertian foil, R = E_x/(πA) through the pinhole: by hand
+        # with cos⁴α off the axis (a flat detector normal to the line of sight)
         Ex = 0.01 * 1e3 * 1.0 * 10.0
-        hand = Ex / (π * 16.0) * π * (dpin / 2)^2 / (L - p)^2 * Tf * η / hνJ
-        @test all(isapprox.(r.open[10:55, 10:55], hand; rtol = 1e-12))
+        hand = Ex / (π * 16.0) * π * (dpin / 2)^2 / (L - p)^2 * Tf * η / hνJ .* cosα .^ 4
+        @test all(isapprox.(r.open[10:55, 10:55], hand[10:55, 10:55]; rtol = 1e-12))
         @test r.images[1] ≈ r.open .* r.transmission rtol = 1e-12
         @test r.ce == 0.01 && r.sigma == 0 && r.line == 10.279
     end
@@ -120,15 +121,15 @@ end
         r = radiograph(rg, t, dep; object = [:edge => :Al])
         @test r.magnification ≈ (s + Ld) / s rtol = 1e-14
         # by hand: each foil element a point source (isotropic, E_e/4π sr⁻¹) toward the
-        # detector point on the line from the foil's center through the pixel's point,
-        # attenuated by the box's chord
+        # detector point on the line from the foil's center through the pixel's point, at
+        # the ray's incidence on the flat detector (normal +z), attenuated by the box's chord
         fe = elements(t, :backlighter)
         Ee = 0.01 * 1e3 .* dep.element[fe]
         fc = Vec3(0, 0, -s)
         expect = map(Iterators.product(1:41, 1:41)) do (i, j)
             q = pixel_point(rg, i, j)
             Pd = fc + (q - fc) * ((Ld + s) / (q - fc)[3])
-            sum(Ee[k] / (4π * sum(abs2, Pd - t.elem_centroid[e])) *
+            sum(Ee[k] / (4π * sum(abs2, Pd - t.elem_centroid[e])) * normalize(Pd - t.elem_centroid[e])[3] *
                 exp(-κAl * clip_length(t.elem_centroid[e], Pd, Vec3(0.1, -3, -0.01), Vec3(3, 3, 0.01)))
                 for (k, e) in enumerate(fe)) / hνJ
         end
@@ -144,13 +145,69 @@ end
         @test !isempty(part) && all(abs.(xs[part] .- 0.1) .< w / 2 * Ld / (s + Ld) + 1e-3)   # + the box's side
     end
 
+    @testset "off the axis: the flat detector's obliquity against direct integration" begin
+        # pixels at α = 0.25 rad from the line of sight (the last column, 5 pixels), the
+        # detector flat and normal to it; a wide uniform foil, so every ray sees it
+        α, p5 = 0.25, 100.0
+        W = p5 * tan(α) / 0.4
+        t, dep = backlit_scene(; w = 100.0, n = 4)
+        A = 100.0^2
+        Ex = 0.01 * 1e3 * 1.0 * 10.0
+        # pinhole: the fluence is R ∫ cosθ_d cosθ_p / D² dA over the pinhole disk (normal
+        # +z) from the detector point, by Gauss–Legendre in radius and uniform azimuths
+        rg = Radiograph(0, 0; line = :Ge, distance = L, pinhole = dpin, pinhole_distance = p5, width = W,
+                        pixels = 5, ce = 0.01, pulse = 1.0, angular = :lambertian, up = Vec3(0, 1, 0))
+        q = pixel_point(rg, 3, 5)
+        @test isapprox(acos(normalize(Vec3(0, 0, p5) - q)[3]), α; rtol = 1e-12)
+        Pp = Vec3(0, 0, p5)
+        Pd = Pp + (Pp - q) * ((L - p5) / p5)
+        x, wx = Briareus._gauss_legendre(16)
+        a = dpin / 2
+        G = sum(wx[i] * a / 2 * (ρ = a * (x[i] + 1) / 2; ρ) * 2π / 64 *
+                (r = Pd - (Pp + Vec3(ρ * cos(φ), ρ * sin(φ), 0.0)); r[3]^2 / sum(abs2, r)^2)
+                for i in eachindex(x), φ in 2π .* (0:63) ./ 64)
+        ref = Ex / (π * A) * G / hνJ
+        rp = radiograph(rg, t, dep)
+        @test isapprox(rp.open[3, 5], ref; rtol = 1e-9) && isapprox(rp.open[3, 3] * cos(α)^4, ref; rtol = 1e-9)
+        # point projection: each element's fluence per detector area, E_e/4π times the
+        # solid angle of a small detector square about the detector point over its area
+        # (two triangles, Van Oosterom–Strackee, the triple product from the edges)
+        function Ωtri(R1, R2, R3)
+            r1, r2, r3 = norm(R1), norm(R2), norm(R3)
+            2atan(abs(dot(R1, cross(R2 - R1, R3 - R1))),
+                  r1 * r2 * r3 + dot(R1, R2) * r3 + dot(R1, R3) * r2 + dot(R2, R3) * r1)
+        end
+        s5, Lp = 10.0, 200.0
+        rj = Radiograph(0, 0; line = :Ge, distance = Lp, width = s5 * tan(α) / 0.4,
+                        pixels = 5, ce = 0.01, pulse = 1.0, up = Vec3(0, 1, 0))
+        tj, dj = backlit_scene(; w = 1.0, n = 2, D = s5)
+        fe = elements(tj, :backlighter)
+        Ee = 0.01 * 1e3 .* dj.element[fe]
+        fc = Vec3(0, 0, -s5)
+        qj = pixel_point(rj, 3, 5)
+        Pdj = fc + (qj - fc) * ((Lp + s5) / (qj - fc)[3])
+        h = 1e-3
+        c1, c2, c3, c4 = (Pdj + Vec3(u, v, 0.0) for (u, v) in ((-h, -h), (h, -h), (h, h), (-h, h)))
+        refj = sum(Ee[k] / 4π * (Ωtri(c1 - tj.elem_centroid[e], c2 - tj.elem_centroid[e], c3 - tj.elem_centroid[e]) +
+                                 Ωtri(c1 - tj.elem_centroid[e], c3 - tj.elem_centroid[e], c4 - tj.elem_centroid[e])) /
+                   (2h)^2 for (k, e) in enumerate(fe)) / hνJ
+        @test isapprox(acos(normalize(Pdj - fc)[3]), α; rtol = 1e-12)
+        @test isapprox(radiograph(rj, tj, dj).open[3, 5], refj; rtol = 1e-8)
+    end
+
     @testset "the CE chain: the open field at TCC is backlighter_signal's" begin
         t, dep = backlit_scene(; w = 1.0, n = 4)
         rg = Radiograph(0, 0; line = :Ge, distance = 500.0, width = 0.5, pixels = 5, pulse = 2.0, prepulse = true)
         r = radiograph(rg, t, dep)
         s = backlighter_signal(t, dep, (0.0, 0.0); line = :Ge, pulse = 2.0, prepulse = true, distance = 500.0,
                                object = nothing)
-        @test r.open[3, 3] ≈ s.photons rtol = 1e-12
+        # backlighter_signal's fluence is normal to each ray; the radiograph's, per area of
+        # the flat detector, is times each element's incidence cosine (isotropic, uniform
+        # foil: weights 1/r² per element)
+        Pd = Vec3(0, 0, 500.0)
+        rs = [Pd - t.elem_centroid[e] for e in elements(t, :backlighter)]
+        inc = sum(r -> r[3] / norm(r)^3, rs) / sum(r -> 1 / norm(r)^2, rs)
+        @test 1 - 1e-6 < inc < 1 && isapprox(r.open[3, 3], s.photons * inc; rtol = 1e-12)
         @test r.ce ≈ s.ce rtol = 1e-14
         @test r.sigma == s.sigma && r.extrapolated == s.extrapolated
     end

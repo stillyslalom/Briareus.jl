@@ -516,8 +516,10 @@ end
 
 # The fluence (J/mm² of He-α) at the point `Pd` from each foil element `fe[i]` (energy
 # `Ee[i]`) as a point source at its centroid, unobstructed by hardware; each path
-# weighted by `transmit(origin, r)` (the segment from the element to `Pd`), if given
-function _point_fluence(t::Target, fe, Ee, angular, Pd::Vec3, skip, ε, transmit = nothing)
+# weighted by `transmit(origin, r)` (the segment from the element to `Pd`), if given. The
+# fluence is per area normal to each ray, or, with `normal`, per area of a flat detector
+# of that unit normal (each ray's incidence cosine `r̂ · normal`).
+function _point_fluence(t::Target, fe, Ee, angular, Pd::Vec3, skip, ε, transmit = nothing, normal = nothing)
     fl = 0.0
     for (i, e) in enumerate(fe)
         Ee[i] > 0 || continue
@@ -527,6 +529,7 @@ function _point_fluence(t::Target, fe, Ee, angular, Pd::Vec3, skip, ε, transmit
         o = t.elem_centroid[e] + ε * t.elem_normal[e]
         any_hit(t.bvh, o, r, 1.0, skip) && continue
         f = Ee[i] * _angular(angular, μ) / (4π * dot(r, r))
+        normal === nothing || (f *= dot(r, normal) / norm(r))
         fl += transmit === nothing ? f : f * transmit(o, r)
     end
     return fl

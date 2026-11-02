@@ -34,6 +34,21 @@ The optic:
   of a detector point is the object-plane crossing of its line to the foil's centroid,
   and `M = (s + L)/s`. Only the detector pixel blurs further.
 
+The detector is flat, normal to the line of sight, and images are per mm² of it. For a
+pinhole (taken as a thin disk normal to the line of sight, of area `A = π(d/2)²`), an
+image point at `ρ` from `center` sees the foil along a ray at the angle `α` to the line
+of sight, `tan α = ρ/p`, of radiance `R`. The étendue between the pinhole and a
+detector area `dA_d` at the ray's end is `A cos α · dA_d cos α / D²`, with `D = (L −
+p)/cos α` the pinhole–detector distance along the ray, so the fluence is
+`R A cos⁴α/(L − p)²`: the on-axis value times `cos⁴α` (the projected pinhole area,
+the inverse square of the longer distance, and the detector's incidence cosine). In
+point projection each foil element's fluence `E_e f(cos θ)/(4π r²)`, at its own
+distance `r` from the detector point, is times the ray's incidence cosine on the
+detector, `r̂ · d̂`. On the axis the pinhole's factor is 1 exactly; in point projection
+the incidence cosines differ from 1 by the source's angular extent,
+`(w/2)²/(2(s + L)²)` at most for a foil of width `w`. (Fluence normal to each ray, as
+[`backlighter_signal`](@ref) gives it, has none of these factors.)
+
 The spectral response at the line is the product of the filters' transmission
 (`filter_transmission` materials with thicknesses in mm, NIST's tables where they cover
 the material and energy, as [`backlighter_signal`](@ref)), measured `tables`
@@ -274,13 +289,17 @@ function _radiograph_pixels(rg::Radiograph, t::Target, src, bvhs, κ, skip, c::V
                 # the detector point on the line from the foil's centroid through q
                 Pd = fc + (q - fc) * (dot(c + rg.distance * d - fc, d) / dot(q - fc, d))
                 tr = (o, r) -> _object_transmission(bvhs, κ, o, r, buf)
-                opn[i, j] = _point_fluence(t, fe, Ee, angular, Pd, skip, ε)
-                raw[i, j] = _point_fluence(t, fe, Ee, angular, Pd, skip, ε, tr)
+                opn[i, j] = _point_fluence(t, fe, Ee, angular, Pd, skip, ε, nothing, d)
+                raw[i, j] = _point_fluence(t, fe, Ee, angular, Pd, skip, ε, tr, d)
             else
-                Pp = c + rg.pinhole_distance * d
+                p = rg.pinhole_distance
+                Pp = c + p * d
                 R, X = _foil_radiance(t, ftris, idx, Ee, angular, Pp, q - Pp, skip, ε)
                 R > 0 || continue
-                f = R * π * (rg.pinhole / 2)^2 / (rg.distance - rg.pinhole_distance)^2
+                # cos⁴α of the ray's angle α to the line of sight, tan α = |q − c|/p (1
+                # exactly on the axis)
+                c4 = 1 / (1 + (x^2 + y^2) / p^2)^2
+                f = R * π * (rg.pinhole / 2)^2 * c4 / (rg.distance - p)^2
                 opn[i, j] = f
                 raw[i, j] = f * _object_transmission(bvhs, κ, X, Pp - X, buf)
             end
