@@ -389,8 +389,15 @@ and Ye21 0.72-power proxies. Tests: closed-form absorption for linear (cos⁵) a
 exponential (cos³) profiles, turning radius n_e = n_c cos²ψ, energy conservation, a
 direct 3-D ray integration in the same profile. Benchmarks: MN17 (thin-corona limit),
 Ye21's m ≠ 0 part once a comparable profile is available. *Done (2026-10-27)*: the
-operator, profiles and tests (closed forms, energy, thin limit, 3-D ray trace); not yet
-the absorbed power per radius, the P_abl/Ye21 proxies or a snapshot example.
+operator, profiles and tests (closed forms, energy, thin limit, 3-D ray trace).
+*Done (2026-11-02)*: the absorbed power per steradian and radius (`CoronaOperator`'s
+`shells`; per-shell closed forms for the radial ray of the exponential profile and for
+oblique rays in n_e ∝ r⁻²), and the Ba24 P_abl and Ye21 proxies
+(`ablation_pressure_proxy`, `shell_displacement_proxy`; decision 4) as functions of
+`deposit`'s output, checked against hand computations (research notes, "Corona
+deposition per radius and drive proxies"). Not yet: a snapshot example (CompactLES) and
+the Ye21 m ≠ 0 benchmark, which needs a comparable profile; the corona is not in
+`Scenario`/`evaluate` (objectives call `deposit` directly, as the Stage-0 metrics do).
 
 **Stage 2 — time dependence.** A sequence of corona snapshots (from the user's 1-D runs,
 e.g. CompactLES, or tabulated), per-cone pulse shapes and time-varying power balance,

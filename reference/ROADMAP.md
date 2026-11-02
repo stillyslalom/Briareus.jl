@@ -161,9 +161,13 @@ Items 7–12 follow the 2026-10-22 literature review against Kritcher et al. 202
     Shestakov 1998 and then Kritcher 2024 Table III; stage 2, multigroup with the M-band.
 16. **Polar direct drive** (`reference/litreview/polar_direct_drive.md`). *State:* stage 0
     (hard-sphere illumination, `mode_rms`, spherical pointing, the LMJ fixture), the corona
-    operator (stage 1), the Ba24 σ₁ comparison and optimization. *Remains:* stage 1's
-    absorbed power per radius, the P_abl/Ye21 proxies, `Scenario`/`evaluate` integration,
-    the CompactLES snapshot example; OMEGA fixtures; open decisions 13–15 in the review.
+    operator (stage 1) with its absorbed power per steradian and radius (`shells`) and the
+    Ba24 P_abl and Ye21 proxies (`ablation_pressure_proxy`, `shell_displacement_proxy`),
+    the Ba24 σ₁ comparison and optimization. *Remains:* the CompactLES snapshot example;
+    the Ye21 m ≠ 0 benchmark (needs a comparable profile); OMEGA fixtures; open decisions
+    13–15 in the review. The corona has no `Scenario` field: an objective for
+    `optimize_pointing` captures the `CoronaOperator` and calls `deposit(op, ev.beams)`, at
+    the cost of the scenario's own (unused) surface deposition per evaluation.
 
 17. **Photometric forward modeling of x-ray sources.** From a source's spectrum and
     history (a backlighter's He-α chain, the hohlraum's re-emission, `spectral.jl`)

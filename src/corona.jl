@@ -332,7 +332,7 @@ absorbed power per shell (a radial deposition profile), which sum to the totals.
 shell edge is then also a panel boundary of every ray, so every panel lies in one shell
 and the partition is exact; the totals then come from these refined panels (on an OMEGA
 case the absorbed power equals the operator's without shells to round-off and the
-harmonics differ by 2e-7 of the mean, the panels' angular placement). A shell's
+harmonics by 1e-7 to 1e-6 of the mean, the panels' angular placement). A shell's
 harmonics cost as much as the totals' in each evaluation, so the evaluation time grows
 in proportion to the number of shells.
 [`ablation_pressure_proxy`](@ref) sums the shells with a density weight.
@@ -737,9 +737,10 @@ profile, and ``r_c`` the profile's critical radius (outermost ``n_e = n_c``). Ba
 the sum over their hydrodynamic cells, ``Σ_r r^2 n_r^{2/3} I_r / (R_{351}^2 n_{351}^{2/3})``
 with ``r^2 I_r`` the cell's absorbed power per steradian, so with a snapshot's cell edges
 as `shells` this is their sum; finer shells converge to the radial integral, with an
-error of second order in the shell width (on an OMEGA case, shells of a quarter of the
-density scale length put σ₂ within 0.5 % of its converged value; research notes). ``n_c`` is the critical density of the
-profile's wavelength, Ba24's ``n_{351}`` at 351 nm. `exponent` replaces the outer 2/3
+error of second order in the shell width (on an OMEGA case, shells of an eighth of the
+density scale length L out to 4L past the critical radius put σ₂ within 0.1 % of its
+converged value, a quarter of L within 1 %; research notes). ``n_c`` is the critical
+density of the profile's wavelength, Ba24's ``n_{351}`` at 351 nm. `exponent` replaces the outer 2/3
 and `density_exponent` the density weight's 2/3.
 
 The angular mean, Ba24's ``\\bar P_{abl}``, is `c[1] / √(4π)` and their ``σ_2`` is

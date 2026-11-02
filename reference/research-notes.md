@@ -8855,7 +8855,93 @@ one thread, compilation included.
 above); bare spheres only (no other parts, which would need their own shadowing);
 CBET-free. **Not done**: absorbed power per radius; the P_abl and Ye21 drive proxies
 (decision 4's optional transforms); the CompactLES snapshot example; `Scenario` /
-`evaluate` integration (objectives call `deposit` directly); a tutorial.
+`evaluate` integration (objectives call `deposit` directly); a tutorial. (The first two
+done 2026-11-02, next section.)
+
+## Corona deposition per radius and drive proxies (2026-11-02) *measured*
+
+Polar direct drive, the rest of Stage 1 (review §5; decision 4): `CoronaOperator(...;
+shells)`, `deposit(op, beams).shell_ylm` / `.radial`, `ablation_pressure_proxy`,
+`shell_displacement_proxy` (`src/corona.jl`, tests in `test/corona.jl`).
+
+**Deposition per radius.** `shells` (edges covering the profile) become panel boundaries
+of every ray (the t-grid of r = r_t + (R − r_t)t² takes t = √((e − r_t)/(R − r_t)) for
+each edge inside the ray), so each panel lies in one shell and its deposit and mid angle
+are as before; per shell the operator keeps a zonal kernel set and the absorbed fraction
+per impact-parameter class, and `deposit` contracts and rotates each shell as it does
+the totals. Without `shells` the operator and `deposit` are bit for bit the previous
+code (kernels, `ylm`, `per_beam`, Float64 and duals; checked against the previous
+`corona.jl` loaded beside the new one). With shells the totals come from the refined
+panels: absorbed power equal to round-off, harmonics within 0.7–12 × 10⁻⁷ of c₀₀ for
+14–448 shells on the OMEGA case below (the angular placement at panel mid angles).
+Checks (references independent of the operator):
+- radial ray of the truncated exponential corona: one-pass depth outside r,
+  τ(r) = (ν_c L/c)[H(x(r)) − H(x(R))], x = n_e/n_c, H(x) = −2√(1−x) + (2/3)(1−x)^{3/2};
+  shell s absorbs e^{−τ(b)} − e^{−τ(a)} + e^{−(2T−τ(a))} − e^{−(2T−τ(b))} (T = τ(r_c)):
+  agreement 1e-14–6e-14 at N = 50–400 panels for shells from L/4 to 10L wide (*derived*);
+- oblique rays in n_e/n_c = a/r² (a = 0.04, rate 2 n_e², R = 2, b = 0–1.5): one-pass
+  depth inside ρ, νa²[√(ρ² − r_t²)/(2r_t²ρ²) + arcsec(ρ/r_t)/(2r_t³)]: 3.9e-14;
+- partition: Σ radial = Σ per_beam, Σ_s shell_ylm = ylm (4e-16), √(4π) shell_ylm[1, s] =
+  radial[s] (1e-15).
+
+**Ba24 ablation-pressure proxy.** Barlow et al., PRL 133, 175101 (2024), appendix "on
+approximating ablation pressure", Eqs. (2a)–(2b) of the accepted manuscript (OSTI
+2475934); Eqs. (1a)–(1b) in arXiv:2311.18342v2; read from page images, both versions,
+same formulas (**H**): P_abl = 24.7 Mbar (F/10¹⁴ W cm⁻²)^{2/3}, F = Σ_r r² n_r^{2/3} I_r /
+(R₃₅₁² n₃₅₁^{2/3}), with I_r the intensity absorbed in a cell of radial extent Δr and solid
+angle ΔΩ such that the power is Σ ΔΩ r² I_r (the manuscript's added definition), R₃₅₁ and
+n₃₅₁ the 351-nm critical radius and density. The 2/3 power follows Manheimer, Colombant &
+Gardner, Phys. Fluids 25, 1644 (1982) (their Ref. 33); the n^{2/3} weight is empirical,
+"chosen to match pressure and asymmetries" of several of their 3-D runs (**H** that it
+is what they did; *L* as physics elsewhere). Fitness (their Eq. 1, arXiv Eq. 2) uses σ₂,
+the rms of P_abl over l ≤ 30, and P̄_abl. Implementation: F(Ω) = r_c⁻² Σ_s
+(n_s/n_c)^{2/3} dP_s/dΩ in TW/mm² (= 10¹⁴ W/cm²), n_s at the middle of the shell's part
+inside the profile, r_c the outermost n_e = n_c of the profile (n_c of the profile's
+wavelength), the 2/3 power applied on a Gauss–Legendre product grid (2L + 2 × 4L + 4,
+exact for results to degree 3L + 3) and projected to l ≤ lmax. Both exponents are
+keywords (decision 4). Check: an axisymmetric l ≤ 1 deposition in three shells against a
+1-D Legendre projection of 24.7 F^{2/3} with hand weights: 4e-15 (*derived*).
+
+**Ye21 shell-displacement proxy.** Yeamans et al., Nucl. Fusion 61, 046031 (2021)
+(LLNL-JRNL-814327, OSTI 1772693), Eq. (3), read from the page image (**H**):
+d(θ, φ) = d̄(θ) · 0.72 E(θ, φ)/Ē(θ) as typeset, with the text: shell velocity scales as
+the 0.72 power of laser energy (their Ref. 47, Tucker, LLE report 2011, from implosion
+simulations), close to an experimental 0.71 they cite; Ē(θ) is the φ-average of the
+deposited energy per steradian, d̄(θ) the 2-D run's mean distance moved. The typeset
+form is ambiguous (the factor sits beside E/Ē, not as an exponent); the function uses
+the power d̄ (E/Ē)^{0.72} the text describes (*M* for the reading). The linear reading
+d̄ (1 + 0.72(E/Ē − 1)) agrees to first order and makes their "ΔV_m reduced by a factor of
+0.72 from the ΔE_m" exact; on the OMEGA case below the power gives ΔV_{m≠0}/ΔE_{m≠0} =
+1.06495/1.47559 = 0.7217. Their reported ΔV = 2.22 % (m = 0: 1.23 % from their 2-D
+hydro, m ≠ 0: 1.85 %) is not reproduced here (no comparable profile; the review's
+benchmark). Check: E = A Y₀₀ + B Y₁₀ + C Y₁₁ with d̄(θ) = 1 + 0.05 cos 2θ against
+hand-written harmonics on a 100 × 200 grid: 1.4e-14 (*derived*).
+
+**OMEGA 40-beam PDD case** (the corona-operator case: r_c = 0.40, L = 0.08 mm, η⊥ =
+1 − e^{−2.4}, Mn14 ring shifts 0.09/0.15/0.15 mm, ncone = 7; an engineering corona, not a
+snapshot): absorbed 0.645914, σ₁ (absorbed, l ≤ 30) 10.410 %; P̄_abl and σ₂ against the
+shells:
+
+| shells | P̄_abl (Mbar) | σ₂ (%) | `deposit` (8 threads) |
+|---|---|---|---|
+| none | — | — | 0.039 s |
+| 14 uniform (1.0 L) | 100.70 | 5.046 | 0.31 s |
+| 56 uniform (0.27 L) | 104.67 | 4.012 | 0.84 s |
+| 224 uniform | 104.61 | 3.996 | 3.1 s |
+| 448 uniform | 104.60 | 3.994 | 6.4 s |
+| 30: L/4 to r_c + 4L, then L | 104.56 | 4.025 | 0.42 s |
+| 60: L/8 to r_c + 4L, then L/2 | 104.60 | 3.993 | 0.86 s |
+
+So shells of L/8 near the critical radius give σ₂ within 0.1 % and P̄ within 0.01 %, L/4
+within 1 %; the cost is about 14 ms per shell here (each shell's contraction and
+rotation), the proxy 2 ms. σ₂ is 0.38 of σ₁ (the 2/3 power and the density weight).
+Absolute P̄_abl depends on the corona (an engineering snapshot), not a prediction.
+
+**Use in an optimization.** No `Scenario` field: an objective for `optimize_pointing`
+captures the operator, `ev -> mode_rms(ablation_pressure_proxy(op, deposit(op,
+ev.beams)), 30)^2`, on a scenario over a bare sphere (whose surface deposition is then
+computed and unused). Checked: 40 beams, `:theta_s` per ring, 30 shells, three L-BFGS-B
+iterations take σ₂² 1.68e-3 → 3.49e-4 (15 s with compilation). Not adopted as a test.
 
 ## GUI on CAD: import, parts and first frames, remeasured (2026-10-26) *measured*
 
