@@ -104,7 +104,9 @@ function session_state(sess::DesignSession; view::Bool = true)
                                                          "unconverted_ratio" => collect(dr.unconverted_ratio[])),
                              "optimize" => optimize, "review" => review, "talis" => talis,
                              "sweep" => _sweep_state(sess.sweep),
-                             "time" => Dict{String,Any}("diagnostics" => copy(sess.time.diagnostics[])))
+                             "time" => Dict{String,Any}("diagnostics" => copy(sess.time.diagnostics[]),
+                                                        "prepulse" => collect(sess.time.prepulse[]),
+                                                        "threshold" => sess.time.threshold[]))
     if view
         v = sess.view
         state["view"] = Dict{String,Any}("color" => String(v.color[]), "beams" => String(v.beams[]),
@@ -281,8 +283,13 @@ function restore!(sess::DesignSession, state::AbstractDict)
         end
         _restore_sweep!(sess.sweep, sw)
     end
-    ids = String[String(x) for x in get(get(state, "time", Dict()), "diagnostics", DEFAULT_DIAGNOSTICS)]
+    tms = get(state, "time", Dict())
+    ids = String[String(x) for x in get(tms, "diagnostics", DEFAULT_DIAGNOSTICS)]
     ids == sess.time.diagnostics[] || (sess.time.diagnostics[] = ids)
+    # (sessions saved before the prepulse and the irradiance threshold: their defaults)
+    p1, p2, a, b = Float64.(get(tms, "prepulse", collect(DEFAULT_PREPULSE)))
+    set_prepulse!(sess.time, p1, p2; start = a, stop = b)
+    set_irradiance_threshold!(sess.time, Float64(get(tms, "threshold", DEFAULT_THRESHOLD)))
     if haskey(state, "view")
         v, vs = state["view"], sess.view
         _assign!(vs.color, Symbol(v["color"]))

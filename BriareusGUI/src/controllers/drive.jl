@@ -789,13 +789,31 @@ end
 """
 Charts of the time panel: `:pulses` (laser power per beam group), `:drive` (capsule
 Tᵣ, the recorded diagnostics' Tᵣ and a_l/a_0), `:diagnostics` (each recorded
-diagnostic's Tᵣ and intensity), `:energy` (where the laser energy has gone by each time)
-and `:retune` (the latest retune's reference and retuned powers and its mode 1).
+diagnostic's Tᵣ and intensity), `:energy` (where the laser energy has gone by each time),
+`:irradiance` (the peak irradiance of the unconverted light on each part against the
+plasma threshold, see [`start_irradiance!`](@ref)) and `:retune` (the latest retune's
+reference and retuned powers and its mode 1).
 """
-const TIME_CHARTS = (:pulses, :drive, :diagnostics, :energy, :retune)
+const TIME_CHARTS = (:pulses, :drive, :diagnostics, :energy, :irradiance, :retune)
 
 const TIME_CHART_LABELS = Dict(:pulses => "Pulses", :drive => "Drive history", :diagnostics => "Diagnostics",
-                               :energy => "Energy", :retune => "Retune")
+                               :energy => "Energy", :irradiance => "Irradiance", :retune => "Retune")
+
+"""
+The prepulse of a new session: off (no 1ω or 2ω power), on from -5 to 0 ns once given a
+power. The window is an *engineering default*: the NIF User Guide (§4.4) puts the 1ω
+prepulse above 10⁸ W/cm² 3–5 ns before the nominal start of the pulse, with no level
+given (research notes, "Unconverted light over time").
+"""
+const DEFAULT_PREPULSE = (0.0, 0.0, -5.0, 0.0)
+
+"""
+The irradiance threshold of the checks in a new session, 10⁸ W/cm²: an *engineering
+default* (confidence low), the NIF User Guide's general guideline for the onset of
+weakly ionized plasma on a metal surface (§4.4), as in Briareus's `specular_check` and
+`preplasma_check`. Research notes, "Unconverted light over time".
+"""
+const DEFAULT_THRESHOLD = 1e8
 
 """
     DriveHistory
@@ -840,8 +858,13 @@ time shown in the 3D view, ns; `NaN`: the drive at the table's powers), `diagnos
 [`set_diagnostic!`](@ref)), `catalog` (the definitions on the search path and those
 saved with the session, see [`refresh_diagnostics!`](@ref)), `embedded` (the
 definitions read from a saved session, by id: the ones used for those ids), `issues`
-(the search path's problems, `check_diagnostics`), and the history job's `running`,
-`progress` (steps done, steps), `started` and `status`.
+(the search path's problems, `check_diagnostics`), the history job's `running`,
+`progress` (steps done, steps), `started` and `status`, the unconverted light's
+`prepulse` (1ω and 2ω power per beam in TW, on from a start to a stop time in ns, see
+[`set_prepulse!`](@ref)), the irradiance checks' `threshold` (W/cm², see
+[`set_irradiance_threshold!`](@ref)), and the latest irradiance histories and checks,
+`irradiance` (see [`start_irradiance!`](@ref); `nothing` before them), with their job's
+`checking`.
 """
 struct TimeState
     pulses::Observable{Any}
@@ -860,6 +883,12 @@ struct TimeState
     generation::Base.RefValue{Int}
     cancel::Threads.Atomic{Bool}
     queued::Base.RefValue{Bool}               # run once the drive is computed
+    prepulse::Observable{NTuple{4,Float64}}   # 1ω, 2ω (TW per beam), start, stop (ns)
+    threshold::Observable{Float64}            # W/cm²
+    irradiance::Observable{Any}
+    checking::Observable{Bool}
+    check_generation::Base.RefValue{Int}
+    check_queued::Base.RefValue{Bool}         # run the checks once the drive is computed
 end
 
 TimeState() = TimeState(Observable{Any}(nothing), Observable{Any}(nothing), Observable{Any}(nothing),
@@ -867,7 +896,9 @@ TimeState() = TimeState(Observable{Any}(nothing), Observable{Any}(nothing), Obse
                         Observable(NamedTuple[]), Observable(Dict{String,Any}()),
                         Observable(DiagnosticIssue[]), Observable(false),
                         Observable((0, 0)), Observable(0.0), Observable(""), Ref(0),
-                        Threads.Atomic{Bool}(false), Ref(false))
+                        Threads.Atomic{Bool}(false), Ref(false), Observable(DEFAULT_PREPULSE),
+                        Observable(DEFAULT_THRESHOLD), Observable{Any}(nothing), Observable(false), Ref(0),
+                        Ref(false))
 
 """
     set_chart!(tm::TimeState, chart::Symbol) -> tm

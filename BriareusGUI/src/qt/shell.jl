@@ -582,7 +582,7 @@ function BriareusShell(sess::DesignSession; queue::Channel{Any} = Channel{Any}(I
                 v.cut_azimuth, v.cut_width,
                 v.expanded, v.triads, tm.pulses, tm.history, tm.retune, tm.chart, tm.cursor, tm.diagnostics,
                 tm.catalog, tm.issues, tm.running,
-                tm.progress, tm.status)
+                tm.progress, tm.status, tm.prepulse, tm.threshold, tm.irradiance, tm.checking)
         on(mark, obs)
     end
     _refresh!(sh)
@@ -963,6 +963,12 @@ function _refresh_drive!(sh::BriareusShell)
     _set!(sh, "ucRatio1", r1 > 0 ? _num(r1) : "")
     _set!(sh, "ucRatio2", r2 > 0 ? _num(r2) : "")
     _set!(sh, "ucLive", [r1 > 0, r2 > 0])
+    p1, p2, a, b = sess.time.prepulse[]
+    _set!(sh, "ppOmega1", p1 > 0 ? _num(p1) : "")
+    _set!(sh, "ppOmega2", p2 > 0 ? _num(p2) : "")
+    _set!(sh, "ppStart", _num(a))
+    _set!(sh, "ppStop", _num(b))
+    _set!(sh, "irrThreshold", _num(sess.time.threshold[]))
     _set!(sh, "unconvertedText", res === nothing ? "" : unconverted_summary(res))
     _set!(sh, "driveSummary", res === nothing ? "" : drive_summary(res))
     _set!(sh, "driveMean", res === nothing || isnan(res.mean_flux) ? "" :
@@ -1020,6 +1026,12 @@ function _refresh_time!(sh::BriareusShell)
     _set!(sh, "timeFraction", n > 0 ? k / n : 0.0)
     _set!(sh, "timeStatus", tm.status[])
     _set!(sh, "timeHasPulses", tm.pulses[] !== nothing)
+    _set!(sh, "timeChecking", tm.checking[])
+    checks = irradiance_checks(sess)
+    _set!(sh, "irrTexts", String[c.text for c in checks])
+    _set!(sh, "irrPass", Bool[c.pass for c in checks])
+    _set!(sh, "irrTips", String[c.tip for c in checks])
+    _set!(sh, "irrStale", irradiance_stale(sess))
     _set!(sh, "timeHasHistory", h !== nothing)
     _set!(sh, "timeStale", history_stale(sess))
     _set!(sh, "timeSteps", h === nothing ? 0 : length(h.time))
@@ -2439,6 +2451,23 @@ function br_unconverted_ratio(h, text)
         set_unconverted_ratio!(dr, r...)
     end
 end
+# The prepulse's 1ω (`h` = 1) or 2ω (2) power per beam (TW; empty: off), or its start (3)
+# or stop (4) time (ns), as text.
+function br_prepulse(h, text)
+    _with_shell() do sh
+        tm = sh.sess.time
+        k = round(Int, h)
+        s = strip(string(text))
+        p = collect(tm.prepulse[])
+        p[k] = k <= 2 && isempty(s) ? 0.0 :
+               Controllers._parse_number(String(s), k <= 2 ? "the prepulse power" : "the prepulse time";
+                                         nonnegative = k <= 2)
+        set_prepulse!(tm, p[1], p[2]; start = p[3], stop = p[4])
+    end
+end
+br_irr_threshold(text) = _with_shell(sh -> set_irradiance_threshold!(sh.sess.time,
+                                                                     Controllers._parse_number(string(text), "the threshold";
+                                                                                               positive = true)))
 br_set_spot_radius(text) = _with_shell(sh -> (sh.sess.drive.spot_radius[] =
                                                   Controllers._parse_number(string(text), "the spot radius"; positive = true)))
 function br_import_visrad_workspace(url)
@@ -2470,6 +2499,7 @@ br_time_chart(key) = _with_shell(sh -> set_chart!(sh.sess.time, _sym(key)))
 br_time_pulses(url) = _with_shell(sh -> load_pulses!(sh.sess, _url_to_path(String(url))))
 br_time_shape() = _with_shell(sh -> use_pulse_shape!(sh.sess))
 br_time_run() = _with_shell(sh -> start_history!(sh.sess))
+br_time_checks() = _with_shell(sh -> start_irradiance!(sh.sess))
 br_time_cancel() = _with_shell(sh -> cancel_history!(sh.sess))
 br_time_step(k) = _with_shell(sh -> set_time_step!(sh.sess, round(Int, k)))
 br_time_now() = _with_shell(sh -> set_time_cursor!(sh.sess, NaN))
@@ -2730,6 +2760,7 @@ function _register_qml_functions()
     @qmlfunction br_export_summary br_build br_set_view br_side_view br_xray_image br_close_image br_set_spot_radius br_unconverted_ratio br_beam_model br_export_results
     @qmlfunction br_import_visrad_workspace br_export_visrad_workspace br_retune
     @qmlfunction br_time_chart br_time_pulses br_time_shape br_time_run br_time_cancel br_time_step
+    @qmlfunction br_time_checks br_prepulse br_irr_threshold
     @qmlfunction br_time_now br_time_diagnostic br_diag_use_path br_diag_reload br_diag_add_folder
     @qmlfunction br_diag_remove_folder br_diag_image
     @qmlfunction br_opt_set_by br_opt_free br_opt_edit br_opt_objective br_opt_hold

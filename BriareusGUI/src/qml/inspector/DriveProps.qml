@@ -119,6 +119,30 @@ ColumnLayout {
         label: "2ω power ratio"; value: app.ucRatio2; unit: "of each beam's 3ω power (empty: off)"
         onEdited: (text) => Julia.br_unconverted_ratio(2, text)
     }
+    PropRow {
+        label: "1ω prepulse"; value: app.ppOmega1; unit: "TW per beam (empty: off)"
+        tip: "Light not proportional to the 3ω pulse, flat over the prepulse window, on the beams whose 1ω light takes part; the drive history, the retune and the irradiance checks add it (the drive at the table's powers does not). No default level (derived scale: 4.8e-4 TW of 1ω on one beamlet puts its 22 mm footprint at 10⁸ W/cm²)"
+        onEdited: (text) => Julia.br_prepulse(1, text)
+    }
+    PropRow {
+        label: "2ω prepulse"; value: app.ppOmega2; unit: "TW per beam (empty: off)"
+        tip: "As the 1ω prepulse, on the beams whose 2ω light takes part"
+        onEdited: (text) => Julia.br_prepulse(2, text)
+    }
+    PropRow {
+        label: "Prepulse from"; value: app.ppStart; unit: "ns"
+        tip: "The NIF User Guide (§4.4) puts the 1ω prepulse above 10⁸ W/cm² 3–5 ns before the nominal start of the pulse; -5 to 0 ns is an engineering default"
+        onEdited: (text) => Julia.br_prepulse(3, text)
+    }
+    PropRow {
+        label: "Prepulse to"; value: app.ppStop; unit: "ns"
+        onEdited: (text) => Julia.br_prepulse(4, text)
+    }
+    PropRow {
+        label: "Plasma threshold"; value: app.irrThreshold; unit: "W/cm² (irradiance checks)"
+        tip: "The irradiance the Time tab's checks compare with: the NIF User Guide's guideline for the onset of weakly ionized plasma on a metal (10⁸ W/cm², §4.4), taken as the end of specular reflection; an engineering default for metals only"
+        onEdited: (text) => Julia.br_irr_threshold(text)
+    }
     Label { text: app.unconvertedText; visible: app.unconvertedText !== ""; wrapMode: Text.WordWrap; Layout.fillWidth: true }
     Label { text: app.driveSummary; visible: app.driveHasResult; wrapMode: Text.WordWrap; Layout.fillWidth: true; font.weight: Font.DemiBold }
 }

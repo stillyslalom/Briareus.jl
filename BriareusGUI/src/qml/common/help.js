@@ -193,6 +193,18 @@ var pages = [
                 "retuned, at each time of the table, to give the capsule the reference's drive " +
                 "level and its modes through l = 4 (Compute ▸ Retune to a reference drive)." }
     ] },
+    { key: "time", title: "Time", items: [
+        { key: "time.irradiance", title: "Irradiance checks",
+          text: "Run checks computes the irradiance of the unconverted 1ω and 2ω light on each part " +
+                "of the drive's target through the pulses: the drive's power ratios on the beams " +
+                "whose 1ω or 2ω light takes part, plus the prepulse (Drive properties). The chart " +
+                "shows each part's peak against the plasma threshold, 10⁸ W/cm² by default: the NIF " +
+                "User Guide's guideline for the onset of weakly ionized plasma on a metal (§4.4), " +
+                "taken as the end of specular reflection. It is an engineering default for metals, " +
+                "not a facility criterion. Specular passes while every part stays below it; " +
+                "pre-plasma, on a target with a foil, fails when the unconverted light reaches it on " +
+                "the active foil before the 3ω light does. A dot is gray when the checks are out of date." }
+    ] },
     { key: "optimize", title: "Pointing optimization", items: [
         { key: "optimize.intro", title: "What is optimized",
           text: "Free pointing fields per cone, quad or beam within ± bounds around the beam " +

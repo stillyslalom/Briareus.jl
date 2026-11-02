@@ -12,6 +12,24 @@ function _wide_hohlraum_session()
     return s
 end
 
+# Equal to 1e-12 relative: numbers, arrays, or Dicts of them with the same keys.
+_near(a, b) = a isa AbstractDict ? keys(a) == keys(b) && all(isapprox(a[k], b[k]; rtol = 1e-12) for k in keys(a)) :
+              isapprox(a, b; rtol = 1e-12)
+
+# The core's drive history of a session's latest pulses on its scenario, with the GUI
+# history's observed parts, wall and times, and the keywords `kw`.
+function _core_history(sess, times; kw...)
+    s = sess.drive.scenario[]
+    src, beams, enabled = sess.time.pulses[], sess.beams.beams[], sess.beams.enabled[]
+    observe = Controllers._observed_parts(s)
+    names = component_names(s.target)
+    walls = Tuple(n for n in wall_names(sess.target) if n in names)
+    return drive_history(s.model, s.deposition, τ -> Controllers._pulse_beams(src, beams, enabled, τ), times;
+                         observe, wall = isempty(walls) ? observe : walls, lmax = 4, kw...)
+end
+
+_history_fields(h) = (h.Tr, h.flux, h.moments, h.wall_Tr, h.setup, h.delivered, h.laser, h.source, h.absorbed)
+
 @testset "time panel: drive histories with unconverted light (no GL)" begin
     sess = _wide_hohlraum_session()
     tm, bt, dr = sess.time, sess.beams, sess.drive
@@ -156,4 +174,181 @@ end
     @test isapprox(pred.shape, v.after.ylm ./ c00'; atol = 1e-3)
     @test maximum(mode_amplitude(v.after.ylm[:, k], 1) for k in eachindex(v.after.time)) <
           maximum(mode_amplitude(v.before.ylm[:, k], 1) for k in eachindex(v.before.time)) / 10
+
+    # with a 1ω prepulse over the reference's first firing time (1 ns): the reference and
+    # the retuned drive take it, as the core's histories with one prepulse for every beam
+    r0 = r
+    P = 2e-3
+    set_prepulse!(s.time, P, 0.0; start = 0.0, stop = 2.0)
+    retune_to_reference!(s, table, out; cap = 1.5)
+    r = s.time.retune[]
+    pre = (omega1 = PulseShape([0.0, 2.0], [P, P]),)
+    after = drive_history(sc.model, sc.deposition[keep], τ -> with_pulses(kept, r.pulses, τ; by = :quad), r.after.time;
+                          observe, wall, lmax = 4, ylm = true, uc..., prepulse = pre)
+    @test isapprox(after.Tr, r.after.Tr; rtol = 1e-12) && isapprox(after.moments, r.after.moments; rtol = 1e-12)
+    @test all(_near(after.unconverted.delivered[c], r.after.unconverted.delivered[c]) for c in (:omega1, :omega2))
+    ref = drive_history(sc.model, sc.deposition, τ -> with_pulses(beams, r.reference_pulses, τ; by = r.reference_by),
+                        r.reference.time;
+                        observe, wall, lmax = 4, ylm = true, uc..., prepulse = pre)
+    @test _near(ref.Tr, r.reference.Tr) && _near(ref.unconverted.delivered[:omega1], r.reference.unconverted.delivered[:omega1])
+    # (more 1ω light inside the window than without the prepulse, the same after it)
+    d0, d1 = r0.reference.unconverted.delivered[:omega1], r.reference.unconverted.delivered[:omega1]
+    inside = r.reference.time .<= 2.0
+    @test r.reference.time == r0.reference.time && any(inside) && all(d1[inside] .> d0[inside]) &&
+          _near(d1[.!inside], d0[.!inside])
+    # a prepulse on some beams of a retuned key only cannot be keyed by it
+    @test any(b -> b.group === beams[1].group, beams[2:end])
+    pp =(omega1 = [i == 1 ? P : 0.0 for i in all_beams], omega2 = zeros(length(beams)), window = (0.0, 2.0))
+    @test_throws ArgumentError Controllers._prepulse_schedules(pp, beams, :group)
+    @test Controllers._prepulse_schedules(pp, beams, :beam)[:omega1][Symbol(beams[1].name)](1.0) == P
+end
+
+@testset "time panel: a prepulse and the irradiance checks (no GL)" begin
+    sess = _wide_hohlraum_session()
+    tm, bt, dr = sess.time, sess.beams, sess.drive
+    use_pulse_shape!(sess; step = 1.0)
+    beams = bt.beams[]
+    all_beams = collect(eachindex(beams))
+    set_unconverted_ratio!(dr, 0.05, 0.02)
+    set_participation!(bt, all_beams, 1, true)
+    set_participation!(bt, all_beams, 2, true)
+    start_history!(sess)
+    h1 = tm.history[]
+    @test tm.prepulse[] == DEFAULT_PREPULSE && tm.threshold[] == DEFAULT_THRESHOLD == 1e8
+
+    # a 1ω prepulse makes the history stale; zero power, whatever the window, does not
+    set_prepulse!(tm, 0.0, 0.0; start = -4.0, stop = 2.5)
+    @test !history_stale(sess)
+    P = 2e-3
+    set_prepulse!(tm, P, 0.0)
+    @test tm.prepulse[] == (P, 0.0, -4.0, 2.5) && history_stale(sess)
+    @test_throws ArgumentError set_prepulse!(tm, P, 0.0; start = 3.0, stop = 2.0)
+    @test_throws ArgumentError set_prepulse!(tm, -1.0, 0.0)
+    start_history!(sess)
+    h2 = tm.history[]
+    @test !history_stale(sess) && h2.time == h1.time
+
+    # the drive history: the core's with the same ratios and one prepulse for every beam
+    pre = PulseShape([-4.0, 2.5], [P, P])
+    uc = (; unconverted = (omega1 = 0.05, omega2 = 0.02), colors = nif_unconverted())
+    ref = _core_history(sess, h1.time; uc..., prepulse = (omega1 = pre,))
+    @test all(_near.(_history_fields(h2.history), _history_fields(ref)))
+    @test all(_near(h2.history.unconverted.delivered[c], ref.unconverted.delivered[c]) for c in (:omega1, :omega2))
+    # (more 1ω light inside the window than without the prepulse, the same after it)
+    d1, d2 = h1.history.unconverted.delivered[:omega1], ref.unconverted.delivered[:omega1]
+    inside = h1.time .<= 2.5
+    @test any(inside) && all(d2[inside] .> d1[inside]) && _near(d2[.!inside], d1[.!inside])
+
+    # the irradiance histories and checks
+    thr = DEFAULT_THRESHOLD
+    start_irradiance!(sess)
+    r = tm.irradiance[]
+    @test r !== nothing && !irradiance_stale(sess) && tm.chart[] === :irradiance && r.foil === nothing
+    src = tm.pulses[]
+    ts = r.history.time
+    # sampled at the pulses' times and knots, and on both sides of each end
+    edges = (prevfloat(-4.0), -4.0, 2.5, nextfloat(2.5), prevfloat(src.shape.t[1]), nextfloat(src.shape.t[end]))
+    @test issorted(ts) && allunique(ts) && all(in(ts), src.times) && all(in(ts), src.nodes) && all(in(ts), edges)
+    # the core's history at those times: every beam on one pulse (the same table power)
+    s = dr.scenario[]
+    Pt = beams[1].power
+    @test all(b -> b.power == Pt, beams)
+    pulse = τ -> Pt * src.shape(τ)
+    hc = unconverted_history(s.target, beams, pulse, ts; ratio = uc.unconverted, prepulse = (omega1 = pre,))
+    @test all(_near(r.history.element[c], hc.element[c]) && _near(r.history.backside[c], hc.backside[c])
+              for c in (:omega1, :omega2))
+    sc = specular_check(hc; threshold = thr)
+    @test [x.part for x in r.specular] == [x.part for x in sc] && [x.specular for x in r.specular] == [x.specular for x in sc]
+    @test _near([x.peak for x in r.specular], [x.peak for x in sc]) &&
+          all(isapprox.([x.crossing for x in r.specular], [x.crossing for x in sc]; rtol = 1e-12))
+    # 2 GW of 1ω per beam is above the threshold on the hohlraum: the first crossing at the
+    # prepulse's start
+    c = threshold_crossing(hc, thr)
+    @test r.crossing.part === c.part === :hohlraum && isapprox(r.crossing.time, c.time; rtol = 1e-12) &&
+          isapprox(c.time, -4.0; atol = 1e-12)
+    rows = irradiance_checks(sess)
+    @test length(rows) == 1 && rows[1].check === :specular && !rows[1].pass && occursin("-4.00 ns", rows[1].text)
+    # a threshold above every peak: the checks follow from the histories kept
+    set_irradiance_threshold!(tm, 2 * maximum(x.peak for x in sc))
+    @test tm.irradiance[].history === r.history && all(x -> x.specular, tm.irradiance[].specular) &&
+          irradiance_checks(sess)[1].pass && isinf(tm.irradiance[].crossing.time)
+    @test_throws ArgumentError set_irradiance_threshold!(tm, 0.0)
+    set_irradiance_threshold!(tm, thr)
+
+    # the chart: the threshold, and the hohlraum's peak at each time (the largest 1ω + 2ω
+    # irradiance on its elements and back sides, from the core's history), floored for the log axis
+    ch = time_chart(sess, :irradiance)
+    @test ch.scale === :log && isempty(ch.empty)
+    line = only(filter(x -> startswith(x.label, "threshold"), ch.left.series))
+    @test line.y == [thr, thr] && line.style === :dash
+    t = s.target
+    E = hc.element[:omega1] .+ hc.element[:omega2]
+    B = hc.backside[:omega1] .+ hc.backside[:omega2]
+    on_part(ci) = t.components[ci].part === :hohlraum && t.components[ci].kind === :surface
+    els = [e for e in 1:nelements(t) if on_part(t.elem_comp[e])]
+    backs = [ci for ci in eachindex(t.components) if on_part(ci) && !t.components[ci].two_sided]
+    peak = vec(maximum(vcat(E[els, :], B[backs, :]); dims = 1))
+    hs = only(filter(x -> x.label == "hohlraum", ch.left.series))
+    @test hs.x == ts && _near(hs.y, max.(peak, 1e-4 * thr)) && maximum(peak) > thr
+
+    # a prepulse edit makes the checks stale; back to it, current again
+    set_prepulse!(tm, P, 0.0; stop = 3.0)
+    @test irradiance_stale(sess) && occursin("out of date", time_chart(sess, :irradiance).title)
+    set_prepulse!(tm, P, 0.0; stop = 2.5)
+    @test !irradiance_stale(sess)
+end
+
+@testset "time panel: the pre-plasma check on a foil, sessions (no GL)" begin
+    f = DesignSession(starter = :foil, resolution = :coarse, preset = :nif_quads)
+    tm = f.time
+    use_pulse_shape!(f; step = 1.0)
+    beams = f.beams.beams[]
+    set_unconverted_ratio!(f.drive, 0.05, 0.0)
+    set_participation!(f.beams, collect(eachindex(beams)), 1, true)
+    P = 2e-3
+    set_prepulse!(tm, P, 0.0; start = -4.0, stop = 0.5)
+    start_irradiance!(f)
+    r = tm.irradiance[]
+    @test r.foil === active_foil(f.target) === :foil
+    # the core's histories at the same times: the unconverted light, and the 3ω light on
+    # the drive's deposition operator
+    s = f.drive.scenario[]
+    ts = r.history.time
+    shape = tm.pulses[].shape
+    Pt = beams[1].power
+    @test all(b -> b.power == Pt, beams)
+    pulse = τ -> Pt * shape(τ)
+    hc = unconverted_history(s.target, beams, pulse, ts; ratio = (omega1 = 0.05, omega2 = 0.0),
+                             prepulse = (omega1 = PulseShape([-4.0, 0.5], [P, P]),))
+    ac = irradiance_history(s.deposition, beams, pulse, ts)
+    pc = preplasma_check(hc, ac; foil = :foil)
+    p = r.preplasma
+    @test p.preplasma == pc.preplasma && isapprox(p.onset, pc.onset; rtol = 1e-12) &&
+          isapprox(p.arrival, pc.arrival; rtol = 1e-12)
+    # the prepulse reaches the threshold on the foil at its start; the 3ω light, zero
+    # before the shape's first knot, not before it
+    @test pc.preplasma && isapprox(pc.onset, -4.0; atol = 1e-12) && pc.arrival >= prevfloat(shape.t[1]) &&
+          pc.lead ≈ pc.arrival - pc.onset
+    rows = irradiance_checks(f)
+    @test [x.check for x in rows] == [:specular, :preplasma] && !rows[2].pass && occursin("foil", rows[2].text)
+    # the chart's 3ω line: the foil's peak 3ω irradiance at each time (the core's)
+    t = s.target
+    els = [e for e in 1:nelements(t) if t.components[t.elem_comp[e]].part === :foil]
+    peak3 = vec(maximum(ac.element[:omega3][els, :]; dims = 1))
+    line = only(filter(x -> x.label == "3ω on foil", time_chart(f, :irradiance).left.series))
+    @test line.style === :dot && _near(line.y, max.(peak3, 1e-4 * tm.threshold[]))
+
+    # sessions keep the prepulse and the threshold; older ones load the defaults
+    set_irradiance_threshold!(tm, 3e8)
+    st = session_state(f)
+    @test st["time"]["prepulse"] == [P, 0.0, -4.0, 0.5] && st["time"]["threshold"] == 3e8
+    set_prepulse!(tm, 0.0, 0.0; start = -5.0, stop = 0.0)
+    set_irradiance_threshold!(tm, 1e9)
+    restore!(f, st)
+    @test tm.prepulse[] == (P, 0.0, -4.0, 0.5) && tm.threshold[] == 3e8
+    old = deepcopy(st)
+    delete!(old["time"], "prepulse")
+    delete!(old["time"], "threshold")
+    restore!(f, old)
+    @test tm.prepulse[] == DEFAULT_PREPULSE && tm.threshold[] == DEFAULT_THRESHOLD
 end

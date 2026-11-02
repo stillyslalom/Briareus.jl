@@ -118,8 +118,11 @@ Items 7–12 follow the 2026-10-22 literature review against Kritcher et al. 202
     neglected there. `unconverted_history` and `irradiance_history` (3ω) give irradiance
     histories from the pulses, a fraction in time and an optional prepulse, at one
     deposition per schedule; `specular_check` and `preplasma_check` apply the User
-    Guide's 10⁸ W/cm² (research notes, "Unconverted light over time"). *Remains:*
-    - the GUI: the histories and both checks in the Time view;
+    Guide's 10⁸ W/cm² (research notes, "Unconverted light over time"). The GUI's Time
+    tab runs both (*Irradiance*: `unconverted_history` of the drive's ratios and prepulse
+    on the drive's target, each part's peak against the threshold on a log axis with the
+    3ω arrival on the active foil from `irradiance_history`; a pass or fail line per check
+    with the first crossing); the threshold is a Drive property. *Remains:*
     - pointing or geometry that changes in time (a deposition per configuration);
     - a fluence-based damage criterion beside the irradiance threshold.
 
@@ -144,8 +147,10 @@ Items 7–12 follow the 2026-10-22 literature review against Kritcher et al. 202
     Drive panel's 1ω and 2ω ratios as `unconverted` (NIF's colors) on the beams whose
     light takes part (a fraction per beam where a color is on some beams only); the
     history goes stale when the ratios or the participation change, and the energy chart
-    shows each color's delivered energy. *Remains:*
-    - the GUI: a prepulse input;
+    shows each color's delivered energy. The Drive properties take a prepulse (a 1ω and a
+    2ω power per beam, flat over a window; -5 to 0 ns by default, an engineering default)
+    on the same beams, which the drive histories, the retune and the irradiance checks
+    add; it is saved with the session and makes the history stale. *Remains:*
     - in `drive_history`, pointing that changes in time; the M-band of unconverted light
       (the M-band stays the 3ω light's);
     - data on the conversion of overlapping colors (each color at its own flux is an

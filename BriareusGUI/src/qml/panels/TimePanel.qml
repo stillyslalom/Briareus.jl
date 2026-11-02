@@ -37,7 +37,7 @@ Item {
             Repeater {
                 model: [{ key: "pulses", label: "Pulses" }, { key: "drive", label: "Drive history" },
                         { key: "diagnostics", label: "Diagnostics" }, { key: "energy", label: "Energy" },
-                        { key: "retune", label: "Retune" }]
+                        { key: "irradiance", label: "Irradiance" }, { key: "retune", label: "Retune" }]
                 delegate: Button {
                     text: modelData.label
                     // as wide as the name (not the style's minimum), so that the row fits
@@ -62,8 +62,16 @@ Item {
                 ToolTip.text: "N221204's delivered pulse shape (Pak et al. 2024), each beam reaching its table power at the peak"
             }
             Button {
+                text: app.timeChecking ? "Checking…" : "Run checks"
+                visible: app.timeChart === "irradiance"
+                enabled: app.timeHasPulses && !app.driveBuilding && !app.timeChecking
+                onClicked: Julia.br_time_checks()
+                ToolTip.visible: hovered
+                ToolTip.text: "Irradiance histories of the unconverted 1ω and 2ω light (unconverted_history) and the specular and pre-plasma checks against the plasma threshold (Drive properties)"
+            }
+            Button {
                 text: "Run history"
-                visible: !app.timeRunning
+                visible: !app.timeRunning && app.timeChart !== "irradiance"
                 enabled: app.timeHasPulses && !app.driveBuilding
                 onClicked: Julia.br_time_run()
                 ToolTip.visible: hovered
@@ -84,6 +92,30 @@ Item {
             font.weight: Font.DemiBold
             elide: Text.ElideRight
             Layout.fillWidth: true
+        }
+        // the irradiance checks: a pass or fail dot and the first crossing each (the
+        // parts' peaks in the tooltip)
+        Flow {
+            visible: app.timeChart === "irradiance" && app.irrTexts.length > 0
+            Layout.fillWidth: true
+            spacing: 12
+            Repeater {
+                model: app.irrTexts.length
+                delegate: Row {
+                    spacing: 5
+                    StatusDot {
+                        anchors.verticalCenter: parent.verticalCenter
+                        status: app.irrStale ? "todo" : app.irrPass[index] ? "ok" : "attention"
+                    }
+                    Label {
+                        text: app.irrTexts[index]
+                        HoverHandler { id: checkHover }
+                        ToolTip.visible: checkHover.hovered
+                        ToolTip.text: app.irrTips[index]
+                    }
+                }
+            }
+            Info { topic: "time.irradiance" }
         }
 
         RowLayout {

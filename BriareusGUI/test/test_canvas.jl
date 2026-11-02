@@ -286,7 +286,9 @@ end
 end
 
 @testset "time chart and the 3D view at a time (offscreen)" begin
+    # (a hohlraum wide enough to take in some unconverted light, for the irradiance chart)
     sess = DesignSession(resolution = :coarse)
+    @test edit_part!(sess.target, 1, :radius, "6.0") && edit_part!(sess.target, 1, :leh_radius, "5.5")
     sc = B.scene_canvas(sess)
     tc = B.time_canvas(sess)
     nplots = (length(tc.ax.scene.plots), length(tc.ax2.scene.plots))
@@ -314,5 +316,14 @@ end
     @test !isempty(colorbuffer(tc.fig; px_per_unit = 1)) && !isempty(colorbuffer(sc.fig; px_per_unit = 1))
     set_time_cursor!(sess, NaN)
     @test !tc.cursor.visible[] && !occursin(" at ", sc.colorbar.label[])
+    # the irradiance chart on a log axis (its peaks and the threshold line), and back
+    set_unconverted_ratio!(sess.drive, 0.05, 0.0)
+    set_participation!(sess.beams, collect(eachindex(sess.beams.beams[])), 1, true)
+    start_irradiance!(sess)
+    ch = time_chart(sess, :irradiance)
+    @test sess.time.chart[] === :irradiance && isempty(ch.empty) && tc.ax.yscale[] === log10
+    @test shown(tc.left) == length(ch.left.series) && !isempty(colorbuffer(tc.fig; px_per_unit = 1))
+    set_chart!(sess.time, :energy)
+    @test tc.ax.yscale[] === identity && shown(tc.left) == length(time_chart(sess).left.series)
     @test (length(tc.ax.scene.plots), length(tc.ax2.scene.plots)) == nplots
 end

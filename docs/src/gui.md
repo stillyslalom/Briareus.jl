@@ -416,13 +416,26 @@ The bottom panel's tabs:
   each with a tooltip naming its files; NIF Dante 1 is ticked in a new session, and a
   definition that cannot be built (Dante 2's channels are not public) cannot be ticked.
   The Folders dialog lists the problems found in the definitions
-  ([`check_diagnostics`](@ref)). Five charts, in the tree's colors: *Pulses* (each group's
+  ([`check_diagnostics`](@ref)). Six charts, in the tree's colors: *Pulses* (each group's
   power and the total, TW), *Drive history* (capsule Tᵣ and each recorded diagnostic's,
   [`dante`](@ref), in eV; a₂/a₀ and a₄/a₀ in % on the right axis), *Diagnostics* (each
   recorded diagnostic's Tᵣ, and the intensity toward it in TW/sr on the right axis),
   *Energy* (the laser
-  energy delivered by each time and where it went, kJ, [`energy_budget`](@ref)) and
-  *Retune* (below). A click or drag on the chart, or the slider under it, moves the
+  energy delivered by each time and where it went, kJ, [`energy_budget`](@ref)),
+  *Irradiance* (below) and *Retune* (below). On the *Irradiance* chart, *Run checks*
+  computes the irradiance histories of the unconverted 1ω and 2ω light on the drive's
+  target ([`unconverted_history`](@ref): the drive's ratios on the beams whose light
+  takes part, plus the prepulse) and plots each part's peak against the plasma
+  threshold on a log axis, with the 3ω light's peak on the active foil. Above the chart,
+  a pass or fail line per check: *Specular* ([`specular_check`](@ref): every surface part
+  below the threshold, else the first crossing, [`threshold_crossing`](@ref)) and, on a
+  target with a foil, *Pre-plasma* ([`preplasma_check`](@ref): the unconverted light's
+  onset on the foil against the 3ω light's arrival there, from
+  [`irradiance_history`](@ref)). The Drive properties set the prepulse (a 1ω and a 2ω
+  power per beam, flat over a window, -5 to 0 ns by default; `drive_history`'s
+  `prepulse`, also taken by the drive history and the retune) and the threshold
+  (10⁸ W/cm², the NIF User Guide's guideline for the onset of plasma on a metal, an
+  engineering default). A click or drag on the chart, or the slider under it, moves the
   time cursor: the 3D view shows that step of the history on one color scale for the
   whole history; scrubbing computes nothing. *Now* returns to the drive at the table's
   powers, and a beam, pulse or target edit marks the history out of date.
@@ -559,8 +572,11 @@ retune_to_reference!(sess, "reference.csv", "retuned.csv")  # disabled beams are
 load_pulses!(sess, "reference.csv")              # or use_pulse_shape!(sess): N221204's shape
 start_history!(sess)                             # drive_history on the drive's view factors
 set_diagnostic!(sess, "nif_dante1_2012")          # also record Dante 1 as fielded in 2012–14
-time_chart(sess, :drive)                         # what the Time tab plots (also :pulses, :diagnostics, :energy, :retune)
+time_chart(sess, :drive)                         # what the Time tab plots (also :pulses, :diagnostics, :energy, :irradiance, :retune)
 set_time_cursor!(sess, 6.0)                      # the 3D view at the history step nearest 6 ns
+set_prepulse!(sess.time, 2e-3, 0.0; start = -4.0, stop = 0.0)  # 1ω prepulse, TW per beam
+start_irradiance!(sess)                          # unconverted irradiance histories and checks
+irradiance_checks(sess)                          # specular and pre-plasma: pass, first crossing
 nudge_part!(sess.target, 1, 0.5; frame = :leh_top, axis = :z)   # part 1 up 0.5 mm, one edit
 set_aim_frame!(sess, 1:4, :disk_1; keep = false)     # four beams at the disk's center, following it
 set_sweep!(sess.sweep; subject = :disk_1, frame = :tcc, axis = :x)

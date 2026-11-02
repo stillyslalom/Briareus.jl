@@ -36,6 +36,8 @@ const _LINESTYLES = Dict(:solid => nothing, :dash => :dash, :dot => :dot)
 # `LinearTicks` takes the count as given (PlotUtils' Wilkinson search with a low maximum
 # warns "No strict ticks found" on some spans).
 _yticks_for(h) = LinearTicks(clamp(round(Int, h / 45), 2, 5))
+# On a log axis, Makie's automatic ticks (powers of ten, `LogTicks`).
+_yticks_for(h, log::Bool) = log ? Makie.automatic : _yticks_for(h)
 
 """
     time_canvas(sess::DesignSession) -> TimeCanvas
@@ -46,7 +48,8 @@ function time_canvas(sess::DesignSession)
     tm = sess.time
     c = _chart_canvas(() -> time_chart(sess))
     onany((_...) -> _draw_time!(c, sess), tm.chart, tm.history, tm.pulses, tm.retune, sess.beams.beams,
-          sess.beams.enabled, sess.beams.cluster, sess.beams.unconverted, sess.drive.unconverted_ratio)
+          sess.beams.enabled, sess.beams.cluster, sess.beams.unconverted, sess.drive.unconverted_ratio,
+          tm.prepulse, tm.irradiance)
     on(_ -> _draw_cursor!(c, sess), tm.cursor)
     # a click on the chart, or a drag along it, puts the cursor at that time
     _on_chart_click(x -> sess.time.history[] === nothing || set_time_cursor!(sess, x), c)
@@ -87,9 +90,9 @@ function _chart_canvas(chart)
     # the panel's height sets the tick count, so that a short chart's labels do not overlap
     on(ax.scene.viewport) do vp
         t = _yticks_for(vp.widths[2])
-        t == ax.yticks[] && return
-        ax.yticks[] = t
+        t == ax2.yticks[] && return
         ax2.yticks[] = t
+        ax.yscale[] === log10 || (ax.yticks[] = t)
     end
     # the chart is for reading and pointing at times: no zoom or pan gestures
     for a in (ax, ax2), name in collect(keys(Makie.interactions(a)))
@@ -184,8 +187,23 @@ function _draw_time!(c::TimeCanvas, sess::DesignSession)
     for a in (ax2.yticklabelsvisible, ax2.yticksvisible, ax2.ylabelvisible)
         a[] = two
     end
-    # powers and energies from zero; temperatures, modes and clearances where they lie
-    ax.limits[] = ch.chart in (:drive, :sweep) ? (nothing, nothing) : (nothing, (0, nothing))
+    # powers and energies from zero; temperatures, modes and clearances where they lie;
+    # irradiances on a log axis, between the extremes of the chart's values (which it
+    # floors above zero), set before the scale so that the limits are valid for it
+    log = get(ch, :scale, :linear) === :log
+    if log
+        ys = reduce(vcat, (s.y for s in sl); init = Float64[])
+        lo, hi = isempty(ys) ? (1.0, 10.0) : extrema(ys)
+        ax.limits[] = (nothing, (lo / 2, max(hi, lo) * 2))
+        reset_limits!(ax)
+    else
+        ax.yscale[] === log10 || (ax.limits[] = ch.chart in (:drive, :sweep) ? (nothing, nothing) : (nothing, (0, nothing)))
+    end
+    if log != (ax.yscale[] === log10)
+        ax.yscale[] = log ? log10 : identity
+        ax.yticks[] = _yticks_for(ax.scene.viewport[].widths[2], log)
+        log || (ax.limits[] = ch.chart in (:drive, :sweep) ? (nothing, nothing) : (nothing, (0, nothing)))
+    end
     reset_limits!(ax)
     two && reset_limits!(ax2)
     _draw_cursor!(c, sess)

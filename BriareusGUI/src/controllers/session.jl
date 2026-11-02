@@ -235,6 +235,7 @@ function _connect!(sess::DesignSession)
     # a drive history asked for before the drive was computed runs when it is
     on(dr.result) do res
         sess.time.queued[] && res !== nothing && _drive_current(sess) && start_history!(sess)
+        sess.time.check_queued[] && res !== nothing && _drive_current(sess) && start_irradiance!(sess)
     end
     # the x-ray image follows the drive
     on(dr.result) do res
@@ -936,7 +937,7 @@ end
 
 """
     retune_pulses(s::Scenario, beams, enabled, pulses; by = :quad, cap = 1.3, stay = 0.0,
-                  wall = (), unconverted = nothing) -> NamedTuple
+                  wall = (), unconverted = nothing, prepulse = nothing) -> NamedTuple
 
 Retune the enabled beams' powers to the drive of a reference shot in which every beam of
 `beams` (the scenario's, in its order) fired `pulses` (power per beam against time, keyed
@@ -952,12 +953,17 @@ its [`wall_names`](@ref)), else the capsule's. With `unconverted` (per color, th
 unconverted power as a fraction of each beam's 3ω power, `(; omega1, omega2)`: a number
 for every beam, or a vector with one per beam of `beams`), every history and the retune
 take the unconverted 1ω and 2ω light (`drive_history`'s and `retune_drive`'s
-`unconverted`, NIF's colors; the enabled beams' fractions in the retune); without it
-they are the 3ω ones, bit for bit.
+`unconverted`, NIF's colors; the enabled beams' fractions in the retune). `prepulse`
+adds light not proportional to the 3ω pulse, `(; omega1, omega2, window)`: per color a
+power per beam of `beams` (TW, a vector), flat over `window = (start, stop)` (ns); the
+histories and the retune take it as `drive_history`'s and `retune_drive`'s `prepulse`,
+keyed by `by` (the beams of one key must carry the same prepulse), and the retune does
+not retune it. Without either they are the 3ω ones, bit for bit.
 """
 function retune_pulses(s::Scenario, beams::AbstractVector{<:Beam}, enabled::AbstractVector{Bool},
                        pulses::AbstractDict; by::Symbol = :quad, cap::Real = 1.3, stay::Real = 0.0,
-                       wall = (), unconverted::Union{Nothing,NamedTuple} = nothing)
+                       wall = (), unconverted::Union{Nothing,NamedTuple} = nothing,
+                       prepulse::Union{Nothing,NamedTuple} = nothing)
     observe = _observed_parts(s)
     # the histories' wall: the walls in the scenario's target (`wall_names`), else the capsule
     names = component_names(s.target)
@@ -974,19 +980,21 @@ function retune_pulses(s::Scenario, beams::AbstractVector{<:Beam}, enabled::Abst
     times = filter(τ -> sum(b -> pulses[refkey(b)](τ), beams) > 0, nodes)
     isempty(times) && throw(ArgumentError("the reference pulses have no power"))
     op = s.deposition
-    uc = _unconverted_kw(unconverted)
+    uc = _light_kw(unconverted, prepulse, beams; by)
     ref = drive_history(s.model, op, τ -> with_pulses(beams, pulses, τ; by = ref_by), times;
                         observe, wall, lmax = 4, ylm = true, keep_albedo = true, uc...)
     keep = findall(enabled)
     kept = beams[keep]
     opk = op[keep]
-    uc = _unconverted_kw(_kept_unconverted(unconverted, keep))     # the kept beams' fractions
+    # the kept beams' fractions and prepulse (the retune's `by` is its own keyword)
+    uc = _light_kw(_kept_unconverted(unconverted, keep), _kept_unconverted(prepulse, keep), kept; by)
+    ucr = Base.structdiff(uc, NamedTuple{(:by,)})
     # a key's reference power: its beams' mean (the table may be finer than the retune)
     members = Dict(k => [refkey(b) for b in kept if key(b) == k] for k in unique(key.(kept)))
     nominal(k, τ) = sum(pulses[r](τ) for r in members[k]) / length(members[k])
     limits(k, τ) = (0.0, cap * nominal(k, τ))
     r = retune_drive(s.model, opk, kept, ref; by, limits, stay, observe,
-                     nominal = stay > 0 ? nominal : nothing, uc...)
+                     nominal = stay > 0 ? nominal : nothing, ucr...)
     before = drive_history(s.model, opk, τ -> with_pulses(kept, pulses, τ; by = ref_by), times;
                            observe, wall, lmax = 4, ylm = true, uc...)
     after = drive_history(s.model, opk, τ -> with_pulses(kept, r.pulses, τ; by), times;
@@ -1011,8 +1019,9 @@ Retune the enabled beams to the reference shot whose pulses are the table `table
 [`retune_pulses`](@ref) with the drive's scenario (which must be current), and write the
 new pulses to `out` (`write_pulse_table`), on a worker when `spawn[]` is set. The
 disabled beams are the ones the shot loses. The unconverted 1ω and 2ω light takes part
-as in the drive ([`set_unconverted_ratio!`](@ref); `retune_pulses`'s `unconverted`), in
-the reference shot and in the retune, on the beams whose 1ω or 2ω light takes part
+as in the drive ([`set_unconverted_ratio!`](@ref); `retune_pulses`'s `unconverted`), with
+the prepulse ([`set_prepulse!`](@ref); `retune_pulses`'s `prepulse`), in the reference
+shot and in the retune, on the beams whose 1ω or 2ω light takes part
 ([`participates`](@ref)). Progress and the outcome (the capsule drive's worst-time mode 1 before and
 after) go to `drive.retune_running`/`retune_status`.
 """
@@ -1026,6 +1035,7 @@ function retune_to_reference!(sess::DesignSession, table::AbstractString, out::A
     end
     # the unconverted light of every beam (the reference fires them all)
     unconverted = _history_unconverted(sess, eachindex(sess.beams.beams[]))
+    prepulse = _history_prepulse(sess, eachindex(sess.beams.beams[]))
     pulses = read_pulse_table(table)
     s = dr.scenario[]
     beams = sess.beams.beams[]
@@ -1035,7 +1045,7 @@ function retune_to_reference!(sess::DesignSession, table::AbstractString, out::A
     dr.retune_status[] = "retuning to $(basename(table))…"
     runner = _runner(sess.spawn, sess.deliver)
     wall = Tuple(wall_names(sess.target))
-    runner(() -> retune_pulses(s, beams, enabled, pulses; by, cap, stay, wall, unconverted), function (res)
+    runner(() -> retune_pulses(s, beams, enabled, pulses; by, cap, stay, wall, unconverted, prepulse), function (res)
         dr.retune_running[] = false
         if res.err !== nothing
             dr.retune_status[] = "retune failed: " * _errmsg(res.err)
@@ -1221,7 +1231,10 @@ function _abandon_jobs!(sess::DesignSession)
     end
     tm = sess.time
     tm.queued[] = false
+    tm.check_queued[] = false
     tm.running[] && (tm.generation[] += 1; tm.cancel[] = true; tm.running[] = false;
                      tm.status[] = "abandoned when the window closed")
+    tm.checking[] && (tm.check_generation[] += 1; tm.checking[] = false;
+                      tm.status[] = "abandoned when the window closed")
     return sess
 end

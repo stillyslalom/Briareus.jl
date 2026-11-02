@@ -64,9 +64,10 @@ end
 struct _HistoryCanceled <: Exception end
 
 # What a history is computed for: the scenario, the beams (pointing and table power),
-# which are on, the pulses, the walls and the unconverted light.
+# which are on, the pulses, the walls and the unconverted light (fractions and prepulse).
 _history_key(sess::DesignSession) = (sess.drive.scenario[], sess.beams.beams[], sess.beams.enabled[],
-                                     sess.time.pulses[], wall_names(sess.target), _history_unconverted(sess))
+                                     sess.time.pulses[], wall_names(sess.target), _history_unconverted(sess),
+                                     _history_prepulse(sess))
 
 # The unconverted light of a drive history of the table's beams `idx`, as
 # `drive_history`'s and `retune_drive`'s `unconverted`: per color, the drive's fraction
@@ -85,18 +86,93 @@ function _history_unconverted(sess::DesignSession, idx = findall(sess.beams.enab
     return (; omega1 = f[1], omega2 = f[2])
 end
 
-# `drive_history`'s and `retune_drive`'s keywords for the unconverted light `u` (from
-# `_history_unconverted`): none without it, so that the history is the 3ω one bit for bit.
-_unconverted_kw(::Nothing) = (;)
-_unconverted_kw(u::NamedTuple) = (; unconverted = u, colors = nif_unconverted())
+"""
+    set_prepulse!(tm::TimeState, omega1, omega2; start = current, stop = current) -> tm
+
+The unconverted light's prepulse: a 1ω and a 2ω power per beam (TW, ≥ 0; 0 turns that
+color's prepulse off), flat from `start` to `stop` (ns) and off outside, on the enabled
+beams whose light of that color takes part ([`set_participation!`](@ref)). It is light
+not proportional to the 3ω pulse (`drive_history`'s, `retune_drive`'s and
+`unconverted_history`'s `prepulse`), so it adds to the drive's 1ω and 2ω ratios
+([`set_unconverted_ratio!`](@ref)): a beam's power in a color is `ratio · P₃ω(t) +
+prepulse(t)`. The drive histories, the retune and the irradiance checks
+([`start_irradiance!`](@ref)) take it; the drive at the table's powers, which has no
+time, does not. A drive history solves at the pulses' times where they fire, so a
+prepulse before them reaches the irradiance histories only. There is no default level:
+the NIF User Guide (§4.4) puts the 1ω prepulse above 10⁸ W/cm² 3–5 ns before the nominal
+start of the pulse and gives no power (as a *derived* scale, 4.8e-4 TW of 1ω on a
+beamlet puts its 22 mm footprint at 10⁸ W/cm²; research notes, "Unconverted light over
+time"). A change makes the drive history and the checks out of date.
+"""
+function set_prepulse!(tm::TimeState, omega1::Real, omega2::Real; start::Real = tm.prepulse[][3],
+                       stop::Real = tm.prepulse[][4])
+    all(isfinite, (omega1, omega2, start, stop)) && omega1 >= 0 && omega2 >= 0 ||
+        throw(ArgumentError("the prepulse powers must be finite and ≥ 0"))
+    start < stop || throw(ArgumentError("the prepulse must start before it stops"))
+    _assign!(tm.prepulse, (Float64(omega1), Float64(omega2), Float64(start), Float64(stop)))
+    return tm
+end
+
+# The prepulse of the table's beams `idx` (`set_prepulse!`): per color, each table
+# beam's power (TW; zero where the beam is not in `idx` or its light of that color does
+# not take part) and the window (ns), `(; omega1, omega2, window)`; `nothing` when no
+# beam of `idx` carries one.
+function _history_prepulse(sess::DesignSession, idx = findall(sess.beams.enabled[]))
+    p1, p2, a, b = sess.time.prepulse[]
+    u = sess.beams.unconverted[]
+    on = falses(length(u))
+    on[collect(Int, idx)] .= true
+    v1 = [on[i] && u[i][1] ? p1 : 0.0 for i in eachindex(u)]
+    v2 = [on[i] && u[i][2] ? p2 : 0.0 for i in eachindex(u)]
+    any(>(0), v1) || any(>(0), v2) || return nothing
+    return (; omega1 = v1, omega2 = v2, window = (a, b))
+end
+
+# `drive_history`'s `prepulse` for the prepulse `pp` (`_history_prepulse`) of `beams`
+# (in the order of `pp`'s vectors), keyed by `by`: per color with power, each key's flat
+# pulse, one `PulseShape` per power, so that the beams on equal powers share a
+# deposition. The beams of one key must carry the same power.
+function _prepulse_schedules(pp, beams, by)
+    key = Briareus._beam_key(by)
+    a, b = pp.window
+    out = Dict{Symbol,Any}()
+    for c in (:omega1, :omega2)
+        v = pp[c]
+        any(>(0), v) || continue
+        shapes = Dict{Float64,PulseShape}()
+        d = Dict{Any,PulseShape}()
+        for (i, bm) in enumerate(beams)
+            k = key(bm)
+            s = get!(() -> PulseShape([a, b], [v[i], v[i]]), shapes, v[i])
+            haskey(d, k) && d[k] !== s &&
+                throw(ArgumentError("the beams of $k carry different prepulses (the light of some of them " *
+                                    "only takes part): retune by beam"))
+            d[k] = s
+        end
+        out[c] = d
+    end
+    return out
+end
+
+# `drive_history`'s keywords for the unconverted light: the fractions `u`
+# (`_history_unconverted`, zero for both colors when only a prepulse is set) and the
+# prepulse `pp` (`_history_prepulse`) of `beams`, keyed by `by`. None without either,
+# so that the history is the 3ω one bit for bit.
+_light_kw(::Nothing, ::Nothing, beams; by = :beam) = (;)
+function _light_kw(u, pp, beams; by = :beam)
+    kw = (; unconverted = something(u, (omega1 = 0.0, omega2 = 0.0)), colors = nif_unconverted())
+    pp === nothing && return kw
+    return (; kw..., prepulse = _prepulse_schedules(pp, beams, by), by)
+end
 
 """
     history_stale(sess::DesignSession) -> Bool
 
 Whether the drive history was computed for another scenario, other beams or on/off
 states, other pulses, other walls ([`wall_names`](@ref)) or other unconverted light
-(the drive's ratios, [`set_unconverted_ratio!`](@ref), and the beams' 1ω and 2ω
-participation) (`false` without a history).
+(the drive's ratios, [`set_unconverted_ratio!`](@ref), the prepulse,
+[`set_prepulse!`](@ref), and the beams' 1ω and 2ω participation) (`false` without a
+history).
 """
 function history_stale(sess::DesignSession)
     h = sess.time.history[]
@@ -114,8 +190,9 @@ Compute the drive history of the table's beams on the pulses ([`load_pulses!`](@
 fire), recording each step's element fields for the time cursor, each ticked diagnostic
 ([`set_diagnostic!`](@ref); `dante` for the soft x-ray power kind), and the energy split
 (`energy_budget`). The unconverted 1ω and 2ω light takes part as in the drive
-([`set_unconverted_ratio!`](@ref), `drive_history`'s `unconverted`), on the beams whose
-1ω or 2ω light takes part ([`participates`](@ref)).
+([`set_unconverted_ratio!`](@ref), `drive_history`'s `unconverted`), with the prepulse
+([`set_prepulse!`](@ref), `drive_history`'s `prepulse`), on the beams whose 1ω or 2ω
+light takes part ([`participates`](@ref)).
 It runs on a worker when `spawn[]` is set, with progress per step and
 [`cancel_history!`](@ref). A drive that is missing or stale is computed first, as a
 coloring by a drive field computes it.
@@ -141,7 +218,7 @@ function start_history!(sess::DesignSession)
     beams, enabled = sess.beams.beams[], sess.beams.enabled[]
     times = filter(τ -> sum(b -> b.power, _pulse_beams(src, beams, enabled, τ)) > 0, src.times)
     isempty(times) && (tm.status[] = "the pulses fire no enabled beam"; return sess)
-    unconverted = _history_unconverted(sess)
+    light = _light_kw(_history_unconverted(sess), _history_prepulse(sess), beams)
     key = _history_key(sess)
     g = (tm.generation[] += 1)
     tm.cancel[] = false
@@ -156,7 +233,7 @@ function start_history!(sess::DesignSession)
     cancel = tm.cancel
     runner = _runner(sess.spawn, sess.deliver)
     wall = Tuple(wall_names(sess.target))
-    runner(() -> _history_job(s, beams, enabled, src, times; diags, progress, cancel, key, wall, unconverted),
+    runner(() -> _history_job(s, beams, enabled, src, times; diags, progress, cancel, key, wall, light),
            function (out)
         g == tm.generation[] || return
         tm.running[] = false
@@ -185,11 +262,11 @@ cancel_history!(sess::DesignSession) = (sess.time.running[] && (sess.time.cancel
 
 # The drive history of `beams` on the pulses `src` at `times` on scenario `s` (worker).
 # `wall`: the wall-role holders (`wall_names`); those in the scenario's target give the
-# history's wall temperature, else the observed surface does. `unconverted`: the
-# unconverted light (`_history_unconverted`; `nothing`: none).
+# history's wall temperature, else the observed surface does. `light`: the unconverted
+# light's keywords of `drive_history` (`_light_kw`; empty: none).
 function _history_job(s::Scenario, beams, enabled, src, times; diags = NamedTuple[],
                         progress = k -> nothing, cancel = Threads.Atomic{Bool}(false), key = nothing,
-                        wall = (), unconverted = nothing)
+                        wall = (), light = (;))
     t0 = time()
     t = s.target
     names = component_names(t)
@@ -212,7 +289,7 @@ function _history_job(s::Scenario, beams, enabled, src, times; diags = NamedTupl
                 escaped)
     end
     h = drive_history(s.model, s.deposition, τ -> _pulse_beams(src, beams, enabled, τ), times;
-                      observe, wall, lmax = 4, record, _unconverted_kw(unconverted)...)
+                      observe, wall, lmax = 4, record, light...)
     fields = Dict{Symbol,Matrix{Float32}}(f => reduce(hcat, [r[f] for r in h.record]) for f in DRIVE_FIELDS)
     ranges = Dict{Symbol,Tuple{Float64,Float64}}()
     for (f, M) in fields
@@ -267,6 +344,215 @@ end
 const ENERGY_LABELS = Dict(:laser => "Laser delivered", :wall => "Walls (heat)", :capsule => "Capsule (heat)",
                            :holes => "Out of the entrance holes", :windows => "Out of windows",
                            :omega1 => "1ω delivered", :omega2 => "2ω delivered")
+
+# ---------------------------------------------------------------- irradiance checks
+
+"""
+    set_irradiance_threshold!(tm::TimeState, threshold) -> tm
+
+The irradiance (W/cm², > 0) the checks of [`start_irradiance!`](@ref) compare with
+([`DEFAULT_THRESHOLD`](@ref) in a new session). The checks follow from the histories
+kept: nothing is computed again.
+"""
+function set_irradiance_threshold!(tm::TimeState, x::Real)
+    isfinite(x) && x > 0 || throw(ArgumentError("the threshold must be positive"))
+    _assign!(tm.threshold, Float64(x))
+    r = tm.irradiance[]
+    r === nothing || r.threshold == x || (tm.irradiance[] = _with_checks(r, Float64(x)))
+    return tm
+end
+
+# What the irradiance checks are computed for: the scenario, the beams, which are on,
+# the pulses, the unconverted light (fractions and prepulse) and the active foil.
+_irradiance_key(sess::DesignSession) = (sess.drive.scenario[], sess.beams.beams[], sess.beams.enabled[],
+                                        sess.time.pulses[], _history_unconverted(sess), _history_prepulse(sess),
+                                        active_foil(sess.target))
+
+"""
+    irradiance_stale(sess::DesignSession) -> Bool
+
+Whether the irradiance checks were computed for another drive, other beams or on/off
+states, other pulses, other unconverted light (ratios, prepulse, participation) or
+another active foil (`false` without them).
+"""
+function irradiance_stale(sess::DesignSession)
+    r = sess.time.irradiance[]
+    r === nothing && return false
+    k = _irradiance_key(sess)
+    return drive_stale(sess) || r.key[1] !== k[1] || !isequal(r.key[2:end], k[2:end])
+end
+
+"""
+    start_irradiance!(sess::DesignSession) -> sess
+
+Compute the irradiance histories of the unconverted 1ω and 2ω light on the drive's
+target through the pulses (`unconverted_history`: the drive's ratios on the beams whose
+light takes part, [`set_unconverted_ratio!`](@ref) and [`participates`](@ref), with the
+prepulse, [`set_prepulse!`](@ref); one `unconverted_deposition` per set of beams on one
+schedule) and check them against the threshold ([`set_irradiance_threshold!`](@ref)):
+`specular_check` per surface part, the first crossing on any part
+(`threshold_crossing`), and, on a target with a foil, `preplasma_check` on the active
+foil against the arrival of the 3ω light there (the first crossing of its
+`irradiance_history`, on the drive's deposition operator). The histories are sampled at
+the pulses' times and knots, at the prepulse's edges, and at the instants just outside
+each pulse's and the prepulse's ends (where the power jumps from zero, so that a
+crossing there is not drawn out over the step before it); they are linear in between,
+as the pulses are. The result goes to `sess.time.irradiance` (see
+[`irradiance_checks`](@ref)), from a worker when `spawn[]` is set; a drive that is
+missing or stale is computed first.
+"""
+function start_irradiance!(sess::DesignSession)
+    tm, dr = sess.time, sess.drive
+    tm.checking[] && return sess
+    src = tm.pulses[]
+    src === nothing && (tm.status[] = "load a pulse table first (or use N221204's pulse shape)"; return sess)
+    ratio, pp = _history_unconverted(sess), _history_prepulse(sess)
+    ratio === nothing && pp === nothing &&
+        (tm.status[] = "no unconverted light takes part: set a 1ω or 2ω ratio or prepulse (Drive properties) " *
+                       "and turn on the beams' 1ω or 2ω dots"; return sess)
+    if !_drive_current(sess)
+        tm.check_queued[] = true
+        tm.status[] = "computing the drive first…"
+        dr.building[] || build_scenario!(sess)
+        return sess
+    end
+    tm.check_queued[] = false
+    s = dr.scenario[]
+    beams, enabled = sess.beams.beams[], sess.beams.enabled[]
+    foil = active_foil(sess.target)
+    key = _irradiance_key(sess)
+    threshold = tm.threshold[]
+    g = (tm.check_generation[] += 1)
+    tm.checking[] = true
+    tm.status[] = "computing the irradiance histories…"
+    t0 = time()
+    runner = _runner(sess.spawn, sess.deliver)
+    runner(() -> _irradiance_job(s, beams, enabled, src, ratio, pp, foil; key, threshold), function (out)
+        g == tm.check_generation[] || return
+        tm.checking[] = false
+        if out.err !== nothing
+            tm.status[] = "irradiance checks failed: " * _errmsg(out.err)
+            return
+        end
+        r = out.value
+        tm.threshold[] == r.threshold || (r = _with_checks(r, tm.threshold[]))
+        tm.irradiance[] = r
+        _assign!(tm.chart, :irradiance)
+        tm.status[] = @sprintf("irradiance histories at %d times in %s", length(r.history.time),
+                               _seconds(time() - t0))
+    end)
+    return sess
+end
+
+# Each table beam's 3ω power history (TW per beam), keyed by its name (`by = :beam`):
+# the pulse table's function of its key (shared by the beams of that key), or the shape
+# scaled to the beam's table power (one per power), and one zero pulse for the disabled
+# beams; beams on the same function share a deposition.
+function _beam_pulses(src, beams, enabled)
+    allunique(b.name for b in beams) || throw(ArgumentError("the irradiance checks need unique beam names"))
+    off = PulseShape([0.0], [0.0])
+    scaled = Dict{Float64,PulseShape}()
+    key = src.kind === :table ? Briareus._beam_key(src.by) : nothing
+    out = Dict{Symbol,Any}()
+    for (b, on) in zip(beams, enabled)
+        out[Symbol(b.name)] = !on ? off :
+                              src.kind === :table ? Briareus._beam_pulse(src.table, key, b) :
+                              get!(() -> PulseShape(src.shape.t, b.power .* src.shape.p), scaled, b.power)
+    end
+    return out
+end
+
+# The times of the irradiance histories: the pulses' times and knots, and the ends of
+# each pulse (zero outside its knots) and of the prepulse with the instants just outside.
+function _irradiance_times(src, pp)
+    ts = Float64[src.times; src.nodes]
+    shapes = src.kind === :table ? collect(values(src.table)) : [src.shape]
+    for p in shapes
+        isempty(p.t) || append!(ts, (prevfloat(p.t[1]), nextfloat(p.t[end])))
+    end
+    if pp !== nothing
+        a, b = pp.window
+        append!(ts, (prevfloat(a), a, b, nextfloat(b)))
+    end
+    return sort!(unique!(ts))
+end
+
+# The irradiance histories (worker): the unconverted light's on the scenario's target,
+# the 3ω light's when `foil` is one of its parts, and per surface part the peak of the
+# unconverted irradiance at each time (all colors summed, W/cm²), with the checks at
+# `threshold` (`_with_checks`).
+function _irradiance_job(s::Scenario, beams, enabled, src, ratio, pp, foil; key = nothing,
+                         threshold = DEFAULT_THRESHOLD)
+    t = s.target
+    times = _irradiance_times(src, pp)
+    pulses = _beam_pulses(src, beams, enabled)
+    h = unconverted_history(t, beams, pulses, times; ratio = something(ratio, (omega1 = 0.0, omega2 = 0.0)),
+                            prepulse = pp === nothing ? (;) : _prepulse_schedules(pp, beams, :beam), by = :beam)
+    peak(hh, p) = vec(maximum(Briareus._part_series(hh, (p,), nothing)[1]; dims = 1, init = 0.0))
+    parts = unique!([c.part for c in t.components if c.kind === :surface])
+    peaks = [(; part = p, values = peak(h, p)) for p in parts]
+    f = foil !== nothing && any(c -> c.part === foil && c.kind === :surface, t.components) ? foil : nothing
+    arrival = f === nothing ? nothing : irradiance_history(s.deposition, beams, pulses, times; by = :beam)
+    r = (; history = h, arrival, foil = f, peaks, arrival_peak = arrival === nothing ? nothing : peak(arrival, f),
+         key, threshold = NaN, specular = NamedTuple[], crossing = (; time = Inf, part = :none, element = 0),
+         preplasma = nothing)
+    return _with_checks(r, threshold)
+end
+
+# The irradiance histories `r` with their checks at `threshold`.
+function _with_checks(r, threshold::Float64)
+    h = r.history
+    specular = specular_check(h; threshold)
+    crossing = threshold_crossing(h, threshold)
+    preplasma = r.arrival === nothing ? nothing : preplasma_check(h, r.arrival; foil = r.foil, threshold)
+    return merge(r, (; threshold, specular, crossing, preplasma))
+end
+
+"""
+    irradiance_checks(sess::DesignSession) -> Vector{NamedTuple}
+
+The irradiance checks of the latest [`start_irradiance!`](@ref), one row `(; check,
+pass, text, tip)` each: `:specular` (every surface part below the threshold through the
+pulses, `specular_check`; `text` the first crossing, `threshold_crossing`, when one is
+not), and on a target with a foil `:preplasma` (the unconverted light below the
+threshold on the active foil until the 3ω light arrives, `preplasma_check`). `tip`
+lists the parts' peaks. Empty without checks.
+"""
+function irradiance_checks(sess::DesignSession)
+    r = sess.time.irradiance[]
+    r === nothing && return NamedTuple[]
+    thr = _irr_text(r.threshold)
+    rows = NamedTuple[]
+    c = r.crossing
+    ok = isinf(c.time)
+    hot = sort(r.specular; by = x -> -x.peak)
+    tip = "Peak unconverted irradiance per part:\n" *
+          join((@sprintf("%s: %s at %.2f ns%s", x.part, _irr_text(x.peak), x.peak_time,
+                         x.specular ? "" : @sprintf(", above %s from %.2f ns", thr, x.crossing))
+                for x in hot if x.peak > 0), "\n")
+    text = ok ? "Specular: every part below " * thr :
+           @sprintf("Specular: %s reaches %s at %.2f ns", c.part, thr, c.time) *
+           (count(x -> !x.specular, r.specular) > 1 ? @sprintf(" (%d parts)", count(x -> !x.specular, r.specular)) : "")
+    push!(rows, (; check = :specular, pass = ok, text, tip))
+    p = r.preplasma
+    if p !== nothing
+        arrive = isinf(p.arrival) ? "the 3ω light stays below it" : @sprintf("3ω arrives at %.2f ns", p.arrival)
+        text = if p.preplasma
+            isinf(p.arrival) ? @sprintf("Pre-plasma on %s: from %.2f ns (3ω below %s)", r.foil, p.onset, thr) :
+            @sprintf("Pre-plasma on %s: from %.2f ns, %.2f ns before the 3ω light", r.foil, p.onset, p.lead)
+        else
+            isinf(p.onset) ? "Pre-plasma on $(r.foil): none (below $thr)" :
+            @sprintf("Pre-plasma on %s: none before the 3ω light (%s from %.2f ns)", r.foil, thr, p.onset)
+        end
+        push!(rows, (; check = :preplasma, pass = !p.preplasma,
+                     text, tip = "The unconverted light on $(r.foil) against the arrival of the 3ω light: " *
+                                 "the first time each reaches $thr there; " * arrive))
+    end
+    return rows
+end
+
+# An irradiance (W/cm²) as text, three significant digits.
+_irr_text(x::Real) = @sprintf("%.3g W/cm²", x)
 
 # ---------------------------------------------------------------- the time cursor
 
@@ -345,6 +631,10 @@ end
 
 const _INK = "#333333"
 const _GRAY = "#8C8C8C"
+# the irradiance chart: the parts drawn, at most, and the floor of its log axis (a
+# fraction of the threshold; display choices)
+const _IRRADIANCE_PARTS = 12
+const _IRRADIANCE_FLOOR = 1e-4
 
 _series(label, x, y, color; style = :solid) =
     (; label = String(label), x = collect(Float64, x), y = collect(Float64, y), color, style)
@@ -357,7 +647,7 @@ empty)`. `left` and `right` are the y axes, `(; label, series)` (`right` is `not
 for one axis), each series `(; label, x, y, color, style)` with `style` `:solid`,
 `:dash` or `:dot`; `legend` the key, `(; label, color, style)` rows; `cursor` the time
 of the cursor's history step (`NaN` without); `empty` a message when there is nothing to
-plot (then no series).
+plot (then no series); `scale` (`:log`), on a chart whose left axis is logarithmic only.
 
 - `:pulses`: the laser power of each beam group (the sum over its enabled beams, TW;
   groups colored as in the model tree) and the total.
@@ -367,6 +657,10 @@ plot (then no series).
   (TW/sr, dashed).
 - `:energy`: the laser energy delivered by each time and where it went (kJ), and the
   unconverted 1ω and 2ω light's part of the delivered energy (dotted) when it takes part.
+- `:irradiance`: from the latest [`start_irradiance!`](@ref), the peak irradiance of the
+  unconverted light (1ω and 2ω summed, W/cm²) on each surface part it reaches (the
+  12 highest), the 3ω light's on the active foil (dotted) and the threshold (dashed), on
+  a log axis (`scale = :log`; values below 10⁻⁴ of the threshold drawn at that level).
 - `:retune`: each group's power on the reference pulses (all beams, dashed) and on the
   retuned ones (enabled beams), and the capsule's mode 1 ε₁ before and after (%).
 """
@@ -432,6 +726,30 @@ function time_chart(sess::DesignSession, chart::Symbol = sess.time.chart[])
         return (; chart, title = "Energy by each time" * stale, xlabel = "t (ns)",
                 left = (; label = "Energy (kJ)", series), right = nothing,
                 legend = [_key(s) for s in series], cursor, empty = "")
+    elseif chart === :irradiance
+        r = tm.irradiance[]
+        r === nothing && return none("Irradiance", tm.pulses[] === nothing ? "Load pulses, then Run checks" :
+                                                   "Run checks on these pulses")
+        lit = sort(filter(p -> maximum(p.values; init = 0.0) > 0, r.peaks); by = p -> -maximum(p.values))
+        isempty(lit) && r.arrival_peak === nothing &&
+            return none("Irradiance", "The unconverted light reaches no surface of the drive's target")
+        ts = r.history.time
+        lo = r.threshold * _IRRADIANCE_FLOOR
+        cc = component_colors(r.history.target)
+        pc = Dict{Symbol,String}()
+        for c in r.history.target.components
+            c.kind === :surface && haskey(cc, c.name) && get!(pc, c.part, cc[c.name])
+        end
+        series = [_series(String(p.part), ts, max.(p.values, lo), get(pc, p.part, palette_color(k)))
+                  for (k, p) in enumerate(first(lit, _IRRADIANCE_PARTS))]
+        r.arrival_peak === nothing ||
+            push!(series, _series("3ω on " * String(r.foil), ts, max.(r.arrival_peak, lo), _INK; style = :dot))
+        push!(series, _series("threshold " * _irr_text(r.threshold), [ts[1], ts[end]], [r.threshold, r.threshold],
+                              _GRAY; style = :dash))
+        st = irradiance_stale(sess) ? " (out of date: run it again)" : ""
+        return (; chart, title = "Peak irradiance of the unconverted light" * st, xlabel = "t (ns)",
+                left = (; label = "Peak irradiance (W/cm²)", series), right = nothing,
+                legend = [_key(s) for s in series], cursor, empty = "", scale = :log)
     else
         r = tm.retune[]
         r === nothing && return none("Retune", "Retune to a reference drive (Compute ▸ Retune to a reference drive) to see its pulses")
