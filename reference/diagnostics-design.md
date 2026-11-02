@@ -38,6 +38,13 @@ lands; the docstrings and research notes then hold what was built.
   Research notes, "The x-ray pinhole imager model and its public definitions". The GUI
   records ticked imagers in a drive history and shows the image at the time cursor or
   each gate's frame (the Images row in Time).
+- Backlit radiography (phase 5, second part, 2026-11-01, core, 80d7c12): `Radiograph` and
+  `radiograph`, kind `radiography` (a backlighter's He-α line from
+  `backlighter_signal`'s source chain, through an object of closed parts with
+  materials, a pinhole or a point projection, filters and a detector; integrated or
+  gated over the emission); built-in `nif_inflight_radiography` (Rygg 2014; the values
+  that are not public left to an extending file). Research notes, "Backlit radiography:
+  the model and its public definitions". The GUI does not record it.
 - Not yet: port names, a field of view
   per channel (the multilayer channel's 12 mm; Rubery 2022 finds it covers every NIF
   hohlraum), time response, uncertainty, the recording modes other than `history`,
@@ -133,9 +140,10 @@ lands; the docstrings and research notes then hold what was built.
 
 5. Next kinds, in the user's order (2026-10-29): x-ray imagers (core and GUI
    done; left: the SXI soft channel, which needs the W/B₄C multilayer's reflectivity;
-   per-pixel gate times across a strip, Chen 2018; the perspective of near pinholes, Izumi's 0.38 m camera); backlit radiography (the
-   backlighter-signal path as a definition; ARC and opacity radiographs); streaked
-   VISAR and SOP. SOP needs optical emission and VISAR a moving reflector, neither of
+   per-pixel gate times across a strip, Chen 2018; the perspective of near pinholes, Izumi's 0.38 m camera); backlit radiography
+   (core done; left: its GUI, ARC radiographs, which need attenuation above 40 keV and
+   a bremsstrahlung source, opacity radiographs, which need a spectrometer, image plates
+   with Rosenberg's response, and the streaked mode); streaked VISAR and SOP. SOP needs optical emission and VISAR a moving reflector, neither of
    which the radiation model has: they need a hydro coupling (CompactLES, ROADMAP item
    15) or a prescribed shock, so the streaked mode is in the schema at once and those
    kinds come with the coupling.

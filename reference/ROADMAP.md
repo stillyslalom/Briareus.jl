@@ -103,8 +103,9 @@ Items 7–12 follow the 2026-10-22 literature review against Kritcher et al. 202
 10. **Spectral radiosity.** Left: measured Ni XRD and thin-filter transmissions;
     the rest of diagnostic definitions phase 5 (`reference/diagnostics-design.md`: the
     imagers' SXI soft channel, gate times and near-pinhole perspective; backlit
-    radiography; streaked VISAR and SOP); a measured soft spectrum of spots in a cavity; the
-    M-band's angle dependence (Dewald 2020) and its emission from the outer bubble; the
+    radiography's GUI and ARC, opacity and streaked radiographs; streaked VISAR and SOP); a
+    measured soft spectrum of spots in a cavity; the M-band's angle dependence (Dewald
+    2020) and its emission from the outer bubble; the
     closing LEH plasma's emission; a time-resolved M-band P2 against Dewald's Fig. 10; the
     M-band split in the `CapsuleDrive` handover.
 11. **Implosion metrics and UQ.** Time-dependent error budgets and multi-shot trending.

@@ -88,7 +88,8 @@ callout in the section says which).
   geometry: what is public (2026-10-29); X-ray imagers, radiography and streaked
   diagnostics: what is public (2026-10-29); Dante field of view and reference area
   (2026-10-29); Public diagnostic definitions and the time-dependent Tr area (2026-10-29);
-  The x-ray pinhole imager model and its public definitions (2026-10-29).
+  The x-ray pinhole imager model and its public definitions (2026-10-29); Backlit
+  radiography: the model and its public definitions (2026-11-01).
 
 **Hydrodynamics coupling**
 - Capsule drive hand-over and CompactLES stage 0 (2026-10-24).
@@ -9552,3 +9553,80 @@ Checks (`test/imager.jl`):
   sampling).
 - Integrated and Gaussian-gated records of a signal linear in time match their closed
   forms to 1e-12 and 1e-6 (a square gate to 1e-3, the sampling of its edges).
+
+## Backlit radiography: the model and its public definitions (2026-11-01) *derived*
+
+`Radiograph` and `radiograph` (`src/radiography.jl`, kind `radiography`; design in
+`reference/diagnostics-design.md`, phase 5). The source is the chain of "Backlighter
+conversion efficiency and the photometric chain (2026-10-24)" (the laser energy on each
+foil element, the CE fit, the angular distribution, hardware occlusion), and the
+point-spread function and gates are those of "The x-ray pinhole imager model and its
+public definitions (2026-10-29)"; both are shared code, unchanged bit for bit. No value
+here is fitted.
+
+Model (each an approximation, stated in the docstrings):
+- **Line only.** The He-α line at `kshell_line_energy` (Ge 10.279 keV; Rygg 2014 quotes
+  10.25 keV), no continuum or satellites; the filters by `filter_transmission` at the
+  line (NIST μ/ρ with coherent scattering where tabulated, as `backlighter_signal`), the
+  detector's absorbing layer by Henke photoabsorption, 1 − e^(−μρt).
+- **Object.** Each object part is a closed surface filled with one material (μ/ρ from
+  `mass_attenuation`, `:auto`); the transmission along a ray is exp(−Σ μρL), L the ray's
+  length inside each part from the signed sum of its crossings (a crossing on a shared
+  edge or vertex counted once). Overlapping parts add, so a hollow shell is its outer
+  surface filled and its inner surface at the negative density. The object is static
+  over the emission.
+- **Pinhole.** Each object-plane point sees the foil through the pinhole's center and
+  that point; the foil's radiance there times the path's transmission, A_p/q² at the
+  detector; then the imager's point-spread function (penumbra d(1 + 1/M), Gaussian of
+  the diffraction at the line and of the detector pixel). The blur is applied to the
+  product, so the foil's out-of-focus structure is blurred as the object's is (an
+  approximation).
+- **Point projection.** Each foil element is a point source at its centroid; each
+  detector point sums them along their own paths through the object, so the source's
+  extent sets the blur, w L/(s + L) on the object plane. The image point of a detector
+  point is the crossing of its line to the foil's centroid; M = (s + L)/s.
+- **Time.** The He-α emission is uniform over the laser's flat-top pulse (an assumption;
+  Rygg 2014's ≈ 2 ns emission against a 2–5 ns drive is not resolved). A gated frame
+  records the emission against its gate (Gaussian or square FWHM, peak 1); the weights
+  come from the imager's gate integral over 400 intervals of the pulse.
+
+Built-in definition (`data/diagnostics/nif_inflight_radiography.toml`):
+- **`nif_inflight_radiography`** (Rygg et al. 2014, LLNL-JRNL-646555, OSTI 1184746, text
+  read from the PDF, H): Ge foil 12 mm from the capsule in the equatorial plane (the
+  target's geometry, not the definition's); eight beams, 52 kJ, CE ≈ 1 %, emission
+  ≈ 1 mm across and ≈ 2 ns; pinhole array imaging at 8× (20–25 µm pinholes) onto a gated
+  MCP detector (Oertel 2006, Rygg's Ref. 18) of two strips with ≈ 90 ps integration
+  (taken as the gate's FWHM, M); viewing holes 0.9 × 0.83 mm with HDC windows. The
+  picket class for the CE (`prepulse = true`) follows Rygg's Ref. 17 (Barrios 2013: a
+  1 ns picket 3 ns before a 2–5 ns drive), M.
+- **Not public, so absent** (`check_diagnostics` reports them): the equatorial port
+  (φ); the pinholes' diameter within 20–25 µm and their distance from the capsule; the
+  filters; the MCP's detection efficiency; the backlighter pulse and its timing; the
+  frame times; the object-plane field. The test completes it with a labeled mock-up.
+- **Not built.** ARC radiography (Tommasini 2020; Hill 2021) uses 40–200 keV
+  bremsstrahlung and Compton sources: the attenuation tables stop at 40 keV (NIST) and
+  30 keV (Henke), and the source is not a He-α line, so neither the source nor the
+  object's attenuation is modeled. Image-plate detectors (Rosenberg 2019's PSL response),
+  streaked radiography (Hicks 2010, the streaked mode) and opacity (point-projection
+  spectroscopy) radiographs are not built either.
+
+Checks (`test/radiography.jl`, independent references):
+- A 0.1 mm Al slab (a closed box) seen through a pinhole: the radiograph's transmission
+  at every pixel against exp(−(μ/ρ)ρ t / cos α), α the angle of that pixel's ray, to
+  1e-7 (the blur's mixing of neighboring rays); nested boxes, the outer filled and the
+  inner at −ρ, against the 0.1 mm between them, to 1e-7; a box not listed as object
+  obstructs every ray.
+- The open field of a uniform Lambertian foil through the pinhole against the chain by
+  hand, E_x/(πA) · A_p/q² · T_filters · η_Si / hν, to 1e-12.
+- Point projection: every pixel against a hand sum over the foil elements, E_e/(4π r²)
+  times exp(−μρL), L from slab clipping of an axis-aligned box (closed form), to 1e-10;
+  M = (s + L)/s; the center's open field against a point source at s + L to 1e-4 (the
+  foil's extent); partial transmission only within w L/(s + L) of the edge.
+- A pinhole radiograph of an opaque edge: partial transmission only within D/2 = d(1 +
+  1/M)/2 of the edge (plus half a pixel) and reaching within 1.5 pixels of it; the
+  row's blocked length conserved (1 mm) to 1e-6.
+- The open field at TCC (no filters or detector) equals `backlighter_signal`'s photons
+  per mm² to 1e-12, with its CE, σ and extrapolation flag (a consistency check of the
+  shared source).
+- Gates: a Gaussian gate inside the emission records w √(π/4 ln 2)/τ of it and one at
+  the pulse's start half that, to 1e-6; a square gate w/τ to 1e-3.
