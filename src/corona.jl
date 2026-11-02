@@ -672,10 +672,13 @@ end
 # ---------------------------------------------------------------------------------------
 
 # Applies `g(values, μ)` ring by ring to the band-limited field with coefficients `c`
-# (l ≤ L) and returns the coefficients (l ≤ L) of the result. Gauss–Legendre in μ with
-# 2L + 2 nodes and 4L + 4 uniform azimuths: the projection is exact for results up to
-# degree 3L + 3 (higher degrees alias), and a ring's azimuthal mean is exact.
-function _sphere_transform(g::G, c::AbstractVector, L::Integer) where {G}
+# (l ≤ L) and returns the coefficients (l ≤ Lout ≤ L) of the result. Gauss–Legendre in μ
+# with 2L + 2 nodes and 4L + 4 uniform azimuths: the projection is exact for results up
+# to degree 3L + 3 (higher degrees alias), and a ring's azimuthal mean is exact. The grid
+# depends on L only, so the output for Lout < L is the first (Lout + 1)² coefficients of
+# the output for Lout = L, bit for bit (the map acts on the whole field, then the result
+# is filtered).
+function _sphere_transform(g::G, c::AbstractVector, L::Integer, Lout::Integer = L) where {G}
     T = eltype(c)
     nθ, nφ = 2L + 2, 4L + 4
     μs, wμ = _gauss_legendre(nθ)
@@ -683,7 +686,7 @@ function _sphere_transform(g::G, c::AbstractVector, L::Integer) where {G}
     sn = [sin(2π * m * (j - 1) / nφ) for m in 0:L, j in 1:nφ]
     Y, P = zeros(L + 1, 2L + 1), zeros(L + 1, L + 1)
     A, B, v = zeros(T, L + 1), zeros(T, L + 1), zeros(T, nφ)
-    out = zeros(T, (L + 1)^2)
+    out = zeros(T, (Lout + 1)^2)
     for i in 1:nθ
         _real_ylm!(Y, L, μs[i], 0.0, P)        # Y[l+1, L+1+m]: the μ part of Y_l,±m
         fill!(A, zero(T))
@@ -701,7 +704,7 @@ function _sphere_transform(g::G, c::AbstractVector, L::Integer) where {G}
             v[j] = s
         end
         gv = g(v, μs[i])
-        for m in 0:L
+        for m in 0:Lout
             a, b = zero(T), zero(T)
             for j in 1:nφ
                 a += gv[j] * cs[m+1, j]
@@ -709,7 +712,7 @@ function _sphere_transform(g::G, c::AbstractVector, L::Integer) where {G}
             end
             a *= 2π / nφ * wμ[i]
             b *= 2π / nφ * wμ[i]
-            for l in m:L
+            for l in m:Lout
                 q = Y[l+1, L+1+m]
                 out[mode_index(l, m)] += a * q
                 m > 0 && (out[mode_index(l, -m)] += b * q)
@@ -744,9 +747,11 @@ density of the profile's wavelength, Ba24's ``n_{351}`` at 351 nm. `exponent` re
 and `density_exponent` the density weight's 2/3.
 
 The angular mean, Ba24's ``\\bar P_{abl}``, is `c[1] / √(4π)` and their ``σ_2`` is
-`mode_rms(c, 30)`. The map is formed on a Gauss–Legendre product grid and projected back
-to degree `lmax`, so it is ``F^{2/3}`` filtered to l ≤ `lmax` (as Ba24's σ₂ is), and
-``F`` must be positive everywhere (an `ArgumentError` otherwise).
+`mode_rms(c, 30)`. ``F`` is formed at the deposition's full degree `op.lmax`, the map on
+a Gauss–Legendre product grid for that degree, and the result projected back to degree
+`lmax`, so it is ``F^{2/3}`` filtered to l ≤ `lmax` (as Ba24's σ₂ is; a smaller `lmax`
+returns the leading coefficients of the full-degree result), and ``F`` must be positive
+everywhere (an `ArgumentError` otherwise).
 
 Provenance: an engineering proxy, not a facility criterion. The 2/3 power follows
 Manheimer et al. (Phys. Fluids 25, 1644, 1982; Ba24's Ref. 33); the density weight is
@@ -764,7 +769,9 @@ function ablation_pressure_proxy(op::CoronaOperator, dep; lmax::Integer = op.lma
     size(S, 2) == ns || throw(DimensionMismatch("dep has $(size(S, 2)) shells, op has $ns"))
     p = op.profile
     rc = _critical_radius(p)
-    nlm = (lmax + 1)^2
+    nlm = (op.lmax + 1)^2                    # F at the deposition's full degree
+    size(S, 1) == nlm ||
+        throw(DimensionMismatch("dep has $(size(S, 1)) coefficients per shell, op has $nlm"))
     F = zeros(eltype(S), nlm)
     for s in 1:ns
         a, b = max(op.shells[s], p.r[1]), min(op.shells[s+1], p.r[end])
@@ -774,7 +781,7 @@ function ablation_pressure_proxy(op::CoronaOperator, dep; lmax::Integer = op.lma
             F[k] += w * S[k, s]
         end
     end
-    return _sphere_transform(F, lmax) do v, _
+    return _sphere_transform(F, op.lmax, lmax) do v, _
         minimum(v) > 0 ||
             throw(ArgumentError("the weighted absorbed intensity F is not positive everywhere"))
         24.7 .* v .^ exponent
@@ -805,8 +812,11 @@ laser energy, which this function follows. The linear reading
 ``\\bar d\\,(1 + 0.72 (E/\\bar E - 1))`` agrees with it to first order in ``E/\\bar E - 1``,
 and Ye21's statement that their velocity modes are 0.72 times the energy's holds
 exactly for that reading and to first order for this one (research notes, "Corona
-deposition per radius and drive proxies"). Formed on a Gauss–Legendre product grid and projected back to degree
-`lmax`; ``E`` must be positive everywhere (an `ArgumentError` otherwise).
+deposition per radius and drive proxies"). ``E`` is the field of all of `ylm` (its full
+degree; `length(ylm)` must be a square), the map is formed on a Gauss–Legendre product
+grid for that degree, and the result is projected back to degree `lmax`, so it is ``d``
+filtered to l ≤ `lmax` (a smaller `lmax` returns the leading coefficients of the
+full-degree result). ``E`` must be positive everywhere (an `ArgumentError` otherwise).
 
 Provenance: an engineering proxy, not a facility criterion: the 0.72 power is from
 implosion simulations (Ye21's Ref. 47, an LLE report), close to an experimental 0.71
@@ -815,10 +825,11 @@ Generic in the number type of `ylm`.
 """
 function shell_displacement_proxy(ylm::AbstractVector, lmax::Integer; exponent::Real = 0.72,
                                   mean_displacement = nothing)
-    lmax >= 0 && length(ylm) >= (lmax + 1)^2 ||
-        throw(ArgumentError("coefficients reach l = $(isqrt(length(ylm)) - 1), not lmax = $lmax"))
-    c = ylm[1:(lmax+1)^2]
-    return _sphere_transform(c, lmax) do v, μ
+    L = isqrt(length(ylm)) - 1
+    (L + 1)^2 == length(ylm) ||
+        throw(ArgumentError("$(length(ylm)) coefficients: not a full set up to some degree"))
+    0 <= lmax <= L || throw(ArgumentError("coefficients reach l = $L, not lmax = $lmax"))
+    return _sphere_transform(ylm, L, lmax) do v, μ
         minimum(v) > 0 ||
             throw(ArgumentError("the absorbed power per steradian is not positive everywhere"))
         Ē = sum(v) / length(v)

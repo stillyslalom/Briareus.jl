@@ -212,6 +212,20 @@ end
         # an axisymmetric E gives d = d̄ (here 1)
         d0 = shell_displacement_proxy(E(0.0), 8)
         @test isapprox(d0[1], sqrt(4π); rtol = 1e-13) && maximum(abs, d0[2:end]) < 1e-13
+        # lmax filters the result, not the field: with l = 6 content in the deposition, the
+        # l ≤ 4 output is the leading 25 coefficients of the full-degree (l ≤ 8) output
+        S6 = S(0.2)
+        S6[mode_index(6, 0), :] .= (0.08, 0.1, 0.02)
+        S6[mode_index(6, 3), :] .= (0.05, -0.04, 0.01)
+        P8, P4 = ablation_pressure_proxy(o3, (; shell_ylm = S6)),
+                 ablation_pressure_proxy(o3, (; shell_ylm = S6); lmax = 4)
+        E6 = E(C)
+        E6[mode_index(6, 2)] = 0.04
+        d8, d4 = shell_displacement_proxy(E6, 8; mean_displacement = dbar),
+                 shell_displacement_proxy(E6, 4; mean_displacement = dbar)
+        @test length(P4) == length(d4) == 25
+        @test maximum(abs, P4 .- P8[1:25]) <= 1e-12 * P8[1] &&
+              maximum(abs, d4 .- d8[1:25]) <= 1e-12 * d8[1]
         # derivatives through both, against central differences
         fP(t) = mode_rms(ablation_pressure_proxy(o3, (; shell_ylm = S(t))), 8)
         fd(t) = mode_rms(shell_displacement_proxy(E(t), 8; mean_displacement = dbar), 8; m = :nonzero)
