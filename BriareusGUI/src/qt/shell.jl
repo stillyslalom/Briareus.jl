@@ -880,6 +880,10 @@ function _refresh_selection!(sh::BriareusShell)
             _set!(sh, "partBottomEnd", hoh ? Int(p.values[:bottom_end]) : 1)
             _set!(sh, "partLehClosure", hoh && p.values[:leh_closure] != 0)
             _set!(sh, "partCapsuleMesh", p.kind === :sphere && p.values[:capsule_mesh] != 0)
+            hoh && p.values[:bottom_end] == 1 &&
+                insert!(fields, length(PART_SIZE_FIELDS[:hohlraum]) + 1,
+                        FieldRow("bottom_leh_radius", "Bottom LEH radius", "mm (0: the LEH radius)",
+                                 _num(p.values[:bottom_leh_radius])))
             hoh && p.values[:leh_closure] != 0 &&
                 append!(fields, [FieldRow(String(k), label, unit, _num(p.values[k])) for (k, label, unit, _) in LEH_CLOSURE_FIELDS])
             _sync_rows!(sh.rows[:partFieldModel], sh.models[:partFieldModel], fields)
@@ -2070,7 +2074,7 @@ function br_part_role(index)
         # part holding the role, the fitted sphere for a CAD capsule
         done = function ()
             o = observed_name(ts)
-            i = role === :capsule && o !== nothing ? part_index(ts, o) : nothing
+            i = role === :observed && o !== nothing ? part_index(ts, o) : nothing
             p = i === nothing ? ts.parts[][something(part_index(ts, name), idx[1])] : ts.parts[][i]
             select!(sh.sess.view, "part:" * String(p.name))
             sh.sess.status[] = "$(p.name): " * lowercase(PART_ROLE_LABELS[part_role(p)])

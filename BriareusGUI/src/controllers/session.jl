@@ -531,10 +531,12 @@ end
 # Whether the drive's target is a closed hohlraum enclosure, whose view factors are
 # balanced so its rows sum to one: the pieces of a single hohlraum part and the part with
 # the observed role only (other free parts lie outside it), none of them left out (that
-# leaves a hole).
+# leaves a hole), and no end of it open (a halfraum is open to whatever is placed there).
 function _closed_enclosure(ts::TargetSetup)
     hs = [p.name for p in ts.parts[] if p.kind === :hohlraum]
     length(hs) == 1 || return false
+    h = ts.parts[][findfirst(p -> p.kind === :hohlraum, ts.parts[])]
+    any(e -> _end_kind(h.values, e) === :open, (:top_end, :bottom_end)) && return false
     obs = Set{Symbol}(p.name for p in ts.parts[] if p.observed)    # (left out or not)
     inside(c) = c.part === hs[1] || c.name in obs || c.part in obs
     all(inside, ts.target[].components) || return false
@@ -651,10 +653,10 @@ function unconverted_ratios(sess)
 end
 
 # The scenario's flux-map lookup for the active foil `foil`: the one built with the
-# scenario, made again when another foil became active since (a capsule map stays).
+# scenario, made again when another foil became active since (a capsule or face map stays).
 function _foil_lookup!(dr::DriveState, s::Scenario, foil)
     lk = dr.lookup[]
-    lk !== nothing && lk.kind === :capsule && return lk
+    lk !== nothing && lk.kind in (:capsule, :face) && return lk
     _lookup_foil(lk) === foil && return lk
     return dr.lookup[] = flux_lookup(s; foil)
 end
@@ -1099,9 +1101,10 @@ function start_optimize!(sess::DesignSession; spawn::Bool = true)
         st.status[] = "capsule symmetry needs the x-ray drive, and this target's drive is laser only" *
                       _radiation_note(s.target)
         return sess
-    elseif isempty(s.observed)
+    elseif isempty(s.observed) || _observed_flat(s)
         st.status[] = "capsule symmetry needs a hohlraum with a capsule, or a sphere part with the " *
-                      "role Capsule (Properties ▸ Role)"
+                      "role Observed (Properties ▸ Role)" *
+                      (isempty(s.observed) ? "" : ": the observed surface is a flat face")
         return sess
     end
     bt = sess.beams

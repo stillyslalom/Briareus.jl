@@ -576,11 +576,11 @@ end
     @test set_part_role!(ts, i, :foil)
     @test ts.parts[][i].name === :Rectangle_0 && part_role(ts.parts[][i]) === :foil &&
           active_foil(ts) === :Rectangle_0 && :Rectangle_0 in component_names(ts.target[])
-    @test !set_part_role!(ts, part_index(ts, :Cyl_Hohlraum_0), :capsule)      # not a sphere
+    @test !set_part_role!(ts, part_index(ts, :Cyl_Hohlraum_0), :observed)      # not a sphere
     @test occursin("is a sphere", ts.error[])
     # a CAD capsule: a sphere fitted to it takes its place in the calculations
     np = length(ts.parts[])
-    @test set_part_role!(ts, part_index(ts, :CAD_0), :capsule)
+    @test set_part_role!(ts, part_index(ts, :CAD_0), :observed)
     cap = ts.parts[][end]
     @test length(ts.parts[]) == np + 1 && cap.name === :capsule && cap.kind === :sphere
     @test :CAD_0 in ts.excluded[] && :capsule in component_names(ts.target[])
@@ -589,8 +589,8 @@ end
     # the excluded marker sphere can be the capsule (the fitted one gives the role up),
     # and stays left out, keeping its name
     m = part_index(ts, :Marker)
-    @test set_part_role!(ts, m, :capsule)
-    @test :Marker in ts.excluded[] && part_role(ts.parts[][m]) === :capsule &&
+    @test set_part_role!(ts, m, :observed)
+    @test :Marker in ts.excluded[] && part_role(ts.parts[][m]) === :observed &&
           !(:Marker in component_names(ts.target[])) && ts.parts[][end].name === :capsule &&
           part_role(ts.parts[][end]) === :none && observed_name(ts) === nothing
     @test set_part_role!(ts, m, :none) && ts.parts[][m].name === :Marker && :Marker in ts.excluded[]
@@ -972,7 +972,7 @@ end
         np = length(ts.parts[])
         i = part_index(ts, :CAD_0)
         given = Ref(false)
-        @test set_part_role!(ts, i, :capsule; done = () -> (given[] = true))
+        @test set_part_role!(ts, i, :observed; done = () -> (given[] = true))
         @test ts.fitting[] == Set([:CAD_0]) && length(ts.parts[]) == np && !target_ready(ts) && !given[]
         @test occursin("fitting the capsule to CAD_0", target_summary(ts))
         build_scenario!(s)
@@ -987,13 +987,13 @@ end
         # a fit made stale by an undo is dropped
         record!(s)
         @test undo!(s) && !(:capsule in (p.name for p in ts.parts[]))
-        @test set_part_role!(ts, part_index(ts, :CAD_0), :capsule) && !isempty(ts.fitting[])
+        @test set_part_role!(ts, part_index(ts, :CAD_0), :observed) && !isempty(ts.fitting[])
         @test undo!(s) && isempty(ts.fitting[])
         sleep(0.5)                                            # the fit's delivery arrives, dropped
         drain_until(() -> target_ready(ts), queue)
         @test !(:capsule in (p.name for p in ts.parts[]))
         # a part moved while its sphere is fitted is fitted again where it is
-        @test set_part_role!(ts, part_index(ts, :CAD_0), :capsule)
+        @test set_part_role!(ts, part_index(ts, :CAD_0), :observed)
         @test edit_part!(ts, part_index(ts, :CAD_0), :x, "0.5")
         drain_until(() -> target_ready(ts), queue)
         cap2 = ts.parts[][end]

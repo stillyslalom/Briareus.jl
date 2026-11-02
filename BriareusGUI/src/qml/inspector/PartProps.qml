@@ -184,12 +184,14 @@ ColumnLayout {
             Label { text: modelData.t; Layout.preferredWidth: 110 }
             ComboBox {
                 Layout.fillWidth: true
-                model: ["Closed (the cap covers it)", "Entrance hole"]
+                model: ["Closed (the cap covers it)", "Entrance hole", "Open (to a package)"]
                 currentIndex: modelData.v
                 onActivated: (index) => Julia.br_edit_part(modelData.k, String(index))
                 ToolTip.visible: hovered
                 ToolTip.delay: 400
-                ToolTip.text: "An entrance hole of the LEH radius, or a closed end"
+                ToolTip.text: "An entrance hole (the top's of the LEH radius, the bottom's of the bottom " +
+                              "LEH radius), a closed end, or an open end with neither cap nor hole " +
+                              "(a halfraum: a package placed there closes it, or the radiation leaves)"
             }
         }
     }

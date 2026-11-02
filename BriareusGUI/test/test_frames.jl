@@ -127,15 +127,20 @@ end
     # renamed: the beams aim in the new name, where they were
     @test edit_part!(ts, part_index(ts, :shield), :name, "screen")
     @test all(==(:screen), bt.aim_frame[][a]) && bt.beams[] == aims && bt.aim_local[] == loc
-    # the capsule's role needs a sphere (a disk is refused); roles keep the parts' names:
-    # each set of beams stays with its own part
-    @test !set_part_role!(ts, part_index(ts, :screen), :capsule)
+    # the observed role takes a sphere or a flat face (a disk, here, which then gives it up;
+    # a cone is refused); roles keep the parts' names: each set of beams stays with its
+    # own part
+    @test set_part_role!(ts, part_index(ts, :screen), :observed) && observed_flat(ts)
+    @test set_part_role!(ts, part_index(ts, :screen), :none) && all(==(:screen), bt.aim_frame[][a])
+    @test add_part!(ts, :cone; name = :funnel, z = -4.0)
+    @test !set_part_role!(ts, part_index(ts, :funnel), :observed) && occursin("flat face", ts.error[])
+    @test remove_part!(ts, part_index(ts, :funnel))
     @test set_part_role!(ts, part_index(ts, :plate), :foil)
     @test all(==(:plate), bt.aim_frame[][b]) && bt.beams[] == aims && bt.aim_local[] == loc
     @test add_part!(ts, :sphere; name = :ball, z = 4.0, r1 = 0.3)
     set_aim_frame!(s, 7:8, :ball; keep = false)
     aims = copy(bt.beams[])
-    @test set_part_role!(ts, part_index(ts, :ball), :capsule)
+    @test set_part_role!(ts, part_index(ts, :ball), :observed)
     @test all(==(:ball), bt.aim_frame[][7:8]) && all(==(:screen), bt.aim_frame[][a]) &&
           all(==(:plate), bt.aim_frame[][b]) && bt.beams[] == aims
     @test set_part_role!(ts, part_index(ts, :ball), :none)
@@ -562,9 +567,9 @@ end
     # the role: the name stays, the target is not rebuilt, the checks follow
     t = ts.target[]
     record!(s)
-    @test set_part_role!(ts, part_index(ts, :ball), :capsule)
+    @test set_part_role!(ts, part_index(ts, :ball), :observed)
     record!(s)
-    @test ts.target[] === t && observed_name(ts) === :ball && part_role(ts.parts[][end]) === :capsule
+    @test ts.target[] === t && observed_name(ts) === :ball && part_role(ts.parts[][end]) === :observed
     @test :ball in s.review.targets[] && !(:ball in s.talis.capture[]) && !(:ball in s.talis.hardware[])
     @test Controllers._closed_enclosure(ts)
     build_scenario!(s)
@@ -584,7 +589,7 @@ end
     old["review"]["targets"] = replace(old["review"]["targets"], "ball" => "capsule")
     s6 = DesignSession(resolution = :coarse)
     restore!(s6, old)
-    @test observed_name(s6.target) === :capsule && part_role(s6.target.parts[][end]) === :capsule
+    @test observed_name(s6.target) === :capsule && part_role(s6.target.parts[][end]) === :observed
     build_scenario!(s6)
     r6 = s6.drive.result[]
     @test r6.modes == r1.modes && r6.mean_flux == r1.mean_flux && r6.solution.H == r1.solution.H &&
@@ -610,13 +615,13 @@ end
     @test undo!(s) && observed_name(ts) === :ball
     @test redo!(s) && observed_name(ts) === nothing
     # one observed surface at a time
-    @test set_part_role!(ts, part_index(ts, :ball), :capsule)
+    @test set_part_role!(ts, part_index(ts, :ball), :observed)
     @test add_part!(ts, :sphere; name = :bead, x = 2.0, r1 = 0.2)
-    @test set_part_role!(ts, part_index(ts, :bead), :capsule)
+    @test set_part_role!(ts, part_index(ts, :bead), :observed)
     @test observed_name(ts) === :bead && part_role(ts.parts[][part_index(ts, :ball)]) === :none
     @test remove_part!(ts, part_index(ts, :bead)) && observed_name(ts) === nothing
     # a rename keeps the role; a part renamed capsule does not take it
-    @test set_part_role!(ts, part_index(ts, :ball), :capsule)
+    @test set_part_role!(ts, part_index(ts, :ball), :observed)
     @test edit_part!(ts, part_index(ts, :ball), :name, "core") && observed_name(ts) === :core
     @test add_part!(ts, :sphere; name = :other, x = -2.0, r1 = 0.2)
     @test set_part_role!(ts, part_index(ts, :core), :none)

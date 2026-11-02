@@ -216,14 +216,14 @@ function _make_objective(cfg::NamedTuple, s::Scenario, ev0, spot_radius::Real)
         c = sum(s.target.elem_centroid[e] for e in es) / length(es)
         return irradiance_objective(foil; center = c, radius = spot_radius, spill = cfg.spill)
     end
-    s.model !== nothing && !isempty(s.observed) ||
+    s.model !== nothing && !isempty(s.observed) && !_observed_flat(s) ||
         throw(ArgumentError("capsule symmetry needs a hohlraum with a capsule"))
     modes = Tuple(l => w for (l, w) in sort(collect(cfg.weights)) if w > 0)
     isempty(modes) && throw(ArgumentError("give at least one mode a positive weight"))
     keepouts = Any[]
     cfg.keepout && push!(keepouts, ApertureKeepOut(s.target; minimum = cfg.keepout_min))
     o = cfg.observed
-    cfg.capsule_keepout && o !== nothing && o in component_names(s.target) &&
+    cfg.capsule_keepout && o !== nothing && o in component_names(s.target) && !_observed_flat(s) &&
         push!(keepouts, SphereKeepOut(s.target; spheres = (o,), minimum = cfg.capsule_min))
     keepout = isempty(keepouts) ? nothing : Tuple(keepouts)
     drive = !cfg.hold_drive ? nothing :
@@ -238,20 +238,24 @@ end
 # `ev.flux` would compute the full flux response, which the moments do not need).
 _has_flux(ev::Evaluation) = ev.scenario.model !== nothing && !isempty(ev.scenario.observed)
 
+# Whether an evaluation has capsule modes: an observed x-ray flux on a surface that is not
+# a flat face (`_observed_flat`).
+_has_modes(ev::Evaluation) = _has_flux(ev) && !_observed_flat(ev.scenario)
+
 # Capsule modes / foil spot (of foil `foil`), clipping, and the power on and clearance of
 # the observed sphere (`observed`) of an evaluation, for before/after tables.
 function _quick_summary(ev::Evaluation, spot_radius::Real, foil::Union{Nothing,Symbol} = nothing,
                         observed::Union{Nothing,Symbol} = nothing)
     modes = NamedTuple[]
     mean = NaN
-    if _has_flux(ev)
+    if _has_modes(ev)
         c = flux_ylm(ev; lmax = maximum(MODE_DEGREES))
         a = flux_moments(ev; lmax = maximum(MODE_DEGREES))
         mean = a[1]
         modes = [(; l, epsilon = mode_amplitude(c, l), legendre = a[l+1] / a[1]) for l in MODE_DEGREES]
     end
     t = ev.scenario.target
-    has = observed !== nothing && observed in component_names(t)
+    has = observed !== nothing && observed in component_names(t) && !_observed_flat(ev.scenario)
     cap = has ? minimum(sphere_clearance(SphereKeepOut(t; spheres = (observed,)), ev.beams);
                         init = Inf) : Inf
     return (; modes, mean_flux = mean, spot = _spot_stats(ev, spot_radius, foil),

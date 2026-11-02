@@ -9822,3 +9822,36 @@ Checks (`test/radiography.jl`, independent references):
   shared source).
 - Gates: a Gaussian gate inside the emission records w √(π/4 ln 2)/τ of it and one at
   the pulse's start half that, to 1e-6; a square gate w/τ to 1e-3.
+
+## Halfraum ends and starters (2026-11-02) *derived*
+
+`hohlraum(; top_end, bottom_end)` and the GUI's halfraum starters (assemblies phase C).
+- **Open end.** An end given `:open` has no cap and no entrance hole; the target is not
+  declared `closed`, so its view factors are not balanced and the power that leaves
+  through the end is `energy_balance`'s `lost`. Checked against the coaxial-disk closed
+  form (equal disks of radius R a distance L apart, `F = (X − √(X² − 4))/2`,
+  `X = 2 + (L/R)²`; 0.17157 at R 1.5, L 3 mm): a halfraum closed at the top and open at
+  the bottom, h 0.3, 0.2 and 0.12 mm, gives the cap's escaping fraction within 0.75–0.95e-3
+  of it and the wall's escaping area `A_d (1 − F)` within 0.7–1.3e-3; the power lost
+  through the open end with the wall driven matches the power escaping through an
+  aperture disk closing the end (its own view factors) within 0.8–1.5e-3. The errors are
+  the view factors' (they do not fall steadily with h). `test/halfraum.jl`.
+- **Per-end radius.** An end given a radius other than `leh_radius` takes its own ring
+  counts from `h`; one given `leh_radius` is the default end, bit for bit.
+- **Closed end.** The cap and the hole's mesh (and its lip's) merged, of the wall's
+  material: the GUI hohlraum part's closed end since phase B, moved into core unchanged.
+- **Starters: illustrative mock-ups, no experiment's dimensions.** *Halfraum pair with
+  shock tube*: two halfraums 2.5 mm long, radius 1.5 mm, entrance holes of 1 mm radius at
+  their outer ends, facing each other across a 2 mm package (a cylinder of the halfraums'
+  radius, absorbing) whose end disks close the open ends; the top disk is observed.
+  *Opacity halfraum*: a halfraum 3 mm long, radius 1.5 mm, an entrance hole of 1 mm
+  radius at the top and the bottom open, a 1 mm square sample (albedo 0.3, no laser
+  conversion) in the open end's plane facing in. The scale (millimeter halfraums, mm-size
+  packages and samples) is that of the public descriptions of NIF's halfraum-driven
+  hydrodynamics and opacity platforms
+  (https://lmf.llnl.gov/about/keys-to-success/targets); the numbers are chosen, not taken
+  from any shot. Package and sample albedos are the starter capsule's 0.3 (an engineering
+  default).
+- **Not balanced.** The GUI balances view factors only for one hohlraum part with no open
+  end (`_closed_enclosure`); the shock-tube pair, two cavities each closed by a package
+  face, is left unbalanced (its rows miss by the view-factor error, ~1e-3).

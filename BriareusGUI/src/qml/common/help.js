@@ -18,10 +18,14 @@ var pages = [
           text: "A target is made of parts. Insert ▸ adds a starter assembly in the selected part's " +
                 "or piece's frame (TCC with nothing selected), its names made unique (hohlraum_2): " +
                 "Hohlraum with capsule, a hohlraum part along z with a capsule sphere at its center " +
-                "that holds the capsule role; Backlighter foil, a foil 6 mm along x facing the frame's " +
+                "that holds the observed role; Backlighter foil, a foil 6 mm along x facing the frame's " +
                 "origin and a sphere there standing in for the main target (it absorbs the laser " +
-                "light and x-rays that reach it and emits nothing). File ▸ New target starts a " +
-                "target with one starter. The dimensions are illustrative." },
+                "light and x-rays that reach it and emits nothing); Halfraum pair with shock tube, " +
+                "two halfraums (hohlraum parts with one end open) facing each other across a " +
+                "cylinder package whose end faces close them, the top face observed; Opacity " +
+                "halfraum, a halfraum with a sample foil, observed, in its open end. File ▸ New " +
+                "target starts a target with one starter. The dimensions are illustrative " +
+                "mock-ups." },
         { key: "target.mesh", title: "Mesh presets",
           text: "Presets come from a work-precision study on the NIF hohlraum " +
                 "(examples/mesh_convergence.jl): errors in the capsule P2/P0 and P4/P0 of about " +

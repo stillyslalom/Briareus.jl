@@ -47,7 +47,8 @@ ColumnLayout {
         Layout.fillWidth: true
         spacing: 6
         Repeater {
-            model: [{ k: "hohlraum", t: "Hohlraum with capsule" }, { k: "foil", t: "Backlighter foil" }]
+            model: [{ k: "hohlraum", t: "Hohlraum with capsule" }, { k: "foil", t: "Backlighter foil" },
+                    { k: "shock_tube", t: "Halfraum pair with shock tube" }, { k: "opacity", t: "Opacity halfraum" }]
             Button {
                 text: modelData.t
                 onClicked: Julia.br_insert(modelData.k)

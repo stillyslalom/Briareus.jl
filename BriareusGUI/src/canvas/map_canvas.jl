@@ -41,7 +41,7 @@ function _draw_map!(c::MapCanvas, sess::DesignSession)
     if m === nothing
         _update!(c.heatmap, [0.0, 1.0], [0.0, 1.0], fill(NaN32, 2, 2); colorrange = (0.0, 1.0))
         ax.title[] = sess.drive.result[] === nothing ? "Compute the drive to see the flux map" :
-                     "This target has no capsule or foil to map"
+                     "This target has no capsule, observed face or foil to map"
         c.colorbar.label[] = " "
     else
         fin = filter(isfinite, m.values)
@@ -52,7 +52,8 @@ function _draw_map!(c::MapCanvas, sess::DesignSession)
         ax.ylabel[] = m.ylabel
         ax.yreversed[] = m.kind === :capsule
         ax.aspect[] = m.kind === :capsule ? AxisAspect(2) : DataAspect()     # equal degrees / mm
-        ax.title[] = m.kind === :capsule ? "Capsule incident x-ray flux" : "Foil laser irradiance"
+        ax.title[] = m.kind === :capsule ? "Capsule incident x-ray flux" :
+                     m.kind === :face ? "Observed face incident x-ray flux" : "Foil laser irradiance"
         c.colorbar.label[] = "W/cm²"
         ax.limits[] = (nothing, nothing)                  # not an image's window
         reset_limits!(ax)

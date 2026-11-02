@@ -33,12 +33,15 @@ One evaluation of the drive: `evaluation` (core `Evaluation` of the display
 beams: every beam of the table, disabled ones at zero power), `solution` (the
 radiosity `RadiationSolution`, or `nothing` without a radiation model), `modes` (rows
 `(; l, epsilon, legendre)` of the capsule flux, empty without a capsule), `mean_flux`
-(TW/mm², `NaN` without a capsule), `power` (rows `(; name, power, fraction)`), `spot`
-(foil irradiance statistics, or `nothing`), `map` (see [`flux_map`](@ref)),
-`seconds`, and `unconverted` (`nothing`, or the unconverted light's share when it takes
-part: `(; omega1, omega2)`, each `(; absorbed, delivered, conversion)` (TW, and its x-ray
-conversion relative to 3ω), and `skipped`, the beams without a footprint; see
-[`set_unconverted_ratio!`](@ref)). With unconverted light, `evaluation`'s deposition is
+(TW/mm², the observed surface's mean incident x-ray flux: the capsule's moment P0, or a
+flat observed face's area mean; `NaN` without either), `power` (rows `(; name, power,
+fraction)`), `spot` (foil irradiance statistics, or `nothing`), `map` (see
+[`flux_map`](@ref)), `seconds`, `unconverted` (`nothing`, or the unconverted light's
+share when it takes part: `(; omega1, omega2)`, each `(; absorbed, delivered,
+conversion)` (TW, and its x-ray conversion relative to 3ω), and `skipped`, the beams
+without a footprint; see [`set_unconverted_ratio!`](@ref)) and `face` (a flat observed
+face's incident x-ray flux over the whole face, `(; mean, peak, low, rms)` in W/cm² and
+the RMS nonuniformity, or `nothing`). With unconverted light, `evaluation`'s deposition is
 the absorbed power of the 3ω light plus the 1ω and 2ω `unconverted_deposition`, and the
 x-ray source (`solution`, the capsule flux) counts each unconverted color's power at the
 material's conversion, at that color's own absorbed flux, times the color's `conversion`
@@ -55,6 +58,7 @@ struct DriveResult
     map::Any
     seconds::Float64
     unconverted::Any
+    face::Any
 end
 
 """
@@ -524,15 +528,31 @@ end
     flux_lookup(s::Scenario; foil = nothing, ntheta = 90, nphi = 180, npix = 100)
 
 Raster lookup for [`flux_map`](@ref): for a scenario observing a capsule, the observed
-element seen in each direction of a θ–φ grid about the capsule center; otherwise, with
-a backlighter foil `foil` (a part or component name of the scenario's target, see
-[`active_foil`](@ref)), the front element nearest each pixel of the foil face (y–z
-plane; the lookup records the foil as `foil`). `nothing` otherwise.
+element seen in each direction of a θ–φ grid about the capsule center; for one
+observing a flat face (a package's face, an opacity sample: `kind = :face`), the
+observed element nearest each pixel of the face, in its plane (axes `u`, `v` across it,
+`u` along the chamber `z` projected on the face, or `x` when the face is normal to `z`);
+otherwise, with a backlighter foil `foil` (a part or component name of the scenario's
+target, see [`active_foil`](@ref)), the front element nearest each pixel of the foil
+face (y–z plane; the lookup records the foil as `foil`). `nothing` otherwise.
 """
 function flux_lookup(s::Scenario; foil::Union{Nothing,Symbol} = nothing, ntheta::Integer = 90,
                      nphi::Integer = 180, npix::Integer = 100)
     t = s.target
-    if !isempty(s.observed)
+    if _observed_flat(s)
+        es = s.observed
+        n = t.elem_normal[first(es)]
+        a = abs(n[3]) < 0.9 ? Vec3(0, 0, 1) : Vec3(1, 0, 0)
+        u = normalize(a - dot(a, n) * n)
+        v = cross(n, u)
+        A = t.elem_area[es]
+        c0 = sum(A .* t.elem_centroid[es]) / sum(A)
+        us = [dot(t.elem_centroid[e] - c0, u) for e in es]
+        vs = [dot(t.elem_centroid[e] - c0, v) for e in es]
+        idx, xs, ys = _face_raster(us, vs, npix)
+        return (; kind = :face, x = xs, y = ys, index = idx, elems = es, xlabel = "u (mm)",
+                ylabel = "v (mm)", title = "Observed face incident x-ray flux (W/cm²)")
+    elseif !isempty(s.observed)
         obs = s.observed
         A = t.elem_area[obs]
         c0 = sum(A .* t.elem_centroid[obs]) / sum(A)
@@ -566,6 +586,42 @@ function flux_lookup(s::Scenario; foil::Union{Nothing,Symbol} = nothing, ntheta:
             xlabel = "y (mm)", ylabel = "z (mm)", title = "Foil laser irradiance (W/cm²)")
 end
 
+# The element (index into `us`, `vs`, its in-plane coordinates) nearest each pixel of an
+# `npix × npix` raster over their extent padded by half an element, and the raster's axes.
+function _face_raster(us, vs, npix::Integer)
+    ulo, uhi = extrema(us)
+    vlo, vhi = extrema(vs)
+    pad = max(uhi - ulo, vhi - vlo) / (2 * sqrt(length(us)))
+    xs = range(ulo - pad, uhi + pad; length = npix)
+    ys = range(vlo - pad, vhi + pad; length = npix)
+    idx = Matrix{Int}(undef, npix, npix)
+    for (j, y) in enumerate(ys), (i, x) in enumerate(xs)
+        idx[i, j] = argmin(k -> (us[k] - x)^2 + (vs[k] - y)^2, eachindex(us))
+    end
+    return idx, collect(xs), collect(ys)
+end
+
+# Whether a scenario observes a flat face (every observed element facing one way, as on
+# a rectangle or disk) rather than a capsule.
+function _observed_flat(s::Scenario)
+    isempty(s.observed) && return false
+    t = s.target
+    n = t.elem_normal[first(s.observed)]
+    return all(e -> dot(t.elem_normal[e], n) > 1 - 1e-9, s.observed)
+end
+
+# A flat observed face's incident x-ray flux `H` (TW/mm²) over its elements: mean, peak
+# and lowest (W/cm²) and the RMS nonuniformity; `nothing` without one.
+function _face_stats(s::Scenario, sol)
+    (sol === nothing || !_observed_flat(s)) && return nothing
+    es = s.observed
+    H = sol.H[es]
+    A = s.target.elem_area[es]
+    mean = sum(H .* A) / sum(A)
+    return (; mean = to_Wcm2(mean), peak = to_Wcm2(maximum(H)), low = to_Wcm2(minimum(H)),
+            rms = mean > 0 ? rms_nonuniformity(H, A) : NaN)
+end
+
 """
     flux_map(dr::DriveState) -> Union{Nothing,NamedTuple}
 
@@ -582,7 +638,7 @@ flux_map(dr::DriveState) = dr.result[] === nothing ? nothing : dr.result[].map
 function _flux_map(lk, ev::Evaluation, sol)
     lk === nothing && return nothing
     t = ev.scenario.target
-    vals = lk.kind === :capsule ? to_Wcm2.(sol.H[ev.scenario.observed]) :
+    vals = lk.kind in (:capsule, :face) ? to_Wcm2.(sol.H[ev.scenario.observed]) :
            to_Wcm2.(ev.deposition.element[lk.elems] ./ t.elem_area[lk.elems])
     return (; lk.kind, lk.x, lk.y, values = vals[lk.index], lk.xlabel, lk.ylabel, lk.title)
 end
@@ -627,14 +683,17 @@ function _evaluate_drive(s::Scenario, beams, lookup, spot_radius::Real; ratio = 
     sol = s.model === nothing ? nothing : solve(s.model, P3; sol_kw...)
     modes = NamedTuple[]
     mean = NaN
-    if _has_flux(ev)
+    face = _face_stats(s, sol)
+    if _has_modes(ev)
         c = flux_ylm(ev; lmax = maximum(MODE_DEGREES))
         a = flux_moments(ev; lmax = maximum(MODE_DEGREES))
         mean = a[1]
         modes = [(; l, epsilon = mode_amplitude(c, l), legendre = a[l+1] / a[1]) for l in MODE_DEGREES]
+    elseif face !== nothing
+        mean = face.mean / to_Wcm2(1.0)                  # back to TW/mm²
     end
     return DriveResult(ev, sol, modes, mean, power_rows(ev), _spot_stats(ev, spot_radius, foil),
-                       _flux_map(lookup, ev, sol), time() - t0, uc)
+                       _flux_map(lookup, ev, sol), time() - t0, uc, face)
 end
 
 """
@@ -757,11 +816,21 @@ end
 """
     drive_summary(res::DriveResult; short = false) -> String
 
-The drive in a line: capsule mean flux, radiation temperature, and ε₂/ε₄; or the foil
-spot irradiance and nonuniformity. `short`: the model tree's detail, the capsule's
-radiation temperature and ε₂, or the foil spot's nonuniformity.
+The drive in a line: capsule mean flux, radiation temperature, and ε₂/ε₄; or a flat
+observed face's mean flux, radiation temperature and nonuniformity; or the foil spot
+irradiance and nonuniformity. `short`: the model tree's detail, the capsule's radiation
+temperature and ε₂, the observed face's radiation temperature and nonuniformity, or the
+foil spot's nonuniformity.
 """
 function drive_summary(res::DriveResult; short::Bool = false)
+    if res.face !== nothing
+        f = res.face
+        Tr = radiation_temperature(res.mean_flux)
+        short && return _nobreak(@sprintf("Tr %.0f eV · rms %.1f %%", Tr, 100 * f.rms))
+        return _nobreak(@sprintf("observed face %s W/cm² (Tr %.0f eV) · rms %.1f %% · %s to %s W/cm²",
+                                 _wcm2(res.mean_flux), Tr, 100 * f.rms, _wcm2(f.low / to_Wcm2(1.0)),
+                                 _wcm2(f.peak / to_Wcm2(1.0))))
+    end
     if short && (!isempty(res.modes) || res.spot !== nothing)
         isempty(res.modes) && return _nobreak(@sprintf("spot rms %.1f %%", 100 * res.spot.rms))
         e2 = only(r.epsilon for r in res.modes if r.l == 2)

@@ -15,12 +15,14 @@ assembly. Cases named:
 This file records the design and the phased plan. Remove each phase from it once that
 phase lands; the docstrings and research notes then hold what was built.
 
-## Today (after phase B2)
+## Today (after phase C)
 
 - **Parts only.** A target is its parts (`PartSpec`, `controllers/target_setup.jl`); the
-  hohlraum is a `:hohlraum` part (core `hohlraum(...)` placed by its frame, pieces
+  hohlraum is a `:hohlraum` part (core `hohlraum(...)` placed by its frame, each end an
+  entrance hole, closed or open (a halfraum), pieces
   `<part>_wall`, … with `Component.part = <part>`, its windows on the part). Starters
-  (`starter_parts`, `insert_starter!`: *Hohlraum with capsule*, *Backlighter foil*)
+  (`starter_parts`, `insert_starter!`: *Hohlraum with capsule*, *Backlighter foil*,
+  *Halfraum pair with shock tube*, *Opacity halfraum*)
   insert parts in a frame; File ▸ New target is one starter.
 - **A model tree.** Parts and assemblies (`:assembly` parts) nest to any depth through
   `PartSpec.assembly` (`controllers/assemblies.jl`); the analyses see only the parts'
@@ -28,7 +30,8 @@ phase lands; the docstrings and research notes then hold what was built.
 - **Frames.** Every part has a frame, and a hohlraum part its pieces' (`<part>.leh_top`,
   `<part>.leh_bottom`, `<part>.window_k`), so beams aim relative to the wall, caps,
   entrance holes, windows and capsule.
-- **Roles, not names.** The observed, foil and wall roles are flags on parts; a hohlraum
+- **Roles, not names.** The observed (a sphere or a flat face), foil and wall roles are
+  flags on parts; a hohlraum
   part's wall and caps hold the wall role.
 - **Core is already generic.** Core analyses take the names as keywords (`observe`,
   `wall`, `foil`, `object`, `targets`), and the VisRad import builds a cylindrical
@@ -114,8 +117,9 @@ B2. Landed (the assembly tree: assemblies, membership, subtree show/hide and
    include/exclude, the tree's editing commands, sessions, a CAD or VisRad import as one
    assembly; session version 10). The placement triad (decision 6) is not built: it
    remains open (see "Phase B2 as built").
-C. **Halfraum ends and packages:** open ends, a package `observed` face, the shock-tube
-   and opacity starters.
+C. Landed (halfraum ends and packages: per-end entrance holes and open ends in core
+   `hohlraum`, the role key `:observed`, flat observed faces, the shock-tube and opacity
+   starters; no session version change): see "Phase C as built".
 D. **Profiles:** frustraums and multi-section hohlraums (a radius per section; four
    sections for the tentless design).
 C2. **Per-cavity drive and whole-assembly Dante** (decisions 8, 10, 11): Tr per hohlraum
@@ -199,6 +203,44 @@ E. **Double backlighter with ARC:** the starter, ARC beams as a facility beam se
 - Not built: the placement triad (decision 6). It needs 3D-view handles (arrows, rings),
   picking and drag-to-step commits in `canvas/scene_canvas.jl`, a separate piece of
   work; left open rather than half built.
+
+## Phase C as built (2026-11-02): what departs from the design
+
+- Core: `hohlraum(; top_end, bottom_end)`, each `nothing` (an entrance hole of
+  `leh_radius`), a radius, `:closed` or `:open`. The closed end moved from the GUI into
+  core unchanged (the cap and the hole's and lip's meshes merged). An open end has no cap
+  and no hole; the target is then not declared `closed`, and an open end refuses corner
+  fillets and sombreros (a fillet at an open end would be a lip; a sombrero shields a
+  hole). With a closing lip, an end of its own radius scales `leh_open_radius` by the
+  ratio of the radii.
+- Bit for bit: the components, element centroids and areas of nine `hohlraum`
+  configurations, and the view factors, deposition, B, H and moments of a coarse NIF
+  hohlraum under `nif_quads`, serialized before and after: identical. The GUI hohlraum
+  part's components (default, closed ends with and without lips, a placed part, windows)
+  likewise. Validation: the coaxial-disk closed form and an aperture-closed energy balance
+  (`test/halfraum.jl`; research notes, "Halfraum ends and starters").
+- The GUI hohlraum part's ends take 2 (open) besides 0 and 1 (`HOHLRAUM_ENDS`), and
+  `bottom_leh_radius` (0: `leh_radius`) gives the bottom hole its own radius; the top's
+  is `leh_radius`. Sessions store values by key and fill missing keys with defaults, and
+  the role is the flag `observed`, so no session version change and no conversion: older
+  sessions load unchanged.
+- The role key is `:observed` (`PART_ROLES`), labeled *Observed*. A flat observed face is
+  a rectangle or disk (or a VisRad rectangle) (`observed_flat`); the drive's scenario
+  tests flatness from the observed elements' normals (`_observed_flat`). A flat face gets
+  a face map of its incident x-ray flux (`flux_lookup` kind `:face`, in-plane axes `u`,
+  `v`), `DriveResult.face` (mean, peak, lowest, RMS nonuniformity over the whole face,
+  not the foil's spot radius), `mean_flux` its area mean, and no modes; the symmetry
+  objective and the capsule keep-out refuse it.
+- Starters `:shock_tube` and `:opacity` (`starter_parts`): plain parts, not wrapped in an
+  assembly, as the earlier starters. The package's end disks have the halfraums' radius
+  and close their open ends; the shock-tube pair is two cavities, so `_closed_enclosure`
+  leaves it unbalanced (as any target with more than one hohlraum part), and a single
+  hohlraum part with an open end too. The beam presets do not aim in the starters' frames
+  (model item 5's presets): `nif_quads` keeps its cone pointing at TCC.
+- Not built: the drive history (`timeline.jl`, left to the Time tab's work) still
+  computes Legendre moments of a flat observed face (finite and meaningless); its Tr from
+  P0 is within 0.2 % of the face's area mean on the opacity starter. A piece's role
+  (decision 7, a cap observed) is not built.
 
 ## Decisions (user, 2026-10-29)
 

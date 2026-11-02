@@ -167,12 +167,14 @@ const PART_SIZE_FIELDS = Dict(
 Values of a `:hohlraum` part besides its sizes (`key => default`): its wall's albedo and
 laser → x-ray conversion (the placement fields `albedo` and `conversion`, which default
 to 0.85 and 0.8 for a hohlraum, as the former hohlraum template had), each end's opening (`top_end`,
-`bottom_end`: 1 an entrance hole of radius `leh_radius`, 0 closed: the cap covers the
-end), and the closing entrance holes: `leh_closure` (1 on, 0 off) with the
-[`LEH_CLOSURE_FIELDS`](@ref).
+`bottom_end`: 1 an entrance hole, 0 closed: the cap covers the end, 2 open: neither cap
+nor hole, the cavity open to a package placed there or to nothing, as a halfraum's; see
+[`HOHLRAUM_ENDS`](@ref)), `bottom_leh_radius` (mm: the bottom entrance hole's radius; 0,
+the default, `leh_radius`, which is the top's), and the closing entrance holes:
+`leh_closure` (1 on, 0 off) with the [`LEH_CLOSURE_FIELDS`](@ref).
 """
 const HOHLRAUM_VALUES = (:albedo => 0.85, :conversion => 0.8, :top_end => 1.0, :bottom_end => 1.0,
-                         :leh_closure => 0.0,
+                         :bottom_leh_radius => 0.0, :leh_closure => 0.0,
                          (k => d for (k, _, _, d) in LEH_CLOSURE_FIELDS)...)
 
 """
@@ -184,6 +186,21 @@ hohlraum's capsule sets it, so it meshes as the former hohlraum template's capsu
 """
 const SPHERE_VALUES = (:capsule_mesh => 0.0,)
 
+"""
+The openings of a hohlraum part's end, by value of its `top_end` or `bottom_end`
+([`HOHLRAUM_VALUES`](@ref)): 0 `:closed`, 1 `:leh` (an entrance hole), 2 `:open` (core
+`hohlraum(; top_end = :open)`: no cap, no hole). A hohlraum part with an open end is a
+halfraum.
+"""
+const HOHLRAUM_ENDS = (:closed, :leh, :open)
+
+# The opening of end `e` (`:top_end` or `:bottom_end`) of hohlraum values `v`.
+function _end_kind(v, e::Symbol)
+    x = v[e]
+    x in (0.0, 1.0, 2.0) || throw(ArgumentError("an end is closed (0), an entrance hole (1) or open (2)"))
+    return HOHLRAUM_ENDS[Int(x)+1]
+end
+
 # The values a kind has besides the placement and size fields.
 _kind_values(kind::Symbol) = kind === :hohlraum ? HOHLRAUM_VALUES : kind === :sphere ? SPHERE_VALUES : ()
 
@@ -192,16 +209,19 @@ _kind_values(kind::Symbol) = kind === :hohlraum ? HOHLRAUM_VALUES : kind === :sp
 
 The piece names of a `:hohlraum` part `p` without its prefix, in the order of its
 components (each component is named `<part>_<piece>` and carries `part = <part>`):
-`:wall`, `:cap_top`, `:cap_bottom`, then for each end with an entrance hole `:leh_top`
-or `:leh_bottom` (and its closing lip `:leh_top_lip`, … with `leh_closure`), then the
-windows `:window_1`, ….
+`:wall`, then `:cap_top` and `:cap_bottom` for each end that is not open, then for each
+end with an entrance hole `:leh_top` or `:leh_bottom` (and its closing lip
+`:leh_top_lip`, … with `leh_closure`), then the windows `:window_1`, ….
 """
 function hohlraum_pieces(p)                     # p::PartSpec (defined below)
     p.kind === :hohlraum || throw(ArgumentError("$(p.name) is not a hohlraum"))
     v = p.values
-    out = [:wall, :cap_top, :cap_bottom]
+    out = [:wall]
+    for (e, cap) in ((:top_end, :cap_top), (:bottom_end, :cap_bottom))
+        _end_kind(v, e) === :open || push!(out, cap)
+    end
     for (e, leh) in ((:top_end, :leh_top), (:bottom_end, :leh_bottom))
-        v[e] != 0 || continue
+        _end_kind(v, e) === :leh || continue
         push!(out, leh)
         v[:leh_closure] != 0 && push!(out, Symbol(leh, :_lip))
     end
@@ -605,40 +625,35 @@ function _part_components(p::PartSpec, h::Real, frame::Frame, raw::Bool, hc::Rea
 end
 
 # The components of a `:hohlraum` part: core `hohlraum` (gold wall, no capsule) with
-# elements of `h`, each component renamed `<part>_<name>` with `part = <part>`; a closed
-# end's entrance hole (and lip) merged into its cap, of the wall's material. Placed by
+# elements of `h` and the part's ends (core `top_end`, `bottom_end`: a closed end's
+# entrance hole and lip merged into its cap, of the wall's material; an open end with
+# neither), each component renamed `<part>_<name>` with `part = <part>`. Placed by
 # `frame`; at the chamber frame the meshes are not moved.
 function _hohlraum_components(p::PartSpec, h::Real, frame::Frame)
     v = p.values
-    for e in (:top_end, :bottom_end)
-        v[e] in (0.0, 1.0) || throw(ArgumentError("$(p.name): an end is an entrance hole (1) or closed (0)"))
-    end
     wall = gold(albedo = v[:albedo], conversion = v[:conversion])
     closing = v[:leh_closure] != 0
     lip = closing ? _leh_closure(v, wall) : nothing
     fopen = closing ? v[:leh_open_fraction] : 0.84
     t = try
+        rb = v[:bottom_leh_radius]
+        rb >= 0 || throw(ArgumentError("the bottom LEH radius must be positive (0: the LEH radius)"))
+        ends = map((:top_end, :bottom_end)) do e
+            k = _end_kind(v, e)
+            k === :leh ? (e === :bottom_end && rb > 0 && rb != v[:leh_radius] ? rb : nothing) : k
+        end
         hohlraum(; length = v[:length], radius = v[:radius], leh_radius = v[:leh_radius],
                  capsule_radius = 0.0, wall,
                  windows = [_wall_window(w, k) for (k, w) in enumerate(p.windows)], h,
-                 leh_closure = lip, leh_open_radius = fopen * v[:leh_radius])
+                 leh_closure = lip, leh_open_radius = fopen * v[:leh_radius],
+                 top_end = ends[1], bottom_end = ends[2])
     catch err
         err isa ArgumentError || rethrow()
         throw(ArgumentError("$(p.name): " * err.msg))
     end
-    comps = copy(t.components)
-    for (e, cap, leh) in ((:top_end, :cap_top, :leh_top), (:bottom_end, :cap_bottom, :leh_bottom))
-        v[e] == 0 || continue
-        hole = filter(c -> c.name in (leh, Symbol(leh, :_lip)), comps)
-        k = findfirst(c -> c.name === cap, comps)
-        c = comps[k]
-        comps[k] = Component(cap, merge_meshes(c.mesh, (d.mesh for d in hole)...), c.material;
-                             surface = c.surface)
-        filter!(c -> !(c in hole), comps)
-    end
     out = Component[Component(piece_name(p.name, c.name), c.mesh, c.material; kind = c.kind,
                               two_sided = c.two_sided, surface = c.surface, part = p.name)
-                    for c in comps]
+                    for c in t.components]
     frame == CHAMBER && return out
     return Component[transform(c, frame.R, frame.origin) for c in out]
 end
@@ -2212,23 +2227,42 @@ end
 
 """
 Roles a part can take in the analyses, held by the part's flags (its name carries none):
-`:none`; `:capsule`, the observed role held by a sphere (flag `observed`: its x-ray
-drive's modes, the θ–φ map and the capsule keep-out; one part at a time, see
-[`observed_name`](@ref)); `:foil` (a backlighter foil, a flat part or a mesh: any number
+`:none`; `:observed`, the surface whose x-ray drive is analyzed (flag `observed`; one
+part at a time, see [`observed_name`](@ref)): a sphere (a capsule: its drive's modes,
+the θ–φ map and the capsule keep-out) or a flat face (a rectangle or disk: a package's
+face, an opacity sample; the face map of its incident x-ray flux and that flux's
+statistics over the face, see [`observed_flat`](@ref)); `:foil` (a backlighter foil, a flat part or a mesh: any number
 of parts can be foils, and the active one ([`active_foil`](@ref)) is the foil whose spot
 statistics, map, objective, line of sight and captured power the analyses take); and
 `:wall` (a re-emitting cavity surface: the drive history's wall temperature, and a
 surface the clearance and TaLIS checks land the beams on; any number of parts, see
 [`wall_names`](@ref)).
 """
-const PART_ROLES = (:none, :capsule, :foil, :wall)
+const PART_ROLES = (:none, :observed, :foil, :wall)
 
-const PART_ROLE_LABELS = Dict(:none => "None", :capsule => "Capsule (observed x-ray drive)",
+const PART_ROLE_LABELS = Dict(:none => "None", :observed => "Observed (x-ray drive: a capsule or a face)",
                               :foil => "Backlighter foil (spot uniformity)",
                               :wall => "Wall (re-emitting cavity surface)")
 
 "Role of a part (one of [`PART_ROLES`](@ref)), from its flags."
-part_role(p::PartSpec) = p.observed ? :capsule : p.foil ? :foil : p.wall ? :wall : :none
+part_role(p::PartSpec) = p.observed ? :observed : p.foil ? :foil : p.wall ? :wall : :none
+
+"""
+    observed_flat(ts::TargetSetup) -> Bool
+
+Whether the observed surface ([`observed_name`](@ref)) is a flat face (a rectangle or a
+disk, or a VisRad rectangle) rather than a sphere: the drive then maps its face and
+gives its flux's statistics over the face, and the capsule-only views (modes, keep-out,
+the θ–φ map) have no capsule.
+"""
+function observed_flat(ts::TargetSetup)
+    o = observed_name(ts)
+    o === nothing && return false
+    return _part_shape(ts.parts[][part_index(ts, o)]) in _FLAT_OBSERVED
+end
+
+# The shapes a flat observed face can be.
+const _FLAT_OBSERVED = (:rectangle, :disk)
 
 """
     observed_name(ts::TargetSetup) -> Union{Symbol,Nothing}
@@ -2253,8 +2287,9 @@ end
 The re-emitting cavity walls in the calculations (the drive history's wall temperature;
 surfaces the clearance and TaLIS checks land the beams on), in the parts' order: each
 part with the role `:wall`, and each hohlraum part's wall and caps (its pieces
-`<part>_wall`, `<part>_cap_top`, `<part>_cap_bottom`: they hold the role by being a
-hohlraum's; the checks keep the caps as hardware, the entrance holes' edges).
+`<part>_wall`, `<part>_cap_top`, `<part>_cap_bottom`, an open end having no cap: they
+hold the role by being a hohlraum's; the checks keep the caps as hardware, the entrance
+holes' edges).
 """
 function wall_names(ts::TargetSetup)
     ex = ts.excluded[]
@@ -2262,13 +2297,14 @@ function wall_names(ts::TargetSetup)
     for p in ts.parts[]
         p.name in ex && continue
         p.wall && push!(out, p.name)
-        p.kind === :hohlraum && append!(out, (piece_name(p.name, s) for s in _HOHLRAUM_WALL))
+        p.kind === :hohlraum && append!(out, _hohlraum_walls(p))
     end
     return out
 end
 
-# The pieces of a hohlraum part that hold the wall role.
+# The pieces of a hohlraum part that hold the wall role: its wall and the caps it has.
 const _HOHLRAUM_WALL = (:wall, :cap_top, :cap_bottom)
+_hohlraum_walls(p) = (ps = hohlraum_pieces(p); [piece_name(p.name, s) for s in _HOHLRAUM_WALL if s in ps])
 
 """
     foil_names(ts::TargetSetup) -> Vector{Symbol}
@@ -2336,7 +2372,7 @@ end
 
 wall_components(ts::TargetSetup, t::Target = ts.target[]) =
     _held_components(ts, t, p -> p.wall,
-                     [piece_name(p.name, s) for p in ts.parts[] if p.kind === :hohlraum for s in _HOHLRAUM_WALL])
+                     [n for p in ts.parts[] if p.kind === :hohlraum for n in _hohlraum_walls(p)])
 
 # The components of `t` of the parts `holds(p)` selects (a VisRad part's carry its name as
 # a prefix), and the components named `named` (a hohlraum part's walls).
@@ -2393,11 +2429,12 @@ Give part `i` a role in the analyses (one of [`PART_ROLES`](@ref)); the part kee
 name, and its components (and so the target) are unchanged. `:foil` (a disk, rectangle
 or mesh, or a VisRad rectangle or CAD part: a backlighter whose spot the foil objective
 makes uniform) marks the part as a foil; the part becomes the active foil
-([`active_foil`](@ref)) when the design had none. `:capsule` makes the part the observed
+([`active_foil`](@ref)) when the design had none. `:observed` makes the part the observed
 surface ([`observed_name`](@ref)); another part that held it gives it up. A hohlraum
-part takes no role (its wall and caps hold the wall role). The capsule is a sphere (the mode analysis and the
-keep-out take its center and radius): a sphere part or a VisRad sphere takes the role
-itself; a CAD part (a capsule with its fill tube, say) is replaced in the calculations by
+part takes no role (its wall and caps hold the wall role). The observed surface is a
+sphere (a capsule: the mode analysis and the keep-out take its center and radius) or a
+flat face (a rectangle or disk, or a VisRad rectangle: [`observed_flat`](@ref)): such a
+part takes the role itself; a CAD part (a capsule with its fill tube, say) is replaced in the calculations by
 a sphere part fitted to it ([`fit_sphere`](@ref): named `capsule`, or `capsule_2`, … when
 that is taken; its element size the target's capsule size, its albedo and conversion the
 part's), which takes the role, and left out of the calculations itself. `:wall` (any
@@ -2418,9 +2455,10 @@ function set_part_role!(ts::TargetSetup, i::Integer, role::Symbol; done = () -> 
         p.kind === :hohlraum &&
             throw(ArgumentError("a hohlraum's wall and caps hold the wall role already; its holes are apertures"))
         shape = _part_shape(p)
-        if role === :capsule && shape !== :sphere
+        if role === :observed && shape !== :sphere && !(shape in _FLAT_OBSERVED)
             shape === :mesh ||
-                throw(ArgumentError("the capsule is a sphere, or a CAD part a sphere is fitted to"))
+                throw(ArgumentError("the observed surface is a sphere, a flat face (a rectangle or disk), " *
+                                    "or a CAD part a sphere is fitted to"))
             return _capsule_from_part!(ts, i; done)
         end
         role === :foil && !(shape in (:rectangle, :disk, :mesh)) &&
@@ -2432,8 +2470,8 @@ function set_part_role!(ts::TargetSetup, i::Integer, role::Symbol; done = () -> 
         ts.error[] = _errmsg(err)
         return false
     end
-    role === :capsule && _drop_observed!(ps)            # one observed surface at a time
-    ps[i] = _with(ps[i]; foil = role === :foil, observed = role === :capsule, wall = role === :wall)
+    role === :observed && _drop_observed!(ps)            # one observed surface at a time
+    ps[i] = _with(ps[i]; foil = role === :foil, observed = role === :observed, wall = role === :wall)
     first_foil = role === :foil && active_foil(ts) === nothing
     # the geometry is unchanged: the parts are committed without building the target
     ts.error[] = ""
@@ -2500,7 +2538,7 @@ function fit_sphere(points::AbstractVector, weights::AbstractVector = ones(lengt
     return c, r
 end
 
-# Role `:capsule` for CAD part `i`: a sphere part with the role, fitted to it, in its place in
+# Role `:observed` for CAD part `i`: a sphere part with the role, fitted to it, in its place in
 # the calculations. With `spawn[]` a part of more than `BACKGROUND_TRIANGLES` facets is
 # fitted on a worker (`fitting`), and the role is given when the fit is done, to the part
 # as it is then (fitted again if it moved meanwhile; dropped if it went away).
@@ -2549,7 +2587,7 @@ function _capsule_fitted!(ts::TargetSetup, p::PartSpec, job::Integer, out, done 
         elseif i !== nothing
             _apply_capsule!(ts, i, out.value...) && (done(); true)
         elseif j !== nothing                                  # edited meanwhile: fit it again
-            set_part_role!(ts, j, :capsule; done)
+            set_part_role!(ts, j, :observed; done)
         else
             ts.error[] = "$(p.name) went away before its capsule sphere was fitted"
             false
@@ -2599,14 +2637,18 @@ part_index(ts::TargetSetup, name::Symbol) = findfirst(p -> p.name === name, ts.p
 
 """
 Starter assemblies, inserted with [`insert_starter!`](@ref): `:hohlraum` (*Hohlraum with
-capsule*: a hohlraum part and a capsule sphere with the observed role) and `:foil`
+capsule*: a hohlraum part and a capsule sphere with the observed role), `:foil`
 (*Backlighter foil*: a foil rectangle facing TCC and an absorbing sphere standing in for
-the main target). Their dimensions are illustrative (the NIF-scale defaults of the
-former templates), not a facility's design.
+the main target), `:shock_tube` (*Halfraum pair with shock tube*: two halfraums facing
+each other across a cylinder package whose end face has the observed role) and
+`:opacity` (*Opacity halfraum*: a halfraum with a sample foil, observed, at its open
+end). Their dimensions are illustrative (the NIF-scale defaults of the former
+templates; mock-ups for the halfraums), not a facility's design.
 """
-const STARTERS = (:hohlraum, :foil)
+const STARTERS = (:hohlraum, :foil, :shock_tube, :opacity)
 
-const STARTER_LABELS = Dict(:hohlraum => "Hohlraum with capsule", :foil => "Backlighter foil")
+const STARTER_LABELS = Dict(:hohlraum => "Hohlraum with capsule", :foil => "Backlighter foil",
+                            :shock_tube => "Halfraum pair with shock tube", :opacity => "Opacity halfraum")
 
 """
     starter_parts(kind; frame = :tcc, taken = (), capsule_h = 0.3) -> Vector{PartSpec}
@@ -2624,6 +2666,21 @@ The parts of starter `kind` (one of [`STARTERS`](@ref)), placed in the frame nam
   along its `x` and facing it (its edges along the frame's `z` and `y`), with the foil
   role, and the absorbing sphere `main` (radius 1 mm, albedo and conversion 0) at the
   origin. At TCC both mesh as the former foil template's did.
+- `:shock_tube`: two halfraums (hohlraum parts `halfraum_top` and `halfraum_bottom`,
+  each 2.5 mm long, radius 1.5 mm, of the hohlraum part's wall), each with an entrance
+  hole of 1 mm radius at its outer end and its inner end open, facing each other across
+  the package `package` (a cylinder of radius 1.5 mm and length 2 mm at the frame's
+  origin, along its `z`, absorbing: albedo and conversion 0) whose end faces, the disks
+  `package_top` (with the observed role) and `package_bottom` (radius 1.5 mm, albedo and
+  conversion 0.3, placed in the package's frame), close each halfraum's open end.
+- `:opacity`: a halfraum (the hohlraum part `halfraum`, 3 mm long, radius 1.5 mm, an
+  entrance hole of 1 mm radius at its top, its bottom open) and the sample `sample` (a
+  1 mm square rectangle, albedo 0.3, conversion 0, with the observed role) in its open
+  end's plane, facing into it; the radiation that misses the sample leaves through the
+  open end.
+
+The two halfraum starters are mock-ups at an illustrative scale (reference/research-notes.md,
+"Halfraum starters"), not any experiment's design.
 """
 function starter_parts(kind::Symbol; frame::Symbol = :tcc, taken = (), capsule_h::Real = 0.3)
     kind in STARTERS || throw(ArgumentError("a starter is one of $STARTERS"))
@@ -2643,6 +2700,26 @@ function starter_parts(kind::Symbol; frame::Symbol = :tcc, taken = (), capsule_h
         return [PartSpec(:hohlraum; name = h, frame),
                 PartSpec(:sphere; name = c, frame = h, observed = true,
                          values = Dict(:r1 => 0.9, :albedo => 0.3, :conversion => 0.3, :capsule_mesh => 1.0))]
+    end
+    if kind === :shock_tube
+        a, b = unique_name(:halfraum_top), unique_name(:halfraum_bottom)
+        t, ft, fb = unique_name(:package), unique_name(:package_top), unique_name(:package_bottom)
+        R, Lh, Lp = 1.5, 2.5, 2.0
+        half(name, z, top, bottom) =
+            PartSpec(:hohlraum; name, frame, values = Dict(:z => z, :length => Lh, :radius => R, :leh_radius => 1.0,
+                                                           :top_end => top, :bottom_end => bottom))
+        face(name, z, theta, observed) =
+            PartSpec(:disk; name, frame = t, observed,
+                     values = Dict(:z => z, :theta => theta, :r1 => R, :albedo => 0.3, :conversion => 0.3))
+        return [half(a, (Lp + Lh) / 2, 1.0, 2.0), half(b, -(Lp + Lh) / 2, 2.0, 1.0),
+                PartSpec(:cylinder; name = t, frame, values = Dict(:r1 => R, :length => Lp)),
+                face(ft, Lp / 2, 0.0, true), face(fb, -Lp / 2, 180.0, false)]
+    elseif kind === :opacity
+        h, s = unique_name(:halfraum), unique_name(:sample)
+        return [PartSpec(:hohlraum; name = h, frame,
+                         values = Dict(:length => 3.0, :radius => 1.5, :leh_radius => 1.0, :bottom_end => 2.0)),
+                PartSpec(:rectangle; name = s, frame = h, observed = true,
+                         values = Dict(:z => -1.5, :r1 => 1.0, :r2 => 1.0, :albedo => 0.3))]
     end
     f = unique_name(:foil)
     m = unique_name(:main)

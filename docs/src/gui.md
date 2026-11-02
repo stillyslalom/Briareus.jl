@@ -237,16 +237,21 @@ collects every explanation by page. Help ▸ Documentation opens this page.
 ![The Help screen at the placement sweep's page: the explanations behind the ⓘ marks, listed by page, with a link to this documentation.](assets/gui/help.png)
 
 - **Target:** the mesh: a preset (above) or element sizes in mm for the walls and parts
-  and for the capsule. A target is made of parts: Insert ▸ *Hohlraum with capsule* or
-  *Backlighter foil* adds a starter assembly in the selected part's or piece's frame (TCC
+  and for the capsule. A target is made of parts: Insert ▸ *Hohlraum with capsule*,
+  *Backlighter foil*, *Halfraum pair with shock tube* (two halfraums facing each other
+  across a cylinder package whose end faces close them, the top face observed) or
+  *Opacity halfraum* (a halfraum with an observed sample foil in its open end) adds a
+  starter assembly in the selected part's or piece's frame (TCC
   with nothing selected), its names made unique (`hohlraum_2`), and File ▸ New target
   starts a target of one starter (*Empty*: a sphere at TCC). The starters' dimensions are
-  illustrative; a session saved with the former hohlraum or foil template loads as these
+  illustrative mock-ups; a session saved with the former hohlraum or foil template loads as these
   parts.
 - **Hohlraum parts:** a cylindrical hohlraum ([`hohlraum`](@ref)) along the part's z,
   in pieces named after the part (`hohlraum_wall`, `hohlraum_cap_top`, …): its length,
-  radius, entrance-hole radius, wall albedo and conversion, each end an entrance hole or
-  closed (covered by its cap), the closing entrance holes, and its windows. Its wall and
+  radius, entrance-hole radius (the bottom hole's may differ), wall albedo and conversion,
+  each end an entrance hole, closed (covered by its cap) or open (neither cap nor hole: a
+  halfraum, closed or not by whatever is placed there; its view factors are then not
+  balanced), the closing entrance holes, and its windows. Its wall and
   caps hold the *Wall* role (the drive history's wall temperature); the clearance and
   TaLIS checks keep the caps as hardware, the entrance holes' edges. Each end has a frame
   (`hohlraum.leh_top`, `hohlraum.leh_bottom`: origin at the end's center, z pointing out
@@ -283,8 +288,11 @@ collects every explanation by page. Help ▸ Documentation opens this page.
   solids gives one part per solid. A *VisRad object* part is a component of an imported
   VisRad workspace; a VisRad rectangle, sphere or cylindrical hohlraum keeps VisRad's
   own element grid unless the part is given an element size. A part's *Role* marks it
-  for the analyses, and the part keeps its name: *Capsule* (the observed surface, one at
-  a time; a CAD capsule is replaced in the
+  for the analyses, and the part keeps its name: *Observed* (the surface whose x-ray drive
+  is analyzed, one at a time: a sphere, whose capsule modes, θ–φ map and keep-out the
+  drive and optimization take, or a flat face, a rectangle or disk such as a package's
+  face or an opacity sample, which gets a map of its incident flux over the face, its
+  mean, range and RMS nonuniformity, and no capsule modes; a CAD capsule is replaced in the
   calculations by a sphere fitted to it, `fit_sphere`, so a fill tube does not count),
   *Backlighter foil* (a flat part or a mesh), *Wall* (a re-emitting cavity surface: the
   drive history's wall temperature, and a surface the clearance and TaLIS checks land the
