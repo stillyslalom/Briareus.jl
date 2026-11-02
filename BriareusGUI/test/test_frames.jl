@@ -631,7 +631,7 @@ end
     @test set_part_role!(ts, part_index(ts, :shield), :wall)
     @test ts.target[] === t && wall_names(ts) == [:hohlraum_wall, :hohlraum_cap_top, :hohlraum_cap_bottom, :shield] && wall_components(ts) == [:hohlraum_wall, :hohlraum_cap_top, :hohlraum_cap_bottom, :shield]
     @test :shield in s.review.targets[] && :shield in s.talis.capture[]
-    @test Controllers._history_key(s)[end] != k[end]
+    @test Controllers._history_key(s)[5] != k[5]   # the wall set
     @test !set_part_role!(ts, part_index(ts, :hole), :wall) && occursin("aperture", ts.error[])
     @test set_part_role!(ts, part_index(ts, :shield), :none) && wall_names(ts) == [:hohlraum_wall, :hohlraum_cap_top, :hohlraum_cap_bottom]
     @test :shield in s.review.hardware[] && :shield in s.talis.hardware[]
