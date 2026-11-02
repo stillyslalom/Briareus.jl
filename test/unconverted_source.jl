@@ -313,6 +313,31 @@ end
         abs(hpp.unconverted.delivered[:omega1][j] - u[:omega1].delivered) / u[:omega1].delivered
     end
     @test maximum(devp) < 1e-12 && minimum(inside) > 1e-3
+    # the power-split grouping: the cones' pulses equal through 1 ns, then apart, so the
+    # one set of beams the history deposits at first splits mid-history; the mock squares
+    # put the light inside. Each step against `solve` with `unconverted_deposition` of
+    # that step's beams at its powers
+    inner = PulseShape([0.0, 1.0, 2.0, 3.0], [1.0, 2.0, 3.0, 3.0])
+    outer = PulseShape([0.0, 1.0, 2.0, 3.0], [1.0, 2.0, 5.0, 4.0])
+    batd = τ -> with_pulses(quads, Dict(:inner23 => inner, :inner30 => inner, :outer44 => outer,
+                                        :outer50 => outer), τ)
+    @test [length(unique(b.power for b in batd(τ))) for τ in times] == [1, 1, 2, 2]
+    hd = drive_history(mh, oph, batd, times; record = sol -> sol, unconverted = (omega1 = fω1, omega2 = 0.01),
+                       colors = mock)
+    insided = Float64[]
+    devd = map(enumerate(times)) do (j, τ)
+        b = batd(τ)
+        d = deposit(oph, b)
+        u = unconverted_deposition(th, b; ratio = (omega1 = fω1(τ), omega2 = 0.01), colors = mock)
+        push!(insided, sum(u.omega1.element) / sum(d.element))
+        ref = solve(mh, d; time = τ, unconverted = u)
+        s = hd.record[j]
+        lz = d.delivered + u.omega1.delivered + u.omega2.delivered
+        maximum(f -> maximum(abs.(getfield(s, f) .- getfield(ref, f))) / maximum(abs.(getfield(ref, f))),
+                (:source, :B, :H, :laser, :converted)) + abs(hd.delivered[j] - lz) / lz +
+        abs(hd.unconverted.delivered[:omega1][j] - u.omega1.delivered) / u.omega1.delivered
+    end
+    @test maximum(devd) < 1e-12 && minimum(insided) > 1e-3
     # a zero prepulse: the history without one, bit for bit
     hz0 = drive_history(mh, oph, bat, times; record = sol -> sol.B, unconverted = (omega1 = fω1, omega2 = 0.01),
                         colors = mock)
