@@ -131,6 +131,11 @@ end
     r2 = st.result[]
     @test r2.completed && length(r2.beams) == 48 - beam_rows(sess.beams)[4].count
     @test r2.indices == findall(sess.beams.enabled[])
+    # the keep-out sees the hohlraum part's two entrance holes, not the part as one hole
+    # (its pieces share `Component.part`), and the pointing clears them
+    ko = ApertureKeepOut(sess.drive.scenario[].target)
+    @test ko.names == [:hohlraum_leh_top, :hohlraum_leh_bottom] && all(c -> abs(abs(c[3]) - 5.05) < 1e-9, ko.centers)
+    @test r2.before.clipped < 1e-9
     set_enabled!(sess.beams, 4, true)
     st.keepout[] = false
     set_objective!(st, :legendre)
