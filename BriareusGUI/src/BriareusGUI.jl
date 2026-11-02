@@ -46,6 +46,7 @@ using ZipArchives: ZipWriter, ZipReader, zip_newfile, zip_commitfile, zip_findla
 
 include("controllers/shared.jl")
 include("controllers/target_setup.jl")
+include("controllers/assemblies.jl")          # the model tree: assemblies and membership
 include("controllers/beam_table.jl")
 include("controllers/user_frames.jl")         # port frames' ports, the coordinate transform
 include("controllers/drive.jl")
@@ -84,6 +85,8 @@ export PartSpec, PART_KINDS, PART_KIND_LABELS, PART_FIELDS, PART_SIZE_FIELDS, pa
        export_target_stl, add_stl_parts!, fit_sphere, part_size_unit
 export HOHLRAUM_VALUES, SPHERE_VALUES, hohlraum_pieces, piece_name, piece_frame_defs, piece_frame,
        STARTERS, STARTER_LABELS, starter_parts, insert_starter!
+export TOP_LEVEL, is_assembly, assemblies, check_tree, assembly_children, assembly_members, assembly_parts,
+       assembly_frame, add_assembly!, move_into_assembly!, ungroup_assembly!
 export WindowSpec, WINDOW_FIELDS, add_window!, remove_window!, edit_window!, set_window_open!,
        set_window_round!,
        window_name, hohlraum_windows
@@ -131,7 +134,7 @@ export ViewState, COLOR_MODES, COLOR_LABELS, BEAM_COLORINGS, PALETTE, component_
        component_plane, cut_through_component!, DISPLAY_MODES, DISPLAY_LABELS, display_mode, set_display!,
        beam_drawn, set_beams_drawn!, beam_matrix,
        cluster_colors, TreeRow, select!, select_add!, select_range!, selected_ids, toggle_expanded!,
-       selected_components,
+       selected_components, node_components,
        selection_kind, component_id, beam_id, model_tree, node_beams, selected_beams,
        selected_component, component_label, piece_label, window_of, part_node_id, frame_detail,
        set_triad!, drawn_triads

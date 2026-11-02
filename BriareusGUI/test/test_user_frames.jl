@@ -137,7 +137,7 @@ end
     f = joinpath(mktempdir(), "frames.briar.toml")
     save_session(f, s)
     saved = TOML.parsefile(f)
-    @test saved["version"] == 9 && saved["view"]["triads"] == ["mount"]
+    @test saved["version"] == Controllers.SESSION_VERSION && saved["view"]["triads"] == ["mount"]
     @test count(p -> p["kind"] == "frame", saved["target"]["parts"]) == 2
     s2 = DesignSession(resolution = :coarse)
     load_session!(s2, f)

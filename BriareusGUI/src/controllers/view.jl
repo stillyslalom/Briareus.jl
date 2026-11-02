@@ -95,7 +95,8 @@ green and blue, and the frame's name), besides the selected frame's
 ([`set_triad!`](@ref), [`drawn_triads`](@ref)).
 
 Tree node ids: `"target"`, `"comp:<name>"`, `"window:<name>"` (a hohlraum part's window
-`<part>_window_k`), `"part:<name>"`, `"frames"` (the Frames folder), `"frame:<name>"`
+`<part>_window_k`), `"part:<name>"`, `"assembly:<name>"` (an assembly, see
+[`add_assembly!`](@ref)), `"frames"` (the Frames folder), `"frame:<name>"`
 (a user frame, see [`user_frames`](@ref)),
 `"beams"`, `"group:<group>"` (a beam group, see `BeamTable`'s `cluster`),
 `"quad:<quad>@<group>"` (a quad's beams in a group), `"beam:<name>"`, `"analyses"`,
@@ -352,7 +353,7 @@ _is_beam_node(id) = first(selection_kind(id)) in (:group, :quad, :beam, :beams)
 function _family(id)
     k = first(selection_kind(id))
     k in (:group, :quad, :beam, :beams) && return :beams
-    k in (:comp, :part, :window) && return :components
+    k in (:comp, :part, :window, :assembly) && return :components
     k === :frame && return :frames
     return nothing
 end
@@ -418,8 +419,19 @@ function component_id(ts, name::Symbol)
     return "comp:" * String(shown_component(name))
 end
 
-"Tree node id of a part: `\"frame:<name>\"` for a user frame, `\"part:<name>\"` otherwise."
-part_node_id(p) = (p.kind === :frame ? "frame:" : "part:") * String(p.name)
+"""Tree node id of a part: `\"frame:<name>\"` for a user frame, `\"assembly:<name>\"` for an
+assembly, `\"part:<name>\"` otherwise."""
+part_node_id(p) = (p.kind === :frame ? "frame:" : p.kind === :assembly ? "assembly:" : "part:") * String(p.name)
+
+# Tree node ids renamed (`old => new`, an assembly's): the selection, the extra
+# selection and the expanded nodes follow.
+function _rename_nodes!(v::ViewState, rn::AbstractDict)
+    r(id) = get(rn, id, id)
+    haskey(rn, v.selection[]) && _assign!(v.selection, rn[v.selection[]])
+    any(id -> haskey(rn, id), v.extra[]) && (v.extra[] = map(r, v.extra[]))
+    any(id -> haskey(rn, id), v.expanded[]) && (v.expanded[] = Set{String}(map(r, collect(v.expanded[]))))
+    return v
+end
 
 """
     frame_detail(p::PartSpec, v::ViewState) -> String
@@ -453,7 +465,7 @@ end
     drawn_triads(sess) -> Vector{Symbol}
 
 The frames whose axes the 3D view draws: the frames toggled on (`triads`) and the
-selected user frames, each once, those of the design only.
+selected user frames and assemblies, each once, those of the design only.
 """
 function drawn_triads(sess)
     fr = part_frames(sess.target)
@@ -461,7 +473,7 @@ function drawn_triads(sess)
     for id in selected_ids(sess.view)
         kind, key = selection_kind(id)
         f = Symbol(key)
-        kind === :frame && haskey(fr, f) && !(f in out) && push!(out, f)
+        kind in (:frame, :assembly) && haskey(fr, f) && !(f in out) && push!(out, f)
     end
     return out
 end
@@ -492,10 +504,13 @@ beam_id(b::Beam) = "beam:" * b.name
 
 One visible row of the model tree: `id`, `depth`, `label`, `detail`, `kind` (the id's
 kind), `expandable`, `expanded`, `on` (−1: no switch, 0 off, 1 on, 2 some on: a
-beam's or a beam set's 3ω participation, a component's visibility), `status` (`""`, or
+beam's or a beam set's 3ω participation, a component's visibility, a part in pieces' or
+an assembly's: of the components under it), `status` (`""`, or
 `"ok"`, `"todo"`, `"attention"`, `"busy"` for analyses), `selected`, `color` (the
 swatch: a component's or beam group's color in the 3D view, `""` for none), `display`
-(a component's display mode, one of [`DISPLAY_MODES`](@ref); `""` for other rows) and
+(a component's display mode, one of [`DISPLAY_MODES`](@ref); for a part in pieces or an
+assembly, the mode its components share, `"opaque"` when shown in several, `"mixed"`
+when some are shown and some not; `""` for other rows) and
 `matrix` (a beam row's [`beam_matrix`](@ref); `""` for other rows).
 """
 const TreeRow = NamedTuple{(:id, :depth, :label, :detail, :kind, :expandable, :expanded, :on,
@@ -588,34 +603,77 @@ function model_tree(sess)
             (m = display_mode(v, name);
              _row(id, depth, lab, detail, false, false, m === :invisible ? 0 : 1, "", sel; color,
                   display = String(m)))
-        # a part made in pieces (a hohlraum part): its row, then its pieces under it
-        headed = Set{Symbol}()
-        function piece_head!(c, detail)
-            _is_piece(c) || return 1
-            if !(c.part in headed)
-                push!(headed, c.part)
-                push!(rows, _row("part:" * String(c.part), 1, String(c.part), detail, false, false, -1, "", sel))
-            end
-            return 2
-        end
         label(c) = _is_piece(c) ? piece_label(c.name, c.part) : component_label(c.name)
-        for c in t.components
-            is_lip(c) && continue                   # shown as part of its entrance hole
-            kindtxt = c.kind === :aperture ? (c.name in lips ? "aperture · closing" : "aperture") :
-                      c.two_sided ? "two-sided" : ""
-            kindtxt = join(filter(!isempty, [foiltxt(c), kindtxt]), " · ")
-            depth = piece_head!(c, PART_KIND_LABELS[:hohlraum])
-            push!(rows, crow(component_id(ts, c.name), label(c), kindtxt, c.name;
-                             color = get(cols, c.name, ""), depth))
-        end
-        # left out of the calculations: listed (and drawn as a ghost) to be put back
-        if ts.ghost[] !== nothing
-            for c in ts.ghost[].components
+        # each part's components: in the calculations, then those left out (listed, and
+        # drawn as a ghost, to be put back); lips are shown with their entrance holes
+        byp = Dict{Symbol,Vector{Tuple{Component,Bool}}}()
+        seen = Symbol[]
+        for (tt, incalc) in ((t, true), (ts.ghost[], false))
+            tt === nothing && continue
+            for c in tt.components
                 is_lip(c) && continue
-                depth = piece_head!(c, "not in calculations")
+                haskey(byp, c.part) || (byp[c.part] = Tuple{Component,Bool}[]; push!(seen, c.part))
+                push!(byp[c.part], (c, incalc))
+            end
+        end
+        function comp_row!(c, incalc, depth)
+            if incalc
+                kindtxt = c.kind === :aperture ? (c.name in lips ? "aperture · closing" : "aperture") :
+                          c.two_sided ? "two-sided" : ""
+                kindtxt = join(filter(!isempty, [foiltxt(c), kindtxt]), " · ")
+                push!(rows, crow(component_id(ts, c.name), label(c), kindtxt, c.name;
+                                 color = get(cols, c.name, ""), depth))
+            else
                 push!(rows, crow(component_id(ts, c.name), label(c), "not in calculations", c.name; depth))
             end
         end
+        # a node over several components (a part in pieces, an assembly): its switch and
+        # display mode are its components' together, and its line says how many of them are
+        # in the calculations
+        function head_row(id, depth, lab, detail, expandable, cs)
+            modes = Symbol[display_mode(v, c.name) for (c, _) in cs]
+            n, nvis, nin = length(modes), count(!=(:invisible), modes), count(last, cs)
+            m = n == 0 ? "" : nvis == 0 ? "invisible" : nvis < n ? "mixed" :
+                all(==(modes[1]), modes) ? String(modes[1]) : "opaque"
+            calc = nin == n ? "" : nin == 0 ? "not in calculations" : "partly in calculations"
+            return _row(id, depth, lab, join(filter(!isempty, [detail, calc]), " · "), expandable,
+                        id in ex, n == 0 ? -1 : _tri(nvis, n), "", sel; display = m)
+        end
+        ps = ts.parts[]
+        kinds = Dict{Symbol,Symbol}(p.name => p.kind for p in ps)
+        # a part made in pieces (a hohlraum part): its row, then its pieces under it;
+        # another part: its components
+        function part_rows!(name, depth)
+            cs = pop!(byp, name, nothing)
+            cs === nothing && return
+            if any(x -> _is_piece(first(x)), cs)
+                k = get(kinds, name, :hohlraum)
+                push!(rows, head_row("part:" * String(name), depth, String(name), PART_KIND_LABELS[k], false, cs))
+                foreach(((c, inc),) -> comp_row!(c, inc, depth + 1), cs)
+            else
+                foreach(((c, inc),) -> comp_row!(c, inc, depth), cs)
+            end
+        end
+        # the parts and assemblies in tree order, an assembly's members under it
+        function tree_rows!(parent, depth)
+            for p in assembly_children(ps, parent)
+                if is_assembly(p)
+                    leaves = assembly_parts(ps, p.name)
+                    cs = reduce(vcat, (get(byp, n, Tuple{Component,Bool}[]) for n in leaves);
+                                init = Tuple{Component,Bool}[])
+                    id = "assembly:" * String(p.name)
+                    nk = length(leaves)
+                    push!(rows, head_row(id, depth, String(p.name), nk == 1 ? "1 part" : "$nk parts",
+                                         !isempty(assembly_children(ps, p.name)), cs))
+                    id in ex ? tree_rows!(p.name, depth + 1) : foreach(n -> delete!(byp, n), leaves)
+                else
+                    part_rows!(p.name, depth)
+                end
+            end
+        end
+        tree_rows!(TOP_LEVEL, 1)
+        # components of no part (a target still being built for the parts before an edit)
+        foreach(n -> part_rows!(n, 1), seen)
     end
     # the user frames (port frames among them)
     fs = user_frames(ts)
@@ -714,15 +772,42 @@ selected_beams(sess) =
     sort!(unique!(reduce(vcat, (node_beams(sess.beams, id) for id in selected_ids(sess.view));
                          init = Int[])))
 
-"Names of the selected components (components, parts and windows)."
+"""Names of the selected components (components, parts and windows; an assembly's
+components, see [`node_components`](@ref))."""
 function selected_components(sess)
     out = Symbol[]
     for id in selected_ids(sess.view)
         kind, key = selection_kind(id)
         kind in (:comp, :part) && push!(out, Symbol(key))
         kind === :window && push!(out, Symbol(key))
+        kind === :assembly && append!(out, node_components(sess, id))
     end
     return out
+end
+
+"""
+    node_components(sess, id) -> Vector{Symbol}
+
+The components a model-tree node stands for when it is shown, hidden or given a display
+mode: a component's or window's own name, a part's components (a hohlraum part's
+pieces), an assembly's every component of its subtree ([`assembly_parts`](@ref)); in the
+calculations or left out, entrance holes' lips not listed (they follow their holes).
+Empty for other nodes.
+"""
+function node_components(sess, id::AbstractString)
+    ts = sess.target
+    kind, key = selection_kind(id)
+    kind in (:comp, :window) && return [Symbol(key)]
+    kind in (:part, :assembly) || return Symbol[]
+    n = Symbol(key)
+    k = part_index(ts, n)
+    parts = k !== nothing && is_assembly(ts.parts[][k]) ? Set(assembly_parts(ts.parts[], n)) : Set((n,))
+    out = Symbol[]
+    for t in (ts.target[], ts.ghost[])
+        t === nothing && continue
+        append!(out, (c.name for c in t.components if c.part in parts && !is_lip(c)))
+    end
+    return kind === :part && isempty(out) ? [n] : out
 end
 
 """

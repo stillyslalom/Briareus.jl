@@ -79,10 +79,10 @@ end
     inc = element_values(r, :incident)
     sums = Dict(_template_name(c.name) => sum(inc[t.comp_elems[ci]]) for (ci, c) in enumerate(t.components))
     @test all(isapprox(sums[Symbol(k)], x; rtol = 1e-10) for (k, x) in e["incident_sum"])
-    # saved again: the current version (9), read back the same
-    f = joinpath(mktempdir(), "v9.briar.toml")
+    # saved again: the current version (10), read back the same
+    f = joinpath(mktempdir(), "v10.briar.toml")
     save_session(f, s)
-    @test TOML.parsefile(f)["version"] == Controllers.SESSION_VERSION == 9
+    @test TOML.parsefile(f)["version"] == Controllers.SESSION_VERSION == 10
     s8 = DesignSession(resolution = :coarse)
     load_session!(s8, f)
     @test session_state(s8) == session_state(s)

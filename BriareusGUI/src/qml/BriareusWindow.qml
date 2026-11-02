@@ -198,9 +198,10 @@ ApplicationWindow {
                 Action { text: "Mesh from STL file…"; onTriggered: stlDialog.open() }
             }
             Action { text: "Add diagnostic window"; enabled: app.hasHohlraum; onTriggered: Julia.br_add_window() }
+            Action { text: "New assembly (of the selected parts)"; onTriggered: Julia.br_new_assembly() }
             Action {
-                text: "Remove selected part, window or frame"
-                enabled: app.selKind === "part" || app.selKind === "window" || app.selKind === "frame"
+                text: "Remove selected part, assembly, window or frame"
+                enabled: ["part", "assembly", "window", "frame"].indexOf(app.selKind) >= 0
                 onTriggered: Julia.br_remove_selected()
             }
             MenuSeparator {}

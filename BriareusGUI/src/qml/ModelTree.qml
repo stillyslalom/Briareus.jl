@@ -1,5 +1,5 @@
-// The model tree: target components (with their colors in the 3D view), beams by
-// group and quad, analyses. Click selects (in the 3D view too), Ctrl + click adds beams
+// The model tree: target components (with their colors in the 3D view) under their
+// parts and assemblies, beams by group and quad, analyses. Click selects (in the 3D view too), Ctrl + click adds beams
 // to the selection, double click fits the view to it, the arrow expands, a beam row's
 // dots switch its 1ω, 2ω and 3ω light in the calculations (top) and in the view
 // (bottom), a component's box (its color, filled by its display mode) shows or hides
@@ -99,23 +99,26 @@ Pane {
                     // a component: one box in its color, checked while drawn; the fill is its
                     // display mode (solid opaque, pale semi-transparent, an outline as
                     // wireframe, empty hidden). A click shows or hides it; its menu sets the mode.
+                    // A part in pieces or an assembly: its components' box together ("mixed": some
+                    // shown, some hidden; a click shows them all).
                     Rectangle {
                         id: compBox
                         visible: model.drawmode !== ""
                         readonly property color base: model.color === "" ? palette.mid : model.color
-                        readonly property bool shown: model.drawmode !== "invisible"
+                        readonly property bool mixed: model.drawmode === "mixed"
+                        readonly property bool shown: model.drawmode !== "invisible" && !mixed
                         readonly property bool dark: 0.299 * base.r + 0.587 * base.g + 0.114 * base.b < 0.6
                         implicitWidth: 14
                         implicitHeight: 14
                         radius: 3
                         color: model.drawmode === "opaque" ? base
-                             : model.drawmode === "transparent" ? Qt.rgba(base.r, base.g, base.b, 0.35) : "transparent"
-                        border.color: shown ? base : Qt.rgba(base.r, base.g, base.b, 0.6)
+                             : model.drawmode === "transparent" || mixed ? Qt.rgba(base.r, base.g, base.b, 0.35) : "transparent"
+                        border.color: shown || mixed ? base : Qt.rgba(base.r, base.g, base.b, 0.6)
                         border.width: model.drawmode === "wireframe" ? 2 : 1.2
                         Label {
                             anchors.centerIn: parent
-                            visible: compBox.shown
-                            text: "✓"
+                            visible: compBox.shown || compBox.mixed
+                            text: compBox.mixed ? "–" : "✓"
                             font.pixelSize: 11
                             font.bold: true
                             color: model.drawmode === "opaque" ? (compBox.dark ? "white" : "black") : palette.text
@@ -123,11 +126,12 @@ Pane {
                         HoverHandler { id: boxHover; cursorShape: Qt.PointingHandCursor }
                         ToolTip.visible: boxHover.hovered
                         ToolTip.delay: 400
-                        ToolTip.text: (compBox.shown ? "Drawn " : "Hidden") +
-                                      ({ opaque: "opaque", transparent: "semi-transparent", wireframe: "as wireframe",
-                                         invisible: "" })[model.drawmode] +
-                                      ": click to " + (compBox.shown ? "hide" : "show") + ", right-click for the " +
-                                      "display mode (drawing only: it stays in the calculations)"
+                        ToolTip.text: (compBox.mixed ? "Partly drawn: click to show all" :
+                                       (compBox.shown ? "Drawn " : "Hidden") +
+                                       ({ opaque: "opaque", transparent: "semi-transparent", wireframe: "as wireframe",
+                                          invisible: "" })[model.drawmode] +
+                                       ": click to " + (compBox.shown ? "hide" : "show")) +
+                                      ", right-click for the display mode (drawing only: it stays in the calculations)"
                         TapHandler { onTapped: Julia.br_tree_on(node.nodeId, !compBox.shown) }
                     }
                     StatusDot { visible: model.status !== ""; status: model.status }
@@ -164,7 +168,9 @@ Pane {
                 }
                 AutoMenu {
                     id: menu
-                    readonly property bool showable: ["comp", "part", "window", "group", "quad", "beam", "beams"].indexOf(node.nodeKind) >= 0
+                    readonly property bool showable: ["comp", "part", "window", "assembly", "group", "quad", "beam", "beams"].indexOf(node.nodeKind) >= 0
+                    // what the model tree's commands act on: parts and assemblies
+                    readonly property bool treeNode: node.nodeKind === "part" || node.nodeKind === "assembly"
                     readonly property bool isComp: node.nodeDisplay !== ""
                     MenuItem {
                         id: showItem
@@ -261,9 +267,34 @@ Pane {
                         height: visible ? implicitHeight : 0
                         onTriggered: Julia.br_merge_quad()
                     }
+                    MenuSeparator { visible: menu.treeNode || node.nodeKind === "target"; height: visible ? implicitHeight : 0 }
                     MenuItem {
-                        text: "Remove"
-                        visible: node.nodeKind === "part" || node.nodeKind === "window" || node.nodeKind === "frame"
+                        text: node.nodeKind === "target" ? "New assembly" : "New assembly of the selection"
+                        visible: menu.treeNode || node.nodeKind === "target"
+                        height: visible ? implicitHeight : 0
+                        onTriggered: Julia.br_new_assembly()
+                    }
+                    MenuItem {
+                        text: "Move into assembly…"
+                        visible: menu.treeNode
+                        height: visible ? implicitHeight : 0
+                        onTriggered: assemblyDialog.open()
+                    }
+                    MenuItem {
+                        text: "Ungroup"
+                        visible: node.nodeKind === "assembly"
+                        height: visible ? implicitHeight : 0
+                        onTriggered: Julia.br_ungroup_assembly()
+                    }
+                    MenuItem {
+                        text: "Rename…"
+                        visible: menu.treeNode || node.nodeKind === "frame"
+                        height: visible ? implicitHeight : 0
+                        onTriggered: renameDialog.openFor(node.nodeId.substring(node.nodeId.indexOf(":") + 1))
+                    }
+                    MenuItem {
+                        text: node.nodeKind === "assembly" ? "Remove with its contents" : "Remove"
+                        visible: menu.treeNode || node.nodeKind === "window" || node.nodeKind === "frame"
                         height: visible ? implicitHeight : 0
                         onTriggered: Julia.br_remove_selected()
                     }
@@ -300,6 +331,51 @@ Pane {
                 Layout.fillWidth: true
                 placeholderText: "backlighter"
                 onAccepted: groupDialog.accept()
+            }
+        }
+    }
+
+    // Move into assembly: the selected parts and assemblies, kept where they are
+    Dialog {
+        id: assemblyDialog
+        title: "Move into assembly"
+        anchors.centerIn: Overlay.overlay
+        modal: true
+        standardButtons: Dialog.Ok | Dialog.Cancel
+        onOpened: assemblyChoice.currentIndex = 0
+        onAccepted: Julia.br_move_into_assembly(assemblyChoice.currentIndex)
+        RowLayout {
+            spacing: 8
+            Label { text: "Into" }
+            ComboBox {
+                id: assemblyChoice
+                model: app.assemblyChoices
+                Layout.preferredWidth: Math.max(200, implicitWidth)
+                ToolTip.visible: hovered
+                ToolTip.delay: 400
+                ToolTip.text: "The members stay where they are; the top level is in no assembly"
+            }
+        }
+    }
+
+    // Rename a part, assembly or frame: what is placed in it, aims in it or is a member follows
+    Dialog {
+        id: renameDialog
+        title: "Rename"
+        anchors.centerIn: Overlay.overlay
+        modal: true
+        standardButtons: Dialog.Ok | Dialog.Cancel
+        function openFor(name) { newName.text = name; open() }
+        onOpened: { newName.selectAll(); newName.forceActiveFocus() }
+        onAccepted: if (newName.text.trim() !== "") Julia.br_rename_node(newName.text)
+        ColumnLayout {
+            spacing: 8
+            Label { text: "New name (letters, digits and _)" }
+            TextField {
+                id: newName
+                Layout.fillWidth: true
+                Layout.preferredWidth: 220
+                onAccepted: renameDialog.accept()
             }
         }
     }

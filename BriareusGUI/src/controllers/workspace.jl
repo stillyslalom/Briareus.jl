@@ -6,11 +6,12 @@
 # restored design.
 
 const SESSION_FORMAT = "BriareusGUI session"
-const SESSION_VERSION = 9               # 2: `.briar` archives with the CAD files; 3: frames; 4: placement steps;
+const SESSION_VERSION = 10              # 2: `.briar` archives with the CAD files; 3: frames; 4: placement steps;
                                         # 5: foil roles as a flag, and the active foil; 6: the diagnostics
                                         # recorded, and their definitions; 7: the observed and wall roles
                                         # as flags; 8: parts only (no template), hohlraum parts;
-                                        # 9: user frames (parts of kind `frame`), the frames' drawn axes
+                                        # 9: user frames (parts of kind `frame`), the frames' drawn axes;
+                                        # 10: assemblies (parts of kind `assembly`), each part's `assembly`
 
 _strs(xs) = [String(x) for x in xs]
 _syms(xs) = Symbol[Symbol(x) for x in xs]
@@ -66,7 +67,8 @@ function session_state(sess::DesignSession; view::Bool = true)
                                      "frame" => String(p.frame), "coords" => String(p.coords),
                                      "object" => p.object, "steps" => _step_state.(p.steps),
                                      "foil" => p.foil, "observed" => p.observed, "wall" => p.wall,
-                                     "windows" => _window_state.(p.windows))
+                                     "windows" => _window_state.(p.windows),
+                                     "assembly" => String(p.assembly))
                     for p in ts.parts[]])
     beams = Dict{String,Any}("preset" => String(bt.preset[]), "by" => String(bt.by[]),
                              "facility" => String(bt.facility[]),
@@ -139,6 +141,8 @@ geometry rejects (the session is then left as it was before the target, if the
 target fails, or partly restored otherwise).
 
 Older sessions convert as they load, through this one path:
+- Before version 10 a design has no assemblies: every part loads at the top level of the
+  model tree ([`TOP_LEVEL`](@ref)), placed as saved.
 - Before version 9 a design has no user frames (`:frame` parts) and the view draws no
   frame axes: such a session loads as it is.
 - Before version 8 a target had a template, which becomes parts placed ahead of the
@@ -347,7 +351,8 @@ function _state_part(p, params; named_foil::Bool = false, named_capsule::Bool = 
                     foil = named_foil ? p["name"] == "backlighter" : p["foil"],
                     observed = named_capsule ? p["name"] == "capsule" : p["observed"],
                     wall = named_capsule ? false : p["wall"],
-                    windows = WindowSpec[_state_window(w) for w in get(p, "windows", [])])
+                    windows = WindowSpec[_state_window(w) for w in get(p, "windows", [])],
+                    assembly = Symbol(get(p, "assembly", "")))
 end
 
 _window_state(w::WindowSpec) =

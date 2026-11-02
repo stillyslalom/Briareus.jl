@@ -27,6 +27,26 @@ var pages = [
                 "(examples/mesh_convergence.jl): errors in the capsule P2/P0 and P4/P0 of about " +
                 "0.5, 0.1 and 0.02 percentage points. A part can set its own element size." }
     ] },
+    { key: "assembly", title: "Assemblies", items: [
+        { key: "assembly.intro", title: "The model tree",
+          text: "An assembly groups parts and other assemblies, at any depth; parts and " +
+                "assemblies can also sit at the top level. Each assembly has a frame, placed like a " +
+                "part's: its members are placed in it by default, so moving or sweeping the " +
+                "assembly moves them and the beams aimed in their frames. Membership and " +
+                "placement are separate: a member may be placed in any frame (a capsule in its " +
+                "hohlraum's). An assembly's box shows or hides everything in it (a dash: partly " +
+                "shown); Include in calculations puts all of it in or leaves all of it out, and a " +
+                "part left out gives up its role (observed, foil, wall) until it is put back. The " +
+                "analyses see the parts alone, never the tree." },
+        { key: "assembly.commands", title: "Tree commands",
+          text: "Right-click in the model tree: New assembly (of the selected parts and " +
+                "assemblies, or an empty one from Target), Move into assembly (the members stay " +
+                "where they are), Ungroup (the assembly goes, its members stay, in its parent), " +
+                "Rename (whatever is placed in it, aimed in it or a member of it follows) and " +
+                "Remove with its contents. An imported VisRad workspace or multi-body STL file " +
+                "arrives as one assembly named after the file; Insert with an assembly selected " +
+                "puts the starter in it." }
+    ] },
     { key: "component", title: "Pieces", items: [
         { key: "component.intro", title: "Wall, caps, entrance holes, windows",
           text: "A hohlraum part's pieces are sized from the part: select the part to edit them. " +

@@ -539,6 +539,8 @@ function BriareusShell(sess::DesignSession; queue::Channel{Any} = Channel{Any}(I
     _set!(sh, "framePort", "")
     _set!(sh, "frameTriad", false)
     _set!(sh, "frameInfo", "")
+    _set!(sh, "assemblyInfo", "")
+    _set!(sh, "assemblyChoices", ["Top level"])
     _set!(sh, "portChoices", String[])
     _set!(sh, "frameCount", 0)
     _set!(sh, "tfFrames", [FRAME_LABELS[:tcc]])
@@ -727,6 +729,8 @@ function _refresh_target!(sh::BriareusShell)
     _set!(sh, "windowCount", length(ws))
     _set!(sh, "hasHohlraum", any(p -> p.kind === :hohlraum, ts.parts[]))
     _set!(sh, "partCount", length(ts.parts[]))
+    # where Move into assembly can put the selection: the top level, or an assembly
+    _set!(sh, "assemblyChoices", ["Top level"; [String(a.name) for a in assemblies(ts)]])
     names = component_names(ts.target[])
     obs = observed_name(ts)
     _set!(sh, "hasCapsule", obs !== nothing && obs in names)
@@ -823,7 +827,7 @@ function _refresh_selection!(sh::BriareusShell)
             _set!(sh, "selTitle", String(name))
         end
     end
-    if kind in (:part, :frame)
+    if kind in (:part, :frame, :assembly)
         i = part_index(sess.target, Symbol(key))
         if i !== nothing
             p = sess.target.parts[][i]
@@ -834,6 +838,9 @@ function _refresh_selection!(sh::BriareusShell)
                 _set!(sh, "framePort", p.object)
                 _set!(sh, "frameTriad", p.name in sess.view.triads[])
                 _set!(sh, "frameInfo", _frame_info(sess, p))
+            elseif p.kind === :assembly
+                _set!(sh, "selTitle", String(p.name))
+                _set!(sh, "assemblyInfo", _assembly_info(sess, p))
             end
             _set!(sh, "partName", String(p.name))
             src = cad_source(sess, p.file)
@@ -866,7 +873,7 @@ function _refresh_selection!(sh::BriareusShell)
                        for (k, label, unit) in PART_POSITION_FIELDS[p.coords]];
                       [FieldRow(String(k), label, k === :h ? part_size_unit(p) : unit, _num(p.values[k]))
                        for (k, label, unit, _) in PART_FIELDS
-                       if !(k in (:x, :y, :z)) && !(p.kind === :frame && k in (:albedo, :conversion, :h))]]
+                       if !(k in (:x, :y, :z)) && !(Controllers._no_geometry(p) && k in (:albedo, :conversion, :h))]]
             # a hohlraum's ends and closing entrance holes
             hoh = p.kind === :hohlraum
             _set!(sh, "partTopEnd", hoh ? Int(p.values[:top_end]) : 1)
@@ -1500,6 +1507,14 @@ function br_node_flags(id)
     # a user frame: whether its axes are drawn (in place of whether it is shown)
     kind, key = selection_kind(String(id))
     kind === :frame && return [Symbol(key) in sess.view.triads[], true]
+    # a part or an assembly: shown when all of its components are, included when none
+    # is left out
+    if kind in (:part, :assembly)
+        cs = node_components(sess, String(id))
+        g = sess.target.ghost[]
+        out = g === nothing ? Set{Symbol}() : Set(c.name for c in g.components)
+        return [all(c -> display_mode(sess.view, c) !== :invisible, cs), !any(in(out), cs)]
+    end
     c = _node_component(sess, String(id))
     if c !== nothing
         return [display_mode(sess.view, c) !== :invisible, !(c in sess.target.excluded[])]
@@ -1514,9 +1529,9 @@ function br_node_show(id, on)
     _with_shell() do sh
         sess = sh.sess
         for n in _acted_nodes(sh, id)
-            c = _node_component(sess, n)
-            if c !== nothing
-                _show_component!(sess.view, c, Bool(on))
+            cs = node_components(sess, n)
+            if !isempty(cs)
+                foreach(c -> _show_component!(sess.view, c, Bool(on)), cs)
             else
                 set_beams_drawn!(sess.view, _node_beam_names(sess, n), 3, Bool(on))
             end
@@ -1526,11 +1541,12 @@ end
 # Showing an invisible component makes it opaque; another mode is kept.
 _show_component!(v, c, on) = on ? (display_mode(v, c) === :invisible && set_display!(v, c, :opaque)) :
                                   set_display!(v, c, :invisible)
-# Display mode of the components among the nodes acted on (the tree's or Properties').
+# Display mode of the components among the nodes acted on (the tree's or Properties'):
+# a part's or an assembly's every component.
 function br_set_display(id, mode)
     _with_shell() do sh
         m = mode isa Real ? DISPLAY_MODES[round(Int, mode) + 1] : _sym(mode)
-        cs = filter(!isnothing, [_node_component(sh.sess, n) for n in _acted_nodes(sh, id)])
+        cs = unique!(reduce(vcat, (node_components(sh.sess, n) for n in _acted_nodes(sh, id)); init = Symbol[]))
         isempty(cs) || set_display!(sh.sess.view, cs, m)
     end
 end
@@ -1555,8 +1571,12 @@ function br_node_include(id, on)
         sess = sh.sess
         comps = Symbol[]
         for n in _acted_nodes(sh, id)
+            # (an assembly: the parts of its subtree)
             c = _node_component(sess, n)
-            if c !== nothing
+            kind, key = selection_kind(n)
+            if kind === :assembly
+                push!(comps, Symbol(key))
+            elseif c !== nothing
                 push!(comps, c)
             else
                 idx = node_beams(sess.beams, n)
@@ -1578,11 +1598,11 @@ function br_tree_on(id, on)
             isempty(idx) || set_set_enabled!(sess.beams, idx, on)
         elseif kind === :beams
             Controllers._assign!(sess.beams.enabled, fill(on, length(sess.beams.beams[])))
-        elseif kind in (:comp, :part, :window)
-            # every selected component when the box is on a selected one
-            for n in _acted_nodes(sh, id)
-                c = _node_component(sess, n)
-                c === nothing || _show_component!(sess.view, c, on)
+        elseif kind in (:comp, :part, :window, :assembly)
+            # every selected component when the box is on a selected one (a part's or an
+            # assembly's every component)
+            for n in _acted_nodes(sh, id), c in node_components(sess, n)
+                _show_component!(sess.view, c, on)
             end
         end
     end
@@ -1605,17 +1625,20 @@ function br_insert(starter)
         before = Set(p.name for p in sess.target.parts[])
         insert_starter!(sess.target, s; frame) || return
         new = [p.name for p in sess.target.parts[] if !(p.name in before)]
+        # inserted in an assembly's frame: its members
+        k = part_index(sess.target, frame)
+        k !== nothing && is_assembly(sess.target.parts[][k]) && move_into_assembly!(sess.target, new, frame)
         isempty(new) || select!(sess.view, "part:" * String(new[1]))
         sess.status[] = "inserted " * STARTER_LABELS[s] * (frame === :tcc ? " at TCC" : " in " * _frame_label(frame)) *
                         ": " * join(String.(new), ", ")
     end
 end
 # The frame of the selection, where Insert places a starter: a part's, a piece's (its
-# part's piece frame), a window's; TCC otherwise.
+# part's piece frame), a window's, an assembly's; TCC otherwise.
 function _selected_frame(sess)
     ts = sess.target
     kind, key = selection_kind(sess.view.selection[])
-    kind in (:part, :comp, :window, :frame) || return :tcc
+    kind in (:part, :comp, :window, :frame, :assembly) || return :tcc
     n = Symbol(key)
     part_index(ts, n) === nothing || return n
     for c in ts.target[].components
@@ -1676,14 +1699,22 @@ function br_add_stl(url)
         ts = sh.sess.target
         path = _url_to_path(String(url))
         n0 = length(ts.parts[])
-        # one part, or one per named solid of a multi-body export
+        # one part, or one per named solid of a multi-body export, in one assembly
         if add_stl_parts!(ts, path)
-            name = String(ts.parts[][end].name)
-            n = length(ts.parts[]) - n0
-            select!(sh.sess.view, "part:" * String(ts.parts[][n0+1].name))
-            sh.sess.status[] = n == 1 ?
-                "added $name from $(basename(path)): set its scale (mm per file unit) and place in Properties" :
-                "added $n parts from $(basename(path)), one per solid: set their scale (mm per file unit) and place in Properties"
+            new = ts.parts[][n0+1:end]
+            n = count(!is_assembly, new)
+            if n == 1
+                name = String(new[1].name)
+                select!(sh.sess.view, "part:" * name)
+                sh.sess.status[] = "added $name from $(basename(path)): set its scale (mm per file unit) and place in Properties"
+            else
+                a = new[end]
+                id = part_node_id(a)
+                id in sh.sess.view.expanded[] || toggle_expanded!(sh.sess.view, id)
+                select!(sh.sess.view, id)
+                sh.sess.status[] = "added $n parts from $(basename(path)), one per solid, in assembly $(a.name): " *
+                                   "set their scale (mm per file unit) and place them in Properties"
+            end
         end
     end
 end
@@ -1699,7 +1730,7 @@ function _selected_parts(sh)
     idx = Int[]
     for id in selected_ids(sh.sess.view)
         kind, key = selection_kind(id)
-        kind in (:part, :frame) || continue
+        kind in (:part, :frame, :assembly) || continue
         i = part_index(ts, Symbol(key))
         i === nothing || push!(idx, i)
     end
@@ -1744,6 +1775,7 @@ function _frame_label(f::Symbol, ts = (sh = _SHELL[]; sh === nothing ? nothing :
         p = k === nothing ? nothing : ts.parts[][k]
         p !== nothing && is_port_frame(p) && return "Port frame: " * s * " (" * p.object * ")"
         p !== nothing && p.kind === :frame && return "Frame: " * s
+        p !== nothing && p.kind === :assembly && return "Assembly: " * s
         return "Part: " * s
     end
     piece = s[i+1:end]
@@ -1772,6 +1804,75 @@ function _frame_info(sess, p)
                                  nu == 0 ? "" : nu == 1 ? "1 part or frame placed in it" : "$nu parts or frames placed in it"]), " · ")
     return @sprintf("origin (%.4g, %.4g, %.4g) mm · z at θ %.4g°, φ %.4g°", F.origin..., θ, φ) *
            (isempty(use) ? "" : " · " * use)
+end
+# An assembly's line under its name: its members, where its frame is, the beams aimed in it.
+function _assembly_info(sess, p)
+    ps = sess.target.parts[]
+    nk, na = length(assembly_parts(ps, p.name)), count(is_assembly, assembly_children(ps, p.name))
+    F = part_frames(sess.target)[p.name]
+    nb = count(==(p.name), sess.beams.aim_frame[])
+    what = join(filter(!isempty, [nk == 1 ? "1 part" : "$nk parts",
+                                  na == 0 ? "" : na == 1 ? "1 assembly" : "$na assemblies",
+                                  nb == 0 ? "" : nb == 1 ? "1 beam aims in it" : "$nb beams aim in it"]), " · ")
+    return what * @sprintf(" · origin (%.4g, %.4g, %.4g) mm", F.origin...)
+end
+# The model tree's assembly commands. New assembly: of the selected parts and assemblies
+# (an empty one with none), selected and open.
+function br_new_assembly()
+    _with_shell() do sh
+        sess = sh.sess
+        ts = sess.target
+        members = [ts.parts[][i].name for i in _selected_parts(sh) if ts.parts[][i].kind !== :frame]
+        add_assembly!(ts; members) || return
+        a = last(assemblies(ts))
+        id = part_node_id(a)
+        for e in ("target", id)
+            e in sess.view.expanded[] || toggle_expanded!(sess.view, e)
+        end
+        select!(sess.view, id)
+        sess.status[] = "added assembly $(a.name)" * (isempty(members) ? "" : " of " * join(String.(members), ", "))
+    end
+end
+# Move the selected parts and assemblies into the assembly of `assemblyChoices` (0: the top level).
+function br_move_into_assembly(index)
+    _with_shell() do sh
+        sess = sh.sess
+        ts = sess.target
+        k = Int(index)
+        as = assemblies(ts)
+        0 <= k <= length(as) || return
+        a = k == 0 ? TOP_LEVEL : as[k].name
+        names = [ts.parts[][i].name for i in _selected_parts(sh)]
+        isempty(names) && return
+        move_into_assembly!(ts, names, a) || (sess.status[] = ts.error[]; return)
+        a === TOP_LEVEL || (id = "assembly:" * String(a); id in sess.view.expanded[] || toggle_expanded!(sess.view, id))
+        sess.status[] = "moved " * join(String.(names), ", ") * (a === TOP_LEVEL ? " to the top level" : " into $a")
+    end
+end
+# Ungroup the selected assembly: its members stay, in its parent.
+function br_ungroup_assembly()
+    _with_shell() do sh
+        sess = sh.sess
+        kind, key = selection_kind(sess.view.selection[])
+        kind === :assembly || return
+        ungroup_assembly!(sess.target, Symbol(key)) || (sess.status[] = sess.target.error[]; return)
+        sess.status[] = "ungrouped $key"
+    end
+end
+# Rename the selected part, assembly or frame (what refers to it follows).
+function br_rename_node(text)
+    _with_shell() do sh
+        sess = sh.sess
+        kind, key = selection_kind(sess.view.selection[])
+        kind in (:part, :assembly, :frame) || return
+        i = part_index(sess.target, Symbol(key))
+        i === nothing && return
+        if edit_part!(sess.target, i, :name, string(text))
+            select!(sess.view, part_node_id(sess.target.parts[][i]))
+        else
+            sess.status[] = "not renamed: " * sess.target.error[]
+        end
+    end
 end
 # Move the selected part to another frame, keeping it where it is (index into
 # `frameLabels`).
@@ -2118,6 +2219,10 @@ function br_remove_selected()
         if kind === :part
             i = part_index(sess.target, Symbol(key))
             i === nothing || (remove_part!(sess.target, i); select!(sess.view, "target"))
+        elseif kind === :assembly
+            # with its subtree; refused (and kept selected) while a part left is placed in it
+            i = part_index(sess.target, Symbol(key))
+            i !== nothing && remove_part!(sess.target, i) && select!(sess.view, "target")
         elseif kind === :frame
             # a frame in use stays, selected, with the reason in its page
             i = part_index(sess.target, Symbol(key))
@@ -2128,7 +2233,7 @@ function br_remove_selected()
             w === nothing || remove_window!(sess.target, w[2]; part = sess.target.parts[][w[1]].name)
             select!(sess.view, "target")
         else
-            sess.status[] = "only parts and windows can be removed (hide a component instead)"
+            sess.status[] = "only parts, assemblies, frames and windows can be removed (hide a component instead)"
         end
     end
 end
@@ -2618,6 +2723,7 @@ function _register_qml_functions()
     @qmlfunction br_sw_mode br_sw_step br_sw_number br_step_sweep
     @qmlfunction br_part_role br_active_foil br_export_stl br_cavity br_cavity_point br_part_film
     @qmlfunction br_remove_selected br_help br_docs_url
+    @qmlfunction br_new_assembly br_move_into_assembly br_ungroup_assembly br_rename_node
     @qmlfunction br_add_frame br_add_port_frame br_set_triad br_tf_set br_tf_open br_tf_create br_open_transform
     @qmlfunction br_load_preset br_set_grouping br_edit_beam br_set_beam_on br_edit_node
     @qmlfunction br_import_beams br_export_beams br_import_sst br_import_summary br_export_sst

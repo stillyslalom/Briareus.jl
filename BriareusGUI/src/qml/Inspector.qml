@@ -12,7 +12,7 @@ Pane {
     readonly property string kind: app.selKind
     readonly property string title: {
         if (kind === "target") return "Target"
-        if (kind === "comp" || kind === "part" || kind === "window" || kind === "frame") return app.selTitle
+        if (kind === "comp" || kind === "part" || kind === "window" || kind === "frame" || kind === "assembly") return app.selTitle
         if (kind === "frames") return "Frames"
         if (kind === "beams") return "Beams"
         if (kind === "group" || kind === "quad" || kind === "beam") return app.selTitle
@@ -31,6 +31,7 @@ Pane {
         if (kind === "window") return "inspector/WindowProps.qml"
         if (kind === "part") return "inspector/PartProps.qml"
         if (kind === "frame") return "inspector/FrameProps.qml"
+        if (kind === "assembly") return "inspector/AssemblyProps.qml"
         if (kind === "frames") return "inspector/FramesProps.qml"
         if (kind === "beams") return "inspector/BeamsProps.qml"
         if (kind === "group" || kind === "quad" || kind === "beam") return "inspector/BeamProps.qml"
@@ -50,6 +51,7 @@ Pane {
         if (kind === "comp") return "component.intro"
         if (kind === "part") return "part.placement"
         if (kind === "frame" || kind === "frames") return "frames.intro"
+        if (kind === "assembly") return "assembly.intro"
         if (kind === "task") return app.selKey + ".intro"
         if (kind === "") return "start.select"
         return ""

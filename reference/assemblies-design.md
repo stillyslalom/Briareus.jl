@@ -15,13 +15,16 @@ assembly. Cases named:
 This file records the design and the phased plan. Remove each phase from it once that
 phase lands; the docstrings and research notes then hold what was built.
 
-## Today (after phase B)
+## Today (after phase B2)
 
 - **Parts only.** A target is its parts (`PartSpec`, `controllers/target_setup.jl`); the
   hohlraum is a `:hohlraum` part (core `hohlraum(...)` placed by its frame, pieces
   `<part>_wall`, … with `Component.part = <part>`, its windows on the part). Starters
   (`starter_parts`, `insert_starter!`: *Hohlraum with capsule*, *Backlighter foil*)
   insert parts in a frame; File ▸ New target is one starter.
+- **A model tree.** Parts and assemblies (`:assembly` parts) nest to any depth through
+  `PartSpec.assembly` (`controllers/assemblies.jl`); the analyses see only the parts'
+  components.
 - **Frames.** Every part has a frame, and a hohlraum part its pieces' (`<part>.leh_top`,
   `<part>.leh_bottom`, `<part>.window_k`), so beams aim relative to the wall, caps,
   entrance holes, windows and capsule.
@@ -107,9 +110,10 @@ A. Landed (roles in the GUI, bit for bit; session version 7): commit 3a07a50.
 B. Landed (the hohlraum part kind, piece aim points, target kinds removed, sessions with a
    template converted to parts, Insert ▸ starters; session version 8): commit cd46de8 and
    the commit after it.
-B2. **Assembly tree:** `Assembly`, membership, subtree show/hide and include/exclude,
-   the tree's editing commands, sessions; a CAD import as one assembly of its parts; the
-   placement triad (decision 6).
+B2. Landed (the assembly tree: assemblies, membership, subtree show/hide and
+   include/exclude, the tree's editing commands, sessions, a CAD or VisRad import as one
+   assembly; session version 10). The placement triad (decision 6) is not built: it
+   remains open (see "Phase B2 as built").
 C. **Halfraum ends and packages:** open ends, a package `observed` face, the shock-tube
    and opacity starters.
 D. **Profiles:** frustraums and multi-section hohlraums (a radius per section; four
@@ -155,6 +159,47 @@ E. **Double backlighter with ARC:** the starter, ARC beams as a facility beam se
   custom template did.
 - Starters insert in the selected part's or piece's frame; the capsule is placed in its
   hohlraum's frame, so moving the hohlraum carries it.
+
+## Phase B2 as built (2026-11-02): what departs from the design
+
+- An assembly is a part of kind `:assembly` (a `PartSpec`, like a user frame: no
+  geometry), not a separate `Assembly` type. Its frame is the part frame
+  (`part_frame_def`: placement fields and steps), so placement, Move along, steps,
+  renames, sweeps and undo serve it unchanged. `PartSpec.assembly` is the membership (an
+  assembly's is its parent); `TOP_LEVEL` (`Symbol("")`) is the top. `check_tree` (called
+  by `part_frames`) refuses a member of a missing assembly, an assembly inside itself and
+  a user frame in an assembly (frames stay in the Frames folder).
+- Show/hide and include/exclude act on the members, as for beam groups: an assembly
+  holds no state of its own, and its box and its line ("partly in calculations") are its
+  components' together. Excluding an assembly puts its parts' names in `excluded`, so the
+  roles fall back through the existing paths. Putting a part back (alone or with its
+  assembly) now also puts back its pieces left out on their own: a part comes back whole.
+- A hohlraum part's row now has a box too (its pieces' state, mixed included), changing
+  phase B's "no display switch of its own".
+- New assembly: placed at its parent's origin with its axes (zero offsets in
+  `assembly_frame(parent)`), so grouping moves nothing; the parent is the one its members
+  share, else the top. Moving into an assembly re-places a member only when it is placed
+  in its old assembly's frame (TCC at the top), keeping it where it is (`_kept_in`,
+  factored out of `set_part_frame!`); a member placed elsewhere (a capsule in its
+  hohlraum) keeps its placement. Ungroup re-places everything placed in the assembly's
+  frame in its parent's, and is refused while a placement step refers to it; beams
+  aimed in it keep their aims in `:tcc`. Removing an assembly removes its subtree, refused
+  while a part left behind is placed in it.
+- Tree order: an assembly is listed where its first member is among the parts; a new
+  assembly is appended to the parts, so no part's index changes.
+- A VisRad workspace imports as one assembly named after the file (appended last, its
+  objects placed in it, open in the tree); so does a multi-body STL file. Insert with an
+  assembly selected puts the starter in it (window only).
+- The tree's expanded nodes are not saved (as before): assemblies load collapsed.
+- Bit for bit: grouping the starter leaves its frames, its components (the same objects)
+  and its target unchanged, and the drive equal (test). The default design's drive is
+  equal before and after this phase built with the same precompile settings; built with
+  and without the GUI's precompile workload it differs at round-off (P0/P4 in the last
+  digits), unrelated to this phase.
+- Not built: the placement triad (decision 6). It needs 3D-view handles (arrows, rings),
+  picking and drag-to-step commits in `canvas/scene_canvas.jl`, a separate piece of
+  work; left open rather than half built.
+
 ## Decisions (user, 2026-10-29)
 
 1. Piece names `<part>_wall`, VisRad's scheme (shown in the tree as "hohlraum ▸ wall").

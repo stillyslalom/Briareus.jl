@@ -126,13 +126,21 @@ file, such as a CAD export), `:visrad` (an object of a VisRad workspace) and `:h
 (a cylindrical hohlraum, `Briareus.hohlraum`, in pieces: see [`hohlraum_pieces`](@ref)).
 `:frame` is a user frame: a named frame with no geometry, placed like a part
 ([`add_frame!`](@ref), [`add_port_frame!`](@ref)); the model tree lists it under Frames.
+`:assembly` is an assembly of the model tree: a named frame with no geometry of its own,
+placed like a part, whose members are the parts and assemblies that name it as their
+`assembly` ([`add_assembly!`](@ref)).
 """
-const PART_KINDS = (:sphere, :disk, :annulus, :rectangle, :cylinder, :cone, :mesh, :visrad, :hohlraum, :frame)
+const PART_KINDS = (:sphere, :disk, :annulus, :rectangle, :cylinder, :cone, :mesh, :visrad, :hohlraum, :frame,
+                    :assembly)
 
 const PART_KIND_LABELS = Dict(:sphere => "Sphere", :disk => "Disk", :annulus => "Washer (annulus)",
                               :rectangle => "Rectangle", :cylinder => "Cylinder (tube)",
                               :cone => "Cone (frustum)", :mesh => "Mesh (STL file)",
-                              :visrad => "VisRad object", :hohlraum => "Hohlraum", :frame => "Frame")
+                              :visrad => "VisRad object", :hohlraum => "Hohlraum", :frame => "Frame",
+                              :assembly => "Assembly")
+
+# Whether part `p` has no geometry: a user frame or an assembly.
+_no_geometry(p) = p.kind === :frame || p.kind === :assembly
 
 """
 Size fields of each part kind: `(key, label, unit, default)`. The part's local axis is
@@ -151,6 +159,7 @@ const PART_SIZE_FIELDS = Dict(
     :mesh => ((:scale, "Scale", "mm per file unit", 1.0),),
     :visrad => (),
     :frame => (),
+    :assembly => (),
     :hohlraum => ((:length, "Length", "mm", 10.1), (:radius, "Radius", "mm", 2.875),
                   (:leh_radius, "LEH radius", "mm", 1.55)))
 
@@ -227,7 +236,8 @@ const FRAME_LABELS = Dict(:tcc => "Target chamber (TCC)")
 """
     PartSpec(kind; name, values, two_sided = false, inward = false, aperture = false,
              file = "", frame = :tcc, coords = :cartesian, object = "", steps = [],
-             foil = false, observed = false, wall = false, windows = [])
+             foil = false, observed = false, wall = false, windows = [],
+             assembly = TOP_LEVEL)
 
 A free target part: `kind` (one of [`PART_KINDS`](@ref)), its component `name`,
 `values` (every [`PART_FIELDS`](@ref) key and its kind's [`PART_SIZE_FIELDS`](@ref)),
@@ -250,6 +260,12 @@ A `:frame` part is a user frame: its placement fields and steps define the frame
 has no components. With `object` set it is a port frame ([`is_port_frame`](@ref)): the
 frame of the port named `object`, at TCC with `z` toward the port (`theta`, `phi` the
 port's angles, `rotation` its roll), placed in `:tcc` without steps.
+
+`assembly` is the part's place in the model tree: the name of the assembly it is a member
+of (an `:assembly` part), or [`TOP_LEVEL`](@ref). Membership is separate from placement:
+a member is placed in its assembly's frame by default ([`add_assembly!`](@ref),
+[`move_into_assembly!`](@ref)) but may be placed in any frame. An `:assembly` part's
+`assembly` is its parent. User frames are in no assembly.
 """
 struct PartSpec
     kind::Symbol
@@ -267,7 +283,14 @@ struct PartSpec
     observed::Bool
     wall::Bool
     windows::Vector{WindowSpec}
+    assembly::Symbol
 end
+
+"""
+The top level of the model tree: the `assembly` ([`PartSpec`](@ref)) of a part or
+assembly that is a member of none, `Symbol("")`.
+"""
+const TOP_LEVEL = Symbol("")
 
 """
 Coordinates a part's position is shown and edited in: `:cartesian` (x, y, z),
@@ -305,7 +328,8 @@ function PartSpec(kind::Symbol; name = kind, values = Dict{Symbol,Float64}(),
                   two_sided::Bool = false, inward::Bool = false, aperture::Bool = false,
                   file::AbstractString = "", frame::Symbol = :tcc, coords::Symbol = :cartesian,
                   object::AbstractString = "", steps = PlacementStep[], foil::Bool = false,
-                  observed::Bool = false, wall::Bool = false, windows = WindowSpec[])
+                  observed::Bool = false, wall::Bool = false, windows = WindowSpec[],
+                  assembly::Symbol = TOP_LEVEL)
     kind in PART_KINDS || throw(ArgumentError("part kind must be one of $PART_KINDS"))
     _own_frame_name(Symbol(name), frame) && throw(ArgumentError("a part cannot be placed in its own frame"))
     coords in PART_COORDINATES || throw(ArgumentError("coordinates must be one of $PART_COORDINATES"))
@@ -325,7 +349,7 @@ function PartSpec(kind::Symbol; name = kind, values = Dict{Symbol,Float64}(),
         throw(ArgumentError("a part's placement step cannot refer to its own frame"))
     return _port_checked(PartSpec(kind, Symbol(name), v, two_sided, inward, aperture, String(file), frame,
                                   coords, String(object), collect(PlacementStep, steps), foil, observed, wall,
-                                  collect(WindowSpec, windows)))
+                                  collect(WindowSpec, windows), assembly))
 end
 
 # A port frame stays at TCC, in `:tcc`, without steps (`_with` checks every edit).
@@ -344,15 +368,16 @@ _own_frame_name(name::Symbol, frame::Symbol) = frame === name || startswith(Stri
 _with(p::PartSpec; kind = p.kind, name = p.name, values = p.values, two_sided = p.two_sided,
       inward = p.inward, aperture = p.aperture, file = p.file, frame = p.frame,
       coords = p.coords, object = p.object, steps = p.steps, foil = p.foil,
-      observed = p.observed, wall = p.wall, windows = p.windows) =
+      observed = p.observed, wall = p.wall, windows = p.windows, assembly = p.assembly) =
     _port_checked(PartSpec(kind, name, values, two_sided, inward, aperture, file, frame, coords, object, steps,
-                           foil, observed, wall, windows))
+                           foil, observed, wall, windows, assembly))
 
-# A part with the frame named `old` renamed `new`: the frame it is placed in and the
-# frames its placement steps refer to.
+# A part with the frame named `old` renamed `new`: the frame it is placed in, the frames
+# its placement steps refer to, and the assembly it is a member of.
 _renamed(p::PartSpec, old::Symbol, new::Symbol) =
     _with(p; frame = p.frame === old ? new : p.frame,
-          steps = PlacementStep[_rename_step(st, old, new) for st in p.steps])
+          steps = PlacementStep[_rename_step(st, old, new) for st in p.steps],
+          assembly = p.assembly === old ? new : p.assembly)
 
 function _rename_step(st::PlacementStep, old::Symbol, new::Symbol)
     T = typeof(st)
@@ -394,9 +419,10 @@ Every named frame of a design in the chamber: `:tcc`, each part's own
 ([`piece_frame_defs`](@ref)), resolved with `resolve_frames`, so a part placed in
 another part's frame follows every ancestor exactly. Throws `ArgumentError` for a part
 placed in a frame that does not exist, or parts placed in each other in a loop (the
-error names the loop).
+error names the loop), and for a model tree that is not one ([`check_tree`](@ref)).
 """
 function part_frames(parts::AbstractVector)
+    check_tree(parts)
     defs = _frame_defs(parts)
     names = Set{Symbol}(first.(defs))
     for p in parts
@@ -467,7 +493,7 @@ placed by its placement fields in the chamber frame, without its steps.
 """
 function part_component(p::PartSpec, h::Real; frame::Frame = _own_frame(p))
     p.kind === :visrad && throw(ArgumentError("a VisRad object can make several components: use part_components"))
-    p.kind === :frame && throw(ArgumentError("a frame has no component"))
+    _no_geometry(p) && throw(ArgumentError("a $(p.kind) has no component"))
     return only(part_components(p, h; frame))
 end
 
@@ -513,7 +539,7 @@ function _part_key(p::PartSpec, h::Real, frame, raw::Bool, hc::Real = 0.0)
 end
 
 function _part_components(p::PartSpec, h::Real, frame::Frame, raw::Bool, hc::Real = 0.0)
-    p.kind === :frame && return Component[]               # a user frame: no geometry
+    _no_geometry(p) && return Component[]                 # a user frame, an assembly: no geometry
     R, center = frame.R, frame.origin
     v = p.values
     hp = v[:h] > 0 ? v[:h] : Float64(h)
@@ -917,8 +943,10 @@ end
 Add the parts of an STL file: one `:mesh` part for a file of one solid (as
 [`add_part!`](@ref)), or one per named solid of an ASCII file of several (a multi-body CAD
 export, `read_stl_solids`), each named after its solid (letters, digits and `_`, made
-unique) and placed and sized by `values` alike. The parts are added together: one the
-geometry rejects (an empty solid, …) adds none, sets `error` and returns `false`.
+unique) and placed and sized by `values` alike, as one assembly named after the file
+(its frame at TCC, the parts placed in it: [`add_assembly!`](@ref)). The parts are added
+together: one the geometry rejects (an empty solid, …) adds none, sets `error` and
+returns `false`.
 """
 function add_stl_parts!(ts, file::AbstractString; values...)      # ts::TargetSetup (defined below)
     solids = try
@@ -929,21 +957,31 @@ function add_stl_parts!(ts, file::AbstractString; values...)      # ts::TargetSe
         return false
     end
     length(solids) <= 1 && return add_part!(ts, :mesh; file, values...)
-    taken = union(Set(all_component_names(ts)), (p.name for p in ts.parts[]))
+    taken = union(Set(all_component_names(ts)), (p.name for p in ts.parts[]), keys(part_frames(ts)))
+    asm = _free_identifier(first(splitext(basename(file))), taken, "assembly")
     parts = copy(ts.parts[])
     vals = Dict{Symbol,Float64}(k => Float64(v) for (k, v) in values)
     for (k, (sname, _)) in enumerate(solids)
-        base = replace(strip(sname), r"[^A-Za-z0-9_]" => "_")
-        (isempty(base) || !occursin(r"^[A-Za-z_]", base)) && (base = "solid_" * base)
-        name, j = Symbol(base), 1
-        while name in taken
-            j += 1
-            name = Symbol(base, :_, j)
-        end
-        push!(taken, name)
-        push!(parts, PartSpec(:mesh; name, file, object = string(k), values = vals))
+        name = _free_identifier(sname, taken, "solid")
+        push!(parts, PartSpec(:mesh; name, file, object = string(k), values = vals, frame = asm, assembly = asm))
     end
+    push!(parts, PartSpec(:assembly; name = asm))
     return _try_build!(ts; parts)
+end
+
+# A name from text `s` (letters, digits and `_`, starting with a letter or `_`: `prefix`
+# and `_` put in front otherwise) not in `taken` (`name_2`, `name_3`, … when it is),
+# added to `taken`.
+function _free_identifier(s::AbstractString, taken::AbstractSet, prefix::AbstractString)
+    base = replace(strip(s), r"[^A-Za-z0-9_]" => "_")
+    (isempty(base) || !occursin(r"^[A-Za-z_]", base)) && (base = prefix * "_" * base)
+    name, j = Symbol(base), 1
+    while name in taken
+        j += 1
+        name = Symbol(base, :_, j)
+    end
+    push!(taken, name)
+    return name
 end
 
 # ---------------------------------------------------------------- the setup
@@ -1290,13 +1328,40 @@ end
 Leave component `name` out of the calculations (`excluded = true`) or put it back.
 An excluded component is not part of `target` (no laser, view factors, clearance or
 checks see it) but stays listed and drawn as a ghost (`ghost`), so it can be put
-back; a hohlraum with an excluded component is no longer treated as closed.
+back; a hohlraum with an excluded component is no longer treated as closed. `name` may
+be a part (every component of it) or an assembly (every part of its subtree,
+[`assembly_parts`](@ref)); a part put back comes back whole, its pieces left out on
+their own included.
 """
 function set_excluded!(ts::TargetSetup, name::Symbol, excluded::Bool)
-    ex = copy(ts.excluded[])
-    excluded ? push!(ex, name) : delete!(ex, name)
+    ex = first(_with_excluded(ts, ts.excluded[], (name,), excluded))
     ex == ts.excluded[] && return true
     return _try_build!(ts; excluded = ex)
+end
+
+# The set of names left out, `ex`, with `names` (components, parts or assemblies) left
+# out (`out`) or put back, and the names put in or taken out of it: an assembly stands for
+# the parts of its subtree; a part put back takes its components with it.
+function _with_excluded(ts::TargetSetup, ex, names, out::Bool)
+    ex = Set{Symbol}(ex)
+    ps = ts.parts[]
+    leaves = Symbol[]
+    for n in names
+        k = part_index(ts, Symbol(n))
+        k !== nothing && ps[k].kind === :assembly ? append!(leaves, assembly_parts(ps, ps[k].name)) :
+                                                    push!(leaves, Symbol(n))
+    end
+    if out
+        union!(ex, leaves)
+    else
+        setdiff!(ex, leaves)
+        back = Set(leaves)
+        for t in (ts.target[], ts.ghost[])
+            t === nothing && continue
+            foreach(c -> c.part in back && delete!(ex, c.name), t.components)
+        end
+    end
+    return ex, leaves
 end
 
 "Every component name of the design: in the calculations, then excluded ones."
@@ -1597,10 +1662,18 @@ end
 
 """
     remove_part!(ts::TargetSetup, i) -> Bool
+
+Remove part `i`. An assembly goes with its subtree: every part and assembly in it, at
+any depth ([`assembly_members`](@ref)). A user frame in use is not removed, and nor is
+anything a part left behind is placed in (`error` says why).
 """
 function remove_part!(ts::TargetSetup, i::Integer)
     _check_part_index(ts, i)
     p = ts.parts[][i]
+    if p.kind === :assembly
+        gone = Set{Symbol}([p.name; assembly_members(ts.parts[], p.name)])
+        return _try_build!(ts; parts = PartSpec[q for q in ts.parts[] if !(q.name in gone)])
+    end
     if p.kind === :frame
         users = frame_users(ts, p.name)
         isempty(users) ||
@@ -1694,7 +1767,7 @@ function edit_part!(ts::TargetSetup, i::Integer, key::Symbol, text)
     _check_part_index(ts, i)
     p = ts.parts[][i]
     try
-        p.kind === :frame && key in (:albedo, :conversion, :h) && throw(ArgumentError("a frame has no field :$key"))
+        _no_geometry(p) && key in (:albedo, :conversion, :h) && throw(ArgumentError("a $(p.kind) has no field :$key"))
         is_port_frame(p) && key in (:theta, :phi) &&
             throw(ArgumentError("a port frame's axis is its port's: change its roll, or place another frame in it"))
         if key === :name
@@ -1787,24 +1860,28 @@ function set_part_frame!(ts::TargetSetup, i::Integer, frame::Symbol; keep::Bool 
         trial = copy(ts.parts[])
         trial[i] = _with(p; frame)
         part_frames(trial)                     # a loop, a missing frame
-        vals = copy(p.values)
-        if keep
-            fr = part_frames(ts)
-            P0, P1 = fr[p.frame], fr[frame]
-            vals[:x], vals[:y], vals[:z] = to_frame(P1, to_chamber(P0, part_center(p)))
-            if P0.R != P1.R
-                local_R = P1.R' * (P0.R * euler_rotation(p.values[:theta], p.values[:phi], p.values[:rotation]))
-                vals[:theta], vals[:phi], vals[:rotation] = _euler_angles(local_R)
-            end
-        end
         ps = copy(ts.parts[])
-        ps[i] = _with(p; frame, values = vals)
+        ps[i] = keep ? _kept_in(p, frame, part_frames(ts)) : _with(p; frame)
         return _try_build!(ts; parts = ps)
     catch err
         err isa ArgumentError || rethrow()
         ts.error[] = _errmsg(err)
         return false
     end
+end
+
+# Part `p` placed in the frame named `frame`, where it is in the chamber (`fr`: the
+# design's chamber frames, `part_frames`): its center and the angles of its rotation
+# re-expressed there (the angles kept when the two frames have the same axes).
+function _kept_in(p::PartSpec, frame::Symbol, fr::AbstractDict)
+    vals = copy(p.values)
+    P0, P1 = fr[p.frame], fr[frame]
+    vals[:x], vals[:y], vals[:z] = to_frame(P1, to_chamber(P0, part_center(p)))
+    if P0.R != P1.R
+        local_R = P1.R' * (P0.R * euler_rotation(p.values[:theta], p.values[:phi], p.values[:rotation]))
+        vals[:theta], vals[:phi], vals[:rotation] = _euler_angles(local_R)
+    end
+    return _with(p; frame, values = vals)
 end
 
 """
@@ -2337,7 +2414,7 @@ function set_part_role!(ts::TargetSetup, i::Integer, role::Symbol; done = () -> 
     p = ps[i]
     part_role(p) === role && (done(); return true)
     try
-        p.kind === :frame && throw(ArgumentError("a frame has no surface to take a role"))
+        _no_geometry(p) && throw(ArgumentError("a $(p.kind) has no surface to take a role"))
         p.kind === :hohlraum &&
             throw(ArgumentError("a hohlraum's wall and caps hold the wall role already; its holes are apertures"))
         shape = _part_shape(p)
@@ -2616,7 +2693,7 @@ function target_summary(ts::TargetSetup)
     ps = ts.parts[]
     nh = count(p -> p.kind === :hohlraum, ps)
     nw = sum(p -> length(p.windows), ps; init = 0)
-    no = count(p -> !(p.kind in (:hohlraum, :frame)), ps)
+    no = count(p -> !(p.kind in (:hohlraum, :frame, :assembly)), ps)
     kind = nh == 0 ? "target" : nh == 1 ? "hohlraum" : "$nh hohlraums"
     nw > 0 && (kind *= nw == 1 ? " with 1 window" : " with $nw windows")
     no > 0 && (kind *= nh == 0 ? (no == 1 ? " of 1 part" : " of $no parts") : no == 1 ? " + 1 part" : " + $no parts")

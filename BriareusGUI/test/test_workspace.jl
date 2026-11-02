@@ -460,7 +460,12 @@ end
     @test_throws ArgumentError export_visrad_workspace(s, joinpath(dir, "out.vrw"))
     import_visrad_workspace!(s, src)
     ts = s.target
-    @test all(p -> p.kind === :visrad, ts.parts[])
+    # the objects, in one assembly named after the file (its frame at TCC)
+    objs = ts.parts[][1:end-1]
+    @test all(p -> p.kind === :visrad && p.assembly === :work && p.frame === :work, objs)
+    @test is_assembly(ts.parts[][end]) && ts.parts[][end].name === :work
+    @test assembly_parts(ts.parts[], :work) == [p.name for p in objs] && part_frames(ts)[:work] ≈ CHAMBER
+    @test "assembly:work" in s.view.expanded[]
     names = component_names(ts.target[])
     # the foil, the hohlraum's five components and the CAD tetrahedron take part; the
     # reference cone (not meshed) is skipped and the marker sphere, which VisRad leaves
@@ -513,7 +518,7 @@ end
     s3 = DesignSession(resolution = :coarse)
     load_session!(s3, fz)
     @test s3.visrad_source[] != abspath(src) && cad_source(s3, s3.visrad_source[]) == abspath(src)
-    @test all(p -> p.file == s3.visrad_source[], s3.target.parts[])
+    @test all(p -> p.file == s3.visrad_source[], filter(!is_assembly, s3.target.parts[]))
     @test component_names(s3.target.target[]) == names
     # a design's targets are built once: an edit to a part left out of the calculations
     # keeps the calculation target, and an undo or a redo finds its target again
@@ -547,7 +552,9 @@ end
         f()
     end
     @test done[] && isempty(s.meshing[]) && startswith(s.status[], "imported work.vrw")
-    @test all(p -> p.kind === :visrad, s.target.parts[]) && :CAD_0 in component_names(s.target.target[])
+    # (the objects in one assembly)
+    @test all(p -> p.kind === :visrad, s.target.parts[][1:end-1]) && is_assembly(s.target.parts[][end]) &&
+          :CAD_0 in component_names(s.target.target[])
     @test length(s.beams.beams[]) == 3 && s.visrad_source[] == abspath(src)
     # a failed import says why and keeps the design
     bad = joinpath(dir, "empty.vrw")
@@ -639,8 +646,10 @@ end
     ts2 = TargetSetup(starter = :none)
     n0 = length(ts2.parts[])
     @test add_stl_parts!(ts2, f; h = 0.5)
-    @test length(ts2.parts[]) - n0 == length(solids)
-    @test all(p -> p.kind === :mesh && !isempty(p.object), ts2.parts[][n0+1:end])
+    # (in one assembly named after the file)
+    new = ts2.parts[][n0+1:end]
+    @test count(p -> p.kind === :mesh && !isempty(p.object), new) == length(solids) == length(new) - 1
+    @test is_assembly(new[end]) && new[end].name === :target && all(p -> p.assembly === :target, new[1:end-1])
     @test :Rectangle_0 in component_names(ts2.target[])                       # named after its solid
     @test add_stl_parts!(ts2, fb) && isempty(ts2.parts[][end].object)
 end

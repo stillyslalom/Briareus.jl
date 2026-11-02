@@ -134,6 +134,15 @@ function _connect!(sess::DesignSession)
         rn = ts.renames[]
         tr = sess.view.triads[]
         any(f -> haskey(rn, f), tr) && (sess.view.triads[] = Set{Symbol}(get(rn, f, f) for f in tr))
+        # a renamed assembly stays selected and expanded
+        isempty(rn) || _rename_nodes!(sess.view, Dict("assembly:" * String(a) => "assembly:" * String(b)
+                                                      for (a, b) in rn))
+    end
+    # an assembly removed or ungrouped is no longer selected
+    on(ts.parts) do ps
+        kind, key = selection_kind(sess.view.selection[])
+        kind === :assembly && !any(p -> is_assembly(p) && String(p.name) == key, ps) &&
+            select!(sess.view, "target")
     end
     on(ts.target) do t
         _default_selections!(sess, t)
@@ -678,15 +687,16 @@ end
     include_components!(sess::DesignSession, names, include::Bool; spawn = sess.spawn[]) -> sess
 
 Put the components `names` back into the calculations (`include = true`) or leave them
-out (see [`set_excluded!`](@ref)). A CAD part left out is drawn from its file's facets;
+out (see [`set_excluded!`](@ref)). A name may be a part's (its components) or an
+assembly's (the parts of its subtree: the model tree's include and exclude); a part put
+back comes back whole. A CAD part left out is drawn from its file's facets;
 putting it back repairs its windings and remeshes it, which takes tens of seconds for
 10⁵ facets: with `spawn` that runs on worker threads, with progress in `meshing`, and
 the target is replaced when it is ready. A rejected change sets the target's `error`.
 """
 function include_components!(sess::DesignSession, names, include::Bool; spawn::Bool = sess.spawn[])
     ts = sess.target
-    ex = copy(ts.excluded[])
-    include ? setdiff!(ex, names) : union!(ex, names)
+    ex, names = _with_excluded(ts, ts.excluded[], names, !include)
     ex == ts.excluded[] && return sess
     if !spawn || !include
         _try_build!(ts; excluded = ex)
@@ -737,8 +747,9 @@ end
 Replace the design with a VisRad workspace's (`read_visrad_workspace`): a custom target
 whose parts are the workspace's objects (`:visrad` parts: each keeps its place, albedo
 and conversion; CAD windings are repaired and surfaces remeshed to the target's element
-size), and the workspace's beams, in their clusters as groups, switched on where
-VisRad delivers power. Objects for which `include` is false (by default those VisRad
+size), in one assembly named after the file (its frame at TCC, the objects placed in it,
+so moving the assembly moves them all: [`add_assembly!`](@ref)), and the workspace's
+beams, in their clusters as groups, switched on where VisRad delivers power. Objects for which `include` is false (by default those VisRad
 leaves out of both its laser and radiosity calculations) are imported but left out of
 the calculations, drawn as ghosts. The workspace becomes the template of
 [`export_visrad_workspace`](@ref), and the drive deposits with VisRad's beam model and
@@ -782,11 +793,13 @@ Base.@nospecializeinfer function import_visrad_workspace!(
         isempty(supported) && throw(ArgumentError("$file has no target components Briareus reads"))
         any(include, supported) ||
             throw(ArgumentError("VisRad includes none of the workspace's objects in its calculations"))
-        # (an object named capsule is the observed surface, as VisRad workspaces name it)
-        parts = [PartSpec(:visrad; name = Symbol(o.name), file = path, object = o.name,
-                          values = Dict(:albedo => o.albedo, :conversion => o.conversion),
-                          observed = o.name == "capsule")
-                 for o in supported]
+        # one assembly of the objects, named after the file, its frame at TCC (an object
+        # named capsule is the observed surface, as VisRad workspaces name it)
+        asm = _free_identifier(first(splitext(file)), Set{Symbol}(Symbol(o.name) for o in supported), "workspace")
+        parts = [[PartSpec(:visrad; name = Symbol(o.name), file = path, object = o.name,
+                           values = Dict(:albedo => o.albedo, :conversion => o.conversion),
+                           observed = o.name == "capsule", frame = asm, assembly = asm)
+                  for o in supported]; PartSpec(:assembly; name = asm)]
         # the components of objects VisRad leaves out are left out of the calculations,
         # and so (by default) is CAD hardware far from where the beams point
         names = Set{Symbol}(n for o in supported if !include(o) for n in visrad_component_names(o))
@@ -816,6 +829,8 @@ Base.@nospecializeinfer function import_visrad_workspace!(
             spawn || throw(ArgumentError(sess.status[]))
             return
         end
+        # the workspace's assembly is shown open in the model tree
+        _assign!(sess.view.expanded, union(sess.view.expanded[], ("assembly:" * String(parts[end].name),)))
         bs = ws.beams
         set_beams!(sess.beams, bs; preset = :custom, enabled = [b.power > 0 for b in bs],
                    cluster = Symbol[b.group for b in bs])
@@ -832,7 +847,7 @@ Base.@nospecializeinfer function import_visrad_workspace!(
         # the cutaway cuts every component of an imported design (its names are VisRad's)
         obs = observed_name(ts)
         set_cut!(sess.view; components = [n for n in surface_names(ts.target[]) if n !== obs])
-        sess.status[] = "imported $file: $(length(parts)) objects, $(length(bs)) beams" *
+        sess.status[] = "imported $file: $(length(parts) - 1) objects, $(length(bs)) beams" *
                         (isempty(far) ? "" :
                          "; drawn only, far from the target (Include in calculations puts one back " *
                          "for the laser, clearance and drive): " * join(far, ", ")) *
