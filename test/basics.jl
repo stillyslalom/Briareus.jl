@@ -1,0 +1,1183 @@
+# The core testsets: meshes and ray casting through radiation, analysis and optimization.
+# runtests.jl includes it (shard 1) rather than holding these testsets in its own body:
+# inside the outer `@testset` the whole body is one top-level expression, which keeps
+# every testset's locals alive until the suite ends (about 600 MB); an included file
+# runs each testset as its own expression, and its locals are freed when it ends.
+
+@testset "meshes" begin
+    s = sphere_mesh(R_SPHERE; ntheta = 16, nphi = 24)
+    t = Target(Component(:s, s, gold()))
+    @test nelements(t) == 16 * 24
+    @test isapprox(sum(t.elem_area), 4π * R_SPHERE^2; rtol = 0.03)
+    # equal-area bands
+    @test maximum(t.elem_area) / minimum(t.elem_area) < 1.1
+    # outward normals
+    @test all(dot(t.elem_normal[e], t.elem_centroid[e]) > 0 for e in 1:nelements(t))
+    c = Target(Component(:c, cylinder_mesh(1.0, -1, 1; nz = 4, nphi = 12), gold()))
+    @test all(dot(c.elem_normal[e], Vec3(c.elem_centroid[e][1], c.elem_centroid[e][2], 0)) < 0
+              for e in 1:nelements(c))
+    a = annulus_mesh(0.5, 1.0, 0.0; nr = 3, nphi = 64, up = false)
+    ta = Target(Component(:a, a, gold()))
+    @test isapprox(sum(ta.elem_area), π * (1 - 0.25); rtol = 0.01)
+    @test all(n -> n[3] ≈ -1, ta.elem_normal)
+    f = foil(:f, (1.0, 2.0, 3.0), (0, 1, 0); width = 2.0, n = 4)
+    tf = Target(f)
+    @test nelements(tf) == 2 * 16                # two-sided
+    @test count(n -> n ≈ Vec3(0, 1, 0), tf.elem_normal) == 16
+    @test count(n -> n ≈ Vec3(0, -1, 0), tf.elem_normal) == 16
+    @test all(c -> c[2] ≈ 2.0, tf.elem_centroid)
+    top, rest = split_mesh(s, c -> c[3] > 1.5)
+    @test npatches(top) + npatches(rest) == npatches(s)
+    @test npatches(top) == 2 * 24                 # the two uppermost bands
+    tt = Target(Component(:a, top, gold()), Component(:b, rest, gold()))
+    @test sum(tt.elem_area) ≈ sum(t.elem_area)
+    R = rotation_to(Vec3(1, 1, 1))
+    @test R * Vec3(0, 0, 1) ≈ normalize(Vec3(1, 1, 1))
+    @test det(R) ≈ 1
+end
+
+@testset "ray casting" begin
+    t = hohlraum(nz = 8, nphi = 12, capsule_ntheta = 6, capsule_nphi = 8)
+    rng = MersenneTwister(1)
+    for _ in 1:300
+        o = Vec3(randn(rng, 3)...) .* 2
+        d = normalize(Vec3(randn(rng, 3)...))
+        tb, idb = closest_hit(t.bvh, o, d)
+        # brute force over opaque triangles
+        best, bi = Inf, 0
+        for k in eachindex(t.tri_area)
+            t.tri_opaque[k] || continue
+            tt = Briareus._intersect(o, d, t.tri_v0[k], t.tri_e1[k], t.tri_e2[k], best)
+            tt < best && (best = tt; bi = k)
+        end
+        @test tb ≈ best
+        @test any_hit(t.bvh, o, d) == (bi != 0)
+    end
+    # packets (the deposition operator's visibility rays): the same answers as any_hit,
+    # for coherent bundles off a facet and for scattered origins and directions
+    agree = true
+    cache = zeros(Int32, 16)
+    for trial in 1:200
+        k = rand(rng, findall(t.tri_opaque))
+        side = rand(rng, (-1, 1)) * t.tri_normal[k]
+        k0 = normalize(Vec3(randn(rng, 3)...))
+        dot(k0, side) > 0 || (k0 = -k0)
+        ds = trial % 4 == 0 ? [normalize(Vec3(randn(rng, 3)...)) for _ in 1:16] :
+             [normalize(k0 + 0.06 * Vec3(randn(rng, 3)...)) for _ in 1:13]
+        os = trial % 4 == 0 ? [Vec3(randn(rng, 3)...) .* 2 for _ in 1:7] :
+             [t.tri_v0[k] + u * t.tri_e1[k] + v * t.tri_e2[k] + 1e-6 * side
+              for (u, v) in ((rand(rng), rand(rng)) for _ in 1:16) if u + v <= 1]
+        m0 = [rand(rng, UInt16) & UInt16((1 << length(ds)) - 1) for _ in os]
+        m = Briareus._unblocked!(copy(m0), t.bvh, os, ds, Briareus._safe_inv.(ds), cache)
+        for i in eachindex(os), j in eachindex(ds)
+            (m0[i] >> (j - 1)) & 1 == 1 || continue
+            agree &= ((m[i] >> (j - 1)) & 1 == 1) == !any_hit(t.bvh, os[i], ds[j])
+        end
+        agree &= all(m .& .~m0 .== 0)
+    end
+    @test agree
+end
+
+@testset "view factors" begin
+    # Interior of a sphere: F_ij = A_j / (4πR²) for every pair, rows close to 1.
+    s = Target(Component(:s, sphere_mesh(R_SPHERE; ntheta = 10, nphi = 16, outward = false), gold()))
+    F = view_factors(s)
+    A = s.elem_area
+    @test maximum(abs.(closure_error(F))) < 0.01
+    # two mid-latitude facets: F_ij ≈ A_j / ΣA (polar slivers deviate more, being flat)
+i, j = 2 * 16 + 1, 7 * 16 + 9
+@test isapprox(F[i, j], A[j] / sum(A); rtol = 0.03)
+    # reciprocity
+    @test maximum(abs.(A .* F .- (A .* F)')) < 1e-12
+
+    # Coaxial parallel disks, radii r1, r2 at separation h (analytic).
+    r1, r2, h = 1.0, 0.7, 0.8
+    d1 = Component(:d1, disk_mesh(r1, 0.0; nr = 8, nphi = 32, up = true), gold())
+    d2 = Component(:d2, disk_mesh(r2, h; nr = 8, nphi = 32, up = false), gold())
+    t = Target(d1, d2)
+    F = view_factors(t)
+    e1, e2 = elements(t, :d1), elements(t, :d2)
+    F12 = sum(t.elem_area[i] * F[i, j] for i in e1, j in e2) / sum(t.elem_area[e1])
+    R1, R2 = r1 / h, r2 / h
+    X = 1 + (1 + R2^2) / R1^2
+    F12_exact = (X - sqrt(X^2 - 4 * (R2 / R1)^2)) / 2
+    @test isapprox(F12, F12_exact; rtol = 0.01)
+
+    # Occlusion: an opaque plate between the disks blocks the view.
+    blocker = Component(:b, disk_mesh(2.0, h / 2; nr = 2, nphi = 16), gold(); two_sided = true)
+    tb = Target(d1, d2, blocker)
+    Fb = view_factors(tb)
+    @test sum(Fb[i, j] for i in elements(tb, :d1), j in elements(tb, :d2)) == 0
+
+    # Exact point-to-polygon factor: unit square at height 1 above a corner point,
+    # against a fine midpoint quadrature of the point kernel.
+    p, n = Vec3(0, 0, 0), Vec3(0, 0, 1)
+    tri1 = (Vec3(0, 0, 1), Vec3(1, 0, 1), Vec3(1, 1, 1))
+    tri2 = (Vec3(0, 0, 1), Vec3(1, 1, 1), Vec3(0, 1, 1))
+    exact = _point_polygon_vf(p, n, tri1) + _point_polygon_vf(p, n, tri2)
+    m = 400
+    quad = sum(begin
+        x, y = (i - 0.5) / m, (j - 0.5) / m
+        r2 = x^2 + y^2 + 1
+        1 / (π * r2^2) / m^2
+    end for i in 1:m, j in 1:m)
+    @test isapprox(exact, quad; rtol = 1e-4)
+
+    # Sliver elements (one 20:1 element per plate) against the closed forms for directly
+    # opposed parallel rectangles and perpendicular ones on a common edge: near flat pairs
+    # wholly in front of each other take the exact double contour (the cell rule was off
+    # by 1e-4 and 9e-5 here, square elements by 9e-4 and 1.6e-3).
+    Rx = [1 0 0; 0 -1 0; 0 0 -1]; Rq = [1 0 0; 0 0 -1; 0 1 0]
+    l, w, g = 1.0, 0.05, 0.02
+    pa = Component(:a, rectangle_mesh(l, w; nu = 1, nv = 1), gold())
+    pb = Component(:b, translate(transform(rectangle_mesh(l, w; nu = 1, nv = 1), Rx), (0, 0, g)), gold())
+    pc = Component(:c, translate(transform(rectangle_mesh(l, g; nu = 1, nv = 1), Rq), (0, w / 2, g / 2)), gold())
+    tp = Target([pa, pb, pc])
+    Fp = view_factors(tp)
+    X, Y = l / g, w / g
+    Fab = 2 / (π * X * Y) * (log(sqrt((1 + X^2) * (1 + Y^2) / (1 + X^2 + Y^2))) +
+                             X * sqrt(1 + Y^2) * atan(X / sqrt(1 + Y^2)) +
+                             Y * sqrt(1 + X^2) * atan(Y / sqrt(1 + X^2)) - X * atan(X) - Y * atan(Y))
+    W, H = w / l, g / l
+    S = W^2 + H^2
+    Fac = (W * atan(1 / W) + H * atan(1 / H) - sqrt(S) * atan(1 / sqrt(S)) +
+           log((1 + W^2) * (1 + H^2) / (1 + S) * (W^2 * (1 + S) / ((1 + W^2) * S))^(W^2) *
+               (H^2 * (1 + S) / ((1 + H^2) * S))^(H^2)) / 4) / (π * W)
+    ea, eb, ec = elements(tp, :a), elements(tp, :b), elements(tp, :c)
+    @test isapprox(sum(Fp[ea, eb]), Fab; rtol = 1e-12)
+    @test isapprox(sum(Fp[ea, ec]), Fac; rtol = 1e-12)
+    # Closed polyhedra of flat elements, every pair near and wholly in front of the
+    # other: a cube of one element per face, a triangular prism (60° and 90° edges) and
+    # the cube with its bottom and front faces one element folded across their edge. Rows
+    # sum to one exactly, but the folded element's, which misses its self-exchange, the
+    # perpendicular unit squares' Hottel factor; opposite faces match the parallel squares.
+    function poly_target(faces, inside; merge = 0)
+        m = Mesh()
+        foreach(f -> add_polygon!(m, f; facing = inside - sum(f) / length(f)), faces)
+        P = merge == 0 ? m.patches : [first(m.patches[1]):last(m.patches[merge]), m.patches[merge+1:end]...]
+        return Target(Component(:p, Mesh(m.vertices, m.triangles, P), gold()))
+    end
+    cv(i, j, k) = Vec3(i, j, k)
+    cube = [[cv(0, 0, 0), cv(1, 0, 0), cv(1, 1, 0), cv(0, 1, 0)], [cv(0, 0, 0), cv(1, 0, 0), cv(1, 0, 1), cv(0, 0, 1)],
+            [cv(0, 0, 1), cv(1, 0, 1), cv(1, 1, 1), cv(0, 1, 1)], [cv(0, 1, 0), cv(1, 1, 0), cv(1, 1, 1), cv(0, 1, 1)],
+            [cv(0, 0, 0), cv(0, 1, 0), cv(0, 1, 1), cv(0, 0, 1)], [cv(1, 0, 0), cv(1, 1, 0), cv(1, 1, 1), cv(1, 0, 1)]]
+    tri = [Vec3(0, 0, 0), Vec3(1, 0, 0), Vec3(0.5, sqrt(3) / 2, 0)]
+    prism = [tri, [t + Vec3(0, 0, 1.5) for t in tri],
+             [[tri[k], tri[mod1(k + 1, 3)], tri[mod1(k + 1, 3)] + Vec3(0, 0, 1.5), tri[k] + Vec3(0, 0, 1.5)] for k in 1:3]...]
+    perp = (2atan(1) - sqrt(2) * atan(1 / sqrt(2)) + log(4 / 3 * (3 / 4)^2) / 4) / π     # Hottel, W = H = 1
+    par = 2 / π * (log(sqrt(4 / 3)) + 2sqrt(2) * atan(1 / sqrt(2)) - 2atan(1))         # X = Y = 1
+    Fc = view_factors(poly_target(cube, Vec3(0.5, 0.5, 0.5)))
+    Fq = view_factors(poly_target(prism, Vec3(0.5, sqrt(3) / 6, 0.75)))
+    Ff = view_factors(poly_target(cube, Vec3(0.5, 0.5, 0.5); merge = 2))
+    @test all(x -> abs(x) < 1e-12, closure_error(Fc)) && all(x -> abs(x) < 1e-12, closure_error(Fq))
+    @test isapprox(Fc[1, 3], par; rtol = 1e-12) && isapprox(Fc[1, 2], perp; rtol = 1e-12)
+    @test isapprox(closure_error(Ff)[1], perp; rtol = 1e-12) && all(x -> abs(x) < 1e-12, closure_error(Ff)[2:end])
+    # Sectors and inward cylinder patches about one axis: the double contour with exact
+    # arcs (`_arc_pair_vf`), summed over every pair, against the coaxial-disk closed forms:
+    # a 20 µm slot's aperture onto its annulus (sharing the arc), the annuli across it, a
+    # wall onto its end annulus and a bore onto its disk of center fans. The near pairs of
+    # `view_factors` take it.
+    Fdd(a, b, H) = (X = 1 + (1 + (b / H)^2) / (a / H)^2; (X - sqrt(X^2 - 4(b / a)^2)) / 2)
+    Gca(a, r0, H) = π * a^2 * (1 - Fdd(a, a, H)) - (r0 == 0 ? 0.0 : π * r0^2 * (1 - Fdd(r0, a, H)))
+    Gdd(a, b, H) = π * a^2 * Fdd(a, b, H)
+    R0, R1, g2 = 2.875, 2.925, 0.01
+    ta = Target([Component(:slot, cylinder_mesh(R1, -g2, g2; nz = 1, nphi = 90), gold(); surface = CylinderSurface(R1)),
+                 Component(:top, annulus_mesh(R0, R1, g2; nr = 1, nphi = 24, up = false), gold(); surface = DiskSurface(center = (0, 0, g2))),
+                 Component(:bottom, annulus_mesh(R0, R1, -g2; nr = 1, nphi = 32, up = true), gold(); surface = DiskSurface(center = (0, 0, -g2))),
+                 Component(:wall, cylinder_mesh(R0, g2, 1.0; nz = 2, nphi = 24), gold(); surface = CylinderSurface(R0)),
+                 Component(:cap, annulus_mesh(1.55, R0, 1.0; nr = 2, nphi = 24, up = false), gold(); surface = DiskSurface(center = (0, 0, 1.0))),
+                 Component(:bore, cylinder_mesh(1.55, 1.0, 1.1; nz = 1, nphi = 20), gold(); surface = CylinderSurface(1.55)),
+                 Component(:leh, disk_mesh(1.55, 1.1; nr = 2, nphi = 12, up = false), gold(); surface = DiskSurface(center = (0, 0, 1.1)))])
+    cta = Briareus._vf_context(ta; near = 3.0, mid = 12.0, level = 1, exact_far = true, visibility = :centroid, visibility_grid = 1)
+    Garc(a, b) = sum(Briareus._arc_pair_vf(cta.arcs[i], cta.arcs[j]) for i in elements(ta, a), j in elements(ta, b))
+    @test isapprox(Garc(:slot, :top), Gca(R1, R0, 2g2); rtol = 1e-11)
+    @test isapprox(Garc(:top, :bottom), Gdd(R1, R1, 2g2) - Gdd(R1, R0, 2g2) - Gdd(R0, R1, 2g2) + Gdd(R0, R0, 2g2); rtol = 1e-11)
+    @test isapprox(Garc(:wall, :cap), Gca(R0, 1.55, 1.0 - g2); rtol = 1e-11)
+    @test isapprox(Garc(:bore, :leh), Gca(1.55, 0.0, 0.1); rtol = 1e-11)
+    # (not in front of each other: the wall above the slot and the annulus below it)
+    @test isnan(Briareus._arc_pair_vf(cta.arcs[elements(ta, :wall)[1]], cta.arcs[elements(ta, :bottom)[1]]))
+    Fa = view_factors(ta)
+    i, j = elements(ta, :slot)[1], elements(ta, :top)[1]
+    @test Fa[i, j] == Briareus._arc_pair_vf(cta.arcs[i], cta.arcs[j]) / ta.elem_area[i]
+    # the cut pieces tile the sliver, each about half as long
+    a, b, c = Vec3(0, 0, 0), Vec3(1, 0, 0), Vec3(0, 0.05, 0)
+    area(x, y, z) = norm(cross(y - x, z - x)) / 2
+    for tri in ((a, b, c), (a, b, Vec3(0.5, 0.01, 0)))
+        @test Briareus._split_sliver(area, tri...) ≈ area(tri...) rtol = 1e-14
+        @test Briareus._split_sliver((x, y, z) -> max(norm(y - x), norm(z - y), norm(x - z)), tri...) <
+              1.6 * max(norm(tri[2] - tri[1]), norm(tri[3] - tri[2]), norm(tri[1] - tri[3]))
+    end
+end
+
+@testset "radiosity" begin
+    # Integrating sphere with uniform source S and albedo α: B = H = S/(1-α).
+    α, η = 0.7, 0.5
+    s = Target(Component(:s, sphere_mesh(R_SPHERE; ntheta = 8, nphi = 12, outward = false),
+                         Material(:m; albedo = α, conversion = η)))
+    m = RadiationModel(s)
+    P = 0.3 .* s.elem_area                      # 0.3 TW/mm² of absorbed laser
+    sol = solve(m, P)
+    expected = η * 0.3 / (1 - α)
+    @test isapprox(sum(sol.H .* s.elem_area) / sum(s.elem_area), expected; rtol = 0.04)
+    eb = energy_balance(sol)
+    @test isapprox(eb.source, sum(values(eb.absorbed)) + eb.lost; rtol = 1e-10)
+    @test abs(eb.lost) < 0.04 * eb.source
+    # with enforced closure the integrating sphere is exact
+mc = RadiationModel(s; closed = true)
+@test maximum(abs.(closure_error(mc.F))) < 1e-9
+@test maximum(abs.(s.elem_area .* mc.F .- (s.elem_area .* mc.F)')) < 1e-12
+solc = solve(mc, P)
+@test all(h -> isapprox(h, expected; rtol = 1e-6), solc.H)
+# a target declared closed is balanced by default; a given F is used as is
+sd = Target(s.components; closed = true)
+@test RadiationModel(sd).F == mc.F
+@test RadiationModel(sd; closed = false).F == m.F
+@test RadiationModel(sd; F = m.F).F == m.F
+let th = hohlraum(nz = 6, nphi = 8, nr_cap = 1, nr_leh = 1, capsule_radius = 0)
+    @test th.closed && !Target(th.components).closed && curved_components(th).closed
+end
+# flux_response reproduces the direct solve
+    obs = collect(1:5:nelements(s))
+    R = flux_response(m, obs)
+    @test R * P ≈ sol.H[obs]
+
+    # Temperature-dependent albedo converges and stays in range.
+    w = WallLossAlbedo()
+    s2 = Target(Component(:s, sphere_mesh(R_SPHERE; ntheta = 8, nphi = 12, outward = false),
+                          Material(:Au; albedo = w, conversion = 0.7)))
+    sol2 = solve(RadiationModel(s2), P; time = 2.0)
+    @test isapprox(sol2.albedo[1], Briareus.albedo(w, 2.0, radiation_temperature(sol2.H[1])); atol = 1e-3)
+    @test 0 < sol2.albedo[1] < 0.95
+    @test radiation_temperature(SIGMA_SB * 300.0^4) ≈ 300.0
+end
+
+@testset "beam profile" begin
+    spot = SuperGaussianSpot(0.4, 0.25; order = 4.0, angle = 0.3)
+    b = Beam("b"; theta = 30, phi = 40, power = 2.0, spot, fnumber = 8.0, aim = (0.1, -0.2, 0.3),
+             defocus = 1.5)
+    k = direction(b)
+    e1, e2 = Briareus.spot_axes(b)
+    @test abs(dot(e1, k)) < 1e-12 && abs(dot(e2, k)) < 1e-12 && abs(dot(e1, e2)) < 1e-12
+    # power through planes perpendicular to the beam at several axial positions
+    for s in (-3.0, 0.0, 1.5, 4.0)
+        c = Vec3(b.aim) + s * k
+        h = 0.02
+        tot = sum(intensity(b, c + u * e1 + v * e2) for u in -2:h:2, v in -2:h:2) * h^2
+        @test isapprox(tot, 2.0; rtol = 1e-3)
+    end
+end
+
+@testset "deposition vs ray trace" begin
+    # Normal incidence on a large foil: everything deposits, centroid at the aim point.
+    tf = Target(foil(:f, (0, 0, 0), (0, 0, 1); width = 6.0, n = 40))
+    b = Beam("b"; theta = 0, phi = 0, power = 3.0, spot = SuperGaussianSpot(0.5; order = 6.0),
+             fnumber = 6.7, aim = (0.4, -0.3, 0.0), defocus = 2.0)
+    op = DepositionOperator(tf, [b])
+    dep = deposit(op, [b])
+    rt = raytrace_deposition(tf, [b])
+    @test isapprox(sum(dep.element), 3.0; rtol = 2e-3)
+    @test isapprox(sum(rt.element), 3.0; rtol = 1e-9)
+    cen(d) = sum(d.element .* tf.elem_centroid) / sum(d.element)
+    @test isapprox(cen(dep), Vec3(0.4, -0.3, 0); atol = 0.01)
+    # second moment of the defocused spot: analytic profile vs ray trace
+    m2(d) = (c = cen(d); sum(d.element .* [sum(abs2, x - c) for x in tf.elem_centroid]) / sum(d.element))
+    @test isapprox(m2(dep), m2(rt); rtol = 0.03)
+
+    # Shadowing by an object near focus: a small disk in front of the foil.
+    sh = Component(:shield, disk_mesh(0.3, 0.0; nr = 4, nphi = 24), gold(); two_sided = true)
+    ts = Target(foil(:f, (0, 0, -2.0), (0, 0, 1); width = 6.0, n = 40), translate(sh, (0.2, 0, 0)))
+    b2 = Beam("b"; theta = 0, phi = 0, power = 1.0, spot = SuperGaussianSpot(0.5; order = 4.0),
+              fnumber = 6.7)
+    op2 = DepositionOperator(ts, [b2]; ncone = 13)
+    d2 = deposit(op2, [b2])
+    r2 = raytrace_deposition(ts, [b2]; ncone = 13)
+    pf(d) = sum(d.element[elements(ts, :f)])
+    pshield(d) = sum(d.element[elements(ts, :shield)])
+    @test isapprox(pshield(d2), pshield(r2); rtol = 0.03)
+    @test isapprox(pf(d2), pf(r2); rtol = 0.03)
+
+    # Far from focus at grazing incidence: a 30° quad crossing a hohlraum lands on the
+    # wall 7 mm past focus at 60° incidence. Power is conserved and the footprint
+    # matches a converged ray trace element by element.
+    th = hohlraum(length = 10.1, radius = 2.875, leh_radius = 1.55, capsule_radius = 0.9)
+    q30 = first(filter(b -> b.group === :inner30, nif_quads()))
+    φ = port_angles(q30)[2]
+    q30 = remake(q30; aim = (-0.6cosd(φ), -0.6sind(φ), 3.63 * sign(q30.port[3])))
+    dh = deposit(DepositionOperator(th, [q30]), [q30])
+    rh = raytrace_deposition(th, [q30]; nspot = 121, ncone = 61)
+    @test isapprox(sum(dh.element), q30.power; rtol = 1e-3)
+    @test sum(abs.(dh.element .- rh.element)) / q30.power < 0.03
+    # On a coarse mesh (1.3 mm wall triangles) the triangles near each beam are refined
+    # until the spot is resolved, so power is still conserved beam by beam, here with
+    # beams aimed close enough to the LEH plane to clip on the lip.
+    tc = hohlraum(length = 10.1, radius = 2.875, leh_radius = 1.55, capsule_radius = 0.9, nz = 8)
+    qc = [remake(b; aim = (0.0, 0.0, 4.0 * sign(b.port[3]))) for b in nif_quads()[1:12:48]]
+    dc = deposit(DepositionOperator(tc, qc), qc)
+    @test sum(dc.backside) > 0.01 * sum(b.power for b in qc)
+    @test maximum(abs.(dc.per_beam ./ [b.power for b in qc] .- 1)) < 2e-3
+    @test maximum(abs.(deposit(DepositionOperator(tc, qc; maxlevel = 1), qc).per_beam ./
+                       [b.power for b in qc] .- 1)) > 1e-2   # unrefined, it is not
+    # `deposit` splits the work into units that own their outputs and sums each output in
+    # a fixed order, so it matches a serial beam-by-beam sum bit for bit whatever the
+    # thread count, also when cut into many small units; a beam subset gets its own plan
+    opc = DepositionOperator(tc, qc)
+    small = Briareus._deposit_plan(nelements(tc), opc.dest; unit = 64)
+    @test size(small.boff, 1) > 10 && length(small.back) > length(qc)
+    fine = DepositionOperator(tc, opc.ports, opc.dirs, opc.pts, opc.w, opc.normal, opc.mask,
+                              opc.dest, small)
+    serial(o, bs) = (E = zeros(nelements(tc)); L = zeros(length(tc.components));
+                     pb = [Briareus._deposit_beam!(E, L, o, bi, Briareus.BeamFrame(bs[bi]))
+                           for bi in eachindex(bs)]; (E, L, pb))
+    for (o, bs) in ((opc, qc), (fine, qc), (opc[[2, 4]], qc[[2, 4]]))
+        d = deposit(o, bs)
+        E, L, pb = serial(o, bs)
+        @test d.element == E
+        @test d.backside ≈ L rtol = 1e-14
+        @test d.per_beam ≈ pb rtol = 1e-14
+    end
+    # Back sides that only feed the clipped power are sampled for their total: the light an
+    # LEH lip clips from a beam's tail lies within ~1/50 of a spot of the rim, so the rule
+    # is graded toward open edges. Clipped power from 1e-4 to 1e-2 of a beam matches
+    # ray traces converged at nspot ≥ 241 (uniform 0.3-spot sub-triangles were 10–60% low),
+    # and element values do not depend on the back-side sampling at all.
+    q = nif_quads()
+    for (b, aim, rtol) in ((q[1], (-0.274, -1.378, 3.09), 0.03), (q[1], (-0.311, -1.562, 3.09), 0.01),
+                           (q[17], (0.456, 0.378, 5.01), 0.03), (q[17], (0.626, 0.519, 5.01), 0.01))
+        bb = remake(b; aim)
+        clip = sum(deposit(DepositionOperator(th, [bb]), [bb]).backside) / bb.power
+        ref = sum(sum(raytrace_deposition(th, [bb]; nspot = n).backside) for n in (241, 301)) / 2 / bb.power
+        @test 5e-5 < ref < 2e-2
+        @test clip ≈ ref rtol = rtol
+    end
+    bb = remake(q[1]; aim = (-0.289, -1.454, 3.09))
+    opb = DepositionOperator(th, [bb])
+    coarse = DepositionOperator(th, [bb]; backside_resolution = 3.0, edge_resolution = 0.1)
+    @test deposit(coarse, [bb]).element == deposit(opb, [bb]).element
+    @test sum(length, coarse.w) < sum(length, opb.w)
+    # clipped power is smooth in the aim: monotone along a sweep, AD = finite differences
+    φ = port_angles(bb)[2]
+    clipped(δ) = (d = deposit(opb, [remake(bb; aim = bb.aim .- δ .* (cosd(φ), sind(φ), 0.0))]);
+                  sum(d.backside) / d.delivered)
+    @test issorted(clipped.(range(-0.15, 0.15; length = 31)))
+    for δ in (-0.1, 0.0, 0.1)
+        @test ForwardDiff.derivative(clipped, δ) ≈ (clipped(δ + 1e-5) - clipped(δ - 1e-5)) / 2e-5 rtol = 1e-5
+    end
+end
+
+@testset "VisRad beam profile" begin
+    # VisRad's model (`VisRadProfile`): at z from best focus, I = I₀(z) exp(−α), α =
+    # f[(|u|/ΔL)^M + (|v|/ΔL)^M] + (1 − f) q^(n/2), with a(z)² = a₀² + z²/(2F²) (and b),
+    # n = n₀(1 + 0.2|z|/z_A), f = |z|/√(z² + z_A z_B), ΔL = ρa₀/√2 + 0.99605|z|/(2F),
+    # M = 10(1 + |z|/√(z_A z_B)), z_A,B = √2 a₀,b₀ F, cut where α = ln 1000, and I₀(z) the
+    # beam's power over the plane integral. Reference: that law written out here, its plane
+    # integral by a midpoint sum on a Cartesian grid, and at focus the closed form
+    # 2π a b Γ(2/n)/n P(2/n, ln 1000) of the cut super-Gaussian.
+    F, n, a0, b0, P = 6.7, 4.5, 0.6, 0.35, 2.0
+    ρd = visrad_envelope(n)
+    spot = SuperGaussianSpot(a0, b0; order = n, angle = 0.4)
+    b = Beam("b"; theta = 0, phi = 0, power = P, spot, fnumber = F, aim = (0.1, -0.2, 0.0))
+    prof = VisRadProfile()
+    function αref(u, v, s; ρ = ρd)
+        z = abs(s); zA, zB = √2 * a0 * F, √2 * b0 * F
+        a, bb = sqrt(a0^2 + z^2 / (2F^2)), sqrt(b0^2 + z^2 / (2F^2))
+        f = z / sqrt(z^2 + zA * zB)
+        ΔL = ρ * a0 / √2 + 0.99605 * z / (2F)
+        M = 10 * (1 + z / sqrt(zA * zB))
+        α = f * ((abs(u) / ΔL)^M + (abs(v) / ΔL)^M) + (1 - f) * ((u / a)^2 + (v / bb)^2)^(n * (1 + 0.2z / zA) / 2)
+        return α < log(1000) ? α : Inf
+    end
+    function plane(s; ρ = ρd, h = 0.004, R = 3.0)
+        sum(exp(-αref(u, v, s; ρ)) for u in -R+h/2:h:R, v in -R+h/2:h:R) * h^2
+    end
+    e1, e2 = spot_axes(b)
+    k = direction(b)
+    at(s, u, v) = Vec3(b.aim) + s * k + u * e1 + v * e2
+    # at focus: the cut super-Gaussian, closed form
+    N0 = 2π * a0 * b0 * Briareus.gamma(2 / n) / n * Briareus.gamma_inc(2 / n, log(1000))[1]
+    @test intensity(prof, b, at(0, 0, 0)) ≈ P / N0 rtol = 1e-6
+    @test intensity(prof, b, at(0, 0.999ρd * a0, 0)) > 0 && intensity(prof, b, at(0, 1.001ρd * a0, 0)) == 0
+    # away from focus, at table nodes and between them, before and after focus
+    zs, uvs = (5.0, -8.0, 7.33, 20.0), ((0.0, 0.0), (0.4, 0.1), (-0.5, 0.3), (0.2, -0.45))
+    Ns = Dict(s => plane(s) for s in zs)
+    Iref(s, u, v) = isfinite(αref(u, v, s)) ? P / Ns[s] * exp(-αref(u, v, s)) : 0.0
+    @test all(isapprox(intensity(prof, b, at(s, u, v)), Iref(s, u, v); rtol = 2e-4, atol = 1e-12)
+              for s in zs, (u, v) in uvs)
+    # power through the transverse plane is the beam's
+    h = 0.005
+    @test all(isapprox(sum(intensity(prof, b, at(s, u, v)) for u in -3:h:3, v in -3:h:3) * h^2, P; rtol = 2e-4)
+              for s in zs)
+    # deposition on a foil normal to the beam, at focus and 5 mm from it, and on a foil
+    # tilted 40°; reference: element integrals of the law × |n·k| by an m × m midpoint rule
+    function element_ref(t, bx; m = 24)
+        ex1, ex2 = spot_axes(bx); kx = direction(bx)
+        foc = Vec3(bx.aim) + bx.defocus * kx
+        Nz = Dict{Float64,Float64}()
+        function I(x)
+            d = x - foc; s = dot(d, kx)
+            α = αref(dot(d, ex1), dot(d, ex2), s)
+            isfinite(α) || return 0.0
+            Ns = get!(() -> plane(round(s; digits = 2); h = 0.01), Nz, round(s; digits = 2))
+            return bx.power / Ns * exp(-α)
+        end
+        E = zeros(nelements(t))
+        for e in 1:nelements(t), tri in t.elem_tris[e]
+            c = abs(dot(t.elem_normal[e], kx))
+            dot(t.elem_normal[e], kx) < 0 || continue
+            v0, a1, a2 = t.tri_v0[tri], t.tri_e1[tri], t.tri_e2[tri]
+            pts = [((i + 1 / 3) / m, (j + 1 / 3) / m) for i in 0:m-1 for j in 0:m-1-i]
+            append!(pts, [((i + 2 / 3) / m, (j + 2 / 3) / m) for i in 0:m-2 for j in 0:m-2-i])
+            E[e] += t.tri_area[tri] / m^2 * c * sum(I(v0 + λ * a1 + μ * a2) for (λ, μ) in pts)
+        end
+        return E
+    end
+    tf = Target(foil(:f, (0, 0, 0), (0, 0, 1); width = 4.0, n = 24))
+    tt = Target(foil(:f, (0, 0, 0), (sind(40), 0, cosd(40)); width = 4.0, n = 24))
+    for (tg, bx) in ((tf, b), (tf, remake(b; defocus = 5.0)), (tt, b))
+        d = deposit(DepositionOperator(tg, [bx]; profile = prof), [bx])
+        ref = element_ref(tg, bx)
+        @test sum(d.element) ≈ sum(ref) rtol = 2e-3
+        # per-plane normalization holds the beam's power on planes normal to it; a tilted
+        # foil spans planes of different widths
+        @test sum(ref) ≈ P rtol = (tg === tt ? 1e-2 : 2e-3)
+        # the operator's default quadrature: within 0.4% rms on bright elements, 2.6% at
+        # worst where the square's steep edge crosses an element 5 mm past focus
+        r = d.element[ref .> 0.05 * maximum(ref)] ./ ref[ref .> 0.05 * maximum(ref)] .- 1
+        @test maximum(abs.(r)) < 0.03 && sqrt(sum(abs2, r) / length(r)) < 0.005
+    end
+    # near focus it agrees with the f-cone model
+    op = DepositionOperator(tf, [b]; profile = prof)
+    dv, df = deposit(op, [b]).element, deposit(DepositionOperator(tf, [b]), [b]).element
+    bright = df .> 0.05 * maximum(df)
+    @test maximum(abs.(dv[bright] ./ df[bright] .- 1)) < 0.01
+    # differentiable in the aim and in the defocus (8 mm past focus, where the square and
+    # the normalization table both enter); a beam subset keeps the profile; a Scenario
+    # passes it on
+    g(δ) = (bd = remake(b; aim = b.aim .+ δ .* (1.0, 0.0, 0.0)); E = deposit(op, [bd]).element;
+            sum(E .* getindex.(tf.elem_centroid, 1)))
+    @test ForwardDiff.derivative(g, 0.05) ≈ (g(0.05 + 1e-5) - g(0.05 - 1e-5)) / 2e-5 rtol = 1e-4
+    t8 = Target(foil(:f, Tuple(Vec3(b.aim) + 8 * k), Tuple(-k); width = 6.0, n = 40))
+    op8 = DepositionOperator(t8, [b]; profile = prof)
+    gd(δ) = (bd = remake(b; defocus = δ); E = deposit(op8, [bd]).element;
+             sum(E .* [dot(c - Vec3(b.aim), e1)^2 for c in t8.elem_centroid]))
+    @test ForwardDiff.derivative(gd, 0.37) ≈ (gd(0.37 + 1e-5) - gd(0.37 - 1e-5)) / 2e-5 rtol = 1e-4
+    @test op[[1]].profile === prof && op[[1]].envelope == [ρd]
+    @test Scenario(tf, [b]; deposition_kw = (; profile = prof)).deposition.profile === prof
+    @test_throws ArgumentError VisRadProfile(; envelope = 0)
+    @test_throws ArgumentError VisRadProfile(; envelope = Dict("b" => -1.0))
+    # the same spot with its axes swapped (a < b, turned 90°) is the same beam
+    bs = remake(b; spot = SuperGaussianSpot(b0, a0; order = n, angle = 0.4 + π / 2))
+    @test all(isapprox(intensity(prof, bs, at(s, u, v)), intensity(prof, b, at(s, u, v)); rtol = 1e-9)
+              for s in (0.0, 6.0), (u, v) in ((0.3, 0.1), (-0.5, 0.2)))
+    # envelope per beam: VisRad's default (ln 1000)^(1/n) puts the focal profile at 10⁻³ of
+    # its peak and reproduces the NIF plates' ratios in VisRad workspaces; a Dict sets it
+    # by beam name; larger ratios are capped at the default; ρ sets the square's width
+    @test visrad_envelope.([4.5, 4.8, 8.0, 7.6]) ≈ [1.53645, 1.49576, 1.27326, 1.28955] rtol = 1e-5
+    @test exp(-visrad_envelope(n)^n) ≈ 1e-3
+    b2 = remake(b; name = "b2", spot = SuperGaussianSpot(0.6, 0.35; order = 8.0, angle = 0.4))
+    pd = VisRadProfile(; envelope = Dict("b" => 1.2, "b2" => 3.0))
+    @test DepositionOperator(tf, [b, b2]; profile = pd).envelope ≈ [1.2, visrad_envelope(8.0)]
+    @test DepositionOperator(tf, [b, b2]; profile = VisRadProfile()).envelope ≈ [ρd, visrad_envelope(8.0)]
+    N12 = plane(10.0; ρ = 1.2)
+    @test all(isapprox(intensity(pd, b, at(10.0, u, v)), P / N12 * exp(-αref(u, v, 10.0; ρ = 1.2)); rtol = 2e-4)
+              for (u, v) in ((0.0, 0.0), (0.5, 0.3)))
+    @test intensity(pd, b, at(10.0, 0.5, 0.3)) != intensity(prof, b, at(10.0, 0.5, 0.3))
+    @test VisRadProfile(; envelope = Dict("b" => 1.2)) == VisRadProfile(; envelope = Dict("b" => 1.2))
+    @test hash(VisRadProfile(; envelope = 1.2)) == hash(VisRadProfile(; envelope = 1.2))
+end
+
+@testset "hohlraum + gradients" begin
+    t = hohlraum(nz = 16, nphi = 24, capsule_ntheta = 12, capsule_nphi = 16)
+    q = nif_quads()
+    p = GroupPointing(q; fields = (:z, :r, :power))
+    x0 = Float64[]
+    for k in p.keys
+        append!(x0, k in (:inner23, :inner30) ? [3.3, -0.8, 6.0] : [5.0, 0.0, 9.0])
+    end
+    sc = Scenario(t, GroupPointing(apply(p, x0); fields = (:z, :r, :power)); observe = :capsule)
+    ev = evaluate(sc, x0)
+    @test clipped_fraction(ev) < 0.01
+    @test abs(missed_fraction(ev)) < 0.01
+    # analytic deposition agrees with the ray trace on wall power and capsule symmetry
+    rt = raytrace_deposition(t, ev.beams; nspot = 31)
+    w = elements(t, :wall)
+    @test isapprox(sum(ev.deposition.element[w]), sum(rt.element[w]); rtol = 0.01)
+    a = flux_moments(ev; lmax = 4)
+    sol = solve(sc.model, rt)
+    b = legendre_moments(sol.H, t, sc.observed; lmax = 4)
+    @test isapprox(a[1], b[1]; rtol = 0.01)
+    @test abs(a[3] / a[1] - b[3] / b[1]) < 0.005
+    # response operator equals a direct solve
+    sol_a = solve(sc.model, ev.deposition)
+    @test ev.flux ≈ sol_a.H[sc.observed]
+    # top/bottom symmetric pointing ⇒ no odd moments
+    @test abs(a[2] / a[1]) < 1e-6 && abs(a[4] / a[1]) < 1e-6
+    # AD gradient matches central differences
+    obj = symmetry_objective()
+    f(x) = obj(evaluate(sc, x))
+    g = ForwardDiff.gradient(f, x0)
+    for i in (1, 2, 3, 10)
+        h = 1e-5
+        xp = copy(x0); xp[i] += h
+        xm = copy(x0); xm[i] -= h
+        @test isapprox(g[i], (f(xp) - f(xm)) / 2h; rtol = 1e-4, atol = 1e-9)
+    end
+    # energy accounting closes up to view-factor discretization
+    eb = energy_balance(sol_a)
+    @test abs(eb.lost) < 0.04 * eb.source
+    # the direct penalty defaults to the observed elements; a name not in the target is an
+    # error, not a penalty that never applies
+    evc = evaluate(sc, repeat([0.0, 0.0, 6.0], length(p.keys)))      # aimed at the capsule
+    @test power_fraction(evc, :capsule) > 0.01
+    @test Briareus._direct_fraction(evc, nothing) == power_fraction(evc, :capsule)
+    @test symmetry_objective()(evc) == symmetry_objective(; direct_names = (:capsule,))(evc)
+    @test_throws ArgumentError symmetry_objective(; direct_names = (:Capsule,))(evc)
+end
+
+@testset "mode analysis" begin
+    t = Target(Component(:s, sphere_mesh(1.0; ntheta = 40, nphi = 40), gold()))
+    es = collect(1:nelements(t))
+    μ = [c[3] / norm(c) for c in t.elem_centroid]
+    v = 1 .+ 0.1 .* legendre.(2, μ) .- 0.03 .* legendre.(4, μ)
+    a = legendre_moments(v, t, es; lmax = 6)
+    @test isapprox(a[3] / a[1], 0.1; atol = 1e-3)
+    @test isapprox(a[5] / a[1], -0.03; atol = 1e-3)
+    @test abs(a[2]) < 1e-10
+    C = ylm_moments(v, t, es; lmax = 4)
+    mp = mode_power(C)
+    @test isapprox(mp[3], 0.1 / sqrt(5); rtol = 0.02)
+    # a tilted P2 has the same rotation-invariant power
+    vt = 1 .+ 0.1 .* legendre.(2, [c[1] / norm(c) for c in t.elem_centroid])
+    @test isapprox(mode_power(ylm_moments(vt, t, es; lmax = 4))[3], mp[3]; rtol = 0.03)
+end
+
+@testset "facilities" begin
+    q = nif_quads()
+    @test length(q) == 48
+    @test length(nif_beams()) == 192
+    angs = port_angles.(q)
+    tops = filter(a -> a[1] < 90, angs)
+    bots = filter(a -> a[1] > 90, angs)
+    # every bottom port is (180-θ, 360-φ) of a top port
+    @test all(any(isapprox(180 - b[1], a[1]; atol = 1e-6) && isapprox(mod(360 - b[2], 360), a[2]; atol = 1e-6)
+                  for a in tops) for b in bots)
+    @test count(b -> b.group === :inner23, q) == 8
+    @test count(b -> b.group === :outer50, q) == 16
+    ob = omega_beams(; cones = :all)
+    @test length(ob) == 60
+    θs = sort(unique(round.(first.(port_angles.(ob)); digits = 2)))
+    @test θs ≈ [21.42, 42.02, 58.85, 81.25, 98.75, 121.15, 137.98, 158.58]
+    @test length(omega_beams()) == 40
+    # quad names from the LMF chamber-geometry figures: a bijection onto the ports,
+    # every bundle one top and one bottom quad, FABS on Q31B (30°) and Q36B (130°, 186°)
+    @test length(unique(b.name for b in q)) == 48
+    bundles = nif_bundles(q)
+    @test length(bundles) == 24
+    @test all(sort([q[i].name[end] for i in v]) == ['B', 'T'] for v in values(bundles))
+    @test port_angles(q[findfirst(b -> b.name == "Q36B", q)])[1] ≈ 130
+    @test port_angles(q[findfirst(b -> b.name == "Q36B", q)])[2] ≈ 185.62
+    @test q[findfirst(b -> b.name == "Q31B", q)].group === :inner30
+    @test nif_port("Q11T") == 17 && nif_port("Q11B") == 50
+    kinds = Dict{Tuple{Bool,Bool},Int}()
+    for v in values(bundles)
+        inner = sort([q[i].group in (:inner23, :inner30) for i in v])
+        kinds[(inner[1], inner[2])] = get(kinds, (inner[1], inner[2]), 0) + 1
+    end
+    @test kinds == Dict((false, false) => 12, (false, true) => 8, (true, true) => 4)
+    @test all(nif_bundle(b) == nif_bundle(b.quad) for b in nif_beams())
+    # the LMF per-beam table: each quad's mean beam direction is its port, which also
+    # confirms the quad names read from the chamber-geometry figures
+    nb = nif_beams()
+    @test length(nb) == 192 && nb[1].name == "B111" && nb[1].quad == "Q11T"
+    for b in q
+        mean_dir = normalize(sum(x.port for x in nb if x.quad == b.quad))
+        @test acosd(clamp(dot(mean_dir, b.port), -1, 1)) < 0.01
+    end
+    @test all(x.group === q[findfirst(y -> y.quad == x.quad, q)].group for x in nb)
+end
+
+@testset "relative group pointing" begin
+    # an as-shot-like table: each quad's beams aim at their own points (tangential split)
+    nb = [b for b in nif_beams() if b.quad in ("Q11T", "Q11B", "Q31T")]
+    splitaim(b) = (er = normalize(Vec3(b.port[1], b.port[2], 0)); et = Vec3(-er[2], er[1], 0);
+                s = parse(Int, b.name[end]) % 2 == 1 ? 0.45 : -0.45;
+                Tuple(s * et + Vec3(0, 0, sign(b.port[3]) * 5.9)))
+    bs = [remake(b; aim = splitaim(b)) for b in nb]
+    p = GroupPointing(bs; by = :quad, fields = (:z, :r, :phi), relative = true)
+    @test initial_parameters(p) == zeros(nparams(p))
+    @test all(a.aim ≈ b.aim for (a, b) in zip(apply(p, initial_parameters(p)), bs))
+    # one shift per quad moves every member rigidly in z (mirrored below) and keeps the split
+    x = zeros(nparams(p)); x[1] = 0.2                       # Q11T.z
+    x[nparams(p)-2] = 0.1                                   # Q31T.z
+    moved = apply(p, x)
+    for (a, b) in zip(moved, bs)
+        dz = b.quad == "Q11T" ? 0.2 : b.quad == "Q31T" ? 0.1 : 0.0
+        @test a.aim[3] ≈ b.aim[3] + dz
+        @test a.aim[1] ≈ b.aim[1] && a.aim[2] ≈ b.aim[2]
+    end
+    xm = zeros(nparams(p)); xm[4] = 0.3                     # Q11B.z, mirrored below the equator
+    @test all(a.aim[3] ≈ b.aim[3] - 0.3 for (a, b) in zip(apply(p, xm), bs) if b.quad == "Q11B")
+    # the absolute parameterization collapses each quad onto one tangential aim
+    pa = GroupPointing(bs; by = :quad, fields = (:z, :r, :phi))
+    @test any(!(a.aim ≈ b.aim) for (a, b) in zip(apply(pa, initial_parameters(pa)), bs))
+    # differentiable, and subset keeps the mode
+    t = hohlraum(nz = 8, nphi = 16, capsule_ntheta = 6, capsule_nphi = 8)
+    sc = Scenario(t, p; observe = :capsule)
+    g = ForwardDiff.gradient(x -> flux_moments(evaluate(sc, x))[1], initial_parameters(p))
+    @test all(isfinite, g) && any(!iszero, g)
+    @test subset(sc, findall(b -> b.quad != "Q31T", bs)).param.relative
+end
+
+@testset "foil optimization + imaging" begin
+    t = Target(foil(:bl, (0, 0, 0), (0, 0, 1); width = 3.0, n = 30, two_sided = false))
+    beams = [Beam("b$i"; theta = 40, phi = 90i, power = 0.5, spot = omega_spot(:SG4),
+                  fnumber = 6.7, group = Symbol(:b, i), aim = (0.3cos(i), 0.3sin(i), 0.0)) for i in 1:4]
+    p = GroupPointing(beams; by = :group, fields = (:r, :phi, :z), mirror = false)
+    sc = Scenario(t, p)
+    @test sc.model === nothing
+    obj = irradiance_objective(:bl; center = (0, 0, 0), radius = 0.4, spill = 0.0)
+    x0 = initial_parameters(p)
+    @test apply(p, x0)[1].aim ≈ beams[1].aim
+    lo, hi = bounds(p, x0; r = 0.5, phi = 0.5, z = 0.0)
+    res = optimize_pointing(sc, obj; x0, lower = lo, upper = hi, iterations = 50)
+    @test res.value < 0.5 * res.initial_value
+    @test !res.stopped && res.iterations > 0 && res.evaluations > 0
+    # a callback sees every evaluation and can stop the run, keeping the best design
+    seen = Float64[]
+    stop = optimize_pointing(sc, obj; x0, lower = lo, upper = hi, iterations = 50,
+                             callback = st -> (push!(seen, st.value); st.evaluations >= 3))
+    @test stop.stopped && stop.evaluations == 3 == length(seen)
+    @test stop.value == minimum(seen) && obj(evaluate(sc, stop.x)) ≈ stop.value
+    @test stop.reason === :callback
+    @test res.reason in (:converged, :iterations)
+    # the evaluation budget bounds the run whatever the line searches do
+    few = optimize_pointing(sc, obj; x0, lower = lo, upper = hi, iterations = 50, evaluations = 5)
+    @test few.stopped && few.reason === :evaluations && few.evaluations == 5
+    @test few.iterations < 50 && few.value <= few.initial_value
+    @test_throws ArgumentError GroupPointing(beams; by = :quad)
+    dep = evaluate(sc, res.x).deposition
+    img = render(t, laser_flux(dep, t), OrthoCamera((0, 0, -1); up = (0, 1, 0), width = 4.0, nx = 64))
+    @test count(isfinite, img) ≈ 64^2 * (3 / 4)^2 rtol = 0.05
+    @test maximum(filter(isfinite, img)) > 0
+    # x-ray power toward a detector above the foil equals ΣB A cosθ / π
+    B = ones(nelements(t))
+    @test line_of_sight_power(t, B, (0, 0, 1)) ≈ 9.0 / π rtol = 1e-6
+    @test line_of_sight_power(t, B, (0, 0, -1)) == 0
+end
+
+@testset "drive history" begin
+    t = hohlraum(nz = 10, nphi = 16, capsule_ntheta = 8, capsule_nphi = 12,
+                 wall = Material(:Au; albedo = WallLossAlbedo(), conversion = 0.8))
+    q = nif_quads()
+    q = [remake(b; aim = (0.0, 0.0, sign(b.port[3]) * 4.0)) for b in q]
+    m = RadiationModel(t)
+    op = DepositionOperator(t, q)
+    pulse = PulseShape([0.0, 1.0, 5.0, 6.0], [0.0, 2.0, 8.0, 0.0])
+    @test pulse_energy(pulse) ≈ 1 + 20 + 4
+    h = drive_history(m, op, τ -> with_pulses(q, pulse, τ), [0.5, 2.0, 4.0, 5.5])
+    @test issorted(h.Tr[1:3])
+    @test all(0 .< h.wall_albedo .< 0.95)
+    @test h.delivered ≈ 48 .* pulse.([0.5, 2.0, 4.0, 5.5])
+end
+
+@testset "clearance" begin
+    @test enclosed_radius(2.0, 1 - exp(-1)) ≈ 1
+    # point–ellipse distance against brute force, inside and outside
+    rng = MersenneTwister(3)
+    for _ in 1:200
+        a, b = 0.3 + rand(rng), 0.3 + rand(rng)
+        u, v = 3 .* (rand(rng, 2) .- 0.5)
+        d = Briareus._ellipse_distance(u, v, a, b)
+        # brute force, refined around the best sample: a sampled curve alone overestimates
+        # the distance by up to half the sample spacing for points near the ellipse
+        dist(θ) = hypot(u - a * cos(θ), v - b * sin(θ))
+        θs = range(0, 2π; length = 20001)
+        θ0 = θs[argmin(dist.(θs))]
+        bf = minimum(dist, range(θ0 - step(θs), θ0 + step(θs); length = 20001))
+        @test abs(d) ≈ bf atol = 1e-7
+        @test (d < 0) == ((u / a)^2 + (v / b)^2 < 1)
+    end
+    # Beam straight down onto a foil at z = 0; a small disk upstream at z = 2 with its
+    # nearest edge 1.0 mm from the axis, and one below the foil (downstream, ignored).
+    spot = SuperGaussianSpot(0.3; order = 4.0)
+    b = Beam("b"; theta = 0, phi = 0, power = 1.0, spot, fnumber = 8.0)
+    up = translate(Component(:up, disk_mesh(0.05, 0.0; nr = 1, nphi = 32), gold()), (1.05, 0, 2.0))
+    down = translate(Component(:down, disk_mesh(0.05, 0.0; nr = 1, nphi = 32), gold()), (0.2, 0, -1.0))
+    t = Target(foil(:f, (0, 0, 0), (0, 0, 1); width = 4.0, n = 8), up, down)
+    r = clearance(t, [b]; targets = (:f,), enclosed = 0.99, margin = 0.1, pointing = 0.05,
+                  target_offset = 0.02, hardware_tolerance = 0.03, focus = 0.4, wings = [], rtol = 0)
+    row(c) = only(x for x in r.rows if x.component === c)
+    nominal = 1.0 - (enclosed_radius(4.0, 0.99) * 0.3 + 2.0 / 16 + 0.1)
+    # the clearance is a lower bound of the minimum over the whole disk, within 1e-4 mm
+    @test nominal - 1e-4 <= row(:up).nominal <= nominal + 1e-9
+    @test row(:up).clearance ≈ row(:up).nominal - (0.05 + 0.02 + 0.03) - 0.4 / 16 atol = 1e-12
+    @test row(:up).s ≈ -2.0
+    @test row(:down).clearance == Inf
+    @test isempty(violations(r))
+    # intensity contours: the peak-fraction and absolute-intensity envelopes agree
+    I0 = focal_profile(spot, 1.0, 0.0)
+    ρ = envelope_radius(spot, 1.0; peak_fraction = 1e-6)
+    @test ρ ≈ log(1e6)^(1 / 4) rtol = 1e-9
+    @test envelope_radius(spot, 1.0; intensity = 1e-6 * I0 * 1e14) ≈ ρ rtol = 1e-9
+    @test envelope_radius(spot, 1.0; intensity = 2 * I0 * 1e14) == 0
+    # a halo widens the envelope far more than the core alone
+    hspot = SuperGaussianSpot(0.3; order = 4.0, halo = 1e-3, halo_scale = 4.0)
+    @test envelope_radius(hspot, 1.0; peak_fraction = 1e-6) > 3 * ρ
+    @test enclosed_fraction(hspot, 50.0) ≈ 1
+    # the halo carries its power through deposition and the ray trace
+    hb = remake(b; spot = hspot)
+    tf = Target(foil(:f, (0, 0, 0), (0, 0, 1); width = 12.0, n = 60))
+    @test sum(raytrace_deposition(tf, [hb]).element) ≈ 1 rtol = 1e-9
+    @test sum(deposit(DepositionOperator(tf, [hb]), [hb]).element) ≈ 1 rtol = 2e-3
+    # pointing toward hardware raises the worst-case power and intensity on it
+    near = translate(Component(:near, disk_mesh(0.2, 0.0; nr = 2, nphi = 32), gold()), (0.75, 0, 1.0))
+    tn = Target(foil(:f, (0, 0, 0), (0, 0, 1); width = 4.0, n = 8), near)
+    nowing = (; wings = [], target_offset = 0.0, focus = 0.0, rtol = 0)
+    r0 = only(clearance(tn, [b]; targets = (:f,), pointing = 0.0, nowing...).rows)
+    rep1 = clearance(tn, [b]; targets = (:f,), pointing = 0.1, nowing...)
+    r1 = only(rep1.rows)
+    @test r1.power > r0.power && r1.peak_intensity > r0.peak_intensity
+    @test r1.clearance ≈ r0.clearance - 0.1 atol = 1e-4
+    strict = (fail_intensity = Inf, fail_fraction = Inf, review_intensity = 0.5 * r1.peak_intensity,
+              review_fraction = Inf)
+    rs = clearance(tn, [b]; targets = (:f,), pointing = 0.1, thresholds = strict, nowing...)
+    @test only(rs.rows).status === :review
+    @test length(violations(rs)) == 1 && isempty(violations(rs; status = (:fail,)))
+    # wings: a large foil catches all of the halo and scatter power; the far scatter
+    # reaches hardware the core envelope clears by millimeters
+    wl = nif_wings()
+    @test sum(w.fraction for w in wl) ≈ 0.011
+    tw = Target(foil(:f, (0, 0, 0), (0, 0, 1); width = 60.0, n = 30),
+                translate(Component(:far, disk_mesh(0.5, 0.0; nr = 2, nphi = 16), gold()), (8.0, 0, 3.0)))
+    rw = only(clearance(tw, [b]; targets = (:f,), wings = wl, focus = 0.0, intensity = 1e7).rows)
+    rn = only(clearance(tw, [b]; targets = (:f,), wings = [], focus = 0.0, intensity = 1e7).rows)
+    @test rn.power == 0 && rw.power > 0
+    @test rw.peak_intensity ≈ 1e14 * 1e-3 / (π * 23.0^2) rtol = 1e-6   # scatter floor only
+    @test rw.clearance < 0 < rn.clearance        # inside the 1e7 W/cm² scatter disk
+    Lw = zeros(2)
+    Briareus._raytrace_wing!(Lw, tw, b, wl[1], Briareus._wing_rh(wl[1], b))
+    @test Lw[1] ≈ 0.01 rtol = 1e-9
+    # A plate across the beam upstream intercepts everything and overlaps.
+    plate = Component(:plate, translate(rectangle_mesh(3.0, 3.0; nu = 6, nv = 6), (0, 0, 1.0)), gold();
+                      two_sided = true)
+    r2 = clearance(Target(foil(:f, (0, 0, 0), (0, 0, 1); width = 4.0, n = 8), plate), [b]; targets = (:f,),
+                   wings = [])
+    @test only(r2.rows).clearance < 0
+    @test only(r2.rows).intercepted ≈ 1 rtol = 1e-3
+    @test only(r2.rows).status === :fail
+    @test length(violations(r2)) == 1
+    # The same plate made 100 mm wide in one quad, its corners ≥ 50 mm off the axis: the
+    # clearance is the minimum over the whole triangle, on the axis, not at the vertices.
+    # Exact: −ρ (the 1e-4 contour's radius) − 1/16 (f-cone at s = −1), less the errors.
+    wide = Component(:plate, translate(rectangle_mesh(100.0, 100.0; nu = 1, nv = 1), (8.0, 8.0, 1.0)), gold();
+                     two_sided = true)
+    rwide = only(clearance(Target(foil(:f, (0, 0, 0), (0, 0, 1); width = 4.0, n = 8), wide), [b];
+                           targets = (:f,), wings = [], level = 0, rtol = 0).rows)
+    exw = -0.3 * envelope_radius(spot, 1.0; peak_fraction = 1e-4) - 1 / 16 - (0.05 + 0.025) - 1 / 16
+    @test exw - 1e-4 <= rwide.clearance <= exw + 1e-9
+    @test isapprox(rwide.point[1:2], [0, 0]; atol = 1e-3) && rwide.status === :fail
+    path = write_clearance_csv(tempname() * ".csv", r)
+    @test countlines(path) == 1 + length(r.rows)
+
+    # Occlusion: a 23.5° quad through the top LEH lands on the wall below the waist. A
+    # foam ring just outside the wall at the waist lies upstream of the landing and
+    # within the envelope's transverse reach, but behind the opaque wall: not judged.
+    # A disk beside the beam above the LEH still is.
+    tho = hohlraum(length = 10.1, radius = 2.875, leh_radius = 1.55, capsule_radius = 0.9,
+                   nz = 20, nphi = 32, nr_cap = 3, nr_leh = 2, capsule_ntheta = 8, capsule_nphi = 12)
+    bo = only(x for x in nif_quads() if x.group === :inner23 && x.port[3] > 0 && port_angles(x)[2] < 90)
+    bo = remake(bo; aim = (0.0, 0.0, 5.05))
+    foam = Component(:foam, cylinder_mesh(3.0, -0.6, 0.6; nz = 4, nphi = 48, inward = false), BLACK)
+    xa = Vec3(bo.aim) - ((7.0 - 5.05) / -direction(bo)[3]) * direction(bo)   # axis at z = 7
+    pre = translate(Component(:pre, disk_mesh(0.1, 0.0; nr = 1, nphi = 16), BLACK), xa + Vec3(0.5, 0, 0))
+    to = Target(tho.components..., foam, pre)
+    tgts = (:wall, :cap_top, :cap_bottom, :capsule)
+    env = BeamEnvelope(bo; peak_fraction = 1e-4)
+    s_stop = Briareus._landing(to, env, Set(component_index(to, n) for n in tgts))
+    near = [envelope_distance(env, Vec3(v)) for v in foam.mesh.vertices]
+    @test minimum(d for (d, s) in near if s < s_stop) < 0     # flagged without occlusion
+    ro = clearance(to, [bo]; targets = tgts, hardware = (:foam, :pre), wings = [],
+                   peak_fraction = 1e-4)
+    rowo(c) = only(x for x in ro.rows if x.component === c)
+    @test rowo(:foam).clearance == Inf && rowo(:foam).status === :pass
+    @test rowo(:foam).peak_intensity == 0
+    @test rowo(:pre).clearance < 0 && rowo(:pre).status === :fail
+    @test [x.component for x in violations(ro)] == [:pre]
+
+    # Aperture keep-out against the clearance check: one quad per cone through the
+    # entrance holes of a hohlraum, judged on the caps at 1% of peak.
+    th = hohlraum(length = 10.1, radius = 2.875, leh_radius = 1.55, capsule_radius = 0.9)
+    qs = nif_quads()
+    qs = [qs[findfirst(b -> b.group === g, qs)] for g in (:inner23, :inner30, :outer44, :outer50)]
+    rz = Dict(:inner23 => (1.09, 3.09), :inner30 => (0.6, 3.63), :outer44 => (0.0, 5.2),
+              :outer50 => (0.0, 5.01))
+    qs = map(qs) do b
+        r0, z0 = rz[b.group]
+        φ = port_angles(b)[2]
+        remake(b; aim = (-r0 * cosd(φ), -r0 * sind(φ), sign(b.port[3]) * z0))
+    end
+    ko = ApertureKeepOut(th; peak_fraction = 0.01)
+    rk = clearance(th, qs; targets = (:wall, :capsule), hardware = (:cap_top, :cap_bottom),
+                   peak_fraction = 0.01, wings = [], nangles = 8, rtol = 0)
+    worst = [minimum(x.clearance for x in rk.rows if x.beam == b.name) for b in qs]
+    @test aperture_clearance(ko, qs) ≈ worst atol = 0.005
+    p = GroupPointing(qs; by = :beam, fields = (:z, :phi))
+    g = ForwardDiff.gradient(x -> sum(aperture_clearance(ko, apply(p, x))), initial_parameters(p))
+    @test all(isfinite, g) && norm(g) > 0
+    @test Briareus._keepout_penalty(ApertureKeepOut(th; minimum = -1.0), qs) == 0
+    @test Briareus._keepout_penalty(ApertureKeepOut(th; minimum = 1.0, weight = 2.0), qs) ≈
+          2 * sum((1 .- aperture_clearance(ApertureKeepOut(th), qs)) .^ 2)
+
+    # capsule keep-out against the clearance check on a fine capsule mesh (vertices on
+    # the sphere), with the inner cones pulled in toward it
+    tc = hohlraum(length = 10.1, radius = 2.875, leh_radius = 1.55, capsule_radius = 0.9,
+                  capsule_ntheta = 48, capsule_nphi = 96)
+    close = map(qs) do b
+        b.group in (:inner23, :inner30) || return b
+        remake(b; aim = Vec3(0.3 * b.aim[1], 0.3 * b.aim[2], b.aim[3] - sign(b.aim[3])))
+    end
+    kc = SphereKeepOut(tc)
+    @test kc.names == [:capsule]
+    rc = clearance(tc, close; targets = (:wall, :cap_top, :cap_bottom), hardware = (:capsule,),
+                   peak_fraction = 0.01, wings = [], nangles = 8, rtol = 0)
+    sc = sphere_clearance(kc, close)
+    worst = [only(x.clearance for x in rc.rows if x.beam == b.name) for b in close]
+    @test any(<(0), sc)
+    @test sc ≈ worst atol = 0.005
+    p = GroupPointing(close; by = :beam, fields = (:z, :r))
+    g = ForwardDiff.gradient(x -> sum(sphere_clearance(kc, apply(p, x))), initial_parameters(p))
+    @test all(isfinite, g) && norm(g) > 0
+    both = (ApertureKeepOut(tc; minimum = 0.2), SphereKeepOut(tc; minimum = 0.2))
+    @test Briareus._keepout_penalty(both, close) ≈
+          sum(Briareus._keepout_penalty(k, close) for k in both)
+end
+
+@testset "I/O" begin
+    q = [remake(b; aim = (0.1, -0.2, 0.3), dlambda = 1.5, defocus = 0.7) for b in nif_quads()]
+    path = write_beam_table(tempname() * ".csv", q)
+    r = read_beam_table(path)
+    @test length(r) == length(q)
+    @test all(a.name == b.name && a.port ≈ b.port && a.aim ≈ b.aim && a.defocus ≈ b.defocus &&
+              a.spot.a ≈ b.spot.a && a.spot.b ≈ b.spot.b && a.spot.order == b.spot.order &&
+              a.spot.angle ≈ b.spot.angle && a.group === b.group && a.dlambda ≈ b.dlambda &&
+              a.fnumber == b.fnumber for (a, b) in zip(q, r))
+    # a foreign, semicolon-separated pointing table in cm updates a template beam set
+    f = tempname() * ".csv"
+    write(f, "# exported pointing\nBeam;X (cm);Z (cm)\nQ15T;0.01;0.42\n\"Q13T\";-0.02;0.36\n")
+    fb = read_beam_table(f; columns = Dict(:name => "Beam", :aim_x => "X (cm)", :aim_z => "Z (cm)"),
+                         scale = Dict(:aim_x => 10, :aim_z => 10), template = q)
+    @test fb[1].aim ≈ Vec3(0.1, -0.2, 4.2)
+    @test fb[2].aim ≈ Vec3(-0.2, -0.2, 3.6)
+    @test fb[1].port == q[1].port && fb[1].spot.a == q[1].spot.a
+    @test_throws ArgumentError read_beam_table(f)            # no name column without mapping
+    t = hohlraum(nz = 4, nphi = 8, capsule_ntheta = 4, capsule_nphi = 6)
+    p2 = write_element_table(tempname() * ".csv", t, :one => ones(nelements(t)))
+    hdr, rows = read_csv(p2)
+    @test hdr[end] == "one" && length(rows) == nelements(t)
+    p3 = write_moments(tempname() * ".csv", [2.0, 0.0, -0.2])
+    @test read_csv(p3)[2][3][3] == "-0.1"
+end
+
+@testset "laser-plasma models" begin
+    beams = [Beam("i$k"; theta = 23.5, phi = 90k, power = 2.0, group = :inner) for k in 1:4]
+    append!(beams, [Beam("o$k"; theta = 50, phi = 90k + 45, power = 3.0, group = :outer) for k in 1:4])
+    bs = apply_lpi(Backscatter(:inner => 0.1, :outer => ([0.0, 10.0], [0.0, 0.2])), beams, 5.0)
+    @test all(b.power ≈ 1.8 for b in bs if b.group === :inner)
+    @test all(b.power ≈ 2.7 for b in bs if b.group === :outer)
+    # calibrated transfer conserves power and responds to Δλ
+    ct = CalibratedTransfer((:outer,), (:inner,), linear_transfer(0.05, 0.1))
+    shifted = [remake(b; dlambda = b.group === :inner ? 1.0 : 0.0) for b in beams]
+    eff = apply_lpi(ct, shifted)
+    @test sum(b.power for b in eff) ≈ sum(b.power for b in beams)
+    @test sum(b.power for b in eff if b.group === :outer) ≈ 12 * (1 - 0.15)
+    chain = apply_lpi((Backscatter(:inner => 0.1), ct), shifted)
+    @test sum(b.power for b in chain) ≈ 20 - 0.8
+    tab = tabulated_transfer([-1.0, 0.0, 2.0], [0.0, 0.1, 0.3])
+    @test tab(1.0, 0.0) ≈ 0.2
+    @test ForwardDiff.derivative(x -> tab(x, 0.0), 1.0) ≈ 0.1
+    # gradients flow through dlambda in a scenario
+    t = hohlraum(nz = 10, nphi = 16, capsule_ntheta = 8, capsule_nphi = 12)
+    q = [remake(b; aim = (0.0, 0.0, sign(b.port[3]) * (b.group in (:inner23, :inner30) ? 3.3 : 5.0)))
+         for b in nif_quads()]
+    p = GroupPointing(q; fields = (:dlambda,))
+    lpi = CalibratedTransfer((:outer44, :outer50), (:inner23, :inner30), linear_transfer(0.0, 0.05))
+    sc = Scenario(t, p; observe = :capsule, lpi)
+    f(x) = (a = flux_moments(evaluate(sc, x); lmax = 2); a[3] / a[1])
+    x0 = zeros(nparams(p))
+    x1 = [k in (:inner23, :inner30) ? 1.0 : 0.0 for k in p.keys]
+    @test f(x1) < f(x0)               # more inner-cone (waist) drive lowers flux P2
+    g = ForwardDiff.gradient(f, x1)
+    h = 1e-6
+    @test g[1] ≈ (f(x1 .+ h .* (1:4 .== 1)) - f(x1 .- h .* (1:4 .== 1))) / 2h rtol = 1e-4
+    ev = evaluate(sc, x1)
+    @test sum(b.power for b in ev.effective) ≈ sum(b.power for b in ev.beams)
+end
+
+
+@testset "CBET" begin
+    @test plasma_dispersion(1.0) ≈ complex(-1.0761, 0.6520) atol = 1e-4
+    @test plasma_dispersion(0.0) ≈ complex(0.0, sqrt(π))
+    # independent cross-check (research notes): NIF-LEH-like CH plasma, 20° crossing,
+    # 351 nm: |Im Γ| peaks ≈ 153 near Δλ(3ω) ≈ 2 Å without flow
+    m = CBET(leh_z = 5.0, mach = 0.0)
+    pl = cbet_plasma(m, 0.351, 0.0)
+    k = 2 * (2π / 0.351e-6) * sqrt(1 - 0.06) * sind(10)
+    Ω(dl) = 2π * 2.99792458e8 * dl * 1e-10 / 0.351e-6^2
+    ims = [abs(imag(cbet_coupling(Ω(dl), k, 0.0; ne = pl.ne, Te = 5000.0, Ti = 1500.0, ions = CH_IONS)))
+           for dl in 0:0.02:4]
+    @test maximum(ims) ≈ 153 rtol = 0.02
+    @test 1.8 < (0:0.02:4)[argmax(ims)] < 2.1
+    # the redder beam gains; coupling is antisymmetric
+    mk(φ, dl) = Beam("x"; theta = 10, phi = φ, power = 1.0, dlambda = dl, fnumber = 8.0,
+                     spot = SuperGaussianSpot(0.5; order = 4.0), aim = (0, 0, 5.0))
+    @test cbet_gain(m, mk(0, 1.5), mk(180, 0.0)) > 0
+    @test cbet_gain(m, mk(0, 1.5), mk(180, 0.0)) ≈ -cbet_gain(m, mk(180, 0.0), mk(0, 1.5))
+    @test cbet_gain(m, mk(0, 0.0), mk(180, 0.0)) == 0          # no detuning, no flow
+    # hohlraum: power conserved, transfer to the redder inner cones, differentiable
+    q = [remake(b; aim = (0.0, 0.0, sign(b.port[3]) * (b.group in (:inner23, :inner30) ? 3.3 : 5.0)))
+         for b in nif_quads()]
+    inner = (:inner23, :inner30)
+    mf = CBET(leh_z = 5.05)
+    shifted = [remake(b; dlambda = b.group in inner ? 1.0 : 0.0) for b in q]
+    eff = apply_lpi(mf, shifted)
+    @test sum(b.power for b in eff) ≈ sum(b.power for b in q) rtol = 1e-12
+    @test receiver_ratio(mf, q, 2.0; receivers = inner) > receiver_ratio(mf, q, 0.5; receivers = inner)
+    f(dl) = receiver_ratio(mf, q, dl; receivers = inner)
+    h = 1e-5
+    @test ForwardDiff.derivative(f, 1.0) ≈ (f(1.0 + h) - f(1.0 - h)) / 2h rtol = 1e-5
+    @test ion_wave_amplitude(mf, eff[1], eff[end]) ≥ 0
+    # threaded pair coefficients and LEH exchanges reproduce the serial path bit for bit,
+    # for values and for duals through power, aim and model parameters
+    for mm in (mf, CBET(leh_z = 5.05, clamp = nothing))
+        @test [b.power for b in Briareus._apply_cbet(mm, shifted, 0.0, true)] ==
+              [b.power for b in Briareus._apply_cbet(mm, shifted, 0.0, false)] ==
+              [b.power for b in apply_lpi(mm, shifted)]
+    end
+    function cbet_obj(x, threaded)
+        mm = CBET(leh_z = 5.05, multiplier = x[1], mach = x[2])
+        bs = [remake(b; power = b.power * (1 + x[3] * (b.group === :outer44)),
+                     aim = b.aim .+ (0.0, 0.0, x[4] * sign(b.port[3]))) for b in shifted]
+        return sum(b.power^2 for b in Briareus._apply_cbet(mm, bs, 0.0, threaded) if b.group in inner)
+    end
+    x = [0.7, 1.1, 0.05, 0.2]
+    gt = ForwardDiff.gradient(y -> cbet_obj(y, true), x)
+    @test gt == ForwardDiff.gradient(y -> cbet_obj(y, false), x)
+    hx = 1e-6
+    fd = [(cbet_obj(x .+ hx .* (1:4 .== i), true) - cbet_obj(x .- hx .* (1:4 .== i), true)) / 2hx
+          for i in 1:4]
+    @test gt ≈ fd rtol = 1e-5
+    # calibration recovers a known multiplier from synthetic transfer data
+    truth = CBET(leh_z = 5.05, multiplier = 0.4, clamp = nothing)
+    data = [(dl, receiver_ratio(truth, q, dl; receivers = inner)) for dl in (0.5, 1.0, 2.0)]
+    fitted, res = calibrate_cbet(CBET(leh_z = 5.05, clamp = nothing), q, data; receivers = inner)
+    @test fitted.multiplier ≈ 0.4 rtol = 1e-3
+end
+
+
+@testset "unconverted light" begin
+    b = Beam("b"; theta = 0, phi = 0, power = 1.0)          # e1 = θ̂ = x̂ at the pole
+    plate = Component(:plate, translate(rectangle_mesh(2.0, 2.0; nu = 2, nv = 2), (10.0, 0, 0)), gold();
+                      two_sided = true)
+    near = Component(:near, translate(sphere_mesh(0.5; ntheta = 6, nphi = 8), (1.0, 0, 0)), gold())
+    t = Target(plate, near)
+    r = unconverted_light_check(t, [b])
+    row(c, col) = only(x for x in r.rows if x.component === c && x.color === col)
+    @test row(:plate, :omega1).exposure === :possible       # some offset direction reaches it
+    @test row(:near, :omega1).exposure === :clear           # inside the 4.8 mm clear radius
+    @test row(:near, :omega2).exposure === :clear
+    @test r.flat[:plate] && !r.flat[:near]
+    @test r.zone[:near] ≈ 0.5 rtol = 1e-6
+    # with a known offset direction the footprint is a definite square
+    rx = unconverted_light_check(t, [b]; offsets = Dict("b" => 0.0))      # toward +x
+    ry = unconverted_light_check(t, [b]; offsets = Dict("b" => 90.0))     # toward +y
+    @test only(x for x in rx.rows if x.component === :plate && x.color === :omega1).exposure === :exposed
+    @test only(x for x in ry.rows if x.component === :plate && x.color === :omega1).exposure === :clear
+end
+
+
+@testset "spherical harmonics and 3D symmetry" begin
+    t = Target(Component(:s, sphere_mesh(1.0; ntheta = 40, nphi = 80), gold()))
+    es = collect(1:nelements(t))
+    W = ylm_weights(t, es; lmax = 4)
+    @test size(W) == (25, length(es))
+    # x and y components land in m = +1 and m = -1 (azimuth from +x)
+    u = [normalize(c) for c in t.elem_centroid]
+    cx = W * [1 + 0.1 * v[1] for v in u]
+    cy = W * [1 + 0.1 * v[2] for v in u]
+    @test cx[mode_index(1, 1)] > 0 && abs(cx[mode_index(1, -1)]) < 1e-6
+    @test cy[mode_index(1, -1)] > 0 && abs(cy[mode_index(1, 1)]) < 1e-6
+    # Y_11 = √(3/4π) x, so 0.1 x has c_11 = 0.1 √(4π/3) relative to c_00 = √(4π)
+    @test cx[mode_index(1, 1)] / cx[1] ≈ 0.1 / sqrt(3) rtol = 1e-3
+    # axisymmetric field: relative_mode_power = (a_l/a_0)²/(2l+1)
+    μ = [v[3] for v in u]
+    f = 1 .+ 0.1 .* legendre.(2, μ)
+    c = W * f
+    @test relative_mode_power(c, 2) ≈ 0.1^2 / 5 rtol = 5e-3
+    @test mode_amplitude(c, 2) ≈ 0.1 rtol = 3e-3
+    @test mode_amplitude(W * [1 + 0.02 * v[1] for v in u], 1) ≈ 0.02 rtol = 3e-3   # tilted dipole
+    @test ylm_matrix(c, 4) ≈ ylm_moments(f, t, es; lmax = 4)
+
+    # NIF hohlraum: the quad set is D2-symmetric, so cos-type modes with l+m odd and
+    # sin-type modes with l+m even vanish; dropping a bundle breaks it
+    th = hohlraum(nz = 16, nphi = 24, capsule_ntheta = 12, capsule_nphi = 24)
+    q = [remake(b; aim = (0.0, 0.0, sign(b.port[3]) * (b.group in (:inner23, :inner30) ? 3.3 : 5.0)))
+         for b in nif_quads()]
+    p = GroupPointing(q; by = :quad, fields = (:power,))
+    sc = Scenario(th, p; observe = :capsule)
+    cf = flux_ylm(evaluate(sc, q); lmax = 4)
+    forbidden = [(l, m) for l in 0:4 for m in -l:l if (m >= 0 ? isodd(l + m) : iseven(l + m))]
+    @test maximum(abs(cf[mode_index(l, m)]) for (l, m) in forbidden) < 1e-10 * cf[1]
+    keep = findall(b -> nif_bundle(b) != "11", q)
+    sub = subset(sc, keep)
+    cd = flux_ylm(evaluate(sub, q[keep]); lmax = 4)
+    @test relative_mode_power(cd, 1) > 1e-6
+    # subset ≡ zero power on the dropped quads in the full scenario
+    q0 = [nif_bundle(b) == "11" ? remake(b; power = 0.0) : b for b in q]
+    @test flux_ylm(evaluate(sc, q0); lmax = 4) ≈ cd rtol = 1e-12
+    # influence matrix: modes are linear in quad powers
+    M = influence_matrix(sc, q; lmax = 4)
+    P = [b.power for b in q0]
+    @test M * P ≈ cd rtol = 1e-10
+    # dropping also the bundle related to 11 by the 180° rotation about z restores that
+    # symmetry, which removes every odd-m mode (l = 1, m = 0 is allowed and stays tiny)
+    p11 = q[findfirst(x -> x.name == "Q11T", q)].port
+    partner = nif_bundle(q[findfirst(b -> b.port ≈ Vec3(-p11[1], -p11[2], p11[3]), q)])
+    @test partner == "34"
+    c2 = flux_ylm(evaluate(sc, [nif_bundle(b) in ("11", partner) ? remake(b; power = 0.0) : b
+                                for b in q]); lmax = 4)
+    @test maximum(abs(c2[mode_index(l, m)]) for l in 1:4 for m in -l:l if isodd(m)) < 1e-10 * c2[1]
+    @test abs(c2[mode_index(1, 0)]) < 1e-5 * c2[1]
+    # objective gradient and absolute power caps
+    obj = asymmetry_objective(components = ((1, 1) => 5.0,))
+    x0 = initial_parameters(sub.param)
+    g = ForwardDiff.gradient(x -> obj(evaluate(sub, x)), x0)
+    h = 1e-6
+    e1 = zeros(length(x0)); e1[3] = 1
+    @test g[3] ≈ (obj(evaluate(sub, x0 .+ h .* e1)) - obj(evaluate(sub, x0 .- h .* e1))) / 2h rtol = 1e-4
+    lo, hi = bounds(sub.param, x0; power = 0.5, power_max = 9.0)
+    @test all(hi .== 9.0) && all(lo .== 4.0)
+    # a reference shape: zero at the reference itself, the plain objective without one
+    ev = evaluate(sub, x0)
+    quiet = (; clip = 0.0, missed = 0.0, direct = 0.0)
+    cr = flux_ylm(ev; lmax = 4)
+    @test asymmetry_objective(; reference = cr, quiet...)(ev) < 1e-25
+    @test asymmetry_objective(; reference = 2cr, quiet...)(ev) < 1e-25   # shape, not scale
+    @test asymmetry_objective(; reference = cf, quiet...)(ev) > 0          # the full set differs
+    @test asymmetry_objective(; quiet...)(ev) ≈ sum(relative_mode_power(cr, l) for l in 1:4)
+    @test_throws ArgumentError asymmetry_objective(; reference = cr[1:4])
+end
+
+
+@testset "curved surfaces" begin
+    # cubed sphere: convex faceting (every element sees every other), exact curved area
+    cs = cubed_sphere_mesh(2.0; n = 6, outward = false)
+    t = Target(Component(:s, cs, Material(:w; albedo = 0.5, conversion = 0.7); surface = SphereSurface(2.0)))
+    @test sum(t.elem_area) ≈ 16π rtol = 1e-12
+    F = view_factors(t)
+    @test maximum(abs.(closure_error(F))) < 1e-10
+    @test maximum(abs.(F .- (t.elem_area ./ sum(t.elem_area))')) < 1e-12      # F_ij = A_j / 4πR², self included
+    # integrating sphere with a port: incident flux uniform to round-off wherever the laser lands
+    port, wall = split_mesh(cs, c -> c[3] > 2.0 * cosd(30))
+    ts = Target(Component(:wall, wall, Material(:w; albedo = 0.5, conversion = 0.7); surface = SphereSurface(2.0)),
+                aperture(:port, port; surface = SphereSurface(2.0)))
+    b = Beam("B"; theta = 0, phi = 0, power = 1.0, spot = omega_spot(:SG4), fnumber = 6.7, aim = (0.3, 0.0, -1.0))
+    dep = raytrace_deposition(ts, [b]; nspot = 31)
+    sol = solve(RadiationModel(ts), dep)
+    w = elements(ts, :wall)
+    A, Aw = sum(ts.elem_area), sum(ts.elem_area[w])
+    exact = 0.7 * sum(dep.element[w]) / (A - 0.5 * Aw)
+    @test maximum(abs.(sol.H[w] ./ exact .- 1)) < 1e-10
+    # closed cylinder with sector end caps against exact view factors
+    Rc, L = 1.0, 2.0
+    tc = Target(Component(:wall, cylinder_mesh(Rc, 0.0, L; nz = 8, nphi = 24), gold(); surface = CylinderSurface(Rc)),
+                Component(:bot, disk_mesh(Rc, 0.0; nr = 4, nphi = 24, up = true), gold(); surface = DiskSurface()),
+                Component(:top, disk_mesh(Rc, L; nr = 4, nphi = 24, up = false), gold();
+                          surface = DiskSurface(center = (0, 0, L))))
+    @test sum(tc.elem_area[elements(tc, :bot)]) ≈ π rtol = 1e-12
+    @test sum(tc.elem_area[elements(tc, :wall)]) ≈ 2π * Rc * L rtol = 1e-14
+    Fc = view_factors(tc)
+    wl, bt, tp = elements(tc, :wall), elements(tc, :bot), elements(tc, :top)
+    X = 1 + (1 + (Rc / L)^2) / (Rc / L)^2
+    dd = (X - sqrt(X^2 - 4)) / 2
+    Fdd = sum(tc.elem_area[i] * Fc[i, j] for i in bt, j in tp) / sum(tc.elem_area[bt])
+    Fww = sum(tc.elem_area[i] * Fc[i, j] for i in wl, j in wl) / sum(tc.elem_area[wl])
+    @test Fdd ≈ dd rtol = 1e-3
+    @test Fww ≈ 1 - π * Rc^2 * (1 - dd) / (π * Rc * L) rtol = 1e-3
+    @test maximum(abs.(closure_error(Fc))) < 3e-3
+    # the rim element at the wall–cap corner against the exact point-to-disk factor
+    Fdisk(ρ, z, R) = 0.5 * (1 - (z^2 + ρ^2 - R^2) / sqrt((z^2 + ρ^2 + R^2)^2 - 4ρ^2 * R^2))
+    rim = bt[end]
+    r0, r1 = element_sector(tc, rim)[1:2]
+    rs = range(r0, r1; length = 4001)
+    mids = (rs[1:end-1] .+ rs[2:end]) ./ 2
+    Ftop = sum(m * Fdisk(m, L, Rc) for m in mids) / sum(mids)
+    @test sum(Fc[rim, tp]) ≈ Ftop rtol = 2e-3
+    @test sum(Fc[rim, wl]) ≈ 1 - Ftop rtol = 2e-3
+
+    # cones: the patches of a faceted cone tile it exactly, rim chords included (frusta
+    # both ways, a pointed cone, a near-flat and a slightly tapered one: π(r₀ + r₁)s)...
+    curved_sum(s, m) = sum(Briareus._curved_area(s, (m.vertices[i] for i in tri)...) for tri in m.triangles)
+    for (r0, z0, r1, z1) in ((1.0, 1.0, 2.0, 2.0), (0.0, 0.0, 1.5, 3.0), (2.0, 0.0, 1.0, 4.0), (3.0, 0.0, 2.99, 1.0),
+                             (1.0, 0.0, 5.0, 0.05))
+        k = (r1 - r0) / (z1 - z0)
+        s = ConeSurface(atand(abs(k)); apex = (0, 0, z0 - r0 / k), axis = (0, 0, sign(k)))
+        for (nz, nphi) in ((1, 12), (4, 90))
+            @test curved_sum(s, frustum_mesh(r0, z0, r1, z1; nz, nphi)) ≈ π * (r0 + r1) * hypot(r1 - r0, z1 - z0) rtol = 1e-13
+        end
+    end
+    # ...and a general triangle's patch has the area of its projection, against a fine
+    # subdivision (Richardson-extrapolated)
+    function projected_area(s, a, b, c, n)
+        P(i, j) = first(surface_point(s, a + (i / n) * (b - a) + (j / n) * (c - a)))
+        A = 0.0
+        for i in 0:n-1, j in 0:n-1-i
+            A += norm(cross(P(i + 1, j) - P(i, j), P(i, j + 1) - P(i, j))) / 2
+            i + j < n - 1 && (A += norm(cross(P(i + 1, j + 1) - P(i + 1, j), P(i, j + 1) - P(i + 1, j))) / 2)
+        end
+        return A
+    end
+    rng = Xoshiro(3)
+    for θ in (5.0, 30.0, 75.0)
+        s = ConeSurface(θ; apex = (0.1, -0.2, 0.3), axis = (0.2, 0.1, 1.0))
+        e1 = normalize(cross(s.axis, Vec3(1, 0, 0)))
+        e2 = cross(s.axis, e1)
+        for _ in 1:2
+            a, b, c = [(z = 1 + 2rand(rng); φ = rand(rng);
+                        s.apex + z * s.axis + z * tand(θ) * (cos(φ) * e1 + sin(φ) * e2) + 0.01randn(rng, Vec3)) for _ in 1:3]
+            ref = (4projected_area(s, a, b, c, 200) - projected_area(s, a, b, c, 100)) / 3
+            @test Briareus._curved_area(s, a, b, c) ≈ ref rtol = 1e-9
+        end
+    end
+    # a frustum (45°, r 1 → 2 over z 0 → 1) closed by sector disks, against the exact
+    # exchanges: the coaxial-disk factor, and the cone's by closure and reciprocity
+    r1, r2, L = 1.0, 2.0, 1.0
+    Ac, A1, A2 = π * (r1 + r2) * hypot(r2 - r1, L), π * r1^2, π * r2^2
+    X = 1 + (1 + (r2 / L)^2) / (r1 / L)^2
+    f12 = (X - sqrt(X^2 - 4(r2 / r1)^2)) / 2
+    exact = (; cd1 = A1 * (1 - f12) / Ac, cd2 = (A2 - A1 * f12) / Ac)
+    errs = map((nothing, ConeSurface(45.0; apex = (0, 0, -1)))) do s
+        t = Target(Component(:cone, frustum_mesh(r1, 0.0, r2, L; nz = 8, nphi = 48), gold(); surface = s),
+                   Component(:d1, disk_mesh(r1, 0.0; nr = 6, nphi = 48, up = true), gold(); surface = DiskSurface()),
+                   Component(:d2, disk_mesh(r2, L; nr = 6, nphi = 48, up = false), gold();
+                             surface = DiskSurface(center = (0, 0, L))))
+        F = view_factors(t)
+        A = t.elem_area
+        c, d1, d2 = elements(t, :cone), elements(t, :d1), elements(t, :d2)
+        flux(I, J) = sum(A[i] * F[i, j] for i in I, j in J) / sum(A[I])
+        (; area = sum(A[c]) / Ac - 1, d1 = flux(c, d1) / exact.cd1 - 1, d2 = flux(c, d2) / exact.cd2 - 1,
+         cc = flux(c, c) / (1 - exact.cd1 - exact.cd2) - 1, recip = maximum(abs, A .* F .- (A .* F)'))
+    end
+    flat, fitted = errs
+    @test abs(fitted.area) < 1e-14 && fitted.recip < 1e-15
+    @test abs(fitted.d1) < 2e-3 && abs(fitted.d2) < 1e-3 && abs(fitted.cc) < 5e-4
+    @test abs(fitted.d2) < abs(flat.d2) / 3 && abs(fitted.cc) < abs(flat.cc) / 5
+    # a pointed cone on its base: the base sees only the cone; the ring of elements at
+    # the apex (where the surface is singular) stays flat
+    rb, H = 1.5, 3.0
+    t = Target(Component(:cone, frustum_mesh(0.0, 0.0, rb, H; nz = 8, nphi = 48), gold(); surface = ConeSurface(atand(rb / H))),
+               Component(:base, disk_mesh(rb, H; nr = 6, nphi = 48, up = false), gold(); surface = DiskSurface(center = (0, 0, H))))
+    @test count(e -> t.elem_curved[e] == 0, elements(t, :cone)) == 48
+    @test count(e -> t.elem_curved[e] == -1, elements(t, :cone)) == 7 * 48
+    F = view_factors(t)
+    b = elements(t, :base)
+    @test sum(t.elem_area[i] * F[i, j] for i in b, j in elements(t, :cone)) / sum(t.elem_area[b]) ≈ 1 rtol = 1e-4
+end

@@ -365,6 +365,7 @@ end
         @test hf.Tr[findfirst(≈(x), fine)] ≈ on.Tr[findfirst(≈(x), times)] atol = 0.1
     end
 end
+wl_beams = wl_op = nothing   # the operator (~170 MB) is not kept for the rest of the suite
 
 @testset "N221204 delivered pulse and Dante 1" begin
     p = n221204_pulse()
