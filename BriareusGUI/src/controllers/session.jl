@@ -105,8 +105,7 @@ function DesignSession(; kind::Symbol = :hohlraum, resolution::Symbol = :standar
                          TimeState(), ViewState(), Observable(""), ts.deliver, ts.spawn, EditHistory(),
                          Ref(""), Observable(""), Ref(0), Ref(false), Dict{String,String}(),
                          Observable(String[]), SweepState())
-    default_selection!(sess.review, ts.target[]; foils = foil_components(ts))
-    default_selection!(sess.talis, ts.target[]; foils = foil_components(ts))
+    _default_selections!(sess, ts.target[])
     _connect!(sess)
     record!(sess)
     return sess
@@ -114,6 +113,15 @@ end
 
 function Base.show(io::IO, s::DesignSession)
     print(io, "DesignSession(", target_summary(s.target), "; ", beams_summary(s.beams), ")")
+end
+
+# The checks' default roles for the components of `t`, from the parts' and the template's
+# roles (walls, the observed surface and the foils are where the beams land).
+function _default_selections!(sess::DesignSession, t::Target)
+    l = _landing(sess.target, t)
+    default_selection!(sess.review, t; l.lands_on)
+    default_selection!(sess.talis, t; l.capture, l.observed)
+    return sess
 end
 
 function _connect!(sess::DesignSession)
@@ -132,8 +140,7 @@ function _connect!(sess::DesignSession)
     # inputs, before a target built on a worker is in place)
     on(fr -> follow_frames!(bt, fr; renames = ts.renames[]), ts.frames)
     on(ts.target) do t
-        default_selection!(sess.review, t; foils = foil_components(ts, t))
-        default_selection!(sess.talis, t; foils = foil_components(ts, t))
+        _default_selections!(sess, t)
         # forget display modes and a selection of components that no longer exist
         names = Set(all_component_names(ts))
         d = filter(p -> first(p) in names, sess.view.display[])
@@ -152,19 +159,24 @@ function _connect!(sess::DesignSession)
         (sess.view.extra[] = filter(id -> !(id in gone), sess.view.extra[]))
     end
     onany((_...) -> _drive_inputs_changed!(sess), bt.beams, bt.enabled, bt.unconverted)
-    # a part given or relieved of the foil role (its components unchanged): the clearance
-    # and TaLIS checks take it as a landing surface, or as hardware; another active foil
-    # re-evaluates the drive's foil statistics
+    # a part given or relieved of a role (its components unchanged, so the target is not
+    # rebuilt): the clearance and TaLIS checks take a wall or foil as a landing surface,
+    # the observed surface as one the clearance check lands on and TaLIS leaves out, and a
+    # part that lost its role as hardware; another observed surface makes the drive stale
+    # (its scenario observes it), another wall the drive history (`_history_key`), and
+    # another active foil re-evaluates the drive's foil statistics
     foils = Ref(Set(foil_components(ts)))
+    held = Ref(_held_sets(ts))
+    observed = Ref{Union{Nothing,Symbol}}(observed_name(ts))
     active = Ref{Union{Nothing,Symbol}}(active_foil(ts))
     onany(ts.parts, ts.target, ts.active_foil) do _...
+        names = Set(component_names(ts.target[]))
         now = Set(foil_components(ts))
         if now != foils[]
             for n in setdiff(now, foils[])
                 set_role!(sess.review, n, :target)
                 set_talis_role!(sess.talis, n, :capture)
             end
-            names = Set(component_names(ts.target[]))
             for n in setdiff(foils[], now)
                 n in names || continue
                 set_role!(sess.review, n, :hardware)
@@ -172,6 +184,30 @@ function _connect!(sess::DesignSession)
             end
             foils[] = now
         end
+        # (walls and the observed surface: a role the checks give a new component by
+        # default, as after a rebuild, is left as it is)
+        now = _held_sets(ts)
+        if now != held[]
+            was = held[]
+            rv, tl = sess.review, sess.talis
+            for n in setdiff(union(now...), union(was...))
+                n in names && !(n in rv.targets[]) && set_role!(rv, n, :target)
+            end
+            for n in setdiff(now.walls, was.walls)
+                n in names && !(n in tl.capture[]) && set_talis_role!(tl, n, :capture)
+            end
+            for n in setdiff(now.observed, was.observed)
+                n in names && (n in tl.capture[] || n in tl.hardware[]) && set_talis_role!(tl, n, :none)
+            end
+            for n in setdiff(union(was...), union(now...))
+                n in names || continue
+                n in rv.hardware[] || set_role!(rv, n, :hardware)
+                n in tl.hardware[] || set_talis_role!(tl, n, :hardware)
+            end
+            held[] = now
+        end
+        o = observed_name(ts)
+        o === observed[] || (observed[] = o; _drive_inputs_changed!(sess))
         a = active_foil(ts)
         a === active[] || (active[] = a; _request_evaluation!(sess))
     end
@@ -372,15 +408,16 @@ end
 """
     drive_stale(sess::DesignSession) -> Bool
 
-Whether the scenario was built for another target, other beam ports, cavity or beam
-model (it must be computed again), or the target of the design is still being built. `false` before the
-first build.
+Whether the scenario was built for another target, other beam ports, cavity, beam
+model or observed surface ([`observed_name`](@ref)) (it must be computed again), or the
+target of the design is still being built. `false` before the first build.
 """
 function drive_stale(sess::DesignSession)
     k = sess.drive.key[]
     k === nothing && return false
     return sess.target.building[] || k[1] !== sess.target.target[] || k[2] != _ports(sess.beams.beams[]) ||
-           k[3] != _cavity_key(sess.drive) || k[4] != _profile_state(_deposition_profile(sess.drive))
+           k[3] != _cavity_key(sess.drive) || k[4] != _profile_state(_deposition_profile(sess.drive)) ||
+           k[5] !== observed_name(sess.target)
 end
 
 # The cavity settings a scenario was built with (`nothing`: the whole target).
@@ -444,10 +481,11 @@ function build_scenario!(sess::DesignSession)
     closed = _closed_enclosure(sess.target)
     kind, params, mesh, parts = ts.kind[], ts.params[], ts.mesh[], ts.parts[]
     foil = active_foil(ts)
+    observed = observed_name(ts)
     runner(function ()
                # the CAD parts' file facets, for the drive's fit of their curved faces
                references = _fit_references(t, kind, params, mesh, parts)
-               _build_scenario(t, beams; closed, cavity, profile, references, foil)
+               _build_scenario(t, beams; closed, cavity, profile, references, foil, observed)
            end, function (out)
         g == dr.generation[] || return
         dr.building[] = false
@@ -460,7 +498,7 @@ function build_scenario!(sess::DesignSession)
         # a film found sealing the cavity joins the films (and the scenario's key)
         film === nothing || (_assign!(dr.films, union(dr.films[], (film,)));
                              cavity = (cavity[1], copy(dr.films[])))
-        dr.key[] = (t, _ports(beams), cavity, _profile_state(profile))
+        dr.key[] = (t, _ports(beams), cavity, _profile_state(profile), observed)
         dr.lookup[] = lookup
         dr.enclosure[] = enc
         dr.cavity_index[] = index
@@ -485,16 +523,19 @@ function build_scenario!(sess::DesignSession)
 end
 
 # Whether the drive's target is a closed hohlraum enclosure, whose view factors are
-# balanced so its rows sum to one: the template's components only (free parts lie
-# outside it), none of them left out (that leaves a hole).
-const _TEMPLATE_HOHLRAUM = (:wall, :cap_top, :cap_bottom, :leh_top, :leh_bottom, :leh_top_lip,
-                            :leh_bottom_lip, :capsule)
+# balanced so its rows sum to one: the template's components and the part with the
+# observed role only (other free parts lie outside it), none of them left out (that
+# leaves a hole).
+const _TEMPLATE_HOHLRAUM = (_TEMPLATE_WALL, :cap_top, :cap_bottom, :leh_top, :leh_bottom, :leh_top_lip,
+                            :leh_bottom_lip, _TEMPLATE_CAPSULE)
 _template_component(n::Symbol) = n in _TEMPLATE_HOHLRAUM || occursin(r"^window_\d+$", String(n))
 function _closed_enclosure(ts::TargetSetup)
     ts.kind[] === :hohlraum || return false
-    all(c -> _template_component(c.name), ts.target[].components) || return false
+    obs = Set{Symbol}(p.name for p in ts.parts[] if p.observed)    # (left out or not)
+    inside(c) = _template_component(c.name) || c.name in obs || c.part in obs
+    all(inside, ts.target[].components) || return false
     g = ts.ghost[]
-    return g === nothing || !any(c -> _template_component(c.name), g.components)
+    return g === nothing || !any(inside, g.components)
 end
 
 """
@@ -748,8 +789,10 @@ Base.@nospecializeinfer function import_visrad_workspace!(
         isempty(supported) && throw(ArgumentError("$file has no target components Briareus reads"))
         any(include, supported) ||
             throw(ArgumentError("VisRad includes none of the workspace's objects in its calculations"))
+        # (an object named capsule is the observed surface, as VisRad workspaces name it)
         parts = [PartSpec(:visrad; name = Symbol(o.name), file = path, object = o.name,
-                          values = Dict(:albedo => o.albedo, :conversion => o.conversion))
+                          values = Dict(:albedo => o.albedo, :conversion => o.conversion),
+                          observed = o.name == "capsule")
                  for o in supported]
         # the components of objects VisRad leaves out are left out of the calculations,
         # and so (by default) is CAD hardware far from where the beams point
@@ -794,7 +837,8 @@ Base.@nospecializeinfer function import_visrad_workspace!(
         # VisRad workspaces list every port: draw the beams that fire when most do not
         _assign!(sess.view.show_off, 2 * count(sess.beams.enabled[]) >= length(bs))
         # the cutaway cuts every component of an imported design (its names are VisRad's)
-        set_cut!(sess.view; components = [n for n in surface_names(ts.target[]) if n !== :capsule])
+        obs = observed_name(ts)
+        set_cut!(sess.view; components = [n for n in surface_names(ts.target[]) if n !== obs])
         sess.status[] = "imported $file: $(length(parts)) objects, $(length(bs)) beams" *
                         (isempty(far) ? "" :
                          "; drawn only, far from the target (Include in calculations puts one back " *
@@ -863,10 +907,9 @@ function export_results(sess::DesignSession, dir::AbstractString)
     res = dr.result[]
     ev = res.evaluation
     t = ev.scenario.target
-    names = component_names(t)
-    observe = :capsule in names ? :capsule : nothing
+    observe = _observed_parts(ev.scenario)
     files = write_results(dir, t, ev.deposition; sol = res.solution, beams = ev.effective,
-                          observe = res.solution === nothing ? nothing : observe)
+                          observe = res.solution === nothing || isempty(observe) ? nothing : observe)
     push!(files, save_session(joinpath(dir, "session.briar.toml"), sess))
     sess.status[] = "exported the results to $(basename(normpath(dir)))"
     return files
@@ -899,7 +942,8 @@ beams on the reference pulses (`before`) and on the new ones (`after`).
 """
 function retune_pulses(s::Scenario, beams::AbstractVector{<:Beam}, enabled::AbstractVector{Bool},
                        pulses::AbstractDict; by::Symbol = :quad, cap::Real = 1.3, stay::Real = 0.0)
-    s.model !== nothing && :capsule in component_names(s.target) ||
+    observe = _observed_parts(s)
+    s.model !== nothing && !isempty(observe) ||
         throw(ArgumentError("the retune matches the capsule's drive: compute the drive of a target with a capsule"))
     by in (:quad, :group, :beam) || throw(ArgumentError("retune by :quad, :group or :beam, not :$by"))
     cap > 0 || throw(ArgumentError("the power limit must be positive"))
@@ -911,7 +955,7 @@ function retune_pulses(s::Scenario, beams::AbstractVector{<:Beam}, enabled::Abst
     isempty(times) && throw(ArgumentError("the reference pulses have no power"))
     op = s.deposition
     ref = drive_history(s.model, op, τ -> with_pulses(beams, pulses, τ; by = ref_by), times;
-                        lmax = 4, ylm = true, keep_albedo = true)
+                        observe, lmax = 4, ylm = true, keep_albedo = true)
     keep = findall(enabled)
     kept = beams[keep]
     opk = op[keep]
@@ -919,12 +963,12 @@ function retune_pulses(s::Scenario, beams::AbstractVector{<:Beam}, enabled::Abst
     members = Dict(k => [refkey(b) for b in kept if key(b) == k] for k in unique(key.(kept)))
     nominal(k, τ) = sum(pulses[r](τ) for r in members[k]) / length(members[k])
     limits(k, τ) = (0.0, cap * nominal(k, τ))
-    r = retune_drive(s.model, opk, kept, ref; by, limits, stay,
+    r = retune_drive(s.model, opk, kept, ref; by, limits, stay, observe,
                      nominal = stay > 0 ? nominal : nothing)
     before = drive_history(s.model, opk, τ -> with_pulses(kept, pulses, τ; by = ref_by), times;
-                           lmax = 4, ylm = true)
+                           observe, lmax = 4, ylm = true)
     after = drive_history(s.model, opk, τ -> with_pulses(kept, r.pulses, τ; by), times;
-                          lmax = 4, ylm = true)
+                          observe, lmax = 4, ylm = true)
     # the new pulses on the table's times, off where the reference is
     at(g, τ) = (k = findfirst(==(τ), times); k === nothing ? 0.0 : r.power[g, k])
     out = Dict{Symbol,PulseShape}(Symbol(k) => PulseShape(nodes, [at(g, τ) for τ in nodes])
@@ -1020,7 +1064,8 @@ function start_optimize!(sess::DesignSession; spawn::Bool = true)
     bt = sess.beams
     idx = findall(bt.enabled[])
     start_optimize!(st, s, bt.beams[][idx], idx;
-                    spot_radius = sess.drive.spot_radius[], foil, clusters = bt.cluster[][idx],
+                    spot_radius = sess.drive.spot_radius[], foil,
+                    observed = observed_name(sess.target), clusters = bt.cluster[][idx],
                     frames = beam_frames(bt)[idx], deliver = sess.deliver[], spawn)
     return sess
 end

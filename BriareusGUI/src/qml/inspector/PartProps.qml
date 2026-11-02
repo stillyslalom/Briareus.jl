@@ -68,6 +68,9 @@ ColumnLayout {
             model: app.roleLabels
             currentIndex: app.partRole
             onActivated: (index) => Julia.br_part_role(index)
+            ToolTip.visible: hovered
+            ToolTip.delay: 400
+            ToolTip.text: "What the analyses take the part as; the part keeps its name (one capsule at a time; any number of foils and walls)"
         }
         Info { topic: "part.role" }
     }

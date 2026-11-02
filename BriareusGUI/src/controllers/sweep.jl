@@ -251,13 +251,14 @@ end
     sweep_los_object(sess) -> Symbol
 
 The object the sweep's line of sight passes: the chosen one when the target has it,
-otherwise a foil target's main sphere (`:main`) or a capsule, or `:none`.
+otherwise a foil target's main sphere (`:main`) or the observed surface
+([`observed_name`](@ref)), or `:none`.
 """
 function sweep_los_object(sess)
     names = component_names(sess.target.target[])
     o = sess.sweep.los_object[]
     o in names && return o
-    for d in (:main, :capsule)
+    for d in (:main, observed_name(sess.target))
         d in names && return d
     end
     return :none
@@ -496,7 +497,8 @@ function _sweep_inputs(sess)
     q = sw.quality[]
     st = sess.optimize
     opt = sw.optimize[] ? (; by = st.by[], fields = Tuple(st.fields[]), deltas = copy(st.deltas[]),
-                           cfg = _objective_settings(st; foil), iterations = st.iterations[],
+                           cfg = _objective_settings(st; foil, observed = observed_name(ts)),
+                           iterations = st.iterations[],
                            evaluations = st.max_evaluations[], spot_radius = sess.drive.spot_radius[]) :
           nothing
     if opt !== nothing
@@ -547,7 +549,7 @@ function start_sweep!(sess; spawn::Bool = true)
         frame_fields = _frame_fields(opt.fields)
         d = opt.deltas
         scenario_kw = opt.cfg.kind === :irradiance ? (; deposition_kw = (; inp.profile)) :
-                      (; observe = :capsule, radiation = true, deposition_kw = (; inp.profile))
+                      (; observe = opt.cfg.observed, radiation = true, deposition_kw = (; inp.profile))
         bounds_kw = frame_fields ?
                     (; u = d[:u], v = d[:v], w = d[:w], defocus = d[:defocus], power = d[:power]) :
                     (; z = d[:z], r = d[:r], phi = d[:phi], defocus = d[:defocus], power = d[:power])

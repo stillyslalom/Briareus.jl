@@ -6,9 +6,10 @@
 # restored design.
 
 const SESSION_FORMAT = "BriareusGUI session"
-const SESSION_VERSION = 6               # 2: `.briar` archives with the CAD files; 3: frames; 4: placement steps;
+const SESSION_VERSION = 7               # 2: `.briar` archives with the CAD files; 3: frames; 4: placement steps;
                                         # 5: foil roles as a flag, and the active foil; 6: the diagnostics
-                                        # recorded, and their definitions
+                                        # recorded, and their definitions; 7: the observed and wall roles
+                                        # as flags
 
 _strs(xs) = [String(x) for x in xs]
 _syms(xs) = Symbol[Symbol(x) for x in xs]
@@ -68,7 +69,7 @@ function session_state(sess::DesignSession; view::Bool = true)
                                      "inward" => p.inward, "aperture" => p.aperture, "file" => p.file,
                                      "frame" => String(p.frame), "coords" => String(p.coords),
                                      "object" => p.object, "steps" => _step_state.(p.steps),
-                                     "foil" => p.foil)
+                                     "foil" => p.foil, "observed" => p.observed, "wall" => p.wall)
                     for p in ts.parts[]])
     beams = Dict{String,Any}("preset" => String(bt.preset[]), "by" => String(bt.by[]),
                              "facility" => String(bt.facility[]),
@@ -149,7 +150,9 @@ in their frames.
 
 Sessions before version 5 named the part with the role of the backlighter foil
 `backlighter`: that part loads as a foil (keeping the name) and the active one.
-Sessions before version 6 record [`DEFAULT_DIAGNOSTICS`](@ref).
+Sessions before version 6 record [`DEFAULT_DIAGNOSTICS`](@ref). Sessions before version 7
+named the part with the observed role `capsule`: that part loads with the role (keeping
+the name). A hohlraum template's capsule and wall hold their roles in every version.
 """
 function restore!(sess::DesignSession, state::AbstractDict)
     get(state, "format", "") == SESSION_FORMAT ||
@@ -168,7 +171,8 @@ function restore!(sess::DesignSession, state::AbstractDict)
                                     round = w["round"]) for w in t["windows"]]
     version = get(state, "version", 0)
     old = version < 3
-    parts = PartSpec[_state_part(p, old ? params : nothing; named_foil = version < 5) for p in t["parts"]]
+    parts = PartSpec[_state_part(p, old ? params : nothing; named_foil = version < 5,
+                                   named_capsule = version < 7) for p in t["parts"]]
     _cancel_fits!(ts)                     # a capsule fit in flight was for another design
     _try_build!(ts; kind = Symbol(t["kind"]), params, mesh, windows, parts,
                 excluded = Set(_syms(get(t, "excluded", String[])))) ||
@@ -295,8 +299,9 @@ end
 # in the old foil frame (`anchor = "foil"`, axes the columns of [0 0 1; 0 1 0; -1 0 0],
 # `z` along the foil's back normal) is re-expressed in the `:backlighter` frame, its
 # chamber placement unchanged. `named_foil` (before version 5): the foil role is the
-# name `backlighter`.
-function _state_part(p, params; named_foil::Bool = false)
+# name `backlighter`; `named_capsule` (before version 7): the observed role is the name
+# `capsule`.
+function _state_part(p, params; named_foil::Bool = false, named_capsule::Bool = false)
     vals = Dict{Symbol,Float64}(Symbol(k) => v for (k, v) in p["values"])
     frame = Symbol(get(p, "frame", get(p, "anchor", "tcc")))
     if params !== nothing && frame === :foil
@@ -313,7 +318,9 @@ function _state_part(p, params; named_foil::Bool = false)
                     two_sided = p["two_sided"], inward = p["inward"], aperture = p["aperture"],
                     file = get(p, "file", ""), frame, coords = Symbol(get(p, "coords", "cartesian")),
                     object = get(p, "object", ""), steps = _state_step.(get(p, "steps", Dict[])),
-                    foil = named_foil ? p["name"] == String(FOIL_NAME) : p["foil"])
+                    foil = named_foil ? p["name"] == String(FOIL_NAME) : p["foil"],
+                    observed = named_capsule ? p["name"] == "capsule" : p["observed"],
+                    wall = named_capsule ? false : p["wall"])
 end
 
 # ---------------------------------------------------------------- CAD files in sessions

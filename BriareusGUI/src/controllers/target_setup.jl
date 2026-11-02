@@ -93,6 +93,11 @@ with_lips(names) = Symbol[n for x in names for n in (x in (:leh_top, :leh_bottom
 "Name of the foil component of a `:foil` target; the main-target sphere is `:main`."
 const FOIL_NAME = :backlighter
 
+# The hohlraum template's capsule and wall components: the template's holders of the
+# observed and wall roles (parts hold roles by their flags, see `PartSpec`).
+const _TEMPLATE_CAPSULE = :capsule
+const _TEMPLATE_WALL = :wall
+
 # ---------------------------------------------------------------- windows
 
 """
@@ -237,15 +242,18 @@ end
 """
     PartSpec(kind; name, values, two_sided = false, inward = false, aperture = false,
              file = "", frame = :tcc, coords = :cartesian, object = "", steps = [],
-             foil = false)
+             foil = false, observed = false, wall = false)
 
 A free target part: `kind` (one of [`PART_KINDS`](@ref)), its component `name`,
 `values` (every [`PART_FIELDS`](@ref) key and its kind's [`PART_SIZE_FIELDS`](@ref)),
 `two_sided` (both sides radiate and absorb), `inward` (a sphere, cylinder or cone
 radiates from its inside; a flat part from its back; a mesh from the other side) and
 `aperture` (a transparent diagnostic surface: rays pass, its incident flux is what
-escapes through it). `foil` marks a part with the role of a backlighter foil
-([`set_part_role!`](@ref), [`active_foil`](@ref)). A `:mesh` part reads its triangles from the STL `file`. The
+escapes through it). The role flags mark the part for the analyses
+([`set_part_role!`](@ref)): `foil` a backlighter foil ([`active_foil`](@ref)),
+`observed` the surface whose x-ray drive is analyzed ([`observed_name`](@ref)), `wall`
+a re-emitting cavity wall ([`wall_names`](@ref)); the name carries no role. A `:mesh`
+part reads its triangles from the STL `file`. The
 placement fields are in the frame named `frame` (one of [`TEMPLATE_FRAMES`](@ref), or
 another part's name: see [`part_frames`](@ref)); `coords` ([`PART_COORDINATES`](@ref)) is
 how its position is shown and edited (the values keep `x`, `y`, `z`). The placement
@@ -266,6 +274,8 @@ struct PartSpec
     object::String
     steps::Vector{PlacementStep}
     foil::Bool
+    observed::Bool
+    wall::Bool
 end
 
 """
@@ -303,7 +313,8 @@ end
 function PartSpec(kind::Symbol; name = kind, values = Dict{Symbol,Float64}(),
                   two_sided::Bool = false, inward::Bool = false, aperture::Bool = false,
                   file::AbstractString = "", frame::Symbol = :tcc, coords::Symbol = :cartesian,
-                  object::AbstractString = "", steps = PlacementStep[], foil::Bool = false)
+                  object::AbstractString = "", steps = PlacementStep[], foil::Bool = false,
+                  observed::Bool = false, wall::Bool = false)
     kind in PART_KINDS || throw(ArgumentError("part kind must be one of $PART_KINDS"))
     frame === Symbol(name) && throw(ArgumentError("a part cannot be placed in its own frame"))
     coords in PART_COORDINATES || throw(ArgumentError("coordinates must be one of $PART_COORDINATES"))
@@ -318,13 +329,15 @@ function PartSpec(kind::Symbol; name = kind, values = Dict{Symbol,Float64}(),
     any(st -> Symbol(name) in Briareus._step_refs(st), steps) &&
         throw(ArgumentError("a part's placement step cannot refer to its own frame"))
     return PartSpec(kind, Symbol(name), v, two_sided, inward, aperture, String(file), frame,
-                    coords, String(object), collect(PlacementStep, steps), foil)
+                    coords, String(object), collect(PlacementStep, steps), foil, observed, wall)
 end
 
 _with(p::PartSpec; kind = p.kind, name = p.name, values = p.values, two_sided = p.two_sided,
       inward = p.inward, aperture = p.aperture, file = p.file, frame = p.frame,
-      coords = p.coords, object = p.object, steps = p.steps, foil = p.foil) =
-    PartSpec(kind, name, values, two_sided, inward, aperture, file, frame, coords, object, steps, foil)
+      coords = p.coords, object = p.object, steps = p.steps, foil = p.foil,
+      observed = p.observed, wall = p.wall) =
+    PartSpec(kind, name, values, two_sided, inward, aperture, file, frame, coords, object, steps,
+             foil, observed, wall)
 
 # A part with the frame named `old` renamed `new`: the frame it is placed in and the
 # frames its placement steps refer to.
@@ -1952,20 +1965,60 @@ function _axis_vector3(axis)
 end
 
 """
-Roles a part can take in the analyses: `:none`, `:capsule` (the observed surface: its
-x-ray drive's modes and the capsule keep-out; a sphere, named `:capsule` as the drive and
-the optimizer look for it) and `:foil` (a backlighter foil, a flat part or a mesh that
-keeps its name: any number of parts can be foils, and the active one
-([`active_foil`](@ref)) is the foil whose spot statistics, map, objective, line of sight
-and captured power the analyses take).
+Roles a part can take in the analyses, held by the part's flags (its name carries none):
+`:none`; `:capsule`, the observed role held by a sphere (flag `observed`: its x-ray
+drive's modes, the θ–φ map and the capsule keep-out; one part at a time, see
+[`observed_name`](@ref)); `:foil` (a backlighter foil, a flat part or a mesh: any number
+of parts can be foils, and the active one ([`active_foil`](@ref)) is the foil whose spot
+statistics, map, objective, line of sight and captured power the analyses take); and
+`:wall` (a re-emitting cavity surface: the drive history's wall temperature, and a
+surface the clearance and TaLIS checks land the beams on; any number of parts, see
+[`wall_names`](@ref)).
 """
-const PART_ROLES = (:none, :capsule, :foil)
+const PART_ROLES = (:none, :capsule, :foil, :wall)
 
 const PART_ROLE_LABELS = Dict(:none => "None", :capsule => "Capsule (observed x-ray drive)",
-                              :foil => "Backlighter foil (spot uniformity)")
+                              :foil => "Backlighter foil (spot uniformity)",
+                              :wall => "Wall (re-emitting cavity surface)")
 
-"Role of a part (one of [`PART_ROLES`](@ref)): the capsule by its name, a foil by its flag."
-part_role(p::PartSpec) = p.name === :capsule ? :capsule : p.foil ? :foil : :none
+"Role of a part (one of [`PART_ROLES`](@ref)), from its flags."
+part_role(p::PartSpec) = p.observed ? :capsule : p.foil ? :foil : p.wall ? :wall : :none
+
+"""
+    observed_name(ts::TargetSetup) -> Union{Symbol,Nothing}
+
+The surface whose x-ray drive the analyses observe (the drive's modes and θ–φ map, the
+capsule keep-out and summaries, the drive history, the retune, the results export): the
+part with the observed role (`PartSpec.observed`, given by [`set_part_role!`](@ref))
+while it is in the calculations, else a hohlraum template's capsule (`:capsule`, when its
+radius is positive and it is in the calculations), else `nothing`. One surface at a time.
+"""
+function observed_name(ts::TargetSetup)
+    ex = ts.excluded[]
+    for p in ts.parts[]
+        p.observed && !(p.name in ex) && return p.name
+    end
+    ts.kind[] === :hohlraum && ts.params[][:capsule_radius] > 0 && !(_TEMPLATE_CAPSULE in ex) &&
+        return _TEMPLATE_CAPSULE
+    return nothing
+end
+
+"""
+    wall_names(ts::TargetSetup) -> Vector{Symbol}
+
+The re-emitting cavity walls in the calculations (the drive history's wall temperature;
+surfaces the clearance and TaLIS checks land the beams on): a hohlraum template's wall
+(`:wall`; its caps are not), then each part with the role `:wall` in the parts' order.
+"""
+function wall_names(ts::TargetSetup)
+    ex = ts.excluded[]
+    out = Symbol[]
+    ts.kind[] === :hohlraum && !(_TEMPLATE_WALL in ex) && push!(out, _TEMPLATE_WALL)
+    for p in ts.parts[]
+        p.wall && !(p.name in ex) && push!(out, p.name)
+    end
+    return out
+end
 
 """
     foil_names(ts::TargetSetup) -> Vector{Symbol}
@@ -2024,19 +2077,58 @@ The components of `t` that belong to a backlighter foil, active or not: a foil t
 foil and the components of each part with the foil role (a VisRad part's carry its name
 as a prefix). The clearance and TaLIS checks take them as surfaces the beams land on.
 """
-function foil_components(ts::TargetSetup, t::Target = ts.target[])
-    fs = Set{Symbol}(p.name for p in ts.parts[] if p.foil)
-    vr = Set{Symbol}(p.name for p in ts.parts[] if p.foil && p.kind === :visrad)
+foil_components(ts::TargetSetup, t::Target = ts.target[]) =
+    _held_components(ts, t, p -> p.foil, ts.kind[] === :foil ? (FOIL_NAME,) : ())
+
+"""
+    observed_components(ts::TargetSetup, t = ts.target[]) -> Vector{Symbol}
+    wall_components(ts::TargetSetup, t = ts.target[]) -> Vector{Symbol}
+
+The components of `t` that hold the observed role ([`observed_name`](@ref)) or the wall
+role ([`wall_names`](@ref)): a template's capsule or wall, and the components of the parts
+with the role (a VisRad part's carry its name as a prefix).
+"""
+function observed_components(ts::TargetSetup, t::Target = ts.target[])
+    o = observed_name(ts)
+    o === nothing && return Symbol[]
+    return _held_components(ts, t, p -> p.name === o, o === _TEMPLATE_CAPSULE ? (o,) : ())
+end
+
+wall_components(ts::TargetSetup, t::Target = ts.target[]) =
+    _held_components(ts, t, p -> p.wall, ts.kind[] === :hohlraum ? (_TEMPLATE_WALL,) : ())
+
+# The components of `t` of the parts `holds(p)` selects (a VisRad part's carry its name as
+# a prefix), and the template components named `template`.
+function _held_components(ts::TargetSetup, t::Target, holds, template)
+    fs = Set{Symbol}(p.name for p in ts.parts[] if holds(p))
+    vr = Set{Symbol}(p.name for p in ts.parts[] if holds(p) && p.kind === :visrad)
     out = Symbol[]
     for c in t.components
         n = c.name
-        if (ts.kind[] === :foil && n === FOIL_NAME) || n in fs || c.part in fs ||
-           any(v -> startswith(String(n), String(v)), vr)
+        if n in template || n in fs || c.part in fs || any(v -> startswith(String(n), String(v)), vr)
             push!(out, n)
         end
     end
     return out
 end
+
+# The surfaces the clearance check lands the beams on by default (`lands_on`: walls, the
+# observed surface, the foils) and those the TaLIS check leaves out (`observed`), as part
+# and component names of `t` (the checks list parts: the parts of the wall and observed
+# components join them; the foils by component).
+function _landing(ts::TargetSetup, t::Target = ts.target[])
+    obs = _with_parts(t, observed_components(ts, t))
+    capture = unique!([_with_parts(t, wall_components(ts, t)); foil_components(ts, t)])
+    return (; lands_on = unique!([capture; obs]), capture, observed = obs)
+end
+
+# Components `ns` of `t` and their parts.
+_with_parts(t::Target, ns) = unique!([ns; [c.part for c in t.components if c.name in ns]])
+
+# The walls' and the observed surface's components and parts, as sets.
+_held_sets(ts::TargetSetup, t::Target = ts.target[]) =
+    (; walls = Set(_with_parts(t, wall_components(ts, t))),
+     observed = Set(_with_parts(t, observed_components(ts, t))))
 
 # The object kind a part stands for (a VisRad object's own kind).
 function _part_shape(p::PartSpec)
@@ -2045,36 +2137,26 @@ function _part_shape(p::PartSpec)
     return k === :mesh ? :mesh : k
 end
 
-# A part's name without a role: a VisRad object's own name, else its kind and a free number.
-function _plain_name(p::PartSpec, taken)
-    p.kind === :visrad && return Symbol(p.object)
-    k = 1
-    while Symbol(p.kind, :_, k) in taken
-        k += 1
-    end
-    return Symbol(p.kind, :_, k)
-end
-
 """
     set_part_role!(ts::TargetSetup, i, role::Symbol; done = () -> nothing) -> Bool
 
-Give part `i` a role in the analyses (one of [`PART_ROLES`](@ref)). `:foil` (a disk,
-rectangle or mesh, or a VisRad rectangle or CAD part: a backlighter whose spot the foil
-objective makes uniform) marks the part as a foil and keeps its name; other foils keep
-theirs, and the part becomes the active foil ([`active_foil`](@ref)) when the design had
-none. `:capsule` names the part as the drive and the optimizer expect. The capsule is a
-sphere (the mode analysis and the keep-out take its center and radius): a sphere part or
-a VisRad sphere is renamed; a CAD part (a capsule with its fill tube, say) is replaced
-in the calculations by a sphere part `:capsule` fitted to it ([`fit_sphere`](@ref): its
-element size the target's capsule size, its albedo and conversion the part's), and left
-out of the calculations itself. A part that held the capsule role gives it up (back to
-its own name). `:none` clears the foil role, or renames the capsule to its own name (a
-VisRad object's, or its kind and a number). Parts placed in a renamed part's frame
-follow. A role the part cannot take, or the capsule role a hohlraum's capsule already
-holds, sets `error` and returns `false`. In a window
-(`spawn[]`) a large CAD capsule is fitted on a worker (see [`TargetSetup`](@ref)):
-`true` then means the fit is under way, and `done()` runs once the role is given (at
-once otherwise).
+Give part `i` a role in the analyses (one of [`PART_ROLES`](@ref)); the part keeps its
+name, and its components (and so the target) are unchanged. `:foil` (a disk, rectangle
+or mesh, or a VisRad rectangle or CAD part: a backlighter whose spot the foil objective
+makes uniform) marks the part as a foil; the part becomes the active foil
+([`active_foil`](@ref)) when the design had none. `:capsule` makes the part the observed
+surface ([`observed_name`](@ref)); another part that held it gives it up, and a hohlraum
+template's capsule yields to it. The capsule is a sphere (the mode analysis and the
+keep-out take its center and radius): a sphere part or a VisRad sphere takes the role
+itself; a CAD part (a capsule with its fill tube, say) is replaced in the calculations by
+a sphere part fitted to it ([`fit_sphere`](@ref): named `capsule`, or `capsule_2`, … when
+that is taken; its element size the target's capsule size, its albedo and conversion the
+part's), which takes the role, and left out of the calculations itself. `:wall` (any
+surface but an aperture) marks a re-emitting cavity wall ([`wall_names`](@ref)). `:none`
+clears the part's role. A role the part cannot take sets `error` and returns `false`. In
+a window (`spawn[]`) a large CAD capsule is fitted on a worker (see
+[`TargetSetup`](@ref)): `true` then means the fit is under way, and `done()` runs once the
+role is given (at once otherwise).
 """
 function set_part_role!(ts::TargetSetup, i::Integer, role::Symbol; done = () -> nothing)
     _check_part_index(ts, i)
@@ -2082,8 +2164,6 @@ function set_part_role!(ts::TargetSetup, i::Integer, role::Symbol; done = () -> 
     ps = copy(ts.parts[])
     p = ps[i]
     part_role(p) === role && (done(); return true)
-    ex = copy(ts.excluded[])
-    renames = Dict{Symbol,Symbol}()
     try
         shape = _part_shape(p)
         if role === :capsule && shape !== :sphere
@@ -2093,35 +2173,30 @@ function set_part_role!(ts::TargetSetup, i::Integer, role::Symbol; done = () -> 
         end
         role === :foil && !(shape in (:rectangle, :disk, :mesh)) &&
             throw(ArgumentError("the backlighter foil is a flat part (a rectangle or disk) or a mesh"))
-        taken = Set{Symbol}(q.name for q in ps)
-        function rename(k, new)
-            old = ps[k].name
-            renames[old] = new
-            ps[k] = _with(ps[k]; name = new)
-            for j in eachindex(ps)
-                ps[j] = _renamed(ps[j], old, new)
-            end
-            old in ex && (delete!(ex, old); push!(ex, new))    # stays left out
-        end
-        # the foil role is a flag; the capsule's is the name `:capsule`
-        ps[i] = _with(ps[i]; foil = role === :foil)
-        if role === :capsule
-            j = findfirst(q -> q.name === :capsule, ps)
-            j === nothing || rename(j, _plain_name(ps[j], taken))
-            rename(i, :capsule)
-        elseif p.name === :capsule
-            rename(i, _plain_name(p, taken))
-        end
+        role === :wall && p.aperture &&
+            throw(ArgumentError("an aperture is transparent: a wall is a surface"))
     catch err
         err isa ArgumentError || rethrow()
         ts.error[] = _errmsg(err)
         return false
     end
+    role === :capsule && _drop_observed!(ps)            # one observed surface at a time
+    ps[i] = _with(ps[i]; foil = role === :foil, observed = role === :capsule, wall = role === :wall)
     first_foil = role === :foil && active_foil(ts) === nothing
-    ok = _try_build!(ts; parts = ps, excluded = ex, renames)
-    ok && first_foil && (ts.active_foil[] = ps[i].name)
-    ok && done()
-    return ok
+    # the geometry is unchanged: the parts are committed without building the target
+    ts.error[] = ""
+    ts.parts[] = ps
+    first_foil && (ts.active_foil[] = ps[i].name)
+    done()
+    return true
+end
+
+# Clear the observed role of every part of `ps` (in place).
+function _drop_observed!(ps::Vector{PartSpec})
+    for k in eachindex(ps)
+        ps[k].observed && (ps[k] = _with(ps[k]; observed = false))
+    end
+    return ps
 end
 
 """
@@ -2173,7 +2248,7 @@ function fit_sphere(points::AbstractVector, weights::AbstractVector = ones(lengt
     return c, r
 end
 
-# Role `:capsule` for CAD part `i`: a sphere part `:capsule` fitted to it in its place in
+# Role `:capsule` for CAD part `i`: a sphere part with the role, fitted to it, in its place in
 # the calculations. With `spawn[]` a part of more than `BACKGROUND_TRIANGLES` facets is
 # fitted on a worker (`fitting`), and the role is given when the fit is done, to the part
 # as it is then (fitted again if it moved meanwhile; dropped if it went away).
@@ -2246,27 +2321,21 @@ function _cancel_fits!(ts::TargetSetup)
 end
 
 function _apply_capsule!(ts::TargetSetup, i::Integer, c, r)
-    ps = copy(ts.parts[])
+    ps = _drop_observed!(copy(ts.parts[]))
     p = ps[i]
     ex = copy(ts.excluded[])
-    taken = Set{Symbol}(q.name for q in ps)
-    j = findfirst(q -> q.name === :capsule, ps)
-    renames = Dict{Symbol,Symbol}()
-    if j !== nothing
-        old = ps[j].name
-        ps[j] = _with(ps[j]; name = _plain_name(ps[j], taken))
-        renames[old] = ps[j].name
-        for k in eachindex(ps)
-            ps[k].frame === old && (ps[k] = _with(ps[k]; frame = ps[j].name))
-        end
-        old in ex && (delete!(ex, old); push!(ex, ps[j].name))
+    taken = union(Set(all_component_names(ts)), (q.name for q in ps))
+    name, k = :capsule, 1
+    while name in taken
+        k += 1
+        name = Symbol(:capsule_, k)
     end
-    push!(ps, PartSpec(:sphere; name = :capsule,
+    push!(ps, PartSpec(:sphere; name, observed = true,
                        values = Dict(:x => c[1], :y => c[2], :z => c[3], :r1 => r,
                                      :h => ts.mesh[].capsule_h, :albedo => p.values[:albedo],
                                      :conversion => p.values[:conversion])))
     push!(ex, p.name)
-    return _try_build!(ts; parts = ps, excluded = ex, renames)
+    return _try_build!(ts; parts = ps, excluded = ex)
 end
 
 """

@@ -63,10 +63,6 @@ ReviewState() = ReviewState(Observable(Symbol[]), Observable(Symbol[]), Observab
                             Observable{Union{Nothing,ClearanceReport}}(nothing), Ref{Any}(nothing),
                             Ref(Symbol[]), Threads.Atomic{Bool}(false))
 
-# Whether a component is where beams are meant to land by default (a hohlraum wall or
-# capsule, a backlighter foil: one of `foils`); everything else is hardware to check.
-_lands_on(name::Symbol, foils) = name in (:wall, :capsule) || name in foils
-
 # Keep two role lists (`first`, `second`) in step with a target's components: roles of
 # known components stay; new components get `role(name)` (`1`, `2`, or `0` for none);
 # if no component keeps the first role, every role is chosen afresh.
@@ -92,18 +88,19 @@ function _update_roles!(first::Observable, second::Observable, known::Base.RefVa
 end
 
 """
-    default_selection!(rv::ReviewState, t::Target; foils = (FOIL_NAME,))
+    default_selection!(rv::ReviewState, t::Target; lands_on = (:wall, :capsule, FOIL_NAME))
 
-Choose the landing targets and hardware for a target's components: a hohlraum's beams
-land on the wall and capsule and everything else (LEH caps, closed diagnostic
-windows) is checked; the beams land on every backlighter foil (`foils`, component names:
-a session passes [`foil_components`](@ref)) and the main target is checked.
-Components the selection was already made for keep their roles; new components get
-the default role.
+Choose the landing targets and hardware for a target's components: the beams land on
+the surfaces `lands_on` (names; a session passes the holders of the wall, observed and
+foil roles: a hohlraum's wall and capsule, every backlighter foil) and everything else
+(LEH caps, closed diagnostic windows, a foil target's main sphere) is checked. The
+default names are the templates' components. Components the selection was already made
+for keep their roles; new components get the default role.
 """
-function default_selection!(rv::ReviewState, t::Target; foils = (FOIL_NAME,))
+function default_selection!(rv::ReviewState, t::Target;
+                            lands_on = (_TEMPLATE_WALL, _TEMPLATE_CAPSULE, FOIL_NAME))
     _update_roles!(rv.targets, rv.hardware, rv.known, surface_names(t),
-                   n -> _lands_on(n, foils) ? 1 : 2)
+                   n -> n in lands_on ? 1 : 2)
     return rv
 end
 

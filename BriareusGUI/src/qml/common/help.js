@@ -56,14 +56,18 @@ var pages = [
                 "values). The part follows the frames its steps refer to, as it follows the " +
                 "frame it is placed in." },
         { key: "part.role", title: "Role",
-          text: "A role marks the part for the analyses: the capsule (a sphere, or a CAD part a " +
-                "sphere is fitted to, named capsule) whose x-ray drive is observed, or a backlighter " +
-                "foil (a flat part or a mesh, keeping its name). Any number of parts can be foils; " +
+          text: "A role marks the part for the analyses; the part keeps its name. The capsule (a " +
+                "sphere, or a CAD part a sphere is fitted to) is the surface whose x-ray drive is " +
+                "observed: one part at a time, and a hohlraum template's capsule yields it. A " +
+                "backlighter foil is a flat part or a mesh. A wall is a re-emitting cavity surface: " +
+                "the drive history's wall temperature, and a surface the clearance and TaLIS checks " +
+                "land the beams on (a hohlraum template's wall holds the role too). Any number of " +
+                "parts can be foils or walls; " +
                 "the active foil (Drive ▸ Active foil, or the part's own check) is the one whose " +
                 "spot statistics, map and objective the drive and the optimization take, and whose " +
                 "line of sight and captured power the sweep checks. The clearance and TaLIS checks " +
-                "take every foil as a surface the beams land on. Renaming a part, or giving it a " +
-                "role, keeps the parts placed in its frame and the beams aimed in it." },
+                "take every foil as a surface the beams land on. Renaming a part keeps the parts " +
+                "placed in its frame and the beams aimed in it." },
         { key: "part.cad", title: "Parts from CAD files",
           text: "Windings repaired (closed solids face out of their material, open sheets the " +
                 "target center) and the surface remeshed into elements of the part's size; a part " +

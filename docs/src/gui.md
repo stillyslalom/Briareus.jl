@@ -270,10 +270,13 @@ collects every explanation by page. Help ▸ Documentation opens this page.
   solids gives one part per solid. A *VisRad object* part is a component of an imported
   VisRad workspace; a VisRad rectangle, sphere or cylindrical hohlraum keeps VisRad's
   own element grid unless the part is given an element size. A part's *Role* marks it
-  for the analyses: *Capsule* (the observed surface, named `capsule`; a CAD capsule is
-  replaced in the calculations by a sphere fitted to it, `fit_sphere`, so a fill tube does
-  not count), *Backlighter foil* (a flat part or a mesh, keeping its name), or *Thin film*
-  (left out of the drive's cavity, below). Any number of parts can be foils; the *active
+  for the analyses, and the part keeps its name: *Capsule* (the observed surface, one at
+  a time, taken from a hohlraum template's capsule; a CAD capsule is replaced in the
+  calculations by a sphere fitted to it, `fit_sphere`, so a fill tube does not count),
+  *Backlighter foil* (a flat part or a mesh), *Wall* (a re-emitting cavity surface: the
+  drive history's wall temperature, and a surface the clearance and TaLIS checks land the
+  beams on, as the template's wall), or *Thin film* (left out of the drive's cavity,
+  below). Any number of parts can be foils or walls; the *active
   foil* (Drive ▸ Active foil, or the check in the part's properties, shown with two or
   more foils) is the one whose spot statistics, map and objective the drive and the
   optimization take and whose line of sight and captured power the sweep checks, while

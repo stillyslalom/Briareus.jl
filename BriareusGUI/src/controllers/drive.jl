@@ -410,11 +410,20 @@ end
 _has_part(t::Target, name) =
     name !== nothing && (name in component_names(t) || any(c -> c.part === name, t.components))
 
+# The parts of a scenario's observed elements, `()` when it observes none (the names core's
+# `observe` keywords take for the same elements).
+_observed_parts(s::Scenario) =
+    Tuple(unique([s.target.components[s.target.elem_comp[e]].part for e in s.observed]))
+
+# The part a scenario observes (`nothing`: none).
+_observed_part(s::Scenario) = (o = _observed_parts(s); isempty(o) ? nothing : first(o))
+
 # The foil a flux-map lookup was made for (`nothing`: none, or a capsule map).
 _lookup_foil(lk) = lk !== nothing && lk.kind === :foil ? lk.foil : nothing
 
 # Build a scenario for a target and the table's beams (all of them: disabled beams are
-# evaluated at zero power, so on/off needs no rebuild). Hohlraums observe the capsule;
+# evaluated at zero power, so on/off needs no rebuild). `observed` (a part or component
+# name, [`observed_name`](@ref)) is the surface the radiation model observes;
 # `closed` (a hohlraum and nothing outside it) balances the view factors of the
 # enclosure. Every target gets a radiation model for the B/H fields, unless it is too
 # large for its view factors (`radiation_size`: laser only). With `cavity = (point,
@@ -437,7 +446,8 @@ function _build_scenario(t::Target, beams::Vector{Beam{Float64}}; closed::Bool =
                          radiation::Union{Bool,Nothing} = nothing, cavity = nothing,
                          profile::Union{Nothing,VisRadProfile} = nothing,
                          references::AbstractDict = Dict{Symbol,Mesh}(),
-                         foil::Union{Nothing,Symbol} = nothing)
+                         foil::Union{Nothing,Symbol} = nothing,
+                         observed::Union{Nothing,Symbol} = nothing)
     enc = index = film = nothing
     escape = NaN
     leak = (; fraction = NaN, apertures = false)
@@ -458,8 +468,7 @@ function _build_scenario(t::Target, beams::Vector{Beam{Float64}}; closed::Bool =
     end
     fmap === nothing || (index = index === nothing ? fmap : fmap[index])
     radiation === nothing && (radiation = radiation_size(t).feasible)
-    names = component_names(t)
-    observe = radiation && :capsule in names ? :capsule : nothing
+    observe = radiation && observed !== nothing && observed in component_names(t) ? observed : nothing
     s = Scenario(t, beams; observe, radiation, viewfactor_kw = (; closed), deposition_kw = (; profile))
     return (; s, lookup = flux_lookup(s; foil), enc, index, film, escape, closed, leak)
 end

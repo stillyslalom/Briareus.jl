@@ -197,9 +197,11 @@ function set_objective!(st::OptimizeState, objective::Symbol)
 end
 
 # The objective settings, captured on the GUI thread when a job starts (`foil`: the
-# backlighter foil of the foil objective, `active_foil`).
-_objective_settings(st::OptimizeState; foil::Union{Nothing,Symbol} = nothing) =
-    (; kind = st.objective[], foil, weights = copy(st.weights[]), hold_drive = st.hold_drive[],
+# backlighter foil of the foil objective, `active_foil`; `observed`: the sphere of the
+# capsule keep-out, `observed_name`).
+_objective_settings(st::OptimizeState; foil::Union{Nothing,Symbol} = nothing,
+                    observed::Union{Nothing,Symbol} = nothing) =
+    (; kind = st.objective[], foil, observed, weights = copy(st.weights[]), hold_drive = st.hold_drive[],
      keepout = st.keepout[], keepout_min = st.keepout_min[],
      capsule_keepout = st.capsule_keepout[], capsule_min = st.capsule_min[], spill = st.spill[])
 
@@ -220,8 +222,9 @@ function _make_objective(cfg::NamedTuple, s::Scenario, ev0, spot_radius::Real)
     isempty(modes) && throw(ArgumentError("give at least one mode a positive weight"))
     keepouts = Any[]
     cfg.keepout && push!(keepouts, ApertureKeepOut(s.target; minimum = cfg.keepout_min))
-    cfg.capsule_keepout && :capsule in component_names(s.target) &&
-        push!(keepouts, SphereKeepOut(s.target; spheres = (:capsule,), minimum = cfg.capsule_min))
+    o = cfg.observed
+    cfg.capsule_keepout && o !== nothing && o in component_names(s.target) &&
+        push!(keepouts, SphereKeepOut(s.target; spheres = (o,), minimum = cfg.capsule_min))
     keepout = isempty(keepouts) ? nothing : Tuple(keepouts)
     drive = !cfg.hold_drive ? nothing :
             mean_flux(something(ev0, evaluate(s, initial_parameters(s.param))))
@@ -235,9 +238,10 @@ end
 # `ev.flux` would compute the full flux response, which the moments do not need).
 _has_flux(ev::Evaluation) = ev.scenario.model !== nothing && !isempty(ev.scenario.observed)
 
-# Capsule modes / foil spot (of foil `foil`) and clipping of an evaluation, for
-# before/after tables.
-function _quick_summary(ev::Evaluation, spot_radius::Real, foil::Union{Nothing,Symbol} = nothing)
+# Capsule modes / foil spot (of foil `foil`), clipping, and the power on and clearance of
+# the observed sphere (`observed`) of an evaluation, for before/after tables.
+function _quick_summary(ev::Evaluation, spot_radius::Real, foil::Union{Nothing,Symbol} = nothing,
+                        observed::Union{Nothing,Symbol} = nothing)
     modes = NamedTuple[]
     mean = NaN
     if _has_flux(ev)
@@ -247,11 +251,11 @@ function _quick_summary(ev::Evaluation, spot_radius::Real, foil::Union{Nothing,S
         modes = [(; l, epsilon = mode_amplitude(c, l), legendre = a[l+1] / a[1]) for l in MODE_DEGREES]
     end
     t = ev.scenario.target
-    has = :capsule in component_names(t)
-    cap = has ? minimum(sphere_clearance(SphereKeepOut(t; spheres = (:capsule,)), ev.beams);
+    has = observed !== nothing && observed in component_names(t)
+    cap = has ? minimum(sphere_clearance(SphereKeepOut(t; spheres = (observed,)), ev.beams);
                         init = Inf) : Inf
     return (; modes, mean_flux = mean, spot = _spot_stats(ev, spot_radius, foil),
-            clipped = clipped_fraction(ev), capsule = has ? power_fraction(ev, :capsule) : 0.0,
+            clipped = clipped_fraction(ev), capsule = has ? power_fraction(ev, observed) : 0.0,
             capsule_clearance = cap)
 end
 
@@ -268,15 +272,18 @@ the beam table) when given, otherwise the beams' cones. With a local aim field f
 (chamber `Frame`s, one per beam; the chamber's when not given): a group then shares its
 local aim, and moves in its frame. `foil` names the backlighter foil (a part or component
 of the scenario's target) whose spot the foil objective (`:irradiance`) makes uniform and
-the before/after summaries report ([`active_foil`](@ref)). Its callback hands progress (`evaluations`, `current`, `best`,
+the before/after summaries report ([`active_foil`](@ref)); `observed` the sphere of the
+capsule keep-out and of the summaries' capsule power and clearance
+([`observed_name`](@ref); by default the part the scenario observes). Its callback hands progress (`evaluations`, `current`, `best`,
 at most every 0.1 s) to `deliver`, and so does the result. [`cancel_optimize!`](@ref)
 makes the callback stop the optimization after the next objective evaluation; the
 result is then the best design found so far.
 """
 function start_optimize!(st::OptimizeState, s::Scenario, beams::AbstractVector,
                          indices::AbstractVector{<:Integer}; spot_radius::Real = 0.5,
-                         foil::Union{Nothing,Symbol} = nothing, clusters = nothing, frames = nothing, deliver = f -> f(),
-                         spawn::Bool = true)
+                         foil::Union{Nothing,Symbol} = nothing,
+                         observed::Union{Nothing,Symbol} = _observed_part(s), clusters = nothing,
+                         frames = nothing, deliver = f -> f(), spawn::Bool = true)
     st.running[] && return st
     try
         isempty(beams) && throw(ArgumentError("no beams are enabled"))
@@ -298,7 +305,7 @@ function start_optimize!(st::OptimizeState, s::Scenario, beams::AbstractVector,
     st.running[] = true
     gen = st.generation[]
     settings = (; deltas = copy(st.deltas[]))
-    cfg = _objective_settings(st; foil)
+    cfg = _objective_settings(st; foil, observed)
     job = function ()
         t0 = time()
         key = by === :group && clusters !== nothing ?
@@ -308,7 +315,7 @@ function start_optimize!(st::OptimizeState, s::Scenario, beams::AbstractVector,
         x0 = initial_parameters(p)
         lower, upper = _bounds(p, x0, settings.deltas)
         ev0 = evaluate(sub, x0)
-        before = _quick_summary(ev0, spot_radius, foil)
+        before = _quick_summary(ev0, spot_radius, foil, observed)
         obj = _make_objective(cfg, sub, ev0, spot_radius)
         # called on this task after every objective evaluation; `true` stops
         reported = Ref(0.0)
@@ -324,7 +331,7 @@ function start_optimize!(st::OptimizeState, s::Scenario, beams::AbstractVector,
         end
         res = optimize_pointing(sub, obj; x0, lower, upper, iterations, evaluations,
                                 callback = progress)
-        after = _quick_summary(evaluate(sub, res.x), spot_radius, foil)
+        after = _quick_summary(evaluate(sub, res.x), spot_radius, foil, observed)
         return OptimizeResult(parameter_names(p), x0, collect(Float64, res.x), lower, upper,
                               res.initial_value, res.value,
                               Beam{Float64}[_float_beam(b) for b in res.beams],

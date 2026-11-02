@@ -710,7 +710,8 @@ function _refresh_target!(sh::BriareusShell)
     _set!(sh, "windowCount", length(ws))
     _set!(sh, "partCount", length(ts.parts[]))
     names = component_names(ts.target[])
-    _set!(sh, "hasCapsule", :capsule in names)
+    obs = observed_name(ts)
+    _set!(sh, "hasCapsule", obs !== nothing && obs in names)
     foil = active_foil(ts)
     _set!(sh, "hasFoil", foil !== nothing && Controllers._has_part(ts.target[], foil))
     # the foils to choose the active one from (shown with two or more)
@@ -1828,7 +1829,8 @@ function br_part_role(index)
         # once given (a CAD capsule's sphere may be fitted on a worker first): select the
         # part holding the role, the fitted sphere for a CAD capsule
         done = function ()
-            i = role === :capsule ? part_index(ts, :capsule) : nothing
+            o = observed_name(ts)
+            i = role === :capsule && o !== nothing ? part_index(ts, o) : nothing
             p = i === nothing ? ts.parts[][something(part_index(ts, name), idx[1])] : ts.parts[][i]
             select!(sh.sess.view, "part:" * String(p.name))
             sh.sess.status[] = "$(p.name): " * lowercase(PART_ROLE_LABELS[part_role(p)])

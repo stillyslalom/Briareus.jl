@@ -66,13 +66,13 @@ struct _HistoryCanceled <: Exception end
 # What a history is computed for: the scenario, the beams (pointing and table power),
 # which are on, and the pulses.
 _history_key(sess::DesignSession) = (sess.drive.scenario[], sess.beams.beams[], sess.beams.enabled[],
-                                     sess.time.pulses[])
+                                     sess.time.pulses[], wall_names(sess.target))
 
 """
     history_stale(sess::DesignSession) -> Bool
 
 Whether the drive history was computed for another scenario, other beams or on/off
-states, or other pulses (`false` without a history).
+states, other pulses or other walls ([`wall_names`](@ref)) (`false` without a history).
 """
 function history_stale(sess::DesignSession)
     h = sess.time.history[]
@@ -127,7 +127,9 @@ function start_history!(sess::DesignSession)
     progress(k) = deliver(() -> g == tm.generation[] && _assign!(tm.progress, (k, n)))
     cancel = tm.cancel
     runner = _runner(sess.spawn, sess.deliver)
-    runner(() -> _history_job(s, beams, enabled, src, times; diags, progress, cancel, key), function (out)
+    wall = Tuple(wall_names(sess.target))
+    runner(() -> _history_job(s, beams, enabled, src, times; diags, progress, cancel, key, wall),
+           function (out)
         g == tm.generation[] || return
         tm.running[] = false
         if out.err isa _HistoryCanceled
@@ -154,13 +156,17 @@ Stop the drive history in progress at its next step (nothing is kept).
 cancel_history!(sess::DesignSession) = (sess.time.running[] && (sess.time.cancel[] = true); sess)
 
 # The drive history of `beams` on the pulses `src` at `times` on scenario `s` (worker).
+# `wall`: the wall-role holders (`wall_names`); those in the scenario's target give the
+# history's wall temperature, else the observed surface does.
 function _history_job(s::Scenario, beams, enabled, src, times; diags = NamedTuple[],
-                        progress = k -> nothing, cancel = Threads.Atomic{Bool}(false), key = nothing)
+                        progress = k -> nothing, cancel = Threads.Atomic{Bool}(false), key = nothing,
+                        wall = (_TEMPLATE_WALL,))
     t0 = time()
     t = s.target
     names = component_names(t)
-    observe = Tuple(unique([t.components[t.elem_comp[e]].part for e in s.observed]))
-    wall = :wall in names ? (:wall,) : observe
+    observe = _observed_parts(s)
+    walls = Tuple(n for n in wall if n in names)
+    wall = isempty(walls) ? observe : walls
     views = _diagnostic_views(diags, names)
     A = t.elem_area
     aperture = [t.components[t.elem_comp[e]].kind === :aperture for e in 1:nelements(t)]
@@ -185,17 +191,18 @@ function _history_job(s::Scenario, beams, enabled, src, times; diags = NamedTupl
     end
     legendre = h.moments[2:5, :] ./ h.moments[1:1, :]
     recorded = NamedTuple[_recorded(v, j, h, t) for (j, v) in enumerate(views)]
-    return DriveHistory(h.time, h.Tr, legendre, recorded, _energy_series(h, t),
+    return DriveHistory(h.time, h.Tr, legendre, recorded, _energy_series(h, t, observe),
                         fields, ranges, h, key, time() - t0)
 end
 
 # Where the laser energy has gone by each time of a history (kJ, `energy_budget` up to
 # that time): the laser delivered, the heat left in the walls (every surface but the
-# capsule: unconverted laser and absorbed x-rays), in the capsule, the x-rays out of
-# the entrance holes, and out of windows (other apertures and thin foils).
-function _energy_series(h, t::Target)
+# capsule: unconverted laser and absorbed x-rays), in the capsule (the observed parts
+# `observed`), the x-rays out of the entrance holes, and out of windows (other apertures
+# and thin foils).
+function _energy_series(h, t::Target, observed)
     holes = Set(c.part for c in t.components if c.kind === :aperture && !(c.surface isa CylinderSurface))
-    capsule = Set(c.part for c in t.components if c.name === :capsule || c.part === :capsule)
+    capsule = Set(c.part for c in t.components if c.name in observed || c.part in observed)
     eb = [energy_budget(h; to = τ) for τ in h.time]
     sumof(d, keep) = sum((v for (k, v) in d if keep(k)); init = 0.0)
     series = NamedTuple[
@@ -363,8 +370,11 @@ function time_chart(sess::DesignSession, chart::Symbol = sess.time.chart[])
         h === nothing && return none("Energy", "Run the drive history to see where the energy goes")
         cc = component_colors(sess.drive.scenario[] === nothing ? sess.target.target[] :
                               sess.drive.scenario[].target)
-        color = Dict(:laser => _INK, :wall => get(cc, :wall, palette_color(1)),
-                     :capsule => get(cc, :capsule, palette_color(4)), :holes => _GRAY, :windows => "#D55E00")
+        # the colors of the first wall and of the observed surface
+        ws = wall_names(sess.target)
+        w, o = isempty(ws) ? nothing : ws[1], observed_name(sess.target)
+        color = Dict(:laser => _INK, :wall => get(cc, w, palette_color(1)),
+                     :capsule => get(cc, o, palette_color(4)), :holes => _GRAY, :windows => "#D55E00")
         series = [_series(ENERGY_LABELS[s.name], h.time, s.values, color[s.name];
                           style = s.name === :laser ? :dash : :solid) for s in h.energy]
         return (; chart, title = "Energy by each time" * stale, xlabel = "t (ns)",

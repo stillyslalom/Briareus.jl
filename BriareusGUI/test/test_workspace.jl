@@ -580,11 +580,12 @@ end
     tri = only(c for c in ts.ghost[].components if c.name === :CAD_0).mesh.vertices
     @test all(v -> abs(sqrt(sum(abs2, v - part_center(cap))) - cap.values[:r1]) < 1e-6, tri)   # its sphere
     # the excluded marker sphere can be the capsule (the fitted one gives the role up),
-    # and stays left out
+    # and stays left out, keeping its name
     m = part_index(ts, :Marker)
     @test set_part_role!(ts, m, :capsule)
-    @test :capsule in ts.excluded[] && :capsule in all_component_names(ts) &&
-          !(:capsule in component_names(ts.target[])) && ts.parts[][end].name === :sphere_1
+    @test :Marker in ts.excluded[] && part_role(ts.parts[][m]) === :capsule &&
+          !(:Marker in component_names(ts.target[])) && ts.parts[][end].name === :capsule &&
+          part_role(ts.parts[][end]) === :none && observed_name(ts) === nothing
     @test set_part_role!(ts, m, :none) && ts.parts[][m].name === :Marker && :Marker in ts.excluded[]
     remove_part!(ts, length(ts.parts[]))
     @test set_excluded!(ts, :CAD_0, false)

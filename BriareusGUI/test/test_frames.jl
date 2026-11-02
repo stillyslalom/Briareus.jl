@@ -125,8 +125,8 @@ end
     # renamed: the beams aim in the new name, where they were
     @test edit_part!(ts, part_index(ts, :shield), :name, "screen")
     @test all(==(:screen), bt.aim_frame[][a]) && bt.beams[] == aims && bt.aim_local[] == loc
-    # the capsule's role renames the screen (a sphere is needed: a disk is refused), the
-    # foil's keeps the plate's name: each set of beams stays with its own part
+    # the capsule's role needs a sphere (a disk is refused); roles keep the parts' names:
+    # each set of beams stays with its own part
     @test !set_part_role!(ts, part_index(ts, :screen), :capsule)
     @test set_part_role!(ts, part_index(ts, :plate), :foil)
     @test all(==(:plate), bt.aim_frame[][b]) && bt.beams[] == aims && bt.aim_local[] == loc
@@ -134,11 +134,11 @@ end
     set_aim_frame!(s, 7:8, :ball; keep = false)
     aims = copy(bt.beams[])
     @test set_part_role!(ts, part_index(ts, :ball), :capsule)
-    @test all(==(:capsule), bt.aim_frame[][7:8]) && all(==(:screen), bt.aim_frame[][a]) &&
+    @test all(==(:ball), bt.aim_frame[][7:8]) && all(==(:screen), bt.aim_frame[][a]) &&
           all(==(:plate), bt.aim_frame[][b]) && bt.beams[] == aims
-    @test set_part_role!(ts, part_index(ts, :capsule), :none)
+    @test set_part_role!(ts, part_index(ts, :ball), :none)
     plain = ts.parts[][end].name
-    @test plain === :sphere_2 && all(==(plain), bt.aim_frame[][7:8]) && bt.beams[] == aims
+    @test plain === :ball && all(==(plain), bt.aim_frame[][7:8]) && bt.beams[] == aims
     # and they still move with their parts
     @test nudge_part!(ts, part_index(ts, :plate), 0.5; frame = :tcc, axis = :x)
     @test all(i -> isapprox(bt.beams[][i].aim, aims[i].aim + V3(0.5, 0, 0); atol = 1e-12), b)
@@ -546,4 +546,93 @@ end
     ps = s5.target.parts[]
     @test [p.name for p in ps] == [:sphere_1, :plate, :backlighter] &&
           [part_role(p) for p in ps] == [:none, :none, :foil] && active_foil(s5.target) === :backlighter
+end
+
+@testset "observed and wall roles held by parts, not names (no GL)" begin
+    # a hohlraum without the template's capsule, and a sphere part named ball in its place
+    s = DesignSession(resolution = :coarse)
+    ts = s.target
+    @test edit_target!(ts, :capsule_radius, "0") && observed_name(ts) === nothing
+    @test wall_names(ts) == [:wall]
+    @test add_part!(ts, :sphere; name = :ball, r1 = 0.9, h = 0.16)
+    @test :ball in s.review.hardware[] && :ball in s.talis.hardware[]
+    # the role: the name stays, the target is not rebuilt, the checks follow
+    t = ts.target[]
+    record!(s)
+    @test set_part_role!(ts, part_index(ts, :ball), :capsule)
+    record!(s)
+    @test ts.target[] === t && observed_name(ts) === :ball && part_role(ts.parts[][end]) === :capsule
+    @test :ball in s.review.targets[] && !(:ball in s.talis.capture[]) && !(:ball in s.talis.hardware[])
+    @test Controllers._closed_enclosure(ts)
+    build_scenario!(s)
+    r1 = s.drive.result[]
+    @test r1 !== nothing && length(r1.modes) > 0 && isfinite(r1.mean_flux) &&
+          Controllers._observed_parts(s.drive.scenario[]) == (:ball,)
+
+    # the same design saved by version 6, the sphere named capsule (the name was the role):
+    # it loads with the role, and its drive is the ball's, bit for bit
+    old = session_state(s)
+    old["version"] = 6
+    for p in old["target"]["parts"]
+        p["name"] == "ball" && (p["name"] = "capsule")
+        delete!(p, "observed")
+        delete!(p, "wall")
+    end
+    old["review"]["targets"] = replace(old["review"]["targets"], "ball" => "capsule")
+    s6 = DesignSession(resolution = :coarse)
+    restore!(s6, old)
+    @test observed_name(s6.target) === :capsule && part_role(only(s6.target.parts[])) === :capsule
+    build_scenario!(s6)
+    r6 = s6.drive.result[]
+    @test r6.modes == r1.modes && r6.mean_flux == r1.mean_flux && r6.solution.H == r1.solution.H &&
+          [x.power for x in r6.power] == [x.power for x in r1.power]
+    use_pulse_shape!(s; step = 2.0)
+    use_pulse_shape!(s6; step = 2.0)
+    start_history!(s)
+    start_history!(s6)
+    @test s.time.history[].Tr == s6.time.history[].Tr && length(s.time.history[].Tr) > 1
+    # from version 7 the name carries no role
+    st7 = session_state(s6)
+    st7["target"]["parts"][1]["observed"] = false
+    restore!(s6, st7)
+    @test observed_name(s6.target) === nothing && only(s6.target.parts[]).name === :capsule &&
+          drive_stale(s6)
+
+    # role changes: the target stays, the drive goes stale (its scenario observes the old
+    # surface), undo and redo bring the role back and forth
+    @test set_part_role!(ts, part_index(ts, :ball), :none)
+    record!(s)
+    @test ts.target[] === t && observed_name(ts) === nothing && drive_stale(s) && s.drive.result[] === nothing
+    @test :ball in s.review.hardware[] && :ball in s.talis.hardware[] && !Controllers._closed_enclosure(ts)
+    @test undo!(s) && observed_name(ts) === :ball
+    @test redo!(s) && observed_name(ts) === nothing
+    # one observed surface at a time; a template capsule yields to a part
+    @test set_part_role!(ts, part_index(ts, :ball), :capsule)
+    @test add_part!(ts, :sphere; name = :bead, x = 2.0, r1 = 0.2)
+    @test set_part_role!(ts, part_index(ts, :bead), :capsule)
+    @test observed_name(ts) === :bead && part_role(ts.parts[][part_index(ts, :ball)]) === :none
+    @test edit_target!(ts, :capsule_radius, "0.5") && observed_name(ts) === :bead
+    @test remove_part!(ts, part_index(ts, :bead)) && observed_name(ts) === :capsule
+    # a rename keeps the role; a part renamed capsule does not take it
+    @test edit_target!(ts, :capsule_radius, "0")
+    @test set_part_role!(ts, part_index(ts, :ball), :capsule)
+    @test edit_part!(ts, part_index(ts, :ball), :name, "core") && observed_name(ts) === :core
+    @test add_part!(ts, :sphere; name = :other, x = -2.0, r1 = 0.2)
+    @test set_part_role!(ts, part_index(ts, :core), :none)
+    @test edit_part!(ts, part_index(ts, :other), :name, "capsule") && observed_name(ts) === nothing
+
+    # the wall role: a shield outside the hohlraum re-emits as a wall; the target stays,
+    # the checks land the beams on it, and the drive history (which reads the walls) is stale
+    @test add_part!(ts, :disk; name = :shield, x = 4.0, theta = 90, r1 = 0.5)
+    @test add_part!(ts, :disk; name = :hole, x = -4.0, theta = 90, r1 = 0.5, aperture = true)
+    t = ts.target[]
+    k = Controllers._history_key(s)
+    @test set_part_role!(ts, part_index(ts, :shield), :wall)
+    @test ts.target[] === t && wall_names(ts) == [:wall, :shield] && wall_components(ts) == [:wall, :shield]
+    @test :shield in s.review.targets[] && :shield in s.talis.capture[]
+    @test Controllers._history_key(s)[end] != k[end]
+    @test !set_part_role!(ts, part_index(ts, :hole), :wall) && occursin("aperture", ts.error[])
+    @test set_part_role!(ts, part_index(ts, :shield), :none) && wall_names(ts) == [:wall]
+    @test :shield in s.review.hardware[] && :shield in s.talis.hardware[]
+    @test session_state(s)["target"]["parts"][end-1]["wall"] == false
 end
