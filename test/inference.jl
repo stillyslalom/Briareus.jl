@@ -89,6 +89,11 @@ end
     xf0 = initial_parameters(pf)
     corona = CoronaOperator(CoronaProfile(; critical_radius = 0.9, scale_length = 0.2, absorption = 0.9),
                             quads; ncone = 1, lmax = 4, spacing = 0.2, panels = 20)
+    coronas = CoronaOperator(corona.profile, quads; ncone = 1, lmax = 4, spacing = 0.2, panels = 20,
+                             shells = [0.7, 0.9, 1.2, 3.7])
+    # the drive proxies of a deposition, made positive everywhere (types unchanged)
+    _inf_positive(d) = (; ylm = d.ylm .+ 10 .* (eachindex(d.ylm) .== 1),
+                        shell_ylm = d.shell_ylm .+ 10 .* (axes(d.shell_ylm, 1) .== 1))
 
     @testset "closures compile once" begin
         history(τ -> with_pulses(quads, pulse, τ), [0.5, 1.0]; record = sol -> sol)
@@ -136,6 +141,10 @@ end
             @test (@inferred deposit(s.deposition, beams)).element isa Vector{T}
             @test (@inferred deposit(s.deposition, beams; absorption = T(0.9))).element isa Vector{T}
             @test (@inferred deposit(corona, beams)).ylm isa Vector{T}
+            dc = _inf_positive(@inferred deposit(coronas, beams))
+            @test dc.shell_ylm isa Matrix{T}
+            @test (@inferred ablation_pressure_proxy(coronas, dc)) isa Vector{T}
+            @test (@inferred shell_displacement_proxy(dc.ylm, 4)) isa Vector{T}
             ev = evaluate(s, x)   # `Scenario.lpi` is dynamic by design: one dispatch per call
             @test (@inferred flux_moments(ev)) isa Vector{T}
             @test (@inferred mean_flux(ev)) isa T
@@ -185,11 +194,17 @@ end
                                          s.deposition, beams, eltype(x)(0.9))
                     @test _inf_jet_clean(JET.report_opt, Briareus._keepout_penalty, keepout, beams)
                     @test _inf_jet_clean(JET.report_opt, deposit, corona, beams)
+                    @test _inf_jet_clean(JET.report_opt, deposit, coronas, beams)
                 end
                 # no possible errors
                 @test _inf_jet_clean(JET.report_call, (o, b, η) -> deposit(o, b; absorption = η),
                                      s.deposition, beams, eltype(x)(0.9))
                 @test _inf_jet_clean(JET.report_call, deposit, corona, beams)
+                dc = _inf_positive(deposit(coronas, beams))
+                @test _inf_jet_clean(JET.report_opt, ablation_pressure_proxy, coronas, dc)
+                @test _inf_jet_clean(JET.report_opt, shell_displacement_proxy, dc.ylm, 4)
+                @test _inf_jet_clean(JET.report_call, ablation_pressure_proxy, coronas, dc)
+                @test _inf_jet_clean(JET.report_call, shell_displacement_proxy, dc.ylm, 4)
                 @test _inf_jet_clean(JET.report_call, evaluate, s, x)
                 @test _inf_jet_clean(JET.report_call, flux_moments, ev)
                 @test _inf_jet_clean(JET.report_call, objectives[1], ev)
