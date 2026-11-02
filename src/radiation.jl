@@ -965,3 +965,35 @@ function energy_balance(s::RadiationSolution; by::Symbol = :part)
     source = sum(ForwardDiff.value(s.source[e]) * t.elem_area[e] for e in 1:nelements(t))
     return (; source, absorbed, escaped, transmitted, lost)
 end
+
+"""
+    wall_temperature(sol::RadiationSolution, names...) -> Float64
+
+The radiation temperature (eV) of the area-weighted mean incident flux `ΣHᵢAᵢ / ΣAᵢ` on
+the elements of the components or parts `names`: a cavity's wall temperature when
+`names` are its wall and caps. With several cavities in one target (two halfraums
+across a package), each cavity's own wall pieces give its own temperature; a part name
+takes every component of the part, entrance holes included, so a hohlraum's wall is
+named piece by piece. `drive_history`'s `cavity_Tr` records it per step.
+"""
+wall_temperature(sol::RadiationSolution, names::Symbol...) =
+    _wall_temperature(sol, elements(sol.model.target, names...))
+
+function _wall_temperature(sol::RadiationSolution, es::AbstractVector{<:Integer})
+    isempty(es) && throw(ArgumentError("no wall elements"))
+    A = sol.model.target.elem_area[es]
+    return radiation_temperature(sum(ForwardDiff.value.(sol.H[es]) .* A) / sum(A))
+end
+
+# The wall elements of each cavity of `cavities` (pairs `name => wall names`, a name or a
+# collection of them), `name => elements`; cavity names unique.
+function _cavity_elements(t::Target, cavities)
+    out = Pair{Symbol,Vector{Int}}[]
+    for c in cavities
+        c isa Pair || throw(ArgumentError("a cavity is a pair name => wall names"))
+        ns = last(c) isa Symbol ? (last(c),) : Tuple(last(c))
+        push!(out, Symbol(first(c)) => elements(t, ns...))
+    end
+    allunique(first.(out)) || throw(ArgumentError("cavity names must be unique"))
+    return out
+end

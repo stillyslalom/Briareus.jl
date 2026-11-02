@@ -9656,6 +9656,27 @@ Checks (`test/spectral.jl`, "Dante field of view"):
   halves I to 1e-12 (the pixel grid and the polygon share the symmetry); Tr over the
   emitter's visible projected area is its own temperature to 1e-12, shielded or not.
 
+## Several cavities: wall temperatures and the whole-target Dante (2026-11-02) *derived*
+
+`wall_temperature(sol, names...)` and `drive_history(; cavities)` (`cavity_Tr`): each
+cavity's Tr from the area-weighted mean incident flux on its own wall components
+(assemblies design, decision 8). No value is fitted. The built-in `nif_dante1_field`
+takes the field of view of the 2004 design, ±30 mm at TCC (Dewald 2004; section 1 of
+"Dante-family hardware and geometry" above, **H** for the design; the fielded
+collimators are not public, and Girard 2009's "centimeter-wide" field is the one
+fielded hint), with Dante 1's channels and Tr over the lower entrance hole.
+
+Checks (`test/cavities.jl`; GUI `test_halfraum.jl`, "per-cavity wall temperature"):
+- Each cavity's Tr equals Σ H A / Σ A over its wall elements (selected by component name
+  in the test) to 1e-12, per step, for two hohlraums side by side driven unequally and
+  for the shock-tube starter with half its lower beams off; one cavity holding every wall
+  gives the history's `wall_Tr` exactly, and a history without `cavities` is unchanged.
+- An 8 mm field about one hohlraum receives exactly zero from a blackbody in the other;
+  it reads the view through its own hole to 1.2e-4 (400 pixels), a 60 mm field the sum of
+  both holes' views to 1.4e-4 (1200 pixels); on the shock tube the whole-target view
+  reads the view through the lower hole to 3.5e-4 (the package is black and the outsides
+  of one-sided surfaces dark, so only that hole shows radiance).
+
 ## Public diagnostic definitions and the time-dependent Tr area (2026-10-29) *derived*
 
 Built-in definitions in `data/diagnostics` (docs page "Diagnostic definitions"), each

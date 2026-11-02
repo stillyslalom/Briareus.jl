@@ -50,7 +50,7 @@ end
 
 """
     drive_history(model, op, beams_at, times; observe = :capsule, lmax = 6,
-                  wall = (:wall,), lpi = nothing, holes = nothing, ylm = false,
+                  wall = (:wall,), cavities = (), lpi = nothing, holes = nothing, ylm = false,
                   transition = nothing, flux_change = nothing, min_step = 1e-3,
                   tol = 1e-4, keep_albedo = false, record = nothing,
                   wall_history = true, wall_release = true, mband = MBandSplit(),
@@ -73,6 +73,12 @@ radiosity at that time (time- and temperature-dependent albedos included), and r
   work with `mode_amplitude`), otherwise `nothing`
 - `wall_Tr`, `wall_albedo` — area-weighted mean incident-flux temperature and albedo
   of the `wall` components
+- `cavity_Tr` — per cavity of `cavities` (pairs `name => wall names`, e.g.
+  `[:upper => (:upper_wall, :upper_cap_top), :lower => (:lower_wall, :lower_cap_bottom)]`
+  for two halfraums), the temperature of the area-weighted mean incident flux on that
+  cavity's own wall components ([`wall_temperature`](@ref) of each step's solution),
+  keyed by cavity name; empty without `cavities` (the default). A cavity's walls are
+  named one by one: grouping by part would take a hohlraum's entrance holes too.
 - `escaped` — power (TW) through each aperture, and `transmitted` through each
   thin-foil (`BurnthroughAlbedo`) and closing-gap (`GapClosure`) component, as in
   `energy_balance` (by default the fraction `s T` of the flux on each burned-through
@@ -249,7 +255,7 @@ Base.@nospecializeinfer function _drive_history(
                         t::Target, @nospecialize(model_at), @nospecialize(operator_at),
                         @nospecialize(beams_at), @nospecialize(times);
                         observe = :capsule, lmax::Integer = 6, wall = (:wall,),
-                        @nospecialize(lpi = nothing), holes = nothing, ylm::Bool = false,
+                        @nospecialize(cavities = ()), @nospecialize(lpi = nothing), holes = nothing, ylm::Bool = false,
                         transition = nothing, flux_change = nothing, min_step::Real = 1e-3,
                         tol = 1e-4, keep_albedo::Bool = false, @nospecialize(record = nothing),
                         wall_history::Bool = true, wall_release::Bool = true,
@@ -293,6 +299,8 @@ Base.@nospecializeinfer function _drive_history(
     issorted(times) || throw(ArgumentError("times must be sorted"))
     obs = elements(t, (observe isa Symbol ? (observe,) : observe)...)
     we = elements(t, wall...)
+    # each cavity's own wall elements (`cavities`: name => wall names)
+    cavity_elems = _cavity_elements(t, cavities)
     weights = _TargetCache(tg -> ylm_weights(tg, obs; lmax))
     N = nelements(t)
     # thin-foil components and the elements whose burnthrough is tracked
@@ -340,6 +348,7 @@ Base.@nospecializeinfer function _drive_history(
     time = Float64[]
     delivered, flux, Tr = Float64[], Float64[], Float64[]
     wall_Tr, wall_albedo = Float64[], Float64[]
+    cavity_Tr = Dict{Symbol,Vector{Float64}}(first(c) => Float64[] for c in cavity_elems)
     moments = Vector{Float64}[]
     clm = Vector{Float64}[]
     escaped = Dict(n => Float64[] for n in apertures)
@@ -546,6 +555,9 @@ Base.@nospecializeinfer function _drive_history(
             push!(Tr, radiation_temperature(a[1]))
             Hw = sum(sol.H[we] .* Aw) / sum(Aw)
             push!(wall_Tr, radiation_temperature(Hw))
+            for (name, es) in cavity_elems
+                push!(cavity_Tr[name], _wall_temperature(sol, es))
+            end
             # the emission a re-emitting wall adds to the solution's source (TW/mm²); the
             # wall albedo is the effective one, reflected over incident flux
             xe = wall_release && !isempty(lossy) ?
@@ -617,7 +629,7 @@ Base.@nospecializeinfer function _drive_history(
     end
     return (; time, delivered, flux, Tr, moments = _columns(moments, lmax + 1),
             ylm = ylm ? _columns(clm, (lmax + 1)^2) : nothing, wall_Tr,
-            wall_albedo, escaped, transmitted, window_loss, front, burnthrough,
+            wall_albedo, cavity_Tr, escaped, transmitted, window_loss, front, burnthrough,
             albedo = keep_albedo ? albedo_steps : nothing, setup, laser, source, absorbed, lost,
             released, lip_radius, record = record === nothing ? nothing : [r for r in recorded],
             mband_moments = emission === nothing ? nothing : _columns(mband_moments, lmax + 1),
