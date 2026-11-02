@@ -653,8 +653,10 @@ exactly); `intact`, the albedo each element would have intact (a thin-foil eleme
 flux each element transmits out of the enclosure (nonzero only on a burned-through
 `BurnthroughAlbedo` foil; see `energy_balance`); `time`; `converted`, the part of
 `source` converted from laser light (TW/mm²; every color's, without a re-emitting
-wall's emission). The constructor without `converted` takes it as the 3ω conversion of
-`laser`, `ηP/A`.
+wall's emission); `laser3`, the 3ω part of `laser` (TW per element; `laser` itself
+without `unconverted`), from which [`spectral_solve`](@ref) forms its default M-band. The
+constructor without `converted` takes it as the 3ω conversion of `laser`, `ηP/A`, and
+without `laser3` takes `laser` as all 3ω.
 """
 struct RadiationSolution{T}
     model::RadiationModel
@@ -667,10 +669,13 @@ struct RadiationSolution{T}
     transmission::Vector{Float64}
     time::Float64
     converted::Vector{T}
+    laser3::Vector{T}
 end
 RadiationSolution(m, laser, source, B, H, albedo, intact, transmission, time) =
     RadiationSolution(m, laser, source, B, H, albedo, intact, transmission, time,
                       convert(Vector{eltype(source)}, _xray_source(m.target, laser, time)))
+RadiationSolution(m, laser, source, B, H, albedo, intact, transmission, time, converted) =
+    RadiationSolution(m, laser, source, B, H, albedo, intact, transmission, time, converted, laser)
 
 """
     solve(model, dep::Deposition; time = 0.0, albedo = nothing, burnthrough = nothing,
@@ -742,6 +747,7 @@ function solve(m::RadiationModel, P::AbstractVector; time = 0.0, albedo = nothin
     t = m.target
     S = _xray_source(t, P, time)
     laser = collect(P)
+    laser3 = laser                          # the 3ω part (all of it without `unconverted`)
     if unconverted !== nothing
         Sc, Pc = _unconverted_source(t, unconverted, time)
         S = S .+ Sc
@@ -789,7 +795,8 @@ function solve(m::RadiationModel, P::AbstractVector; time = 0.0, albedo = nothin
         S = E === nothing ? S0 : S0 .+ E
         it == maxiter && @warn "albedo iteration did not converge" δ
     end
-    return RadiationSolution(m, laser, S, B, H, α, intact, tr, Float64(time), S0)
+    return RadiationSolution(m, laser, S, B, H, α, intact, tr, Float64(time), S0,
+                             laser3 === laser ? laser : convert(Vector{eltype(laser)}, laser3))
 end
 
 # The unconverted colors' x-ray source flux Σ_c r_c η(t, P_c/A) P_c/A and absorbed power

@@ -273,6 +273,22 @@ end
     s05 = solve(mh, P05; time = 1.0, unconverted = u05)
     @test u05.colors == m05 && sum(u05.omega1.element) > 1e-3 * sum(P05)
     @test isapprox(s05.source, S05; rtol = 1e-12)
+    # the M-band is the 3ω light's on both paths: a direct `spectral_solve` of a step's
+    # solution (with unconverted light) and the history's own, per component; the
+    # M-band of all the absorbed light differs
+    em = MBandEmission()
+    hm = drive_history(mh, oph, τ -> with_pulses(quads, pulse, τ), times[2:3]; record = sol -> sol,
+                       unconverted = (omega1 = 0.05, omega2 = 0.01), colors = m05, mband = MBandSplit(em))
+    mdev = map(enumerate(hm.time)) do (j, τ)
+        s = hm.record[j]
+        sm = spectral_solve(s; edges = [0.0, em.band[1], Inf], mband = em)
+        mc(x) = Dict(c.name => sum(x[e] * th.elem_area[e] for e in th.comp_elems[ci]; init = 0.0)
+                     for (ci, c) in enumerate(th.components))
+        d, w = mc(sm.mband), mc(min.(mband_power(em, th, s.laser) ./ th.elem_area, s.source))
+        (maximum(abs(d[n] - hm.mband[n][j]) for n in keys(d)) / hm.mband[:wall][j],
+         abs(w[:wall] - hm.mband[:wall][j]) / hm.mband[:wall][j])
+    end
+    @test maximum(first, mdev) < 1e-12 && minimum(last, mdev) > 1e-4
     pre1 = Dict(:outer44 => PulseShape([0.0, 4.0], [0.02, 0.01]), :outer50 => PulseShape([0.0, 4.0], [0.03, 0.0]),
                 :inner23 => τ -> 0.0, :inner30 => τ -> 0.0)
     pre2 = PulseShape([0.0, 4.0], [0.004, 0.004])

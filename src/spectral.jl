@@ -352,8 +352,9 @@ e.g. `spectral_edges()`).
   every color's with `solve`'s `unconverted`) plus, on a
   re-emitting wall of a `drive_history`, the emission of its stored energy. The
   laser-produced M-band (`mband`, an `MBandEmission`; its power per element
-  `mband_power`, TW, defaults to `mband_power(mband, target, sol.laser)`, and must be
-  given for a per-group model) is part of the converted x-rays and goes into its band.
+  `mband_power`, TW, defaults to `mband_power(mband, target, sol.laser3)`, from the 3ω
+  light alone as in [`drive_history`](@ref), and must be given for a per-group model) is
+  part of the converted x-rays and goes into its band.
   The rest is split by Planck fractions, by `spot`:
   - `:radiation` (default): the converted x-rays less the M-band at the element's
     radiation temperature `(H/σ)^¼` (its incident flux; the coronal emission of a laser
@@ -420,7 +421,7 @@ function spectral_solve(sol::RadiationSolution; edges = [0.0, Inf], albedo = not
     shares = zeros(G)
     if mband !== nothing
         shares = _band_shares(E, mband.band)
-        PM = mband_power === nothing ? Briareus.mband_power(mband, t, sol.laser) : mband_power
+        PM = mband_power === nothing ? Briareus.mband_power(mband, t, sol.laser3) : mband_power
         length(PM) == n || throw(ArgumentError("mband_power must have one entry per element"))
         SM .= min.(PM ./ t.elem_area, S)
     end
