@@ -79,8 +79,7 @@ see [`set_aim_frame!`](@ref)), `aim_local` (each aim's coordinates in that frame
 `frames` (the frames the local aims refer to: the design's, [`part_frames`](@ref), kept
 current by [`follow_frames!`](@ref)) and `unconverted` (per beam, whether its
 unconverted 1ω and 2ω light takes part in the calculations: design state, saved and
-undone, that no calculation reads yet, as Briareus has no unconverted-light deposition
-model; see [`set_participation!`](@ref)).
+undone, that the drive reads with its ratios; see [`set_participation!`](@ref)).
 
 Every beam keeps `aim ≈ to_chamber(frames[aim_frame], aim_local)` (to round-off; exactly
 after a frame moved, when [`follow_frames!`](@ref) sets the aims from the local
@@ -758,7 +757,8 @@ end
 
 Whether beam `i`'s light of `harmonic` takes part in the calculations: 3 (the 3ω
 drive) is its enabled flag; 1 and 2 (unconverted 1ω, 2ω light) are its `unconverted`
-flags, which no calculation reads yet.
+flags, which the drive, its histories and the retune read with the drive's ratios
+([`unconverted_ratios`](@ref)).
 """
 function participates(bt::BeamTable, i::Integer, h::Integer)
     h == 3 && return bt.enabled[][i]
@@ -772,8 +772,8 @@ end
 Put the light of `harmonic` (1, 2 or 3) of the beams `idx` in the calculations or take
 it out. For 3ω this is [`set_set_enabled!`](@ref) (the drive, clearance and
 optimization see only enabled beams); for 1ω and 2ω it records the choice in the
-design (saved, undone) for an unconverted-light deposition model that Briareus does
-not have yet: no calculation changes.
+design (saved, undone), and the drive, its histories and the retune deposit those
+beams' unconverted light at the drive's ratios ([`unconverted_ratios`](@ref)).
 """
 function set_participation!(bt::BeamTable, idx, h::Integer, on::Bool)
     h == 3 && return set_set_enabled!(bt, idx, on)

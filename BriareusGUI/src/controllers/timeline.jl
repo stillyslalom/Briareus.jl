@@ -64,15 +64,43 @@ end
 struct _HistoryCanceled <: Exception end
 
 # What a history is computed for: the scenario, the beams (pointing and table power),
-# which are on, and the pulses.
+# which are on, the pulses, the walls and the unconverted light.
 _history_key(sess::DesignSession) = (sess.drive.scenario[], sess.beams.beams[], sess.beams.enabled[],
-                                     sess.time.pulses[], wall_names(sess.target))
+                                     sess.time.pulses[], wall_names(sess.target), _history_unconverted(sess))
+
+# The unconverted light of a drive history of the table's beams `idx`, as
+# `drive_history`'s and `retune_drive`'s `unconverted`: per color, the drive's fraction
+# of the 3ω power (`unconverted_ratios`), `(; omega1, omega2)`; `nothing` when no
+# unconverted light of the beams `idx` takes part (the history is then the 3ω one, bit
+# for bit). A history takes one fraction per color for every beam it fires, so a color
+# that takes part on some of the beams `idx` only gives a `String` (why) instead.
+function _history_unconverted(sess::DesignSession, idx = findall(sess.beams.enabled[]))
+    u = unconverted_ratios(sess)
+    u === nothing && return nothing
+    f = Float64[]
+    for (name, o) in (("1ω", u.omega1), ("2ω", u.omega2))
+        v = unique(o[idx])
+        length(v) > 1 &&
+            return "the $name light takes part on some of the beams only: a drive history takes one " *
+                   "fraction per color for every beam it fires ($name on all of them, or on none)"
+        push!(f, isempty(v) ? 0.0 : v[1])
+    end
+    all(iszero, f) && return nothing
+    return (; omega1 = f[1], omega2 = f[2])
+end
+
+# `drive_history`'s and `retune_drive`'s keywords for the unconverted light `u` (from
+# `_history_unconverted`): none without it, so that the history is the 3ω one bit for bit.
+_unconverted_kw(::Nothing) = (;)
+_unconverted_kw(u::NamedTuple) = (; unconverted = u, colors = nif_unconverted())
 
 """
     history_stale(sess::DesignSession) -> Bool
 
 Whether the drive history was computed for another scenario, other beams or on/off
-states, other pulses or other walls ([`wall_names`](@ref)) (`false` without a history).
+states, other pulses, other walls ([`wall_names`](@ref)) or other unconverted light
+(the drive's ratios, [`set_unconverted_ratio!`](@ref), and the beams' 1ω and 2ω
+participation) (`false` without a history).
 """
 function history_stale(sess::DesignSession)
     h = sess.time.history[]
@@ -89,7 +117,10 @@ Compute the drive history of the table's beams on the pulses ([`load_pulses!`](@
 (`drive_history`, quasi-static: one radiosity solve per time of the pulses where they
 fire), recording each step's element fields for the time cursor, each ticked diagnostic
 ([`set_diagnostic!`](@ref); `dante` for the soft x-ray power kind), and the energy split
-(`energy_budget`). It runs on a worker when `spawn[]` is set, with progress per step and
+(`energy_budget`). The unconverted 1ω and 2ω light takes part as in the drive
+([`set_unconverted_ratio!`](@ref), `drive_history`'s `unconverted`), when each color is
+on every enabled beam or on none (one fraction per color; `status` says so otherwise).
+It runs on a worker when `spawn[]` is set, with progress per step and
 [`cancel_history!`](@ref). A drive that is missing or stale is computed first, as a
 coloring by a drive field computes it.
 """
@@ -114,6 +145,8 @@ function start_history!(sess::DesignSession)
     beams, enabled = sess.beams.beams[], sess.beams.enabled[]
     times = filter(τ -> sum(b -> b.power, _pulse_beams(src, beams, enabled, τ)) > 0, src.times)
     isempty(times) && (tm.status[] = "the pulses fire no enabled beam"; return sess)
+    unconverted = _history_unconverted(sess)
+    unconverted isa String && (tm.status[] = "no drive history: " * unconverted; return sess)
     key = _history_key(sess)
     g = (tm.generation[] += 1)
     tm.cancel[] = false
@@ -128,7 +161,7 @@ function start_history!(sess::DesignSession)
     cancel = tm.cancel
     runner = _runner(sess.spawn, sess.deliver)
     wall = Tuple(wall_names(sess.target))
-    runner(() -> _history_job(s, beams, enabled, src, times; diags, progress, cancel, key, wall),
+    runner(() -> _history_job(s, beams, enabled, src, times; diags, progress, cancel, key, wall, unconverted),
            function (out)
         g == tm.generation[] || return
         tm.running[] = false
@@ -157,10 +190,11 @@ cancel_history!(sess::DesignSession) = (sess.time.running[] && (sess.time.cancel
 
 # The drive history of `beams` on the pulses `src` at `times` on scenario `s` (worker).
 # `wall`: the wall-role holders (`wall_names`); those in the scenario's target give the
-# history's wall temperature, else the observed surface does.
+# history's wall temperature, else the observed surface does. `unconverted`: the
+# unconverted light (`_history_unconverted`; `nothing`: none).
 function _history_job(s::Scenario, beams, enabled, src, times; diags = NamedTuple[],
                         progress = k -> nothing, cancel = Threads.Atomic{Bool}(false), key = nothing,
-                        wall = ())
+                        wall = (), unconverted = nothing)
     t0 = time()
     t = s.target
     names = component_names(t)
@@ -183,7 +217,7 @@ function _history_job(s::Scenario, beams, enabled, src, times; diags = NamedTupl
                 escaped)
     end
     h = drive_history(s.model, s.deposition, τ -> _pulse_beams(src, beams, enabled, τ), times;
-                      observe, wall, lmax = 4, record)
+                      observe, wall, lmax = 4, record, _unconverted_kw(unconverted)...)
     fields = Dict{Symbol,Matrix{Float32}}(f => reduce(hcat, [r[f] for r in h.record]) for f in DRIVE_FIELDS)
     ranges = Dict{Symbol,Tuple{Float64,Float64}}()
     for (f, M) in fields
@@ -202,7 +236,7 @@ end
 # that time): the laser delivered, the heat left in the walls (every surface but the
 # capsule: unconverted laser and absorbed x-rays), in the capsule (the observed parts
 # `observed`), the x-rays out of the entrance holes, and out of windows (other apertures
-# and thin foils).
+# and thin foils), and the unconverted 1ω and 2ω light delivered (part of the laser's).
 function _energy_series(h, t::Target, observed)
     holes = Set(c.name for c in t.components if c.kind === :aperture && !(c.surface isa CylinderSurface))
     capsule = Set(c.part for c in t.components if c.name in observed || c.part in observed)
@@ -228,12 +262,16 @@ function _energy_series(h, t::Target, observed)
         (; name = :capsule, values = [sumof(e.heating, in(capsule)) for e in eb]),
         (; name = :holes, values = out(in(holes))),
         (; name = :windows, values = out(n -> !(n in holes)) .+ [sumof(e.transmitted, _ -> true) for e in eb])]
+    # the unconverted light delivered, per color (part of the laser's)
+    uc = h.unconverted
+    uc === nothing || append!(series, [(; name = c, values = upto(uc.delivered[c])) for c in (:omega1, :omega2)])
     # (a hohlraum without windows, or a target without a capsule, has no such series)
     return filter(s -> s.name === :laser || any(>(1e-9), s.values), series)
 end
 
 const ENERGY_LABELS = Dict(:laser => "Laser delivered", :wall => "Walls (heat)", :capsule => "Capsule (heat)",
-                           :holes => "Out of the entrance holes", :windows => "Out of windows")
+                           :holes => "Out of the entrance holes", :windows => "Out of windows",
+                           :omega1 => "1ω delivered", :omega2 => "2ω delivered")
 
 # ---------------------------------------------------------------- the time cursor
 
@@ -332,7 +370,8 @@ plot (then no series).
   a₄/a₀ (%).
 - `:diagnostics`: each recorded diagnostic's Tr (eV) and the intensity toward it
   (TW/sr, dashed).
-- `:energy`: the laser energy delivered by each time and where it went (kJ).
+- `:energy`: the laser energy delivered by each time and where it went (kJ), and the
+  unconverted 1ω and 2ω light's part of the delivered energy (dotted) when it takes part.
 - `:retune`: each group's power on the reference pulses (all beams, dashed) and on the
   retuned ones (enabled beams), and the capsule's mode 1 ε₁ before and after (%).
 """
@@ -390,9 +429,11 @@ function time_chart(sess::DesignSession, chart::Symbol = sess.time.chart[])
         ws = wall_names(sess.target)
         w, o = isempty(ws) ? nothing : ws[1], observed_name(sess.target)
         color = Dict(:laser => _INK, :wall => get(cc, w, palette_color(1)),
-                     :capsule => get(cc, o, palette_color(4)), :holes => _GRAY, :windows => "#D55E00")
+                     :capsule => get(cc, o, palette_color(4)), :holes => _GRAY, :windows => "#D55E00",
+                     :omega1 => "#CC79A7", :omega2 => "#E69F00")
         series = [_series(ENERGY_LABELS[s.name], h.time, s.values, color[s.name];
-                          style = s.name === :laser ? :dash : :solid) for s in h.energy]
+                          style = s.name === :laser ? :dash : s.name in (:omega1, :omega2) ? :dot : :solid)
+                  for s in h.energy]
         return (; chart, title = "Energy by each time" * stale, xlabel = "t (ns)",
                 left = (; label = "Energy (kJ)", series), right = nothing,
                 legend = [_key(s) for s in series], cursor, empty = "")

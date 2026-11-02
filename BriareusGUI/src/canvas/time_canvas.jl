@@ -46,7 +46,7 @@ function time_canvas(sess::DesignSession)
     tm = sess.time
     c = _chart_canvas(() -> time_chart(sess))
     onany((_...) -> _draw_time!(c, sess), tm.chart, tm.history, tm.pulses, tm.retune, sess.beams.beams,
-          sess.beams.enabled, sess.beams.cluster)
+          sess.beams.enabled, sess.beams.cluster, sess.beams.unconverted, sess.drive.unconverted_ratio)
     on(_ -> _draw_cursor!(c, sess), tm.cursor)
     # a click on the chart, or a drag along it, puts the cursor at that time
     _on_chart_click(x -> sess.time.history[] === nothing || set_time_cursor!(sess, x), c)

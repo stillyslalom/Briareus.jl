@@ -137,9 +137,14 @@ Items 7–12 follow the 2026-10-22 literature review against Kritcher et al. 202
     converted source to `spectral_solve`. `drive_history(...; prepulse, by)` adds a power
     per beam per color not proportional to the 3ω pulse (as `unconverted_history`'s);
     `retune_drive(...; unconverted, prepulse, colors, unconverted_kw)` retunes with the
-    history's per-color sources (the prepulse a fixed offset). *Remains:*
-    - the GUI: pass the ratio and prepulse to its drive histories and its retune
-      (`drive_history`'s and `retune_drive`'s `unconverted`, `prepulse`);
+    history's per-color sources (the prepulse a fixed offset). The GUI's drive histories
+    and retune take the Drive panel's 1ω and 2ω ratios as `unconverted` (NIF's colors)
+    when each color is on every beam the history fires or on none; the history goes
+    stale when the ratios or the participation change, and the energy chart shows each
+    color's delivered energy. *Remains:*
+    - the GUI: a prepulse input, and a color on some of the beams only (the core's
+      `unconverted` takes one fraction per color for every beam; the GUI refuses the
+      history or retune and says why);
     - in `drive_history`, pointing that changes in time; the M-band of unconverted light
       (the M-band stays the 3ω light's);
     - data on the conversion of overlapping colors (each color at its own flux is an

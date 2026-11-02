@@ -38,6 +38,7 @@ end
     include("test_hohlraum.jl")         # the hohlraum part, its pieces and frames, starters (no GL)
     include("test_display.jl")          # participation, visibility, cutaway (no GL)
     include("test_time.jl")             # pulses, drive histories, the time cursor (no GL)
+    include("test_time_unconverted.jl") # drive histories and retunes with 1ω, 2ω light (no GL)
     include("test_diagnostics.jl")      # diagnostic definitions: list, folders, sessions (no GL)
     include("test_app.jl")              # the `briareus` command: shortcuts, script, splash (no GL)
     include("test_canvas.jl")           # 3D and map canvases (offscreen GL)

@@ -915,7 +915,7 @@ end
 
 """
     retune_pulses(s::Scenario, beams, enabled, pulses; by = :quad, cap = 1.3, stay = 0.0,
-                  wall = ()) -> NamedTuple
+                  wall = (), unconverted = nothing) -> NamedTuple
 
 Retune the enabled beams' powers to the drive of a reference shot in which every beam of
 `beams` (the scenario's, in its order) fired `pulses` (power per beam against time, keyed
@@ -927,11 +927,15 @@ Disabled beams are the dropped ones. Returns the new `pulses` (by `by`, zero whe
 reference is), the `retune`, and drive histories of the `reference`, of the enabled
 beams on the reference pulses (`before`) and on the new ones (`after`); the histories'
 wall temperature is that of the names `wall` in the scenario's target (a session passes
-its [`wall_names`](@ref)), else the capsule's.
+its [`wall_names`](@ref)), else the capsule's. With `unconverted` (per color, the
+unconverted power as a fraction of each beam's 3ω power, `(; omega1, omega2)`), every
+history and the retune take the unconverted 1ω and 2ω light (`drive_history`'s and
+`retune_drive`'s `unconverted`, NIF's colors); without it they are the 3ω ones, bit for
+bit.
 """
 function retune_pulses(s::Scenario, beams::AbstractVector{<:Beam}, enabled::AbstractVector{Bool},
                        pulses::AbstractDict; by::Symbol = :quad, cap::Real = 1.3, stay::Real = 0.0,
-                       wall = ())
+                       wall = (), unconverted::Union{Nothing,NamedTuple} = nothing)
     observe = _observed_parts(s)
     # the histories' wall: the walls in the scenario's target (`wall_names`), else the capsule
     names = component_names(s.target)
@@ -948,8 +952,9 @@ function retune_pulses(s::Scenario, beams::AbstractVector{<:Beam}, enabled::Abst
     times = filter(τ -> sum(b -> pulses[refkey(b)](τ), beams) > 0, nodes)
     isempty(times) && throw(ArgumentError("the reference pulses have no power"))
     op = s.deposition
+    uc = _unconverted_kw(unconverted)
     ref = drive_history(s.model, op, τ -> with_pulses(beams, pulses, τ; by = ref_by), times;
-                        observe, wall, lmax = 4, ylm = true, keep_albedo = true)
+                        observe, wall, lmax = 4, ylm = true, keep_albedo = true, uc...)
     keep = findall(enabled)
     kept = beams[keep]
     opk = op[keep]
@@ -958,11 +963,11 @@ function retune_pulses(s::Scenario, beams::AbstractVector{<:Beam}, enabled::Abst
     nominal(k, τ) = sum(pulses[r](τ) for r in members[k]) / length(members[k])
     limits(k, τ) = (0.0, cap * nominal(k, τ))
     r = retune_drive(s.model, opk, kept, ref; by, limits, stay, observe,
-                     nominal = stay > 0 ? nominal : nothing)
+                     nominal = stay > 0 ? nominal : nothing, uc...)
     before = drive_history(s.model, opk, τ -> with_pulses(kept, pulses, τ; by = ref_by), times;
-                           observe, wall, lmax = 4, ylm = true)
+                           observe, wall, lmax = 4, ylm = true, uc...)
     after = drive_history(s.model, opk, τ -> with_pulses(kept, r.pulses, τ; by), times;
-                          observe, wall, lmax = 4, ylm = true)
+                          observe, wall, lmax = 4, ylm = true, uc...)
     # the new pulses on the table's times, off where the reference is
     at(g, τ) = (k = findfirst(==(τ), times); k === nothing ? 0.0 : r.power[g, k])
     out = Dict{Symbol,PulseShape}(Symbol(k) => PulseShape(nodes, [at(g, τ) for τ in nodes])
@@ -977,8 +982,11 @@ Retune the enabled beams to the reference shot whose pulses are the table `table
 (`read_pulse_table`: a `time_ns` column and one per group, quad or beam), as
 [`retune_pulses`](@ref) with the drive's scenario (which must be current), and write the
 new pulses to `out` (`write_pulse_table`), on a worker when `spawn[]` is set. The
-disabled beams are the ones the shot loses. Progress and the outcome (the capsule
-drive's worst-time mode 1 before and after) go to `drive.retune_running`/`retune_status`.
+disabled beams are the ones the shot loses. The unconverted 1ω and 2ω light takes part
+as in the drive ([`set_unconverted_ratio!`](@ref); `retune_pulses`'s `unconverted`), in
+the reference shot and in the retune, when each color is on every beam of the table or
+on none. Progress and the outcome (the capsule drive's worst-time mode 1 before and
+after) go to `drive.retune_running`/`retune_status`.
 """
 function retune_to_reference!(sess::DesignSession, table::AbstractString, out::AbstractString;
                               by::Symbol = :quad, cap::Real = 1.3, stay::Real = 0.0)
@@ -988,6 +996,9 @@ function retune_to_reference!(sess::DesignSession, table::AbstractString, out::A
         dr.retune_status[] = "compute the drive first: the retune reuses its operator and radiation model"
         return sess
     end
+    # the unconverted light, on every beam (the reference fires them all) or on none
+    unconverted = _history_unconverted(sess, eachindex(sess.beams.beams[]))
+    unconverted isa String && (dr.retune_status[] = "no retune: " * unconverted; return sess)
     pulses = read_pulse_table(table)
     s = dr.scenario[]
     beams = sess.beams.beams[]
@@ -997,7 +1008,7 @@ function retune_to_reference!(sess::DesignSession, table::AbstractString, out::A
     dr.retune_status[] = "retuning to $(basename(table))…"
     runner = _runner(sess.spawn, sess.deliver)
     wall = Tuple(wall_names(sess.target))
-    runner(() -> retune_pulses(s, beams, enabled, pulses; by, cap, stay, wall), function (res)
+    runner(() -> retune_pulses(s, beams, enabled, pulses; by, cap, stay, wall, unconverted), function (res)
         dr.retune_running[] = false
         if res.err !== nothing
             dr.retune_status[] = "retune failed: " * _errmsg(res.err)
