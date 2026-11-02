@@ -26,7 +26,8 @@ phase lands; the docstrings and research notes then hold what was built.
   wall, caps and capsule have none. This is the reported bug.
 - **Names carry meaning.** The GUI finds what to analyze by component name: `:capsule`
   (37 uses: modes, keep-out, Dante, TaLIS and clearance roles), `:wall` (9), the LEHs and
-  lips, `FOIL_NAME`. A part takes the capsule role by being renamed `:capsule`.
+  lips, `FOIL_NAME`. A part took the capsule role by being renamed `:capsule` (until
+  phase A: roles are now flags on parts).
 - **Core is already generic.** Core analyses take the names as keywords (`observe`,
   `wall`, `foil`, `object`, `targets`), and the VisRad import already builds a
   cylindrical hohlraum as one part with prefixed pieces (`<name>_wall`, …,
@@ -106,8 +107,7 @@ it.
 
 ## Phases
 
-A. **Roles in the GUI** (no visible change, bit for bit): `observed`, `wall`,
-   `lands_on` read from roles; the capsule role stops renaming; sessions version up.
+A. Landed (roles in the GUI, bit for bit; session version 7): commit 3a07a50.
 B. **Hohlraum part, piece aim points, starters:** the reported bug fixed; target kinds
    removed; sessions with a template convert to parts; starters inserted in a selected
    frame (decision 5).
@@ -124,18 +124,17 @@ C2. **Per-cavity drive and whole-assembly Dante** (decisions 8, 10, 11): Tr per 
 E. **Double backlighter with ARC:** the starter, ARC beams as a facility beam set (public
    description only; mock-up timing), per-foil results if one active foil is not enough.
 
-## Phase A starting point (2026-10-29)
+## Phase A as built (2026-11-01): what departs from the design
 
-The several-foils change (5bef323) is phase A's pattern for one role: a flag on
-`PartSpec` (`foil`), a session-level choice (`active_foil`), the analyses given the name
-(`flux_lookup(s; foil)`, the optimizer's and sweep's `foil`), every holder counted as a
-landing surface (`foil_components`), a session watcher for role changes that do not
-rebuild the target. `observed` (today `:capsule` by name) and `wall` follow it. Uses of
-the fixed names (`:capsule`, `:wall`, the LEHs, caps, lips, `FOIL_NAME`) in the GUI, by
-file: `target_setup.jl` 35 (mostly the template build, which phase B replaces),
-`view.jl` 9, `timeline.jl` 8, `session.jl` 6, `optimizer.jl` 5, `talis.jl` 4,
-`shell.jl` 4, `sweep.jl` 3, `review.jl` 3, `drive.jl` 3, `workspace.jl` 2. Core takes
-these as keywords already (`observe`, `wall`, `foil`, `object`, `targets`).
+- The role is the flag `PartSpec.observed`, but its key in `PART_ROLES` stays `:capsule`
+  (the existing API and tests use it; phase A's observed surface is a sphere). Rename it
+  `:observed` when flat observed faces arrive (phase C).
+- The template's wall role is its `:wall` component only, not the caps (today's drive
+  history and checks); the caps join with the hohlraum part (decision 7).
+- A part given the observed role now takes it from a template capsule (before, the name
+  clash refused it); a VisRad object named `capsule` imports with the role.
+- Template names left for phase B: the cutaway's default components, the LEHs, caps and
+  lips, `:main`, `FOIL_NAME`; the model tree marks no role yet (tree-wide roles come later).
 
 ## Decisions (user, 2026-10-29)
 
