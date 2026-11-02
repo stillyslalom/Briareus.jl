@@ -591,6 +591,7 @@ function _omega1_beamlets(b::Beam, offsets, table)
     end
     _is_nif(b) || return nothing
     pq = _nif_quad_port(b.quad)
+    pq === nothing && return nothing
     ports = acosd(clamp(dot(b.port, pq), -1.0, 1.0)) < 0.1 ?
             [port_vector(r.theta, r.phi) for r in table if "Q" * r.bundle * r.hemisphere == b.quad] :
             [b.port]

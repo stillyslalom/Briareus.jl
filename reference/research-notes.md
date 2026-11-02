@@ -387,6 +387,30 @@ evaluating a 1ω or 2ω conversion at (λ/0.351 µm)² times its flux. Briareus 
 that: below 10¹⁴ W/cm² the 3ω table (Dewald 2008) is held at its low-intensity end
 either way, and unconverted light lies below that.
 
+**In `drive_history` and the flux response (2026-11-02):** *engineering default*, **L**
+(the rule above, applied at each step). Each step's colors are deposited by
+`unconverted_deposition` from the beams' 3ω powers before the laser–plasma model
+(unconverted light is taken not to take part in 3ω CBET or backscatter), at that step's
+fractions. The M-band of 1ω and 2ω light is not modeled: the M-band conversions are 3ω
+data (Dewald 2020), and no 1ω or 2ω value was looked for.
+`flux_response`'s per-color response fixes each color's conversion at its own power (a
+secant per color), exact there and for conversions independent of intensity. On
+Dewald's table the secant's source exceeds the per-color one by 0.065 δ/η for a relative
+flux rise δ (0.15/ln 10 = 0.065, the table's slope), and the two agree where both
+fluxes lie below 10¹⁴ W/cm², as unconverted light does.
+Checks (`test/unconverted_source.jl`): a two-plate history solved by hand over two steps
+with a time-varying 1ω fraction (1e-12); NIF hohlraum histories against `solve` with
+`unconverted_deposition` at every step, for a constant fraction and for a falling 1ω
+fraction on per-cone pulses (1e-12); zero fractions give the 3ω history bit for bit;
+the secant's error on the two-plate system against the hand source change (1e-9).
+Cost and effect, measured on the 4116-element NIF hohlraum (`nif_gold`, 48 quads at
+8 TW on two per-cone pulses, 16 steps to 4 ns, 1ω fraction 0.08 falling to 0.02, 2ω
+0.01, 4 threads): 16.4 s without and 16.6 s with the unconverted light (one
+`unconverted_deposition` 0.68 s). Of the 23.2 kJ of 1ω and 2ω delivered, 0.03 kJ is
+absorbed: the squares, 2.9 mm or more off the 3ω axis, miss the 1.55 mm entrance holes
+and almost all of the case (the absorbed share includes the case's outside). The capsule's Tr and P2/P0 agree to the printed 1e-3 eV and
+1e-4.
+
 **Not found:**
 - Garban-Labaune et al., PRL 48, 1018 (1982): CH absorption at 1.06/0.53/0.26 µm down
   to 1e10 W/cm²; only the abstract was available.

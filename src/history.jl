@@ -54,7 +54,8 @@ end
                   transition = nothing, flux_change = nothing, min_step = 1e-3,
                   tol = 1e-4, keep_albedo = false, record = nothing,
                   wall_history = true, wall_release = true, mband = MBandSplit(),
-                  spectral = nothing) -> NamedTuple
+                  spectral = nothing, unconverted = nothing, colors = nif_unconverted(),
+                  unconverted_kw = (;)) -> NamedTuple
 
 Quasi-static drive history: at each time, deposit `beams_at(t)` with `op` (after the
 laser–plasma model `lpi`, evaluated at that time), solve the
@@ -108,6 +109,29 @@ radiosity at that time (time- and temperature-dependent albedos included), and r
   `laser`); `nothing` with `mband = nothing`, or when the target has no surface of the
   model's materials or (per-group model) no beam of `beams_at(times[1])` is in its
   groups.
+- `unconverted` — with `unconverted`, `(; delivered, skipped)`: per color, the
+  unconverted power delivered at each step (TW, before absorption), and the beams whose
+  unconverted light cannot be placed (see [`unconverted_deposition`](@ref)); otherwise
+  `nothing`.
+
+**Unconverted light.** `unconverted` gives, per color of `colors`
+([`UnconvertedColor`](@ref)s, NIF's 1ω and 2ω by default), the unconverted power as a
+fraction of each beam's 3ω power: a number or a function of time (ns), keyed by color
+name, e.g. `(omega1 = 0.05, omega2 = 0.01)` or `(omega1 = PulseShape(ts, fs), omega2 =
+0.0)`, as [`unconverted_history`](@ref)'s `ratio` (no default: the fraction is an
+input). At each step the colors' absorbed powers are those of
+[`unconverted_deposition`](@ref) for the beams of `beams_at(τ)` (their powers before
+`lpi`: unconverted light does not take part in the 3ω laser–plasma model) at that
+step's fractions, and the step is solved with them as `solve`'s `unconverted`, each
+color's conversion at its own absorbed flux. `unconverted_kw` passes
+`unconverted_deposition`'s `offsets`, `lens_distance`, `coarse` and `resolution`. The
+light is linear in each beam's power, so the history deposits it once per set of beams
+whose powers are equal at every step (for beams on shared pulses, once per pulse, as
+`unconverted_history` does) and scales those patterns by the powers in time; the
+pointing must not change in time. `laser` then includes each color's absorbed power,
+and `setup` and `delivered` its delivered power, so `energy_budget` balances; the
+M-band stays the 3ω light's. Without `unconverted` the history is the 3ω one, bit for
+bit.
 
 **M-band.** `mband` is an [`MBandSplit`](@ref): the M-band emission model and the
 spectral split it is solved with. By default (`MBandSplit()`: `nif_mband()`, Dewald
@@ -217,7 +241,13 @@ Base.@nospecializeinfer function _drive_history(
                         transition = nothing, flux_change = nothing, min_step::Real = 1e-3,
                         tol = 1e-4, keep_albedo::Bool = false, @nospecialize(record = nothing),
                         wall_history::Bool = true, wall_release::Bool = true,
-                        mband = MBandSplit(), @nospecialize(spectral = nothing))
+                        mband = MBandSplit(), @nospecialize(spectral = nothing),
+                        @nospecialize(unconverted = nothing), colors = nif_unconverted(),
+                        @nospecialize(unconverted_kw = (;)))
+    # the unconverted light's fractions and depositions (`nothing`: none)
+    ulight = unconverted === nothing ? nothing : _UnconvertedLight(unconverted, colors, unconverted_kw)
+    unconverted === nothing && !isempty(unconverted_kw) &&
+        throw(ArgumentError("unconverted_kw sets the unconverted light's deposition; without `unconverted` it has no effect"))
     # the M-band model of each step (`nothing`: off) and its `spectral_solve` keywords
     emission = nothing
     if mband === nothing
@@ -312,11 +342,13 @@ Base.@nospecializeinfer function _drive_history(
     lip_radius = Dict(L.name => Float64[] for L in lips)
     mband_moments = Vector{Float64}[]
     mband_laser = Dict(n => Float64[] for n in names)
+    uc_delivered = Dict(c.name => Float64[] for c in (ulight === nothing ? UnconvertedColor[] : ulight.colors))
 
     # The step from τ0 (`nothing` at the first time) to τ: its solution and the
     # thin-foil state at τ. The state at τ0 is left untouched, so a step can be retried.
-    # `Il`: the laser intensity through each computed lip's hole at τ.
-    function step(τ0, τ, dep, guess, Il)
+    # `Il`: the laser intensity through each computed lip's hole at τ; `b0`: the beams
+    # at τ before the laser–plasma model (the unconverted light's powers).
+    function step(τ0, τ, dep, guess, Il, b0)
         Δ = τ0 === nothing ? 0.0 : τ - τ0
         # predictor: each front advanced through the step at its last temperature
         pred = copy(tb)
@@ -325,6 +357,7 @@ Base.@nospecializeinfer function _drive_history(
                 (pred[e] = τ0 + (need[e] - I[e]) / rate[e])
         end
         mτ = model_at(τ)
+        uc = ulight === nothing ? nothing : _unconverted_at!(ulight, mτ.target, b0, τ)
         # the per-element state the albedos see: burnthrough times, and the wall-loss
         # history of the `lossy` elements (`_WallHistory`)
         hist = Dict(e => (τ0 === nothing ? _WallHistory(0.0, τ) :
@@ -350,26 +383,30 @@ Base.@nospecializeinfer function _drive_history(
             end
             return s
         end
-        sol = solve(mτ, dep; time = τ, burnthrough = state(pred), guess, tol)
+        sol = solve(mτ, dep; time = τ, burnthrough = state(pred), guess, tol, unconverted = uc, colors)
         # corrector: the lips' depths with this step's own lip temperatures
         for _ in 1:5
             (isempty(lips) || τ0 === nothing) && break
             dn = depths(_lip_temperatures(lips, sol))
             maximum(abs.(dn .- ds)) <= 1e-5 && break
             ds = dn
-            sol = solve(mτ, dep; time = τ, burnthrough = state(pred), guess = sol, tol)
+            sol = solve(mτ, dep; time = τ, burnthrough = state(pred), guess = sol, tol, unconverted = uc, colors)
         end
-        # corrector: the trapezoidal integral with this step's temperatures
+        # corrector: the trapezoidal integral with this step's temperatures (from the
+        # state at τ0, `I0, tb0, rate0`: the march's own `I, tb, rate` are reassigned
+        # after each step, so captured here they would be boxed, possibly undefined to
+        # JET's report_call)
+        I0, tb0, rate0 = I, tb, rate
         function advance(sol)
             # `local`: the step's own `Ik, tk, rk` below would otherwise be captured
             # (boxed, and possibly undefined here; JET's report_call)
-            local Ik, tk, rk = copy(I), copy(tb), copy(rate)
+            local Ik, tk, rk = copy(I0), copy(tb0), copy(rate0)
             for e in foil_elems
                 rk[e] = _front_rate(model(e).front, radiation_temperature(ForwardDiff.value(sol.H[e])))
                 τ0 === nothing && continue
-                dI = Δ * (rate[e] + rk[e]) / 2
+                dI = Δ * (rate0[e] + rk[e]) / 2
                 if isnan(tk[e]) && Ik[e] + dI >= need[e]   # (explicit times are never NaN)
-                    tk[e] = τ0 + _linear_crossing(rate[e], rk[e], Δ, need[e] - Ik[e])
+                    tk[e] = τ0 + _linear_crossing(rate0[e], rk[e], Δ, need[e] - Ik[e])
                 end
                 Ik[e] += dI
             end
@@ -384,7 +421,7 @@ Base.@nospecializeinfer function _drive_history(
                        !(abs(tk[e] - used[e]) <= 1e-12 * max(abs(τ), 1.0))
             any(moved, tracked) || break
             used = tk
-            sol = solve(mτ, dep; time = τ, burnthrough = state(used), guess = sol, tol)
+            sol = solve(mτ, dep; time = τ, burnthrough = state(used), guess = sol, tol, unconverted = uc, colors)
             Ik, tk, rk = advance(sol)
         end
         # the wall-energy integrals at τ, with this step's temperatures (the heating
@@ -396,7 +433,7 @@ Base.@nospecializeinfer function _drive_history(
             rwk[e] = _loss_rate(model(e), T)
             Iwk[e] = τ0 === nothing ? τ * rwk[e] : hist[e].A + Δ * rwk[e] / 2
         end
-        return sol, Ik, tk, rk, Iwk, rwk, hist, ds
+        return sol, Ik, tk, rk, Iwk, rwk, hist, ds, uc
     end
     # the largest advance of a smooth transition from τ0 to τ, given burnthrough times
     advance_of(τ0, τ, tbs) =
@@ -427,7 +464,7 @@ Base.@nospecializeinfer function _drive_history(
                     τ = min(lo, τgoal)
                 end
             end
-            local sol, Ik, tk, rk, Iwk, rwk, hist, ds, Il, a, dep, P0, bl, msplit
+            local sol, Ik, tk, rk, Iwk, rwk, hist, ds, Il, a, dep, P0, bl, msplit, uc
             while true
                 b0 = beams_at(τ)
                 P0 = sum(b -> ForwardDiff.value(b.power), b0; init = 0.0)
@@ -437,7 +474,7 @@ Base.@nospecializeinfer function _drive_history(
                          _mband_split(emission, t, bl)
                 dep = _lpi_deposit(lpi, operator_at(τ), bl, τ, msplit)
                 Il = _lip_intensities(lips, bl)
-                sol, Ik, tk, rk, Iwk, rwk, hist, ds = step(τ0, τ, dep, last, Il)
+                sol, Ik, tk, rk, Iwk, rwk, hist, ds, uc = step(τ0, τ, dep, last, Il, b0)
                 a = legendre_moments(sol.H, sol.model.target, obs; lmax)
                 τ0 === nothing && break
                 h = τ - τ0
@@ -476,7 +513,15 @@ Base.@nospecializeinfer function _drive_history(
             τ0, last = τ, sol
             shape0 = shape(sol, a[1])
             push!(time, τ)
-            push!(delivered, dep.delivered)
+            # the unconverted light delivered and absorbed, per color (TW)
+            udel = 0.0
+            if uc !== nothing
+                for c in ulight.colors
+                    push!(uc_delivered[c.name], uc[c.name].delivered)
+                    udel += uc[c.name].delivered
+                end
+            end
+            push!(delivered, uc === nothing ? dep.delivered : dep.delivered + udel)
             push!(moments, a)
             ylm && push!(clm, weights(sol.model.target) * sol.H[obs])
             Aw = sol.model.target.elem_area[we]
@@ -487,7 +532,7 @@ Base.@nospecializeinfer function _drive_history(
             # the emission a re-emitting wall adds to the solution's source (TW/mm²); the
             # wall albedo is the effective one, reflected over incident flux
             xe = wall_release && !isempty(lossy) ?
-                 ForwardDiff.value.(sol.source) .- _xray_source(sol.model.target, ForwardDiff.value.(sol.laser), τ) :
+                 ForwardDiff.value.(sol.source) .- ForwardDiff.value.(sol.converted) :
                  nothing
             αw = xe === nothing || all(iszero, xe) ? sol.albedo[we] :
                  sol.albedo[we] .+ xe[we] ./ ForwardDiff.value.(sol.H[we])
@@ -526,7 +571,7 @@ Base.@nospecializeinfer function _drive_history(
                                          for e in es) / sum(t.elem_area[es]))
             end
             push!(window_loss, loss)
-            push!(setup, P0)
+            push!(setup, uc === nothing ? P0 : P0 + udel)
             push!(lost, bal.lost)
             tg = sol.model.target
             v = ForwardDiff.value
@@ -536,7 +581,9 @@ Base.@nospecializeinfer function _drive_history(
             for (ci, c) in enumerate(tg.components)
                 es = tg.comp_elems[ci]
                 Ec = emitted === nothing ? 0.0 : sum(emitted[e] for e in es; init = 0.0)
-                push!(laser[c.name], sum(v(sol.laser[e]) for e in es; init = 0.0) + v(dep.backside[ci]))
+                Pl = sum(v(sol.laser[e]) for e in es; init = 0.0) + v(dep.backside[ci])
+                uc === nothing || (Pl += sum(uc[col.name].backside[ci] for col in ulight.colors; init = 0.0))
+                push!(laser[c.name], Pl)
                 push!(source[c.name], sum(v(sol.source[e]) * tg.elem_area[e] for e in es; init = 0.0) - Ec)
                 push!(released[c.name], sum(rel[e] for e in es; init = 0.0))
                 haskey(absorbed, c.name) && push!(absorbed[c.name], bal.absorbed[c.name] - Ec)
@@ -557,7 +604,9 @@ Base.@nospecializeinfer function _drive_history(
             albedo = keep_albedo ? albedo_steps : nothing, setup, laser, source, absorbed, lost,
             released, lip_radius, record = record === nothing ? nothing : [r for r in recorded],
             mband_moments = emission === nothing ? nothing : _columns(mband_moments, lmax + 1),
-            mband = emission === nothing ? nothing : mband_laser)
+            mband = emission === nothing ? nothing : mband_laser,
+            unconverted = ulight === nothing ? nothing :
+                          (; delivered = uc_delivered, skipped = copy(ulight.skipped)))
 end
 
 # The computed entrance-hole lips of a target (`LipClosure` apertures): per lip its name,

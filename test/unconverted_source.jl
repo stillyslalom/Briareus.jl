@@ -131,3 +131,104 @@ end
     @test isapprox(Hh(1.0), Hs(1.0); rtol = 1e-12) && isapprox(Hh(1.7), Hs(1.7); rtol = 1e-12)
     @test_throws ArgumentError flux_response(mh, obs; unconverted = (omega1 = uh.omega1,))
 end
+
+@testset "unconverted light in drive histories" begin
+    uc = nif_unconverted()
+    r1, r2 = uc[1].conversion, uc[2].conversion
+    a1, a2 = uc[1].absorption, uc[2].absorption
+    fx = _UC_FX
+
+    # Two one-element plates in one beamlet's 3ω focal plane, facing the lens, under its
+    # 1ω and 2ω squares (1ω: 4.8–26.8 mm along ô from the 3ω axis; 2ω: 2.9–14.9 mm):
+    # plate a at 10 mm in both, plate b at 20 mm in the 1ω square only. Inside a square
+    # a plate in the focal plane absorbs absorption × fraction × P × area / footprint².
+    # The view factors are given (the opposed-squares closed form), so the 2×2
+    # radiosity is solved by hand at each of two steps.
+    bl = first(nif_beams())
+    k = direction(bl)
+    ô = Briareus._own_side(bl.port, Briareus._nif_quad_port(bl.quad))
+    ŵ = cross(k, ô)
+    fb = Vec3(bl.aim...) - bl.defocus * bl.port
+    sq = rectangle_mesh(1.0, 1.0; nu = 1, nv = 1)
+    tab = Conversion(intensities = (1e9, 1e11), efficiencies = (0.9, 0.6))
+    ηa(I) = 0.9 - 0.15 * log10(clamp(I, 1e9, 1e11) / 1e9)
+    ηb(τ) = 0.5 * τ^0.2
+    αa, αb = 0.6, 0.3
+    Rot = hcat(ŵ, ô, -k)
+    tp = Target(Component(:a, transform(sq, Rot, fb + 10ô), Material(:Au; albedo = αa, conversion = tab)),
+                Component(:b, transform(sq, Rot, fb + 20ô),
+                          Material(:Au; albedo = αb, conversion = Conversion(efficiency = 0.5, time_exponent = 0.2))))
+    @test all(≈(1.0), tp.elem_area)
+    mp = RadiationModel(tp, [0.0 fx; fx 0.0])
+    op = DepositionOperator(tp, [bl])
+    pulse = PulseShape([0.0, 3.0], [1.0, 3.0])
+    f1 = PulseShape([0.0, 3.0], [0.06, 0.03])
+    beams_at(τ) = with_pulses([bl], pulse, τ)
+    hp = drive_history(mp, op, beams_at, [1.0, 2.0]; observe = :b, wall = (:a,), lmax = 0, mband = nothing,
+                       record = sol -> sol, unconverted = (omega1 = f1, omega2 = 0.01))
+    @test hp.time == [1.0, 2.0] && isempty(hp.unconverted.skipped)
+    dev = map(enumerate(hp.time)) do (j, τ)
+        P = pulse(τ)
+        P3 = deposit(op, beams_at(τ)).element
+        P1, P2 = a1 * f1(τ) * P / 22.0^2, a2 * 0.01 * P / 12.0^2
+        Sa = ηa(1e14 * P3[1]) * P3[1] + r1 * ηa(1e14 * P1) * P1 + r2 * ηa(1e14 * P2) * P2
+        Sb = ηb(τ) * (P3[2] + r1 * P1)
+        Ba = (Sa + αa * fx * Sb) / (1 - αa * αb * fx^2)
+        Bb = Sb + αb * fx * Ba
+        s = hp.record[j]
+        rel(x, y) = maximum(abs.(x .- y) ./ abs.(y))
+        # the hand values sit on the intensity table (1e9–1e11 W/cm²)
+        (1e9 < 1e14 * P1 < 1e11 && 1e9 < 1e14 * P2 < 1e11) || return Inf
+        max(rel(s.source, [Sa, Sb]), rel(s.B, [Ba, Bb]), rel(s.H, [fx * Bb, fx * Ba]), rel(hp.flux[j], fx * Ba),
+            rel(s.laser, P3 .+ [P1 + P2, P1]), rel(hp.laser[:a][j], P3[1] + P1 + P2),
+            rel(hp.unconverted.delivered[:omega1][j], f1(τ) * P), rel(hp.unconverted.delivered[:omega2][j], 0.01 * P))
+    end
+    @test maximum(dev) < 1e-12
+
+    # A hohlraum with an intensity-dependent conversion and constant albedos (each step a
+    # direct solve): the history against `solve` with `unconverted_deposition` of that
+    # step's beams, for a constant fraction and for a time-varying 1ω fraction on per-cone
+    # pulses (beams on two schedules)
+    tab2 = Conversion(intensities = (1e11, 1e15), efficiencies = (0.9, 0.5))
+    th = hohlraum(nz = 8, nphi = 12, capsule_ntheta = 6, capsule_nphi = 8,
+                  wall = Material(:Au; albedo = 0.8, conversion = tab2))
+    mh = RadiationModel(th)
+    quads = nif_quads(power = 8.0)
+    oph = DepositionOperator(th, quads)
+    late = PulseShape([0.0, 1.0, 2.0, 3.0], [0.0, 1.0, 4.0, 4.0])
+    pulses = Dict(:inner23 => pulse, :inner30 => pulse, :outer44 => late, :outer50 => late)
+    fω1 = PulseShape([0.0, 4.0], [0.08, 0.02])
+    times = [0.5, 1.0, 2.0, 3.0]
+    cases = ((τ -> with_pulses(quads, pulse, τ), (omega1 = 0.05, omega2 = 0.01), τ -> (omega1 = 0.05, omega2 = 0.01)),
+             (τ -> with_pulses(quads, pulses, τ), (omega1 = fω1, omega2 = 0.01), τ -> (omega1 = fω1(τ), omega2 = 0.01)))
+    for (bat, ratio, ratio_at) in cases
+        h = drive_history(mh, oph, bat, times; record = sol -> sol, unconverted = ratio)
+        dev = map(enumerate(times)) do (j, τ)
+            b = bat(τ)
+            d = deposit(oph, b)
+            u = unconverted_deposition(th, b; ratio = ratio_at(τ))
+            ref = solve(mh, d; time = τ, unconverted = u)
+            s = h.record[j]
+            lz = d.delivered + u.omega1.delivered + u.omega2.delivered
+            tot = sum(d.element) + sum(d.backside) + sum(u.omega1.element) + sum(u.omega1.backside) +
+                  sum(u.omega2.element) + sum(u.omega2.backside)
+            maximum(f -> maximum(abs.(getfield(s, f) .- getfield(ref, f))) / maximum(abs.(getfield(ref, f))),
+                    (:source, :B, :H, :laser, :converted)) +
+            abs(h.delivered[j] - lz) / lz + abs(sum(h.laser[n][j] for n in keys(h.laser)) - tot) / tot
+        end
+        @test maximum(dev) < 1e-12
+        @test h.unconverted.delivered[:omega1][end] > 0 && isempty(h.unconverted.skipped)
+    end
+
+    # zero fractions: the 3ω history, bit for bit
+    h0 = drive_history(mh, oph, τ -> with_pulses(quads, pulse, τ), times; record = sol -> sol.B)
+    hz = drive_history(mh, oph, τ -> with_pulses(quads, pulse, τ), times; record = sol -> sol.B,
+                       unconverted = (omega1 = 0.0, omega2 = 0.0))
+    @test h0.unconverted === nothing && all(isequal(h0[f], hz[f]) for f in keys(h0) if f !== :unconverted)
+    @test_throws ArgumentError drive_history(mh, oph, τ -> with_pulses(quads, pulse, τ), times;
+                                             unconverted = (omega1 = 0.05,))
+    @test_throws ArgumentError drive_history(mh, oph, τ -> with_pulses(quads, pulse, τ), times;
+                                             unconverted_kw = (; coarse = 0.2))
+    moved(τ) = [remake(b; power = pulse(τ), aim = b.aim + Vec3(0.0, 0.0, 0.1τ)) for b in quads]
+    @test_throws ArgumentError drive_history(mh, oph, moved, times; unconverted = (omega1 = 0.05, omega2 = 0.0))
+end

@@ -96,6 +96,13 @@ end
         # new `beams_at`, `record` and `times` types
         history(τ -> with_pulses(quads, pulse, 0.9τ), 0.5:0.5:1.0; record = sol -> sol.H[1])
         @test _inf_body_instances(Briareus._drive_history) == n
+        # unconverted light: new fraction functions reuse the body
+        uq(r) = history(τ -> with_pulses(quads, pulse, τ), [0.5, 1.0]; unconverted = (omega1 = r, omega2 = 0.0))
+        uq(τ -> 0.05)
+        n = _inf_body_instances(Briareus._drive_history)
+        uq(PulseShape([0.0, 1.0], [0.05, 0.02]))
+        uq(τ -> 0.04τ)
+        @test _inf_body_instances(Briareus._drive_history) == n
 
         optimize_pointing(s, objectives[1]; x0, iterations = 1, evaluations = 2)
         n = _inf_body_instances(optimize_pointing)

@@ -129,9 +129,17 @@ Items 7–12 follow the 2026-10-22 literature review against Kritcher et al. 202
     unconverted, colors)` sums each color's source at the material's conversion at that
     color's own absorbed flux, times the color's relative `conversion`; the GUI drive
     solves with it (its capsule flux, through the scenario's linear response, keeps the
-    equivalent 3ω power, exact for the conversions that response allows). *Remains:*
-    - the unconverted sources in `drive_history` and the flux response (a secant per
-      color), and the converted share per color in `spectral_solve`;
+    equivalent 3ω power, exact for the conversions that response allows).
+    `drive_history(...; unconverted)` takes each color's fraction of the 3ω power (a
+    number or a function of time), deposits once per set of beams on equal powers and
+    solves each step with the per-color sources; `flux_response(...; unconverted)` gives
+    a response per color (a secant per color); `sol.converted` carries every color's
+    converted source to `spectral_solve`. *Remains:*
+    - the GUI: pass the ratio to its drive histories (`drive_history`'s `unconverted`);
+    - in `drive_history`, a prepulse (light not proportional to the 3ω pulse, as
+      `unconverted_history`'s `prepulse`) and pointing that changes in time; the M-band
+      of unconverted light (the M-band stays the 3ω light's);
+    - `retune_drive` with unconverted light (its response is the 3ω one);
     - data on the conversion of overlapping colors (each color at its own flux is an
       engineering default) and on whether the 3ω intensity table applies to 1ω and 2ω
       (Mead's Iλ² scaling would shift it);

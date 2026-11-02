@@ -546,6 +546,97 @@ Base.@nospecializeinfer function unconverted_history(t::Target, beams::AbstractV
     return IrradianceHistory(t, ts, names, E, B, absorption, skipped)
 end
 
+# The unconverted light of a `drive_history` (its `unconverted`): per color, a fraction
+# `ratio` of each beam's 3ω power (a number or a function of time). The light is linear
+# in each beam's power, so beams whose powers have been equal at every step so far share
+# one `unconverted_deposition` at unit power (an atom of a partition of the beams, split
+# when their powers part); a color's absorbed power at a step is the sum over atoms of
+# that pattern times the atom's power and the color's fraction. For beams on shared
+# pulses the atoms are the pulse schedules, as in `unconverted_history`.
+mutable struct _UnconvertedLight
+    ratio::Any
+    colors::Vector{UnconvertedColor}
+    kw::NamedTuple
+    target::Union{Nothing,Target}
+    geometry::Vector{Tuple{String,Vec3,SVector{3,Float64},Float64,String}}
+    atoms::Vector{Vector{Int}}
+    patterns::Vector{Any}          # per atom, its unit-power deposition (`nothing`: not yet)
+    skipped::Vector{String}
+end
+
+function _UnconvertedLight(ratio, colors, kw)
+    cs = collect(UnconvertedColor, colors)
+    for c in cs
+        haskey(ratio, c.name) || throw(ArgumentError("unconverted has no fraction for $(c.name)"))
+    end
+    for n in keys(ratio)
+        any(c -> c.name === Symbol(n), cs) ||
+            throw(ArgumentError("unconverted fraction for $n, which is not one of the colors"))
+    end
+    bad = filter(k -> !(k in (:offsets, :lens_distance, :coarse, :resolution)), collect(keys(kw)))
+    isempty(bad) || throw(ArgumentError("unconverted_kw takes unconverted_deposition's offsets, " *
+                                        "lens_distance, coarse and resolution, not " * join(bad, ", ")))
+    return _UnconvertedLight(ratio, cs, NamedTuple(kw), nothing,
+                             Tuple{String,Vec3,SVector{3,Float64},Float64,String}[], Vector{Int}[], Any[],
+                             String[])
+end
+
+# Each color's absorbed unconverted light (a `Deposition`) on target `t` from `beams` (3ω
+# setup powers, before any laser–plasma model) at time τ.
+function _unconverted_at!(u::_UnconvertedLight, t::Target, beams, τ)
+    vb = Beam{Float64}[_value_beam(b) for b in beams]
+    geo = [(b.name, b.port, SVector{3,Float64}(b.aim), b.defocus, b.quad) for b in vb]
+    if isempty(u.atoms)
+        u.geometry, u.atoms, u.patterns = geo, [collect(eachindex(vb))], Any[nothing]
+    elseif !isequal(geo, u.geometry)
+        throw(ArgumentError("unconverted light in a drive history needs the beams' pointing fixed in " *
+                            "time (their names, ports, aims and defocus), which changed at $τ ns"))
+    end
+    t === u.target || (u.target = t; fill!(u.patterns, nothing))
+    p = Float64[b.power for b in vb]
+    atoms, patterns = Vector{Int}[], Any[]
+    for (a, d) in zip(u.atoms, u.patterns)
+        _, parts = _schedule_groups(a, i -> p[i])
+        if length(parts) == 1
+            push!(atoms, a)
+            push!(patterns, d)
+        else
+            append!(atoms, [a[g] for g in parts])
+            append!(patterns, fill(nothing, length(parts)))
+        end
+    end
+    u.atoms, u.patterns = atoms, patterns
+    r = Dict(c.name => _fraction_at(u.ratio[c.name], τ) for c in u.colors)
+    all(>=(0), values(r)) || throw(ArgumentError("the unconverted fractions must not be negative (at $τ ns)"))
+    n, nc = nelements(t), length(t.components)
+    E = Dict(c.name => zeros(n) for c in u.colors)
+    L = Dict(c.name => zeros(nc) for c in u.colors)
+    per_beam = Dict(c.name => zeros(length(vb)) for c in u.colors)
+    delivered = Dict(c.name => 0.0 for c in u.colors)
+    for (k, a) in enumerate(atoms)
+        s = p[a[1]]
+        (s > 0 && any(>(0), values(r))) || continue
+        if patterns[k] === nothing
+            d = unconverted_deposition(t, [remake(vb[i]; power = 1.0) for i in a];
+                                       ratio = Dict(c.name => 1.0 for c in u.colors), colors = u.colors, u.kw...)
+            union!(u.skipped, d.skipped)
+            patterns[k] = d
+        end
+        d = patterns[k]
+        for c in u.colors
+            f = r[c.name] * s
+            f == 0 && continue
+            dc = d[c.name]::Deposition{Float64}
+            E[c.name] .+= f .* dc.element
+            L[c.name] .+= f .* dc.backside
+            per_beam[c.name][a] .+= f .* dc.per_beam
+            delivered[c.name] += f * dc.delivered
+        end
+    end
+    return Dict{Symbol,Deposition{Float64}}(c.name => Deposition(E[c.name], L[c.name], per_beam[c.name],
+                                                                 delivered[c.name]) for c in u.colors)
+end
+
 """
     irradiance_history(op, beams, pulses, times; by = :group) -> IrradianceHistory
 
