@@ -41,7 +41,9 @@ conversion relative to 3ω), and `skipped`, the beams without a footprint; see
 [`set_unconverted_ratio!`](@ref)). With unconverted light, `evaluation`'s deposition is
 the absorbed power of the 3ω light plus the 1ω and 2ω `unconverted_deposition`, and the
 x-ray source (`solution`, the capsule flux) counts each unconverted color's power at the
-material's conversion times the color's `conversion` (`UnconvertedColor`).
+material's conversion, at that color's own absorbed flux, times the color's `conversion`
+(`UnconvertedColor`; `solve`'s `unconverted`), and `solution.laser` is the absorbed
+power of every color.
 """
 struct DriveResult
     evaluation::Evaluation
@@ -595,16 +597,17 @@ end
 # color (what the laser coloring, power accounting and back-side losses show:
 # `unconverted_deposition` has applied each color's `absorption`). The x-ray source is
 # kept per color: the 3ω power at the material's conversion, each unconverted color's at
-# the material's conversion times the color's `conversion`. The radiosity solve and the
-# capsule flux take their sum as an equivalent 3ω power, P₃ + Σ c P_c (exact for a
-# conversion independent of intensity; with an intensity-dependent conversion, it is
-# evaluated at that equivalent power's intensity).
+# the material's conversion (at the color's own absorbed flux) times the color's
+# `conversion`, as `solve`'s `unconverted` takes it. The capsule flux of the evaluation
+# goes through the scenario's linear response with the equivalent 3ω power P₃ + Σ c P_c,
+# which is exact there: that response holds only conversions independent of intensity.
 function _evaluate_drive(s::Scenario, beams, lookup, spot_radius::Real; ratio = nothing,
                          colors = nif_unconverted(), foil = _lookup_foil(lookup))
     t0 = time()
     ev = evaluate(s, beams)
     uc = nothing
-    source = ev.deposition.element                   # the x-ray source's equivalent 3ω power
+    P3 = ev.deposition.element                       # the 3ω absorbed power
+    sol_kw = (;)                                     # the solve's unconverted sources
     if ratio !== nothing
         u = unconverted_deposition(s.target, beams; ratio, colors)
         d = ev.deposition
@@ -618,8 +621,9 @@ function _evaluate_drive(s::Scenario, beams, lookup, spot_radius::Real; ratio = 
         ev = Evaluation(s, ev.beams, ev.effective, tot, Ref{Union{Nothing,Vector{Float64}}}(flux))
         share(x, h) = (; absorbed = sum(x.per_beam), delivered = x.delivered, conversion = conv[h])
         uc = (; omega1 = share(u.omega1, :omega1), omega2 = share(u.omega2, :omega2), u.skipped)
+        sol_kw = (; unconverted = u, colors)
     end
-    sol = s.model === nothing ? nothing : solve(s.model, source)
+    sol = s.model === nothing ? nothing : solve(s.model, P3; sol_kw...)
     modes = NamedTuple[]
     mean = NaN
     if _has_flux(ev)

@@ -125,11 +125,16 @@ Items 7–12 follow the 2026-10-22 literature review against Kritcher et al. 202
 
     *Data:* the unconverted fraction vs. pulse shape and the prepulse level; plasma,
     damage and specularity thresholds of Au, Al and Si at 1ω and 2ω.
-14. **Per-color x-ray sources and a materials library.** *State:* the GUI drive weights
-    each color's x-ray source as an equivalent 3ω power, exact only for a conversion
-    independent of intensity. *Remains:*
-    - a `solve` that takes each color's source with its own intensity-dependent
-      conversion;
+14. **Per-color x-ray sources and a materials library.** *State:* `solve(...;
+    unconverted, colors)` sums each color's source at the material's conversion at that
+    color's own absorbed flux, times the color's relative `conversion`; the GUI drive
+    solves with it (its capsule flux, through the scenario's linear response, keeps the
+    equivalent 3ω power, exact for the conversions that response allows). *Remains:*
+    - the unconverted sources in `drive_history` and the flux response (a secant per
+      color), and the converted share per color in `spectral_solve`;
+    - data on the conversion of overlapping colors (each color at its own flux is an
+      engineering default) and on whether the 3ω intensity table applies to 1ω and 2ω
+      (Mead's Iλ² scaling would shift it);
     - a library of material defaults (albedo, conversion vs. intensity and wavelength,
       absorption, cold reflectance), each with its data source and uncertainty, in
       place of the per-template constants.
