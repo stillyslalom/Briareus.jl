@@ -2645,6 +2645,11 @@ end
 
 # ---------------------------------------------------------------- the window
 
+# The session `briareus()` starts from when none is given (`preset = nothing`: the default).
+_launch_session(; starter, resolution, preset, beams) =
+    preset === nothing ? DesignSession(; starter, resolution, beams) :
+    DesignSession(; starter, resolution, preset, beams)
+
 """
     briareus(sess = DesignSession(); starter = :hohlraum, resolution = :standard,
              preset = nothing, beams = nothing, build = false, shown = nothing) -> DesignSession
@@ -2688,10 +2693,7 @@ window cannot share a process.
 function briareus(sess::Union{Nothing,DesignSession} = nothing; starter::Symbol = :hohlraum,
                   resolution::Symbol = :standard, preset = nothing, beams = nothing,
                   build::Bool = false, shown = nothing)
-    if sess === nothing
-        sess = preset === nothing ? DesignSession(; starter, resolution, beams) :
-               DesignSession(; starter, resolution, preset, beams)
-    end
+    sess === nothing && (sess = _launch_session(; starter, resolution, preset, beams))
     _SHELL[] === nothing || throw(ArgumentError("a BriareusGUI window is already open"))
     _check_no_glfw_screens()
     # From here on background work goes to the window's queue.

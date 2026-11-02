@@ -27,6 +27,15 @@ const A = BriareusGUI
         @test isfile(A.SPLASH_QML)
     end
 
+    @testset "the session briareus() starts without one" begin
+        # the keywords briareus() passes on construct a session (a renamed keyword once
+        # broke the launch with no session while every test built its own)
+        s = A._launch_session(; starter = :hohlraum, resolution = :coarse, preset = nothing, beams = nothing)
+        @test s isa DesignSession && :hohlraum in [p.name for p in s.target.parts[]]
+        s = A._launch_session(; starter = :none, resolution = :coarse, preset = :nif_quads, beams = nothing)
+        @test s isa DesignSession && !isempty(s.target.parts[])
+    end
+
     @testset "the app's entry point" begin
         @static if isdefined(Base, Symbol("@main"))
             @test isdefined(A, :main)
