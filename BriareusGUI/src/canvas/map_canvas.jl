@@ -78,7 +78,7 @@ function _draw_image!(c::MapCanvas, sess::DesignSession)
         ax.yreversed[] = false
         ax.aspect[] = DataAspect()
         ax.title[] = im.title
-        c.colorbar.label[] = "W/cm²/sr"
+        c.colorbar.label[] = get(im, :unit, "W/cm²/sr")
         reset_limits!(ax)
     end
     c.dirty[] = true

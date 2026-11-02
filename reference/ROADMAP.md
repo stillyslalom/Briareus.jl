@@ -6,10 +6,10 @@ the sections named here.
 
 ## Release
 
-1. **Registration.** Register Briareus in General, then BriareusGUI
-   (`subdir=BriareusGUI`; its `Project.toml` must carry no `[sources]`). Risk: AutoMerge's
-   load test on the GUI's precompile workload. Then `pkg> app add BriareusGUI` and
-   `briareus --shortcut`.
+1. **Registration.** Briareus is registered in General; BriareusGUI
+   (`subdir=BriareusGUI`, no `[sources]` in its `Project.toml`) is in flight. Risk:
+   AutoMerge's load test on the GUI's precompile workload. Then `pkg> app add BriareusGUI`
+   and `briareus --shortcut` from the registry.
 2. **Desktop launch.**
    - The macOS app bundle and splash are untested (the macOS `qml` tool needs each Qt
      framework folder on dyld's fallback path).
@@ -101,9 +101,9 @@ Items 7–12 follow the 2026-10-22 literature review against Kritcher et al. 202
    - The Zylstra pair's LEH difference is 2–4 eV too large (N191118's pointing and cone
      fraction are unpublished); the hot-spot velocity needs per-quad delivered powers.
 10. **Spectral radiosity.** Left: measured Ni XRD and thin-filter transmissions;
-    diagnostic definitions phases 2–5 (`reference/diagnostics-design.md`: the field of
-    view and Tr area, the public Dante 2, Sentinel and Omega definitions, the GUI, imagers,
-    radiography and streaked kinds); a measured soft spectrum of spots in a cavity; the
+    the rest of diagnostic definitions phase 5 (`reference/diagnostics-design.md`: the
+    imagers' SXI soft channel, gate times and near-pinhole perspective; backlit
+    radiography; streaked VISAR and SOP); a measured soft spectrum of spots in a cavity; the
     M-band's angle dependence (Dewald 2020) and its emission from the outer bubble; the
     closing LEH plasma's emission; a time-resolved M-band P2 against Dewald's Fig. 10; the
     M-band split in the `CapsuleDrive` handover.

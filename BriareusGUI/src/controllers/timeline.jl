@@ -184,9 +184,7 @@ function _history_job(s::Scenario, beams, enabled, src, times; diags = NamedTupl
         ranges[f] = (lo, hi > lo ? hi : lo + 1)
     end
     legendre = h.moments[2:5, :] ./ h.moments[1:1, :]
-    recorded = NamedTuple[(; v.id, v.name, Tr = [r.diag[j][1] for r in h.record],
-                           intensity = [r.diag[j][2] for r in h.record], note = v.note[])
-                          for (j, v) in enumerate(views)]
+    recorded = NamedTuple[_recorded(v, j, h, t) for (j, v) in enumerate(views)]
     return DriveHistory(h.time, h.Tr, legendre, recorded, _energy_series(h, t),
                         fields, ranges, h, key, time() - t0)
 end
@@ -351,7 +349,8 @@ function time_chart(sess::DesignSession, chart::Symbol = sess.time.chart[])
         isempty(h.diagnostics) && return none("Diagnostics", "No diagnostic was recorded: tick one, then Run the drive history")
         left = [_series(d.name * " Tr", h.time, d.Tr, _diagnostic_color(j))
                 for (j, d) in enumerate(h.diagnostics) if any(isfinite, d.Tr)]
-        right = [_series(d.name * " intensity", h.time, d.intensity, _diagnostic_color(j); style = :dash)
+        right = [_series(d.name * (d.kind === :xray_imager ? " detected" : " intensity"), h.time, d.intensity,
+                         _diagnostic_color(j); style = :dash)
                  for (j, d) in enumerate(h.diagnostics) if any(isfinite, d.intensity)]
         notes = [d.name * ": " * d.note for d in h.diagnostics if !isempty(d.note)]
         isempty(left) && isempty(right) &&
@@ -531,19 +530,24 @@ end
 
 # The instrument of each recorded definition on a target with components `names`
 # (worker): `(; id, name, view, note)`, `view` nothing (and `note` why) when it records
-# nothing in a history: a kind other than the soft x-ray power one, or a view through an
-# aperture the target lacks.
+# nothing in a history: a kind recorded neither as a power history nor as images, a
+# view through an aperture the target lacks, or a field centered on a part it lacks.
 function _diagnostic_views(diags, names)
     out = NamedTuple[]
     for d in diags
         view, note = nothing, d.note
         if d.def !== nothing
-            if d.def.kind !== :xray_power
+            if !(d.def.kind in (:xray_power, :xray_imager))
                 note = "a $(d.def.kind) diagnostic is not recorded in a drive history"
             else
                 v = diagnostic(d.def)
-                v.through === nothing || v.through in names ? (view = v) :
-                    (note = "the target has no $(v.through) to look through")
+                if v isa DanteView && !(v.through === nothing || v.through in names)
+                    note = "the target has no $(v.through) to look through"
+                elseif v.center isa Symbol && !(v.center in names)
+                    note = "the target has no $(v.center) to center the field on"
+                else
+                    view = v
+                end
             end
         end
         push!(out, (; d.id, d.name, view, note = Ref(note)))
@@ -551,18 +555,106 @@ function _diagnostic_views(diags, names)
     return out
 end
 
-# One step of a recorded diagnostic: (Tr in eV, intensity in TW/sr); NaN, with the
-# reason kept, where the view gives none.
+# One step of a recorded diagnostic: `(; Tr, intensity, L)`, the brightness temperature
+# (eV) and intensity (TW/sr) of a power diagnostic, or for an imager the detected
+# radiance per element (`detected_radiance`, Float32) and NaN; NaN, with the reason kept,
+# where the view gives none.
 function _record_diagnostic!(v, sol)
-    v.view === nothing && return (NaN, NaN)
+    v.view === nothing && return (; Tr = NaN, intensity = NaN, L = nothing)
+    v.view isa XrayImager &&
+        return (; Tr = NaN, intensity = NaN, L = Float32.(detected_radiance(v.view, sol)))
     try
         r = dante(v.view, sol)
-        return (Float64(r.Tr), Float64(r.intensity))
+        return (; Tr = Float64(r.Tr), intensity = Float64(r.intensity), L = nothing)
     catch err
         err isa ArgumentError || rethrow()
         isempty(v.note[]) && (v.note[] = sprint(showerror, err))
-        return (NaN, NaN)
+        return (; Tr = NaN, intensity = NaN, L = nothing)
     end
+end
+
+# What history `h` keeps of recorded diagnostic `j` (worker): `(; id, name, kind, Tr,
+# intensity, note, view, L, frames)`. For an imager, `L` the detected radiance per
+# element and step, `intensity` the detected intensity toward the pinhole (TW/sr: the
+# image's total over the object plane) and `frames` its recording
+# (`imager_record`: one integrated image, or a frame per gate).
+function _recorded(v, j, h, t::Target)
+    rows = [r.diag[j] for r in h.record]
+    if v.view isa XrayImager
+        L = reduce(hcat, [r.L for r in rows])
+        P = Briareus._imager_pixels(v.view, t)
+        a = (v.view.camera.width / v.view.camera.nx)^2
+        intensity = [a * sum((p > 0 ? Float64(L[p, k]) : 0.0 for p in P); init = 0.0) for k in axes(L, 2)]
+        frames = imager_record(v.view, t, h.time, Float64.(L))
+        return (; v.id, v.name, kind = :xray_imager, Tr = fill(NaN, length(rows)), intensity,
+                note = v.note[], v.view, L, frames)
+    end
+    return (; v.id, v.name, kind = :xray_power, Tr = [r.Tr for r in rows], intensity = [r.intensity for r in rows],
+            note = v.note[], v.view, L = nothing, frames = nothing)
+end
+
+"""
+    diagnostic_images(sess::DesignSession) -> Vector{NamedTuple}
+
+The images the latest drive history holds of its recorded imagers, one row `(; id,
+label, frame)` per image: `frame` 0 for the image at the time cursor, else the
+recording's frame (the integrated image, or each gate's). Empty without a history or
+an imager.
+"""
+function diagnostic_images(sess::DesignSession)
+    h = sess.time.history[]
+    h === nothing && return NamedTuple[]
+    out = NamedTuple[]
+    for d in h.diagnostics
+        d.frames === nothing && continue
+        push!(out, (; d.id, label = d.name * " at the cursor", frame = 0))
+        if isempty(d.frames.times)
+            push!(out, (; d.id, label = d.name * ", time-integrated", frame = 1))
+        else
+            for (k, τ) in enumerate(d.frames.times)
+                push!(out, (; d.id, label = @sprintf("%s, frame %d (%.2f ns)", d.name, k, τ), frame = k))
+            end
+        end
+    end
+    return out
+end
+
+"""
+    show_diagnostic_image!(sess::DesignSession, id, frame::Integer = 0) -> sess
+
+Show an image of recorded imager `id` of the latest drive history in the image view
+(as Compute ▸ X-ray image does, [`set_view!`](@ref) `:image`): `frame` 0 the image at
+the time cursor's step (detected radiance, W/cm²/sr; the last step without a cursor),
+else frame `frame` of its recording (detected fluence per steradian, J/cm²/sr: the
+integral over the shot or against a gate). The image stays until another is asked
+for: a drive edit does not replace it.
+"""
+function show_diagnostic_image!(sess::DesignSession, id::AbstractString, frame::Integer = 0)
+    h = sess.time.history[]
+    h === nothing && return sess
+    j = findfirst(d -> d.id == id && d.frames !== nothing, h.diagnostics)
+    j === nothing && return sess
+    d = h.diagnostics[j]
+    t = sess.drive.scenario[].target
+    if frame == 0
+        k = something(time_step(sess.time), length(h.time))
+        img = to_Wcm2.(imager_image(d.view, t, Float64.(view(d.L, :, k))))
+        title, unit = @sprintf("%s at %.2f ns", d.name, h.time[k]), "W/cm²/sr (detected)"
+    else
+        f = d.frames
+        1 <= frame <= length(f.images) || throw(ArgumentError("no frame $frame"))
+        img = 1e5 .* f.images[frame]                          # kJ/mm²/sr to J/cm²/sr
+        title = isempty(f.times) ? d.name * ", time-integrated" :
+                @sprintf("%s, frame %d (%.2f ns, gate %.2f ns)", d.name, frame, f.times[frame], d.view.gate)
+        unit = "J/cm²/sr (detected)"
+    end
+    cam = d.view.camera
+    w = cam.width / 2
+    x = range(-w, w; length = cam.nx)
+    sess.drive.image_request[] = nothing                     # not the drive's camera image
+    sess.drive.image[] = (; x, y = x, values = permutedims(img[end:-1:1, :]), title, unit)
+    set_view!(sess.drive, :image)
+    return sess
 end
 
 """

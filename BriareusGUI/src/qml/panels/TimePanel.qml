@@ -202,6 +202,28 @@ Item {
                 ToolTip.text: "Diagnostic definition folders, and the problems found in them"
             }
         }
+        // the images the history holds of its recorded imagers: each opens in the image view
+        Flow {
+            Layout.fillWidth: true
+            spacing: 2
+            visible: imageRepeater.count > 0
+            Label { text: "Images"; opacity: 0.75; height: 28; verticalAlignment: Text.AlignVCenter }
+            Repeater {
+                id: imageRepeater
+                model: diagImageModel
+                delegate: Button {
+                    required property string id
+                    required property string label
+                    required property int frame
+                    text: label
+                    flat: true
+                    onClicked: Julia.br_diag_image(id, frame)
+                    ToolTip.visible: hovered
+                    ToolTip.text: frame === 0 ? "The detected radiance at the time cursor's step (W/cm²/sr)"
+                                              : "The detected fluence per steradian of the recording (J/cm²/sr)"
+                }
+            }
+        }
         Note { text: app.timeStatus; Layout.fillWidth: true }
     }
 }

@@ -105,7 +105,8 @@ export TimeState, DriveHistory, TIME_CHARTS, TIME_CHART_LABELS, set_chart!, load
        use_pulse_shape!, start_history!, cancel_history!, history_stale, set_time_cursor!,
        set_time_step!, time_step, cursor_values, cursor_range, time_label, time_chart,
        DEFAULT_DIAGNOSTICS, refresh_diagnostics!, diagnostic_catalog, set_diagnostic!, use_path_diagnostic!,
-       diagnostic_folders, add_diagnostic_folder!, remove_diagnostic_folder!
+       diagnostic_folders, add_diagnostic_folder!, remove_diagnostic_folder!, diagnostic_images,
+       show_diagnostic_image!
 export OptimizeState, OptimizeResult, OBJECTIVES, OBJECTIVE_LABELS, OPTIMIZE_FIELDS, set_free!,
        edit_optimize!, set_objective!, start_optimize!, cancel_optimize!, clear_optimize!, optimize_progress,
        parameter_rows

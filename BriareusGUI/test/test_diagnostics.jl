@@ -51,12 +51,13 @@ end
         set_diagnostic!(sess, "group_blind")
         set_diagnostic!(sess, "nif_dante1", false)
         set_diagnostic!(sess, "nif_dante1")
-        @test tm.diagnostics[] == ["group_dante1_fov", "group_blind", "nif_dante1"]
+        set_diagnostic!(sess, "nif_sxi_lower")                     # an imager, time-integrated
+        @test tm.diagnostics[] == ["group_dante1_fov", "group_blind", "nif_dante1", "nif_sxi_lower"]
         use_pulse_shape!(sess; step = 2.0)
         start_history!(sess)
         h = tm.history[]
         @test [d.id for d in h.diagnostics] == tm.diagnostics[]
-        fov, blind, hole = h.diagnostics
+        fov, blind, hole, sxi = h.diagnostics
         @test all(isnan, blind.Tr) && blind.note == "the target has no no_such_hole to look through"
         @test isempty(fov.note) && isempty(hole.note) && all(isfinite, hole.Tr)
         # independent of the definition path: the 60 mm field over the whole target and
@@ -65,7 +66,23 @@ end
         @test fov.intensity[k] ≈ hole.intensity[k] rtol = 2e-2
         @test fov.Tr[k] ≈ hole.Tr[k] rtol = 1e-2
         ch = time_chart(sess, :diagnostics)
-        @test isempty(ch.empty) && length(ch.left.series) == 2 && length(ch.right.series) == 2
+        @test isempty(ch.empty) && length(ch.left.series) == 2 && length(ch.right.series) == 3
+        # the imager: its integrated image is the time integral of the detected intensity
+        # (the blur keeps the total of a target inside the field)
+        @test sxi.kind === :xray_imager && isempty(sxi.note) && all(isnan, sxi.Tr) && maximum(sxi.intensity) > 0
+        a = (sxi.view.camera.width / sxi.view.camera.nx)^2
+        @test sum(sxi.frames.images[1]) * a ≈
+              sum((h.time[k+1] - h.time[k]) * (sxi.intensity[k] + sxi.intensity[k+1]) / 2
+                  for k in 1:length(h.time)-1) rtol = 1e-6
+        @test [r.frame for r in diagnostic_images(sess)] == [0, 1]
+        show_diagnostic_image!(sess, "nif_sxi_lower", 1)
+        im1 = sess.drive.image[]
+        @test sess.drive.view[] === :image && im1.unit == "J/cm²/sr (detected)" && size(im1.values) == (1024, 1024)
+        @test sum(im1.values) ≈ 1e5 * sum(sxi.frames.images[1]) rtol = 1e-12
+        set_time_step!(sess, argmax(sxi.intensity))
+        show_diagnostic_image!(sess, "nif_sxi_lower")
+        @test sess.drive.image[].unit == "W/cm²/sr (detected)"
+        @test sum(sess.drive.image[].values) * a ≈ to_Wcm2(maximum(sxi.intensity)) rtol = 1e-5
         @test [s.label for s in time_chart(sess, :drive).left.series] ==
               ["Capsule Tr", "Dante 1, 60 mm field", "NIF Dante 1"]
 

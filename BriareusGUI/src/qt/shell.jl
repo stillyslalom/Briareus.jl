@@ -362,6 +362,13 @@ mutable struct FolderRow
     saved::Bool
 end
 
+# One image a drive history holds of a recorded imager.
+mutable struct ImageRow
+    id::String
+    label::String
+    frame::Int
+end
+
 mutable struct IssueRow
     level::String
     where_::String                                 # file name [key]
@@ -433,7 +440,7 @@ const _MODEL_ROWS = (treeModel = TreeItem, targetFieldModel = FieldRow, partFiel
                      talisCompModel = CompRow, ruleModel = RuleRow, talisModel = TalisRow,
                      noteModel = NoteRow, timeLegendModel = LegendRow, sweepModel = SweepRowItem,
                      sweepLegendModel = LegendRow, diagModel = DiagRow, folderModel = FolderRow,
-                     issueModel = IssueRow)
+                     issueModel = IssueRow, diagImageModel = ImageRow)
 
 """
 State shared between a `DesignSession` and its QML window: the property map `app`,
@@ -953,6 +960,8 @@ function _refresh_time!(sh::BriareusShell)
     step = time_step(tm)
     _set!(sh, "timeStep", step === nothing ? 0 : step)
     _set!(sh, "timeLabel", time_label(sess))
+    _sync_rows!(sh.rows[:diagImageModel], sh.models[:diagImageModel],
+                ImageRow[ImageRow(r.id, r.label, r.frame) for r in diagnostic_images(sess)])
     rows = diagnostic_catalog(sess)
     _sync_rows!(sh.rows[:diagModel], sh.models[:diagModel],
                 DiagRow[DiagRow(r.id, r.name, r.id in tm.diagnostics[], r.usable, !isempty(r.changed), _diag_tip(r))
@@ -2103,6 +2112,13 @@ br_time_step(k) = _with_shell(sh -> set_time_step!(sh.sess, round(Int, k)))
 br_time_now() = _with_shell(sh -> set_time_cursor!(sh.sess, NaN))
 br_time_diagnostic(id, on) = _with_shell(sh -> set_diagnostic!(sh.sess, String(id), Bool(on)))
 br_diag_use_path(id) = _with_shell(sh -> use_path_diagnostic!(sh.sess, String(id)))
+function br_diag_image(id, frame)
+    _with_shell() do sh
+        v = sh.sess.drive.view[]
+        v === :image || (sh.shown["_viewBeforeImage"] = v)
+        show_diagnostic_image!(sh.sess, String(id), round(Int, frame))
+    end
+end
 br_diag_reload() = _with_shell(sh -> refresh_diagnostics!(sh.sess))
 br_diag_add_folder(url) = _with_shell(sh -> add_diagnostic_folder!(sh.sess, _url_to_path(String(url))))
 br_diag_remove_folder(path) = _with_shell(sh -> remove_diagnostic_folder!(sh.sess, String(path)))
@@ -2350,7 +2366,7 @@ function _register_qml_functions()
     @qmlfunction br_import_visrad_workspace br_export_visrad_workspace br_retune
     @qmlfunction br_time_chart br_time_pulses br_time_shape br_time_run br_time_cancel br_time_step
     @qmlfunction br_time_now br_time_diagnostic br_diag_use_path br_diag_reload br_diag_add_folder
-    @qmlfunction br_diag_remove_folder
+    @qmlfunction br_diag_remove_folder br_diag_image
     @qmlfunction br_opt_set_by br_opt_free br_opt_edit br_opt_objective br_opt_hold
     @qmlfunction br_opt_keepout br_opt_capsule br_opt_start br_opt_cancel br_opt_accept
     @qmlfunction br_rv_role br_rv_edit br_rv_wings br_rv_quality br_rv_start br_rv_cancel
