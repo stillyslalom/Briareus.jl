@@ -80,8 +80,11 @@ using BriareusGUI.Briareus
                       axis = isapprox(F.R[:, 3], Briareus.Vec3(0, 0, 1); atol = 1e-12),
                       rows = count(r -> r.kind == "head", sh.rows[:stepModel]) == 3)
             all(checks) ? push!(seen, :steps) : @info "placement steps in the window" checks
+            n_parts = length(s.target.parts[])
             B.br_remove_selected()
-            isempty(s.target.parts[]) && s.view.selection[] == "target" && push!(seen, :remove)
+            # the starter's parts remain; the added part is gone
+            length(s.target.parts[]) == n_parts - 1 && !any(p -> p.name === ps.name, s.target.parts[]) &&
+                s.view.selection[] == "target" && push!(seen, :remove)
             # beams: a quad from the tree, the table per quad, VisRad round trip
             B.br_toggle_expand("group:inner23")
             B.br_select("group:inner23")
@@ -118,7 +121,8 @@ using BriareusGUI.Briareus
             τ, tri = B._pick_surface(sh.scene, s, o, dvec)
             B.camera_press!(c, mid, :left)
             B.camera_release!(c, mid)
-            tri != 0 && startswith(s.view.selection[], "comp:") && push!(seen, :pick)
+            tri != 0 && (startswith(s.view.selection[], "comp:") || startswith(s.view.selection[], "part:")) &&
+                push!(seen, :pick)                          # the capsule is a part
             B.camera_press!(c, mid, :left)
             B.camera_move!(c, (mid[1] + 80, mid[2] + 30))
             B.camera_release!(c, (mid[1] + 80, mid[2] + 30))
