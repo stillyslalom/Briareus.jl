@@ -295,9 +295,22 @@ collects every explanation by page. Help ▸ Documentation opens this page.
   optimization take and whose line of sight and captured power the sweep checks, while
   the clearance and TaLIS checks take every foil as a surface the beams land on. The model
   tree marks the foils, and the active one among several.
+- **Frames:** the model tree's Frames folder holds user frames, named frames with no
+  geometry placed like parts (origin, axis angles, rotation and placement steps, in any
+  frame): Tools ▸ *Add frame* or the folder's *Add frame* places one in the selected
+  frame. Parts are placed in a user frame, beams aim in it and a sweep steps it, as for
+  a part's frame; a frame that parts or other frames are placed in, or that their steps
+  refer to, is not removed. A *port frame* (the folder's page: a port of the beam table,
+  a NIF quad at the angles of [`port_angles`](@ref)`(:nif, quad)`) has its origin at TCC
+  and z toward the port ([`port_frame`](@ref), VisRad's diagnostic-port axis), and only
+  its roll is edited. Tools ▸ *Coordinate transform* gives the coordinates of a point or
+  direction in any frame from those in another ([`transform_point`](@ref)), Cartesian,
+  cylindrical or spherical, and *Create frame* makes a user frame there. The 3D view
+  draws the selected frame's axes (x red, y green, z blue, with its name) and those of
+  the frames switched on in their page or menu.
 - **Beams** (a group, quad, beam, or any Ctrl-selected set): the aim relative to the
   ports (z, r and a tangential offset), or a common aim point (x, y, z, as VisRad points
-  a cluster at a reference point) in the beams' *Aim frame*: the chamber, a part, or a
+  a cluster at a reference point) in the beams' *Aim frame*: the chamber, a user frame, a part, or a
   hohlraum part's end (its entrance hole and cap) or window, listed after their part. The beams keep their coordinates in that frame
   when it moves or turns (an aim 0.3 mm off a foil's center stays 0.3 mm off it) and when
   the part is renamed or given a role, and

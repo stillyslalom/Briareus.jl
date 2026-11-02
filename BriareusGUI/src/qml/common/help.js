@@ -32,6 +32,35 @@ var pages = [
           text: "A hohlraum part's pieces are sized from the part: select the part to edit them. " +
                 "However a piece is drawn (invisible included), it takes part in every calculation." }
     ] },
+    { key: "frames", title: "Frames", items: [
+        { key: "frames.intro", title: "User frames",
+          text: "A user frame is a named frame with no geometry, placed like a part: an origin " +
+                "at (x, y, z) in the frame it is placed in, its z axis tilted to polar angle θ and " +
+                "azimuth φ, turned by the rotation about z, then moved by its placement steps. " +
+                "Parts can be placed in it and beams aimed in it, and they follow it; a sweep can " +
+                "step it along an axis. A frame in use (parts or frames placed in it, or steps " +
+                "that refer to it) cannot be removed; beams aimed in a removed frame keep their " +
+                "aims in the chamber frame. Add frame places the new frame in the selected " +
+                "frame, TCC with none selected." },
+        { key: "frames.port", title: "Port frames",
+          text: "A port frame has its origin at TCC and z toward the port (VisRad's diagnostic " +
+                "port axis), so the port's beams travel along −z; x is the port's polar " +
+                "direction θ̂ turned by the roll toward φ̂ (an assumption: VisRad's x for port " +
+                "frames is not documented). The ports are those of the beam table, NIF quads at " +
+                "the angles of the NIF port table. Only the roll can be edited; a frame placed in " +
+                "a port frame carries offsets along the port axis." },
+        { key: "frames.transform", title: "Coordinate transform",
+          text: "Tools ▸ Coordinate transform gives the coordinates in one frame of a point or " +
+                "a direction given in another, each in Cartesian, cylindrical (r, φ, z about the " +
+                "frame's z) or spherical (r, θ, φ) coordinates, mm and degrees. A direction turns " +
+                "with the frames and does not move with their origins. Create frame adds a user " +
+                "frame placed in the To frame: at the point with the From frame's axes, or, for a " +
+                "direction, at the To frame's origin with z along it." },
+        { key: "frames.axes", title: "Frame axes in the view",
+          text: "The 3D view draws the selected frame's axes, and those of the frames whose " +
+                "axes are switched on (the frame's page, or its menu in the model tree): x red, y " +
+                "green, z blue, with the frame's name at the origin. Drawing only." }
+    ] },
     { key: "part", title: "Parts", items: [
         { key: "part.placement", title: "Placement and frames",
           text: "The axis of a part is its local z: the part is turned by the rotation about " +

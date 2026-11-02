@@ -74,6 +74,8 @@ struct SceneCanvas
     uc_lines::Any
     cut::Base.RefValue{CutRegion}
     sweep_ghost::Any                             # the moved parts at the selected sweep step
+    frame_axes::Any                              # the drawn frames' triads (`drawn_triads`)
+    frame_names::Any                             # and their names
 end
 
 """
@@ -108,6 +110,11 @@ function scene_canvas(sess::DesignSession)
                     strokecolor = :white)
     hits = scatter!(sc, _NOPOINT3; color = [NAN_COLOR], markersize = 8, marker = :diamond)
     outlines = linesegments!(sc, _NOSEG3; color = [NAN_COLOR, NAN_COLOR], linewidth = 2.5)
+    # (drawn over the geometry: a frame inside a hohlraum stays visible)
+    frame_axes = linesegments!(sc, _NOSEG3; color = [NAN_COLOR, NAN_COLOR], linewidth = 1.5, visible = false,
+                               overdraw = true)
+    frame_names = text!(sc, _NOPOINT3; text = [""], fontsize = 12, markerspace = :pixel,
+                        align = (:left, :bottom), offset = (4, 2), visible = false, overdraw = true)
     cb = Colorbar(fig[1, 2]; colormap = [NAN_COLOR, NAN_COLOR], limits = (0.0, 1.0), label = " ",
                   height = Relative(0.6), tellheight = false)
     triad = _triad_scene(sc)
@@ -115,7 +122,7 @@ function scene_canvas(sess::DesignSession)
     c = SceneCanvas(fig, ls, cam, body, highlight, rays, selected_rays, aims, hits, volumes,
                     outlines, cb, triad, Ref(BeamPath[]), Ref(UInt8[]), Ref{Any}(nothing),
                     Ref(true), Ref(0), ghost, translucent, wire, sections, uc_volumes, uc_lines,
-                    Ref(cut_region(sess.view)), sweep_ghost)
+                    Ref(cut_region(sess.view)), sweep_ghost, frame_axes, frame_names)
     cam.pick = (o, d) -> min(_pick_surface(c, sess, o, d)[1], _pick_ghost(sess, o, d)[1])
     cam.pivot = () -> selection_center(sess)
     cam.on_click = (o, d, px) -> _click!(c, sess, o, d, px)
@@ -137,6 +144,9 @@ function scene_canvas(sess::DesignSession)
     onany((_...) -> _draw_ghost!(c, sess), sess.target.ghost, v.display)
     onany((_...) -> _draw_sweep_ghost!(c, sess), sess.sweep.selected, sess.sweep.result,
           sess.target.target, sess.beams.beams)
+    onany((_...) -> _draw_frame_triads!(c, sess), sess.target.frames, sess.target.target, v.triads,
+          v.selection, v.extra)
+    _draw_frame_triads!(c, sess)
     _draw_ghost!(c, sess)
     _draw_body!(c, sess)
     _draw_beams!(c, sess)
@@ -771,6 +781,35 @@ function _draw_windows!(c::SceneCanvas, sess::DesignSession)
         end
     end
     _update!(c.outlines, segs; color = cols)
+    c.dirty[] = true
+    return c
+end
+
+# ---------------------------------------------------------------- frame triads
+
+const TRIAD_COLORS = (RGBAf(0.85, 0.2, 0.2, 1), RGBAf(0.2, 0.65, 0.25, 1), RGBAf(0.2, 0.4, 0.9, 1))
+
+# The axes of the frames `drawn_triads` names: thin lines from each origin along x, y, z
+# (red, green, blue), a fifth of the target's bounding radius long (0.2 mm at least),
+# and the frame's name at its origin.
+function _draw_frame_triads!(c::SceneCanvas, sess::DesignSession)
+    names = drawn_triads(sess)
+    if isempty(names)
+        _update!(c.frame_axes, _NOSEG3; color = [NAN_COLOR, NAN_COLOR], visible = false)
+        _update!(c.frame_names, _NOPOINT3; text = [""], visible = false)
+        c.dirty[] = true
+        return c
+    end
+    fr = part_frames(sess.target)
+    L = max(0.2, 0.2 * sess.target.target[].scale)
+    segs, cols = Point3f[], RGBAf[]
+    for n in names, k in 1:3
+        F = fr[n]
+        push!(segs, Point3f(F.origin...), Point3f((F.origin + L * F.R[:, k])...))
+        push!(cols, TRIAD_COLORS[k], TRIAD_COLORS[k])
+    end
+    _update!(c.frame_axes, segs; color = cols, visible = true)
+    _update!(c.frame_names, [Point3f(fr[n].origin...) for n in names]; text = String.(names), visible = true)
     c.dirty[] = true
     return c
 end

@@ -6,10 +6,11 @@
 # restored design.
 
 const SESSION_FORMAT = "BriareusGUI session"
-const SESSION_VERSION = 8               # 2: `.briar` archives with the CAD files; 3: frames; 4: placement steps;
+const SESSION_VERSION = 9               # 2: `.briar` archives with the CAD files; 3: frames; 4: placement steps;
                                         # 5: foil roles as a flag, and the active foil; 6: the diagnostics
                                         # recorded, and their definitions; 7: the observed and wall roles
-                                        # as flags; 8: parts only (no template), hohlraum parts
+                                        # as flags; 8: parts only (no template), hohlraum parts;
+                                        # 9: user frames (parts of kind `frame`), the frames' drawn axes
 
 _strs(xs) = [String(x) for x in xs]
 _syms(xs) = Symbol[Symbol(x) for x in xs]
@@ -122,7 +123,8 @@ function session_state(sess::DesignSession; view::Bool = true)
                                          "hidden_beams" => sort(collect(v.hidden_beams[])),
                                          "shown_1w" => sort(collect(v.shown_1w[])),
                                          "shown_2w" => sort(collect(v.shown_2w[])),
-                                         "side" => dr.side[], "show_off" => v.show_off[])
+                                         "side" => dr.side[], "show_off" => v.show_off[],
+                                         "triads" => sort(_strs(v.triads[])))
     end
     return state
 end
@@ -137,6 +139,8 @@ geometry rejects (the session is then left as it was before the target, if the
 target fails, or partly restored otherwise).
 
 Older sessions convert as they load, through this one path:
+- Before version 9 a design has no user frames (`:frame` parts) and the view draws no
+  frame axes: such a session loads as it is.
 - Before version 8 a target had a template, which becomes parts placed ahead of the
   saved ones, so the elements keep their order ([`starter_parts`](@ref) has the same
   geometry): a hohlraum template the hohlraum part `hohlraum` (its dimensions, wall,
@@ -310,6 +314,8 @@ function restore!(sess::DesignSession, state::AbstractDict)
         _assign!(vs.shown_2w, Set{String}(get(v, "shown_2w", String[])))
         haskey(v, "side") && _assign!(sess.drive.side, Bool(v["side"]))
         haskey(v, "show_off") && _assign!(vs.show_off, Bool(v["show_off"]))
+        # (sessions before version 9 draw no frame axes)
+        _assign!(vs.triads, Set{Symbol}(rf.(get(v, "triads", String[]))))
     end
     return sess
 end

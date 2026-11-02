@@ -215,7 +215,7 @@ Items 7–12 follow the 2026-10-22 literature review against Kritcher et al. 202
     each); the CAD capsule's remesh (1.0–2.0 s, now clustering); a "fit the hohlraum
     template to CAD parts" action; the foil objective with one shared parameter set for
     beams aimed at one point does not move ("GUI on CAD: import, parts and first frames").
-22. **GUI requests.** Frames on a port axis; clipping volumes; STEP import (needs a CAD
+22. **GUI requests.** Clipping volumes; STEP import (needs a CAD
     kernel); an x-ray image that follows the camera; adaptive refinement of the radiation
     mesh where deposition varies fastest.
 23. **Scale.** Segments between the capsule's balls (~21M rays left in the 11.4k bored

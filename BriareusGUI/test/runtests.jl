@@ -35,6 +35,7 @@ end
     include("test_talis.jl")            # Review step: TaLIS checks (no GL)
     include("test_workspace.jl")        # session files, undo and redo (no GL)
     include("test_frames.jl")           # frames, aims in frames, the placement sweep (no GL)
+    include("test_user_frames.jl")      # user and port frames, the coordinate transform (no GL)
     include("test_hohlraum.jl")         # the hohlraum part, its pieces and frames, starters (no GL)
     include("test_display.jl")          # participation, visibility, cutaway (no GL)
     include("test_time.jl")             # pulses, drive histories, the time cursor (no GL)

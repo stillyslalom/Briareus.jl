@@ -124,13 +124,15 @@ Kinds of free parts: `:sphere`, `:disk`, `:annulus` (a washer), `:rectangle`,
 `:cylinder` (open tube), `:cone` (open frustum), `:mesh` (a triangle mesh from an STL
 file, such as a CAD export), `:visrad` (an object of a VisRad workspace) and `:hohlraum`
 (a cylindrical hohlraum, `Briareus.hohlraum`, in pieces: see [`hohlraum_pieces`](@ref)).
+`:frame` is a user frame: a named frame with no geometry, placed like a part
+([`add_frame!`](@ref), [`add_port_frame!`](@ref)); the model tree lists it under Frames.
 """
-const PART_KINDS = (:sphere, :disk, :annulus, :rectangle, :cylinder, :cone, :mesh, :visrad, :hohlraum)
+const PART_KINDS = (:sphere, :disk, :annulus, :rectangle, :cylinder, :cone, :mesh, :visrad, :hohlraum, :frame)
 
 const PART_KIND_LABELS = Dict(:sphere => "Sphere", :disk => "Disk", :annulus => "Washer (annulus)",
                               :rectangle => "Rectangle", :cylinder => "Cylinder (tube)",
                               :cone => "Cone (frustum)", :mesh => "Mesh (STL file)",
-                              :visrad => "VisRad object", :hohlraum => "Hohlraum")
+                              :visrad => "VisRad object", :hohlraum => "Hohlraum", :frame => "Frame")
 
 """
 Size fields of each part kind: `(key, label, unit, default)`. The part's local axis is
@@ -148,6 +150,7 @@ const PART_SIZE_FIELDS = Dict(
               (:length, "Length", "mm", 1.0)),
     :mesh => ((:scale, "Scale", "mm per file unit", 1.0),),
     :visrad => (),
+    :frame => (),
     :hohlraum => ((:length, "Length", "mm", 10.1), (:radius, "Radius", "mm", 2.875),
                   (:leh_radius, "LEH radius", "mm", 1.55)))
 
@@ -243,6 +246,10 @@ how its position is shown and edited (the values keep `x`, `y`, `z`). The placem
 after the placement fields; the degrees of freedom they leave free keep the fields'
 values ([`part_placement`](@ref)). A `:hohlraum` part has its [`HOHLRAUM_VALUES`](@ref)
 too and `windows`, its diagnostic windows ([`WindowSpec`](@ref)s; other kinds have none).
+A `:frame` part is a user frame: its placement fields and steps define the frame and it
+has no components. With `object` set it is a port frame ([`is_port_frame`](@ref)): the
+frame of the port named `object`, at TCC with `z` toward the port (`theta`, `phi` the
+port's angles, `rotation` its roll), placed in `:tcc` without steps.
 """
 struct PartSpec
     kind::Symbol
@@ -316,9 +323,19 @@ function PartSpec(kind::Symbol; name = kind, values = Dict{Symbol,Float64}(),
     end
     any(st -> Symbol(name) in Briareus._step_refs(st), steps) &&
         throw(ArgumentError("a part's placement step cannot refer to its own frame"))
-    return PartSpec(kind, Symbol(name), v, two_sided, inward, aperture, String(file), frame,
-                    coords, String(object), collect(PlacementStep, steps), foil, observed, wall,
-                    collect(WindowSpec, windows))
+    return _port_checked(PartSpec(kind, Symbol(name), v, two_sided, inward, aperture, String(file), frame,
+                                  coords, String(object), collect(PlacementStep, steps), foil, observed, wall,
+                                  collect(WindowSpec, windows)))
+end
+
+# A port frame stays at TCC, in `:tcc`, without steps (`_with` checks every edit).
+function _port_checked(p::PartSpec)
+    p.kind === :frame && !isempty(p.object) || return p
+    v = p.values
+    (p.frame === :tcc && isempty(p.steps) && v[:x] == v[:y] == v[:z] == 0) ||
+        throw(ArgumentError("a port frame's origin is TCC and its axis its port's: change its roll, " *
+                            "or place another frame in it"))
+    return p
 end
 
 # Whether `frame` is the frame of part `name` or one of its pieces' (`name.leh_top`, …).
@@ -328,8 +345,8 @@ _with(p::PartSpec; kind = p.kind, name = p.name, values = p.values, two_sided = 
       inward = p.inward, aperture = p.aperture, file = p.file, frame = p.frame,
       coords = p.coords, object = p.object, steps = p.steps, foil = p.foil,
       observed = p.observed, wall = p.wall, windows = p.windows) =
-    PartSpec(kind, name, values, two_sided, inward, aperture, file, frame, coords, object, steps,
-             foil, observed, wall, windows)
+    _port_checked(PartSpec(kind, name, values, two_sided, inward, aperture, file, frame, coords, object, steps,
+                           foil, observed, wall, windows))
 
 # A part with the frame named `old` renamed `new`: the frame it is placed in and the
 # frames its placement steps refer to.
@@ -450,6 +467,7 @@ placed by its placement fields in the chamber frame, without its steps.
 """
 function part_component(p::PartSpec, h::Real; frame::Frame = _own_frame(p))
     p.kind === :visrad && throw(ArgumentError("a VisRad object can make several components: use part_components"))
+    p.kind === :frame && throw(ArgumentError("a frame has no component"))
     return only(part_components(p, h; frame))
 end
 
@@ -495,6 +513,7 @@ function _part_key(p::PartSpec, h::Real, frame, raw::Bool, hc::Real = 0.0)
 end
 
 function _part_components(p::PartSpec, h::Real, frame::Frame, raw::Bool, hc::Real = 0.0)
+    p.kind === :frame && return Component[]               # a user frame: no geometry
     R, center = frame.R, frame.origin
     v = p.values
     hp = v[:h] > 0 ? v[:h] : Float64(h)
@@ -1581,9 +1600,89 @@ end
 """
 function remove_part!(ts::TargetSetup, i::Integer)
     _check_part_index(ts, i)
+    p = ts.parts[][i]
+    if p.kind === :frame
+        users = frame_users(ts, p.name)
+        isempty(users) ||
+            (ts.error[] = "frame $(p.name) is in use: $(join(String.(users), ", ")) placed in it or related to it";
+             return false)
+    end
     ps = copy(ts.parts[])
     deleteat!(ps, i)
     return _try_build!(ts; parts = ps)
+end
+
+# ---------------------------------------------------------------- user frames
+
+"Whether part `p` is a port frame: a `:frame` part tied to a port (its `object`)."
+is_port_frame(p::PartSpec) = p.kind === :frame && !isempty(p.object)
+
+"""
+    user_frames(ts::TargetSetup) -> Vector{PartSpec}
+
+The user frames of a design (its `:frame` parts, port frames included), in order.
+"""
+user_frames(ts::TargetSetup) = PartSpec[p for p in ts.parts[] if p.kind === :frame]
+
+"""
+    frame_users(ts::TargetSetup, name::Symbol) -> Vector{Symbol}
+
+The parts and frames placed in the frame `name` (or a piece frame of part `name`), or
+with a placement step that refers to it. A user frame in use is not removed
+([`remove_part!`](@ref)); beams aimed in a removed frame keep their aims, held in `:tcc`.
+"""
+function frame_users(ts::TargetSetup, name::Symbol)
+    own(f) = _own_frame_name(name, f)
+    return Symbol[q.name for q in ts.parts[] if q.name !== name &&
+                  (own(q.frame) || any(st -> any(own, Briareus._step_refs(st)), q.steps))]
+end
+
+"""
+    add_frame!(ts::TargetSetup; name = nothing, frame = :tcc, values...) -> Bool
+
+Add a user frame (a `:frame` part, see [`PartSpec`](@ref)) named `name` (default
+`frame_1`, …) placed in the frame `frame` by the placement fields given as keywords
+(`x`, `y`, `z` in mm, `theta`, `phi`, `rotation` in degrees, as a part's). Parts can be
+placed in it and beams aimed in it like any part's frame. A rejected frame sets `error`
+and returns `false`.
+"""
+add_frame!(ts::TargetSetup; name = nothing, frame::Symbol = :tcc, values...) =
+    add_part!(ts, :frame; name = name === nothing ? _free_name(ts, :frame) : name, frame, values...)
+
+"""
+    add_port_frame!(ts::TargetSetup, port, theta, phi; roll = 0, name = nothing) -> Bool
+
+Add the frame of the port named `port` at polar angle `theta` and azimuth `phi`
+(degrees): `Briareus.port_frame(theta, phi; roll)`, at TCC with `z` toward the port (a beam from it
+travels along `-z`). Its name defaults to `port_<port>`. Only its roll can be edited
+afterward; another frame placed in it carries offsets along the port axis.
+"""
+function add_port_frame!(ts::TargetSetup, port::AbstractString, θ::Real, φ::Real; roll::Real = 0.0,
+                         name = nothing)
+    nm = name === nothing ? _free_name(ts, Symbol(:port_, replace(String(port), r"[^A-Za-z0-9_]" => "_"));
+                                       numbered = false) : name
+    part = try
+        isempty(port) && throw(ArgumentError("a port frame needs its port's name"))
+        PartSpec(:frame; name = nm, object = port,
+                 values = Dict(:theta => Float64(θ), :phi => Float64(φ), :rotation => Float64(roll)))
+    catch err
+        err isa ArgumentError || rethrow()
+        ts.error[] = _errmsg(err)
+        return false
+    end
+    return _try_build!(ts; parts = [ts.parts[]; part])
+end
+
+# A name not taken by a component, part or frame: `base_1`, `base_2`, … (or `base`
+# itself first, unless `numbered`).
+function _free_name(ts::TargetSetup, base::Symbol; numbered::Bool = true)
+    taken = union(Set(component_names(ts.target[])), (p.name for p in ts.parts[]), keys(part_frames(ts)))
+    !numbered && !(base in taken) && return base
+    k = 1
+    while Symbol(base, :_, k) in taken
+        k += 1
+    end
+    return Symbol(base, :_, k)
 end
 
 """
@@ -1595,6 +1694,9 @@ function edit_part!(ts::TargetSetup, i::Integer, key::Symbol, text)
     _check_part_index(ts, i)
     p = ts.parts[][i]
     try
+        p.kind === :frame && key in (:albedo, :conversion, :h) && throw(ArgumentError("a frame has no field :$key"))
+        is_port_frame(p) && key in (:theta, :phi) &&
+            throw(ArgumentError("a port frame's axis is its port's: change its roll, or place another frame in it"))
         if key === :name
             s = strip(String(text))
             occursin(r"^[A-Za-z_][A-Za-z0-9_]*$", s) ||
@@ -2235,6 +2337,7 @@ function set_part_role!(ts::TargetSetup, i::Integer, role::Symbol; done = () -> 
     p = ps[i]
     part_role(p) === role && (done(); return true)
     try
+        p.kind === :frame && throw(ArgumentError("a frame has no surface to take a role"))
         p.kind === :hohlraum &&
             throw(ArgumentError("a hohlraum's wall and caps hold the wall role already; its holes are apertures"))
         shape = _part_shape(p)
@@ -2513,7 +2616,7 @@ function target_summary(ts::TargetSetup)
     ps = ts.parts[]
     nh = count(p -> p.kind === :hohlraum, ps)
     nw = sum(p -> length(p.windows), ps; init = 0)
-    no = length(ps) - nh
+    no = count(p -> !(p.kind in (:hohlraum, :frame)), ps)
     kind = nh == 0 ? "target" : nh == 1 ? "hohlraum" : "$nh hohlraums"
     nw > 0 && (kind *= nw == 1 ? " with 1 window" : " with $nw windows")
     no > 0 && (kind *= nh == 0 ? (no == 1 ? " of 1 part" : " of $no parts") : no == 1 ? " + 1 part" : " + $no parts")

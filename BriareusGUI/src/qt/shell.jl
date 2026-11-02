@@ -536,6 +536,19 @@ function BriareusShell(sess::DesignSession; queue::Channel{Any} = Channel{Any}(I
     _set!(sh, "placementNote", "")
     _set!(sh, "windowNumber", 0)
     _set!(sh, "hasHohlraum", false)
+    _set!(sh, "framePort", "")
+    _set!(sh, "frameTriad", false)
+    _set!(sh, "frameInfo", "")
+    _set!(sh, "portChoices", String[])
+    _set!(sh, "frameCount", 0)
+    _set!(sh, "tfFrames", [FRAME_LABELS[:tcc]])
+    for k in ("tfFrom", "tfTo", "tfInput", "tfOutput")
+        _set!(sh, k, 0)
+    end
+    _set!(sh, "tfDirection", false)
+    _set!(sh, "tfIn", ["0", "0", "0"])
+    _set!(sh, "tfOut", ["0", "0", "0"])
+    _set!(sh, "tfError", "")
     _set!(sh, "ortho", false)
     _set!(sh, "turntable", true)
     mark = (_...) -> (sh.dirty[] = true)
@@ -565,7 +578,7 @@ function BriareusShell(sess::DesignSession; queue::Channel{Any} = Channel{Any}(I
                 v.hidden_beams, v.shown_1w, v.shown_2w, bt.unconverted, v.cut_kind, v.cut_axis,
                 v.cut_range, v.cut_point, v.cut_normal, v.cut_shift, v.cut_line, v.cut_rotation,
                 v.cut_azimuth, v.cut_width,
-                v.expanded, tm.pulses, tm.history, tm.retune, tm.chart, tm.cursor, tm.diagnostics,
+                v.expanded, v.triads, tm.pulses, tm.history, tm.retune, tm.chart, tm.cursor, tm.diagnostics,
                 tm.catalog, tm.issues, tm.running,
                 tm.progress, tm.status)
         on(mark, obs)
@@ -616,6 +629,7 @@ function _refresh!(sh::BriareusShell)
     _refresh_target!(sh)
     _refresh_beams!(sh)
     _refresh_selection!(sh)
+    _refresh_frames!(sh)
     _refresh_drive!(sh)
     _refresh_time!(sh)
     _refresh_optimize!(sh)
@@ -809,12 +823,18 @@ function _refresh_selection!(sh::BriareusShell)
             _set!(sh, "selTitle", String(name))
         end
     end
-    if kind === :part
+    if kind in (:part, :frame)
         i = part_index(sess.target, Symbol(key))
         if i !== nothing
             p = sess.target.parts[][i]
             _set!(sh, "partNumber", i)
-            _set!(sh, "partKind", PART_KIND_LABELS[p.kind])
+            _set!(sh, "partKind", is_port_frame(p) ? "Port frame" : PART_KIND_LABELS[p.kind])
+            if p.kind === :frame
+                _set!(sh, "selTitle", String(p.name))
+                _set!(sh, "framePort", p.object)
+                _set!(sh, "frameTriad", p.name in sess.view.triads[])
+                _set!(sh, "frameInfo", _frame_info(sess, p))
+            end
             _set!(sh, "partName", String(p.name))
             src = cad_source(sess, p.file)
             _set!(sh, "partFile", src)
@@ -838,12 +858,15 @@ function _refresh_selection!(sh::BriareusShell)
             _set!(sh, "partRole", findfirst(==(part_role(p)), PART_ROLES) - 1)
             _set!(sh, "partFilm", p.name in sess.drive.films[])
             pos = Dict(part_position(p))
-            fields = [[FieldRow(String(k), label, unit, _num(p.values[k]))
+            fields = is_port_frame(p) ?
+                     [FieldRow("rotation", "Roll about the axis", "°", _num(p.values[:rotation]))] :
+                     [[FieldRow(String(k), label, unit, _num(p.values[k]))
                        for (k, label, unit, _) in PART_SIZE_FIELDS[p.kind]];
                       [FieldRow(String(k), label, unit, _num(pos[k]))
                        for (k, label, unit) in PART_POSITION_FIELDS[p.coords]];
                       [FieldRow(String(k), label, k === :h ? part_size_unit(p) : unit, _num(p.values[k]))
-                       for (k, label, unit, _) in PART_FIELDS if !(k in (:x, :y, :z))]]
+                       for (k, label, unit, _) in PART_FIELDS
+                       if !(k in (:x, :y, :z)) && !(p.kind === :frame && k in (:albedo, :conversion, :h))]]
             # a hohlraum's ends and closing entrance holes
             hoh = p.kind === :hohlraum
             _set!(sh, "partTopEnd", hoh ? Int(p.values[:top_end]) : 1)
@@ -1474,6 +1497,9 @@ function br_node_flags(id)
     sh = _SHELL[]
     sh === nothing && return [true, true]
     sess = sh.sess
+    # a user frame: whether its axes are drawn (in place of whether it is shown)
+    kind, key = selection_kind(String(id))
+    kind === :frame && return [Symbol(key) in sess.view.triads[], true]
     c = _node_component(sess, String(id))
     if c !== nothing
         return [display_mode(sess.view, c) !== :invisible, !(c in sess.target.excluded[])]
@@ -1589,7 +1615,7 @@ end
 function _selected_frame(sess)
     ts = sess.target
     kind, key = selection_kind(sess.view.selection[])
-    kind in (:part, :comp, :window) || return :tcc
+    kind in (:part, :comp, :window, :frame) || return :tcc
     n = Symbol(key)
     part_index(ts, n) === nothing || return n
     for c in ts.target[].components
@@ -1673,7 +1699,7 @@ function _selected_parts(sh)
     idx = Int[]
     for id in selected_ids(sh.sess.view)
         kind, key = selection_kind(id)
-        kind === :part || continue
+        kind in (:part, :frame) || continue
         i = part_index(ts, Symbol(key))
         i === nothing || push!(idx, i)
     end
@@ -1688,7 +1714,7 @@ function br_edit_part(key, text)
         if k === :name                                  # names are per part
             i = idx[1]
             edit_part!(ts, i, k, string(text)) ?
-                select!(sh.sess.view, "part:" * String(ts.parts[][i].name)) : _resend_part_fields!(sh)
+                select!(sh.sess.view, part_node_id(ts.parts[][i])) : _resend_part_fields!(sh)
             return
         end
         ok = true
@@ -1707,25 +1733,45 @@ function br_part_flag(flag, on)
         end
     end
 end
-# A frame's name in the menus: TCC's label, a part's name, or a piece frame's (part ▸ piece).
-function _frame_label(f::Symbol)
+# A frame's name in the menus: TCC's label, a user frame's, a part's name, or a piece
+# frame's (part ▸ piece). `ts`: the design the names belong to (the window's by default).
+function _frame_label(f::Symbol, ts = (sh = _SHELL[]; sh === nothing ? nothing : sh.sess.target))
     haskey(FRAME_LABELS, f) && return FRAME_LABELS[f]
     s = String(f)
     i = findfirst('.', s)
-    i === nothing && return "Part: " * s
+    if i === nothing
+        k = ts === nothing ? nothing : part_index(ts, f)
+        p = k === nothing ? nothing : ts.parts[][k]
+        p !== nothing && is_port_frame(p) && return "Port frame: " * s * " (" * p.object * ")"
+        p !== nothing && p.kind === :frame && return "Frame: " * s
+        return "Part: " * s
+    end
     piece = s[i+1:end]
     return s[1:i-1] * " ▸ " * get(_PIECE_FRAME_LABELS, piece, replace(piece, "_" => " "))
 end
 const _PIECE_FRAME_LABELS = Dict("leh_top" => "top LEH and cap", "leh_bottom" => "bottom LEH and cap")
 # A part's frame and its pieces' (`piece_frame_defs`), in order.
 _with_piece_frames(ps) = Symbol[n for q in ps for n in (q.name, first.(piece_frame_defs(q))...)]
-# Frames a part can be placed in: TCC, then the other parts and their pieces.
+# The parts in menu order: the user frames first, then the parts.
+_frames_first(ps) = [filter(q -> q.kind === :frame, ps); filter(q -> q.kind !== :frame, ps)]
+# Frames a part can be placed in: TCC, the user frames, then the other parts and their pieces.
 function _part_frame_choices(sess, p)
-    return [:tcc; _with_piece_frames(q for q in sess.target.parts[] if q.name !== p.name)]
+    return [:tcc; _with_piece_frames(q for q in _frames_first(sess.target.parts[]) if q.name !== p.name)]
 end
-# Frames to move along or aim in: TCC, then every part and its pieces.
+# Frames to move along or aim in: TCC, the user frames, then every part and its pieces.
 function _move_frame_choices(sess)
-    return [:tcc; _with_piece_frames(sess.target.parts[])]
+    return [:tcc; _with_piece_frames(_frames_first(sess.target.parts[]))]
+end
+# A user frame's line under its name: where it is in the chamber, and what uses it.
+function _frame_info(sess, p)
+    F = part_frames(sess.target)[p.name]
+    _, θ, φ = coords_of(F.R[:, 3], :spherical)
+    nb = count(==(p.name), sess.beams.aim_frame[])
+    nu = length(frame_users(sess.target, p.name))
+    use = join(filter(!isempty, [nb == 0 ? "" : nb == 1 ? "1 beam aims in it" : "$nb beams aim in it",
+                                 nu == 0 ? "" : nu == 1 ? "1 part or frame placed in it" : "$nu parts or frames placed in it"]), " · ")
+    return @sprintf("origin (%.4g, %.4g, %.4g) mm · z at θ %.4g°, φ %.4g°", F.origin..., θ, φ) *
+           (isempty(use) ? "" : " · " * use)
 end
 # Move the selected part to another frame, keeping it where it is (index into
 # `frameLabels`).
@@ -1942,6 +1988,129 @@ function br_part_coords(index)
         end
     end
 end
+# The Frames folder's page and the transform dialog: the ports a port frame is made from
+# (once per beam table) and the transform of the current frames.
+function _refresh_frames!(sh)
+    bs = sh.sess.beams.beams[]
+    if get(sh.shown, "_portBeams", nothing) !== bs
+        sh.shown["_portBeams"] = bs
+        _set!(sh, "portChoices", [@sprintf("%s · θ %.4g° φ %.4g°", q.name, q.theta, q.phi)
+                                  for q in port_choices(sh.sess.beams)])
+    end
+    _set!(sh, "frameCount", length(user_frames(sh.sess.target)))
+    haskey(sh.shown, "_tf") && _refresh_transform!(sh)
+    return
+end
+# Frames: a user frame in the selected frame (TCC with none), a port frame of a port of
+# the beam table (index into `portChoices`), a frame's axes drawn or not.
+function br_add_frame()
+    _with_shell() do sh
+        sess = sh.sess
+        frame = _selected_frame(sess)
+        add_frame!(sess.target; frame) || return
+        p = sess.target.parts[][end]
+        "frames" in sess.view.expanded[] || toggle_expanded!(sess.view, "frames")
+        select!(sess.view, part_node_id(p))
+        sess.status[] = "added frame $(p.name) " * (frame === :tcc ? "at TCC" : "in " * _frame_label(frame)) *
+                        ": place it in Properties"
+    end
+end
+function br_add_port_frame(index)
+    _with_shell() do sh
+        sess = sh.sess
+        ports = port_choices(sess.beams)
+        k = Int(index) + 1
+        1 <= k <= length(ports) || return
+        q = ports[k]
+        add_port_frame!(sess.target, q.name, q.theta, q.phi) || return
+        p = sess.target.parts[][end]
+        "frames" in sess.view.expanded[] || toggle_expanded!(sess.view, "frames")
+        select!(sess.view, part_node_id(p))
+        sess.status[] = @sprintf("added port frame %s: z toward port %s (θ %.4g°, φ %.4g°), origin at TCC",
+                                 p.name, q.name, q.theta, q.phi)
+    end
+end
+# Draw the axes of the frame of node `id` (a user frame; "" for the selection's).
+function br_set_triad(id, on)
+    _with_shell() do sh
+        kind, key = selection_kind(isempty(String(id)) ? sh.sess.view.selection[] : String(id))
+        kind === :frame && set_triad!(sh.sess.view, Symbol(key), Bool(on))
+    end
+end
+# The coordinate transform dialog: its state in `shown["_tf"]`, the result in `tf*`.
+function _tf_state(sh)
+    get!(sh.shown, "_tf") do
+        Dict{String,Any}("from" => :tcc, "to" => :tcc, "input" => :cartesian, "output" => :cartesian,
+                         "direction" => false, "c" => [0.0, 0.0, 0.0])
+    end
+end
+function _refresh_transform!(sh)
+    sess, st = sh.sess, _tf_state(sh)
+    choices = _move_frame_choices(sess)
+    for k in ("from", "to")
+        st[k] in choices || (st[k] = :tcc)
+    end
+    _set!(sh, "tfFrames", [_frame_label(f) for f in choices])
+    _set!(sh, "tfFrom", findfirst(==(st["from"]), choices) - 1)
+    _set!(sh, "tfTo", findfirst(==(st["to"]), choices) - 1)
+    _set!(sh, "tfInput", findfirst(==(st["input"]), PART_COORDINATES) - 1)
+    _set!(sh, "tfOutput", findfirst(==(st["output"]), PART_COORDINATES) - 1)
+    _set!(sh, "tfDirection", st["direction"])
+    _set!(sh, "tfIn", [_num(x) for x in st["c"]])
+    try
+        out = transform_coordinates(sess.target, st["from"], st["to"], st["c"]; input = st["input"],
+                                    output = st["output"], direction = st["direction"])
+        _set!(sh, "tfOut", [@sprintf("%.6g", x) for x in out])
+        _set!(sh, "tfError", "")
+    catch err
+        err isa ArgumentError || rethrow()
+        _set!(sh, "tfOut", ["–", "–", "–"])
+        _set!(sh, "tfError", Controllers._errmsg(err))
+    end
+    return
+end
+# Set a field of the transform: "from", "to" (indices into `tfFrames`), "input",
+# "output" (indices into the coordinate systems), "direction" (Bool), "c1"–"c3" (text).
+function br_tf_set(field, value)
+    _with_shell() do sh
+        st, f = _tf_state(sh), String(field)
+        if f in ("from", "to")
+            st[f] = _move_frame_choices(sh.sess)[Int(value)+1]
+        elseif f in ("input", "output")
+            st[f] = PART_COORDINATES[Int(value)+1]
+        elseif f == "direction"
+            st[f] = Bool(value)
+        else
+            k = parse(Int, f[2:end])
+            x = tryparse(Float64, strip(string(value)))
+            x === nothing ? _set!(sh, "tfError", "not a number: $(value)") : (st["c"][k] = x)
+        end
+        _refresh_transform!(sh)
+    end
+end
+# Open the transform from the selected frame (TCC with none) to TCC.
+function br_tf_open()
+    _with_shell() do sh
+        st = _tf_state(sh)
+        st["from"] = _selected_frame(sh.sess)
+        _refresh_transform!(sh)
+    end
+end
+# Open the transform dialog from the selected frame.
+br_open_transform() = request_popup("transform")
+# A user frame made from the transform (`add_frame_from_transform!`), selected.
+function br_tf_create()
+    _with_shell() do sh
+        sess, st = sh.sess, _tf_state(sh)
+        add_frame_from_transform!(sess.target, st["from"], st["to"], st["c"]; input = st["input"],
+                                  direction = st["direction"]) || (_set!(sh, "tfError", sess.target.error[]); return)
+        p = sess.target.parts[][end]
+        "frames" in sess.view.expanded[] || toggle_expanded!(sess.view, "frames")
+        select!(sess.view, part_node_id(p))
+        sess.status[] = "added frame $(p.name) in " * _frame_label(st["to"])
+        _refresh_transform!(sh)
+    end
+end
 function br_remove_selected()
     _with_shell() do sh
         sess = sh.sess
@@ -1949,6 +2118,11 @@ function br_remove_selected()
         if kind === :part
             i = part_index(sess.target, Symbol(key))
             i === nothing || (remove_part!(sess.target, i); select!(sess.view, "target"))
+        elseif kind === :frame
+            # a frame in use stays, selected, with the reason in its page
+            i = part_index(sess.target, Symbol(key))
+            i !== nothing && remove_part!(sess.target, i) &&
+                (set_triad!(sess.view, Symbol(key), false); select!(sess.view, "frames"))
         elseif kind === :window
             w = window_of(sess.target, Symbol(key))
             w === nothing || remove_window!(sess.target, w[2]; part = sess.target.parts[][w[1]].name)
@@ -2444,6 +2618,7 @@ function _register_qml_functions()
     @qmlfunction br_sw_mode br_sw_step br_sw_number br_step_sweep
     @qmlfunction br_part_role br_active_foil br_export_stl br_cavity br_cavity_point br_part_film
     @qmlfunction br_remove_selected br_help br_docs_url
+    @qmlfunction br_add_frame br_add_port_frame br_set_triad br_tf_set br_tf_open br_tf_create br_open_transform
     @qmlfunction br_load_preset br_set_grouping br_edit_beam br_set_beam_on br_edit_node
     @qmlfunction br_import_beams br_export_beams br_import_sst br_import_summary br_export_sst
     @qmlfunction br_export_summary br_build br_set_view br_side_view br_xray_image br_close_image br_set_spot_radius br_unconverted_ratio br_beam_model br_export_results
@@ -2471,7 +2646,7 @@ end
 # ---------------------------------------------------------------- the window
 
 """
-    briareus(sess = DesignSession(); kind = :hohlraum, resolution = :standard,
+    briareus(sess = DesignSession(); starter = :hohlraum, resolution = :standard,
              preset = nothing, beams = nothing, build = false, shown = nothing) -> DesignSession
 
 Open the Briareus window and return its session when the window closes. The window is
@@ -2499,7 +2674,7 @@ a design tool in the manner of VisRad, not a sequence of steps:
 - **Menus and toolbar**: new targets, parts and windows, beam presets and imports
   (CSV, VisRad SST and Laser Beam Summary) and exports, views, and the analyses.
 
-The session starts from `sess`, or a fresh `DesignSession(; kind, resolution,
+The session starts from `sess`, or a fresh `DesignSession(; starter, resolution,
 preset, beams)`; `build = true` starts computing the drive at once, and `shown()`, when
 given, runs once on the window's first tick (the `briareus` command closes its splash
 then). The call blocks while the window is open (Qt runs its event loop on this thread); start Julia with
@@ -2510,12 +2685,12 @@ The window throws an `ArgumentError` when this Julia session already has a GLMak
 screen (a GLMakie window or an offscreen `colorbuffer`): GLMakie's windows and the Qt
 window cannot share a process.
 """
-function briareus(sess::Union{Nothing,DesignSession} = nothing; kind::Symbol = :hohlraum,
+function briareus(sess::Union{Nothing,DesignSession} = nothing; starter::Symbol = :hohlraum,
                   resolution::Symbol = :standard, preset = nothing, beams = nothing,
                   build::Bool = false, shown = nothing)
     if sess === nothing
-        sess = preset === nothing ? DesignSession(; kind, resolution, beams) :
-               DesignSession(; kind, resolution, preset, beams)
+        sess = preset === nothing ? DesignSession(; starter, resolution, beams) :
+               DesignSession(; starter, resolution, preset, beams)
     end
     _SHELL[] === nothing || throw(ArgumentError("a BriareusGUI window is already open"))
     _check_no_glfw_screens()

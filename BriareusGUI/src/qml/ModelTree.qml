@@ -66,6 +66,7 @@ Pane {
                             const f = Julia.br_node_flags(node.nodeId)
                             showItem.checked = f[0]
                             includeItem.checked = f[1]
+                            axesItem.checked = f[0]
                             menu.popup()
                         } else if (mouse.modifiers & Qt.ShiftModifier) {
                             Julia.br_select_range(node.nodeId)
@@ -209,8 +210,33 @@ Pane {
                         height: visible ? implicitHeight : 0
                         onTriggered: Julia.br_node_include(node.nodeId, checked)
                     }
+                    MenuItem {
+                        text: "Draw axes in the 3D view"
+                        checkable: true
+                        id: axesItem
+                        visible: node.nodeKind === "frame"
+                        height: visible ? implicitHeight : 0
+                        onTriggered: Julia.br_set_triad(node.nodeId, checked)
+                    }
+                    MenuItem {
+                        text: node.nodeKind === "frame" ? "Add frame in it" : "Add frame"
+                        visible: node.nodeKind === "frame" || node.nodeKind === "frames"
+                        height: visible ? implicitHeight : 0
+                        onTriggered: Julia.br_add_frame()
+                    }
+                    MenuItem {
+                        text: "Coordinate transform…"
+                        visible: node.nodeKind === "frame" || node.nodeKind === "frames"
+                        height: visible ? implicitHeight : 0
+                        onTriggered: Julia.br_open_transform()
+                    }
                     MenuSeparator { visible: menu.showable; height: visible ? implicitHeight : 0 }
-                    MenuItem { text: "Fit view"; onTriggered: Julia.br_fit_selection() }
+                    MenuItem {
+                        text: "Fit view"
+                        visible: node.nodeKind !== "frame" && node.nodeKind !== "frames"
+                        height: visible ? implicitHeight : 0
+                        onTriggered: Julia.br_fit_selection()
+                    }
                     MenuItem {
                         text: "Look along beam"
                         visible: ["group", "quad", "beam"].indexOf(node.nodeKind) >= 0
@@ -237,7 +263,7 @@ Pane {
                     }
                     MenuItem {
                         text: "Remove"
-                        visible: node.nodeKind === "part" || node.nodeKind === "window"
+                        visible: node.nodeKind === "part" || node.nodeKind === "window" || node.nodeKind === "frame"
                         height: visible ? implicitHeight : 0
                         onTriggered: Julia.br_remove_selected()
                     }

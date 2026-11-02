@@ -79,7 +79,7 @@ ApplicationWindow {
         const key = popupRequest
         if (key === "") return
         // "window": no popup (an image of the toolbar)
-        const dialogs = { retune: retuneDialog, port: portDialog, help: helpDialog }
+        const dialogs = { retune: retuneDialog, port: portDialog, help: helpDialog, transform: transformDialog }
         if (key.startsWith("topics")) { helpTopics.openAt(key.substring(7)); openPopup = helpTopics }
         else if (key === "group") { tree.openGroupDialog(); openPopup = tree.groupDialog }
         else if (key === "diagnostics") { results.show("time"); openPopup = results.openDiagnosticPicker() }
@@ -199,8 +199,8 @@ ApplicationWindow {
             }
             Action { text: "Add diagnostic window"; enabled: app.hasHohlraum; onTriggered: Julia.br_add_window() }
             Action {
-                text: "Remove selected part or window"
-                enabled: app.selKind === "part" || app.selKind === "window"
+                text: "Remove selected part, window or frame"
+                enabled: app.selKind === "part" || app.selKind === "window" || app.selKind === "frame"
                 onTriggered: Julia.br_remove_selected()
             }
             MenuSeparator {}
@@ -318,6 +318,12 @@ ApplicationWindow {
             }
             MenuSeparator {}
             Action { text: "Cancel running analyses"; onTriggered: Julia.br_cancel_all() }
+        }
+        AutoMenu {
+            title: "&Tools"
+            Action { text: "Coordinate transform…"; onTriggered: transformDialog.open() }
+            Action { text: "Add frame (in the selected frame)"; onTriggered: Julia.br_add_frame() }
+            Action { text: "Frames…"; onTriggered: Julia.br_select("frames") }
         }
         AutoMenu {
             title: "&Diagnostics"
@@ -617,6 +623,7 @@ ApplicationWindow {
             canvas.grabToImage(function (img) { img.saveToFile(target) })
         }
     }
+    TransformDialog { id: transformDialog; x: (win.width - width) / 2; y: 60 }
     // the view from a beam or diagnostic port: angles typed, or a table beam's port
     Dialog {
         id: portDialog

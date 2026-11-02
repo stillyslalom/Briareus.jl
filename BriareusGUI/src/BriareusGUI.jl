@@ -47,6 +47,7 @@ using ZipArchives: ZipWriter, ZipReader, zip_newfile, zip_commitfile, zip_findla
 include("controllers/shared.jl")
 include("controllers/target_setup.jl")
 include("controllers/beam_table.jl")
+include("controllers/user_frames.jl")         # port frames' ports, the coordinate transform
 include("controllers/drive.jl")
 include("controllers/optimizer.jl")
 include("controllers/review.jl")
@@ -71,7 +72,8 @@ export TargetSetup, MeshSpec, MESH_PRESETS,
        is_lip, shown_component, with_lips
 export PartSpec, PART_KINDS, PART_KIND_LABELS, PART_FIELDS, PART_SIZE_FIELDS, part_component,
        part_axis, part_center, add_part!, remove_part!, edit_part!, set_part_flag!, part_index,
-       FRAME_LABELS, part_frame_def,
+       FRAME_LABELS, part_frame_def, is_port_frame, user_frames, frame_users, add_frame!,
+       add_port_frame!, port_choices, transform_coordinates, add_frame_from_transform!,
        part_frames, set_part_frame!, nudge_part!, set_excluded!, PART_STEP_KINDS,
        PART_STEP_LABELS, step_kind, add_part_step!, remove_part_step!, move_part_step!,
        edit_part_step!, part_placement,
@@ -131,7 +133,8 @@ export ViewState, COLOR_MODES, COLOR_LABELS, BEAM_COLORINGS, PALETTE, component_
        cluster_colors, TreeRow, select!, select_add!, select_range!, selected_ids, toggle_expanded!,
        selected_components,
        selection_kind, component_id, beam_id, model_tree, node_beams, selected_beams,
-       selected_component, component_label, piece_label, window_of
+       selected_component, component_label, piece_label, window_of, part_node_id, frame_detail,
+       set_triad!, drawn_triads
 export DesignSession, TASKS, TASK_LABELS, task_status, set_color!, drive_stale,
        build_scenario!, accept_optimum!, radiation_size, include_components!,
        RADIATION_MAX_ELEMENTS

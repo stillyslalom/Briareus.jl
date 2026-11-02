@@ -90,8 +90,13 @@ line of sight also keeps the line's direction `cut_line` (zero otherwise) and th
 plane's rotation `cut_rotation` (degrees) about it. See [`set_cut!`](@ref),
 [`set_cut_plane!`](@ref) and [`set_cut_line!`](@ref).
 
+`triads` names the frames whose axes the 3D view draws (a triad: x, y and z in red,
+green and blue, and the frame's name), besides the selected frame's
+([`set_triad!`](@ref), [`drawn_triads`](@ref)).
+
 Tree node ids: `"target"`, `"comp:<name>"`, `"window:<name>"` (a hohlraum part's window
-`<part>_window_k`), `"part:<name>"`,
+`<part>_window_k`), `"part:<name>"`, `"frames"` (the Frames folder), `"frame:<name>"`
+(a user frame, see [`user_frames`](@ref)),
 `"beams"`, `"group:<group>"` (a beam group, see `BeamTable`'s `cluster`),
 `"quad:<quad>@<group>"` (a quad's beams in a group), `"beam:<name>"`, `"analyses"`,
 `"task:drive"`, `"task:optimize"`, `"task:clearance"`, `"task:talis"`.
@@ -121,6 +126,7 @@ struct ViewState
     cut_shift::Observable{Float64}
     cut_line::Observable{NTuple{3,Float64}}
     cut_rotation::Observable{Float64}
+    triads::Observable{Set{Symbol}}
 end
 
 "Components the cutaway cuts by default: the starter hohlraum's shell."
@@ -135,7 +141,7 @@ ViewState() = ViewState(Observable(:component), Observable(:rays), Observable(:g
                         Observable(Set{String}()), Observable(:sector), Observable(:z),
                         Observable((-Inf, Inf)), Observable((0.0, 0.0, 0.0)),
                         Observable((0.0, -1.0, 0.0)), Observable(0.0),
-                        Observable((0.0, 0.0, 0.0)), Observable(0.0))
+                        Observable((0.0, 0.0, 0.0)), Observable(0.0), Observable(Set{Symbol}()))
 
 """
     set_cut!(v::ViewState; kind, azimuth, width, axis, range, components) -> v
@@ -347,6 +353,7 @@ function _family(id)
     k = first(selection_kind(id))
     k in (:group, :quad, :beam, :beams) && return :beams
     k in (:comp, :part, :window) && return :components
+    k === :frame && return :frames
     return nothing
 end
 
@@ -409,6 +416,54 @@ function component_id(ts, name::Symbol)
     window_of(ts, name) === nothing || return "window:" * String(name)
     any(p -> p.name === name, ts.parts[]) && return "part:" * String(name)
     return "comp:" * String(shown_component(name))
+end
+
+"Tree node id of a part: `\"frame:<name>\"` for a user frame, `\"part:<name>\"` otherwise."
+part_node_id(p) = (p.kind === :frame ? "frame:" : "part:") * String(p.name)
+
+"""
+    frame_detail(p::PartSpec, v::ViewState) -> String
+
+A user frame's line in the model tree: its port (and roll) for a port frame, else the
+frame it is placed in; "axes" when its triad is toggled on.
+"""
+function frame_detail(p, v)
+    s = is_port_frame(p) ? "port " * p.object * (p.values[:rotation] == 0 ? "" : @sprintf(" · roll %.4g°", p.values[:rotation])) :
+        "in " * (p.frame === :tcc ? "TCC" : String(p.frame))
+    isempty(p.steps) || (s *= " · " * (length(p.steps) == 1 ? "1 step" : "$(length(p.steps)) steps"))
+    p.name in v.triads[] && (s *= " · axes")
+    return s
+end
+
+"""
+    set_triad!(v::ViewState, frame::Symbol, on::Bool) -> v
+
+Draw (or stop drawing) the axes of the frame named `frame` in the 3D view (see
+[`ViewState`](@ref)'s `triads`). Drawing only: no calculation changes.
+"""
+function set_triad!(v::ViewState, frame::Symbol, on::Bool)
+    (frame in v.triads[]) == on && return v
+    s = copy(v.triads[])
+    on ? push!(s, frame) : delete!(s, frame)
+    v.triads[] = s
+    return v
+end
+
+"""
+    drawn_triads(sess) -> Vector{Symbol}
+
+The frames whose axes the 3D view draws: the frames toggled on (`triads`) and the
+selected user frames, each once, those of the design only.
+"""
+function drawn_triads(sess)
+    fr = part_frames(sess.target)
+    out = Symbol[f for f in sort!(collect(sess.view.triads[])) if haskey(fr, f)]
+    for id in selected_ids(sess.view)
+        kind, key = selection_kind(id)
+        f = Symbol(key)
+        kind === :frame && haskey(fr, f) && !(f in out) && push!(out, f)
+    end
+    return out
 end
 
 """
@@ -560,6 +615,15 @@ function model_tree(sess)
                 depth = piece_head!(c, "not in calculations")
                 push!(rows, crow(component_id(ts, c.name), label(c), "not in calculations", c.name; depth))
             end
+        end
+    end
+    # the user frames (port frames among them)
+    fs = user_frames(ts)
+    push!(rows, _row("frames", 0, "Frames", isempty(fs) ? "TCC only" : string(length(fs)), !isempty(fs),
+                     "frames" in ex, -1, "", sel))
+    if "frames" in ex
+        for p in fs
+            push!(rows, _row(part_node_id(p), 1, String(p.name), frame_detail(p, v), false, false, -1, "", sel))
         end
     end
     bt = sess.beams

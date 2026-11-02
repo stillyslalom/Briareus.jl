@@ -259,6 +259,32 @@ end
     @test length(sc.lscene.scene.plots) == nplots
 end
 
+@testset "frame axes (offscreen)" begin
+    sess = DesignSession(resolution = :coarse)
+    sc = B.scene_canvas(sess)
+    nplots = length(sc.lscene.scene.plots)
+    @test !sc.frame_axes.visible[] && !sc.frame_names.visible[]
+    @test add_frame!(sess.target; name = :mount, x = 1.0, theta = 90.0)
+    @test !sc.frame_axes.visible[]                          # neither selected nor switched on
+    select!(sess.view, "frame:mount")
+    L = max(0.2, 0.2 * sess.target.target[].scale)
+    segs = sc.frame_axes[1][]
+    # x along chamber -z, y along +y, z along +x, from (1, 0, 0), in red, green, blue
+    @test sc.frame_axes.visible[] && length(segs) == 6
+    @test all(isapprox.(segs[2:2:6] .- segs[1:2:5], [Point3f(0, 0, -L), Point3f(0, L, 0), Point3f(L, 0, 0)]; atol = 1e-5))
+    @test sc.frame_axes.color[][1:2:5] == collect(B.TRIAD_COLORS)
+    @test sc.frame_names.visible[] && sc.frame_names.text[] == ["mount"]
+    # switched on: drawn while another is selected, with the hohlraum's end frame toggled too
+    set_triad!(sess.view, :mount, true)
+    set_triad!(sess.view, Symbol("hohlraum.leh_top"), true)
+    select!(sess.view, "target")
+    @test length(sc.frame_axes[1][]) == 12 && Set(sc.frame_names.text[]) == Set(["mount", "hohlraum.leh_top"])
+    @test !isempty(colorbuffer(sc.fig; px_per_unit = 1))
+    set_triad!(sess.view, :mount, false)
+    set_triad!(sess.view, Symbol("hohlraum.leh_top"), false)
+    @test !sc.frame_axes.visible[] && length(sc.lscene.scene.plots) == nplots
+end
+
 @testset "time chart and the 3D view at a time (offscreen)" begin
     sess = DesignSession(resolution = :coarse)
     sc = B.scene_canvas(sess)

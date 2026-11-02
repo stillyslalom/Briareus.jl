@@ -129,6 +129,12 @@ function _connect!(sess::DesignSession)
     # beams aimed in a frame move and turn with it (the frames change with the committed
     # inputs, before a target built on a worker is in place)
     on(fr -> follow_frames!(bt, fr; renames = ts.renames[]), ts.frames)
+    # frames whose axes are drawn keep them through a rename
+    on(ts.frames) do _
+        rn = ts.renames[]
+        tr = sess.view.triads[]
+        any(f -> haskey(rn, f), tr) && (sess.view.triads[] = Set{Symbol}(get(rn, f, f) for f in tr))
+    end
     on(ts.target) do t
         _default_selections!(sess, t)
         # forget display modes and a selection of components that no longer exist

@@ -107,8 +107,6 @@ was built.
      clearance and blocked fraction against position), and a ghost of the selected
      step.
 6. **VisRad.**
-   - `transform_point(frames, from, to, p; input, output)` and a Tools ▸ Coordinate
-     transform dialog.
    - Pointing methods map: 0 → `:tcc`; 2 → that system's frame; 1 → the port frame with
      local (0, 0, distance).
    - Import parses diagnostic ports, keeps object hierarchies as anchored parts, and
@@ -137,8 +135,16 @@ was built.
    conflict is a raised residual of an earlier relation, not a subspace test; a sweep
    re-resolves the frames per value and moves each changed part by its own rigid map
    (also a translation sweep when other parts' steps refer to the moving part).
-3. **User frames:** port-axis frames, a Frames folder in the tree, the coordinate
-   transform, and frame triads drawn in the view.
+3. **User frames:** landed in c1f64de (core: `port_frame(facility, port)`,
+   `port_angles(facility, port)`, `transform_point`) and the GUI commit after it (the
+   Frames folder, port frames, Tools ▸ Coordinate transform, triads, session version 9).
+   Departures: a user frame is a `PartSpec` of kind `:frame` (no components), so it
+   shares the parts' resolution, renames, steps, sweeps and session rows instead of a
+   separate `FrameDef` list; a port frame is such a part tied to a port (`object`), its
+   origin TCC and axis the port's, only its roll editable; its ports are the beam
+   table's (NIF quads at the port table's angles); the transform's *Create frame*
+   places the new frame in the To frame (at the point with the From frame's axes, or at
+   the origin with z along a direction).
 4. **VisRad frames,** import and export. (`_vrw_rotation` was unified in phase 1, bit
    for bit.)
 5. **(Optional)** The foil template becomes a rectangle part with the foil role. That
