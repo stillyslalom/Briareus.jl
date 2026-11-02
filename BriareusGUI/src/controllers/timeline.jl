@@ -201,8 +201,9 @@ end
 # `observed`), the x-rays out of the entrance holes, and out of windows (other apertures
 # and thin foils).
 function _energy_series(h, t::Target, observed)
-    holes = Set(c.part for c in t.components if c.kind === :aperture && !(c.surface isa CylinderSurface))
-    capsule = Set(c.part for c in t.components if c.name in observed || c.part in observed)
+    # (by component: the budget's keys; a hohlraum part's entrance holes are its pieces)
+    holes = Set(c.name for c in t.components if c.kind === :aperture && !(c.surface isa CylinderSurface))
+    capsule = Set(c.name for c in t.components if c.name in observed || c.part in observed)
     eb = [energy_budget(h; to = τ) for τ in h.time]
     sumof(d, keep) = sum((v for (k, v) in d if keep(k)); init = 0.0)
     series = NamedTuple[

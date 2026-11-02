@@ -80,6 +80,8 @@ export PartSpec, PART_KINDS, PART_KIND_LABELS, PART_FIELDS, PART_SIZE_FIELDS, pa
        foil_names, active_foil, set_active_foil!, foil_components, observed_name, wall_names,
        observed_components, wall_components,
        export_target_stl, add_stl_parts!, fit_sphere, part_size_unit
+export HOHLRAUM_VALUES, SPHERE_VALUES, hohlraum_pieces, piece_name, piece_frame_defs, piece_frame,
+       STARTERS, STARTER_LABELS, starter_parts, insert_starter!
 export WindowSpec, WINDOW_FIELDS, add_window!, remove_window!, edit_window!, set_window_open!,
        set_window_round!,
        window_name
@@ -129,7 +131,7 @@ export ViewState, COLOR_MODES, COLOR_LABELS, BEAM_COLORINGS, PALETTE, component_
        cluster_colors, TreeRow, select!, select_add!, select_range!, selected_ids, toggle_expanded!,
        selected_components,
        selection_kind, component_id, beam_id, model_tree, node_beams, selected_beams,
-       selected_component, component_label
+       selected_component, component_label, piece_label
 export DesignSession, TASKS, TASK_LABELS, task_status, set_color!, drive_stale,
        build_scenario!, accept_optimum!, radiation_size, include_components!,
        RADIATION_MAX_ELEMENTS

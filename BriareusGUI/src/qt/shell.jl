@@ -510,7 +510,7 @@ function BriareusShell(sess::DesignSession; queue::Channel{Any} = Channel{Any}(I
     _set!(sh, "cutSettingsRequest", false)
     _set!(sh, "cutGrabPath", "")
     _set!(sh, "facility", "nif")
-    for k in ("partTwoSided", "partInward", "partAperture", "partCopy", "partSourceExists")
+    for k in ("partTwoSided", "partInward", "partAperture", "partCopy", "partSourceExists", "partLehClosure", "partCapsuleMesh")
         _set!(sh, k, false)
     end
     _set!(sh, "bnOn", 0)
@@ -518,6 +518,8 @@ function BriareusShell(sess::DesignSession; queue::Channel{Any} = Channel{Any}(I
     _set!(sh, "compDisplay", 0)
     _set!(sh, "displayLabels", [DISPLAY_LABELS[m] for m in DISPLAY_MODES])
     _set!(sh, "partNumber", 0)
+    _set!(sh, "partTopEnd", 1)
+    _set!(sh, "partBottomEnd", 1)
     _set!(sh, "partFrame", 0)
     _set!(sh, "moveFrames", String[])
     _set!(sh, "moveFrame", 0)
@@ -762,10 +764,19 @@ function _refresh_selection!(sh::BriareusShell)
         name = selected_component(sess)
         # a component left out of the calculations is described from the ghost
         g = sess.target.ghost[]
-        tc = any(c -> c.name === name, t.components) || g === nothing ? t : g
+        tc = any(c -> c.name === name || c.part === name, t.components) || g === nothing ? t : g
         ci = findfirst(c -> c.name === name, tc.components)
         _set!(sh, "compIncluded", !(name in sess.target.excluded[]))
-        if ci !== nothing
+        if ci === nothing && any(c -> c.part === name, tc.components)
+            # a part made in pieces (a hohlraum part): its pieces together
+            es = elements(tc, name)
+            np = count(c -> c.part === name, tc.components)
+            _set!(sh, "compInfo", @sprintf("%d pieces · %d elements · %.4g mm²%s", np, length(es),
+                                           sum(tc.elem_area[e] for e in es; init = 0.0),
+                                           tc === t ? "" : " · not in the calculations"))
+            _set!(sh, "compDisplay", findfirst(==(display_mode(sess.view, name)), DISPLAY_MODES) - 1)
+            _set!(sh, "selTitle", String(name))
+        elseif ci !== nothing
             c = tc.components[ci]
             # an entrance hole is shown with its closing lip (a split for the calculations)
             li = findfirst(l -> is_lip(l) && shown_component(l.name) === name, tc.components)
@@ -820,6 +831,14 @@ function _refresh_selection!(sh::BriareusShell)
                        for (k, label, unit) in PART_POSITION_FIELDS[p.coords]];
                       [FieldRow(String(k), label, k === :h ? part_size_unit(p) : unit, _num(p.values[k]))
                        for (k, label, unit, _) in PART_FIELDS if !(k in (:x, :y, :z))]]
+            # a hohlraum's ends and closing entrance holes
+            hoh = p.kind === :hohlraum
+            _set!(sh, "partTopEnd", hoh ? Int(p.values[:top_end]) : 1)
+            _set!(sh, "partBottomEnd", hoh ? Int(p.values[:bottom_end]) : 1)
+            _set!(sh, "partLehClosure", hoh && p.values[:leh_closure] != 0)
+            _set!(sh, "partCapsuleMesh", p.kind === :sphere && p.values[:capsule_mesh] != 0)
+            hoh && p.values[:leh_closure] != 0 &&
+                append!(fields, [FieldRow(String(k), label, unit, _num(p.values[k])) for (k, label, unit, _) in LEH_CLOSURE_FIELDS])
             _sync_rows!(sh.rows[:partFieldModel], sh.models[:partFieldModel], fields)
             rows, note = _step_rows(sess, i)
             _sync_rows!(sh.rows[:stepModel], sh.models[:stepModel], rows)
@@ -1637,18 +1656,28 @@ function br_part_flag(flag, on)
     end
 end
 # A frame's name in the menus: a template frame's label, or the part's name.
-_frame_label(f::Symbol) = haskey(FRAME_LABELS, f) ? FRAME_LABELS[f] : "Part: " * String(f)
-# Frames a part can be placed in: the template's, then the other parts.
+function _frame_label(f::Symbol)
+    haskey(FRAME_LABELS, f) && return FRAME_LABELS[f]
+    s = String(f)
+    i = findfirst('.', s)
+    i === nothing && return "Part: " * s
+    piece = s[i+1:end]
+    return s[1:i-1] * " ▸ " * get(_PIECE_FRAME_LABELS, piece, replace(piece, "_" => " "))
+end
+const _PIECE_FRAME_LABELS = Dict("leh_top" => "top LEH and cap", "leh_bottom" => "bottom LEH and cap")
+# A part's frame and its pieces' (`piece_frame_defs`), in order.
+_with_piece_frames(ps) = Symbol[n for q in ps for n in (q.name, first.(piece_frame_defs(q))...)]
+# Frames a part can be placed in: the template's, then the other parts and their pieces.
 function _part_frame_choices(sess, p)
     fr = part_frames(sess.target)
     return [[f for f in TEMPLATE_FRAMES if haskey(fr, f) && !(f in (q.name for q in sess.target.parts[]))];
-            [q.name for q in sess.target.parts[] if q.name !== p.name]]
+            _with_piece_frames(q for q in sess.target.parts[] if q.name !== p.name)]
 end
-# Frames to move along or aim in: the template's, then every part's.
+# Frames to move along or aim in: the template's, then every part's and its pieces'.
 function _move_frame_choices(sess)
     fr = part_frames(sess.target)
     names = [q.name for q in sess.target.parts[]]
-    return [[f for f in TEMPLATE_FRAMES if haskey(fr, f) && !(f in names)]; names]
+    return [[f for f in TEMPLATE_FRAMES if haskey(fr, f) && !(f in names)]; _with_piece_frames(sess.target.parts[])]
 end
 # Move the selected part to another frame, keeping it where it is (index into
 # `frameLabels`).

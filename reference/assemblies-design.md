@@ -108,9 +108,10 @@ it.
 ## Phases
 
 A. Landed (roles in the GUI, bit for bit; session version 7): commit 3a07a50.
-B. **Hohlraum part, piece aim points, starters:** the reported bug fixed; target kinds
-   removed; sessions with a template convert to parts; starters inserted in a selected
-   frame (decision 5).
+B1. Landed (the hohlraum part kind, piece aim points; the starter *Hohlraum with capsule*
+   bit for bit with the template): see "Phase B as built" below.
+B. **Target kinds removed, starters:** sessions with a template convert to parts;
+   starters inserted in a selected frame (decision 5).
 B2. **Assembly tree:** `Assembly`, membership, subtree show/hide and include/exclude,
    the tree's editing commands, sessions; a CAD import as one assembly of its parts; the
    placement triad (decision 6).
@@ -135,6 +136,27 @@ E. **Double backlighter with ARC:** the starter, ARC beams as a facility beam se
   clash refused it); a VisRad object named `capsule` imports with the role.
 - Template names left for phase B: the cutaway's default components, the LEHs, caps and
   lips, `:main`, `FOIL_NAME`; the model tree marks no role yet (tree-wide roles come later).
+
+## Phase B as built (2026-11-02): what departs from the design
+
+- One LEH radius for both ends (core `hohlraum` takes one); each end is an entrance
+  hole or closed (`top_end`, `bottom_end`: a closed end's hole merges into its cap, of
+  the wall's material). Per-end radii and open ends come with phase C.
+- Piece frames are analytic, so they exist before meshing and follow every edit exactly:
+  `<part>.leh_top` and `<part>.leh_bottom` (the template's entrance-hole axes) serve
+  the entrance holes and the caps (a cap's centroid is its end's center), each window has
+  `<part>.window_k` (origin on the wall), and the wall aims in the part's own frame (its
+  center). A VisRad primitive's pieces have no frames of their own yet.
+- The aim-frame and placement lists are flat, each part followed by its piece frames
+  (`hohlraum ▸ top LEH and cap`), not a nested menu.
+- The caps hold the wall role for the drive history (decision 7), but the clearance and
+  TaLIS checks keep them as hardware, the entrance holes' edges (the template's checks):
+  a hohlraum part's caps landing the beams would hide LEH clipping.
+- A sphere meshes as the template's capsule only with `capsule_mesh` set (the starter's
+  capsule sets it); the observed role does not change a sphere's mesh, so existing
+  sessions keep theirs.
+- The model tree lists a hohlraum part's row with its pieces under it (a step toward B2's
+  tree); the part has no display switch of its own (its pieces do).
 
 ## Decisions (user, 2026-10-29)
 

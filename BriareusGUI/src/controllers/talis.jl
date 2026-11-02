@@ -98,8 +98,9 @@ function default_selection!(tl::TaLISState, t::Target; capture = (_TEMPLATE_WALL
     return tl
 end
 
-# Components of the hohlraum template that form an entrance-hole edge.
-const _LEH_EDGES = (:cap_top, :cap_bottom, :leh_top_lip, :leh_bottom_lip)
+# Components that form an entrance-hole edge: the hohlraum template's caps and lips, and a
+# hohlraum part's (`<part>_cap_top`, …).
+_leh_edge(n::Symbol) = occursin(r"(^|_)(cap_top|cap_bottom|leh_top_lip|leh_bottom_lip)$", String(n))
 
 """
     set_talis_role!(tl::TaLISState, component::Symbol, role::Symbol)
@@ -185,7 +186,7 @@ function talis_kwargs(tl::TaLISState, rv::ReviewState)
     checked = Tuple(unique([tl.capture[]; tl.hardware[]]))
     pivot = tl.pivot[] === :point ? tl.pivot_point[] : tl.pivot[]
     return (; capture = Tuple(tl.capture[]), hardware = Tuple(unique([checked...; tl.diagnostics[]])),
-            leh = Tuple(n for n in tl.hardware[] if n in _LEH_EDGES), omega1_components = checked,
+            leh = Tuple(n for n in tl.hardware[] if _leh_edge(n)), omega1_components = checked,
             diagnostics = Tuple(tl.diagnostics[]),
             omega1 = tl.omega1[], tolerance = tl.tolerance[], pivot,
             pointing = e[:pointing], target_offset = e[:target_offset],

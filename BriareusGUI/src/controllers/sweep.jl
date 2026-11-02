@@ -264,14 +264,21 @@ function sweep_los_object(sess)
     return :none
 end
 
-# The frames that move with the subject: its own and every part's placed in one of them.
+# The frames that move with the subject: its own (and its pieces', `piece_frame_defs`) and
+# every part's placed in one of them.
 function _moved_frames(parts, subject::Symbol)
-    moved = Set{Symbol}((subject,))
+    moved = Set{Symbol}()
+    function add!(n)
+        push!(moved, n)
+        i = findfirst(q -> q.name === n, parts)
+        i === nothing || union!(moved, first.(piece_frame_defs(parts[i])))
+    end
+    add!(subject)
     grew = true
     while grew
         grew = false
         for p in parts
-            p.frame in moved && !(p.name in moved) && (push!(moved, p.name); grew = true)
+            p.frame in moved && !(p.name in moved) && (add!(p.name); grew = true)
         end
     end
     return moved
@@ -286,7 +293,8 @@ function _moved_components(t::Target, parts, frames::Set{Symbol})
     for p in parts
         p.name in frames || continue
         for c in t.components
-            (c.name === p.name || p.kind === :visrad && startswith(String(c.name), String(p.name))) &&
+            (c.name === p.name || c.part === p.name ||
+             p.kind === :visrad && startswith(String(c.name), String(p.name))) &&
                 push!(moved, c.name)
         end
     end
@@ -343,7 +351,8 @@ end
 function _component_owners(t::Target, parts)
     owner = Dict{Symbol,Symbol}()
     for p in parts, c in t.components
-        (c.name === p.name || p.kind === :visrad && startswith(String(c.name), String(p.name))) &&
+        (c.name === p.name || c.part === p.name ||
+             p.kind === :visrad && startswith(String(c.name), String(p.name))) &&
             (owner[c.name] = p.name)
     end
     return owner

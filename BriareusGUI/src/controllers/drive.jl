@@ -669,12 +669,23 @@ function power_rows(ev::Evaluation; minor::Real = 1e-3)
     d = ev.deposition
     P = d.delivered
     frac(v) = P > 0 ? v / P : 0.0
-    cp = component_power(d, t)                  # by part: the drive's fitted pieces summed
-    ps = [p for p in Briareus.parts(t) if t.components[first(part_pieces(t, p))].kind !== :aperture]
-    parts = Tuple{String,Float64}[(component_label(p), get(cp, p, 0.0)) for p in ps]
-    for p in ps
+    # by part (the drive's fitted pieces summed), but each piece of a part made in pieces
+    # (a hohlraum part's wall, caps, …) on its own row, as the model tree lists them
+    cp = merge(component_power(d, t), component_power(d, t; by = :component))
+    ps, labels = Symbol[], String[]
+    several = length(unique(c.part for c in t.components if _is_piece(c))) > 1
+    for c in t.components
+        c.kind === :aperture && continue
+        n = _is_piece(c) ? c.name : c.part
+        n in ps && continue
+        push!(ps, n)
+        push!(labels, !_is_piece(c) ? component_label(n) :
+                      several ? String(c.part) * " ▸ " * piece_label(n, c.part) : piece_label(n, c.part))
+    end
+    parts = Tuple{String,Float64}[(l, get(cp, p, 0.0)) for (p, l) in zip(ps, labels)]
+    for (p, l) in zip(ps, labels)
         k = Symbol(p, :_outside)
-        haskey(cp, k) && push!(parts, (component_label(p) * " (outside)", cp[k]))
+        haskey(cp, k) && push!(parts, (l * " (outside)", cp[k]))
     end
     rows = NamedTuple[]
     small = 0

@@ -476,6 +476,19 @@ function component_label(name::Symbol)
     return String(name)
 end
 
+"""
+    piece_label(name::Symbol, part::Symbol) -> String
+
+A piece of a part made in pieces as the model tree names it under its part: the piece's
+[`component_label`](@ref) without the part's prefix ("Wall" for `:hohlraum_wall` of part
+`:hohlraum`, "window_1" for `:hohlraum_window_1`).
+"""
+function piece_label(name::Symbol, part::Symbol)
+    s, pre = String(name), String(part) * "_"
+    startswith(s, pre) || return component_label(name)
+    return component_label(Symbol(s[ncodeunits(pre)+1:end]))
+end
+
 _nbeams(n::Integer) = n == 1 ? "1 beam" : "$n beams"
 
 """
@@ -500,24 +513,36 @@ function model_tree(sess)
         several = length(foil_names(ts)) > 1
         foiltxt(c) = !(c.name in foils) ? "" :
                      several && (c.name === act || c.part === act) ? "foil · active" : "foil"
-        crow(id, lab, detail, name; color = "") =
+        crow(id, lab, detail, name; color = "", depth = 1) =
             (m = display_mode(v, name);
-             _row(id, 1, lab, detail, false, false, m === :invisible ? 0 : 1, "", sel; color,
+             _row(id, depth, lab, detail, false, false, m === :invisible ? 0 : 1, "", sel; color,
                   display = String(m)))
+        # a part made in pieces (a hohlraum part): its row, then its pieces under it
+        headed = Set{Symbol}()
+        function piece_head!(c, detail)
+            _is_piece(c) || return 1
+            if !(c.part in headed)
+                push!(headed, c.part)
+                push!(rows, _row("part:" * String(c.part), 1, String(c.part), detail, false, false, -1, "", sel))
+            end
+            return 2
+        end
+        label(c) = _is_piece(c) ? piece_label(c.name, c.part) : component_label(c.name)
         for c in t.components
             is_lip(c) && continue                   # shown as part of its entrance hole
             kindtxt = c.kind === :aperture ? (c.name in lips ? "aperture · closing" : "aperture") :
                       c.two_sided ? "two-sided" : ""
             kindtxt = join(filter(!isempty, [foiltxt(c), kindtxt]), " · ")
-            push!(rows, crow(component_id(ts, c.name), component_label(c.name), kindtxt, c.name;
-                             color = get(cols, c.name, "")))
+            depth = piece_head!(c, PART_KIND_LABELS[:hohlraum])
+            push!(rows, crow(component_id(ts, c.name), label(c), kindtxt, c.name;
+                             color = get(cols, c.name, ""), depth))
         end
         # left out of the calculations: listed (and drawn as a ghost) to be put back
         if ts.ghost[] !== nothing
             for c in ts.ghost[].components
                 is_lip(c) && continue
-                push!(rows, crow(component_id(ts, c.name), component_label(c.name),
-                                 "not in calculations", c.name))
+                depth = piece_head!(c, "not in calculations")
+                push!(rows, crow(component_id(ts, c.name), label(c), "not in calculations", c.name; depth))
             end
         end
     end

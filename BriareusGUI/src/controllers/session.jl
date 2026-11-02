@@ -523,16 +523,23 @@ function build_scenario!(sess::DesignSession)
 end
 
 # Whether the drive's target is a closed hohlraum enclosure, whose view factors are
-# balanced so its rows sum to one: the template's components and the part with the
-# observed role only (other free parts lie outside it), none of them left out (that
-# leaves a hole).
+# balanced so its rows sum to one: one hohlraum (the template's components, or the
+# pieces of a single hohlraum part) and the part with the observed role only (other
+# free parts lie outside it), none of them left out (that leaves a hole).
 const _TEMPLATE_HOHLRAUM = (_TEMPLATE_WALL, :cap_top, :cap_bottom, :leh_top, :leh_bottom, :leh_top_lip,
                             :leh_bottom_lip, _TEMPLATE_CAPSULE)
 _template_component(n::Symbol) = n in _TEMPLATE_HOHLRAUM || occursin(r"^window_\d+$", String(n))
 function _closed_enclosure(ts::TargetSetup)
-    ts.kind[] === :hohlraum || return false
+    hs = [p.name for p in ts.parts[] if p.kind === :hohlraum]
+    if ts.kind[] === :hohlraum
+        isempty(hs) || return false
+        cavity = _template_component
+    else
+        length(hs) == 1 || return false
+        cavity = n -> n === hs[1]
+    end
     obs = Set{Symbol}(p.name for p in ts.parts[] if p.observed)    # (left out or not)
-    inside(c) = _template_component(c.name) || c.name in obs || c.part in obs
+    inside(c) = (ts.kind[] === :hohlraum ? cavity(c.name) : cavity(c.part)) || c.name in obs || c.part in obs
     all(inside, ts.target[].components) || return false
     g = ts.ghost[]
     return g === nothing || !any(inside, g.components)

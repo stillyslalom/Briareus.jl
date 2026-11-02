@@ -10,10 +10,12 @@ import "../common"
 
 ColumnLayout {
     spacing: 8
+    readonly property bool hohlraum: app.partKind === "Hohlraum"
     RowLayout {
         Layout.fillWidth: true
         Note { text: app.partKind + " · " + app.compInfo; opacity: 0.9 }
         Info { topic: "part.visrad"; visible: app.partKind === "VisRad object"; Layout.alignment: Qt.AlignTop }
+        Info { topic: "part.hohlraum"; visible: hohlraum; Layout.alignment: Qt.AlignTop }
     }
     Note {
         visible: app.selectionCount > 1
@@ -62,6 +64,7 @@ ColumnLayout {
         onEdited: (text) => Julia.br_edit_part("name", text)
     }
     RowLayout {
+        visible: !hohlraum
         Label { text: "Role"; Layout.preferredWidth: 110 }
         ComboBox {
             Layout.fillWidth: true
@@ -86,6 +89,7 @@ ColumnLayout {
         }
     }
     CheckLine {
+        visible: !hohlraum
         text: "Thin film: left out of the drive's cavity (a capsule tent, an LEH window)"
         checked: app.partFilm
         onToggled: Julia.br_part_film(checked)
@@ -172,24 +176,59 @@ ColumnLayout {
             onEdited: (text) => Julia.br_edit_part(model.key, text)
         }
     }
+    // a hohlraum part: each end an entrance hole or closed, and the closing holes
+    Repeater {
+        model: hohlraum ? [{ k: "top_end", t: "Top end", v: app.partTopEnd },
+                           { k: "bottom_end", t: "Bottom end", v: app.partBottomEnd }] : []
+        delegate: RowLayout {
+            Label { text: modelData.t; Layout.preferredWidth: 110 }
+            ComboBox {
+                Layout.fillWidth: true
+                model: ["Closed (the cap covers it)", "Entrance hole"]
+                currentIndex: modelData.v
+                onActivated: (index) => Julia.br_edit_part(modelData.k, String(index))
+                ToolTip.visible: hovered
+                ToolTip.delay: 400
+                ToolTip.text: "An entrance hole of the LEH radius, or a closed end"
+            }
+        }
+    }
+    CheckLine {
+        visible: hohlraum
+        text: "Closing entrance holes"
+        checked: app.partLehClosure
+        onToggled: Julia.br_edit_part("leh_closure", checked ? "1" : "0")
+        tip: "Plasma closes each LEH to x-rays down to the open radius during the pulse; " +
+             "laser light still passes. Closed, the lip re-emits like the wall"
+    }
+    CheckLine {
+        visible: app.partKind === "Sphere"
+        text: "Capsule mesh (geodesic, the capsule element size)"
+        checked: app.partCapsuleMesh
+        onToggled: Julia.br_edit_part("capsule_mesh", checked ? "1" : "0")
+        tip: "The geodesic mesh of a hohlraum's capsule, with the target's capsule element size unless the part sets its own"
+    }
     PlacementSteps { visible: app.selectionCount <= 1 }
     CheckLine {
+        visible: !hohlraum
         text: "Two-sided (both sides radiate and absorb)"
         checked: app.partTwoSided
         enabled: !app.partAperture
         onToggled: Julia.br_part_flag("two_sided", checked)
     }
     CheckLine {
+        visible: !hohlraum
         text: "Inward (radiates from its inside, or a flat part from its back)"
         checked: app.partInward
         onToggled: Julia.br_part_flag("inward", checked)
     }
     CheckLine {
+        visible: !hohlraum
         text: "Aperture (transparent: rays pass, its flux is what escapes)"
         checked: app.partAperture
         onToggled: Julia.br_part_flag("aperture", checked)
     }
-    DisplayRow {}
+    DisplayRow { visible: !hohlraum }      // (a hohlraum's pieces have their own, in the tree)
     ErrorText { text: app.targetError }
     Button { text: "Remove part"; onClicked: Julia.br_remove_selected() }
 }

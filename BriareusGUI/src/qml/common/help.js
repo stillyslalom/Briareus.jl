@@ -68,6 +68,14 @@ var pages = [
                 "line of sight and captured power the sweep checks. The clearance and TaLIS checks " +
                 "take every foil as a surface the beams land on. Renaming a part keeps the parts " +
                 "placed in its frame and the beams aimed in it." },
+        { key: "part.hohlraum", title: "Hohlraum parts",
+          text: "A cylindrical hohlraum along its part's z axis, in pieces: the wall, the two caps, " +
+                "each end's entrance hole (or a closed end, covered by its cap) and the windows. " +
+                "The wall and caps hold the wall role for the drive history; the clearance and " +
+                "TaLIS checks keep the caps as hardware, the entrance holes' edges. Each end has a " +
+                "frame (origin at the end's center, z pointing out of the hohlraum, so one aim or " +
+                "placement mirrors between the two), and each window one at its center on the " +
+                "wall: beams aim and parts are placed in them, and they follow the hohlraum." },
         { key: "part.cad", title: "Parts from CAD files",
           text: "Windings repaired (closed solids face out of their material, open sheets the " +
                 "target center) and the surface remeshed into elements of the part's size; a part " +

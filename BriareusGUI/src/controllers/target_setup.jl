@@ -81,14 +81,15 @@ const LEH_CLOSURE_FIELDS = ((:leh_closure_time, "Closure time", "ns", 5.0),
 # The closing lip of an entrance hole (`:leh_top_lip`, `:leh_bottom_lip`) is a split of
 # the hole for the calculations: the GUI lists, selects, highlights and leaves it out
 # with its hole.
-const _LIP_NAME = r"^(leh_(?:top|bottom))_lip$"
-"Whether `c` is a hohlraum's closing entrance-hole lip."
+const _LIP_NAME = r"^((?:[A-Za-z0-9_]+_)?leh_(?:top|bottom))_lip$"
+"Whether `c` is a hohlraum's closing entrance-hole lip (a template's, or a hohlraum part's)."
 is_lip(c::Component) =
     c.kind === :aperture && c.material.albedo isa GapClosure && occursin(_LIP_NAME, String(c.name))
 "The component a name is shown as: an entrance hole for its lip, else itself."
 shown_component(name::Symbol) = (m = match(_LIP_NAME, String(name)); m === nothing ? name : Symbol(m[1]))
 "Components `names` with the lips of the entrance holes among them."
-with_lips(names) = Symbol[n for x in names for n in (x in (:leh_top, :leh_bottom) ? (x, Symbol(x, :_lip)) : (x,))]
+with_lips(names) = Symbol[n for x in names
+                          for n in (occursin(r"(^|_)leh_(top|bottom)$", String(x)) ? (x, Symbol(x, :_lip)) : (x,))]
 
 "Name of the foil component of a `:foil` target; the main-target sphere is `:main`."
 const FOIL_NAME = :backlighter
@@ -155,15 +156,16 @@ end
 
 """
 Kinds of free parts: `:sphere`, `:disk`, `:annulus` (a washer), `:rectangle`,
-`:cylinder` (open tube), `:cone` (open frustum) and `:mesh` (a triangle mesh from an STL
-file, such as a CAD export).
+`:cylinder` (open tube), `:cone` (open frustum), `:mesh` (a triangle mesh from an STL
+file, such as a CAD export), `:visrad` (an object of a VisRad workspace) and `:hohlraum`
+(a cylindrical hohlraum, `Briareus.hohlraum`, in pieces: see [`hohlraum_pieces`](@ref)).
 """
-const PART_KINDS = (:sphere, :disk, :annulus, :rectangle, :cylinder, :cone, :mesh, :visrad)
+const PART_KINDS = (:sphere, :disk, :annulus, :rectangle, :cylinder, :cone, :mesh, :visrad, :hohlraum)
 
 const PART_KIND_LABELS = Dict(:sphere => "Sphere", :disk => "Disk", :annulus => "Washer (annulus)",
                               :rectangle => "Rectangle", :cylinder => "Cylinder (tube)",
                               :cone => "Cone (frustum)", :mesh => "Mesh (STL file)",
-                              :visrad => "VisRad object")
+                              :visrad => "VisRad object", :hohlraum => "Hohlraum")
 
 """
 Size fields of each part kind: `(key, label, unit, default)`. The part's local axis is
@@ -180,7 +182,58 @@ const PART_SIZE_FIELDS = Dict(
     :cone => ((:r1, "Radius at −L/2", "mm", 0.2), (:r2, "Radius at +L/2", "mm", 0.6),
               (:length, "Length", "mm", 1.0)),
     :mesh => ((:scale, "Scale", "mm per file unit", 1.0),),
-    :visrad => ())
+    :visrad => (),
+    :hohlraum => ((:length, "Length", "mm", 10.1), (:radius, "Radius", "mm", 2.875),
+                  (:leh_radius, "LEH radius", "mm", 1.55)))
+
+"""
+Values of a `:hohlraum` part besides its sizes (`key => default`): its wall's albedo and
+laser → x-ray conversion (the placement fields `albedo` and `conversion`, which default
+to 0.85 and 0.8 for a hohlraum, as the template had), each end's opening (`top_end`,
+`bottom_end`: 1 an entrance hole of radius `leh_radius`, 0 closed: the cap covers the
+end), and the closing entrance holes: `leh_closure` (1 on, 0 off) with the
+[`LEH_CLOSURE_FIELDS`](@ref).
+"""
+const HOHLRAUM_VALUES = (:albedo => 0.85, :conversion => 0.8, :top_end => 1.0, :bottom_end => 1.0,
+                         :leh_closure => 0.0,
+                         (k => d for (k, _, _, d) in LEH_CLOSURE_FIELDS)...)
+
+"""
+Values of a `:sphere` part besides its radius (`key => default`): `capsule_mesh` (1:
+meshed as a capsule, the geodesic mesh of `Briareus.hohlraum`'s capsule with elements of
+the target's capsule size, `MeshSpec.capsule_h`, unless the part sets its own `h`; 0,
+the default: the latitude–longitude `sphere_mesh` with elements of `h`). The starter
+hohlraum's capsule sets it, so it meshes as the template's capsule did.
+"""
+const SPHERE_VALUES = (:capsule_mesh => 0.0,)
+
+# The values a kind has besides the placement and size fields.
+_kind_values(kind::Symbol) = kind === :hohlraum ? HOHLRAUM_VALUES : kind === :sphere ? SPHERE_VALUES : ()
+
+"""
+    hohlraum_pieces(p::PartSpec) -> Vector{Symbol}
+
+The piece names of a `:hohlraum` part `p` without its prefix, in the order of its
+components (each component is named `<part>_<piece>` and carries `part = <part>`):
+`:wall`, `:cap_top`, `:cap_bottom`, then for each end with an entrance hole `:leh_top`
+or `:leh_bottom` (and its closing lip `:leh_top_lip`, … with `leh_closure`), then the
+windows `:window_1`, ….
+"""
+function hohlraum_pieces(p)                     # p::PartSpec (defined below)
+    p.kind === :hohlraum || throw(ArgumentError("$(p.name) is not a hohlraum"))
+    v = p.values
+    out = [:wall, :cap_top, :cap_bottom]
+    for (e, leh) in ((:top_end, :leh_top), (:bottom_end, :leh_bottom))
+        v[e] != 0 || continue
+        push!(out, leh)
+        v[:leh_closure] != 0 && push!(out, Symbol(leh, :_lip))
+    end
+    append!(out, (window_name(k) for k in eachindex(p.windows)))
+    return out
+end
+
+"The component name of piece `piece` of hohlraum part `name`: `<name>_<piece>`."
+piece_name(name::Symbol, piece::Symbol) = Symbol(name, :_, piece)
 
 """
 Placement and material fields of every part: `(key, label, unit, default)`. The part
@@ -242,7 +295,7 @@ end
 """
     PartSpec(kind; name, values, two_sided = false, inward = false, aperture = false,
              file = "", frame = :tcc, coords = :cartesian, object = "", steps = [],
-             foil = false, observed = false, wall = false)
+             foil = false, observed = false, wall = false, windows = [])
 
 A free target part: `kind` (one of [`PART_KINDS`](@ref)), its component `name`,
 `values` (every [`PART_FIELDS`](@ref) key and its kind's [`PART_SIZE_FIELDS`](@ref)),
@@ -259,7 +312,8 @@ another part's name: see [`part_frames`](@ref)); `coords` ([`PART_COORDINATES`](
 how its position is shown and edited (the values keep `x`, `y`, `z`). The placement
 `steps` (`PlacementStep`s: relations to other frames, relative moves) apply in order
 after the placement fields; the degrees of freedom they leave free keep the fields'
-values ([`part_placement`](@ref)).
+values ([`part_placement`](@ref)). A `:hohlraum` part has its [`HOHLRAUM_VALUES`](@ref)
+too and `windows`, its diagnostic windows ([`WindowSpec`](@ref)s; other kinds have none).
 """
 struct PartSpec
     kind::Symbol
@@ -276,6 +330,7 @@ struct PartSpec
     foil::Bool
     observed::Bool
     wall::Bool
+    windows::Vector{WindowSpec}
 end
 
 """
@@ -314,14 +369,18 @@ function PartSpec(kind::Symbol; name = kind, values = Dict{Symbol,Float64}(),
                   two_sided::Bool = false, inward::Bool = false, aperture::Bool = false,
                   file::AbstractString = "", frame::Symbol = :tcc, coords::Symbol = :cartesian,
                   object::AbstractString = "", steps = PlacementStep[], foil::Bool = false,
-                  observed::Bool = false, wall::Bool = false)
+                  observed::Bool = false, wall::Bool = false, windows = WindowSpec[])
     kind in PART_KINDS || throw(ArgumentError("part kind must be one of $PART_KINDS"))
-    frame === Symbol(name) && throw(ArgumentError("a part cannot be placed in its own frame"))
+    _own_frame_name(Symbol(name), frame) && throw(ArgumentError("a part cannot be placed in its own frame"))
     coords in PART_COORDINATES || throw(ArgumentError("coordinates must be one of $PART_COORDINATES"))
     kind === :mesh && isempty(file) && throw(ArgumentError("a mesh part needs an STL file"))
     kind === :visrad && (isempty(file) || isempty(object)) &&
         throw(ArgumentError("a VisRad part needs a workspace file and an object name"))
     v = Dict{Symbol,Float64}(k => d for (k, _, _, d) in (PART_FIELDS..., PART_SIZE_FIELDS[kind]...))
+    for (k, d) in _kind_values(kind)
+        v[k] = d
+    end
+    kind === :hohlraum || isempty(windows) || throw(ArgumentError("only a hohlraum has windows"))
     for (k, x) in values
         haskey(v, k) || throw(ArgumentError("a $kind has no field :$k"))
         v[k] = x
@@ -329,15 +388,19 @@ function PartSpec(kind::Symbol; name = kind, values = Dict{Symbol,Float64}(),
     any(st -> Symbol(name) in Briareus._step_refs(st), steps) &&
         throw(ArgumentError("a part's placement step cannot refer to its own frame"))
     return PartSpec(kind, Symbol(name), v, two_sided, inward, aperture, String(file), frame,
-                    coords, String(object), collect(PlacementStep, steps), foil, observed, wall)
+                    coords, String(object), collect(PlacementStep, steps), foil, observed, wall,
+                    collect(WindowSpec, windows))
 end
+
+# Whether `frame` is the frame of part `name` or one of its pieces' (`name.leh_top`, …).
+_own_frame_name(name::Symbol, frame::Symbol) = frame === name || startswith(String(frame), String(name) * ".")
 
 _with(p::PartSpec; kind = p.kind, name = p.name, values = p.values, two_sided = p.two_sided,
       inward = p.inward, aperture = p.aperture, file = p.file, frame = p.frame,
       coords = p.coords, object = p.object, steps = p.steps, foil = p.foil,
-      observed = p.observed, wall = p.wall) =
+      observed = p.observed, wall = p.wall, windows = p.windows) =
     PartSpec(kind, name, values, two_sided, inward, aperture, file, frame, coords, object, steps,
-             foil, observed, wall)
+             foil, observed, wall, windows)
 
 # A part with the frame named `old` renamed `new`: the frame it is placed in and the
 # frames its placement steps refer to.
@@ -389,7 +452,12 @@ the loop).
 """
 function part_frames(kind::Symbol, params::AbstractDict, parts::AbstractVector)
     base = template_frames(kind, params)
-    names = Set{Symbol}(p.name for p in parts)
+    defs = Pair{Symbol,FrameDef}[]
+    for p in parts
+        push!(defs, p.name => part_frame_def(p))
+        append!(defs, piece_frame_defs(p))
+    end
+    names = Set{Symbol}(first.(defs))
     for p in parts
         (haskey(base, p.frame) || p.frame in names) && continue
         p.frame in (:leh_top, :leh_bottom) &&
@@ -398,7 +466,52 @@ function part_frames(kind::Symbol, params::AbstractDict, parts::AbstractVector)
             throw(ArgumentError("only a backlighter target has a foil frame to place a part in"))
         throw(ArgumentError("no frame named $(p.frame) to place $(p.name) in"))
     end
-    return resolve_frames([p.name => part_frame_def(p) for p in parts], base)
+    return resolve_frames(defs, base)
+end
+
+"""
+    piece_frame_defs(p::PartSpec) -> Vector{Pair{Symbol,FrameDef}}
+
+The child frames of a part's pieces, placed in the part's own frame: for a `:hohlraum`
+part `name` of length `L`, the entrance holes' `name.leh_top` (origin at the top end's
+center `(0, 0, L/2)`, the part's axes, so `z` points out of the hohlraum) and
+`name.leh_bottom` (at `(0, 0, −L/2)`, turned 180° about the part's `x`: `z` out of the
+hohlraum, `y` reversed, so one placement or aim mirrors between the two ends, as the
+template's entrance-hole frames did), and each window's `name.window_k` (origin at the
+window's center on the wall, the part's axes). The ends' frames serve their caps too (a
+cap's centroid is its end's center), and the wall aims in the part's own frame (its
+centroid is the part's center). Other kinds have none.
+"""
+function piece_frame_defs(p::PartSpec)
+    out = Pair{Symbol,FrameDef}[]
+    p.kind === :hohlraum || return out
+    L, R = p.values[:length], p.values[:radius]
+    push!(out, Symbol(p.name, ".leh_top") => FrameDef(p.name; offset = (0.0, 0.0, L / 2)),
+          Symbol(p.name, ".leh_bottom") => FrameDef(p.name; offset = (0.0, 0.0, -L / 2),
+                                                    rotation = (180.0, 0.0, 180.0)))
+    for (k, w) in enumerate(p.windows)
+        push!(out, Symbol(p.name, ".", window_name(k)) =>
+                   FrameDef(p.name; offset = (R * cosd(w.phi), R * sind(w.phi), w.z)))
+    end
+    return out
+end
+
+"""
+    piece_frame(name::Symbol, part::Symbol) -> Symbol
+
+The frame component `name` of part `part` aims in as a piece of it: a hohlraum part's
+wall in the part's frame, its caps and entrance holes (and their lips) in its ends'
+frames (`part.leh_top`, `part.leh_bottom`), a window in its own (`part.window_k`), see
+[`piece_frame_defs`](@ref); any other component in its part's frame.
+"""
+function piece_frame(name::Symbol, part::Symbol)
+    s, pre = String(name), String(part) * "_"
+    startswith(s, pre) || return part
+    piece = s[ncodeunits(pre)+1:end]
+    occursin(r"^(cap|leh)_top", piece) && return Symbol(part, ".leh_top")
+    occursin(r"^(cap|leh)_bottom", piece) && return Symbol(part, ".leh_bottom")
+    occursin(r"^window_\d+$", piece) && return Symbol(part, ".", piece)
+    return part
 end
 
 _count(len, h; min = 1, multiple = 1) = multiple * max(cld(min, multiple), ceil(Int, len / h / multiple))
@@ -429,23 +542,36 @@ primitive (rectangle, sphere, cylindrical hohlraum) keeps VisRad's grid, which
 reproduces VisRad's element table, unless the part sets its own element size. With `raw`
 a VisRad CAD part keeps its file's facets as they are (no winding repair, no remeshing:
 for drawing a part left out of the calculations, at no meshing cost).
+
+A sphere with `capsule_mesh` set (value 1, see [`SPHERE_VALUES`](@ref)) is meshed as a
+capsule: the geodesic mesh of `Briareus.hohlraum`'s capsule (`icosphere_mesh`,
+`capsule_mesh = :compact`) with elements of `capsule_h` (the target's capsule size,
+[`MeshSpec`](@ref)) unless the part gives its own. A `:hohlraum` part is core `hohlraum(...)` without a capsule, meshed with
+elements of `h`, its components named and grouped as in [`hohlraum_pieces`](@ref); at
+the chamber frame it is not moved at all, so it equals the template's hohlraum bit for
+bit.
 """
-function part_components(p::PartSpec, h::Real; frame::Frame = _own_frame(p), raw::Bool = false)
+function part_components(p::PartSpec, h::Real; frame::Frame = _own_frame(p), raw::Bool = false,
+                         capsule_h::Real = h)
     # the same components (identical objects) for the same part, size and frame, so the
     # targets built from them are found again (`_target_of`): an edit elsewhere, an undo
     lock(() -> length(_PART_MEMO) > 512 && empty!(_PART_MEMO), _STL_LOCK)
-    return _cached(() -> _part_components(p, h, frame, raw), _PART_MEMO, _part_key(p, h, frame, raw))
+    hc = _capsule_meshed(p) ? Float64(capsule_h) : 0.0
+    return _cached(() -> _part_components(p, h, frame, raw, hc), _PART_MEMO, _part_key(p, h, frame, raw, hc))
 end
 
 const _PART_MEMO = Dict{Any,Vector{Component}}()
 
-function _part_key(p::PartSpec, h::Real, frame, raw::Bool)
+# Whether a part is meshed as the capsule (`capsule_h`, geodesic).
+_capsule_meshed(p::PartSpec) = p.kind === :sphere && p.values[:capsule_mesh] != 0
+
+function _part_key(p::PartSpec, h::Real, frame, raw::Bool, hc::Real = 0.0)
     stamp = isfile(p.file) ? (mtime(p.file), filesize(p.file)) : nothing
     return (p.kind, p.name, sort!(collect(p.values)), p.two_sided, p.inward, p.aperture, p.file,
-            p.object, stamp, Float64(h), frame.R, frame.origin, raw)
+            p.object, stamp, Float64(h), frame.R, frame.origin, raw, Float64(hc), p.windows)
 end
 
-function _part_components(p::PartSpec, h::Real, frame::Frame, raw::Bool)
+function _part_components(p::PartSpec, h::Real, frame::Frame, raw::Bool, hc::Real = 0.0)
     R, center = frame.R, frame.origin
     v = p.values
     hp = v[:h] > 0 ? v[:h] : Float64(h)
@@ -456,9 +582,14 @@ function _part_components(p::PartSpec, h::Real, frame::Frame, raw::Bool)
     0 <= v[:albedo] <= 1 || throw(ArgumentError("$(p.name): the albedo must be between 0 and 1"))
     0 <= v[:conversion] <= 1 ||
         throw(ArgumentError("$(p.name): the conversion must be between 0 and 1"))
+    p.kind === :hohlraum && return _hohlraum_components(p, hp, frame)
     out = !p.inward
     k = p.kind
-    if k === :sphere
+    if k === :sphere && hc > 0
+        r = v[:r1]
+        m = icosphere_mesh(r; n = icosphere_frequency(r, v[:h] > 0 ? v[:h] : Float64(hc)), outward = out)
+        surf = SphereSurface(r)
+    elseif k === :sphere
         r = v[:r1]
         (; capsule_ntheta, capsule_nphi) = capsule_counts(r, hp)
         m = sphere_mesh(r; ntheta = capsule_ntheta, nphi = capsule_nphi, outward = out)
@@ -503,6 +634,45 @@ function _part_components(p::PartSpec, h::Real, frame::Frame, raw::Bool)
         Component(p.name, m, Material(p.name; albedo = v[:albedo], conversion = v[:conversion]);
                   two_sided = p.two_sided, surface = surf)
     return [transform(c, R, center)]
+end
+
+# The components of a `:hohlraum` part: core `hohlraum` (gold wall, no capsule) with
+# elements of `h`, each component renamed `<part>_<name>` with `part = <part>`; a closed
+# end's entrance hole (and lip) merged into its cap, of the wall's material. Placed by
+# `frame`; at the chamber frame the meshes are not moved.
+function _hohlraum_components(p::PartSpec, h::Real, frame::Frame)
+    v = p.values
+    for e in (:top_end, :bottom_end)
+        v[e] in (0.0, 1.0) || throw(ArgumentError("$(p.name): an end is an entrance hole (1) or closed (0)"))
+    end
+    wall = gold(albedo = v[:albedo], conversion = v[:conversion])
+    closing = v[:leh_closure] != 0
+    lip = closing ? _leh_closure(v, wall) : nothing
+    fopen = closing ? v[:leh_open_fraction] : 0.84
+    t = try
+        hohlraum(; length = v[:length], radius = v[:radius], leh_radius = v[:leh_radius],
+                 capsule_radius = 0.0, wall,
+                 windows = [_wall_window(w, k) for (k, w) in enumerate(p.windows)], h,
+                 leh_closure = lip, leh_open_radius = fopen * v[:leh_radius])
+    catch err
+        err isa ArgumentError || rethrow()
+        throw(ArgumentError("$(p.name): " * err.msg))
+    end
+    comps = copy(t.components)
+    for (e, cap, leh) in ((:top_end, :cap_top, :leh_top), (:bottom_end, :cap_bottom, :leh_bottom))
+        v[e] == 0 || continue
+        hole = filter(c -> c.name in (leh, Symbol(leh, :_lip)), comps)
+        k = findfirst(c -> c.name === cap, comps)
+        c = comps[k]
+        comps[k] = Component(cap, merge_meshes(c.mesh, (d.mesh for d in hole)...), c.material;
+                             surface = c.surface)
+        filter!(c -> !(c in hole), comps)
+    end
+    out = Component[Component(piece_name(p.name, c.name), c.mesh, c.material; kind = c.kind,
+                              two_sided = c.two_sided, surface = c.surface, part = p.name)
+                    for c in comps]
+    frame == CHAMBER && return out
+    return Component[transform(c, frame.R, frame.origin) for c in out]
 end
 
 # A VisRad object's components in the chamber frame (windings repaired toward `toward`,
@@ -783,7 +953,8 @@ function _mesh_parts(parts, kind, params, mesh, raw, report, label; all = parts)
     frames = part_frames(kind, params, all)
     tasks = map(parts) do p
         Threads.@spawn begin
-            part_components(p, mesh.h; frame = frames[p.name], raw = p.name in raw)
+            part_components(p, mesh.h; frame = frames[p.name], raw = p.name in raw,
+                            capsule_h = mesh.capsule_h)
             k = Threads.atomic_add!(finished, 1) + 1
             k < n && report("$label: meshed $k of $n parts…")
         end
@@ -1041,7 +1212,8 @@ function _target_components(kind::Symbol, p::AbstractDict, mesh::MeshSpec,
     end
     frames = isempty(parts) ? Dict{Symbol,Frame}() : part_frames(kind, p, parts)
     for part in parts
-        new = part_components(part, mesh.h; frame = frames[part.name], raw = part.name in raw)
+        new = part_components(part, mesh.h; frame = frames[part.name], raw = part.name in raw,
+                              capsule_h = mesh.capsule_h)
         for c in new
             any(d -> d.name === c.name, comps) && throw(ArgumentError("two components are named $(c.name)"))
         end
@@ -1102,7 +1274,8 @@ end
 
 # The components in the calculations and those left out (`nothing` when none is).
 function _split_lists(comps::Vector{Component}, excluded)
-    out(c) = (is_lip(c) ? shown_component(c.name) : c.name) in excluded   # a lip with its hole
+    # a lip with its hole; a piece with its part
+    out(c) = (is_lip(c) ? shown_component(c.name) : c.name) in excluded || c.part in excluded
     keep = [c for c in comps if !out(c)]
     isempty(keep) && throw(ArgumentError("every component is left out of the calculations"))
     length(keep) == length(comps) && return keep, nothing
@@ -1852,8 +2025,8 @@ step, redundant steps, what stays free, and the residuals left by relative moves
 function part_placement(ts::TargetSetup, i::Integer)
     _check_part_index(ts, i)
     ps = ts.parts[]
-    return placement_report([p.name => part_frame_def(p) for p in ps],
-                            template_frames(ts.kind[], ts.params[]))[ps[i].name]
+    defs = [d for p in ps for d in (p.name => part_frame_def(p), piece_frame_defs(p)...)]
+    return placement_report(defs, template_frames(ts.kind[], ts.params[]))[ps[i].name]
 end
 
 # The fields of a step's point and offset coordinates: (field, index).
@@ -2008,17 +2181,24 @@ end
 
 The re-emitting cavity walls in the calculations (the drive history's wall temperature;
 surfaces the clearance and TaLIS checks land the beams on): a hohlraum template's wall
-(`:wall`; its caps are not), then each part with the role `:wall` in the parts' order.
+(`:wall`; its caps are not), then in the parts' order each part with the role `:wall` and
+each hohlraum part's wall and caps (its pieces `<part>_wall`, `<part>_cap_top`,
+`<part>_cap_bottom`: they hold the role by being a hohlraum's).
 """
 function wall_names(ts::TargetSetup)
     ex = ts.excluded[]
     out = Symbol[]
     ts.kind[] === :hohlraum && !(_TEMPLATE_WALL in ex) && push!(out, _TEMPLATE_WALL)
     for p in ts.parts[]
-        p.wall && !(p.name in ex) && push!(out, p.name)
+        p.name in ex && continue
+        p.wall && push!(out, p.name)
+        p.kind === :hohlraum && append!(out, (piece_name(p.name, s) for s in _HOHLRAUM_WALL))
     end
     return out
 end
+
+# The pieces of a hohlraum part that hold the wall role.
+const _HOHLRAUM_WALL = (:wall, :cap_top, :cap_bottom)
 
 """
     foil_names(ts::TargetSetup) -> Vector{Symbol}
@@ -2095,7 +2275,9 @@ function observed_components(ts::TargetSetup, t::Target = ts.target[])
 end
 
 wall_components(ts::TargetSetup, t::Target = ts.target[]) =
-    _held_components(ts, t, p -> p.wall, ts.kind[] === :hohlraum ? (_TEMPLATE_WALL,) : ())
+    _held_components(ts, t, p -> p.wall,
+                     [ts.kind[] === :hohlraum ? [_TEMPLATE_WALL] : Symbol[];
+                      [piece_name(p.name, s) for p in ts.parts[] if p.kind === :hohlraum for s in _HOHLRAUM_WALL]])
 
 # The components of `t` of the parts `holds(p)` selects (a VisRad part's carry its name as
 # a prefix), and the template components named `template`.
@@ -2118,16 +2300,24 @@ end
 # components join them; the foils by component).
 function _landing(ts::TargetSetup, t::Target = ts.target[])
     obs = _with_parts(t, observed_components(ts, t))
-    capture = unique!([_with_parts(t, wall_components(ts, t)); foil_components(ts, t)])
+    # (a hohlraum part's caps hold the wall role for the drive, but the checks keep them
+    # as hardware: they are the entrance holes' edges, as the template's caps were)
+    walls = filter(n -> !occursin(r"_cap_(top|bottom)$", String(n)) || !_piece_of_hohlraum(ts, n),
+                   wall_components(ts, t))
+    capture = unique!([_with_parts(t, walls); foil_components(ts, t)])
     return (; lands_on = unique!([capture; obs]), capture, observed = obs)
 end
 
-# Components `ns` of `t` and their parts.
-_with_parts(t::Target, ns) = unique!([ns; [c.part for c in t.components if c.name in ns]])
+# Components `ns` of `t` and their parts (a piece of a part in pieces stands alone).
+_with_parts(t::Target, ns) = unique!([ns; [c.part for c in t.components if c.name in ns && !_is_piece(c)]])
+
+# Whether component `name` is a piece of one of the design's hohlraum parts.
+_piece_of_hohlraum(ts::TargetSetup, name::Symbol) =
+    any(p -> p.kind === :hohlraum && startswith(String(name), String(p.name) * "_"), ts.parts[])
 
 # The walls' and the observed surface's components and parts, as sets.
 _held_sets(ts::TargetSetup, t::Target = ts.target[]) =
-    (; walls = Set(_with_parts(t, wall_components(ts, t))),
+    (; walls = Set(setdiff(_landing(ts, t).capture, foil_components(ts, t))),
      observed = Set(_with_parts(t, observed_components(ts, t))))
 
 # The object kind a part stands for (a VisRad object's own kind).
@@ -2165,6 +2355,8 @@ function set_part_role!(ts::TargetSetup, i::Integer, role::Symbol; done = () -> 
     p = ps[i]
     part_role(p) === role && (done(); return true)
     try
+        p.kind === :hohlraum &&
+            throw(ArgumentError("a hohlraum's wall and caps hold the wall role already; its holes are apertures"))
         shape = _part_shape(p)
         if role === :capsule && shape !== :sphere
             shape === :mesh ||
@@ -2343,6 +2535,92 @@ end
 """
 part_index(ts::TargetSetup, name::Symbol) = findfirst(p -> p.name === name, ts.parts[])
 
+# ---------------------------------------------------------------- starters
+
+"""
+Starter assemblies, inserted with [`insert_starter!`](@ref): `:hohlraum` (*Hohlraum with
+capsule*: a hohlraum part and a capsule sphere with the observed role) and `:foil`
+(*Backlighter foil*: a foil rectangle facing TCC and an absorbing sphere standing in for
+the main target). Their dimensions are illustrative (the NIF-scale defaults of the
+former templates), not a facility's design.
+"""
+const STARTERS = (:hohlraum, :foil)
+
+const STARTER_LABELS = Dict(:hohlraum => "Hohlraum with capsule", :foil => "Backlighter foil")
+
+"""
+    starter_parts(kind; frame = :tcc, taken = (), capsule_h = 0.3) -> Vector{PartSpec}
+
+The parts of starter `kind` (one of [`STARTERS`](@ref)), placed in the frame named
+`frame`, their names made unique against `taken` (`hohlraum`, then `hohlraum_2`, …).
+
+- `:hohlraum`: a `:hohlraum` part `hohlraum` (length 10.1 mm, radius 2.875 mm, entrance
+  holes of 1.55 mm radius, wall albedo 0.85 and conversion 0.8) and, placed in its frame
+  at its center, the sphere `capsule` (radius 0.9 mm, albedo and conversion 0.3: the
+  ablator's, meshed as a capsule, `capsule_mesh`) with the observed role. At TCC it
+  meshes as the former hohlraum template did, element for element.
+- `:foil`: the rectangle `foil` (2 mm square, conversion 0.02, its element size the
+  target's capsule size `capsule_h` at the insert), 6 mm from the frame's origin
+  along its `x` and facing it (its edges along the frame's `z` and `y`), with the foil
+  role, and the absorbing sphere `main` (radius 1 mm, albedo and conversion 0) at the
+  origin. At TCC both mesh as the former foil template's did.
+"""
+function starter_parts(kind::Symbol; frame::Symbol = :tcc, taken = (), capsule_h::Real = 0.3)
+    kind in STARTERS || throw(ArgumentError("a starter is one of $STARTERS"))
+    used = Set{Symbol}(taken)
+    function unique_name(base::Symbol)
+        name, k = base, 1
+        while name in used || any(n -> startswith(String(n), String(name) * "."), used)
+            k += 1
+            name = Symbol(base, :_, k)
+        end
+        push!(used, name)
+        return name
+    end
+    if kind === :hohlraum
+        h = unique_name(:hohlraum)
+        c = unique_name(:capsule)
+        return [PartSpec(:hohlraum; name = h, frame),
+                PartSpec(:sphere; name = c, frame = h, observed = true,
+                         values = Dict(:r1 => 0.9, :albedo => 0.3, :conversion => 0.3, :capsule_mesh => 1.0))]
+    end
+    f = unique_name(:foil)
+    m = unique_name(:main)
+    return [PartSpec(:rectangle; name = f, frame, foil = true,
+                     values = Dict(:x => 6.0, :theta => 90.0, :phi => 180.0, :rotation => 180.0,
+                                   :r1 => 2.0, :r2 => 2.0,
+                                   :conversion => 0.02, :h => Float64(capsule_h))),
+            PartSpec(:sphere; name = m, frame, values = Dict(:r1 => 1.0))]
+end
+
+"""
+    insert_starter!(ts::TargetSetup, kind; frame = :tcc) -> Bool
+
+Add the parts of starter `kind` ([`starter_parts`](@ref)) to the design, placed in the
+frame named `frame` (a part's, a piece's or TCC), their names made unique against the
+design's parts and components (`hohlraum_2`, …). The first foil a starter brings
+becomes the active foil when the design had none; a starter's observed surface takes
+the role from the part that held it. A design the geometry rejects sets `error` and
+returns `false`.
+"""
+function insert_starter!(ts::TargetSetup, kind::Symbol; frame::Symbol = :tcc)
+    try
+        haskey(part_frames(ts), frame) || throw(ArgumentError("no frame named $frame"))
+        taken = union(Set(all_component_names(ts)), (p.name for p in ts.parts[]), keys(part_frames(ts)))
+        new = starter_parts(kind; frame, taken, capsule_h = ts.mesh[].capsule_h)
+        ps = copy(ts.parts[])
+        any(p -> p.observed, new) && _drop_observed!(ps)
+        first_foil = active_foil(ts) === nothing ? findfirst(p -> p.foil, new) : nothing
+        _try_build!(ts; parts = [ps; new]) || return false
+        first_foil === nothing || (ts.active_foil[] = new[first_foil].name)
+        return true
+    catch err
+        err isa ArgumentError || rethrow()
+        ts.error[] = _errmsg(err)
+        return false
+    end
+end
+
 # ---------------------------------------------------------------- summary
 
 """
@@ -2362,8 +2640,20 @@ function target_summary(ts::TargetSetup)
     return "$kind · $(nelements(t)) elements" * (isempty(w) ? "" : " · " * w)
 end
 
-"Names of a target's components, in order: its parts (the drive's fitted pieces of a CAD part are the part)."
-component_names(t::Target) = Briareus.parts(t)
+"""
+Names of a target's components, in order: its parts (the drive's fitted pieces of a CAD
+part are the part), then the pieces of the parts made in pieces (a hohlraum part's
+`<part>_wall`, …), which are addressed on their own too.
+"""
+component_names(t::Target) = unique!([Briareus.parts(t); [c.name for c in t.components if _is_piece(c)]])
 
-"Names of a target's opaque (non-aperture) components, as parts (see `component_names`)."
-surface_names(t::Target) = unique!([c.part for c in t.components if c.kind === :surface])
+"""
+Names of a target's opaque (non-aperture) components, as the checks list them: each part
+(the drive's fitted pieces of a CAD part are the part), but each piece of a part made in
+pieces (a hohlraum part's wall and caps).
+"""
+surface_names(t::Target) = unique!([_is_piece(c) ? c.name : c.part for c in t.components if c.kind === :surface])
+
+# Whether `c` is a piece of a part made in pieces (named `<part>_<piece>`; a hohlraum
+# part's), as opposed to a whole part or a fitted piece of a CAD part (`<part>/cyl1`, …).
+_is_piece(c::Component) = c.part !== c.name && startswith(String(c.name), String(c.part) * "_")
