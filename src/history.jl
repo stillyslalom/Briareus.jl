@@ -55,7 +55,7 @@ end
                   tol = 1e-4, keep_albedo = false, record = nothing,
                   wall_history = true, wall_release = true, mband = MBandSplit(),
                   spectral = nothing, unconverted = nothing, colors = nif_unconverted(),
-                  unconverted_kw = (;)) -> NamedTuple
+                  unconverted_kw = (;), prepulse = nothing, by = :group) -> NamedTuple
 
 Quasi-static drive history: at each time, deposit `beams_at(t)` with `op` (after the
 laser–plasma model `lpi`, evaluated at that time), solve the
@@ -123,12 +123,18 @@ input). At each step the colors' absorbed powers are those of
 [`unconverted_deposition`](@ref) for the beams of `beams_at(τ)` (their powers before
 `lpi`: unconverted light does not take part in the 3ω laser–plasma model) at that
 step's fractions, and the step is solved with them as `solve`'s `unconverted`, each
-color's conversion at its own absorbed flux. `unconverted_kw` passes
+color's conversion at its own absorbed flux. `prepulse` adds light not proportional to
+the 3ω pulse, as `unconverted_history`'s `prepulse`: per color (optional), a power per
+beam (TW) as a function of time, one function for all beams or keyed by `by` (`:group`,
+`:quad`, `:beam` or a function, as in [`with_pulses`](@ref)); a beam's power in color
+`c` at step τ is then `unconverted[c](τ) · P₃ω(τ) + prepulse[c](τ)`, with `P₃ω` the
+beam's power in `beams_at(τ)`. A prepulse alone takes zero fractions (`unconverted =
+(omega1 = 0.0, omega2 = 0.0)`). `unconverted_kw` passes
 `unconverted_deposition`'s `offsets`, `lens_distance`, `coarse` and `resolution`. The
 light is linear in each beam's power, so the history deposits it once per set of beams
-whose powers are equal at every step (for beams on shared pulses, once per pulse, as
-`unconverted_history` does) and scales those patterns by the powers in time; the
-pointing must not change in time. `laser` then includes each color's absorbed power,
+whose powers are equal at every step and whose prepulses are the same (for beams on
+shared pulses, once per (pulse, prepulse) schedule, as `unconverted_history` does) and
+scales those patterns by the powers in time; the pointing must not change in time. `laser` then includes each color's absorbed power,
 and `setup` and `delivered` its delivered power, so `energy_budget` balances; the
 M-band stays the 3ω light's. Without `unconverted` the history is the 3ω one, bit for
 bit.
@@ -243,11 +249,15 @@ Base.@nospecializeinfer function _drive_history(
                         wall_history::Bool = true, wall_release::Bool = true,
                         mband = MBandSplit(), @nospecialize(spectral = nothing),
                         @nospecialize(unconverted = nothing), colors = nif_unconverted(),
-                        @nospecialize(unconverted_kw = (;)))
+                        @nospecialize(unconverted_kw = (;)), @nospecialize(prepulse = nothing),
+                        @nospecialize(by = :group))
     # the unconverted light's fractions and depositions (`nothing`: none)
-    ulight = unconverted === nothing ? nothing : _UnconvertedLight(unconverted, colors, unconverted_kw)
+    ulight = unconverted === nothing ? nothing :
+             _UnconvertedLight(unconverted, prepulse, by, colors, unconverted_kw)
     unconverted === nothing && !isempty(unconverted_kw) &&
         throw(ArgumentError("unconverted_kw sets the unconverted light's deposition; without `unconverted` it has no effect"))
+    unconverted === nothing && prepulse !== nothing &&
+        throw(ArgumentError("a prepulse needs `unconverted`, the colors' fractions of the 3ω power (0 for none)"))
     # the M-band model of each step (`nothing`: off) and its `spectral_solve` keywords
     emission = nothing
     if mband === nothing

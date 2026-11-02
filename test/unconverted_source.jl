@@ -185,6 +185,29 @@ end
     end
     @test maximum(dev) < 1e-12
 
+    # A 1ω prepulse alone (zero fractions) on the same plates, before and during a 3ω pulse
+    # that starts at 1 ns: the 1ω light is absorption × prepulse × area / footprint² on
+    # both plates, whatever the 3ω power, by hand as above
+    main = PulseShape([1.0, 3.0], [1.0, 3.0])
+    pre = PulseShape([0.0, 3.0], [0.05, 0.2])
+    hq = drive_history(mp, op, τ -> with_pulses([bl], main, τ), [0.5, 2.0]; observe = :b, wall = (:a,), lmax = 0,
+                       mband = nothing, record = sol -> sol, unconverted = (omega1 = 0.0, omega2 = 0.0),
+                       prepulse = (omega1 = pre,))
+    devq = map(enumerate(hq.time)) do (j, τ)
+        P3 = deposit(op, with_pulses([bl], main, τ)).element
+        P1 = a1 * pre(τ) / 22.0^2
+        Sa = ηa(1e14 * P3[1]) * P3[1] + r1 * ηa(1e14 * P1) * P1
+        Sb = ηb(τ) * (P3[2] + r1 * P1)
+        Ba = (Sa + αa * fx * Sb) / (1 - αa * αb * fx^2)
+        Bb = Sb + αb * fx * Ba
+        s = hq.record[j]
+        rel(x, y) = maximum(abs.(x .- y) ./ abs.(y))
+        1e9 < 1e14 * P1 < 1e11 || return Inf
+        max(rel(s.source, [Sa, Sb]), rel(s.B, [Ba, Bb]), rel(s.laser, P3 .+ P1),
+            rel(hq.unconverted.delivered[:omega1][j], pre(τ))) + abs(hq.unconverted.delivered[:omega2][j])
+    end
+    @test hq.delivered[1] == hq.unconverted.delivered[:omega1][1] && maximum(devq) < 1e-12
+
     # A hohlraum with an intensity-dependent conversion and constant albedos (each step a
     # direct solve): the history against `solve` with `unconverted_deposition` of that
     # step's beams, for a constant fraction and for a time-varying 1ω fraction on per-cone
@@ -219,6 +242,47 @@ end
         @test maximum(dev) < 1e-12
         @test h.unconverted.delivered[:omega1][end] > 0 && isempty(h.unconverted.skipped)
     end
+
+    # a prepulse per cone on per-cone pulses (1ω on the outer cones, 2ω on all): each step
+    # against `solve` with each color's light from `unconverted_deposition` of the beams at
+    # that color's power, r_c P₃ω + prepulse_c. NIF's 1ω and 2ω squares miss this target's
+    # inside (the wedged lenses keep them ≥ 2.9 mm off the 3ω axis), so mock squares near
+    # the axis put the light on the walls and capsule
+    mock = [UnconvertedColor(:omega1; footprint = 2.0, edge = 0.0, focal_shift = 100.0, absorption = 0.88,
+                             conversion = 0.88),
+            UnconvertedColor(:omega2; footprint = 1.5, edge = 0.3, focal_shift = 60.0, absorption = 1.0, conversion = 0.9)]
+    pre1 = Dict(:outer44 => PulseShape([0.0, 4.0], [0.02, 0.01]), :outer50 => PulseShape([0.0, 4.0], [0.03, 0.0]),
+                :inner23 => τ -> 0.0, :inner30 => τ -> 0.0)
+    pre2 = PulseShape([0.0, 4.0], [0.004, 0.004])
+    bat = τ -> with_pulses(quads, pulses, τ)
+    hpp = drive_history(mh, oph, bat, times; record = sol -> sol, unconverted = (omega1 = fω1, omega2 = 0.01),
+                        prepulse = (omega1 = pre1, omega2 = pre2), colors = mock)
+    inside = Float64[]
+    devp = map(enumerate(times)) do (j, τ)
+        b = bat(τ)
+        d = deposit(oph, b)
+        pc = (omega1 = [fω1(τ) * x.power + pre1[x.group](τ) for x in b], omega2 = [0.01 * x.power + pre2(τ) for x in b])
+        u = Dict(n => unconverted_deposition(th, [remake(x; power = p) for (x, p) in zip(b, pc[n])];
+                                             ratio = (omega1 = 1.0, omega2 = 1.0), colors = mock)[n]
+                 for n in (:omega1, :omega2))
+        push!(inside, sum(u[:omega1].element) / sum(d.element))
+        ref = solve(mh, d; time = τ, unconverted = u, colors = mock)
+        s = hpp.record[j]
+        lz = d.delivered + u[:omega1].delivered + u[:omega2].delivered
+        maximum(f -> maximum(abs.(getfield(s, f) .- getfield(ref, f))) / maximum(abs.(getfield(ref, f))),
+                (:source, :B, :H, :laser, :converted)) + abs(hpp.delivered[j] - lz) / lz +
+        abs(hpp.unconverted.delivered[:omega1][j] - u[:omega1].delivered) / u[:omega1].delivered
+    end
+    @test maximum(devp) < 1e-12 && minimum(inside) > 1e-3
+    # a zero prepulse: the history without one, bit for bit
+    hz0 = drive_history(mh, oph, bat, times; record = sol -> sol.B, unconverted = (omega1 = fω1, omega2 = 0.01),
+                        colors = mock)
+    hzp = drive_history(mh, oph, bat, times; record = sol -> sol.B, unconverted = (omega1 = fω1, omega2 = 0.01),
+                        colors = mock, prepulse = (omega1 = τ -> 0.0,))
+    @test all(isequal(hz0[f], hzp[f]) for f in keys(hz0))
+    @test_throws ArgumentError drive_history(mh, oph, bat, times; prepulse = (omega1 = pre2,))
+    @test_throws ArgumentError drive_history(mh, oph, bat, times; unconverted = (omega1 = 0.0, omega2 = 0.0),
+                                             prepulse = (omega3 = pre2,))
 
     # zero fractions: the 3ω history, bit for bit
     h0 = drive_history(mh, oph, τ -> with_pulses(quads, pulse, τ), times; record = sol -> sol.B)
