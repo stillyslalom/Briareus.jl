@@ -6,7 +6,10 @@ build the common ones. Surfaces are one- or two-sided, and laser entrance holes 
 transparent apertures that measure the escaping x-ray flux. A component can carry the
 exact surface its mesh approximates ([`SphereSurface`](@ref), [`CylinderSurface`](@ref),
 [`DiskSurface`](@ref)), and the radiation model then integrates over the true curved
-surface; hohlraums do this by default.
+surface; hohlraums do this by default. A [`HohlraumProfile`](@ref) gives a hohlraum a
+radius per break instead of one radius: a frustraum ([`frustraum_profile`](@ref)) or a
+multi-section wall, each section a cylinder, a cone ([`ConeSurface`](@ref)) or a flat
+step.
 
 [`WallWindow`](@ref) cuts rectangular or round diagnostic windows, with optional assembly
 gaps, into a hohlraum wall at exact areas, and the mesh conforms to their edges. Closed

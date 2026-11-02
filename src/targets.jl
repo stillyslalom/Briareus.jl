@@ -233,6 +233,57 @@ function _circular_window(box::Mesh, R, φc, zc, rw, rg, n::Integer, hcell)
 end
 
 """
+    HohlraumProfile(z, r)
+
+Wall profile of a hohlraum of revolution about `z` (`hohlraum(; profile)`): break points
+at heights `z` (mm, nondecreasing, from the bottom end `z[1] = −L/2` to the top end
+`z[end] = L/2`) with wall radii `r` (mm, positive). Between consecutive breaks the wall is
+a section: a cylinder where the two radii are equal, a conical frustum where they differ,
+and a flat ring (a step in radius) where two breaks share a height. A frustraum is two
+frusta meeting at the waist ([`frustraum_profile`](@ref)); a multi-section hohlraum is a
+radius per break.
+"""
+struct HohlraumProfile
+    z::Vector{Float64}
+    r::Vector{Float64}
+    function HohlraumProfile(z::AbstractVector{<:Real}, r::AbstractVector{<:Real})
+        length(z) == length(r) || throw(ArgumentError("a profile needs one radius per break"))
+        length(z) >= 2 || throw(ArgumentError("a profile needs at least two breaks"))
+        all(>(0), r) || throw(ArgumentError("a profile's radii must be positive"))
+        issorted(z) || throw(ArgumentError("a profile's breaks must go up in z"))
+        z[end] > z[1] || throw(ArgumentError("a profile must have a length"))
+        abs(z[1] + z[end]) <= 1e-12 * (z[end] - z[1]) ||
+            throw(ArgumentError("a profile is centered on its waist: its ends must be at ±length/2"))
+        for i in 1:length(z)-1
+            z[i] == z[i+1] && r[i] == r[i+1] && throw(ArgumentError("breaks $i and $(i + 1) coincide"))
+        end
+        (z[1] == z[2] || z[end-1] == z[end]) &&
+            throw(ArgumentError("a profile's end is its cap, not a step: start and end with a section"))
+        return new(Float64.(z), Float64.(r))
+    end
+end
+
+"""
+    frustraum_profile(; length, waist_radius, end_radius, bottom_end_radius = end_radius)
+
+[`HohlraumProfile`](@ref) of a frustraum: two conical frusta joined at the waist `z = 0`
+(radius `waist_radius`, mm), narrowing to `end_radius` at the top end (`z = length/2`)
+and `bottom_end_radius` at the bottom. The wall angle from the axis is
+`atand((waist_radius − end_radius) / (length/2))`.
+"""
+function frustraum_profile(; length::Real, waist_radius::Real, end_radius::Real,
+                           bottom_end_radius::Real = end_radius)
+    length > 0 || throw(ArgumentError("a frustraum needs a positive length"))
+    return HohlraumProfile([-length / 2, 0.0, length / 2], [bottom_end_radius, waist_radius, end_radius])
+end
+
+# The sections of a profile: (r0, z0, r1, z1) per section, bottom to top.
+_sections(p::HohlraumProfile) = [(p.r[i], p.z[i], p.r[i+1], p.z[i+1]) for i in 1:length(p.z)-1]
+
+# A section's kind: :cylinder, :frustum or :ring (a step).
+_section_kind(r0, z0, r1, z1) = z0 == z1 ? :ring : r0 == r1 ? :cylinder : :frustum
+
+"""
     hohlraum_counts(; length, radius, leh_radius, h) -> (; nz, nphi, nr_cap, nr_leh)
 
 Mesh counts of `hohlraum` for wall and end-cap elements no larger than `h` (mm) along
@@ -335,9 +386,11 @@ end
              h = nothing, capsule_h = nothing, capsule_mesh = :compact, wall = gold(),
              capsule = ablator(), capsule_center = (0,0,0), windows = (), corner_radius = 0,
              nr_corner = nothing, leh_closure = nothing, leh_open_radius = nothing,
-             nr_lip = nothing, sombrero = nothing, top_end = nothing, bottom_end = nothing)
+             nr_lip = nothing, sombrero = nothing, top_end = nothing, bottom_end = nothing,
+             profile = nothing)
 
-Cylindrical hohlraum along `z`, centered on TCC (dimensions in mm), with components
+Cylindrical hohlraum along `z` (or, with `profile`, a hohlraum of revolution of that
+profile), centered on TCC (dimensions in mm), with components
 
 - `:wall` — inner cylinder wall (radiates inward)
 - `:cap_top`, `:cap_bottom` — end-cap washers between the LEH and the wall
@@ -424,6 +477,22 @@ none of the hohlraum's (their view-factor rows and columns are zero), so the enc
 stays closed, `closed = true` balancing leaves them alone, and the hohlraum's solution
 does not change. Off by default.
 
+`profile`, a [`HohlraumProfile`](@ref), gives the wall a radius per break instead of
+`length` and `radius` (give neither): a frustraum ([`frustraum_profile`](@ref)) or a
+multi-section hohlraum. Each section between two breaks is its own wall component,
+`:wall_1`, `:wall_2`, … from the bottom, each with `part = :wall` (so `:wall` names the
+whole wall in `elements`, `drive_history(; wall)` and every name-taking analysis) and its
+exact surface: a `CylinderSurface`, a `ConeSurface` (a frustum, meshed as planar
+trapezoids between parallel chords) or a `DiskSurface` (a flat ring where the radius
+steps). All sections share the azimuthal grid, so they meet vertex for vertex, and each
+end's cap runs from its hole to that end's radius. With `h` the azimuthal count comes
+from the widest radius and each section's axial count from its meridian length;
+otherwise `nz` is shared out among the sections by length. Windows are cut into
+cylindrical sections only (each window within one); a window on a frustum or across a
+break is refused, as are corner fillets. The ends, closing lips, sombreros and the
+capsule work as for the cylinder; a sombrero's bore must clear the widest radius. A
+profile of one cylindrical section is the cylindrical hohlraum exactly (`:wall` and all).
+
 `capsule_mesh` picks the capsule mesh: `:compact` (the default), a geodesic
 `icosphere_mesh` of nearly equilateral triangles with sides of about `capsule_h`
 (`icosphere_frequency`; without `capsule_h`, the lat-long meridional size
@@ -433,7 +502,8 @@ the poles, and the compact mesh reaches the same P4 error with several times few
 elements (research notes, "Compact capsule mesh"). `:latlong` is the comparison mesh of
 that convergence study (`examples/capsule_mesh.jl`, `test/capsule_mesh.jl`).
 """
-function hohlraum(; length = 9.4, radius = 2.875, leh_radius = 1.55, capsule_radius = 0.9,
+function hohlraum(; length::Union{Nothing,Real} = nothing, radius::Union{Nothing,Real} = nothing,
+                  leh_radius = 1.55, capsule_radius = 0.9,
                   nz::Integer = 36, nphi::Integer = 48, nr_cap::Integer = 6, nr_leh::Integer = 4,
                   capsule_ntheta::Integer = 24, capsule_nphi::Integer = 32,
                   h = nothing, capsule_h = nothing, capsule_mesh::Symbol = :compact,
@@ -444,8 +514,20 @@ function hohlraum(; length = 9.4, radius = 2.875, leh_radius = 1.55, capsule_rad
                   leh_open_radius::Union{Nothing,Real} = nothing, nr_lip::Union{Nothing,Integer} = nothing,
                   sombrero::Union{Nothing,Bool,Sombrero} = nothing,
                   top_end::Union{Nothing,Real,Symbol} = nothing,
-                  bottom_end::Union{Nothing,Real,Symbol} = nothing)
-    0 < leh_radius < radius || throw(ArgumentError("need 0 < leh_radius < radius"))
+                  bottom_end::Union{Nothing,Real,Symbol} = nothing,
+                  profile::Union{Nothing,HohlraumProfile} = nothing)
+    if profile !== nothing
+        length === nothing && radius === nothing ||
+            throw(ArgumentError("a profile sets the length and the radii: give no length or radius with it"))
+        secs = _sections(profile)
+        if Base.length(secs) == 1 && _section_kind(secs[1]...) === :cylinder
+            # one cylindrical section: the cylindrical hohlraum itself
+            length, radius = profile.z[end] - profile.z[1], profile.r[1]
+            profile = nothing
+        end
+    end
+    length = something(length, 9.4)
+    radius = something(radius, 2.875)
     if leh_closure isa Symbol
         leh_closure === :computed || throw(ArgumentError("leh_closure must be :computed, a GapClosure or a LipClosure"))
         leh_closure = LipClosure()
@@ -456,44 +538,73 @@ function hohlraum(; length = 9.4, radius = 2.875, leh_radius = 1.55, capsule_rad
     leh_closure === nothing || 0 < leh_open_radius < leh_radius ||
         throw(ArgumentError("need 0 < leh_open_radius < leh_radius"))
     nr_lip >= 1 || throw(ArgumentError("nr_lip must be at least 1"))
+    capsule_mesh in (:latlong, :compact) ||
+        throw(ArgumentError("capsule_mesh must be :latlong or :compact, got :$capsule_mesh"))
+    windows = windows isa WallWindow ? [windows] : collect(WallWindow, windows)
+    profile === nothing ||
+        return _profile_hohlraum(profile; leh_radius, capsule_radius, nz, nphi, nr_cap, nr_leh,
+                                 capsule_ntheta, capsule_nphi, h, capsule_h, capsule_mesh, wall, capsule,
+                                 capsule_center, windows, corner_radius, leh_closure, leh_open_radius,
+                                 nr_lip, sombrero, top_end, bottom_end)
+    0 < leh_radius < radius || throw(ArgumentError("need 0 < leh_radius < radius"))
     rc = Float64(corner_radius)
     0 <= rc < min(radius - leh_radius, length / 2) ||
         throw(ArgumentError("need 0 ≤ corner_radius < min(radius - leh_radius, length / 2)"))
     capsule_radius < min(radius, length / 2) || throw(ArgumentError("capsule does not fit"))
-    capsule_mesh in (:latlong, :compact) ||
-        throw(ArgumentError("capsule_mesh must be :latlong or :compact, got :$capsule_mesh"))
     (; nz, nphi, nr_cap, nr_leh, nr_corner) =
         _hohlraum_grid(; length, radius, leh_radius, h, rc, nz, nphi, nr_cap, nr_leh, nr_corner)
     ends = (_hohlraum_end(top_end, :top_end; leh_radius, radius, rc, h, nr_cap, nr_leh),
             _hohlraum_end(bottom_end, :bottom_end; leh_radius, radius, rc, h, nr_cap, nr_leh))
-    opened = any(e -> e.kind === :open, ends)
-    opened && rc > 0 &&
-        throw(ArgumentError("an open end has no corner to round: give corner_radius = 0"))
-    opened && sombrero !== nothing && sombrero !== false &&
-        throw(ArgumentError("a sombrero shields entrance holes: an open end has none"))
-    if capsule_mesh === :compact && capsule_radius > 0
-        capsule_n = icosphere_frequency(capsule_radius, something(capsule_h, π * capsule_radius / capsule_ntheta))
-    elseif capsule_h !== nothing && capsule_radius > 0
-        (; capsule_ntheta, capsule_nphi) = capsule_counts(capsule_radius, capsule_h)
-    end
+    opened = _check_open_ends(ends, rc, sombrero)
     h = length / 2
     hw = h - rc                                     # half-length of the straight wall
-    windows = windows isa WallWindow ? [windows] : collect(WallWindow, windows)
     hcell = min(2π * radius / nphi, 2hw / nz)
     exts = _check_windows(windows, radius, hw, hcell)
     zbreaks = [z for e in exts for (_, _, za, zb) in e for z in (za, zb)]
     phibreaks = [φ for e in exts for (φa, Δφ, _, _) in e for φ in (φa, φa + Δφ)]
     wall_mesh = cylinder_mesh(radius, -hw, hw; nz, nphi, inward = true, zbreaks, phibreaks)
     cyl = CylinderSurface(radius)
+    wall_mesh, window_comps = _cut_windows(wall_mesh, windows, exts, eachindex(windows), radius, hcell, cyl, wall)
+    comps = Component[Component(:wall, wall_mesh, wall; surface = cyl)]
+    _end_components!(comps, ends, h, (radius - rc, radius - rc), nphi, phibreaks, wall;
+                     leh_closure, leh_radius, leh_open_radius, nr_lip)
+    if rc > 0
+        k = nr_corner
+        k >= 1 || throw(ArgumentError("nr_corner must be at least 1"))
+        for (sgn, name) in ((1, :corner_top), (-1, :corner_bottom)), i in 1:k
+            push!(comps, _corner_band(Symbol(name, :_, i), radius, hw, rc, sgn, i, k, nphi, phibreaks, wall))
+        end
+    end
+    _capsule_component!(comps, capsule_radius, capsule_mesh, capsule_ntheta, capsule_nphi, capsule_h,
+                        capsule, capsule_center)
+    append!(comps, window_comps)
+    _sombrero_components!(comps, sombrero, h, radius, ends)
+    return Target(comps; closed = !opened)
+end
+
+# Whether either end is open, refusing what an open end cannot have (a fillet, a sombrero).
+function _check_open_ends(ends, rc, sombrero)
+    opened = any(e -> e.kind === :open, ends)
+    opened && rc > 0 &&
+        throw(ArgumentError("an open end has no corner to round: give corner_radius = 0"))
+    opened && sombrero !== nothing && sombrero !== false &&
+        throw(ArgumentError("a sombrero shields entrance holes: an open end has none"))
+    return opened
+end
+
+# Cut `windows` (with extents `exts`, numbered `ks`) out of the cylindrical wall mesh of
+# radius `R` whose grid contains their edges: the rest of the wall and the windows'
+# components (each followed by its gap), on the cylinder `cyl`.
+function _cut_windows(wall_mesh, windows, exts, ks, R, hcell, cyl, wall)
     part(name, mesh, open, mat) = open ? aperture(name, mesh; surface = cyl) :
                                   Component(name, mesh, mat === nothing ? wall : mat; surface = cyl)
     window_comps = Component[]
-    for (k, (w, e)) in enumerate(zip(windows, exts))
+    for (k, w, e) in zip(ks, windows, exts)
         # the mesh conforms to the extents' edges, so patch centroids are well inside or
         # well outside (by half a patch)
         if w.circular
             box, wall_mesh = split_mesh(wall_mesh, c -> _in_window(e[1], c))
-            rest, sel, gsel = _circular_window(box, radius, deg2rad(w.phi), w.z, w.width / 2,
+            rest, sel, gsel = _circular_window(box, R, deg2rad(w.phi), w.z, w.width / 2,
                                                w.width / 2 + w.gap, _window_segments(w, hcell), hcell)
             wall_mesh = merge_meshes(wall_mesh, rest)
         else
@@ -508,15 +619,21 @@ function hohlraum(; length = 9.4, radius = 2.875, leh_radius = 1.55, capsule_rad
         w.gap > 0 && push!(window_comps, part(Symbol(name, :_gap), gsel, w.gap_material === nothing,
                                               w.gap_material))
     end
-    comps = Component[
-        Component(:wall, wall_mesh, wall; surface = cyl),
-        Component(:cap_top, annulus_mesh(ends[1].radius, radius - rc, h; nr = ends[1].nr_cap, nphi,
-                                         up = false, phibreaks), wall;
-                  surface = DiskSurface(center = (0, 0, h))),
-        Component(:cap_bottom, annulus_mesh(ends[2].radius, radius - rc, -h; nr = ends[2].nr_cap, nphi,
-                                            up = true, phibreaks), wall;
-                  surface = DiskSurface(center = (0, 0, -h))),
-    ]
+    return wall_mesh, window_comps
+end
+
+# The end caps (washers from each end's hole to `rcaps`, top then bottom), the entrance
+# holes and their closing lips, appended to `comps`; a closed end's hole (and lip) merged
+# into its cap, of the wall's material; an open end with neither cap nor hole.
+function _end_components!(comps, ends, h, rcaps, nphi, phibreaks, wall; leh_closure, leh_radius,
+                          leh_open_radius, nr_lip)
+    push!(comps,
+          Component(:cap_top, annulus_mesh(ends[1].radius, rcaps[1], h; nr = ends[1].nr_cap, nphi,
+                                           up = false, phibreaks), wall;
+                    surface = DiskSurface(center = (0, 0, h))),
+          Component(:cap_bottom, annulus_mesh(ends[2].radius, rcaps[2], -h; nr = ends[2].nr_cap, nphi,
+                                              up = true, phibreaks), wall;
+                    surface = DiskSurface(center = (0, 0, -h))))
     for (sgn, name, e) in ((1, :leh_top, ends[1]), (-1, :leh_bottom, ends[2]))
         e.kind === :open && continue
         disk = DiskSurface(center = (0, 0, sgn * h))
@@ -534,8 +651,6 @@ function hohlraum(; length = 9.4, radius = 2.875, leh_radius = 1.55, capsule_rad
                                   surface = disk, closure = leh_closure))
         end
     end
-    # a closed end: its hole (and lip) merged into its cap, of the wall's material; an
-    # open end: neither cap nor hole
     for (cap, leh, e) in ((:cap_top, :leh_top, ends[1]), (:cap_bottom, :leh_bottom, ends[2]))
         e.kind === :leh && continue
         k = findfirst(c -> c.name === cap, comps)
@@ -549,25 +664,172 @@ function hohlraum(; length = 9.4, radius = 2.875, leh_radius = 1.55, capsule_rad
             deleteat!(comps, k)
         end
     end
-    if rc > 0
-        k = nr_corner
-        k >= 1 || throw(ArgumentError("nr_corner must be at least 1"))
-        for (sgn, name) in ((1, :corner_top), (-1, :corner_bottom)), i in 1:k
-            push!(comps, _corner_band(Symbol(name, :_, i), radius, hw, rc, sgn, i, k, nphi, phibreaks, wall))
+    return comps
+end
+
+# The capsule (none for `capsule_radius = 0`), appended to `comps`.
+function _capsule_component!(comps, capsule_radius, capsule_mesh, capsule_ntheta, capsule_nphi, capsule_h,
+                             capsule, capsule_center)
+    capsule_radius > 0 || return comps
+    if capsule_mesh === :compact
+        capsule_n = icosphere_frequency(capsule_radius, something(capsule_h, π * capsule_radius / capsule_ntheta))
+        cm = icosphere_mesh(capsule_radius; n = capsule_n)
+    else
+        if capsule_h !== nothing
+            (; capsule_ntheta, capsule_nphi) = capsule_counts(capsule_radius, capsule_h)
+        end
+        cm = sphere_mesh(capsule_radius; ntheta = capsule_ntheta, nphi = capsule_nphi)
+    end
+    cm = translate(cm, Vec3(capsule_center...))
+    return push!(comps, Component(:capsule, cm, capsule;
+                                  surface = SphereSurface(capsule_radius; center = capsule_center)))
+end
+
+# The entrance-hole shields (last), for a hohlraum of half-length `h` whose wall's widest
+# radius near the ends is `R`.
+function _sombrero_components!(comps, sombrero, h, R, ends)
+    sombrero === true && (sombrero = Sombrero())
+    sombrero isa Sombrero && append!(comps, _sombreros(sombrero, h, R, max(ends[1].radius, ends[2].radius)))
+    return comps
+end
+
+# `hohlraum(; profile)` with more than one section, or a section that is not a cylinder.
+function _profile_hohlraum(prof::HohlraumProfile; leh_radius, capsule_radius, nz, nphi, nr_cap, nr_leh,
+                           capsule_ntheta, capsule_nphi, h, capsule_h, capsule_mesh, wall, capsule,
+                           capsule_center, windows, corner_radius, leh_closure, leh_open_radius, nr_lip,
+                           sombrero, top_end, bottom_end)
+    corner_radius == 0 ||
+        throw(ArgumentError("a profile's corners are its breaks: give corner_radius = 0"))
+    secs = _sections(prof)
+    L = prof.z[end] - prof.z[1]
+    hz = prof.z[end]                                # the ends are at ±hz
+    rends = (prof.r[end], prof.r[1])                # top, bottom
+    rmax = maximum(prof.r)
+    0 < leh_radius || throw(ArgumentError("need 0 < leh_radius"))
+    # the capsule inside every section: its distance in its meridian half-plane from each
+    # section's line, and from the ends
+    if capsule_radius > 0
+        c = Vec3(capsule_center...)
+        q = (hypot(c[1], c[2]), c[3])
+        abs(q[2]) + capsule_radius < hz && all(s -> _segment_distance(q, s) > capsule_radius, secs) &&
+            _profile_radius(prof, q[2]) > q[1] || throw(ArgumentError("capsule does not fit"))
+    end
+    # counts: azimuthal from the widest radius, axial per section from its meridian length
+    lens = [hypot(r1 - r0, z1 - z0) for (r0, z0, r1, z1) in secs]
+    if h !== nothing
+        h > 0 || throw(ArgumentError("the element size h must be positive"))
+        nphi = 8 * max(1, ceil(Int, 2π * rmax / h / 8))
+        ns = [max(1, ceil(Int, l / h)) for l in lens]
+    else
+        ns = [max(1, round(Int, nz * l / sum(lens))) for l in lens]
+    end
+    endcounts = map(rends) do re
+        h === nothing ? (; nr_cap, nr_leh) :
+        (; nr_cap = max(1, ceil(Int, (re - leh_radius) / h)), nr_leh = max(1, ceil(Int, leh_radius / h)))
+    end
+    ends = (_hohlraum_end(top_end, :top_end; leh_radius, radius = rends[1], rc = 0.0, h, endcounts[1]...),
+            _hohlraum_end(bottom_end, :bottom_end; leh_radius, radius = rends[2], rc = 0.0, h, endcounts[2]...))
+    for (e, re, key) in zip(ends, rends, (:top_end, :bottom_end))
+        e.kind === :open || e.radius < re ||
+            throw(ArgumentError("need $key's entrance hole (radius $(e.radius)) narrower than the end ($re)"))
+    end
+    opened = _check_open_ends(ends, 0.0, sombrero)
+    # windows: each within one cylindrical section, cut as in a cylindrical wall
+    home = zeros(Int, Base.length(windows))
+    exts = Vector{Any}(undef, Base.length(windows))
+    for (k, w) in enumerate(windows)
+        for (i, (r0, z0, r1, z1)) in enumerate(secs)
+            _section_kind(r0, z0, r1, z1) === :cylinder || continue
+            e = _window_extents(w, r0, min(2π * r0 / nphi, (z1 - z0) / ns[i]))
+            tol = 1e-9 * max(r0, hz)
+            z0 - tol <= last(e)[3] && last(e)[4] <= z1 + tol && (home[k] = i; break)
+        end
+        home[k] == 0 && throw(ArgumentError("window $k does not lie within one cylindrical section: " *
+                                            "windows are cut into cylindrical walls only"))
+    end
+    hcells = [min(2π * r0 / nphi, (z1 - z0) / max(ns[i], 1)) for (i, (r0, z0, r1, z1)) in enumerate(secs)]
+    for i in unique(home)
+        ks = findall(==(i), home)
+        r0, z0, _, z1 = secs[i]
+        # `_check_windows` takes a wall centered on z = 0: shift the windows to it
+        zc = (z0 + z1) / 2
+        shifted = [WallWindow(w.phi, w.z - zc, w.width, w.height, w.circular, w.segments, w.material, w.open,
+                              w.name, w.gap, w.gap_material) for w in windows[ks]]
+        ex = _check_windows(shifted, r0, (z1 - z0) / 2, hcells[i])
+        for (k, e) in zip(ks, ex)
+            exts[k] = [(φa, Δφ, za + zc, zb + zc) for (φa, Δφ, za, zb) in e]
         end
     end
-    if capsule_radius > 0
-        cm = capsule_mesh === :compact ? icosphere_mesh(capsule_radius; n = capsule_n) :
-             sphere_mesh(capsule_radius; ntheta = capsule_ntheta, nphi = capsule_nphi)
-        cm = translate(cm, Vec3(capsule_center...))
-        push!(comps, Component(:capsule, cm, capsule;
-                               surface = SphereSurface(capsule_radius; center = capsule_center)))
+    phibreaks = [φ for e in exts for (φa, Δφ, _, _) in e for φ in (φa, φa + Δφ)]
+    φs = isempty(phibreaks) ? range(0.0, 2π; length = nphi + 1) :
+         conforming_grid(0.0, 2π, nphi, phibreaks; periodic = true)
+    comps = Component[]
+    window_comps = Component[]
+    for (i, (r0, z0, r1, z1)) in enumerate(secs)
+        name = Symbol(:wall_, i)
+        kind = _section_kind(r0, z0, r1, z1)
+        if kind === :cylinder
+            ks = findall(==(i), home)
+            zbreaks = [z for k in ks for (_, _, za, zb) in exts[k] for z in (za, zb)]
+            m = cylinder_mesh(r0, z0, z1; nz = ns[i], nphi, inward = true, zbreaks, phibreaks)
+            cyl = CylinderSurface(r0)
+            m, wc = _cut_windows(m, windows[ks], exts[ks], ks, r0, hcells[i], cyl, wall)
+            append!(window_comps, wc)
+            push!(comps, Component(name, m, wall; surface = cyl, part = :wall))
+        elseif kind === :frustum
+            k = (r1 - r0) / (z1 - z0)
+            surf = ConeSurface(atand(abs(k)); apex = (0.0, 0.0, z0 - r0 / k), axis = (0.0, 0.0, sign(k)))
+            push!(comps, Component(name, _section_mesh(r0, z0, r1, z1, ns[i], φs), wall; surface = surf,
+                                   part = :wall))
+        else
+            push!(comps, Component(name, _section_mesh(r0, z0, r1, z1, ns[i], φs), wall;
+                                   surface = DiskSurface(center = (0, 0, z0)), part = :wall))
+        end
     end
+    _end_components!(comps, ends, hz, rends, nphi, phibreaks, wall;
+                     leh_closure, leh_radius, leh_open_radius, nr_lip)
+    _capsule_component!(comps, capsule_radius, capsule_mesh, capsule_ntheta, capsule_nphi, capsule_h,
+                        capsule, capsule_center)
     append!(comps, window_comps)
-    sombrero === true && (sombrero = Sombrero())
-    sombrero isa Sombrero &&
-        append!(comps, _sombreros(sombrero, h, radius, max(ends[1].radius, ends[2].radius)))
+    _sombrero_components!(comps, sombrero, hz, rmax, ends)
     return Target(comps; closed = !opened)
+end
+
+# A section of revolution from radius r0 at z0 to r1 at z1 (a frustum, a cylinder or a
+# flat ring) in `n` bands on the azimuthal grid `φs`, facing the axis side of the profile
+# (the cavity). Each patch is the trapezoid between two parallel chords at the same
+# azimuths, so it is planar; the last ring is (r1, z1) exactly, so sections meet vertex
+# for vertex.
+function _section_mesh(r0, z0, r1, z1, n, φs)
+    m = Mesh()
+    ring(i) = i == n ? (Float64(r1), Float64(z1)) : (r0 + (r1 - r0) * i / n, z0 + (z1 - z0) * i / n)
+    for i in 1:n, j in 1:length(φs)-1
+        (ra, za), (rb, zb) = ring(i - 1), ring(i)
+        a, b = φs[j], φs[j+1]
+        p = [Vec3(ra * cos(a), ra * sin(a), za), Vec3(ra * cos(b), ra * sin(b), za),
+             Vec3(rb * cos(b), rb * sin(b), zb), Vec3(rb * cos(a), rb * sin(a), zb)]
+        φc = (a + b) / 2
+        # the profile's normal toward the cavity: (−dz, dr) in the meridian half-plane
+        add_polygon!(m, p; facing = Vec3(-(z1 - z0) * cos(φc), -(z1 - z0) * sin(φc), r1 - r0))
+    end
+    return m
+end
+
+# Distance in the meridian half-plane from the point q = (ρ, z) to the section's line.
+function _segment_distance(q, (r0, z0, r1, z1))
+    d = (r1 - r0, z1 - z0)
+    t = clamp(((q[1] - r0) * d[1] + (q[2] - z0) * d[2]) / (d[1]^2 + d[2]^2), 0.0, 1.0)
+    return hypot(q[1] - r0 - t * d[1], q[2] - z0 - t * d[2])
+end
+
+# The profile's wall radius at height z (the smallest where a ring steps).
+function _profile_radius(p::HohlraumProfile, z)
+    best = Inf
+    for (r0, z0, r1, z1) in _sections(p)
+        z0 <= z <= z1 || continue
+        best = min(best, z0 == z1 ? min(r0, r1) : r0 + (r1 - r0) * (z - z0) / (z1 - z0))
+    end
+    return best
 end
 
 # One end of `hohlraum` (keyword `key`): `(; kind, radius, nr_cap, nr_leh)`, `kind` one

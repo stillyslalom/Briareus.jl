@@ -20,7 +20,7 @@ const LONG_TESTS = get(ENV, "BRIAREUS_LONG_TESTS", "false") == "true"
 const SHARDS = Dict(f => 2 for f in ("meshops.jl", "stl.jl", "cadfit.jl", "partial_visibility.jl", "hmatrix.jl",
                                      "unconverted_history.jl",
                                      "inference.jl"))
-merge!(SHARDS, Dict(f => 3 for f in ("windows.jl", "halfraum.jl", "burnthrough.jl", "uncertainty.jl",
+merge!(SHARDS, Dict(f => 3 for f in ("windows.jl", "halfraum.jl", "profiles.jl", "burnthrough.jl", "uncertainty.jl",
                                      "implosion.jl", "energetics.jl", "spectral.jl", "large_models.jl",
                                      "direct_drive.jl", "corona.jl", "frames.jl", "aqua.jl")))
 in_shard(file) = SHARD == "" || get(SHARDS, file, 1) == parse(Int, SHARD)
@@ -41,6 +41,7 @@ shard_include("visrad.jl")
 shard_include("solve_cache.jl")
 shard_include("windows.jl")
 shard_include("halfraum.jl")
+shard_include("profiles.jl")
 shard_include("burnthrough.jl")
 shard_include("meshops.jl")
 shard_include("stl.jl")

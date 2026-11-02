@@ -45,7 +45,8 @@ callout in the section says which).
   (2026-10-26); Deposition-operator rays
   and sliver view factors (2026-10-25); Compile latency (2026-10-25); Closure on bored,
   windowed and CAD cavities (2026-10-25); Compact capsule rows at capsule_h = h/3
-  (2026-10-25).
+  (2026-10-25); Halfraum ends and starters (2026-11-02); Hohlraum profiles: frustraums
+  and multi-section walls (2026-11-02) (the frustraum starter's public dimensions).
 
 **Design, errors and shot review**
 - Beam-error budgets (2026-10-17); Retuning to a reference drive (2026-10-17); Implosion
@@ -9861,3 +9862,69 @@ Checks (`test/radiography.jl`, independent references):
 - **Not balanced.** The GUI balances view factors only for one hohlraum part with no open
   end (`_closed_enclosure`); the shock-tube pair, two cavities each closed by a package
   face, is left unbalanced (its rows miss by the view-factor error, ~1e-3).
+
+## Hohlraum profiles: frustraums and multi-section walls (2026-11-02) *derived*
+
+`hohlraum(; profile)` (`HohlraumProfile`, `frustraum_profile`) and the GUI's frustraum
+starter (assemblies phase D). Sources read 2026-11-02; the paper's numbers from its text,
+checked against the page image of Fig. 1.
+- **Frustraum geometry (public).** Baker et al., Phys. Plasmas 30, 092708 (2023),
+  doi:10.1063/5.0163396 (OSTI 2222631): two conical frustum-shaped hohlraums joined at the
+  capsule's equator (Fig. 1); in all but one shot 9.76 mm in diameter at the equator,
+  12.24 mm long, 23° wall angles, entrance holes 3.1 mm in diameter at both ends, wall
+  area quoted as 270 mm²; across the campaign wall angles of 21°, 23° and 25° and
+  equatorial diameters of 7, 9.26 and 9.76 mm; HDC capsules of 1.2 mm inner radius and
+  ~81 µm shell (1.4 mm in some shots). Confidence: high (stated in the text). Design
+  paper: Amendt et al., Phys. Plasmas 26, 082707 (2019), doi:10.1063/1.5099934 (not read;
+  paywalled at OSTI 1557379). LLNL news, 2019-11-13
+  (https://lmf.llnl.gov/news/frustraum-hohlraum-design-shaping): the name dates from
+  2018; full-scale 9.2 mm wide, subscale 7 mm.
+- **Derived end radius.** The paper does not say what its wall angle is measured from.
+  Taken from the axis, the end radius is 4.88 − 6.12 tan 23° = 2.282 mm (*derived*,
+  medium confidence). The cones' area is then 299.2 mm² and the caps' 17.6 mm² (holes of
+  1.55 mm radius), 317 mm² against the quoted 270 mm²: the quoted area is **not
+  reproduced** from the quoted dimensions (a wall angle from the end plane is too steep
+  to fit at all). The drawing's ends are not resolved well enough to explain it. The
+  starter uses the stated dimensions as an illustrative mock-up of the shape; its wall
+  area is not the paper's.
+- **No published comparison used as a check.** Baker et al.'s APS DPP 2023 abstract
+  (LLNL-PROC-851230, OSTI 2204932) gives the frustraum's wall area as ~25 % smaller than
+  a 6.4 × 11.3 mm cylinder's and its efficiency ~14 % higher, while the 2023 paper gives
+  270 mm² against 257 mm² for the 6.4 × 11.24 mm HYBRID-E cylinder (slightly larger).
+  The two disagree and neither specifies the geometry fully, so neither is a check here.
+- **Four-section (tentless) hohlraum: not public beyond a caption.** The LMF targets page
+  (https://lmf.llnl.gov/about/keys-to-success/targets) captions a photo of a prototype
+  tentless target whose hohlraum is made in four sections, the top and bottom ones
+  sandwiching 50 nm polyimide membranes (with an amorphous-carbon layer) that hold the
+  capsule. No section lengths or radii are given. Science & Technology Review, March 2018
+  (https://str.llnl.gov/2018-03/stadermann) describes a hohlraum made in four segments
+  whose walls clamp the tents' edges, also without dimensions. The four sections are a
+  fabrication split; whether their radii differ is not public. The GUI's *sections* profile starts from a
+  mock-up of four sections (breaks at 0, ±2.5 and ±5.05 mm, radii 2.875 mm at the ends and
+  at ±2.5 mm, 3.1 mm at the waist): illustrative only, no experiment's numbers.
+- **Mesh.** Each section between breaks is a component (`wall_1`, … from the bottom,
+  `part = :wall`) with its exact surface: `CylinderSurface`, `ConeSurface` or, for a step
+  in radius, `DiskSurface`. A cone section's patches are trapezoids between parallel
+  chords at the same azimuths (planar); all sections share the azimuthal grid, so they
+  meet vertex for vertex. A profile of one cylindrical section is the cylindrical
+  hohlraum bit for bit (`test/profiles.jl`).
+- **Validation, closed forms.** A closed frustraum (length 4, waist radius 2, end radius
+  1.2 mm, both ends closed, no capsule): every exchange follows from the coaxial-disk
+  factor alone, because the ends see each other unobstructed and the waist plane splits
+  the cavity (end to end F(re → re, L); end to the far cone F(re → rw, L/2) − F_ee; end to
+  its own cone 1 − F(re → rw, L/2); cone to cone through the waist disk by reciprocity;
+  cone to itself the remainder). Exact values 0.07672, 0.37864, 0.54464, 0.40607 and
+  0.40105. With the cone surfaces, h 0.4 / 0.25 / 0.16 mm (576 / 1512 / 3200 elements):
+  end to end −1.8e-4 / −7.3e-5 / −4.0e-5; end to far cone −7.4e-5 / −1.3e-5 / −5.9e-6; end
+  to own cone 9.8e-4 / 9.1e-4 / 7.3e-4; cone to cone 1.7e-3 / 1.5e-3 / 9.4e-4; cone to
+  itself 5.7e-4 / 5.4e-4 / 3.4e-4; cone areas exact to round-off, reciprocity to 1e-16.
+  Flat facets instead: end to end −9.8e-3 / −3.1e-3 / −1.5e-3 and cone areas short by
+  2.3e-3 / 7.4e-4 / 3.6e-4.
+- **Validation, transport.** The frustraum with entrance holes of 0.7 mm radius and a
+  0.6 mm capsule, the wall driven (albedo 0.8), on flat facets against
+  `montecarlo_incident(...; reemit = :element)` (16 × 250 paths per receiver): with
+  balanced view factors at h 0.3 mm the LEH loss differs by 1.2e-3 and the capsule's
+  incident power by 1.9e-3 (statistical error 6e-4); the cylinder of the same length and
+  holes (radius 1.6 mm) by 1.8e-3 and 2.6e-3. Unbalanced and at h 0.4 the frustraum
+  stays within 6e-3, the cylinder within 1.9e-2. The energy balance (absorbed + escaped
+  + lost = source) closes to 5e-15.
