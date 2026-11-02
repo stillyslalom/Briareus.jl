@@ -1,0 +1,47 @@
+# NIF in-flight (2D) radiography of an imploding capsule, area-backlit: a Ge foil 12 mm
+# from the capsule in the equatorial plane, its He-α line (10.25 keV) imaged through an
+# array of pinholes at 8x onto a gated MCP detector (Oertel 2006) of two strips, ≈ 90 ps
+# each. Rygg et al. (2014), LLNL-JRNL-646555, OSTI 1184746, text (as read from the PDF):
+# eight beams, 52 kJ, CE ≈ 1 %, an emission ≈ 1 mm across and ≈ 2 ns long; 20–25 µm
+# pinholes; viewing holes 0.9 × 0.83 mm with HDC windows. The foil's standoff and the
+# windows are the target's, not this file's. The NIF foils' drive is a 1 ns picket 3 ns
+# before a 2–5 ns pulse (Barrios et al. 2013, Table 3; Rygg's Ref. 17), so the CE class
+# is the pre-pulsed one.
+# Not public, so absent, to be supplied by a file that extends this one
+# (check_diagnostics names them): the equatorial port (line_of_sight.phi_deg); the
+# pinhole's diameter (20–25 µm) and distance from the capsule (optic.diameter_um,
+# distance_mm); the filters; the MCP's detection efficiency (detector.efficiency_csv);
+# the backlighter's pulse (backlighter.pulse_ns, start_ns); the frame times
+# (recording.times_ns); the object-plane field (view.width_mm).
+
+schema = 1
+id = "nif_inflight_radiography"
+name = "NIF in-flight radiography (Ge area backlighter)"
+kind = "radiography"
+facility = "NIF"
+public = true
+source = "Rygg et al., LLNL-JRNL-646555 (Phys. Rev. Lett., 2014), OSTI 1184746"
+confidence = "H"
+
+[line_of_sight]
+theta_deg = 90.0
+note = "the equatorial plane; the port is not published"
+
+[backlighter]
+line = "Ge"
+prepulse = true
+note = "the He-alpha line (Rygg: 10.25 keV; kshell_line_energy: 10.279 keV); picket class (Barrios 2013)"
+
+[optic]
+kind = "pinhole"
+magnification = 8
+note = "an array of 20-25 um pinholes; diameter and distance not public"
+
+[detector]
+kind = "mcp"
+note = "two MCP strips; the photocathode's efficiency is not public"
+
+[recording]
+mode = "gated"
+gate_ns = 0.09
+note = "Rygg's ~90 ps temporal integration time, taken as the gate's FWHM"

@@ -65,6 +65,25 @@ over its spectrum, [`imager_image`](@ref) renders it on the object plane and blu
 by the pinhole, and [`imager_record`](@ref) integrates the images of a history over
 the recording's gates.
 
+The kind `radiography` (backlit radiographs: an area backlighter imaged through a
+pinhole, or a point projection) builds a [`Radiograph`](@ref) for
+[`radiograph`](@ref), which takes the target with its backlighter foil, the laser
+deposition on the foil and the object's parts with their materials. It takes:
+
+| Table | Keys |
+|---|---|
+| `[line_of_sight]` (required) | `theta_deg`, `phi_deg`: from the object toward the detector |
+| `[backlighter]` (required) | `line` (the He-α element, e.g. `"Ge"`) or `line_keV`; `pulse_ns` (the flat-top pulse) and `start_ns`; `foil_part` (default `backlighter`); `angular` (`"isotropic"` or `"lambertian"`); `prepulse` (the conversion-efficiency class); `ce` (in place of [`kshell_ce`](@ref)) |
+| `[optic]` (required) | `kind = "pinhole"` with `diameter_um`, `distance_mm` (from the object) and `magnification` (or the detector's `distance_mm`), or `kind = "projection"` |
+| top level | `filters` (required; as a channel's) |
+| `[detector]` (required) | `distance_mm` (from the object), `absorber` and `absorber_um` or `efficiency_csv`; `kind`, `pixel_um`, `pixels` |
+| `[view]` | `width_mm` (the object-plane field), `pixels` (default 128), `center_part` or `center_mm`, `up` |
+| `[recording]` | as an imager's |
+
+The images are of detected photons per mm² of detector, with the open field (no
+object) and the transmission that a radiograph normalized by it measures; a gated
+radiograph's frames are the emission recorded through each gate.
+
 A field of view takes in every surface of the target facing the instrument, occluded by
 any part: a NIF Dante's is ±30 mm at TCC (the 2004 design), wider than any hohlraum, so
 windows, packages and shields enter the signal as they would on the shot. Within an
@@ -97,6 +116,7 @@ source's table and checked against the energies the source tabulates:
 | `nif_sxi_lower` | NIF SXI lower, hard channel: 25 µm pinhole at 2×, Be 75 + Ti 50 µm, Si CCD (Schneider et al. 2010) | — |
 | `nif_sxi_upper` | NIF SXI upper, hard channel (extends `nif_sxi_lower`; Schneider et al. 2012, a draft) | — |
 | `nif_gleh2` | NIF G-LEH-2, gated, 1× (Chen et al. 2021, Table I) | the Ti filter, the sensor's absorbing layer, frame times and gate |
+| `nif_inflight_radiography` | NIF in-flight radiography: Ge He-α area backlighter, pinholes at 8×, two gated MCP strips of ≈ 90 ps (Rygg et al. 2014) | the equatorial port, the pinholes' diameter and distance, the filters, the detector's efficiency, the pulse, the frame times, the field |
 
 A user group completes one by extending it with the values it holds, e.g. Omega's
 solid angles, one `[[channel]]` table per channel with `number` and `solid_angle_sr`.
@@ -155,6 +175,6 @@ the repository.
 
 ```@autodocs
 Modules = [Briareus]
-Pages = ["src/diagnostics.jl", "src/imager.jl"]
+Pages = ["src/diagnostics.jl", "src/imager.jl", "src/radiography.jl"]
 Private = false
 ```

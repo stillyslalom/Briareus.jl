@@ -886,19 +886,13 @@ const _XRAY_IMAGER_SPEC = Dict(
         "gate_ns" => DiagnosticField(Real; doc = "gated: the gate's FWHM"),
         "gate_shape" => DiagnosticField(String; doc = "gated: gaussian (default) or square"))))
 
-function _build_xray_imager(def::DiagnosticDefinition; kwargs...)
-    d = def.data
-    los, o, det = d["line_of_sight"], d["optic"], d["detector"]
-    v = get(d, "view", Dict{String,Any}())
-    rec = get(d, "recording", Dict{String,Any}())
-    o["kind"] == "pinhole" || throw(_KeyedError("optic.kind", "pinhole (the one optic so far)"))
-    M = Float64(o["magnification"])
-    filters, tables = _filters(d["filters"], k -> "filters" * k)
-    mirror = haskey(d, "mirror") ? _mirror(d["mirror"], k -> "mirror" * k) : nothing
+# the detector's absorbing layer or measured efficiency (a `detector` table), as
+# `_detection` takes it
+function _detector(det::AbstractDict)
     if haskey(det, "efficiency_csv")
         (haskey(det, "absorber") || haskey(det, "absorber_um")) &&
             throw(_KeyedError("detector.efficiency_csv", "give absorber and absorber_um, or efficiency_csv"))
-        detector = _curve(det["efficiency_csv"], "detector.efficiency_csv")
+        return _curve(det["efficiency_csv"], "detector.efficiency_csv")
     elseif haskey(det, "absorber") || haskey(det, "absorber_um")
         (haskey(det, "absorber") && haskey(det, "absorber_um")) ||
             throw(_KeyedError("detector", "give absorber and absorber_um together"))
@@ -908,9 +902,41 @@ function _build_xray_imager(def::DiagnosticDefinition; kwargs...)
         catch e
             throw(_KeyedError("detector.absorber", sprint(showerror, e)))
         end
-    else
-        throw(_MissingValue("detector", "the detector's absorber and absorber_um, or efficiency_csv"))
+        return detector
     end
+    throw(_MissingValue("detector", "the detector's absorber and absorber_um, or efficiency_csv"))
+end
+
+# the object-plane field's center (a `view` table)
+function _view_center(v::AbstractDict)
+    haskey(v, "center_part") && haskey(v, "center_mm") &&
+        throw(_KeyedError("view.center_mm", "give one of center_part, center_mm"))
+    return haskey(v, "center_part") ? Symbol(v["center_part"]) :
+           haskey(v, "center_mm") ? Vec3(Float64.(v["center_mm"])...) : zero(Vec3)
+end
+
+# the recording's mode and gates (a `recording` table) as the instrument's keywords
+function _recording(rec::AbstractDict, kind)
+    mode = Symbol(get(rec, "mode", "integrated"))
+    mode in (:integrated, :gated) || throw(_KeyedError("recording.mode", "$kind records integrated or gated"))
+    if mode === :gated
+        haskey(rec, "times_ns") || throw(_MissingValue("recording.times_ns", "the frames' times"))
+        haskey(rec, "gate_ns") || throw(_MissingValue("recording.gate_ns", "the gate's FWHM"))
+    end
+    return (; mode, times = Float64.(get(rec, "times_ns", Float64[])), gate = Float64(get(rec, "gate_ns", 0.0)),
+            gate_shape = Symbol(get(rec, "gate_shape", "gaussian")))
+end
+
+function _build_xray_imager(def::DiagnosticDefinition; kwargs...)
+    d = def.data
+    los, o, det = d["line_of_sight"], d["optic"], d["detector"]
+    v = get(d, "view", Dict{String,Any}())
+    rec = get(d, "recording", Dict{String,Any}())
+    o["kind"] == "pinhole" || throw(_KeyedError("optic.kind", "pinhole (the one optic so far)"))
+    M = Float64(o["magnification"])
+    filters, tables = _filters(d["filters"], k -> "filters" * k)
+    mirror = haskey(d, "mirror") ? _mirror(d["mirror"], k -> "mirror" * k) : nothing
+    detector = _detector(det)
     pixel = 1e-3 * get(det, "pixel_um", 0.0)
     width = if haskey(v, "width_mm")
         Float64(v["width_mm"])
@@ -919,22 +945,101 @@ function _build_xray_imager(def::DiagnosticDefinition; kwargs...)
     else
         throw(_MissingValue("view.width_mm", "the object-plane field (or the detector's pixels and pixel_um)"))
     end
-    haskey(v, "center_part") && haskey(v, "center_mm") &&
-        throw(_KeyedError("view.center_mm", "give one of center_part, center_mm"))
-    center = haskey(v, "center_part") ? Symbol(v["center_part"]) :
-             haskey(v, "center_mm") ? Vec3(Float64.(v["center_mm"])...) : zero(Vec3)
-    mode = Symbol(get(rec, "mode", "integrated"))
-    mode in (:integrated, :gated) || throw(_KeyedError("recording.mode", "xray_imager records integrated or gated"))
-    if mode === :gated
-        haskey(rec, "times_ns") || throw(_MissingValue("recording.times_ns", "the frames' times"))
-        haskey(rec, "gate_ns") || throw(_MissingValue("recording.gate_ns", "the gate's FWHM"))
-    end
     kw = (; pinhole = 1e-3 * o["diameter_um"], distance = Float64(o["distance_mm"]), magnification = M,
-          width, pixels = Int(get(v, "pixels", 256)), center,
+          width, pixels = Int(get(v, "pixels", 256)), center = _view_center(v),
           up = Vec3(Float64.(get(v, "up", [0.0, 0.0, 1.0]))...), filters, tables, mirror, detector,
-          detector_pixel = pixel, energy = haskey(o, "energy_eV") ? Float64(o["energy_eV"]) : nothing, mode, times = Float64.(get(rec, "times_ns", Float64[])),
-          gate = Float64(get(rec, "gate_ns", 0.0)), gate_shape = Symbol(get(rec, "gate_shape", "gaussian")))
+          detector_pixel = pixel, energy = haskey(o, "energy_eV") ? Float64(o["energy_eV"]) : nothing,
+          _recording(rec, "xray_imager")...)
     return XrayImager(los["theta_deg"], los["phi_deg"]; merge(kw, values(kwargs))...)
 end
 
 register_diagnostic_kind(:xray_imager, _XRAY_IMAGER_SPEC, _build_xray_imager)
+
+# ---- kind "radiography": backlit radiographs (area backlighters, point projection) -------
+
+const _RADIOGRAPHY_SPEC = Dict(
+    "line_of_sight" => DiagnosticField(Dict(
+        "theta_deg" => DiagnosticField(Real; required = true),
+        "phi_deg" => DiagnosticField(Real; required = true)); required = true),
+    "backlighter" => DiagnosticField(Dict(
+        "line" => DiagnosticField(String; doc = "the He-α element, e.g. Ge"),
+        "line_keV" => DiagnosticField(Real; doc = "the line energy, in place of line"),
+        "foil_part" => DiagnosticField(String; doc = "the backlighter foil's part; default backlighter"),
+        "angular" => DiagnosticField(String; doc = "isotropic (default) or lambertian"),
+        "prepulse" => DiagnosticField(Bool; doc = "the CE class with a picket or pre-pulse"),
+        "ce" => DiagnosticField(Real; doc = "a conversion efficiency in place of the model's (fraction)"),
+        "pulse_ns" => DiagnosticField(Real; doc = "the backlighter's flat-top pulse"),
+        "start_ns" => DiagnosticField(Real; doc = "the pulse's start; default 0")); required = true),
+    "optic" => DiagnosticField(Dict(
+        "kind" => DiagnosticField(String; required = true, doc = "pinhole or projection"),
+        "diameter_um" => DiagnosticField(Real; doc = "pinhole diameter, µm"),
+        "distance_mm" => DiagnosticField(Real; doc = "pinhole from the object (TCC), mm"),
+        "magnification" => DiagnosticField(Real; doc = "pinhole: the detector's distance is distance_mm (1 + M)"));
+        required = true),
+    "filters" => DiagnosticField([_FILTER_SPEC]; required = true),
+    "detector" => DiagnosticField(Dict(
+        "kind" => DiagnosticField(String; doc = "ccd, hcmos, mcp or image_plate (descriptive)"),
+        "distance_mm" => DiagnosticField(Real; doc = "the detector from the object (TCC), mm"),
+        "pixel_um" => DiagnosticField(Real; doc = "detector pixel, µm"),
+        "pixels" => DiagnosticField(Vector{Real}; doc = "detector pixels across and down"),
+        "absorber" => DiagnosticField(String; doc = "the absorbing layer's material, e.g. Si"),
+        "absorber_um" => DiagnosticField(Real; doc = "the absorbing layer's thickness, µm"),
+        "efficiency_csv" => DiagnosticField(String; doc = "measured detection efficiency (energy eV, fraction)"));
+        required = true),
+    "view" => DiagnosticField(Dict(
+        "width_mm" => DiagnosticField(Real; doc = "object-plane field"),
+        "pixels" => DiagnosticField(Integer; doc = "object-plane samples per side; default 128"),
+        "center_part" => DiagnosticField(String; doc = "the field's center: a part's centroid"),
+        "center_mm" => DiagnosticField(Vector{Real}; doc = "the field's center: x, y, z"),
+        "up" => DiagnosticField(Vector{Real}; doc = "the image's up, a chamber direction; default z"))),
+    "recording" => DiagnosticField(Dict(
+        "mode" => DiagnosticField(String; doc = "integrated or gated"),
+        "times_ns" => DiagnosticField(Vector{Real}; doc = "gated: the frames' times"),
+        "gate_ns" => DiagnosticField(Real; doc = "gated: the gate's FWHM"),
+        "gate_shape" => DiagnosticField(String; doc = "gated: gaussian (default) or square"))))
+
+function _build_radiography(def::DiagnosticDefinition; kwargs...)
+    d = def.data
+    los, s, o, det = d["line_of_sight"], d["backlighter"], d["optic"], d["detector"]
+    v = get(d, "view", Dict{String,Any}())
+    haskey(s, "line") && haskey(s, "line_keV") && throw(_KeyedError("backlighter.line_keV", "give one of line, line_keV"))
+    line = haskey(s, "line_keV") ? Float64(s["line_keV"]) :
+           haskey(s, "line") ? Symbol(s["line"]) : throw(_MissingValue("backlighter.line", "the backlighter's He-α element"))
+    line isa Symbol && !haskey(_HEALPHA_KEV, line) &&
+        throw(_KeyedError("backlighter.line", "no He-α line energy for $line; give line_keV"))
+    angular = Symbol(get(s, "angular", "isotropic"))
+    angular in (:isotropic, :lambertian) || throw(_KeyedError("backlighter.angular", "isotropic or lambertian"))
+    kind = o["kind"]
+    kind in ("pinhole", "projection") || throw(_KeyedError("optic.kind", "pinhole or projection"))
+    if kind == "pinhole"
+        haskey(o, "diameter_um") || throw(_MissingValue("optic.diameter_um", "the pinhole's diameter"))
+        haskey(o, "distance_mm") || throw(_MissingValue("optic.distance_mm", "the pinhole's distance from the object"))
+        haskey(o, "magnification") && haskey(det, "distance_mm") &&
+            throw(_KeyedError("optic.magnification", "give one of optic.magnification, detector.distance_mm"))
+        p = Float64(o["distance_mm"])
+        distance = haskey(o, "magnification") ? p * (1 + o["magnification"]) :
+                   haskey(det, "distance_mm") ? Float64(det["distance_mm"]) :
+                   throw(_MissingValue("detector.distance_mm", "the detector's distance (or optic.magnification)"))
+        optic = (; pinhole = 1e-3 * o["diameter_um"], pinhole_distance = p)
+    else
+        for k in ("diameter_um", "distance_mm", "magnification")
+            haskey(o, k) && throw(_KeyedError("optic." * k, "a point projection has no $k"))
+        end
+        haskey(det, "distance_mm") || throw(_MissingValue("detector.distance_mm", "the detector's distance"))
+        distance = Float64(det["distance_mm"])
+        optic = (;)
+    end
+    filters, tables = _filters(d["filters"], k -> "filters" * k)
+    detector = _detector(det)
+    haskey(s, "pulse_ns") || throw(_MissingValue("backlighter.pulse_ns", "the backlighter's pulse length"))
+    haskey(v, "width_mm") || throw(_MissingValue("view.width_mm", "the object-plane field"))
+    kw = (; line, distance, optic..., width = Float64(v["width_mm"]), pixels = Int(get(v, "pixels", 128)),
+          center = _view_center(v), up = Vec3(Float64.(get(v, "up", [0.0, 0.0, 1.0]))...), filters, tables,
+          detector, detector_pixel = 1e-3 * get(det, "pixel_um", 0.0),
+          foil = Symbol(get(s, "foil_part", "backlighter")), angular, prepulse = get(s, "prepulse", false),
+          ce = haskey(s, "ce") ? Float64(s["ce"]) : nothing, pulse = Float64(s["pulse_ns"]),
+          start = Float64(get(s, "start_ns", 0.0)), _recording(get(d, "recording", Dict{String,Any}()), "radiography")...)
+    return Radiograph(los["theta_deg"], los["phi_deg"]; merge(kw, values(kwargs))...)
+end
+
+register_diagnostic_kind(:radiography, _RADIOGRAPHY_SPEC, _build_radiography)

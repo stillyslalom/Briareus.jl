@@ -70,6 +70,7 @@ export legendre, legendre_moments, legendre_weights, solid_angle, ylm_moments, y
        ylm_matrix, ylm_frame, mode_index, relative_mode_power, mode_amplitude, mode_power, mode_rms, rms_nonuniformity
 export OrthoCamera, render, radiance, line_of_sight_power
 export XrayImager, detected_radiance, imager_image, imager_record, pinhole_solid_angle
+export Radiograph, radiograph
 export backlighter_foil, line_of_sight, LineOfSightReport
 export Frame, CHAMBER, to_chamber, to_frame, compose, euler_rotation, euler_frame, port_frame,
        foil_frame, part_centroid, component_frame, coords_of, point_of, FrameDef, resolve_frames,
@@ -134,6 +135,7 @@ include("clearance.jl")
 include("backlighter.jl")
 include("sweep.jl")
 include("backlighter_signal.jl")
+include("radiography.jl")
 include("keepout.jl")
 include("uncertainty.jl")
 include("implosion.jl")
