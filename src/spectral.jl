@@ -348,7 +348,8 @@ Multigroup radiosity about a gray solution `sol` (same model, laser deposition a
 time). The groups are `[edges[g], edges[g+1]]` (eV; `edges[1] = 0`, `edges[end] = Inf`,
 e.g. `spectral_edges()`).
 
-- Sources: an element's gray source is its converted laser x-rays `ηP/A` plus, on a
+- Sources: an element's gray source is its converted laser x-rays `ηP/A` (`sol.converted`,
+  every color's with `solve`'s `unconverted`) plus, on a
   re-emitting wall of a `drive_history`, the emission of its stored energy. The
   laser-produced M-band (`mband`, an `MBandEmission`; its power per element
   `mband_power`, TW, defaults to `mband_power(mband, target, sol.laser)`, and must be
@@ -425,7 +426,7 @@ function spectral_solve(sol::RadiationSolution; edges = [0.0, Inf], albedo = not
     end
     # converted laser x-rays (the rest of the source is a re-emitting wall's stored energy)
     SC = spot === :brightness ? copy(S) :
-         clamp.(Float64[v(x) for x in _xray_source(t, v.(sol.laser), sol.time)], SM, S)
+         clamp.(Float64[v(x) for x in sol.converted], SM, S)
     # wall temperature (the only one with :brightness) and the converted x-rays'
     wallT(Btot) = spot === :brightness ? radiation_temperature.(Btot) :
                   radiation_temperature.(max.(Btot .- SC, 0.0))

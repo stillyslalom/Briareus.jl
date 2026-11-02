@@ -651,7 +651,10 @@ element (the albedos the radiosity was solved with, so `B = source + albedo .* H
 exactly); `intact`, the albedo each element would have intact (a thin-foil element's
 `before` albedo, the albedo elsewhere); `transmission`, the fraction of its incident
 flux each element transmits out of the enclosure (nonzero only on a burned-through
-`BurnthroughAlbedo` foil; see `energy_balance`); `time`.
+`BurnthroughAlbedo` foil; see `energy_balance`); `time`; `converted`, the part of
+`source` converted from laser light (TW/mm²; every color's, without a re-emitting
+wall's emission). The constructor without `converted` takes it as the 3ω conversion of
+`laser`, `ηP/A`.
 """
 struct RadiationSolution{T}
     model::RadiationModel
@@ -663,7 +666,11 @@ struct RadiationSolution{T}
     intact::Vector{Float64}
     transmission::Vector{Float64}
     time::Float64
+    converted::Vector{T}
 end
+RadiationSolution(m, laser, source, B, H, albedo, intact, transmission, time) =
+    RadiationSolution(m, laser, source, B, H, albedo, intact, transmission, time,
+                      convert(Vector{eltype(source)}, _xray_source(m.target, laser, time)))
 
 """
     solve(model, dep::Deposition; time = 0.0, albedo = nothing, burnthrough = nothing,
@@ -694,10 +701,9 @@ and no measurement of the conversion of overlapping colors was found (research n
 "Unconverted light: absorption and conversion vs. wavelength"). A conversion
 independent of intensity makes this the 3ω solve of the equivalent power
 `P + Σ_c r_c P_c`, to rounding. `sol.laser` is then the absorbed power of all colors,
-`P + Σ_c P_c` ([`spectral_solve`](@ref) estimates the converted share of the source from
-that total at the 3ω conversion, clamped to the source: exact for `r_c ≤ 1` and a
-conversion independent of intensity). Without `unconverted` the source is the 3ω one, unchanged. Generic in the number type of the
-powers of every color.
+`P + Σ_c P_c`, and `sol.converted` the source above (which [`spectral_solve`](@ref)
+takes as the converted share). Without `unconverted` the source is the 3ω one,
+unchanged. Generic in the number type of the powers of every color.
 
 The factorization of the system for the initial albedo (the materials' at `time`, or the
 explicit `albedo`) is cached on the model, so repeated solves with unchanged albedos
@@ -781,20 +787,23 @@ function solve(m::RadiationModel, P::AbstractVector; time = 0.0, albedo = nothin
         S = E === nothing ? S0 : S0 .+ E
         it == maxiter && @warn "albedo iteration did not converge" δ
     end
-    return RadiationSolution(m, laser, S, B, H, α, intact, tr, Float64(time))
+    return RadiationSolution(m, laser, S, B, H, α, intact, tr, Float64(time), S0)
 end
 
 # The unconverted colors' x-ray source flux Σ_c r_c η(t, P_c/A) P_c/A and absorbed power
 # Σ_c P_c per element, each color's conversion at its own absorbed flux.
 _color_power(d::Deposition) = d.element
 _color_power(p::AbstractVector) = p
-function _unconverted_source(t::Target, u, colors, time)
-    n = nelements(t)
+function _check_unconverted(t::Target, u, colors)
     for c in colors
         haskey(u, c.name) || throw(ArgumentError("unconverted has no power for $(c.name)"))
-        length(_color_power(u[c.name])) == n ||
+        length(_color_power(u[c.name])) == nelements(t) ||
             throw(DimensionMismatch("unconverted power of $(c.name): one entry per element"))
     end
+end
+function _unconverted_source(t::Target, u, colors, time)
+    n = nelements(t)
+    _check_unconverted(t, u, colors)
     T = mapreduce(c -> eltype(_color_power(u[c.name])), promote_type, colors; init = Float64)
     S = zeros(T, n)
     Pc = zeros(T, n)
@@ -807,7 +816,8 @@ function _unconverted_source(t::Target, u, colors, time)
 end
 
 """
-    flux_response(model, observed; time = 0.0, albedo = nothing, weights = nothing) -> Matrix
+    flux_response(model, observed; time = 0.0, albedo = nothing, weights = nothing,
+                  laser = nothing, unconverted = nothing, colors = nif_unconverted()) -> Matrix
 
 Linear operator `R` with `H[observed] = R * P`: incident x-ray flux on the observed
 elements (TW/mm²) per unit absorbed laser power on every element (TW). It is fixed
@@ -826,13 +836,30 @@ A time-dependent [`Conversion`](@ref) is evaluated at `time`. An intensity-depen
 makes the source nonlinear in `P`: pass the absorbed laser power `laser` (TW per
 element) to linearize about, i.e. to fix each element's conversion at its value for
 that deposition (the secant, exact at `laser` itself).
+
+With `unconverted` (as in [`solve`](@ref): per color of `colors`, a `Deposition` or a
+per-element absorbed power), returns a `Dict` of responses keyed by color: `:omega3`,
+the 3ω response above, and one per unconverted color `c`, the response to that color's
+absorbed power: the 3ω response with each element's conversion `η(t, P/A)` replaced by
+`r_c η(t, P_c/A)`, `r_c` the color's `conversion`, so that
+`H[observed] ≈ R[:omega3] * P + Σ_c R[c] * P_c`. Each color's conversion is fixed at its value for the color's own
+power in `unconverted` (a secant per color): the sum is `solve`'s per-color result to
+rounding at those powers, and at any powers for conversions independent of intensity.
+With an intensity-dependent conversion, other powers `P_c′` leave the error of the
+source change `r_c [η(P_c/A) − η(P_c′/A)] P_c′/A` carried through the radiosity solve;
+on Dewald's gold table (`dη/dlog₁₀I = −0.15` between 10¹⁴ and 10¹⁵ W/cm²) the secant's
+source of the color exceeds the per-color one by `0.065 δ/η` of it for a small relative
+rise `δ` of the color's flux, and equals it where both fluxes lie beyond the same end
+of the table (held at its end values, as for unconverted light below 10¹⁴ W/cm²).
 """
 function flux_response(m::RadiationModel, observed::AbstractVector{<:Integer}; time = 0.0,
-                       albedo = nothing, weights = nothing, laser = nothing)
+                       albedo = nothing, weights = nothing, laser = nothing,
+                       unconverted = nothing, colors = nif_unconverted())
     t = m.target
     α = albedo === nothing ? albedos(t, time) : collect(Float64, albedo)
     η = _constant_conversion(t) ? conversions(t) :
         conversions(t, time, laser === nothing ? nothing : ForwardDiff.value.(laser))
+    unconverted === nothing || _check_unconverted(t, unconverted, colors)
     # R = F[obs,:] M⁻¹ diag(η ./ A)  ⇒  Rᵀ = diag(η ./ A) M⁻ᵀ F[obs,:]ᵀ
     rhs = if weights === nothing
         _rows_transposed(m.F, observed)
@@ -843,7 +870,14 @@ function flux_response(m::RadiationModel, observed::AbstractVector{<:Integer}; t
         Matrix(transpose(Wn * m.F))
     end
     X = m.iterative ? _iterative_transposed(m, α, rhs) : ldiv!(_radiosity_lu(m, α)', rhs)
-    return Matrix(transpose(X .* (η ./ t.elem_area)))
+    unconverted === nothing && return Matrix(transpose(X .* (η ./ t.elem_area)))
+    R = Dict{Symbol,Matrix{Float64}}(:omega3 => Matrix(transpose(X .* (η ./ t.elem_area))))
+    for c in colors
+        ηc = _constant_conversion(t) ? η :
+             conversions(t, time, Float64[ForwardDiff.value(x) for x in _color_power(unconverted[c.name])])
+        R[c.name] = Matrix(transpose(X .* (c.conversion .* ηc ./ t.elem_area)))
+    end
+    return R
 end
 
 # F[observed, :]ᵀ (an HMatrix by products with unit vectors)

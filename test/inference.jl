@@ -214,6 +214,8 @@ end
             # per-color x-ray sources of unconverted light
             ucp = (omega1 = 0.01 .* dep.element, omega2 = 0.002 .* dep.element)
             @test _inf_jet_clean(JET.report_call, (m, d, u) -> solve(m, d; unconverted = u), s.model, dep, ucp)
+            @test _inf_jet_clean(JET.report_call, (m, o, u) -> flux_response(m, o; unconverted = u),
+                                 s.model, s.observed, ucp)
             @test _inf_jet_clean(JET.report_call, history,
                                  τ -> with_pulses(quads, pulse, τ), [0.5, 1.0])
             # the history's deposition with the M-band's per-group split (from 1.11, as

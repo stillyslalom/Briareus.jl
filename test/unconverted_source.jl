@@ -74,3 +74,60 @@
     dH = ForwardDiff.derivative(x -> sum(solve(mh, x .* Ph; unconverted = uh).H[obs]), 1.0)
     @test isapprox(dH, sum(s0.H[obs]); rtol = 1e-12)
 end
+
+# Two directly opposed unit squares one side length apart: Howell's closed form at X = 1.
+const _UC_FX = let X = 1.0
+    2 / (π * X^2) * (log(sqrt((1 + X^2)^2 / (1 + 2X^2))) + 2X * sqrt(1 + X^2) * atan(X / sqrt(1 + X^2)) - 2X * atan(X))
+end
+
+@testset "per-color flux response and converted share" begin
+    uc = nif_unconverted()
+    r1, r2 = uc[1].conversion, uc[2].conversion
+    fx = _UC_FX
+    F = [0.0 fx; fx 0.0]
+    tab = Conversion(intensities = (1e14, 1e15), efficiencies = (0.95, 0.80))
+    m1 = Material(:Au; albedo = 0.6, conversion = tab)
+    m2 = Material(:Au; albedo = 0.3, conversion = Conversion(efficiency = 0.5, time_exponent = 0.2))
+    sq = rectangle_mesh(1.0, 1.0; nu = 1, nv = 1)
+    t2 = Target(Component(:a, sq, m1),
+                Component(:b, transform(sq, [1 0 0; 0 -1 0; 0 0 -1], Vec3(0, 0, 1)), m2))
+    m = RadiationModel(t2, F)
+    P = [3.0, 0.4]
+    u = (omega1 = [0.5, 0.1], omega2 = [2.0, 0.0])
+    τ = 2.0
+    sol = solve(m, P; time = τ, unconverted = u)
+    R = flux_response(m, [1, 2]; time = τ, laser = P, unconverted = u)
+    @test R isa Dict{Symbol,Matrix{Float64}} && sort(collect(keys(R))) == [:omega1, :omega2, :omega3]
+    @test isequal(R[:omega3], flux_response(m, [1, 2]; time = τ, laser = P))
+    Hr(u) = R[:omega3] * P .+ R[:omega1] * u.omega1 .+ R[:omega2] * u.omega2
+    @test isapprox(Hr(u), sol.H; rtol = 1e-12)
+    # away from the secant: the 2ω flux on plate 1 rises from 2e14 to 2.2e14 W/cm², on
+    # the table; the 1ω flux (5.5e13) stays below it and plate 2's conversion depends on
+    # time only. The response's error is the source change r₂ [η(2e14) − η(2.2e14)] 2.2
+    # on plate 1 through the 2×2 radiosity solve.
+    u2 = (omega1 = 1.1 .* u.omega1, omega2 = 1.1 .* u.omega2)
+    η(I) = 0.95 - 0.15 * log10(clamp(I, 1e14, 1e15) / 1e14)
+    ΔS = r2 * (η(2e14) - η(2.2e14)) * 2.2
+    ΔB1 = ΔS / (1 - 0.6 * 0.3 * fx^2)
+    ΔH = [fx * 0.3 * fx * ΔB1, fx * ΔB1]
+    @test isapprox(Hr(u2) .- solve(m, P; time = τ, unconverted = u2).H, ΔH; rtol = 1e-9)
+    # the converted share is the per-color source (no re-emission here), where the 3ω
+    # conversion of the total power differs
+    @test isequal(sol.converted, sol.source)
+    @test spectral_solve(sol).converted == sol.source
+    @test abs(Briareus._xray_source(t2, sol.laser, τ)[1] - sol.source[1]) > 1e-3 * sol.source[1]
+
+    # a conversion independent of intensity: the response is the per-color solve at any
+    # powers
+    th = hohlraum(nz = 8, nphi = 12, capsule_ntheta = 6, capsule_nphi = 8)
+    mh = RadiationModel(th)
+    rng = Xoshiro(5)
+    Ph = 0.1 .* rand(rng, nelements(th))
+    uh = (omega1 = 0.01 .* rand(rng, nelements(th)), omega2 = 0.002 .* rand(rng, nelements(th)))
+    obs = elements(th, :capsule)
+    Rh = flux_response(mh, obs; unconverted = uh)
+    Hh(s) = Rh[:omega3] * Ph .+ s .* (Rh[:omega1] * uh.omega1 .+ Rh[:omega2] * uh.omega2)
+    Hs(s) = solve(mh, Ph; unconverted = (omega1 = s .* uh.omega1, omega2 = s .* uh.omega2)).H[obs]
+    @test isapprox(Hh(1.0), Hs(1.0); rtol = 1e-12) && isapprox(Hh(1.7), Hs(1.7); rtol = 1e-12)
+    @test_throws ArgumentError flux_response(mh, obs; unconverted = (omega1 = uh.omega1,))
+end
