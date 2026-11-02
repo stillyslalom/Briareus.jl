@@ -132,6 +132,19 @@ end
     @test isapprox(rt.shape, tuned.ylm[1:25, :] ./ tuned.ylm[1:1, :]; rtol = 1e-12, atol = 1e-14)
     @test isapprox(rt.drive .* ref2.ylm[1, :], tuned.ylm[1, :]; rtol = 1e-12)
     @test maximum(abs.(rt.drive .- 1)) < 1e-3
+    # 1ω on every other quad (a fraction per beam), retuned by cone: each cone's quads
+    # carry two fractions, and the history at the retuned powers is the prediction
+    half = (omega1 = [isodd(i) ? uc.omega1 : 0.0 for i in eachindex(quads)], omega2 = uc.omega2)
+    ref4 = drive_history(m, op, τ -> with_pulses(quads, pul, τ), times; lmax = 4, ylm = true, keep_albedo = true,
+                         mband = nothing, unconverted = half, colors = mock)
+    uv = (omega1 = half.omega1[keep], omega2 = uc.omega2)
+    rv = retune_drive(m, opk, kept, ref4; by = :group, unconverted = uv, colors = mock)
+    tv = drive_history(m, opk, τ -> with_pulses(kept, rv.pulses, τ), times; lmax = 4, ylm = true, mband = nothing,
+                       unconverted = uv, colors = mock)
+    @test isapprox(rv.shape, tv.ylm[1:25, :] ./ tv.ylm[1:1, :]; rtol = 1e-12, atol = 1e-14)
+    @test isapprox(rv.drive .* ref4.ylm[1, :], tv.ylm[1, :]; rtol = 1e-12)
+    # (the light is not vacuous: it raises the drive over the 3ω-only history)
+    @test all(ref4.ylm[1, :] .> ref3.ylm[1, :])
     # zero fractions: the retune without unconverted light, bit for bit
     r0 = retune_drive(m, opk, kept, ref3; by = :quad, limits = cap)
     rz0 = retune_drive(m, opk, kept, ref3; by = :quad, limits = cap, unconverted = (omega1 = 0.0, omega2 = 0.0),

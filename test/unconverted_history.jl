@@ -63,6 +63,23 @@
     refb = [unconverted_deposition(t, with_pulses([bl, b2], pulses, τ; by = :beam); ratio).omega2.element
             for τ in times]
     @test isapprox(hb.element[:omega2] .* t.elem_area ./ 1e14, reduce(hcat, refb); rtol = 1e-12)
+    # a fraction per beam (keyed by name): 1ω on the first beam only, on a falling
+    # fraction, and 2ω on the second only; against `unconverted_deposition` at each time
+    # with those fractions per beam, and the same as a vector per beam
+    n1, n2 = Symbol(bl.name), Symbol(b2.name)
+    rb = (omega1 = Dict(n1 => f1, n2 => 0.0), omega2 = Dict(n1 => 0.0, n2 => 0.02))
+    hk = unconverted_history(t, [bl, b2], pulses, times; ratio = rb, by = :beam)
+    refk = [unconverted_deposition(t, with_pulses([bl, b2], pulses, τ; by = :beam);
+                                   ratio = (omega1 = [f1(τ), 0.0], omega2 = [0.0, 0.02])) for τ in times]
+    for c in (:omega1, :omega2)
+        A = hk.absorption[c] .* hk.element[c] .* t.elem_area ./ 1e14
+        R = reduce(hcat, [getfield(d, c).element for d in refk])
+        @test isapprox(A, R; rtol = 1e-12) && sum(R) > 0
+    end
+    hkv = unconverted_history(t, [bl, b2], pulses, times; ratio = (omega1 = [f1, 0.0], omega2 = [0.0, 0.02]), by = :beam)
+    @test isequal(hk.element, hkv.element) && isequal(hk.backside, hkv.backside)
+    @test_throws KeyError unconverted_history(t, [bl, b2], pulses, times; ratio = (omega1 = Dict(n1 => f1), omega2 = 0.0),
+                                              by = :beam)
 
     # Threshold crossing on a linear ramp: P = P0 (τ - τ0)/Δ, so the 1ω irradiance inside
     # the square reaches I* at τ0 + Δ I* 22² / (1e14 r P0), between the sampled times

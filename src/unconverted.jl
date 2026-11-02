@@ -467,6 +467,26 @@ end
 _fraction_at(r::Real, τ) = Float64(r)
 _fraction_at(r, τ) = Float64(r(τ))
 
+# The fraction schedule of beam `b`, at position `i` of `n` beams, in one color's entry
+# `r` of a per-color fraction input: `r` itself (a number or a function of time, for every
+# beam), `r[i]` of a vector with one entry per beam, or `r[key(b)]` of a keyed collection
+# (a `KeyError` for a beam without an entry, as `pulses`). Numbers are made Float64, so
+# that beams on equal fractions share a schedule (compared by identity).
+function _fraction_of(r, key, b, i, n)
+    f = if r isa AbstractVector
+        length(r) == n || throw(DimensionMismatch("a fraction per beam needs one entry for each of the $n beams, " *
+                                                  "not $(length(r))"))
+        r[i]
+    else
+        _schedule_of(r, key, b)
+    end
+    return f isa Real ? Float64(f) : f
+end
+
+# Each beam's fraction schedules, a tuple over the colors `names` of `ratio`.
+_fractions_of(ratio, names, key, beams) =
+    [Tuple(_fraction_of(ratio[nm], key, b, i, length(beams)) for nm in names) for (i, b) in enumerate(beams)]
+
 # The schedule of beam `b`: `p[key(b)]` of a keyed collection, else `p` itself (one
 # function of time for all beams).
 _schedule_of(p, key, b) = p isa Union{AbstractDict,NamedTuple} ? _beam_pulse(p, key, b) : p
@@ -499,7 +519,12 @@ its name; or `by(beam)`). For each color `c` of `colors`, the light of one beam 
   outside its times). It has no default: the fraction and its dependence on the pulse
   shape are not public (NIF User Guide §4.5: most of the unconverted light is 1ω, and
   shaped pulses leave more of it). Every color needs an entry (0 for none), keyed by its
-  name, a `Symbol`: any other key (a `String`, an unknown name) is an error.
+  name, a `Symbol`: any other key (a `String`, an unknown name) is an error. A color's
+  entry holds for every beam, or gives each beam its own fraction (a number or a
+  function of time): a vector with one entry per beam of `beams`, in order, or keyed as
+  `pulses` (by `by`; a beam without an entry is a `KeyError`, as for `pulses`), e.g.
+  `(omega1 = Dict(:outer44 => 0.05, :outer50 => 0.05, :inner23 => 0.0, :inner30 => 0.0),
+  omega2 = 0.01)` for 1ω on the outer cones only.
 - `prepulse` — per color (optional), light not proportional to the 3ω pulse, in TW per
   beam: one function of time (a `PulseShape`) for all beams, or keyed as `pulses`, keyed
   by color as `ratio` is. An
@@ -510,9 +535,10 @@ its name; or `by(beam)`). For each color `c` of `colors`, the light of one beam 
 
 The geometry is fixed (the aims, spots and ports of `beams`; only the power varies), and
 the light is linear in each beam's power, so the whole history costs one
-[`unconverted_deposition`](@ref): the beams are grouped by their (pulse, prepulse)
-schedule, each group is deposited once at unit power, and the history is that pattern
-times the group's power at each time. A pointing or a target that changes in time needs
+[`unconverted_deposition`](@ref): the beams are grouped by their (pulse, prepulse,
+fraction) schedule (equal numbers or the same function), each group is deposited once
+at unit power, and the history is that pattern times the group's power at each time. A
+pointing or a target that changes in time needs
 a deposition per configuration, which this does not cover.
 
 The irradiance is the light incident on each surface (each color's `absorption` set to
@@ -538,7 +564,8 @@ Base.@nospecializeinfer function unconverted_history(t::Target, beams::AbstractV
     key = _beam_key(by)
     vb = Beam[_value_beam(b) for b in beams]
     pre(b) = Tuple(haskey(prepulse, n) ? _schedule_of(prepulse[n], key, b) : nothing for n in names)
-    sigs, groups = _schedule_groups(vb, b -> (_schedule_of(pulses, key, b), pre(b)))
+    fr = _fractions_of(ratio, names, key, vb)
+    sigs, groups = _schedule_groups(eachindex(vb), i -> (_schedule_of(pulses, key, vb[i]), pre(vb[i]), fr[i]))
     # the colors' geometry, incident light only
     unit = [UnconvertedColor(c.name; footprint = c.footprint, edge = c.edge, focal_shift = c.focal_shift)
             for c in colors]
@@ -548,13 +575,13 @@ Base.@nospecializeinfer function unconverted_history(t::Target, beams::AbstractV
     B = Dict(n => zeros(length(t.components), nt) for n in names)
     skipped = String[]
     for (sig, idx) in zip(sigs, groups)
-        pulse, pres = sig
+        pulse, pres, fracs = sig
         d = unconverted_deposition(t, [remake(vb[i]; power = 1.0) for i in idx];
                                    ratio = Dict(n => 1.0 for n in names), colors = unit, offsets,
                                    lens_distance, coarse, resolution)
         append!(skipped, d.skipped)
         for (j, n) in enumerate(names)
-            s = _color_power(ratio[n], pulse, pres[j], ts, n)
+            s = _color_power(fracs[j], pulse, pres[j], ts, n)
             Ie, Ib = _unit_irradiance(t, d[n], Aback)
             _add_outer!(E[n], Ie, s)
             _add_outer!(B[n], Ib, s)
@@ -565,14 +592,15 @@ Base.@nospecializeinfer function unconverted_history(t::Target, beams::AbstractV
 end
 
 # The unconverted light of a `drive_history` (its `unconverted`): per color, a fraction
-# `ratio` of each beam's 3ω power (a number or a function of time), plus an optional
-# `prepulse` power per beam (per color, one function of time or keyed by `key(beam)`).
-# The light is linear in each beam's power, so beams whose powers have been equal at
-# every step so far, on the same prepulse schedules, share one `unconverted_deposition`
-# at unit power (an atom of a partition of the beams, split when their powers part); a
-# color's absorbed power at a step is the sum over atoms of that pattern times the
-# atom's power in the color, `ratio · P₃ω + prepulse`. For beams on shared pulses the
-# atoms are the (pulse, prepulse) schedules, as in `unconverted_history`.
+# `ratio` of each beam's 3ω power (a number or a function of time, for every beam, one
+# per beam or keyed by `key(beam)`), plus an optional `prepulse` power per beam (per
+# color, one function of time or keyed by `key(beam)`). The light is linear in each
+# beam's power, so beams whose powers have been equal at every step so far, on the same
+# fraction and prepulse schedules, share one `unconverted_deposition` at unit power (an
+# atom of a partition of the beams, split when their powers part); a color's absorbed
+# power at a step is the sum over atoms of that pattern times the atom's power in the
+# color, `ratio · P₃ω + prepulse`. For beams on shared pulses the atoms are the (pulse,
+# fraction, prepulse) schedules, as in `unconverted_history`.
 mutable struct _UnconvertedLight
     ratio::Any
     prepulse::Any                  # `nothing`: none
@@ -582,6 +610,7 @@ mutable struct _UnconvertedLight
     target::Union{Nothing,Target}
     geometry::Vector{Tuple{String,Vec3,SVector{3,Float64},Float64,String}}
     atoms::Vector{Vector{Int}}
+    fracs::Vector{Any}             # per atom, its fraction schedule per color
     pres::Vector{Any}              # per atom, its prepulse schedule per color (`nothing`: none)
     patterns::Vector{Any}          # per atom, its unit-power deposition (`nothing`: not yet)
     skipped::Vector{String}
@@ -597,7 +626,7 @@ function _UnconvertedLight(ratio, prepulse, by, colors, kw)
                                         "lens_distance, coarse and resolution, not " * join(bad, ", ")))
     return _UnconvertedLight(ratio, prepulse, _beam_key(by), cs, NamedTuple(kw), nothing,
                              Tuple{String,Vec3,SVector{3,Float64},Float64,String}[], Vector{Int}[], Any[],
-                             Any[], String[])
+                             Any[], Any[], String[])
 end
 
 # Per-color depositions with the colors they were deposited with: `solve`'s `unconverted`.
@@ -614,34 +643,37 @@ function _unconverted_at!(u::_UnconvertedLight, t::Target, beams, τ)
     geo = [(b.name, b.port, SVector{3,Float64}(b.aim), b.defocus, b.quad) for b in vb]
     if isempty(u.atoms)
         u.geometry = geo
+        fr = _fractions_of(u.ratio, Symbol[c.name for c in u.colors], u.key, vb)
         if u.prepulse === nothing
-            u.atoms, u.pres, u.patterns = [collect(eachindex(vb))], Any[nothing], Any[nothing]
+            sigs, groups = _schedule_groups(eachindex(vb), i -> fr[i])
+            u.atoms, u.fracs, u.pres = groups, Any[sigs...], Any[nothing for _ in groups]
         else
-            sigs, groups = _schedule_groups(vb, b -> _prepulse_of(u, b))
-            u.atoms, u.pres, u.patterns = groups, Any[sigs...], Any[nothing for _ in groups]
+            sigs, groups = _schedule_groups(eachindex(vb), i -> (fr[i], _prepulse_of(u, vb[i])))
+            u.atoms, u.fracs, u.pres = groups, Any[first(x) for x in sigs], Any[last(x) for x in sigs]
         end
+        u.patterns = Any[nothing for _ in groups]
     elseif !isequal(geo, u.geometry)
         throw(ArgumentError("unconverted light in a drive history needs the beams' pointing fixed in " *
                             "time (their names, ports, aims and defocus), which changed at $τ ns"))
     end
     t === u.target || (u.target = t; fill!(u.patterns, nothing))
     p = Float64[b.power for b in vb]
-    atoms, pres, patterns = Vector{Int}[], Any[], Any[]
-    for (a, q, d) in zip(u.atoms, u.pres, u.patterns)
+    atoms, fracs, pres, patterns = Vector{Int}[], Any[], Any[], Any[]
+    for (a, f, q, d) in zip(u.atoms, u.fracs, u.pres, u.patterns)
         _, parts = _schedule_groups(a, i -> p[i])
         if length(parts) == 1
             push!(atoms, a)
+            push!(fracs, f)
             push!(pres, q)
             push!(patterns, d)
         else
             append!(atoms, [a[g] for g in parts])
+            append!(fracs, fill(f, length(parts)))
             append!(pres, fill(q, length(parts)))
             append!(patterns, fill(nothing, length(parts)))
         end
     end
-    u.atoms, u.pres, u.patterns = atoms, pres, patterns
-    r = Dict(c.name => _fraction_at(u.ratio[c.name], τ) for c in u.colors)
-    all(>=(0), values(r)) || throw(ArgumentError("the unconverted fractions must not be negative (at $τ ns)"))
+    u.atoms, u.fracs, u.pres, u.patterns = atoms, fracs, pres, patterns
     n, nc = nelements(t), length(t.components)
     E = Dict(c.name => zeros(n) for c in u.colors)
     L = Dict(c.name => zeros(nc) for c in u.colors)
@@ -649,12 +681,14 @@ function _unconverted_at!(u::_UnconvertedLight, t::Target, beams, τ)
     delivered = Dict(c.name => 0.0 for c in u.colors)
     for (k, a) in enumerate(atoms)
         s = p[a[1]]
-        # each color's power per beam of the atom (TW)
+        # the atom's fraction per color, and each color's power per beam of the atom (TW)
+        r = Float64[_fraction_at(f, τ) for f in fracs[k]]
+        all(>=(0), r) || throw(ArgumentError("the unconverted fractions must not be negative (at $τ ns)"))
         if pres[k] === nothing
-            (s > 0 && any(>(0), values(r))) || continue
-            fs = Float64[r[c.name] * s for c in u.colors]
+            (s > 0 && any(>(0), r)) || continue
+            fs = Float64[r[j] * s for j in eachindex(u.colors)]
         else
-            fs = Float64[r[c.name] * s + (q === nothing ? 0.0 : Float64(q(τ))) for (c, q) in zip(u.colors, pres[k])]
+            fs = Float64[r[j] * s + (q === nothing ? 0.0 : Float64(q(τ))) for (j, q) in enumerate(pres[k])]
             all(>=(0), fs) || throw(ArgumentError("the unconverted power must not be negative " *
                                                   "(ratio and prepulse, at $τ ns)"))
             any(>(0), fs) || continue

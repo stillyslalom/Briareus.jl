@@ -338,6 +338,43 @@ end
         abs(hd.unconverted.delivered[:omega1][j] - u.omega1.delivered) / u.omega1.delivered
     end
     @test maximum(devd) < 1e-12 && minimum(insided) > 1e-3
+    # 1ω on half the quads (fractions keyed by quad), 2ω on all, on the same per-cone
+    # pulses: each step against `solve` with the 1ω light of `unconverted_deposition` of
+    # those quads only and the 2ω light of all of them
+    on = Set(b.quad for b in quads[1:2:end])
+    f1q = Dict(Symbol(b.quad) => (b.quad in on ? fω1 : 0.0) for b in quads)
+    hh = drive_history(mh, oph, batd, times; record = sol -> sol, unconverted = (omega1 = f1q, omega2 = 0.01),
+                       by = :quad, colors = mock)
+    devh = map(enumerate(times)) do (j, τ)
+        b = batd(τ)
+        d = deposit(oph, b)
+        u1 = unconverted_deposition(th, [x for x in b if x.quad in on]; ratio = (omega1 = fω1(τ), omega2 = 0.0),
+                                    colors = mock).omega1
+        u2 = unconverted_deposition(th, b; ratio = (omega1 = 0.0, omega2 = 0.01), colors = mock).omega2
+        ref = solve(mh, d; time = τ, unconverted = Dict{Symbol,Any}(:omega1 => u1, :omega2 => u2, :colors => mock))
+        s = hh.record[j]
+        lz = d.delivered + u1.delivered + u2.delivered
+        maximum(f -> maximum(abs.(getfield(s, f) .- getfield(ref, f))) / maximum(abs.(getfield(ref, f))),
+                (:source, :B, :H, :laser, :converted)) + abs(hh.delivered[j] - lz) / lz +
+        abs(hh.unconverted.delivered[:omega1][j] - u1.delivered) / u1.delivered
+    end
+    @test maximum(devh) < 1e-12 && 0 < hh.unconverted.delivered[:omega1][end] < hd.unconverted.delivered[:omega1][end]
+    # the same fractions as a vector per beam: the keyed history, bit for bit
+    hv = drive_history(mh, oph, batd, times; record = sol -> sol, unconverted = (omega1 = [f1q[Symbol(b.quad)] for b in quads],
+                       omega2 = 0.01), colors = mock)
+    @test all(isequal(hh[f], hv[f]) for f in keys(hh) if f !== :record) &&
+          isequal([s.B for s in hh.record], [s.B for s in hv.record])
+    # keyed fractions all equal: the scalar form, bit for bit
+    he = drive_history(mh, oph, batd, times; record = sol -> sol, colors = mock, by = :quad,
+                       unconverted = (omega1 = Dict(Symbol(b.quad) => fω1 for b in quads),
+                                      omega2 = Dict(Symbol(b.quad) => 0.01 for b in quads)))
+    @test all(isequal(hd[f], he[f]) for f in keys(hd) if f !== :record) &&
+          isequal([s.B for s in hd.record], [s.B for s in he.record])
+    # a beam without an entry, and a vector of another length
+    @test_throws KeyError drive_history(mh, oph, batd, times; unconverted = (omega1 = Dict(:none => 0.05), omega2 = 0.0),
+                                        by = :quad, colors = mock)
+    @test_throws DimensionMismatch drive_history(mh, oph, batd, times; unconverted = (omega1 = [0.05], omega2 = 0.0),
+                                                 colors = mock)
     # a zero prepulse: the history without one, bit for bit
     hz0 = drive_history(mh, oph, bat, times; record = sol -> sol.B, unconverted = (omega1 = fω1, omega2 = 0.01),
                         colors = mock)

@@ -131,20 +131,21 @@ Items 7–12 follow the 2026-10-22 literature review against Kritcher et al. 202
     solves with it (its capsule flux, through the scenario's linear response, keeps the
     equivalent 3ω power, exact for the conversions that response allows).
     `drive_history(...; unconverted)` takes each color's fraction of the 3ω power (a
-    number or a function of time), deposits once per set of beams on equal powers and
-    solves each step with the per-color sources; `flux_response(...; unconverted)` gives
+    number or a function of time, for every beam, one per beam or keyed by `by`, as do
+    `unconverted_history`'s `ratio` and `retune_drive`), deposits once per set of beams
+    on equal powers and fraction and prepulse schedules, and solves each step with the
+    per-color sources; `flux_response(...; unconverted)` gives
     a response per color (a secant per color); `sol.converted` carries every color's
     converted source to `spectral_solve`. `drive_history(...; prepulse, by)` adds a power
     per beam per color not proportional to the 3ω pulse (as `unconverted_history`'s);
     `retune_drive(...; unconverted, prepulse, colors, unconverted_kw)` retunes with the
-    history's per-color sources (the prepulse a fixed offset). The GUI's drive histories
-    and retune take the Drive panel's 1ω and 2ω ratios as `unconverted` (NIF's colors)
-    when each color is on every beam the history fires or on none; the history goes
-    stale when the ratios or the participation change, and the energy chart shows each
-    color's delivered energy. *Remains:*
-    - the GUI: a prepulse input, and a color on some of the beams only (the core's
-      `unconverted` takes one fraction per color for every beam; the GUI refuses the
-      history or retune and says why);
+    history's per-color sources (the prepulse a fixed offset; the beams of a retuned
+    group may carry different fractions). The GUI's drive histories and retune take the
+    Drive panel's 1ω and 2ω ratios as `unconverted` (NIF's colors) on the beams whose
+    light takes part (a fraction per beam where a color is on some beams only); the
+    history goes stale when the ratios or the participation change, and the energy chart
+    shows each color's delivered energy. *Remains:*
+    - the GUI: a prepulse input;
     - in `drive_history`, pointing that changes in time; the M-band of unconverted light
       (the M-band stays the 3ω light's);
     - data on the conversion of overlapping colors (each color at its own flux is an

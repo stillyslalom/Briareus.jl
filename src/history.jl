@@ -119,22 +119,28 @@ radiosity at that time (time- and temperature-dependent albedos included), and r
 fraction of each beam's 3ω power: a number or a function of time (ns), keyed by color
 name, e.g. `(omega1 = 0.05, omega2 = 0.01)` or `(omega1 = PulseShape(ts, fs), omega2 =
 0.0)`, as [`unconverted_history`](@ref)'s `ratio` (no default: the fraction is an
-input). At each step the colors' absorbed powers are those of
+input). A color's fraction holds for every beam, or each beam has its own: a vector with
+one entry per beam of `beams_at(τ)` (in its order, which the pointing fixes), or keyed by
+`by` as `prepulse` is (a beam without an entry is a `KeyError`, as in `with_pulses`),
+e.g. `(omega1 = Dict(:outer44 => 0.05, :outer50 => 0.05, :inner23 => 0.0, :inner30 =>
+0.0), omega2 = 0.01)` for 1ω on the outer cones only. At each step the colors' absorbed powers are those of
 [`unconverted_deposition`](@ref) for the beams of `beams_at(τ)` (their powers before
 `lpi`: unconverted light does not take part in the 3ω laser–plasma model) at that
-step's fractions, and the step is solved with them as `solve`'s `unconverted`, each
+step's fractions of each beam, and the step is solved with them as `solve`'s `unconverted`, each
 color's conversion at its own absorbed flux. `prepulse` adds light not proportional to
 the 3ω pulse, as `unconverted_history`'s `prepulse`: per color (optional), a power per
 beam (TW) as a function of time, one function for all beams or keyed by `by` (`:group`,
 `:quad`, `:beam` or a function, as in [`with_pulses`](@ref)); a beam's power in color
-`c` at step τ is then `unconverted[c](τ) · P₃ω(τ) + prepulse[c](τ)`, with `P₃ω` the
-beam's power in `beams_at(τ)`. A prepulse alone takes zero fractions (`unconverted =
+`c` at step τ is then `r_c(τ) · P₃ω(τ) + prepulse[c](τ)`, with `r_c` its fraction in
+color `c` and `P₃ω` the beam's power in `beams_at(τ)`. A prepulse alone takes zero fractions (`unconverted =
 (omega1 = 0.0, omega2 = 0.0)`). `unconverted_kw` passes
 `unconverted_deposition`'s `offsets`, `lens_distance`, `coarse` and `resolution`. The
 light is linear in each beam's power, so the history deposits it once per set of beams
-whose powers are equal at every step and whose prepulses are the same (for beams on
-shared pulses, once per (pulse, prepulse) schedule, as `unconverted_history` does) and
-scales those patterns by the powers in time; the pointing must not change in time. `laser` then includes each color's absorbed power,
+whose powers are equal at every step and whose fractions and prepulses are the same
+(equal numbers or the same function; for beams on shared pulses, once per (pulse,
+fraction, prepulse) schedule, as `unconverted_history` does), never for a set whose
+light is zero, and scales those patterns by the powers in time; the pointing must not
+change in time. `laser` then includes each color's absorbed power,
 and `setup` and `delivered` its delivered power, so `energy_budget` balances; the
 M-band stays the 3ω light's. Without `unconverted` the history is the 3ω one, bit for
 bit.

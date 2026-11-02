@@ -97,13 +97,16 @@ box-bounded linear least-squares problem per time; the drive term keeps the leve
 **Unconverted light.** A reference run with unconverted (1ω, 2ω) light takes that
 history's `unconverted`, `prepulse`, `colors` and `unconverted_kw` here (see
 [`drive_history`](@ref)), so that the retune solves with the same per-color sources:
-the flux is then `c = (R₃ E + Σ_c r_c(t) R_c E_c) P + Σ_c R_c Q_c p_c(t)`, with `R₃` and
-`R_c` the 3ω and per-color responses (`flux_response(...; unconverted)`), `E` and `E_c`
-each group's 3ω and color-`c` absorbed power at 1 TW per beam
-([`unconverted_deposition`](@ref) of the group's beams), `r_c(t)` the color's fraction
-and `p_c(t)` its prepulse, fixed powers deposited by `Q_c` (keyed by `by`, as the
-retuned groups). The prepulse is not retuned: it shifts the target of the least squares.
-As for the 3ω response, the conversions must not depend on intensity. A reference with
+the flux is then `c = (R₃ E + Σ_c R_c E_c(t)) P + Σ_c R_c Q_c p_c(t)`, with `R₃` and
+`R_c` the 3ω and per-color responses (`flux_response(...; unconverted)`), `E` each
+group's 3ω absorbed power at 1 TW per beam, `E_c(t)` its color-`c` absorbed power at
+1 TW per beam times each beam's fraction `r_c(t)` (the sum, over its beams on each
+fraction schedule, of [`unconverted_deposition`](@ref) of those beams at that fraction),
+and `p_c(t)` the color's prepulse, fixed powers deposited by `Q_c`. The fractions and
+prepulses are keyed by `by`, as the retuned groups, and a color's fraction may also
+be a vector with one entry per beam of `beams`: the beams of a retuned group may carry
+different fractions (e.g. 1ω on some beams of a quad only). The prepulse is not
+retuned: it shifts the target of the least squares. As for the 3ω response, the conversions must not depend on intensity. A reference with
 unconverted light and no `unconverted` here is an error.
 
 Returns `(; time, keys, power, pulses, shape, reference_shape, drive, residual)`: the
@@ -157,8 +160,18 @@ Base.@nospecializeinfer function retune_drive(m::RadiationModel, op::DepositionO
     Eu = Dict{Symbol,Matrix{Float64}}()
     Q = Dict{Symbol,Matrix{Float64}}()
     qs = Any[]
+    # the groups' beams on each fraction schedule (`subs`: group index, fraction per
+    # color, beam indices; one per group when the fractions hold for every beam), with
+    # each one's absorbed power per color in the columns of `Eu`
+    subs = Tuple{Int,Any,Vector{Int}}[]
     if ul !== nothing
-        du = [unit_light([b for b in beams if key(b) == k]) for k in ks]
+        fr = _fractions_of(ul.ratio, Symbol[c.name for c in ul.colors], key, beams)
+        for (g, k) in enumerate(ks)
+            idx = [i for (i, b) in enumerate(beams) if key(b) == k]
+            sg, gg = _schedule_groups(idx, i -> fr[i])
+            append!(subs, [(g, f, idx[p]) for (f, p) in zip(sg, gg)])
+        end
+        du = [unit_light(beams[idx]) for (_, _, idx) in subs]
         for c in ul.colors
             Eu[c.name] = reduce(hcat, [d[c.name].element for d in du]; init = zeros(ne, 0))
         end
@@ -199,10 +212,13 @@ Base.@nospecializeinfer function retune_drive(m::RadiationModel, op::DepositionO
             R = flux_response(m, obs; time = τ, albedo = ref.albedo[k], weights = Y,
                               unconverted = _with_colors(Dict(c.name => zeros(ne) for c in ul.colors), ul.colors))
             M = R[:omega3] * E
-            for c in ul.colors
-                rc = _fraction_at(ul.ratio[c.name], τ)
-                rc >= 0 || throw(ArgumentError("the unconverted fractions must not be negative (at $τ ns)"))
-                M .+= rc .* (R[c.name] * Eu[c.name])
+            for (j, c) in enumerate(ul.colors)
+                X = R[c.name] * Eu[c.name]
+                for (si, (g, f, _)) in enumerate(subs)
+                    rc = _fraction_at(f[j], τ)
+                    rc >= 0 || throw(ArgumentError("the unconverted fractions must not be negative (at $τ ns)"))
+                    @views M[:, g] .+= rc .* X[:, si]
+                end
             end
             if !isempty(qs)
                 c0 = zeros(nm)
