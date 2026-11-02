@@ -190,10 +190,15 @@ end
 # The point-spread function on the object-plane pixels: the penumbra's disk (each
 # pixel's covered fraction, 8 × 8 subsamples) convolved with the Gaussian of diffraction
 # and the detector pixel; normalized to sum 1
-function _psf(im::XrayImager)
-    h = im.camera.width / im.camera.nx
-    σ = sqrt((im.diffraction / 2.3548)^2 + (im.detector_pixel / im.magnification)^2 / 12) / h
-    ρ = im.penumbra / 2 / h
+_psf(im::XrayImager) = _psf(im.camera.width / im.camera.nx, im.penumbra, im.diffraction,
+                            im.detector_pixel / im.magnification)
+
+# the same for object-plane pixels of side `h`, a penumbra of diameter `penumbra`, a
+# diffraction FWHM `diffraction` and a detector pixel of side `pixel` (all on the
+# object plane, mm)
+function _psf(h, penumbra, diffraction, pixel)
+    σ = sqrt((diffraction / 2.3548)^2 + pixel^2 / 12) / h
+    ρ = penumbra / 2 / h
     r = ceil(Int, ρ + 4σ + 1)
     disk = zeros(2r + 1, 2r + 1)
     for i in -r:r, j in -r:r
@@ -218,8 +223,9 @@ function _convolve(img::AbstractMatrix, w::AbstractVector; dims)
 end
 
 # Blur an object-plane image by the point-spread function (zero outside the field).
-function _blur(im::XrayImager, img::AbstractMatrix)
-    k = _psf(im)
+_blur(im::XrayImager, img::AbstractMatrix) = _blur(_psf(im), img)
+
+function _blur(k::AbstractMatrix, img::AbstractMatrix)
     r = size(k, 1) ÷ 2
     n1, n2 = size(img)
     out = zeros(n1, n2)

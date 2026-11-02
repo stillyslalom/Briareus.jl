@@ -360,6 +360,9 @@ function mass_attenuation(mat::Symbol, hν::Real; table::Symbol = :auto)
     return exp(log(μ[i]) + s * (log(μ[i+1]) - log(μ[i])))
 end
 
+# a filter material's density (g/cm³; NaN if none is known)
+_density(mat::Symbol) = get(_FILTER_DENSITY, mat, haskey(_COMPOUNDS, mat) ? _COMPOUNDS[mat][2] : NaN)
+
 """
     filter_transmission(filters, hν; table = :auto) -> Real
 
@@ -378,8 +381,7 @@ function filter_transmission(filters, hν::Real; table::Symbol = :auto)
     τ = 0.0
     for (mat, spec) in filters
         t, ρ = spec isa Tuple ? (Float64(spec[1]), Float64(spec[2])) :
-               (Float64(spec), get(_FILTER_DENSITY, mat,
-                                   haskey(_COMPOUNDS, mat) ? _COMPOUNDS[mat][2] : NaN))
+               (Float64(spec), _density(mat))
         isnan(ρ) && throw(ArgumentError("no density for :$mat; pass $mat => (thickness, density)"))
         t >= 0 || throw(ArgumentError("filter thicknesses must be non-negative"))
         τ += mass_attenuation(mat, hν; table) * ρ * 0.1t       # mm → cm
@@ -459,6 +461,77 @@ end
 
 const _KEV_J = 1.602176634e-16
 
+# The backlighter's source: the laser energy on each element of `foil` in `dep` over a
+# flat-top `pulse` and its He-α energy into 4π (steps 1–2 of `backlighter_signal`)
+function _backlighter_source(t::Target, dep::Deposition; line, pulse, foil, prepulse, ce, irradiance, model)
+    hν = _line_keV(line)
+    fe = elements(t, foil)
+    isempty(fe) && throw(ArgumentError("the foil :$foil has no elements"))
+    P = [Float64(ForwardDiff.value(dep.element[e])) for e in fe]        # TW
+    Ptot = sum(P)
+    Ptot > 0 || throw(ArgumentError("no laser power on the foil :$foil"))
+    Ie = [1e14 * P[i] / t.elem_area[e] for (i, e) in enumerate(fe)]    # W/cm²
+    Ibar = sum(P .* Ie) / Ptot
+    if ce === nothing
+        est = kshell_ce(hν; irradiance = Ibar, prepulse, pulse, model)
+        cee = irradiance === :mean ? fill(est.ce, length(fe)) :
+              [p > 0 ? kshell_ce(hν; irradiance = I, prepulse, model).ce : 0.0 for (p, I) in zip(P, Ie)]
+        σ, ext = est.sigma, est.extrapolated
+    else
+        0 <= ce <= 1 || throw(ArgumentError("ce must be a fraction in [0, 1]"))
+        cee, σ, ext = fill(Float64(ce), length(fe)), 0.0, false
+    end
+    EL = 1e3 * pulse * Ptot                                   # J (TW·ns = kJ)
+    Ee = 1e3 .* pulse .* P .* cee                             # J into 4π
+    Ex = sum(Ee)
+    return (; hν, fe, P, Ptot, Ibar, σ, ext, EL, Ee, Ex)
+end
+
+# The hardware that obstructs x rays: every surface component but those of `foil` and of
+# the parts `objects`. Returns the foil's pieces and the `skip(triangle)` of `any_hit`.
+function _hardware(t::Target, foil::Symbol, objects)
+    fi = Set(part_pieces(t, foil))
+    oi = Set(ci for o in objects for ci in part_pieces(t, o))
+    hw = Set(ci for (ci, cp) in enumerate(t.components)
+             if cp.kind === :surface && !(ci in fi) && !(ci in oi))
+    skip(id) = !(t.tri_comp[id] in hw)
+    return fi, skip
+end
+
+# The radiance (J sr⁻¹ mm⁻² of He-α) of the foil seen from `Pp` along `u`, through the
+# foil's triangles `ftris` (`idx`: element => index into the energies `Ee`), zero when
+# hardware lies between; and the point seen (`Pp` itself when the radiance is zero)
+function _foil_radiance(t::Target, ftris, idx, Ee, angular, Pp::Vec3, u::Vec3, skip, ε)
+    s, k = _first_hit(t, ftris, Pp, u)
+    k > 0 || return 0.0, Pp
+    e = dot(u, t.tri_normal[k]) < 0 ? t.tri_front[k] : t.tri_back[k]
+    x = Pp + s * u
+    if e > 0 && haskey(idx, e) &&
+       !any_hit(t.bvh, x + ε * t.elem_normal[e], Pp - x, 1.0, skip)
+        μ = -dot(normalize(u), t.elem_normal[e])
+        return Ee[idx[e]] * _angular(angular, μ) / (4π * t.elem_area[e] * μ), x   # J/sr/mm²
+    end
+    return 0.0, Pp
+end
+
+# The fluence (J/mm² of He-α) at the point `Pd` from each foil element `fe[i]` (energy
+# `Ee[i]`) as a point source at its centroid, unobstructed by hardware; each path
+# weighted by `transmit(origin, r)` (the segment from the element to `Pd`), if given
+function _point_fluence(t::Target, fe, Ee, angular, Pd::Vec3, skip, ε, transmit = nothing)
+    fl = 0.0
+    for (i, e) in enumerate(fe)
+        Ee[i] > 0 || continue
+        r = Pd - t.elem_centroid[e]
+        μ = dot(t.elem_normal[e], r) / norm(r)
+        μ > 0 || continue
+        o = t.elem_centroid[e] + ε * t.elem_normal[e]
+        any_hit(t.bvh, o, r, 1.0, skip) && continue
+        f = Ee[i] * _angular(angular, μ) / (4π * dot(r, r))
+        fl += transmit === nothing ? f : f * transmit(o, r)
+    end
+    return fl
+end
+
 """
     backlighter_signal(target, deposition, los; line, pulse, distance, foil = :backlighter,
                        prepulse = false, pinhole = nothing, pinhole_distance = nothing,
@@ -519,32 +592,9 @@ function backlighter_signal(t::Target, dep::Deposition, los; line, pulse::Real, 
     irradiance in (:mean, :element) || throw(ArgumentError("irradiance must be :mean or :element"))
     d = los isa Tuple{Real,Real} ? port_vector(los...) : normalize(Vec3(los...))
     c = Vec3(center...)
-    hν = _line_keV(line)
-    fe = elements(t, foil)
-    isempty(fe) && throw(ArgumentError("the foil :$foil has no elements"))
-    P = [Float64(ForwardDiff.value(dep.element[e])) for e in fe]        # TW
-    Ptot = sum(P)
-    Ptot > 0 || throw(ArgumentError("no laser power on the foil :$foil"))
-    Ie = [1e14 * P[i] / t.elem_area[e] for (i, e) in enumerate(fe)]    # W/cm²
-    Ibar = sum(P .* Ie) / Ptot
-    if ce === nothing
-        est = kshell_ce(hν; irradiance = Ibar, prepulse, pulse, model)
-        cee = irradiance === :mean ? fill(est.ce, length(fe)) :
-              [p > 0 ? kshell_ce(hν; irradiance = I, prepulse, model).ce : 0.0 for (p, I) in zip(P, Ie)]
-        σ, ext = est.sigma, est.extrapolated
-    else
-        0 <= ce <= 1 || throw(ArgumentError("ce must be a fraction in [0, 1]"))
-        cee, σ, ext = fill(Float64(ce), length(fe)), 0.0, false
-    end
-    EL = 1e3 * pulse * Ptot                                   # J (TW·ns = kJ)
-    Ee = 1e3 .* pulse .* P .* cee                             # J into 4π
-    Ex = sum(Ee)
-    # hardware: surface components other than the foil and the object
-    fi = Set(part_pieces(t, foil))
-    oi = object === nothing ? Set{Int}() : Set(part_pieces(t, object))
-    hw = Set(ci for (ci, cp) in enumerate(t.components)
-             if cp.kind === :surface && !(ci in fi) && !(ci in oi))
-    skip(id) = !(t.tri_comp[id] in hw)
+    src = _backlighter_source(t, dep; line, pulse, foil, prepulse, ce, irradiance, model)
+    (; hν, fe, Ibar, σ, ext, EL, Ee, Ex) = src
+    fi, skip = _hardware(t, foil, object === nothing ? () : (object,))
     ε = _ray_eps(t)
     facing = sum((Ee[i] for (i, e) in enumerate(fe) if dot(t.elem_normal[e], d) > 0); init = 0.0) /
              max(Ex, floatmin())
@@ -559,15 +609,7 @@ function backlighter_signal(t::Target, dep::Deposition, los; line, pulse::Real, 
     fc = sum(t.elem_area[e] * t.elem_centroid[e] for e in fe) / sum(t.elem_area[e] for e in fe)
     if pinhole === nothing
         Pd = c + Float64(distance) * d
-        fl = 0.0
-        for (i, e) in enumerate(fe)
-            Ee[i] > 0 || continue
-            r = Pd - t.elem_centroid[e]
-            μ = dot(t.elem_normal[e], r) / norm(r)
-            μ > 0 || continue
-            any_hit(t.bvh, t.elem_centroid[e] + ε * t.elem_normal[e], r, 1.0, skip) && continue
-            fl += Ee[i] * _angular(angular, μ) / (4π * dot(r, r))
-        end
+        fl = _point_fluence(t, fe, Ee, angular, Pd, skip, ε)
         mode, Ω, rng = :projection, 1 / sum(abs2, Pd - fc), (NaN, NaN)
     else
         pinhole_distance === nothing && throw(ArgumentError("give pinhole_distance with pinhole"))
@@ -588,17 +630,7 @@ function backlighter_signal(t::Target, dep::Deposition, los; line, pulse::Real, 
         vals = Float64[]
         for qd in _disk_samples(c, d, a, nrings)
             u = qd - Pp                                       # from the pinhole through the disk
-            s, k = _first_hit(t, ftris, Pp, u)
-            R = 0.0
-            if k > 0
-                e = dot(u, t.tri_normal[k]) < 0 ? t.tri_front[k] : t.tri_back[k]
-                x = Pp + s * u
-                if e > 0 && haskey(idx, e) &&
-                   !any_hit(t.bvh, x + ε * t.elem_normal[e], Pp - x, 1.0, skip)
-                    μ = -dot(normalize(u), t.elem_normal[e])
-                    R = Ee[idx[e]] * _angular(angular, μ) / (4π * t.elem_area[e] * μ)   # J/sr/mm²
-                end
-            end
+            R, _ = _foil_radiance(t, ftris, idx, Ee, angular, Pp, u, skip, ε)
             push!(vals, R * Ap / q^2)
         end
         fl = sum(vals) / length(vals)
