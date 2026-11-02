@@ -115,15 +115,16 @@ Items 7–12 follow the 2026-10-22 literature review against Kritcher et al. 202
 
 13. **Unconverted light over time.** *State:* `unconverted_deposition` is a steady
     source, and the GUI drive adds it. 1ω and 2ω light does not enter the hohlraum and is
-    neglected there. *Remains:* irradiance histories on clipped components and
-    backlighter foils, from the pulse shape and an unconverted fraction in time:
-    - whether a surface stays below the irradiance at which it stops being specular;
-    - whether a foil forms a pre-plasma before its backlighter beams arrive (NIF User
-      Guide §4.4: plasma above ~10⁸ W/cm² on metals; the 1ω prepulse passes that
-      3–5 ns before the pulse).
+    neglected there. `unconverted_history` and `irradiance_history` (3ω) give irradiance
+    histories from the pulses, a fraction in time and an optional prepulse, at one
+    deposition per schedule; `specular_check` and `preplasma_check` apply the User
+    Guide's 10⁸ W/cm² (research notes, "Unconverted light over time"). *Remains:*
+    - the GUI: the histories and both checks in the Time view;
+    - pointing or geometry that changes in time (a deposition per configuration);
+    - a fluence-based damage criterion beside the irradiance threshold.
 
-    *Data:* the unconverted fraction vs. pulse shape; plasma and damage thresholds of
-    Au, Al and Si at 1ω and 2ω.
+    *Data:* the unconverted fraction vs. pulse shape and the prepulse level; plasma,
+    damage and specularity thresholds of Au, Al and Si at 1ω and 2ω.
 14. **Per-color x-ray sources and a materials library.** *State:* the GUI drive weights
     each color's x-ray source as an equivalent 3ω power, exact only for a conversion
     independent of intensity. *Remains:*

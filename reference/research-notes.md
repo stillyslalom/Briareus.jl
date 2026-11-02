@@ -282,6 +282,51 @@ The 1ω focus is 46 cm beyond the 3ω focus (MacFarlane 2003). **H**
     beam's 3ω power). Not found: a measured unconverted fraction vs. pulse shape (see
     "Still not found"). VisRad workspaces seen so far carry 5 % / 5 % of the total.
 
+### Unconverted light over time (2026-11-01)
+
+`unconverted_history`, `irradiance_history`, `threshold_crossing`, `specular_check`,
+`preplasma_check` (`src/unconverted.jl`).
+- **Prepulse and plasma onset.** NIF User Guide (rev. 2024-09) §4.4.3, reread from the
+  text: the primary prepulse is 1ω light, kept off the 3ω focus by the wedged lens (its
+  footprint 4.8 mm clear). "As a general guideline", intensities above about 10⁸ W/cm²
+  begin to form weakly ionized plasma on a metal surface (the guide cites Spaeth et
+  al., "Description of the NIF laser", Fusion Sci. Technol. 69, 25 (2016)). The NIF
+  prepulse exceeds 10⁸ W/cm² of 1ω about 3–5 ns before the nominal start of the pulse.
+  **H** for what the guide says; a guideline, not a criterion. Not given: the prepulse
+  level or shape, and where the 10⁸ W/cm² is reached (the 1ω footprint is the reading
+  taken here).
+- **Derived scale.** The 22 mm 1ω footprint is 4.84 cm² in the 3ω focal plane, so it is
+  at 10⁸ W/cm² when a beamlet carries 0.48 GW (4.8e-4 TW) of 1ω. *Derived*, **M** (flat
+  top at the nominal size).
+- **Thresholds in the checks.**
+  - `preplasma_check`: 10⁸ W/cm², the guideline above, for metal foils. **M**.
+  - `specular_check`: the same 10⁸ W/cm², taken as the end of cold-mirror (specular)
+    reflection. *Engineering default*, **L**: no facility criterion for specularity was
+    found, and a surface's reflection can change below plasma onset (melting and
+    roughening, a fluence effect not modeled) or persist above it. Metals only;
+    silicon and plastics have no value here.
+  - For comparison, `clearance`'s 3ω tiers (10⁹ ablation and debris, 10¹² W/cm² plasma
+    formation) are engineering defaults for 3ω beam clipping, a different question.
+- **Fraction in time.** Still an input (`ratio`, a number or a function of time per
+  color, plus an optional `prepulse` power): no measured unconverted fraction vs. pulse
+  shape was found ("Still not found").
+- **Cost.** The geometry and pointing are fixed and the light is linear in each beam's
+  power, so a history is one deposition at unit power per (pulse, prepulse) schedule,
+  times scalar powers in time; the schedules partition the beams, so the geometric work
+  is one `unconverted_deposition` in all. Measured on the 4116-element NIF hohlraum with
+  48 quads, 241 times, 4 threads: one deposition 0.08 s; the history with one pulse 0.09
+  s, with 48 per-quad pulses 0.26 s (per-call overhead and fewer jobs per thread call);
+  241 separate `unconverted_deposition` calls 17.5 s. The 3ω `irradiance_history` costs
+  one `deposit` per distinct pulse. A pointing or target that changes in time needs one
+  deposition per configuration (not covered).
+- **Checks** (`test/unconverted_history.jl`): a plate in the 3ω focal plane under one
+  beamlet, against the closed form 10¹⁴ P(t)/footprint² W/cm² inside each square for a
+  shaped pulse and a time-varying 1ω fraction (1e-12); a constant fraction against
+  `unconverted_deposition` of `with_pulses` at every time, for a quad (1e-12); per-beam
+  pulses against the sum of single-beam histories; a linear ramp's crossing of 3e9
+  W/cm² against τ₀ + Δ I* 22²/(10¹⁴ r P₀) (1e-12); a prepulse ramp's 10⁸ W/cm² onset
+  against its hand value; the 3ω history against `deposit` at every time (1e-12).
+
 ### Unconverted light: absorption and conversion vs. wavelength (2026-10-28)
 
 *Engineering default*, **L**. `nif_unconverted` scales the 1ω and 2ω light relative to
@@ -773,6 +818,8 @@ design papers, OSTI full texts (library redirect), GitHub code search, User Guid
 
 - The NIF far-field halo or wing fraction.
 - The unconverted-light energy fraction as a function of pulse shape.
+- The NIF 1ω prepulse level and shape (User Guide §4.4.3 gives only when it passes
+  10⁸ W/cm²).
 - OMEGA EP port angles.
 
 ## VisRad interchange formats (2026-10-16)

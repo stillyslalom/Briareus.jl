@@ -18,6 +18,7 @@ SHARD in ("", "1", "2", "3") || error("BRIAREUS_TEST_SHARD must be 1, 2 or 3, go
 # one-thread shards run them; local full runs skip them unless asked.
 const LONG_TESTS = get(ENV, "BRIAREUS_LONG_TESTS", "false") == "true"
 const SHARDS = Dict(f => 2 for f in ("meshops.jl", "stl.jl", "cadfit.jl", "partial_visibility.jl", "hmatrix.jl",
+                                     "unconverted_history.jl",
                                      "inference.jl"))
 merge!(SHARDS, Dict(f => 3 for f in ("windows.jl", "burnthrough.jl", "uncertainty.jl",
                                      "implosion.jl", "energetics.jl", "spectral.jl", "large_models.jl",
@@ -1238,6 +1239,7 @@ shard_include("hybride_mock.jl")
 shard_include("parallel_gradient.jl")
 shard_include("cbet_zones.jl")
 shard_include("unconverted.jl")
+shard_include("unconverted_history.jl")
 shard_include("sombrero.jl")
 shard_include("backlighter.jl")
 shard_include("backlighter_signal.jl")

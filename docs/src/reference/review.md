@@ -11,6 +11,10 @@ incidence, 3ω and 1ω clearance, unconverted-light management, the TAS stay-in 
 [`unconverted_light_check`](@ref) covers the 1ω and 2ω footprints and the 32 mm zone, and
 [`unconverted_deposition`](@ref) puts their power on the target (a uniform square beam
 per beamlet and color, with shadowing; the unconverted fraction is an input).
+[`unconverted_history`](@ref) follows that light through the pulses, with a fraction and
+a prepulse that may vary in time, and [`irradiance_history`](@ref) the 3ω light;
+[`specular_check`](@ref) and [`preplasma_check`](@ref) compare them with the NIF User
+Guide's 10⁸ W/cm² plasma-onset guideline for metals.
 [`ApertureKeepOut`](@ref) puts each beam's worst-case clearance from its entrance hole
 into an optimization objective. [`backlighter_foil`](@ref) and [`line_of_sight`](@ref)
 place a foil on a diagnostic line of sight and check it against shields and beams, and

@@ -111,6 +111,14 @@ end
         n = _inf_instances(Briareus._sweep)
         sweep(v -> (; target = foilt, beams = quads[1:2]), st -> st.done > 5)
         @test _inf_instances(Briareus._sweep) == n
+
+        # unconverted-light histories: new fraction and prepulse functions reuse the body
+        uh(r, pre) = unconverted_history(foilt, quads[1:1], pulse, [0.5, 1.0];
+                                         ratio = (omega1 = r, omega2 = 0.0), prepulse = (omega1 = pre,))
+        uh(τ -> 0.05, τ -> 0.0)
+        n = _inf_body_instances(unconverted_history)
+        uh(τ -> 0.04τ, PulseShape([0.0, 1.0], [0.0, 1e-4]))
+        @test _inf_body_instances(unconverted_history) == n
     end
 
     @testset "optimization path infers" begin

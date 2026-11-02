@@ -364,3 +364,336 @@ function _uc_visible(t, p, A, fb, ô, ŵ, n, v0, side_n, ε)
     x = A + dot(n, v0 - A) / dot(n, q - A) * (q - A)
     return !any_hit(t.bvh, x + ε * side_n, normalize(x - A))
 end
+
+# ---------------------------------------------------------------- irradiance histories
+
+"""
+    IrradianceHistory
+
+Incident laser irradiance on a target over time, per color: the result of
+[`unconverted_history`](@ref) (colors `:omega1`, `:omega2`) and
+[`irradiance_history`](@ref) (3ω, `:omega3`).
+
+- `target`, `time` (ns), `colors` (the color names, in order)
+- `element` — per color, a `nelements × length(time)` matrix: the irradiance incident on
+  each element (W/cm²; the power reaching it over its area, at its own incidence)
+- `backside` — per color, a `ncomponents × length(time)` matrix: the irradiance on each
+  one-sided component's unmodeled back side, its power over the component's area (W/cm²;
+  a mean over the component, below the back side's local peak where it is lit unevenly)
+- `absorption` — per color, the fraction of the incident light a surface absorbs
+  (`UnconvertedColor`'s `absorption`; 1 for 3ω): the absorbed irradiance is
+  `absorption[c] .* element[c]`
+- `skipped` — the beams whose unconverted light cannot be placed (see
+  [`unconverted_deposition`](@ref))
+
+Between its times the history is taken to be linear: crossings of a threshold
+([`threshold_crossing`](@ref)) are interpolated within a step.
+"""
+struct IrradianceHistory
+    target::Target
+    time::Vector{Float64}
+    colors::Vector{Symbol}
+    element::Dict{Symbol,Matrix{Float64}}
+    backside::Dict{Symbol,Matrix{Float64}}
+    absorption::Dict{Symbol,Float64}
+    skipped::Vector{String}
+end
+
+function Base.show(io::IO, ::MIME"text/plain", h::IrradianceHistory)
+    nt = length(h.time)
+    print(io, "IrradianceHistory: ", nt, " times")
+    nt > 0 && @printf(io, " (%.4g–%.4g ns)", h.time[1], h.time[end])
+    for c in h.colors
+        pk = max(maximum(h.element[c]; init = 0.0), maximum(h.backside[c]; init = 0.0))
+        @printf(io, "\n  %-7s peak %.3g W/cm²", c, pk)
+    end
+    isempty(h.skipped) || print(io, "\n  skipped (cannot be placed): ", join(h.skipped, ", "))
+end
+
+# Each one-sided component's area (its back side's); 0 for a two-sided one.
+_backside_area(t::Target) =
+    [c.two_sided ? 0.0 :
+     sum(t.elem_area[e] for e in t.comp_elems[ci] if t.elem_side[e] == 1; init = 0.0)
+     for (ci, c) in enumerate(t.components)]
+
+# Beams grouped by their schedule `sig(b)` (compared by identity): the distinct schedules
+# and the beam indices of each, in order of first appearance.
+function _schedule_groups(beams, sig)
+    sigs = Any[]
+    groups = Vector{Int}[]
+    for (i, b) in enumerate(beams)
+        s = sig(b)
+        j = findfirst(k -> k === s, sigs)
+        j === nothing ? (push!(sigs, s); push!(groups, [i])) : push!(groups[j], i)
+    end
+    return sigs, groups
+end
+
+# Per-unit-power irradiance (W/cm²) of a deposition, on elements and back sides.
+_unit_irradiance(t::Target, d::Deposition, Aback) =
+    (1e14 .* d.element ./ t.elem_area,
+     [A > 0 ? 1e14 * L / A : 0.0 for (L, A) in zip(d.backside, Aback)])
+
+# Add `I` (per unit power) times the power history `s` to the matrix `M`.
+function _add_outer!(M, I, s)
+    for k in eachindex(s)
+        s[k] == 0 && continue
+        @views M[:, k] .+= s[k] .* I
+    end
+    return M
+end
+
+_fraction_at(r::Real, τ) = Float64(r)
+_fraction_at(r, τ) = Float64(r(τ))
+
+# The schedule of beam `b`: `p[key(b)]` of a keyed collection, else `p` itself (one
+# function of time for all beams).
+_schedule_of(p, key, b) = p isa Union{AbstractDict,NamedTuple} ? _beam_pulse(p, key, b) : p
+
+# A color's power per beam (TW) at the times `ts`: `r` (a number or a function of time)
+# times the 3ω pulse, plus the color's own pulse `pre` (or nothing).
+function _color_power(r, pulse, pre, ts, name)
+    s = [_fraction_at(r, τ) * pulse(τ) + (pre === nothing ? 0.0 : Float64(pre(τ))) for τ in ts]
+    all(>=(0), s) || throw(ArgumentError("the $name power must not be negative (ratio and prepulse)"))
+    return s
+end
+
+"""
+    unconverted_history(target, beams, pulses, times; ratio, prepulse = (;), by = :group,
+                        colors = nif_unconverted(), offsets = nothing, lens_distance = 7700.0,
+                        coarse = 0.5, resolution = 0.02) -> IrradianceHistory
+
+Irradiance of the unconverted (1ω, 2ω) light on the target at each of `times` (ns),
+from each beam's 3ω pulse and an unconverted fraction that may vary in time.
+
+`pulses` gives each beam's 3ω power history (TW per beam), keyed as in
+[`with_pulses`](@ref): one function of time (a [`PulseShape`](@ref)) for all, or a
+`Dict`/NamedTuple keyed by each beam's `group` (`by = :quad`: its quad; `by = :beam`:
+its name; or `by(beam)`). For each color `c` of `colors`, the light of one beam is
+
+    P_c(t) = ratio[c](t) · P₃ω(t) + prepulse[c](t)    (TW per beam)
+
+- `ratio` — per color, the unconverted power as a fraction of the beam's 3ω power: a
+  number or a function of time (ns), e.g. a `PulseShape(times, fractions)` table (zero
+  outside its times). It has no default: the fraction and its dependence on the pulse
+  shape are not public (NIF User Guide §4.5: most of the unconverted light is 1ω, and
+  shaped pulses leave more of it). Every color needs an entry (0 for none).
+- `prepulse` — per color (optional), light not proportional to the 3ω pulse, in TW per
+  beam: one function of time (a `PulseShape`) for all beams, or keyed as `pulses`. An
+  example is the 1ω prepulse, which the User Guide (§4.4) puts above 10⁸ W/cm² 3–5 ns before the nominal
+  start of the pulse, with no level given. As a *derived* scale, the 22 mm 1ω footprint
+  (4.84 cm² in the 3ω focal plane) is at 10⁸ W/cm² when a beamlet carries 0.48 GW
+  (4.8e-4 TW) of 1ω.
+
+The geometry is fixed (the aims, spots and ports of `beams`; only the power varies), and
+the light is linear in each beam's power, so the whole history costs one
+[`unconverted_deposition`](@ref): the beams are grouped by their (pulse, prepulse)
+schedule, each group is deposited once at unit power, and the history is that pattern
+times the group's power at each time. A pointing or a target that changes in time needs
+a deposition per configuration, which this does not cover.
+
+The irradiance is the light incident on each surface (each color's `absorption` set to
+1), as the threshold checks ([`specular_check`](@ref), [`preplasma_check`](@ref))
+compare incident intensities. Times each element's area (over 10¹⁴, W/cm² to TW/mm²),
+`absorption[c] .* element[c]` is the power [`unconverted_deposition`](@ref) absorbs at
+each time's beam powers, the same to rounding for a constant fraction. `offsets`, `lens_distance`, `coarse` and `resolution` are those of
+[`unconverted_deposition`](@ref). The history is sampled at `times` and linear between
+them: include the knots of the pulses and fractions in `times` to follow them exactly.
+"""
+Base.@nospecializeinfer function unconverted_history(t::Target, beams::AbstractVector{<:Beam},
+                                                     @nospecialize(pulses), @nospecialize(times);
+                                                     @nospecialize(ratio), @nospecialize(prepulse = (;)),
+                                                     @nospecialize(by = :group),
+                                                     colors = nif_unconverted(), offsets = nothing,
+                                                     lens_distance::Real = 7700.0, coarse::Real = 0.5,
+                                                     resolution::Real = 0.02)
+    ts = collect(Float64, times)
+    issorted(ts) || throw(ArgumentError("times must be sorted"))
+    names = Symbol[c.name for c in colors]
+    for n in names
+        haskey(ratio, n) || throw(ArgumentError("ratio has no value for $n"))
+    end
+    for n in keys(prepulse)
+        Symbol(n) in names || throw(ArgumentError("prepulse for $n, which is not one of the colors"))
+    end
+    key = _beam_key(by)
+    vb = Beam[_value_beam(b) for b in beams]
+    pre(b) = Tuple(haskey(prepulse, n) ? _schedule_of(prepulse[n], key, b) : nothing for n in names)
+    sigs, groups = _schedule_groups(vb, b -> (_schedule_of(pulses, key, b), pre(b)))
+    # the colors' geometry, incident light only
+    unit = [UnconvertedColor(c.name; footprint = c.footprint, edge = c.edge, focal_shift = c.focal_shift)
+            for c in colors]
+    ne, nt = nelements(t), length(ts)
+    Aback = _backside_area(t)
+    E = Dict(n => zeros(ne, nt) for n in names)
+    B = Dict(n => zeros(length(t.components), nt) for n in names)
+    skipped = String[]
+    for (sig, idx) in zip(sigs, groups)
+        pulse, pres = sig
+        d = unconverted_deposition(t, [remake(vb[i]; power = 1.0) for i in idx];
+                                   ratio = Dict(n => 1.0 for n in names), colors = unit, offsets,
+                                   lens_distance, coarse, resolution)
+        append!(skipped, d.skipped)
+        for (j, n) in enumerate(names)
+            s = _color_power(ratio[n], pulse, pres[j], ts, n)
+            Ie, Ib = _unit_irradiance(t, d[n], Aback)
+            _add_outer!(E[n], Ie, s)
+            _add_outer!(B[n], Ib, s)
+        end
+    end
+    absorption = Dict(c.name => c.absorption for c in colors)
+    return IrradianceHistory(t, ts, names, E, B, absorption, skipped)
+end
+
+"""
+    irradiance_history(op, beams, pulses, times; by = :group) -> IrradianceHistory
+
+Irradiance of the 3ω light (color `:omega3`) on the target of the
+[`DepositionOperator`](@ref) `op` at each of `times` (ns), the beams following `pulses`
+(one function of time for all, or keyed by `by` as in [`with_pulses`](@ref)). With the geometry fixed, deposition is linear in each
+beam's power: the history costs one [`deposit`](@ref) per distinct pulse (with that
+pulse's beams at unit power and the others at zero), scaled by the pulse at each time.
+The irradiance is the incident light (every ray deposits all its power), before any
+laser–plasma model. It gives [`preplasma_check`](@ref) the time the backlighter beams
+arrive on their foil.
+"""
+Base.@nospecializeinfer function irradiance_history(op::DepositionOperator, beams::AbstractVector{<:Beam},
+                                                    @nospecialize(pulses), @nospecialize(times);
+                                                    @nospecialize(by = :group))
+    t = op.target
+    ts = collect(Float64, times)
+    issorted(ts) || throw(ArgumentError("times must be sorted"))
+    key = _beam_key(by)
+    vb = Beam[_value_beam(b) for b in beams]
+    sigs, groups = _schedule_groups(vb, b -> _schedule_of(pulses, key, b))
+    Aback = _backside_area(t)
+    E = zeros(nelements(t), length(ts))
+    B = zeros(length(t.components), length(ts))
+    for (pulse, idx) in zip(sigs, groups)
+        d = deposit(op, [remake(b; power = i in idx ? 1.0 : 0.0) for (i, b) in enumerate(vb)])
+        s = [Float64(pulse(τ)) for τ in ts]
+        all(>=(0), s) || throw(ArgumentError("the pulse power must not be negative"))
+        Ie, Ib = _unit_irradiance(t, d, Aback)
+        _add_outer!(E, Ie, s)
+        _add_outer!(B, Ib, s)
+    end
+    return IrradianceHistory(t, ts, [:omega3], Dict(:omega3 => E), Dict(:omega3 => B),
+                             Dict(:omega3 => 1.0), String[])
+end
+
+# First time a linearly interpolated series `I` (at times `ts`) reaches `thr`; Inf if never.
+function _first_reach(ts, I, thr)
+    k = findfirst(>=(thr), I)
+    k === nothing && return Inf
+    k == 1 && return ts[1]
+    return ts[k-1] + (thr - I[k-1]) / (I[k] - I[k-1]) * (ts[k] - ts[k-1])
+end
+
+# The irradiance of `colors` summed on the elements and back sides of the surface
+# components of `parts`: rows, and per row (component index, element; 0 for the back side).
+function _part_series(h::IrradianceHistory, parts, colors)
+    t = h.target
+    cols = colors === nothing ? h.colors : Symbol[colors...]
+    all(in(h.colors), cols) || throw(ArgumentError("the history has the colors $(h.colors)"))
+    cis = parts === nothing ? collect(eachindex(t.components)) :
+          unique!(reduce(vcat, (part_pieces(t, Symbol(p)) for p in parts); init = Int[]))
+    labels = Tuple{Int,Int}[]
+    for ci in cis
+        t.components[ci].kind === :surface || continue
+        append!(labels, (ci, e) for e in t.comp_elems[ci])
+        t.components[ci].two_sided || push!(labels, (ci, 0))
+    end
+    S = zeros(length(labels), length(h.time))
+    for c in cols, (i, (ci, e)) in enumerate(labels)
+        @views S[i, :] .+= e > 0 ? h.element[c][e, :] : h.backside[c][ci, :]
+    end
+    return S, labels
+end
+
+"""
+    threshold_crossing(history, threshold; parts = nothing, colors = nothing)
+        -> NamedTuple (time, part, element)
+
+The first time (ns) the irradiance of `history` (an [`IrradianceHistory`](@ref)), summed
+over `colors` (default: all of the history's), reaches `threshold` (W/cm²) on any element
+or one-sided back side of the surface components of `parts` (default: all), with the
+history linear between its times. `part` is the part where it does, `element` the
+element (0 for a back side, whose irradiance is the component mean). `time = Inf`,
+`part = :none` and `element = 0` when it never does.
+"""
+function threshold_crossing(h::IrradianceHistory, threshold::Real; parts = nothing, colors = nothing)
+    threshold > 0 || throw(ArgumentError("threshold must be positive"))
+    S, labels = _part_series(h, parts, colors)
+    best, at = Inf, 0
+    for i in eachindex(labels)
+        τ = _first_reach(h.time, view(S, i, :), threshold)
+        τ < best && (best = τ; at = i)
+    end
+    at == 0 && return (; time = Inf, part = :none, element = 0)
+    ci, e = labels[at]
+    return (; time = best, part = h.target.components[ci].part, element = e)
+end
+
+"""
+    specular_check(history; threshold = 1e8, parts = nothing, colors = nothing)
+        -> Vector{NamedTuple}
+
+Whether each surface part stays below the irradiance `threshold` (W/cm²) at which it is
+taken to stop being a specular reflector, under the light of `history` (an
+[`IrradianceHistory`](@ref), e.g. of [`unconverted_history`](@ref)) summed over
+`colors`. One row per part of `parts` (default: every surface part), in target order:
+`part`, `peak` (the highest irradiance on any of its elements or back sides, W/cm²),
+`peak_time` (ns), `crossing` (the first time it reaches `threshold`,
+[`threshold_crossing`](@ref); `Inf` if never) and `specular` (`crossing == Inf`).
+
+A surface below the threshold stays a cold mirror, and its specular 1ω reflection is what
+the NIF curvature rule disperses (User Guide §5.6.1: curvature radius ≤ 2 mm in one
+dimension, ≤ 5 mm in two, or dimpled); above it, a plasma forms and the cold-mirror
+reflection no longer holds. The default 10⁸ W/cm² is an *engineering default*
+(confidence low): the User Guide's general guideline for the onset of weakly ionized
+plasma on a metal surface (§4.4, citing Spaeth et al., Fusion Sci. Technol. 69, 25
+(2016)), taken as the end of specular reflection. It is not a facility criterion for
+specularity, it holds for metals only (silicon and plastics need their own value), and a
+fluence-driven change of the surface (melting, roughening) is not modeled. Research
+notes, "Unconverted light over time".
+"""
+function specular_check(h::IrradianceHistory; threshold::Real = 1e8, parts = nothing, colors = nothing)
+    t = h.target
+    ps = parts === nothing ? unique!([c.part for c in t.components if c.kind === :surface]) :
+         Symbol[parts...]
+    return map(ps) do p
+        S, _ = _part_series(h, (p,), colors)
+        peak, k = isempty(S) ? (0.0, 0) : findmax(vec(maximum(S; dims = 1)))
+        crossing = threshold_crossing(h, threshold; parts = (p,), colors).time
+        (; part = p, peak, peak_time = k == 0 ? NaN : h.time[k], crossing, specular = crossing == Inf)
+    end
+end
+
+"""
+    preplasma_check(history, arrival; foil = :backlighter, threshold = 1e8, colors = nothing)
+        -> NamedTuple (onset, arrival, lead, preplasma)
+
+Whether the foil `foil` forms a pre-plasma before its backlighter beams arrive. `onset`
+is the first time (ns) the irradiance of `history` (the unconverted light of
+[`unconverted_history`](@ref), summed over `colors`) reaches `threshold` (W/cm²) on the
+foil ([`threshold_crossing`](@ref)). `arrival` is a time (ns), or the 3ω
+[`irradiance_history`](@ref) of the backlighter beams, whose first crossing of the same
+threshold on the foil is then the arrival. `lead = arrival - onset` (ns; `-Inf` when the
+unconverted light never reaches the threshold) and `preplasma = onset < arrival`.
+
+The default 10⁸ W/cm² is the NIF User Guide's general guideline for the onset of weakly
+ionized plasma on a metal surface (§4.4, citing Spaeth et al., Fusion Sci. Technol. 69,
+25 (2016)); the guide puts the 1ω prepulse above it 3–5 ns before the nominal start of
+the pulse. It is a guideline for metals, not a facility criterion for foils; a foil of
+another material needs its own value.
+"""
+preplasma_check(h::IrradianceHistory, arrival::IrradianceHistory; foil::Symbol = :backlighter,
+                threshold::Real = 1e8, colors = nothing) =
+    preplasma_check(h, threshold_crossing(arrival, threshold; parts = (foil,)).time; foil, threshold, colors)
+
+function preplasma_check(h::IrradianceHistory, arrival::Real; foil::Symbol = :backlighter,
+                         threshold::Real = 1e8, colors = nothing)
+    onset = threshold_crossing(h, threshold; parts = (foil,), colors).time
+    a = Float64(arrival)
+    return (; onset, arrival = a, lead = onset == Inf ? -Inf : a - onset, preplasma = onset < a)
+end
