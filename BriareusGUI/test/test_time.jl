@@ -130,7 +130,7 @@ end
     new_target!(sess, :foil)
     use_pulse_shape!(sess; step = 1.0)
     start_history!(sess)
-    @test occursin("follows the capsule", tm.status[])
+    @test occursin("follows the observed surface", tm.status[])
 end
 
 @testset "time panel: the history on a worker (no GL)" begin

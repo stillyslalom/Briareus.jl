@@ -214,8 +214,8 @@ function start_history!(sess::DesignSession)
     s.model === nothing && (tm.status[] = "no drive history: the drive is laser only" * _radiation_note(s.target);
                             return sess)
     isempty(s.observed) &&
-        (tm.status[] = "the drive history follows the capsule: a hohlraum with a capsule, or a sphere part " *
-                       "with the role Capsule"; return sess)
+        (tm.status[] = "the drive history follows the observed surface: give a sphere (a capsule) or a flat " *
+                       "face the role Observed"; return sess)
     beams, enabled = sess.beams.beams[], sess.beams.enabled[]
     times = filter(τ -> sum(b -> b.power, _pulse_beams(src, beams, enabled, τ)) > 0, src.times)
     isempty(times) && (tm.status[] = "the pulses fire no enabled beam"; return sess)
@@ -352,11 +352,11 @@ function _energy_series(h, t::Target, observed)
     # the unconverted light delivered, per color (part of the laser's)
     uc = h.unconverted
     uc === nothing || append!(series, [(; name = c, values = upto(uc.delivered[c])) for c in (:omega1, :omega2)])
-    # (a hohlraum without windows, or a target without a capsule, has no such series)
+    # (a hohlraum without windows, or a target without an observed surface, has no such series)
     return filter(s -> s.name === :laser || any(>(1e-9), s.values), series)
 end
 
-const ENERGY_LABELS = Dict(:laser => "Laser delivered", :wall => "Walls (heat)", :capsule => "Capsule (heat)",
+const ENERGY_LABELS = Dict(:laser => "Laser delivered", :wall => "Walls (heat)", :capsule => "Observed surface (heat)",
                            :holes => "Out of the entrance holes", :windows => "Out of windows",
                            :omega1 => "1ω delivered", :omega2 => "2ω delivered")
 
