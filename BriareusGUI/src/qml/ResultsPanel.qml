@@ -16,6 +16,9 @@ Pane {
     function openDiagnosticPicker() { return timePanel.openPicker() }
     function openImageList() { return timePanel.openImages() }
     function redrawSweep() { sweepPanel.redraw() }
+    // the height the current tab needs (the Time tab: its rows and the chart at its minimum;
+    // 0 for the others, which fit any height); the window grows the panel to it
+    readonly property real fitHeight: tabs.currentIndex === keys.indexOf("time") ? tabs.height + timePanel.fitHeight : 0
     // leaving NIF hides the TaLIS tab: show the drive rather than its stale page
     readonly property bool talisShown: app.facility === "nif"
     onTalisShownChanged: if (!talisShown && tabs.currentIndex === keys.indexOf("talis")) show("drive")

@@ -381,6 +381,7 @@ ApplicationWindow {
         }
 
         SplitView {
+            id: centerSplit
             SplitView.fillWidth: true
             SplitView.minimumWidth: 420
             orientation: Qt.Vertical
@@ -444,6 +445,23 @@ ApplicationWindow {
                 id: results
                 SplitView.preferredHeight: Math.min(300, Math.round(0.27 * win.availH))
                 SplitView.minimumHeight: 100
+                // a tab that needs more height (Time's chart) grows the panel when it opens,
+                // the 3D view keeping its minimum; the next tab returns the panel to its
+                // height unless the splitter moved meanwhile (a shorter Time tab scrolls)
+                property real heightBefore: -1
+                property real grownTo: -1
+                function fitTab() {
+                    const need = Math.min(fitHeight, centerSplit.height - 260 - 8)
+                    if (height < need - 1) {
+                        if (heightBefore < 0) heightBefore = height
+                        results.SplitView.preferredHeight = need
+                        grownTo = need
+                    } else if (fitHeight === 0 && heightBefore >= 0) {
+                        if (Math.abs(height - grownTo) < 1) results.SplitView.preferredHeight = heightBefore
+                        heightBefore = -1
+                    }
+                }
+                onCurrentIndexChanged: Qt.callLater(fitTab)
             }
         }
 

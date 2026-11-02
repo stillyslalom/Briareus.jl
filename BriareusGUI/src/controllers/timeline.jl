@@ -748,7 +748,7 @@ function time_chart(sess::DesignSession, chart::Symbol = sess.time.chart[])
                               _GRAY; style = :dash))
         st = irradiance_stale(sess) ? " (out of date: run it again)" : ""
         return (; chart, title = "Peak irradiance of the unconverted light" * st, xlabel = "t (ns)",
-                left = (; label = "Peak irradiance (W/cm²)", series), right = nothing,
+                left = (; label = "Irradiance (W/cm²)", series), right = nothing,
                 legend = [_key(s) for s in series], cursor, empty = "", scale = :log)
     else
         r = tm.retune[]
