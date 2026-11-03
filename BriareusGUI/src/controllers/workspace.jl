@@ -192,7 +192,11 @@ Older sessions convert as they load, through this one path:
 - Before version 7 the part with the observed role was named `capsule`: that part loads
   with the role (keeping the name).
 """
-function restore!(sess::DesignSession, state::AbstractDict)
+restore!(sess::DesignSession, state::AbstractDict) = _restore!(sess, state, false)
+
+# `keep_target`: the state's target section is the design's (an undo step's): the target
+# is kept unless a build, remeshing, capsule fit or rejected edit is in flight.
+function _restore!(sess::DesignSession, state::AbstractDict, keep_target::Bool)
     get(state, "format", "") == SESSION_FORMAT ||
         throw(ArgumentError("not a $SESSION_FORMAT (format \"$(get(state, "format", ""))\")"))
     get(state, "version", 0) <= SESSION_VERSION ||
@@ -215,12 +219,15 @@ function restore!(sess::DesignSession, state::AbstractDict)
     rn(x) = get(names, Symbol(x), Symbol(x))                 # a template component's name now
     rns(xs) = Symbol[rn(x) for x in xs]
     rf(x) = get(renamed, Symbol(x), Symbol(x))               # a template frame's
-    _cancel_fits!(ts)                     # a capsule fit in flight was for another design
-    _try_build!(ts; mesh, parts, excluded = Set(rns(get(t, "excluded", String[])))) ||
-        throw(ArgumentError("the saved target was rejected: $(ts.error[])"))
+    # (an undo step whose target is the design's, built and settled, keeps it as it is)
+    if !(keep_target && !ts.building[] && isempty(ts.pending[]) && isempty(ts.fitting[]) && isempty(ts.error[]))
+        _cancel_fits!(ts)                 # a capsule fit in flight was for another design
+        _try_build!(ts; mesh, parts, excluded = Set(rns(get(t, "excluded", String[])))) ||
+            throw(ArgumentError("the saved target was rejected: $(ts.error[])"))
+    end
     a = version < 5 ? (any(p -> p.foil, parts) ? rn(:backlighter) : Symbol("")) : rn(t["active_foil"])
-    ts.active_foil[] = isempty(String(a)) ? nothing : a
-    sess.visrad_source[] = get(state, "visrad_source", "")
+    _assign!(ts.active_foil, isempty(String(a)) ? nothing : a)
+    _assign!(sess.visrad_source, get(state, "visrad_source", ""))
     b = state["beams"]
     rows = b["beam"]
     # aims in their frames: version 3 saves the local aims; before it, a beam that followed
@@ -345,10 +352,11 @@ function _restore_view!(sess::DesignSession, v::AbstractDict; rn = Symbol, rf = 
                                        axis = Symbol(get(v, "cut_axis", "z")),
                                        range = Tuple(Float64.(get(v, "cut_range", [-Inf, Inf]))))
     # sessions before the plane's offset and line of sight kept the shifted point and
-    # no line
+    # no line (the plane is set without making the cut a plane cut on the way: a sector
+    # cut briefly a plane cut redrew the 3D view twice on every undo)
     if haskey(v, "cut_normal")
-        set_cut_plane!(vs; normal = Float64.(v["cut_normal"]), point = Float64.(v["cut_point"]),
-                       offset = Float64(get(v, "cut_shift", 0.0)))
+        _set_plane!(vs, Vec3(Float64.(v["cut_normal"])...), Float64.(v["cut_point"]),
+                    Float64(get(v, "cut_shift", 0.0)))
         _assign!(vs.cut_line, Tuple(Float64.(get(v, "cut_line", [0.0, 0.0, 0.0]))))
         _assign!(vs.cut_rotation, Float64(get(v, "cut_rotation", 0.0)))
         _assign!(vs.cut_kind, Symbol(get(v, "cut_kind", "sector")))
@@ -925,7 +933,9 @@ function _numeric_view_change(a, b)
 end
 
 # A step of the history: only the view when nothing else differs from the current state
-# (the design and its target stay as they are), else the whole state.
+# (the design and its target stay as they are), else the whole state, the target kept
+# when its section is the current one (a beam or setting edit undone). `current` is the
+# design as it is: undo and redo record it first.
 function _step_to!(sess::DesignSession, state)
     cur = sess.history.current
     if cur !== nothing && all(k -> k == "view" || isequal(get(state, k, nothing), get(cur, k, nothing)),
@@ -935,7 +945,8 @@ function _step_to!(sess::DesignSession, state)
         # (the diagnostics ticked stay as they are: they are not steps)
         tm = merge(get(state, "time", Dict{String,Any}()),
                    Dict{String,Any}("diagnostics" => copy(sess.time.diagnostics[])))
-        restore!(sess, merge(state, Dict{String,Any}("time" => tm)))
+        _restore!(sess, merge(state, Dict{String,Any}("time" => tm)),
+                  cur !== nothing && isequal(get(state, "target", nothing), get(cur, "target", nothing)))
     end
     sess.history.current = _snapshot!(sess)
     return sess

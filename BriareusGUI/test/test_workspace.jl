@@ -207,6 +207,33 @@ end
     @test h.changes[] == h.seen && !record!(s)
 end
 
+# An undo whose target is the design's keeps the target (no rebuild, the parts as they
+# are) and ends where a full restore of the step ends; restoring the view leaves a sector
+# cut a sector cut throughout.
+@testset "undo keeps an unchanged target (no GL)" begin
+    s = DesignSession(resolution = :coarse)
+    before = Controllers._history_state(s)
+    t0, p0 = s.target.target[], s.target.parts[]
+    edit_beams!(s.beams, 1, :power, "4.5"; by = :beam)
+    s.optimize.iterations[] = 21
+    record!(s)
+    kinds = Symbol[]
+    f = on(k -> push!(kinds, k), s.view.cut_kind)
+    @test undo!(s)
+    off(f)
+    @test s.target.target[] === t0 && s.target.parts[] === p0 && isempty(kinds)
+    @test Controllers._history_state(s) == before
+    # the same step restored in full (the target rebuilt from the state) ends alike
+    s2 = DesignSession(resolution = :coarse)
+    restore!(s2, session_state(s))
+    @test Controllers._history_state(s2) == Controllers._history_state(s)
+    # a part edit undone rebuilds the target
+    @test redo!(s) && s.beams.beams[][1].power == 4.5
+    edit_part!(s.target, 1, :length, "10.8")
+    record!(s)
+    @test undo!(s) && s.target.parts[] !== p0 && s.target.parts[][1].values[:length] != 10.8
+end
+
 @testset "STL mesh parts (no GL)" begin
     # a closed cube (2 × 2 × 2 file units), half its facets wound backward, ASCII STL
     corners = [Briareus.Vec3(x, y, z) for x in (-1, 1), y in (-1, 1), z in (-1, 1)]

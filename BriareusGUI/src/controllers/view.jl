@@ -201,15 +201,26 @@ function set_cut_plane!(v::ViewState; normal = nothing, angles = nothing, point 
     n = angles !== nothing ? port_vector(Float64.(Tuple(angles))...) :
         normal === nothing ? Vec3(v.cut_normal[]...) :
         normal isa Symbol ? _axis_vector(normal) : Vec3(Float64.(Tuple(normal))...)
-    all(isfinite, n) && norm(n) > 0 || throw(ArgumentError("the cut plane needs a nonzero normal"))
-    p = Vec3(Float64.(Tuple(point))...)
-    all(isfinite, p) && isfinite(offset) ||
-        throw(ArgumentError("the cut plane's point and offset must be finite"))
+    _check_plane(n, point, offset)
     (normal !== nothing || angles !== nothing) && _assign!(v.cut_line, (0.0, 0.0, 0.0))
-    _assign!(v.cut_normal, Tuple(normalize(n)))
-    _assign!(v.cut_point, Tuple(p))
-    _assign!(v.cut_shift, Float64(offset))
+    _set_plane!(v, n, point, offset)
     _assign!(v.cut_kind, :plane)
+    return v
+end
+
+function _check_plane(n, point, offset)
+    all(isfinite, n) && norm(n) > 0 || throw(ArgumentError("the cut plane needs a nonzero normal"))
+    all(isfinite, point) && isfinite(offset) ||
+        throw(ArgumentError("the cut plane's point and offset must be finite"))
+    return nothing
+end
+
+# The cut plane's normal `n` (normalized here), point and offset, the cut's kind as it is.
+function _set_plane!(v::ViewState, n, point, offset)
+    _check_plane(n, point, offset)
+    _assign!(v.cut_normal, Tuple(normalize(n)))
+    _assign!(v.cut_point, Tuple(Vec3(Float64.(Tuple(point))...)))
+    _assign!(v.cut_shift, Float64(offset))
     return v
 end
 

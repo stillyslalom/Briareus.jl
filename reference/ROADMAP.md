@@ -276,12 +276,17 @@ Items 10–15 follow the 2026-10-22 literature review against Kritcher et al. 20
     10.8k elements)*. *Done:* `record!` and `can_undo` answer from a count of the
     session's observable changes between edits (before, a snapshot took 0.3–0.6 ms and
     its comparison 0.25–0.5 ms at every event, and twice per refresh with no undo step: a
-    refresh took 1.8–2.0 ms then, 0.4–0.9 ms now). *Left:* the model tree and every panel
-    are rebuilt each refresh (the tree 0.1–0.3 ms, the panels together under 0.3 ms: not
-    worth caching yet); undo rebuilds the target (CAD designs depend on the 6-entry
-    target cache; on the mock-up a view undo took 88 ms, a beam undo 126 ms, a part undo
-    188 ms, each with its refresh); targets under 30k triangles build on the GUI thread;
-    each sweep step rebuilds the target.
+    refresh took 1.8–2.0 ms then, 0.4–0.9 ms now). An undo step whose target section is
+    the design's keeps the target, and restoring the view no longer makes a sector cut a
+    plane cut on the way (two redraws of the 3D view each time); on the mock-up a view
+    undo took 88 ms, now 6 ms, a beam undo 126 → 25 ms, a part undo 188 → 82 ms, each
+    with its refresh. *Left:* the model tree and every panel are rebuilt each refresh (the
+    tree 0.1–0.3 ms, the panels together under 0.3 ms: not worth caching yet); a
+    `restore!` of an unchanged CAD design (a session reopened) still takes 13 ms in
+    `_try_build!` (each part's cache key reads its file's time stamp) and 17 ms in
+    `set_beams!` (the beams redrawn); a part undo rebuilds the target (CAD designs depend
+    on the 6-entry target cache); targets under 30k triangles build on the GUI thread
+    (~30 ms); each sweep step rebuilds the target (a background job).
 27. **Backlighter geometry (optional).** The shield's mounting sector (the sheet runs past
     9.2 mm there); backlighter beams aimed off the foil center, or foils off the equator
     (both expressible with `backlighter_foil(los)` and `FramePointing`; neither explored).
