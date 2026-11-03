@@ -46,7 +46,8 @@ callout in the section says which).
   and sliver view factors (2026-10-25); Compile latency (2026-10-25); Closure on bored,
   windowed and CAD cavities (2026-10-25); Compact capsule rows at capsule_h = h/3
   (2026-10-25); Halfraum ends and starters (2026-11-02); Hohlraum profiles: frustraums
-  and multi-section walls (2026-11-02) (the frustraum starter's public dimensions).
+  and multi-section walls (2026-11-02) (the frustraum starter's public dimensions);
+  Frustraum cone pointing: derived (2026-11-03).
 
 **Design, errors and shot review**
 - Beam-error budgets (2026-10-17); Retuning to a reference drive (2026-10-17); Implosion
@@ -10147,6 +10148,56 @@ checked against the page image of Fig. 1.
   holes (radius 1.6 mm) by 1.8e-3 and 2.6e-3. Unbalanced and at h 0.4 the frustraum
   stays within 6e-3, the cylinder within 1.9e-2. The energy balance (absorbed + escaped
   + lost = source) closes to 5e-15.
+
+## Frustraum cone pointing: derived (2026-11-03) *derived*
+
+BriareusGUI's NIF presets in a frustraum part's entrance holes (`FRUSTRAUM_CONE_POINTING`,
+`preset_pointing`); derivation `examples/frustraum_pointing.jl`, test
+`BriareusGUI/test/test_profiles.jl`. Sources read 2026-11-03.
+- **Public pointing: the 50° cone only.** Baker et al., Phys. Plasmas 30, 092708 (2023)
+  (OSTI 2222631), Sec. III A 2 and Fig. 3: the outer cones' pointing was moved along the
+  axis by 0.2 mm between N200108 and N200217 and by 0.1 mm between N200721 and N201018
+  (text); Fig. 3(b)'s abscissa, "50 deg. z pointing (mm)", read from the page image at
+  400 dpi (±0.01 mm): N200217 and N200721 5.99, N201018 6.09, N200108 6.19. Fig. 3(a)
+  sketches the 50° beams' footprint on the wall for two shots, without numbers. The text
+  says the 44.5° cone's z pointing was farther from the capsule than the 50° cone's in
+  the layered shots (no value), and the 25° wall moves the outer spots by an effective
+  ~0.13 mm in z. No inner-cone pointing, radial offsets or defocus are given. The shots'
+  frustraum dimensions are not tabulated per shot (the paper's main geometry is the
+  starter's). Baker et al.'s Frustraum 1100 paper (LLNL conference record, OSTI 2315082;
+  journal version High Energy Density Phys., OSTI 2447656) gives quad splitting, not
+  aims. Amendt et al. 2019 (the design paper) was not read (paywalled). Confidence in the
+  50° values: medium (figure-read; the reference point of "z pointing" taken as TCC on
+  the axis, which the paper does not state).
+- **Derivation (engineering default).** No full public pointing, so the four cones are
+  derived from the example cylinder pointing (section "Example NIF cone pointing:
+  unsourced"; itself an illustrative example) on its 10.1 × 5.75 mm hohlraum: each cone's
+  spot centroid (power-weighted mean height of the wall deposition of the cone's quads
+  in one hemisphere) over the half-length is held at the cylinder's, on the frustraum
+  starter (12.24 mm, waist radius 4.88 mm, ends 2.282 mm, holes 1.55 mm, capsule
+  1.281 mm). Each cone's line is set by where it crosses the hole's plane; its aim keeps
+  the cylinder aim's axial distance from the hole (so the spot size at the hole is the
+  cylinder's). Where the fraction would bring the beams closer to the hole's rim than the
+  cylinder pointing's smallest keep-out clearance (0.0656 mm, its 23.5° cone, by
+  `ApertureKeepOut` defaults: 1 % contour, 0.075 mm transverse and 1 mm focus error), the
+  line stops at that clearance instead. Aims rounded to 0.01 mm.
+- **Result** (aim z, r toward the port azimuth, mm, frustraum at TCC; fraction of the
+  half-length, cylinder → frustraum, ray trace nspot = 121, wall mesh h = 0.2 mm;
+  keep-out clearance, mm): 23.5° (4.16, −1.09), −0.187 → −0.372, 0.066; 30° (4.70,
+  −1.16), −0.042 → −0.154, 0.069; 44.5° (6.27, −0.25), 0.454 → 0.449, 0.067; 50° (6.08,
+  −0.06), 0.518 → 0.518, 0.229. All cones deposit their power on the wall. The 50° cone
+  is at the cylinder's fraction; the 44.5° cone 0.005 short of it (0.03 mm), at the
+  clearance limit; the inner cones cannot reach it. On the frustraum the 23.5° beams run
+  nearly parallel to the 23° wall of their own half, so they land on the far half past
+  the waist; reaching the cylinder's fractions (−0.19, −0.04) would take a hole-plane
+  crossing near the rim (clearances −1.2 and −0.4 mm). The 23.5° line crosses the hole
+  where the cylinder's does, so its clearance is the cylinder's exactly.
+- **Check, not fitted.** The derived 50° aim, z = 6.08 mm, lies within the published
+  5.99–6.19 mm (Fig. 3(b)), and the 44.5° aim (6.27 mm) lies farther from the capsule than
+  the 50° aim, as the text states for the layered shots. Neither was a target of the
+  derivation. Confidence in the derived table: low as a model of the platform's pointing
+  (an engineering default for illustrative designs), the 50° cone consistent with
+  public data.
 
 ## Aperture keep-out rims (2026-11-03) *derived*
 

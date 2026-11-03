@@ -110,6 +110,62 @@ end
     @test all(_same_component(a, b) for (a, b) in zip(s3.target.target[].components, s0.target.target[].components))
 end
 
+@testset "frustraum pointing: the preset in its holes, spots and clearance (no GL)" begin
+    V = Briareus.Vec3
+    quads = nif_quads(power = 8.0)
+    cone = Controllers._cone_pointing(quads, Controllers.NIF_CONE_POINTING)
+    fz = Controllers._cone_pointing(quads, Controllers.FRUSTRAUM_CONE_POINTING)
+    # the starter at TCC: the frustraum pointing's own aims, in its holes' frames
+    s = DesignSession(starter = :frustraum, resolution = :coarse)
+    @test s.beams.beams[] == fz && all(s.beams.enabled[])
+    # File ▸ New target from the default design loads the preset again for the frustraum
+    s2 = DesignSession(resolution = :coarse)
+    @test s2.beams.beams[] == cone && new_target!(s2, :frustraum) && s2.beams.beams[] == fz
+    # inserted into a design without holes: beams held at TCC move by the frustraum
+    # pointing's change, an edit kept as an offset
+    e = DesignSession(starter = :none, resolution = :coarse)
+    edit_beam_set!(e.beams, [1], :aim_x, "0.2")
+    @test insert_starter!(e, :frustraum)
+    want = [b.aim for b in fz]
+    want[1] += V(0.2 - cone[1].aim[1], 0, 0)
+    @test maximum(norm.([b.aim for b in e.beams.beams[]] .- want)) < 1e-12
+    # a frustraum moved carries the beams rigidly, as the cylinder's
+    i = part_index(s.target, :frustraum)
+    @test nudge_part!(s.target, i, 0.3; frame = :tcc, axis = :x)
+    @test maximum(norm.([b.aim - a for (b, a) in zip(s.beams.beams[], [b.aim for b in fz])] .- Ref(V(0.3, 0, 0)))) < 1e-12
+
+    # Spots against the intended positions (research notes, "Frustraum cone pointing"):
+    # each cone's wall-deposition centroid height over the half-length, by ray trace
+    # (nspot = 121), on the frustraum starter's geometry and on the 10.1 mm cylinder the
+    # example pointing is for. The 50° cone sits at the cylinder's fraction; the 44.5° and
+    # inner cones stop at the cylinder pointing's smallest clearance from the hole's rim.
+    cyl = hohlraum(length = 10.1, radius = 2.875, leh_radius = 1.55, capsule_radius = 0.9, h = 0.2)
+    fr = hohlraum(profile = frustraum_profile(length = 12.24, waist_radius = 4.88, end_radius = 2.282),
+                  leh_radius = 1.55, capsule_radius = 1.281, h = 0.2)
+    function fraction(t, bs, c, halfL)
+        d = raytrace_deposition(t, [b for b in bs if b.group === c && b.port[3] > 0]; nspot = 121)
+        w = elements(t, :wall)
+        return sum(d.element[w] .* [t.elem_centroid[k][3] for k in w]) / sum(d.element[w]) / halfL,
+               sum(d.element[w]) / sum(b.power for b in bs if b.group === c && b.port[3] > 0)
+    end
+    cones = (:inner23, :inner30, :outer44, :outer50)
+    fc = Dict(c => fraction(cyl, cone, c, 5.05) for c in cones)
+    ff = Dict(c => fraction(fr, fz, c, 6.12) for c in cones)
+    @test all(ff[c][2] > 1 - 1e-6 for c in cones)              # every cone's power on the wall
+    @test abs(ff[:outer50][1] - fc[:outer50][1]) < 1e-3       # 0.5180 against 0.5177
+    @test abs(ff[:outer44][1] - fc[:outer44][1]) < 6e-3       # 0.4492 against 0.4544
+    # the inner cones land farther past the waist than on the cylinder (the hole limits them)
+    @test isapprox(ff[:inner23][1], -0.3715; atol = 2e-3) && isapprox(ff[:inner30][1], -0.1542; atol = 2e-3)
+    # clearance from the entrance holes: every quad and every beam of the presets positive,
+    # the clamped cones at the cylinder pointing's smallest (its 23.5° cone's, 0.0656 mm)
+    kc, kf = ApertureKeepOut(cyl), ApertureKeepOut(fr)
+    m = minimum(aperture_clearance(kc, cone))
+    cf = aperture_clearance(kf, fz)
+    @test isapprox(m, 0.0656; atol = 1e-4) && minimum(cf) ≥ m - 1e-6
+    @test all(abs(minimum(cf[[b.group === c for b in fz]]) - m) < 5e-3 for c in (:inner23, :inner30, :outer44))
+    @test minimum(aperture_clearance(kf, preset_beams(:nif_beams; target = s2.target))) > 0
+end
+
 @testset "hohlraum breaks: a new break splits the longest section, the wall kept (no GL)" begin
     ts = TargetSetup(resolution = :coarse)
     i = part_index(ts, :hohlraum)

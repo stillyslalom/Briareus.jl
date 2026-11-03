@@ -241,8 +241,9 @@ Items 10–15 follow the 2026-10-22 literature review against Kritcher et al. 20
     - Phase E, the double backlighter with ARC: the starter, ARC beams as a facility beam
       set (public description only; mock-up timing), per-foil results if one active foil
       is not enough.
-    - Profiles: windows on cones and across breaks, fillets on a profile, a frustraum
-      pointing preset; the tentless membranes.
+    - Profiles: windows on cones and across breaks, fillets on a profile; the tentless
+      membranes; NIF presets re-aimed when a hohlraum part's profile is switched in
+      place (the frustraum pointing applies on load, New target and Insert only).
     - Roles: several observed surfaces (decision 3, "later"); roles on VisRad and CAD
       pieces (only hohlraum-part pieces hold their own); an observed washer, cylinder,
       cone or flat CAD face; per-cavity albedo and energy series; a Dante field centered

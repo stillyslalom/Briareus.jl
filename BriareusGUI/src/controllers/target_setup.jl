@@ -3205,7 +3205,8 @@ The parts of starter `kind` (one of [`STARTERS`](@ref)), placed in the frame nam
   the stated dimensions of the NIF frustraum of Baker et al., Phys. Plasmas 30, 092708
   (2023); the end radius is derived from its 23° wall angle taken from the axis, and the
   capsule is its 1.2 mm inner radius plus the ~81 µm shell. An illustrative mock-up: its
-  wall area is not the paper's quoted one, and the beams are not its pointing.
+  wall area is not the paper's quoted one. The NIF presets aim in its holes with a
+  pointing derived for it ([`preset_pointing`](@ref)), not the platform's.
 
 The two halfraum starters are mock-ups at an illustrative scale; reference/research-notes.md,
 "Halfraum ends and starters" and "Hohlraum profiles", has the sources.

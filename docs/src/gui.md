@@ -355,7 +355,9 @@ collects every explanation by page. Help ▸ Documentation opens this page.
   NIF quad held as one beam splits into its four beams (their own ports, a quarter of
   the power each) to point them apart, and merges back.
 - **Facility** (Beams ▸ Facility: NIF, OMEGA, OMEGA EP or other): the presets offered
-  (NIF quads or beams at illustrative example cone aims; the OMEGA hohlraum or backlighter
+  (NIF quads or beams at illustrative example cone aims, in a frustraum's holes at aims
+  derived from them that keep each cone's spot at the same fraction of the wall height
+  where the hole allows; the OMEGA hohlraum or backlighter
   sets; OMEGA EP's beams are imported, its port geometry is not built in) and the
   checks (the TaLIS rules are NIF's).
 - **Analyses:** the settings and Run of the drive, the optimization, the clearance

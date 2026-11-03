@@ -375,16 +375,47 @@ E. **Double backlighter with ARC:** the starter, ARC beams as a facility beam se
   stated size of Baker et al. 2023's NIF frustraum (12.24 mm long, waist radius 4.88 mm,
   holes of 1.55 mm), end radius 2.282 mm derived from its 23° wall angle, capsule radius
   1.281 mm; a mock-up of the shape (its wall area is not the paper's quoted 270 mm²). The
-  NIF presets aim in its entrance holes with the cylinder's offsets (item 5), not a
-  frustraum pointing.
+  NIF presets aim in its entrance holes with a derived frustraum pointing ("Frustraum
+  pointing as built").
 - Sessions store `sections` beside `windows` and the new values by key; missing keys take
   their defaults, so older sessions load unchanged (test) and the version stays.
 - Window frames and the canvas's window outlines use the wall radius at the window's
   height (`_wall_radius_at`).
 - Not built: windows on cones; fillets on a profile; the cutaway's default components
   (`DEFAULT_CUT_COMPONENTS`, the starter's `hohlraum_wall` and caps) do not name section
-  walls, so a frustraum is not cut away by default; a frustraum pointing preset; the
-  tentless membranes (not geometry here); GUI screenshots not regenerated.
+  walls, so a frustraum is not cut away by default; the tentless membranes (not geometry
+  here); GUI screenshots not regenerated.
+
+## Frustraum pointing as built (2026-11-03)
+
+- Public pointing: Baker et al. 2023 give only the 50° cone's axial aim (5.99–6.19 mm
+  over four shots, read from Fig. 3(b)); no inner-cone or 44.5° values. So the preset is
+  an engineering default, derived (research notes, "Frustraum cone pointing: derived";
+  `examples/frustraum_pointing.jl`): each cone's wall-deposition centroid at the example
+  cylinder pointing's fraction of the half-length, the aim at the cylinder aim's axial
+  distance from the hole, and where that would bring the beams nearer the hole's rim
+  than the cylinder pointing's smallest keep-out clearance (0.066 mm) the line stops at
+  that clearance. The 50° cone reaches its fraction (0.518, ray trace nspot = 121), the
+  44.5° falls 0.005 short, and the inner cones cannot reach theirs: their beams run
+  nearly parallel to the 23° wall and land on the far half past the waist (fractions
+  −0.37 and −0.15 against −0.19 and −0.04). The derived 50° aim (6.08 mm) lies in the
+  published range, a check that was not a target.
+- `FRUSTRAUM_CONE_POINTING` (beside `NIF_CONE_POINTING`) holds the aims for the frustraum
+  starter at TCC. `preset_pointing` picks, per hemisphere, the pointing of the hohlraum
+  part whose hole the beams aim in (`_hole_profile`): a frustraum's holes get the
+  frustraum pointing's offsets from the starter's holes at TCC, any other hohlraum the
+  cylinder's, so a shock-tube pair or a mixed design points each hole for its own part.
+  The presets stay per facility (no new menu entry): the target picks the pointing.
+- `aim_in_lehs!` (Insert into a design whose beams drive no hole) moves a NIF beam held
+  at TCC by the frustraum pointing's change from the cylinder pointing for that beam
+  (by name) before carrying it to the frustraum's hole, so edits made at TCC are kept as
+  offsets. File ▸ New target reloads the preset, as for any change of holes.
+- Bit for bit: cylinder hohlraums (the default design, the halfraum starters) keep their
+  aims (`test_halfraum.jl` unchanged and passing). Changed: the frustraum starter's aims
+  (its drive was not a reference anywhere).
+- Not built: switching a hohlraum part's profile in place does not re-aim beams already
+  in its holes (their offsets and edits stay); OMEGA beams aim at a frustraum's hole
+  centers as at a cylinder's.
 
 ## Phase C2 as built (2026-11-02): what departs from the design
 

@@ -168,7 +168,8 @@ var pages = [
                 "±length/2. Each section is its own wall piece with its exact surface. Windows " +
                 "are cut into cylindrical sections only. The frustraum starter has the stated " +
                 "size of a published NIF frustraum (Baker et al. 2023), its end radius derived " +
-                "from the 23° wall angle: a mock-up of the shape, not that platform." },
+                "from the 23° wall angle: a mock-up of the shape, not that platform. The NIF " +
+                "presets aim in its holes with a pointing derived for it (see Presets and beam files)." },
         { key: "part.windows", title: "Diagnostic windows",
           text: "A diagnostic window is cut into a hohlraum part's wall, centered at azimuth φ from the " +
                 "part's +x and at z along its axis: round (a disk of the given diameter on the unrolled " +
@@ -228,7 +229,11 @@ var pages = [
           text: "The hohlraum presets aim in the entrance holes' frames: the upper hemisphere's " +
                 "beams in the hole facing up, the lower hemisphere's in the one facing down, so a " +
                 "moved hohlraum carries its beams. NIF beams keep the offsets of an illustrative " +
-                "example cone pointing, OMEGA beams aim at the holes' centers, and a hemisphere " +
+                "example cone pointing; in a frustraum's holes, a pointing derived from it that " +
+                "puts each cone's spot at the same fraction of the wall height where the hole " +
+                "allows (the inner cones' spots land farther past the waist than on the " +
+                "cylinder). " +
+                "OMEGA beams aim at the holes' centers, and a hemisphere " +
                 "with no hole facing it is switched off (the opacity halfraum). The OMEGA " +
                 "backlighter set aims at the active foil's center, in its frame. An engineering " +
                 "default, not a facility's pointing. Beam tables and VisRad pointing or " +

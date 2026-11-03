@@ -65,6 +65,16 @@ const BEAM_FIELDS = (:z, :r, :phi, :defocus, :power)
 const NIF_CONE_POINTING = Dict(:inner23 => (-1.09, 3.09), :inner30 => (-0.60, 3.63),
                                :outer44 => (0.0, 5.20), :outer50 => (0.0, 5.01))
 
+# NIF cone pointing (r, z; mm) for the frustraum starter at TCC (`starter_parts(:frustraum)`):
+# an engineering default derived from NIF_CONE_POINTING, not a published pointing
+# (research notes, "Frustraum cone pointing: derived"; examples/frustraum_pointing.jl).
+# Each cone's spot centroid sits at the cylinder pointing's fractional height on the wall
+# where the entrance hole allows it, its aim at the cylinder aim's axial distance from
+# the hole; the inner cones and the 44.5° cone stop where their clearance from the hole's
+# rim falls to the cylinder pointing's smallest (0.066 mm).
+const FRUSTRAUM_CONE_POINTING = Dict(:inner23 => (-1.09, 4.16), :inner30 => (-1.16, 4.70),
+                                     :outer44 => (-0.25, 6.27), :outer50 => (-0.06, 6.08))
+
 """
     BeamTable(beams = Beam{Float64}[]; preset = :custom)
 
@@ -186,7 +196,11 @@ enabled.
   a hohlraum part carries its beams. The NIF beams keep the offsets of the example cone
   pointing (`NIF_CONE_POINTING`, set for the 10.1 mm default) from the default
   hohlraum part's entrance holes at TCC, the OMEGA beams aim at the holes' centers. For
-  the default hohlraum part at TCC the aims are the cone pointing's own, bit for bit.
+  the default hohlraum part at TCC the aims are the cone pointing's own, bit for bit. In
+  the holes of a frustraum part the NIF beams keep instead the offsets of the frustraum
+  pointing (`FRUSTRAUM_CONE_POINTING`, derived for the frustraum starter: each cone's
+  spot at the cylinder pointing's fractional wall height where the hole allows it) from
+  the starter's holes at TCC.
   When the target has an entrance hole facing one hemisphere only (the opacity halfraum),
   the other hemisphere's beams are disabled and aim as without a hohlraum. Without any
   entrance hole every beam aims in `:tcc`: the NIF beams at the cone pointing, the OMEGA
@@ -200,19 +214,14 @@ designs, not a facility's pointing.
 """
 function preset_pointing(preset::Symbol; target = nothing)
     if preset in HOHLRAUM_PRESETS
-        bs = if preset === :omega_hohlraum
-            omega_beams(power = 0.5)
-        else
-            _cone_pointing(preset === :nif_quads ? nif_quads(power = 8.0) : nif_beams(power = 2.0),
-                           NIF_CONE_POINTING)
-        end
+        bs = _preset_cone_beams(preset, :cylinder)
         af = fill(:tcc, length(bs))
         en = fill(true, length(bs))
         target === nothing && return (; beams = bs, aim_frame = af, enabled = en)
         frames = part_frames(target)
         up, down = facing_lehs(target; frames)
         (up === nothing && down === nothing) && return (; beams = bs, aim_frame = af, enabled = en)
-        ref = _leh_reference(preset)
+        fz = nothing
         out = copy(bs)
         for (i, b) in enumerate(bs)
             upper = b.port[3] > 0
@@ -221,7 +230,14 @@ function preset_pointing(preset::Symbol; target = nothing)
                 en[i] = false
                 continue
             end
-            out[i] = remake(b; aim = _reaim(b.aim, frames[f], upper ? ref[1] : ref[2]))
+            kind = _hole_profile(target, f)
+            a = b.aim
+            if kind === :frustraum
+                fz === nothing && (fz = _preset_cone_beams(preset, kind))
+                a = fz[i].aim
+            end
+            ref = _leh_reference(preset, kind)
+            out[i] = remake(b; aim = _reaim(a, frames[f], upper ? ref[1] : ref[2]))
             af[i] = f
         end
         return (; beams = out, aim_frame = af, enabled = en)
@@ -268,12 +284,32 @@ function facing_lehs(target; frames::AbstractDict = part_frames(target))
 end
 
 # The entrance-hole frames a hohlraum preset's chamber aims are offsets from (upper,
-# lower): the default hohlraum part's at TCC for the NIF cone pointing, the chamber's (the
-# holes' centers) for the OMEGA beams.
-function _leh_reference(preset::Symbol)
+# lower), for a hole in a hohlraum of profile `kind`: the default hohlraum part's at TCC
+# for the NIF cone pointing, the frustraum starter's at TCC for the frustraum pointing,
+# the chamber's (the holes' centers) for the OMEGA beams.
+function _leh_reference(preset::Symbol, kind::Symbol = :cylinder)
     preset === :omega_hohlraum && return (CHAMBER, CHAMBER)
-    fr = part_frames([PartSpec(:hohlraum; name = :hohlraum)])
-    return fr[Symbol("hohlraum.leh_top")], fr[Symbol("hohlraum.leh_bottom")]
+    p = kind === :frustraum ? first(starter_parts(:frustraum)) : PartSpec(:hohlraum; name = :hohlraum)
+    fr = part_frames([p])
+    return fr[Symbol(p.name, ".leh_top")], fr[Symbol(p.name, ".leh_bottom")]
+end
+
+# A hohlraum preset's beams at TCC; the NIF beams pointed for a hohlraum of profile `kind`
+# (the frustraum pointing for `:frustraum`, the example cone pointing otherwise).
+function _preset_cone_beams(preset::Symbol, kind::Symbol)
+    preset === :omega_hohlraum && return omega_beams(power = 0.5)
+    return _cone_pointing(preset === :nif_quads ? nif_quads(power = 8.0) : nif_beams(power = 2.0),
+                          kind === :frustraum ? FRUSTRAUM_CONE_POINTING : NIF_CONE_POINTING)
+end
+
+# The profile kind (`HOHLRAUM_PROFILES`) of the hohlraum part whose entrance-hole frame is
+# `f` (`<part>.leh_top` or `<part>.leh_bottom`).
+function _hole_profile(target, f::Symbol)
+    name = Symbol(first(rsplit(String(f), '.'; limit = 2)))
+    for p in target.parts[]
+        p.kind === :hohlraum && p.name === name && return _profile_kind(p.values)
+    end
+    return :cylinder
 end
 
 # The aim `a`, an offset from the reference frame `ref`, carried to frame `F`; `a` itself
@@ -391,7 +427,9 @@ end
 Aim the beams of a hohlraum preset ([`HOHLRAUM_PRESETS`](@ref)) that are held in `:tcc`
 in the entrance holes' frames of `target` ([`facing_lehs`](@ref)), as
 [`preset_pointing`](@ref) does: each keeps its offset from the preset's reference hole,
-so pointing edits made at TCC carry over. Beams in a hemisphere that no hole faces, beams
+so pointing edits made at TCC carry over. In a frustraum part's hole a NIF beam's aim
+first moves by the frustraum pointing's change from the cylinder pointing for that beam
+(matched by name). Beams in a hemisphere that no hole faces, beams
 held in another frame, and a table of another preset are left as they are, as are the
 enabled flags. Returns whether an aim changed.
 """
@@ -402,15 +440,24 @@ function aim_in_lehs!(bt::BeamTable, target)
     follow_frames!(bt, frames)
     up, down = facing_lehs(target; frames)
     (up === nothing && down === nothing) && return false
-    ref = _leh_reference(preset)
     bs, af = copy(bt.beams[]), copy(bt.aim_frame[])
+    shift = nothing
     changed = false
     for (i, b) in enumerate(bs)
         af[i] === :tcc || continue
         upper = b.port[3] > 0
         f = upper ? up : b.port[3] < 0 ? down : nothing
         f === nothing && continue
-        bs[i] = remake(b; aim = _reaim(b.aim, frames[f], upper ? ref[1] : ref[2]))
+        kind = _hole_profile(target, f)
+        a = b.aim
+        if kind === :frustraum && preset !== :omega_hohlraum
+            shift === nothing && (shift = Dict(c.name => z.aim - c.aim
+                                               for (c, z) in zip(_preset_cone_beams(preset, :cylinder),
+                                                                 _preset_cone_beams(preset, :frustraum))))
+            a = a + get(shift, b.name, zero(a))
+        end
+        ref = _leh_reference(preset, kind)
+        bs[i] = remake(b; aim = _reaim(a, frames[f], upper ? ref[1] : ref[2]))
         af[i] = f
         changed = true
     end
