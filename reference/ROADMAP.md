@@ -257,8 +257,7 @@ Items 10–15 follow the 2026-10-22 literature review against Kritcher et al. 20
     - Modes stop at l = 4 in the tables, weights and retune.
     - Beams: spot shape, f-number, wavelength and port are saved but not editable; aims
       are Cartesian only; VisRad profiles and focal lengths only from an import; no OMEGA
-      EP preset; applying SST or a beam summary needs a preset first; no aim-frame column
-      or sorting in the beam table.
+      EP preset; applying SST or a beam summary needs a preset first.
     - Time: no pulse editing; no Time node in the Analyses tree (its prepulse and
       threshold settings sit in Drive).
     - Sessions: camera pose and chart choices are not saved.

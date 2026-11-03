@@ -216,9 +216,12 @@ var pages = [
                 "others. Right-click: Look along beam, Move to a new group, Split or Merge a quad." },
         { key: "beams.table", title: "Beam table",
           text: "The Beam table tab below the 3D view: a row per cone, quad or beam (Rows), with the " +
-                "number of beams n, the port angles θ / φ, and the aim z, aim r, tangential offset and " +
+                "number of beams n, the port angles θ / φ, the frame the aims are held in (mixed: the " +
+                "row's beams aim in different frames), and the aim z, aim r, tangential offset and " +
                 "defocus (mm) and the power (TW per beam), edited in place: an edit sets the field on " +
                 "every beam of the row. The box switches the row's beams on or off (pale: some are off). " +
+                "A click on a heading sorts the rows by that column, again descending, a third time back " +
+                "to the table's order; sorting changes the display only, not the beams' order. " +
                 "Selecting a row selects its node in the model tree and the 3D view. Problems found in an " +
                 "imported VisRad file show above the table." },
         { key: "beams.preset", title: "Presets and beam files",

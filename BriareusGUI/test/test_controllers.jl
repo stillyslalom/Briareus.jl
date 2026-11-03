@@ -134,6 +134,58 @@ end
     @test_throws ArgumentError Controllers._check_grouping(bt.beams[], :quad)   # the optimizer's check
 end
 
+# The beam table's aim-frame column and its display order: sorting changes the order the
+# rows are shown in, never the beams' order, the rows' numbers or the session.
+@testset "beam table: aim frames and sorting (no GL)" begin
+    sess = DesignSession(resolution = :coarse)
+    bt, v = sess.beams, sess.view
+    set_grouping!(bt, :quad)
+    reset_history!(sess)
+    beams0, state0 = copy(bt.beams[]), session_state(sess)
+    rows = beam_rows(bt)
+    # each quad aims in the entrance hole its hemisphere faces; a cone spans both: mixed
+    @test all(r -> r.aim_frame === (bt.beams[][r.members[1]].port[3] > 0 ? Symbol("hohlraum.leh_top") :
+                                    Symbol("hohlraum.leh_bottom")), rows)
+    @test all(r -> r.aim_frame === nothing, beam_rows(bt; by = :group))
+    @test beam_row_order(rows) == 1:48 && beam_row_order(rows, :row, true) == 48:-1:1
+    # by a number: a permutation, sorted, ties in the table's order
+    o = beam_row_order(rows, :theta)
+    θ = [r.theta for r in rows]
+    @test sort(o) == 1:48 && issorted(θ[o])
+    @test all(o[k] < o[k+1] for k in 1:47 if θ[o[k]] == θ[o[k+1]])
+    od = beam_row_order(rows, :theta, true)
+    @test issorted(θ[od]; rev = true) && all(od[k] < od[k+1] for k in 1:47 if θ[od[k]] == θ[od[k+1]])
+    # names in natural order (Q31B before Q115B); frames by name
+    names = beam_row_order(rows, :key)
+    num(k) = parse(Int, match(r"\d+", k).match)
+    @test issorted([(num(rows[i].key), rows[i].key) for i in names])
+    @test issorted([String(rows[i].aim_frame) for i in beam_row_order(rows, :aim_frame)])
+    # a cone's azimuth is NaN: those rows keep the table's order
+    cones = beam_rows(bt; by = :group)
+    @test beam_row_order(cones, :phi) == 1:4
+    @test_throws ArgumentError beam_row_order(rows, :spot)
+    # a heading click: ascending, descending, then the table's order
+    @test v.beam_sort[] == (:row, false)
+    sort_beam_rows!(v, :power)
+    @test v.beam_sort[] == (:power, false)
+    sort_beam_rows!(v, :power)
+    @test v.beam_sort[] == (:power, true)
+    sort_beam_rows!(v, :z)
+    @test v.beam_sort[] == (:z, false)
+    sort_beam_rows!(v, :z); sort_beam_rows!(v, :z)
+    @test v.beam_sort[] == (:row, false)
+    sort_beam_rows!(v, :theta)
+    # the design and the session are as they were: no edit, no undo step
+    @test bt.beams[] == beams0 && beam_rows(bt) == rows
+    @test session_state(sess) == state0 && !can_undo(sess)
+    # an edit refers to a row by its number whatever the display order
+    k = beam_row_order(rows, :theta)[1]
+    @test edit_beams!(bt, k, :power, "3.5")
+    @test all(b -> b.power == 3.5, bt.beams[][rows[k].members])
+    others = setdiff(1:48, rows[k].members)
+    @test bt.beams[][others] == beams0[others]
+end
+
 @testset "diagnostic windows (no GL)" begin
     ts = TargetSetup(resolution = :coarse)
     t0 = ts.target[]

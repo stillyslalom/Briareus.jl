@@ -109,7 +109,7 @@ export BeamTable, BEAM_PRESETS, BEAM_GROUPINGS, BEAM_FIELDS, PRESET_LABELS, pres
        load_preset!, set_beams!, set_grouping!, beam_rows, edit_beams!, set_enabled!,
        beam_node, edit_beam_node!, set_node_enabled!, SET_FIELDS, beam_set_values,
        edit_beam_set!, set_set_enabled!, participates, set_participation!, clusters, set_cluster!, rename_cluster!, split_quad!,
-       merge_quad!,
+       merge_quad!, BEAM_SORT_COLUMNS, beam_row_order, sort_beam_rows!,
        active_beams, display_beams, import_beams!, export_beams, beams_summary
 export import_visrad_sst!, import_visrad_summary!, export_visrad_sst, export_visrad_summary
 export DriveState, DriveResult, DRIVE_FIELDS, DRIVE_FIELD_LABELS, MODE_DEGREES, set_field!, xray_image!,

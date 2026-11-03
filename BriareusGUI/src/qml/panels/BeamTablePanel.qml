@@ -1,5 +1,6 @@
 // The beam table: pointing, defocus, power and on/off per cone, quad or beam, edited in
-// place. Selecting a row selects it in the tree and the 3D view.
+// place, and the frame the aims are held in. Selecting a row selects it in the tree and the
+// 3D view; a heading click sorts the rows' display (not the beams' order).
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -9,10 +10,23 @@ import "../common"
 ColumnLayout {
     id: page
     spacing: 6
+    // `key`: the edited field, `sort`: the column it sorts by (BEAM_SORT_COLUMNS)
     readonly property var columns: [
-        { key: "z", label: "aim z" }, { key: "r", label: "aim r" },
-        { key: "phi", label: "tang." }, { key: "defocus", label: "defocus" },
-        { key: "power", label: "TW/beam" }]
+        { key: "z", sort: "z", label: "aim z" }, { key: "r", sort: "r", label: "aim r" },
+        { key: "phi", sort: "phi_offset", label: "tang." }, { key: "defocus", sort: "defocus", label: "defocus" },
+        { key: "power", sort: "power", label: "TW/beam" }]
+    // a column heading that sorts the display: ascending, descending, then the table's order
+    component SortHeading: Cell {
+        property string sortKey: ""
+        property string what: ""
+        text: label + (app.beamSort === sortKey ? (app.beamSortDesc ? " ▼" : " ▲") : "")
+        property string label: ""
+        font.pixelSize: 12
+        opacity: app.beamSort === sortKey ? 1 : 0.8
+        tip: "Sort the rows by " + what + " (again: descending; a third time: the table's order). " +
+             "Only the display: the beams keep their order"
+        TapHandler { onTapped: Julia.br_sort_beams(parent.sortKey) }
+    }
     readonly property string rowKind: app.beamsBy === "group" ? "group" : app.beamsBy
 
     RowLayout {
@@ -38,17 +52,18 @@ ColumnLayout {
         Layout.fillWidth: true
         Layout.fillHeight: true
         Layout.minimumHeight: 100
-        minimumContentWidth: 36 + 72 + 24 + 104 + 5 * 72 + 8 * 4
+        minimumContentWidth: 36 + 72 + 24 + 104 + 88 + 5 * 72 + 9 * 4
         spacing: 6
         RowLayout {
             spacing: 4
-            Label { text: "On"; Layout.preferredWidth: 36 }
-            Label { text: "Name"; Layout.preferredWidth: 72 }
-            Label { text: "n"; Layout.preferredWidth: 24 }
-            Label { text: "θ / φ (°)"; Layout.preferredWidth: 104 }
+            SortHeading { label: "On"; sortKey: "enabled"; what: "on or off"; Layout.preferredWidth: 36 }
+            SortHeading { label: "Name"; sortKey: "key"; what: "name"; Layout.preferredWidth: 72 }
+            SortHeading { label: "n"; sortKey: "count"; what: "number of beams"; Layout.preferredWidth: 24 }
+            SortHeading { label: "θ / φ (°)"; sortKey: "theta"; what: "port polar angle"; Layout.preferredWidth: 104 }
+            SortHeading { label: "frame"; sortKey: "aim_frame"; what: "the frame the aims are held in"; Layout.preferredWidth: 88 }
             Repeater {
                 model: page.columns
-                Label { text: modelData.label; Layout.preferredWidth: 72; font.pixelSize: 12; opacity: 0.8 }
+                SortHeading { label: modelData.label; sortKey: modelData.sort; what: modelData.label; Layout.preferredWidth: 72 }
             }
         }
         ListView {
@@ -82,9 +97,10 @@ ColumnLayout {
                         opacity: model.on === 2 ? 0.6 : 1
                         onToggled: Julia.br_set_beam_on(beamRow.rowNumber, checked)
                     }
-                    Label { text: model.key; Layout.preferredWidth: 72; elide: Text.ElideRight }
+                    Cell { text: model.key; Layout.preferredWidth: 72 }
                     Label { text: model.count; Layout.preferredWidth: 24; opacity: 0.7 }
                     Label { text: model.theta + " / " + model.phi; Layout.preferredWidth: 104; opacity: 0.7 }
+                    Cell { text: model.frame; tip: model.frameTip; Layout.preferredWidth: 88; opacity: 0.7 }
                     Repeater {
                         model: beamRow.cells
                         TextField {

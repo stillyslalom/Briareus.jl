@@ -495,7 +495,8 @@ One row per group of the grouping `by` (the table's by default): `key` (cone, qu
 (beams), `members` (beam indices), `theta`/`phi` (port angles, degrees: per cone the
 mean polar angle from the nearer pole and `NaN` azimuth; per quad or beam the mean
 port angles), the mean
-`z`, `r`, `phi_offset`, `defocus` (mm) and `power` (TW per beam), and `enabled`
+`z`, `r`, `phi_offset`, `defocus` (mm) and `power` (TW per beam), `aim_frame` (the
+frame the members aim in, or `nothing` when they aim in different ones), and `enabled`
 (`true`, `false`, or `missing` when only some members are enabled).
 """
 function beam_rows(bt::BeamTable; by::Symbol = bt.by[])
@@ -513,11 +514,52 @@ function beam_rows(bt::BeamTable; by::Symbol = bt.by[])
         cone = _mirror(by)
         θ = sum(a -> cone ? min(a[1], 180 - a[1]) : a[1], angles) / length(mem)
         φ = cone ? NaN : sum(last, angles) / length(mem)
+        fs = unique(bt.aim_frame[][mem])
         (; key = string(k), count = length(mem), members = mem, theta = θ, phi = φ,
          z = x[(g-1)*nf+1], r = x[(g-1)*nf+2], phi_offset = x[(g-1)*nf+3],
          defocus = x[(g-1)*nf+4], power = x[(g-1)*nf+5],
+         aim_frame = length(fs) == 1 ? fs[1] : nothing,
          enabled = on == length(mem) ? true : on == 0 ? false : missing)
     end
+end
+
+"""
+Columns the beam table sorts by: `:row` (the table's own order), `:key` (the row's name,
+numbers within it in numeric order: Q31B before Q115B), `:count`, `:theta`, `:phi` (port
+angles), `:aim_frame` (the frame's name; mixed frames last), `:z`, `:r`, `:phi_offset`,
+`:defocus`, `:power` and `:enabled` (off, some on, on).
+"""
+const BEAM_SORT_COLUMNS = (:row, :key, :count, :theta, :phi, :aim_frame, :z, :r, :phi_offset,
+                           :defocus, :power, :enabled)
+
+# A name as its runs of digits and of other characters, the digits as numbers, so that
+# names sort in natural order.
+_natural_key(s::AbstractString) =
+    [isdigit(m.match[1]) ? (0, parse(BigInt, m.match), "") : (1, big(0), m.match)
+     for m in eachmatch(r"\d+|\D+", s)]
+
+_sort_value(r, c::Symbol) =
+    c === :key ? _natural_key(r.key) :
+    c === :aim_frame ? (r.aim_frame === nothing ? (1, Any[]) : (0, _natural_key(String(r.aim_frame)))) :
+    c === :enabled ? (r.enabled === missing ? 1 : r.enabled ? 2 : 0) :
+    c === :phi_offset ? r.phi_offset : getfield(r, c)
+
+"""
+    beam_row_order(rows, column = :row, descending = false) -> Vector{Int}
+
+The order the beam table shows [`beam_rows`](@ref) in: indices into `rows`, sorted by
+`column` (one of [`BEAM_SORT_COLUMNS`](@ref)), ties and `NaN` (a cone's azimuth) in the
+table's order and last. A display order only: the rows keep their numbers, which edits
+refer to, and the beams their order in the table and the session.
+"""
+function beam_row_order(rows::AbstractVector, column::Symbol = :row, descending::Bool = false)
+    column in BEAM_SORT_COLUMNS || throw(ArgumentError("sort column must be one of $BEAM_SORT_COLUMNS"))
+    n = length(rows)
+    column === :row && return descending ? collect(n:-1:1) : collect(1:n)
+    v = [_sort_value(r, column) for r in rows]
+    bad = [x isa Real && isnan(x) for x in v]
+    good = sort(findall(!, bad); by = i -> v[i], rev = descending, alg = MergeSort)   # stable
+    return [good; findall(bad)]
 end
 
 """

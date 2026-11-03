@@ -96,6 +96,10 @@ plane's rotation `cut_rotation` (degrees) about it. See [`set_cut!`](@ref),
 green and blue, and the frame's name), besides the selected frame's
 ([`set_triad!`](@ref), [`drawn_triads`](@ref)).
 
+`beam_sort` is the beam table's display order, `(column, descending)` with `column`
+one of [`BEAM_SORT_COLUMNS`](@ref) (`:row`: the table's order; see
+[`sort_beam_rows!`](@ref)): a display choice, not saved and not an undo step.
+
 Tree node ids: `"target"`, `"comp:<name>"`, `"window:<name>"` (a hohlraum part's window
 `<part>_window_k`), `"part:<name>"`, `"assembly:<name>"` (an assembly, see
 [`add_assembly!`](@ref)), `"frames"` (the Frames folder), `"frame:<name>"`
@@ -130,6 +134,7 @@ struct ViewState
     cut_line::Observable{NTuple{3,Float64}}
     cut_rotation::Observable{Float64}
     triads::Observable{Set{Symbol}}
+    beam_sort::Observable{Tuple{Symbol,Bool}}
 end
 
 ViewState(; cut_components = ()) =
@@ -142,7 +147,8 @@ ViewState(; cut_components = ()) =
                         Observable(Set{String}()), Observable(:sector), Observable(:z),
                         Observable((-Inf, Inf)), Observable((0.0, 0.0, 0.0)),
                         Observable((0.0, -1.0, 0.0)), Observable(0.0),
-                        Observable((0.0, 0.0, 0.0)), Observable(0.0), Observable(Set{Symbol}()))
+                        Observable((0.0, 0.0, 0.0)), Observable(0.0), Observable(Set{Symbol}()),
+                        Observable((:row, false)))
 
 """
     set_cut!(v::ViewState; kind, azimuth, width, axis, range, components) -> v
@@ -832,4 +838,20 @@ function selected_component(sess)
     kind in (:comp, :part) && return Symbol(key)
     kind === :window && return Symbol(key)
     return nothing
+end
+
+"""
+    sort_beam_rows!(view::ViewState, column::Symbol) -> view
+
+Sort the beam table's display by `column` (one of [`BEAM_SORT_COLUMNS`](@ref)) as a
+header click does: a new column ascending, the same column again descending, and a
+third time back to the table's order (`:row`). It sets `view.beam_sort` only: neither
+the beams' order nor the session changes.
+"""
+function sort_beam_rows!(v::ViewState, column::Symbol)
+    column in BEAM_SORT_COLUMNS || throw(ArgumentError("sort column must be one of $BEAM_SORT_COLUMNS"))
+    c, desc = v.beam_sort[]
+    v.beam_sort[] = column === :row ? (:row, false) :
+                    c !== column ? (column, false) : !desc ? (column, true) : (:row, false)
+    return v
 end

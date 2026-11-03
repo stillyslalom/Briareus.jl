@@ -423,8 +423,10 @@ second canvas next to the target.
 
 The bottom panel's tabs:
 
-- **Beam table:** every cone, quad or beam with its pointing, defocus, power and
-  on/off, edited in place.
+- **Beam table:** every cone, quad or beam with its pointing, defocus, power, on/off
+  and the frame its aims are held in, edited in place; a click on a column heading
+  sorts the rows (again: descending, a third time: the table's order), a display order
+  only that leaves the beams' order in the design and the session as it is.
 - **Drive:** the view factors are computed once per target and beam ports, on a
   worker; beam edits then re-evaluate at once. The tab shows the capsule's mode
   amplitudes and ``P_l/P_0``, the foil spot's statistics and the laser power accounting.

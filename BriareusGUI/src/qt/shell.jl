@@ -272,6 +272,8 @@ mutable struct BeamRow
     defocus::String
     power::String
     on::Int
+    frame::String                                  # the aim frame's name, its label the tooltip
+    frameTip::String
 end
 
 mutable struct ModeRow
@@ -613,7 +615,7 @@ function BriareusShell(sess::DesignSession; queue::Channel{Any} = Channel{Any}(I
                 v.hidden_beams, v.shown_1w, v.shown_2w, bt.unconverted, v.cut_kind, v.cut_axis,
                 v.cut_range, v.cut_point, v.cut_normal, v.cut_shift, v.cut_line, v.cut_rotation,
                 v.cut_azimuth, v.cut_width,
-                v.expanded, v.triads, tm.pulses, tm.history, tm.retune, tm.chart, tm.cursor, tm.diagnostics,
+                v.expanded, v.triads, v.beam_sort, tm.pulses, tm.history, tm.retune, tm.chart, tm.cursor, tm.diagnostics,
                 tm.catalog, tm.issues, tm.running,
                 tm.progress, tm.status, tm.prepulse, tm.threshold, tm.irradiance, tm.checking)
         on(mark, obs)
@@ -807,10 +809,19 @@ function _refresh_beams!(sh::BriareusShell)
     _set!(sh, "hasQuads", !isempty(bt.beams[]) && all(b -> !isempty(b.quad), bt.beams[]))
     _set!(sh, "beamNames", [b.name for b in bt.beams[]])
     _set!(sh, "facility", String(bt.facility[]))
-    rows = [BeamRow(i, r.key, r.count, @sprintf("%.2f", r.theta), isnan(r.phi) ? "–" : @sprintf("%.2f", r.phi),
-                    _fix(r.z), _fix(r.r), _fix(r.phi_offset), _fix(r.defocus), _num(r.power),
-                    r.enabled === missing ? 2 : r.enabled ? 1 : 0)
-            for (i, r) in enumerate(beam_rows(bt))]
+    # (shown in the display order; each row keeps its number, which edits refer to)
+    br = beam_rows(bt)
+    col, desc = sh.sess.view.beam_sort[]
+    _set!(sh, "beamSort", String(col))
+    _set!(sh, "beamSortDesc", desc)
+    rows = [(r = br[i]; f = r.aim_frame;
+             BeamRow(i, r.key, r.count, @sprintf("%.2f", r.theta), isnan(r.phi) ? "–" : @sprintf("%.2f", r.phi),
+                     _fix(r.z), _fix(r.r), _fix(r.phi_offset), _fix(r.defocus), _num(r.power),
+                     r.enabled === missing ? 2 : r.enabled ? 1 : 0,
+                     f === nothing ? "mixed" : f === :tcc ? "chamber" : String(f),
+                     f === nothing ? "The row's beams aim in different frames" :
+                     "Aims held in " * (f === :tcc ? "the chamber (TCC)" : _frame_label(f))))
+            for i in beam_row_order(br, col, desc)]
     _sync_rows!(sh.rows[:beamModel], sh.models[:beamModel], rows)
     return
 end
@@ -2622,6 +2633,8 @@ function br_retune(table, out, by, cap, stay)
 end
 # Time panel
 br_time_chart(key) = _with_shell(sh -> set_chart!(sh.sess.time, _sym(key)))
+# A beam-table header click: sort the rows' display by that column.
+br_sort_beams(key) = _with_shell(sh -> sort_beam_rows!(sh.sess.view, _sym(key)))
 br_time_pulses(url) = _with_shell(sh -> load_pulses!(sh.sess, _url_to_path(String(url))))
 br_time_shape() = _with_shell(sh -> use_pulse_shape!(sh.sess))
 br_time_run() = _with_shell(sh -> start_history!(sh.sess))
@@ -2880,6 +2893,7 @@ function _register_qml_functions()
     @qmlfunction br_remove_selected br_help br_docs_url
     @qmlfunction br_new_assembly br_move_into_assembly br_ungroup_assembly br_rename_node
     @qmlfunction br_add_frame br_add_port_frame br_set_triad br_tf_set br_tf_open br_tf_create br_open_transform
+    @qmlfunction br_sort_beams
     @qmlfunction br_load_preset br_set_grouping br_edit_beam br_set_beam_on br_edit_node
     @qmlfunction br_import_beams br_export_beams br_import_sst br_import_summary br_export_sst
     @qmlfunction br_export_summary br_run_task br_build br_set_view br_side_view br_xray_image br_close_image br_set_spot_radius br_unconverted_ratio br_beam_model br_export_results
