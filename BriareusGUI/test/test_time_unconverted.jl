@@ -374,3 +374,83 @@ end
     restore!(f, old)
     @test tm.prepulse[] == DEFAULT_PREPULSE && tm.threshold[] == DEFAULT_THRESHOLD
 end
+
+@testset "time panel: a foil's retune with unconverted light and a prepulse (no GL)" begin
+    # five NIF quads from the foil's front side: three aimed at its center (their 3ω on
+    # the spot), two 10 mm off along their port's φ̂ (their 3ω misses the foil, their 1ω
+    # and 2ω squares, ≥ 4.8 and 2.9 mm off the axis, cover it); the last (off-axis)
+    # quad down: the 3ω drive keeps its powers, the 1ω and 2ω light lost is made up
+    f = DesignSession(starter = :foil, resolution = :coarse, preset = :nif_quads)
+    V = Briareus.Vec3
+    t0 = f.target.target[]
+    foil = active_foil(f.target)
+    front = [e for e in elements(t0, foil) if t0.elem_side[e] == 1]
+    c0 = sum(t0.elem_area[front] .* t0.elem_centroid[front]) / sum(t0.elem_area[front])
+    lit = sort(filter(b -> b.port[1] < -0.5 * sqrt(sum(abs2, b.port)), f.beams.beams[]); by = b -> b.port[1])[1:5]
+    φhat(b) = (φ = atan(b.port[2], b.port[1]); V(-sin(φ), cos(φ), 0))
+    beams = [remake(b; aim = i <= 3 ? V(c0...) : V(c0...) + 10 * φhat(b)) for (i, b) in enumerate(lit)]
+    set_beams!(f.beams, beams; enabled = [i != 5 for i in eachindex(beams)])
+    set_participation!(f.beams, collect(eachindex(beams)), 1, true)
+    set_participation!(f.beams, collect(eachindex(beams)), 2, true)
+    ratio = (omega1 = 0.05, omega2 = 0.02)
+    set_unconverted_ratio!(f.drive, ratio...)
+    P = 0.01                                                 # TW of 1ω per beam, over -1–0 ns
+    set_prepulse!(f.time, P, 0.0; start = -1.0, stop = 0.0)
+    build_scenario!(f)
+    sc = f.drive.scenario[]
+    t = sc.target
+    dir = mktempdir()
+    ps = PulseShape([0.0, 0.5, 1.0, 1.5], [0.0, 0.3, 0.5, 0.0])
+    pul = Dict(Symbol(b.quad) => ps for b in beams)
+    table = write_pulse_table(joinpath(dir, "reference.csv"), pul)
+    # one power per cone group (two, each with a quad on the spot): a well-posed problem,
+    # where one power per quad leaves the off-axis quads' powers to the solver's tolerance
+    retune_to_reference!(f, table, joinpath(dir, "retuned.csv"); by = :group, cap = 3.0)
+    r = f.time.retune[]
+    @test r.kind === :foil && occursin("foil spot worst RMS", f.drive.retune_status[])
+    times = r.after.time
+    @test any(<(0), times)                                   # the prepulse window's steps
+    # the core's retune with the same inputs: the reference's absorbed power per element
+    # from the 3ω deposition and each color's unconverted_deposition, at the ratio and,
+    # within the window, at the prepulse power
+    pre = PulseShape([-1.0, 0.0], [P, P])
+    function absorbed(bs, τ)
+        E = copy(deposit(sc.deposition, bs).element)
+        u = unconverted_deposition(t, bs; ratio)
+        E .+= u[:omega1].element .+ u[:omega2].element
+        if pre(τ) > 0
+            E .+= unconverted_deposition(t, [remake(b; power = pre(τ)) for b in bs];
+                                         ratio = (omega1 = 1.0, omega2 = 0.0))[:omega1].element
+        end
+        return (; element = E)
+    end
+    at = τ -> with_pulses(beams, pul, τ; by = :quad)
+    ref = (; time = times, deposition = [absorbed(at(τ), τ) for τ in times])
+    # the GUI's reference (the session's light: `_UnconvertedLight` atoms at unit power,
+    # scaled) equals it to rounding
+    light = Controllers._light_kw(Controllers._history_unconverted(f, eachindex(beams)),
+                                  Controllers._history_prepulse(f, eachindex(beams)), beams; by = :group)
+    gui = Controllers._absorbed_light(sc.deposition, at, times, light, :group)
+    @test all(isapprox(g.element, d.element; rtol = 1e-12) for (g, d) in zip(gui, ref.deposition))
+    keep = findall(f.beams.enabled[])
+    q = FoilIrradiance(foil; radius = f.drive.spot_radius[])
+    lim = (k, τ) -> (0.0, 3.0 * ps(τ))
+    kw = (; by = :group, limits = lim, unconverted = ratio, prepulse = (omega1 = pre,), colors = nif_unconverted())
+    # the core's retune on the GUI's reference: the GUI's powers to 1e-12; on the
+    # reference built here, to 1e-10 (measured 3e-12: the shape cannot be restored, the
+    # residual's minimum is shallow along one direction)
+    core = retune_drive(q, sc.deposition[keep], beams[keep], (; time = times, deposition = gui); kw...)
+    gp = [r.pulses[k](τ) for k in core.keys, τ in times]
+    @test isapprox(gp, core.power; rtol = 1e-12)
+    @test isapprox(gp, retune_drive(q, sc.deposition[keep], beams[keep], ref; kw...).power; rtol = 1e-10)
+    # the statistics take the unconverted light: the spot's mean after, from the GUI's
+    # depositions at the retuned powers, is the core's predicted level (linear in the
+    # powers), and the prepulse lights the spot before the 3ω pulse
+    @test isapprox(r.after.mean, 1e14 .* core.level; rtol = 1e-12)
+    @test all(>(0), r.reference.mean[times .< 0])
+    # and it matters: without it the dropped quad costs no 3ω light and the powers stay
+    # the reference's; with it they make up its 1ω and 2ω light (measured 4.6e-5 more)
+    v3 = retune_pulses(sc, beams, f.beams.enabled[], pul; by = :group, cap = 3.0, foil, spot_radius = f.drive.spot_radius[])
+    @test all(isapprox(v3.pulses[k](1.0), 0.5; rtol = 1e-12) for k in core.keys)
+    @test all(r.pulses[k](1.0) / 0.5 - 1 > 1e-6 for k in core.keys)
+end

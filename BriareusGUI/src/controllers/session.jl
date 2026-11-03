@@ -1219,9 +1219,10 @@ power limits cannot reach the level the retune reports the level they allow
 - `:face`, an observed flat face ([`observed_flat`](@ref)): its incident x-ray flux on
   each element, so its RMS nonuniformity, peak-to-mean and mean (`Briareus.FaceFlux`);
 - `:foil`, the backlighter foil `foil` (a part or component of the scenario's target,
-  e.g. [`active_foil`](@ref)): its absorbed 3ω laser irradiance within `spot_radius`
-  (mm) of the foil's area centroid on its front, as the drive's spot statistics
-  (`Briareus.FoilIrradiance`); laser only, no radiation model needed.
+  e.g. [`active_foil`](@ref)): its absorbed laser irradiance (3ω, and the unconverted
+  light below) within `spot_radius` (mm) of the foil's area centroid on its front, as the
+  drive's spot statistics (`Briareus.FoilIrradiance`); laser only, no radiation model
+  needed.
 
 `on = :auto` holds the observed surface when the scenario has a radiation model and an
 observed surface, else the foil; `:observed` or `:foil` chooses. Returns the new `pulses`
@@ -1235,14 +1236,16 @@ the drive's face and spot statistics, the face's from drive histories; and the `
 and `level` asked for. With
 `unconverted` (per color, the unconverted power as a fraction of each beam's 3ω power,
 `(; omega1, omega2)`: a number for every beam, or a vector with one per beam of
-`beams`), every history and the retune of a capsule or a face take the unconverted 1ω
-and 2ω light (`drive_history`'s and `retune_drive`'s `unconverted`, NIF's colors; the
-enabled beams' fractions in the retune). `prepulse` adds light not proportional to the
-3ω pulse, `(; omega1, omega2, window)`: per color a power per beam of `beams` (TW, a
-vector), flat over `window = (start, stop)` (ns); the histories and the retune take it
-as `drive_history`'s and `retune_drive`'s `prepulse`, keyed by `by` (the beams of one
-key must carry the same prepulse), and the retune does not retune it. Without either
-they are the 3ω ones, bit for bit. The foil's retune is the 3ω light's: it takes neither.
+`beams`), every history and the retune take the unconverted 1ω and 2ω light
+(`drive_history`'s and `retune_drive`'s `unconverted`, NIF's colors; the enabled beams'
+fractions in the retune); for a foil, each color's absorbed power adds to the spot's
+irradiance in the reference, the retune and the statistics, as `drive_history` deposits
+it. `prepulse` adds light not proportional to the 3ω pulse, `(; omega1, omega2,
+window)`: per color a power per beam of `beams` (TW, a vector), flat over `window =
+(start, stop)` (ns); the histories and the retune take it as `drive_history`'s and
+`retune_drive`'s `prepulse`, keyed by `by` (the beams of one key must carry the same
+prepulse), and the retune does not retune it. Without either they are the 3ω ones, bit
+for bit.
 """
 function retune_pulses(s::Scenario, beams::AbstractVector{<:Beam}, enabled::AbstractVector{Bool},
                        pulses::AbstractDict; by::Symbol = :quad, cap::Real = 1.3, stay::Real = 0.0,
@@ -1257,8 +1260,6 @@ function retune_pulses(s::Scenario, beams::AbstractVector{<:Beam}, enabled::Abst
     level === nothing || (isfinite(level) && level > 0) || throw(ArgumentError("the level must be positive"))
     cap > 0 || throw(ArgumentError("the power limit must be positive"))
     any(enabled) || throw(ArgumentError("every beam is disabled"))
-    kind === :foil && (unconverted !== nothing || prepulse !== nothing) &&
-        throw(ArgumentError("the foil's retune holds the 3ω irradiance: it takes no unconverted light"))
     ref_by = _pulse_key(beams, pulses)
     refkey, key = Briareus._beam_key(ref_by), Briareus._beam_key(by)
     nodes = sort(unique(reduce(vcat, [p.t for p in values(pulses)])))
@@ -1282,15 +1283,20 @@ function retune_pulses(s::Scenario, beams::AbstractVector{<:Beam}, enabled::Abst
     lkw = (; by, limits, stay, nominal = stay > 0 ? nominal : nothing, target, level = lv)
     refbeams(τ) = with_pulses(beams, pulses, τ; by = ref_by)
     oldbeams(τ) = with_pulses(kept, pulses, τ; by = ref_by)
+    # the unconverted light of every beam (the reference's) and of the kept beams, as
+    # `drive_history`'s keywords, and the latter as the retune's (its `by` is its own)
+    uc = _light_kw(unconverted, prepulse, beams; by)
+    uck = _light_kw(_kept_unconverted(unconverted, keep), _kept_unconverted(prepulse, keep), kept; by)
+    ucr = Base.structdiff(uck, NamedTuple{(:by,)})
     if kind === :foil
         t = s.target
         es = _spot_elements(t, foil, spot_radius)
         es === nothing && throw(ArgumentError("the foil $foil has no front elements within $spot_radius mm of its center"))
-        ref = (; time = times, deposition = [deposit(op, refbeams(τ)) for τ in times])
-        r = retune_drive(FoilIrradiance(foil; radius = spot_radius), opk, kept, ref; lkw...)
+        ref = (; time = times, deposition = _absorbed_light(op, refbeams, times, uc, by))
+        r = retune_drive(FoilIrradiance(foil; radius = spot_radius), opk, kept, ref; lkw..., ucr...)
         newbeams(τ) = with_pulses(kept, r.pulses, τ; by)
-        series(o, at) = _spot_series(t, es, times, [deposit(o, at(τ)).element for τ in times])
-        reference, before, after = series(op, refbeams), series(opk, oldbeams), series(opk, newbeams)
+        series(o, at, kw) = _spot_series(t, es, times, [d.element for d in _absorbed_light(o, at, times, kw, by)])
+        reference, before, after = series(op, refbeams, uc), series(opk, oldbeams, uck), series(opk, newbeams, uck)
     else
         observe = _observed_parts(s)
         # the histories' wall: the walls in the scenario's target (`wall_names`), else the
@@ -1298,10 +1304,6 @@ function retune_pulses(s::Scenario, beams::AbstractVector{<:Beam}, enabled::Abst
         names = component_names(s.target)
         walls = Tuple(n for n in wall if n in names)
         wall = isempty(walls) ? observe : walls
-        uc = _light_kw(unconverted, prepulse, beams; by)
-        # the kept beams' fractions and prepulse (the retune's `by` is its own keyword)
-        uck = _light_kw(_kept_unconverted(unconverted, keep), _kept_unconverted(prepulse, keep), kept; by)
-        ucr = Base.structdiff(uck, NamedTuple{(:by,)})
         face = kind === :face
         # a face's statistics per step, as the drive's (`_face_stats`)
         hkw = face ? (; record = sol -> _face_stats(s, sol)) : (; ylm = true)
@@ -1384,6 +1386,25 @@ function _spot_series(t::Target, es, times, Ps)
             low = to_Wcm2.(minimum.(I)), rms = [m > 0 ? rms_nonuniformity(i, A) : NaN for (i, m) in zip(I, mean)])
 end
 
+# The absorbed laser power on the target of `op` from the beams `at(τ)` (3ω setup powers)
+# at each of `times`: the 3ω light's `Deposition`, and with the unconverted light `kw`
+# (`_light_kw`'s; empty: none, the 3ω deposition itself) each color's absorbed power
+# added per element, `(; element)`, as `drive_history` deposits it (one
+# `_UnconvertedLight` per call: its unit-power patterns serve every time).
+function _absorbed_light(op, at, times, kw, by)
+    isempty(kw) && return [deposit(op, at(τ)) for τ in times]
+    ul = Briareus._UnconvertedLight(kw.unconverted, get(kw, :prepulse, nothing), get(kw, :by, by), kw.colors, (;))
+    return map(times) do τ
+        bs = at(τ)
+        E = copy(deposit(op, bs).element)
+        u = Briareus._unconverted_at!(ul, op.target, bs, τ)
+        for c in ul.colors
+            E .+= u[c.name].element
+        end
+        (; element = E)
+    end
+end
+
 # A retune's face or foil statistics `f` (`retune_pulses`'s `before`, `after`): the mean's
 # relative departure at each step from the reference's mean `ref.mean`, or with a
 # `level` (TW/mm²) from it where the retune solved (`solved`; NaN elsewhere).
@@ -1416,11 +1437,11 @@ the CSV's rounding), an edit that undo takes back. The disabled beams are the on
 the shot loses. The retune holds the observed surface's drive (a capsule's modes, a flat
 face's flux) when the drive has a radiation model, else the active foil's irradiance;
 `on = :observed` or `:foil` chooses (`retune_pulses`'s `on`) when the design has both.
-For an observed surface the unconverted 1ω and 2ω light takes part as in the drive
+The unconverted 1ω and 2ω light takes part as in the drive
 ([`set_unconverted_ratio!`](@ref); `retune_pulses`'s `unconverted`), with the prepulse
 ([`set_prepulse!`](@ref); `retune_pulses`'s `prepulse`), in the reference shot and in
-the retune, on the beams whose 1ω or 2ω light takes part ([`participates`](@ref)); a
-foil's retune is the 3ω light's. Progress and the outcome go to
+the retune, on the beams whose 1ω or 2ω light takes part ([`participates`](@ref)), for a
+foil as each color's absorbed irradiance on its spot. Progress and the outcome go to
 `drive.retune_running`/`retune_status`: for a capsule the worst-time mode 1 before and
 after, for a face or a foil the worst RMS nonuniformity and the worst departure of the
 mean from the reference's (from `level` when it is set; for a capsule the Tᵣ's likewise).
@@ -1441,9 +1462,9 @@ function retune_to_reference!(sess::DesignSession, table::AbstractString, out::A
     kind = _retune_kind(s, foil, on)
     kind === nothing && (dr.retune_status[] = on === :auto ? _RETUNE_NONE :
                                               "the design has no $(on === :foil ? "foil" : "observed surface") to hold"; return sess)
-    # the unconverted light of every beam (the reference fires them all); a foil's is 3ω
-    unconverted = kind === :foil ? nothing : _history_unconverted(sess, eachindex(sess.beams.beams[]))
-    prepulse = kind === :foil ? nothing : _history_prepulse(sess, eachindex(sess.beams.beams[]))
+    # the unconverted light of every beam (the reference fires them all)
+    unconverted = _history_unconverted(sess, eachindex(sess.beams.beams[]))
+    prepulse = _history_prepulse(sess, eachindex(sess.beams.beams[]))
     pulses = read_pulse_table(table)
     beams = sess.beams.beams[]
     enabled = copy(sess.beams.enabled[])

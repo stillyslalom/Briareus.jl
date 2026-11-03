@@ -342,9 +342,19 @@ E. **Double backlighter with ARC:** the starter, ARC beams as a facility beam se
   in the dialog, on by default. `retune_pulses` gives the dropped beams' keys zero
   pulses, so the table (and the written CSV) keys every beam. The reference no longer
   fires when no pulses were loaded: the retuned pulses do, or (unticked) the pulses stay.
-- The foil's GUI retune is the 3ω light's: it takes no unconverted light (`retune_pulses`
-  throws if given), though core `retune_drive` adds each color's absorbed power to a
-  foil's irradiance when the reference carries it.
+- The foil's GUI retune takes the unconverted light and the prepulse (2026-11-03), as the
+  capsule's and the face's do: the reference's absorbed power per element at each step
+  is the 3ω deposition plus each color's (`_absorbed_light`: `drive_history`'s
+  `_UnconvertedLight` at the reference's fractions and prepulse), the retune gets the
+  kept beams' `unconverted` and `prepulse`, and the spot statistics before and after
+  take the same light. Checked (`test_time_unconverted.jl`, five NIF quads on the foil
+  starter, two aimed 10 mm off so that only their 1ω and 2ω reach the spot): the
+  reference equals 3ω deposition plus `unconverted_deposition` at the ratio and the
+  prepulse power to 1e-12; the GUI's powers equal core `retune_drive` on that
+  reference to 1e-12 (on the one built in the test, to 3e-12: a shallow residual); the
+  spot's mean after equals the core's predicted level to 1e-12. Dropping an off-axis
+  quad costs no 3ω light: without the unconverted light the powers stay the
+  reference's, with it they rise 4.6e-5 to make up its 1ω and 2ω light.
 
 ## Item 5 as built (2026-11-02): presets in the starters' frames
 
