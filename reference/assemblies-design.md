@@ -386,8 +386,8 @@ E. **Double backlighter with ARC:** the starter, ARC beams as a facility beam se
   entrance hole: what the instrument sees (2026-11-02; C2 first kept `nif_dante1` as the
   view through the hole, beside a separate `nif_dante1_field`, so that existing Dante
   results would not change; the user rejected that, and the one definition replaced
-  both). `nif_dante1_2021` and the older dated configurations still look through the
-  hole.
+  both). The dated Dante 1 configurations take the same field (46d8a76); Dante 2 and
+  Omega's Dante look through the hole (their fields are not public).
 - Bit for bit: the default design's drive (modes, mean flux, H, B, powers, map) and drive
   history (every core field, the GUI's Tr, modes, fields, ranges, energy, diagnostics)
   equal those computed without cavities, the path before this phase (test); its one
