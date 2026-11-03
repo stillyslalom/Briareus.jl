@@ -398,7 +398,8 @@ keyframes = range(turn_on, 9.0, 11)
 
 p2(r) = r.moments[3, :] ./ r.moments[1, :]
 p4(r) = r.moments[5, :] ./ r.moments[1, :]
-# Synthetic Dante 1 (θ 143°, φ 274°, 37° through the lower LEH; `dante1()`): the
+# Synthetic Dante 1 (θ 143°, φ 274°, 37° to the axis, its 60 mm field at TCC taking in
+# the lower LEH and the whole target; `dante1()`): the
 # brightness temperature of the power per steradian it sees, over the LEH's initial
 # area (Dante's convention) and over its open area (the closing lips' open fraction: the
 # temperature behind the hole), recorded at every step of every run.

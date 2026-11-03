@@ -105,9 +105,8 @@ source's table and checked against the energies the source tabulates:
 
 | `id` | Instrument and configuration | Not public (reported as missing) |
 |---|---|---|
-| `nif_dante1` | NIF Dante 1, latest public configuration (extends `nif_dante1_2021`) | — |
-| `nif_dante1_field` | NIF Dante 1 viewing the whole target: a 60 mm field of view at TCC, the 2004 design's ±30 mm (Dewald et al. 2004), Tr over the lower entrance hole (extends `nif_dante1`) | the collimators as fielded |
-| `nif_dante1_2021` | from October 2021 (Rubery et al. 2023, Fig. 4) | — |
+| `nif_dante1` | NIF Dante 1, latest public configuration, viewing the whole target: a 60 mm field of view at TCC, the 2004 design's ±30 mm (Dewald et al. 2004), Tr over the lower entrance hole (extends `nif_dante1_2021`) | the collimators as fielded |
+| `nif_dante1_2021` | from October 2021 (Rubery et al. 2023, Fig. 4), viewed through the lower entrance hole | — |
 | `nif_dante1_N180604`, `_N180129`, `_N170924` | single shots, 2017–18 (Kemp et al. 2020, Tables I–III) | — |
 | `nif_dante1_2012` | 2012–14 (May et al. 2015, Table IV) | — |
 | `nif_dante1_2009` | N091104 (Fournier et al. 2010, Table II) | — |

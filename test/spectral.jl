@@ -298,7 +298,8 @@ using Briareus: RadiationSolution, _planck_tail, _channel_matrix, _color_tempera
                      for p in (t.tri_v0[k], t.tri_v0[k] + t.tri_e1[k], t.tri_v0[k] + t.tri_e2[k])
                      if abs(hypot(p[1], p[2]) - 1.6) < 1e-9)
         Apoly = length(rim) / 2 * 1.6^2 * sin(2π / length(rim))
-        for v in (dante1(), dante2(), DanteView(143, 274; pixels = 200))
+        # Dante 1 over its 60 mm field and through the hole alone
+        for v in (dante1(), dante1(field_of_view = nothing), dante2(), DanteView(143, 274; pixels = 200))
             r = dante(v, sol)
             hole = v.through === :leh_bottom ? elements(t, :leh_bottom) : elements(t, :leh_top)
             @test r.area ≈ sum(t.elem_area[hole]) ≈ π * 1.6^2
@@ -320,7 +321,9 @@ using Briareus: RadiationSolution, _planck_tail, _channel_matrix, _color_tempera
             r = dante(dante1(), RadiationSolution(RadiationModel(tl; F = zeros(nl, nl)), zl, zl, Bl, zl, zl, zl, τ, 0.0))
             Ao, Al = (sum(tl.elem_area[elements(tl, c)]) for c in (:leh_bottom, :leh_bottom_lip))
             open = (Ao + f * Al) / (Ao + Al)
-            @test r.Tr ≈ T0 * open^0.25 rtol = 4e-3
+            # (the view through the hole reads 3.7e-3 off at f = 0 at 400 and at 1600
+            # pixels; the 60 mm field's 400 pixels add 4e-4)
+            @test r.Tr ≈ T0 * open^0.25 rtol = 5e-3
             f > 0 && @test r.Tr_open ≈ r.Tr / open^0.25 rtol = 1e-12
         end
         # spectrum: a Planckian's channel signals unfold to its temperature
@@ -335,22 +338,25 @@ using Briareus: RadiationSolution, _planck_tail, _channel_matrix, _color_tempera
     end
 
     @testset "Dante field of view" begin
-        # the blackbody cavity of "synthetic Dante": a 60 mm field (a NIF Dante's) sees
-        # the cavity only through the hole (the outside of every one-sided surface is
-        # dark), so it reads what the view through the hole reads, to pixel resolution
+        # the blackbody cavity of "synthetic Dante": Dante 1's 60 mm field sees the cavity
+        # only through the hole (the outside of every one-sided surface is dark), so it
+        # reads what the view through the hole reads, to pixel resolution: at its default
+        # 400 pixels across the target, and at 800
         t = coarse()
         n = nelements(t)
         T0 = 250.0
         B = [c.kind === :aperture ? 0.0 : SIGMA_SB * T0^4 for c in t.components[t.elem_comp]]
         z = zeros(n)
         sol = RadiationSolution(RadiationModel(t; F = zeros(n, n)), z, z, B, z, z, z, z, 0.0)
-        hole, wide = dante(dante1(), sol), dante(dante1(field_of_view = 60.0, pixels = 800), sol)
+        through = dante1(field_of_view = nothing)
+        @test dante1().field_of_view == 60.0 && through.field_of_view === nothing
+        hole, wide, fine = dante(through, sol), dante(dante1(), sol), dante(dante1(pixels = 800), sol)
         @test wide.area == hole.area && wide.cos == hole.cos        # the same reference
         @test wide.intensity ≈ hole.intensity rtol = 2e-3
-        @test Set(keys(visible_area(dante1(field_of_view = 60.0, pixels = 800), t))) ==
-              Set(keys(visible_area(dante1(), t)))
+        @test fine.intensity ≈ hole.intensity rtol = 2e-3
+        @test Set(keys(visible_area(dante1(), t))) == Set(keys(visible_area(through, t)))
         @test_throws ArgumentError DanteView(143, 274; through = nothing)
-        @test isnan(dante(dante1(field_of_view = 60.0, through = nothing), sol).Tr)
+        @test isnan(dante(dante1(through = nothing), sol).Tr)
         @test_throws ArgumentError dante(DanteView(143, 274; through = :window), sol)
 
         # a flat Lambertian disk facing the detector: I = B/π × the area seen

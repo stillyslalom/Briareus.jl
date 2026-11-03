@@ -283,16 +283,17 @@ end
     # the drive history: each halfraum's wall temperature per step, against the core
     # history's recorded incident flux reduced here
     use_pulse_shape!(st; step = 1.0)
-    set_diagnostic!(st, "nif_dante1_field")       # the whole target in a 60 mm field
-    start_history!(st)
+    start_history!(st)                            # Dante 1 (the default): the whole target in a 60 mm field
     hs = st.time.history[]
     s = st.drive.scenario[]
     src, beams, enabled = st.time.pulses[], st.beams.beams[], st.beams.enabled[]
     observe = Controllers._observed_parts(s)
+    hole_view = dante1(field_of_view = nothing, through = :halfraum_bottom_leh_bottom)
     core = drive_history(s.model, s.deposition, τ -> Controllers._pulse_beams(src, beams, enabled, τ), hs.time;
-                         observe, wall = Tuple(wall_names(ts)), lmax = 4, record = sol -> copy(sol.H))
+                         observe, wall = Tuple(wall_names(ts)), lmax = 4,
+                         record = sol -> (copy(sol.H), dante(hole_view, sol).intensity))
     @test [c.name for c in hs.cavities] == first.(walls)
-    @test all(isapprox(c.Tr, [direct(H, last(w)) for H in core.record]; rtol = 1e-12)
+    @test all(isapprox(c.Tr, [direct(first(r), last(w)) for r in core.record]; rtol = 1e-12)
               for (c, w) in zip(hs.cavities, walls))
     # the drive chart: a wall series per cavity
     ser = Dict(q.label => q for q in time_chart(st, :drive).left.series)
@@ -300,8 +301,7 @@ end
     @test ser["halfraum_top wall Tr"].color != ser["halfraum_bottom wall Tr"].color
     # Dante 1 over the whole pair: from below it sees the lower halfraum through its hole
     # (the package is black, every one-sided outside dark), as the view through that hole
-    d = Dict(x.id => x for x in hs.diagnostics)
-    whole, hole = d["nif_dante1_field"], d["nif_dante1"]
+    whole = only(x for x in hs.diagnostics if x.id == "nif_dante1")
     @test isempty(whole.note) && whole.view.field_of_view == 60.0 && whole.view.through === :halfraum_bottom_leh_bottom
-    @test all(>(0), whole.intensity) && isapprox(whole.intensity, hole.intensity; rtol = 2e-3)   # 3.5e-4
+    @test all(>(0), whole.intensity) && isapprox(whole.intensity, last.(core.record); rtol = 2e-3)   # 3.5e-4
 end

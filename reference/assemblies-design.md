@@ -124,8 +124,8 @@ D. Landed (profiles: frustraums and multi-section hohlraums, core `hohlraum(; pr
    and the GUI hohlraum part's *Profile*, the frustraum starter; no session version
    change): see "Phase D as built".
 C2. Landed (per-cavity wall Tr in core `drive_history(; cavities)` and `wall_temperature`,
-   the Drive panel's cavity selector and the history's per-cavity series; the whole-target
-   Dante definition `nif_dante1_field`; no session version change): see "Phase C2 as
+   the Drive panel's cavity selector and the history's per-cavity series; the built-in
+   `nif_dante1` views the whole target; no session version change): see "Phase C2 as
    built".
 E. **Double backlighter with ARC:** the starter, ARC beams as a facility beam set (public
    description only; mock-up timing), per-foil results if one active foil is not enough.
@@ -359,11 +359,13 @@ E. **Double backlighter with ARC:** the starter, ARC beams as a facility beam se
 - Dante: `DanteView`'s collimated field of view, its center and the reference area
   already existed (diagnostics phase 2, 2026-10-29), as did the sourced field: ±30 mm at
   TCC, the 2004 design (Dewald et al. 2004, research notes "Dante-family hardware and
-  geometry", H); the fielded collimators are not public. New: the built-in
-  `nif_dante1_field` (Dante 1's channels and line of sight over a 60 mm field at TCC,
-  Tr over the lower entrance hole). `nif_dante1` stays the view through the hole
-  (decision taken: the default session's Dante history unchanged), and the field view
-  is a tick in Time ▸ Diagnostics.
+  geometry", H); the fielded collimators are not public. New: the built-in `nif_dante1`
+  is Dante 1's channels and line of sight over a 60 mm field at TCC, Tr over the lower
+  entrance hole: what the instrument sees (2026-11-02; C2 first kept `nif_dante1` as the
+  view through the hole, beside a separate `nif_dante1_field`, so that existing Dante
+  results would not change; the user rejected that, and the one definition replaced
+  both). `nif_dante1_2021` and the older dated configurations still look through the
+  hole.
 - Bit for bit: the default design's drive (modes, mean flux, H, B, powers, map) and drive
   history (every core field, the GUI's Tr, modes, fields, ranges, energy, diagnostics)
   equal those computed without cavities, the path before this phase (test); its one
@@ -375,7 +377,8 @@ E. **Double backlighter with ARC:** the starter, ARC beams as a facility beam se
   the shock-tube starter with half its lower beams off). Dante: a field of 8 mm about
   one hohlraum receives exactly nothing from a blackbody in the other; the field reads
   the view through that hohlraum's hole to 1.2e-4, a 60 mm field both holes' sum to
-  1.4e-4; on the shock tube `nif_dante1_field` reads `nif_dante1` to 3.5e-4.
+  1.4e-4; on the shock tube `nif_dante1` reads the view through the lower hole to
+  3.5e-4.
 - Not built: a cavity holding a piece's role (decision 7); per-cavity albedo or energy
   series; a Dante field centered on a part from the GUI (a definition's `center_part`
   serves).

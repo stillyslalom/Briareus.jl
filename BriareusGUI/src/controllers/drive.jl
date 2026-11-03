@@ -956,7 +956,8 @@ struct DriveHistory
 end
 
 """
-The diagnostics a new session records in a drive history: NIF Dante 1.
+The diagnostics a new session records in a drive history: NIF Dante 1 (`nif_dante1`,
+the whole target over its 60 mm field, Tr over the lower entrance hole).
 """
 const DEFAULT_DIAGNOSTICS = ["nif_dante1"]
 

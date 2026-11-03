@@ -9694,11 +9694,20 @@ Checks (`test/spectral.jl`, "Dante field of view"):
 
 `wall_temperature(sol, names...)` and `drive_history(; cavities)` (`cavity_Tr`): each
 cavity's Tr from the area-weighted mean incident flux on its own wall components
-(assemblies design, decision 8). No value is fitted. The built-in `nif_dante1_field`
-takes the field of view of the 2004 design, ±30 mm at TCC (Dewald 2004; section 1 of
-"Dante-family hardware and geometry" above, **H** for the design; the fielded
-collimators are not public, and Girard 2009's "centimeter-wide" field is the one
-fielded hint), with Dante 1's channels and Tr over the lower entrance hole.
+(assemblies design, decision 8). No value is fitted. The built-in `nif_dante1` (and so
+`dante1()`) takes the field of view of the 2004 design, ±30 mm at TCC (Dewald 2004;
+section 1 of "Dante-family hardware and geometry" above, **H** for the design; the
+fielded collimators are not public, and Girard 2009's "centimeter-wide" field is the one
+fielded hint), with Dante 1's channels and Tr over the lower entrance hole. (C2 first
+added it as `nif_dante1_field` beside a through-hole `nif_dante1`; since 2026-11-02 the
+one definition is the field view, what the instrument sees. The dated configurations,
+`nif_dante1_2021` and older, still look through the hole.) Cost and difference on the
+default GUI session (4796 elements, N221204's shape, 49 steps, 8 threads): the history
+takes 8.35–8.52 s with the field view and 8.35–8.37 s through the hole (two runs each;
+the footprint is cast once per target); Dante 1's Tr differs by 7.3e-5 at its peak
+(289.563 against 289.542 eV) and at most, the intensity by 2.9e-4 (400 pixels across
+the target's extent against 400 across the hole). On the coarse hohlraum with a closing
+lip (`test/spectral.jl`), the field's 400 pixels put Tr 4e-4 off the converged view.
 
 Checks (`test/cavities.jl`; GUI `test_halfraum.jl`, "per-cavity wall temperature"):
 - Each cavity's Tr equals Σ H A / Σ A over its wall elements (selected by component name

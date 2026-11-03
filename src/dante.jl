@@ -114,9 +114,12 @@ end
 """
     dante1(; kwargs...)
 
-NIF Dante 1: θ 143°, φ 274°, viewing the lower entrance hole at 37° to the hohlraum axis
-(Rubery et al., RSI 2023; Rubery et al., PRL 132, 065104, 2024), with the channels of
-[`dante1_responses`](@ref), from the built-in definition `nif_dante1`; definitions on the
+NIF Dante 1: θ 143°, φ 274°, at 37° to the hohlraum axis (Rubery et al., RSI 2023;
+Rubery et al., PRL 132, 065104, 2024), viewing the whole target over its collimated
+field, 60 mm at TCC (the 2004 design's ±30 mm, Dewald et al., RSI 75, 3759 (2004)), with
+Tr over the lower entrance hole's initial area and the channels of
+[`dante1_responses`](@ref), from the built-in definition `nif_dante1`
+(`field_of_view = nothing` gives the view through the hole alone); definitions on the
 search path do not change it (`diagnostic("nif_dante1")` takes them, [`diagnostic`](@ref)).
 `kwargs` replace the definition's values (those of [`DanteView`](@ref)).
 """

@@ -64,11 +64,11 @@ using Briareus: RadiationSolution
     @test dante(narrow, bb(lit(:a))).intensity ≈ hole(:a) rtol = 1e-3       # measured 1.2e-4
     @test dante(wide, bb(lit(:a) .+ lit(:b))).intensity ≈ hole(:a) + hole(:b) rtol = 1e-3   # 1.4e-4
     @test issubset((:a, :b), keys(visible_area(wide, t)))
-    # the built-in whole-target Dante 1: that field at TCC, Dante 1's channels; this
-    # target has no `leh_bottom` to quote Tr over, so only the power
-    fv = diagnostic("nif_dante1_field")
+    # the built-in Dante 1 sees the whole target: that field at TCC, Dante 1's channels;
+    # this target has no `leh_bottom` to quote Tr over, so only the power
+    fv = dante1()
     @test fv.field_of_view == 60.0 && fv.center == zero(fv.center) && fv.through === :leh_bottom &&
-          (fv.theta, fv.phi) == (dante1().theta, dante1().phi) && length(fv.channels) == 18
+          (fv.theta, fv.phi) == (143.0, 274.0) && length(fv.channels) == 18
     r = dante(fv, bb(lit(:a) .+ lit(:b)))
     @test isnan(r.Tr) && isapprox(r.intensity, hole(:a) + hole(:b); rtol = 5e-3)   # 1.8e-3 (400 pixels)
 end

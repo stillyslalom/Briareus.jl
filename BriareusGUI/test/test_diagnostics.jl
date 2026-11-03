@@ -39,16 +39,16 @@ end
         @test Controllers._signal_window(xs, xs, ones(201, 201)) === nothing
         @test Controllers._signal_window(xs, xs, zeros(201, 201)) === nothing
 
-        # a group's folder: Dante 1 with a 60 mm field of view (Tr over the lower hole), a
+        # a group's folder: Dante 1 with a 12 mm field of view (Tr over the lower hole), a
         # measured channel from a CSV, and a view through a hole the target lacks
         dir = mkpath(joinpath(root, "group"))
         write(joinpath(dir, "ch19.csv"), "energy_eV,response_V_per_GW\n50,0.0\n1000,0.2\n20000,0.0\n")
         _defn(dir, "group_dante1_fov", """
             extends = "nif_dante1"
-            name = "Dante 1, 60 mm field"
+            name = "Dante 1, 12 mm field"
             public = false
             [view]
-            field_of_view_mm = 60
+            field_of_view_mm = 12
             through = "leh_bottom"
             [[channel]]
             number = 19
@@ -75,14 +75,14 @@ end
         start_history!(sess)
         h = tm.history[]
         @test [d.id for d in h.diagnostics] == tm.diagnostics[]
-        fov, blind, hole, sxi = h.diagnostics
+        fov, blind, d1, sxi = h.diagnostics
         @test all(isnan, blind.Tr) && blind.note == "the target has no no_such_hole to look through"
-        @test isempty(fov.note) && isempty(hole.note) && all(isfinite, hole.Tr)
-        # independent of the definition path: the 60 mm field over the whole target and
-        # the view through the hole see the same emission (the walls radiate inward only)
-        k = argmax(hole.intensity)
-        @test fov.intensity[k] ≈ hole.intensity[k] rtol = 2e-2
-        @test fov.Tr[k] ≈ hole.Tr[k] rtol = 1e-2
+        @test isempty(fov.note) && isempty(d1.note) && all(isfinite, d1.Tr)
+        # independent of the definition path: a 12 mm field about TCC and Dante 1's 60 mm
+        # field over the whole target see the same emission (the walls radiate inward only)
+        k = argmax(d1.intensity)
+        @test fov.intensity[k] ≈ d1.intensity[k] rtol = 2e-2
+        @test fov.Tr[k] ≈ d1.Tr[k] rtol = 1e-2
         ch = time_chart(sess, :diagnostics)
         @test isempty(ch.empty) && length(ch.left.series) == 2 && length(ch.right.series) == 3
         # the imager: its integrated image is the time integral of the detected intensity
@@ -106,7 +106,7 @@ end
         @test sess.drive.image[].unit == "W/cm²/sr (detected)"
         @test sum(sess.drive.image[].values) * a ≈ to_Wcm2(maximum(sxi.intensity)) rtol = 1e-5
         @test [s.label for s in time_chart(sess, :drive).left.series] ==
-              ["Capsule Tr", "Dante 1, 60 mm field", "NIF Dante 1"]
+              ["Capsule Tr", "Dante 1, 12 mm field", "NIF Dante 1"]
 
         # saved with the session: the definitions and the CSV they read
         file = joinpath(root, "s.briar")
@@ -131,7 +131,7 @@ end
         # the folder's definition changes: the session's is used, and the change reported
         orig = Controllers._definition(sess, "group_dante1_fov")
         f = joinpath(dir, "group_dante1_fov.toml")
-        write(f, replace(read(f, String), "field_of_view_mm = 60" => "field_of_view_mm = 40"))
+        write(f, replace(read(f, String), "field_of_view_mm = 12" => "field_of_view_mm = 40"))
         s2 = DesignSession(resolution = :coarse)
         load_session!(s2, file)
         @test s2.time.diagnostics[] == tm.diagnostics[]
