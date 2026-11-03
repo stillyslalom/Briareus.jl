@@ -78,6 +78,13 @@ end
         record!(s)
     end
     @test undo!(s) && s.view.cut_azimuth[] == az0 && s.view.beams[] === :volumes
+    # a diagnostic ticked is saved but not a step, and an undo keeps the ticks
+    ids = copy(s.time.diagnostics[])
+    set_diagnostic!(s, first(ids), false)
+    @test !record!(s) && session_state(s)["time"]["diagnostics"] == ids[2:end]
+    @test undo!(s) && s.time.diagnostics[] == ids[2:end] && s.view.beams[] !== :volumes
+    set_diagnostic!(s, first(ids), true)
+    @test redo!(s) && s.view.beams[] === :volumes && Set(s.time.diagnostics[]) == Set(ids)
     @test undo!(s)
     # undo walks back: the power, the window, the length
     @test undo!(s) && s.beams.beams[][1] == b0

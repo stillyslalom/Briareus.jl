@@ -781,11 +781,13 @@ and view state keyed to part names follows the undo of a rename. The camera, the
 selection and the model tree's expanded nodes are not saved and not steps. An undo
 that changes only the view leaves the target as it is (no rebuild). Consecutive changes
 of the same numeric view settings and nothing else (a cutaway slider dragged) merge
-into one step, so the step returns to where the drag started.
+into one step, so the step returns to where the drag started. The diagnostics a drive
+history records (ticked in the list) are saved but not steps: an undo keeps them as
+they are.
 """
 function record!(sess::DesignSession)
     h = sess.history
-    state = session_state(sess)
+    state = _history_state(sess)
     if h.current === nothing
         h.current = state
         return false
@@ -835,6 +837,13 @@ function redo!(sess::DesignSession)
     return true
 end
 
+# A snapshot of the edit history: the session state without the diagnostics recorded.
+function _history_state(sess::DesignSession)
+    state = session_state(sess)
+    delete!(state["time"], "diagnostics")
+    return state
+end
+
 # The view keys whose values changed from state `a` to `b` when only numeric view
 # settings changed (a slider's), else `nothing`.
 function _numeric_view_change(a, b)
@@ -855,16 +864,19 @@ function _step_to!(sess::DesignSession, state)
                               union(keys(state), keys(cur)))
         _restore_view!(sess, state["view"])
     else
-        restore!(sess, state)
+        # (the diagnostics ticked stay as they are: they are not steps)
+        tm = merge(get(state, "time", Dict{String,Any}()),
+                   Dict{String,Any}("diagnostics" => copy(sess.time.diagnostics[])))
+        restore!(sess, merge(state, Dict{String,Any}("time" => tm)))
     end
-    sess.history.current = session_state(sess)
+    sess.history.current = _history_state(sess)
     return sess
 end
 
 "Whether there is an edit to undo / to redo."
 can_undo(sess::DesignSession) = !isempty(sess.history.undo) ||
                                 (sess.history.current !== nothing &&
-                                 !isequal(session_state(sess), sess.history.current))
+                                 !isequal(_history_state(sess), sess.history.current))
 can_redo(sess::DesignSession) = !isempty(sess.history.redo)
 
 """
@@ -876,6 +888,6 @@ function reset_history!(sess::DesignSession)
     h = sess.history
     empty!(h.undo)
     empty!(h.redo)
-    h.current = session_state(sess)
+    h.current = _history_state(sess)
     return sess
 end
