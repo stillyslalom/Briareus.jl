@@ -526,7 +526,9 @@ The bottom panel's tabs:
   produced them).
 - **Retune to a reference drive** (Compute ▸): from the pulse table of a reference
   shot that fired every beam of the table, the enabled beams' powers are retuned at
-  each time of the table to restore the reference's drive ([`retune_drive`](@ref)),
+  each step of the drive history (the table's times, the prepulse window and the
+  zero-power steps between; zero where the reference fires no 3ω light) to restore the
+  reference's drive ([`retune_drive`](@ref)),
   within a limit relative to the reference powers and optionally staying near them; the
   disabled beams are the ones the shot loses. What is restored follows the target: an
   observed sphere's level and modes through l = 4 ([`CapsuleModes`](@ref)); an observed

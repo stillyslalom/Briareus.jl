@@ -985,8 +985,11 @@ end
 
 Retune the enabled beams' powers to the drive of a reference shot in which every beam of
 `beams` (the scenario's, in its order) fired `pulses` (power per beam against time, keyed
-by group, quad or beam name, e.g. `read_pulse_table`): at each time of the pulses where
-the reference fires, the reference's drive shape and level are restored
+by group, quad or beam name, e.g. `read_pulse_table`): at each step of a drive history
+of the reference ([`start_history!`](@ref)'s steps: the pulses' times, the prepulse
+window every 0.5 ns and one step after it, and the zero-power steps between, from the
+first time anything fires to the last), the reference's drive shape and level are
+restored where its 3ω light fires (elsewhere the retuned powers are zero)
 (`Briareus.retune_drive`, target `:reference`) by one power per `by` key (`:quad`,
 `:group` or `:beam`) within `cap` times its reference power, preferring the reference
 powers with weight `stay`. Disabled beams are the dropped ones. What is held (`kind`):
@@ -1001,7 +1004,7 @@ powers with weight `stay`. Disabled beams are the dropped ones. What is held (`k
 
 `on = :auto` holds the observed surface when the scenario has a radiation model and an
 observed surface, else the foil; `:observed` or `:foil` chooses. Returns the new `pulses`
-(by `by`, zero where the reference is), the `kind`, the `retune`, and the `reference`,
+(by `by`, on the table's times and the steps, zero outside the steps), the `kind`, the `retune`, and the `reference`,
 the enabled beams on the reference pulses (`before`) and on the new ones (`after`): for
 a capsule, drive histories, whose wall temperature is that of the names `wall` in the
 scenario's target (a session passes its [`wall_names`](@ref)), else the capsule's; for
@@ -1033,8 +1036,13 @@ function retune_pulses(s::Scenario, beams::AbstractVector{<:Beam}, enabled::Abst
     ref_by = _pulse_key(beams, pulses)
     refkey, key = Briareus._beam_key(ref_by), Briareus._beam_key(by)
     nodes = sort(unique(reduce(vcat, [p.t for p in values(pulses)])))
-    times = filter(τ -> sum(b -> pulses[refkey(b)](τ), beams) > 0, nodes)
-    isempty(times) && throw(ArgumentError("the reference pulses have no power"))
+    # the steps of a drive history of the reference (`_history_times`): the table's times,
+    # the prepulse window and one step after it, gaps where nothing fires; a step without
+    # 3ω light in the reference has none in the retune (its limits are zero)
+    times = _history_times((; kind = :table, table = pulses, by = ref_by, times = nodes), prepulse, beams,
+                           fill(true, length(beams)))
+    any(τ -> sum(b -> pulses[refkey(b)](τ), beams) > 0, times) ||
+        throw(ArgumentError("the reference pulses have no power"))
     op = s.deposition
     keep = findall(enabled)
     kept = beams[keep]
@@ -1079,9 +1087,10 @@ function retune_pulses(s::Scenario, beams::AbstractVector{<:Beam}, enabled::Abst
             reference, before, after = _face_series(reference), _face_series(before), _face_series(after)
         end
     end
-    # the new pulses on the table's times, off where the reference is
+    # the new pulses on the table's times and the steps, off outside the steps
     at(g, τ) = (k = findfirst(==(τ), times); k === nothing ? 0.0 : r.power[g, k])
-    out = Dict{Symbol,PulseShape}(Symbol(k) => PulseShape(nodes, [at(g, τ) for τ in nodes])
+    ts = sort(unique([nodes; times]))
+    out = Dict{Symbol,PulseShape}(Symbol(k) => PulseShape(ts, [at(g, τ) for τ in ts])
                                   for (g, k) in enumerate(r.keys))
     return (; pulses = out, kind, retune = r, reference, before, after)
 end
@@ -1103,6 +1112,8 @@ const _RETUNE_NONE = "the retune holds an observed surface's x-ray drive or a ba
                      "irradiance: observe a part (Properties ▸ Role), or make one a backlighter foil"
 
 # A face's statistics per step of a drive history recorded with `_face_stats`.
+_finite_max(x) = maximum(filter(isfinite, x); init = 0.0)
+
 _face_series(h) = (; time = h.time, mean = [f.mean for f in h.record], peak = [f.peak for f in h.record],
                    low = [f.low for f in h.record], rms = [f.rms for f in h.record])
 
@@ -1191,8 +1202,9 @@ function retune_to_reference!(sess::DesignSession, table::AbstractString, out::A
             dr.retune_status[] = @sprintf("%d %s powers: worst ε₁ %.2f%% → %.2f%%, |ΔTᵣ| %.1f → %.1f eV; wrote %s",
                                           n, by, ε1(v.before), ε1(v.after), ΔT(v.before), ΔT(v.after), basename(out))
         else
-            rms(f) = 100 * maximum(f.rms)
-            Δ(f) = 100 * maximum(abs.(f.mean ./ v.reference.mean .- 1))
+            # (over the steps where the reference lights the face or the spot)
+            rms(f) = 100 * _finite_max(f.rms)
+            Δ(f) = 100 * _finite_max(abs.(f.mean ./ v.reference.mean .- 1))
             dr.retune_status[] = @sprintf("%d %s powers: %s worst RMS %.2f%% → %.2f%% (reference %.2f%%), |Δmean| %.2f%% → %.2f%%; wrote %s",
                                           n, by,
                                           v.kind === :face ? "face" : "foil spot", rms(v.before), rms(v.after),

@@ -191,11 +191,18 @@ end
                         r.reference.time;
                         observe, wall, lmax = 4, ylm = true, uc..., prepulse = pre)
     @test _near(ref.Tr, r.reference.Tr) && _near(ref.unconverted.delivered[:omega1], r.reference.unconverted.delivered[:omega1])
-    # (more 1ω light inside the window than without the prepulse, the same after it)
-    d0, d1 = r0.reference.unconverted.delivered[:omega1], r.reference.unconverted.delivered[:omega1]
-    inside = r.reference.time .<= 2.0
-    @test r.reference.time == r0.reference.time && any(inside) && all(d1[inside] .> d0[inside]) &&
-          _near(d1[.!inside], d0[.!inside])
+    # the retune steps through the prepulse window as the drive history does
+    # (`_history_times`): the steps without the prepulse and the window's
+    pps = Controllers._history_prepulse(s, eachindex(beams))
+    src = (; kind = :table, table = r.reference_pulses, by = r.reference_by, times = r.nodes)
+    @test r.reference.time == r.after.time == Controllers._history_times(src, pps, beams, fill(true, length(beams)))
+    @test issubset(r0.reference.time, r.reference.time) && 0.5 in r.reference.time && 2.5 in r.reference.time
+    # (more 1ω light inside the window than without the prepulse, the same after it, at
+    # the steps of both)
+    common = [findfirst(==(τ), r.reference.time) for τ in r0.reference.time]
+    d0, d1 = r0.reference.unconverted.delivered[:omega1], r.reference.unconverted.delivered[:omega1][common]
+    inside = r0.reference.time .<= 2.0
+    @test any(inside) && all(d1[inside] .> d0[inside]) && _near(d1[.!inside], d0[.!inside])
     # a prepulse on some beams of a retuned key only cannot be keyed by it
     @test any(b -> b.group === beams[1].group, beams[2:end])
     pp =(omega1 = [i == 1 ? P : 0.0 for i in all_beams], omega2 = zeros(length(beams)), window = (0.0, 2.0))
