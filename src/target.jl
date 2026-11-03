@@ -1241,32 +1241,36 @@ shadowed by a rim). Targets with rims set `:sampled`: `cad_target` and `visrad_t
 (bored entrance holes, gaps, CAD walls), where one centroid ray leaves row sums up to
 1% off on walls and 6% on LEH apertures; `hohlraum` keeps `:centroid` (flush apertures,
 row-sum errors ~0.1% that balancing removes; research notes, "Partial visibility").
+
+A `Target` is immutable in all its fields but has identity (a `mutable struct` of
+`const` fields), so that caches of derived data (a Dante view's footprint, an imager's
+pixels) hold it weakly and release their entries once the target is unreachable.
 """
-struct Target
-    components::Vector{Component}
+mutable struct Target
+    const components::Vector{Component}
     # triangles
-    tri_v0::Vector{Vec3}
-    tri_e1::Vector{Vec3}
-    tri_e2::Vector{Vec3}
-    tri_normal::Vector{Vec3}
-    tri_area::Vector{Float64}
-    tri_comp::Vector{Int32}
-    tri_front::Vector{Int32}       # element on the front side (0 = none)
-    tri_back::Vector{Int32}        # element on the back side (0 = none)
-    tri_opaque::BitVector
+    const tri_v0::Vector{Vec3}
+    const tri_e1::Vector{Vec3}
+    const tri_e2::Vector{Vec3}
+    const tri_normal::Vector{Vec3}
+    const tri_area::Vector{Float64}
+    const tri_comp::Vector{Int32}
+    const tri_front::Vector{Int32}       # element on the front side (0 = none)
+    const tri_back::Vector{Int32}        # element on the back side (0 = none)
+    const tri_opaque::BitVector
     # elements
-    elem_centroid::Vector{Vec3}
-    elem_normal::Vector{Vec3}      # unit normal of the radiating side
-    elem_area::Vector{Float64}
-    elem_comp::Vector{Int32}
-    elem_side::Vector{Int8}        # +1 front, -1 back
-    elem_tris::Vector{UnitRange{Int}}
-    elem_curved::Vector{Int8}      # radiating side relative to the curved surface's outward normal (0: flat)
-    comp_elems::Vector{Vector{Int}}
-    bvh::BVH
-    scale::Float64                 # bounding-sphere radius about the origin (mm)
-    closed::Bool                   # the elements form a closed enclosure
-    visibility::Symbol             # default `view_factors` visibility rule
+    const elem_centroid::Vector{Vec3}
+    const elem_normal::Vector{Vec3}      # unit normal of the radiating side
+    const elem_area::Vector{Float64}
+    const elem_comp::Vector{Int32}
+    const elem_side::Vector{Int8}        # +1 front, -1 back
+    const elem_tris::Vector{UnitRange{Int}}
+    const elem_curved::Vector{Int8}      # radiating side relative to the curved surface's outward normal (0: flat)
+    const comp_elems::Vector{Vector{Int}}
+    const bvh::BVH
+    const scale::Float64                 # bounding-sphere radius about the origin (mm)
+    const closed::Bool                   # the elements form a closed enclosure
+    const visibility::Symbol             # default `view_factors` visibility rule
 end
 
 function Target(components::AbstractVector{Component}; closed::Bool = false,

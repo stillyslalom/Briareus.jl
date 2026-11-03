@@ -54,7 +54,7 @@ struct XrayImager
     times::Vector{Float64}
     gate::Float64
     gate_shape::Symbol
-    cache::IdDict{Target,Any}
+    cache::WeakKeyDict{Target,Any}
     lock::ReentrantLock
 end
 
@@ -93,7 +93,7 @@ function XrayImager(theta::Real, phi::Real; pinhole::Real, distance::Real, magni
     return XrayImager(Float64(theta), Float64(phi), cam, center isa Symbol ? center : Vec3(center...), d,
                       Float64(distance), M, Float64(detector_pixel), E, R, Float64(energy), d * (1 + 1 / M),
                       1.03λ * distance / d, mode,
-                      collect(Float64, times), Float64(gate), gate_shape, IdDict{Target,Any}(), ReentrantLock())
+                      collect(Float64, times), Float64(gate), gate_shape, WeakKeyDict{Target,Any}(), ReentrantLock())
 end
 
 _detection(::Nothing, e) = 1.0

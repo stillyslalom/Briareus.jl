@@ -92,7 +92,7 @@ struct DanteView
     area::Union{Nothing,Float64,Symbol,TabulatedCurve}
     field_of_view::Union{Nothing,Float64}
     center::Union{Vec3,Symbol}
-    cache::IdDict{Target,Any}
+    cache::WeakKeyDict{Target,Any}
     lock::ReentrantLock
 end
 
@@ -108,7 +108,7 @@ function DanteView(theta::Real, phi::Real; through::Union{Nothing,Symbol} = :leh
     c = center isa Symbol ? center : Vec3(center...)
     return DanteView(Float64(theta), Float64(phi), port_vector(theta, phi), through, Int(pixels),
                      collect(channels), a, field_of_view === nothing ? nothing : Float64(field_of_view),
-                     c, IdDict{Target,Any}(), ReentrantLock())
+                     c, WeakKeyDict{Target,Any}(), ReentrantLock())
 end
 
 """

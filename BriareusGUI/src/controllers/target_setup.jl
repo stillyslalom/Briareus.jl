@@ -3353,7 +3353,7 @@ function _view_on(v, names)
     vals = map(fs) do f
         x = getfield(v, f)
         f in refs && x isa Symbol ? _piece_named(names, x) :
-        x isa IdDict ? typeof(x)() : x isa ReentrantLock ? ReentrantLock() : x
+        x isa Union{IdDict,WeakKeyDict} ? typeof(x)() : x isa ReentrantLock ? ReentrantLock() : x
     end
     return T(vals...)
 end
