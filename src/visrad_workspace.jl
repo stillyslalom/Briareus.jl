@@ -89,8 +89,23 @@ function _vrw_kv(line::AbstractString)
     return strip(line[1:prevind(line, i)]), strip(line[nextind(line, i):end])
 end
 
-_vrw_float(d, k, default = 0.0) = (v = get(d, k, ""); x = tryparse(Float64, v); x === nothing ? Float64(default) : x)
-_vrw_int(d, k, default = 0) = round(Int, _vrw_float(d, k, default))
+# A numeric parameter of VisRad object `name`. Without `default` the key is required: a
+# missing, empty or malformed value throws, naming the key and the object. With
+# `default`, a missing or empty value takes it; a malformed one still throws.
+function _vrw_float(d, k, name)
+    v = strip(get(d, k, ""))
+    isempty(v) && throw(ArgumentError("VisRad object $name: no value for \"$k\""))
+    x = tryparse(Float64, v)
+    x === nothing && throw(ArgumentError("VisRad object $name: \"$k\" = \"$v\" is not a number"))
+    return x
+end
+_vrw_float(d, k, name, default) =
+    isempty(strip(get(d, k, ""))) ? Float64(default) : _vrw_float(d, k, name)
+function _vrw_int(d, k, name, default...)
+    x = _vrw_float(d, k, name, default...)
+    isinteger(x) || throw(ArgumentError("VisRad object $name: \"$k\" = $x is not an integer"))
+    return Int(x)
+end
 
 # "... # table times = N ..." -> N
 function _vrw_table_count(line)
@@ -203,12 +218,12 @@ end
 # other directions count nodes. With `h` (mm) the grid is Briareus's for elements of
 # about that size instead (`hohlraum_counts`, `capsule_counts`; VisRad's counts ignored).
 function _vrw_primitive(kind, name, p, mat; h = nothing)
-    L(k) = 10 * _vrw_float(p, "Length $k value")
-    N(k) = _vrw_int(p, "Number of mesh pts $k")
+    L(k) = 10 * _vrw_float(p, "Length $k value", name)
+    N(k) = _vrw_int(p, "Number of mesh pts $k", name)
     h === nothing || h > 0 || throw(ArgumentError("VisRad object $name: the element size must be positive"))
     cells(len) = max(1, ceil(Int, len / h))
-    flip = _vrw_int(p, "Normals in/out") != 0
-    _vrw_int(p, "Use non-zero wall thickness") != 0 &&
+    flip = _vrw_int(p, "Normals in/out", name, 0) != 0
+    _vrw_int(p, "Use non-zero wall thickness", name, 0) != 0 &&
         @warn "VisRad object $name has a wall thickness; Briareus models its outer surface only"
     if kind === :rectangle
         # Length 1 × Length 2 (x × y) centered in the object's x-y plane, normal +z
@@ -217,7 +232,7 @@ function _vrw_primitive(kind, name, p, mat; h = nothing)
         return [Component(name, flip ? _vrw_flip(m) : m, mat)]
     elseif kind === :sphere
         # Length 1 = radius; Lengths 2–5 = angular limits (full sphere only)
-        Ls = Tuple(_vrw_float(p, "Length $k value") for k in 2:5)
+        Ls = Tuple(_vrw_float(p, "Length $k value", name) for k in 2:5)
         Ls == (0.0, 360.0, 0.0, 180.0) ||
             throw(ArgumentError("VisRad sphere $name: partial spheres are not supported"))
         nt, np = h === nothing ? (max(2, N(1) - 1), max(3, N(2))) : values(capsule_counts(L(1), h))
@@ -278,20 +293,20 @@ function _vrw_objects(lines, a, b)
         haskey(frames, name) && return frames[name]
         depth > length(blocks) && throw(ArgumentError("cyclic VisRad reference frames at $name"))
         p = byname[name].params
-        _vrw_int(p, "Set position of ID") == 0 ||
+        _vrw_int(p, "Set position of ID", name, 0) == 0 ||
             throw(ArgumentError("VisRad object $name is positioned by a key point other than its centroid (not supported)"))
         ref = get(p, "Reference coord. system name", "Target Chamber")
         R0, t0 = _vrw_frame_of(ref, n -> haskey(byname, n) ? frame(n, depth + 1) : nothing)
-        x = _vrw_point(_vrw_int(p, "Coord. sys. geometry type"), _vrw_float(p, "Position 1"),
-                       _vrw_float(p, "Position 2"), _vrw_float(p, "Position 3"))
-        R = euler_rotation(_vrw_float(p, "Tilt angle"), _vrw_float(p, "Rotation angle"),
-                           _vrw_float(p, "Spin angle"))
+        x = _vrw_point(_vrw_int(p, "Coord. sys. geometry type", name), _vrw_float(p, "Position 1", name),
+                       _vrw_float(p, "Position 2", name), _vrw_float(p, "Position 3", name))
+        R = euler_rotation(_vrw_float(p, "Tilt angle", name), _vrw_float(p, "Rotation angle", name),
+                           _vrw_float(p, "Spin angle", name))
         return frames[name] = (R0 * R, R0 * x + t0)
     end
     objs = VisRadObject[]
     for blk in blocks
         p = blk.params
-        type = _vrw_int(p, "Object type", -1)
+        type = _vrw_int(p, "Object type", blk.name, -1)
         kind = get(_VRW_KINDS, type, :other)
         R, t = frame(blk.name)
         mesh = nothing
@@ -311,20 +326,20 @@ function _vrw_objects(lines, a, b)
                 push!(patches, t0:length(tris))
             end
             mesh = Mesh(vs, tris, patches)
-            _vrw_int(p, "Normals in/out") != 0 && (mesh = _vrw_flip(mesh))
+            _vrw_int(p, "Normals in/out", blk.name, 0) != 0 && (mesh = _vrw_flip(mesh))
         end
         for (key, what) in (("Albedo model ID", "albedo"), ("Xray conv. effic. model ID", "x-ray conversion"),
                             ("Laser reflectivity model ID", "laser reflectivity"))
-            _vrw_int(p, key) != 0 && @warn "VisRad object $(blk.name): time-dependent $what is not imported; using its constant value"
+            _vrw_int(p, key, blk.name, 0) != 0 && @warn "VisRad object $(blk.name): time-dependent $what is not imported; using its constant value"
         end
         push!(objs, VisRadObject(blk.name, type, kind, get(folders, blk.name, ""), p, R, t, mesh,
-                                 _vrw_float(p, "Albedo value"), _vrw_float(p, "Xray conv. effic. value"),
-                                 _vrw_float(p, "Laser reflectivity value"),
-                                 _vrw_int(p, "Include in radiosity calc.") != 0,
-                                 _vrw_int(p, "Include in dir laser dep calc.") != 0,
-                                 _vrw_int(p, "Object visibility") != 0,
-                                 (_vrw_float(p, "Red value"), _vrw_float(p, "Green value"),
-                                  _vrw_float(p, "Blue value"))))
+                                 _vrw_float(p, "Albedo value", blk.name), _vrw_float(p, "Xray conv. effic. value", blk.name),
+                                 _vrw_float(p, "Laser reflectivity value", blk.name),
+                                 _vrw_int(p, "Include in radiosity calc.", blk.name) != 0,
+                                 _vrw_int(p, "Include in dir laser dep calc.", blk.name) != 0,
+                                 _vrw_int(p, "Object visibility", blk.name, 1) != 0,
+                                 (_vrw_float(p, "Red value", blk.name, 0.7), _vrw_float(p, "Green value", blk.name, 0.7),
+                                  _vrw_float(p, "Blue value", blk.name, 0.7))))
     end
     return objs
 end
@@ -468,7 +483,13 @@ resolved to the target-chamber frame. Build a Briareus target from the component
 patches (one per triangle). Spheres, rectangles and cylindrical hohlraums are meshed on
 VisRad's grid when converted by `visrad_target`. Objects are placed by VisRad's
 orientation angles and position (`VR/grid/specifying_orient_angles.html`), relative to the
-chamber or to another component.
+chamber or to another component. The parameters that set an object's geometry and
+material (its position, coordinate type and orientation angles, the lengths and mesh
+counts its primitive uses, the albedo, conversion and reflectivity values, and the
+radiosity and laser-deposition flags) are required: a missing or malformed one throws
+an `ArgumentError` naming the key and the object. Flags that only modify (normals
+flipped, wall thickness, time-dependent models, the key-point reference) default to 0,
+visibility to on and the color to gray; a malformed value of any key throws.
 
 **Beams.** Port angles and f-number come from the file. Pointing at TCC or at a point
 given in the chamber's or a component's frame is supported; the point is the aim and
@@ -795,8 +816,8 @@ visrad_power_sources(ws::VisRadWorkspace; kw...) = visrad_power_sources(ws.path;
 function _vrw_row_patches(o::VisRadObject, n)
     o.kind === :mesh && return collect(1:n)
     if o.kind === :rectangle
-        nu = max(1, _vrw_int(o.params, "Number of mesh pts 1") - 1)
-        nv = max(1, _vrw_int(o.params, "Number of mesh pts 2") - 1)
+        nu = max(1, _vrw_int(o.params, "Number of mesh pts 1", o.name, 0) - 1)
+        nv = max(1, _vrw_int(o.params, "Number of mesh pts 2", o.name, 0) - 1)
         nu * nv == n || return nothing
         return [ix * nv + iy + 1 for r in 0:n-1 for (iy, ix) in (divrem(r, nu),)]
     end

@@ -479,4 +479,41 @@ end
     @test_throws ArgumentError visrad_deposition(wc, Target(visrad_component(wc.objects[1]; primitive_h = 0.5)))
 end
 
+@testset "workspace (.vrw): required and optional keys" begin
+    txt = synthetic_workspace()
+    edit(f) = vrfile("keys.vrw", f(txt))
+    # in object `name`'s block, the line of `key` replaced (`nothing`: removed)
+    function rekey(name, key, value)
+        return t -> begin
+            a = last(findfirst("Begin Parameters for Object = $name", t))
+            b = first(findnext("End Parameters for Object: $name", t, a))
+            blk = replace(t[a+1:b-1], Regex("\\n\\s*" * replace(key, "." => "\\.") * "\\s*=[^\\n]*") =>
+                          value === nothing ? "" : "\n   $key = $value")
+            t[1:a] * blk * t[b:end]
+        end
+    end
+    msg(f) = try f(); "" catch e; e isa ArgumentError ? e.msg : rethrow() end
+    # a missing radius: refused when the primitive is meshed, naming key and object
+    ws = read_visrad_workspace(edit(rekey("Cyl_Hohlraum_0", "Length 1 value", nothing)))
+    m = msg(() -> visrad_target(ws))
+    @test occursin("Cyl_Hohlraum_0", m) && occursin("Length 1 value", m)
+    # a malformed or missing position, a missing albedo: refused on reading
+    m = msg(() -> read_visrad_workspace(edit(rekey("Marker", "Position 2", "abc"))))
+    @test occursin("Marker", m) && occursin("Position 2", m) && occursin("abc", m)
+    m = msg(() -> read_visrad_workspace(edit(rekey("CAD_0", "Position 1", nothing))))
+    @test occursin("CAD_0", m) && occursin("Position 1", m)
+    @test occursin("Albedo value", msg(() -> read_visrad_workspace(edit(rekey("Rectangle_0", "Albedo value", nothing)))))
+    # a mesh count that is not an integer
+    ws = read_visrad_workspace(edit(rekey("Rectangle_0", "Number of mesh pts 1", "9.5")))
+    @test occursin("not an integer", msg(() -> visrad_target(ws)))
+    # optional keys take their defaults: color, visibility, normals
+    ws0 = read_visrad_workspace(vrfile("keys0.vrw", txt))
+    ws = read_visrad_workspace(edit(t -> rekey("Rectangle_0", "Normals in/out", nothing)(
+                                          rekey("Rectangle_0", "Red value", nothing)(
+                                          rekey("Rectangle_0", "Object visibility", nothing)(t)))))
+    r, r0 = ws.objects[1], ws0.objects[1]
+    @test r.color == (0.7, 0.5, 0.0) && r.visible && r.position == r0.position
+    @test visrad_target(ws).elem_normal == visrad_target(ws0).elem_normal
+end
+
 end
