@@ -33,6 +33,7 @@
 
     # the reference shot, then a dropped bundle, then the retune
     m = RadiationModel(t; closed = true)
+    cm = CapsuleModes(m)
     op = DepositionOperator(t, quads)
     times = 0.5:0.5:3.5
     ref = drive_history(m, op, τ -> with_pulses(quads, pul, τ), times; lmax = 4, ylm = true,
@@ -44,7 +45,7 @@
     amp1(h) = [mode_amplitude(h.ylm[:, k], 1) for k in eachindex(h.time)]
     dropped = drive_history(m, opk, τ -> with_pulses(kept, pul, τ), ref.time; lmax = 4, ylm = true)
     cap(k, τ) = (0.0, 1.5 * pul[first(b.group for b in kept if Symbol(b.quad) == k)](τ) + 1e-9)
-    rt = retune_drive(m, opk, kept, ref; by = :quad, limits = cap)
+    rt = retune_drive(cm, opk, kept, ref; by = :quad, limits = cap)
     @test size(rt.power) == (length(kept), length(ref.time))
     @test all(rt.power[g, k] <= cap(rt.keys[g], rt.time[k])[2] + 1e-9 for g in eachindex(rt.keys)
               for k in eachindex(rt.time))
@@ -60,19 +61,18 @@
     @test maximum(abs.(tuned.Tr .- ref.Tr)) < 0.5
     # staying near nominal powers: a smaller departure, a larger residual
     nominal(k, τ) = pul[first(b.group for b in kept if Symbol(b.quad) == k)](τ)
-    near = retune_drive(m, opk, kept, ref; by = :quad, limits = cap, nominal, stay = 1e-2)
+    near = retune_drive(cm, opk, kept, ref; by = :quad, limits = cap, nominal, stay = 1e-2)
     dep(r) = maximum(abs(r.power[g, k] / nominal(r.keys[g], r.time[k]) - 1)
                      for g in eachindex(r.keys) for k in eachindex(r.time))
     @test dep(near) < dep(rt)
     @test sum(near.residual) > sum(rt.residual)
     # fixed powers (a quad held at zero) are honored
     q0 = rt.keys[1]
-    fixed = retune_drive(m, opk, kept, ref; by = :quad,
+    fixed = retune_drive(cm, opk, kept, ref; by = :quad,
                          limits = (k, τ) -> k == q0 ? (0.0, 0.0) : cap(k, τ))
     @test all(iszero, fixed.power[1, :])
-    @test_throws ArgumentError retune_drive(m, opk, kept, dropped)            # no albedos
-    @test_throws ArgumentError retune_drive(m, opk, kept, ref; drive_weight = 0)
-    @test_throws ArgumentError retune_drive(m, opk, kept, ref; stay = 1.0)
+    @test_throws ArgumentError retune_drive(cm, opk, kept, dropped)            # no albedos
+    @test_throws ArgumentError retune_drive(cm, opk, kept, ref; stay = 1.0)
 end
 
 @testset "retune with unconverted light" begin
@@ -90,6 +90,7 @@ end
     end
     pul = cone_fraction_pulses(quads, [0.0, 1.0, 3.0, 4.0], [0.0, 100.0, 300.0, 0.0], [0.3, 0.3, 0.25, 0.25])
     m = RadiationModel(t; closed = true)
+    cm = CapsuleModes(m)
     op = DepositionOperator(t, quads)
     times = [0.5, 1.5, 2.5]
     # mock 1ω and 2ω squares near the 3ω axis: NIF's miss the inside of this hohlraum (the
@@ -106,15 +107,15 @@ end
     # the prediction is its drive and shape (measured 9e-16, 2e-16), and the free retune
     # returns those powers to the bounded least-squares solver's tolerance (measured 1e-9;
     # 1e-8 for the same retune of the 3ω-only reference)
-    pinned = retune_drive(m, op, quads, ref; unconverted = uc, prepulse = pre, colors = mock,
+    pinned = retune_drive(cm, op, quads, ref; unconverted = uc, prepulse = pre, colors = mock,
                           limits = (k, τ) -> (pul[k](τ), pul[k](τ)))
-    @test maximum(abs.(pinned.drive .- 1)) < 1e-12 && maximum(abs.(pinned.shape .- pinned.reference_shape)) < 1e-12
-    self = retune_drive(m, op, quads, ref; unconverted = uc, prepulse = pre, colors = mock)
+    @test maximum(abs.(pinned.drive .- 1)) < 1e-12 && maximum(abs.(pinned.shape .- pinned.target_shape)) < 1e-12
+    self = retune_drive(cm, op, quads, ref; unconverted = uc, prepulse = pre, colors = mock)
     Pref = [pul[k](τ) for k in self.keys, τ in times]
     @test isapprox(self.power, Pref; rtol = 1e-7) && maximum(abs.(self.drive .- 1)) < 1e-12
     # a reference with unconverted light needs it in the retune; here it raises the drive
     # by 5 % over the 3ω-only history
-    @test_throws ArgumentError retune_drive(m, op, quads, ref)
+    @test_throws ArgumentError retune_drive(cm, op, quads, ref)
     ref3 = drive_history(m, op, τ -> with_pulses(quads, pul, τ), times; lmax = 4, ylm = true, keep_albedo = true,
                          mband = nothing)
     @test maximum(abs.(ref.ylm[1, :] ./ ref3.ylm[1, :] .- 1)) > 0.01
@@ -126,7 +127,7 @@ end
     keep = findall(b -> nif_bundle(b) != "31", quads)
     kept, opk = quads[keep], op[keep]
     cap(k, τ) = (0.0, 1.5 * pul[first(b.group for b in kept if Symbol(b.quad) == k)](τ) + 1e-9)
-    rt = retune_drive(m, opk, kept, ref2; by = :quad, limits = cap, unconverted = uc, prepulse = pre2, colors = mock)
+    rt = retune_drive(cm, opk, kept, ref2; by = :quad, limits = cap, unconverted = uc, prepulse = pre2, colors = mock)
     tuned = drive_history(m, opk, τ -> with_pulses(kept, rt.pulses, τ; by = :quad), times; lmax = 4, ylm = true,
                           mband = nothing, unconverted = uc, prepulse = pre2, colors = mock)
     @test isapprox(rt.shape, tuned.ylm[1:25, :] ./ tuned.ylm[1:1, :]; rtol = 1e-12, atol = 1e-14)
@@ -138,7 +139,7 @@ end
     ref4 = drive_history(m, op, τ -> with_pulses(quads, pul, τ), times; lmax = 4, ylm = true, keep_albedo = true,
                          mband = nothing, unconverted = half, colors = mock)
     uv = (omega1 = half.omega1[keep], omega2 = uc.omega2)
-    rv = retune_drive(m, opk, kept, ref4; by = :group, unconverted = uv, colors = mock)
+    rv = retune_drive(cm, opk, kept, ref4; by = :group, unconverted = uv, colors = mock)
     tv = drive_history(m, opk, τ -> with_pulses(kept, rv.pulses, τ), times; lmax = 4, ylm = true, mband = nothing,
                        unconverted = uv, colors = mock)
     @test isapprox(rv.shape, tv.ylm[1:25, :] ./ tv.ylm[1:1, :]; rtol = 1e-12, atol = 1e-14)
@@ -146,10 +147,102 @@ end
     # (the light is not vacuous: it raises the drive over the 3ω-only history)
     @test all(ref4.ylm[1, :] .> ref3.ylm[1, :])
     # zero fractions: the retune without unconverted light, bit for bit
-    r0 = retune_drive(m, opk, kept, ref3; by = :quad, limits = cap)
-    rz0 = retune_drive(m, opk, kept, ref3; by = :quad, limits = cap, unconverted = (omega1 = 0.0, omega2 = 0.0),
+    r0 = retune_drive(cm, opk, kept, ref3; by = :quad, limits = cap)
+    rz0 = retune_drive(cm, opk, kept, ref3; by = :quad, limits = cap, unconverted = (omega1 = 0.0, omega2 = 0.0),
                  colors = mock)
     @test all(isequal(r0[f], rz0[f]) for f in keys(r0) if f !== :pulses) &&
           all(isequal(r0.pulses[k].p, rz0.pulses[k].p) for k in keys(r0.pulses))
-    @test_throws ArgumentError retune_drive(m, opk, kept, ref3; prepulse = pre2)
+    @test_throws ArgumentError retune_drive(cm, opk, kept, ref3; prepulse = pre2)
+end
+
+# The face retunes are checked against quantities computed here from their definitions:
+# the area-weighted mean and RMS nonuniformity over the face's elements, from forward
+# depositions and solves. Two beams symmetric by a half turn about ẑ make a known answer:
+# with the second one's pulse at 0.6 of the first's in the reference, the reference
+# target recovers 0.6, and the uniform target gives the two equal powers (the RMS at a
+# fixed level is convex in the powers and invariant under the turn), at the level asked.
+_face_mean(H, A) = sum(A .* H) / sum(A)
+_face_rms(H, A) = sqrt(sum(A .* (H .- _face_mean(H, A)) .^ 2) / sum(A)) / _face_mean(H, A)
+# the RMS nonuniformity of `p (v1 + ρ v2)` (`v1`, `v2` each beam's distribution at 1 TW)
+# at the level `L`, for the power ratio `ρ`
+_rms_at_level(v1, v2, A, L, ρ) =
+    _face_rms(L / (_face_mean(v1, A) + ρ * _face_mean(v2, A)) .* (v1 .+ ρ .* v2), A)
+
+@testset "retune a foil's laser irradiance" begin
+    t = Target(foil(:bl, (0, 0, 0), (0, 0, 1); width = 2.0, n = 24, two_sided = false))
+    beam(i, φ, x) = Beam("b$i"; theta = 40, phi = φ, spot = SuperGaussianSpot(0.8), fnumber = 6.7,
+                         group = Symbol(:g, i), aim = (x, 0.0, 0.0))
+    beams = [beam(1, 0, 0.25), beam(2, 180, -0.25)]          # each spot off center on its side
+    op = DepositionOperator(t, beams)
+    times = [0.5, 1.0, 1.5]
+    pul = Dict(:g1 => PulseShape([0.0, 2.0], [0.2, 0.6]), :g2 => PulseShape([0.0, 2.0], [0.12, 0.36]))
+    ref = (; time = times, deposition = [deposit(op, with_pulses(beams, pul, τ)) for τ in times])
+    q = FoilIrradiance(:bl; center = (0, 0, 0), radius = 0.6)
+    spot = [e for e in elements(t, :bl) if norm(t.elem_centroid[e]) <= 0.6]
+    A = t.elem_area[spot]
+    irr(P) = deposit(op, [remake(b; power = P[i]) for (i, b) in enumerate(beams)]).element[spot] ./ A
+    # the reference's own distribution: the second pulse's scale recovered
+    rt = retune_drive(q, op, beams, ref)
+    @test rt.keys == [:g1, :g2]
+    @test isapprox(rt.power, [pul[k](τ) for k in rt.keys, τ in times]; rtol = 1e-7)
+    # the reported mean, RMS and peak-to-mean against the depositions at the retuned powers
+    Is = [irr(rt.power[:, k]) for k in eachindex(times)]
+    @test isapprox(rt.level, [_face_mean(I, A) for I in Is]; rtol = 1e-12)
+    @test isapprox(rt.rms, [_face_rms(I, A) for I in Is]; rtol = 1e-12)
+    @test isapprox(rt.peak, [maximum(I) / _face_mean(I, A) for I in Is]; rtol = 1e-12)
+    # the uniform target at a prescribed mean: equal powers at that mean, the RMS there
+    # below its value at other power ratios on the same mean, and below the reference's
+    L(τ) = 0.5τ
+    un = retune_drive(q, op, beams, (; time = times); target = :uniform, level = L)
+    v1, v2 = irr([1.0, 0.0]), irr([0.0, 1.0])
+    @test isapprox(un.power[1, :], un.power[2, :]; rtol = 1e-7)
+    @test isapprox([_face_mean(irr(un.power[:, k]), A) for k in eachindex(times)], L.(times); rtol = 1e-10)
+    @test isapprox(un.rms[2], _rms_at_level(v1, v2, A, L(1.0), 1.0); rtol = 1e-7)
+    @test all(_rms_at_level(v1, v2, A, L(1.0), ρ) > un.rms[2] for ρ in (0.9, 0.97, 1.03, 1.1))
+    @test all(un.rms .< rt.rms)
+    @test_throws ArgumentError retune_drive(q, op, beams, (; time = times))       # no reference drive
+    @test_throws ArgumentError retune_drive(q, op, beams, ref; target = :flat)
+    @test_throws ArgumentError retune_drive(FoilIrradiance(:bl; center = (5, 5, 0), radius = 0.1), op, beams, ref)
+end
+
+@testset "retune a flat face's x-ray drive" begin
+    # a halfraum closed at the bottom, whose bottom cap is the observed face, lit through
+    # the top hole; constant albedo and conversion, so each step of a history is one linear
+    # solve and the retune's linear prediction is the history's own to rounding
+    t = hohlraum(; length = 4.0, radius = 1.5, leh_radius = 1.2, capsule_radius = 0.0, nz = 8, nphi = 16,
+                 bottom_end = :closed, wall = Material(:Au; albedo = 0.8, conversion = 0.8))
+    beams = [Beam("b1"; theta = 35, phi = 0, group = :g1, aim = (-0.3, 0.0, 0.5)),
+             Beam("b2"; theta = 35, phi = 180, group = :g2, aim = (0.3, 0.0, 0.5))]
+    m = RadiationModel(t; closed = true)
+    op = DepositionOperator(t, beams)
+    times = [0.5, 1.0, 1.5]
+    pul = Dict(:g1 => PulseShape([0.0, 2.0], [1.0, 3.0]), :g2 => PulseShape([0.0, 2.0], [0.6, 1.8]))
+    obs = elements(t, :cap_bottom)
+    A = t.elem_area[obs]
+    hist(P, ts; kw...) = drive_history(m, op, τ -> with_pulses(beams, P, τ), ts; observe = :cap_bottom,
+                                       lmax = 2, mband = nothing, kw...)
+    ref = hist(pul, times; observed_flux = true, keep_albedo = true)
+    @test size(ref.observed_flux) == (length(obs), length(times))
+    q = FaceFlux(m, :cap_bottom)
+    rt = retune_drive(q, op, beams, ref)
+    @test isapprox(rt.power, [pul[k](τ) for k in rt.keys, τ in times]; rtol = 1e-7)
+    # the reported mean and RMS against the history at the retuned powers, from each
+    # step's incident flux on the face's elements
+    tuned = hist(rt.pulses, times; record = sol -> sol.H[obs])
+    @test isapprox(rt.level, [_face_mean(H, A) for H in tuned.record]; rtol = 1e-12)
+    @test isapprox(rt.rms, [_face_rms(H, A) for H in tuned.record]; rtol = 1e-12)
+    @test rt.rms[1] > 1e-3                                   # (the face is not uniform)
+    # the uniform target at 1.2 times the reference's mean: equal powers at that mean (from
+    # forward solves at 1 TW on each beam), the RMS a minimum along it
+    Lr = [_face_mean(ref.observed_flux[:, k], A) for k in eachindex(times)]
+    un = retune_drive(q, op, beams, ref; target = :uniform, level = τ -> 1.2 * Lr[findfirst(==(τ), times)])
+    flux(P) = solve(m, deposit(op, [remake(b; power = P[i]) for (i, b) in enumerate(beams)]).element).H[obs]
+    v1, v2 = flux([1.0, 0.0]), flux([0.0, 1.0])
+    @test isapprox(un.power[1, :], un.power[2, :]; rtol = 1e-7)
+    @test isapprox(un.power[1, :] .* (_face_mean(v1, A) + _face_mean(v2, A)), 1.2 .* Lr; rtol = 1e-10)
+    @test isapprox(un.rms[2], _rms_at_level(v1, v2, A, 1.2 * Lr[2], 1.0); rtol = 1e-7)
+    @test all(_rms_at_level(v1, v2, A, 1.2 * Lr[2], ρ) > un.rms[2] for ρ in (0.9, 0.97, 1.03, 1.1))
+    @test all(un.rms .< rt.rms)
+    @test_throws ArgumentError retune_drive(q, op, beams, hist(pul, times; keep_albedo = true))   # no face flux
+    @test_throws ArgumentError retune_drive(q, op, beams, hist(pul, times; observed_flux = true))  # no albedos
 end

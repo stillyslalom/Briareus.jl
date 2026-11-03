@@ -46,7 +46,8 @@ export view_factors, Float32Matrix, HMatrix, closure_error, enforce_closure!, op
        montecarlo_incident
 export WallMotion, wall_radius, wall_displacement, moving_hohlraum, Keyframes, model_at, deposition_at
 export PulseShape, pulse_energy, with_pulses, drive_history, energy_budget, cone_fraction_pulses,
-       write_pulse_table, read_pulse_table, retune_drive
+       write_pulse_table, read_pulse_table, retune_drive, RetuneQuantity, CapsuleModes, FaceFlux,
+       FoilIrradiance
 export enclosed_radius, envelope_radius, focal_profile, enclosed_fraction, with_axes,
        BeamEnvelope, envelope_distance, ClearanceRow, ClearanceReport, clearance,
        ApertureKeepOut, aperture_clearance, SphereKeepOut, sphere_clearance,

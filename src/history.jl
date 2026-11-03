@@ -51,7 +51,7 @@ end
 """
     drive_history(model, op, beams_at, times; observe = :capsule, lmax = 6,
                   wall = (:wall,), cavities = (), lpi = nothing, holes = nothing, ylm = false,
-                  transition = nothing, flux_change = nothing, min_step = 1e-3,
+                  observed_flux = false, transition = nothing, flux_change = nothing, min_step = 1e-3,
                   tol = 1e-4, keep_albedo = false, record = nothing,
                   wall_history = true, wall_release = true, mband = MBandSplit(),
                   spectral = nothing, unconverted = nothing, colors = nif_unconverted(),
@@ -71,6 +71,9 @@ radiosity at that time (time- and temperature-dependent albedos included), and r
 - `ylm` — with `ylm = true`, the `(lmax+1)² × nt` real spherical-harmonic
   coefficients of the observed flux (`ylm_weights`, in `mode_index` order; columns
   work with `mode_amplitude`), otherwise `nothing`
+- `observed_flux` — with `observed_flux = true`, the `n × nt` incident flux (TW/mm²) on
+  each of the `n` observed elements (in the order of `elements(target, observe...)`), the
+  state a flat face's retune holds ([`FaceFlux`](@ref)), otherwise `nothing`
 - `wall_Tr`, `wall_albedo` — area-weighted mean incident-flux temperature and albedo
   of the `wall` components
 - `cavity_Tr` — per cavity of `cavities` (pairs `name => wall names`, e.g.
@@ -267,7 +270,7 @@ Base.@nospecializeinfer function _drive_history(
                         @nospecialize(beams_at), @nospecialize(times);
                         observe = :capsule, lmax::Integer = 6, wall = (:wall,),
                         @nospecialize(cavities = ()), @nospecialize(lpi = nothing), holes = nothing, ylm::Bool = false,
-                        transition = nothing, flux_change = nothing, min_step::Real = 1e-3,
+                        observed_flux::Bool = false, transition = nothing, flux_change = nothing, min_step::Real = 1e-3,
                         tol = 1e-4, keep_albedo::Bool = false, @nospecialize(record = nothing),
                         wall_history::Bool = true, wall_release::Bool = true,
                         mband = MBandSplit(), @nospecialize(spectral = nothing),
@@ -362,6 +365,7 @@ Base.@nospecializeinfer function _drive_history(
     cavity_Tr = Dict{Symbol,Vector{Float64}}(first(c) => Float64[] for c in cavity_elems)
     moments = Vector{Float64}[]
     clm = Vector{Float64}[]
+    Hobs = Vector{Float64}[]
     escaped = Dict(n => Float64[] for n in apertures)
     transmitted = Dict(t.components[ci].name => Float64[] for ci in transmitters)
     front = Dict(t.components[ci].name => Float64[] for ci in foils)
@@ -561,6 +565,7 @@ Base.@nospecializeinfer function _drive_history(
             push!(delivered, uc === nothing ? dep.delivered : dep.delivered + udel)
             push!(moments, a)
             ylm && push!(clm, weights(sol.model.target) * sol.H[obs])
+            observed_flux && push!(Hobs, sol.H[obs])
             Aw = sol.model.target.elem_area[we]
             push!(flux, a[1])
             push!(Tr, radiation_temperature(a[1]))
@@ -639,7 +644,8 @@ Base.@nospecializeinfer function _drive_history(
         emission === nothing || (mband_laser = _by_part(t, mband_laser))
     end
     return (; time, delivered, flux, Tr, moments = _columns(moments, lmax + 1),
-            ylm = ylm ? _columns(clm, (lmax + 1)^2) : nothing, wall_Tr,
+            ylm = ylm ? _columns(clm, (lmax + 1)^2) : nothing,
+            observed_flux = observed_flux ? _columns(Hobs, length(obs)) : nothing, wall_Tr,
             wall_albedo, cavity_Tr, escaped, transmitted, window_loss, front, burnthrough,
             albedo = keep_albedo ? albedo_steps : nothing, setup, laser, source, absorbed, lost,
             released, lip_radius, record = record === nothing ? nothing : [r for r in recorded],

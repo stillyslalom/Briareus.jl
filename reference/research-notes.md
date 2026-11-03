@@ -2480,6 +2480,35 @@ shot), drive histories at 0.4 ns steps to 9.6 ns. Bundle 31 (Q31T, Q31B) dropped
 - Limits: the per-quad caps here are relative to the reference powers, not NIF's
   per-quad energy or power capability (which depends on the pulse and the laser's
   state). The view factors and pointing are the reference's through the pulse.
+- The table above predates the held level (next section): it was measured with the
+  level as a soft penalty, which let `stay` lower the drive. Not remeasured since.
+
+## Retuning faces and foils; the held level (2026-11-02) *derived*
+
+`retune_drive(quantity, ...)` with `CapsuleModes`, `FaceFlux` or `FoilIrradiance`; a
+method change, no new constants.
+- **Held level.** The level row was a penalty of weight `drive_weight` (default 1). A
+  penalty pulls the level below its target by about the square of the nonuniformity
+  (the shape terms scale with the level squared): negligible for capsule modes of a few
+  percent, a percent on a face at 10 % RMS, a third on a foil spot at 70 % RMS (measured
+  on the test foil, SG4 spots). Its target is now shifted by the secant method until the
+  level is held (`drive_weight` removed). On `test/retune.jl`'s dropped-bundle fixture:
+  free retune |drive − 1| 1.4e-5 → 2.9e-7, worst predicted ε₁ 3.5e-5 → 1.8e-5; with
+  `stay = 1e-2` 1.4 % → 5e-13 (ε₁ 3.62 → 3.63 %); with `smooth = 0.1` 74 % → 1e-8 (the
+  penalty had let smoothing hold the powers near the first step's; ε₁ 1.2 → 3.2 %).
+  Without `stay` or `smooth` the 3ω capsule retune before the change was the earlier
+  code's bit for bit.
+- **Solver.** L-BFGS-B stopped at a projected gradient near 2e-6 of the gradient's scale
+  on these rank-deficient problems (46 quads, 25 rows); active-set Gauss–Newton steps
+  after it take that to 1e-16–1e-10, and the held level then takes 3 solves per step.
+- **Validation** (`test/retune.jl`): two beams symmetric by a half turn, the second at 0.6
+  of the first's power in the reference, on a one-sided foil (SG 0.8 mm spots, 0.6 mm
+  spot radius, RMS 14 %) and on the closed bottom cap of a halfraum (albedo 0.8). The
+  reference target recovers the powers to 2e-14 (foil); the uniform target gives equal
+  powers at the asked level (1e-10 in the test, rounding measured), with the RMS a
+  minimum along that level against ratios 0.9–1.1; reported mean, RMS and peak-to-mean
+  equal those recomputed from depositions (foil) and from the history's flux on the
+  face's elements (face) to 1e-12.
 
 ## HYBRID-E (N210808) hohlraum and LEH size (2026-10-20)
 

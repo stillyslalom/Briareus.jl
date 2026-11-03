@@ -90,14 +90,17 @@ peak(h, x) = (k = findall(t -> 7.6 <= t <= 9.4, h.time); sum(x[k]) / length(k))
 # At any moment the capsule flux is linear in the beams' powers once the albedos are
 # fixed, and the reference history gives the albedos. So at each reference
 # time [`retune_drive`](@ref) finds each quad's power that brings the capsule flux's
-# shape ``c_{lm}/c_{00}`` back to the reference's for ``l = 1``–``4`` and its level
-# ``c_{00}`` back to the reference's: a least-squares problem with each quad's power
-# between zero and its limit, here 1.3 times its cone's power per quad in the
-# reference at that time.
+# shape ``c_{lm}/c_{00}`` back to the reference's for ``l = 1``–``4`` at the reference's
+# level ``c_{00}`` (the quantity [`CapsuleModes`](@ref)): a least-squares problem with
+# each quad's power between zero and its limit, here 1.3 times its cone's power per quad
+# in the reference at that time. The same retune holds a flat face's x-ray flux
+# ([`FaceFlux`](@ref), e.g. a package's face in a halfraum) or a backlighter foil's laser
+# irradiance ([`FoilIrradiance`](@ref)), to the reference's distribution or, with
+# `target = :uniform` and a `level`, as uniform as the powers allow at a prescribed mean.
 
 nominal(k, τ) = reference_pulses[first(b.group for b in kept if Symbol(b.quad) == k)](τ)
 limit(k, τ) = (0.0, 1.3 * nominal(k, τ) + 1e-9)
-retuned = retune_drive(model, op_kept, kept, reference; by = :quad, limits = limit)
+retuned = retune_drive(CapsuleModes(model), op_kept, kept, reference; by = :quad, limits = limit)
 @printf("linear prediction: shape matched to %.1e, drive to %.1e (worst time)\n",
         maximum(retuned.residual), maximum(abs.(retuned.drive .- 1)))
 
@@ -128,7 +131,7 @@ k_peak = findfirst(≈(8.8), reference.time)
 println("  stay      ε₁ peak   ε₁ max   powers / reference at 8.8 ns   at the limit")
 rows = Any[("unconstrained", 0.0, retuned, tuned)]
 for stay in (1e-5, 1e-4, 1e-3)
-    r = retune_drive(model, op_kept, kept, reference; by = :quad, limits = limit, nominal, stay)
+    r = retune_drive(CapsuleModes(model), op_kept, kept, reference; by = :quad, limits = limit, nominal, stay)
     h = drive_history(model, op_kept, τ -> with_pulses(kept, r.pulses, τ; by = :quad),
                       reference.time; lmax = 4, ylm = true)
     push!(rows, (@sprintf("%.0e", stay), stay, r, h))
@@ -177,3 +180,9 @@ fig
 # - Weighting the departure from the reference powers trades the match for smaller
 #   departures monotonically (test suite: a larger `stay`, a smaller departure and a
 #   larger residual).
+# - A face and a foil (test suite, `test/retune.jl`): two beams symmetric by a half
+#   turn, one at 0.6 of the other's power in the reference. The reference target
+#   recovers the powers to 1e-7; the uniform target gives equal powers at the level
+#   asked (1e-10), with the RMS below its value at power ratios of 0.9–1.1 on that
+#   level; the reported mean and RMS equal those recomputed from the depositions (foil)
+#   and from the drive history's flux on the face's elements (halfraum face) to 1e-12.

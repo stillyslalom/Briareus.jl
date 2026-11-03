@@ -122,12 +122,18 @@ end
 
         # retuning: new limit, nominal, fraction and prepulse functions reuse the body
         rref = history(τ -> with_pulses(quads, pulse, τ), [0.5, 1.0]; ylm = true, keep_albedo = true, mband = nothing)
-        rt(lim, nom, r) = retune_drive(mw, s.deposition, quads, rref; limits = lim, nominal = nom, stay = 0.1,
-                                       unconverted = (omega1 = r, omega2 = 0.0), prepulse = (omega1 = τ -> 0.0,))
+        rt(lim, nom, r) = retune_drive(CapsuleModes(mw), s.deposition, quads, rref; limits = lim, nominal = nom,
+                                       stay = 0.1, unconverted = (omega1 = r, omega2 = 0.0),
+                                       prepulse = (omega1 = τ -> 0.0,))
         rt((k, τ) -> (0.0, 10.0), (k, τ) -> 4.0, 0.0)
         n = _inf_body_instances(retune_drive)
         rt((k, τ) -> (0.0, 9.0), (k, τ) -> 3.0, τ -> 0.0)
         rt((k, τ) -> (0.0, 8.0), (k, τ) -> 3.0, [isodd(i) ? (τ -> 0.0) : 0.0 for i in eachindex(quads)])
+        # and new level functions, another quantity type, a uniform target
+        ru(q, L) = retune_drive(q, s.deposition, quads, rref; target = :uniform, level = L)
+        ru(CapsuleModes(mw), τ -> 1e-3)
+        ru(CapsuleModes(mw; modes = (2 => 1.0,)), 2e-3)
+        ru(FaceFlux(mw, :capsule), τ -> 1e-3 * τ)
         @test _inf_body_instances(retune_drive) == n
 
         optimize_pointing(s, objectives[1]; x0, iterations = 1, evaluations = 2)
