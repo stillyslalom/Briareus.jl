@@ -157,10 +157,10 @@ struct TabulatedCurve
 end
 
 function TabulatedCurve(file::AbstractString; extrapolate::Symbol = :hold)
-    _, rows = read_csv(file)
-    all(r -> length(r) >= 2, rows) || throw(ArgumentError("$file: two columns (energy eV, value) expected"))
-    E = [parse(Float64, r[1]) for r in rows]
-    v = [parse(Float64, r[2]) for r in rows]
+    h, rows, lines = _read_csv(file)
+    length(h) >= 2 || throw(ArgumentError("$file: two columns (energy eV, value) expected"))
+    E = [_csv_number(r[1], file, l, h[1]) for (r, l) in zip(rows, lines)]
+    v = [_csv_number(r[2], file, l, h[2]) for (r, l) in zip(rows, lines)]
     return TabulatedCurve(E, v; extrapolate, file)
 end
 

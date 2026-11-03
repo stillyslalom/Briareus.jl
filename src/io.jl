@@ -44,37 +44,103 @@ _csvfield(x) = string(x)
 """
     read_csv(path; comment = '#') -> (header::Vector{String}, rows::Vector{Vector{String}})
 
-Minimal CSV reader (quoted fields, `""` escapes, comment and blank lines skipped).
-Tab- or semicolon-separated files are detected from the header line.
+CSV reader without dependencies (RFC 4180 quoting). A field in double quotes may hold
+the delimiter, line breaks and the comment character, with `""` for a quote; its text
+is kept as quoted, while unquoted fields are stripped of surrounding blanks. Lines that
+are blank or start with `comment` (after blanks, outside a quoted field) are skipped.
+Tab- or semicolon-separated files are detected from the header line. A row with fewer
+fields than the header, or with more (other than empty trailing ones), and a quoted
+field left open at the end of the file throw an `ArgumentError` with the line number.
 """
 function read_csv(path::AbstractString; comment = '#')
-    lines = [l for l in eachline(path) if !isempty(strip(l)) && !startswith(lstrip(l), comment)]
-    isempty(lines) && throw(ArgumentError("$path has no rows"))
-    delim = occursin('\t', lines[1]) ? '\t' : (count(==(';'), lines[1]) > count(==(','), lines[1]) ? ';' : ',')
-    split_line(l) = begin
-        out = String[]; buf = IOBuffer(); q = false; i = 1
-        cs = collect(l)
-        while i <= length(cs)
-            c = cs[i]
-            if q
-                if c == '"'
-                    (i < length(cs) && cs[i+1] == '"') ? (write(buf, '"'); i += 1) : (q = false)
+    header, rows, _ = _read_csv(path; comment)
+    return header, rows
+end
+
+# `read_csv`, with the file line on which each row starts.
+function _read_csv(path::AbstractString; comment = '#')
+    text = read(path, String)
+    startswith(text, '﻿') && (text = text[nextind(text, 1):end])     # byte-order mark
+    skipline(l) = (s = lstrip(l); isempty(s) || startswith(s, comment))
+    first_line = findfirst(!skipline, split(text, '\n'))
+    first_line === nothing && throw(ArgumentError("$path has no rows"))
+    l1 = split(text, '\n')[first_line]
+    delim = occursin('\t', l1) ? '\t' : (count(==(';'), l1) > count(==(','), l1) ? ';' : ',')
+    records, starts = Vector{String}[], Int[]
+    fields, buf = String[], IOBuffer()
+    inq = quoted = false                 # inside quotes; the field has a quoted part
+    line, start, i, n = 1, 1, firstindex(text), lastindex(text)
+    atstart = true                       # at the start of a record
+    endfield!() = (s = String(take!(buf)); push!(fields, quoted ? s : String(strip(s))); quoted = false)
+    function endrecord!()
+        endfield!()
+        push!(records, fields); push!(starts, start)
+        fields = String[]
+    end
+    while i <= n
+        if atstart
+            # a blank or comment line before a record: skip to its end
+            j = something(findnext('\n', text, i), n + 1)
+            if skipline(text[i:prevind(text, j)])
+                i, line = nextind(text, min(j, n)), line + 1
+                j > n && break
+                continue
+            end
+            atstart, start = false, line
+        end
+        c = text[i]
+        if inq
+            if c == '"'
+                if i < n && text[nextind(text, i)] == '"'
+                    write(buf, '"'); i = nextind(text, i)
                 else
-                    write(buf, c)
+                    inq = false
                 end
-            elseif c == '"'
-                q = true
-            elseif c == delim
-                push!(out, strip(String(take!(buf))))
-            else
+            elseif !(c == '\r' && i < n && text[nextind(text, i)] == '\n')
+                c == '\n' && (line += 1)
                 write(buf, c)
             end
-            i += 1
+        elseif c == '"'
+            if !quoted                                 # blanks before the opening quote
+                s = String(take!(buf))
+                isempty(strip(s)) ? (quoted = true) : write(buf, s)
+            end
+            inq = true
+        elseif c == delim
+            endfield!()
+        elseif c == '\n' || c == '\r'
+            c == '\r' && i < n && text[nextind(text, i)] == '\n' && (i = nextind(text, i))
+            endrecord!()
+            line += 1
+            atstart = true
+        elseif !(quoted && isspace(c))                 # blanks after the closing quote
+            write(buf, c)
         end
-        push!(out, strip(String(take!(buf))))
-        out
+        i = nextind(text, i)
     end
-    return split_line(lines[1]), [split_line(l) for l in lines[2:end]]
+    inq && throw(ArgumentError("$path, line $start: a quoted field is not closed"))
+    atstart || endrecord!()
+    header = popfirst!(records)
+    popfirst!(starts)
+    while length(header) > 1 && isempty(header[end])
+        pop!(header)
+    end
+    m = length(header)
+    for (r, l) in zip(records, starts)
+        while length(r) > m && isempty(r[end])
+            pop!(r)
+        end
+        length(r) == m ||
+            throw(ArgumentError("$path, line $l: $(length(r)) fields, the header has $m"))
+    end
+    return header, records, starts
+end
+
+# A number from a CSV field, or an error naming the file, line and column.
+function _csv_number(s::AbstractString, path, line, column)
+    x = tryparse(Float64, s)
+    x === nothing && throw(ArgumentError("$path, line $line, column $column: \"$s\" is not a number"))
+    return x
 end
 
 """
@@ -88,11 +154,12 @@ multiplies a field after reading, e.g. `Dict(:aim_x => 10, :aim_y => 10, :aim_z 
 for cm → mm. Fields missing from the file come from `defaults` (a NamedTuple of
 canonical fields), or — when `template` is a beam vector — from the template beam with
 the same `name` (so a pointing table can update a facility beam set), else from the
-`Beam` defaults.
+`Beam` defaults. A field that is not a number throws an `ArgumentError` naming the
+file's line and column.
 """
 function read_beam_table(path::AbstractString; columns = Dict{Symbol,String}(),
                          scale = Dict{Symbol,Float64}(), defaults = (;), template = nothing)
-    header, rows = read_csv(path)
+    header, rows, lines = _read_csv(path)
     lower = lowercase.(header)
     colidx = Dict{Symbol,Int}()
     for f in BEAM_COLUMNS
@@ -103,11 +170,12 @@ function read_beam_table(path::AbstractString; columns = Dict{Symbol,String}(),
     haskey(colidx, :name) || throw(ArgumentError("no beam name column in $path (map it with columns)"))
     tmpl = template === nothing ? Dict{String,Beam}() : Dict(b.name => b for b in template)
     beams = Beam{Float64}[]
-    for r in rows
+    for (r, line) in zip(rows, lines)
         name = r[colidx[:name]]
         tb = get(tmpl, name, nothing)
         get_num(f, fallback) = begin
-            x = haskey(colidx, f) && !isempty(r[colidx[f]]) ? parse(Float64, r[colidx[f]]) :
+            x = haskey(colidx, f) && !isempty(r[colidx[f]]) ?
+                _csv_number(r[colidx[f]], path, line, header[colidx[f]]) :
                 haskey(defaults, f) ? Float64(defaults[f]) : fallback
             x === nothing ? nothing : x * get(scale, f, 1.0)
         end
