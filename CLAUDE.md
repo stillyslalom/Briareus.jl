@@ -36,7 +36,9 @@ of runtests.jl's outer `@testset` (one top-level expression: its locals live to 
   also a fit target; say which data a calibration was fitted to.
 - New paths must leave existing ones bit for bit unless the change is the point: say so in
   the commit and measure the difference. Screens that skip work (zero weights, culled
-  rays) must be exact on Float64.
+  rays) must be exact on Float64. The package is 0.x: a better design is reason enough to
+  break an API or change results (no compatibility shims, no parallel old option); "existing
+  results don't change" is never the argument for keeping a worse one.
 - Tests: tolerances no tighter than ~1e-12 relative on summed quantities (CI CPUs round
   differently); no `@test` inside loops over elements or points — check the collection
   with one `@test all(...)` (a per-element loop once tripled the suite's test count).
