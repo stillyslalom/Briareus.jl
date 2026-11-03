@@ -1178,8 +1178,9 @@ end
     @test !s.drive.retune_running[]
     @test startswith(s.drive.retune_status[], "46 quad powers")
     back = read_pulse_table(out)
-    @test length(back) == 46
-    @test !haskey(back, :Q31T)
+    # every quad keyed (the table loads for the whole beam table), bundle 31's off
+    @test length(back) == 48
+    @test all(iszero, back[:Q31T].p) && all(iszero, back[:Q31B].p)
     @test all(p -> iszero(p(0.0)) && iszero(p(4.0)), values(back))   # off where the reference is
     # the job: mode 1 of the dropped bundle removed, the drive kept, within the limits
     v = retune_pulses(s.drive.scenario[], beams, s.beams.enabled[], pul; cap = 1.5)

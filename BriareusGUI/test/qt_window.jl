@@ -259,12 +259,13 @@ using BriareusGUI.Briareus
                                        [0.3, 0.3, 0.25, 0.25])
             write_pulse_table(reference_csv, pul)
             s.beams.enabled[] = [nif_bundle(b) != "31" for b in bs]
-            B.br_retune(reference_csv, retuned_csv, "quad", "1.5", "0", "auto", "reference", "")
+            B.br_retune(reference_csv, retuned_csv, "quad", "1.5", "0", "auto", "reference", "", true)
             s.drive.retune_running[] && push!(seen, :retune_started)
             B.request_grab(png("cut_port")); next!()
         elseif k == 22 && grabbed(png("cut_port")) && !s.drive.retune_running[]
             isfile(retuned_csv) && occursin("quad powers", s.drive.retune_status[]) &&
-                sh.app["retuneStatus"] == s.drive.retune_status[] && push!(seen, :retune)
+                sh.app["retuneStatus"] == s.drive.retune_status[] && s.time.pulses[].label == "retuned.csv" &&
+                push!(seen, :retune)
             # the Time tab: the retune's powers, then N221204's shape and its history
             B.request_tab("time")
             s.time.chart[] === :retune && sh.app["timeChart"] == "retune" && push!(seen, :time_retune)

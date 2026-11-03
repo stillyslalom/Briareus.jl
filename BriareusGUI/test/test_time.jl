@@ -217,11 +217,28 @@ end
     out = joinpath(dir, "retuned.csv")
     build_scenario!(s)
     s.beams.enabled[] = [nif_bundle(b) != "31" for b in beams]          # bundle 31 down
+    record!(s)
     retune_to_reference!(s, table, out; cap = 1.5)
     @test isfile(out)                                                   # the CSV, as before
     tm = s.time
     @test tm.chart[] === :retune && tm.retune[] !== nothing
-    @test tm.pulses[].by === :group && tm.pulses[].label == "reference.csv"   # the reference fires
+    # the beams fire the retuned pulses, keyed by quad (the dropped quads' columns zero),
+    # as loading the written table does to its rounding
+    @test tm.pulses[].by === :quad && tm.pulses[].label == "retuned.csv" && tm.pulses[].table == tm.retune[].pulses
+    @test all(iszero(tm.pulses[].table[Symbol(b.quad)].p) for b in beams if nif_bundle(b) == "31")
+    written = read_pulse_table(out)
+    @test keys(written) == keys(tm.pulses[].table) &&
+          all(isapprox(written[k].p, tm.pulses[].table[k].p; rtol = 1e-6, atol = 1e-12) for k in keys(written))
+    # a drive history on them is the retuned drive: the enabled beams on the retune's powers
+    @test [b.power for b in Controllers._pulse_beams(tm.pulses[], beams, s.beams.enabled[], 3.0)] ==
+          [on ? tm.retune[].pulses[Symbol(b.quad)](3.0) : 0.0 for (b, on) in zip(beams, s.beams.enabled[])]
+    # an edit: undo takes the pulses back (to none), redo fires them again
+    @test record!(s) && undo!(s) && tm.pulses[] === nothing
+    @test redo!(s) && tm.pulses[].label == "retuned.csv"
+    # without loading, the pulses stay as they were
+    use_pulse_shape!(s; step = 1.0)
+    retune_to_reference!(s, table, out; cap = 1.5, load = false)
+    @test tm.pulses[].kind === :shape && tm.retune[] !== nothing && tm.chart[] === :retune
     ch = time_chart(s)
     groups = unique(s.beams.cluster[])
     ref, new = ch.left.series[1:length(groups)], ch.left.series[length(groups)+1:end]

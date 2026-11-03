@@ -336,6 +336,12 @@ E. **Double backlighter with ARC:** the starter, ARC beams as a facility beam se
   `on`; `_retune_quantities` lists what the drive's scenario can hold (the observed
   surface first, as `:auto` takes it, then the active foil), and the dialog's *Holds*
   shows only when there are several. A choice the design lacks is refused in the status.
+- The retuned pulses fire (2026-11-03): `retune_to_reference!(...; load = true)` makes
+  them the Time panel's pulses (a table keyed by the retune's `by`, labeled with the
+  written file's name), an undo step like any loaded pulses; *Fire the retuned pulses*
+  in the dialog, on by default. `retune_pulses` gives the dropped beams' keys zero
+  pulses, so the table (and the written CSV) keys every beam. The reference no longer
+  fires when no pulses were loaded: the retuned pulses do, or (unticked) the pulses stay.
 - The foil's GUI retune is the 3ω light's: it takes no unconverted light (`retune_pulses`
   throws if given), though core `retune_drive` adds each color's absorbed power to a
   foil's irradiance when the reference carries it.

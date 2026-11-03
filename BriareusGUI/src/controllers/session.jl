@@ -1225,7 +1225,8 @@ power limits cannot reach the level the retune reports the level they allow
 
 `on = :auto` holds the observed surface when the scenario has a radiation model and an
 observed surface, else the foil; `:observed` or `:foil` chooses. Returns the new `pulses`
-(by `by`, on the table's times and the steps, zero outside the steps), the `kind`, the `retune`, and the `reference`,
+(by `by`, on the table's times and the steps, zero outside the steps and for the keys of
+the dropped beams, so that every beam of `beams` has one), the `kind`, the `retune`, and the `reference`,
 the enabled beams on the reference pulses (`before`) and on the new ones (`after`): for
 a capsule, drive histories, whose wall temperature is that of the names `wall` in the
 scenario's target (a session passes its [`wall_names`](@ref)), else the capsule's; for
@@ -1314,11 +1315,15 @@ function retune_pulses(s::Scenario, beams::AbstractVector{<:Beam}, enabled::Abst
             reference, before, after = _face_series(reference), _face_series(before), _face_series(after)
         end
     end
-    # the new pulses on the table's times and the steps, off outside the steps
+    # the new pulses on the table's times and the steps, off outside the steps, and off
+    # for the keys of the dropped beams (so that the table keys every beam)
     at(g, τ) = (k = findfirst(==(τ), times); k === nothing ? 0.0 : r.power[g, k])
     ts = sort(unique([nodes; times]))
     out = Dict{Symbol,PulseShape}(Symbol(k) => PulseShape(ts, [at(g, τ) for τ in ts])
                                   for (g, k) in enumerate(r.keys))
+    for k in unique(key.(beams))
+        haskey(out, k) || (out[k] = PulseShape(ts, zeros(length(ts))))
+    end
     return (; pulses = out, kind, target, level, retune = r, reference, before, after)
 end
 
@@ -1397,7 +1402,7 @@ _kept_unconverted(u::NamedTuple, keep) = map(f -> f isa AbstractVector ? f[keep]
 
 """
     retune_to_reference!(sess::DesignSession, table, out; by = :quad, cap = 1.3, stay = 0.0,
-                         target = :reference, level = nothing, on = :auto)
+                         target = :reference, level = nothing, on = :auto, load = true)
 
 Retune the enabled beams to the reference shot whose pulses are the table `table`
 (`read_pulse_table`: a `time_ns` column and one per group, quad or beam), as
@@ -1405,7 +1410,9 @@ Retune the enabled beams to the reference shot whose pulses are the table `table
 radius and the active foil ([`active_foil`](@ref)), to the reference's drive shape
 (`target = :reference`) or a uniform drive (`:uniform`), at the reference's level or at
 `level` (TW/mm², `retune_pulses`'s), and write the new pulses to `out`
-(`write_pulse_table`), on a worker when `spawn[]` is set. The disabled beams are the ones
+(`write_pulse_table`), on a worker when `spawn[]` is set. With `load` the beams then fire
+the new pulses: they become the Time panel's (as [`load_pulses!`](@ref) of `out`, before
+the CSV's rounding), an edit that undo takes back. The disabled beams are the ones
 the shot loses. The retune holds the observed surface's drive (a capsule's modes, a flat
 face's flux) when the drive has a radiation model, else the active foil's irradiance;
 `on = :observed` or `:foil` chooses (`retune_pulses`'s `on`) when the design has both.
@@ -1422,7 +1429,7 @@ A drive with neither is refused with a status message.
 function retune_to_reference!(sess::DesignSession, table::AbstractString, out::AbstractString;
                               by::Symbol = :quad, cap::Real = 1.3, stay::Real = 0.0,
                               target::Symbol = :reference, level::Union{Nothing,Real} = nothing,
-                              on::Symbol = :auto)
+                              on::Symbol = :auto, load::Bool = true)
     dr = sess.drive
     dr.retune_running[] && return sess
     if !_drive_current(sess)
@@ -1455,7 +1462,7 @@ function retune_to_reference!(sess::DesignSession, table::AbstractString, out::A
         end
         v = res.value
         write_pulse_table(out, v.pulses)
-        # the time panel plots the retune (and fires the reference pulses when it had none)
+        # the time panel plots the retune
         bt = sess.beams
         nodes = sort(unique(reduce(vcat, [p.t for p in values(pulses)])))
         sess.time.retune[] = (; label = basename(table), v.kind, v.target, v.level,
@@ -1463,8 +1470,10 @@ function retune_to_reference!(sess::DesignSession, table::AbstractString, out::A
                               reference_by = _pulse_key(beams, pulses), nodes, beams, enabled,
                               table = (; cluster = copy(bt.cluster[]), colors = cluster_colors(bt)),
                               before = v.before, after = v.after, reference = v.reference)
-        sess.time.pulses[] === nothing && length(bt.beams[]) == length(beams) &&
-            (sess.time.pulses[] = _table_pulses(pulses, _pulse_key(beams, pulses), basename(table)))
+        # the beams fire the new pulses (the table's beams unchanged while the worker ran)
+        loaded = load && length(bt.beams[]) == length(beams) &&
+                 all(b -> haskey(v.pulses, Briareus._beam_key(by)(b)), bt.beams[])
+        loaded && _set_pulses!(sess, _table_pulses(v.pulses, by, basename(out)))
         set_chart!(sess.time, :retune)
         n = length(v.retune.keys)
         aim = v.target === :uniform ? "uniform, " : ""
@@ -1486,7 +1495,8 @@ function retune_to_reference!(sess::DesignSession, table::AbstractString, out::A
                                           v.kind === :face ? "face" : "foil spot", rms(v.before), rms(v.after),
                                           rms(v.reference), Δ(v.before), Δ(v.after), basename(out))
         end
-        sess.status[] = "wrote the retuned pulses to " * basename(out)
+        sess.status[] = "wrote the retuned pulses to " * basename(out) *
+                        (loaded ? "; the beams fire them (Undo takes them back)" : "")
     end)
     return sess
 end

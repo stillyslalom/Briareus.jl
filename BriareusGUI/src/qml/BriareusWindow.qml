@@ -684,6 +684,14 @@ ApplicationWindow {
                          : "The mean flux held at every step (TW/mm², ×10¹⁴ for W/cm²); empty: the reference's at each step. Where the power limit cannot reach it, the status gives the level reached"
                 }
                 Label { text: retuneDialog.kind === "capsule" ? "Tᵣ (eV)" : "TW/mm²"; visible: retuneLevel.visible }
+                Item { width: 1 }
+                CheckBox {
+                    id: retuneLoad
+                    text: "Fire the retuned pulses"
+                    checked: true
+                    Layout.columnSpan: 2
+                    tip: "The retuned pulses become the Time tab's pulses (as Pulse table… of the written file), so a drive history runs on them; Undo takes them back"
+                }
             }
             RowLayout {
                 Button {
@@ -692,7 +700,7 @@ ApplicationWindow {
                     onClicked: Julia.br_retune(retuneTable.text, retuneOut.text, retuneBy.currentValue,
                                                retuneCap.text, retuneStay.text,
                                                retuneOn.visible ? app.retuneOn[retuneDialog.choice] : "auto",
-                                               retuneTarget.currentValue, retuneLevel.text)
+                                               retuneTarget.currentValue, retuneLevel.text, retuneLoad.checked)
                     tip: app.driveCurrent ? "Retune in the background; the Time tab's Retune chart shows the result"
                                           : "Compute the drive first"
                 }

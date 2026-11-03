@@ -2625,7 +2625,7 @@ br_export_visrad_workspace(url) = _with_shell(sh -> export_visrad_workspace(sh.s
 br_export_results(url) = _with_shell(sh -> export_results(sh.sess, _url_to_path(String(url))))
 br_export_stl(url) = _with_shell(sh -> export_target_stl(sh.sess, _url_to_path(String(url))))
 # The retune's errors show in its dialog, where it was asked for.
-function br_retune(table, out, by, cap, stay, on, target, level)
+function br_retune(table, out, by, cap, stay, on, target, level, load)
     _with_shell() do sh
         try
             # what the retune holds (`auto`: the first the design offers), and the level in
@@ -2639,7 +2639,8 @@ function br_retune(table, out, by, cap, stay, on, target, level)
                                  cap = Controllers._parse_number(cap, "the power limit"; positive = true),
                                  stay = Controllers._parse_number(stay, "the weight on the reference powers";
                                                                   nonnegative = true),
-                                 target = _sym(target), level = _sym(target) === :uniform ? lv : nothing, on = which)
+                                 target = _sym(target), level = _sym(target) === :uniform ? lv : nothing, on = which,
+                                 load = Bool(load))
         catch err
             sh.sess.drive.retune_status[] = "retune failed: " * Controllers._errmsg(err)
         end

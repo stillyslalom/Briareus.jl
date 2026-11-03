@@ -306,7 +306,8 @@ var pages = [
                 "modes or a flat flux, the least nonuniformity the powers allow, at the reference's " +
                 "level or at a set level held at every time (a capsule's Tᵣ in eV, a face's or a " +
                 "foil spot's mean in TW/mm²); where the power limit cannot reach it, the level " +
-                "reached is the nearest the limit allows." }
+                "reached is the nearest the limit allows. Fire the retuned pulses makes them the " +
+                "Time tab's pulses (Undo takes them back)." }
     ] },
     { key: "time", title: "Time", items: [
         { key: "time.pulses", title: "Pulses",
