@@ -2454,14 +2454,14 @@ power.
 reference pulse from a total power (60 TW picket, 15 TW foot, 50 TW step, 420 TW peak)
 and a cone fraction (0.35 in the foot to 0.25 at the peak, an engineering example, not a
 shot), drive histories at 0.4 ns steps to 9.6 ns. Bundle 31 (Q31T, Q31B) dropped.
-- Bundle down on the reference pulses: ε₁ 2.02% averaged over the peak (7.6–9.4 ns),
-  5.2% at most (in the foot, where the dropped pair carries a larger share of the
-  inner-cone drive); Tᵣ −3.3 eV at the peak. ε₂ and ε₄ barely change (9.17 → 8.99%,
-  0.25 → 0.20%: the tutorial pointing is not tuned for P2).
-- Retuned per quad, each within 1.3× its cone's reference power per quad: ε₁ 0.023%
-  at the peak and 0.18% at most, ε₂, ε₄ and Tᵣ back to the reference's (ΔTᵣ +0.01 eV).
+- Bundle down on the reference pulses: ε₁ 2.70% averaged over the peak (7.6–9.4 ns),
+  5.17% at most (in the foot, where the dropped pair carries a larger share of the
+  inner-cone drive); Tᵣ −3.2 eV at the peak. ε₂ and ε₄ barely change (10.20 → 10.00%,
+  0.42 → 0.42%: the tutorial pointing is not tuned for P2).
+- Retuned per quad, each within 1.3× its cone's reference power per quad: ε₁ 0.031%
+  at the peak and 0.18% at most, ε₂, ε₄ and Tᵣ back to the reference's (ΔTᵣ +0.00 eV).
   The fit holds the albedos at the reference's; a drive history of the new pulses,
-  with albedos following the drive, reproduces the predicted c_lm/c₀₀ to 3e-5, so the
+  with albedos following the drive, reproduces the predicted c_lm/c₀₀ to 8.4e-5, so the
   linearization is not the limit.
 - The unconstrained retune is not unique and uses its bounds: 25 of 46 quads at 1.3×
   at the peak, some near zero. Weighting the departure from the reference powers
@@ -2469,10 +2469,10 @@ shot), drive histories at 0.4 ns steps to 9.6 ns. Bundle 31 (Q31T, Q31B) dropped
 
   | stay | ε₁ peak | ε₁ max | powers / reference at 8.8 ns | quads at the limit |
   |---|---|---|---|---|
-  | 0 | 0.023% | 0.18% | 0.00–1.30 | 25 |
-  | 1e-5 | 0.12% | 0.25% | 0.82–1.30 | 6 |
-  | 1e-4 | 0.34% | 0.45% | 0.95–1.30 | 2 |
-  | 1e-3 | 1.24% | 1.55% | 1.01–1.14 | 0 |
+  | 0 | 0.031% | 0.18% | 0.00–1.30 | 25 |
+  | 1e-5 | 0.13% | 0.26% | 0.78–1.30 | 7 |
+  | 1e-4 | 0.34% | 0.46% | 0.93–1.30 | 3 |
+  | 1e-3 | 1.31% | 1.57% | 1.01–1.19 | 0 |
 
   A dropped bundle's mode 1 is fixed mostly by the quads around it; a stay of order
   1e-4 keeps most of the correction with powers within a few percent of the reference
@@ -2480,8 +2480,10 @@ shot), drive histories at 0.4 ns steps to 9.6 ns. Bundle 31 (Q31T, Q31B) dropped
 - Limits: the per-quad caps here are relative to the reference powers, not NIF's
   per-quad energy or power capability (which depends on the pulse and the laser's
   state). The view factors and pointing are the reference's through the pulse.
-- The table above predates the held level (next section): it was measured with the
-  level as a soft penalty, which let `stay` lower the drive. Not remeasured since.
+- Remeasured 2026-11-02 with the level held (next section) and the active-set polish;
+  the 2026-10-17 table (soft level penalty) had ε₁ 0.023/0.12/0.34/1.24% at the peak.
+  The reference's own numbers also moved (bundle-down ε₁ 2.02% then) with changes to
+  the tutorial's pointing and pulse since; the trend in `stay` is unchanged.
 
 ## Retuning faces and foils; the held level (2026-11-02) *derived*
 

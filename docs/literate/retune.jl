@@ -112,7 +112,7 @@ tuned = drive_history(model, op_kept, τ -> with_pulses(kept, retuned.pulses, τ
 @printf("history against the prediction: c_lm/c₀₀ within %.1e\n",
         maximum(abs.(retuned.shape .- tuned.ylm[1:25, :] ./ tuned.ylm[1:1, :])))
 
-# The two agree to a few parts in 10⁵: the drive stays close enough to the reference's
+# The two agree to better than 1e-4: the drive stays close enough to the reference's
 # that the wall's albedos do not move. The retune takes the mode 1 out at every time
 # and gives back the drive the bundle took:
 
@@ -144,7 +144,7 @@ for (label, stay, r, h) in rows
 end
 
 # A small `stay` keeps most of the correction with only a few quads at their limit.
-# Larger ones give back mode 1 for powers within about 15% of the reference's. The
+# Larger ones give back mode 1 for powers within about 20% of the reference's. The
 # power histories of one design, as each quad's power over its reference power, for
 # the other quads of the dropped bundle's cluster (quads `Q3…`):
 
@@ -172,8 +172,8 @@ fig
 # ## What this checks
 #
 # - The per-time linear model is the drive history's own: the retuned pulses' history,
-#   with albedos that follow the drive, reproduces the predicted shape to a few parts
-#   in 10⁵ (the test suite checks 1e-4 on its own mesh).
+#   with albedos that follow the drive, reproduces the predicted shape to better than
+#   1e-4 (the test suite checks 1e-4 on its own mesh).
 # - Each quad stays within its limits and the drive level within 0.1% of the
 #   reference's at every time (test suite), and the dropped bundle's mode 1 falls by
 #   more than an order of magnitude.
