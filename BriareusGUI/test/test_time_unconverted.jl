@@ -226,18 +226,33 @@ end
     @test_throws ArgumentError set_prepulse!(tm, -1.0, 0.0)
     start_history!(sess)
     h2 = tm.history[]
-    @test !history_stale(sess) && h2.time == h1.time
+    @test !history_stale(sess)
+    # without a prepulse the history stepped at the pulses' firing times; with one, also
+    # through its window every 0.5 ns and one step after it (from its start at -4 ns)
+    src = tm.pulses[]
+    fires(τ) = sum(b -> b.power, Controllers._pulse_beams(src, beams, bt.enabled[], τ)) > 0
+    @test h1.time == filter(fires, src.times)
+    @test h2.time == sort(unique([collect(-4.0:0.5:2.5); 3.0; h1.time]))
 
     # the drive history: the core's with the same ratios and one prepulse for every beam
     pre = PulseShape([-4.0, 2.5], [P, P])
     uc = (; unconverted = (omega1 = 0.05, omega2 = 0.02), colors = nif_unconverted())
-    ref = _core_history(sess, h1.time; uc..., prepulse = (omega1 = pre,))
+    ref = _core_history(sess, h2.time; uc..., prepulse = (omega1 = pre,))
     @test all(_near.(_history_fields(h2.history), _history_fields(ref)))
     @test all(_near(h2.history.unconverted.delivered[c], ref.unconverted.delivered[c]) for c in (:omega1, :omega2))
+    # the steps before the main pulse: the prepulse's light alone, which gives a Tr
+    early = h2.time .< 0
+    @test count(early) == 8 && _near(h2.history.setup[early], ref.unconverted.delivered[:omega1][early]) &&
+          all(>(0), h2.Tr[early])
     # (more 1ω light inside the window than without the prepulse, the same after it)
-    d1, d2 = h1.history.unconverted.delivered[:omega1], ref.unconverted.delivered[:omega1]
+    d1 = h1.history.unconverted.delivered[:omega1]
+    d2 = ref.unconverted.delivered[:omega1][indexin(h1.time, h2.time)]
     inside = h1.time .<= 2.5
     @test any(inside) && all(d2[inside] .> d1[inside]) && _near(d2[.!inside], d1[.!inside])
+    # a prepulse that stops before the main pulse: a zero-power step after it, and the
+    # times in between where nothing fires, kept as gap steps
+    pg = (omega1 = fill(P, length(beams)), omega2 = zeros(length(beams)), window = (-4.0, -2.0))
+    @test Controllers._history_times(src, pg, beams, bt.enabled[]) == [collect(-4.0:0.5:-1.5); h1.time]
 
     # the irradiance histories and checks
     thr = DEFAULT_THRESHOLD

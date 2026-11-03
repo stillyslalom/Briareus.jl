@@ -139,7 +139,13 @@ beam (TW) as a function of time, one function for all beams or keyed by `by` (`:
 `:quad`, `:beam` or a function, as in [`with_pulses`](@ref)); a beam's power in color
 `c` at step τ is then `r_c(τ) · P₃ω(τ) + prepulse[c](τ)`, with `r_c` its fraction in
 color `c` and `P₃ω` the beam's power in `beams_at(τ)`. A prepulse alone takes zero fractions (`unconverted =
-(omega1 = 0.0, omega2 = 0.0)`). `unconverted_kw` passes
+(omega1 = 0.0, omega2 = 0.0)`). The history solves at `times` only, so a prepulse
+reaches the drive through the steps in its window: a step where only the prepulse fires
+(every 3ω power zero, before the main pulse at negative times as well) is solved with the
+prepulse's light alone, and its x-rays heat the wall, whose memory (below) carries them
+into the main pulse. Between a prepulse and the main pulse, a step where nothing fires
+lets the wall cool and re-emit what it stored; without one, the wall-energy integral
+runs across the gap at the interpolated temperature. `unconverted_kw` passes
 `unconverted_deposition`'s `offsets`, `lens_distance`, `coarse` and `resolution`. The
 light is linear in each beam's power, so the history deposits it once per set of beams
 whose powers are equal at every step and whose fractions and prepulses are the same
@@ -180,7 +186,8 @@ constant-T loss at the effective time
     t_eff = ∫₀ᵗ (T(t′)/T(t))^(a/b) dt′,
 
 integrated trapezoidally between the steps from each element's incident-flux
-temperature (constant T before `times[1]`). A wall heated in a low foot holds little
+temperature (constant T from `t = 0` to `times[1]`; none before a first step at or
+before `t = 0`, such as a prepulse's). A wall heated in a low foot holds little
 energy at the peak temperature, so its loss early in the peak is several times the
 constant-T value at `t` (`t_eff` ≈ the time since the rise), and the drive rises
 through a flat peak. `wall_history = false` evaluates the albedo at `t` (the behavior
@@ -203,7 +210,11 @@ radiation hydrodynamics of an ablating gold wall, `examples/late_time_wall.jl`).
 heat wave's own `t^b`. The effective albedo `1 − F/H` exceeds 1 where the wall gives
 back more than it takes; `solve` carries the release as an emission added to the
 element's source. While no element's temperature falls below its running maximum the
-history is the heating loss's bit for bit. `released` records the re-emitted power
+history is the heating loss's bit for bit. At a step where nothing fires, a heated
+wall's flux is its own re-emission: `solve`'s albedo iteration starts it at half its
+running maximum (an element without flux would otherwise take `reference_temperature`).
+A wall heated again after cooling takes back its surface layer's energy, but never more
+than the flux on it: its radiosity is kept ≥ 0 (albedo 0, no emission, *engineering*). `released` records the re-emitted power
 per component (`energy_budget` integrates it); `absorbed` is net of it. Research notes,
 "Wall re-emission and the capsule radius (2026-10-24)" (the closure) and "Capsule
 absorption, conversion and the ablating-wall release (2026-10-25)" (`release` 1.0).
@@ -386,7 +397,7 @@ Base.@nospecializeinfer function _drive_history(
         ucs = uc === nothing ? nothing : _with_colors(uc, ulight.colors)   # as `solve` takes it
         # the per-element state the albedos see: burnthrough times, and the wall-loss
         # history of the `lossy` elements (`_WallHistory`)
-        hist = Dict(e => (τ0 === nothing ? _WallHistory(0.0, τ) :
+        hist = Dict(e => (τ0 === nothing ? _WallHistory(0.0, max(τ, 0.0)) :
                           !wall_release ? _WallHistory(Iw[e] + Δ * ratew[e] / 2, Δ / 2) :
                           _WallHistory(Iw[e] + Δ * ratew[e] / 2, Δ / 2, Tmax[e],
                                        cooled[e] ? _deficit_sum(model(e), deficits, dtimes, e, τ) : 0.0,
@@ -457,7 +468,7 @@ Base.@nospecializeinfer function _drive_history(
             T = radiation_temperature(ForwardDiff.value(sol.H[e]))
             wall_release && (T = max(T, Tmax[e]))
             rwk[e] = _loss_rate(model(e), T)
-            Iwk[e] = τ0 === nothing ? τ * rwk[e] : hist[e].A + Δ * rwk[e] / 2
+            Iwk[e] = τ0 === nothing ? max(τ, 0.0) * rwk[e] : hist[e].A + Δ * rwk[e] / 2
         end
         return sol, Ik, tk, rk, Iwk, rwk, hist, ds, uc
     end

@@ -423,8 +423,11 @@ The bottom panel's tabs:
   or beam; disabled beams stay off), and *N221204 shape* with N221204's delivered pulse
   shape ([`n221204_pulse`](@ref)), each beam reaching its table power at the peak.
   *Run history* solves the drive at each time of the pulses on the drive's view factors
-  ([`drive_history`](@ref)), recording each synthetic diagnostic ticked under the
-  chart: the definitions on the diagnostic search path ([Diagnostic
+  ([`drive_history`](@ref)), and every 0.5 ns over the prepulse window (below), so the
+  prepulse's x-rays heat the wall and capsule and the wall's memory carries that heat
+  into the main pulse; a time between two that fire where nothing fires is solved as a
+  zero-power step, the wall re-emitting what it stored. Each synthetic diagnostic ticked under the
+  chart is recorded: the definitions on the diagnostic search path ([Diagnostic
   definitions](reference/diagnostics.md): the built-ins, then the folders of
   Diagnostics ▸ Folders…, kept for later sessions) and those saved with the session,
   each with a tooltip naming its files; NIF Dante 1 is ticked in a new session, and a

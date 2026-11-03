@@ -98,8 +98,9 @@ not proportional to the 3ω pulse (`drive_history`'s, `retune_drive`'s and
 ([`set_unconverted_ratio!`](@ref)): a beam's power in a color is `ratio · P₃ω(t) +
 prepulse(t)`. The drive histories, the retune and the irradiance checks
 ([`start_irradiance!`](@ref)) take it; the drive at the table's powers, which has no
-time, does not. A drive history solves at the pulses' times where they fire, so a
-prepulse before them reaches the irradiance histories only. There is no default level:
+time, does not. A drive history ([`start_history!`](@ref)) also steps through the
+prepulse window, so its Tr includes the prepulse's converted x-rays, and the wall's
+memory carries the heat they leave into the main pulse. There is no default level:
 the NIF User Guide (§4.4) puts the 1ω prepulse above 10⁸ W/cm² 3–5 ns before the nominal
 start of the pulse and gives no power (as a *derived* scale, 4.8e-4 TW of 1ω on a
 beamlet puts its 22 mm footprint at 10⁸ W/cm²; research notes, "Unconverted light over
@@ -166,6 +167,36 @@ function _light_kw(u, pp, beams; by = :beam)
     return (; kw..., prepulse = _prepulse_schedules(pp, beams, by), by)
 end
 
+# The spacing (ns) of a drive history's steps over the prepulse window. The prepulse is
+# flat, so its Tr moves only with the wall's loss; on a coarse hohlraum with a 5 ns 1ω
+# prepulse and the Lindl wall, 0.5 ns steps give the Tr at the window's end and early in
+# the main pulse within 2.4e-4 of 0.125 ns steps (*engineering*; research notes,
+# "The prepulse in the drive history").
+const PREPULSE_STEP = 0.5
+
+# The times of a drive history of the table's beams on the pulses `src` with the prepulse
+# `pp` (`_history_prepulse`, `nothing` for none): the pulses' times, plus the prepulse
+# window every `PREPULSE_STEP` (its ends included) and one step after it, kept from the
+# first time anything fires to the last. Times between where nothing fires stay as
+# zero-power steps: the wall cools through them and re-emits what it stored
+# (`drive_history`'s wall memory), between a prepulse and the main pulse or within a
+# pulse table.
+function _history_times(src, pp, beams, enabled)
+    fires(τ) = sum(b -> b.power, _pulse_beams(src, beams, enabled, τ)) > 0
+    ts = Float64.(src.times)
+    window = pp === nothing ? nothing : pp.window
+    if window !== nothing
+        a, b = window
+        n = max(1, ceil(Int, (b - a) / PREPULSE_STEP - 1e-9))
+        ts = sort!([ts; range(a, b; length = n + 1); b + PREPULSE_STEP])
+        # one step for times closer than 1 ps (the pulse's grid and the window's)
+        ts = ts[[i == 1 || ts[i] - ts[i-1] > 1e-3 for i in eachindex(ts)]]
+    end
+    on = [fires(τ) || (window !== nothing && window[1] <= τ <= window[2]) for τ in ts]
+    any(on) || return Float64[]
+    return ts[findfirst(on):findlast(on)]
+end
+
 """
     history_stale(sess::DesignSession) -> Bool
 
@@ -187,8 +218,11 @@ end
 
 Compute the drive history of the table's beams on the pulses ([`load_pulses!`](@ref),
 [`use_pulse_shape!`](@ref)) with the drive's deposition operator and radiation model
-(`drive_history`, quasi-static: one radiosity solve per time of the pulses where they
-fire), recording each step's element fields for the time cursor, each ticked diagnostic
+(`drive_history`, quasi-static: one radiosity solve per time of the pulses, plus the
+prepulse window every 0.5 ns and one step after it, from the first time any light fires
+to the last; a time in between where nothing fires is a zero-power step, through which
+the wall cools and re-emits stored energy), recording each step's element fields for
+the time cursor, each ticked diagnostic
 ([`set_diagnostic!`](@ref); `dante` for the soft x-ray power kind), and the energy split
 (`energy_budget`). The unconverted 1ω and 2ω light takes part as in the drive
 ([`set_unconverted_ratio!`](@ref), `drive_history`'s `unconverted`), with the prepulse
@@ -217,9 +251,10 @@ function start_history!(sess::DesignSession)
         (tm.status[] = "the drive history follows the observed surface: give a sphere (a capsule) or a flat " *
                        "face the role Observed"; return sess)
     beams, enabled = sess.beams.beams[], sess.beams.enabled[]
-    times = filter(τ -> sum(b -> b.power, _pulse_beams(src, beams, enabled, τ)) > 0, src.times)
+    pp = _history_prepulse(sess)
+    times = _history_times(src, pp, beams, enabled)
     isempty(times) && (tm.status[] = "the pulses fire no enabled beam"; return sess)
-    light = _light_kw(_history_unconverted(sess), _history_prepulse(sess), beams)
+    light = _light_kw(_history_unconverted(sess), pp, beams)
     key = _history_key(sess)
     g = (tm.generation[] += 1)
     tm.cancel[] = false

@@ -851,7 +851,8 @@ _albedo_split(m::LipClosure, t, T, closed) = _lip_split(m, t, T, closed)
 # current T and the effective time t_eff = ∫ r(T) dt / r(T): the time the wall would
 # have needed at today's T to hold today's energy. Over a step, with the trapezoidal
 # integral, t_eff = A / r(T) + B (A = I₀ + Δ r₀/2, B = Δ/2; at the first step A = 0,
-# B = t, i.e. constant T since t = 0).
+# B = max(t, 0), i.e. constant T since t = 0, and no history before a first step at or
+# before t = 0, a prepulse's).
 #
 # Re-emission under a falling drive (`drive_history(...; wall_release = true)`): the
 # loss above is the heating response and is evaluated at the element's highest
@@ -895,8 +896,12 @@ end
 # implicit part (this step's deficit, C Δ^(b−1) φ(T)) goes into the albedo and the rest,
 # independent of T, into E: the stiff short-time response of the hot surface layer
 # would make a T-dependent emission diverge in `solve`'s albedo iteration, whereas the
-# albedo 1 − C Δ^(b−1) φ(T)/H ∝ T^-0.7 iterates like Lindl's.
+# albedo 1 − C Δ^(b−1) φ(T)/H ∝ T^-0.7 iterates like Lindl's. The radiosity αH + E is
+# kept ≥ 0.
 function _wall_split(m::WallLossAlbedo, h::_WallHistory, T)
+    # a heated wall without flux (a step where nothing fires): started below its running
+    # maximum, where its stored energy re-emits; `solve`'s iteration then finds its T
+    (T === nothing || T <= 0) && h.Tmax > 0 && (T = h.Tmax / 2)
     Te = (T === nothing || T <= 0) ? m.reference_temperature : T
     if Te >= h.Tmax && h.G == 0 && h.D == 0
         α = albedo(m, _effective_time(m, h, T), T)
@@ -911,8 +916,13 @@ function _wall_split(m::WallLossAlbedo, h::_WallHistory, T)
     C = m.release * Lh * tc^(1 - b) / (b * _wall_potential(m, Th))
     φ = _wall_potential(m, Te)
     Fc = C * (h.G + (_wall_potential(m, Th) - φ - h.D) * K)
-    Te >= h.Tmax && return αh, Fc, Fc
-    return 1 - C * K * φ / (SIGMA_SB * Te^4), C * K * φ - (Lh - Fc), Fc
+    α, E = Te >= h.Tmax ? (αh, Fc) : (1 - C * K * φ / (SIGMA_SB * Te^4), C * K * φ - (Lh - Fc))
+    # a wall that cooled and is heated again takes its surface layer back (Fc < 0), but
+    # no more than falls on it: the radiosity αH + E stays ≥ 0 (then α = 0, E = 0, and
+    # the re-emitted flux is what makes the net flux into the wall H)
+    H = SIGMA_SB * Te^4
+    α * H + E >= 0 && return α, E, Fc
+    return zero(α), zero(α), Lh - H
 end
 
 _albedo_split(m::WallLossAlbedo, t, T, h::_WallHistory) =

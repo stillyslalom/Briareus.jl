@@ -434,6 +434,40 @@ tolerance; 1e-8 for the 3ω-only reference); a dropped bundle's retuned powers, 
 through `drive_history`, give the retune's predicted drive and shape (1e-15, 2e-16);
 zero fractions give the retune without unconverted light bit for bit.
 
+**The prepulse in the drive history (2026-11-02):** a drive history steps only at its
+`times`, so a prepulse before the 3ω pulse reached the GUI's irradiance checks only. The
+GUI's history now also steps through the prepulse window every 0.5 ns (ends included),
+one step 0.5 ns after it, and every time between the first and last firing time,
+zero-power ones included (`_history_times`): the wall cools through a gap and re-emits
+what it stored. 0.5 ns is *engineering*: on the coarse hohlraum (`nz = 8`, Lindl wall,
+48 quads, a flat 5 ns 1ω prepulse of 0.1 TW per beam on mock squares near the axis, main
+pulse from 0 in 0.2 ns steps), the Tr at the window's end and over the first 1 ns of the
+main pulse moves by ≤ 0.0053 eV (2.4e-4) from 0.125 ns steps (1 ns steps: 0.022 eV,
+1e-3). Three changes
+in the wall's memory, each exact where it did not apply before:
+- the first step's wall-energy integral is `max(t, 0) · r(T)` (constant T since t = 0);
+  a first step at negative time, a prepulse's, starts with no history (it was `t r(T)`,
+  negative);
+- at a step where nothing fires, a heated element without flux starts `solve`'s albedo
+  iteration at half its running maximum (it took `reference_temperature`, 250 eV, which
+  put the dark wall on the heating branch at 250 eV and gave negative fluxes);
+- a cooled wall heated again (the release's own step `Fc < 0`, the surface layer
+  reabsorbed) could take more than its incident flux, a negative radiosity (the capsule's
+  Tr went to 0 at the first main-pulse step after a 1.25 ns gap); the radiosity is kept
+  ≥ 0 (albedo 0, no emission, the re-emitted flux booked as `L(T_h) − H`).
+Checks (`test/unconverted_source.jl`, "the prepulse in the drive history"): a
+prepulse-only history at -3, -2, -1 ns (constant albedo 0.8, an intensity-dependent
+conversion, 1ω and 2ω prepulses on mock squares) against `solve` with each color's
+`unconverted_deposition` at that step's prepulse power: Tr equal to the last bit, H to
+3e-16. On the Lindl wall, a 1ω prepulse of 0.1 TW per beam from -3 to 0 ns (prepulse Tr
+17.0 → 20.3 eV) raises the main pulse's capsule Tr by 9.5 eV at 0.25 ns (8.9 → 18.3),
+falling every step to 0.96 eV at 3 ns (28.9 eV); the same steps with a zero prepulse give
+the history without one bit for bit. With the prepulse stopping at -1 ns, the zero-power
+steps at -0.5 and 0 ns read 18.9 and 17.6 eV (the wall's re-emission alone, from 19.1),
+and no radiosity is negative after the gap. GUI (`test_time_unconverted.jl`): without a
+prepulse the history's times are the pulses' firing times, unchanged; with one, the
+window's steps are added and match the core's history at the same times to 1e-12.
+
 **Not found:**
 - Garban-Labaune et al., PRL 48, 1018 (1982): CH absorption at 1.06/0.53/0.26 µm down
   to 1e10 W/cm²; only the abstract was available.

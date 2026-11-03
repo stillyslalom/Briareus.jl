@@ -401,3 +401,73 @@ end
     moved(τ) = [remake(b; power = pulse(τ), aim = b.aim + Vec3(0.0, 0.0, 0.1τ)) for b in quads]
     @test_throws ArgumentError drive_history(mh, oph, moved, times; unconverted = (omega1 = 0.05, omega2 = 0.0))
 end
+
+# The prepulse in a drive history's Tr: steps where only the prepulse fires, before the
+# main pulse and at negative times, against direct solves; the wall's memory carrying
+# the prepulse's heat into the main pulse.
+@testset "the prepulse in the drive history" begin
+    # mock squares near the axis put the light on the walls and capsule (NIF's miss the
+    # inside of a 2.9 mm hohlraum)
+    mock = [UnconvertedColor(:omega1; footprint = 2.0, edge = 0.0, focal_shift = 100.0, absorption = 0.88,
+                             conversion = 0.88),
+            UnconvertedColor(:omega2; footprint = 1.5, edge = 0.3, focal_shift = 60.0, absorption = 1.0, conversion = 0.9)]
+    quads = nif_quads(power = 8.0)
+    main = PulseShape([0.0, 0.5, 3.0], [0.0, 1.0, 1.0])
+    bat = τ -> with_pulses(quads, main, τ)
+    zero_light = (unconverted = (omega1 = 0.0, omega2 = 0.0), colors = mock)
+
+    # (a) a prepulse-only history (the 3ω pulse starts at 0) on a hohlraum with constant
+    # albedos and an intensity-dependent conversion: each step against `solve` with each
+    # color's `unconverted_deposition` of the beams at the step's prepulse power
+    tab = Conversion(intensities = (1e11, 1e15), efficiencies = (0.9, 0.5))
+    tc = hohlraum(nz = 8, nphi = 12, capsule_ntheta = 6, capsule_nphi = 8,
+                  wall = Material(:Au; albedo = 0.8, conversion = tab))
+    mc = RadiationModel(tc)
+    opc = DepositionOperator(tc, quads)
+    pre1, pre2 = PulseShape([-3.0, 0.0], [0.02, 0.05]), PulseShape([-3.0, 0.0], [0.01, 0.01])
+    ts = collect(-3.0:1.0:-1.0)
+    ha = drive_history(mc, opc, bat, ts; zero_light..., prepulse = (omega1 = pre1, omega2 = pre2), mband = nothing,
+                       record = sol -> sol)
+    obs = elements(tc, :capsule)
+    deva = map(enumerate(ts)) do (j, τ)
+        b = bat(τ)
+        d = deposit(opc, b)
+        u = Dict{Symbol,Any}(n => unconverted_deposition(tc, [remake(x; power = p(τ)) for x in b];
+                                                        ratio = (omega1 = 1.0, omega2 = 1.0), colors = mock)[n]
+                             for (n, p) in ((:omega1, pre1), (:omega2, pre2)))
+        u[:colors] = mock
+        ref = solve(mc, d; time = τ, unconverted = u)
+        Tr = radiation_temperature(legendre_moments(ref.H, tc, obs; lmax = 6)[1])
+        (abs(ha.Tr[j] - Tr) / Tr, maximum(abs.(ha.record[j].H .- ref.H)) / maximum(ref.H), sum(d.element))
+    end
+    @test maximum(first, deva) < 1e-12 && maximum(x -> x[2], deva) < 1e-12
+    @test all(x -> x[3] == 0, deva) && all(>(1), ha.Tr)    # no 3ω light, a prepulse Tr
+
+    # (b) the Lindl wall with its memory: a 1ω prepulse from -3 to 0 ns, then the main
+    # pulse alone. Its early Tr is above the history without the prepulse, by less and
+    # less; (c) without a prepulse, the main pulse's history is the history of the same
+    # steps with a zero prepulse, bit for bit
+    tw = hohlraum(nz = 8, nphi = 12, capsule_ntheta = 6, capsule_nphi = 8,
+                  wall = Material(:Au; albedo = WallLossAlbedo(), conversion = 0.8))
+    mw = RadiationModel(tw)
+    opw = DepositionOperator(tw, quads)
+    pre = PulseShape([-3.0, 0.0], [0.1, 0.1])
+    tpre, tmain = collect(-3.0:0.5:0.0), collect(0.25:0.25:3.0)
+    hp = drive_history(mw, opw, bat, [tpre; tmain]; zero_light..., prepulse = (omega1 = pre,), mband = nothing)
+    h0 = drive_history(mw, opw, bat, tmain; zero_light..., mband = nothing)
+    hz = drive_history(mw, opw, bat, tmain; zero_light..., prepulse = (omega1 = τ -> 0.0,), mband = nothing)
+    @test all(isequal(h0[f], hz[f]) for f in keys(h0))
+    ΔT = hp.Tr[length(tpre)+1:end] .- h0.Tr
+    @test all(>(0), ΔT) && issorted(ΔT; rev = true) && ΔT[end] < ΔT[1] / 2
+    @test all(>(0), hp.Tr[1:length(tpre)])
+    # a prepulse that stops at -1 ns, with zero-power steps at -0.5 and 0 ns: the wall
+    # cools through them and re-emits what it stored (its flux there is its own
+    # emission); heated again by the main pulse, no element's radiosity is negative
+    preg = PulseShape([-3.0, -1.0], [0.1, 0.1])
+    hg = drive_history(mw, opw, bat, [collect(-3.0:0.5:0.0); tmain]; zero_light..., prepulse = (omega1 = preg,),
+                       mband = nothing, record = sol -> minimum(sol.B) / maximum(sol.B))
+    gap = findall(τ -> -1 < τ <= 0, hg.time)
+    @test length(gap) == 2 && all(iszero, hg.delivered[gap]) && all(>(0), hg.released[:wall][gap]) &&
+          0 < hg.Tr[gap[2]] < hg.Tr[gap[1]] < hg.Tr[gap[1]-1]
+    @test all(>=(-1e-12), hg.record) && all(>(0), hg.Tr)    # (to rounding)
+end
