@@ -57,6 +57,8 @@ csv(dir, name, E, v) = (open(joinpath(dir, name), "w") do io
         v = dante1()
         @test (v.theta, v.phi, v.through, v.pixels, v.area) == (143.25, 274.0, :leh_bottom, 400, nothing)
         @test all(v.channels .=== dante1_responses())
+        # the multilayer channel's own 12 mm field (Rubery 2022), the others the view's
+        @test [c.field_of_view for c in v.channels] == [n == 2 ? 12.0 : nothing for n in 1:18]
         @test dante1(pixels = 50).pixels == 50
         @test dante1(channels = dante1_channels(model = :gaussian)).channels[1] isa DanteChannel
         # the built-ins report only values that are not public ("public definitions")
@@ -188,6 +190,7 @@ csv(dir, name, E, v) = (open(joinpath(dir, name), "w") do io
             put(dir, "cycle2.toml", "schema = 1\nid = \"y\"\nextends = \"x\"\n")
             put(dir, "kind.toml", "schema = 1\nid = \"k\"\nkind = \"spectrometer\"\n")
             put(dir, "csv.toml", defn("csv", chan("sensitivity_csv = \"missing.csv\"\n")))
+            put(dir, "fov.toml", defn("fov", chan("cathode = \"Cr\"\nfield_of_view_mm = 0\n")))
             issues = check_diagnostics(; paths = [dir])
             has(file, key, level) = any(i -> basename(i.file) == file && occursin(key, i.key) && i.level === level,
                                         issues)
@@ -201,6 +204,7 @@ csv(dir, name, E, v) = (open(joinpath(dir, name), "w") do io
             @test has("cycle.toml", "extends", :error) || has("cycle2.toml", "extends", :error)
             @test has("kind.toml", "kind", :error)
             @test has("csv.toml", "channel[1].sensitivity_csv", :error)
+            @test has("fov.toml", "channel[1].field_of_view_mm", :error)
             @test_throws ArgumentError diagnostic("typo"; paths = [dir])
             @test_throws ArgumentError diagnostic("absent"; paths = [dir])
         end

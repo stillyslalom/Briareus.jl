@@ -9801,6 +9801,32 @@ Tr ∝ (I / A cos θ)^¼ falls by the difference. Checks (`test/diagnostics.jl`,
 the errors for a port with angles, a port without a facility, an Omega port and an
 unknown port; angles in an extending file replace an inherited port.
 
+**A field of view per channel.** A channel's `field_of_view_mm` (`DanteResponse(…;
+field_of_view)`) replaces the view's for that channel's signal: a disk of that diameter
+about the view's center, or, in a view through a hole, the hole's square cut to that
+disk. One footprint is cast per distinct field and target; channels on the view's field
+take the view's footprint and signals unchanged. The intensity, Tr and the in-group
+spectral shape (a Planckian at the view's `Tr_open`) stay the view's. Applied: Dante 1's
+channel 2, the 2–4 keV multilayer, 12 mm (Rubery et al. 2022, OSTI 1959490, **H**; the
+one public per-channel field) in `nif_dante1_2021`, so in `nif_dante1` and `dante1()`.
+`dante2()` and `sentinel()` take Dante 1's channels without it (their fields are not
+public). Change: none on a hohlraum of N221204's size (10.1 × 5.75 mm, LEH 3.2 mm; a
+blackbody cavity and a driven radiosity solution, 42 groups): its extent across Dante
+1's line of sight is under 6 mm, so the 12 mm and 60 mm fields cast the same rays
+(`DanteView`'s rays cover the field cut to the target's extent) and channel 2 reads the
+same voltage bit for bit. A channel's field changes a signal only on a target wider than
+the field (a halfraum pair, a package off TCC). Also: `sentinel(:equatorial_78)` moves
+to the table's φ 78.75° (P90-78) from 78°.
+
+Checks (`test/cavities.jl`, two hohlraums 12 mm apart as blackbodies, 400 pixels):
+a channel given the view's own 60 mm field reads bit for bit what it reads without one
+(every output, the unfold included); channel 1 with 8 mm about one cavity, in the 60 mm
+view, reads exactly 0 from the other while the other channels read it, and matches the
+8 mm view's channel 1 to 1.5e-6 (the same rays; the in-group shape is each view's
+Tr_open); the other channels equal the 60 mm view's bit for bit; through one hole, a
+60 mm channel field changes nothing and an 8 mm field about TCC (the hole 6 mm off it)
+reads 0.
+
 ## Public diagnostic definitions and the time-dependent Tr area (2026-10-29) *derived*
 
 Built-in definitions in `data/diagnostics` (docs page "Diagnostic definitions"), each

@@ -50,6 +50,9 @@ filters = [{ material = "polyimide", thickness_um = 47 }]
 mirror = { kind = "mlm", angle_deg = 1.9 }
 cathode = "Al"
 solid_angle_sr = 1.9e-7
+# the multilayer channel's own field, 12 mm in diameter at TCC (Rubery et al. 2022, OSTI
+# 1959490; research notes, "Dante-family hardware and geometry", H)
+field_of_view_mm = 12
 
 [[channel]]
 number = 3

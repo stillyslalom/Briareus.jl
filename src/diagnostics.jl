@@ -702,7 +702,8 @@ const _CHANNEL_SPEC = Dict(
     "mirror" => DiagnosticField(_MIRROR_SPEC),
     "cathode" => DiagnosticField(String; doc = "XRD cathode: Al, Cr or Ni"),
     "sensitivity_csv" => DiagnosticField(String; doc = "measured detector sensitivity (energy eV, V/GW)"),
-    "response_csv" => DiagnosticField(String; doc = "measured whole-channel response (energy eV, V/GW)"))
+    "response_csv" => DiagnosticField(String; doc = "measured whole-channel response (energy eV, V/GW)"),
+    "field_of_view_mm" => DiagnosticField(Real; doc = "the channel's own collimated field, in place of the view's"))
 
 # a line of sight: a NIF diagnostic port by name, or its angles
 const _LOS_SPEC = Dict(
@@ -795,11 +796,13 @@ function _channel(c::AbstractDict)
     key(k) = "channel[$n].$k"
     Ω = Float64(c["solid_angle_sr"])
     E0 = get(c, "energy_eV", NaN)
+    fov = haskey(c, "field_of_view_mm") ? Float64(c["field_of_view_mm"]) : nothing
+    fov === nothing || fov > 0 || throw(_KeyedError(key("field_of_view_mm"), "a positive diameter, mm"))
     if haskey(c, "response_csv")
         for k in ("filters", "grid", "mirror", "cathode", "sensitivity_csv")
             haskey(c, k) && throw(_KeyedError(key(k), "a channel with response_csv takes no $k"))
         end
-        return _peak_energy(DanteResponse(n, E0; solid_angle = Ω,
+        return _peak_energy(DanteResponse(n, E0; solid_angle = Ω, field_of_view = fov,
                                           response = _curve(c["response_csv"], key("response_csv"); extrapolate = :zero)))
     end
     filters, tables = _filters(get(c, "filters", Any[]), k -> key("filters" * k))
@@ -815,13 +818,14 @@ function _channel(c::AbstractDict)
     end
     g = Float64(get(c, "grid", 1.0))
     0 < g <= 1 || throw(_KeyedError(key("grid"), "an open fraction in (0, 1]"))
-    return _peak_energy(DanteResponse(n, E0; filters, grid = g, mirror, cathode, solid_angle = Ω, tables))
+    return _peak_energy(DanteResponse(n, E0; filters, grid = g, mirror, cathode, solid_angle = Ω, tables,
+                                      field_of_view = fov))
 end
 
 # a channel without a nominal energy takes its response's peak
 _peak_energy(c::DanteResponse) =
     isnan(c.energy) ? DanteResponse(c.number, c.E[argmax(c.R)], c.filters, c.tables, c.grid, c.mirror, c.cathode,
-                                    c.response, c.solid_angle, c.E, c.R) : c
+                                    c.response, c.solid_angle, c.E, c.R, c.field_of_view) : c
 
 # channels built once per content (the responses take ~0.1 s per channel set)
 const _CHANNEL_CACHE = Dict{UInt,Vector{DanteResponse}}()

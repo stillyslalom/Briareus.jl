@@ -82,6 +82,31 @@ using Briareus: RadiationSolution
           (fv.theta, fv.phi) == (143.25, 274.0) && length(fv.channels) == 18
     r = dante(fv, bb(lit(:a) .+ lit(:b)))
     @test isnan(r.Tr) && isapprox(r.intensity, hole(:a) + hole(:b); rtol = 5e-3)   # 1.8e-3 (400 pixels)
+
+    # a field of view per channel: channel 1 with its own field, the others the view's.
+    # The blackbodies as spectra (every element's groups its Planck fractions).
+    E = spectral_edges()
+    spec(B) = (G = length(E) - 1; Z = zeros(n, G);
+               SpectralSolution(bb(B), E, Z, B .* planck_fractions(T0, E)', Z, Z, fill(T0, n), z, zeros(G), false))
+    sa, sb, sab = spec(lit(:a)), spec(lit(:b)), spec(lit(:a) .+ lit(:b))
+    chans(f) = [c.number == 1 ? Briareus._with_field(c, f) : Briareus._with_field(c, nothing) for c in dante1_channels()]
+    chview(f; kw...) = DanteView(d1...; through = :a_leh_bottom, channels = chans(f), kw...)
+    # a channel given the view's own field reads bit for bit what it reads without one
+    same = dante(chview(60.0; field_of_view = 60.0), sab)
+    @test all(k -> isequal(same[k], dante(chview(nothing; field_of_view = 60.0), sab)[k]),
+              (:intensity, :Tr, :spectrum, :channels, :color_temperature, :Tr_unfold))
+    # 8 mm about a in the 60 mm field: channel 1 sees nothing of b and reads, from a, the
+    # 8 mm view's own channel 1 (the same rays; the in-group spectral shape is each view's
+    # Tr_open, 1.5e-6 apart here); the other channels see both cavities
+    eight(s) = dante(chview(8.0; field_of_view = 60.0, center = :a), s).channels
+    @test eight(sb)[1] == 0 && all(>(0), eight(sb)[2:end])
+    @test eight(sa)[1] ≈ dante(chview(nothing; field_of_view = 8.0, center = :a), sa).channels[1] rtol = 1e-4
+    @test eight(sa)[1] > 0
+    @test eight(sab)[2:end] == dante(chview(nothing; field_of_view = 60.0, center = :a), sab).channels[2:end]
+    # through a's hole alone: a channel field that holds the hole changes nothing; 8 mm
+    # about TCC (a's hole lies 6 mm off it) sees none of it
+    hv(f) = dante(chview(f; center = zero(Briareus.Vec3)), sa).channels
+    @test hv(60.0) == hv(nothing) && hv(8.0)[1] == 0 && hv(8.0)[2:end] == hv(nothing)[2:end]
 end
 
 @testset "Several cavities: per-cavity balancing" begin

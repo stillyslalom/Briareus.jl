@@ -123,8 +123,8 @@ end
 
 """
     DanteResponse(number, energy; filters = [], grid = 1, mirror = nothing, cathode,
-                  solid_angle, tables = [])
-    DanteResponse(number, energy; solid_angle, response::TabulatedCurve)
+                  solid_angle, tables = [], field_of_view = nothing)
+    DanteResponse(number, energy; solid_angle, response::TabulatedCurve, field_of_view = nothing)
 
 One Dante channel built from its hardware: `filters` (`material => thickness` pairs,
 thickness in mm, or `material => (thickness, density)`; transmission from Henke's
@@ -139,6 +139,10 @@ second form takes a measured whole-channel `response` (V/GW). `energy` (eV) is t
 nominal band energy and `solid_angle` (sr) the channel's. Fields `E` (eV) and `R` (V/GW)
 tabulate the response on 50 eV – 30 keV; a spectrum `dI/dE` (GW/sr/eV) gives the voltage
 `V = Ω ∫ (dI/dE) R dE` (Harris et al., RSI 92, 033505, 2021, eq. 1).
+
+`field_of_view` (mm) is the channel's own collimated field, the diameter of the disk it
+sees at the view's center, in place of the view's ([`DanteView`](@ref)); `nothing`
+(default) takes the view's.
 """
 struct DanteResponse <: AbstractDanteChannel
     number::Int
@@ -152,20 +156,24 @@ struct DanteResponse <: AbstractDanteChannel
     solid_angle::Float64
     E::Vector{Float64}
     R::Vector{Float64}
+    field_of_view::Union{Nothing,Float64}
 end
 
 _filter_spec(v::Real) = Float64(v)
 _filter_spec(v::Tuple) = (Float64(v[1]), Float64(v[2]))
 
 function DanteResponse(number::Integer, energy::Real; filters = (), grid::Real = 1.0, mirror = nothing,
-                       cathode = nothing, solid_angle::Real, tables = (), response = nothing)
+                       cathode = nothing, solid_angle::Real, tables = (), response = nothing,
+                       field_of_view = nothing)
     E = _DANTE_GRID
+    fov = field_of_view === nothing ? nothing : Float64(field_of_view)
+    fov === nothing || fov > 0 || throw(ArgumentError("field_of_view must be positive"))
     if response !== nothing
         response isa TabulatedCurve || throw(ArgumentError("response must be a TabulatedCurve"))
         (isempty(filters) && isempty(tables) && grid == 1 && mirror === nothing && cathode === nothing) ||
             throw(ArgumentError("a measured response replaces filters, grid, mirror and cathode"))
         return DanteResponse(Int(number), Float64(energy), [], TabulatedCurve[], 1.0, nothing, response,
-                             response, Float64(solid_angle), E, [response(e) for e in E])
+                             response, Float64(solid_angle), E, [response(e) for e in E], fov)
     end
     cathode === nothing && throw(ArgumentError("a cathode (an XRD symbol or a TabulatedCurve) is required"))
     f = Pair{Symbol,Union{Float64,Tuple{Float64,Float64}}}[k => _filter_spec(v) for (k, v) in filters]
@@ -182,11 +190,18 @@ function DanteResponse(number::Integer, energy::Real; filters = (), grid::Real =
         grid * t * _mirror_reflectivity(m, e) * _sensitivity(cathode, e)
     end
     return DanteResponse(Int(number), Float64(energy), f, tb, Float64(grid), m, cathode, nothing,
-                         Float64(solid_angle), E, R)
+                         Float64(solid_angle), E, R, fov)
 end
 
 _sensitivity(c::Symbol, E) = xrd_sensitivity(c, E)
 _sensitivity(c::TabulatedCurve, E) = c(E)
+
+# a channel with field of view `f` (mm, or `nothing` for the view's); other channel
+# types have none
+_with_field(c::DanteResponse, f) =
+    DanteResponse(c.number, c.energy, c.filters, c.tables, c.grid, c.mirror, c.cathode, c.response,
+                  c.solid_angle, c.E, c.R, f === nothing ? nothing : Float64(f))
+_with_field(c, f) = c
 
 _show_filter(k, v::Float64) = "$(k) $(round(1000v; digits = 3)) µm"
 _show_filter(k, v::Tuple) = "$(k) $(round(1000v[1]; digits = 3)) µm ($(v[2]) g/cm³)"
@@ -194,13 +209,14 @@ _show_part(x::TabulatedCurve) = isempty(x.file) ? "measured" : basename(x.file)
 
 function Base.show(io::IO, c::DanteResponse)
     print(io, "DanteResponse(", c.number, ", ", c.energy, " eV, ")
-    c.response === nothing || return print(io, "measured response ", _show_part(c.response), ")")
+    fov = c.field_of_view === nothing ? "" : ", field of view $(c.field_of_view) mm"
+    c.response === nothing || return print(io, "measured response ", _show_part(c.response), fov, ")")
     parts = [[_show_filter(k, v) for (k, v) in c.filters]; ["filter " * _show_part(t) for t in c.tables]]
     print(io, join(parts, " + "), c.grid < 1 ? " + $(round(100c.grid; digits = 1)) % grid" : "",
           c.mirror === nothing ? "" : c.mirror isa TabulatedCurve ? ", mirror " * _show_part(c.mirror) :
           c.mirror isa GrazingMirror ? ", " * sprint(show, c.mirror) :
           ", $(c.mirror[1]) $(c.mirror[2])°",
-          ", ", c.cathode isa Symbol ? "$(c.cathode) XRD" : "detector " * _show_part(c.cathode), ")")
+          ", ", c.cathode isa Symbol ? "$(c.cathode) XRD" : "detector " * _show_part(c.cathode), fov, ")")
 end
 
 # response at E (linear interpolation on the grid, 0 outside it)

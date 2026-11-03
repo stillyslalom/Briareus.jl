@@ -48,9 +48,10 @@ lands; the docstrings and research notes then hold what was built.
 - Named ports (2026-11-03): a line of sight may name a NIF diagnostic port
   (`port = "P143-274"`, `NIF_DIAGNOSTIC_PORTS`, the User Guide's Table 5-1); the NIF
   built-ins do, and Dante 1 moved from the papers' θ 143° to the table's 143.25°.
-- Not yet: a field of view
-  per channel (the multilayer channel's 12 mm; Rubery 2022 finds it covers every NIF
-  hohlraum), time response, uncertainty, the recording modes other than `history`,
+- A field of view per channel (2026-11-03): a channel's `field_of_view_mm` replaces the
+  view's for its signal (one footprint per distinct field); Dante 1's multilayer channel
+  has its 12 mm (Rubery 2022, which finds it covers every NIF hohlraum).
+- Not yet: time response, uncertainty, the recording modes other than `history`,
   channel voltages and the unfold in the GUI (its histories are gray: they need a
   spectral history). `dante2()` and `sentinel(dim)` construct views in code with Dante
   1's channels.
@@ -121,7 +122,8 @@ lands; the docstrings and research notes then hold what was built.
   (`nif_dante1_2021`, `nif_dante1_N170924`, …) with `valid_from` / `shots`, and `nif_dante1`
   extends the latest. A session records which one it used.
 - **Field of view per channel.** The instrument's field of view (NIF: ±30 mm, the 2004
-  design) is the default and a channel may narrow it (the multilayer channel: 12 mm).
+  design) is the default and a channel may narrow it (the multilayer channel: 12 mm;
+  done 2026-11-03).
   With a 60 mm field the view is limited by occlusion and the target's extent.
 - **Ports from the facility table.** The line of sight is a port name resolved in the
   facility's port table (P143-274 is θ 143.25° there; Rubery's 37° is θ 143°): adopted

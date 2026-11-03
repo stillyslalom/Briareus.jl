@@ -64,6 +64,13 @@ its open fraction (`sol.transmission`). What the rays cover:
   every surface of a target that faces it: the wall seen through windows, packages,
   shields.
 
+A channel with its own `field_of_view` ([`DanteResponse`](@ref)) records what that field
+sees in place of the view's: a disk of its diameter about `center` (in a view through a
+hole, the hole's square cut to that disk). Its signal comes from its own footprint, cast
+once per distinct field and target, so channels that share the view's field cost
+nothing more and read bit for bit what they read without a field of their own. The
+intensity, `Tr` and the visible areas are the view's.
+
 The brightness temperature is
 
     T = (π I / (σ A cos θ_v))^¼,
@@ -141,18 +148,21 @@ dante2(; kwargs...) = DanteView(64, 350; through = :leh_top, kwargs...)
 The NIF Sentinel filtered-XRD array (Kemp et al., RSI 2020, LLNL-JRNL-813698), a
 DIM-mounted broadband spectrometer that can be fielded on the polar DIM (`:polar`,
 000-000: θ 0°, straight down the hohlraum axis through the upper entrance hole) or on
-either equatorial DIM (`:equatorial_78`, 090-078; `:equatorial_315`, 090-315), where a
+either equatorial DIM (`:equatorial_78`, P90-78 at φ 78.75°; `:equatorial_315`, P90-315;
+NIF User Guide 2024-09, Table 5-1), where a
 hohlraum is seen only through a diagnostic window, so `through` must name it. Its own
 filter set (16 Al, Ni and Cr MiniXRDs behind Dante filters) is not tabulated here: the
-channels default to Dante 1's (`dante1_channels()`, *assumed*), to be replaced by the
-shot's configuration.
+channels default to Dante 1's (`dante1_channels()`, *assumed*), without Dante 1's
+per-channel fields of view (Sentinel's are not public), to be replaced by the shot's
+configuration.
 """
-function sentinel(dim::Symbol = :polar; through = nothing, kwargs...)
-    dim === :polar && return DanteView(0, 0; through = something(through, :leh_top), kwargs...)
-    φ = dim === :equatorial_78 ? 78 : dim === :equatorial_315 ? 315 :
+function sentinel(dim::Symbol = :polar; through = nothing, channels = _with_field.(dante1_channels(), nothing),
+                  kwargs...)
+    dim === :polar && return DanteView(0, 0; through = something(through, :leh_top), channels, kwargs...)
+    φ = dim === :equatorial_78 ? 78.75 : dim === :equatorial_315 ? 315 :
         throw(ArgumentError("dim must be :polar, :equatorial_78 or :equatorial_315"))
     through === nothing && throw(ArgumentError("an equatorial view needs `through` (a window)"))
-    return DanteView(90, φ; through, kwargs...)
+    return DanteView(90, φ; through, channels, kwargs...)
 end
 
 function Base.show(io::IO, v::DanteView)
@@ -181,10 +191,16 @@ function _dante_hole(t::Target, v::DanteView)
 end
 
 # Visible projected area (mm², normal to the line of sight) per (element, lip element
-# the ray crossed or 0), the reference hole's area and the cosine of the viewing angle.
-function _dante_footprint(t::Target, v::DanteView)
+# the ray crossed or 0), the reference hole's area and the cosine of the viewing angle,
+# over the field `fov` (mm; the view's, or a channel's own): a disk about the view's
+# center, or with no field of view of the view's own the hole's square, cut to `fov`'s
+# disk when a channel gives one.
+function _dante_footprint(t::Target, v::DanteView, fov = v.field_of_view)
     h = _dante_hole(t, v)
     d = v.direction
+    cf = fov === nothing ? zero(Vec3) : v.center isa Symbol ? part_centroid(t, v.center) : v.center
+    # a channel's field in a view through a hole: the hole's rays within that disk
+    Rc2 = v.field_of_view === nothing && fov !== nothing ? (fov / 2)^2 : Inf
     if v.field_of_view === nothing
         c = h.centroid
         pts = [p for e in h.hole for k in t.elem_tris[e]
@@ -192,14 +208,14 @@ function _dante_footprint(t::Target, v::DanteView)
         half = 1.05 * maximum(norm(p - c) for p in pts)
         R2 = Inf
     else
-        c = v.center isa Symbol ? part_centroid(t, v.center) : v.center
+        c = cf
         # the target's extent across the line of sight about c
         ext = 0.0
         for k in eachindex(t.tri_v0), p in (t.tri_v0[k], t.tri_v0[k] + t.tri_e1[k], t.tri_v0[k] + t.tri_e2[k])
             q = p - c
             ext = max(ext, norm(q - dot(q, d) * d))
         end
-        R = v.field_of_view / 2
+        R = fov / 2
         half = min(R, 1.0001 * ext)
         R2 = R^2
     end
@@ -217,6 +233,10 @@ function _dante_footprint(t::Target, v::DanteView)
     for i in 1:np, j in 1:np
         x, y = -half + (i - 0.5) * px, -half + (j - 0.5) * px
         x^2 + y^2 > R2 && continue
+        if Rc2 < Inf
+            q = c + x * r + y * u - cf
+            sum(abs2, q - dot(q, d) * d) > Rc2 && continue
+        end
         o = c + x * r + y * u + far * d
         th, tri = closest_hit(t.bvh, o, ray)
         tri == 0 && continue
@@ -252,7 +272,16 @@ function _dante_footprint(t::Target, v::DanteView)
             lip_area = t.elem_area[lip_elems], ref_area = A, ref_cos = cref)
 end
 
-_footprint(v::DanteView, t::Target) = lock(() -> get!(() -> _dante_footprint(t, v), v.cache, t), v.lock)
+# the footprint over field `fov` (the view's by default), cast once per target and field
+_footprint(v::DanteView, t::Target, fov = v.field_of_view) =
+    lock(v.lock) do
+        byfield = get!(() -> Dict{Union{Nothing,Float64},Any}(), v.cache, t)
+        get!(() -> _dante_footprint(t, v, fov), byfield, fov)
+    end
+
+# the field a channel records: its own, else the view's
+_channel_field(v::DanteView, c) =
+    c isa DanteResponse && c.field_of_view !== nothing ? c.field_of_view : v.field_of_view
 
 # Power per steradian toward the detector from radiosity `B` (TW/mm²).
 _los_intensity(fp, B, τ) =
@@ -289,7 +318,8 @@ the hole that the view samples (equal to `Tr` without lips; `NaN` without `throu
 Without a reference area `Tr` is `NaN`, and the in-group spectrum and the unfold take
 the visible projected area instead (a brightness temperature over what is seen). For a
 `SpectralSolution` also `spectrum` (TW/sr per group), `edges`, `channels` (each
-channel's signal; the open-ended top group contributes nothing), `color_temperature`
+channel's signal, over its own field of view where it has one; the open-ended top group
+contributes nothing), `color_temperature`
 (eV, the Planckian whose channel signals best match, in log, those of the channels
 below 1.5 keV, as Dante's unfold starts) and `mband_fraction` (of the intensity above
 1.8 keV, `NaN` without that edge).
@@ -339,6 +369,17 @@ function dante(v::DanteView, s::SpectralSolution; unfold = :traditional, kwargs.
     hw = eltype(v.channels) <: DanteResponse
     W = hw ? _channel_matrix(v.channels, s.edges; T = Tshape) : _channel_matrix(v.channels, s.edges)
     signals = hw ? W * (1e3 .* spectrum) : W * spectrum
+    # channels with a field of their own: each distinct field's footprint and spectrum
+    fields = [_channel_field(v, c) for c in v.channels]
+    for f in unique(fields)
+        isequal(f, v.field_of_view) && continue
+        fpf = _footprint(v, sol.model.target, f)
+        sf = [_los_intensity(fpf, view(s.B, :, g), sol.transmission) for g in 1:G]
+        sig = hw ? W * (1e3 .* sf) : W * sf
+        for c in eachindex(signals)
+            isequal(fields[c], f) && (signals[c] = sig[c])
+        end
+    end
     k = findfirst(==(1800.0), s.edges)
     mband_fraction = k === nothing ? NaN : sum(spectrum[k:end]) / I
     base = (; intensity = I, Tr = radiation_temperature(π * I / (A * c)), area = A,
