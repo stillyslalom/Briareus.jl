@@ -248,7 +248,7 @@ Items 10–15 follow the 2026-10-22 literature review against Kritcher et al. 20
       pieces (only hohlraum-part pieces hold their own); an observed washer, cylinder,
       cone or flat CAD face; per-cavity albedo and energy series; a Dante field centered
       on a part from the GUI; VisRad primitive pieces have no frames.
-    - Triad: a hover highlight, planar (two-axis) drags, several selected parts.
+    - Triad: several selected parts.
     - Tree: drag-and-drop into assemblies, duplicate, a bare hohlraum part in Add part,
       expanded nodes saved; Remove deletes the primary selection only.
     - The design docs keep built phases against their own rule (remove each phase once it

@@ -47,8 +47,9 @@ unconverted light), the `colorbar`, the triad scene, the beam `paths` last drawn
 each triangle is drawn (`drawn`: 0 not, 1 opaque, 2 see-through) and the cut (`cut`), for
 picking, and a `dirty` flag the shell reads to request a redraw. The placement triad
 on the selected part (`place_arrows`, `place_rings`; a drag's preview in `place_ghost`,
-`place_beams` and `place_label`) snaps its arrows to `triad_step` (mm, the Move-along
-row's step, which the shell sets); see [`TriadDrag`](@ref).
+`place_beams` and `place_label`) snaps its arrows and squares to `triad_step` (mm, the
+Move-along row's step, which the shell sets) and highlights the handle under the pointer
+(`triad_hover`); see [`TriadDrag`](@ref).
 """
 struct SceneCanvas
     fig::Figure
@@ -87,6 +88,7 @@ struct SceneCanvas
     triad_step::Base.RefValue{Float64}           # the arrows' snap step (the Move-along row's, mm)
     triad_at::Base.RefValue{Any}                 # (part index, name, frame) of the triad shown
     placing::Base.RefValue{Any}                  # the `TriadDrag` in progress, or nothing
+    triad_hover::Base.RefValue{Any}              # the triad handle under the pointer, or nothing
 end
 
 """
@@ -129,10 +131,10 @@ function scene_canvas(sess::DesignSession)
     # the placement triad and a drag's preview (thin, over the geometry)
     place_ghost = mesh!(sc, tri...; color = _TRIAD_PREVIEW, transparency = true, visible = false)
     place_beams = linesegments!(sc, _NOSEG3; color = _TRIAD_PREVIEW, linewidth = 1.5, visible = false)
-    place_rings = linesegments!(sc, _NOSEG3; color = [NAN_COLOR, NAN_COLOR], linewidth = 1.5, visible = false,
-                                overdraw = true)
-    place_arrows = linesegments!(sc, _NOSEG3; color = [NAN_COLOR, NAN_COLOR], linewidth = 2.5, visible = false,
-                                 overdraw = true)
+    place_rings = linesegments!(sc, _NOSEG3; color = [NAN_COLOR, NAN_COLOR], linewidth = fill(_TRIAD_RING_WIDTH, 2),
+                                visible = false, overdraw = true)
+    place_arrows = linesegments!(sc, _NOSEG3; color = [NAN_COLOR, NAN_COLOR], linewidth = fill(_TRIAD_ARROW_WIDTH, 2),
+                                 visible = false, overdraw = true)
     place_label = text!(sc, _NOPOINT3; text = [""], fontsize = 13, markerspace = :pixel,
                         align = (:left, :bottom), offset = (4, 2), visible = false, overdraw = true)
     cb = Colorbar(fig[1, 2]; colormap = [NAN_COLOR, NAN_COLOR], limits = (0.0, 1.0), label = " ",
@@ -144,7 +146,7 @@ function scene_canvas(sess::DesignSession)
                     Ref(true), Ref(0), ghost, translucent, wire, sections, uc_volumes, uc_lines,
                     Ref(cut_region(sess.view)), sweep_ghost, frame_axes, frame_names,
                     place_arrows, place_rings, place_ghost, place_beams, place_label, Ref(0.1),
-                    Ref{Any}(nothing), Ref{Any}(nothing))
+                    Ref{Any}(nothing), Ref{Any}(nothing), Ref{Any}(nothing))
     cam.pick = (o, d) -> min(_pick_surface(c, sess, o, d)[1], _pick_ghost(sess, o, d)[1])
     cam.pivot = () -> selection_center(sess)
     cam.on_click = (o, d, px) -> _click!(c, sess, o, d, px)
@@ -153,6 +155,7 @@ function scene_canvas(sess::DesignSession)
     cam.handle_move = px -> _triad_move!(c, sess, px)
     cam.handle_release = px -> _triad_release!(c, sess, px)
     cam.handle_cancel = () -> _triad_cancel!(c, sess)
+    cam.hover = px -> _triad_hover!(c, sess, px)
     # (the triad keeps its size on screen)
     # (the session keeps the pose, without notifying: it is saved, not an edit)
     cam.on_change = () -> (_update_triad!(c); c.triad_at[] === nothing || _draw_placement_triad!(c, sess);

@@ -234,8 +234,32 @@ E. **Double backlighter with ARC:** the starter, ARC beams as a facility beam se
   start to their new aim, and the amount by the triad. A press released within the click
   slop is a click, so the beams and parts behind a handle stay selectable; focus lost
   mid-drag cancels it.
-- Not built: hover highlighting of a handle; a planar (two-axis) drag; dragging several
-  selected parts at once (the Move-along row moves them all).
+- Not built: dragging several selected parts at once (the Move-along row moves them
+  all).
+
+## Triad hover and planar drags as built (2026-11-03)
+
+- Hover: with no button held, a pointer move goes to the camera's new `hover` callback,
+  which picks the handle with `triad_handle_at` (the press's own picking) and redraws the
+  triad only when the handle under the pointer changes (`SceneCanvas.triad_hover`). The
+  hovered handle is drawn halfway to white and 2 px thicker; during a drag the dragged
+  handle keeps the drag color (`_TRIAD_ACTIVE`) and the extra width wherever the pointer
+  goes. The widths are per point on the existing `place_arrows` and `place_rings` plots
+  (vectors from construction on), so the plot count is unchanged (the test checks it).
+- Planar handles `(:plane, k)` (`TRIAD_HANDLES` now nine): a square in the plane normal
+  to axis `k`, from 0.2 to 0.38 arrow lengths along axes `k + 1` and `k + 2` (clear of
+  the arrows and inside the ring), colored as axis `k`, drawn in the rings' plot. Picked
+  inside its outline or within the grab distance of an edge; skipped edge-on as a ring
+  is. The amount is where the pointer's ray meets the plane, each component snapped to
+  the Move-along step (a tenth with Ctrl). The commit is one `nudge_part!` along the sum
+  of the two components (its length and direction), one edit and one undo; it equals
+  the two Move-along moves to round-off (1e-12, test) rather than bit for bit, the
+  direction being normalized.
+- Tests (`test_triad.jl`, synthetic events): hover over an arrow highlights it (color,
+  width) and leaves the others plain; moving off clears it; a drag keeps the dragged
+  arrow highlighted with the pointer off its line; a square hovered, dragged by
+  (0.31, 0.22) mm snaps to (0.3, 0.2), previews, commits one undoable edit equal to the
+  two nudges; the controller's planar commit against two `nudge_part!` calls.
 
 ## Phase C as built (2026-11-02): what departs from the design
 

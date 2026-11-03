@@ -7,9 +7,21 @@
 
 """
 The placement triad's handles, `(kind, k)`: `(:move, k)` the arrow along axis `k` (1 x,
-2 y, 3 z) of the frame the part is placed in, `(:turn, k)` the ring about it.
+2 y, 3 z) of the frame the part is placed in, `(:turn, k)` the ring about it, `(:plane,
+k)` the square in the plane normal to it, which moves the part along the other two axes
+(`k + 1` and `k + 2`, cyclically: the yz, zx and xy planes) at once.
 """
-const TRIAD_HANDLES = ((:move, 1), (:move, 2), (:move, 3), (:turn, 1), (:turn, 2), (:turn, 3))
+const TRIAD_HANDLES = ((:move, 1), (:move, 2), (:move, 3), (:turn, 1), (:turn, 2), (:turn, 3),
+                       (:plane, 1), (:plane, 2), (:plane, 3))
+
+# The move (mm, in the frame's axes) of a planar handle normal to axis `k` dragged by
+# `(a, b)` along axes `k + 1` and `k + 2`.
+function _plane_move(k::Integer, amount)
+    a, b = amount
+    d = zeros(3)
+    d[mod1(k + 1, 3)], d[mod1(k + 2, 3)] = a, b
+    return d
+end
 
 """
 Snap increment (degrees) of a placement-triad ring; an arrow snaps to the Move-along
@@ -80,16 +92,21 @@ triad_frame(ts::TargetSetup, i::Integer) = triad_frame(ts.parts[], i)
 
 The parts after a placement-triad drag of `amount` on `handle` ([`TRIAD_HANDLES`](@ref))
 of part `i`: mm along an arrow ([`nudged_parts`](@ref)), degrees about a ring
-([`turned_parts`](@ref)), in the axes of the frame the part is placed in. Throws
-`ArgumentError` for a move the edit refuses.
+([`turned_parts`](@ref)), and for a square `(a, b)`, mm along its plane's two axes (`k +
+1` and `k + 2`), one move along their sum; all in the axes of the frame the part is
+placed in. Throws `ArgumentError` for a move the edit refuses.
 """
-function triad_parts(parts::AbstractVector{PartSpec}, i::Integer, handle::Tuple{Symbol,Int}, amount::Real)
+function triad_parts(parts::AbstractVector{PartSpec}, i::Integer, handle::Tuple{Symbol,Int}, amount)
     kind, k = handle
     axis = (:x, :y, :z)[k]
     frame = parts[i].frame
     kind === :move && return nudged_parts(parts, i, amount; frame, axis)
     kind === :turn && return turned_parts(parts, i, amount; frame, axis)
-    throw(ArgumentError("a triad handle is :move or :turn"))
+    if kind === :plane
+        d = _plane_move(k, amount)
+        return nudged_parts(parts, i, norm(d); frame, axis = d)
+    end
+    throw(ArgumentError("a triad handle is :move, :turn or :plane"))
 end
 
 """
@@ -97,17 +114,23 @@ end
 
 Make a placement-triad drag as one edit: [`nudge_part!`](@ref) by `amount` mm along an
 arrow's axis, or [`turn_part!`](@ref) by `amount` degrees about a ring's, in the frame
-part `i` is placed in (the edit the Move-along row's buttons make). A zero amount makes
-no edit and returns `true`; a refused one sets `error` and returns `false`.
+part `i` is placed in (the edit the Move-along row's buttons make); for a square,
+`amount = (a, b)` mm along its plane's two axes, one `nudge_part!` along their sum (one
+edit, one undo). A zero amount makes no edit and returns `true`; a refused one sets
+`error` and returns `false`.
 """
-function commit_triad!(ts::TargetSetup, i::Integer, handle::Tuple{Symbol,Int}, amount::Real)
-    amount == 0 && return true
+function commit_triad!(ts::TargetSetup, i::Integer, handle::Tuple{Symbol,Int}, amount)
+    all(iszero, amount) && return true
     kind, k = handle
     axis = (:x, :y, :z)[k]
     frame = ts.parts[][i].frame
     kind === :move && return nudge_part!(ts, i, amount; frame, axis)
     kind === :turn && return turn_part!(ts, i, amount; frame, axis)
-    throw(ArgumentError("a triad handle is :move or :turn"))
+    if kind === :plane
+        d = _plane_move(k, amount)
+        return nudge_part!(ts, i, norm(d); frame, axis = d)
+    end
+    throw(ArgumentError("a triad handle is :move, :turn or :plane"))
 end
 
 """

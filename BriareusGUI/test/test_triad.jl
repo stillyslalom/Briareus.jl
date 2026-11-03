@@ -88,6 +88,21 @@ end
     @test undo!(u)
     @test _same_parts(u.target.parts[], parts0) && u.beams.beams[] == beams0
 
+    # a square's drag: one nudge along the sum of its two components, as the two
+    # Move-along moves make it (to round-off), its preview the edit's parts, one undo
+    q, w = _triad_design(), _triad_design()
+    record!(q)
+    n0 = length(q.history.undo)
+    pq = triad_parts(q.target.parts[], i, (:plane, 3), (0.3, -0.2))
+    @test commit_triad!(q.target, i, (:plane, 3), (0.3, -0.2)) && _same_parts(q.target.parts[], pq)
+    @test nudge_part!(w.target, i, 0.3; frame = :tcc, axis = :x) && nudge_part!(w.target, i, -0.2; frame = :tcc, axis = :y)
+    Fq, Fw = part_frames(q.target), part_frames(w.target)
+    @test all(n -> isapprox(Fq[n].origin, Fw[n].origin; atol = 1e-12) && Fq[n].R == Fw[n].R, [:shield, :plate])
+    @test all(isapprox(u.aim, v.aim; atol = 1e-12) for (u, v) in zip(q.beams.beams[], w.beams.beams[]))
+    @test record!(q) && length(q.history.undo) == n0 + 1 && undo!(q) &&
+          _same_parts(q.target.parts[], _triad_design().target.parts[])
+    @test commit_triad!(q.target, i, (:plane, 1), (0.0, 0.0)) && _same_parts(q.target.parts[], _triad_design().target.parts[])
+
     # refused: a missing frame; a port frame (its axis is its port's)
     @test !turn_part!(u.target, i, 1.0; frame = :nowhere) && occursin("no frame", u.target.error[])
     @test add_port_frame!(u.target, "Q31T", 23.5, 78.75)
@@ -194,5 +209,58 @@ end
     B.camera_move!(c, B.project_point(c, O + (0.85L + 0.4) * ez))
     @test sc.placing[].amount === 0.5
     B.release_input!(sc)
+    sc.triad_step[] = 0.1
+
+    # hover: the arrow under the pointer drawn brighter and thicker, plain again off it
+    arrow(k) = (6k-5):6k                           # its points in `place_arrows` (handle order)
+    square(k) = 6 * B._TRIAD_RING_SEGMENTS .+ ((8k-7):8k)     # in `place_rings`, after the rings
+    col(p, r) = p.color[][r]
+    wid(p, r) = p.linewidth[][r]
+    plain = B.TRIAD_COLORS[3]
+    @test c.mode === :none && sc.triad_hover[] === nothing
+    B.camera_move!(c, p_z)
+    @test sc.triad_hover[] == (:move, 3)
+    @test all(==(B._triad_hover_color(plain)), col(sc.place_arrows, arrow(3))) &&
+          all(==(B._TRIAD_ARROW_WIDTH + B._TRIAD_HOT_WIDTH), wid(sc.place_arrows, arrow(3)))
+    @test all(==(B.TRIAD_COLORS[1]), col(sc.place_arrows, arrow(1))) &&
+          all(==(B._TRIAD_ARROW_WIDTH), wid(sc.place_arrows, arrow(1)))
+    B.camera_move!(c, (5.0, 5.0))                  # off every handle
+    @test sc.triad_hover[] === nothing && all(==(plain), col(sc.place_arrows, arrow(3))) &&
+          all(==(B._TRIAD_ARROW_WIDTH), wid(sc.place_arrows, arrow(3)))
+    # a drag keeps the dragged arrow highlighted, the pointer off its line included
+    B.camera_move!(c, p_z)
+    B.camera_press!(c, p_z, :left)
+    B.camera_move!(c, B.project_point(c, O + (0.85L + 0.2) * ez + 0.3L * ex))
+    @test c.mode === :handle && sc.triad_hover[] == (:move, 3)
+    @test all(==(B._TRIAD_ACTIVE), col(sc.place_arrows, arrow(3))) &&
+          all(==(B._TRIAD_ARROW_WIDTH + B._TRIAD_HOT_WIDTH), wid(sc.place_arrows, arrow(3)))
+    B.release_input!(sc)
+    @test _same_parts(sess.target.parts[], parts0)
+
+    # the square of the zx plane (normal y, facing the view): hovered, then dragged 0.31 mm
+    # along z and 0.22 mm along x, snapped to (0.3, 0.2): one move, one undo
+    F = sc.triad_at[][3]
+    mid = O + sum(B._TRIAD_PLANE) / 2 * L * (ez + ex)
+    p_sq = B.project_point(c, mid)
+    @test B.triad_handle_at(c, F, L, p_sq) == (:plane, 2)
+    B.camera_move!(c, p_sq)
+    @test sc.triad_hover[] == (:plane, 2) &&
+          all(==(B._TRIAD_RING_WIDTH + B._TRIAD_HOT_WIDTH), wid(sc.place_rings, square(2))) &&
+          all(==(B._TRIAD_RING_WIDTH), wid(sc.place_rings, square(3)))
+    record!(sess)
+    n1 = length(sess.history.undo)
+    B.camera_press!(c, p_sq, :left)
+    p_end = B.project_point(c, mid + 0.31 * ez + 0.22 * ex)
+    B.camera_move!(c, p_end)
+    @test sc.placing[].amount == (0.3, 0.2) && sc.place_label.text[] == ["+0.3, +0.2 mm"]
+    @test all(==(B._TRIAD_ACTIVE), col(sc.place_rings, square(2)))
+    B.camera_release!(c, p_end)
+    pl = DesignSession(resolution = :coarse)
+    @test nudge_part!(pl.target, i, 0.3; frame = :tcc, axis = :z) && nudge_part!(pl.target, i, 0.2; frame = :tcc, axis = :x)
+    Fa, Fb = part_frames(sess.target), part_frames(pl.target)
+    @test all(n -> isapprox(Fa[n].origin, Fb[n].origin; atol = 1e-12) && Fa[n].R == Fb[n].R, collect(keys(Fb)))
+    @test all(isapprox(u.aim, v.aim; atol = 1e-12) for (u, v) in zip(sess.beams.beams[], pl.beams.beams[]))
+    @test record!(sess) && length(sess.history.undo) == n1 + 1 && !record!(sess)
+    @test undo!(sess) && _same_parts(sess.target.parts[], parts0)
     @test length(sc.lscene.scene.plots) == nplots
 end

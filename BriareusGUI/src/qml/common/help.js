@@ -114,8 +114,10 @@ var pages = [
         { key: "part.triad", title: "Placement triad",
           text: "The 3D view draws a triad on the selected part, piece or assembly, in the axes of " +
                 "the frame it is placed in (x red, y green, z blue). Dragging an arrow moves the part " +
-                "along that axis in whole steps of the Move-along row's \"by\" field; dragging a ring " +
-                "turns it about that axis, through the part's origin, in 15° steps. Ctrl held at the " +
+                "along that axis in whole steps of the Move-along row's \"by\" field; dragging a square " +
+                "moves it in the plane of the two axes beside it, each in those steps, as one move; " +
+                "dragging a ring turns it about that axis, through the part's origin, in 15° steps. " +
+                "The handle under the pointer is drawn brighter and thicker. Ctrl held at the " +
                 "press snaps to a tenth of either. The moved parts and the beams aimed in their frames " +
                 "are previewed while dragging; the release makes one edit, undone as one, the edit " +
                 "the Move-along row's buttons make. A press released without moving is a click, so " +

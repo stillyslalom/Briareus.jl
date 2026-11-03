@@ -1,17 +1,23 @@
 # The placement triad on the selected part (controllers/placement_triad.jl): three
-# arrows and three rings in the axes of the frame the part is placed in, a constant size
-# on screen, drawn over the geometry in thin lines. A left drag from a handle previews
-# the move (the moved components, the beams aimed in the moved frames and the amount)
-# and commits it on release as one edit; a press released within the click slop is a
-# click, so the beams and parts behind a handle stay selectable.
+# arrows, three rings and three squares (one per plane of two axes) in the axes of the
+# frame the part is placed in, a constant size on screen, drawn over the geometry in thin
+# lines; the handle under the pointer is drawn brighter and thicker. A left drag from a
+# handle previews the move (the moved components, the beams aimed in the moved frames
+# and the amount) and commits it on release as one edit; a press released within the
+# click slop is a click, so the beams and parts behind a handle stay selectable.
 #
-# Snapping: an arrow moves by whole Move-along steps (the row's "by" field, `triad_step`),
-# a ring by whole `TRIAD_TURN_STEP`s; Ctrl held at the press snaps to a tenth of either.
+# Snapping: an arrow, and each of a square's two components, by whole Move-along steps
+# (the row's "by" field, `triad_step`), a ring by whole `TRIAD_TURN_STEP`s; Ctrl held at
+# the press snaps to a tenth of either.
 
 const _TRIAD_ARROW_PX = 70.0       # arrow length on screen (pixels)
 const _TRIAD_RING = 0.62           # ring radius / arrow length
 const _TRIAD_GRAB_PX = 6.0         # how near (pixels) a press must fall to a handle
 const _TRIAD_RING_SEGMENTS = 48
+const _TRIAD_PLANE = (0.2, 0.38)   # a square's sides, from and to (arrow lengths), along its two axes
+const _TRIAD_ARROW_WIDTH = 2.5f0   # line widths (pixels): arrows; rings and squares
+const _TRIAD_RING_WIDTH = 1.5f0
+const _TRIAD_HOT_WIDTH = 2.0f0     # added to the hovered or dragged handle's
 const _TRIAD_ACTIVE = RGBAf(1.0, 0.85, 0.1, 1.0)
 const _TRIAD_PREVIEW = RGBAf(0.1, 0.6, 1.0, 0.35)
 
@@ -20,9 +26,10 @@ const _TRIAD_PREVIEW = RGBAf(0.1, 0.6, 1.0, 0.35)
 
 A placement-triad drag in progress: the part (`part`, its index, and `name`), the
 `handle` (`TRIAD_HANDLES`), the triad's frame `F` and arrow length `L` (mm) at the press,
-the `step` it snaps to (mm or degrees), the pointer's position along the arrow at the
-press (`s0`, mm) or its accumulated screen angle about the triad's origin (`angle`,
-radians, with `last` the previous pointer angle), the snapped `amount`, the previewed
+the `step` it snaps to (mm or degrees), the pointer's position at the press along the
+arrow (`s0`, mm) or in a square's plane (`s0 = (a, b)`, mm along its two axes), or its
+accumulated screen angle about the triad's origin (`angle`, radians, with `last` the
+previous pointer angle), the snapped `amount` (a pair for a square), the previewed
 `parts` (`nothing` when the move is refused, with the reason in `error`).
 """
 mutable struct TriadDrag
@@ -32,10 +39,10 @@ mutable struct TriadDrag
     F::Frame
     L::Float64
     step::Float64
-    s0::Float64
+    s0::Any
     angle::Float64
     last::Float64
-    amount::Float64
+    amount::Any
     parts::Any
     error::String
 end
@@ -53,14 +60,19 @@ function _triad_polyline(F::Frame, L, handle)
     O = Makie.Vec3d(F.origin...)
     e(j) = Makie.Vec3d(F.R[:, mod1(j, 3)]...)
     kind === :move && return [O + 0.18L * e(k), O + L * e(k)]
+    if kind === :plane
+        a, b = e(k + 1), e(k + 2)
+        s, t = _TRIAD_PLANE .* L
+        return [O + s * a + s * b, O + t * a + s * b, O + t * a + t * b, O + s * a + t * b, O + s * a + s * b]
+    end
     ρ = _TRIAD_RING * L
     return [O + ρ * (cos(t) * e(k + 1) + sin(t) * e(k + 2))
             for t in range(0, 2π; length = _TRIAD_RING_SEGMENTS + 1)]
 end
 
 # Whether a handle can be dragged as the camera sees it: an arrow not along the line of
-# sight (at least 12 pixels long on screen), a ring not edge-on (its axis at most 81°
-# from the line of sight).
+# sight (at least 12 pixels long on screen), a ring or square not edge-on (its axis at
+# most 81° from the line of sight).
 function _triad_usable(c::CadCamera, F::Frame, L, handle)
     kind, k = handle
     e = Makie.Vec3d(F.R[:, k]...)
@@ -76,9 +88,10 @@ end
     triad_handle_at(c::CadCamera, F, L, px) -> Union{Nothing,Tuple{Symbol,Int}}
 
 The placement-triad handle (`TRIAD_HANDLES`) whose drawn line passes nearest the pixel
-`px`, within `_TRIAD_GRAB_PX`, of a triad at frame `F` with arrows `L` mm long; handles
-that cannot be dragged from this view (an arrow along the line of sight, a ring
-edge-on) are skipped.
+`px`, within `_TRIAD_GRAB_PX`, of a triad at frame `F` with arrows `L` mm long (a
+square also anywhere inside its outline); handles that cannot be dragged from this view
+(an arrow along the line of sight, a ring or square edge-on) are skipped. The hover
+highlight and a press both use it.
 """
 function triad_handle_at(c::CadCamera, F::Frame, L, px)
     f = camera_frame(c)[1]
@@ -86,6 +99,11 @@ function triad_handle_at(c::CadCamera, F::Frame, L, px)
     for h in TRIAD_HANDLES
         _triad_usable(c, F, L, h) || continue
         pts = _triad_polyline(F, L, h)
+        if h[1] === :plane && all(p -> dot(p - c.eye, f) > 0, pts) &&
+           _in_convex(px, [project_point(c, p) for p in pts])
+            (best, hit) = (0.0, h)
+            continue
+        end
         for j in 1:length(pts)-1
             (dot(pts[j] - c.eye, f) > 0 && dot(pts[j+1] - c.eye, f) > 0) || continue
             d = _segment_distance(px, project_point(c, pts[j]), project_point(c, pts[j+1]))
@@ -93,6 +111,31 @@ function triad_handle_at(c::CadCamera, F::Frame, L, px)
         end
     end
     return hit
+end
+
+# Whether pixel `px` lies inside the convex polygon `q` (closed: last point = first).
+function _in_convex(px, q)
+    sgn = 0.0
+    for j in 1:length(q)-1
+        a, b = q[j], q[j+1]
+        z = (b[1] - a[1]) * (px[2] - a[2]) - (b[2] - a[2]) * (px[1] - a[1])
+        z == 0 && continue
+        sgn == 0 && (sgn = sign(z))
+        sign(z) == sgn || return false
+    end
+    return sgn != 0
+end
+
+# Position (mm) in the plane of `F` normal to its axis `k`, along its axes `k + 1` and
+# `k + 2`, where the pixel's ray meets it ((0, 0) for a ray along the plane).
+function _plane_position(c::CadCamera, F::Frame, k, px)
+    o, d = pixel_ray(c, px)
+    n = Makie.Vec3d(F.R[:, k]...)
+    O = Makie.Vec3d(F.origin...)
+    den = dot(d, n)
+    abs(den) < 1e-9 && return (0.0, 0.0)
+    p = o + (dot(O - o, n) / den) * d
+    return (dot(p - O, Makie.Vec3d(F.R[:, mod1(k + 1, 3)]...)), dot(p - O, Makie.Vec3d(F.R[:, mod1(k + 2, 3)]...)))
 end
 
 # Position (mm) along the axis `e` through `O` nearest the pixel's ray.
@@ -116,14 +159,17 @@ end
 
 The unsnapped amount of a placement-triad drag with the pointer at `px`: for an arrow,
 the move (mm) along its axis from the press, where the pointer's ray passes nearest the
-axis; for a ring, the turn (degrees, right-handed about its axis) the pointer has swept
-about the triad's origin on screen since the press (counterclockwise is positive with
-the axis toward the viewer). Updates the ring's accumulated angle.
+axis; for a square, the move `(a, b)` (mm along its plane's two axes) from the press,
+where the pointer's ray meets the plane; for a ring, the turn (degrees, right-handed
+about its axis) the pointer has swept about the triad's origin on screen since the
+press (counterclockwise is positive with the axis toward the viewer). Updates the
+ring's accumulated angle.
 """
 function triad_amount(c::CadCamera, g::TriadDrag, px)
     kind, k = g.handle
     e = Makie.Vec3d(g.F.R[:, k]...)
     kind === :move && return _axis_position(c, g.F.origin, e, px) - g.s0
+    kind === :plane && return _plane_position(c, g.F, k, px) .- g.s0
     a = _screen_angle(c, g.F, px)
     g.angle += rem2pi(a - g.last, RoundNearest)
     g.last = a
@@ -139,9 +185,10 @@ function _triad_press!(c, sess, px, ctrl::Bool)
     L = _triad_length(c.camera, F.origin)
     h = triad_handle_at(c.camera, F, L, px)
     h === nothing && return false
-    base = h[1] === :move ? c.triad_step[] : TRIAD_TURN_STEP
+    base = h[1] === :turn ? TRIAD_TURN_STEP : c.triad_step[]
     step = ctrl ? base / TRIAD_FINE : base
-    s0 = h[1] === :move ? _axis_position(c.camera, F.origin, Makie.Vec3d(F.R[:, h[2]]...), px) : 0.0
+    s0 = h[1] === :move ? _axis_position(c.camera, F.origin, Makie.Vec3d(F.R[:, h[2]]...), px) :
+         h[1] === :plane ? _plane_position(c.camera, F, h[2], px) : 0.0
     a0 = _screen_angle(c.camera, F, px)
     c.placing[] = TriadDrag(i, name, h, F, L, step, s0, 0.0, a0, 0.0, nothing, "")
     return true
@@ -151,12 +198,12 @@ end
 function _triad_move!(c, sess, px)
     g = c.placing[]
     g === nothing && return
-    amount = triad_snap(triad_amount(c.camera, g, px), g.step)
+    amount = map(x -> triad_snap(x, g.step), triad_amount(c.camera, g, px))
     amount == g.amount && return
     g.amount = amount
     ts = sess.target
     i = part_index(ts, g.name)
-    if i === nothing || amount == 0
+    if i === nothing || all(iszero, amount)
         g.parts, g.error = nothing, ""
     else
         try
@@ -178,14 +225,16 @@ function _triad_release!(c, sess, px)
     g === nothing && return
     ts = sess.target
     i = part_index(ts, g.name)
-    if i !== nothing && g.amount != 0
+    if i !== nothing && !all(iszero, g.amount)
         ok = commit_triad!(ts, i, g.handle, g.amount)
         kind, k = g.handle
         frame = ts.parts[][i].frame
+        ax(j) = ("x", "y", "z")[mod1(j, 3)]
         sess.status[] = !ok ? "not moved: " * ts.error[] :
-                        kind === :move ? @sprintf("moved %s by %+g mm along %s of %s", g.name, g.amount,
-                                                  ("x", "y", "z")[k], frame) :
-                        @sprintf("turned %s by %+g° about %s of %s", g.name, g.amount, ("x", "y", "z")[k], frame)
+                        kind === :move ? @sprintf("moved %s by %+g mm along %s of %s", g.name, g.amount, ax(k), frame) :
+                        kind === :plane ? @sprintf("moved %s by %+g mm along %s and %+g mm along %s of %s", g.name,
+                                                   g.amount[1], ax(k + 1), g.amount[2], ax(k + 2), frame) :
+                        @sprintf("turned %s by %+g° about %s of %s", g.name, g.amount, ax(k), frame)
     end
     _place_triad!(c, sess)
     return
@@ -193,8 +242,21 @@ end
 
 _triad_cancel!(c, sess) = (c.placing[] = nothing; _draw_placement_triad!(c, sess); nothing)
 
+# Pointer moved with no button held: highlight the handle under it (none during a drag,
+# whose handle stays highlighted); redrawn only when that handle changes.
+function _triad_hover!(c, sess, px)
+    at = c.triad_at[]
+    h = at === nothing || c.placing[] !== nothing ? nothing :
+        triad_handle_at(c.camera, at[3], _triad_length(c.camera, at[3].origin), px)
+    h == c.triad_hover[] && return false
+    c.triad_hover[] = h
+    at === nothing || _draw_placement_triad!(c, sess)
+    return true
+end
+
 # Where the triad is: the selection's part and its triad frame, or nothing.
 function _place_triad!(c, sess)
+    c.triad_hover[] = nothing
     i = triad_subject(sess)
     c.triad_at[] = i === nothing ? nothing :
                    (try
@@ -207,13 +269,19 @@ function _place_triad!(c, sess)
     return c
 end
 
-# The triad (at its previewed place during a drag, the dragged handle highlighted), the
-# preview's components and beams, and the amount.
+# A handle's color brightened for the hover highlight: halfway to white.
+_triad_hover_color(x::RGBAf) = RGBAf((1 + x.r) / 2, (1 + x.g) / 2, (1 + x.b) / 2, x.alpha)
+
+# The triad (at its previewed place during a drag, the dragged handle highlighted; else the
+# hovered handle brighter), the preview's components and beams, and the amount. The
+# highlighted handle is drawn `_TRIAD_HOT_WIDTH` thicker.
 function _draw_placement_triad!(c, sess)
     at, g = c.triad_at[], c.placing[]
     if at === nothing
-        _update!(c.place_arrows, _NOSEG3; color = [NAN_COLOR, NAN_COLOR], visible = false)
-        _update!(c.place_rings, _NOSEG3; color = [NAN_COLOR, NAN_COLOR], visible = false)
+        _update!(c.place_arrows, _NOSEG3; color = [NAN_COLOR, NAN_COLOR], linewidth = fill(_TRIAD_ARROW_WIDTH, 2),
+                 visible = false)
+        _update!(c.place_rings, _NOSEG3; color = [NAN_COLOR, NAN_COLOR], linewidth = fill(_TRIAD_RING_WIDTH, 2),
+                 visible = false)
         _update!(c.place_ghost, _NOTRI...; visible = false)
         _update!(c.place_beams, _NOSEG3; visible = false)
         _update!(c.place_label, _NOPOINT3; text = [""], visible = false)
@@ -230,9 +298,12 @@ function _draw_placement_triad!(c, sess)
         end
     end
     L = _triad_length(c.camera, F.origin)
-    arrows, acols, rings, rcols = Point3f[], RGBAf[], Point3f[], RGBAf[]
+    hot = g !== nothing ? g.handle : c.triad_hover[]
+    arrows, acols, aw, rings, rcols, rw = Point3f[], RGBAf[], Float32[], Point3f[], RGBAf[], Float32[]
     for h in TRIAD_HANDLES
-        col = g !== nothing && g.handle == h ? _TRIAD_ACTIVE : TRIAD_COLORS[h[2]]
+        plain = TRIAD_COLORS[h[2]]
+        col = h != hot ? plain : g !== nothing ? _TRIAD_ACTIVE : _triad_hover_color(plain)
+        extra = h == hot ? _TRIAD_HOT_WIDTH : 0.0f0
         pts = _triad_polyline(F, L, h)
         if h[1] === :move
             a, b = pts[1], pts[2]
@@ -244,16 +315,18 @@ function _draw_placement_triad!(c, sess)
             for q in (a, b, b, base + 0.07L * side, b, base - 0.07L * side)
                 push!(arrows, Point3f(q...))
                 push!(acols, col)
+                push!(aw, _TRIAD_ARROW_WIDTH + extra)
             end
         else
             for j in 1:length(pts)-1
                 push!(rings, Point3f(pts[j]...), Point3f(pts[j+1]...))
                 push!(rcols, col, col)
+                push!(rw, _TRIAD_RING_WIDTH + extra, _TRIAD_RING_WIDTH + extra)
             end
         end
     end
-    _update!(c.place_arrows, arrows; color = acols, visible = true)
-    _update!(c.place_rings, rings; color = rcols, visible = true)
+    _update!(c.place_arrows, arrows; color = acols, linewidth = aw, visible = true)
+    _update!(c.place_rings, rings; color = rcols, linewidth = rw, visible = true)
     if g === nothing
         _update!(c.place_ghost, _NOTRI...; visible = false)
         _update!(c.place_beams, _NOSEG3; visible = false)
@@ -276,10 +349,12 @@ function _draw_placement_triad!(c, sess)
         isempty(ghost) ? _update!(c.place_ghost, _NOTRI...; visible = false) :
                          _update!(c.place_ghost, ghost, _faces(length(ghost) ÷ 3); visible = true)
         _update!(c.place_beams, isempty(segs) ? _NOSEG3 : segs; visible = !isempty(segs))
-        unit = g.handle[1] === :move ? " mm" : "°"
-        text = isempty(g.error) ? @sprintf("%+g%s", g.amount, unit) : g.error
-        _update!(c.place_label, [Point3f((Makie.Vec3d(F.origin...) + 1.05L * Makie.Vec3d(F.R[:, g.handle[2]]...))...)];
-                 text = [text], visible = true)
+        kind, k = g.handle
+        text = !isempty(g.error) ? g.error : kind === :move ? @sprintf("%+g mm", g.amount) :
+               kind === :plane ? @sprintf("%+g, %+g mm", g.amount...) : @sprintf("%+g°", g.amount)
+        ax(j) = Makie.Vec3d(F.R[:, mod1(j, 3)]...)
+        off = kind === :plane ? 0.45L * (ax(k + 1) + ax(k + 2)) : 1.05L * ax(k)
+        _update!(c.place_label, [Point3f((Makie.Vec3d(F.origin...) + off)...)]; text = [text], visible = true)
     end
     c.dirty[] = true
     return c

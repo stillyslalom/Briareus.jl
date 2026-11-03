@@ -34,7 +34,8 @@ Gestures (wired by [`attach_cad_camera!`](@ref)):
   whether the press grabbed one; past the click slop the drag goes to
   `handle_move(pixel)` and the release to `handle_release(pixel)` instead of orbiting.
   A press on a handle released within the slop is a click (`handle_cancel()` first), so
-  a beam or part behind a handle can still be selected;
+  a beam or part behind a handle can still be selected; with no button held, a pointer
+  move goes to `hover(pixel)` (the triad's highlight);
 - `f`: fit the scene; arrow keys orbit 15°.
 
 `pick(origin, direction)` returns the distance to the first surface along the ray, or
@@ -60,6 +61,7 @@ mutable struct CadCamera
     handle_move::Any
     handle_release::Any
     handle_cancel::Any
+    hover::Any
     # drag state
     mode::Symbol                          # :none, :orbit(_pending), :pan(_pending), :handle(_pending)
     button::Any
@@ -76,7 +78,7 @@ function CadCamera(; bounds = (Vec3d_(0, 0, 0), 1.0), fov = 30.0)
                   (Vec3d_(bounds[1]...), Float64(bounds[2])),
                   (Vec3d_(bounds[1]...), Float64(bounds[2])), (0.0, 0.0, 800.0, 600.0),
                   (o, d) -> Inf, () -> nothing, (o, d, px) -> nothing, (o, d, px) -> nothing,
-                  () -> nothing, (px, ctrl) -> false, px -> nothing, px -> nothing, () -> nothing,
+                  () -> nothing, (px, ctrl) -> false, px -> nothing, px -> nothing, () -> nothing, px -> nothing,
                   :none, nothing, (0.0, 0.0), (0.0, 0.0), Vec3d_(0, 0, 0),
                   Vec3d_(0, 0, 0), -Inf, false)
     orient_camera!(c, :iso)
@@ -311,8 +313,8 @@ function camera_press!(c::CadCamera, px, button::Symbol; shift = false, ctrl = f
 end
 
 function camera_move!(c::CadCamera, px)
-    c.mode === :none && return false
     x, y = Float64(px[1]), Float64(px[2])
+    c.mode === :none && (c.hover((x, y)); return false)
     if c.mode in (:orbit_pending, :pan_pending, :handle_pending)
         hypot(x - c.press_pos[1], y - c.press_pos[2]) < _CLICK_SLOP && return true
         c.mode = c.mode === :orbit_pending ? :orbit : c.mode === :pan_pending ? :pan : :handle
@@ -411,7 +413,6 @@ function attach_cad_camera!(scene, c::CadCamera)
         return Consume(false)
     end
     on(scene, ev.mouseposition; priority = 100) do mp
-        c.mode === :none && return Consume(false)
         return Consume(camera_move!(c, _local(c, mp)))
     end
     on(scene, ev.scroll; priority = 100) do s

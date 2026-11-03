@@ -376,9 +376,11 @@ port or any θ, φ) and Save view as image. Help ▸ Mouse and keys lists the bi
 
 A placement triad sits on the selected part, piece or assembly, in the axes of the frame
 it is placed in (Properties ▸ *Placed in*). A drag on an arrow moves the part along that
-axis in whole steps of the *Move along* row's step; a drag on a ring turns it about that
-axis, through the part's origin, in 15° steps; Ctrl held at the press snaps to a tenth of
-either. While dragging, the view previews the moved parts and the beams aimed in their
+axis in whole steps of the *Move along* row's step; a drag on a square (one between each
+pair of arrows) moves it in that plane, each component in those steps, as one move; a
+drag on a ring turns it about that axis, through the part's origin, in 15° steps; Ctrl
+held at the press snaps to a tenth of either. The handle under the pointer is drawn
+brighter and thicker. While dragging, the view previews the moved parts and the beams aimed in their
 frames; the release makes one edit (`nudge_part!` or `turn_part!`, the edits of the
 *Move along* buttons), undone as one, so the placement stays parametric and the beams
 aimed in the moved frames follow. A press on a handle released without moving is a
