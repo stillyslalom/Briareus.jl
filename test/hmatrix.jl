@@ -69,7 +69,9 @@
     W = legendre_weights(t, cap; lmax = 4)
     α = s.albedo
     @test rel(flux_response(mh, cap; albedo = α, weights = W), flux_response(m, cap; albedo = α, weights = W)) < 1e-4
-    @test rel(flux_response(mh, cap[1:5]; albedo = α), flux_response(m, cap[1:5]; albedo = α)) < 1e-5
+    # single elements' responses carry the blocks' compression error (tol 1e-4): 3.0e-5
+    # here, 2.4e-7 at tol 1e-5 and 3.5e-8 at 1e-6 (measured 2026-11-03)
+    @test rel(flux_response(mh, cap[1:5]; albedo = α), flux_response(m, cap[1:5]; albedo = α)) < 1e-4
     # derivatives through the iterative solve
     z = [c[3] for c in t.elem_centroid] ./ 5
     f(mod) = p -> sum(solve(mod, (1 .+ p[1] .* z .+ p[2] .* z .^ 2) .* dep.element; albedo = α).H[cap])
