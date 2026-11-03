@@ -121,6 +121,9 @@ function session_state(sess::DesignSession)
                                                         "threshold" => sess.time.threshold[]))
     pulses = _pulse_state(sess.time.pulses[])
     pulses === nothing || (state["time"]["pulses"] = pulses)
+    # the parts the diagnostics' views name in this session (after renames), when any
+    vp = sess.time.view_parts[]
+    isempty(vp) || (state["time"]["view_parts"] = Dict{String,Any}(id => Dict{String,Any}(d) for (id, d) in vp))
     state["window"] = _window_state(sess)
     v = sess.view
     state["view"] = Dict{String,Any}("color" => String(v.color[]), "beams" => String(v.beams[]),
@@ -316,6 +319,9 @@ function _restore!(sess::DesignSession, state::AbstractDict, keep_target::Bool)
     tms = get(state, "time", Dict())
     ids = String[String(x) for x in get(tms, "diagnostics", DEFAULT_DIAGNOSTICS)]
     ids == sess.time.diagnostics[] || (sess.time.diagnostics[] = ids)
+    vp = Dict{String,Dict{String,String}}(String(id) => Dict{String,String}(String(k) => String(v) for (k, v) in d)
+                                          for (id, d) in get(tms, "view_parts", Dict()))
+    _assign!(sess.time.view_parts, vp)
     # (sessions saved before the prepulse and the irradiance threshold: their defaults)
     p1, p2, a, b = Float64.(get(tms, "prepulse", collect(DEFAULT_PREPULSE)))
     set_prepulse!(sess.time, p1, p2; start = a, stop = b)

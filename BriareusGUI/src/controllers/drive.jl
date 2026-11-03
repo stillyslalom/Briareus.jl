@@ -1036,7 +1036,11 @@ time shown in the 3D view, ns; `NaN`: the drive at the table's powers), `diagnos
 (the ids of the diagnostic definitions recorded in the next history, see
 [`set_diagnostic!`](@ref)), `catalog` (the definitions on the search path and those
 saved with the session, see [`refresh_diagnostics!`](@ref)), `embedded` (the
-definitions read from a saved session, by id: the ones used for those ids), `issues`
+definitions read from a saved session, by id: the ones used for those ids),
+`view_parts` (the session's own values of the parts a definition's `[view]` names, by id:
+`center_part` or `area_part` => the part; set when such a part is renamed, see
+[`follow_renames!`](@ref), so that the definition, the user's file, stays as it is),
+`issues`
 (the search path's problems, `check_diagnostics`), the history job's `running`,
 `progress` (steps done, steps), `started` and `status`, the unconverted light's
 `prepulse` (1ω and 2ω power per beam in TW, on from a start to a stop time in ns, see
@@ -1054,6 +1058,7 @@ struct TimeState
     diagnostics::Observable{Vector{String}}
     catalog::Observable{Vector{NamedTuple}}
     embedded::Observable{Dict{String,Any}}
+    view_parts::Observable{Dict{String,Dict{String,String}}}
     issues::Observable{Vector{DiagnosticIssue}}
     running::Observable{Bool}
     progress::Observable{Tuple{Int,Int}}
@@ -1073,6 +1078,7 @@ end
 TimeState() = TimeState(Observable{Any}(nothing), Observable{Any}(nothing), Observable{Any}(nothing),
                         Observable(:pulses), Observable(NaN), Observable(copy(DEFAULT_DIAGNOSTICS)),
                         Observable(NamedTuple[]), Observable(Dict{String,Any}()),
+                        Observable(Dict{String,Dict{String,String}}()),
                         Observable(DiagnosticIssue[]), Observable(false),
                         Observable((0, 0)), Observable(0.0), Observable(""), Ref(0),
                         Threads.Atomic{Bool}(false), Ref(false), Observable(DEFAULT_PREPULSE),

@@ -720,3 +720,24 @@ Taken without a question (reverse any):
   The entrance holes meet the caps vertex for vertex since the same date (research
   notes, "Entrance holes at the caps' azimuthal count"): the shock tube's rays no longer
   leak.
+
+## A diagnostic's parts after a rename (2026-11-03): roadmap item 3
+
+- A diagnostic definition is the user's file (or a built-in): a part rename does not
+  edit it. The parts a definition's `[view]` names (`center_part`, `area_part`) follow
+  the rename in the session instead (decision taken): `follow_renames!` sets
+  `time.view_parts[id][key]` to the new name for the ticked definitions (and those
+  already followed), and the time status names each (`<id>'s center_part → ball`).
+  `_recorded_definitions` uses a copy of the definition with those values; the
+  catalog, the file and `diagnostic_diff` see the file's. Saved with the session
+  (`time.view_parts`, only when there are any, so other sessions' files are unchanged;
+  no version step: an older reader leaves the key unread), and part of an undo step:
+  undoing the rename takes the session's value back with it.
+- A ticked definition whose view names a part the design lacks (one renamed before it
+  was ticked, or removed) is warned about in the status bar when it is ticked and when
+  a drive history starts (`_view_part_warning`); the history then records nothing for
+  it, its note saying why, as before.
+- Test (`test_diagnostics.jl`): a 3 mm Dante field about the capsule records the same
+  Tᵣ and intensity before and after the capsule is renamed (1e-12), the file unchanged;
+  the session file holds the value and loads it; undo and redo; a field about a part
+  that does not exist is warned about.

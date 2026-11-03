@@ -160,3 +160,52 @@ end
         @test s3.time.diagnostics[] == DEFAULT_DIAGNOSTICS
     end
 end
+
+@testset "a diagnostic's center_part follows a renamed part in the session (no GL)" begin
+    root = mktempdir()
+    withenv("BRIAREUS_CONFIG" => joinpath(root, "config.toml"), "BRIAREUS_DIAGNOSTICS" => nothing) do
+        sess = DesignSession(resolution = :coarse)
+        tm, ts = sess.time, sess.target
+        dir = mkpath(joinpath(root, "group"))
+        id = "dante_on_capsule"
+        file = _defn(dir, id, "extends = \"nif_dante1\"\n[view]\nfield_of_view_mm = 3\ncenter_part = \"capsule\"\n")
+        text = read(file, String)
+        @test add_diagnostic_folder!(sess, dir)
+        set_diagnostic!(sess, id)
+        @test !occursin("has no part", sess.status[])
+        use_pulse_shape!(sess; step = 2.0)
+        build_scenario!(sess)
+        start_history!(sess)
+        d1 = only(d for d in tm.history[].diagnostics if d.id == id)
+        @test isempty(d1.note) && all(isfinite, d1.Tr)
+        # the capsule renamed: the session's view follows it, the user's file does not
+        record!(sess)
+        @test edit_part!(ts, part_index(ts, :capsule), :name, "ball")
+        @test tm.view_parts[] == Dict(id => Dict("center_part" => "ball"))
+        @test occursin("$id's center_part → ball", tm.status[])
+        @test read(file, String) == text && Controllers._definition(sess, id).data["view"]["center_part"] == "capsule"
+        @test only(d for d in Controllers._recorded_definitions(sess) if d.id == id).def.data["view"]["center_part"] == "ball"
+        @test isempty(Controllers._missing_view_parts(sess))
+        # the history records the same field about the renamed part
+        build_scenario!(sess)
+        start_history!(sess)
+        d2 = only(d for d in tm.history[].diagnostics if d.id == id)
+        @test isempty(d2.note) && isapprox(d2.Tr, d1.Tr; rtol = 1e-12) && isapprox(d2.intensity, d1.intensity; rtol = 1e-12)
+        # saved with the session; an undo takes the rename and the session's part back
+        f = joinpath(root, "s.briar.toml")
+        save_session(f, sess)
+        @test TOML.parsefile(f)["time"]["view_parts"] == Dict(id => Dict("center_part" => "ball"))
+        s2 = DesignSession(resolution = :coarse)
+        load_session!(s2, f)
+        @test s2.time.view_parts[] == tm.view_parts[]
+        @test record!(sess) && undo!(sess) && isempty(tm.view_parts[]) && part_index(ts, :capsule) !== nothing
+        @test !haskey(session_state(sess)["time"], "view_parts")       # (none saved: files as before)
+        @test redo!(sess) && tm.view_parts[][id]["center_part"] == "ball"
+        # a ticked definition naming a part the design lacks: warned in the status bar
+        _defn(dir, "dante_on_bead", "extends = \"nif_dante1\"\n[view]\nfield_of_view_mm = 3\ncenter_part = \"bead\"\n")
+        refresh_diagnostics!(sess)
+        set_diagnostic!(sess, "dante_on_bead")
+        @test occursin("the design has no part bead (dante_on_bead's center_part)", sess.status[])
+        @test Controllers._missing_view_parts(sess) == [("dante_on_bead", "center_part", "bead")]
+    end
+end

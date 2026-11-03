@@ -286,6 +286,8 @@ function start_history!(sess::DesignSession)
     tm.started[] = time()
     tm.status[] = "computing the drive history: $n steps…"
     diags = _recorded_definitions(sess)
+    w = _view_part_warning(sess)
+    isempty(w) || (sess.status[] = w)
     deliver = sess.deliver[]
     progress(k) = deliver(() -> g == tm.generation[] && _assign!(tm.progress, (k, n)))
     cancel = tm.cancel
@@ -989,13 +991,18 @@ end
 """
     set_diagnostic!(sess::DesignSession, id, on::Bool = true) -> sess
 
-Record the diagnostic of definition `id` in the next drive history (`on`), or not.
+Record the diagnostic of definition `id` in the next drive history (`on`), or not. A
+ticked definition whose view names a part the design lacks (`center_part`, `area_part`;
+e.g. a part renamed before it was ticked, its definition being the user's file) is
+warned about in the status bar, as it is when a drive history starts.
 """
 function set_diagnostic!(sess::DesignSession, id::AbstractString, on::Bool = true)
     tm = sess.time
     ids = filter(!=(String(id)), tm.diagnostics[])
     on && push!(ids, String(id))
     ids == tm.diagnostics[] || (tm.diagnostics[] = ids)
+    w = on ? _view_part_warning(sess) : ""
+    isempty(w) || (sess.status[] = w)
     return sess
 end
 
@@ -1013,6 +1020,40 @@ function use_path_diagnostic!(sess::DesignSession, id::AbstractString)
     return sess
 end
 
+# Definition `def` with the session's parts `vp` (`time.view_parts[id]`; `nothing`: none)
+# in its view in place of the file's: a copy, the definition itself unchanged.
+_with_view_parts(def, ::Nothing) = def
+_with_view_parts(::Nothing, vp::AbstractDict) = nothing
+function _with_view_parts(def, vp::AbstractDict)
+    data = copy(def.data)
+    data["view"] = merge(Dict{String,Any}(get(def.data, "view", Dict{String,Any}())), vp)
+    return Briareus.DiagnosticDefinition(def.id, def.name, def.kind, def.file, def.chain, def.public, data)
+end
+
+# The ticked diagnostics whose view names a part the design lacks: `(id, key, name)` per
+# such name (the session's own, `time.view_parts`, where it has one).
+function _missing_view_parts(sess::DesignSession)
+    names = Symbol[component_names(sess.target.target[])...; [p.name for p in sess.target.parts[]]...]
+    out = Tuple{String,String,String}[]
+    for id in sess.time.diagnostics[]
+        def = _definition(sess, id)
+        def === nothing && continue
+        for (k, name) in _view_parts(def, get(sess.time.view_parts[], id, nothing))
+            _piece_named(names, Symbol(name)) in names || push!(out, (id, k, name))
+        end
+    end
+    return out
+end
+
+# A status warning for the ticked diagnostics whose view names a part the design lacks
+# (empty: none).
+function _view_part_warning(sess::DesignSession)
+    miss = _missing_view_parts(sess)
+    isempty(miss) && return ""
+    return "the design has no part " * join(["$name ($id's $k)" for (id, k, name) in miss], ", ") *
+           ": the diagnostic records nothing (rename the part back, or edit its definition)"
+end
+
 # The ticked definitions, in the order ticked: `(; id, name, def, note)`, `def` nothing
 # (and `note` why) for one the session cannot build.
 function _recorded_definitions(sess::DesignSession)
@@ -1025,7 +1066,8 @@ function _recorded_definitions(sess::DesignSession)
         elseif !r.usable
             push!(out, (; id, r.name, def = nothing, note = r.problem))
         else
-            push!(out, (; id, r.name, def = _definition(sess, id), note = ""))
+            def = _with_view_parts(_definition(sess, id), get(sess.time.view_parts[], id, nothing))
+            push!(out, (; id, r.name, def, note = ""))
         end
     end
     return out

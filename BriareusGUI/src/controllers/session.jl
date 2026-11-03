@@ -164,8 +164,11 @@ end
 Carry the session's state keyed by part, frame or component names through the renames
 `rn` (old name → new, a [`rename_map`](@ref)): display modes, the cutaway's components,
 drawn triads, the model tree's selection and expanded nodes, the drive's films and wall
-cavity, the clearance and TaLIS roles, and the sweep's subject, frame and line-of-sight
-object. The target's left-out components and the active foil follow in the edit itself.
+cavity, the clearance and TaLIS roles, the sweep's subject, frame and line-of-sight
+object, and the parts the ticked diagnostics' views name (`center_part`, `area_part`):
+these follow in the session's `time.view_parts`, the definition (the user's file) left
+as it is, and the time status notes it. The target's left-out components and the active
+foil follow in the edit itself.
 """
 function follow_renames!(sess::DesignSession, rn::AbstractDict)
     r(n::Symbol) = get(rn, n, n)
@@ -194,7 +197,45 @@ function follow_renames!(sess::DesignSession, rn::AbstractDict)
     rename!(sw.subject, r)
     rename!(sw.frame, r)
     rename!(sw.los_object, r)
+    _follow_view_parts!(sess, rn)
     return sess
+end
+
+# The `[view]` keys of a diagnostic definition that name a part of the design.
+const _VIEW_PART_KEYS = ("center_part", "area_part")
+
+# The parts the views of the ticked diagnostics (and those already overridden) name
+# follow the renames `rn`, in `time.view_parts`; the definitions stay as they are.
+function _follow_view_parts!(sess::DesignSession, rn::AbstractDict)
+    tm = sess.time
+    vp = Dict{String,Dict{String,String}}(id => copy(d) for (id, d) in tm.view_parts[])
+    moved = String[]
+    for id in union(tm.diagnostics[], keys(vp))
+        def = _definition(sess, id)
+        def === nothing && continue
+        for (k, name) in _view_parts(def, get(vp, id, nothing))
+            new = get(rn, Symbol(name), nothing)
+            new === nothing && continue
+            get!(vp, id, Dict{String,String}())[k] = String(new)
+            push!(moved, "$id's $k → $new")
+        end
+    end
+    isempty(moved) && return sess
+    _assign!(tm.view_parts, vp)
+    tm.status[] = "the diagnostics follow the rename in this session, their files unchanged: " * join(moved, ", ")
+    return sess
+end
+
+# The parts definition `def`'s view names, `key => name`, with the session's own `vp`
+# (`time.view_parts[id]`, or `nothing`) in place of the file's.
+function _view_parts(def, vp)
+    v = get(def.data, "view", nothing)
+    out = Pair{String,String}[]
+    for k in _VIEW_PART_KEYS
+        name = vp !== nothing && haskey(vp, k) ? vp[k] : v isa AbstractDict && haskey(v, k) ? String(v[k]) : nothing
+        name === nothing || push!(out, k => name)
+    end
+    return out
 end
 
 function _connect!(sess::DesignSession)

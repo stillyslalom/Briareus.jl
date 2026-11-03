@@ -28,9 +28,6 @@ those under "Correctness" were read in the code, the rest are leads to confirm f
 
 ## Correctness
 
-3. **Bugs and weak spots found by the survey** *(survey; GUI items read in the code)*.
-   - GUI: a diagnostic definition's `center_part` is the user's file and keeps a renamed
-     part's old name.
 4. **Engineering closures to validate.** The re-heated wall's radiosity clamp (≥ 0,
    albedo 0, no emission; `history.jl`, eae01d4); the conversion of overlapping colors at
    each color's own flux; the liner blend in `WallLossAlbedo`. *Data:* a radiation-
@@ -163,8 +160,9 @@ Items 10–15 follow the 2026-10-22 literature review against Kritcher et al. 20
     data at 351 nm); pulse length and spot size as variables (CE ignores both); continuum
     and higher lines in the filter pass band, detector response, the object's
     transmission. Retune (core `retune_drive` with `FoilIrradiance`/`FaceFlux`, level
-    held; "Retuning faces and foils; the held level"): peak-to-mean is reported, not optimized; the
-    retune holds the reference's albedos (linearized) and retunes powers, not pointing.
+    held; "Retuning faces and foils; the held level"): peak-to-mean is reported, not
+    optimized; the retune holds the reference's albedos (linearized) and retunes powers,
+    not pointing.
 16. **Unconverted light over time.** *State:* `unconverted_history` and
     `irradiance_history`, `specular_check` and `preplasma_check` against the User Guide's
     10⁸ W/cm², the GUI's Time tab *Irradiance*, the prepulse in the drive history's Tr
