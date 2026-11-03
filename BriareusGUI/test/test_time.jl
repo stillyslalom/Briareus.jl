@@ -275,4 +275,42 @@ end
     @test Δ(r.after) < 1e-6 < 0.01 < Δ(r.before)
     ch = time_chart(s, :retune)
     @test ch.right.label == "Foil spot RMS, mean − reference (%)" && ch.right.series[2].y == 100 .* r.after.rms
+
+    # a uniform target at a set level: the reference's mean at 1 ns, held at both firing
+    # steps (a power limit of 3× reaches it at 0.5 ns too)
+    enabled = s.beams.enabled[]
+    kw = (; by = :beam, cap = 3.0, foil, spot_radius = s.drive.spot_radius[])
+    rref = retune_pulses(sc, beams, enabled, pul; kw...)
+    k1 = findfirst(==(1.0), rref.retune.time)
+    I0 = rref.retune.level[k1]
+    ru = retune_pulses(sc, beams, enabled, pul; kw..., target = :uniform, level = I0)
+    rr = retune_pulses(sc, beams, enabled, pul; kw..., target = :reference, level = I0)
+    # the core's retune called with the same arguments: the reference shot's depositions
+    # (every beam) at the steps, one power per beam within 3× its reference power
+    times = ru.retune.time
+    ref = (; time = times, deposition = [deposit(sc.deposition, with_pulses(beams, pul, τ; by = :beam)) for τ in times])
+    core = retune_drive(FoilIrradiance(foil; radius = s.drive.spot_radius[]), sc.deposition[kept], beams[kept], ref;
+                        by = :beam, limits = (k, τ) -> (0.0, 3.0 * pul[k](τ)), target = :uniform, level = I0)
+    @test core.keys == ru.retune.keys && isapprox(core.power, ru.retune.power; rtol = 1e-12)
+    solved = isfinite.(core.residual)
+    @test count(solved) == 2 && all(abs.(ru.retune.drive[solved] .- 1) .< 1e-10)
+    # the level held, from depositions at the retuned powers (the GUI's `after`), and the
+    # uniform target's RMS below the reference shape's at the same level
+    @test all(abs.(ru.after.mean[solved] ./ (1e14 * I0) .- 1) .< 1e-10)
+    @test all(abs.(rr.retune.drive[solved] .- 1) .< 1e-10)
+    @test all(ru.retune.rms[solved] .< rr.retune.rms[solved]) &&
+          isapprox(ru.after.rms[solved], ru.retune.rms[solved]; rtol = 1e-12)
+    # through the session: the chart's mean against the level, zero where it solved
+    retune_to_reference!(s, table, out; kw.by, kw.cap, target = :uniform, level = I0)
+    r = s.time.retune[]
+    @test r.target === :uniform && r.level == I0 && occursin("uniform, ", s.drive.retune_status[])
+    @test keys(r.pulses) == keys(ru.pulses) &&
+          all(isapprox(r.pulses[k].p, ru.pulses[k].p; rtol = 1e-12) for k in keys(ru.pulses))
+    ch = time_chart(s, :retune)
+    @test ch.right.label == "Foil spot RMS, mean − level (%)"
+    @test all(abs.(ch.right.series[5].y[solved]) .< 1e-8) && all(isnan, ch.right.series[5].y[.!solved])
+    # the dialog's level text: empty is the reference's; a capsule's is its Tᵣ in eV
+    @test Controllers._retune_level(:foil, " ") === nothing && Controllers._retune_level(:face, "0.02") == 0.02
+    @test radiation_temperature(Controllers._retune_level(:capsule, "250")) ≈ 250 rtol = 1e-12
+    @test_throws ArgumentError Controllers._retune_level(:foil, "-1")
 end

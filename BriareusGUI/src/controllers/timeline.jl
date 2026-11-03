@@ -747,8 +747,8 @@ plot (then no series); `scale` (`:log`), on a chart whose left axis is logarithm
 - `:retune`: each group's power on the reference pulses (all beams, dashed) and on the
   retuned ones (enabled beams), and the capsule's mode 1 ε₁ before and after (%); for a
   flat face or a foil spot ([`retune_pulses`](@ref)'s `kind`), its RMS nonuniformity
-  before, after and in the reference, and its mean's departure from the reference's
-  before and after (%).
+  before, after and in the reference, and its mean's departure from the reference's (or
+  from the retune's set level, where it solved) before and after (%).
 """
 function time_chart(sess::DesignSession, chart::Symbol = sess.time.chart[])
     chart in TIME_CHARTS || throw(ArgumentError("chart must be one of $TIME_CHARTS"))
@@ -874,14 +874,15 @@ function time_chart(sess::DesignSession, chart::Symbol = sess.time.chart[])
             rlabel = "ε₁ (%)"
         else
             # a face or a foil spot: its RMS nonuniformity, and its mean's departure from
-            # the reference's, before and after
-            Δ(f) = 100 .* (f.mean ./ r.reference.mean .- 1)
+            # the reference's (or from the set level), before and after
+            Δ(f) = 100 .* _mean_departure(f, r.level, r.solved, r.reference)
             right = [_series("RMS before", r.before.time, 100 .* r.before.rms, _GRAY; style = :dot),
                      _series("RMS retuned", r.after.time, 100 .* r.after.rms, _INK),
                      _series("RMS reference", r.reference.time, 100 .* r.reference.rms, _GRAY; style = :dash),
                      _series("mean before", r.before.time, Δ(r.before), "#0072B2"; style = :dot),
                      _series("mean retuned", r.after.time, Δ(r.after), "#0072B2")]
-            rlabel = (r.kind === :face ? "Face" : "Foil spot") * " RMS, mean − reference (%)"
+            rlabel = (r.kind === :face ? "Face" : "Foil spot") * " RMS, mean − " *
+                     (r.level === nothing ? "reference" : "level") * " (%)"
         end
         legend = vcat([_key(s) for s in new], [(; label = "reference (dashed)", color = _GRAY, style = :dash)],
                       [_key(s) for s in right])

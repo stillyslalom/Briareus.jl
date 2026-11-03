@@ -594,6 +594,8 @@ ApplicationWindow {
     Dialog {
         id: retuneDialog
         title: "Retune to a reference drive"
+        // what the retune holds: capsule, face or foil (the level's units)
+        readonly property string kind: app.retuneKinds.length > 0 ? app.retuneKinds[0] : ""
         anchors.centerIn: parent
         modal: true
         standardButtons: Dialog.Close
@@ -650,13 +652,35 @@ ApplicationWindow {
                 TextField { id: retuneStay; text: "0"; Layout.preferredWidth: 100
                             tip: "The weight on the retuned powers' departure from the reference powers; 1e-4 keeps most quads off their limit" }
                 Item { width: 1 }
+                Label { text: "Target" }
+                ComboBox {
+                    id: retuneTarget
+                    Layout.preferredWidth: 160
+                    textRole: "label"
+                    valueRole: "key"
+                    model: [{ label: "reference shape", key: "reference" }, { label: "uniform", key: "uniform" }]
+                    tip: "Reference shape: the reference shot's modes or flux distribution, nonuniformity included. Uniform: no modes, a flat flux, the least nonuniformity the powers allow"
+                }
+                Item { width: 1 }
+                Label { text: "Level"; visible: retuneTarget.currentValue === "uniform" }
+                TextField {
+                    id: retuneLevel
+                    visible: retuneTarget.currentValue === "uniform"
+                    Layout.preferredWidth: 100
+                    placeholderText: "reference's"
+                    tip: retuneDialog.kind === "capsule"
+                         ? "The capsule's radiation temperature held at every step (eV); empty: the reference's at each step"
+                         : "The mean flux held at every step (TW/mm², ×10¹⁴ for W/cm²); empty: the reference's at each step. Where the power limit cannot reach it, the status gives the level reached"
+                }
+                Label { text: retuneDialog.kind === "capsule" ? "Tᵣ (eV)" : "TW/mm²"; visible: retuneLevel.visible }
             }
             RowLayout {
                 Button {
                     text: "Retune"
                     enabled: app.driveCurrent && !app.retuneRunning && retuneTable.text !== "" && retuneOut.text !== ""
                     onClicked: Julia.br_retune(retuneTable.text, retuneOut.text, retuneBy.currentValue,
-                                               retuneCap.text, retuneStay.text)
+                                               retuneCap.text, retuneStay.text, retuneTarget.currentValue,
+                                               retuneLevel.text)
                     tip: app.driveCurrent ? "Retune in the background; the Time tab's Retune chart shows the result"
                                           : "Compute the drive first"
                 }

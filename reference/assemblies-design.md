@@ -322,8 +322,16 @@ E. **Double backlighter with ARC:** the starter, ARC beams as a facility beam se
   `_face_stats` on each history step, the foil's from depositions over `_spot_elements`
   (shared with `_spot_stats`). The retune chart's right axis then shows the RMS (before,
   after, reference) and the mean's departure from the reference's (before, after).
-- The GUI's retune holds the reference's shape; the uniform target at a prescribed level
-  is core only.
+- The GUI's retune (2026-11-03) takes the target and the level: `retune_pulses(...;
+  target, level)` passes them to `retune_drive`, the level in TW/mm² (a capsule's mean
+  flux, its `c_00` being `√(4π)` times it). The dialog offers *reference shape* or
+  *uniform*, and for uniform a level in the quantity's units (a capsule's Tᵣ in eV,
+  converted as σTᵣ⁴; a face's or a foil spot's mean in TW/mm²; empty: the reference's).
+  With a set level the status and the retune chart give the mean's departure from it,
+  over the steps the retune solves. Checked on the foil and opacity starters: the GUI's
+  powers equal core `retune_drive` called with the same reference and limits to 1e-12,
+  the level is held to 1e-10, and the uniform target's RMS is below the reference
+  shape's at that level at every solved step.
 - The foil's GUI retune is the 3ω light's: it takes no unconverted light (`retune_pulses`
   throws if given), though core `retune_drive` adds each color's absorbed power to a
   foil's irradiance when the reference carries it.

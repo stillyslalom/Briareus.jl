@@ -163,9 +163,8 @@ Items 10–15 follow the 2026-10-22 literature review against Kritcher et al. 20
     data at 351 nm); pulse length and spot size as variables (CE ignores both); continuum
     and higher lines in the filter pass band, detector response, the object's
     transmission. Retune (core `retune_drive` with `FoilIrradiance`/`FaceFlux`, level
-    held; "Retuning faces and foils; the held level"): the GUI offers the reference target
-    only (no uniform target at a set level), lets the user choose neither the quantity
-    (`on = :auto`) nor load the retuned pulses as the Time panel's; its foil retune leaves
+    held; "Retuning faces and foils; the held level"): the GUI lets the user choose neither
+    the quantity (`on = :auto`) nor load the retuned pulses as the Time panel's; its foil retune leaves
     out unconverted light and the prepulse; peak-to-mean is reported, not optimized; the
     retune holds the reference's albedos (linearized) and retunes powers, not pointing.
 16. **Unconverted light over time.** *State:* `unconverted_history` and

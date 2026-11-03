@@ -1080,6 +1080,11 @@ function _refresh_drive!(sh::BriareusShell)
     end
     _set!(sh, "retuneRunning", dr.retune_running[])
     _set!(sh, "retuneStatus", dr.retune_status[])
+    # what a retune can hold (the dialog's choice when there are several, and the level's units)
+    qs = Controllers._retune_quantities(sess)
+    _set!(sh, "retuneOn", String[String(q.on) for q in qs])
+    _set!(sh, "retuneKinds", String[String(q.kind) for q in qs])
+    _set!(sh, "retuneLabels", String[q.label for q in qs])
     return
 end
 
@@ -2620,14 +2625,18 @@ br_export_visrad_workspace(url) = _with_shell(sh -> export_visrad_workspace(sh.s
 br_export_results(url) = _with_shell(sh -> export_results(sh.sess, _url_to_path(String(url))))
 br_export_stl(url) = _with_shell(sh -> export_target_stl(sh.sess, _url_to_path(String(url))))
 # The retune's errors show in its dialog, where it was asked for.
-function br_retune(table, out, by, cap, stay)
+function br_retune(table, out, by, cap, stay, target, level)
     _with_shell() do sh
         try
+            qs = Controllers._retune_quantities(sh.sess)
+            # the level in the units of what the retune holds (a capsule's Tᵣ, else TW/mm²)
+            lv = isempty(qs) ? nothing : Controllers._retune_level(first(qs).kind, String(level))
             retune_to_reference!(sh.sess, _url_to_path(String(table)), _url_to_path(String(out));
                                  by = _sym(by),
                                  cap = Controllers._parse_number(cap, "the power limit"; positive = true),
                                  stay = Controllers._parse_number(stay, "the weight on the reference powers";
-                                                                  nonnegative = true))
+                                                                  nonnegative = true),
+                                 target = _sym(target), level = _sym(target) === :uniform ? lv : nothing)
         catch err
             sh.sess.drive.retune_status[] = "retune failed: " * Controllers._errmsg(err)
         end

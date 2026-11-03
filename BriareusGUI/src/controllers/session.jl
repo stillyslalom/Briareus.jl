@@ -1196,19 +1196,24 @@ end
 
 """
     retune_pulses(s::Scenario, beams, enabled, pulses; by = :quad, cap = 1.3, stay = 0.0,
-                  wall = (), unconverted = nothing, prepulse = nothing, foil = nothing,
-                  spot_radius = 0.5, on = :auto) -> NamedTuple
+                  target = :reference, level = nothing, wall = (), unconverted = nothing,
+                  prepulse = nothing, foil = nothing, spot_radius = 0.5, on = :auto) -> NamedTuple
 
 Retune the enabled beams' powers to the drive of a reference shot in which every beam of
 `beams` (the scenario's, in its order) fired `pulses` (power per beam against time, keyed
 by group, quad or beam name, e.g. `read_pulse_table`): at each step of a drive history
 of the reference ([`start_history!`](@ref)'s steps: the pulses' times, the prepulse
 window every 0.5 ns and one step after it, and the zero-power steps between, from the
-first time anything fires to the last), the reference's drive shape and level are
-restored where its 3ω light fires (elsewhere the retuned powers are zero)
-(`Briareus.retune_drive`, target `:reference`) by one power per `by` key (`:quad`,
-`:group` or `:beam`) within `cap` times its reference power, preferring the reference
-powers with weight `stay`. Disabled beams are the dropped ones. What is held (`kind`):
+first time anything fires to the last), where the reference's 3ω light fires (elsewhere
+the retuned powers are zero), the drive is held (`Briareus.retune_drive`) by one power
+per `by` key (`:quad`, `:group` or `:beam`) within `cap` times its reference power,
+preferring the reference powers with weight `stay`. `target = :reference` holds the
+reference's drive shape, `:uniform` a uniform drive (no modes; a flat flux), the least
+nonuniformity the powers allow; `level` sets the drive's level at every step (TW/mm²:
+the face's or the foil spot's mean, or the capsule's mean incident flux, whose `c_00` is
+`√(4π)` times it), and `nothing` holds the reference's level at each step. Where the
+power limits cannot reach the level the retune reports the level they allow
+(`retune.drive`). Disabled beams are the dropped ones. What is held (`kind`):
 
 - `:capsule`, an observed sphere: its modes through l = 4 (`Briareus.CapsuleModes`);
 - `:face`, an observed flat face ([`observed_flat`](@ref)): its incident x-ray flux on
@@ -1225,7 +1230,8 @@ the enabled beams on the reference pulses (`before`) and on the new ones (`after
 a capsule, drive histories, whose wall temperature is that of the names `wall` in the
 scenario's target (a session passes its [`wall_names`](@ref)), else the capsule's; for
 a face or a foil, `(; time, mean, peak, low, rms)` per time (W/cm², the RMS relative), as
-the drive's face and spot statistics, the face's from drive histories. With
+the drive's face and spot statistics, the face's from drive histories; and the `target`
+and `level` asked for. With
 `unconverted` (per color, the unconverted power as a fraction of each beam's 3ω power,
 `(; omega1, omega2)`: a number for every beam, or a vector with one per beam of
 `beams`), every history and the retune of a capsule or a face take the unconverted 1ω
@@ -1239,12 +1245,15 @@ they are the 3ω ones, bit for bit. The foil's retune is the 3ω light's: it tak
 """
 function retune_pulses(s::Scenario, beams::AbstractVector{<:Beam}, enabled::AbstractVector{Bool},
                        pulses::AbstractDict; by::Symbol = :quad, cap::Real = 1.3, stay::Real = 0.0,
+                       target::Symbol = :reference, level::Union{Nothing,Real} = nothing,
                        wall = (), unconverted::Union{Nothing,NamedTuple} = nothing,
                        prepulse::Union{Nothing,NamedTuple} = nothing, foil::Union{Nothing,Symbol} = nothing,
                        spot_radius::Real = 0.5, on::Symbol = :auto)
     kind = _retune_kind(s, foil, on)
     kind === nothing && throw(ArgumentError(_RETUNE_NONE))
     by in (:quad, :group, :beam) || throw(ArgumentError("retune by :quad, :group or :beam, not :$by"))
+    target in (:reference, :uniform) || throw(ArgumentError("the retune's target is :reference or :uniform, not :$target"))
+    level === nothing || (isfinite(level) && level > 0) || throw(ArgumentError("the level must be positive"))
     cap > 0 || throw(ArgumentError("the power limit must be positive"))
     any(enabled) || throw(ArgumentError("every beam is disabled"))
     kind === :foil && (unconverted !== nothing || prepulse !== nothing) &&
@@ -1267,7 +1276,9 @@ function retune_pulses(s::Scenario, beams::AbstractVector{<:Beam}, enabled::Abst
     members = Dict(k => [refkey(b) for b in kept if key(b) == k] for k in unique(key.(kept)))
     nominal(k, τ) = sum(pulses[r](τ) for r in members[k]) / length(members[k])
     limits(k, τ) = (0.0, cap * nominal(k, τ))
-    lkw = (; by, limits, stay, nominal = stay > 0 ? nominal : nothing)
+    # the level in the quantity's units: a capsule's c_00 = √(4π) × its mean flux
+    lv = level === nothing ? nothing : kind === :capsule ? sqrt(4π) * Float64(level) : Float64(level)
+    lkw = (; by, limits, stay, nominal = stay > 0 ? nominal : nothing, target, level = lv)
     refbeams(τ) = with_pulses(beams, pulses, τ; by = ref_by)
     oldbeams(τ) = with_pulses(kept, pulses, τ; by = ref_by)
     if kind === :foil
@@ -1308,7 +1319,7 @@ function retune_pulses(s::Scenario, beams::AbstractVector{<:Beam}, enabled::Abst
     ts = sort(unique([nodes; times]))
     out = Dict{Symbol,PulseShape}(Symbol(k) => PulseShape(ts, [at(g, τ) for τ in ts])
                                   for (g, k) in enumerate(r.keys))
-    return (; pulses = out, kind, retune = r, reference, before, after)
+    return (; pulses = out, kind, target, level, retune = r, reference, before, after)
 end
 
 # What a retune of scenario `s` holds (`retune_pulses`'s `kind`; `on`: `:auto`,
@@ -1321,6 +1332,31 @@ function _retune_kind(s::Scenario, foil, on::Symbol)
     on === :observed && return observed
     on === :foil && return hasfoil
     return something(observed, hasfoil, Some(nothing))
+end
+
+# What a retune of the drive's scenario can hold: `(; on, kind, label)` per choice (`on`,
+# `retune_pulses`'s: `:observed` or `:foil`), the one `on = :auto` takes first; none
+# without a scenario.
+function _retune_quantities(sess::DesignSession)
+    s = sess.drive.scenario[]
+    s === nothing && return NamedTuple[]
+    foil = active_foil(sess.target)
+    out = NamedTuple[]
+    obs = _retune_kind(s, foil, :observed)
+    name = String(something(observed_name(sess.target), :observed))
+    obs === nothing ||
+        push!(out, (; on = :observed, kind = obs, label = obs === :capsule ? "$name's modes" : "$name's flux"))
+    _retune_kind(s, foil, :foil) === nothing || push!(out, (; on = :foil, kind = :foil, label = "$foil's irradiance"))
+    return out
+end
+
+# A retune's `level` from the dialog's text in the units of the quantity `kind`: a
+# capsule's Tᵣ (eV) as its mean flux σTᵣ⁴, a face's or a foil spot's mean (TW/mm²); an
+# empty text is the reference's level (`nothing`).
+function _retune_level(kind::Symbol, text::AbstractString)
+    isempty(strip(text)) && return nothing
+    x = _parse_number(text, kind === :capsule ? "the level's Tᵣ" : "the level"; positive = true)
+    return kind === :capsule ? Briareus.SIGMA_SB * x^4 : x
 end
 
 # Why a drive cannot be retuned: nothing to hold.
@@ -1343,18 +1379,32 @@ function _spot_series(t::Target, es, times, Ps)
             low = to_Wcm2.(minimum.(I)), rms = [m > 0 ? rms_nonuniformity(i, A) : NaN for (i, m) in zip(I, mean)])
 end
 
+# A retune's face or foil statistics `f` (`retune_pulses`'s `before`, `after`): the mean's
+# relative departure at each step from the reference's mean `ref.mean`, or with a
+# `level` (TW/mm²) from it where the retune solved (`solved`; NaN elsewhere).
+_mean_departure(f, level, solved, ref) =
+    level === nothing ? f.mean ./ ref.mean .- 1 : [s ? m / to_Wcm2(level) - 1 : NaN for (m, s) in zip(f.mean, solved)]
+
+# The retune's level as text: the reference's, or the set one.
+_level_text(v) = v.level === nothing ? "the reference's level" :
+                 v.kind === :capsule ? @sprintf("Tᵣ %.1f eV", radiation_temperature(v.level)) :
+                 @sprintf("%.3g TW/mm²", v.level)
+
 # The unconverted light `u` (`retune_pulses`'s `unconverted`) of the beams `keep`: each
 # color's fraction per beam, if it has one, at those beams.
 _kept_unconverted(::Nothing, keep) = nothing
 _kept_unconverted(u::NamedTuple, keep) = map(f -> f isa AbstractVector ? f[keep] : f, u)
 
 """
-    retune_to_reference!(sess::DesignSession, table, out; by = :quad, cap = 1.3, stay = 0.0)
+    retune_to_reference!(sess::DesignSession, table, out; by = :quad, cap = 1.3, stay = 0.0,
+                         target = :reference, level = nothing)
 
 Retune the enabled beams to the reference shot whose pulses are the table `table`
 (`read_pulse_table`: a `time_ns` column and one per group, quad or beam), as
 [`retune_pulses`](@ref) with the drive's scenario (which must be current), its spot
-radius and the active foil ([`active_foil`](@ref)), and write the new pulses to `out`
+radius and the active foil ([`active_foil`](@ref)), to the reference's drive shape
+(`target = :reference`) or a uniform drive (`:uniform`), at the reference's level or at
+`level` (TW/mm², `retune_pulses`'s), and write the new pulses to `out`
 (`write_pulse_table`), on a worker when `spawn[]` is set. The disabled beams are the ones
 the shot loses. The retune holds the observed surface's drive (a capsule's modes, a flat
 face's flux) when the drive has a radiation model, else the active foil's irradiance.
@@ -1365,10 +1415,12 @@ the retune, on the beams whose 1ω or 2ω light takes part ([`participates`](@re
 foil's retune is the 3ω light's. Progress and the outcome go to
 `drive.retune_running`/`retune_status`: for a capsule the worst-time mode 1 before and
 after, for a face or a foil the worst RMS nonuniformity and the worst departure of the
-mean from the reference's. A drive with neither is refused with a status message.
+mean from the reference's (from `level` when it is set; for a capsule the Tᵣ's likewise).
+A drive with neither is refused with a status message.
 """
 function retune_to_reference!(sess::DesignSession, table::AbstractString, out::AbstractString;
-                              by::Symbol = :quad, cap::Real = 1.3, stay::Real = 0.0)
+                              by::Symbol = :quad, cap::Real = 1.3, stay::Real = 0.0,
+                              target::Symbol = :reference, level::Union{Nothing,Real} = nothing)
     dr = sess.drive
     dr.retune_running[] && return sess
     if !_drive_current(sess)
@@ -1391,8 +1443,8 @@ function retune_to_reference!(sess::DesignSession, table::AbstractString, out::A
     dr.retune_status[] = "retuning to $(basename(table))…"
     runner = _runner(sess.spawn, sess.deliver)
     wall = Tuple(wall_names(sess.target))
-    runner(() -> retune_pulses(s, beams, enabled, pulses; by, cap, stay, wall, unconverted, prepulse, foil,
-                               spot_radius), function (res)
+    runner(() -> retune_pulses(s, beams, enabled, pulses; by, cap, stay, target, level, wall, unconverted,
+                               prepulse, foil, spot_radius), function (res)
         dr.retune_running[] = false
         if res.err !== nothing
             dr.retune_status[] = "retune failed: " * _errmsg(res.err)
@@ -1403,7 +1455,8 @@ function retune_to_reference!(sess::DesignSession, table::AbstractString, out::A
         # the time panel plots the retune (and fires the reference pulses when it had none)
         bt = sess.beams
         nodes = sort(unique(reduce(vcat, [p.t for p in values(pulses)])))
-        sess.time.retune[] = (; label = basename(table), v.kind, by, pulses = v.pulses, reference_pulses = pulses,
+        sess.time.retune[] = (; label = basename(table), v.kind, v.target, v.level,
+                              solved = isfinite.(v.retune.residual), by, pulses = v.pulses, reference_pulses = pulses,
                               reference_by = _pulse_key(beams, pulses), nodes, beams, enabled,
                               table = (; cluster = copy(bt.cluster[]), colors = cluster_colors(bt)),
                               before = v.before, after = v.after, reference = v.reference)
@@ -1411,17 +1464,22 @@ function retune_to_reference!(sess::DesignSession, table::AbstractString, out::A
             (sess.time.pulses[] = _table_pulses(pulses, _pulse_key(beams, pulses), basename(table)))
         set_chart!(sess.time, :retune)
         n = length(v.retune.keys)
+        aim = v.target === :uniform ? "uniform, " : ""
+        solved = isfinite.(v.retune.residual)
         if v.kind === :capsule
             ε1(h) = 100 * maximum(mode_amplitude(h.ylm[:, k], 1) for k in eachindex(h.time))
-            ΔT(h) = maximum(abs.(h.Tr .- v.reference.Tr))
-            dr.retune_status[] = @sprintf("%d %s powers: worst ε₁ %.2f%% → %.2f%%, |ΔTᵣ| %.1f → %.1f eV; wrote %s",
-                                          n, by, ε1(v.before), ε1(v.after), ΔT(v.before), ΔT(v.after), basename(out))
+            # the Tᵣ against the reference's, or against the level's where the retune solves
+            ΔT(h) = v.level === nothing ? maximum(abs.(h.Tr .- v.reference.Tr)) :
+                    _finite_max(abs.(h.Tr[solved] .- radiation_temperature(v.level)))
+            dr.retune_status[] = @sprintf("%d %s powers (%s%s): worst ε₁ %.2f%% → %.2f%%, |ΔTᵣ| %.1f → %.1f eV; wrote %s",
+                                          n, by, aim, _level_text(v), ε1(v.before), ε1(v.after), ΔT(v.before),
+                                          ΔT(v.after), basename(out))
         else
             # (over the steps where the reference lights the face or the spot)
             rms(f) = 100 * _finite_max(f.rms)
-            Δ(f) = 100 * _finite_max(abs.(f.mean ./ v.reference.mean .- 1))
-            dr.retune_status[] = @sprintf("%d %s powers: %s worst RMS %.2f%% → %.2f%% (reference %.2f%%), |Δmean| %.2f%% → %.2f%%; wrote %s",
-                                          n, by,
+            Δ(f) = 100 * _finite_max(abs.(_mean_departure(f, v.level, solved, v.reference)))
+            dr.retune_status[] = @sprintf("%d %s powers (%s%s): %s worst RMS %.2f%% → %.2f%% (reference %.2f%%), |Δmean| %.2f%% → %.2f%%; wrote %s",
+                                          n, by, aim, _level_text(v),
                                           v.kind === :face ? "face" : "foil spot", rms(v.before), rms(v.after),
                                           rms(v.reference), Δ(v.before), Δ(v.after), basename(out))
         end

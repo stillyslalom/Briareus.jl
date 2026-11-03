@@ -585,3 +585,47 @@ end
     restore!(sess, state)
     @test st.uniformity[] == 1.0
 end
+
+@testset "the opacity sample's retune: a uniform flux at a set level (no GL)" begin
+    sess = DesignSession(starter = :opacity, resolution = :coarse)
+    build_scenario!(sess)
+    s = sess.drive.scenario[]
+    beams = sess.beams.beams[]
+    # the reference fires every beam of the table; the first enabled quad is down
+    pul = Dict(g => PulseShape([0.0, 1.0, 2.0, 3.0], [0.0, 1.0, 2.0, 0.0]) for g in unique(b.group for b in beams))
+    q1 = beams[findfirst(sess.beams.enabled[])].quad
+    enabled = [on && b.quad != q1 for (b, on) in zip(beams, sess.beams.enabled[])]
+    keep = findall(enabled)
+    walls = Tuple(n for n in wall_names(sess.target) if n in component_names(s.target))
+    kw = (; by = :quad, cap = 1.5, wall = Tuple(wall_names(sess.target)))
+    rref = retune_pulses(s, beams, enabled, pul; kw...)
+    @test rref.kind === :face
+    # the level: 1.2 × the reference's mean at 1 ns (within the 1.5× limit there, below
+    # the reference's at 2 ns)
+    k1 = findfirst(==(1.0), rref.retune.time)
+    I0 = 1.2 * rref.retune.level[k1] / rref.retune.drive[k1]
+    ru = retune_pulses(s, beams, enabled, pul; kw..., target = :uniform, level = I0)
+    rr = retune_pulses(s, beams, enabled, pul; kw..., target = :reference, level = I0)
+    # the core's retune called with the same arguments: a core history of the reference
+    # (every beam, its albedos and the face's flux kept), one power per quad within 1.5×
+    # its reference power
+    observe = Controllers._observed_parts(s)
+    times = ru.retune.time
+    ref = drive_history(s.model, s.deposition, τ -> with_pulses(beams, pul, τ; by = :group), times;
+                        observe, wall = isempty(walls) ? observe : walls, lmax = 4, keep_albedo = true,
+                        observed_flux = true)
+    group = Dict(Symbol(b.quad) => b.group for b in beams)
+    core = retune_drive(FaceFlux(s.model, observe), s.deposition[keep], beams[keep], ref; by = :quad,
+                        limits = (k, τ) -> (0.0, 1.5 * pul[group[k]](τ)), target = :uniform, level = I0)
+    @test core.keys == ru.retune.keys && isapprox(core.power, ru.retune.power; rtol = 1e-12)
+    solved = isfinite.(core.residual)
+    @test count(solved) == 2
+    # the level held (the core's tolerance) and the uniform target's RMS below the
+    # reference shape's at that level, as predicted at the reference's albedos
+    @test all(abs.(ru.retune.drive[solved] .- 1) .< 1e-10) && all(abs.(rr.retune.drive[solved] .- 1) .< 1e-10)
+    @test all(ru.retune.rms[solved] .< rr.retune.rms[solved])
+    # (measured on the coarse sample: RMS 7e-17 uniform, 1.3e-4 for the reference shape)
+    # the face's mean from a drive history of the retuned pulses, the albedos following
+    # the drive (fixed ones here): the level
+    @test all(abs.(ru.after.mean[solved] ./ to_Wcm2(I0) .- 1) .< 1e-9)
+end
