@@ -65,19 +65,36 @@ _tvalue(f::PulseShape, t) = f(t)
 Per-group backscattered power fraction (SRS + SBS), removed before deposition.
 `fractions` maps a beam group to a number, a function `t -> fraction`, or a
 `(times, values)` table (ns); groups not listed lose nothing. Typically set from
-measured FABS/NBI backscatter per cone.
+measured FABS/NBI backscatter per cone. A fraction lies in [0, 1]: numbers and tables
+outside it throw an `ArgumentError` at construction, a function's value outside it
+when applied.
 
     Backscatter(:inner23 => 0.10, :inner30 => ([0, 5, 8], [0.0, 0.05, 0.12]))
 """
 struct Backscatter <: LaserPlasmaModel
     fractions::Dict{Symbol,Any}
+    function Backscatter(fractions::Dict{Symbol,Any})
+        for (g, f) in fractions
+            ok = f isa Real ? 0 <= f <= 1 :
+                 f isa Tuple{<:AbstractVector,<:AbstractVector} ? all(x -> 0 <= x <= 1, f[2]) : true
+            ok || throw(ArgumentError("backscattered fraction of $g outside [0, 1]: $f"))
+        end
+        return new(fractions)
+    end
 end
 Backscatter(ps::Pair...) = Backscatter(Dict{Symbol,Any}(Symbol(k) => v for (k, v) in ps))
+Backscatter(d::AbstractDict) = Backscatter(Dict{Symbol,Any}(Symbol(k) => v for (k, v) in d))
 
 function apply_lpi(m::Backscatter, beams::AbstractVector{<:Beam}, time = 0.0)
     return [haskey(m.fractions, b.group) ?
-            remake(b; power = b.power * (1 - _tvalue(m.fractions[b.group], time))) : b
+            remake(b; power = b.power * (1 - _backscattered(m.fractions[b.group], b.group, time))) : b
             for b in beams]
+end
+
+function _backscattered(f, g, time)
+    x = _tvalue(f, time)
+    0 <= x <= 1 || throw(ArgumentError("backscattered fraction of $g at $time ns outside [0, 1]: $x"))
+    return x
 end
 
 """
@@ -89,6 +106,12 @@ power). `fraction(Δλ, t)` is a calibration — e.g. fit to shot data — where
 `Δλ = ⟨dlambda⟩_receivers − ⟨dlambda⟩_donors` (Å, power-weighted means), so a
 positive `Δλ` means the receivers are red-shifted relative to the donors, the
 direction that drives transfer toward them. Total power is conserved.
+
+At zero power the transfer has its limit: donors without power give nothing (`f · 0`),
+their `⟨dlambda⟩` then the unweighted mean, so that the derivatives with respect to
+their powers are finite; receivers without power take nothing (the light is shared in
+proportion to their powers, so there is nothing to share it by), and the beams are
+returned unchanged.
 
 Build `fraction` with `linear_transfer` or `tabulated_transfer`, or pass any
 differentiable function.
@@ -131,8 +154,9 @@ function apply_lpi(m::CalibratedTransfer, beams::AbstractVector{<:Beam}, time = 
     any(isd) && any(isr) || return beams
     Pd = sum(b.power for (b, d) in zip(beams, isd) if d)
     Pr = sum(b.power for (b, r) in zip(beams, isr) if r)
-    λd = sum(b.power * b.dlambda for (b, d) in zip(beams, isd) if d) / Pd
-    λr = sum(b.power * b.dlambda for (b, r) in zip(beams, isr) if r) / Pr
+    ForwardDiff.value(Pr) > 0 || return beams           # no receiving power to share by
+    λd = _mean_dlambda(beams, isd, Pd)
+    λr = _mean_dlambda(beams, isr, Pr)
     f = m.fraction(λr - λd, time)
     moved = f * Pd
     return [isd[i] ? remake(b; power = b.power * (1 - f)) :
@@ -140,17 +164,27 @@ function apply_lpi(m::CalibratedTransfer, beams::AbstractVector{<:Beam}, time = 
             for (i, b) in enumerate(beams)]
 end
 
+# The power-weighted mean detuning of the beams `sel` (total power `P`); the unweighted
+# mean when they have no power (the weights stay in the power's number type).
+function _mean_dlambda(beams, sel, P)
+    on = ForwardDiff.value(P) > 0
+    w(b) = on ? b.power : one(b.power)
+    return sum(w(b) * b.dlambda for (b, s) in zip(beams, sel) if s) /
+           sum(w(b) for (b, s) in zip(beams, sel) if s)
+end
+
 """
     lpi_summary(setup, effective) -> Dict{Symbol,NamedTuple}
 
-Per-group setup and effective power (TW) and their ratio.
+Per-group setup and effective power (TW) and their ratio: 1 for a group without power
+in either (no change), `Inf` for one that gains power from none.
 """
 function lpi_summary(setup::AbstractVector{<:Beam}, eff::AbstractVector{<:Beam})
     out = Dict{Symbol,NamedTuple}()
     for g in unique(b.group for b in setup)
         ps = sum(ForwardDiff.value(b.power) for b in setup if b.group === g)
-        pe = sum(ForwardDiff.value(b.power) for b in eff if b.group === g)
-        out[g] = (setup = ps, effective = pe, ratio = pe / ps)
+        pe = sum((ForwardDiff.value(b.power) for b in eff if b.group === g); init = 0.0)
+        out[g] = (setup = ps, effective = pe, ratio = ps > 0 ? pe / ps : pe == 0 ? 1.0 : Inf)
     end
     return out
 end

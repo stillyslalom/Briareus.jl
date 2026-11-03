@@ -35,6 +35,7 @@ include("docrefs.jl")
 
 shard_include("basics.jl")
 shard_include("csv.jl")
+shard_include("lpi.jl")
 
 shard_include("talis.jl")
 shard_include("vrw_fixture.jl")
