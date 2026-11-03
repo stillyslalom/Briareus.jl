@@ -65,7 +65,10 @@ end
 
 Steps a design through `values` and checks each step. `design(value)` returns a named
 tuple with the step's `target` and `beams`, and with `pointing`, the parameterization
-whose initial parameters give those beams, when the step is re-optimized.
+whose initial parameters give those beams, when the step is re-optimized; it may add
+`scenario_kw`, keywords of [`Scenario`](@ref) for that step alone, which follow
+`optimize.scenario_kw` (`viewfactor_kw = (; closed = cavities)` balances the step's
+cavities, whose elements move with its target).
 
 Each check runs when its keyword is given:
 - `clearance_kw`, the keywords of [`clearance`](@ref) (`targets` among them): the least
@@ -179,7 +182,8 @@ Base.@nospecializeinfer function _sweep(@nospecialize(design), values::Vector{Fl
         if opt !== nothing
             p = get(d, :pointing, nothing)
             p === nothing && throw(ArgumentError("re-optimizing needs the design's `pointing`"))
-            s = Scenario(t, p; get(opt, :scenario_kw, (;))...)
+            # the step's own keywords (its cavities' balancing, say) after the sweep's
+            s = Scenario(t, p; merge(get(opt, :scenario_kw, (;)), get(d, :scenario_kw, (;)))...)
             xi = initial_parameters(p)
             lo, hi = bounds(p, xi; get(opt, :bounds_kw, (;))...)
             warm = get(opt, :warm, true)

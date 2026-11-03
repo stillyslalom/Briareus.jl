@@ -614,15 +614,26 @@ Taken without a question (reverse any):
   capsule flux; its test compares the template-era values with the scenario built
   without cavities).
 - The drive's status names the cavities balanced and why one is not, when the design
-  has more than one or one is not balanced; the cavity-point drive (Drive ▸ Cavity)
-  keeps its own whole-enclosure balancing (`_cavity_closure`). `_build_scenario` takes
-  `cavities` in place of `closed` and returns them (`cavities`).
+  has more than one or one is not balanced. `_build_scenario` takes `cavities` in place
+  of `closed` and returns them (`cavities`).
 - Bit for bit: the default design's, the frustraum's and the opacity halfraum's drive and
   drive history, every serialized field (standard size), before and after: identical.
   The shock tube changes at the view factors' error (observed face −4.4e-4, each wall Tr
   311.2875 → 311.2444 eV). Validation (sphere closed forms over every bounce, the
   coaxial-disk closed form, per-cavity energy balance to 3e-13, a Monte Carlo of the
   element model on watertight facets): research notes, "Per-cavity balancing".
-- Not built: the GUI placement sweep's re-optimization builds its radiation models from
-  the target's own `closed` flag (false for GUI targets), so its drive objective is
-  unbalanced for every design, a single hohlraum included (before and after this item).
+- The sweep and the cavity drive (2026-11-03, the item's leftovers). The placement
+  sweep's re-optimization (a drive objective, not irradiance) balances each step's
+  cavities: the design's cavity volumes move with their parts (a translation, or the
+  re-resolved frames), `_closed_cavities` traces them on the step's target, and the step
+  returns `scenario_kw = (; viewfactor_kw = (; closed))`, which core `placement_sweep`
+  merges after `optimize.scenario_kw`. A cavity a step opens (a halfraum lifted off its
+  package) is left unbalanced at that step. Until then the sweep's drive objective was
+  unbalanced for every design, a single hohlraum included. Drive ▸ Cavity balances each
+  hohlraum part of the design that its enclosure holds and the rays find closed, on its
+  own; what the enclosure reaches through an entrance hole (a plate beyond it) keeps its
+  raw rows (balancing the enclosure as one forced them to one). An enclosure with no
+  such part (a CAD cavity) is balanced as one when its apertures close it, as before.
+  The entrance holes meet the caps vertex for vertex since the same date (research
+  notes, "Entrance holes at the caps' azimuthal count"): the shock tube's rays no longer
+  leak.

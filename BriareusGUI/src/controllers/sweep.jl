@@ -307,6 +307,7 @@ struct _SweepDesign
     follow::Vector{Bool}
     frames::Vector{Frame}
     pointing::Any                      # nothing, or (; key, fields, by)
+    cavities::Vector{_CavityVolume}    # balanced per step (re-optimizing a drive), or none
 end
 
 function (d::_SweepDesign)(value)
@@ -321,7 +322,21 @@ function (d::_SweepDesign)(value)
         frames = Frame[m ? Frame(F.R, F.origin + Δ) : F for (F, m) in zip(d.frames, d.follow)]
         _parameterization(beams, frames, d.pointing.key, d.pointing.by, d.pointing.fields)
     end
-    return (; target, beams, pointing)
+    vols = _CavityVolume[any(in(d.moved), v.pieces) ? _moved_volume(v, Frame(v.frame.R, v.frame.origin + Δ)) : v
+            for v in d.cavities]
+    return (; target, beams, pointing, scenario_kw = _step_scenario_kw(target, vols))
+end
+
+# A cavity volume placed by the frame `F`.
+_moved_volume(v::_CavityVolume, F::Frame) =
+    _CavityVolume(v.name, F, v.length, v.radius, v.profile, v.pieces, v.holed)
+
+# The scenario keywords of a re-optimized sweep step: its cavities balanced each on its
+# own on the step's target, as the drive balances the design's (`_closed_cavities`; the
+# rays check each cavity where the step put it), or none.
+function _step_scenario_kw(target::Target, vols::Vector{_CavityVolume})
+    isempty(vols) && return (;)
+    return (; viewfactor_kw = (; closed = _closure_kw(target, _closed_cavities(target, vols))))
 end
 
 # The frames that change when the frames `moved` move: theirs, and those of the parts
@@ -367,6 +382,7 @@ struct _FrameSweepDesign
     aim_frame::Vector{Symbol}
     bframes::Vector{Frame}
     pointing::Any                      # nothing, or (; key, fields, by)
+    cavities::Vector{_CavityVolume}    # balanced per step (re-optimizing a drive), or none
 end
 
 # The rigid maps (chamber to chamber) of the frames a sweep value moves.
@@ -388,7 +404,8 @@ function (d::_FrameSweepDesign)(value)
         frames = Frame[haskey(maps, f) ? compose(maps[f], F) : F for (F, f) in zip(d.bframes, d.aim_frame)]
         _parameterization(beams, frames, d.pointing.key, d.pointing.by, d.pointing.fields)
     end
-    return (; target, beams, pointing)
+    vols = _CavityVolume[haskey(maps, v.name) ? _moved_volume(v, compose(maps[v.name], v.frame)) : v for v in d.cavities]
+    return (; target, beams, pointing, scenario_kw = _step_scenario_kw(target, vols))
 end
 
 # The parts at a sweep value: the subject part's center moved by `value * dir` (chamber),
@@ -435,16 +452,18 @@ function _sweep_design(inp)
           opt.by === :group ? (d = Dict(b.name => c for (b, c) in zip(inp.beams, inp.clusters)); b -> d[b.name]) :
           opt.by
     pointing = opt === nothing ? nothing : (; key, by = opt.by, fields = opt.fields)
+    # a re-optimized drive balances each step's cavities, as the drive does the design's
+    vols = opt === nothing || opt.cfg.kind === :irradiance ? _CavityVolume[] : inp.cavities
     # parts with steps that refer to a moved frame (a part facing the subject) do not just
     # translate: re-resolve the frames per step
     if inp.mode !== :step && _dependent_frames(inp.parts, moved_frames) == moved_frames
-        return _SweepDesign(t, moved, dir, inp.beams, follow, bframes, pointing), dir, follow
+        return _SweepDesign(t, moved, dir, inp.beams, follow, bframes, pointing, vols), dir, follow
     end
     i = findfirst(p -> p.name === inp.subject, inp.parts)   # (a part: `_sweep_inputs`)
     edit = inp.mode === :step ? _SetStepNumber(i, inp.step_index, inp.step_key) :
            _MoveCenter(i, dir, inp.frames[inp.parts[i].frame])
     design = _FrameSweepDesign(t, inp.parts, edit, inp.frames,
-                               _component_owners(t, inp.parts), inp.beams, inp.aim_frame, bframes, pointing)
+                               _component_owners(t, inp.parts), inp.beams, inp.aim_frame, bframes, pointing, vols)
     return design, dir, follow
 end
 
@@ -502,7 +521,8 @@ function _sweep_inputs(sess)
         isempty(opt.fields) && throw(ArgumentError("free at least one field (Optimization)"))
         _check_grouping(bt.beams[][idx], opt.by)
     end
-    return (; target = ts.target[], frames = part_frames(ts), parts = ts.parts[], subject, frame,
+    return (; target = ts.target[], frames = part_frames(ts), parts = ts.parts[],
+            cavities = _cavity_volumes(ts), subject, frame,
             axis = sw.axis[], values, idx, mode, step_index = sw.step_index[], step_key = sw.step_key[],
             beams = bt.beams[][idx], aim_frame = bt.aim_frame[][idx],
             clusters = bt.cluster[][idx],

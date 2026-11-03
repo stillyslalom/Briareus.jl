@@ -460,5 +460,13 @@ using Briareus: Vec3, SVector, SMatrix
         @test length(r1.x) == 4 && rows[1] === nothing && rows[3] === r2
         @test_throws ArgumentError placement_sweep(t, bs, :backlighter, [0.0];
                                                    optimize = (; objective = spread))
+        # a step's own `scenario_kw` follows the sweep's: here each step's time
+        times = Float64[]
+        lk = ReentrantLock()                      # gradient chunks run concurrently
+        stamp(ev) = (lock(() -> push!(times, ev.scenario.time), lk); spread(ev))
+        step = v -> (; target = t, beams = bs, pointing = p, scenario_kw = (; time = 2v))
+        placement_sweep(step, [0.5, 1.0]; optimize = (; objective = stamp, iterations = 1, evaluations = 1,
+                                                      scenario_kw = (; time = 9.0, deposition_kw = (; resolution = 0.6))))
+        @test unique(times) == [1.0, 2.0]
     end
 end

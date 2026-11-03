@@ -412,6 +412,46 @@ end
     @test !c.balanced && c.leak > 0.05
 end
 
+@testset "per-cavity balancing: the sweep's steps and the cavity drive (no GL)" begin
+    rows(F, c, d = axes(F, 2)) = vec(sum(F[c, d]; dims = 2))
+    # the placement sweep's re-optimization balances each step's cavities where the step
+    # puts them: the hohlraum moved 0.5 mm along x is one closed cavity of every element
+    sess = DesignSession(resolution = :coarse)
+    sw = sess.sweep
+    set_sweep!(sw; subject = :hohlraum, frame = :tcc, axis = :x, optimize = true)
+    design, _, _ = Controllers._sweep_design(Controllers._sweep_inputs(sess))
+    step = design(0.5)
+    @test step.scenario_kw.viewfactor_kw.closed === true
+    @test step.target.elem_centroid[1] ≈ sess.target.target[].elem_centroid[1] + Briareus.Vec3(0.5, 0, 0)
+    # the shock tube's upper halfraum lifted off the package opens its cavity: only the
+    # lower one is balanced, by its elements on the step's target
+    st = DesignSession(starter = :shock_tube, resolution = :coarse)
+    set_sweep!(st.sweep; subject = :halfraum_top, frame = :tcc, axis = :z, optimize = true)
+    design, _, _ = Controllers._sweep_design(Controllers._sweep_inputs(st))
+    cs = Controllers._closed_cavities(st.target)
+    @test design(0.0).scenario_kw.viewfactor_kw.closed == [c.elements for c in cs]
+    @test design(0.3).scenario_kw.viewfactor_kw.closed == [cs[2].elements]
+    # without re-optimization nothing is balanced or traced
+    set_sweep!(st.sweep; optimize = false, clearance = true)
+    @test !haskey(Controllers._sweep_design(Controllers._sweep_inputs(st))[1](0.0).scenario_kw, :viewfactor_kw)
+
+    # Drive ▸ Cavity on a hohlraum with a black plate beyond its upper entrance hole: the
+    # enclosure around TCC reaches the plate through the hole; the hohlraum is balanced
+    # on its own and the plate keeps its raw rows (balancing the enclosure as one forced
+    # them to one)
+    @test add_part!(sess.target, :disk; name = :plate, z = 6.5, r1 = 2.0, inward = true)
+    set_cavity!(sess.drive, true; point = (0, 0, 0))
+    build_scenario!(sess)
+    s = sess.drive.scenario[]
+    t = s.target
+    plate = elements(t, :plate)
+    @test !isempty(plate) && nelements(t) < nelements(sess.target.target[]) + 1
+    cav = setdiff(1:nelements(t), plate)
+    @test maximum(abs.(rows(s.model.F, cav, cav) .- 1)) < 1e-10      # (it sees the plate through the hole)
+    @test maximum(rows(s.model.F, plate)) < 0.5
+    @test occursin("balanced on the cavity of hohlraum", sess.drive.status[])
+end
+
 @testset "piece roles: an observed cap (no GL)" begin
     sess = DesignSession(resolution = :coarse)
     ts = sess.target

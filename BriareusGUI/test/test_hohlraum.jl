@@ -87,7 +87,11 @@ end
     @test all(isapprox(m.legendre, l; rtol = 1e-8, atol = 1e-12) for (m, l) in zip(r.modes, e["legendre"]))
     inc = element_values(r, :incident)
     sums = Dict(_template_name(c.name) => sum(inc[t.comp_elems[ci]]) for (ci, c) in enumerate(t.components))
-    @test all(isapprox(sums[Symbol(k)], x; rtol = 1e-10) for (k, x) in e["incident_sum"])
+    # the holes and lips have twice their template-era elements (the caps' azimuthal count
+    # since 2026-11-03): their sums of element fluxes double, to 1.5e-3 of the element means
+    hole(k) = startswith(k, "leh")
+    @test all(isapprox(sums[Symbol(k)], x; rtol = 1e-10) for (k, x) in e["incident_sum"] if !hole(k))
+    @test all(isapprox(sums[Symbol(k)] / 2, x; rtol = 3e-3) for (k, x) in e["incident_sum"] if hole(k))
     # saved again: the current version, read back the same
     f = joinpath(mktempdir(), "v10.briar.toml")
     save_session(f, s)

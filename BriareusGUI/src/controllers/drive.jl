@@ -259,7 +259,9 @@ passes); the clearance and TaLIS checks keep using the whole target. A CAD cavit
 open wherever its file is (entrance holes), so its view factors are left raw unless
 aperture parts close its openings: the drive then balances them (`closed = true`,
 `enforce_closure!`), when at most [`CAVITY_MAX_LEAK`](@ref) of the cavity's rays leak,
-and its status says which.
+and its status says which. A cavity holding hohlraum parts of the design that rays find
+closed balances each of them on its own instead (as the whole target's drive does), so
+what it reaches through an entrance hole beyond them keeps its raw rows.
 """
 function set_cavity!(dr::DriveState, on::Bool; point = dr.cavity_point[], films = dr.films[])
     _assign!(dr.cavity_point, Vec3(point...))
@@ -450,6 +452,23 @@ _observed_part(s::Scenario) = (o = _observed_parts(s); isempty(o) ? nothing : fi
 # The foil a flux-map lookup was made for (`nothing`: none, or a capsule map).
 _lookup_foil(lk) = lk !== nothing && lk.kind === :foil ? lk.foil : nothing
 
+# The cavities of the design whose view factors the drive balances each on its own (core
+# `RadiationModel(...; closed)` with one element set per cavity; reference/
+# assemblies-design.md, "Per-cavity balancing as built"): one per hohlraum part in the
+# calculations, its closed volume (its profile about its axis, ends included) placed by
+# its frame (`_cavity_volumes`, session.jl). Which elements a cavity holds is decided on
+# the drive's target (`_cavity_elements`), and whether it is closed by rays
+# (`_closed_cavities`).
+struct _CavityVolume
+    name::Symbol
+    frame::Frame
+    length::Float64
+    radius::Float64                           # a cylinder's (and a refused profile's)
+    profile::Any                              # a `HohlraumProfile`, or nothing
+    pieces::Set{Symbol}                       # the part's pieces' component names
+    holed::Bool                               # a boundary element left out of the calculations
+end
+
 # Build a scenario for a target and the table's beams (all of them: disabled beams are
 # evaluated at zero power, so on/off needs no rebuild). `observed` (a part or component
 # name, [`observed_name`](@ref)) is the surface the radiation model observes;
@@ -459,9 +478,10 @@ _lookup_foil(lk) = lk !== nothing && lk.kind === :foil ? lk.foil : nothing
 # films)` the scenario is built on the cavity around the point (see `set_cavity!`); a
 # pocket sealed by a film is opened by leaving that film out too (`_open_cavity`), and
 # a point in the open (most of its rays escape: a backlighter foil and its shields, say)
-# keeps the whole target. The cavity is balanced when apertures close it
-# (`_cavity_closure`), whatever `cavities` say. `profile` is the deposition's beam model
-# (`nothing`: the f-cone; a `VisRadProfile`: VisRad's, see `set_beam_model!`).
+# keeps the whole target. The cavity is balanced per cavity of `cavities` it holds that
+# rays find closed, else as one when apertures close it (`_cavity_closure`). `profile` is
+# the deposition's beam model (`nothing`: the f-cone; a `VisRadProfile`: VisRad's, see
+# `set_beam_model!`).
 # `references` (CAD part name => file facets, `_fit_references`) splits those parts into
 # their fitted curved pieces in the drive's target (`_fitted_target`). `foil`: the
 # backlighter foil of the flux map (`active_foil`). Returns `(; s,
@@ -500,8 +520,21 @@ function _build_scenario(t::Target, beams::Vector{Beam{Float64}}; cavities = _Ca
     fmap === nothing || (index = index === nothing ? fmap : fmap[index])
     radiation === nothing && (radiation = radiation_size(t).feasible)
     observe = radiation && observed !== nothing && observed in component_names(t) ? observed : nothing
-    cs = enc !== nothing || !radiation ? NamedTuple[] : _closed_cavities(t, cavities)
-    enc === nothing && (closed = _closure_kw(t, cs))
+    cs = radiation ? _closed_cavities(t, cavities) : NamedTuple[]
+    if enc === nothing
+        closed = _closure_kw(t, cs)
+    else
+        # the cavity's hohlraum parts closed by rays: each balanced on its own, as the whole
+        # design's are, rather than the enclosure (what it reaches through an entrance
+        # hole, outside the hohlraum, keeps its raw rows); else the enclosure as one
+        cs = filter(c -> !isempty(c.elements), cs)
+        if any(c -> c.balanced, cs)
+            closed = _closure_kw(t, cs)
+            leak = (; fraction = NaN, leak.apertures)
+        else
+            cs = NamedTuple[]
+        end
+    end
     s = Scenario(t, beams; observe, radiation, viewfactor_kw = (; closed), deposition_kw = (; profile))
     return (; s, lookup = flux_lookup(s; foil), enc, index, film, escape, closed = closed !== false, leak,
             cavities = cs)
@@ -524,7 +557,8 @@ keeps a cavity with an opening left without one, or with an aperture facing out 
 cavity (dropped by the selection), unbalanced. An engineering default, not a facility
 criterion, set from the fractions measured in the research notes ("Closure on bored,
 windowed and CAD cavities"): cracks where meshes meet 2–7 × 10⁻⁴ (2.7 × 10⁻³ on a coarse
-hohlraum) and a 40 µm waist gap 4 × 10⁻³ lie below it; a CAD cavity's two open LEHs,
+hohlraum before its entrance holes took the caps' count) and a 40 µm waist gap 4 × 10⁻³
+lie below it; a CAD cavity's two open LEHs,
 7 × 10⁻², lie well above it.
 """
 const CAVITY_MAX_LEAK = 1e-2

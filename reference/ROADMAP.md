@@ -35,11 +35,6 @@ those under "Correctness" were read in the code, the rest are leads to confirm f
    albedo 0, no emission; `history.jl`, eae01d4); the conversion of overlapping colors at
    each color's own flux; the liner blend in `WallLossAlbedo`. *Data:* a radiation-
    hydrodynamics run of a wall heated, cooled and heated again (a prepulse and gap).
-5. **Balancing in the placement sweep.** Each closed cavity is balanced on its own since
-   2026-11-03 (assemblies design, "Per-cavity balancing as built"), but the GUI
-   placement sweep's re-optimization builds its models from the target's `closed` flag,
-   so its drive objective runs unbalanced; it needs the drive's cavities per step. Drive ▸
-   Cavity still balances its whole enclosure as one cavity.
 
 ## VisRad parity and facility practice
 

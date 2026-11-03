@@ -618,29 +618,14 @@ function build_scenario!(sess::DesignSession)
                       (enc !== nothing && cavity_sealed(dr) ?
                        " · the cavity is a sealed pocket: mark the film that closes it (Properties ▸ Thin film)" : "") *
                       (enc === nothing || s.model === nothing ? "" : _closure_note(leak, out.value.closed)) *
-                      (enc !== nothing || s.model === nothing ? "" : _cavities_note(out.value.cavities)) *
+                      (s.model === nothing ? "" : _cavities_note(out.value.cavities; enclosure = enc !== nothing)) *
                       (s.model === nothing ? _radiation_note(s.target) : _facet_note(s.target))
         _request_evaluation!(sess)
     end)
     return sess
 end
 
-# The cavities of the design whose view factors the drive balances each on its own (core
-# `RadiationModel(...; closed)` with one element set per cavity; reference/
-# assemblies-design.md, "Per-cavity balancing as built"): one per hohlraum part in the
-# calculations, its closed volume (its profile about its axis, ends included) placed by
-# its frame. Which elements a cavity holds is decided on the drive's target
-# (`_cavity_elements`), and whether it is closed by rays (`_closed_cavities`).
-struct _CavityVolume
-    name::Symbol
-    frame::Frame
-    length::Float64
-    radius::Float64                           # a cylinder's (and a refused profile's)
-    profile::Any                              # a `HohlraumProfile`, or nothing
-    pieces::Set{Symbol}                       # the part's pieces' component names
-    holed::Bool                               # a boundary element left out of the calculations
-end
-
+# A cavity volume (`_CavityVolume`, drive.jl) of a hohlraum part.
 function _CavityVolume(p::PartSpec, frame::Frame, ghost)
     prof = try
         hohlraum_profile(p)
@@ -733,9 +718,12 @@ function _closure_kw(t::Target, cs)
 end
 
 # The drive status's note on the cavities' balancing: nothing for one cavity balanced
-# (a hohlraum and what lies inside it), else each cavity balanced, and why not.
-function _cavities_note(cs)
-    (isempty(cs) || length(cs) == 1 && cs[1].balanced) && return ""
+# (a hohlraum and what lies inside it) of the whole target, else each cavity balanced,
+# and why not. On a cavity point's `enclosure`, the cavities balanced in it are named.
+function _cavities_note(cs; enclosure::Bool = false)
+    isempty(cs) && return ""
+    length(cs) == 1 && cs[1].balanced &&
+        return enclosure ? " · view factors balanced on the cavity of $(cs[1].name)" : ""
     bal = [String(c.name) for c in cs if c.balanced]
     out = isempty(bal) ? "" : " · view factors balanced per cavity: " * join(bal, ", ")
     for c in cs
