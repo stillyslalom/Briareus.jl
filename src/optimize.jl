@@ -905,7 +905,11 @@ Base.@nospecializeinfer function optimize_pointing(
     f(x) = seen(x, J(x))
     # One dual tag for every objective, so the compiled deposition and objective code
     # (and the package's precompiled copy) serve any objective, not only the first.
-    # The tag check is off: objectives do not differentiate internally.
+    # ForwardDiff's tag check (`Val(false)` in `_pointing_gradient!`) compares the tag's
+    # function with `J` and would refuse this shared tag; it guards against a config
+    # reused for another function, not against nesting. An objective that differentiates
+    # internally makes its own tag, which `_PointingTag`'s ordering (`≺`) nests inside
+    # this one whatever the tags' counts (test/nested_gradient.jl).
     cfg = ForwardDiff.GradientConfig(J, x0, ForwardDiff.Chunk(min(length(x0), 12)),
                                      ForwardDiff.Tag(_PointingTag(), Float64))
     # The chunks' dual passes run concurrently (`_pointing_gradient!`); the result is
@@ -1028,6 +1032,20 @@ struct _OptimizationStop <: Exception
 end
 
 struct _PointingTag end
+
+# The optimizer's dual tag precedes every other tag. ForwardDiff orders the tags of
+# nested derivatives by `tagcount`, a counter read when a tag type is first compiled,
+# so that a derivative taken inside the objective (its tag `Tag{typeof(g), <:Dual}`)
+# nests inside the optimizer's. The precompile workload compiles this tag, so its count
+# is the one from the precompile session, while the counter restarts on loading: a tag
+# made at run time can then get an equal or smaller count, and its duals would not nest
+# in the optimizer's ("Cannot determine ordering of Dual tags"). The gradient of
+# `optimize_pointing` is always the outermost derivative (its parameters and scenario
+# are Float64, and the tag is not public), so stating the order is exact.
+const _PTAG = ForwardDiff.Tag{_PointingTag,Float64}
+ForwardDiff.:≺(::Type{_PTAG}, ::Type{ForwardDiff.Tag{F,V}}) where {F,V} = true
+ForwardDiff.:≺(::Type{ForwardDiff.Tag{F,V}}, ::Type{_PTAG}) where {F,V} = false
+ForwardDiff.:≺(::Type{_PTAG}, ::Type{_PTAG}) = false
 
 # ForwardDiff's chunk-mode `gradient!(out, f, x, cfg)` with the chunks' dual passes run
 # concurrently, one task each (their inner threaded loops nest on the same pool). A

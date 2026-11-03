@@ -37,6 +37,7 @@ shard_include("basics.jl")
 shard_include("csv.jl")
 shard_include("lpi.jl")
 shard_include("bounds.jl")
+shard_include("nested_gradient.jl")
 
 shard_include("talis.jl")
 shard_include("vrw_fixture.jl")
