@@ -314,25 +314,44 @@ Box bounds around `x0`: `±z`, `±r`, `±phi`, `±defocus` mm, relative `±power
 fractions, `±dlambda` Å, and `±theta_s`, `±dphi_s`, `±split_theta`, `±split_phi`
 degrees (engineering defaults, not facility limits). Power bounds are further clipped to
 the absolute limits `power_min ≤ P ≤ power_max` (TW per beam, e.g. a facility's per-quad
-capability).
+capability). A group at zero power in `x0` (a dropped quad) gets `±power` of the mean
+of the groups' nonzero powers, `[0, power · P̄]` before the clipping, so that it can
+come back; with every group at zero the upper bound is `power_max`, which must then be
+finite.
 """
-function bounds(p::GroupPointing, x0 = initial_parameters(p); z = 1.0, r = 1.0, phi = 1.0,
-                defocus = 2.0, power = 0.5, spot = 0.5, dlambda = 2.0, theta_s = 5.0,
-                dphi_s = 10.0, split_theta = 5.0, split_phi = 5.0, power_min = 0.0,
-                power_max = Inf)
+bounds(p::GroupPointing, x0 = initial_parameters(p); z = 1.0, r = 1.0, phi = 1.0,
+       defocus = 2.0, power = 0.5, spot = 0.5, dlambda = 2.0, theta_s = 5.0,
+       dphi_s = 10.0, split_theta = 5.0, split_phi = 5.0, power_min = 0.0,
+       power_max = Inf) =
+    _box_bounds(p, x0, (; z, r, phi, defocus, dlambda, theta_s, dphi_s, split_theta, split_phi),
+                power, spot, power_min, power_max)
+
+# The box of `bounds` for a parameterization with groups `p.members`, fields `p.fields`
+# and `_pidx`: additive half-widths `widths` by field name; `power` and `spot` relative.
+function _box_bounds(p, x0::AbstractVector, widths::NamedTuple, power, spot, power_min, power_max)
     lo, hi = copy(x0), copy(x0)
+    fp = findfirst(==(:power), p.fields)
+    # the scale of a group at zero power: the mean of the nonzero ones
+    P = fp === nothing ? Float64[] : [x0[_pidx(p, g, fp)] for g in eachindex(p.members)]
+    Pbar = any(>(0), P) ? sum(filter(>(0), P)) / count(>(0), P) : NaN
     for g in eachindex(p.members), (fi, f) in enumerate(p.fields)
         i = _pidx(p, g, fi)
         if f === :power
-            lo[i] = max(x0[i] * (1 - power), power_min)
-            hi[i] = min(x0[i] * (1 + power), power_max)
+            if x0[i] > 0
+                lo[i] = max(x0[i] * (1 - power), power_min)
+                hi[i] = min(x0[i] * (1 + power), power_max)
+            else
+                isnan(Pbar) && !isfinite(power_max) &&
+                    throw(ArgumentError("every group is at zero power: give a finite power_max"))
+                lo[i] = max(x0[i], power_min)
+                hi[i] = isnan(Pbar) ? power_max : min(x0[i] + power * Pbar, power_max)
+            end
             lo[i] <= hi[i] || throw(ArgumentError("empty power bounds for group $(p.keys[g])"))
         elseif f === :spot
             lo[i] = x0[i] * (1 - spot); hi[i] = x0[i] * (1 + spot)
         else
-            δ = f === :z ? z : f === :r ? r : f === :phi ? phi : f === :dlambda ? dlambda :
-                f === :theta_s ? theta_s : f === :dphi_s ? dphi_s :
-                f === :split_theta ? split_theta : f === :split_phi ? split_phi : defocus
+            haskey(widths, f) || throw(ArgumentError("no bound width for the field $f"))
+            δ = widths[f]
             lo[i] = x0[i] - δ; hi[i] = x0[i] + δ
         end
     end

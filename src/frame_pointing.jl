@@ -161,27 +161,13 @@ end
 
 Box bounds around `x0`: `±u`, `±v`, `±w`, `±defocus` mm, relative `±power` and `±spot`
 fractions and `±dlambda` Å (engineering defaults, not facility limits), with power
-clipped to `power_min ≤ P ≤ power_max` (TW per beam).
+clipped to `power_min ≤ P ≤ power_max` (TW per beam). A group at zero power gets
+`[0, power · P̄]`, `P̄` the mean nonzero power, as for a `GroupPointing`.
 """
-function bounds(p::FramePointing, x0 = initial_parameters(p); u = 1.0, v = 1.0, w = 1.0,
-                defocus = 2.0, power = 0.5, spot = 0.5, dlambda = 2.0, power_min = 0.0,
-                power_max = Inf)
-    lo, hi = copy(x0), copy(x0)
-    for g in eachindex(p.members), (fi, f) in enumerate(p.fields)
-        i = _pidx(p, g, fi)
-        if f === :power
-            lo[i] = max(x0[i] * (1 - power), power_min)
-            hi[i] = min(x0[i] * (1 + power), power_max)
-            lo[i] <= hi[i] || throw(ArgumentError("empty power bounds for group $(p.keys[g])"))
-        elseif f === :spot
-            lo[i] = x0[i] * (1 - spot); hi[i] = x0[i] * (1 + spot)
-        else
-            δ = f === :u ? u : f === :v ? v : f === :w ? w : f === :dlambda ? dlambda : defocus
-            lo[i] = x0[i] - δ; hi[i] = x0[i] + δ
-        end
-    end
-    return lo, hi
-end
+bounds(p::FramePointing, x0 = initial_parameters(p); u = 1.0, v = 1.0, w = 1.0,
+       defocus = 2.0, power = 0.5, spot = 0.5, dlambda = 2.0, power_min = 0.0,
+       power_max = Inf) =
+    _box_bounds(p, x0, (; u, v, w, defocus, dlambda), power, spot, power_min, power_max)
 
 Scenario(t::Target, p::FramePointing; kwargs...) = _scenario(t, p.template, p; kwargs...)
 
