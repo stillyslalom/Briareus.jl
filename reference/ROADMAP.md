@@ -265,6 +265,9 @@ Items 10–15 follow the 2026-10-22 literature review against Kritcher et al. 20
       lands; `assemblies-design.md` "Today", `frames-design.md` phases 1–3 and phase 5,
       done by the foil starter).
 23. **GUI: workflow gaps** *(survey)*.
+    - The face objective's uniformity term (σ², σ relative) is ~1e-9 on a uniform sample
+      against penalties of ~1e-2, so the default weight 1 leaves the penalties in charge
+      (opacity starter: weight ~1e6 needed); scale the term so weight 1 means a balance.
     - Modes stop at l = 4 in the tables, weights and retune.
     - Beams: spot shape, f-number, wavelength and port are saved but not editable; aims
       are Cartesian only; VisRad profiles and focal lengths only from an import; no OMEGA
