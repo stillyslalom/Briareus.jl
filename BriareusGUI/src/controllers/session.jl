@@ -31,14 +31,22 @@ Undo and redo stacks of design snapshots ([`session_state`](@ref) without the vi
 coloring, selection and the camera are not edits). [`record!`](@ref) takes a snapshot
 when the design has changed since the last one; [`undo!`](@ref) and [`redo!`](@ref)
 step through them.
+
+`changes` counts the changes of the session's observables that a snapshot reads (a
+[`DesignSession`](@ref) watches them all), and `seen` is the count at which `current`
+last matched the design: with no change since, the design is `current` without taking
+a snapshot, so [`record!`](@ref) and [`can_undo`](@ref) cost nothing between edits.
 """
 mutable struct EditHistory
     undo::Vector{Dict{String,Any}}
     redo::Vector{Dict{String,Any}}
     current::Union{Nothing,Dict{String,Any}}
     limit::Int
+    changes::Threads.Atomic{Int}
+    seen::Int
 end
-EditHistory(; limit::Integer = 200) = EditHistory(Dict{String,Any}[], Dict{String,Any}[], nothing, limit)
+EditHistory(; limit::Integer = 200) =
+    EditHistory(Dict{String,Any}[], Dict{String,Any}[], nothing, limit, Threads.Atomic{Int}(0), -1)
 
 """
     DesignSession(; starter = :hohlraum, resolution = :standard, preset = :nif_quads,
@@ -82,7 +90,7 @@ struct DesignSession
     deliver::Base.RefValue{Any}
     spawn::Base.RefValue{Bool}
     history::EditHistory
-    visrad_source::Base.RefValue{String}   # the imported VisRad workspace (export template)
+    visrad_source::Observable{String}      # the imported VisRad workspace (export template)
     meshing::Observable{String}            # a workspace import or CAD meshing in progress ("" when none)
     mesh_generation::Base.RefValue{Int}    # import and meshing requests (latest wins)
     build_queued::Base.RefValue{Bool}      # a drive asked for while CAD parts remesh
@@ -108,11 +116,32 @@ function DesignSession(; starter::Symbol = :hohlraum, resolution::Symbol = :stan
     sess = DesignSession(ts, bt, DriveState(), OptimizeState(), ReviewState(), TaLISState(),
                          TimeState(), ViewState(; cut_components = default_cut(ts)), Observable(""), ts.deliver,
                          ts.spawn, EditHistory(),
-                         Ref(""), Observable(""), Ref(0), Ref(false), Dict{String,String}(),
+                         Observable(""), Observable(""), Ref(0), Ref(false), Dict{String,String}(),
                          Observable(String[]), SweepState())
     _default_selections!(sess, ts.target[])
     _connect!(sess)
+    _watch_changes!(sess)
     record!(sess)
+    return sess
+end
+
+# The observables an undo snapshot leaves out (`_history_state`): the window as it was
+# left and the diagnostics a drive history records.
+_unrecorded(sess::DesignSession) = (sess.view.camera, sess.drive.view, sess.drive.image_request,
+                                    sess.time.chart, sess.time.diagnostics)
+
+# Count every change of the session's observables but those (`EditHistory`'s `changes`):
+# every observable field of the session and of its parts, so a field added later is
+# counted too. A change that a snapshot does not read only costs `record!` a snapshot.
+function _watch_changes!(sess::DesignSession)
+    n = sess.history.changes
+    skip = _unrecorded(sess)
+    for x in (sess, sess.target, sess.beams, sess.drive, sess.optimize, sess.review, sess.talis,
+              sess.time, sess.view, sess.sweep), f in fieldnames(typeof(x))
+        o = getfield(x, f)
+        o isa Observables.AbstractObservable && !any(s -> s === o, skip) || continue
+        on(_ -> (Threads.atomic_add!(n, 1); nothing), o)
+    end
     return sess
 end
 

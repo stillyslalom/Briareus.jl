@@ -154,6 +154,59 @@ end
     @test !can_undo(s)
 end
 
+# `record!` and `can_undo` answer from the history's count of changes between edits: over
+# a scripted sequence of edits of each kind, undos and redos, they agree with the
+# definitions that take a snapshot each time, and whenever no change is counted since
+# the last snapshot the design is that snapshot.
+@testset "undo bookkeeping without snapshots (no GL)" begin
+    s = DesignSession(resolution = :coarse)
+    h = s.history
+    snap() = Controllers._history_state(s)
+    old_can_undo() = !isempty(h.undo) || (h.current !== nothing && !isequal(snap(), h.current))
+    q = findfirst(b -> b.group === :inner23, s.beams.beams[])
+    ids = copy(s.time.diagnostics[])
+    steps = Any[
+        () -> edit_part!(s.target, 1, :length, "10.6"),                 # design
+        () -> record!(s),
+        () -> set_display!(s.view, :capsule, :wireframe),                # view
+        () -> edit_beams!(s.beams, q, :z, "2.9"; by = :beam),            # beams
+        () -> record!(s),
+        () -> select!(s.view, "beams"),                                  # not an edit
+        () -> (s.view.camera[] = (; eye = (9.0, 0.0, 1.0), lookat = (0.0, 0.0, 0.0), up = (0.0, 0.0, 1.0),
+                                  ortho = false, turntable = true)),       # the window
+        () -> set_diagnostic!(s, first(ids), false),                     # a tick
+        () -> record!(s),
+        () -> set_cut!(s.view; azimuth = 15.0), () -> record!(s),
+        () -> set_cut!(s.view; azimuth = 25.0), () -> record!(s),        # a drag: merged
+        () -> undo!(s), () -> undo!(s), () -> redo!(s),
+        () -> (s.optimize.iterations[] = 12),                            # a setting, not recorded
+        () -> undo!(s),
+        () -> redo!(s), () -> redo!(s), () -> redo!(s),
+        () -> build_scenario!(s),                                        # results: no step
+        () -> record!(s),
+        () -> set_cut!(s.view; azimuth = 15.0),                          # back to the noted state
+        () -> set_cut!(s.view; azimuth = 25.0),
+        () -> record!(s),
+        () -> (undo!(s); undo!(s); undo!(s); undo!(s); undo!(s)),
+        () -> (s.visrad_source[] = "workspace.vrw"),
+        () -> reset_history!(s),
+        () -> (s.visrad_source[] = ""),
+    ]
+    checks = map(steps) do f
+        f()
+        # old and new answers, each before the other could note anything
+        a = (old_can_undo(), !isempty(h.redo))
+        consistent = h.changes[] != h.seen || isequal(snap(), h.current)
+        b = (can_undo(s), can_redo(s))
+        (; a, b, consistent)
+    end
+    @test all(c -> c.a == c.b && c.consistent, checks)
+    @test any(c -> c.b[1], checks) && any(c -> !c.b[1], checks) && any(c -> c.b[2], checks)
+    # between edits neither takes a snapshot
+    record!(s)
+    @test h.changes[] == h.seen && !record!(s)
+end
+
 @testset "STL mesh parts (no GL)" begin
     # a closed cube (2 × 2 × 2 file units), half its facets wound backward, ASCII STL
     corners = [Briareus.Vec3(x, y, z) for x in (-1, 1), y in (-1, 1), z in (-1, 1)]

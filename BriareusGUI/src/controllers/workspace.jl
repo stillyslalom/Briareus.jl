@@ -842,7 +842,8 @@ they are.
 """
 function record!(sess::DesignSession)
     h = sess.history
-    state = _history_state(sess)
+    h.current !== nothing && h.changes[] == h.seen && return false      # nothing changed since
+    state = _snapshot!(sess)
     if h.current === nothing
         h.current = state
         return false
@@ -901,6 +902,16 @@ function _history_state(sess::DesignSession)
     return state
 end
 
+# A snapshot of the design as it is, which `current` matches once it is noted: the
+# count of changes is read first, so a change made while the snapshot is taken counts
+# as one after it.
+function _snapshot!(sess::DesignSession)
+    n = sess.history.changes[]
+    state = _history_state(sess)
+    sess.history.seen = n
+    return state
+end
+
 # The view keys whose values changed from state `a` to `b` when only numeric view
 # settings changed (a slider's), else `nothing`.
 function _numeric_view_change(a, b)
@@ -926,14 +937,27 @@ function _step_to!(sess::DesignSession, state)
                    Dict{String,Any}("diagnostics" => copy(sess.time.diagnostics[])))
         restore!(sess, merge(state, Dict{String,Any}("time" => tm)))
     end
-    sess.history.current = _history_state(sess)
+    sess.history.current = _snapshot!(sess)
     return sess
 end
 
-"Whether there is an edit to undo / to redo."
-can_undo(sess::DesignSession) = !isempty(sess.history.undo) ||
-                                (sess.history.current !== nothing &&
-                                 !isequal(_history_state(sess), sess.history.current))
+"""
+    can_undo(sess::DesignSession) -> Bool
+    can_redo(sess::DesignSession) -> Bool
+
+Whether there is an edit to undo (an undo step, or an edit not recorded yet) / to redo.
+Between edits the answer comes from the history's count of changes
+([`EditHistory`](@ref)), without a snapshot of the design.
+"""
+function can_undo(sess::DesignSession)
+    h = sess.history
+    isempty(h.undo) || return true
+    n = h.changes[]
+    (h.current === nothing || n == h.seen) && return false
+    isequal(_history_state(sess), h.current) || return true
+    h.seen = n                                          # (the design is `current` again)
+    return false
+end
 can_redo(sess::DesignSession) = !isempty(sess.history.redo)
 
 """
@@ -945,6 +969,6 @@ function reset_history!(sess::DesignSession)
     h = sess.history
     empty!(h.undo)
     empty!(h.redo)
-    h.current = _history_state(sess)
+    h.current = _snapshot!(sess)
     return sess
 end
