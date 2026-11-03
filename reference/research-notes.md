@@ -9958,6 +9958,22 @@ Checks (`test/radiography.jl`, independent references):
 - **Not balanced.** The GUI balances view factors only for one hohlraum part with no open
   end (`_closed_enclosure`); the shock-tube pair, two cavities each closed by a package
   face, is left unbalanced (its rows miss by the view-factor error, ~1e-3).
+- **The seam (2026-11-02).** The package disks have the halfraums' radius and lie in their
+  open ends' planes exactly (z ±1.0 mm); no overlap. The GUI meshed disks, washers,
+  cylinders and cones with azimuthal counts in multiples of 4 and core `hohlraum` its wall
+  in multiples of 8 (`hohlraum_counts`), so at the standard element size (0.28 mm) the
+  disk's rim was a 36-gon inside the wall's 40-gon end ring: a gap of 6.8e-3 mm², 9.6e-4
+  of the end's area (closed form: the difference of the inscribed polygons' areas,
+  `n/2 R² sin(2π/n)`); at 0.6 and 0.17 mm the counts agreed (16, 56). Measured on the
+  upper halfraum closed by its disk (the enclosure alone, unbalanced view factors, the
+  wall driven; the energy balance exact to 5e-15): the gap raised the view-factor area
+  leaving the enclosure, Σ A(1 − ΣF), by 3.8e-4 mm² and the power lost to open space by
+  2.3e-5 of the source, against a closure error of the view factors themselves of
+  6.4e-4 of the source. The GUI's circular parts now take core's rule (`_nphi`: multiples
+  of 8), so a part of a hohlraum part's radius and element size meets the wall's ring
+  vertex for vertex; at 0.28 mm the closed configuration then equals the one with the
+  disk remeshed at the wall's count exactly. Circular parts meshed at sizes where the two
+  rules differ change their meshes (results change at the view-factor error).
 
 ## Hohlraum profiles: frustraums and multi-section walls (2026-11-02) *derived*
 

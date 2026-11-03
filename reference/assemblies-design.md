@@ -541,5 +541,33 @@ Taken without a question (reverse any):
 - The 37 `:capsule` uses span drive, Dante, TaLIS, clearance and the optimizer; phase A
   must be a pure refactor, checked by the existing GUI suite unchanged.
 - Sessions from every version so far convert through one path; keep its tests.
-- A halfraum's open end meeting a package needs no gap between components; the
-  enclosure checks (`closed = true`) must allow two cavities joined by a package.
+- A halfraum's open end meeting a package needs no gap between components: checked and
+  fixed (see "Package seams as built"). The enclosure checks (`closed = true`) still
+  leave two cavities joined by a package unbalanced (open: balancing needs the per-cavity
+  enclosures, not one hohlraum part).
+
+## Package seams as built (2026-11-02)
+
+- The shock-tube starter's package disks have the halfraums' radius (1.5 mm) and lie in
+  their open ends' planes exactly (z = ±1.0 mm): no overlap and no axial gap. The opacity
+  starter's sample is a 1 mm square inside the open end, not a closure (what misses it
+  leaves, by design), so it has no seam.
+- The gap was azimuthal: the GUI meshed disks, washers, cylinders and cones with counts
+  in multiples of 4, core `hohlraum` its wall in multiples of 8, so at the standard
+  element size (0.28 mm, the default) the disk's rim was a 36-gon inside the wall's
+  40-gon: 6.8e-3 mm², 9.6e-4 of the end (the inscribed polygons' areas). The coarse and
+  fine sizes happened to agree (16 and 56).
+- Leak, the upper halfraum closed by its disk alone (unbalanced view factors, wall
+  driven, energy balance exact to 5e-15): Σ A(1 − ΣF) out of the enclosure 3.8e-4 mm²
+  larger with the gap, the power lost 2.3e-5 of the source larger (−6.437e-4 → −6.672e-4:
+  the view factors' own closure error, a quadrature excess, is the larger term).
+- Fixed at the source (decision taken): the GUI's circular parts take core's rule
+  (`_nphi`, multiples of 8), so a part of a hohlraum part's radius and element size meets
+  the wall's ring vertex for vertex; after it the starter's closed configuration equals
+  the one with the disk remeshed at the wall's count, exactly. Results change for any
+  disk, washer, cylinder or cone meshed at a size where the two rules differ (the
+  shock-tube starter at the standard size among them: 1760 → 1840 elements, the observed
+  face's mean flux +1.0e-4 relative, its RMS 4.705 % → 4.710 %, each halfraum's wall Tr
+  311.2789 → 311.2875 eV); the default design has none.
+  Test: the seams' vertex azimuths equal at the coarse and standard sizes
+  (`test_halfraum.jl`). Research notes, "Halfraum ends and starters".

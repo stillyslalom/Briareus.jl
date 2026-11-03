@@ -604,6 +604,13 @@ end
 
 _count(len, h; min = 1, multiple = 1) = multiple * max(cld(min, multiple), ceil(Int, len / h / multiple))
 
+# The azimuthal patch count of a disk, washer, cylinder or cone of radius `r` with
+# elements of `h`: core `hohlraum_counts`'s rule (a multiple of 8, at least 8), so a part
+# of a hohlraum part's radius meshed with its element size meets the wall's end ring
+# vertex for vertex (a package disk closing a halfraum's open end leaves no gap at the
+# seam; with multiples of 4 the standard size left a 36-gon inside the wall's 40-gon).
+_nphi(r, h) = _count(2π * r, h; min = 8, multiple = 8)
+
 """
     part_component(p::PartSpec, h; frame) -> Component
 
@@ -686,12 +693,12 @@ function _part_components(p::PartSpec, h::Real, frame::Frame, raw::Bool, hc::Rea
         surf = SphereSurface(r)
     elseif k === :disk
         r = v[:r1]
-        m = disk_mesh(r, 0.0; nr = _count(r, hp), nphi = _count(2π * r, hp; min = 8, multiple = 4), up = out)
+        m = disk_mesh(r, 0.0; nr = _count(r, hp), nphi = _nphi(r, hp), up = out)
         surf = DiskSurface()
     elseif k === :annulus
         ri, ro = v[:r1], v[:r2]
         ro > ri || throw(ArgumentError("$(p.name): the outer radius must exceed the inner"))
-        m = annulus_mesh(ri, ro, 0.0; nr = _count(ro - ri, hp), nphi = _count(2π * ro, hp; min = 8, multiple = 4),
+        m = annulus_mesh(ri, ro, 0.0; nr = _count(ro - ri, hp), nphi = _nphi(ro, hp),
                          up = out)
         surf = DiskSurface()
     elseif k === :rectangle
@@ -711,13 +718,13 @@ function _part_components(p::PartSpec, h::Real, frame::Frame, raw::Bool, hc::Rea
         surf = raw ? nothing : _whole_surface(m, _stl_mesh(p, hp, toward; raw = true))
     elseif k === :cylinder
         r, L = v[:r1], v[:length]
-        m = cylinder_mesh(r, -L / 2, L / 2; nz = _count(L, hp), nphi = _count(2π * r, hp; min = 8, multiple = 4),
+        m = cylinder_mesh(r, -L / 2, L / 2; nz = _count(L, hp), nphi = _nphi(r, hp),
                           inward = !out)
         surf = CylinderSurface(r)
     else
         r1, r2, L = v[:r1], v[:r2], v[:length]
         m = frustum_mesh(r1, -L / 2, r2, L / 2; nz = _count(L, hp),
-                         nphi = _count(2π * max(r1, r2), hp; min = 8, multiple = 4), inward = !out)
+                         nphi = _nphi(max(r1, r2), hp), inward = !out)
         surf = nothing
     end
     c = p.aperture ? aperture(p.name, m; surface = surf) :

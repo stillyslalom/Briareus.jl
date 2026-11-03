@@ -46,6 +46,19 @@ end
     zs(n) = extrema(v[3] for c in t.components if c.name === n for v in c.mesh.vertices)
     @test all(isapprox.(zs(:package_top), 1.0; atol = 1e-12)) && zs(:halfraum_top_wall)[1] ≈ 1.0
     @test all(isapprox.(zs(:package_bottom), -1.0; atol = 1e-12)) && zs(:halfraum_bottom_wall)[2] ≈ -1.0
+    # and meet the walls' end rings vertex for vertex, at the coarse and standard element
+    # sizes (no gap at the seam: the disks take the wall's azimuthal count)
+    function ring(t, n, z)
+        vs = [v for c in t.components if c.name === n for v in c.mesh.vertices
+              if abs(v[3] - z) < 1e-9 && abs(hypot(v[1], v[2]) - 1.5) < 1e-9]
+        az = [mod(atan(v[2], v[1]), 2π) for v in vs]
+        return sort(unique(round.([a > 2π - 1e-6 ? 0.0 : a for a in az]; digits = 6)))
+    end
+    seams(t) = [ring(t, :halfraum_top_wall, 1.0) == ring(t, :package_top, 1.0),
+                ring(t, :halfraum_bottom_wall, -1.0) == ring(t, :package_bottom, -1.0)]
+    @test all(seams(t))
+    st = TargetSetup(starter = :shock_tube, resolution = :standard)
+    @test all(seams(st.target[])) && length(ring(st.target[], :package_top, 1.0)) == 40
     build_scenario!(sess)
     res = sess.drive.result[]
     # a flat observed face: no capsule modes; its mean flux and its statistics over the face
