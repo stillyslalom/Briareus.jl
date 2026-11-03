@@ -635,11 +635,11 @@ end
     start_optimize!(s; spawn = false)
     @test st.result[] !== nothing && st.result[].before.spot !== nothing
 
-    # the target as STL: one named solid per component (ASCII), read back as parts
+    # the target as STL: one named solid per part (ASCII), read back as parts
     f = joinpath(dir, "target.stl")
     export_target_stl(s, f; binary = false)
     solids = read_stl_solids(f)
-    @test [Symbol(n) for (n, _) in solids] == component_names(ts.target[])
+    @test [Symbol(n) for (n, _) in solids] == Briareus.parts(ts.target[])
     @test sum(length(m.triangles) for (_, m) in solids) == length(ts.target[].tri_area)
     fb = joinpath(dir, "target_binary.stl")
     export_target_stl(s, fb)                                                  # binary

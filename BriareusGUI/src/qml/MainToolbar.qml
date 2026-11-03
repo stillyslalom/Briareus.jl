@@ -335,10 +335,12 @@ ToolBar {
             onActivated: Julia.br_set_color(currentValue)
         }
         Tool {
-            text: app.hasFoil ? "Foil map" : "Capsule map"; checkable: true
+            text: app.observedKind === "face" ? "Face map" : app.observedKind === "capsule" ? "Capsule map" : "Foil map"
+            checkable: true
             checked: app.driveView === "map"
             enabled: app.driveHasResult && (app.hasCapsule || app.hasFoil)
-            tip: "Show the capsule θ–φ flux map (or the foil face) instead of the 3D view"
+            tip: "Show the observed surface's x-ray flux map (the capsule's θ–φ map or the flat face's) " +
+                 "or the foil's laser irradiance instead of the 3D view"
             onClicked: Julia.br_set_view(checked ? "map" : "scene")
         }
         ToolSeparator { height: 28 }

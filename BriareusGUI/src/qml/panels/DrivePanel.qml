@@ -10,7 +10,8 @@ ScrollPage {
         visible: !app.driveHasResult
         text: app.driveBuilding ? "Computing the view factors… " + app.driveElapsed
               : "Compute the drive (Compute ▸ Drive, or color the target by a drive field) to see " +
-                (app.hasFoil ? "the foil spot" : app.hasCapsule ? "the capsule modes" : "the drive") +
+                (app.observedKind === "face" ? "the face's flux" : app.observedKind === "capsule" ? "the capsule modes" :
+                 app.hasFoil ? "the foil spot" : "the drive") +
                 " and the laser power accounting."
     }
     RowLayout {

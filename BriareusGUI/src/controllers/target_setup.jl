@@ -840,10 +840,13 @@ function _visrad_components(p::PartSpec, h, toward; raw::Bool = false)
             ref = visrad_component(o; material = mat, two_sided = p.two_sided)
             cs = [length(ref) == 1 ? _with_surface(c, _whole_surface(c.mesh, only(ref).mesh)) : c for c in cs]
         end
-        # components carry the part's name (renamed, or given a role), not the object's
-        String(p.name) == o.name ? cs :
-        [Component(String(p.name) * String(c.name)[ncodeunits(o.name)+1:end], c.mesh, c.material;
-                   kind = c.kind, two_sided = c.two_sided, surface = c.surface) for c in cs]
+        # components carry the part's name (renamed, or given a role), not the object's, and
+        # the part as their `part` (a primitive's pieces, `<part>_wall`, …, as a hohlraum
+        # part's: they follow the part through a rename and a left-out part)
+        Component[String(p.name) == o.name && c.part === p.name ? c :
+                  Component(String(p.name) * String(c.name)[ncodeunits(o.name)+1:end], c.mesh, c.material;
+                            kind = c.kind, two_sided = c.two_sided, surface = c.surface, part = p.name)
+                  for c in cs]
     end
 end
 
@@ -1884,6 +1887,34 @@ function _free_name(ts::TargetSetup, base::Symbol; numbered::Bool = true)
 end
 
 """
+    rename_map(ts::TargetSetup, p::PartSpec, new::Symbol) -> Dict{Symbol,Symbol}
+
+Every name that changes when part `p` is renamed `new`, old name → new: the part's (and
+its frame's), its piece frames' (`<part>.leh_top`, …), and its components', in the
+calculations or left out (`<part>_wall`, a CAD part's `<part>_<object piece>`: the part's
+name is their prefix). A rename commits it as the edit's `renames`, and what is keyed by
+these names (left-out components, display modes, cutaway components, roles in the
+checks, films, the sweep's subject) follows it.
+"""
+function rename_map(ts::TargetSetup, p::PartSpec, new::Symbol)
+    old = p.name
+    rn = Dict{Symbol,Symbol}(old => new)
+    for ((a, _), (b, _)) in zip(piece_frame_defs(p), piece_frame_defs(_with(p; name = new)))
+        rn[a] = b
+    end
+    pre = String(old) * "_"
+    for t in (ts.target[], ts.ghost[])
+        t === nothing && continue
+        for c in t.components
+            s = String(c.name)
+            (c.part === old || c.name === old) && startswith(s, pre) &&
+                (rn[c.name] = Symbol(new, s[ncodeunits(String(old))+1:end]))
+        end
+    end
+    return rn
+end
+
+"""
     edit_part!(ts::TargetSetup, i, key, text) -> Bool
 
 Set a field of part `i` from text: a [`PART_FIELDS`](@ref) or size key, or `:name`.
@@ -1901,15 +1932,14 @@ function edit_part!(ts::TargetSetup, i::Integer, key::Symbol, text)
                 throw(ArgumentError("a part name is letters, digits and _, starting with a letter"))
             Symbol(s) == p.name && return true
             new = _with(p; name = Symbol(s))
+            renames = rename_map(ts, p, new.name)
             # parts placed in this one's frame or its pieces', or with steps that refer to
-            # them, follow the rename, and so do the beams aimed in them
-            renames = Dict(p.name => new.name)
-            for ((a, _), (b, _)) in zip(piece_frame_defs(p), piece_frame_defs(new))
-                renames[a] = b
-            end
+            # them, follow the rename, and so do the beams aimed in them; the components
+            # left out stay out (the session's state follows `renames` too)
             ps = [foldl((q, (a, b)) -> _renamed(q, a, b), renames; init = q) for q in ts.parts[]]
             ps[i] = new
-            return _try_build!(ts; parts = ps, renames)
+            excluded = Set{Symbol}(get(renames, n, n) for n in ts.excluded[])
+            return _try_build!(ts; parts = ps, excluded, renames)
         elseif key in (:pos_r, :pos_phi, :pos_theta)
             x, y, z = _set_position(p, key, _parse_number(text, String(key)))
             vals = copy(p.values)
@@ -2051,13 +2081,19 @@ end
 """
     set_part_flag!(ts::TargetSetup, i, flag, on::Bool) -> Bool
 
-Set `:two_sided`, `:inward` or `:aperture` of part `i`.
+Set `:two_sided`, `:inward` or `:aperture` of part `i`. A rectangle or disk observed as a
+flat face stays one-sided ([`observed_flat`](@ref)): making it two-sided sets `error` and
+returns `false`.
 """
 function set_part_flag!(ts::TargetSetup, i::Integer, flag::Symbol, on::Bool)
     _check_part_index(ts, i)
     flag in (:two_sided, :inward, :aperture) || throw(ArgumentError("unknown part flag :$flag"))
     p = ts.parts[][i]
     getfield(p, flag) == on && return true
+    if flag === :two_sided && on && p.observed && _part_shape(p) in _FLAT_OBSERVED
+        ts.error[] = "the observed face is one-sided: give the role to another part first"
+        return false
+    end
     ps = copy(ts.parts[])
     ps[i] = _with(p; (flag => on,)...)
     return _try_build!(ts; parts = ps)
@@ -2649,19 +2685,22 @@ end
     observed_flat(ts::TargetSetup) -> Bool
 
 Whether the observed surface ([`observed_name`](@ref)) is a flat face (a rectangle or a
-disk, or a VisRad rectangle) rather than a sphere: the drive then maps its face and
-gives its flux's statistics over the face, and the capsule-only views (modes, keep-out,
-the θ–φ map) have no capsule.
+disk, a VisRad rectangle, a hohlraum part's cap) rather than a sphere: the drive then
+maps its face and gives its flux's statistics over the face, and the capsule-only views
+(modes, keep-out, the θ–φ map) have no capsule. Decided on the built target's elements of
+the observed surface, by the rule the drive applies to the elements its scenario
+observes (every element facing one way), so the two agree; `false` when the observed
+surface is not in the calculations.
 """
 function observed_flat(ts::TargetSetup)
     o = observed_name(ts)
     o === nothing && return false
-    i = part_index(ts, o)
-    i === nothing && return true                 # a piece: a cap (`_FLAT_PIECES`)
-    return _part_shape(ts.parts[][i]) in _FLAT_OBSERVED
+    t = ts.target[]
+    o in component_names(t) || return false
+    return _flat_face(t, elements(t, o))
 end
 
-# The shapes a flat observed face can be.
+# The shapes a part given the observed role takes it as a flat face (`set_part_role!`).
 const _FLAT_OBSERVED = (:rectangle, :disk)
 
 """
@@ -2711,6 +2750,25 @@ end
 # The pieces of a hohlraum part that hold the wall role (`piece_role`; by default its wall,
 # each section of it, and the caps it has), in the order of its pieces.
 _hohlraum_walls(p) = [piece_name(p.name, s) for s in hohlraum_pieces(p) if piece_role(p, s) === :wall]
+
+"""
+    default_cut(ts::TargetSetup) -> Set{Symbol}
+
+The components the cutaway cuts by default: the shell of each hohlraum part, its wall
+(each section of a profile's) and the caps of its ends that are not open, whatever role
+a piece holds; the entrance holes, lips and windows are not cut. A session's cutaway
+starts as this and follows it through edits while the cut components are this default.
+"""
+function default_cut(ts::TargetSetup)
+    out = Set{Symbol}()
+    for p in ts.parts[]
+        p.kind === :hohlraum || continue
+        for s in hohlraum_pieces(p)
+            (s in _wall_pieces(p) || s in (:cap_top, :cap_bottom)) && push!(out, piece_name(p.name, s))
+        end
+    end
+    return out
+end
 
 """
     cavity_walls(ts::TargetSetup) -> Vector{Pair{Symbol,Vector{Symbol}}}
@@ -2884,7 +2942,7 @@ surface ([`observed_name`](@ref)); another part or piece that held it gives it u
 hohlraum part takes no role: its pieces hold theirs (the wall and caps the wall role by
 default, see [`set_piece_role!`](@ref)). The observed surface is a
 sphere (a capsule: the mode analysis and the keep-out take its center and radius) or a
-flat face (a rectangle or disk, or a VisRad rectangle: [`observed_flat`](@ref)): such a
+flat face (a one-sided rectangle or disk, or a VisRad rectangle: [`observed_flat`](@ref)): such a
 part takes the role itself; a CAD part (a capsule with its fill tube, say) is replaced in the calculations by
 a sphere part fitted to it ([`fit_sphere`](@ref): named `capsule`, or `capsule_2`, … when
 that is taken; its element size the target's capsule size, its albedo and conversion the
@@ -2913,6 +2971,9 @@ function set_part_role!(ts::TargetSetup, i::Integer, role::Symbol; done = () -> 
                                     "or a CAD part a sphere is fitted to"))
             return _capsule_from_part!(ts, i; done)
         end
+        # (a two-sided face faces both ways: not a flat face, `observed_flat`)
+        role === :observed && shape in _FLAT_OBSERVED && p.two_sided &&
+            throw(ArgumentError("the observed face is one-sided: make the part one-sided first"))
         role === :foil && !(shape in (:rectangle, :disk, :mesh)) &&
             throw(ArgumentError("the backlighter foil is a flat part (a rectangle or disk) or a mesh"))
         role === :wall && p.aperture &&

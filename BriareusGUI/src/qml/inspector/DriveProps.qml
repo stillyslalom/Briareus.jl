@@ -80,7 +80,9 @@ ColumnLayout {
             onClicked: Julia.br_set_view("scene")
         }
         Button {
-            text: app.hasFoil ? "Foil face" : "Capsule θ–φ map"; checkable: true
+            text: app.observedKind === "face" ? "Observed face" :
+                  app.observedKind === "capsule" ? "Capsule θ–φ map" : "Foil face"
+            checkable: true
             checked: app.driveView === "map"
             enabled: app.driveHasResult && (app.hasCapsule || app.hasFoil)
             onClicked: Julia.br_set_view("map")

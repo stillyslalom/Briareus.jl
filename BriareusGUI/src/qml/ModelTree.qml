@@ -328,13 +328,7 @@ Pane {
                         text: "Run"
                         visible: node.nodeKind === "task"
                         height: visible ? implicitHeight : 0
-                        onTriggered: {
-                            const k = node.nodeId.substring(5)
-                            if (k === "drive") Julia.br_build()
-                            else if (k === "optimize") Julia.br_opt_start()
-                            else if (k === "clearance") Julia.br_rv_start()
-                            else Julia.br_tl_start()
-                        }
+                        onTriggered: Julia.br_run_task(node.nodeId.substring(5))
                     }
                 }
             }

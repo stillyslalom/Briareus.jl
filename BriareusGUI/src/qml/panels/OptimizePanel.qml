@@ -13,6 +13,7 @@ ScrollPage {
         opacity: 1
     }
     Label { text: app.optValues; visible: app.optHasResult; wrapMode: Text.WordWrap; Layout.fillWidth: true; font.weight: Font.DemiBold }
+    Label { text: "inputs changed since"; visible: app.optHasResult && app.optStale; color: "#d08a00" }
     Note { text: app.optClipped; visible: app.optHasResult }
     Note { text: app.optSpot }
     RowLayout {

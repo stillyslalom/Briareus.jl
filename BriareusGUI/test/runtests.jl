@@ -41,6 +41,7 @@ end
     include("test_profiles.jl")         # frustraums and section lists, the frustraum starter (no GL)
     include("test_assemblies.jl")       # the model tree: assemblies, its commands, sessions (no GL)
     include("test_display.jl")          # participation, visibility, cutaway (no GL)
+    include("test_regressions.jl")      # the survey's fixes: Run, renames, undo, the default cut, flat faces (no GL)
     include("test_time.jl")             # pulses, drive histories, the time cursor (no GL)
     include("test_time_unconverted.jl") # drive histories and retunes with 1ω, 2ω light (no GL)
     include("test_diagnostics.jl")      # diagnostic definitions: list, folders, sessions (no GL)

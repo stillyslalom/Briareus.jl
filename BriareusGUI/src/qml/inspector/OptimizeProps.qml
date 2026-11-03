@@ -17,9 +17,10 @@ ColumnLayout {
             ComboBox {
                 Layout.fillWidth: true
                 textRole: "text"; valueRole: "value"
-                model: [{ text: "cone", value: "group" }, { text: "quad", value: "quad" },
-                        { text: "beam", value: "beam" }]
-                currentIndex: Math.max(0, ["group", "quad", "beam"].indexOf(app.optBy))
+                model: app.hasQuads ? [{ text: "cone", value: "group" }, { text: "quad", value: "quad" },
+                                       { text: "beam", value: "beam" }]
+                                    : [{ text: "cone", value: "group" }, { text: "beam", value: "beam" }]
+                currentIndex: Math.max(0, (app.hasQuads ? ["group", "quad", "beam"] : ["group", "beam"]).indexOf(app.optBy))
                 onActivated: Julia.br_opt_set_by(currentValue)
             }
         }
@@ -81,7 +82,7 @@ ColumnLayout {
             onToggled: Julia.br_opt_hold(checked)
         }
         PropRow {
-            visible: app.optObjective !== "irradiance" && app.hasCapsule
+            visible: app.optObjective !== "irradiance" && app.observedKind === "capsule"
             check: true
             label: "Capsule keep-out"
             labelWidth: 170

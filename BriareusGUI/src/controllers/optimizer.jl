@@ -44,8 +44,11 @@ A finished (or canceled) optimization: `names` (parameter names), `x0`, `x`, `lo
 `capsule_clearance` (worst-case, mm)), `evaluations` (objective evaluations),
 `iterations` (L-BFGS-B iterations completed), `reason` (why it ended: `:converged`,
 `:iterations`, `:evaluations` or `:callback`), `seconds`, `completed` (`false` when
-canceled: the best design found so far), and `applied` (set by
-[`accept_optimum!`](@ref)).
+canceled: the best design found so far), `applied` (set by [`accept_optimum!`](@ref),
+and by an undo or redo to whether the table holds the optimized beams), and `key` (the
+design the optimization ran on: the drive's scenario key, the spot radius and the foil;
+`nothing` when not known): a result whose key is not the current design's is out of
+date ([`optimize_stale`](@ref)), and current again when an undo brings that design back.
 """
 mutable struct OptimizeResult
     names::Vector{String}
@@ -65,6 +68,7 @@ mutable struct OptimizeResult
     seconds::Float64
     completed::Bool
     applied::Bool
+    key::Any
 end
 
 """
@@ -265,8 +269,8 @@ end
 
 """
     start_optimize!(st::OptimizeState, scenario, beams, indices; spot_radius = 0.5,
-                    foil = nothing, clusters = nothing, frames = nothing, deliver = f -> f(),
-                    spawn = true)
+                    foil = nothing, clusters = nothing, frames = nothing, key = nothing,
+                    deliver = f -> f(), spawn = true)
 
 Optimize the enabled `beams` (positions `indices` in the beam table; `scenario` is
 built for the whole table) with the current settings. Runs `optimize_pointing` on a
@@ -281,13 +285,14 @@ capsule keep-out and of the summaries' capsule power and clearance
 ([`observed_name`](@ref); by default the part the scenario observes). Its callback hands progress (`evaluations`, `current`, `best`,
 at most every 0.1 s) to `deliver`, and so does the result. [`cancel_optimize!`](@ref)
 makes the callback stop the optimization after the next objective evaluation; the
-result is then the best design found so far.
+result is then the best design found so far. The result carries `key`, the design the
+optimization ran on ([`OptimizeResult`](@ref)).
 """
 function start_optimize!(st::OptimizeState, s::Scenario, beams::AbstractVector,
                          indices::AbstractVector{<:Integer}; spot_radius::Real = 0.5,
                          foil::Union{Nothing,Symbol} = nothing,
                          observed::Union{Nothing,Symbol} = _observed_part(s), clusters = nothing,
-                         frames = nothing, deliver = f -> f(), spawn::Bool = true)
+                         frames = nothing, key = nothing, deliver = f -> f(), spawn::Bool = true)
     st.running[] && return st
     try
         isempty(beams) && throw(ArgumentError("no beams are enabled"))
@@ -312,9 +317,9 @@ function start_optimize!(st::OptimizeState, s::Scenario, beams::AbstractVector,
     cfg = _objective_settings(st; foil, observed)
     job = function ()
         t0 = time()
-        key = by === :group && clusters !== nothing ?
+        group_key = by === :group && clusters !== nothing ?
               (d = Dict(b.name => c for (b, c) in zip(beams, clusters)); b -> d[b.name]) : by
-        p = _parameterization(beams, frames, key, by, fields)
+        p = _parameterization(beams, frames, group_key, by, fields)
         sub = subset(s, collect(indices); parameterization = p)
         x0 = initial_parameters(p)
         lower, upper = _bounds(p, x0, settings.deltas)
@@ -341,7 +346,7 @@ function start_optimize!(st::OptimizeState, s::Scenario, beams::AbstractVector,
                               Beam{Float64}[_float_beam(b) for b in res.beams],
                               collect(Int, indices), before, after, res.evaluations,
                               res.iterations, res.reason, time() - t0, res.reason !== :callback,
-                              false)
+                              false, key)
     end
     run = function ()
         out = _try_job(job)

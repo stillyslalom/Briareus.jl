@@ -6,9 +6,13 @@
 var pages = [
     { key: "start", title: "Getting around", items: [
         { key: "start.select", title: "Selection",
-          text: "Select a component, beam or analysis in the model tree or the 3D view to see and " +
-                "edit its properties. Ctrl + click adds beams to the selection. Each analysis has its " +
-                "settings in Properties and its results in the tab of the same name below the 3D view." },
+          text: "Select a part, component, frame, beam or analysis in the model tree or the 3D view " +
+                "to see and edit its properties. Ctrl + click adds a node of the same kind to the " +
+                "selection, or takes it out (beams with beams, parts and components with parts and " +
+                "components, frames with frames); in the model tree Shift + click selects the range " +
+                "from the selected node. An edit then applies to everything selected. Each analysis " +
+                "has its settings in Properties and its results in the tab of the same name below " +
+                "the 3D view." },
         { key: "start.docs", title: "Documentation",
           text: "Help ▸ Documentation opens the Desktop application page of the Briareus " +
                 "documentation; Help ▸ Mouse and keys lists the bindings of the 3D view." }
@@ -23,7 +27,9 @@ var pages = [
                 "light and x-rays that reach it and emits nothing); Halfraum pair with shock tube, " +
                 "two halfraums (hohlraum parts with one end open) facing each other across a " +
                 "cylinder package whose end faces close them, the top face observed; Opacity " +
-                "halfraum, a halfraum with a sample foil, observed, in its open end. File ▸ New " +
+                "halfraum, a halfraum with a sample foil, observed, in its open end; Frustraum with " +
+                "capsule, a hohlraum part with the frustraum profile (the stated size of a published " +
+                "NIF frustraum) and an observed capsule sphere at its center. File ▸ New " +
                 "target starts a target with one starter. The dimensions are illustrative " +
                 "mock-ups." },
         { key: "target.mesh", title: "Mesh presets",
@@ -127,9 +133,12 @@ var pages = [
                 "values). The part follows the frames its steps refer to, as it follows the " +
                 "frame it is placed in." },
         { key: "part.role", title: "Role",
-          text: "A role marks the part for the analyses; the part keeps its name. The capsule (a " +
-                "sphere, or a CAD part a sphere is fitted to) is the surface whose x-ray drive is " +
-                "observed: one part at a time. A " +
+          text: "A role marks the part for the analyses; the part keeps its name. The observed " +
+                "surface is the one whose x-ray drive the drive, the optimization and the drive " +
+                "history analyze, one at a time: a capsule (a sphere, or a CAD part a sphere is " +
+                "fitted to: modes, θ–φ map, keep-out) or a flat face (a one-sided rectangle or disk, " +
+                "a VisRad rectangle, or a hohlraum part's cap given the role as a piece: the face's " +
+                "map and flux statistics). A " +
                 "backlighter foil is a flat part or a mesh. A wall is a re-emitting cavity surface: " +
                 "the drive history's wall temperature, and a surface the clearance and TaLIS checks " +
                 "land the beams on (a hohlraum part's wall and caps hold the role for the drive history). Any number of " +
@@ -138,13 +147,16 @@ var pages = [
                 "spot statistics, map and objective the drive and the optimization take, and whose " +
                 "line of sight and captured power the sweep checks. The clearance and TaLIS checks " +
                 "take every foil as a surface the beams land on. Renaming a part keeps the parts " +
-                "placed in its frame and the beams aimed in it." },
+                "placed in its frame, the beams aimed in it, and what its components were given " +
+                "(left out, display modes, the cut, the checks' roles, thin films, the sweep)." },
         { key: "part.hohlraum", title: "Hohlraum parts",
           text: "A hohlraum along its part's z axis (a cylinder, a frustraum or sections: see " +
-                "Profile), in pieces: the wall (one piece per section), the two caps, " +
-                "each end's entrance hole (or a closed end, covered by its cap) and the windows. " +
-                "The wall and caps hold the wall role for the drive history; the clearance and " +
-                "TaLIS checks keep the caps as hardware, the entrance holes' edges. Each end has a " +
+                "Profile), in pieces: the wall (one piece per section), a cap at each end that is " +
+                "not open, each end's entrance hole, and the windows. An end is an entrance hole in " +
+                "its cap, a closed cap, or open (no cap: a halfraum's end, closed by another part " +
+                "or letting the radiation out). The wall and caps hold the wall role by default; a " +
+                "piece's Role changes it (a cap observed as a flat face). The clearance and TaLIS " +
+                "checks keep the caps as hardware, the entrance holes' edges. Each end has a " +
                 "frame (origin at the end's center, z pointing out of the hohlraum, so one aim or " +
                 "placement mirrors between the two), and each window one at its center on the " +
                 "wall: beams aim and parts are placed in them, and they follow the hohlraum." },
@@ -171,8 +183,14 @@ var pages = [
     ] },
     { key: "beams", title: "Beams", items: [
         { key: "beams.preset", title: "Presets and beam files",
-          text: "NIF presets are pointed at illustrative example cone aims; OMEGA sets at the " +
-                "LEH centers or the foil. Beam tables and VisRad pointing or beam-summary files are in File." },
+          text: "The hohlraum presets aim in the entrance holes' frames: the upper hemisphere's " +
+                "beams in the hole facing up, the lower hemisphere's in the one facing down, so a " +
+                "moved hohlraum carries its beams. NIF beams keep the offsets of an illustrative " +
+                "example cone pointing, OMEGA beams aim at the holes' centers, and a hemisphere " +
+                "with no hole facing it is switched off (the opacity halfraum). The OMEGA " +
+                "backlighter set aims at the active foil's center, in its frame. An engineering " +
+                "default, not a facility's pointing. Beam tables and VisRad pointing or " +
+                "beam-summary files are in File." },
         { key: "beams.display", title: "Rays and volumes",
           text: "Rays run along each beam axis to the surface where it lands (diamond); the dot " +
                 "is the aim point. Volumes show the 5 % contour of each spot carried along its " +
@@ -218,7 +236,8 @@ var pages = [
                 "3ω light is. Only NIF beams and quads have footprints." },
         { key: "drive.walls", title: "Hohlraum wall",
           text: "The radiation temperature of the area-weighted mean x-ray flux incident on one " +
-                "hohlraum part's own wall and caps (its entrance holes and windows excluded). A " +
+                "hohlraum part's pieces that hold the wall role (by default its wall and caps, but " +
+                "not a cap observed as a flat face; never its entrance holes or windows). A " +
                 "target with several cavities (a halfraum pair) has one per hohlraum part: the " +
                 "panel opens on the one that holds the observed surface, and the drive history " +
                 "charts each one. Parts given the wall role outside a hohlraum part (a shield) " +

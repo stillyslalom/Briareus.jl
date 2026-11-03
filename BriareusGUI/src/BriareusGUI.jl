@@ -83,7 +83,7 @@ export PartSpec, PART_KINDS, PART_KIND_LABELS, PART_FIELDS, PART_SIZE_FIELDS, pa
        PART_COORDINATES, PART_POSITION_FIELDS, part_position, set_part_coords!, part_components,
        all_component_names, PART_ROLES, PART_ROLE_LABELS, part_role, set_part_role!,
        PIECE_ROLES, PIECE_ROLE_LABELS, piece_role, piece_roles, set_piece_role!,
-       foil_names, active_foil, set_active_foil!, foil_components, observed_name, observed_flat, wall_names,
+       foil_names, active_foil, set_active_foil!, foil_components, observed_name, observed_flat, wall_names, rename_map,
        observed_components, wall_components, cavity_walls, observed_cavity,
        export_target_stl, add_stl_parts!, fit_sphere, part_size_unit
 export HOHLRAUM_VALUES, HOHLRAUM_ENDS, HOHLRAUM_PROFILES, hohlraum_profile, edit_hohlraum_break!,
@@ -125,7 +125,7 @@ export TimeState, DriveHistory, TIME_CHARTS, TIME_CHART_LABELS, set_chart!, load
        show_diagnostic_image!, DEFAULT_PREPULSE, DEFAULT_THRESHOLD, set_prepulse!,
        set_irradiance_threshold!, start_irradiance!, irradiance_stale, irradiance_checks
 export OptimizeState, OptimizeResult, OBJECTIVES, OBJECTIVE_LABELS, OPTIMIZE_FIELDS, set_free!,
-       edit_optimize!, set_objective!, start_optimize!, cancel_optimize!, clear_optimize!, optimize_progress,
+       edit_optimize!, set_objective!, start_optimize!, cancel_optimize!, clear_optimize!, optimize_progress, optimize_stale,
        parameter_rows
 export ReviewState, REVIEW_QUALITY, REVIEW_VIEWS, review_batch, default_selection!, set_role!,
        set_review_view!, edit_review!, clearance_kwargs, start_clearance!, cancel_clearance!,
@@ -138,7 +138,7 @@ export BEAM_STYLES, BeamPath, beam_path, beam_paths, beam_volume, beam_hit_dista
        has_unconverted, unconverted_footprint, unconverted_beamlets, unconverted_square,
        unconverted_light
 export ViewState, COLOR_MODES, COLOR_LABELS, BEAM_COLORINGS, PALETTE, component_colors,
-       DEFAULT_CUT_COMPONENTS, set_cut!, is_cut, CUT_KINDS, set_cut_plane!, cut_offset, CutRegion,
+       default_cut, set_cut!, is_cut, CUT_KINDS, set_cut_plane!, cut_offset, CutRegion,
        cut_region, cut_pieces, cut_triangle, cut_angles, set_cut_line!, flip_cut!, CUT_FLATNESS,
        component_plane, cut_through_component!, DISPLAY_MODES, DISPLAY_LABELS, display_mode, set_display!,
        beam_drawn, set_beams_drawn!, beam_matrix,
@@ -147,7 +147,7 @@ export ViewState, COLOR_MODES, COLOR_LABELS, BEAM_COLORINGS, PALETTE, component_
        selection_kind, component_id, beam_id, model_tree, node_beams, selected_beams,
        selected_component, component_label, piece_label, window_of, part_node_id, frame_detail,
        set_triad!, drawn_triads
-export DesignSession, TASKS, TASK_LABELS, task_status, set_color!, drive_stale,
+export DesignSession, TASKS, TASK_LABELS, task_status, run_task!, follow_renames!, set_color!, drive_stale,
        build_scenario!, accept_optimum!, radiation_size, include_components!,
        RADIATION_MAX_ELEMENTS
 

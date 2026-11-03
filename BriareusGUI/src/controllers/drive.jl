@@ -623,14 +623,17 @@ function _face_raster(us, vs, npix::Integer)
     return idx, collect(xs), collect(ys)
 end
 
-# Whether a scenario observes a flat face (every observed element facing one way, as on
-# a rectangle or disk) rather than a capsule.
-function _observed_flat(s::Scenario)
-    isempty(s.observed) && return false
-    t = s.target
-    n = t.elem_normal[first(s.observed)]
-    return all(e -> dot(t.elem_normal[e], n) > 1 - 1e-9, s.observed)
+# Whether elements `es` of `t` make a flat face: every one facing the first's way (a
+# rectangle, a disk, a cap). The one rule for a flat observed face: a scenario's
+# (`_observed_flat`) and the design's (`observed_flat`, on the built target).
+function _flat_face(t::Target, es)
+    isempty(es) && return false
+    n = t.elem_normal[first(es)]
+    return all(e -> dot(t.elem_normal[e], n) > 1 - 1e-9, es)
 end
+
+# Whether a scenario observes a flat face rather than a capsule.
+_observed_flat(s::Scenario) = _flat_face(s.target, s.observed)
 
 # A flat observed face's incident x-ray flux `H` (TW/mm²) over its elements: mean, peak
 # and lowest (W/cm²) and the RMS nonuniformity; `nothing` without one.

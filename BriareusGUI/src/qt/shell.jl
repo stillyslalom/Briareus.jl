@@ -742,6 +742,8 @@ function _refresh_target!(sh::BriareusShell)
     names = component_names(ts.target[])
     obs = observed_name(ts)
     _set!(sh, "hasCapsule", obs !== nothing && obs in names)
+    # the observed surface in the calculations: a capsule or a flat face (the map, the keep-out)
+    _set!(sh, "observedKind", obs !== nothing && obs in names ? (observed_flat(ts) ? "face" : "capsule") : "")
     foil = active_foil(ts)
     _set!(sh, "hasFoil", foil !== nothing && Controllers._has_part(ts.target[], foil))
     # the foils to choose the active one from (shown with two or more)
@@ -1130,6 +1132,7 @@ function _refresh_optimize!(sh::BriareusShell)
     r = st.result[]
     _set!(sh, "optHasResult", r !== nothing)
     _set!(sh, "optApplied", r !== nothing && r.applied)
+    _set!(sh, "optStale", optimize_stale(sh.sess))
     _set!(sh, "optValues", r === nothing ? "" : st.status[])
     _set!(sh, "optClipped", r === nothing ? "" :
                             "clipped laser power " * _pct(r.before.clipped) * " → " * _pct(r.after.clipped) *
@@ -2486,8 +2489,11 @@ br_import_sst(url) = _visrad_io(import_visrad_sst!, url, "applied VisRad pointin
 br_import_summary(url) = _visrad_io(import_visrad_summary!, url, "applied the VisRad beam summary")
 br_export_sst(url) = _visrad_io(export_visrad_sst, url, "wrote VisRad pointing to")
 br_export_summary(url) = _visrad_io(export_visrad_summary, url, "wrote the VisRad beam summary to")
+# Start an analysis (a `TASKS` id: the model tree's Run, the Compute commands); the sweep
+# shows its panel.
+br_run_task(id) = _with_shell(sh -> (k = _sym(id); run_task!(sh.sess, k); k === :sweep && request_tab("sweep")))
 # Drive
-br_build() = _with_shell(sh -> build_scenario!(sh.sess))
+br_build() = br_run_task("drive")
 br_set_view(v) = _with_shell(sh -> set_view!(sh.sess.drive, _sym(v)))
 # Leave the x-ray image for the view shown before it.
 br_close_image() = _with_shell(sh -> set_view!(sh.sess.drive, get(sh.shown, "_viewBeforeImage", :scene)))
@@ -2613,7 +2619,7 @@ br_opt_objective(k) = _with_shell(sh -> set_objective!(sh.sess.optimize, _sym(k)
 br_opt_hold(on) = _with_shell(sh -> (sh.sess.optimize.hold_drive[] = Bool(on)))
 br_opt_keepout(on) = _with_shell(sh -> (sh.sess.optimize.keepout[] = Bool(on)))
 br_opt_capsule(on) = _with_shell(sh -> (sh.sess.optimize.capsule_keepout[] = Bool(on)))
-br_opt_start() = _with_shell(sh -> start_optimize!(sh.sess))
+br_opt_start() = br_run_task("optimize")
 br_opt_cancel() = _with_shell(sh -> cancel_optimize!(sh.sess))
 br_opt_accept() = _with_shell(sh -> accept_optimum!(sh.sess))
 # Clearance
@@ -2622,8 +2628,7 @@ br_rv_edit(key, text) = _with_shell(sh -> edit_review!(sh.sess.review, _sym(key)
 br_rv_wings(on) = _with_shell(sh -> (sh.sess.review.wings[] = Bool(on)))
 br_rv_quality(q) = _with_shell(sh -> (q = _sym(q); haskey(REVIEW_QUALITY, q) &&
                                                    Controllers._assign!(sh.sess.review.quality, q)))
-br_rv_start() = _with_shell(sh -> (start_clearance!(sh.sess);
-                                   Controllers._assign!(sh.sess.view.beam_color, :clearance)))
+br_rv_start() = br_run_task("clearance")
 br_rv_cancel() = _with_shell(sh -> cancel_clearance!(sh.sess))
 br_rv_export(url) = _with_shell(sh -> export_clearance(sh.sess.review, _url_to_path(String(url))))
 # Sweep
@@ -2660,7 +2665,7 @@ br_sw_check(key, on) = _with_shell(sh -> set_sweep!(sh.sess.sweep; (_sym(key) =>
 br_sw_object(i) = _with_shell(sh -> set_sweep!(sh.sess.sweep;
                                               los_object = [:none; surface_names(sh.sess.target.target[])][Int(i)+1]))
 br_sw_quality(q) = _with_shell(sh -> set_sweep!(sh.sess.sweep; quality = _sym(q)))
-br_sw_start() = _with_shell(sh -> (start_sweep!(sh.sess); request_tab("sweep")))
+br_sw_start() = br_run_task("sweep")
 br_sw_cancel() = _with_shell(sh -> cancel_sweep!(sh.sess))
 br_sw_select(k) = _with_shell(sh -> select_sweep_step!(sh.sess.sweep, round(Int, k)))
 br_sw_apply(k) = _with_shell(sh -> apply_sweep_step!(sh.sess, round(Int, k)))
@@ -2669,8 +2674,7 @@ br_tl_role(name, role) = _with_shell(sh -> set_talis_role!(sh.sess.talis, _sym(n
 br_tl_edit(key, text) = _with_shell(sh -> edit_talis!(sh.sess.talis, _sym(key), string(text)))
 br_tl_pivot(p) = _with_shell(sh -> set_talis_pivot!(sh.sess.talis, _sym(p)))
 br_tl_omega1(on) = _with_shell(sh -> Controllers._assign!(sh.sess.talis.omega1, Bool(on)))
-br_tl_start() = _with_shell(sh -> (start_talis!(sh.sess);
-                                   Controllers._assign!(sh.sess.view.beam_color, :talis)))
+br_tl_start() = br_run_task("talis")
 br_tl_cancel() = _with_shell(sh -> cancel_talis!(sh.sess))
 br_tl_export(url) = _with_shell(sh -> export_talis(sh.sess.talis, _url_to_path(String(url))))
 br_cancel_all() = _with_shell(sh -> (cancel_optimize!(sh.sess); cancel_clearance!(sh.sess);
@@ -2847,7 +2851,7 @@ function _register_qml_functions()
     @qmlfunction br_add_frame br_add_port_frame br_set_triad br_tf_set br_tf_open br_tf_create br_open_transform
     @qmlfunction br_load_preset br_set_grouping br_edit_beam br_set_beam_on br_edit_node
     @qmlfunction br_import_beams br_export_beams br_import_sst br_import_summary br_export_sst
-    @qmlfunction br_export_summary br_build br_set_view br_side_view br_xray_image br_close_image br_set_spot_radius br_unconverted_ratio br_beam_model br_export_results
+    @qmlfunction br_export_summary br_run_task br_build br_set_view br_side_view br_xray_image br_close_image br_set_spot_radius br_unconverted_ratio br_beam_model br_export_results
     @qmlfunction br_import_visrad_workspace br_export_visrad_workspace br_retune
     @qmlfunction br_time_chart br_time_pulses br_time_shape br_time_run br_time_cancel br_time_step
     @qmlfunction br_time_checks br_prepulse br_irr_threshold

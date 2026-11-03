@@ -290,7 +290,8 @@ ApplicationWindow {
                 onTriggered: Julia.br_set_view("scene")
             }
             Action {
-                text: app.hasFoil ? "Foil map" : "Capsule θ–φ map"
+                text: app.observedKind === "face" ? "Observed face map" :
+                      app.observedKind === "capsule" ? "Capsule θ–φ map" : "Foil map"
                 checkable: true
                 checked: app.driveView === "map"
                 enabled: app.driveHasResult && (app.hasCapsule || app.hasFoil)
@@ -746,7 +747,8 @@ ApplicationWindow {
                   "Wheel: zoom toward the point under the pointer\n" +
                   "Left or middle drag: orbit about the selection, or the point under the pointer\n" +
                   "Right drag, Shift + drag, or Ctrl + middle drag: pan\n" +
-                  "Click: select a component or beam (empty space clears); Ctrl + click adds beams\n" +
+                  "Click: select a component or beam (empty space clears); Ctrl + click adds one\n" +
+                  "of the same kind (beams, or components) or takes it out\n" +
                   "Double click: fit the view to what was clicked (empty space: everything)\n" +
                   "F: fit everything · arrow keys: orbit 15°\n" +
                   "Triad on the selected part (axes of its Placed in frame): drag an arrow to move\n" +
@@ -756,8 +758,9 @@ ApplicationWindow {
                   "Wheel: zoom · left drag: zoom to a box · right drag: pan\n" +
                   "Ctrl + click: back to the opening view (a diagnostic image: its region with signal)\n" +
                   "Ctrl + Shift + click: the whole field\n\n" +
-                  "The model tree selects the same things; its boxes switch beams on and off\n" +
-                  "and show or hide components. View ▸ Turntable keeps z up while orbiting.\n\n" +
+                  "The model tree selects the same things (Ctrl + click adds, Shift + click a range);\n" +
+                  "its boxes switch beams on and off and show or hide components.\n" +
+                  "View ▸ Turntable keeps z up while orbiting.\n\n" +
                   "Ctrl + Z / Ctrl + Y: undo / redo a design edit (target, beams, settings)\n" +
                   "Ctrl + S / Ctrl + O: save / open the session (the design and its CAD files)"
         }

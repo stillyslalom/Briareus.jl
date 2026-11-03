@@ -8,7 +8,7 @@ _area(a, b, c) = norm(cross(b - a, c - a)) / 2
 _tris_area(ts) = sum((_area(t...) for t in ts); init = 0.0)
 
 @testset "cutaway geometry (no GL)" begin
-    v = ViewState()
+    v = ViewState(cut_components = (:hohlraum_wall,))
     # the square plate [-1, 1]² at z = 0, as two triangles
     P(x, y) = Briareus.Vec3(x, y, 0.0)
     sq = [(P(-1, -1), P(1, -1), P(1, 1)), (P(-1, -1), P(1, 1), P(-1, 1))]
@@ -57,7 +57,7 @@ end
 
 @testset "arbitrary cut planes (no GL)" begin
     V(x...) = Briareus.Vec3(x...)
-    v = ViewState()
+    v = ViewState(cut_components = (:hohlraum_wall,))
     # a normal typed as port angles: the polar angle from +z, the azimuth from +x toward +y
     set_cut_plane!(v; angles = (60, 135), point = (0.5, 0.0, -1.0), offset = 0.25)
     @test all(isapprox.(v.cut_normal[], (sind(60) * cosd(135), sind(60) * sind(135), cosd(60)); atol = 1e-15))

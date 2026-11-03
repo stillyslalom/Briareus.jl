@@ -141,7 +141,8 @@ end
 
 Set the session to a [`session_state`](@ref) (a view section, when present, restores
 the view too). The target is rebuilt once; analyses whose inputs changed become stale
-as after any edit. Throws `ArgumentError` for a state of another format, or one the
+as after any edit, and an optimization result stays, current when the restored design
+is the one it ran on ([`optimize_stale`](@ref)). Throws `ArgumentError` for a state of another format, or one the
 geometry rejects (the session is then left as it was before the target, if the
 target fails, or partly restored otherwise).
 
@@ -235,7 +236,7 @@ function restore!(sess::DesignSession, state::AbstractDict)
         # sessions before the unconverted-light deposition: off
         set_unconverted_ratio!(sess.drive, Float64.(get(d, "unconverted_ratio", [0.0, 0.0]))...)
     end
-    clear_optimize!(sess.optimize)
+    # (an optimization result stays: it is current while the design is the one it ran on)
     if haskey(state, "optimize")
         o, op = state["optimize"], sess.optimize
         _assign!(op.by, Symbol(o["by"]))
@@ -333,6 +334,7 @@ function restore!(sess::DesignSession, state::AbstractDict)
         # (sessions before version 9 draw no frame axes)
         _assign!(vs.triads, Set{Symbol}(rf.(get(v, "triads", String[]))))
     end
+    _restored_optimum!(sess)
     return sess
 end
 
@@ -688,6 +690,7 @@ function load_session!(sess::DesignSession, path::AbstractString)
     end
     bad = String[]
     embedded = _read_diagnostic_state(state, zr, bad)
+    clear_optimize!(sess.optimize)                        # (a result of the design before)
     restore!(sess, state)
     sess.time.embedded[] = embedded
     rows = refresh_diagnostics!(sess)

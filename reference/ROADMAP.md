@@ -29,15 +29,9 @@ those under "Correctness" were read in the code, the rest are leads to confirm f
 ## Correctness
 
 3. **Bugs and weak spots found by the survey** *(survey; GUI items read in the code)*.
-   - GUI: the tree's right-click *Run* on *Placement sweep* starts the TaLIS checks
-     (`ModelTree.qml`, the `else` branch); renaming a part leaves `excluded`, display
-     modes, cutaway components, drive films, clearance/TaLIS custom roles and the sweep
-     subject keyed to the old name (an excluded part comes back in); every undo or redo
-     discards the optimization result (`restore!` calls `clear_optimize!`), even for an
-     unrelated edit; the default cutaway names `hohlraum_wall`/`hohlraum_cap_*` only, so
-     a frustraum's sections, `hohlraum_2` or a renamed hohlraum are not cut by default.
-   - GUI, two rules for a flat observed face: by part shape (`target_setup.jl`) and by
-     element normals (`drive.jl`); a flat CAD face can satisfy one and not the other.
+   - GUI: an undo of a part rename brings the old name back, but the view state keyed to
+     the new one (display modes, the cut, triads) is not in the history and is dropped; a
+     diagnostic definition's `center_part` is the user's file and keeps the old name.
    - Core: the albedo fixed point (`solve`) warns and returns an unconverted solution,
      with no relaxation and no flag on the result; `WallLossAlbedo` does not clamp
      `1 − r(1 − α)` at 0 for extreme `factor` settings; `_vrw_float`/`_vrw_int` read a
@@ -301,9 +295,6 @@ Items 10–15 follow the 2026-10-22 literature review against Kritcher et al. 20
       canvas only; a beam within the pick distance wins over a nearer surface.
 24. **GUI: Help, tooltips and layout** *(survey; the rule: explanations in tooltips, ⓘ and
     Help, never page paragraphs)*.
-    - Help out of date: `beams.preset` (presets aim in the entrance holes' frames),
-      `target.insert` (Frustraum), `part.role` (faces), `part.hohlraum` (open ends),
-      `drive.walls` (piece roles), `start.select` and Mouse and keys (selection).
     - Help missing: the Time charts and Images list, diagnostic folders, diagnostic
       windows, beams and groups, the result panels, cutaway, display modes, LEH closure;
       Help has no search.

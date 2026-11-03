@@ -106,7 +106,8 @@ function DesignSession(; starter::Symbol = :hohlraum, resolution::Symbol = :stan
     # the target remeshes CAD parts on the session's workers (the same switches)
     ts.deliver[] = deliver
     sess = DesignSession(ts, bt, DriveState(), OptimizeState(), ReviewState(), TaLISState(),
-                         TimeState(), ViewState(), Observable(""), ts.deliver, ts.spawn, EditHistory(),
+                         TimeState(), ViewState(; cut_components = default_cut(ts)), Observable(""), ts.deliver,
+                         ts.spawn, EditHistory(),
                          Ref(""), Observable(""), Ref(0), Ref(false), Dict{String,String}(),
                          Observable(String[]), SweepState())
     _default_selections!(sess, ts.target[])
@@ -128,19 +129,72 @@ function _default_selections!(sess::DesignSession, t::Target)
     return sess
 end
 
+"""
+    follow_renames!(sess::DesignSession, rn::AbstractDict) -> sess
+
+Carry the session's state keyed by part, frame or component names through the renames
+`rn` (old name → new, a [`rename_map`](@ref)): display modes, the cutaway's components,
+drawn triads, the model tree's selection and expanded nodes, the drive's films and wall
+cavity, the clearance and TaLIS roles, and the sweep's subject, frame and line-of-sight
+object. The target's left-out components and the active foil follow in the edit itself.
+"""
+function follow_renames!(sess::DesignSession, rn::AbstractDict)
+    r(n::Symbol) = get(rn, n, n)
+    rs(xs) = map(r, xs)
+    function rename!(o::Observable, f)
+        x = f(o[])
+        x == o[] || (o[] = x)
+    end
+    v, dr, sw = sess.view, sess.drive, sess.sweep
+    rename!(v.display, d -> Dict{Symbol,Symbol}(r(k) => m for (k, m) in d))
+    rename!(v.cut_components, s -> Set{Symbol}(rs(collect(s))))
+    rename!(v.triads, s -> Set{Symbol}(rs(collect(s))))
+    ids = Dict{String,String}()
+    for (a, b) in rn, kind in ("part:", "assembly:", "frame:", "comp:", "window:")
+        ids[kind * String(a)] = kind * String(b)
+    end
+    _rename_nodes!(v, ids)
+    rename!(dr.films, s -> Set{Symbol}(rs(collect(s))))
+    dr.wall_cavity[] === nothing || rename!(dr.wall_cavity, r)
+    for st in (sess.review, sess.talis), f in (st isa ReviewState ? (:targets, :hardware) :
+                                              (:capture, :hardware, :diagnostics))
+        rename!(getfield(st, f), rs)
+    end
+    sess.review.known[] = rs(sess.review.known[])
+    sess.talis.known[] = rs(sess.talis.known[])
+    rename!(sw.subject, r)
+    rename!(sw.frame, r)
+    rename!(sw.los_object, r)
+    return sess
+end
+
 function _connect!(sess::DesignSession)
     ts, bt, dr = sess.target, sess.beams, sess.drive
     # beams aimed in a frame move and turn with it (the frames change with the committed
     # inputs, before a target built on a worker is in place)
     on(fr -> follow_frames!(bt, fr; renames = ts.renames[]), ts.frames)
-    # frames whose axes are drawn keep them through a rename
+    # what is keyed by a renamed part's names follows the rename (before the target of the
+    # new names prunes what it no longer has)
     on(ts.frames) do _
         rn = ts.renames[]
-        tr = sess.view.triads[]
-        any(f -> haskey(rn, f), tr) && (sess.view.triads[] = Set{Symbol}(get(rn, f, f) for f in tr))
-        # a renamed assembly stays selected and expanded
-        isempty(rn) || _rename_nodes!(sess.view, Dict("assembly:" * String(a) => "assembly:" * String(b)
-                                                      for (a, b) in rn))
+        isempty(rn) && return
+        follow_renames!(sess, rn)
+        # (and the role holders below: a renamed wall is not a new wall; they wait for the
+        # target of the new names)
+        r(s) = Set{Symbol}(get(rn, n, n) for n in s)
+        foils[] = r(foils[])
+        held[] = map(r, held[])
+        observed[] === nothing || (observed[] = get(rn, observed[], observed[]))
+        old = component_names(ts.target[])
+        any(n -> haskey(rn, n), old) && (renamed[] = ts.target[])
+    end
+    # a cutaway left at its default cuts the hohlraum parts' shells as the parts change
+    cut = Ref(default_cut(ts))
+    on(ts.parts) do _
+        now = default_cut(ts)
+        now == cut[] && return
+        sess.view.cut_components[] == cut[] && (sess.view.cut_components[] = now)
+        cut[] = now
     end
     # an assembly removed or ungrouped is no longer selected
     on(ts.parts) do ps
@@ -178,7 +232,14 @@ function _connect!(sess::DesignSession)
     held = Ref(_held_sets(ts))
     observed = Ref{Union{Nothing,Symbol}}(observed_name(ts))
     active = Ref{Union{Nothing,Symbol}}(active_foil(ts))
+    renamed = Ref{Any}(nothing)                   # the target of a rename's old names
     onany(ts.parts, ts.target, ts.active_foil) do _...
+        # (a renamed part is committed before the target of its new names: the roles
+        # follow the rename itself, not a comparison with the target of the old names)
+        if renamed[] !== nothing
+            ts.target[] === renamed[] && return
+            renamed[] = nothing
+        end
         names = Set(component_names(ts.target[]))
         now = Set(foil_components(ts))
         if now != foils[]
@@ -356,7 +417,7 @@ function task_status(sess::DesignSession, task::Symbol)
         r = st.result[]
         r === nothing && return (:todo, isempty(st.status[]) ? "not run" : st.status[])
         txt = @sprintf("%.3g → %.3g", r.initial_value, r.value)
-        _optimum_stale(sess.beams.beams[], r) && return (:attention, "out of date: " * txt)
+        optimize_stale(sess) && return (:attention, "out of date: " * txt)
         r.applied && return (:ok, txt * ", applied")
         return (:attention, txt * ", not applied")
     elseif task === :clearance
@@ -411,6 +472,37 @@ function _optimum_stale(bs::AbstractVector, r)
     all(i -> i <= length(bs), r.indices) || return true
     r.applied && return any(k -> bs[r.indices[k]] != r.beams[k], eachindex(r.indices))
     return any(k -> bs[r.indices[k]].port != r.beams[k].port, eachindex(r.indices))
+end
+
+# The design an optimization runs on: the drive's scenario key (target, ports, cavity,
+# deposition profile, observed surface), the spot radius and the foil.
+_optimize_key(sess::DesignSession) = (sess.drive.key[], sess.drive.spot_radius[], active_foil(sess.target))
+
+"""
+    optimize_stale(sess::DesignSession) -> Bool
+
+Whether the optimization result is out of date: the drive it ran on is not the current
+design's (another target, ports, cavity, deposition profile, observed surface, spot
+radius or foil), or its beams left the beam table or moved to other ports, or, once
+applied, the optimized beams were edited since. An undo or redo keeps the result: it is
+current again when the restored design is the one it ran on.
+"""
+function optimize_stale(sess::DesignSession)
+    r = sess.optimize.result[]
+    r === nothing && return false
+    r.key === nothing || (!drive_stale(sess) && r.key == _optimize_key(sess)) || return true
+    return _optimum_stale(sess.beams.beams[], r)
+end
+
+# After an undo or redo: the optimization result is applied when the beam table holds its
+# optimized beams.
+function _restored_optimum!(sess::DesignSession)
+    r = sess.optimize.result[]
+    r === nothing && return sess
+    bs = sess.beams.beams[]
+    held = all(i -> i <= length(bs), r.indices) && all(k -> bs[r.indices[k]] == r.beams[k], eachindex(r.indices))
+    held == r.applied || (r.applied = held; notify(sess.optimize.result))
+    return sess
 end
 
 # ---------------------------------------------------------------- drive
@@ -1266,7 +1358,7 @@ function start_optimize!(sess::DesignSession; spawn::Bool = true)
     start_optimize!(st, s, bt.beams[][idx], idx;
                     spot_radius = sess.drive.spot_radius[], foil,
                     observed = observed_name(sess.target), clusters = bt.cluster[][idx],
-                    frames = beam_frames(bt)[idx], deliver = sess.deliver[], spawn)
+                    frames = beam_frames(bt)[idx], key = _optimize_key(sess), deliver = sess.deliver[], spawn)
     return sess
 end
 
@@ -1321,6 +1413,33 @@ start_talis!(sess::DesignSession; spawn::Bool = true) =
                   deliver = sess.deliver[], spawn); sess)
 
 cancel_talis!(sess::DesignSession) = (cancel_talis!(sess.talis); sess)
+
+"""
+    run_task!(sess::DesignSession, task::Symbol; spawn = true) -> sess
+
+Start analysis `task`, one of [`TASKS`](@ref): `:drive` builds the scenario
+([`build_scenario!`](@ref)), `:optimize`, `:clearance`, `:sweep` and `:talis` start their
+jobs ([`start_optimize!`](@ref), [`start_clearance!`](@ref), [`start_sweep!`](@ref),
+[`start_talis!`](@ref)); the clearance and TaLIS checks color the beams by their reports.
+The model tree's *Run* and the Compute commands go through it.
+"""
+function run_task!(sess::DesignSession, task::Symbol; spawn::Bool = true)
+    task in TASKS || throw(ArgumentError("unknown analysis :$task (one of $TASKS)"))
+    if task === :drive
+        build_scenario!(sess)
+    elseif task === :optimize
+        start_optimize!(sess; spawn)
+    elseif task === :clearance
+        start_clearance!(sess; spawn)
+        _assign!(sess.view.beam_color, :clearance)
+    elseif task === :sweep
+        start_sweep!(sess; spawn)
+    else
+        start_talis!(sess; spawn)
+        _assign!(sess.view.beam_color, :talis)
+    end
+    return sess
+end
 
 """
     review_stale(sess::DesignSession) -> Bool

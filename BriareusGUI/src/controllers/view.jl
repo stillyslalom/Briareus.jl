@@ -63,7 +63,7 @@ along it) and `:plane` (everything on the side a cut plane's normal points to).
 const CUT_KINDS = (:sector, :plane)
 
 """
-    ViewState()
+    ViewState(; cut_components = ())
 
 State of the 3D view and the model tree: `color` (one of [`COLOR_MODES`](@ref)),
 `beams` (one of [`BEAM_STYLES`](@ref)), `beam_color` (one of
@@ -80,7 +80,9 @@ selection) and `expanded` (expanded tree node ids). Drawing never changes a
 calculation: whether a beam's light takes part is the beam table's
 ([`set_participation!`](@ref)).
 
-The cutaway (`cutaway` on or off) cuts the components `cut_components` and is of kind
+The cutaway (`cutaway` on or off) cuts the components `cut_components` (a session's
+start as [`default_cut`](@ref), the hohlraum parts' shells, and follow it while the
+choice is that default) and is of kind
 `cut_kind` (one of [`CUT_KINDS`](@ref)): a sector of `cut_width` degrees of azimuth
 centered on `cut_azimuth` about the coordinate axis `cut_axis` (`:z` by default; by
 default the quadrant of a hohlraum shell facing −x −y), within `cut_range` (lo, hi)
@@ -130,14 +132,12 @@ struct ViewState
     triads::Observable{Set{Symbol}}
 end
 
-"Components the cutaway cuts by default: the starter hohlraum's shell."
-const DEFAULT_CUT_COMPONENTS = (:hohlraum_wall, :hohlraum_cap_top, :hohlraum_cap_bottom)
-
-ViewState() = ViewState(Observable(:component), Observable(:rays), Observable(:group),
+ViewState(; cut_components = ()) =
+              ViewState(Observable(:component), Observable(:rays), Observable(:group),
                         Observable(0.0), Observable(true), Observable(Dict{Symbol,Symbol}()),
                         Observable(""), Observable(String[]),
                         Observable(Set(["target", "beams", "analyses"])), Observable(225.0),
-                        Observable(90.0), Observable(Set{Symbol}(DEFAULT_CUT_COMPONENTS)),
+                        Observable(90.0), Observable(Set{Symbol}(cut_components)),
                         Observable(Set{String}()), Observable(true), Observable(Set{String}()),
                         Observable(Set{String}()), Observable(:sector), Observable(:z),
                         Observable((-Inf, Inf)), Observable((0.0, 0.0, 0.0)),
