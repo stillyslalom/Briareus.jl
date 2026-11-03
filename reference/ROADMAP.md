@@ -32,25 +32,8 @@ those under "Correctness" were read in the code, the rest are leads to confirm f
    - GUI: an undo of a part rename brings the old name back, but the view state keyed to
      the new one (display modes, the cut, triads) is not in the history and is dropped; a
      diagnostic definition's `center_part` is the user's file and keeps the old name.
-   - Core: the albedo fixed point (`solve`) warns and returns an unconverted solution,
-     with no relaxation and no flag on the result; `WallLossAlbedo` does not clamp
-     `1 − r(1 − α)` at 0 for extreme `factor` settings; `_vrw_float`/`_vrw_int` read a
-     missing or malformed VisRad key as 0 (a radius among them) rather than refusing;
-     `read_csv` is hand-rolled (no multi-line quoted fields; a short row fails later with
-     a `BoundsError` and no row context); `CalibratedTransfer` and `lpi_summary` give NaN
-     for groups at zero power, and `Backscatter` fractions are not bounded by 1.
-   - Core, optimization: a group at zero power in `x0` gets bounds `lo = hi = 0` (a
-     dropped quad cannot come back), an unknown field falls through to the defocus
-     width; the ForwardDiff tag check is off (an objective differentiating internally
-     would get wrong gradients); `bounds` is duplicated between `optimize.jl` and
-     `frame_pointing.jl`.
-   - Core, caches: the per-target `IdDict` caches in `imager.jl` and `dante.jl` hold
-     strong references, so moving-target histories grow memory; `TabulatedCurve`
-     interpolates filter curves linearly where Henke data are log-log; the
-     `line_of_sight_power` occlusion is per centroid (all or nothing), unlike Dante's
-     pixel rays; `ApertureKeepOut` takes every hole as a circle.
-   - Geometry: `orient_mesh` warns on non-manifold or inconsistent patches and carries on
-     with a possibly wrong winding, on which `enclosure` depends; primitive targets
+   - Core: the `line_of_sight_power` occlusion is per centroid (all or nothing), unlike
+     Dante's pixel rays; `ApertureKeepOut` takes every hole as a circle; primitive targets
      default to `visibility = :centroid` (row sums 1–6 % off at LEH rims unless
      `:sampled`).
 4. **Engineering closures to validate.** The re-heated wall's radiosity clamp (≥ 0,
