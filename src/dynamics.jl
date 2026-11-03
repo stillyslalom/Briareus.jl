@@ -210,8 +210,8 @@ A target that changes through the pulse. `build(τ)` makes its `Target` at time 
 factors and the deposition operator of `beams` are computed at the keyframe `times`.
 Between two keyframes, [`model_at`](@ref) interpolates the exchange matrix `Aᵢ Fᵢⱼ`
 linearly in time and divides by the areas of `build(τ)`, which keeps reciprocity, and
-rebalances it when `closed` (default: the target's declaration, as in
-`RadiationModel`). Deposition between keyframes uses an operator built at that time
+rebalances it when `closed` (default: the target's declaration; `true`, `false` or
+cavities of `build(times[1])`'s elements, as in `RadiationModel`). Deposition between keyframes uses an operator built at that time
 ([`deposition_at`](@ref)). Before the first keyframe and after the last, the nearest one
 holds. The error against rebuilding at every time falls as the square of the spacing: on
 a NIF hohlraum whose wall moves at 0.1 mm/ns, keyframes 2, 1 and 0.5 ns apart keep P2/P0
@@ -227,7 +227,7 @@ struct Keyframes{B}
     build::B
     time::Vector{Float64}
     beams::Vector{Beam}
-    closed::Bool
+    closed::Union{Nothing,Vector{Vector{Int}}}     # the cavities balanced (`_cavities`)
     keep::Int
     deposition_kw::Any
     viewfactor_kw::Any
@@ -247,7 +247,7 @@ function Keyframes(build, times, beams::AbstractVector{<:Beam}; closed = nothing
     issorted(ts) && allunique(ts) || throw(ArgumentError("keyframe times must increase"))
     keep >= 2 || throw(ArgumentError("keep at least two keyframes"))
     ref = build(ts[1])
-    return Keyframes(build, ts, collect(Beam, beams), something(closed, ref.closed), Int(keep),
+    return Keyframes(build, ts, collect(Beam, beams), _cavities(ref, something(closed, ref.closed)), Int(keep),
                      deposition_kw, viewfactor_kw, ref, Dict{Int,RadiationModel}(), Int[],
                      Dict{Int,DepositionOperator}(), Ref{Any}(nothing), Ref{Any}(nothing),
                      ReentrantLock())
@@ -274,7 +274,7 @@ function _keyframe(kf::Keyframes, k::Int)
         if m === nothing
             τ = kf.time[k]
             t = k == 1 ? kf.reference : _check_elements(kf, kf.build(τ), τ)
-            m = RadiationModel(t; closed = kf.closed, kf.viewfactor_kw...)
+            m = RadiationModel(t; closed = something(kf.closed, false), kf.viewfactor_kw...)
             kf.models[k] = m
             haskey(kf.ops, k) || (kf.ops[k] = DepositionOperator(t, kf.beams; kf.deposition_kw...))
         end
@@ -325,7 +325,7 @@ function model_at(kf::Keyframes, τ::Real)
     t = _check_elements(kf, kf.build(τ), τ)
     A0, A1, A = m0.target.elem_area, m1.target.elem_area, t.elem_area
     F = _interpolate_exchange(m0.F, m1.F, A0, A1, A, w)
-    kf.closed && enforce_closure!(F, A)
+    kf.closed === nothing || enforce_closure!(F, A; cavities = kf.closed)
     m = RadiationModel(t, F)
     kf.between[] = (τ, m)
     return m

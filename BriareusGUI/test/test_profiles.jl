@@ -22,7 +22,7 @@
     @test all(_same_component(a, b) for (a, b) in zip(cs, ref.components))
     @test all(c -> c.part === :hohlraum, cs)
     @test wall_names(ts) == [:hohlraum_wall_1, :hohlraum_wall_2, :hohlraum_cap_top, :hohlraum_cap_bottom]
-    @test Controllers._closed_enclosure(ts)
+    @test closed_design(ts)
     @test edit_part!(ts, i, :bottom_end_radius, "2.0")
     t = ts.target[]
     @test sum(t.elem_area[elements(t, :hohlraum_cap_bottom, :hohlraum_leh_bottom)]) ≈ 4π rtol = 1e-12
@@ -73,7 +73,7 @@ end
     @test [q.name for q in ps] == [:frustraum, :capsule] && ps[2].observed && ps[2].frame === :frustraum
     sess = DesignSession(starter = :frustraum, resolution = :coarse)
     ts = sess.target
-    @test observed_name(ts) === :capsule && Controllers._closed_enclosure(ts)
+    @test observed_name(ts) === :capsule && closed_design(ts)
     t = ts.target[]
     zs = extrema(v[3] for c in t.components if c.name === :frustraum_wall_2 for v in c.mesh.vertices)
     @test zs == (0.0, 6.12)

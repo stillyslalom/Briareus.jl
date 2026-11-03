@@ -33,7 +33,7 @@ _same_component(a, b) =
     @test all(c -> c.part === :hohlraum, t.components[1:end-1]) && t.components[end].part === :capsule
     tr = Target(ref.components)
     @test t.elem_area == tr.elem_area && t.elem_centroid == tr.elem_centroid && t.elem_normal == tr.elem_normal
-    @test Controllers._closed_enclosure(ts) && observed_name(ts) === :capsule
+    @test closed_design(ts) && observed_name(ts) === :capsule
     # with a window and closing entrance holes: the same meshes, the capsule after the window
     h = ts.parts[][1]
     v = copy(h.values)
@@ -71,9 +71,18 @@ end
     @test sort(_template_name.(s.review.hardware[])) == sort(Symbol.(e["review_hardware"]))
     @test _template_name.(s.talis.capture[]) == Symbol.(e["talis_capture"])
     # the drive of the template-era GUI on the same session (its capsule now comes after the
-    # window: to round-off)
+    # window: to round-off), which left this design's view factors unbalanced (the shield
+    # outside the hohlraum): the scenario without its cavities
     build_scenario!(s)
-    r = s.drive.result[]
+    rb = s.drive.result[]
+    out = Controllers._build_scenario(t, bt.beams[]; observed = observed_name(ts),
+                                      profile = Controllers._deposition_profile(s.drive))
+    r = Controllers._evaluate_drive(out.s, display_beams(bt), out.lookup, s.drive.spot_radius[];
+                                    ratio = unconverted_ratios(s), foil = active_foil(ts))
+    # (the drive balances the hohlraum's cavity, the shield in none: +0.33 % mean flux)
+    c = only(Controllers._closed_cavities(ts))
+    @test c.balanced && isempty(intersect(c.elements, elements(t, :shield)))
+    @test isapprox(rb.mean_flux, e["mean_flux"]; rtol = 5e-3) && !isapprox(rb.mean_flux, e["mean_flux"]; rtol = 1e-3)
     @test isapprox(r.mean_flux, e["mean_flux"]; rtol = 1e-10)
     @test all(isapprox(m.legendre, l; rtol = 1e-8, atol = 1e-12) for (m, l) in zip(r.modes, e["legendre"]))
     inc = element_values(r, :incident)
@@ -185,7 +194,7 @@ end
     set_excluded!(ts, :hohlraum, true)
     @test all(c -> c.part !== :hohlraum, ts.target[].components)
     @test length(ts.ghost[].components) == length(hohlraum_pieces(ts.parts[][1]))
-    @test isempty(wall_names(ts)) && !Controllers._closed_enclosure(ts)
+    @test isempty(wall_names(ts)) && !closed_design(ts)
     set_excluded!(ts, :hohlraum, false)
 
     # a second insert: names made unique; the new capsule takes the observed role
@@ -193,7 +202,7 @@ end
     @test [p.name for p in ts.parts[]] == [:hohlraum, :capsule, :hohlraum_2, :capsule_2]
     @test ts.parts[][3].frame === Symbol("hohlraum.leh_top") && ts.parts[][4].frame === :hohlraum_2
     @test observed_name(ts) === :capsule_2 && !ts.parts[][2].observed
-    @test !Controllers._closed_enclosure(ts)                  # two cavities: not one enclosure
+    @test !closed_design(ts)                  # two cavities: not one enclosure
     @test :hohlraum_2_wall in wall_names(ts)
     @test !insert_starter!(ts, :hohlraum; frame = :nowhere) && occursin("no frame", ts.error[])
 end

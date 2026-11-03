@@ -580,14 +580,14 @@ function build_scenario!(sess::DesignSession)
     dr.status[] *= _facet_note(t)
     runner = _runner(sess.spawn, sess.deliver)
     t0 = time()
-    closed = _closed_enclosure(sess.target)
+    cavities = _cavity_volumes(ts)
     mesh, parts = ts.mesh[], ts.parts[]
     foil = active_foil(ts)
     observed = observed_name(ts)
     runner(function ()
                # the CAD parts' file facets, for the drive's fit of their curved faces
                references = _fit_references(t, mesh, parts)
-               _build_scenario(t, beams; closed, cavity, profile, references, foil, observed)
+               _build_scenario(t, beams; cavities, cavity, profile, references, foil, observed)
            end, function (out)
         g == dr.generation[] || return
         dr.building[] = false
@@ -618,41 +618,133 @@ function build_scenario!(sess::DesignSession)
                       (enc !== nothing && cavity_sealed(dr) ?
                        " · the cavity is a sealed pocket: mark the film that closes it (Properties ▸ Thin film)" : "") *
                       (enc === nothing || s.model === nothing ? "" : _closure_note(leak, out.value.closed)) *
+                      (enc !== nothing || s.model === nothing ? "" : _cavities_note(out.value.cavities)) *
                       (s.model === nothing ? _radiation_note(s.target) : _facet_note(s.target))
         _request_evaluation!(sess)
     end)
     return sess
 end
 
-# Whether the drive's target is a closed hohlraum enclosure, whose view factors are
-# balanced so its rows sum to one: the pieces of a single hohlraum part, the part with the
-# observed role and parts lying wholly inside the hohlraum (a capsule that gave the role to
-# a cap; other free parts lie outside it), none of the hohlraum's pieces or the observed
-# part left out (that leaves a hole), and no end of it open (a halfraum is open to
-# whatever is placed there).
-function _closed_enclosure(ts::TargetSetup)
-    hs = [p.name for p in ts.parts[] if p.kind === :hohlraum]
-    length(hs) == 1 || return false
-    h = ts.parts[][findfirst(p -> p.kind === :hohlraum, ts.parts[])]
-    any(e -> _end_kind(h.values, e) === :open, (:top_end, :bottom_end)) && return false
-    obs = Set{Symbol}(p.name for p in ts.parts[] if p.observed)    # (left out or not)
-    held(c) = c.part === hs[1] || c.name in obs || c.part in obs
-    frame = get(part_frames(ts), hs[1], nothing)
-    all(c -> held(c) || frame !== nothing && _inside_hohlraum(h, frame, c), ts.target[].components) ||
-        return false
-    g = ts.ghost[]
-    return g === nothing || !any(held, g.components)
+# The cavities of the design whose view factors the drive balances each on its own (core
+# `RadiationModel(...; closed)` with one element set per cavity; reference/
+# assemblies-design.md, "Per-cavity balancing as built"): one per hohlraum part in the
+# calculations, its closed volume (its profile about its axis, ends included) placed by
+# its frame. Which elements a cavity holds is decided on the drive's target
+# (`_cavity_elements`), and whether it is closed by rays (`_closed_cavities`).
+struct _CavityVolume
+    name::Symbol
+    frame::Frame
+    length::Float64
+    radius::Float64                           # a cylinder's (and a refused profile's)
+    profile::Any                              # a `HohlraumProfile`, or nothing
+    pieces::Set{Symbol}                       # the part's pieces' component names
+    holed::Bool                               # a boundary element left out of the calculations
 end
 
-# Whether every vertex of component `c` lies in the closed volume of hohlraum part `p`
-# placed by `frame` (its profile about its axis, ends included, to 10⁻⁶ of its length).
-function _inside_hohlraum(p::PartSpec, frame::Frame, c::Component)
-    L = _hohlraum_length(p)
-    tol = 1e-6 * L
-    return all(c.mesh.vertices) do v
-        q = to_frame(frame, v)
-        abs(q[3]) <= L / 2 + tol && hypot(q[1], q[2]) <= _wall_radius_at(p, clamp(q[3], -L / 2, L / 2)) + tol
+function _CavityVolume(p::PartSpec, frame::Frame, ghost)
+    prof = try
+        hohlraum_profile(p)
+    catch err
+        err isa ArgumentError || rethrow()
+        nothing                               # a profile the geometry refuses
     end
+    pieces = Set(piece_name(p.name, s) for s in hohlraum_pieces(p))
+    v = _CavityVolume(p.name, frame, _hohlraum_length(p), p.values[:radius], prof, pieces, false)
+    ghost === nothing && return v
+    # a piece left out, or another element left out that would bound the cavity (a
+    # package face): a hole. One wholly inside it (a capsule) leaves it closed.
+    holed = any(c -> c.name in pieces, ghost.components) ||
+            any(e -> _in_cavity(v, ghost, e) && _on_boundary(v, ghost, e), 1:nelements(ghost))
+    return _CavityVolume(v.name, v.frame, v.length, v.radius, v.profile, v.pieces, holed)
+end
+
+# The cavities of the design (`_CavityVolume`), one per hohlraum part in the calculations
+# that has a frame, in the parts' order.
+function _cavity_volumes(ts::TargetSetup)
+    frames = part_frames(ts)
+    g = ts.ghost[]
+    return _CavityVolume[_CavityVolume(p, frames[p.name], g) for p in ts.parts[]
+                         if p.kind === :hohlraum && !(p.name in ts.excluded[]) && haskey(frames, p.name)]
+end
+
+# Whether point `x` (chamber) lies in the cavity's closed volume, to `tol` (mm).
+function _in_volume(v::_CavityVolume, x, tol)
+    q = to_frame(v.frame, x)
+    L = v.length
+    abs(q[3]) <= L / 2 + tol || return false
+    r = v.profile === nothing ? v.radius : Briareus._profile_radius(v.profile, clamp(q[3], -L / 2, L / 2))
+    return hypot(q[1], q[2]) <= (isfinite(r) ? r : v.radius) + tol
+end
+
+# Whether element `e` of `t` belongs to the cavity by its place and side: its centroid in
+# the closed volume (to 10⁻⁶ of the length) and its radiating side facing into it (10⁻³
+# of the length in front of the centroid still inside). A package face in a halfraum's
+# open end belongs to that halfraum; each side of a two-sided disk between two cavities
+# to the cavity it faces.
+function _in_cavity(v::_CavityVolume, t::Target, e::Integer)
+    tol = 1e-6 * v.length
+    x = t.elem_centroid[e]
+    return _in_volume(v, x, tol) && _in_volume(v, x + 1e-3 * v.length * t.elem_normal[e], tol)
+end
+
+# Whether element `e` of the cavity lies on its boundary: one element size behind its
+# centroid lies outside the volume (a wall, a cap, a package face), not inside (a capsule).
+_on_boundary(v::_CavityVolume, t::Target, e::Integer) =
+    !_in_volume(v, t.elem_centroid[e] - sqrt(t.elem_area[e]) * t.elem_normal[e], 1e-6 * v.length)
+
+# The elements of `t` in each cavity of `vs`: the pieces of its hohlraum part by component
+# name (entrance holes, lips and windows included), and every other element by
+# `_in_cavity`, the first cavity that takes it holding it.
+function _cavity_elements(t::Target, vs::AbstractVector{_CavityVolume})
+    pieces = Dict(n => k for (k, v) in enumerate(vs) for n in v.pieces)
+    out = [Int[] for _ in vs]
+    for e in 1:nelements(t)
+        k = get(pieces, t.components[t.elem_comp[e]].name, 0)
+        if k == 0
+            k = something(findfirst(v -> _in_cavity(v, t, e), vs), 0)
+        end
+        k > 0 && push!(out[k], e)
+    end
+    return out
+end
+
+# Each cavity of `vs` on the drive's target `t`: `(; name, elements, leak, holed,
+# balanced)`, `leak` the fraction of its diffuse rays that leave it (core
+# `open_fraction(t; cavity)`: they meet nothing, or an element outside it first), and
+# `balanced` whether the drive balances it: no element of its boundary left out, and
+# `leak` at most `CAVITY_MAX_LEAK` (an opening without an aperture, an open end that no
+# part closes, or an element the selection missed shows as a leak). The rays check the
+# geometric selection.
+function _closed_cavities(t::Target, vs::AbstractVector{_CavityVolume})
+    map(zip(vs, _cavity_elements(t, vs))) do (v, es)
+        leak = isempty(es) ? 1.0 : open_fraction(t; cavity = es).fraction
+        (; name = v.name, elements = es, leak, v.holed, balanced = !v.holed && !isempty(es) && leak <= CAVITY_MAX_LEAK)
+    end
+end
+_closed_cavities(ts::TargetSetup) = _closed_cavities(ts.target[], _cavity_volumes(ts))
+
+# The view factors' `closed` for the cavities balanced (`_closed_cavities`): `false` for
+# none, `true` for one holding every element, else their element sets.
+function _closure_kw(t::Target, cs)
+    sets = [c.elements for c in cs if c.balanced]
+    isempty(sets) && return false
+    length(sets) == 1 && length(sets[1]) == nelements(t) && return true
+    return sets
+end
+
+# The drive status's note on the cavities' balancing: nothing for one cavity balanced
+# (a hohlraum and what lies inside it), else each cavity balanced, and why not.
+function _cavities_note(cs)
+    (isempty(cs) || length(cs) == 1 && cs[1].balanced) && return ""
+    bal = [String(c.name) for c in cs if c.balanced]
+    out = isempty(bal) ? "" : " · view factors balanced per cavity: " * join(bal, ", ")
+    for c in cs
+        c.balanced && continue
+        out *= " · $(c.name) not balanced: " *
+               (c.holed ? "a piece of its boundary is left out of the calculations" :
+                @sprintf("%.2g %% of its rays leave it (an opening without an aperture, or an open end)", 100c.leak))
+    end
+    return out
 end
 
 """

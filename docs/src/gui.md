@@ -251,8 +251,11 @@ collects every explanation by page. Help ▸ Documentation opens this page.
   in pieces named after the part (`hohlraum_wall`, `hohlraum_cap_top`, …): its length,
   radius, entrance-hole radius (the bottom hole's may differ), wall albedo and conversion,
   each end an entrance hole, closed (covered by its cap) or open (neither cap nor hole: a
-  halfraum, closed or not by whatever is placed there; its view factors are then not
-  balanced), the closing entrance holes, and its windows. Its wall and
+  halfraum, closed or not by whatever is placed there), the closing entrance holes, and
+  its windows. Each hohlraum part's cavity (its pieces, and the elements of other parts
+  inside it that face into it: a capsule, a package face closing an open end) has its
+  view factors balanced on its own when under 1 % of its rays leave it; elements in no
+  cavity keep their raw view factors. Its wall and
   caps hold the *Wall* role (the drive history's wall temperature); the clearance and
   TaLIS checks keep the caps as hardware, the entrance holes' edges. A piece's row in the
   model tree (its properties, or the right-click menu) gives it another role: a cap

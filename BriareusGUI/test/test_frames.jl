@@ -571,7 +571,7 @@ end
     record!(s)
     @test ts.target[] === t && observed_name(ts) === :ball && part_role(ts.parts[][end]) === :observed
     @test :ball in s.review.targets[] && !(:ball in s.talis.capture[]) && !(:ball in s.talis.hardware[])
-    @test Controllers._closed_enclosure(ts)
+    @test closed_design(ts)
     build_scenario!(s)
     r1 = s.drive.result[]
     @test r1 !== nothing && length(r1.modes) > 0 && isfinite(r1.mean_flux) &&
@@ -612,10 +612,14 @@ end
     record!(s)
     @test ts.target[] === t && observed_name(ts) === nothing && drive_stale(s) && s.drive.result[] === nothing
     @test :ball in s.review.hardware[] && :ball in s.talis.hardware[]
-    # (a part wholly inside the hohlraum leaves it closed; one reaching out of it does not)
-    @test Controllers._closed_enclosure(ts)
-    @test edit_part!(ts, part_index(ts, :ball), :x, "2.5") && !Controllers._closed_enclosure(ts)
-    @test edit_part!(ts, part_index(ts, :ball), :x, "0") && Controllers._closed_enclosure(ts)
+    # (a part wholly inside the hohlraum lies in its cavity; of one reaching out through
+    # the wall the cavity holds the elements facing into it, and the wall buried in it sees
+    # the part from behind: 1.2 % of the cavity's rays leave it, and it is not balanced)
+    @test closed_design(ts)
+    inside() = (b = elements(ts.target[], :ball); count(in(only(Controllers._closed_cavities(ts)).elements), b) / length(b))
+    @test inside() == 1
+    @test edit_part!(ts, part_index(ts, :ball), :x, "2.5") && !closed_design(ts) && 0 < inside() < 1
+    @test edit_part!(ts, part_index(ts, :ball), :x, "0") && closed_design(ts) && inside() == 1
     @test undo!(s) && observed_name(ts) === :ball
     @test redo!(s) && observed_name(ts) === nothing
     # one observed surface at a time

@@ -9978,9 +9978,12 @@ Checks (`test/radiography.jl`, independent references):
   (https://lmf.llnl.gov/about/keys-to-success/targets); the numbers are chosen, not taken
   from any shot. Package and sample albedos are the starter capsule's 0.3 (an engineering
   default).
-- **Not balanced.** The GUI balances view factors only for one hohlraum part with no open
-  end (`_closed_enclosure`); the shock-tube pair, two cavities each closed by a package
-  face, is left unbalanced (its rows miss by the view-factor error, ~1e-3).
+- **Balanced per cavity (2026-11-03).** Until then the GUI balanced view factors only for
+  one hohlraum part with no open end, and left the shock-tube pair (two cavities, each
+  closed by a package face) unbalanced, its rows missing by the view-factor error
+  (~1e-3). Each halfraum and its package face are now balanced on their own; see
+  "Per-cavity balancing" below. The opacity halfraum stays unbalanced: 17 % of its rays
+  leave through the open end around the sample.
 - **The seam (2026-11-02).** The package disks have the halfraums' radius and lie in their
   open ends' planes exactly (z ±1.0 mm); no overlap. The GUI meshed disks, washers,
   cylinders and cones with azimuthal counts in multiples of 4 and core `hohlraum` its wall
@@ -9997,6 +10000,86 @@ Checks (`test/radiography.jl`, independent references):
   vertex for vertex; at 0.28 mm the closed configuration then equals the one with the
   disk remeshed at the wall's count exactly. Circular parts meshed at sizes where the two
   rules differ change their meshes (results change at the view-factor error).
+
+## Per-cavity balancing (2026-11-03) *derived*
+
+`RadiationModel(target; closed = cavities)` and `enforce_closure!(F, A; cavities)`:
+the Sinkhorn balancing of "Balancing on the curved path against a continuum Monte Carlo"
+applied to each cavity's block of the exchange matrix `Aᵢ Fᵢⱼ` on its own, so each
+cavity's rows sum to one over its own elements; elements in no cavity keep a factor of
+one, and the one diagonal scaling applies to the whole matrix (reciprocity everywhere).
+One cavity of every element is the whole-target balancing bit for bit. A cavity is the
+caller's declaration (element indices, or component or part names);
+`open_fraction(target; cavity)` checks it by rays: diffuse rays from the cavity's
+elements that meet nothing, or first meet an element side outside the cavity (or a
+one-sided surface from behind), leak. No value is fitted. Tests: `test/cavities.jl`
+("per-cavity balancing"), GUI `test_halfraum.jl` ("per-cavity balancing").
+
+**The GUI's cavities.** One per hohlraum part in the calculations: its pieces by
+component name (entrance holes, lips and windows included), and every other element
+whose centroid lies in the part's closed volume (its profile about its axis, ends
+included, to 1e-6 of its length) and whose radiating side faces into it (1e-3 of the
+length in front of the centroid still inside): a capsule, a package face in a
+halfraum's open end, each side of a two-sided disk shared by two cavities. Overlapping
+volumes give an element to the first part. The drive balances a cavity when
+`open_fraction(t; cavity)` is at most `CAVITY_MAX_LEAK` (1e-2, the engineering default
+of "Closure on bored, windowed and CAD cavities") and no element of its boundary is
+left out of the calculations (a piece of the part, or another element in it whose
+centroid one element size behind lies outside the volume; a capsule left out keeps the
+cavity closed). Elements in no cavity (a package's outer face, a shield at an entrance
+hole, free parts in the open) keep their raw rows. Leaks measured (`_closed_cavities`):
+the default design 1.2e-3 (coarse) and 2.7e-4 (standard), the frustraum 3.8e-4 and
+5.7e-5, each shock-tube halfraum 7.5–7.8e-3 and 1.1e-3 (the cracks where the holes'
+disks, of half the cap's azimuthal count, meet the caps; the curved view factors do not
+leak there), the opacity halfraum 0.17 (its open end). A ball of 0.9 mm reaching
+through the default hohlraum's wall leaks 1.2e-2 (the wall buried in it sees it from
+behind) and is left unbalanced, as before. The rays cost 0.09 s on the default design
+(4796 elements, 4 threads).
+
+Checks against independent references:
+- **Two spheres with holes, side by side** (R 1.5 mm, 9 of 10 equal-area bands, 24
+  azimuths, the hole closed by a flat disk aperture; albedo 0.8; a black disk in the open
+  above one hole, which that cavity's wall sees through it). Every point of a sphere sees
+  an area A of it with the view factor A/4πR², so the wall carries
+  H = S w/(1 − α w), w = (1 + cos θ₀)/2, everywhere (closed form, every bounce). Raw
+  in-cavity row sums miss by up to 1.6e-2 (the polar band), −2.2e-3 area-weighted. The
+  wall's mean H: raw +3.3e-3, per-cavity balanced +3.7e-4; whole-target balancing,
+  which forces the rows that include the free disk to one, −36 %. The source of the lit
+  sphere equals what its own elements absorb and let out, Σ(1 − α)HA, to 2.9e-13; the
+  other receives nothing.
+- **Two halfraums joined by a package, black** (2.5 mm long, radius 1.5 mm, holes of
+  1 mm at the outer ends, the package 2 mm long; the package face emitting). From the
+  face, the coaxial-disk view factors (r₁ = 1.5 to r₂ = 1.0 and 1.5 mm, 2.5 mm apart)
+  give the hole 0.108027, the cap 0.111348 and the wall 0.780625 of its emission.
+  Relative errors, raw → balanced: h 0.4 (348 elements per cavity) hole −6.0e-4 →
+  −7.2e-5, cap −3.0e-4 → +3.1e-4, wall −3.2e-5 → −3.5e-5; h 0.28 hole −2.6e-4 →
+  −4.7e-4, cap −2.8e-4 → +1.2e-4, wall +2.1e-4 → +4.9e-5; h 0.2 hole −1.6e-4 →
+  −2.8e-4, cap −1.3e-4 → +1.9e-4, wall +2.0e-4 → +1.1e-5. Single-bounce view factors
+  stay within their own error either way (balancing corrects row sums, not single
+  entries); the loss falls from ~1.2e-4 of the source to 1e-13, and the other cavity
+  receives exactly nothing.
+- **The same pair reflecting** (walls 0.8, faces 0.3, the upper wall emitting 1 per unit
+  area and the lower 0.5; `examples/mc_two_cavities.jl`). Flat watertight facets (each
+  hole's disk of the cap's full azimuthal count: `open_fraction` 0) against the Monte
+  Carlo of the element model with exact view factors (`reemit = :element`, 200,000 paths
+  per receiver, ±1.4e-4 and ±8e-5): the package faces' mean flux raw +4.1e-3 and +3.4e-3
+  (h 0.4 and 0.28), balanced −2.6e-4 and +1.0e-5. With the hohlraum's own holes (half
+  the cap's count, cracks: `open_fraction` 2.7e-3) the balanced flat model is +8.8e-3
+  off: balancing spreads the cracks' real loss over the cavity, so on flat facets it
+  needs watertight meshes, as "Closure on bored, windowed and CAD cavities" found. On the
+  default curved path the balanced face flux at h 0.4, 0.28, 0.2 lies +2.4e-4, +1.5e-4,
+  +4.4e-5 from the balanced value at h 0.14 (6408 elements), the raw one +5.4 to
+  +7.7e-4 at every h: raw does not converge to the same limit at the 1e-4 level (its row
+  excess, about −2e-4 area-weighted, is amplified by the bounces).
+
+Changes to results: the default design, the frustraum and the opacity halfraum
+(standard size) have the same drive and drive history, every serialized field, before
+and after. The shock tube (standard, 1840 elements): the observed face's mean flux
+−4.40e-4, its RMS 4.7098 → 4.7020 %, peak −1.03e-3, lowest −4.7e-4; each halfraum's wall
+Tr 311.2875 → 311.2444 eV (−1.38e-4); in the history the face's peak Tr
+323.8916 → 323.8560 eV and each cavity's peak wall Tr 310.5660 → 310.5230 eV; Dante 1's Tr
+at most 7.2e-5. A template-era session with a shield outside the hohlraum (GUI test data)
+was unbalanced and is now balanced: its capsule's mean flux +0.33 %.
 
 ## Hohlraum profiles: frustraums and multi-section walls (2026-11-02) *derived*
 

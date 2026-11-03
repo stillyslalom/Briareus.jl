@@ -267,8 +267,9 @@ E. **Double backlighter with ARC:** the starter, ARC beams as a facility beam se
 - Starters `:shock_tube` and `:opacity` (`starter_parts`): plain parts, not wrapped in an
   assembly, as the earlier starters. The package's end disks have the halfraums' radius
   and close their open ends; the shock-tube pair is two cavities, so `_closed_enclosure`
-  leaves it unbalanced (as any target with more than one hohlraum part), and a single
-  hohlraum part with an open end too. The beam presets did not aim in the starters'
+  left it unbalanced (as any target with more than one hohlraum part), and a single
+  hohlraum part with an open end too (each cavity balanced on its own since 2026-11-03:
+  "Per-cavity balancing as built"). The beam presets did not aim in the starters'
   frames at first; see "Item 5 as built".
 - The drive history of a flat observed face (built after phase C): `DriveHistory.face`
   holds the face's mean, peak, lowest and RMS nonuniformity per step (`_face_stats` on
@@ -463,7 +464,7 @@ E. **Double backlighter with ARC:** the starter, ARC beams as a facility beam se
   `false`: every other history is unchanged.
 - `_closed_enclosure` now also counts parts lying wholly inside the single hohlraum (every
   vertex in its closed volume): the capsule that gave the role to a cap keeps the default
-  design closed. Before, any free part without the observed role opened it (the test of a
+  design closed (replaced by per-cavity balancing, 2026-11-03). Before, any free part without the observed role opened it (the test of a
   sphere without a role inside the hohlraum changed accordingly). The ghost check (a piece
   of the hohlraum or the observed part left out leaves a hole) is as before.
 - GUI: a piece's properties have a *Role* box, and its tree row's right-click menu the
@@ -542,9 +543,8 @@ Taken without a question (reverse any):
   must be a pure refactor, checked by the existing GUI suite unchanged.
 - Sessions from every version so far convert through one path; keep its tests.
 - A halfraum's open end meeting a package needs no gap between components: checked and
-  fixed (see "Package seams as built"). The enclosure checks (`closed = true`) still
-  leave two cavities joined by a package unbalanced (open: balancing needs the per-cavity
-  enclosures, not one hohlraum part).
+  fixed (see "Package seams as built"). Two cavities joined by a package are balanced
+  each on its own since 2026-11-03 ("Per-cavity balancing as built").
 
 ## Package seams as built (2026-11-02)
 
@@ -571,3 +571,58 @@ Taken without a question (reverse any):
   311.2789 → 311.2875 eV); the default design has none.
   Test: the seams' vertex azimuths equal at the coarse and standard sizes
   (`test_halfraum.jl`). Research notes, "Halfraum ends and starters".
+
+## Per-cavity balancing as built (2026-11-03): roadmap item 5
+
+- Core owns the balancing; the GUI names the cavities. `RadiationModel(t; closed)` takes
+  `true`, `false` or a collection of cavities, each element indices or component or part
+  names (a part name takes every piece, entrance holes included: what a hohlraum's cavity
+  holds). `enforce_closure!(F, A; cavities)` balances each cavity's block of the
+  exchange matrix on its own (Sinkhorn on the block, one product with the scaling masked
+  to the cavity per cavity and iteration) and applies the one diagonal scaling to the
+  whole matrix, so reciprocity holds everywhere and elements in no cavity keep a factor
+  of one. One cavity of every element takes the whole-target path, bit for bit.
+  `Keyframes(...; closed)` takes cavities of its first keyframe's elements.
+  `open_fraction(t; cavity)` is the ray check of a declared cavity (rays from its
+  elements that meet nothing, or an element side outside it, leak).
+- How cavities are found (decision taken: both, one checking the other). The GUI's
+  geometry names them: one per hohlraum part in the calculations (`_cavity_volumes`), its
+  pieces by component name (never by `Component.part`), and every other element whose
+  centroid lies in the part's closed volume and whose radiating side faces into it
+  (`_in_cavity`). Core's rays check them (`_closed_cavities`: `open_fraction(t; cavity)`
+  at most `CAVITY_MAX_LEAK`, 1e-2). Core `enclosure`'s flux selection was not used to
+  find cavities: apertures are transparent to it, so it reaches through an entrance hole
+  to whatever lies beyond, and its threshold is statistical.
+- A package's two faces (decision taken): by side and normal. Each element side belongs
+  to the cavity its front faces: the package's top disk, in the upper halfraum's open
+  end and facing up, to the upper halfraum; the bottom disk to the lower one; each side
+  of a two-sided disk between two cavities to the cavity it faces. The package's outer
+  face lies in neither volume.
+- Elements in no closed cavity (decision taken): their raw rows, apart from the
+  reciprocal scaling of their entries with cavity elements: a package's outer face, a
+  shield at an entrance hole, free parts in the open, and every element of a cavity left
+  unbalanced. Whole-target balancing would force their rows (and the cavity rows that
+  see them through an entrance hole) to one: on two spheres with a black disk beyond one
+  hole it puts that sphere's wall flux 36 % off its closed form.
+- A cavity is left unbalanced when its rays leak above `CAVITY_MAX_LEAK` (an open end no
+  part closes, an opening without an aperture, a part reaching through the wall) or an
+  element of its boundary is left out of the calculations (a piece of the part, or
+  another element in it whose centroid one element size behind lies outside the volume:
+  a package face; a capsule left out keeps it closed). The old rule's other refusals
+  (more than one hohlraum part, an open end, any part outside the hohlraum) are gone:
+  the template-era test session with a shield at the top hole is now balanced (+0.33 %
+  capsule flux; its test compares the template-era values with the scenario built
+  without cavities).
+- The drive's status names the cavities balanced and why one is not, when the design
+  has more than one or one is not balanced; the cavity-point drive (Drive ▸ Cavity)
+  keeps its own whole-enclosure balancing (`_cavity_closure`). `_build_scenario` takes
+  `cavities` in place of `closed` and returns them (`cavities`).
+- Bit for bit: the default design's, the frustraum's and the opacity halfraum's drive and
+  drive history, every serialized field (standard size), before and after: identical.
+  The shock tube changes at the view factors' error (observed face −4.4e-4, each wall Tr
+  311.2875 → 311.2444 eV). Validation (sphere closed forms over every bounce, the
+  coaxial-disk closed form, per-cavity energy balance to 3e-13, a Monte Carlo of the
+  element model on watertight facets): research notes, "Per-cavity balancing".
+- Not built: the GUI placement sweep's re-optimization builds its radiation models from
+  the target's own `closed` flag (false for GUI targets), so its drive objective is
+  unbalanced for every design, a single hohlraum included (before and after this item).

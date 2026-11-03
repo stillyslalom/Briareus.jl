@@ -82,3 +82,108 @@ using Briareus: RadiationSolution
     r = dante(fv, bb(lit(:a) .+ lit(:b)))
     @test isnan(r.Tr) && isapprox(r.intensity, hole(:a) + hole(:b); rtol = 5e-3)   # 1.8e-3 (400 pixels)
 end
+
+@testset "Several cavities: per-cavity balancing" begin
+    named(c, p) = Component(Symbol(p, :_, c.name), c.mesh, c.material; kind = c.kind,
+                            two_sided = c.two_sided, surface = c.surface, part = p)
+    rows(F, c) = vec(sum(F[c, c]; dims = 2))
+    # A sphere of radius R with a polar hole (its first of `nθ` bands, equal in cos θ),
+    # closed by a flat disk aperture: every point of a sphere sees each area A of it with
+    # the view factor A / 4πR², so a wall emitting S per unit area with albedo α carries
+    # the incident flux H = S w / (1 − α w) everywhere, w = (1 + cos θ₀)/2 its share of
+    # the sphere (closed form, every bounce).
+    function sphere_cavity(p, R, nθ, nφ, center; albedo)
+        m = Briareus.Mesh()
+        μs, φs = range(1.0, -1.0; length = nθ + 1), range(0.0, 2π; length = nφ + 1)
+        pt(μ, φ) = (s = sqrt(max(0.0, 1 - μ^2)); R * Briareus.Vec3(s * cos(φ), s * sin(φ), μ))
+        for i in 2:nθ, j in 1:nφ
+            q = i == nθ ? [pt(μs[i], φs[j]), Briareus.Vec3(0, 0, -R), pt(μs[i], φs[j+1])] :
+                [pt(μs[i], φs[j]), pt(μs[i+1], φs[j]), pt(μs[i+1], φs[j+1]), pt(μs[i], φs[j+1])]
+            Briareus.add_polygon!(m, q; facing = -sum(q) / length(q))
+        end
+        c = μs[2]
+        wall = Component(:wall, m, Material(:w; albedo, conversion = 1.0); surface = SphereSurface(R))
+        hole = aperture(:leh, disk_mesh(R * sqrt(1 - c^2), R * c; nr = 2, nphi = nφ, up = false);
+                        surface = DiskSurface(center = (0, 0, R * c)))
+        return [translate(named(x, p), center) for x in (wall, hole)], (1 + c) / 2
+    end
+    # two of them side by side, and a black disk in the open above a's hole, which a's
+    # wall sees through it: an element in no cavity
+    R, α = 1.5, 0.8
+    ca, w = sphere_cavity(:a, R, 10, 24, (-4.0, 0.0, 0.0); albedo = α)
+    cb, _ = sphere_cavity(:b, R, 10, 24, (4.0, 0.0, 0.0); albedo = α)
+    free = translate(Component(:free, disk_mesh(1.0, 0.0; nr = 3, nphi = 16, up = false),
+                               Material(:k; albedo = 0.0, conversion = 0.0); surface = DiskSurface()), (-4.0, 0.0, R + 0.5))
+    t = Target([ca; cb; free])
+    a, b = elements(t, :a), elements(t, :b)
+    F0 = view_factors(t)
+    @test all(c -> maximum(abs.(rows(F0, c) .- 1)) > 1e-3, (a, b))            # 1.6e-2 on the polar band
+    @test open_fraction(t; cavity = :a).fraction == 0 && open_fraction(t; cavity = b).fraction == 0
+    @test open_fraction(t; cavity = :a_wall).fraction > 0.05                   # without its hole
+    # each cavity balanced on its own: its rows sum to one over its own elements
+    model(closed) = RadiationModel(t; F = copy(F0), closed)
+    m = model([:a, :b])
+    @test all(c -> maximum(abs.(rows(m.F, c) .- 1)) < 1e-10, (a, b))
+    @test m.F == model([a, b]).F && isapprox(m.F' .* t.elem_area', m.F .* t.elem_area; rtol = 1e-12)
+    @test model([1:nelements(t)]).F == model(true).F
+    @test_throws ArgumentError model([:a, [first(a)]])
+    @test_throws ArgumentError model(:a)
+    # the wall's mean incident flux against the closed form: per-cavity balancing moves it
+    # toward it (3.3e-3 → 3.7e-4); balancing the whole target, the free disk's rows and
+    # the wall's view of it with it, is wrong by 36 %
+    wa, wb = elements(t, :a_wall), elements(t, :b_wall)
+    P = zeros(nelements(t))
+    P[wa] .= t.elem_area[wa]
+    Hw = w / (1 - α * w)
+    err(m) = (s = solve(m, P); sum(s.H[wa] .* t.elem_area[wa]) / sum(t.elem_area[wa]) / Hw - 1)
+    raw, bal = err(model(false)), err(m)
+    @test abs(bal) < 1e-3 && abs(bal) < abs(raw) / 5
+    @test abs(err(model(true))) > 0.1
+    # energy, exactly per cavity: a's source is what a's elements absorb and let out
+    # through its hole, Σ (1 − α) H A; b receives nothing
+    s = solve(m, P)
+    out(es) = sum((1 - s.albedo[e]) * s.H[e] * t.elem_area[e] for e in es)
+    @test out(a) ≈ sum(s.source .* t.elem_area) rtol = 1e-12
+    @test out(b) == 0
+    @test sum(s.H[elements(t, :free)]) > 0                    # (through the hole, outside the cavity)
+
+    # Two halfraums joined by a package, black: each halfraum and the package face that
+    # closes its open end form a cavity; the package's outer face is in none. From the
+    # face, the coaxial-disk view factors (r₁ = 1.5 to r₂ = 1.0 and 1.5 mm, 2.5 mm apart)
+    # give what leaves through the hole, lands on the cap and on the wall.
+    h = 0.4
+    kw = (; length = 2.5, radius = 1.5, leh_radius = 1.0, capsule_radius = 0.0, h,
+          wall = Material(:au; albedo = 0.0, conversion = 1.0))
+    nphi = hohlraum_counts(; length = 2.5, radius = 1.5, leh_radius = 1.0, h).nphi
+    face = Material(:pk; albedo = 0.0, conversion = 1.0)
+    pkg = [Component(:package, cylinder_mesh(1.5, -1.0, 1.0; nz = 5, nphi, inward = false), face;
+                     surface = CylinderSurface(1.5)),
+           Component(:package_top, disk_mesh(1.5, 1.0; nr = 4, nphi, up = true), face;
+                     surface = DiskSurface(center = (0, 0, 1.0))),
+           Component(:package_bottom, disk_mesh(1.5, -1.0; nr = 4, nphi, up = false), face;
+                     surface = DiskSurface(center = (0, 0, -1.0)))]
+    t = Target([[translate(named(x, :top), (0, 0, 2.25)) for x in hohlraum(; kw..., bottom_end = :open).components];
+                [translate(named(x, :bot), (0, 0, -2.25)) for x in hohlraum(; kw..., top_end = :open).components]; pkg])
+    cavs = [[elements(t, :top); elements(t, :package_top)], [elements(t, :bot); elements(t, :package_bottom)]]
+    @test all(c -> open_fraction(t; cavity = c).fraction < 5e-3, cavs)          # 2.7e-3: the 12-gon holes in 24-gon caps
+    @test open_fraction(t; cavity = elements(t, :top)).fraction > 0.1             # without the face
+    coax(r1, r2, L) = (R1 = r1 / L; R2 = r2 / L; X = 1 + (1 + R2^2) / R1^2; (X - sqrt(X^2 - 4 * (R2 / R1)^2)) / 2)
+    Fl, Fe = coax(1.5, 1.0, 2.5), coax(1.5, 1.5, 2.5)
+    F0 = view_factors(t)
+    m = RadiationModel(t; F = copy(F0), closed = cavs)
+    @test all(c -> maximum(abs.(rows(m.F, c) .- 1)) < 1e-10, cavs)
+    pf = elements(t, :package_top)
+    P = zeros(nelements(t))
+    P[pf] .= t.elem_area[pf]
+    s = solve(m, P)
+    eb = energy_balance(s; by = :component)
+    src = sum(P)
+    # within the view factors' error of the closed forms (raw: −6.0e-4, −3.0e-4, −3.2e-5;
+    # balanced: −7.2e-5, +3.1e-4, −3.5e-5), and nothing lost
+    @test eb.escaped[:top_leh_top] / src ≈ Fl rtol = 1e-3
+    @test eb.absorbed[:top_cap_top] / src ≈ Fe - Fl rtol = 1e-3
+    @test eb.absorbed[:top_wall] / src ≈ 1 - Fe rtol = 1e-3
+    @test abs(eb.lost) < 1e-12 * src
+    @test eb.absorbed[:top_wall] + eb.absorbed[:top_cap_top] + eb.escaped[:top_leh_top] ≈ src rtol = 1e-12
+    @test eb.absorbed[:bot_wall] == eb.absorbed[:package_bottom] == 0
+end

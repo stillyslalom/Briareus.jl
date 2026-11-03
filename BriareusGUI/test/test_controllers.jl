@@ -289,7 +289,7 @@ end
     @test only(r for r in rows if r.id == "comp:hohlraum_leh_top").detail == "aperture · closing"
     @test component_id(ts, :hohlraum_leh_top_lip) == "comp:hohlraum_leh_top"
     @test with_lips([:hohlraum_wall, :hohlraum_leh_top]) == [:hohlraum_wall, :hohlraum_leh_top, :hohlraum_leh_top_lip]
-    @test Controllers._closed_enclosure(ts)
+    @test closed_design(ts)
     @test set_excluded!(ts, :hohlraum_leh_top, true)
     @test !(:hohlraum_leh_top_lip in component_names(ts.target[])) &&
           :hohlraum_leh_top_lip in component_names(ts.ghost[])

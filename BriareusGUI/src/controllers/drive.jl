@@ -453,31 +453,33 @@ _lookup_foil(lk) = lk !== nothing && lk.kind === :foil ? lk.foil : nothing
 # Build a scenario for a target and the table's beams (all of them: disabled beams are
 # evaluated at zero power, so on/off needs no rebuild). `observed` (a part or component
 # name, [`observed_name`](@ref)) is the surface the radiation model observes;
-# `closed` (a hohlraum and nothing outside it) balances the view factors of the
-# enclosure. Every target gets a radiation model for the B/H fields, unless it is too
+# `cavities` (`_cavity_volumes`) are the design's cavities, whose view factors are
+# balanced each on its own when rays find it closed (`_closed_cavities`). Every target gets a radiation model for the B/H fields, unless it is too
 # large for its view factors (`radiation_size`: laser only). With `cavity = (point,
 # films)` the scenario is built on the cavity around the point (see `set_cavity!`); a
 # pocket sealed by a film is opened by leaving that film out too (`_open_cavity`), and
 # a point in the open (most of its rays escape: a backlighter foil and its shields, say)
 # keeps the whole target. The cavity is balanced when apertures close it
-# (`_cavity_closure`), whatever `closed` says. `profile` is the deposition's beam model
+# (`_cavity_closure`), whatever `cavities` say. `profile` is the deposition's beam model
 # (`nothing`: the f-cone; a `VisRadProfile`: VisRad's, see `set_beam_model!`).
 # `references` (CAD part name => file facets, `_fit_references`) splits those parts into
 # their fitted curved pieces in the drive's target (`_fitted_target`). `foil`: the
 # backlighter foil of the flux map (`active_foil`). Returns `(; s,
-# lookup, enc, index, film, escape, closed, leak)`: the scenario, its flux-map lookup,
-# the cavity's enclosure and the target element of each drive element (`nothing` when
-# the drive's elements are the target's), the film found (`nothing` without a cavity),
-# the point's escaping fraction, whether the view factors were balanced, and the
-# cavity's leaking fraction (`open_fraction`; `NaN` without a cavity) and whether it
-# has apertures, as `(; fraction, apertures)`.
-function _build_scenario(t::Target, beams::Vector{Beam{Float64}}; closed::Bool = false,
+# lookup, enc, index, film, escape, closed, leak, cavities)`: the scenario, its flux-map
+# lookup, the cavity's enclosure and the target element of each drive element (`nothing`
+# when the drive's elements are the target's), the film found (`nothing` without a
+# cavity), the point's escaping fraction, whether view factors were balanced, the
+# cavity's leaking fraction (`open_fraction`; `NaN` without a cavity) and whether it has
+# apertures, as `(; fraction, apertures)`, and each of `cavities` on the drive's target
+# (`_closed_cavities`; empty with a cavity point or no radiation model).
+function _build_scenario(t::Target, beams::Vector{Beam{Float64}}; cavities = _CavityVolume[],
                          radiation::Union{Bool,Nothing} = nothing, cavity = nothing,
                          profile::Union{Nothing,VisRadProfile} = nothing,
                          references::AbstractDict = Dict{Symbol,Mesh}(),
                          foil::Union{Nothing,Symbol} = nothing,
                          observed::Union{Nothing,Symbol} = nothing)
     enc = index = film = nothing
+    closed = false
     escape = NaN
     leak = (; fraction = NaN, apertures = false)
     # (the fit serves the x-ray view factors only)
@@ -498,8 +500,11 @@ function _build_scenario(t::Target, beams::Vector{Beam{Float64}}; closed::Bool =
     fmap === nothing || (index = index === nothing ? fmap : fmap[index])
     radiation === nothing && (radiation = radiation_size(t).feasible)
     observe = radiation && observed !== nothing && observed in component_names(t) ? observed : nothing
+    cs = enc !== nothing || !radiation ? NamedTuple[] : _closed_cavities(t, cavities)
+    enc === nothing && (closed = _closure_kw(t, cs))
     s = Scenario(t, beams; observe, radiation, viewfactor_kw = (; closed), deposition_kw = (; profile))
-    return (; s, lookup = flux_lookup(s; foil), enc, index, film, escape, closed, leak)
+    return (; s, lookup = flux_lookup(s; foil), enc, index, film, escape, closed = closed !== false, leak,
+            cavities = cs)
 end
 
 """
@@ -512,7 +517,8 @@ const CAVITY_MAX_ESCAPE = 0.5
 """
 The largest fraction of a cavity's diffuse rays that may leak (`Briareus.open_fraction`
 of the cavity selected, apertures stopping the rays) for the drive to balance the view
-factors of a cavity that has apertures (`closed = true`, `enforce_closure!`). Adding
+factors of a cavity that has apertures (`closed = true`, `enforce_closure!`), and of
+each cavity of the design's hohlraum parts (balanced each on its own). Adding
 apertures is the user's declaration that they close the cavity's openings; this guard
 keeps a cavity with an opening left without one, or with an aperture facing out of the
 cavity (dropped by the selection), unbalanced. An engineering default, not a facility

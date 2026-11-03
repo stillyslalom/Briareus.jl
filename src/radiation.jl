@@ -52,6 +52,17 @@ to the target's own declaration (`hohlraum` makes it) when the view factors are
 computed here, and to `false` for a given `F`, which is used as is; pass
 `closed = false` for the raw view factors of a closed target.
 
+A target of several cavities (two halfraums across a package, two hohlraums side by
+side) passes `closed` a collection of cavities, each the elements of one closed
+enclosure: a vector of element indices, or of component or part names (a part name
+takes every piece of the part, entrance holes included, which is what a hohlraum's
+cavity holds). Each cavity's rows are balanced to sum to one over its own elements
+(`enforce_closure!(F, A; cavities)`), and elements in no cavity (a package's outer
+face, free parts in the open) keep their raw rows apart from the reciprocal scaling of
+their entries with cavity elements. One cavity holding every element is `closed =
+true` exactly. Which elements form a cavity is the caller's declaration;
+`open_fraction(target; cavity)` checks it by rays.
+
 The model caches LU factorizations of the radiosity matrix `I - diag(α) F` keyed on
 the albedo vector (the two most recently used), so `solve` and `flux_response` with
 unchanged albedos skip the factorization. The cache is thread-safe. Do not mutate `F`
@@ -107,11 +118,13 @@ view factors").
 """
 const HMATRIX_MODEL = Ref(15_000)
 
-function RadiationModel(t::Target; F = nothing, closed::Union{Bool,Nothing} = nothing,
+function RadiationModel(t::Target; F = nothing, closed = nothing,
                         storage = :auto, solver::Symbol = :auto, kwargs...)
     storage in (:auto, Float64, Float32, :hmatrix) ||
         throw(ArgumentError("storage must be :auto, Float64, Float32 or :hmatrix, got $storage"))
     closed = something(closed, F === nothing && t.closed)
+    cavities = _cavities(t, closed)
+    closed = cavities !== nothing
     if F === nothing
         N = nelements(t)
         st = storage === :auto ? (N > HMATRIX_MODEL[] ? :hmatrix : N > LARGE_MODEL[] ? Float32 : Float64) : storage
@@ -125,20 +138,55 @@ function RadiationModel(t::Target; F = nothing, closed::Union{Bool,Nothing} = no
     elseif closed
         F = copy(F)                 # balanced below: the caller's matrix is left alone
     end
-    closed && enforce_closure!(F, t.elem_area)
+    closed && enforce_closure!(F, t.elem_area; cavities)
     return RadiationModel(t, F; solver)
 end
 
+# The cavities that `closed` declares on `t` (`RadiationModel`): `nothing` for none
+# (`false`), `[1:N]` for the whole target (`true`), else one element vector per cavity
+# (indices, or component or part names), checked nonempty, in range and disjoint.
+function _cavities(t::Target, closed)
+    closed === false && return nothing
+    N = nelements(t)
+    closed === true && return [collect(1:N)]
+    closed isa Union{Symbol,AbstractString,Integer} &&
+        throw(ArgumentError("closed is true, false or a collection of cavities (element indices or names each)"))
+    sets = Vector{Int}[]
+    for c in closed
+        es = c isa AbstractVector{<:Integer} ? collect(Int, c) :
+             c isa Symbol ? elements(t, c) : elements(t, (Symbol(n) for n in c)...)
+        isempty(es) && throw(ArgumentError("a cavity has no elements"))
+        all(e -> 1 <= e <= N, es) || throw(ArgumentError("a cavity's element lies outside 1:$N"))
+        push!(sets, es)
+    end
+    seen = falses(N)
+    for es in sets, e in es
+        seen[e] && throw(ArgumentError("element $e lies in two cavities (or twice in one)"))
+        seen[e] = true
+    end
+    return sets
+end
+
 """
-    enforce_closure!(F, areas; tol = 1e-12, maxiter = 1000) -> F
+    enforce_closure!(F, areas; cavities = nothing, tol = 1e-12, maxiter = 1000) -> F
 
 Rescale view factors so every row sums to one while keeping reciprocity
 `Aᵢ Fᵢⱼ = Aⱼ Fⱼᵢ`: the exchange matrix `Gᵢⱼ = Aᵢ Fᵢⱼ` becomes `sᵢ Gᵢⱼ sⱼ` with `s`
 from symmetric (Sinkhorn) balancing. Only valid for closed enclosures. Rows that see
 nothing are left untouched.
+
+`cavities` (disjoint vectors of element indices) balances each cavity on its own: the
+rows of its elements sum to one over its own elements, from the Sinkhorn balancing of
+its block of `G`, and elements in no cavity keep `sᵢ = 1`. The one scaling `s` applies to
+the whole matrix, so reciprocity holds everywhere, and an entry between a cavity and
+another element (of another cavity, or outside every cavity, seen through an aperture
+or a crack) changes by the cavity's factors only. A single cavity of every element is
+the whole-matrix balancing exactly.
 """
-function enforce_closure!(F::AbstractMatrix, A::AbstractVector; tol = 1e-12,
+function enforce_closure!(F::AbstractMatrix, A::AbstractVector; cavities = nothing, tol = 1e-12,
                           maxiter::Integer = 1000)
+    cavities === nothing || (length(cavities) == 1 && length(only(cavities)) == length(A)) ||
+        return _balance!(F, _cavity_scaling(F, A, cavities, tol, maxiter))
     # with G = diag(A) F, (G s)ᵢ = Aᵢ (F s)ᵢ and sᵢ Gᵢⱼ sⱼ / Aᵢ = sᵢ Fᵢⱼ sⱼ: no copy of F
     s = ones(length(A))
     active = _rowsums(F) .> 0
@@ -153,8 +201,40 @@ function enforce_closure!(F::AbstractMatrix, A::AbstractVector; tol = 1e-12,
     return _balance!(F, s)
 end
 
+# The Sinkhorn scaling of each cavity's block of G = diag(A) F (`enforce_closure!`;
+# disjoint element vectors): (G s)ᵢ over the cavity of i from one product with s masked
+# to that cavity.
+function _cavity_scaling(F, A, cavities, tol, maxiter)
+    N = length(A)
+    s, u, q, r = ones(N), zeros(N), zeros(N), zeros(N)
+    active = falses(N)
+    for c in cavities
+        fill!(u, 0.0)
+        u[c] .= 1.0
+        mul!(q, F, u)
+        active[c] .= q[c] .> 0
+    end
+    for _ in 1:maxiter
+        for c in cavities
+            fill!(u, 0.0)
+            u[c] .= s[c]
+            mul!(q, F, u)
+            r[c] .= A[c] .* q[c]
+        end
+        δ = 0.0
+        for c in cavities, i in c
+            active[i] || continue
+            snew = sqrt(s[i] * A[i] / r[i])
+            δ = max(δ, abs(snew - s[i]))
+            s[i] = snew
+        end
+        δ < tol && break
+    end
+    return s
+end
+
 """
-    open_fraction(target; rays = 64, seed = 1) -> (; fraction, element)
+    open_fraction(target; cavity = nothing, rays = 64, seed = 1) -> (; fraction, element)
 
 Whether the target's facets close an enclosure, apertures counted: the area-weighted
 `fraction` of diffuse rays leaving its elements (`rays` cosine-distributed rays from
@@ -173,32 +253,48 @@ not whether to balance; that follows from the apertures given. Curved surfaces a
 ignored: cracks between the facets of a curved part and an aperture do not leak in the
 view factors, which integrate over the true surfaces.
 
+`cavity` (element indices, or component or part names) checks one cavity of a target
+of several (the cavities `RadiationModel(...; closed)` balances): the rays leave from
+the cavity's elements only, and a ray leaks when it meets no facet or first meets an
+element side outside the cavity (or a one-sided surface from behind), so an element
+that the cavity's declaration misses, or one that belongs to another cavity, shows as a
+leak where it is seen; `element` is zero outside the cavity.
+
 Each element draws from its own stream (from `seed` and the element), so the result
 does not depend on the thread count.
 """
-function open_fraction(t::Target; rays::Integer = 64, seed::Integer = 1)
+function open_fraction(t::Target; cavity = nothing, rays::Integer = 64, seed::Integer = 1)
     rays > 0 || throw(ArgumentError("rays must be positive"))
     N = nelements(t)
     nt = ntriangles(t)
     bvh = _sah_bvh(BVH(t.tri_v0, t.tri_e1, t.tri_e2, Int32.(1:nt)))   # apertures included
     cum = [cumsum(t.tri_area[t.elem_tris[e]]) for e in 1:N]
-    open = [t.components[t.elem_comp[e]].kind !== :aperture for e in 1:N]
+    within = cavity === nothing ? nothing : (b = falses(N); b[only(_cavities(t, [cavity]))] .= true; b)
+    open = [t.components[t.elem_comp[e]].kind !== :aperture && (within === nothing || within[e]) for e in 1:N]
     miss = zeros(N)
     Threads.@threads for e in 1:N
-        open[e] && (miss[e] = _open_rays(t, bvh, cum, e, Int(rays), Random.Xoshiro(1_000_003 * seed + e)))
+        open[e] && (miss[e] = _open_rays(t, bvh, cum, e, Int(rays), Random.Xoshiro(1_000_003 * seed + e), within))
     end
     A = t.elem_area
     w = sum(A[open])
     return (; fraction = w > 0 ? sum(miss[e] * A[e] for e in 1:N if open[e]) / w : 0.0, element = miss)
 end
 
-function _open_rays(t, bvh, cum, e, rays, rng)
+# The fraction of `rays` diffuse rays from element e that meet no facet or, with
+# `within` (a mask of a cavity's elements), first meet a side outside it.
+function _open_rays(t, bvh, cum, e, rays, rng, within)
     eps = _ray_eps(t)
     n = 0
     for _ in 1:rays
         x, nrm = _mc_point(t, cum, e, rng)
-        _, k = closest_hit(bvh, x + eps * nrm, _cosine_direction(nrm, rng))
-        k == 0 && (n += 1)
+        d = _cosine_direction(nrm, rng)
+        _, k = closest_hit(bvh, x + eps * nrm, d)
+        if k == 0
+            n += 1
+        elseif within !== nothing
+            h = dot(d, t.tri_normal[k]) < 0 ? t.tri_front[k] : t.tri_back[k]
+            (h == 0 || !within[h]) && (n += 1)
+        end
     end
     return n / rays
 end

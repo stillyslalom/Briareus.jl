@@ -23,6 +23,10 @@ function drain_until(done, queue; timeout = 300)
     return true
 end
 
+# Whether the drive balances the view factors of every cavity of the design (one per
+# hohlraum part), on its built target, and it has one.
+closed_design(ts) = (cs = Controllers._closed_cavities(ts); !isempty(cs) && all(c -> c.balanced, cs))
+
 @testset "BriareusGUI.jl" begin
     @testset "Controllers are framework-free" begin
         for name in (:Figure, :Axis, :Axis3, :mesh!, :GLMakie, :Makie, :QML, :QMLMakie)

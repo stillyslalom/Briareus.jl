@@ -21,13 +21,13 @@ using LinearAlgebra: norm
     @test all(_same_component(a, b) for (a, b) in zip(cs, ref.components)) && !ref.closed
     # an open end has no cap to hold the wall role, and the enclosure is not closed
     @test wall_names(ts) == [:hohlraum_wall, :hohlraum_cap_top]
-    @test !Controllers._closed_enclosure(ts)
+    @test !closed_design(ts)
     # the bottom entrance hole of its own radius (0: the LEH radius)
     @test edit_part!(ts, i, :bottom_end, "1") && edit_part!(ts, i, :bottom_leh_radius, "1.0")
     t = ts.target[]
     @test sum(t.elem_area[elements(t, :hohlraum_leh_bottom)]) ≈ π rtol = 1e-12
     @test sum(t.elem_area[elements(t, :hohlraum_leh_top)]) ≈ π * 1.55^2 rtol = 1e-12
-    @test Controllers._closed_enclosure(ts)
+    @test closed_design(ts)
     @test !edit_part!(ts, i, :bottom_end, "3") && occursin("open (2)", ts.error[])
     @test !edit_part!(ts, i, :bottom_leh_radius, "3.0") && occursin("bottom_end", ts.error[])
 end
@@ -40,7 +40,7 @@ end
     @test [hohlraum_pieces(q) for q in ps[1:2]] == [[:wall, :cap_top, :leh_top], [:wall, :cap_bottom, :leh_bottom]]
     sess = DesignSession(starter = :shock_tube, resolution = :coarse)
     ts = sess.target
-    @test observed_name(ts) === :package_top && observed_flat(ts) && !Controllers._closed_enclosure(ts)
+    @test observed_name(ts) === :package_top && observed_flat(ts) && closed_design(ts)   # two cavities
     t = ts.target[]
     # the faces close each halfraum's open end: they lie in its plane, with its radius
     zs(n) = extrema(v[3] for c in t.components if c.name === n for v in c.mesh.vertices)
@@ -352,6 +352,66 @@ end
     @test all(>(0), whole.intensity) && isapprox(whole.intensity, last.(core.record); rtol = 2e-3)   # 3.5e-4
 end
 
+@testset "per-cavity balancing (no GL)" begin
+    # the shock tube: each halfraum and the package face closing its open end form a
+    # cavity (the package's outer face in neither), each balanced on its own
+    st = DesignSession(starter = :shock_tube, resolution = :coarse)
+    ts = st.target
+    t = ts.target[]
+    named(pre...) = sort([e for e in 1:nelements(t)
+                          if any(p -> startswith(String(t.components[t.elem_comp[e]].name), p), pre)])
+    cs = Controllers._closed_cavities(ts)
+    @test [c.name for c in cs] == [:halfraum_top, :halfraum_bottom] && all(c -> c.balanced, cs)
+    @test sort(cs[1].elements) == named("halfraum_top_", "package_top") &&
+          sort(cs[2].elements) == named("halfraum_bottom_", "package_bottom")
+    side = elements(t, :package)
+    @test !isempty(side) && !any(e -> e in cs[1].elements || e in cs[2].elements, side)
+    @test all(c -> c.leak < Controllers.CAVITY_MAX_LEAK, cs)                   # 7.5e-3, 7.8e-3: cracks at the holes' rims
+    build_scenario!(st)
+    @test occursin("balanced per cavity: halfraum_top, halfraum_bottom", st.drive.status[])
+    s = st.drive.scenario[]
+    F = s.model.F
+    rows(F, c) = vec(sum(F[c, c]; dims = 2))
+    F0 = view_factors(s.target)                         # the raw view factors
+    @test all(c -> maximum(abs.(rows(F0, c.elements) .- 1)) > 1e-5, cs)
+    @test all(c -> maximum(abs.(rows(F, c.elements) .- 1)) < 1e-10, cs)
+    # energy, exactly per cavity: a source in the upper halfraum's wall alone; its power
+    # equals what its own elements absorb and its hole lets out, Σ (1 − α) H A over them,
+    # and the lower cavity receives nothing
+    P = zeros(nelements(t))
+    P[elements(t, :halfraum_top_wall)] .= 1.0
+    sol = solve(s.model, P)
+    absorbed(es) = sum((1 - sol.albedo[e]) * sol.H[e] * t.elem_area[e] for e in es)
+    @test absorbed(cs[1].elements) ≈ sum(sol.source .* t.elem_area) rtol = 1e-12
+    @test absorbed(cs[2].elements) == 0
+
+    # the default design: one cavity of every element, balanced as the whole target
+    ts = TargetSetup(resolution = :coarse)
+    cs = Controllers._closed_cavities(ts)
+    @test length(cs) == 1 && cs[1].balanced && length(cs[1].elements) == nelements(ts.target[])
+    @test Controllers._closure_kw(ts.target[], cs) === true
+    # two hohlraums side by side, each with its capsule: two cavities
+    @test insert_starter!(ts, :hohlraum) && edit_part!(ts, part_index(ts, :hohlraum_2), :x, "8")
+    t = ts.target[]
+    cs = Controllers._closed_cavities(ts)
+    @test [c.name for c in cs] == [:hohlraum, :hohlraum_2] && all(c -> c.balanced, cs)
+    @test sort(cs[2].elements) == sort(elements(t, :capsule_2, (Symbol(n) for n in component_names(t)
+                                                                  if startswith(String(n), "hohlraum_2_"))...))
+    # a piece left out leaves a hole (its cavity unbalanced, the other one kept)
+    @test set_excluded!(ts, :hohlraum_2_leh_top, true)
+    cs = Controllers._closed_cavities(ts)
+    @test cs[1].balanced && cs[2].holed && !cs[2].balanced
+    @test occursin("hohlraum_2 not balanced: a piece of its boundary", Controllers._cavities_note(cs))
+    # a capsule left out leaves its cavity closed
+    @test set_excluded!(ts, :hohlraum_2_leh_top, false) && set_excluded!(ts, :capsule_2, true)
+    @test closed_design(ts)
+
+    # the opacity halfraum: open where the sample does not close its end, so not balanced
+    ts = TargetSetup(starter = :opacity, resolution = :coarse)
+    c = only(Controllers._closed_cavities(ts))
+    @test !c.balanced && c.leak > 0.05
+end
+
 @testset "piece roles: an observed cap (no GL)" begin
     sess = DesignSession(resolution = :coarse)
     ts = sess.target
@@ -375,7 +435,7 @@ end
     @test observed_name(ts) === cap && observed_flat(ts) && !ts.parts[][part_index(ts, :capsule)].observed
     @test cavity_walls(ts) == [:hohlraum => walls] && wall_names(ts) == walls
     @test observed_cavity(ts) === :hohlraum && observed_components(ts) == [cap]
-    @test Controllers._closed_enclosure(ts)
+    @test closed_design(ts)
     row = only(r for r in model_tree(sess) if r.id == Controllers.component_id(ts, cap))
     @test occursin("observed", row.detail)
     # the drive: the cap's face map and statistics, no modes; its mean flux and the
