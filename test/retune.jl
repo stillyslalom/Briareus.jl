@@ -200,6 +200,14 @@ _rms_at_level(v1, v2, A, L, ρ) =
     @test isapprox(un.rms[2], _rms_at_level(v1, v2, A, L(1.0), 1.0); rtol = 1e-7)
     @test all(_rms_at_level(v1, v2, A, L(1.0), ρ) > un.rms[2] for ρ in (0.9, 0.97, 1.03, 1.1))
     @test all(un.rms .< rt.rms)
+    # a gap in the reference (nothing fires at 1 ns), held off by the limits: not solved,
+    # the other times as before
+    gap = (; time = times, deposition = [τ == 1.0 ? deposit(op, [remake(b; power = 0.0) for b in beams]) : d
+                                         for (τ, d) in zip(times, ref.deposition)])
+    rg = retune_drive(q, op, beams, gap; limits = (k, τ) -> τ == 1.0 ? (0.0, 0.0) : (0.0, Inf))
+    @test all(iszero, rg.power[:, 2]) && isnan(rg.residual[2]) && rg.level[2] == 0
+    @test isapprox(rg.power[:, [1, 3]], rt.power[:, [1, 3]]; rtol = 1e-10)
+    @test_throws ArgumentError retune_drive(q, op, beams, gap)                    # an empty target, free powers
     @test_throws ArgumentError retune_drive(q, op, beams, (; time = times))       # no reference drive
     @test_throws ArgumentError retune_drive(q, op, beams, ref; target = :flat)
     @test_throws ArgumentError retune_drive(FoilIrradiance(:bl; center = (5, 5, 0), radius = 0.1), op, beams, ref)

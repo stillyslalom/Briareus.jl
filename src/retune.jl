@@ -323,7 +323,10 @@ residual)`: the per-beam powers (`length(keys) × nt`), the same as `PulseShape`
 `with_pulses` (`by` the same key), the predicted shape `y/L` and the target `ŝ`
 (`ny × nt`), the predicted level `L` (TW/mm²) and `L/L_t`, for a face or a foil the
 predicted RMS nonuniformity and peak-to-mean ratio `max(y)/L` (`nothing` for a capsule),
-and the weighted residual norm per time. For the x-ray quantities the prediction is
+and the weighted residual norm per time. A time whose limits fix every power (`lo == hi`,
+e.g. `(0, 0)` where the reference fires no 3ω light: a prepulse alone, or a gap between
+pulses) is not solved: its powers are the limits, its target level may be zero, and its
+residual is `NaN`. For the x-ray quantities the prediction is
 linear about the reference's albedos: confirm with a `drive_history` of the pulses,
 where the albedos follow the new drive.
 """
@@ -426,7 +429,26 @@ Base.@nospecializeinfer function retune_drive(@nospecialize(q::RetuneQuantity), 
                 y0 .+= R[c.name] * (Q[c.name] * w)
             end
         end
+        bounds = [lim(kk, τ) for kk in ks]
+        lo, hi = first.(bounds), last.(bounds)
+        all(lo .<= hi) || throw(ArgumentError("empty power limits at $τ ns"))
         Lt = level === nothing ? dot(μ, view(st.yref, :, k)) : level isa Real ? Float64(level) : Float64(level(τ))
+        if lo == hi
+            # the limits fix every power (e.g. none where the reference fires none): nothing
+            # to solve, and the target may be empty
+            y = y0 === nothing ? M * lo : M * lo .+ y0
+            power[:, k] = lo
+            target_shape[:, k] .= target === :reference ? st.yref[:, k] ./ dot(μ, view(st.yref, :, k)) : st.uniform
+            lev[k] = L = dot(μ, y)
+            shape[:, k] = y ./ L
+            drive[k] = L / Lt
+            if st.area !== nothing
+                rms[k] = L > 0 ? rms_nonuniformity(y, st.area) : NaN
+                peak[k] = maximum(y) / L
+            end
+            residual[k] = NaN
+            continue
+        end
         Lt > 0 || throw(ArgumentError("the target level must be positive (at $τ ns)"))
         s = target === :reference ? st.yref[:, k] ./ dot(μ, view(st.yref, :, k)) : st.uniform
         target_shape[:, k] = s
@@ -442,9 +464,6 @@ Base.@nospecializeinfer function retune_drive(@nospecialize(q::RetuneQuantity), 
         r = rl = length(st.rows) + 1                             # the level row
         A[r, :] .= LM ./ Lt
         b[r] = (Lt - L0) / Lt
-        bounds = [lim(kk, τ) for kk in ks]
-        lo, hi = first.(bounds), last.(bounds)
-        all(lo .<= hi) || throw(ArgumentError("empty power limits at $τ ns"))
         if stay > 0
             Pn = [nom(kk, τ) for kk in ks]
             scale = max(sum(Pn) / ng, eps())
