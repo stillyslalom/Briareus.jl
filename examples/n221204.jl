@@ -398,7 +398,7 @@ keyframes = range(turn_on, 9.0, 11)
 
 p2(r) = r.moments[3, :] ./ r.moments[1, :]
 p4(r) = r.moments[5, :] ./ r.moments[1, :]
-# Synthetic Dante 1 (θ 143°, φ 274°, 37° to the axis, its 60 mm field at TCC taking in
+# Synthetic Dante 1 (port P143-274: θ 143.25°, φ 274°, 36.75° to the axis; its 60 mm field at TCC taking in
 # the lower LEH and the whole target; `dante1()`): the
 # brightness temperature of the power per steradian it sees, over the LEH's initial
 # area (Dante's convention) and over its open area (the closing lips' open fraction: the

@@ -148,13 +148,16 @@ port_frame(facility::Symbol, port; roll = 0.0, origin = (0.0, 0.0, 0.0)) =
 
 Polar angle and azimuth (degrees) of a facility port from the facility's table:
 - `:nif`: an indirect-drive quad port, by its number (`NIF_PORTS`, NIF User Guide
-  Table 4-1) or its quad name such as `"Q31B"` ([`nif_port`](@ref));
+  Table 4-1) or its quad name such as `"Q31B"` ([`nif_port`](@ref)), or a diagnostic
+  port by name such as `"P143-274"` ([`NIF_DIAGNOSTIC_PORTS`](@ref), Table 5-1);
 - `:omega`: a beam port by name, `"B01"`–`"B60"`, in the hohlraum frame of
   [`omega_ports`](@ref).
 An unknown port is a `KeyError`, another facility an `ArgumentError`.
 """
 function port_angles(facility::Symbol, port)
     if facility === :nif
+        d = port isa Integer ? nothing : _nif_diagnostic_port(String(port))
+        d === nothing || return (d[2], d[3])
         n = port isa Integer ? Int(port) : nif_port(String(port))
         k = findfirst(r -> r[1] == n, NIF_PORTS)
         k === nothing && throw(KeyError(port))

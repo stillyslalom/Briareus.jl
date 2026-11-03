@@ -45,7 +45,10 @@ lands; the docstrings and research notes then hold what was built.
   gated over the emission); built-in `nif_inflight_radiography` (Rygg 2014; the values
   that are not public left to an extending file). Research notes, "Backlit radiography:
   the model and its public definitions". The GUI does not record it.
-- Not yet: port names, a field of view
+- Named ports (2026-11-03): a line of sight may name a NIF diagnostic port
+  (`port = "P143-274"`, `NIF_DIAGNOSTIC_PORTS`, the User Guide's Table 5-1); the NIF
+  built-ins do, and Dante 1 moved from the papers' θ 143° to the table's 143.25°.
+- Not yet: a field of view
   per channel (the multilayer channel's 12 mm; Rubery 2022 finds it covers every NIF
   hohlraum), time response, uncertainty, the recording modes other than `history`,
   channel voltages and the unfold in the GUI (its histories are gray: they need a
@@ -121,8 +124,10 @@ lands; the docstrings and research notes then hold what was built.
   design) is the default and a channel may narrow it (the multilayer channel: 12 mm).
   With a 60 mm field the view is limited by occlusion and the target's extent.
 - **Ports from the facility table.** The line of sight is a port name resolved in the
-  facility's port table (P143-274 is θ 143.25° there; Rubery's 37° is θ 143°): adopting
-  the table moves Dante 1 by 0.25°, a change measured and stated when it lands.
+  facility's port table (P143-274 is θ 143.25° there; Rubery's 37° is θ 143°): adopted
+  2026-11-03, the change measured in the research notes ("Named ports and per-channel
+  fields"). Omega's diagnostic ports (H16I) are not tabulated, so `omega_dante` keeps
+  its angles.
 - **Tr's area is a setting**: `initial` (an aperture's initial area, the default and the
   convention of Rubery 2024 and the BAH paper), `projected` (a part's projected area, as
   Fournier 2010), `history` (an area per time), or a number.

@@ -20,11 +20,10 @@ source = "Rubery et al., RSI (2023), OSTI 1975922, Fig. 4 and §II"
 confidence = "H"
 
 [line_of_sight]
-# 37° to the hohlraum axis (Rubery 2023 §II); the NIF port table gives P143-274 at
-# θ 143.25° (NIF User Guide 2024-09, Table 5-1), not adopted yet
-theta_deg = 143.0
-phi_deg = 274.0
-source = "Rubery et al., RSI (2023) §II"
+# P143-274, θ 143.25°, φ 274°: 36.75° to the hohlraum axis (NIF User Guide 2024-09,
+# Table 5-1); Rubery 2023 §II gives 37° (θ 143°)
+port = "P143-274"
+source = "NIF User Guide (2024-09), Table 5-1"
 
 [view]
 # Tr over the lower entrance hole's initial area, Dante's convention (Rubery et al.,

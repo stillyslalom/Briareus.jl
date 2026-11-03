@@ -135,8 +135,7 @@ Items 10–15 follow the 2026-10-22 literature review against Kritcher et al. 20
       roughness and surface layer (assumed or fitted; extrapolated below 2.2 keV); the
       within-group spectral shape (finer groups); Dante 2's hardware and fields and
       Omega's (Dante 2 and Omega's Dante look through the hole: fields not public;
-      `dante2()` is not definition-backed); port names from the facility table (moves
-      Dante 1 by 0.25°); a field of view per channel (the multilayer channel's 12 mm); time
+      `dante2()` is not definition-backed); a field of view per channel (the multilayer channel's 12 mm); time
       response and per-channel uncertainty, and an uncertainty band from `dante_unfold`;
       recording modes other than `history`; field-of-view checks against Chen 2024, the
       BAH 27 % ring occlusion and May 2015's cosine ratio. Sessions saved before 46d8a76

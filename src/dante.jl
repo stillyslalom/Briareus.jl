@@ -114,9 +114,11 @@ end
 """
     dante1(; kwargs...)
 
-NIF Dante 1: θ 143°, φ 274°, at 37° to the hohlraum axis (Rubery et al., RSI 2023;
-Rubery et al., PRL 132, 065104, 2024), viewing the whole target over its collimated
-field, 60 mm at TCC (the 2004 design's ±30 mm, Dewald et al., RSI 75, 3759 (2004)), with
+NIF Dante 1 at port P143-274: θ 143.25°, φ 274°, 36.75° from the hohlraum axis (NIF User
+Guide 2024-09, Table 5-1, [`NIF_DIAGNOSTIC_PORTS`](@ref); the papers round it to 37°,
+Rubery et al., RSI 2023; Rubery et al., PRL 132, 065104, 2024), viewing the whole target
+over its collimated field, 60 mm at TCC (the 2004 design's ±30 mm, Dewald et al., RSI 75,
+3759 (2004)), with
 Tr over the lower entrance hole's initial area and the channels of
 [`dante1_responses`](@ref), from the built-in definition `nif_dante1`
 (`field_of_view = nothing` gives the view through the hole alone); definitions on the

@@ -42,7 +42,7 @@ The kind `xray_power` (Dante, Sentinel) takes:
 
 | Table | Keys |
 |---|---|
-| `[line_of_sight]` (required) | `theta_deg`, `phi_deg`: the instrument's direction from TCC |
+| `[line_of_sight]` (required) | `port`, a NIF diagnostic port by name (`"P143-274"`, with `facility = "NIF"`; the angles of [`NIF_DIAGNOSTIC_PORTS`](@ref), the User Guide's Table 5-1), or `theta_deg` and `phi_deg`: the instrument's direction from TCC |
 | `[view]` | `field_of_view_mm` (the collimated field, a disk of this diameter normal to the line of sight; without it the view looks through `through` alone), `center_part` or `center_mm` (the field's center, a part's centroid or a point; default TCC), `through` (the aperture looked through, and the reference for Tr; default `leh_bottom` without a field of view, none with one), `pixels` (rays per side; default 400), `area_mm2` (the area Tr is quoted over; default the aperture's initial area), `area_part` (Tr over that part's visible projected area), `area_open = true` (Tr over the hole's open area at each time, from the model's entrance-hole closure) or `area_history_csv` (a measured area history: time in ns, area in mm²) |
 | `[recording]` | `mode = "history"` |
 | `[[channel]]` (one per channel) | `number` and `solid_angle_sr` (required); `energy_eV` (nominal band energy; default the response's peak); `filters` (an array of `{ material, thickness_um }`, optionally `density_g_cm3`, or `{ transmission_csv }`); `grid` (open fraction; default 1); `mirror` (`{ kind = "SiO2", angle_deg }`, calibrated; `{ kind = "mlm", angle_deg = 1.9 }`; `{ kind = "fresnel", material, angle_deg }`, optionally `roughness_nm` and `density_g_cm3`, an uncalibrated [`GrazingMirror`](@ref) for C, Be, B₄C and other coatings; or `{ reflectivity_csv }`); `cathode` (`"Al"`, `"Cr"` or `"Ni"`, [`xrd_sensitivity`](@ref)) or `sensitivity_csv`; or a measured `response_csv` in place of all of these |
@@ -53,7 +53,7 @@ The kind `xray_imager` (the SXI, G-LEH and gated imagers) builds an
 
 | Table | Keys |
 |---|---|
-| `[line_of_sight]` (required) | `theta_deg`, `phi_deg` |
+| `[line_of_sight]` (required) | `port`, or `theta_deg` and `phi_deg` (as above) |
 | `[optic]` (required) | `kind = "pinhole"`, `diameter_um`, `distance_mm` (the pinhole from the object), `magnification`; `energy_eV` (the photon energy of the diffraction blur) |
 | top level | `filters` (required; as a channel's, an empty array for none), `mirror` (as a channel's) |
 | `[detector]` (required) | `absorber` and `absorber_um` (the absorbing layer, e.g. Si 15 µm) or `efficiency_csv`; `kind`, `pixel_um`, `pixels` (across, down) |
@@ -72,7 +72,7 @@ deposition on the foil and the object's parts with their materials. It takes:
 
 | Table | Keys |
 |---|---|
-| `[line_of_sight]` (required) | `theta_deg`, `phi_deg`: from the object toward the detector |
+| `[line_of_sight]` (required) | `port`, or `theta_deg` and `phi_deg`: from the object toward the detector |
 | `[backlighter]` (required) | `line` (the He-α element, e.g. `"Ge"`) or `line_keV`; `pulse_ns` (the flat-top pulse) and `start_ns`; `foil_part` (default `backlighter`); `angular` (`"isotropic"` or `"lambertian"`); `prepulse` (the conversion-efficiency class); `ce` (in place of [`kshell_ce`](@ref)) |
 | `[optic]` (required) | `kind = "pinhole"` with `diameter_um`, `distance_mm` (from the object) and `magnification` (or the detector's `distance_mm`), or `kind = "projection"` |
 | top level | `filters` (required; as a channel's) |
@@ -87,8 +87,9 @@ radiograph's frames are the emission recorded through each gate.
 A field of view takes in every surface of the target facing the instrument, occluded by
 any part: a NIF Dante's is ±30 mm at TCC (the 2004 design), wider than any hohlraum, so
 windows, packages and shields enter the signal as they would on the shot. Within an
-extended definition, giving one of `area_mm2` / `area_part` or `center_part` /
-`center_mm` drops the other inherited from the base.
+extended definition, giving one of `area_mm2` / `area_part`, `center_part` /
+`center_mm` or `port` / `theta_deg` and `phi_deg` drops the other inherited from the
+base.
 
 The response of a channel is the product of its parts ([`DanteResponse`](@ref)).
 Measured curves are CSV files with a header line and two columns, photon energy (eV)
@@ -106,7 +107,7 @@ source's table and checked against the energies the source tabulates:
 | `id` | Instrument and configuration | Not public (reported as missing) |
 |---|---|---|
 | `nif_dante1` | NIF Dante 1, latest public configuration, viewing the whole target: a 60 mm field of view at TCC, the 2004 design's ±30 mm (Dewald et al. 2004), Tr over the lower entrance hole (extends `nif_dante1_2021`) | the collimators as fielded |
-| `nif_dante1_2021` | from October 2021 (Rubery et al. 2023, Fig. 4), viewed through the lower entrance hole | — |
+| `nif_dante1_2021` | from October 2021 (Rubery et al. 2023, Fig. 4), the same field and Tr's reference | — |
 | `nif_dante1_N180604`, `_N180129`, `_N170924` | single shots, 2017–18 (Kemp et al. 2020, Tables I–III) | — |
 | `nif_dante1_2012` | 2012–14 (May et al. 2015, Table IV) | — |
 | `nif_dante1_2009` | N091104 (Fournier et al. 2010, Table II) | — |

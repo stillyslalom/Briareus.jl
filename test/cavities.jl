@@ -59,18 +59,19 @@ using Briareus: RadiationSolution
 
     # Dante 1's line of sight, each cavity seen through its bottom entrance hole. A
     # blackbody in one cavity at a time (the outside of every one-sided surface is dark).
+    d1 = port_angles(:nif, "P143-274")
     n = nelements(t)
     T0 = 250.0
     lit(p) = [c.kind !== :aperture && c.part === p ? SIGMA_SB * T0^4 : 0.0 for c in t.components[t.elem_comp]]
     z = zeros(n)
     bb(B) = RadiationSolution(RadiationModel(t; F = zeros(n, n)), z, z, B, z, z, z, z, 0.0)
     # a field of 8 mm about a's center leaves b out: b gives it nothing
-    narrow = DanteView(143, 274; through = :a_leh_bottom, field_of_view = 8.0, center = :a, pixels = 400)
+    narrow = DanteView(d1...; through = :a_leh_bottom, field_of_view = 8.0, center = :a, pixels = 400)
     @test dante(narrow, bb(lit(:b))).intensity == 0 && !haskey(visible_area(narrow, t), :b)
     # the views through each hole (no field of view), and a 60 mm field at TCC (a NIF
     # Dante's, research notes) that takes in both cavities
-    hole(p) = dante(DanteView(143, 274; through = Symbol(p, :_leh_bottom)), bb(lit(p))).intensity
-    wide = DanteView(143, 274; through = :a_leh_bottom, field_of_view = 60.0, pixels = 1200)
+    hole(p) = dante(DanteView(d1...; through = Symbol(p, :_leh_bottom)), bb(lit(p))).intensity
+    wide = DanteView(d1...; through = :a_leh_bottom, field_of_view = 60.0, pixels = 1200)
     @test dante(narrow, bb(lit(:a))).intensity ≈ hole(:a) rtol = 1e-3       # measured 1.2e-4
     @test dante(wide, bb(lit(:a) .+ lit(:b))).intensity ≈ hole(:a) + hole(:b) rtol = 1e-3   # 1.4e-4
     @test issubset((:a, :b), keys(visible_area(wide, t)))
@@ -78,7 +79,7 @@ using Briareus: RadiationSolution
     # this target has no `leh_bottom` to quote Tr over, so only the power
     fv = dante1()
     @test fv.field_of_view == 60.0 && fv.center == zero(fv.center) && fv.through === :leh_bottom &&
-          (fv.theta, fv.phi) == (143.0, 274.0) && length(fv.channels) == 18
+          (fv.theta, fv.phi) == (143.25, 274.0) && length(fv.channels) == 18
     r = dante(fv, bb(lit(:a) .+ lit(:b)))
     @test isnan(r.Tr) && isapprox(r.intensity, hole(:a) + hole(:b); rtol = 5e-3)   # 1.8e-3 (400 pixels)
 end

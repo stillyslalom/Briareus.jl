@@ -9483,8 +9483,9 @@ Kline).
   belongs to a date or shot.
 - **Dante 1's port** is θ 143.25°, φ 274° (User Guide Table 5-1; 36.75° to the axis; the
   BAH paper uses 36.75°); Rubery, Kline, Marrs and Fournier give 37°, Chen 2024 37.4°.
-  `dante1()` keeps θ 143° (Rubery) until the port table is adopted, with the change
-  measured then. Dante 2: θ 64°, φ 350°.
+  Since 2026-11-03 every Dante 1 definition names the port and takes the table's
+  143.25° ("Named ports and per-channel fields (2026-11-03)" below, with the change
+  measured). Dante 2: P64-350, θ 64°, φ 350° in the table too.
 - **Tr's area is an analysis choice.** Rubery 2024 and the BAH paper (its eq. 12) use the
   initial LEH area; Glenzer 2010 used A_LEH(t) from the 3–5 keV SXI images (diameter to
   83 %) and a 10–15 eV view-factor correction to the capsule; Fournier 2010 used 19.65 /
@@ -9775,6 +9776,30 @@ Checks (`test/cavities.jl`; GUI `test_halfraum.jl`, "per-cavity wall temperature
   both holes' views to 1.4e-4 (1200 pixels); on the shock tube the whole-target view
   reads the view through the lower hole to 3.5e-4 (the package is black and the outsides
   of one-sided surfaces dark, so only that hole shows radiance).
+
+## Named ports and per-channel fields (2026-11-03) *derived*
+
+**Named ports.** `NIF_DIAGNOSTIC_PORTS` holds the NIF User Guide's (2024-09, a public
+LLNL document) Table 5-1: 110 diagnostic ports, name, θ, φ and diameter, transcribed
+from page images at 110 and 200 dpi (the text layer of the table's second page is
+scrambled), **H**. As printed, P116-250 sits at θ 116.8°, φ 250.5° and P121-83 at θ
+120.5°; every other name truncates its angles. A definition's `[line_of_sight]` may give
+`port = "P143-274"` (with `facility = "NIF"`) in place of `theta_deg` and `phi_deg`,
+resolved by `port_angles(:nif, port)`. Omega's diagnostic ports (H16I and the rest) are
+not tabulated in the repository, so `omega_dante` keeps Rubery's angles.
+
+Adopted: every Dante 1 definition (2009 to 2021) names P143-274, θ 143.25° (from the
+papers' 143°); Dante 2 P64-350, SXI-L and G-LEH-2 P161-326, SXI-U P18-123 carry the
+table's angles, which they already had. Change on the default GUI session (5228
+elements, 49 steps of the default pulse shape, 8 threads, one history recording both
+lines of sight): Dante 1's intensity rises by 2.00e-3 and its Tr falls by 3.18e-4 at
+every step (289.564 → 289.472 eV at the peak, 7.8 ns). The reference area's projection
+grows by cos 36.75° / cos 37° = 1.0033, which alone would lower Tr by 8.2e-4; the
+intensity, the hole seen a little more face-on, grows by less than that projection, and
+Tr ∝ (I / A cos θ)^¼ falls by the difference. Checks (`test/diagnostics.jl`,
+"named ports"): 110 unique names, each within 1° of its angles; the built-ins' angles;
+the errors for a port with angles, a port without a facility, an Omega port and an
+unknown port; angles in an extending file replace an inherited port.
 
 ## Public diagnostic definitions and the time-dependent Tr area (2026-10-29) *derived*
 

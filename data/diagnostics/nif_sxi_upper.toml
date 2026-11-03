@@ -13,9 +13,8 @@ source = "Schneider et al. (2012), OSTI 1043636, §II (draft); Schneider et al. 
 confidence = "M"
 
 [line_of_sight]
-theta_deg = 18.0
-phi_deg = 123.75
-source = "port P18-123, NIF User Guide 2024-09"
+port = "P18-123"
+source = "NIF User Guide (2024-09), Table 5-1"
 
 [optic]
 distance_mm = 1626.7

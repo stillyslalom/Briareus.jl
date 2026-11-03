@@ -21,9 +21,8 @@ confidence = "H"
 filters = [{ material = "Be", thickness_um = 75 }, { material = "Ti", thickness_um = 50 }]
 
 [line_of_sight]
-theta_deg = 161.0
-phi_deg = 326.25
-source = "port P161-326, NIF User Guide 2024-09"
+port = "P161-326"
+source = "NIF User Guide (2024-09), Table 5-1"
 
 [optic]
 kind = "pinhole"

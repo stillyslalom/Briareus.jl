@@ -15,8 +15,7 @@ source = "Rubery et al., RSI (2023) §II"
 confidence = "H"
 
 [line_of_sight]
-theta_deg = 64.0
-phi_deg = 350.0
+port = "P64-350"
 
 [view]
 through = "leh_top"

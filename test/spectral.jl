@@ -307,7 +307,7 @@ using Briareus: RadiationSolution, _planck_tail, _channel_matrix, _color_tempera
             @test r.Tr_open == r.Tr
             @test sum(values(visible_area(v, t))) ≈ Apoly * r.cos rtol = 2e-3
         end
-        @test dante1().direction ⋅ [0, 0, -1] ≈ cosd(37) atol = 1e-3   # 37° to the axis
+        @test dante1().direction ⋅ [0, 0, -1] ≈ cosd(36.75) rtol = 1e-12   # P143-274: 36.75° to the axis
         # a closing lip transmits its open fraction of what lies behind it
         tl = hohlraum(; length = 10.1, radius = 2.875, leh_radius = 1.6, capsule_radius = 0.9,
                       h = 0.9, capsule_h = 0.45, leh_closure = GapClosure(closure = 5.0),

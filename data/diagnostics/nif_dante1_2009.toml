@@ -17,9 +17,10 @@ source = "Fournier et al. (2010), OSTI 1012430, Table II"
 confidence = "H"
 
 [line_of_sight]
-theta_deg = 143.0
-phi_deg = 274.0
-source = "Fournier et al. (2010) §II: 37° to the axis"
+# P143-274, θ 143.25°, φ 274°: 36.75° to the hohlraum axis (NIF User Guide 2024-09,
+# Table 5-1); the papers give 37° (θ 143°)
+port = "P143-274"
+source = "NIF User Guide (2024-09), Table 5-1; Fournier et al. (2010) §II: 37° to the axis"
 
 [view]
 # the whole target in the collimated field (the 2004 design, which this configuration

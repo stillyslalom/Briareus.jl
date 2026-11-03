@@ -55,7 +55,7 @@ csv(dir, name, E, v) = (open(joinpath(dir, name), "w") do io
                   new[i].mirror == old[i].mirror && new[i].cathode === old[i].cathode for i in 1:18)
         @test dante1_responses() === dante1_responses()            # built once
         v = dante1()
-        @test (v.theta, v.phi, v.through, v.pixels, v.area) == (143.0, 274.0, :leh_bottom, 400, nothing)
+        @test (v.theta, v.phi, v.through, v.pixels, v.area) == (143.25, 274.0, :leh_bottom, 400, nothing)
         @test all(v.channels .=== dante1_responses())
         @test dante1(pixels = 50).pixels == 50
         @test dante1(channels = dante1_channels(model = :gaussian)).channels[1] isa DanteChannel
@@ -273,6 +273,54 @@ csv(dir, name, E, v) = (open(joinpath(dir, name), "w") do io
             issues = check_diagnostics(; paths = [dir])
             @test any(i -> basename(i.file) == "both.toml" && i.key == "view.area_part" && i.level === :error, issues)
             @test any(i -> basename(i.file) == "nofov.toml" && i.key == "view" && i.level === :error, issues)
+        end
+    end
+
+    @testset "named ports" begin
+        # the NIF table (User Guide 2024-09, Table 5-1): 110 ports, each name within 1° of
+        # its angles (a transcription check: names round or truncate the angles)
+        P = NIF_DIAGNOSTIC_PORTS
+        named(r) = parse.(Float64, split(r[1][2:end], "-"))
+        @test length(P) == 110 && allunique(first.(P))
+        @test all(r -> all(abs.(named(r) .- (r[2], r[3])) .< 1), P)
+        @test port_angles(:nif, "P143-274") == (143.25, 274.0)
+        @test port_angles(:nif, "P 143-274") == port_angles(:nif, "143-274") == (143.25, 274.0)
+        @test port_angles(:nif, "090-078") == (90.0, 78.75)
+        @test port_angles(:nif, "Q31B") == port_angles(:nif, nif_port("Q31B"))   # quads as before
+        @test_throws KeyError port_angles(:nif, "P1-2")
+        @test port_frame(:nif, "P143-274").R[:, 3] ≈ port_vector(143.25, 274.0) rtol = 1e-12
+        # the built-ins name their ports: Dante 1 moves to the table's 143.25° (from the
+        # papers' 143°), the rest keep their angles
+        builtin = diagnostic_paths()[1:1]
+        ang(id) = (v = diagnostic(id; paths = builtin); (v.theta, v.phi))
+        @test all(id -> ang(id) == (143.25, 274.0),
+                  ["nif_dante1", "nif_dante1_2021", "nif_dante1_2012", "nif_dante1_2009", "nif_dante1_N170924",
+                   "nif_dante1_N180129", "nif_dante1_N180604"])
+        @test (ang("nif_sxi_lower"), ang("nif_sxi_upper")) == ((161.0, 326.25), (18.0, 123.75))
+        mktempdir() do dir
+            los(id, body) = "schema = 1\nid = \"$id\"\nkind = \"xray_power\"\n" * body * "\n" *
+                            chan("cathode = \"Cr\"\n")
+            put(dir, "named.toml", los("named", "facility = \"NIF\"\n[line_of_sight]\nport = \"P90-315\""))
+            put(dir, "both.toml", los("both", "facility = \"NIF\"\n[line_of_sight]\nport = \"P90-315\"\ntheta_deg = 90.0"))
+            put(dir, "nofac.toml", los("nofac", "[line_of_sight]\nport = \"P90-315\""))
+            put(dir, "omega.toml", los("omega", "facility = \"Omega\"\n[line_of_sight]\nport = \"H16I\""))
+            put(dir, "unknown.toml", los("unknown", "facility = \"NIF\"\n[line_of_sight]\nport = \"P91-315\""))
+            # angles in a file that extends a named port replace it
+            put(dir, "angles.toml", "schema = 1\nid = \"angles\"\nextends = \"nif_dante1\"\n" *
+                "[line_of_sight]\ntheta_deg = 143.0\nphi_deg = 274.0\n")
+            put(dir, "half.toml", "schema = 1\nid = \"half\"\nextends = \"nif_dante1\"\n[line_of_sight]\ntheta_deg = 143.0\n")
+            n = diagnostic("named"; paths = [dir])
+            @test (n.theta, n.phi) == (90.0, 315.0)
+            a = diagnostic("angles"; paths = [builtin; dir])
+            @test (a.theta, a.phi) == (143.0, 274.0) && a.channels == dante1().channels
+            issues = check_diagnostics(; paths = [builtin; dir])
+            has(file, key, level) = any(i -> basename(i.file) == file && i.key == key && i.level === level, issues)
+            @test has("both.toml", "line_of_sight.theta_deg", :error)
+            @test has("nofac.toml", "facility", :missing)
+            @test has("omega.toml", "line_of_sight.port", :error)
+            @test has("unknown.toml", "line_of_sight.port", :error)
+            @test has("half.toml", "line_of_sight.phi_deg", :missing)
+            @test !any(i -> basename(i.file) in ("named.toml", "angles.toml"), issues)
         end
     end
 

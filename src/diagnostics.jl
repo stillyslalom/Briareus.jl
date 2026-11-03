@@ -135,7 +135,7 @@ function _check_table!(issues, file, path, d::AbstractDict, spec::Dict{String,Di
     end
     if required
         for (k, f) in spec
-            f.required && !haskey(d, k) &&
+            f.required && !haskey(d, k) && !_alternative_given(d, k) &&
                 push!(issues, DiagnosticIssue(file, isempty(path) ? k : path * "." * k, "required", :missing))
         end
     end
@@ -241,13 +241,36 @@ function _merge(parent::AbstractDict, child::AbstractDict)
     return out
 end
 
-# keys that exclude each other: a file that gives one drops the other it inherits
-const _EXCLUSIVE_KEYS = (("area_mm2", "area_part", "area_open", "area_history_csv"), ("center_part", "center_mm"))
+# keys that exclude each other: in each group, alternatives (a key, or keys given
+# together); a file that gives one alternative drops the others it inherits
+const _EXCLUSIVE_KEYS = ((("area_mm2",), ("area_part",), ("area_open",), ("area_history_csv",)),
+                         (("center_part",), ("center_mm",)),
+                         (("port",), ("theta_deg", "phi_deg")))
+
+# the alternatives of each group that table `d` gives
+_given_alternatives(d::AbstractDict) =
+    [[alt for alt in group if any(k -> haskey(d, k), alt)] for group in _EXCLUSIVE_KEYS]
+
+# whether `d` gives another alternative of a group that holds key `k` (a required key
+# is then not missing: `port` stands for `theta_deg` and `phi_deg`)
+_alternative_given(d::AbstractDict, k) =
+    any(group -> any(alt -> k in alt, group) &&
+                 any(alt -> !(k in alt) && any(x -> haskey(d, x), alt), group), _EXCLUSIVE_KEYS)
+
+# a table that gives two alternatives of a group: the error, keyed by `path`
+function _check_exclusive(d::AbstractDict, path)
+    for (group, given) in zip(_EXCLUSIVE_KEYS, _given_alternatives(d))
+        length(given) > 1 &&
+            throw(_KeyedError(path * "." * given[end][1],
+                              "give one of " * join((join(a, " and ") for a in group), ", ")))
+    end
+end
 
 function _merge_table(a::AbstractDict, b::AbstractDict)
     out = deepcopy(Dict{String,Any}(a))
-    for group in _EXCLUSIVE_KEYS
-        any(k -> haskey(b, k), group) && foreach(k -> haskey(b, k) || delete!(out, k), group)
+    for (group, given) in zip(_EXCLUSIVE_KEYS, _given_alternatives(b))
+        isempty(given) && continue
+        foreach(alt -> alt in given || foreach(k -> delete!(out, k), alt), group)
     end
     for (k, v) in b
         out[k] = v isa AbstractDict && get(out, k, nothing) isa AbstractDict ? _merge_table(out[k], v) : deepcopy(v)
@@ -681,10 +704,14 @@ const _CHANNEL_SPEC = Dict(
     "sensitivity_csv" => DiagnosticField(String; doc = "measured detector sensitivity (energy eV, V/GW)"),
     "response_csv" => DiagnosticField(String; doc = "measured whole-channel response (energy eV, V/GW)"))
 
+# a line of sight: a NIF diagnostic port by name, or its angles
+const _LOS_SPEC = Dict(
+    "port" => DiagnosticField(String; doc = "a NIF diagnostic port, e.g. P143-274 (NIF_DIAGNOSTIC_PORTS); replaces theta_deg and phi_deg"),
+    "theta_deg" => DiagnosticField(Real; required = true),
+    "phi_deg" => DiagnosticField(Real; required = true))
+
 const _XRAY_POWER_SPEC = Dict(
-    "line_of_sight" => DiagnosticField(Dict(
-        "theta_deg" => DiagnosticField(Real; required = true),
-        "phi_deg" => DiagnosticField(Real; required = true)); required = true),
+    "line_of_sight" => DiagnosticField(_LOS_SPEC; required = true),
     "view" => DiagnosticField(Dict(
         "through" => DiagnosticField(String; doc = "the aperture looked through (Tr's reference)"),
         "pixels" => DiagnosticField(Integer; doc = "rays per side"),
@@ -811,18 +838,32 @@ function _channels(cs::AbstractVector)
     return ch
 end
 
+# (θ, φ) of a definition's line of sight: its `port` in NIF's diagnostic port table
+# (`port_angles(:nif, port)`; Omega's diagnostic ports, H16I and the rest, are not
+# tabulated), or `theta_deg` and `phi_deg`
+function _line_of_sight(d::AbstractDict)
+    los = d["line_of_sight"]
+    _check_exclusive(los, "line_of_sight")
+    haskey(los, "port") || return (los["theta_deg"], los["phi_deg"])
+    haskey(d, "facility") || throw(_MissingValue("facility", "a named port needs the facility whose port table holds it"))
+    lowercase(d["facility"]) == "nif" ||
+        throw(_KeyedError("line_of_sight.port", "no port table for facility \"$(d["facility"])\": give theta_deg and phi_deg"))
+    try
+        return port_angles(:nif, los["port"])
+    catch e
+        e isa KeyError || rethrow()
+        throw(_KeyedError("line_of_sight.port", "no port \"$(los["port"])\" in the $(d["facility"]) port table"))
+    end
+end
+
 function _build_xray_power(def::DiagnosticDefinition; kwargs...)
     d = def.data
-    los = d["line_of_sight"]
     v = get(d, "view", Dict{String,Any}())
     mode = get(get(d, "recording", Dict{String,Any}()), "mode", "history")
     mode == "history" || throw(_KeyedError("recording.mode", "xray_power records a history"))
     cs = get(d, "channel", Any[])
     isempty(cs) && throw(_MissingValue("channel", "no channels: supply [[channel]] tables (extend \"$(def.id)\")"))
-    for group in _EXCLUSIVE_KEYS
-        given = [k for k in group if haskey(v, k)]
-        length(given) > 1 && throw(_KeyedError("view." * given[end], "give one of " * join(group, ", ")))
-    end
+    _check_exclusive(v, "view")
     fov = haskey(v, "field_of_view_mm") ? Float64(v["field_of_view_mm"]) : nothing
     fov === nothing && (haskey(v, "center_part") || haskey(v, "center_mm")) &&
         throw(_KeyedError("view", "a center needs field_of_view_mm"))
@@ -843,7 +884,7 @@ function _build_xray_power(def::DiagnosticDefinition; kwargs...)
         throw(_KeyedError("view.area_open", "the open area is that of `through`; give through"))
     kw = (; through, pixels = Int(get(v, "pixels", 400)), channels = _channels(cs), area,
           field_of_view = fov, center)
-    return DanteView(los["theta_deg"], los["phi_deg"]; merge(kw, values(kwargs))...)
+    return DanteView(_line_of_sight(d)...; merge(kw, values(kwargs))...)
 end
 
 register_diagnostic_kind(:xray_power, _XRAY_POWER_SPEC, _build_xray_power)
@@ -855,9 +896,7 @@ _builtin_definition(id) = _definitions([normpath(_BUILTIN_DIAGNOSTICS)], Diagnos
 # ---- kind "xray_imager": pinhole x-ray imagers (SXI, G-LEH, GXD) -----------------------
 
 const _XRAY_IMAGER_SPEC = Dict(
-    "line_of_sight" => DiagnosticField(Dict(
-        "theta_deg" => DiagnosticField(Real; required = true),
-        "phi_deg" => DiagnosticField(Real; required = true)); required = true),
+    "line_of_sight" => DiagnosticField(_LOS_SPEC; required = true),
     "optic" => DiagnosticField(Dict(
         "kind" => DiagnosticField(String; required = true, doc = "pinhole"),
         "diameter_um" => DiagnosticField(Real; required = true, doc = "µm"),
@@ -929,7 +968,7 @@ end
 
 function _build_xray_imager(def::DiagnosticDefinition; kwargs...)
     d = def.data
-    los, o, det = d["line_of_sight"], d["optic"], d["detector"]
+    o, det = d["optic"], d["detector"]
     v = get(d, "view", Dict{String,Any}())
     rec = get(d, "recording", Dict{String,Any}())
     o["kind"] == "pinhole" || throw(_KeyedError("optic.kind", "pinhole (the one optic so far)"))
@@ -950,7 +989,7 @@ function _build_xray_imager(def::DiagnosticDefinition; kwargs...)
           up = Vec3(Float64.(get(v, "up", [0.0, 0.0, 1.0]))...), filters, tables, mirror, detector,
           detector_pixel = pixel, energy = haskey(o, "energy_eV") ? Float64(o["energy_eV"]) : nothing,
           _recording(rec, "xray_imager")...)
-    return XrayImager(los["theta_deg"], los["phi_deg"]; merge(kw, values(kwargs))...)
+    return XrayImager(_line_of_sight(d)...; merge(kw, values(kwargs))...)
 end
 
 register_diagnostic_kind(:xray_imager, _XRAY_IMAGER_SPEC, _build_xray_imager)
@@ -958,9 +997,7 @@ register_diagnostic_kind(:xray_imager, _XRAY_IMAGER_SPEC, _build_xray_imager)
 # ---- kind "radiography": backlit radiographs (area backlighters, point projection) -------
 
 const _RADIOGRAPHY_SPEC = Dict(
-    "line_of_sight" => DiagnosticField(Dict(
-        "theta_deg" => DiagnosticField(Real; required = true),
-        "phi_deg" => DiagnosticField(Real; required = true)); required = true),
+    "line_of_sight" => DiagnosticField(_LOS_SPEC; required = true),
     "backlighter" => DiagnosticField(Dict(
         "line" => DiagnosticField(String; doc = "the He-α element, e.g. Ge"),
         "line_keV" => DiagnosticField(Real; doc = "the line energy, in place of line"),
@@ -1000,7 +1037,7 @@ const _RADIOGRAPHY_SPEC = Dict(
 
 function _build_radiography(def::DiagnosticDefinition; kwargs...)
     d = def.data
-    los, s, o, det = d["line_of_sight"], d["backlighter"], d["optic"], d["detector"]
+    s, o, det = d["backlighter"], d["optic"], d["detector"]
     v = get(d, "view", Dict{String,Any}())
     haskey(s, "line") && haskey(s, "line_keV") && throw(_KeyedError("backlighter.line_keV", "give one of line, line_keV"))
     line = haskey(s, "line_keV") ? Float64(s["line_keV"]) :
@@ -1039,7 +1076,7 @@ function _build_radiography(def::DiagnosticDefinition; kwargs...)
           foil = Symbol(get(s, "foil_part", "backlighter")), angular, prepulse = get(s, "prepulse", false),
           ce = haskey(s, "ce") ? Float64(s["ce"]) : nothing, pulse = Float64(s["pulse_ns"]),
           start = Float64(get(s, "start_ns", 0.0)), _recording(get(d, "recording", Dict{String,Any}()), "radiography")...)
-    return Radiograph(los["theta_deg"], los["phi_deg"]; merge(kw, values(kwargs))...)
+    return Radiograph(_line_of_sight(d)...; merge(kw, values(kwargs))...)
 end
 
 register_diagnostic_kind(:radiography, _RADIOGRAPHY_SPEC, _build_radiography)

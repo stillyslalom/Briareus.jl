@@ -20,9 +20,8 @@ source = "Chen et al. (2021), OSTI 1860726, Table I"
 confidence = "H"
 
 [line_of_sight]
-theta_deg = 161.0
-phi_deg = 326.25
-source = "port P161-326 (Chen 2020 §II.1, Chen 2021 §II)"
+port = "P161-326"
+source = "Chen 2020 §II.1, Chen 2021 §II; NIF User Guide (2024-09), Table 5-1"
 
 [optic]
 kind = "pinhole"
