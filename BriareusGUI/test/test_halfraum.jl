@@ -506,3 +506,32 @@ end
     @test occursin("no role", bottom.detail)
     @test set_piece_role!(ts, :hohlraum_cap_bottom, :wall) && isempty(ts.parts[][part_index(ts, :hohlraum)].piece_roles)
 end
+
+@testset "the face objective on the opacity halfraum (no GL)" begin
+    sess = DesignSession(starter = :opacity, resolution = :coarse)
+    build_scenario!(sess)
+    st = sess.optimize
+    # the capsule objectives refuse a flat face, and say which objective serves it
+    start_optimize!(sess; spawn = false)
+    @test st.result[] === nothing && occursin("Observed face uniformity", st.status[])
+    set_objective!(st, :face)
+    @test edit_optimize!(st, :uniformity, "1e6") && st.uniformity[] == 1e6
+    @test !edit_optimize!(st, :uniformity, "-1")
+    start_optimize!(sess; spawn = false)
+    r = st.result[]
+    @test r isa OptimizeResult && isempty(r.after.modes)
+    # the face's RMS before and after against a radiosity solve of the optimized beams
+    s = sess.drive.scenario[]
+    sub = subset(s, r.indices)
+    rms(beams) = (ev = evaluate(sub, beams); H = solve(sub.model, ev.deposition).H[sub.observed];
+                  rms_nonuniformity(H, sub.target.elem_area[sub.observed]))
+    @test r.before.face.rms ≈ rms(sess.beams.beams[][r.indices]) rtol = 1e-9
+    @test r.after.face.rms ≈ rms(r.beams) rtol = 1e-9
+    @test r.after.face.rms < 0.5 * r.before.face.rms     # measured 7.3e-5 → 8.9e-6
+    # the setting round trips in a session; an older one loads with the default weight
+    state = session_state(sess)
+    @test state["optimize"]["uniformity"] == 1e6 && state["optimize"]["objective"] == "face"
+    delete!(state["optimize"], "uniformity")
+    restore!(sess, state)
+    @test st.uniformity[] == 1.0
+end

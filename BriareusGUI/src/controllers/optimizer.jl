@@ -1,6 +1,6 @@
 # The Optimize step: a GroupPointing parameterization of the enabled beams (chamber aim
 # fields), or a FramePointing one (aims in each beam's aim frame), with grouping and box
-# bounds, an objective (capsule symmetry, axisymmetric or 3D, or foil
+# bounds, an objective (capsule symmetry, axisymmetric or 3D, a flat face's uniformity, or foil
 # uniformity) and `optimize_pointing` on a worker. Its callback reports each objective
 # evaluation (progress) and stops the optimization on cancel, which then returns the
 # best design found so far.
@@ -9,12 +9,15 @@
 Objectives of the pointing optimization: `:legendre` (`symmetry_objective`: weighted
 `(Pₗ/P₀)²` of the capsule flux, for axisymmetric designs), `:ylm` (`asymmetry_objective`:
 weighted rotation-invariant mode power over all `m`, for 3D designs such as a dropped
-quad), `:irradiance` (`irradiance_objective`: foil-spot uniformity and spill).
+quad), `:face` (`face_flux_objective`: the area-weighted RMS nonuniformity of a flat
+observed face's x-ray flux, for halfraum packages and opacity samples), `:irradiance`
+(`irradiance_objective`: foil-spot uniformity and spill).
 """
-const OBJECTIVES = (:legendre, :ylm, :irradiance)
+const OBJECTIVES = (:legendre, :ylm, :face, :irradiance)
 
 const OBJECTIVE_LABELS = Dict(:legendre => "Capsule symmetry, axisymmetric (Pₗ/P₀)",
                               :ylm => "Capsule symmetry, 3D (all m)",
+                              :face => "Observed face uniformity",
                               :irradiance => "Foil spot uniformity")
 
 """
@@ -40,7 +43,7 @@ const DEFAULT_DELTAS = Dict(:z => 1.0, :r => 1.0, :phi => 1.0, :u => 1.0, :v => 
 A finished (or canceled) optimization: `names` (parameter names), `x0`, `x`, `lower`,
 `upper`, `initial_value`, `value`, `beams` (the optimized enabled beams), `indices`
 (their positions in the beam table), `before`/`after` (quick summaries: `modes`,
-`mean_flux`, `spot`, `clipped`, `capsule` (power fraction on the capsule),
+`mean_flux`, `spot`, `face` (a flat observed face's area-mean flux and RMS nonuniformity), `clipped`, `capsule` (power fraction on the capsule),
 `capsule_clearance` (worst-case, mm)), `evaluations` (objective evaluations),
 `iterations` (L-BFGS-B iterations completed), `reason` (why it ended: `:converged`,
 `:iterations`, `:evaluations` or `:callback`), `seconds`, `completed` (`false` when
@@ -78,12 +81,13 @@ State of the pointing optimization. Settings: `by` (grouping, one of
 [`BEAM_GROUPINGS`](@ref)), `fields` (free fields, a subset of
 [`OPTIMIZE_FIELDS`](@ref)), `deltas` (bound half-widths per field: mm, or for `:power` a
 fraction of the start), `objective` (one of [`OBJECTIVES`](@ref)), `weights` (mode
-weight per degree `l`), `hold_drive` (keep the capsule drive at its start value),
+weight per degree `l`), `hold_drive` (keep the mean drive of the capsule or face at its start value),
 `keepout`/`keepout_min` (an `ApertureKeepOut` on the LEH rims with this minimum
 worst-case clearance, mm), `capsule_keepout`/`capsule_min` (a `SphereKeepOut` on the
 capsule, on by default: without it the optimizer may move the inner cones onto the
 capsule, which the deposition penalty barely sees), `spill` (foil objective weight on
-power outside the spot), `iterations` (L-BFGS-B iterations) and `max_evaluations`
+power outside the spot), `uniformity` (face objective weight on the squared RMS
+nonuniformity), `iterations` (L-BFGS-B iterations) and `max_evaluations`
 (objective evaluations; a line search can take many per iteration). Job: `running`,
 `evaluations`, `iteration`, `current`/`best` objective values, `started`, `status`,
 and `result` (an [`OptimizeResult`](@ref)).
@@ -100,6 +104,7 @@ struct OptimizeState
     capsule_keepout::Observable{Bool}
     capsule_min::Observable{Float64}
     spill::Observable{Float64}
+    uniformity::Observable{Float64}
     iterations::Observable{Int}
     max_evaluations::Observable{Int}
     running::Observable{Bool}
@@ -119,7 +124,7 @@ OptimizeState() =
     OptimizeState(Observable(:group), Observable([:z, :r]), Observable(copy(DEFAULT_DELTAS)),
                   Observable(:legendre), Observable(Dict(1 => 1.0, 2 => 1.0, 3 => 1.0, 4 => 1.0)),
                   Observable(true), Observable(false), Observable(0.0), Observable(true),
-                  Observable(0.0), Observable(0.2), Observable(100), Observable(1000),
+                  Observable(0.0), Observable(0.2), Observable(1.0), Observable(100), Observable(1000),
                   Observable(false), Observable(0), Observable(0), Observable(NaN),
                   Observable(NaN), Observable(0.0), Observable(""), Observable(""),
                   Observable{Union{Nothing,OptimizeResult}}(nothing), Threads.Atomic{Bool}(false),
@@ -151,7 +156,7 @@ _frame_fields(fields) = any(in(_LOCAL_AIM), fields)
     edit_optimize!(st::OptimizeState, key::Symbol, text) -> Bool
 
 Edit a setting from text: a bound half-width (`:z`, `:r`, `:phi`, `:u`, `:v`, `:w`,
-`:defocus`, `:power`), a mode weight (`:w1`…`:w4`), `:keepout_min`, `:capsule_min`, `:spill`,
+`:defocus`, `:power`), a mode weight (`:w1`…`:w4`), `:keepout_min`, `:capsule_min`, `:spill`, `:uniformity`,
 `:iterations` or `:max_evaluations`.
 A rejected value sets `error` and returns `false`.
 """
@@ -171,6 +176,8 @@ function edit_optimize!(st::OptimizeState, key::Symbol, text)
             _assign!(st.capsule_min, _parse_number(text, "the capsule clearance"))
         elseif key === :spill
             _assign!(st.spill, _parse_number(text, "the spill weight"; nonnegative = true))
+        elseif key === :uniformity
+            _assign!(st.uniformity, _parse_number(text, "the uniformity weight"; nonnegative = true))
         elseif key === :iterations
             n = round(Int, _parse_number(text, "the iteration limit"; positive = true))
             _assign!(st.iterations, n)
@@ -207,7 +214,8 @@ _objective_settings(st::OptimizeState; foil::Union{Nothing,Symbol} = nothing,
                     observed::Union{Nothing,Symbol} = nothing) =
     (; kind = st.objective[], foil, observed, weights = copy(st.weights[]), hold_drive = st.hold_drive[],
      keepout = st.keepout[], keepout_min = st.keepout_min[],
-     capsule_keepout = st.capsule_keepout[], capsule_min = st.capsule_min[], spill = st.spill[])
+     capsule_keepout = st.capsule_keepout[], capsule_min = st.capsule_min[], spill = st.spill[],
+     uniformity = st.uniformity[])
 
 # The objective for a scenario of the enabled beams, given its start evaluation `ev0`
 # (`nothing`: evaluated here at the scenario's initial parameters when the drive is held).
@@ -220,12 +228,19 @@ function _make_objective(cfg::NamedTuple, s::Scenario, ev0, spot_radius::Real)
         c = sum(s.target.elem_centroid[e] for e in es) / length(es)
         return irradiance_objective(foil; center = c, radius = spot_radius, spill = cfg.spill)
     end
+    keepouts = Any[]
+    cfg.keepout && push!(keepouts, ApertureKeepOut(s.target; minimum = cfg.keepout_min))
+    if kind === :face
+        s.model !== nothing && _observed_flat(s) ||
+            throw(ArgumentError("the face objective needs a flat observed face in the x-ray drive"))
+        flux = !cfg.hold_drive ? nothing : face_mean_flux(something(ev0, evaluate(s, initial_parameters(s.param))))
+        return face_flux_objective(; uniformity = cfg.uniformity, flux,
+                                   keepout = isempty(keepouts) ? nothing : Tuple(keepouts))
+    end
     s.model !== nothing && !isempty(s.observed) && !_observed_flat(s) ||
         throw(ArgumentError("capsule symmetry needs a hohlraum with a capsule"))
     modes = Tuple(l => w for (l, w) in sort(collect(cfg.weights)) if w > 0)
     isempty(modes) && throw(ArgumentError("give at least one mode a positive weight"))
-    keepouts = Any[]
-    cfg.keepout && push!(keepouts, ApertureKeepOut(s.target; minimum = cfg.keepout_min))
     o = cfg.observed
     cfg.capsule_keepout && o !== nothing && o in component_names(s.target) && !_observed_flat(s) &&
         push!(keepouts, SphereKeepOut(s.target; spheres = (o,), minimum = cfg.capsule_min))
@@ -262,7 +277,13 @@ function _quick_summary(ev::Evaluation, spot_radius::Real, foil::Union{Nothing,S
     has = observed !== nothing && observed in component_names(t) && !_observed_flat(ev.scenario)
     cap = has ? minimum(sphere_clearance(SphereKeepOut(t; spheres = (observed,)), ev.beams);
                         init = Inf) : Inf
-    return (; modes, mean_flux = mean, spot = _spot_stats(ev, spot_radius, foil),
+    face = nothing
+    if _has_flux(ev) && _observed_flat(ev.scenario)
+        H̄ = face_mean_flux(ev)
+        face = (; mean = H̄, rms = H̄ > 0 ? rms_nonuniformity(face_flux(ev), t.elem_area[ev.scenario.observed]) : NaN)
+        mean = H̄
+    end
+    return (; modes, mean_flux = mean, spot = _spot_stats(ev, spot_radius, foil), face,
             clipped = clipped_fraction(ev), capsule = has ? power_fraction(ev, observed) : 0.0,
             capsule_clearance = cap)
 end

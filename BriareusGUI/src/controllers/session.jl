@@ -1436,10 +1436,17 @@ function start_optimize!(sess::DesignSession; spawn::Bool = true)
             (st.status[] = "the foil objective needs a foil: a foil target's, or a part with the role " *
                            "Backlighter foil (Properties ▸ Role)"; return sess)
     elseif s.model === nothing
-        st.status[] = "capsule symmetry needs the x-ray drive, and this target's drive is laser only" *
-                      _radiation_note(s.target)
+        st.status[] = (st.objective[] === :face ? "the face objective" : "capsule symmetry") *
+                      " needs the x-ray drive, and this target's drive is laser only" * _radiation_note(s.target)
         return sess
+    elseif st.objective[] === :face
+        _observed_flat(s) ||
+            (st.status[] = "the face objective needs a flat observed face: a disk or rectangle part with " *
+                           "the role Observed (Properties ▸ Role)"; return sess)
     elseif isempty(s.observed) || _observed_flat(s)
+        _observed_flat(s) &&
+            (st.status[] = "the observed surface is a flat face: choose the objective Observed face uniformity";
+             return sess)
         st.status[] = "capsule symmetry needs a hohlraum with a capsule, or a sphere part with the " *
                       "role Observed (Properties ▸ Role)" *
                       (isempty(s.observed) ? "" : ": the observed surface is a flat face")

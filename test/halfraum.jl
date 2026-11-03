@@ -1,8 +1,9 @@
 # Hohlraum ends (`hohlraum(; top_end, bottom_end)`): the defaults unchanged bit for bit,
 # per-end entrance-hole radii, closed ends, and open ends (a halfraum) against the
-# coaxial-disk view factor and an energy balance through an aperture closing the end.
+# coaxial-disk view factor and an energy balance through an aperture closing the end;
+# the face flux objective of a flat observed face.
 
-using Briareus, LinearAlgebra, Test
+using Briareus, LinearAlgebra, ForwardDiff, Test
 
 @testset "Hohlraum ends" begin
     same(a, b) = length(a.components) == length(b.components) &&
@@ -66,4 +67,52 @@ using Briareus, LinearAlgebra, Test
     @test eo.lost / es.escaped[:end] ≈ 1 rtol = 3e-3                # measured 1.45e-3
     @test abs(es.lost) < 3e-3 * es.escaped[:end]
     @test sum(values(eo.absorbed)) + eo.lost ≈ eo.source rtol = 1e-12
+end
+
+# The face objective of a flat observed face (an opacity sample at a halfraum's open end)
+# against a direct forward solve, its gradient against finite differences, and an
+# optimization that lowers it.
+@testset "face flux objective" begin
+    hr = hohlraum(; length = 3.0, radius = 1.5, leh_radius = 1.0, capsule_radius = 0.0, h = 0.25,
+                  top_end = 1.0, bottom_end = :open)
+    smp = foil(:sample, (0, 0, -1.5), (0, 0, 1); width = 1.0, n = 8, two_sided = false,
+               material = Material(:sample; albedo = 0.3, conversion = 0.0))
+    t = Target([hr.components; smp]; closed = false)
+    up = [remake(b; aim = (0.0, 0.0, 1.5)) for b in nif_quads(power = 4.0) if b.port[3] > 0]
+    p = GroupPointing(up; fields = (:z, :r), mirror = false)
+    s = Scenario(t, p; observe = :sample)
+    x0 = initial_parameters(p)
+    ev = evaluate(s, x0)
+    # the value: the RMS of the radiosity solve's incident flux on the face, and its mean
+    H = solve(s.model, ev.deposition).H[s.observed]
+    A = t.elem_area[s.observed]
+    H̄ = sum(A .* H) / sum(A)
+    σ = sqrt(sum(A .* (H .- H̄) .^ 2) / sum(A)) / H̄
+    shape = face_flux_objective(; clip = 0.0, missed = 0.0, direct = 0.0)
+    @test shape(ev) ≈ σ^2 rtol = 1e-12
+    @test face_mean_flux(ev) ≈ H̄ rtol = 1e-12
+    @test face_flux(ev) ≈ H rtol = 1e-12
+    held = face_flux_objective(; clip = 0.0, missed = 0.0, direct = 0.0, flux = 0.8H̄, flux_weight = 2.0)
+    @test held(ev) ≈ σ^2 + 2 * (1 / 0.8 - 1)^2 rtol = 1e-12
+    # the penalties: the light through the open end and on the sample itself
+    full = face_flux_objective()
+    @test full(ev) ≈ σ^2 + 10 * (clipped_fraction(ev)^2 + missed_fraction(ev)^2 +
+                                 power_fraction(ev, :sample)^2) rtol = 1e-12
+    @test_throws ArgumentError face_flux_objective(; uniformity = -1.0)
+    @test_throws ArgumentError face_flux_objective(; flux = 0.0)
+    # the gradient (forward-mode duals through the flux response) against central differences
+    f(x) = full(evaluate(s, x))
+    x1 = x0 .+ 0.1 .* (1:length(x0)) ./ length(x0)
+    g = ForwardDiff.gradient(f, x1)
+    δ = 1e-5
+    fd = [(f(x1 .+ δ .* (eachindex(x1) .== i)) - f(x1 .- δ .* (eachindex(x1) .== i))) / 2δ for i in eachindex(x1)]
+    @test maximum(abs.(g .- fd)) < 1e-7 * maximum(abs.(g))   # measured 2.4e-10
+    # optimizing the shape at a held level lowers the face's RMS (measured 0.61 % → 0.046 %)
+    lo, hi = bounds(p, x0; z = 1.0, r = 1.0)
+    obj = face_flux_objective(; clip = 0.0, missed = 0.0, direct = 0.0, flux = H̄)
+    res = optimize_pointing(s, obj; x0, lower = lo, upper = hi, iterations = 30)
+    eo = evaluate(s, res.x)
+    Ho = solve(s.model, eo.deposition).H[s.observed]
+    @test res.value ≈ obj(eo) rtol = 1e-12
+    @test rms_nonuniformity(Ho, A) < 0.5σ
 end

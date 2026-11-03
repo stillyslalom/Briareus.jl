@@ -597,7 +597,7 @@ function BriareusShell(sess::DesignSession; queue::Channel{Any} = Channel{Any}(I
                 dr.spot_radius, dr.status, dr.retune_running, dr.unconverted_ratio,
                 dr.retune_status, dr.wall_cavity,
                 st.by, st.fields, st.deltas, st.objective, st.weights, st.hold_drive, st.keepout,
-                st.keepout_min, st.capsule_keepout, st.capsule_min, st.spill, st.iterations,
+                st.keepout_min, st.capsule_keepout, st.capsule_min, st.spill, st.uniformity, st.iterations,
                 st.max_evaluations, st.running, st.evaluations, st.iteration, st.status,
                 st.error, st.result, bt.cluster, bt.aim_frame, ts.frames, v.extra,
                 sess.sweep.subject, sess.sweep.frame, sess.sweep.axis, sess.sweep.start, sess.sweep.stop,
@@ -1148,6 +1148,7 @@ function _refresh_optimize!(sh::BriareusShell)
     _set!(sh, "optCapsule", st.capsule_keepout[])
     _set!(sh, "optCapsuleMin", _num(st.capsule_min[]))
     _set!(sh, "optSpill", _num(st.spill[]))
+    _set!(sh, "optUniformity", _num(st.uniformity[]))
     _set!(sh, "optIterations", st.iterations[])
     _set!(sh, "optMaxEvaluations", st.max_evaluations[])
     _set!(sh, "optRunning", st.running[])
@@ -1165,9 +1166,14 @@ function _refresh_optimize!(sh::BriareusShell)
                              " · on the capsule " * _pct(r.before.capsule, 3) * " → " * _pct(r.after.capsule, 3) *
                              @sprintf(" · capsule worst-case clearance %.3f → %.3f mm",
                                       r.before.capsule_clearance, r.after.capsule_clearance) : ""))
-    _set!(sh, "optSpot", r === nothing || r.after.spot === nothing ? "" :
+    _set!(sh, "optSpot", r === nothing ? "" :
+                         r.after.spot !== nothing ?
                          @sprintf("spot rms nonuniformity %.1f %% → %.1f %%", 100 * r.before.spot.rms,
-                                  100 * r.after.spot.rms))
+                                  100 * r.after.spot.rms) :
+                         get(r.after, :face, nothing) !== nothing ?
+                         @sprintf("face rms nonuniformity %.2f %% → %.2f %% · mean flux %.3g → %.3g W/cm²",
+                                  100 * r.before.face.rms, 100 * r.after.face.rms,
+                                  to_Wcm2(r.before.face.mean), to_Wcm2(r.after.face.mean)) : "")
     modes = r === nothing || isempty(r.after.modes) ? ModeRow[] :
             [ModeRow(a.l, _pct(a.epsilon), _pct(a.legendre), _pct(b.epsilon), _pct(a.epsilon))
              for (b, a) in zip(r.before.modes, r.after.modes)]

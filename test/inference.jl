@@ -71,8 +71,9 @@ end
     x0 = initial_parameters(p)
     s = Scenario(t, p; observe = :capsule, viewfactor_kw = (; closed = true))
     keepout = (ApertureKeepOut(t), SphereKeepOut(t))
-    objectives = (symmetry_objective(; drive = 1.0, keepout), asymmetry_objective(; keepout))
-    tw = hohlraum(; geometry..., wall = Material(:Au; albedo = WallLossAlbedo(), conversion = 0.8))
+    objectives = (symmetry_objective(; drive = 1.0, keepout), asymmetry_objective(; keepout),
+                  face_flux_objective(; flux = 1.0, keepout))   # the capsule's elements as a "face"
+    tw =hohlraum(; geometry..., wall = Material(:Au; albedo = WallLossAlbedo(), conversion = 0.8))
     mw = RadiationModel(tw; F = s.model.F, closed = true)
     pulse = PulseShape([0.0, 1.0, 2.0], [0.0, 4.0, 4.0])
     history(beams_at, times; kw...) = drive_history(mw, s.deposition, beams_at, times; kw...)
@@ -179,6 +180,8 @@ end
             @test (@inferred mean_flux(ev)) isa T
             @test (@inferred objectives[1](ev)) isa T
             @test (@inferred objectives[2](ev)) isa T
+            @test (@inferred objectives[3](ev)) isa T
+            @test (@inferred face_mean_flux(ev)) isa T
             c = flux_ylm(ev)
             @test (@inferred mode_rms(c, 6)) isa T
             @test (@inferred mode_rms(c, 6; m = :nonzero)) isa T
@@ -238,6 +241,7 @@ end
                 @test _inf_jet_clean(JET.report_call, flux_moments, ev)
                 @test _inf_jet_clean(JET.report_call, objectives[1], ev)
                 @test _inf_jet_clean(JET.report_call, objectives[2], ev)
+                @test _inf_jet_clean(JET.report_call, objectives[3], ev)
                 @test _inf_jet_clean(JET.report_call, mode_rms, flux_ylm(ev), 6)
             end
             # spherical pointing fields: no dispatch (from 1.11, as the deposition checks

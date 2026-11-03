@@ -84,7 +84,7 @@ function session_state(sess::DesignSession; view::Bool = true)
         "weights" => Dict{String,Any}(string(l) => w for (l, w) in op.weights[]),
         "hold_drive" => op.hold_drive[], "keepout" => op.keepout[], "keepout_min" => op.keepout_min[],
         "capsule_keepout" => op.capsule_keepout[], "capsule_min" => op.capsule_min[],
-        "spill" => op.spill[], "iterations" => op.iterations[],
+        "spill" => op.spill[], "uniformity" => op.uniformity[], "iterations" => op.iterations[],
         "max_evaluations" => op.max_evaluations[])
     review = Dict{String,Any}(
         "targets" => _strs(rv.targets[]), "hardware" => _strs(rv.hardware[]),
@@ -250,6 +250,8 @@ function restore!(sess::DesignSession, state::AbstractDict)
             obs = getfield(op, k)
             _assign!(obs, convert(typeof(obs[]), o[String(k)]))
         end
+        # (sessions before the face objective: its default weight)
+        _assign!(op.uniformity, Float64(get(o, "uniformity", 1.0)))
     end
     # the checks' component roles once the saved design's target is in place (a target
     # built on a worker would otherwise give its new components their default roles)

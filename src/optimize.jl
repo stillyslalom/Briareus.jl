@@ -849,6 +849,69 @@ function irradiance_objective(name::Symbol; center, radius, intensity = nothing,
 end
 
 """
+    face_flux(ev) -> Vector
+
+Incident x-ray flux `H_e` (TW/mm²) on each of the scenario's observed elements: the
+full linear flux response (`scenario.response`, computed when first read) times the
+absorbed laser power, generic in the number type (the optimizer's duals). On a dense
+model, the same numbers as the evaluation's `flux`; on a large (iterative) model it
+builds the response (a solve per observed element) instead of one iterative solve, so
+meant for an observed face of moderate size.
+"""
+function face_flux(ev::Evaluation)
+    s = ev.scenario
+    _radiative(s) || throw(ArgumentError("scenario has no radiation response"))
+    return _mul(_response(s)::Matrix{Float64}, ev.deposition.element)
+end
+
+"""
+    face_mean_flux(ev) -> Real
+
+Area mean `H̄ = Σ A_e H_e / Σ A_e` (TW/mm²) of the incident x-ray flux on the scenario's
+observed elements ([`face_flux`](@ref)): the level of [`FaceFlux`](@ref) and the level
+that the `flux` keyword of [`face_flux_objective`](@ref) holds, so
+`flux = face_mean_flux(evaluate(scenario, x0))` keeps the drive of the design `x0`.
+"""
+face_mean_flux(ev::Evaluation) = _face_terms(ev)[1]
+
+# The area mean and the RMS nonuniformity of the observed face's flux.
+function _face_terms(ev::Evaluation)
+    H = face_flux(ev)
+    A = ev.scenario.target.elem_area[ev.scenario.observed]
+    return sum(A .* H) / sum(A), rms_nonuniformity(H, A)
+end
+
+"""
+    face_flux_objective(; uniformity = 1.0, flux = nothing, flux_weight = 1.0,
+                        clip = 10.0, missed = 10.0, direct = 10.0, direct_names = nothing,
+                        keepout = nothing)
+
+Objective for the x-ray drive of a flat observed face (a package's face in a halfraum,
+an opacity sample), which has no capsule modes: `uniformity × σ²` with `σ =
+rms_nonuniformity(H, A)` the area-weighted RMS nonuniformity of the incident flux on
+the scenario's observed elements ([`face_flux`](@ref), through the scenario's linear
+flux response, so differentiable), the shape term of [`FaceFlux`](@ref) for a uniform
+target. When `flux` (TW/mm²) is given, adds `flux_weight × (H̄/flux - 1)²` with `H̄`
+the [`face_mean_flux`](@ref). The `clip`, `missed` and `direct` penalties (`direct`:
+laser light on the face itself, or with `direct_names` on the named parts or
+components) and the `keepout` penalty are as in [`symmetry_objective`](@ref).
+"""
+function face_flux_objective(; uniformity = 1.0, flux = nothing, flux_weight = 1.0,
+                             clip = 10.0, missed = 10.0, direct = 10.0, direct_names = nothing,
+                             keepout = nothing)
+    uniformity >= 0 || throw(ArgumentError("uniformity must not be negative"))
+    flux === nothing || flux > 0 || throw(ArgumentError("the flux level must be positive"))
+    return function (ev::Evaluation)
+        H̄, σ = _face_terms(ev)
+        J = uniformity * σ^2
+        J += _penalties(ev; clip, missed, direct, direct_names)
+        J += _keepout_penalty(keepout, ev.beams)
+        flux === nothing || (J += flux_weight * (H̄ / flux - 1)^2)
+        return J
+    end
+end
+
+"""
     optimize_pointing(scenario, objective; x0 = initial_parameters(scenario.param),
                       lower = bounds(scenario.param, x0)[1], upper = bounds(scenario.param, x0)[2],
                       iterations = 200, evaluations = 20 * iterations, show_trace = false,

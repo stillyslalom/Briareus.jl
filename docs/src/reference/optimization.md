@@ -5,8 +5,9 @@ and tangential aim, defocus, power, spot scale and Δλ, with top–bottom mirro
 [`parameters`](@ref) builds its parameter vector from values named by group and field,
 and [`Scenario`](@ref) precomputes everything an evaluation needs.
 [`symmetry_objective`](@ref) and [`asymmetry_objective`](@ref) target capsule drive
-symmetry (axisymmetric and three-dimensional), and [`irradiance_objective`](@ref) foil
-uniformity. [`optimize_pointing`](@ref) runs bounded L-BFGS-B on forward-mode
+symmetry (axisymmetric and three-dimensional), [`face_flux_objective`](@ref) the
+uniformity of a flat observed face's x-ray drive (a halfraum's package, an opacity
+sample), and [`irradiance_objective`](@ref) foil uniformity. [`optimize_pointing`](@ref) runs bounded L-BFGS-B on forward-mode
 automatic-differentiation gradients, with a callback for progress and cancellation.
 [`influence_matrix`](@ref) gives each beam's mode response.
 

@@ -266,9 +266,7 @@ Items 10–15 follow the 2026-10-22 literature review against Kritcher et al. 20
       lands; `assemblies-design.md` "Today", `frames-design.md` phases 1–3 and phase 5,
       done by the foil starter).
 23. **GUI: workflow gaps** *(survey)*.
-    - No optimizer objective for a flat observed face (halfraum and opacity designs
-      cannot be optimized for face uniformity); modes stop at l = 4 in the tables,
-      weights and retune.
+    - Modes stop at l = 4 in the tables, weights and retune.
     - Beams: spot shape, f-number, wavelength and port are saved but not editable; aims
       are Cartesian only; VisRad profiles and focal lengths only from an import; no OMEGA
       EP preset; applying SST or a beam summary needs a preset first; no aim-frame column

@@ -55,14 +55,18 @@ ColumnLayout {
             textRole: "text"; valueRole: "value"
             model: [{ text: "Capsule symmetry, axisymmetric (Pₗ/P₀)", value: "legendre" },
                     { text: "Capsule symmetry, 3D (all m)", value: "ylm" },
+                    { text: "Observed face uniformity", value: "face" },
                     { text: "Foil spot uniformity", value: "irradiance" }]
-            currentIndex: Math.max(0, ["legendre", "ylm", "irradiance"].indexOf(app.optObjective))
+            currentIndex: Math.max(0, ["legendre", "ylm", "face", "irradiance"].indexOf(app.optObjective))
             onActivated: Julia.br_opt_objective(currentValue)
             tip: "Axisymmetric: the weighted (Pₗ/P₀)² of the capsule flux; 3D: the weighted rotation-invariant mode " +
-                 "power over all m (a dropped quad); foil: the spot's RMS nonuniformity plus the spill"
+                 "power over all m (a dropped quad); face: the squared area-weighted RMS nonuniformity of a flat " +
+                 "observed face's x-ray flux (a halfraum package, an opacity sample); foil: the spot's RMS " +
+                 "nonuniformity plus the spill. Clipped, missed and direct laser light on the observed surface " +
+                 "add penalties"
         }
         RowLayout {
-            visible: app.optObjective !== "irradiance"
+            visible: app.optObjective === "legendre" || app.optObjective === "ylm"
             spacing: 4
             Cell { text: "Mode weights"; Layout.preferredWidth: 100; tip: "The weight of each degree ℓ in the objective (0: left out)" }
             Repeater {
@@ -82,10 +86,11 @@ ColumnLayout {
         }
         CheckLine {
             visible: app.optObjective !== "irradiance"
-            text: "Hold the mean capsule drive"
+            text: app.optObjective === "face" ? "Hold the mean face drive" : "Hold the mean capsule drive"
             checked: app.optHold
             onToggled: Julia.br_opt_hold(checked)
-            tip: "Keep the capsule's mean drive at its start value"
+            tip: app.optObjective === "face" ? "Keep the face's area-mean x-ray flux at its start value"
+                                             : "Keep the capsule's mean drive at its start value"
         }
         PropRow {
             visible: app.optObjective !== "irradiance" && app.observedKind === "capsule"
@@ -113,6 +118,16 @@ ColumnLayout {
             unit: "mm clearance"
             tip: "Keep every beam's worst-case envelope off the LEH rims by at least this much"
             onEdited: (text) => Julia.br_opt_edit("keepout_min", text)
+        }
+        PropRow {
+            visible: app.optObjective === "face"
+            label: "Uniformity weight"
+            value: app.optUniformity
+            unit: "on the squared RMS"
+            tip: "The weight on the squared RMS nonuniformity of the face's flux. The clipped, missed and direct-light " +
+                 "penalties weigh 10 on squared power fractions, so a face already uniform to 0.1 % needs a weight " +
+                 "near 10⁶ for its RMS to count beside them"
+            onEdited: (text) => Julia.br_opt_edit("uniformity", text)
         }
         PropRow {
             visible: app.optObjective === "irradiance"

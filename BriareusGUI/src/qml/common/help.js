@@ -371,7 +371,7 @@ var pages = [
                 "face and w along its normal); a group shares its frame coordinates." },
         { key: "optimize.results", title: "The Optimization tab",
           text: "The tab below the 3D view: the objective's values, the modes εₗ before and after, the " +
-                "clipping and the capsule clearance of the result, the foil spot, and each free " +
+                "clipping and the capsule clearance of the result, the foil spot or the observed face, and each free " +
                 "parameter's start, optimized value and bounds (a value at a bound is marked). Apply to " +
                 "the beam table writes the result into the table. \"Inputs changed since\" marks a result " +
                 "computed for other beams, a drive or settings. Set it up and run it from Pointing " +
