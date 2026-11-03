@@ -30,6 +30,11 @@ Gestures (wired by [`attach_cad_camera!`](@ref)):
   follows the pointer);
 - click: `on_click(origin, direction, pixel)` (selection; `click_ctrl` says whether Ctrl
   was held, to add to it); double click: `on_double`;
+- left drag from a handle (the placement triad): `handle_press(pixel, ctrl)` returns
+  whether the press grabbed one; past the click slop the drag goes to
+  `handle_move(pixel)` and the release to `handle_release(pixel)` instead of orbiting.
+  A press on a handle released within the slop is a click (`handle_cancel()` first), so
+  a beam or part behind a handle can still be selected;
 - `f`: fit the scene; arrow keys orbit 15°.
 
 `pick(origin, direction)` returns the distance to the first surface along the ray, or
@@ -51,8 +56,12 @@ mutable struct CadCamera
     on_click::Any
     on_double::Any
     on_change::Any
+    handle_press::Any
+    handle_move::Any
+    handle_release::Any
+    handle_cancel::Any
     # drag state
-    mode::Symbol                          # :none, :press, :orbit, :pan
+    mode::Symbol                          # :none, :orbit(_pending), :pan(_pending), :handle(_pending)
     button::Any
     press_pos::NTuple{2,Float64}
     last_pos::NTuple{2,Float64}
@@ -67,7 +76,8 @@ function CadCamera(; bounds = (Vec3d_(0, 0, 0), 1.0), fov = 30.0)
                   (Vec3d_(bounds[1]...), Float64(bounds[2])),
                   (Vec3d_(bounds[1]...), Float64(bounds[2])), (0.0, 0.0, 800.0, 600.0),
                   (o, d) -> Inf, () -> nothing, (o, d, px) -> nothing, (o, d, px) -> nothing,
-                  () -> nothing, :none, nothing, (0.0, 0.0), (0.0, 0.0), Vec3d_(0, 0, 0),
+                  () -> nothing, (px, ctrl) -> false, px -> nothing, px -> nothing, () -> nothing,
+                  :none, nothing, (0.0, 0.0), (0.0, 0.0), Vec3d_(0, 0, 0),
                   Vec3d_(0, 0, 0), -Inf, false)
     orient_camera!(c, :iso)
     return c
@@ -284,6 +294,10 @@ function camera_press!(c::CadCamera, px, button::Symbol; shift = false, ctrl = f
     c.click_ctrl = ctrl
     pan = button === :right || (shift && button in (:left, :middle)) || (ctrl && button === :middle)
     c.mode = :press
+    if button === :left && !shift && c.handle_press((Float64(px[1]), Float64(px[2])), ctrl)
+        c.mode = :handle_pending
+        return c
+    end
     p, hit = _point_under(c, px)
     if pan
         c.grab = p
@@ -299,9 +313,14 @@ end
 function camera_move!(c::CadCamera, px)
     c.mode === :none && return false
     x, y = Float64(px[1]), Float64(px[2])
-    if c.mode in (:orbit_pending, :pan_pending)
+    if c.mode in (:orbit_pending, :pan_pending, :handle_pending)
         hypot(x - c.press_pos[1], y - c.press_pos[2]) < _CLICK_SLOP && return true
-        c.mode = c.mode === :orbit_pending ? :orbit : :pan
+        c.mode = c.mode === :orbit_pending ? :orbit : c.mode === :pan_pending ? :pan : :handle
+    end
+    if c.mode === :handle
+        c.last_pos = (x, y)
+        c.handle_move((x, y))
+        return true
     end
     dx, dy = x - c.last_pos[1], y - c.last_pos[2]
     c.last_pos = (x, y)
@@ -317,7 +336,9 @@ end
 
 function camera_release!(c::CadCamera, px)
     mode, c.mode = c.mode, :none
-    mode in (:orbit_pending, :pan_pending) || return c
+    mode === :handle && (c.handle_release((Float64(px[1]), Float64(px[2]))); return c)
+    mode === :handle_pending && c.handle_cancel()
+    mode in (:orbit_pending, :pan_pending, :handle_pending) || return c
     c.button === :left || return c
     o, d = pixel_ray(c, px)
     now = time()
@@ -342,6 +363,7 @@ a Shift released elsewhere would otherwise stay held and turn every drag into a 
 """
 function release_input!(scene, c::CadCamera)
     empty!(Makie.events(scene).keyboardstate)
+    c.mode in (:handle, :handle_pending) && c.handle_cancel()
     c.mode = :none
     return c
 end

@@ -115,8 +115,8 @@ B. Landed (the hohlraum part kind, piece aim points, target kinds removed, sessi
    the commit after it.
 B2. Landed (the assembly tree: assemblies, membership, subtree show/hide and
    include/exclude, the tree's editing commands, sessions, a CAD or VisRad import as one
-   assembly; session version 10). The placement triad (decision 6) is not built: it
-   remains open (see "Phase B2 as built").
+   assembly; session version 10). The placement triad (decision 6) landed after it, with
+   no session version change: see "Placement triad as built".
 C. Landed (halfraum ends and packages: per-end entrance holes and open ends in core
    `hohlraum`, the role key `:observed`, flat observed faces, the shock-tube and opacity
    starters; no session version change): see "Phase C as built".
@@ -202,9 +202,38 @@ E. **Double backlighter with ARC:** the starter, ARC beams as a facility beam se
   equal before and after this phase built with the same precompile settings; built with
   and without the GUI's precompile workload it differs at round-off (P0/P4 in the last
   digits), unrelated to this phase.
-- Not built: the placement triad (decision 6). It needs 3D-view handles (arrows, rings),
-  picking and drag-to-step commits in `canvas/scene_canvas.jl`, a separate piece of
-  work; left open rather than half built.
+- Not built in this phase: the placement triad (decision 6); see "Placement triad as
+  built".
+
+## Placement triad as built (2026-11-02)
+
+- One placement model: an arrow drag commits `nudge_part!` in the part's *Placed in*
+  frame (the Move-along row's edit, frame values equal exactly); a ring drag commits the
+  new `turn_part!`, its rotational counterpart, which re-expresses the part's angles
+  (`theta`, `phi`, `rotation`) in that frame and keeps its origin. No placement step is
+  appended per drag (the steps list would grow with every turn); a part without steps
+  ends where a `Rotate` step about the same chamber axis puts it, to round-off. A turn
+  its steps undo is refused as a fixed move is. `nudged_parts`/`turned_parts` give the
+  edit's parts without making it (the preview).
+- Shown for one selected part, assembly, user frame, or a piece, window or component
+  (its part's triad); hidden with nothing, several things, a beam or a port frame
+  selected. Drawn at the part's origin, 70 px long on screen, thin lines over the
+  geometry; rings 0.62 of the arrow length.
+- Snapping: an arrow by whole steps of the Move-along row's *by* field, a ring by 15°
+  (`TRIAD_TURN_STEP`, the arrow keys' orbit step); Ctrl at the press snaps to a tenth
+  (`TRIAD_FINE`). The amount is the decimal it prints as (`triad_snap`: three 0.1 mm
+  steps are 0.3 mm).
+- An arrow's amount is where the pointer's ray passes nearest the axis; a ring's is the
+  pointer's screen angle swept about the projected origin (signed by whether the axis
+  faces the viewer). An arrow along the line of sight (under 12 px) and a ring within 9°
+  of edge-on are not grabbed.
+- The preview edits nothing (the undo history records only the release): the moved
+  parts' components drawn faint, the beams aimed in moved frames from their shifted
+  start to their new aim, and the amount by the triad. A press released within the click
+  slop is a click, so the beams and parts behind a handle stay selectable; focus lost
+  mid-drag cancels it.
+- Not built: hover highlighting of a handle; a planar (two-axis) drag; dragging several
+  selected parts at once (the Move-along row moves them all).
 
 ## Phase C as built (2026-11-02): what departs from the design
 

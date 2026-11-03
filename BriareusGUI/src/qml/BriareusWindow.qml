@@ -748,7 +748,10 @@ ApplicationWindow {
                   "Right drag, Shift + drag, or Ctrl + middle drag: pan\n" +
                   "Click: select a component or beam (empty space clears); Ctrl + click adds beams\n" +
                   "Double click: fit the view to what was clicked (empty space: everything)\n" +
-                  "F: fit everything · arrow keys: orbit 15°\n\n" +
+                  "F: fit everything · arrow keys: orbit 15°\n" +
+                  "Triad on the selected part (axes of its Placed in frame): drag an arrow to move\n" +
+                  "it by Move-along steps, a ring to turn it by 15°; Ctrl at the press: a tenth.\n" +
+                  "Each drag is one edit (one undo)\n\n" +
                   "In a map or image (the capsule map, a foil face, an x-ray or diagnostic image)\n\n" +
                   "Wheel: zoom · left drag: zoom to a box · right drag: pan\n" +
                   "Ctrl + click: back to the opening view (a diagnostic image: its region with signal)\n" +

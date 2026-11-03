@@ -46,6 +46,7 @@ end
     include("test_diagnostics.jl")      # diagnostic definitions: list, folders, sessions (no GL)
     include("test_app.jl")              # the `briareus` command: shortcuts, script, splash (no GL)
     include("test_canvas.jl")           # 3D and map canvases (offscreen GL)
+    include("test_triad.jl")            # the placement triad: its edits, its handles (offscreen GL)
 end
 
 if get(ENV, "BRIAREUSGUI_QT_TESTS", "") == "true"

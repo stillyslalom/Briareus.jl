@@ -2380,30 +2380,96 @@ aimed in it, move with it. A rejected move sets `error` and returns `false`.
 function nudge_part!(ts::TargetSetup, i::Integer, Δ::Real; frame::Union{Nothing,Symbol} = nothing,
                      axis = :z)
     _check_part_index(ts, i)
-    p = ts.parts[][i]
-    frame = something(frame, p.frame)
     try
-        isfinite(Δ) || throw(ArgumentError("the move must be a finite length"))
-        fr = part_frames(ts)
-        haskey(fr, frame) || throw(ArgumentError("no frame named $frame"))
-        d = Δ * to_chamber(fr[frame], _axis_vector3(axis); direction = true)
-        P = fr[p.frame]
-        c = part_center(p) + to_frame(P, d; direction = true)
-        vals = copy(p.values)
-        vals[:x], vals[:y], vals[:z] = c
-        ps = copy(ts.parts[])
-        ps[i] = _with(p; values = vals)
-        # placement steps that fix the position along the move leave nothing to move
-        if !isempty(p.steps) && Δ != 0 &&
-           norm(part_frames(ps)[p.name].origin - fr[p.name].origin) < 1e-12 * abs(Δ)
-            throw(ArgumentError("its placement steps fix its position along this axis: edit or sweep a step instead"))
-        end
-        return _try_build!(ts; parts = ps)
+        return _try_build!(ts; parts = nudged_parts(ts.parts[], i, Δ; frame, axis))
     catch err
         err isa ArgumentError || rethrow()
         ts.error[] = _errmsg(err)
         return false
     end
+end
+
+"""
+    nudged_parts(parts, i, Δ; frame = the part's frame, axis = :z) -> Vector{PartSpec}
+    turned_parts(parts, i, θ; frame = the part's frame, axis = :z) -> Vector{PartSpec}
+
+The parts after the edit [`nudge_part!`](@ref) or [`turn_part!`](@ref) makes, without
+making it (the placement triad's preview draws them). Throws `ArgumentError` for a move
+the edit refuses.
+"""
+function nudged_parts(parts::AbstractVector{PartSpec}, i::Integer, Δ::Real;
+                      frame::Union{Nothing,Symbol} = nothing, axis = :z)
+    p = parts[i]
+    frame = something(frame, p.frame)
+    isfinite(Δ) || throw(ArgumentError("the move must be a finite length"))
+    fr = part_frames(parts)
+    haskey(fr, frame) || throw(ArgumentError("no frame named $frame"))
+    d = Δ * to_chamber(fr[frame], _axis_vector3(axis); direction = true)
+    P = fr[p.frame]
+    c = part_center(p) + to_frame(P, d; direction = true)
+    vals = copy(p.values)
+    vals[:x], vals[:y], vals[:z] = c
+    ps = copy(parts)
+    ps[i] = _with(p; values = vals)
+    # placement steps that fix the position along the move leave nothing to move
+    if !isempty(p.steps) && Δ != 0 &&
+       norm(part_frames(ps)[p.name].origin - fr[p.name].origin) < 1e-12 * abs(Δ)
+        throw(ArgumentError("its placement steps fix its position along this axis: edit or sweep a step instead"))
+    end
+    return ps
+end
+
+"""
+    turn_part!(ts::TargetSetup, i, θ; frame = the part's frame, axis = :z) -> Bool
+
+Turn part `i` by `θ` degrees (right-handed) about `axis` (`:x`, `:y`, `:z`, or a vector,
+normalized) of the frame named `frame` ([`part_frames`](@ref); by default the frame the
+part is placed in), through the part's own origin, as one edit: the angles of its
+rotation (`theta`, `phi`, `rotation`) are re-expressed in the frame it is placed in, its
+origin and that frame stay. A part without placement steps ends where a `Rotate` step
+about the same chamber axis would put it (to round-off in the angles). Parts placed in
+its frame, and beams aimed in it, turn with it. The rotational counterpart of
+[`nudge_part!`](@ref) (the placement triad's rings make it). A port frame (its axis is
+its port's) and a turn its placement steps undo are refused with `error` set, returning
+`false`.
+"""
+function turn_part!(ts::TargetSetup, i::Integer, θ::Real; frame::Union{Nothing,Symbol} = nothing,
+                    axis = :z)
+    _check_part_index(ts, i)
+    try
+        return _try_build!(ts; parts = turned_parts(ts.parts[], i, θ; frame, axis))
+    catch err
+        err isa ArgumentError || rethrow()
+        ts.error[] = _errmsg(err)
+        return false
+    end
+end
+
+function turned_parts(parts::AbstractVector{PartSpec}, i::Integer, θ::Real;
+                      frame::Union{Nothing,Symbol} = nothing, axis = :z)
+    p = parts[i]
+    frame = something(frame, p.frame)
+    isfinite(θ) || throw(ArgumentError("the turn must be a finite angle"))
+    is_port_frame(p) && throw(ArgumentError("a port frame's axis is its port's: choose another port instead"))
+    fr = part_frames(parts)
+    haskey(fr, frame) || throw(ArgumentError("no frame named $frame"))
+    e = to_chamber(fr[frame], _axis_vector3(axis); direction = true)
+    Q = Briareus._axis_rotation(Vec3(e), deg2rad(θ))
+    P = fr[p.frame]
+    F0 = _own_frame(p, P)                          # before the steps
+    O = fr[p.name].origin                          # the pivot: the part's origin
+    vals = copy(p.values)
+    # (without steps the pivot is its center, kept as typed)
+    isempty(p.steps) || ((vals[:x], vals[:y], vals[:z]) = to_frame(P, O + Q * (F0.origin - O)))
+    vals[:theta], vals[:phi], vals[:rotation] = _euler_angles(P.R' * (Q * F0.R))
+    ps = copy(parts)
+    ps[i] = _with(p; values = vals)
+    if !isempty(p.steps) && θ != 0
+        G = part_frames(ps)[p.name]
+        norm(G.R - fr[p.name].R) < 1e-12 && norm(G.origin - O) < 1e-12 * max(1.0, norm(O)) &&
+            throw(ArgumentError("its placement steps fix its orientation about this axis: edit or sweep a step instead"))
+    end
+    return ps
 end
 
 # A frame axis: `:x`, `:y`, `:z` or a vector (normalized).

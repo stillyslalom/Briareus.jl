@@ -66,6 +66,7 @@ ColumnLayout {
                  ToolTip.visible: hovered; ToolTip.text: "Move back along the axis, with its members (one edit)" }
         Button { text: "+"; Layout.preferredWidth: 34; onClicked: Julia.br_nudge_part(1)
                  ToolTip.visible: hovered; ToolTip.text: "Move forward along the axis, with its members (one edit)" }
+        Info { topic: "part.triad" }
     }
     RowLayout {
         Label { text: "Origin in"; Layout.preferredWidth: 110 }

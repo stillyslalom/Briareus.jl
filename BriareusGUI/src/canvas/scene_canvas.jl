@@ -45,7 +45,10 @@ The 3D viewer of the Briareus window: `fig`, the `lscene`, the `camera` (a
 wireframe components, `sections` for the cut's edges, `uc_volumes` and `uc_lines` for
 unconverted light), the `colorbar`, the triad scene, the beam `paths` last drawn, how
 each triangle is drawn (`drawn`: 0 not, 1 opaque, 2 see-through) and the cut (`cut`), for
-picking, and a `dirty` flag the shell reads to request a redraw.
+picking, and a `dirty` flag the shell reads to request a redraw. The placement triad
+on the selected part (`place_arrows`, `place_rings`; a drag's preview in `place_ghost`,
+`place_beams` and `place_label`) snaps its arrows to `triad_step` (mm, the Move-along
+row's step, which the shell sets); see [`TriadDrag`](@ref).
 """
 struct SceneCanvas
     fig::Figure
@@ -76,6 +79,14 @@ struct SceneCanvas
     sweep_ghost::Any                             # the moved parts at the selected sweep step
     frame_axes::Any                              # the drawn frames' triads (`drawn_triads`)
     frame_names::Any                             # and their names
+    place_arrows::Any                            # the placement triad (placement_triad.jl)
+    place_rings::Any
+    place_ghost::Any                             # a triad drag's preview: the moved parts,
+    place_beams::Any                             # the beams aimed in the moved frames,
+    place_label::Any                             # and the amount
+    triad_step::Base.RefValue{Float64}           # the arrows' snap step (the Move-along row's, mm)
+    triad_at::Base.RefValue{Any}                 # (part index, name, frame) of the triad shown
+    placing::Base.RefValue{Any}                  # the `TriadDrag` in progress, or nothing
 end
 
 """
@@ -115,6 +126,15 @@ function scene_canvas(sess::DesignSession)
                                overdraw = true)
     frame_names = text!(sc, _NOPOINT3; text = [""], fontsize = 12, markerspace = :pixel,
                         align = (:left, :bottom), offset = (4, 2), visible = false, overdraw = true)
+    # the placement triad and a drag's preview (thin, over the geometry)
+    place_ghost = mesh!(sc, tri...; color = _TRIAD_PREVIEW, transparency = true, visible = false)
+    place_beams = linesegments!(sc, _NOSEG3; color = _TRIAD_PREVIEW, linewidth = 1.5, visible = false)
+    place_rings = linesegments!(sc, _NOSEG3; color = [NAN_COLOR, NAN_COLOR], linewidth = 1.5, visible = false,
+                                overdraw = true)
+    place_arrows = linesegments!(sc, _NOSEG3; color = [NAN_COLOR, NAN_COLOR], linewidth = 2.5, visible = false,
+                                 overdraw = true)
+    place_label = text!(sc, _NOPOINT3; text = [""], fontsize = 13, markerspace = :pixel,
+                        align = (:left, :bottom), offset = (4, 2), visible = false, overdraw = true)
     cb = Colorbar(fig[1, 2]; colormap = [NAN_COLOR, NAN_COLOR], limits = (0.0, 1.0), label = " ",
                   height = Relative(0.6), tellheight = false)
     triad = _triad_scene(sc)
@@ -122,12 +142,20 @@ function scene_canvas(sess::DesignSession)
     c = SceneCanvas(fig, ls, cam, body, highlight, rays, selected_rays, aims, hits, volumes,
                     outlines, cb, triad, Ref(BeamPath[]), Ref(UInt8[]), Ref{Any}(nothing),
                     Ref(true), Ref(0), ghost, translucent, wire, sections, uc_volumes, uc_lines,
-                    Ref(cut_region(sess.view)), sweep_ghost, frame_axes, frame_names)
+                    Ref(cut_region(sess.view)), sweep_ghost, frame_axes, frame_names,
+                    place_arrows, place_rings, place_ghost, place_beams, place_label, Ref(0.1),
+                    Ref{Any}(nothing), Ref{Any}(nothing))
     cam.pick = (o, d) -> min(_pick_surface(c, sess, o, d)[1], _pick_ghost(sess, o, d)[1])
     cam.pivot = () -> selection_center(sess)
     cam.on_click = (o, d, px) -> _click!(c, sess, o, d, px)
     cam.on_double = (o, d, px) -> _double_click!(c, sess, o, d, px)
-    cam.on_change = () -> (_update_triad!(c); c.dirty[] = true)
+    cam.handle_press = (px, ctrl) -> _triad_press!(c, sess, px, ctrl)
+    cam.handle_move = px -> _triad_move!(c, sess, px)
+    cam.handle_release = px -> _triad_release!(c, sess, px)
+    cam.handle_cancel = () -> _triad_cancel!(c, sess)
+    # (the triad keeps its size on screen)
+    cam.on_change = () -> (_update_triad!(c); c.triad_at[] === nothing || _draw_placement_triad!(c, sess);
+                           c.dirty[] = true)
     attach_cad_camera!(sc, cam)
     dr, v = sess.drive, sess.view
     onany((_...) -> _draw_body!(c, sess), sess.target.target, dr.result, v.color, dr.field,
@@ -146,7 +174,10 @@ function scene_canvas(sess::DesignSession)
           sess.target.target, sess.beams.beams)
     onany((_...) -> _draw_frame_triads!(c, sess), sess.target.frames, sess.target.target, v.triads,
           v.selection, v.extra)
+    onany((_...) -> _place_triad!(c, sess), sess.target.parts, sess.target.target, sess.target.ghost,
+          v.selection, v.extra)
     _draw_frame_triads!(c, sess)
+    _place_triad!(c, sess)
     _draw_ghost!(c, sess)
     _draw_body!(c, sess)
     _draw_beams!(c, sess)

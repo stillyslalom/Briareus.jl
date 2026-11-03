@@ -528,6 +528,7 @@ function BriareusShell(sess::DesignSession; queue::Channel{Any} = Channel{Any}(I
     _set!(sh, "moveFrame", 0)
     _set!(sh, "moveAxis", 2)
     _set!(sh, "moveStep", "0.1")
+    sh.scene.triad_step[] = 0.1
     _set!(sh, "partRole", 0)
     _set!(sh, "partFilm", false)
     _set!(sh, "cavitySummary", "")
@@ -2076,7 +2077,11 @@ function _move_frame(sh)
     return f in _move_frame_choices(sh.sess) ? f : :tcc
 end
 br_move_axis(index) = _with_shell(sh -> _set!(sh, "moveAxis", Int(index)))
-br_move_step(text) = _with_shell(sh -> (_parse(text, "the step"); _set!(sh, "moveStep", String(strip(string(text))))))
+# (the placement triad's arrows snap to the same step)
+br_move_step(text) = _with_shell() do sh
+    sh.scene.triad_step[] = Controllers._parse_number(string(text), "the step"; positive = true)
+    _set!(sh, "moveStep", String(strip(string(text))))
+end
 # Move the selected part by ± the step along the chosen axis (`sign` +1 or -1): one edit.
 function br_nudge_part(sign)
     _with_shell() do sh
@@ -2867,7 +2872,9 @@ a design tool in the manner of VisRad, not a sequence of steps:
   or Shift-drag pans, double click fits the clicked part, `f` fits all), standard
   views, a perspective or orthographic projection, beams as rays to where they land
   or as volumes, coloring by component or by a drive field (computed on request), a
-  cutaway (a pie slice or a section plane, clipped exactly), and an orientation triad.
+  cutaway (a pie slice or a section plane, clipped exactly), an orientation triad, and
+  a placement triad on the selected part (arrows move it, rings turn it, one edit per
+  drag).
   The capsule θ–φ (or foil) map shares the canvas.
 - **Results** (bottom): the beam table, the drive (modes, power accounting), time
   (pulses, the drive history and the retune plotted against time, with a time cursor

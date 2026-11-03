@@ -354,6 +354,16 @@ close the view. The View menu holds the standard views, a perspective or orthogr
 projection, turntable (z up) or free rotation, the cutaway, Look from port (a beam's
 port or any θ, φ) and Save view as image. Help ▸ Mouse and keys lists the bindings.
 
+A placement triad sits on the selected part, piece or assembly, in the axes of the frame
+it is placed in (Properties ▸ *Placed in*). A drag on an arrow moves the part along that
+axis in whole steps of the *Move along* row's step; a drag on a ring turns it about that
+axis, through the part's origin, in 15° steps; Ctrl held at the press snaps to a tenth of
+either. While dragging, the view previews the moved parts and the beams aimed in their
+frames; the release makes one edit (`nudge_part!` or `turn_part!`, the edits of the
+*Move along* buttons), undone as one, so the placement stays parametric and the beams
+aimed in the moved frames follow. A press on a handle released without moving is a
+click, and the triad is hidden with nothing, several things or a beam selected.
+
 The cutaway is a pie slice or a section plane through the chosen components (the
 Cutaway button's context menu: presets, the components cut, and *Cut settings…*). A
 slice has a center azimuth and a width about the x, y or z axis, optionally bounded
@@ -605,6 +615,7 @@ set_prepulse!(sess.time, 2e-3, 0.0; start = -4.0, stop = 0.0)  # 1ω prepulse, T
 start_irradiance!(sess)                          # unconverted irradiance histories and checks
 irradiance_checks(sess)                          # specular and pre-plasma: pass, first crossing
 nudge_part!(sess.target, 1, 0.5; frame = :leh_top, axis = :z)   # part 1 up 0.5 mm, one edit
+turn_part!(sess.target, 1, 15.0; axis = :x)      # 15° about x of the frame it is placed in (the triad's rings)
 set_aim_frame!(sess, 1:4, :disk_1; keep = false)     # four beams at the disk's center, following it
 set_sweep!(sess.sweep; subject = :disk_1, frame = :tcc, axis = :x)
 edit_sweep!(sess.sweep, :step, "0.25")           # shifts from start to stop, mm

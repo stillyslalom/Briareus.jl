@@ -60,6 +60,7 @@ include("controllers/sweep.jl")               # placement sweeps
 include("controllers/session.jl")             # links the parts
 include("controllers/timeline.jl")            # pulses, drive histories, the time cursor
 include("controllers/workspace.jl")           # session files, undo and redo
+include("controllers/placement_triad.jl")     # the 3D view's placement triad
 
 export display_number
 export import_visrad_workspace!, export_visrad_workspace, export_results, retune_pulses,
@@ -75,7 +76,8 @@ export PartSpec, PART_KINDS, PART_KIND_LABELS, PART_FIELDS, PART_SIZE_FIELDS, pa
        part_axis, part_center, add_part!, remove_part!, edit_part!, set_part_flag!, part_index,
        FRAME_LABELS, part_frame_def, is_port_frame, user_frames, frame_users, add_frame!,
        add_port_frame!, port_choices, transform_coordinates, add_frame_from_transform!,
-       part_frames, set_part_frame!, nudge_part!, set_excluded!, PART_STEP_KINDS,
+       part_frames, set_part_frame!, nudge_part!, turn_part!, nudged_parts, turned_parts,
+       set_excluded!, PART_STEP_KINDS,
        PART_STEP_LABELS, step_kind, add_part_step!, remove_part_step!, move_part_step!,
        edit_part_step!, part_placement,
        PART_COORDINATES, PART_POSITION_FIELDS, part_position, set_part_coords!, part_components,
@@ -95,6 +97,8 @@ export WindowSpec, WINDOW_FIELDS, add_window!, remove_window!, edit_window!, set
 export FACILITIES, FACILITY_LABELS, FACILITY_PRESETS, facility_of, set_facility!, session_tasks
 export set_aim_frame!, follow_frames!, frame_point, beam_frames, preset_pointing,
        HOHLRAUM_PRESETS, facing_lehs, aim_in_lehs!
+export TRIAD_HANDLES, TRIAD_TURN_STEP, TRIAD_FINE, triad_subject, triad_frame, triad_parts,
+       commit_triad!, triad_snap, triad_preview
 export SweepState, SWEEP_QUALITY, SWEEP_AXES, SWEEP_MAX_STEPS, SWEEP_MODES, set_sweep!, set_sweep_step!,
        edit_sweep!, sweep_values, step_numbers, step_number,
        sweep_subjects, sweep_subject, sweep_frame, sweep_los, sweep_los_object, start_sweep!, cancel_sweep!,
@@ -162,6 +166,7 @@ export TargetSetup, new_target!, set_resolution!, edit_mesh!, add_window!,
 
 include("canvas/cad_camera.jl")
 include("canvas/scene_canvas.jl")
+include("canvas/placement_triad.jl")   # the placement triad on the selected part
 include("canvas/map_canvas.jl")
 include("canvas/time_canvas.jl")
 include("qt/shell.jl")
