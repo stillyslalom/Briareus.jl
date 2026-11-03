@@ -139,6 +139,16 @@ sensitivity (V/GW) or a whole channel's response (V/GW); against time (ns), an a
 history ([`DanteView`](@ref)). Outside the table it holds its end values (`extrapolate
 = :hold`, for factors and histories) or is zero (`:zero`, for a whole response). The
 file form reads a CSV with a header line and two columns, the abscissa and the value.
+
+Linear interpolation is kept for every kind of curve. Henke's constants themselves are
+interpolated log-log (`henke_mass_attenuation`), but a transmission tabulated from them
+and read back log-log (or as a power law in the attenuation) is not more accurate where
+an absorption edge falls between two points, which dominates the error of a channel's
+response: on the filters of 17 of the 18 Dante 1 channels tabulated at 167 points per
+decade, the worst Planck-weighted response error is 4 % read linearly and 9 % read
+log-log; log-log is far better only on smooth, steep curves (channel 16's 250 µm Al
+filter: 44 % against 0.3 %). Tabulate a curve at the edges' own energies (research notes, "Dante channel
+responses and the unfold", interpolation of tabulated curves).
 """
 struct TabulatedCurve
     E::Vector{Float64}

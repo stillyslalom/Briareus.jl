@@ -6813,6 +6813,29 @@ A Planckian at 300 eV through the LEH (π 1.55², 37°) gives 190 V on channel 1
 on channel 3 (at the XRD, before attenuators), the scale of Harris's N190721 traces
 (90–230 V on the low channels).
 
+### Interpolation of tabulated curves (2026-11-03) *derived*
+
+`TabulatedCurve` (a measured filter transmission, mirror reflectivity, cathode
+sensitivity or whole response read from CSV) interpolates linearly. The built-in
+channels do not use it: their filters are Beer–Lambert from Henke's f₂, itself
+interpolated log-log between Henke's own energies, so the default Dante 1 responses and
+every Dante Tr are independent of this choice. Measured on the filters of the 18
+Dante 1 channels: each transmission tabulated on a log grid (50 eV – 30 keV), read
+back by three rules, and the channel response (`R` × read/exact transmission) weighted
+by Planckians at 100, 200 and 300 eV against the exact one on the 3001-point Dante
+grid; the worst of the three temperatures:
+
+| Table | linear | log-log | log(−ln T) vs log E |
+|---|---|---|---|
+| 167 per decade (CXRO's 500 points from 30 eV) | 0.1–4.0 % (44 % for 250 µm Al) | 0.1–8.8 % | 0.05–8.0 % |
+| 20 per decade | 7–87 % | 1.4–99 % | 0.3–98 % |
+
+Neither rule wins: the error is set by the absorption edges falling between two points
+(the edge that closes a channel's band), where linear reading is the less biased; the
+power-law rules win on smooth steep curves (the thick Al filter of channel 16: 44 % →
+0.3 % / 0.05 %). Linear is kept for every kind (**L**, a decision); a measured table
+should carry the edges' own energies, as CXRO's and Henke's do.
+
 ### Unfold (`dante_unfold`, `dante(view, ::SpectralSolution)`)
 
 - `:traditional` — Harris's algorithm: Planckian start at the mean of the per-channel
