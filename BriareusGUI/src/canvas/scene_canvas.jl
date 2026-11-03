@@ -154,10 +154,13 @@ function scene_canvas(sess::DesignSession)
     cam.handle_release = px -> _triad_release!(c, sess, px)
     cam.handle_cancel = () -> _triad_cancel!(c, sess)
     # (the triad keeps its size on screen)
+    # (the session keeps the pose, without notifying: it is saved, not an edit)
     cam.on_change = () -> (_update_triad!(c); c.triad_at[] === nothing || _draw_placement_triad!(c, sess);
-                           c.dirty[] = true)
+                           sess.view.camera.val = camera_pose(cam); c.dirty[] = true)
     attach_cad_camera!(sc, cam)
     dr, v = sess.drive, sess.view
+    # a pose set by a session loaded (nothing: the default view, fitted to the target)
+    on(p -> _apply_camera!(c, p), v.camera)
     onany((_...) -> _draw_body!(c, sess), sess.target.target, dr.result, v.color, dr.field,
           sess.time.cursor, sess.time.history, v.cutaway, v.display, v.cut_azimuth, v.cut_width,
           v.cut_components, v.cut_kind, v.cut_axis, v.cut_range, v.cut_point, v.cut_normal,
@@ -246,7 +249,32 @@ end
     set_projection!(c::SceneCanvas, ortho::Bool) / set_turntable!(c, on::Bool)
 """
 set_projection!(c::SceneCanvas, ortho::Bool) = (c.camera.ortho = ortho; c.camera.on_change(); c)
-set_turntable!(c::SceneCanvas, on::Bool) = (c.camera.turntable = on; c)
+set_turntable!(c::SceneCanvas, on::Bool) = (c.camera.turntable = on; c.camera.on_change(); c)
+
+"""
+    camera_pose(c::CadCamera) -> NamedTuple
+
+The pose `(; eye, lookat, up, ortho, turntable)` that a session saves (`ViewState`'s
+`camera`): points and the up direction as 3-tuples (mm), the projection and the
+rotation mode.
+"""
+camera_pose(c::CadCamera) = (; eye = Tuple(Float64.(c.eye)), lookat = Tuple(Float64.(c.lookat)),
+                             up = Tuple(Float64.(c.up)), ortho = c.ortho, turntable = c.turntable)
+
+# Set the camera to a saved pose, or (`nothing`) to the default view: isometric, fitted
+# to the target.
+function _apply_camera!(c::SceneCanvas, p)
+    cam = c.camera
+    if p === nothing
+        cam.lookat = Makie.Vec3d(0, 0, 0)
+        orient_camera!(cam, :iso)
+    else
+        cam.eye, cam.lookat, cam.up = Makie.Vec3d(p.eye...), Makie.Vec3d(p.lookat...), Makie.Vec3d(p.up...)
+        cam.ortho, cam.turntable = p.ortho, p.turntable
+        cam.on_change()
+    end
+    return c
+end
 release_input!(c::SceneCanvas) = (release_input!(c.lscene.scene, c.camera); c)
 
 # ---------------------------------------------------------------- picking
@@ -480,8 +508,7 @@ function _draw_body!(c::SceneCanvas, sess::DesignSession)
     c.camera.bounds = (Makie.Vec3d(0, 0, 0), max(2.2 * t.scale, g === nothing ? 0.0 : 1.05 * g.scale))
     c.camera.home = (Makie.Vec3d(0, 0, 0), t.scale)
     if c.fitted[] === nothing
-        c.camera.lookat = Makie.Vec3d(0, 0, 0)
-        orient_camera!(c.camera, :iso)
+        _apply_camera!(c, sess.view.camera[])          # a session's pose, or the default
         c.fitted[] = t
     end
     v = sess.view

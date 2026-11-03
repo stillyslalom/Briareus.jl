@@ -212,6 +212,20 @@ end
     @test B.camera_frame(c)[1] ≈ B.Makie.Vec3d(direction(b)...)
     # the triad follows the rotation
     @test !isempty(colorbuffer(sc.fig; px_per_unit = 1))
+    # the session keeps the pose (saved, not an undo step); a pose set with notification
+    # (a session loaded) moves the camera, and `nothing` brings back the default view
+    B.orbit_camera!(c, 0.3, 0.1)
+    B.set_projection!(sc, true)
+    p = sess.view.camera[]
+    @test p == B.camera_pose(c) && p.ortho && !can_undo(sess)
+    saved = (; eye = (9.0, -12.0, 4.0), lookat = (0.5, 0.0, 1.0), up = (0.0, 0.0, 1.0), ortho = false,
+             turntable = false)
+    sess.view.camera[] = saved
+    @test (c.eye, c.lookat, c.up) == (B.Makie.Vec3d(saved.eye...), B.Makie.Vec3d(saved.lookat...), B.Makie.Vec3d(0, 0, 1))
+    @test !c.ortho && !c.turntable && sess.view.camera[] == saved
+    sess.view.camera[] = nothing
+    @test B.camera_frame(c)[1] ≈ B._normalized(B.Makie.Vec3d(1, 1, -0.75)) && B.norm(c.lookat) < 1e-12
+    @test sess.view.camera[] == B.camera_pose(c)
 end
 
 @testset "window outlines, parts and TaLIS beam colors (offscreen)" begin

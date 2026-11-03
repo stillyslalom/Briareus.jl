@@ -615,7 +615,7 @@ function BriareusShell(sess::DesignSession; queue::Channel{Any} = Channel{Any}(I
                 v.hidden_beams, v.shown_1w, v.shown_2w, bt.unconverted, v.cut_kind, v.cut_axis,
                 v.cut_range, v.cut_point, v.cut_normal, v.cut_shift, v.cut_line, v.cut_rotation,
                 v.cut_azimuth, v.cut_width,
-                v.expanded, v.triads, v.beam_sort, tm.pulses, tm.history, tm.retune, tm.chart, tm.cursor, tm.diagnostics,
+                v.expanded, v.triads, v.beam_sort, v.camera, tm.pulses, tm.history, tm.retune, tm.chart, tm.cursor, tm.diagnostics,
                 tm.catalog, tm.issues, tm.running,
                 tm.progress, tm.status, tm.prepulse, tm.threshold, tm.irradiance, tm.checking)
         on(mark, obs)
@@ -662,6 +662,8 @@ function _refresh!(sh::BriareusShell)
                            join(cad_source.(Ref(sess), changed), "\n") *
                            "\n\nThe design reads the copies saved in the session. Read the changed files instead?")
     _set!(sh, "status", sess.status[])
+    _set!(sh, "ortho", sh.scene.camera.ortho)             # (a session's camera sets them too)
+    _set!(sh, "turntable", sh.scene.camera.turntable)
     _refresh_view!(sh)
     _refresh_target!(sh)
     _refresh_beams!(sh)

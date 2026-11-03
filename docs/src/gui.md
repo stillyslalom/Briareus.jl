@@ -178,7 +178,11 @@ names the menu entries, and the panels are described in [The window](@ref).
    and hidden beams, frame axes), in one history, so an undo takes back the last thing
    done and a part's view state follows the undo of its rename. The camera, the
    selection and the diagnostics ticked for a drive history are not steps; an undo of a
-   view change leaves the target as it is.
+   view change leaves the target as it is. A session saves the window as it was left
+   too, so it reopens that way: the camera's pose and projection, whether the drive
+   shows the 3D view, the map or the x-ray image (with the image's camera), and the
+   Time tab's chart; a session from before version 13 opens on the default camera, the
+   3D view and the Pulses chart.
 
 Two further steps use the drive's view factors without computing them again: an x-ray
 image of the target (Compute ▸ X-ray image along the view) and the drive through a pulse

@@ -6,7 +6,7 @@
 # restored design.
 
 const SESSION_FORMAT = "BriareusGUI session"
-const SESSION_VERSION = 12              # 2: `.briar` archives with the CAD files; 3: frames; 4: placement steps;
+const SESSION_VERSION = 13              # 2: `.briar` archives with the CAD files; 3: frames; 4: placement steps;
                                         # 5: foil roles as a flag, and the active foil; 6: the diagnostics
                                         # recorded, and their definitions; 7: the observed and wall roles
                                         # as flags; 8: parts only (no template), hohlraum parts;
@@ -14,6 +14,7 @@ const SESSION_VERSION = 12              # 2: `.briar` archives with the CAD file
                                         # 10: assemblies (parts of kind `assembly`), each part's `assembly`
                                         # 11: the roles of a hohlraum part's pieces (`piece_roles`)
                                         # 12: the pulses (a table's data, or the pulse shape's step)
+                                        # 13: the window as left: the camera, the drive's view, the Time chart
 
 _strs(xs) = [String(x) for x in xs]
 _syms(xs) = Symbol[Symbol(x) for x in xs]
@@ -56,8 +57,12 @@ definitions too, see [`save_session`](@ref)), the pulses the beams fire (a pulse
 data itself, its keys' times and powers, so the session opens without the CSV file, or
 the pulse shape and its step; see [`load_pulses!`](@ref)), and the 3D view's coloring, beam
 drawing (which beams' 1ω, 2ω and 3ω light is drawn), cutaway, component display modes and
-frame axes. Results are not part of it; they are computed again, and neither are the
-camera, the selection or the model tree's expanded nodes. Restore it with
+frame axes. It also holds the window as it was left (`window`): the 3D view's camera
+pose and projection (`ViewState`'s `camera`), whether the drive shows the 3D view, the
+map or the x-ray image (and the image's camera), and the Time tab's chart, so a session
+reopens as it was; the edit history leaves these out (they are not undo steps).
+Results are not part of it; they are computed again, and neither are the selection,
+the model tree's expanded nodes or the beam table's sort. Restore it with
 [`restore!`](@ref); the edit history ([`record!`](@ref)) holds the same snapshots.
 """
 function session_state(sess::DesignSession)
@@ -116,6 +121,7 @@ function session_state(sess::DesignSession)
                                                         "threshold" => sess.time.threshold[]))
     pulses = _pulse_state(sess.time.pulses[])
     pulses === nothing || (state["time"]["pulses"] = pulses)
+    state["window"] = _window_state(sess)
     v = sess.view
     state["view"] = Dict{String,Any}("color" => String(v.color[]), "beams" => String(v.beams[]),
                                      "beam_color" => String(v.beam_color[]),
@@ -151,6 +157,9 @@ geometry rejects (the session is then left as it was before the target, if the
 target fails, or partly restored otherwise).
 
 Older sessions convert as they load, through this one path:
+- Before version 13 a session saved no window: it opens on the default camera (the
+  isometric view fitted to the target), the 3D view and the Pulses chart. A state with
+  no window from version 13 on (an undo step) leaves the window as it is.
 - Before version 12 a session saved no pulses: it loads with none (Pulse table… or the
   pulse shape fires the beams again).
 - Before version 11 no piece holds a role of its own: a hohlraum part's pieces load with
@@ -311,6 +320,8 @@ function restore!(sess::DesignSession, state::AbstractDict)
         p === nothing ? (sess.time.pulses[] = nothing) : _set_pulses!(sess, _state_pulses(p))
     end
     haskey(state, "view") && _restore_view!(sess, state["view"]; rn, rf)
+    haskey(state, "window") ? _restore_window!(sess, state["window"]) :
+        version < 13 && _restore_window!(sess, Dict{String,Any}())
     _restored_optimum!(sess)
     return sess
 end
@@ -356,6 +367,48 @@ function _restore_view!(sess::DesignSession, v::AbstractDict; rn = Symbol, rf = 
     haskey(v, "show_off") && _assign!(vs.show_off, Bool(v["show_off"]))
     # (sessions before version 9 draw no frame axes)
     _assign!(vs.triads, Set{Symbol}(rf.(get(v, "triads", String[]))))
+    return sess
+end
+
+# The window as it was left (`session_state`'s `window`): the camera pose (none: the
+# default view), the drive's view (`:scene`, `:map`, `:image`) with the x-ray image's
+# camera, and the Time chart.
+function _window_state(sess::DesignSession)
+    w = Dict{String,Any}("drive_view" => String(sess.drive.view[]), "time_chart" => String(sess.time.chart[]))
+    c = sess.view.camera[]
+    c === nothing ||
+        (w["camera"] = Dict{String,Any}("eye" => collect(Float64, c.eye), "lookat" => collect(Float64, c.lookat),
+                                        "up" => collect(Float64, c.up), "ortho" => c.ortho,
+                                        "turntable" => c.turntable))
+    r = sess.drive.image_request[]
+    r === nothing ||
+        (w["image"] = Dict{String,Any}("direction" => collect(Float64, r.direction), "up" => collect(Float64, r.up),
+                                       "center" => collect(Float64, r.center), "width" => r.width, "nx" => r.nx))
+    return w
+end
+
+# Set the window from `_window_state`'s data; what is missing takes its default (the
+# isometric camera, the 3D view, the Pulses chart). An image view without its camera (a
+# diagnostic's image, which is not saved) opens on the 3D view; the image itself is
+# rendered when the drive is computed.
+function _restore_window!(sess::DesignSession, w::AbstractDict)
+    t3(x) = Tuple(Float64.(x))
+    c = get(w, "camera", nothing)
+    pose = c === nothing ? nothing :
+           (; eye = t3(c["eye"]), lookat = t3(c["lookat"]), up = t3(c["up"]), ortho = Bool(c["ortho"]),
+            turntable = Bool(c["turntable"]))
+    isequal(pose, sess.view.camera[]) || (sess.view.camera[] = pose)
+    dr = sess.drive
+    im = get(w, "image", nothing)
+    req = im === nothing ? nothing :
+          (; direction = Vec3(t3(im["direction"])...), up = Vec3(t3(im["up"])...),
+           center = Vec3(t3(im["center"])...), width = Float64(im["width"]), nx = Int(im["nx"]))
+    isequal(req, dr.image_request[]) || (dr.image_request[] = req; dr.image[] = nothing)
+    view = Symbol(get(w, "drive_view", "scene"))
+    (view in (:scene, :map, :image) && !(view === :image && req === nothing)) || (view = :scene)
+    set_view!(dr, view)
+    chart = Symbol(get(w, "time_chart", "pulses"))
+    set_chart!(sess.time, chart in TIME_CHARTS ? chart : :pulses)
     return sess
 end
 
@@ -778,7 +831,9 @@ The history holds what a session saves ([`session_state`](@ref)), view included:
 change of display mode, cutaway, beam drawing, hidden beams, drawn colors or frame axes
 is a step of the one history, so undo takes back the last thing done, whichever it was,
 and view state keyed to part names follows the undo of a rename. The camera, the
-selection and the model tree's expanded nodes are not saved and not steps. An undo
+selection and the model tree's expanded nodes are not saved and not steps, and the
+window as it was left (the camera, the drive's view, the Time chart) is saved but not a
+step: an undo leaves it as it is. An undo
 that changes only the view leaves the target as it is (no rebuild). Consecutive changes
 of the same numeric view settings and nothing else (a cutaway slider dragged) merge
 into one step, so the step returns to where the drag started. The diagnostics a drive
@@ -837,10 +892,12 @@ function redo!(sess::DesignSession)
     return true
 end
 
-# A snapshot of the edit history: the session state without the diagnostics recorded.
+# A snapshot of the edit history: the session state without the diagnostics recorded
+# and the window (camera, views and charts: not undo steps).
 function _history_state(sess::DesignSession)
     state = session_state(sess)
     delete!(state["time"], "diagnostics")
+    delete!(state, "window")
     return state
 end
 

@@ -260,7 +260,6 @@ Items 10–15 follow the 2026-10-22 literature review against Kritcher et al. 20
       EP preset; applying SST or a beam summary needs a preset first.
     - Time: no pulse editing; no Time node in the Analyses tree (its prepulse and
       threshold settings sit in Drive).
-    - Sessions: camera pose and chart choices are not saved.
     - Views: Look from port lists beam ports only; *Save view as image* grabs the main
       canvas only; a beam within the pick distance wins over a nearer surface.
 24. **GUI: Help, tooltips and layout** *(survey; the rule: explanations in tooltips, ⓘ and

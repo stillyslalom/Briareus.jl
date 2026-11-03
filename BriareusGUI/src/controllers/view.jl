@@ -100,6 +100,12 @@ green and blue, and the frame's name), besides the selected frame's
 one of [`BEAM_SORT_COLUMNS`](@ref) (`:row`: the table's order; see
 [`sort_beam_rows!`](@ref)): a display choice, not saved and not an undo step.
 
+`camera` is the 3D view's camera pose, `(; eye, lookat, up, ortho, turntable)` (points
+and the up direction in mm as 3-tuples; orthographic projection, turntable rotation),
+or `nothing` for the default view (isometric, fitted to the target): the canvas keeps
+it current without notifying, and applies a pose set with notification (a session
+loaded). Saved with the session, not an undo step ([`session_state`](@ref)).
+
 Tree node ids: `"target"`, `"comp:<name>"`, `"window:<name>"` (a hohlraum part's window
 `<part>_window_k`), `"part:<name>"`, `"assembly:<name>"` (an assembly, see
 [`add_assembly!`](@ref)), `"frames"` (the Frames folder), `"frame:<name>"`
@@ -135,6 +141,7 @@ struct ViewState
     cut_rotation::Observable{Float64}
     triads::Observable{Set{Symbol}}
     beam_sort::Observable{Tuple{Symbol,Bool}}
+    camera::Observable{Any}
 end
 
 ViewState(; cut_components = ()) =
@@ -148,7 +155,7 @@ ViewState(; cut_components = ()) =
                         Observable((-Inf, Inf)), Observable((0.0, 0.0, 0.0)),
                         Observable((0.0, -1.0, 0.0)), Observable(0.0),
                         Observable((0.0, 0.0, 0.0)), Observable(0.0), Observable(Set{Symbol}()),
-                        Observable((:row, false)))
+                        Observable((:row, false)), Observable{Any}(nothing))
 
 """
     set_cut!(v::ViewState; kind, azimuth, width, axis, range, components) -> v

@@ -48,6 +48,51 @@
     @test_throws ArgumentError load_session!(DesignSession(resolution = :coarse), bad)
 end
 
+# The window as it was left (the camera, the drive's view and the Time chart): saved with
+# the session and restored, older sessions with the defaults, never an undo step.
+@testset "the window saved with the session (no GL)" begin
+    s = DesignSession(resolution = :coarse)
+    reset_history!(s)
+    pose = (; eye = (12.5, -3.25, 6.0), lookat = (0.0, 0.5, 1.0), up = (0.0, 0.0, 1.0), ortho = true,
+            turntable = false)
+    s.view.camera[] = pose
+    req = (; direction = Briareus.Vec3(0.0, 1.0, 0.0), up = Briareus.Vec3(0.0, 0.0, 1.0),
+           center = Briareus.Vec3(0.0, 0.0, 0.5), width = 6.0, nx = 64)
+    s.drive.image_request[] = req
+    set_view!(s.drive, :image)
+    set_chart!(s.time, :energy)
+    @test !record!(s) && !can_undo(s)                       # not edits
+    path = joinpath(mktempdir(), "window.briar")
+    save_session(path, s)
+    s2 = DesignSession(resolution = :coarse)
+    load_session!(s2, path)
+    @test s2.view.camera[] == pose && s2.drive.view[] === :image && s2.drive.image_request[] == req
+    @test s2.time.chart[] === :energy && !can_undo(s2)
+    st = session_state(s2)
+    @test st["version"] == Controllers.SESSION_VERSION == 13 && st == session_state(s)
+    # an undo takes back the edit and leaves the window as it is
+    edit_part!(s2.target, 1, :length, "10.6")
+    record!(s2)
+    pose2 = merge(pose, (; eye = (1.0, 2.0, 3.0)))
+    s2.view.camera[] = pose2
+    set_view!(s2.drive, :map)
+    @test !record!(s2)
+    @test undo!(s2) && s2.target.parts[][1].values[:length] == 10.1
+    @test s2.view.camera[] == pose2 && s2.drive.view[] === :map && s2.time.chart[] === :energy
+    # a session from before version 13: the default camera, the 3D view, the Pulses chart
+    old = session_state(s)
+    old["version"] = 12
+    delete!(old, "window")
+    restore!(s2, old)
+    @test s2.view.camera[] === nothing && s2.drive.view[] === :scene && s2.drive.image_request[] === nothing
+    @test s2.time.chart[] === :pulses
+    # an image view without its camera (a diagnostic's image is not saved) opens on the 3D view
+    w = session_state(s)
+    delete!(w["window"], "image")
+    restore!(s2, w)
+    @test s2.drive.view[] === :scene && s2.view.camera[] == pose && s2.time.chart[] === :energy
+end
+
 @testset "undo and redo (no GL)" begin
     s = DesignSession(resolution = :coarse)
     @test !can_undo(s) && !can_redo(s) && !undo!(s) && !redo!(s)
