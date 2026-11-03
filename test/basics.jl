@@ -755,7 +755,8 @@ end
     tp = Target([Component(c.name, c.mesh, c.material; kind = c.kind, two_sided = c.two_sided,
                            surface = c.surface, part = :h) for c in th.components]; closed = th.closed)
     kp = ApertureKeepOut(tp; peak_fraction = 0.01)
-    @test kp.names == ko.names == [:leh_top, :leh_bottom] && kp.centers == ko.centers && kp.rims == ko.rims
+    rim(k) = [[(r.p, r.q, r.arc, r.ρ) for r in h] for h in k.rims]
+    @test kp.names == ko.names == [:leh_top, :leh_bottom] && kp.centers == ko.centers && rim(kp) == rim(ko)
     @test aperture_clearance(kp, qs) == aperture_clearance(ko, qs)
 
     # capsule keep-out against the clearance check on a fine capsule mesh (vertices on

@@ -19,7 +19,8 @@
     d = deposit(DepositionOperator(t, quads), quads)
     @test d.per_beam ≈ d_open.per_beam rtol = 1e-12
     # and the keep-out rim is the hole's full radius
-    @test ApertureKeepOut(t).rims ≈ ApertureKeepOut(open_t).rims
+    @test all(h -> all(r -> r.arc && r.ρ ≈ 1.55, h), ApertureKeepOut(t).rims)
+    @test aperture_clearance(ApertureKeepOut(t), quads) ≈ aperture_clearance(ApertureKeepOut(open_t), quads) rtol = 1e-12
     @test ApertureKeepOut(t).names == [:leh_top, :leh_bottom]
 
     m, m_open = RadiationModel(t), RadiationModel(open_t)

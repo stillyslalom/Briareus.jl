@@ -171,6 +171,8 @@ end
             @test (@inferred deposit(s.deposition, beams)).element isa Vector{T}
             @test (@inferred deposit(s.deposition, beams; absorption = T(0.9))).element isa Vector{T}
             @test (@inferred deposit(corona, beams)).ylm isa Vector{T}
+            @test (@inferred aperture_clearance(keepout[1], beams)) isa Vector{T}
+            @test (@inferred sphere_clearance(keepout[2], beams)) isa Vector{T}
             dc = _inf_positive(@inferred deposit(coronas, beams))
             @test dc.shell_ylm isa Matrix{T}
             @test (@inferred ablation_pressure_proxy(coronas, dc)) isa Vector{T}
@@ -225,6 +227,7 @@ end
                     @test _inf_jet_clean(JET.report_opt, (o, b, η) -> deposit(o, b; absorption = η),
                                          s.deposition, beams, eltype(x)(0.9))
                     @test _inf_jet_clean(JET.report_opt, Briareus._keepout_penalty, keepout, beams)
+                    @test _inf_jet_clean(JET.report_call, aperture_clearance, keepout[1], beams)
                     @test _inf_jet_clean(JET.report_opt, deposit, corona, beams)
                     @test _inf_jet_clean(JET.report_opt, deposit, coronas, beams)
                 end

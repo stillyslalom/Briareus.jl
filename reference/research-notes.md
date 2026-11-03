@@ -10147,3 +10147,35 @@ checked against the page image of Fig. 1.
   holes (radius 1.6 mm) by 1.8e-3 and 2.6e-3. Unbalanced and at h 0.4 the frustraum
   stays within 6e-3, the cylinder within 1.9e-2. The energy balance (absorbed + escaped
   + lost = source) closes to 5e-15.
+
+## Aperture keep-out rims (2026-11-03) *derived*
+
+- **Before.** `ApertureKeepOut` took every hole as the circle through its mesh's
+  outermost vertices about the area centroid, sampled at `nrim` = 96 points, and the
+  clearance was the minimum over the samples. A rectangular, slotted or elliptical hole
+  became its circumscribed circle (clearance overstated by up to the difference of the
+  circle and the opening); a circle's clearance was overstated by the sampling, up to
+  1.2e-4 mm on the 48 quads of `test/basics.jl`'s keep-out case (cones pointed through
+  1.55 mm holes) against a 2e5-point reference on the circle.
+- **Now.** The rim is the hole's boundary: edges of its triangles (with a coplanar lip
+  about the same center) that no other triangle continues across. Shared edges cancel
+  by their end points, and an edge with another triangle just beyond it (1e-6 of its
+  length) is inside (T-junctions). On a `DiskSurface` hole, an edge whose ends lie at
+  one radius from the center is the arc between them (the elements' exact sectors), and
+  arcs of one circle with elements on both sides are inside (rings of different counts,
+  whose chords leave a crack). The rim is sampled at about `nrim` points and the minimum
+  refined by golden section (40 steps, Float64 abscissae, so ForwardDiff carries only
+  the distance) on the four sample intervals with the smallest ends.
+- **Validation** (`test/keepout.jl`, round spots so the envelope distance is exact):
+  a 2 × 1 mm rectangle, beam down its normal: the closed-form edge distance to 1e-12
+  relative, the gradient in aim (0, −1) to 1e-8 (the refined point's position); an
+  oblique (35°), defocused f/8 beam: within 1e-9 mm of the minimum over 2e5 points on the
+  analytic edges. An ellipse (1.5 × 0.8 mm) meshed as a 64-gon: the closed-form distance
+  to the polygon's edges to 1e-12, and within the polygon's sag (1.8e-3 mm) of the true
+  ellipse (6.8e-4 mm here); oblique within 1e-9 mm of the dense polygon. A circle on its
+  `DiskSurface`, a 24-gon or a 16-gon disk in a 32-gon ring: within 1e-9 mm of 4e5
+  points on the circle. The basics case: within 4e-12 mm of the circle reference.
+- **Changed results.** Circular holes: clearances lower by the old sampling error (up to
+  1.2e-4 mm); the keep-out penalty moves accordingly. Noncircular holes: the true rim in
+  place of the circumscribed circle. Cost: 1.1 ms for 48 beams (about 2.7 times the old
+  96 samples).

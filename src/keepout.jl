@@ -1,21 +1,50 @@
 # Differentiable aperture keep-out: worst-case clearance of beam envelopes from the rims
 # of entrance holes, smooth enough to optimize against.
 
+# A piece of a hole's rim, sampled at `taus` in [0, 1]: the straight edge from `p` to `q`,
+# or (`arc`) the circular arc about `o` of radius `ρ` from angle `θ0` through `Δθ` in the
+# hole plane's basis `e1`, `e2`.
+struct _RimPiece
+    arc::Bool
+    p::Vec3
+    q::Vec3
+    o::Vec3
+    e1::Vec3
+    e2::Vec3
+    ρ::Float64
+    θ0::Float64
+    Δθ::Float64
+    taus::Vector{Float64}
+end
+
+_rim_point(r::_RimPiece, τ) =
+    r.arc ? r.o + r.ρ * (cos(r.θ0 + τ * r.Δθ) * r.e1 + sin(r.θ0 + τ * r.Δθ) * r.e2) :
+            r.p + τ * (r.q - r.p)
+
 """
     ApertureKeepOut(target; apertures = planar aperture components, peak_fraction = 0.01,
                     intensity = nothing, pointing = 0.05, target_offset = 0.025,
                     hardware_tolerance = 0.0, focus = 1.0, margin = 0.0,
                     minimum = 0.0, weight = 100.0, nrim = 96)
 
-Keep-out constraint for beams entering through circular apertures (laser entrance
-holes). `aperture_clearance(keepout, beams)` gives each beam's worst-case clearance
-(mm) from the rim of its entrance aperture — the aperture on the beam's port side —
-judged as `clearance` judges it: the beam envelope is the best-focus contour at
-`peak_fraction` of the peak (or at `intensity`, W/cm²) grown by the f-cone radius
-`|s|/(2F)` and `margin`; the clearance is the smallest distance from `nrim` rim points
-to the envelope, less the transverse error radius `pointing + target_offset +
-hardware_tolerance` and `focus/(2F)` for the focus error. The rim is the circle
-through the aperture mesh's outermost vertices.
+Keep-out constraint for beams entering through planar apertures of any shape (laser
+entrance holes, slots). `aperture_clearance(keepout, beams)` gives each beam's
+worst-case clearance (mm) from the rim of its entrance aperture — the aperture on the
+beam's port side — judged as `clearance` judges it: the beam envelope is the best-focus
+contour at `peak_fraction` of the peak (or at `intensity`, W/cm²) grown by the f-cone
+radius `|s|/(2F)` and `margin`; the clearance is the smallest distance from the rim to
+the envelope, less the transverse error radius `pointing + target_offset +
+hardware_tolerance` and `focus/(2F)` for the focus error.
+
+The rim is the hole's boundary: the edges of the aperture's triangles (with a closing
+lip in its plane about the same center, of the union) that no other of its triangles
+continues across. On a `DiskSurface` aperture an edge whose ends lie at one radius from
+the surface's center is the circular arc between them (the element's exact shape), so
+a circular hole meshed as a polygon keeps its circle; every other edge is straight
+(rectangular, slotted or elliptical openings, CAD apertures: the mesh is the geometry).
+The rim is sampled at about `nrim` points, every straight edge at both ends, and the
+smallest distance is refined by golden section on the sample intervals beside the
+closest samples, to about 1e-9 mm along the rim.
 
 The distance to the envelope ellipse is first order (Sampson): exact on the envelope
 and for round spots, and smooth in aim, defocus and spot size. Confirm a design with
@@ -26,7 +55,7 @@ and for round spots, and smooth in aim, defocus and spot size. Confirm a design 
 struct ApertureKeepOut
     names::Vector{Symbol}
     centers::Vector{Vec3}
-    rims::Vector{Vector{Vec3}}
+    rims::Vector{Vector{_RimPiece}}
     peak_fraction::Union{Nothing,Float64}
     intensity::Union{Nothing,Float64}
     transverse::Float64
@@ -41,36 +70,113 @@ function ApertureKeepOut(t::Target; apertures = nothing, peak_fraction = nothing
                          hardware_tolerance = 0.0, focus = 1.0, margin = 0.0,
                          minimum = 0.0, weight = 100.0, nrim::Integer = 96)
     intensity === nothing && peak_fraction === nothing && (peak_fraction = 0.01)
+    nrim >= 3 || throw(ArgumentError("nrim must be at least 3"))
     # by default every planar aperture; open windows in a hohlraum wall (apertures on a
     # `CylinderSurface`) are not entrance holes, and a closing lip (an aperture with a
     # `GapClosure`) widens the hole whose plane and center it shares
     lip(c) = c.kind === :aperture && _transmits(c.material.albedo)
     names, holes = apertures === nothing ? _default_apertures(t, lip) :
                    (ns = Symbol[apertures...]; (ns, [Set(part_pieces(t, n)) for n in ns]))
-    lips = [findall(==(ci), t.tri_comp) for (ci, c) in enumerate(t.components) if lip(c)]
+    lips = [ci for (ci, c) in enumerate(t.components) if lip(c)]
     isempty(names) && throw(ArgumentError("target has no apertures"))
-    centers, rims = Vec3[], Vector{Vec3}[]
-    for cis in holes
+    centroid(ks) = sum(t.tri_area[k] * (t.tri_v0[k] + (t.tri_e1[k] + t.tri_e2[k]) / 3) for k in ks) /
+                   sum(t.tri_area[ks])
+    centers, rims = Vec3[], Vector{_RimPiece}[]
+    for (name, cis) in zip(names, holes)
         tris = findall(in(cis), t.tri_comp)
-        A = sum(t.tri_area[tris])
-        c = sum(t.tri_area[k] * (t.tri_v0[k] + (t.tri_e1[k] + t.tri_e2[k]) / 3) for k in tris) / A
+        isempty(tris) && throw(ArgumentError("aperture $name has no triangles"))
+        c = centroid(tris)
         n = t.tri_normal[tris[1]]
-        reach(ks) = maximum(max(norm(t.tri_v0[k] - c), norm(t.tri_v0[k] + t.tri_e1[k] - c),
-                                norm(t.tri_v0[k] + t.tri_e2[k] - c)) for k in ks)
-        r = reach(tris)
-        for ks in lips
-            cl = sum(t.tri_area[k] * (t.tri_v0[k] + (t.tri_e1[k] + t.tri_e2[k]) / 3) for k in ks) /
-                 sum(t.tri_area[ks])
-            norm(cl - c) < 1e-6 * r && abs(dot(t.tri_normal[ks[1]], n)) > 1 - 1e-9 && (r = max(r, reach(ks)))
+        r = maximum(norm(x - c) for k in tris
+                    for x in (t.tri_v0[k], t.tri_v0[k] + t.tri_e1[k], t.tri_v0[k] + t.tri_e2[k]))
+        comps = collect(cis)
+        for ci in lips
+            ks = findall(==(ci), t.tri_comp)
+            isempty(ks) && continue
+            norm(centroid(ks) - c) < 1e-6 * r && abs(dot(t.tri_normal[ks[1]], n)) > 1 - 1e-9 &&
+                push!(comps, ci)
         end
-        e1 = normalize(abs(n[1]) < 0.9 ? cross(n, Vec3(1, 0, 0)) : cross(n, Vec3(0, 1, 0)))
-        e2 = cross(n, e1)
         push!(centers, c)
-        push!(rims, [c + r * (cos(2π * j / nrim) * e1 + sin(2π * j / nrim) * e2) for j in 0:nrim-1])
+        push!(rims, _hole_rim(t, comps, n, nrim))
     end
     return ApertureKeepOut(names, centers, rims, peak_fraction, intensity,
                            pointing + target_offset + hardware_tolerance, focus, margin,
                            minimum, weight)
+end
+
+# The rim of the hole made of the coplanar components `comps` (normal `n`): the edges of
+# their triangles that no other of them continues across (an edge two triangles share,
+# or one with another triangle just beyond it: a T-junction, a crack between rings), each
+# a straight piece or an arc (see `ApertureKeepOut`), sampled with about `nrim` points.
+function _hole_rim(t::Target, comps, n, nrim)
+    e1 = normalize(abs(n[1]) < 0.9 ? cross(n, Vec3(1, 0, 0)) : cross(n, Vec3(0, 1, 0)))
+    e2 = cross(n, e1)
+    tris = Tuple{Vec3,Vec3,Vec3,Int}[]
+    for ci in comps, k in findall(==(ci), t.tri_comp)
+        push!(tris, (t.tri_v0[k], t.tri_v0[k] + t.tri_e1[k], t.tri_v0[k] + t.tri_e2[k], ci))
+    end
+    edgekey(a, b) = Tuple(a) < Tuple(b) ? (a, b) : (b, a)
+    uses = Dict{Tuple{Vec3,Vec3},Int}()
+    for (a, b, c, _) in tris, (x, y) in ((a, b), (b, c), (c, a))
+        uses[edgekey(x, y)] = get(uses, edgekey(x, y), 0) + 1
+    end
+    function inside(x, tri)
+        a, b, c = tri[1] - x, tri[2] - x, tri[3] - x
+        s1, s2, s3 = dot(cross(a, b), n), dot(cross(b, c), n), dot(cross(c, a), n)
+        return (s1 > 0 && s2 > 0 && s3 > 0) || (s1 < 0 && s2 < 0 && s3 < 0)
+    end
+    angle(x, o) = atan(dot(x - o, e2), dot(x - o, e1))
+    sweep(x, y, o) = rem2pi(angle(y, o) - angle(x, o), RoundNearest)
+    # (ends, arc: center and radius, the side of the arc its element lies on)
+    cand = Tuple{Vec3,Vec3,Union{Nothing,Tuple{Vec3,Float64}},Int}[]
+    for (a, b, c, ci) in tris, (x, y, z) in ((a, b, c), (b, c, a), (c, a, b))
+        uses[edgekey(x, y)] == 1 || continue
+        # a point just beyond the edge, away from its triangle: inside another one, the
+        # edge lies inside the hole
+        m = (x + y) / 2
+        out = normalize(cross(y - x, n))
+        dot(out, z - m) > 0 && (out = -out)
+        probe = m + 1e-6 * norm(y - x) * out
+        any(tri -> inside(probe, tri), tris) && continue
+        s = t.components[ci].surface
+        arc, side = nothing, 0
+        if s isa DiskSurface
+            o = s.center - dot(s.center - x, n) * n
+            ρx, ρy = norm(x - o), norm(y - o)
+            if ρx > 0 && abs(ρx - ρy) <= 1e-9 * ρx
+                arc = (o, (ρx + ρy) / 2)
+                side = norm(z - o) < arc[2] ? -1 : 1
+            end
+        end
+        push!(cand, (x, y, arc, side))
+    end
+    # arcs of one circle with elements on both sides (rings of different counts: their
+    # exact sectors meet though their chords leave a crack) lie inside the hole
+    function covered((x, y, arc, side))
+        arc === nothing && return false
+        o, ρ = arc
+        θm = angle(x, o) + sweep(x, y, o) / 2
+        return any(cand) do (p, q, a2, s2)
+            (a2 === nothing || s2 != -side || norm(a2[1] - o) > 1e-9 * ρ || abs(a2[2] - ρ) > 1e-9 * ρ) &&
+                return false
+            Δ = sweep(p, q, o)
+            θs = Δ >= 0 ? angle(p, o) : angle(q, o)
+            return rem2pi(θm - θs + 1e-9, RoundDown) < abs(Δ) + 2e-9     # a midpoint at a vertex
+        end
+    end
+    edges = [(x, y, arc) for (x, y, arc, side) in filter(!covered, cand)]
+    len((x, y, arc)) = arc === nothing ? norm(y - x) : abs(sweep(x, y, arc[1])) * arc[2]
+    pieces = _RimPiece[]
+    isempty(edges) && return pieces
+    P = sum(len, edges)
+    for e in edges
+        x, y, arc = e
+        taus = collect(range(0.0, 1.0; length = max(1, ceil(Int, nrim * len(e) / P)) + 1))
+        push!(pieces, arc === nothing ? _RimPiece(false, x, y, x, e1, e2, 0.0, 0.0, 0.0, taus) :
+                      _RimPiece(true, x, y, arc[1], e1, e2, arc[2], angle(x, arc[1]),
+                                sweep(x, y, arc[1]), taus))
+    end
+    return pieces
 end
 
 # The default entrance holes: the planar aperture components (not lips), one hole per part
@@ -119,21 +225,62 @@ function _aperture_clearance(k::ApertureKeepOut, b::Beam)
     side = [dot(c, b.port) for c in k.centers]
     j = argmax(side)
     side[j] > 0 || return _no_clearance(b)
+    rim = k.rims[j]
+    isempty(rim) && return _no_clearance(b)        # an aperture without a rim
     ρ = envelope_radius(b.spot, b.power; intensity = k.intensity, peak_fraction = k.peak_fraction)
     A, B = ρ * b.spot.a, ρ * b.spot.b
     kv = direction(b)
     e1, e2 = spot_axes(b)
     focus = b.aim + b.defocus * kv
     cone = 1 / (2b.fnumber)
-    best = nothing
-    for x in k.rims[j]
-        d = x - focus
+    # the distance from the rim point at `τ` on piece `r` to the envelope
+    function dist(r, τ)
+        d = _rim_point(r, τ) - focus
         s, u, v = dot(d, kv), dot(d, e1), dot(d, e2)
-        dist = _sampson_distance(u, v, A, B) - cone * abs(s) - k.margin
-        best = best === nothing ? dist : min(best, dist)
+        return _sampson_distance(u, v, A, B) - cone * abs(s) - k.margin
     end
-    best === nothing && return _no_clearance(b)   # an aperture without a rim
+    # the samples, and the intervals beside the closest ones (four: both sides of the
+    # closest sample, on two pieces where it is a vertex), refined by golden section
+    best = dist(rim[1], 0.0)
+    far = (oftype(best, Inf), 1, 1)         # (interval's smaller end, piece, interval)
+    near = (far, far, far, far)
+    for (i, r) in enumerate(rim)
+        prev = dist(r, r.taus[1])
+        best = min(best, prev)
+        for m in 1:length(r.taus)-1
+            next = dist(r, r.taus[m+1])
+            best = min(best, next)
+            lo = min(prev, next)
+            w = argmax(map(first, near))
+            lo < near[w][1] && (near = Base.setindex(near, (lo, i, m), w))
+            prev = next
+        end
+    end
+    for (_, i, m) in near
+        r = rim[i]
+        best = min(best, _golden_min(τ -> dist(r, τ), r.taus[m], r.taus[m+1]))
+    end
     return best - k.transverse - k.focus * cone
+end
+
+# The smallest value of `g` on [a, b] found by golden-section search (the abscissae stay
+# Float64; only `g`'s values carry its number type).
+function _golden_min(g, a::Float64, b::Float64; iterations = 40)
+    φ = (sqrt(5.0) - 1) / 2
+    c, d = b - φ * (b - a), a + φ * (b - a)
+    gc, gd = g(c), g(d)
+    for _ in 1:iterations
+        if gc < gd
+            b, d, gd = d, c, gc
+            c = b - φ * (b - a)
+            gc = g(c)
+        else
+            a, c, gc = c, d, gd
+            d = a + φ * (b - a)
+            gd = g(d)
+        end
+    end
+    return min(gc, gd)
 end
 
 # First-order (Sampson) signed distance from (u, v) to the ellipse with semi-axes A, B:

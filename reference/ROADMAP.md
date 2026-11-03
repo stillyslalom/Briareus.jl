@@ -32,7 +32,7 @@ those under "Correctness" were read in the code, the rest are leads to confirm f
    - GUI: a diagnostic definition's `center_part` is the user's file and keeps a renamed
      part's old name.
    - Core: the `line_of_sight_power` occlusion is per centroid (all or nothing), unlike
-     Dante's pixel rays; `ApertureKeepOut` takes every hole as a circle; primitive targets
+     Dante's pixel rays; primitive targets
      default to `visibility = :centroid` (row sums 1–6 % off at LEH rims unless
      `:sampled`).
 4. **Engineering closures to validate.** The re-heated wall's radiosity clamp (≥ 0,
