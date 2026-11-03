@@ -1,7 +1,7 @@
-# NIF Dante 1 in its latest public configuration, viewing the whole target: the rays are
-# cast over the collimated field of view, so a halfraum pair's walls, a package or a
-# shield in the field count, occluded by every part. The field is the 2004 design's
-# ±30 mm at TCC (Dewald et al., RSI 75, 3759 (2004), OSTI 15014120; research notes,
+# NIF Dante 1 in its latest public configuration. Every Dante 1 configuration views the
+# whole target: the rays are cast over the collimated field of view, so a halfraum pair's
+# walls, a package or a shield in the field count, occluded by every part. The field is
+# the 2004 design's ±30 mm at TCC (Dewald et al., RSI 75, 3759 (2004), OSTI 15014120; research notes,
 # "Dante-family hardware and geometry", confidence H for the design). The collimators as
 # fielded are not public (Girard et al. 2009 describe a "centimeter-wide" field), nor is
 # any channel's own field except the multilayer channel's 12 mm (Rubery et al. 2022): a
@@ -14,8 +14,3 @@ id = "nif_dante1"
 extends = "nif_dante1_2021"
 name = "NIF Dante 1"
 
-[view]
-field_of_view_mm = 60.0
-through = "leh_bottom"
-source = "Dewald et al., RSI 75, 3759 (2004): field of view ±30 mm at TCC (2004 design)"
-confidence = "H"

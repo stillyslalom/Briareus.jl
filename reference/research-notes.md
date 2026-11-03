@@ -9700,8 +9700,9 @@ section 1 of "Dante-family hardware and geometry" above, **H** for the design; t
 fielded collimators are not public, and Girard 2009's "centimeter-wide" field is the one
 fielded hint), with Dante 1's channels and Tr over the lower entrance hole. (C2 first
 added it as `nif_dante1_field` beside a through-hole `nif_dante1`; since 2026-11-02 the
-one definition is the field view, what the instrument sees. The dated configurations,
-`nif_dante1_2021` and older, still look through the hole.) Cost and difference on the
+one definition is the field view, what the instrument sees, and so are the dated
+configurations, `nif_dante1_2021` and older, which share the 2004 design; Dante 2 and
+Omega's Dante still look through the hole, their fields being unpublished.) Cost and difference on the
 default GUI session (4796 elements, N221204's shape, 49 steps, 8 threads): the history
 takes 8.35–8.52 s with the field view and 8.35–8.37 s through the hole (two runs each;
 the footprint is cast once per target); Dante 1's Tr differs by 7.3e-5 at its peak

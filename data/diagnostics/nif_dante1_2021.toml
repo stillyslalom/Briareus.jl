@@ -29,6 +29,9 @@ source = "Rubery et al., RSI (2023) §II"
 [view]
 # Tr over the lower entrance hole's initial area, Dante's convention (Rubery et al.,
 # PRL 132, 065104, 2024)
+# the whole target in the collimated field (the 2004 design, which this configuration
+# shares): ±30 mm at TCC (Dewald et al., RSI 75, 3759 (2004), OSTI 15014120)
+field_of_view_mm = 60.0
 through = "leh_bottom"
 
 [recording]
