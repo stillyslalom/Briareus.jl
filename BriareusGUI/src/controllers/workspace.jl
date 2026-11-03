@@ -6,13 +6,14 @@
 # restored design.
 
 const SESSION_FORMAT = "BriareusGUI session"
-const SESSION_VERSION = 11              # 2: `.briar` archives with the CAD files; 3: frames; 4: placement steps;
+const SESSION_VERSION = 12              # 2: `.briar` archives with the CAD files; 3: frames; 4: placement steps;
                                         # 5: foil roles as a flag, and the active foil; 6: the diagnostics
                                         # recorded, and their definitions; 7: the observed and wall roles
                                         # as flags; 8: parts only (no template), hohlraum parts;
                                         # 9: user frames (parts of kind `frame`), the frames' drawn axes;
                                         # 10: assemblies (parts of kind `assembly`), each part's `assembly`
                                         # 11: the roles of a hohlraum part's pieces (`piece_roles`)
+                                        # 12: the pulses (a table's data, or the pulse shape's step)
 
 _strs(xs) = [String(x) for x in xs]
 _syms(xs) = Symbol[Symbol(x) for x in xs]
@@ -51,7 +52,9 @@ quad, group, whether it is on, and whether its unconverted 1ω and 2ω light tak
 the frame each beam aims in and its aim there, the settings of the drive (beam model
 included), the optimization, the clearance check, the TaLIS checks and the placement
 sweep, the diagnostics a drive history records (their ids; a session file carries their
-definitions too, see [`save_session`](@ref)), and (with `view`) the 3D view's coloring, beam drawing (which
+definitions too, see [`save_session`](@ref)), the pulses the beams fire (a pulse table's
+data itself, its keys' times and powers, so the session opens without the CSV file, or
+the pulse shape and its step; see [`load_pulses!`](@ref)), and (with `view`) the 3D view's coloring, beam drawing (which
 beams' 1ω, 2ω and 3ω light is drawn), cutaway and component display modes. Results are
 not part of it; they are
 computed again. Restore it with [`restore!`](@ref).
@@ -110,6 +113,8 @@ function session_state(sess::DesignSession; view::Bool = true)
                              "time" => Dict{String,Any}("diagnostics" => copy(sess.time.diagnostics[]),
                                                         "prepulse" => collect(sess.time.prepulse[]),
                                                         "threshold" => sess.time.threshold[]))
+    pulses = _pulse_state(sess.time.pulses[])
+    pulses === nothing || (state["time"]["pulses"] = pulses)
     if view
         v = sess.view
         state["view"] = Dict{String,Any}("color" => String(v.color[]), "beams" => String(v.beams[]),
@@ -147,6 +152,8 @@ geometry rejects (the session is then left as it was before the target, if the
 target fails, or partly restored otherwise).
 
 Older sessions convert as they load, through this one path:
+- Before version 12 a session saved no pulses: it loads with none (Pulse table… or the
+  pulse shape fires the beams again).
 - Before version 11 no piece holds a role of its own: a hohlraum part's pieces load with
   their default roles ([`piece_role`](@ref): the wall and caps the wall role).
 - Before version 10 a design has no assemblies: every part loads at the top level of the
@@ -298,6 +305,12 @@ function restore!(sess::DesignSession, state::AbstractDict)
     p1, p2, a, b = Float64.(get(tms, "prepulse", collect(DEFAULT_PREPULSE)))
     set_prepulse!(sess.time, p1, p2; start = a, stop = b)
     set_irradiance_threshold!(sess.time, Float64(get(tms, "threshold", DEFAULT_THRESHOLD)))
+    # the pulses (sessions before version 12 saved none: no pulses); pulses equal to the
+    # loaded ones stay as they are
+    p = get(tms, "pulses", nothing)
+    if p != _pulse_state(sess.time.pulses[])
+        p === nothing ? (sess.time.pulses[] = nothing) : _set_pulses!(sess, _state_pulses(p))
+    end
     if haskey(state, "view")
         v, vs = state["view"], sess.view
         _assign!(vs.color, Symbol(v["color"]))
@@ -753,7 +766,7 @@ end
 Note the design's current state in the edit history: if it differs from the last one
 noted, the last one becomes an undo step (and the redo steps are dropped). Returns
 whether a step was added. A window calls this after every event, so any edit (a field,
-a preset, an applied optimization) can be undone.
+a preset, an applied optimization, loaded pulses) can be undone.
 """
 function record!(sess::DesignSession)
     h = sess.history

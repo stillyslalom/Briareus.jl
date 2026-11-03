@@ -439,7 +439,8 @@ The bottom panel's tabs:
 - **Time:** the drive through a pulse. *Pulse table…* fires the beams with a pulse
   table ([`read_pulse_table`](@ref): power per beam against time, per cone group, quad
   or beam; disabled beams stay off), and *N221204 shape* with N221204's delivered pulse
-  shape ([`n221204_pulse`](@ref)), each beam reaching its table power at the peak.
+  shape ([`n221204_pulse`](@ref)), each beam reaching its table power at the peak. A
+  session saves the pulses: a table's data itself, so it opens without the CSV file.
   *Run history* solves the drive at each time of the pulses on the drive's view factors
   ([`drive_history`](@ref)), and every 0.5 ns over the prepulse window (below), so the
   prepulse's x-rays heat the wall and capsule and the wall's memory carries that heat

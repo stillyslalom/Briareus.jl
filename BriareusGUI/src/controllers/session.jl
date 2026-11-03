@@ -1391,8 +1391,7 @@ function retune_to_reference!(sess::DesignSession, table::AbstractString, out::A
                               table = (; cluster = copy(bt.cluster[]), colors = cluster_colors(bt)),
                               before = v.before, after = v.after, reference = v.reference)
         sess.time.pulses[] === nothing && length(bt.beams[]) == length(beams) &&
-            (sess.time.pulses[] = (; kind = :table, table = pulses, by = _pulse_key(beams, pulses),
-                                   shape = nothing, nodes, times = nodes, label = basename(table)))
+            (sess.time.pulses[] = _table_pulses(pulses, _pulse_key(beams, pulses), basename(table)))
         set_chart!(sess.time, :retune)
         n = length(v.retune.keys)
         if v.kind === :capsule

@@ -4,7 +4,8 @@
     PulseShape(times, powers)
 
 Piecewise-linear power history (ns, TW per beam), zero outside the table. Callable:
-`pulse(t)`.
+`pulse(t)`. Two pulse shapes are equal (`==`, `isequal`, `hash`) when their times and
+powers are.
 """
 struct PulseShape
     t::Vector{Float64}
@@ -15,6 +16,10 @@ struct PulseShape
         new(collect(Float64, t), collect(Float64, p))
     end
 end
+
+Base.:(==)(a::PulseShape, b::PulseShape) = a.t == b.t && a.p == b.p
+Base.isequal(a::PulseShape, b::PulseShape) = isequal(a.t, b.t) && isequal(a.p, b.p)
+Base.hash(s::PulseShape, h::UInt) = hash(s.p, hash(s.t, hash(:PulseShape, h)))
 
 (s::PulseShape)(t) = (t < s.t[1] || t > s.t[end]) ? 0.0 : _interp(s.t, s.p, t)
 

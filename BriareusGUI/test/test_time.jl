@@ -47,6 +47,54 @@
     @test_throws ArgumentError load_pulses!(sess, bad)
 end
 
+@testset "time panel: pulses in sessions and undo (no GL)" begin
+    sess = DesignSession(resolution = :coarse)
+    tm = sess.time
+    record!(sess)
+    beams = sess.beams.beams[]
+    pul = cone_fraction_pulses(beams, [0.0, 1.0, 2.5, 4.0], [0.0, 100.0 / 3, 300.0, 0.0],
+                               [0.3, 0.3, 0.28, 0.25])
+    dir = mktempdir()
+    csv = write_pulse_table(joinpath(dir, "pulses.csv"), pul)
+    load_pulses!(sess, csv)
+    loaded = tm.pulses[]
+    # the table's data is saved, not its path: the session opens with the CSV file gone,
+    # its pulses bit for bit
+    for f in (joinpath(dir, "p.briar.toml"), joinpath(dir, "p.briar"))
+        save_session(f, sess)
+    end
+    rm(csv)
+    for f in (joinpath(dir, "p.briar.toml"), joinpath(dir, "p.briar"))
+        s2 = DesignSession(resolution = :coarse)
+        load_session!(s2, f)
+        p = s2.time.pulses[]
+        @test p.kind === :table && p.by === loaded.by && p.label == "pulses.csv" && p.times == loaded.times
+        @test p.table == loaded.table                             # PulseShape equality: times and powers
+        @test session_state(s2) == session_state(sess)
+    end
+    # loading pulses is an edit: undo returns to no pulses, redo to the table
+    @test record!(sess)
+    @test undo!(sess) && tm.pulses[] === nothing
+    @test redo!(sess) && tm.pulses[].table == loaded.table
+    # the pulse shape: its step round trips
+    use_pulse_shape!(sess; step = 0.5)
+    record!(sess)
+    f = joinpath(dir, "shape.briar.toml")
+    save_session(f, sess)
+    s3 = DesignSession(resolution = :coarse)
+    load_session!(s3, f)
+    @test s3.time.pulses[].kind === :shape && s3.time.pulses[].times == tm.pulses[].times &&
+          s3.time.pulses[].shape == tm.pulses[].shape
+    @test undo!(sess) && tm.pulses[].kind === :table
+    # a session before version 12 has no pulses: it loads with none
+    old = session_state(sess)
+    @test haskey(old["time"], "pulses")
+    delete!(old["time"], "pulses")
+    old["version"] = 11
+    restore!(s3, old)
+    @test s3.time.pulses[] === nothing
+end
+
 @testset "time panel: drive history and the time cursor (no GL)" begin
     sess = DesignSession(resolution = :coarse)
     tm = sess.time

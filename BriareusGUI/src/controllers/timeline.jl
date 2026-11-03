@@ -19,12 +19,42 @@ drive they give.
 """
 function load_pulses!(sess::DesignSession, path::AbstractString)
     table = read_pulse_table(path)
-    by = _pulse_key(sess.beams.beams[], table)
-    nodes = sort(unique(reduce(vcat, [p.t for p in values(table)])))
-    _set_pulses!(sess, (; kind = :table, table, by, shape = nothing, nodes, times = nodes,
-                        label = basename(path)))
+    _set_pulses!(sess, _table_pulses(table, _pulse_key(sess.beams.beams[], table), basename(path)))
     return sess
 end
+
+# The pulses of a pulse table (`Dict{Symbol,PulseShape}`, keyed by `by`), named `label`.
+function _table_pulses(table::AbstractDict, by::Symbol, label::AbstractString)
+    nodes = sort(unique(reduce(vcat, [p.t for p in values(table)])))
+    return (; kind = :table, table, by, shape = nothing, nodes, times = nodes, step = 0.0, label = String(label))
+end
+
+# N221204's pulse shape, normalized to its peak, solved every `step` ns.
+function _shape_pulses(step::Real)
+    step > 0 || throw(ArgumentError("the step must be positive"))
+    p = n221204_pulse()
+    shape = PulseShape(p.t, p.power ./ maximum(p.power))
+    times = collect(range(first(p.t), last(p.t); step))
+    return (; kind = :shape, table = nothing, by = :beam, shape, nodes = collect(p.t), times,
+            step = Float64(step), label = "N221204's pulse shape × the table's powers")
+end
+
+# The pulses `src` as plain data for a session: a table's data itself (its keys' times and
+# powers, so the session opens without the CSV file), or the shape's step; `nothing` for
+# none.
+function _pulse_state(src)
+    src === nothing && return nothing
+    src.kind === :shape && return Dict{String,Any}("kind" => "shape", "step" => src.step)
+    return Dict{String,Any}("kind" => "table", "label" => src.label, "by" => String(src.by),
+                            "table" => Dict{String,Any}(String(k) => Dict{String,Any}("t" => copy(p.t), "power" => copy(p.p))
+                                                        for (k, p) in src.table))
+end
+
+_state_pulses(d) =
+    d["kind"] == "shape" ? _shape_pulses(Float64(d["step"])) :
+    _table_pulses(Dict{Symbol,PulseShape}(Symbol(k) => PulseShape(Float64.(v["t"]), Float64.(v["power"]))
+                                          for (k, v) in d["table"]),
+                  Symbol(d["by"]), d["label"])
 
 """
     use_pulse_shape!(sess::DesignSession; step = 0.2) -> sess
@@ -35,15 +65,7 @@ NIF pulse for a first look when no pulse table is at hand (the published curve i
 total of the 192 beams; every beam follows its shape here). The history is solved every
 `step` ns.
 """
-function use_pulse_shape!(sess::DesignSession; step::Real = 0.2)
-    step > 0 || throw(ArgumentError("the step must be positive"))
-    p = n221204_pulse()
-    shape = PulseShape(p.t, p.power ./ maximum(p.power))
-    times = collect(range(first(p.t), last(p.t); step))
-    _set_pulses!(sess, (; kind = :shape, table = nothing, by = :beam, shape, nodes = collect(p.t), times,
-                        label = "N221204's pulse shape × the table's powers"))
-    return sess
-end
+use_pulse_shape!(sess::DesignSession; step::Real = 0.2) = _set_pulses!(sess, _shape_pulses(step))
 
 function _set_pulses!(sess::DesignSession, src)
     tm = sess.time

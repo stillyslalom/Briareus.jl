@@ -271,11 +271,11 @@ Items 10–15 follow the 2026-10-22 literature review against Kritcher et al. 20
       are Cartesian only; VisRad profiles and focal lengths only from an import; no OMEGA
       EP preset; applying SST or a beam summary needs a preset first; no aim-frame column
       or sorting in the beam table.
-    - Time: no pulse editing; the loaded pulses are not saved with the session; no Time
-      node in the Analyses tree (its prepulse and threshold settings sit in Drive).
+    - Time: no pulse editing; no Time node in the Analyses tree (its prepulse and
+      threshold settings sit in Drive).
     - Sessions and undo: view edits (display modes, cutaway, hidden beams, beam style)
-      and loading pulses are not undoable; camera pose and chart choices are not saved;
-      ticking a diagnostic makes design undo steps.
+      are not undoable; camera pose and chart choices are not saved; ticking a
+      diagnostic makes design undo steps.
     - Views: Look from port lists beam ports only; *Save view as image* grabs the main
       canvas only; a beam within the pick distance wins over a nearer surface.
 24. **GUI: Help, tooltips and layout** *(survey; the rule: explanations in tooltips, ⓘ and

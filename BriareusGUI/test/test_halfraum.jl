@@ -477,7 +477,8 @@ end
     @test sum(values(eb.heating)) ≈ sum(values(byp.heating)) rtol = 1e-12
     @test sum(v for (k, v) in eb.heating if startswith(String(k), "hohlraum_")) ≈ byp.heating[:hohlraum] rtol = 1e-12
     @test only(x for x in h.energy if x.name === :capsule).values[end] ≈ eb.heating[cap] rtol = 1e-12
-    # undo gives the capsule its role back; redo the cap's
+    # undo takes back the loaded pulses, then gives the capsule its role back; redo the cap's
+    @test undo!(sess) && sess.time.pulses[] === nothing && observed_name(ts) === cap
     @test undo!(sess) && observed_name(ts) === :capsule
     @test cavity_walls(ts) == [:hohlraum => [:hohlraum_wall, cap, :hohlraum_cap_bottom]]
     @test redo!(sess) && observed_name(ts) === cap
@@ -487,7 +488,7 @@ end
     save_session(f, sess)
     saved = TOML.parsefile(f)
     hp = only(q for q in saved["target"]["parts"] if q["name"] == "hohlraum")
-    @test saved["version"] == 11 && hp["piece_roles"] == Dict("cap_top" => "observed")
+    @test saved["version"] == Controllers.SESSION_VERSION && hp["piece_roles"] == Dict("cap_top" => "observed")
     s2 = DesignSession(resolution = :coarse)
     load_session!(s2, f)
     @test observed_name(s2.target) === cap && cavity_walls(s2.target) == [:hohlraum => walls]
