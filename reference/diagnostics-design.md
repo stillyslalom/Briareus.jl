@@ -53,8 +53,9 @@ lands; the docstrings and research notes then hold what was built.
   has its 12 mm (Rubery 2022, which finds it covers every NIF hohlraum).
 - Not yet: time response, uncertainty, the recording modes other than `history`,
   channel voltages and the unfold in the GUI (its histories are gray: they need a
-  spectral history). `dante2()` and `sentinel(dim)` construct views in code with Dante
-  1's channels.
+  spectral history). `sentinel(dim)` constructs a view in code with Dante 1's channels;
+  `dante2()` builds `nif_dante2` (2026-11-03) with Dante 1's channels, assumed, the
+  definition holding none.
 - XRD cathodes `:Al`, `:Cr`, `:Ni` (a Henke-yield model fitted to Rubery's curves),
   SiO₂ mirrors (Fresnel, angle and roughness scaled to Rubery Fig. 3a), the Cr/Sc
   multilayer as Rubery's digitized curve; filters by Henke's tables.

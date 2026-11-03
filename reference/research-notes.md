@@ -9818,6 +9818,16 @@ same voltage bit for bit. A channel's field changes a signal only on a target wi
 the field (a halfraum pair, a package off TCC). Also: `sentinel(:equatorial_78)` moves
 to the table's φ 78.75° (P90-78) from 78°.
 
+**`dante2()` from its definition.** `dante2()` builds `nif_dante2` (port P64-350, the
+upper hole, 400 pixels) with Dante 1's channels without their per-channel fields: an
+assumption in code (**L**), since Dante 2's channel set, solid angles and fields are not
+public (section 2 above); the definition holds no channels and stays unusable from the
+search path until a file that extends it supplies them. Checks (`test/diagnostics.jl`,
+`test/dante_response.jl`): its geometry equals the bare `DanteView(64, 350; through =
+:leh_top)` it replaced, and on the blackbody hohlraum its intensity, Tr, channel
+voltages and unfolded Tr equal that view's (with Dante 1's channels, no fields) bit for
+bit; against the bare view before the per-channel field, nothing changes.
+
 Checks (`test/cavities.jl`, two hohlraums 12 mm apart as blackbodies, 400 pixels):
 a channel given the view's own 60 mm field reads bit for bit what it reads without one
 (every output, the unfold included); channel 1 with 8 mm about one cavity, in the 60 mm

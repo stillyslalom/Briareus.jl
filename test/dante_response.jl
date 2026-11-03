@@ -112,6 +112,11 @@ using Briareus: _rubery_dante, _response, _DANTE_GRID, _planck_shape, _channel_m
         rs = dante(dante1(), s; unfold = :smooth)
         @test rs.Tr_unfold ≈ r.Tr * planck_fraction(T0, 50.0, 20_000.0)^0.25 rtol = 2e-3
         @test !haskey(dante(dante1(), s; unfold = nothing), :unfold)
+        # Dante 2 from its definition reads what the bare view at its port with Dante 1's
+        # channels (no fields of their own) reads, bit for bit
+        bare = DanteView(64, 350; through = :leh_top, channels = Briareus._with_field.(dante1_channels(), nothing))
+        r2, rb = dante(dante2(), s), dante(bare, s)
+        @test all(k -> isequal(r2[k], rb[k]), (:intensity, :Tr, :channels, :Tr_unfold)) && all(>(0), r2.channels)
         # Sentinel on the polar DIM: down the axis through the upper hole, onto the capsule
         # and out of the lower hole (same radius)
         sp = dante(sentinel(), sol)

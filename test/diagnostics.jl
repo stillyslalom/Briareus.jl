@@ -60,6 +60,15 @@ csv(dir, name, E, v) = (open(joinpath(dir, name), "w") do io
         # the multilayer channel's own 12 mm field (Rubery 2022), the others the view's
         @test [c.field_of_view for c in v.channels] == [n == 2 ? 12.0 : nothing for n in 1:18]
         @test dante1(pixels = 50).pixels == 50
+        # Dante 2 from its definition (line of sight, the hole), with Dante 1's channels
+        # (assumed) without their own fields: the bare view it replaced
+        d2, ref = dante2(), DanteView(64, 350; through = :leh_top)
+        @test all(f -> isequal(getfield(d2, f), getfield(ref, f)),
+                  (:theta, :phi, :direction, :through, :pixels, :area, :field_of_view, :center))
+        @test [c.R for c in d2.channels] == [c.R for c in dante1_channels()] &&
+              all(c -> c.field_of_view === nothing, d2.channels)
+        @test dante2(pixels = 50).pixels == 50 && dante2(channels = old_dante1()[1:2]).channels[2].R == old_dante1()[2].R
+        @test_throws ArgumentError diagnostic("nif_dante2"; paths = diagnostic_paths()[1:1])   # no channels
         @test dante1(channels = dante1_channels(model = :gaussian)).channels[1] isa DanteChannel
         # the built-ins report only values that are not public ("public definitions")
         @test all(i -> i.level === :missing, check_diagnostics(; paths = diagnostic_paths(builtin = true)[1:1]))

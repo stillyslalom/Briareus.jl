@@ -137,10 +137,17 @@ dante1(; kwargs...) = _builtin_diagnostic("nif_dante1"; kwargs...)
 """
     dante2(; kwargs...)
 
-NIF Dante 2: θ 64°, φ 350°, a shallow view of the upper entrance hole (Rubery et al.,
-RSI 2023).
+NIF Dante 2 at port P64-350: θ 64°, φ 350° (NIF User Guide 2024-09, Table 5-1; Rubery et
+al., RSI 2023), a shallow view through the upper entrance hole, from the built-in
+definition `nif_dante2`. Its channels and fields of view are not public, so the
+definition has none and the view takes Dante 1's channels, *assumed*
+([`dante1_channels`](@ref), without Dante 1's per-channel fields), and looks through
+the hole; `kwargs` replace these (those of [`DanteView`](@ref)), e.g. a group's
+`channels`. `diagnostic("nif_dante2")` takes the search path, where a file that extends
+`nif_dante2` supplies the channels.
 """
-dante2(; kwargs...) = DanteView(64, 350; through = :leh_top, kwargs...)
+dante2(; kwargs...) =
+    _builtin_diagnostic("nif_dante2"; merge((; channels = _with_field.(dante1_channels(), nothing)), values(kwargs))...)
 
 """
     sentinel(dim = :polar; through, kwargs...)

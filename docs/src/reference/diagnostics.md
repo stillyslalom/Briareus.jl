@@ -111,7 +111,7 @@ source's table and checked against the energies the source tabulates:
 | `nif_dante1_N180604`, `_N180129`, `_N170924` | single shots, 2017–18 (Kemp et al. 2020, Tables I–III) | — |
 | `nif_dante1_2012` | 2012–14 (May et al. 2015, Table IV) | — |
 | `nif_dante1_2009` | N091104 (Fournier et al. 2010, Table II) | — |
-| `nif_dante2` | NIF Dante 2: the line of sight | the channels |
+| `nif_dante2` | NIF Dante 2: port P64-350, through the upper entrance hole ([`dante2`](@ref) supplies Dante 1's channels, assumed) | the channels, the field of view |
 | `nif_sentinel_N170924` | NIF Sentinel on N170924-003 (Kemp et al. 2020, Table II) | the equatorial DIM (`phi_deg`); the MiniXRD responses |
 | `omega_dante` | Omega Dante (Rubery et al. 2023, Fig. 13) | the solid angles (the standoff) |
 | `nif_sxi_lower` | NIF SXI lower, hard channel: 25 µm pinhole at 2×, Be 75 + Ti 50 µm, Si CCD (Schneider et al. 2010) | — |

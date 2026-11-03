@@ -866,7 +866,9 @@ function _build_xray_power(def::DiagnosticDefinition; kwargs...)
     mode = get(get(d, "recording", Dict{String,Any}()), "mode", "history")
     mode == "history" || throw(_KeyedError("recording.mode", "xray_power records a history"))
     cs = get(d, "channel", Any[])
-    isempty(cs) && throw(_MissingValue("channel", "no channels: supply [[channel]] tables (extend \"$(def.id)\")"))
+    # (a definition without channels builds when the call supplies them: `dante2()`)
+    isempty(cs) && !haskey(kwargs, :channels) &&
+        throw(_MissingValue("channel", "no channels: supply [[channel]] tables (extend \"$(def.id)\")"))
     _check_exclusive(v, "view")
     fov = haskey(v, "field_of_view_mm") ? Float64(v["field_of_view_mm"]) : nothing
     fov === nothing && (haskey(v, "center_part") || haskey(v, "center_mm")) &&
@@ -886,7 +888,7 @@ function _build_xray_power(def::DiagnosticDefinition; kwargs...)
            haskey(v, "area_history_csv") ? _curve(v["area_history_csv"], "view.area_history_csv") : nothing
     area === :open && through === nothing &&
         throw(_KeyedError("view.area_open", "the open area is that of `through`; give through"))
-    kw = (; through, pixels = Int(get(v, "pixels", 400)), channels = _channels(cs), area,
+    kw = (; through, pixels = Int(get(v, "pixels", 400)), channels = isempty(cs) ? nothing : _channels(cs), area,
           field_of_view = fov, center)
     return DanteView(_line_of_sight(d)...; merge(kw, values(kwargs))...)
 end
@@ -895,7 +897,16 @@ register_diagnostic_kind(:xray_power, _XRAY_POWER_SPEC, _build_xray_power)
 
 # the built-in definitions alone (the public ones; user files cannot change these)
 _builtin_diagnostic(id; kwargs...) = diagnostic(_builtin_definition(id); kwargs...)
-_builtin_definition(id) = _definitions([normpath(_BUILTIN_DIAGNOSTICS)], DiagnosticIssue[])[id]
+function _builtin_definition(id)
+    issues = DiagnosticIssue[]
+    raws = _read_all([normpath(_BUILTIN_DIAGNOSTICS)], issues)
+    defs = _checked(raws, issues)
+    haskey(defs, id) && return defs[id]
+    # a built-in that lacks values that are not public (nif_dante2's channels), resolved
+    # for a constructor that supplies them; errors in a built-in are never expected
+    any(i -> i.level === :error, issues) && error("built-in diagnostic definitions: " * join(sprint.(show, issues), "\n"))
+    return _resolve(id, raws, issues)
+end
 
 # ---- kind "xray_imager": pinhole x-ray imagers (SXI, G-LEH, GXD) -----------------------
 
