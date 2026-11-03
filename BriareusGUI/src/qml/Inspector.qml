@@ -50,6 +50,9 @@ Pane {
         if (kind === "target") return "target.insert"
         if (kind === "comp") return "component.intro"
         if (kind === "part") return "part.placement"
+        if (kind === "window") return "part.windows"
+        if (kind === "beams") return "beams.intro"
+        if (kind === "group" || kind === "quad" || kind === "beam") return "beams.nodes"
         if (kind === "frame" || kind === "frames") return "frames.intro"
         if (kind === "assembly") return "assembly.intro"
         if (kind === "task") return app.selKey + ".intro"
@@ -100,14 +103,11 @@ Pane {
                 visible: inspector.page === ""
                 Layout.fillWidth: true
                 spacing: 8
-                Note {
-                    text: "Select a component, beam or analysis in the model tree or the 3D view " +
-                          "to see and edit its properties."
-                }
+                Note { text: "Nothing selected" }
                 Note { text: app.targetSummary }
                 Note { text: app.beamsSummary }
-                Button { text: "Target"; onClicked: Julia.br_select("target") }
-                Button { text: "Beams"; onClicked: Julia.br_select("beams") }
+                Button { text: "Target"; onClicked: Julia.br_select("target"); tip: "Select the target: its mesh and starters" }
+                Button { text: "Beams"; onClicked: Julia.br_select("beams"); tip: "Select the beam set: presets, switching, drawing" }
             }
         }
     }

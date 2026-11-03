@@ -18,9 +18,9 @@ ColumnLayout {
             readonly property int rowNumber: model.number
             readonly property bool isOpen: model.open
             readonly property bool isRound: model.round
-            PropRow { label: "Azimuth φ"; value: model.phi; unit: "° from +x"
+            PropRow { label: "Azimuth φ"; value: model.phi; unit: "° from +x"; tip: "The window center's azimuth about the hohlraum axis, from the part's +x"
                       onEdited: (text) => Julia.br_edit_window(w.rowNumber, "phi", text) }
-            PropRow { label: "Center z"; value: model.z; unit: "mm"
+            PropRow { label: "Center z"; value: model.z; unit: "mm"; tip: "The window center's position along the hohlraum axis, in the part's frame"
                       onEdited: (text) => Julia.br_edit_window(w.rowNumber, "z", text) }
             CheckLine {
                 text: "Round"
@@ -29,22 +29,23 @@ ColumnLayout {
                 tip: "A disk on the unrolled wall (otherwise a rectangle)"
             }
             PropRow { label: w.isRound ? "Diameter" : "Width"; value: model.width
-                      unit: w.isRound ? "mm" : "mm of arc"
+                      unit: w.isRound ? "mm" : "mm of arc"; tip: w.isRound ? "The diameter on the unrolled wall" : "The width along the wall's circumference"
                       onEdited: (text) => Julia.br_edit_window(w.rowNumber, "width", text) }
-            PropRow { visible: !w.isRound; label: "Height"; value: model.height; unit: "mm along z"
+            PropRow { visible: !w.isRound; label: "Height"; value: model.height; unit: "mm along z"; tip: "The height along the hohlraum axis"
                       onEdited: (text) => Julia.br_edit_window(w.rowNumber, "height", text) }
             CheckLine {
                 text: "Open (a hole: laser light and x-rays leave through it)"
                 checked: w.isOpen
                 onToggled: Julia.br_window_open(w.rowNumber, checked)
+                tip: "Open: an aperture, with no albedo or conversion; closed: an opaque wall patch"
             }
-            PropRow { label: "Albedo"; value: model.albedo; unit: "closed window"; enabled: !w.isOpen
+            PropRow { label: "Albedo"; value: model.albedo; unit: "fraction re-emitted"; enabled: !w.isOpen; tip: "The closed window's x-ray albedo: the fraction of the incident flux it re-emits"
                       onEdited: (text) => Julia.br_edit_window(w.rowNumber, "albedo", text) }
-            PropRow { label: "Conversion"; value: model.conversion; unit: "laser → x-ray"; enabled: !w.isOpen
+            PropRow { label: "Conversion"; value: model.conversion; unit: "laser → x-ray"; enabled: !w.isOpen; tip: "The fraction of the absorbed laser power the closed window converts to x-rays"
                       onEdited: (text) => Julia.br_edit_window(w.rowNumber, "conversion", text) }
         }
     }
     DisplayRow {}
     ErrorText { text: app.targetError }
-    Button { text: "Remove window"; onClicked: Julia.br_remove_selected() }
+    Button { text: "Remove window"; onClicked: Julia.br_remove_selected(); tip: "Remove this window from the hohlraum wall" }
 }

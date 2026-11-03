@@ -20,14 +20,10 @@ ColumnLayout {
         rowSpacing: 0
         component Box: CheckBox {
             property int at: 0                       // index into app.bnMatrix
-            property string tip: ""
             readonly property string st: app.bnMatrix.charAt(at)
             checked: st === "1" || st === "2"
             opacity: st === "2" ? 0.55 : 1
             padding: 2
-            ToolTip.visible: hovered && tip !== ""
-            ToolTip.delay: 400
-            ToolTip.text: tip
             onToggled: Julia.br_beam_dot(app.selection, at < 3 ? "use" : "draw", at % 3 + 1, checked)
         }
         Label { text: "" }
@@ -60,12 +56,16 @@ ColumnLayout {
               tip: "Along the hohlraum axis; for beams from both hemispheres the lower ones aim at −z"
               onEdited: (text) => Julia.br_edit_node("z", text) }
     PropRow { label: "Aim r"; value: app.bn_r; unit: "mm toward each port azimuth"
+              tip: "Radial offset of the aim from the hohlraum axis, toward the beam's port azimuth"
               onEdited: (text) => Julia.br_edit_node("r", text) }
     PropRow { label: "Tangential offset"; value: app.bn_phi; unit: "mm, counterclockwise"
+              tip: "Offset of the aim across the port azimuth, positive counterclockwise"
               onEdited: (text) => Julia.br_edit_node("phi", text) }
     PropRow { label: "Defocus"; value: app.bn_defocus; unit: "mm (+: beyond the aim)"
+              tip: "Best focus lies this far along the beam from the aim point"
               onEdited: (text) => Julia.br_edit_node("defocus", text) }
     PropRow { label: "Power"; value: app.bn_power; unit: "TW per beam"
+              tip: "The 3ω power of each selected beam"
               onEdited: (text) => Julia.br_edit_node("power", text) }
 
     SectionLabel { text: "Aim point (x, y, z)"; info: "beams.aim" }
@@ -80,19 +80,21 @@ ColumnLayout {
             currentIndex: app.bnAimFrame
             displayText: app.bnAimFrame < 0 ? "(several)" : currentText
             onActivated: (index) => Julia.br_aim_frame(index)
+            tip: "The frame the aim point is given in; the beams follow it when it moves (the aim stays where it is on a change)"
         }
     }
     Button {
         text: "Aim at the frame's center"
         enabled: app.bnAimFrame >= 0
         onClicked: Julia.br_aim_at_frame()
-        ToolTip.visible: hovered
-        ToolTip.text: "Point the beams at the frame's center (a part's centroid, a piece frame's origin)"
+        tip: "Point the beams at the frame's center (a part's centroid, a piece frame's origin)"
     }
-    Note { text: "Coordinates in " + app.bnAimFrameLabel + "; shown: the mean aim." }
-    PropRow { label: "x"; value: app.bn_aim_x; unit: "mm"; onEdited: (text) => Julia.br_edit_node("aim_x", text) }
-    PropRow { label: "y"; value: app.bn_aim_y; unit: "mm"; onEdited: (text) => Julia.br_edit_node("aim_y", text) }
-    PropRow { label: "z"; value: app.bn_aim_z; unit: "mm"; onEdited: (text) => Julia.br_edit_node("aim_z", text) }
+    PropRow { label: "x"; value: app.bn_aim_x; unit: "mm"; tip: "In " + app.bnAimFrameLabel + "; shown: the mean aim"
+              onEdited: (text) => Julia.br_edit_node("aim_x", text) }
+    PropRow { label: "y"; value: app.bn_aim_y; unit: "mm"; tip: "In " + app.bnAimFrameLabel + "; shown: the mean aim"
+              onEdited: (text) => Julia.br_edit_node("aim_y", text) }
+    PropRow { label: "z"; value: app.bn_aim_z; unit: "mm"; tip: "In " + app.bnAimFrameLabel + "; shown: the mean aim"
+              onEdited: (text) => Julia.br_edit_node("aim_z", text) }
     ErrorText { text: app.beamsError }
 
     SectionLabel { text: "Group"; info: "beams.group" }
@@ -107,13 +109,13 @@ ColumnLayout {
             editable: true
             model: app.clusterNames
             currentIndex: model ? model.indexOf(app.bnCluster) : -1
+            tip: "A group to move the selection to: an existing one, or a new name"
         }
         Button {
             text: "Move"
             enabled: groupBox.editText.trim() !== "" && groupBox.editText !== app.bnCluster
             onClicked: Julia.br_set_cluster(groupBox.editText)
-            ToolTip.visible: hovered
-            ToolTip.text: "Move the selected beams to this group (type a new name for a new group)"
+            tip: "Move the selected beams to this group (type a new name for a new group)"
         }
     }
     PropRow {
@@ -121,6 +123,7 @@ ColumnLayout {
         label: "Rename group"
         value: app.selKey
         fieldWidth: 130
+        tip: "A new name for this group (its beams stay in it)"
         onEdited: (text) => Julia.br_rename_cluster(text)
     }
 
@@ -132,8 +135,10 @@ ColumnLayout {
     Flow {
         Layout.fillWidth: true
         spacing: 6
-        Button { visible: app.bnCanSplit; text: "Split into beams"; onClicked: Julia.br_split_quad() }
-        Button { visible: app.bnCanMerge; text: "Merge quad"; onClicked: Julia.br_merge_quad() }
+        Button { visible: app.bnCanSplit; text: "Split into beams"; onClicked: Julia.br_split_quad()
+                 tip: "Four beams with their own ports, a quarter of the power each" }
+        Button { visible: app.bnCanMerge; text: "Merge quad"; onClicked: Julia.br_merge_quad()
+                 tip: "One beam again: the mean aim and defocus, the total power" }
     }
 
     SectionLabel { text: "View" }
@@ -143,9 +148,8 @@ ColumnLayout {
         Button {
             text: "Look along beam"
             onClicked: Julia.br_look_along_beam()
-            ToolTip.visible: hovered
-            ToolTip.text: "View the target from the port, down the beam axis"
+            tip: "View the target from the port, down the beam axis"
         }
-        Button { text: "Fit selection"; onClicked: Julia.br_fit_selection() }
+        Button { text: "Fit selection"; onClicked: Julia.br_fit_selection(); tip: "Fit the 3D view to the selected beams" }
     }
 }

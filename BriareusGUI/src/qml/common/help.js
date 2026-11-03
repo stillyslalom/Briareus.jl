@@ -169,6 +169,24 @@ var pages = [
                 "are cut into cylindrical sections only. The frustraum starter has the stated " +
                 "size of a published NIF frustraum (Baker et al. 2023), its end radius derived " +
                 "from the 23° wall angle: a mock-up of the shape, not that platform." },
+        { key: "part.windows", title: "Diagnostic windows",
+          text: "A diagnostic window is cut into a hohlraum part's wall, centered at azimuth φ from the " +
+                "part's +x and at z along its axis: round (a disk of the given diameter on the unrolled " +
+                "wall, the default) or a rectangle (a width in mm of arc by a height along z). Closed, it " +
+                "is an opaque wall patch with its own x-ray albedo and laser → x-ray conversion; open, it " +
+                "is a hole that laser light and x-rays leave through. Windows are cut into cylindrical " +
+                "sections only. Add window (the part's properties) places a closed 1 mm window at the " +
+                "midplane, at the first of φ = 90°, 270°, 0°, 180°, … where it overlaps no other. Each " +
+                "window has a frame at its center on the wall for aims and placements, and holds no role " +
+                "unless given one (a closed window made Wall joins its cavity's walls)." },
+        { key: "part.leh_closure", title: "Closing entrance holes",
+          text: "With Closing entrance holes on, each entrance hole stays open to x-rays out to the open " +
+                "radius (a fraction of its radius), and the lip beyond closes: it lets its incident flux " +
+                "escape until the closure time, then across the closure duration turns into plasma that " +
+                "re-emits with the wall's albedo. Laser light and lines of sight pass the lip throughout. " +
+                "The drive history follows the closure through the pulse. Defaults: 0.84 of the LEH " +
+                "radius, the measured radius at peak (Schneider et al. 2015; research notes, \"Closing " +
+                "entrance holes\"); closure from 5 ns over 0.5 ns, an engineering example to set per design." },
         { key: "part.cad", title: "Parts from CAD files",
           text: "Windings repaired (closed solids face out of their material, open sheets the " +
                 "target center) and the surface remeshed into elements of the part's size; a part " +
@@ -182,6 +200,27 @@ var pages = [
                 "leaves it out of the x-ray view factors either way)." }
     ] },
     { key: "beams", title: "Beams", items: [
+        { key: "beams.intro", title: "The beam set",
+          text: "The Beams node holds the beam set: the facility's ports, grouped by cone (or by user " +
+                "group), with NIF quads or single beams. Its properties load a preset, switch every beam " +
+                "on or off and set how the beams are drawn and colored. The Beam table tab below the 3D " +
+                "view edits pointing, defocus and power per cone, quad or beam. File imports and exports " +
+                "beam tables, VisRad SST pointing and VisRad beam summaries." },
+        { key: "beams.nodes", title: "Groups, quads and beams",
+          text: "Under Beams the model tree has a node per group, and under each its quads (NIF) or " +
+                "beams. A node's box switches its beams on or off (a dash: some are off); its 2 × 3 dots " +
+                "are the 1ω, 2ω and 3ω light in the calculations (top row) and drawn (bottom row), a pale " +
+                "dot on for some of its beams. Selecting a node shows its properties: the pointing (the " +
+                "mean over its beams), the aim point and its frame, the group and, for a NIF quad, " +
+                "splitting and merging; an edit sets that field on every selected beam and leaves the " +
+                "others. Right-click: Look along beam, Move to a new group, Split or Merge a quad." },
+        { key: "beams.table", title: "Beam table",
+          text: "The Beam table tab below the 3D view: a row per cone, quad or beam (Rows), with the " +
+                "number of beams n, the port angles θ / φ, and the aim z, aim r, tangential offset and " +
+                "defocus (mm) and the power (TW per beam), edited in place: an edit sets the field on " +
+                "every beam of the row. The box switches the row's beams on or off (pale: some are off). " +
+                "Selecting a row selects its node in the model tree and the 3D view. Problems found in an " +
+                "imported VisRad file show above the table." },
         { key: "beams.preset", title: "Presets and beam files",
           text: "The hohlraum presets aim in the entrance holes' frames: the upper hemisphere's " +
                 "beams in the hole facing up, the lower hemisphere's in the one facing down, so a " +
@@ -203,7 +242,8 @@ var pages = [
           text: "Coordinates in the aim frame. Point every selected beam at one point, as VisRad " +
                 "points a cluster at a reference point (e.g. a backlighter foil). Shown: the mean " +
                 "aim. Beams aimed in a part's or a piece's frame keep these coordinates in it " +
-                "when it moves or turns, or when the part is renamed." },
+                "when it moves or turns, or when the part is renamed. Choosing another aim frame keeps " +
+                "the aims where they are; Aim at the frame's center points them at its center." },
         { key: "beams.group", title: "Groups",
           text: "Groups gather beams for pointing, power and on/off together, and are the " +
                 "optimizer's per-group parameters. Type a new name to move the selection to a new group." },
@@ -254,6 +294,46 @@ var pages = [
                 "radius (Compute ▸ Retune to a reference drive)." }
     ] },
     { key: "time", title: "Time", items: [
+        { key: "time.pulses", title: "Pulses",
+          text: "The Time tab's first chart: the laser power of each beam group against time (the sum " +
+                "over its enabled beams, TW), colored as in the model tree, and the total. Pulse table… " +
+                "fires the beams with a pulse table (power per beam in TW against time_ns, one column " +
+                "per cone group, quad or beam; disabled beams stay off); N221204 shape fires them with " +
+                "N221204's delivered pulse shape (Pak et al. 2024), each beam reaching its table power at " +
+                "the peak. Run history solves the drive at each time of the pulses with the drive's view " +
+                "factors, for the other charts." },
+        { key: "time.drive", title: "Drive history",
+          text: "From the latest history: the capsule's radiation temperature Tr and each recorded " +
+                "diagnostic's (eV, dashed), and a₂/a₀ and a₄/a₀ (%). For a flat observed face, its Tr " +
+                "(from its area-mean flux) and, on the right axis, its RMS nonuniformity and its peak " +
+                "and lowest flux relative to its mean (%, dashed). A target with several cavities " +
+                "charts each hohlraum part's wall temperature." },
+        { key: "time.diagnostics", title: "Diagnostics chart",
+          text: "From the latest history: each recorded diagnostic's Tr (eV) and the intensity toward " +
+                "it (TW/sr, dashed). A diagnostic is recorded when it is ticked under Record before the " +
+                "history runs." },
+        { key: "time.energy", title: "Energy",
+          text: "From the latest history: the laser energy delivered by each time and where it went " +
+                "(kJ), and the unconverted 1ω and 2ω light's part of the delivered energy (dotted) when " +
+                "that light takes part." },
+        { key: "time.retune", title: "Retune chart",
+          text: "From the latest retune (Compute ▸ Retune to a reference drive): each group's power on " +
+                "the reference pulses (all beams, dashed) and on the retuned ones (enabled beams), and " +
+                "the capsule's mode ε₁ before and after the retune (%). For a flat face or a foil spot: " +
+                "its RMS nonuniformity before, after and in the reference, and its mean's departure from " +
+                "the reference's before and after (%)." },
+        { key: "time.cursor", title: "Time cursor",
+          text: "A click on a chart, a drag along it, or the slider puts the time cursor at a step of " +
+                "the history: the 3D view is colored by the drive at that step, and the images at the " +
+                "cursor are taken there. Now returns to the drive at the beam table's powers. The " +
+                "cursor is off while the history is out of date." },
+        { key: "time.images", title: "Images list",
+          text: "Images (n) lists the images the latest history holds of its recorded imagers: for " +
+                "each, the image at the time cursor's step (detected radiance, W/cm²/sr; the last step " +
+                "without a cursor) and each frame of its recording (detected fluence per steradian, " +
+                "J/cm²/sr: the integral over the shot or against a gate). An image opens in the image " +
+                "view on its region with signal and stays until another is chosen: a drive edit does " +
+                "not replace it." },
         { key: "time.irradiance", title: "Irradiance checks",
           text: "Run checks computes the irradiance of the unconverted 1ω and 2ω light on each part " +
                 "of the drive's target through the pulses: the drive's power ratios on the beams " +
@@ -265,6 +345,22 @@ var pages = [
                 "pre-plasma, on a target with a foil, fails when the unconverted light reaches it on " +
                 "the active foil before the 3ω light does. A dot is gray when the checks are out of date." }
     ] },
+    { key: "diagnostics", title: "Diagnostics", items: [
+        { key: "diagnostics.record", title: "Recording diagnostics",
+          text: "Record ▸ Diagnostics (the Time tab) lists every diagnostic definition found, by kind: " +
+                "the built-ins, those in the search path's folders and those saved with the session. " +
+                "Each ticked one is recorded in the next drive history and shows as a chip beside the " +
+                "list; ✕ stops recording it. A definition saved with the session that differs from the " +
+                "search path's of the same id is marked * and is the one used; ↺ uses the search " +
+                "path's instead. A definition that does not build is dimmed, the reason in its tooltip." },
+        { key: "diagnostics.folders", title: "Folders and the search path",
+          text: "Diagnostics ▸ Folders… shows the search path: the built-in definitions are read " +
+                "first, then each folder's TOML files in order, and a definition with the id of an " +
+                "earlier one replaces it. Folders added there are saved for later sessions; the " +
+                "BRIAREUS_DIAGNOSTICS environment variable adds others (marked environment). Read again " +
+                "reads every folder again, and Problems lists each definition's errors and warnings with " +
+                "its file. A session saves the definitions it records, so it opens without the folders." }
+    ] },
     { key: "optimize", title: "Pointing optimization", items: [
         { key: "optimize.intro", title: "What is optimized",
           text: "Free pointing fields per cone, quad or beam within ± bounds around the beam " +
@@ -272,7 +368,15 @@ var pages = [
                 "L-BFGS-B and exact gradients, in the background. Canceling keeps the best design. " +
                 "The aims are free either in the chamber (z, r, tangential offset) or in each " +
                 "beam's aim frame (u, v, w: on the backlighter foil's frame, u and v across its " +
-                "face and w along its normal); a group shares its frame coordinates." }
+                "face and w along its normal); a group shares its frame coordinates." },
+        { key: "optimize.results", title: "The Optimization tab",
+          text: "The tab below the 3D view: the objective's values, the modes εₗ before and after, the " +
+                "clipping and the capsule clearance of the result, the foil spot, and each free " +
+                "parameter's start, optimized value and bounds (a value at a bound is marked). Apply to " +
+                "the beam table writes the result into the table. \"Inputs changed since\" marks a result " +
+                "computed for other beams, a drive or settings. Set it up and run it from Pointing " +
+                "optimization in the model tree's Analyses, or the toolbar's Optimize…; it needs a " +
+                "current drive." }
     ] },
     { key: "clearance", title: "Beam clearance", items: [
         { key: "clearance.intro", title: "The check",
@@ -283,7 +387,15 @@ var pages = [
                 "thresholds are engineering defaults (fail: 10¹² W/cm² or 10⁻³ of the beam power; " +
                 "review: 10⁹ W/cm² or 10⁻⁵)." },
         { key: "clearance.errors", title: "Envelope and errors",
-          text: "The errors and the sampling also apply to the TaLIS checks." }
+          text: "The errors and the sampling also apply to the TaLIS checks." },
+        { key: "clearance.results", title: "The Clearance tab",
+          text: "The tab below the 3D view: a summary line, the closest beam to each component (its " +
+                "worst-case and nominal clearance, the beam's power and the status), and a row per beam " +
+                "and component: the status, the worst-case and nominal clearance (mm), the power (TW) " +
+                "and the peak intensity on the component (W/cm²). Export CSV… writes the rows. " +
+                "\"Inputs changed since\" marks a report computed for other beams, target or settings. " +
+                "Set the check up and run it from Beam clearance in the model tree's Analyses, or the " +
+                "toolbar's Clearance…." }
     ] },
     { key: "sweep", title: "Placement sweep", items: [
         { key: "sweep.intro", title: "The sweep",
@@ -321,6 +433,23 @@ var pages = [
                 "with each rule's worst check. Right: every check, colored by status with its margin." }
     ] },
     { key: "view", title: "3D view", items: [
+        { key: "view.cutaway", title: "Cutaway",
+          text: "Cutaway (toolbar) removes part of the target from the drawing to show inside. Drawing " +
+                "only: every calculation sees the whole target, and a click in the removed part picks " +
+                "nothing there. A sector removes a slice of the given width about the x, y or z axis, " +
+                "centered on an azimuth, optionally between bounds along the axis; a plane removes the " +
+                "side its normal points to, through a point and moved by the offset along the normal. A " +
+                "plane can contain a line of sight (from TCC or the selected component, toward θ, φ or a " +
+                "beam port) and turn about it. Right-click the Cutaway button for the common cuts, Cut " +
+                "settings… and Components cut: by default the hohlraum parts' shells (the wall and the " +
+                "caps of the ends that are not open), not the entrance holes, lips or windows; that " +
+                "default follows the target as it changes." },
+        { key: "view.display", title: "Display modes",
+          text: "A component is drawn opaque, semi-transparent, as a wireframe or not at all (its " +
+                "properties, or its row's right-click menu in the model tree). Drawing only: an " +
+                "invisible component still takes part in every calculation it is included in; Include " +
+                "in calculations is separate. The model tree's boxes show or hide a part or an assembly " +
+                "with everything in it." },
         { key: "view.cut", title: "Cutaway angles",
           text: "Azimuth about z runs from +x toward +y, about x from +y toward +z, about y from +z toward +x." },
         { key: "view.image", title: "Maps and images",

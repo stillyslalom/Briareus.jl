@@ -1,11 +1,15 @@
 // The style's ComboBox at the window's density (see TextField.qml), its list as wide as
 // its widest entry so that no choice is clipped there (the box itself may show a short
-// `displayText`).
+// `displayText`). `tip` shows on hover while the list is closed.
 import QtQuick
 import QtQuick.Controls as T
 
 T.ComboBox {
     id: box
+    property string tip: ""
+    T.ToolTip.visible: tip !== "" && hovered && !popup.visible
+    T.ToolTip.delay: 400
+    T.ToolTip.text: tip
     topPadding: 2
     bottomPadding: 2
     implicitHeight: Math.max(26, implicitContentHeight + topPadding + bottomPadding)

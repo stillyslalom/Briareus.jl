@@ -78,11 +78,17 @@ Dialog {
                 }
                 Label { text: dialog.units[app.tfInput][index]; opacity: 0.7; Layout.preferredWidth: 28 }
                 Label { text: "→  " + dialog.names[app.tfOutput][index]; Layout.preferredWidth: 40 }
-                Label {
+                // read-only but selectable, to copy a result
+                TextEdit {
                     objectName: "tfOut" + index
                     text: app.tfOut[index]
+                    readOnly: true
+                    selectByMouse: true
+                    color: palette.windowText
+                    selectionColor: palette.highlight
+                    selectedTextColor: palette.highlightedText
                     font.family: "monospace"
-                    Layout.preferredWidth: 90
+                    Layout.preferredWidth: Math.max(90, implicitWidth)
                     horizontalAlignment: Text.AlignRight
                 }
                 Label { text: dialog.units[app.tfOutput][index]; opacity: 0.7 }

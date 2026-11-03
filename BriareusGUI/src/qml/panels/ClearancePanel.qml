@@ -13,18 +13,25 @@ ColumnLayout {
         if (s === "review") return "#d08a00"
         return "#2e9e44"
     }
-    Note {
+    RowLayout {
         visible: !app.rvHasReport
-        text: app.rvRunning ? "checked " + app.rvDone + " of " + app.rvTotal + " beams"
-              : "Set up the clearance check in Properties (select it in the model tree) and run it."
-        opacity: 1
+        spacing: 6
+        Note {
+            Layout.fillWidth: false
+            text: app.rvRunning ? "checked " + app.rvDone + " of " + app.rvTotal + " beams" : "No report yet: run Beam clearance"
+            opacity: 1
+        }
+        Info { topic: "clearance.results" }
     }
     RowLayout {
         visible: app.rvHasReport
         spacing: 8
-        Cell { text: app.rvBrief; font.weight: Font.DemiBold; Layout.fillWidth: true }
+        Cell { text: app.rvBrief; font.weight: Font.DemiBold; Layout.fillWidth: true; Layout.maximumWidth: implicitWidth }
+        Info { topic: "clearance.results" }
+        Item { Layout.fillWidth: true }
         Label { text: "inputs changed since"; visible: app.rvStale; color: "#d08a00" }
-        Button { text: "Export CSV…"; enabled: !app.rvRunning; onClicked: win.openClearanceExport() }
+        Button { text: "Export CSV…"; enabled: !app.rvRunning; onClicked: win.openClearanceExport()
+                 tip: "Write every beam–component row to a CSV file" }
     }
     Repeater {
         model: worstModel

@@ -148,3 +148,35 @@ const A = BriareusGUI
         end
     end
 end
+
+# The Help topics (qml/common/help.js) against the QML that shows them: every topic an ⓘ,
+# a section heading, the inspector's title or the Help screen names exists, every topic is
+# shown by one of them, and the topics of the survey's pages are there.
+@testset "Help topics" begin
+    qml = A.QML_DIR
+    js = read(joinpath(qml, "common", "help.js"), String)
+    keys_ = Set(m[1] for m in eachmatch(r"key: \"([a-z_]+\.[a-z_]+)\"", js))
+    refs = Set{String}()
+    for (dir, _, files) in walkdir(qml), f in files
+        endswith(f, ".qml") || continue
+        src = read(joinpath(dir, f), String)
+        for m in eachmatch(r"\b(?:topic|info):\s*([^;\n}]*)", src), k in eachmatch(r"\"([a-z_]+\.[a-z_]+)\"", m[1])
+            push!(refs, k[1])
+        end
+        # the inspector's title ⓘ: its `intro` (a task's is "<task>.intro")
+        if f == "Inspector.qml"
+            intro = match(r"property string intro: \{(.*?)\n    \}"s, src)[1]
+            union!(refs, (m[1] for m in eachmatch(r"return \"([a-z_]+\.[a-z_]+)\"", intro)))
+            union!(refs, (t * ".intro" for t in ("drive", "optimize", "clearance", "sweep", "talis")))
+        end
+    end
+    # the Time tab's ⓘ: the chart shown ("time." + app.timeChart)
+    union!(refs, ("time." * String(c) for c in A.Controllers.TIME_CHARTS))
+    @test isempty(setdiff(refs, keys_))                 # every topic shown exists
+    @test isempty(setdiff(keys_, refs))                 # every topic is shown somewhere
+    survey = ["time.pulses", "time.drive", "time.diagnostics", "time.energy", "time.retune", "time.images",
+              "diagnostics.record", "diagnostics.folders", "part.windows", "beams.intro", "beams.nodes",
+              "beams.table", "optimize.results", "clearance.results", "view.cutaway", "view.display",
+              "part.leh_closure"]
+    @test issubset(survey, keys_)
+end

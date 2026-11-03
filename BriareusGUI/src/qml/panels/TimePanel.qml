@@ -61,9 +61,12 @@ Item {
                 Layout.fillWidth: true
                 spacing: 6
                 Repeater {
-                    model: [{ key: "pulses", label: "Pulses" }, { key: "drive", label: "Drive history" },
-                            { key: "diagnostics", label: "Diagnostics" }, { key: "energy", label: "Energy" },
-                            { key: "irradiance", label: "Irradiance" }, { key: "retune", label: "Retune" }]
+                    model: [{ key: "pulses", label: "Pulses", tip: "Each beam group's laser power and the total (TW)" },
+                            { key: "drive", label: "Drive history", tip: "The capsule's or face's Tr (eV) and modes or uniformity (%) through the pulses" },
+                            { key: "diagnostics", label: "Diagnostics", tip: "Each recorded diagnostic's Tr (eV) and the intensity toward it (TW/sr)" },
+                            { key: "energy", label: "Energy", tip: "The laser energy delivered and where it went (kJ)" },
+                            { key: "irradiance", label: "Irradiance", tip: "The unconverted light's peak irradiance on each part against the plasma threshold (W/cm²)" },
+                            { key: "retune", label: "Retune", tip: "The latest retune's powers (TW) and the drive's mode or uniformity before and after (%)" }]
                     delegate: Button {
                         text: modelData.label
                         // as wide as the name (not the style's minimum), so that the row fits
@@ -72,6 +75,7 @@ Item {
                         flat: app.timeChart !== modelData.key
                         highlighted: app.timeChart === modelData.key
                         onClicked: Julia.br_time_chart(modelData.key)
+                        tip: modelData.tip
                     }
                 }
                 // as tall as the buttons (the style's own is taller, and sets the row's height)
@@ -79,32 +83,28 @@ Item {
                 Button {
                     text: "Pulse table…"
                     onClicked: pulseDialog.open()
-                    ToolTip.visible: hovered
-                    ToolTip.text: "Fire the beams with a pulse table (read_pulse_table); disabled beams stay off"
+                    tip: "Fire the beams with a pulse table (read_pulse_table); disabled beams stay off"
                 }
                 Button {
                     text: "N221204 shape"
                     onClicked: Julia.br_time_shape()
-                    ToolTip.visible: hovered
-                    ToolTip.text: "N221204's delivered pulse shape (Pak et al. 2024), each beam reaching its table power at the peak"
+                    tip: "N221204's delivered pulse shape (Pak et al. 2024), each beam reaching its table power at the peak"
                 }
                 Button {
                     text: app.timeChecking ? "Checking…" : "Run checks"
                     visible: app.timeChart === "irradiance"
                     enabled: app.timeHasPulses && !app.driveBuilding && !app.timeChecking
                     onClicked: Julia.br_time_checks()
-                    ToolTip.visible: hovered
-                    ToolTip.text: "Irradiance histories of the unconverted 1ω and 2ω light (unconverted_history) and the specular and pre-plasma checks against the plasma threshold (Drive properties)"
+                    tip: "Irradiance histories of the unconverted 1ω and 2ω light (unconverted_history) and the specular and pre-plasma checks against the plasma threshold (Drive properties)"
                 }
                 Button {
                     text: "Run history"
                     visible: !app.timeRunning && app.timeChart !== "irradiance"
                     enabled: app.timeHasPulses && !app.driveBuilding
                     onClicked: Julia.br_time_run()
-                    ToolTip.visible: hovered
-                    ToolTip.text: "Solve the drive at each time of the pulses with the drive's view factors (drive_history)"
+                    tip: "Solve the drive at each time of the pulses with the drive's view factors (drive_history)"
                 }
-                Button { text: "Cancel"; visible: app.timeRunning; onClicked: Julia.br_time_cancel() }
+                Button { text: "Cancel"; visible: app.timeRunning; onClicked: Julia.br_time_cancel(); tip: "Stop the history" }
             }
 
             RowLayout {
@@ -127,6 +127,7 @@ Item {
                     width: Math.min(implicitWidth, titleRow.width)
                     wrapMode: Text.WordWrap
                 }
+                Info { topic: "time." + app.timeChart }
                 Repeater {
                     model: app.timeChart === "irradiance" ? app.irrTexts.length : 0
                     delegate: Row {
@@ -143,7 +144,6 @@ Item {
                         }
                     }
                 }
-                Info { topic: "time.irradiance"; visible: app.timeChart === "irradiance" && app.irrTexts.length > 0 }
                 Label {
                     text: app.timeStatus
                     visible: text !== ""
@@ -184,12 +184,13 @@ Item {
                     id: timeKey
                     visible: app.timeEmpty === ""
                     Layout.alignment: Qt.AlignTop
-                    Layout.preferredWidth: 190
+                    Layout.maximumWidth: 260
                     spacing: 3
                     Repeater {
                         model: timeLegendModel
                         delegate: RowLayout {
                             id: entry
+                            Layout.fillWidth: true
                             spacing: 6
                             readonly property string lineStyle: model.style
                             readonly property string lineColor: model.color
@@ -205,7 +206,7 @@ Item {
                                     }
                                 }
                             }
-                            Label { text: model.label; font.pixelSize: 12 }
+                            Cell { text: model.label; font.pixelSize: 12; Layout.fillWidth: true }
                         }
                     }
                 }
@@ -238,6 +239,9 @@ Item {
                         snapMode: Slider.SnapAlways
                         enabled: !app.timeStale
                         onMoved: Julia.br_time_step(value)
+                        ToolTip.visible: hovered && !pressed
+                        ToolTip.delay: 400
+                        ToolTip.text: "The step of the history the 3D view shows (a click or a drag on the chart sets it too)"
                     }
                     // follows the cursor however it moved (a click on the chart, Now)
                     Binding {
@@ -246,13 +250,15 @@ Item {
                         value: app.timeStep > 0 ? app.timeStep : 1
                         when: !stepSlider.pressed
                     }
+                    // at least as wide as the usual labels, so that the slider keeps its length
                     Label {
                         text: app.timeLabel !== "" ? app.timeLabel : "the table's powers"
-                        Layout.preferredWidth: 120
+                        Layout.preferredWidth: Math.max(120, implicitWidth)
                         font.weight: app.timeLabel !== "" ? Font.DemiBold : Font.Normal
                     }
                     Button { text: "Now"; enabled: app.timeLabel !== ""; onClicked: Julia.br_time_now()
-                             ToolTip.visible: hovered; ToolTip.text: "Back to the drive at the beam table's powers" }
+                             tip: "Back to the drive at the beam table's powers" }
+                    Info { topic: "time.cursor" }
                 }
                 ToolSeparator { visible: app.timeHasHistory && bottomRow.oneLine; Layout.preferredHeight: 26 }
                 Row {
@@ -319,6 +325,7 @@ Item {
                         ToolTip.visible: hovered
                         ToolTip.text: "Diagnostic definition folders, and the problems found in them"
                     }
+                    Info { topic: "diagnostics.record"; height: 26; verticalAlignment: Text.AlignVCenter }
                     ToolSeparator { visible: imageRepeater.count > 0; height: 26 }
                     Button {
                         id: imagesButton
@@ -329,6 +336,7 @@ Item {
                         ToolTip.text: "The images the history holds of its recorded imagers; each opens in the image view, " +
                                       "zoomed to its region with signal (Ctrl + Shift + click there: the whole field; Ctrl + click: back)"
                     }
+                    Info { topic: "time.images"; visible: imageRepeater.count > 0; height: 26; verticalAlignment: Text.AlignVCenter }
                 }
             }
             // the images of the recorded imagers, one entry each (opens above its button)
@@ -389,6 +397,7 @@ Item {
                         Repeater {
                             model: diagModel
                             delegate: Column {
+                                id: definition
                                 required property string id
                                 required property string name
                                 required property bool ticked
@@ -411,8 +420,7 @@ Item {
                                         checked: ticked
                                         enabled: usable
                                         onToggled: Julia.br_time_diagnostic(id, checked)
-                                        ToolTip.visible: hovered
-                                        ToolTip.text: tip
+                                        tip: definition.tip
                                     }
                                     ToolButton {
                                         visible: changed

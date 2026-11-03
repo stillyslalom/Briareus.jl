@@ -295,18 +295,8 @@ Items 10–15 follow the 2026-10-22 literature review against Kritcher et al. 20
       canvas only; a beam within the pick distance wins over a nearer surface.
 24. **GUI: Help, tooltips and layout** *(survey; the rule: explanations in tooltips, ⓘ and
     Help, never page paragraphs)*.
-    - Help missing: the Time charts and Images list, diagnostic folders, diagnostic
-      windows, beams and groups, the result panels, cutaway, display modes, LEH closure;
-      Help has no search.
-    - Controls without tooltips: Sweep, Clearance, TaLIS and Beams properties nearly
-      throughout, parts of Optimize, Window, Drive and Part properties, the toolbar's beam
-      style and cut popup, the Time panel's chart buttons, the retune dialog.
-    - Page text against the rule: the retune dialog's stay hint, the cut popup's notes,
-      DriveProps' long sentence, the empty-state paragraphs of the result panels.
-    - Clipped text: the status bar elides long notes with no tooltip; fixed-width labels
-      in Clearance, TaLIS, the Time and Sweep panels and the retune dialog.
-    - Duplicated QML: the Move-along row (three copies), the role rows of Clearance and
-      TaLIS.
+    - Controls outside the survey's list still without tooltips: Target, Component,
+      Frames and placement-step properties, the model tree's dialogs, Look from port.
 25. **GUI density and layout (user review, 2026-10-29).** Aim toward Office-ribbon
     density, not all the way; the 3D view first. *Left:* the next pass on what still takes
     room once the user has used it. Principle: frequent commands near at hand,

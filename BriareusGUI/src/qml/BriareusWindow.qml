@@ -359,7 +359,21 @@ ApplicationWindow {
             spacing: 10
             BusyIndicator { running: app.busy !== ""; visible: running; Layout.preferredHeight: 18; Layout.preferredWidth: 18 }
             Label { text: app.busy; visible: text !== ""; color: "#2f7fd8" }
-            Label { text: app.status; elide: Text.ElideRight; Layout.fillWidth: true; opacity: 0.8 }
+            // the latest note, cut short to the bar: the whole of it on hover
+            Label {
+                id: statusLine
+                text: app.status
+                elide: Text.ElideRight
+                Layout.fillWidth: true
+                opacity: 0.8
+                HoverHandler { id: statusHover }
+                ToolTip {
+                    visible: statusLine.truncated && statusHover.hovered
+                    delay: 300
+                    text: statusLine.text
+                    width: Math.min(implicitWidth, 640)
+                }
+            }
             Label {
                 // the gestures of the view on the canvas: the 3D view's, or a map's or image's
                 text: app.driveView === "scene" || app.sideView
@@ -368,6 +382,7 @@ ApplicationWindow {
                 opacity: 0.55
                 font.pixelSize: 11
             }
+            Info { topic: "view.image"; visible: !(app.driveView === "scene" || app.sideView); font.pixelSize: 11 }
         }
     }
 
@@ -607,11 +622,15 @@ ApplicationWindow {
             GridLayout {
                 columns: 3
                 Label { text: "Reference pulses" }
-                TextField { id: retuneTable; Layout.preferredWidth: 340; placeholderText: "pulse table (CSV)" }
-                Button { text: "Browse…"; onClicked: { retunePick.saving = false; retunePick.open() } }
+                TextField { id: retuneTable; Layout.preferredWidth: 340; placeholderText: "pulse table (CSV)"
+                            tip: text !== "" ? text : "The pulses of the reference shot, fired with every beam of the table" }
+                Button { text: "Browse…"; onClicked: { retunePick.saving = false; retunePick.open() }
+                         tip: "Choose the reference pulse table" }
                 Label { text: "Retuned pulses" }
-                TextField { id: retuneOut; Layout.preferredWidth: 340; placeholderText: "file to write" }
-                Button { text: "Browse…"; onClicked: { retunePick.saving = true; retunePick.open() } }
+                TextField { id: retuneOut; Layout.preferredWidth: 340; placeholderText: "file to write"
+                            tip: text !== "" ? text : "The pulse table the retuned powers are written to" }
+                Button { text: "Browse…"; onClicked: { retunePick.saving = true; retunePick.open() }
+                         tip: "Choose the file to write" }
                 Label { text: "One power per" }
                 ComboBox {
                     id: retuneBy
@@ -620,14 +639,17 @@ ApplicationWindow {
                     valueRole: "key"
                     model: [{ label: "quad", key: "quad" }, { label: "cone group", key: "group" },
                             { label: "beam", key: "beam" }]
+                    tip: "The beams of one quad, cone group or beam share one retuned power at each time"
                 }
                 Item { width: 1 }
                 Label { text: "Power limit (× reference)" }
-                TextField { id: retuneCap; text: "1.3"; Layout.preferredWidth: 100 }
+                TextField { id: retuneCap; text: "1.3"; Layout.preferredWidth: 100
+                            tip: "Each retuned power stays within this multiple of its reference power" }
                 Item { width: 1 }
                 Label { text: "Stay near the reference" }
-                TextField { id: retuneStay; text: "0"; Layout.preferredWidth: 100 }
-                Label { text: "weight; 1e-4 keeps most quads off their limit"; color: "gray" }
+                TextField { id: retuneStay; text: "0"; Layout.preferredWidth: 100
+                            tip: "The weight on the retuned powers' departure from the reference powers; 1e-4 keeps most quads off their limit" }
+                Item { width: 1 }
             }
             RowLayout {
                 Button {
@@ -635,9 +657,11 @@ ApplicationWindow {
                     enabled: app.driveCurrent && !app.retuneRunning && retuneTable.text !== "" && retuneOut.text !== ""
                     onClicked: Julia.br_retune(retuneTable.text, retuneOut.text, retuneBy.currentValue,
                                                retuneCap.text, retuneStay.text)
+                    tip: app.driveCurrent ? "Retune in the background; the Time tab's Retune chart shows the result"
+                                          : "Compute the drive first"
                 }
                 BusyIndicator { running: app.retuneRunning; visible: running; Layout.preferredHeight: 24; Layout.preferredWidth: 24 }
-                Label { text: app.retuneStatus; Layout.preferredWidth: 400; wrapMode: Text.WordWrap }
+                Label { text: app.retuneStatus; Layout.fillWidth: true; Layout.maximumWidth: 400; wrapMode: Text.WordWrap }
             }
         }
     }
@@ -697,9 +721,10 @@ ApplicationWindow {
             spacing: 4
             RowLayout {
                 SectionLabel { text: "Folders"; Layout.fillWidth: true }
-                Info { tip: "Read after the built-in definitions, in this order; a definition with the id of an earlier one replaces it. Saved folders are kept for later sessions; the others come from BRIAREUS_DIAGNOSTICS." }
-                Button { text: "Add folder…"; onClicked: diagFolderDialog.open() }
-                Button { text: "Read again"; onClicked: Julia.br_diag_reload() }
+                Info { topic: "diagnostics.folders" }
+                Button { text: "Add folder…"; onClicked: diagFolderDialog.open()
+                         tip: "A folder of diagnostic definitions (.toml), read after those listed and saved for later sessions" }
+                Button { text: "Read again"; onClicked: Julia.br_diag_reload(); tip: "Read every folder's definitions again" }
             }
             Label { visible: app.diagFolders === 0; text: "Built-in definitions only"; opacity: 0.6 }
             Repeater {
@@ -712,7 +737,8 @@ ApplicationWindow {
                             ToolTip.visible: hov.hovered; ToolTip.text: path
                             HoverHandler { id: hov } }
                     Label { visible: !saved; text: "environment"; opacity: 0.6 }
-                    Button { visible: saved; text: "Remove"; flat: true; onClicked: Julia.br_diag_remove_folder(path) }
+                    Button { visible: saved; text: "Remove"; flat: true; onClicked: Julia.br_diag_remove_folder(path)
+                             tip: "Take this folder off the search path" }
                 }
             }
             SectionLabel { text: "Problems (" + app.diagIssues + ")" }

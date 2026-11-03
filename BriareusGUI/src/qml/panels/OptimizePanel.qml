@@ -7,12 +7,19 @@ import jlqml
 import "../common"
 
 ScrollPage {
-    Note {
-        visible: !app.optHasResult
-        text: app.optRunning ? app.optProgress : "Set up the optimization in Properties (select it in the model tree) and run it."
-        opacity: 1
+    RowLayout {
+        spacing: 6
+        Layout.fillWidth: true
+        Note {
+            visible: !app.optHasResult
+            Layout.fillWidth: false
+            text: app.optRunning ? app.optProgress : "No result yet: run Pointing optimization"
+            opacity: 1
+        }
+        Label { text: app.optValues; visible: app.optHasResult; wrapMode: Text.WordWrap; Layout.fillWidth: true; font.weight: Font.DemiBold }
+        Info { topic: "optimize.results"; Layout.alignment: Qt.AlignTop }
+        Item { Layout.fillWidth: !app.optHasResult }
     }
-    Label { text: app.optValues; visible: app.optHasResult; wrapMode: Text.WordWrap; Layout.fillWidth: true; font.weight: Font.DemiBold }
     Label { text: "inputs changed since"; visible: app.optHasResult && app.optStale; color: "#d08a00" }
     Note { text: app.optClipped; visible: app.optHasResult }
     Note { text: app.optSpot }
@@ -85,5 +92,6 @@ ScrollPage {
         text: app.optApplied ? "Applied to the beam table" : "Apply to the beam table"
         enabled: !app.optApplied && !app.optRunning
         onClicked: Julia.br_opt_accept()
+        tip: "Write the optimized pointing into the beam table"
     }
 }

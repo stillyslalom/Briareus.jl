@@ -213,13 +213,38 @@ mutable struct TreeItem
     matrix::String                                 # a beam row's 2 × 3 dots, "" for none
 end
 
-# An editable field of the inspector: key, label, unit, value as text.
+# An editable field of the inspector: key, label, unit, value as text, and its tooltip
+# (`_FIELD_TIPS`, "" for none).
 mutable struct FieldRow
     key::String
     label::String
     unit::String
     value::String
+    tip::String
 end
+FieldRow(key, label, unit, value) = FieldRow(key, label, unit, value, get(_FIELD_TIPS, String(key), ""))
+
+# The tooltips of the part, assembly and frame fields, by key.
+const _FIELD_TIPS = Dict(
+    "x" => "In the frame it is placed in", "y" => "In the frame it is placed in",
+    "z" => "In the frame it is placed in",
+    "pos_r" => "Distance from the placement frame's z axis (cylindrical) or origin (spherical)",
+    "pos_phi" => "Azimuth about the placement frame's z, from its +x",
+    "pos_theta" => "Polar angle from the placement frame's +z",
+    "theta" => "The polar angle the axis (local z) is tilted to, after the rotation about it",
+    "phi" => "The azimuth the axis (local z) is tilted toward",
+    "rotation" => "The turn about the axis (local z), applied first",
+    "albedo" => "The x-ray albedo: the fraction of the incident x-ray flux re-emitted",
+    "conversion" => "The fraction of the absorbed laser power converted to x-rays",
+    "h" => "The mesh element size of this part; 0: the target's (Target ▸ Mesh)",
+    "scale" => "The mesh file's length unit in mm (25.4 for a file in inches)",
+    "leh_radius" => "The radius of the entrance holes (the top's, and the bottom's unless set)",
+    "bottom_leh_radius" => "The bottom entrance hole's radius; 0: the LEH radius",
+    "end_radius" => "The radius of the frustraum's top end (and of the bottom's unless set)",
+    "bottom_end_radius" => "The radius of the frustraum's bottom end; 0: the end radius",
+    "leh_closure_time" => "When the lips start to close to x-rays",
+    "leh_closure_width" => "How long the lips take to close, from the closure time",
+    "leh_open_fraction" => "The radius each entrance hole stays open to, as a fraction of its radius")
 
 # A placement step's heading or field: `kind` head, number, choice or check; `choices`
 # joined by "|"; `pick` the chosen index, or 1 for a checked box.

@@ -15,6 +15,7 @@ ColumnLayout {
             highlighted: !app.driveCurrent
             enabled: !app.driveBuilding
             onClicked: Julia.br_build()
+            tip: "View factors, the laser deposition operator and the flux response, then the drive (Ctrl+R)"
         }
         BusyIndicator {
             running: app.driveBuilding || app.driveEvaluating
@@ -25,8 +26,9 @@ ColumnLayout {
     }
     Note {
         text: app.driveBuilding ? app.driveStatus + " " + app.driveElapsed :
-              app.driveStale ? "The target, the beam ports, the cavity or the beam model changed since the drive was computed." :
+              app.driveStale ? "Out of date: compute again" :
               app.driveStatus
+        tip: app.driveStale && !app.driveBuilding ? "The target, the beam ports, the cavity or the beam model changed since the drive was computed" : ""
         color: app.driveStale ? "#d08a00" : palette.windowText
     }
 
@@ -38,6 +40,7 @@ ColumnLayout {
                 { text: "VisRad profile", value: "visrad" }]
         currentIndex: Math.max(0, ["fcone", "visrad"].indexOf(app.beamModel))
         onActivated: Julia.br_beam_model(currentValue)
+        tip: "How each beam deposits its light: the f-cone sum, or VisRad's profile cut at each beam's envelope"
     }
 
     SectionLabel { text: "Cavity"; info: "drive.cavity" }
@@ -45,6 +48,7 @@ ColumnLayout {
         text: "Compute the drive on the cavity around a point"
         checked: app.driveCavity
         onToggled: Julia.br_cavity(checked)
+        tip: "Only the elements that bound the free space around the point take part in the view factors"
     }
     PropRow {
         visible: app.driveCavity
@@ -70,6 +74,7 @@ ColumnLayout {
                     { text: "Incident x-ray flux", value: "incident" }]
             currentIndex: Math.max(0, ["component", "laser", "radiosity", "incident"].indexOf(app.colorBy))
             onActivated: Julia.br_set_color(currentValue)
+            tip: "Components: each its own color; or a drive field per element (W/cm²), computing the drive when needed"
         }
     }
     Flow {
@@ -78,6 +83,7 @@ ColumnLayout {
         Button {
             text: "3D target"; checkable: true; checked: app.driveView === "scene"
             onClicked: Julia.br_set_view("scene")
+            tip: "The 3D view of the target"
         }
         Button {
             text: app.observedKind === "face" ? "Observed face" :
@@ -86,6 +92,7 @@ ColumnLayout {
             checked: app.driveView === "map"
             enabled: app.driveHasResult && (app.hasCapsule || app.hasFoil)
             onClicked: Julia.br_set_view("map")
+            tip: "The observed surface's x-ray flux map (the capsule's θ–φ map or the flat face's), or the foil's laser irradiance"
         }
     }
     RowLayout {
@@ -119,6 +126,7 @@ ColumnLayout {
     }
     PropRow {
         label: "2ω power ratio"; value: app.ucRatio2; unit: "of each beam's 3ω power (empty: off)"
+        tip: "The 2ω power as a fraction of the 3ω power, on the beams whose 2ω light takes part; no default"
         onEdited: (text) => Julia.br_unconverted_ratio(2, text)
     }
     PropRow {
@@ -138,6 +146,7 @@ ColumnLayout {
     }
     PropRow {
         label: "Prepulse to"; value: app.ppStop; unit: "ns"
+        tip: "The end of the prepulse window"
         onEdited: (text) => Julia.br_prepulse(4, text)
     }
     PropRow {

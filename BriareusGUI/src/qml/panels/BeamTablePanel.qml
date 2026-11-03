@@ -26,7 +26,9 @@ ColumnLayout {
                                 : [{ text: "per cone", value: "group" }, { text: "per beam", value: "beam" }]
             currentIndex: Math.max(0, (app.hasQuads ? ["group", "quad", "beam"] : ["group", "beam"]).indexOf(app.beamsBy))
             onActivated: Julia.br_set_grouping(currentValue)
+            tip: "A row per cone, per quad or per beam"
         }
+        Info { topic: "beams.table" }
         Cell { text: app.beamsSummary; opacity: 0.7; Layout.fillWidth: true }
     }
     ErrorText { text: app.beamsError }

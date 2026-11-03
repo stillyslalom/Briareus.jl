@@ -61,6 +61,7 @@ ColumnLayout {
         label: "Name"
         value: app.partName
         fieldWidth: 140
+        tip: "Letters, digits and _; what is placed in its frame, aimed in it or given to it follows a rename"
         onEdited: (text) => Julia.br_edit_part("name", text)
     }
     RowLayout {
@@ -93,11 +94,13 @@ ColumnLayout {
         text: "Thin film: left out of the drive's cavity (a capsule tent, an LEH window)"
         checked: app.partFilm
         onToggled: Julia.br_part_film(checked)
+        tip: "A thin film modeled as a solid seals the cavity point into a pocket unless it is left out of the cavity"
     }
     CheckLine {
         text: "Include in calculations (laser, x-ray drive, clearance)"
         checked: app.compIncluded
         onToggled: Julia.br_node_include(app.selection, checked)
+        tip: "Left out, the part is drawn but takes no part in any calculation and gives up its role"
     }
     RowLayout {
         Label { text: "Placed in"; Layout.preferredWidth: 110 }
@@ -107,57 +110,16 @@ ColumnLayout {
             // -1 after a rejected change: show the part's frame again
             currentIndex: app.partFrame < 0 ? 0 : app.partFrame
             onActivated: (index) => Julia.br_part_frame(index)
+            tip: "The frame the part is placed in: TCC, a user frame, another part's or a piece's (it stays where it is)"
         }
         Info { topic: "part.placement" }
     }
-    // Move along [axis] of [frame] by [Δ] [−][+]: each click one edit (undone as one)
-    RowLayout {
-        id: moveRow
-        objectName: "moveRow"
-        spacing: 4
-        Layout.fillWidth: true
-        Label { text: "Move along"; Layout.preferredWidth: 110 }
-        ComboBox {
-            Layout.preferredWidth: 52
-            model: ["x", "y", "z"]
-            currentIndex: app.moveAxis
-            onActivated: (index) => Julia.br_move_axis(index)
-        }
-        Label { text: "of" }
-        ComboBox {
-            Layout.fillWidth: true
-            Layout.minimumWidth: 90
-            model: app.moveFrames
-            currentIndex: app.moveFrame
-            onActivated: (index) => Julia.br_move_frame(index)
-            ToolTip.visible: hovered
-            ToolTip.delay: 400
-            ToolTip.text: "The frame whose axis the part moves along: TCC, a part's own (its axis is z) or a piece's"
-        }
-    }
-    RowLayout {
-        spacing: 4
-        Layout.fillWidth: true
-        Label { text: "by"; Layout.preferredWidth: 110; horizontalAlignment: Text.AlignRight }
-        TextField {
-            Layout.preferredWidth: 64
-            text: app.moveStep
-            selectByMouse: true
-            onEditingFinished: if (text !== app.moveStep) Julia.br_move_step(text)
-        }
-        Label { text: "mm"; opacity: 0.7 }
-        Button { text: "−"; Layout.preferredWidth: 34; onClicked: Julia.br_nudge_part(-1)
-                 ToolTip.visible: hovered; ToolTip.text: "Move back along the axis (one edit)" }
-        Button { text: "+"; Layout.preferredWidth: 34; onClicked: Julia.br_nudge_part(1)
-                 ToolTip.visible: hovered; ToolTip.text: "Move forward along the axis (one edit)" }
-        Info { topic: "part.triad" }
-    }
+    MoveAlongRow { what: "the part" }
     Button {
         text: "Sweep along this axis…"
         Layout.leftMargin: 114
         onClicked: Julia.br_sweep_part()
-        ToolTip.visible: hovered
-        ToolTip.text: "Step the part along this axis and check each step (clearance, line of sight, capture)"
+        tip: "Step the part along this axis and check each step (clearance, line of sight, capture)"
     }
     RowLayout {
         Label { text: "Position in"; Layout.preferredWidth: 110 }
@@ -166,6 +128,7 @@ ColumnLayout {
             model: ["Cartesian (x, y, z)", "Cylindrical (r, φ, z)", "Spherical (r, θ, φ)"]
             currentIndex: app.partCoords
             onActivated: (index) => Julia.br_part_coords(index)
+            tip: "The coordinates of the part's position fields, in the frame it is placed in (cylindrical and spherical about its z)"
         }
     }
     // a hohlraum part's wall profile: one radius, a frustraum, or a radius per break
@@ -237,7 +200,8 @@ ColumnLayout {
         delegate: PropRow {
             label: model.label
             value: model.value
-            unit: model.unit === "" ? "fraction" : model.unit
+            unit: model.unit
+            tip: model.tip
             onEdited: (text) => Julia.br_edit_part(model.key, text)
         }
     }
@@ -267,13 +231,17 @@ ColumnLayout {
         ToolTip.visible: hovered
         ToolTip.text: "A closed 1 mm diagnostic window in this hohlraum's wall at its midplane, where it fits"
     }
-    CheckLine {
+    RowLayout {
         visible: hohlraum
-        text: "Closing entrance holes"
-        checked: app.partLehClosure
-        onToggled: Julia.br_edit_part("leh_closure", checked ? "1" : "0")
-        tip: "Plasma closes each LEH to x-rays down to the open radius during the pulse; " +
-             "laser light still passes. Closed, the lip re-emits like the wall"
+        Layout.fillWidth: true
+        CheckLine {
+            text: "Closing entrance holes"
+            checked: app.partLehClosure
+            onToggled: Julia.br_edit_part("leh_closure", checked ? "1" : "0")
+            tip: "Plasma closes each LEH to x-rays down to the open radius during the pulse; " +
+                 "laser light still passes. Closed, the lip re-emits like the wall"
+        }
+        Info { topic: "part.leh_closure" }
     }
     CheckLine {
         visible: app.partKind === "Sphere"
@@ -304,5 +272,5 @@ ColumnLayout {
     }
     DisplayRow { visible: !hohlraum }      // (a hohlraum's pieces have their own, in the tree)
     ErrorText { text: app.targetError }
-    Button { text: "Remove part"; onClicked: Julia.br_remove_selected() }
+    Button { text: "Remove part"; onClicked: Julia.br_remove_selected(); tip: "Remove the selected parts (Edit ▸ Undo brings them back)" }
 }

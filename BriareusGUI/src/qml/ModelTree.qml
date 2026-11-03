@@ -26,6 +26,8 @@ Pane {
             Layout.rightMargin: 8
             Layout.topMargin: 6
             Label { text: "Model"; font.pixelSize: 15; font.weight: Font.DemiBold }
+            Info { topic: "assembly.commands" }
+            Item { Layout.fillWidth: app.selectionCount <= 1 }
             Label {
                 visible: app.selectionCount > 1
                 text: app.selectionCount + " selected"

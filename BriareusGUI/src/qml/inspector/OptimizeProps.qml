@@ -22,19 +22,20 @@ ColumnLayout {
                                     : [{ text: "cone", value: "group" }, { text: "beam", value: "beam" }]
                 currentIndex: Math.max(0, (app.hasQuads ? ["group", "quad", "beam"] : ["group", "beam"]).indexOf(app.optBy))
                 onActivated: Julia.br_opt_set_by(currentValue)
+                tip: "One set of free fields per cone, per quad or per beam: the beams of one share their values"
             }
         }
 
         SectionLabel { text: "Free fields and bounds" }
         Repeater {
-            model: [{ key: "z", label: "Aim z (chamber)", unit: "± mm" },
-                    { key: "r", label: "Aim r (chamber)", unit: "± mm" },
-                    { key: "phi", label: "Tangential offset", unit: "± mm" },
-                    { key: "u", label: "Aim u (frame x)", unit: "± mm in the aim frame" },
-                    { key: "v", label: "Aim v (frame y)", unit: "± mm in the aim frame" },
-                    { key: "w", label: "Aim w (frame z)", unit: "± mm in the aim frame" },
-                    { key: "defocus", label: "Defocus", unit: "± mm" },
-                    { key: "power", label: "Power", unit: "± fraction" }]
+            model: [{ key: "z", label: "Aim z (chamber)", unit: "± mm", tip: "The aim's z, free within ± this many mm of the beam table's value" },
+                    { key: "r", label: "Aim r (chamber)", unit: "± mm", tip: "The aim's radial offset, free within ± this many mm of the beam table's value" },
+                    { key: "phi", label: "Tangential offset", unit: "± mm", tip: "The aim's tangential offset, free within ± this many mm of the beam table's value" },
+                    { key: "u", label: "Aim u (frame x)", unit: "± mm in the aim frame", tip: "The aim along its frame's x (on a foil's frame, across its face)" },
+                    { key: "v", label: "Aim v (frame y)", unit: "± mm in the aim frame", tip: "The aim along its frame's y (on a foil's frame, across its face)" },
+                    { key: "w", label: "Aim w (frame z)", unit: "± mm in the aim frame", tip: "The aim along its frame's z (on a foil's frame, along its normal)" },
+                    { key: "defocus", label: "Defocus", unit: "± mm", tip: "The defocus, free within ± this many mm of the beam table's value" },
+                    { key: "power", label: "Power", unit: "± fraction of the start", tip: "The power, free within ± this fraction of the beam table's" }]
             delegate: PropRow {
                 check: true
                 label: modelData.label
@@ -43,6 +44,7 @@ ColumnLayout {
                 onToggled: (on) => Julia.br_opt_free(modelData.key, on)
                 value: app["optDelta_" + modelData.key]
                 unit: modelData.unit
+                tip: modelData.tip
                 onEdited: (text) => Julia.br_opt_edit(modelData.key, text)
             }
         }
@@ -56,11 +58,13 @@ ColumnLayout {
                     { text: "Foil spot uniformity", value: "irradiance" }]
             currentIndex: Math.max(0, ["legendre", "ylm", "irradiance"].indexOf(app.optObjective))
             onActivated: Julia.br_opt_objective(currentValue)
+            tip: "Axisymmetric: the weighted (Pₗ/P₀)² of the capsule flux; 3D: the weighted rotation-invariant mode " +
+                 "power over all m (a dropped quad); foil: the spot's RMS nonuniformity plus the spill"
         }
         RowLayout {
             visible: app.optObjective !== "irradiance"
             spacing: 4
-            Label { text: "Mode weights"; Layout.preferredWidth: 100 }
+            Cell { text: "Mode weights"; Layout.preferredWidth: 100; tip: "The weight of each degree ℓ in the objective (0: left out)" }
             Repeater {
                 model: [1, 2, 3, 4]
                 delegate: RowLayout {
@@ -71,6 +75,7 @@ ColumnLayout {
                         text: app["optW" + modelData]
                         onEditingFinished: if (text !== app["optW" + modelData])
                                                Julia.br_opt_edit("w" + modelData, text)
+                        tip: "The weight of mode ℓ = " + modelData + " (0: left out)"
                     }
                 }
             }
@@ -80,6 +85,7 @@ ColumnLayout {
             text: "Hold the mean capsule drive"
             checked: app.optHold
             onToggled: Julia.br_opt_hold(checked)
+            tip: "Keep the capsule's mean drive at its start value"
         }
         PropRow {
             visible: app.optObjective !== "irradiance" && app.observedKind === "capsule"
@@ -113,6 +119,7 @@ ColumnLayout {
             label: "Spill weight"
             value: app.optSpill
             unit: "power outside the spot"
+            tip: "The weight on the squared fraction of the power that falls outside the spot radius"
             onEdited: (text) => Julia.br_opt_edit("spill", text)
         }
 
@@ -121,6 +128,7 @@ ColumnLayout {
             label: "Iterations"
             value: "" + app.optIterations
             unit: "L-BFGS-B iterations"
+            tip: "The most iterations of the optimizer"
             onEdited: (text) => Julia.br_opt_edit("iterations", text)
         }
         PropRow {
@@ -139,12 +147,15 @@ ColumnLayout {
             highlighted: true
             enabled: !app.optRunning && app.driveCurrent
             onClicked: Julia.br_opt_start()
+            tip: "Run the optimization in the background; the result is in the Optimization tab"
         }
-        Button { text: "Cancel"; enabled: app.optRunning; onClicked: Julia.br_opt_cancel() }
+        Button { text: "Cancel"; enabled: app.optRunning; onClicked: Julia.br_opt_cancel()
+                 tip: "Stop the optimization and keep the best design so far" }
         Button {
             text: app.optApplied ? "Applied" : "Apply result"
             enabled: app.optHasResult && !app.optApplied && !app.optRunning
             onClicked: Julia.br_opt_accept()
+            tip: "Write the optimized pointing into the beam table"
         }
     }
     Note {

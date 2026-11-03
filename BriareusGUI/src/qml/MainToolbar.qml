@@ -121,9 +121,13 @@ ToolBar {
                 ColumnLayout {
                     spacing: 6
                     RowLayout {
-                        Label { text: "Cut"; font.bold: true; Layout.fillWidth: true }
-                        RadioButton { text: "Sector"; checked: app.cutKind === "sector"; onToggled: if (checked) Julia.br_cut_kind("sector") }
-                        RadioButton { text: "Plane"; checked: app.cutKind === "plane"; onToggled: if (checked) Julia.br_cut_kind("plane") }
+                        Label { text: "Cut"; font.bold: true }
+                        Info { topic: "view.cutaway" }
+                        Item { Layout.fillWidth: true }
+                        RadioButton { text: "Sector"; checked: app.cutKind === "sector"; onToggled: if (checked) Julia.br_cut_kind("sector")
+                                      ToolTip.visible: hovered; ToolTip.delay: 400; ToolTip.text: "Remove a slice about a coordinate axis" }
+                        RadioButton { text: "Plane"; checked: app.cutKind === "plane"; onToggled: if (checked) Julia.br_cut_kind("plane")
+                                      ToolTip.visible: hovered; ToolTip.delay: 400; ToolTip.text: "Remove the side a plane's normal points to" }
                     }
                     ColumnLayout {
                         visible: app.cutKind === "sector"
@@ -137,6 +141,9 @@ ToolBar {
                                     text: modelData
                                     checked: app.cutAxis === modelData
                                     onToggled: if (checked) Julia.br_cut_axis(modelData)
+                                    ToolTip.visible: hovered
+                                    ToolTip.delay: 400
+                                    ToolTip.text: "The slice turns about the chamber's " + modelData + " axis"
                                 }
                             }
                         }
@@ -147,8 +154,12 @@ ToolBar {
                                 value: app.cutAzimuth
                                 Layout.preferredWidth: 160
                                 onMoved: Julia.br_cut_azimuth(value)
+                                ToolTip.visible: hovered && !pressed
+                                ToolTip.delay: 400
+                                ToolTip.text: "The azimuth the removed slice is centered on (°)"
                             }
                             Label { text: Math.round(app.cutAzimuth) + "°"; Layout.preferredWidth: 40 }
+                            Info { topic: "view.cut" }
                         }
                         RowLayout {
                             Label { text: "Width"; Layout.preferredWidth: 140 }
@@ -157,47 +168,52 @@ ToolBar {
                                 value: app.cutWidth
                                 Layout.preferredWidth: 160
                                 onMoved: Julia.br_cut_width(value)
+                                ToolTip.visible: hovered && !pressed
+                                ToolTip.delay: 400
+                                ToolTip.text: "The azimuthal width of the removed slice (°)"
                             }
                             Label { text: Math.round(app.cutWidth) + "°"; Layout.preferredWidth: 40 }
                         }
                         PropRow {
                             label: "From (along the axis)"; value: app.cutLo; unit: "mm (empty: no bound)"
+                            tip: "The slice's lower bound along the axis"
                             onEdited: (text) => Julia.br_cut_range(text, app.cutHi)
                         }
                         PropRow {
                             label: "To"; value: app.cutHi; unit: "mm (empty: no bound)"
+                            tip: "The slice's upper bound along the axis"
                             onEdited: (text) => Julia.br_cut_range(app.cutLo, text)
-                        }
-                        RowLayout {
-                            Label { text: "Azimuth directions"; opacity: 0.72 }
-                            Info { topic: "view.cut" }
                         }
                     }
                     ColumnLayout {
                         visible: app.cutKind === "plane"
                         spacing: 4
                         RowLayout {
-                            Label { text: "Normal"; Layout.preferredWidth: 140 }
-                            Button { text: "x"; implicitWidth: 36; onClicked: Julia.br_cut_plane("x") }
-                            Button { text: "y"; implicitWidth: 36; onClicked: Julia.br_cut_plane("y") }
-                            Button { text: "z"; implicitWidth: 36; onClicked: Julia.br_cut_plane("z") }
-                            Button { text: "View"; onClicked: Julia.br_cut_plane("view") }
-                            Button { text: "Flip"; onClicked: Julia.br_cut_plane("flip") }
+                            Cell { text: "Normal"; Layout.preferredWidth: 140
+                                   tip: "The cut removes the side the normal (" + app.cutNormal + ") points to" }
+                            Button { text: "x"; implicitWidth: 36; onClicked: Julia.br_cut_plane("x"); tip: "Normal along +x: removes +x" }
+                            Button { text: "y"; implicitWidth: 36; onClicked: Julia.br_cut_plane("y"); tip: "Normal along +y: removes +y" }
+                            Button { text: "z"; implicitWidth: 36; onClicked: Julia.br_cut_plane("z"); tip: "Normal along +z: removes +z" }
+                            Button { text: "View"; onClicked: Julia.br_cut_plane("view"); tip: "Normal toward the camera: removes the near side" }
+                            Button { text: "Flip"; onClicked: Julia.br_cut_plane("flip"); tip: "Reverse the normal: removes the other side" }
                         }
                         RowLayout {
                             Label { text: "Normal θ, φ"; Layout.preferredWidth: 140 }
                             TextField {
                                 id: cutThetaField; text: app.cutTheta; Layout.preferredWidth: 70; selectByMouse: true
                                 onEditingFinished: if (text !== app.cutTheta) Julia.br_cut_angles(text, cutPhiField.text)
+                                tip: "The normal's polar angle (°)"
                             }
                             TextField {
                                 id: cutPhiField; text: app.cutPhi; Layout.preferredWidth: 70; selectByMouse: true
                                 onEditingFinished: if (text !== app.cutPhi) Julia.br_cut_angles(cutThetaField.text, text)
+                                tip: "The normal's azimuth (°)"
                             }
                             Label { text: "°"; opacity: 0.7 }
                         }
                         PropRow {
                             label: "Normal vector"; value: app.cutNormal; unit: "x, y, z"; fieldWidth: 150
+                            tip: "The normal's direction (any length)"
                             onEdited: (text) => Julia.br_cut_normal(text)
                         }
                         RowLayout {
@@ -214,20 +230,18 @@ ToolBar {
                                         const p = [0, 1, 2].map(i => cutPointFields.itemAt(i).text)
                                         if (text !== app.cutPoint[index]) Julia.br_cut_point(p[0], p[1], p[2])
                                     }
+                                    tip: "The plane's point, " + ["x", "y", "z"][index] + " (mm)"
                                 }
                             }
                             Label { text: "mm"; opacity: 0.7 }
-                            Button { text: "TCC"; onClicked: Julia.br_cut_point("0", "0", "0") }
+                            Button { text: "TCC"; onClicked: Julia.br_cut_point("0", "0", "0"); tip: "The plane through the chamber center" }
                         }
                         Button {
                             text: app.cutSelected !== "" ? "Through " + app.cutSelected : "Through the selected component"
                             enabled: app.cutSelected !== ""
-                            ToolTip.visible: hovered
-                            ToolTip.delay: 500
-                            ToolTip.text: "The plane through its centroid, with its normal if it is flat (a window, a foil)"
+                            tip: "The plane through its centroid, with its normal if it is flat (a window, a foil)"
                             onClicked: Julia.br_cut_through_selected()
                         }
-                        Label { text: "Removes the side the normal (" + app.cutNormal + ") points to"; opacity: 0.7 }
                         RowLayout {
                             Label { text: "Offset"; Layout.preferredWidth: 140 }
                             Slider {
@@ -235,8 +249,11 @@ ToolBar {
                                 value: app.cutOffset
                                 Layout.preferredWidth: 160
                                 onMoved: Julia.br_cut_offset(value)
+                                ToolTip.visible: hovered && !pressed
+                                ToolTip.delay: 400
+                                ToolTip.text: "Moves the plane along its normal from the point (mm)"
                             }
-                            Label { text: app.cutOffset.toFixed(2) + " mm from the point"; Layout.preferredWidth: 140 }
+                            Label { text: app.cutOffset.toFixed(2) + " mm from the point" }
                         }
                         MenuSeparator { Layout.fillWidth: true }
                         RowLayout {
@@ -250,37 +267,38 @@ ToolBar {
                                     dirTheta.text = a[0]
                                     dirPhi.text = a[1]
                                 }
+                                tip: "Take θ, φ from a beam's port"
                             }
                         }
                         RowLayout {
                             Label { text: "θ, φ"; Layout.preferredWidth: 140 }
-                            TextField { id: dirTheta; text: app.cutLineTheta; Layout.preferredWidth: 70; selectByMouse: true }
-                            TextField { id: dirPhi; text: app.cutLinePhi; Layout.preferredWidth: 70; selectByMouse: true }
+                            TextField { id: dirTheta; text: app.cutLineTheta; Layout.preferredWidth: 70; selectByMouse: true
+                                        tip: "The direction's polar angle (°)" }
+                            TextField { id: dirPhi; text: app.cutLinePhi; Layout.preferredWidth: 70; selectByMouse: true
+                                        tip: "The direction's azimuth (°)" }
                             Label { text: "°"; opacity: 0.7 }
                         }
                         RowLayout {
                             Label { text: ""; Layout.preferredWidth: 140 }
                             Button {
                                 text: "Facing it"
-                                ToolTip.visible: hovered
-                                ToolTip.delay: 500
-                                ToolTip.text: "The normal along the direction: removes the side toward it"
+                                tip: "The normal along the direction: removes the side toward it"
                                 onClicked: Julia.br_cut_angles(dirTheta.text, dirPhi.text)
                             }
                             Button {
                                 text: "Containing the line of sight"
-                                ToolTip.visible: hovered
-                                ToolTip.delay: 500
-                                ToolTip.text: "The plane through the line from the origin toward the direction"
+                                tip: "The plane through the line from the origin toward the direction"
                                 onClicked: Julia.br_cut_line(dirTheta.text, dirPhi.text, losFromSel.checked, app.cutRotation)
                             }
                         }
                         RowLayout {
                             Label { text: "Line from"; Layout.preferredWidth: 140 }
-                            RadioButton { text: "TCC"; checked: app.cutAtTcc || app.cutSelected === "" }
+                            RadioButton { text: "TCC"; checked: app.cutAtTcc || app.cutSelected === ""
+                                          ToolTip.visible: hovered; ToolTip.delay: 400; ToolTip.text: "The line of sight starts at the chamber center" }
                             RadioButton {
                                 id: losFromSel; text: "Selected component"
                                 enabled: app.cutSelected !== ""; checked: !app.cutAtTcc && app.cutSelected !== ""
+                                ToolTip.visible: hovered; ToolTip.delay: 400; ToolTip.text: "The line of sight starts at the selected component"
                             }
                         }
                         RowLayout {
@@ -291,18 +309,18 @@ ToolBar {
                                 value: app.cutRotation
                                 Layout.preferredWidth: 160
                                 onMoved: Julia.br_cut_rotation(value)
+                                ToolTip.visible: hovered && !pressed
+                                ToolTip.delay: 400
+                                ToolTip.text: "Turns the plane about the line of sight (°)"
                             }
                             Label { text: Math.round(app.cutRotation) + "°"; Layout.preferredWidth: 40 }
                         }
-                        Label {
+                        Cell {
                             visible: app.cutLine
-                            text: "The plane contains the line of sight at " + app.cutLineText
+                            text: "Line of sight: " + app.cutLineText
                             opacity: 0.7
+                            Layout.maximumWidth: 520
                         }
-                    }
-                    Label {
-                        text: "Components cut: right-click the Cutaway button"
-                        opacity: 0.7
                     }
                     Button { text: "Close"; Layout.alignment: Qt.AlignRight; onClicked: cutPopup.close() }
                 }
@@ -320,6 +338,7 @@ ToolBar {
                     { text: "Hidden", value: "off" }]
             currentIndex: Math.max(0, ["rays", "volumes", "off"].indexOf(app.beamStyle))
             onActivated: Julia.br_beam_style(currentValue)
+            tip: "How the beams are drawn: rays (each axis to where it lands), volumes (each spot's 5 % envelope along its f-cone) or hidden"
         }
         Label { text: "Color"; opacity: 0.7; leftPadding: 8; rightPadding: 4; height: beamStyleBox.height; verticalAlignment: Text.AlignVCenter }
         ComboBox {
@@ -333,6 +352,7 @@ ToolBar {
                     { text: "Incident x-ray flux", value: "incident" }]
             currentIndex: Math.max(0, ["component", "laser", "radiosity", "incident"].indexOf(app.colorBy))
             onActivated: Julia.br_set_color(currentValue)
+            tip: "What the target is colored by: each component's color, or a drive field per element (W/cm², computing the drive when needed)"
         }
         Tool {
             text: app.observedKind === "face" ? "Face map" : app.observedKind === "capsule" ? "Capsule map" : "Foil map"

@@ -14,9 +14,8 @@ RowLayout {
         model: app.displayLabels
         currentIndex: app.compDisplay
         onActivated: (index) => Julia.br_set_display(app.selection, index)
-        ToolTip.visible: hovered
-        ToolTip.delay: 500
-        ToolTip.text: "How the 3D view draws the selected components (drawing only: " +
-                      "whether they take part in the calculations is separate)"
+        tip: "How the 3D view draws the selected components (drawing only: " +
+             "whether they take part in the calculations is separate)"
     }
+    Info { topic: "view.display" }
 }

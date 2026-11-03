@@ -13,11 +13,15 @@ ColumnLayout {
         if (s === "review") return "#d08a00"
         return "#2e9e44"
     }
-    Note {
+    RowLayout {
         visible: !app.tlHasReport
-        text: app.tlRunning ? "checking… " + app.tlElapsed
-              : "Set up the TaLIS checks in Properties (select them in the model tree) and run them."
-        opacity: 1
+        spacing: 6
+        Note {
+            Layout.fillWidth: false
+            text: app.tlRunning ? "checking… " + app.tlElapsed : "No report yet: run TaLIS rules"
+            opacity: 1
+        }
+        Info { topic: "talis.intro" }
     }
     RowLayout {
         visible: app.tlHasReport
@@ -26,7 +30,8 @@ ColumnLayout {
         Info { topic: "talis.report" }
         Item { Layout.fillWidth: true }
         Label { text: "inputs changed since"; visible: app.tlStale; color: "#d08a00" }
-        Button { text: "Export CSV…"; enabled: !app.tlRunning; onClicked: win.openTalisExport() }
+        Button { text: "Export CSV…"; enabled: !app.tlRunning; onClicked: win.openTalisExport()
+                 tip: "Write every check to a CSV file" }
     }
     // notes and the rule summary beside every check, split by a draggable handle
     SplitView {

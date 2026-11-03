@@ -104,8 +104,8 @@ Item {
                 }
                 Note {
                     visible: !app.swHasResult
-                    text: app.swRunning ? "" : "Set up the sweep in Properties (select it in the model tree, or " +
-                                               "Sweep along this axis… on a part) and run it."
+                    text: app.swRunning ? "" : "No steps yet: run Placement sweep"
+                    tip: "Set it up in Properties (Placement sweep in the model tree's Analyses, or Sweep along this axis… on a part)"
                 }
             }
             // the chart and its key
@@ -131,12 +131,13 @@ Item {
             ColumnLayout {
                 visible: app.swEmpty === ""
                 Layout.alignment: Qt.AlignTop
-                Layout.preferredWidth: 130
+                Layout.maximumWidth: 220
                 spacing: 3
                 Repeater {
                     model: sweepLegendModel
                     delegate: RowLayout {
                         id: entry
+                        Layout.fillWidth: true
                         spacing: 6
                         readonly property string lineStyle: model.style
                         readonly property string lineColor: model.color
@@ -152,7 +153,7 @@ Item {
                                 }
                             }
                         }
-                        Label { text: model.label; font.pixelSize: 12 }
+                        Cell { text: model.label; font.pixelSize: 12; Layout.fillWidth: true }
                     }
                 }
             }

@@ -328,7 +328,7 @@ the target's; for a VisRad primitive, VisRad's own grid, see [`part_size_unit`](
 const PART_FIELDS = ((:x, "x", "mm", 0.0), (:y, "y", "mm", 0.0), (:z, "z", "mm", 0.0),
                      (:theta, "Axis polar θ", "°", 0.0), (:phi, "Axis azimuth φ", "°", 0.0),
                      (:rotation, "Rotation about axis", "°", 0.0),
-                     (:albedo, "Albedo", "", 0.0), (:conversion, "Conversion", "laser → x-ray", 0.0),
+                     (:albedo, "Albedo", "fraction re-emitted", 0.0), (:conversion, "Conversion", "laser → x-ray", 0.0),
                      (:h, "Element size", "mm (0: target's)", 0.0))
 
 """

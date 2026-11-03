@@ -32,42 +32,7 @@ ColumnLayout {
             ToolTip.text: "The frame its own frame is placed in (it stays where it is); its members move with it"
         }
     }
-    RowLayout {
-        spacing: 4
-        Layout.fillWidth: true
-        Label { text: "Move along"; Layout.preferredWidth: 110 }
-        ComboBox {
-            Layout.preferredWidth: 52
-            model: ["x", "y", "z"]
-            currentIndex: app.moveAxis
-            onActivated: (index) => Julia.br_move_axis(index)
-        }
-        Label { text: "of" }
-        ComboBox {
-            Layout.fillWidth: true
-            Layout.minimumWidth: 90
-            model: app.moveFrames
-            currentIndex: app.moveFrame
-            onActivated: (index) => Julia.br_move_frame(index)
-        }
-    }
-    RowLayout {
-        spacing: 4
-        Layout.fillWidth: true
-        Label { text: "by"; Layout.preferredWidth: 110; horizontalAlignment: Text.AlignRight }
-        TextField {
-            Layout.preferredWidth: 64
-            text: app.moveStep
-            selectByMouse: true
-            onEditingFinished: if (text !== app.moveStep) Julia.br_move_step(text)
-        }
-        Label { text: "mm"; opacity: 0.7 }
-        Button { text: "−"; Layout.preferredWidth: 34; onClicked: Julia.br_nudge_part(-1)
-                 ToolTip.visible: hovered; ToolTip.text: "Move back along the axis, with its members (one edit)" }
-        Button { text: "+"; Layout.preferredWidth: 34; onClicked: Julia.br_nudge_part(1)
-                 ToolTip.visible: hovered; ToolTip.text: "Move forward along the axis, with its members (one edit)" }
-        Info { topic: "part.triad" }
-    }
+    MoveAlongRow { what: "the assembly (with its members)" }
     RowLayout {
         Label { text: "Origin in"; Layout.preferredWidth: 110 }
         ComboBox {
@@ -75,6 +40,7 @@ ColumnLayout {
             model: ["Cartesian (x, y, z)", "Cylindrical (r, φ, z)", "Spherical (r, θ, φ)"]
             currentIndex: app.partCoords
             onActivated: (index) => Julia.br_part_coords(index)
+            tip: "The coordinates of the origin's fields, in the frame it is placed in"
         }
     }
     Repeater {
@@ -83,6 +49,7 @@ ColumnLayout {
             label: model.label
             value: model.value
             unit: model.unit
+            tip: model.tip
             onEdited: (text) => Julia.br_edit_part(model.key, text)
         }
     }

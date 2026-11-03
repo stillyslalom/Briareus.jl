@@ -21,6 +21,7 @@ ColumnLayout {
                 currentIndex: app.swSubject
                 displayText: app.swSubject < 0 ? "(add a part)" : currentText
                 onActivated: (index) => Julia.br_sw_subject(index)
+                tip: "The part moved, with the parts placed in its frame and the beams aimed in those frames"
             }
         }
         RowLayout {
@@ -30,6 +31,7 @@ ColumnLayout {
                 model: ["Its place along a frame's axis", "A number of its placement steps"]
                 currentIndex: app.swMode
                 onActivated: (index) => Julia.br_sw_mode(index)
+                tip: "A shift along an axis (the part translates), or a number of one of its placement steps (it may turn)"
             }
             Info { topic: "sweep.steps" }
         }
@@ -43,6 +45,7 @@ ColumnLayout {
                 displayText: app.swStepChoices.length === 0 ? "(the part has no placement steps)" :
                              app.swStepIndex < 0 ? "(choose a step)" : currentText
                 onActivated: (index) => Julia.br_sw_step(index)
+                tip: "The placement step whose number the sweep varies"
             }
         }
         RowLayout {
@@ -54,6 +57,7 @@ ColumnLayout {
                 currentIndex: app.swNumber
                 displayText: app.swNumber < 0 ? "(choose a step)" : currentText
                 onActivated: (index) => Julia.br_sw_number(index)
+                tip: "The step's number that takes the values From, From + Increment, … To (a distance, an angle, a coordinate)"
             }
         }
         RowLayout {
@@ -65,6 +69,7 @@ ColumnLayout {
                 model: ["x", "y", "z"]
                 currentIndex: app.swAxis
                 onActivated: (index) => Julia.br_sw_axis(index)
+                tip: "The axis the part moves along"
             }
             Label { text: "of" }
             ComboBox {
@@ -72,15 +77,19 @@ ColumnLayout {
                 model: app.swFrames
                 currentIndex: app.swFrame
                 onActivated: (index) => Julia.br_sw_frame(index)
+                tip: "The frame whose axis the part moves along"
             }
         }
         PropRow { label: "From"; value: app.sw_start
                   unit: app.swMode === 1 ? app.swUnit : "mm (shift from where it is)"
+                  tip: "The first value"
                   onEdited: (text) => Julia.br_sw_edit("start", text) }
         PropRow { label: "To"; value: app.sw_stop; unit: app.swMode === 1 ? app.swUnit : "mm"
+                  tip: "The last value"
                   onEdited: (text) => Julia.br_sw_edit("stop", text) }
         PropRow { label: "Increment"; value: app.sw_step
                   unit: (app.swMode === 1 ? app.swUnit : "mm") + (app.swSteps > 0 ? " · " + app.swSteps + " steps" : "")
+                  tip: "The change from one step to the next"
                   onEdited: (text) => Julia.br_sw_edit("step", text) }
 
         SectionLabel { text: "Checks at each step" }
@@ -88,12 +97,15 @@ ColumnLayout {
             text: "Beam clearance (the clearance check's components, envelope and errors)"
             checked: app.sw_clearance
             onToggled: Julia.br_sw_check("clearance", checked)
+            tip: "The least clearance of the beams from the hardware, and the failing and review pairs"
         }
         CheckLine {
             text: "Line of sight from the backlighter foil"
             checked: app.sw_los
             enabled: app.hasFoil
             onToggled: Julia.br_sw_check("los", checked)
+            tip: app.hasFoil ? "Whether the target blocks the line of sight from the active foil through the object"
+                             : "Needs a backlighter foil (a part with the foil role)"
         }
         ColumnLayout {
             visible: app.sw_los
@@ -107,11 +119,14 @@ ColumnLayout {
                     model: app.swObjects
                     currentIndex: app.swObject
                     onActivated: (index) => Julia.br_sw_object(index)
+                    tip: "The part the line of sight passes through (the object the backlighter images)"
                 }
             }
             PropRow { label: "Toward θ"; labelWidth: 86; value: app.sw_los_theta; unit: "° (empty: foil → object)"
+                      tip: "The line of sight's polar angle; empty: the direction from the foil's center through the object's"
                       onEdited: (text) => Julia.br_sw_edit("los_theta", text) }
             PropRow { label: "φ"; labelWidth: 86; value: app.sw_los_phi; unit: "°"
+                      tip: "The line of sight's azimuth"
                       onEdited: (text) => Julia.br_sw_edit("los_phi", text) }
         }
         CheckLine {
@@ -119,6 +134,8 @@ ColumnLayout {
             checked: app.sw_capture
             enabled: app.hasFoil
             onToggled: Julia.br_sw_check("capture", checked)
+            tip: app.hasFoil ? "The least fraction of a beam's power the active foil absorbs"
+                             : "Needs a backlighter foil (a part with the foil role)"
         }
         CheckLine {
             text: "Re-optimize the pointing at each step (Optimization's settings)"
@@ -136,14 +153,19 @@ ColumnLayout {
                 model: [{ text: "Quick", value: "quick" }, { text: "Standard", value: "standard" }]
                 currentIndex: app.swQuality === "standard" ? 1 : 0
                 onActivated: Julia.br_sw_quality(currentValue)
+                tip: "Quick: the line of sight from the foil's vertices through 2 rings of object points, the captured power " +
+                     "on a 0.6 mm grid; Standard: 4 sub-points per foil triangle, 4 rings, a 0.3 mm grid " +
+                     "(with the clearance check's sampling of the same name; engineering defaults, not converged)"
             }
         }
     }
     ErrorText { text: app.swError }
     RowLayout {
         spacing: 8
-        Button { text: "Sweep"; highlighted: true; enabled: !app.swRunning; onClicked: Julia.br_sw_start() }
-        Button { text: "Cancel"; enabled: app.swRunning; onClicked: Julia.br_sw_cancel() }
+        Button { text: "Sweep"; highlighted: true; enabled: !app.swRunning; onClicked: Julia.br_sw_start()
+                 tip: "Check each step in the background; the steps are in the Sweep tab" }
+        Button { text: "Cancel"; enabled: app.swRunning; onClicked: Julia.br_sw_cancel()
+                 tip: "Stop the sweep and keep the steps checked so far" }
     }
     ProgressBar {
         Layout.fillWidth: true
@@ -154,7 +176,8 @@ ColumnLayout {
     }
     Note {
         text: app.swRunning ? "step " + app.swDone + " of " + app.swTotal :
-              app.swStale ? "The design or the settings changed since this sweep. " + app.swBrief : app.swStatus
+              app.swStale ? "Out of date. " + app.swBrief : app.swStatus
+        tip: app.swStale && !app.swRunning ? "The design or the settings changed since this sweep" : ""
         color: app.swStale && !app.swRunning ? "#d08a00" : palette.windowText
         opacity: 1
     }

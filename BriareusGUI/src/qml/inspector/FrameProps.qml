@@ -34,43 +34,7 @@ ColumnLayout {
             ToolTip.text: "The frame it is placed in: TCC, another frame, a part's or a piece's (it stays where it is)"
         }
     }
-    RowLayout {
-        visible: !port
-        spacing: 4
-        Layout.fillWidth: true
-        Label { text: "Move along"; Layout.preferredWidth: 110 }
-        ComboBox {
-            Layout.preferredWidth: 52
-            model: ["x", "y", "z"]
-            currentIndex: app.moveAxis
-            onActivated: (index) => Julia.br_move_axis(index)
-        }
-        Label { text: "of" }
-        ComboBox {
-            Layout.fillWidth: true
-            Layout.minimumWidth: 90
-            model: app.moveFrames
-            currentIndex: app.moveFrame
-            onActivated: (index) => Julia.br_move_frame(index)
-        }
-    }
-    RowLayout {
-        visible: !port
-        spacing: 4
-        Layout.fillWidth: true
-        Label { text: "by"; Layout.preferredWidth: 110; horizontalAlignment: Text.AlignRight }
-        TextField {
-            Layout.preferredWidth: 64
-            text: app.moveStep
-            selectByMouse: true
-            onEditingFinished: if (text !== app.moveStep) Julia.br_move_step(text)
-        }
-        Label { text: "mm"; opacity: 0.7 }
-        Button { text: "−"; Layout.preferredWidth: 34; onClicked: Julia.br_nudge_part(-1)
-                 ToolTip.visible: hovered; ToolTip.text: "Move back along the axis (one edit)" }
-        Button { text: "+"; Layout.preferredWidth: 34; onClicked: Julia.br_nudge_part(1)
-                 ToolTip.visible: hovered; ToolTip.text: "Move forward along the axis (one edit)" }
-    }
+    MoveAlongRow { visible: !port; what: "the frame"; triad: false }
     RowLayout {
         visible: !port
         Label { text: "Origin in"; Layout.preferredWidth: 110 }
@@ -79,6 +43,7 @@ ColumnLayout {
             model: ["Cartesian (x, y, z)", "Cylindrical (r, φ, z)", "Spherical (r, θ, φ)"]
             currentIndex: app.partCoords
             onActivated: (index) => Julia.br_part_coords(index)
+            tip: "The coordinates of the origin's fields, in the frame it is placed in"
         }
     }
     Repeater {
@@ -87,15 +52,20 @@ ColumnLayout {
             label: model.label
             value: model.value
             unit: model.unit
+            tip: model.tip
             onEdited: (text) => Julia.br_edit_part(model.key, text)
         }
     }
     PlacementSteps { visible: !port && app.selectionCount <= 1 }
-    CheckLine {
-        text: "Draw its axes in the 3D view (also while not selected)"
-        checked: app.frameTriad
-        onToggled: Julia.br_set_triad("", checked)
-        tip: "x red, y green, z blue, with the frame's name at its origin"
+    RowLayout {
+        Layout.fillWidth: true
+        CheckLine {
+            text: "Draw its axes in the 3D view (also while not selected)"
+            checked: app.frameTriad
+            onToggled: Julia.br_set_triad("", checked)
+            tip: "x red, y green, z blue, with the frame's name at its origin"
+        }
+        Info { topic: "frames.axes"; Layout.alignment: Qt.AlignTop }
     }
     RowLayout {
         Button {

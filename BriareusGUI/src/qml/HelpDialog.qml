@@ -1,5 +1,6 @@
 // The Help screen: the explanations of every page (common/help.js), a page list on the
-// left and the page's topics on the right. `openAt(topic)` shows the topic's page with
+// left and the page's topics on the right; a filter above the list shows the topics of
+// every page that contain its words instead. `openAt(topic)` shows the topic's page with
 // the topic marked, as an ⓘ does when clicked; Documentation opens the documentation's
 // Desktop application page.
 import QtQuick
@@ -19,7 +20,25 @@ Dialog {
     standardButtons: Dialog.Close
     property int page: 0
     property string marked: ""
+    property string query: ""
+    // the topics of every page whose title or text holds each word of the filter, titled
+    // with their page
+    readonly property var found: {
+        const words = query.toLowerCase().split(/\s+/).filter(w => w !== "")
+        if (words.length === 0) return []
+        const out = []
+        for (const p of Help.pages)
+            for (const it of p.items) {
+                const hay = (it.title + " " + it.text).toLowerCase()
+                if (words.every(w => hay.indexOf(w) >= 0))
+                    out.push({ key: it.key, title: p.title + " ▸ " + it.title, text: it.text })
+            }
+        return out
+    }
+    readonly property bool filtering: query.trim() !== ""
     function openAt(topic) {
+        query = ""
+        filter.text = ""
         marked = topic
         page = Help.pageOf(topic)
         open()
@@ -34,6 +53,14 @@ Dialog {
             Layout.fillWidth: false
             Layout.fillHeight: true
             spacing: 6
+            TextField {
+                id: filter
+                Layout.fillWidth: true
+                placeholderText: "Filter topics"
+                selectByMouse: true
+                onTextChanged: help.query = text
+                tip: "Show the topics of every page that contain these words"
+            }
             ListView {
                 id: pageList
                 Layout.fillWidth: true
@@ -44,17 +71,19 @@ Dialog {
                 delegate: ItemDelegate {
                     width: pageList.width
                     text: modelData.title
-                    highlighted: index === help.page
-                    onClicked: { help.marked = ""; help.page = index }
+                    highlighted: !help.filtering && index === help.page
+                    onClicked: { filter.text = ""; help.marked = ""; help.page = index }
                 }
             }
-            Button {
-                text: "Documentation"
+            RowLayout {
                 Layout.fillWidth: true
-                onClicked: Qt.openUrlExternally(Julia.br_docs_url())
-                ToolTip.visible: hovered
-                ToolTip.delay: 400
-                ToolTip.text: "The Desktop application page of the Briareus documentation (a local build, or online)"
+                Button {
+                    text: "Documentation"
+                    Layout.fillWidth: true
+                    onClicked: Qt.openUrlExternally(Julia.br_docs_url())
+                    tip: "The Desktop application page of the Briareus documentation (a local build, or online)"
+                }
+                Info { topic: "start.docs" }
             }
         }
         ListView {
@@ -63,7 +92,7 @@ Dialog {
             Layout.fillHeight: true
             clip: true
             spacing: 14
-            model: Help.pages[help.page].items
+            model: help.filtering ? help.found : Help.pages[help.page].items
             ScrollBar.vertical: ScrollBar {}
             function positionAt(topic) {
                 const items = Help.pages[help.page].items
@@ -71,7 +100,9 @@ Dialog {
                     if (items[i].key === topic) positionViewAtIndex(i, ListView.Beginning)
             }
             header: Label {
-                text: Help.pages[help.page].title
+                text: help.filtering ? (help.found.length === 0 ? "No topic matches" :
+                                        help.found.length + (help.found.length === 1 ? " topic" : " topics"))
+                                     : Help.pages[help.page].title
                 font.pixelSize: 18
                 font.weight: Font.DemiBold
                 bottomPadding: 10
