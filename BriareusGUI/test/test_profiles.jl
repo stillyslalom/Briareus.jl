@@ -109,3 +109,28 @@ end
     @test session_state(s3) == session_state(s0)
     @test all(_same_component(a, b) for (a, b) in zip(s3.target.target[].components, s0.target.target[].components))
 end
+
+@testset "hohlraum breaks: a new break splits the longest section, the wall kept (no GL)" begin
+    ts = TargetSetup(resolution = :coarse)
+    i = part_index(ts, :hohlraum)
+    @test edit_part!(ts, i, :profile, "1") && edit_part!(ts, i, :bottom_end_radius, "2.0")
+    @test edit_part!(ts, i, :profile, "2")
+    @test ts.parts[][i].sections == [(-5.05, 2.0), (0.0, 2.875), (5.05, 1.86)]
+    wall(ts) = (t = ts.target[]; sum(t.elem_area[elements(t, (c.name for c in t.components
+                                                              if startswith(String(c.name), "hohlraum_wall"))...)]))
+    A0 = wall(ts)
+    # the frustum sections' lateral areas, π (r₀ + r₁) × slant
+    @test A0 ≈ π * (2.0 + 2.875) * hypot(5.05, 0.875) + π * (2.875 + 1.86) * hypot(5.05, 1.015) rtol = 1e-12
+    # the upper section is the longer (slant 5.151 against 5.125): its midpoint is the new break
+    @test add_hohlraum_break!(ts, i)
+    p = ts.parts[][i]
+    @test p.sections == [(-5.05, 2.0), (0.0, 2.875), (2.525, (2.875 + 1.86) / 2), (5.05, 1.86)]
+    @test hohlraum_pieces(p)[1:3] == [:wall_1, :wall_2, :wall_3]
+    @test wall(ts) ≈ A0 rtol = 1e-12
+    @test hohlraum_profile(p).r[3] ≈ (2.875 + 1.86) / 2
+    # again: now the lower section is the longest
+    @test add_hohlraum_break!(ts, i)
+    @test ts.parts[][i].sections[2] == (-2.525, (2.0 + 2.875) / 2) && isapprox(wall(ts), A0; rtol = 1e-12)
+    # a part that is not a hohlraum has no sections
+    @test !add_hohlraum_break!(ts, part_index(ts, :capsule)) && !isempty(ts.error[])
+end

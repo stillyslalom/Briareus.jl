@@ -931,6 +931,10 @@ end
 
 """
     rename_cluster!(bt::BeamTable, old, new) -> Bool
+
+Move every beam of group `old` into group `new` ([`set_cluster!`](@ref)): a rename, or a
+merge when `new` is another group's name. The beams' cones (`Beam.group`) stay. Refused
+(with `error` set) for a group without beams or a blank name.
 """
 rename_cluster!(bt::BeamTable, old, new) =
     set_cluster!(bt, findall(==(Symbol(old)), bt.cluster[]), new)

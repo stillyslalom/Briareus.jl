@@ -180,3 +180,35 @@ end
     record!(s)
     @test undo!(s) && isempty(assemblies(s.target)) && s.target.parts[][part_index(s.target, :shield)].assembly === TOP_LEVEL
 end
+
+@testset "assemblies: ungroup a nested assembly, and its refusals (no GL)" begin
+    s = DesignSession(resolution = :coarse)
+    ts = s.target
+    @test add_part!(ts, :disk; name = :shield, x = 4.0, theta = 90.0, r1 = 0.5)
+    @test add_part!(ts, :sphere; name = :bead, x = -4.0, r1 = 0.2)
+    @test add_assembly!(ts; name = :inner, members = [:shield])
+    @test add_assembly!(ts; name = :outer, members = [:inner])
+    # placed away from TCC and turned, so the frames compose
+    @test edit_part!(ts, part_index(ts, :outer), :x, "1.0") && edit_part!(ts, part_index(ts, :outer), :theta, "90")
+    @test edit_part!(ts, part_index(ts, :inner), :z, "0.5")
+    F = part_frames(ts)[:shield]
+    # a placement step on another part refers to the inner assembly: ungrouping is refused
+    ps = copy(ts.parts[])
+    k = part_index(ts, :bead)
+    ps[k] = Controllers._with(ps[k]; steps = Briareus.PlacementStep[Briareus.OnAxis(:inner; axis = :z)])
+    @test Controllers._try_build!(ts; parts = ps)
+    @test !ungroup_assembly!(ts, :inner) && occursin("bead", ts.error[]) && part_index(ts, :inner) !== nothing
+    ps = copy(ts.parts[])
+    ps[k] = Controllers._with(ps[k]; steps = Briareus.PlacementStep[])
+    @test Controllers._try_build!(ts; parts = ps)
+    # the member joins the parent assembly, placed in its frame, where it was in the chamber
+    @test ungroup_assembly!(ts, :inner)
+    p = ts.parts[][part_index(ts, :shield)]
+    @test part_index(ts, :inner) === nothing && p.assembly === :outer && p.frame === :outer
+    @test isapprox(part_frames(ts)[:shield].R, F.R; atol = 1e-14) &&
+          isapprox(part_frames(ts)[:shield].origin, F.origin; atol = 1e-14)
+    @test assembly_parts(ts.parts[], :outer) == [:shield]
+    # a part, or a name of nothing, is not an assembly
+    @test !ungroup_assembly!(ts, :shield) && occursin("no assembly", ts.error[])
+    @test !ungroup_assembly!(ts, :nowhere) && occursin("no assembly", ts.error[])
+end

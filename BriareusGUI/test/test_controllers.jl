@@ -523,3 +523,20 @@ end
     @test k > 0 && old[p].id == g && [r.id for r in old[p+1:end]] == [r.id for r in new[p+k+1:end]]
     @test BriareusGUI._common_lead(new, old) == p
 end
+
+@testset "renaming beam groups (no GL)" begin
+    bt = BeamTable(preset_beams(:nif_quads); preset = :nif_quads)
+    members = findall(==(:inner23), bt.cluster[])
+    # every beam of the group moves, the cones (for LPI) and the group order stay
+    @test rename_cluster!(bt, :inner23, "  i23 ")
+    @test clusters(bt) == [:i23, :inner30, :outer44, :outer50] && findall(==(:i23), bt.cluster[]) == members
+    @test all(b -> b.group === :inner23, bt.beams[][members]) && bt.error[] == ""
+    # onto another group's name: the two merge
+    @test rename_cluster!(bt, "i23", "inner30")
+    @test clusters(bt) == [:inner30, :outer44, :outer50] && count(==(:inner30), bt.cluster[]) == 16
+    # refused, nothing changed: a group that does not exist, a blank name
+    before = copy(bt.cluster[])
+    @test !rename_cluster!(bt, :nowhere, "x") && occursin("no beams", bt.error[])
+    @test !rename_cluster!(bt, :outer44, " ") && occursin("name", bt.error[])
+    @test bt.cluster[] == before
+end
