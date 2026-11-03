@@ -808,17 +808,25 @@ _pct_text(x::Real) = _nobreak(string(round(100x; sigdigits = 3), " %"))
 # wrapped line keeps a number with its unit and its symbol.
 _nobreak(s::AbstractString) = replace(s, r"(?<=ε[₀-₉]) | (?=%|W/cm²|eV|mm|TW)" => string(Char(0xa0)))
 
-# Irradiance of foil `foil` (a part or component name) within `radius` of its center:
-# mean, peak (W/cm²) and RMS nonuniformity; `nothing` without that foil.
-function _spot_stats(ev::Evaluation, radius::Real, foil::Union{Nothing,Symbol})
-    t = ev.scenario.target
+# The front elements of foil `foil` (a part or component name of `t`) within `radius` of
+# their area centroid (the spot, as `Briareus.FoilIrradiance` selects it); `nothing`
+# without that foil or such elements.
+function _spot_elements(t::Target, foil::Union{Nothing,Symbol}, radius::Real)
     _has_part(t, foil) || return nothing
     front = [e for e in elements(t, foil) if t.elem_side[e] == 1]
     isempty(front) && return nothing
     A = t.elem_area[front]
     c0 = sum(A .* t.elem_centroid[front]) / sum(A)
     es = [e for e in front if norm(t.elem_centroid[e] - c0) <= radius]
-    isempty(es) && return nothing
+    return isempty(es) ? nothing : es
+end
+
+# Irradiance of foil `foil` (a part or component name) within `radius` of its center:
+# mean, peak (W/cm²) and RMS nonuniformity; `nothing` without that foil.
+function _spot_stats(ev::Evaluation, radius::Real, foil::Union{Nothing,Symbol})
+    t = ev.scenario.target
+    es = _spot_elements(t, foil, radius)
+    es === nothing && return nothing
     I = ev.deposition.element[es] ./ t.elem_area[es]
     Ae = t.elem_area[es]
     mean = sum(I .* Ae) / sum(Ae)

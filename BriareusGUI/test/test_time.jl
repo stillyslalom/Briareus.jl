@@ -191,3 +191,40 @@ end
     @test maximum(ch.right.series[2].y) < maximum(ch.right.series[1].y) / 10
     @test any(r -> r.label == "reference (dashed)", ch.legend)
 end
+
+@testset "time panel: a backlighter foil's retune (no GL)" begin
+    # the first beam down, the others retuned to the reference's laser irradiance over
+    # the foil's spot (no radiation solve)
+    s = DesignSession(starter = :foil, resolution = :coarse)
+    build_scenario!(s)
+    sc = s.drive.scenario[]
+    @test isempty(sc.observed)                                # nothing observed: the foil is held
+    beams = s.beams.beams[]
+    dir = mktempdir()
+    pul = Dict(Symbol(b.name) => PulseShape([0.0, 0.5, 1.0, 1.5], [0.0, 0.3, 0.5, 0.0]) for b in beams)
+    table = write_pulse_table(joinpath(dir, "reference.csv"), pul)
+    out = joinpath(dir, "retuned.csv")
+    s.beams.enabled[] = [i != 1 for i in eachindex(beams)]
+    retune_to_reference!(s, table, out; by = :beam, cap = 2.0)
+    r = s.time.retune[]
+    @test r.kind === :foil && isfile(out) && occursin("foil spot worst RMS", s.drive.retune_status[])
+    # independent check: depositions of the enabled beams at the retuned powers, over the
+    # front elements within the spot radius of the foil's front centroid
+    t = sc.target
+    foil = active_foil(s.target)
+    front = [e for e in elements(t, foil) if t.elem_side[e] == 1]
+    c0 = sum(t.elem_area[front] .* t.elem_centroid[front]) / sum(t.elem_area[front])
+    es = [e for e in front if sqrt(sum(abs2, t.elem_centroid[e] - c0)) <= s.drive.spot_radius[]]
+    A = t.elem_area[es]
+    kept = findall(s.beams.enabled[])
+    Is = [deposit(sc.deposition[kept], with_pulses(beams[kept], r.pulses, τ; by = :beam)).element[es] ./ A
+          for τ in r.after.time]
+    μ = [sum(I .* A) / sum(A) for I in Is]
+    @test isapprox(r.after.mean, 1e14 .* μ; rtol = 1e-12)
+    @test isapprox(r.after.rms, [sqrt(sum(A .* (I .- m) .^ 2) / sum(A)) / m for (I, m) in zip(Is, μ)]; rtol = 1e-12)
+    # the mean restored (within the power cap), from a deficit before
+    Δ(f) = maximum(abs.(f.mean ./ r.reference.mean .- 1))
+    @test Δ(r.after) < 1e-6 < 0.01 < Δ(r.before)
+    ch = time_chart(s, :retune)
+    @test ch.right.label == "Foil spot RMS, mean − reference (%)" && ch.right.series[2].y == 100 .* r.after.rms
+end

@@ -526,13 +526,19 @@ The bottom panel's tabs:
   produced them).
 - **Retune to a reference drive** (Compute ▸): from the pulse table of a reference
   shot that fired every beam of the table, the enabled beams' powers are retuned at
-  each time of the table to restore the reference's capsule drive level and its modes
-  through l = 4 ([`retune_drive`](@ref)), within a limit relative to the reference
-  powers and optionally staying near them; the disabled beams are the ones the shot
-  loses. The new pulses are written as a pulse table; the dialog reports the worst-time
-  mode 1 and Tᵣ change before and after, from drive histories of both, and the Time
-  tab plots each group's power on the reference and retuned pulses and ε₁ before and
-  after. A drive that observes a flat face is refused: it has no modes to restore.
+  each time of the table to restore the reference's drive ([`retune_drive`](@ref)),
+  within a limit relative to the reference powers and optionally staying near them; the
+  disabled beams are the ones the shot loses. What is restored follows the target: an
+  observed sphere's level and modes through l = 4 ([`CapsuleModes`](@ref)); an observed
+  flat face's incident x-ray flux over its elements, so its mean, RMS nonuniformity and
+  peak-to-mean ([`FaceFlux`](@ref)); without a radiation model, the active backlighter
+  foil's absorbed 3ω irradiance within the drive's spot radius ([`FoilIrradiance`](@ref),
+  laser only). The new pulses are written as a pulse table. The dialog reports, for a
+  capsule, the worst-time mode 1 and Tᵣ change before and after; for a face or a foil,
+  the worst RMS and the worst departure of the mean from the reference's, before and
+  after. The Time tab plots each group's power on the reference and retuned pulses, with
+  ε₁ before and after, or the face's or spot's RMS (before, after, reference) and its
+  mean's departure from the reference's (before, after).
 
 ### CAD workspaces and large targets
 

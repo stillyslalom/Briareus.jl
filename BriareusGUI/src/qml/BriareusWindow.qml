@@ -574,7 +574,7 @@ ApplicationWindow {
         title: "Folder for the results (laser, radiosity and flux per element, modes, powers)"
         onAccepted: Julia.br_export_results(selectedFolder.toString())
     }
-    // retune the enabled beams' pulses to a reference shot's capsule drive
+    // retune the enabled beams' pulses to a reference shot's drive (capsule, face or foil)
     Dialog {
         id: retuneDialog
         title: "Retune to a reference drive"
@@ -600,7 +600,7 @@ ApplicationWindow {
         ColumnLayout {
             spacing: 8
             RowLayout {
-                Label { text: "The enabled beams' pulses, retuned to a reference shot's capsule drive" }
+                Label { text: "The enabled beams' pulses, retuned to a reference shot's drive" }
                 Info { topic: "drive.retune" }
             }
             GridLayout {

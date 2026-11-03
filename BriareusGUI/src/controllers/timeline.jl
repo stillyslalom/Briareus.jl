@@ -719,7 +719,10 @@ plot (then no series); `scale` (`:log`), on a chart whose left axis is logarithm
   12 highest), the 3ω light's on the active foil (dotted) and the threshold (dashed), on
   a log axis (`scale = :log`; values below 10⁻⁴ of the threshold drawn at that level).
 - `:retune`: each group's power on the reference pulses (all beams, dashed) and on the
-  retuned ones (enabled beams), and the capsule's mode 1 ε₁ before and after (%).
+  retuned ones (enabled beams), and the capsule's mode 1 ε₁ before and after (%); for a
+  flat face or a foil spot ([`retune_pulses`](@ref)'s `kind`), its RMS nonuniformity
+  before, after and in the reference, and its mean's departure from the reference's
+  before and after (%).
 """
 function time_chart(sess::DesignSession, chart::Symbol = sess.time.chart[])
     chart in TIME_CHARTS || throw(ArgumentError("chart must be one of $TIME_CHARTS"))
@@ -838,14 +841,27 @@ function time_chart(sess::DesignSession, chart::Symbol = sess.time.chart[])
         new = _group_series(r.table, r.nodes,
                             τ -> [on ? remake(b; power = r.pulses[Briareus._beam_key(r.by)(b)](τ)) : remake(b; power = 0.0)
                                   for (b, on) in zip(r.beams, r.enabled)]; total = false)
-        ε1(hh) = [100 * mode_amplitude(hh.ylm[:, j], 1) for j in eachindex(hh.time)]
-        right = [_series("ε₁ before", r.before.time, ε1(r.before), _GRAY; style = :dot),
-                 _series("ε₁ retuned", r.after.time, ε1(r.after), _INK)]
+        if r.kind === :capsule
+            ε1(hh) = [100 * mode_amplitude(hh.ylm[:, j], 1) for j in eachindex(hh.time)]
+            right = [_series("ε₁ before", r.before.time, ε1(r.before), _GRAY; style = :dot),
+                     _series("ε₁ retuned", r.after.time, ε1(r.after), _INK)]
+            rlabel = "ε₁ (%)"
+        else
+            # a face or a foil spot: its RMS nonuniformity, and its mean's departure from
+            # the reference's, before and after
+            Δ(f) = 100 .* (f.mean ./ r.reference.mean .- 1)
+            right = [_series("RMS before", r.before.time, 100 .* r.before.rms, _GRAY; style = :dot),
+                     _series("RMS retuned", r.after.time, 100 .* r.after.rms, _INK),
+                     _series("RMS reference", r.reference.time, 100 .* r.reference.rms, _GRAY; style = :dash),
+                     _series("mean before", r.before.time, Δ(r.before), "#0072B2"; style = :dot),
+                     _series("mean retuned", r.after.time, Δ(r.after), "#0072B2")]
+            rlabel = (r.kind === :face ? "Face" : "Foil spot") * " RMS, mean − reference (%)"
+        end
         legend = vcat([_key(s) for s in new], [(; label = "reference (dashed)", color = _GRAY, style = :dash)],
                       [_key(s) for s in right])
         return (; chart, title = "Retune to " * r.label, xlabel = "t (ns)",
                 left = (; label = "Laser power (TW)", series = vcat(ref, new)),
-                right = (; label = "ε₁ (%)", series = right), legend, cursor, empty = "")
+                right = (; label = rlabel, series = right), legend, cursor, empty = "")
     end
 end
 

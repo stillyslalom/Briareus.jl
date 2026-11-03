@@ -211,8 +211,10 @@ var pages = [
           text: "The reference shot fired every beam of the table with the pulses of a pulse table " +
                 "(power per beam in TW against time_ns, one column per cone group, quad or beam). " +
                 "The disabled beams are the ones this shot loses: the enabled beams' powers are " +
-                "retuned, at each time of the table, to give the capsule the reference's drive " +
-                "level and its modes through l = 4 (Compute ▸ Retune to a reference drive)." }
+                "retuned, at each time of the table, to restore the reference's drive: a capsule's " +
+                "level and modes through l = 4, a flat observed face's flux over the face (mean, " +
+                "RMS, peak-to-mean), or, laser only, the active foil's 3ω irradiance within the spot " +
+                "radius (Compute ▸ Retune to a reference drive)." }
     ] },
     { key: "time", title: "Time", items: [
         { key: "time.irradiance", title: "Irradiance checks",

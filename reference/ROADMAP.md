@@ -111,7 +111,11 @@ Items 7–12 follow the 2026-10-22 literature review against Kritcher et al. 202
 11. **Implosion metrics and UQ.** Time-dependent error budgets and multi-shot trending.
 12. **Backlighter physics.** The low-Z end of He-α CE (one Ti point; no V/Sc data at
     351 nm); pulse length and spot size as variables; continuum and higher lines in the
-    filter pass band, detector response, the object's transmission.
+    filter pass band, detector response, the object's transmission. Retune: core
+    `retune_drive` holds a foil spot's irradiance or a face's flux (`FoilIrradiance`,
+    `FaceFlux`), to a reference or uniform at a prescribed level; the GUI exposes the
+    reference target only, and its foil retune leaves out the unconverted light. A
+    peak-to-mean bound is reported, not optimized.
 
 13. **Unconverted light over time.** *State:* `unconverted_deposition` is a steady
     source, and the GUI drive adds it. 1ω and 2ω light does not enter the hohlraum and is

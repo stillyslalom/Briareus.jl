@@ -244,11 +244,33 @@ E. **Double backlighter with ARC:** the starter, ARC beams as a facility beam se
   each step's solution, as the steady drive), `Tr` comes from the area-mean flux (the
   core history's `Tr` is from P0, within 0.2 % on the opacity starter), `legendre` has
   no rows, and the drive chart's right axis shows the RMS and the peak and lowest flux
-  relative to the mean. The retune restores capsule modes and refuses a flat face
-  (status message; `retune_pulses` throws). Sphere-observed histories are unchanged:
+  relative to the mean. The retune first restored capsule modes only and refused a flat
+  face; since 2026-11-02 it restores a flat face's flux over its elements (core
+  `FaceFlux`) and, without a radiation model, the active foil's spot irradiance (core
+  `FoilIrradiance`); see "Face and foil retune as built". Sphere-observed histories are unchanged:
   the default session's history fields and drive chart serialized before and after are
   equal.
 - Not built: a piece's role (decision 7, a cap observed).
+
+## Face and foil retune as built (2026-11-02)
+
+- Core: `retune_drive(quantity, op, beams, reference; target, level, ...)` with
+  `CapsuleModes`, `FaceFlux` or `FoilIrradiance`; `target = :reference` restores the
+  reference's whole shape (modes, or the flux over the elements), `:uniform` asks for a
+  uniform drive at `level`. The level is held (secant on a shifted penalty target), not
+  a soft penalty. `drive_history(...; observed_flux = true)` keeps the face's flux.
+- GUI: `retune_pulses` picks what it holds (`kind`): an observed sphere (capsule), an
+  observed flat face (`_observed_flat`), else the active foil within the drive's spot
+  radius (laser only; the drive needs no radiation model). The face's and the foil's
+  `reference`, `before` and `after` are `(; time, mean, peak, low, rms)`, the face's from
+  `_face_stats` on each history step, the foil's from depositions over `_spot_elements`
+  (shared with `_spot_stats`). The retune chart's right axis then shows the RMS (before,
+  after, reference) and the mean's departure from the reference's (before, after).
+- The GUI's retune holds the reference's shape; the uniform target at a prescribed level
+  is core only.
+- The foil's GUI retune is the 3ω light's: it takes no unconverted light (`retune_pulses`
+  throws if given), though core `retune_drive` adds each color's absorbed power to a
+  foil's irradiance when the reference carries it.
 
 ## Item 5 as built (2026-11-02): presets in the starters' frames
 

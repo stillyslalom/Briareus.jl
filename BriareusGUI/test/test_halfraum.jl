@@ -1,7 +1,7 @@
 # Halfraum ends and packages (assemblies phase C): a hohlraum part's open ends and
 # per-end entrance holes against core `hohlraum(; top_end, bottom_end)`, the walls and
 # enclosure of a halfraum, the flat observed face (its face map and flux statistics, no
-# capsule modes; its drive history and chart, the retune's refusal), the two halfraum
+# capsule modes; its drive history and chart, its retune), the two halfraum
 # starters, and the hohlraum presets aimed in their entrance holes.
 
 using LinearAlgebra: norm
@@ -113,11 +113,44 @@ end
     @test ch.right.series[1].y == 100 .* h.face.rms
     @test ch.right.series[2].y ≈ 100 .* (h.face.peak ./ h.face.mean .- 1) rtol = 1e-12
     @test all(ch.right.series[3].y .<= 0 .<= ch.right.series[2].y)
-    # the retune restores capsule modes: refused on a flat face, before reading the table
-    retune_to_reference!(sess, joinpath(mktempdir(), "absent.csv"), joinpath(mktempdir(), "out.csv"))
-    @test !sess.drive.retune_running[] && sess.drive.retune_status[] == Controllers._RETUNE_FLAT &&
-          sess.time.retune[] === nothing
-    @test_throws ArgumentError retune_pulses(s, beams, enabled, Dict{Symbol,PulseShape}())
+    # the retune of the flat face: the first quad down, the others retuned to the
+    # reference's flux over the face
+    dir = mktempdir()
+    pul = Dict(g => PulseShape([0.0, 1.0, 2.0, 3.0], [0.0, 1.0, 2.0, 0.0]) for g in unique(b.group for b in beams))
+    table = write_pulse_table(joinpath(dir, "reference.csv"), pul)
+    out = joinpath(dir, "retuned.csv")
+    sess.beams.enabled[] = [b.quad != beams[1].quad for b in beams]
+    retune_to_reference!(sess, table, out; cap = 1.5)
+    r = sess.time.retune[]
+    @test r.kind === :face && isfile(out) && occursin("face worst RMS", sess.drive.retune_status[])
+    # independent check: core histories of the enabled beams on the reference and on the
+    # retuned pulses (as written, before the CSV's rounding), the face's mean and RMS from
+    # each step's flux on its elements
+    kept = findall(sess.beams.enabled[])
+    stats(P, by) = begin
+        hc = drive_history(s.model, s.deposition[kept], τ -> with_pulses(beams[kept], P, τ; by), r.after.time;
+                           observe, wall = isempty(walls) ? observe : walls, lmax = 4,
+                           record = sol -> sol.H[s.observed])
+        μ = [sum(H .* A) / sum(A) for H in hc.record]
+        (; mean = 1e14 .* μ, rms = [sqrt(sum(A .* (H .- m) .^ 2) / sum(A)) / m for (H, m) in zip(hc.record, μ)])
+    end
+    after, before = stats(r.pulses, :quad), stats(pul, :group)
+    @test isapprox(read_pulse_table(out)[first(keys(r.pulses))].p, first(values(r.pulses)).p; rtol = 1e-6)
+    @test isapprox(r.after.mean, after.mean; rtol = 1e-12) && isapprox(r.after.rms, after.rms; rtol = 1e-12)
+    @test isapprox(r.before.mean, before.mean; rtol = 1e-12) && isapprox(r.before.rms, before.rms; rtol = 1e-12)
+    # the retune restores the mean and moves the RMS toward the reference's
+    Δ(f) = maximum(abs.(f.mean ./ r.reference.mean .- 1))
+    @test Δ(r.after) < 1e-3 < Δ(r.before)
+    @test maximum(abs.(r.after.rms .- r.reference.rms)) < maximum(abs.(r.before.rms .- r.reference.rms))
+    # its chart: the face's RMS and mean, before and after
+    ch = time_chart(sess, :retune)
+    @test ch.right.label == "Face RMS, mean − reference (%)"
+    @test [x.label for x in ch.right.series] == ["RMS before", "RMS retuned", "RMS reference", "mean before",
+                                                 "mean retuned"]
+    @test ch.right.series[2].y == 100 .* r.after.rms && ch.right.series[5].y ≈ 100 .* (r.after.mean ./ r.reference.mean .- 1)
+    # nothing to hold (a foil asked for, and the target has none): refused
+    @test Controllers._retune_kind(s, nothing, :foil) === nothing
+    @test_throws ArgumentError retune_pulses(s, beams, enabled, pul; on = :foil)
 end
 
 @testset "hohlraum presets aim in the starters' entrance holes (no GL)" begin
