@@ -366,7 +366,7 @@ end
           sort(cs[2].elements) == named("halfraum_bottom_", "package_bottom")
     side = elements(t, :package)
     @test !isempty(side) && !any(e -> e in cs[1].elements || e in cs[2].elements, side)
-    @test all(c -> c.leak < Controllers.CAVITY_MAX_LEAK, cs)                   # 7.5e-3, 7.8e-3: cracks at the holes' rims
+    @test all(c -> c.leak < 1e-5, cs)        # the holes meet the caps vertex for vertex (7.5e-3, 7.8e-3 at half the count)
     build_scenario!(st)
     @test occursin("balanced per cavity: halfraum_top, halfraum_bottom", st.drive.status[])
     s = st.drive.scenario[]

@@ -335,7 +335,7 @@ end
     @test [c.name for c in hc] == [c.name for c in t.components[2:6]]
     cnt = hohlraum_counts(; length = 9.35, radius = 2.55, leh_radius = 1.52, h = 0.5)
     @test npatches(hc[1].mesh) == cnt.nz * cnt.nphi && npatches(hc[2].mesh) == cnt.nr_cap * cnt.nphi
-    @test npatches(hc[4].mesh) == cnt.nr_leh * cnt.nphi ÷ 2 && hc[4].kind === :aperture
+    @test npatches(hc[4].mesh) == cnt.nr_leh * cnt.nphi && hc[4].kind === :aperture
     th = Target(hc)
     @test sum(th.elem_area[th.comp_elems[1]]) ≈ 2π * 2.55 * 9.35 rtol = 1e-12
     @test all(dot(th.elem_normal[i], th.elem_centroid[i] - Vec3(-4, 0, 0)) < 0 for i in th.comp_elems[1])

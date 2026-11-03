@@ -244,12 +244,12 @@ function _vrw_primitive(kind, name, p, mat; h = nothing)
         # hohlraum normals point in by default. Each LEH is one ring of elements.
         R, H, r = L(1), L(2), L(3)
         # VisRad's grid: one ring of LEH elements; Briareus's: `hohlraum`'s (LEH rings of
-        # about h, half the wall's azimuthal count)
+        # about h, the wall's azimuthal count: the caps' inner edges, vertex for vertex)
         nz, nphi, nr, nr_leh, nphi_leh = if h === nothing
             max(1, N(1) - 1), max(3, N(2)), max(1, N(3) - 1), 1, max(3, N(2))
         else
             c = hohlraum_counts(; length = H, radius = R, leh_radius = min(r, R), h)
-            c.nz, c.nphi, c.nr_cap, c.nr_leh, c.nphi ÷ 2
+            c.nz, c.nphi, c.nr_cap, c.nr_leh, c.nphi
         end
         z = H / 2
         cyl = CylinderSurface(R)

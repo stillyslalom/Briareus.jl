@@ -243,9 +243,10 @@ that fraction per `element` (zero on apertures). Apertures stop the rays here, a
 would. A target is closed, and `closed = true` balancing (`enforce_closure!`) applies,
 when every opening carries an aperture: the fraction is then zero up to cracks where
 meshes meet without sharing vertices (a disk aperture of 24 sides in a bore of 20 or
-360, an LEH disk of `nphi ÷ 2` sides in a cap's inner edge of `nphi`): 2–7 × 10⁻⁴ on
-the cavities of the research notes' "Closure on bored, windowed and CAD cavities",
-2.7 × 10⁻³ on the coarse `hohlraum(h = 1)`. An opening left without an aperture shows
+360): 2–7 × 10⁻⁴ on the cavities of the research notes' "Closure on bored, windowed and
+CAD cavities"; `hohlraum`'s holes meet its caps vertex for vertex, and it leaks nothing
+(2.7 × 10⁻³ at h = 1 when the holes took half the caps' count). An opening left
+without an aperture shows
 as the share of the view it takes, which may be no larger: a 40 µm waist gap 4 × 10⁻³,
 a CAD cavity's two 3.1 mm LEHs 7 × 10⁻². So the fraction indicates where to look
 (`element`),

@@ -10232,3 +10232,23 @@ balancing it moves no result by more than 3e-5 relative or 0.03 pp. The 1–6 % 
 LEH rims belong to bored entrance holes and gaps (the bored cavity of "Partial
 visibility"), which `cad_target` and `visrad_target` already sample; on flush holes the
 largest row-sum error is the wall's 0.66 % at the coarse size.
+
+## Entrance holes at the caps' azimuthal count (2026-11-03) *derived*
+
+- **Before.** `hohlraum` meshed each entrance hole (and its closing lip) with half the
+  cap's azimuthal count, so the hole's rim was an `nphi/2`-gon inside the cap's inner
+  `nphi`-gon: a crack at every rim that rays leak through (the curved view factors,
+  integrating the `DiskSurface` sectors, do not see it). The VisRad workspace's
+  primitive hohlraum copied the rule.
+- **Now.** Holes, lips and caps share the azimuths (`phibreaks` included), vertex for
+  vertex. Diffuse-ray leak (`open_fraction`, by cavity): the GUI shock-tube starter's
+  halfraums 7.5e-3 / 7.8e-3 → 0 (coarse) and 1.1e-3 → 0 (standard); the GUI default
+  hohlraum 1.2e-3 → 0 (coarse) and 2.7e-4 → 0 (standard); core `hohlraum(h = 1)` 2.7e-3
+  → 0. Cost: the holes' elements double (default design at the standard size 4,796 →
+  5,228 elements, its drive 6.7 → 7.7 s).
+- **Changed results** (the GUI's drives, balanced per cavity). Default design, standard:
+  capsule flux +1.7e-5 relative, P2/P0 −14.5022 → −14.5016 %, P4/P0 0.16691 → 0.16687 %,
+  wall Tr 267.7390 → 267.7407 eV; coarse: capsule flux +1.6e-4, ε₂ 14.33 → 14.37 %, wall
+  Tr 267.7287 → 267.7388 eV. Shock tube, coarse: observed face −7.6e-6, wall Tr 311.3656 →
+  311.3661 eV; standard: +5.1e-6, 311.2444 → 311.2443 eV. Flat-facet references (Monte
+  Carlo, `open_fraction`) no longer lose the rim cracks' share.

@@ -39,9 +39,7 @@ those under "Correctness" were read in the code, the rest are leads to confirm f
    2026-11-03 (assemblies design, "Per-cavity balancing as built"), but the GUI
    placement sweep's re-optimization builds its models from the target's `closed` flag,
    so its drive objective runs unbalanced; it needs the drive's cavities per step. Drive ▸
-   Cavity still balances its whole enclosure as one cavity. At the coarse size each
-   shock-tube halfraum leaks 7.5–7.8e-3 by rays (threshold 1e-2): the entrance-hole disks
-   take half the cap's azimuthal count, leaving cracks at the hole rims.
+   Cavity still balances its whole enclosure as one cavity.
 
 ## VisRad parity and facility practice
 

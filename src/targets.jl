@@ -638,16 +638,18 @@ function _end_components!(comps, ends, h, rcaps, nphi, phibreaks, wall; leh_clos
         e.kind === :open && continue
         disk = DiskSurface(center = (0, 0, sgn * h))
         rl = e.radius
+        # the hole takes the cap's azimuths, so its rim meets the cap's inner edge vertex
+        # for vertex (half the count left a crack at the rim that rays leak through)
         if leh_closure === nothing
-            push!(comps, aperture(name, disk_mesh(rl, sgn * h; nr = e.nr_leh, nphi = nphi ÷ 2,
-                                                  up = sgn < 0); surface = disk))
+            push!(comps, aperture(name, annulus_mesh(0.0, rl, sgn * h; nr = e.nr_leh, nphi,
+                                                     up = sgn < 0, phibreaks); surface = disk))
         else
             # the hole open at the peak, and the lip that closes around it
             ro = rl == leh_radius ? leh_open_radius : leh_open_radius * rl / leh_radius
-            push!(comps, aperture(name, disk_mesh(ro, sgn * h; nr = max(1, round(Int, e.nr_leh * ro / rl)),
-                                                  nphi = nphi ÷ 2, up = sgn < 0); surface = disk))
-            push!(comps, aperture(Symbol(name, :_lip), annulus_mesh(ro, rl, sgn * h; nr = nr_lip,
-                                                                    nphi = nphi ÷ 2, up = sgn < 0);
+            push!(comps, aperture(name, annulus_mesh(0.0, ro, sgn * h; nr = max(1, round(Int, e.nr_leh * ro / rl)),
+                                                     nphi, up = sgn < 0, phibreaks); surface = disk))
+            push!(comps, aperture(Symbol(name, :_lip), annulus_mesh(ro, rl, sgn * h; nr = nr_lip, nphi,
+                                                                    up = sgn < 0, phibreaks);
                                   surface = disk, closure = leh_closure))
         end
     end

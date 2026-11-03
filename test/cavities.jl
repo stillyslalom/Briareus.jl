@@ -165,7 +165,8 @@ end
     t = Target([[translate(named(x, :top), (0, 0, 2.25)) for x in hohlraum(; kw..., bottom_end = :open).components];
                 [translate(named(x, :bot), (0, 0, -2.25)) for x in hohlraum(; kw..., top_end = :open).components]; pkg])
     cavs = [[elements(t, :top); elements(t, :package_top)], [elements(t, :bot); elements(t, :package_bottom)]]
-    @test all(c -> open_fraction(t; cavity = c).fraction < 5e-3, cavs)          # 2.7e-3: the 12-gon holes in 24-gon caps
+    @test all(c -> open_fraction(t; cavity = c).fraction < 1e-5, cavs)          # 0: the holes meet the caps vertex for vertex
+    @test open_fraction(hohlraum(h = 1.0)).fraction < 1e-5                       # 2.7e-3 when the holes took half the count
     @test open_fraction(t; cavity = elements(t, :top)).fraction > 0.1             # without the face
     coax(r1, r2, L) = (R1 = r1 / L; R2 = r2 / L; X = 1 + (1 + R2^2) / R1^2; (X - sqrt(X^2 - 4 * (R2 / R1)^2)) / 2)
     Fl, Fe = coax(1.5, 1.0, 2.5), coax(1.5, 1.5, 2.5)
