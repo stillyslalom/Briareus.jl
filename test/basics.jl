@@ -36,48 +36,6 @@
     @test det(R) ≈ 1
 end
 
-@testset "ray casting" begin
-    t = hohlraum(nz = 8, nphi = 12, capsule_ntheta = 6, capsule_nphi = 8)
-    rng = MersenneTwister(1)
-    for _ in 1:300
-        o = Vec3(randn(rng, 3)...) .* 2
-        d = normalize(Vec3(randn(rng, 3)...))
-        tb, idb = closest_hit(t.bvh, o, d)
-        # brute force over opaque triangles
-        best, bi = Inf, 0
-        for k in eachindex(t.tri_area)
-            t.tri_opaque[k] || continue
-            tt = Briareus._intersect(o, d, t.tri_v0[k], t.tri_e1[k], t.tri_e2[k], best)
-            tt < best && (best = tt; bi = k)
-        end
-        @test tb ≈ best
-        @test any_hit(t.bvh, o, d) == (bi != 0)
-    end
-    # packets (the deposition operator's visibility rays): the same answers as any_hit,
-    # for coherent bundles off a facet and for scattered origins and directions
-    agree = true
-    cache = zeros(Int32, 16)
-    for trial in 1:200
-        k = rand(rng, findall(t.tri_opaque))
-        side = rand(rng, (-1, 1)) * t.tri_normal[k]
-        k0 = normalize(Vec3(randn(rng, 3)...))
-        dot(k0, side) > 0 || (k0 = -k0)
-        ds = trial % 4 == 0 ? [normalize(Vec3(randn(rng, 3)...)) for _ in 1:16] :
-             [normalize(k0 + 0.06 * Vec3(randn(rng, 3)...)) for _ in 1:13]
-        os = trial % 4 == 0 ? [Vec3(randn(rng, 3)...) .* 2 for _ in 1:7] :
-             [t.tri_v0[k] + u * t.tri_e1[k] + v * t.tri_e2[k] + 1e-6 * side
-              for (u, v) in ((rand(rng), rand(rng)) for _ in 1:16) if u + v <= 1]
-        m0 = [rand(rng, UInt16) & UInt16((1 << length(ds)) - 1) for _ in os]
-        m = Briareus._unblocked!(copy(m0), t.bvh, os, ds, Briareus._safe_inv.(ds), cache)
-        for i in eachindex(os), j in eachindex(ds)
-            (m0[i] >> (j - 1)) & 1 == 1 || continue
-            agree &= ((m[i] >> (j - 1)) & 1 == 1) == !any_hit(t.bvh, os[i], ds[j])
-        end
-        agree &= all(m .& .~m0 .== 0)
-    end
-    @test agree
-end
-
 @testset "view factors" begin
     # Interior of a sphere: F_ij = A_j / (4πR²) for every pair, rows close to 1.
     s = Target(Component(:s, sphere_mesh(R_SPHERE; ntheta = 10, nphi = 16, outward = false), gold()))
@@ -548,51 +506,6 @@ end
     # a tilted P2 has the same rotation-invariant power
     vt = 1 .+ 0.1 .* legendre.(2, [c[1] / norm(c) for c in t.elem_centroid])
     @test isapprox(mode_power(ylm_moments(vt, t, es; lmax = 4))[3], mp[3]; rtol = 0.03)
-end
-
-@testset "facilities" begin
-    q = nif_quads()
-    @test length(q) == 48
-    @test length(nif_beams()) == 192
-    angs = port_angles.(q)
-    tops = filter(a -> a[1] < 90, angs)
-    bots = filter(a -> a[1] > 90, angs)
-    # every bottom port is (180-θ, 360-φ) of a top port
-    @test all(any(isapprox(180 - b[1], a[1]; atol = 1e-6) && isapprox(mod(360 - b[2], 360), a[2]; atol = 1e-6)
-                  for a in tops) for b in bots)
-    @test count(b -> b.group === :inner23, q) == 8
-    @test count(b -> b.group === :outer50, q) == 16
-    ob = omega_beams(; cones = :all)
-    @test length(ob) == 60
-    θs = sort(unique(round.(first.(port_angles.(ob)); digits = 2)))
-    @test θs ≈ [21.42, 42.02, 58.85, 81.25, 98.75, 121.15, 137.98, 158.58]
-    @test length(omega_beams()) == 40
-    # quad names from the LMF chamber-geometry figures: a bijection onto the ports,
-    # every bundle one top and one bottom quad, FABS on Q31B (30°) and Q36B (130°, 186°)
-    @test length(unique(b.name for b in q)) == 48
-    bundles = nif_bundles(q)
-    @test length(bundles) == 24
-    @test all(sort([q[i].name[end] for i in v]) == ['B', 'T'] for v in values(bundles))
-    @test port_angles(q[findfirst(b -> b.name == "Q36B", q)])[1] ≈ 130
-    @test port_angles(q[findfirst(b -> b.name == "Q36B", q)])[2] ≈ 185.62
-    @test q[findfirst(b -> b.name == "Q31B", q)].group === :inner30
-    @test nif_port("Q11T") == 17 && nif_port("Q11B") == 50
-    kinds = Dict{Tuple{Bool,Bool},Int}()
-    for v in values(bundles)
-        inner = sort([q[i].group in (:inner23, :inner30) for i in v])
-        kinds[(inner[1], inner[2])] = get(kinds, (inner[1], inner[2]), 0) + 1
-    end
-    @test kinds == Dict((false, false) => 12, (false, true) => 8, (true, true) => 4)
-    @test all(nif_bundle(b) == nif_bundle(b.quad) for b in nif_beams())
-    # the LMF per-beam table: each quad's mean beam direction is its port, which also
-    # confirms the quad names read from the chamber-geometry figures
-    nb = nif_beams()
-    @test length(nb) == 192 && nb[1].name == "B111" && nb[1].quad == "Q11T"
-    for b in q
-        mean_dir = normalize(sum(x.port for x in nb if x.quad == b.quad))
-        @test acosd(clamp(dot(mean_dir, b.port), -1, 1)) < 0.01
-    end
-    @test all(x.group === q[findfirst(y -> y.quad == x.quad, q)].group for x in nb)
 end
 
 @testset "relative group pointing" begin

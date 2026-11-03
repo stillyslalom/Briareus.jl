@@ -328,9 +328,7 @@ Items 10–15 follow the 2026-10-22 literature review against Kritcher et al. 20
     gap"); a cheaper predictor for ACA give-ups (~20 % of assembly) and near-field
     quadrature reuse; an `HMatrix` has no direct solve; `storage = Float64` densifies an
     `HMatrix` without warning; `Keyframes` build a deposition operator at every time.
-33. **Code health** *(survey)*. Thin or indirect tests: `lpi.jl`, `keepout.jl`,
-    `xray_optics.jl`, `bvh.jl`, `storage.jl`, `facilities.jl` have no test file of their
-    own; a dozen exported functions have no test reference (`beams_from_table`,
+33. **Code health** *(survey)*. A dozen exported functions have no test reference (`beams_from_table`,
     `beam_component_power`, `raytrace_component_power`, `with_axes`, `talis_requirement`,
     `ylm_frame`, the Young 2020 helpers); GUI radiography, `ungroup_assembly!`,
     `add_hohlraum_break!` and `rename_cluster` are tested once or not at all. Shared
