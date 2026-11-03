@@ -66,6 +66,31 @@ patch_center(m, p) = Briareus._patch_centroid(m, m.patches[p])
         add_polygon!(fan, [Vec3(0, 0, 0), Vec3(0, 0, 1), Vec3(cos(ϕ), sin(ϕ), 1), Vec3(cos(ϕ), sin(ϕ), 0)])
     end
     @test_logs (:warn, r"non-manifold") orient_mesh(fan)
+    # two closed cubes touching along an edge (an assembly's contact), both wound inward:
+    # each is still closed and faces out of its own volume, without a warning
+    function box!(m, c)
+        for (n, u, v) in ((Vec3(1, 0, 0), Vec3(0, 1, 0), Vec3(0, 0, 1)), (Vec3(0, 1, 0), Vec3(0, 0, 1), Vec3(1, 0, 0)),
+                          (Vec3(0, 0, 1), Vec3(1, 0, 0), Vec3(0, 1, 0))), s in (1, -1)
+            q = [c + s * n - u - v, c + s * n + u - v, c + s * n + u + v, c + s * n - u + v]
+            add_polygon!(m, s > 0 ? reverse(q) : q)               # inward: clockwise seen from outside
+        end
+        return m
+    end
+    pair = box!(box!(Mesh(), Vec3(0, 0, 0)), Vec3(2, 2, 0))
+    @test all(dot(patch_normal(pair, p), patch_center(pair, p) - (p <= 6 ? Vec3(0, 0, 0) : Vec3(2, 2, 0))) < 0
+              for p in 1:12)
+    o = @test_logs orient_mesh(pair)
+    @test all(dot(patch_normal(o, p), patch_center(o, p) - (p <= 6 ? Vec3(0, 0, 0) : Vec3(2, 2, 0))) > 0
+              for p in 1:12)
+    # a Möbius band has no consistent winding: refused, or kept with a warning
+    band = Mesh()
+    edge(θ, s) = Vec3(2cos(θ), 2sin(θ), 0) + s * 0.3 * (cos(θ / 2) * Vec3(cos(θ), sin(θ), 0) + sin(θ / 2) * Vec3(0, 0, 1))
+    for k in 0:11
+        θ0, θ1 = 2π * k / 12, 2π * (k + 1) / 12
+        add_polygon!(band, [edge(θ0, -1), edge(θ1, -1), edge(θ1, 1), edge(θ0, 1)])
+    end
+    @test_throws ArgumentError orient_mesh(band)
+    @test npatches(@test_logs (:warn, r"inconsistent") orient_mesh(band; strict = false)) == 12
 end
 
 @testset "coarsen_mesh" begin

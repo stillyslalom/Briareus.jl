@@ -72,7 +72,7 @@ _patch_centroid(m::Mesh, r) =
                  for k in r) / A : sum(sum(triangle_vertices(m, k)) / 3 for k in r) / length(r))
 
 """
-    orient_mesh(mesh; toward = nothing, tol = 1e-9) -> Mesh
+    orient_mesh(mesh; toward = nothing, tol = 1e-9, strict = true) -> Mesh
 
 The mesh with its patches' windings made consistent: across every edge two patches
 share (vertices welded by position to `tol` times the mesh's extent), the patches
@@ -88,33 +88,30 @@ Each connected surface then gets one orientation as a whole:
   wall) by area-weighted majority, or, without `toward`, keeps the orientation of the
   larger part of its area.
 
-Edges shared by more than two patches (non-manifold) do not constrain the orientation,
-and a surface that cannot be oriented consistently (a Möbius-like stitching) keeps the
-first orientation found for each patch; both are reported in a warning.
+Edges shared by more than two patches (non-manifold) do not constrain the orientation.
+Where they only join separate surfaces, each with two patches on the edge (closed
+solids touching along an edge, as in a CAD assembly), each surface still counts as
+closed and faces out of its own volume; other non-manifold edges (three patches of one
+surface, a sheet meeting a solid) leave their surfaces open, and are reported in a
+warning. A surface that cannot be oriented consistently (a Möbius-like stitching) has
+no right winding: every orientation leaves some front side facing the wrong way, which
+`enclosure` and the radiosity read as given. It throws an
+`ArgumentError`, unless `strict = false`, which keeps the first orientation found for
+each patch and warns.
 """
-function orient_mesh(m::Mesh; toward = nothing, tol = 1e-9)
+function orient_mesh(m::Mesh; toward = nothing, tol = 1e-9, strict::Bool = true)
     np = npatches(m)
     np == 0 && return m
     id = _welded_ids(m; tol)
     edges = _patch_edges(m, id)
     # neighbors: (patch, same) with `same` true when the two must keep relative winding
     nbr = [Tuple{Int,Bool}[] for _ in 1:np]
-    boundary = falses(np)
-    nonmanifold = 0
     for list in values(edges)
-        if length(list) == 1
-            boundary[list[1][1]] = true
-        elseif length(list) == 2
-            (p, dp), (q, dq) = list
-            p == q && continue
-            push!(nbr[p], (q, dp != dq))       # opposite traversal: consistent as they are
-            push!(nbr[q], (p, dp != dq))
-        else
-            nonmanifold += 1
-            for (p, _) in list
-                boundary[p] = true
-            end
-        end
+        length(list) == 2 || continue
+        (p, dp), (q, dq) = list
+        p == q && continue
+        push!(nbr[p], (q, dp != dq))           # opposite traversal: consistent as they are
+        push!(nbr[q], (p, dp != dq))
     end
     flip = falses(np)
     shell = zeros(Int, np)
@@ -140,13 +137,37 @@ function orient_mesh(m::Mesh; toward = nothing, tol = 1e-9)
         end
     end
     conflicts ÷= 2                                  # each seen from both sides
+    conflicts > 0 && strict &&
+        throw(ArgumentError("orient_mesh: $conflicts patch pairs cannot be oriented consistently " *
+                            "(a surface with no consistent winding); repair the mesh, or pass " *
+                            "strict = false to keep the first orientation found"))
+    # a surface is closed when every edge of its patches has exactly two of them
+    closed = trues(nshell)
+    nonmanifold = 0
+    for list in values(edges)
+        if length(list) == 1
+            closed[shell[list[1][1]]] = false
+        elseif length(list) > 2
+            ss = sort!([shell[p] for (p, _) in list])
+            bad = false
+            i = 1
+            while i <= length(ss)
+                j = i
+                while j < length(ss) && ss[j+1] == ss[i]
+                    j += 1
+                end
+                j - i + 1 == 2 || (closed[ss[i]] = false; bad = true)
+                i = j + 1
+            end
+            nonmanifold += bad
+        end
+    end
     # one orientation per connected surface
     areavec = [_patch_area_vector(m, r) for r in m.patches]
     sgn(p) = flip[p] ? -1 : 1
     for s in 1:nshell
         ps = findall(==(s), shell)
-        closed = !any(boundary[p] for p in ps)
-        score = if closed
+        score = if closed[s]
             sum(sgn(p) * sum(dot(triangle_vertices(m, k)[1], cross(triangle_vertices(m, k)[2],
                                                                     triangle_vertices(m, k)[3]))
                              for k in m.patches[p]) for p in ps)       # 6 × signed volume
@@ -164,7 +185,7 @@ function orient_mesh(m::Mesh; toward = nothing, tol = 1e-9)
         end
     end
     (nonmanifold > 0 || conflicts > 0) &&
-        @warn "orient_mesh: $nonmanifold non-manifold edges, $conflicts inconsistent patch pairs"
+        @warn "orient_mesh: $nonmanifold non-manifold edges within a surface, $conflicts inconsistent patch pairs"
     owner = _triangle_patch(m)
     tris = [owner[k] > 0 && flip[owner[k]] ? (a, c, b) : (a, b, c)
             for (k, (a, b, c)) in enumerate(m.triangles)]
