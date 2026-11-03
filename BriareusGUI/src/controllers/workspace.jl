@@ -6,12 +6,13 @@
 # restored design.
 
 const SESSION_FORMAT = "BriareusGUI session"
-const SESSION_VERSION = 10              # 2: `.briar` archives with the CAD files; 3: frames; 4: placement steps;
+const SESSION_VERSION = 11              # 2: `.briar` archives with the CAD files; 3: frames; 4: placement steps;
                                         # 5: foil roles as a flag, and the active foil; 6: the diagnostics
                                         # recorded, and their definitions; 7: the observed and wall roles
                                         # as flags; 8: parts only (no template), hohlraum parts;
                                         # 9: user frames (parts of kind `frame`), the frames' drawn axes;
                                         # 10: assemblies (parts of kind `assembly`), each part's `assembly`
+                                        # 11: the roles of a hohlraum part's pieces (`piece_roles`)
 
 _strs(xs) = [String(x) for x in xs]
 _syms(xs) = Symbol[Symbol(x) for x in xs]
@@ -69,6 +70,7 @@ function session_state(sess::DesignSession; view::Bool = true)
                                      "foil" => p.foil, "observed" => p.observed, "wall" => p.wall,
                                      "windows" => _window_state.(p.windows),
                                      "sections" => [[z, r] for (z, r) in p.sections],
+                                     "piece_roles" => Dict{String,Any}(String(k) => String(r) for (k, r) in p.piece_roles),
                                      "assembly" => String(p.assembly))
                     for p in ts.parts[]])
     beams = Dict{String,Any}("preset" => String(bt.preset[]), "by" => String(bt.by[]),
@@ -144,6 +146,8 @@ geometry rejects (the session is then left as it was before the target, if the
 target fails, or partly restored otherwise).
 
 Older sessions convert as they load, through this one path:
+- Before version 11 no piece holds a role of its own: a hohlraum part's pieces load with
+  their default roles ([`piece_role`](@ref): the wall and caps the wall role).
 - Before version 10 a design has no assemblies: every part loads at the top level of the
   model tree ([`TOP_LEVEL`](@ref)), placed as saved.
 - Before version 9 a design has no user frames (`:frame` parts) and the view draws no
@@ -361,7 +365,8 @@ function _state_part(p, params; named_foil::Bool = false, named_capsule::Bool = 
                     wall = named_capsule ? false : p["wall"],
                     windows = WindowSpec[_state_window(w) for w in get(p, "windows", [])],
                     sections = NTuple{2,Float64}[(s[1], s[2]) for s in get(p, "sections", [])],
-                    assembly = Symbol(get(p, "assembly", "")))
+                    assembly = Symbol(get(p, "assembly", "")),
+                    piece_roles = Dict{Symbol,Symbol}(Symbol(k) => Symbol(r) for (k, r) in get(p, "piece_roles", Dict())))
 end
 
 _window_state(w::WindowSpec) =

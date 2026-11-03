@@ -611,7 +611,11 @@ end
     @test set_part_role!(ts, part_index(ts, :ball), :none)
     record!(s)
     @test ts.target[] === t && observed_name(ts) === nothing && drive_stale(s) && s.drive.result[] === nothing
-    @test :ball in s.review.hardware[] && :ball in s.talis.hardware[] && !Controllers._closed_enclosure(ts)
+    @test :ball in s.review.hardware[] && :ball in s.talis.hardware[]
+    # (a part wholly inside the hohlraum leaves it closed; one reaching out of it does not)
+    @test Controllers._closed_enclosure(ts)
+    @test edit_part!(ts, part_index(ts, :ball), :x, "2.5") && !Controllers._closed_enclosure(ts)
+    @test edit_part!(ts, part_index(ts, :ball), :x, "0") && Controllers._closed_enclosure(ts)
     @test undo!(s) && observed_name(ts) === :ball
     @test redo!(s) && observed_name(ts) === nothing
     # one observed surface at a time

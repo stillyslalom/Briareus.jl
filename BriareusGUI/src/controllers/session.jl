@@ -533,19 +533,34 @@ function build_scenario!(sess::DesignSession)
 end
 
 # Whether the drive's target is a closed hohlraum enclosure, whose view factors are
-# balanced so its rows sum to one: the pieces of a single hohlraum part and the part with
-# the observed role only (other free parts lie outside it), none of them left out (that
-# leaves a hole), and no end of it open (a halfraum is open to whatever is placed there).
+# balanced so its rows sum to one: the pieces of a single hohlraum part, the part with the
+# observed role and parts lying wholly inside the hohlraum (a capsule that gave the role to
+# a cap; other free parts lie outside it), none of the hohlraum's pieces or the observed
+# part left out (that leaves a hole), and no end of it open (a halfraum is open to
+# whatever is placed there).
 function _closed_enclosure(ts::TargetSetup)
     hs = [p.name for p in ts.parts[] if p.kind === :hohlraum]
     length(hs) == 1 || return false
     h = ts.parts[][findfirst(p -> p.kind === :hohlraum, ts.parts[])]
     any(e -> _end_kind(h.values, e) === :open, (:top_end, :bottom_end)) && return false
     obs = Set{Symbol}(p.name for p in ts.parts[] if p.observed)    # (left out or not)
-    inside(c) = c.part === hs[1] || c.name in obs || c.part in obs
-    all(inside, ts.target[].components) || return false
+    held(c) = c.part === hs[1] || c.name in obs || c.part in obs
+    frame = get(part_frames(ts), hs[1], nothing)
+    all(c -> held(c) || frame !== nothing && _inside_hohlraum(h, frame, c), ts.target[].components) ||
+        return false
     g = ts.ghost[]
-    return g === nothing || !any(inside, g.components)
+    return g === nothing || !any(held, g.components)
+end
+
+# Whether every vertex of component `c` lies in the closed volume of hohlraum part `p`
+# placed by `frame` (its profile about its axis, ends included, to 10⁻⁶ of its length).
+function _inside_hohlraum(p::PartSpec, frame::Frame, c::Component)
+    L = _hohlraum_length(p)
+    tol = 1e-6 * L
+    return all(c.mesh.vertices) do v
+        q = to_frame(frame, v)
+        abs(q[3]) <= L / 2 + tol && hypot(q[1], q[2]) <= _wall_radius_at(p, clamp(q[3], -L / 2, L / 2)) + tol
+    end
 end
 
 """

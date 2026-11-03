@@ -331,8 +331,11 @@ function _history_job(s::Scenario, beams, enabled, src, times; diags = NamedTupl
         return flat ? merge(rec, (; face = _face_stats(s, sol))) : rec
     end
     cavs = _drive_cavities(s, cavities)
+    # an observed piece of a part (a hohlraum's cap): the energy budget keeps it apart from
+    # the part's other pieces (`per_component`); a whole part keeps the budget by part
+    per_component = any(o -> !any(c -> c.part === o, t.components), observe)
     h = drive_history(s.model, s.deposition, τ -> _pulse_beams(src, beams, enabled, τ), times;
-                      observe, wall, lmax = 4, record, cavities = cavs, light...)
+                      observe, wall, lmax = 4, record, cavities = cavs, per_component, light...)
     fields = Dict{Symbol,Matrix{Float32}}(f => reduce(hcat, [r[f] for r in h.record]) for f in DRIVE_FIELDS)
     ranges = Dict{Symbol,Tuple{Float64,Float64}}()
     for (f, M) in fields
@@ -361,12 +364,13 @@ end
 
 # Where the laser energy has gone by each time of a history (kJ, `energy_budget` up to
 # that time): the laser delivered, the heat left in the walls (every surface but the
-# capsule: unconverted laser and absorbed x-rays), in the capsule (the observed parts
-# `observed`), the x-rays out of the entrance holes, and out of windows (other apertures
-# and thin foils), and the unconverted 1ω and 2ω light delivered (part of the laser's).
+# capsule: unconverted laser and absorbed x-rays), in the capsule (the observed parts or
+# pieces `observed`, the budget's keys: an observed piece's history is per component), the
+# x-rays out of the entrance holes, and out of windows (other apertures and thin foils),
+# and the unconverted 1ω and 2ω light delivered (part of the laser's).
 function _energy_series(h, t::Target, observed)
     holes = Set(c.name for c in t.components if c.kind === :aperture && !(c.surface isa CylinderSurface))
-    capsule = Set(c.part for c in t.components if c.name in observed || c.part in observed)
+    capsule = Set{Symbol}(observed)
     eb = [energy_budget(h; to = τ) for τ in h.time]
     sumof(d, keep) = sum((v for (k, v) in d if keep(k)); init = 0.0)
     # the escape through each aperture up to each time, from the steps' records (the

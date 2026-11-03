@@ -54,7 +54,16 @@ var pages = [
     { key: "component", title: "Pieces", items: [
         { key: "component.intro", title: "Wall, caps, entrance holes, windows",
           text: "A hohlraum part's pieces are sized from the part: select the part to edit them. " +
-                "However a piece is drawn (invisible included), it takes part in every calculation." }
+                "However a piece is drawn (invisible included), it takes part in every calculation." },
+        { key: "component.role", title: "A piece's role",
+          text: "A hohlraum part's wall and caps hold the Wall role (the drive history's and their " +
+                "cavity's wall temperature) and its other pieces none. A piece's own role replaces " +
+                "that default: a cap made Observed is the observed surface, a flat face with its face " +
+                "map and flux statistics, and no longer one of its cavity's walls; a wall section or a " +
+                "cap made None leaves the walls; a closed window made Wall joins them. One observed " +
+                "surface at a time: a part or piece that held the role gives it up. Entrance holes, " +
+                "their lips and open windows are apertures and take no role. Set it in the piece's " +
+                "properties or from its row's right-click menu in the model tree." }
     ] },
     { key: "frames", title: "Frames", items: [
         { key: "frames.intro", title: "User frames",

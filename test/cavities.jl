@@ -44,6 +44,16 @@ using Briareus: RadiationSolution
     # `wall_temperature` on one solution
     sol = solve(m, deposit(op, q))
     @test wall_temperature(sol, walls(:b)...) ≈ Tr(sol.H, own(:b)) rtol = 1e-12
+    # `per_component`: the energy per piece, not summed into the parts; each part's sum of
+    # its pieces is the by-part history's, and every other field is unchanged
+    hc = run(; per_component = true)
+    @test haskey(hc.absorbed, :a_cap_top) && !haskey(hc.absorbed, :a) && haskey(h0.absorbed, :a)
+    bypart(d, p) = sum(v for (k, v) in d if startswith(String(k), String(p) * "_"))
+    @test all(isapprox(bypart(getfield(hc, f), p), getfield(h0, f)[p]; rtol = 1e-12)
+              for f in (:laser, :source, :absorbed), p in (:a, :b))
+    @test all(k -> k in (:laser, :source, :absorbed, :escaped, :transmitted, :released, :mband) ||
+                   isequal(h0[k], hc[k]),
+              keys(h0))
     @test_throws ArgumentError run(; cavities = [:a => walls(:a), :a => walls(:b)])
     @test_throws ArgumentError run(; cavities = [walls(:a)])
 

@@ -343,7 +343,7 @@ const FRAME_LABELS = Dict(:tcc => "Target chamber (TCC)")
     PartSpec(kind; name, values, two_sided = false, inward = false, aperture = false,
              file = "", frame = :tcc, coords = :cartesian, object = "", steps = [],
              foil = false, observed = false, wall = false, windows = [],
-             assembly = TOP_LEVEL, sections = [])
+             assembly = TOP_LEVEL, sections = [], piece_roles = Dict())
 
 A free target part: `kind` (one of [`PART_KINDS`](@ref)), its component `name`,
 `values` (every [`PART_FIELDS`](@ref) key and its kind's [`PART_SIZE_FIELDS`](@ref)),
@@ -363,7 +363,9 @@ after the placement fields; the degrees of freedom they leave free keep the fiel
 values ([`part_placement`](@ref)). A `:hohlraum` part has its [`HOHLRAUM_VALUES`](@ref)
 too, `windows`, its diagnostic windows ([`WindowSpec`](@ref)s; other kinds have none),
 and `sections`, the `(z, r)` breaks of its wall when its profile is a section list
-([`hohlraum_profile`](@ref); the first and last `z` follow its length).
+([`hohlraum_profile`](@ref); the first and last `z` follow its length), and
+`piece_roles`, the roles its pieces hold in place of their default ones (a piece's name
+without the part's prefix => one of [`PIECE_ROLES`](@ref); see [`piece_role`](@ref)).
 A `:frame` part is a user frame: its placement fields and steps define the frame and it
 has no components. With `object` set it is a port frame ([`is_port_frame`](@ref)): the
 frame of the port named `object`, at TCC with `z` toward the port (`theta`, `phi` the
@@ -393,6 +395,7 @@ struct PartSpec
     windows::Vector{WindowSpec}
     assembly::Symbol
     sections::Vector{NTuple{2,Float64}}
+    piece_roles::Dict{Symbol,Symbol}
 end
 
 """
@@ -438,7 +441,8 @@ function PartSpec(kind::Symbol; name = kind, values = Dict{Symbol,Float64}(),
                   file::AbstractString = "", frame::Symbol = :tcc, coords::Symbol = :cartesian,
                   object::AbstractString = "", steps = PlacementStep[], foil::Bool = false,
                   observed::Bool = false, wall::Bool = false, windows = WindowSpec[],
-                  assembly::Symbol = TOP_LEVEL, sections = NTuple{2,Float64}[])
+                  assembly::Symbol = TOP_LEVEL, sections = NTuple{2,Float64}[],
+                  piece_roles = Dict{Symbol,Symbol}())
     kind in PART_KINDS || throw(ArgumentError("part kind must be one of $PART_KINDS"))
     _own_frame_name(Symbol(name), frame) && throw(ArgumentError("a part cannot be placed in its own frame"))
     coords in PART_COORDINATES || throw(ArgumentError("coordinates must be one of $PART_COORDINATES"))
@@ -451,6 +455,10 @@ function PartSpec(kind::Symbol; name = kind, values = Dict{Symbol,Float64}(),
     end
     kind === :hohlraum || isempty(windows) || throw(ArgumentError("only a hohlraum has windows"))
     kind === :hohlraum || isempty(sections) || throw(ArgumentError("only a hohlraum has sections"))
+    kind === :hohlraum || isempty(piece_roles) ||
+        throw(ArgumentError("only a hohlraum part's pieces hold roles of their own"))
+    all(r -> Symbol(r) in PIECE_ROLES, Base.values(piece_roles)) ||
+        throw(ArgumentError("a piece's role must be one of $PIECE_ROLES"))
     for (k, x) in values
         haskey(v, k) || throw(ArgumentError("a $kind has no field :$k"))
         v[k] = x
@@ -460,7 +468,8 @@ function PartSpec(kind::Symbol; name = kind, values = Dict{Symbol,Float64}(),
     return _port_checked(PartSpec(kind, Symbol(name), v, two_sided, inward, aperture, String(file), frame,
                                   coords, String(object), collect(PlacementStep, steps), foil, observed, wall,
                                   collect(WindowSpec, windows), assembly,
-                                  NTuple{2,Float64}[(Float64(z), Float64(r)) for (z, r) in sections]))
+                                  NTuple{2,Float64}[(Float64(z), Float64(r)) for (z, r) in sections],
+                                  Dict{Symbol,Symbol}(Symbol(k) => Symbol(r) for (k, r) in piece_roles)))
 end
 
 # A port frame stays at TCC, in `:tcc`, without steps (`_with` checks every edit).
@@ -480,9 +489,9 @@ _with(p::PartSpec; kind = p.kind, name = p.name, values = p.values, two_sided = 
       inward = p.inward, aperture = p.aperture, file = p.file, frame = p.frame,
       coords = p.coords, object = p.object, steps = p.steps, foil = p.foil,
       observed = p.observed, wall = p.wall, windows = p.windows, assembly = p.assembly,
-      sections = p.sections) =
+      sections = p.sections, piece_roles = p.piece_roles) =
     _port_checked(PartSpec(kind, name, values, two_sided, inward, aperture, file, frame, coords, object, steps,
-                           foil, observed, wall, windows, assembly, sections))
+                           foil, observed, wall, windows, assembly, sections, piece_roles))
 
 # A part with the frame named `old` renamed `new`: the frame it is placed in, the frames
 # its placement steps refer to, and the assembly it is a member of.
@@ -2494,7 +2503,8 @@ of parts can be foils, and the active one ([`active_foil`](@ref)) is the foil wh
 statistics, map, objective, line of sight and captured power the analyses take); and
 `:wall` (a re-emitting cavity surface: the drive history's wall temperature, and a
 surface the clearance and TaLIS checks land the beams on; any number of parts, see
-[`wall_names`](@ref)).
+[`wall_names`](@ref)). A hohlraum part's pieces hold roles of their own
+([`PIECE_ROLES`](@ref), [`set_piece_role!`](@ref)).
 """
 const PART_ROLES = (:none, :observed, :foil, :wall)
 
@@ -2504,6 +2514,129 @@ const PART_ROLE_LABELS = Dict(:none => "None", :observed => "Observed (x-ray dri
 
 "Role of a part (one of [`PART_ROLES`](@ref)), from its flags."
 part_role(p::PartSpec) = p.observed ? :observed : p.foil ? :foil : p.wall ? :wall : :none
+
+"""
+Roles a piece of a hohlraum part can hold ([`set_piece_role!`](@ref)): `:none`,
+`:observed` (a cap, flat: the observed surface's face map and flux statistics, as a
+package's face) and `:wall` (a re-emitting cavity wall: the drive history's and its
+cavity's wall temperature). The foil role stays on parts.
+"""
+const PIECE_ROLES = (:none, :observed, :wall)
+
+const PIECE_ROLE_LABELS = Dict(:none => "None", :observed => "Observed (x-ray drive: a flat face)",
+                               :wall => "Wall (re-emitting cavity surface)")
+
+"""
+    piece_role(p::PartSpec, piece::Symbol) -> Symbol
+
+The role (one of [`PIECE_ROLES`](@ref)) piece `piece` (without the prefix, one of
+[`hohlraum_pieces`](@ref)) of hohlraum part `p` holds: the one its row in the model tree
+gave it (`p.piece_roles`), else its default, `:wall` for the wall (each section of it)
+and the caps and `:none` for the entrance holes, their lips and the windows.
+"""
+piece_role(p::PartSpec, piece::Symbol) = get(p.piece_roles, piece, _default_piece_role(p, piece))
+
+_default_piece_role(p::PartSpec, piece::Symbol) =
+    piece in (:cap_top, :cap_bottom) || piece in _wall_pieces(p) ? :wall : :none
+
+# The pieces of hohlraum part `p` that are flat (the caps, which can be observed).
+const _FLAT_PIECES = (:cap_top, :cap_bottom)
+
+# The piece of hohlraum part `p` that holds the observed role (`nothing`: none). A role
+# given to a piece the part no longer has (a cap of an end since opened) is held by
+# nothing until the piece is back.
+function _observed_piece(p::PartSpec)
+    p.kind === :hohlraum || return nothing
+    ps = hohlraum_pieces(p)
+    for s in ps
+        piece_role(p, s) === :observed && return s
+    end
+    return nothing
+end
+
+"""
+    piece_roles(ts::TargetSetup, name::Symbol) -> Union{Nothing,NamedTuple}
+
+The role of component `name` when it is a piece of a hohlraum part (`<part>_<piece>`):
+`(; part, piece, role, roles)`, `role` the piece's ([`piece_role`](@ref)) and `roles`
+those it can take ([`PIECE_ROLES`](@ref): an entrance hole, its lip or an open window is
+an aperture and takes none; only a cap, flat, can be observed). `nothing` for any other
+component.
+"""
+function piece_roles(ts::TargetSetup, name::Symbol)
+    w = _hohlraum_piece(ts, name)
+    w === nothing && return nothing
+    p, s = w
+    return (; part = p.name, piece = s, role = piece_role(p, s), roles = _piece_roles_allowed(p, s))
+end
+
+# The hohlraum part and piece (without the prefix) of component `name`, or `nothing`.
+function _hohlraum_piece(ts::TargetSetup, name::Symbol)
+    n = String(name)
+    for p in ts.parts[]
+        p.kind === :hohlraum || continue
+        pre = String(p.name) * "_"
+        startswith(n, pre) || continue
+        s = Symbol(n[ncodeunits(pre)+1:end])
+        s in hohlraum_pieces(p) && return (p, s)
+    end
+    return nothing
+end
+
+# The roles piece `s` of hohlraum part `p` can take.
+function _piece_roles_allowed(p::PartSpec, s::Symbol)
+    _piece_aperture(p, s) && return (:none,)
+    return s in _FLAT_PIECES ? PIECE_ROLES : (:none, :wall)
+end
+
+# Whether piece `s` of hohlraum part `p` is an aperture: an entrance hole, its lip, an
+# open window.
+function _piece_aperture(p::PartSpec, s::Symbol)
+    str = String(s)
+    startswith(str, "leh_") && return true
+    k = findfirst(i -> window_name(i) === s, eachindex(p.windows))
+    return k !== nothing && p.windows[k].open
+end
+
+"""
+    set_piece_role!(ts::TargetSetup, name::Symbol, role::Symbol) -> Bool
+
+Give piece `name` of a hohlraum part (its component, `<part>_<piece>`) a role of its own
+(one of [`PIECE_ROLES`](@ref)) in place of its default ([`piece_role`](@ref)): a cap
+`:observed` becomes the observed surface ([`observed_name`](@ref): a flat face, its face
+map and flux statistics) and leaves the wall role, so its cavity's wall temperature
+([`cavity_walls`](@ref)) no longer counts it; a wall section or a cap given `:none`
+leaves the walls too; a closed window given `:wall` joins them. One observed surface at
+a time: a part or piece that held it gives it up. The components (and so the target)
+are unchanged. Saved with the session, and undone like any edit. A role the piece cannot
+take (an aperture takes none; only a cap can be observed), or a component that is not a
+hohlraum part's piece, sets `error` and returns `false`.
+"""
+function set_piece_role!(ts::TargetSetup, name::Symbol, role::Symbol)
+    role in PIECE_ROLES || throw(ArgumentError("a piece's role must be one of $PIECE_ROLES"))
+    w = _hohlraum_piece(ts, name)
+    if w === nothing
+        ts.error[] = "$name is not a piece of a hohlraum part: a part's role is set on the part"
+        return false
+    end
+    p, s = w
+    piece_role(p, s) === role && (ts.error[] = ""; return true)
+    if !(role in _piece_roles_allowed(p, s))
+        ts.error[] = _piece_aperture(p, s) ? "$name is an aperture (transparent): it takes no role" :
+                     "only a cap, flat, can be the observed surface: $name is curved"
+        return false
+    end
+    ps = copy(ts.parts[])
+    role === :observed && _drop_observed!(ps)            # one observed surface at a time
+    i = findfirst(q -> q.name === p.name, ps)
+    q = ps[i]
+    roles = copy(q.piece_roles)
+    role === _default_piece_role(q, s) ? delete!(roles, s) : (roles[s] = role)
+    ps[i] = _with(q; piece_roles = roles)
+    ts.error[] = ""
+    ts.parts[] = ps                                      # the geometry is unchanged
+    return true
+end
 
 """
     observed_flat(ts::TargetSetup) -> Bool
@@ -2516,7 +2649,9 @@ the θ–φ map) have no capsule.
 function observed_flat(ts::TargetSetup)
     o = observed_name(ts)
     o === nothing && return false
-    return _part_shape(ts.parts[][part_index(ts, o)]) in _FLAT_OBSERVED
+    i = part_index(ts, o)
+    i === nothing && return true                 # a piece: a cap (`_FLAT_PIECES`)
+    return _part_shape(ts.parts[][i]) in _FLAT_OBSERVED
 end
 
 # The shapes a flat observed face can be.
@@ -2528,13 +2663,19 @@ const _FLAT_OBSERVED = (:rectangle, :disk)
 The surface whose x-ray drive the analyses observe (the drive's modes and θ–φ map, the
 capsule keep-out and summaries, the drive history, the retune, the results export): the
 part with the observed role (`PartSpec.observed`, given by [`set_part_role!`](@ref); a
-starter's capsule holds it) while it is in the calculations, else `nothing`. One surface
-at a time.
+starter's capsule holds it), or the piece of a hohlraum part given it by
+[`set_piece_role!`](@ref) (its component name, `<part>_cap_top`, say), while it is in the
+calculations, else `nothing`. One surface at a time.
 """
 function observed_name(ts::TargetSetup)
     ex = ts.excluded[]
     for p in ts.parts[]
-        p.observed && !(p.name in ex) && return p.name
+        p.name in ex && continue
+        p.observed && return p.name
+        s = _observed_piece(p)
+        s === nothing && continue
+        n = piece_name(p.name, s)
+        n in ex || return n
     end
     return nothing
 end
@@ -2544,10 +2685,10 @@ end
 
 The re-emitting cavity walls in the calculations (the drive history's wall temperature;
 surfaces the clearance and TaLIS checks land the beams on), in the parts' order: each
-part with the role `:wall`, and each hohlraum part's wall and caps (its pieces
-`<part>_wall`, `<part>_cap_top`, `<part>_cap_bottom`, an open end having no cap: they
-hold the role by being a hohlraum's; the checks keep the caps as hardware, the entrance
-holes' edges).
+part with the role `:wall`, and each hohlraum part's pieces holding it ([`piece_role`](@ref):
+by default its wall and caps, `<part>_wall`, `<part>_cap_top`, `<part>_cap_bottom`, an
+open end having no cap; a piece given another role in the model tree leaves them; the
+checks keep the caps as hardware, the entrance holes' edges).
 """
 function wall_names(ts::TargetSetup)
     ex = ts.excluded[]
@@ -2560,18 +2701,18 @@ function wall_names(ts::TargetSetup)
     return out
 end
 
-# The pieces of a hohlraum part that hold the wall role: its wall (each section of it) and
-# the caps it has.
-_hohlraum_walls(p) = (ps = hohlraum_pieces(p);
-                      [piece_name(p.name, s) for s in [_wall_pieces(p); :cap_top; :cap_bottom] if s in ps])
+# The pieces of a hohlraum part that hold the wall role (`piece_role`; by default its wall,
+# each section of it, and the caps it has), in the order of its pieces.
+_hohlraum_walls(p) = [piece_name(p.name, s) for s in hohlraum_pieces(p) if piece_role(p, s) === :wall]
 
 """
     cavity_walls(ts::TargetSetup) -> Vector{Pair{Symbol,Vector{Symbol}}}
 
 The cavities of the design for the drive's per-cavity wall temperature: one per
-hohlraum part in the calculations, in the parts' order, `part => its wall pieces` (its
-wall, each section of it, and the caps it has; [`wall_names`](@ref) lists them all
-together). Parts that hold the wall role without being a hohlraum part (a shield, a
+hohlraum part in the calculations, in the parts' order, `part => its wall pieces` (the
+pieces holding the wall role, [`piece_role`](@ref): by default its wall, each section of
+it, and the caps it has, so a cap made the observed surface is not among them;
+[`wall_names`](@ref) lists them all together). Parts that hold the wall role without being a hohlraum part (a shield, a
 VisRad hohlraum) count in the drive history's wall temperature, not as a cavity of
 their own. A cavity's walls are named piece by piece: every piece of a hohlraum part,
 its entrance holes included, carries the part's name as `Component.part`.
@@ -2587,13 +2728,13 @@ The hohlraum part ([`cavity_walls`](@ref)) that holds the observed surface
 ([`observed_name`](@ref)): the first whose closed volume (its profile about its axis, ends
 included, to 10⁻⁶ of its length) contains the observed part's area-weighted centroid in
 the built target. A capsule at a hohlraum's center is in it; a shock-tube package's face
-closing a halfraum's open end lies in that end's plane, so it is in that halfraum.
-`nothing` without an observed surface or when no cavity holds it.
+closing a halfraum's open end lies in that end's plane, so it is in that halfraum, and so
+does an observed cap. `nothing` without an observed surface or when no cavity holds it.
 """
 function observed_cavity(ts::TargetSetup)
     o = observed_name(ts)
     t = ts.target[]
-    (o === nothing || t === nothing || !any(c -> c.part === o, t.components)) && return nothing
+    (o === nothing || t === nothing || !_has_part(t, o)) && return nothing
     c = Briareus.part_centroid(t, o)
     frames = part_frames(ts)
     for p in ts.parts[]
@@ -2668,6 +2809,7 @@ carry its name as a prefix) and, for the wall, each hohlraum part's wall and cap
 function observed_components(ts::TargetSetup, t::Target = ts.target[])
     o = observed_name(ts)
     o === nothing && return Symbol[]
+    part_index(ts, o) === nothing && return Symbol[c.name for c in t.components if c.name === o]   # a piece
     return _held_components(ts, t, p -> p.name === o, ())
 end
 
@@ -2731,8 +2873,9 @@ name, and its components (and so the target) are unchanged. `:foil` (a disk, rec
 or mesh, or a VisRad rectangle or CAD part: a backlighter whose spot the foil objective
 makes uniform) marks the part as a foil; the part becomes the active foil
 ([`active_foil`](@ref)) when the design had none. `:observed` makes the part the observed
-surface ([`observed_name`](@ref)); another part that held it gives it up. A hohlraum
-part takes no role (its wall and caps hold the wall role). The observed surface is a
+surface ([`observed_name`](@ref)); another part or piece that held it gives it up. A
+hohlraum part takes no role: its pieces hold theirs (the wall and caps the wall role by
+default, see [`set_piece_role!`](@ref)). The observed surface is a
 sphere (a capsule: the mode analysis and the keep-out take its center and radius) or a
 flat face (a rectangle or disk, or a VisRad rectangle: [`observed_flat`](@ref)): such a
 part takes the role itself; a CAD part (a capsule with its fill tube, say) is replaced in the calculations by
@@ -2754,7 +2897,8 @@ function set_part_role!(ts::TargetSetup, i::Integer, role::Symbol; done = () -> 
     try
         _no_geometry(p) && throw(ArgumentError("a $(p.kind) has no surface to take a role"))
         p.kind === :hohlraum &&
-            throw(ArgumentError("a hohlraum's wall and caps hold the wall role already; its holes are apertures"))
+            throw(ArgumentError("a hohlraum part's pieces hold the roles (its wall and caps the wall role): " *
+                                "select a piece to change its role"))
         shape = _part_shape(p)
         if role === :observed && shape !== :sphere && !(shape in _FLAT_OBSERVED)
             shape === :mesh ||
@@ -2782,10 +2926,14 @@ function set_part_role!(ts::TargetSetup, i::Integer, role::Symbol; done = () -> 
     return true
 end
 
-# Clear the observed role of every part of `ps` (in place).
+# Clear the observed role of every part of `ps` and of their pieces (in place; a piece
+# returns to its default role).
 function _drop_observed!(ps::Vector{PartSpec})
     for k in eachindex(ps)
         ps[k].observed && (ps[k] = _with(ps[k]; observed = false))
+        r = ps[k].piece_roles
+        any(==(:observed), values(r)) &&
+            (ps[k] = _with(ps[k]; piece_roles = filter(kv -> last(kv) !== :observed, r)))
     end
     return ps
 end

@@ -254,7 +254,11 @@ collects every explanation by page. Help ▸ Documentation opens this page.
   halfraum, closed or not by whatever is placed there; its view factors are then not
   balanced), the closing entrance holes, and its windows. Its wall and
   caps hold the *Wall* role (the drive history's wall temperature); the clearance and
-  TaLIS checks keep the caps as hardware, the entrance holes' edges. Each end has a frame
+  TaLIS checks keep the caps as hardware, the entrance holes' edges. A piece's row in the
+  model tree (its properties, or the right-click menu) gives it another role: a cap
+  *Observed* (a flat face: its face map and flux statistics, and out of its cavity's
+  walls), a wall section or a cap *None*, a closed window *Wall*; the entrance holes, their
+  lips and open windows are apertures and take none. Each end has a frame
   (`hohlraum.leh_top`, `hohlraum.leh_bottom`: origin at the end's center, z pointing out
   of the hohlraum, so one placement or aim mirrors between the two) and each window one
   at its center on the wall (`hohlraum.window_1`). Its *Profile* is a cylinder, a

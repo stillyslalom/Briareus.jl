@@ -599,6 +599,18 @@ function model_tree(sess)
         several = length(foil_names(ts)) > 1
         foiltxt(c) = !(c.name in foils) ? "" :
                      several && (c.name === act || c.part === act) ? "foil · active" : "foil"
+        # a hohlraum part's piece holding a role other than its default (`piece_role`)
+        function roletxt(c)
+            _is_piece(c) || return ""
+            i = part_index(ts, c.part)
+            i === nothing && return ""
+            p = ts.parts[][i]
+            p.kind === :hohlraum || return ""
+            s = Symbol(String(c.name)[ncodeunits(String(p.name))+2:end])
+            haskey(p.piece_roles, s) || return ""
+            r = p.piece_roles[s]
+            return r === :none ? "no role" : String(r)
+        end
         crow(id, lab, detail, name; color = "", depth = 1) =
             (m = display_mode(v, name);
              _row(id, depth, lab, detail, false, false, m === :invisible ? 0 : 1, "", sel; color,
@@ -620,7 +632,7 @@ function model_tree(sess)
             if incalc
                 kindtxt = c.kind === :aperture ? (c.name in lips ? "aperture · closing" : "aperture") :
                           c.two_sided ? "two-sided" : ""
-                kindtxt = join(filter(!isempty, [foiltxt(c), kindtxt]), " · ")
+                kindtxt = join(filter(!isempty, [foiltxt(c), roletxt(c), kindtxt]), " · ")
                 push!(rows, crow(component_id(ts, c.name), label(c), kindtxt, c.name;
                                  color = get(cols, c.name, ""), depth))
             else

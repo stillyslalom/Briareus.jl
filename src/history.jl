@@ -55,7 +55,8 @@ end
                   tol = 1e-4, keep_albedo = false, record = nothing,
                   wall_history = true, wall_release = true, mband = MBandSplit(),
                   spectral = nothing, unconverted = nothing, colors = nif_unconverted(),
-                  unconverted_kw = (;), prepulse = nothing, by = :group) -> NamedTuple
+                  unconverted_kw = (;), prepulse = nothing, by = :group,
+                  per_component = false) -> NamedTuple
 
 Quasi-static drive history: at each time, deposit `beams_at(t)` with `op` (after the
 laser–plasma model `lpi`, evaluated at that time), solve the
@@ -106,6 +107,9 @@ radiosity at that time (time- and temperature-dependent albedos included), and r
   `energy_budget` integrates them. Like `energy_balance`, `escaped`, `transmitted`,
   `laser`, `source` and `absorbed` are keyed by part, the pieces of a part split by
   `curved_components` summed into it; `front` and `burnthrough` stay per component.
+  With `per_component = true` all of them, `released` and `mband`'s laser power stay per
+  component (one piece of a part apart from the others: a hohlraum's cap observed while
+  its wall heats).
 - `lip_radius` — per computed entrance-hole lip (`LipClosure`, `hohlraum(; leh_closure =
   :computed)`), the radius of its plasma edge at each step (mm)
 - `record` — with `record = f`, the vector of `f(sol)` for each step's
@@ -276,7 +280,7 @@ Base.@nospecializeinfer function _drive_history(
                         mband = MBandSplit(), @nospecialize(spectral = nothing),
                         @nospecialize(unconverted = nothing), colors = nif_unconverted(),
                         @nospecialize(unconverted_kw = (;)), @nospecialize(prepulse = nothing),
-                        @nospecialize(by = :group))
+                        @nospecialize(by = :group), per_component::Bool = false)
     # the unconverted light's fractions and depositions (`nothing`: none)
     ulight = unconverted === nothing ? nothing :
              _UnconvertedLight(unconverted, prepulse, by, colors, unconverted_kw)
@@ -637,7 +641,7 @@ Base.@nospecializeinfer function _drive_history(
         end
     end
     burnthrough = Dict(t.components[ci].name => [_nan_inf(tb[e]) for e in t.comp_elems[ci]] for ci in foils)
-    if any(c -> c.part !== c.name, t.components)       # pieces of split parts summed into them
+    if !per_component && any(c -> c.part !== c.name, t.components)   # pieces of split parts summed into them
         escaped, transmitted, laser, source, absorbed, released =
             _by_part(t, escaped), _by_part(t, transmitted), _by_part(t, laser), _by_part(t, source),
             _by_part(t, absorbed), _by_part(t, released)

@@ -426,10 +426,23 @@ end
 _has_part(t::Target, name) =
     name !== nothing && (name in component_names(t) || any(c -> c.part === name, t.components))
 
-# The parts of a scenario's observed elements, `()` when it observes none (the names core's
-# `observe` keywords take for the same elements).
-_observed_parts(s::Scenario) =
-    Tuple(unique([s.target.components[s.target.elem_comp[e]].part for e in s.observed]))
+# The names core's `observe` keywords take for a scenario's observed elements, `()` when it
+# observes none: each part whose components are all observed (a capsule, a CAD capsule's
+# fitted pieces), else the observed components by name (a hohlraum part's cap, never its
+# part: the part's name stands for all of its pieces).
+function _observed_parts(s::Scenario)
+    t = s.target
+    comps = unique([t.elem_comp[e] for e in s.observed])
+    seen = Set(comps)
+    out = Symbol[]
+    for ci in comps
+        c = t.components[ci]
+        whole = all(k -> t.components[k].part !== c.part || k in seen, eachindex(t.components))
+        n = whole ? c.part : c.name
+        n in out || push!(out, n)
+    end
+    return Tuple(out)
+end
 
 # The part a scenario observes (`nothing`: none).
 _observed_part(s::Scenario) = (o = _observed_parts(s); isempty(o) ? nothing : first(o))

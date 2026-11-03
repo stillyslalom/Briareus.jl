@@ -216,6 +216,32 @@ Pane {
                         height: visible ? implicitHeight : 0
                         onTriggered: Julia.br_node_include(node.nodeId, checked)
                     }
+                    // a hohlraum part's piece: its role (the selection's, set on right-click)
+                    MenuSeparator { visible: menu.isComp && app.pieceRoleable; height: visible ? implicitHeight : 0 }
+                    MenuItem {
+                        text: "Role: " + app.pieceRoleLabels[0]
+                        checkable: true
+                        checked: app.pieceRole === 0
+                        enabled: app.pieceRoleAllowed[0] === true
+                        visible: menu.isComp && app.pieceRoleable; height: visible ? implicitHeight : 0
+                        onTriggered: Julia.br_piece_role(0)
+                    }
+                    MenuItem {
+                        text: "Role: " + app.pieceRoleLabels[1]
+                        checkable: true
+                        checked: app.pieceRole === 1
+                        enabled: app.pieceRoleAllowed[1] === true
+                        visible: menu.isComp && app.pieceRoleable; height: visible ? implicitHeight : 0
+                        onTriggered: Julia.br_piece_role(1)
+                    }
+                    MenuItem {
+                        text: "Role: " + app.pieceRoleLabels[2]
+                        checkable: true
+                        checked: app.pieceRole === 2
+                        enabled: app.pieceRoleAllowed[2] === true
+                        visible: menu.isComp && app.pieceRoleable; height: visible ? implicitHeight : 0
+                        onTriggered: Julia.br_piece_role(2)
+                    }
                     MenuItem {
                         text: "Draw axes in the 3D view"
                         checkable: true

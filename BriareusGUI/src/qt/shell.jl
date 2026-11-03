@@ -534,6 +534,10 @@ function BriareusShell(sess::DesignSession; queue::Channel{Any} = Channel{Any}(I
     _set!(sh, "cavitySummary", "")
     _set!(sh, "compIncluded", true)
     _set!(sh, "roleLabels", [PART_ROLE_LABELS[r] for r in PART_ROLES])
+    _set!(sh, "pieceRoleLabels", [PIECE_ROLE_LABELS[r] for r in PIECE_ROLES])
+    _set!(sh, "pieceRoleable", false)
+    _set!(sh, "pieceRole", 0)
+    _set!(sh, "pieceRoleAllowed", fill(false, length(PIECE_ROLES)))
     _set!(sh, "partCoords", 0)
     _set!(sh, "frameLabels", [FRAME_LABELS[:tcc]])
     _set!(sh, "stepKindLabels", [PART_STEP_LABELS[k] for k in PART_STEP_KINDS])
@@ -830,6 +834,11 @@ function _refresh_selection!(sh::BriareusShell)
             _set!(sh, "compDisplay", findfirst(==(display_mode(sess.view, name)), DISPLAY_MODES) - 1)
             _set!(sh, "selTitle", String(name))
         end
+        # a hohlraum part's piece: its role, and those it can take (indices into PIECE_ROLES)
+        pr = name === nothing ? nothing : piece_roles(sess.target, name)
+        _set!(sh, "pieceRoleable", pr !== nothing && length(pr.roles) > 1)
+        _set!(sh, "pieceRole", pr === nothing ? 0 : findfirst(==(pr.role), PIECE_ROLES) - 1)
+        _set!(sh, "pieceRoleAllowed", [pr !== nothing && r in pr.roles for r in PIECE_ROLES])
     end
     if kind in (:part, :frame, :assembly)
         i = part_index(sess.target, Symbol(key))
@@ -2137,6 +2146,22 @@ function br_part_role(index)
         end
     end
 end
+# The selected piece's role (index into `pieceRoleLabels`); a refused role shows the
+# piece's own again.
+function br_piece_role(index)
+    _with_shell() do sh
+        name = selected_component(sh.sess)
+        name === nothing && return
+        role = PIECE_ROLES[Int(index)+1]
+        if set_piece_role!(sh.sess.target, name, role)
+            sh.sess.status[] = "$name: " * lowercase(PIECE_ROLE_LABELS[role])
+            sh.dirty[] = true
+        else
+            sh.sess.status[] = sh.sess.target.error[]
+        end
+        delete!(sh.shown, "pieceRole")
+    end
+end
 # The foil the foil analyses take (index into `foilNames`).
 function br_active_foil(index)
     _with_shell() do sh
@@ -2816,7 +2841,7 @@ function _register_qml_functions()
     @qmlfunction br_sw_subject br_sw_frame br_sw_axis br_sw_edit br_sw_check br_sw_object
     @qmlfunction br_sw_quality br_sw_start br_sw_cancel br_sw_select br_sw_apply
     @qmlfunction br_sw_mode br_sw_step br_sw_number br_step_sweep
-    @qmlfunction br_part_role br_active_foil br_drive_cavity br_export_stl br_cavity br_cavity_point br_part_film
+    @qmlfunction br_part_role br_piece_role br_active_foil br_drive_cavity br_export_stl br_cavity br_cavity_point br_part_film
     @qmlfunction br_remove_selected br_help br_docs_url
     @qmlfunction br_new_assembly br_move_into_assembly br_ungroup_assembly br_rename_node
     @qmlfunction br_add_frame br_add_port_frame br_set_triad br_tf_set br_tf_open br_tf_create br_open_transform

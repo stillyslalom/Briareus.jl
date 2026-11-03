@@ -82,6 +82,7 @@ export PartSpec, PART_KINDS, PART_KIND_LABELS, PART_FIELDS, PART_SIZE_FIELDS, pa
        edit_part_step!, part_placement,
        PART_COORDINATES, PART_POSITION_FIELDS, part_position, set_part_coords!, part_components,
        all_component_names, PART_ROLES, PART_ROLE_LABELS, part_role, set_part_role!,
+       PIECE_ROLES, PIECE_ROLE_LABELS, piece_role, piece_roles, set_piece_role!,
        foil_names, active_foil, set_active_foil!, foil_components, observed_name, observed_flat, wall_names,
        observed_components, wall_components, cavity_walls, observed_cavity,
        export_target_stl, add_stl_parts!, fit_sphere, part_size_unit

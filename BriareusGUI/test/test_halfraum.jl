@@ -338,3 +338,98 @@ end
     @test isempty(whole.note) && whole.view.field_of_view == 60.0 && whole.view.through === :halfraum_bottom_leh_bottom
     @test all(>(0), whole.intensity) && isapprox(whole.intensity, last.(core.record); rtol = 2e-3)   # 3.5e-4
 end
+
+@testset "piece roles: an observed cap (no GL)" begin
+    sess = DesignSession(resolution = :coarse)
+    ts = sess.target
+    cap, walls = :hohlraum_cap_top, [:hohlraum_wall, :hohlraum_cap_bottom]
+    # defaults: the wall and caps hold the wall role, the holes none
+    p = ts.parts[][part_index(ts, :hohlraum)]
+    @test [piece_role(p, s) for s in hohlraum_pieces(p)] == [:wall, :wall, :wall, :none, :none]
+    @test piece_roles(ts, cap).roles == PIECE_ROLES && piece_roles(ts, :hohlraum_wall).roles == (:none, :wall)
+    @test piece_roles(ts, :hohlraum_leh_top).roles == (:none,) && piece_roles(ts, :capsule) === nothing
+    # refused: an aperture, a curved piece observed, a part's own component
+    @test !set_piece_role!(ts, :hohlraum_leh_top, :wall) && occursin("aperture", ts.error[])
+    @test !set_piece_role!(ts, :hohlraum_wall, :observed) && occursin("curved", ts.error[])
+    @test !set_piece_role!(ts, :capsule, :wall)
+    @test_throws ArgumentError set_piece_role!(ts, cap, :foil)
+    target = ts.target[]
+    record!(sess)
+    # the top cap observed: the capsule gives the role up, the cap leaves the walls, and
+    # the cavity holding it is the hohlraum
+    @test set_piece_role!(ts, cap, :observed) && record!(sess)
+    @test ts.target[] === target                              # the geometry is unchanged
+    @test observed_name(ts) === cap && observed_flat(ts) && !ts.parts[][part_index(ts, :capsule)].observed
+    @test cavity_walls(ts) == [:hohlraum => walls] && wall_names(ts) == walls
+    @test observed_cavity(ts) === :hohlraum && observed_components(ts) == [cap]
+    @test Controllers._closed_enclosure(ts)
+    row = only(r for r in model_tree(sess) if r.id == Controllers.component_id(ts, cap))
+    @test occursin("observed", row.detail)
+    # the drive: the cap's face map and statistics, no modes; its mean flux and the
+    # cavity's wall temperature against Σ H A / Σ A over elements found by name here
+    build_scenario!(sess)
+    res = sess.drive.result[]
+    s = sess.drive.scenario[]
+    t = s.target
+    named(ns) = [e for e in 1:nelements(t) if t.components[t.elem_comp[e]].name in ns]
+    mean(H, es) = sum(H[e] * t.elem_area[e] for e in es) / sum(t.elem_area[e] for e in es)
+    H = res.solution.H
+    @test Controllers._observed_parts(s) == (cap,) && sort(s.observed) == named((cap,))
+    @test isempty(res.modes) && res.face !== nothing && flux_map(sess.drive).kind === :face
+    @test res.mean_flux ≈ mean(H, named((cap,))) rtol = 1e-12
+    @test [c.name for c in res.cavities] == [:hohlraum]
+    @test res.cavities[1].Tr ≈ radiation_temperature(mean(H, named(walls))) rtol = 1e-12
+    # (counting the cap would change it)
+    @test abs(res.cavities[1].Tr / radiation_temperature(mean(H, named([walls; cap]))) - 1) > 1e-6
+    # the retune holds the face; the capsule symmetry objective refuses it
+    @test Controllers._retune_kind(s, nothing, :auto) === :face
+    @test_throws ArgumentError Controllers._make_objective(Controllers._objective_settings(sess.optimize; observed = cap),
+                                                           s, nothing, 0.5)
+    # the drive history: the face's Tr per step, the cavity's from its own walls, and the
+    # energy kept apart for the cap, against core histories on the same scenario
+    use_pulse_shape!(sess; step = 1.0)
+    start_history!(sess)
+    h = sess.time.history[]
+    @test h.face !== nothing && [c.name for c in h.cavities] == [:hohlraum]
+    src, beams, enabled = sess.time.pulses[], sess.beams.beams[], sess.beams.enabled[]
+    at = τ -> Controllers._pulse_beams(src, beams, enabled, τ)
+    core = drive_history(s.model, s.deposition, at, h.time; observe = (cap,), wall = Tuple(walls), lmax = 4,
+                         record = sol -> copy(sol.H))
+    @test core.time == h.time
+    @test isapprox(h.Tr, [radiation_temperature(mean(r, named((cap,)))) for r in core.record]; rtol = 1e-12)
+    @test isapprox(h.cavities[1].Tr, [radiation_temperature(mean(r, named(walls))) for r in core.record]; rtol = 1e-12)
+    eb = energy_budget(h.history)
+    byp = energy_budget(core)                       # by part: the cap summed into the hohlraum
+    @test haskey(eb.heating, cap) && !haskey(byp.heating, cap)
+    @test sum(values(eb.heating)) ≈ sum(values(byp.heating)) rtol = 1e-12
+    @test sum(v for (k, v) in eb.heating if startswith(String(k), "hohlraum_")) ≈ byp.heating[:hohlraum] rtol = 1e-12
+    @test only(x for x in h.energy if x.name === :capsule).values[end] ≈ eb.heating[cap] rtol = 1e-12
+    # undo gives the capsule its role back; redo the cap's
+    @test undo!(sess) && observed_name(ts) === :capsule
+    @test cavity_walls(ts) == [:hohlraum => [:hohlraum_wall, cap, :hohlraum_cap_bottom]]
+    @test redo!(sess) && observed_name(ts) === cap
+    # sessions: the role round trips (version 11); a version-10 session loads with the
+    # pieces' default roles
+    f = joinpath(mktempdir(), "cap.briar.toml")
+    save_session(f, sess)
+    saved = TOML.parsefile(f)
+    hp = only(q for q in saved["target"]["parts"] if q["name"] == "hohlraum")
+    @test saved["version"] == 11 && hp["piece_roles"] == Dict("cap_top" => "observed")
+    s2 = DesignSession(resolution = :coarse)
+    load_session!(s2, f)
+    @test observed_name(s2.target) === cap && cavity_walls(s2.target) == [:hohlraum => walls]
+    old = session_state(sess)
+    old["version"] = 10
+    foreach(q -> delete!(q, "piece_roles"), old["target"]["parts"])
+    old["target"]["parts"][findfirst(q -> q["name"] == "capsule", old["target"]["parts"])]["observed"] = true
+    restore!(s2, old)
+    @test observed_name(s2.target) === :capsule && all(q -> isempty(q.piece_roles), s2.target.parts[])
+    # the capsule given the role again: the cap gives it up and is a wall again
+    @test set_part_role!(ts, part_index(ts, :capsule), :observed)
+    @test observed_name(ts) === :capsule && isempty(ts.parts[][part_index(ts, :hohlraum)].piece_roles)
+    # a cap given no role leaves the walls; back to its default, the override goes
+    @test set_piece_role!(ts, :hohlraum_cap_bottom, :none) && wall_names(ts) == [:hohlraum_wall, cap]
+    bottom = only(r for r in model_tree(sess) if r.id == Controllers.component_id(ts, :hohlraum_cap_bottom))
+    @test occursin("no role", bottom.detail)
+    @test set_piece_role!(ts, :hohlraum_cap_bottom, :wall) && isempty(ts.parts[][part_index(ts, :hohlraum)].piece_roles)
+end

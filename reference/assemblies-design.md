@@ -127,6 +127,8 @@ C2. Landed (per-cavity wall Tr in core `drive_history(; cavities)` and `wall_tem
    the Drive panel's cavity selector and the history's per-cavity series; the built-in
    `nif_dante1` views the whole target; no session version change): see "Phase C2 as
    built".
+Piece roles (decision 7's second half: a piece's own role, a cap observed; core
+   `drive_history(; per_component)`; session version 11): see "Piece roles as built".
 E. **Double backlighter with ARC:** the starter, ARC beams as a facility beam set (public
    description only; mock-up timing), per-foil results if one active foil is not enough.
 
@@ -279,7 +281,7 @@ E. **Double backlighter with ARC:** the starter, ARC beams as a facility beam se
   `FoilIrradiance`); see "Face and foil retune as built". Sphere-observed histories are unchanged:
   the default session's history fields and drive chart serialized before and after are
   equal.
-- Not built: a piece's role (decision 7, a cap observed).
+- A piece's role (decision 7, a cap observed): built, see "Piece roles as built".
 
 ## Face and foil retune as built (2026-11-02)
 
@@ -430,9 +432,62 @@ E. **Double backlighter with ARC:** the starter, ARC beams as a facility beam se
   the view through that hohlraum's hole to 1.2e-4, a 60 mm field both holes' sum to
   1.4e-4; on the shock tube `nif_dante1` reads the view through the lower hole to
   3.5e-4.
-- Not built: a cavity holding a piece's role (decision 7); per-cavity albedo or energy
+- Not built: per-cavity albedo or energy
   series; a Dante field centered on a part from the GUI (a definition's `center_part`
   serves).
+
+## Piece roles as built (2026-11-02): decision 7's second half
+
+- `PartSpec.piece_roles` (a hohlraum part's only): piece name without the prefix => role,
+  holding only the roles that differ from the default (`piece_role`: `:wall` for the wall,
+  each section, and the caps; `:none` for the holes, lips and windows). Keyed by the
+  piece, so a rename keeps them; a role on a piece the part no longer has (a cap of an end
+  since opened) is held by nothing until the piece is back.
+- `PIECE_ROLES = (:none, :observed, :wall)` (decision taken): the foil role stays on parts.
+  Only a cap, flat, can be observed (a wall section or a window is curved, and the
+  capsule-only views need a sphere part); the entrance holes, lips and open windows are
+  apertures and take none; a closed window can be a wall. `set_piece_role!(ts, component,
+  role)` takes the component name (`hohlraum_cap_top`); one observed surface at a time
+  (`_drop_observed!` clears parts' flags and pieces' observed roles alike).
+- `observed_name` is then the piece's component name, never its part's (`part_pieces` on
+  the part's name would take every piece, the trap of d5e6606); the scenario's
+  `_observed_parts` gives core `observe` a part only when all its components are observed,
+  else the components by name. `observed_flat` is true for an observed piece; `wall_names`,
+  `cavity_walls` and `wall_components` take the pieces holding `:wall`, so an observed cap
+  leaves its cavity's walls. `observed_cavity` and `observed_components` take a piece's
+  name.
+- Energy: core `drive_history(; per_component = true)` keeps `laser`, `source`,
+  `absorbed`, `escaped`, `transmitted` and `released` per component instead of summing a
+  part's pieces; the GUI's history passes it only when the observed surface is a piece, so
+  the energy chart's observed-surface heat is the cap's and the walls' the rest. Default
+  `false`: every other history is unchanged.
+- `_closed_enclosure` now also counts parts lying wholly inside the single hohlraum (every
+  vertex in its closed volume): the capsule that gave the role to a cap keeps the default
+  design closed. Before, any free part without the observed role opened it (the test of a
+  sphere without a role inside the hohlraum changed accordingly). The ghost check (a piece
+  of the hohlraum or the observed part left out leaves a hole) is as before.
+- GUI: a piece's properties have a *Role* box, and its tree row's right-click menu the
+  three roles (those it cannot take disabled); the row's detail reads `observed`, `wall` or
+  `no role` when the piece's role is not its default; Help ▸ Pieces ▸ A piece's role.
+  Undo comes with the session state. Sessions: version 11 stores `piece_roles` per part;
+  older sessions load with the defaults (test).
+- Consumers checked: the drive's scenario and face map, the face statistics and retune
+  kind (`_observed_flat` from the elements' normals: a cap is flat), the capsule keep-out
+  and symmetry objective (refuse a flat face), the history (Tr from the face, the cavities
+  from their walls, the energy), the clearance and TaLIS roles (`_held_sets`: an observed
+  cap is a landing surface the TaLIS check leaves out, as any observed surface), the
+  optimizer and sweep (`observed_name`). Dante's field and `ApertureKeepOut` read no role
+  (geometry and apertures only).
+- Bit for bit: the default design's and the shock tube's drive (modes, mean flux, H, B,
+  powers, map, face, cavities, summary) and drive history (every core field, Tr, Legendre
+  rows, face, fields, ranges, energy, diagnostics, cavities, the drive and energy charts),
+  serialized before (fe18c7f) and after: identical.
+- Validation (GUI `test_halfraum.jl`, "piece roles"): the default design with its top cap
+  observed: the cap's mean flux against Σ H A / Σ A over the elements of the component
+  named `hohlraum_cap_top`, found in the test, and the cavity's wall Tr against the same
+  over `hohlraum_wall` and `hohlraum_cap_bottom`, to 1e-12, in the drive and per step of a
+  core history; the cap's heat plus the hohlraum's other pieces' equals the by-part
+  budget's hohlraum heat to 1e-12.
 
 ## Decisions (user, 2026-10-29)
 
