@@ -62,17 +62,29 @@ end
     edit_beams!(s.beams, 1, :power, "5.5"; by = :beam)
     record!(s)
     @test s.beams.beams[][1].power == 5.5
-    # view changes (coloring, selection) are not edits
-    s.view.beams[] = :volumes
+    # a selection is not an edit; a view change (the beam drawing) is a step of its own,
+    # undone without rebuilding the target
     select!(s.view, "beams")
     @test !record!(s)
+    s.view.beams[] = :volumes
+    @test record!(s)
+    t0 = s.target.target[]
+    @test undo!(s) && s.view.beams[] !== :volumes && s.target.target[] === t0 && s.beams.beams[][1].power == 5.5
+    @test redo!(s) && s.view.beams[] === :volumes
+    # a slider dragged (the cut's azimuth, event by event) is one step back to its start
+    az0 = s.view.cut_azimuth[]
+    for az in (10.0, 20.0, 30.0)
+        set_cut!(s.view; azimuth = az)
+        record!(s)
+    end
+    @test undo!(s) && s.view.cut_azimuth[] == az0 && s.view.beams[] === :volumes
+    @test undo!(s)
     # undo walks back: the power, the window, the length
     @test undo!(s) && s.beams.beams[][1] == b0
     @test undo!(s) && isempty(hohlraum_windows(s.target))
     @test can_redo(s)
     @test undo!(s) && s.target.parts[][1].values[:length] == L0
     @test !undo!(s) && !can_undo(s)
-    @test s.view.beams[] === :volumes                     # the view stays as it is
     # redo walks forward again, and the target is rebuilt each time
     @test redo!(s) && s.target.parts[][1].values[:length] == 11.0
     @test redo!(s) && length(hohlraum_windows(s.target)) == 1

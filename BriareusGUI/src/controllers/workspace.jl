@@ -44,7 +44,7 @@ function _state_beam(d)
 end
 
 """
-    session_state(sess::DesignSession; view = true) -> Dict{String,Any}
+    session_state(sess::DesignSession) -> Dict{String,Any}
 
 The design as plain data, ready for TOML: the target (element sizes, parts with their
 windows, what is left out, the active foil), the beams (each beam's port, aim, power, focus, spot, cone and
@@ -54,12 +54,13 @@ included), the optimization, the clearance check, the TaLIS checks and the place
 sweep, the diagnostics a drive history records (their ids; a session file carries their
 definitions too, see [`save_session`](@ref)), the pulses the beams fire (a pulse table's
 data itself, its keys' times and powers, so the session opens without the CSV file, or
-the pulse shape and its step; see [`load_pulses!`](@ref)), and (with `view`) the 3D view's coloring, beam drawing (which
-beams' 1ω, 2ω and 3ω light is drawn), cutaway and component display modes. Results are
-not part of it; they are
-computed again. Restore it with [`restore!`](@ref).
+the pulse shape and its step; see [`load_pulses!`](@ref)), and the 3D view's coloring, beam
+drawing (which beams' 1ω, 2ω and 3ω light is drawn), cutaway, component display modes and
+frame axes. Results are not part of it; they are computed again, and neither are the
+camera, the selection or the model tree's expanded nodes. Restore it with
+[`restore!`](@ref); the edit history ([`record!`](@ref)) holds the same snapshots.
 """
-function session_state(sess::DesignSession; view::Bool = true)
+function session_state(sess::DesignSession)
     ts, bt, dr, op, rv, tl = sess.target, sess.beams, sess.drive, sess.optimize, sess.review, sess.talis
     target = Dict{String,Any}(
         "mesh" => Dict{String,Any}("h" => ts.mesh[].h, "capsule_h" => ts.mesh[].capsule_h),
@@ -115,29 +116,27 @@ function session_state(sess::DesignSession; view::Bool = true)
                                                         "threshold" => sess.time.threshold[]))
     pulses = _pulse_state(sess.time.pulses[])
     pulses === nothing || (state["time"]["pulses"] = pulses)
-    if view
-        v = sess.view
-        state["view"] = Dict{String,Any}("color" => String(v.color[]), "beams" => String(v.beams[]),
-                                         "beam_color" => String(v.beam_color[]),
-                                         "beam_length" => v.beam_length[], "cutaway" => v.cutaway[],
-                                         "cut_azimuth" => v.cut_azimuth[], "cut_width" => v.cut_width[],
-                                         "cut_components" => sort(_strs(v.cut_components[])),
-                                         "cut_kind" => String(v.cut_kind[]),
-                                         "cut_axis" => String(v.cut_axis[]),
-                                         "cut_range" => collect(v.cut_range[]),
-                                         "cut_point" => collect(v.cut_point[]),
-                                         "cut_normal" => collect(v.cut_normal[]),
-                                         "cut_shift" => v.cut_shift[],
-                                         "cut_line" => collect(v.cut_line[]),
-                                         "cut_rotation" => v.cut_rotation[],
-                                         "display" => Dict{String,Any}(String(k) => String(m)
-                                                                       for (k, m) in v.display[]),
-                                         "hidden_beams" => sort(collect(v.hidden_beams[])),
-                                         "shown_1w" => sort(collect(v.shown_1w[])),
-                                         "shown_2w" => sort(collect(v.shown_2w[])),
-                                         "side" => dr.side[], "show_off" => v.show_off[],
-                                         "triads" => sort(_strs(v.triads[])))
-    end
+    v = sess.view
+    state["view"] = Dict{String,Any}("color" => String(v.color[]), "beams" => String(v.beams[]),
+                                     "beam_color" => String(v.beam_color[]),
+                                     "beam_length" => v.beam_length[], "cutaway" => v.cutaway[],
+                                     "cut_azimuth" => v.cut_azimuth[], "cut_width" => v.cut_width[],
+                                     "cut_components" => sort(_strs(v.cut_components[])),
+                                     "cut_kind" => String(v.cut_kind[]),
+                                     "cut_axis" => String(v.cut_axis[]),
+                                     "cut_range" => collect(v.cut_range[]),
+                                     "cut_point" => collect(v.cut_point[]),
+                                     "cut_normal" => collect(v.cut_normal[]),
+                                     "cut_shift" => v.cut_shift[],
+                                     "cut_line" => collect(v.cut_line[]),
+                                     "cut_rotation" => v.cut_rotation[],
+                                     "display" => Dict{String,Any}(String(k) => String(m)
+                                                                   for (k, m) in v.display[]),
+                                     "hidden_beams" => sort(collect(v.hidden_beams[])),
+                                     "shown_1w" => sort(collect(v.shown_1w[])),
+                                     "shown_2w" => sort(collect(v.shown_2w[])),
+                                     "side" => dr.side[], "show_off" => v.show_off[],
+                                     "triads" => sort(_strs(v.triads[])))
     return state
 end
 
@@ -311,45 +310,52 @@ function restore!(sess::DesignSession, state::AbstractDict)
     if p != _pulse_state(sess.time.pulses[])
         p === nothing ? (sess.time.pulses[] = nothing) : _set_pulses!(sess, _state_pulses(p))
     end
-    if haskey(state, "view")
-        v, vs = state["view"], sess.view
-        _assign!(vs.color, Symbol(v["color"]))
-        _assign!(vs.beams, Symbol(v["beams"]))
-        _assign!(vs.beam_color, Symbol(v["beam_color"]))
-        _assign!(vs.beam_length, Float64(v["beam_length"]))
-        _assign!(vs.cutaway, v["cutaway"])
-        # sessions before the plane cut and the axis and range of the sector: a sector
-        # about z, unbounded
-        haskey(v, "cut_width") && set_cut!(vs; azimuth = v["cut_azimuth"], width = v["cut_width"],
-                                           components = rns(v["cut_components"]),
-                                           kind = Symbol(get(v, "cut_kind", "sector")),
-                                           axis = Symbol(get(v, "cut_axis", "z")),
-                                           range = Tuple(Float64.(get(v, "cut_range", [-Inf, Inf]))))
-        # sessions before the plane's offset and line of sight kept the shifted point and
-        # no line
-        if haskey(v, "cut_normal")
-            set_cut_plane!(vs; normal = Float64.(v["cut_normal"]), point = Float64.(v["cut_point"]),
-                           offset = Float64(get(v, "cut_shift", 0.0)))
-            _assign!(vs.cut_line, Tuple(Float64.(get(v, "cut_line", [0.0, 0.0, 0.0]))))
-            _assign!(vs.cut_rotation, Float64(get(v, "cut_rotation", 0.0)))
-            _assign!(vs.cut_kind, Symbol(get(v, "cut_kind", "sector")))
-        end
-        # sessions before display modes listed hidden components: invisible
-        disp = Dict{Symbol,Symbol}(rn(k) => Symbol(m) for (k, m) in get(v, "display", Dict()))
-        for n in get(v, "hidden", String[])
-            disp[rn(n)] = :invisible
-        end
-        filter!(p -> last(p) in DISPLAY_MODES && last(p) !== :opaque, disp)
-        _assign!(vs.display, disp)
-        _assign!(vs.hidden_beams, Set{String}(get(v, "hidden_beams", String[])))
-        _assign!(vs.shown_1w, Set{String}(get(v, "shown_1w", String[])))
-        _assign!(vs.shown_2w, Set{String}(get(v, "shown_2w", String[])))
-        haskey(v, "side") && _assign!(sess.drive.side, Bool(v["side"]))
-        haskey(v, "show_off") && _assign!(vs.show_off, Bool(v["show_off"]))
-        # (sessions before version 9 draw no frame axes)
-        _assign!(vs.triads, Set{Symbol}(rf.(get(v, "triads", String[]))))
-    end
+    haskey(state, "view") && _restore_view!(sess, state["view"]; rn, rf)
     _restored_optimum!(sess)
+    return sess
+end
+
+# The view section of a session state (`session_state`): the coloring, the beam drawing,
+# the cut, the display modes, the frame axes. `rn` and `rf` map a saved component and
+# frame name to the design's (a template's names in sessions before version 8).
+function _restore_view!(sess::DesignSession, v::AbstractDict; rn = Symbol, rf = Symbol)
+    rns(xs) = Symbol[rn(x) for x in xs]
+    vs = sess.view
+    _assign!(vs.color, Symbol(v["color"]))
+    _assign!(vs.beams, Symbol(v["beams"]))
+    _assign!(vs.beam_color, Symbol(v["beam_color"]))
+    _assign!(vs.beam_length, Float64(v["beam_length"]))
+    _assign!(vs.cutaway, v["cutaway"])
+    # sessions before the plane cut and the axis and range of the sector: a sector
+    # about z, unbounded
+    haskey(v, "cut_width") && set_cut!(vs; azimuth = v["cut_azimuth"], width = v["cut_width"],
+                                       components = rns(v["cut_components"]),
+                                       kind = Symbol(get(v, "cut_kind", "sector")),
+                                       axis = Symbol(get(v, "cut_axis", "z")),
+                                       range = Tuple(Float64.(get(v, "cut_range", [-Inf, Inf]))))
+    # sessions before the plane's offset and line of sight kept the shifted point and
+    # no line
+    if haskey(v, "cut_normal")
+        set_cut_plane!(vs; normal = Float64.(v["cut_normal"]), point = Float64.(v["cut_point"]),
+                       offset = Float64(get(v, "cut_shift", 0.0)))
+        _assign!(vs.cut_line, Tuple(Float64.(get(v, "cut_line", [0.0, 0.0, 0.0]))))
+        _assign!(vs.cut_rotation, Float64(get(v, "cut_rotation", 0.0)))
+        _assign!(vs.cut_kind, Symbol(get(v, "cut_kind", "sector")))
+    end
+    # sessions before display modes listed hidden components: invisible
+    disp = Dict{Symbol,Symbol}(rn(k) => Symbol(m) for (k, m) in get(v, "display", Dict()))
+    for n in get(v, "hidden", String[])
+        disp[rn(n)] = :invisible
+    end
+    filter!(p -> last(p) in DISPLAY_MODES && last(p) !== :opaque, disp)
+    _assign!(vs.display, disp)
+    _assign!(vs.hidden_beams, Set{String}(get(v, "hidden_beams", String[])))
+    _assign!(vs.shown_1w, Set{String}(get(v, "shown_1w", String[])))
+    _assign!(vs.shown_2w, Set{String}(get(v, "shown_2w", String[])))
+    haskey(v, "side") && _assign!(sess.drive.side, Bool(v["side"]))
+    haskey(v, "show_off") && _assign!(vs.show_off, Bool(v["show_off"]))
+    # (sessions before version 9 draw no frame axes)
+    _assign!(vs.triads, Set{Symbol}(rf.(get(v, "triads", String[]))))
     return sess
 end
 
@@ -767,15 +773,31 @@ Note the design's current state in the edit history: if it differs from the last
 noted, the last one becomes an undo step (and the redo steps are dropped). Returns
 whether a step was added. A window calls this after every event, so any edit (a field,
 a preset, an applied optimization, loaded pulses) can be undone.
+
+The history holds what a session saves ([`session_state`](@ref)), view included: a
+change of display mode, cutaway, beam drawing, hidden beams, drawn colors or frame axes
+is a step of the one history, so undo takes back the last thing done, whichever it was,
+and view state keyed to part names follows the undo of a rename. The camera, the
+selection and the model tree's expanded nodes are not saved and not steps. An undo
+that changes only the view leaves the target as it is (no rebuild). Consecutive changes
+of the same numeric view settings and nothing else (a cutaway slider dragged) merge
+into one step, so the step returns to where the drag started.
 """
 function record!(sess::DesignSession)
     h = sess.history
-    state = session_state(sess; view = false)
+    state = session_state(sess)
     if h.current === nothing
         h.current = state
         return false
     end
     isequal(state, h.current) && return false
+    if !isempty(h.undo) && isempty(h.redo)
+        now, last = _numeric_view_change(h.current, state), _numeric_view_change(h.undo[end], h.current)
+        if now !== nothing && now == last
+            h.current = state                 # the same drag: the step keeps its start
+            return false
+        end
+    end
     push!(h.undo, h.current)
     length(h.undo) > h.limit && popfirst!(h.undo)
     h.current = state
@@ -813,16 +835,36 @@ function redo!(sess::DesignSession)
     return true
 end
 
+# The view keys whose values changed from state `a` to `b` when only numeric view
+# settings changed (a slider's), else `nothing`.
+function _numeric_view_change(a, b)
+    all(k -> k == "view" || isequal(get(a, k, nothing), get(b, k, nothing)), union(keys(a), keys(b))) ||
+        return nothing
+    va, vb = a["view"], b["view"]
+    ks = Set(k for k in union(keys(va), keys(vb)) if !isequal(get(va, k, nothing), get(vb, k, nothing)))
+    (isempty(ks) || !all(k -> get(va, k, nothing) isa Real && get(vb, k, nothing) isa Real &&
+                              !(get(va, k, nothing) isa Bool), ks)) && return nothing
+    return ks
+end
+
+# A step of the history: only the view when nothing else differs from the current state
+# (the design and its target stay as they are), else the whole state.
 function _step_to!(sess::DesignSession, state)
-    restore!(sess, state)
-    sess.history.current = session_state(sess; view = false)
+    cur = sess.history.current
+    if cur !== nothing && all(k -> k == "view" || isequal(get(state, k, nothing), get(cur, k, nothing)),
+                              union(keys(state), keys(cur)))
+        _restore_view!(sess, state["view"])
+    else
+        restore!(sess, state)
+    end
+    sess.history.current = session_state(sess)
     return sess
 end
 
 "Whether there is an edit to undo / to redo."
 can_undo(sess::DesignSession) = !isempty(sess.history.undo) ||
                                 (sess.history.current !== nothing &&
-                                 !isequal(session_state(sess; view = false), sess.history.current))
+                                 !isequal(session_state(sess), sess.history.current))
 can_redo(sess::DesignSession) = !isempty(sess.history.redo)
 
 """
@@ -834,6 +876,6 @@ function reset_history!(sess::DesignSession)
     h = sess.history
     empty!(h.undo)
     empty!(h.redo)
-    h.current = session_state(sess; view = false)
+    h.current = session_state(sess)
     return sess
 end

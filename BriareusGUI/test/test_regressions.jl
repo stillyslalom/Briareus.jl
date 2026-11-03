@@ -36,6 +36,7 @@ end
     set_sweep!(sw; subject = :hohlraum, frame = leh, los_object = :hohlraum_wall)
     set_triad!(v, leh, true)
     select!(v, "comp:hohlraum_wall")
+    record!(sess)
     @test edit_part!(ts, part_index(ts, :hohlraum), :name, "hr")
     # the cap stays out of the calculations, under its new name
     @test :hr_cap_top in ts.excluded[] && !(:hohlraum_cap_top in ts.excluded[])
@@ -47,6 +48,12 @@ end
     @test sw.subject[] === :hr && sw.frame[] === Symbol("hr.leh_top") && sw.los_object[] === :hr_wall
     @test v.triads[] == Set([Symbol("hr.leh_top")]) && v.selection[] == "comp:hr_wall"
     @test v.cut_components[] == Set([:hr_wall, :hr_cap_top, :hr_cap_bottom])
+    # the rename undone: the view keyed to the old names comes back with them (the view is
+    # in the edit history), and follows the redo
+    @test record!(sess) && undo!(sess)
+    @test v.display[] == Dict(:hohlraum_wall => :wireframe) && v.triads[] == Set([leh])
+    @test v.cut_components[] == Set([:hohlraum_wall, :hohlraum_cap_top, :hohlraum_cap_bottom])
+    @test redo!(sess) && v.display[] == Dict(:hr_wall => :wireframe) && v.triads[] == Set([Symbol("hr.leh_top")])
 
     # a VisRad part's pieces carry its name as their part's: they follow it too
     dir = mktempdir()

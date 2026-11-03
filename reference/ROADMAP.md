@@ -29,9 +29,8 @@ those under "Correctness" were read in the code, the rest are leads to confirm f
 ## Correctness
 
 3. **Bugs and weak spots found by the survey** *(survey; GUI items read in the code)*.
-   - GUI: an undo of a part rename brings the old name back, but the view state keyed to
-     the new one (display modes, the cut, triads) is not in the history and is dropped; a
-     diagnostic definition's `center_part` is the user's file and keeps the old name.
+   - GUI: a diagnostic definition's `center_part` is the user's file and keeps a renamed
+     part's old name.
    - Core: the `line_of_sight_power` occlusion is per centroid (all or nothing), unlike
      Dante's pixel rays; `ApertureKeepOut` takes every hole as a circle; primitive targets
      default to `visibility = :centroid` (row sums 1–6 % off at LEH rims unless
@@ -273,8 +272,7 @@ Items 10–15 follow the 2026-10-22 literature review against Kritcher et al. 20
       or sorting in the beam table.
     - Time: no pulse editing; no Time node in the Analyses tree (its prepulse and
       threshold settings sit in Drive).
-    - Sessions and undo: view edits (display modes, cutaway, hidden beams, beam style)
-      are not undoable; camera pose and chart choices are not saved; ticking a
+    - Sessions and undo: camera pose and chart choices are not saved; ticking a
       diagnostic makes design undo steps.
     - Views: Look from port lists beam ports only; *Save view as image* grabs the main
       canvas only; a beam within the pick distance wins over a nearer surface.
