@@ -120,7 +120,13 @@ material's,
 applied to gold's loss after its `range` clamp (so a DU wall's albedo may exceed gold's
 cap), the ratio of the two materials' Marshak wall losses (Rosen 2005: for U₀.₆Dy₀.₂Au₀.₂
 against Au, `E/A ∝ T^3.1 t^0.57` against `T^3.3 t^0.6`, a ratio ∝ T^-0.22 t^-0.05).
-`du_wall_loss()` is the preset for an Au-lined depleted-uranium wall.
+`du_wall_loss()` is the preset for an Au-lined depleted-uranium wall. A loss above 1 (a
+lossier material, `r > 1`, where gold's loss is already large) leaves albedo 0: the
+wall absorbs all it receives (a `range` reaching below 0, as for the unclamped power law
+of a closure study, lowers that floor to its own lower end). The constructor throws an
+`ArgumentError` for a negative `coefficient`, `factor`, `liner` or `release`, a
+nonpositive `t0`, `reference_temperature` or `factor_temperature`, and a `range` with
+`lo > hi` or `hi > 1`.
 
 **Liner.** `liner` (g/cm², 0 for none) of gold on the inside of such a wall: until the
 heat front has crossed it the wall loses like gold. The front's areal mass is the
@@ -165,21 +171,45 @@ Base.@kwdef struct WallLossAlbedo <: AlbedoModel
     liner::Float64 = 0.0
     front::HeatFront = HeatFront()
     release::Float64 = 1.0
+    function WallLossAlbedo(coefficient, temperature_exponent, time_exponent,
+                            reference_temperature, t0, range, factor, factor_exponent,
+                            factor_temperature, liner, front, release)
+        bad(what) = throw(ArgumentError("WallLossAlbedo: $what"))
+        coefficient >= 0 || bad("coefficient must not be negative")
+        factor >= 0 || bad("factor must not be negative")
+        liner >= 0 || bad("liner must not be negative")
+        release >= 0 || bad("release must not be negative")
+        t0 > 0 || bad("t0 must be positive")
+        reference_temperature > 0 || bad("reference_temperature must be positive")
+        factor_temperature > 0 || bad("factor_temperature must be positive")
+        range[1] <= range[2] || bad("range must satisfy lo ≤ hi, got $range")
+        range[2] <= 1 || bad("an albedo cannot exceed 1: range $range")
+        return new(coefficient, temperature_exponent, time_exponent, reference_temperature, t0,
+                   range, factor, factor_exponent, factor_temperature, liner, front, release)
+    end
 end
 
 function albedo(m::WallLossAlbedo, t, T = nothing)
     Te = (T === nothing || T <= 0) ? m.reference_temperature : T
     tc = max(t, m.t0)
-    loss = m.coefficient * (Te / 100)^m.temperature_exponent * tc^m.time_exponent
-    α = clamp(1 - loss, m.range...)
+    α = clamp(1 - _gold_loss(m, Te, tc), m.range...)
     m.factor == 1 && m.factor_exponent == 0 && return α
+    a = 1 - _loss_ratio(m, Te, tc) * (1 - α)
+    return max(a, min(m.range[1], zero(a)))     # a loss above 1 absorbs everything
+end
+
+# Gold's loss (Lindl's form, unclamped) and the material's ratio `r_eff` to it, at the
+# element's temperature `Te` and (clamped) time `tc`.
+_gold_loss(m::WallLossAlbedo, Te, tc) =
+    m.coefficient * (Te / 100)^m.temperature_exponent * tc^m.time_exponent
+function _loss_ratio(m::WallLossAlbedo, Te, tc)
     r = m.factor * (Te / m.factor_temperature)^m.factor_exponent
     if m.liner > 0
         f = m.front
         w = min(1.0, m.liner / (f.coefficient * (Te / 100)^f.temperature_exponent * tc^f.time_exponent))
         r = w + (1 - w) * r
     end
-    return 1 - r * (1 - α)
+    return r
 end
 
 """
@@ -190,12 +220,9 @@ temperature `T` (eV): 1 for gold, `f (T/T_f)^δ` for another material, blended t
 while the heat front is inside a gold `liner`.
 """
 function wall_loss_factor(m::WallLossAlbedo, t, T)
-    g = WallLossAlbedo(; m.coefficient, m.temperature_exponent, m.time_exponent,
-                       m.reference_temperature, m.t0, range = (-Inf, Inf))
-    d = WallLossAlbedo(; m.coefficient, m.temperature_exponent, m.time_exponent,
-                       m.reference_temperature, m.t0, range = (-Inf, Inf), m.factor,
-                       m.factor_exponent, m.factor_temperature, m.liner, m.front)
-    return (1 - albedo(d, t, T)) / (1 - albedo(g, t, T))
+    m.factor == 1 && m.factor_exponent == 0 && return 1.0
+    Te = (T === nothing || T <= 0) ? m.reference_temperature : T
+    return _loss_ratio(m, Te, max(t, m.t0))
 end
 
 # The depleted-uranium loss factor at 300 eV: calibrated so that an Au-lined DU wall is

@@ -46,6 +46,18 @@ _capsule_Tr(sol, t) = (c = elements(t, :capsule);
     @test wall_loss_factor(d, 8.0, 300.0) ≈ w + (1 - w) * Briareus.DU_LOSS_FACTOR
     nl = du_wall_loss(liner = 0.0)
     @test wall_loss_factor(nl, 8.0, 250.0) ≈ Briareus.DU_LOSS_FACTOR * (250 / 300)^-0.2
+    # a scaled loss above 1 absorbs everything: albedo 0, never negative. Gold's loss at
+    # 300 eV and 1 ns is 0.32 × 3^-0.7 = 0.1488, so factors above 6.72 exceed 1.
+    lossy(f) = albedo(WallLossAlbedo(factor = f), 1.0, 300.0)
+    @test lossy(6.0) ≈ 1 - 6 * 0.32 * 3^-0.7 && lossy(10.0) == 0 && lossy(100.0) == 0
+    # nonphysical parameters are refused at construction
+    @test_throws ArgumentError WallLossAlbedo(factor = -0.5)
+    @test_throws ArgumentError WallLossAlbedo(coefficient = -0.1)
+    @test_throws ArgumentError WallLossAlbedo(range = (0.0, 1.2))
+    @test albedo(WallLossAlbedo(factor = 10.0, range = (-Inf, 0.95)), 1.0, 300.0) ≈ 1 - 10 * 0.32 * 3^-0.7
+    @test_throws ArgumentError WallLossAlbedo(range = (0.5, 0.4))
+    @test_throws ArgumentError WallLossAlbedo(t0 = 0.0)
+    @test_throws ArgumentError du_wall_loss(liner = -1e-4)
     @test uranium().name === :DU && uranium().albedo isa WallLossAlbedo
     # one fixed conversion for `gold` and `uranium`, whatever the albedo; the NIF
     # drive-history presets convert as `nif_conversion()`
