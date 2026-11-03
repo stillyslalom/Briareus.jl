@@ -10179,3 +10179,23 @@ checked against the page image of Fig. 1.
   1.2e-4 mm); the keep-out penalty moves accordingly. Noncircular holes: the true rim in
   place of the circumscribed circle. Cost: 1.1 ms for 48 beams (about 2.7 times the old
   96 samples).
+
+## Line-of-sight power on partly hidden elements (2026-11-03) *derived*
+
+- **Before.** `line_of_sight_power` counted an element whole when the ray from its
+  centroid toward the detector met nothing, and not at all otherwise.
+- **Now** (decision taken: sample points on the element, not `DanteView`'s pixel rays).
+  Each element's unobstructed fraction is the area-weighted fraction of the centroids of
+  `nsub²` = 16 equal sub-triangles per triangle that see the detector, and of
+  `(refine·nsub)²` = 1024 where those first points disagree. Pixel rays err on every
+  element boundary across the image and need a field and a resolution chosen for each
+  view; sub-element points are exact on whole elements, put the error only on the
+  partly hidden ones, and keep the function's `elems` subset and any direction.
+- **Validation** (`test/line_of_sight.jl`): a 2 × 2 mm plate (3 × 3 elements) under an
+  opaque sheet 0.5 mm above it whose straight edge runs at 20° to the mesh, seen straight
+  on and at 30°, against the visible area in closed form (the square clipped by the
+  shifted edge). Relative error of the power: old (centroid) +12.9 % and +3.3 %; one
+  point per triangle −1.2 % and +3.3 %; the default 6.8e-5 and −9.5e-5; 64 per side
+  −1.0e-4 and −1.9e-5; 128 per side 7.6e-6 and 6.3e-6 (first order).
+- **Changed results.** Power from elements partly hidden; unobstructed and wholly hidden
+  elements unchanged. Cost: 16 rays per triangle, 1024 on partly hidden ones.

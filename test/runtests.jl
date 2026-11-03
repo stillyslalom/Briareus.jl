@@ -43,6 +43,7 @@ shard_include("component_power.jl")
 shard_include("csv.jl")
 shard_include("lpi.jl")
 shard_include("bounds.jl")
+shard_include("line_of_sight.jl")
 shard_include("nested_gradient.jl")
 shard_include("target_caches.jl")
 

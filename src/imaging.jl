@@ -62,22 +62,51 @@ Lambertian x-ray radiance `B/π` per element (TW mm⁻² sr⁻¹).
 radiance(s::RadiationSolution) = s.B ./ π
 
 """
-    line_of_sight_power(target, B, direction; elems = all) -> Real
+    line_of_sight_power(target, B, direction; elems = all, nsub = 4, refine = 8) -> Real
 
 X-ray power per steradian (TW/sr) radiated toward a distant detector in `direction`
 (unit vector from the target toward the detector) by the given elements with
-radiosity `B` (TW/mm²), counting only unobstructed elements: `Σ Bᵢ/π · Aᵢ cosθᵢ`.
+radiosity `B` (TW/mm²), each counted with its unobstructed fraction `fᵢ`:
+`Σ Bᵢ/π · fᵢ Aᵢ cosθᵢ`.
+
+`fᵢ` is the area-weighted fraction of points on the element from which a ray toward the
+detector meets no opaque surface (apertures are transparent): the centroids of the
+`nsub²` equal sub-triangles of each of its triangles, and of `(refine·nsub)²` on an
+element whose first points disagree (an element partly hidden behind an edge). The
+error is first order in the sub-triangle size, on partly hidden elements only; an
+occluder that misses every first point of an element is not seen.
 """
 function line_of_sight_power(t::Target, B::AbstractVector, direction;
-                             elems = 1:nelements(t))
+                             elems = 1:nelements(t), nsub::Integer = 4, refine::Integer = 8)
+    nsub >= 1 && refine >= 1 || throw(ArgumentError("nsub and refine must be positive"))
     d = normalize(Vec3(direction))
-    ε = _ray_eps(t)
     s = zero(eltype(B))
     for e in elems
         c = dot(t.elem_normal[e], d)
         c > 0 || continue
-        any_hit(t.bvh, t.elem_centroid[e] + ε * t.elem_normal[e], d) && continue
-        s += B[e] / π * t.elem_area[e] * c
+        f = _visible_fraction(t, e, d, nsub)
+        0 < f < 1 && refine > 1 && (f = _visible_fraction(t, e, d, refine * nsub))
+        f > 0 && (s += B[e] / π * t.elem_area[e] * c * f)
     end
     return s
+end
+
+# The area-weighted fraction of the centroids of the n² equal sub-triangles of element
+# `e`'s triangles that see along `d` without meeting an opaque surface.
+function _visible_fraction(t::Target, e::Integer, d::Vec3, n::Integer)
+    off = _ray_eps(t) * t.elem_normal[e]
+    seen = total = 0.0
+    for k in t.elem_tris[e]
+        v0, e1, e2 = t.tri_v0[k], t.tri_e1[k], t.tri_e2[k]
+        m = 0
+        for i in 0:n-1, j in 0:n-1-i
+            # the upward sub-triangle at (i, j), and the downward one beside it
+            m += !any_hit(t.bvh, v0 + ((i + 1 / 3) / n) * e1 + ((j + 1 / 3) / n) * e2 + off, d)
+            i + j <= n - 2 &&
+                (m += !any_hit(t.bvh, v0 + ((i + 2 / 3) / n) * e1 + ((j + 2 / 3) / n) * e2 + off, d))
+        end
+        seen += t.tri_area[k] * m / n^2
+        total += t.tri_area[k]
+    end
+    return seen / total
 end
