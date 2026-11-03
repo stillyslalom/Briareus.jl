@@ -556,8 +556,9 @@ end
     start_optimize!(sess; spawn = false)
     @test st.result[] === nothing && occursin("Observed face uniformity", st.status[])
     set_objective!(st, :face)
-    @test edit_optimize!(st, :uniformity, "1e6") && st.uniformity[] == 1e6
+    @test edit_optimize!(st, :uniformity, "2") && st.uniformity[] == 2
     @test !edit_optimize!(st, :uniformity, "-1")
+    @test edit_optimize!(st, :uniformity, "1")
     start_optimize!(sess; spawn = false)
     r = st.result[]
     @test r isa OptimizeResult && isempty(r.after.modes)
@@ -568,10 +569,18 @@ end
                   rms_nonuniformity(H, sub.target.elem_area[sub.observed]))
     @test r.before.face.rms ≈ rms(sess.beams.beams[][r.indices]) rtol = 1e-9
     @test r.after.face.rms ≈ rms(r.beams) rtol = 1e-9
-    @test r.after.face.rms < 0.5 * r.before.face.rms     # measured 7.3e-5 → 8.9e-6
+    # weight 1 weighs the start's nonuniformity as 1: the objective starts at 1 plus the
+    # penalties (10 × the squared clipped, missed and direct fractions; the held drive at 0)
+    ev0 = evaluate(sub, sess.beams.beams[][r.indices])
+    @test r.initial_value ≈ 1 + 10 * (clipped_fraction(ev0)^2 + missed_fraction(ev0)^2 +
+                                      power_fraction(ev0, :sample)^2) rtol = 1e-12
+    # and the shape counts at weight 1 (measured 7.3e-5 → 3.0e-7, missed light 12.1 % → 4.5 %)
+    @test r.after.face.rms < 0.05 * r.before.face.rms
+    @test missed_fraction(evaluate(sub, r.beams)) < missed_fraction(ev0)
     # the setting round trips in a session; an older one loads with the default weight
+    st.uniformity[] = 3.0
     state = session_state(sess)
-    @test state["optimize"]["uniformity"] == 1e6 && state["optimize"]["objective"] == "face"
+    @test state["optimize"]["uniformity"] == 3.0 && state["optimize"]["objective"] == "face"
     delete!(state["optimize"], "uniformity")
     restore!(sess, state)
     @test st.uniformity[] == 1.0

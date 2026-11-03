@@ -135,7 +135,8 @@ names the menu entries, and the panels are described in [The window](@ref).
    parameters (aim, defocus and power per cone, quad or beam, within ± bounds), the
    objective (axisymmetric ``P_l``, all-m 3D modes, optionally holding the drive level, a
    flat observed face's RMS nonuniformity, [`face_flux_objective`](@ref), for a halfraum
-   package or an opacity sample, or a foil spot's nonuniformity) and the keep-outs. *Optimize* starts
+   package or an opacity sample, relative to its start so that a weight of 1 balances it
+   against the penalties on any face, or a foil spot's nonuniformity) and the keep-outs. *Optimize* starts
    [`optimize_pointing`](@ref) in the background with progress and Cancel; the tab
    then compares the modes, the clipped power and the capsule clearance before and
    after, lists every parameter against its bounds (a parameter at a bound is marked),

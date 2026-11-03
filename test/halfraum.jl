@@ -98,8 +98,13 @@ end
     full = face_flux_objective()
     @test full(ev) ≈ σ^2 + 10 * (clipped_fraction(ev)^2 + missed_fraction(ev)^2 +
                                  power_fraction(ev, :sample)^2) rtol = 1e-12
+    # the term scaled by a reference RMS: the start's nonuniformity weighs `uniformity`
+    @test face_nonuniformity(ev) ≈ σ rtol = 1e-12
+    scaled = face_flux_objective(; uniformity = 3.0, rms_scale = 2σ, clip = 0.0, missed = 0.0, direct = 0.0)
+    @test scaled(ev) ≈ 3 / 4 rtol = 1e-12
     @test_throws ArgumentError face_flux_objective(; uniformity = -1.0)
     @test_throws ArgumentError face_flux_objective(; flux = 0.0)
+    @test_throws ArgumentError face_flux_objective(; rms_scale = 0.0)
     # the gradient (forward-mode duals through the flux response) against central differences
     f(x) = full(evaluate(s, x))
     x1 = x0 .+ 0.1 .* (1:length(x0)) ./ length(x0)

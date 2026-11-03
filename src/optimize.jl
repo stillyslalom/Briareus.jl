@@ -874,6 +874,17 @@ that the `flux` keyword of [`face_flux_objective`](@ref) holds, so
 """
 face_mean_flux(ev::Evaluation) = _face_terms(ev)[1]
 
+"""
+    face_nonuniformity(ev) -> Real
+
+Area-weighted RMS nonuniformity `σ = rms_nonuniformity(H, A)` (relative to the mean) of
+the incident x-ray flux on the scenario's observed elements ([`face_flux`](@ref)): the
+shape term of [`face_flux_objective`](@ref), and the scale of its `rms_scale` keyword,
+so `rms_scale = face_nonuniformity(evaluate(scenario, x0))` weighs the start's
+nonuniformity as 1.
+"""
+face_nonuniformity(ev::Evaluation) = _face_terms(ev)[2]
+
 # The area mean and the RMS nonuniformity of the observed face's flux.
 function _face_terms(ev::Evaluation)
     H = face_flux(ev)
@@ -882,28 +893,40 @@ function _face_terms(ev::Evaluation)
 end
 
 """
-    face_flux_objective(; uniformity = 1.0, flux = nothing, flux_weight = 1.0,
-                        clip = 10.0, missed = 10.0, direct = 10.0, direct_names = nothing,
-                        keepout = nothing)
+    face_flux_objective(; uniformity = 1.0, rms_scale = nothing, flux = nothing,
+                        flux_weight = 1.0, clip = 10.0, missed = 10.0, direct = 10.0,
+                        direct_names = nothing, keepout = nothing)
 
 Objective for the x-ray drive of a flat observed face (a package's face in a halfraum,
-an opacity sample), which has no capsule modes: `uniformity × σ²` with `σ =
+an opacity sample), which has no capsule modes: `uniformity × (σ/σ₀)²` with `σ =
 rms_nonuniformity(H, A)` the area-weighted RMS nonuniformity of the incident flux on
-the scenario's observed elements ([`face_flux`](@ref), through the scenario's linear
-flux response, so differentiable), the shape term of [`FaceFlux`](@ref) for a uniform
-target. When `flux` (TW/mm²) is given, adds `flux_weight × (H̄/flux - 1)²` with `H̄`
-the [`face_mean_flux`](@ref). The `clip`, `missed` and `direct` penalties (`direct`:
-laser light on the face itself, or with `direct_names` on the named parts or
-components) and the `keepout` penalty are as in [`symmetry_objective`](@ref).
+the scenario's observed elements ([`face_nonuniformity`](@ref), through the scenario's
+linear flux response, so differentiable), the shape term of [`FaceFlux`](@ref) for a
+uniform target, and `σ₀ = rms_scale` (`nothing`: 1, the absolute `σ²`). When `flux`
+(TW/mm²) is given, adds `flux_weight × (H̄/flux - 1)²` with `H̄` the
+[`face_mean_flux`](@ref). The `clip`, `missed` and `direct` penalties (`direct`: laser
+light on the face itself, or with `direct_names` on the named parts or components) and
+the `keepout` penalty are as in [`symmetry_objective`](@ref).
+
+`rms_scale = face_nonuniformity(evaluate(scenario, x0))` makes the term 1 at the design
+`x0` (times `uniformity`), so `uniformity = 1` balances the shape against the penalties
+on any face. Without it the term is the absolute `σ²`, which is as small as the face is
+uniform: on a uniform 1 mm sample (σ ~ 1e-4, σ² ~ 1e-8) the penalties (10 × a squared
+light fraction, ~1e-2) set the optimum, while a capsule's modes (`(Pₗ/P₀)²` ~ 1e-2
+before tuning) are of their size. The scale is a number fixed at construction, so the
+objective stays a function of the beams alone (thread-safe, differentiable).
 """
-function face_flux_objective(; uniformity = 1.0, flux = nothing, flux_weight = 1.0,
-                             clip = 10.0, missed = 10.0, direct = 10.0, direct_names = nothing,
-                             keepout = nothing)
+function face_flux_objective(; uniformity = 1.0, rms_scale = nothing, flux = nothing,
+                             flux_weight = 1.0, clip = 10.0, missed = 10.0, direct = 10.0,
+                             direct_names = nothing, keepout = nothing)
     uniformity >= 0 || throw(ArgumentError("uniformity must not be negative"))
+    rms_scale === nothing || (isfinite(rms_scale) && rms_scale > 0) ||
+        throw(ArgumentError("rms_scale must be a positive RMS nonuniformity"))
     flux === nothing || flux > 0 || throw(ArgumentError("the flux level must be positive"))
+    w = rms_scale === nothing ? Float64(uniformity) : uniformity / Float64(rms_scale)^2
     return function (ev::Evaluation)
         H̄, σ = _face_terms(ev)
-        J = uniformity * σ^2
+        J = w * σ^2
         J += _penalties(ev; clip, missed, direct, direct_names)
         J += _keepout_penalty(keepout, ev.beams)
         flux === nothing || (J += flux_weight * (H̄ / flux - 1)^2)

@@ -72,7 +72,7 @@ end
     s = Scenario(t, p; observe = :capsule, viewfactor_kw = (; closed = true))
     keepout = (ApertureKeepOut(t), SphereKeepOut(t))
     objectives = (symmetry_objective(; drive = 1.0, keepout), asymmetry_objective(; keepout),
-                  face_flux_objective(; flux = 1.0, keepout))   # the capsule's elements as a "face"
+                  face_flux_objective(; flux = 1.0, rms_scale = 0.1, keepout))   # the capsule's elements as a "face"
     tw =hohlraum(; geometry..., wall = Material(:Au; albedo = WallLossAlbedo(), conversion = 0.8))
     mw = RadiationModel(tw; F = s.model.F, closed = true)
     pulse = PulseShape([0.0, 1.0, 2.0], [0.0, 4.0, 4.0])
@@ -184,6 +184,7 @@ end
             @test (@inferred objectives[2](ev)) isa T
             @test (@inferred objectives[3](ev)) isa T
             @test (@inferred face_mean_flux(ev)) isa T
+            @test (@inferred face_nonuniformity(ev)) isa T
             c = flux_ylm(ev)
             @test (@inferred mode_rms(c, 6)) isa T
             @test (@inferred mode_rms(c, 6; m = :nonzero)) isa T

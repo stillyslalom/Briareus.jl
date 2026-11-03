@@ -233,8 +233,12 @@ function _make_objective(cfg::NamedTuple, s::Scenario, ev0, spot_radius::Real)
     if kind === :face
         s.model !== nothing && _observed_flat(s) ||
             throw(ArgumentError("the face objective needs a flat observed face in the x-ray drive"))
-        flux = !cfg.hold_drive ? nothing : face_mean_flux(something(ev0, evaluate(s, initial_parameters(s.param))))
-        return face_flux_objective(; uniformity = cfg.uniformity, flux,
+        e0 = something(ev0, evaluate(s, initial_parameters(s.param)))
+        flux = !cfg.hold_drive ? nothing : face_mean_flux(e0)
+        # the start's nonuniformity weighs `uniformity` (an exactly uniform start: absolute)
+        σ0 = face_nonuniformity(e0)
+        rms_scale = isfinite(σ0) && σ0 > 0 ? σ0 : nothing
+        return face_flux_objective(; uniformity = cfg.uniformity, rms_scale, flux,
                                    keepout = isempty(keepouts) ? nothing : Tuple(keepouts))
     end
     s.model !== nothing && !isempty(s.observed) && !_observed_flat(s) ||

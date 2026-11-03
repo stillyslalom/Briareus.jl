@@ -369,6 +369,14 @@ var pages = [
                 "The aims are free either in the chamber (z, r, tangential offset) or in each " +
                 "beam's aim frame (u, v, w: on the backlighter foil's frame, u and v across its " +
                 "face and w along its normal); a group shares its frame coordinates." },
+        { key: "optimize.weights", title: "Objective weights",
+          text: "The capsule objectives weigh each mode's (Pₗ/P₀)², about 10⁻² on an untuned capsule. " +
+                "The observed face's uniformity weight multiplies its squared RMS nonuniformity over the " +
+                "start's, so the term starts at the weight on any face: an opacity sample uniform to 0.01 % " +
+                "and a package face at 5 % weigh alike. The clipped, missed and direct-light penalties " +
+                "weigh 10 on squared power fractions (10 % missed: 0.1) and the held drive 1 on the squared " +
+                "relative departure. A weight of 1 puts the shape first; a smaller one gives the light lost " +
+                "more say." },
         { key: "optimize.results", title: "The Optimization tab",
           text: "The tab below the 3D view: the objective's values, the modes εₗ before and after, the " +
                 "clipping and the capsule clearance of the result, the foil spot or the observed face, and each free " +

@@ -92,7 +92,7 @@ export GroupPointing, nparams, parameter_names, initial_parameters, parameters, 
        Scenario, Evaluation, evaluate, subset, flux_ylm, asymmetry_objective, influence_matrix,
        clipped_fraction, missed_fraction, power_fraction,
        flux_moments, mean_flux, symmetry_objective, irradiance_objective, face_flux, face_mean_flux,
-       face_flux_objective, optimize_pointing, PointingResult, report,
+       face_nonuniformity, face_flux_objective, optimize_pointing, PointingResult, report,
        mode_sensitivity, mode_uncertainty, sample_modes, infer_errors
 export HOTSPOT_VELOCITY_PER_PERCENT, mode1_vector, hotspot_velocity, ResponseKernel, flat_kernel,
        yield_factor, alpha_factor, rke_fraction, reactivity_exponent, burn_amplification,

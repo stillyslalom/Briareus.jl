@@ -49,7 +49,7 @@ ColumnLayout {
             }
         }
 
-        SectionLabel { text: "Objective" }
+        SectionLabel { text: "Objective"; info: "optimize.weights" }
         ComboBox {
             Layout.fillWidth: true
             textRole: "text"; valueRole: "value"
@@ -123,10 +123,11 @@ ColumnLayout {
             visible: app.optObjective === "face"
             label: "Uniformity weight"
             value: app.optUniformity
-            unit: "on the squared RMS"
-            tip: "The weight on the squared RMS nonuniformity of the face's flux. The clipped, missed and direct-light " +
-                 "penalties weigh 10 on squared power fractions, so a face already uniform to 0.1 % needs a weight " +
-                 "near 10⁶ for its RMS to count beside them"
+            unit: "× (RMS/start RMS)²"
+            tip: "The weight on the face's squared RMS nonuniformity relative to the start's: the term is this " +
+                 "weight at the start, on any face. The clipped, missed and direct-light penalties weigh 10 on " +
+                 "squared power fractions (10 % missed: 0.1): at 1 the shape leads and lost light still counts; " +
+                 "a larger weight favors the shape more"
             onEdited: (text) => Julia.br_opt_edit("uniformity", text)
         }
         PropRow {
