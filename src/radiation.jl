@@ -656,7 +656,13 @@ flux each element transmits out of the enclosure (nonzero only on a burned-throu
 wall's emission); `laser3`, the 3ω part of `laser` (TW per element; `laser` itself
 without `unconverted`), from which [`spectral_solve`](@ref) forms its default M-band. The
 constructor without `converted` takes it as the 3ω conversion of `laser`, `ηP/A`, and
-without `laser3` takes `laser` as all 3ω.
+without `laser3` takes `laser` as all 3ω. `iterations`, `residual` and `converged`
+report the albedo fixed point of a temperature-dependent albedo (`solve`): the number of
+radiosity solves, the largest albedo change after the last one (an emission change
+counted as the albedo change it equals), and whether that change fell below `tol`.
+An unconverged solution is the last iterate's radiosity, with the albedos it was solved
+with, not a self-consistent one. A solution without a fixed point (explicit or constant
+albedos, or one built directly) has `iterations = 1`, `residual = 0`, `converged = true`.
 """
 struct RadiationSolution{T}
     model::RadiationModel
@@ -670,12 +676,18 @@ struct RadiationSolution{T}
     time::Float64
     converted::Vector{T}
     laser3::Vector{T}
+    iterations::Int
+    residual::Float64
+    converged::Bool
 end
 RadiationSolution(m, laser, source, B, H, albedo, intact, transmission, time) =
     RadiationSolution(m, laser, source, B, H, albedo, intact, transmission, time,
                       convert(Vector{eltype(source)}, _xray_source(m.target, laser, time)))
 RadiationSolution(m, laser, source, B, H, albedo, intact, transmission, time, converted) =
     RadiationSolution(m, laser, source, B, H, albedo, intact, transmission, time, converted, laser)
+RadiationSolution(m, laser, source, B, H, albedo, intact, transmission, time, converted, laser3) =
+    RadiationSolution(m, laser, source, B, H, albedo, intact, transmission, time, converted,
+                      laser3, 1, 0.0, true)
 
 """
     solve(model, dep::Deposition; time = 0.0, albedo = nothing, burnthrough = nothing,
@@ -685,7 +697,16 @@ RadiationSolution(m, laser, source, B, H, albedo, intact, transmission, time, co
 Solve the radiosity system for the given absorbed laser power per element. Albedos come
 from the materials at `time` unless an explicit per-element `albedo` vector is passed.
 Temperature-dependent albedos (`WallLossAlbedo`) are iterated to self-consistency with
-each element's incident-flux temperature (to `tol` in albedo). `burnthrough` (ns, per
+each element's incident-flux temperature (to `tol` in albedo), in at most `maxiter`
+radiosity solves. The first ten iterates take the new albedos whole, and so does every
+later one until the iteration oscillates: an albedo that falls steeply enough with `T`
+overshoots, so that the albedo change reverses direction (a negative dot product with
+the previous change) and shrinks by less than half. Each such iterate halves the step
+from then on, `α ← α + ω (α_new − α)` with `ω` down to 1/64 (results that converge in
+ten iterates are those of the plain iteration). An albedo that rises steeply with `T`
+runs away monotonically toward its `range` instead, which relaxation does not help.
+The result's `iterations`, `residual` and `converged` report the fixed point
+([`RadiationSolution`](@ref)); an unconverged one also warns. `burnthrough` (ns, per
 element, `NaN` where not given) sets the burnthrough times of `BurnthroughAlbedo`
 elements; without it a thin-foil element uses its model's explicit `burnthrough`, or
 is intact (`drive_history` tracks it from the flux history instead).
@@ -762,6 +783,7 @@ function solve(m::RadiationModel, P::AbstractVector; time = 0.0, albedo = nothin
     S0 = S
     E === nothing || (S = S0 .+ E)
     B = H = nothing
+    δ, δprev, ω, its, Δprev = 0.0, Inf, 1.0, 0, α
     if warm && nelements(guess.model.target) == nelements(t)
         # a nearby system's factorization (another model's: the previous time of a
         # moving target) preconditions this one's iterates until it factors its own
@@ -771,6 +793,7 @@ function solve(m::RadiationModel, P::AbstractVector; time = 0.0, albedo = nothin
         end
     end
     for it in 1:(iterate ? maxiter : 1)
+        its = it
         if it == 1 && !warm && m.iterative
             B = _iterative_radiosity(m, α, S, nothing)
         elseif it == 1 && !warm
@@ -790,14 +813,36 @@ function solve(m::RadiationModel, P::AbstractVector; time = 0.0, albedo = nothin
             δ = max(δ, maximum(abs(ev(En, e) - ev(E, e)) / max(ForwardDiff.value(H[e]), eps())
                                for e in eachindex(H)))
         end
-        δ < tol && break          # keep the albedo B was solved with, so B = S + αH exactly
-        α, intact, tr, E = αn, intactn, trn, En
+        # keep the albedo B was solved with, so B = S + αH exactly (also when unconverged)
+        (δ < tol || it == maxiter) && break
+        # an overshooting iteration (the change reverses and shrinks by less than half):
+        # under-relax from here on
+        Δ = αn .- α
+        it > _UNDAMPED && δ > δprev / 2 && dot(Δ, Δprev) < 0 && (ω = max(ω / 2, 1 / 64))
+        δprev, Δprev = δ, Δ
+        if ω == 1
+            α, intact, tr, E = αn, intactn, trn, En
+        else
+            α, intact, tr = _relax(α, αn, ω), _relax(intact, intactn, ω), _relax(tr, trn, ω)
+            E = _relax(E, En, ω)
+        end
         S = E === nothing ? S0 : S0 .+ E
-        it == maxiter && @warn "albedo iteration did not converge" δ
     end
+    converged = !iterate || δ < tol
+    converged || @warn "albedo iteration did not converge" iterations = its δ tol
     return RadiationSolution(m, laser, S, B, H, α, intact, tr, Float64(time), S0,
-                             laser3 === laser ? laser : convert(Vector{eltype(laser)}, laser3))
+                             laser3 === laser ? laser : convert(Vector{eltype(laser)}, laser3),
+                             its, iterate ? Float64(δ) : 0.0, converged)
 end
+
+_relax(x, xn, ω) = x .+ ω .* (xn .- x)
+_relax(::Nothing, ::Nothing, ω) = nothing                 # emissions: `nothing` is none
+_relax(x::AbstractVector, ::Nothing, ω) = (1 - ω) .* x
+_relax(::Nothing, xn::AbstractVector, ω) = ω .* xn
+# Albedo iterates taken whole before `solve` may relax an oscillating iteration: a
+# re-emitting wall's clamp switches between iterates and converges undamped in a few
+# (relaxation slowed one such step from 6 to 17 solves).
+const _UNDAMPED = 10
 
 # The unconverted colors' x-ray source flux Σ_c r_c η(t, P_c/A) P_c/A and absorbed power
 # Σ_c P_c per element, each color's conversion at its own absorbed flux.

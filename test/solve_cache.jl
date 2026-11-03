@@ -67,7 +67,9 @@
     Sw = Briareus.conversions(tw) .* depw.element ./ tw.elem_area
     α = albedos(tw, 2.0)
     B = H = nothing
+    nit = 0
     for _ in 1:50
+        nit += 1
         B = (I - α .* mw.F) \ Sw
         H = mw.F * B
         αn = albedos(tw, 2.0, H)
@@ -78,6 +80,32 @@
     # (iterates after the first are solved by preconditioned GMRES to a 1e-12 residual)
     @test rel(sw.B, B) <= 1e-10 && rel(sw.H, H) <= 1e-10 && maximum(abs.(sw.albedo .- α)) <= 1e-12
     @test length(mw.cache.keys) == 1 && mw.cache.keys[1] == albedos(tw, 2.0)
+    @test sw.converged && sw.iterations == nit && sw.residual < 1e-4
+end
+
+@testset "albedo fixed point: relaxation and the convergence flag" begin
+    # a wall loss rising steeply with T (∝ T⁵, loss 0.3 at the cavity's 240 eV): the
+    # undamped iteration overshoots and oscillates without converging in 50 solves
+    q = [remake(b; aim = (0.0, 0.0, sign(b.port[3]) * 4.0)) for b in nif_quads()]
+    w = WallLossAlbedo(; temperature_exponent = 5.0, coefficient = 0.3 / 2.4^5, time_exponent = 0.0)
+    t = hohlraum(nz = 8, nphi = 12, capsule_ntheta = 6, capsule_nphi = 10,
+                 wall = Material(:Au; albedo = w, conversion = 0.8))
+    m = RadiationModel(t)
+    dep = deposit(DepositionOperator(t, q), q)
+    ew = [e for e in 1:nelements(t) if Briareus.element_material(t, e).albedo === w]
+    s = solve(m, dep; time = 1.0)
+    # the reference: the albedo model at each wall element's own incident-flux temperature
+    αref = albedo.(Ref(w), 1.0, radiation_temperature.(s.H[ew]))
+    @test s.converged && s.residual < 1e-4 && s.iterations < 50
+    @test maximum(abs.(αref .- s.albedo[ew])) < 1e-4
+    @test 0.6 < sum(s.albedo[ew]) / length(ew) < 0.8          # an interior fixed point
+    # an unconverged solution is flagged and keeps the albedos its radiosity was solved with
+    s2 = @test_logs (:warn, r"did not converge") solve(m, dep; time = 1.0, maxiter = 2)
+    @test !s2.converged && s2.iterations == 2 && s2.residual > 1e-4
+    @test maximum(abs.(s2.B .- s2.source .- s2.albedo .* s2.H)) <= 1e-12 * maximum(s2.B)
+    # a constant albedo has no fixed point to report
+    s3 = solve(m, dep; albedo = s.albedo)
+    @test s3.converged && s3.iterations == 1 && s3.residual == 0
 end
 
 @testset "preconditioned iterative radiosity solves" begin
