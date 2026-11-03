@@ -454,8 +454,7 @@ drops, call `enclosure` on the target built without `inside`.
 function cad_target(parts; orient::Bool = true, toward = (0.0, 0.0, 0.0), inside = nothing,
                     remesh = nothing, coarsen = nothing, fit = nothing, material = gold(),
                     two_sided = false, visibility = :sampled, closed::Bool = false, enclosure_kw = (;))
-    coarsen === nothing || remesh === nothing ||
-        throw(ArgumentError("give one of `coarsen` and `remesh`, not both"))
+    _check_coarsen_remesh(coarsen, remesh)
     fit isa Union{Nothing,Bool,NamedTuple} ||
         throw(ArgumentError("`fit` must be true, false or a named tuple of curved_components keywords"))
     comps = Component[]

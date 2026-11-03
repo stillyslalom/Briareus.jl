@@ -48,14 +48,6 @@ wall_displacement(w::WallMotion, t) =
 "Wall radius (mm) at time `t` (ns) of a wall that starts at radius `R0`."
 wall_radius(w::WallMotion, R0, t) = R0 - wall_displacement(w, t)
 
-# A digitized table in data/: numeric columns as Float64 vectors, others as strings.
-function _data_table(file)
-    h, rows = read_csv(joinpath(@__DIR__, "..", "data", file))
-    col(i) = (v = [r[i] for r in rows];
-              all(x -> tryparse(Float64, x) !== nothing, v) ? parse.(Float64, v) : String.(v))
-    return NamedTuple{Tuple(Symbol.(h))}(Tuple(col(i) for i in eachindex(h)))
-end
-
 """
     young2020_radii() -> NamedTuple
 

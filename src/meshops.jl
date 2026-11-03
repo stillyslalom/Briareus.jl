@@ -1465,3 +1465,9 @@ function _assemble_elements(P, rtris, (plane, pnormal), region)
     end
     return Mesh(verts, [(used[a], used[b], used[c]) for (a, b, c) in tris], patches)
 end
+
+# The CAD-part options `coarsen` and `remesh` exclude each other (`cad_target`,
+# `visrad_component`, `visrad_target`).
+_check_coarsen_remesh(coarsen, remesh) =
+    coarsen === nothing || remesh === nothing ||
+    throw(ArgumentError("give one of `coarsen` and `remesh`, not both"))

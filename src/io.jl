@@ -57,6 +57,14 @@ function read_csv(path::AbstractString; comment = '#')
     return header, rows
 end
 
+# A digitized table in data/: numeric columns as Float64 vectors, others as strings.
+function _data_table(file)
+    h, rows = read_csv(joinpath(@__DIR__, "..", "data", file))
+    col(i) = (v = [r[i] for r in rows];
+              all(x -> tryparse(Float64, x) !== nothing, v) ? parse.(Float64, v) : String.(v))
+    return NamedTuple{Tuple(Symbol.(h))}(Tuple(col(i) for i in eachindex(h)))
+end
+
 # `read_csv`, with the file line on which each row starts.
 function _read_csv(path::AbstractString; comment = '#')
     text = read(path, String)

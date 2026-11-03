@@ -137,16 +137,7 @@ linear_transfer(f0, slope; range = (0.0, 1.0)) =
 
 Piecewise-linear `fraction(Δλ, t)` through the table, constant beyond its ends.
 """
-tabulated_transfer(xs, ys) = (Δλ, t) -> _interp_ad(collect(Float64, xs), collect(Float64, ys), Δλ)
-
-# Linear interpolation that keeps dual numbers in the abscissa.
-function _interp_ad(xs, ys, x)
-    x <= xs[1] && return ys[1] + 0 * x
-    x >= xs[end] && return ys[end] + 0 * x
-    k = searchsortedlast(xs, ForwardDiff.value(x))
-    w = (x - xs[k]) / (xs[k+1] - xs[k])
-    return (1 - w) * ys[k] + w * ys[k+1]
-end
+tabulated_transfer(xs, ys) = (Δλ, t) -> _interp(collect(Float64, xs), collect(Float64, ys), Δλ)
 
 function apply_lpi(m::CalibratedTransfer, beams::AbstractVector{<:Beam}, time = 0.0)
     isd = [b.group in m.donors for b in beams]

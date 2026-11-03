@@ -102,14 +102,7 @@ struct ResponseKernel
     end
 end
 
-function (k::ResponseKernel)(t)
-    (t < k.t[1] || t > k.t[end]) && return 0.0
-    i = clamp(searchsortedlast(k.t, t), 1, length(k.t) - 1)
-    a, b = k.t[i], k.t[i+1]
-    b == a && return k.g[i+1]
-    w = (t - a) / (b - a)
-    return (1 - w) * k.g[i] + w * k.g[i+1]
-end
+(k::ResponseKernel)(t) = (t < k.t[1] || t > k.t[end]) ? 0.0 : _interp(k.t, k.g, t)
 
 """
     flat_kernel(t0, t1; total = HOTSPOT_VELOCITY_PER_PERCENT) -> ResponseKernel
@@ -368,8 +361,6 @@ function _clip_series(t, y, (a, b))
     ts = vcat(a, [τ for τ in t if a < τ < b], b)
     return ts, [_interp(t, y, τ) for τ in ts]
 end
-
-_trapz(t, y) = sum((t[k+1] - t[k]) * (y[k] + y[k+1]) / 2 for k in 1:length(t)-1)
 
 # ∫|y| over an interval of length h on which y goes linearly from u to v
 function _abs_integral(h, u, v)

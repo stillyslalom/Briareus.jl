@@ -328,8 +328,7 @@ Items 10–15 follow the 2026-10-22 literature review against Kritcher et al. 20
     gap"); a cheaper predictor for ACA give-ups (~20 % of assembly) and near-field
     quadrature reuse; an `HMatrix` has no direct solve; `storage = Float64` densifies an
     `HMatrix` without warning; `Keyframes` build a deposition operator at every time.
-33. **Code health** *(survey)*. GUI radiography is untested (it records nothing yet). Shared
-    helpers: the several linear interpolators, `_trapz` (in `implosion.jl`, used by
-    `imager.jl`), `_data_table` (belongs in `io.jl`), the triplicated coarsen-xor-remesh
-    check; benchmark toggles (`_ITERATIVE_SOLVE`, `_SOLVE_STATS`) in production code; a
-    `dante_unfold` docstring names a `solver` keyword that does not exist.
+33. **Code health** *(survey)*. GUI radiography is untested (it records nothing yet).
+    `TabulatedCurve` interpolates as v₁ + w (v₂ − v₁), not through `_interp`: switching
+    changes its values at the last bit, so it waits for a change that remeasures the
+    Dante responses.

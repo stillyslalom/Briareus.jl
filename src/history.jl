@@ -23,9 +23,11 @@ Base.hash(s::PulseShape, h::UInt) = hash(s.p, hash(s.t, hash(:PulseShape, h)))
 
 (s::PulseShape)(t) = (t < s.t[1] || t > s.t[end]) ? 0.0 : _interp(s.t, s.p, t)
 
+# Trapezoid rule: ∫ y dt through the samples (t, y), at least two of them.
+_trapz(t, y) = sum((t[k+1] - t[k]) * (y[k] + y[k+1]) / 2 for k in 1:length(t)-1)
+
 "Laser energy (kJ = TW·ns) of one beam following the pulse."
-pulse_energy(s::PulseShape) =
-    sum((s.t[k+1] - s.t[k]) * (s.p[k] + s.p[k+1]) / 2 for k in 1:length(s.t)-1; init = 0.0)
+pulse_energy(s::PulseShape) = length(s.t) < 2 ? 0.0 : _trapz(s.t, s.p)
 
 """
     with_pulses(beams, pulses, t; by = :group) -> Vector{Beam}

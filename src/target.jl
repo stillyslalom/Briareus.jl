@@ -996,10 +996,17 @@ function _linear_crossing(r0, r1, Δ, J)
     return 2J / (r0 + sqrt(max(r0^2 + 4a * J, 0.0)))
 end
 
+# The package's linear interpolation: through (ts, vs) (ts sorted; a time may repeat once
+# for a step, which takes the value after it), held at the end values outside. Generic in
+# `t` for ForwardDiff: the end values come back in t's number type (a Float64 beside
+# duals made callers infer a Union), and the interval is found on t's value. Shared by
+# albedo, radius and conversion tables, pulses, LPI transfer tables, response kernels
+# and drive-history resampling. (`TabulatedCurve` keeps its own form, v₁ + w (v₂ − v₁),
+# which rounds differently.)
 function _interp(ts, vs, t)
-    t <= ts[1] && return vs[1]
-    t >= ts[end] && return vs[end]
-    k = searchsortedlast(ts, t)
+    t <= ts[1] && return vs[1] * one(t)
+    t >= ts[end] && return vs[end] * one(t)
+    k = searchsortedlast(ts, ForwardDiff.value(t))
     w = (t - ts[k]) / (ts[k+1] - ts[k])
     return (1 - w) * vs[k] + w * vs[k+1]
 end
@@ -1068,7 +1075,7 @@ function conversion_efficiency(m::Conversion, t = 0.0, I = nothing)
         m.efficiency
     else
         I === nothing && throw(ArgumentError("this conversion depends on the laser intensity: pass it"))
-        _interp_ad(m.log_intensity, m.table, log10(max(I, 1.0)))
+        _interp(m.log_intensity, m.table, log10(max(I, 1.0)))
     end
     m.time_exponent == 0 && return clamp(η0, m.range...)
     τ = max(t - m.start, m.t0) / m.reference_time

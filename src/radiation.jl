@@ -346,11 +346,17 @@ end
 # a fresh factorization, which becomes the preconditioner, when it does not converge in
 # `_GMRES_MAXITER` iterations.
 
+# Test seams, kept in the solve path on purpose. `_ITERATIVE_SOLVE[] = false` factors
+# each albedo iterate afresh: the reference the preconditioned path is checked against
+# (test/solve_cache.jl), which no public option reproduces (`solver = :direct` still
+# reuses the cached LU as preconditioner). `_SOLVE_STATS` counts fresh factorizations,
+# iterative solves and GMRES iterations, which the tests read to check that caches are
+# reused; one relaxed atomic add per solve, against its O(n²) work at least.
 "Use the preconditioned iterative path for albedo iterates (`false`: factor each afresh)."
 const _ITERATIVE_SOLVE = Ref(true)
 const _GMRES_RTOL = 1e-12
 const _GMRES_MAXITER = 30
-# counters for benchmarks: fresh factorizations, iterative solves, GMRES iterations
+# counters: fresh factorizations, iterative solves, GMRES iterations
 const _SOLVE_STATS = (lu = Threads.Atomic{Int}(0), gmres = Threads.Atomic{Int}(0),
                       iterations = Threads.Atomic{Int}(0))
 _reset_solve_stats!() = foreach(a -> a[] = 0, _SOLVE_STATS)

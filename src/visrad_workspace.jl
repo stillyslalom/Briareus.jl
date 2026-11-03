@@ -599,8 +599,7 @@ VisRad meshes coarsely. Other object types return no components (with a warning)
 function visrad_component(o::VisRadObject; material = nothing, two_sided::Bool = false,
                           orient::Bool = false, toward = (0.0, 0.0, 0.0), coarsen = nothing,
                           remesh = nothing, fit = nothing, primitive_h = nothing)
-    coarsen === nothing || remesh === nothing ||
-        throw(ArgumentError("give one of `coarsen` and `remesh`, not both"))
+    _check_coarsen_remesh(coarsen, remesh)
     mat = material === nothing ? Material(Symbol(o.name); albedo = o.albedo, conversion = o.conversion) :
           material
     o.reflectivity > 0 && @warn "VisRad object $(o.name) reflects laser light ($(o.reflectivity)); Briareus absorbs it all"
@@ -670,8 +669,7 @@ function visrad_target(ws::VisRadWorkspace; select = o -> o.radiosity || o.laser
                        orient::Bool = false, toward = (0.0, 0.0, 0.0), coarsen = nothing,
                        remesh = nothing, fit = nothing, inside = nothing, visibility::Symbol = :sampled,
                        closed::Bool = false)
-    coarsen === nothing || remesh === nothing ||
-        throw(ArgumentError("give one of `coarsen` and `remesh`, not both"))
+    _check_coarsen_remesh(coarsen, remesh)
     # object names as `String`s or `Symbol`s; a name that is no object is a mistake
     materials = Dict{String,Material}(String(k) => v for (k, v) in materials)
     for k in keys(materials)
