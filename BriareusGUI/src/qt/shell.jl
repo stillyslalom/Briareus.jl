@@ -2625,18 +2625,21 @@ br_export_visrad_workspace(url) = _with_shell(sh -> export_visrad_workspace(sh.s
 br_export_results(url) = _with_shell(sh -> export_results(sh.sess, _url_to_path(String(url))))
 br_export_stl(url) = _with_shell(sh -> export_target_stl(sh.sess, _url_to_path(String(url))))
 # The retune's errors show in its dialog, where it was asked for.
-function br_retune(table, out, by, cap, stay, target, level)
+function br_retune(table, out, by, cap, stay, on, target, level)
     _with_shell() do sh
         try
+            # what the retune holds (`auto`: the first the design offers), and the level in
+            # its units (a capsule's Tᵣ, else TW/mm²)
             qs = Controllers._retune_quantities(sh.sess)
-            # the level in the units of what the retune holds (a capsule's Tᵣ, else TW/mm²)
-            lv = isempty(qs) ? nothing : Controllers._retune_level(first(qs).kind, String(level))
+            which = _sym(on)
+            k = which === :auto ? (isempty(qs) ? nothing : 1) : findfirst(q -> q.on === which, qs)
+            lv = k === nothing ? nothing : Controllers._retune_level(qs[k].kind, String(level))
             retune_to_reference!(sh.sess, _url_to_path(String(table)), _url_to_path(String(out));
                                  by = _sym(by),
                                  cap = Controllers._parse_number(cap, "the power limit"; positive = true),
                                  stay = Controllers._parse_number(stay, "the weight on the reference powers";
                                                                   nonnegative = true),
-                                 target = _sym(target), level = _sym(target) === :uniform ? lv : nothing)
+                                 target = _sym(target), level = _sym(target) === :uniform ? lv : nothing, on = which)
         catch err
             sh.sess.drive.retune_status[] = "retune failed: " * Controllers._errmsg(err)
         end

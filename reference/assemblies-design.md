@@ -332,6 +332,10 @@ E. **Double backlighter with ARC:** the starter, ARC beams as a facility beam se
   powers equal core `retune_drive` called with the same reference and limits to 1e-12,
   the level is held to 1e-10, and the uniform target's RMS is below the reference
   shape's at that level at every solved step.
+- The quantity (2026-11-03): `retune_to_reference!(...; on)` passes `retune_pulses`'s
+  `on`; `_retune_quantities` lists what the drive's scenario can hold (the observed
+  surface first, as `:auto` takes it, then the active foil), and the dialog's *Holds*
+  shows only when there are several. A choice the design lacks is refused in the status.
 - The foil's GUI retune is the 3ω light's: it takes no unconverted light (`retune_pulses`
   throws if given), though core `retune_drive` adds each color's absorbed power to a
   foil's irradiance when the reference carries it.

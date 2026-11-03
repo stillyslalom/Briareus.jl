@@ -314,3 +314,39 @@ end
     @test radiation_temperature(Controllers._retune_level(:capsule, "250")) ≈ 250 rtol = 1e-12
     @test_throws ArgumentError Controllers._retune_level(:foil, "-1")
 end
+
+@testset "time panel: the retune's quantity chosen (no GL)" begin
+    # the foil starter with its main sphere observed: a capsule (lit by the foil's x-rays)
+    # and the foil both can be held
+    s = DesignSession(starter = :foil, resolution = :coarse)
+    @test Controllers._retune_quantities(s) == NamedTuple[]                 # no scenario yet
+    build_scenario!(s)
+    @test [q.on for q in Controllers._retune_quantities(s)] == [:foil]
+    @test set_part_role!(s.target, part_index(s.target, :main), :observed)
+    build_scenario!(s)
+    qs = Controllers._retune_quantities(s)
+    @test [(q.on, q.kind) for q in qs] == [(:observed, :capsule), (:foil, :foil)]
+    @test [q.label for q in qs] == ["main's modes", "foil's irradiance"]
+    beams = s.beams.beams[]
+    dir = mktempdir()
+    pul = Dict(Symbol(b.name) => PulseShape([0.0, 0.5, 1.0, 1.5], [0.0, 0.3, 0.5, 0.0]) for b in beams)
+    table = write_pulse_table(joinpath(dir, "reference.csv"), pul)
+    out = joinpath(dir, "retuned.csv")
+    s.beams.enabled[] = [i != 1 for i in eachindex(beams)]
+    sc = s.drive.scenario[]
+    kw = (; by = :beam, cap = 2.0, foil = active_foil(s.target), spot_radius = s.drive.spot_radius[])
+    # auto holds the observed capsule; the foil when chosen, as retune_pulses on the foil
+    retune_to_reference!(s, table, out; by = :beam, cap = 2.0)
+    @test s.time.retune[].kind === :capsule
+    retune_to_reference!(s, table, out; by = :beam, cap = 2.0, on = :foil)
+    r = s.time.retune[]
+    v = retune_pulses(sc, beams, s.beams.enabled[], pul; kw..., on = :foil)
+    @test r.kind === :foil && v.kind === :foil && keys(r.pulses) == keys(v.pulses) &&
+          all(isapprox(r.pulses[k].p, v.pulses[k].p; rtol = 1e-12) for k in keys(v.pulses))
+    @test occursin("foil spot worst RMS", s.drive.retune_status[])
+    # a choice the design lacks is refused with a status message
+    s2 = DesignSession(starter = :foil, resolution = :coarse)
+    build_scenario!(s2)
+    retune_to_reference!(s2, table, out; on = :observed)
+    @test s2.time.retune[] === nothing && occursin("no observed surface", s2.drive.retune_status[])
+end

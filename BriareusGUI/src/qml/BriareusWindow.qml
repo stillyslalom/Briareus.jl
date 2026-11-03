@@ -594,8 +594,10 @@ ApplicationWindow {
     Dialog {
         id: retuneDialog
         title: "Retune to a reference drive"
-        // what the retune holds: capsule, face or foil (the level's units)
-        readonly property string kind: app.retuneKinds.length > 0 ? app.retuneKinds[0] : ""
+        // what the retune holds: capsule, face or foil (the level's units), the first the
+        // design offers unless several are chosen between
+        readonly property int choice: app.retuneOn.length > 1 ? Math.max(retuneOn.currentIndex, 0) : 0
+        readonly property string kind: app.retuneKinds.length > choice ? app.retuneKinds[choice] : ""
         anchors.centerIn: parent
         modal: true
         standardButtons: Dialog.Close
@@ -652,6 +654,15 @@ ApplicationWindow {
                 TextField { id: retuneStay; text: "0"; Layout.preferredWidth: 100
                             tip: "The weight on the retuned powers' departure from the reference powers; 1e-4 keeps most quads off their limit" }
                 Item { width: 1 }
+                Label { text: "Holds"; visible: retuneOn.visible }
+                ComboBox {
+                    id: retuneOn
+                    visible: app.retuneOn.length > 1
+                    Layout.preferredWidth: 220
+                    model: app.retuneLabels
+                    tip: "What the retune holds: the observed surface's x-ray drive (a capsule's modes, a face's flux) or the active foil's laser irradiance within the spot radius"
+                }
+                Item { width: 1; visible: retuneOn.visible }
                 Label { text: "Target" }
                 ComboBox {
                     id: retuneTarget
@@ -679,8 +690,9 @@ ApplicationWindow {
                     text: "Retune"
                     enabled: app.driveCurrent && !app.retuneRunning && retuneTable.text !== "" && retuneOut.text !== ""
                     onClicked: Julia.br_retune(retuneTable.text, retuneOut.text, retuneBy.currentValue,
-                                               retuneCap.text, retuneStay.text, retuneTarget.currentValue,
-                                               retuneLevel.text)
+                                               retuneCap.text, retuneStay.text,
+                                               retuneOn.visible ? app.retuneOn[retuneDialog.choice] : "auto",
+                                               retuneTarget.currentValue, retuneLevel.text)
                     tip: app.driveCurrent ? "Retune in the background; the Time tab's Retune chart shows the result"
                                           : "Compute the drive first"
                 }

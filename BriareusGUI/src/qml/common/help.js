@@ -301,7 +301,8 @@ var pages = [
                 "retuned, at each time of the table, to restore the reference's drive: a capsule's " +
                 "level and modes through l = 4, a flat observed face's flux over the face (mean, " +
                 "RMS, peak-to-mean), or, laser only, the active foil's 3ω irradiance within the spot " +
-                "radius (Compute ▸ Retune to a reference drive). Target uniform asks instead for no " +
+                "radius (Compute ▸ Retune to a reference drive); with both an observed surface " +
+                "and a foil, Holds chooses. Target uniform asks instead for no " +
                 "modes or a flat flux, the least nonuniformity the powers allow, at the reference's " +
                 "level or at a set level held at every time (a capsule's Tᵣ in eV, a face's or a " +
                 "foil spot's mean in TW/mm²); where the power limit cannot reach it, the level " +

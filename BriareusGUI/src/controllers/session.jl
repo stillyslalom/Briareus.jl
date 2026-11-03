@@ -1397,7 +1397,7 @@ _kept_unconverted(u::NamedTuple, keep) = map(f -> f isa AbstractVector ? f[keep]
 
 """
     retune_to_reference!(sess::DesignSession, table, out; by = :quad, cap = 1.3, stay = 0.0,
-                         target = :reference, level = nothing)
+                         target = :reference, level = nothing, on = :auto)
 
 Retune the enabled beams to the reference shot whose pulses are the table `table`
 (`read_pulse_table`: a `time_ns` column and one per group, quad or beam), as
@@ -1407,7 +1407,8 @@ radius and the active foil ([`active_foil`](@ref)), to the reference's drive sha
 `level` (TW/mm², `retune_pulses`'s), and write the new pulses to `out`
 (`write_pulse_table`), on a worker when `spawn[]` is set. The disabled beams are the ones
 the shot loses. The retune holds the observed surface's drive (a capsule's modes, a flat
-face's flux) when the drive has a radiation model, else the active foil's irradiance.
+face's flux) when the drive has a radiation model, else the active foil's irradiance;
+`on = :observed` or `:foil` chooses (`retune_pulses`'s `on`) when the design has both.
 For an observed surface the unconverted 1ω and 2ω light takes part as in the drive
 ([`set_unconverted_ratio!`](@ref); `retune_pulses`'s `unconverted`), with the prepulse
 ([`set_prepulse!`](@ref); `retune_pulses`'s `prepulse`), in the reference shot and in
@@ -1420,7 +1421,8 @@ A drive with neither is refused with a status message.
 """
 function retune_to_reference!(sess::DesignSession, table::AbstractString, out::AbstractString;
                               by::Symbol = :quad, cap::Real = 1.3, stay::Real = 0.0,
-                              target::Symbol = :reference, level::Union{Nothing,Real} = nothing)
+                              target::Symbol = :reference, level::Union{Nothing,Real} = nothing,
+                              on::Symbol = :auto)
     dr = sess.drive
     dr.retune_running[] && return sess
     if !_drive_current(sess)
@@ -1429,8 +1431,9 @@ function retune_to_reference!(sess::DesignSession, table::AbstractString, out::A
     end
     s = dr.scenario[]
     foil = active_foil(sess.target)
-    kind = _retune_kind(s, foil, :auto)
-    kind === nothing && (dr.retune_status[] = _RETUNE_NONE; return sess)
+    kind = _retune_kind(s, foil, on)
+    kind === nothing && (dr.retune_status[] = on === :auto ? _RETUNE_NONE :
+                                              "the design has no $(on === :foil ? "foil" : "observed surface") to hold"; return sess)
     # the unconverted light of every beam (the reference fires them all); a foil's is 3ω
     unconverted = kind === :foil ? nothing : _history_unconverted(sess, eachindex(sess.beams.beams[]))
     prepulse = kind === :foil ? nothing : _history_prepulse(sess, eachindex(sess.beams.beams[]))
@@ -1444,7 +1447,7 @@ function retune_to_reference!(sess::DesignSession, table::AbstractString, out::A
     runner = _runner(sess.spawn, sess.deliver)
     wall = Tuple(wall_names(sess.target))
     runner(() -> retune_pulses(s, beams, enabled, pulses; by, cap, stay, target, level, wall, unconverted,
-                               prepulse, foil, spot_radius), function (res)
+                               prepulse, foil, spot_radius, on), function (res)
         dr.retune_running[] = false
         if res.err !== nothing
             dr.retune_status[] = "retune failed: " * _errmsg(res.err)

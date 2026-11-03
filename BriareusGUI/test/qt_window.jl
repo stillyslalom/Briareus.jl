@@ -259,7 +259,7 @@ using BriareusGUI.Briareus
                                        [0.3, 0.3, 0.25, 0.25])
             write_pulse_table(reference_csv, pul)
             s.beams.enabled[] = [nif_bundle(b) != "31" for b in bs]
-            B.br_retune(reference_csv, retuned_csv, "quad", "1.5", "0", "reference", "")
+            B.br_retune(reference_csv, retuned_csv, "quad", "1.5", "0", "auto", "reference", "")
             s.drive.retune_running[] && push!(seen, :retune_started)
             B.request_grab(png("cut_port")); next!()
         elseif k == 22 && grabbed(png("cut_port")) && !s.drive.retune_running[]
