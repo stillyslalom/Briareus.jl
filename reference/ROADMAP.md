@@ -31,8 +31,6 @@ those under "Correctness" were read in the code, the rest are leads to confirm f
 3. **Bugs and weak spots found by the survey** *(survey; GUI items read in the code)*.
    - GUI: a diagnostic definition's `center_part` is the user's file and keeps a renamed
      part's old name.
-   - Core: primitive targets default to `visibility = :centroid` (row sums 1–6 % off at
-     LEH rims unless `:sampled`).
 4. **Engineering closures to validate.** The re-heated wall's radiosity clamp (≥ 0,
    albedo 0, no emission; `history.jl`, eae01d4); the conversion of overlapping colors at
    each color's own flux; the liner blend in `WallLossAlbedo`. *Data:* a radiation-

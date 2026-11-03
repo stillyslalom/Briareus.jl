@@ -1246,8 +1246,11 @@ cavities").
 `:centroid` (one ray per pair) or `:sampled` (the visible fraction of pairs partly
 shadowed by a rim). Targets with rims set `:sampled`: `cad_target` and `visrad_target`
 (bored entrance holes, gaps, CAD walls), where one centroid ray leaves row sums up to
-1% off on walls and 6% on LEH apertures; `hohlraum` keeps `:centroid` (flush apertures,
-row-sum errors ~0.1% that balancing removes; research notes, "Partial visibility").
+1% off on walls and 6% on LEH apertures; `hohlraum` and assembled targets keep
+`:centroid`: on flush entrance holes the largest row-sum error is the wall's, 0.3–0.7 %,
+and after balancing `:sampled` moves the drive by less than 3e-5 relative and a₂/a₀ by
+less than 0.03 pp for 3–4 times the build (research notes, "Partial visibility" and
+"Visibility default on the GUI presets").
 
 A `Target` is immutable in all its fields but has identity (a `mutable struct` of
 `const` fields), so that caches of derived data (a Dante view's footprint, an imager's

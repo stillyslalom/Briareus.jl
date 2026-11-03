@@ -10199,3 +10199,36 @@ checked against the page image of Fig. 1.
   −1.0e-4 and −1.9e-5; 128 per side 7.6e-6 and 6.3e-6 (first order).
 - **Changed results.** Power from elements partly hidden; unobstructed and wholly hidden
   elements unchanged. Cost: 16 rays per triangle, 1024 on partly hidden ones.
+
+## Visibility default on the GUI presets (2026-11-03) *measured*
+
+Whether primitive targets should default to `visibility = :sampled` (roadmap item 3).
+The GUI's default design (the hohlraum starter, flush entrance holes, capsule) and the
+shock-tube starter, built by `BriareusGUI.Controllers.build_target`, curved surfaces,
+4 threads; a wall source of two Gaussian rings (the CAD tutorial's), balanced per cavity
+as the drive balances it. Max |ΣF − 1| before balancing (rms in parentheses):
+
+| preset | rule | build | wall | caps | LEHs | capsule |
+|---|---|---|---|---|---|---|
+| coarse (1,152) | centroid | 0.34 s | 6.6e-3 (2.7e-3) | 1.3e-3 | 5.4e-4 | 3.6e-4 |
+| coarse | sampled | 1.16 s | 3.8e-3 (1.5e-3) | 5.8e-4 | 9.5e-4 | 3.7e-4 |
+| standard (4,796) | centroid | 3.81 s | 3.1e-3 (8.5e-4) | 7.4e-4 | 7.7e-4 | 1.3e-3 |
+| standard | sampled | 16.07 s | 1.2e-3 (4.4e-4) | 7.0e-4 | 4.6e-4 | 1.3e-3 |
+
+Sampled minus centroid, balanced (what the GUI solves): wall Tr +2.4e-6 / +2.6e-5
+relative, LEH loss −5.5e-5 / −1.6e-4, capsule flux +6.4e-5 / −2.4e-6, a₂/a₀ +0.025 /
++0.003 pp, a₄/a₀ −0.010 / +0.001 pp (coarse / standard). Unbalanced the rule moves the
+capsule flux by 9.1e-3 / 4.3e-4 and a₂/a₀ by −0.33 / +0.03 pp. Against a Monte Carlo of
+the element model on the coarse flat facets (`montecarlo_incident(...; reemit =
+:element)`, 20,000 paths per capsule element: a₀ ± 2.5e-4, a₂/a₀ ± 0.058 pp) the two
+balanced rules differ from each other by less than the statistics (a₂/a₀ +0.14 and +0.16
+pp; a₀ +6.0e-3 and +6.1e-3, the coarse mesh's cracks at the entrance-hole rims, which
+balancing fills and the rays leak through). The shock-tube starter (standard) has no
+pair a rim shadows: identical factors, 0.73 → 1.36 s.
+
+Decision: the default stays `:centroid` for primitive targets. `:sampled` costs 3.4–4.2×
+the build on the hohlraum presets (over the 2× bound set for the change), and after
+balancing it moves no result by more than 3e-5 relative or 0.03 pp. The 1–6 % row sums at
+LEH rims belong to bored entrance holes and gaps (the bored cavity of "Partial
+visibility"), which `cad_target` and `visrad_target` already sample; on flush holes the
+largest row-sum error is the wall's 0.66 % at the coarse size.
