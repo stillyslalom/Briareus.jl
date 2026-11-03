@@ -28,6 +28,17 @@
     @test abs(k.n221204[findfirst(==(6.0), k.t)] - 0.92 / 0.985) < 0.03
     @test k.t[argmin(k.n221204)] == 9.5 && minimum(k.n221204) < 0.07
     @test all(k.n210808[k.t .<= 9.0] .<= k.n221204[k.t .<= 9.0] .+ 1e-12)   # thinner shell implodes first
+    # Young 2020's dynamic albedos (Fig. 3a top): on 0–8 ns every 0.25 plus the wall's drop,
+    # within (0, 1), the wall's falling across 0.5–0.65 ns, the ablator's rising late above
+    # the static 0.3; reading errors 0.03 or 0.05
+    al = young2020_albedos()
+    @test issorted(al.t) && all(in(al.t), 0:0.25:8) && all(0 .< al.wall .< 1) && all(0 .< al.capsule .< 1)
+    @test al.wall[findfirst(==(0.5), al.t)] > al.wall[findfirst(t -> t > 0.6, al.t)]
+    @test al.capsule[1] < 0.05 && al.capsule[end] > 0.3
+    @test all(in((0.03, 0.05)), al.u_wall) && all(in((0.03, 0.05)), al.u_capsule)
+    # as a TabulatedAlbedo, the table itself at its times
+    wa = TabulatedAlbedo(al.t, al.wall)
+    @test all(albedo(wa, al.t[i]) ≈ al.wall[i] for i in eachindex(al.t))
     # N210808's measured inner-cone SBS per quad (Kemp 2026 Fig. 2): the paper's 2.8 and
     # 0.9 kJ per quad, the 23° peak at 5.3 ns before the 30°'s at 5.75, both gone by 7 ns
     s = kemp2026_sbs()

@@ -112,6 +112,45 @@ end
     @test r.rhoR ≈ 100 * (0.05 * 2 + 0.05 * 2 / 2)
 end
 
+@testset "implosion metrics: piston factors, kernels and nToF errors" begin
+    # flat kernel: total/(t1 − t0) on the window, zero outside, its integral `total`
+    K = flat_kernel(2.0, 7.0; total = 110.0)
+    @test (K(1.9), K(2.0), K(4.5), K(7.0), K(7.1)) == (0.0, 22.0, 22.0, 22.0, 0.0)
+    @test_throws ArgumentError flat_kernel(3.0, 3.0)
+    # Hurricane et al. 2020 Table I (χ = 2, a = 3.3): f = 0.08 and 0.16 keep 95 % and 80 % of
+    # the yield (f to two digits), as the product of the no-α and α factors
+    @test abs(yield_factor(0.08) * alpha_factor(0.08, 2.0) - 0.95) < 0.01
+    @test abs(yield_factor(0.16) * alpha_factor(0.16, 2.0) - 0.80) < 0.01
+    @test alpha_factor(0.0, 2.0) == 1 && alpha_factor(0.1, 0.0) == 1
+    # Casey et al. 2023 Eq. 5: q = 1.2(a − 1), the exponent 1.2 times Hurricane's
+    @test log(alpha_factor(0.1, 2.0; q = 1.2 * 2.3)) ≈ 1.2 * log(alpha_factor(0.1, 2.0)) rtol = 1e-12
+    # Eq. 23 inverted: f = √(RKE/(c KE)) gives back RKE/KE; c = 1 for an incompressible piston
+    @test isapprox(rke_fraction(sqrt(0.1 / 0.66)), 0.1; rtol = 1e-12) && rke_fraction(0.3; c = 1) ≈ 0.09
+    # nToF errors: σ² along v̂, (|v| σθ)² along θ̂ and (|v| sinθ σφ)² along φ̂
+    v = Vec3(30.0, -40.0, 20.0)
+    r, θ, φ = norm(v), acos(v[3] / norm(v)), atan(v[2], v[1])
+    er = v / r
+    eθ = Vec3(cos(θ) * cos(φ), cos(θ) * sin(φ), -sin(θ))
+    eφ = Vec3(-sin(φ), cos(φ), 0.0)
+    Σ = ntof_covariance(v; speed = 14, theta = 13, phi = 29)
+    @test Σ ≈ Σ' rtol = 1e-14
+    @test Σ * er ≈ 14^2 * er rtol = 1e-12
+    @test Σ * eθ ≈ (r * deg2rad(13))^2 * eθ rtol = 1e-12
+    @test Σ * eφ ≈ (r * sin(θ) * deg2rad(29))^2 * eφ rtol = 1e-12
+    @test ntof_covariance(zeros(3); speed = 10) == Matrix(Diagonal(fill(100.0, 3)))
+
+    # Young et al. 2020 Fig. 5 as digitized: the two panels on 0.25–7.875 ns every 0.125,
+    # and the kernel their mean (either alone where the other is hidden)
+    g = young2020_green()
+    @test g.t ≈ 0.25:0.125:7.875 && length(g.panel_b) == length(g.panel_d) == length(g.t)
+    Kg = young2020_kernel()
+    both = findall(i -> !isnan(g.panel_b[i]) && !isnan(g.panel_d[i]), eachindex(g.t))
+    @test !isempty(both) && all(Kg(g.t[i]) ≈ (g.panel_b[i] + g.panel_d[i]) / 2 for i in both)
+    one_ = findall(i -> isnan(g.panel_b[i]) != isnan(g.panel_d[i]), eachindex(g.t))
+    @test all(Kg(g.t[i]) ≈ (isnan(g.panel_b[i]) ? g.panel_d[i] : g.panel_b[i]) for i in one_)
+    @test g.panel_b[1] < 0                              # negative in the foot
+end
+
 @testset "implosion metrics: uncertainty, inverse, penalty" begin
     t = hohlraum(; length = 10.1, radius = 2.875, leh_radius = 1.55, capsule_radius = 0.9,
                  wall = gold(albedo = 0.85, conversion = 0.8), h = 0.6, capsule_h = 0.2)

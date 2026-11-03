@@ -311,3 +311,26 @@
     @test count(startswith("# not evaluated: "), lines) == length(rs.notes)
     @test length(TALIS_OUT_OF_SCOPE) >= 5
 end
+
+@testset "TaLIS requirement text" begin
+    # each rule's requirement reads its thresholds from the report's settings
+    s = (; capture_contour = 0.1, capture_margin = 0.2, max_incidence = 70.0, clearance_contour = 0.01,
+         clearance_margin = 0.5, omega1_edge = 1.25, omega1_margin = 3.0, cylinder_radius = 4.0,
+         sphere_radius = 2.5, reflection_angle = 10.0, stay_in = 6.0)
+    req(rule) = talis_requirement(rule, s)
+    @test req(:capture_3w) == "10% contour ≥ 0.2 mm inside the substrate edge"
+    @test req(:incidence_3w) == "incidence < 70° to the surface normal"
+    @test req(:clearance_3w) == "1% contour > 0.5 mm from the component"
+    @test req(:clearance_1w) == "1ω 10% footprint (1.25 mm off the 3ω axis) > 3 mm from the component"
+    @test req(:management_1w) ==
+          "curvature radius < 4 mm (cylinder) or < 2.5 mm (sphere), or specular 1ω > 10° from open ports"
+    @test req(:diagnostic_1w) == "diagnostics ≥ 10 mm (at TCC) to 25 mm (at 1 m) from 1ω light"
+    @test req(:tas_stay_in) == "≤ 6 mm beyond the extreme aim points (TAS)"
+    @test req(:other) == "other"
+    # a report prints the requirement of each rule it checked, from its own settings
+    b = Beam("b"; theta = 0, phi = 0, power = 1.0, spot = SuperGaussianSpot(0.3; order = 4.0), fnumber = 8.0)
+    t = Target(foil(:f, (0, 0, 0), (0, 0, 1); width = 4.0, n = 8))
+    r = talis_check(t, [b]; capture = (:f,), rtol = 0)
+    shown = sprint(show, MIME("text/plain"), r)
+    @test all(occursin(talis_requirement(x.rule, r.settings), shown) for x in r.rows)
+end

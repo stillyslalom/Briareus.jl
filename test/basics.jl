@@ -223,6 +223,17 @@ end
         tot = sum(intensity(b, c + u * e1 + v * e2) for u in -2:h:2, v in -2:h:2) * h^2
         @test isapprox(tot, 2.0; rtol = 1e-3)
     end
+    # the same profile on other axes: order, angle and halo kept, the number type theirs;
+    # scaling both axes by c scales the intensity at c·(u, v) by 1/c²
+    hs = SuperGaussianSpot(0.4, 0.25; order = 4.0, angle = 0.3, halo = 0.1, halo_scale = 2.5, halo_order = 3.0)
+    w = with_axes(hs, 0.6, 0.375)
+    @test (w.a, w.b, w.order, w.angle, w.halo, w.halo_scale, w.halo_order) == (0.6, 0.375, 4.0, 0.3, 0.1, 2.5, 3.0)
+    bh, bw = remake(b; spot = hs, defocus = 0.0), remake(b; spot = w, defocus = 0.0)
+    pts = [(u, v) for u in -0.5:0.25:0.5 for v in -0.3:0.15:0.3]
+    @test all(isapprox(intensity(bw, Vec3(b.aim) + 1.5u * e1 + 1.5v * e2),
+                       intensity(bh, Vec3(b.aim) + u * e1 + v * e2) / 1.5^2; rtol = 1e-12) for (u, v) in pts)
+    d = with_axes(hs, ForwardDiff.Dual(0.4, 1.0), 0.25)
+    @test d isa SuperGaussianSpot{<:ForwardDiff.Dual} && ForwardDiff.value(d.b) == 0.25 && d.halo == 0.1
 end
 
 @testset "deposition vs ray trace" begin
@@ -927,6 +938,16 @@ end
     @test cy[mode_index(1, -1)] > 0 && abs(cy[mode_index(1, 1)]) < 1e-6
     # Y_11 = √(3/4π) x, so 0.1 x has c_11 = 0.1 √(4π/3) relative to c_00 = √(4π)
     @test cx[mode_index(1, 1)] / cx[1] ≈ 0.1 / sqrt(3) rtol = 1e-3
+    # frames about other polar axes: right-handed and orthonormal, the chamber frame for ẑ;
+    # about x̂, the dipole along x is the m = 0 mode
+    @test ylm_frame((0, 0, 1)) == (Vec3(0, 0, 1), Vec3(1, 0, 0), Vec3(0, 1, 0))
+    frames = [ylm_frame(a) for a in ((0, 0, -2), (1, 0, 0), (0.3, -0.5, 0.8), (0.95, 0.1, 0.05))]
+    @test all(abs(dot(z, x)) < 1e-14 && abs(norm(x) - 1) < 1e-14 && norm(cross(z, x) - y) < 1e-14 &&
+              abs(norm(z) - 1) < 1e-14 for (z, x, y) in frames)
+    @test all(f[1] ≈ normalize(Vec3(a...)) for (f, a) in zip(frames, ((0, 0, -2), (1, 0, 0), (0.3, -0.5, 0.8), (0.95, 0.1, 0.05))))
+    ca = ylm_weights(t, es; lmax = 1, axis = (1, 0, 0)) * [1 + 0.1 * v[1] for v in u]
+    @test ca[mode_index(1, 0)] / ca[1] ≈ 0.1 / sqrt(3) rtol = 1e-3
+    @test abs(ca[mode_index(1, 1)]) < 1e-6 && abs(ca[mode_index(1, -1)]) < 1e-6
     # axisymmetric field: relative_mode_power = (a_l/a_0)²/(2l+1)
     μ = [v[3] for v in u]
     f = 1 .+ 0.1 .* legendre.(2, μ)

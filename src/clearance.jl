@@ -789,10 +789,15 @@ function beam_component_power(op::DepositionOperator, beams::AbstractVector{<:Be
     t = op.target
     nc = length(t.components)
     M = zeros(length(beams), nc)
-    Threads.@threads for i in eachindex(beams)
-        b = beams[i]
+    # matched before the threaded loop, so a beam without a port throws the ArgumentError
+    # itself rather than a task's CompositeException
+    idx = map(beams) do b
         bi = findfirst(==(b.port), op.ports)
         bi === nothing && throw(ArgumentError("beam $(b.name) port is not in the operator"))
+        bi
+    end
+    Threads.@threads for i in eachindex(beams)
+        b, bi = beams[i], idx[i]
         E = zeros(nelements(t))
         L = zeros(nc)
         _deposit_beam!(E, L, op, bi, BeamFrame(_value_beam(b)))
