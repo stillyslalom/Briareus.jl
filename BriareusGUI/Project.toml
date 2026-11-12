@@ -22,7 +22,7 @@ ZipArchives = "49080126-0e18-4c2a-b176-c102e4b3760c"
 
 [compat]
 Base64 = "1"
-Briareus = "0.1"
+Briareus = "0.2"
 GLMakie = "0.13"
 Libdl = "1"
 LinearAlgebra = "1"
