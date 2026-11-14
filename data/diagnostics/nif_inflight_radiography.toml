@@ -19,6 +19,7 @@ id = "nif_inflight_radiography"
 name = "NIF in-flight radiography (Ge area backlighter)"
 kind = "radiography"
 facility = "NIF"
+instrument = "NIF in-flight radiography"
 public = true
 source = "Rygg et al., LLNL-JRNL-646555 (Phys. Rev. Lett., 2014), OSTI 1184746"
 confidence = "H"

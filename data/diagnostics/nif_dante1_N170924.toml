@@ -8,6 +8,7 @@ id = "nif_dante1_N170924"
 name = "NIF Dante 1 (N170924-003)"
 kind = "xray_power"
 facility = "NIF"
+instrument = "NIF Dante 1"
 public = true
 shots = ["N170924-003"]
 source = "Kemp et al., RSI 91, 083507 (2020), OSTI 1736341, Table I"

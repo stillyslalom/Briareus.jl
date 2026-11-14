@@ -103,7 +103,7 @@ export CapsuleDrive, capsule_drive
 export DIAGNOSTIC_SCHEMA, TabulatedCurve, DiagnosticField, DiagnosticIssue, DiagnosticDefinition,
        register_diagnostic_kind, diagnostic_config_path, diagnostic_paths, add_diagnostic_path,
        remove_diagnostic_path, diagnostics, diagnostic, check_diagnostics, diagnostic_table, diagnostic_definition,
-       diagnostic_diff
+       diagnostic_diff, diagnostic_instrument
 
 include("geometry.jl")
 include("meshops.jl")

@@ -46,6 +46,7 @@ const _HEADER_KEYS = Dict(
     "kind" => DiagnosticField(String; doc = "a registered kind; inherited through extends"),
     "name" => DiagnosticField(String; doc = "display name"),
     "facility" => DiagnosticField(String),
+    "instrument" => DiagnosticField(String; doc = "the instrument this definition is a configuration of"),
     "extends" => DiagnosticField(String; doc = "the id this definition modifies"),
     "public" => DiagnosticField(Bool; doc = "false for non-public detail"),
     "valid_from" => DiagnosticField(:date),
@@ -66,8 +67,8 @@ const _DIAGNOSTIC_KINDS = Dict{Symbol,_Kind}()
 
 Make `kind` a diagnostic kind: definition files with `kind = "<kind>"` are checked
 against `schema` (the keys besides the header ones: `schema`, `id`, `kind`, `name`,
-`facility`, `extends`, `public`, `valid_from`, `valid_to`, `shots`, and `source`,
-`confidence`, `note` in every table) and built by `build(def::DiagnosticDefinition;
+`facility`, `instrument`, `extends`, `public`, `valid_from`, `valid_to`, `shots`, and
+`source`, `confidence`, `note` in every table) and built by `build(def::DiagnosticDefinition;
 kwargs...)`. A kind registered again replaces the earlier one.
 """
 function register_diagnostic_kind(kind::Symbol, schema::Dict{String,DiagnosticField}, build)
@@ -151,6 +152,11 @@ A diagnostic definition read from a file and resolved through `extends`: `id`, `
 `kind`, `file` (the file that defines it), `chain` (the files it was resolved from,
 the base first), `public` (`false` when any file in the chain sets `public = false`) and `data` (the
 resolved table, CSV paths made absolute). [`diagnostic`](@ref) builds the instrument.
+
+`data["instrument"]`, when a file of the chain gives it, names the instrument the
+definition is one configuration of (NIF Dante 1's channel sets of several years and
+shots share `instrument = "NIF Dante 1"`); a definition that extends another inherits
+it, and one without it is its own instrument ([`diagnostic_instrument`](@ref)).
 """
 struct DiagnosticDefinition
     id::String
@@ -165,6 +171,15 @@ end
 Base.show(io::IO, d::DiagnosticDefinition) =
     print(io, "DiagnosticDefinition(\"", d.id, "\", ", d.kind, ", ", basename(d.file),
           length(d.chain) > 1 ? " extending " * join(basename.(d.chain[1:end-1]), " ← ") : "", ")")
+
+"""
+    diagnostic_instrument(d::DiagnosticDefinition) -> String
+
+The instrument `d` is a configuration of: its `instrument` key (its own, or inherited
+through `extends`), else its `name`. A list of diagnostics shows each instrument once
+and offers its definitions as configurations.
+"""
+diagnostic_instrument(d::DiagnosticDefinition) = String(get(d.data, "instrument", d.name))
 
 # a file as read: its table with CSV paths made absolute
 struct _Raw

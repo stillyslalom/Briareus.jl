@@ -31,10 +31,15 @@ user files do not change them; `diagnostic("nif_dante1")` takes the search path.
 ## A definition file
 
 Every file has a header: `schema` (the format version, [`DIAGNOSTIC_SCHEMA`](@ref)),
-`id`, and either `kind` or `extends`; optionally `name`, `facility`, `public`
-(`false` for non-public detail), `valid_from` and `valid_to` (dates), `shots`, and the
-provenance keys `source`, `confidence` (H, M or L, as in the research notes) and
-`note`, which every table may also carry. Keys are checked: an unknown key or a value
+`id`, and either `kind` or `extends`; optionally `name`, `facility`, `instrument`,
+`public` (`false` for non-public detail), `valid_from` and `valid_to` (dates), `shots`,
+and the provenance keys `source`, `confidence` (H, M or L, as in the research notes) and
+`note`, which every table may also carry. `instrument` names the instrument a
+definition is one configuration of: the Dante 1 channel sets of several years and shots
+all carry `instrument = "NIF Dante 1"`, and a file that extends one of them inherits it
+([`diagnostic_instrument`](@ref)). A list of diagnostics (the desktop application's
+Diagnostics tab) shows each instrument once, for the session's `facility`, and offers
+its definitions as configurations. Keys are checked: an unknown key or a value
 of the wrong type is an error naming the file and the key. Units are in the key names
 (`theta_deg`, `energy_eV`, `thickness_um`, `solid_angle_sr`).
 

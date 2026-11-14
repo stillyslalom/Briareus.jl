@@ -13,6 +13,7 @@ id = "nif_sentinel_N170924"
 name = "NIF Sentinel (N170924-003)"
 kind = "xray_power"
 facility = "NIF"
+instrument = "NIF Sentinel"
 public = true
 shots = ["N170924-003"]
 source = "Kemp et al. (2020), OSTI 1736345, Table II and §II"

@@ -14,6 +14,7 @@ id = "nif_dante1_2021"
 name = "NIF Dante 1 (from October 2021)"
 kind = "xray_power"
 facility = "NIF"
+instrument = "NIF Dante 1"
 public = true
 valid_from = 2021-10-01
 source = "Rubery et al., RSI (2023), OSTI 1975922, Fig. 4 and §II"

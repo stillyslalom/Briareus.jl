@@ -9,6 +9,7 @@ id = "nif_dante1_2012"
 name = "NIF Dante 1 (2012–14)"
 kind = "xray_power"
 facility = "NIF"
+instrument = "NIF Dante 1"
 public = true
 shots = ["N120627-002", "N120628-001", "N140220-002", "N140221-001"]
 source = "May et al. (2015), OSTI 1234624, Table IV"

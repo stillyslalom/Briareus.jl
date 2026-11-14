@@ -116,6 +116,16 @@ csv(dir, name, E, v) = (open(joinpath(dir, name), "w") do io
             defs = diagnostics(; paths = [builtin, a])
             @test !defs["group_dante1"].public
             @test length(defs["group_dante1"].chain) == 3
+            # the instrument a definition is a configuration of: stated, inherited through
+            # extends, or (without the key) the definition's own name
+            @test diagnostic_instrument(defs["nif_dante1_2012"]) == "NIF Dante 1" &&
+                  diagnostic_instrument(defs["nif_dante1"]) == "NIF Dante 1" &&
+                  diagnostic_instrument(defs["group_dante1"]) == "NIF Dante 1"
+            @test diagnostic_instrument(DiagnosticDefinition("x", "A name", :xray_power, "", String[], true,
+                                                             Dict{String,Any}())) == "A name"
+            # (the upper SXI extends the lower one and states its own)
+            @test diagnostic_instrument(defs["nif_sxi_lower"]) == "NIF SXI lower" &&
+                  diagnostic_instrument(defs["nif_sxi_upper"]) == "NIF SXI upper"
             # a later definition of an id shadows an earlier one, with a warning naming both
             put(b, "dante1.toml", defn("nif_dante1", chan("cathode = \"Cr\"\n")))
             issues = check_diagnostics(; paths = [builtin, a, b])

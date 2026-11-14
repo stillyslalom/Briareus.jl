@@ -15,6 +15,7 @@ id = "nif_sxi_lower"
 name = "NIF SXI lower (hard channel)"
 kind = "xray_imager"
 facility = "NIF"
+instrument = "NIF SXI lower"
 public = true
 source = "Schneider et al., RSI 81, 10E538 (2010), OSTI 1009651, §II"
 confidence = "H"

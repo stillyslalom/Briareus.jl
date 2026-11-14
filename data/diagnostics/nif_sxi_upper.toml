@@ -9,6 +9,7 @@ schema = 1
 id = "nif_sxi_upper"
 extends = "nif_sxi_lower"
 name = "NIF SXI upper (hard channel)"
+instrument = "NIF SXI upper"
 source = "Schneider et al. (2012), OSTI 1043636, §II (draft); Schneider et al. (2010)"
 confidence = "M"
 
