@@ -35,6 +35,11 @@ end
 
 function _qt_init!()
     _QT_READY[] && return
+    # GLMakie accepts a context only while the GLFW library is initialized, the QMLMakie
+    # canvas's included. GLFW.jl 3.4 initialized it on load; 4.x does so on its first
+    # call, which a QMLMakie canvas never makes. Initializing creates no GLFW context.
+    GLMakie.GLFW.Init() ||
+        error("GLFW failed to initialize; the Briareus window's canvases need it")
     if Sys.iswindows()
         # The FluentWinUI3 style plugin depends on a library outside the DLL search
         # path; load it first so the native Windows 11 style is used.
