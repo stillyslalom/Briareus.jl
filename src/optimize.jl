@@ -9,14 +9,15 @@ const _SPH_FIELDS = (:theta_s, :dphi_s, :split_theta, :split_phi)
 
 """
     GroupPointing(beams; by = :group, fields = (:z, :r, :defocus), mirror = true,
-                  relative = false, radius = nothing, center = (0, 0, 0))
+                  relative = false, unit = :beam, radius = nothing, center = (0, 0, 0))
 
 Maps a parameter vector to beams. Beams are grouped by `by` (`:group` — e.g. cone —,
 `:quad`, `:beam`, or a function `beam -> key`); each group gets one value per field:
 
 - `:z` — axial aim coordinate (mm). With `mirror`, beams from the lower hemisphere
   (port `z < 0`) aim at `-z`, so one value describes a top/bottom-symmetric cone.
-- `:r` — radial aim offset (mm) toward the beam's own port azimuth.
+- `:r` — radial aim offset (mm) toward the beam's own port azimuth (its quad's with
+  `unit = :quad`, below).
 - `:phi` — tangential aim offset (mm), counterclockwise about `z`.
 - `:defocus` — focal-plane offset along the beam (mm, see `Beam`).
 - `:power` — power per beam (TW).
@@ -57,6 +58,17 @@ value. The aim moves to the surface along the template's axis, so the focus move
 it unless the template aim was already on the sphere. The spherical fields and the
 hohlraum fields `:z`, `:r`, `:phi` exclude each other.
 
+`unit = :quad` makes a quad the unit of the hohlraum fields' pointing: `:r` and `:phi`
+are measured in the azimuth of the quad's port, the mean port of the beams that share
+its `quad` name, instead of each beam's own. The beams of a quad that share their
+values then share one aim point, whether the table holds the quad as one beam or as its
+four, so a NIF pointing given per cone or per quad stays one aim per quad while the
+deposition is computed per beam. With the default `unit = :beam` each beam's offsets
+are in its own port azimuth, and a quad's four beams with the same `r` aim
+`r sin Δφ` apart (Δφ: a beam's azimuth from its quad's, up to 5.7° on NIF's 23.5° cone).
+A quad held as one beam, and a beam without a quad name, are the same either way, bit
+for bit.
+
 `relative = true` makes the aim fields (`:z`, `:r`, `:phi`, or the spherical ones) shifts
 added to each beam's own template aim instead of values the group's beams share, so a
 group moves rigidly and keeps its members' differences: re-pointing an as-shot table,
@@ -75,14 +87,18 @@ struct GroupPointing{K}
     center::Vec3
     sph::Vector{NTuple{5,Float64}}       # per beam: θ' (mirrored frame), Δφ, sθ, sφ, φ_port
     sph0::Vector{NTuple{4,Float64}}      # per group: mean θ', mean Δφ, θ' split, Δφ split
+    unit::Symbol                         # :beam or :quad: whose port azimuth :r and :phi refer to
+    radial::Vector{NTuple{2,Vec3}}       # per beam: those radial and tangential directions
 end
 
 function GroupPointing(beams::AbstractVector{<:Beam}; by = :group,
                        fields = (:z, :r, :defocus), mirror::Bool = true, relative::Bool = false,
+                       unit::Symbol = :beam,
                        radius::Union{Nothing,Real} = nothing, center = (0.0, 0.0, 0.0))
     for f in fields
         f in _FIELDS || throw(ArgumentError("unknown field $f; choose from $_FIELDS"))
     end
+    unit in (:beam, :quad) || throw(ArgumentError("unit is :beam or :quad, got :$unit"))
     by === :quad && any(b -> isempty(b.quad), beams) &&
         throw(ArgumentError("by = :quad needs quad names on every beam (OMEGA beams have none)"))
     spherical = any(in(_SPH_FIELDS), fields)
@@ -109,8 +125,20 @@ function GroupPointing(beams::AbstractVector{<:Beam}; by = :group,
     c = Vec3(center...)
     sph = spherical ? _sphere_angles(tmpl, R, c, mirror) : NTuple{5,Float64}[]
     sph0 = spherical ? [_sphere_group0(sph, mem) for mem in members] : NTuple{4,Float64}[]
+    radial = unit === :quad ? _quad_radial(tmpl) : map(_radial, tmpl)
     return GroupPointing(tmpl, uk, members, collect(Symbol, fields), mirror, relative, R, c,
-                         sph, sph0)
+                         sph, sph0, unit, radial)
+end
+
+# Per template beam, the radial and tangential directions of its quad's port: of the mean
+# port of the beams that share its quad name (a quad held as one beam: its own port,
+# exactly); a beam without a quad name keeps its own.
+function _quad_radial(tmpl)
+    qsum = Dict{String,Vec3}()
+    for b in tmpl
+        isempty(b.quad) || (qsum[b.quad] = get(qsum, b.quad, zero(Vec3)) + b.port)
+    end
+    return [isempty(b.quad) ? _radial(b) : _radial(qsum[b.quad]) for b in tmpl]
 end
 
 # Per template beam: the polar angle θ' (degrees; from the beam's own pole when mirrored)
@@ -163,7 +191,8 @@ parameter_names(p::GroupPointing) = [string(k, ".", f) for k in p.keys for f in 
 _pidx(p::GroupPointing, g, fi) = (g - 1) * length(p.fields) + fi
 
 _zsign(p::GroupPointing, b::Beam) = (p.mirror && b.port[3] < 0) ? -1.0 : 1.0
-_radial(b::Beam) = (φ = atan(b.port[2], b.port[1]); (Vec3(cos(φ), sin(φ), 0), Vec3(-sin(φ), cos(φ), 0)))
+_radial(b::Beam) = _radial(b.port)
+_radial(port::Vec3) = (φ = atan(port[2], port[1]); (Vec3(cos(φ), sin(φ), 0), Vec3(-sin(φ), cos(φ), 0)))
 _spherical(p::GroupPointing) = !isempty(p.sph)
 
 """
@@ -183,7 +212,7 @@ function initial_parameters(p::GroupPointing)
         end
         vals = map(mem) do bi
             b = p.template[bi]
-            er, eφ = _radial(b)
+            er, eφ = p.radial[bi]
             f === :z ? _zsign(p, b) * b.aim[3] :
             f === :r ? dot(b.aim, er) :
             f === :phi ? dot(b.aim, eφ) :
@@ -249,7 +278,7 @@ function apply(p::GroupPointing, x::AbstractVector{T}) where {T}
             if _spherical(p)
                 aim = _sphere_aim(p, g, bi, has, vals)
             else
-                er, eφ = _radial(b)
+                er, eφ = p.radial[bi]
                 aim0 = b.aim
                 if p.relative
                     rr = r === nothing ? dot(aim0, er) : dot(aim0, er) + r
@@ -489,8 +518,8 @@ Scenario for the beams `keep` (indices into the scenario's beams) — e.g. after
 dropping a bundle — reusing the view factors, flux response and mode weights; only the
 deposition operator is restricted. The kept beams' template values (pointing, power)
 come from the scenario's parameterization; the default new parameterization keeps its
-fields, mirroring, `relative` and sphere and groups by `group` (pass one to group by quad
-or beam). For a [`FramePointing`](@ref) scenario, the default keeps the kept beams'
+fields, mirroring, `relative`, `unit` and sphere and groups by `group` (pass one to group
+by quad or beam; with `unit = :quad` a quad's azimuth is then that of its kept beams). For a [`FramePointing`](@ref) scenario, the default keeps the kept beams'
 frames, groups, fields and `relative`. Any other parameterization needs one.
 """
 function subset(s::Scenario, keep::AbstractVector{<:Integer}; parameterization = nothing)
@@ -502,7 +531,7 @@ end
 
 _subset_param(p::GroupPointing, keep) =
     GroupPointing(p.template[keep]; fields = Tuple(p.fields), mirror = p.mirror,
-                  relative = p.relative, radius = _spherical(p) ? p.radius : nothing,
+                  relative = p.relative, unit = p.unit, radius = _spherical(p) ? p.radius : nothing,
                   center = p.center)
 _subset_param(p, keep) =
     throw(ArgumentError("give a parameterization for a scenario that is not on a GroupPointing or FramePointing"))
