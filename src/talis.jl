@@ -17,7 +17,6 @@ const TALIS_OUT_OF_SCOPE = [
     "TAS withdrawal envelope (cylinder of radius 60 mm for TARPOS 90-239 and TANDM 90-348, 29 mm for C-TARPOS 90-015; target height 38 mm): cylinder axis not specified",
     "diagnostics to the target shroud swept volume (10 mm): needs shroud geometry",
     "ARC beams must not intersect a NIF beam footprint on a target feature: ARC not modeled",
-    "blow-by assessment by the backscatter working group, and positioner/alignment-sequence reviews: facility processes",
 ]
 
 const _TALIS_BLOWBY = "TaLIS: configuration must be assessed for blow-by by the backscatter working group"
