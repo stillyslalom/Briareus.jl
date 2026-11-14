@@ -479,6 +479,7 @@ end
 @testset "several backlighter foils, one active (no GL)" begin
     s = DesignSession(starter = :none, resolution = :coarse)
     ts, bt = s.target, s.beams
+    @test add_part!(ts, :sphere)                                      # sphere_1, at TCC
     # two disks facing TCC from either side along x
     @test add_part!(ts, :disk; name = :foil_a, x = 3.0, theta = 90, phi = 180, r1 = 0.6)
     @test add_part!(ts, :disk; name = :foil_b, x = -3.0, theta = 90, r1 = 0.6)
@@ -552,8 +553,8 @@ end
     s5 = DesignSession(resolution = :coarse)
     restore!(s5, old)
     ps = s5.target.parts[]
-    @test [p.name for p in ps] == [:sphere_1, :plate, :backlighter] &&
-          [part_role(p) for p in ps] == [:none, :none, :foil] && active_foil(s5.target) === :backlighter
+    @test [p.name for p in ps] == [:plate, :backlighter] &&
+          [part_role(p) for p in ps] == [:none, :foil] && active_foil(s5.target) === :backlighter
 end
 
 @testset "observed and wall roles held by parts, not names (no GL)" begin

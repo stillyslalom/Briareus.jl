@@ -1,5 +1,5 @@
 // A section heading inside a panel, with an ⓘ for its Help entry when `info` names one
-// (`infoTip`: the explanation with current values instead).
+// (`infoTip`: a one-line hint with current values, in place of the entry's own).
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -11,6 +11,6 @@ RowLayout {
     spacing: 6
     Layout.topMargin: 6
     Label { id: heading; font.weight: Font.DemiBold }
-    Info { visible: parent.info !== "" && explanation !== ""; topic: parent.info; tip: parent.infoTip }
+    Info { topic: parent.info; tip: parent.infoTip; visible: parent.info !== "" && (known || tip !== "") }
     Item { Layout.fillWidth: true }
 }

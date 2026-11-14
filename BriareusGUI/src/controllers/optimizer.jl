@@ -385,7 +385,8 @@ end
 # The parameterization of the free fields: a `FramePointing` in the beams' frames when a
 # local aim field is free, else a `GroupPointing` (z mirrored per cone).
 function _parameterization(beams, frames, key, by::Symbol, fields)
-    _frame_fields(fields) || return GroupPointing(beams; by = key, fields, mirror = _mirror(by))
+    # (a quad's beams share one aim point: `unit = :quad`)
+    _frame_fields(fields) || return GroupPointing(beams; by = key, fields, mirror = _mirror(by), unit = :quad)
     fr = frames === nothing ? CHAMBER : collect(Frame, frames)
     return FramePointing(beams, fr; by = key, fields)
 end

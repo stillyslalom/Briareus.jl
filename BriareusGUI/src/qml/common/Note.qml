@@ -3,6 +3,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import "."
 
 Label {
     property string tip: ""
@@ -10,8 +11,6 @@ Label {
     wrapMode: Text.WordWrap
     Layout.fillWidth: true
     visible: text !== ""
-    ToolTip.visible: tip !== "" && noteHover.hovered
-    ToolTip.delay: 400
-    ToolTip.text: tip
+    Tip { text: parent.tip; visible: parent.tip !== "" && noteHover.hovered }
     HoverHandler { id: noteHover }
 }

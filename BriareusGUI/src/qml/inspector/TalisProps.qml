@@ -17,13 +17,11 @@ ColumnLayout {
             role: model.role
             readonly property string compName: model.name
             roles: [{ text: "capture: beams land on it", value: "capture",
-                      tip: "A surface the beams are meant to land on (a foil, a capture surface, a hohlraum wall): " +
-                           "the 3ω capture and incidence rules, and its clearance for beams landing elsewhere" },
+                      tip: "The beams land on it: capture and incidence rules" },
                     { text: "check 3ω and 1ω clearance", value: "hardware",
                       tip: "Hardware checked for 3ω and 1ω clearance" },
                     { text: "diagnostic: 3ω, and 10–25 mm from 1ω", value: "diagnostic",
-                      tip: "Diagnostic hardware: checked for 3ω clearance and kept 10–25 mm from the 1ω light " +
-                           "(instead of the 0.2 mm 1ω clearance)" },
+                      tip: "Diagnostic hardware: 3ω clearance, 10–25 mm from 1ω light" },
                     { text: "ignore", value: "none", tip: "Left out of the checks" }]
             onChosen: (value) => Julia.br_tl_role(compName, value)
         }
@@ -31,18 +29,14 @@ ColumnLayout {
     SectionLabel {
         text: "Rule tolerance"
         info: "talis.tolerance"
-        infoTip: "The angular tolerance becomes a lateral allowance r·tan(tolerance) at each hardware " +
-                 "point. Error set (from the clearance check): pointing " + app.rv_pointing +
-                 " mm, positioning " + app.rv_target_offset + " mm, hardware " + app.rv_hardware_tolerance +
-                 " mm, focus ± " + app.rv_focus + " mm; " + app.rvQuality + " sampling."
+        infoTip: "Uses the clearance check's errors and " + app.rvQuality + " sampling"
     }
     ColumnLayout {
         spacing: 6
         enabled: !app.tlRunning
         Layout.fillWidth: true
         PropRow { label: "Tolerance"; value: app.tlTolerance; unit: "degrees (0: none)"
-                  tip: "The component rotated off nominal, in the least favorable direction; it applies to the " +
-                       "clearances and the capture margin, not to the 70° incidence limit"
+                  tip: "Rotation of the component off nominal, in the worst direction"
                   onEdited: (text) => Julia.br_tl_edit("tolerance", text) }
         RowLayout {
             spacing: 8
@@ -56,8 +50,7 @@ ColumnLayout {
                         { text: "a point (x, y, z mm)", value: "point" }]
                 currentIndex: Math.max(0, ["tcc", "aim", "max", "point"].indexOf(app.tlPivot))
                 onActivated: Julia.br_tl_pivot(currentValue)
-                tip: "The pivot the tolerance turns the component about: r is measured from it " +
-                     "(for a component assembled off-square, its mount)"
+                tip: "The point the tolerance rotates the component about"
             }
         }
         PropRow { visible: app.tlPivot === "point"; label: "Pivot point"; value: app.tlPivotPoint
@@ -65,13 +58,13 @@ ColumnLayout {
                   tip: "In the chamber frame (TCC)"
                   onEdited: (text) => Julia.br_tl_edit("pivot_point", text) }
         CheckLine { text: "1ω rules (NIF beams only)"; checked: app.tlOmega1; onToggled: Julia.br_tl_omega1(checked)
-                    tip: "Also check the 1ω clearance, the unconverted-light management and the diagnostics' 1ω distance" }
+                    tip: "Also check the 1ω rules" }
     }
     ErrorText { text: app.tlError }
     RowLayout {
         spacing: 8
         Button { text: "Run TaLIS checks"; highlighted: true; enabled: !app.tlRunning; onClicked: Julia.br_tl_start()
-                 tip: "Check every enabled beam in the background; the report is in the TaLIS tab" }
+                 tip: "Runs in the background; results in the TaLIS tab" }
         Button { text: "Cancel"; enabled: app.tlRunning; onClicked: Julia.br_tl_cancel(); tip: "Stop the checks" }
         BusyIndicator { running: app.tlRunning; visible: running; Layout.preferredHeight: 28; Layout.preferredWidth: 28 }
     }

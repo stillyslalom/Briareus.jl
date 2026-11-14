@@ -44,7 +44,9 @@
     @test !new_target!(ts, :sphere) && occursin("starter", ts.error[])
     @test new_target!(ts, :hohlraum)
     @test :capsule in component_names(ts.target[]) && ts.parts[][1].values[:length] == 10.1
-    @test new_target!(ts, :none) && component_names(ts.target[]) == [:sphere_1]
+    # an empty target: no parts, a target with no elements
+    @test new_target!(ts, :none) && isempty(ts.parts[]) && nelements(ts.target[]) == 0
+    @test add_part!(ts, :sphere) && component_names(ts.target[]) == [:sphere_1]
 end
 
 @testset "BeamTable (no GL)" begin
@@ -396,10 +398,56 @@ end
     @test !add_part!(ts, :annulus; r1 = 2.0, r2 = 1.0) && occursin("outer radius", ts.error[])
     @test !add_part!(ts, :torus) && occursin("part kind", ts.error[])
     @test remove_part!(ts, i) && !(:shield in component_names(ts.target[]))
-    # a target without a starter starts with a sphere, and is never empty
+    # a target without a starter is empty; the last part can be removed
     ts2 = TargetSetup(starter = :none, resolution = :coarse)
-    @test component_names(ts2.target[]) == [:sphere_1]
-    @test !remove_part!(ts2, 1) && occursin("empty", ts2.error[])
+    @test isempty(ts2.parts[]) && isempty(component_names(ts2.target[]))
+    @test add_part!(ts2, :sphere) && component_names(ts2.target[]) == [:sphere_1]
+    @test remove_part!(ts2, 1) && isempty(ts2.parts[]) && nelements(ts2.target[]) == 0 && ts2.error[] == ""
+end
+
+@testset "removing several parts; what was placed in them stays (no GL)" begin
+    s = DesignSession(resolution = :coarse)
+    ts = s.target
+    c0 = part_frames(ts)[:capsule]
+    # the hohlraum, with the capsule placed in its frame: the capsule stays where it is, at TCC's
+    @test replaced_parts(ts, [:hohlraum]) == [:capsule]
+    select!(s.view, "part:hohlraum")
+    r = remove_nodes!(s)
+    @test r.ok && r.removed == ["hohlraum"] && r.replaced == [:capsule] && isempty(r.skipped)
+    @test [p.name for p in ts.parts[]] == [:capsule] && ts.parts[][1].frame === :tcc
+    @test isapprox(part_frames(ts)[:capsule], c0; atol = 1e-12) && s.view.selection[] == "target"
+    # the beams aimed in the removed entrance holes keep their aims, held in the chamber
+    @test all(==(:tcc), s.beams.aim_frame[])
+    @test undo!(s) || true
+    # several nodes at once, a window among them; a piece and a beam are skipped
+    s = DesignSession(resolution = :coarse)
+    ts = s.target
+    @test add_window!(ts) && add_window!(ts)
+    @test add_part!(ts, :disk; name = :lid, z = 7.0, theta = 30) && add_part!(ts, :sphere; name = :bead, frame = :lid, z = 1.0, r1 = 0.2)
+    @test add_part!(ts, :rectangle; name = :plate, x = 6.0)
+    b0 = part_frames(ts)[:bead]
+    select!(s.view, "part:lid")
+    foreach(id -> select_add!(s.view, id), ("part:plate", "window:hohlraum_window_1", "comp:hohlraum_wall"))
+    r = remove_nodes!(s)
+    @test r.ok && Set(r.removed) == Set(["lid", "plate", "hohlraum_window_1"]) && r.replaced == [:bead] &&
+          r.skipped == ["comp:hohlraum_wall"]
+    @test [p.name for p in ts.parts[]] == [:hohlraum, :capsule, :bead] && length(ts.parts[][1].windows) == 1
+    @test ts.parts[][end].frame === :tcc && isapprox(part_frames(ts)[:bead], b0; atol = 1e-12)
+    # a placement step that refers to a removed frame goes with it, the part keeping its place
+    @test add_part!(ts, :disk; name = :ref, x = 4.0) && add_part!(ts, :disk; name = :dep, x = -4.0)
+    @test add_part_step!(ts, part_index(ts, :dep), :facing; ref = :ref)
+    d0 = part_frames(ts)[:dep]
+    @test replaced_parts(ts, [:ref]) == [:dep] && remove_parts!(ts, [:ref])
+    @test isempty(ts.parts[][part_index(ts, :dep)].steps) && isapprox(part_frames(ts)[:dep], d0; atol = 1e-12)
+    # everything: an empty target, and nothing left to remove
+    select!(s.view, "part:hohlraum")
+    foreach(n -> select_add!(s.view, "part:" * String(n)), (:capsule, :bead, :dep))
+    @test remove_nodes!(s).ok && isempty(ts.parts[]) && nelements(ts.target[]) == 0
+    @test isempty(remove_nodes!(s, ["target", "beams"]).removed)
+    @test !remove_parts!(ts, [:nothing_here]) && occursin("no part", ts.error[])
+    # the drive of an empty target says so
+    build_scenario!(s)
+    @test occursin("empty", s.drive.status[]) && s.drive.scenario[] === nothing
 end
 
 @testset "model tree and selection (no GL)" begin

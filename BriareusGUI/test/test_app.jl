@@ -33,7 +33,7 @@ const A = BriareusGUI
         s = A._launch_session(; starter = :hohlraum, resolution = :coarse, preset = nothing, beams = nothing)
         @test s isa DesignSession && :hohlraum in [p.name for p in s.target.parts[]]
         s = A._launch_session(; starter = :none, resolution = :coarse, preset = :nif_quads, beams = nothing)
-        @test s isa DesignSession && !isempty(s.target.parts[])
+        @test s isa DesignSession && isempty(s.target.parts[]) && length(s.beams.beams[]) == 48
     end
 
     @testset "the app's entry point" begin
@@ -150,8 +150,10 @@ const A = BriareusGUI
 end
 
 # The Help topics (qml/common/help.js) against the QML that shows them: every topic an ⓘ,
-# a section heading, the inspector's title or the Help screen names exists, every topic is
-# shown by one of them, and the topics of the survey's pages are there.
+# a section heading, the inspector's title, a menu or the Help window names exists; every
+# topic is shown by one of them, but for those of the Help window's own first page
+# (Getting around), which its page list reaches; each has a one-line hint for the hover
+# and a text in short paragraphs; and the topics of the survey's pages are there.
 @testset "Help topics" begin
     qml = A.QML_DIR
     js = read(joinpath(qml, "common", "help.js"), String)
@@ -163,6 +165,8 @@ end
         for m in eachmatch(r"\b(?:topic|info):\s*([^;\n}]*)", src), k in eachmatch(r"\"([a-z_]+\.[a-z_]+)\"", m[1])
             push!(refs, k[1])
         end
+        # a menu or a command that opens the Help window at a topic
+        union!(refs, (m[1] for m in eachmatch(r"(?:openAt|br_help)\(\"([a-z_]+\.[a-z_]+)\"\)", src)))
         # the inspector's title ⓘ: its `intro` (a task's is "<task>.intro")
         if f == "Inspector.qml"
             intro = match(r"property string intro: \{(.*?)\n    \}"s, src)[1]
@@ -170,12 +174,19 @@ end
             union!(refs, (t * ".intro" for t in ("drive", "optimize", "clearance", "sweep", "talis")))
         end
     end
-    # the Time tab's ⓘ: the chart shown ("time." + app.timeChart)
-    union!(refs, ("time." * String(c) for c in A.Controllers.TIME_CHARTS))
+    # the Time tab's ⓘ: the chart shown ("time." + app.timeChart; the diagnostics chart is
+    # the Diagnostics tab's)
+    union!(refs, ("time." * String(c) for c in A.Controllers.TIME_CHARTS if c !== :diagnostics))
     @test isempty(setdiff(refs, keys_))                 # every topic shown exists
-    @test isempty(setdiff(keys_, refs))                 # every topic is shown somewhere
-    survey = ["time.pulses", "time.drive", "time.diagnostics", "time.energy", "time.retune", "time.images",
-              "diagnostics.record", "diagnostics.folders", "part.windows", "beams.intro", "beams.nodes",
+    @test all(startswith("start."), setdiff(keys_, refs))   # every topic is shown somewhere
+    # each topic: a hint of one short line, and a text without a long unbroken paragraph
+    topics = collect(eachmatch(r"key: \"([a-z_]+\.[a-z_]+)\", title: \"[^\"]*\",\s*tip: \"([^\"]*)\",\s*text: md\(`(.*?)`\)"s, js))
+    @test length(topics) == length(keys_)
+    @test all(m -> 0 < length(m[2]) <= 64, topics)
+    paragraphs(t) = filter(!isempty, strip.(split(t, r"\n\s*\n")))
+    @test all(m -> all(p -> length(p) < 560, paragraphs(m[3])), topics)
+    survey = ["time.pulses", "time.drive", "diagnostics.chart", "time.energy", "time.retune", "diagnostics.images",
+              "diagnostics.record", "diagnostics.config", "diagnostics.folders", "part.windows", "beams.intro", "beams.nodes",
               "beams.table", "optimize.results", "clearance.results", "view.cutaway", "view.display",
               "part.leh_closure"]
     @test issubset(survey, keys_)

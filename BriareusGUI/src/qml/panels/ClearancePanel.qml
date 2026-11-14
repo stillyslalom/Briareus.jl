@@ -19,7 +19,7 @@ ColumnLayout {
         Note {
             Layout.fillWidth: false
             text: app.rvRunning ? "checked " + app.rvDone + " of " + app.rvTotal + " beams" : "No report yet: run Beam clearance"
-            opacity: 1
+            opacity: 0.72
         }
         Info { topic: "clearance.results" }
     }
@@ -44,6 +44,8 @@ ColumnLayout {
             Layout.fillWidth: true
         }
     }
+    // (without a report nothing else takes the height: keep the note at the top)
+    Item { visible: !app.rvHasReport; Layout.fillHeight: true }
     HScroll {
         visible: app.rvHasReport
         Layout.fillWidth: true

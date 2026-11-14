@@ -73,7 +73,8 @@ export TargetSetup, MeshSpec, MESH_PRESETS,
        target_ready, await_target!, BACKGROUND_TRIANGLES, LEH_CLOSURE_FIELDS, set_leh_closure!,
        is_lip, shown_component, with_lips
 export PartSpec, PART_KINDS, PART_KIND_LABELS, PART_FIELDS, PART_SIZE_FIELDS, part_component,
-       part_axis, part_center, add_part!, remove_part!, edit_part!, set_part_flag!, part_index,
+       part_axis, part_center, add_part!, remove_part!, remove_parts!, replaced_parts, remove_nodes!,
+       edit_part!, set_part_flag!, part_index,
        FRAME_LABELS, part_frame_def, is_port_frame, user_frames, frame_users, add_frame!,
        add_port_frame!, port_choices, transform_coordinates, add_frame_from_transform!,
        part_frames, set_part_frame!, nudge_part!, turn_part!, nudged_parts, turned_parts,
@@ -89,7 +90,7 @@ export PartSpec, PART_KINDS, PART_KIND_LABELS, PART_FIELDS, PART_SIZE_FIELDS, pa
 export HOHLRAUM_VALUES, HOHLRAUM_ENDS, HOHLRAUM_PROFILES, hohlraum_profile, edit_hohlraum_break!,
        add_hohlraum_break!, remove_hohlraum_break!,
        SPHERE_VALUES, hohlraum_pieces, piece_name, piece_frame_defs, piece_frame,
-       STARTERS, STARTER_LABELS, starter_parts, insert_starter!
+       STARTERS, STARTER_LABELS, STARTER_PRESETS, starter_parts, insert_starter!
 export TOP_LEVEL, is_assembly, assemblies, check_tree, assembly_children, assembly_members, assembly_parts,
        assembly_frame, add_assembly!, move_into_assembly!, ungroup_assembly!
 export WindowSpec, WINDOW_FIELDS, add_window!, remove_window!, edit_window!, set_window_open!,
@@ -109,7 +110,8 @@ export BeamTable, BEAM_PRESETS, BEAM_GROUPINGS, BEAM_FIELDS, PRESET_LABELS, pres
        load_preset!, set_beams!, set_grouping!, beam_rows, edit_beams!, set_enabled!,
        beam_node, edit_beam_node!, set_node_enabled!, SET_FIELDS, beam_set_values,
        edit_beam_set!, set_set_enabled!, participates, set_participation!, clusters, set_cluster!, rename_cluster!, split_quad!,
-       merge_quad!, BEAM_SORT_COLUMNS, beam_row_order, sort_beam_rows!,
+       merge_quad!, split_quads!, merge_quads!, quads_to_split, quads_to_merge, power_unit, beams_label,
+       BEAM_SORT_COLUMNS, beam_row_order, sort_beam_rows!,
        active_beams, display_beams, import_beams!, export_beams, beams_summary
 export import_visrad_sst!, import_visrad_summary!, export_visrad_sst, export_visrad_summary
 export DriveState, DriveResult, DRIVE_FIELDS, DRIVE_FIELD_LABELS, MODE_DEGREES, set_field!, xray_image!,
@@ -118,10 +120,13 @@ export DriveState, DriveResult, DRIVE_FIELDS, DRIVE_FIELD_LABELS, MODE_DEGREES, 
        BEAM_MODELS, BEAM_MODEL_LABELS, set_beam_model!, set_unconverted_ratio!, unconverted_ratios,
        unconverted_summary, drive_cavity, set_drive_cavity!
 export TimeState, DriveHistory, TIME_CHARTS, TIME_CHART_LABELS, set_chart!, load_pulses!,
-       use_pulse_shape!, start_history!, cancel_history!, history_stale, set_time_cursor!,
+       use_pulse_shape!, PULSE_SHAPES, PULSE_SHAPE_LABELS, PULSE_UNITS, set_pulse_unit!, start_history!,
+       cancel_history!, history_stale,
+       export_history, set_time_cursor!,
        set_time_step!, time_step, cursor_values, cursor_range, time_label, time_chart,
        DEFAULT_DIAGNOSTICS, refresh_diagnostics!, diagnostic_catalog, set_diagnostic!, use_path_diagnostic!,
        diagnostic_folders, add_diagnostic_folder!, remove_diagnostic_folder!, diagnostic_images,
+       diagnostic_instruments, set_instrument!, set_configuration!, diagnostic_here, diagnostic_image,
        show_diagnostic_image!, DEFAULT_PREPULSE, DEFAULT_THRESHOLD, set_prepulse!,
        set_irradiance_threshold!, start_irradiance!, irradiance_stale, irradiance_checks
 export OptimizeState, OptimizeResult, OBJECTIVES, OBJECTIVE_LABELS, OPTIMIZE_FIELDS, set_free!,
@@ -130,7 +135,7 @@ export OptimizeState, OptimizeResult, OBJECTIVES, OBJECTIVE_LABELS, OPTIMIZE_FIE
 export ReviewState, REVIEW_QUALITY, REVIEW_VIEWS, review_batch, default_selection!, set_role!,
        set_review_view!, edit_review!, clearance_kwargs, start_clearance!, cancel_clearance!,
        clearance_rows, worst_rows, review_brief, export_clearance, review_stale
-export TaLISState, TALIS_PIVOTS, TALIS_RULE_LABELS, TALIS_TOLERANCE_NOTE, set_talis_role!,
+export TaLISState, TALIS_PIVOTS, TALIS_RULE_LABELS, TALIS_TOLERANCE_NOTE, TALIS_SCOPE_NOTE, set_talis_role!,
        set_talis_pivot!, edit_talis!, talis_kwargs, start_talis!, cancel_talis!, talis_rows,
        talis_rule_rows, talis_notes, talis_brief, export_talis, talis_stale,
        talis_role
@@ -143,6 +148,7 @@ export ViewState, COLOR_MODES, COLOR_LABELS, BEAM_COLORINGS, PALETTE, component_
        component_plane, cut_through_component!, DISPLAY_MODES, DISPLAY_LABELS, display_mode, set_display!,
        beam_drawn, set_beams_drawn!, beam_matrix,
        cluster_colors, TreeRow, select!, select_add!, select_range!, selected_ids, toggle_expanded!,
+       picked_beam_id,
        selected_components, node_components,
        selection_kind, component_id, beam_id, model_tree, node_beams, selected_beams,
        selected_component, component_label, piece_label, window_of, part_node_id, frame_detail,

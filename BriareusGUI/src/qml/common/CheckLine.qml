@@ -16,9 +16,7 @@ RowLayout {
     spacing: 0
     Layout.fillWidth: true
     HoverHandler { id: lineHover }
-    ToolTip.visible: tip !== "" && hovered
-    ToolTip.delay: 400
-    ToolTip.text: tip
+    Tip { text: line.tip; visible: line.tip !== "" && line.hovered }
     CheckBox {
         id: box
         Layout.alignment: Qt.AlignTop

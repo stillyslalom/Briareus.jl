@@ -166,13 +166,18 @@ end
     @test all(n -> (q = ts.parts[][part_index(ts, n)]; q.assembly === TOP_LEVEL && q.frame === :tcc), keys(Fs))
     @test all(n -> isapprox(part_frames(ts)[n], Fs[n]; atol = 1e-14), keys(Fs))
     @test all(==(:tcc), bt.aim_frame[][idx])                          # its beams keep their aims
-    # remove a subtree: refused while a part left is placed in it, then everything in it goes
+    # remove a subtree: everything in it goes; a part outside it that was placed in its
+    # frame stays where it is, at the top level's frame
     @test add_assembly!(ts; name = :pack, members = [:foil, :main])
     @test add_part!(ts, :sphere; name = :bead, frame = :pack, z = 1.0, r1 = 0.1)
-    @test !remove_part!(ts, part_index(ts, :pack)) && occursin("bead", ts.error[])
-    @test move_into_assembly!(ts, [:bead], :pack)
+    @test add_part!(ts, :sphere; name = :pearl, frame = :pack, z = -1.0, r1 = 0.1)
+    Fp = part_frames(ts)[:pearl]
+    @test replaced_parts(ts, [:pack]) == [:bead, :pearl]
+    @test move_into_assembly!(ts, [:bead], :pack) && replaced_parts(ts, [:pack]) == [:pearl]
     @test remove_part!(ts, part_index(ts, :pack))
     @test !any(q -> q.name in (:pack, :foil, :main, :bead), ts.parts[])
+    @test ts.parts[][part_index(ts, :pearl)].frame === :tcc && isapprox(part_frames(ts)[:pearl], Fp; atol = 1e-12)
+    @test remove_part!(ts, part_index(ts, :pearl))
     @test :shield in component_names(ts.target[])
     # undone like any edit
     record!(s)

@@ -16,9 +16,9 @@ ColumnLayout {
             role: model.role
             readonly property string compName: model.name
             roles: [{ text: "beams land on it", value: "target",
-                      tip: "A surface the beams are meant to land on: each beam is checked only up to where it lands" },
+                      tip: "The beams land on it" },
                     { text: "check clearance", value: "hardware",
-                      tip: "Hardware the beams must clear: each beam's worst-case envelope is measured from it" },
+                      tip: "The beams must stay clear of it" },
                     { text: "ignore", value: "none", tip: "Left out of the check" }]
             onChosen: (value) => Julia.br_rv_role(compName, value)
         }
@@ -29,7 +29,7 @@ ColumnLayout {
         enabled: !app.rvRunning && !app.tlRunning
         Layout.fillWidth: true
         PropRow { label: "Contour"; value: app.rvPeak; unit: "of each spot's peak"
-                  tip: "The envelope is each spot's contour at this fraction of its peak, grown by the f-cone"
+                  tip: "The spot contour that bounds the beam, as a fraction of its peak"
                   onEdited: (text) => Julia.br_rv_edit("peak_fraction", text) }
         PropRow { label: "Pointing error"; value: app.rv_pointing; unit: "mm"
                   tip: "Displacement of each aim point in any direction across the beam"
@@ -38,13 +38,13 @@ ColumnLayout {
                   tip: "Displacement of the whole target from its nominal position"
                   onEdited: (text) => Julia.br_rv_edit("target_offset", text) }
         PropRow { label: "Hardware tolerance"; value: app.rv_hardware_tolerance; unit: "mm"
-                  tip: "Fabrication and assembly tolerance of the hardware, added to the other errors"
+                  tip: "Fabrication and assembly tolerance of the hardware"
                   onEdited: (text) => Julia.br_rv_edit("hardware_tolerance", text) }
         PropRow { label: "Focus error"; value: app.rv_focus; unit: "± mm"
                   tip: "Shift of best focus along each beam, both ways"
                   onEdited: (text) => Julia.br_rv_edit("focus", text) }
         CheckLine { text: "Far-field wings (1 % halo, 10⁻³ scatter)"; checked: app.rvWings; onToggled: Julia.br_rv_wings(checked)
-                    tip: "The NIF far-field wings (nif_wings) also count in the envelope, for the clearance check only" }
+                    tip: "Count the NIF far-field wings in the envelope" }
         RowLayout {
             spacing: 8
             Cell { text: "Sampling"; Layout.preferredWidth: 150 }
@@ -54,8 +54,7 @@ ColumnLayout {
                 model: [{ text: "Quick", value: "quick" }, { text: "Standard (4× the points)", value: "standard" }]
                 currentIndex: app.rvQuality === "standard" ? 1 : 0
                 onActivated: Julia.br_rv_quality(currentValue)
-                tip: "Quick: hardware at triangle vertices and 4 sub-triangle points, 8 pointing-error angles, a 31-point spot grid; " +
-                     "Standard: 16 sub-points, 16 angles, a 61-point grid"
+                tip: "Quick: coarser sampling, faster. Standard: finer"
             }
         }
     }
@@ -63,7 +62,7 @@ ColumnLayout {
     RowLayout {
         spacing: 8
         Button { text: "Check clearance"; highlighted: true; enabled: !app.rvRunning; onClicked: Julia.br_rv_start()
-                 tip: "Check every enabled beam in the background; the report is in the Clearance tab" }
+                 tip: "Runs in the background; results in the Clearance tab" }
         Button { text: "Cancel"; enabled: app.rvRunning; onClicked: Julia.br_rv_cancel()
                  tip: "Stop the check and keep the beams checked so far" }
     }

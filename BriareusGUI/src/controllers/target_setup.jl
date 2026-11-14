@@ -1182,7 +1182,7 @@ function TargetSetup(; starter::Symbol = :hohlraum, resolution::Symbol = :standa
             throw(ArgumentError("resolution must be one of $MESH_RESOLUTIONS"))
         mesh = MESH_PRESETS[resolution]
     end
-    ps = isempty(parts) ? _starter_or_sphere(starter, mesh) : collect(PartSpec, parts)
+    ps = isempty(parts) ? _starter_or_none(starter, mesh) : collect(PartSpec, parts)
     t = build_target(mesh, ps)
     return TargetSetup(Observable(mesh), Observable(_preset_of(mesh)), Observable(ps),
                        Observable(t), Observable(""), Observable(Set{Symbol}()),
@@ -1193,9 +1193,9 @@ function TargetSetup(; starter::Symbol = :hohlraum, resolution::Symbol = :standa
                        Observable{Union{Nothing,Symbol}}(nothing))
 end
 
-# The parts of a new target: a starter's, or (`:none`) a sphere at TCC.
-function _starter_or_sphere(starter::Symbol, mesh::MeshSpec)
-    starter === :none && return [PartSpec(:sphere; name = :sphere_1)]
+# The parts of a new target: a starter's, or (`:none`) none.
+function _starter_or_none(starter::Symbol, mesh::MeshSpec)
+    starter === :none && return PartSpec[]
     starter in STARTERS || throw(ArgumentError("a starter is one of $STARTERS, or :none"))
     return starter_parts(starter; capsule_h = mesh.capsule_h)
 end
@@ -1255,7 +1255,8 @@ end
 The `Target` of `parts` ([`PartSpec`](@ref)s) meshed with the element sizes `mesh` (a
 [`MeshSpec`](@ref) or a preset name). Throws `ArgumentError` for parts the geometry
 rejects (overlapping windows, a window past the end of a hohlraum's wall, a duplicate
-component name, …) and for no parts at all.
+component name, …). No parts at all give a target with no components: the empty design
+that File ▸ New target ▸ Empty starts from.
 """
 build_target(resolution::Symbol, parts) = build_target(MESH_PRESETS[resolution], parts)
 
@@ -1276,7 +1277,6 @@ function _target_components(mesh::MeshSpec, parts::AbstractVector{PartSpec}; raw
         end
         append!(comps, new)
     end
-    isempty(comps) && throw(ArgumentError("the target is empty: add a part"))
     return comps
 end
 
@@ -1326,7 +1326,8 @@ function _split_lists(comps::Vector{Component}, excluded)
     # a lip with its hole; a piece with its part
     out(c) = (is_lip(c) ? shown_component(c.name) : c.name) in excluded || c.part in excluded
     keep = [c for c in comps if !out(c)]
-    isempty(keep) && throw(ArgumentError("every component is left out of the calculations"))
+    # (a design without parts is the empty target; one whose every component is left out is not)
+    isempty(keep) && !isempty(comps) && throw(ArgumentError("every component is left out of the calculations"))
     length(keep) == length(comps) && return keep, nothing
     return keep, [c for c in comps if out(c)]
 end
@@ -1522,12 +1523,12 @@ end
 
 Start a new target (File ▸ New target): the parts of `starter` alone (one of
 [`STARTERS`](@ref), placed at TCC, [`starter_parts`](@ref)), or with `starter = :none`
-a sphere at TCC; nothing is left out of the calculations, and the element sizes are
-kept.
+no parts at all (an empty design, to build from Insert); nothing is left out of the
+calculations, and the element sizes are kept.
 """
 function new_target!(ts::TargetSetup, starter::Symbol = :hohlraum)
     parts = try
-        _starter_or_sphere(starter, ts.mesh[])
+        _starter_or_none(starter, ts.mesh[])
     catch err
         err isa ArgumentError || rethrow()
         ts.error[] = _errmsg(err)
@@ -1791,26 +1792,89 @@ end
 """
     remove_part!(ts::TargetSetup, i) -> Bool
 
-Remove part `i`. An assembly goes with its subtree: every part and assembly in it, at
-any depth ([`assembly_members`](@ref)). A user frame in use is not removed, and nor is
-anything a part left behind is placed in (`error` says why).
+Remove part `i` ([`remove_parts!`](@ref) of its name).
 """
-function remove_part!(ts::TargetSetup, i::Integer)
-    _check_part_index(ts, i)
-    p = ts.parts[][i]
-    if p.kind === :assembly
-        gone = Set{Symbol}([p.name; assembly_members(ts.parts[], p.name)])
-        return _try_build!(ts; parts = PartSpec[q for q in ts.parts[] if !(q.name in gone)])
+remove_part!(ts::TargetSetup, i::Integer) = remove_parts!(ts, [ts.parts[][_check_part_index(ts, i)].name])
+
+"""
+    remove_parts!(ts::TargetSetup, names) -> Bool
+
+Remove the parts, assemblies and user frames `names` in one edit. An assembly goes with
+its subtree: every part and assembly in it, at any depth ([`assembly_members`](@ref)).
+What stays keeps its place in the chamber: a part or frame that was placed in a removed
+frame (a capsule in its hohlraum's, a part in a user frame or an assembly's) is placed
+in the nearest frame above it that stays, where it is; a placement step that refers to
+a removed frame is dropped, the part keeping its place when its other steps are
+relations. [`replaced_parts`](@ref) lists them beforehand. Beams aimed in a removed
+frame keep their aims, held in `:tcc`. Removing every part leaves an empty target.
+"""
+function remove_parts!(ts::TargetSetup, names)
+    try
+        return _try_build!(ts; parts = _without_parts(ts, names).parts)
+    catch err
+        err isa ArgumentError || rethrow()
+        ts.error[] = _errmsg(err)
+        return false
     end
-    if p.kind === :frame
-        users = frame_users(ts, p.name)
-        isempty(users) ||
-            (ts.error[] = "frame $(p.name) is in use: $(join(String.(users), ", ")) placed in it or related to it";
-             return false)
+end
+
+"""
+    replaced_parts(ts::TargetSetup, names) -> Vector{Symbol}
+
+The parts and frames that [`remove_parts!`](@ref) of `names` would place in another
+frame or take a placement step from: those that stay and are placed in a removed frame
+or refer to one.
+"""
+replaced_parts(ts::TargetSetup, names) = _without_parts(ts, names).moved
+
+# The design's parts without `names` (assemblies with their subtrees): `(; parts, gone,
+# moved)`, `moved` the names of the parts that stay and were placed in a removed frame or
+# referred to one, each kept where it is (`remove_parts!`).
+function _without_parts(ts::TargetSetup, names)
+    all = ts.parts[]
+    gone = Set{Symbol}()
+    for n in names
+        i = findfirst(p -> p.name === n, all)
+        i === nothing && throw(ArgumentError("no part named $n"))
+        push!(gone, n)
+        all[i].kind === :assembly && union!(gone, assembly_members(all, n))
     end
-    ps = copy(ts.parts[])
-    deleteat!(ps, i)
-    return _try_build!(ts; parts = ps)
+    owner(f) = Symbol(first(split(String(f), '.'; limit = 2)))      # a piece frame's part
+    removed(f) = f !== :tcc && owner(f) in gone
+    byname = Dict{Symbol,PartSpec}(p.name => p for p in all)
+    # the nearest frame above `f` that stays
+    function kept_frame(f)
+        while removed(f)
+            f = byname[owner(f)].frame
+        end
+        return f
+    end
+    fr = part_frames(ts)
+    out, moved = PartSpec[], Symbol[]
+    for p in all
+        p.name in gone && continue
+        refs = any(st -> any(removed, Briareus._step_refs(st)), p.steps)
+        if !removed(p.frame) && !refs
+            push!(out, p.assembly in gone ? _with(p; assembly = TOP_LEVEL) : p)
+            continue
+        end
+        push!(moved, p.name)
+        steps = PlacementStep[st for st in p.steps if !any(removed, Briareus._step_refs(st))]
+        frame = kept_frame(p.frame)
+        # where it is now, as its placement fields in the frame it is placed in from here
+        # on; relative steps that stay apply on top of the fields, which are then kept
+        vals = copy(p.values)
+        if !is_port_frame(p) && !any(Briareus._relative, steps)
+            F, P1 = fr[p.name], fr[frame]
+            vals[:x], vals[:y], vals[:z] = to_frame(P1, F.origin)
+            vals[:theta], vals[:phi], vals[:rotation] = _euler_angles(P1.R' * F.R)
+        elseif frame !== p.frame
+            vals = _kept_in(p, frame, fr).values
+        end
+        q = _with(p; frame, values = vals, steps)
+        push!(out, q.assembly in gone ? _with(q; assembly = TOP_LEVEL) : q)
+    end
+    return (; parts = out, gone, moved)
 end
 
 # ---------------------------------------------------------------- user frames
@@ -1829,8 +1893,9 @@ user_frames(ts::TargetSetup) = PartSpec[p for p in ts.parts[] if p.kind === :fra
     frame_users(ts::TargetSetup, name::Symbol) -> Vector{Symbol}
 
 The parts and frames placed in the frame `name` (or a piece frame of part `name`), or
-with a placement step that refers to it. A user frame in use is not removed
-([`remove_part!`](@ref)); beams aimed in a removed frame keep their aims, held in `:tcc`.
+with a placement step that refers to it. When the frame is removed they keep their
+place, in the nearest frame above that stays ([`remove_parts!`](@ref)); beams aimed in
+a removed frame keep their aims, held in `:tcc`.
 """
 function frame_users(ts::TargetSetup, name::Symbol)
     own(f) = _own_frame_name(name, f)

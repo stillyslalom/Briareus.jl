@@ -1,487 +1,671 @@
-// The window's explanations, one entry per topic, grouped by page: the Help screen
-// (HelpDialog.qml) shows them, and an ⓘ (Info.qml) shows its topic's entry on hover and
-// opens the Help screen there. Pages carry short status lines only.
+// The window's Help: one entry per topic, grouped by page. The Help window
+// (HelpWindow.qml) shows the pages; an ⓘ (Info.qml) shows its topic's `tip` on hover and
+// opens the Help window at the topic on a click.
+//
+// Writing an entry: `tip` is one short line for the hover. `text` is Markdown, written for
+// someone who is stuck: short sentences, one idea each, lists for steps and choices, the
+// control's name in bold where it helps to find it. Say what a control does and when to
+// use it; leave derivations and provenance to the documentation.
 .pragma library
+
+// A text block written with the code's indentation: each line trimmed, so that Markdown
+// sees paragraphs and list items at the left margin.
+function md(s) { return s.split("\n").map(l => l.trim()).join("\n").trim() }
 
 var pages = [
     { key: "start", title: "Getting around", items: [
-        { key: "start.select", title: "Selection",
-          text: "Select a part, component, frame, beam or analysis in the model tree or the 3D view " +
-                "to see and edit its properties. Ctrl + click adds a node of the same kind to the " +
-                "selection, or takes it out (beams with beams, parts and components with parts and " +
-                "components, frames with frames); in the model tree Shift + click selects the range " +
-                "from the selected node. An edit then applies to everything selected. Each analysis " +
-                "has its settings in Properties and its results in the tab of the same name below " +
-                "the 3D view." },
+        { key: "start.layout", title: "The window",
+          tip: "Model tree, 3D view, Properties, result tabs",
+          text: md(`
+            - **Model** (left): the target's parts, the frames, the beams and the analyses.
+            - **3D view** (center): the target and the beams.
+            - **Properties** (right): the settings of whatever is selected.
+            - **Result tabs** (bottom): the beam table and the results of each analysis.
+
+            Nothing has to be done in a fixed order. An analysis that no longer matches the design is marked out of date; run it again when needed.`) },
+        { key: "start.select", title: "Selecting",
+          tip: "Click to select; Ctrl or Shift + click for several; Esc clears",
+          text: md(`
+            Click a row of the model tree, or an object in the 3D view, to select it. Its settings appear in Properties.
+
+            - **Ctrl + click** adds a row to the selection or takes it out.
+            - **Shift + click** in the tree selects the range from the selected row.
+            - Rows of one kind select together: parts with parts, beams with beams, frames with frames.
+            - **Esc**, or a click on empty space in the 3D view, clears the selection.
+
+            The 3D view highlights everything selected. An edit in Properties, a right-click command or Remove applies to all of it.`) },
+        { key: "start.keys", title: "Mouse and keys",
+          tip: "Navigation and keyboard shortcuts",
+          text: md(`
+            **3D view**
+
+            - Wheel: zoom toward the pointer.
+            - Left or middle drag: orbit about the selection, or about the point under the pointer.
+            - Right drag, Shift + drag or Ctrl + middle drag: pan.
+            - Click: select. Ctrl + click: add or remove. Esc: clear the selection.
+            - Double click: fit the view to what was clicked.
+            - F: fit everything. Arrow keys: orbit by 15°.
+
+            **Maps and images**
+
+            - Wheel: zoom. Left drag: zoom to a box. Right drag: pan.
+            - Ctrl + click: back to the opening view.
+            - Ctrl + Shift + click: the whole field.
+
+            **Keyboard**
+
+            - Ctrl + Z, Ctrl + Y: undo, redo.
+            - Delete: remove the selected parts, assemblies, frames and windows.
+            - Ctrl + S, Ctrl + O: save, open a session.
+            - Ctrl + R: compute the drive.
+            - F1: Help.`) },
+        { key: "start.turntable", title: "Turntable rotation",
+          tip: "Keeps z up while orbiting",
+          text: md(`
+            **View ▸ Turntable rotation** keeps the chamber's z axis up while orbiting. It is on by default.
+
+            Switched off, the view turns freely about the screen's axes and can roll. Switching it back on levels the view: z points up again.`) },
+        { key: "start.files", title: "Sessions and exports",
+          tip: "Saving the design and writing results",
+          text: md(`
+            - **File ▸ Save session** writes the whole design: target, beams, settings and the CAD files it reads (.briar).
+            - **Save session without CAD files** keeps the CAD files by path instead.
+            - **Export results (CSV)** writes the drive to a folder: fields per element, power per part and per beam, the capsule modes and a copy of the session.
+
+            With a current drive history, Export results also writes the history: the drive, the energy and each recorded diagnostic against time (history.csv), the fields per element at every step, and the imagers' images. An image open in the image view is written too.`) },
         { key: "start.docs", title: "Documentation",
-          text: "Help ▸ Documentation opens the Desktop application page of the Briareus " +
-                "documentation; Help ▸ Mouse and keys lists the bindings of the 3D view." }
+          tip: "Opens the documentation's page on this window",
+          text: md(`
+            **Documentation** opens the Desktop application page of the Briareus documentation: a first session, every panel, and the methods behind the numbers.`) }
     ] },
     { key: "target", title: "Target", items: [
-        { key: "target.insert", title: "Starters",
-          text: "A target is made of parts. Insert ▸ adds a starter assembly in the selected part's " +
-                "or piece's frame (TCC with nothing selected), its names made unique (hohlraum_2): " +
-                "Hohlraum with capsule, a hohlraum part along z with a capsule sphere at its center " +
-                "that holds the observed role; Backlighter foil, a foil 6 mm along x facing the frame's " +
-                "origin and a sphere there standing in for the main target (it absorbs the laser " +
-                "light and x-rays that reach it and emits nothing); Halfraum pair with shock tube, " +
-                "two halfraums (hohlraum parts with one end open) facing each other across a " +
-                "cylinder package whose end faces close them, the top face observed; Opacity " +
-                "halfraum, a halfraum with a sample foil, observed, in its open end; Frustraum with " +
-                "capsule, a hohlraum part with the frustraum profile (the stated size of a published " +
-                "NIF frustraum) and an observed capsule sphere at its center. File ▸ New " +
-                "target starts a target with one starter. The dimensions are illustrative " +
-                "mock-ups." },
-        { key: "target.mesh", title: "Mesh presets",
-          text: "Presets come from a work-precision study on the NIF hohlraum " +
-                "(examples/mesh_convergence.jl): errors in the capsule P2/P0 and P4/P0 of about " +
-                "0.5, 0.1 and 0.02 percentage points. A part can set its own element size." }
+        { key: "target.new", title: "New target",
+          tip: "A ready-made target with its facility's beams",
+          text: md(`
+            **File ▸ New target** replaces the target with a ready-made one and loads the beams of the facility it belongs to.
+
+            **NIF**
+
+            - *Hohlraum with capsule*: a cylindrical hohlraum with two entrance holes and a capsule.
+            - *Frustraum with capsule*: the same with a frustraum wall.
+            - *Halfraum pair with shock tube*: two halfraums facing each other across a package.
+            - *Opacity halfraum*: one halfraum with a sample in its open end.
+
+            **OMEGA**
+
+            - *Backlighter foil*: a foil 6 mm from a sphere that stands in for the main target.
+
+            **Empty** starts with no parts; build the target from the Insert menu.
+
+            The dimensions are illustrative mock-ups, not a facility's designs. Imported beams are kept.`) },
+        { key: "target.insert", title: "Inserting parts",
+          tip: "Insert adds a part, window, assembly or frame",
+          text: md(`
+            The **Insert** menu adds to the target:
+
+            - a **part**: sphere, disk, washer, rectangle, cylinder, cone, a bare hohlraum, or a mesh from an STL file;
+            - a **diagnostic window** in the selected hohlraum's wall;
+            - an **assembly** of the selected parts;
+            - a **frame**.
+
+            A new part appears at the chamber center (TCC), selected. Set its size and place in Properties.`) },
+        { key: "target.remove", title: "Removing",
+          tip: "Remove takes out everything selected",
+          text: md(`
+            Select parts, assemblies, frames or windows, then right-click ▸ **Remove** (or press Delete). Everything selected is removed in one step, and Undo brings it back.
+
+            - An assembly is removed with its contents.
+            - Parts that were placed in a removed part's frame stay where they are. They are then placed in the next frame up (a capsule left behind by its hohlraum is placed at TCC).
+            - Beams that aimed in a removed frame keep their aim points.
+            - A hohlraum's pieces (wall, caps, entrance holes) cannot be removed; hide them or change the hohlraum's ends instead.`) },
+        { key: "target.mesh", title: "Mesh",
+          tip: "Element sizes: accuracy against time",
+          text: md(`
+            The mesh preset sets the element sizes of the whole target.
+
+            - **Coarse**: about 0.5 % error in the capsule P2 and P4, under a second.
+            - **Standard**: about 0.1 %, a few seconds.
+            - **Fine**: converged, tens of seconds.
+
+            The capsule element size sets the accuracy of P4. A part can set its own element size in its properties.`) }
     ] },
     { key: "assembly", title: "Assemblies", items: [
-        { key: "assembly.intro", title: "The model tree",
-          text: "An assembly groups parts and other assemblies, at any depth; parts and " +
-                "assemblies can also sit at the top level. Each assembly has a frame, placed like a " +
-                "part's: its members are placed in it by default, so moving or sweeping the " +
-                "assembly moves them and the beams aimed in their frames. Membership and " +
-                "placement are separate: a member may be placed in any frame (a capsule in its " +
-                "hohlraum's). An assembly's box shows or hides everything in it (a dash: partly " +
-                "shown); Include in calculations puts all of it in or leaves all of it out, and a " +
-                "part left out gives up its role (observed, foil, wall) until it is put back. The " +
-                "analyses see the parts alone, never the tree." },
+        { key: "assembly.intro", title: "Assemblies",
+          tip: "A group of parts that moves together",
+          text: md(`
+            An assembly groups parts and other assemblies. It has its own frame, and its members are placed in that frame, so moving the assembly moves them and the beams aimed at them.
+
+            - The assembly's box shows or hides everything in it. A dash means partly shown.
+            - **Include in calculations** puts all of it in or leaves all of it out.
+            - A member can still be placed in another frame, such as a capsule in its hohlraum's.
+
+            The analyses see the parts only; the tree is for organizing.`) },
         { key: "assembly.commands", title: "Tree commands",
-          text: "Right-click in the model tree: New assembly (of the selected parts and " +
-                "assemblies, or an empty one from Target), Move into assembly (the members stay " +
-                "where they are), Ungroup (the assembly goes, its members stay, in its parent), " +
-                "Rename (whatever is placed in it, aimed in it or a member of it follows) and " +
-                "Remove with its contents. An imported VisRad workspace or multi-body STL file " +
-                "arrives as one assembly named after the file; Insert with an assembly selected " +
-                "puts the starter in it." }
+          tip: "Right-click a row for its commands",
+          text: md(`
+            Right-click a row of the model tree:
+
+            - **New assembly of the selection** groups the selected parts.
+            - **Move into assembly…** moves them to another assembly or to the top level. They stay where they are in space.
+            - **Ungroup** removes the assembly and keeps its members.
+            - **Rename…** renames a part, assembly or frame. Everything that refers to it follows.
+            - **Remove** removes everything selected.
+
+            An imported VisRad workspace or a multi-body STL file arrives as one assembly named after the file.`) }
     ] },
-    { key: "component", title: "Pieces", items: [
-        { key: "component.intro", title: "Wall, caps, entrance holes, windows",
-          text: "A hohlraum part's pieces are sized from the part: select the part to edit them. " +
-                "However a piece is drawn (invisible included), it takes part in every calculation." },
+    { key: "component", title: "Hohlraum pieces", items: [
+        { key: "component.intro", title: "Pieces",
+          tip: "Wall, caps, entrance holes and windows",
+          text: md(`
+            A hohlraum part is drawn as pieces: wall sections, caps, entrance holes and windows. Their sizes come from the part, so select the part to change them.
+
+            A piece can be shown, hidden or drawn semi-transparent on its own. However it is drawn, it stays in the calculations.`) },
         { key: "component.role", title: "A piece's role",
-          text: "A hohlraum part's wall and caps hold the Wall role (the drive history's and their " +
-                "cavity's wall temperature) and its other pieces none. A piece's own role replaces " +
-                "that default: a cap made Observed is the observed surface, a flat face with its face " +
-                "map and flux statistics, and no longer one of its cavity's walls; a wall section or a " +
-                "cap made None leaves the walls; a closed window made Wall joins them. One observed " +
-                "surface at a time: a part or piece that held the role gives it up. Entrance holes, " +
-                "their lips and open windows are apertures and take no role. Set it in the piece's " +
-                "properties or from its row's right-click menu in the model tree." }
+          tip: "Wall, observed face, or none",
+          text: md(`
+            By default the wall and the caps are **Wall**: they count toward the hohlraum's wall temperature. The other pieces have no role.
+
+            - **Observed** on a cap makes it the observed surface: a flat face with its own flux map. Only one surface is observed at a time.
+            - **None** on a wall section or cap takes it out of the wall temperature.
+            - **Wall** on a closed window adds it to the walls.
+
+            Entrance holes and open windows are openings and take no role.`) }
     ] },
     { key: "frames", title: "Frames", items: [
-        { key: "frames.intro", title: "User frames",
-          text: "A user frame is a named frame with no geometry, placed like a part: an origin " +
-                "at (x, y, z) in the frame it is placed in, its z axis tilted to polar angle θ and " +
-                "azimuth φ, turned by the rotation about z, then moved by its placement steps. " +
-                "Parts can be placed in it and beams aimed in it, and they follow it; a sweep can " +
-                "step it along an axis. A frame in use (parts or frames placed in it, or steps " +
-                "that refer to it) cannot be removed; beams aimed in a removed frame keep their " +
-                "aims in the chamber frame. Add frame places the new frame in the selected " +
-                "frame, TCC with none selected." },
+        { key: "frames.intro", title: "Frames",
+          tip: "A named origin and axes to place parts and aim beams in",
+          text: md(`
+            A frame is a named origin with axes and no geometry. Parts can be placed in it and beams aimed in it; they follow when it moves.
+
+            - **Insert ▸ Frame** adds one in the selected frame, or at TCC.
+            - Place it like a part: position, tilt of its z axis (θ, φ), rotation about z, then placement steps.
+            - Every part also has a frame of its own, with z along the part's axis.
+
+            Removing a frame leaves what was placed in it where it is.`) },
         { key: "frames.port", title: "Port frames",
-          text: "A port frame has its origin at TCC and z toward the port (VisRad's diagnostic " +
-                "port axis), so the port's beams travel along −z; x is the port's polar " +
-                "direction θ̂ turned by the roll toward φ̂ (an assumption: VisRad's x for port " +
-                "frames is not documented). The ports are those of the beam table, NIF quads at " +
-                "the angles of the NIF port table. Only the roll can be edited; a frame placed in " +
-                "a port frame carries offsets along the port axis." },
+          tip: "Origin at TCC, z toward a port",
+          text: md(`
+            A port frame has its origin at TCC and its z axis toward a beam port, so the port's beams travel along −z.
+
+            Only its roll about z can be edited. To work at a distance along the port axis, place another frame in it.`) },
         { key: "frames.transform", title: "Coordinate transform",
-          text: "Tools ▸ Coordinate transform gives the coordinates in one frame of a point or " +
-                "a direction given in another, each in Cartesian, cylindrical (r, φ, z about the " +
-                "frame's z) or spherical (r, θ, φ) coordinates, mm and degrees. A direction turns " +
-                "with the frames and does not move with their origins. Create frame adds a user " +
-                "frame placed in the To frame: at the point with the From frame's axes, or, for a " +
-                "direction, at the To frame's origin with z along it." },
-        { key: "frames.axes", title: "Frame axes in the view",
-          text: "The 3D view draws the selected frame's axes, and those of the frames whose " +
-                "axes are switched on (the frame's page, or its menu in the model tree): x red, y " +
-                "green, z blue, with the frame's name at the origin. Drawing only." }
+          tip: "Convert a point or direction between frames",
+          text: md(`
+            **Tools ▸ Coordinate transform** converts a point or a direction from one frame to another, in Cartesian, cylindrical or spherical coordinates (mm and degrees).
+
+            A direction turns with the frames but ignores their origins.
+
+            **Create frame** adds a frame at the point (or with z along the direction).`) },
+        { key: "frames.axes", title: "Frame axes",
+          tip: "x red, y green, z blue",
+          text: md(`
+            The 3D view draws the axes of the selected frame: x red, y green, z blue, with its name at the origin.
+
+            **Draw axes in the 3D view** keeps a frame's axes on when it is not selected.`) }
     ] },
     { key: "part", title: "Parts", items: [
-        { key: "part.placement", title: "Placement and frames",
-          text: "The axis of a part is its local z: the part is turned by the rotation about " +
-                "that axis, tilted to polar angle θ and azimuth φ (as VisRad orders them), then " +
-                "moved to (x, y, z) in the frame it is placed in. A disk, washer or rectangle " +
-                "faces along its axis. A hohlraum part's entrance-hole frames have their origin at the " +
-                "hole and z pointing out of the hohlraum, so a part there moves with the hole and " +
-                "mirrors between the two; a foil's frame has z along its front normal. Every part " +
-                "has its own frame (origin at its center, z its axis): " +
-                "parts placed in it and beams aimed in it move and turn with the part. Changing " +
-                "the frame keeps the part where it is." },
-        { key: "part.triad", title: "Placement triad",
-          text: "The 3D view draws a triad on the selected part, piece or assembly, in the axes of " +
-                "the frame it is placed in (x red, y green, z blue). Dragging an arrow moves the part " +
-                "along that axis in whole steps of the Move-along row's \"by\" field; dragging a square " +
-                "moves it in the plane of the two axes beside it, each in those steps, as one move; " +
-                "dragging a ring turns it about that axis, through the part's origin, in 15° steps. " +
-                "The handle under the pointer is drawn brighter and thicker. Ctrl held at the " +
-                "press snaps to a tenth of either. The moved parts and the beams aimed in their frames " +
-                "are previewed while dragging; the release makes one edit, undone as one, the edit " +
-                "the Move-along row's buttons make. A press released without moving is a click, so " +
-                "the beams behind a handle stay selectable." },
+        { key: "part.placement", title: "Placing a part",
+          tip: "Position, tilt and rotation in a frame",
+          text: md(`
+            A part is placed in a frame (**Placed in**): TCC, a user frame, or another part's frame.
+
+            - **x, y, z**: its center in that frame. **Position in** switches to cylindrical or spherical coordinates.
+            - **θ, φ**: the direction its axis (its own z) is tilted to.
+            - **Rotation**: its turn about that axis.
+
+            A disk, washer or rectangle faces along its axis. Choosing another frame keeps the part where it is.
+
+            To move a part by a step, use **Move along** or drag the triad in the 3D view.`) },
+        { key: "part.triad", title: "Moving with the triad",
+          tip: "Drag an arrow to move, a ring to turn",
+          text: md(`
+            The 3D view draws a triad on the selected part, along the axes of the frame it is placed in.
+
+            - Drag an **arrow** to move the part along that axis.
+            - Drag a **square** to move it in that plane.
+            - Drag a **ring** to turn it about that axis.
+
+            Moves snap to the **Move along** step and turns to 15°. Hold Ctrl when pressing for a tenth of that. Each drag is one undo step.`) },
         { key: "part.steps", title: "Placement steps",
-          text: "Steps apply in order after the placement fields, each in closed form. Relations " +
-                "fix degrees of freedom: Coincident (the origin at a point of a frame), On axis, " +
-                "Concentric (z along a frame's axis, the origin on it), Distance (from a point, " +
-                "along the line through the origin), Facing (z toward a point, by the smallest " +
-                "turn), Parallel (z along an axis) and Roll (x at an angle from a frame's axis). " +
-                "Offset and Rotate are relative moves and fix nothing. What no step fixes keeps " +
-                "the values of the placement fields. A relation that undoes an earlier one is " +
-                "refused: reorder the steps or remove one. A new step leaves the part where it " +
-                "is where it can (a coincident point, a distance and a roll start at the current " +
-                "values). The part follows the frames its steps refer to, as it follows the " +
-                "frame it is placed in." },
+          tip: "Relations and moves applied after the placement fields",
+          text: md(`
+            Placement steps position a part relative to other frames. They apply in order, after the placement fields.
+
+            **Relations** hold the part to something:
+
+            - *Coincident*: its origin at a point of a frame.
+            - *On axis*: its origin on a frame's axis.
+            - *Concentric*: on the axis, with its z along it.
+            - *Distance*: at a distance from a point.
+            - *Facing*: its z toward a point.
+            - *Parallel*: its z along an axis.
+            - *Roll*: its x at an angle from an axis.
+
+            **Offset** and **Rotate** are plain moves on top.
+
+            Whatever the steps leave free is set by the placement fields. The note under the steps says what is still free. A step that contradicts an earlier one is refused: reorder or remove one.`) },
         { key: "part.role", title: "Role",
-          text: "A role marks the part for the analyses; the part keeps its name. The observed " +
-                "surface is the one whose x-ray drive the drive, the optimization and the drive " +
-                "history analyze, one at a time: a capsule (a sphere, or a CAD part a sphere is " +
-                "fitted to: modes, θ–φ map, keep-out) or a flat face (a one-sided rectangle or disk, " +
-                "a VisRad rectangle, or a hohlraum part's cap given the role as a piece: the face's " +
-                "map and flux statistics). A " +
-                "backlighter foil is a flat part or a mesh. A wall is a re-emitting cavity surface: " +
-                "the drive history's wall temperature, and a surface the clearance and TaLIS checks " +
-                "land the beams on (a hohlraum part's wall and caps hold the role for the drive history). Any number of " +
-                "parts can be foils or walls; " +
-                "the active foil (Drive ▸ Active foil, or the part's own check) is the one whose " +
-                "spot statistics, map and objective the drive and the optimization take, and whose " +
-                "line of sight and captured power the sweep checks. The clearance and TaLIS checks " +
-                "take every foil as a surface the beams land on. Renaming a part keeps the parts " +
-                "placed in its frame, the beams aimed in it, and what its components were given " +
-                "(left out, display modes, the cut, the checks' roles, thin films, the sweep)." },
+          tip: "What the analyses take the part as",
+          text: md(`
+            A role tells the analyses what a part is.
+
+            - **Observed**: the surface whose x-ray drive is analyzed. A sphere is treated as a capsule (modes, θ–φ map); a flat one-sided part as a face (flux map). One at a time.
+            - **Foil**: a backlighter foil, analyzed for its laser spot. With several foils, the **active foil** is the one the drive and the optimization report on.
+            - **Wall**: a re-emitting surface that counts toward the wall temperature.
+            - **None**: plain hardware.
+
+            A part left out of the calculations gives up its role until it is put back.`) },
         { key: "part.hohlraum", title: "Hohlraum parts",
-          text: "A hohlraum along its part's z axis (a cylinder, a frustraum or sections: see " +
-                "Profile), in pieces: the wall (one piece per section), a cap at each end that is " +
-                "not open, each end's entrance hole, and the windows. An end is an entrance hole in " +
-                "its cap, a closed cap, or open (no cap: a halfraum's end, closed by another part " +
-                "or letting the radiation out). The wall and caps hold the wall role by default; a " +
-                "piece's Role changes it (a cap observed as a flat face). The clearance and TaLIS " +
-                "checks keep the caps as hardware, the entrance holes' edges. Each end has a " +
-                "frame (origin at the end's center, z pointing out of the hohlraum, so one aim or " +
-                "placement mirrors between the two), and each window one at its center on the " +
-                "wall: beams aim and parts are placed in them, and they follow the hohlraum." },
-        { key: "part.profile", title: "Hohlraum profiles",
-          text: "Cylinder: one radius. Frustraum: two cones meeting at the waist (z = 0), the " +
-                "waist radius and each end's radius (the bottom's 0: the top's). Sections: a " +
-                "radius at each break, a cone between unequal radii, a cylinder between equal " +
-                "ones and a flat step where two breaks share a height; the end breaks sit at " +
-                "±length/2. Each section is its own wall piece with its exact surface. Windows " +
-                "are cut into cylindrical sections only. The frustraum starter has the stated " +
-                "size of a published NIF frustraum (Baker et al. 2023), its end radius derived " +
-                "from the 23° wall angle: a mock-up of the shape, not that platform. The NIF " +
-                "presets aim in its holes with a pointing derived for it (see Presets and beam files)." },
+          tip: "A hohlraum along its z axis, in pieces",
+          text: md(`
+            A hohlraum part lies along its own z axis. Each end is one of:
+
+            - **Entrance hole**: a cap with a hole of the LEH radius.
+            - **Closed**: a full cap.
+            - **Open**: no cap at all, as on a halfraum closed by a package.
+
+            Each end has a frame with z pointing out of the hohlraum, and each window has one at its center. Beams aim in these frames and follow the hohlraum when it moves.`) },
+        { key: "part.profile", title: "Wall profile",
+          tip: "Cylinder, frustraum or sections",
+          text: md(`
+            - **Cylinder**: one radius.
+            - **Frustraum**: two cones that meet at the waist. Set the waist radius and the end radius.
+            - **Sections**: a list of breaks, each with a height and a radius. Unequal radii give a cone between them; two breaks at one height give a step.
+
+            Windows can only be cut into cylindrical sections.`) },
         { key: "part.windows", title: "Diagnostic windows",
-          text: "A diagnostic window is cut into a hohlraum part's wall, centered at azimuth φ from the " +
-                "part's +x and at z along its axis: round (a disk of the given diameter on the unrolled " +
-                "wall, the default) or a rectangle (a width in mm of arc by a height along z). Closed, it " +
-                "is an opaque wall patch with its own x-ray albedo and laser → x-ray conversion; open, it " +
-                "is a hole that laser light and x-rays leave through. Windows are cut into cylindrical " +
-                "sections only. Add window (the part's properties) places a closed 1 mm window at the " +
-                "midplane, at the first of φ = 90°, 270°, 0°, 180°, … where it overlaps no other. Each " +
-                "window has a frame at its center on the wall for aims and placements, and holds no role " +
-                "unless given one (a closed window made Wall joins its cavity's walls)." },
+          tip: "A patch or hole in the hohlraum wall",
+          text: md(`
+            A diagnostic window sits in the hohlraum wall at azimuth φ and height z.
+
+            - **Round** or rectangular.
+            - **Closed**: a wall patch with its own albedo and conversion.
+            - **Open**: a hole that light and x-rays leave through.
+
+            **Insert ▸ Diagnostic window** adds a closed 1 mm window at the midplane, at the first free azimuth.`) },
         { key: "part.leh_closure", title: "Closing entrance holes",
-          text: "With Closing entrance holes on, each entrance hole stays open to x-rays out to the open " +
-                "radius (a fraction of its radius), and the lip beyond closes: it lets its incident flux " +
-                "escape until the closure time, then across the closure duration turns into plasma that " +
-                "re-emits with the wall's albedo. Laser light and lines of sight pass the lip throughout. " +
-                "The drive history follows the closure through the pulse. Defaults: 0.84 of the LEH " +
-                "radius, the measured radius at peak (Schneider et al. 2015; research notes, \"Closing " +
-                "entrance holes\"); closure from 5 ns over 0.5 ns, an engineering example to set per design." },
+          tip: "Plasma closes the holes to x-rays during the pulse",
+          text: md(`
+            With **Closing entrance holes** on, each hole keeps an open radius for x-rays, and the lip outside it closes during the pulse:
+
+            - before the closure time, the lip lets x-rays out;
+            - over the closure duration, it turns into plasma that re-emits like the wall.
+
+            Laser light passes throughout. The drive history follows the closure in time.
+
+            The defaults are 0.84 of the LEH radius, closing from 5 ns over 0.5 ns. Set them per design.`) },
         { key: "part.cad", title: "Parts from CAD files",
-          text: "Windings repaired (closed solids face out of their material, open sheets the " +
-                "target center) and the surface remeshed into elements of the part's size; a part " +
-                "left out of the calculations is drawn from its file's facets. A session saved with " +
-                "its CAD files reads the saved copy; Read from the file reads the file on disk instead." },
+          tip: "STL meshes, remeshed to the element size",
+          text: md(`
+            **Insert ▸ Mesh from STL file** adds a part from a CAD export. Its surface is remeshed to the part's element size. Set **Scale** to the file's unit in mm (25.4 for inches).
+
+            A session saved with its CAD files reads the saved copies. **Read from the file** reads the file on disk again, and **Relink…** points the part at another file.`) },
         { key: "part.visrad", title: "VisRad objects",
-          text: "A VisRad CAD part's element size (0: the target's) sets its remeshing; a " +
-                "VisRad rectangle, sphere or hohlraum keeps VisRad's grid unless given a size. " +
-                "Mounting hardware far from the target is drawn only after an import; put it back " +
-                "in the calculations for the laser and clearance to see it (the drive's cavity " +
-                "leaves it out of the x-ray view factors either way)." }
+          tip: "Objects imported from a VisRad workspace",
+          text: md(`
+            Objects from an imported VisRad workspace keep VisRad's grid unless given an element size.
+
+            Mounting hardware far from the target is only drawn after an import. Tick **Include in calculations** for the laser and the clearance check to see it.`) }
     ] },
     { key: "beams", title: "Beams", items: [
         { key: "beams.intro", title: "The beam set",
-          text: "The Beams node holds the beam set: the facility's ports, grouped by cone (or by user " +
-                "group), with NIF quads or single beams. Its properties load a preset, switch every beam " +
-                "on or off and set how the beams are drawn and colored. The Beam table tab below the 3D " +
-                "view edits pointing, defocus and power per cone, quad or beam. File imports and exports " +
-                "beam tables, VisRad SST pointing and VisRad beam summaries." },
+          tip: "The facility's beams, by cone, quad and beam",
+          text: md(`
+            The **Beams** row holds every beam, grouped by cone, then by quad (NIF), then by beam.
+
+            - Its properties load a preset, switch all beams on or off and set how beams are drawn.
+            - The **Beam table** tab edits pointing and power row by row.
+            - **File** imports and exports beam tables and VisRad pointing files.`) },
+        { key: "beams.facility", title: "Facility",
+          tip: "Sets the beams, the diagnostics and the checks",
+          text: md(`
+            **Beams ▸ Facility** sets which facility the design is for.
+
+            - **NIF**, **OMEGA**: loads the facility's beams. The Diagnostics tab lists its instruments, and the TaLIS rules apply to NIF only.
+            - **OMEGA EP**, **Other**: no built-in beams. The beam table is emptied; import one with **File ▸ Import beam table**.
+
+            Imported beams are kept when the facility changes.`) },
         { key: "beams.nodes", title: "Groups, quads and beams",
-          text: "Under Beams the model tree has a node per group, and under each its quads (NIF) or " +
-                "beams. A node's box switches its beams on or off (a dash: some are off); its 2 × 3 dots " +
-                "are the 1ω, 2ω and 3ω light in the calculations (top row) and drawn (bottom row), a pale " +
-                "dot on for some of its beams. Selecting a node shows its properties: the pointing (the " +
-                "mean over its beams), the aim point and its frame, the group and, for a NIF quad, " +
-                "splitting and merging; an edit sets that field on every selected beam and leaves the " +
-                "others. Right-click: Look along beam, Move to a new group, Split or Merge a quad." },
+          tip: "A row edits all the beams under it",
+          text: md(`
+            Selecting a group, quad or beam shows its pointing and power. An edit sets that value on every beam under the row.
+
+            - The **box** switches the beams on or off. A dash means some are off.
+            - The **dots** are the 1ω, 2ω and 3ω light: top row in the calculations, bottom row drawn.
+
+            Clicking a beam in the 3D view selects its quad while the quad's row is closed in the tree. Open the quad's row to pick single beams.`) },
         { key: "beams.table", title: "Beam table",
-          text: "The Beam table tab below the 3D view: a row per cone, quad or beam (Rows), with the " +
-                "number of beams n, the port angles θ / φ, the frame the aims are held in (mixed: the " +
-                "row's beams aim in different frames), and the aim z, aim r, tangential offset and " +
-                "defocus (mm) and the power (TW per beam), edited in place: an edit sets the field on " +
-                "every beam of the row. The box switches the row's beams on or off (pale: some are off). " +
-                "A click on a heading sorts the rows by that column, again descending, a third time back " +
-                "to the table's order; sorting changes the display only, not the beams' order. " +
-                "Selecting a row selects its node in the model tree and the 3D view. Problems found in an " +
-                "imported VisRad file show above the table." },
-        { key: "beams.preset", title: "Presets and beam files",
-          text: "The hohlraum presets aim in the entrance holes' frames: the upper hemisphere's " +
-                "beams in the hole facing up, the lower hemisphere's in the one facing down, so a " +
-                "moved hohlraum carries its beams. NIF beams keep the offsets of an illustrative " +
-                "example cone pointing; in a frustraum's holes, a pointing derived from it that " +
-                "puts each cone's spot at the same fraction of the wall height where the hole " +
-                "allows (the inner cones' spots land farther past the waist than on the " +
-                "cylinder). " +
-                "OMEGA beams aim at the holes' centers, and a hemisphere " +
-                "with no hole facing it is switched off (the opacity halfraum). The OMEGA " +
-                "backlighter set aims at the active foil's center, in its frame. An engineering " +
-                "default, not a facility's pointing. Beam tables and VisRad pointing or " +
-                "beam-summary files are in File." },
+          tip: "Pointing and power per cone, quad or beam",
+          text: md(`
+            One row per cone, quad or beam (**Rows**). Edit a cell to set that value on every beam of the row.
+
+            - **aim z, aim r, tang.**: the aim point relative to the quad's port azimuth (mm).
+            - **defocus**: how far best focus lies beyond the aim point (mm).
+            - **TW/quad** or **TW/beam**: the power. NIF rows give the power per quad.
+            - **frame**: the frame the aims are held in.
+
+            Click a heading to sort. Sorting changes the display only.`) },
+        { key: "beams.preset", title: "Presets",
+          tip: "A facility's beams, aimed for this target",
+          text: md(`
+            A preset replaces the beams with a facility's set, aimed for the current target.
+
+            - Hohlraum presets aim into the entrance holes and follow the hohlraum when it moves.
+            - The OMEGA backlighter set aims at the active foil.
+
+            The pointing is an illustrative default, not a shot's.`) },
         { key: "beams.display", title: "Rays and volumes",
-          text: "Rays run along each beam axis to the surface where it lands (diamond); the dot " +
-                "is the aim point. Volumes show the 5 % contour of each spot carried along its " +
-                "f-cone through best focus, each edge cut where it meets the target, so clipping on " +
-                "an LEH lip or a capsule shows directly." },
-        { key: "beams.pointing", title: "Pointing a selection",
-          text: "Values are the mean over the selection; an edit sets that field on every beam " +
-                "and leaves the others. The beam direction is fixed by its port." },
+          tip: "How beams are drawn",
+          text: md(`
+            - **Rays**: each beam's axis to where it lands (diamond). The dot is the aim point.
+            - **Volumes**: each beam's envelope, cut where it meets the target. Clipping on a lip or capsule shows directly.
+            - **Hidden**: no beams drawn.
+
+            Drawing never changes a calculation.`) },
+        { key: "beams.pointing", title: "Pointing",
+          tip: "Aim offsets, defocus and power of the selection",
+          text: md(`
+            The fields show the mean over the selected beams. An edit sets that field on all of them and leaves the others alone.
+
+            A beam's direction is fixed by its port; pointing moves where it aims.`) },
         { key: "beams.aim", title: "Aim point and aim frame",
-          text: "Coordinates in the aim frame. Point every selected beam at one point, as VisRad " +
-                "points a cluster at a reference point (e.g. a backlighter foil). Shown: the mean " +
-                "aim. Beams aimed in a part's or a piece's frame keep these coordinates in it " +
-                "when it moves or turns, or when the part is renamed. Choosing another aim frame keeps " +
-                "the aims where they are; Aim at the frame's center points them at its center." },
+          tip: "Point the selection at one spot, in a frame",
+          text: md(`
+            **x, y, z** point every selected beam at one spot, in the coordinates of the **aim frame**.
+
+            Beams aimed in a part's frame follow the part when it moves. Choosing another aim frame leaves the aim where it is. **Aim at the frame's center** moves it to the frame's origin.`) },
         { key: "beams.group", title: "Groups",
-          text: "Groups gather beams for pointing, power and on/off together, and are the " +
-                "optimizer's per-group parameters. Type a new name to move the selection to a new group." },
-        { key: "beams.quad", title: "Splitting and merging quads",
-          text: "A NIF quad drawn as one beam splits into its four beams (own ports, a quarter of " +
-                "the power each) to point them apart; the drive is then recomputed. Merging brings " +
-                "them back into one beam (mean aim and defocus, total power)." }
+          tip: "Named sets of beams edited together",
+          text: md(`
+            A group is a named set of beams: a cone by default. Groups are pointed, powered and switched together, and the optimizer can treat each as one unit.
+
+            To make a new group, type a name and press **Move**.`) },
+        { key: "beams.quad", title: "Quads and beams",
+          tip: "Split quads for per-beam deposition",
+          text: md(`
+            A NIF quad can be held as one beam or as its four beams.
+
+            - **Split into beams** gives each beam its own port, so the laser deposition is computed per beam.
+            - **Merge into quads** goes back to one beam per quad.
+
+            Both work on a quad, a group, or all beams (right-click the row).
+
+            The quad stays the unit either way:
+
+            - Its row sets one aim point for its beams. Aim r and the tangential offset are measured in the quad's port azimuth.
+            - Its power is given per quad and shared by its beams.
+            - Pulse tables with cone or quad columns give the power per quad.
+            - The optimizer per cone or per quad keeps each quad's beams on one aim point.
+
+            To point a quad's beams apart, open its row and edit single beams. The drive must be computed again after a split or a merge.`) }
     ] },
     { key: "drive", title: "Drive", items: [
         { key: "drive.intro", title: "Computing the drive",
-          text: "View factors, the laser deposition operator and the capsule flux response, " +
-                "once per target and beam ports (seconds on the standard mesh). Pointing, power " +
-                "and on/off edits then re-evaluate the drive at once. Coloring the target by a " +
-                "drive field computes it when needed. The modes and the power accounting are in " +
-                "the Drive tab below the 3D view." },
+          tip: "Laser deposition and x-ray drive on the target",
+          text: md(`
+            **Compute ▸ Drive** (Ctrl + R) builds the view factors and the laser deposition for the target and the beam ports. This takes seconds on the standard mesh.
+
+            After that, pointing and power edits update the drive at once. Changing the target or the ports marks it out of date.
+
+            The **Drive** tab shows the capsule modes, the wall temperature and where the laser power lands.`) },
         { key: "drive.model", title: "Beam model",
-          text: "Briareus (f-cone): the focal spot summed over the f-cone's directions, each with " +
-                "its own incidence. VisRad profile: VisRad's beam model (a super-Gaussian cut at " +
-                "each beam's envelope), so the design deposits in VisRad as here; an imported " +
-                "workspace sets its envelopes and focal length." },
+          tip: "How a beam deposits its light",
+          text: md(`
+            - **Briareus (f-cone)**: sums the focal spot over the directions of the beam's cone.
+            - **VisRad profile**: VisRad's beam model, for comparing a design with VisRad.`) },
         { key: "drive.cavity", title: "Cavity",
-          text: "Only the elements that bound the free space around the point take part in the " +
-                "drive: a CAD assembly's outer faces and mounting hardware drop out of the view " +
-                "factors. Mark thin films modeled as solids (a capsule tent, an entrance-hole " +
-                "window) in their Properties, or they seal the point into a pocket. The clearance " +
-                "and TaLIS checks use the whole target." },
+          tip: "Limit the drive to the surfaces around a point",
+          text: md(`
+            With **Compute the drive on the cavity around a point**, only the surfaces that bound the free space around that point take part in the x-ray drive. Outer faces and mounting hardware of a CAD assembly drop out.
+
+            Thin films drawn as solids (a capsule tent, an LEH window) would seal the point in: tick **Thin film** on those parts.
+
+            The clearance and TaLIS checks always use the whole target.`) },
         { key: "drive.unconverted", title: "Unconverted light",
-          text: "Beams whose 1ω or 2ω dot is on in the calculations row (model tree, beam " +
-                "properties) add that light's absorbed power to the drive, converted to x-rays as the " +
-                "3ω light is. Only NIF beams and quads have footprints." },
+          tip: "1ω and 2ω light in the drive",
+          text: md(`
+            Set a **1ω** or **2ω power ratio** (a fraction of each beam's 3ω power) to include that light. Then switch it on per beam with the top-row dots in the model tree.
+
+            The **prepulse** fields add light that does not follow the 3ω pulse; it enters the drive history and the irradiance checks.
+
+            Only NIF beams have unconverted-light footprints.`) },
         { key: "drive.walls", title: "Hohlraum wall",
-          text: "The radiation temperature of the area-weighted mean x-ray flux incident on one " +
-                "hohlraum part's pieces that hold the wall role (by default its wall and caps, but " +
-                "not a cap observed as a flat face; never its entrance holes or windows). A " +
-                "target with several cavities (a halfraum pair) has one per hohlraum part: the " +
-                "panel opens on the one that holds the observed surface, and the drive history " +
-                "charts each one. Parts given the wall role outside a hohlraum part (a shield) " +
-                "are not a cavity of their own." },
+          tip: "The wall's radiation temperature",
+          text: md(`
+            The wall temperature is the radiation temperature of the mean x-ray flux on a hohlraum's wall pieces.
+
+            A target with several hohlraums has one per hohlraum: choose which to show. The drive history charts each.`) },
         { key: "drive.modes", title: "Capsule modes",
-          text: "εₗ: rotation-invariant amplitude over all m (= |Pₗ/P₀| when axisymmetric)." },
+          tip: "εₗ: the drive asymmetry at mode l",
+          text: md(`
+            **εₗ** is the amplitude of mode l of the x-ray flux on the capsule, relative to the mean, over all azimuthal orders.
+
+            **Pₗ/P₀** is the axisymmetric (Legendre) part. The two agree for an axisymmetric drive.`) },
         { key: "drive.retune", title: "Retune to a reference drive",
-          text: "The reference shot fired every beam of the table with the pulses of a pulse table " +
-                "(power per beam in TW against time_ns, one column per cone group, quad or beam). " +
-                "The disabled beams are the ones this shot loses: the enabled beams' powers are " +
-                "retuned, at each time of the table, to restore the reference's drive: a capsule's " +
-                "level and modes through l = 4, a flat observed face's flux over the face (mean, " +
-                "RMS, peak-to-mean), or, laser only, the active foil's absorbed irradiance within " +
-                "the spot radius (Compute ▸ Retune to a reference drive). The unconverted 1ω and 2ω " +
-                "light and the prepulse take part as in the drive, the prepulse not retuned; with both an observed surface " +
-                "and a foil, Holds chooses. Target uniform asks instead for no " +
-                "modes or a flat flux, the least nonuniformity the powers allow, at the reference's " +
-                "level or at a set level held at every time (a capsule's Tᵣ in eV, a face's or a " +
-                "foil spot's mean in TW/mm²); where the power limit cannot reach it, the level " +
-                "reached is the nearest the limit allows. Fire the retuned pulses makes them the " +
-                "Time tab's pulses (Undo takes them back)." }
+          tip: "Recover a reference shot's drive with fewer beams",
+          text: md(`
+            **Compute ▸ Retune to a reference drive** adjusts the pulses of the enabled beams so that they reproduce a reference shot's drive.
+
+            1. Disable the beams this shot loses.
+            2. Give the reference shot's pulse table (all beams firing).
+            3. Choose one power per quad, cone or beam, and a power limit.
+            4. Press **Retune**. The result is written as a new pulse table.
+
+            **Target** chooses what to match: the reference's drive, or a uniform drive at the reference's level or a set one. **Fire the retuned pulses** loads the result as the session's pulses.
+
+            Cone and quad columns give the power per quad, in the reference table and in the new one. If the Time tab is set to **TW per beam**, both are per beam.`) }
     ] },
     { key: "time", title: "Time", items: [
         { key: "time.pulses", title: "Pulses",
-          text: "The Time tab's first chart: the laser power of each beam group against time (the sum " +
-                "over its enabled beams, TW), colored as in the model tree, and the total. Pulse table… " +
-                "fires the beams with a pulse table (power per beam in TW against time_ns, one column " +
-                "per cone group, quad or beam; disabled beams stay off); N221204 shape fires them with " +
-                "N221204's delivered pulse shape (Pak et al. 2024), each beam reaching its table power at " +
-                "the peak. Run history solves the drive at each time of the pulses with the drive's view " +
-                "factors, for the other charts." },
+          tip: "The laser power of each group against time",
+          text: md(`
+            **Pulses ▾** sets the pulses the beams fire:
+
+            - **Pulse table…** reads a CSV file: power in TW against time_ns, one column per cone, quad or beam.
+            - **Published shapes** scales a published NIF pulse to the beams, each reaching its own power at the peak.
+
+            A cone's or a quad's column gives the power **per quad**, shared by the quad's beams, so the pulses fire the same whether quads are split or not. Switch the box beside Pulses ▾ to **TW per beam** if the table gives each beam's power.
+
+            The chart shows the power of each group and the total. **Run history** then computes the drive at each time.`) },
         { key: "time.drive", title: "Drive history",
-          text: "From the latest history: the capsule's radiation temperature Tr and each recorded " +
-                "diagnostic's (eV, dashed), and a₂/a₀ and a₄/a₀ (%). For a flat observed face, its Tr " +
-                "(from its area-mean flux) and, on the right axis, its RMS nonuniformity and its peak " +
-                "and lowest flux relative to its mean (%, dashed). A target with several cavities " +
-                "charts each hohlraum part's wall temperature." },
-        { key: "time.diagnostics", title: "Diagnostics chart",
-          text: "From the latest history: each recorded diagnostic's Tr (eV) and the intensity toward " +
-                "it (TW/sr, dashed). A diagnostic is recorded when it is ticked under Record before the " +
-                "history runs." },
+          tip: "Tr and symmetry through the pulse",
+          text: md(`
+            After **Run history**: the radiation temperature of the observed surface, and the drive symmetry (a₂/a₀ and a₄/a₀ for a capsule; the nonuniformity for a flat face).
+
+            A target with several hohlraums also shows each wall temperature.`) },
         { key: "time.energy", title: "Energy",
-          text: "From the latest history: the laser energy delivered by each time and where it went " +
-                "(kJ), and the unconverted 1ω and 2ω light's part of the delivered energy (dotted) when " +
-                "that light takes part." },
+          tip: "Where the laser energy has gone by each time",
+          text: md(`
+            The laser energy delivered by each time, and where it went: the walls, the observed surface, the entrance holes and the windows (kJ).`) },
         { key: "time.retune", title: "Retune chart",
-          text: "From the latest retune (Compute ▸ Retune to a reference drive): each group's power on " +
-                "the reference pulses (all beams, dashed) and on the retuned ones (enabled beams), and " +
-                "the capsule's mode ε₁ before and after the retune (%). For a flat face or a foil spot: " +
-                "its RMS nonuniformity before, after and in the reference, and its mean's departure from " +
-                "the reference's before and after (%)." },
-        { key: "time.cursor", title: "Time cursor",
-          text: "A click on a chart, a drag along it, or the slider puts the time cursor at a step of " +
-                "the history: the 3D view is colored by the drive at that step, and the images at the " +
-                "cursor are taken there. Now returns to the drive at the beam table's powers. The " +
-                "cursor is off while the history is out of date." },
-        { key: "time.images", title: "Images list",
-          text: "Images (n) lists the images the latest history holds of its recorded imagers: for " +
-                "each, the image at the time cursor's step (detected radiance, W/cm²/sr; the last step " +
-                "without a cursor) and each frame of its recording (detected fluence per steradian, " +
-                "J/cm²/sr: the integral over the shot or against a gate). An image opens in the image " +
-                "view on its region with signal and stays until another is chosen: a drive edit does " +
-                "not replace it." },
+          tip: "Powers and symmetry before and after a retune",
+          text: md(`
+            From the latest retune: each group's power on the reference pulses (dashed) and on the retuned ones, and the asymmetry before and after.`) },
+        { key: "time.cursor", title: "What the 3D view shows",
+          tip: "Beam powers, or a time of the drive history",
+          text: md(`
+            The 3D view colors the target by one of two drives:
+
+            - **Beam powers**: the drive at the powers set on the beams (Beams tree, Beam table). Pointing and power edits show at once.
+            - **Drive history**: the drive at one time of the latest history. Move the slider, or click or drag on the chart, to choose the time.
+
+            The history view is unavailable while the history is out of date.`) },
         { key: "time.irradiance", title: "Irradiance checks",
-          text: "Run checks computes the irradiance of the unconverted 1ω and 2ω light on each part " +
-                "of the drive's target through the pulses: the drive's power ratios on the beams " +
-                "whose 1ω or 2ω light takes part, plus the prepulse (Drive properties). The chart " +
-                "shows each part's peak against the plasma threshold, 10⁸ W/cm² by default: the NIF " +
-                "User Guide's guideline for the onset of weakly ionized plasma on a metal (§4.4), " +
-                "taken as the end of specular reflection. It is an engineering default for metals, " +
-                "not a facility criterion. Specular passes while every part stays below it; " +
-                "pre-plasma, on a target with a foil, fails when the unconverted light reaches it on " +
-                "the active foil before the 3ω light does. A dot is gray when the checks are out of date." }
+          tip: "Unconverted light against the plasma threshold",
+          text: md(`
+            **Run checks** computes the irradiance of the unconverted 1ω and 2ω light on each part through the pulse and compares it with the plasma threshold (Drive properties, 10⁸ W/cm² by default).
+
+            - **Specular** passes while every part stays below the threshold.
+            - **Pre-plasma** fails when unconverted light reaches the threshold on the active foil before the 3ω light does.
+
+            The threshold is an engineering default for metals. A gray dot means the checks are out of date.`) }
     ] },
     { key: "diagnostics", title: "Diagnostics", items: [
         { key: "diagnostics.record", title: "Recording diagnostics",
-          text: "Record ▸ Diagnostics (the Time tab) lists every diagnostic definition found, by kind: " +
-                "the built-ins, those in the search path's folders and those saved with the session. " +
-                "Each ticked one is recorded in the next drive history and shows as a chip beside the " +
-                "list; ✕ stops recording it. A definition saved with the session that differs from the " +
-                "search path's of the same id is marked * and is the one used; ↺ uses the search " +
-                "path's instead. A definition that does not build is dimmed, the reason in its tooltip." },
-        { key: "diagnostics.folders", title: "Folders and the search path",
-          text: "Diagnostics ▸ Folders… shows the search path: the built-in definitions are read " +
-                "first, then each folder's TOML files in order, and a definition with the id of an " +
-                "earlier one replaces it. Folders added there are saved for later sessions; the " +
-                "BRIAREUS_DIAGNOSTICS environment variable adds others (marked environment). Read again " +
-                "reads every folder again, and Problems lists each definition's errors and warnings with " +
-                "its file. A session saves the definitions it records, so it opens without the folders." }
+          tip: "Add instruments, then run the drive history",
+          text: md(`
+            The **Diagnostics** tab records synthetic diagnostics in the drive history.
+
+            1. Choose a category: x-ray power, x-ray imagers or radiography.
+            2. Press **Add ▾** and pick an instrument. It appears as a chip.
+            3. Run the drive history (Time tab).
+
+            The list shows the instruments of the session's facility. **✕** on a chip stops recording it. A dimmed instrument cannot be built; its tooltip says why.`) },
+        { key: "diagnostics.config", title: "Configurations",
+          tip: "Right-click a chip to change its configuration",
+          text: md(`
+            An instrument can have several configurations, such as Dante's channel sets from different years and shots. It is listed once and recorded in one configuration.
+
+            Right-click or double-click its chip to choose another configuration.
+
+            A configuration marked * was saved with the session and differs from the one in the diagnostic directories. **Use the directories' definition** switches to the latter.`) },
+        { key: "diagnostics.chart", title: "X-ray power",
+          tip: "Each recorded diagnostic's Tr and intensity",
+          text: md(`
+            For each recorded power diagnostic: its radiation temperature (eV) and the intensity toward it (TW/sr, dashed), against time.
+
+            Click or drag on the chart to move the time cursor.`) },
+        { key: "diagnostics.images", title: "X-ray imagers",
+          tip: "The images a history holds of its imagers",
+          text: md(`
+            Each recorded imager gives:
+
+            - an image **at the cursor**: what it detects at the time the cursor shows;
+            - its **recording**: one time-integrated image, or one frame per gate.
+
+            Click an entry to show it. **Open in the main view** shows it large, where it zooms and pans.`) },
+        { key: "diagnostics.folders", title: "Diagnostic directories",
+          tip: "Where diagnostic definitions are read from",
+          text: md(`
+            Diagnostics are defined in TOML files. **Diagnostics ▸ Diagnostic directories** lists the directories they are read from, after the built-in ones.
+
+            - **Add directory…** adds one and keeps it for later sessions.
+            - **Refresh** reads every definition again.
+            - **Problems** lists the errors found, with their files.
+
+            A definition with the same id as an earlier one replaces it. A session saves the definitions it records, so it opens without the directories.`) }
     ] },
     { key: "optimize", title: "Pointing optimization", items: [
         { key: "optimize.intro", title: "What is optimized",
-          text: "Free pointing fields per cone, quad or beam within ± bounds around the beam " +
-                "table (power bounds: a fraction of the start) and minimize an objective with " +
-                "L-BFGS-B and exact gradients, in the background. Canceling keeps the best design. " +
-                "The aims are free either in the chamber (z, r, tangential offset) or in each " +
-                "beam's aim frame (u, v, w: on the backlighter foil's frame, u and v across its " +
-                "face and w along its normal); a group shares its frame coordinates." },
+          tip: "Pointing and power, within bounds, for an objective",
+          text: md(`
+            The optimization varies the pointing fields that are ticked as free, within ± bounds around the current values, to minimize an objective. It runs in the background; canceling keeps the best design so far.
+
+            - Parameters are per cone, quad or beam.
+            - Aims are free either in the chamber (z, r, tangential offset) or in each beam's aim frame.
+
+            It needs a current drive.`) },
         { key: "optimize.weights", title: "Objective weights",
-          text: "The capsule objectives weigh each mode's (Pₗ/P₀)², about 10⁻² on an untuned capsule. " +
-                "The observed face's uniformity weight multiplies its squared RMS nonuniformity over the " +
-                "start's, so the term starts at the weight on any face: an opacity sample uniform to 0.01 % " +
-                "and a package face at 5 % weigh alike. The clipped, missed and direct-light penalties " +
-                "weigh 10 on squared power fractions (10 % missed: 0.1) and the held drive 1 on the squared " +
-                "relative departure. A weight of 1 puts the shape first; a smaller one gives the light lost " +
-                "more say." },
-        { key: "optimize.results", title: "The Optimization tab",
-          text: "The tab below the 3D view: the objective's values, the modes εₗ before and after, the " +
-                "clipping and the capsule clearance of the result, the foil spot or the observed face, and each free " +
-                "parameter's start, optimized value and bounds (a value at a bound is marked). Apply to " +
-                "the beam table writes the result into the table. \"Inputs changed since\" marks a result " +
-                "computed for other beams, a drive or settings. Set it up and run it from Pointing " +
-                "optimization in the model tree's Analyses, or the toolbar's Optimize…; it needs a " +
-                "current drive." }
+          tip: "How much each term counts",
+          text: md(`
+            Each mode's weight multiplies its squared amplitude. A weight of 0 ignores the mode.
+
+            The penalties for clipped, missed and direct light use a weight of 10 on the squared power fraction. A weight of 1 on the drive puts its shape first; smaller weights give lost light more say.`) },
+        { key: "optimize.results", title: "Results",
+          tip: "Before and after, and each parameter",
+          text: md(`
+            The **Optimization** tab shows the objective, the modes before and after, the clipping, and each free parameter with its bounds. A value at a bound is marked.
+
+            **Apply to the beam table** writes the result into the beams.`) }
     ] },
     { key: "clearance", title: "Beam clearance", items: [
         { key: "clearance.intro", title: "The check",
-          text: "Worst-case clearance of each enabled beam from the hardware over pointing, " +
-                "positioning, hardware and focus errors that add linearly. The envelope is each " +
-                "spot's contour at the given fraction of its peak grown by the f-cone; with wings, " +
-                "the far field also counts. Only hardware before a beam lands is checked. Status " +
-                "thresholds are engineering defaults (fail: 10¹² W/cm² or 10⁻³ of the beam power; " +
-                "review: 10⁹ W/cm² or 10⁻⁵)." },
+          tip: "Worst-case clearance of each beam from the hardware",
+          text: md(`
+            The check finds how close each enabled beam comes to the hardware in the worst case over the pointing, positioning, hardware and focus errors.
+
+            Give each component a role: a **target** the beams land on, **hardware** to stay clear of, or none. Only hardware a beam passes before it lands is checked.
+
+            The fail and review thresholds are engineering defaults.`) },
         { key: "clearance.errors", title: "Envelope and errors",
-          text: "The errors and the sampling also apply to the TaLIS checks." },
-        { key: "clearance.results", title: "The Clearance tab",
-          text: "The tab below the 3D view: a summary line, the closest beam to each component (its " +
-                "worst-case and nominal clearance, the beam's power and the status), and a row per beam " +
-                "and component: the status, the worst-case and nominal clearance (mm), the power (TW) " +
-                "and the peak intensity on the component (W/cm²). Export CSV… writes the rows. " +
-                "\"Inputs changed since\" marks a report computed for other beams, target or settings. " +
-                "Set the check up and run it from Beam clearance in the model tree's Analyses, or the " +
-                "toolbar's Clearance…." }
+          tip: "The beam envelope and the error set",
+          text: md(`
+            The envelope is each spot's contour at the given fraction of its peak, grown along the beam's cone. With **wings**, the far field counts too.
+
+            The errors add linearly. The TaLIS checks use the same errors and sampling.`) },
+        { key: "clearance.results", title: "Results",
+          tip: "The closest beam per component, and every pair",
+          text: md(`
+            The **Clearance** tab lists the closest beam to each component, then every beam–component pair: status, worst-case and nominal clearance, power and peak intensity.
+
+            **Export CSV…** writes the rows.`) }
     ] },
     { key: "sweep", title: "Placement sweep", items: [
         { key: "sweep.intro", title: "The sweep",
-          text: "Step a part (with the parts placed in its frame and the beams aimed in those " +
-                "frames) along an axis of any frame, and check each step in the background: beam " +
-                "clearance with the clearance check's settings, the backlighter's line of sight, " +
-                "the power the foil captures, and optionally the pointing re-optimized with the " +
-                "optimization's settings. Along an axis, the sweep translates; it does not turn." },
+          tip: "Step a part along an axis and check each step",
+          text: md(`
+            A sweep moves a part along an axis in steps and checks each position in the background: beam clearance, the backlighter's line of sight, the power the foil captures, and optionally a re-optimized pointing.
+
+            Parts placed in the moving part's frame, and beams aimed in it, move with it.`) },
         { key: "sweep.steps", title: "Sweeping a placement step",
-          text: "Instead of a shift along an axis, the sweep can step a number of one of the " +
-                "part's placement steps (a distance, an angle, a point's or an offset's " +
-                "coordinate) through a range of values. At each value the frames are resolved " +
-                "again, and every part whose frame changes moves rigidly with it, turns " +
-                "included: the parts placed in it, and those whose steps refer to it (a part " +
-                "facing it). Beams aimed in those frames move with them. A sweep along an axis " +
-                "does the same when other parts' steps refer to the moving part." },
+          tip: "Vary one number of a placement step instead",
+          text: md(`
+            Instead of moving along an axis, a sweep can vary one number of a placement step: a distance, an angle or a coordinate. Everything that depends on the part follows at each value, turns included.`) },
         { key: "sweep.results", title: "Results",
-          text: "A row per step: the least clearance and where, the failing and review pairs, the " +
-                "line of sight, the captured power and the objective. Click the chart or a row to " +
-                "select a step; double-click a row to apply it (one edit, undone as one)." }
+          tip: "One row per step",
+          text: md(`
+            Each row is one step: the least clearance and where, failing pairs, the line of sight, the captured power and the objective.
+
+            Click a row or the chart to select a step. Double-click a row, or press **Apply step**, to move the part there.`) }
     ] },
     { key: "talis", title: "TaLIS rules", items: [
         { key: "talis.intro", title: "The checks",
-          text: "The NIF target-configuration rules for each enabled beam: 3ω capture, incidence " +
-                "and clearance, 1ω clearance and unconverted light, and the TAS stay-in zone, " +
-                "each judged on the worst case over the clearance error set plus the rule tolerance " +
-                "(not on incidence). The report is in the TaLIS tab below the 3D view." },
+          tip: "NIF's target-configuration rules, per beam",
+          text: md(`
+            The TaLIS checks apply NIF's target-configuration rules to each enabled beam: 3ω capture, incidence and clearance, 1ω clearance and unconverted light, and the TAS stay-in zone.
+
+            Each is judged in the worst case over the clearance check's errors plus the rule tolerance.`) },
         { key: "talis.tolerance", title: "Rule tolerance",
-          text: "The angular tolerance becomes a lateral allowance r·tan(tolerance) at each hardware " +
-                "point, with r measured from the chosen point. The error set (pointing, positioning, " +
-                "hardware, focus) and the sampling are the clearance check's." },
+          tip: "A rotation of the component, as a lateral allowance",
+          text: md(`
+            The rule tolerance is an angle: the component rotated off nominal in the least favorable direction, as when a target is inserted rotated or assembled off-square.
+
+            It becomes a lateral allowance r·tan(tolerance) at each hardware point, with r measured from the chosen pivot. For a component assembled off-square, set the pivot to its mount.
+
+            It applies to the clearances and the capture margin, not to the 70° incidence limit.`) },
         { key: "talis.report", title: "The report",
-          text: "Left: one line per note (the tolerance, the error set, the checks not evaluated, " +
-                "the requirements out of scope), the whole note on hover, and the per-rule summary " +
-                "with each rule's worst check. Right: every check, colored by status with its margin." }
+          tip: "Rules on the left, every check on the right",
+          text: md(`
+            - **Left**: each rule with its pass, review and fail counts and its worst check, then the notes.
+            - **Right**: every check with its status and margin.
+
+            **Export CSV…** writes the checks.`) },
+        { key: "talis.scope", title: "Out of scope",
+          tip: "Requirements these checks do not cover",
+          text: md(`
+            These requirements of the TCC Configuration Requirements are not checked, because the hardware involved is not modeled:
+
+            - positioner clearance inside and outside the CIVS field of view;
+            - targets to the TAS, and the TAS withdrawal envelope;
+            - diagnostics to the target shroud's swept volume;
+            - ARC beams crossing a NIF beam footprint on a target feature.`) }
     ] },
     { key: "view", title: "3D view", items: [
         { key: "view.cutaway", title: "Cutaway",
-          text: "Cutaway (toolbar) removes part of the target from the drawing to show inside. Drawing " +
-                "only: every calculation sees the whole target, and a click in the removed part picks " +
-                "nothing there. A sector removes a slice of the given width about the x, y or z axis, " +
-                "centered on an azimuth, optionally between bounds along the axis; a plane removes the " +
-                "side its normal points to, through a point and moved by the offset along the normal. A " +
-                "plane can contain a line of sight (from TCC or the selected component, toward θ, φ or a " +
-                "beam port) and turn about it. Right-click the Cutaway button for the common cuts, Cut " +
-                "settings… and Components cut: by default the hohlraum parts' shells (the wall and the " +
-                "caps of the ends that are not open), not the entrance holes, lips or windows; that " +
-                "default follows the target as it changes." },
-        { key: "view.display", title: "Display modes",
-          text: "A component is drawn opaque, semi-transparent, as a wireframe or not at all (its " +
-                "properties, or its row's right-click menu in the model tree). Drawing only: an " +
-                "invisible component still takes part in every calculation it is included in; Include " +
-                "in calculations is separate. The model tree's boxes show or hide a part or an assembly " +
-                "with everything in it." },
+          tip: "Hide part of the target to see inside",
+          text: md(`
+            **Cutaway** removes part of the target from the drawing. Calculations still see the whole target.
+
+            - A **sector** removes a slice about an axis: set its center azimuth and width.
+            - A **plane** removes one side: set its normal, a point and an offset.
+
+            Right-click the Cutaway button for common cuts, **Cut settings…** and the list of components that are cut.`) },
         { key: "view.cut", title: "Cutaway angles",
-          text: "Azimuth about z runs from +x toward +y, about x from +y toward +z, about y from +z toward +x." },
+          tip: "Azimuth runs from +x toward +y about z",
+          text: md(`
+            The azimuth about z runs from +x toward +y; about x from +y toward +z; about y from +z toward +x.`) },
+        { key: "view.display", title: "Display modes",
+          tip: "Opaque, semi-transparent, wireframe or hidden",
+          text: md(`
+            A component is drawn opaque, semi-transparent, as a wireframe, or not at all. Set it in the component's properties or its right-click menu.
+
+            This only changes the drawing. Whether a component takes part in the calculations is set by **Include in calculations**.`) },
         { key: "view.image", title: "Maps and images",
-          text: "The capsule map, the foil face and the x-ray and diagnostic images zoom with the wheel " +
-                "and to a box dragged with the left button, and pan with the right. A diagnostic image " +
-                "opens zoomed to its region with signal: Ctrl + Shift + click shows the whole field, " +
-                "Ctrl + click returns to the opening view." }
+          tip: "Wheel zooms, drag zooms to a box, right-drag pans",
+          text: md(`
+            The capsule map, the foil face and the x-ray images zoom with the wheel or a dragged box and pan with the right button.
+
+            A diagnostic image opens on its region with signal. Ctrl + Shift + click shows the whole field; Ctrl + click returns.`) }
     ] }
 ]
 
@@ -493,7 +677,11 @@ for (var i = 0; i < pages.length; ++i)
         _page[pages[i].items[j].key] = i
     }
 
-// The explanation of a topic ("" for an unknown one).
+// Whether `key` is a topic.
+function has(key) { return _entries[key] !== undefined }
+// A topic's one-line hint for a hover: its `tip`, else its title ("" for an unknown one).
+function hint(key) { return _entries[key] ? (_entries[key].tip || _entries[key].title) : "" }
+// The explanation of a topic, Markdown ("" for an unknown one).
 function text(key) { return _entries[key] ? _entries[key].text : "" }
 // The index into `pages` of a topic's page (0 for an unknown one).
 function pageOf(key) { return _page[key] !== undefined ? _page[key] : 0 }

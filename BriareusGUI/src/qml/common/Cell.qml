@@ -4,12 +4,14 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import "."
 
 Label {
     property string tip: ""
     elide: Text.ElideRight
-    ToolTip.visible: (truncated || tip !== "") && cellHover.hovered
-    ToolTip.delay: 400
-    ToolTip.text: tip === "" ? text : truncated ? text + ": " + tip : tip
+    Tip {
+        text: parent.tip === "" ? parent.text : parent.truncated ? parent.text + ": " + parent.tip : parent.tip
+        visible: (parent.truncated || parent.tip !== "") && cellHover.hovered
+    }
     HoverHandler { id: cellHover }
 }

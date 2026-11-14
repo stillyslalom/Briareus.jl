@@ -47,7 +47,7 @@ Pane {
 
     // the Help topic that introduces the page (its ⓘ beside the title)
     readonly property string intro: {
-        if (kind === "target") return "target.insert"
+        if (kind === "target") return "target.new"
         if (kind === "comp") return "component.intro"
         if (kind === "part") return "part.placement"
         if (kind === "window") return "part.windows"
@@ -78,9 +78,7 @@ Pane {
                 // its whole name, cut short only when the panel is narrower than it
                 Layout.preferredWidth: implicitWidth
                 Layout.minimumWidth: 40
-                ToolTip.visible: truncated && titleHover.hovered
-                ToolTip.delay: 400
-                ToolTip.text: inspector.title
+                Tip { visible: parent.truncated && titleHover.hovered; text: inspector.title }
                 HoverHandler { id: titleHover }
             }
             Info { topic: inspector.intro }
@@ -106,8 +104,8 @@ Pane {
                 Note { text: "Nothing selected" }
                 Note { text: app.targetSummary }
                 Note { text: app.beamsSummary }
-                Button { text: "Target"; onClicked: Julia.br_select("target"); tip: "Select the target: its mesh and starters" }
-                Button { text: "Beams"; onClicked: Julia.br_select("beams"); tip: "Select the beam set: presets, switching, drawing" }
+                Button { text: "Target"; onClicked: Julia.br_select("target"); tip: "The mesh, and inserting parts" }
+                Button { text: "Beams"; onClicked: Julia.br_select("beams"); tip: "The facility, presets and drawing" }
             }
         }
     }

@@ -99,10 +99,11 @@ Dialog {
             Button {
                 text: "Create frame"
                 onClicked: Julia.br_tf_create()
-                ToolTip.visible: hovered
-                ToolTip.delay: 400
-                ToolTip.text: app.tfDirection ? "A frame in the To frame, at its origin, with z along the direction"
-                                              : "A frame in the To frame at the point, with the From frame's axes"
+                Tip {
+                    visible: parent.hovered
+                    text: app.tfDirection ? "A frame in the To frame, at its origin, with z along the direction"
+                          : "A frame in the To frame at the point, with the From frame's axes"
+                }
             }
             Item { Layout.fillWidth: true }
         }

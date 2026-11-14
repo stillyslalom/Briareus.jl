@@ -8,7 +8,7 @@
 # under `xvfb-run`), drives it through its QML callbacks from `BriareusGUI._TICK_HOOK[]`
 # as `BriareusGUI/test/qt_window.jl` does, and grabs the window's contents below the
 # toolbar with `request_grab` (QML `grabToImage`, written asynchronously); the Cut
-# settings popup and the Help screen are grabbed alone (`request_cut_settings`,
+# settings popup and the Help window are grabbed alone (`request_cut_settings`,
 # `request_popup`). Nothing outside the window is captured. Every target and pointing is a
 # built-in public one: the hohlraum starter with the NIF quads at illustrative example
 # cone aims, and the OMEGA backlighter set on a foil; the 1ω and 2ω power ratios of the
@@ -25,7 +25,7 @@ root = dirname(@__DIR__)
 gui = joinpath(root, "BriareusGUI")
 out = joinpath(root, "docs", "src", "assets", "gui")
 raw = mktempdir()
-const ALL = ["optimize", "overview", "xray", "time_history", "talis", "beam_matrix", "display_cut",
+const ALL = ["optimize", "overview", "xray", "time_history", "diagnostics", "talis", "beam_matrix", "display_cut",
              "cut_plane", "cut_settings", "backlighter", "sweep", "help"]
 names = isempty(ARGS) ? ALL : ARGS
 all(in(ALL), names) || error("images are named among ", join(ALL, ", "))
@@ -50,6 +50,8 @@ function grab(sh, name)
 end
 idle(s) = s.drive.result[] !== nothing && !s.drive.building[] && !s.drive.evaluating[] &&
           B.Controllers.target_ready(s.target)
+# the Diagnostics tab's image, taken between two stages: 0 not yet, 1 shown, 2 grabbed
+diag = Ref(0)
 B._TICK_HOOK[] = function (sh)
     s = sh.sess
     time() - t_start > 900 && (println("timed out at stage ", stage[]); return B.request_close())
@@ -108,7 +110,9 @@ B._TICK_HOOK[] = function (sh)
         B.br_close_image()
         B.br_beam_style("rays")
         B.br_standard_view("iso")
-        if "time_history" in wanted
+        if "time_history" in wanted || "diagnostics" in wanted
+            # (with the lower SXI recorded beside Dante 1, for the Diagnostics tab's image)
+            B.br_diag_record("NIF SXI lower", true)
             B.br_time_shape()
             B.br_time_run()
         end
@@ -119,8 +123,22 @@ B._TICK_HOOK[] = function (sh)
         B.br_time_chart("drive"); next!()
     elseif k == 12 && after(1.5)
         grab(sh, "time_history"); next!()
+    elseif k == 13 && grabbed("time_history") && "diagnostics" in wanted && diag[] < 2
+        # the Diagnostics tab on its imagers: the history's images of the lower SXI
+        if diag[] == 0
+            B.request_tab("diagnostics")
+            B.br_diag_category("xray_imager")
+            diag[] = 1
+            t_stage[] = time()
+        elseif after(1.5) && !isfile(png("diagnostics"))
+            grab(sh, "diagnostics")
+            t_stage[] = time()
+        elseif grabbed("diagnostics")
+            diag[] = 2
+        end
     elseif k == 13 && grabbed("time_history")
         # the TaLIS rules on every quad, the beams colored by their worst status
+        B.br_diag_category("xray_power")
         B.br_time_now()
         B.br_set_color("component")
         B.br_select("task:talis")
@@ -226,7 +244,7 @@ B._TICK_HOOK[] = function (sh)
     elseif k == 29 && after(1.5)
         grab(sh, "sweep"); next!()
     elseif k == 30 && grabbed("sweep")
-        # the Help screen, at the placement sweep's page
+        # the Help window, at the placement sweep's page
         "help" in wanted && B.request_popup("topics:sweep.intro", png("help")); next!()
     elseif k == 31 && grabbed("help")
         B.request_popup("")

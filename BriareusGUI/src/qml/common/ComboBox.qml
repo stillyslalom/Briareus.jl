@@ -3,13 +3,12 @@
 // `displayText`). `tip` shows on hover while the list is closed.
 import QtQuick
 import QtQuick.Controls as T
+import "."
 
 T.ComboBox {
     id: box
     property string tip: ""
-    T.ToolTip.visible: tip !== "" && hovered && !popup.visible
-    T.ToolTip.delay: 400
-    T.ToolTip.text: tip
+    Tip { text: box.tip; visible: box.tip !== "" && box.hovered && !box.popup.visible }
     topPadding: 2
     bottomPadding: 2
     implicitHeight: Math.max(26, implicitContentHeight + topPadding + bottomPadding)

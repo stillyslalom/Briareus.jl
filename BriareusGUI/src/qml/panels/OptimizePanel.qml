@@ -14,7 +14,6 @@ ScrollPage {
             visible: !app.optHasResult
             Layout.fillWidth: false
             text: app.optRunning ? app.optProgress : "No result yet: run Pointing optimization"
-            opacity: 1
         }
         Label { text: app.optValues; visible: app.optHasResult; wrapMode: Text.WordWrap; Layout.fillWidth: true; font.weight: Font.DemiBold }
         Info { topic: "optimize.results"; Layout.alignment: Qt.AlignTop }

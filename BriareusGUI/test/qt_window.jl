@@ -209,7 +209,7 @@ using BriareusGUI.Briareus
             next!()
         elseif k == 16 && time() - t_stage[] > 0.2
             q = first(b.name for b in s.beams.beams[] if b.group === :inner23)
-            B.br_split_quad()
+            B.br_split_quads("")                                    # the selected quad
             count(b -> b.quad == q, s.beams.beams[]) == 4 && startswith(s.view.selection[], "quad:") &&
                 push!(seen, :split)
             B.br_edit_node("defocus", "0.5")
@@ -283,14 +283,16 @@ using BriareusGUI.Briareus
         elseif k == 25 && grabbed(png("time_drive"))
             sh.app["timeLabel"] == time_label(s) && startswith(time_label(s), "t = ") &&
                 s.view.color[] !== :component && length(sh.rows[:timeLegendModel]) == 5 &&
-                length(sh.rows[:diagModel]) == length(diagnostic_catalog(s)) &&
+                count(r -> r.first, sh.rows[:diagModel]) == length(diagnostic_instruments(s)) &&
                 count(r -> r.ticked, sh.rows[:diagModel]) == 2 && push!(seen, :history)
             B.br_time_chart("energy")
             B.request_grab(png("time_energy")); next!()
         elseif k == 26 && grabbed(png("time_energy"))
             B.br_time_now()
             time_label(s) == "" && push!(seen, :time_now)
-            B.br_new_target("empty"); next!()                      # a sphere, no hohlraum
+            B.br_new_target("empty")                               # no parts; then a sphere inserted
+            isempty(s.target.parts[]) && B.br_add_part("sphere")
+            next!()
         elseif k == 27 && time() - t_stage[] > 0.5
             [p.name for p in s.target.parts[]] == [:sphere_1] && !sh.app["hasHohlraum"] &&
                 isempty(sh.rows[:windowModel]) && push!(seen, :custom)

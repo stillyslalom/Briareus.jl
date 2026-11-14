@@ -279,12 +279,21 @@ function talis_rule_rows(tl::TaLISState)
 end
 
 """
+The requirements the TaLIS checks leave out, in a line for the report's notes
+(`Briareus.TALIS_OUT_OF_SCOPE` has each one in full, as the CSV export writes them).
+"""
+const TALIS_SCOPE_NOTE = "Out of scope: positioner clearance, TAS clearance and withdrawal, " *
+                         "shroud swept volume, ARC beam footprints."
+
+"""
     talis_notes(tl::TaLISState) -> Vector{NamedTuple}
 
-What the report does not settle, as `(; kind, text)` rows: the rule-tolerance
-interpretation (`:tolerance`, always first, also before a check), the error set
-(`:settings`), the checks the report did not evaluate (`:skipped`), the requirements
-out of scope (`:scope`, `TALIS_OUT_OF_SCOPE`), and the source (`:source`).
+What the report does not settle, as `(; kind, text)` rows, each a short line: the
+rule tolerance as applied (`:tolerance`, always first, also before a check), the error
+set (`:settings`), the checks the report did not evaluate (`:skipped`), the
+requirements out of scope in one line (`:scope`, [`TALIS_SCOPE_NOTE`](@ref)), and the
+source (`:source`). What the tolerance means is `TALIS_TOLERANCE_NOTE`, in the window's
+Help.
 """
 function talis_notes(tl::TaLISState)
     r = tl.report[]
@@ -295,24 +304,22 @@ function talis_notes(tl::TaLISState)
               piv === :max ? "r = larger of the distances from TCC and from the aim point" :
               @sprintf("r = distance from (%g, %g, %g) mm", tl.pivot_point[]...)
         push!(notes, (; kind = :tolerance,
-                      text = @sprintf("Rule tolerance %g° as a lateral allowance r·tan(%g°), %s. ",
-                                      tl.tolerance[], tl.tolerance[], txt) * TALIS_TOLERANCE_NOTE))
+                      text = @sprintf("Rule tolerance %g° as a lateral allowance r·tan(%g°), %s.",
+                                      tl.tolerance[], tl.tolerance[], txt)))
     else
         s = r.settings
         push!(notes, (; kind = :tolerance,
-                      text = @sprintf("Rule tolerance %g° as a lateral allowance r·tan(%g°), %s. ",
-                                      s.tolerance, s.tolerance, s.pivot_text) * TALIS_TOLERANCE_NOTE))
+                      text = @sprintf("Rule tolerance %g° as a lateral allowance r·tan(%g°), %s.",
+                                      s.tolerance, s.tolerance, s.pivot_text)))
         push!(notes, (; kind = :settings,
-                      text = @sprintf("Error set added linearly: transverse %g mm (pointing %g + positioning %g + hardware %g), focus ±%g mm.",
+                      text = @sprintf("Errors, added linearly: transverse %g mm (pointing %g + positioning %g + hardware %g), focus ±%g mm.",
                                       s.transverse, s.pointing, s.target_offset,
                                       s.hardware_tolerance, s.focus)))
         for n in r.notes
             push!(notes, (; kind = :skipped, text = "Not evaluated: " * n))
         end
     end
-    for n in TALIS_OUT_OF_SCOPE
-        push!(notes, (; kind = :scope, text = "Out of scope: " * n))
-    end
+    push!(notes, (; kind = :scope, text = TALIS_SCOPE_NOTE))
     push!(notes, (; kind = :source, text = "Rules from " * TALIS_SOURCE))
     return notes
 end

@@ -194,7 +194,7 @@ end
     # the retune steps through the prepulse window as the drive history does
     # (`_history_times`): the steps without the prepulse and the window's
     pps = Controllers._history_prepulse(s, eachindex(beams))
-    src = (; kind = :table, table = r.reference_pulses, by = r.reference_by, times = r.nodes)
+    src = (; kind = :table, table = r.reference_pulses, by = r.reference_by, times = r.nodes, r.unit)
     @test r.reference.time == r.after.time == Controllers._history_times(src, pps, beams, fill(true, length(beams)))
     @test issubset(r0.reference.time, r.reference.time) && 0.5 in r.reference.time && 2.5 in r.reference.time
     # (more 1ω light inside the window than without the prepulse, the same after it, at

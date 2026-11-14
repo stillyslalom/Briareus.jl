@@ -391,9 +391,10 @@ end
     @test p.frame === :tcc && p.values[:z] ≈ -6.0 && p.values[:theta] ≈ 180
     @test center(:shield_bottom) ≈ Briareus.Vec3(0, 0, -6.0) atol = 1e-12
     @test normal(:shield_bottom) ≈ Briareus.Vec3(0, 0, -1)
-    # a frame the design lacks is refused, and so is removing a part whose frames are used
+    # a frame the design lacks is refused; removing a part whose frames are used would
+    # place what is in them elsewhere (`replaced_parts`)
     @test !set_part_frame!(ts, i, :backlighter) && occursin("backlighter", ts.error[])
-    @test !remove_part!(ts, 1) && occursin("no frame named hohlraum", ts.error[]) && length(ts.parts[]) == 4
+    @test !isempty(replaced_parts(ts, [ts.parts[][1].name])) && length(ts.parts[]) == 4
     # in a session file
     f = joinpath(mktempdir(), "frames.briar.toml")
     save_session(f, s)
@@ -490,8 +491,8 @@ end
     @test s.beams.preset[] === :omega_hohlraum && s.beams.facility[] === :omega
     @test !(:talis in session_tasks(s))
     @test !any(r -> r.id == "task:talis", model_tree(s))
-    set_facility!(s.beams, :omega_ep)                                  # no presets: beams kept
-    @test s.beams.preset[] === :omega_hohlraum && s.beams.facility[] === :omega_ep
+    set_facility!(s.beams, :omega_ep)                                  # no presets: the other facility's beams go
+    @test isempty(s.beams.beams[]) && s.beams.preset[] === :custom && s.beams.facility[] === :omega_ep
     load_preset!(s.beams, :nif_quads)
     @test s.beams.facility[] === :nif
     @test_throws ArgumentError set_facility!(s.beams, :lmj)
@@ -524,7 +525,7 @@ end
     @test edit_part!(ts, part_index(ts, :shield), :name, "lid")
     @test ts.parts[][part_index(ts, :marker)].frame === :lid
     @test !set_part_frame!(ts, part_index(ts, :lid), :marker) && occursin("loop", ts.error[])
-    @test !remove_part!(ts, part_index(ts, :lid))                     # its child needs it
+    @test replaced_parts(ts, [:lid]) == [:marker]                     # its child would move out of it
     # backlighter-style aiming: beams at a part's center, held in its frame, following it
     idx = findall(==(:outer50), s.beams.cluster[])[1:2]
     set_aim_frame!(s, idx, :lid; keep = false)

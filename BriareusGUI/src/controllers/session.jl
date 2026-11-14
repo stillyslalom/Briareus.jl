@@ -623,8 +623,9 @@ the laser deposition alone, and `status` says why and what to do.
 function build_scenario!(sess::DesignSession)
     dr = sess.drive
     beams = sess.beams.beams[]
-    isempty(beams) && (dr.status[] = "add beams first"; return sess)
+    isempty(beams) && (dr.status[] = "no beams: load a preset or import a beam table first"; return sess)
     ts = sess.target
+    isempty(ts.parts[]) && (dr.status[] = "the target is empty: insert a part first"; return sess)
     # parts left remeshing, or a target left building, when a window closed: now
     sess.spawn[] || await_target!(ts)
     if !target_ready(ts)
@@ -1206,8 +1207,11 @@ end
 Write the current drive's results to the folder `dir` for postprocessing
 (`Briareus.write_results`: per-element laser and x-ray fields, per-component and per-beam
 power, the capsule flux's Legendre and Y_lm modes, a summary) and the design that
-produced them (`session.briar.toml`, see [`save_session`](@ref)). The drive must be
-computed and current; disabled beams appear at zero power. Returns the files written.
+produced them (`session.briar.toml`, see [`save_session`](@ref)). With a current drive
+history its results follow ([`export_history`](@ref): the drive, the energy and each
+recorded diagnostic against time, the fields per element and step, the imagers'
+images), and the image in the image view when there is one. The drive must be computed
+and current; disabled beams appear at zero power. Returns the files written.
 """
 function export_results(sess::DesignSession, dir::AbstractString)
     dr = sess.drive
@@ -1219,8 +1223,16 @@ function export_results(sess::DesignSession, dir::AbstractString)
     observe = _observed_parts(ev.scenario)
     files = write_results(dir, t, ev.deposition; sol = res.solution, beams = ev.effective,
                           observe = res.solution === nothing || isempty(observe) ? nothing : observe)
+    h = sess.time.history[]
+    with_history = h !== nothing && !history_stale(sess)
+    with_history && append!(files, export_history(sess, dir))
+    img = dr.image[]
+    img === nothing || push!(files, _write_image(joinpath(dir, "image.csv"), img.x, img.y, img.values,
+                                                 img.title * ", " * img.unit))
     push!(files, save_session(joinpath(dir, "session.briar.toml"), sess))
-    sess.status[] = "exported the results to $(basename(normpath(dir)))"
+    sess.status[] = "exported the results to $(basename(normpath(dir)))" *
+                    (with_history ? ", with the drive history" :
+                     h === nothing ? "" : " (the drive history is out of date: not exported)")
     return files
 end
 
@@ -1254,7 +1266,11 @@ nonuniformity the powers allow; `level` sets the drive's level at every step (TW
 the face's or the foil spot's mean, or the capsule's mean incident flux, whose `c_00` is
 `√(4π)` times it), and `nothing` holds the reference's level at each step. Where the
 power limits cannot reach the level the retune reports the level they allow
-(`retune.drive`). Disabled beams are the dropped ones. What is held (`kind`):
+(`retune.drive`). Disabled beams are the dropped ones. A cone's or a quad's column of
+`pulses` is the power per `unit` ([`PULSE_UNITS`](@ref): per quad by default, shared
+among the quad's beams), and so are the new pulses' columns (the result's `unit`); a key
+whose quads are held some as one beam and some as four is refused (its beams would not
+share one power). What is held (`kind`):
 
 - `:capsule`, an observed sphere: its modes through l = 4 (`Briareus.CapsuleModes`);
 - `:face`, an observed flat face ([`observed_flat`](@ref)): its incident x-ray flux on
@@ -1290,6 +1306,7 @@ for bit.
 """
 function retune_pulses(s::Scenario, beams::AbstractVector{<:Beam}, enabled::AbstractVector{Bool},
                        pulses::AbstractDict; by::Symbol = :quad, cap::Real = 1.3, stay::Real = 0.0,
+                       unit::Symbol = :quad,
                        target::Symbol = :reference, level::Union{Nothing,Real} = nothing,
                        wall = (), unconverted::Union{Nothing,NamedTuple} = nothing,
                        prepulse::Union{Nothing,NamedTuple} = nothing, foil::Union{Nothing,Symbol} = nothing,
@@ -1301,13 +1318,24 @@ function retune_pulses(s::Scenario, beams::AbstractVector{<:Beam}, enabled::Abst
     level === nothing || (isfinite(level) && level > 0) || throw(ArgumentError("the level must be positive"))
     cap > 0 || throw(ArgumentError("the power limit must be positive"))
     any(enabled) || throw(ArgumentError("every beam is disabled"))
+    unit in PULSE_UNITS || throw(ArgumentError("a pulse table's unit is one of $PULSE_UNITS"))
     ref_by = _pulse_key(beams, pulses)
     refkey, key = Briareus._beam_key(ref_by), Briareus._beam_key(by)
+    # each beam's share of its column, in the reference table and in the retuned one
+    # (`_pulse_shares`); a retuned key gives one power to its beams, so they must share
+    # alike: a cone whose quads are held some as one beam and some as four cannot
+    rsh, osh = _pulse_shares(beams, ref_by, unit), _pulse_shares(beams, by, unit)
+    keyshare = Dict{Any,Float64}()
+    for (b, sh) in zip(beams, osh)
+        get!(keyshare, key(b), sh) == sh ||
+            throw(ArgumentError("$(key(b)) holds quads as one beam and as four: split or merge them all, " *
+                                "or retune with one power per beam"))
+    end
     nodes = sort(unique(reduce(vcat, [p.t for p in values(pulses)])))
     # the steps of a drive history of the reference (`_history_times`): the table's times,
     # the prepulse window and one step after it, gaps where nothing fires; a step without
     # 3ω light in the reference has none in the retune (its limits are zero)
-    times = _history_times((; kind = :table, table = pulses, by = ref_by, times = nodes), prepulse, beams,
+    times = _history_times((; kind = :table, table = pulses, by = ref_by, times = nodes, unit), prepulse, beams,
                            fill(true, length(beams)))
     any(τ -> sum(b -> pulses[refkey(b)](τ), beams) > 0, times) ||
         throw(ArgumentError("the reference pulses have no power"))
@@ -1316,14 +1344,14 @@ function retune_pulses(s::Scenario, beams::AbstractVector{<:Beam}, enabled::Abst
     kept = beams[keep]
     opk = op[keep]
     # a key's reference power: its beams' mean (the table may be finer than the retune)
-    members = Dict(k => [refkey(b) for b in kept if key(b) == k] for k in unique(key.(kept)))
-    nominal(k, τ) = sum(pulses[r](τ) for r in members[k]) / length(members[k])
+    members = Dict(k => [(refkey(beams[i]), rsh[i]) for i in keep if key(beams[i]) == k] for k in unique(key.(kept)))
+    nominal(k, τ) = sum(sh * pulses[r](τ) for (r, sh) in members[k]) / length(members[k])
     limits(k, τ) = (0.0, cap * nominal(k, τ))
     # the level in the quantity's units: a capsule's c_00 = √(4π) × its mean flux
     lv = level === nothing ? nothing : kind === :capsule ? sqrt(4π) * Float64(level) : Float64(level)
     lkw = (; by, limits, stay, nominal = stay > 0 ? nominal : nothing, target, level = lv)
-    refbeams(τ) = with_pulses(beams, pulses, τ; by = ref_by)
-    oldbeams(τ) = with_pulses(kept, pulses, τ; by = ref_by)
+    refbeams(τ) = _table_beams(beams, pulses, τ; by = ref_by, shares = rsh)
+    oldbeams(τ) = _table_beams(kept, pulses, τ; by = ref_by, shares = rsh[keep])
     # the unconverted light of every beam (the reference's) and of the kept beams, as
     # `drive_history`'s keywords, and the latter as the retune's (its `by` is its own)
     uc = _light_kw(unconverted, prepulse, beams; by)
@@ -1359,15 +1387,17 @@ function retune_pulses(s::Scenario, beams::AbstractVector{<:Beam}, enabled::Abst
         end
     end
     # the new pulses on the table's times and the steps, off outside the steps, and off
-    # for the keys of the dropped beams (so that the table keys every beam)
+    # for the keys of the dropped beams (so that the table keys every beam); in the
+    # table's unit: a key's power per beam over its beams' share of the column
     at(g, τ) = (k = findfirst(==(τ), times); k === nothing ? 0.0 : r.power[g, k])
     ts = sort(unique([nodes; times]))
-    out = Dict{Symbol,PulseShape}(Symbol(k) => PulseShape(ts, [at(g, τ) for τ in ts])
+    out = Dict{Symbol,PulseShape}(Symbol(k) => PulseShape(ts, [at(g, τ) / keyshare[k] for τ in ts])
                                   for (g, k) in enumerate(r.keys))
     for k in unique(key.(beams))
         haskey(out, k) || (out[k] = PulseShape(ts, zeros(length(ts))))
     end
-    return (; pulses = out, kind, target, level, retune = r, reference, before, after)
+    return (; pulses = out, unit = by === :beam ? :beam : unit, kind, target, level, retune = r, reference, before,
+            after)
 end
 
 # What a retune of scenario `s` holds (`retune_pulses`'s `kind`; `on`: `:auto`,
@@ -1464,10 +1494,11 @@ _kept_unconverted(u::NamedTuple, keep) = map(f -> f isa AbstractVector ? f[keep]
 
 """
     retune_to_reference!(sess::DesignSession, table, out; by = :quad, cap = 1.3, stay = 0.0,
-                         target = :reference, level = nothing, on = :auto, load = true)
+                         unit = :quad, target = :reference, level = nothing, on = :auto, load = true)
 
 Retune the enabled beams to the reference shot whose pulses are the table `table`
-(`read_pulse_table`: a `time_ns` column and one per group, quad or beam), as
+(`read_pulse_table`: a `time_ns` column and one per group, quad or beam; a cone's or a
+quad's column the power per `unit`, [`PULSE_UNITS`](@ref), as the table written), as
 [`retune_pulses`](@ref) with the drive's scenario (which must be current), its spot
 radius and the active foil ([`active_foil`](@ref)), to the reference's drive shape
 (`target = :reference`) or a uniform drive (`:uniform`), at the reference's level or at
@@ -1489,7 +1520,7 @@ mean from the reference's (from `level` when it is set; for a capsule the Tᵣ's
 A drive with neither is refused with a status message.
 """
 function retune_to_reference!(sess::DesignSession, table::AbstractString, out::AbstractString;
-                              by::Symbol = :quad, cap::Real = 1.3, stay::Real = 0.0,
+                              by::Symbol = :quad, cap::Real = 1.3, stay::Real = 0.0, unit::Symbol = :quad,
                               target::Symbol = :reference, level::Union{Nothing,Real} = nothing,
                               on::Symbol = :auto, load::Bool = true)
     dr = sess.drive
@@ -1515,7 +1546,7 @@ function retune_to_reference!(sess::DesignSession, table::AbstractString, out::A
     dr.retune_status[] = "retuning to $(basename(table))…"
     runner = _runner(sess.spawn, sess.deliver)
     wall = Tuple(wall_names(sess.target))
-    runner(() -> retune_pulses(s, beams, enabled, pulses; by, cap, stay, target, level, wall, unconverted,
+    runner(() -> retune_pulses(s, beams, enabled, pulses; by, cap, stay, unit, target, level, wall, unconverted,
                                prepulse, foil, spot_radius, on), function (res)
         dr.retune_running[] = false
         if res.err !== nothing
@@ -1528,14 +1559,14 @@ function retune_to_reference!(sess::DesignSession, table::AbstractString, out::A
         bt = sess.beams
         nodes = sort(unique(reduce(vcat, [p.t for p in values(pulses)])))
         sess.time.retune[] = (; label = basename(table), v.kind, v.target, v.level,
-                              solved = isfinite.(v.retune.residual), by, pulses = v.pulses, reference_pulses = pulses,
+                              solved = isfinite.(v.retune.residual), by, unit, pulses = v.pulses, reference_pulses = pulses,
                               reference_by = _pulse_key(beams, pulses), nodes, beams, enabled,
                               table = (; cluster = copy(bt.cluster[]), colors = cluster_colors(bt)),
                               before = v.before, after = v.after, reference = v.reference)
         # the beams fire the new pulses (the table's beams unchanged while the worker ran)
         loaded = load && length(bt.beams[]) == length(beams) &&
                  all(b -> haskey(v.pulses, Briareus._beam_key(by)(b)), bt.beams[])
-        loaded && _set_pulses!(sess, _table_pulses(v.pulses, by, basename(out)))
+        loaded && _set_pulses!(sess, _table_pulses(v.pulses, by, basename(out); unit))
         set_chart!(sess.time, :retune)
         n = length(v.retune.keys)
         aim = v.target === :uniform ? "uniform, " : ""
@@ -1573,6 +1604,14 @@ Optimize the enabled beams on the current scenario (see
 """
 function start_optimize!(sess::DesignSession; spawn::Bool = true)
     st = sess.optimize
+    # a group's power is one power per beam of it (`GroupPointing`'s `:power`): one power
+    # per quad only where the group's quads are held alike
+    if :power in st.fields[] && st.by[] === :group
+        mixed = _mixed_quads(sess.beams)
+        mixed === nothing ||
+            (st.status[] = "$mixed holds quads as one beam and as four: split or merge them all, " *
+                           "or free the power per quad or per beam"; return sess)
+    end
     if !_drive_current(sess)
         st.status[] = "compute the drive first (Compute ▸ Drive)"
         return sess
@@ -1709,28 +1748,90 @@ load_preset!(sess::DesignSession, preset::Symbol) =
     (load_preset!(sess.beams, preset; target = sess.target); sess)
 
 """
+The facility each starter is a mock-up for, and the beam preset a new target of it gets
+when the beams are another facility's ([`new_target!`](@ref)): the hohlraum, frustraum
+and halfraum starters are at NIF scale (the NIF quads), the backlighter foil is the
+OMEGA example's (the OMEGA backlighter beams). No OMEGA-scale hohlraum starter yet: it
+needs published dimensions.
+"""
+const STARTER_PRESETS = Dict(:hohlraum => :nif_quads, :frustraum => :nif_quads, :shock_tube => :nif_quads,
+                             :opacity => :nif_quads, :foil => :omega_backlighter)
+
+"""
     new_target!(sess::DesignSession, starter = :hohlraum) -> Bool
 
 Start a new target from `starter` ([`new_target!`](@ref) on the session's target). An
-optimization of the previous target is cleared; a backlighter foil swaps a NIF or OMEGA
-hohlraum preset for the OMEGA backlighter beams (aimed at the new foil), and a starter
-with a hohlraum the OMEGA backlighter beams for the NIF quads; a hohlraum preset whose
-beams do not aim in the new target's entrance holes as [`preset_pointing`](@ref) aims them
-(a halfraum pair after a hohlraum) is loaded again for the new target; imported beams
-are kept.
+optimization of the previous target is cleared. The starters belong to a facility
+([`STARTER_PRESETS`](@ref)): when the beams are another facility's preset, or a preset
+of the same facility that does not drive this kind of target (the OMEGA hohlraum beams
+on a foil), the starter's own preset replaces them, pointed for the new target; a
+hohlraum preset whose beams do not aim in the new target's entrance holes as
+[`preset_pointing`](@ref) aims them (a halfraum pair after a hohlraum) is loaded again
+for the new target. Imported beams are kept, as are the beams of an empty target
+(`:none`).
 """
 function new_target!(sess::DesignSession, starter::Symbol = :hohlraum)
     new_target!(sess.target, starter) || return false
     clear_optimize!(sess.optimize)
     p = sess.beams.preset[]
-    if starter === :foil && p in HOHLRAUM_PRESETS
-        load_preset!(sess, :omega_backlighter)
-    elseif starter in (:hohlraum, :shock_tube, :opacity, :frustraum) && p === :omega_backlighter
-        load_preset!(sess, :nif_quads)
+    want = get(STARTER_PRESETS, starter, nothing)
+    (want === nothing || p === :custom) && return true
+    drives = starter === :foil ? p === :omega_backlighter : p in HOHLRAUM_PRESETS
+    if facility_of(p) !== facility_of(want) || !drives
+        load_preset!(sess, want)
     elseif p in HOHLRAUM_PRESETS && sess.beams.aim_frame[] != preset_pointing(p; target = sess.target).aim_frame
         load_preset!(sess, p)
     end
     return true
+end
+
+"""
+    remove_nodes!(sess::DesignSession, ids = selected_ids(sess.view)) -> NamedTuple
+
+Remove the model-tree nodes `ids` that can be removed, in one edit: parts, assemblies
+(with their contents) and user frames ([`remove_parts!`](@ref)) and diagnostic windows
+([`remove_window!`](@ref)); other nodes (pieces, beams, analyses) are skipped. Returns
+`(; removed, replaced, skipped, ok)`: the names removed, the parts that stayed and were
+placed in another frame where they are ([`replaced_parts`](@ref)), the ids skipped, and
+whether the design accepted the removal (`sess.target.error` says why not). The axes of
+a removed frame are no longer drawn, and the selection goes to the target.
+"""
+function remove_nodes!(sess::DesignSession, ids = selected_ids(sess.view))
+    ts = sess.target
+    names, windows, skipped = Symbol[], Tuple{Symbol,Int}[], String[]
+    for id in ids
+        kind, key = selection_kind(id)
+        if kind in (:part, :assembly, :frame) && part_index(ts, Symbol(key)) !== nothing
+            push!(names, Symbol(key))
+        elseif kind === :window && window_of(ts, Symbol(key)) !== nothing
+            i, k = window_of(ts, Symbol(key))
+            push!(windows, (ts.parts[][i].name, k))
+        else
+            push!(skipped, String(id))
+        end
+    end
+    unique!(names)
+    removed = String[]
+    ok = true
+    # the windows of the parts that stay, the highest number first (the others keep theirs)
+    for (part, k) in sort!(unique!(windows); by = w -> (w[1], -w[2]))
+        part in names && continue
+        label = String(piece_name(part, window_name(k)))
+        remove_window!(ts, k; part) ? push!(removed, label) : (ok = false)
+    end
+    replaced = Symbol[]
+    if !isempty(names)
+        replaced = replaced_parts(ts, names)
+        if remove_parts!(ts, names)
+            append!(removed, String.(names))
+            foreach(n -> set_triad!(sess.view, n, false), names)
+        else
+            ok = false
+            empty!(replaced)
+        end
+    end
+    isempty(removed) || select!(sess.view, "target")
+    return (; removed, replaced, skipped, ok)
 end
 
 """

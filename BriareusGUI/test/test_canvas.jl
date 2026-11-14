@@ -81,6 +81,27 @@ const B = BriareusGUI
     @test sc.highlight.visible[] && length(sc.highlight[1][]) == nleh &&
           nleh > count(k -> tl.components[k].name === :hohlraum_leh_top, tl.tri_comp)
     set_leh_closure!(sess.target, false)
+    # every selected component is highlighted: a part in pieces with all of them
+    tn = sess.target.target[]
+    ntri(names) = count(k -> tn.components[k].name in names, tn.tri_comp)
+    select!(sess.view, "part:capsule")
+    n1 = length(sc.highlight[1][])
+    select_add!(sess.view, "comp:hohlraum_cap_top")
+    @test length(sc.highlight[1][]) > n1
+    sess.view.cutaway[] = false                                # whole triangles: the highlight is not cut either
+    @test length(sc.highlight[1][]) == ntri((:capsule, :hohlraum_cap_top))
+    select!(sess.view, "part:hohlraum")
+    nh = count(k -> tn.components[k].part === :hohlraum, tn.tri_comp)
+    @test length(sc.highlight[1][]) == nh
+    sess.view.cutaway[] = true                                 # cut with the body
+    @test length(sc.highlight[1][]) != nh
+    sess.view.cutaway[] = false
+    @test B.selection_bounds(sess)[2] > 5                      # the part in pieces, not nothing
+    sess.view.cutaway[] = true
+    # Esc on the canvas clears the selection
+    ev = B.Makie.events(sc.lscene.scene)
+    ev.keyboardbutton[] = B.Makie.KeyEvent(B.Makie.Keyboard.escape, B.Makie.Keyboard.press)
+    @test sess.view.selection[] == "" && isempty(selected_ids(sess.view)) && !sc.highlight.visible[]
     select!(sess.view, "group:inner23")
     @test !sc.highlight.visible[] && sc.selected_rays.visible[] && finite(sc.selected_rays[1][]) == 2 * 8
     select_add!(sess.view, "group:inner30")
@@ -157,6 +178,25 @@ end
     @test all(isapprox.(B.project_point(c, ctr), before; atol = 1e-6))
     # turntable keeps z up on screen
     @test B.camera_frame(c)[3][3] > 0
+    # a free rotation rolls the view; switching the turntable back on levels it (the eye
+    # and the direction it looks along kept), and it stays level while orbiting
+    B.set_turntable!(sc, false)
+    B.orbit_camera!(c, 0.4, 0.5; center = ctr)
+    c.up = B._rotate(c.up, B.camera_frame(c)[1], 0.8)
+    c.on_change()
+    eye0, f0 = c.eye, B.camera_frame(c)[1]
+    @test abs(B.camera_frame(c)[2][3]) > 0.1                   # the screen's right axis is off the horizon
+    B.set_turntable!(sc, true)
+    fr = B.camera_frame(c)
+    @test abs(fr[2][3]) < 1e-12 && fr[3][3] > 0 && c.eye == eye0 && fr[1] ≈ f0 && c.turntable
+    B.orbit_camera!(c, 0.3, -0.2; center = ctr)
+    @test abs(B.camera_frame(c)[2][3]) < 1e-12
+    # looking straight down z, every roll is level: the view is left as it is
+    B.standard_view!(sc, :top)
+    up0 = c.up
+    B.level_camera!(c)
+    @test c.up == up0
+    B.standard_view!(sc, :iso)
     # panning moves a point at the grab depth with the pointer
     g = B.Makie.Vec3d(0, 0, 0)
     pg = B.project_point(c, g)

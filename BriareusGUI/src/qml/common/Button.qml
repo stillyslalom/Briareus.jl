@@ -1,6 +1,7 @@
 // The style's Button at the window's density (see TextField.qml); `tip` shows on hover.
 import QtQuick
 import QtQuick.Controls as T
+import "."
 
 T.Button {
     property string tip: ""
@@ -9,7 +10,5 @@ T.Button {
     leftPadding: 10
     rightPadding: 10
     implicitHeight: Math.max(26, implicitContentHeight + topPadding + bottomPadding)
-    T.ToolTip.visible: tip !== "" && hovered
-    T.ToolTip.delay: 400
-    T.ToolTip.text: tip
+    Tip { text: parent.tip; visible: parent.tip !== "" && parent.hovered }
 }

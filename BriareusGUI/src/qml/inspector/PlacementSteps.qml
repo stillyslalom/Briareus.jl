@@ -44,23 +44,25 @@ ColumnLayout {
                 Button {
                     text: "Sweep…"
                     onClicked: Julia.br_step_sweep(stepRow.stepNumber)
-                    ToolTip.visible: hovered
-                    ToolTip.text: "Step a number of this placement step through a range and check each value"
+                    Tip {
+                        visible: parent.hovered
+                        text: "Sweep a number of this step through a range"
+                    }
                 }
                 Button {
                     text: "↑"; Layout.preferredWidth: 30; enabled: stepRow.stepNumber > 1
                     onClicked: Julia.br_step_move(stepRow.stepNumber, -1)
-                    ToolTip.visible: hovered; ToolTip.text: "Apply this step earlier"
+                    Tip { visible: parent.hovered; text: "Apply this step earlier" }
                 }
                 Button {
                     text: "↓"; Layout.preferredWidth: 30
                     onClicked: Julia.br_step_move(stepRow.stepNumber, 1)
-                    ToolTip.visible: hovered; ToolTip.text: "Apply this step later"
+                    Tip { visible: parent.hovered; text: "Apply this step later" }
                 }
                 Button {
                     text: "✕"; Layout.preferredWidth: 30
                     onClicked: Julia.br_step_remove(stepRow.stepNumber)
-                    ToolTip.visible: hovered; ToolTip.text: "Remove this step"
+                    Tip { visible: parent.hovered; text: "Remove this step" }
                 }
             }
             PropRow {

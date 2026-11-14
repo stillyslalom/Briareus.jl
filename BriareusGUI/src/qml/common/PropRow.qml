@@ -39,9 +39,10 @@ ColumnLayout {
             Layout.preferredWidth: row.labelWidth
             elide: Text.ElideRight
             // the tip, or the whole label when it is cut short
-            ToolTip.visible: (row.tip !== "" || truncated) && labelHover.hovered
-            ToolTip.delay: 400
-            ToolTip.text: row.tip !== "" ? (truncated ? row.label + ": " : "") + row.tip : row.label
+            Tip {
+                text: row.tip !== "" ? (parent.truncated ? row.label + ": " : "") + row.tip : row.label
+                visible: (row.tip !== "" || parent.truncated) && labelHover.hovered
+            }
             HoverHandler { id: labelHover }
         }
         CheckBox {
@@ -50,9 +51,7 @@ ColumnLayout {
             checked: row.checked
             Layout.preferredWidth: row.labelWidth
             onToggled: row.toggled(checked)
-            ToolTip.visible: row.tip !== "" && hovered
-            ToolTip.delay: 400
-            ToolTip.text: row.tip
+            tip: row.tip
         }
         TextField {
             id: field
@@ -62,6 +61,7 @@ ColumnLayout {
             text: row.value
             selectByMouse: true
             onEditingFinished: if (text !== row.value) row.edited(text)
+            tip: row.tip
         }
         Label {
             id: unitInline

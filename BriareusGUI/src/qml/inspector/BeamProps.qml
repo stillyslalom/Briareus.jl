@@ -32,40 +32,35 @@ ColumnLayout {
         Label { text: "3ω"; color: "#1f5fd6"; font.bold: true; Layout.alignment: Qt.AlignHCenter }
         Label { text: "In calculations" }
         Box { at: 0; enabled: st !== "-" && app.ucLive[0]
-              tip: st === "-" ? "No 1ω footprint for these beams (NIF quads and beams only)"
-                 : app.ucLive[0] ? "The 1ω light's absorbed power adds to the drive"
-                 : "Set the 1ω power ratio in the Drive's properties first" }
+              tip: st === "-" ? "No 1ω footprint for these beams"
+                 : app.ucLive[0] ? "1ω light in the drive" : "Set the 1ω power ratio in Drive first" }
         Box { at: 1; enabled: st !== "-" && app.ucLive[1]
-              tip: st === "-" ? "No 2ω footprint for these beams (NIF quads and beams only)"
-                 : app.ucLive[1] ? "The 2ω light's absorbed power adds to the drive"
-                 : "Set the 2ω power ratio in the Drive's properties first" }
-        Box { at: 2; tip: app.bnOn === 2 ? "Some of these beams are off" : "Laser drive, clearance and optimization" }
+              tip: st === "-" ? "No 2ω footprint for these beams"
+                 : app.ucLive[1] ? "2ω light in the drive" : "Set the 2ω power ratio in Drive first" }
+        Box { at: 2; tip: app.bnOn === 2 ? "Some of these beams are off" : "The beams fire" }
         Label { text: "Drawn" }
-        Box { at: 3; enabled: st !== "-"
-              tip: st === "-" ? "No 1ω footprint for these beams (NIF quads and beams only)"
-                              : "The 1ω footprint, and the light converging to it" }
-        Box { at: 4; enabled: st !== "-"
-              tip: st === "-" ? "No 2ω footprint for these beams (NIF quads and beams only)"
-                              : "The 2ω footprint at the 3ω best-focus plane" }
-        Box { at: 5; tip: "Hiding a beam keeps it in every calculation" }
+        Box { at: 3; enabled: st !== "-"; tip: st === "-" ? "No 1ω footprint for these beams" : "Draw the 1ω footprint" }
+        Box { at: 4; enabled: st !== "-"; tip: st === "-" ? "No 2ω footprint for these beams" : "Draw the 2ω footprint" }
+        Box { at: 5; tip: "Draw the beams (drawing only)" }
     }
 
     SectionLabel { text: "Pointing"; info: "beams.pointing" }
     PropRow { label: "Aim z"; value: app.bn_z
               unit: app.bnMirrored ? "mm, mirrored below TCC" : "mm"
-              tip: "Along the hohlraum axis; for beams from both hemispheres the lower ones aim at −z"
+              tip: "Aim along the hohlraum axis; mirrored for the lower beams"
               onEdited: (text) => Julia.br_edit_node("z", text) }
-    PropRow { label: "Aim r"; value: app.bn_r; unit: "mm toward each port azimuth"
-              tip: "Radial offset of the aim from the hohlraum axis, toward the beam's port azimuth"
+    PropRow { label: "Aim r"; value: app.bn_r; unit: "mm toward the port azimuth"
+              tip: "Radial aim offset, in the port azimuth (on NIF: the quad's)"
               onEdited: (text) => Julia.br_edit_node("r", text) }
     PropRow { label: "Tangential offset"; value: app.bn_phi; unit: "mm, counterclockwise"
-              tip: "Offset of the aim across the port azimuth, positive counterclockwise"
+              tip: "Aim offset across that azimuth"
               onEdited: (text) => Julia.br_edit_node("phi", text) }
     PropRow { label: "Defocus"; value: app.bn_defocus; unit: "mm (+: beyond the aim)"
-              tip: "Best focus lies this far along the beam from the aim point"
+              tip: "Best focus, this far beyond the aim point"
               onEdited: (text) => Julia.br_edit_node("defocus", text) }
-    PropRow { label: "Power"; value: app.bn_power; unit: "TW per beam"
-              tip: "The 3ω power of each selected beam"
+    PropRow { label: "Power"; value: app.bn_power; unit: app.bnPowerUnit === "quad" ? "TW per quad" : "TW per beam"
+              tip: app.bnPowerUnit === "quad" ? "3ω power of each selected quad, shared by its beams"
+                                              : "3ω power of each selected beam"
               onEdited: (text) => Julia.br_edit_node("power", text) }
 
     SectionLabel { text: "Aim point (x, y, z)"; info: "beams.aim" }
@@ -80,14 +75,14 @@ ColumnLayout {
             currentIndex: app.bnAimFrame
             displayText: app.bnAimFrame < 0 ? "(several)" : currentText
             onActivated: (index) => Julia.br_aim_frame(index)
-            tip: "The frame the aim point is given in; the beams follow it when it moves (the aim stays where it is on a change)"
+            tip: "The frame the aim is held in; the beams follow it"
         }
     }
     Button {
         text: "Aim at the frame's center"
         enabled: app.bnAimFrame >= 0
         onClicked: Julia.br_aim_at_frame()
-        tip: "Point the beams at the frame's center (a part's centroid, a piece frame's origin)"
+        tip: "Point the beams at the frame's origin"
     }
     PropRow { label: "x"; value: app.bn_aim_x; unit: "mm"; tip: "In " + app.bnAimFrameLabel + "; shown: the mean aim"
               onEdited: (text) => Julia.br_edit_node("aim_x", text) }
@@ -109,13 +104,13 @@ ColumnLayout {
             editable: true
             model: app.clusterNames
             currentIndex: model ? model.indexOf(app.bnCluster) : -1
-            tip: "A group to move the selection to: an existing one, or a new name"
+            tip: "An existing group, or a new name"
         }
         Button {
             text: "Move"
             enabled: groupBox.editText.trim() !== "" && groupBox.editText !== app.bnCluster
             onClicked: Julia.br_set_cluster(groupBox.editText)
-            tip: "Move the selected beams to this group (type a new name for a new group)"
+            tip: "Move the selected beams to this group"
         }
     }
     PropRow {
@@ -123,22 +118,27 @@ ColumnLayout {
         label: "Rename group"
         value: app.selKey
         fieldWidth: 130
-        tip: "A new name for this group (its beams stay in it)"
+        tip: "A new name for this group"
         onEdited: (text) => Julia.br_rename_cluster(text)
     }
 
-    SectionLabel { text: "Quad"; info: "beams.quad"; visible: app.bnCanSplit || app.bnCanMerge }
-    Note {
-        visible: app.bnCanSplit || app.bnCanMerge
-        text: app.bnCanSplit ? "Quad " + app.bnQuad + " is one beam." : "Quad " + app.bnQuad + " is split into its four beams."
-    }
+    // NIF quads: held as one beam each (a split gives the deposition per beam), or as four
+    SectionLabel { text: "Quads"; info: "beams.quad"; visible: app.bnSplit > 0 || app.bnMerge > 0 }
     Flow {
         Layout.fillWidth: true
         spacing: 6
-        Button { visible: app.bnCanSplit; text: "Split into beams"; onClicked: Julia.br_split_quad()
-                 tip: "Four beams with their own ports, a quarter of the power each" }
-        Button { visible: app.bnCanMerge; text: "Merge quad"; onClicked: Julia.br_merge_quad()
-                 tip: "One beam again: the mean aim and defocus, the total power" }
+        Button {
+            visible: app.bnSplit > 0
+            text: app.bnSplit === 1 ? "Split into beams" : "Split " + app.bnSplit + " quads into beams"
+            onClicked: Julia.br_split_quads("")
+            tip: "Four beams per quad, each from its own port"
+        }
+        Button {
+            visible: app.bnMerge > 0
+            text: app.bnMerge === 1 ? "Merge into quad" : "Merge into " + app.bnMerge + " quads"
+            onClicked: Julia.br_merge_quads("")
+            tip: "One beam per quad again"
+        }
     }
 
     SectionLabel { text: "View" }
@@ -148,7 +148,7 @@ ColumnLayout {
         Button {
             text: "Look along beam"
             onClicked: Julia.br_look_along_beam()
-            tip: "View the target from the port, down the beam axis"
+            tip: "View the target from the beam's port"
         }
         Button { text: "Fit selection"; onClicked: Julia.br_fit_selection(); tip: "Fit the 3D view to the selected beams" }
     }

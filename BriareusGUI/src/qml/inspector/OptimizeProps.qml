@@ -22,15 +22,15 @@ ColumnLayout {
                                     : [{ text: "cone", value: "group" }, { text: "beam", value: "beam" }]
                 currentIndex: Math.max(0, (app.hasQuads ? ["group", "quad", "beam"] : ["group", "beam"]).indexOf(app.optBy))
                 onActivated: Julia.br_opt_set_by(currentValue)
-                tip: "One set of free fields per cone, per quad or per beam: the beams of one share their values"
+                tip: "The beams that share one set of free values"
             }
         }
 
         SectionLabel { text: "Free fields and bounds" }
         Repeater {
             model: [{ key: "z", label: "Aim z (chamber)", unit: "± mm", tip: "The aim's z, free within ± this many mm of the beam table's value" },
-                    { key: "r", label: "Aim r (chamber)", unit: "± mm", tip: "The aim's radial offset, free within ± this many mm of the beam table's value" },
-                    { key: "phi", label: "Tangential offset", unit: "± mm", tip: "The aim's tangential offset, free within ± this many mm of the beam table's value" },
+                    { key: "r", label: "Aim r (chamber)", unit: "± mm", tip: "The aim's radial offset, free within ± this many mm" },
+                    { key: "phi", label: "Tangential offset", unit: "± mm", tip: "The aim's tangential offset, free within ± this many mm" },
                     { key: "u", label: "Aim u (frame x)", unit: "± mm in the aim frame", tip: "The aim along its frame's x (on a foil's frame, across its face)" },
                     { key: "v", label: "Aim v (frame y)", unit: "± mm in the aim frame", tip: "The aim along its frame's y (on a foil's frame, across its face)" },
                     { key: "w", label: "Aim w (frame z)", unit: "± mm in the aim frame", tip: "The aim along its frame's z (on a foil's frame, along its normal)" },
@@ -59,11 +59,7 @@ ColumnLayout {
                     { text: "Foil spot uniformity", value: "irradiance" }]
             currentIndex: Math.max(0, ["legendre", "ylm", "face", "irradiance"].indexOf(app.optObjective))
             onActivated: Julia.br_opt_objective(currentValue)
-            tip: "Axisymmetric: the weighted (Pₗ/P₀)² of the capsule flux; 3D: the weighted rotation-invariant mode " +
-                 "power over all m (a dropped quad); face: the squared area-weighted RMS nonuniformity of a flat " +
-                 "observed face's x-ray flux (a halfraum package, an opacity sample); foil: the spot's RMS " +
-                 "nonuniformity plus the spill. Clipped, missed and direct laser light on the observed surface " +
-                 "add penalties"
+            tip: "What to minimize: capsule modes, or the face's or foil's nonuniformity"
         }
         RowLayout {
             visible: app.optObjective === "legendre" || app.optObjective === "ylm"
@@ -102,8 +98,7 @@ ColumnLayout {
             fieldEnabled: app.optCapsule
             value: app.optCapsuleMin
             unit: "mm clearance"
-            tip: "Keep every beam's worst-case envelope (1 % of peak, with pointing, " +
-                 "positioning and focus errors) off the capsule by at least this much"
+            tip: "Keep every beam's worst-case envelope this far off the capsule"
             onEdited: (text) => Julia.br_opt_edit("capsule_min", text)
         }
         PropRow {
@@ -116,7 +111,7 @@ ColumnLayout {
             fieldEnabled: app.optKeepout
             value: app.optKeepoutMin
             unit: "mm clearance"
-            tip: "Keep every beam's worst-case envelope off the LEH rims by at least this much"
+            tip: "Keep every beam's worst-case envelope this far off the LEH rims"
             onEdited: (text) => Julia.br_opt_edit("keepout_min", text)
         }
         PropRow {
@@ -124,10 +119,7 @@ ColumnLayout {
             label: "Uniformity weight"
             value: app.optUniformity
             unit: "× (RMS/start RMS)²"
-            tip: "The weight on the face's squared RMS nonuniformity relative to the start's: the term is this " +
-                 "weight at the start, on any face. The clipped, missed and direct-light penalties weigh 10 on " +
-                 "squared power fractions (10 % missed: 0.1): at 1 the shape leads and lost light still counts; " +
-                 "a larger weight favors the shape more"
+            tip: "Weight on the face's nonuniformity (1: the shape comes first)"
             onEdited: (text) => Julia.br_opt_edit("uniformity", text)
         }
         PropRow {
@@ -135,7 +127,7 @@ ColumnLayout {
             label: "Spill weight"
             value: app.optSpill
             unit: "power outside the spot"
-            tip: "The weight on the squared fraction of the power that falls outside the spot radius"
+            tip: "Weight on the power that misses the spot"
             onEdited: (text) => Julia.br_opt_edit("spill", text)
         }
 
@@ -151,7 +143,7 @@ ColumnLayout {
             label: "Evaluations"
             value: "" + app.optMaxEvaluations
             unit: "of the objective"
-            tip: "A line search can take many evaluations in one iteration; this bounds the run time"
+            tip: "Bounds the run time"
             onEdited: (text) => Julia.br_opt_edit("max_evaluations", text)
         }
     }
@@ -163,7 +155,7 @@ ColumnLayout {
             highlighted: true
             enabled: !app.optRunning && app.driveCurrent
             onClicked: Julia.br_opt_start()
-            tip: "Run the optimization in the background; the result is in the Optimization tab"
+            tip: "Runs in the background; results in the Optimization tab"
         }
         Button { text: "Cancel"; enabled: app.optRunning; onClicked: Julia.br_opt_cancel()
                  tip: "Stop the optimization and keep the best design so far" }

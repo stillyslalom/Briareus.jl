@@ -31,8 +31,7 @@ Item {
                 text: "Apply step"
                 enabled: app.swHasResult && app.swSelected > 0 && !app.swStale && !app.swRunning
                 onClicked: Julia.br_sw_apply(app.swSelected)
-                ToolTip.visible: hovered
-                ToolTip.text: "Move the part to the selected step (one edit, undone as one)"
+                Tip { visible: parent.hovered; text: "Move the part to the selected step (one edit, undone as one)" }
             }
         }
         RowLayout {
@@ -102,11 +101,13 @@ Item {
                         }
                     }
                 }
+                // without steps: one note at the top, as on the other tabs
                 Note {
                     visible: !app.swHasResult
                     text: app.swRunning ? "" : "No steps yet: run Placement sweep"
-                    tip: "Set it up in Properties (Placement sweep in the model tree's Analyses, or Sweep along this axis… on a part)"
+                    tip: "Set it up in Properties ▸ Placement sweep"
                 }
+                Item { visible: !app.swHasResult; Layout.fillHeight: true }
             }
             // the chart and its key
             Item {
@@ -121,10 +122,12 @@ Item {
                     scene: app.sweepCanvas
                     visible: app.swEmpty === ""
                 }
+                // (a sweep whose steps hold nothing to chart; before one, the note at the left says so)
                 Note {
-                    anchors.centerIn: parent
+                    anchors.top: parent.top
+                    anchors.left: parent.left
                     width: Math.min(parent.width - 20, 420)
-                    horizontalAlignment: Text.AlignHCenter
+                    visible: app.swHasResult && text !== ""
                     text: app.swEmpty
                 }
             }

@@ -146,7 +146,7 @@ end
     # follow the part when it moves and turns
     sess = DesignSession(starter = :none, resolution = :coarse)
     ts = sess.target
-    @test insert_starter!(ts, :hohlraum) && [p.name for p in ts.parts[]] == [:sphere_1, :hohlraum, :capsule]
+    @test insert_starter!(ts, :hohlraum) && [p.name for p in ts.parts[]] == [:hohlraum, :capsule]
     i = part_index(ts, :hohlraum)
     @test edit_part!(ts, i, :z, "0.4") && edit_part!(ts, i, :theta, "90") && edit_part!(ts, i, :length, "8")
     fr = part_frames(ts)
@@ -157,7 +157,7 @@ end
     @test isapprox(top.R[:, 3], F.R[:, 3]; atol = 1e-12) && isapprox(bot.R[:, 3], -F.R[:, 3]; atol = 1e-12)
     @test bot.R[:, 1] ≈ F.R[:, 1] atol = 1e-12
     # the capsule placed in the hohlraum's frame moved with it
-    @test ts.parts[][3].frame === :hohlraum && isapprox(fr[:capsule].origin, F.origin; atol = 1e-12)
+    @test ts.parts[][part_index(ts, :capsule)].frame === :hohlraum && isapprox(fr[:capsule].origin, F.origin; atol = 1e-12)
     @test piece_frame(:hohlraum_cap_bottom, :hohlraum) === Symbol("hohlraum.leh_bottom")
     @test piece_frame(:hohlraum_leh_top_lip, :hohlraum) === Symbol("hohlraum.leh_top")
     @test piece_frame(:hohlraum_wall, :hohlraum) === :hohlraum

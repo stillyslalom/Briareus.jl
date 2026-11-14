@@ -58,6 +58,23 @@ function time_canvas(sess::DesignSession)
 end
 
 """
+    diagnostics_canvas(sess::DesignSession) -> TimeCanvas
+
+Build the Diagnostics tab's chart for `sess`: the recorded power diagnostics against
+time (`time_chart`'s `:diagnostics`) with the time cursor, which a click or a drag on
+the chart moves as on the time chart.
+"""
+function diagnostics_canvas(sess::DesignSession)
+    tm = sess.time
+    c = _chart_canvas(() -> time_chart(sess, :diagnostics))
+    onany((_...) -> _draw_time!(c, sess), tm.history, tm.diagnostics)
+    on(_ -> _draw_cursor!(c, sess), tm.cursor)
+    _on_chart_click(x -> sess.time.history[] === nothing || set_time_cursor!(sess, x), c)
+    _draw_time!(c, sess)
+    return c
+end
+
+"""
     sweep_canvas(sess::DesignSession) -> TimeCanvas
 
 Build the sweep panel's chart (`sweep_chart`) for `sess`: a click on it selects the

@@ -14,7 +14,9 @@ ColumnLayout {
     readonly property var columns: [
         { key: "z", sort: "z", label: "aim z" }, { key: "r", sort: "r", label: "aim r" },
         { key: "phi", sort: "phi_offset", label: "tang." }, { key: "defocus", sort: "defocus", label: "defocus" },
-        { key: "power", sort: "power", label: "TW/beam" }]
+        // (a quad is the unit of power whether it is held as one beam or as four)
+        { key: "power", sort: "power", label: app.beamPowerUnit === "quad" ? "TW/quad"
+                                              : app.beamPowerUnit === "beam" ? "TW/beam" : "TW" }]
     // a column heading that sorts the display: ascending, descending, then the table's order
     component SortHeading: Cell {
         property string sortKey: ""
@@ -23,8 +25,7 @@ ColumnLayout {
         property string label: ""
         font.pixelSize: 12
         opacity: app.beamSort === sortKey ? 1 : 0.8
-        tip: "Sort the rows by " + what + " (again: descending; a third time: the table's order). " +
-             "Only the display: the beams keep their order"
+        tip: "Sort by " + what + " (display only)"
         TapHandler { onTapped: Julia.br_sort_beams(parent.sortKey) }
     }
     readonly property string rowKind: app.beamsBy === "group" ? "group" : app.beamsBy
@@ -40,7 +41,7 @@ ColumnLayout {
                                 : [{ text: "per cone", value: "group" }, { text: "per beam", value: "beam" }]
             currentIndex: Math.max(0, (app.hasQuads ? ["group", "quad", "beam"] : ["group", "beam"]).indexOf(app.beamsBy))
             onActivated: Julia.br_set_grouping(currentValue)
-            tip: "A row per cone, per quad or per beam"
+            tip: "What a row of the table is"
         }
         Info { topic: "beams.table" }
         Cell { text: app.beamsSummary; opacity: 0.7; Layout.fillWidth: true }

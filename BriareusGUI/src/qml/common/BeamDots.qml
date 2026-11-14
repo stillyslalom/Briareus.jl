@@ -36,25 +36,14 @@ Grid {
             border.width: 1.2
             opacity: st === "-" ? 0.15 : usable ? 1 : 0.35
             HoverHandler { id: hover }
-            ToolTip.visible: hover.hovered
-            ToolTip.delay: 400
-            ToolTip.text: {
-                const n = dots.names[h - 1]
-                if (use && h < 3 && st === "-")
-                    return "No " + n + " footprint for these beams (NIF quads and beams only)"
-                if (use && h < 3 && !app.ucLive[h - 1])
-                    return n + " light in the calculations: set the " + n + " power ratio in the Drive's " +
-                           "properties first (the choice is kept with the design)"
-                if (use && h < 3)
-                    return n + " light in the calculations (" + (st === "1" ? "on" : st === "0" ? "off" : "some on") +
-                           "): its absorbed power adds to the drive; click to switch"
-                if (use)
-                    return "3ω light in the calculations (" + (st === "1" ? "on" : st === "0" ? "off" : "some on") +
-                           "): click to switch"
-                if (st === "-")
-                    return "No " + n + " footprint to draw for these beams (NIF quads and beams only)"
-                return "Draw the " + n + " light" + (h < 3 ? " (its footprint and the light converging to it)" : "") +
-                       ": click to switch; drawing never changes a calculation"
+            Tip {
+                visible: hover.hovered
+                text: {
+                    const n = dots.names[d.h - 1]
+                    if (d.st === "-") return "No " + n + " footprint for these beams"
+                    if (d.use && d.h < 3 && !app.ucLive[d.h - 1]) return "Set the " + n + " power ratio in Drive first"
+                    return d.use ? n + " light in the calculations" : n + " light drawn"
+                }
             }
             MouseArea {
                 anchors.fill: parent

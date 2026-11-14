@@ -1,5 +1,6 @@
-// Properties of the target: the mesh element sizes, inserting starter assemblies, and
-// adding windows and parts. A hohlraum's dimensions and wall are its part's properties.
+// Properties of the target: the mesh element sizes, and inserting parts, windows,
+// assemblies and frames (the Insert menu's commands). A hohlraum's dimensions and wall
+// are its part's properties; ready-made targets are in File ▸ New target.
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -8,6 +9,9 @@ import "../common"
 
 ColumnLayout {
     spacing: 5
+
+    Note { text: app.targetSummary; opacity: 0.9 }
+    Note { visible: app.partCount === 0; text: "The target is empty: insert a part, or start from File ▸ New target." }
 
     SectionLabel { text: "Mesh"; info: "target.mesh"; Layout.topMargin: 0 }
     RowLayout {
@@ -30,15 +34,14 @@ ColumnLayout {
         label: "Element size"
         value: app.mesh_h
         unit: "mm (walls, caps, parts)"
-        tip: "Largest element side on hohlraum walls, end caps and LEHs and on the parts, unless a part sets its own"
+        tip: "Largest element side, unless a part sets its own"
         onEdited: (text) => Julia.br_edit_mesh("h", text)
     }
     PropRow {
         label: "Capsule element size"
         value: app.mesh_capsule_h
         unit: "mm"
-        tip: "Spheres meshed as a capsule (the starters' capsule), and a starter foil when inserted. " +
-             "The capsule mesh sets the accuracy of P4: its error falls as the square of this size"
+        tip: "Element size on capsule spheres; sets the accuracy of P4"
         onEdited: (text) => Julia.br_edit_mesh("capsule_h", text)
     }
 
@@ -47,34 +50,24 @@ ColumnLayout {
         Layout.fillWidth: true
         spacing: 6
         Repeater {
-            model: [{ k: "hohlraum", t: "Hohlraum with capsule" }, { k: "foil", t: "Backlighter foil" },
-                    { k: "shock_tube", t: "Halfraum pair with shock tube" }, { k: "opacity", t: "Opacity halfraum" },
-                    { k: "frustraum", t: "Frustraum with capsule" }]
-            Button {
-                text: modelData.t
-                onClicked: Julia.br_insert(modelData.k)
-                ToolTip.visible: hovered
-                ToolTip.text: "Insert at TCC (Insert ▸ places it in the selected part's or piece's frame)"
-            }
+            model: [{ k: "sphere", t: "Sphere" }, { k: "disk", t: "Disk" }, { k: "annulus", t: "Washer" },
+                    { k: "rectangle", t: "Rectangle" }, { k: "cylinder", t: "Cylinder" }, { k: "cone", t: "Cone" },
+                    { k: "hohlraum", t: "Hohlraum" }]
+            Button { text: modelData.t; onClicked: Julia.br_add_part(modelData.k); tip: "Insert at TCC" }
         }
+        Button { text: "STL mesh…"; onClicked: win.openStl(); tip: "Insert a part from a CAD export" }
     }
-    SectionLabel { text: "Add to the target" }
     Flow {
         Layout.fillWidth: true
         spacing: 6
         Button {
-            text: "Window"
+            text: "Diagnostic window"
             enabled: app.hasHohlraum
             onClicked: Julia.br_add_window()
-            ToolTip.visible: hovered
-            ToolTip.text: "A closed 1 mm diagnostic window in the first hohlraum's wall at its midplane, where it fits"
+            tip: app.hasHohlraum ? "A closed 1 mm window in the hohlraum's wall" : "Needs a hohlraum"
         }
-        Repeater {
-            model: [{ k: "sphere", t: "Sphere" }, { k: "disk", t: "Disk" }, { k: "annulus", t: "Washer" },
-                    { k: "rectangle", t: "Rectangle" }, { k: "cylinder", t: "Cylinder" }, { k: "cone", t: "Cone" }]
-            Button { text: modelData.t; onClicked: Julia.br_add_part(modelData.k) }
-        }
+        Button { text: "Assembly"; onClicked: Julia.br_new_assembly(); tip: "Group the selected parts" }
+        Button { text: "Frame"; onClicked: Julia.br_add_frame(); tip: "A named origin and axes" }
     }
     ErrorText { text: app.targetError }
-    Note { text: app.targetSummary }
 }

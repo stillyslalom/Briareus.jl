@@ -17,9 +17,10 @@ ColumnLayout {
             model: app.pieceRoleLabels
             currentIndex: app.pieceRole
             onActivated: (index) => Julia.br_piece_role(index)
-            ToolTip.visible: hovered
-            ToolTip.delay: 400
-            ToolTip.text: "What the analyses take this piece as, in place of its part's default (a cap can be the observed face)"
+            Tip {
+                visible: parent.hovered
+                text: "What the analyses take this piece as"
+            }
         }
         Info { topic: "component.role" }
     }

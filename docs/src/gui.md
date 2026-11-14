@@ -167,17 +167,17 @@ names the menu entries, and the panels are described in [The window](@ref).
    that component's frame, their saved aims kept. In sessions before version 5 the
    part with the foil role was named `backlighter`; it loads as the active foil, its
    name kept. A session also holds the definition of each diagnostic it records (see
-   *Time* below), CSV files included, and its histories use those definitions wherever
-   it is opened; one that differs from the definition of the same id on the
-   diagnostic search path is marked `*` in the list, its tooltip names the keys, and ↺
-   switches to the search path's. The status after a save names the definitions from
+   *Diagnostics* below), CSV files included, and its histories use those definitions
+   wherever it is opened; one that differs from the definition of the same id in the
+   diagnostic directories is marked `*` on its chip, whose tooltip names the keys and
+   whose menu switches to the directories' definition. The status after a save names the definitions from
    outside the built-ins and those not public, which the file then carries.
    Edit ▸ Undo (Ctrl + Z) and Redo (Ctrl + Y) step through every edit of what a session
    saves: design edits, typed, from a menu, from a file or from an applied optimization,
    loaded pulses, and changes of the view (display modes, the cutaway, the beam drawing
    and hidden beams, frame axes), in one history, so an undo takes back the last thing
    done and a part's view state follows the undo of its rename. The camera, the
-   selection and the diagnostics ticked for a drive history are not steps; an undo of a
+   selection and the diagnostics added for a drive history are not steps; an undo of a
    view change leaves the target as it is. A session saves the window as it was left
    too, so it reopens that way: the camera's pose and projection, whether the drive
    shows the 3D view, the map or the x-ray image (with the image's camera), and the
@@ -209,8 +209,14 @@ caps, entrance holes and diagnostic windows; the capsule; other parts) with a sw
 view, so the tree is the color key; the beams by group, quad and beam; and the analyses
 (drive, optimization, clearance, TaLIS) with their state. Selecting a node selects it in
 the 3D view and shows it in Properties; Ctrl + click adds components or beams to the
-selection and Shift + click a range, which Properties then edits together; a double
-click fits the view to it.
+selection and Shift + click a range, which Properties then edits together and the 3D
+view highlights together; Esc clears the selection; a double click fits the view to it.
+A right click opens the row's commands, only those that apply to it. *Remove* takes out
+every selected part, assembly, frame and window in one edit
+(`Controllers.remove_nodes!`): an assembly goes with its contents, and what was placed
+in a removed frame (a capsule in its hohlraum's) stays where it is, placed in the
+nearest frame above that remains; beams aimed in a removed frame keep their aim points.
+Removing every part leaves an empty target.
 
 Taking part in the calculations and being drawn are separate settings. Each beam row
 carries VisRad's 2 × 3 matrix of dots: the top row is whether the beams' 1ω (red), 2ω
@@ -241,23 +247,28 @@ and beams left out are switched off.
 
 The right panel edits the selection. A value the geometry or a check rejects is
 refused with the reason in the status line. The pages hold controls and short status
-lines; an ⓘ beside a page title, a section heading or a control shows its explanation on
-hover and, when clicked, opens it on the Help screen (Help ▸ Help topics, F1), which
-collects every explanation by page. Help ▸ Documentation opens this page.
+lines; tooltips are one-line hints. An ⓘ beside a page title, a section heading or a
+control shows such a hint on hover and, when clicked, opens its explanation in the Help
+window (Help ▸ Help, F1): a window of its own, which resizes and stays open beside the
+design, with the explanations by page, a search field, and the mouse and key bindings.
+Help ▸ Documentation opens this page.
 
-![The Help screen at the placement sweep's page: the explanations behind the ⓘ marks, listed by page, with a link to this documentation.](assets/gui/help.png)
+![The Help window at the placement sweep's page: the explanations behind the ⓘ marks, listed by page, with a link to this documentation.](assets/gui/help.png)
 
 - **Target:** the mesh: a preset (above) or element sizes in mm for the walls and parts
-  and for the capsule. A target is made of parts: Insert ▸ *Hohlraum with capsule*,
-  *Backlighter foil*, *Halfraum pair with shock tube* (two halfraums facing each other
-  across a cylinder package whose end faces close them, the top face observed) or
-  *Opacity halfraum* (a halfraum with an observed sample foil in its open end) or
-  *Frustraum with capsule* (a hohlraum part with a frustraum profile) adds a
-  starter assembly in the selected part's or piece's frame (TCC
-  with nothing selected), its names made unique (`hohlraum_2`), and File ▸ New target
-  starts a target of one starter (*Empty*: a sphere at TCC). The starters' dimensions are
-  illustrative mock-ups; a session saved with the former hohlraum or foil template loads as these
-  parts.
+  and for the capsule. A target is made of parts. File ▸ New target starts from a
+  ready-made one, listed under the facility it is a mock-up for, and loads that
+  facility's beams (imported beams are kept): for NIF, *Hohlraum with capsule*,
+  *Frustraum with capsule* (a hohlraum part with a frustraum profile), *Halfraum pair
+  with shock tube* (two halfraums facing each other across a cylinder package whose end
+  faces close them, the top face observed) and *Opacity halfraum* (a halfraum with an
+  observed sample foil in its open end); for OMEGA, *Backlighter foil*; or *Empty*, no
+  parts at all. Their dimensions are illustrative mock-ups; a session saved with the
+  former hohlraum or foil template loads as these parts. The Insert menu (and the
+  target's properties) adds to the target: a sphere, disk, washer, rectangle, cylinder,
+  cone, a bare hohlraum part or an STL mesh, placed at TCC; a diagnostic window in the
+  selected hohlraum part's wall; an assembly of the selected parts; a frame.
+  (`insert_starter!` still adds a starter's parts to a design from a script.)
 - **Hohlraum parts:** a cylindrical hohlraum ([`hohlraum`](@ref)) along the part's z,
   in pieces named after the part (`hohlraum_wall`, `hohlraum_cap_top`, …): its length,
   radius, entrance-hole radius (the bottom hole's may differ), wall albedo and conversion,
@@ -281,8 +292,8 @@ collects every explanation by page. Help ▸ Documentation opens this page.
   radius, the end breaks at ±length/2: [`HohlraumProfile`](@ref)); the wall is then one
   piece per section (`hohlraum_wall_1`, …), each holding the *Wall* role, and windows go
   in cylindrical sections only.
-- **Windows** ([`WallWindow`](@ref)) in a hohlraum part's wall (its properties ▸ *Add
-  window*): azimuth, height, round (the default, with the exact disk area) or rectangular, open or closed with their own albedo and conversion
+- **Windows** ([`WallWindow`](@ref)) in a hohlraum part's wall (Insert ▸ *Diagnostic
+  window*, or its properties ▸ *Add window*): azimuth, height, round (the default, with the exact disk area) or rectangular, open or closed with their own albedo and conversion
   efficiency. Overlapping windows, or a window past the end of the wall, are refused.
 - **Parts:** spheres, disks, washers, rectangles, cylinders and cones placed anywhere,
   with their own albedo, conversion, sidedness, aperture flag and element size: a
@@ -306,7 +317,7 @@ collects every explanation by page. Help ▸ Documentation opens this page.
   freedom no step fixes keep the placement fields' values. A new step starts where it
   leaves the part in place (the current point, distance and roll). The part follows
   the frames its steps refer to, as it follows the frame it is placed in.
-  A *mesh* part reads an STL file (Target ▸ Add part ▸ Mesh from STL file), scaled to
+  A *mesh* part reads an STL file (Insert ▸ Mesh from STL file), scaled to
   mm, with its windings repaired ([`orient_mesh`](@ref)) and its surface remeshed into
   elements of the part's size ([`remesh_mesh`](@ref)); a multi-body ASCII STL of named
   solids gives one part per solid. A *VisRad object* part is a component of an imported
@@ -329,10 +340,10 @@ collects every explanation by page. Help ▸ Documentation opens this page.
   tree marks the foils, and the active one among several.
 - **Frames:** the model tree's Frames folder holds user frames, named frames with no
   geometry placed like parts (origin, axis angles, rotation and placement steps, in any
-  frame): Tools ▸ *Add frame* or the folder's *Add frame* places one in the selected
+  frame): Insert ▸ *Frame* or the folder's *Add frame* places one in the selected
   frame. Parts are placed in a user frame, beams aim in it and a sweep steps it, as for
-  a part's frame; a frame that parts or other frames are placed in, or that their steps
-  refer to, is not removed. A *port frame* (the folder's page: a port of the beam table,
+  a part's frame; when a frame is removed, what was placed in it stays where it is. A
+  *port frame* (the folder's page: a port of the beam table,
   a NIF quad at the angles of [`port_angles`](@ref)`(:nif, quad)`) has its origin at TCC
   and z toward the port ([`port_frame`](@ref), VisRad's diagnostic-port axis), and only
   its roll is edited. Tools ▸ *Coordinate transform* gives the coordinates of a point or
@@ -353,13 +364,27 @@ collects every explanation by page. Help ▸ Documentation opens this page.
   named set ("backlighter") made with *Move to group*; a group is edited, switched and
   optimized together, and its members keep their cone for the laser–plasma models. A
   NIF quad held as one beam splits into its four beams (their own ports, a quarter of
-  the power each) to point them apart, and merges back.
-- **Facility** (Beams ▸ Facility: NIF, OMEGA, OMEGA EP or other): the presets offered
-  (NIF quads or beams at illustrative example cone aims, in a frustraum's holes at aims
-  derived from them that keep each cone's spot at the same fraction of the wall height
-  where the hole allows; the OMEGA hohlraum or backlighter
-  sets; OMEGA EP's beams are imported, its port geometry is not built in) and the
-  checks (the TaLIS rules are NIF's).
+  the power each), so that the laser deposition is computed per beam, and merges back:
+  for one quad, a group's quads or every quad at once (the row's right-click menu, the
+  Beams menu). The quad stays the unit of pointing and power either way. Its row edits
+  its beams together, and the radial and tangential aim offsets are measured in the
+  quad's port azimuth ([`GroupPointing`](@ref)'s `unit = :quad`), so a quad's beams with
+  the same values share one aim point: the point the quad held as one beam aims at, to
+  under a micron (the mean of a quad's four ports is the quad's port to 0.004°).
+  Measured in each beam's own azimuth, the aims of a 23.5° quad would land 0.2 mm apart
+  per mm of aim r. A cone's or a quad's row, the 192-beam preset and the optimizer per
+  cone or per quad keep one aim point per quad; a quad's beams are pointed apart from
+  their own rows. A click on one of a quad's beams in the 3D view selects the quad while
+  its row is closed in the tree, and the power of rows of whole quads is given per quad
+  (`Controllers.power_unit`), so a split leaves the Beam table's numbers as they were.
+- **Facility** (Beams ▸ Facility, or the Beams properties: NIF, OMEGA, OMEGA EP or
+  Other): the beams (a facility's first preset replaces another facility's; OMEGA EP
+  and Other have no built-in set, so another facility's preset beams are taken out and
+  a beam table is imported; imported beams are kept), the presets offered (NIF quads or
+  beams at illustrative example cone aims, in a frustraum's holes at aims derived from
+  them that keep each cone's spot at the same fraction of the wall height where the
+  hole allows; the OMEGA hohlraum or backlighter sets), the instruments the Diagnostics
+  tab lists and the checks (the TaLIS rules are NIF's).
 - **Analyses:** the settings and Run of the drive, the optimization, the clearance
   check, the placement sweep and the TaLIS rules.
 
@@ -372,7 +397,8 @@ component or beam, a double click fits it, `f` fits everything and the arrow key
 orbit by 15°. The near and far planes follow the eye, so nothing is clipped however
 close the view. The View menu holds the standard views, a perspective or orthographic
 projection, turntable (z up) or free rotation, the cutaway, Look from port (a beam's
-port or any θ, φ) and Save view as image. Help ▸ Mouse and keys lists the bindings.
+port or any θ, φ) and Save view as image. Switching the turntable back on levels a view
+that a free rotation rolled. Help ▸ Mouse and keys lists the bindings.
 
 A placement triad sits on the selected part, piece or assembly, in the axes of the frame
 it is placed in (Properties ▸ *Placed in*). A drag on an arrow moves the part along that
@@ -452,28 +478,28 @@ The bottom panel's tabs:
   unconverted light of the same beams (`drive_history`'s `unconverted`, a fraction per
   beam where only some beams' light takes part); the pointing optimization uses the 3ω
   light alone.
-- **Time:** the drive through a pulse. *Pulse table…* fires the beams with a pulse
-  table ([`read_pulse_table`](@ref): power per beam against time, per cone group, quad
-  or beam; disabled beams stay off), and *N221204 shape* with N221204's delivered pulse
-  shape ([`n221204_pulse`](@ref)), each beam reaching its table power at the peak. A
+- **Time:** the drive through a pulse. *Pulses ▾* sets the pulses the beams fire: a
+  pulse table ([`read_pulse_table`](@ref): power against time, per cone group,
+  quad or beam; disabled beams stay off), or a published shape (`Controllers.PULSE_SHAPES`:
+  the delivered total power of N221204, [`n221204_pulse`](@ref), or of N191118 or
+  N210601, [`zylstra2022_fig2`](@ref)), each beam reaching its own power at the peak. A
+  cone's or a quad's column of a table is the power per quad, shared by the beams the
+  table holds of that quad, so the pulses fire the same total whether quads are split or
+  not; the box beside *Pulses ▾* switches the columns to the power per beam
+  (`Controllers.PULSE_UNITS`; `with_pulses` itself reads a table per beam), and the
+  retune reads its reference table and writes its result in the same unit. A
   session saves the pulses: a table's data itself, so it opens without the CSV file.
   *Run history* solves the drive at each time of the pulses on the drive's view factors
   ([`drive_history`](@ref)), and every 0.5 ns over the prepulse window (below), so the
   prepulse's x-rays heat the wall and capsule and the wall's memory carries that heat
   into the main pulse; a time between two that fire where nothing fires is solved as a
-  zero-power step, the wall re-emitting what it stored. Each synthetic diagnostic ticked under the
-  chart is recorded: the definitions on the diagnostic search path ([Diagnostic
-  definitions](reference/diagnostics.md): the built-ins, then the folders of
-  Diagnostics ▸ Folders…, kept for later sessions) and those saved with the session,
-  each with a tooltip naming its files; NIF Dante 1 is ticked in a new session, and a
-  definition that cannot be built (Dante 2's channels are not public) cannot be ticked.
-  The Folders dialog lists the problems found in the definitions
-  ([`check_diagnostics`](@ref)). Six charts, in the tree's colors: *Pulses* (each group's
+  zero-power step, the wall re-emitting what it stored. The diagnostics added in the
+  Diagnostics tab (below) are recorded with it. Five charts, in the tree's colors:
+  *Pulses* (each group's
   power and the total, TW), *Drive history* (capsule Tᵣ and each recorded diagnostic's,
   [`dante`](@ref), in eV; a₂/a₀ and a₄/a₀ in % on the right axis; for a flat observed
   face, its Tᵣ from the area-mean flux, and its RMS nonuniformity and peak and lowest
-  flux relative to the mean on the right axis), *Diagnostics* (each
-  recorded diagnostic's Tᵣ, and the intensity toward it in TW/sr on the right axis),
+  flux relative to the mean on the right axis),
   *Energy* (the laser
   energy delivered by each time and where it went, kJ, [`energy_budget`](@ref)),
   *Irradiance* (below) and *Retune* (below). On the *Irradiance* chart, *Run checks*
@@ -489,10 +515,33 @@ The bottom panel's tabs:
   power per beam, flat over a window, -5 to 0 ns by default; `drive_history`'s
   `prepulse`, also taken by the drive history and the retune) and the threshold
   (10⁸ W/cm², the NIF User Guide's guideline for the onset of plasma on a metal, an
-  engineering default). A click or drag on the chart, or the slider under it, moves the
-  time cursor: the 3D view shows that step of the history on one color scale for the
-  whole history; scrubbing computes nothing. *Now* returns to the drive at the table's
-  powers, and a beam, pulse or target edit marks the history out of date.
+  engineering default). The row under the chart sets what the 3D view shows: *Beam
+  powers*, the drive at the powers set on the beams, or *Drive history*, a step of the
+  history, chosen with the slider or a click or drag on the chart, on one color scale
+  for the whole history; scrubbing computes nothing. A beam, pulse or target edit marks
+  the history out of date. File ▸ Export results writes a current history with the
+  drive (`Controllers.export_history`): the drive, the energy and each recorded
+  diagnostic against time, the fields per element at every step, and the imagers'
+  images.
+- **Diagnostics:** the synthetic diagnostics a drive history records, by category
+  (x-ray power, x-ray imagers, radiography). *Add ▾* lists the category's instruments of
+  the session's facility, from the diagnostic directories ([Diagnostic
+  definitions](reference/diagnostics.md): the built-ins, then the directories of
+  Diagnostics ▸ Diagnostic directories…, kept for later sessions) and those saved with
+  the session. An instrument is listed once, whatever the number of its definitions
+  (their `instrument` key: Dante 1's channel sets of several years and shots), and
+  recorded in one configuration, which its chip's menu changes (right click or double
+  click); NIF Dante 1 is recorded in a new session, and an instrument that cannot be
+  built (Dante 2's channels are not public) cannot be added. The dialog of the
+  directories lists the problems found in the definitions ([`check_diagnostics`](@ref)),
+  and Diagnostics ▸ Refresh reads them again. *X-ray power* charts each recorded
+  diagnostic's Tᵣ, and the intensity toward it in TW/sr on the right axis; *X-ray
+  imagers* shows the images the history holds of its imagers (at the time cursor, and
+  the recording: time-integrated, or a frame per gate), one at a time, and opens one in
+  the main image view; radiography definitions are listed and record nothing yet.
+
+  ![The Diagnostics tab on its x-ray imagers after a drive history: the categories with the number recorded in each, the recorded instrument as a chip, the history's images of the lower SXI in a list and the one chosen beside it.](assets/gui/diagnostics.png)
+
 - **Optimization:** the free parameters, objective and limits described in the first
   session; a capsule keep-out ([`SphereKeepOut`](@ref), on by default) keeps every
   beam's worst-case envelope off the capsule, and an entrance-hole keep-out

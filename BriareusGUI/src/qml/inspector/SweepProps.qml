@@ -21,7 +21,7 @@ ColumnLayout {
                 currentIndex: app.swSubject
                 displayText: app.swSubject < 0 ? "(add a part)" : currentText
                 onActivated: (index) => Julia.br_sw_subject(index)
-                tip: "The part moved, with the parts placed in its frame and the beams aimed in those frames"
+                tip: "The part to move; what is placed in it follows"
             }
         }
         RowLayout {
@@ -31,7 +31,7 @@ ColumnLayout {
                 model: ["Its place along a frame's axis", "A number of its placement steps"]
                 currentIndex: app.swMode
                 onActivated: (index) => Julia.br_sw_mode(index)
-                tip: "A shift along an axis (the part translates), or a number of one of its placement steps (it may turn)"
+                tip: "Move along an axis, or vary a placement step"
             }
             Info { topic: "sweep.steps" }
         }
@@ -57,7 +57,7 @@ ColumnLayout {
                 currentIndex: app.swNumber
                 displayText: app.swNumber < 0 ? "(choose a step)" : currentText
                 onActivated: (index) => Julia.br_sw_number(index)
-                tip: "The step's number that takes the values From, From + Increment, … To (a distance, an angle, a coordinate)"
+                tip: "The number of the step to vary"
             }
         }
         RowLayout {
@@ -97,14 +97,14 @@ ColumnLayout {
             text: "Beam clearance (the clearance check's components, envelope and errors)"
             checked: app.sw_clearance
             onToggled: Julia.br_sw_check("clearance", checked)
-            tip: "The least clearance of the beams from the hardware, and the failing and review pairs"
+            tip: "Check the beam clearance at each step"
         }
         CheckLine {
             text: "Line of sight from the backlighter foil"
             checked: app.sw_los
             enabled: app.hasFoil
             onToggled: Julia.br_sw_check("los", checked)
-            tip: app.hasFoil ? "Whether the target blocks the line of sight from the active foil through the object"
+            tip: app.hasFoil ? "Check whether the target blocks the line of sight"
                              : "Needs a backlighter foil (a part with the foil role)"
         }
         ColumnLayout {
@@ -119,11 +119,11 @@ ColumnLayout {
                     model: app.swObjects
                     currentIndex: app.swObject
                     onActivated: (index) => Julia.br_sw_object(index)
-                    tip: "The part the line of sight passes through (the object the backlighter images)"
+                    tip: "The part the line of sight passes through"
                 }
             }
             PropRow { label: "Toward θ"; labelWidth: 86; value: app.sw_los_theta; unit: "° (empty: foil → object)"
-                      tip: "The line of sight's polar angle; empty: the direction from the foil's center through the object's"
+                      tip: "Polar angle of the line of sight; empty: from the foil to the object"
                       onEdited: (text) => Julia.br_sw_edit("los_theta", text) }
             PropRow { label: "φ"; labelWidth: 86; value: app.sw_los_phi; unit: "°"
                       tip: "The line of sight's azimuth"
@@ -141,8 +141,7 @@ ColumnLayout {
             text: "Re-optimize the pointing at each step (Optimization's settings)"
             checked: app.sw_optimize
             onToggled: Julia.br_sw_check("optimize", checked)
-            tip: "Slow: an optimization per step. Aims free in their frame (u, v, w) warm-start " +
-                 "from the previous step, as the frame moves with the part."
+            tip: "Re-optimize the pointing at each step (slow)"
         }
         RowLayout {
             spacing: 8
@@ -153,9 +152,7 @@ ColumnLayout {
                 model: [{ text: "Quick", value: "quick" }, { text: "Standard", value: "standard" }]
                 currentIndex: app.swQuality === "standard" ? 1 : 0
                 onActivated: Julia.br_sw_quality(currentValue)
-                tip: "Quick: the line of sight from the foil's vertices through 2 rings of object points, the captured power " +
-                     "on a 0.6 mm grid; Standard: 4 sub-points per foil triangle, 4 rings, a 0.3 mm grid " +
-                     "(with the clearance check's sampling of the same name; engineering defaults, not converged)"
+                tip: "Quick: coarser sampling, faster. Standard: finer"
             }
         }
     }

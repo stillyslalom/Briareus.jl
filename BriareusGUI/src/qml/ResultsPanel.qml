@@ -1,5 +1,6 @@
 // The bottom panel: the beam table and each analysis's results, one tab each (Time:
-// pulses, drive histories and the retune over time; Sweep: a placement sweep's steps).
+// pulses, drive histories and the retune over time; Diagnostics: the synthetic
+// diagnostics a history records; Sweep: a placement sweep's steps).
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -10,15 +11,17 @@ Pane {
     id: results
     padding: 0
     property alias currentIndex: tabs.currentIndex
-    readonly property var keys: ["beams", "drive", "time", "optimize", "clearance", "sweep", "talis"]
+    readonly property var keys: ["beams", "drive", "time", "diagnostics", "optimize", "clearance", "sweep", "talis"]
     function show(key) { const i = keys.indexOf(key); if (i >= 0) tabs.currentIndex = i }
     function redrawTime() { timePanel.redraw() }
-    function openDiagnosticPicker() { return timePanel.openPicker() }
-    function openImageList() { return timePanel.openImages() }
+    function redrawDiagnostics() { diagnosticsPanel.redraw() }
+    function openDiagnosticPicker() { return diagnosticsPanel.openPicker() }
     function redrawSweep() { sweepPanel.redraw() }
-    // the height the current tab needs (the Time tab: its rows and the chart at its minimum;
-    // 0 for the others, which fit any height); the window grows the panel to it
-    readonly property real fitHeight: tabs.currentIndex === keys.indexOf("time") ? tabs.height + timePanel.fitHeight : 0
+    // the height the current tab needs (the Time and Diagnostics tabs: their rows and the
+    // chart at its minimum; 0 for the others, which fit any height); the window grows the
+    // panel to it
+    readonly property real fitHeight: tabs.currentIndex === keys.indexOf("time") ? tabs.height + timePanel.fitHeight
+                                    : tabs.currentIndex === keys.indexOf("diagnostics") ? tabs.height + diagnosticsPanel.fitHeight : 0
     // leaving NIF hides the TaLIS tab: show the drive rather than its stale page
     readonly property bool talisShown: app.facility === "nif"
     onTalisShownChanged: if (!talisShown && tabs.currentIndex === keys.indexOf("talis")) show("drive")
@@ -32,7 +35,7 @@ Pane {
             // the tabs' side padding, less when the panel is narrow, so that every tab shows
             // its whole name rather than being scrolled out of sight (from the names' widths,
             // which do not depend on the padding)
-            readonly property var names: ["Beam table", "Drive", "Time", "Optimization", "Clearance", "Sweep", "TaLIS"]
+            readonly property var names: ["Beam table", "Drive", "Time", "Diagnostics", "Optimization", "Clearance", "Sweep", "TaLIS"]
             FontMetrics { id: tabFont; font: tabs.font }
             readonly property real pad: {
                 const shown = app.facility === "nif" ? names : names.slice(0, -1)   // (TaLIS: NIF beams)
@@ -55,6 +58,7 @@ Pane {
             Tab { text: "Beam table" }
             Tab { text: "Drive" }
             Tab { text: "Time" }
+            Tab { text: "Diagnostics" }
             Tab { text: "Optimization" }
             Tab { text: "Clearance" }
             Tab { text: "Sweep" }
@@ -70,6 +74,7 @@ Pane {
             }
             DrivePanel {}
             TimePanel { id: timePanel }
+            DiagnosticsPanel { id: diagnosticsPanel }
             OptimizePanel {}
             Item {
                 ClearancePanel { anchors.fill: parent; anchors.margins: 6 }

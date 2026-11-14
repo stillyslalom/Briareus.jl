@@ -3,6 +3,7 @@
 // shows on hover.
 import QtQuick
 import QtQuick.Controls as T
+import "."
 
 T.TextField {
     property string tip: ""
@@ -11,7 +12,5 @@ T.TextField {
     leftPadding: 6
     rightPadding: 6
     implicitHeight: Math.max(24, contentHeight + topPadding + bottomPadding)
-    T.ToolTip.visible: tip !== "" && hovered
-    T.ToolTip.delay: 400
-    T.ToolTip.text: tip
+    Tip { text: parent.tip; visible: parent.tip !== "" && parent.hovered }
 }

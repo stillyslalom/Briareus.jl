@@ -29,9 +29,10 @@ ColumnLayout {
             model: app.frameLabels
             currentIndex: app.partFrame < 0 ? 0 : app.partFrame
             onActivated: (index) => Julia.br_part_frame(index)
-            ToolTip.visible: hovered
-            ToolTip.delay: 400
-            ToolTip.text: "The frame it is placed in: TCC, another frame, a part's or a piece's (it stays where it is)"
+            Tip {
+                visible: parent.hovered
+                text: "The frame it is placed in; it stays where it is"
+            }
         }
     }
     MoveAlongRow { visible: !port; what: "the frame"; triad: false }
@@ -43,7 +44,7 @@ ColumnLayout {
             model: ["Cartesian (x, y, z)", "Cylindrical (r, φ, z)", "Spherical (r, θ, φ)"]
             currentIndex: app.partCoords
             onActivated: (index) => Julia.br_part_coords(index)
-            tip: "The coordinates of the origin's fields, in the frame it is placed in"
+            tip: "Coordinates of the origin fields"
         }
     }
     Repeater {
@@ -71,16 +72,12 @@ ColumnLayout {
         Button {
             text: "Frame in it"
             onClicked: Julia.br_add_frame()
-            ToolTip.visible: hovered
-            ToolTip.delay: 400
-            ToolTip.text: "Add a user frame placed in this one"
+            Tip { visible: parent.hovered; text: "Add a user frame placed in this one" }
         }
         Button {
             text: "Transform…"
             onClicked: Julia.br_open_transform()
-            ToolTip.visible: hovered
-            ToolTip.delay: 400
-            ToolTip.text: "Coordinates of a point or direction between this frame and another"
+            Tip { visible: parent.hovered; text: "Coordinates of a point or direction between this frame and another" }
         }
     }
     ErrorText { text: app.targetError }

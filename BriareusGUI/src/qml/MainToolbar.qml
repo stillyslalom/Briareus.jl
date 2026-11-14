@@ -37,9 +37,7 @@ ToolBar {
 
         component Tool: ToolButton {
             property string tip: ""
-            ToolTip.visible: hovered && tip !== ""
-            ToolTip.delay: 500
-            ToolTip.text: tip
+            Tip { visible: parent.hovered && parent.tip !== ""; text: parent.tip }
             focusPolicy: Qt.NoFocus
             topPadding: 3
             bottomPadding: 3
@@ -69,7 +67,7 @@ ToolBar {
         Tool {
             id: cutTool
             text: "Cutaway"; checkable: true; checked: app.cutaway
-            tip: "Cut away part of the target to see inside (right-click: where and what)"
+            tip: "Cut the target open to see inside (right-click: options)"
             onClicked: Julia.br_set_cutaway(checked)
             TapHandler {
                 acceptedButtons: Qt.RightButton
@@ -125,9 +123,9 @@ ToolBar {
                         Info { topic: "view.cutaway" }
                         Item { Layout.fillWidth: true }
                         RadioButton { text: "Sector"; checked: app.cutKind === "sector"; onToggled: if (checked) Julia.br_cut_kind("sector")
-                                      ToolTip.visible: hovered; ToolTip.delay: 400; ToolTip.text: "Remove a slice about a coordinate axis" }
+                                      Tip { visible: parent.hovered; text: "Remove a slice about a coordinate axis" } }
                         RadioButton { text: "Plane"; checked: app.cutKind === "plane"; onToggled: if (checked) Julia.br_cut_kind("plane")
-                                      ToolTip.visible: hovered; ToolTip.delay: 400; ToolTip.text: "Remove the side a plane's normal points to" }
+                                      Tip { visible: parent.hovered; text: "Remove the side a plane's normal points to" } }
                     }
                     ColumnLayout {
                         visible: app.cutKind === "sector"
@@ -141,9 +139,10 @@ ToolBar {
                                     text: modelData
                                     checked: app.cutAxis === modelData
                                     onToggled: if (checked) Julia.br_cut_axis(modelData)
-                                    ToolTip.visible: hovered
-                                    ToolTip.delay: 400
-                                    ToolTip.text: "The slice turns about the chamber's " + modelData + " axis"
+                                    Tip {
+                                        visible: parent.hovered
+                                        text: "The slice turns about the chamber's " + modelData + " axis"
+                                    }
                                 }
                             }
                         }
@@ -154,9 +153,10 @@ ToolBar {
                                 value: app.cutAzimuth
                                 Layout.preferredWidth: 160
                                 onMoved: Julia.br_cut_azimuth(value)
-                                ToolTip.visible: hovered && !pressed
-                                ToolTip.delay: 400
-                                ToolTip.text: "The azimuth the removed slice is centered on (°)"
+                                Tip {
+                                    visible: parent.hovered && !parent.pressed
+                                    text: "The azimuth the removed slice is centered on (°)"
+                                }
                             }
                             Label { text: Math.round(app.cutAzimuth) + "°"; Layout.preferredWidth: 40 }
                             Info { topic: "view.cut" }
@@ -168,9 +168,10 @@ ToolBar {
                                 value: app.cutWidth
                                 Layout.preferredWidth: 160
                                 onMoved: Julia.br_cut_width(value)
-                                ToolTip.visible: hovered && !pressed
-                                ToolTip.delay: 400
-                                ToolTip.text: "The azimuthal width of the removed slice (°)"
+                                Tip {
+                                    visible: parent.hovered && !parent.pressed
+                                    text: "The azimuthal width of the removed slice (°)"
+                                }
                             }
                             Label { text: Math.round(app.cutWidth) + "°"; Layout.preferredWidth: 40 }
                         }
@@ -239,7 +240,7 @@ ToolBar {
                         Button {
                             text: app.cutSelected !== "" ? "Through " + app.cutSelected : "Through the selected component"
                             enabled: app.cutSelected !== ""
-                            tip: "The plane through its centroid, with its normal if it is flat (a window, a foil)"
+                            tip: "A plane through the selected component"
                             onClicked: Julia.br_cut_through_selected()
                         }
                         RowLayout {
@@ -249,9 +250,10 @@ ToolBar {
                                 value: app.cutOffset
                                 Layout.preferredWidth: 160
                                 onMoved: Julia.br_cut_offset(value)
-                                ToolTip.visible: hovered && !pressed
-                                ToolTip.delay: 400
-                                ToolTip.text: "Moves the plane along its normal from the point (mm)"
+                                Tip {
+                                    visible: parent.hovered && !parent.pressed
+                                    text: "Moves the plane along its normal from the point (mm)"
+                                }
                             }
                             Label { text: app.cutOffset.toFixed(2) + " mm from the point" }
                         }
@@ -294,11 +296,11 @@ ToolBar {
                         RowLayout {
                             Label { text: "Line from"; Layout.preferredWidth: 140 }
                             RadioButton { text: "TCC"; checked: app.cutAtTcc || app.cutSelected === ""
-                                          ToolTip.visible: hovered; ToolTip.delay: 400; ToolTip.text: "The line of sight starts at the chamber center" }
+                                          Tip { visible: parent.hovered; text: "The line starts at the chamber center" } }
                             RadioButton {
                                 id: losFromSel; text: "Selected component"
                                 enabled: app.cutSelected !== ""; checked: !app.cutAtTcc && app.cutSelected !== ""
-                                ToolTip.visible: hovered; ToolTip.delay: 400; ToolTip.text: "The line of sight starts at the selected component"
+                                Tip { visible: parent.hovered; text: "The line of sight starts at the selected component" }
                             }
                         }
                         RowLayout {
@@ -309,9 +311,10 @@ ToolBar {
                                 value: app.cutRotation
                                 Layout.preferredWidth: 160
                                 onMoved: Julia.br_cut_rotation(value)
-                                ToolTip.visible: hovered && !pressed
-                                ToolTip.delay: 400
-                                ToolTip.text: "Turns the plane about the line of sight (°)"
+                                Tip {
+                                    visible: parent.hovered && !parent.pressed
+                                    text: "Turns the plane about the line of sight (°)"
+                                }
                             }
                             Label { text: Math.round(app.cutRotation) + "°"; Layout.preferredWidth: 40 }
                         }
@@ -338,7 +341,7 @@ ToolBar {
                     { text: "Hidden", value: "off" }]
             currentIndex: Math.max(0, ["rays", "volumes", "off"].indexOf(app.beamStyle))
             onActivated: Julia.br_beam_style(currentValue)
-            tip: "How the beams are drawn: rays (each axis to where it lands), volumes (each spot's 5 % envelope along its f-cone) or hidden"
+            tip: "Draw beams as rays, as volumes, or not at all"
         }
         Label { text: "Color"; opacity: 0.7; leftPadding: 8; rightPadding: 4; height: beamStyleBox.height; verticalAlignment: Text.AlignVCenter }
         ComboBox {
@@ -352,15 +355,14 @@ ToolBar {
                     { text: "Incident x-ray flux", value: "incident" }]
             currentIndex: Math.max(0, ["component", "laser", "radiosity", "incident"].indexOf(app.colorBy))
             onActivated: Julia.br_set_color(currentValue)
-            tip: "What the target is colored by: each component's color, or a drive field per element (W/cm², computing the drive when needed)"
+            tip: "Color by component, or by a drive field (W/cm²)"
         }
         Tool {
             text: app.observedKind === "face" ? "Face map" : app.observedKind === "capsule" ? "Capsule map" : "Foil map"
             checkable: true
             checked: app.driveView === "map"
             enabled: app.driveHasResult && (app.hasCapsule || app.hasFoil)
-            tip: "Show the observed surface's x-ray flux map (the capsule's θ–φ map or the flat face's) " +
-                 "or the foil's laser irradiance instead of the 3D view"
+            tip: "Show the flux map in place of the 3D view"
             onClicked: Julia.br_set_view(checked ? "map" : "scene")
         }
         ToolSeparator { height: 28 }

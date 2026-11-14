@@ -243,6 +243,22 @@ function fit_camera!(c::CadCamera, center = c.home[1], radius = c.home[2])
     return c
 end
 
+"""
+    level_camera!(c::CadCamera)
+
+Remove the view's roll: keep the eye and the direction it looks along, and turn the view
+about that direction until world `z` points up on the screen. Looking straight along
+`z` (within 0.1°) the view keeps its up direction: every roll is level there.
+"""
+function level_camera!(c::CadCamera)
+    f = camera_frame(c)[1]
+    z = Vec3d_(0, 0, 1)
+    u = z - dot(z, f) * f
+    norm(u) > 1.7e-3 && (c.up = _normalized(u))
+    c.on_change()
+    return c
+end
+
 "Standard view directions: the direction the camera looks along, and up."
 const STANDARD_VIEWS = Dict(
     :iso => (Vec3d_(1, 1, -0.75), Vec3d_(0, 0, 1)),      # from −x −y, the cutaway side

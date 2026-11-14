@@ -10,62 +10,136 @@
 # ---------------------------------------------------------------- pulses
 
 """
-    load_pulses!(sess::DesignSession, path) -> sess
-
-Fire the beams with the pulses of a pulse table (`read_pulse_table`: power per beam in
-TW against `time_ns`, one column per cone group, quad or beam of the table; disabled
-beams stay off). The time panel plots them, and [`start_history!`](@ref) computes the
-drive they give.
+What the power of a pulse table's cone or quad column is given per: `:quad` (the
+default: the power of each quad, shared equally among the beams the table holds of it,
+so the pulses fire the same whether a quad is held as one beam or as its four) or
+`:beam` (every beam of the column fires the column's power, as `with_pulses` reads a
+table). A column per beam name is that beam's power either way, as is any column on
+beams without quad names.
 """
-function load_pulses!(sess::DesignSession, path::AbstractString)
+const PULSE_UNITS = (:quad, :beam)
+
+"""
+    load_pulses!(sess::DesignSession, path; unit = :quad) -> sess
+
+Fire the beams with the pulses of a pulse table (`read_pulse_table`: power in TW against
+`time_ns`, one column per cone group, quad or beam of the table; disabled beams stay
+off). A cone's or a quad's column is the power per `unit` ([`PULSE_UNITS`](@ref): per
+quad by default; [`set_pulse_unit!`](@ref) changes it). The time panel plots the
+pulses, and [`start_history!`](@ref) computes the drive they give.
+"""
+function load_pulses!(sess::DesignSession, path::AbstractString; unit::Symbol = :quad)
     table = read_pulse_table(path)
-    _set_pulses!(sess, _table_pulses(table, _pulse_key(sess.beams.beams[], table), basename(path)))
+    _set_pulses!(sess, _table_pulses(table, _pulse_key(sess.beams.beams[], table), basename(path); unit))
     return sess
 end
 
-# The pulses of a pulse table (`Dict{Symbol,PulseShape}`, keyed by `by`), named `label`.
-function _table_pulses(table::AbstractDict, by::Symbol, label::AbstractString)
-    nodes = sort(unique(reduce(vcat, [p.t for p in values(table)])))
-    return (; kind = :table, table, by, shape = nothing, nodes, times = nodes, step = 0.0, label = String(label))
+"""
+    set_pulse_unit!(sess::DesignSession, unit::Symbol) -> sess
+
+Read the loaded pulse table's cone or quad columns as powers per `unit`
+([`PULSE_UNITS`](@ref)). Nothing changes for a table keyed by beam or a pulse shape.
+"""
+function set_pulse_unit!(sess::DesignSession, unit::Symbol)
+    unit in PULSE_UNITS || throw(ArgumentError("a pulse table's unit is one of $PULSE_UNITS"))
+    src = sess.time.pulses[]
+    (src === nothing || src.kind !== :table || src.by === :beam || src.unit === unit) && return sess
+    _set_pulses!(sess, _table_pulses(src.table, src.by, src.label; unit))
+    return sess
 end
 
-# N221204's pulse shape, normalized to its peak, solved every `step` ns.
-function _shape_pulses(step::Real)
+# The unit a session reads the cone and quad columns of pulse tables in: the loaded
+# table's, else per quad.
+_pulse_unit(sess::DesignSession) =
+    (src = sess.time.pulses[]; src !== nothing && src.kind === :table && src.by !== :beam ? src.unit : :quad)
+
+# The pulses of a pulse table (`Dict{Symbol,PulseShape}`, keyed by `by`), named `label`,
+# its cone or quad columns powers per `unit` (a table keyed by beam: per beam).
+function _table_pulses(table::AbstractDict, by::Symbol, label::AbstractString; unit::Symbol = :quad)
+    unit in PULSE_UNITS || throw(ArgumentError("a pulse table's unit is one of $PULSE_UNITS"))
+    nodes = sort(unique(reduce(vcat, [p.t for p in values(table)])))
+    return (; kind = :table, table, by, shape = nothing, nodes, times = nodes, step = 0.0, label = String(label),
+            unit = by === :beam ? :beam : unit)
+end
+
+# Each beam's share of its pulse-table column's power: 1 for a column per beam name or a
+# table read per beam; else its share of its quad (`_quad_shares`: 1 for a quad held as
+# one beam or a beam without a quad name, 1/4 for one of a quad's four).
+_pulse_shares(beams, by::Symbol, unit::Symbol) =
+    by === :beam || unit === :beam ? ones(length(beams)) : _quad_shares(beams)
+
+# `beams` at time τ of the pulse table `table` keyed by `by`, each firing its `shares` of
+# its column (`_pulse_shares`; all ones: `with_pulses`, bit for bit).
+function _table_beams(beams, table, τ; by, shares)
+    bs = with_pulses(beams, table, τ; by)
+    all(==(1.0), shares) && return bs
+    return [remake(b; power = b.power * s) for (b, s) in zip(bs, shares)]
+end
+
+"""
+Published pulse shapes a session can fire ([`use_pulse_shape!`](@ref)), each the total
+delivered laser power of a NIF shot against time, read from a figure
+([`PULSE_SHAPE_LABELS`](@ref) names the paper): `:n221204` (Pak et al., PRE 109, 025203
+(2024) Fig. 1, `n221204_pulse`), `:n191118` and `:n210601` (Zylstra et al., PRE 106,
+025202 (2022) Fig. 2, `zylstra2022_fig2`). Only the total is published: every beam
+follows the shape, scaled to its own power at the peak.
+"""
+const PULSE_SHAPES = (:n221204, :n191118, :n210601)
+
+"Menu labels of [`PULSE_SHAPES`](@ref): the shot and the paper its pulse is read from."
+const PULSE_SHAPE_LABELS = Dict(:n221204 => "N221204 (Pak et al. 2024)",
+                                :n191118 => "N191118 (Zylstra et al. 2022)",
+                                :n210601 => "N210601 (Zylstra et al. 2022)")
+
+# The published total power of pulse shape `key` against time: `(t, power)`.
+function _published_pulse(key::Symbol)
+    key === :n221204 && return (p = n221204_pulse(); (p.t, p.power))
+    key in (:n191118, :n210601) && return (z = zylstra2022_fig2(); (z.t, getproperty(z, Symbol(:power_, key))))
+    throw(ArgumentError("a pulse shape is one of $PULSE_SHAPES"))
+end
+
+# Published pulse shape `key`, normalized to its peak, solved every `step` ns.
+function _shape_pulses(step::Real, key::Symbol = :n221204)
     step > 0 || throw(ArgumentError("the step must be positive"))
-    p = n221204_pulse()
-    shape = PulseShape(p.t, p.power ./ maximum(p.power))
-    times = collect(range(first(p.t), last(p.t); step))
-    return (; kind = :shape, table = nothing, by = :beam, shape, nodes = collect(p.t), times,
-            step = Float64(step), label = "N221204's pulse shape × the table's powers")
+    t, power = _published_pulse(key)
+    shape = PulseShape(t, power ./ maximum(power))
+    times = collect(range(first(t), last(t); step))
+    shot = uppercase(String(key))
+    return (; kind = :shape, table = nothing, by = :beam, shape, nodes = collect(t), times,
+            step = Float64(step), label = "$shot's pulse shape × the beams' powers", key)
 end
 
 # The pulses `src` as plain data for a session: a table's data itself (its keys' times and
-# powers, so the session opens without the CSV file), or the shape's step; `nothing` for
-# none.
+# powers, so the session opens without the CSV file), or the shape's name and step;
+# `nothing` for none.
 function _pulse_state(src)
     src === nothing && return nothing
-    src.kind === :shape && return Dict{String,Any}("kind" => "shape", "step" => src.step)
+    src.kind === :shape &&
+        return Dict{String,Any}("kind" => "shape", "step" => src.step, "shape" => String(src.key))
     return Dict{String,Any}("kind" => "table", "label" => src.label, "by" => String(src.by),
+                            "unit" => String(src.unit),
                             "table" => Dict{String,Any}(String(k) => Dict{String,Any}("t" => copy(p.t), "power" => copy(p.p))
                                                         for (k, p) in src.table))
 end
 
 _state_pulses(d) =
-    d["kind"] == "shape" ? _shape_pulses(Float64(d["step"])) :
+    d["kind"] == "shape" ? _shape_pulses(Float64(d["step"]), Symbol(get(d, "shape", "n221204"))) :
     _table_pulses(Dict{Symbol,PulseShape}(Symbol(k) => PulseShape(Float64.(v["t"]), Float64.(v["power"]))
                                           for (k, v) in d["table"]),
-                  Symbol(d["by"]), d["label"])
+                  # (a session from before the unit: every beam fired its column's power)
+                  Symbol(d["by"]), d["label"]; unit = Symbol(get(d, "unit", "beam")))
 
 """
-    use_pulse_shape!(sess::DesignSession; step = 0.2) -> sess
+    use_pulse_shape!(sess::DesignSession, shape = :n221204; step = 0.2) -> sess
 
-Fire the beams with N221204's delivered pulse shape (Pak et al., PRE 109, 025203 (2024)
-Fig. 1, `n221204_pulse`) scaled so that each beam reaches its table power at the peak: a
-NIF pulse for a first look when no pulse table is at hand (the published curve is the
-total of the 192 beams; every beam follows its shape here). The history is solved every
-`step` ns.
+Fire the beams with a published pulse shape (one of [`PULSE_SHAPES`](@ref); N221204's
+delivered pulse by default) scaled so that each beam reaches its own power at the peak:
+a NIF pulse for a first look when no pulse table is at hand (the published curves are
+the total of the 192 beams; every beam follows the shape here). The history is solved
+every `step` ns.
 """
-use_pulse_shape!(sess::DesignSession; step::Real = 0.2) = _set_pulses!(sess, _shape_pulses(step))
+use_pulse_shape!(sess::DesignSession, shape::Symbol = :n221204; step::Real = 0.2) =
+    _set_pulses!(sess, _shape_pulses(step, shape))
 
 function _set_pulses!(sess::DesignSession, src)
     tm = sess.time
@@ -77,7 +151,8 @@ end
 
 # The table's beams at time τ of the pulses `src` (disabled beams off).
 function _pulse_beams(src, beams, enabled, τ)
-    bs = src.kind === :table ? with_pulses(beams, src.table, τ; by = src.by) :
+    bs = src.kind === :table ? _table_beams(beams, src.table, τ; by = src.by,
+                                            shares = _pulse_shares(beams, src.by, src.unit)) :
          [remake(b; power = b.power * src.shape(τ)) for b in beams]
     return [on ? b : remake(b; power = 0.0) for (b, on) in zip(bs, enabled)]
 end
@@ -528,19 +603,28 @@ function start_irradiance!(sess::DesignSession)
 end
 
 # Each table beam's 3ω power history (TW per beam), keyed by its name (`by = :beam`):
-# the pulse table's function of its key (shared by the beams of that key), or the shape
-# scaled to the beam's table power (one per power), and one zero pulse for the disabled
-# beams; beams on the same function share a deposition.
+# the pulse table's function of its key (shared by the beams of that key; scaled to the
+# beam's share of a column per quad, `_pulse_shares`), or the shape scaled to the beam's
+# table power (one per power), and one zero pulse for the disabled beams; beams on the
+# same function share a deposition.
 function _beam_pulses(src, beams, enabled)
     allunique(b.name for b in beams) || throw(ArgumentError("the irradiance checks need unique beam names"))
     off = PulseShape([0.0], [0.0])
     scaled = Dict{Float64,PulseShape}()
+    shared = Dict{Any,PulseShape}()
     key = src.kind === :table ? Briareus._beam_key(src.by) : nothing
+    shares = src.kind === :table ? _pulse_shares(beams, src.by, src.unit) : nothing
     out = Dict{Symbol,Any}()
-    for (b, on) in zip(beams, enabled)
-        out[Symbol(b.name)] = !on ? off :
-                              src.kind === :table ? Briareus._beam_pulse(src.table, key, b) :
-                              get!(() -> PulseShape(src.shape.t, b.power .* src.shape.p), scaled, b.power)
+    for (i, (b, on)) in enumerate(zip(beams, enabled))
+        out[Symbol(b.name)] =
+            if !on
+                off
+            elseif src.kind === :table
+                p = Briareus._beam_pulse(src.table, key, b)
+                shares[i] == 1 ? p : get!(() -> PulseShape(p.t, shares[i] .* p.p), shared, (key(b), shares[i]))
+            else
+                get!(() -> PulseShape(src.shape.t, b.power .* src.shape.p), scaled, b.power)
+            end
     end
     return out
 end
@@ -763,8 +847,7 @@ function time_chart(sess::DesignSession, chart::Symbol = sess.time.chart[])
                         right = nothing, legend = NamedTuple[], cursor = NaN, empty = msg)
     if chart === :pulses
         src = tm.pulses[]
-        src === nothing && return none("Pulses", "Load a pulse table (power per beam against time), or use " *
-                                                 "N221204's pulse shape")
+        src === nothing && return none("Pulses", "No pulses yet: Pulses ▾ loads a pulse table or a published shape")
         series = _group_series(sess.beams, src.nodes, τ -> _pulse_beams(src, sess.beams.beams[],
                                                                        sess.beams.enabled[], τ))
         return (; chart, title = "Laser pulses: " * src.label, xlabel = "t (ns)",
@@ -772,8 +855,8 @@ function time_chart(sess::DesignSession, chart::Symbol = sess.time.chart[])
                 legend = [_key(s) for s in series], cursor, empty = "")
     elseif chart === :drive
         h === nothing && return none("Drive history", tm.pulses[] === nothing ?
-                                                      "Load pulses, then Run the drive history" :
-                                                      "Run the drive history on these pulses")
+                                                      "No history yet: load pulses (Pulses ▾), then Run history" :
+                                                      "No history yet: Run history")
         f = h.face
         left = [_series(f === nothing ? "Capsule Tr" : "Face Tr", h.time, h.Tr, _INK)]
         # with several cavities, each one's wall temperature (colored as its wall); one
@@ -807,8 +890,8 @@ function time_chart(sess::DesignSession, chart::Symbol = sess.time.chart[])
                 left = (; label = "Tr (eV)", series = left), right = (; label = rlabel, series = right),
                 legend = [_key(s) for s in vcat(left, right)], cursor, empty = "")
     elseif chart === :diagnostics
-        h === nothing && return none("Diagnostics", "Tick diagnostics below, then Run the drive history")
-        isempty(h.diagnostics) && return none("Diagnostics", "No diagnostic was recorded: tick one, then Run the drive history")
+        h === nothing && return none("Diagnostics", "No history yet: add diagnostics, then run the drive history (Time tab)")
+        isempty(h.diagnostics) && return none("Diagnostics", "No diagnostic was recorded: add one, then run the drive history again")
         left = [_series(d.name * " Tr", h.time, d.Tr, _diagnostic_color(j))
                 for (j, d) in enumerate(h.diagnostics) if any(isfinite, d.Tr)]
         right = [_series(d.name * (d.kind === :xray_imager ? " detected" : " intensity"), h.time, d.intensity,
@@ -822,7 +905,7 @@ function time_chart(sess::DesignSession, chart::Symbol = sess.time.chart[])
                 right = isempty(right) ? nothing : (; label = "Intensity (TW/sr)", series = right),
                 legend = [_key(s) for s in vcat(left, right)], cursor, empty = "")
     elseif chart === :energy
-        h === nothing && return none("Energy", "Run the drive history to see where the energy goes")
+        h === nothing && return none("Energy", "No history yet: Run history")
         cc = component_colors(sess.drive.scenario[] === nothing ? sess.target.target[] :
                               sess.drive.scenario[].target)
         # the colors of the first wall and of the observed surface
@@ -839,8 +922,8 @@ function time_chart(sess::DesignSession, chart::Symbol = sess.time.chart[])
                 legend = [_key(s) for s in series], cursor, empty = "")
     elseif chart === :irradiance
         r = tm.irradiance[]
-        r === nothing && return none("Irradiance", tm.pulses[] === nothing ? "Load pulses, then Run checks" :
-                                                   "Run checks on these pulses")
+        r === nothing && return none("Irradiance", tm.pulses[] === nothing ? "No checks yet: load pulses (Pulses ▾), then Run checks" :
+                                                   "No checks yet: Run checks")
         lit = sort(filter(p -> maximum(p.values; init = 0.0) > 0, r.peaks); by = p -> -maximum(p.values))
         isempty(lit) && r.arrival_peak === nothing &&
             return none("Irradiance", "The unconverted light reaches no surface of the drive's target")
@@ -863,12 +946,16 @@ function time_chart(sess::DesignSession, chart::Symbol = sess.time.chart[])
                 legend = [_key(s) for s in series], cursor, empty = "", scale = :log)
     else
         r = tm.retune[]
-        r === nothing && return none("Retune", "Retune to a reference drive (Compute ▸ Retune to a reference drive) to see its pulses")
-        ref = _group_series(r.table, r.nodes, τ -> with_pulses(r.beams, r.reference_pulses, τ; by = r.reference_by);
+        r === nothing && return none("Retune", "No retune yet: Compute ▸ Retune to a reference drive")
+        # (each beam's share of its column, for tables read per quad)
+        rsh = _pulse_shares(r.beams, r.reference_by, r.unit)
+        nsh = _pulse_shares(r.beams, r.by, r.unit)
+        ref = _group_series(r.table, r.nodes,
+                            τ -> _table_beams(r.beams, r.reference_pulses, τ; by = r.reference_by, shares = rsh);
                             total = false, style = :dash)
         new = _group_series(r.table, r.nodes,
-                            τ -> [on ? remake(b; power = r.pulses[Briareus._beam_key(r.by)(b)](τ)) : remake(b; power = 0.0)
-                                  for (b, on) in zip(r.beams, r.enabled)]; total = false)
+                            τ -> [on ? remake(b; power = s * r.pulses[Briareus._beam_key(r.by)(b)](τ)) : remake(b; power = 0.0)
+                                  for (b, on, s) in zip(r.beams, r.enabled, nsh)]; total = false)
         if r.kind === :capsule
             ε1(hh) = [100 * mode_amplitude(hh.ylm[:, j], 1) for j in eachindex(hh.time)]
             right = [_series("ε₁ before", r.before.time, ε1(r.before), _GRAY; style = :dot),
@@ -933,11 +1020,16 @@ Read the diagnostic definitions on the search path again (`diagnostic_paths`: th
 built-ins, the saved folders, `BRIAREUS_DIAGNOSTICS`) with their problems
 (`check_diagnostics`, in `sess.time.issues`), and list them with those saved with the
 session in `sess.time.catalog`, one row `(; id, name, kind, origin, file, chain,
-public, usable, problem, changed)` per id: `origin` is `:builtin`, `:user` (a folder on
-the search path) or `:session` (saved with the session and not on the search path);
-`usable` whether it builds, else `problem` says why; `changed` the keys in which a
-definition saved with the session differs from the search path's of that id
-(`diagnostic_diff`; the session's is used). The built-ins first, then by id.
+public, usable, problem, changed, facility, instrument, config)` per id: `origin` is
+`:builtin`, `:user` (a folder on the search path) or `:session` (saved with the session
+and not on the search path); `usable` whether it builds, else `problem` says why;
+`changed` the keys in which a definition saved with the session differs from the search
+path's of that id (`diagnostic_diff`; the session's is used); `facility` the definition's
+(`""` without one); `instrument` the instrument it is a configuration of
+(`diagnostic_instrument`) and `config` what tells it from the instrument's other
+configurations (its name without the instrument's: "2012–14" for "NIF Dante 1
+(2012–14)", "default" for the definition named as the instrument). The built-ins
+first, then by id.
 """
 function refresh_diagnostics!(sess::DesignSession)
     tm = sess.time
@@ -959,14 +1051,121 @@ function refresh_diagnostics!(sess::DesignSession)
         d = e === nothing ? p : e.def
         chain = e === nothing ? d.chain : e.chain
         msg = e === nothing ? problem(d) : ""
+        inst = diagnostic_instrument(d)
         push!(rows, (; id, d.name, d.kind, origin = p === nothing ? :session : _builtin_file(p.file) ? :builtin : :user,
                      file = e === nothing ? d.file : e.file, chain, d.public, usable = isempty(msg), problem = msg,
-                     changed = e === nothing || p === nothing ? String[] : diagnostic_diff(e.def, p)))
+                     changed = e === nothing || p === nothing ? String[] : diagnostic_diff(e.def, p),
+                     facility = String(get(d.data, "facility", "")), instrument = inst,
+                     config = _config_label(d.name, inst)))
     end
     sort!(rows; by = r -> (r.origin !== :builtin, r.id))
     tm.issues[] = issues
     tm.catalog[] = rows
     return rows
+end
+
+# What tells a definition named `name` from the other configurations of `instrument`: the
+# name without the instrument's and the brackets around the rest; "default" for the
+# definition named as the instrument.
+function _config_label(name::AbstractString, instrument::AbstractString)
+    name == instrument && return "default"
+    s = startswith(name, instrument) ? name[nextind(name, ncodeunits(instrument)):end] : name
+    s = strip(s, [' ', ',', ':', '·', '-', '–'])
+    startswith(s, '(') && endswith(s, ')') && (s = strip(s[nextind(s, 1):prevind(s, end)]))
+    return isempty(s) ? "default" : String(s)
+end
+
+# A facility name as written in a definition or as the session's symbol, for comparison.
+_facility_key(f) = replace(lowercase(String(f)), r"[^a-z0-9]" => "")
+
+"""
+    diagnostic_here(sess::DesignSession, facility) -> Bool
+
+Whether a diagnostic of `facility` (a definition's `facility` key) belongs to the
+session's: the same facility, a definition without one, or a session whose facility is
+Other (`:custom`), which lists every definition.
+"""
+function diagnostic_here(sess::DesignSession, facility::AbstractString)
+    f = sess.beams.facility[]
+    return f === :custom || isempty(facility) || _facility_key(facility) == _facility_key(f)
+end
+
+"""
+    diagnostic_instruments(sess::DesignSession) -> Vector{NamedTuple}
+
+The diagnostics list of the window: one row per instrument of the session's facility
+([`diagnostic_here`](@ref)), and per recorded instrument of another, grouped by kind as
+[`refresh_diagnostics!`](@ref)'s catalog. Each row is `(; instrument, kind, group, head,
+facility, here, usable, recorded, configs)`: `recorded` the ids of the configurations
+the next drive history records, in the order recorded (empty: not recorded; one, as the
+window records them, unless a script or an earlier session recorded several), `configs`
+the instrument's definitions as catalog rows (the one named as the instrument first,
+then by id), `usable` whether one of them builds, `head` whether the row is the first of
+its `group`.
+"""
+function diagnostic_instruments(sess::DesignSession)
+    rows = diagnostic_catalog(sess)
+    ticked = sess.time.diagnostics[]
+    by = Dict{Tuple{Symbol,String},Vector{Any}}()
+    order = Tuple{Symbol,String}[]
+    for g in _diagnostic_groups(rows)
+        r = g.row
+        k = (r.kind, r.instrument)
+        haskey(by, k) || (by[k] = Any[]; push!(order, k))
+        push!(by[k], r)
+    end
+    out = NamedTuple[]
+    for k in order
+        configs = sort(by[k]; by = r -> (r.config != "default", r.id))
+        recorded = String[id for id in ticked if any(r -> r.id == id, configs)]
+        here = any(r -> diagnostic_here(sess, r.facility), configs)
+        (here || !isempty(recorded)) || continue
+        group = _diagnostic_group(k[1])
+        push!(out, (; instrument = k[2], kind = k[1], group, head = isempty(out) || out[end].group != group,
+                    facility = configs[1].facility, here, usable = any(r -> r.usable, configs), recorded, configs))
+    end
+    return out
+end
+
+"""
+    set_instrument!(sess::DesignSession, instrument, on::Bool = true) -> sess
+
+Record `instrument` (a row of [`diagnostic_instruments`](@ref)) in the next drive
+history, in its first configuration that builds (the default one first), or stop
+recording it. [`set_diagnostic!`](@ref) chooses another configuration. An instrument
+none of whose configurations builds is not recorded; the time status says why.
+"""
+function set_instrument!(sess::DesignSession, instrument::AbstractString, on::Bool = true)
+    rows = [r for r in diagnostic_catalog(sess) if r.instrument == instrument]
+    isempty(rows) && return sess
+    configs = sort(rows; by = r -> (r.config != "default", r.id))
+    if on
+        any(r -> r.id in sess.time.diagnostics[], configs) && return sess
+        j = findfirst(r -> r.usable, configs)
+        j === nothing && (sess.status[] = "$instrument cannot be recorded: " * configs[1].problem; return sess)
+        return set_diagnostic!(sess, configs[j].id, true)
+    end
+    foreach(r -> set_diagnostic!(sess, r.id, false), configs)
+    return sess
+end
+
+"""
+    set_configuration!(sess::DesignSession, id, new) -> sess
+
+Record definition `new` in place of the recorded definition `id` (another configuration
+of its instrument: a chip's menu in the window), where `id` was in the list; when `new`
+is recorded already, `id` is dropped.
+"""
+function set_configuration!(sess::DesignSession, id::AbstractString, new::AbstractString)
+    id, new = String(id), String(new)
+    ids = copy(sess.time.diagnostics[])
+    k = findfirst(==(id), ids)
+    (k === nothing || id == new) && return sess
+    new in ids ? deleteat!(ids, k) : (ids[k] = new)
+    sess.time.diagnostics[] = ids
+    w = _view_part_warning(sess)
+    isempty(w) || (sess.status[] = w)
+    return sess
 end
 
 """
@@ -985,16 +1184,20 @@ function _definition(sess::DesignSession, id::AbstractString)
     r = findfirst(r -> r.id == id, diagnostic_catalog(sess))
     r === nothing && return nothing
     row = diagnostic_catalog(sess)[r]
-    return row.origin === :session ? nothing : Briareus._definitions(diagnostic_paths(), DiagnosticIssue[])[id]
+    # (`nothing` too for one that does not build: it lacks values, e.g. ones that are not public)
+    return row.origin === :session ? nothing : get(Briareus._definitions(diagnostic_paths(), DiagnosticIssue[]), id, nothing)
 end
 
 """
     set_diagnostic!(sess::DesignSession, id, on::Bool = true) -> sess
 
-Record the diagnostic of definition `id` in the next drive history (`on`), or not. A
-ticked definition whose view names a part the design lacks (`center_part`, `area_part`;
-e.g. a part renamed before it was ticked, its definition being the user's file) is
-warned about in the status bar, as it is when a drive history starts.
+Record the diagnostic of definition `id` in the next drive history (`on`), or not.
+Several definitions of one instrument can be recorded side by side (two fields of view
+of one Dante); the window records an instrument once and swaps its configuration
+([`set_instrument!`](@ref), [`set_configuration!`](@ref)). A ticked definition whose
+view names a part the design lacks (`center_part`, `area_part`; e.g. a part renamed
+before it was ticked, its definition being the user's file) is warned about in the
+status bar, as it is when a drive history starts.
 """
 function set_diagnostic!(sess::DesignSession, id::AbstractString, on::Bool = true)
     tm = sess.time
@@ -1177,10 +1380,27 @@ image shows the whole field. The image stays until another is asked
 for: a drive edit does not replace it.
 """
 function show_diagnostic_image!(sess::DesignSession, id::AbstractString, frame::Integer = 0)
+    im = diagnostic_image(sess, id, frame)
+    im === nothing && return sess
+    sess.drive.image_request[] = nothing                     # not the drive's camera image
+    sess.drive.image[] = im
+    set_view!(sess.drive, :image)
+    return sess
+end
+
+"""
+    diagnostic_image(sess::DesignSession, id, frame::Integer = 0) -> Union{Nothing,NamedTuple}
+
+An image of recorded imager `id` of the latest drive history, as
+[`show_diagnostic_image!`](@ref) shows it: `(; x, y, values, title, unit, window)` with
+`values[i, j]` at `(x[i], y[j])` (mm on the object plane) and `window` the region with
+signal. `nothing` without a history or such an imager.
+"""
+function diagnostic_image(sess::DesignSession, id::AbstractString, frame::Integer = 0)
     h = sess.time.history[]
-    h === nothing && return sess
+    h === nothing && return nothing
     j = findfirst(d -> d.id == id && d.frames !== nothing, h.diagnostics)
-    j === nothing && return sess
+    j === nothing && return nothing
     d = h.diagnostics[j]
     t = sess.drive.scenario[].target
     if frame == 0
@@ -1199,10 +1419,103 @@ function show_diagnostic_image!(sess::DesignSession, id::AbstractString, frame::
     w = cam.width / 2
     x = range(-w, w; length = cam.nx)
     values = permutedims(img[end:-1:1, :])
-    sess.drive.image_request[] = nothing                     # not the drive's camera image
-    sess.drive.image[] = (; x, y = x, values, title, unit, window = _signal_window(x, x, values))
-    set_view!(sess.drive, :image)
-    return sess
+    return (; x, y = x, values, title, unit, window = _signal_window(x, x, values))
+end
+
+# An image as CSV: a comment line with `title`, then a header of the x coordinates (mm)
+# and one row per y coordinate (mm) with the values; `values[i, j]` is at `(x[i], y[j])`.
+function _write_image(path::AbstractString, x, y, values, title::AbstractString)
+    open(path, "w") do io
+        println(io, "# ", title, "; rows: y_mm, columns: x_mm")
+        println(io, "y_mm\\x_mm,", join((@sprintf("%.6g", a) for a in x), ","))
+        for j in eachindex(y)
+            println(io, @sprintf("%.6g", y[j]), ",", join((@sprintf("%.6g", values[i, j]) for i in eachindex(x)), ","))
+        end
+    end
+    return path
+end
+
+"""
+    export_history(sess::DesignSession, dir) -> Vector{String}
+
+Write the latest drive history to the folder `dir` as CSV files and return their paths:
+
+- `history.csv`: against `time_ns`, the observed surface's `Tr_eV` and the capsule's
+  `a1_over_a0` … `a4_over_a0` (or a flat face's mean, peak and lowest flux in W/cm² and
+  its RMS nonuniformity), each cavity's wall temperature (`<cavity>_wall_Tr_eV`), each
+  energy series (`energy_<name>_kJ`, cumulative) and each recorded diagnostic's
+  brightness temperature and intensity toward it (`<id>_Tr_eV`, `<id>_TW_per_sr`; an
+  imager's detected intensity);
+- `history_laser_Wcm2.csv`, `history_radiosity_Wcm2.csv`, `history_incident_Wcm2.csv`:
+  per element of the drive's target (`element`, `component`) one column per step
+  (`t_<time>ns`), the fields the time cursor shows;
+- `image_<id>_<frame>.csv`: each recorded imager's recording (`integrated`, or
+  `frame<k>` per gate; detected fluence per steradian, J/cm²/sr), as [`export_results`](@ref)
+  writes the image view's image.
+
+Throws without a history; [`export_results`](@ref) calls it for a current one.
+"""
+function export_history(sess::DesignSession, dir::AbstractString)
+    h = sess.time.history[]
+    h === nothing && throw(ArgumentError("run the drive history first"))
+    mkpath(dir)
+    files = String[]
+    cols = Pair{String,Vector{Float64}}["time_ns" => h.time, "Tr_eV" => h.Tr]
+    for l in axes(h.legendre, 1)
+        push!(cols, "a$(l)_over_a0" => h.legendre[l, :])
+    end
+    f = h.face
+    f === nothing || append!(cols, ["face_mean_Wcm2" => f.mean, "face_peak_Wcm2" => f.peak,
+                                    "face_lowest_Wcm2" => f.low, "face_rms" => f.rms])
+    for c in h.cavities
+        push!(cols, String(c.name) * "_wall_Tr_eV" => c.Tr)
+    end
+    for s in h.energy
+        push!(cols, "energy_" * String(s.name) * "_kJ" => s.values)
+    end
+    for d in h.diagnostics
+        any(isfinite, d.Tr) && push!(cols, d.id * "_Tr_eV" => d.Tr)
+        any(isfinite, d.intensity) && push!(cols, d.id * "_TW_per_sr" => d.intensity)
+    end
+    path = joinpath(dir, "history.csv")
+    open(path, "w") do io
+        println(io, join(first.(cols), ","))
+        for k in eachindex(h.time)
+            println(io, join((@sprintf("%.8g", last(c)[k]) for c in cols), ","))
+        end
+    end
+    push!(files, path)
+    # the fields per element and step, on the drive's elements
+    s = sess.drive.scenario[]
+    t = s === nothing ? nothing : s.target
+    for field in DRIVE_FIELDS
+        M = get(h.fields, field, nothing)
+        (M === nothing || t === nothing || size(M, 1) != nelements(t)) && continue
+        path = joinpath(dir, "history_$(field)_Wcm2.csv")
+        open(path, "w") do io
+            println(io, "element,component,", join((@sprintf("t_%.4gns", τ) for τ in h.time), ","))
+            for e in axes(M, 1)
+                println(io, e, ",", t.components[t.elem_comp[e]].name, ",",
+                        join((@sprintf("%.6g", M[e, k]) for k in axes(M, 2)), ","))
+            end
+        end
+        push!(files, path)
+    end
+    # the imagers' recordings
+    for d in h.diagnostics
+        d.frames === nothing && continue
+        cam = d.view.camera
+        x = range(-cam.width / 2, cam.width / 2; length = cam.nx)
+        for (k, img) in enumerate(d.frames.images)
+            name = isempty(d.frames.times) ? "integrated" : "frame$k"
+            title = isempty(d.frames.times) ? d.name * ", time-integrated" :
+                    @sprintf("%s, frame %d (%.2f ns)", d.name, k, d.frames.times[k])
+            values = permutedims(1e5 .* img[end:-1:1, :])               # kJ/mm²/sr to J/cm²/sr
+            push!(files, _write_image(joinpath(dir, "image_$(d.id)_$name.csv"), x, x, values,
+                                      title * ", J/cm²/sr (detected)"))
+        end
+    end
+    return files
 end
 
 # The region of an image with signal, for the image view's first limits: `(x0, x1, y0,

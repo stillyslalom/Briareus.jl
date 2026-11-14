@@ -44,9 +44,9 @@ const U3 = Briareus.Vec3
     # a frame has no surface fields and no role
     @test !edit_part!(ts, i, :albedo, "0.5") && occursin("no field", ts.error[])
     @test !set_part_role!(ts, i, :foil)
-    # removal is refused while a part is placed in it, then allowed; its beams keep their aims
-    @test frame_users(ts, :mount) == [:shield]
-    @test !remove_part!(ts, i) && occursin("in use", ts.error[]) && occursin("shield", ts.error[])
+    # a part is placed in it: removing the frame would place the part elsewhere; removed
+    # once nothing is in it, its beams keep their aims
+    @test frame_users(ts, :mount) == [:shield] && replaced_parts(ts, [:mount]) == [:shield]
     @test remove_part!(ts, part_index(ts, :shield))
     a = [bt.beams[][i].aim for i in idx]
     @test remove_part!(ts, part_index(ts, :mount))

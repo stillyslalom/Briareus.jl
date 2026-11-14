@@ -16,16 +16,12 @@ ColumnLayout {
         Button {
             text: "Add frame"
             onClicked: Julia.br_add_frame()
-            ToolTip.visible: hovered
-            ToolTip.delay: 400
-            ToolTip.text: "A user frame at TCC, with the chamber's axes"
+            Tip { visible: parent.hovered; text: "A user frame at TCC, with the chamber's axes" }
         }
         Button {
             text: "Transform…"
             onClicked: Julia.br_open_transform()
-            ToolTip.visible: hovered
-            ToolTip.delay: 400
-            ToolTip.text: "Coordinates of a point or direction between any two frames"
+            Tip { visible: parent.hovered; text: "Coordinates of a point or direction between any two frames" }
         }
     }
     RowLayout {
@@ -36,9 +32,7 @@ ColumnLayout {
             Layout.fillWidth: true
             model: app.portChoices
             enabled: app.portChoices.length > 0
-            ToolTip.visible: hovered
-            ToolTip.delay: 400
-            ToolTip.text: "The ports of the beam table (a NIF quad at the NIF port table's angles)"
+            Tip { visible: parent.hovered; text: "A port of the beam set" }
         }
         Button {
             text: "Add port frame"

@@ -31,14 +31,14 @@ const PRESET_LABELS = Dict(:nif_quads => "NIF quads (48)", :nif_beams => "NIF be
 
 """
 Facilities: `:nif`, `:omega`, `:omega_ep` and `:custom` (another facility, or none).
-The facility decides the presets offered ([`FACILITY_PRESETS`](@ref)) and the checks
-that apply: the TaLIS target-configuration rules are NIF's. OMEGA EP's port geometry
-is not built in: its beams come from a beam table or a VisRad file.
+The facility decides the presets offered ([`FACILITY_PRESETS`](@ref)), the diagnostics
+listed and the checks that apply: the TaLIS target-configuration rules are NIF's. OMEGA
+EP's port geometry is not built in: its beams come from a beam table or a VisRad file.
 """
 const FACILITIES = (:nif, :omega, :omega_ep, :custom)
 
 const FACILITY_LABELS = Dict(:nif => "NIF", :omega => "OMEGA", :omega_ep => "OMEGA EP",
-                             :custom => "Other (imported beams)")
+                             :custom => "Other")
 
 "Beam presets of each facility (the first is the default)."
 const FACILITY_PRESETS = Dict(:nif => (:nif_quads, :nif_beams),
@@ -316,9 +316,11 @@ end
 # when `F` is the reference (the default hohlraum at TCC: bit for bit).
 _reaim(a, F::Frame, ref::Frame) = F == ref ? Vec3(a) : Vec3(to_chamber(F, to_frame(ref, a)))
 
-# Point each cone at (r, z) with top/bottom mirroring.
+# Point each cone at (r, z) with top/bottom mirroring, each quad's beams at one point
+# (`unit = :quad`: r toward the quad's port azimuth), so the 192 beams aim where the 48
+# quads do.
 function _cone_pointing(bs, rz)
-    p = GroupPointing(bs; by = :group, fields = (:r, :z))
+    p = GroupPointing(bs; by = :group, fields = (:r, :z), unit = :quad)
     x = initial_parameters(p)
     for (g, k) in enumerate(p.keys)
         haskey(rz, k) || continue
@@ -332,16 +334,43 @@ end
 
 Choose the facility ([`FACILITIES`](@ref)). If the table's preset belongs to another
 facility, the new facility's first preset replaces it (pointed for the design `target`,
-[`preset_beams`](@ref)); a facility without presets keeps the beams.
+[`preset_beams`](@ref)); a facility without presets (OMEGA EP, Other) takes the other
+facility's preset beams out, leaving an empty table to import into. Imported beams
+(`:custom`) are kept: the facility is then the one they are said to belong to.
 """
 function set_facility!(bt::BeamTable, facility::Symbol; kwargs...)
     facility in FACILITIES || throw(ArgumentError("facility must be one of $FACILITIES"))
-    _assign!(bt.facility, facility)
     ps = FACILITY_PRESETS[facility]
-    if !isempty(ps) && facility_of(bt.preset[]) !== facility
-        load_preset!(bt, first(ps); kwargs...)
+    old = facility_of(bt.preset[])
+    if !isempty(ps)
+        old === facility || load_preset!(bt, first(ps); kwargs...)
+    elseif old !== nothing
+        set_beams!(bt, Beam{Float64}[]; preset = :custom)
     end
+    _assign!(bt.facility, facility)
     return bt
+end
+
+"""
+    beams_label(bt::BeamTable) -> String
+
+What the table holds, for the model tree's Beams node and the summaries: a preset's
+label ([`PRESET_LABELS`](@ref); a NIF preset whose quads were split or merged since
+reads as what it holds now, "NIF quads (48) as 192 beams"), or for imported or scripted
+beams the facility's with "(imported)" (plain "imported table" for the facility Other;
+the facility's label alone for an empty table).
+"""
+function beams_label(bt::BeamTable)
+    p, f = bt.preset[], bt.facility[]
+    if p !== :custom
+        label = get(PRESET_LABELS, p, String(p))
+        p in (:nif_quads, :nif_beams) || return label
+        n, nq = length(bt.beams[]), length(unique(b.quad for b in bt.beams[]))
+        n == (p === :nif_quads ? nq : 4nq) && return label
+        return n == nq ? "NIF quads ($nq)" : "NIF quads ($nq) as $n beams"
+    end
+    isempty(bt.beams[]) && return FACILITY_LABELS[f]
+    return f === :custom ? PRESET_LABELS[:custom] : FACILITY_LABELS[f] * " (imported)"
 end
 
 """
@@ -521,6 +550,63 @@ function _check_grouping(beams, by::Symbol)
     return nothing
 end
 
+# Each beam's share of its quad: one over the number of the table's beams that carry its
+# quad name (a NIF quad held as one beam: 1; one of its four beams: 1/4); 1 without a
+# quad name.
+function _quad_shares(bs)
+    n = Dict{String,Int}()
+    for b in bs
+        isempty(b.quad) || (n[b.quad] = get(n, b.quad, 0) + 1)
+    end
+    return Float64[isempty(b.quad) ? 1.0 : 1 / n[b.quad] for b in bs]
+end
+
+# The first group whose enabled beams hold quads both as one beam and as several, or
+# `nothing`: one power per beam of such a group is not one power per quad.
+function _mixed_quads(bt::BeamTable)
+    sh = _quad_shares(bt.beams[])
+    seen = Dict{Symbol,Float64}()
+    for i in findall(bt.enabled[])
+        c = bt.cluster[][i]
+        get!(seen, c, sh[i]) == sh[i] || return c
+    end
+    return nothing
+end
+
+"""
+    power_unit(bt::BeamTable, idx) -> Symbol
+
+The unit the power of the beams `idx` is given in: `:quad` when they are whole quads
+(every beam has a quad name, and every beam of each quad among them is in `idx`),
+`:beam` otherwise. A quad is the unit of power whether the table holds it as one beam
+or as its four: splitting a quad into beams for the deposition leaves its row's power
+as it was.
+"""
+function power_unit(bt::BeamTable, idx)
+    bs = bt.beams[]
+    (isempty(idx) || any(i -> isempty(bs[i].quad), idx)) && return :beam
+    sh = _quad_shares(bs)
+    return sum(sh[i] for i in idx) ≈ length(unique(bs[i].quad for i in idx)) ? :quad : :beam
+end
+
+# The power of the beams `idx` in their unit (`power_unit`): the mean per quad (the
+# total over the number of quads), or the mean per beam.
+function _unit_power(bt::BeamTable, idx)
+    bs = bt.beams[]
+    P = sum(bs[i].power for i in idx)
+    return power_unit(bt, idx) === :quad ? P / length(unique(bs[i].quad for i in idx)) : P / length(idx)
+end
+
+# `bs` with the power of the beams `idx` set to `v` in their unit: every quad to `v`,
+# shared equally among its beams, or every beam to `v`.
+function _with_unit_power!(bs, bt::BeamTable, idx, v::Real)
+    sh = power_unit(bt, idx) === :quad ? _quad_shares(bt.beams[]) : nothing
+    for i in idx
+        bs[i] = remake(bs[i]; power = Float64(sh === nothing ? v : v * sh[i]))
+    end
+    return bs
+end
+
 # Rows group by cluster with z mirrored top/bottom (one value describes a cone); per
 # quad or beam, z is the aim's own coordinate.
 _mirror(by::Symbol) = by === :group
@@ -532,8 +618,10 @@ function _keyfun(bt::BeamTable, by::Symbol)
     return b -> d[b.name]
 end
 
+# (`unit = :quad`: the radial and tangential offsets are in the quad's port azimuth, so a
+# row's value puts each quad's beams at one aim point, held as one beam or as four)
 _pointing(bt::BeamTable, fields; by::Symbol = bt.by[]) =
-    GroupPointing(bt.beams[]; by = _keyfun(bt, by), fields, mirror = _mirror(by))
+    GroupPointing(bt.beams[]; by = _keyfun(bt, by), fields, mirror = _mirror(by), unit = :quad)
 
 """
     beam_rows(bt::BeamTable; by = bt.by[]) -> Vector{NamedTuple}
@@ -542,7 +630,10 @@ One row per group of the grouping `by` (the table's by default): `key` (cone, qu
 (beams), `members` (beam indices), `theta`/`phi` (port angles, degrees: per cone the
 mean polar angle from the nearer pole and `NaN` azimuth; per quad or beam the mean
 port angles), the mean
-`z`, `r`, `phi_offset`, `defocus` (mm) and `power` (TW per beam), `aim_frame` (the
+`z`, `r`, `phi_offset` (the radial and tangential offsets in each quad's port azimuth,
+`GroupPointing`'s `unit = :quad`: a quad's beams at one aim point read the same values
+whether it is held as one beam or as four), `defocus` (mm), `power` (TW, the mean per `power_unit`: per quad
+for rows of whole quads, per beam otherwise; see [`power_unit`](@ref)), `aim_frame` (the
 frame the members aim in, or `nothing` when they aim in different ones), and `enabled`
 (`true`, `false`, or `missing` when only some members are enabled).
 """
@@ -564,7 +655,7 @@ function beam_rows(bt::BeamTable; by::Symbol = bt.by[])
         fs = unique(bt.aim_frame[][mem])
         (; key = string(k), count = length(mem), members = mem, theta = θ, phi = φ,
          z = x[(g-1)*nf+1], r = x[(g-1)*nf+2], phi_offset = x[(g-1)*nf+3],
-         defocus = x[(g-1)*nf+4], power = x[(g-1)*nf+5],
+         defocus = x[(g-1)*nf+4], power = _unit_power(bt, mem), power_unit = power_unit(bt, mem),
          aim_frame = length(fs) == 1 ? fs[1] : nothing,
          enabled = on == length(mem) ? true : on == 0 ? false : missing)
     end
@@ -614,7 +705,8 @@ end
 
 Set `field` (one of [`BEAM_FIELDS`](@ref)) of every beam in `row` of
 [`beam_rows`](@ref) (with grouping `by`) from text-field text. Only that field
-changes. A rejected value sets `error` and returns `false`.
+changes. The power is in the row's unit ([`power_unit`](@ref)): per quad, shared equally
+among the quad's beams, or per beam. A rejected value sets `error` and returns `false`.
 """
 function edit_beams!(bt::BeamTable, row::Integer, field::Symbol, text; by::Symbol = bt.by[])
     field in BEAM_FIELDS || throw(ArgumentError("beam field must be one of $BEAM_FIELDS"))
@@ -622,6 +714,12 @@ function edit_beams!(bt::BeamTable, row::Integer, field::Symbol, text; by::Symbo
         v = _parse_number(text, field === :power ? "power" : "$field"; nonnegative = field === :power)
         p = _pointing(bt, (field,); by)
         1 <= row <= length(p.keys) || throw(ArgumentError("no beam-table row $row"))
+        if field === :power
+            mem = p.members[row]
+            _unit_power(bt, mem) == v || _set_aims!(bt, _with_unit_power!(copy(bt.beams[]), bt, mem, v))
+            bt.error[] = ""
+            return true
+        end
         x = initial_parameters(p)
         x[row] == v && (bt.error[] = ""; return true)
         x[row] = v
@@ -812,8 +910,7 @@ function beams_summary(bt::BeamTable)
     n == 0 && return "no beams"
     act = active_beams(bt)
     P = sum(b.power for b in act; init = 0.0)
-    src = get(PRESET_LABELS, bt.preset[], String(bt.preset[]))
-    return @sprintf("%d of %d beams on · %.4g TW · %s", length(act), n, P, src)
+    return @sprintf("%d of %d beams on · %.4g TW · %s", length(act), n, P, beams_label(bt))
 end
 
 "Ports of a beam list (what a deposition operator is tied to)."
@@ -870,14 +967,15 @@ _set_mirror(bs, idx) = any(i -> bs[i].port[3] > 0, idx) && any(i -> bs[i].port[3
 function _set_pointing(bt::BeamTable, idx, fields)
     S = Set(bt.beams[][i].name for i in idx)
     p = GroupPointing(bt.beams[]; by = b -> b.name in S, fields,
-                      mirror = _set_mirror(bt.beams[], idx))
+                      mirror = _set_mirror(bt.beams[], idx), unit = :quad)
     return p, findfirst(==(true), p.keys)
 end
 
 """
     beam_set_values(bt::BeamTable, idx) -> NamedTuple
 
-Mean `z`, `r`, `phi` (tangential offset), `defocus` (mm) and `power` (TW per beam) of
+Mean `z`, `r`, `phi` (tangential offset), `defocus` (mm) and `power` (TW per
+`power_unit`: per quad for whole quads, per beam otherwise, [`power_unit`](@ref)) of
 the beams `idx`, as [`edit_beam_set!`](@ref) reads them (z mirrored when the set spans
 both hemispheres: `mirrored`), their mean Cartesian `aim` in the chamber, `aim_frame`
 (the frame they all aim in, or `nothing` when they differ), `aim_local` (their mean aim
@@ -896,7 +994,8 @@ function beam_set_values(bt::BeamTable, idx)
     aim_frame = length(fs) == 1 ? fs[1] : nothing
     aim_local = aim_frame === nothing ? aim : sum(bt.aim_local[][i] for i in idx) / length(idx)
     on = count(i -> bt.enabled[][i], idx)
-    return (; z = v(:z), r = v(:r), phi = v(:phi), defocus = v(:defocus), power = v(:power), aim,
+    return (; z = v(:z), r = v(:r), phi = v(:phi), defocus = v(:defocus), power = _unit_power(bt, idx),
+            power_unit = power_unit(bt, idx), aim,
             aim_frame, aim_local, count = length(idx), mirrored = _set_mirror(bs, idx),
             enabled = on == length(idx) ? true : on == 0 ? false : missing)
 end
@@ -917,7 +1016,10 @@ function edit_beam_set!(bt::BeamTable, idx, field::Symbol, text)
         idx = _check_set(bt, idx)
         v = _parse_number(text, field === :power ? "power" : "$field"; nonnegative = field === :power)
         bs = copy(bt.beams[])
-        if field in BEAM_FIELDS
+        if field === :power
+            _unit_power(bt, idx) == v && (bt.error[] = ""; return true)
+            _with_unit_power!(bs, bt, idx, v)
+        elseif field in BEAM_FIELDS
             p, g = _set_pointing(bt, idx, (field,))
             x = initial_parameters(p)
             x[g] == v && (bt.error[] = ""; return true)
@@ -1033,10 +1135,11 @@ rename_cluster!(bt::BeamTable, old, new) =
 
 Replace a NIF quad that the table holds as one beam (`nif_quads`) by its four beams
 (`nif_beams`: their own ports and f/20.7 cones), each with the quad's aim, defocus,
-detuning, spot and group, and a quarter of its power, so its beams can be pointed
-apart (split quads). The quad's enabled flag and unconverted-light participation carry
-over. Ports change, so the drive
-must be computed again.
+detuning, spot and group, and a quarter of its power, so its beams deposit from their
+own ports and can be pointed apart (split quads). The quad's enabled flag and
+unconverted-light participation carry over. Ports change, so the drive must be computed
+again. The quad stays the unit of pointing and power: its node and its row edit the
+four beams together ([`power_unit`](@ref)).
 """
 function split_quad!(bt::BeamTable, quad::AbstractString)
     try
@@ -1045,25 +1148,85 @@ function split_quad!(bt::BeamTable, quad::AbstractString)
         i === nothing && throw(ArgumentError("no quad $quad in the table"))
         count(b -> b.quad == quad, bs) == 1 ||
             throw(ArgumentError("quad $quad is already split into its beams"))
-        q = bs[i]
-        parts = [remake(b; aim = q.aim, defocus = q.defocus, dlambda = q.dlambda, spot = q.spot,
-                        power = q.power / 4, group = q.group)
-                 for b in nif_beams() if b.quad == quad]
-        length(parts) == 4 || throw(ArgumentError("$quad is not a NIF quad"))
-        nb = vcat(bs[1:i-1], parts, bs[i+1:end])
-        en = vcat(bt.enabled[][1:i-1], fill(bt.enabled[][i], 4), bt.enabled[][i+1:end])
-        cl = vcat(bt.cluster[][1:i-1], fill(bt.cluster[][i], 4), bt.cluster[][i+1:end])
-        af = vcat(bt.aim_frame[][1:i-1], fill(bt.aim_frame[][i], 4), bt.aim_frame[][i+1:end])
-        al = vcat(bt.aim_local[][1:i-1], fill(bt.aim_local[][i], 4), bt.aim_local[][i+1:end])
-        uc = vcat(bt.unconverted[][1:i-1], fill(bt.unconverted[][i], 4), bt.unconverted[][i+1:end])
-        set_beams!(bt, nb; preset = bt.preset[], enabled = en, cluster = cl, aim_frame = af,
-                   aim_local = al, unconverted = uc)
+        any(b -> b.quad == quad, nif_beams()) || throw(ArgumentError("$quad is not a NIF quad"))
+        _split_at!(bt, [i])
         return true
     catch err
         err isa ArgumentError || rethrow()
         bt.error[] = _errmsg(err)
         return false
     end
+end
+
+"""
+    split_quads!(bt::BeamTable, idx = every beam) -> Int
+
+Split every NIF quad that the table holds as one beam among the beams `idx` into its
+four beams ([`split_quad!`](@ref)), in one edit: a group's quads, or the whole table's.
+Returns how many were split (0, with `error` set, when there is none to split).
+"""
+function split_quads!(bt::BeamTable, idx = eachindex(bt.beams[]))
+    todo = quads_to_split(bt, idx)
+    isempty(todo) && (bt.error[] = "no quad held as one beam to split among these beams"; return 0)
+    _split_at!(bt, todo)
+    return length(todo)
+end
+
+const _NIF_QUAD_NAMES = Ref{Union{Nothing,Set{String}}}(nothing)
+# The names of the NIF quads (what can be split and merged).
+function _nif_quad_names()
+    _NIF_QUAD_NAMES[] === nothing && (_NIF_QUAD_NAMES[] = Set(String(b.quad) for b in nif_quads()))
+    return _NIF_QUAD_NAMES[]
+end
+
+"""
+    quads_to_split(bt::BeamTable, idx = every beam) -> Vector{Int}
+    quads_to_merge(bt::BeamTable, idx = every beam) -> Vector{String}
+
+What [`split_quads!`](@ref) and [`merge_quads!`](@ref) act on among the beams `idx`: the
+table indices of the NIF quads held as one beam, and the names of the NIF quads held as
+their four beams.
+"""
+function quads_to_split(bt::BeamTable, idx = eachindex(bt.beams[]))
+    bs = bt.beams[]
+    sh = _quad_shares(bs)
+    nif = _nif_quad_names()
+    return Int[i for i in idx if sh[i] == 1 && bs[i].quad in nif]
+end
+
+@doc (@doc quads_to_split)
+function quads_to_merge(bt::BeamTable, idx = eachindex(bt.beams[]))
+    bs = bt.beams[]
+    sh = _quad_shares(bs)
+    nif = _nif_quad_names()
+    return unique(String[bs[i].quad for i in idx if sh[i] == 0.25 && bs[i].quad in nif])
+end
+
+# Replace the quad beams at table indices `at` by their four beams each.
+function _split_at!(bt::BeamTable, at)
+    bs = bt.beams[]
+    four = Dict{String,Vector{Beam{Float64}}}()
+    for b in nif_beams()
+        push!(get!(four, b.quad, Beam{Float64}[]), _float_beam(b))
+    end
+    S = Set(at)
+    nb, keep = Beam{Float64}[], Int[]              # the new beams, and the old index of each
+    for (i, q) in enumerate(bs)
+        if i in S
+            for b in four[q.quad]
+                push!(nb, remake(b; aim = q.aim, defocus = q.defocus, dlambda = q.dlambda, spot = q.spot,
+                                 power = q.power / 4, group = q.group))
+                push!(keep, i)
+            end
+        else
+            push!(nb, q)
+            push!(keep, i)
+        end
+    end
+    set_beams!(bt, nb; preset = bt.preset[], enabled = bt.enabled[][keep], cluster = bt.cluster[][keep],
+               aim_frame = bt.aim_frame[][keep], aim_local = bt.aim_local[][keep],
+               unconverted = bt.unconverted[][keep])
+    return bt
 end
 
 """
@@ -1076,24 +1239,48 @@ unconverted-light participation.
 function merge_quad!(bt::BeamTable, quad::AbstractString)
     try
         bs = bt.beams[]
-        idx = findall(b -> b.quad == quad, bs)
-        length(idx) == 4 || throw(ArgumentError("quad $quad is not split into four beams"))
-        tmpl = findfirst(b -> b.quad == quad, nif_quads())
-        tmpl === nothing && throw(ArgumentError("$quad is not a NIF quad"))
-        b1 = bs[idx[1]]
-        q = remake(nif_quads()[tmpl]; aim = sum(bs[i].aim for i in idx) / 4,
-                   defocus = sum(bs[i].defocus for i in idx) / 4, dlambda = b1.dlambda,
-                   power = sum(bs[i].power for i in idx), spot = b1.spot, group = b1.group)
-        keep = setdiff(eachindex(bs), idx[2:end])
-        nb = copy(bs)
-        nb[idx[1]] = q
-        set_beams!(bt, nb[keep]; preset = bt.preset[], enabled = bt.enabled[][keep],
-                   cluster = bt.cluster[][keep], aim_frame = bt.aim_frame[][keep],
-                   unconverted = bt.unconverted[][keep])
+        count(b -> b.quad == quad, bs) == 4 || throw(ArgumentError("quad $quad is not split into four beams"))
+        any(b -> b.quad == quad, nif_quads()) || throw(ArgumentError("$quad is not a NIF quad"))
+        _merge_quads!(bt, [String(quad)])
         return true
     catch err
         err isa ArgumentError || rethrow()
         bt.error[] = _errmsg(err)
         return false
     end
+end
+
+"""
+    merge_quads!(bt::BeamTable, idx = every beam) -> Int
+
+Merge every NIF quad split into its four beams that has a beam among `idx` back into
+one beam ([`merge_quad!`](@ref)), in one edit. Returns how many were merged (0, with
+`error` set, when there is none).
+"""
+function merge_quads!(bt::BeamTable, idx = eachindex(bt.beams[]))
+    quads = quads_to_merge(bt, idx)
+    isempty(quads) && (bt.error[] = "no quad split into its four beams among these beams"; return 0)
+    _merge_quads!(bt, quads)
+    return length(quads)
+end
+
+# Replace the four beams of each of `quads` by the quad as one beam, at its first beam's row.
+function _merge_quads!(bt::BeamTable, quads)
+    bs = bt.beams[]
+    tmpl = Dict(b.quad => b for b in nif_quads())
+    nb = copy(bs)
+    drop = Set{Int}()
+    for quad in quads
+        idx = findall(b -> b.quad == quad, bs)
+        b1 = bs[idx[1]]
+        nb[idx[1]] = remake(tmpl[quad]; aim = sum(bs[i].aim for i in idx) / 4,
+                            defocus = sum(bs[i].defocus for i in idx) / 4, dlambda = b1.dlambda,
+                            power = sum(bs[i].power for i in idx), spot = b1.spot, group = b1.group)
+        union!(drop, idx[2:end])
+    end
+    keep = setdiff(eachindex(bs), drop)
+    set_beams!(bt, nb[keep]; preset = bt.preset[], enabled = bt.enabled[][keep],
+               cluster = bt.cluster[][keep], aim_frame = bt.aim_frame[][keep],
+               unconverted = bt.unconverted[][keep])
+    return bt
 end

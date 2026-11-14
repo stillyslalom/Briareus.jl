@@ -524,6 +524,24 @@ end
 beam_id(b::Beam) = "beam:" * b.name
 
 """
+    picked_beam_id(sess, i) -> String
+
+The tree node that a click on beam `i` in the 3D view selects: the beam's, or its
+quad's when the quad is held as several beams and its node is closed in the model tree.
+A quad stays the unit of pointing and power after it is split into its beams; opening
+its node in the tree makes its beams selectable one by one.
+"""
+function picked_beam_id(sess, i::Integer)
+    bt = sess.beams
+    b = bt.beams[][i]
+    isempty(b.quad) && return beam_id(b)
+    g = bt.cluster[][i]
+    count(j -> bt.beams[][j].quad == b.quad && bt.cluster[][j] === g, eachindex(bt.beams[])) > 1 || return beam_id(b)
+    qid = "quad:" * b.quad * "@" * String(g)
+    return qid in sess.view.expanded[] ? beam_id(b) : qid
+end
+
+"""
     TreeRow
 
 One visible row of the model tree: `id`, `depth`, `label`, `detail`, `kind` (the id's
@@ -726,9 +744,9 @@ function model_tree(sess)
         _row(id, depth, label, detail, expandable, id in ex, _tri(count(en[idx]), length(idx)), "", sel;
              color, matrix = beam_matrix(sess, idx))
     push!(rows, isempty(bs) ?
-                _row("beams", 0, "Beams: " * get(PRESET_LABELS, bt.preset[], String(bt.preset[])),
-                     "0 of 0 on", false, false, -1, "", sel) :
-                brow("beams", 0, "Beams: " * get(PRESET_LABELS, bt.preset[], String(bt.preset[])),
+                _row("beams", 0, "Beams: " * beams_label(bt), "no beams: import a beam table", false, false,
+                     -1, "", sel) :
+                brow("beams", 0, "Beams: " * beams_label(bt),
                      all(en) ? "all on" : @sprintf("%d of %d on", count(en), length(bs)), true,
                      collect(eachindex(bs))))
     if "beams" in ex && !isempty(bs)

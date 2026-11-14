@@ -378,16 +378,22 @@ mutable struct SweepRowItem
     objective::String
 end
 
-# One diagnostic definition of the time panel's list.
+# One instrument of the Diagnostics tab's list (`diagnostic_instruments`): one row per
+# instrument, or one per recorded configuration of an instrument recorded in several (a
+# script's, an earlier session's): the list shows the `first` rows, the chips the ticked.
 mutable struct DiagRow
-    id::String
-    name::String
-    ticked::Bool
+    id::String                                     # the recorded definition, else the one a tick records
+    name::String                                   # the instrument
+    kind::String                                   # the diagnostic kind (the tab's category)
+    ticked::Bool                                   # recorded in the next drive history
     usable::Bool
     changed::Bool                                  # saved with the session, differs from the search path's
     tip::String
-    group::String                                  # the kind's group in the picker
-    head::Bool                                     # the first row of its group
+    config::String                                 # the recorded configuration ("" with one only)
+    configIds::String                              # the instrument's configurations, joined by "|":
+    configLabels::String                           # their definitions' ids and their labels
+    foreign::Bool                                  # of another facility than the session's
+    first::Bool                                    # the instrument's first row
 end
 
 # One folder of the diagnostic search path; one problem found in its definitions.
@@ -473,7 +479,8 @@ const _MODEL_ROWS = (treeModel = TreeItem, partFieldModel = FieldRow,
                      compModel = CompRow, clearModel = ClearRow, worstModel = ClearRow,
                      talisCompModel = CompRow, ruleModel = RuleRow, talisModel = TalisRow,
                      noteModel = NoteRow, timeLegendModel = LegendRow, sweepModel = SweepRowItem,
-                     sweepLegendModel = LegendRow, diagModel = DiagRow, folderModel = FolderRow,
+                     sweepLegendModel = LegendRow, diagLegendModel = LegendRow, diagModel = DiagRow,
+                     folderModel = FolderRow,
                      issueModel = IssueRow, diagImageModel = ImageRow)
 
 """
@@ -487,6 +494,8 @@ mutable struct BriareusShell
     map::MapCanvas
     time::TimeCanvas
     sweep::TimeCanvas
+    diag::TimeCanvas                               # the Diagnostics tab's chart
+    diag_image::MapCanvas                          # and its image, on the tab's one canvas in turn
     app::JuliaPropertyMap
     rows::Dict{Symbol,Vector}
     models::Dict{Symbol,JuliaItemModel}
@@ -504,11 +513,20 @@ function BriareusShell(sess::DesignSession; queue::Channel{Any} = Channel{Any}(I
     models = Dict{Symbol,JuliaItemModel}(k => JuliaItemModel(rows[k]) for k in keys(_MODEL_ROWS))
     scene = scene_canvas(sess)
     sh = BriareusShell(sess, scene, map_canvas(sess), time_canvas(sess), sweep_canvas(sess),
+                       diagnostics_canvas(sess), image_canvas(),
                        JuliaPropertyMap(), rows, models, queue, Ref(true), Dict{String,Any}(),
                        scene.fig, "", nothing, Figure(size = (40, 40)))
     sh.app["canvas"] = scene.fig
     sh.app["timeCanvas"] = sh.time.fig
     sh.app["sweepCanvas"] = sh.sweep.fig
+    # the Diagnostics tab's one canvas shows the chart or the image, by category
+    sh.app["diagCanvas"] = sh.diag.fig
+    sh.shown["_diagFigure"] = sh.diag.fig
+    _set!(sh, "diagCategory", "xray_power")
+    _set!(sh, "pulseShapeKeys", [String(k) for k in PULSE_SHAPES])
+    _set!(sh, "pulseShapeLabels", [PULSE_SHAPE_LABELS[k] for k in PULSE_SHAPES])
+    _set!(sh, "facilityKeys", [String(f) for f in FACILITIES])
+    _set!(sh, "facilityLabels", [FACILITY_LABELS[f] for f in FACILITIES])
     # a figure is shown on one canvas at a time: the side canvas holds a blank one
     # unless the map sits beside the 3D view
     sh.side_figure = sh.blank
@@ -530,9 +548,10 @@ function BriareusShell(sess::DesignSession; queue::Channel{Any} = Channel{Any}(I
               "bnCluster", "bnQuad")
         _set!(sh, k, "")
     end
-    for k in ("bnMirrored", "bnCanSplit", "bnCanMerge")
-        _set!(sh, k, false)
-    end
+    _set!(sh, "bnMirrored", false)
+    _set!(sh, "bnSplit", 0)
+    _set!(sh, "bnMerge", 0)
+    _set!(sh, "bnPowerUnit", "beam")
     _set!(sh, "bnCount", 0)
     _set!(sh, "clusterNames", String[])
     _set!(sh, "aimChoices", ["Target chamber (TCC)"])
@@ -807,7 +826,8 @@ end
 function _refresh_beams!(sh::BriareusShell)
     bt = sh.sess.beams
     _set!(sh, "preset", String(bt.preset[]))
-    _set!(sh, "presetLabel", get(PRESET_LABELS, bt.preset[], String(bt.preset[])))
+    _set!(sh, "presetLabel", Controllers.beams_label(bt))
+    _set!(sh, "beamCount", length(bt.beams[]))
     _set!(sh, "beamsBy", String(bt.by[]))
     _set!(sh, "beamsSummary", beams_summary(bt))
     _set!(sh, "beamsError", bt.error[])
@@ -818,6 +838,10 @@ function _refresh_beams!(sh::BriareusShell)
     _set!(sh, "facility", String(bt.facility[]))
     # (shown in the display order; each row keeps its number, which edits refer to)
     br = beam_rows(bt)
+    # the power column's unit: per quad when every row is whole quads (a quad is the unit
+    # whether it is held as one beam or four), per beam when every row is beams
+    units = unique(r.power_unit for r in br)
+    _set!(sh, "beamPowerUnit", length(units) == 1 ? String(units[1]) : "mixed")
     col, desc = sh.sess.view.beam_sort[]
     _set!(sh, "beamSort", String(col))
     _set!(sh, "beamSortDesc", desc)
@@ -987,6 +1011,7 @@ function _refresh_selection!(sh::BriareusShell)
                 _set!(sh, "bn_" * String(f), _fix(v))
             end
             _set!(sh, "bn_power", _num(n.power))
+            _set!(sh, "bnPowerUnit", String(n.power_unit))
             _set!(sh, "bnMirrored", n.mirrored)
             _set!(sh, "bnOn", n.enabled === missing ? 2 : n.enabled ? 1 : 0)
             _set!(sh, "bnMatrix", beam_matrix(sess, idx))
@@ -1001,13 +1026,11 @@ function _refresh_selection!(sh::BriareusShell)
             _set!(sh, "bnAimFrame", f === nothing ? -1 : something(findfirst(==(f), choices), 1) - 1)
             _set!(sh, "bnAimFrameLabel", f === nothing ? "the chamber (the beams aim in different frames)" :
                                          f === :tcc ? "the chamber" : _frame_label(f))
-            # quads: one NIF quad beam can be split; a quad's four beams merged
+            # quads: the NIF quads held as one beam can be split, those held as four merged
             qs = unique(bs[i].quad for i in idx)
-            q = length(qs) == 1 ? qs[1] : ""
-            _set!(sh, "bnQuad", q)
-            nq = isempty(q) ? 0 : count(b -> b.quad == q, bs)
-            _set!(sh, "bnCanSplit", nq == 1 && startswith(q, "Q") && length(idx) == 1)
-            _set!(sh, "bnCanMerge", nq == 4 && startswith(q, "Q"))
+            _set!(sh, "bnQuad", length(qs) == 1 ? qs[1] : "")
+            _set!(sh, "bnSplit", length(Controllers.quads_to_split(bt, idx)))
+            _set!(sh, "bnMerge", length(Controllers.quads_to_merge(bt, idx)))
             b = bs[idx[1]]
             p = beam_path(t, b)
             land = n.count > 1 ? "" : p.component === :missed ? " · misses the target" :
@@ -1093,20 +1116,59 @@ function _refresh_drive!(sh::BriareusShell)
     return
 end
 
-# A diagnostic's tooltip: where its definition comes from, and what keeps it from use.
+# A diagnostic's tooltip: its definition and where it comes from, and what keeps it from use.
 function _diag_tip(r)
-    origin = r.origin === :builtin ? "built-in" : r.origin === :user ? "from a diagnostic folder" :
-             "saved with the session (not on the search path)"
-    lines = [r.id * " · " * origin * (r.public ? "" : " · not public"), join(r.chain, " ← ")]
-    r.usable || push!(lines, "cannot be built: " * r.problem)
-    isempty(r.changed) ||
-        push!(lines, "the session's definition (used) differs from the search path's in: " * join(r.changed, ", "))
+    origin = r.origin === :builtin ? "built-in" : r.origin === :user ? "from a diagnostic directory" :
+             "saved with the session"
+    lines = [r.id * " · " * origin * (r.public ? "" : " · not public")]
+    r.usable || push!(lines, "Cannot be built: " * r.problem)
+    isempty(r.changed) || push!(lines, "Differs from the directories' definition in: " * join(r.changed, ", "))
     return join(lines, "\n")
+end
+
+# The Diagnostics tab's rows: one per instrument, its recorded configuration (or the one
+# a tick would record) and its configurations.
+function _diag_rows(sess)
+    rows = DiagRow[]
+    for r in diagnostic_instruments(sess)
+        cs = r.configs
+        ids, labels = join((x.id for x in cs), "|"), join((x.config for x in cs), "|")
+        ks = isempty(r.recorded) ? [something(findfirst(c -> c.usable, cs), 1)] :
+             [findfirst(c -> c.id == id, cs) for id in r.recorded]
+        for (j, k) in enumerate(ks)
+            c = cs[k]
+            # (the configuration is named when there is a choice, or when it says something)
+            push!(rows, DiagRow(c.id, r.instrument, String(r.kind), !isempty(r.recorded), r.usable,
+                                !isempty(c.changed), _diag_tip(c),
+                                length(cs) > 1 || c.config != "default" ? c.config : "", ids, labels, !r.here, j == 1))
+        end
+    end
+    return rows
+end
+
+# The image the Diagnostics tab shows: the chosen one of the history's (`_diagImage`, an
+# `(id, frame)`), else its first; drawn again when the history, the choice or (for the
+# image at the cursor) the cursor's step changes.
+function _refresh_diag_image!(sh::BriareusShell, images)
+    sess = sh.sess
+    sel = get(sh.shown, "_diagImage", nothing)
+    k = sel === nothing ? nothing : findfirst(r -> (r.id, r.frame) == sel, images)
+    k === nothing && !isempty(images) && (k = 1)
+    _set!(sh, "diagImageIndex", something(k, 0) - 1)
+    pick = k === nothing ? nothing : (images[k].id, images[k].frame)
+    key = (sess.time.history[], pick, pick !== nothing && pick[2] == 0 ? time_step(sess.time) : nothing)
+    isequal(get(sh.shown, "_diagImageKey", missing), key) && return
+    sh.shown["_diagImageKey"] = key
+    im = pick === nothing ? nothing : Controllers.diagnostic_image(sess, pick...)
+    show_image!(sh.diag_image, im; empty = "No image yet")
+    return
 end
 
 function _refresh_time!(sh::BriareusShell)
     sess = sh.sess
     tm = sess.time
+    # (the diagnostics chart is the Diagnostics tab's: a session left on it shows the drive)
+    tm.chart[] === :diagnostics && set_chart!(tm, :drive)
     ch = time_chart(sess)
     h = tm.history[]
     _set!(sh, "timeChart", String(ch.chart))
@@ -1131,13 +1193,39 @@ function _refresh_time!(sh::BriareusShell)
     step = time_step(tm)
     _set!(sh, "timeStep", step === nothing ? 0 : step)
     _set!(sh, "timeLabel", time_label(sess))
+    # what the 3D view shows: the drive at the beams' powers, or a step of the history
+    _set!(sh, "timeMode", time_label(sess) == "" ? "beams" : "history")
+    step === nothing || (sh.shown["_lastStep"] = step)
+    src = tm.pulses[]
+    _set!(sh, "pulsesLabel", src === nothing ? "" : src.label)
+    # what a pulse table's cone or quad columns are given per ("": a table per beam, a
+    # shape, or beams without quads, where there is nothing to choose)
+    _set!(sh, "pulseUnit", src !== nothing && src.kind === :table && src.by !== :beam &&
+                           any(b -> !isempty(b.quad), sess.beams.beams[]) ? String(src.unit) : "")
+    images = diagnostic_images(sess)
     _sync_rows!(sh.rows[:diagImageModel], sh.models[:diagImageModel],
-                ImageRow[ImageRow(r.id, r.label, r.frame) for r in diagnostic_images(sess)])
+                ImageRow[ImageRow(r.id, r.label, r.frame) for r in images])
+    _refresh_diag_image!(sh, images)
+    # the tab's canvas: the image on the imagers' category, the chart otherwise (a figure
+    # is shown on one canvas at a time)
+    dfig = get(sh.shown, "diagCategory", "") == "xray_imager" ? sh.diag_image.fig : sh.diag.fig
+    if dfig !== sh.shown["_diagFigure"]
+        sh.shown["_diagFigure"] = dfig
+        sh.app["diagCanvas"] = dfig
+        sh.diag.dirty[] = true
+    end
     rows = diagnostic_catalog(sess)
-    _sync_rows!(sh.rows[:diagModel], sh.models[:diagModel],
-                DiagRow[DiagRow(g.row.id, g.row.name, g.row.id in tm.diagnostics[], g.row.usable,
-                                !isempty(g.row.changed), _diag_tip(g.row), g.group, g.head)
-                        for g in Controllers._diagnostic_groups(rows)])
+    drows = _diag_rows(sess)
+    _sync_rows!(sh.rows[:diagModel], sh.models[:diagModel], drows)
+    # the instruments recorded, per category (the tab's toggle shows the counts)
+    _set!(sh, "diagCounts", [count(r -> r.ticked && r.kind == String(k), drows) for (k, _) in Controllers._DIAGNOSTIC_GROUPS])
+    _set!(sh, "diagKinds", [String(k) for (k, _) in Controllers._DIAGNOSTIC_GROUPS])
+    _set!(sh, "diagKindLabels", [l for (_, l) in Controllers._DIAGNOSTIC_GROUPS])
+    dch = time_chart(sess, :diagnostics)
+    _set!(sh, "diagEmpty", dch.empty)
+    _set!(sh, "diagTitle", dch.title)
+    _sync_rows!(sh.rows[:diagLegendModel], sh.models[:diagLegendModel],
+                LegendRow[LegendRow(r.label, r.color, String(r.style)) for r in dch.legend])
     if get(sh.shown, "_catalog", nothing) !== rows             # the folders and problems, once per reading
         sh.shown["_catalog"] = rows
         _sync_rows!(sh.rows[:folderModel], sh.models[:folderModel],
@@ -1425,10 +1513,12 @@ end
 """
     request_popup(key, path = "")
 
-Open a dialog or menu of the open window: `"retune"`, `"port"`, `"help"` or `"group"`
-(the dialogs), `"diagnostics"` and `"images"` (the Time tab's lists of diagnostic definitions and of
-a history's images), `"topics"` or `"topics:<topic>"` (the Help screen, see `br_help`), a menu
-bar menu by its title without the `&` (`"File"`, `"View"`, …), or `"window"` for none.
+Open a dialog or menu of the open window: `"retune"`, `"port"` or `"group"` (the
+dialogs), `"diagnostics"` (the Diagnostics tab's list of instruments) and `"images"` (the
+Diagnostics tab on its imagers), `"topics"` or `"topics:<topic>"` (the Help window, see
+`br_help`; `"help"` opens it at the mouse and keys), `"rowmenu:<node id>"` (the model
+tree's row menu for a beam row, a frame or an analysis), a menu bar menu by its title
+without the `&` (`"File"`, `"View"`, …), or `"window"` for none.
 With a `path`, save an image of the popup there (for `"window"`, of the toolbar; PNG,
 written asynchronously, as by [`request_grab`](@ref)); `request_popup("")` closes it.
 """
@@ -1527,7 +1617,8 @@ end
 const _ENUM_QT_WINDOWS = Ref(C_NULL)
 _enum_qt_windows_ptr() = @cfunction(_collect_qt_window, Cint, (Ptr{Cvoid}, Int))
 
-# Returns 0 (nothing to draw), 1 (redraw the canvas), or 2 (close the window).
+# Returns 2 (close the window), or the canvases to redraw as bits: 1 the 3D view or the
+# map, 4 the time chart, 8 the sweep chart, 16 the Diagnostics tab's chart and image.
 function br_tick()
     sh = _SHELL[]
     sh === nothing && return 0
@@ -1580,11 +1671,14 @@ function br_tick()
     redraw = sh.scene.dirty[] || sh.map.dirty[]
     chart = sh.time.dirty[]
     swchart = sh.sweep.dirty[]
+    dchart = sh.diag.dirty[] || sh.diag_image.dirty[]
     sh.scene.dirty[] = false
     sh.map.dirty[] = false
     sh.time.dirty[] = false
     sh.sweep.dirty[] = false
-    return (redraw ? 1 : 0) | (chart ? 4 : 0) | (swchart ? 8 : 0)
+    sh.diag.dirty[] = false
+    sh.diag_image.dirty[] = false
+    return (redraw ? 1 : 0) | (chart ? 4 : 0) | (swchart ? 8 : 0) | (dchart ? 16 : 0)
 end
 
 _sym(x) = Symbol(String(x))
@@ -1610,6 +1704,30 @@ function _node_component(sess, id)
 end
 _node_beam_names(sess, id) = [sess.beams.beams[][i].name for i in node_beams(sess.beams, id)]
 
+# The NIF quads the tree's Split and Merge commands act on for the nodes acted on by a
+# menu on `id`: how many are held as one beam, and how many as their four beams.
+function br_node_quads(id)
+    sh = _SHELL[]
+    sh === nothing && return [0, 0]
+    bt = sh.sess.beams
+    idx = unique!(reduce(vcat, (node_beams(bt, n) for n in _acted_nodes(sh, id)); init = Int[]))
+    isempty(idx) && return [0, 0]
+    return [length(Controllers.quads_to_split(bt, idx)), length(Controllers.quads_to_merge(bt, idx))]
+end
+# What the tree's row menu needs for the rows a menu on `id` acts on, as integers: whether
+# they are shown and included in the calculations (`br_node_flags`), the quads to split
+# and to merge (`br_node_quads`), whether the row is a hohlraum piece that can take a
+# role, its role (an index into `PIECE_ROLES`, from 0) and whether each role is allowed.
+function br_node_menu(id)
+    sh = _SHELL[]
+    sh === nothing && return fill(0, 6 + length(PIECE_ROLES))
+    f, q = br_node_flags(id), br_node_quads(id)
+    kind, key = selection_kind(String(id))
+    pr = kind in (:comp, :window) ? piece_roles(sh.sess.target, Symbol(key)) : nothing
+    return Int[f[1], f[2], q[1], q[2], pr !== nothing && length(pr.roles) > 1,
+               pr === nothing ? 0 : findfirst(==(pr.role), PIECE_ROLES) - 1,
+               (pr !== nothing && r in pr.roles for r in PIECE_ROLES)...]
+end
 # Whether a node is shown in the 3D view and takes part in the calculations, for the
 # tree's right-click menu: [shown, included].
 function br_node_flags(id)
@@ -1720,29 +1838,14 @@ function br_tree_on(id, on)
     end
 end
 # Target
-# File ▸ New target: a starter alone ("empty": a sphere at TCC).
+# File ▸ New target: a starter alone, with its facility's beams ("empty": no parts).
 function br_new_target(starter)
     _with_shell() do sh
         s = _sym(starter)
-        new_target!(sh.sess, s === :empty ? :none : s) &&
-            (sh.sess.status[] = "new target: " * get(STARTER_LABELS, s, "a sphere at TCC"))
-    end
-end
-# Insert ▸ a starter, placed in the selected part's or piece's frame (TCC with none).
-function br_insert(starter)
-    _with_shell() do sh
-        sess = sh.sess
-        s = _sym(starter)
-        frame = _selected_frame(sess)
-        before = Set(p.name for p in sess.target.parts[])
-        insert_starter!(sess, s; frame) || return
-        new = [p.name for p in sess.target.parts[] if !(p.name in before)]
-        # inserted in an assembly's frame: its members
-        k = part_index(sess.target, frame)
-        k !== nothing && is_assembly(sess.target.parts[][k]) && move_into_assembly!(sess.target, new, frame)
-        isempty(new) || select!(sess.view, "part:" * String(new[1]))
-        sess.status[] = "inserted " * STARTER_LABELS[s] * (frame === :tcc ? " at TCC" : " in " * _frame_label(frame)) *
-                        ": " * join(String.(new), ", ")
+        new_target!(sh.sess, s === :empty ? :none : s) || return
+        select!(sh.sess.view, "target")
+        sh.sess.status[] = s === :empty ? "new target: empty (Insert adds parts)" :
+                           "new target: " * STARTER_LABELS[s] * " · " * Controllers.beams_label(sh.sess.beams)
     end
 end
 # The frame of the selection, where Insert places a starter: a part's, a piece's (its
@@ -1801,8 +1904,11 @@ function br_add_part(kind)
     _with_shell() do sh
         ts = sh.sess.target
         if add_part!(ts, _sym(kind))
+            "target" in sh.sess.view.expanded[] || toggle_expanded!(sh.sess.view, "target")
             select!(sh.sess.view, "part:" * String(ts.parts[][end].name))
-            sh.sess.status[] = "added " * String(ts.parts[][end].name) * " at TCC: set its size and place in Properties"
+            sh.sess.status[] = "inserted " * String(ts.parts[][end].name) * " at TCC"
+        else
+            sh.sess.status[] = "not inserted: " * ts.error[]
         end
     end
 end
@@ -2370,29 +2476,21 @@ function br_tf_create()
         _refresh_transform!(sh)
     end
 end
+# Remove every selected part, assembly, frame and window, as one edit (`remove_nodes!`).
 function br_remove_selected()
     _with_shell() do sh
         sess = sh.sess
-        kind, key = selection_kind(sess.view.selection[])
-        if kind === :part
-            i = part_index(sess.target, Symbol(key))
-            i === nothing || (remove_part!(sess.target, i); select!(sess.view, "target"))
-        elseif kind === :assembly
-            # with its subtree; refused (and kept selected) while a part left is placed in it
-            i = part_index(sess.target, Symbol(key))
-            i !== nothing && remove_part!(sess.target, i) && select!(sess.view, "target")
-        elseif kind === :frame
-            # a frame in use stays, selected, with the reason in its page
-            i = part_index(sess.target, Symbol(key))
-            i !== nothing && remove_part!(sess.target, i) &&
-                (set_triad!(sess.view, Symbol(key), false); select!(sess.view, "frames"))
-        elseif kind === :window
-            w = window_of(sess.target, Symbol(key))
-            w === nothing || remove_window!(sess.target, w[2]; part = sess.target.parts[][w[1]].name)
-            select!(sess.view, "target")
-        else
-            sess.status[] = "only parts, assemblies, frames and windows can be removed (hide a component instead)"
+        r = Controllers.remove_nodes!(sess)
+        if isempty(r.removed)
+            sess.status[] = r.ok ? "nothing to remove: select parts, assemblies, frames or windows (a piece can be hidden)" :
+                            "not removed: " * sess.target.error[]
+            return
         end
+        n = length(r.removed)
+        what = n <= 4 ? join(r.removed, ", ") : "$n items"
+        kept = isempty(r.replaced) ? "" :
+               " · " * join(String.(r.replaced), ", ") * (length(r.replaced) == 1 ? " keeps its place" : " keep their places")
+        sess.status[] = "removed " * what * kept * (r.ok ? "" : " · " * sess.target.error[])
     end
 end
 # Beams
@@ -2463,30 +2561,66 @@ end
 function br_set_facility(f)
     _with_shell() do sh
         s = sh.sess
-        set_facility!(s.beams, _sym(f); target = s.target)
-        s.status[] = "facility: " * FACILITY_LABELS[_sym(f)]
+        f = _sym(f)
+        f === s.beams.facility[] && return
+        set_facility!(s.beams, f; target = s.target)
+        s.status[] = "facility: " * FACILITY_LABELS[f] * " · " *
+                     (isempty(s.beams.beams[]) ? "no built-in beams: import a beam table (File)" : beams_summary(s.beams))
     end
 end
-function br_split_quad()
+# The beams under the nodes a tree command on `id` acts on ("": the selected beams).
+function _command_beams(sh, id)
+    isempty(String(id)) && return selected_beams(sh.sess)
+    return sort!(unique!(reduce(vcat, (node_beams(sh.sess.beams, n) for n in _acted_nodes(sh, id)); init = Int[])))
+end
+# The selection after quads were split (`split`) or merged: a quad's own node in place
+# of its beam's (or its beams'); other nodes as they were.
+function _reselect_quads!(sh, ids, quads, split::Bool)
+    sess = sh.sess
+    bt = sess.beams
+    group(q) = (i = findfirst(b -> b.quad == q, bt.beams[]); i === nothing ? "" : String(bt.cluster[][i]))
+    out = String[]
+    for id in ids
+        kind, key = selection_kind(id)
+        q = kind === :beam && split && key in quads ? key :
+            kind === :quad && !split && first(split_at(key)) in quads ? first(split_at(key)) : nothing
+        new = q === nothing ? id : split ? "quad:" * q * "@" * group(q) : "beam:" * q
+        (new in out || isempty(node_beams(bt, new))) || push!(out, new)
+    end
+    isempty(out) && return select!(sess.view, "beams")
+    select!(sess.view, out[1])
+    foreach(x -> select_add!(sess.view, x), out[2:end])
+    return
+end
+split_at(key) = split(key, '@'; limit = 2)
+# Split the NIF quads held as one beam under the nodes acted on (`id`; "": the selected
+# beams) into their four beams, or merge those held as four, in one edit.
+function br_split_quads(id)
     _with_shell() do sh
-        q = get(sh.shown, "bnQuad", "")
-        isempty(q) && return
-        g = sh.sess.beams.cluster[][findfirst(b -> b.quad == q, sh.sess.beams.beams[])]
-        if split_quad!(sh.sess.beams, q)
-            id = "quad:" * q * "@" * String(g)
-            "group:" * String(g) in sh.sess.view.expanded[] || toggle_expanded!(sh.sess.view, "group:" * String(g))
-            id in sh.sess.view.expanded[] || toggle_expanded!(sh.sess.view, id)
-            select!(sh.sess.view, id)
-            sh.sess.status[] = "split $q into its four beams (the drive must be computed again)"
-        end
+        sess = sh.sess
+        bt = sess.beams
+        idx = _command_beams(sh, id)
+        quads = String[bt.beams[][i].quad for i in Controllers.quads_to_split(bt, idx)]
+        ids = selected_ids(sess.view)
+        n = Controllers.split_quads!(bt, idx)
+        n == 0 && (sess.status[] = bt.error[]; return)
+        _reselect_quads!(sh, ids, quads, true)
+        sess.status[] = (n == 1 ? "split $(quads[1]) into its four beams" : "split $n quads into their beams") *
+                        ": the quad stays the unit of pointing and power · compute the drive again"
     end
 end
-function br_merge_quad()
+function br_merge_quads(id)
     _with_shell() do sh
-        q = get(sh.shown, "bnQuad", "")
-        isempty(q) && return
-        merge_quad!(sh.sess.beams, q) && (select!(sh.sess.view, "beam:" * q);
-                                          sh.sess.status[] = "merged $q into one quad beam")
+        sess = sh.sess
+        bt = sess.beams
+        idx = _command_beams(sh, id)
+        quads = Controllers.quads_to_merge(bt, idx)
+        ids = selected_ids(sess.view)
+        n = Controllers.merge_quads!(bt, idx)
+        n == 0 && (sess.status[] = bt.error[]; return)
+        _reselect_quads!(sh, ids, quads, false)
+        sess.status[] = (n == 1 ? "merged $(quads[1]) into one beam" : "merged $n quads into one beam each") *
+                        " · compute the drive again"
     end
 end
 # Session files and undo
@@ -2639,8 +2773,9 @@ function br_retune(table, out, by, cap, stay, on, target, level, load)
             which = _sym(on)
             k = which === :auto ? (isempty(qs) ? nothing : 1) : findfirst(q -> q.on === which, qs)
             lv = k === nothing ? nothing : Controllers._retune_level(qs[k].kind, String(level))
+            # (the reference table's cone and quad columns as the loaded pulses' are read)
             retune_to_reference!(sh.sess, _url_to_path(String(table)), _url_to_path(String(out));
-                                 by = _sym(by),
+                                 by = _sym(by), unit = Controllers._pulse_unit(sh.sess),
                                  cap = Controllers._parse_number(cap, "the power limit"; positive = true),
                                  stay = Controllers._parse_number(stay, "the weight on the reference powers";
                                                                   nonnegative = true),
@@ -2656,18 +2791,45 @@ br_time_chart(key) = _with_shell(sh -> set_chart!(sh.sess.time, _sym(key)))
 # A beam-table header click: sort the rows' display by that column.
 br_sort_beams(key) = _with_shell(sh -> sort_beam_rows!(sh.sess.view, _sym(key)))
 br_time_pulses(url) = _with_shell(sh -> load_pulses!(sh.sess, _url_to_path(String(url))))
-br_time_shape() = _with_shell(sh -> use_pulse_shape!(sh.sess))
+# A pulse table's cone or quad columns as powers per "quad" or per "beam".
+br_time_unit(unit) = _with_shell(sh -> set_pulse_unit!(sh.sess, _sym(unit)))
+# Fire the beams with a published pulse shape (a `PULSE_SHAPES` key; N221204's without one).
+br_time_shape(key = "n221204") = _with_shell(sh -> use_pulse_shape!(sh.sess, _sym(key)))
+# What the 3D view shows: "history" (the drive history at the step shown last, or its
+# last) or "beams" (the drive at the powers set on the beams).
+function br_time_mode(mode)
+    _with_shell() do sh
+        sess = sh.sess
+        if String(mode) == "history"
+            h = sess.time.history[]
+            h === nothing && return
+            set_time_step!(sess, clamp(get(sh.shown, "_lastStep", length(h.time)), 1, length(h.time)))
+        else
+            set_time_cursor!(sess, NaN)
+        end
+    end
+end
 br_time_run() = _with_shell(sh -> start_history!(sh.sess))
 br_time_checks() = _with_shell(sh -> start_irradiance!(sh.sess))
 br_time_cancel() = _with_shell(sh -> cancel_history!(sh.sess))
 br_time_step(k) = _with_shell(sh -> set_time_step!(sh.sess, round(Int, k)))
 br_time_now() = _with_shell(sh -> set_time_cursor!(sh.sess, NaN))
 br_time_diagnostic(id, on) = _with_shell(sh -> set_diagnostic!(sh.sess, String(id), Bool(on)))
+# Record an instrument of the Diagnostics tab's list (its default configuration), or stop.
+br_diag_record(instrument, on) = _with_shell(sh -> Controllers.set_instrument!(sh.sess, String(instrument), Bool(on)))
+# Record definition `new` in place of the recorded `id`: a chip's configuration.
+br_diag_config(id, new) = _with_shell(sh -> Controllers.set_configuration!(sh.sess, String(id), String(new)))
+# The category the Diagnostics tab shows (a diagnostic kind: "xray_power", …).
+br_diag_category(kind) = _with_shell(sh -> _set!(sh, "diagCategory", String(kind)))
 br_diag_use_path(id) = _with_shell(sh -> use_path_diagnostic!(sh.sess, String(id)))
+# The image the Diagnostics tab shows (an imager's id and frame, as `diagImageModel` lists them).
+br_diag_pick_image(id, frame) = _with_shell(sh -> (sh.shown["_diagImage"] = (String(id), round(Int, frame))))
+# Open an imager's image in the main image view, where it zooms and pans.
 function br_diag_image(id, frame)
     _with_shell() do sh
         v = sh.sess.drive.view[]
         v === :image || (sh.shown["_viewBeforeImage"] = v)
+        sh.shown["_diagImage"] = (String(id), round(Int, frame))
         show_diagnostic_image!(sh.sess, String(id), round(Int, frame))
     end
 end
@@ -2895,12 +3057,12 @@ br_canvas_focus(on) = (sh = _SHELL[]; sh === nothing || Bool(on) || release_inpu
 
 function _register_qml_functions()
     @qmlfunction br_tick br_grab_started br_select br_select_add br_toggle_expand br_tree_on
-    @qmlfunction br_select_range br_node_flags br_node_show br_node_include
+    @qmlfunction br_select_range br_node_flags br_node_quads br_node_menu br_node_show br_node_include
     @qmlfunction br_undo br_redo br_open_session br_save_session br_reload_cad_sources br_keep_cad_copies
     @qmlfunction br_relink_part br_part_from_source
-    @qmlfunction br_set_cluster br_rename_cluster br_split_quad br_merge_quad br_window_round
+    @qmlfunction br_set_cluster br_rename_cluster br_split_quads br_merge_quads br_window_round
     @qmlfunction br_set_facility br_aim_frame br_aim_at_frame
-    @qmlfunction br_new_target br_insert br_set_resolution br_edit_mesh
+    @qmlfunction br_new_target br_set_resolution br_edit_mesh
     @qmlfunction br_add_window br_remove_window br_edit_window br_window_open
     @qmlfunction br_section_edit br_section_add br_section_remove
     @qmlfunction br_add_part br_add_stl br_edit_part br_part_flag br_part_frame br_part_coords
@@ -2918,10 +3080,11 @@ function _register_qml_functions()
     @qmlfunction br_import_beams br_export_beams br_import_sst br_import_summary br_export_sst
     @qmlfunction br_export_summary br_run_task br_build br_set_view br_side_view br_xray_image br_close_image br_set_spot_radius br_unconverted_ratio br_beam_model br_export_results
     @qmlfunction br_import_visrad_workspace br_export_visrad_workspace br_retune
-    @qmlfunction br_time_chart br_time_pulses br_time_shape br_time_run br_time_cancel br_time_step
+    @qmlfunction br_time_chart br_time_pulses br_time_shape br_time_run br_time_cancel br_time_step br_time_mode
+    @qmlfunction br_time_unit
     @qmlfunction br_time_checks br_prepulse br_irr_threshold
     @qmlfunction br_time_now br_time_diagnostic br_diag_use_path br_diag_reload br_diag_add_folder
-    @qmlfunction br_diag_remove_folder br_diag_image
+    @qmlfunction br_diag_remove_folder br_diag_image br_diag_record br_diag_config br_diag_category br_diag_pick_image
     @qmlfunction br_opt_set_by br_opt_free br_opt_edit br_opt_objective br_opt_hold
     @qmlfunction br_opt_keepout br_opt_capsule br_opt_start br_opt_cancel br_opt_accept
     @qmlfunction br_rv_role br_rv_edit br_rv_wings br_rv_quality br_rv_start br_rv_cancel

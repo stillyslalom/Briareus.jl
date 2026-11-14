@@ -1,5 +1,5 @@
-// TaLIS report: the notes, one line each (the whole note on hover), the per-rule
-// summary, every check colored by status, CSV export.
+// TaLIS report: the notes (short lines, wrapped to the panel), the per-rule summary,
+// every check colored by status, CSV export.
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -19,7 +19,6 @@ ColumnLayout {
         Note {
             Layout.fillWidth: false
             text: app.tlRunning ? "checking… " + app.tlElapsed : "No report yet: run TaLIS rules"
-            opacity: 1
         }
         Info { topic: "talis.intro" }
     }
@@ -53,11 +52,15 @@ ColumnLayout {
                 // the tolerance note first, then the rule summary, then the other notes
                 Repeater {
                     model: noteModel
-                    delegate: Cell {
+                    delegate: RowLayout {
                         visible: model.kind === "tolerance"
-                        text: model.text
-                        opacity: 0.72
                         Layout.fillWidth: true
+                        spacing: 6
+                        // (the ⓘ follows the text; a long note wraps to the panel)
+                        Label { text: model.text; opacity: 0.72; wrapMode: Text.WordWrap
+                                Layout.fillWidth: true; Layout.maximumWidth: implicitWidth }
+                        Info { topic: "talis.tolerance"; Layout.alignment: Qt.AlignTop }
+                        Item { Layout.fillWidth: true }
                     }
                 }
                 SectionLabel { text: "Rules"; visible: app.tlHasReport }
@@ -67,9 +70,10 @@ ColumnLayout {
                     delegate: ColumnLayout {
                         spacing: 0
                         Layout.fillWidth: true
-                        ToolTip.visible: ruleHover.hovered
-                        ToolTip.delay: 400
-                        ToolTip.text: model.requirement + "\nworst " + model.worst + " · " + model.where_
+                        Tip {
+                            visible: ruleHover.hovered
+                            text: model.requirement + "\nworst " + model.worst + " · " + model.where_
+                        }
                         HoverHandler { id: ruleHover }
                         Label {
                             text: model.label + "  <font color='" + palette.windowText + "'>" +
@@ -85,7 +89,7 @@ ColumnLayout {
                         Label {
                             text: "worst " + model.worst + " · " + model.where_
                             opacity: 0.7
-                            elide: Text.ElideRight
+                            wrapMode: Text.WordWrap
                             Layout.fillWidth: true
                         }
                     }
@@ -93,11 +97,19 @@ ColumnLayout {
                 SectionLabel { text: "Notes"; visible: app.tlHasReport }
                 Repeater {
                     model: noteModel
-                    delegate: Cell {
+                    delegate: RowLayout {
                         visible: model.kind !== "tolerance"
-                        text: "· " + model.text
-                        opacity: model.kind === "scope" || model.kind === "source" ? 0.7 : 1
                         Layout.fillWidth: true
+                        spacing: 6
+                        Label {
+                            text: "· " + model.text
+                            opacity: model.kind === "scope" || model.kind === "source" ? 0.7 : 1
+                            wrapMode: Text.WordWrap
+                            Layout.fillWidth: true
+                            Layout.maximumWidth: implicitWidth
+                        }
+                        Info { topic: "talis.scope"; visible: model.kind === "scope"; Layout.alignment: Qt.AlignTop }
+                        Item { Layout.fillWidth: true }
                     }
                 }
             }
@@ -129,8 +141,7 @@ ColumnLayout {
                     ScrollBar.vertical: ScrollBar {}
                     delegate: RowLayout {
                         spacing: 4
-                        ToolTip.visible: rowHover.hovered && model.note !== ""
-                        ToolTip.text: model.note
+                        Tip { visible: rowHover.hovered && model.note !== ""; text: model.note }
                         HoverHandler { id: rowHover }
                         Cell { text: model.beam; Layout.preferredWidth: head.widths[0] }
                         Cell { text: model.rule; Layout.preferredWidth: head.widths[1] }

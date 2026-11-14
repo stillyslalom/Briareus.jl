@@ -37,16 +37,14 @@ ColumnLayout {
         visible: app.partFile !== ""
         Button {
             text: "Relink…"
-            ToolTip.visible: hovered
-            ToolTip.text: "Read this file's parts from another file"
+            Tip { visible: parent.hovered; text: "Read this file's parts from another file" }
             onClicked: relinkDialog.open()
         }
         Button {
             text: "Read from the file"
             visible: app.partCopy
             enabled: app.partSourceExists
-            ToolTip.visible: hovered
-            ToolTip.text: "Read this file's parts from the file on disk instead of the saved copy"
+            Tip { visible: parent.hovered; text: "Read the file on disk instead of the saved copy" }
             onClicked: Julia.br_part_from_source()
         }
     }
@@ -61,7 +59,7 @@ ColumnLayout {
         label: "Name"
         value: app.partName
         fieldWidth: 140
-        tip: "Letters, digits and _; what is placed in its frame, aimed in it or given to it follows a rename"
+        tip: "Letters, digits and _"
         onEdited: (text) => Julia.br_edit_part("name", text)
     }
     RowLayout {
@@ -72,9 +70,10 @@ ColumnLayout {
             model: app.roleLabels
             currentIndex: app.partRole
             onActivated: (index) => Julia.br_part_role(index)
-            ToolTip.visible: hovered
-            ToolTip.delay: 400
-            ToolTip.text: "What the analyses take the part as; the part keeps its name (one capsule at a time; any number of foils and walls)"
+            Tip {
+                visible: parent.hovered
+                text: "What the analyses take the part as"
+            }
         }
         Info { topic: "part.role" }
     }
@@ -83,7 +82,7 @@ ColumnLayout {
         visible: app.partRole === 2 && app.foilNames.length > 1
         text: "Active foil (the foil analyses take it)"
         checked: app.foilNames[app.activeFoil] === app.partName
-        tip: "Another foil is made active from its own part, or in Drive ▸ Active foil"
+        tip: "The foil the drive and the optimization report on"
         onToggled: {
             if (checked) Julia.br_active_foil(app.foilNames.indexOf(app.partName))
             checked = Qt.binding(() => app.foilNames[app.activeFoil] === app.partName)
@@ -94,13 +93,13 @@ ColumnLayout {
         text: "Thin film: left out of the drive's cavity (a capsule tent, an LEH window)"
         checked: app.partFilm
         onToggled: Julia.br_part_film(checked)
-        tip: "A thin film modeled as a solid seals the cavity point into a pocket unless it is left out of the cavity"
+        tip: "Keeps a thin film from sealing the drive's cavity"
     }
     CheckLine {
         text: "Include in calculations (laser, x-ray drive, clearance)"
         checked: app.compIncluded
         onToggled: Julia.br_node_include(app.selection, checked)
-        tip: "Left out, the part is drawn but takes no part in any calculation and gives up its role"
+        tip: "Left out: drawn, but in no calculation"
     }
     RowLayout {
         Label { text: "Placed in"; Layout.preferredWidth: 110 }
@@ -110,7 +109,7 @@ ColumnLayout {
             // -1 after a rejected change: show the part's frame again
             currentIndex: app.partFrame < 0 ? 0 : app.partFrame
             onActivated: (index) => Julia.br_part_frame(index)
-            tip: "The frame the part is placed in: TCC, a user frame, another part's or a piece's (it stays where it is)"
+            tip: "The frame the part is placed in; it stays where it is"
         }
         Info { topic: "part.placement" }
     }
@@ -119,7 +118,7 @@ ColumnLayout {
         text: "Sweep along this axis…"
         Layout.leftMargin: 114
         onClicked: Julia.br_sweep_part()
-        tip: "Step the part along this axis and check each step (clearance, line of sight, capture)"
+        tip: "Step the part along this axis and check each step"
     }
     RowLayout {
         Label { text: "Position in"; Layout.preferredWidth: 110 }
@@ -128,7 +127,7 @@ ColumnLayout {
             model: ["Cartesian (x, y, z)", "Cylindrical (r, φ, z)", "Spherical (r, θ, φ)"]
             currentIndex: app.partCoords
             onActivated: (index) => Julia.br_part_coords(index)
-            tip: "The coordinates of the part's position fields, in the frame it is placed in (cylindrical and spherical about its z)"
+            tip: "Coordinates of the position fields"
         }
     }
     // a hohlraum part's wall profile: one radius, a frustraum, or a radius per break
@@ -140,11 +139,10 @@ ColumnLayout {
             model: ["Cylinder", "Frustraum", "Sections"]
             currentIndex: app.partProfile
             onActivated: (index) => Julia.br_edit_part("profile", String(index))
-            ToolTip.visible: hovered
-            ToolTip.delay: 400
-            ToolTip.text: "The wall's shape: one radius; two cones meeting at the waist (its radius and " +
-                          "the ends'); or a radius per break, a cone between unequal radii and a " +
-                          "cylinder between equal ones"
+            Tip {
+                visible: parent.hovered
+                text: "The shape of the wall"
+            }
         }
         Info { topic: "part.profile" }
     }
@@ -169,8 +167,7 @@ ColumnLayout {
                     enabled: inner
                     selectByMouse: true
                     onEditingFinished: if (text !== app.partSectionZ[index]) Julia.br_section_edit(index, "z", text)
-                    ToolTip.visible: hovered && !inner
-                    ToolTip.text: "An end break: at ±length/2 (edit the length)"
+                    Tip { visible: parent.hovered && !inner; text: "An end break: at ±length/2 (edit the length)" }
                 }
                 TextField {
                     Layout.preferredWidth: sectionHead.widths[2]
@@ -183,16 +180,14 @@ ColumnLayout {
                     Layout.preferredWidth: sectionHead.widths[3]
                     enabled: inner
                     onClicked: Julia.br_section_remove(index)
-                    ToolTip.visible: hovered
-                    ToolTip.text: "Remove this break, joining the sections beside it"
+                    Tip { visible: parent.hovered; text: "Remove this break, joining the sections beside it" }
                 }
             }
         }
         Button {
             text: "Add break"
             onClicked: Julia.br_section_add()
-            ToolTip.visible: hovered
-            ToolTip.text: "Split the longest section at its middle (the shape is unchanged)"
+            Tip { visible: parent.hovered; text: "Split the longest section at its middle (the shape is unchanged)" }
         }
     }
     Repeater {
@@ -216,11 +211,10 @@ ColumnLayout {
                 model: ["Closed (the cap covers it)", "Entrance hole", "Open (to a package)"]
                 currentIndex: modelData.v
                 onActivated: (index) => Julia.br_edit_part(modelData.k, String(index))
-                ToolTip.visible: hovered
-                ToolTip.delay: 400
-                ToolTip.text: "An entrance hole (the top's of the LEH radius, the bottom's of the bottom " +
-                              "LEH radius), a closed end, or an open end with neither cap nor hole " +
-                              "(a halfraum: a package placed there closes it, or the radiation leaves)"
+                Tip {
+                    visible: parent.hovered
+                    text: "Entrance hole, closed cap, or fully open"
+                }
             }
         }
     }
@@ -228,8 +222,10 @@ ColumnLayout {
         visible: hohlraum
         text: "Add window"
         onClicked: Julia.br_add_window()
-        ToolTip.visible: hovered
-        ToolTip.text: "A closed 1 mm diagnostic window in this hohlraum's wall at its midplane, where it fits"
+        Tip {
+            visible: parent.hovered
+            text: "A closed 1 mm window in the wall, at the midplane"
+        }
     }
     RowLayout {
         visible: hohlraum
@@ -238,8 +234,7 @@ ColumnLayout {
             text: "Closing entrance holes"
             checked: app.partLehClosure
             onToggled: Julia.br_edit_part("leh_closure", checked ? "1" : "0")
-            tip: "Plasma closes each LEH to x-rays down to the open radius during the pulse; " +
-                 "laser light still passes. Closed, the lip re-emits like the wall"
+            tip: "Plasma closes the holes to x-rays during the pulse"
         }
         Info { topic: "part.leh_closure" }
     }
@@ -248,7 +243,7 @@ ColumnLayout {
         text: "Capsule mesh (geodesic, the capsule element size)"
         checked: app.partCapsuleMesh
         onToggled: Julia.br_edit_part("capsule_mesh", checked ? "1" : "0")
-        tip: "The geodesic mesh of a hohlraum's capsule, with the target's capsule element size unless the part sets its own"
+        tip: "Mesh the sphere as a capsule (geodesic)"
     }
     PlacementSteps { visible: app.selectionCount <= 1 }
     CheckLine {
@@ -272,5 +267,10 @@ ColumnLayout {
     }
     DisplayRow { visible: !hohlraum }      // (a hohlraum's pieces have their own, in the tree)
     ErrorText { text: app.targetError }
-    Button { text: "Remove part"; onClicked: Julia.br_remove_selected(); tip: "Remove the selected parts (Edit ▸ Undo brings them back)" }
+    RowLayout {
+        spacing: 8
+        Button { text: app.selectionCount > 1 ? "Remove " + app.selectionCount + " selected" : "Remove part"
+                 onClicked: Julia.br_remove_selected(); tip: "Undo brings it back" }
+        Info { topic: "target.remove" }
+    }
 }

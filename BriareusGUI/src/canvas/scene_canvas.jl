@@ -161,6 +161,13 @@ function scene_canvas(sess::DesignSession)
     cam.on_change = () -> (_update_triad!(c); c.triad_at[] === nothing || _draw_placement_triad!(c, sess);
                            sess.view.camera.val = camera_pose(cam); c.dirty[] = true)
     attach_cad_camera!(sc, cam)
+    # Esc clears the selection (the canvas has the keyboard while the pointer is on it)
+    on(sc, Makie.events(sc).keyboardbutton; priority = 90) do e
+        (e.action == Makie.Keyboard.press && e.key == Makie.Keyboard.escape) || return Consume(false)
+        isempty(selected_ids(sess.view)) || select!(sess.view, "")
+        c.dirty[] = true
+        return Consume(true)
+    end
     dr, v = sess.drive, sess.view
     # a pose set by a session loaded (nothing: the default view, fitted to the target)
     on(p -> _apply_camera!(c, p), v.camera)
@@ -250,9 +257,17 @@ end
 
 """
     set_projection!(c::SceneCanvas, ortho::Bool) / set_turntable!(c, on::Bool)
+
+The projection (orthographic or perspective) and the rotation mode. Switching the
+turntable on levels the view ([`level_camera!`](@ref)): a free rotation may have rolled
+it, and a turntable orbit keeps whatever roll it starts from.
 """
 set_projection!(c::SceneCanvas, ortho::Bool) = (c.camera.ortho = ortho; c.camera.on_change(); c)
-set_turntable!(c::SceneCanvas, on::Bool) = (c.camera.turntable = on; c.camera.on_change(); c)
+function set_turntable!(c::SceneCanvas, on::Bool)
+    c.camera.turntable = on
+    on ? level_camera!(c.camera) : c.camera.on_change()
+    return c
+end
 
 """
     camera_pose(c::CadCamera) -> NamedTuple
@@ -372,8 +387,8 @@ function _click!(c::SceneCanvas, sess::DesignSession, o, d, px)
     τg, ghost = _pick_ghost(sess, o, d)
     add = c.camera.click_ctrl
     if bi !== nothing
-        b = sess.beams.beams[][bi]
-        add ? select_add!(sess.view, beam_id(b)) : select!(sess.view, beam_id(b))
+        id = picked_beam_id(sess, bi)
+        add ? select_add!(sess.view, id) : select!(sess.view, id)
     elseif τg < τ                       # a part left out of the calculations, in front
         id = component_id(sess.target, ghost)
         add ? select_add!(sess.view, id) : select!(sess.view, id)
@@ -410,7 +425,8 @@ function selection_bounds(sess::DesignSession)
         for tt in (t, sess.target.ghost[])
             tt === nothing && continue
             for k in eachindex(tt.tri_area)
-                tt.components[tt.tri_comp[k]].name in names || continue
+                c = tt.components[tt.tri_comp[k]]
+                (c.name in names || c.part in names) || continue     # (a part made in pieces: all of them)
                 push!(pts, tt.tri_v0[k], tt.tri_v0[k] + tt.tri_e1[k], tt.tri_v0[k] + tt.tri_e2[k])
             end
         end
@@ -628,24 +644,27 @@ end
 
 function _draw_selection!(c::SceneCanvas, sess::DesignSession)
     t = sess.target.target[]
-    name = selected_component(sess)
+    # every selected component, part and window (an assembly: its parts' components)
+    names = Set{Symbol}(selected_components(sess))
     drawn = c.drawn[]
     pts = Point3f[]
-    if name !== nothing && length(drawn) == length(t.tri_area)
-        ci = findfirst(x -> x.name === name || x.part === name, t.components)
-        # a part left out of the calculations is highlighted on its ghost
+    if !isempty(names) && length(drawn) == length(t.tri_area)
+        lipped = Set{Symbol}(with_lips(names))        # an entrance hole with its closing lip
         g = sess.target.ghost[]
-        tt = ci === nothing && g !== nothing ? g : t
-        # an entrance hole with its closing lip; a part made in pieces with all of them
-        cis = findall(x -> x.name in with_lips((name,)) || x.part === name, tt.components)
-        # what the cutaway keeps (a ghost is drawn whole: no cut)
-        r = cut_region(sess.view; scale = t.scale, on = tt === t)
-        for k in eachindex(tt.tri_area)
-            tt.tri_comp[k] in cis || continue
-            # apertures and invisible parts are not drawn; highlight them anyway
-            v0, e1, e2 = tt.tri_v0[k], tt.tri_e1[k], tt.tri_e2[k]
-            for (a, b, cc) in first(cut_triangle(r, tt.components[tt.tri_comp[k]].name, v0, v0 + e1, v0 + e2))
-                push!(pts, Point3f(a...), Point3f(b...), Point3f(cc...))
+        # in the calculations, or left out of them (highlighted on the ghost, drawn whole:
+        # no cut); a part made in pieces with all of them
+        for tt in (t, g)
+            tt === nothing && continue
+            cis = findall(x -> x.name in lipped || x.part in names, tt.components)
+            isempty(cis) && continue
+            r = cut_region(sess.view; scale = t.scale, on = sess.view.cutaway[] && tt === t)
+            for k in eachindex(tt.tri_area)
+                tt.tri_comp[k] in cis || continue
+                # apertures and invisible parts are not drawn; highlight them anyway
+                v0, e1, e2 = tt.tri_v0[k], tt.tri_e1[k], tt.tri_e2[k]
+                for (a, b, cc) in first(cut_triangle(r, tt.components[tt.tri_comp[k]].name, v0, v0 + e1, v0 + e2))
+                    push!(pts, Point3f(a...), Point3f(b...), Point3f(cc...))
+                end
             end
         end
     end

@@ -66,9 +66,10 @@ ScrollPage {
                     model: app.cavityNames
                     currentIndex: app.cavityIndex
                     onActivated: (index) => Julia.br_drive_cavity(index)
-                    ToolTip.visible: hovered
-                    ToolTip.delay: 400
-                    ToolTip.text: "The hohlraum part whose wall temperature is shown; the drive history charts every one"
+                    Tip {
+                        visible: parent.hovered
+                        text: "The hohlraum whose wall temperature is shown"
+                    }
                 }
                 Label { text: "Mean incident flux " + app.cavityTr }
             }

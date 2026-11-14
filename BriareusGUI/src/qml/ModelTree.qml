@@ -1,9 +1,10 @@
 // The model tree: target components (with their colors in the 3D view) under their
-// parts and assemblies, beams by group and quad, analyses. Click selects (in the 3D view too), Ctrl + click adds beams
-// to the selection, double click fits the view to it, the arrow expands, a beam row's
-// dots switch its 1ω, 2ω and 3ω light in the calculations (top) and in the view
-// (bottom), a component's box (its color, filled by its display mode) shows or hides
-// it, right click opens the node's actions (a component's display mode among them).
+// parts and assemblies, beams by group and quad, analyses. Click selects (in the 3D view
+// too), Ctrl + click adds to the selection, Shift + click a range, double click fits the
+// view to it, the arrow expands, a beam row's dots switch its 1ω, 2ω and 3ω light in the
+// calculations (top) and in the view (bottom), a component's box (its color, filled by
+// its display mode) shows or hides it, right click opens the row's commands. The menu is
+// built for the row clicked, so it holds only the commands that apply to it.
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -14,6 +15,7 @@ Pane {
     id: tree
     padding: 0
     property alias groupDialog: groupDialog
+    property alias rowMenu: menu
     function openGroupDialog() { groupDialog.open() }
 
     ColumnLayout {
@@ -35,9 +37,7 @@ Pane {
                 Layout.fillWidth: true
                 horizontalAlignment: Text.AlignRight
                 HoverHandler { id: countHover }
-                ToolTip.visible: countHover.hovered
-                ToolTip.delay: 400
-                ToolTip.text: "Ctrl + click adds or removes; Shift + click selects a range"
+                Tip { visible: countHover.hovered; text: "Esc clears the selection" }
             }
         }
         ListView {
@@ -65,11 +65,7 @@ Pane {
                     onClicked: (mouse) => {
                         if (mouse.button === Qt.RightButton) {
                             if (!model.selected) Julia.br_select(node.nodeId)
-                            const f = Julia.br_node_flags(node.nodeId)
-                            showItem.checked = f[0]
-                            includeItem.checked = f[1]
-                            axesItem.checked = f[0]
-                            menu.popup()
+                            tree.openMenu(node.nodeId, node.nodeKind, node.nodeDisplay)
                         } else if (mouse.modifiers & Qt.ShiftModifier) {
                             Julia.br_select_range(node.nodeId)
                         } else if (mouse.modifiers & Qt.ControlModifier) {
@@ -126,14 +122,11 @@ Pane {
                             color: model.drawmode === "opaque" ? (compBox.dark ? "white" : "black") : palette.text
                         }
                         HoverHandler { id: boxHover; cursorShape: Qt.PointingHandCursor }
-                        ToolTip.visible: boxHover.hovered
-                        ToolTip.delay: 400
-                        ToolTip.text: (compBox.mixed ? "Partly drawn: click to show all" :
-                                       (compBox.shown ? "Drawn " : "Hidden") +
-                                       ({ opaque: "opaque", transparent: "semi-transparent", wireframe: "as wireframe",
-                                          invisible: "" })[model.drawmode] +
-                                       ": click to " + (compBox.shown ? "hide" : "show")) +
-                                      ", right-click for the display mode (drawing only: it stays in the calculations)"
+                        Tip {
+                            visible: boxHover.hovered
+                            text: compBox.mixed ? "Partly shown: click to show all"
+                                                : compBox.shown ? "Click to hide" : "Click to show"
+                        }
                         TapHandler { onTapped: Julia.br_tree_on(node.nodeId, !compBox.shown) }
                     }
                     StatusDot { visible: model.status !== ""; status: model.status }
@@ -151,9 +144,7 @@ Pane {
                         font.weight: model.depth === 0 ? Font.DemiBold : Font.Normal
                         elide: Text.ElideRight
                         Layout.maximumWidth: list.width * (model.depth === 0 ? 0.7 : 0.55)   // a heading's detail is a count
-                        ToolTip.visible: labelHover.hovered && truncated
-                        ToolTip.delay: 400
-                        ToolTip.text: model.label
+                        Tip { visible: labelHover.hovered && parent.truncated; text: model.label }
                         HoverHandler { id: labelHover }
                     }
                     Label {
@@ -162,179 +153,119 @@ Pane {
                         font.pixelSize: 11
                         elide: Text.ElideRight
                         Layout.fillWidth: true
-                        ToolTip.visible: detailHover.hovered && truncated
-                        ToolTip.delay: 400
-                        ToolTip.text: model.detail
+                        Tip { visible: detailHover.hovered && parent.truncated; text: model.detail }
                         HoverHandler { id: detailHover }
-                    }
-                }
-                AutoMenu {
-                    id: menu
-                    readonly property bool showable: ["comp", "part", "window", "assembly", "group", "quad", "beam", "beams"].indexOf(node.nodeKind) >= 0
-                    // what the model tree's commands act on: parts and assemblies
-                    readonly property bool treeNode: node.nodeKind === "part" || node.nodeKind === "assembly"
-                    readonly property bool isComp: node.nodeDisplay !== ""
-                    MenuItem {
-                        id: showItem
-                        text: "Show 3ω light in the 3D view"
-                        checkable: true
-                        visible: menu.showable && !menu.isComp
-                        height: visible ? implicitHeight : 0
-                        onTriggered: Julia.br_node_show(node.nodeId, checked)
-                    }
-                    MenuItem {
-                        text: app.displayLabels[0]
-                        checkable: true
-                        checked: node.nodeDisplay === "opaque"
-                        visible: menu.isComp; height: visible ? implicitHeight : 0
-                        onTriggered: Julia.br_set_display(node.nodeId, "opaque")
-                    }
-                    MenuItem {
-                        text: app.displayLabels[1]
-                        checkable: true
-                        checked: node.nodeDisplay === "transparent"
-                        visible: menu.isComp; height: visible ? implicitHeight : 0
-                        onTriggered: Julia.br_set_display(node.nodeId, "transparent")
-                    }
-                    MenuItem {
-                        text: app.displayLabels[2]
-                        checkable: true
-                        checked: node.nodeDisplay === "wireframe"
-                        visible: menu.isComp; height: visible ? implicitHeight : 0
-                        onTriggered: Julia.br_set_display(node.nodeId, "wireframe")
-                    }
-                    MenuItem {
-                        text: app.displayLabels[3]
-                        checkable: true
-                        checked: node.nodeDisplay === "invisible"
-                        visible: menu.isComp; height: visible ? implicitHeight : 0
-                        onTriggered: Julia.br_set_display(node.nodeId, "invisible")
-                    }
-                    MenuItem {
-                        id: includeItem
-                        text: "Include in calculations"
-                        checkable: true
-                        visible: menu.showable
-                        height: visible ? implicitHeight : 0
-                        onTriggered: Julia.br_node_include(node.nodeId, checked)
-                    }
-                    // a hohlraum part's piece: its role (the selection's, set on right-click)
-                    MenuSeparator { visible: menu.isComp && app.pieceRoleable; height: visible ? implicitHeight : 0 }
-                    MenuItem {
-                        text: "Role: " + app.pieceRoleLabels[0]
-                        checkable: true
-                        checked: app.pieceRole === 0
-                        enabled: app.pieceRoleAllowed[0] === true
-                        visible: menu.isComp && app.pieceRoleable; height: visible ? implicitHeight : 0
-                        onTriggered: Julia.br_piece_role(0)
-                    }
-                    MenuItem {
-                        text: "Role: " + app.pieceRoleLabels[1]
-                        checkable: true
-                        checked: app.pieceRole === 1
-                        enabled: app.pieceRoleAllowed[1] === true
-                        visible: menu.isComp && app.pieceRoleable; height: visible ? implicitHeight : 0
-                        onTriggered: Julia.br_piece_role(1)
-                    }
-                    MenuItem {
-                        text: "Role: " + app.pieceRoleLabels[2]
-                        checkable: true
-                        checked: app.pieceRole === 2
-                        enabled: app.pieceRoleAllowed[2] === true
-                        visible: menu.isComp && app.pieceRoleable; height: visible ? implicitHeight : 0
-                        onTriggered: Julia.br_piece_role(2)
-                    }
-                    MenuItem {
-                        text: "Draw axes in the 3D view"
-                        checkable: true
-                        id: axesItem
-                        visible: node.nodeKind === "frame"
-                        height: visible ? implicitHeight : 0
-                        onTriggered: Julia.br_set_triad(node.nodeId, checked)
-                    }
-                    MenuItem {
-                        text: node.nodeKind === "frame" ? "Add frame in it" : "Add frame"
-                        visible: node.nodeKind === "frame" || node.nodeKind === "frames"
-                        height: visible ? implicitHeight : 0
-                        onTriggered: Julia.br_add_frame()
-                    }
-                    MenuItem {
-                        text: "Coordinate transform…"
-                        visible: node.nodeKind === "frame" || node.nodeKind === "frames"
-                        height: visible ? implicitHeight : 0
-                        onTriggered: Julia.br_open_transform()
-                    }
-                    MenuSeparator { visible: menu.showable; height: visible ? implicitHeight : 0 }
-                    MenuItem {
-                        text: "Fit view"
-                        visible: node.nodeKind !== "frame" && node.nodeKind !== "frames"
-                        height: visible ? implicitHeight : 0
-                        onTriggered: Julia.br_fit_selection()
-                    }
-                    MenuItem {
-                        text: "Look along beam"
-                        visible: ["group", "quad", "beam"].indexOf(node.nodeKind) >= 0
-                        height: visible ? implicitHeight : 0
-                        onTriggered: Julia.br_look_along_beam()
-                    }
-                    MenuItem {
-                        text: "Move to a new group…"
-                        visible: ["group", "quad", "beam"].indexOf(node.nodeKind) >= 0
-                        height: visible ? implicitHeight : 0
-                        onTriggered: groupDialog.open()
-                    }
-                    MenuItem {
-                        text: "Split quad into beams"
-                        visible: app.bnCanSplit && ["quad", "beam"].indexOf(node.nodeKind) >= 0
-                        height: visible ? implicitHeight : 0
-                        onTriggered: Julia.br_split_quad()
-                    }
-                    MenuItem {
-                        text: "Merge quad"
-                        visible: app.bnCanMerge && ["quad", "beam"].indexOf(node.nodeKind) >= 0
-                        height: visible ? implicitHeight : 0
-                        onTriggered: Julia.br_merge_quad()
-                    }
-                    MenuSeparator { visible: menu.treeNode || node.nodeKind === "target"; height: visible ? implicitHeight : 0 }
-                    MenuItem {
-                        text: node.nodeKind === "target" ? "New assembly" : "New assembly of the selection"
-                        visible: menu.treeNode || node.nodeKind === "target"
-                        height: visible ? implicitHeight : 0
-                        onTriggered: Julia.br_new_assembly()
-                    }
-                    MenuItem {
-                        text: "Move into assembly…"
-                        visible: menu.treeNode
-                        height: visible ? implicitHeight : 0
-                        onTriggered: assemblyDialog.open()
-                    }
-                    MenuItem {
-                        text: "Ungroup"
-                        visible: node.nodeKind === "assembly"
-                        height: visible ? implicitHeight : 0
-                        onTriggered: Julia.br_ungroup_assembly()
-                    }
-                    MenuItem {
-                        text: "Rename…"
-                        visible: menu.treeNode || node.nodeKind === "frame"
-                        height: visible ? implicitHeight : 0
-                        onTriggered: renameDialog.openFor(node.nodeId.substring(node.nodeId.indexOf(":") + 1))
-                    }
-                    MenuItem {
-                        text: node.nodeKind === "assembly" ? "Remove with its contents" : "Remove"
-                        visible: menu.treeNode || node.nodeKind === "window" || node.nodeKind === "frame"
-                        height: visible ? implicitHeight : 0
-                        onTriggered: Julia.br_remove_selected()
-                    }
-                    MenuItem {
-                        text: "Run"
-                        visible: node.nodeKind === "task"
-                        height: visible ? implicitHeight : 0
-                        onTriggered: Julia.br_run_task(node.nodeId.substring(5))
                     }
                 }
             }
         }
+    }
+
+    // The row menu, built for the row clicked: only the commands that apply to it (a
+    // hidden item of a fixed menu still takes its padding in the style's menus).
+    // Each entry is { text, run, checkable, checked, enabled }; null is a separator.
+    Component {
+        id: menuItem
+        MenuItem {
+            property var run: null
+            onTriggered: if (run) run(checked)
+        }
+    }
+    Component { id: menuSeparator; MenuSeparator {} }
+    AutoMenu { id: menu }
+    function openMenu(id, kind, display) {
+        const entries = menuEntries(id, kind, display)
+        while (menu.count > 0) {
+            const it = menu.takeItem(0)
+            if (it) it.destroy()
+        }
+        let last = null
+        for (const e of entries) {
+            if (e === null && last === null) continue             // no leading or doubled separator
+            // (created under the tree, an item: the menu takes them over)
+            menu.addItem(e === null ? menuSeparator.createObject(tree)
+                                    : menuItem.createObject(tree, { text: e.text, run: e.run, checkable: !!e.checkable,
+                                                                    checked: !!e.checked, enabled: e.enabled !== false }))
+            last = e
+        }
+        if (last === null && menu.count > 0) menu.takeItem(menu.count - 1).destroy()
+        if (menu.count > 0) menu.popup()
+    }
+    function menuEntries(id, kind, display) {
+        // [shown, included, quads to split, quads to merge, piece roleable, piece role,
+        //  role 0 allowed, role 1 allowed, role 2 allowed] for the rows the menu acts on
+        const f = Julia.br_node_menu(id)
+        const several = app.selectionCount > 1
+        const beamRow = ["beams", "group", "quad", "beam"].indexOf(kind) >= 0
+        const treeNode = kind === "part" || kind === "assembly"
+        const isComp = display !== ""
+        const name = id.substring(id.indexOf(":") + 1)
+        const e = []
+        if (beamRow) {
+            e.push({ text: "Show 3ω light in the 3D view", checkable: true, checked: f[0] === 1,
+                     run: (on) => Julia.br_node_show(id, on) })
+            e.push({ text: "Include in calculations", checkable: true, checked: f[1] === 1,
+                     run: (on) => Julia.br_node_include(id, on) })
+            e.push(null)
+            e.push({ text: "Fit view", run: () => Julia.br_fit_selection() })
+            if (kind !== "beams") {
+                e.push({ text: "Look along beam", run: () => Julia.br_look_along_beam() })
+                e.push({ text: "Move to a new group…", run: () => groupDialog.open() })
+            }
+            if (f[2] > 0 || f[3] > 0) e.push(null)
+            if (f[2] > 0)
+                e.push({ text: f[2] === 1 ? "Split quad into beams" : "Split " + f[2] + " quads into beams",
+                         run: () => Julia.br_split_quads(id) })
+            if (f[3] > 0)
+                e.push({ text: f[3] === 1 ? "Merge beams into quad" : "Merge beams into " + f[3] + " quads",
+                         run: () => Julia.br_merge_quads(id) })
+        } else if (isComp) {
+            const modes = ["opaque", "transparent", "wireframe", "invisible"]
+            for (let k = 0; k < 4; ++k)
+                e.push({ text: app.displayLabels[k], checkable: true, checked: display === modes[k],
+                         run: () => Julia.br_set_display(id, modes[k]) })
+            e.push(null)
+            e.push({ text: "Include in calculations", checkable: true, checked: f[1] === 1,
+                     run: (on) => Julia.br_node_include(id, on) })
+            if (f[4] === 1) {
+                e.push(null)
+                for (let k = 0; k < 3; ++k)
+                    e.push({ text: "Role: " + app.pieceRoleLabels[k], checkable: true, checked: f[5] === k,
+                             enabled: f[6 + k] === 1, run: () => Julia.br_piece_role(k) })
+            }
+            e.push(null)
+            e.push({ text: "Fit view", run: () => Julia.br_fit_selection() })
+        } else if (kind === "frame") {
+            e.push({ text: "Draw axes in the 3D view", checkable: true, checked: f[0] === 1,
+                     run: (on) => Julia.br_set_triad(id, on) })
+            e.push({ text: "Insert frame in it", run: () => Julia.br_add_frame() })
+            e.push({ text: "Coordinate transform…", run: () => Julia.br_open_transform() })
+        } else if (kind === "frames") {
+            e.push({ text: "Insert frame", run: () => Julia.br_add_frame() })
+            e.push({ text: "Coordinate transform…", run: () => Julia.br_open_transform() })
+        } else if (kind === "target") {
+            e.push({ text: "Fit view", run: () => Julia.br_fit_all() })
+            e.push({ text: "New assembly", run: () => Julia.br_new_assembly() })
+        } else if (kind === "task") {
+            e.push({ text: "Run", run: () => Julia.br_run_task(name) })
+        }
+        if (treeNode) {
+            e.push(null)
+            e.push({ text: "New assembly of the selection", run: () => Julia.br_new_assembly() })
+            e.push({ text: "Move into assembly…", run: () => assemblyDialog.open() })
+            if (kind === "assembly" && !several) e.push({ text: "Ungroup", run: () => Julia.br_ungroup_assembly() })
+        }
+        if ((treeNode || kind === "frame") && !several) {
+            if (kind === "frame") e.push(null)
+            e.push({ text: "Rename…", run: () => renameDialog.openFor(name) })
+        }
+        if (treeNode || kind === "window" || kind === "frame") {
+            if (kind === "window") e.push(null)
+            e.push({ text: several ? "Remove " + app.selectionCount + " selected"
+                                   : kind === "assembly" ? "Remove with its contents" : "Remove",
+                     run: () => Julia.br_remove_selected() })
+        }
+        return e
     }
 
     Dialog {
@@ -373,9 +304,7 @@ Pane {
                 id: assemblyChoice
                 model: app.assemblyChoices
                 Layout.preferredWidth: Math.max(200, implicitWidth)
-                ToolTip.visible: hovered
-                ToolTip.delay: 400
-                ToolTip.text: "The members stay where they are; the top level is in no assembly"
+                tip: "The members stay where they are in space"
             }
         }
     }

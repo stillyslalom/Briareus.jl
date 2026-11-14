@@ -62,13 +62,37 @@ function _draw_map!(c::MapCanvas, sess::DesignSession)
     return c
 end
 
+"""
+    image_canvas() -> MapCanvas
+
+A canvas for one image, the Diagnostics tab's: [`show_image!`](@ref) draws a recorded
+imager's image on it.
+"""
+function image_canvas()
+    fig = Figure(size = (700, 300), figure_padding = 6)
+    ax = Axis(fig[1, 1]; xlabel = "image x (mm)", ylabel = "image y (mm)", aspect = DataAspect(), title = " ")
+    hm = heatmap!(ax, [0.0, 1.0], [0.0, 1.0], fill(NaN32, 2, 2); colormap = FIELD_COLORMAP,
+                  colorrange = (0.0, 1.0), nan_color = :transparent)
+    cb = Colorbar(fig[1, 2], hm; label = " ")
+    return MapCanvas(fig, ax, hm, cb, Ref(true))
+end
+
 # The x-ray image (see `xray_image!`): radiance over the image plane, mm by mm.
-function _draw_image!(c::MapCanvas, sess::DesignSession)
-    im = sess.drive.image[]
+_draw_image!(c::MapCanvas, sess::DesignSession) =
+    show_image!(c, sess.drive.image[]; empty = "Computing the drive for the x-ray image…")
+
+"""
+    show_image!(c::MapCanvas, im; empty = " ")
+
+Draw the image `im` (`(; x, y, values, title, unit, window)`, as
+`Controllers.diagnostic_image` gives it) on `c`, opened on its region with signal;
+`nothing` clears the canvas and titles it `empty`.
+"""
+function show_image!(c::MapCanvas, im; empty::AbstractString = " ")
     ax = c.ax
     if im === nothing
         _update!(c.heatmap, [0.0, 1.0], [0.0, 1.0], fill(NaN32, 2, 2); colorrange = (0.0, 1.0))
-        ax.title[] = "Computing the drive for the x-ray image…"
+        ax.title[] = empty
         c.colorbar.label[] = " "
     else
         fin = filter(isfinite, im.values)

@@ -33,7 +33,7 @@ ColumnLayout {
             model: app.moveFrames
             currentIndex: app.moveFrame
             onActivated: (index) => Julia.br_move_frame(index)
-            tip: "The frame whose axis " + move.what + " moves along: TCC, a part's own (its axis is z), a piece's or a user frame"
+            tip: "The frame whose axis " + move.what + " moves along"
         }
     }
     RowLayout {

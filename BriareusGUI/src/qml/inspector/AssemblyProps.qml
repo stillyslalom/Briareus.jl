@@ -27,9 +27,10 @@ ColumnLayout {
             model: app.frameLabels
             currentIndex: app.partFrame < 0 ? 0 : app.partFrame
             onActivated: (index) => Julia.br_part_frame(index)
-            ToolTip.visible: hovered
-            ToolTip.delay: 400
-            ToolTip.text: "The frame its own frame is placed in (it stays where it is); its members move with it"
+            Tip {
+                visible: parent.hovered
+                text: "The frame the assembly is placed in; it stays where it is"
+            }
         }
     }
     MoveAlongRow { what: "the assembly (with its members)" }
@@ -40,7 +41,7 @@ ColumnLayout {
             model: ["Cartesian (x, y, z)", "Cylindrical (r, φ, z)", "Spherical (r, θ, φ)"]
             currentIndex: app.partCoords
             onActivated: (index) => Julia.br_part_coords(index)
-            tip: "The coordinates of the origin's fields, in the frame it is placed in"
+            tip: "Coordinates of the origin fields"
         }
     }
     Repeater {
@@ -59,16 +60,12 @@ ColumnLayout {
         Button {
             text: "Ungroup"
             onClicked: Julia.br_ungroup_assembly()
-            ToolTip.visible: hovered
-            ToolTip.delay: 400
-            ToolTip.text: "Remove the assembly and keep its members, where they are, in its parent"
+            Tip { visible: parent.hovered; text: "Remove the assembly and keep its members" }
         }
         Button {
             text: "Remove with its contents"
             onClicked: Julia.br_remove_selected()
-            ToolTip.visible: hovered
-            ToolTip.delay: 400
-            ToolTip.text: "Remove the assembly and every part and assembly in it"
+            Tip { visible: parent.hovered; text: "Remove the assembly and every part and assembly in it" }
         }
     }
 }

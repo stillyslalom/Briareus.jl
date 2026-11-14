@@ -1,23 +1,24 @@
-// The Help screen: the explanations of every page (common/help.js), a page list on the
-// left and the page's topics on the right; a filter above the list shows the topics of
-// every page that contain its words instead. `openAt(topic)` shows the topic's page with
-// the topic marked, as an ⓘ does when clicked; Documentation opens the documentation's
-// Desktop application page.
+// The Help window: a window of its own (it resizes, moves and stays open beside the
+// design) with the pages of common/help.js on the left and the page's topics on the
+// right; a filter above the list shows the topics of every page that contain its words.
+// `openAt(topic)` shows the topic's page with the topic marked, as an ⓘ does when
+// clicked.
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import QtQuick.Window
 import jlqml
 import "common"
 import "common/help.js" as Help
 
-Dialog {
+Window {
     id: help
-    title: "Help"
-    modal: false
-    anchors.centerIn: parent
-    width: Math.min(parent ? parent.width - 80 : 900, 900)
-    height: Math.min(parent ? parent.height - 80 : 640, 640)
-    standardButtons: Dialog.Close
+    title: "Briareus Help"
+    width: 860
+    height: 620
+    minimumWidth: 480
+    minimumHeight: 320
+    color: palette.window
     property int page: 0
     property string marked: ""
     property string query: ""
@@ -29,7 +30,7 @@ Dialog {
         const out = []
         for (const p of Help.pages)
             for (const it of p.items) {
-                const hay = (it.title + " " + it.text).toLowerCase()
+                const hay = (it.title + " " + (it.tip || "") + " " + it.text).toLowerCase()
                 if (words.every(w => hay.indexOf(w) >= 0))
                     out.push({ key: it.key, title: p.title + " ▸ " + it.title, text: it.text })
             }
@@ -41,57 +42,68 @@ Dialog {
         filter.text = ""
         marked = topic
         page = Help.pageOf(topic)
-        open()
-        topics.positionAt(topic)
+        show()
+        raise()
+        requestActivate()
+        Qt.callLater(topics.positionAt, topic)
     }
+    Shortcut { sequence: "Escape"; onActivated: help.close() }
 
-    RowLayout {
+    // the window's background as an item, so that an image grabbed of the content has it
+    // too (the window's own color is not part of its content item)
+    Rectangle { anchors.fill: parent; color: palette.window }
+
+    SplitView {
         anchors.fill: parent
-        spacing: 12
+        anchors.margins: 10
+        orientation: Qt.Horizontal
         ColumnLayout {
-            Layout.preferredWidth: 200
-            Layout.fillWidth: false
-            Layout.fillHeight: true
+            SplitView.preferredWidth: 210
+            SplitView.minimumWidth: 140
             spacing: 6
             TextField {
                 id: filter
                 Layout.fillWidth: true
-                placeholderText: "Filter topics"
+                Layout.rightMargin: 8
+                placeholderText: "Search Help"
                 selectByMouse: true
                 onTextChanged: help.query = text
-                tip: "Show the topics of every page that contain these words"
             }
             ListView {
                 id: pageList
                 Layout.fillWidth: true
                 Layout.fillHeight: true
+                Layout.rightMargin: 8
                 clip: true
                 model: Help.pages
                 currentIndex: help.page
+                boundsBehavior: Flickable.StopAtBounds
                 delegate: ItemDelegate {
                     width: pageList.width
                     text: modelData.title
+                    topPadding: 5
+                    bottomPadding: 5
                     highlighted: !help.filtering && index === help.page
-                    onClicked: { filter.text = ""; help.marked = ""; help.page = index }
+                    onClicked: { filter.text = ""; help.marked = ""; help.page = index; topics.positionViewAtBeginning() }
                 }
             }
-            RowLayout {
+            Button {
+                text: "Documentation"
                 Layout.fillWidth: true
-                Button {
-                    text: "Documentation"
-                    Layout.fillWidth: true
-                    onClicked: Qt.openUrlExternally(Julia.br_docs_url())
-                    tip: "The Desktop application page of the Briareus documentation (a local build, or online)"
-                }
-                Info { topic: "start.docs" }
+                Layout.rightMargin: 8
+                onClicked: Qt.openUrlExternally(Julia.br_docs_url())
+                tip: "Open the documentation in the browser"
             }
         }
         ListView {
             id: topics
-            Layout.fillWidth: true
-            Layout.fillHeight: true
+            SplitView.fillWidth: true
+            SplitView.minimumWidth: 260
+            leftMargin: 14
+            rightMargin: 14
             clip: true
-            spacing: 14
+            spacing: 18
+            boundsBehavior: Flickable.StopAtBounds
             model: help.filtering ? help.found : Help.pages[help.page].items
             ScrollBar.vertical: ScrollBar {}
             function positionAt(topic) {
@@ -103,24 +115,31 @@ Dialog {
                 text: help.filtering ? (help.found.length === 0 ? "No topic matches" :
                                         help.found.length + (help.found.length === 1 ? " topic" : " topics"))
                                      : Help.pages[help.page].title
-                font.pixelSize: 18
+                font.pixelSize: 20
                 font.weight: Font.DemiBold
-                bottomPadding: 10
+                bottomPadding: 12
             }
             delegate: ColumnLayout {
-                width: topics.width - 16
-                spacing: 4
+                // a readable line length, however wide the window
+                width: Math.min(topics.width - topics.leftMargin - topics.rightMargin - 12, 640)
+                spacing: 6
                 Label {
                     text: modelData.title
+                    font.pixelSize: 15
                     font.weight: Font.DemiBold
                     color: modelData.key === help.marked ? palette.link : palette.windowText
-                }
-                Label {
-                    text: modelData.text
                     wrapMode: Text.WordWrap
                     Layout.fillWidth: true
                 }
+                Label {
+                    text: modelData.text
+                    textFormat: Text.MarkdownText
+                    wrapMode: Text.WordWrap
+                    lineHeight: 1.15
+                    Layout.fillWidth: true
+                }
             }
+            footer: Item { height: 16 }
         }
     }
 }

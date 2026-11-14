@@ -58,6 +58,7 @@ ApplicationWindow {
     function openClearanceExport() { fileDialog.run("export_clearance") }
     function openTalisExport() { fileDialog.run("export_talis") }
     function openDiagnostics() { diagnosticsDialog.open() }
+    function openStl() { stlDialog.open() }
 
     // a results tab asked for from Julia (`request_tab`)
     readonly property string resultsRequest: app.resultsRequest
@@ -79,11 +80,18 @@ ApplicationWindow {
         const key = popupRequest
         if (key === "") return
         // "window": no popup (an image of the toolbar)
-        const dialogs = { retune: retuneDialog, port: portDialog, help: helpDialog, transform: transformDialog }
+        const dialogs = { retune: retuneDialog, port: portDialog, transform: transformDialog }
         if (key.startsWith("topics")) { helpTopics.openAt(key.substring(7)); openPopup = helpTopics }
+        else if (key === "help") { helpTopics.openAt("start.keys"); openPopup = helpTopics }
         else if (key === "group") { tree.openGroupDialog(); openPopup = tree.groupDialog }
-        else if (key === "diagnostics") { results.show("time"); openPopup = results.openDiagnosticPicker() }
-        else if (key === "images") { results.show("time"); openPopup = results.openImageList() }
+        else if (key.startsWith("rowmenu:")) {
+            // the model tree's row menu for a node id (a beam row, a frame, an analysis)
+            const id = key.substring(8)
+            tree.openMenu(id, id.split(":")[0], "")
+            openPopup = tree.rowMenu
+        }
+        else if (key === "diagnostics") { results.show("diagnostics"); openPopup = results.openDiagnosticPicker() }
+        else if (key === "images") { results.show("diagnostics"); Julia.br_diag_category("xray_imager") }
         else if (dialogs[key]) { openPopup = dialogs[key]; openPopup.open() }
         else if (key !== "window") {
             for (let i = 0; i < menuBar.count; ++i) {
@@ -102,15 +110,17 @@ ApplicationWindow {
         interval: 500
         onTriggered: {
             const path = app.popupGrabPath
-            // the popup alone (the window's root item cannot be grabbed), or the toolbar
-            const item = openPopup ? openPopup.contentItem.parent : win.header
+            // the popup alone (the window's root item cannot be grabbed), the Help window's
+            // content, or the toolbar
+            const item = openPopup === helpTopics ? helpTopics.contentItem
+                       : openPopup ? openPopup.contentItem.parent : win.header
             item.grabToImage(function (img) { img.saveToFile(path) })
         }
     }
     // the Help screen at a topic (an ⓘ clicked, `br_help`)
     readonly property string helpRequest: app.helpRequest
     onHelpRequestChanged: if (helpRequest.startsWith("topic:")) helpTopics.openAt(helpRequest.substring(6))
-    HelpDialog { id: helpTopics }
+    HelpWindow { id: helpTopics }
     // follow the selection with the result tabs
     readonly property string selectionWatch: app.selKind + ":" + app.selKey
     onSelectionWatchChanged: followSelection()
@@ -143,14 +153,23 @@ ApplicationWindow {
             Action { text: "Save session &as…"; shortcut: StandardKey.SaveAs; onTriggered: sessionDialog.run("save") }
             Action { text: "Save session without CAD files…"; onTriggered: sessionDialog.run("save_refs") }
             MenuSeparator {}
+            // ready-made targets, by the facility they are mock-ups for: each comes with
+            // that facility's beams
             AutoMenu {
                 title: "New target"
-                Action { text: "Hohlraum with capsule"; onTriggered: { Julia.br_new_target("hohlraum"); Julia.br_select("target") } }
-                Action { text: "Backlighter foil"; onTriggered: { Julia.br_new_target("foil"); Julia.br_select("target") } }
-                Action { text: "Halfraum pair with shock tube"; onTriggered: { Julia.br_new_target("shock_tube"); Julia.br_select("target") } }
-                Action { text: "Opacity halfraum"; onTriggered: { Julia.br_new_target("opacity"); Julia.br_select("target") } }
-                Action { text: "Frustraum with capsule"; onTriggered: { Julia.br_new_target("frustraum"); Julia.br_select("target") } }
-                Action { text: "Empty (parts only)"; onTriggered: { Julia.br_new_target("empty"); Julia.br_select("target") } }
+                AutoMenu {
+                    title: "NIF"
+                    Action { text: "Hohlraum with capsule"; onTriggered: Julia.br_new_target("hohlraum") }
+                    Action { text: "Frustraum with capsule"; onTriggered: Julia.br_new_target("frustraum") }
+                    Action { text: "Halfraum pair with shock tube"; onTriggered: Julia.br_new_target("shock_tube") }
+                    Action { text: "Opacity halfraum"; onTriggered: Julia.br_new_target("opacity") }
+                }
+                AutoMenu {
+                    title: "OMEGA"
+                    Action { text: "Backlighter foil"; onTriggered: Julia.br_new_target("foil") }
+                }
+                MenuSeparator {}
+                Action { text: "Empty"; onTriggered: Julia.br_new_target("empty") }
             }
             MenuSeparator {}
             Action { text: "Import VisRad workspace…"; onTriggered: vrwDialog.run("import") }
@@ -168,7 +187,13 @@ ApplicationWindow {
             Action { text: "Export beam table…"; onTriggered: fileDialog.run("export_beams") }
             Action { text: "Export VisRad SST pointing…"; onTriggered: fileDialog.run("export_sst") }
             Action { text: "Export VisRad beam summary…"; onTriggered: fileDialog.run("export_summary") }
-            Action { text: "Export results (CSV)…"; enabled: app.driveCurrent; onTriggered: resultsDialog.open() }
+            Action {
+                // the drive, and the drive history with its diagnostics when it is current
+                text: app.timeHasHistory && !app.timeStale ? "Export results with the drive history (CSV)…"
+                                                           : "Export results (CSV)…"
+                enabled: app.driveCurrent
+                onTriggered: resultsDialog.open()
+            }
             Action { text: "Export target as STL…"; onTriggered: exportStlDialog.open() }
             MenuSeparator {}
             Action { text: "Save view as image…"; onTriggered: saveViewDialog.open() }
@@ -179,38 +204,35 @@ ApplicationWindow {
             title: "&Edit"
             Action { text: "&Undo"; shortcut: StandardKey.Undo; enabled: app.canUndo; onTriggered: Julia.br_undo() }
             Action { text: "&Redo"; shortcut: StandardKey.Redo; enabled: app.canRedo; onTriggered: Julia.br_redo() }
+            MenuSeparator {}
+            Action {
+                text: app.selectionCount > 1 ? "Remove " + app.selectionCount + " selected" : "Remove selected"
+                shortcut: StandardKey.Delete
+                enabled: ["part", "assembly", "window", "frame"].indexOf(app.selKind) >= 0
+                onTriggered: Julia.br_remove_selected()
+            }
+            Action { text: "Deselect"; enabled: app.selKind !== ""; onTriggered: Julia.br_select("") }
         }
         AutoMenu {
-            // starters, placed in the selected part's or piece's frame (TCC with none)
+            // what a target is built from: parts, windows, assemblies and frames
             title: "&Insert"
-            Action { text: "Hohlraum with capsule"; onTriggered: Julia.br_insert("hohlraum") }
-            Action { text: "Backlighter foil"; onTriggered: Julia.br_insert("foil") }
-            Action { text: "Halfraum pair with shock tube"; onTriggered: Julia.br_insert("shock_tube") }
-            Action { text: "Opacity halfraum"; onTriggered: Julia.br_insert("opacity") }
-            Action { text: "Frustraum with capsule"; onTriggered: Julia.br_insert("frustraum") }
+            Action { text: "Sphere"; onTriggered: Julia.br_add_part("sphere") }
+            Action { text: "Disk"; onTriggered: Julia.br_add_part("disk") }
+            Action { text: "Washer (annulus)"; onTriggered: Julia.br_add_part("annulus") }
+            Action { text: "Rectangle"; onTriggered: Julia.br_add_part("rectangle") }
+            Action { text: "Cylinder (tube)"; onTriggered: Julia.br_add_part("cylinder") }
+            Action { text: "Cone (frustum)"; onTriggered: Julia.br_add_part("cone") }
+            Action { text: "Hohlraum"; onTriggered: Julia.br_add_part("hohlraum") }
+            Action { text: "Mesh from STL file…"; onTriggered: stlDialog.open() }
+            MenuSeparator {}
+            Action { text: "Diagnostic window"; enabled: app.hasHohlraum; onTriggered: Julia.br_add_window() }
+            MenuSeparator {}
+            Action { text: "Assembly (of the selected parts)"; onTriggered: Julia.br_new_assembly() }
+            Action { text: "Frame (in the selected frame)"; onTriggered: Julia.br_add_frame() }
         }
         AutoMenu {
             title: "&Target"
             Action { text: "Properties"; onTriggered: Julia.br_select("target") }
-            AutoMenu {
-                title: "Add part"
-                Action { text: "Sphere"; onTriggered: Julia.br_add_part("sphere") }
-                Action { text: "Disk"; onTriggered: Julia.br_add_part("disk") }
-                Action { text: "Washer (annulus)"; onTriggered: Julia.br_add_part("annulus") }
-                Action { text: "Rectangle"; onTriggered: Julia.br_add_part("rectangle") }
-                Action { text: "Cylinder (tube)"; onTriggered: Julia.br_add_part("cylinder") }
-                Action { text: "Cone (frustum)"; onTriggered: Julia.br_add_part("cone") }
-                MenuSeparator {}
-                Action { text: "Mesh from STL file…"; onTriggered: stlDialog.open() }
-            }
-            Action { text: "Add diagnostic window"; enabled: app.hasHohlraum; onTriggered: Julia.br_add_window() }
-            Action { text: "New assembly (of the selected parts)"; onTriggered: Julia.br_new_assembly() }
-            Action {
-                text: "Remove selected part, assembly, window or frame"
-                enabled: ["part", "assembly", "window", "frame"].indexOf(app.selKind) >= 0
-                onTriggered: Julia.br_remove_selected()
-            }
-            MenuSeparator {}
             AutoMenu {
                 title: "Mesh"
                 Action { text: "Coarse"; checkable: true; checked: app.targetResolution === "coarse"; onTriggered: Julia.br_set_resolution("coarse") }
@@ -225,16 +247,21 @@ ApplicationWindow {
                 title: "Facility"
                 Action { text: "NIF"; checkable: true; checked: app.facility === "nif"; onTriggered: Julia.br_set_facility("nif") }
                 Action { text: "OMEGA"; checkable: true; checked: app.facility === "omega"; onTriggered: Julia.br_set_facility("omega") }
-                Action { text: "OMEGA EP (import its beams)"; checkable: true; checked: app.facility === "omega_ep"; onTriggered: Julia.br_set_facility("omega_ep") }
-                Action { text: "Other (imported beams)"; checkable: true; checked: app.facility === "custom"; onTriggered: Julia.br_set_facility("custom") }
+                Action { text: "OMEGA EP"; checkable: true; checked: app.facility === "omega_ep"; onTriggered: Julia.br_set_facility("omega_ep") }
+                Action { text: "Other"; checkable: true; checked: app.facility === "custom"; onTriggered: Julia.br_set_facility("custom") }
             }
             AutoMenu {
                 title: "Load preset"
+                enabled: app.facility === "nif" || app.facility === "omega"
                 Action { text: "NIF quads (48)"; enabled: app.facility === "nif"; onTriggered: Julia.br_load_preset("nif_quads") }
                 Action { text: "NIF beams (192)"; enabled: app.facility === "nif"; onTriggered: Julia.br_load_preset("nif_beams") }
                 Action { text: "OMEGA hohlraum (40)"; enabled: app.facility === "omega"; onTriggered: Julia.br_load_preset("omega_hohlraum") }
                 Action { text: "OMEGA backlighter"; enabled: app.facility === "omega"; onTriggered: Julia.br_load_preset("omega_backlighter") }
             }
+            MenuSeparator {}
+            Action { text: "Split all quads into beams"; enabled: app.hasQuads; onTriggered: Julia.br_split_quads("beams") }
+            Action { text: "Merge all beams into quads"; enabled: app.hasQuads; onTriggered: Julia.br_merge_quads("beams") }
+            MenuSeparator {}
             Action { text: "All on"; onTriggered: Julia.br_tree_on("beams", true) }
             Action { text: "All off"; onTriggered: Julia.br_tree_on("beams", false) }
         }
@@ -260,7 +287,7 @@ ApplicationWindow {
             }
             MenuSeparator {}
             Action { text: "Orthographic projection"; checkable: true; checked: app.ortho; onTriggered: Julia.br_projection(checked) }
-            Action { text: "Turntable rotation (z stays up)"; checkable: true; checked: app.turntable; onTriggered: Julia.br_turntable(checked) }
+            Action { text: "Turntable rotation (keeps z up)"; checkable: true; checked: app.turntable; onTriggered: Julia.br_turntable(checked) }
             Action { text: "Cutaway"; checkable: true; checked: app.cutaway; onTriggered: Julia.br_set_cutaway(checked) }
             MenuSeparator {}
             AutoMenu {
@@ -330,19 +357,20 @@ ApplicationWindow {
         AutoMenu {
             title: "&Tools"
             Action { text: "Coordinate transform…"; onTriggered: transformDialog.open() }
-            Action { text: "Add frame (in the selected frame)"; onTriggered: Julia.br_add_frame() }
             Action { text: "Frames…"; onTriggered: Julia.br_select("frames") }
         }
         AutoMenu {
             title: "&Diagnostics"
-            Action { text: "Folders…"; onTriggered: diagnosticsDialog.open() }
-            Action { text: "Read the definitions again"; onTriggered: Julia.br_diag_reload() }
+            Action { text: "Show the Diagnostics tab"; onTriggered: results.show("diagnostics") }
+            MenuSeparator {}
+            Action { text: "Diagnostic directories…"; onTriggered: diagnosticsDialog.open() }
+            Action { text: "Refresh"; onTriggered: Julia.br_diag_reload() }
         }
         AutoMenu {
             title: "&Help"
-            Action { text: "Help topics"; shortcut: StandardKey.HelpContents; onTriggered: helpTopics.openAt("") }
+            Action { text: "Help"; shortcut: StandardKey.HelpContents; onTriggered: helpTopics.openAt("start.layout") }
+            Action { text: "Mouse and keys"; onTriggered: helpTopics.openAt("start.keys") }
             Action { text: "Documentation"; onTriggered: Qt.openUrlExternally(Julia.br_docs_url()) }
-            Action { text: "Mouse and keys"; onTriggered: helpDialog.open() }
         }
     }
 
@@ -367,17 +395,12 @@ ApplicationWindow {
                 Layout.fillWidth: true
                 opacity: 0.8
                 HoverHandler { id: statusHover }
-                ToolTip {
-                    visible: statusLine.truncated && statusHover.hovered
-                    delay: 300
-                    text: statusLine.text
-                    width: Math.min(implicitWidth, 640)
-                }
+                Tip { visible: statusLine.truncated && statusHover.hovered; delay: 300; text: statusLine.text; maxWidth: 640 }
             }
             Label {
                 // the gestures of the view on the canvas: the 3D view's, or a map's or image's
                 text: app.driveView === "scene" || app.sideView
-                      ? "wheel zoom · drag orbit · right-drag pan · double-click fit · F fit all"
+                      ? "wheel zoom · drag orbit · right-drag pan · double-click fit · F fit all · Esc deselect"
                       : "wheel zoom · drag box zoom · right-drag pan · Ctrl+click opening view · Ctrl+Shift+click whole field"
                 opacity: 0.55
                 font.pixelSize: 11
@@ -390,6 +413,11 @@ ApplicationWindow {
         id: body
         anchors.fill: parent
         orientation: Qt.Horizontal
+        // Esc clears the selection. The key reaches here from whatever had the keyboard
+        // (a field, the tree) unless that used it; a popup closes on Esc before this, and
+        // the 3D view, which takes its own keys, clears the selection itself.
+        focus: true
+        Keys.onEscapePressed: (event) => { Julia.br_select(""); event.accepted = true }
 
         ModelTree {
             id: tree
@@ -587,7 +615,7 @@ ApplicationWindow {
     }
     FolderDialog {
         id: resultsDialog
-        title: "Folder for the results (laser, radiosity and flux per element, modes, powers)"
+        title: "Folder for the results (the drive, and the drive history when there is one)"
         onAccepted: Julia.br_export_results(selectedFolder.toString())
     }
     // retune the enabled beams' pulses to a reference shot's drive (capsule, face or foil)
@@ -627,12 +655,12 @@ ApplicationWindow {
                 columns: 3
                 Label { text: "Reference pulses" }
                 TextField { id: retuneTable; Layout.preferredWidth: 340; placeholderText: "pulse table (CSV)"
-                            tip: text !== "" ? text : "The pulses of the reference shot, fired with every beam of the table" }
+                            tip: text !== "" ? text : "The reference shot's pulse table, all beams firing" }
                 Button { text: "Browse…"; onClicked: { retunePick.saving = false; retunePick.open() }
                          tip: "Choose the reference pulse table" }
                 Label { text: "Retuned pulses" }
                 TextField { id: retuneOut; Layout.preferredWidth: 340; placeholderText: "file to write"
-                            tip: text !== "" ? text : "The pulse table the retuned powers are written to" }
+                            tip: text !== "" ? text : "Where the retuned pulse table is written" }
                 Button { text: "Browse…"; onClicked: { retunePick.saving = true; retunePick.open() }
                          tip: "Choose the file to write" }
                 Label { text: "One power per" }
@@ -643,16 +671,16 @@ ApplicationWindow {
                     valueRole: "key"
                     model: [{ label: "quad", key: "quad" }, { label: "cone group", key: "group" },
                             { label: "beam", key: "beam" }]
-                    tip: "The beams of one quad, cone group or beam share one retuned power at each time"
+                    tip: "The beams that share one retuned power"
                 }
                 Item { width: 1 }
                 Label { text: "Power limit (× reference)" }
                 TextField { id: retuneCap; text: "1.3"; Layout.preferredWidth: 100
-                            tip: "Each retuned power stays within this multiple of its reference power" }
+                            tip: "Upper limit of each retuned power, as a multiple of its reference" }
                 Item { width: 1 }
                 Label { text: "Stay near the reference" }
                 TextField { id: retuneStay; text: "0"; Layout.preferredWidth: 100
-                            tip: "The weight on the retuned powers' departure from the reference powers; 1e-4 keeps most quads off their limit" }
+                            tip: "Weight on staying near the reference powers (0: none; try 1e-4)" }
                 Item { width: 1 }
                 Label { text: "Holds"; visible: retuneOn.visible }
                 ComboBox {
@@ -660,7 +688,7 @@ ApplicationWindow {
                     visible: app.retuneOn.length > 1
                     Layout.preferredWidth: 220
                     model: app.retuneLabels
-                    tip: "What the retune holds: the observed surface's x-ray drive (a capsule's modes, a face's flux) or the active foil's laser irradiance within the spot radius"
+                    tip: "Match the observed surface's x-rays, or the foil's laser spot"
                 }
                 Item { width: 1; visible: retuneOn.visible }
                 Label { text: "Target" }
@@ -670,7 +698,7 @@ ApplicationWindow {
                     textRole: "label"
                     valueRole: "key"
                     model: [{ label: "reference shape", key: "reference" }, { label: "uniform", key: "uniform" }]
-                    tip: "Reference shape: the reference shot's modes or flux distribution, nonuniformity included. Uniform: no modes, a flat flux, the least nonuniformity the powers allow"
+                    tip: "Match the reference's drive as it is, or aim for a uniform drive"
                 }
                 Item { width: 1 }
                 Label { text: "Level"; visible: retuneTarget.currentValue === "uniform" }
@@ -679,9 +707,7 @@ ApplicationWindow {
                     visible: retuneTarget.currentValue === "uniform"
                     Layout.preferredWidth: 100
                     placeholderText: "reference's"
-                    tip: retuneDialog.kind === "capsule"
-                         ? "The capsule's radiation temperature held at every step (eV); empty: the reference's at each step"
-                         : "The mean flux held at every step (TW/mm², ×10¹⁴ for W/cm²); empty: the reference's at each step. Where the power limit cannot reach it, the status gives the level reached"
+                    tip: "The level to hold at every time; empty: the reference's"
                 }
                 Label { text: retuneDialog.kind === "capsule" ? "Tᵣ (eV)" : "TW/mm²"; visible: retuneLevel.visible }
                 Item { width: 1 }
@@ -690,7 +716,7 @@ ApplicationWindow {
                     text: "Fire the retuned pulses"
                     checked: true
                     Layout.columnSpan: 2
-                    tip: "The retuned pulses become the Time tab's pulses (as Pulse table… of the written file), so a drive history runs on them; Undo takes them back"
+                    tip: "Load the retuned pulses as the session's pulses"
                 }
             }
             RowLayout {
@@ -701,8 +727,7 @@ ApplicationWindow {
                                                retuneCap.text, retuneStay.text,
                                                retuneOn.visible ? app.retuneOn[retuneDialog.choice] : "auto",
                                                retuneTarget.currentValue, retuneLevel.text, retuneLoad.checked)
-                    tip: app.driveCurrent ? "Retune in the background; the Time tab's Retune chart shows the result"
-                                          : "Compute the drive first"
+                    tip: app.driveCurrent ? "Runs in the background" : "Compute the drive first"
                 }
                 BusyIndicator { running: app.retuneRunning; visible: running; Layout.preferredHeight: 24; Layout.preferredWidth: 24 }
                 Label { text: app.retuneStatus; Layout.fillWidth: true; Layout.maximumWidth: 400; wrapMode: Text.WordWrap }
@@ -746,29 +771,29 @@ ApplicationWindow {
         }
         onAccepted: Julia.br_look_from_port(portTheta.text, portPhi.text)
     }
-    // the diagnostic search path's folders (saved for later sessions) and the problems
-    // found in their definitions (check_diagnostics)
+    // the directories diagnostic definitions are read from (saved for later sessions)
+    // and the problems found in their definitions (check_diagnostics)
     Dialog {
         id: diagnosticsDialog
-        title: "Diagnostic definitions: " + app.diagCount + " found"
+        title: "Diagnostic directories: " + app.diagCount + " definitions found"
         anchors.centerIn: parent
         width: Math.min(win.width - 40, 760)
         height: Math.min(win.height - 40, 520)
         standardButtons: Dialog.Close
         FolderDialog {
             id: diagFolderDialog
-            title: "Folder of diagnostic definitions (.toml)"
+            title: "Directory of diagnostic definitions (.toml)"
             onAccepted: Julia.br_diag_add_folder(selectedFolder.toString())
         }
         ColumnLayout {
             anchors.fill: parent
             spacing: 4
             RowLayout {
-                SectionLabel { text: "Folders"; Layout.fillWidth: true }
+                SectionLabel { text: "Directories"; Layout.fillWidth: true }
                 Info { topic: "diagnostics.folders" }
-                Button { text: "Add folder…"; onClicked: diagFolderDialog.open()
-                         tip: "A folder of diagnostic definitions (.toml), read after those listed and saved for later sessions" }
-                Button { text: "Read again"; onClicked: Julia.br_diag_reload(); tip: "Read every folder's definitions again" }
+                Button { text: "Add directory…"; onClicked: diagFolderDialog.open()
+                         tip: "Read definitions from another directory, kept for later sessions" }
+                Button { text: "Refresh"; onClicked: Julia.br_diag_reload(); tip: "Read every definition again" }
             }
             Label { visible: app.diagFolders === 0; text: "Built-in definitions only"; opacity: 0.6 }
             Repeater {
@@ -777,12 +802,10 @@ ApplicationWindow {
                     required property string path
                     required property bool saved
                     Layout.fillWidth: true
-                    Label { text: path; elide: Text.ElideMiddle; Layout.fillWidth: true
-                            ToolTip.visible: hov.hovered; ToolTip.text: path
-                            HoverHandler { id: hov } }
+                    Cell { text: path; elide: Text.ElideMiddle; Layout.fillWidth: true }
                     Label { visible: !saved; text: "environment"; opacity: 0.6 }
                     Button { visible: saved; text: "Remove"; flat: true; onClicked: Julia.br_diag_remove_folder(path)
-                             tip: "Take this folder off the search path" }
+                             tip: "Stop reading this directory" }
                 }
             }
             SectionLabel { text: "Problems (" + app.diagIssues + ")" }
@@ -800,40 +823,9 @@ ApplicationWindow {
                     width: ListView.view.width
                     Label { text: level; Layout.preferredWidth: 60; opacity: 0.75
                             color: level === "error" ? "#D55E00" : palette.windowText }
-                    Label { text: where_ + ": " + message; elide: Text.ElideRight; Layout.fillWidth: true
-                            ToolTip.visible: ih.hovered; ToolTip.text: file + "\n" + message
-                            HoverHandler { id: ih } }
+                    Cell { text: where_ + ": " + message; tip: file; Layout.fillWidth: true }
                 }
             }
-        }
-    }
-    Dialog {
-        id: helpDialog
-        title: "Mouse and keys"
-        anchors.centerIn: parent
-        standardButtons: Dialog.Close
-        Label {
-            text: "In the 3D view\n\n" +
-                  "Wheel: zoom toward the point under the pointer\n" +
-                  "Left or middle drag: orbit about the selection, or the point under the pointer\n" +
-                  "Right drag, Shift + drag, or Ctrl + middle drag: pan\n" +
-                  "Click: select a component or beam (empty space clears); Ctrl + click adds one\n" +
-                  "of the same kind (beams, or components) or takes it out\n" +
-                  "Double click: fit the view to what was clicked (empty space: everything)\n" +
-                  "F: fit everything · arrow keys: orbit 15°\n" +
-                  "Triad on the selected part (axes of its Placed in frame): drag an arrow to move\n" +
-                  "it by Move-along steps, a square to move it in that plane, a ring to turn it by\n" +
-                  "15°; Ctrl at the press: a tenth.\n" +
-                  "Each drag is one edit (one undo)\n\n" +
-                  "In a map or image (the capsule map, a foil face, an x-ray or diagnostic image)\n\n" +
-                  "Wheel: zoom · left drag: zoom to a box · right drag: pan\n" +
-                  "Ctrl + click: back to the opening view (a diagnostic image: its region with signal)\n" +
-                  "Ctrl + Shift + click: the whole field\n\n" +
-                  "The model tree selects the same things (Ctrl + click adds, Shift + click a range);\n" +
-                  "its boxes switch beams on and off and show or hide components.\n" +
-                  "View ▸ Turntable keeps z up while orbiting.\n\n" +
-                  "Ctrl + Z / Ctrl + Y: undo / redo a design edit (target, beams, settings)\n" +
-                  "Ctrl + S / Ctrl + O: save / open the session (the design and its CAD files)"
         }
     }
 
@@ -852,13 +844,15 @@ ApplicationWindow {
             if (r === 2) {
                 win.close()
             } else {
-                // 1: the 3D view or the map changed, 4: the time chart, 8: the sweep chart
+                // 1: the 3D view or the map changed, 4: the time chart, 8: the sweep chart,
+                // 16: the Diagnostics tab's chart or image
                 if (r & 1) {
                     canvas.update()
                     if (app.sideView) sideCanvas.update()
                 }
                 if (r & 4) results.redrawTime()
                 if (r & 8) results.redrawSweep()
+                if (r & 16) results.redrawDiagnostics()
             }
         }
     }
