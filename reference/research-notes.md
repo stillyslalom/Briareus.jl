@@ -26,7 +26,7 @@ callout in the section says which).
 - Later search (2026-10-16): LMF Shot RI Resources and the VisRad manual (NIF beam
   table, CPP spots, TaLIS rules, OMEGA).
 - VisRad interchange formats (2026-10-16): SST, summary, power and workspace formats;
-  "VisRad workspace files (2026-10-17)"; "VisRad deposition parity: hohlraum runs
+  "VisRad workspace files (2026-10-17)"; "VisRad JSON workspaces (2026-11-16)"; "VisRad deposition parity: hohlraum runs
   (2026-10-21)" (`VisRadProfile`: growth 0.67, measured plates, the faint wings); "CAD
   import, remeshing and surface fits" (bullets "Flat CAD elements", "Tori", "Cost of
   fitting faces of none of the kinds", "Fitting CAD by default", "Sampled visibility on
@@ -1252,6 +1252,56 @@ test fixture rebuilds the layout from rows copied from these files.
   a(z), b(z), n(z), f_SQ(z), ΔL_W(z), ΔL_H(z), M(z) at each hit) gives the defocus law
   directly. Rerunning with the foil normal to the beams, where the distance from focus
   barely varies, separates the focal profile from that law.
+
+#### VisRad JSON workspaces (2026-11-16)
+
+VisRad 21.0.0 saves a workspace it has computed as JSON, whatever format it was opened
+from. Read off computed workspaces of a NIF CAD hohlraum and of Briareus-built targets.
+Two of these had been saved by VisRad in both formats from the same run. Implemented in
+`src/visrad_json.jl`.
+
+- **Layout.** CRLF, three-space indent, strict JSON. `"Workspace Format ID": 1001`, then one
+  object per text section: `Header data`, `Target component data`, `Target comp list
+  structure`, `Laser beam data`, `Diagnostic port data`, `Chamber component data`,
+  `Dialog settings data`, `Snapshots data`, `Movie maker data`, `Memorized views data`,
+  `Power source data`, `Radiosity data`, `Capture clearance data`, `Target pos viewer
+  data`, `SRF beam group data`. Repeated items are numbered keys (`"Target component
+  element[1]"`, …, 1-based). **H**
+- **Objects.** `"Object name"`, then the text block's keys with the same spelling (Length
+  k value, Position k, Tilt/Rotation/Spin angle, albedo, the Include flags, …).
+  Exceptions:
+  - `"Object color"` is `[r, g, b]`, and `"Gen. mesh object origin"` is `[x, y, z]`.
+  - Time-dependent tables are `…-Num rows` / `…-Num cols`.
+  - Meshes are `"Object node array-Num elements"` plus `"Object node array[k]"` (`[x, y,
+    z]`, cm, object frame), and four connectivity columns `"Object connectivity
+    array-Values Col c"`, the fourth all −1.
+  - Numbers inside arrays are strings; scalars are JSON numbers. **H**
+- **Folders.** `"Target comp list structure"` lists `"Folder name"` paths and
+  `"Target comp name"` as `"Target Components/<folders>/<name>"`. **H**
+- **Beams.** `"Laser beam element[k]"` with readable keys, one per text-row column. VisRad's
+  spelling is kept (`"Beam cone F numuber"`).
+  - Port angles and f-number are unrounded (52.382267335385706), where the text row has
+    52.382. Colors have 6 digits.
+  - The cone half-angles are not stored. The text row's cone_max is atan(1/2F) to its
+    2 decimals, and cone_min is 0.
+  - All three power tables are listed with their row counts (0 in every file seen). Row
+    layout of a non-empty table: *assumption*, as the connectivity columns.
+  - On the 192 beams of a NIF workspace every column agrees with the text row to its
+    printed digits. **H**
+- **Power sources.** `"Num pwr src up to date"` (0 or 1), then `"Sim time element[1]"`
+  with one `"Power source element[k]"` per target component, in the components' order,
+  with no names. Each has `"Num surface elements"` and, per text column, `"<label>-Num
+  elems"` and `"<label>-Values"` (strings, `%e`). On the paired files the values match the
+  text table to its 5 decimals: 5 × 10⁻⁷ relative at 1000 TW/cm². **H**
+- **CAD windings and VisRad's deposition.** VisRad deposits laser light on a CAD mesh
+  regardless of how its triangles are wound. On a NIF CAD workspace the hohlraum parts
+  are wound inconsistently: `orient_mesh` turns 48–52% of the area of the wall halves,
+  LEH washers and window patches. Every triangle of the inner wall sheet faces away from
+  the cavity, yet VisRad puts 405 TW on those 5,500 triangles, matching Briareus with
+  `two_sided = true` or `orient = true` to 0.2%. Read one-sided as stored, Briareus puts
+  2.5 of 422.5 TW on front sides and the rest on back sides. `visrad_target` now warns
+  when more than 10% of a mesh's area is wound against its surface (without `orient` or
+  `two_sided`). **H**
 
 #### VisRad deposition parity: hohlraum runs (2026-10-21)
 

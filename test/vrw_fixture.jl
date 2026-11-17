@@ -151,3 +151,88 @@ function power_source_section(objects; up_to_date = true)
     println(io, "[End Power Source Data]\n")
     return String(take!(io))
 end
+
+# The JSON workspace VisRad 21 saves after computing ("Workspace Format ID": 1001), built
+# from a parsed text workspace in the layout of real VisRad 21.0.0 JSON files: object
+# parameters under the text format's keys, "Object color" and "Gen. mesh object origin"
+# as arrays, the node array as "Object node array[k]" and the connectivity as columns,
+# numbers in arrays as strings, beams under readable keys at the precision `ports` gives
+# (VisRad writes them unrounded; the text table rounds to 3 decimals), and the power
+# sources per object in the components' order. `sources`: per object name, the direct
+# laser source per element, or `nothing` for "not up to date".
+function synthetic_json_workspace(ws; sources = nothing, ports = Dict{String,NTuple{3,Float64}}())
+    q(x) = string(x)
+    obj = Dict{String,Any}[]
+    for o in ws.objects
+        d = Dict{String,Any}("Object name" => o.name)
+        for (k, v) in o.params
+            k in ("Red value", "Green value", "Blue value", "Number of vertices", "Number of surfaces") && continue
+            startswith(k, "Gen. mesh object origin") && continue
+            x = tryparse(Float64, v)
+            d[k] = x === nothing ? v : isinteger(x) ? Int(x) : x
+        end
+        d["Object color"] = [o.params[k] for k in ("Red value", "Green value", "Blue value")]
+        if o.mesh !== nothing
+            Rt, t = transpose(o.rotation), o.position
+            nodes = [Rt * (v - t) / 10 for v in o.mesh.vertices]          # cm, object frame
+            d["Gen. mesh object origin"] = q.(-t / 10)
+            d["Object node array-Num elements"] = length(nodes)
+            for (k, v) in enumerate(nodes)
+                d["Object node array[$k]"] = q.(round.(collect(v); sigdigits = 12))
+            end
+            d["Object connectivity array-Num rows"] = length(o.mesh.triangles)
+            d["Object connectivity array-Num cols"] = 4
+            for c in 1:4
+                d["Object connectivity array-Values Col $c"] = [c == 4 ? "-1" : q(t[c] - 1) for t in o.mesh.triangles]
+            end
+        end
+        push!(obj, d)
+    end
+    tc = Dict{String,Any}("Exploded view reference object" => "Target Chamber", "Number of target components" => length(obj))
+    for (k, d) in enumerate(obj)
+        tc["Target component element[$k]"] = d
+    end
+    path(o) = join(filter(!isempty, ["Target Components", o.folder, o.name]), "/")
+    beams = Dict{String,Any}("Number of fixed laser beams" => length(ws.rows), "Total number of laser beams" => length(ws.rows),
+                             "Use random beam pwr mult" => 0, "Number of laser beam clusters" => length(ws.clusters),
+                             "Cluster names list" => ws.clusters)
+    for (k, r) in enumerate(ws.rows)
+        θ, φ, F = get(ports, r.name, (r.theta, r.phi, r.fnumber))
+        b = Dict{String,Any}("Laser beam name" => " " * r.name, "Cluster name" => r.cluster,
+                             "Beam cone color" => q.([r.red, r.green, r.blue]),
+                             "Beam rotation angle orientation id" => r.rot_id, "Reference coord sys name" => r.ref,
+                             "Dist to port - port id" => r.port_id, "Pulse shape name" => r.pulse,
+                             "Laser power table-Num rows" => 0, "Laser power table-Num cols" => 2,
+                             "Blue cone" => Dict("Main window BSO text box" => Dict("Visibility" => 1)))
+        for (c, key) in Briareus._VRJ_BEAM_KEYS
+            b[key] = c === :theta ? θ : c === :phi ? φ : c === :fnumber ? F : getfield(r, c)
+        end
+        beams["Laser beam element[$k]"] = b
+    end
+    ps = Dict{String,Any}("Num pwr src up to date" => sources === nothing ? 0 : 1)
+    if sources !== nothing
+        st = Dict{String,Any}("Number of objects" => length(obj))
+        for (k, o) in enumerate(ws.objects)
+            v = get(sources, o.name, Float64[])
+            e = Dict{String,Any}("Num surface elements" => length(v))
+            for (label, (col, _)) in Briareus._VRJ_PS_COLUMNS
+                vals = col === :direct_laser_pwr_source ? v : col === :albedo ? fill(0.7, length(v)) :
+                       col === :n_blue_cones_hitting_surf ? [x > 0 ? 2.0 : 0.0 for x in v] :
+                       col in (:min_angle_overlap_1w, :min_angle_overlap_3w) ? fill(360.0, length(v)) : zeros(length(v))
+                e["$label-Num elems"] = length(v)
+                e["$label-Values"] = [Briareus.@sprintf("%.6e", x) for x in vals]
+            end
+            st["Power source element[$k]"] = e
+        end
+        ps["Sim time element[1]"] = st
+    end
+    return Briareus.JSON.json(Dict{String,Any}(
+        "Workspace Format ID" => 1001,
+        "Header data" => Dict("VisRad version" => ws.version, "Number of simulation times" => 1,
+                              "Sim time element[1]" => Dict("Simulation time" => 0, "Selected for run" => 1)),
+        "Target component data" => tc,
+        "Target comp list structure" => Dict("Folder name" => ["Target Components"], "Target comp name" => path.(ws.objects)),
+        "Laser beam data" => beams,
+        "Power source data" => ps,
+        "Radiosity data" => Dict("Num radiosity up to date" => 0)); pretty = 3)
+end

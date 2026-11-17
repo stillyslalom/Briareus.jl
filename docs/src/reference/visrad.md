@@ -11,6 +11,6 @@ the provenance and confidence of each detail are in `reference/research-notes.md
 
 ```@autodocs
 Modules = [Briareus]
-Pages = ["src/visrad.jl", "src/visrad_workspace.jl"]
+Pages = ["src/visrad.jl", "src/visrad_workspace.jl", "src/visrad_json.jl"]
 Private = false
 ```

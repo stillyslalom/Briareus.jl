@@ -12,6 +12,7 @@ module Briareus
 using LinearAlgebra
 import Dates
 import TOML
+import JSON
 using Printf
 using Random
 using StaticArrays
@@ -21,7 +22,7 @@ import Optim
 using PrecompileTools: @setup_workload, @compile_workload
 
 export CurvedSurface, SphereSurface, CylinderSurface, ConeSurface, TorusSurface, DiskSurface, surface_point, element_sector
-export Vec3, Mesh, npatches, add_polygon!, merge_meshes, split_mesh, transform, translate, rotation_to,
+export Vec3, Mesh, npatches, add_polygon!, merge_meshes, split_mesh, connected_pieces, transform, translate, rotation_to,
        orient_mesh, coarsen_mesh, remesh_mesh, SurfaceRegion, fit_surfaces, curved_components,
        cylinder_mesh, annulus_mesh, disk_mesh, sphere_mesh, cubed_sphere_mesh, icosphere_mesh,
        icosphere_frequency, rectangle_mesh, frustum_mesh
@@ -151,6 +152,7 @@ include("io.jl")
 include("diagnostics.jl")
 include("visrad.jl")
 include("visrad_workspace.jl")
+include("visrad_json.jl")
 include("cbet.jl")
 include("unconverted.jl")
 

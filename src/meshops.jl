@@ -32,6 +32,66 @@ function _welded_ids(m::Mesh; tol = 1e-9)
     return ids
 end
 
+"""
+    connected_pieces(mesh; tol = 1e-9) -> Vector{Mesh}
+
+The connected pieces of a mesh, largest area first: patches that share a vertex belong to
+one piece. Vertices are welded by position first (to `tol` times the mesh's extent, as
+[`orient_mesh`](@ref) welds them), so a piece whose file duplicates the vertices along a
+seam stays whole. Each piece keeps its patches, in their order. A CAD assembly stored as
+one mesh (e.g. a target holder with its shields, sombreros and arms) splits into its
+parts this way, where [`split_mesh`](@ref) needs a position test.
+"""
+function connected_pieces(m::Mesh; tol = 1e-9)
+    npatches(m) == 0 && return Mesh[]
+    id = _welded_ids(m; tol)
+    parent = collect(1:maximum(id))
+    function root(i)
+        while parent[i] != i
+            parent[i] = parent[parent[i]]
+            i = parent[i]
+        end
+        return i
+    end
+    for r in m.patches, k in r
+        a = root(id[m.triangles[k][1]])
+        for v in m.triangles[k]
+            b = root(id[v])
+            b != a && (parent[b] = a)
+        end
+    end
+    groups = Dict{Int,Vector{Int}}()
+    for (p, r) in enumerate(m.patches)
+        isempty(r) && continue
+        push!(get!(groups, root(id[m.triangles[first(r)][1]]), Int[]), p)
+    end
+    pieces = Mesh[]
+    for ps in values(groups)
+        sort!(ps)
+        out = Mesh()
+        vmap = Dict{Int,Int}()
+        newv(vi) = get!(vmap, vi) do
+            push!(out.vertices, m.vertices[vi])
+            length(out.vertices)
+        end
+        for p in ps
+            t0 = length(out.triangles) + 1
+            for k in m.patches[p]
+                a, b, c = m.triangles[k]
+                push!(out.triangles, (newv(a), newv(b), newv(c)))
+            end
+            push!(out.patches, t0:length(out.triangles))
+        end
+        push!(pieces, out)
+    end
+    area(x) = sum(norm(_tri_cross(triangle_vertices(x, k)...)) / 2 for k in eachindex(x.triangles); init = 0.0)
+    a = area.(pieces)
+    # largest first; areas equal to 12 digits (mirror pieces, which differ by rounding) by
+    # their first vertex, so the order does not depend on round-off
+    key(i) = (-round(a[i]; sigdigits = 12), Tuple(pieces[i].vertices[1]))
+    return pieces[sort(eachindex(pieces); by = key)]
+end
+
 # Patch of each triangle.
 function _triangle_patch(m::Mesh)
     owner = zeros(Int, length(m.triangles))

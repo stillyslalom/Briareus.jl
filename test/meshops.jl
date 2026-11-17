@@ -93,6 +93,36 @@ patch_center(m, p) = Briareus._patch_centroid(m, m.patches[p])
     @test npatches(@test_logs (:warn, r"inconsistent") orient_mesh(band; strict = false)) == 12
 end
 
+@testset "connected_pieces" begin
+    # three disjoint parts merged into one mesh, as a CAD assembly exported whole: two
+    # equal annuli mirrored in z (up at +5, down at -5) and a smaller disk. The mesh
+    # builders give every patch its own corner vertices, so each seam is duplicated and
+    # the pieces are found only after welding.
+    ring(z) = annulus_mesh(2.0, 4.0, z; nr = 3, nphi = 16, up = z > 0)
+    parts = [ring(5.0), disk_mesh(1.0, 0.0; nr = 2, nphi = 12), ring(-5.0)]
+    m = merge_meshes(parts...)
+    @test length(unique(m.vertices)) < length(m.vertices)                 # duplicated seams
+    pcs = connected_pieces(m)
+    area(x) = sum(norm(Briareus._tri_cross(Briareus.triangle_vertices(x, k)...)) / 2 for k in eachindex(x.triangles))
+    @test length(pcs) == 3
+    @test [npatches(x) for x in pcs] == [npatches(parts[3]), npatches(parts[1]), npatches(parts[2])]
+    # exact areas of the chord polygons: 16 sectors of the 2–4 annulus, 12 of the unit disk
+    @test area(pcs[1]) ≈ 8 * sin(π / 8) * (4.0^2 - 2.0^2) rtol = 1e-12
+    @test area(pcs[2]) ≈ area(pcs[1]) rtol = 1e-12
+    @test area(pcs[3]) ≈ 6 * sin(π / 6) rtol = 1e-12
+    zs = [p.vertices[1][3] for p in pcs]
+    @test zs == [-5.0, 5.0, 0.0]                        # equal areas ordered by first vertex
+    @test sum(npatches, pcs) == npatches(m) && sum(x -> length(x.triangles), pcs) == length(m.triangles)
+    @test all(all(v -> v[3] == p.vertices[1][3], p.vertices) for p in pcs)  # each piece one part
+    # windings kept: each annulus faces as built (down at -5, up at +5)
+    @test all(r -> Briareus._patch_area_vector(pcs[1], r)[3] < 0, pcs[1].patches)
+    @test all(r -> Briareus._patch_area_vector(pcs[2], r)[3] > 0, pcs[2].patches)
+    # one connected mesh is one piece, with its patches and triangles as they were
+    one = only(connected_pieces(parts[2]))
+    @test one.patches == parts[2].patches && one.triangles == parts[2].triangles && one.vertices == parts[2].vertices
+    @test isempty(connected_pieces(Mesh()))
+end
+
 @testset "coarsen_mesh" begin
     # a finely divided plate: patches merged up to the size, triangles and area unchanged
     plate = rectangle_mesh(4.0, 2.0; nu = 40, nv = 20)

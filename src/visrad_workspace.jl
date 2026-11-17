@@ -287,6 +287,13 @@ function _vrw_objects(lines, a, b)
         k = findnext(l -> occursin("Number of target components", l), lines, d)
         k === nothing || _vrw_folders!(folders, lines, k, "")
     end
+    return _vrw_build_objects(blocks, folders)
+end
+
+# `VisRadObject`s from parsed object blocks — (; name, params, nodes (cm, object
+# frame), faces (1-based vertex lists)) with `params` keyed as in the text format — and
+# each object's folder path. Shared by the text and JSON readers.
+function _vrw_build_objects(blocks, folders)
     byname = Dict(blk.name => blk for blk in blocks)
     frames = Dict{String,Tuple{SMatrix{3,3,Float64,9},Vec3}}()
     function frame(name, depth = 0)
@@ -473,10 +480,14 @@ end
     read_visrad_workspace(path; template = nothing, absent = :off, spot_definition = :auto,
                           rotation_sense = :beam, angle_tol = 0.05) -> VisRadWorkspace
 
-Read a VisRad workspace (`.vrw`, the text format of VisRad 20–21, "Workspace Format
-ID = 11"): its target components, including CAD imported as generalized meshes, and its
-laser beams. Lengths are converted from cm to mm; every object and beam frame is
-resolved to the target-chamber frame. Build a Briareus target from the components with
+Read a VisRad workspace (`.vrw`): its target components, including CAD imported as
+generalized meshes, and its laser beams. Both of VisRad's formats are read: the text format of
+VisRad 20–21 ("Workspace Format ID = 11") and the JSON format VisRad 21 writes when it
+saves a computed workspace ("Workspace Format ID": 1001). The two give the same objects,
+meshes, beam rows and beams, except that the JSON file stores each beam's port angles and
+f-number to full precision (the text table rounds them to 3 decimals) and colors to 6
+digits. Lengths are converted from cm to mm; every object and beam frame is resolved to
+the target-chamber frame. Build a Briareus target from the components with
 `visrad_target`.
 
 **Components** become `VisRadObject`s. CAD meshes keep VisRad's surface elements as
@@ -513,19 +524,23 @@ function read_visrad_workspace(path::AbstractString; template = nothing, absent:
                                spot_definition = :auto, rotation_sense::Symbol = :beam,
                                angle_tol = 0.05)
     _vr_sense(rotation_sense)
-    lines = _vr_lines(path)
-    occursin("Workspace Format ID", first(lines)) ||
-        throw(ArgumentError("$path is not a VisRad text workspace (first line: \"$(first(lines))\")"))
-    vi = findfirst(l -> occursin("VisRad Version", l), lines)
-    version = vi === nothing ? "" : String(strip(replace(lines[vi], r".*VisRad Version_?" => "")))
-    section(name) = (a = _vrw_find(lines, "[" * name * "]"); a === nothing ? nothing :
-                     (a, something(_vrw_find(lines, "[End " * name * "]", a), length(lines))))
-    ts = section("Target Component Data")
-    objects = ts === nothing ? VisRadObject[] : _vrw_objects(lines, ts...)
+    if _vrw_is_json(path)
+        version, objects, clusters, rows = _vrj_workspace(_vrj_parse(path), path)
+    else
+        lines = _vr_lines(path)
+        occursin("Workspace Format ID", first(lines)) ||
+            throw(ArgumentError("$path is not a VisRad workspace (first line: \"$(first(lines))\")"))
+        vi = findfirst(l -> occursin("VisRad Version", l), lines)
+        version = vi === nothing ? "" : String(strip(replace(lines[vi], r".*VisRad Version_?" => "")))
+        section(name) = (a = _vrw_find(lines, "[" * name * "]"); a === nothing ? nothing :
+                         (a, something(_vrw_find(lines, "[End " * name * "]", a), length(lines))))
+        ts = section("Target Component Data")
+        objects = ts === nothing ? VisRadObject[] : _vrw_objects(lines, ts...)
+        ls = section("Laser Beam Data")
+        clusters, rows = ls === nothing ? (String[], NamedTuple[]) : _vrw_beams(lines, ls...)
+    end
     frames = Dict(o.name => (o.rotation, o.position) for o in objects)
     frame_of = n -> get(frames, n, nothing)
-    ls = section("Laser Beam Data")
-    clusters, rows = ls === nothing ? (String[], NamedTuple[]) : _vrw_beams(lines, ls...)
     recs = Dict{String,Any}()
     order = String[]
     for r in rows
@@ -679,12 +694,17 @@ function visrad_target(ws::VisRadWorkspace; select = o -> o.radiosity || o.laser
     parts = Union{Component,Pair{Symbol,Mesh}}[]
     mats = Dict{Symbol,Material}()        # of the CAD parts, for cad_target
     sides = Dict{Symbol,Bool}()
+    miswound = Pair{String,Float64}[]     # CAD parts read one-sided with inconsistent windings
     for o in ws.objects
         select(o) || continue
         (o.radiosity && o.laser) || @warn "VisRad object $(o.name) is included in only one of VisRad's radiosity and laser calculations; Briareus uses it in both"
         ts = two_sided isa Bool ? two_sided : Bool(two_sided(o))
         material = get(materials, o.name, nothing)
         if o.kind === :mesh
+            if !(orient || ts)
+                f = _vrw_miswound(o)
+                f > 0.1 && push!(miswound, o.name => f)
+            end
             # the CAD part as VisRad has it (material, sidedness); cad_target does the rest
             c = only(visrad_component(o; material, two_sided = ts))
             push!(parts, c.name => c.mesh)
@@ -694,8 +714,28 @@ function visrad_target(ws::VisRadWorkspace; select = o -> o.radiosity || o.laser
         end
     end
     isempty(parts) && throw(ArgumentError("no VisRad components selected"))
+    isempty(miswound) ||
+        @warn "$(length(miswound)) VisRad CAD meshes are wound inconsistently (share of each one's area against the rest of its surface: $(join(("$n $(round(100f; digits = 1))%" for (n, f) in miswound), ", "))). Read one-sided as stored, laser light lands on back sides there; pass `orient = true` (consistent windings, facing `toward`) or `two_sided = true`."
     return cad_target(parts; orient, toward, inside, remesh, coarsen, fit, material = mats, two_sided = sides,
                       visibility, closed)
+end
+
+# Share of a CAD mesh's area wound against the rest of its surface: what `orient_mesh`
+# without a reference point (each open surface kept in its majority winding, closed
+# solids facing out of their material) turns over; 0 for a consistent mesh. Read
+# one-sided as stored, such a mesh radiates and absorbs on the front of each triangle as
+# the file winds it, and CAD windings are often inconsistent: about half the area of the
+# hohlraum parts of a NIF CAD workspace, where VisRad's own laser deposition does not
+# depend on the winding (research notes, "VisRad JSON workspaces") but Briareus then puts
+# nearly all the laser power on back sides.
+function _vrw_miswound(o::VisRadObject)
+    m = o.mesh
+    (m === nothing || isempty(m.triangles)) && return 0.0
+    om = Base.CoreLogging.with_logger(Base.CoreLogging.NullLogger()) do
+        orient_mesh(m; strict = false)
+    end
+    a = [norm(_tri_cross(triangle_vertices(m, k)...)) / 2 for k in eachindex(m.triangles)]
+    return sum(a[k] for k in eachindex(a) if m.triangles[k] != om.triangles[k]; init = 0.0) / max(sum(a), eps())
 end
 
 # ---------------------------------------------------------------------------------------
@@ -752,12 +792,18 @@ A workspace saved before computing, or changed since, shows "Power sources are n
 date" and holds no tables: that is an error, or `nothing` with `stale = :nothing`.
 Tables of the same layout in other sections (beam capture and clearance data) are not
 read. Map the direct laser source onto a Briareus target with `visrad_deposition`.
+
+JSON workspaces (VisRad 21's format for a computed workspace) give the same tables. Their
+"Power source data" lists the objects in the target components' order without names,
+and values at full precision (the text table rounds the direct source to 5 decimals,
+5 × 10⁻⁷ relative on a NIF wall).
 """
 function visrad_power_sources(path::AbstractString; stale::Symbol = :error)
     stale in (:error, :nothing) || throw(ArgumentError("stale must be :error or :nothing, not :$stale"))
+    _vrw_is_json(path) && return _vrj_power_sources(_vrj_parse(path), path, stale)
     lines = _vr_lines(path)
     occursin("Workspace Format ID", first(lines)) ||
-        throw(ArgumentError("$path is not a VisRad text workspace (first line: \"$(first(lines))\")"))
+        throw(ArgumentError("$path is not a VisRad workspace (first line: \"$(first(lines))\")"))
     a = _vrw_find(lines, "[Power Source Data]")
     a === nothing && throw(ArgumentError("$path has no [Power Source Data] section"))
     b = something(_vrw_find(lines, "[End Power Source Data]", a), length(lines))
@@ -901,7 +947,7 @@ visrad_deposition(path::AbstractString, args...; kw...) =
     visrad_deposition(read_visrad_workspace(path), args...; kw...)
 
 """
-    write_visrad_workspace(path, template, beams; angle_tol = 0.05) -> path
+    write_visrad_workspace(path, template, beams; angle_tol = 0.05, overwrite = false) -> path
 
 A VisRad workspace with the pointing, focus, power and on/off of `beams` written into a
 copy of the workspace `template` (a `.vrw` file, e.g. the one a design was imported
@@ -916,6 +962,12 @@ written in place at the template's column widths and decimals (0.1 µm for posit
 
 A computed template's results (power sources, radiosities, beam capture and clearance)
 are reset to "not up to date" when any row is written: they belong to the old beams.
+The template must be a text workspace: VisRad 21 saves computed workspaces as JSON,
+which is read (`read_visrad_workspace`) but not patched.
+
+A `path` that already holds VisRad's results — a JSON workspace, or a text one with
+power sources or radiosities up to date, including the template itself — is refused
+unless `overwrite = true`: those results exist only in that file.
 
 Rows without a matching beam are left as they were, and beams without a row are
 reported in a warning: the template sets which beams exist. A beam whose port differs
@@ -924,7 +976,15 @@ Time-dependent power tables and energy normalization in the template are left as
 are, so a row that uses them does not take the constant power (warned).
 """
 function write_visrad_workspace(path::AbstractString, template::AbstractString,
-                                beams::AbstractVector{<:Beam}; angle_tol = 0.05)
+                                beams::AbstractVector{<:Beam}; angle_tol = 0.05, overwrite::Bool = false)
+    _vrw_is_json(template) &&
+        throw(ArgumentError("template $template is a JSON workspace; the writer patches VisRad's text format (save the template from VisRad before computing it, or as text)"))
+    if isfile(path) && !overwrite
+        why = _vrw_is_json(path) ? "a JSON workspace (VisRad saves computed workspaces so)" :
+              _vrw_has_results(path) ? "a workspace with VisRad's computed results" : nothing
+        why === nothing ||
+            throw(ArgumentError("$path is $why, which exists nowhere else; write elsewhere, or pass overwrite = true"))
+    end
     ws = read_visrad_workspace(template)
     frames = Dict(o.name => (o.rotation, o.position) for o in ws.objects)
     byname = Dict(b.name => b for b in beams)
@@ -964,6 +1024,10 @@ function write_visrad_workspace(path::AbstractString, template::AbstractString,
 end
 
 const _VRW_CAPTURE_KINDS = ("3w Capture", "3w Clearance", "1w Clearance", "1w Footprint", "3w Footprint")
+
+# Whether a text workspace holds computed results (power sources or radiosities up to date).
+_vrw_has_results(path::AbstractString) =
+    any(l -> occursin(r"(?:Power sources|Radiosities) are up to date for", l), eachline(path))
 
 # A computed template's results (power sources, radiosities, beam capture/clearance)
 # belong to its old beams: reset them to "not up to date", as VisRad writes a workspace

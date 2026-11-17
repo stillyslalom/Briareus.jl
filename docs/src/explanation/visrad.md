@@ -41,8 +41,8 @@ pulse-shape files; Briareus is in mm, TW/mm², ns and TW. The readers and writer
 | Laser Beam Summary CSV | [`read_visrad_summary`](@ref) | [`write_visrad_summary`](@ref) | Ports, pointing, focus, power, spots. The headers after "Power" are not shown in the manual, so the written ones are an assumption. |
 | Time-dependent beam powers CSV | [`read_visrad_powers`](@ref) | [`write_visrad_powers`](@ref) | One column per beam, TW against ns; for NIF, VisRad assigns the powers to the 3ω cones. |
 | Pulse-shape library file | [`read_visrad_pulse_shape`](@ref) | — | W against s; the column order is an assumption. |
-| Workspace `.vrw` (keyed text, VisRad 20–21) | [`read_visrad_workspace`](@ref), [`visrad_target`](@ref) | [`write_visrad_workspace`](@ref) | Components (CAD as generalized meshes; spheres, rectangles, cylindrical hohlraums) and beams. The writer copies a template workspace and rewrites the beams' pointing, focus, power and on/off; everything else stays VisRad's. JSON workspaces are refused. |
-| Computed power sources in a `.vrw` | [`visrad_power_sources`](@ref), [`visrad_deposition`](@ref) | — | VisRad's per-element deposition, mapped onto a target built from the same workspace. |
+| Workspace `.vrw` (keyed text, VisRad 20–21; JSON, VisRad 21) | [`read_visrad_workspace`](@ref), [`visrad_target`](@ref) | [`write_visrad_workspace`](@ref) | Components (CAD as generalized meshes; spheres, rectangles, cylindrical hohlraums) and beams, from either format. The writer copies a text template and rewrites the beams' pointing, focus, power and on/off; everything else stays VisRad's. A JSON template, or writing over a workspace that holds VisRad's results, is an error. |
+| Computed power sources in a `.vrw` | [`visrad_power_sources`](@ref), [`visrad_deposition`](@ref) | — | VisRad's per-element deposition, mapped onto a target built from the same workspace. VisRad 21 saves a computed workspace as JSON; both formats give the same tables. |
 | Surface Element Properties (`.sed`), Power Summary (`.psd`) | [`read_visrad_table`](@ref) | — | The file layout is not documented; the reader is tolerant. |
 | Benchmark kit | [`compare_visrad`](@ref) | [`write_visrad_kit`](@ref) | Pointing, beam summary, powers and target description for rebuilding a case in VisRad, with Briareus's results named as VisRad's Power Summary columns. |
 | NIF CMT XML, `.bti` intersection points, beam-energy files | — | — | Not implemented: the CMT schema is undocumented and no public sample was found. |
@@ -217,10 +217,14 @@ profile = visrad_profile(ws)   # VisRad's beam model, with this workspace's enve
 **2. Check the deposition against VisRad's own.** On a workspace that VisRad has
 computed, a target on VisRad's own elements (no remeshing) takes VisRad's per-element
 deposition. [`visrad_deposition`](@ref) maps only onto components on those elements, so
-this target serves the comparison only; step 3 builds the radiation target:
+this target serves the comparison only; step 3 builds the radiation target. VisRad saves
+a computed workspace as JSON, which [`read_visrad_workspace`](@ref) reads as it reads the
+text format. VisRad deposits on a CAD triangle whichever way it is wound, and CAD
+windings are often inconsistent, so the comparison target takes CAD meshes two-sided
+(`visrad_target` warns about inconsistent windings otherwise):
 
 ```julia
-t0 = visrad_target(ws)
+t0 = visrad_target(ws; two_sided = true)
 dep = deposit(DepositionOperator(t0, beams; profile), beams)
 P = visrad_deposition(ws, t0)          # TW per element, from VisRad's table
 wall = elements(t0, :Hohlraum_wall)    # the wall object's name in the workspace

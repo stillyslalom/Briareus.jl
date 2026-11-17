@@ -477,6 +477,101 @@ end
     @test (@test_logs (:warn, r"Cyl_Hohlraum_0") visrad_deposition(wh, th)) == P[[er; ec]]
     @test_throws ArgumentError visrad_deposition(wc, visrad_target(wc; select = o -> o.kind === :mesh, remesh = 0.3))
     @test_throws ArgumentError visrad_deposition(wc, Target(visrad_component(wc.objects[1]; primitive_h = 0.5)))
+
+    # the writer never overwrites VisRad's results: a computed text workspace (also as its
+    # own template) or a JSON one is refused unless `overwrite = true`; a JSON template is refused
+    @test_throws ArgumentError write_visrad_workspace(pc, p, edited)
+    @test_throws ArgumentError write_visrad_workspace(pc, pc, edited)
+    qo = vrfile("overwritten.vrw", read(pc, String))
+    write_visrad_workspace(qo, pc, edited; overwrite = true)
+    @test visrad_power_sources(qo; stale = :nothing) === nothing
+    write_visrad_workspace(q, p, edited)                                   # an uncomputed file: rewritten as before
+    @test read_visrad_workspace(q).beams[1].aim ≈ edited[1].aim atol = 1e-6
+end
+
+@testset "workspace (.vrw): VisRad 21's JSON format" begin
+    # The same workspace in the JSON form VisRad 21 saves a computed workspace in
+    # (vrw_fixture.jl), its ports at full precision: every object, mesh, folder, beam row
+    # and beam is the text reader's, apart from the ports' digits.
+    p = vrfile("work.vrw", synthetic_workspace())
+    wt = read_visrad_workspace(p)
+    full = Dict(r.name => (r.theta + 2.3e-4, r.phi - 4.1e-4, r.fnumber + 3.3e-4) for r in wt.rows)
+    qrect = Float64.(1:81)
+    qcad = [10.0, 0.0, 2.5, 7.25]
+    src = Dict("Rectangle_0" => qrect, "Cyl_Hohlraum_0" => zeros(216), "CAD_0" => qcad)
+    pj = vrfile("work_json.vrw", synthetic_json_workspace(wt; sources = src, ports = full))
+    @test Briareus._vrw_is_json(pj) && !Briareus._vrw_is_json(p)
+    wj = read_visrad_workspace(pj)
+    @test wj.version == wt.version && wj.clusters == wt.clusters
+    @test [o.name for o in wj.objects] == [o.name for o in wt.objects]
+    @test [(o.kind, o.type, o.folder) for o in wj.objects] == [(o.kind, o.type, o.folder) for o in wt.objects]
+    @test all((o.albedo, o.conversion, o.reflectivity, o.radiosity, o.laser, o.visible, o.color) ==
+              (u.albedo, u.conversion, u.reflectivity, u.radiosity, u.laser, u.visible, u.color) for (o, u) in zip(wj.objects, wt.objects))
+    @test all(isapprox(o.position, u.position; atol = 1e-12) && isapprox(o.rotation, u.rotation; atol = 1e-12)
+              for (o, u) in zip(wj.objects, wt.objects))
+    cj, ct = wj.objects[4].mesh, wt.objects[4].mesh
+    @test cj.triangles == ct.triangles && cj.patches == ct.patches && isapprox(cj.vertices, ct.vertices; atol = 1e-12)
+    # the text table rounds the ports (and cone_max) to 3 decimals, and lists a beam's power
+    # table even when empty (the JSON reader keeps only non-empty ones)
+    tabs(r) = filter(!isempty ∘ last, r.tables)
+    same(r, s) = tabs(r) == tabs(s) &&
+                 all(k -> k in (:theta, :phi, :fnumber, :cone_max, :tables) || isequal(r[k], s[k]), keys(s))
+    @test length(wj.rows) == length(wt.rows) && all(same(r, s) for (r, s) in zip(wj.rows, wt.rows))
+    @test all((r.theta, r.phi, r.fnumber) == full[r.name] for r in wj.rows)        # the JSON file's digits
+    @test all(r.cone_max ≈ atand(1 / (2r.fnumber)) && r.cone_min == 0 for r in wj.rows)
+    @test all(x.name == y.name && isapprox(x.aim, y.aim; atol = 1e-12) && x.power == y.power &&
+              x.defocus == y.defocus for (x, y) in zip(wj.beams, wt.beams))
+    # with a template too, as for text
+    @test [b.power for b in read_visrad_workspace(pj; template = nif_beams()).beams] ==
+          [b.power for b in read_visrad_workspace(p; template = nif_beams()).beams]
+    # the same targets, so VisRad's results map onto either
+    tj, tt = visrad_target(wj), visrad_target(wt)
+    @test [c.name for c in tj.components] == [c.name for c in tt.components] && tj.elem_area ≈ tt.elem_area
+    # power sources: per object in the components' order, the text reader's columns and units
+    ps = visrad_power_sources(pj)
+    @test ps.time == 0 && sort(collect(keys(ps.tables))) == sort([o.name for o in wt.objects])
+    tc = ps.tables["CAD_0"]
+    @test keys(tc) == (:surface_index, :direct_laser_pwr_source, :uniform_source, :albedo, :x_ray_conv_efficiency,
+                       :laser_reflectivity, :pre_reflect_laser_pwr, :n_red_cones_hitting_surf,
+                       :n_blue_cones_hitting_surf, :min_angle_overlap_1w, :min_angle_overlap_3w)
+    @test tc.direct_laser_pwr_source == qcad && tc.surface_index == 0:3 && tc.n_blue_cones_hitting_surf == [2, 0, 2, 2]
+    @test tc.n_blue_cones_hitting_surf isa Vector{Int}
+    @test ps.units[:direct_laser_pwr_source] == "TW/cm2" && ps.units[:min_angle_overlap_3w] == "deg" && ps.units[:albedo] == ""
+    # mapped onto the target exactly as the text format's tables
+    pt = vrfile("work_text_computed.vrw", synthetic_workspace() * "\n" *
+                power_source_section(["Rectangle_0" => qrect, "Cyl_Hohlraum_0" => zeros(216), "CAD_0" => qcad]))
+    @test visrad_deposition(wj, tj) == visrad_deposition(read_visrad_workspace(pt), tt)
+    # not computed: no tables
+    ps0 = vrfile("stale_json.vrw", synthetic_json_workspace(wt))
+    @test_throws ArgumentError visrad_power_sources(ps0)
+    @test visrad_power_sources(ps0; stale = :nothing) === nothing
+    # the writer patches text only, and never writes over a JSON workspace
+    @test_throws ArgumentError write_visrad_workspace(vrfile("from_json.vrw", ""), pj, wj.beams)
+    @test_throws ArgumentError write_visrad_workspace(pj, p, wt.beams)
+    @test Briareus._vrw_is_json(pj)                                            # left as it was
+    # JSON that is no VisRad workspace, and a mismatched power-source count
+    @test_throws ArgumentError read_visrad_workspace(vrfile("other.json", "{\"json\": 1}"))
+    bad = replace(read(pj, String), r"\"Number of target components\": \d+" => "\"Number of target components\": 9")
+    @test_throws ArgumentError read_visrad_workspace(vrfile("bad.vrw", bad))
+end
+
+@testset "workspace (.vrw): inconsistent CAD windings" begin
+    # the tetrahedron with one face wound against the others: read one-sided as stored,
+    # visrad_target warns (that face's area share); orient = true and two_sided do not
+    txt = synthetic_workspace()
+    a = findfirst("Surface element connectivity:", txt)
+    b = findnext("End Parameters", txt, last(a))
+    conn = txt[last(a)+1:first(b)-1]
+    flipped = replace(conn, r"\n(\s+)3(\s+)1(\s+)2(\s+)3(\s+)-1" => s"\n\g<1>3\g<2>1\g<3>3\g<4>2\g<5>-1")
+    @test flipped != conn
+    w = read_visrad_workspace(vrfile("miswound.vrw", txt[1:last(a)] * flipped * txt[first(b):end]))
+    sel = o -> o.kind === :mesh
+    f = Briareus._vrw_miswound(only(o for o in w.objects if o.kind === :mesh))
+    @test f ≈ (sqrt(3) / 2 * 0.01) / (3 * 0.005 + sqrt(3) / 2 * 0.01) rtol = 1e-6 # the slanted face's share
+    @test_logs (:warn, r"1 VisRad CAD meshes are wound inconsistently.*CAD_0 36\.6%") visrad_target(w; select = sel)
+    @test_logs visrad_target(w; select = sel, orient = true, toward = w.objects[4].position)
+    @test_logs visrad_target(w; select = sel, two_sided = true)
+    @test Briareus._vrw_miswound(only(o for o in read_visrad_workspace(vrfile("w.vrw", txt)).objects if o.kind === :mesh)) == 0
 end
 
 @testset "workspace (.vrw): required and optional keys" begin
