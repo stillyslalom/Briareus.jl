@@ -243,6 +243,89 @@ function nif_beams(; power = 2.0, fnumber = 20.7, spot = nif_spot, spot_frame::S
     return [remake(b; spot = _vr_turn(b.spot, _vr_reference_angle(b))) for b in beams]
 end
 
+"""
+    nif_beams(quads; fnumber = 20.7, spot = nothing, spot_frame = :beam) -> Vector{Beam}
+
+The facility beams of NIF quads (beams named and `quad`-named as by `nif_quads`, e.g. a
+re-pointed quad model): each quad gives its four beams, in its order, from the LMF beam
+table, with the quad's aim, defocus, `dlambda`, wavelength and `group` and a quarter of
+its power. `spot` is `nothing` (each beam takes its quad's spot) or a function of the
+cone, as for `nif_beams()`; `spot_frame` is the frame of its `angle` (`:beam` or
+`:quad`, see `nif_beams()`). `nif_beams(nif_quads())` holds the beams of `nif_beams()`.
+
+A per-beam pointing table on a quad model is then a template for a reader: an SST
+export (aims and defocus per beam) applied to the quads' beams is
+`read_visrad_sst(path; template = nif_beams(quads))`, which keeps each beam's quarter of
+its quad's power and its `dlambda`. [`nif_quads`](@ref)`(beams)` goes back.
+"""
+function nif_beams(quads::AbstractVector{<:Beam}; fnumber = 20.7, spot = nothing,
+                   spot_frame::Symbol = :beam)
+    spot_frame in (:beam, :quad) || throw(ArgumentError("spot_frame is :beam or :quad, got :$spot_frame"))
+    table = Dict(b.name => b for b in nif_beams(; fnumber))
+    members = _nif_quad_members()
+    out = Beam[]
+    for q in quads
+        haskey(members, q.quad) ||
+            throw(ArgumentError("beam $(q.name) is not a NIF quad (quad name \"$(q.quad)\")"))
+        T = typeof(q.power)
+        for n in members[q.quad]
+            bt = table[n]
+            sp = spot === nothing ? q.spot : spot(bt.group)
+            b = Beam{T}(bt.name, bt.port, SVector{3,T}(q.aim), q.power / 4, q.defocus,
+                        _retype(sp, T), Float64(fnumber), q.group, q.quad, q.wavelength, q.dlambda)
+            spot_frame === :quad && (b = remake(b; spot = _vr_turn(b.spot, _vr_reference_angle(b))))
+            push!(out, b)
+        end
+    end
+    return identity.(out)
+end
+
+"""
+    nif_quads(beams; fnumber = 7.9, spot = nothing, spot_frame = :beam) -> Vector{Beam}
+
+NIF quads from their facility beams (named by `nif_beams`, any subset of a quad's four):
+one quad per `quad` name, in the order of the quads' first beams, at its port (the NIF
+User Guide's, as `nif_quads()`), with the mean aim, defocus and `dlambda` of its beams,
+their summed power, and the `group` and wavelength they share. This is a quad's mean
+aim from a beam list: `Dict(q.quad => q.aim for q in nif_quads(beams))`. A split quad
+(beams pointed apart, as in an as-shot table) becomes one aim point: the mean.
+
+`spot` is `nothing` (each quad takes its first beam's spot) or a function of the cone;
+with `spot = nothing`, `spot_frame = :quad` reads that spot's `angle` in the quad frame
+and turns it back to the quad's own port (the inverse of `nif_beams(quads; spot_frame =
+:quad)`). Beams of one quad in different groups are an `ArgumentError`.
+"""
+function nif_quads(beams::AbstractVector{<:Beam}; fnumber = 7.9, spot = nothing,
+                   spot_frame::Symbol = :beam)
+    spot_frame in (:beam, :quad) || throw(ArgumentError("spot_frame is :beam or :quad, got :$spot_frame"))
+    ports = Dict(NIF_QUAD_NAMES[p] => port_vector(θ, φ) for (p, θ, φ) in NIF_PORTS)
+    order = String[]
+    idx = Dict{String,Vector{Int}}()
+    for (i, b) in enumerate(beams)
+        haskey(ports, b.quad) ||
+            throw(ArgumentError("beam $(b.name) belongs to no NIF quad (quad name \"$(b.quad)\")"))
+        haskey(idx, b.quad) || push!(order, b.quad)
+        push!(get!(idx, b.quad, Int[]), i)
+    end
+    out = Beam[]
+    for q in order
+        bs = beams[idx[q]]
+        all(b -> b.group === bs[1].group, bs) ||
+            throw(ArgumentError("the beams of quad $q are in groups $(unique(b.group for b in bs))"))
+        n = length(bs)
+        aim = sum(b -> b.aim, bs) / n
+        power = sum(b -> b.power, bs)
+        defocus = sum(b -> b.defocus, bs) / n
+        dlambda = sum(b -> b.dlambda, bs) / n
+        sp = spot !== nothing ? spot(bs[1].group) :
+             spot_frame === :quad ? _vr_turn(bs[1].spot, -_vr_reference_angle(bs[1])) : bs[1].spot
+        T = promote_type(eltype(aim), typeof(power), typeof(defocus), typeof(dlambda), typeof(sp.a))
+        push!(out, Beam{T}(q, ports[q], SVector{3,T}(aim), power, defocus, _retype(sp, T),
+                           Float64(fnumber), bs[1].group, q, bs[1].wavelength, dlambda))
+    end
+    return identity.(out)
+end
+
 function _nif_beam_table()
     _, rows = read_csv(joinpath(@__DIR__, "..", "data", "nif_beams.csv"))
     return [(beam = r[1], bundle = r[2], hemisphere = r[3], theta = parse(Float64, r[5]),
