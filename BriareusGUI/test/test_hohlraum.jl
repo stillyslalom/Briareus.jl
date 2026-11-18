@@ -139,7 +139,7 @@ end
     cap(cs) = cs[findfirst(c -> c.name === :hr_cap_top, cs)]
     leh = open[findfirst(c -> c.name === :hr_leh_top, open)]
     @test area(cap(closed)) ≈ area(cap(open)) + area(leh) rtol = 1e-12
-    @test cap(closed).kind === :surface && albedo(cap(closed).material) == 0.85
+    @test cap(closed).kind === :surface && albedo(cap(closed).material) == q.values[:albedo] == albedo(gold())
     @test_throws ArgumentError part_components(PartSpec(:hohlraum; name = :hr, values = Dict(:top_end => 3.0)), 0.6)
 
     # the frames: the ends' (z out of the hohlraum at either end) and the window's, which
