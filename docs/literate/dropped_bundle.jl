@@ -830,7 +830,8 @@ review_line("stage 1 (quads)", cap_review(stage1.beams))
 # each through its own port at f/20.7, at the quad's aim and with a quarter of its power.
 # A scenario on them needs a deposition operator for their ports: `remake` builds one,
 # given the options of the first. The polish lets each outer beam move by up to 0.1 mm
-# on its own, the inner quads' beams held as before.
+# on its own, along the hohlraum axis and along its quad's tangent (a quad is the unit of
+# [`GroupPointing`](@ref)'s frame by default), the inner quads' beams held as before.
 
 beams = nif_beams(stage1.beams)
 inner_beams = Set(b.name for b in beams if b.quad in inner_quads)

@@ -2,23 +2,30 @@
 
 const _CACHED_LMAX = 12
 
-const _FIELDS = (:z, :r, :phi, :defocus, :power, :spot, :dlambda,
+const _FIELDS = (:z, :r, :phi, :split, :defocus, :power, :spot, :dlambda,
                  :theta_s, :dphi_s, :split_theta, :split_phi)
-const _CYL_FIELDS = (:z, :r, :phi)
+const _CYL_FIELDS = (:z, :r, :phi, :split)
 const _SPH_FIELDS = (:theta_s, :dphi_s, :split_theta, :split_phi)
 
 """
     GroupPointing(beams; by = :group, fields = (:z, :r, :defocus), mirror = true,
-                  relative = false, unit = :beam, radius = nothing, center = (0, 0, 0))
+                  relative = false, unit = :quad, radius = nothing, center = (0, 0, 0))
 
 Maps a parameter vector to beams. Beams are grouped by `by` (`:group` — e.g. cone —,
 `:quad`, `:beam`, or a function `beam -> key`); each group gets one value per field:
 
 - `:z` — axial aim coordinate (mm). With `mirror`, beams from the lower hemisphere
   (port `z < 0`) aim at `-z`, so one value describes a top/bottom-symmetric cone.
-- `:r` — radial aim offset (mm) toward the beam's own port azimuth (its quad's with
-  `unit = :quad`, below).
+- `:r` — radial aim offset (mm) toward the port azimuth of the beam's quad (its own with
+  `unit = :beam`, below).
 - `:phi` — tangential aim offset (mm), counterclockwise about `z`.
+- `:split` — tangential split of a quad's beams about its aim point (mm), along the
+  quad's φ̂: each beam's aim moves by `±split`, with the sign of its own port's azimuth
+  from its quad's mean port (beams counterclockwise of it `+split`), so a positive split
+  opens a quad's aims in the sense of its ports and a negative one crosses them (the `s`
+  of [`hybride_mock_pointing`](@ref) is `split = -s`). It sets each beam's tangential
+  offset from its quad's mean template aim (a shift of it with `relative`); a quad held
+  as one beam gets none. Needs `unit = :quad` and `quad` names.
 - `:defocus` — focal-plane offset along the beam (mm, see `Beam`).
 - `:power` — power per beam (TW).
 - `:spot` — multiplier on the best-focus spot semi-axes.
@@ -58,18 +65,28 @@ value. The aim moves to the surface along the template's axis, so the focus move
 it unless the template aim was already on the sphere. The spherical fields and the
 hohlraum fields `:z`, `:r`, `:phi` exclude each other.
 
-`unit = :quad` makes a quad the unit of the hohlraum fields' pointing: `:r` and `:phi`
-are measured in the azimuth of the quad's port, the mean port of the beams that share
-its `quad` name, instead of each beam's own. The beams of a quad that share their
-values then share one aim point, whether the table holds the quad as one beam or as its
-four, so a NIF pointing given per cone or per quad stays one aim per quad while the
-deposition is computed per beam. With the default `unit = :beam` each beam's offsets
-are in its own port azimuth, and a quad's four beams with the same `r` aim
-`r sin Δφ` apart (Δφ: a beam's azimuth from its quad's, up to 5.7° on NIF's 23.5° cone).
-A quad held as one beam, and a beam without a quad name, are the same either way, bit
-for bit.
+A quad is the unit of the hohlraum fields' pointing by default (`unit = :quad`): `:r`,
+`:phi` and `:split` are measured in the azimuth of the quad's port, the mean port of the
+beams that share its `quad` name, instead of each beam's own. The beams of a quad that
+share their values then share one aim point, whether the table holds the quad as one
+beam or as its four, so a NIF pointing given per cone or per quad stays one aim per quad
+while the deposition is computed per beam. A quad's beams pointed apart about its aim
+point:
 
-`relative = true` makes the aim fields (`:z`, `:r`, `:phi`, or the spherical ones) shifts
+```julia
+p = GroupPointing(nif_beams(); by = :quad, fields = (:z, :r, :phi, :split))
+beams = apply(p, parameters(p, "Q31T" => (z = 5.8, split = 0.5)))
+```
+
+`by = :beam` gives each beam its own aim (its offsets still in its quad's azimuth), and
+a per-beam table (an as-shot SST export, `read_visrad_sst(path; template =
+nif_beams(quads))`) keeps its beams' differences under one shift per quad with
+`relative = true` (below). `unit = :beam` measures each beam's `:r` and `:phi` in its own
+port azimuth instead, so a quad's four beams with the same `r` aim `r sin Δφ` apart (Δφ:
+a beam's azimuth from its quad's, up to 5.7° on NIF's 23.5° cone). A quad held as one
+beam, and a beam without a quad name, are the same either way, bit for bit.
+
+`relative = true` makes the aim fields (`:z`, `:r`, `:phi`, `:split`, or the spherical ones) shifts
 added to each beam's own template aim instead of values the group's beams share, so a
 group moves rigidly and keeps its members' differences: re-pointing an as-shot table,
 whose beams within a quad aim at different points (a facility's per-beam offsets), by
@@ -89,11 +106,12 @@ struct GroupPointing{K}
     sph0::Vector{NTuple{4,Float64}}      # per group: mean θ', mean Δφ, θ' split, Δφ split
     unit::Symbol                         # :beam or :quad: whose port azimuth :r and :phi refer to
     radial::Vector{NTuple{2,Vec3}}       # per beam: those radial and tangential directions
+    split::Vector{NTuple{2,Float64}}     # per beam with `:split`: its sign, its template offset
 end
 
 function GroupPointing(beams::AbstractVector{<:Beam}; by = :group,
                        fields = (:z, :r, :defocus), mirror::Bool = true, relative::Bool = false,
-                       unit::Symbol = :beam,
+                       unit::Symbol = :quad,
                        radius::Union{Nothing,Real} = nothing, center = (0.0, 0.0, 0.0))
     for f in fields
         f in _FIELDS || throw(ArgumentError("unknown field $f; choose from $_FIELDS"))
@@ -101,6 +119,10 @@ function GroupPointing(beams::AbstractVector{<:Beam}; by = :group,
     unit in (:beam, :quad) || throw(ArgumentError("unit is :beam or :quad, got :$unit"))
     by === :quad && any(b -> isempty(b.quad), beams) &&
         throw(ArgumentError("by = :quad needs quad names on every beam (OMEGA beams have none)"))
+    if :split in fields
+        unit === :quad || throw(ArgumentError("the :split field is in the quad's frame: it needs unit = :quad"))
+        any(b -> isempty(b.quad), beams) && throw(ArgumentError("the :split field needs quad names on every beam"))
+    end
     spherical = any(in(_SPH_FIELDS), fields)
     spherical && any(in(_CYL_FIELDS), fields) &&
         throw(ArgumentError("the spherical fields $_SPH_FIELDS exclude $_CYL_FIELDS"))
@@ -126,8 +148,48 @@ function GroupPointing(beams::AbstractVector{<:Beam}; by = :group,
     sph = spherical ? _sphere_angles(tmpl, R, c, mirror) : NTuple{5,Float64}[]
     sph0 = spherical ? [_sphere_group0(sph, mem) for mem in members] : NTuple{4,Float64}[]
     radial = unit === :quad ? _quad_radial(tmpl) : map(_radial, tmpl)
+    split = :split in fields ? _quad_split(tmpl, radial) : NTuple{2,Float64}[]
     return GroupPointing(tmpl, uk, members, collect(Symbol, fields), mirror, relative, R, c,
-                         sph, sph0, unit, radial)
+                         sph, sph0, unit, radial, split)
+end
+
+# Per template beam, the side of its quad it splits to: the sign of its port's azimuth
+# from the quad's mean port (0 for a beam level with it, and for a quad held as one
+# beam), and its aim's tangential offset (along the quad's φ̂, `radial`'s second vector)
+# from the mean aim of its quad's beams.
+function _quad_split(tmpl, radial)
+    qsum, asum, n = Dict{String,Vec3}(), Dict{String,Vec3}(), Dict{String,Int}()
+    for b in tmpl
+        qsum[b.quad] = get(qsum, b.quad, zero(Vec3)) + b.port
+        asum[b.quad] = get(asum, b.quad, zero(Vec3)) + b.aim
+        n[b.quad] = get(n, b.quad, 0) + 1
+    end
+    return map(eachindex(tmpl)) do i
+        b = tmpl[i]
+        q = qsum[b.quad]
+        δ = mod(atan(b.port[2], b.port[1]) - atan(q[2], q[1]) + π, 2π) - π
+        side = abs(δ) < 1e-9 ? 0.0 : sign(δ)
+        (side, dot(b.aim - asum[b.quad] / n[b.quad], radial[i][2]))
+    end
+end
+
+# The tangential offsets of `aims` (one per template beam, or their shifts from the
+# template's) from the mean of their quad's, along each quad's φ̂.
+function _split_offsets(p::GroupPointing, aims::AbstractVector{Vec3})
+    asum, n = Dict{String,Vec3}(), Dict{String,Int}()
+    for (b, a) in zip(p.template, aims)
+        asum[b.quad] = get(asum, b.quad, zero(Vec3)) + a
+        n[b.quad] = get(n, b.quad, 0) + 1
+    end
+    return [dot(a - asum[b.quad] / n[b.quad], p.radial[i][2]) for (i, (b, a)) in enumerate(zip(p.template, aims))]
+end
+
+# A group's split value from its members' tangential offsets `d` from their quads' mean
+# aims: Σ side × d over the members with a side, over their number (0 without one).
+function _group_split(p::GroupPointing, mem, d)
+    k = count(bi -> p.split[bi][1] != 0, mem)
+    k == 0 && return 0.0
+    return sum(p.split[bi][1] * d[bi] for bi in mem if p.split[bi][1] != 0) / k
 end
 
 # Per template beam, the radial and tangential directions of its quad's port: of the mean
@@ -205,9 +267,15 @@ angles where each template axis first meets the sphere (see `GroupPointing`).
 function initial_parameters(p::GroupPointing)
     x = zeros(nparams(p))
     for (g, mem) in enumerate(p.members), (fi, f) in enumerate(p.fields)
-        p.relative && f in (:z, :r, :phi) && continue
+        p.relative && f in _CYL_FIELDS && continue
         if f in _SPH_FIELDS
             p.relative || (x[_pidx(p, g, fi)] = p.sph0[g][findfirst(==(f), _SPH_FIELDS)])
+            continue
+        end
+        # the group's split: each beam's offset from its quad's mean, by its side
+        sg = :split in p.fields ? _group_split(p, mem, last.(p.split)) : 0.0
+        if f === :split
+            x[_pidx(p, g, fi)] = sg
             continue
         end
         vals = map(mem) do bi
@@ -215,7 +283,7 @@ function initial_parameters(p::GroupPointing)
             er, eφ = p.radial[bi]
             f === :z ? _zsign(p, b) * b.aim[3] :
             f === :r ? dot(b.aim, er) :
-            f === :phi ? dot(b.aim, eφ) :
+            f === :phi ? (isempty(p.split) ? dot(b.aim, eφ) : dot(b.aim, eφ) - p.split[bi][1] * sg) :
             f === :defocus ? b.defocus :
             f === :power ? b.power :
             f === :dlambda ? b.dlambda : 1.0
@@ -267,7 +335,9 @@ beams are ignored), and each group's value of a field is the mean over its membe
 what `apply` would need for that beam. For the aim fields that is the aim's axial
 coordinate (`:z`, mirrored as in `apply`) and its components along the beam's radial
 and tangential directions (`:r`, `:phi`, in the frame of `unit`), or, for a `relative`
-parameterization, the same components of the shift from the template beam's aim;
+parameterization, the same components of the shift from the template beam's aim
+(`:split`: the group's mean of each beam's signed tangential offset from its quad's
+mean, as in `initial_parameters`);
 `:defocus`, `:power` and `:dlambda` are the beams' values and `:spot` the ratio of
 the beam's spot semi-axis `a` to the template's. Spherical fields are not supported (an
 `ArgumentError`).
@@ -278,10 +348,10 @@ them, as when the groups of `p` split those of the parameterization that produce
 the same template,
 
 ```julia
-quad = GroupPointing(beams; by = :quad, fields = (:z, :phi), relative = true, unit = :quad)
+quad = GroupPointing(beams; by = :quad, fields = (:z, :phi), relative = true)
 s = remake(scenario; parameterization = quad)
 r = optimize_pointing(s, objective; ...)
-per_beam = GroupPointing(beams; by = :beam, fields = (:z, :phi), relative = true, unit = :quad)
+per_beam = GroupPointing(beams; by = :beam, fields = (:z, :phi), relative = true)
 x0 = parameters(per_beam, r.beams)       # the box `bounds(per_beam)` stays about `beams`
 polish = optimize_pointing(remake(s; parameterization = per_beam), objective; x0, ...)
 ```
@@ -292,19 +362,30 @@ give each quad its mean shift.
 function parameters(p::GroupPointing, beams::AbstractVector{<:Beam})
     _spherical(p) && throw(ArgumentError("parameters from beams: spherical fields are not supported"))
     byname = Dict(b.name => b for b in beams)
+    for t in p.template
+        haskey(byname, t.name) || throw(ArgumentError("no beam named $(t.name) among the beams"))
+    end
+    # the beams' tangential offsets from their quads' mean aims (or of their shifts)
+    d = :split in p.fields ?
+        _split_offsets(p, [Vec3(ForwardDiff.value.(byname[t.name].aim)) - (p.relative ? t.aim : zero(Vec3))
+                           for t in p.template]) : Float64[]
     x = zeros(nparams(p))
     for (g, mem) in enumerate(p.members), (fi, f) in enumerate(p.fields)
+        sg = isempty(d) ? 0.0 : _group_split(p, mem, d)
+        if f === :split
+            x[_pidx(p, g, fi)] = sg
+            continue
+        end
         s = 0.0
         for bi in mem
             t = p.template[bi]
-            haskey(byname, t.name) || throw(ArgumentError("no beam named $(t.name) among the beams"))
             b = _value_beam(byname[t.name])
             er, eφ = p.radial[bi]
             rel = p.relative && f in (:z, :r, :phi)
             a = rel ? b.aim - t.aim : b.aim
             s += f === :z ? _zsign(p, t) * a[3] :
                  f === :r ? dot(a, er) :
-                 f === :phi ? dot(a, eφ) :
+                 f === :phi ? (isempty(d) ? dot(a, eφ) : dot(a, eφ) - p.split[bi][1] * sg) :
                  f === :defocus ? b.defocus :
                  f === :power ? b.power :
                  f === :dlambda ? b.dlambda : b.spot.a / t.spot.a
@@ -325,7 +406,7 @@ function apply(p::GroupPointing, x::AbstractVector{T}) where {T}
     for (g, mem) in enumerate(p.members)
         val(f) = (fi = findfirst(==(f), p.fields); fi === nothing ? nothing : x[_pidx(p, g, fi)])
         z, r, ϕ, dfc, pw, sp = val(:z), val(:r), val(:phi), val(:defocus), val(:power), val(:spot)
-        dl = val(:dlambda)
+        dl, spl = val(:dlambda), val(:split)
         # spherical values as concrete types (whether each is a parameter, and its value)
         sv = (val(:theta_s), val(:dphi_s), val(:split_theta), val(:split_phi))
         has = map(!isnothing, sv)
@@ -341,10 +422,17 @@ function apply(p::GroupPointing, x::AbstractVector{T}) where {T}
                     rr = r === nothing ? dot(aim0, er) : dot(aim0, er) + r
                     tt = ϕ === nothing ? dot(aim0, eφ) : dot(aim0, eφ) + ϕ
                     zz = z === nothing ? aim0[3] : aim0[3] + _zsign(p, b) * z
+                    spl === nothing || (tt += p.split[bi][1] * spl)
                 else
                     rr = r === nothing ? dot(aim0, er) : r
                     tt = ϕ === nothing ? dot(aim0, eφ) : ϕ
                     zz = z === nothing ? aim0[3] : _zsign(p, b) * z
+                    if spl !== nothing
+                        # the split sets the beam's offset from its quad's mean: the
+                        # template's own offset out where the aim is the template's
+                        side, d0 = p.split[bi]
+                        tt = (ϕ === nothing ? tt - d0 : tt) + side * spl
+                    end
                 end
                 aim = rr * er + tt * eφ + SVector{3,T}(0, 0, zz)
             end
@@ -391,12 +479,12 @@ function _sphere_aim(p::GroupPointing, g, bi, has::NTuple{4,Bool}, v::NTuple{4,T
 end
 
 """
-    bounds(p::GroupPointing, x0; z = 1.0, r = 1.0, phi = 1.0, defocus = 2.0,
+    bounds(p::GroupPointing, x0; z = 1.0, r = 1.0, phi = 1.0, split = 1.0, defocus = 2.0,
            power = 0.5, spot = 0.5, dlambda = 2.0, theta_s = 5.0, dphi_s = 10.0,
            split_theta = 5.0, split_phi = 5.0, power_min = 0.0, power_max = Inf)
            -> (lower, upper)
 
-Box bounds around `x0`: `±z`, `±r`, `±phi`, `±defocus` mm, relative `±power`, `±spot`
+Box bounds around `x0`: `±z`, `±r`, `±phi`, `±split`, `±defocus` mm, relative `±power`, `±spot`
 fractions, `±dlambda` Å, and `±theta_s`, `±dphi_s`, `±split_theta`, `±split_phi`
 degrees (engineering defaults, not facility limits). Power bounds are further clipped to
 the absolute limits `power_min ≤ P ≤ power_max` (TW per beam, e.g. a facility's per-quad
@@ -406,10 +494,10 @@ come back; with every group at zero the upper bound is `power_max`, which must t
 finite.
 """
 bounds(p::GroupPointing, x0 = initial_parameters(p); z = 1.0, r = 1.0, phi = 1.0,
-       defocus = 2.0, power = 0.5, spot = 0.5, dlambda = 2.0, theta_s = 5.0,
+       split = 1.0, defocus = 2.0, power = 0.5, spot = 0.5, dlambda = 2.0, theta_s = 5.0,
        dphi_s = 10.0, split_theta = 5.0, split_phi = 5.0, power_min = 0.0,
        power_max = Inf) =
-    _box_bounds(p, x0, (; z, r, phi, defocus, dlambda, theta_s, dphi_s, split_theta, split_phi),
+    _box_bounds(p, x0, (; z, r, phi, split, defocus, dlambda, theta_s, dphi_s, split_theta, split_phi),
                 power, spot, power_min, power_max)
 
 # The box of `bounds` for a parameterization with groups `p.members`, fields `p.fields`
@@ -670,7 +758,8 @@ dropping a bundle — reusing the view factors, flux response and mode weights; 
 deposition operator is restricted. The kept beams' template values (pointing, power)
 come from the scenario's parameterization; the default new parameterization keeps its
 fields, mirroring, `relative`, `unit` and sphere and groups by `group` (pass one to group
-by quad or beam; with `unit = :quad` a quad's azimuth is then that of its kept beams). For a [`FramePointing`](@ref) scenario, the default keeps the kept beams'
+by quad or beam; with `unit = :quad`, the default, a quad's azimuth and split are then
+those of its kept beams). For a [`FramePointing`](@ref) scenario, the default keeps the kept beams'
 frames, groups, fields and `relative`. Any other parameterization needs one.
 """
 function subset(s::Scenario, keep::AbstractVector{<:Integer}; parameterization = nothing)

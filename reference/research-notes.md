@@ -12162,3 +12162,44 @@ as it stands (0.8 % over here), where with `exact = false` the report shows the 
 (the earlier tutorial printed the peak beside a report of every limit met). The tutorial
 keeps its 120-evaluation polish (a converged one costs five and a half more minutes of
 the docs build) and says so; a design to hand off runs to convergence.
+
+**`GroupPointing`'s `unit` defaults to `:quad`** (items 23 and 34). The user's
+condition: "Quads-as-units is a default for pointing, but quad-splitting shouldn't
+require jumping over hurdles." What pointing a quad's beams apart takes after the
+change, as a user meets it:
+
+- *Per-beam aims*: `by = :beam` (one keyword, as before); each beam's `:r` and `:phi`
+  are then in its quad's port azimuth. `unit = :beam` (one keyword) puts them in its own.
+- *A split about the quad's aim point*: there was no cylindrical split field
+  (`hybride_mock_pointing` splits by a fixed table; `:split_theta`/`:split_phi` are on
+  the capsule sphere). Added: `:split` (mm, along the quad's φ̂, each beam `±split` by
+  the side of its port's azimuth from the quad's mean port; positive opens the quad in
+  the sense of its ports, as `:split_phi`; `hybride_mock_pointing`'s crossing `s` is
+  `split = -s`), absolute (it sets each beam's tangential offset from its quad's mean
+  template aim) or a shift with `relative`, needing `unit = :quad` and quad names. Two
+  lines: `p = GroupPointing(nif_beams(); by = :quad, fields = (:z, :r, :phi, :split))`
+  and `apply(p, parameters(p, "Q31T" => (z = 5.8, split = 0.5)))`. Checked against beams
+  split by hand (each aim moved by ±split along the quad's φ̂ computed in the test from
+  the port table) and against `hybride_mock_pointing` per cone, to 1e-12 mm; the
+  template's split read back by `initial_parameters` and `parameters(p, beams)` to
+  1e-12; d aim/d split equals the side times the quad's φ̂ to 1e-14 (ForwardDiff); a
+  quad held as one beam gets none, bit for bit; inferred and JET-clean on Float64 and
+  the optimizer's duals, absolute and relative.
+- *A per-beam table* (`read_visrad_sst(path; template = nif_beams(quads))`, an as-shot
+  table): `relative = true` keeps its beams' differences under one shift per quad, in
+  the quad's frame now; absolute `:z`, `:r`, `:phi` collapse each quad to one aim point,
+  and absolute `:split` keeps the table's mean split.
+
+Callers: every one built on quads held as one beam (`nif_quads`, the tests, examples
+and tutorials but one) or on beams without quad names (OMEGA) is the same either way,
+bit for bit; the spherical fields do not use the frame. Results change only for beam
+lists holding a quad's beams separately with an aim field in play:
+`test/parameters.jl`'s per-beam case (pinned to `unit = :beam`, the case it checks),
+`test/basics.jl`'s relative per-beam table (the new default intended; its checks hold
+either way) and the dropped-bundle tutorial's per-beam polish (the new default
+intended: its tangential shifts are along the quad's φ̂; measured with the next
+change, below). `BriareusGUI` already
+passed `unit = :quad` everywhere (left explicit). `Scenario(target, beams)`'s default
+parameterization on a 192-beam list now has the quad frame; `examples/n221204.jl`
+builds no parameterization, and its coarse CSV (`0.8 0.4 full`) is byte-identical to
+the base commit's (8 threads, 2 min 12 s each).

@@ -41,15 +41,16 @@ Briareus.initial_parameters(s::_Shift) = zeros(length(s.x0))
           evaluate(Scenario(t, apply(p, x)), apply(p, x)).deposition.element
 end
 
-# A quad as the unit of pointing (`unit = :quad`): the radial and tangential offsets in the
-# quad's port azimuth, so a quad's beams that share their values share one aim point.
+# A quad as the unit of pointing (`unit = :quad`, the default): the radial and tangential
+# offsets in the quad's port azimuth, so a quad's beams that share their values share one
+# aim point.
 @testset "GroupPointing: a quad as the pointing unit" begin
     quads, beams = nif_quads(power = 8.0), nif_beams(power = 2.0)
     vals = (inner23 = (z = 3.09, r = -1.09, phi = 0.2), inner30 = (z = 3.63, r = -0.6, phi = -0.1),
             outer44 = (z = 5.2, r = 0.4, phi = 0.0), outer50 = (z = 5.01, r = 0.0, phi = 0.3))
     fields = (:z, :r, :phi)
     # quads held as one beam: the same either way, bit for bit
-    pb, pq = GroupPointing(quads; fields), GroupPointing(quads; fields, unit = :quad)
+    pb, pq = GroupPointing(quads; fields, unit = :beam), GroupPointing(quads; fields)
     x = parameters(pb; vals...)
     @test initial_parameters(pb) == initial_parameters(pq) && pq.radial == pb.radial
     @test [b.aim for b in apply(pq, x)] == [b.aim for b in apply(pb, x)]
@@ -67,10 +68,11 @@ end
     @test maximum(norm(b4[idx[1]].aim - qaim[q]) for (q, idx) in byquad) < 1e-3
     # and the values read back: the applied beams give the parameters again
     @test initial_parameters(GroupPointing(b4; fields, unit = :quad)) ≈ x4 rtol = 1e-12 atol = 1e-12
-    # per beam (the default) the same values put a quad's aims r sin Δφ apart: the 23.5°
+    # per beam (`unit = :beam`) the same values put a quad's aims r sin Δφ apart: the 23.5°
     # cone's beams are up to 5.73° from their quad's azimuth (closed form, to the last digit
     # of the port table's angles)
-    b1 = apply(GroupPointing(beams; fields), parameters(GroupPointing(beams; fields); vals...))
+    p1 = GroupPointing(beams; fields, unit = :beam)
+    b1 = apply(p1, parameters(p1; vals...))
     inner = [idx for (q, idx) in byquad if beams[idx[1]].group === :inner23]
     φ(v) = atand(v[2], v[1])
     δ(idx) = maximum(abs(mod(φ(beams[i].port) - φ(sum(beams[j].port for j in idx)) + 180, 360) - 180) for i in idx)
@@ -90,11 +92,71 @@ end
     # differentiable, and kept by a subset
     g = ForwardDiff.gradient(y -> sum(b -> sum(b.aim), apply(p4, y)), x4)
     @test all(isfinite, g) && any(!=(0), g)
-    @test Briareus._subset_param(p4, 1:8).unit === :quad && pb.unit === :beam
+    @test Briareus._subset_param(p4, 1:8).unit === :quad && pb.unit === :beam && pq.unit === :quad
+    @test Briareus._subset_param(p1, 1:8).unit === :beam
     # a beam without a quad name keeps its own azimuth
     om = omega_beams()
-    @test GroupPointing(om; fields, unit = :quad).radial == GroupPointing(om; fields).radial
+    @test GroupPointing(om; fields).radial == GroupPointing(om; fields, unit = :beam).radial
     @test_throws ArgumentError GroupPointing(quads; unit = :cone)
+end
+
+# A quad's beams split about its aim point (`:split`, in the quad's frame), against beams
+# split by hand: each beam's aim moved along its quad's φ̂ (the mean port's azimuth, from
+# the port table) by ±split with the side of its port, and against the mock HYBRID-E
+# pointing's outer-cone split (`hybride_mock_pointing`, another construction of the same
+# rule: its `s` crosses the beams, `split = -s`).
+@testset "GroupPointing: a quad's split" begin
+    beams = nif_beams(power = 2.0)
+    byquad = Dict{String,Vector{Int}}()
+    foreach(i -> push!(get!(byquad, beams[i].quad, Int[]), i), eachindex(beams))
+    φq = Dict(q => (m = sum(beams[i].port for i in idx); atan(m[2], m[1])) for (q, idx) in byquad)
+    side(b) = sign(mod(atan(b.port[2], b.port[1]) - φq[b.quad] + π, 2π) - π)
+    eφ(b) = Vec3(-sin(φq[b.quad]), cos(φq[b.quad]), 0.0)
+    er(b) = Vec3(cos(φq[b.quad]), sin(φq[b.quad]), 0.0)
+    @test all(b -> side(b) != 0, beams)
+    # absolute: one (z, r, phi, split) per quad
+    p = GroupPointing(beams; by = :quad, fields = (:z, :r, :phi, :split))
+    x = [(4.5, -0.5, 0.2, 0.35)[mod1(i, 4)] + 0.01 * sin(i) for i in 1:nparams(p)]
+    at(q, f) = x[findfirst(==(string(q, '.', f)), parameter_names(p))]
+    hand = [at(b.quad, "r") * er(b) + (at(b.quad, "phi") + side(b) * at(b.quad, "split")) * eφ(b) +
+            Vec3(0, 0, sign(b.port[3]) * at(b.quad, "z")) for b in beams]
+    bs = apply(p, x)
+    @test maximum(norm(b.aim - h) for (b, h) in zip(bs, hand)) < 1e-12
+    # the parameters read back from the split beams, and the template's split as the start
+    @test maximum(abs.(parameters(p, bs) .- x)) < 1e-12
+    @test maximum(abs.(initial_parameters(GroupPointing(bs; by = :quad, fields = (:z, :r, :phi, :split))) .- x)) < 1e-12
+    # the mock HYBRID-E pointing per cone: z, r and split = -s
+    hyb = hybride_mock_pointing(beams)
+    pc = GroupPointing(beams; fields = (:z, :r, :split))
+    xc = parameters(pc; (c => (z = v.z, r = v.r, split = -v.s) for (c, v) in Briareus.HYBRIDE_MOCK_POINTING)...)
+    @test maximum(norm(a.aim - b.aim) for (a, b) in zip(apply(pc, xc), hyb)) < 1e-12
+    ph = GroupPointing(hyb; fields = (:z, :r, :split))
+    @test maximum(abs.(initial_parameters(ph) .- xc)) < 1e-12
+    # with the split held at the template's, the other fields keep it: the hybrid's quads
+    # moved in z keep their ±s
+    xz = initial_parameters(ph) .+ [f == "z" ? 0.1 : 0.0 for f in last.(split.(parameter_names(ph), '.'))]
+    @test maximum(norm(a.aim - b.aim - Vec3(0, 0, 0.1 * sign(b.port[3]))) for (a, b) in zip(apply(ph, xz), hyb)) < 1e-12
+    # relative: a shift of each beam's own split, the members' differences kept
+    pr = GroupPointing(hyb; by = :quad, fields = (:phi, :split), relative = true)
+    δ = [0.02 * cos(i) for i in 1:nparams(pr)]
+    atr(q, f) = δ[findfirst(==(string(q, '.', f)), parameter_names(pr))]
+    @test initial_parameters(pr) == zeros(nparams(pr))
+    @test maximum(norm(a.aim - (b.aim + (atr(b.quad, "phi") + side(b) * atr(b.quad, "split")) * eφ(b)))
+                  for (a, b) in zip(apply(pr, δ), hyb)) < 1e-12
+    @test maximum(abs.(parameters(pr, apply(pr, δ)) .- δ)) < 1e-12
+    # differentiable: d aim / d split is the beam's side along its quad's φ̂, exactly
+    @test parameter_names(p)[4] == beams[1].quad * ".split"
+    J = ForwardDiff.jacobian(s -> apply(p, [i == 4 ? s[1] : oftype(s[1], x[i]) for i in eachindex(x)])[1].aim, [x[4]])
+    @test J[:, 1] ≈ side(beams[1]) * eφ(beams[1]) rtol = 1e-14
+    # a quad held as one beam gets no split; a split per beam, without quads or in the
+    # beam's own frame is refused, and spherical fields exclude it
+    q = nif_quads()
+    pq = GroupPointing(q; by = :quad, fields = (:z, :split))
+    @test [b.aim for b in apply(pq, fill(0.3, nparams(pq)))] == [b.aim for b in apply(pq, repeat([0.3, 0.0], 48))]
+    @test_throws ArgumentError GroupPointing(beams; fields = (:split,), unit = :beam)
+    @test_throws ArgumentError GroupPointing(omega_beams(); fields = (:split,))
+    @test_throws ArgumentError GroupPointing(beams; fields = (:theta_s, :split), radius = 1.0)
+    @test bounds(p, x; split = 0.2)[2][4] == x[4] + 0.2
 end
 
 # Parameters read from beams (`parameters(p, beams)`): a quad re-pointing handed to a

@@ -1,7 +1,8 @@
 # Optimization
 
 [`GroupPointing`](@ref) maps parameters to beams, per cone, quad or beam: axial, radial
-and tangential aim, defocus, power, spot scale and Δλ, with top–bottom mirroring;
+and tangential aim (in the quad's port azimuth by default) and a quad's split about its
+aim point, defocus, power, spot scale and Δλ, with top–bottom mirroring;
 [`parameters`](@ref) builds its parameter vector from values named by group and field,
 and [`Scenario`](@ref) precomputes everything an evaluation needs.
 [`symmetry_objective`](@ref) and [`asymmetry_objective`](@ref) target capsule drive

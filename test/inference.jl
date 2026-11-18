@@ -90,6 +90,10 @@ end
     xs0 = initial_parameters(ps)
     psr = GroupPointing(nif_beams(power = 2.0)[1:16]; by = :quad, relative = true, radius = 0.9,
                         fields = (:theta_s, :dphi_s, :split_theta, :split_phi))
+    # a quad's beams split about its aim point (`:split`), absolute and relative
+    psp = [GroupPointing(nif_beams(power = 2.0)[1:16]; by = :quad, fields = (:z, :r, :phi, :split), relative)
+           for relative in (false, true)]
+    xsp0 = initial_parameters(psp[1]) .+ 0.1
     # a corona about the capsule (the quads' spots reach it: live rays on both paths)
     # pointing in the entrance holes' frames (the bottom one mirrored), one local aim per cone
     L = geometry.length
@@ -268,6 +272,10 @@ end
             @test (@inferred deposit(s.deposition, beams)).element isa Vector{T}
             @test (@inferred apply(psr, zeros(T, nparams(psr)))) isa Vector{Beam{T}}
         end
+        # a quad's split
+        for x in (xsp0, _inf_duals(xsp0)), q in psp
+            @test (@inferred apply(q, x)) isa Vector{Beam{eltype(x)}}
+        end
         # pointing in frames
         for x in (xf0, _inf_duals(xf0))
             T = eltype(x)
@@ -364,6 +372,11 @@ end
                 end
                 @test _inf_jet_clean(JET.report_call, apply, ps, x)
                 @test _inf_jet_clean(JET.report_call, apply, psr, zeros(eltype(x), nparams(psr)))
+            end
+            # a quad's split: no dispatch, no possible errors
+            for x in (xsp0, _inf_duals(xsp0)), q in psp
+                @test _inf_jet_clean(JET.report_opt, apply, q, x)
+                @test _inf_jet_clean(JET.report_call, apply, q, x)
             end
             # pointing in frames: no dispatch, no possible errors
             for x in (xf0, _inf_duals(xf0))
