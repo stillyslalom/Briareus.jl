@@ -167,21 +167,60 @@ Base.@nospecializeinfer function _constrained_pointing(
         s::Scenario, @nospecialize(objective), @nospecialize(cs::Tuple), x0, xs, lower, upper;
         iterations::Integer, evaluations::Integer, show_trace::Bool, g_tol,
         @nospecialize(callback), feasibility::Float64, outer::Int, @nospecialize(state = nothing),
-        deadline::Float64 = Inf)
+        deadline::Float64 = Inf, phase1::Bool = false, relaxation::Bool = false)
     for c in cs
         c isa Constraint || throw(ArgumentError("constraints must be `Constraint`s, got $(typeof(c))"))
     end
     feasibility > 0 || throw(ArgumentError("feasibility must be positive"))
+    phase1 |= relaxation
     ev = evaluate(s, xs)
     f0 = Float64(ForwardDiff.value(objective(ev)))
     g = _all_violations(cs, ev)
     lens = map(c -> length(_violations(c, ev)), cs)
+    x, ne, ni, k = copy(xs), 0, 0, 0
+    p1 = nothing
+    # phase 1 (a fresh run whose start violates a constraint): the smallest infeasibility
+    # from the start, ignoring the objective; a verdict when it stays above `feasibility`,
+    # else the main run starts from its first design within the limits
+    if phase1 && state === nothing && maximum(g; init = -Inf) > feasibility
+        r1 = _phase1(s, cs, x0, xs, lower, upper; iterations, evaluations, show_trace, g_tol,
+                     callback, feasibility, deadline)
+        ne, ni = r1.evaluations, r1.iterations
+        p1 = (; evaluations = r1.evaluations, iterations = r1.iterations, feasible = r1.feasible,
+              x = copy(r1.x), verdict = r1.verdict)
+        if r1.verdict || (r1.stopped && !r1.feasible)
+            # infeasible (phase 1 converged above `feasibility`), or stopped by the budget,
+            # the time limit or the callback before a design within the limits
+            ev1 = evaluate(s, r1.x)
+            rows = _constraint_rows(ev1, cs, nothing, feasibility)
+            rel = Relaxation[]
+            if r1.verdict && relaxation
+                rel = _relaxations(s, cs, rows, lens, collect(Float64, x0), collect(Float64, r1.x),
+                                   lower, upper; iterations,
+                                   evaluations = evaluations - ne, show_trace, g_tol,
+                                   feasibility, outer, deadline)
+                ne += sum(r -> r.evaluations, rel; init = 0)
+            end
+            return _pointing_result(s, r1.x, Float64(ForwardDiff.value(objective(ev1))), f0, ni, ne,
+                                    r1.stopped, r1.verdict ? :converged : r1.reason, r1.result,
+                                    lower, upper; constraints = rows, phase1 = p1, relaxations = rel)
+        end
+    end
+    # the main run's start: phase 1's design within the limits, if any (its objective and
+    # violations set the first penalty), else the start
+    fμ = f0
+    if p1 !== nothing && p1.feasible
+        x = copy(p1.x)
+        evs = evaluate(s, x)
+        fμ = Float64(ForwardDiff.value(objective(evs)))
+        g = _all_violations(cs, evs)
+    end
     # the constraints as the inner problems see them: an exact ceiling's stand-in at a
     # working limit, lowered while the exact value ends above the limit
     work = cs
     if state === nothing
         λ = zeros(length(g))
-        μ = clamp(10 * max(1.0, abs(f0)) / max(1.0, sum(abs2, max.(g, 0.0)) / 2), 1e-6, 1e6)
+        μ = clamp(10 * max(1.0, abs(fμ)) / max(1.0, sum(abs2, max.(g, 0.0)) / 2), 1e-6, 1e6)
         μmax = 1e8 * μ
         tol = max(Float64(g_tol), 1e-3)
         Vold = Inf
@@ -195,7 +234,6 @@ Base.@nospecializeinfer function _constrained_pointing(
         work = map((c, L) -> Constraint(c.name, c.f, copy(L), c.scale, c.upper, c.labels), cs,
                    Tuple(state.limits))
     end
-    x, ne, ni, k = copy(xs), 0, 0, 0
     last = nothing
     reason = :converged
     evx = ev
@@ -257,8 +295,143 @@ Base.@nospecializeinfer function _constrained_pointing(
     stopped = last.stopped
     return _pointing_result(s, x, Float64(ForwardDiff.value(objective(evx))), f0, ni, ne,
                             stopped, reason, last.result, lower, upper; constraints = rows,
-                            outer = k, state, objective,
+                            outer = k, state, objective, phase1 = p1,
                             lagrangian = _Lagrangian(objective, work, _split_multipliers(λ, lens)))
+end
+
+# Phase 1 of a constrained run: the box-constrained minimization of the infeasibility
+# ψ = ½ Σᵢ max(0, gᵢ)² over every component's normalized violation (the augmented
+# Lagrangian's limit as μ → ∞, zero exactly on the feasible set), ignoring the
+# objective, by the same L-BFGS-B and its inner-run value tolerance. It stops at the
+# first design with ψ ≤ ½ feasibility², where every violation is within `feasibility`
+# (`feasible`). Converged above it with a violation over `feasibility`, the design is a
+# local minimum of the infeasibility: the verdict that the constraints cannot all be met
+# from this start (`verdict`).
+struct _Infeasibility{C<:Tuple}
+    constraints::C
+end
+(a::_Infeasibility)(ev::Evaluation) = sum(map(c -> _hinge2(_violations(c, ev)), a.constraints))
+
+function _hinge2(g::AbstractVector{T}) where {T}
+    s = zero(T)
+    for x in g
+        s += max(zero(T), x)^2
+    end
+    return s / 2
+end
+
+Base.@nospecializeinfer function _phase1(s::Scenario, @nospecialize(cs::Tuple), x0, xs, lower, upper;
+                                         iterations::Integer, evaluations::Integer, show_trace::Bool,
+                                         g_tol, @nospecialize(callback), feasibility::Float64,
+                                         deadline::Float64)
+    thr = feasibility^2 / 2
+    found, stalled = Ref(false), Ref(false)
+    best = Float64[]                       # the least ψ after each evaluation
+    W = _PHASE1_WINDOW
+    # the callback's view: phase 1 reports `outer = 0`
+    stop = st -> begin
+        st.value <= thr && (found[] = true; return true)
+        push!(best, st.best_value)
+        n = length(best)
+        n > W && best[n] > (1 - _PHASE1_STALL) * best[n-W] && (stalled[] = true; return true)
+        return callback === nothing ? false : callback(merge(st, (; outer = 0))) === true
+    end
+    r = _lbfgsb(s, _Infeasibility(cs), x0, xs, lower, upper; iterations, evaluations, show_trace,
+                g_tol, callback = stop, f_reltol = _AL_F_RELTOL[], deadline)
+    # converged, or stalled: a local minimum of ψ, or as near one as the stall rule tells
+    ended = !r.stopped && r.reason === :converged || r.stopped && r.reason === :callback && stalled[]
+    feasible = found[] || r.value <= thr
+    g = feasible ? Float64[] : _all_violations(cs, evaluate(s, r.x))
+    verdict = !feasible && ended && maximum(g; init = -Inf) > feasibility
+    # an ended phase 1 whose violations are all within `feasibility` (many components each
+    # just inside it) counts as feasible
+    feasible |= ended && !verdict
+    return (; r.x, r.value, r.iterations, r.evaluations,
+            stopped = r.stopped && !found[] && !stalled[], r.reason, r.result, feasible, verdict)
+end
+
+# Phase 1's stall rule (engineering defaults): it ends when its least infeasibility has
+# fallen by less than `_PHASE1_STALL` (relative) over the last `_PHASE1_WINDOW`
+# evaluations. A drive problem's phase 1 that can reach the limits does so in tens of
+# evaluations; one that cannot creeps toward its local minimum of ψ for thousands
+# (research notes, "A verdict on conflicting constraints").
+const _PHASE1_WINDOW = 100
+const _PHASE1_STALL = 0.01
+
+# The objective of a relaxation: a smooth largest positive normalized violation of one
+# constraint's components, `m (Σₖ max(0, gₖ/m)ᵖ)^(1/p)` with `m` the largest (a constant:
+# the norm is homogeneous), above the largest by at most a factor n^(1/p) for n equal
+# components; zero once every component holds.
+struct _Relaxed{C}
+    constraint::C
+    p::Float64
+end
+(r::_Relaxed)(ev::Evaluation) = _positive_norm(_violations(r.constraint, ev), r.p)
+
+function _positive_norm(g::AbstractVector{T}, p::Float64) where {T}
+    m = maximum(x -> Float64(ForwardDiff.value(x)), g; init = 0.0)
+    m > 0 || return zero(T)
+    s = zero(T)
+    for x in g
+        x > 0 && (s += (x / m)^p)
+    end
+    return m * s^(1 / p)
+end
+
+# The p of a relaxation's smooth largest violation (engineering default: as the gate
+# multiples of a study, 4 components equal at most 2.2 % above their largest)
+const _RELAX_P = 64.0
+
+# The relaxation of each constraint violated or active at the infeasible design `x1`
+# (rows `rows`; a constraint of the conflict can end at its limit there, the violation
+# carried by the others): the smallest largest violation of its components with the
+# others as constraints, each a constrained run (phase 1 on the others first) from `x1`,
+# within the remaining budget and time.
+Base.@nospecializeinfer function _relaxations(s::Scenario, @nospecialize(cs::Tuple), rows,
+                                              @nospecialize(lens::Tuple), x0::Vector{Float64},
+                                              x1::Vector{Float64}, lower, upper; iterations::Integer,
+                                              evaluations::Integer, show_trace::Bool, g_tol,
+                                              feasibility::Float64, outer::Int, deadline::Float64)
+    offs = cumsum((0, lens...))
+    out = Relaxation[]
+    used = 0
+    for j in eachindex(cs)
+        any(i -> rows[i].status !== :satisfied, offs[j]+1:offs[j+1]) || continue
+        c = cs[j]
+        others = cs[[i for i in eachindex(cs) if i != j]]
+        budget = evaluations - used
+        if budget <= 0 || time() > deadline
+            push!(out, Relaxation(string(c.name), NaN, copy(c.limit), fill(NaN, length(c.limit)),
+                                  c.upper, :stopped, copy(x1), ConstraintRow[], 0))
+            continue
+        end
+        obj = _Relaxed(c, _RELAX_P)
+        r = if isempty(others)
+            # the constraint alone: a box-constrained run, as `optimize_pointing` without constraints
+            q = _lbfgsb(s, obj, x0, x1, lower, upper; iterations, evaluations = budget, show_trace, g_tol,
+                        callback = nothing, deadline)
+            _pointing_result(s, q.x, q.value, q.initial_value, q.iterations, q.evaluations, q.stopped,
+                             q.reason, q.result, lower, upper)
+        else
+            _constrained_pointing(s, obj, Tuple(others), x0, x1, lower, upper; iterations,
+                                  evaluations = budget, show_trace, g_tol, callback = nothing,
+                                  feasibility, outer, deadline, phase1 = true)
+        end
+        used += r.evaluations
+        evr = evaluate(s, r.x)
+        allrows = _constraint_rows(evr, cs, nothing, feasibility)
+        status = r.outcome in (:interior, :box) || (isempty(others) && r.reason === :converged) ? :relaxed :
+                 r.outcome in (:infeasible, :infeasible_box) ? :others_conflict : :stopped
+        v = status === :others_conflict ? NaN :
+            max(0.0, maximum(i -> allrows[i].violation, offs[j]+1:offs[j+1]))
+        sg = c.upper ? 1 : -1
+        n = max(length(c.limit), length(c.scale))
+        lim = [c.limit[length(c.limit) == 1 ? 1 : i] for i in 1:n]
+        sc = [c.scale[length(c.scale) == 1 ? 1 : i] for i in 1:n]
+        push!(out, Relaxation(string(c.name), v, lim, lim .+ sg .* v .* sc, c.upper, status,
+                              copy(r.x), allrows, r.evaluations))
+    end
+    return out
 end
 
 # The Lagrangian f + Σᵢ λᵢ gᵢ of an objective and the constraints' normalized violations,

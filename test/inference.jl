@@ -129,6 +129,9 @@ end
     pceil = picket_ceiling(evaluate(s, xo), :wall; pkw...)
     pmean = picket_ceiling(evaluate(s, xo), :wall; pkw..., measure = :mean)
     linked = PicketLinkedBubble(BubbleAbsorption(radius = 2.875), t, apply(p, xo); pkw...)
+    # phase 1's infeasibility and a relaxation's objective
+    infeas = Briareus._Infeasibility((ceilc, gatec, clf))
+    relaxg = Briareus._Relaxed(gatec, 64.0)
 
     @testset "closures compile once" begin
         history(τ -> with_pulses(quads, pulse, τ), [0.5, 1.0]; record = sol -> sol)
@@ -192,6 +195,17 @@ end
         @test _inf_body_instances(Briareus._constrained_pointing) == nc
         @test _inf_body_instances(Briareus._lbfgsb) == nl
         @test _inf_body_instances(Briareus._pointing_result) == npr
+        # phase 1 and the relaxations (a power cap below the box: a verdict, then each
+        # violated constraint relaxed until the budget ends): new objective, constraint and
+        # callback types reuse the bodies
+        optimize_pointing(s, objectives[1]; x0, evaluations = 60, relaxation = true,
+                          constraints = (Constraint(:power, ev -> sum(b.power for b in ev.beams); upper = 1.0), gatec))
+        n1, nr = _inf_body_instances(Briareus._phase1), _inf_body_instances(Briareus._relaxations)
+        optimize_pointing(s, dobj; x0, evaluations = 60, relaxation = true, callback = st -> false,
+                          constraints = [Constraint(:power, ev -> sum(b.power^2 for b in ev.beams); upper = 2.0),
+                                         gatec])
+        @test _inf_body_instances(Briareus._phase1) == n1 && _inf_body_instances(Briareus._relaxations) == nr
+        @test _inf_body_instances(Briareus._constrained_pointing) == nc
         # the bound sensitivities' gradient: new objective types reuse the compiled body
         Briareus._scenario_gradient(s, objectives[1], x0)
         ng = _inf_instances(Briareus._scenario_gradient)
@@ -266,6 +280,8 @@ end
             @test (@inferred lightc.f(ev)) isa T
             @test (@inferred aug2(ev)) isa T
             @test (@inferred lag(ev)) isa T
+            @test (@inferred infeas(ev)) isa T
+            @test (@inferred relaxg(ev)) isa T
         end
         # the outer picket fluence and the bubble's picket ratio from it (outer quads aimed
         # into the entrance holes)
@@ -375,6 +391,12 @@ end
                 @test _inf_jet_clean(JET.report_opt, lightc.f, ev)
                 @test _inf_jet_clean(JET.report_call, aug2, ev)
                 @test _inf_jet_clean(JET.report_call, lag, ev)
+                # phase 1 and the relaxations: no dispatch in their kernels, no possible
+                # errors in their objectives
+                @test _inf_jet_clean(JET.report_opt, Briareus._hinge2, flux_ylm(ev)[1:4])
+                @test _inf_jet_clean(JET.report_opt, Briareus._positive_norm, flux_ylm(ev)[1:4], 64.0)
+                @test _inf_jet_clean(JET.report_call, infeas, ev)
+                @test _inf_jet_clean(JET.report_call, relaxg, ev)
             end
             # the outer picket fluence: no dispatch (from 1.11, as the deposition), no errors
             for x in (xo, _inf_duals(xo))
@@ -444,6 +466,9 @@ end
             @test _inf_jet_clean(JET.report_call, (s, o, x) -> optimize_pointing(s, o; x0 = x),
                                  s, objectives[1], x0)
             @test _inf_jet_clean(JET.report_call, (s, o, x, c) -> optimize_pointing(s, o; x0 = x, constraints = c),
+                                 s, objectives[1], x0, (ceilc, gatec))
+            @test _inf_jet_clean(JET.report_call,
+                                 (s, o, x, c) -> optimize_pointing(s, o; x0 = x, constraints = c, relaxation = true),
                                  s, objectives[1], x0, (ceilc, gatec))
             # a warm restart from a constrained result
             r1 = optimize_pointing(s, objectives[1]; x0, iterations = 1, evaluations = 2, constraints = (ceilc, gatec))

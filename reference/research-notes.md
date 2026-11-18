@@ -11570,6 +11570,128 @@ the multipliers are not unique, so the Lagrangian's derivative is not the optimu
 The sensitivities hold where the active set pins the design (the quadratic program);
 on a drive objective under several gates, a restart in the wider box is the measure.
 
+### A verdict on conflicting constraints (2026-11-18, item 36 continued) *measured*
+
+On the variants of a staged re-pointing study kept outside the repository, constrained
+runs whose constraints were incompatible ran to their time limit instead of
+ending `:infeasible`: the augmented Lagrangian declares infeasibility only once its
+penalty has grown 10⁸-fold without progress, and on that study its first inner run
+alone did not finish within the limit. The designer then needs which constraints
+conflict and by how much, in their own units; the study found those by hand, several
+runs each. Three forms compared:
+
+- (a) **phase 1** (`optimize_pointing(...; phase1 = true)`): before the main run,
+  minimize the infeasibility ψ = ½ Σ max(0, gᵢ)² over every component's normalized
+  violation (the augmented Lagrangian's limit as μ → ∞; zero exactly on the feasible
+  set), ignoring the objective, by the same L-BFGS-B with the inner runs' value
+  tolerance. It stops at the first design with ψ ≤ ½ feasibility² (every violation
+  within `feasibility`), where the main run starts. Converged above it, or stalled (the
+  least ψ fallen by less than 1 % over the last 100 evaluations; below), with a
+  violation over `feasibility`: the run ends `:infeasible` (`:infeasible_box` with
+  parameters at a bound) at that design, no outer iteration;
+- (b) **elastic**: the objective plus γ Σ h(gᵢ), h a hinge smoothed quadratically below
+  10⁻³, in one unconstrained run; the hinge's arguments at the end are the slacks;
+- (c) **a stall rule in the augmented Lagrangian**: infeasible once the penalty has
+  grown in each of the last two outer iterations and ψ has fallen by less than 10 %
+  over them.
+
+Cases: the closed-form problem of `test/constraints.jl` (48 quad powers; the drive
+`mean_flux` is linear in the powers, so the largest drive at a total power and the
+least power for a drive are fills of the quads in decreasing drive per power, a closed
+form) with a 120 TW cap and a drive floor 5 % above the cap's largest drive, 1 thread;
+the dropped-bundle test case of `test/constraints.jl` (46 quads in `:phi` and `:z`,
+0.45 mm wall elements, drive objective, the four gates and the wall ceiling; 8
+threads), made infeasible by a box of ±0.02 mm (the gates against the box) and by the
+ceiling at 0.8 of the 48-quad peak (the ceiling against the box: alone it reaches 0.84
+at best from this start), budget 3,000 evaluations and 90 s. Gates tightened to 0.3
+and 0.1 of their values, and the ceiling to 0.9 and 0.86, all stayed feasible: on this
+case the gates and the ceiling hardly conflict.
+
+| case | augmented Lagrangian (today) | (c) stall rule | (a) phase 1 | (b) elastic, γ = 10 |
+|---|---|---|---|---|
+| closed form, cap against floor | `:infeasible_box`, 71 evaluations | — | verdict in 20 | — |
+| closed form, cap 0.95 × start against floor 1.05 × its drive | 38 | 26 | 9 | 50 (γ = 1: 58, the floor given up by 0.49) |
+| box ±0.02 mm | 48 (1.6 s) | 27 | 22 | 24, ends `:box` with the slacks (no verdict) |
+| ceiling 0.8 | none in 90 s (2,195, 4 outer) | 1,837 (75 s) | 577 (about 25 s; 2,681 without the stall rule) | 1,979, iteration cap, slack 0.050 |
+
+Feasible cases (no false verdict in any; drive as a fraction of the 48 quads'; phase 1
+seeds the main run):
+
+| case | augmented Lagrangian | (a) phase 1 (its evaluations) | (c) | (b) γ = 10 |
+|---|---|---|---|---|
+| closed form, start 2.5 × the powers (far outside the cap) | 37 | 56 (7) | 37 | 240–381 (γ = 1–100), 5e-6 from the KKT point |
+| tutorial's start | 1,044, 0.962592 | 1,037 (11), 0.962284 | as today | — |
+| random start in the box | 1,238, 0.962592 | 1,140 (19), 0.962522 | as today | — |
+| ceiling 0.86 | 841, 0.958760, `:box` | 1,085 (323), 0.958871, `:interior` | as today | time limit (2,249), violation 9e-6 |
+| gates × 0.1, 60 s | time limit (1,491), violation 2.7e-2 | time limit (1,477), 1.4e-3 | as today | 429, violation 0.021 |
+
+Reading. The augmented Lagrangian's own verdict is cheap where the box stops its inner
+runs at once (the box case) and slow where the inner runs creep (the ceiling case, and
+the study, where the first inner run alone outlasted the limit); (c) only shortens the
+outer iterations' share, so it cannot help the study, whose single inner run took the
+time. The elastic form needs γ above the multipliers (γ = 1 gave up a floor that
+γ = 10 kept), cannot tell "infeasible" from "γ too small", and on the feasible cases
+ended with violations of 1e-5 to 2e-2 where the augmented Lagrangian meets them. Phase
+1 reaches the verdict first on every infeasible case, from the infeasibility alone,
+and costs a feasible run from 8 % fewer to 29 % more evaluations on the dropped-bundle
+case and 51 % more on the small closed form (the main run starts elsewhere, and on a
+flat family of designs ends at another, within 3.2e-4 of the drive).
+
+The stall rule. On the ceiling case phase 1 converges slowly toward its local minimum:
+ψ within 3 % of its final value after 400 evaluations, within 1e-5 after 2,000, the
+L-BFGS-B convergence after 2,681 (with the ceiling alone: within 1 % after 140, done
+after 766). Every feasible case reached the limits within 323 phase-1 evaluations, with
+ψ falling by orders of magnitude per hundred. Ending phase 1 when its least ψ falls by
+less than 1 % over 100 evaluations (engineering defaults) gave the verdict at 577
+evaluations with the violations within a few percent of the converged ones (the
+ceiling 5.26 % over against 5.10 %). A feasible run that stalls so would need thousands
+of windows to reach the limits, which the augmented Lagrangian does not do either.
+
+**Relaxations** (`relaxation = true`, implies `phase1`). After a verdict, each
+constraint violated or active at phase 1's design is relaxed alone: a constrained run
+from that design minimizing a smooth largest positive violation of its components (a
+64-norm, at most 2.2 % above the largest for four equal components) with every other
+constraint as a constraint (phase 1 on them first, which reports when they conflict
+among themselves). The result is achievable (the design meets the others) and locally
+least. Active constraints are included because the least-squares compromise of phase 1
+can leave a constraint of the conflict exactly at its limit: on the closed form with
+the cap at 0.95 of the start, the floor carried the whole violation and the cap sat at
+its limit. Checks against the closed forms (120 TW cap, floor 1.05 × the cap's largest
+drive): the floor relaxed alone 0.04761904762 (closed form 1 − 1/1.05 =
+0.04761904762), the cap relaxed alone 0.05056360668 (closed form 0.05056360668, the
+least power for the floor over 120 TW), in 133 and 82 evaluations. On the box case the
+gates relaxed alone come out at 2.23 times their limits (304 evaluations), and the
+ceiling relaxed alone is reported as not enough (the gates alone cannot be met in that
+box: their phase 1 converged in 3 evaluations). On the ceiling case one relaxation ran
+past the 90 s limit (status `:stopped`, the ceiling's 5.1 % at its best design), so a
+time limit bounds the relaxations too: they cost one constrained run each, which is why
+they are an option.
+
+Chosen: (a) with relaxations as an option, default off for both (a feasible run with
+phase 1 starts its main run elsewhere and ends at another design of a flat family;
+whether to switch it on by default is the user's decision; recommended, as it cost at
+most 29 % on the drive problems and turns a run to the time limit into a verdict). Today's run is
+unchanged without the keywords: unconstrained runs and default constrained runs are
+bit for bit those of the base commit. Confidence: two public infeasible cases and the
+closed form; the stall rule's 1 % per 100 evaluations is an engineering default
+measured on one creeping case.
+
+**On the study** (scratch runs, numbers not recorded here; one call each with a
+time limit, `VisRadProfile(; taper = 1)`, 8 threads). On its case with two windows and
+the entrance-hole keep-out as a `clearance_floor`, phase 1 gave the verdict in under a
+minute, where the run without it had gone to its time limit; the gates relaxed alone
+matched the largest gate multiple found by hand (runs minimizing it) within 2 %, the
+keep-out relaxed alone fell inside the bracket the hand-found feasibility runs had set
+(that relaxation stopped by the time limit, the other constraints within a few percent),
+and the ceiling relaxed alone was reported as not enough: the conflict the hand-found
+runs had named. On its case with the outer quads re-pointed alone (the keep-out as a
+floor), the verdict came in seconds and the whole call, relaxations included, in under
+two minutes: the gates relaxed alone matched the hand-found multiple within 1 %, and
+the ceiling and the keep-out relaxed alone were each reported as not enough. The last
+was new: the hand-found runs had named the ceiling as the gates' conflict, while the
+keep-out, held by a penalty there, conflicts with the gates as well, so that only the
+gates' relaxation resolves the case.
+
 ## Constrained re-pointing: convergence on a feasible, active start (2026-11-18) *measured*
 
 The augmented Lagrangian of `optimize_pointing(...; constraints)` (§ Constrained

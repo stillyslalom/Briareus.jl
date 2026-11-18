@@ -1209,7 +1209,8 @@ end
                       lower = bounds(scenario.param, x0)[1], upper = bounds(scenario.param, x0)[2],
                       iterations = 200, evaluations = 20 * iterations, show_trace = false,
                       g_tol = 1e-8, callback = nothing, constraints = (),
-                      feasibility = 1e-3, outer = 30, time_limit = Inf) -> PointingResult
+                      feasibility = 1e-3, outer = 30, time_limit = Inf, phase1 = false,
+                      relaxation = false) -> PointingResult
 
 Minimize `objective(evaluate(scenario, x))` within the box `lower ≤ x ≤ upper` by
 L-BFGS-B with forward-mode automatic-differentiation gradients, from `x0` (clamped to
@@ -1256,7 +1257,8 @@ run ends only once an inner run at `g_tol` has converged (its projected gradient
 it, or its value changing by less than 1e-10 relative per iteration: a drive objective
 is flat along the limits), so a start that already meets the limits, as on a restart
 or a hand-off to a finer parameterization, is still optimized. A constraint that cannot
-be met ends the run once the penalty has grown by 10⁸ without progress. `outer` caps the outer
+be met ends the run once the penalty has grown by 10⁸ without progress (see `phase1`
+below for a faster verdict). `outer` caps the outer
 iterations, `iterations` caps each inner run and `evaluations` is the budget of the
 whole run (the result counts both over all inner runs). The result's
 `constraints` and `outcome` report each constraint against its limit and whether the
@@ -1264,6 +1266,29 @@ box, the constraints or the budget ended the run ([`PointingResult`](@ref)). The
 callback's named tuple then also carries `outer`, and its `value` is the inner
 problem's (the objective with the constraint terms). Without constraints the run is
 the plain L-BFGS-B above.
+
+**Infeasible constraints.** `phase1 = true` first minimizes, from a start that violates
+a constraint, the infeasibility `½ Σ max(0, gᵢ)²` over every component's normalized
+violation (the augmented Lagrangian's limit as its penalty grows), ignoring the
+objective, by the same L-BFGS-B. It stops at the first design where every violation is
+within `feasibility`, and the main run starts there. If it converges, or stalls (its
+least infeasibility falls by less than 1 % over 100 evaluations, an engineering
+default), with a violation above `feasibility` instead, the run ends there with
+`outcome` `:infeasible` (or
+`:infeasible_box`, parameters at a bound) and no outer iteration: that design is the
+least infeasible one the search reached from this start (a local verdict), and its
+`constraints` rows show each constraint's violation there. `relaxation = true` (which
+implies `phase1`) adds, after such a verdict, one constrained run per constraint
+violated or active there: the smallest largest violation of its components with every
+other constraint met, which is how far that constraint alone must be relaxed
+([`Relaxation`](@ref), in `PointingResult.relaxations`); these runs share the budget
+and the time limit. Both are off by default: with `phase1`, a feasible run starts its
+main run from another design and can end at another design of a flat family. A start
+that already meets every constraint, and a restart with `from`, skip phase 1. The
+callback's `outer` is 0 during phase 1. On the dropped-bundle test case made
+infeasible, phase 1 reached the verdict in 577 evaluations where the augmented
+Lagrangian had none after 2,195, and on feasible starts it cost 8 % fewer to 29 % more
+evaluations (research notes, "A verdict on conflicting constraints").
 
 **Restarts.** `from`, a previous run's [`PointingResult`](@ref), continues that run:
 `x0`, `lower` and `upper` default to its `x` and box, and a constrained run starts from
@@ -1292,7 +1317,8 @@ Base.@nospecializeinfer function optimize_pointing(
                            iterations::Integer = 200, evaluations::Integer = 20 * iterations,
                            show_trace::Bool = false, g_tol = 1e-8, @nospecialize(callback = nothing),
                            @nospecialize(constraints = ()), feasibility::Real = 1e-3,
-                           outer::Integer = 30, time_limit::Real = Inf)
+                           outer::Integer = 30, time_limit::Real = Inf, phase1::Bool = false,
+                           relaxation::Bool = false)
     # Inferred and compiled once for every objective and callback (each objective
     # closure type used to recompile this body and Optim's L-BFGS-B, ~1 s); the objective
     # is reached by dynamic dispatch once per evaluation.
@@ -1305,7 +1331,8 @@ Base.@nospecializeinfer function optimize_pointing(
         return _constrained_pointing(s, objective, Tuple(constraints), x0, xs, lower, upper;
                                      iterations, evaluations, show_trace, g_tol, callback,
                                      feasibility = Float64(feasibility), outer = Int(outer),
-                                     state = from === nothing ? nothing : from.state, deadline)
+                                     state = from === nothing ? nothing : from.state, deadline,
+                                     phase1, relaxation)
     r = _lbfgsb(s, objective, x0, xs, lower, upper; iterations, evaluations, show_trace, g_tol,
                 callback, deadline)
     return _pointing_result(s, r.x, r.value, r.initial_value, r.iterations, r.evaluations,
@@ -1410,6 +1437,40 @@ struct ConstraintRow
 end
 
 """
+    Relaxation
+
+How far one constraint must be relaxed, alone, for the others to hold: an entry of
+`PointingResult.relaxations` after a run that [`optimize_pointing`](@ref) found
+infeasible with `relaxation = true`. Fields: `name` (the constraint's), `violation`
+(the largest normalized violation of its components at a design that meets every
+other constraint: the relaxation in units of its `scale`, so a multiple `1 +
+violation` of the limit where the scale is the limit, the default), `limit` and
+`relaxed_limit` (one per component, in the constraint's units: a ceiling raised and a
+floor lowered by `violation × scale`), `upper`, `status`, `x` (that design),
+`constraints` (every constraint's [`ConstraintRow`](@ref) at `x`) and `evaluations`.
+`status` is `:relaxed` (the others met at `x`), `:others_conflict` (the other
+constraints cannot all be met either, so relaxing this one alone does not suffice;
+`violation` is `NaN`) or `:stopped` (the budget, the time limit or the callback ended
+the search first; `violation` is the best design's, the others possibly unmet).
+
+The relaxation is achievable (the design `x` meets the others with this one at
+`relaxed_limit`) and the least one only locally: the run that finds it minimizes a
+smooth stand-in for the largest violation (a 64-norm of the positive violations) from
+the infeasible design, a local search.
+"""
+struct Relaxation
+    name::String
+    violation::Float64
+    limit::Vector{Float64}
+    relaxed_limit::Vector{Float64}
+    upper::Bool
+    status::Symbol
+    x::Vector{Float64}
+    constraints::Vector{ConstraintRow}
+    evaluations::Int
+end
+
+"""
     PointingResult
 
 Result of [`optimize_pointing`](@ref). Fields: `x` (the best parameters), `beams`
@@ -1469,6 +1530,15 @@ convergence. Where the active constraints and bounds leave a flat family of desi
 derivative can overstate what a wider box gains by an order of magnitude or more
 (research notes, "Constrained re-pointing"); a restart with `from` in the wider box
 measures it.
+
+**Phase 1 and relaxations** (`phase1 = true`, `relaxation = true`). `phase1` is
+`nothing` when phase 1 did not run, else a named tuple of its `evaluations` and
+`iterations` (included in the totals), `feasible` (it reached a design within the
+limits, where the main run started), `verdict` (it converged above `feasibility`: the
+run ended there, `outer` 0) and its design `x`. `relaxations` holds one
+[`Relaxation`](@ref) per constraint violated or active at a verdict's design, with
+`relaxation = true` (empty otherwise); their evaluations count in `evaluations`. The
+display lists them under the constraints.
 """
 struct PointingResult{B}
     x::Vector{Float64}
@@ -1490,6 +1560,8 @@ struct PointingResult{B}
     state::Union{Nothing,NamedTuple}
     bound_gradient::Vector{Float64}
     bound_sensitivity::Vector{Float64}
+    phase1::Union{Nothing,NamedTuple}
+    relaxations::Vector{Relaxation}
 end
 
 _names(p::GroupPointing, n) = parameter_names(p)
@@ -1507,7 +1579,8 @@ end
 Base.@nospecializeinfer function _pointing_result(
         s::Scenario, x, value, initial_value, iterations, evaluations, stopped, reason, result,
         lower, upper; constraints::Vector{ConstraintRow} = ConstraintRow[], outer::Int = 0,
-        @nospecialize(state = nothing), @nospecialize(objective = nothing), @nospecialize(lagrangian = nothing))
+        @nospecialize(state = nothing), @nospecialize(objective = nothing), @nospecialize(lagrangian = nothing),
+        @nospecialize(phase1 = nothing), relaxations::Vector{Relaxation} = Relaxation[])
     x = collect(Float64, x)
     names = _names(s.param, length(x))
     side = map(_bound_side, x, lower, upper)
@@ -1526,7 +1599,7 @@ Base.@nospecializeinfer function _pointing_result(
     return PointingResult(x, apply(s.param, x), Float64(value), Float64(initial_value),
                           Int(iterations), Int(evaluations), stopped, reason, result, names,
                           collect(Float64, lower), collect(Float64, upper), atb,
-                          constraints, outcome, outer, state, gf, gL)
+                          constraints, outcome, outer, state, gf, gL, phase1, relaxations)
 end
 
 function Base.show(io::IO, r::PointingResult)
@@ -1570,9 +1643,40 @@ function Base.show(io::IO, ::MIME"text/plain", r::PointingResult)
            r.outcome === :infeasible_box ? "constraints violated with parameters at a bound (the box blocks them)" :
            r.outcome === :infeasible ? "constraints violated inside the box" :
            "ended by the budget, the time limit or the callback"
-    @printf(io, "\n  %d outer iterations: %s", r.outer, what)
+    p1 = r.phase1
+    if p1 !== nothing && p1.verdict
+        @printf(io, "\n  phase 1 (%d evaluations): no design meets every constraint from this start; the least infeasibility found:",
+                p1.evaluations)
+    else
+        p1 === nothing ||
+            @printf(io, "\n  phase 1: %s in %d evaluations", p1.feasible ? "a design within the limits" :
+                    "no design within the limits", p1.evaluations)
+        @printf(io, "\n  %d outer iterations: %s", r.outer, what)
+    end
     _show_constraint_rows(io, r.constraints)
+    isempty(r.relaxations) && return nothing
+    print(io, "\n  each violated constraint relaxed alone, the others met:")
+    for x in r.relaxations
+        print(io, "\n    ", rpad(x.name, 12), " ", _relaxation_text(x))
+    end
     return nothing
+end
+
+# A relaxation in words: the relaxed limits in the constraint's units, and as a multiple
+# of the limit where the scale is the limit's magnitude.
+function _relaxation_text(x::Relaxation)
+    x.status === :others_conflict && return "not enough alone: the others conflict too"
+    v = x.violation
+    s = x.status === :stopped ? " (stopped first: the others possibly unmet)" : ""
+    # relative: the scale is the limit's magnitude, so each limit moves by the same multiple
+    m = x.relaxed_limit ./ x.limit
+    rel = all(l -> l != 0, x.limit) &&
+          all(i -> isapprox(abs(x.relaxed_limit[i] - x.limit[i]), v * abs(x.limit[i]); rtol = 1e-9),
+              eachindex(x.limit))
+    lims = length(x.limit) == 1 ? @sprintf("limit %.5g → %.5g", x.limit[1], x.relaxed_limit[1]) :
+           "limits " * join((@sprintf("%.4g", l) for l in x.relaxed_limit), ", ")
+    return @sprintf("by %.4g × its scale%s: %s%s (%d evaluations)", v,
+                    rel ? @sprintf(" (the limit × %.4g)", m[1]) : "", lims, s, x.evaluations)
 end
 
 # A constraint's rows (its components) in a display: all of them up to this many, beyond

@@ -3,6 +3,8 @@
 #
 # References: the closed-form solution and multiplier of an equality-active quadratic
 # program (the drive's coefficients are linear in the quad powers, `influence_matrix`);
+# for phase 1's relaxations, fills of the quads in decreasing drive per power (the
+# largest drive at a total power, the least power for a drive);
 # central finite differences for the gradients; the power-mean inequality and its limit
 # for the irradiance norm; synthetic coefficient vectors for the mode departure.
 
@@ -117,6 +119,68 @@
         @test boxed.outcome === :infeasible_box && boxed.reason === :converged
         @test boxed.constraints[1].status === :violated && length(boxed.at_bounds) == 48
         @test occursin("ended with constraints violated", sprint(show, MIME"text/plain"(), boxed))
+        # with phase 1 the same verdict, and the cap relaxed alone (no other constraint) to
+        # the least total power the box allows, every power at its lower bound
+        bv = optimize_pointing(s, f; x0 = P0, lower = 0.99 .* P0, upper = hi, constraints = (total,),
+                               relaxation = true)
+        @test bv.outcome === :infeasible_box && only(bv.relaxations).status === :relaxed
+        @test only(bv.relaxations).violation ≈ 0.99 * sum(P0) / (0.95 * sum(P0)) - 1 rtol = 1e-9
+
+        # Phase 1 and the relaxations on a conflict with closed forms. The drive
+        # (`mean_flux`) is linear in the powers, `m` per quad by unit powers, so the largest
+        # drive at a total power and the least total power for a drive are fills of the
+        # quads in decreasing `m` to the box's 20 TW. A cap of 120 TW and a drive floor 5 %
+        # above the cap's largest drive: the floor relaxed alone falls to that drive (by
+        # 1 - 1/1.05 of itself), the cap relaxed alone rises to the floor's least power.
+        m = [mean_flux(evaluate(s, Float64.(1:48 .== i))) for i in 1:48]
+        @test dot(m, P0) ≈ mean_flux(evaluate(s, P0)) rtol = 1e-12
+        order = sortperm(m; rev = true)
+        function drive_at(P)
+            D = 0.0
+            for i in order
+                p = min(20.0, P); D += m[i] * p; P -= p
+            end
+            return D
+        end
+        function power_for(D)
+            P = 0.0
+            for i in order
+                m[i] > 0 || continue
+                p = clamp(D / m[i], 0.0, 20.0); P += p; D -= m[i] * p
+            end
+            return P
+        end
+        cap120 = Constraint(:total_power, ev -> sum(q.power for q in ev.beams); upper = 120.0)
+        Dfl = 1.05 * drive_at(120.0)
+        above = Constraint(:drive, mean_flux; lower = Dfl)
+        @test power_for(Dfl) < 20 * count(>(0), m)       # the floor alone is feasible
+        today = optimize_pointing(s, f; x0 = P0, lower = lo, upper = hi, constraints = (cap120, above),
+                                  feasibility = 1e-8)
+        v = optimize_pointing(s, f; x0 = P0, lower = lo, upper = hi, constraints = (cap120, above),
+                              feasibility = 1e-8, relaxation = true)
+        @test today.outcome in (:infeasible, :infeasible_box) && today.phase1 === nothing && isempty(today.relaxations)
+        @test v.outcome in (:infeasible, :infeasible_box) && v.reason === :converged && v.outer == 0
+        @test v.phase1.verdict && !v.phase1.feasible && v.phase1.evaluations < today.evaluations
+        @test all(r -> r.status === :violated, v.constraints)
+        r1, r2 = v.relaxations
+        @test (r1.name, r2.name) == ("total_power", "drive") && r1.status === r2.status === :relaxed
+        @test r1.violation ≈ power_for(Dfl) / 120 - 1 rtol = 1e-5
+        @test r1.relaxed_limit ≈ [power_for(Dfl)] rtol = 1e-7
+        @test r2.violation ≈ 1 - 1 / 1.05 rtol = 1e-5
+        @test r2.relaxed_limit ≈ [drive_at(120.0)] rtol = 1e-7
+        # each relaxation's design meets the other constraint
+        @test r1.constraints[2].status !== :violated && r2.constraints[1].status !== :violated
+        @test v.evaluations == v.phase1.evaluations + r1.evaluations + r2.evaluations
+        shown = sprint(show, MIME"text/plain"(), v)
+        @test occursin("no design meets every constraint", shown) && occursin("relaxed alone", shown)
+        # no verdict on a feasible run from far outside the cap: the KKT point as without
+        # phase 1, its main run started from phase 1's first design within the limits
+        far = optimize_pointing(s, f; x0 = clamp.(2.5 .* P0, lo, hi), lower = lo, upper = hi,
+                                constraints = cs2, feasibility = 1e-8, phase1 = true)
+        @test far.outcome === :interior && far.phase1.feasible && !far.phase1.verdict
+        @test norm(far.x - Pstar) / norm(Pstar) < 1e-4
+        @test res.phase1 === nothing && isempty(res.relaxations)
+
         # the budget ends a run first
         short = optimize_pointing(s, f; x0 = P0, lower = lo, upper = hi, evaluations = 10, constraints = [total])
         @test short.outcome === :evaluations && short.stopped && short.evaluations == 10

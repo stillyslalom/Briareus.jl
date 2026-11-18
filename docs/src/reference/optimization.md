@@ -21,7 +21,10 @@ Limits that a design must meet go to [`optimize_pointing`](@ref) as
 [`PointingResult`](@ref) records each one's value against its limit, what ended the
 run and, for each parameter held by the box, the optimum's derivative with respect to
 that bound. `from = result` continues a run with its multipliers and penalty, and
-`time_limit` bounds its wall time. Ready-made constraints: [`irradiance_ceiling`](@ref), a
+`time_limit` bounds its wall time. `phase1 = true` first looks for a design within the
+limits and ends with `:infeasible` when the search finds none, and `relaxation = true`
+then reports how far each conflicting constraint must be relaxed alone
+([`Relaxation`](@ref)). Ready-made constraints: [`irradiance_ceiling`](@ref), a
 ceiling on the laser irradiance over named parts (its exact value
 [`peak_irradiance`](@ref), held itself by default, its smooth stand-in
 [`irradiance_norm`](@ref), held alone with `exact = false`), and [`mode_gate`](@ref), a gate per degree on the
