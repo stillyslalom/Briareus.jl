@@ -258,6 +258,63 @@ function parameters(p::GroupPointing, values::Pair...; kwargs...)
 end
 
 """
+    parameters(p::GroupPointing, beams::AbstractVector{<:Beam}) -> Vector{Float64}
+
+The parameter vector of `p` that reproduces `beams`, such as the result of an
+optimization in another parameterization of the same beams: each template beam of `p`
+takes the beam of its name in `beams` (an `ArgumentError` when there is none; extra
+beams are ignored), and each group's value of a field is the mean over its members of
+what `apply` would need for that beam. For the aim fields that is the aim's axial
+coordinate (`:z`, mirrored as in `apply`) and its components along the beam's radial
+and tangential directions (`:r`, `:phi`, in the frame of `unit`), or, for a `relative`
+parameterization, the same components of the shift from the template beam's aim;
+`:defocus`, `:power` and `:dlambda` are the beams' values and `:spot` the ratio of
+the beam's spot semi-axis `a` to the template's. Spherical fields are not supported (an
+`ArgumentError`).
+
+`apply(p, parameters(p, beams))` reproduces the beams exactly when `p` can express
+them, as when the groups of `p` split those of the parameterization that produced
+`beams` and share its aim frame: a re-pointing by quad handed to a per-beam polish on
+the same template,
+
+```julia
+quad = GroupPointing(beams; by = :quad, fields = (:z, :phi), relative = true, unit = :quad)
+s = remake(scenario; parameterization = quad)
+r = optimize_pointing(s, objective; ...)
+per_beam = GroupPointing(beams; by = :beam, fields = (:z, :phi), relative = true, unit = :quad)
+x0 = parameters(per_beam, r.beams)       # the box `bounds(per_beam)` stays about `beams`
+polish = optimize_pointing(remake(s; parameterization = per_beam), objective; x0, ...)
+```
+
+Otherwise the result is the group means of those values: per-beam aims read by quad
+give each quad its mean shift.
+"""
+function parameters(p::GroupPointing, beams::AbstractVector{<:Beam})
+    _spherical(p) && throw(ArgumentError("parameters from beams: spherical fields are not supported"))
+    byname = Dict(b.name => b for b in beams)
+    x = zeros(nparams(p))
+    for (g, mem) in enumerate(p.members), (fi, f) in enumerate(p.fields)
+        s = 0.0
+        for bi in mem
+            t = p.template[bi]
+            haskey(byname, t.name) || throw(ArgumentError("no beam named $(t.name) among the beams"))
+            b = _value_beam(byname[t.name])
+            er, eφ = p.radial[bi]
+            rel = p.relative && f in (:z, :r, :phi)
+            a = rel ? b.aim - t.aim : b.aim
+            s += f === :z ? _zsign(p, t) * a[3] :
+                 f === :r ? dot(a, er) :
+                 f === :phi ? dot(a, eφ) :
+                 f === :defocus ? b.defocus :
+                 f === :power ? b.power :
+                 f === :dlambda ? b.dlambda : b.spot.a / t.spot.a
+        end
+        x[_pidx(p, g, fi)] = s / length(mem)
+    end
+    return x
+end
+
+"""
     apply(p::GroupPointing, x) -> Vector{Beam}
 
 Beams for parameter vector `x` (element type follows `x`, so this is differentiable).

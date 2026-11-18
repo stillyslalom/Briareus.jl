@@ -97,6 +97,40 @@ end
     @test_throws ArgumentError GroupPointing(quads; unit = :cone)
 end
 
+# Parameters read from beams (`parameters(p, beams)`): a quad re-pointing handed to a
+# per-beam parameterization on the same template, and back to quads as group means.
+@testset "parameters from beams" begin
+    tmpl = hybride_mock_pointing(nif_beams())          # outer quads' beams split ±0.5 mm
+    kw = (fields = (:z, :phi), mirror = false, relative = true, unit = :quad)
+    quad, per = GroupPointing(tmpl; by = :quad, kw...), GroupPointing(tmpl; by = :beam, kw...)
+    xq = [0.3 * sin(1.7i) for i in 1:nparams(quad)]
+    bq = apply(quad, xq)
+    xb = parameters(per, bq)
+    # each beam takes its quad's shift (by name), and the beams come back
+    at(p, x, n) = x[findfirst(==(n), parameter_names(p))]
+    want = [at(quad, xq, string(tmpl[findfirst(b -> b.name == split(n, '.')[1], tmpl)].quad, '.', split(n, '.')[2]))
+            for n in parameter_names(per)]
+    @test maximum(abs.(xb .- want)) < 1e-12
+    @test maximum(norm(a.aim - b.aim) for (a, b) in zip(apply(per, xb), bq)) < 1e-12
+    @test parameters(per, reverse(bq)) == xb
+    # per-beam shifts read by quad: each quad's mean shift
+    δ = [0.05 * cos(2.3i) for i in eachindex(xb)]
+    xm = parameters(quad, apply(per, xb .+ δ))
+    mean_by_quad = [sum(at(per, xb .+ δ, string(tmpl[i].name, '.', split(n, '.')[2]))
+                        for i in findall(b -> b.quad == split(n, '.')[1], tmpl)) / 4
+                    for n in parameter_names(quad)]
+    @test maximum(abs.(xm .- mean_by_quad)) < 1e-12
+    # absolute fields: the template gives the initial parameters, an applied vector itself
+    p = GroupPointing(tmpl; fields = (:z, :r, :defocus, :power, :spot))
+    x0 = initial_parameters(p)
+    @test maximum(abs.(parameters(p, tmpl) .- x0)) < 1e-12
+    x1 = x0 .+ [0.1 * sin(i) for i in eachindex(x0)]
+    @test maximum(abs.(parameters(p, apply(p, x1)) .- x1)) < 1e-12
+    @test_throws ArgumentError parameters(per, bq[2:end])
+    @test_throws ArgumentError parameters(GroupPointing(nif_quads(); fields = (:theta_s,), radius = 1.1),
+                                          nif_quads())
+end
+
 @testset "drive level, optimization result, report" begin
     t = hohlraum(nz = 8, nphi = 16, capsule_ntheta = 6, capsule_nphi = 8)
     p = GroupPointing(nif_quads(power = 8.0); fields = (:z, :r, :power))
