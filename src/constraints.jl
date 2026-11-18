@@ -663,14 +663,16 @@ function mode_departure(c::AbstractVector, reference::AbstractVector; lmax::Inte
     n = (lmax + 1)^2
     length(c) >= n && length(reference) >= n ||
         throw(ArgumentError("the coefficient vectors need degrees through l = $lmax"))
-    T = typeof(c[1] / c[1])
-    return [_departure(c, reference, l, T) for l in 1:lmax]
+    # a zero of the result type rather than the type itself: the comprehension's closure
+    # stores a type as a `DataType` field, and Julia 1.10 then dispatches at run time
+    z = zero(c[1] / c[1] - reference[1] / reference[1])
+    return [_departure(c, reference, l, z) for l in 1:lmax]
 end
 mode_departure(ev::Evaluation, reference::AbstractVector; lmax::Integer = 4) =
     mode_departure(flux_ylm(ev; lmax), reference; lmax)
 
-function _departure(c, r, l, ::Type{T}) where {T}
-    s = zero(T)
+function _departure(c, r, l, z)
+    s = z
     for m in -l:l
         i = mode_index(l, m)
         s += (c[i] / c[1] - r[i] / r[1])^2
