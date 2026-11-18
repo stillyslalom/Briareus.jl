@@ -1061,7 +1061,8 @@ end
     optimize_pointing(scenario, objective; x0 = initial_parameters(scenario.param),
                       lower = bounds(scenario.param, x0)[1], upper = bounds(scenario.param, x0)[2],
                       iterations = 200, evaluations = 20 * iterations, show_trace = false,
-                      g_tol = 1e-8, callback = nothing) -> PointingResult
+                      g_tol = 1e-8, callback = nothing, constraints = (),
+                      feasibility = 1e-3, outer = 30) -> PointingResult
 
 Minimize `objective(evaluate(scenario, x))` within the box `lower ≤ x ≤ upper` by
 L-BFGS-B with forward-mode automatic-differentiation gradients, from `x0` (clamped to
@@ -1089,16 +1090,66 @@ the number of iterations completed in every case.
 `callback`, if given, is called after every (non-derivative) objective evaluation with
 `(; evaluations, iteration, value, best_value, best_x)`; returning `true` stops the
 optimization. Use it for progress reports and cancellation.
+
+**Constraints.** `constraints`, a tuple or vector of [`Constraint`](@ref)s (ceilings
+`f(ev) ≤ limit` and floors `f(ev) ≥ limit`, such as [`irradiance_ceiling`](@ref) and
+[`mode_gate`](@ref)), are handled as constraints rather than as penalty terms of the
+objective: by an augmented Lagrangian, whose inner problems are box-constrained
+L-BFGS-B runs on `objective + Σ μ/2 [max(0, gᵢ + λᵢ/μ)² - (λᵢ/μ)²]` (`gᵢ` the
+normalized violations, `±(value - limit)/scale`), each started from the last, with
+the multipliers `λ` and the penalty `μ` updated between them (ALGENCAN's rules,
+Andreani et al., SIAM J. Optim. 18, 1286, 2008). The run converges when every
+violation is at most `feasibility` (in the constraints' scaled units: 1e-3 is 0.1 % of
+a limit by default), the multipliers are complementary to the same tolerance, and the
+last inner run has converged: its projected gradient below a tolerance that tightens
+tenfold per outer iteration from 1e-3 to `g_tol`, or its value changing by less than
+1e-10 relative per iteration (a drive objective is flat along the limits). A constraint that cannot be met ends the run
+once the penalty has grown by 10⁸ without progress. `outer` caps the outer
+iterations, `iterations` caps each inner run and `evaluations` is the budget of the
+whole run (the result counts both over all inner runs). The result's
+`constraints` and `outcome` report each constraint against its limit and whether the
+box, the constraints or the budget ended the run ([`PointingResult`](@ref)). The
+callback's named tuple then also carries `outer`, and its `value` is the inner
+problem's (the objective with the constraint terms). Without constraints the run is
+the plain L-BFGS-B above.
+
+Compared with penalty terms at fixed weights, the multipliers carry the constraints'
+weights from one inner run to the next: the limits are met without stiff weights
+(which stall the line search), without stages of loosened limits set by hand, and the
+design ends at its limits rather than where the penalty terms balance the objective
+(on the dropped-bundle case, 0.35 % more drive in half the evaluations: research
+notes, "Constrained re-pointing").
 """
 Base.@nospecializeinfer function optimize_pointing(
                            s::Scenario, @nospecialize(objective); x0 = initial_parameters(s.param),
                            lower = bounds(s.param, x0)[1], upper = bounds(s.param, x0)[2],
                            iterations::Integer = 200, evaluations::Integer = 20 * iterations,
-                           show_trace::Bool = false, g_tol = 1e-8, @nospecialize(callback = nothing))
+                           show_trace::Bool = false, g_tol = 1e-8, @nospecialize(callback = nothing),
+                           @nospecialize(constraints = ()), feasibility::Real = 1e-3,
+                           outer::Integer = 30)
     # Inferred and compiled once for every objective and callback (each objective
     # closure type used to recompile this body and Optim's L-BFGS-B, ~1 s); the objective
     # is reached by dynamic dispatch once per evaluation.
     xs = clamp.(x0, lower, upper)
+    isempty(constraints) ||
+        return _constrained_pointing(s, objective, Tuple(constraints), x0, xs, lower, upper;
+                                     iterations, evaluations, show_trace, g_tol, callback,
+                                     feasibility = Float64(feasibility), outer = Int(outer))
+    r = _lbfgsb(s, objective, x0, xs, lower, upper; iterations, evaluations, show_trace, g_tol,
+                callback)
+    return _pointing_result(s, r.x, r.value, r.initial_value, r.iterations, r.evaluations,
+                            r.stopped, r.reason, r.result, lower, upper)
+end
+
+# One L-BFGS-B run of `objective(evaluate(s, x))` in the box from `xs` (`x0` sizes the
+# gradient's configuration): the parameters, objective value, iterations, evaluations
+# and stop of `optimize_pointing`, and Optim's result (`nothing` when stopped).
+# `f_reltol` (Optim's; 0, its default, off) ends the run on a small relative change of
+# the value, for the inner runs of the constrained path.
+Base.@nospecializeinfer function _lbfgsb(s::Scenario, @nospecialize(objective), x0, xs, lower,
+                                         upper; iterations::Integer, evaluations::Integer,
+                                         show_trace::Bool, g_tol, @nospecialize(callback),
+                                         f_reltol::Float64 = 0.0)
     best_x, best_value, count, iter = copy(xs), Inf, Ref(0), Ref(0)
     J(x) = objective(evaluate(s, x))
     # every objective value the optimizer sees (bookkeeping, callback, budget)
@@ -1136,21 +1187,44 @@ Base.@nospecializeinfer function optimize_pointing(
     res = try
         Optim.optimize(Optim.OnceDifferentiable(f, g!, fg!, xs, 0.0), lower, upper, xs,
                        Optim.LBFGSB(),
-                       Optim.Options(; iterations, show_trace, g_abstol = g_tol,
+                       Optim.Options(; iterations, show_trace, g_abstol = g_tol, f_reltol,
                                      callback = track))
     catch err
         err isa _OptimizationStop || rethrow()
         err
     end
     if res isa _OptimizationStop
-        return _pointing_result(s, best_x, best_value, initial_value, iter[], count[], true,
-                                res.reason, nothing, lower, upper)
+        return (; x = best_x, value = best_value, initial_value, iterations = iter[],
+                evaluations = count[], stopped = true, reason = res.reason, result = nothing)
     end
-    x = Optim.minimizer(res)
     n = Optim.iterations(res)
-    return _pointing_result(s, x, Optim.minimum(res), initial_value, n, count[], false,
-                            Optim.converged(res) || n < iterations ? :converged : :iterations,
-                            res, lower, upper)
+    return (; x = Optim.minimizer(res), value = Optim.minimum(res), initial_value,
+            iterations = n, evaluations = count[], stopped = false,
+            reason = Optim.converged(res) || n < iterations ? :converged : :iterations,
+            result = res)
+end
+
+"""
+    ConstraintRow
+
+One component of a [`Constraint`](@ref) at a design, from [`check_constraints`](@ref) or
+in `PointingResult.constraints`. Fields: `name` (the constraint's name, with the
+component's label for a vector constraint, e.g. `"mode_gate[l = 2]"`), `value` and
+`limit` (in the constraint's units), `upper` (`true` for a ceiling `value ≤ limit`,
+`false` for a floor), `violation` (`±(value - limit)/scale`, the normalized excess:
+positive when violated, negative inside), `multiplier` (the augmented Lagrangian's
+multiplier estimate in the normalized units, 0 when not computed) and `status`:
+`:violated` (`violation > feasibility`), `:active` (within `feasibility` of the limit)
+or `:satisfied`.
+"""
+struct ConstraintRow
+    name::String
+    value::Float64
+    limit::Float64
+    upper::Bool
+    violation::Float64
+    multiplier::Float64
+    status::Symbol
 end
 
 """
@@ -1166,6 +1240,22 @@ return the best design evaluated so far), `result` (Optim's result, `nothing` wh
 a method), the box `lower`, `upper`, and `at_bounds`: the names of the parameters at a
 bound (within 1e-8 of the box width; parameters fixed by `lower == upper` excluded). Its
 display lists those parameters with their values and bounds.
+
+Two more fields record what ended the run. `constraints` holds one [`ConstraintRow`](@ref)
+per constraint component at `x` (empty without `constraints`), and `outcome` is one of
+- `:interior`: converged with every constraint met and no parameter at a bound;
+- `:box`: converged with every constraint met and parameters at a bound (the box is
+  active: a wider box may lower the objective);
+- `:infeasible_box`: a constraint is still violated and parameters are at a bound (the
+  box keeps the run from meeting it);
+- `:infeasible`: a constraint is still violated and no parameter is at a bound (a local
+  point where the constraints cannot be met; another start may help);
+- `:iterations`, `:evaluations` or `:callback`: the budget or the callback ended the run
+  first (its constraints, if any, are in `constraints`).
+`reason` reads `:converged` for the first four. `outer` is the number of outer
+(multiplier) iterations of a constrained run, 0 without constraints; `iterations` and
+`evaluations` are then totals over them, and `value` and `initial_value` are the
+objective's own values, without the constraint terms.
 """
 struct PointingResult{B}
     x::Vector{Float64}
@@ -1181,6 +1271,9 @@ struct PointingResult{B}
     lower::Vector{Float64}
     upper::Vector{Float64}
     at_bounds::Vector{String}
+    constraints::Vector{ConstraintRow}
+    outcome::Symbol
+    outer::Int
 end
 
 _names(p::GroupPointing, n) = parameter_names(p)
@@ -1196,24 +1289,35 @@ function _bound_side(x, lo, hi)
 end
 
 function _pointing_result(s::Scenario, x, value, initial_value, iterations, evaluations,
-                          stopped, reason, result, lower, upper)
+                          stopped, reason, result, lower, upper;
+                          constraints::Vector{ConstraintRow} = ConstraintRow[], outer::Int = 0)
     x = collect(Float64, x)
     names = _names(s.param, length(x))
     side = map(_bound_side, x, lower, upper)
+    atb = names[side .!= 0]
+    met = all(r -> r.status !== :violated, constraints)
+    outcome = reason !== :converged ? reason :
+              met ? (isempty(atb) ? :interior : :box) :
+              (isempty(atb) ? :infeasible : :infeasible_box)
     return PointingResult(x, apply(s.param, x), Float64(value), Float64(initial_value),
                           Int(iterations), Int(evaluations), stopped, reason, result, names,
-                          collect(Float64, lower), collect(Float64, upper),
-                          names[side .!= 0])
+                          collect(Float64, lower), collect(Float64, upper), atb,
+                          constraints, outcome, outer)
 end
 
 function Base.show(io::IO, r::PointingResult)
     print(io, "PointingResult(", r.reason, ", objective ", round(r.initial_value; sigdigits = 4),
           " → ", round(r.value; sigdigits = 4), ", ", length(r.at_bounds), " of ",
-          length(r.x), " parameters at bounds)")
+          length(r.x), " parameters at bounds")
+    isempty(r.constraints) ||
+        print(io, ", ", count(c -> c.status === :violated, r.constraints), " of ",
+              length(r.constraints), " constraints violated")
+    print(io, ")")
 end
 
 function Base.show(io::IO, ::MIME"text/plain", r::PointingResult)
-    how = r.reason === :converged ? "converged" :
+    how = r.outcome in (:infeasible, :infeasible_box) ? "ended with constraints violated" :
+          r.reason === :converged ? "converged" :
           r.reason === :iterations ? "reached the iteration limit" :
           r.reason === :evaluations ? "reached the evaluation limit (best design kept)" :
           "stopped by the callback (best design kept)"
@@ -1223,18 +1327,39 @@ function Base.show(io::IO, ::MIME"text/plain", r::PointingResult)
             r.evaluations, length(r.x))
     if isempty(r.at_bounds)
         print(io, ", none at a bound")
-        return nothing
+    else
+        print(io, "; at a bound (widen the box if the objective should set them):")
+        w = maximum(length, r.at_bounds)
+        for n in r.at_bounds
+            i = findfirst(==(n), r.names)
+            lo = _bound_side(r.x[i], r.lower[i], r.upper[i]) < 0
+            @printf(io, "\n    %s = %.6g  (%s bound; box %.6g to %.6g)", rpad(n, w), r.x[i],
+                    lo ? "lower" : "upper", r.lower[i], r.upper[i])
+        end
     end
-    print(io, "; at a bound (widen the box if the objective should set them):")
-    w = maximum(length, r.at_bounds)
-    for n in r.at_bounds
-        i = findfirst(==(n), r.names)
-        lo = _bound_side(r.x[i], r.lower[i], r.upper[i]) < 0
-        @printf(io, "\n    %s = %.6g  (%s bound; box %.6g to %.6g)", rpad(n, w), r.x[i],
-                lo ? "lower" : "upper", r.lower[i], r.upper[i])
-    end
+    isempty(r.constraints) && return nothing
+    what = r.outcome === :interior ? "constraints met inside the box" :
+           r.outcome === :box ? "constraints met, parameters at a bound" :
+           r.outcome === :infeasible_box ? "constraints violated with parameters at a bound (the box blocks them)" :
+           r.outcome === :infeasible ? "constraints violated inside the box" :
+           "ended by the budget or the callback"
+    @printf(io, "\n  %d outer iterations: %s", r.outer, what)
+    _show_constraint_rows(io, r.constraints)
     return nothing
 end
+
+function _show_constraint_rows(io::IO, rows::AbstractVector{ConstraintRow}; indent = "\n    ")
+    w = maximum(r -> length(r.name), rows; init = 10)
+    @printf(io, "%s%s %12s %12s %10s %10s  %s", indent, rpad("constraint", w), "value", "limit",
+            "violation", "multiplier", "status")
+    for r in rows
+        @printf(io, "\n    %s %12.5g %s%11.5g %10.2e %10.3g  %s", rpad(r.name, w), r.value,
+                r.upper ? "≤" : "≥", r.limit, r.violation, r.multiplier, r.status)
+    end
+end
+
+Base.show(io::IO, ::MIME"text/plain", rows::AbstractVector{ConstraintRow}) =
+    _show_constraint_rows(io, rows; indent = "    ")
 
 struct _OptimizationStop <: Exception
     reason::Symbol

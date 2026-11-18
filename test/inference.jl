@@ -100,6 +100,13 @@ end
     # the drive proxies of a deposition, made positive everywhere (types unchanged)
     _inf_positive(d) = (; ylm = d.ylm .+ 10 .* (eachindex(d.ylm) .== 1),
                         shell_ylm = d.shell_ylm .+ 10 .* (axes(d.shell_ylm, 1) .== 1))
+    # constraints: the wall-irradiance ceiling and the mode gate of the start, and the
+    # augmented Lagrangian of an objective with both
+    ev_ref = evaluate(s, x0)
+    c_ref = flux_ylm(ev_ref)
+    ceilc, gatec = irradiance_ceiling(ev_ref, :wall), mode_gate(c_ref, fill(0.05, 4))
+    dobj = drive_objective(; drive = 1.0, keepout)
+    aug = Briareus._Augmented(objectives[2], (ceilc, gatec), ([0.5], [0.1, 0.0, 0.2, 0.0]), 3.0)
 
     @testset "closures compile once" begin
         history(τ -> with_pulses(quads, pulse, τ), [0.5, 1.0]; record = sol -> sol)
@@ -148,6 +155,16 @@ end
         optimize_pointing(s, asymmetry_objective(; drive = 1.0); x0, iterations = 1,
                           evaluations = 2, callback = st -> false)
         @test _inf_body_instances(optimize_pointing) == n
+        # constrained runs: new objective, constraint and callback types reuse the bodies
+        optimize_pointing(s, objectives[1]; x0, iterations = 1, evaluations = 3, constraints = (ceilc, gatec))
+        n = _inf_body_instances(optimize_pointing)
+        nc = _inf_body_instances(Briareus._constrained_pointing)
+        nl = _inf_body_instances(Briareus._lbfgsb)
+        optimize_pointing(s, dobj; x0, iterations = 1, evaluations = 3, callback = st -> false,
+                          constraints = [Constraint(:power, ev -> sum(b.power for b in ev.beams); upper = 400.0)])
+        @test _inf_body_instances(optimize_pointing) == n
+        @test _inf_body_instances(Briareus._constrained_pointing) == nc
+        @test _inf_body_instances(Briareus._lbfgsb) == nl
 
         # a placement sweep: new design and callback types reuse the compiled sweep
         foilt = Target([backlighter_foil((90.0, 0.0); standoff = 5.0, n = 2)])
@@ -195,6 +212,14 @@ end
             c = flux_ylm(ev)
             @test (@inferred mode_rms(c, 6)) isa T
             @test (@inferred mode_rms(c, 6; m = :nonzero)) isa T
+            # constraints
+            @test (@inferred peak_irradiance(ev, :wall)) isa T
+            @test (@inferred irradiance_norm(ev, :wall)) isa T
+            @test (@inferred mode_departure(ev, c_ref)) isa Vector{T}
+            @test (@inferred ceilc.f(ev)) isa T
+            @test (@inferred gatec.f(ev)) isa Vector{T}
+            @test (@inferred dobj(ev)) isa T
+            @test (@inferred aug(ev)) isa T
         end
         # pointing on the capsule sphere (polar direct drive), with split quads
         for x in (xs0, _inf_duals(xs0))
@@ -260,6 +285,16 @@ end
                 @test _inf_jet_clean(JET.report_call, objectives[2], ev)
                 @test _inf_jet_clean(JET.report_call, objectives[3], ev)
                 @test _inf_jet_clean(JET.report_call, mode_rms, flux_ylm(ev), 6)
+                # constraints: no dispatch in the per-element and per-degree kernels, no
+                # possible errors in the constraint values and the augmented Lagrangian
+                P = evaluate(s, x).deposition.element
+                @test _inf_jet_clean(JET.report_opt, Briareus._irradiance_norm, P, t, elements(t, :wall), 32.0)
+                @test _inf_jet_clean(JET.report_opt, mode_departure, flux_ylm(ev), c_ref)
+                @test _inf_jet_clean(JET.report_opt, Briareus._al_term, flux_ylm(ev)[1:4], zeros(4), 2.0)
+                @test _inf_jet_clean(JET.report_call, ceilc.f, ev)
+                @test _inf_jet_clean(JET.report_call, gatec.f, ev)
+                @test _inf_jet_clean(JET.report_call, dobj, ev)
+                @test _inf_jet_clean(JET.report_call, aug, ev)
             end
             # spherical pointing fields: no dispatch (from 1.11, as the deposition checks
             # above), no possible errors
@@ -303,6 +338,8 @@ end
             end
             @test _inf_jet_clean(JET.report_call, (s, o, x) -> optimize_pointing(s, o; x0 = x),
                                  s, objectives[1], x0)
+            @test _inf_jet_clean(JET.report_call, (s, o, x, c) -> optimize_pointing(s, o; x0 = x, constraints = c),
+                                 s, objectives[1], x0, (ceilc, gatec))
         end
     else
         @warn "JET is not in the environment: test/inference.jl skips its JET checks"

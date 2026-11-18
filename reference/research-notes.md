@@ -10883,3 +10883,108 @@ as the source and with Briareus's.
   deposition its laser rows reproduce the comparison above (gold 0.07% below VisRad).
   **H** (the comparison itself), **M** (the export layout: header names from the
   manual's screenshot, index base assumed)
+
+## Constrained re-pointing: an irradiance ceiling and mode gates (2026-11-18) *measured*
+
+Roadmap item 36. `optimize_pointing(...; constraints)` takes `Constraint`s (ceilings and
+floors on any function of an `Evaluation`) and solves them by an augmented Lagrangian
+around the same L-BFGS-B; `irradiance_ceiling` and `mode_gate` are the ready-made ones,
+`drive_objective` the objective they go with. Public case: the dropped-bundle tutorial
+(bundle 11 freed, the other 46 quads re-pointed in `:phi` and `:z` within ±0.3 mm, the
+tutorial's mesh, 1,728 wall elements, and its coarse deposition operator), the largest
+drive with each degree's departure from the 48-quad shape within the gate
+`√(2l+1) × rms_mode` of `mode_uncertainty` at 50 µm rms pointing per quad (0.346,
+0.395, 0.313, 0.095 % for l = 1–4; the start departs 1.09, 1.07, 0.77, 0.12 %), under
+the 48-quad pointing's peak wall irradiance (8.273 TW/mm²; the start's hottest element
+is the same, so the ceiling is active from the start). Scratch scripts, not in the
+repository; 8 threads.
+
+**Method** (`src/constraints.jl`). Powell–Hestenes–Rockafellar augmented Lagrangian for
+inequalities on the normalized violations `gᵢ = ±(value − limit)/scale`, with
+ALGENCAN's updates (Andreani, Birgin, Martínez and Schuverdt, SIAM J. Optim. 18, 1286,
+2008): λ ← max(0, λ + μg); μ × 10 when `V = max |max(gᵢ, −λᵢ/μ)|` has not halved; first
+μ = 10 max(1, |f|)/max(1, ½Σ max(0, g)²), clamped to [1e-6, 1e6]; infeasible once μ has
+grown 1e8-fold. Inner runs: `_lbfgsb` (the unconstrained path, unchanged) warm-started,
+projected-gradient tolerance from 1e-3 tightened tenfold per outer iteration to
+`g_tol`, and a relative value tolerance of 1e-10 (Optim's `f_reltol`; engineering
+default). Without it each inner run on the drive objective crept for hundreds of
+iterations at 1e-6 gains: the first version ran out of its 1,000 iterations in 2–3 outer
+iterations on every start (constraints met to 2e-4, but never "converged").
+
+**Smooth stand-in for the peak.** The area-weighted p-norm `(Σ A I^p / Σ A)^(1/p)`,
+scaled to equal the peak at the reference, against the squared hinge over the
+elements above the limit (`Σ (A/Ā) max(0, I/L − 1)²`, limit 0, scale 1e-4). Augmented
+Lagrangian runs to 1,000 iterations from the start and from one random start in the box
+(peak over the elements after the run, relative to the limit):
+
+| ceiling | start 1 | start 2 | gates |
+|---|---|---|---|
+| none | 1.272 | 1.383 | met |
+| p = 16 | 1.029 | 1.027 | met |
+| p = 32 | 1.010 | 1.005 | met |
+| p = 64 | 1.0007 | 0.9991 | met |
+| hinge | 1.0001 | 1.0006 | start 2 unmet (l = 2 and 4 at 2.0 and 1.7 × gate) |
+
+The hinge holds the peak exactly where it converges but fails on the second start: its
+gradient vanishes at the limit (a degenerate constraint for the multiplier update), so
+it acts as a pure penalty. Chosen: p = 64 (`irradiance_norm` default).
+
+Mesh: 41 designs near the limit (the start and random shifts of ±0.01–0.08 mm), wall
+elements of 0.2, 0.3 and 0.45 mm (4,896, 2,176, 1,104 on the wall; default deposition
+resolution, `reach = 0.6`). The 48-quad peak is 8.84, 8.67 and 8.15 TW/mm²: element
+averages lower the peak 8 % from 0.2 to 0.45 mm; the 64-norm moves 5 % (8.03 → 7.61), the
+32-norm 3.5 %, the 16-norm 2.5 %. Ratios to the reference on the same mesh, rms (max)
+difference between meshes:
+
+| quantity | 0.2 vs 0.45 mm | 0.2 vs 0.3 mm | correlation with the peak ratio (0.2 mm) | verdict ≤ 1 agrees with the peak's |
+|---|---|---|---|---|
+| peak | 0.0128 (0.034) | 0.0113 (0.035) | 1 | 41/41 across meshes |
+| p = 16 | 0.0066 (0.025) | 0.0007 (0.002) | 0.930 | 19/41 |
+| p = 32 | 0.0108 (0.041) | 0.0030 (0.008) | 0.969 | 31/41 |
+| p = 64 | 0.0102 (0.038) | 0.0067 (0.018) | 0.991 | 37/41 |
+
+Small random shifts raise the peak 1–2 % (a spot moves onto a neighbor's) while the
+norms barely move, so lower p is more mesh-steady but blind to the peak; p = 64 tracks
+it (0.99) and its ratio is as mesh-steady as the peak's. Far from the limit (37 designs
+shifted ±0.15–0.3 mm, peak ratios to 1.66) every quantity differs between 0.2 and
+0.45 mm by about 6 % rms (the coarse mesh averages the stacked spots). Confidence:
+measured on this hohlraum and these spots only.
+
+**Method comparison** (p = 64 ceiling, three starts: the tutorial's and two random in
+the box; budget 2,000 evaluations for the penalty methods):
+
+| method | drive (× 48-quad) | departure / gate, l = 1–4 | peak / limit | evaluations |
+|---|---|---|---|---|
+| augmented Lagrangian (one call) | 0.96259–0.96261 | 1.000 1.000 1.000 1.000 | 0.9996–1.0025 | 488–765 (converged, `:box`) |
+| penalty, final gates, one call (the study's form: 100 × squared excess over each gate², 0.01 × each ratio², 100 × squared ceiling excess) | 0.95921 | 0.002 0.120 0.005 0.066 | 1.0088–1.0095 | 1,071–1,081 (1,000 iterations) |
+| the same, staged by hand (gates × 4, 2, 1.4, 1; 250 iterations each) | 0.95921 | 0.002 0.120 0.005 0.066 | 1.0084–1.0095 | 1,234–1,437 |
+| penalty without the 0.01 term, one call | 0.95747–0.96153 | gates met | 1.0012–1.0199 | 2,000 (budget: 67–672 iterations, line searches stall on the stiff hinge) |
+| penalty-weight continuation (½ w Σ max(0, g)², w = 1, 10, …), inner runs as the study's | 0.96261 | 1.000 (violation 2.4–3.0e-4) | 1.0008–1.0026 | 2,000 (budget; the first stage crept) |
+| the same continuation, inner runs with the augmented Lagrangian's value tolerance | 0.96258–0.96260 | ≤ 1.000 (violation ≤ 2.4e-4) | 1.0003–1.0072 | 725–1,262 (2–4 stages) |
+
+All methods reach the gates here: the public case does not reproduce the study's stall
+at the bounds. What it shows is the cost of penalties: with the symmetry reward the
+optimum sits deep inside the gates at 0.35 % less drive, staging changes nothing but
+the evaluations, and without the reward the stiff hinges stall the line search. The
+augmented Lagrangian reaches the constrained optimum (every gate active) in half the
+penalty runs' evaluations, from every start, and reports it with its multipliers.
+Continuation in the weights, given the same inner tolerance, reaches the same design
+in 1.0–1.7 times the augmented Lagrangian's evaluations on the same start (838, 725,
+1,262 against 765, 698, 488), with no multiplier estimates and a schedule to choose;
+continuation in the gates is the hand staging above. Chosen: the augmented Lagrangian.
+Confidence: one public case, three starts; the study's own stall was not reproduced.
+
+**Checks.** An equality-active quadratic program (48 quad powers fitted to 1.1 × the
+drive's coefficients through l = 2, regularized, under a total-power ceiling): the run
+matches the KKT solution to 4e-6 relative and its multiplier to 1e-5 (tested to 1e-4 and
+1e-3); a box that keeps the powers above the ceiling ends `:infeasible_box` after 10
+outer iterations. Constraint values' gradients against central differences: 1e-8–1e-9
+relative. Unconstrained runs are bit for bit those of the base commit (three tutorial
+runs: x, value, iterations, evaluations, reason, at-bounds).
+
+**Bubble drivers.** The ceiling at the reference's peak irradiance is an engineering
+limit of the study, not a published bubble criterion (the published scalings use the
+outer cones' picket fluence on the wall: § The swing and the bubble without new data,
+part 4, and `reference/litreview/bubble_drivers.md`): `weight` (a function of the
+beam multiplying its deposited power; 0 leaves it out) gives the outer cones' or a
+picket's fluence map on the same machinery, at one more deposit per evaluation.

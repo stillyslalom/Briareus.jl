@@ -99,6 +99,8 @@ export GroupPointing, nparams, parameter_names, initial_parameters, parameters, 
        face_nonuniformity, face_flux_objective, optimize_pointing, PointingResult, report,
        mode_sensitivity, mode_uncertainty, sample_modes, infer_errors
 export HeldParameters, PowerScales
+export Constraint, ConstraintRow, check_constraints, peak_irradiance, irradiance_norm,
+       irradiance_ceiling, mode_departure, mode_gate, drive_objective
 export HOTSPOT_VELOCITY_PER_PERCENT, mode1_vector, hotspot_velocity, ResponseKernel, flat_kernel,
        yield_factor, alpha_factor, rke_fraction, reactivity_exponent, burn_amplification,
        shape_amplification, young2020_green, young2020_kernel, young2020_pulses, young2020_dropped_quads,
@@ -132,6 +134,7 @@ include("analysis.jl")
 include("corona.jl")
 include("imaging.jl")
 include("optimize.jl")
+include("constraints.jl")
 include("frame_pointing.jl")
 include("parameterizations.jl")
 include("history.jl")

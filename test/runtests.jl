@@ -100,6 +100,7 @@ shard_include("corona.jl")
 shard_include("hmatrix.jl")
 shard_include("parameters.jl")
 shard_include("parameterizations.jl")
+shard_include("constraints.jl")
 shard_include("inference.jl")
 shard_include("aqua.jl")
 end

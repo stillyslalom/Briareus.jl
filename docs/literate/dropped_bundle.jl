@@ -19,8 +19,8 @@
 # the bundle's symmetric partner as well, rebalancing the powers of the remaining
 # quads, and re-pointing them within the clearance the entrance holes allow. It introduces three-dimensional mode analysis with real
 # spherical harmonics, the symmetry of the NIF ports, scenarios on a subset of the
-# beams, the influence matrix, optimization with automatic-differentiation gradients,
-# and beam-clearance checks.
+# beams, the influence matrix, optimization with automatic-differentiation gradients
+# and under constraints, and beam-clearance checks.
 
 using Briareus
 using CairoMakie
@@ -670,6 +670,86 @@ traced = raytrace_deposition(target, second_try.beams; nspot = 61)
 H = solve(scenario.model, traced).H[capsule]
 show_modes("re-pointed, ray-traced", ylm_weights(target, capsule; lmax = 4) * H)
 
+# ## Re-pointing within limits
+#
+# The objective above weighs mode 1 against the other modes and the drive by hand-set
+# weights. A design review states limits instead: every mode as close to the 48-quad
+# shape as the shot-to-shot spread allows, the wall's laser irradiance no higher than
+# the 48-quad pointing's, and within those limits as much drive as possible.
+#
+# The first limit is a gate per degree on the departure from the 48-quad shape,
+# ``\delta_l = \sqrt{(2l+1)\sum_m (c_{lm}/c_{00} - c'_{lm}/c'_{00})^2}``
+# ([`mode_departure`](@ref)). [`mode_uncertainty`](@ref) gives the rms amplitude that
+# random pointing errors of 50 µm per quad leave in each degree, and
+# [`mode_gate`](@ref) turns it into the gate ``\sqrt{2l+1}`` times that rms. The second
+# is a ceiling on the laser irradiance over the wall's elements
+# ([`irradiance_ceiling`](@ref)): a hot spot on the gold drives the wall plasma inward,
+# and the 48-quad pointing's peak serves as the limit, an engineering choice rather
+# than a published criterion. The peak over the elements ([`peak_irradiance`](@ref))
+# has a kink wherever the hottest element changes, so the optimizer works on a smooth
+# stand-in, the area-weighted 64-norm of the irradiance ([`irradiance_norm`](@ref)),
+# scaled to equal the peak at the reference.
+
+ref48 = evaluate(scenario, quads)
+gates = mode_gate(full, mode_uncertainty(scenario, quads; pointing = 0.05, lmax = 4))
+ceiling = irradiance_ceiling(ref48, :wall)
+check_constraints(evaluate(repoint, x0), (ceiling, gates))
+
+# Freeing the bundle puts every degree outside its gate, l = 1 by a factor of three,
+# while the wall's hottest element, lit by quads that stay, keeps the 48-quad peak:
+# the ceiling is active from the start.
+#
+# [`optimize_pointing`](@ref) takes the limits as `constraints`. It handles them by an
+# augmented Lagrangian: a sequence of L-BFGS-B runs on the objective plus
+# multiplier-weighted terms, each run started where the last ended, with the multipliers
+# updated in between until every limit is met. The objective is the drive alone
+# ([`drive_objective`](@ref)), with the usual penalties on light clipped by the
+# entrance holes.
+
+most_drive = drive_objective(; drive = mean_flux(ref48))
+limited = optimize_pointing(repoint, most_drive; x0, lower, upper, constraints = (ceiling, gates),
+                            iterations = 1000, evaluations = 3000)
+
+# One call from the start meets every gate and the ceiling. The table lists each limit's
+# value, its normalized excess and its multiplier; the outcome records that the run
+# converged with every constraint met and some aims at the ±0.3 mm box.
+#
+# The same limits as penalty terms are what a hand-written objective would add: 100
+# times the squared excess of each degree over its gate and of the irradiance over the
+# ceiling, with a small reward, 0.01 times each degree's squared ratio to its gate, for
+# symmetry inside the gates.
+
+function penalized(ev)
+    J = most_drive(ev)
+    ratio = mode_departure(ev, full) ./ gates.limit
+    J += sum(100 * max(0, r^2 - 1)^2 + 0.01 * r^2 for r in ratio)
+    excess = ceiling.f(ev) / only(ceiling.limit) - 1
+    return J + 100 * max(0, excess)^2
+end
+by_penalty = optimize_pointing(repoint, penalized; x0, lower, upper, iterations = 1000, evaluations = 3000)
+for (label, r) in (("within limits", limited), ("penalty terms", by_penalty))
+    ev = evaluate(repoint, r.x)
+    @printf("%-14s drive %.4f  δ/gate %s  peak/limit %.4f  %4d evaluations\n", label,
+            flux_ylm(ev; lmax = 0)[1] / full[1],
+            join((@sprintf("%.3f", d) for d in mode_departure(ev, full) ./ gates.limit), " "),
+            peak_irradiance(ev, :wall) / peak_irradiance(ref48, :wall), r.evaluations)
+end
+@assert limited.outcome in (:interior, :box) && all(r -> r.status !== :violated, limited.constraints)
+
+# Both designs meet the limits. The penalty terms keep rewarding symmetry inside the
+# gates, beyond what the limits require, and pay for it with drive: modes 1 and 3 end
+# far inside their gates and a third of a percent of the drive is gone, after more
+# evaluations. With the limits as constraints every gate ends active, at its limit,
+# and the drive left over is the largest the limits allow from this start. Staging
+# the penalties by hand (gates loosened four-, two- and 1.4-fold, then the final ones)
+# reaches the penalty design again, in more evaluations still (research notes,
+# "Constrained re-pointing").
+#
+# The peak over the elements ends within about a percent of the ceiling: the 64-norm
+# bounds the hot spots' mean, not the hottest element. Without the ceiling the same
+# gates are met with the wall's peak 27–38 % above the 48-quad pointing's (research
+# notes), the re-aimed quads stacking their spots.
+
 # ## What this checks
 #
 # - The NIF ports have the symmetry ``D_2`` and no more, and every harmonic that
@@ -708,3 +788,10 @@ show_modes("re-pointed, ray-traced", ylm_weights(target, capsule; lmax = 4) * H)
 #   re-pointing against it passes that check.
 # - The re-pointed drive, recomputed by ray tracing and a direct radiosity solve,
 #   reproduces the optimizer's modes.
+# - Re-pointing within limits meets every gate and the ceiling in one call (asserted:
+#   no constraint violated, the run converged). Its closed-form test
+#   (`test/constraints.jl`): with the drive's coefficients linear in the quad powers,
+#   a fit under a ceiling on the total power matches the solution of the
+#   Karush–Kuhn–Tucker equations to 1e-4 and its multiplier to 1e-3; the irradiance
+#   norm's power-mean ordering, its area-mean limit at p = 1 and the constraint values'
+#   gradients against central differences.

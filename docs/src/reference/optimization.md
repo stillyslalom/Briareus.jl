@@ -14,6 +14,16 @@ automatic-differentiation gradients, with a callback for progress and cancellati
 [`PowerScales`](@ref) adds a power scale per group of beams (e.g. per cone) beside its
 parameters; both compose with `GroupPointing`, `FramePointing` and each other.
 
+Limits that a design must meet go to [`optimize_pointing`](@ref) as
+[`Constraint`](@ref)s, which an augmented Lagrangian around the same L-BFGS-B handles;
+[`check_constraints`](@ref) reports them on any evaluation, and the
+[`PointingResult`](@ref) records each one's value against its limit and what ended the
+run. Ready-made ones: [`irradiance_ceiling`](@ref), a ceiling on the laser irradiance
+over named parts (its exact value [`peak_irradiance`](@ref), its smooth stand-in
+[`irradiance_norm`](@ref)), and [`mode_gate`](@ref), a gate per degree on the
+[`mode_departure`](@ref) from a reference drive shape, which goes with
+[`drive_objective`](@ref) for the largest drive within the gates.
+
 [`mode_sensitivity`](@ref) gives the exact sensitivity of the drive shape to each beam's
 pointing and power errors, and [`mode_uncertainty`](@ref) the asymmetry independent
 errors leave by linear propagation ([`sample_modes`](@ref) is the Monte Carlo check).
@@ -23,7 +33,7 @@ objectives' `uncertainty` keyword optimizes the expected symmetry over them, and
 
 ```@autodocs
 Modules = [Briareus]
-Pages = ["src/optimize.jl", "src/uncertainty.jl", "src/parameterizations.jl"]
+Pages = ["src/optimize.jl", "src/constraints.jl", "src/uncertainty.jl", "src/parameterizations.jl"]
 Private = false
 ```
 
