@@ -11692,6 +11692,14 @@ was new: the hand-found runs had named the ceiling as the gates' conflict, while
 keep-out, held by a penalty there, conflicts with the gates as well, so that only the
 gates' relaxation resolves the case.
 
+**`mode_gate` from an evaluation.** `mode_gate(reference::Evaluation, gates)` takes
+the shape from the reference's `flux_ylm` and records its scenario's `lpi` and time,
+as `irradiance_ceiling` does (§ "The exact peak, restarts and the box"): an evaluation
+with another model, or the same at another time, throws an `ArgumentError` (the check
+is now shared by the ceiling and the gate). The reference may be on
+another target (a hohlraum without the design's windows, as in the study), since the
+gate compares shapes, not elements. The coefficient-vector method stays unchecked.
+
 ## Constrained re-pointing: convergence on a feasible, active start (2026-11-18) *measured*
 
 The augmented Lagrangian of `optimize_pointing(...; constraints)` (§ Constrained

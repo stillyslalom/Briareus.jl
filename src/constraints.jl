@@ -659,22 +659,44 @@ function _check_ceiling(c::_CeilingValue, ev::Evaluation)
     s = ev.scenario
     s.target === c.target ||
         throw(ArgumentError("irradiance_ceiling: the evaluation is on another target than the reference"))
+    _check_reference_model("irradiance_ceiling", c.lpi, c.time, c.checked, s)
+    return nothing
+end
+
+# A constraint's reference evaluation and the optimized scenario share the laser–plasma
+# model (compared field by field; `checked` holds the last model found equal, an identity
+# check from then on) and, with a model, its time; otherwise an `ArgumentError` from `who`.
+function _check_reference_model(who::String, ref_lpi, ref_time::Float64, checked::Base.RefValue{Any},
+                                s::Scenario)
     lpi = s.lpi
-    if lpi !== c.checked[]
-        _same_model(lpi, c.lpi) ||
-            throw(ArgumentError("irradiance_ceiling: the reference was evaluated with another laser–plasma " *
-                                "model than the scenario's ($(_model_name(c.lpi)) against " *
+    if lpi !== checked[]
+        _same_model(lpi, ref_lpi) ||
+            throw(ArgumentError("$who: the reference was evaluated with another laser–plasma " *
+                                "model than the scenario's ($(_model_name(ref_lpi)) against " *
                                 "$(_model_name(lpi))), so its limit bounds another quantity: evaluate the " *
                                 "reference in a scenario with the same `lpi`, e.g. " *
                                 "`evaluate(remake(reference_scenario; lpi = scenario.lpi), beams)`"))
-        c.checked[] = lpi
+        checked[] = lpi
     end
-    lpi === nothing || s.time == c.time ||
-        throw(ArgumentError("irradiance_ceiling: the reference was evaluated at time $(c.time) ns and the " *
+    lpi === nothing || s.time == ref_time ||
+        throw(ArgumentError("$who: the reference was evaluated at time $(ref_time) ns and the " *
                             "scenario's laser–plasma model at $(s.time) ns: evaluate the reference at the " *
                             "scenario's time (`remake(reference_scenario; time)`)"))
     return nothing
 end
+
+# The laser–plasma model and time of a reference evaluation, for a constraint that
+# refuses evaluations with another (`_check_reference_model`).
+struct _ReferenceModel
+    lpi::Any
+    time::Float64
+    checked::Base.RefValue{Any}
+end
+_ReferenceModel(s::Scenario) = _ReferenceModel(s.lpi, s.time, Ref{Any}(s.lpi))
+
+_check_model(::Nothing, who, ev::Evaluation) = nothing
+_check_model(m::_ReferenceModel, who, ev::Evaluation) =
+    _check_reference_model(who, m.lpi, m.time, m.checked, ev.scenario)
 
 _model_name(::Nothing) = "none"
 _model_name(m) = string(nameof(typeof(m)))
@@ -866,12 +888,13 @@ function _departure(c, r, l, z)
 end
 
 """
-    mode_gate(reference, gates) -> Constraint
+    mode_gate(reference::Evaluation, gates) -> Constraint
+    mode_gate(reference::AbstractVector, gates) -> Constraint
 
 A gate per degree on the departure of the capsule's drive shape from a `reference`
-shape (a coefficient vector from [`flux_ylm`](@ref)): the [`Constraint`](@ref)
-`mode_departure(ev, reference; lmax) ≤ gates`, named `:mode_gate`, one component per
-degree `l = 1:lmax` (labeled `l = 1`, …), each in units of its own gate.
+shape: the [`Constraint`](@ref) `mode_departure(ev, reference; lmax) ≤ gates`, named
+`:mode_gate`, one component per degree `l = 1:lmax` (labeled `l = 1`, …), each in units
+of its own gate.
 
 `gates` is a vector of departures (`gates[l]` for degree `l`), or the result of
 [`mode_uncertainty`](@ref), whose `rms_mode` gives the gate `√(2l+1) × rms_mode[l]`:
@@ -879,25 +902,48 @@ the departure that random errors of that size (e.g. NIF's 50 µm rms pointing) g
 each degree, so that a design within the gates differs from the reference by no more
 than the shot-to-shot spread. With [`drive_objective`](@ref), the largest drive within
 the gates.
+
+With a reference [`Evaluation`](@ref) (e.g. the pointing before a bundle was dropped,
+in a scenario that observes the capsule), the shape is its [`flux_ylm`](@ref)
+coefficients, and the gate records the reference scenario's laser–plasma model (`lpi`)
+and time: evaluating the gate on a scenario with another model, or the same model at
+another time, throws an `ArgumentError`, as for [`irradiance_ceiling`](@ref) (the shape
+of a drive without the scenario's CBET model is another shape, and the gates would hold
+the design to it). The reference may be on another target (a hohlraum without the
+design's windows). A coefficient vector records no model, so that method cannot check
+it: the vector must come from an evaluation with the scenario's `lpi` and time.
 """
-function mode_gate(reference::AbstractVector, gates::AbstractVector{<:Real})
+mode_gate(reference::Evaluation, gates) =
+    _mode_gate(flux_ylm(reference; lmax = _gate_lmax(gates)), _gate_values(gates),
+               _ReferenceModel(reference.scenario))
+mode_gate(reference::AbstractVector, gates) = _mode_gate(reference, _gate_values(gates), nothing)
+
+_gate_values(gates::AbstractVector{<:Real}) = gates
+_gate_values(u::NamedTuple) = [sqrt(2l + 1) * r for (l, r) in enumerate(u.rms_mode)]
+_gate_lmax(gates) = max(length(_gate_values(gates)), 1)
+
+function _mode_gate(reference::AbstractVector, gates::AbstractVector{<:Real}, model)
     lmax = length(gates)
     lmax >= 1 || throw(ArgumentError("give a gate for at least l = 1"))
     all(g -> isfinite(g) && g > 0, gates) || throw(ArgumentError("gates must be positive and finite"))
     length(reference) >= (lmax + 1)^2 ||
         throw(ArgumentError("the reference needs coefficients through l = $lmax"))
     ref = collect(Float64, reference[1:(lmax+1)^2])
-    return Constraint(:mode_gate, _GateValue(ref, lmax); upper = collect(Float64, gates),
+    return Constraint(:mode_gate, _GateValue(ref, lmax, model); upper = collect(Float64, gates),
                       labels = ["l = $l" for l in 1:lmax])
 end
-mode_gate(reference::AbstractVector, u::NamedTuple) =
-    mode_gate(reference, [sqrt(2l + 1) * r for (l, r) in enumerate(u.rms_mode)])
 
-struct _GateValue
+# The gate's value; `model` the reference's laser–plasma model and time (`nothing` for a
+# coefficient vector: unchecked).
+struct _GateValue{M<:Union{Nothing,_ReferenceModel}}
     reference::Vector{Float64}
     lmax::Int
+    model::M
 end
-(g::_GateValue)(ev::Evaluation) = mode_departure(ev, g.reference; lmax = g.lmax)
+function (g::_GateValue)(ev::Evaluation)
+    _check_model(g.model, "mode_gate", ev)
+    return mode_departure(ev, g.reference; lmax = g.lmax)
+end
 
 """
     drive_objective(; drive, clip = 10.0, missed = 10.0, direct = 10.0,

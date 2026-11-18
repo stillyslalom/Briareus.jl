@@ -227,6 +227,17 @@
         @test_throws ArgumentError ceilb.f(evaluate(remake(s; lpi = bs(0.2)), P0))
         @test ceilb.f(evaluate(remake(s; lpi = bs(0.1)), P0)) == ceilb.f(evaluate(sb, P0))
         @test_throws ArgumentError ceilb.f(evaluate(remake(sb; time = 2.0), P0))
+        # so does a mode gate from a reference evaluation; its values are those from the
+        # reference's coefficients, which record no model (unchecked)
+        gate_ev = mode_gate(evaluate(sb, P0), [0.01, 0.01])
+        gate_c = mode_gate(flux_ylm(evaluate(sb, P0); lmax = 2), [0.01, 0.01])
+        xb = P0 .* (1 .+ 0.1 .* sin.(1:48))
+        @test gate_ev.f(evaluate(sb, xb)) == gate_c.f(evaluate(sb, xb)) && gate_ev.limit == gate_c.limit
+        @test gate_ev.f(evaluate(remake(s; lpi = bs(0.1)), xb)) == gate_ev.f(evaluate(sb, xb))
+        @test_throws ArgumentError gate_ev.f(evaluate(s, xb))
+        @test_throws ArgumentError gate_ev.f(evaluate(remake(sb; time = 2.0), xb))
+        @test length(gate_c.f(evaluate(s, xb))) == 2
+        @test mode_gate(evaluate(sb, P0), (; rms_mode = [0.001, 0.002])).limit ≈ [sqrt(3) * 0.001, sqrt(5) * 0.002]
     end
 
     # The dropped-bundle tutorial's design on a coarser wall mesh: bundle 11 freed, the
