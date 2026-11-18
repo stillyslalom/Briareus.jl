@@ -170,6 +170,7 @@ bounds(p::FramePointing, x0 = initial_parameters(p); u = 1.0, v = 1.0, w = 1.0,
     _box_bounds(p, x0, (; u, v, w, defocus, dlambda), power, spot, power_min, power_max)
 
 Scenario(t::Target, p::FramePointing; kwargs...) = _scenario(t, p.template, p; kwargs...)
+_scenario_beams(p::FramePointing) = p.template
 
 _subset_param(p::FramePointing, keep) =
     _frame_pointing(p.template[keep], p.frames[keep], p.beam_keys[keep], p.fields, p.relative)

@@ -447,6 +447,10 @@ The operators' own options pass through two named tuples:
 
 `model`, a `RadiationModel` of the target, is used instead of building one; it excludes
 `viewfactor_kw` (an `ArgumentError`).
+
+[`remake`](@ref)`(scenario; ...)` replaces the laser–plasma model, the parameterization,
+the deposition options or the response's observed elements, time and albedos, and
+rebuilds only what depends on them.
 """
 struct Scenario{P}
     target::Target
@@ -498,8 +502,20 @@ function _scenario(t::Target, beams::AbstractVector{<:Beam}, parameterization;
     model === nothing || isempty(viewfactor_kw) ||
         throw(ArgumentError("give a model or viewfactor_kw, not both (the model's view factors are fixed)"))
     op = DepositionOperator(t, beams; deposition_kw...)
-    obs = observe === nothing ? Int[] : elements(t, (observe isa Symbol ? (observe,) : observe)...)
+    obs = _observed(t, observe)
     model = !radiation ? nothing : model === nothing ? RadiationModel(t; viewfactor_kw...) : model
+    W, Y, WR, YR = _moment_responses(t, model, obs, time, albedo)
+    return Scenario(t, parameterization, op, model, obs, W, Y, WR, YR, lpi, Float64(time),
+                    _LazyResponse(), albedo === nothing ? nothing : collect(Float64, albedo))
+end
+
+# The observed elements of `observe` (component or part names; `nothing`: none).
+_observed(t::Target, observe) =
+    observe === nothing ? Int[] : elements(t, (observe isa Symbol ? (observe,) : observe)...)
+
+# The mode weights of the observed elements and, with a model, their responses: one
+# flux-response solve for all weights.
+function _moment_responses(t::Target, model, obs, time, albedo)
     W = isempty(obs) ? zeros(0, 0) : legendre_weights(t, obs; lmax = _CACHED_LMAX)
     Y = isempty(obs) ? zeros(0, 0) : ylm_weights(t, obs; lmax = _CACHED_YLM_LMAX)
     WR, YR = zeros(0, 0), zeros(0, 0)
@@ -507,8 +523,86 @@ function _scenario(t::Target, beams::AbstractVector{<:Beam}, parameterization;
         WY = flux_response(model, obs; time, albedo, weights = vcat(W, Y))
         WR, YR = WY[1:size(W, 1), :], WY[size(W, 1)+1:end, :]
     end
-    return Scenario(t, parameterization, op, model, obs, W, Y, WR, YR, lpi, Float64(time),
-                    _LazyResponse(), albedo === nothing ? nothing : collect(Float64, albedo))
+    return W, Y, WR, YR
+end
+
+# The beams a scenario's deposition operator is built for, from its parameterization.
+_scenario_beams(p::GroupPointing) = p.template
+_scenario_beams(p) = apply(p, initial_parameters(p))
+
+# Marks a keyword of `remake(::Scenario)` that was not given.
+struct _Unchanged end
+const _UNCHANGED = _Unchanged()
+
+"""
+    remake(scenario; parameterization, lpi, deposition_kw, observe, time, albedo, model)
+        -> Scenario
+
+Copy of `scenario` with the given parts replaced. What depends on a replaced part is
+rebuilt and everything else is shared:
+
+- `lpi` (a laser–plasma model or `nothing`): nothing is rebuilt.
+- `parameterization`: the deposition operator is kept when the new parameterization's
+  beams (a `GroupPointing`'s or `FramePointing`'s template, another's beams at its
+  initial parameters) enter through the operator's ports in the same order with the same
+  f-cone directions (and, under a [`VisRadProfile`](@ref), the same envelope ratios);
+  otherwise the change is refused with an `ArgumentError`, unless `deposition_kw` is
+  given too. A kept operator resolves the footprints where the original beams aimed
+  (its `reach`), as for [`subset`](@ref).
+- `deposition_kw`: the operator is rebuilt for the parameterization's beams with these
+  options. Options not given take their defaults: a scenario does not record the
+  options its operator was built with, so pass all that differ from the defaults (a
+  `profile`, `reach`, `resolution`).
+- `observe`, `time`, `albedo` and `model` (a `RadiationModel` of the same target, or
+  `nothing` for none): the mode weights and moment responses are recomputed (one
+  flux-response solve), and the full `response` is computed again when read.
+
+The target, `radiation` and `viewfactor_kw` do not change through `remake` (an
+`ArgumentError`): they need a new `Scenario`, or a `model` built for the purpose.
+"""
+function remake(s::Scenario; parameterization = _UNCHANGED, lpi = _UNCHANGED,
+                deposition_kw = _UNCHANGED, observe = _UNCHANGED, time = _UNCHANGED,
+                albedo = _UNCHANGED, model = _UNCHANGED, kwargs...)
+    isempty(kwargs) ||
+        throw(ArgumentError("remake(::Scenario) cannot change $(join(keys(kwargs), ", ")): build a new Scenario " *
+                            "(or pass a `model`); it changes parameterization, lpi, deposition_kw, observe, " *
+                            "time, albedo and model"))
+    t = s.target
+    param = parameterization === _UNCHANGED ? s.param : parameterization
+    op = s.deposition
+    if deposition_kw !== _UNCHANGED
+        op = DepositionOperator(t, _scenario_beams(param); deposition_kw...)
+    elseif parameterization !== _UNCHANGED
+        _check_operator(op, _scenario_beams(param))
+    end
+    lp = lpi === _UNCHANGED ? s.lpi : lpi
+    if all(v -> v === _UNCHANGED, (observe, time, albedo, model))
+        return Scenario(t, param, op, s.model, s.observed, s.moment_weights, s.ylm_weights,
+                        s.moment_response, s.ylm_response, lp, s.time, getfield(s, :_response),
+                        s.albedo)
+    end
+    m = model === _UNCHANGED ? s.model : model
+    m === nothing || m.target === t ||
+        throw(ArgumentError("model is a radiation model of another target"))
+    obs = observe === _UNCHANGED ? s.observed : _observed(t, observe)
+    tm = time === _UNCHANGED ? s.time : Float64(time)
+    alb = albedo === _UNCHANGED ? s.albedo : albedo === nothing ? nothing : collect(Float64, albedo)
+    W, Y, WR, YR = _moment_responses(t, m, obs, tm, alb)
+    return Scenario(t, param, op, m, obs, W, Y, WR, YR, lp, tm, _LazyResponse(), alb)
+end
+
+# Whether the operator `op` serves `beams`: their ports and f-cone directions in order,
+# and their envelope ratios under VisRad's profile (an `ArgumentError` otherwise).
+function _check_operator(op::DepositionOperator, beams)
+    fail(why) = throw(ArgumentError("the parameterization's beams $why the deposition operator's: " *
+                                    "give deposition_kw to rebuild it"))
+    length(beams) == length(op.ports) || fail("are $(length(beams)), not the $(length(op.ports)) of")
+    all(i -> beams[i].port == op.ports[i], eachindex(beams)) || fail("enter through other ports than")
+    all(i -> cone_directions(beams[i], length(op.dirs[i]))[1] == op.dirs[i], eachindex(beams)) ||
+        fail("have other f-cone directions (f-numbers) than")
+    op.profile === nothing || [_vr_envelope(op.profile, b) for b in beams] == op.envelope ||
+        fail("have other VisRad envelope ratios than")
+    return nothing
 end
 
 """
