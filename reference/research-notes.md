@@ -10878,6 +10878,20 @@ being lowered (the same machinery as `irradiance_ceiling(...; exact = true)`). T
 bubble equals `remake(bubble; picket_ratio)` by hand to 1e-12, and a drive history with
 it equals the resolved bubble's bit for bit.
 
+*Inference (2026-11-18, later).* `BubbleAbsorption`'s `apply_lpi`, `lpi_deposit` and
+`bubble_fractions` formed their number type by splatting over the beams in
+`promote_type` and inferred abstract containers; they now dispatch on the beams' type
+(`AbstractVector{Beam{S}}`; a vector of mixed types is converted to one type first, which
+also fixes that conversion for beams whose aim and power differ in type). They infer
+concretely on Float64 and on the optimizer's duals, for the bubble and the linked bubble
+(`test/inference.jl`: `@inferred`, and JET from Julia 1.11, the clipping alone also on
+1.10). Results bit for bit: an evaluation with the bubble at 6 ns (Float64, and 12-partial
+duals' values and partials) and the N221204 coarse CSV, against the base commit. What it
+bought is the guard, not time: one `evaluate` at 6 ns on the inference fixture's 48 quads
+(one thread, best of 10) 23.6 → 23.1 ms (22.7 ms without the bubble), with duals 44.4 →
+44.2 ms; `apply_lpi` alone 0.57 → 0.56 ms, its allocations 52 → 46 kB (Float64) and
+123 → 101 kB (duals). The per-beam iris integrals were already behind a function barrier.
+
 **The benchmark's table, linked column, through `bubble_prediction`** (coarse mesh, full
 model, measured backscatter; F̄ and the peak on the h 0.1 map; the reference is the mock
 pointing at E = 1.1, minimum −0.181 at 5.25 ns, upward zero 6.194 ns):

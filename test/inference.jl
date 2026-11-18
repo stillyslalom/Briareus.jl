@@ -128,7 +128,8 @@ end
     pkw = (; pulses = pulse, window = (0.5, 1.5))
     pceil = picket_ceiling(evaluate(s, xo), :wall; pkw...)
     pmean = picket_ceiling(evaluate(s, xo), :wall; pkw..., measure = :mean)
-    linked = PicketLinkedBubble(BubbleAbsorption(radius = 2.875), t, apply(p, xo); pkw...)
+    bubble = BubbleAbsorption(radius = 2.875)
+    linked = PicketLinkedBubble(bubble, t, apply(p, xo); pkw...)
     # phase 1's infeasibility and a relaxation's objective; the mode gate and the drive
     # floor from a reference evaluation
     infeas = Briareus._Infeasibility((ceilc, gatec, clf))
@@ -299,9 +300,10 @@ end
             ev, bs = evaluate(s, x), apply(p, x)
             @test (@inferred picket_irradiance(ev, :wall; pkw...)) isa T
             @test (@inferred pceil.f(ev)) isa T && (@inferred pmean.f(ev)) isa T
-            # (the resolved bubble's own `apply_lpi` and `lpi_deposit` infer abstract
-            # containers, as `BubbleAbsorption`'s did before the link)
             @test (@inferred linked_bubble(linked, bs)) isa BubbleAbsorption{T}
+            # the bubble and the linked bubble on the beams (6 ns: clipping and the ridge stop)
+            @test all(m -> (@inferred apply_lpi(m, bs, 6.0)) isa Vector{Beam{T}}, (bubble, linked))
+            @test all(m -> (@inferred lpi_deposit(m, s.deposition, bs, 6.0)).element isa Vector{T}, (bubble, linked))
         end
         # pointing on the capsule sphere (polar direct drive), with split quads
         for x in (xs0, _inf_duals(xs0))
@@ -413,10 +415,16 @@ end
                 if VERSION >= v"1.11"
                     @test _inf_jet_clean(JET.report_opt, pceil.f, ev) && _inf_jet_clean(JET.report_opt, pmean.f, ev)
                     @test _inf_jet_clean(JET.report_opt, linked_bubble, linked, bs)
+                    @test _inf_jet_clean(JET.report_opt, (m, b) -> apply_lpi(m, b, 6.0), linked, bs)
+                    @test all(m -> _inf_jet_clean(JET.report_opt, (q, o, b) -> lpi_deposit(q, o, b, 6.0), m, s.deposition, bs),
+                              (bubble, linked))
                 end
+                # the bubble's own clipping: no dispatch on either version
+                @test _inf_jet_clean(JET.report_opt, (m, b) -> apply_lpi(m, b, 6.0), bubble, bs)
                 @test _inf_jet_clean(JET.report_call, pceil.f, ev) && _inf_jet_clean(JET.report_call, pmean.f, ev)
-                @test _inf_jet_clean(JET.report_call, (m, b) -> apply_lpi(m, b, 6.0), linked, bs)
-                @test _inf_jet_clean(JET.report_call, (m, o, b) -> lpi_deposit(m, o, b, 6.0), linked, s.deposition, bs)
+                @test all(m -> _inf_jet_clean(JET.report_call, (q, b) -> apply_lpi(q, b, 6.0), m, bs) &&
+                               _inf_jet_clean(JET.report_call, (q, o, b) -> lpi_deposit(q, o, b, 6.0), m, s.deposition, bs),
+                          (bubble, linked))
             end
             # spherical pointing fields: no dispatch (from 1.11, as the deposition checks
             # above), no possible errors

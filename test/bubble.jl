@@ -94,6 +94,8 @@
     m = BubbleAbsorption(radius = 2.875)
     # before the launch nothing moves
     @test [x.power for x in apply_lpi(m, quads, 0.1)] == [x.power for x in quads]
+    # an abstract vector of beams takes one number type first: the same powers, bit for bit
+    @test [x.power for x in apply_lpi(m, Beam[quads...], 5.0)] == [x.power for x in apply_lpi(m, quads, 5.0)]
     # power is conserved, in each hemisphere, and moves from inner to 50° beams only
     for t in (3.0, 5.0, 7.0)
         eff = apply_lpi(m, quads, t)

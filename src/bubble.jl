@@ -324,8 +324,9 @@ end
 
 # Footprint plane height in hemisphere h (signed), or nothing without footprint beams.
 function _footprint_z(m::BubbleAbsorption, beams, h, t)
-    m.footprint_z !== nothing && return h * m.footprint_z
-    R = m.wall === nothing ? m.radius : wall_radius(m.wall, m.radius, t)
+    fz, wall = m.footprint_z, m.wall          # (locals: Julia 1.10 narrows these, not fields)
+    fz !== nothing && return h * fz
+    R = wall === nothing ? m.radius : wall_radius(wall, m.radius, t)
     zs = [_axis_wall_z(b, R) for b in beams if b.group in m.footprint && _hemisphere(b) == h]
     isempty(zs) && return nothing
     return sum(zs) / length(zs)
@@ -391,13 +392,12 @@ beam `clipped` (f, zero for beams that are not inner) and `absorbed` (``f (1 - T
 Of an inner beam's power, `absorbed` goes to the footprint beams, and g(1 − absorbed)
 stops at the ridge.
 """
-function bubble_fractions(m::BubbleAbsorption, beams::AbstractVector{<:Beam}, t)
+function bubble_fractions(m::BubbleAbsorption, beams::AbstractVector{Beam{S}}, t) where {S<:Real}
     x = bubble_depth(m, t)
     T = bubble_transmission(m, t)
     zb = (_footprint_z(m, beams, 1, t), _footprint_z(m, beams, -1, t))
     ρ = m.radius - x
-    Tf = promote_type(typeof(x), typeof(T), map(b -> typeof(b.power), beams)...,
-                      map(b -> eltype(b.aim), beams)...)
+    Tf = promote_type(typeof(x), typeof(T), S)
     clipped = zeros(Tf, length(beams))
     if x > 0
         for (i, b) in enumerate(beams)
@@ -411,17 +411,22 @@ function bubble_fractions(m::BubbleAbsorption, beams::AbstractVector{<:Beam}, t)
     return (depth = x, transmission = T, footprint_z = zb, ridge = ridge_fraction(m, t),
             clipped = clipped, absorbed = clipped .* (1 - T))
 end
+# Beams of mixed number types: one type first (the bubble's quantities carry it).
+bubble_fractions(m::BubbleAbsorption, beams::AbstractVector{<:Beam}, t) =
+    bubble_fractions(m, _common_type(beams), t)
 
-function apply_lpi(m::BubbleAbsorption, beams::AbstractVector{<:Beam}, time = 0.0)
-    fr = bubble_fractions(m, beams, time)
-    P = [b.power * one(eltype(fr.absorbed)) for b in beams]
+function apply_lpi(m::BubbleAbsorption, beams::AbstractVector{Beam{S}}, time = 0.0) where {S<:Real}
+    # (the fractions' named tuple is not concrete, `footprint_z` may be `nothing`: the
+    # closures below capture only its concrete field)
+    absorbed = bubble_fractions(m, beams, time).absorbed
+    P = [b.power * one(eltype(absorbed)) for b in beams]
     for h in (1, -1)
         rec = [i for (i, b) in enumerate(beams) if b.group in m.footprint && _hemisphere(b) == h]
         isempty(rec) && continue
         moved = zero(eltype(P))
         for (i, b) in enumerate(beams)
             if b.group in m.inner && _hemisphere(b) == h
-                δ = b.power * fr.absorbed[i]
+                δ = b.power * absorbed[i]
                 P[i] -= δ
                 moved += δ
             end
@@ -432,6 +437,8 @@ function apply_lpi(m::BubbleAbsorption, beams::AbstractVector{<:Beam}, time = 0.
     end
     return [remake(b; power = P[i]) for (i, b) in enumerate(beams)]
 end
+apply_lpi(m::BubbleAbsorption, beams::AbstractVector{<:Beam}, time = 0.0) =
+    apply_lpi(m, _common_type(beams), time)
 
 _deposits(::BubbleAbsorption) = true
 
@@ -439,14 +446,14 @@ _deposits(::BubbleAbsorption) = true
 # components at the height where each beam's axis crosses the ridge radius; the rest
 # of every beam is deposited by the operator. Power is conserved and booked per beam.
 function _lpi_deposit(m::BubbleAbsorption, op::DepositionOperator,
-                      beams::AbstractVector{<:Beam}, time, split)
+                      beams::AbstractVector{Beam{S}}, time, split) where {S<:Real}
     g = ridge_fraction(m, time)
     g == 0 && return _deposit(op, beams, split)
     isinner = [b.group in m.inner for b in beams]
     dep = _deposit(op, [remake(b; power = b.power * (isinner[i] ? 1 - g : one(g)))
                         for (i, b) in enumerate(beams)], split)
     es = _ridge_elements(m, op.target)
-    T = promote_type(eltype(dep.element), typeof(g), map(b -> eltype(b.aim), beams)...)
+    T = promote_type(eltype(dep.element), typeof(g), S)
     E, L, PB = Vector{T}(dep.element), Vector{T}(dep.backside), Vector{T}(dep.per_beam)
     added = zero(T)
     for (i, b) in enumerate(beams)
@@ -460,6 +467,8 @@ function _lpi_deposit(m::BubbleAbsorption, op::DepositionOperator,
     end
     return Deposition(E, L, PB, convert(T, dep.delivered + added))
 end
+_lpi_deposit(m::BubbleAbsorption, op::DepositionOperator, beams::AbstractVector{<:Beam}, time, split) =
+    _lpi_deposit(m, op, _common_type(beams), time, split)
 
 function _ridge_elements(m::BubbleAbsorption, t)
     es = reduce(vcat, (t.comp_elems[ci] for (ci, c) in enumerate(t.components)

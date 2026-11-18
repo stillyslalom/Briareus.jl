@@ -508,10 +508,13 @@ end
 _linked_fluence(op, rb, index, power, gs, es, beams::AbstractVector{<:Beam}) =
     _linked_fluence(op, rb, index, power, gs, es, _common_type(beams))
 
-# A vector of beams of mixed number types as one type.
+# A vector of beams of mixed number types as one type (the promotion of the beams' own,
+# abstract if one of them is).
+_number_type(::Beam{T}) where {T} = T
 function _common_type(beams)
-    T = mapreduce(b -> typeof(b.power), promote_type, beams)
-    return Beam{T}[remake(b; power = convert(T, b.power)) for b in beams]
+    T = mapreduce(_number_type, promote_type, beams)
+    return Beam{T}[Beam{T}(b.name, b.port, SVector{3,T}(b.aim), T(b.power), T(b.defocus), _retype(b.spot, T),
+                           b.fnumber, b.group, b.quad, b.wavelength, T(b.dlambda)) for b in beams]
 end
 
 """
