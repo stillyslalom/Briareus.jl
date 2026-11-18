@@ -10,6 +10,9 @@ uniformity of a flat observed face's x-ray drive (a halfraum's package, an opaci
 sample), and [`irradiance_objective`](@ref) foil uniformity. [`optimize_pointing`](@ref) runs bounded L-BFGS-B on forward-mode
 automatic-differentiation gradients, with a callback for progress and cancellation.
 [`influence_matrix`](@ref) gives each beam's mode response.
+[`HeldParameters`](@ref) holds some parameters of a parameterization at given values, and
+[`PowerScales`](@ref) adds a power scale per group of beams (e.g. per cone) beside its
+parameters; both compose with `GroupPointing`, `FramePointing` and each other.
 
 [`mode_sensitivity`](@ref) gives the exact sensitivity of the drive shape to each beam's
 pointing and power errors, and [`mode_uncertainty`](@ref) the asymmetry independent
@@ -20,6 +23,6 @@ objectives' `uncertainty` keyword optimizes the expected symmetry over them, and
 
 ```@autodocs
 Modules = [Briareus]
-Pages = ["src/optimize.jl", "src/uncertainty.jl"]
+Pages = ["src/optimize.jl", "src/uncertainty.jl", "src/parameterizations.jl"]
 Private = false
 ```

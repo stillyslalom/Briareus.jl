@@ -88,6 +88,10 @@ end
     lehs = (Frame(Matrix(1.0I, 3, 3), (0.0, 0.0, L / 2)), Frame(Diagonal([1.0, -1.0, -1.0]), (0.0, 0.0, -L / 2)))
     pf = FramePointing(quads, b -> b.port[3] > 0 ? lehs[1] : lehs[2]; fields = (:u, :v, :w, :power))
     xf0 = initial_parameters(pf)
+    # composed: the radial aims held, a power scale per cone pair
+    pc = HeldParameters(PowerScales(p; by = b -> b.group in (:inner23, :inner30) ? :inner : :outer),
+                        n -> endswith(n, ".r"))
+    xc0 = initial_parameters(pc)
     corona = CoronaOperator(CoronaProfile(; critical_radius = 0.9, scale_length = 0.2, absorption = 0.9),
                             quads; ncone = 1, lmax = 4, spacing = 0.2, panels = 20)
     coronas = CoronaOperator(corona.profile, quads; ncone = 1, lmax = 4, spacing = 0.2, panels = 20,
@@ -205,6 +209,10 @@ end
             @test (@inferred deposit(s.deposition, beams)).element isa Vector{T}
             @test (@inferred to_chamber(lehs[2], x[1:3])) isa Briareus.SVector{3,T}
         end
+        # composed parameterizations
+        for x in (xc0, _inf_duals(xc0))
+            @test (@inferred apply(pc, x)) isa Vector{Beam{eltype(x)}}
+        end
         @test (@inferred flux_response(s.model, s.observed)) isa Matrix{Float64}
         # a dual absorption on Float64 beams promotes the deposition
         ηd = only(_inf_duals([0.9]))
@@ -266,6 +274,11 @@ end
                     @test _inf_jet_clean(JET.report_opt, apply, pf, x)
                     @test _inf_jet_clean(JET.report_opt, deposit, s.deposition, apply(pf, x))
                 end
+            end
+            # composed parameterizations: no dispatch, no possible errors
+            for x in (xc0, _inf_duals(xc0))
+                @test _inf_jet_clean(JET.report_opt, apply, pc, x)
+                @test _inf_jet_clean(JET.report_call, apply, pc, x)
             end
             @test _inf_jet_clean(JET.report_call, flux_response, s.model, s.observed)
             @test _inf_jet_clean(JET.report_call, solve, s.model, dep)
