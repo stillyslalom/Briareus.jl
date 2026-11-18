@@ -20,7 +20,8 @@
 # quads, and re-pointing them within the clearance the entrance holes allow. It introduces three-dimensional mode analysis with real
 # spherical harmonics, the symmetry of the NIF ports, scenarios on a subset of the
 # beams, the influence matrix, optimization with automatic-differentiation gradients
-# and under constraints, and beam-clearance checks.
+# and under constraints, beam-clearance checks, and a re-pointing study in two stages,
+# from quads to their beams.
 
 using Briareus
 using CairoMakie
@@ -750,6 +751,135 @@ end
 # gates are met with the wall's peak 27–38 % above the 48-quad pointing's (research
 # notes), the re-aimed quads stacking their spots.
 
+# ## A re-pointing study, end to end
+#
+# The design within limits holds the shape and the wall's irradiance, but nothing in its
+# run watched the entrance holes. The clearance check of the end caps finds what the
+# optimizer did not see:
+
+review_line("within limits", cap_review(limited.beams))
+
+# In the worst case the quads' 1% contours reach 58 µm into the caps. A study repeats
+# the run with every limit a design review checks, on the parameters the design may
+# change, in two stages: the quads first, then each of their beams.
+#
+# ### The parameters
+#
+# Here the inner quads keep their pointing (their spots set the drive at the waist and
+# pass close to the capsule), the outer quads move by up to 0.3 mm as before, and each
+# cone's power may fall by up to 20% but not rise: an ignition pulse runs the laser at
+# its limit. [`PowerScales`](@ref) adds a power scale per cone after the pointing
+# parameters, and [`HeldParameters`](@ref) holds the parameters a predicate on their
+# names selects, here those of the inner quads, at their values. With `relative = true`
+# each quad's parameters are shifts from its present aim. [`remake`](@ref) puts the
+# composed parameterization in the scenario and keeps its deposition operator, since
+# the beams enter through the same ports.
+
+inner_quads = Set(b.quad for b in remaining if b.group in (:inner23, :inner30))
+by_quad = GroupPointing(remaining; by = :quad, fields = (:phi, :z), relative = true)
+study = remake(repoint; parameterization = HeldParameters(PowerScales(by_quad),
+                                                          n -> first(split(n, '.')) in inner_quads))
+lower_s, upper_s = bounds(study.param; phi = 0.3, z = 0.3, scale = 0.2, scale_max = 1.0)
+println(nparams(study.param), " free parameters, ending ", join(parameter_names(study.param)[end-4:end], ", "))
+
+# ### The limits
+#
+# Four limits: the gates and the wall-irradiance ceiling above, a keep-out from the end
+# caps, and a ceiling on the light the caps receive. [`HardwareKeepOut`](@ref) gives
+# each beam's worst-case clearance from named parts, here the caps, exactly and with
+# the envelope and error set of the clearance check, and [`clearance_floor`](@ref) holds
+# each beam's clearance at or above the keep-out's minimum, 10 µm, as a constraint with
+# one component and one multiplier per beam. The keep-out judges the 1% contour;
+# [`light_ceiling`](@ref) bounds all the nominal light on the caps, the spots' wings
+# included ([`light_fraction`](@ref): absorbed, plus striking their outside), here at
+# 10⁻⁵ of the delivered power. On the 48-quad pointing the keep-out and the clearance
+# check agree:
+
+cap_keepout = HardwareKeepOut(target, (:cap_top, :cap_bottom); targets = (:wall, :capsule),
+                              peak_fraction = 0.01, minimum = 0.01)
+@printf("worst-case clearance from the caps: keep-out %.4f mm, clearance check %.4f mm\n",
+        minimum(hardware_clearance(cap_keepout, quads)), review_48.worst)
+limits = (ceiling, gates, clearance_floor(cap_keepout), light_ceiling(1e-5, :cap_top, :cap_bottom))
+stage1 = optimize_pointing(study, most_drive; lower = lower_s, upper = upper_s, constraints = limits,
+                           iterations = 1000, evaluations = 3000)
+
+# The run ends with every limit met and the box active: some outer quads' aims at
+# ±0.3 mm, and three of the four cones at full power. The keep-out holds a handful of
+# outer quads at their 10 µm minimum, each with its own multiplier (the display shows
+# the worst of the 46 rows and counts the active ones), and three of the four gates are
+# active. The light ceiling is met with room to spare: the keep-out, on the worst case
+# of the 1% contour, is the stricter of the two here.
+
+ev1 = evaluate(study, stage1.x)
+@printf("%s after %d evaluations; cone powers %s of nominal\n", stage1.outcome, stage1.evaluations,
+        join((@sprintf("%s %.3f", n[1:7], x) for (n, x) in zip(stage1.names[end-3:end], stage1.x[end-3:end])), ", "))
+gate_line(label, ev) = @printf("%-22s drive %.4f, departure / gate for l = 1–4: %s\n", label,
+                               mean_flux(ev) / mean_flux(ref48),
+                               join((@sprintf("%.3f", d) for d in mode_departure(ev, full) ./ gates.limit), " "))
+gate_line("stage 1 (quads)", ev1)
+review_line("stage 1 (quads)", cap_review(stage1.beams))
+
+# ### From quads to beams
+#
+# So far each quad has been one beam: one aim, one power and the deposition of its four
+# beams as a single f/7.9 cone. [`nif_beams`](@ref) gives the four beams of each quad,
+# each through its own port at f/20.7, at the quad's aim and with a quarter of its power.
+# A scenario on them needs a deposition operator for their ports: `remake` builds one,
+# given the options of the first. The polish lets each outer beam move by up to 0.1 mm
+# on its own, the inner quads' beams held as before.
+
+beams = nif_beams(stage1.beams)
+inner_beams = Set(b.name for b in beams if b.quad in inner_quads)
+by_beam = GroupPointing(beams; by = :beam, fields = (:phi, :z), relative = true)
+polish = remake(study; parameterization = HeldParameters(by_beam, n -> first(split(n, '.')) in inner_beams),
+                deposition_kw = (; resolution = 0.6, reach = 0.5, level = 0))
+polish_start = evaluate(polish, initial_parameters(polish.param))
+gate_line("stage 1 on beams", polish_start)
+check_constraints(polish_start, limits)
+
+# The same aims, deposited beam by beam, give a slightly different drive: the four
+# beams of a quad enter at angles up to a few degrees apart, each with its own narrower
+# f-cone, and the mode-1 departure now exceeds its gate by 1.6%. The limits are the same
+# objects as in the first stage. The keep-out's components follow the evaluation's
+# beams, 184 of them now, so the constraints carry over unchanged. The polish starts
+# from the first stage's aims (`relative = true`, all shifts zero) with a capped budget:
+
+lower_p, upper_p = bounds(polish.param; phi = 0.1, z = 0.1)
+stage2 = optimize_pointing(polish, most_drive; lower = lower_p, upper = upper_p, constraints = limits,
+                           iterations = 1000, evaluations = 120)
+
+# ### The result
+#
+# The run's report above gives each limit's value against its limit, its multiplier and
+# its status. [`pointing_summary`](@ref) puts the polished beams beside the beams of the
+# quads before re-pointing (`nif_beams(remaining)`, matched by name): the aim shifts,
+# the power and cone fraction, the keep-out's least clearance against the reference's,
+# and the light clipped and missed. Together they record the design:
+
+pointing_summary(polish, stage2; reference = nif_beams(remaining), keepout = cap_keepout)
+
+#-
+
+ev2 = evaluate(polish, stage2.x)
+@printf("%s after %d evaluations\n", stage2.outcome, stage2.evaluations)
+gate_line("polished, per beam", ev2)
+@printf("peak wall irradiance %.4f of the ceiling\n", peak_irradiance(ev2, :wall) / only(ceiling.limit))
+polished_review = cap_review(stage2.beams)
+review_line("polished", polished_review)
+@assert stage2.outcome in (:interior, :box, :evaluations) && all(r -> r.status !== :violated, stage2.constraints)
+@assert polished_review.fail == 0 && polished_review.worst > 0
+
+# The polish brings mode 1 back within its gate and raises the drive from 0.9568 (the
+# first stage's aims on beams) to 0.9584 of the 48 quads', above the first stage's
+# 0.9577 on quads. It stops at its budget with every limit met and mode 2 at its gate.
+# The clearance check confirms the keep-out on the worst case: no beam fails, and the
+# closest stays 21 µm from a cap.
+#
+# Each stage was one call of [`optimize_pointing`](@ref) on exported names: a
+# parameterization, its box and the limits, the second stage's scenario built with
+# `remake` on the first stage's beams. Both results stay at hand for a report or a
+# further stage.
+
 # ## What this checks
 #
 # - The NIF ports have the symmetry ``D_2`` and no more, and every harmonic that
@@ -795,3 +925,12 @@ end
 #   Karush–Kuhn–Tucker equations to 1e-4 and its multiplier to 1e-3; the irradiance
 #   norm's power-mean ordering, its area-mean limit at p = 1 and the constraint values'
 #   gradients against central differences.
+# - The study's keep-out from the end caps agrees with the clearance check's worst case
+#   on the 48-quad pointing to within a micrometer, and the polished beams pass that
+#   check with no beam failing and every limit met (asserted). The closed-form tests of
+#   the keep-out and light constraints (`test/constraints.jl`): with one free parameter,
+#   the 50° cone's aim, pulled by the objective into the caps, a constrained run ends
+#   with the constraint active at the aim where its value reaches the limit, found by
+#   bisection, to 1e-5 mm; the constraints' values against the quantities that define
+#   them (the light on the caps against `component_power` to 1e-12) and their
+#   gradients against central differences to 1e-6.
