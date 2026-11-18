@@ -128,4 +128,80 @@ using Briareus, ForwardDiff, LinearAlgebra, Test
         @test r.value <= r.initial_value
         @test occursin("$(nparams(ck)) parameters", sprint(show, sk))
     end
+
+    @testset "subsets and named values" begin
+        # four beams per quad by quad, held inner quads and a power scale per quad; kept:
+        # all but bundle 31 (its quads and their scales dropped) and two beams of an
+        # inner quad (its parameters kept, held at their values)
+        beams = nif_beams(power = 2.0)
+        gq = GroupPointing(beams; by = :quad, fields = (:z, :phi), mirror = false, relative = true)
+        nq = nparams(gq)
+        values = [initial_parameters(gq) .+ 0.01 .* (1:nq); 1.0 .+ 0.001 .* (1:48)]
+        c = HeldParameters(PowerScales(gq; by = :quad), byinner; values)
+        part = beams[findfirst(isinner, beams)].quad
+        @test nif_bundle(part) != "31"
+        keep = [i for (i, b) in enumerate(beams)
+                if nif_bundle(b) != "31" && !(i in findall(x -> x.quad == part, beams)[1:2])]
+        t = Target([foil(:foil, (0, 0, 0), (0, 0, 1); width = 8.0, n = 2)])
+        sk = subset(Scenario(t, c), keep)
+        sub = sk.param
+        # by hand: the kept beams by quad, a scale per kept quad, the old values by name
+        byname = Dict(zip(parameter_names(c.inner), values))
+        ps = PowerScales(GroupPointing(beams[keep]; by = :quad, fields = (:z, :phi), mirror = false,
+                                       relative = true); by = :quad)
+        hand = HeldParameters(ps, byinner; values = [byname[n] for n in parameter_names(ps)])
+        @test sub isa HeldParameters && sub.inner isa PowerScales
+        @test parameter_names(sub) == parameter_names(hand) && sub.free == hand.free
+        @test initial_parameters(sub) == initial_parameters(hand)
+        y = initial_parameters(hand) .+ 0.02 .* sin.(1:nparams(hand))
+        @test apply(sub, y) == apply(hand, y)
+        @test evaluate(sk, y).beams == apply(hand, y)
+        # the partly dropped quad keeps its parameters, held at their values; bundle 31's
+        # quads and their scales are gone
+        inner_names = parameter_names(sub.inner)
+        @test all(n -> n in inner_names && !(n in parameter_names(sub)) &&
+                       sub.values[findfirst(==(n), inner_names)] == byname[n],
+                  ("$part.z", "$part.phi", "$part.power_scale"))
+        @test !any(n -> nif_bundle(first(split(n, '.'))) == "31", inner_names)
+        @test length(sub.inner.keys) == 48 - count(q -> nif_bundle(q) == "31", unique(b.quad for b in beams))
+        # a power scale per cone alone: as built by hand on the kept beams
+        sp = subset(Scenario(t, PowerScales(gq; by = cone2)), keep).param
+        hp = PowerScales(GroupPointing(beams[keep]; by = :quad, fields = (:z, :phi), mirror = false,
+                                       relative = true); by = cone2)
+        @test parameter_names(sp) == parameter_names(hp) && sp.group == hp.group
+        yp = initial_parameters(hp) .+ 0.03
+        @test apply(sp, yp) == apply(hp, yp)
+        # a group (cone) that loses every beam loses its scale
+        ss = Briareus._subset_param(PowerScales(gq), findall(b -> b.group !== :outer44, beams))
+        @test ss.keys == [g for g in unique(b.group for b in beams) if g !== :outer44]
+
+        # named values: a quad's fields and its scale by the quad's name, passed through
+        # to the inner parameterization; a held parameter is refused
+        oq = beams[findfirst(!isinner, beams)].quad
+        free_names = parameter_names(c)
+        yn = parameters(c, oq => (z = 0.3, power_scale = 1.2))
+        yh = copy(initial_parameters(c))
+        yh[findfirst(==("$oq.z"), free_names)] = 0.3
+        yh[findfirst(==("$oq.power_scale"), free_names)] = 1.2
+        @test yn == yh
+        @test parameters(c) == initial_parameters(c)
+        @test_throws ArgumentError parameters(c, part => (z = 0.3,))                # held
+        @test_throws ArgumentError parameters(c, oq => (r = 0.3,))                  # not a field
+        @test_throws ArgumentError parameters(c, "Q99T" => (power_scale = 1.0,))    # no such scale
+        # scales keyed by cone beside groups keyed by cone: one keyword sets both
+        pc = PowerScales(GroupPointing(quads; fields = (:z, :r)))
+        xn = parameters(pc; inner23 = (z = 3.0, power_scale = 0.9), outer50 = (power_scale = 1.1,))
+        xh = initial_parameters(pc)
+        pn = parameter_names(pc)
+        xh[findfirst(==("inner23.z"), pn)] = 3.0
+        xh[findfirst(==("inner23.power_scale"), pn)] = 0.9
+        xh[findfirst(==("outer50.power_scale"), pn)] = 1.1
+        @test xn == xh
+        # the other order: scales outside, the hold inside
+        c2 = PowerScales(HeldParameters(gq, byinner; values = values[1:nq]); by = cone2)
+        y2 = parameters(c2, oq => (phi = -0.2,); outer = (power_scale = 0.8,))
+        n2 = parameter_names(c2)
+        @test y2[findfirst(==("$oq.phi"), n2)] == -0.2 && y2[findfirst(==("outer.power_scale"), n2)] == 0.8 &&
+              y2[findfirst(==("inner.power_scale"), n2)] == 1.0
+    end
 end

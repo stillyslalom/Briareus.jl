@@ -104,6 +104,9 @@ end
     pc = HeldParameters(PowerScales(p; by = b -> b.group in (:inner23, :inner30) ? :inner : :outer),
                         n -> endswith(n, ".r"))
     xc0 = initial_parameters(pc)
+    # its subset with a cone dropped (`subset`'s default for the wrappers)
+    pcs = subset(remake(s; parameterization = pc), findall(b -> b.group !== :inner23, quads)).param
+    xcs0 = initial_parameters(pcs)
     corona = CoronaOperator(CoronaProfile(; critical_radius = 0.9, scale_length = 0.2, absorption = 0.9),
                             quads; ncone = 1, lmax = 4, spacing = 0.2, panels = 20)
     coronas = CoronaOperator(corona.profile, quads; ncone = 1, lmax = 4, spacing = 0.2, panels = 20,
@@ -329,6 +332,9 @@ end
         for x in (xc0, _inf_duals(xc0))
             @test (@inferred apply(pc, x)) isa Vector{Beam{eltype(x)}}
         end
+        for x in (xcs0, _inf_duals(xcs0))
+            @test (@inferred apply(pcs, x)) isa Vector{Beam{eltype(x)}}
+        end
         # VisRad's beam model, tapered
         for x in (x0, _inf_duals(x0))
             T = eltype(x)
@@ -451,9 +457,9 @@ end
                 end
             end
             # composed parameterizations: no dispatch, no possible errors
-            for x in (xc0, _inf_duals(xc0))
-                @test _inf_jet_clean(JET.report_opt, apply, pc, x)
-                @test _inf_jet_clean(JET.report_call, apply, pc, x)
+            for (q, x) in ((pc, xc0), (pc, _inf_duals(xc0)), (pcs, xcs0), (pcs, _inf_duals(xcs0)))
+                @test _inf_jet_clean(JET.report_opt, apply, q, x)
+                @test _inf_jet_clean(JET.report_call, apply, q, x)
             end
             # VisRad's beam model, tapered: no dispatch (from 1.11, as the deposition
             # checks above), no possible errors

@@ -27,6 +27,8 @@ the free parameters, and [`bounds`](@ref)`(h, y0; kwargs...)` the box of `p` abo
 held values and `y0` (the keywords of `p`'s `bounds`), restricted to the free
 parameters. `apply` is generic in the number type: the held values enter as constants
 of the element type of `y`, so ForwardDiff duals flow through the free parameters only.
+Named values pass through to `p` ([`parameters`](@ref)), and a [`subset`](@ref) of a
+scenario keeps the kept parameters' names, values and holds.
 
 ```julia
 pointing = GroupPointing(quads; by = :quad, fields = (:z, :phi), relative = true)
@@ -143,7 +145,9 @@ them ([`HeldParameters`](@ref)) removes the redundancy.
 puts each scale within `y0 (1 ± scale)`, clipped to `[scale_min, scale_max]`
 (engineering defaults, not facility limits; `scale_max = 1` holds each group at or below
 the power of `p`), and the other parameters in `p`'s box with `kwargs`. `apply` is
-generic in the number type.
+generic in the number type. A scale is set by name as the field `power_scale` of its key
+([`parameters`](@ref)), and a [`subset`](@ref) of a scenario keeps the scales of the
+groups that keep a beam.
 """
 struct PowerScales{P,K}
     inner::P
@@ -223,3 +227,114 @@ function bounds(ps::PowerScales, y0 = initial_parameters(ps); scale = 0.5, scale
 end
 
 _nparams_shown(ps::PowerScales) = nparams(ps)
+
+# ---------------------------------------------------------------------------------------
+# Named values and subsets through the wrappers
+# ---------------------------------------------------------------------------------------
+
+"""
+    parameters(h::HeldParameters, values::Pair...; group = (field = value, ...), ...)
+    parameters(ps::PowerScales, values::Pair...; group = (field = value, ...), ...)
+        -> Vector{Float64}
+
+The parameter vector of a composed parameterization with named values, as for a
+[`GroupPointing`](@ref) (`key => (; field = value, ...)` pairs, or keywords for `Symbol`
+keys): the fields pass through to the wrapped parameterization, a `GroupPointing` or a
+[`FramePointing`](@ref) inside, and a [`PowerScales`](@ref) scale is the field
+`power_scale` of its key, so that one pair can set a quad's aim and its scale:
+
+```julia
+p = HeldParameters(PowerScales(GroupPointing(beams; by = :quad, fields = (:z, :phi)); by = :quad),
+                   n -> startswith(n, "Q31"))
+y0 = parameters(p, "Q15T" => (z = 5.2, power_scale = 0.9))
+```
+
+Values not named keep [`initial_parameters`](@ref) (a `HeldParameters`' values at its free
+parameters, scales of 1). A held parameter, a scale key with no scale, an unknown group
+or a field that is not a parameter is an `ArgumentError`.
+"""
+parameters(h::HeldParameters, values::Pair...; kwargs...) = _with_named(h, (values..., pairs(kwargs)...))
+parameters(ps::PowerScales, values::Pair...; kwargs...) = _with_named(ps, (values..., pairs(kwargs)...))
+
+# The indices into the parameters of `p` and the values that the named values `kv`
+# (`key => (; field = value)` pairs) set.
+function _named_values(p::Union{GroupPointing,FramePointing}, kv)
+    out = Pair{Int,Any}[]
+    for (key, fv) in kv
+        g = findfirst(==(key), p.keys)
+        g === nothing && throw(ArgumentError("no group $(repr(key)); the groups are " *
+                                             join(repr.(p.keys), ", ")))
+        for (f, v) in pairs(fv)
+            fi = findfirst(==(f), p.fields)
+            fi === nothing && throw(ArgumentError("$f is not a parameter; the fields are " *
+                                                  join(p.fields, ", ")))
+            push!(out, _pidx(p, g, fi) => v)
+        end
+    end
+    return out
+end
+
+# A scale per key (`power_scale`), the other fields to the inner parameterization.
+function _named_values(ps::PowerScales, kv)
+    out = Pair{Int,Any}[]
+    rest = Pair[]
+    for (key, fv) in kv
+        others = Pair{Symbol,Any}[]
+        for (f, v) in pairs(fv)
+            if f === :power_scale
+                g = findfirst(isequal(key), ps.keys)
+                g === nothing && throw(ArgumentError("no power scale for $(repr(key)); the scales' keys are " *
+                                                     join(repr.(ps.keys), ", ")))
+                push!(out, ps.n + g => v)
+            else
+                push!(others, f => v)
+            end
+        end
+        isempty(others) || push!(rest, key => (; others...))
+    end
+    return append!(out, _named_values(ps.inner, rest))
+end
+
+# The inner parameterization's, at the free parameters; a held one refused.
+function _named_values(h::HeldParameters, kv)
+    pos = zeros(Int, length(h.values))
+    pos[h.free] = eachindex(h.free)
+    out = Pair{Int,Any}[]
+    for (i, v) in _named_values(h.inner, kv)
+        pos[i] == 0 && throw(ArgumentError("parameter $(_inner_names(h.inner, length(h.values))[i]) is held " *
+                                           "(at $(h.values[i]))"))
+        push!(out, pos[i] => v)
+    end
+    return out
+end
+
+_named_values(p, kv) = isempty(kv) ? Pair{Int,Any}[] :
+    throw(ArgumentError("named values need a GroupPointing or FramePointing inside, not a $(typeof(p))"))
+
+# `subset`'s default for the wrappers (`subset` in optimize.jl): the inner
+# parameterization's subset that keeps its groups, wrapped again.
+_subset_param(h::HeldParameters, keep) = _subset_kept(h, keep)
+_subset_param(ps::PowerScales, keep) = _subset_kept(ps, keep)
+
+_subset_kept(p, keep) = _subset_param(p, keep)    # a `FramePointing` keeps its groups
+
+# The kept parameters (by name) at their values, held or free as they were.
+function _subset_kept(h::HeldParameters, keep)
+    inner = _subset_kept(h.inner, keep)
+    old = _inner_names(h.inner, length(h.values))
+    new = _inner_names(inner, length(initial_parameters(inner)))
+    idx = [something(findfirst(==(n), old), 0) for n in new]
+    any(iszero, idx) && throw(ArgumentError("the subset's parameters are not among the parameterization's"))
+    isfree = falses(length(h.values))
+    isfree[h.free] .= true
+    return HeldParameters(inner, h.values[idx], findall(i -> isfree[i], idx))
+end
+
+# The kept groups' scales, in order of first appearance among the kept beams (as the
+# constructor orders them).
+function _subset_kept(ps::PowerScales, keep)
+    inner = _subset_kept(ps.inner, keep)
+    g = ps.group[keep]
+    used = unique(g)
+    return PowerScales(inner, length(initial_parameters(inner)), ps.keys[used], [findfirst(==(i), used) for i in g])
+end

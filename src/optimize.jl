@@ -113,12 +113,21 @@ function GroupPointing(beams::AbstractVector{<:Beam}; by = :group,
                        fields = (:z, :r, :defocus), mirror::Bool = true, relative::Bool = false,
                        unit::Symbol = :quad,
                        radius::Union{Nothing,Real} = nothing, center = (0.0, 0.0, 0.0))
+    by === :quad && any(b -> isempty(b.quad), beams) &&
+        throw(ArgumentError("by = :quad needs quad names on every beam (OMEGA beams have none)"))
+    key = by === :group ? (b -> b.group) : by === :quad ? (b -> b.quad) :
+          by === :beam ? (b -> b.name) : by
+    return _group_pointing(beams, map(key, beams); fields, mirror, relative, unit, radius, center)
+end
+
+# A `GroupPointing` of `beams` with group key `ks[i]` for beam i (the constructor's
+# keywords but `by`).
+function _group_pointing(beams::AbstractVector{<:Beam}, ks::AbstractVector; fields, mirror::Bool,
+                         relative::Bool, unit::Symbol, radius::Union{Nothing,Real}, center)
     for f in fields
         f in _FIELDS || throw(ArgumentError("unknown field $f; choose from $_FIELDS"))
     end
     unit in (:beam, :quad) || throw(ArgumentError("unit is :beam or :quad, got :$unit"))
-    by === :quad && any(b -> isempty(b.quad), beams) &&
-        throw(ArgumentError("by = :quad needs quad names on every beam (OMEGA beams have none)"))
     if :split in fields
         unit === :quad || throw(ArgumentError("the :split field is in the quad's frame: it needs unit = :quad"))
         any(b -> isempty(b.quad), beams) && throw(ArgumentError("the :split field needs quad names on every beam"))
@@ -131,9 +140,6 @@ function GroupPointing(beams::AbstractVector{<:Beam}; by = :group,
     radius === nothing || radius > 0 || throw(ArgumentError("radius must be positive"))
     any(in((:split_theta, :split_phi)), fields) && any(b -> isempty(b.quad), beams) &&
         throw(ArgumentError("split fields need quad names on every beam"))
-    key = by === :group ? (b -> b.group) : by === :quad ? (b -> b.quad) :
-          by === :beam ? (b -> b.name) : by
-    ks = map(key, beams)
     uk = unique(ks)
     members = [findall(==(k), ks) for k in uk]
     tmpl = [remake(b; aim = Float64.(ForwardDiff.value.(b.aim)),
@@ -309,18 +315,14 @@ pointing = GroupPointing(nif_quads(); fields = (:z, :r, :power))
 x0 = parameters(pointing; inner23 = (z = 3.09, r = -1.09), outer50 = (z = 5.01,))
 ```
 """
-function parameters(p::GroupPointing, values::Pair...; kwargs...)
+parameters(p::GroupPointing, values::Pair...; kwargs...) = _with_named(p, (values..., pairs(kwargs)...))
+
+# The initial parameters of `p` with the named values `kv` (`key => (; field = value)`
+# pairs) set; `_named_values` (parameterizations.jl) resolves them to indices.
+function _with_named(p, kv)
     x = initial_parameters(p)
-    for (key, fv) in (values..., pairs(kwargs)...)
-        g = findfirst(==(key), p.keys)
-        g === nothing && throw(ArgumentError("no group $(repr(key)); the groups are " *
-                                             join(repr.(p.keys), ", ")))
-        for (f, v) in pairs(fv)
-            fi = findfirst(==(f), p.fields)
-            fi === nothing && throw(ArgumentError("$f is not a parameter; the fields are " *
-                                                  join(p.fields, ", ")))
-            x[_pidx(p, g, fi)] = v
-        end
+    for (i, v) in _named_values(p, kv)
+        x[i] = v
     end
     return x
 end
@@ -760,7 +762,16 @@ come from the scenario's parameterization; the default new parameterization keep
 fields, mirroring, `relative`, `unit` and sphere and groups by `group` (pass one to group
 by quad or beam; with `unit = :quad`, the default, a quad's azimuth and split are then
 those of its kept beams). For a [`FramePointing`](@ref) scenario, the default keeps the kept beams'
-frames, groups, fields and `relative`. Any other parameterization needs one.
+frames, groups, fields and `relative`.
+
+For a [`HeldParameters`](@ref) or [`PowerScales`](@ref) scenario the default wraps the
+subset of the inner parameterization that keeps its groups (a `GroupPointing`'s keys,
+unlike its own default above), so the kept parameters keep their names, and is what
+the wrappers built by hand on the kept beams give: a parameter whose group keeps some of
+its beams keeps its value and stays held or free (the value applies to the kept beams as
+it applied to all, an absolute aim or a shift); one whose group keeps none is dropped,
+held or free, and so is the power scale of a group with no kept beam. Any other
+parameterization needs one.
 """
 function subset(s::Scenario, keep::AbstractVector{<:Integer}; parameterization = nothing)
     param = parameterization === nothing ? _subset_param(s.param, keep) : parameterization
@@ -773,6 +784,18 @@ _subset_param(p::GroupPointing, keep) =
     GroupPointing(p.template[keep]; fields = Tuple(p.fields), mirror = p.mirror,
                   relative = p.relative, unit = p.unit, radius = _spherical(p) ? p.radius : nothing,
                   center = p.center)
+
+# The beams `keep` of `p` in their own groups (the groups that keep a beam keep their
+# keys, so their parameter names), the other options as `_subset_param`'s.
+function _subset_kept(p::GroupPointing, keep)
+    key = similar(p.keys, length(p.template))
+    for (g, mem) in enumerate(p.members), bi in mem
+        key[bi] = p.keys[g]
+    end
+    return _group_pointing(p.template[keep], key[keep]; fields = Tuple(p.fields), mirror = p.mirror,
+                           relative = p.relative, unit = p.unit, radius = _spherical(p) ? p.radius : nothing,
+                           center = p.center)
+end
 _subset_param(p, keep) =
     throw(ArgumentError("give a parameterization for a scenario that is not on a GroupPointing or FramePointing"))
 
