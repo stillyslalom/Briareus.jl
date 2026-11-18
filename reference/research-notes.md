@@ -11709,6 +11709,12 @@ a positive multiplier, against the fill of the quads in decreasing drive per pow
 (1e-6). No default fraction: a reference with more beams than the design delivers more
 drive, so 1 is not always reachable.
 
+**`pointing_summary` and a clearance of −Inf.** The summary's least clearance per
+keep-out filtered every non-finite value, so a beam the rule cannot place (−Inf, a
+capture failure) vanished from it. It now leaves out +Inf only (a beam the rule does
+not apply to); −Inf and NaN propagate and show (`clearance -Inf mm`). Excluding +Inf
+never changes a minimum but for an empty set, where the result stays `Inf`.
+
 ## Constrained re-pointing: convergence on a feasible, active start (2026-11-18) *measured*
 
 The augmented Lagrangian of `optimize_pointing(...; constraints)` (§ Constrained

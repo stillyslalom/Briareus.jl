@@ -4,6 +4,15 @@
 
 using Briareus, LinearAlgebra, Test
 
+# A keep-out whose rule cannot place the first beam (-Inf), does not apply to the second
+# (+Inf) and clears the others by 0.2 mm, or with `fail = false` the first by 0.2 mm too.
+struct _SummaryKeepOut
+    minimum::Float64
+    fail::Bool
+end
+Briareus.keepout_clearance(k::_SummaryKeepOut, beams::AbstractVector{<:Beam}) =
+    [i == 1 && k.fail ? -Inf : i == 2 ? Inf : 0.2 for i in eachindex(beams)]
+
 @testset "pointing summary" begin
     t = hohlraum(nz = 8, nphi = 16, capsule_ntheta = 6, capsule_nphi = 8)
     quads = hybride_mock_pointing(nif_quads(power = 8.0))
@@ -35,6 +44,12 @@ using Briareus, LinearAlgebra, Test
     # display: one line
     shown = sprint(show, sm)
     @test !occursin('\n', shown) && occursin("aim shifts mean", shown) && occursin("cone fraction 0.333", shown)
+    # a beam the rule cannot place (-Inf) is the least clearance and shows; a beam it does
+    # not apply to (+Inf) is left out
+    fails = pointing_summary(s, beams; keepout = _SummaryKeepOut(0.1, true))
+    @test fails.clearance == [-Inf] && fails.margin == [-Inf] && fails.reference_clearance == [-Inf]
+    @test occursin("clearance -Inf mm", sprint(show, fails))
+    @test pointing_summary(s, beams; keepout = _SummaryKeepOut(0.1, false)).clearance == [0.2]
 
     # a subset's result, summarized against the full set's start (beams matched by name)
     keep = findall(b -> nif_bundle(b) != "31", quads)

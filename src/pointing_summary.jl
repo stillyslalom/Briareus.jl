@@ -10,9 +10,12 @@ A pointing (e.g. the beams of a re-pointing result) against reference beams, fro
 - `nbeams`; `shift_mean` and `shift_max` (mm): the mean and largest aim shift
   `|aim - reference aim|` over the beams, matched by name;
 - `power` (TW): the total setup power, and `cone_fraction`: the inner groups' share of it;
-- `clearance` and `reference_clearance` (mm): per keep-out, the least finite clearance
-  of the beams and of the reference beams (`Inf` with none), and `margin` (mm): the
-  clearance less the keep-out's `minimum` (negative: inside the keep-out);
+- `clearance` and `reference_clearance` (mm): per keep-out, the least clearance of the
+  beams and of the reference beams, leaving out `+Inf` (a beam the keep-out does not
+  apply to; `Inf` when every beam is such) but keeping `-Inf` (a beam the rule cannot
+  place, e.g. a [`CaptureKeepIn`](@ref) beam whose axis misses every capture part) and
+  `NaN`, which then are the least and show as such; and `margin` (mm): the clearance
+  less the keep-out's `minimum` (negative: inside the keep-out);
 - `clipped` and `missed`: [`clipped_fraction`](@ref) and [`missed_fraction`](@ref) of
   the beams in the scenario;
 - with a `drive_reference`: `drive_ratio`, the capsule drive's mean over the
@@ -77,7 +80,9 @@ function pointing_summary(s::Scenario, beams::AbstractVector{<:Beam};
     P = sum(b -> b.power, bs; init = 0.0)
     Pin = sum(b -> b.power, (b for b in bs if b.group in inner); init = 0.0)
     ks = keepout === nothing ? Any[] : keepout isa Union{Tuple,AbstractVector} ? collect(Any, keepout) : Any[keepout]
-    least(k, b) = minimum(filter(isfinite, keepout_clearance(k, b)); init = Inf)
+    # +Inf (a beam the keep-out does not apply to) left out; -Inf (a capture failure) and
+    # NaN kept, so that they show (`minimum` propagates NaN)
+    least(k, b) = minimum(filter(!=(Inf), keepout_clearance(k, b)); init = Inf)
     refb = [_value_beam(ref[b.name]) for b in bs]
     c = Float64[least(k, bs) for k in ks]
     cref = Float64[least(k, refb) for k in ks]
