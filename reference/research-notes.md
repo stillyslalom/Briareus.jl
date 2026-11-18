@@ -11226,6 +11226,94 @@ part 4, and `reference/litreview/bubble_drivers.md`): `weight` (a function of th
 beam multiplying its deposited power; 0 leaves it out) gives the outer cones' or a
 picket's fluence map on the same machinery, at one more deposit per evaluation.
 
+**Keep-outs and the light on parts as constraints** (roadmap items 35 and 36 joined).
+`clearance_floor(keepout; minimum = keepout.minimum, scale = 1 mm)` holds each beam's
+`keepout_clearance` at or above the minimum: one component per beam of the evaluation,
+labeled by its name (a `Constraint`'s labels may now be a function of the evaluation,
+so the components follow the beams and one constraint serves a stage on quads and one
+on their beams). Any keep-out with a `keepout_clearance` method and a `minimum` field
+takes part: `ApertureKeepOut`, `SphereKeepOut`, `HardwareKeepOut`, `CaptureKeepIn`,
+`IncidenceRule`, `Omega1KeepOut`. A beam the keep-out does not apply to (`Inf`) has the
+violation −∞: its term and multiplier stay zero. The scale of 1 mm puts the default
+`feasibility = 1e-3` at 1 µm, finer than the keep-outs' agreement with `clearance`
+(engineering default). `light_ceiling` and `light_floor` hold `light_fraction =
+power_fraction + clipped_fraction` (all the light on named parts, from either side, a
+fraction of the delivered power) at most or at least a limit, given or taken from a
+reference evaluation; the scale `max(limit, 1e-3)` is relative above 1e-3 of the
+delivered power and absolute below it, so a ceiling at zero is met to 1e-6 of the
+delivered power (engineering default; a reference's light on a part meant to stay dark
+is often 1e-13 or 0, where a relative scale fails). On the tutorial's hohlraum the
+nominal light on the caps is 3.8e-13 of the delivered power for the 48 quads and 8e-9
+for the design within limits whose worst case reaches 58 µm into the caps: the nominal
+light misses what the worst case sees, so there the keep-out is the binding limit.
+
+Per beam or the smallest clearance? The tutorial's first stage (46 quads, the inner
+ones held, a power scale per cone in [0.8, 1], the four gates, the wall ceiling, the
+cap keep-out at 10 µm and the light on the caps at most 1e-5), with the keep-out as the
+per-beam vector, as the minimum over the beams (one component, kinked where the closest
+beam changes) and as a log-sum-exp soft minimum with τ = 5 µm (smooth, below the
+minimum by up to τ ln 46 = 19 µm); start 1 is the tutorial's, start 2 a random point in
+the box; budget 3,000 evaluations:
+
+| keep-out as | start | evaluations (outer) | drive (× 48 quads) | least clearance (mm) | departure / gate, l = 1–4 |
+|---|---|---|---|---|---|
+| per beam | 1 | 885 (7) | 0.95771 | 0.0099 | 1.000 1.000 0.980 1.000 |
+| per beam | 2 | 745 (7) | 0.95774 | 0.0107 | 0.999 1.000 1.000 1.000 |
+| minimum | 1 | 807 (7) | 0.95776 | 0.0100 | 0.998 1.000 0.990 1.000 |
+| minimum | 2 | 1,154 (7) | 0.95779 | 0.0101 | 1.000 1.000 1.000 1.000 |
+| soft minimum, τ = 5 µm (earlier stopping rule) | 1 | 715 (4) | 0.95778 | 0.0186 | 0.998 1.000 0.991 1.000 |
+
+Every run ends `:box` with no limit violated. Per beam and minimum reach the same design
+(drive within 1e-4) at no consistent difference in cost (885 and 745 against 807 and
+1,154 evaluations); the soft minimum keeps 8.6 µm more clearance than asked, its bias.
+In the per-beam polish of the second stage (184 beams, 200 evaluations) the keep-out is
+not binding (21 µm) and the two forms give the same design to five digits.
+
+Chosen: per beam, on grounds other than cost, which does not separate them here. Each
+component is as smooth as its beam's clearance and carries its own multiplier (zero
+for beams clear of the minimum, which then add nothing to the inner problem), so the
+report names the beams that bind; the soft minimum's bias wastes clearance, and the
+hard minimum is a nonsmooth constraint that the augmented Lagrangian's convergence
+theory does not cover. Confidence: one public case, two starts. A constraint of more than eight components displays
+as its worst row and a count by status (a per-beam keep-out on 184 beams printed 184
+rows). Tests (`test/constraints.jl`): the values against the quantities (the light
+against `component_power`, 1e-12), gradients against central differences (1e-6), and
+with one free parameter (the 50° cone's aim, pulled into the caps by the objective) a
+constrained run ends with the keep-out, and separately the light ceiling, active at the
+aim where the constraint reaches its limit, found by bisection, to 1e-5 mm.
+
+**Stages: two calls, not a schedule** (roadmap item 34). The tutorial's study written
+both ways, quads re-pointed, then each beam polished: (a) two calls of
+`optimize_pointing`, the second on `remake(scenario; parameterization =
+GroupPointing(nif_beams(result.beams); by = :beam, relative = true), deposition_kw)`
+with the same constraints; (b) a schedule of stages (a parameterization built from the
+previous beams, a box, budgets) run by one function that keeps each scenario and
+result. (b) needs every stage-dependent piece as a closure of the previous beams (the
+parameterization, the held set re-derived from the beams), the deposition options
+anyway (a scenario does not record them) and a pair (scenario, result) per stage,
+since `evaluate`, `check_constraints` and `pointing_summary` take the scenario; it
+saves no line of the tutorial's case and hides the check between the stages that
+matters most (below). Chosen: (a), no new API; the change it needed was constraints
+whose components follow the beams. Not built, so not measured: multipliers carried from
+one stage to the next.
+
+The step from quads to beams changes the deposition model, not only the parameters:
+each beam enters through its own port at f/20.7 instead of the quad's f/7.9 cone. On
+the tutorial's case the first stage's aims, deposited per beam, move the drive from
+0.9577 to 0.9568 of the 48 quads' and mode 1 to 1.016 times its gate; the polish (240
+free parameters, ±0.1 mm per beam, 120 evaluations, ended by the budget) brings it
+back within the gate at a drive of 0.9584, every limit met, the clearance check's worst
+case 21 µm from the caps. Under the earlier stopping rule the same polish ended after
+one iteration and three evaluations, at the first inner tolerance (1e-3 on the
+projected gradient, met at once where each of 240 parameters moves little of the
+drive), with the drive unchanged (0.95685 against 0.95688 at its start): found here
+independently of the next section, whose fix (320335b) the tutorial runs on; with a
+stopping rule that also accepted an inner run ended by its value tolerance (the rule
+tried here first) the polish converged in 97 evaluations to the same drive (0.95842)
+and the section's earlier run kept its 765 evaluations bit for bit. The tutorial as a
+script on 8 threads: 249 s, of which the study adds about 100 s (141 s before the
+convergence fix and the study).
+
 ## Constrained re-pointing: convergence on a feasible, active start (2026-11-18) *measured*
 
 The augmented Lagrangian of `optimize_pointing(...; constraints)` (§ Constrained
