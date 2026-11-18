@@ -170,6 +170,7 @@ end
         n = _inf_body_instances(optimize_pointing)
         nc = _inf_body_instances(Briareus._constrained_pointing)
         nl = _inf_body_instances(Briareus._lbfgsb)
+        npr = _inf_body_instances(Briareus._pointing_result)
         cr = optimize_pointing(s, dobj; x0, iterations = 1, evaluations = 3, callback = st -> false,
                                constraints = [Constraint(:power, ev -> sum(b.power for b in ev.beams); upper = 400.0), clf])
         # a warm restart from a result, under a time limit
@@ -178,6 +179,7 @@ end
         @test _inf_body_instances(optimize_pointing) == n
         @test _inf_body_instances(Briareus._constrained_pointing) == nc
         @test _inf_body_instances(Briareus._lbfgsb) == nl
+        @test _inf_body_instances(Briareus._pointing_result) == npr
 
         # a placement sweep: new design and callback types reuse the compiled sweep
         foilt = Target([backlighter_foil((90.0, 0.0); standoff = 5.0, n = 2)])

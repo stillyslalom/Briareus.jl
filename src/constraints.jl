@@ -257,7 +257,30 @@ Base.@nospecializeinfer function _constrained_pointing(
     stopped = last.stopped
     return _pointing_result(s, x, Float64(ForwardDiff.value(objective(evx))), f0, ni, ne,
                             stopped, reason, last.result, lower, upper; constraints = rows,
-                            outer = k, state)
+                            outer = k, state, objective,
+                            lagrangian = _Lagrangian(objective, work, _split_multipliers(λ, lens)))
+end
+
+# The Lagrangian f + Σᵢ λᵢ gᵢ of an objective and the constraints' normalized violations,
+# for the bound sensitivities of a result.
+struct _Lagrangian{O,C<:Tuple,L<:Tuple}
+    objective::O
+    constraints::C
+    λ::L
+end
+
+function (a::_Lagrangian)(ev::Evaluation)
+    J = a.objective(ev)
+    terms = map((c, λ) -> _lagrangian_term(_violations(c, ev), λ), a.constraints, a.λ)
+    return J + sum(terms)
+end
+
+function _lagrangian_term(g::AbstractVector{T}, λ::Vector{Float64}) where {T}
+    s = zero(T)
+    for i in eachindex(g, λ)
+        s += λ[i] * g[i]
+    end
+    return s
 end
 
 # The working constraints with each exact ceiling whose exact value at `ev` exceeds its

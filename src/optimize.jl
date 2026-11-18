@@ -1219,7 +1219,17 @@ Base.@nospecializeinfer function optimize_pointing(
     r = _lbfgsb(s, objective, x0, xs, lower, upper; iterations, evaluations, show_trace, g_tol,
                 callback, deadline)
     return _pointing_result(s, r.x, r.value, r.initial_value, r.iterations, r.evaluations,
-                            r.stopped, r.reason, r.result, lower, upper)
+                            r.stopped, r.reason, r.result, lower, upper; objective)
+end
+
+# The gradient of `F(evaluate(s, x))` at `x`, through the optimizer's dual tag and chunks
+# (bitwise ForwardDiff's chunk-mode gradient; see `_pointing_gradient!`).
+Base.@nospecializeinfer function _scenario_gradient(s::Scenario, @nospecialize(F), x::Vector{Float64})
+    J(x) = F(evaluate(s, x))
+    cfg = ForwardDiff.GradientConfig(J, x, ForwardDiff.Chunk(min(length(x), 12)),
+                                     ForwardDiff.Tag(_PointingTag(), Float64))
+    out = ForwardDiff.DiffResults.GradientResult(similar(x))
+    return copy(ForwardDiff.DiffResults.gradient(_pointing_gradient!(out, J, x, cfg)))
 end
 
 # One L-BFGS-B run of `objective(evaluate(s, x))` in the box from `xs` (`x0` sizes the
@@ -1349,8 +1359,22 @@ constraint component in the order of `constraints`), the penalty parameter `μ` 
 ceiling `μmax`, the inner runs' tolerance `tol`, the last infeasibility–complementarity
 measure `Vold` and the working limits `limits` (an exact ceiling's lowered stand-in
 limit; see [`irradiance_ceiling`](@ref)); `nothing` without constraints. A run ended by
-its budget or callback keeps the state of the interrupted inner problem, so that the
-restart resumes it.
+its budget, time limit or callback keeps the state of the interrupted inner problem,
+so that the restart resumes it.
+
+**Bound sensitivities.** For each parameter in `at_bounds` (same order),
+`bound_gradient` holds the objective's derivative `∂f/∂xᵢ` at `x` and
+`bound_sensitivity` the Lagrangian's, `∂L/∂xᵢ` with `L = f + Σⱼ λⱼ gⱼ` (the
+multipliers of `constraints` on the normalized violations; without constraints the
+two are equal). By the envelope theorem `bound_sensitivity` is the derivative of the
+optimal objective with respect to the bound's value, the active set held: positive at
+a lower bound and negative at an upper bound when the run has converged, so widening
+the box by δ in that parameter (lowering a lower bound, raising an upper one) lowers
+the optimum by about `|bound_sensitivity| δ` (to first order, in the objective's units
+per parameter unit). `bound_gradient` is what the objective alone would gain, before
+the constraints take their share. Both cost one gradient each after the run (not
+counted in `evaluations`), only when a parameter is at a bound; they are meaningful at
+convergence.
 """
 struct PointingResult{B}
     x::Vector{Float64}
@@ -1370,6 +1394,8 @@ struct PointingResult{B}
     outcome::Symbol
     outer::Int
     state::Union{Nothing,NamedTuple}
+    bound_gradient::Vector{Float64}
+    bound_sensitivity::Vector{Float64}
 end
 
 _names(p::GroupPointing, n) = parameter_names(p)
@@ -1384,10 +1410,10 @@ function _bound_side(x, lo, hi)
     return x - lo <= tol ? -1 : hi - x <= tol ? 1 : 0
 end
 
-function _pointing_result(s::Scenario, x, value, initial_value, iterations, evaluations,
-                          stopped, reason, result, lower, upper;
-                          constraints::Vector{ConstraintRow} = ConstraintRow[], outer::Int = 0,
-                          @nospecialize(state = nothing))
+Base.@nospecializeinfer function _pointing_result(
+        s::Scenario, x, value, initial_value, iterations, evaluations, stopped, reason, result,
+        lower, upper; constraints::Vector{ConstraintRow} = ConstraintRow[], outer::Int = 0,
+        @nospecialize(state = nothing), @nospecialize(objective = nothing), @nospecialize(lagrangian = nothing))
     x = collect(Float64, x)
     names = _names(s.param, length(x))
     side = map(_bound_side, x, lower, upper)
@@ -1396,10 +1422,17 @@ function _pointing_result(s::Scenario, x, value, initial_value, iterations, eval
     outcome = reason !== :converged ? reason :
               met ? (isempty(atb) ? :interior : :box) :
               (isempty(atb) ? :infeasible : :infeasible_box)
+    # the derivatives at the bound parameters (one gradient each, only when there are any)
+    gf, gL = Float64[], Float64[]
+    if !isempty(atb) && objective !== nothing
+        at = findall(!=(0), side)
+        gf = _scenario_gradient(s, objective, x)[at]
+        gL = lagrangian === nothing ? copy(gf) : _scenario_gradient(s, lagrangian, x)[at]
+    end
     return PointingResult(x, apply(s.param, x), Float64(value), Float64(initial_value),
                           Int(iterations), Int(evaluations), stopped, reason, result, names,
                           collect(Float64, lower), collect(Float64, upper), atb,
-                          constraints, outcome, outer, state)
+                          constraints, outcome, outer, state, gf, gL)
 end
 
 function Base.show(io::IO, r::PointingResult)
@@ -1428,11 +1461,13 @@ function Base.show(io::IO, ::MIME"text/plain", r::PointingResult)
     else
         print(io, "; at a bound (widen the box if the objective should set them):")
         w = maximum(length, r.at_bounds)
-        for n in r.at_bounds
+        for (j, n) in enumerate(r.at_bounds)
             i = findfirst(==(n), r.names)
             lo = _bound_side(r.x[i], r.lower[i], r.upper[i]) < 0
             @printf(io, "\n    %s = %.6g  (%s bound; box %.6g to %.6g)", rpad(n, w), r.x[i],
                     lo ? "lower" : "upper", r.lower[i], r.upper[i])
+            j <= length(r.bound_sensitivity) &&
+                @printf(io, "  d objective/d bound %.3g", r.bound_sensitivity[j])
         end
     end
     isempty(r.constraints) && return nothing

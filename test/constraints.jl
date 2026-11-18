@@ -124,6 +124,31 @@
         plain = optimize_pointing(s, f; x0 = P0, lower = lo, upper = hi)
         @test plain.outcome === :interior && isempty(plain.constraints) && plain.outer == 0
         @test sum(plain.x) > cap
+        @test isempty(plain.bound_sensitivity) && isempty(plain.bound_gradient)
+
+        # bound sensitivities against central differences of the optimum in the bound (the
+        # optimal value of a quadratic program with a fixed active set is quadratic in the
+        # bound, so the difference is exact up to the runs' convergence): one power's upper
+        # bound below its optimum, without and with the constraints
+        i = argmax(plain.x)
+        δ = 0.05
+        for (c, xref, fz) in (((), plain.x, 1e-12), (cs2, res.x, 1e-8))
+            u = xref[i] - 0.5
+            opt(u) = optimize_pointing(s, f; x0 = P0, lower = lo, upper = [k == i ? u : 20.0 for k in 1:48],
+                                       constraints = c, feasibility = fz)
+            r0 = opt(u)
+            j = findfirst(==(r0.names[i]), r0.at_bounds)
+            @test r0.outcome === :box && r0.at_bounds == [r0.names[i]]
+            fd = (opt(u + δ).value - opt(u - δ).value) / 2δ
+            @test r0.bound_sensitivity[j] < 0
+            @test r0.bound_sensitivity[j] ≈ fd rtol = 1e-4
+            # the objective's own derivative, against its central difference at the result
+            fx(h) = f(evaluate(s, r0.x .+ h .* (1:48 .== i)))
+            @test r0.bound_gradient[j] ≈ (fx(1e-4) - fx(-1e-4)) / 2e-4 rtol = 1e-6
+            @test isempty(c) ? r0.bound_gradient == r0.bound_sensitivity :
+                  abs(r0.bound_gradient[j] - r0.bound_sensitivity[j]) > 1e-3 * abs(fd)
+            @test occursin("d objective/d bound", sprint(show, MIME"text/plain"(), r0))
+        end
     end
 
     # The dropped-bundle tutorial's design on a coarser wall mesh: bundle 11 freed, the
