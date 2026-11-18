@@ -408,27 +408,57 @@ function _sphere_clearance(k::SphereKeepOut, b::Beam)
     return best - k.transverse - k.focus * cone
 end
 
-_keepout_clearance(k::ApertureKeepOut, beams) = aperture_clearance(k, beams)
-_keepout_clearance(k::SphereKeepOut, beams) = sphere_clearance(k, beams)
+"""
+    keepout_clearance(keepout, beams) -> Vector
+    keepout_clearance(keepout, ev::Evaluation) -> Vector
 
-_keepout_penalty(::Nothing, beams) = 0.0
+Each beam's worst-case clearance (mm) from a keep-out, the quantity its penalty holds
+at or above the keep-out's `minimum`: [`aperture_clearance`](@ref) for an
+[`ApertureKeepOut`](@ref), [`sphere_clearance`](@ref) for a [`SphereKeepOut`](@ref);
+`Inf` for a beam the keep-out does not apply to. A pure function of the beams (of the
+evaluation's setup `beams` for an `Evaluation`), in their number type, so a constraint
+`keepout_clearance(keepout, ev) .≥ minimum` can be handed to an optimizer as it stands.
+"""
+keepout_clearance(k::ApertureKeepOut, beams::AbstractVector{<:Beam}) = aperture_clearance(k, beams)
+keepout_clearance(k::SphereKeepOut, beams::AbstractVector{<:Beam}) = sphere_clearance(k, beams)
+keepout_clearance(k, ev::Evaluation) = keepout_clearance(k, ev.beams)
+
+"""
+    keepout_penalty(keepout, beams) -> Real
+    keepout_penalty(keepout, ev::Evaluation) -> Real
+
+The penalty a keep-out adds to an objective: `weight × Σᵢ max(0, minimum − cᵢ)²` over
+the finite clearances `cᵢ = keepout_clearance(keepout, beams)`, with the keep-out's own
+`weight` and `minimum`; for a tuple or vector of keep-outs the sum of theirs, and 0 for
+`nothing`. It is what the `keepout` keyword of [`symmetry_objective`](@ref),
+[`asymmetry_objective`](@ref) and [`face_flux_objective`](@ref) adds, so a hand-written
+objective adds `keepout_penalty(keepout, ev)` to the same effect. In the beams' number
+type (ForwardDiff duals) and thread-safe. A keep-out of another type takes part through
+a `keepout_clearance` method and `weight` and `minimum` fields.
+"""
+keepout_penalty(::Nothing, beams::AbstractVector{<:Beam}) = 0.0
+keepout_penalty(k, ev::Evaluation) = keepout_penalty(k, ev.beams)
 
 # Several keep-outs (a tuple or vector) add their penalties. A tuple is unrolled with
 # `map`: a generator over a heterogeneous tuple took Julia 1.13's inference 27 s.
-_keepout_penalty(ks::Tuple, beams) = sum(map(k -> _keepout_penalty(k, beams), ks); init = 0.0)
+keepout_penalty(ks::Tuple, beams::AbstractVector{<:Beam}) =
+    sum(map(k -> keepout_penalty(k, beams), ks); init = 0.0)
 
-function _keepout_penalty(ks::AbstractVector, beams)
+function keepout_penalty(ks::AbstractVector, beams::AbstractVector{<:Beam})
     J = 0.0
     for k in ks
-        J += _keepout_penalty(k, beams)
+        J += keepout_penalty(k, beams)
     end
     return J
 end
 
-function _keepout_penalty(k::Union{ApertureKeepOut,SphereKeepOut}, beams)
-    c = _keepout_clearance(k, beams)
+function keepout_penalty(k, beams::AbstractVector{<:Beam})
+    c = keepout_clearance(k, beams)
     # in the beams' number type also when no clearance is finite (a Float64 0.0 beside
     # dual penalties made the sum over keep-outs a runtime dispatch)
     J = k.weight * sum(max(zero(ci), k.minimum - ci)^2 for ci in c if isfinite(ci); init = 0.0)
     return convert(eltype(c), J)
 end
+
+# The name the objectives call (their constructors are edited separately).
+const _keepout_penalty = keepout_penalty

@@ -52,6 +52,7 @@ export PulseShape, pulse_energy, with_pulses, drive_history, energy_budget, cone
 export enclosed_radius, envelope_radius, focal_profile, enclosed_fraction, with_axes,
        BeamEnvelope, envelope_distance, ClearanceRow, ClearanceReport, clearance,
        ApertureKeepOut, aperture_clearance, SphereKeepOut, sphere_clearance,
+       keepout_clearance, keepout_penalty, direct_fraction,
        beam_component_power, violations, min_clearance, write_clearance_csv,
        SpotWing, PowerLawWing, UniformScatter, nif_wings, DEFAULT_CLEARANCE_THRESHOLDS
 export LaserPlasmaModel, apply_lpi, Backscatter, CalibratedTransfer, linear_transfer,
@@ -151,6 +152,7 @@ include("uncertainty.jl")
 include("implosion.jl")
 include("capsule_drive.jl")
 include("talis.jl")
+include("design_rules.jl")
 include("lpi.jl")
 include("bubble.jl")
 include("io.jl")

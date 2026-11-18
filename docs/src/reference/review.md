@@ -23,6 +23,6 @@ fitted to published foil data ([`kshell_ce`](@ref)) to the photons at the detect
 
 ```@autodocs
 Modules = [Briareus]
-Pages = ["src/clearance.jl", "src/backlighter.jl", "src/backlighter_signal.jl", "src/keepout.jl", "src/unconverted.jl", "src/talis.jl"]
+Pages = ["src/clearance.jl", "src/backlighter.jl", "src/backlighter_signal.jl", "src/keepout.jl", "src/unconverted.jl", "src/talis.jl", "src/design_rules.jl"]
 Private = false
 ```
