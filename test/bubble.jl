@@ -67,6 +67,22 @@
     @test ridge_fraction(mc, 5.8 + mc.ridge_rise) == 1
     @test ridge_fraction(BubbleAbsorption(radius = 2.88, collision = Inf), 1e3) == 0
 
+    # a new picket ratio by `remake`: the constructor's speed and collision time, the
+    # stored model when unchanged, a given or disabled collision kept as asked, and
+    # derivatives in E (speed ∝ E^0.2, t_c − turn_on ∝ E^-0.16)
+    mh = BubbleAbsorption(radius = 3.2, turn_on = 0.4, capsule_radius = 1.135, picket_ratio = 1.1)
+    mr = remake(mh; picket_ratio = 1.23)
+    mn = BubbleAbsorption(radius = 3.2, turn_on = 0.4, capsule_radius = 1.135, picket_ratio = 1.23)
+    @test isapprox(mr.collision, mn.collision; rtol = 1e-14) && isapprox(bubble_speed(mr), bubble_speed(mn); rtol = 1e-14)
+    @test remake(mh).collision === mh.collision && remake(mh; picket_ratio = 1.1).collision === mh.collision
+    @test remake(mh; picket_ratio = 1.23, collision = 6.5).collision == 6.5
+    @test remake(BubbleAbsorption(radius = 3.2, collision = Inf); picket_ratio = 2.0).collision == Inf
+    @test_throws ArgumentError remake(mh; picket_ratio = 0.0)
+    dE = ForwardDiff.derivative(E -> bubble_speed(remake(mh; picket_ratio = E)), 1.1)
+    @test dE ≈ 0.2 * bubble_speed(mh) / 1.1 rtol = 1e-12
+    dc = ForwardDiff.derivative(E -> remake(mh; picket_ratio = E).collision, 1.1)
+    @test dc ≈ -0.16 * (mh.collision - 0.4) / 1.1 rtol = 1e-12
+
     # the clipped fraction against a closed form: a Gaussian spot (1/e radius a) on a
     # vertical, nearly collimated beam keeps exp(-ρ²/a²) of its power outside radius ρ
     b = Beam("v"; theta = 0.0, phi = 0.0, spot = SuperGaussianSpot(0.5), fnumber = 1e6)

@@ -28,9 +28,11 @@ tip has moved
     x_bal(t) = v_b · max(0, t − t_L),   t_L = turn_on + delay,
     v_b = speed · E^0.2 · (fill / 0.3)^-0.2
 
-in from the initial wall `radius` R (mm, ns; E = `picket_ratio`, the outer picket
-fluence over the reference design's, dimensionless; `fill` the gas fill in mg/cc) while
-it is ballistic. It stagnates smoothly at the depth `stagnation` ``x_{max}``
+in from the initial wall `radius` R (mm, ns; E = `picket_ratio`, the outer cones' picket
+fluence over that of the calibration platform, Izumi 2021's HDC basecamp, dimensionless;
+`fill` the gas fill in mg/cc) while it is ballistic. E is set by hand by default;
+[`picket_ratio`](@ref) computes it from a pointing's own picket fluence on the wall
+([`picket_fluence`](@ref)), for `remake(m; picket_ratio)` (opt-in). It stagnates smoothly at the depth `stagnation` ``x_{max}``
 ([`bubble_depth`](@ref)): ballistic up to ``x_{max} - w`` (w = `stagnation_width`), then
 ``x_{max} - w e^{-(x_{bal} - x_{max} + w)/w}``. In the plane `z_b` of the outer
 footprint, at the axial position where the footprint cones' beam axes reach the wall,
@@ -65,8 +67,8 @@ evaluations, the beam-error sensitivities ([`mode_sensitivity`](@ref) and the re
 
 The edge of the bubble is smoothed over `edge` (mm, a logistic step), which keeps `f`
 smooth in time, in the bubble depth and in the beams' pointing. Everything is generic in
-the number type: `speed`, `opacity`, `stagnation` and `collision` (and the beams) can
-carry ForwardDiff duals ([`remake`](@ref)), so the model enters
+the number type: `speed`, `opacity`, `stagnation`, `collision` and `picket_ratio` (and
+the beams) can carry ForwardDiff duals ([`remake`](@ref)), so the model enters
 [`drive_history`](@ref)`(...; lpi)`, `Scenario(...; lpi)` and calibrations. Compose with
 CBET as `lpi = (cbet, bubble)` (transfer first, then the bubble takes its share of what
 the inner beams carry).
@@ -128,11 +130,12 @@ the data are [`izumi2021_bubble`](@ref) and [`izumi2021_absorption`](@ref)):
 """
 struct BubbleAbsorption{S<:Real} <: LaserPlasmaModel
     radius::Float64
+    turn_on::Float64
     launch::Float64
     speed::S
     opacity::S
     fill::Float64
-    picket_ratio::Float64
+    picket_ratio::S
     density_exponent::Float64
     depth_exponent::Float64
     x_ref::Float64
@@ -182,9 +185,9 @@ function BubbleAbsorption(; radius::Real, turn_on::Real = 0.0, delay::Real = _BU
     0 < ridge < 1 && ridge_width > 0 && ridge_rise > 0 ||
         throw(ArgumentError("need 0 < ridge < 1, ridge_width > 0, ridge_rise > 0"))
     nr >= 1 && nangle >= 1 && 1 <= ncone <= 16 || throw(ArgumentError("bad sampling counts"))
-    s, τ, xs, tc = promote(speed, opacity, stagnation, collision)
-    return BubbleAbsorption(Float64(radius), Float64(turn_on + delay), s, τ, Float64(fill),
-                            Float64(picket_ratio), Float64(density_exponent), Float64(depth_exponent),
+    s, τ, xs, tc, E = promote(speed, opacity, stagnation, collision, picket_ratio)
+    return BubbleAbsorption(Float64(radius), Float64(turn_on), Float64(turn_on + delay), s, τ,
+                            Float64(fill), E, Float64(density_exponent), Float64(depth_exponent),
                             Float64(x_ref), xs, Float64(stagnation_width), tc, Float64(ridge),
                             Float64(ridge_width), Float64(ridge_rise), Symbol[inner...],
                             Symbol[footprint...], Symbol[ridge_components...], wall,
@@ -194,17 +197,32 @@ end
 
 """
     remake(m::BubbleAbsorption; speed = m.speed, opacity = m.opacity,
-           stagnation = m.stagnation, collision = m.collision)
+           stagnation = m.stagnation, collision, picket_ratio = m.picket_ratio)
 
-The model with new calibration parameters (e.g. ForwardDiff duals in a fit).
+The model with new calibration parameters (e.g. ForwardDiff duals in a fit), or a new
+picket fluence ratio E (`picket_ratio`, e.g. from [`picket_ratio`](@ref) for a
+re-pointed design). A new E carries the model's own picket dependence into the ridge
+stop as the constructor does, ``t_c`` − `turn_on` ∝ E^-0.16: `collision` defaults to
+`turn_on + (m.collision − turn_on)·(E/m.picket_ratio)^-0.16` (the stored value
+when E is unchanged, whether the constructor derived it or it was given; `Inf` stays
+`Inf`); pass `collision` to set it. Every argument may be a ForwardDiff dual.
 """
 function remake(m::BubbleAbsorption; speed = m.speed, opacity = m.opacity,
-                stagnation = m.stagnation, collision = m.collision)
-    s, τ, xs, tc = promote(speed, opacity, stagnation, collision)
-    return BubbleAbsorption(m.radius, m.launch, s, τ, m.fill, m.picket_ratio, m.density_exponent,
+                stagnation = m.stagnation, picket_ratio = m.picket_ratio,
+                collision = _rescaled_collision(m, picket_ratio))
+    s, τ, xs, tc, E = promote(speed, opacity, stagnation, collision, picket_ratio)
+    return BubbleAbsorption(m.radius, m.turn_on, m.launch, s, τ, m.fill, E, m.density_exponent,
                             m.depth_exponent, m.x_ref, xs, m.stagnation_width, tc, m.ridge,
                             m.ridge_width, m.ridge_rise, m.inner, m.footprint, m.ridge_components,
                             m.wall, m.footprint_z, m.edge, m.nr, m.nangle, m.ncone)
+end
+
+# The collision time at picket ratio E, scaled from the model's own (t_c − turn_on ∝ E^-0.16);
+# the stored value itself when E is the model's (bit for bit) or the ridge stop is off.
+function _rescaled_collision(m::BubbleAbsorption, E)
+    E > 0 || throw(ArgumentError("picket_ratio must be positive"))
+    (E === m.picket_ratio || isinf(m.collision)) && return m.collision + zero(E)
+    return m.turn_on + (m.collision - m.turn_on) * (E / m.picket_ratio)^-0.16
 end
 
 function Base.show(io::IO, m::BubbleAbsorption)

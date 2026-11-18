@@ -69,6 +69,7 @@ end
     quads = nif_quads(power = 8.0)
     p = GroupPointing(quads; fields = (:z, :r, :power))
     x0 = initial_parameters(p)
+    xo = parameters(p; outer44 = (z = 5.20,), outer50 = (z = 5.01,))   # outer quads into the holes
     s = Scenario(t, p; observe = :capsule, viewfactor_kw = (; closed = true))
     keepout = (ApertureKeepOut(t), SphereKeepOut(t))
     objectives = (symmetry_objective(; drive = 1.0, keepout), asymmetry_objective(; keepout),
@@ -229,6 +230,15 @@ end
             @test (@inferred dobj(ev)) isa T
             @test (@inferred aug(ev)) isa T
         end
+        # the outer picket fluence and the bubble's picket ratio from it (outer quads aimed
+        # into the entrance holes)
+        for x in (xo, _inf_duals(xo))
+            T = eltype(x)
+            fl = @inferred picket_fluence(s.deposition, apply(p, x))
+            @test fl isa PicketFluence{T} && (@inferred picket_ratio(fl, fl; at = 1.1)) isa T
+            @test (@inferred remake(BubbleAbsorption(radius = 2.875); picket_ratio = fl.mean / fl.mean)) isa
+                  BubbleAbsorption{T}
+        end
         # pointing on the capsule sphere (polar direct drive), with split quads
         for x in (xs0, _inf_duals(xs0))
             T = eltype(x)
@@ -305,6 +315,11 @@ end
                 @test _inf_jet_clean(JET.report_call, gatec.f, ev)
                 @test _inf_jet_clean(JET.report_call, dobj, ev)
                 @test _inf_jet_clean(JET.report_call, aug, ev)
+            end
+            # the outer picket fluence: no dispatch (from 1.11, as the deposition), no errors
+            for x in (xo, _inf_duals(xo))
+                VERSION >= v"1.11" && @test _inf_jet_clean(JET.report_opt, picket_fluence, s.deposition, apply(p, x))
+                @test _inf_jet_clean(JET.report_call, picket_fluence, s.deposition, apply(p, x))
             end
             # spherical pointing fields: no dispatch (from 1.11, as the deposition checks
             # above), no possible errors

@@ -10654,6 +10654,137 @@ Izumi 2023, Ralph 2021; **H** unless noted):
   damage thresholds scale with peak intensity; the bubble does not on the published
   data).
 
+### 5. The bubble's speed from the pointing's picket fluence (item 10)
+
+`picket_fluence`, `picket_ratio`, `basecamp_picket_fluence` (`src/picket_fluence.jl`,
+`test/picket_fluence.jl`) and `remake(bubble; picket_ratio)` close the link of §4 as an
+opt-in: E, `BubbleAbsorption`'s `picket_ratio`, from a pointing's own outer picket
+fluence on the wall. *Derived*: a link built on the published definitions and exponents,
+not a facility criterion; no default, exponent or calibrated constant changed, and no
+new constant was fitted.
+
+**Definition.** F is the deposition of the outer beams (44.5° and 50°) at their picket
+energies (pulse integrated over a window, here the first ns after the outer turn-on)
+divided by each wall element's area (kJ/mm²; ×1e5 → J/cm²). The summary the ratio reads
+is the energy-weighted mean F̄ = ∫F² dA / ∫F dA = E/A_eff, with A_eff = (∫F dA)²/∫F² dA
+the footprint's effective area. Which papers' definition (**H** for the definitions,
+`bubble_drivers.md` §2; **L** that F̄ is their computed counterpart):
+
+| Source | Fluence as published | F̄ reproduces |
+|---|---|---|
+| Ralph 2018 (speed ∝ I^0.36) | outer picket energy (FWHM, net of backscatter) over the outer phase-plate spot area | one isolated spot: its energy over its effective area (flat top: E/A exactly) |
+| Callahan 2018 (size ∝ (E/A)^0.5) | outer picket energy over the one-side outer spot area, 53 mm² (all of one side's outer beams) | a footprint of many spots: energy over the footprint's effective area |
+| Izumi 2021 (speed ∝ E^0.2) | picket fluence relative to the basecamp's; −27 % from quad and cone splitting at the same energy | the overlap of spots on the wall: k coincident spots k× one, separated spots 1× |
+
+Not chosen: the peak over elements (one element, mesh-dependent: the dz −0.5 mm variant
+below has a peak ratio 1.126 at h 0.4 mm and 1.143 at h 0.2 mm, where F̄'s ratio moves
+1.1629 → 1.1499), and the mean over the area above half the peak (inherits the peak's
+threshold, and is not smooth in the pointing). F̄ is an integral: smooth in the aims
+(ForwardDiff through the pointing, checked against central differences to 1e-5), and
+its mesh error is O(h²).
+
+**Checks** (`test/picket_fluence.jl`; flat plate, normal incidence, collimated beams,
+elements 0.04 mm, 0.06 mm for the pair):
+- one spot of energy 3 kJ: F̄ = 2^(−2/n) F₀ with F₀ = E/(π a b Γ(1 + 2/n)): Gaussian
+  (a = 0.5 mm) −8.9e-4 relative, the element-average estimate h²/(6a²) being −1.1e-3;
+  super-Gaussian (0.6 × 0.4 mm, n 4.5) −1.7e-3; both converge as h² (n = 50/100/200 cells:
+  −3.6e-3/−8.9e-4/−2.2e-4 for the Gaussian);
+- two Gaussian spots a distance d apart: F̄ = (1 + e^(−d²/2a²)) × one spot's: 2 exactly
+  when they coincide, 1.6071 against 1.6065 at d = a, 1.1359 against 1.1353 at d = 2a,
+  1.000004 at d = 5a;
+- a 50° quad (four beams, `nif_beams`) on the basecamp's cylinder (h 0.2 mm), split
+  tangentially by ±s per beam pair (`hybride_mock_pointing`'s rule): F̄ falls to 0.728 of
+  the unsplit quad's at s = 0.25 mm, 0.549 at 0.5, 0.521 at 0.75 (pairs 1.5 mm apart,
+  toward half), with the energy on the wall unchanged to 3e-4. Izumi 2021's split shot
+  lost 27 % of its wall fluence; a 0.5 mm separation of the pairs (Kritcher 2021: 450 µm
+  on HYBRID-E) gives the same −27 % on this geometry (**L**: the split geometry of Izumi's
+  shot, N180117, is not published, and it split the cones as well).
+
+**Mesh** (F̄ on the hohlraum alone, separate from the radiation mesh; kJ/mm²):
+
+| h (mm) | basecamp, 26 kJ | N221204 mock pointing, 43.04 kJ | E = ratio |
+|---|---|---|---|
+| 0.4 | 0.5040 | 0.5861 | 1.1629 |
+| 0.2 | 0.5204 | 0.5985 | 1.1502 |
+| 0.1 | 0.5250 | 0.6023 | 1.1472 |
+| h² extrapolation | 0.5265 | 0.6035 | 1.1462 |
+
+F̄ is 1.2 % (basecamp) and 0.8 % (N221204) low at h 0.2 mm, the ratio 0.35 % high; the
+ratios between pointings on the same mesh (table below) agree between h 0.2 and 0.1 to
+0.1–0.7 %. `basecamp_picket_fluence` defaults to h 0.2 mm (2–3 s on 8 threads; the
+N221204 operator for 192 beams takes 3 s at h 0.2, 10 s at h 0.1). The coarse radiation
+mesh of the benchmark (0.8 mm) is too coarse for the map.
+
+**The reference** (`basecamp_picket_fluence`). E = 1 is where the tip speed was fitted
+(Izumi 2021's basecamp, "Hohlraum dynamics calibrated to published data"): 5.75 × 10.13 mm
+Au hohlraum, 3.37 mm LEHs, 0.908 mm capsule, 128 outer beams unsplit at the package's
+proxy pointing for this hohlraum (z 5.20 / 5.01 mm on the axis, the pointing the opacity
+calibration used; the facility's is unpublished, **L**), 26 kJ of outer picket in the
+first ns after the turn-on (Izumi 2021 Fig. 3a read by eye, "The P2 swing", **L**). The
+picket energy is the least certain input of an absolute E: Young 2020's requested pulse
+for N170827, another 5.75 mm HDC shot (`young2020_pulses()`), carries 42.2 kJ of outer
+power in the first ns after its 0.25 ns turn-on; if the basecamp's picket were that, every
+absolute E would be 0.62 of the values below. Ratios between pointings do not depend on
+it.
+
+**N221204's own pointing against the hand-set value.** The delivered pulse split by
+DN24's cone fraction (`examples/n221204.jl`) gives 43.04 kJ of outer picket in
+0.4–1.4 ns (§3's 43.0), 1.655× the basecamp's 26 kJ. On the mock HYBRID-E pointing
+(quads split ±0.5 mm) F̄ gives **E = 1.147** (h 0.1 mm) against the hand-set 1.1 (1.5×
+energy by eye × 0.73 for split quads) and Pak's 1.23 (1.69 × 0.73): energy 1.655 × the
+larger hohlraum and its unsplit footprint 0.826 (E 1.368 with s = 0) × the mock's split
+0.839. The hand-set value is 4 % below the computed one, i.e. +0.8 % in tip speed.
+
+**Re-pointing the outer cones** (h 0.1 mm; F̄ relative to the mock pointing; energy on
+the wall; then the full model, coarse mesh 0.8 / 0.4, measured backscatter, E fixed at
+1.1 or following the pointing, `picket_ratio(design, mock; at = 1.1)`, through
+`remake(bubble; picket_ratio)` so the collision follows E^-0.16):
+
+| Outer cones (both, mirrored) | wall picket energy (kJ) | F̄ / mock | E linked | E 1.1: min (at) / upward zero / 8 ns | E linked: min / upward zero / 8 ns | crossing, linked − 1.1 |
+|---|---|---|---|---|---|---|
+| mock (z 5.7 / 5.8, s 0.5) | 43.04 | 1 | 1.1 | −0.181 (5.25) / 6.19 / +0.080 | the same (E = 1.1 exactly) | 0 |
+| z −0.5 mm | 43.03 | 0.9998 | 1.0998 | −0.152 (5.00) / 6.14 / +0.063 | identical to 0.0001 | +0.0002 ns |
+| z −0.3 mm | 43.04 | 1.0000 | 1.1000 | −0.161 (5.25) / 6.15 / +0.074 | identical | 0.0000 ns |
+| z +0.3 mm | 42.91 | 1.0015 | 1.1017 | −0.205 (5.25) / 6.25 / +0.076 | −0.205 / 6.25 / +0.076 | −0.001 ns |
+| z +0.5 mm (clips 2.8 % of the picket on the LEH) | 41.85 | 1.0097 | 1.1107 | −0.227 (5.25) / 6.42 / +0.067 | −0.226 / 6.41 / +0.067 | −0.013 ns |
+| unsplit quads (s 0) | 43.04 | 1.1923 | 1.3115 | −0.177 (5.25) / 6.19 / +0.080 | −0.160 / 6.00 / +0.082 | −0.189 ns |
+| s 0.225 (pairs 0.45 mm apart, Kritcher 2021) | 43.04 | 1.0587 | 1.1646 | −0.178 (5.25) / 6.19 / +0.080 | −0.173 / 6.15 / +0.081 | −0.041 ns |
+| s 0.75 | 42.78 | 1.0869 | 1.1955 | −0.187 (5.25) / 6.21 / +0.080 | −0.180 / 6.15 / +0.082 | −0.057 ns |
+| s 1.0 (not run: clips 8 % on the LEH) | 39.58 | 1.1784 | (1.296) | | | |
+| mock, absolute E (`basecamp_picket_fluence`, h 0.1) | 43.04 | | 1.1472 | | −0.177 (5.25) / 6.17 / +0.081 | −0.028 ns |
+| PRE 109 Fig. 10 | | | | −0.170 (5.60) / 6.67 / +0.095 | | |
+
+- **Moving both outer cones along z leaves the picket fluence alone** (F̄ within
+  −0.02 % to +1 % over ±0.5 mm: the two cones move together, so their overlap and the
+  quads' splits are unchanged and the incidence changes little), and the bubble link
+  moves the crossing by ≤ 0.013 ns. The same re-pointing moves the swing through the
+  geometry by −0.05 to +0.23 ns (crossing 6.14–6.42 ns, minimum −0.15 to −0.23): what
+  a z re-pointing does to the swing is the deposition's, not the bubble speed's.
+- **Overlap is what moves it.** Unsplitting the outer quads raises F̄ 19 % and moves the
+  crossing −0.19 ns through the bubble alone (the geometry alone −0.01 ns); a 0.45 mm
+  split +6 % (−0.04 ns); s 0.75 +9 % (−0.06 ns: the split pairs begin to land on the
+  neighboring quads' spots, so F̄ rises again past s ≈ 0.5, and at s 1.0 the beams clip
+  8 % on the entrance hole). Per unit of ln E the crossing moves −0.7 to −1.1 ns
+  (−0.12 to −0.20 ns for +20 % in F̄, against §4's −0.15 ns estimate); the minimum rises
+  by 0.005–0.017 and the 8 ns value by ≤ 0.002.
+- **The peak irradiance would have told a different story.** Over the same variants the
+  peak element fluence moves ≤ 0.02 % with z (h 0.1 mm) but +39 % without the split
+  (1.30 against 0.94 kJ/mm²), +19 % at s 0.225 and +20 % at s 0.75, i.e. 2–3× the
+  mean's relative change: a ceiling on the peak follows the overlap in direction, not in
+  size.
+- **The computed absolute E** (1.147) moves the crossing −0.03 ns from the hand-set
+  1.1; Fig. 10's crossing stays 0.5 ns later. The link cannot close the gap (it moves
+  E up, not down, on this pointing), and nothing here was fitted to Fig. 10.
+
+Confidence **L**: the exponents (E^0.2, E^-0.16) are published for pickets and splits on
+one platform; applying them to a fluence changed by re-pointing at fixed energy has no
+published test (Izumi 2021's split shot is the nearest, and it also split the cones);
+the pointing is the mock HYBRID-E rule; the absolute E rests on a proxy basecamp pointing
+and a picket energy read by eye (above). The relative numbers (F̄ between pointings on
+one mesh) are **derived**, converged to < 1 %. Not adopted: the example keeps the
+hand-set 1.1 (`bubble_energy`); adopting the link, absolute or relative, is the user's
+decision.
+
 ### What remains
 
 - A HYBRID-E bubble-tip or inner-spot history (unchanged: the one datum that separates
@@ -10661,6 +10792,9 @@ Izumi 2023, Ralph 2021; **H** unless noted):
 - A published thermal-band (~0.9 keV) LEH radius, or the warm lip's opacity, to replace
   the 0–0.13 mm bracket of §2.
 - The foot's +0.03–0.05 over 3–4 ns (mock pointing, DN24's foot cone fraction).
+- §5's link: whether the example reads E from the pointing (a decision), and a published
+  bubble speed at fixed picket energy with a different spot overlap or phase plate (the
+  datum that would test it).
 
 ## Re-pointing studies on the public API (2026-11-18)
 
