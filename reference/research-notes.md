@@ -11655,7 +11655,8 @@ pasted from a run):
 | `test/montecarlo.jl` | closed cube, uniform source: H = ηP/A/(1 − α) | 0.75/0.2 | 0.9/0.2 | the run gave 0.2006 above the old closed form, 0.9/0.75 − 1 = 0.2 within its Monte Carlo error |
 | `test/windows.jl` | the integrating-cavity η | 0.75 | 0.9 | the open/closed ratio is independent of η (it passed unchanged), but its tolerance `dev`, the solved wall flux's largest deviation from ηs/D, had grown by about 0.2 (the flux is 1.2 times the old closed form's): stale, not failing |
 | `test/energetics.jl` | `gold().conversion`, `uranium().conversion` | 0.75 | 0.9 | the decision |
-| `docs/literate/cad_hohlraum.jl` | "the gold converts 75%"; printed capsule H | 0.75; 0.84761 … 0.84548 TW/mm² | 0.9; ×1.2 | linear (constant albedos); relative rows unchanged |
+| `BriareusGUI/test/test_hohlraum.jl`, `test_halfraum.jl`, `test_profiles.jl` | the starter's wall against core `hohlraum`; a closed end's cap albedo | `gold(albedo = 0.85, conversion = 0.8)`; 0.85 | `gold()`; the part's own value | the decision (the GUI part is `gold()`) |
+| `docs/literate/cad_hohlraum.jl` | "the gold converts 75%"; printed capsule H, six models | 0.75; 0.84761 … 0.84548 TW/mm² | 0.9; 1.01714 … 1.01457 TW/mm² | ×1.2 within the 5-digit printing (linear: constant albedos); a₂/a₀, a₄/a₀ and the loss fractions unchanged digit for digit |
 
 Every other test passed unchanged: the hohlraum tests compare with closed forms,
 ratios or explicit materials, and the regression numbers of the energetics, N221204,
