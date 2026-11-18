@@ -1375,7 +1375,11 @@ the optimum by about `|bound_sensitivity| δ` (to first order, in the objective'
 per parameter unit). `bound_gradient` is what the objective alone would gain, before
 the constraints take their share. Both cost one gradient each after the run (not
 counted in `evaluations`), only when a parameter is at a bound; they are meaningful at
-convergence.
+convergence. Where the active constraints and bounds leave a flat family of designs
+(a drive objective under several active gates), the multipliers are not unique and the
+derivative can overstate what a wider box gains by an order of magnitude or more
+(research notes, "Constrained re-pointing"); a restart with `from` in the wider box
+measures it.
 """
 struct PointingResult{B}
     x::Vector{Float64}

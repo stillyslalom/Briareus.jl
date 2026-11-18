@@ -11416,10 +11416,15 @@ same trap there is open.
 **On the study** (scratch scripts, numbers not recorded here): one call with
 `exact = true` from the as-shot start, under a time limit, converged with every gate
 active and the exact peak at (just below) the reference's, two parameters held by the
-box, within the wall time its earlier norm-only run had been cut at plus 40 %; the
-bound sensitivities there remain to be checked against
-a run in a wider box (a degenerate case: five active constraints on a flat family of
-designs, where the multipliers are least determined).
+box, within the wall time its earlier norm-only run had been cut at plus 40 %. Its
+bound sensitivities failed their check there: restarts with `from` in the same box and
+in a box widened at the two bound parameters both left the bounds, and the widened
+box gained over an order of magnitude less than the first-order prediction. A
+degenerate case: five active constraints and two bounds on a flat family of designs
+(the same restart in the same box moved to another design of nearly equal drive), where
+the multipliers are not unique, so the Lagrangian's derivative is not the optimum's.
+The sensitivities hold where the active set pins the design (the quadratic program);
+on a drive objective under several gates, a restart in the wider box is the measure.
 
 ## Constrained re-pointing: convergence on a feasible, active start (2026-11-18) *measured*
 
