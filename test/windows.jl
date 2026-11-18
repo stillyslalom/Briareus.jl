@@ -197,7 +197,7 @@ end
     # is then a closed form independent of the view factors. Its error is that of the
     # uniform-flux idealization: the window's fractional effect 1 - ratio is misstated by
     # at most the largest relative deviation of the solved wall flux from H.
-    α, αc, η = 0.8, 0.3, 0.75
+    α, αc, η = 0.8, 0.3, 0.9                               # gold() and ablator()
     function cavity(wopen; ww, wt)
         t = hohlraum(; kw..., windows = [WallWindow(phi = 0, width = ww, height = wt, open = wopen)])
         src = elements(t, :wall, :cap_top, :cap_bottom)

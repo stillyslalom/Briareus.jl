@@ -21,10 +21,12 @@ t = hohlraum(; wall = d.material)
 ```
 
 The entries named after a constructor build exactly the material that constructor builds,
-field for field, so a model built from the library gives the same results. Package
-defaults with no source found (the capsule's conversion 0.3 in [`ablator`](@ref), the
-foil conversion 0.05 of [`foil`](@ref) and [`backlighter_foil`](@ref)) are not in the
-library.
+field for field, so a model built from the library gives the same results. The foil
+entries are the materials of [`foil_material`](@ref), the default of [`foil`](@ref) and
+[`backlighter_foil`](@ref): gold from published disk and sphere data, the mid-Z
+backlighter elements with the basis `:suggested` (a suggested range, not a
+measurement). Package defaults with no source found (the capsule's conversion 0.3 in
+[`ablator`](@ref)) are not in the library.
 
 ```@autodocs
 Modules = [Briareus]

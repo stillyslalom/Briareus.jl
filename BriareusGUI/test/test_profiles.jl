@@ -7,7 +7,7 @@
     ts = TargetSetup(resolution = :coarse)
     h = ts.mesh[].h
     i = part_index(ts, :hohlraum)
-    wall = gold(albedo = 0.85, conversion = 0.8)
+    wall = gold()
     core(prof) = hohlraum(; profile = prof, leh_radius = 1.55, capsule_radius = 0.0, wall, h,
                           leh_open_radius = 0.84 * 1.55)
     # a frustraum: the end radius filled in on the switch (60 % of the waist radius, at

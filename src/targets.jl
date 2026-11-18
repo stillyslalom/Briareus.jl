@@ -857,14 +857,16 @@ function _hohlraum_end(e, key::Symbol; leh_radius, radius, rc, h, nr_cap, nr_leh
 end
 
 """
-    foil(name, center, normal; width, height = width, n = 20, material = gold(),
+    foil(name, center, normal; width, height = width, n = 20, material = foil_material(),
          two_sided = true, rotation = 0.0)
 
 Rectangular foil (e.g. a backlighter) with front face along `normal`. `rotation`
-(radians) spins it about its normal.
+(radians) spins it about its normal. The default `material` is a directly irradiated
+gold foil (albedo 0.8, conversion 0.8); [`foil_material`](@ref) lists the other foil
+elements with their suggested ranges.
 """
 function foil(name, center, normal; width, height = width, n::Integer = 20,
-              material::Material = gold(conversion = 0.05), two_sided::Bool = true,
+              material::Material = foil_material(), two_sided::Bool = true,
               rotation = 0.0)
     m = rectangle_mesh(width, height; nu = n, nv = max(1, round(Int, n * height / width)))
     Rz = SMatrix{3,3,Float64}(cos(rotation), sin(rotation), 0, -sin(rotation), cos(rotation), 0, 0, 0, 1)

@@ -439,7 +439,7 @@ nothing #hide
 # In place of the laser, the inner wall carries a prescribed source: two Gaussian rings
 # per half, at ``|z| = 3.9`` mm and 2.2 mm, standing in for the outer and inner cones'
 # spots. Each element gets the source integrated over it by quadrature, so every model
-# receives the same power wherever its elements are, and the gold converts 75% of it
+# receives the same power wherever its elements are, and the gold converts 90% of it
 # into x rays. (A laser drive goes the same way: [`DepositionOperator`](@ref) traces the
 # beams onto the CAD elements, washers and bores included.)
 

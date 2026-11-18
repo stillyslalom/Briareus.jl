@@ -1096,7 +1096,7 @@ plateau of Dewald 2008 and the value of the only published VisRad energetics
 calibration (η 0.95 with albedo 0.77, Au, 400 TW; Swadling et al., PoP 32, 052707
 (2025)). *Derived* (research notes, "Wall material, conversion and capsule energetics
 (2026-10-24)"). It is the conversion of the drive-history walls [`nif_gold`](@ref) and
-[`nif_uranium`](@ref); [`gold`](@ref) and [`uranium`](@ref) keep the constant 0.75.
+[`nif_uranium`](@ref); [`gold`](@ref) and [`uranium`](@ref) keep the constant 0.9.
 """
 nif_conversion(; efficiency = 0.7, time_exponent = 0.12, range = (0.0, 0.95), kwargs...) =
     Conversion(; efficiency, time_exponent, range, kwargs...)
@@ -1122,21 +1122,26 @@ Material(name::Symbol; albedo = 0.0, conversion = 0.0) =
 albedo(m::Material, t = 0.0) = albedo(m.albedo, t)
 
 """
-    gold(; albedo = 0.8, conversion = 0.75)
+    gold(; albedo = 0.8, conversion = 0.9)
 
-Gold hohlraum wall: a constant laser → x-ray `conversion` 0.75 whatever the `albedo`.
-For a drive history on NIF use [`nif_gold`](@ref), whose albedo and conversion follow
-the drive.
+Gold hohlraum wall for static solves: a constant laser → x-ray `conversion` 0.9 whatever
+the `albedo`. Both defaults are the inputs of a published static VisRad model of a NIF
+hohlraum (Young et al., PoP 27, 082702 (2020)); the conversion lies within the 0.85–0.95
+published for NIF hohlraums near peak power, above the 0.68–0.85 of 1 ns Nova and Omega
+hohlraums (`gold(conversion = 0.75)` for those). Research notes, "Material defaults and
+their sources (2026-11-18)". For a drive history on NIF use [`nif_gold`](@ref), whose
+albedo and conversion follow the drive; for a directly irradiated foil,
+[`foil_material`](@ref).
 """
-gold(; albedo = 0.8, conversion = 0.75) = Material(:Au; albedo, conversion)
+gold(; albedo = 0.8, conversion = 0.9) = Material(:Au; albedo, conversion)
 """
-    uranium(; albedo = du_wall_loss(), conversion = 0.75)
+    uranium(; albedo = du_wall_loss(), conversion = 0.9)
 
 Au-lined depleted-uranium hohlraum wall: [`du_wall_loss`](@ref)`()` and the constant
-conversion 0.75 of [`gold`](@ref) (the conversion happens in the gold liner). For a
+conversion 0.9 of [`gold`](@ref) (the conversion happens in the gold liner). For a
 drive history on NIF use [`nif_uranium`](@ref).
 """
-uranium(; albedo = du_wall_loss(), conversion = 0.75) = Material(:DU; albedo, conversion)
+uranium(; albedo = du_wall_loss(), conversion = 0.9) = Material(:DU; albedo, conversion)
 """
     nif_gold(; albedo = WallLossAlbedo(), conversion = nif_conversion())
 

@@ -17,7 +17,7 @@ using Briareus, LinearAlgebra, Test
     t = cube(false)
     for reemit in (:hit, :element)
         H, _ = montecarlo_incident(t, ones(6), 1:6; paths = 20_000, reemit)
-        @test maximum(abs, H ./ (0.75 / 0.2) .- 1) < 0.01
+        @test maximum(abs, H ./ (0.9 / 0.2) .- 1) < 0.01
     end
 
     # Open top, source on the bottom: the element model with the closed-form view factors

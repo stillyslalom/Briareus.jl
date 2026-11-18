@@ -14,7 +14,7 @@ using LinearAlgebra: norm
     p = ts.parts[][i]
     @test hohlraum_pieces(p) == [:wall, :cap_top, :leh_top]
     ref = hohlraum(; length = 10.1, radius = 2.875, leh_radius = 1.55, capsule_radius = 0.0,
-                   wall = gold(albedo = 0.85, conversion = 0.8), h, leh_open_radius = 0.84 * 1.55,
+                   wall = gold(), h, leh_open_radius = 0.84 * 1.55,
                    bottom_end = :open)
     cs = part_components(p, h)
     @test [c.name for c in cs] == [:hohlraum_wall, :hohlraum_cap_top, :hohlraum_leh_top]

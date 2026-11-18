@@ -25,7 +25,7 @@ _same_component(a, b) =
     m = ts.mesh[]
     # the former template's call: core `hohlraum` at TCC, its capsule the geodesic mesh
     ref = hohlraum(; length = 10.1, radius = 2.875, leh_radius = 1.55, capsule_radius = 0.9,
-                   wall = gold(albedo = 0.85, conversion = 0.8), h = m.h, capsule_h = m.capsule_h,
+                   wall = gold(), h = m.h, capsule_h = m.capsule_h,
                    leh_open_radius = 0.84 * 1.55)
     t = ts.target[]
     @test _template_name.(c.name for c in t.components) == [c.name for c in ref.components]
@@ -41,7 +41,7 @@ _same_component(a, b) =
     w = WindowSpec(; phi = 90.0, albedo = 0.85, conversion = 0.8)
     tw = TargetSetup(resolution = :coarse, parts = [Controllers._with(h; values = v, windows = [w]), ts.parts[][2]])
     refw = hohlraum(; length = 10.1, radius = 2.875, leh_radius = 1.55, capsule_radius = 0.9,
-                    wall = gold(albedo = 0.85, conversion = 0.8), h = m.h, capsule_h = m.capsule_h,
+                    wall = gold(), h = m.h, capsule_h = m.capsule_h,
                     windows = [Controllers._wall_window(w, 1)],
                     leh_closure = GapClosure(closure = 5.0, width = 0.5, after = 0.85), leh_open_radius = 0.84 * 1.55)
     byname = Dict(_template_name(c.name) => c for c in tw.target[].components)

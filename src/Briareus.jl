@@ -36,6 +36,7 @@ export AlbedoModel, ConstantAlbedo, TabulatedAlbedo, WallLossAlbedo, Burnthrough
        Component, aperture, Target, nelements, elements, component_index, parts, part_pieces,
        element_quadrature
 export SourcedValue, MaterialDefault, MATERIAL_BASES, material_library, material_default
+export foil_material, FOIL_ELEMENTS
 export hohlraum, hohlraum_counts, capsule_counts, foil, HohlraumProfile, frustraum_profile
 export WallWindow, Sombrero, conforming_grid, equal_area_radius
 export SuperGaussianSpot, Beam, port_vector, port_angles, direction, spot_axes, remake, intensity, wavelength,

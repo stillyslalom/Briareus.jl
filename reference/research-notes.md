@@ -103,7 +103,9 @@ callout in the section says which).
 | `WallLossAlbedo` `release` | 1.0 | Capsule absorption, conversion and the ablating-wall release §1 (closure: Wall re-emission and the capsule radius §1) |
 | `drive_history` `wall_history`, `wall_release` | on | N221204 late-time drive; Wall re-emission and the capsule radius |
 | `DU_LOSS_FACTOR` (`du_wall_loss`, `uranium`, `nif_uranium`) | 0.836 at 300 eV, T^-0.2, 0.7 µm Au liner | Energetics defaults and the capsule share (factor); Wall material, conversion and capsule energetics §1 (model) |
-| `gold()`, `uranium()` conversion | 0.75 | Capsule absorption, conversion and the ablating-wall release ("What changed") |
+| `gold()`, `uranium()` conversion | 0.9 (0.75 until 2026-11-18) | Material defaults and their sources, "Decisions of 2026-11-18" (before: Capsule absorption, conversion and the ablating-wall release, "What changed") |
+| `foil_material()` (`foil`, `backlighter_foil`; GUI foil starter) | Au 0.8 / 0.8; mid-Z suggested 0.55 / 0.35 | Material defaults and their sources, "Decisions of 2026-11-18" |
+| GUI hohlraum part, closed windows | 0.8 / 0.9 (`gold()`) | Material defaults and their sources, "Decisions of 2026-11-18" |
 | `nif_conversion()` (`nif_gold`, `nif_uranium`) | 0.7 t^0.12 ≤ 0.95 | Wall material, conversion and capsule energetics §2 |
 | `CapsuleAlbedo` | α_c 0.2, `outside_absorptance` 0 | Wall material, conversion and capsule energetics §3 (0.2); Capsule absorption, conversion and the ablating-wall release (`outside`) |
 | `WallMotion` | 0.185 mm/ns from 0.8 ns, stopping 0.45 mm in | Hohlraum dynamics calibrated to published data |
@@ -11562,6 +11564,110 @@ Not changed; for the user (recommendations):
    docstring says `material = gold()` while the code uses `gold(conversion = 0.05)`.
 5. **GUI free parts 0 / 0**: a black body by definition (`:black`). Recommended: keep,
    with the material picked from the library named in the part's properties.
+
+*Decided the same day* (the user's decisions 1, 2 and 4 above; "Decisions of
+2026-11-18" below): `gold()` and `uranium()` convert at 0.9, the GUI hohlraum is
+`gold()`, and foils take `foil_material()`.
+
+### Decisions of 2026-11-18: the moved defaults
+
+The user's decisions on recommendations 1, 2 and 4 above; 3 and 5 stay open. Results
+change from this commit on (version 0.2.1 unchanged).
+
+1. **`gold()` and `uranium()` convert at 0.9** (was 0.75): Young 2020's static NIF value,
+   inside the published NIF 0.85–0.95. The library's `:gold` is now Young's entry (basis
+   `:published`); `:gold_young2020` is merged into it (two entries with the same numbers
+   and source would drift apart). `uranium()` moves with it: its conversion is defined as
+   the gold liner's (0.7 µm Au, Döppner 2015), and the DU factor 0.836 was itself
+   calibrated with conversion 0.9 ("Energetics defaults and the capsule share",
+   *calibrated*), so the same source applies. `Conversion()`'s own default `efficiency`
+   0.75 is not changed (a separate default; for the user). 0.75 remains available as
+   `gold(conversion = 0.75)` for 1 ns Nova/Omega hohlraums.
+2. **GUI hohlraum part 0.8 / 0.9** (was 0.85 / 0.8): `HOHLRAUM_VALUES` reads `gold()`,
+   so the GUI follows the core. Closed diagnostic windows (`WindowSpec`) default to the
+   same wall material (they had the old 0.85 / 0.8). Saved sessions keep their values: a
+   part's `values` are saved in full since version 8, a window's albedo and conversion
+   always, and sessions before version 8 take the template-era 0.85 / 0.8 from
+   `_TEMPLATE_DEFAULTS`, which is unchanged.
+3. **Foils: `foil_material(element = :Au)`**, the default of `foil` and
+   `backlighter_foil` and of the GUI foil starter (was `gold(conversion = 0.05)`; the GUI
+   starter 0 / 0.02). A `Material` serving every path needs one number: `flux_response`
+   without the laser power, the scenarios' observed flux and `montecarlo_incident` take
+   a conversion independent of intensity, and a constant albedo keeps the solve linear,
+   so gold takes the static equivalent of `:gold_disk`:
+   - conversion 0.8, Dewald's plateau at 10¹⁵ W/cm², the table's end, held beyond it,
+     where backlighter foils are driven (He-α optima 1–5 × 10¹⁵ W/cm², "He-α CE:
+     saturating peak"); basis `:published`, **M** (abstract);
+   - albedo 0.8, Lindl's loss at 1 ns: 1 − 0.32 T^−0.7 = 0.76 / 0.80 / 0.85 at 150 /
+     200 / 300 eV (*derived*); basis `:range`.
+   The library entry `:gold_foil` equals `foil_material()` field for field (tested).
+4. **Mid-Z foils, suggested ranges** (`:titanium_foil` … `:silver_foil`, basis
+   `:suggested`, a new member of `MATERIAL_BASES`). The elements are those of
+   `kshell_ce` that are solid as pure elements (Ti, V, Cr, Mn, Fe, Co, Ni, Cu, Zn, Ge,
+   Zr, Nb, Mo, Ag; Ga, Br and Kr left out). No 3ω broadband conversion of flat mid-Z
+   foils was found (searched again this session: the Z scans at 0.26 µm, PRA 34, 4184
+   (1986), at 0.25 µm, Popil et al., PRA 35, 3874 (1987), and at 0.53 µm, Schwanda &
+   Eidmann, LPB 9, 551 (1991), give no numbers in their abstracts). What is published,
+   and the range it brackets:
+
+   | Source | Conditions | Total conversion | Conf. |
+   |---|---|---|---|
+   | Eidmann & Kishimoto, APL 49, 377 (1986) | 0.53 µm, 3 ns, 3e13 W/cm², planar, Z 4–82 | 2 % (Be) rising to nearly 50 % (heaviest), of the incident energy | **M** |
+   | Pérez et al., PoP 19, 083101 (2012), Table I | 351 nm, 1 ns, OMEGA, Dante/DMX 0–20 keV | Fe-oxide aerogels 0.35–0.60, steel-lined cavities 0.60–0.75 (Fe K-shell 1.2–3 %) | **H** |
+   | Mead et al., LA-UR-86-300 (1985) Fig. 16 | 3ω, open gold disks | 0.51–0.59 of the absorbed energy | **H** |
+   | Tanabe et al., APL 93, 051505 (2008), for scale | planar Ti foil, K-shell 4–6 keV | (1.4 ± 0.9) % of the incident energy (TiO₂ nanofiber cotton 3.7 ± 0.5 %): line output only, under the broadband | **M** |
+
+   - Conversion: suggested range **0.1–0.6**, default its midpoint **0.35**. The upper end
+     is gold's open-disk value and the volumetric Fe targets' (a flat foil neither traps
+     its radiation as a cavity does nor heats in volume as an aerogel does); the lower
+     end lies under 0.13–0.26, the linear-in-Z reading of Eidmann & Kishimoto over
+     Z 22–47 at 2ω (3ω converts better), with room for the measured oscillation in Z
+     (Nakano & Kuroda 1983; PRA 33, 525 (1986)) (*L*).
+   - Albedo: suggested range **0.3–0.8**, default **0.55**: between the static albedos of
+     a low-Z ablator and gold in Young 2020 (*L*); it enters only through x-rays incident
+     from other surfaces.
+   - Midpoints, not an end: a foil's x-ray emission is the wanted source in some designs
+     and the unwanted background (preheat of a nearby target, detector background) in
+     others, so neither end is conservative; the midpoint bounds the error at half the
+     range either way.
+   - The broadband conversion is the radiosity source; the He-α line signal is
+     `kshell_ce`'s, fitted to its own data and not touched.
+
+**Measured baseline moves** (*derived*; the benchmark above: default-size hohlraum, h
+0.8 / capsule_h 0.3, 824 elements, 48 NIF quads at 8 TW on the GUI's cone pointing,
+`ablator()` capsule):
+
+| Case | Before | After | Check |
+|---|---|---|---|
+| capsule Tr, `gold()` | 262.596 eV | 274.842 eV (+12.25, +4.66 %) | (0.9/0.75)^¼ × 262.596 = 274.842, difference 6e-14 eV |
+| capsule P2/P0, P4/P0, `gold()` | −0.15559, +0.00010 | same (Δ < 2e-16) | a uniform source factor leaves the shape |
+| capsule Tr, GUI hohlraum part | 277.768 eV (0.85 / 0.8) | 274.842 eV (−2.93) | the GUI part is `gold()` now |
+| capsule P2/P0, GUI hohlraum part | −0.14370 | −0.15559 (−0.0119) | the albedo 0.85 → 0.8 sharpens the drive |
+| foil case: mean flux on a 1 mm black sphere 6 mm from a 2 mm `backlighter_foil` driven by four 0.5 TW beams (2.0 TW absorbed) | 2.1961e-4 TW/mm² (21.50 eV) | 3.5138e-3 TW/mm² (42.99 eV) | ×16.000000 = 0.8/0.05 (the foil's only source), Tr ×2.00000 |
+| same, the GUI's old foil starter (0 / 0.02) | 8.784e-5 TW/mm² (17.10 eV) | as above | ×40.0000 |
+| same, `foil_material(:Ti)` | — | 1.5373e-3 TW/mm² (34.97 eV) | 0.35/0.8 of gold's (the albedo does not enter: the sphere is black) |
+
+In the test suite and tutorials (every number moved was checked by the closed form, not
+pasted from a run):
+
+| File | Quantity | Before | After | Check |
+|---|---|---|---|---|
+| `test/montecarlo.jl` | closed cube, uniform source: H = ηP/A/(1 − α) | 0.75/0.2 | 0.9/0.2 | the run gave 0.2006 above the old closed form, 0.9/0.75 − 1 = 0.2 within its Monte Carlo error |
+| `test/windows.jl` | the integrating-cavity η | 0.75 | 0.9 | the open/closed ratio is independent of η (it passed unchanged), but its tolerance `dev`, the solved wall flux's largest deviation from ηs/D, had grown by about 0.2 (the flux is 1.2 times the old closed form's): stale, not failing |
+| `test/energetics.jl` | `gold().conversion`, `uranium().conversion` | 0.75 | 0.9 | the decision |
+| `docs/literate/cad_hohlraum.jl` | "the gold converts 75%"; printed capsule H | 0.75; 0.84761 … 0.84548 TW/mm² | 0.9; ×1.2 | linear (constant albedos); relative rows unchanged |
+
+Every other test passed unchanged: the hohlraum tests compare with closed forms,
+ratios or explicit materials, and the regression numbers of the energetics, N221204,
+CBET and M-band calibrations were made with explicit walls (`nif_uranium()`,
+`Material(:w; conversion = 0.9)`, `gold(albedo = WallLossAlbedo(), conversion = …)`).
+No calibrated constant in these notes was fitted with `gold()`'s 0.75: the DU factor
+used conversion 0.9, the capsule albedo and the M-band split the N221204 model's
+`nif_uranium()`, the lip closure `nif_conversion()`, the dynamics and CBET fits no
+radiation. **No call site is pinned.** The tutorials that set 0.85 / 0.8 explicitly
+(`beam_errors`, `dropped_bundle`, `implosion_metrics`) and the examples with explicit
+walls are unchanged; `examples/backlighter.jl` now uses `foil_material(:Ti)` in place of
+an unsourced `Material(:Ti; conversion = 0.02)`.
 
 ## CBET without new data: the Δλ slope and the Te history (2026-11-18) *derived*
 

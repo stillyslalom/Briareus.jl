@@ -4,7 +4,7 @@
 """
     backlighter_foil(los; standoff, width = 2.0, height = width, tilt = 0.0,
                      tilt_toward = 0.0, rotation = 0.0, center = (0, 0, 0), n = 8,
-                     name = :backlighter, material = gold(conversion = 0.05),
+                     name = :backlighter, material = foil_material(),
                      two_sided = true) -> Component
 
 Rectangular backlighter foil for the diagnostic line of sight `los` = (θ, φ) in
@@ -25,11 +25,16 @@ the line of sight.
 
 The defaults (a 2 mm square gold foil) are generic engineering values, not a facility's
 backlighter design: real backlighter dimensions and standoffs are shot-specific. `n` sets the mesh (`n × n` patches for a square foil).
+The default `material` is [`foil_material`](@ref)`()`, directly irradiated gold (albedo
+0.8, conversion 0.8); `foil_material(:Ti)` and the other mid-Z elements give a suggested
+point inside a suggested range, not a measurement (the table there). The foil's x-ray
+emission set by this conversion is broadband radiosity; the He-α line signal is
+[`kshell_ce`](@ref)'s, fitted to its own data.
 """
 function backlighter_foil(los; standoff::Real, width::Real = 2.0, height::Real = width,
                           tilt::Real = 0.0, tilt_toward::Real = 0.0, rotation::Real = 0.0,
                           center = (0.0, 0.0, 0.0), n::Integer = 8, name::Symbol = :backlighter,
-                          material::Material = gold(conversion = 0.05), two_sided::Bool = true)
+                          material::Material = foil_material(), two_sided::Bool = true)
     standoff > 0 || throw(ArgumentError("the backlighter standoff must be positive"))
     width > 0 && height > 0 || throw(ArgumentError("the foil width and height must be positive"))
     f = foil_frame(los; standoff, tilt, tilt_toward, rotation, center)

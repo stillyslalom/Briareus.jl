@@ -10,7 +10,7 @@ using LinearAlgebra
 # TCC stands in for the main target. The imager looks along +x through TCC at the foil.
 foil_center = Vec3(6.0, 0.0, 0.0)
 backlighter = foil(:backlighter, foil_center, (-1, 0, 0); width = 2.0, n = 40,
-                   material = Material(:Ti; conversion = 0.02), two_sided = false)
+                   material = foil_material(:Ti), two_sided = false)      # suggested values, not measured
 main = Component(:main, sphere_mesh(1.0; ntheta = 16, nphi = 24), BLACK)
 target = Target(backlighter, main)
 

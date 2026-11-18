@@ -68,16 +68,16 @@ with_lips(names) = Symbol[n for x in names
 
 """
     WindowSpec(; phi = 0.0, z = 0.0, width = 1.0, height = 1.0, open = false,
-               albedo = 0.85, conversion = 0.8, round = true)
+               albedo = 0.8, conversion = 0.9, round = true)
 
 A diagnostic window cut into a hohlraum part's wall (a core `WallWindow`): centered at
 azimuth `phi` (degrees from the part's +x) and axial position `z` (mm, in the part's
 frame); `round` (the default, as diagnostic windows usually are) a disk of diameter
 `width` mm on the unrolled wall, otherwise a rectangle `width` mm of arc by `height` mm
 along the axis. A closed window (`open = false`) is an opaque wall patch with its own
-x-ray `albedo` and laser → x-ray `conversion`; an open one is a hole (an aperture: laser
-light and x-rays leave through it). Window `k` of part `name` is the component
-`<name>_window_k`.
+x-ray `albedo` and laser → x-ray `conversion` (by default the hohlraum wall's, core
+`gold()`); an open one is a hole (an aperture: laser light and x-rays leave through it).
+Window `k` of part `name` is the component `<name>_window_k`.
 """
 struct WindowSpec
     phi::Float64
@@ -90,7 +90,7 @@ struct WindowSpec
     round::Bool
 end
 WindowSpec(; phi = 0.0, z = 0.0, width = 1.0, height = 1.0, open::Bool = false,
-           albedo = 0.85, conversion = 0.8, round::Bool = true) =
+           albedo = 0.8, conversion = 0.9, round::Bool = true) =
     WindowSpec(phi, z, width, height, open, albedo, conversion, round)
 
 """
@@ -166,7 +166,8 @@ const PART_SIZE_FIELDS = Dict(
 """
 Values of a `:hohlraum` part besides its sizes (`key => default`): its wall's albedo and
 laser → x-ray conversion (the placement fields `albedo` and `conversion`, which default
-to 0.85 and 0.8 for a hohlraum, as the former hohlraum template had), each end's opening (`top_end`,
+to 0.8 and 0.9 for a hohlraum: core `gold()`, the static NIF wall of Young et al., PoP 27,
+082702 (2020); sessions keep the values they saved), each end's opening (`top_end`,
 `bottom_end`: 1 an entrance hole, 0 closed: the cap covers the end, 2 open: neither cap
 nor hole, the cavity open to a package placed there or to nothing, as a halfraum's; see
 [`HOHLRAUM_ENDS`](@ref)), `bottom_leh_radius` (mm: the bottom entrance hole's radius; 0,
@@ -176,7 +177,7 @@ the default, `leh_radius`, which is the top's), the closing entrance holes:
 end's radius; `radius` is the waist's) and `bottom_end_radius` (mm; 0, the default:
 `end_radius`).
 """
-const HOHLRAUM_VALUES = (:albedo => 0.85, :conversion => 0.8, :top_end => 1.0, :bottom_end => 1.0,
+const HOHLRAUM_VALUES = (:albedo => albedo(gold()), :conversion => gold().conversion, :top_end => 1.0, :bottom_end => 1.0,
                          :bottom_leh_radius => 0.0, :leh_closure => 0.0,
                          (k => d for (k, _, _, d) in LEH_CLOSURE_FIELDS)...,
                          :profile => 0.0, :end_radius => 0.0, :bottom_end_radius => 0.0)
@@ -3242,12 +3243,13 @@ The parts of starter `kind` (one of [`STARTERS`](@ref)), placed in the frame nam
 `frame`, their names made unique against `taken` (`hohlraum`, then `hohlraum_2`, …).
 
 - `:hohlraum`: a `:hohlraum` part `hohlraum` (length 10.1 mm, radius 2.875 mm, entrance
-  holes of 1.55 mm radius, wall albedo 0.85 and conversion 0.8) and, placed in its frame
-  at its center, the sphere `capsule` (radius 0.9 mm, albedo and conversion 0.3: the
-  ablator's, meshed as a capsule, `capsule_mesh`) with the observed role. At TCC it
-  meshes as the former hohlraum template did, element for element.
-- `:foil`: the rectangle `foil` (2 mm square, conversion 0.02, its element size the
-  target's capsule size `capsule_h` at the insert), 6 mm from the frame's origin
+  holes of 1.55 mm radius, wall albedo 0.8 and conversion 0.9, core `gold()`) and,
+  placed in its frame at its center, the sphere `capsule` (radius 0.9 mm, albedo and
+  conversion 0.3: the ablator's, meshed as a capsule, `capsule_mesh`) with the observed
+  role. At TCC it meshes as the former hohlraum template did, element for element.
+- `:foil`: the rectangle `foil` (2 mm square, albedo and conversion 0.8, core
+  `foil_material()`, a gold foil; its element size the target's capsule size
+  `capsule_h` at the insert), 6 mm from the frame's origin
   along its `x` and facing it (its edges along the frame's `z` and `y`), with the foil
   role, and the absorbing sphere `main` (radius 1 mm, albedo and conversion 0) at the
   origin. At TCC both mesh as the former foil template's did.
@@ -3329,7 +3331,8 @@ function starter_parts(kind::Symbol; frame::Symbol = :tcc, taken = (), capsule_h
     return [PartSpec(:rectangle; name = f, frame, foil = true,
                      values = Dict(:x => 6.0, :theta => 90.0, :phi => 180.0, :rotation => 180.0,
                                    :r1 => 2.0, :r2 => 2.0,
-                                   :conversion => 0.02, :h => Float64(capsule_h))),
+                                   :albedo => albedo(foil_material()), :conversion => foil_material().conversion,
+                                   :h => Float64(capsule_h))),
             PartSpec(:sphere; name = m, frame, values = Dict(:r1 => 1.0))]
 end
 

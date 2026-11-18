@@ -19,6 +19,12 @@ end
     @test _same_fields(material_default(:nif_gold).material, nif_gold())
     @test _same_fields(material_default(:nif_uranium).material, nif_uranium())
     @test _same_fields(material_default(:black).material, BLACK)
+    # foils: the default of foil and backlighter_foil, and one entry per foil element
+    @test _same_fields(material_default(:gold_foil).material, foil_material())
+    @test _same_fields(foil(:f, (0, 0, 0), (0, 0, 1); width = 1.0, n = 1).material, foil_material())
+    @test _same_fields(backlighter_foil((90.0, 0.0); standoff = 5.0, n = 1).material, foil_material())
+    @test all(_same_fields(material_default(Symbol(n, :_foil)).material, foil_material(e)) for (e, n, _) in FOIL_ELEMENTS)
+    @test_throws ArgumentError foil_material(:Kr)
     # the helper sees a difference in a nested field
     @test !_same_fields(gold(), gold(conversion = 0.05))
     @test !_same_fields(nif_gold(), Material(:Au; albedo = WallLossAlbedo(), conversion = nif_conversion(efficiency = 0.71)))
@@ -30,13 +36,28 @@ end
     @test all(!isempty(strip(v.source)) && !isempty(strip(v.uncertainty)) for v in values)
     @test all(v.basis in MATERIAL_BASES for v in values)
 
-    # the published alternatives carry the published numbers
-    y, s, disk = material_default(:gold_young2020), material_default(:gold_swadling2025), material_default(:gold_disk)
+    # the published values: gold() is Young 2020's static model; the alternatives
+    y, s, disk = material_default(:gold), material_default(:gold_swadling2025), material_default(:gold_disk)
     @test (albedo(y.material), conversion_efficiency(y.material.conversion)) == (0.8, 0.9)
+    @test y.albedo.basis === y.conversion.basis === :published
+    @test material_default(:uranium).conversion.basis === :published
     @test (albedo(s.material), conversion_efficiency(s.material.conversion)) == (0.77, 0.95)
     @test conversion_efficiency(disk.material.conversion, 0.0, 1e14) ≈ 0.95 rtol = 1e-12
     @test conversion_efficiency(disk.material.conversion, 0.0, 1e15) ≈ 0.80 rtol = 1e-12
     @test first.(disk.other) == [:absorption, :cold_reflectance_1w]
+    # the gold foil is the disk table's value at its 1e15 W/cm² end, held beyond it
+    gf = material_default(:gold_foil)
+    @test conversion_efficiency(gf.material.conversion) == conversion_efficiency(disk.material.conversion, 0.0, 1e15)
+    @test conversion_efficiency(disk.material.conversion, 0.0, 3e15) ≈ gf.conversion.value rtol = 1e-12
+    # mid-Z foils: suggested values, each the midpoint of the range its uncertainty states
+    midz = [material_default(Symbol(n, :_foil)) for (_, n, _) in FOIL_ELEMENTS[2:end]]
+    @test all(d.albedo.basis === d.conversion.basis === :suggested for d in midz)
+    @test all(d.conversion.value ≈ sum(Briareus._MIDZ_CONVERSION_RANGE) / 2 &&
+              d.albedo.value ≈ sum(Briareus._MIDZ_ALBEDO_RANGE) / 2 for d in midz)
+    @test all(occursin("suggested range 0.1-0.6", d.conversion.uncertainty) &&
+              occursin("not a measurement", d.conversion.uncertainty) for d in midz)
+    @test gf.conversion.basis === :published && !any(d -> d.conversion.basis === :suggested,
+                                                       filter(d -> !endswith(String(d.name), "_foil") || d.name === :gold_foil, lib))
 
     # defaults without a source are left out
     @test !(:ablator in names)

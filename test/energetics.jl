@@ -61,8 +61,8 @@ _capsule_Tr(sol, t) = (c = elements(t, :capsule);
     @test uranium().name === :DU && uranium().albedo isa WallLossAlbedo
     # one fixed conversion for `gold` and `uranium`, whatever the albedo; the NIF
     # drive-history presets convert as `nif_conversion()`
-    @test gold().conversion === 0.75 && gold(albedo = WallLossAlbedo()).conversion === 0.75
-    @test uranium().conversion === 0.75 && uranium(albedo = 0.9).conversion === 0.75
+    @test gold().conversion === 0.9 && gold(albedo = WallLossAlbedo()).conversion === 0.9
+    @test uranium().conversion === 0.9 && uranium(albedo = 0.85).conversion === 0.9
     @test nif_uranium().name === :DU && nif_uranium().albedo isa WallLossAlbedo
     @test nif_gold().name === :Au && nif_gold().albedo isa WallLossAlbedo
     @test conversion_efficiency(nif_uranium().conversion, 5.0) == conversion_efficiency(nif_conversion(), 5.0)
