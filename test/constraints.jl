@@ -170,4 +170,137 @@
         @test check_constraints(ev, exact)[1].value == peak_irradiance(ev, :wall)
         @test check_constraints(ev, ceiling)[1].value == ceiling.f(ev)
     end
+
+    # Keep-outs and the light on named parts as constraints, on a coarse hohlraum. The
+    # references: the quantities that define them; for the constrained runs, the root of
+    # the one free parameter's constraint value found by bisection (the objective pulls
+    # the 50° cone's aim toward the center, monotonically, so the solution is where the
+    # constraint becomes active); central differences for the gradients.
+    @testset "keep-outs and the light on parts as constraints" begin
+        t = hohlraum(; geom..., nz = 8, nphi = 16, capsule_ntheta = 6, capsule_nphi = 8)
+        aims = Dict(:outer50 => (0.0, 5.01), :outer44 => (0.0, 5.20), :inner30 => (0.60, 3.63),
+                    :inner23 => (1.09, 3.09))
+        quads = map(nif_quads(power = 8.0)) do q
+            r, z = aims[q.group]
+            φ = port_angles(q)[2]
+            remake(q; aim = (-r * cosd(φ), -r * sind(φ), sign(q.port[3]) * z))
+        end
+        p = GroupPointing(quads; fields = (:z, :phi))
+        s = Scenario(t, p; observe = :capsule)
+        xp = initial_parameters(p)
+        ref = evaluate(s, xp)
+        caps = (:cap_top, :cap_bottom)
+        hw = HardwareKeepOut(t, caps; targets = (:wall, :capsule), minimum = 0.05)
+        ak = ApertureKeepOut(t; minimum = 0.05)
+        sk = ApertureKeepOut(t; apertures = (:leh_top,))       # Inf for the lower hemisphere
+
+        # values against the quantities; one component per beam, labeled by its name
+        x = xp .+ 0.05 .* sin.(1:length(xp))
+        ev = evaluate(s, x)
+        cf, ca, cs = clearance_floor(hw), clearance_floor(ak; name = :aperture, minimum = 0.02),
+                     clearance_floor(sk; name = :top)
+        @test cf.f(ev) == hardware_clearance(hw, ev.beams) && ca.f(ev) == aperture_clearance(ak, ev.beams)
+        @test !cf.upper && cf.limit == [0.05] && cf.scale == [1.0] && ca.limit == [0.02]
+        rows = check_constraints(ev, (cf, ca, cs))
+        @test length(rows) == 3 * 48
+        @test [r.name for r in rows[1:48]] == ["clearance[$(b.name)]" for b in quads]
+        @test [r.value for r in rows[49:96]] == aperture_clearance(ak, ev.beams)
+        @test all(r -> r.violation ≈ (0.05 - r.value) / 1.0, filter(r -> isfinite(r.value), rows[1:48]))
+        # a beam the keep-out does not apply to (Inf: no aperture on its side) holds
+        top = aperture_clearance(sk, ev.beams)
+        @test count(isinf, top) == 24 && all(r -> r.status === :satisfied, rows[97:end][isinf.(top)])
+        @test_throws ArgumentError clearance_floor(42)
+        # any keep-out with a `keepout_clearance` method and a `minimum`: a capture rule
+        kc = CaptureKeepIn(t, :wall; minimum = 0.0)
+        cc = clearance_floor(kc; name = :capture)
+        @test cc.f(ev) == capture_margin(kc, ev.beams) && cc.limit == [0.0]
+        # the display: a constraint of more than eight components as its worst row
+        shown = sprint(show, MIME"text/plain"(), rows)
+        worst = rows[argmax([r.violation for r in rows[1:48]])]
+        @test count(==('\n'), shown) == 3 && occursin("the worst of 48", shown) && occursin(worst.name, shown)
+        @test count(==('\n'), sprint(show, MIME"text/plain"(), rows[1:5])) == 5
+        lc = light_ceiling(ref, caps...)
+        cp = component_power(ev.deposition, t)
+        onCaps = sum(get(cp, k, 0.0) for k in (:cap_top, :cap_bottom, :cap_top_outside, :cap_bottom_outside))
+        @test lc.f(ev) ≈ onCaps / ev.deposition.delivered rtol = 1e-12
+        @test light_fraction(ev, caps...) == power_fraction(ev, caps...) + clipped_fraction(ev, caps...)
+        @test only(lc.limit) == light_fraction(ref, caps...) && lc.upper
+        @test only(lc.scale) == max(only(lc.limit), 1e-3)
+        lf = light_floor(0.25, :wall; name = :capture)
+        @test !lf.upper && lf.limit == [0.25] && lf.scale == [0.25]
+        @test check_constraints(ev, lf)[1].name == "capture[wall]"
+        @test_throws ArgumentError light_ceiling(ref, :no_such_part)
+        @test_throws ArgumentError light_ceiling(1.5, :wall)
+
+        # gradients of the values through the optimizer's duals against central differences
+        d = cos.(1:length(xp))
+        along(f) = τ -> f(evaluate(s, x .+ τ .* d))
+        for f in (ev -> sum(cf.f(ev)[1:8] .* (1:8)), lc.f, ev -> light_fraction(ev, :capsule))
+            ad = ForwardDiff.derivative(along(f), 0.0)
+            fd = (along(f)(1e-6) - along(f)(-1e-6)) / 2e-6
+            @test ad ≈ fd rtol = 1e-6
+        end
+
+        # constrained runs with one free parameter (the 50° cone's z; the rest held),
+        # whose objective pulls the cone's aim toward the center: the constraint ends
+        # active, at the parameter where its value reaches the limit
+        h = HeldParameters(p, n -> n != "outer50.z")
+        sh = remake(s; parameterization = h)
+        z0 = initial_parameters(h)
+        @test only(z0) ≈ 5.01 rtol = 1e-12
+        pull(ev) = sum(b.aim[3]^2 for b in ev.beams if b.group === :outer50) / 25
+        at(z) = evaluate(sh, [z])
+        function root(g, a, b)              # bisection for g = 0, g(a) < 0 < g(b)
+            @assert g(a) < 0 < g(b)
+            for _ in 1:60
+                m = (a + b) / 2
+                g(m) < 0 ? (a = m) : (b = m)
+            end
+            return (a + b) / 2
+        end
+        # the keep-out: the smallest clearance at the start less 0.1 mm, reached by the 50°
+        # cone first
+        least(z) = minimum(filter(isfinite, hardware_clearance(hw, at(z).beams)))
+        floor_ = clearance_floor(hw; minimum = least(5.01) - 0.1)
+        zk = root(z -> least(z) - only(floor_.limit), 4.0, 5.01)
+        rk = optimize_pointing(sh, pull; lower = [4.0], upper = [5.3], constraints = (floor_,),
+                               feasibility = 1e-6)
+        @test rk.outcome === :interior && abs(only(rk.x) - zk) < 1e-5
+        act = filter(r -> r.status === :active, rk.constraints)
+        @test !isempty(act) && all(r -> startswith(r.name, "clearance[Q") && r.multiplier > 0, act)
+        @test all(r -> abs(r.value - r.limit) <= 1e-6, act)
+        @test all(r -> r.status !== :violated, rk.constraints)
+        # the light on the caps: a ceiling at 0.1 % of the delivered power
+        ceil_ = light_ceiling(1e-3, caps...)
+        zl = root(z -> 1e-3 - light_fraction(at(z), caps...), 4.0, 5.01)
+        rl = optimize_pointing(sh, pull; lower = [4.0], upper = [5.3], constraints = [ceil_],
+                               feasibility = 1e-6)
+        @test rl.outcome === :interior && abs(only(rl.x) - zl) < 1e-5
+        @test only(rl.constraints).status === :active && only(rl.constraints).multiplier > 0
+        @test abs(only(rl.constraints).value - 1e-3) <= 1e-6 * 1e-3
+
+        # the pieces compose: held parameters of power scales per cone in a constrained
+        # run, with the keep-out and the light as constraints, and the summary of the result
+        ps = HeldParameters(PowerScales(p), n -> startswith(n, "inner") && !endswith(n, "power_scale"))
+        sc = remake(s; parameterization = ps)
+        y0 = initial_parameters(sc.param)
+        @test length(y0) == 8 && parameter_names(sc.param)[end] == "outer50.power_scale"
+        lo, hi = bounds(sc.param, y0; z = 0.3, phi = 0.3, scale = 0.2)
+        total = Constraint(:power, ev -> sum(b.power for b in ev.beams); upper = 384.0)
+        rc = optimize_pointing(sc, drive_objective(; drive = mean_flux(ref)); lower = lo, upper = hi,
+                               constraints = (total, clearance_floor(hw), light_ceiling(ref, :capsule)),
+                               iterations = 40, evaluations = 300)
+        again = apply(sc.param, rc.x)
+        @test rc.names == parameter_names(sc.param)
+        @test [(b.aim, b.power) for b in rc.beams] == [(b.aim, b.power) for b in again]
+        @test length(rc.constraints) == 2 + 48 && rc.constraints[1].name == "power"
+        @test rc.constraints[end].name == "light[capsule]"
+        sm = pointing_summary(sc, rc; keepout = hw)
+        c = hardware_clearance(hw, rc.beams)
+        @test sm.clearance == [minimum(filter(isfinite, c))] && sm.margin == sm.clearance .- 0.05
+        @test sm.power ≈ sum(b.power for b in rc.beams) rtol = 1e-14
+        start = apply(sc.param, y0)
+        @test sm.reference_clearance == [minimum(filter(isfinite, hardware_clearance(hw, start)))]
+        @test sm.shift_max ≈ maximum(norm(b.aim - a.aim) for (b, a) in zip(rc.beams, start)) rtol = 1e-14
+    end
 end

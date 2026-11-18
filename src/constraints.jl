@@ -14,24 +14,29 @@ automatic-differentiation gradients pass through it. Give exactly one of `upper`
 `f` may return a number or a vector; a vector constraint has one component per entry,
 each with its own multiplier and row in the report, against a `limit` that is a number
 (shared) or a vector of the same length. `labels` name the components in reports
-(default `"1"`, `"2"`, …).
+(default `"1"`, `"2"`, …): a collection of names, or a function of the evaluation that
+returns them, for a constraint whose components follow the evaluation (one per beam,
+as in [`clearance_floor`](@ref)). Within one run the number of components is fixed; a
+constraint with a shared limit and labels from the evaluation serves scenarios with
+different numbers of beams (a stage on quads, then one on their beams).
 
 `scale` (a number or one per component, positive) sets the units of the violation: the
 optimizer works on `±(f(ev) - limit)/scale` and its `feasibility` tolerance is in those
 units. By default `scale = |limit|`, so a violation is relative (1e-3: 0.1 % of the
 limit); a zero limit needs a `scale`.
 
-Ready-made constraints: [`irradiance_ceiling`](@ref) and [`mode_gate`](@ref). A
-quantity of the beams alone (a keep-out clearance, the power on named parts) is
-`Constraint(:name, ev -> quantity(ev.beams); lower = minimum)`.
+Ready-made constraints: [`irradiance_ceiling`](@ref), [`mode_gate`](@ref),
+[`clearance_floor`](@ref) (a keep-out's clearance per beam), [`light_ceiling`](@ref)
+and [`light_floor`](@ref) (the laser light on named parts). Any other quantity of the
+beams alone is `Constraint(:name, ev -> quantity(ev.beams); lower = minimum)`.
 """
-struct Constraint{F}
+struct Constraint{F,L}
     name::Symbol
     f::F
     limit::Vector{Float64}
     scale::Vector{Float64}
     upper::Bool
-    labels::Vector{String}
+    labels::L              # Vector{String}, or a function of the evaluation
 end
 
 function Constraint(name, f; upper = nothing, lower = nothing, scale = nothing, labels = nothing)
@@ -45,8 +50,17 @@ function Constraint(name, f; upper = nothing, lower = nothing, scale = nothing, 
         throw(DimensionMismatch("give one scale or one per component of the limit"))
     all(x -> isfinite(x) && x > 0, S) ||
         throw(ArgumentError("the scale must be positive and finite (a zero limit needs a `scale`)"))
-    lab = labels === nothing ? String[] : collect(String, string.(labels))
+    lab = labels === nothing ? String[] : labels isa Function ? labels : collect(String, string.(labels))
     return Constraint(Symbol(name), f, L, S, upper !== nothing, lab)
+end
+
+# The labels of a constraint's `n` components at `ev` (empty: numbered).
+_labels(c::Constraint{<:Any,Vector{String}}, ev, n) = c.labels
+function _labels(c::Constraint, ev, n)
+    lab = collect(String, string.(c.labels(ev)))
+    length(lab) == n ||
+        throw(DimensionMismatch("constraint $(c.name): $(length(lab)) labels for $n components"))
+    return lab
 end
 
 Base.show(io::IO, c::Constraint) =
@@ -84,12 +98,13 @@ function _constraint_rows(ev::Evaluation, cs::Tuple, multipliers, feasibility::F
         vals = v isa Number ? [Float64(ForwardDiff.value(v))] : Float64.(ForwardDiff.value.(v))
         sg = c.upper ? 1 : -1
         n = length(vals)
+        labels = _labels(c, ev, n)
         for i in 1:n
             k += 1
             lim = c.limit[length(c.limit) == 1 ? 1 : i]
             gi = sg * (vals[i] - lim) / c.scale[length(c.scale) == 1 ? 1 : i]
-            label = n == 1 && isempty(c.labels) ? string(c.name) :
-                    string(c.name, "[", isempty(c.labels) ? string(i) : c.labels[i], "]")
+            label = n == 1 && isempty(labels) ? string(c.name) :
+                    string(c.name, "[", isempty(labels) ? string(i) : labels[i], "]")
             status = gi > feasibility ? :violated : gi >= -feasibility ? :active : :satisfied
             push!(rows, ConstraintRow(label, vals[i], lim, c.upper, gi,
                                       multipliers === nothing ? 0.0 : multipliers[k], status))
@@ -248,14 +263,16 @@ _split_multipliers(λ::Vector{Float64}, lens::Tuple) =
 # ---------------------------------------------------------------------------------------
 
 # The elements of the named parts or components (an error for a name not in the target).
-function _named_elements(t::Target, names)
+_named_elements(t::Target, names) = (_check_names(t, names); elements(t, names...))
+
+function _check_names(t::Target, names)
     isempty(names) && throw(ArgumentError("name the parts (e.g. :wall)"))
     for n in names
         any(c -> c.name === n || c.part === n, t.components) ||
             throw(ArgumentError("the target has no part or component $(repr(n)) " *
                                 "(parts: $(join(repr.(parts(t)), ", ")))"))
     end
-    return elements(t, names...)
+    return nothing
 end
 
 """
@@ -414,6 +431,126 @@ function _exact_value(c::_CeilingValue, ev::Evaluation)
     _check_ceiling(c, ev)
     return _peak(Float64.(ForwardDiff.value.(_counted_power(ev, c.weight))), c.target, c.elements)
 end
+
+# ---------------------------------------------------------------------------------------
+# Keep-outs and the light on named parts
+# ---------------------------------------------------------------------------------------
+
+"""
+    clearance_floor(keepout; minimum = keepout.minimum, scale = 1.0, name = :clearance) -> Constraint
+
+A floor on each beam's worst-case clearance (mm) from a keep-out: the
+[`Constraint`](@ref) `keepout_clearance(keepout, ev) .≥ minimum`, one component per beam
+of the evaluation, labeled by the beam's name. The keep-out is any with a
+[`keepout_clearance`](@ref) method and a `minimum` field: an [`ApertureKeepOut`](@ref),
+a [`SphereKeepOut`](@ref), a [`HardwareKeepOut`](@ref). A beam the keep-out does not
+apply to (clearance `Inf`) gives a component that always holds. The keep-out's `weight`
+is not used: the constraint replaces its penalty ([`keepout_penalty`](@ref)), so pass
+the keep-out to the objective's `keepout` keyword or as a constraint, not both.
+
+`scale` (mm) is the unit of the violation: with the default 1 mm and `feasibility =
+1e-3`, a clearance within 1 µm of `minimum` is `:active` (an engineering default, finer
+than the keep-out's own accuracy against [`clearance`](@ref), a few micrometers). Give
+each of several keep-outs its own `name`.
+
+The floor is per beam, not on the smallest clearance over the beams: in the augmented
+Lagrangian each beam's component has its own multiplier, which stays zero for a beam
+clear of its minimum (its term then vanishes from the inner problem), and each term is
+as smooth as that beam's clearance, while the smallest clearance over the beams has a
+kink wherever the closest beam changes (research notes, "Constrained re-pointing").
+The components follow the evaluation's beams, so the same constraint serves a stage on
+quads and a stage on their beams.
+"""
+function clearance_floor(keepout; minimum::Union{Nothing,Real} = nothing, scale::Real = 1.0,
+                         name = :clearance)
+    hasmethod(keepout_clearance, Tuple{typeof(keepout),Vector{Beam{Float64}}}) ||
+        throw(ArgumentError("$(typeof(keepout)) has no keepout_clearance method"))
+    lim = minimum === nothing ? keepout.minimum : minimum
+    return Constraint(name, _ClearanceValue(keepout); lower = lim, scale, labels = _beam_names)
+end
+
+# The constraint's value: the keep-out's clearance per beam of the evaluation.
+struct _ClearanceValue{K}
+    keepout::K
+end
+(c::_ClearanceValue)(ev::Evaluation) = keepout_clearance(c.keepout, ev.beams)
+
+_beam_names(ev::Evaluation) = [b.name for b in ev.beams]
+
+"""
+    light_fraction(ev, names...) -> Real
+
+All the laser light the named parts or components receive, from either side, as a
+fraction of the delivered (effective, post-LPI) power:
+[`power_fraction`](@ref)`(ev, names...) + `[`clipped_fraction`](@ref)`(ev, names...)`,
+the absorbed power on their elements and the power striking their outside (back side).
+The value of [`light_ceiling`](@ref) and [`light_floor`](@ref); differentiable, in the
+evaluation's number type. A name not in the target is an `ArgumentError`.
+"""
+function light_fraction(ev::Evaluation, names::Symbol...)
+    _check_names(ev.scenario.target, names)
+    return power_fraction(ev, names...) + clipped_fraction(ev, names...)
+end
+
+"""
+    light_ceiling(reference, names...; limit = light_fraction(reference, names...),
+                  scale = max(limit, 1e-3), name = :light) -> Constraint
+    light_ceiling(limit::Real, names...; scale = max(limit, 1e-3), name = :light) -> Constraint
+
+A ceiling on the laser light the named parts or components receive: the
+[`Constraint`](@ref) `light_fraction(ev, names...) ≤ limit` ([`light_fraction`](@ref):
+absorbed plus striking their outside, a fraction of the delivered power), labeled by
+the names. With a `reference` evaluation the limit is its light on the parts (no more
+light on a window or a shield than an accepted design gives it); a number sets the
+fraction directly.
+
+`scale` sets the units of the violation: relative to the limit (the default) when the
+limit is above 1e-3 of the delivered power, otherwise absolute in units of 1e-3, so
+that a ceiling at or near zero (a part meant to stay dark) is met to 1e-6 of the
+delivered power at `feasibility = 1e-3` (an engineering default). The fraction comes
+from the deposition operator, which samples the spots' edges: compare a ray trace
+([`raytrace_deposition`](@ref)) where the light on hardware must be known to better than
+the operator's sampling (research notes, "Capture and clearance rules as optimization
+quantities").
+"""
+light_ceiling(reference::Evaluation, names::Symbol...; limit = nothing, kwargs...) =
+    _light_constraint(true, _light_limit(reference, names, limit), names; kwargs...)
+light_ceiling(limit::Real, names::Symbol...; kwargs...) =
+    _light_constraint(true, Float64(limit), names; kwargs...)
+
+"""
+    light_floor(reference, names...; limit = light_fraction(reference, names...),
+                scale = max(limit, 1e-3), name = :light) -> Constraint
+    light_floor(limit::Real, names...; scale = max(limit, 1e-3), name = :light) -> Constraint
+
+A floor on the laser light the named parts or components receive,
+`light_fraction(ev, names...) ≥ limit`: the capture by a part meant to be hit (a
+backlighter foil, a landing surface), at least the `reference` design's or a given
+fraction. Otherwise as [`light_ceiling`](@ref).
+"""
+light_floor(reference::Evaluation, names::Symbol...; limit = nothing, kwargs...) =
+    _light_constraint(false, _light_limit(reference, names, limit), names; kwargs...)
+light_floor(limit::Real, names::Symbol...; kwargs...) =
+    _light_constraint(false, Float64(limit), names; kwargs...)
+
+_light_limit(reference::Evaluation, names, limit) =
+    limit === nothing ? Float64(ForwardDiff.value(light_fraction(reference, names...))) : Float64(limit)
+
+function _light_constraint(upper::Bool, limit::Float64, names::Tuple; scale = nothing, name = :light)
+    isempty(names) && throw(ArgumentError("name the parts (e.g. :cap_top)"))
+    0 <= limit <= 1 || throw(ArgumentError("the limit is a fraction of the delivered power, got $limit"))
+    s = scale === nothing ? max(limit, 1e-3) : scale
+    f = _LightValue(names)
+    lab = [join(string.(names), "+")]
+    return upper ? Constraint(name, f; upper = limit, scale = s, labels = lab) :
+                   Constraint(name, f; lower = limit, scale = s, labels = lab)
+end
+
+# The constraint's value: the light on the named parts.
+struct _LightValue{N}
+    names::NTuple{N,Symbol}
+end
+(l::_LightValue)(ev::Evaluation) = light_fraction(ev, l.names...)
 
 # ---------------------------------------------------------------------------------------
 # Mode shape against a reference

@@ -1302,7 +1302,9 @@ bound (within 1e-8 of the box width; parameters fixed by `lower == upper` exclud
 display lists those parameters with their values and bounds.
 
 Two more fields record what ended the run. `constraints` holds one [`ConstraintRow`](@ref)
-per constraint component at `x` (empty without `constraints`), and `outcome` is one of
+per constraint component at `x` (empty without `constraints`; the display shows a
+constraint of more than eight components, such as a keep-out per beam, as its worst row
+and a count by status), and `outcome` is one of
 - `:interior`: converged with every constraint met and no parameter at a bound;
 - `:box`: converged with every constraint met and parameters at a bound (the box is
   active: a wider box may lower the objective);
@@ -1408,13 +1410,28 @@ function Base.show(io::IO, ::MIME"text/plain", r::PointingResult)
     return nothing
 end
 
+# A constraint's rows (its components) in a display: all of them up to this many, beyond
+# it the worst (largest violation) and a count by status (a keep-out per beam has
+# hundreds; the rows themselves stay in the vector).
+const _ROWS_SHOWN = 8
+
 function _show_constraint_rows(io::IO, rows::AbstractVector{ConstraintRow}; indent = "\n    ")
-    w = maximum(r -> length(r.name), rows; init = 10)
+    # consecutive rows of one constraint: the name before the component's label
+    stem(r) = first(split(r.name, '['))
+    groups = Vector{ConstraintRow}[]
+    for r in rows
+        isempty(groups) || stem(groups[end][1]) != stem(r) ? push!(groups, [r]) : push!(groups[end], r)
+    end
+    shown = [length(g) <= _ROWS_SHOWN ? g : [g[argmax([r.violation for r in g])]] for g in groups]
+    w = maximum(r -> length(r.name), Iterators.flatten(shown); init = 10)
     @printf(io, "%s%s %12s %12s %10s %10s  %s", indent, rpad("constraint", w), "value", "limit",
             "violation", "multiplier", "status")
-    for r in rows
+    for (g, rs) in zip(groups, shown), r in rs
         @printf(io, "\n    %s %12.5g %s%11.5g %10.2e %10.3g  %s", rpad(r.name, w), r.value,
                 r.upper ? "≤" : "≥", r.limit, r.violation, r.multiplier, r.status)
+        length(g) > _ROWS_SHOWN &&
+            print(io, " (the worst of ", length(g), ": ", count(x -> x.status === :violated, g), " violated, ",
+                  count(x -> x.status === :active, g), " active)")
     end
 end
 

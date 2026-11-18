@@ -22,7 +22,10 @@ run. Ready-made ones: [`irradiance_ceiling`](@ref), a ceiling on the laser irrad
 over named parts (its exact value [`peak_irradiance`](@ref), its smooth stand-in
 [`irradiance_norm`](@ref)), and [`mode_gate`](@ref), a gate per degree on the
 [`mode_departure`](@ref) from a reference drive shape, which goes with
-[`drive_objective`](@ref) for the largest drive within the gates.
+[`drive_objective`](@ref) for the largest drive within the gates;
+[`clearance_floor`](@ref), each beam's worst-case clearance from a keep-out at or above
+its minimum; [`light_ceiling`](@ref) and [`light_floor`](@ref), the laser light on
+named parts ([`light_fraction`](@ref)) at most or at least a limit.
 
 [`mode_sensitivity`](@ref) gives the exact sensitivity of the drive shape to each beam's
 pointing and power errors, and [`mode_uncertainty`](@ref) the asymmetry independent

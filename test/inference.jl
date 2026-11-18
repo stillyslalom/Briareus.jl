@@ -114,6 +114,9 @@ end
     ceilc, gatec = irradiance_ceiling(ev_ref, :wall), mode_gate(c_ref, fill(0.05, 4))
     dobj = drive_objective(; drive = 1.0, keepout)
     aug = Briareus._Augmented(objectives[2], (ceilc, gatec), ([0.5], [0.1, 0.0, 0.2, 0.0]), 3.0)
+    # a keep-out's clearance per beam and the light on named parts as constraints
+    clf, lightc = clearance_floor(hardware), light_ceiling(ev_ref, :cap_top, :cap_bottom)
+    aug2 = Briareus._Augmented(dobj, (clf, lightc), (fill(0.1, length(quads)), [0.2]), 3.0)
 
     @testset "closures compile once" begin
         history(τ -> with_pulses(quads, pulse, τ), [0.5, 1.0]; record = sol -> sol)
@@ -168,7 +171,7 @@ end
         nc = _inf_body_instances(Briareus._constrained_pointing)
         nl = _inf_body_instances(Briareus._lbfgsb)
         optimize_pointing(s, dobj; x0, iterations = 1, evaluations = 3, callback = st -> false,
-                          constraints = [Constraint(:power, ev -> sum(b.power for b in ev.beams); upper = 400.0)])
+                          constraints = [Constraint(:power, ev -> sum(b.power for b in ev.beams); upper = 400.0), clf])
         @test _inf_body_instances(optimize_pointing) == n
         @test _inf_body_instances(Briareus._constrained_pointing) == nc
         @test _inf_body_instances(Briareus._lbfgsb) == nl
@@ -229,6 +232,9 @@ end
             @test (@inferred gatec.f(ev)) isa Vector{T}
             @test (@inferred dobj(ev)) isa T
             @test (@inferred aug(ev)) isa T
+            @test (@inferred clf.f(ev)) isa Vector{T}
+            @test (@inferred lightc.f(ev)) isa T
+            @test (@inferred aug2(ev)) isa T
         end
         # the outer picket fluence and the bubble's picket ratio from it (outer quads aimed
         # into the entrance holes)
@@ -315,6 +321,10 @@ end
                 @test _inf_jet_clean(JET.report_call, gatec.f, ev)
                 @test _inf_jet_clean(JET.report_call, dobj, ev)
                 @test _inf_jet_clean(JET.report_call, aug, ev)
+                @test _inf_jet_clean(JET.report_call, clf.f, ev)
+                @test _inf_jet_clean(JET.report_call, lightc.f, ev)
+                @test _inf_jet_clean(JET.report_opt, lightc.f, ev)
+                @test _inf_jet_clean(JET.report_call, aug2, ev)
             end
             # the outer picket fluence: no dispatch (from 1.11, as the deposition), no errors
             for x in (xo, _inf_duals(xo))
