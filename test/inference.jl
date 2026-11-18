@@ -78,7 +78,8 @@ end
     # and 3ω capture, landed (on the wall) and continued past the outline (the caps)
     talis_rules = (HardwareKeepOut(t, (:cap_top, :cap_bottom); targets = (:wall, :capsule), tolerance = 0.5,
                                    pivot = :aim, miss = :all),
-                   CaptureKeepIn(t, (:wall, :cap_top, :cap_bottom)), CaptureKeepIn(t, (:cap_top, :cap_bottom); pivot = :aim))
+                   CaptureKeepIn(t, (:wall, :cap_top, :cap_bottom)), CaptureKeepIn(t, (:cap_top, :cap_bottom); pivot = :aim),
+                   IncidenceRule(t, (:wall, :capsule)), Omega1KeepOut(t, (:cap_top, :cap_bottom); resolution = 1e-6))
     tw =hohlraum(; geometry..., wall = Material(:Au; albedo = WallLossAlbedo(), conversion = 0.8))
     mw = RadiationModel(tw; F = s.model.F, closed = true)
     pulse = PulseShape([0.0, 1.0, 2.0], [0.0, 4.0, 4.0])

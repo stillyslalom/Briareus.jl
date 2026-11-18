@@ -700,3 +700,248 @@ function _capture_margin(k::CaptureKeepIn, b::Beam)
     δ = xa - b.aim
     return _envelope_clearance(k, b, ef, ρ, aim, k.clusters[j], Inf) - 2 * hypot(dot(δ, ef.e1), dot(δ, ef.e2))
 end
+
+# ---------------------------------------------------------------------------------------
+# Incidence on the part a beam lands on
+# ---------------------------------------------------------------------------------------
+
+"""
+    IncidenceRule(target, parts; peak_fraction = 0.1, intensity = nothing, pointing = 0.05,
+                  target_offset = 0.025, hardware_tolerance = 0.0, focus = 1.0, margin = 0.0,
+                  max_incidence = 70.0, sharpness = 100.0, level = 2, minimum = 0.0,
+                  weight = 100.0)
+
+Incidence limit on the parts beams land on: [`incidence_angle`](@ref)`(rule, beams)`
+gives each beam's worst-case incidence (degrees) on the part it lands on (the first of
+`parts` its nominal axis meets), the TaLIS 3ω incidence rule of [`talis_check`](@ref)
+(`:incidence_3w`, at most `max_incidence`) as a quantity. As `talis_check` judges it, the
+part is cut into `4^level` sub-triangles per mesh triangle, each with its normal (exact
+on sphere, cylinder, cone and torus surfaces), and the incidence is the largest angle
+between the beam axis and the normal of a sub-triangle visible from upstream that the
+worst-case footprint reaches (the envelope at `peak_fraction` of the peak grown by the
+f-cone and `margin`, enlarged by the transverse error radius `pointing + target_offset +
+hardware_tolerance` and `focus/(2F)`; no rule tolerance), plus the f-cone's half-angle
+`atan(1/(2F))`, at most 90°.
+
+The set of sub-triangles the footprint reaches changes as a beam moves, so the largest
+angle over it steps. The quantity smooths the step: each sub-triangle `f` enters with its
+angle less `sharpness × max(0, d_f)` (degrees, `d_f` in mm the clearance of the
+sub-triangle from the footprint, from its exact minimum over the sub-triangle as
+[`HardwareKeepOut`](@ref) finds it), so a sub-triangle counts in full once the footprint
+reaches it and fades over `Δθ/sharpness` mm outside it. The incidence is continuous in
+the beams' aim, defocus and spot size, never below `talis_check`'s (to its resolution),
+and equal to it where no sub-triangle outside the footprint lies within `Δθ/sharpness`
+of it, `Δθ` its angle above the reached ones'. On a flat part it is the part's tilt to
+the beam plus the half-angle, independent of the pointing. `sharpness` (100°/mm) is an
+engineering default, not a facility criterion; the other defaults are those of
+`talis_check`. A beam whose axis meets none of `parts` has no incidence (`-Inf`; see
+[`CaptureKeepIn`](@ref) for the capture rule that fails it).
+
+As a keep-out ([`keepout_clearance`](@ref), [`keepout_penalty`](@ref)) the rule's quantity
+is the margin `max_incidence − incidence` in degrees, held at or above `minimum`.
+The quantity is a surrogate checked against the package's own `talis_check` (see the
+research notes), not against the facility's tool.
+"""
+struct IncidenceRule
+    names::Vector{Symbol}
+    target::Target
+    comps::Set{Int}
+    part_of::Dict{Int,Int}
+    leaves::Vector{Vector{NTuple{3,Vec3}}}       # each part's sub-triangles
+    normals::Vector{Vector{Vec3}}                # and their normals
+    peak_fraction::Union{Nothing,Float64}
+    intensity::Union{Nothing,Float64}
+    transverse::Float64
+    focus::Float64
+    margin::Float64
+    tolerance::_TaLISTol                         # none: incidence takes no rule tolerance
+    max_incidence::Float64
+    sharpness::Float64
+    minimum::Float64
+    weight::Float64
+end
+
+function IncidenceRule(t::Target, parts; peak_fraction = nothing, intensity = nothing,
+                       pointing = 0.05, target_offset = 0.025, hardware_tolerance = 0.0,
+                       focus = 1.0, margin = 0.0, max_incidence = 70.0, sharpness = 100.0,
+                       level::Integer = 2, minimum = 0.0, weight = 100.0)
+    intensity === nothing && peak_fraction === nothing && (peak_fraction = 0.1)
+    sharpness > 0 || throw(ArgumentError("sharpness must be > 0"))
+    names = _part_names(parts)
+    pieces = [part_pieces(t, n) for n in names]
+    part_of = Dict(ci => j for (j, ps) in enumerate(pieces) for ci in ps)
+    leaves = [NTuple{3,Vec3}[] for _ in pieces]
+    normals = [Vec3[] for _ in pieces]
+    for (j, ps) in enumerate(pieces), ci in ps
+        t.components[ci].kind === :surface || continue
+        g = _talis_samples(t, ci, level)
+        append!(leaves[j], ((a, b, c) for (a, b, c, _) in g.leaves))
+        append!(normals[j], g.normals)
+    end
+    return IncidenceRule(names, t, Set(keys(part_of)), part_of, leaves, normals, peak_fraction,
+                         intensity, pointing + target_offset + hardware_tolerance, focus, margin,
+                         _NO_TOLERANCE, max_incidence, sharpness, minimum, weight)
+end
+
+"""
+    incidence_angle(rule, beams) -> Vector
+
+Worst-case incidence (degrees) of each beam on the part of an [`IncidenceRule`](@ref) it
+lands on, the f-cone's half-angle included; `-Inf` for a beam that lands on none.
+Continuous in the beams' aim, defocus and spot size; in their number type.
+"""
+incidence_angle(k::IncidenceRule, beams::AbstractVector{<:Beam}) = [_incidence_angle(k, b) for b in beams]
+
+keepout_clearance(k::IncidenceRule, beams::AbstractVector{<:Beam}) =
+    [k.max_incidence - θ for θ in incidence_angle(k, beams)]
+
+function _incidence_angle(k::IncidenceRule, b::Beam{T}) where {T}
+    ef, ρ, aim = _envelope_frame(k, b)
+    _, hit = _landing_hit(k.target, _axis_envelope(ef, aim), k.comps; miss = Inf)
+    hit > 0 || return T(-Inf)
+    j = k.part_of[hit]
+    leaves, normals = k.leaves[j], k.normals[j]
+    t = k.target
+    shift = k.transverse + k.focus * ef.cone
+    L = sqrt(1 + ef.cone^2)
+    far = 4 * (t.scale + norm(aim)) + 1
+    ε = 1e3 * _ray_eps(t)
+    # best first by an upper bound of each sub-triangle's smoothed angle (its angle less
+    # sharpness × a lower bound of its clearance from the footprint)
+    θs = [acosd(clamp(abs(dot(n, ef.k)), 0.0, 1.0)) for n in normals]
+    heap = Tuple{Float64,Int}[]
+    for (i, (a, bb, c)) in enumerate(leaves)
+        m = (a + bb + c) / 3
+        r = max(norm(a - m), norm(bb - m), norm(c - m))
+        lb = _point_bound(ef, m) - L * r - shift
+        _heap_push!(heap, (-(θs[i] - k.sharpness * max(0.0, lb)), i))
+    end
+    best, ibest, cl = -Inf, 0, _TriangleCluster[]
+    while !isempty(heap)
+        nub, i = _heap_pop!(heap)
+        -nub <= best && break
+        a, bb, c = leaves[i]
+        m = (a + bb + c) / 3
+        visible(t, m - far * ef.k, m - ε * ef.k) || continue
+        cl = _clusters([leaves[i]])
+        found, x, _ = _hardware_closest(cl, k.tolerance, ef, Inf, aim)
+        d = first(_envelope_value_gradient(ef, x, 1)) - shift
+        v = θs[i] - k.sharpness * max(0.0, d)
+        v > best && ((best, ibest) = (v, i))
+    end
+    ibest == 0 && return T(-Inf)
+    hc = atand(1 / (2b.fnumber))
+    a, bb, c = leaves[ibest]
+    cl = _clusters([leaves[ibest]])
+    # the clearance in the beams' number type where the smoothing acts
+    d = _envelope_clearance(k, b, ef, ρ, aim, cl, Inf)
+    θ = θs[ibest] - k.sharpness * max(zero(d), d)
+    return min(θ + hc, T(90))
+end
+
+# ---------------------------------------------------------------------------------------
+# Keep-out from the 1ω footprints
+# ---------------------------------------------------------------------------------------
+
+"""
+    Omega1KeepOut(target, parts; pointing = 0.05, target_offset = 0.025,
+                  hardware_tolerance = 0.0, focus = 1.0, tolerance = 0.5, pivot = :tcc,
+                  omega1_edge = 4.45, omega1_size = nothing, omega1_focus = nothing,
+                  lens_distance = 7700.0, offsets = nothing, resolution = 1e-9,
+                  minimum = 0.2, weight = 100.0)
+
+Keep-out of named parts from the beams' 1ω footprints: [`omega1_clearance`](@ref)`(keepout,
+beams)` gives each beam's worst-case clearance (mm) of `parts` (a name or a collection
+of part or component names) from the 10 % contour of its unconverted 1ω light, the TaLIS
+1ω clearance rule of [`talis_check`](@ref) (`:clearance_1w`, more than 0.2 mm) as a
+quantity. The footprint and its keywords are `talis_check`'s (see its "1ω footprint":
+per beamlet of a NIF quad a square whose near edge lies `omega1_edge` from the 3ω axis,
+tapering to the 1ω focus `omega1_focus` beyond the 3ω focus, moved by `±focus` with the
+3ω focal plane), and the clearance is the smallest transverse distance from the parts to
+it less the transverse error radius `pointing + target_offset + hardware_tolerance` and
+the rule tolerance `r·tan(tolerance)` about `pivot`, point by point. Beams without a NIF
+quad name or an `offsets` entry have no 1ω footprint and get `Inf`.
+
+The minimum over the parts is found by `talis_check`'s branch and bound on the Lipschitz
+constant of the footprint distance, to `resolution` (mm), not by an exact search: the
+clearance is the smallest value found, within `resolution` of the minimum and
+continuous in the beams' aim and defocus to that accuracy. Its derivatives are the
+footprint distance's at that point (Danskin's theorem; one-sided at the footprint's
+corners and where two beamlets' footprints are equally near). Not clearing calls for
+unconverted-light management (`:management_1w`), a review this quantity does not
+decide. The defaults are `talis_check`'s; the quantity is a surrogate checked against
+the package's own `talis_check` (see the research notes), not against the facility's
+tool.
+"""
+struct Omega1KeepOut{O,B}
+    names::Vector{Symbol}
+    target::Target
+    tris::Vector{NTuple{3,Vec3}}
+    transverse::Float64
+    focus::Float64
+    tolerance::_TaLISTol
+    c0::Float64                      # the footprint center's distance from the 3ω axis
+    h0::Float64                      # its half side
+    f1::Float64                      # the 1ω focus beyond the 3ω focus
+    L::Float64                       # the lens distance (chief ray)
+    lip::Float64                     # Lipschitz constant of the footprint distance
+    offsets::O                       # footprint directions by beam name, or `nothing`
+    table::B                         # the NIF beam table, for the beamlets
+    resolution::Float64
+    minimum::Float64
+    weight::Float64
+end
+
+function Omega1KeepOut(t::Target, parts; pointing = 0.05, target_offset = 0.025,
+                       hardware_tolerance = 0.0, focus = 1.0, tolerance = 0.5, pivot = :tcc,
+                       omega1_edge = 4.45, omega1_size = nothing, omega1_focus = nothing,
+                       lens_distance = 7700.0, offsets = nothing, resolution = 1e-9, minimum = 0.2,
+                       weight = 100.0)
+    resolution > 0 || throw(ArgumentError("resolution must be > 0"))
+    names = _part_names(parts)
+    idx = Set(ci for n in names for ci in part_pieces(t, n))
+    tris = [tri for (k, tri) in zip(findall(in(idx), t.tri_comp), _part_triangles(t, idx)) if t.tri_area[k] > 0]
+    isempty(tris) && throw(ArgumentError("parts $(join(repr.(names), ", ")) have no triangles"))
+    uc = first(c for c in nif_unconverted() if c.name === :omega1)
+    W0 = omega1_size === nothing ? uc.footprint + 2 * (uc.edge - omega1_edge) : Float64(omega1_size)
+    f1 = omega1_focus === nothing ? uc.focal_shift : Float64(omega1_focus)
+    c0, h0, L = omega1_edge + W0 / 2, W0 / 2, Float64(lens_distance)
+    return Omega1KeepOut(names, t, tris, pointing + target_offset + hardware_tolerance, focus,
+                         _talis_tol(tolerance, pivot), c0, h0, f1, L, 1 + hypot(c0 / L + h0 / f1, h0 / f1),
+                         offsets, _nif_beam_table(), resolution, minimum, weight)
+end
+
+"""
+    omega1_clearance(keepout, beams) -> Vector
+
+Worst-case clearance (mm) of the parts of an [`Omega1KeepOut`](@ref) from each beam's
+1ω footprint, the rule tolerance included; `Inf` for a beam without a 1ω footprint.
+Differentiable in the beams' aim and defocus; in their number type.
+"""
+omega1_clearance(k::Omega1KeepOut, beams::AbstractVector{<:Beam}) = [_omega1_clearance(k, b) for b in beams]
+
+keepout_clearance(k::Omega1KeepOut, beams::AbstractVector{<:Beam}) = omega1_clearance(k, beams)
+
+function _omega1_clearance(k::Omega1KeepOut, b::Beam{T}) where {T}
+    bv = _value_beam(b)
+    bl = _omega1_beamlets(bv, k.offsets, k.table)
+    bl === nothing && return T(Inf)
+    aim = Vec3(bv.aim)
+    cx = (; focus = k.focus, c0 = k.c0, h0 = k.h0, f1 = k.f1, L = k.L)
+    τ = k.tolerance
+    f = x -> _omega1_distance(x, bl, cx)[2] - k.transverse - τ(x, aim)
+    lb, x = _lipschitz_minimum(f, k.tris, k.lip + τ.tanα, (k.resolution, 0.0, k.minimum), aim)
+    isfinite(lb) || return T(Inf)
+    # the footprint distance at that point in the beams' number type: each beamlet's 3ω
+    # focus moves with the aim and defocus
+    d = T(Inf)
+    for (kb, _, ô) in bl
+        fb = b.aim + b.defocus * kb
+        d = min(d, _omega1_square(x - fb, kb, ô, k.c0, k.h0, k.f1, k.L))
+        if k.focus > 0
+            d = min(d, _omega1_square(x - fb + k.focus * kb, kb, ô, k.c0, k.h0, k.f1, k.L),
+                    _omega1_square(x - fb - k.focus * kb, kb, ô, k.c0, k.h0, k.f1, k.L))
+        end
+    end
+    return d - k.transverse - _tol_value(τ, x, b.aim)
+end

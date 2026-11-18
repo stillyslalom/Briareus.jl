@@ -22,8 +22,10 @@ quantity of its own ([`keepout_clearance`](@ref)) for a hand-written objective o
 constraint, as are the fractions of the laser power on named parts
 ([`clipped_fraction`](@ref) beside [`power_fraction`](@ref)). The TaLIS rules that carry
 a margin are such quantities too, each checked against `talis_check`: the 3ω clearance
-is a `HardwareKeepOut` with the rule tolerance, and [`CaptureKeepIn`](@ref) gives the 3ω
-capture margin ([`capture_margin`](@ref)). [`backlighter_foil`](@ref) and [`line_of_sight`](@ref)
+is a `HardwareKeepOut` with the rule tolerance, [`CaptureKeepIn`](@ref) gives the 3ω
+capture margin ([`capture_margin`](@ref)), [`IncidenceRule`](@ref) the 3ω incidence
+([`incidence_angle`](@ref)) and [`Omega1KeepOut`](@ref) the 1ω clearance
+([`omega1_clearance`](@ref)). [`backlighter_foil`](@ref) and [`line_of_sight`](@ref)
 place a foil on a diagnostic line of sight and check it against shields and beams, and
 [`backlighter_signal`](@ref) follows the deposition through a He-α conversion efficiency
 fitted to published foil data ([`kshell_ce`](@ref)) to the photons at the detector.

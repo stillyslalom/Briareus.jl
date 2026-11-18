@@ -287,3 +287,95 @@ end
     end
     @test err < 1e-6
 end
+
+@testset "design rules: TaLIS 3ω incidence as a quantity" begin
+    # closed form: a part of two plates, one normal to a round beam down −z (it lands
+    # there) and one tilted 60° beside it, its near edge at x = 1.2 on the focal plane.
+    # The tilted plate counts in full once the footprint reaches it and fades at
+    # `sharpness` degrees per mm of clearance outside it
+    pa = foil(:pa, (0.0, 0.0, 0.0), (0.0, 0.0, 1.0); width = 2.0, n = 4)
+    pb = foil(:pb, (1.2 + 0.5cosd(60), 0.0, 0.5sind(60)), (-sind(60), 0.0, cosd(60)); width = 1.0, height = 2.0, n = 2)
+    tp = Target([Component(c.name, c.mesh, c.material; part = :p) for c in (pa, pb)])
+    k = IncidenceRule(tp, :p; max_incidence = 70.0, minimum = 5.0)
+    b0 = Beam("b"; theta = 0, phi = 0, spot = SuperGaussianSpot(0.2), aim = (0.0, 0.0, 0.0))
+    R = envelope_radius(b0.spot, b0.power; peak_fraction = 0.1) * b0.spot.a
+    cone = 1 / (2b0.fnumber)
+    hc = atand(cone)
+    ds = -0.1:0.01:0.7                        # the tilted plate's clearance from the footprint
+    bs = [remake(b0; aim = (1.2 - R - 0.075 - cone - d, 0.0, 0.0)) for d in ds]
+    θ = incidence_angle(k, bs)
+    @test θ ≈ [max(0.0, 60 - 100 * max(0.0, d)) + hc for d in ds] rtol = 1e-12
+    @test keepout_clearance(k, bs) == 70 .- θ
+    @test keepout_penalty(k, bs) ≈ 100 * sum(max(0, 5 - (70 - x))^2 for x in θ) rtol = 1e-12
+    # talis_check steps where the footprint reaches the plate; the quantity lies at or
+    # above it, equal outside the fading band
+    w = [only(r.worst for r in talis_check(tp, [b]; capture = (:p,), hardware = (), omega1 = false).rows
+              if r.rule === :incidence_3w) for b in bs]
+    @test all(θ .>= w .- 1e-9) && all(isapprox.(θ[ds .<= 0], w[ds .<= 0]; rtol = 1e-12)) &&
+          all(isapprox.(θ[ds .>= 0.61], w[ds .>= 0.61]; rtol = 1e-12))
+    # the derivative in the aim where the plate fades in: 100°/mm
+    f(x) = only(incidence_angle(k, [remake(b0; aim = (x[1], 0.0, 0.0))]))
+    @test ForwardDiff.gradient(f, [1.2 - R - 0.075 - cone - 0.3])[1] ≈ 100 rtol = 1e-9
+    # no landing, no incidence
+    @test only(incidence_angle(k, [remake(b0; aim = (5.0, 0.0, 0.0))])) == -Inf
+
+    # against talis_check's :incidence_3w rows on the mock-up hohlraum: the wall and the
+    # capsule with their exact normals, every quad (the largest angle on each lies
+    # inside the footprint: no fading)
+    t = DR_TARGET
+    beams = apply(GroupPointing(nif_quads(); fields = (:z, :r)), DR_X)
+    rep = talis_check(t, beams; capture = (:wall, :capsule), hardware = (), omega1 = false)
+    w = [only(r.worst for r in rep.rows if r.beam == b.name && r.rule === :incidence_3w) for b in beams]
+    θ = incidence_angle(IncidenceRule(t, (:wall, :capsule)), beams)
+    @test θ ≈ w rtol = 1e-12
+    @test count(>(70), θ) >= 4
+end
+
+@testset "design rules: TaLIS 1ω clearance as a quantity" begin
+    # closed form: one beamlet's footprint (an `offsets` entry: the square displaced along
+    # +x) without the taper (a prism) and without the focus error, and a plate across the
+    # gap between the beam and the footprint, along the beam at x = 4: the footprint's
+    # near edge lies at x = aim + 4.45, so every point of the plate is 0.45 + aim from it,
+    # and the tolerance is largest at the plate's corners, √21 mm from TCC
+    b0 = Beam("b"; theta = 0, phi = 0, spot = SuperGaussianSpot(0.2), aim = (0.0, 0.0, 0.0))
+    pl = Target([foil(:pl, (4.0, 0.0, 1.0), (-1.0, 0.0, 0.0); width = 2.0, n = 2)])
+    k = Omega1KeepOut(pl, :pl; offsets = Dict("b" => 0.0), omega1_focus = Inf, lens_distance = Inf, focus = 0.0)
+    xs = -0.3:0.05:0.3
+    c = omega1_clearance(k, [remake(b0; aim = (x, 0.0, 0.0)) for x in xs])
+    @test c ≈ [0.45 + x - 0.075 - tand(0.5) * sqrt(21) for x in xs] rtol = 1e-9
+    @test only(omega1_clearance(k, [remake(b0; name = "other")])) == Inf    # no footprint
+
+    # against talis_check's :clearance_1w rows on the mock-up, every NIF quad
+    t = DR_TARGET
+    beams = apply(GroupPointing(nif_quads(); fields = (:z, :r)), DR_X)
+    rep = talis_check(t, beams; capture = (:wall, :capsule), hardware = (), omega1_components = (:shield, :stalk),
+                      resolution = 1e-7, rtol = 0)
+    for part in (:shield, :stalk)
+        w = [only(r.worst for r in rep.rows if r.beam == b.name && r.rule === :clearance_1w && r.component === part)
+             for b in beams]
+        c = omega1_clearance(Omega1KeepOut(t, part), beams)
+        # the report's lower bound, the quantity a found value: within the 1e-7 mm resolution
+        @test all(0 .<= c .- w .<= 1.1e-7)
+    end
+    ko = Omega1KeepOut(t, :stalk; resolution = 1e-11, minimum = 0.2, weight = 3.0)
+    c = omega1_clearance(ko, beams)
+    @test any(<(0.2), c) && any(>(0.2), c)
+    @test keepout_penalty(ko, beams) ≈ 3 * sum(max(0, 0.2 - x)^2 for x in c) rtol = 1e-12
+    # continuity: an aim scan, no step beyond the Lipschitz bound
+    b = beams[argmin(c)]
+    ys = -0.5:0.01:0.5
+    m = omega1_clearance(ko, [remake(b; aim = Tuple(b.aim + Vec3(0.0, y, 0.0))) for y in ys])
+    @test maximum(abs, diff(m)) <= 0.01 * (ko.lip + tand(0.5)) + 1e-10
+    # derivatives in each beam's aim and defocus against central differences
+    err = 0.0
+    for b in beams
+        mk(y) = remake(b; aim = (y[1], y[2], y[3]), defocus = y[4])
+        y0 = [b.aim..., b.defocus]
+        f(y) = only(omega1_clearance(ko, [mk(y)]))
+        f(y0) < 1 || continue
+        g = ForwardDiff.gradient(f, y0)
+        fd = [(f(y0 + 1e-4 * (1:4 .== j)) - f(y0 - 1e-4 * (1:4 .== j))) / 2e-4 for j in 1:4]
+        err = max(err, maximum(abs.(g .- fd)))
+    end
+    @test err < 1e-8
+end

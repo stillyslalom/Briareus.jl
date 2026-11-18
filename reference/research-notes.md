@@ -10812,6 +10812,46 @@ facing away from the beams that pass it, and a closed 0.3 mm radius, 4 mm long s
   4.4e-16 mm (on 2 to 12 of 48 beams per mock-up keep-out) and the penalty gradients by
   at most 2.3e-13 absolute (1e-16 relative): rounding of the same arithmetic compiled in
   another function, measured against the commit before.
+- **TaLIS 3ω incidence as a quantity** (`IncidenceRule`, `incidence_angle`). As
+  `talis_check` judges it: the landing part cut into 4^level sub-triangles with their
+  normals (exact on analytic surfaces), the largest angle to the beam axis among those
+  visible from upstream that the worst-case 10 % footprint reaches, plus the f-cone's
+  half-angle. The set reached steps as the beam moves; the quantity takes each
+  sub-triangle's angle less `sharpness × max(0, d)` (d its exact clearance from the
+  footprint, by the keep-out's search on the one sub-triangle), a continuous maximum that
+  counts a sub-triangle in full once reached and fades it over Δθ/sharpness mm outside.
+  `sharpness = 100°/mm` is an engineering default (a sub-triangle 0.01 mm outside the
+  footprint counts 1° less). Best first over the sub-triangles by an upper bound (their
+  angle less sharpness × a lower bound of d). Checks: closed form (a part of a plate
+  normal to a round beam and a 60° plate beside it, the clearance of the latter from
+  −0.1 to 0.7 mm): 1e-12 relative, the derivative in the aim 100°/mm to 1e-9; it lies at
+  or above `talis_check`'s step and equals it outside the 0.6 mm fading band. Against
+  `talis_check` on the design-rules hohlraum (wall and capsule, exact cylinder and sphere
+  normals, 48 quads, 8 of them above 70°) and on the capture foil (13 landed rows): equal
+  on every row (on each the largest angle lies inside the footprint, where no fading
+  applies: the quantity is locally constant in the pointing, as the rule is). Cost: 12 ms for the 48 quads on the
+  hohlraum's 6976 sub-triangles, 0.63 ms for 24 beams on the foil's 640 (one thread).
+- **TaLIS 1ω clearance as a quantity** (`Omega1KeepOut`, `omega1_clearance`). The
+  footprint of `talis_check` (per NIF beamlet a square, near edge 4.45 mm from the 3ω
+  axis, tapering to the 1ω focus, the focus error as ±1 mm shifts), less the error
+  radius and the rule tolerance. The square distance is convex in the point but the
+  minimum over a triangle can lie inside it (the square's medial lines), so the minimum
+  is not found by a segment search: `talis_check`'s Lipschitz branch and bound runs to
+  `resolution` (1e-9 mm by default, `rtol = 0`) and the quantity is the value at the
+  best point found (within `resolution` above the minimum, continuous to that accuracy),
+  its derivatives the footprint distance's there (each beamlet's focus moves with the aim
+  and defocus). Checks: closed form (one beamlet's prism footprint and a plate between it
+  and the beam): 1e-9 relative. Against `talis_check` (resolution 1e-7, `rtol = 0`) on
+  the mock-up's 48 quads, shield and stalk (worst −0.25 to 3.8 mm): 9.5e-8 to 1.0e-7 mm
+  above the report's lower bound on all 96 rows. An aim scan: no step beyond the
+  Lipschitz bound. Derivatives against central differences (h = 1e-4, resolution 1e-11):
+  3e-11. Cost (48 quads, one thread): 160 ms (shield) and 184 ms (stalk) at 1e-9, 91 and
+  124 ms at 1e-7: three times one deposition of the coarse mock-up, the price of the
+  branch and bound.
+- **Not represented.** 1ω management (curvature or specular reflection, a review), the
+  diagnostics-to-1ω rule, the TAS stay-in zone (not a function of the pointing) and the
+  LEH-edge review tier. The loop that reruns `talis_check` and tightens minimums is out
+  of scope.
 
 ## VisRad benchmark beyond deposition: the saved runs (2026-11-18) *measured*
 

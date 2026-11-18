@@ -715,7 +715,7 @@ function _lipschitz_minimum(f, roots::AbstractVector{S}, lip, acc, x0, axial = n
             lb = min(lb, low)
             break
         elseif !ok                              # a root not yet admitted
-            admit(sx) || continue
+            (admit === nothing || admit(sx)) || continue
             ub, xb = _simplex_bound!(heap, f, inside, lip, sx, ub, xb, true)
             for x in sx
                 inside(x) || continue
