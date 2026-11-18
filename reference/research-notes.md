@@ -2167,6 +2167,61 @@ spatial profile parameters" on.
   steps to 60 mm; Gauss–Legendre in scaled polar coordinates out to the cut-off along
   each direction, within 2 × 10⁻⁶ of a brute-force sum) and interpolated linearly. Its
   derivative with respect to the spot size enters gradients only through a(z) b(z).
+- **A tapered cut for optimization (2026-11-18), `VisRadProfile(; taper)`.** The hard
+  cut makes deposition discontinuous in the aim: an operator point crossing α = ln 1000
+  adds or removes exactly 10⁻³ of the beam's local peak times its weight and |n·k|.
+  On a public mock-up (the default `hohlraum()`, 192 `visrad_nif_spot` beams in the
+  quad frame aimed at their entrance-hole centers, one 44.5° quad's aim moved along z in
+  10⁻⁵ mm steps over 2 × 10⁻³ mm), 13 points crossed; each jump of the wall power
+  matched the prediction from the crossing point to 10⁻⁴ (the ratio to W |n·k| I₀ was
+  0.001000 every time), 5 × 10⁻⁶ TW or 6 × 10⁻⁷ of the quad's wall power, and 2.9 × 10⁻⁶
+  of the wall's P2 moment. A central difference whose stencil straddles a jump is off
+  from ForwardDiff by the jump over 2h: 0.36 % of the P2 moment's derivative at h =
+  10⁻⁴ mm, 36 % at 10⁻⁶ mm. A constrained re-pointing run on a saved study case
+  (scratch, not in the repository) stalled in its first inner run, where the augmented
+  Lagrangian decreased along its descent direction only for steps ≤ 10⁻⁶ mm. **H**
+  - The option multiplies exp(−α) by the quintic smoothstep of t = (ln 1000 − α)/taper,
+    C² at both ends of the band, and renormalizes I₀(z) with the tapered integral (the
+    law's own normalization is the integral inside the cut, so the taper's share is
+    restored). The support, and with it the operator's footprint and the dual screen,
+    is unchanged. Placing the band below the cut in α is where the law is least
+    constrained: a cut at ln 1000 and no cut fit VisRad's plates equally well (above).
+  - Its cost with taper = 1 (intensities between 10⁻³ and e × 10⁻³ of the local peak):
+    the share of a plane's integral in the band is 4–12 × 10⁻⁵ (NIF plates, |z| ≤ 10
+    mm), so the renormalized interior rises by that much; on the mock-up the absorbed
+    total changes by +6 × 10⁻⁶ (redistributed from clipped light), wall elements by at
+    most 6.9 × 10⁻⁵ of the wall peak (rms 2.5 × 10⁻⁵), bright elements (above 1 % of
+    the peak) by at most 0.24 % of their own value, and the wall peak by 5 × 10⁻⁵.
+    Against VisRad's own deposition on the 2026-10-23 probe plates (16 points per
+    element, rms over elements above 1 % of VisRad's peak), the per-plate rms moves by
+    −0.011…+0.010 percentage points: 0.111–0.181 % → 0.112–0.189 % on the 32 tilted
+    plates, 0.041–0.460 % → 0.030–0.458 % on the 27 envelope plates; plate totals move
+    by under 10⁻⁵; no element changes by more than 8.6 × 10⁻⁴ of its plate's peak. With
+    taper = ln 2 the changes are about 60 % of these. (The hard-cut statistics are recomputed
+    here: the tilted plates agree with the row above, 0.11–0.18 % against 0.12–0.22 %,
+    while some envelope plates, at 0.42–0.46 %, exceed the normal-plate row's 0.27 %;
+    the difference was not traced.) **H**
+  - What it buys, on the mock-up: no jumps (second differences of the wall power at
+    10⁻⁵ mm steps 10⁻⁴ of the hard cut's jump and below), and ForwardDiff agrees with
+    central differences as h²: 9.4 × 10⁻⁷, 1.5 × 10⁻⁸, 7.8 × 10⁻¹¹ (P2 moment) at h =
+    10⁻³, 10⁻⁴, 10⁻⁵ mm across the former jump. The normalization table's linear
+    interpolation in |z| (0.1 mm nodes) leaves kinks in the derivative, which did not
+    show at these steps. On the stalled re-pointing run (scratch; 92 parameters, a wall
+    ceiling and four mode gates, CBET on), started the same way with taper = 1: the
+    gates' finite differences along a random direction agree with ForwardDiff to
+    10⁻⁷ at h = 10⁻³ and 10⁻⁴ mm (2 × 10⁻³ to 8 × 10⁻³ with the hard cut); the first
+    inner run ended after about 540 evaluations instead of stalling (1350 evaluations
+    on its last 33 iterations with the hard cut), and in the same 7-minute limit the
+    run took 8 outer iterations (1404 iterations, 1.24 evaluations each) against 1,
+    bringing the gate ratios from 1.3–5.7 to 1.004–1.020. The case stays infeasible (its
+    wall ceiling), and at the hard cut's stalled design the line search along the
+    projected gradient still fails above 10⁻⁶ mm with the taper: what remains there is
+    not smooth in the objective's keep-out penalty (its drive term agrees; the objective's
+    ForwardDiff −1.229 against central differences −1.169, −1.193, −1.207 at h = 10⁻³,
+    10⁻⁴, 10⁻⁵ mm), not in the deposition. **H**
+  - The default stays VisRad's hard cut (the law reproduces VisRad); the taper is an
+    engineering option for optimization. **M** for the choice of width (one e-fold,
+    not tuned).
 
 #### Tilted plates and per-beam totals
 

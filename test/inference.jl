@@ -104,6 +104,8 @@ end
                             quads; ncone = 1, lmax = 4, spacing = 0.2, panels = 20)
     coronas = CoronaOperator(corona.profile, quads; ncone = 1, lmax = 4, spacing = 0.2, panels = 20,
                              shells = [0.7, 0.9, 1.2, 3.7])
+    # VisRad's beam model with its cut tapered (`VisRadProfile(; taper)`)
+    opv = DepositionOperator(t, quads; profile = VisRadProfile(; taper = 1.0))
     # the drive proxies of a deposition, made positive everywhere (types unchanged)
     _inf_positive(d) = (; ylm = d.ylm .+ 10 .* (eachindex(d.ylm) .== 1),
                         shell_ylm = d.shell_ylm .+ 10 .* (axes(d.shell_ylm, 1) .== 1))
@@ -278,6 +280,13 @@ end
         for x in (xc0, _inf_duals(xc0))
             @test (@inferred apply(pc, x)) isa Vector{Beam{eltype(x)}}
         end
+        # VisRad's beam model, tapered
+        for x in (x0, _inf_duals(x0))
+            T = eltype(x)
+            beams = apply(p, x)
+            @test (@inferred deposit(opv, beams)).element isa Vector{T}
+            @test (@inferred intensity(opv.profile, beams[1], Vec3(0.0, 0.0, 4.0))) isa T
+        end
         @test (@inferred flux_response(s.model, s.observed)) isa Matrix{Float64}
         # a dual absorption on Float64 beams promotes the deposition
         ηd = only(_inf_duals([0.9]))
@@ -369,6 +378,12 @@ end
                 @test _inf_jet_clean(JET.report_opt, apply, pc, x)
                 @test _inf_jet_clean(JET.report_call, apply, pc, x)
             end
+            # VisRad's beam model, tapered: no dispatch (from 1.11, as the deposition
+            # checks above), no possible errors
+            for x in (x0, _inf_duals(x0))
+                VERSION >= v"1.11" && @test _inf_jet_clean(JET.report_opt, deposit, opv, apply(p, x))
+                @test _inf_jet_clean(JET.report_call, deposit, opv, apply(p, x))
+            end
             @test _inf_jet_clean(JET.report_call, flux_response, s.model, s.observed)
             @test _inf_jet_clean(JET.report_call, solve, s.model, dep)
             @test _inf_jet_clean(JET.report_call, (m, d) -> solve(m, d; time = 1.0), mw, dep)
@@ -407,5 +422,7 @@ end
         # with the per-group (M-band) split of `drive_history`
         sp = Briareus._mband_split(nif_mband(), t, quads)
         @test _inf_kernel_allocs(s.deposition, quads, sp) < bound
+        # VisRad's beam model, tapered
+        @test _inf_kernel_allocs(opv, apply(p, _inf_duals(x0))) < bound
     end
 end

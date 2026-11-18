@@ -85,7 +85,8 @@ capsule at TCC, an LEH edge — are correlated with the part of the spot they bl
 `profile = VisRadProfile(...)` replaces this with VisRad's beam model, so that a
 design can be checked in VisRad and its deposition reproduced. The model is a
 super-Gaussian whose semi-axes and exponent grow away from focus and which blends
-toward a square, cut off at 10⁻³ of its local peak. Points are then sampled along the
+toward a square, cut off at 10⁻³ of its local peak (or tapered to the cut, for
+optimization: `VisRadProfile(; taper)`). Points are then sampled along the
 beam axis only (`ncone` is ignored), and the beam axis through each point determines
 its shadowing. The two models agree near focus; away from it the f-cone convolution
 softens the edges, while VisRad's spot turns square and grows faster (on NIF hohlraum
@@ -634,9 +635,10 @@ end
 # the sum of those powers (of type `T`); `η` the `absorption` of `deposit`.
 @inline function _sum_points(sink::F, op::DepositionOperator, bi, f::BeamFrame,
                              fv::BeamFrame{Float64}, (κ, α, β), r, ::Type{T}, η = nothing) where {F,T}
-    op.profile === nothing ||
-        return _sum_points_visrad(sink, op, bi, _VRFrame(f, op.envelope[bi]),
-                                  _VRFrame(fv, op.envelope[bi]), r, T, η)
+    prof = op.profile
+    prof === nothing ||
+        return _sum_points_visrad(sink, op, bi, _VRFrame(f, op.envelope[bi], prof.taper),
+                                  _VRFrame(fv, op.envelope[bi], prof.taper), r, T, η)
     ds = op.dirs[bi]
     P, W, Nr, M, D = op.pts[bi], op.w[bi], op.normal[bi], op.mask[bi], op.dest[bi]
     αmax, βmax = maximum(abs, α), maximum(abs, β)

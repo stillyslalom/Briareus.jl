@@ -454,6 +454,58 @@ end
     @test hash(VisRadProfile(; envelope = 1.2)) == hash(VisRadProfile(; envelope = 1.2))
 end
 
+@testset "VisRad beam profile: taper" begin
+    # `VisRadProfile(; taper)` multiplies exp(−α) by the quintic smoothstep of
+    # (ln 1000 − α)/taper and renormalizes each plane; taper 0, VisRad's hard cut, is the
+    # default. References: the smoothstep's closed form, the plane's power by a midpoint
+    # sum, and central differences of a foil's deposition across a jump of the hard cut.
+    F, n, a0, b0, P = 6.7, 4.5, 0.6, 0.35, 2.0
+    b = Beam("b"; theta = 0, phi = 0, power = P, spot = SuperGaussianSpot(a0, b0; order = n, angle = 0.4),
+             fnumber = F, aim = (0.1, -0.2, 0.0))
+    hard, soft = VisRadProfile(), VisRadProfile(; taper = 1.0)
+    @test hard == VisRadProfile(; taper = 0) && hard.taper == 0
+    @test soft != hard && hash(soft) != hash(hard) && soft == VisRadProfile(; taper = 1)
+    @test_throws ArgumentError VisRadProfile(; taper = -0.1)
+    @test_throws ArgumentError VisRadProfile(; taper = log(1000))
+    e1, e2 = spot_axes(b)
+    k = direction(b)
+    at(s, u, v) = Vec3(b.aim) + s * k + u * e1 + v * e2
+    # at focus along the major axis α = (u/a₀)^n: tapered over hard is the smoothstep times
+    # one constant (the renormalization, 1 + O(10⁻⁴)); the support is the same
+    S(t) = t >= 1 ? 1.0 : 10t^3 - 15t^4 + 6t^5
+    uc = a0 * log(1000)^(1 / n)
+    r = [intensity(soft, b, at(0, u, 0)) / intensity(hard, b, at(0, u, 0)) / S(log(1000) - (u / a0)^n)
+         for u in uc .* (0.2, 0.5, 0.9, 0.97, 0.99, 0.999)]
+    @test all(x -> isapprox(x, r[1]; rtol = 1e-12), r) && 1 < r[1] < 1 + 2e-4
+    @test intensity(soft, b, at(0, 1.0001uc, 0)) == 0 == intensity(hard, b, at(0, 1.0001uc, 0))
+    # the renormalized plane holds the beam's power
+    h = 0.005
+    @test all(isapprox(sum(intensity(soft, b, at(s, u, v)) for u in -3:h:3, v in -3:h:3) * h^2, P; rtol = 2e-4)
+              for s in (0.0, 5.0, -8.0, 20.0))
+    # a foil's first x-moment as the aim moves along x in 10⁻⁵ mm steps: the hard cut
+    # jumps where a point crosses it (10⁻³ of the local peak times the point's weight);
+    # the taper leaves second differences 10⁻⁴ of that jump and below
+    tf = Target(foil(:f, (0, 0, 0), (0, 0, 1); width = 4.0, n = 24))
+    oph, ops = DepositionOperator(tf, [b]; profile = hard), DepositionOperator(tf, [b]; profile = soft)
+    xc = getindex.(tf.elem_centroid, 1)
+    g(op, δ) = sum(deposit(op, [remake(b; aim = b.aim .+ δ .* (1.0, 0.0, 0.0))]).element .* xc)
+    δs = 0:1e-5:1e-3
+    gh, gs = [g(oph, δ) for δ in δs], [g(ops, δ) for δ in δs]
+    J = maximum(abs, diff(diff(gh)))
+    @test J > 1e-6 && maximum(abs, diff(diff(gs))) < 1e-4 * J
+    # ForwardDiff against a central difference whose stencil straddles that jump: off by
+    # the jump over 2h on the hard cut, within 1e-8 with the taper
+    d1 = diff(gh)
+    m = argmax(abs.(d1 .- sum(d1) / length(d1)))
+    c = (δs[m] + δs[m+1]) / 2
+    err(op, h) = (ad = ForwardDiff.derivative(δ -> g(op, δ), c); abs((g(op, c + h) - g(op, c - h)) / 2h - ad) / abs(ad))
+    @test err(oph, 5e-6) > 1e-2 && err(ops, 5e-6) < 1e-8
+    # dual beams are screened on values: the same points are lit, the same values
+    bd = [remake(b; aim = ForwardDiff.Dual.(b.aim, 1.0))]
+    Ed, E = ForwardDiff.value.(deposit(ops, bd).element), deposit(ops, [b]).element
+    @test (Ed .!= 0) == (E .!= 0) && isapprox(Ed, E; rtol = 1e-12)
+end
+
 @testset "hohlraum + gradients" begin
     t = hohlraum(nz = 16, nphi = 24, capsule_ntheta = 12, capsule_nphi = 16)
     q = nif_quads()

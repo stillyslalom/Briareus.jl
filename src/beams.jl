@@ -289,7 +289,7 @@ intensity(b::Beam, x) = intensity(BeamFrame(b), x)
 # ---------------------------------------------------------------------------------------
 
 """
-    VisRadProfile(; envelope = nothing)
+    VisRadProfile(; envelope = nothing, taper = 0)
 
 VisRad 21's beam model, for deposition that reproduces VisRad's
 (`DepositionOperator(...; profile)`). The beam is not the focal spot convolved over the
@@ -330,6 +330,21 @@ default, so ρ is capped there. ρ enters ΔL only: a smaller ratio, 1.2, shows 
 cut-off at q = ρ in VisRad's deposition. `visrad_profile` takes the envelopes from a
 workspace.
 
+`taper` is an option for optimization, not part of VisRad's model; the default, 0, is
+VisRad's hard cut. At the cut the profile drops from 10⁻³ of its local peak to zero, so
+as an aim moves, the deposition (and every objective or constraint computed from it)
+jumps wherever an operator point crosses the cut: finite differences and line searches
+see steps that derivatives miss. A positive `taper` multiplies exp(−α) by the quintic
+smoothstep S(t) = 10t³ − 15t⁴ + 6t⁵ of t = (ln 1000 − α)/taper (S = 1 for t ≥ 1), and
+I₀(z) is renormalized so that each plane still holds the beam's power. The profile is
+then twice continuously differentiable across the cut, and its support, which the
+operator's sampling and screens use, is unchanged. The band lies where the law is
+least constrained (VisRad's deposition fits a cut at α = ln 1000 or none equally
+well). `taper = 1` (one e-fold, intensities between 10⁻³ and e × 10⁻³ of the local
+peak) changes the element rms against VisRad on 59 probe plates by at most 0.011
+percentage points, and NIF wall deposition by at most 7 × 10⁻⁵ of its peak
+(`reference/research-notes.md`, "VisRad's beam profile law").
+
 Not identified: any dependence on the final-optic distance (every run had 769.5 cm) or on
 the f-number beyond F itself (every run had f/20.755, where the ΔL slope was measured);
 the square's orientation for a beam whose spot VisRad rotates (taken on the spot axes);
@@ -339,19 +354,21 @@ misses on steep surfaces (+0.2% at 40° incidence, +2.2% at 78°).
 """
 struct VisRadProfile
     envelope::Union{Nothing,Float64,Dict{String,Float64}}
-    function VisRadProfile(envelope)
+    taper::Float64
+    function VisRadProfile(envelope, taper)
         env = envelope isa AbstractDict ? Dict{String,Float64}(String(k) => v for (k, v) in envelope) :
               envelope === nothing ? nothing : Float64(envelope)
         all(>(0), env isa Dict ? values(env) : something(env, 1.0)) ||
             throw(ArgumentError("envelope must be positive"))
-        return new(env)
+        0 <= taper < _VR_CUT || throw(ArgumentError("taper must be in [0, ln 1000)"))
+        return new(env, Float64(taper))
     end
 end
 
-VisRadProfile(; envelope = nothing) = VisRadProfile(envelope)
+VisRadProfile(; envelope = nothing, taper::Real = 0.0) = VisRadProfile(envelope, taper)
 
-Base.:(==)(p::VisRadProfile, q::VisRadProfile) = p.envelope == q.envelope
-Base.hash(p::VisRadProfile, h::UInt) = hash(p.envelope, hash(:VisRadProfile, h))
+Base.:(==)(p::VisRadProfile, q::VisRadProfile) = p.envelope == q.envelope && p.taper == q.taper
+Base.hash(p::VisRadProfile, h::UInt) = hash(p.envelope, hash(p.taper, hash(:VisRadProfile, h)))
 
 """
     visrad_envelope(order) -> Float64
@@ -380,7 +397,8 @@ const _VR_CUT = log(1000.0)
 # One component of a beam under VisRad's profile. a2, b2 are the component's focal 1/e
 # semi-axes squared, along its axes (the first may be the minor one). The law's lengths
 # are taken from the major and minor axes. ntab is the normalization ∫∫ exp(−α) du dv
-# over a(z) b(z) at |z| = 0, h, 2h, …, held constant beyond the table.
+# (times the taper, when there is one) over a(z) b(z) at |z| = 0, h, 2h, …, held
+# constant beyond the table.
 struct _VRComponent{T}
     a2::T
     b2::T
@@ -393,18 +411,20 @@ struct _VRComponent{T}
     power::T                  # the component's power (TW)
     ntab::Vector{Float64}
     h::Float64
+    taper::Float64            # width in α of the taper below the cut (0: the hard cut)
 end
 
-function _VRComponent(c::_SGComponent, F, env, active::Bool)
+function _VRComponent(c::_SGComponent, F, env, taper, active::Bool)
     n = 2 * c.halfn
     a, b = sqrt(c.a2), sqrt(c.b2)
     amaj = max(a, b)
     za, zb = sqrt(2) * amaj * F, sqrt(2) * min(a, b) * F
     dl0 = env * amaj / sqrt(2)
     dls = _VR_DL_SLOPE / (2F)
-    ntab = active ? _vr_ntab(ForwardDiff.value(a), ForwardDiff.value(b), n, Float64(F), Float64(env)) : _VR_NONE
+    ntab = active ? _vr_ntab(ForwardDiff.value(a), ForwardDiff.value(b), n, Float64(F), Float64(env),
+                             Float64(taper)) : _VR_NONE
     return _VRComponent(c.a2, c.b2, 1 / (2F^2), c.halfn, 1 / za, za * zb, dl0, dls,
-                        c.power_norm * _sg_norm(n), ntab, _VR_NTAB_H)
+                        c.power_norm * _sg_norm(n), ntab, _VR_NTAB_H, Float64(taper))
 end
 
 const _VR_NONE = Float64[]           # no table (an inactive halo; shared, never mutated)
@@ -436,36 +456,44 @@ end
 end
 
 # Intensity (per unit area normal to the beam) at focal-frame coordinates (u, v), a
-# distance s from best focus; 0 beyond the cut-off.
+# distance s from best focus; 0 beyond the cut-off. With a taper, exp(−α) is multiplied
+# by the smoothstep of (ln 1000 − α)/taper, which reaches zero at the cut with its first
+# two derivatives: the support is unchanged.
 @inline function _vr_eval(c::_VRComponent, u, v, s)
     α, a2, b2, z = _vr_alpha(c, u, v, s)
     α >= _VR_CUT && return zero(c.power * α)
-    return c.power / (sqrt(a2 * b2) * _vr_norm(c, z)) * exp(-α)
+    I = c.power / (sqrt(a2 * b2) * _vr_norm(c, z)) * exp(-α)
+    return c.taper > 0 ? I * _vr_smoothstep((_VR_CUT - α) / c.taper) : I
 end
+
+# The quintic smoothstep: 0 at t = 0 and 1 from t = 1 on, with continuous first and
+# second derivatives (C²).
+@inline _vr_smoothstep(t) = t >= 1 ? one(t) : t^3 * (10 - t * (15 - 6t))
 
 @inline _vr_outside(c::_VRComponent, u, v, s) = _vr_alpha(c, u, v, s)[1] > _VR_CUT * (1 + 1e-9)
 
 # The normalization table of a component with focal semi-axes a, b (along its axes),
-# exponent n, f-number F and envelope env, on |z| = 0:h:zmax. Each node integrates
+# exponent n, f-number F, envelope env and taper, on |z| = 0:h:zmax. Each node integrates
 # exp(−α) over the quarter plane in scaled polar coordinates (u = a(z) r cos θ,
 # v = b(z) r sin θ), out to the cut-off radius along each θ (α grows with r), by
-# composite Gauss–Legendre rules in θ and r. Built once per (a, b, n, F, env) and cached;
-# frames are built per beam and work unit, so reads take no lock and allocate nothing: a
-# miss copies the cache, adds the entry and swaps it in under the lock.
+# composite Gauss–Legendre rules in θ and r; a taper's share is subtracted, integrated
+# on its own band. Built once per (a, b, n, F, env, taper) and cached; frames are built
+# per beam and work unit, so reads take no lock and allocate nothing: a miss copies the
+# cache, adds the entry and swaps it in under the lock.
 const _VR_NTAB_H = 0.1
 const _VR_NTAB_ZMAX = 60.0
-const _VRNormKey = NTuple{5,Float64}
+const _VRNormKey = NTuple{6,Float64}
 const _VR_NTABS = Ref(Dict{_VRNormKey,Vector{Float64}}())
 const _VR_NTABS_LOCK = ReentrantLock()
 
-function _vr_ntab(a, b, n, F, env)
-    key = (a, b, n, F, env)
+function _vr_ntab(a, b, n, F, env, taper)
+    key = (a, b, n, F, env, taper)
     v = get(_VR_NTABS[], key, nothing)
     v === nothing || return v
     lock(_VR_NTABS_LOCK)
     try
         d = copy(_VR_NTABS[])
-        v = get!(() -> _vr_ntab_build(a, b, n, F, env), d, key)
+        v = get!(() -> _vr_ntab_build(a, b, n, F, env, taper), d, key)
         _VR_NTABS[] = d
         return v
     finally
@@ -473,9 +501,9 @@ function _vr_ntab(a, b, n, F, env)
     end
 end
 
-function _vr_ntab_build(a, b, n, F, env)
+function _vr_ntab_build(a, b, n, F, env, taper)
     sp = _SGComponent(a^2, b^2, n / 2, 0.0, 1 / _sg_norm(n))
-    c = _VRComponent(sp, F, env, false)
+    c = _VRComponent(sp, F, env, taper, false)
     xg, wg = _gauss_legendre(16)                     # corona.jl
     zs = 0:_VR_NTAB_H:_VR_NTAB_ZMAX
     t = zeros(length(zs))
@@ -508,9 +536,32 @@ function _vr_norm_at(c::_VRComponent, z, xg, wg)
             r = R * (pr - 1 + (xr + 1) / 2) / nr
             inner += wr * r * exp(-α(r, θ))
         end
-        total += wθ * inner * R / (2nr)
+        if c.taper > 0
+            total += wθ * (inner * R / (2nr) - _vr_taper_loss(r -> α(r, θ), R, c.taper, xg, wg))
+        else
+            total += wθ * inner * R / (2nr)
+        end
     end
     return 4 * total * (π / 2) / (2nθ)
+end
+
+# ∫ r exp(−α) (1 − smoothstep) dr over the taper's band along one direction: from the
+# radius where α = ln 1000 − taper (bisected) to the cut-off radius R.
+function _vr_taper_loss(α, R, taper, xg, wg)
+    lo, hi = 0.0, R
+    for _ in 1:44
+        mid = (lo + hi) / 2
+        α(mid) < _VR_CUT - taper ? (lo = mid) : (hi = mid)
+    end
+    R1 = (lo + hi) / 2
+    loss = 0.0
+    np = 2                                           # panels
+    for p in 1:np, (x, w) in zip(xg, wg)
+        r = R1 + (R - R1) * (p - 1 + (x + 1) / 2) / np
+        a = α(r)
+        loss += w * r * exp(-a) * (1 - _vr_smoothstep((_VR_CUT - a) / taper))
+    end
+    return loss * (R - R1) / (2np)
 end
 
 struct _VRFrame{T}
@@ -523,10 +574,10 @@ struct _VRFrame{T}
     has_halo::Bool
 end
 
-# `env`: the beam's envelope ratio (`_vr_envelope`)
-_VRFrame(f::BeamFrame, env) =
-    _VRFrame(f.k, f.e1, f.e2, f.focus, _VRComponent(f.core, f.fnumber, env, true),
-             _VRComponent(f.halo, f.fnumber, env, f.has_halo), f.has_halo)
+# `env`: the beam's envelope ratio (`_vr_envelope`); `taper`: the profile's
+_VRFrame(f::BeamFrame, env, taper) =
+    _VRFrame(f.k, f.e1, f.e2, f.focus, _VRComponent(f.core, f.fnumber, env, taper, true),
+             _VRComponent(f.halo, f.fnumber, env, taper, f.has_halo), f.has_halo)
 
 @inline function _vr_coords(f::_VRFrame, x)
     d = x - f.focus
@@ -552,7 +603,7 @@ Intensity (TW/mm², per unit area normal to the beam) of `beam` at point `x` und
 VisRad's beam model (`VisRadProfile`).
 """
 intensity(prof::VisRadProfile, b::Beam, x) =
-    _vr_intensity(_VRFrame(BeamFrame(b), _vr_envelope(prof, b)), x)
+    _vr_intensity(_VRFrame(BeamFrame(b), _vr_envelope(prof, b), prof.taper), x)
 
 """
     cone_directions(beam, n) -> (dirs, weights)
