@@ -5670,6 +5670,16 @@ rise; the DU wall adds 5–8 eV throughout. The capsule model takes the late P2 
 
 ### What remains
 
+> **Superseded (2026-11-18).** This list predates the later sections and its numbers are
+> those of that day's energetics. The capsule share is 13.8 % on the final defaults
+> ("Capsule absorption, conversion and the ablating-wall release (2026-10-25)" §2, `k24`
+> schedule with Young's albedo; 13.9 % on the coarse mesh at commit 85866ae, "The swing
+> and the bubble without new data (2026-11-18)"), not 11.6 % (nor the 12.3 % of the next
+> section's "What remains"); the energetics
+> named below became the example's only settings; the late drive after the droop is
+> taken up in "Wall re-emission and the capsule radius" and "Late-time drive: the wall,
+> the plasma and Dante"; the open items are kept in ROADMAP item 12.
+
 - **After the laser droop (from 8.05 ns)** the model falls with the power (−18 eV by
   8.5 ns, −49 by 9 ns) while Dante holds 311 eV to 8.6 ns and reads 301.5 at 9 ns. A
   quasi-static radiosity with a self-similar wall loss cannot give stored wall energy
@@ -5860,7 +5870,9 @@ Split with the release: wall 62.7 / LEH 25.6 / capsule 11.7 % of the coupled ene
   rises 1; the hohlraum plasma's stored energy and the LEH after the laser turns off are
   the candidates (neither modeled).
 - The capsule share: 12.3 % with published radius and albedo against 16.2 %; the
-  absorbing radius outside the ablation front is the open input.
+  absorbing radius outside the ablation front is the open input. (Superseded: 13.8 % on
+  the final defaults, "Capsule absorption, conversion and the ablating-wall release
+  (2026-10-25)" §2; the release item was taken up there, §1.)
 - The early peak (+18 to +24 eV over the open area at 5–5.5 ns, +1 to +11 over the
   initial area) is not moved by either change (the published capsule albedo takes
   1.7 eV off).
@@ -10414,3 +10426,238 @@ largest row-sum error is the wall's 0.66 % at the coarse size.
   Tr 267.7287 → 267.7388 eV. Shock tube, coarse: observed face −7.6e-6, wall Tr 311.3656 →
   311.3661 eV; standard: +5.1e-6, 311.2444 → 311.2443 eV. Flat-facet references (Monte
   Carlo, `open_fraction`) no longer lose the rim cracks' share.
+
+## The swing and the bubble without new data (2026-11-18) *derived*
+
+ROADMAP items 10 (the P2 swing and the gold bubble), 36 (constrained re-pointing) and 12
+(the notes fix, done in "N221204 late-time drive ▸ What remains"). What can move on the
+swing without bubble-tip histories or HYDRA's multipliers: the current state remeasured,
+the computed lips against the band they were fitted in, the published bubble inputs not
+yet used, and what the literature ties bubble growth to. PRE 109 Fig. 10 is the blind
+check throughout; nothing below is fitted to it and no default or calibrated constant
+changed. Literature for §4: `reference/litreview/bubble_drivers.md`. Runs:
+`examples/n221204.jl 0.8 0.4 full calibrated x n221204 [options]` (coarse mesh, full
+model, defaults of commit 85866ae; ~85 s per option set on 8 threads, both the measured
+backscatter and the uniform cut), and for options the example does not expose a
+scratch copy that passes `BubbleAbsorption`'s `delay` and `LipClosure`'s `depth`
+(nothing else changed). The coarse mesh reproduces the standard one within ~0.01 ns in
+the crossing and 0.006 in P2 ("The P2 swing: capsule radius, backscatter and the
+collision"); no standard-mesh run was made. Confidence: **H** primary text, **L** ours.
+
+### 1. The current state, remeasured
+
+| Metric (coarse, full model) | measured backscatter (default) | uniform 48 kJ cut (Fig. 10's like-for-like) | PRE 109 Fig. 10 |
+|---|---|---|---|
+| minimum | −0.181 at 5.25 ns | −0.195 at 5.25 ns | −0.170 at 5.60 ns |
+| upward zero crossing | 6.19 ns | 6.24 ns | 6.67 ns |
+| P2/P0 at 8 ns | +0.080 | +0.080 | +0.095 |
+| rms against Fig. 10, 2–8.5 ns | 0.047 | 0.044 | — |
+| capsule / LEH share | 13.9 / 24.2 % | 14.0 / 24.1 % | HYDRA 16.2 / 25.2 % |
+| Dante 1 at 8 ns, initial / open area | 289.7 / 312.9 eV | 288.6 / 311.7 eV | measured 310.1 |
+
+- **The swing metrics have not moved** since "Capsule absorption, conversion and the
+  ablating-wall release (2026-10-25)" §2: the four swing numbers of both runs agree to
+  the printed digit. Later commits (the M-band split, the entrance holes at the caps'
+  azimuthal count, Dante 1 as the whole-field view) changed the energetics read-outs
+  only: capsule share 13.8 → 13.9 %, LEH share 24.7 → 24.2 %, Dante 1 at 8 ns 290.9 /
+  314.2 → 289.7 / 312.9 eV.
+- **Rise and foot** (P2/P0 minus Fig. 10, measured backscatter; the uniform cut is within
+  0.004):
+
+  | t (ns) | 1.0 | 1.5 | 2.0 | 2.5 | 3.0 | 3.5 | 4.0 | 4.5 | 5.0 |
+  |---|---|---|---|---|---|---|---|---|---|
+  | model | +0.008 | +0.015 | −0.017 | −0.003 | +0.052 | +0.046 | +0.009 | −0.030 | −0.174 |
+  | model − Fig. 10 | −0.007 | +0.003 | −0.016 | −0.005 | +0.054 | +0.015 | +0.027 | +0.063 | −0.075 |
+
+  The roadmap's "0.06 above and ~0.03 below Fig. 10" (the 2026-10-24 baseline: 4.5 ns
+  +0.058, 2.0 ns −0.030) is now: the rise +0.063 above at 4.5 ns and −0.075 below at
+  5.0 ns (the model's drop into the minimum comes later and steeper than HYDRA's: Fig. 10
+  falls −0.018 → −0.092 → −0.099 over 4.0–5.0 ns, the model +0.009 → −0.030 → −0.174),
+  mean −0.006 over 4.25–5.0 ns; the foot within ±0.016 over 1.0–2.5 ns and *above* Fig. 10
+  over 3.0–4.0 ns (+0.054, +0.015, +0.027), where the outer power steps from 30 to 60–80
+  TW. The change from the 2026-10-24 baseline most likely came with the energetics of
+  2026-10-24/25 (wall history, DU wall, conversion, measured pulse) rather than later
+  commits: the 2026-10-25 runs match today's swing metrics to the digit, but they did not
+  record the foot (*L*). The foot's causes stay those named then (mock pointing, DN24's foot
+  cone fraction read by eye).
+
+### 2. The computed lips against their own calibration band
+
+**What was fitted to what.** `LipClosure`'s speed (0.022 mm/ns at 100 eV), depth
+(0.240 mm) and hold time (0.40 ns) are fitted to Chen et al., PoP 27, 022702 (2020)
+Fig. 27: 31 G-LEH effective radii on five basecamp shots, where the edge is the peak
+gradient of the image in the G-LEH band, 3–5 keV (Ti filter: N171010, N171212) or > 5 keV
+(Al: N180102, N180103, N180117) (Chen Table III, **H**); rms 0.033 mm ("Computed LEH
+closure"). The example's default prescribed lips (0.857 r₀ along Young's ramp) end at
+Young 2020's SXI value, the SXI's clear aperture being measured in its 3–5 keV channel
+(Schneider, RSI 81, 10E538 (2010), and HTPD 2012, **H**; *L* that Young's value is that
+channel's). The x-ray loss through the hole is set by the thermal band (~0.9 keV at 300 eV).
+
+**What the literature gives for the thermal band.**
+- Chen 2020 §II.2 (**H**): the apparent LEH radius grows with photon energy (the 3ω
+  critical-density edge, then the ~0.9 keV thermal peak, then the few-keV tail G-LEH
+  sees) because the mean free path grows. No thermal-band radius is published.
+- Chen 2020 Fig. 7 (**H**, a simulated image of the 0.15 mg/cc basecamp): lowering the
+  opacity of the warm (< 0.5 keV), sub-solid (< 1 g/cm³) lip blow-off a hundredfold
+  moves the inferred 3–5 keV edge out to the solid LEH radius, i.e. by the whole closure
+  depth (~0.24 mm on that platform at peak, *L*). The same paragraph calls the edge only
+  weakly sensitive to the opacity and set by the ridge's hydrodynamics. Read as an e-folding length of the edge in opacity, Fig. 7 gives
+  ≥ 0.24/ln 100 = 0.052 mm per e-fold (*L*, a lower bound since the edge cannot move past
+  the solid rim).
+- Opacity ratio between the bands (*L*, cold gold as a proxy for the warm blow-off):
+  the NIST X-ray mass attenuation table for Z = 79 (Hubbell and Seltzer) gives μ/ρ
+  4652 cm²/g at 1 keV against 2049 / 1144 / 666 at 3 / 4 / 5 keV
+  and 425 at 6 keV, a ratio of 2.3–7 for the Ti band and ~7–11 above 5 keV.
+- Schneider et al., HTPD 2012 (OSTI 1043636, **H**): the 870 eV SXI channel sees part of
+  the thermal flux from outside the 3–5 keV clear aperture; the Dante correction
+  f (R_LEH/R_CA)² is ~1.15 whatever the LEH size. With R_CA 0.84–0.86 r₀, f ≈ 0.81–0.85
+  (*L*): the lip blow-off emits in the thermal band, which Dante's open-area reading
+  brackets, rather than bounding a smaller hole.
+
+**The thermal-band radius the model implies** (*L*): the edge at the G-LEH value minus
+Δ = 0.052 mm × ln(ratio), i.e. Δ ≈ 0.04–0.10 mm for the Ti-band shots and 0.10–0.13 mm
+for the Al-band ones, between 0 (Chen's hydrodynamic edge) and ~0.13 mm. On N221204 the
+computed lower-LEH edge is 1.513 mm at 2.0 ns, 1.420 at 4.5, 1.320 at 5.5 and holds at
+1.310 mm (0.845 r₀) from 8.0 to 9.0 ns (1.305); the thermal-band edge would be
+~0.06–0.12 mm further in, ~1.19–1.25 mm through the peak. Since the fit mixes the two
+bands (2 Ti, 3 Al shots), the implied depth for the x-ray loss is ~0.30–0.36 mm instead
+of 0.24.
+
+**What it does** (`lips=computed`, `LipClosure(depth = …)`, the other lip parameters
+fitted; coarse; measured backscatter, the uniform cut in parentheses):
+
+| depth (mm) | edge at 5.5 / 8.0 ns (mm) | minimum (at) | upward zero | 8 ns | rms vs Fig. 10 | capsule Tr 8.0 / 8.5 ns (eV) | Dante 1 at 8 ns, initial / open area | LEH / capsule share |
+|---|---|---|---|---|---|---|---|---|
+| 0.24 (fitted, `lips=computed`) | 1.320 / 1.310 | −0.175 (−0.189) at 5.25 | 6.18 (6.23) | +0.081 (+0.080) | 0.047 (0.043) | 307.1 / 299.3 | 288.2 / 313.5 | 23.5 / 14.0 % |
+| 0.30 (thermal, Δ 0.06) | 1.265 / 1.250 | −0.170 (−0.184) at 5.25 | 6.17 (6.22) | +0.082 (+0.082) | 0.047 (0.044) | 309.4 / 301.7 | 282.8 / 314.9 | 22.1 / 14.2 % |
+| 0.36 (thermal, Δ 0.12) | 1.210 / 1.190 | −0.165 (−0.178) at 5.25 | 6.16 (6.21) | +0.084 (+0.083) | 0.048 (0.044) | 311.7 / 304.1 | 277.2 / 316.4 | 20.7 / 14.5 % |
+| prescribed lips (default) | — | −0.181 (−0.195) at 5.25 | 6.19 (6.24) | +0.080 (+0.080) | 0.047 (0.044) | 306.3 / 298.4 | 289.7 / 312.9 | 24.2 / 13.9 % |
+| HYDRA / measured | | −0.170 at 5.60 | 6.67 | +0.095 | — | | measured 310.1 | 25.2 / 16.2 % |
+
+- **The swing barely moves.** Per 0.06 mm of thermal offset the crossing moves −0.01 ns,
+  the minimum +0.005 shallower and the 8 ns value +0.001 to +0.002: a smaller hole adds
+  pole drive a little through the whole peak. The thermal band cannot carry any of the
+  0.45 ns crossing gap; it moves the crossing the wrong way.
+- **The energetics move.** The LEH share falls 1.4 points per 0.06 mm (23.5 → 22.1 →
+  20.7 %, HYDRA 25.2 %), the capsule share rises 0.2–0.3 points (14.0 → 14.5 %, HYDRA
+  16.2 %), capsule Tr rises 2.3 eV per 0.06 mm at 8 ns. Dante 1 over the initial area
+  falls 5–6 eV per 0.06 mm (measured 310.1 eV at 8 ns), over the open area it rises
+  1.4 eV. Only the hold depth is offset here: the edge in the foot (free expansion,
+  1.513 mm at 2 ns) is unchanged, so the foot's swing is unchanged by construction.
+- So the thermal band trades the LEH share against the capsule share, in opposite
+  directions relative to HYDRA, and it widens the gap between Dante's initial-area
+  reading and the measurement. Neither a thermal offset nor the fitted G-LEH edge is
+  preferred by these checks; the band difference stays an *L* bracket, and the fitted
+  depth is unchanged.
+
+### 3. Published bubble inputs not yet used
+
+**HYBRID-E bubble speed and collision time: still no measurement.** Searches (2026-11-18:
+HYBRID-E, 6.4 mm Au-lined DU, N210808, N221204 with bubble, G-LEH, thin-wall, inner-spot
+motion) found no HYBRID-E bubble trajectory or spot separation; the inputs are those of
+"The P2 swing" (PRE 109 Fig. 1a's tips; the picket fluence; the collision near 6.1 ns in
+Fig. 1a). One more basecamp datum: Ralph et al., PoP 28, 072704 (2021) (OSTI 1860800,
+**H**) measured the Au bubble on the hohlraum-science platform with the 0.908 mm HDC
+capsule (0.3 mg/cc, N190325 and repeats; the basecamp's size, *L*) at 364 km/s averaged from t = 0, and 399 km/s with a Ta₂O₅ liner (~10 %
+faster). The calibrated model's average from t = 0 on that geometry is 0.32–0.33 mm/ns at
+5–6 ns (0.36 mm/ns from 0.55 ns), so Ralph's number points to a ~10 % faster bubble
+(*L*: the frame times are not in the text); it is the calibration platform, not
+HYBRID-E, and the wrong direction for Fig. 10.
+
+**Pak's picket** (`bubble_energy=1.23`: N221204's delivered pulse split by DN24's cone
+fraction gives 43.0 kJ of outer power in the first ns after the turn-on, against the
+basecamp's ~26 kJ, × 0.73 for split quads; "The P2 swing", not run then): t_c 5.99 ns,
+tip 2.01 mm at 6 ns. Crossing 6.10 ns (−0.09; uniform cut 6.17, −0.07), minimum −0.171
+(uniform −0.184) at 5.25 ns, rms 0.053 / 0.049: earlier, as expected.
+
+**Izumi 2023's stall and relaunch** (Izumi et al., PoP 30 (2023), doi:10.1063/5.0136145,
+OSTI 1971298, **H**): in a low-trough 4-shock CH design (1 TW trough after a high picket,
+280 TW peak) the picket-launched tip stalls in the trough and is relaunched at ~6 ns, at
+most 300 µm/ns, slowing near the axis; extrapolated ballistically it appears launched
+~7 ns late. The trajectory is ballistic for foot-to-peak intensity contrasts below ~15×,
+and the 3-shock HDC basecamp (the calibration platform) is in that class. N221204's
+delivered pulse (`n221204_pulse()`, split by DN24's cone fraction): trough 28.3 TW total
+(24.5 TW outer) at 1.90 ns, below 40 TW for ~1 ns (1.75–2.75 ns), against 433–448 TW
+(outer 290–300 TW) in the peak: contrast 16× total, 12× outer, at the criterion's edge,
+and 2× below its own picket (55 TW). By the published criterion the bubble is ballistic;
+a stall is not excluded.
+
+*No new keyword is needed.* A stall from t_s to t_r with relaunch at the same speed
+leaves the tip at v_b (t − t_L − (t_r − t_s)) from t_r on, which is `delay` + (t_r − t_s);
+before t_r the two differ only while the tip is shallower than its stall depth (0.40 mm
+at t_s = 1.75 ns), where the inner beams lose ≤ 3.3e-9 of their power to the bubble
+(`bubble_fractions` on N221204's geometry: the inner beams start to be clipped at
+1e-3 at 1.05 mm, 3.5 ns). A different relaunch speed is `speed` with the matching
+`delay`. So the existing keywords carry a stall exactly where it matters, and
+`src/bubble.jl` is unchanged. The collision time is kept (the waist's ablator–wall
+collision does not depend on the outer bubble).
+
+| Run (coarse; measured backscatter / uniform cut) | tip at 6 ns | minimum (at) | upward zero | 8 ns | rms vs Fig. 10 | capsule share |
+|---|---|---|---|---|---|---|
+| default (delay 0.25 ns) | 1.96 mm | −0.181 (5.25) / −0.195 (5.25) | 6.19 / 6.24 | +0.080 / +0.080 | 0.047 / 0.044 | 13.9 / 14.0 % |
+| half speed through the trough (delay +0.5 ns) | 1.78 mm | −0.217 (5.25) / −0.233 (5.50) | 6.58 / 6.73 | +0.071 / +0.070 | 0.043 / 0.046 | 14.1 / 14.3 % |
+| full stall through the trough (delay +1.0 ns, a bound) | 1.60 mm | −0.235 (5.25) / −0.260 (5.50) | 7.22 / 7.27 | +0.048 / +0.048 | 0.055 / 0.061 | 14.3 / 14.5 % |
+| Pak's picket (`bubble_energy=1.23`) | 2.01 mm | −0.171 (5.25) / −0.184 (5.25) | 6.10 / 6.17 | +0.082 / +0.081 | 0.053 / 0.049 | 13.8 / 13.9 % |
+| PRE 109 Fig. 10 / Fig. 1a | N210808 1.85 ± 0.1; N221204 ≥ 1.55 | −0.170 (5.60) | 6.67 | +0.095 | — | HYDRA 16.2 % |
+
+- **The crossing follows the tip's delay about one for one** (+0.39 / +0.49 ns for +0.5 ns,
+  +1.03 ns for +1.0 ns) with t_c held at 6.09 ns: the ridge stop alone does not turn the
+  swing positive; the bubble's absorption does. A delay of ~0.5 ns, i.e. the tip at half
+  speed through N221204's ~1 ns trough, puts the uniform-cut crossing at 6.73 ns against
+  Fig. 10's 6.67, with the tip at 1.78 mm at 6 ns (inside N210808's 1.85 ± 0.1 of
+  Fig. 1a and N221204's ≥ 1.55).
+- **It deepens the minimum** by 0.036–0.038 (−0.233 against Fig. 10's −0.170): more inner
+  light reaches the waist through 5–6 ns. The minimum's time moves to 5.50 ns (uniform
+  cut; Fig. 10 5.6). Timing and depth do not close together; the depth's other levers
+  (the backscatter history, −0.029; the lag, "Computed LEH closure") are separate.
+- Capsule Tr rises by ≤ 2.0 eV (+0.5 ns) and ≤ 4.0 eV (+1.0 ns) over 5.5–7.5 ns, Dante 1
+  by ≤ 1.3 eV at 8 ns: a later bubble moves less inner power to the outer footprint near
+  the LEH.
+- **Not adopted** (no default changed): a 0.5 ns delay is the gap Fig. 10 leaves, and
+  choosing it would be fitting to the blind check; Izumi 2023's criterion puts N221204
+  in the ballistic class, so no published datum supports a stall. Recorded as the size
+  of what an unmodeled slow-down in the trough would have to be.
+
+### 4. What drives bubble growth (for item 36)
+
+From `reference/litreview/bubble_drivers.md` (Callahan 2018, Ralph 2018, Izumi 2021,
+Izumi 2023, Ralph 2021; **H** unless noted):
+- **Measure.** Every published scaling uses the outer cones' *picket fluence* (picket
+  energy over the FWHM, net of outer backscatter, per phase-plate spot area, i.e. the
+  outer irradiance integrated over the picket, Ralph 2018), not a peak irradiance.
+  Izumi 2021's split-quad shot (27 % lower wall fluence at the same beam energy, tip
+  −120 µm) shows the fluence *on the wall* (spot overlap) counts (*L* for re-pointing:
+  no published re-pointing study).
+- **Epoch.** The picket, for pulses below ~15× foot-to-peak contrast (the tip then moves
+  at constant speed through the rise and the peak, extrapolating back to the outer
+  turn-on); the main drive as well in low-trough pulses (Izumi 2023's relaunch).
+- **Scaling.** Speed ∝ fluence^0.2 ± 0.03 (Izumi 2021, seven shots); ∝ I^0.36 (Ralph
+  2018's model; data fit I^1/3 to I^2/3 with I measured as the picket fluence); bubble
+  size ∝ (E/A)^0.5 in Callahan 2018's 39-shot metric (R² 84 %; 1/3 and 2/3 give 76 and
+  79 %). Laser mass ablation and exhaust speed ∝ I^1/3 (Izumi 2023); 10 % less ablated
+  mass extends inner-beam propagation by ~0.4 ns (Izumi 2023).
+- **Against `src/bubble.jl`.** The model's only intensity dependence is the scalar
+  `picket_ratio` E (speed ∝ E^0.2, Izumi 2021; collision ∝ E^-0.16, Izumi 2018), set by
+  hand; it does not read the computed wall irradiance. It does follow the pointing: the
+  bubble plane sits where the 50° axes reach the (moving) wall and the clipping is
+  computed from the actual inner beams. On N221204, E 1.1 → 1.23 moves the crossing by
+  −0.09 ns (§3).
+- **For item 36** (*L*): a ceiling on the peak irradiance over wall elements during the
+  peak is not the quantity the bubble data scale with. The supported measure is the
+  outer picket fluence on the wall under the outer footprint, with a weak exponent
+  (0.2–0.5): a 20 % rise in local picket fluence is a ~4 % faster tip, ~−0.15 ns in the
+  crossing with the collision following E as in the model (scaled from the E = 1.23
+  run, −0.09 ns for +12 %). Two options, the user's: put
+  `BubbleAbsorption` in the study's laser–plasma chain (it already moves the bubble's
+  effect with the pointing) and add a picket-fluence ceiling on the outer footprint, or
+  keep a peak-irradiance ceiling as an engineering limit labeled as such (LPI and
+  damage thresholds scale with peak intensity; the bubble does not on the published
+  data).
+
+### What remains
+
+- A HYBRID-E bubble-tip or inner-spot history (unchanged: the one datum that separates
+  the picket, a trough slow-down and the collision).
+- A published thermal-band (~0.9 keV) LEH radius, or the warm lip's opacity, to replace
+  the 0–0.13 mm bracket of §2.
+- The foot's +0.03–0.05 over 3–4 ns (mock pointing, DN24's foot cone fraction).
