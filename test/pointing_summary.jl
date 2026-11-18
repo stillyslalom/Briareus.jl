@@ -46,4 +46,22 @@ using Briareus, LinearAlgebra, Test
     @test (rs.shift_mean, rs.shift_max, rs.power, rs.clearance, rs.clipped) ==
           (bs.shift_mean, bs.shift_max, bs.power, bs.clearance, bs.clipped)
     @test_throws ArgumentError pointing_summary(s, [remake(quads[1]; name = "X1")])
+    @test isnan(sm.drive_ratio) && isempty(sm.departure) && !occursin("drive", shown)
+
+    # the capsule drive against a reference design: the ratio of the solid-angle means
+    # (`mean_flux`, by the Legendre weights) and the departure per degree, by an
+    # evaluation or by its coefficients alike; a design against itself departs by zero
+    so = Scenario(t, p; observe = :capsule)
+    ref = evaluate(so, quads)
+    d = pointing_summary(so, beams; drive_reference = ref)
+    @test d.drive_ratio ≈ mean_flux(evaluate(so, beams)) / mean_flux(ref) rtol = 1e-10
+    @test d.departure == mode_departure(evaluate(so, beams), flux_ylm(ref; lmax = 4)) && length(d.departure) == 4
+    dc = pointing_summary(so, beams; drive_reference = flux_ylm(ref; lmax = 2), lmax = 2)
+    @test dc.drive_ratio ≈ d.drive_ratio rtol = 1e-12
+    @test dc.departure ≈ d.departure[1:2] rtol = 1e-12
+    same = pointing_summary(so, quads; drive_reference = ref)
+    @test same.drive_ratio ≈ 1 rtol = 1e-12
+    @test all(same.departure .< 1e-12)
+    ds = sprint(show, d)
+    @test !occursin('\n', ds) && occursin("of the reference, departure (l = 1–4)", ds)
 end
