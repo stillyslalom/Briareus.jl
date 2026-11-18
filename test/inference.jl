@@ -129,11 +129,11 @@ end
     pceil = picket_ceiling(evaluate(s, xo), :wall; pkw...)
     pmean = picket_ceiling(evaluate(s, xo), :wall; pkw..., measure = :mean)
     linked = PicketLinkedBubble(BubbleAbsorption(radius = 2.875), t, apply(p, xo); pkw...)
-    # phase 1's infeasibility and a relaxation's objective; the mode gate from a
-    # reference evaluation
+    # phase 1's infeasibility and a relaxation's objective; the mode gate and the drive
+    # floor from a reference evaluation
     infeas = Briareus._Infeasibility((ceilc, gatec, clf))
     relaxg = Briareus._Relaxed(gatec, 64.0)
-    gatee = mode_gate(ev_ref, fill(0.05, 4))
+    gatee, dfl = mode_gate(ev_ref, fill(0.05, 4)), drive_floor(ev_ref; fraction = 0.9)
 
     @testset "closures compile once" begin
         history(τ -> with_pulses(quads, pulse, τ), [0.5, 1.0]; record = sol -> sol)
@@ -205,7 +205,7 @@ end
         n1, nr = _inf_body_instances(Briareus._phase1), _inf_body_instances(Briareus._relaxations)
         optimize_pointing(s, dobj; x0, evaluations = 60, relaxation = true, callback = st -> false,
                           constraints = [Constraint(:power, ev -> sum(b.power^2 for b in ev.beams); upper = 2.0),
-                                         gatee])
+                                         gatee, dfl])
         @test _inf_body_instances(Briareus._phase1) == n1 && _inf_body_instances(Briareus._relaxations) == nr
         @test _inf_body_instances(Briareus._constrained_pointing) == nc
         # the bound sensitivities' gradient: new objective types reuse the compiled body
@@ -285,6 +285,7 @@ end
             @test (@inferred infeas(ev)) isa T
             @test (@inferred relaxg(ev)) isa T
             @test (@inferred gatee.f(ev)) isa Vector{T}
+            @test (@inferred dfl.f(ev)) isa T
         end
         # the outer picket fluence and the bubble's picket ratio from it (outer quads aimed
         # into the entrance holes)
@@ -395,12 +396,13 @@ end
                 @test _inf_jet_clean(JET.report_call, aug2, ev)
                 @test _inf_jet_clean(JET.report_call, lag, ev)
                 # phase 1 and the relaxations: no dispatch in their kernels, no possible
-                # errors in their objectives; the gate from an evaluation
+                # errors in their objectives; the gate and the floor from an evaluation
                 @test _inf_jet_clean(JET.report_opt, Briareus._hinge2, flux_ylm(ev)[1:4])
                 @test _inf_jet_clean(JET.report_opt, Briareus._positive_norm, flux_ylm(ev)[1:4], 64.0)
                 @test _inf_jet_clean(JET.report_call, infeas, ev)
                 @test _inf_jet_clean(JET.report_call, relaxg, ev)
                 @test _inf_jet_clean(JET.report_call, gatee.f, ev)
+                @test _inf_jet_clean(JET.report_call, dfl.f, ev)
             end
             # the outer picket fluence: no dispatch (from 1.11, as the deposition), no errors
             for x in (xo, _inf_duals(xo))

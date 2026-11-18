@@ -29,7 +29,8 @@ ceiling on the laser irradiance over named parts (its exact value
 [`peak_irradiance`](@ref), held itself by default, its smooth stand-in
 [`irradiance_norm`](@ref), held alone with `exact = false`), and [`mode_gate`](@ref), a gate per degree on the
 [`mode_departure`](@ref) from a reference drive shape, which goes with
-[`drive_objective`](@ref) for the largest drive within the gates;
+[`drive_objective`](@ref) for the largest drive within the gates, and
+[`drive_floor`](@ref), the capsule's drive at least a fraction of a reference's;
 [`clearance_floor`](@ref), each beam's worst-case clearance from a keep-out at or above
 its minimum; [`light_ceiling`](@ref) and [`light_floor`](@ref), the laser light on
 named parts ([`light_fraction`](@ref)) at most or at least a limit. The laser

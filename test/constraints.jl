@@ -3,8 +3,8 @@
 #
 # References: the closed-form solution and multiplier of an equality-active quadratic
 # program (the drive's coefficients are linear in the quad powers, `influence_matrix`);
-# for phase 1's relaxations, fills of the quads in decreasing drive per power (the
-# largest drive at a total power, the least power for a drive);
+# for phase 1's relaxations and the drive floor, fills of the quads in decreasing drive
+# per power (the largest drive at a total power, the least power for a drive);
 # central finite differences for the gradients; the power-mean inequality and its limit
 # for the irradiance norm; synthetic coefficient vectors for the mode departure.
 
@@ -181,6 +181,17 @@
         @test norm(far.x - Pstar) / norm(Pstar) < 1e-4
         @test res.phase1 === nothing && isempty(res.relaxations)
 
+        # a drive floor active at the solution: the least total power that keeps 0.9 of the
+        # start's drive, a fill of the quads in decreasing `m`
+        ref0 = evaluate(s, P0)
+        df = drive_floor(ref0; fraction = 0.9)
+        @test !df.upper && only(df.limit) == 0.9 * mean_flux(ref0) && df.name === :drive
+        lp = optimize_pointing(s, ev -> sum(q.power for q in ev.beams) / 384; x0 = P0, lower = lo, upper = hi,
+                               constraints = (df,), feasibility = 1e-8)
+        @test lp.outcome === :box && only(lp.constraints).status === :active && only(lp.constraints).multiplier > 0
+        @test sum(lp.x) ≈ power_for(0.9 * mean_flux(ref0)) rtol = 1e-6
+        @test_throws ArgumentError drive_floor(ref0; fraction = 0)
+
         # the budget ends a run first
         short = optimize_pointing(s, f; x0 = P0, lower = lo, upper = hi, evaluations = 10, constraints = [total])
         @test short.outcome === :evaluations && short.stopped && short.evaluations == 10
@@ -227,8 +238,8 @@
         @test_throws ArgumentError ceilb.f(evaluate(remake(s; lpi = bs(0.2)), P0))
         @test ceilb.f(evaluate(remake(s; lpi = bs(0.1)), P0)) == ceilb.f(evaluate(sb, P0))
         @test_throws ArgumentError ceilb.f(evaluate(remake(sb; time = 2.0), P0))
-        # so does a mode gate from a reference evaluation; its values are those from the
-        # reference's coefficients, which record no model (unchecked)
+        # so do a mode gate and a drive floor from a reference evaluation; the gate's values
+        # are those from the reference's coefficients, which record no model (unchecked)
         gate_ev = mode_gate(evaluate(sb, P0), [0.01, 0.01])
         gate_c = mode_gate(flux_ylm(evaluate(sb, P0); lmax = 2), [0.01, 0.01])
         xb = P0 .* (1 .+ 0.1 .* sin.(1:48))
@@ -238,6 +249,9 @@
         @test_throws ArgumentError gate_ev.f(evaluate(remake(sb; time = 2.0), xb))
         @test length(gate_c.f(evaluate(s, xb))) == 2
         @test mode_gate(evaluate(sb, P0), (; rms_mode = [0.001, 0.002])).limit ≈ [sqrt(3) * 0.001, sqrt(5) * 0.002]
+        dfb = drive_floor(evaluate(sb, P0); fraction = 0.9)
+        @test dfb.f(evaluate(sb, xb)) == mean_flux(evaluate(sb, xb))
+        @test_throws ArgumentError dfb.f(evaluate(s, xb))
     end
 
     # The dropped-bundle tutorial's design on a coarser wall mesh: bundle 11 freed, the

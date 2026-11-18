@@ -107,7 +107,7 @@ export HeldParameters, PowerScales
 export Constraint, ConstraintRow, check_constraints, peak_irradiance, irradiance_norm,
        irradiance_ceiling, mode_departure, mode_gate, drive_objective
 export clearance_floor, light_fraction, light_ceiling, light_floor
-export Relaxation
+export Relaxation, drive_floor
 export HOTSPOT_VELOCITY_PER_PERCENT, mode1_vector, hotspot_velocity, ResponseKernel, flat_kernel,
        yield_factor, alpha_factor, rke_fraction, reactivity_exponent, burn_amplification,
        shape_amplification, young2020_green, young2020_kernel, young2020_pulses, young2020_dropped_quads,

@@ -11696,9 +11696,18 @@ gates' relaxation resolves the case.
 the shape from the reference's `flux_ylm` and records its scenario's `lpi` and time,
 as `irradiance_ceiling` does (§ "The exact peak, restarts and the box"): an evaluation
 with another model, or the same at another time, throws an `ArgumentError` (the check
-is now shared by the ceiling and the gate). The reference may be on
+is now shared by the ceiling, the gate and the drive floor). The reference may be on
 another target (a hohlraum without the design's windows, as in the study), since the
 gate compares shapes, not elements. The coefficient-vector method stays unchecked.
+
+**Drive floor.** On the study, an absolute ceiling with a power scale per cone (≤ 1)
+was met by cutting power, at a large loss of drive.
+`drive_floor(reference; fraction)` holds `mean_flux` at or above `fraction` times the
+reference's (scale: the limit; the model check as for the gate). Test: on the closed
+form, the least total power that keeps 0.9 of the start's drive, the floor active with
+a positive multiplier, against the fill of the quads in decreasing drive per power
+(1e-6). No default fraction: a reference with more beams than the design delivers more
+drive, so 1 is not always reachable.
 
 ## Constrained re-pointing: convergence on a feasible, active start (2026-11-18) *measured*
 

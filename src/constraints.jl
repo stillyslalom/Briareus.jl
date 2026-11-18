@@ -588,6 +588,11 @@ evaluate the reference in a scenario with the same model, e.g.
 outer cones only, or picket energies for a fluence ceiling), for the reference and the
 design alike.
 
+The ceiling is on an absolute irradiance: where the power can fall (power scales,
+[`PowerScales`](@ref), or powers among the parameters) the optimizer can meet it by
+cutting power, at a loss of drive (on a re-pointing study with a power scale per cone
+at most 1, a large one). A [`drive_floor`](@ref) beside it holds the drive.
+
 A ceiling on the wall's peak irradiance at the reference's value is an engineering
 limit, not a published criterion: the published scalings of the gold bubble's growth
 use the outer cones' picket fluence on the wall (research notes), which `weight`
@@ -964,4 +969,43 @@ function drive_objective(; drive::Real, clip = 10.0, missed = 10.0, direct = 10.
         J += keepout_penalty(keepout, ev.beams)
         return J
     end
+end
+
+"""
+    drive_floor(reference; fraction, scale = limit, name = :drive) -> Constraint
+
+A floor on the capsule's drive: the [`Constraint`](@ref) `mean_flux(ev) ≥ fraction ×
+mean_flux(reference)` ([`mean_flux`](@ref): the solid-angle mean of the incident flux on
+the observed capsule, TW/mm²), with `reference` an [`Evaluation`](@ref) of a reference
+design in a scenario that observes the capsule (the pointing before a bundle was
+dropped, or the start). `fraction` (positive, no default) sets how much of the
+reference's drive the design must keep: no value holds for every study, as a reference
+with more beams than the design delivers more drive.
+
+The constraint for a design whose power can fall: with power scales
+([`PowerScales`](@ref)) or powers among the parameters, a ceiling on an absolute
+quantity (an [`irradiance_ceiling`](@ref), a [`light_ceiling`](@ref)) is met by cutting
+power, and the drive falls with it. The default `scale` is the limit, so the default
+`feasibility = 1e-3` meets the floor to 0.1 % of the limit. As for
+[`mode_gate`](@ref), the floor records the reference scenario's laser–plasma model and
+time, and evaluating it with another throws an `ArgumentError`; the reference may be on
+another target.
+"""
+function drive_floor(reference::Evaluation; fraction::Real, scale::Union{Nothing,Real} = nothing,
+                     name = :drive)
+    isfinite(fraction) && fraction > 0 || throw(ArgumentError("the fraction must be positive and finite"))
+    a0 = Float64(ForwardDiff.value(mean_flux(reference)))
+    a0 > 0 || throw(ArgumentError("the reference has no drive on the capsule"))
+    lim = fraction * a0
+    return Constraint(name, _DriveValue(_ReferenceModel(reference.scenario)); lower = lim,
+                      scale = something(scale, lim))
+end
+
+# The floor's value: the capsule's mean flux, on the reference's laser–plasma model.
+struct _DriveValue
+    model::_ReferenceModel
+end
+function (d::_DriveValue)(ev::Evaluation)
+    _check_model(d.model, "drive_floor", ev)
+    return mean_flux(ev)
 end
