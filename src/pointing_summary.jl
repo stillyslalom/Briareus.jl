@@ -40,8 +40,9 @@ Summary of `beams` (or a result's `beams`) in `scenario` against the `reference`
 by default the scenario parameterization's beams at its initial parameters (the start
 of `optimize_pointing`). Each beam is matched to the reference beam of its name (an
 `ArgumentError` when there is none), so a subset's beams compare with the full set's.
-`keepout` is an [`ApertureKeepOut`](@ref), a [`SphereKeepOut`](@ref), a tuple or vector
-of them, or `nothing`; `inner` names the groups whose power is the cone fraction (as for
+`keepout` is an [`ApertureKeepOut`](@ref), a [`SphereKeepOut`](@ref), a
+[`HardwareKeepOut`](@ref) (any keep-out with a [`keepout_clearance`](@ref) method), a
+tuple or vector of them, or `nothing`; `inner` names the groups whose power is the cone fraction (as for
 [`cone_fraction_pulses`](@ref)). The clipped and missed fractions come from
 `evaluate(scenario, beams)`, after the scenario's laser–plasma model.
 
@@ -62,7 +63,7 @@ function pointing_summary(s::Scenario, beams::AbstractVector{<:Beam};
     P = sum(b -> b.power, bs; init = 0.0)
     Pin = sum(b -> b.power, (b for b in bs if b.group in inner); init = 0.0)
     ks = keepout === nothing ? Any[] : keepout isa Union{Tuple,AbstractVector} ? collect(Any, keepout) : Any[keepout]
-    least(k, b) = minimum(filter(isfinite, _keepout_clearance(k, b)); init = Inf)
+    least(k, b) = minimum(filter(isfinite, keepout_clearance(k, b)); init = Inf)
     refb = [_value_beam(ref[b.name]) for b in bs]
     c = Float64[least(k, bs) for k in ks]
     cref = Float64[least(k, refb) for k in ks]
