@@ -10842,6 +10842,89 @@ one mesh) are **derived**, converged to < 1 %. Not adopted: the example keeps th
 hand-set 1.1 (`bubble_energy`); adopting the link, absolute or relative, is the user's
 decision.
 
+**The picket ceiling, the linked bubble and the prediction** (later on 2026-11-18;
+`test/picket_fluence.jl`). The user's decision on item 36's quantity: the re-pointing
+study's ceiling holds the *maximum laser irradiance at the picket* (not at peak power),
+and the model chain should predict what a re-pointing does to the bubble. Three opt-in
+pieces, *derived* (no default, exponent or calibrated constant changed; nothing fitted):
+- `picket_irradiance(ev, names...; pulses, window | power, groups, measure)` and
+  `picket_ceiling(reference, names...; ...)`: the irradiance during the picket, each
+  beam at its mean power over the picket window (or a given picket power), the outer
+  cones by default, deposited by the scenario's operator with the setup beams and
+  without the scenario's laser–plasma model (set for its own time). Its ratios are the
+  picket fluence's. `measure = :peak` (the user's quantity; the 64-norm stand-in with
+  the exact peak held, `exact = true` by default) or `:mean` (F̄, what the bubble reads).
+- `PicketLinkedBubble(bubble, target, reference; pulses, window)`: `BubbleAbsorption`
+  with E = `bubble.picket_ratio` × F̄(beams)/F̄(reference) recomputed from the beams of
+  every evaluation (two picket depositions per evaluation), so that `evaluate`, mode
+  gates, objectives and `drive_history` see the bubble a re-pointing grows; at the
+  reference it is `bubble` bit for bit (`picket_ratio` now forms `at × (F̄/F̄_ref)`, `at`
+  exactly at the reference: a change of rounding only). The per-beam sensitivities
+  (`mode_sensitivity`) deposit beams one at a time and refuse it (`linked_bubble`
+  resolves it for given beams).
+- `bubble_prediction(model, design, reference; history, fixed)`: the peak and mean
+  picket ratios, E, the tip-speed ratio, the collision times and, with a drive-history
+  function, P2/P0 of both pointings with the swing's minimum and upward zero crossing,
+  split with `fixed = true` into the change through the deposition (E held) and through
+  the bubble.
+
+Checks: the values against `picket_fluence` to 1e-12; gradients of both ceilings and of
+an evaluation through the linked bubble against central differences to 1e-5; one-
+parameter constrained runs (the 50° cone's z pulled toward the waist on a 0.45 mm
+hohlraum) end at the bisection root of the held quantity to 1e-5 mm with `:mean` and with
+the peak's stand-in (`exact = false`); with the exact peak the run ends 0.4 % below the
+limit, the stand-in running above the peak near that limit and the working limit only
+being lowered (the same machinery as `irradiance_ceiling(...; exact = true)`). The linked
+bubble equals `remake(bubble; picket_ratio)` by hand to 1e-12, and a drive history with
+it equals the resolved bubble's bit for bit.
+
+**The benchmark's table, linked column, through `bubble_prediction`** (coarse mesh, full
+model, measured backscatter; F̄ and the peak on the h 0.1 map; the reference is the mock
+pointing at E = 1.1, minimum −0.181 at 5.25 ns, upward zero 6.194 ns):
+
+| Outer cones | F̄ / mock | peak / mock | E | tip speed | min (at) / upward zero / 8 ns | shift: min / zero |
+|---|---|---|---|---|---|---|
+| z −0.5 mm | 0.9998 | 0.9999 | 1.0998 | ×1.0000 | −0.152 (5.00) / 6.143 / +0.063 | +0.029 / −0.051 ns |
+| z −0.3 mm | 1.0000 | 0.9999 | 1.1000 | ×1.0000 | −0.161 (5.25) / 6.154 / +0.074 | +0.020 / −0.040 ns |
+| z +0.3 mm | 1.0015 | 1.0000 | 1.1017 | ×1.0003 | −0.205 (5.25) / 6.248 / +0.076 | −0.024 / +0.054 ns |
+| z +0.5 mm | 1.0097 | 1.0000 | 1.1107 | ×1.0019 | −0.226 (5.25) / 6.406 / +0.067 | −0.045 / +0.212 ns |
+| unsplit (s 0) | 1.1922 | 1.3913 | 1.3115 | ×1.0358 | −0.160 (5.25) / 5.996 / +0.082 | +0.021 / −0.198 ns |
+| s 0.225 | 1.0587 | 1.1879 | 1.1646 | ×1.0115 | −0.173 (5.25) / 6.147 / +0.081 | +0.008 / −0.047 ns |
+| s 0.75 | 1.0869 | 1.1952 | 1.1955 | ×1.0168 | −0.180 (5.25) / 6.149 / +0.081 | +0.001 / −0.045 ns |
+
+- **Reproduced**: every E, minimum, crossing and 8 ns value of the linked column above
+  (the earlier sweep set E by hand from the same map), to the digits printed there and
+  to 1e-5 in the saved values; the s 0.75 row's 8 ns value is +0.0815, i.e. +0.081 (the
+  table above prints +0.082). The shift columns include the deposition's change, which
+  for a z re-pointing is nearly all of it (§5 above).
+- **The peak does not bound the mean.** Moving the outer cones up by 0.5 mm leaves the
+  picket's peak element unchanged (1.0000) and raises F̄ by 1 % (with 2.8 % of the
+  picket clipped on the entrance hole; the causes were not separated); splitting changes the peak 2–3 times as much as
+  F̄. A ceiling at the reference's peak holds the overlap of the spots, the main lever
+  on F̄ here, but a design can grow its bubble by ~1 % in F̄ (0.2 % in tip speed) under
+  it. The bubble's prediction reads F̄; the peak is the user's limit.
+
+**The dropped-bundle tutorial's design, given a pulse** (scratch; the tutorial's
+`limited` run reproduced on its own mesh and options: 997 evaluations, ending at the
+box, under its peak-power ceiling with `exact = false`). Its scenario has no pulse;
+Young et al. 2020's requested N170827 pulse (`young2020_pulses()`, a 5.75 mm HDC
+hohlraum like the tutorial's) per quad, the picket the first ns after the outer turn-on
+at 0.25 ns, `BubbleAbsorption(radius = 2.875, turn_on = 0.25, capsule_radius = 0.9)` at
+E = 1 for the 48 quads. On the scenario's mesh, freeing bundle 11 leaves the picket's
+peak (×1.0000) and lowers F̄ to ×0.9865 (its outer quads are gone); the re-pointed
+design raises the picket's peak to ×1.0110 (its peak-power irradiance ×1.0017) and F̄
+to ×0.9939. On a 0.2 mm map the design's F̄ is ×0.9934 and its peak ×0.9983 of the 48
+quads': the peak's ratio depends on the mesh by more than its own change. Predicted:
+tip speed ×0.9987, collision +0.006 ns. A drive history on the tutorial's static model
+(constant albedo 0.85, no wall motion, 1–8 ns): the upward zero of P2/P0 moves +0.153 ns
+(6.176 → 6.328 ns), of which +0.144 ns through the deposition and +0.009 ns through the
+bubble; the minimum (−0.136 at 4.25 ns) moves by −0.001. The static model is a proxy for
+the swing's timing (no moving wall, no closing holes, no CBET); the split between the
+two causes is the result.
+
+Confidence **L** for the link itself (above); the picket powers of a design without a
+pulse of its own are an assumption to state with each use.
+
 ### What remains
 
 - A HYBRID-E bubble-tip or inner-spot history (unchanged: the one datum that separates
