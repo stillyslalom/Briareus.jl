@@ -1115,7 +1115,8 @@ function face_flux_objective(; uniformity = 1.0, rms_scale = nothing, flux = not
 end
 
 """
-    optimize_pointing(scenario, objective; x0 = initial_parameters(scenario.param),
+    optimize_pointing(scenario, objective; from = nothing,
+                      x0 = initial_parameters(scenario.param),
                       lower = bounds(scenario.param, x0)[1], upper = bounds(scenario.param, x0)[2],
                       iterations = 200, evaluations = 20 * iterations, show_trace = false,
                       g_tol = 1e-8, callback = nothing, constraints = (),
@@ -1173,6 +1174,16 @@ callback's named tuple then also carries `outer`, and its `value` is the inner
 problem's (the objective with the constraint terms). Without constraints the run is
 the plain L-BFGS-B above.
 
+**Restarts.** `from`, a previous run's [`PointingResult`](@ref), continues that run:
+`x0`, `lower` and `upper` default to its `x` and box, and a constrained run starts from
+its multipliers, penalty parameter, inner tolerance and working limits (`result.state`)
+instead of learning them again from zero. A run cut short by `evaluations` (or by the
+callback) and continued with `from` resumes the interrupted inner problem; the counts of
+the new result (`iterations`, `evaluations`, `outer`) are its own, and its
+`initial_value` is the objective at its start. The constraints must have the same
+components as the previous run's (a `DimensionMismatch` otherwise). An unconstrained
+`from` result only sets the start and the box.
+
 Compared with penalty terms at fixed weights, the multipliers carry the constraints'
 weights from one inner run to the next: the limits are met without stiff weights
 (which stall the line search), without stages of loosened limits set by hand, and the
@@ -1181,8 +1192,11 @@ design ends at its limits rather than where the penalty terms balance the object
 notes, "Constrained re-pointing").
 """
 Base.@nospecializeinfer function optimize_pointing(
-                           s::Scenario, @nospecialize(objective); x0 = initial_parameters(s.param),
-                           lower = bounds(s.param, x0)[1], upper = bounds(s.param, x0)[2],
+                           s::Scenario, @nospecialize(objective);
+                           @nospecialize(from = nothing),
+                           x0 = from === nothing ? initial_parameters(s.param) : from.x,
+                           lower = from === nothing ? bounds(s.param, x0)[1] : from.lower,
+                           upper = from === nothing ? bounds(s.param, x0)[2] : from.upper,
                            iterations::Integer = 200, evaluations::Integer = 20 * iterations,
                            show_trace::Bool = false, g_tol = 1e-8, @nospecialize(callback = nothing),
                            @nospecialize(constraints = ()), feasibility::Real = 1e-3,
@@ -1190,11 +1204,14 @@ Base.@nospecializeinfer function optimize_pointing(
     # Inferred and compiled once for every objective and callback (each objective
     # closure type used to recompile this body and Optim's L-BFGS-B, ~1 s); the objective
     # is reached by dynamic dispatch once per evaluation.
+    from === nothing || from isa PointingResult ||
+        throw(ArgumentError("`from` takes a PointingResult, got $(typeof(from))"))
     xs = clamp.(x0, lower, upper)
     isempty(constraints) ||
         return _constrained_pointing(s, objective, Tuple(constraints), x0, xs, lower, upper;
                                      iterations, evaluations, show_trace, g_tol, callback,
-                                     feasibility = Float64(feasibility), outer = Int(outer))
+                                     feasibility = Float64(feasibility), outer = Int(outer),
+                                     state = from === nothing ? nothing : from.state)
     r = _lbfgsb(s, objective, x0, xs, lower, upper; iterations, evaluations, show_trace, g_tol,
                 callback)
     return _pointing_result(s, r.x, r.value, r.initial_value, r.iterations, r.evaluations,
@@ -1318,6 +1335,15 @@ and a count by status), and `outcome` is one of
 (multiplier) iterations of a constrained run, 0 without constraints; `iterations` and
 `evaluations` are then totals over them, and `value` and `initial_value` are the
 objective's own values, without the constraint terms.
+
+`state` is what `optimize_pointing(...; from = result)` continues from: for a
+constrained run, a named tuple of the multipliers `λ` (normalized units, one per
+constraint component in the order of `constraints`), the penalty parameter `μ` and its
+ceiling `μmax`, the inner runs' tolerance `tol`, the last infeasibility–complementarity
+measure `Vold` and the working limits `limits` (an exact ceiling's lowered stand-in
+limit; see [`irradiance_ceiling`](@ref)); `nothing` without constraints. A run ended by
+its budget or callback keeps the state of the interrupted inner problem, so that the
+restart resumes it.
 """
 struct PointingResult{B}
     x::Vector{Float64}
@@ -1336,6 +1362,7 @@ struct PointingResult{B}
     constraints::Vector{ConstraintRow}
     outcome::Symbol
     outer::Int
+    state::Union{Nothing,NamedTuple}
 end
 
 _names(p::GroupPointing, n) = parameter_names(p)
@@ -1352,7 +1379,8 @@ end
 
 function _pointing_result(s::Scenario, x, value, initial_value, iterations, evaluations,
                           stopped, reason, result, lower, upper;
-                          constraints::Vector{ConstraintRow} = ConstraintRow[], outer::Int = 0)
+                          constraints::Vector{ConstraintRow} = ConstraintRow[], outer::Int = 0,
+                          @nospecialize(state = nothing))
     x = collect(Float64, x)
     names = _names(s.param, length(x))
     side = map(_bound_side, x, lower, upper)
@@ -1364,7 +1392,7 @@ function _pointing_result(s::Scenario, x, value, initial_value, iterations, eval
     return PointingResult(x, apply(s.param, x), Float64(value), Float64(initial_value),
                           Int(iterations), Int(evaluations), stopped, reason, result, names,
                           collect(Float64, lower), collect(Float64, upper), atb,
-                          constraints, outcome, outer)
+                          constraints, outcome, outer, state)
 end
 
 function Base.show(io::IO, r::PointingResult)

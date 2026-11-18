@@ -81,6 +81,29 @@
         @test on_cap.outcome === :interior && norm(on_cap.x - Pstar) / norm(Pstar) < 1e-3
         @test norm(Pa - Pstar) / norm(Pstar) > 0.05
 
+        # warm restarts. Split at an outer iteration (each inner run starts its L-BFGS-B
+        # afresh, from the state the result carries), the continued run is the
+        # uninterrupted one bit for bit. Split inside an inner run by the evaluation budget,
+        # the restart loses that run's L-BFGS-B memory and takes another path to the same
+        # strictly convex optimum: the designs agree to the convergence tolerance
+        # (feasibility 1e-8; the run lies 1e-8 from the KKT point), tested at 1e-6.
+        cs2 = (total, drive)
+        a = optimize_pointing(s, f; x0 = P0, lower = lo, upper = hi, constraints = cs2,
+                              feasibility = 1e-8, outer = 2)
+        @test a.outcome === :iterations && a.outer == 2 && a.state.λ == [r.multiplier for r in a.constraints]
+        ab = optimize_pointing(s, f; from = a, constraints = cs2, feasibility = 1e-8)
+        @test ab.x == res.x && ab.outer == res.outer - 2 && a.evaluations + ab.evaluations == res.evaluations
+        @test ab.lower == lo && ab.upper == hi
+        a2 = optimize_pointing(s, f; x0 = P0, lower = lo, upper = hi, constraints = cs2,
+                               feasibility = 1e-8, evaluations = 20)
+        @test a2.outcome === :evaluations && a2.state.μ > 0
+        b2 = optimize_pointing(s, f; from = a2, constraints = cs2, feasibility = 1e-8)
+        @test b2.outcome === :interior && norm(b2.x - res.x) / norm(res.x) < 1e-6
+        @test b2.constraints[1].multiplier ≈ res.constraints[1].multiplier rtol = 1e-3
+        @test_throws DimensionMismatch optimize_pointing(s, f; from = a, constraints = (total,))
+        # without constraints, `from` sets the start and the box only
+        @test optimize_pointing(s, f; from = a, iterations = 1).lower == lo
+
         # the box keeps every power above the cap's share: infeasible at the bounds
         boxed = optimize_pointing(s, f; x0 = P0, lower = 0.99 .* P0, upper = hi, constraints = (total,))
         @test boxed.outcome === :infeasible_box && boxed.reason === :converged

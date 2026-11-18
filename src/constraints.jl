@@ -166,7 +166,7 @@ const _AL_F_RELTOL = Ref(1e-10)
 Base.@nospecializeinfer function _constrained_pointing(
         s::Scenario, @nospecialize(objective), @nospecialize(cs::Tuple), x0, xs, lower, upper;
         iterations::Integer, evaluations::Integer, show_trace::Bool, g_tol,
-        @nospecialize(callback), feasibility::Float64, outer::Int)
+        @nospecialize(callback), feasibility::Float64, outer::Int, @nospecialize(state = nothing))
     for c in cs
         c isa Constraint || throw(ArgumentError("constraints must be `Constraint`s, got $(typeof(c))"))
     end
@@ -175,18 +175,30 @@ Base.@nospecializeinfer function _constrained_pointing(
     f0 = Float64(ForwardDiff.value(objective(ev)))
     g = _all_violations(cs, ev)
     lens = map(c -> length(_violations(c, ev)), cs)
-    λ = zeros(length(g))
-    μ = clamp(10 * max(1.0, abs(f0)) / max(1.0, sum(abs2, max.(g, 0.0)) / 2), 1e-6, 1e6)
-    μmax = 1e8 * μ
-    x, ne, ni, k = copy(xs), 0, 0, 0
-    tol = max(Float64(g_tol), 1e-3)
-    Vold = Inf
-    last = nothing
-    reason = :converged
     # the constraints as the inner problems see them: an exact ceiling's stand-in at a
     # working limit, lowered while the exact value ends above the limit
     work = cs
+    if state === nothing
+        λ = zeros(length(g))
+        μ = clamp(10 * max(1.0, abs(f0)) / max(1.0, sum(abs2, max.(g, 0.0)) / 2), 1e-6, 1e6)
+        μmax = 1e8 * μ
+        tol = max(Float64(g_tol), 1e-3)
+        Vold = Inf
+    else
+        # a warm restart (`from`): the multipliers, penalty, inner tolerance and working
+        # limits where the previous run left them
+        length(state.λ) == length(g) && length(state.limits) == length(cs) &&
+            all(i -> length(state.limits[i]) == length(cs[i].limit), eachindex(state.limits)) ||
+            throw(DimensionMismatch("`from` is a run with other constraints"))
+        λ, μ, μmax, tol, Vold = copy(state.λ), state.μ, state.μmax, state.tol, state.Vold
+        work = map((c, L) -> Constraint(c.name, c.f, copy(L), c.scale, c.upper, c.labels), cs,
+                   Tuple(state.limits))
+    end
+    x, ne, ni, k = copy(xs), 0, 0, 0
+    last = nothing
+    reason = :converged
     evx = ev
+    limits(w) = [copy(c.limit) for c in w]
     while true
         k += 1
         λs = _split_multipliers(λ, lens)
@@ -202,9 +214,12 @@ Base.@nospecializeinfer function _constrained_pointing(
         evx = evaluate(s, x)
         g = _all_violations(work, evx)
         V = maximum(abs, max.(g, -λ ./ μ); init = 0.0)
+        λinner = λ
         λ = max.(0.0, λ .+ μ .* g)
         if r.stopped
             reason = r.reason
+            # a restart resumes the interrupted inner problem
+            state = (; λ = λinner, μ, μmax, tol, Vold, limits = limits(work))
             break
         end
         feasible = maximum(g; init = -Inf) <= feasibility
@@ -216,25 +231,32 @@ Base.@nospecializeinfer function _constrained_pointing(
             # an exact ceiling above its limit: its stand-in's working limit scaled by
             # limit/exact, and the run continued from here with the same multipliers
             lowered = _lower_exact_limits(cs, work, evx, feasibility)
-            lowered === nothing && break
+            if lowered === nothing
+                state = (; λ, μ, μmax, tol, Vold = V, limits = limits(work))
+                break
+            end
             work = lowered
             # the new limit's violation is not a stall: the penalty stays
             V = Inf
         end
+        # the next outer iteration's penalty and tolerance (what a restart continues with)
+        μnext = V > Vold / 2 && V < Inf ? 10μ : μ
+        tolnext = max(Float64(g_tol), tol / 10)
+        state = (; λ, μ = μnext, μmax, tol = tolnext, Vold = V, limits = limits(work))
         if k >= outer
             reason = :iterations
             break
         end
-        V > Vold / 2 && V < Inf && (μ *= 10)
+        μ = μnext
         !feasible && μ > μmax && break                    # infeasible at the largest penalty
         Vold = V
-        tol = max(Float64(g_tol), tol / 10)
+        tol = tolnext
     end
     rows = _constraint_rows(evx, cs, λ, feasibility)
     stopped = last.stopped
     return _pointing_result(s, x, Float64(ForwardDiff.value(objective(evx))), f0, ni, ne,
                             stopped, reason, last.result, lower, upper; constraints = rows,
-                            outer = k)
+                            outer = k, state)
 end
 
 # The working constraints with each exact ceiling whose exact value at `ev` exceeds its

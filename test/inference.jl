@@ -170,8 +170,11 @@ end
         n = _inf_body_instances(optimize_pointing)
         nc = _inf_body_instances(Briareus._constrained_pointing)
         nl = _inf_body_instances(Briareus._lbfgsb)
-        optimize_pointing(s, dobj; x0, iterations = 1, evaluations = 3, callback = st -> false,
-                          constraints = [Constraint(:power, ev -> sum(b.power for b in ev.beams); upper = 400.0), clf])
+        cr = optimize_pointing(s, dobj; x0, iterations = 1, evaluations = 3, callback = st -> false,
+                               constraints = [Constraint(:power, ev -> sum(b.power for b in ev.beams); upper = 400.0), clf])
+        # a warm restart from a result
+        optimize_pointing(s, objectives[2]; from = cr, iterations = 1, evaluations = 3,
+                          constraints = [Constraint(:power, ev -> sum(b.power for b in ev.beams); upper = 390.0), clf])
         @test _inf_body_instances(optimize_pointing) == n
         @test _inf_body_instances(Briareus._constrained_pointing) == nc
         @test _inf_body_instances(Briareus._lbfgsb) == nl
@@ -375,6 +378,10 @@ end
                                  s, objectives[1], x0)
             @test _inf_jet_clean(JET.report_call, (s, o, x, c) -> optimize_pointing(s, o; x0 = x, constraints = c),
                                  s, objectives[1], x0, (ceilc, gatec))
+            # a warm restart from a constrained result
+            r1 = optimize_pointing(s, objectives[1]; x0, iterations = 1, evaluations = 2, constraints = (ceilc, gatec))
+            @test _inf_jet_clean(JET.report_call, (s, o, r, c) -> optimize_pointing(s, o; from = r, constraints = c),
+                                 s, objectives[1], r1, (ceilc, gatec))
         end
     else
         @warn "JET is not in the environment: test/inference.jl skips its JET checks"
