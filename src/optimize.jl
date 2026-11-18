@@ -1120,7 +1120,7 @@ end
                       lower = bounds(scenario.param, x0)[1], upper = bounds(scenario.param, x0)[2],
                       iterations = 200, evaluations = 20 * iterations, show_trace = false,
                       g_tol = 1e-8, callback = nothing, constraints = (),
-                      feasibility = 1e-3, outer = 30) -> PointingResult
+                      feasibility = 1e-3, outer = 30, time_limit = Inf) -> PointingResult
 
 Minimize `objective(evaluate(scenario, x))` within the box `lower ≤ x ≤ upper` by
 L-BFGS-B with forward-mode automatic-differentiation gradients, from `x0` (clamped to
@@ -1139,11 +1139,13 @@ than `GroupPointing` and [`FramePointing`](@ref) has no `bounds` method and need
 The run ends after `iterations` L-BFGS-B iterations or `evaluations` objective
 evaluations (each gradient counts one), whichever comes first: a line search may take
 many evaluations in one iteration, on a kinked objective (keep-out hinges, a coarse
-mesh) dozens, so the iteration limit alone does not bound the run time. `reason` is
-`:converged` (projected gradient below `g_tol`, or no further progress), `:iterations`,
-`:evaluations` or `:callback`. On `:evaluations` and `:callback` the result is the best
-design evaluated so far, with `stopped = true` and `result = nothing`; `iterations` is
-the number of iterations completed in every case.
+mesh) dozens, so the iteration limit alone does not bound the run time. `time_limit`
+(seconds of wall time, default none) ends the run at the first evaluation after it has
+passed. `reason` is `:converged` (projected gradient below `g_tol`, or no further
+progress), `:iterations`, `:evaluations`, `:time_limit` or `:callback`. On
+`:evaluations`, `:time_limit` and `:callback` the result is the best design evaluated
+so far, with `stopped = true` and `result = nothing`; `iterations` is the number of
+iterations completed in every case.
 
 `callback`, if given, is called after every (non-derivative) objective evaluation with
 `(; evaluations, iteration, value, best_value, best_x)`; returning `true` stops the
@@ -1200,10 +1202,12 @@ Base.@nospecializeinfer function optimize_pointing(
                            iterations::Integer = 200, evaluations::Integer = 20 * iterations,
                            show_trace::Bool = false, g_tol = 1e-8, @nospecialize(callback = nothing),
                            @nospecialize(constraints = ()), feasibility::Real = 1e-3,
-                           outer::Integer = 30)
+                           outer::Integer = 30, time_limit::Real = Inf)
     # Inferred and compiled once for every objective and callback (each objective
     # closure type used to recompile this body and Optim's L-BFGS-B, ~1 s); the objective
     # is reached by dynamic dispatch once per evaluation.
+    deadline = time() + Float64(time_limit)
+    time_limit > 0 || throw(ArgumentError("time_limit must be positive (seconds)"))
     from === nothing || from isa PointingResult ||
         throw(ArgumentError("`from` takes a PointingResult, got $(typeof(from))"))
     xs = clamp.(x0, lower, upper)
@@ -1211,9 +1215,9 @@ Base.@nospecializeinfer function optimize_pointing(
         return _constrained_pointing(s, objective, Tuple(constraints), x0, xs, lower, upper;
                                      iterations, evaluations, show_trace, g_tol, callback,
                                      feasibility = Float64(feasibility), outer = Int(outer),
-                                     state = from === nothing ? nothing : from.state)
+                                     state = from === nothing ? nothing : from.state, deadline)
     r = _lbfgsb(s, objective, x0, xs, lower, upper; iterations, evaluations, show_trace, g_tol,
-                callback)
+                callback, deadline)
     return _pointing_result(s, r.x, r.value, r.initial_value, r.iterations, r.evaluations,
                             r.stopped, r.reason, r.result, lower, upper)
 end
@@ -1226,7 +1230,7 @@ end
 Base.@nospecializeinfer function _lbfgsb(s::Scenario, @nospecialize(objective), x0, xs, lower,
                                          upper; iterations::Integer, evaluations::Integer,
                                          show_trace::Bool, g_tol, @nospecialize(callback),
-                                         f_reltol::Float64 = 0.0)
+                                         f_reltol::Float64 = 0.0, deadline::Float64 = Inf)
     best_x, best_value, count, iter = copy(xs), Inf, Ref(0), Ref(0)
     J(x) = objective(evaluate(s, x))
     # every objective value the optimizer sees (bookkeeping, callback, budget)
@@ -1237,6 +1241,7 @@ Base.@nospecializeinfer function _lbfgsb(s::Scenario, @nospecialize(objective), 
             callback((; evaluations = count[], iteration = iter[], value = v, best_value,
                       best_x)) === true && throw(_OptimizationStop(:callback))
         count[] >= evaluations && throw(_OptimizationStop(:evaluations))
+        time() > deadline && throw(_OptimizationStop(:time_limit))
         return v
     end
     f(x) = seen(x, J(x))
@@ -1311,7 +1316,8 @@ Result of [`optimize_pointing`](@ref). Fields: `x` (the best parameters), `beams
 (`apply(scenario.param, x)`), `value` and `initial_value` (the objective at `x` and at
 the clamped `x0`), `iterations` (L-BFGS-B iterations completed), `evaluations`
 (objective evaluations, each gradient counting one), `reason` (`:converged`,
-`:iterations`, `:evaluations` or `:callback`), `stopped` (`true` for the last two, which
+`:iterations`, `:evaluations`, `:time_limit` or `:callback`), `stopped` (`true` for the
+last three, which
 return the best design evaluated so far), `result` (Optim's result, `nothing` when
 `stopped`), `names` (`parameter_names` of the parameterization, `x[i]` for one without
 a method), the box `lower`, `upper`, and `at_bounds`: the names of the parameters at a
@@ -1329,8 +1335,9 @@ and a count by status), and `outcome` is one of
   box keeps the run from meeting it);
 - `:infeasible`: a constraint is still violated and no parameter is at a bound (a local
   point where the constraints cannot be met; another start may help);
-- `:iterations`, `:evaluations` or `:callback`: the budget or the callback ended the run
-  first (its constraints, if any, are in `constraints`).
+- `:iterations`, `:evaluations`, `:time_limit` or `:callback`: the budget, the time
+  limit or the callback ended the run first (its constraints, if any, are in
+  `constraints`).
 `reason` reads `:converged` for the first four. `outer` is the number of outer
 (multiplier) iterations of a constrained run, 0 without constraints; `iterations` and
 `evaluations` are then totals over them, and `value` and `initial_value` are the
@@ -1410,6 +1417,7 @@ function Base.show(io::IO, ::MIME"text/plain", r::PointingResult)
           r.reason === :converged ? "converged" :
           r.reason === :iterations ? "reached the iteration limit" :
           r.reason === :evaluations ? "reached the evaluation limit (best design kept)" :
+          r.reason === :time_limit ? "reached the time limit (best design kept)" :
           "stopped by the callback (best design kept)"
     @printf(io, "Pointing optimization %s: objective %.4g → %.4g\n", how, r.initial_value,
             r.value)
@@ -1432,7 +1440,7 @@ function Base.show(io::IO, ::MIME"text/plain", r::PointingResult)
            r.outcome === :box ? "constraints met, parameters at a bound" :
            r.outcome === :infeasible_box ? "constraints violated with parameters at a bound (the box blocks them)" :
            r.outcome === :infeasible ? "constraints violated inside the box" :
-           "ended by the budget or the callback"
+           "ended by the budget, the time limit or the callback"
     @printf(io, "\n  %d outer iterations: %s", r.outer, what)
     _show_constraint_rows(io, r.constraints)
     return nothing

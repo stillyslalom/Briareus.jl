@@ -172,8 +172,8 @@ end
         nl = _inf_body_instances(Briareus._lbfgsb)
         cr = optimize_pointing(s, dobj; x0, iterations = 1, evaluations = 3, callback = st -> false,
                                constraints = [Constraint(:power, ev -> sum(b.power for b in ev.beams); upper = 400.0), clf])
-        # a warm restart from a result
-        optimize_pointing(s, objectives[2]; from = cr, iterations = 1, evaluations = 3,
+        # a warm restart from a result, under a time limit
+        optimize_pointing(s, objectives[2]; from = cr, iterations = 1, evaluations = 3, time_limit = 1e3,
                           constraints = [Constraint(:power, ev -> sum(b.power for b in ev.beams); upper = 390.0), clf])
         @test _inf_body_instances(optimize_pointing) == n
         @test _inf_body_instances(Briareus._constrained_pointing) == nc

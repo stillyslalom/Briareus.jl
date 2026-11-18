@@ -166,7 +166,8 @@ const _AL_F_RELTOL = Ref(1e-10)
 Base.@nospecializeinfer function _constrained_pointing(
         s::Scenario, @nospecialize(objective), @nospecialize(cs::Tuple), x0, xs, lower, upper;
         iterations::Integer, evaluations::Integer, show_trace::Bool, g_tol,
-        @nospecialize(callback), feasibility::Float64, outer::Int, @nospecialize(state = nothing))
+        @nospecialize(callback), feasibility::Float64, outer::Int, @nospecialize(state = nothing),
+        deadline::Float64 = Inf)
     for c in cs
         c isa Constraint || throw(ArgumentError("constraints must be `Constraint`s, got $(typeof(c))"))
     end
@@ -209,7 +210,7 @@ Base.@nospecializeinfer function _constrained_pointing(
         end
         r = _lbfgsb(s, aug, x0, x, lower, upper; iterations,
                     evaluations = evaluations - ne, show_trace, g_tol = tol, callback = cb,
-                    f_reltol = _AL_F_RELTOL[])
+                    f_reltol = _AL_F_RELTOL[], deadline)
         x, ne, ni, last = copy(r.x), ne + r.evaluations, ni + r.iterations, r
         evx = evaluate(s, x)
         g = _all_violations(work, evx)

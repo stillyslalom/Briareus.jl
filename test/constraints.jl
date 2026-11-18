@@ -101,6 +101,14 @@
         @test b2.outcome === :interior && norm(b2.x - res.x) / norm(res.x) < 1e-6
         @test b2.constraints[1].multiplier ≈ res.constraints[1].multiplier rtol = 1e-3
         @test_throws DimensionMismatch optimize_pointing(s, f; from = a, constraints = (total,))
+        # a time limit ends a run at its first evaluation past it, with or without
+        # constraints, keeping the best design (and the state to continue from)
+        for c in ((), cs2)
+            tl = optimize_pointing(s, f; x0 = P0, lower = lo, upper = hi, constraints = c, time_limit = 1e-9)
+            @test tl.reason === tl.outcome === :time_limit && tl.stopped && tl.evaluations == 1
+            @test occursin("time limit", sprint(show, MIME"text/plain"(), tl))
+        end
+        @test_throws ArgumentError optimize_pointing(s, f; x0 = P0, time_limit = 0)
         # without constraints, `from` sets the start and the box only
         @test optimize_pointing(s, f; from = a, iterations = 1).lower == lo
 
