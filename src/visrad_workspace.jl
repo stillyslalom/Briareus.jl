@@ -924,23 +924,34 @@ function visrad_deposition(ws::VisRadWorkspace, t::Target = visrad_target(ws);
             continue
         end
         all(iszero, q) && continue
-        c = t.components[ci]
-        rows = _vrw_row_patches(o, length(q))
-        rows === nothing &&
-            throw(ArgumentError("VisRad's element order on $(o.kind) $name is not established; leave it out of the target"))
-        ref = o.kind === :mesh ? o.mesh : only(visrad_component(o; material = c.material)).mesh
-        (c.mesh.patches == ref.patches && length(c.mesh.vertices) == length(ref.vertices) &&
-         all(isapprox.(c.mesh.vertices, ref.vertices; atol = 1e-9)) && npatches(ref) == length(q)) ||
-            throw(ArgumentError("component $name is not on VisRad's $(length(q)) elements (remeshed, coarsened, fitted or cut?)"))
-        t0 = findfirst(==(ci), t.tri_comp) - 1
-        for (k, p) in enumerate(rows)
-            tri = t0 + first(c.mesh.patches[p])
-            e = t.tri_front[tri] != 0 ? t.tri_front[tri] : t.tri_back[tri]
+        for (k, e) in enumerate(_vrw_row_elements(o, t, ci, length(q)))
             e == 0 && continue                                   # a zero-area element
             P[e] = q[k] * f * t.elem_area[e] / 100                  # TW/cm² × mm²/100
         end
     end
     return P
+end
+
+# The element of target `t` (its front side, or the back of a back-only patch; 0 for a
+# zero-area patch) for each of VisRad object `o`'s `n` surface elements, in VisRad's row
+# order, where component `ci` of `t` is the object on VisRad's own elements. Refuses an
+# object whose element order is not established and a component that is not on VisRad's
+# elements (remeshed, coarsened, fitted or cut).
+function _vrw_row_elements(o::VisRadObject, t::Target, ci::Integer, n::Integer)
+    c = t.components[ci]
+    name = o.name
+    rows = _vrw_row_patches(o, n)
+    rows === nothing &&
+        throw(ArgumentError("VisRad's element order on $(o.kind) $name is not established; leave it out of the target"))
+    ref = o.kind === :mesh ? o.mesh : only(visrad_component(o; material = c.material)).mesh
+    (c.mesh.patches == ref.patches && length(c.mesh.vertices) == length(ref.vertices) &&
+     all(isapprox.(c.mesh.vertices, ref.vertices; atol = 1e-9)) && npatches(ref) == n) ||
+        throw(ArgumentError("component $name is not on VisRad's $n elements (remeshed, coarsened, fitted or cut?)"))
+    t0 = findfirst(==(ci), t.tri_comp) - 1
+    return map(rows) do p
+        tri = t0 + first(c.mesh.patches[p])
+        t.tri_front[tri] != 0 ? t.tri_front[tri] : t.tri_back[tri]
+    end
 end
 
 visrad_deposition(path::AbstractString, args...; kw...) =

@@ -10749,3 +10749,137 @@ facing away from the beams that pass it, and a closed 0.3 mm radius, 4 mm long s
   tolerance jumps where the closest point does (by tan 0.5° times the change in r); the
   exact rule needs the tolerance term inside the minimization (a concave term, so the
   per-segment convexity and the medial-strip argument hold only approximately).
+
+## VisRad benchmark beyond deposition: the saved runs (2026-11-18) *measured*
+
+ROADMAP "Benchmark against VisRad". The saved VisRad runs (VisRad 21, outside the
+repository, non-public; described generically here) were searched for VisRad's radiation
+results, and Briareus's radiation side was measured on them with VisRad's own deposition
+as the source and with Briareus's.
+
+- **What the saved runs hold.** Every computed workspace (hohlraum targets built from
+  Briareus geometry as VisRad mesh objects, one VisRad element per triangle, at a ~0.6 mm
+  and a 0.1 mm mesh; the probe kits; a TaLIS report kit; the primitive hohlraum + foil
+  sample) holds VisRad's power sources at one time (t = 0, constant power) and nothing
+  else of VisRad's solution: `[Radiosity Data]` and `[View Factor Data]` read "not up to
+  date" or are empty in every file and in every version the study repository has
+  committed. The JSON workspaces read for "VisRad JSON workspaces (2026-11-16)" are no
+  longer on disk; the layout recorded from them (the test mock) has only the count
+  `"Num radiosity up to date"` under `"Radiosity data"`. No radiosity, emission or radiation temperature, incident
+  flux on the capsule, view factor, spectral or time-dependent result exists in them.
+  The TaLIS kit also holds beam capture and clearance data, and the probe kits `.bti`
+  intersection exports; neither is a radiation result. **H** (every file searched)
+- **What the readers take.** `visrad_power_sources` reads every column of the power
+  sources (direct laser source, uniform source, albedo, conversion, reflectivity,
+  pre-reflection power, cone counts, overlap angles) in both formats. A populated
+  radiosity section has not been seen in either format, so no reader was written for
+  it; capture-clearance tables are not read (the writer resets them). **H**
+- **The import's materials.** On all nine computed workspaces VisRad's per-element
+  albedo and conversion columns equal the imported objects' values (to 10⁻⁵), the
+  uniform source and laser reflectivity are zero, and the element counts match the
+  meshes; on the primitive sample the only elements that differ are the hohlraum's
+  entrance-hole ring at α = η = 0, which the import makes apertures. VisRad's
+  source term is then ηI on every element, as in Briareus. **H**
+- **Method** (scratch scripts kept with the runs). The target is the workspace's
+  objects on VisRad's elements (`visrad_target(ws)`); laser deposition from VisRad's
+  power sources (`visrad_deposition`), from Briareus with VisRad's profile law
+  (`visrad_profile(ws)`) and with the default f-cone model, each on the whole target.
+  The radiation solve takes the radiating parts inside the cavity (wall, caps, corner
+  pieces, window patches, capsule): the parts outside it have α = η = 0, so B = 0 there,
+  and a segment between two points inside the cylinder cannot cross them, so dropping
+  them leaves the cavity's solution unchanged. One Briareus model per mesh (raw view
+  factors, default `:sampled` visibility, constant albedo and conversion as imported)
+  solves all three sources; differences are taken against the solve on VisRad's
+  deposition. Regions of the gold: elements whose laser source ηI exceeds B/5
+  ("spots", 32–33% of the gold's area), the corners (within 0.6 mm of the wall–cap
+  edge), the entrance-hole rim (within 0.6 mm of it) and the rest. Modes are the
+  capsule's incident flux in real spherical harmonics by exact solid angles
+  (`ylm_weights`), as Legendre ratios `aₗ/a₀` (m = 0) and per-l amplitudes
+  `√((2l+1) Σₘ cₗₘ²)/c₀₀`, in percent.
+- **Deposition propagated through the radiation, ~0.6 mm mesh** (four runs: one
+  pointing with and without two window patches, two re-pointings; about 5.5k radiating
+  elements). Briareus with VisRad's profile law against VisRad's deposition:
+  - laser flux on the gold 0.86–0.94% rms per element (largest 4.0–4.8% of the mean);
+    absorbed by the gold 0.07% below VisRad;
+  - gold radiosity B 0.16–0.17% rms, largest 0.72–0.86% of the mean; window patches
+    0.07–0.13%; 56–63% of Σ A ΔB² under the spots, 32–39% on the rest of the barrel,
+    3–4% in the corners, 1% at the entrance-hole rim (each region 0.08–0.19% rms);
+  - capsule incident flux −0.050 to −0.054% (Tr −0.04 eV); the power leaving through
+    the openings −0.08%; mean gold B −0.07%;
+  - capsule modes: ΔP2 −0.019 to −0.032 pp, ΔP4 −0.005 to −0.006 pp, ΔP1, ΔP3 ≤ 0.003 pp,
+    the m ≠ 0 parts of l = 1–4 within 0.006 pp.
+
+  Briareus's default f-cone model instead: laser flux 12.5–12.8% rms (largest
+  66–75%), B 2.0–2.1% rms (largest 10.8–12.4%), 85–87% of it under the spots;
+  capsule flux +0.075 to +0.078% (Tr +0.056 eV); openings −0.02 to −0.03%; ΔP2 −0.09 to
+  −0.11 pp, ΔP4 +0.025 to +0.040 pp, the m ≠ 0 part of l = 2 up to 0.037 pp. The wall's
+  high albedo smooths the deposition difference five- to sixfold into the
+  radiosity, and again on its way to the capsule.
+- **The radiation solve's own sensitivities** (same mesh, VisRad's deposition), the size
+  of the known modeling differences a VisRad radiosity comparison would show:
+  - visibility by one centroid ray (`:centroid`) instead of sampled partial visibility:
+    capsule flux −0.12% (Tr −0.09 eV), openings +0.28%, gold B 0.14% rms, ΔP2 −0.003
+    pp, ΔP4 +0.002 pp;
+  - view factors by the centroid point kernel A cos θ cos θ′/(πR²) on every pair
+    (`near = 0`, `exact_far = false`, `:centroid`): capsule flux +6.2% (Tr +4.5 eV),
+    openings −16.7%, gold B 9.5% rms (20% in the corners, where neighbors share an
+    edge), ΔP2 +1.5 pp, ΔP4 +0.07 pp. A code that integrates near pairs this crudely
+    would show it at once in the drive level and the loss through the openings.
+- **The same at the 0.1 mm mesh** (three runs on one geometry: a shot-like pointing and
+  two re-pointings at a lower power; about 60k radiating elements; view factors as an
+  `HMatrix` with `:centroid` visibility, since `:sampled` did not assemble within the
+  run's five-minute budget on 16 threads; on the 0.6 mm mesh the deposition-propagated
+  differences above are the same under either visibility rule to the digits quoted).
+  Briareus with VisRad's profile law against VisRad's deposition:
+  - laser flux on the gold 0.56–0.71% rms (largest 2.0–2.5%); absorbed by the gold
+    0.08–0.09% below VisRad;
+  - gold B 0.13–0.15% rms (largest 0.41–0.49%); 60–67% of Σ A ΔB² under the spots,
+    12–22% in the rounded corners (38% of the gold's area here), 19–21% on the rest,
+    2–3% at the rim;
+  - capsule flux −0.065 to −0.077% (Tr −0.04 to −0.05 eV); openings −0.09 to −0.10%;
+  - ΔP2 −0.009 to −0.013 pp, ΔP4 −0.009 to −0.010 pp, odd l and m ≠ 0 within 0.002 pp.
+
+  The default f-cone model: laser flux 12.0–14.5% rms, B 2.0–2.4% rms (largest
+  9.2–12.7%), 86–88% under the spots; capsule +0.046 to +0.055% (Tr +0.03 to +0.04 eV);
+  openings −0.03 to −0.04%; ΔP2 −0.108 to −0.117 pp, ΔP4 +0.041 to +0.042 pp, the m ≠ 0
+  part of l = 4 +0.02 pp.
+- **Across the two meshes** (different cases, so a trend, not a convergence study):
+  with VisRad's profile law the per-element differences shrink with the mesh (laser
+  0.9 → 0.6–0.7% rms, B 0.16 → 0.13–0.15%, ΔP2 0.02–0.03 → 0.01 pp), while the drive
+  level does not: the capsule flux and the loss through the openings follow the gold's
+  total deposition (−0.07% → −0.08 to −0.09%), so the level difference is VisRad's
+  per-beam total (ROADMAP item 6), not the spot shapes. The f-cone model's differences
+  are mesh-independent (its spots are another shape).
+- **Explained and open.** Explained: every radiation-side difference measured here is
+  the deposition's, carried through one radiosity solve: the level by the beam totals,
+  the shape by the spot profile (VisRad's law against the f-cone). Open, and not
+  measurable from the saved runs: VisRad's own radiosity, so whether its view factors,
+  visibility, closure and albedo bookkeeping agree with Briareus's. With VisRad's
+  deposition as the source, a VisRad radiosity solve that agrees with Briareus's
+  should match to well under the f-cone differences above; a difference of the size of
+  the `:centroid`/`:sampled` sensitivity (0.1% in drive, 0.3% in the openings) would
+  point at partial visibility, one of the point-kernel size at the view-factor
+  quadrature.
+- **What would settle it** (no new kit needed: the saved hohlraum workspaces hold the
+  geometry, beams and VisRad's up-to-date deposition). In VisRad: open a saved run per
+  mesh (one at 0.6 mm, one at 0.1 mm), compute the radiosities, save, and export the
+  Surface Element Properties (Flux In, Flux Out, Rad T, Emis T with the surface index)
+  of the gold objects and the capsule, and the Power Summary. Back in Briareus:
+  `compare_visrad(ws, sol; elements)` with `sol` solved on `visrad_target(ws)` from
+  `visrad_deposition(ws, t)`. The saved file then also shows VisRad's populated
+  `Radiosity data` layout, for a reader. `write_visrad_kit` cases remain only for what
+  the Briareus-built meshes cannot show: VisRad's primitives with curved surfaces
+  (flat facets renormalized to the nominal area), a cavity with a closed entrance hole
+  (balanced view factors), and temperature-dependent albedo.
+- **Code.** `compare_visrad(workspace, sol; elements, observe)` compares a radiation
+  solution with a workspace's results element by element: laser deposition from the
+  power sources, Flux In, Flux Out, Rad T and Emis T from the element exports, the
+  incident and emitted powers and Tr per object, and the observed object's modes by
+  exact solid angles on both sides. `visrad_element_values` maps one exported column
+  onto the target's elements by the surface index (0- or 1-based, *assumption* until a
+  real export is seen). Checked on the synthetic workspace with a CAD capsule whose
+  exported field is f₀(1 + a₁P₁ + a₂P₂): P1 and P2 recovered to 0.003 and 0.02 pp, and a
+  2% offset on another object recovered exactly. On a saved run with Briareus's
+  deposition its laser rows reproduce the comparison above (gold 0.07% below VisRad).
+  **H** (the comparison itself), **M** (the export layout: header names from the
+  manual's screenshot, index base assumed)

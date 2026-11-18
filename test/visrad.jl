@@ -611,4 +611,82 @@ end
     @test visrad_target(ws).elem_normal == visrad_target(ws0).elem_normal
 end
 
+@testset "workspace results: element tables, radiosity and modes" begin
+    # a CAD capsule (outward sphere, r = 0.5 mm, 1 mm below the chamber center) beside
+    # the tetrahedron, which takes VisRad's laser power
+    sm = sphere_mesh(0.5; ntheta = 16, nphi = 24)
+    nodes = [Tuple(v ./ 10) for v in sm.vertices]
+    faces = [(a - 1, b - 1, c - 1) for (a, b, c) in sm.triangles]
+    nc = length(faces)
+    qcad = [10.0, 0.0, 2.5, 7.25]
+    txt = synthetic_workspace(; meshes = [("Capsule_0", nodes, faces, (0.0, 0.0, -0.1))]) * "\n" *
+          power_source_section(["Rectangle_0" => zeros(81), "Cyl_Hohlraum_0" => zeros(216), "CAD_0" => qcad,
+                                "Capsule_0" => zeros(nc)])
+    ws = read_visrad_workspace(vrfile("results.vrw", txt))
+    t = visrad_target(ws; select = o -> o.kind === :mesh)
+    sol = solve(RadiationModel(t), visrad_deposition(ws, t))
+    ec, es = elements(t, :CAD_0), elements(t, :Capsule_0)
+    # VisRad's capsule export, rows in reverse order (0-based surface index): an
+    # axisymmetric field f₀(1 + a₁P₁ + a₂P₂) about the capsule center at each centroid
+    f0, a1, a2 = 0.5, 0.04, 0.1
+    μ = [normalize(t.elem_centroid[e] - Vec3(0, 0, -1))[3] for e in es]
+    f = f0 .* (1 .+ a1 .* legendre.(1, μ) .+ a2 .* legendre.(2, μ))
+    io = IOBuffer()
+    println(io, "Radius (cm)  Surf Index  Rad T (eV)  Flux In (TW/cm2)")
+    for k in reverse(1:nc)
+        println(io, "0.05  ", k - 1, "  ", radiation_temperature(f[k] / 100), "  ", f[k])
+    end
+    pcap = vrfile("capsule.sed", String(take!(io)))
+    # the tetrahedron's export: 1-based indices, reversed, Flux Out 2 % above Briareus's
+    B = sol.B[ec]
+    io = IOBuffer()
+    println(io, "Surf Index  Flux Out (TW/cm2)")
+    for k in 4:-1:1
+        println(io, k, "  ", 102 * B[k])
+    end
+    ptet = vrfile("tetra.sed", String(take!(io)))
+
+    V = visrad_element_values(ws, t, Dict("Capsule_0" => pcap), r"flux\s*in"i)
+    @test V[es] ≈ f ./ 100 && all(isnan, V[ec])                     # TW/cm² → TW/mm², rows by index
+    @test visrad_element_values(ws, t, Dict(:CAD_0 => ptet), r"flux\s*out"i)[ec] ≈ 1.02 .* B
+    @test visrad_element_values(ws, t, Dict("Capsule_0" => pcap), r"rad\s*t"i)[es] ≈ radiation_temperature.(f ./ 100)
+
+    out = IOBuffer()
+    cmp = compare_visrad(ws, sol; elements = Dict("Capsule_0" => pcap, "CAD_0" => ptet), observe = :Capsule_0, io = out)
+    row(q) = only(r for r in cmp.rows if r.quantity == q)
+    stat(o, q) = only(s for s in cmp.elements if s.object == o && s.quantity == q)
+    # modes of VisRad's field by exact solid angles: the Legendre ratios of the field
+    @test abs(row("P1/P0 [Capsule_0]").visrad - 100a1) < 0.02
+    @test abs(row("P2/P0 [Capsule_0]").visrad - 100a2) < 0.05
+    @test abs(row("mode amplitude l=2 [Capsule_0]").visrad - 100a2) < 0.05
+    # (centroid samples held constant over 16 rings leak 0.2 pp of the P2 into P4)
+    @test all(abs(row("mode amplitude l=$l [Capsule_0]").visrad) < 0.3 for l in (3, 4))
+    @test row("Rad T [Capsule_0]").visrad ≈ radiation_temperature(f0 / 100) rtol = 1e-3
+    @test row("Incident Rad Pwr [Capsule_0]").briareus ≈ sum(sol.H[es] .* t.elem_area[es]) rtol = 1e-12
+    # the tetrahedron: 2 % above everywhere, so the rms is 0.02 B over the mean of 1.02 B
+    s = stat("CAD_0", "Flux Out")
+    A = t.elem_area[ec]
+    @test s.n == 4
+    @test s.rms ≈ sqrt(sum(A .* (0.02B) .^ 2) / sum(A)) / (sum(A .* 1.02B) / sum(A)) rtol = 1e-12
+    @test s.max ≈ maximum(0.02B) / (sum(A .* 1.02B) / sum(A)) rtol = 1e-12
+    @test s.correlation ≈ 1
+    @test row("Emitted Rad Pwr [CAD_0]").relative ≈ 0.02 rtol = 1e-9
+    # laser deposition from the power sources: VisRad's own here, so no difference
+    @test row("Laser Pwr Dep [CAD_0]").visrad ≈ sum(qcad .* A ./ 100) rtol = 1e-12
+    @test row("Laser Pwr Dep [CAD_0]").difference == 0 && stat("CAD_0", "Laser").rms == 0
+    @test !any(r -> occursin("Rectangle_0", r.quantity), cmp.rows)               # not in the target
+    @test occursin("P2/P0 [Capsule_0]", String(take!(out)))
+    # the index base: 1-based found from the largest index; ambiguous tables are refused
+    part = (; header = ["Surf Index", "Flux Out (TW/cm2)"], labels = fill("", 3), data = [1.0 1; 2 2; 3 3])
+    @test_throws ArgumentError visrad_element_values(ws, t, Dict("CAD_0" => part), r"flux\s*out"i)
+    vp = visrad_element_values(ws, t, Dict("CAD_0" => part), r"flux\s*out"i; index_base = 1)[ec]
+    @test vp[1:3] ≈ [0.01, 0.02, 0.03] && isnan(vp[4])
+    @test_throws ArgumentError visrad_element_values(ws, t, Dict("CAD_0" => (; header = ["Flux Out (TW/cm2)"], labels = ["", ""],
+                                                                             data = [1.0; 2;;])), r"flux\s*out"i)
+    @test_throws ArgumentError visrad_element_values(ws, t, Dict("Nothing" => ptet), r"flux\s*out"i)
+    @test_throws ArgumentError compare_visrad(ws, sol; elements = Dict("Capsule_0" => (; header = ["Surf Index", "Flux In (TW/cm2)"],
+                                                                                       labels = ["", ""], data = [0.0 1; 1 1])),
+                                              observe = :Capsule_0)
+end
+
 end

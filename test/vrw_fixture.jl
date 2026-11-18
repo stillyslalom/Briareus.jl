@@ -1,18 +1,20 @@
 # A synthetic VisRad workspace for the tests (core and GUI): object blocks and beam rows
 # in the layout VisRad 20/21 writes, copied from real workspaces with made-up names.
 #
-#   synthetic_workspace() -> String (the file's text)
+#   synthetic_workspace(; meshes = ()) -> String (the file's text)
 
 # the CAD object: a right tetrahedron (cm), centered, outward counterclockwise faces
 # (0-based node indices)
 const TETRA_NODES = [Tuple(v .- 0.025) for v in [(0.0, 0.0, 0.0), (0.1, 0.0, 0.0), (0.0, 0.1, 0.0), (0.0, 0.0, 0.1)]]
 const TETRA_FACES = [(0, 2, 1), (0, 1, 3), (0, 3, 2), (1, 2, 3)]
 
-function synthetic_workspace()
+function synthetic_workspace(; meshes = ())
     # A workspace in the layout VisRad 20/21 writes (Workspace Format ID 11), with
     # object blocks and beam rows copied from real workspaces: the primitive hohlraum
     # + foil of a VisRad 21.0.0 file, a CAD mesh placed through a reference cone, and
-    # NIF beam rows. Lengths are cm in the file.
+    # NIF beam rows. Lengths are cm in the file. `meshes`: further CAD objects after
+    # these, `(name, nodes, faces, position)` (cm; nodes relative to the position,
+    # 0-based faces), placed in the chamber frame.
     function vobj(io, name, type; pos = (0, 0, 0), geom = 0, angles = (0, 0, 0),
                   lengths = zeros(6), pts = (0, 0, 0), ref = "Target Chamber", albedo = 0.7,
                   include = 1, mesh = nothing)
@@ -77,6 +79,9 @@ function synthetic_workspace()
     vobj(io, "CAD_ref", 11; pos = (0, 0, 0.2), angles = (0, 90, 0), lengths = [0.01, 0, 0.02, 360, 180, 0], include = 0)
     vobj(io, "CAD_0", 13; pos = (0.1, 0, 0), ref = "CAD_ref", albedo = 0.5, mesh = (tn, tf))
     vobj(io, "Marker", 1; pos = (0.32, 90, 150), geom = 2, lengths = [0.1, 0, 360, 0, 180, 0], pts = (10, 10, 0), include = 0)
+    for (name, nodes, faces, pos) in meshes
+        vobj(io, name, 13; pos, mesh = (nodes, faces))
+    end
     println(io, """
       Begin Target Component Directory Structure:
 

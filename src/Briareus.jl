@@ -71,6 +71,7 @@ export VisRadObject, VisRadWorkspace, read_visrad_workspace, visrad_component, v
        write_visrad_workspace, VisRadProfile, visrad_profile, visrad_envelope,
        visrad_power_sources, visrad_deposition
 export VISRAD_NIF_PLATES, visrad_nif_spot
+export visrad_element_values
 export legendre, legendre_moments, legendre_weights, solid_angle, ylm_moments, ylm_weights, mode_center,
        ylm_matrix, ylm_frame, mode_index, relative_mode_power, mode_amplitude, mode_power, mode_rms, rms_nonuniformity
 export OrthoCamera, render, radiance, line_of_sight_power
@@ -160,6 +161,7 @@ include("diagnostics.jl")
 include("visrad.jl")
 include("visrad_workspace.jl")
 include("visrad_json.jl")
+include("visrad_results.jl")
 include("cbet.jl")
 include("unconverted.jl")
 
