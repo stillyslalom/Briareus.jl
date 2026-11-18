@@ -11784,3 +11784,191 @@ peak), a Laplace covariance of the prior fit, a third optimizer leg, the standar
   fractions would need a hydro transfer from flux P2 to hot-spot P2.
 - N230729 transfer curves and per-shot plasma states (unchanged); Ruof's asymmetric
   rise-CF response lies outside the reduced CBET.
+
+## Absolute energetics without new data: the early peak and the missing sinks (2026-11-18) *derived*
+
+ROADMAP item 12, the part that needs no HYDRA energy inventory, post-shot synthetic
+Dante or blow-off opacity: the current state with the whole-field Dante 1 (§1), what the
+model's existing inputs do to the early peak (§2), and the sinks the model lacks, sized
+from published numbers (§3). Measured Dante 1 (Pak et al., PRE 109, 025203 (2024)
+Fig. 1, `n221204_pulse()`) and PRE 109 Fig. 10 are checks; nothing below is fitted to
+them, and no default or calibrated constant changed. Runs: a scratch copy of
+`examples/n221204.jl 0.8 0.4 full calibrated x n221204` (coarse mesh, full model,
+measured backscatter, defaults of commit 865f161; 45–55 s per variant on 8 threads;
+the uniform-cut rerun skipped). The copy adds only switches the example lacks (the wall
+conversion as another `Conversion`, the DU loss factor) and a per-step record: Dante 1
+over its whole field and through the hole alone, the share of its intensity that is
+converted laser light seen directly (`sol.converted`), and one diffuse bounce of each
+step's absorbed laser through the step's view factors. The coarse baseline reproduces
+"The swing and the bubble without new data" §1 to the printed digit (capsule / LEH share
+13.9 / 24.2 %, Dante 1 at 8 ns 289.7 / 312.9 eV; Fig. 10 minimum −0.181 at 5.25 ns,
+crossing 6.19 ns). Not run: the standard mesh (the coarse drive is within ~0.1 eV of it,
+"N221204 late-time drive"), combinations of variants (additivity not measured),
+Zylstra's pair. Confidence: **H** primary text, **M** abstract or secondary, **L** ours.
+
+### 1. The current state with the whole-field Dante 1
+
+Coarse, full model; Dante 1 (`dante1()`, the 60 mm field) over the initial LEH area
+(Dante's convention, Rubery et al., PRL 132, 065104 (2024): "a lower bound") and over
+the open area; eV. "Direct share": the fraction of Dante 1's intensity that is converted
+laser light, the spots seen directly.
+
+| t (ns) | capsule Tr | Dante 1, initial | Dante 1, open | measured | initial − measured | open − measured | open fraction A_open/A₀ | direct share |
+|---|---|---|---|---|---|---|---|---|
+| 4.5 | 212.8 | 208.4 | 218.1 | 203.4 | +5.0 | +14.7 | 0.833 | 0.35 |
+| 5.0 | 255.1 | 242.5 | 255.7 | 237.9 | +4.6 | +17.8 | 0.809 | 0.31 |
+| 5.25 | 267.5 | 252.7 | 267.3 | 252.1 | +0.6 | +15.3 | 0.798 | 0.29 |
+| 5.5 | 273.2 | 257.6 | 273.5 | 263.1 | −5.5 | +10.4 | 0.787 | 0.27 |
+| 6.0 | 278.8 | 263.9 | 281.9 | 275.5 | −11.6 | +6.4 | 0.768 | 0.25 |
+| 6.5 | 282.5 | 269.5 | 289.4 | 282.9 | −13.4 | +6.5 | 0.753 | 0.24 |
+| 7.0 | 291.0 | 276.4 | 297.9 | 291.3 | −14.9 | +6.6 | 0.741 | 0.20 |
+| 7.5 | 299.5 | 283.6 | 306.3 | 301.7 | −18.1 | +4.6 | 0.735 | 0.18 |
+| 8.0 | 306.3 | 289.7 | 312.9 | 310.1 | −20.4 | +2.9 | 0.734 | 0.16 |
+| 8.5 | 298.4 | 281.2 | 303.7 | 311.3 | −30.1 | −7.6 | 0.734 | 0.13 |
+| 9.0 | 281.6 | 263.7 | 284.9 | 301.5 | −37.8 | −16.6 | 0.734 | 0.09 |
+| 9.35 | 265.0 | 247.1 | 266.9 | 293.8 | −46.7 | −26.9 | 0.734 | 0.04 |
+
+Split (% of the coupled 1778 kJ; delivered 2046, backscatter and degradation 268): wall
+61.9, LEH 24.2, capsule 13.9 (247 kJ); wall re-emitted 106 kJ; laser out of the holes
+−0.1 kJ (none). Dante 1 peaks at 289.7 eV at 8.0 ns (open 312.9) against 311.9 at
+8.30 ns measured.
+
+- **Whole field and through the hole agree within 0.1 eV at every step** (4.5–9.35 ns).
+  Through the lower LEH at 36.75° to the axis Dante 1 sees only the wall (the capsule
+  lies outside the line of sight), and the target's outside is one-sided and dark, so
+  the 60 mm field adds nothing on this target. The roadmap's "not rerun on N221204" is
+  closed: the numbers are those of the 2026-11-18 swing section, and the move from
+  290.9 / 314.2 came from the other commits named there (the M-band split, the LEH
+  azimuthal count), not from the view.
+- **The area convention is worth 4.7–8 %** in Tr: the prescribed lips leave 0.81 of the
+  initial area open at 5.0 ns and 0.734 (0.857²) from 7.5 ns, and the open reading is
+  the initial one times (A₀/A_open)^¼.
+- **The rise through the peak is too small on both readings**: from 5.0 to 8.0 ns +47.1 eV
+  (initial area) and +57.2 eV (open area) against +72.2 eV measured. The early excess on
+  the open area and the late deficit on the initial area are the same shape error.
+- **After the laser falls** (initial area): −30 eV at 8.5 ns, −38 at 9.0, −47 at 9.35 ns,
+  as in "Capsule absorption, conversion and the ablating-wall release" §3; the plasma
+  source after the fall stays unmodeled ("Late-time drive", §4).
+
+### 2. The early peak: what each existing input does
+
+"13–20 eV above Dante at 5.0–5.5 ns" is an open-area statement. On Dante's own
+convention the model is +4.6 / +0.6 / −5.5 eV at 5.0 / 5.25 / 5.5 ns, and its rise
+over 4.5–5.5 ns lines up with the measured one after a delay of 0.07 ns (rms 2.7 eV);
+over the open area the delay is 0.245 ns (rms 3.1 eV) (*L*: the Δt minimizing the rms of
+model(t − Δt) − measured on a 0.05 ns grid). Each input below is varied alone within its
+documented range; change against the baseline, eV (Dante 1 over the initial area unless
+marked):
+
+| Variant (documented range) | 5.0 | 5.25 | 5.5 | 6.5 | 8.0 | 8.5 | 9.0 | open 5.25 / 8.0 | rise 5 → 8 (initial / open) | capsule / LEH (%) | delay Δt initial / open (ns) | Fig. 10 min (5.25), zero, 8 ns, rms |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| baseline (absolute values) | 242.5 | 252.7 | 257.6 | 269.5 | 289.7 | 281.2 | 263.7 | 267.3 / 312.9 | 47.1 / 57.2 | 13.9 / 24.2 | 0.070 / 0.245 | −0.181, 6.19, +0.080, 0.047 |
+| conversion 0.90 (t/8 ns)^0.2 ≤ 0.95 (Rosen's and Schein's exponent at `nif_conversion()`'s 0.90 at 8 ns) | −3.0 | −2.8 | −2.5 | −1.5 | −0.4 | −0.2 | −0.1 | −2.9 / −0.4 | 49.8 / 60.0 | 13.4 / 23.7 | 0.020 / 0.195 | −0.183, 6.19, +0.081, 0.047 |
+| conversion 0.875, constant (Olson's 0.85–0.90) | +2.9 | +2.5 | +2.1 | +0.5 | −1.4 | −1.6 | −1.6 | +2.7 / −1.5 | 42.8 / 52.8 | 14.3 / 24.4 | 0.125 / 0.295 | −0.179, 6.19, +0.079, 0.047 |
+| conversion in intensity, 0.95 at 10¹⁴, 0.80 at 10¹⁵ W/cm² (Dewald 2008), no time dependence | +5.0 | +4.0 | +3.3 | +1.0 | −3.9 | −3.3 | −2.2 | +4.3 / −4.2 | 38.2 / 47.7 | 14.6 / 24.4 | 0.165 / 0.340 | −0.176, 6.22, +0.076, 0.044 |
+| computed lips (`lips=computed`, `LipClosure`) | −4.5 | −5.2 | −5.2 | −3.0 | −1.5 | −1.3 | −1.6 | −0.1 / +0.6 | 50.1 / 58.0 | 14.0 / 23.5 | 0.020 / 0.240 | −0.175, 6.18, +0.081, 0.047 |
+| capsule albedo 0.3, constant (Young 2020's static value; HYDRA's 0.01–0.16 before 6 ns is the default) | +3.0 | +3.2 | +3.3 | +2.6 | +0.9 | +0.7 | +0.7 | +3.4 / +0.9 | 45.0 / 54.9 | 12.1 / 24.9 | 0.115 / 0.285 | −0.184, 6.22, +0.078, 0.043 |
+| SBS on N210808's per-cone histories (`backscatter=history`, Kemp 2026) | −3.8 | −3.9 | −2.1 | +1.5 | 0.0 | 0.0 | 0.0 | −4.1 / 0.0 | 51.0 / 61.2 | 13.8 / 24.2 | 0.035 / 0.220 | −0.152, 6.20, +0.080, 0.043 |
+| SBS 53 kJ (42 + 11, AS24) | 0.0 | −0.4 | −0.9 | −1.1 | −0.1 | −0.1 | −0.1 | −0.4 / −0.2 | 47.0 / 57.1 | 13.8 / 24.2 | 0.070 / 0.240 | −0.176, 6.18, +0.081, 0.048 |
+| DU loss factor 0.92 (×1.1; the loss models agree within ~10 %) | −2.3 | −2.5 | −2.6 | −3.0 | −3.9 | −3.7 | −3.2 | −2.6 / −4.2 | 45.5 / 55.4 | 13.3 / 23.2 | 0.040 / 0.215 | −0.187, 6.19, +0.088, 0.047 |
+| DU loss factor 0.752 (×0.9) | +2.4 | +2.7 | +2.8 | +3.2 | +4.1 | +3.9 | +3.4 | +2.8 / +4.5 | 48.9 / 59.2 | 14.5 / 25.4 | 0.105 / 0.275 | −0.175, 6.20, +0.073, 0.046 |
+| source lag 0.15 ns (`lag=0.15`, a ~60 kJ store; a sensitivity, not a calibrated input) | −9.1 | −6.9 | −4.1 | −1.1 | −0.4 | +4.3 | +5.9 | −7.3 / −0.4 | 55.9 / 66.4 | 13.2 / 24.1 | −0.080 / 0.105 | −0.154, 6.19, +0.082, 0.049 |
+| measured (absolute values) | 237.9 | 252.1 | 263.1 | 282.9 | 310.1 | 311.3 | 301.5 | — | 72.2 | HYDRA 16.2 / 25.2 | — | −0.170 (5.6), 6.67, +0.095 |
+
+- **No input within its documented range carries the excess.** The largest single
+  reductions at 5.25 ns are the published SBS timing (−3.9 eV), the conversion's time
+  exponent at 0.2 (−2.8) and the DU factor at +10 % (−2.5, a level shift that deepens
+  the 8 ns deficit by more); together, if additive, ~9 eV of the open area's 15. None
+  steepens the 5 → 8 ns rise by more than +4 eV against the 15–25 eV missing.
+- **The conversion's intensity dependence has the wrong sign.** With Dewald's table the
+  element-mean absorbed flux rises through the peak, so η falls (0.88 at 5.25 ns, 0.84
+  at 8 ns, against `nif_conversion()`'s 0.85 / 0.90): +4 eV early, −4 eV late, the rise
+  9 eV smaller. The coarse elements' mean flux sets η here, so the table is also mesh
+  dependent ("Wall material, conversion and capsule energetics" §2). A constant η shows
+  the converse: the rising `nif_conversion()` already supplies +4.3 eV of the rise.
+- **The lips move the convention, not the drive.** Computed lips close faster in the rise
+  (open fraction 0.754 against 0.809 at 5.0 ns): the initial-area reading drops 4.5–5.2 eV
+  at 5–5.5 ns; the open-area reading and the capsule Tr move ≤ 0.8 eV.
+- **The capsule albedo history is already the favorable one**: HYDRA's dark early ablator
+  (0.01–0.16 to 6 ns) keeps the early drive 3 eV below a constant 0.3.
+- **Dante's view of the spots weighs the early peak most.** Converted laser light seen
+  directly is 31 % of Dante 1's intensity at 5.0 ns, 29 % at 5.25, 16 % at 8.0 and 13 %
+  at 8.5 ns (the lips cover the spots near the hole, and the wall's re-emission grows).
+  A term that dims the spots therefore lowers Dante early about twice as much as late,
+  but removing the 15 eV open-area excess at 5.25 ns this way would need the spots'
+  emission 72 % lower (*L*: 1 − (252.1/267.3)⁴ = 0.21 of the intensity, over a direct
+  share of 0.29), which no conversion datum allows.
+- **Only the source lag acts on the shape**: −9 eV at 5.0 ns and +6 eV at 9.0 ns, the
+  rise +9 eV, and the open-area delay 0.245 → 0.105 ns. As in "Computed LEH closure"
+  (measured there on the 2026-10-24 energetics), a ~60 kJ store with a ~0.15 ns return
+  helps both ends, but its content and return time are unpublished, so it stays a
+  sensitivity. It makes the swing minimum shallower (−0.154 against −0.181; the
+  backscatter history gives −0.152; Fig. 10 −0.170) and leaves the crossing.
+
+**Reading.** The model's rise into the peak is in time with Dante's on Dante's own
+convention (0.07 ns) and early by ~0.25 ns only on the open area. What the existing
+inputs cannot supply is the rise through the peak (+47 to +57 eV against +72 eV from 5
+to 8 ns). The measured power is flat over the plateau (440–448 TW over 5.45–8.05 ns), so
+that rise needs losses that fall, or a source that grows, faster in time than the
+model's (the wall's effective age and the conversion's t^0.12 are its two such terms),
+or an LEH whose effective area in the thermal band closes more than the lips' 0.857 r₀
+(*L*). No published number fixes either. Recommendation: no change; quote the early
+peak on both conventions, and track the 5 → 8 ns rise as the quantity.
+
+### 3. Sinks the model lacks, sized from published numbers
+
+Sensitivity used for the drive (*L*, from the gas run below): a uniform 4.5 % cut of the
+coupled power lowers Dante 1 and the capsule Tr by 3.1–3.7 eV (1.2–1.3 %, T ∝ P^0.28)
+at every time.
+
+| Sink | Published size | Model accounting | kJ | TW at peak | eV at 5.5 / 8.0 ns | Run |
+|---|---|---|---|---|---|---|
+| He gas fill, 0.3 mg/cc | 4.5 % of HYDRA's laser energy heats the gas (Kritcher et al., PRE 109, 025204 (2024) App. 3, **H**); "∼5 %" in gas and membranes together (Hurricane et al., PRL 132, 065103 (2024), **H**) | none: no gas; the bubble's absorbed light goes to the wall and converts | 80 (4.5 % of the coupled 1778; 92 of the delivered) | ~17 (4.5 % of ~380 TW coupled, if proportional to the power, *L*) | −3.3 / −3.7 (initial area); open −3.4 / −4.0 | `degrade=0.15` (0.89 × 0.955 of the delivered): capsule 13.9 → 13.7 %, LEH 24.2 → 24.1 %, Dante 1 at 8 ns 289.7 → 286.0 (open 312.9 → 308.9); Fig. 10 −0.175 (5.25), 6.18, +0.081, rms 0.048 |
+| LEH windows (and the capsule tent) | ≲ 0.5 %: Hurricane's ∼5 % for gas and membranes less Kritcher's 4.5 % for the gas (**H** inputs, **L** difference); 0.5 µm polyimide windows that burn through in the first few hundred ps of the foot (an LLNL target-fabrication update; Bradley et al., APS DPP 2008, abstract; **M**) | none (open holes from t = 0) | ≲ 9; two 0.5 µm, 7.5 mm² polyimide films (5.4 µg each), fully ionized at 2 keV, hold ~1 kJ each as heat (*L*) | 0 (gone in the foot) | 0 / 0 | not run (outside the peak; below the coarse mesh's resolution) |
+| Laser scattered or reflected inside the hohlraum, re-deposited | Au disks absorb 0.93 / 0.95 / 0.91 of 3ω light at 3e13 / 1.5e14 / 3e14 W/cm² (Ze et al., UCRL-86414 (1981) Fig. 4, **H**): ≤ 5–9 % leaves the first hit (backscatter into the lens included) | every surface absorbs all laser light at its first hit (`deposit`'s default), so nothing is reflected, lost or re-deposited | 5–11 out of the holes; 4–14 onto the capsule (below) | 1–2 lost; 1–3 onto the capsule | −0.4 to −0.9 (*L*: x-ray source −0.45 to −1.1 % through the escape and the capsule's 0.3 conversion) | one diffuse bounce through the step's view factors (below) |
+| Specular glint escaping the far LEH | inner-beam glint < 8 TW (< 2 % of peak) at 0.3–0.6 mg/cc, none at 1.2 mg/cc (Lemos et al., PoP 29 (2022), doi:10.1063/5.0099937, abstract, **M**); outer-cone glint in the picket lands on the capsule poles and is "insignificant" for symmetry (Chen et al., PoP 31 (2024), doi:10.1063/5.0201962, abstract, **M**) | none | ≤ 24 if all of it escapes over the 5–8 ns peak (*L*) | ≤ 8 | at most −1.8 (≤ 2.1 % of the coupled power, *L*) | not run (an upper bound) |
+
+**Where diffusely scattered laser light would land** (each step's absorbed laser
+re-emitted once, diffusely, through the step's own view factors; fractions of the
+absorbed laser; *L*):
+
+| t (ns) | wall | caps | capsule | out of the holes | lips |
+|---|---|---|---|---|---|
+| 4.5 | 0.724 | 0.126 | 0.071 | 0.067 | 0.013 |
+| 5.0 | 0.724 | 0.116 | 0.087 | 0.059 | 0.013 |
+| 5.5 | 0.724 | 0.117 | 0.086 | 0.058 | 0.015 |
+| 6.5 | 0.722 | 0.133 | 0.061 | 0.064 | 0.020 |
+| 8.0 | 0.718 | 0.144 | 0.046 | 0.068 | 0.023 |
+
+With a scattered fraction r = 0.05–0.09 (Ze's disks), 0.3–0.6 % of the coupled energy
+leaves through the holes and 0.2–0.8 % lands on the capsule as 3ω light (+0.2–0.8
+points of capsule share if the ablator keeps it; the capsule share counts only x-rays
+today). Both are below the 2.4–4.2 points of the capsule share and below the coarse
+mesh's resolution of the drive. *Decision*: no opt-in diffuse laser reflectance (a 3ω
+radiosity on the same view factors) was added; it would touch the deposition and the
+history, and what it would move is ≤ 1 eV and ≤ 1 point.
+
+**The capsule share and the LEH share move against each other** under every sink and
+input above. `capsule_outside=0.15` (the blow-off absorptance that would close the
+capsule share, "Capsule absorption, conversion and the ablating-wall release" §2) gives
+15.8 % (HYDRA 16.2) but takes the LEH share from 24.2 to 23.6 % (HYDRA 25.2) and
+Dante 1 at 8 ns down 2.9 eV (9.0 ns: −4.2); Fig. 10 +0.092 at 8 ns (+0.080 before). The
+gas moves neither share (−0.2 / −0.1 points). Only a lower wall loss (DU factor ×0.9)
+raises both (14.5 / 25.4 %) and Dante 1 (+2.4 to +4.1 eV); Döppner's 6.5 % equivalence
+fixes the factor to 0.827–0.838 ("Energetics defaults and the capsule share"), so that
+is not a lever without new data.
+
+### What remains
+
+- The rise through the peak: Dante 1 rises +72 eV from 5 to 8 ns, the model +47 (initial
+  area) to +57 (open area); no existing input within its range adds more than +4 eV. The
+  "early peak" is the open-area face of it; on Dante's convention the rise is in time
+  (0.07 ns). A thermal-band LEH radius or a HYDRA loss history through the peak would
+  separate the hole from the wall.
+- After the laser falls: −30 / −38 / −47 eV at 8.5 / 9.0 / 9.35 ns (initial area);
+  the plasma's return rate is unpublished ("Late-time drive" §4).
+- The capsule share (13.9 %, HYDRA 16.2) and the LEH share (24.2 %, 25.2) together: no
+  sink or input moves both up except a lower wall loss, which the DU calibration rules
+  out.
+- Sinks: the gas is 80 kJ and 3–4 eV at peak and at 8 ns (sized, not modeled); windows,
+  diffuse scattering and glint are each ≤ 2 eV and ≤ 1 point.
