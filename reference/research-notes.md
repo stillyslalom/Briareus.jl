@@ -12275,3 +12275,31 @@ and holds as a constraint. A −Inf arises only where the rule has no finite mar
 offer, so no step of the optimizer can recover from it; the run stops at the first
 evaluation with the beam named. Existing results do not move (the sum runs over the
 same terms in the same order).
+
+**The aperture keep-out's slope along the aim** (checked on a report from a
+re-pointing study whose objective's derivative disagreed with central differences when
+`ApertureKeepOut`'s penalty, weight 1e3, was active: −1.229 against −1.169, −1.193,
+−1.207 at h = 1e-3, 1e-4, 1e-5 mm). Public mock-up: the dropped-bundle tutorial's
+hohlraum and keep-out (1 % contour, minimum 10 µm), the 48 quads each moved along a
+random direction to within ±20 µm of the minimum. Against central differences along 240
+random aim directions (5 per quad) the forward-mode slope agrees to second order in h
+(largest difference 8e-3 at h = 1e-3, 3.4e-6 at 1e-5, 1.1e-7 at 1e-6 mm): no derivative
+is dropped. Scans over ±20 µm (144 directions, 1e-5 mm steps, the largest slope change
+then resolved to 1e-8 mm and both one-sided AD slopes taken) find (a) one genuine kink:
+on one quad the slope jumps from −0.079 to −0.309 across a point (AD each side within
+5e-9 mm), the rim minimum switching between two separate local minima of the distance
+along the rim (a minimum of two smooth branches, concave); and (b) narrow regions of
+high curvature where two such minima are about to merge (slope changes of 0.2–0.3 over
+a few micrometers, ~300 mm⁻¹), which are smooth (the jump falls linearly with the step)
+but put central differences at h ≥ 1e-5 mm far off. The squared hinge adds a jump in
+curvature (2·weight·c′², 500 at weight 1e3 and slope 0.5) where a clearance
+crosses the minimum, which central differences straddling it resolve only to O(h).
+The reported mismatch is what a line search sees across such points on several beams
+at once; it is not an AD error. `clearance_floor` per beam keeps the kink in the
+active beam's component (it does not remove it) but confines it to one multiplier;
+a floor on a minimum of two branches is the intersection of two smooth floors, so the
+constrained optimum is well posed, though the inner problems still see one nonsmooth
+component when the beam sits on the switch. The penalty's fixed large weight makes the
+kink and the curvature jump part of the objective itself. A smooth minimum over the rim's local minima (a soft-min
+with a length scale below the keep-out's accuracy) would remove both (a design change,
+not made: user decision).
