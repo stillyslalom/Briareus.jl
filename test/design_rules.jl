@@ -100,11 +100,10 @@ end
     w = [worst(:shield), worst(:stalk)]
     @test any(<(0), c[1]) && any(>(0), c[1]) && any(<(0), c[2]) && any(>(0), c[2])
     # where both judge the same points (clearance skips those hidden from the beam, so
-    # it reads higher above 1.2 mm on the shield, and deep inside the envelope its
-    # point–ellipse distance loses digits next to the major axis): within its 1e-7 mm
-    # resolution. Everywhere the keep-out is the lower: conservative
-    near = [findall(x -> -0.5 < x < 1.0, wi) for wi in w]
-    @test sum(length, near) >= 12
+    # it reads higher above 1.2 mm on the shield), deep violations included: within its
+    # 1e-7 mm resolution. Everywhere the keep-out is the lower: conservative
+    near = [findall(x -> x < 1.0, wi) for wi in w]
+    @test sum(length, near) >= 12 && any(j -> any(<(-0.75), w[j][near[j]]), 1:2)
     @test maximum(maximum(abs.(c[j][near[j]] .- w[j][near[j]])) for j in 1:2) < 1e-6
     @test all(all(isfinite.(c[j]) .>= isfinite.(w[j])) for j in 1:2)
     @test all(all(c[j][i] <= w[j][i] + 1e-4 for i in eachindex(beams) if isfinite(w[j][i])) for j in 1:2)
@@ -178,9 +177,10 @@ end
     w = [[r.worst for r in rs] for rs in rows]
     @test all(all(isfinite.(c[j]) .== isfinite.(w[j])) for j in 1:2)
     @test sum(j -> count(<(0.5), c[j]), 1:2) >= 20 && sum(j -> count(x -> 0.5 < x < Inf, c[j]), 1:2) >= 10
-    # talis_check's worst points inside the envelope next to the major axis, where its
-    # point–ellipse distance loses digits: there the keep-out is checked against the
-    # closed form on the axis, d = −B √(1 − u²/(A² − B²)), at talis_check's point
+    # talis_check's worst points inside the envelope next to the major axis (where its
+    # point–ellipse distance lost digits before 2026-11-18, reading up to 6e-6 mm low):
+    # there the keep-out is also checked against the closed form on the axis,
+    # d = −B √(1 − u²/(A² − B²)), at talis_check's point
     medial = [falses(length(beams)) for _ in 1:2]
     onaxis = [fill(Inf, length(beams)) for _ in 1:2]
     for j in 1:2, (i, b) in enumerate(beams)
@@ -196,13 +196,13 @@ end
             onaxis[j][i] = -B * sqrt(1 - u^2 / (A^2 - B^2)) - env.cone * abs(s) - 0.075 - env.cone - tα * norm(x)
         end
     end
-    # elsewhere within twice the 1e-7 mm resolution, and never below its lower bound
+    # every row, those points included, within twice the 1e-7 mm resolution, and never
+    # below its lower bound
     rest = [isfinite.(w[j]) .& .!medial[j] for j in 1:2]
     @test sum(sum, rest) >= 40
-    @test all(all(0 .<= c[j][rest[j]] .- w[j][rest[j]] .<= 2e-7) for j in 1:2)
     @test sum(sum, medial) >= 2
+    @test all(all(0 .<= c[j][isfinite.(w[j])] .- w[j][isfinite.(w[j])] .<= 2e-7) for j in 1:2)
     @test all(all(c[j][medial[j]] .<= onaxis[j][medial[j]] .+ 1e-9) for j in 1:2)
-    @test all(all(0 .<= c[j][medial[j]] .- w[j][medial[j]] .<= 1e-5) for j in 1:2)
 
     # derivatives in each beam's aim, defocus and spot axes against central differences,
     # the tolerance about TCC and about the beam's own aim point

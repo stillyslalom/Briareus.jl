@@ -96,46 +96,87 @@ function envelope_distance(env::BeamEnvelope, x::Vec3)
 end
 
 # Signed distance from (u, v) to the ellipse with semi-axes (a, b): negative inside.
-# Eberly's robust point–ellipse distance (bisection on the Lagrange multiplier), valid
-# inside and outside. A degenerate ellipse (a = b = 0) is the point at the origin.
-function _ellipse_distance(u, v, a, b)
+# The projection of (u, v) minus the closest point on the outward normal there
+# (`_ellipse_closest` without the snap onto the major axis), valid inside and outside, to
+# a few units in the last place next to the major axis too (against a BigFloat minimum:
+# research notes, "Optimization defaults decided"). A degenerate ellipse (a = 0 or b = 0)
+# is the point at the origin.
+function _ellipse_distance(u::Float64, v::Float64, a::Float64, b::Float64)
     (a == 0 || b == 0) && return hypot(u, v)
-    y0, y1 = abs(u), abs(v)
-    e0, e1 = a, b
-    if e0 < e1
-        e0, e1, y0, y1 = e1, e0, y1, y0
-    end
-    inside = (y0 / e0)^2 + (y1 / e1)^2 < 1
-    if y1 > 0
+    X0, X1, _ = _ellipse_closest(u, v, a, b; snap = 0.0)
+    n1, n2 = _ellipse_unit_normal(u, v, a, b, X0, X1)
+    return n1 * (u - X0) + n2 * (v - X1)
+end
+
+# The point (X0, X1) of the ellipse (u/a)² + (v/b)² = 1 closest to (u, v), and whether
+# (u, v) lies on the medial axis (inside, on the major axis between its centers of
+# curvature: two closest points, the other its mirror image across the major axis).
+# Eberly's robust point–ellipse method, the Lagrange multiplier found by Newton's method;
+# the center for a degenerate ellipse.
+#
+# A point within `snap × e1` of the major axis is taken on it (the on-axis branch, the
+# limit), so that a minimum on the medial axis, where a search leaves it within ~1e-9, is
+# known as one (`HardwareKeepOut`'s derivatives there). The snap moves the closest point
+# by up to `snap × e1` and the distance by its second order, except next to a center of
+# curvature, where the closest point moves fast along the ellipse: there the distance
+# moves up to ~1e-8 e1 at the default (measured against a BigFloat minimum, near-circular
+# spots). `snap = 0` takes only points on the axis onto it.
+function _ellipse_closest(u::Float64, v::Float64, a::Float64, b::Float64; snap::Float64 = 1e-6)
+    (a == 0 || b == 0) && return 0.0, 0.0, false
+    swap = a < b
+    e0, e1, y0, y1 = swap ? (b, a, abs(v), abs(u)) : (a, b, abs(u), abs(v))
+    medial = false
+    if y1 > snap * e1 && y1 / e1 > 0                          # (z1 = 0 only by underflow)
         if y0 > 0
             z0, z1 = y0 / e0, y1 / e1
-            g = z0^2 + z1^2 - 1
-            g == 0 && return 0.0
-            r0 = (e0 / e1)^2
-            n0 = r0 * z0
-            s0, s1 = z1 - 1, g < 0 ? 0.0 : hypot(n0, z1) - 1
-            s = s0
-            for _ in 1:200
-                s = (s0 + s1) / 2
-                (s == s0 || s == s1) && break
-                gs = (n0 / (s + r0))^2 + (z1 / (s + 1))^2 - 1
-                gs > 0 ? (s0 = s) : gs < 0 ? (s1 = s) : break
+            if z0^2 + z1^2 == 1
+                x0, x1 = y0, y1
+            else
+                r0 = (e0 / e1)^2
+                q = (e0 - e1) * (e0 + e1) / e1^2               # r0 − 1
+                n0 = r0 * z0
+                # the root σ = s + 1 of F = (n0/(σ + r0 − 1))² + (z1/σ)² − 1, decreasing
+                # and convex for σ > 0: Newton's method from F(z1) ≥ 0 climbs to it. In σ
+                # rather than the multiplier s: inside, next to the major axis, σ ~ y1 and
+                # s = σ − 1 would hold it to an absolute 1e-16 only
+                σ = z1
+                for _ in 1:200
+                    α, β = n0 / (σ + q), z1 / σ
+                    F = α^2 + β^2 - 1
+                    F <= 0 && break
+                    σn = σ + F / (2 * (α^2 / (σ + q) + β^2 / σ))
+                    σn <= σ && break
+                    σ = σn
+                end
+                x0, x1 = r0 * y0 / (σ + q), y1 / σ
             end
-            x0, x1 = r0 * y0 / (s + r0), y1 / (s + 1)
-            d = hypot(x0 - y0, x1 - y1)
         else
-            d = abs(y1 - e1)
+            x0, x1 = 0.0, e1
         end
     else
         numer, denom = e0 * y0, e0^2 - e1^2
         if numer < denom
             ξ = numer / denom
-            d = hypot(e0 * ξ - y0, e1 * sqrt(1 - ξ^2))
+            x0, x1 = e0 * ξ, e1 * sqrt(1 - ξ^2)
+            medial = true
         else
-            d = abs(y0 - e0)
+            x0, x1 = e0, 0.0
         end
     end
-    return inside ? -d : d
+    X0, X1 = swap ? (x1, x0) : (x0, x1)
+    return copysign(X0, u), copysign(X1, v), medial
+end
+
+# The outward unit normal of the ellipse at its point (X0, X1) closest to (u, v); for a
+# degenerate ellipse (its center) the direction of (u, v).
+function _ellipse_unit_normal(u::Float64, v::Float64, a::Float64, b::Float64, X0, X1)
+    if a == 0 || b == 0
+        r = hypot(u, v)
+        return r > 0 ? (u / r, v / r) : (1.0, 0.0)
+    end
+    n1, n2 = X0 / a^2, X1 / b^2
+    m = hypot(n1, n2)
+    return n1 / m, n2 / m
 end
 
 """

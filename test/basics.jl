@@ -672,6 +672,40 @@ end
         @test abs(d) ≈ bf atol = 1e-7
         @test (d < 0) == ((u / a)^2 + (v / b)^2 < 1)
     end
+    # against the minimum over the ellipse in BigFloat (every local minimum of a Float64
+    # sampling refined by golden section), on points inside and outside next to the major
+    # axis: along it to past the center of curvature and the vertex, 0 to 1e-3 off it
+    # (the bisection on the multiplier lost 7e-5 at 3e-13 off the axis; measured now ≤ 5e-16)
+    function bigmin(u, v, a, b)
+        U, V, A, B = big(u), big(v), big(a), big(b)
+        f(θ) = (U - A * cos(θ))^2 + (V - B * sin(θ))^2
+        θs = range(0, 2π; length = 4001)[1:4000]
+        fs = [(u - a * cos(θ))^2 + (v - b * sin(θ))^2 for θ in θs]
+        h, ϕ, best = big(2) * big(π) / 4000, (sqrt(big(5)) - 1) / 2, big(Inf)
+        for i in eachindex(fs)
+            fs[i] <= fs[mod1(i - 1, 4000)] && fs[i] <= fs[mod1(i + 1, 4000)] || continue
+            lo, hi = big(θs[i]) - 2h, big(θs[i]) + 2h
+            c, d = hi - ϕ * (hi - lo), lo + ϕ * (hi - lo)
+            fc, fd = f(c), f(d)
+            for _ in 1:200
+                if fc < fd
+                    hi, d, fd = d, c, fc
+                    c = hi - ϕ * (hi - lo); fc = f(c)
+                else
+                    lo, c, fc = c, d, fd
+                    d = lo + ϕ * (hi - lo); fd = f(d)
+                end
+            end
+            best = min(best, fc, fd)
+        end
+        return Float64(((U / A)^2 + (V / B)^2 < 1 ? -1 : 1) * sqrt(best))
+    end
+    pts = [(a < b ? (y, x, a, b) : (x, y, a, b)) for (a, b) in ((0.62, 0.55), (0.3, 0.5))
+           for x in (0.0, 0.5, 0.999, 1.001, 1.5) .* ((max(a, b)^2 - min(a, b)^2) / max(a, b))
+           for y in (0.0, 3e-13, 1e-9, 5e-7, 1e-3)]
+    append!(pts, [(x, y, 0.62, 0.55) for x in (0.6, 0.62, 0.65) for y in (0.0, 3e-13, 1e-7)])
+    err = [abs(Briareus._ellipse_distance(p...) - bigmin(p...)) for p in pts]
+    @test maximum(err) < 1e-13
     # Beam straight down onto a foil at z = 0; a small disk upstream at z = 2 with its
     # nearest edge 1.0 mm from the axis, and one below the foil (downstream, ignored).
     spot = SuperGaussianSpot(0.3; order = 4.0)

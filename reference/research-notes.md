@@ -10920,7 +10920,8 @@ facing away from the beams that pass it, and a closed 0.3 mm radius, 4 mm long s
   its point–ellipse distance (`_ellipse_distance`, Eberly's bisection) loses digits
   within ~1e-9 mm of the major axis inside the medial segment (2.4e-5 mm at a point
   3e-13 mm off the axis, against the keep-out's value, which a 1e6-point grid about the
-  point confirms to 1e-10). Derivatives in aim, defocus and spot axes against central
+  point confirms to 1e-10). *Since 2026-11-18* (§ Optimization defaults decided) the
+  distance is exact there too and the two agree within 1e-7 mm on every row below 1 mm. Derivatives in aim, defocus and spot axes against central
   differences: within 1e-8 on every beam below 3 mm, medial-strip minima included; not
   where the minimum lies on the landing plane's cut (the cut does not move in the
   derivatives: one bottom beam at 10 mm from the stalk hidden behind the hohlraum).
@@ -10962,7 +10963,9 @@ facing away from the beams that pass it, and a closed 0.3 mm radius, 4 mm long s
   deep violations), it is 1.7e-7 to 6.4e-6 mm above: there `_ellipse_distance` reads
   low (`clearance.jl`, a known loss of digits left to the user), and the closed form on
   the axis, −B √(1 − u²/(A² − B²)), at the report's own worst point lies 7e-9 to 2.2e-7
-  mm above the keep-out's minimum (the keep-out misses no lower point). Continuity
+  mm above the keep-out's minimum (the keep-out misses no lower point). *Since
+  2026-11-18* (§ Optimization defaults decided) those 6 rows (now 4, the worst points
+  having moved) agree within 1.0e-7 mm as well. Continuity
   (closed form, two plates beside a beam down −z, their closest points at r = √10 and
   √82 mm from TCC): the
   keep-out equals the closed form min over the plates of (far edge distance − cone ·
@@ -12203,3 +12206,58 @@ passed `unit = :quad` everywhere (left explicit). `Scenario(target, beams)`'s de
 parameterization on a 192-beam list now has the quad frame; `examples/n221204.jl`
 builds no parameterization, and its coarse CSV (`0.8 0.4 full`) is byte-identical to
 the base commit's (8 threads, 2 min 12 s each).
+
+**The point–ellipse distance next to the major axis** (item 35). `_ellipse_distance`
+(`clearance.jl`, behind `clearance` and `talis_check`) bisected on Eberly's Lagrange
+multiplier s; inside the ellipse next to the major axis s + 1 ~ y₁ is held only to an
+absolute 1e-16, so x₁ = y₁/(s + 1) lost its digits. Against the signed distance as the
+minimum over the ellipse in BigFloat (256 bits; every local minimum of a 20,000-point
+Float64 sampling refined by golden section), on 4,260 points (five ellipses, a/b from
+0.3/0.5 to 1.0/0.2 and near-circular 0.40/0.39 and 0.62/0.55; along the major axis to
+past the center of curvature and the vertex, 0 to 0.05 mm off it, both signs, and 300
+random points inside and outside):
+
+| method | largest error (mm) | points over 1e-12 |
+|---|---|---|
+| bisection on s (the old one) | 7.0e-5 (a point 3e-13 off the axis, inside) | 588 |
+| `design_rules.jl`'s: Newton on s, points within 1e-6 e₁ of the axis snapped onto it, distance projected on the normal | 1.0e-8 (near-circular spot, next to the center of curvature) | 464 |
+| Newton on σ = s + 1 (no snap), projected on the normal | 4.4e-16 | 0 |
+
+The snap is not the fix the roadmap proposed it to be: next to a center of curvature the
+closest point moves fast along the ellipse, and the snap's error there is first order
+(1e-8 e₁), not 1e-12. Chosen: Newton on σ, which holds σ to full relative precision, in
+`_ellipse_closest`, now shared (moved to `clearance.jl`): `_ellipse_distance` calls it
+with `snap = 0` and projects on the normal; `HardwareKeepOut` and the TaLIS rules keep
+the snap (`snap = 1e-6`, the default), which marks the medial-axis minima their
+derivatives need. Tested (`test/basics.jl`) against the BigFloat minimum on 59 points
+next to the axis, to 1e-13 (4.4e-16 measured).
+
+Report movement, new against old, on the test cases (`ellipse_reports`, scratch): the
+mock-up of `test/design_rules.jl` (`clearance`, resolution 1e-7: off the deep
+violations ≤ 4.4e-16 mm, 23 of 48 rows identical; below −0.75 mm up to +6.0e-5 mm;
+nominal values, deep in the envelope, up to +6.0e-5 mm at −0.65 mm; `talis_check`'s
+`:clearance_3w` worst values ≤ 4.4e-16 off the deep rows, +6.3e-6 mm at −0.99 mm);
+`test/talis.jl`'s sombrero, LEH-lip and OMEGA-foil reports ≤ 4.4e-16 mm. The old
+distance read low; every moved value moved up. The shared `_ellipse_closest` (Newton on
+σ in place of s) moves the design-rule quantities by ≤ 2.2e-16 mm in value and ≤ 1.1e-9
+in their derivatives (aim, defocus, spot axes; the old Newton on s lost the same digits
+just outside the snap's 1e-6 e₁). The design-rule quantities against the reports on the
+mock-up (resolution 1e-7 mm; keep-out minus report, before → after): `clearance` below
+−0.75 mm, shield 9e-8 to 1.1e-6 → 9e-8 to 1.0e-7, stalk 6e-8 to 6.0e-5 → 6e-8 to
+1.0e-7; `talis_check`'s `:clearance_3w` worst values on the rows whose worst point lies
+on the medial segment, 1.7e-7 to 6.4e-6 → 1.0e-7 (the other rows 6e-8 to 1.1e-7, as
+before). Every row now agrees within the reports' resolution, deep violations
+included (`test/design_rules.jl` tests 2e-7 on every `:clearance_3w` row and 1e-6 on
+every `clearance` row below 1 mm, where it had excluded those below −0.5 mm and
+allowed 1e-5 on the medial rows); `clearance` still reads up to 0.40 mm higher than the
+keep-out on shield beams above 1 mm, where it skips points the cap hides.
+
+The tutorial with this change and the quad frame (8 threads, 240 s): the runs on quads
+without a hardware keep-out are the same (within limits, 1,079 evaluations); stage 1,
+whose cap `HardwareKeepOut` derivatives moved by ≤ 1e-9, takes another path through
+the flat family of designs (1,092 → 1,526 evaluations, drive 0.95733 → 0.9574, the
+keep-out 18 µm, gates l = 2 and 4 active, no aim at the box); the 120-evaluation polish
+(its tangential shifts now along each quad's φ̂) ends at drive 0.9593 with the wall's
+peak 0.44 % over the ceiling, mode 2 0.12 % over its gate and the keep-out active on six
+beams (the clearance check: 9.5 µm, no beam failing). The tutorial asserts a normalized
+violation of at most 0.01 for the capped polish.

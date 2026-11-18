@@ -522,71 +522,8 @@ function _segment_min(ef::_EnvelopeFrame, p, q, best, ends::Bool = true, gp = 0.
     return va, xa
 end
 
-# The point (X0, X1) of the ellipse (u/a)² + (v/b)² = 1 closest to (u, v), and whether
-# (u, v) lies on the medial axis (inside, on the major axis between its centers of
-# curvature: two closest points, the other its mirror image across the major axis). The
-# robust method of `_ellipse_distance` (Eberly), the multiplier found by Newton's method;
-# the center for a degenerate ellipse.
-function _ellipse_closest(u::Float64, v::Float64, a::Float64, b::Float64)
-    (a == 0 || b == 0) && return 0.0, 0.0, false
-    swap = a < b
-    e0, e1, y0, y1 = swap ? (b, a, abs(v), abs(u)) : (a, b, abs(u), abs(v))
-    medial = false
-    # within 1e-6 e1 of the major axis, on it: inside the ellipse the multiplier below
-    # puts s + 1 ~ y1, to an absolute 1e-16, so x1 = y1/(s + 1) loses its digits as
-    # y1 → 0. The on-axis branch is the limit; the snap moves the closest point by
-    # ~1e-6 e1 and the distance (the projection on the normal there) to second order,
-    # ~1e-12 e1. A minimum on the medial axis, where the search leaves it within ~1e-9,
-    # is then known as one.
-    if y1 > 1e-6 * e1
-        if y0 > 0
-            z0, z1 = y0 / e0, y1 / e1
-            if z0^2 + z1^2 == 1
-                x0, x1 = y0, y1
-            else
-                r0 = (e0 / e1)^2
-                n0 = r0 * z0
-                # the root of F(s) = (n0/(s + r0))² + (z1/(s + 1))² − 1, decreasing and
-                # convex for s > −1: Newton's method from F(z1 − 1) ≥ 0 climbs to it
-                s = z1 - 1
-                for _ in 1:200
-                    α, β = n0 / (s + r0), z1 / (s + 1)
-                    F = α^2 + β^2 - 1
-                    F <= 0 && break
-                    sn = s + F / (2 * (α^2 / (s + r0) + β^2 / (s + 1)))
-                    sn <= s && break
-                    s = sn
-                end
-                x0, x1 = r0 * y0 / (s + r0), y1 / (s + 1)
-            end
-        else
-            x0, x1 = 0.0, e1
-        end
-    else
-        numer, denom = e0 * y0, e0^2 - e1^2
-        if numer < denom
-            ξ = numer / denom
-            x0, x1 = e0 * ξ, e1 * sqrt(1 - ξ^2)
-            medial = true
-        else
-            x0, x1 = e0, 0.0
-        end
-    end
-    X0, X1 = swap ? (x1, x0) : (x0, x1)
-    return copysign(X0, u), copysign(X1, v), medial
-end
-
-# The outward unit normal of the ellipse at its point (X0, X1) closest to (u, v); for a
-# degenerate ellipse (its center) the direction of (u, v).
-function _ellipse_unit_normal(u::Float64, v::Float64, a::Float64, b::Float64, X0, X1)
-    if a == 0 || b == 0
-        r = hypot(u, v)
-        return r > 0 ? (u / r, v / r) : (1.0, 0.0)
-    end
-    n1, n2 = X0 / a^2, X1 / b^2
-    m = hypot(n1, n2)
-    return n1 / m, n2 / m
-end
+# (`_ellipse_closest` and `_ellipse_unit_normal`, the closest point of an ellipse and the
+# normal there: `clearance.jl`, beside `_ellipse_distance`, which shares them.)
 
 # The signed distance (negative inside) from (u, v) to the ellipse with semi-axes
 # (A, B), in their number type: the projection on the unit normal (n1, n2) at the
