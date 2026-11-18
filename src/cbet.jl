@@ -770,9 +770,29 @@ function n221204_fig9_beams(beams::AbstractVector{<:Beam}, fig9, t)
     return [remake(b; power = P[b.group] / n[b.group]) for b in beams]
 end
 
-# LEH electron temperature (eV) at shot times (ns) of the N221204 calibration
-const _N221204_TE = ([1.0, 3.0, 4.0, 4.75, 5.5, 6.5, 8.0],
-                     [2790.0, 3550.0, 3720.0, 5190.0, 5500.0, 6030.0, 7440.0])
+# The calibrated two-zone models below share one form: both zones on one Te(t) table and
+# one clamp schedule (shot times, ns, shifted by `delay`), the outside zone with the fitted
+# outflow Mach number and multiplier, the inside zone at Mach 0 with its own multiplier.
+# Their LEH planes default to ±5.62 mm, half the 11.24 mm length of the HYBRID-E
+# hohlraum of the shots they were fitted to (`hybride_mock_pointing`'s target); a call
+# site with a target passes its half-length.
+const _HYBRIDE_LEH_Z = 5.62
+
+function _calibrated_two_zone(fit; leh_z, offset, delay)
+    Te = (fit.Te[1] .+ delay, fit.Te[2])
+    clamp = (fit.clamp[1] .+ delay, fit.clamp[2])
+    return TwoZoneCBET(; leh_z, offset,
+                       outside = (mach = fit.mach, multiplier = fit.outside, Te, clamp,
+                                  saturation = fit.saturation),
+                       inside = (multiplier = fit.inside, Te, clamp, saturation = fit.saturation))
+end
+
+# The N221204 calibration: LEH electron temperature (eV) at shot times (ns), the deck's
+# clamp schedule, smooth saturation
+const _N221204_FIT = (Te = ([1.0, 3.0, 4.0, 4.75, 5.5, 6.5, 8.0],
+                            [2790.0, 3550.0, 3720.0, 5190.0, 5500.0, 6030.0, 7440.0]),
+                      clamp = ([0.0, 3.9, 4.1, 20.0], [0.002, 0.002, 0.0075, 0.0075]),
+                      mach = 1.23, outside = 0.30, inside = 1.23, saturation = :smooth)
 
 """
     n221204_cbet(; leh_z = 5.62, offset = 0.5) -> TwoZoneCBET
@@ -786,23 +806,23 @@ fitted electron-temperature history Te(t) (2.8 keV at 1 ns, 3.7 at 4, 5.5 at 5.5
 7.4 at 8 ns; constant outside). Outside zone: fitted outflow Mach 1.23 and multiplier
 0.30; inside: Mach 0 and fitted multiplier 1.23. Fit over 0.8–8.4 ns: cone-fraction
 rms 0.016, worst 0.041 (8.4 ns); the outer cones' post/input ratios (not fitted)
-match Fig. 9a to 0.03.
+match Fig. 9a to 0.03. `leh_z` (mm): the LEH planes (`TwoZoneCBET`); the default is
+half the 11.24 mm length of the HYBRID-E hohlraum fitted, and a caller with a target
+passes its half-length (`examples/n221204.jl`: `geometry.length / 2`).
 
 *Derived* (research notes, "Two-zone CBET calibrated to PRE 109 Fig. 9"): an effective
 calibration to one HYDRA simulation of one shot, not a measured plasma state. Times
 are shot times, so it applies to pulses timed like N221204's.
 """
-function n221204_cbet(; leh_z = 5.62, offset::Real = 0.5)
-    clamp = ([0.0, 3.9, 4.1, 20.0], [0.002, 0.002, 0.0075, 0.0075])
-    return TwoZoneCBET(; leh_z, offset,
-                       outside = (mach = 1.23, multiplier = 0.30, Te = _N221204_TE, clamp),
-                       inside = (multiplier = 1.23, Te = _N221204_TE, clamp))
-end
+n221204_cbet(; leh_z = _HYBRIDE_LEH_Z, offset::Real = 0.5) =
+    _calibrated_two_zone(_N221204_FIT; leh_z, offset, delay = 0.0)
 
-# LEH electron temperature (eV) and clamp knots (ns, N221204's timing) of the joint fit
-const _HYBRIDE_TE = ([1.0, 3.0, 4.0, 4.75, 5.5, 6.5, 8.0],
-                     [2054.0, 2502.0, 2799.0, 3949.0, 3357.0, 3622.0, 5500.0])
-const _HYBRIDE_CLAMP = ([3.88, 4.08], [0.00143, 0.000476])
+# The joint fit: LEH electron temperature (eV) and clamp knots (ns, N221204's timing),
+# HYDRA's hard-minimum saturation
+const _HYBRIDE_FIT = (Te = ([1.0, 3.0, 4.0, 4.75, 5.5, 6.5, 8.0],
+                            [2054.0, 2502.0, 2799.0, 3949.0, 3357.0, 3622.0, 5500.0]),
+                      clamp = ([3.88, 4.08], [0.00143, 0.000476]),
+                      mach = 1.54, outside = 0.142, inside = 0.729, saturation = :min)
 
 """
     hybride_cbet(; leh_z = 5.62, offset = 0.5, delay = 0.0) -> TwoZoneCBET
@@ -825,24 +845,19 @@ Fit (107 rows, 0.8–8.4 ns): cone-fraction rms 0.027 (N221204), 0.016 (N220919)
 at 5.6 ns. It does not reproduce HYDRA's flat cross-shot response: dCF/dΔλ at peak is
 0.17–0.20 per Å (HYDRA's N220919 and N221204 differ by 0.03–0.06 per Å), so N210808's
 peak is 0.07–0.10 low and N221204's 0.03 high. `delay` (ns) shifts the time tables for a pulse whose rise comes `delay`
-later than N221204's (negative: earlier).
+later than N221204's (negative: earlier); `leh_z`: as in [`n221204_cbet`](@ref).
 
 *Derived* (research notes, "Joint multi-shot CBET calibration (2026-10-24)"): effective
 parameters fitted to HYDRA, not a measured plasma state.
 """
-function hybride_cbet(; leh_z = 5.62, offset::Real = 0.5, delay::Real = 0.0)
-    Te = (_HYBRIDE_TE[1] .+ delay, _HYBRIDE_TE[2])
-    clamp = (_HYBRIDE_CLAMP[1] .+ delay, _HYBRIDE_CLAMP[2])
-    return TwoZoneCBET(; leh_z, offset,
-                       outside = (mach = 1.54, multiplier = 0.142, Te, clamp, saturation = :min),
-                       inside = (multiplier = 0.729, Te, clamp, saturation = :min))
-end
+hybride_cbet(; leh_z = _HYBRIDE_LEH_Z, offset::Real = 0.5, delay::Real = 0.0) =
+    _calibrated_two_zone(_HYBRIDE_FIT; leh_z, offset, delay)
 
-# LEH electron temperature (eV) and clamp knots of the joint fit with the null at
-# I-Raum's ≤ 0.5 Å
-const _HYBRIDE_IRAUM_TE = ([1.0, 3.0, 4.0, 4.75, 5.5, 6.5, 8.0],
-                           [3223.0, 3899.0, 4522.0, 3806.0, 2544.0, 3031.0, 5500.0])
-const _HYBRIDE_IRAUM_CLAMP = ([3.88, 4.08], [0.000912, 0.0001416])
+# The joint fit with the null at I-Raum's ≤ 0.5 Å
+const _HYBRIDE_IRAUM_FIT = (Te = ([1.0, 3.0, 4.0, 4.75, 5.5, 6.5, 8.0],
+                                  [3223.0, 3899.0, 4522.0, 3806.0, 2544.0, 3031.0, 5500.0]),
+                            clamp = ([3.88, 4.08], [0.000912, 0.0001416]),
+                            mach = 1.489, outside = 0.0723, inside = 1.601, saturation = :min)
 
 """
     hybride_cbet_iraum(; leh_z = 5.62, offset = 0.5, delay = 0.0) -> TwoZoneCBET
@@ -867,15 +882,10 @@ Fit (107 rows, 0.8–8.4 ns): cone-fraction rms 0.024 (N221204), 0.016 (N220919)
 against 0.120 with the null in 1–1.55 Å. Null 0.24 ± 0.20 Å at 5.6 ns (0.29 at 7 ns);
 dCF/dΔλ 0.137 ± 0.011 per Å at peak (2.5–2.75 Å), linear from 1 Å. HYDRA's cross-shot
 response stays 2–3× flatter, which the measured hot-spot P2 sensitivity does not
-support (research notes). `delay`: as in [`hybride_cbet`](@ref).
+support (research notes). `delay`, `leh_z`: as in [`hybride_cbet`](@ref).
 
 *Derived* (research notes, "Joint multi-shot CBET calibration: the null"): effective
 parameters fitted to HYDRA, not a measured plasma state.
 """
-function hybride_cbet_iraum(; leh_z = 5.62, offset::Real = 0.5, delay::Real = 0.0)
-    Te = (_HYBRIDE_IRAUM_TE[1] .+ delay, _HYBRIDE_IRAUM_TE[2])
-    clamp = (_HYBRIDE_IRAUM_CLAMP[1] .+ delay, _HYBRIDE_IRAUM_CLAMP[2])
-    return TwoZoneCBET(; leh_z, offset,
-                       outside = (mach = 1.489, multiplier = 0.0723, Te, clamp, saturation = :min),
-                       inside = (multiplier = 1.601, Te, clamp, saturation = :min))
-end
+hybride_cbet_iraum(; leh_z = _HYBRIDE_LEH_Z, offset::Real = 0.5, delay::Real = 0.0) =
+    _calibrated_two_zone(_HYBRIDE_IRAUM_FIT; leh_z, offset, delay)

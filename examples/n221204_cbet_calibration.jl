@@ -23,7 +23,7 @@ post(t) = fig9.cf_post[argmin(abs.(fig9.t .- t))]
 # Start: the deck's clamp schedule in both zones, a guessed Te history
 clamp = ([0.0, 3.9, 4.1, 20.0], [0.002, 0.002, 0.0075, 0.0075])
 Te0 = ([1.0, 3.0, 4.0, 4.75, 5.5, 6.5, 8.0], [3000.0, 3000.0, 3500.0, 4200.0, 4800.0, 5200.0, 6300.0])
-m0 = TwoZoneCBET(leh_z = 5.62, outside = (mach = 1.4, multiplier = 0.28, clamp, Te = Te0),
+m0 = TwoZoneCBET(leh_z = Briareus._HYBRIDE_LEH_Z, outside = (mach = 1.4, multiplier = 0.28, clamp, Te = Te0),
                  inside = (multiplier = 1.1, clamp, Te = Te0))
 ts = collect(0.8:0.2:8.4)
 fit = ((:outside, :multiplier), (:inside, :multiplier), (:outside, :mach), (:both, :Te))
