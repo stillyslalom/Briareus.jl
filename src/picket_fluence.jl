@@ -1,7 +1,7 @@
 # The outer cones' picket fluence on the wall (energy per area), the quantity the
 # published gold-bubble scalings are written in, and `BubbleAbsorption`'s picket ratio
-# from it; the picket irradiance as a constraint, and the bubble that follows the
-# beams' picket. Research notes, "The swing and the
+# from it; the picket irradiance as a constraint, the bubble that follows the beams'
+# picket, and the prediction for a re-pointed design. Research notes, "The swing and the
 # bubble without new data (2026-11-18)", §5 "The bubble's speed from the pointing's
 # picket fluence"; literature in `reference/litreview/bubble_drivers.md`.
 
@@ -343,7 +343,7 @@ without them). One deposition per evaluation, in the evaluation's number type.
 bubble scalings, and holding its peak at the reference's is the re-pointing study's
 choice (user, 2026-11-18), an engineering limit on the picket's hottest element; the
 model's prediction of the bubble a design grows is the mean's ratio to the 0.2 power
-([`PicketLinkedBubble`](@ref)), confidence low (research
+([`PicketLinkedBubble`](@ref), [`bubble_prediction`](@ref)), confidence low (research
 notes, "The swing and the bubble without new data (2026-11-18)" §5).
 """
 function picket_ceiling(reference::Evaluation, names::Symbol...; pulses = nothing, window = nothing,
@@ -540,3 +540,95 @@ _ridge_split(m::PicketLinkedBubble, op::DepositionOperator, b::Beam, time) =
 
 bubble_fractions(m::PicketLinkedBubble, beams::AbstractVector{<:Beam}, t) =
     bubble_fractions(linked_bubble(m, beams), beams, t)
+
+# ---------------------------------------------------------------------------------------
+# What a re-pointing does to the bubble, and through it to the swing
+# ---------------------------------------------------------------------------------------
+
+"""
+    bubble_prediction(model::PicketLinkedBubble, design, reference; history = nothing,
+                      reference_history = nothing, fixed = false, swing = (4.5, 9.0))
+        -> NamedTuple
+
+What the gold bubble model predicts for a re-pointed `design` (beams) against a
+`reference` pointing, both mapped by `model` ([`PicketLinkedBubble`](@ref): its picket
+powers, target and bubble; usually `reference` is the pointing the model was built on):
+
+- `peak_ratio`: the maximum picket fluence (equivalently irradiance) over the model's
+  elements, design over reference ([`picket_fluence`](@ref)'s `peak`);
+- `fluence_ratio`: the energy-weighted mean picket fluence, design over reference;
+- `picket_ratio`, `reference_picket_ratio`: E of each ([`linked_bubble`](@ref));
+- `speed_ratio`: the bubble's tip speed, design over reference, `fluence_ratio^0.2`;
+- `collision`, `reference_collision`: the ablator–wall collision times (ns);
+- `bubble`, `reference_bubble`: the two [`BubbleAbsorption`](@ref)s; `fluence`,
+  `reference_fluence`: the two [`PicketFluence`](@ref) maps;
+- `history`: `nothing`, or, with `history`, the capsule drive's P2/P0 through time with
+  the bubble linked.
+
+`history(beams, bubble)` runs a drive history (the result of [`drive_history`](@ref),
+with `lmax ≥ 2`) of `beams` with the laser–plasma chain built on `bubble`, e.g.
+`(bs, bub) -> drive_history(model, τ -> with_pulses(bs, pulses, τ), times; lpi = (cbet, bub))`.
+It runs for the design with its own bubble and for the reference with its own
+(`reference_history`, a result of the same call for the reference, skips that run),
+and with `fixed = true` also for the design with the reference's bubble, which splits
+the change into the pointing's effect through the deposition and through the bubble.
+`history` then holds `time`, `p2`, `reference_p2` and `fixed_p2` (or `nothing`); per
+run (`design`, `reference`, `fixed`) the swing's `minimum` of P2/P0 over the `swing`
+window (ns), the time it is reached (`at`) and the upward zero `crossing` after it
+(linear between steps; `NaN` if none); `shift`, the design's minus the reference's;
+and with `fixed`, `through_bubble` (design − fixed) and `through_deposition` (fixed −
+reference).
+
+*Derived* (confidence low): the bubble's response to the pointing rests on the
+published exponents (tip speed ∝ E^0.2, Izumi 2021; collision ∝ E^-0.16, Izumi 2018)
+applied to a fluence changed by re-pointing, which has no published test
+([`PicketLinkedBubble`](@ref)); ratios between pointings on one mesh converge to < 1 %
+(research notes, "The swing and the bubble without new data (2026-11-18)" §5).
+"""
+Base.@nospecializeinfer function bubble_prediction(m::PicketLinkedBubble, design::AbstractVector{<:Beam},
+                                                   reference::AbstractVector{<:Beam};
+                                                   @nospecialize(history = nothing),
+                                                   @nospecialize(reference_history = nothing),
+                                                   fixed::Bool = false, swing = (4.5, 9.0))
+    fd, fr = _linked_fluence(m, design), _linked_fluence(m, reference)
+    at = m.bubble.picket_ratio
+    Ed, Er = picket_ratio(fd, m.reference; at), picket_ratio(fr, m.reference; at)
+    bd, br = remake(m.bubble; picket_ratio = Ed), remake(m.bubble; picket_ratio = Er)
+    h = history === nothing ? nothing :
+        _swing_history(history, design, reference, bd, br, reference_history, fixed, swing)
+    return (; peak_ratio = fd.peak / fr.peak, fluence_ratio = fd.mean / fr.mean, picket_ratio = Ed,
+            reference_picket_ratio = Er, speed_ratio = bubble_speed(bd) / bubble_speed(br),
+            collision = bd.collision, reference_collision = br.collision, bubble = bd,
+            reference_bubble = br, fluence = fd, reference_fluence = fr, history = h)
+end
+
+Base.@nospecializeinfer function _swing_history(@nospecialize(history), design, reference, bd, br,
+                                                @nospecialize(reference_history), fixed::Bool, window)
+    p2(r) = Float64.(ForwardDiff.value.(r.moments[3, :] ./ r.moments[1, :]))
+    rd = history(design, bd)
+    rr = reference_history === nothing ? history(reference, br) : reference_history
+    rf = fixed ? history(design, br) : nothing
+    t = collect(Float64, rd.time)
+    collect(Float64, rr.time) == t && (rf === nothing || collect(Float64, rf.time) == t) ||
+        throw(ArgumentError("the histories must share their times"))
+    pd, pr = p2(rd), p2(rr)
+    pf = rf === nothing ? nothing : p2(rf)
+    sd, sr = _swing(t, pd, window), _swing(t, pr, window)
+    sf = pf === nothing ? nothing : _swing(t, pf, window)
+    diff(a, b) = (minimum = a.minimum - b.minimum, at = a.at - b.at, crossing = a.crossing - b.crossing)
+    return (; time = t, p2 = pd, reference_p2 = pr, fixed_p2 = pf,
+            swing = (; design = sd, reference = sr, fixed = sf), shift = diff(sd, sr),
+            through_bubble = sf === nothing ? nothing : diff(sd, sf),
+            through_deposition = sf === nothing ? nothing : diff(sf, sr))
+end
+
+# The swing of a P2/P0 history: its minimum over the window, when, and the first upward
+# zero crossing after it (linear between the steps; NaN if none).
+function _swing(t::Vector{Float64}, p::Vector{Float64}, window)
+    ks = [k for k in eachindex(t) if window[1] <= t[k] <= window[2] && isfinite(p[k])]
+    isempty(ks) && return (minimum = NaN, at = NaN, crossing = NaN)    # no step in the window
+    km = ks[argmin(p[ks])]
+    kz = findfirst(k -> k > km && p[k-1] < 0 <= p[k], eachindex(p))
+    tz = kz === nothing ? NaN : t[kz-1] - p[kz-1] * (t[kz] - t[kz-1]) / (p[kz] - p[kz-1])
+    return (minimum = p[km], at = t[km], crossing = tz)
+end

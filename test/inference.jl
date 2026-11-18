@@ -217,6 +217,12 @@ end
         uh([τ -> 0.02], τ -> 0.0)
         @test _inf_body_instances(unconverted_history) == n
 
+        # the bubble's prediction: new history functions reuse the compiled bodies
+        bp(h) = bubble_prediction(linked, apply(p, xo .+ 0.01), apply(p, xo); history = h)
+        bp((bs, m) -> history(τ -> with_pulses(bs, pulse, τ), [0.5, 1.0]; lpi = m))
+        n, ns = _inf_body_instances(bubble_prediction), _inf_instances(Briareus._swing_history)
+        bp((bs, m) -> history(τ -> with_pulses(bs, pulse, 0.9τ), [0.5, 1.0]; lpi = (m,)))
+        @test _inf_body_instances(bubble_prediction) == n && _inf_instances(Briareus._swing_history) == ns
     end
 
     @testset "optimization path infers" begin

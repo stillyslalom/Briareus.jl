@@ -272,5 +272,32 @@ end
         run(bs, m) = drive_history(model, op8, τ -> with_pulses(bs, pulses, τ), times; lpi = m)
         hl = run(design, linked)
         @test hl.moments == run(design, ld).moments
+        # the prediction for the design against the reference: the picket and the bubble
+        pr = bubble_prediction(linked, design, quads)
+        fd_, fr_ = hand(design), hand(quads)
+        @test pr.fluence_ratio ≈ fd_.mean / fr_.mean rtol = 1e-12
+        @test pr.peak_ratio ≈ fd_.peak / fr_.peak rtol = 1e-12
+        @test pr.picket_ratio == ld.picket_ratio && pr.reference_picket_ratio === 1.1
+        @test pr.speed_ratio ≈ pr.fluence_ratio^0.2 rtol = 1e-12
+        @test pr.collision == ld.collision && pr.reference_collision === bubble.collision && pr.history === nothing
+        # with the history: the design's P2/P0 is the linked model's history
+        pp = bubble_prediction(linked, design, quads; history = run, fixed = true, swing = (0.5, 8.0))
+        @test pp.history.p2 == hl.moments[3, :] ./ hl.moments[1, :]
+        @test pp.history.fixed_p2 == (r -> r.moments[3, :] ./ r.moments[1, :])(run(design, bubble))
+        @test pp.history.through_bubble.minimum + pp.history.through_deposition.minimum ≈ pp.history.shift.minimum
+        # the swing metrics against a synthetic history whose minimum (−0.2 at 5 ns + δ)
+        # and upward zero (+0.5 ns after it) move with the bubble's speed
+        ts = collect(4.0:0.05:8.0)
+        κ = 0.05 / (bubble_speed(ld) - bubble_speed(bubble))       # a 0.05 ns shift for the design
+        synth(bs, m) = (time = ts, moments = [ones(length(ts))'; zeros(length(ts))';
+                                              [0.8 * (τ - 5 - κ * (bubble_speed(m) - bubble_speed(bubble)))^2 - 0.2
+                                               for τ in ts]'])
+        sp = bubble_prediction(linked, design, quads; history = synth)
+        @test sp.history.swing.reference.minimum ≈ -0.2 && sp.history.swing.reference.at ≈ 5.0
+        @test sp.history.swing.reference.crossing ≈ 5.5 atol = 1e-3
+        @test sp.history.shift.crossing ≈ 0.05 atol = 2e-3
+        @test sp.history.fixed_p2 === nothing && sp.history.through_bubble === nothing
+        @test bubble_prediction(linked, design, quads; history = synth,
+                                reference_history = synth(quads, bubble)).history.shift == sp.history.shift
     end
 end
