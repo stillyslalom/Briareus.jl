@@ -110,7 +110,14 @@ direction(b::Beam) = -b.port
 """
     port_basis(port) -> (θ̂, φ̂)
 
-Spherical unit vectors at the port; the transverse frame for spot orientation.
+Spherical unit vectors at the port; the transverse frame for spot orientation. A beam's
+spot `a` axis at `angle` is `cos(angle) θ̂ + sin(angle) φ̂` ([`spot_axes`](@ref)); an aim
+displaced along the port's θ̂ by `d` mm:
+
+```julia
+eθ, eφ = port_basis(b.port)
+moved = remake(b; aim = Tuple(b.aim + d * eθ))
+```
 """
 function port_basis(p::Vec3)
     θ = acos(clamp(p[3], -1, 1))

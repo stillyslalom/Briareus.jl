@@ -1478,7 +1478,9 @@ _ray_eps(t::Target) = 1e-7 * max(t.scale, 1.0)
 """
     visible(target, a, b) -> Bool
 
-Whether the open segment between points `a` and `b` is free of opaque surfaces.
+Whether the open segment between points `a` and `b` is free of opaque surfaces
+(apertures are transparent): `visible(t, Vec3(0, 0, 0), Vec3(0, 0, 8))` is `true` when
+no opaque surface lies between the target's center and a point 8 mm up the axis.
 """
 visible(t::Target, a::Vec3, b::Vec3) = !any_hit(t.bvh, a, b - a, 1 - 1e-9)
 
