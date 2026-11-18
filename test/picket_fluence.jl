@@ -209,4 +209,68 @@ end
         @test row.value == peak_at(only(rp.x)) && 0.99 * lim <= row.value <= lim * (1 + 1e-6)
         @test zp - 1e-6 <= only(rp.x) < zp + 0.01
     end
+
+    @testset "the linked bubble" begin
+        bubble = BubbleAbsorption(radius = 2.875, turn_on = 0.3, picket_ratio = 1.1)
+        linked = PicketLinkedBubble(bubble, t, quads; kw...)
+        @test length(linked.beams) == count(b -> b.group in (:outer44, :outer50), quads)
+        @test occursin("PicketLinkedBubble", sprint(show, linked))
+        # at the reference: the bubble itself, bit for bit
+        lb = linked_bubble(linked, quads)
+        @test lb.picket_ratio === bubble.picket_ratio && lb.collision === bubble.collision
+        for τ in (5.0, 7.0)
+            @test [b.power for b in apply_lpi(linked, quads, τ)] == [b.power for b in apply_lpi(bubble, quads, τ)]
+            eff = apply_lpi(bubble, quads, τ)
+            @test lpi_deposit(linked, s.deposition, eff, τ).element == lpi_deposit(bubble, s.deposition, eff, τ).element
+        end
+        # a re-pointed design (the outer cones down 0.3 mm toward the waist): E from its
+        # picket fluence against the reference's, as `remake` by hand
+        design = [b.group in (:outer44, :outer50) ? remake(b; aim = b.aim - sign(b.port[3]) * 0.3 * Vec3(0, 0, 1)) : b
+                  for b in quads]
+        hand(bs) = picket_fluence(DepositionOperator(t, bs), bs, pulses, w)
+        E = picket_ratio(hand(design), hand(quads); at = 1.1)
+        @test abs(E - 1.1) > 1e-3
+        ld = linked_bubble(linked, design)
+        @test ld.picket_ratio ≈ E rtol = 1e-12
+        byhand = remake(bubble; picket_ratio = E)
+        @test ld.collision ≈ byhand.collision rtol = 1e-12
+        @test bubble_speed(ld) ≈ bubble_speed(byhand) rtol = 1e-12
+        st = remake(s; lpi = linked, time = 7.0)
+        @test evaluate(st, design).deposition.element ≈
+              evaluate(remake(s; lpi = byhand, time = 7.0), design).deposition.element rtol = 1e-12
+        @test bubble_fractions(linked, design, 6.0).absorbed == bubble_fractions(ld, design, 6.0).absorbed
+        # in a chain after another model; a dropped bundle deposits nothing of its own
+        @test evaluate(remake(st; lpi = (Backscatter(:outer44 => 0.0), linked)), design).deposition.element ==
+              evaluate(st, design).deposition.element
+        bundle = nif_bundles(quads)["11"]
+        keep = setdiff(eachindex(quads), bundle)
+        opq = DepositionOperator(t, quads)
+        at2(bs) = [remake(b; power = 2.0) for b in bs]     # the window's mean power
+        Ek = picket_ratio(picket_fluence(opq, [i in bundle ? remake(b; power = 0.0) : b for (i, b) in enumerate(at2(quads))]),
+                          picket_fluence(opq, at2(quads)); at = 1.1)
+        @test any(b -> b.group in (:outer44, :outer50), quads[bundle]) && Ek < 1.1
+        @test linked_bubble(linked, quads[keep]).picket_ratio ≈ Ek rtol = 1e-12
+        # differentiable through the pointing, the bubble included (at the collision,
+        # where the ridge stop rises with time)
+        d = sin.(1:length(x0))
+        f(τ, m) = sum(evaluate(remake(s; lpi = m, time = bubble.collision), x0 .+ τ .* d).deposition.element .*
+                      (1:nelements(t)) ./ nelements(t))
+        ad = ForwardDiff.derivative(τ -> f(τ, linked), 0.0)
+        fd = (f(1e-6, linked) - f(-1e-6, linked)) / 2e-6
+        @test ad ≈ fd rtol = 1e-5
+        @test abs(ad - ForwardDiff.derivative(τ -> f(τ, bubble), 0.0)) > 1e-6 * abs(ad)   # the link counts
+        # errors: a beam the map does not know, no picket, the per-beam sensitivities
+        @test_throws ArgumentError linked_bubble(linked, [remake(first(b for b in quads if b.group === :outer50); name = "X")])
+        @test_throws ArgumentError PicketLinkedBubble(bubble, t, quads)
+        @test_throws ArgumentError PicketLinkedBubble(bubble, t, quads; kw..., groups = (:none,))
+        @test_throws ArgumentError Briareus._ridge_split(linked, s.deposition, quads[1], 7.0)
+
+        # in a drive history: the resolved bubble's, bit for bit (E is the same number)
+        t8 = hohlraum(; geom..., h = 0.8, capsule_h = 0.4, wall = Material(:Au; albedo = 0.9, conversion = 0.8))
+        model, op8 = RadiationModel(t8), DepositionOperator(t8, quads)
+        times = [1.0, 6.0, 7.0]
+        run(bs, m) = drive_history(model, op8, τ -> with_pulses(bs, pulses, τ), times; lpi = m)
+        hl = run(design, linked)
+        @test hl.moments == run(design, ld).moments
+    end
 end

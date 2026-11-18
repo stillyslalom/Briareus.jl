@@ -124,10 +124,11 @@ end
     clf, lightc = clearance_floor(hardware), light_ceiling(ev_ref, :cap_top, :cap_bottom)
     aug2 = Briareus._Augmented(dobj, (clf, lightc), (fill(0.1, length(quads)), [0.2]), 3.0)
     lag = Briareus._Lagrangian(objectives[2], (ceilc, gatec), ([0.5], [0.1, 0.0, 0.2, 0.0]))
-    # the picket ceilings (outer quads into the holes)
+    # the picket ceilings and the bubble linked to the picket (outer quads into the holes)
     pkw = (; pulses = pulse, window = (0.5, 1.5))
     pceil = picket_ceiling(evaluate(s, xo), :wall; pkw...)
     pmean = picket_ceiling(evaluate(s, xo), :wall; pkw..., measure = :mean)
+    linked = PicketLinkedBubble(BubbleAbsorption(radius = 2.875), t, apply(p, xo); pkw...)
 
     @testset "closures compile once" begin
         history(τ -> with_pulses(quads, pulse, τ), [0.5, 1.0]; record = sol -> sol)
@@ -268,10 +269,13 @@ end
             @test fl isa PicketFluence{T} && (@inferred picket_ratio(fl, fl; at = 1.1)) isa T
             @test (@inferred remake(BubbleAbsorption(radius = 2.875); picket_ratio = fl.mean / fl.mean)) isa
                   BubbleAbsorption{T}
-            # the picket ceilings
-            ev = evaluate(s, x)
+            # the picket ceilings and the linked bubble
+            ev, bs = evaluate(s, x), apply(p, x)
             @test (@inferred picket_irradiance(ev, :wall; pkw...)) isa T
             @test (@inferred pceil.f(ev)) isa T && (@inferred pmean.f(ev)) isa T
+            # (the resolved bubble's own `apply_lpi` and `lpi_deposit` infer abstract
+            # containers, as `BubbleAbsorption`'s did before the link)
+            @test (@inferred linked_bubble(linked, bs)) isa BubbleAbsorption{T}
         end
         # pointing on the capsule sphere (polar direct drive), with split quads
         for x in (xs0, _inf_duals(xs0))
@@ -370,12 +374,15 @@ end
             for x in (xo, _inf_duals(xo))
                 VERSION >= v"1.11" && @test _inf_jet_clean(JET.report_opt, picket_fluence, s.deposition, apply(p, x))
                 @test _inf_jet_clean(JET.report_call, picket_fluence, s.deposition, apply(p, x))
-                # the picket ceilings: no dispatch (from 1.11), no errors
-                ev = evaluate(s, x)
+                # the picket ceilings and the linked bubble: no dispatch (from 1.11), no errors
+                ev, bs = evaluate(s, x), apply(p, x)
                 if VERSION >= v"1.11"
                     @test _inf_jet_clean(JET.report_opt, pceil.f, ev) && _inf_jet_clean(JET.report_opt, pmean.f, ev)
+                    @test _inf_jet_clean(JET.report_opt, linked_bubble, linked, bs)
                 end
                 @test _inf_jet_clean(JET.report_call, pceil.f, ev) && _inf_jet_clean(JET.report_call, pmean.f, ev)
+                @test _inf_jet_clean(JET.report_call, (m, b) -> apply_lpi(m, b, 6.0), linked, bs)
+                @test _inf_jet_clean(JET.report_call, (m, o, b) -> lpi_deposit(m, o, b, 6.0), linked, s.deposition, bs)
             end
             # spherical pointing fields: no dispatch (from 1.11, as the deposition checks
             # above), no possible errors

@@ -32,7 +32,8 @@ in from the initial wall `radius` R (mm, ns; E = `picket_ratio`, the outer cones
 fluence over that of the calibration platform, Izumi 2021's HDC basecamp, dimensionless;
 `fill` the gas fill in mg/cc) while it is ballistic. E is set by hand by default;
 [`picket_ratio`](@ref) computes it from a pointing's own picket fluence on the wall
-([`picket_fluence`](@ref)), for `remake(m; picket_ratio)` (opt-in). It stagnates smoothly at the depth `stagnation` ``x_{max}``
+([`picket_fluence`](@ref)), for `remake(m; picket_ratio)`, and
+[`PicketLinkedBubble`](@ref) does so for the beams of every evaluation (both opt-in). It stagnates smoothly at the depth `stagnation` ``x_{max}``
 ([`bubble_depth`](@ref)): ballistic up to ``x_{max} - w`` (w = `stagnation_width`), then
 ``x_{max} - w e^{-(x_{bal} - x_{max} + w)/w}``. In the plane `z_b` of the outer
 footprint, at the axial position where the footprint cones' beam axes reach the wall,

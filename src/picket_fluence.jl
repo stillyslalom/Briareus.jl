@@ -1,6 +1,7 @@
 # The outer cones' picket fluence on the wall (energy per area), the quantity the
 # published gold-bubble scalings are written in, and `BubbleAbsorption`'s picket ratio
-# from it, and the picket irradiance as a constraint. Research notes, "The swing and the
+# from it; the picket irradiance as a constraint, and the bubble that follows the
+# beams' picket. Research notes, "The swing and the
 # bubble without new data (2026-11-18)", §5 "The bubble's speed from the pointing's
 # picket fluence"; literature in `reference/litreview/bubble_drivers.md`.
 
@@ -163,7 +164,7 @@ published re-pointing study; Izumi 2021's split-quad shot is the nearest, resear
 notes).
 """
 picket_ratio(design::PicketFluence, reference::PicketFluence; at::Real = 1.0) =
-    at * design.mean / reference.mean
+    at * (design.mean / reference.mean)     # `at` itself, exactly, at the reference
 
 # Izumi 2021's HDC SymCap basecamp (`data/izumi2021_fig8.csv`'s header): length and LEH
 # radius (mm), with `_BASECAMP`'s wall and capsule radii; the outer picket energy (kJ, all
@@ -342,7 +343,7 @@ without them). One deposition per evaluation, in the evaluation's number type.
 bubble scalings, and holding its peak at the reference's is the re-pointing study's
 choice (user, 2026-11-18), an engineering limit on the picket's hottest element; the
 model's prediction of the bubble a design grows is the mean's ratio to the 0.2 power
-([`picket_ratio`](@ref)), confidence low (research
+([`PicketLinkedBubble`](@ref)), confidence low (research
 notes, "The swing and the bubble without new data (2026-11-18)" §5).
 """
 function picket_ceiling(reference::Evaluation, names::Symbol...; pulses = nothing, window = nothing,
@@ -398,3 +399,144 @@ function _exact_value(c::_PicketValue, ev::Evaluation)
     _check_picket(c, ev)
     return _peak(Float64.(ForwardDiff.value.(_picket_map(ev, c.power, c.groups))), c.target, c.elements)
 end
+
+# ---------------------------------------------------------------------------------------
+# The bubble that follows the pointing's picket fluence
+# ---------------------------------------------------------------------------------------
+
+"""
+    PicketLinkedBubble(bubble, target, reference; pulses = nothing, window = nothing,
+                       by = :group, power = nothing, groups = (:outer44, :outer50),
+                       components = (:wall,), deposition_kw = (;))
+
+A [`BubbleAbsorption`](@ref) whose picket fluence ratio E follows the beams it is
+applied to (a [`LaserPlasmaModel`](@ref), opt-in): for beams `bs`,
+
+    E(bs) = bubble.picket_ratio × F̄(bs) / F̄(reference),
+
+with F̄ the energy-weighted mean outer picket fluence on the `components` of `target`
+([`picket_fluence`](@ref)), and the bubble `remake(bubble; picket_ratio = E(bs))`
+(tip speed ∝ E^0.2, collision time − `turn_on` ∝ E^-0.16). `bubble.picket_ratio` is
+the E of the `reference` pointing (set by hand, or from [`picket_ratio`](@ref)
+against the calibration platform), so at the reference the model is `bubble` itself,
+bit for bit, and a re-pointed design gets the bubble its own picket grows, inside
+`evaluate(scenario, beams)`, the constraints and objectives built on it
+([`mode_gate`](@ref)) and [`drive_history`](@ref)`(...; lpi)`. Compose as `bubble` is
+composed, e.g. `lpi = (cbet, linked)`.
+
+`target` carries the picket map: the hohlraum on a mesh fine enough for it (h ≤ 0.2
+mm; the radiation mesh of a drive history is usually too coarse; research notes), a
+separate target for the deposition alone. A deposition operator is built on it for the
+`reference` beams in `groups` (with `deposition_kw`); the beams the model is applied to
+are matched to them by name (a beam of `groups` not among them is an error; one of them
+missing, as a dropped bundle's, deposits nothing), and must enter through the same
+ports. The picket powers are those of [`picket_irradiance`](@ref): `pulses` over a
+`window` (the mean power over e.g. the first ns after the outer turn-on), or `power`, a
+function of the beam; one of the two is required, and it must not read the beam's
+`power`, which at the model's `time` is not the picket's (in a chain after CBET it is
+not even the setup's). E depends on the beams' pointing, spots and focus alone, so it
+is constant through a drive history.
+
+Cost: two picket depositions per evaluation (one in [`apply_lpi`](@ref), one in
+[`lpi_deposit`](@ref)). Generic in the number type: E and the bubble carry the beams'
+ForwardDiff duals, so a pointing gradient includes the bubble's response to the picket
+fluence. Thread-safe (no state). The per-beam sensitivities of the uncertainty
+analysis ([`mode_sensitivity`](@ref), [`mode_uncertainty`](@ref)) deposit beams one by
+one and cannot resolve E: they throw an `ArgumentError`; pass them the resolved bubble
+[`linked_bubble`](@ref)`(model, beams)` instead.
+
+*Derived* (confidence low): the exponents (E^0.2, Izumi et al., PoP 28, 022706 (2021),
+seven shots; E^-0.16, Izumi et al., RSI 89, 10K111 (2018)) are published for picket
+energy and quad splitting on one platform; their use for a fluence changed by
+re-pointing at fixed energy has no published test, and the fluence's definition is
+the computed counterpart of the papers' energy over area (research notes, "The swing
+and the bubble without new data (2026-11-18)" §5). Not a facility criterion; no default
+reads it.
+"""
+struct PicketLinkedBubble{S<:Real,F} <: LaserPlasmaModel
+    bubble::BubbleAbsorption{S}
+    operator::DepositionOperator
+    beams::Vector{Beam{Float64}}        # the operator's beams: the reference's in `groups`
+    index::Dict{String,Int}             # their names → their operator index
+    power::F                            # picket power per beam (TW)
+    groups::Vector{Symbol}
+    elements::Vector{Int}
+    reference::PicketFluence{Float64}   # the reference's map and summaries
+end
+
+function PicketLinkedBubble(bubble::BubbleAbsorption, target::Target, reference::AbstractVector{<:Beam};
+                            pulses = nothing, window = nothing, by = :group, power = nothing,
+                            groups = (:outer44, :outer50), components = (:wall,), deposition_kw = (;))
+    pw = _picket_power(pulses, window, by, power, false)
+    gs = collect(Symbol, _symbols(groups))
+    rb = Beam{Float64}[b for b in reference if b.group in gs]
+    isempty(rb) && throw(ArgumentError("no reference beams in the groups $(Tuple(gs))"))
+    names = [b.name for b in rb]
+    allunique(names) || throw(ArgumentError("the reference beams' names must be unique"))
+    op = DepositionOperator(target, rb; deposition_kw...)
+    es = _picket_elements(target, components)
+    index = Dict(n => i for (i, n) in enumerate(names))
+    ref = _linked_fluence(op, rb, index, pw, gs, es, reference)
+    return PicketLinkedBubble(bubble, op, rb, index, pw, gs, es, ref)
+end
+
+function Base.show(io::IO, m::PicketLinkedBubble)
+    print(io, "PicketLinkedBubble(E = ", ForwardDiff.value(m.bubble.picket_ratio), " at the reference, ",
+          length(m.beams), " ", join(m.groups, "/"), " beams, ", m.reference, ")")
+end
+
+# The picket fluence of `beams` on the model's map: each beam of the model's groups at its
+# picket power on the operator's beam of its name, the operator's other beams at zero.
+_linked_fluence(m::PicketLinkedBubble, beams) =
+    _linked_fluence(m.operator, m.beams, m.index, m.power, m.groups, m.elements, beams)
+
+function _linked_fluence(op, rb, index, power, gs, es, beams::AbstractVector{Beam{T}}) where {T<:Real}
+    picket = Vector{Beam{T}}(undef, length(rb))
+    found = falses(length(rb))
+    for b in beams
+        b.group in gs || continue
+        i = get(index, b.name, 0)
+        i == 0 && throw(ArgumentError("beam $(b.name) is not among the linked bubble's reference beams"))
+        picket[i] = remake(b; power = oftype(b.power, power(b)))
+        found[i] = true
+    end
+    for i in eachindex(rb)
+        found[i] || (picket[i] = remake(rb[i]; power = zero(T)))
+    end
+    return _picket_fluence(deposit(op, picket).element, op.target, es)
+end
+_linked_fluence(op, rb, index, power, gs, es, beams::AbstractVector{<:Beam}) =
+    _linked_fluence(op, rb, index, power, gs, es, _common_type(beams))
+
+# A vector of beams of mixed number types as one type.
+function _common_type(beams)
+    T = mapreduce(b -> typeof(b.power), promote_type, beams)
+    return Beam{T}[remake(b; power = convert(T, b.power)) for b in beams]
+end
+
+"""
+    linked_bubble(m::PicketLinkedBubble, beams) -> BubbleAbsorption
+
+The bubble of a [`PicketLinkedBubble`](@ref) for `beams`: `remake(m.bubble;
+picket_ratio = E)` with E from the beams' picket fluence relative to the reference's
+(`m.bubble` itself at the reference). In the beams' number type.
+"""
+linked_bubble(m::PicketLinkedBubble, beams::AbstractVector{<:Beam}) =
+    remake(m.bubble; picket_ratio = picket_ratio(_linked_fluence(m, beams), m.reference;
+                                                 at = m.bubble.picket_ratio))
+
+apply_lpi(m::PicketLinkedBubble, beams::AbstractVector{<:Beam}, time = 0.0) =
+    apply_lpi(linked_bubble(m, beams), beams, time)
+
+_deposits(::PicketLinkedBubble) = true
+
+_lpi_deposit(m::PicketLinkedBubble, op::DepositionOperator, beams::AbstractVector{<:Beam}, time, split) =
+    _lpi_deposit(linked_bubble(m, beams), op, beams, time, split)
+
+_ridge_split(m::PicketLinkedBubble, op::DepositionOperator, b::Beam, time) =
+    throw(ArgumentError("a PicketLinkedBubble resolves its picket ratio from all beams together, and the " *
+                        "per-beam sensitivities deposit one beam at a time: use the resolved bubble, " *
+                        "`linked_bubble(model, beams)`, in the scenario's laser–plasma model"))
+
+bubble_fractions(m::PicketLinkedBubble, beams::AbstractVector{<:Beam}, t) =
+    bubble_fractions(linked_bubble(m, beams), beams, t)
