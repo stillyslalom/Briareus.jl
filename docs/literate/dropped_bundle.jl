@@ -689,7 +689,9 @@ show_modes("re-pointed, ray-traced", ylm_weights(target, capsule; lmax = 4) * H)
 # than a published criterion. The peak over the elements ([`peak_irradiance`](@ref))
 # has a kink wherever the hottest element changes, so the optimizer works on a smooth
 # stand-in, the area-weighted 64-norm of the irradiance ([`irradiance_norm`](@ref)),
-# scaled to equal the peak at the reference.
+# scaled to equal the peak at the reference. Once a run has converged on the stand-in,
+# the ceiling compares the peak itself with the limit and lowers the stand-in's working
+# limit while the peak exceeds it (`exact = true`, its default).
 
 ref48 = evaluate(scenario, quads)
 gates = mode_gate(full, mode_uncertainty(scenario, quads; pointing = 0.05, lmax = 4))
@@ -736,20 +738,22 @@ for (label, r) in (("within limits", limited), ("penalty terms", by_penalty))
             peak_irradiance(ev, :wall) / peak_irradiance(ref48, :wall), r.evaluations)
 end
 @assert limited.outcome in (:interior, :box) && all(r -> r.status !== :violated, limited.constraints)
+@assert peak_irradiance(evaluate(repoint, limited.x), :wall) <= only(ceiling.limit) * (1 + 1e-3)
 
-# Both designs meet the limits. The penalty terms keep rewarding symmetry inside the
+# Both designs meet the gates. The penalty terms keep rewarding symmetry inside the
 # gates, beyond what the limits require, and pay for it with drive: modes 1 and 3 end
-# far inside their gates and a third of a percent of the drive is gone, after more
-# evaluations. With the limits as constraints every gate ends active, at its limit,
+# far inside their gates and a third of a percent of the drive is gone, in as many
+# evaluations. With the limits as constraints three of the gates end active, at their limits,
 # and the drive left over is the largest the limits allow from this start. Staging
 # the penalties by hand (gates loosened four-, two- and 1.4-fold, then the final ones)
-# reaches the penalty design again, in more evaluations still (research notes,
+# reaches the penalty design again, in more evaluations (research notes,
 # "Constrained re-pointing").
 #
-# The peak over the elements ends within about a percent of the ceiling: the 64-norm
-# bounds the hot spots' mean, not the hottest element. Without the ceiling the same
-# gates are met with the wall's peak 27–38 % above the 48-quad pointing's (research
-# notes), the re-aimed quads stacking their spots.
+# The constrained run ends with the peak over the elements at the ceiling; the penalty
+# form, which bounds the 64-norm, the hot spots' mean, leaves the hottest element a
+# percent over it. Without the ceiling the same gates are met with the wall's peak
+# 27–38 % above the 48-quad pointing's (research notes), the re-aimed quads stacking
+# their spots.
 
 # ## A re-pointing study, end to end
 #
@@ -759,7 +763,7 @@ end
 
 review_line("within limits", cap_review(limited.beams))
 
-# In the worst case the quads' 1% contours reach 58 µm into the caps. A study repeats
+# In the worst case the quads' 1% contours reach 60 µm into the caps. A study repeats
 # the run with every limit a design review checks, on the parameters the design may
 # change, in two stages: the quads first, then each of their beams.
 #
@@ -803,12 +807,12 @@ limits = (ceiling, gates, clearance_floor(cap_keepout), light_ceiling(1e-5, :cap
 stage1 = optimize_pointing(study, most_drive; lower = lower_s, upper = upper_s, constraints = limits,
                            iterations = 1000, evaluations = 3000)
 
-# The run ends with every limit met and the box active: some outer quads' aims at
-# ±0.3 mm, and three of the four cones at full power. The keep-out holds a handful of
-# outer quads at their 10 µm minimum, each with its own multiplier (the display shows
-# the worst of the 46 rows and counts the active ones), and three of the four gates are
-# active. The light ceiling is met with room to spare: the keep-out, on the worst case
-# of the 1% contour, is the stricter of the two here.
+# The run ends with every limit met and the box active: four outer quads' aims at
+# ±0.3 mm, and three of the four cones at full power. Two of the four gates are active.
+# The keep-out holds every quad at least 17 µm from the caps, above its 10 µm minimum
+# (the display shows the worst of the 46 rows, one per quad, each with its own
+# multiplier, and counts the active ones), and the light ceiling is met with room to
+# spare: the gates and the box bind here, not the caps.
 
 ev1 = evaluate(study, stage1.x)
 @printf("%s after %d evaluations; cone powers %s of nominal\n", stage1.outcome, stage1.evaluations,
@@ -839,7 +843,7 @@ check_constraints(polish_start, limits)
 
 # The same aims, deposited beam by beam, give a slightly different drive: the four
 # beams of a quad enter at angles up to a few degrees apart, each with its own narrower
-# f-cone, and the mode-1 departure now exceeds its gate by 1.6%. The limits are the same
+# f-cone, and the l = 3 departure now exceeds its gate by 0.7%. The limits are the same
 # objects as in the first stage. The keep-out's components follow the evaluation's
 # beams, 184 of them now, so the constraints carry over unchanged. The polish starts
 # from the first stage's aims (`relative = true`, all shifts zero) with a capped budget:
@@ -866,14 +870,21 @@ gate_line("polished, per beam", ev2)
 @printf("peak wall irradiance %.4f of the ceiling\n", peak_irradiance(ev2, :wall) / only(ceiling.limit))
 polished_review = cap_review(stage2.beams)
 review_line("polished", polished_review)
-@assert stage2.outcome in (:interior, :box, :evaluations) && all(r -> r.status !== :violated, stage2.constraints)
+@assert stage2.outcome in (:interior, :box, :evaluations) &&
+        all(r -> r.status !== :violated || r.name == "irradiance", stage2.constraints)
+@assert peak_irradiance(ev2, :wall) <= only(ceiling.limit) * 1.01
 @assert polished_review.fail == 0 && polished_review.worst > 0
 
-# The polish brings mode 1 back within its gate and raises the drive from 0.9568 (the
-# first stage's aims on beams) to 0.9584 of the 48 quads', above the first stage's
-# 0.9577 on quads. It stops at its budget with every limit met and mode 2 at its gate.
-# The clearance check confirms the keep-out on the worst case: no beam fails, and the
-# closest stays 21 µm from a cap.
+# The polish brings l = 3 back within its gate and raises the drive from 0.9564 (the
+# first stage's aims on beams) to 0.9593 of the 48 quads', above the first stage's
+# 0.9573 on quads. It stops at its budget with mode 2 at its gate, the keep-out active on
+# four beams, and the wall's peak 0.8 % over the ceiling: the ceiling holds the peak
+# once a run has converged on its smooth stand-in, and a run stopped by its budget has
+# not, so its report shows the peak against the limit as it stands. Run to convergence
+# (861 evaluations, five and a half minutes on 8 threads), the same polish meets every
+# limit, the peak at 0.997 of the ceiling, at the same drive (research notes,
+# "Optimization defaults decided"). The clearance check confirms the keep-out on the
+# worst case: no beam fails, and the closest stays 9 µm from a cap.
 #
 # Each stage was one call of [`optimize_pointing`](@ref) on exported names: a
 # parameterization, its box and the limits, the second stage's scenario built with
@@ -919,7 +930,8 @@ review_line("polished", polished_review)
 # - The re-pointed drive, recomputed by ray tracing and a direct radiosity solve,
 #   reproduces the optimizer's modes.
 # - Re-pointing within limits meets every gate and the ceiling in one call (asserted:
-#   no constraint violated, the run converged). Its closed-form test
+#   no constraint violated, the run converged, the peak over the wall's elements within
+#   0.1 % of the ceiling or below it). Its closed-form test
 #   (`test/constraints.jl`): with the drive's coefficients linear in the quad powers,
 #   a fit under a ceiling on the total power matches the solution of the
 #   Karush–Kuhn–Tucker equations to 1e-4 and its multiplier to 1e-3; the irradiance
@@ -927,7 +939,9 @@ review_line("polished", polished_review)
 #   gradients against central differences.
 # - The study's keep-out from the end caps agrees with the clearance check's worst case
 #   on the 48-quad pointing to within a micrometer, and the polished beams pass that
-#   check with no beam failing and every limit met (asserted). The closed-form tests of
+#   check with no beam failing, every limit but the ceiling met and the peak within 1 %
+#   of the ceiling, the budget having stopped the polish before the ceiling's exact
+#   rounds (asserted). The closed-form tests of
 #   the keep-out and light constraints (`test/constraints.jl`): with one free parameter,
 #   the 50° cone's aim, pulled by the objective into the caps, a constrained run ends
 #   with the constraint active at the aim where its value reaches the limit, found by

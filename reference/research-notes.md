@@ -11423,7 +11423,8 @@ One lowering round each, 4–9 % more evaluations, the drive the same to 1e-5. T
 lands below the limit rather than on it (the norm-to-peak ratio moved with the design),
 and one or two gates leave their limits by up to 3 % of the gate. Default kept at
 `exact = false` (today's behavior), as a decision for the user; recommended: `true`,
-where the literal criterion is the peak over the elements.
+where the literal criterion is the peak over the elements. *2026-11-18, later:* the user
+decided `exact = true` as the default (§ Optimization defaults decided).
 
 **Warm restarts** (`from = result`). The result's `state` carries the multipliers, the
 penalty parameter and its ceiling, the inner tolerance, the last infeasibility–
@@ -12134,3 +12135,30 @@ is not a lever without new data.
   out.
 - Sinks: the gas is 80 kJ and 3–4 eV at peak and at 8 ns (sized, not modeled); windows,
   diffuse scattering and glint are each ≤ 2 eV and ≤ 1 point.
+
+## Optimization defaults decided (2026-11-18) *measured*
+
+The user's decisions of 2026-11-18 on roadmap items 34–36, each measured on the public
+cases below.
+
+**`irradiance_ceiling`'s `exact` defaults to `true`** (item 36). The peak over the
+elements is what a ceiling holds by default; `exact = false` keeps the smooth norm alone
+(§ Constrained re-pointing, "Exact peak", for the method and its cost). The
+dropped-bundle test case of `test/constraints.jl` already ran with `exact = true` and
+does not move; it passes plain and under `--check-bounds=yes` (121 tests each), which
+reach different designs of the flat family, so it asserts only what every admissible
+design meets. The tutorial (8 threads; before → after the default):
+
+| run | before (`exact = false`) | after |
+|---|---|---|
+| within limits (46 quads) | 997 evaluations, drive 0.9626, peak within 0.3 % of the limit, either side | 1,079 evaluations (8 outer), drive 0.96258, peak 0.99999 × limit (norm 0.998), `:box` |
+| stage 1 (quads, four limits) | 885 evaluations, drive 0.9577 | 1,092 evaluations, drive 0.95733, peak 0.992 × limit, gates l = 2 and 4 active, cap keep-out 17 µm (none at its 10 µm minimum) |
+| stage 2 (per-beam polish, 120 evaluations) | drive 0.9584, every reported limit met (the norm) | drive 0.9593, peak 1.0082 × limit: reported as violated |
+| stage 2 run to convergence (scratch) | — | 861 evaluations (9 outer), 326 s, drive 0.9592, every limit met, peak 0.997 × limit |
+
+The budget-capped polish shows what the default changes: the exact rounds run only
+after a constrained run has converged, so a run stopped by its budget reports the peak
+as it stands (0.8 % over here), where with `exact = false` the report shows the norm
+(the earlier tutorial printed the peak beside a report of every limit met). The tutorial
+keeps its 120-evaluation polish (a converged one costs five and a half more minutes of
+the docs build) and says so; a design to hand off runs to convergence.

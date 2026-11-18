@@ -221,14 +221,17 @@
         @test count(r -> r.status === :violated, start) == 4 && start[1].status !== :violated
         @test peak_irradiance(evaluate(rp, x0), :wall) ≈ pk rtol = 1e-12
 
-        # the exact peak held (`exact = true`): the stand-in's working limit lowered until the
-        # peak over the elements is within `feasibility` of the limit. The stand-in alone
-        # does not bound the peak to a fixed margin: designs with the same gates differ in
-        # the peak by several percent (from this start, 0.997 and 1.030 of the limit with
-        # the norm at 0.974 and at the limit, under two roundings: research notes).
-        exact = irradiance_ceiling(ref, :wall; exact = true)
+        # the exact peak held (`exact = true`, the default): the stand-in's working limit
+        # lowered until the peak over the elements is within `feasibility` of the limit. The
+        # stand-in alone (`exact = false`) does not bound the peak to a fixed margin: designs
+        # with the same gates differ in the peak by several percent (from this start, 0.997
+        # and 1.030 of the limit with the norm at 0.974 and at the limit, under two
+        # roundings: research notes). Under `--check-bounds=yes` the run reaches another
+        # design of the same flat family: only what every admissible design meets is tested.
+        plain = irradiance_ceiling(ref, :wall; exact = false)
+        @test ceiling.f.exact && !plain.f.exact
         res = optimize_pointing(rp, drive_objective(; drive = mean_flux(ref)); x0, lower, upper,
-                                constraints = (exact, gates), iterations = 1000, evaluations = 3000)
+                                constraints = (ceiling, gates), iterations = 1000, evaluations = 3000)
         ev = evaluate(rp, res.x)
         @test res.outcome in (:interior, :box)
         @test all(r -> r.status !== :violated, res.constraints)
@@ -237,8 +240,8 @@
         @test res.value <= res.initial_value + 1e-3
         # the rows: the exact ceiling reports the peak against the limit, the plain one its norm
         @test res.constraints[1].value == peak_irradiance(ev, :wall) && res.constraints[1].limit == pk
-        @test check_constraints(ev, exact)[1].value == peak_irradiance(ev, :wall)
-        @test check_constraints(ev, ceiling)[1].value == ceiling.f(ev)
+        @test check_constraints(ev, ceiling)[1].value == peak_irradiance(ev, :wall)
+        @test check_constraints(ev, plain)[1].value == plain.f(ev) == ceiling.f(ev)
     end
 
     # Keep-outs and the light on named parts as constraints, on a coarse hohlraum. The

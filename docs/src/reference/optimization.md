@@ -22,8 +22,8 @@ run and, for each parameter held by the box, the optimum's derivative with respe
 that bound. `from = result` continues a run with its multipliers and penalty, and
 `time_limit` bounds its wall time. Ready-made constraints: [`irradiance_ceiling`](@ref), a
 ceiling on the laser irradiance over named parts (its exact value
-[`peak_irradiance`](@ref), held itself with `exact = true`, its smooth stand-in
-[`irradiance_norm`](@ref)), and [`mode_gate`](@ref), a gate per degree on the
+[`peak_irradiance`](@ref), held itself by default, its smooth stand-in
+[`irradiance_norm`](@ref), held alone with `exact = false`), and [`mode_gate`](@ref), a gate per degree on the
 [`mode_departure`](@ref) from a reference drive shape, which goes with
 [`drive_objective`](@ref) for the largest drive within the gates;
 [`clearance_floor`](@ref), each beam's worst-case clearance from a keep-out at or above

@@ -115,7 +115,7 @@ end
 
 # The exact quantity that a constraint's function stands in for smoothly (a scalar, at a
 # Float64 evaluation), or `nothing` where the function is itself the quantity: the
-# irradiance ceiling's peak when it holds the peak (`exact = true`).
+# irradiance ceiling's peak when it holds the peak (`exact = true`, its default).
 _exact_value(f, ev) = nothing
 
 # All constraints' normalized violations at `ev`, concatenated (Float64).
@@ -392,13 +392,15 @@ end
 
 """
     irradiance_ceiling(reference, names...; limit = peak_irradiance(reference, names...),
-                       p = 64, weight = nothing, scale = limit, exact = false) -> Constraint
+                       p = 64, weight = nothing, scale = limit, exact = true) -> Constraint
 
 A ceiling on the absorbed laser irradiance over the elements of the named parts or
-components: a [`Constraint`](@ref) named `:irradiance` whose value is the smooth
-[`irradiance_norm`](@ref) scaled to equal the [`peak_irradiance`](@ref) at the
-`reference` evaluation, `‖I‖ₚ × peak_ref/‖I‖ₚ,ref ≤ limit`. With the default `limit`
-(the reference's peak) the ceiling holds the irradiance at the reference design's, the
+components: a [`Constraint`](@ref) named `:irradiance` that holds the
+[`peak_irradiance`](@ref) at or below `limit` (by default; `exact`, below). Its
+function is the smooth stand-in the optimizer works on, the [`irradiance_norm`](@ref)
+scaled to equal the peak at the `reference` evaluation, `‖I‖ₚ × peak_ref/‖I‖ₚ,ref`.
+With the default `limit` (the reference's peak) the ceiling holds the irradiance at the
+reference design's, the
 reference being, for example, the pointing before a bundle was dropped; a number in
 TW/mm² sets another, measured on the same scale. The reference evaluation must be on
 the same target as the optimized scenario (a `subset` of it shares the target), with
@@ -418,23 +420,23 @@ limit, not a published criterion: the published scalings of the gold bubble's gr
 use the outer cones' picket fluence on the wall (research notes), which `weight`
 expresses on the same machinery.
 
-The constraint bounds the norm, not the peak itself: at the limit the field's hot spots
-are as hot, in the `p`-norm mean, as the reference's, while the peak over the elements
-may exceed the limit, by a margin that depends on where the run ends: on the tutorial's
-mesh 0.1 % at `p = 64` and 3 % at `p = 16`, and on the dropped-bundle test case (0.45 mm
-wall elements) 3 % at `p = 64` for one of two designs that meet the same gates, under
-another floating-point rounding of the same run (research notes, "Constrained
-re-pointing").
+With `exact = true` (the default) the ceiling holds the peak itself. The optimizer
+works on the norm, but once the constrained run has converged it compares the
+[`peak_irradiance`](@ref) with the limit; while the peak exceeds it by more than the
+run's `feasibility` (in units of `scale`), the norm's working limit is scaled by
+limit/peak and the run continues from the same design, multipliers and penalty. The
+reported value ([`check_constraints`](@ref), `PointingResult.constraints`) is the peak
+against the limit, and a converged run ends with the peak at or below the limit within
+`feasibility`. The cost is the further outer iterations, when the peak ends above the
+limit (research notes, "Constrained re-pointing").
 
-`exact = true` holds the peak itself. The optimizer still works on the norm, but once
-the constrained run has converged it compares the [`peak_irradiance`](@ref) with the
-limit; while the peak exceeds it by more than the run's `feasibility` (in units of
-`scale`), the norm's working limit is scaled by limit/peak and the run continues from
-the same design, multipliers and penalty. The reported value
-([`check_constraints`](@ref), `PointingResult.constraints`) is then the peak against
-the limit, and a converged run ends with the peak at or below the limit within
-`feasibility`. The cost is the further outer iterations (research notes, "Constrained
-re-pointing").
+`exact = false` bounds the norm alone, and the norm is the reported value: at the limit
+the field's hot spots are as hot, in the `p`-norm mean, as the reference's, while the
+peak over the elements may exceed the limit, by a margin that depends on where the run
+ends: on the tutorial's mesh 0.1 % at `p = 64` and 3 % at `p = 16`, and on the
+dropped-bundle test case (0.45 mm wall elements) 3 % at `p = 64` for one of two designs
+that meet the same gates, under another floating-point rounding of the same run
+(research notes, "Constrained re-pointing").
 
 Across meshes the ceiling is a ratio to the reference on the same
 mesh, which changes less with the element size than the peak's ratio does (rms
@@ -444,7 +446,7 @@ the peak itself falls on a coarser mesh.
 function irradiance_ceiling(reference::Evaluation, names::Symbol...;
                             limit::Union{Nothing,Real} = nothing, p::Real = 64,
                             weight = nothing, scale::Union{Nothing,Real} = nothing,
-                            exact::Bool = false)
+                            exact::Bool = true)
     t = reference.scenario.target
     es = _named_elements(t, names)
     P = Float64.(ForwardDiff.value.(_counted_power(reference, weight)))
