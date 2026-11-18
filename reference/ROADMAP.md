@@ -53,10 +53,23 @@ notes describe them generically. Check them before listing a run as missing.
 
    *Data:* occluders ~2 and 10 mm upstream and a foil off focus; the Laser Beam Summary
    export of the spot-rotation workspace (`read_visrad_summary` end to end).
-7. **Benchmark against VisRad.** Compare VisRad's radiosity, absolute drive levels and
-   mode amplitudes with `compare_visrad` (deposition alone is compared in the repository
-   so far). The saved hohlraum runs hold VisRad's results: start with them, and build
-   `write_visrad_kit` cases only for what they lack.
+7. **Benchmark against VisRad.** *State:* the saved runs hold VisRad's deposition only:
+   their radiosity and view-factor sections are empty in every file ("VisRad benchmark
+   beyond deposition: the saved runs"). With VisRad's deposition as the source, Briareus
+   on VisRad's profile law differs after the same radiosity solve by 0.13–0.17 % rms on
+   the gold, −0.05 to −0.08 % in the capsule's flux and ≤ 0.03 pp in P2, all of it the
+   deposition's (the drive level follows VisRad's per-beam totals, item 6). VisRad's own
+   view factors, visibility and closure are not yet compared. `compare_visrad(workspace,
+   solution; elements)` compares radiosity, temperatures, drive and modes element by
+   element once VisRad exports them (aa19750). *Remains:* in VisRad, compute the
+   radiosities of one saved hohlraum run at ~0.6 mm and one at 0.1 mm, save, and export
+   the Surface Element Properties of the gold objects and the capsule with the Power
+   Summary; then run `compare_visrad`, confirm the export's index base and write a
+   reader for the populated radiosity section. `write_visrad_kit` cases only for what
+   the saved runs lack: primitives with curved surfaces, a closed entrance hole, a
+   temperature-dependent albedo. A 0.1 mm run's `:sampled` view factors (60k elements)
+   take more than 5 minutes on 16 threads; the comparison there used `:centroid`
+   visibility.
 8. **VisRad import and export: what is skipped.** Each case is warned about or refused;
    most need a sample workspace that uses the feature.
    - Beams: unconverted light (read VisRad's green/red powers into the ratios of
@@ -93,45 +106,78 @@ Items 10–15 follow the 2026-10-22 literature review against Kritcher et al. 20
     swing reaches −0.181 at 5.25 ns and turns positive at 6.19 ns (Fig. 10: −0.170 at
     5.6 ns, 6.67 ns). Every published input tried moves the crossing by −0.10 to +0.16 ns;
     ~0.3 ns remains, which only the least constrained bubble inputs can carry ("The P2
-    swing", "Inner-cone SBS time histories"). *Remains:* the HYBRID-E bubble speed and
-    collision time; Izumi 2023's low-contrast stall and relaunch; the computed lips'
-    thermal-band radius against the 3–5 keV edge they are fitted to; the rise and foot on
-    the current defaults (0.06 above and ~0.03 below Fig. 10 on the 2026-10-24 baseline).
+    swing", "Inner-cone SBS time histories"). Remeasured on 874dcca without new data
+    ("The swing and the bubble without new data"; `litreview/bubble_drivers.md`): the
+    swing is unchanged since 2026-10-25; lips held at a thermal-band depth (0.30–0.36 mm,
+    an estimate) move the crossing by ≤ 0.02 ns, the wrong way; a tip slowed through the
+    trough (a 0.5 ns delay) puts the crossing at 6.58 ns but deepens the minimum by 0.04,
+    and N221204's trough contrast (16× total, 12× outer) sits at Izumi 2023's 15×
+    ballistic criterion: not adopted. *Remains:* a HYBRID-E bubble speed and collision
+    time (none found published); a thermal-band LEH radius or the warm lip's opacity; the
+    rise (0.063 above Fig. 10 at 4.5 ns, 0.075 below at 5.0 ns: the model falls into the
+    minimum later and more steeply) and the foot at 3–4 ns (0.015–0.054 above). The
+    benchmark keeps its hand-set picket ratio, and re-pointing studies use the link
+    relative to their reference (user, 2026-11-18). The link (46d88e6,
+    §5 of the same section; opt-in): `picket_fluence`, `picket_ratio` and `remake(bubble;
+    picket_ratio)` take the bubble's speed from the outer cones' energy-weighted picket
+    fluence on the wall. On N221204 a ±0.5 mm re-pointing of the outer cones along z
+    changes that fluence by ≤ 1 % and the crossing through the bubble by ≤ 0.013 ns;
+    unsplit outer quads raise it 19 % (−0.19 ns). The benchmark's pointing gives a ratio
+    of 1.147 against the calibration platform (hand-set: 1.1), on a proxy pointing and a
+    picket energy read by eye; ratios between pointings converge to < 1 %. A published
+    bubble speed at fixed picket energy and a different spot overlap would test it.
     Validation left: Young's dynamic albedo (needs N170827's delivered per-beam powers);
     Ralph 2018's 18.5 % cone fraction (needs the high-foot pointing and wall radius); the
     N210808 proxy; Callahan 2018's 39-shot curve. *Data:* bubble-tip or inner-spot
     histories (thin-wall or G-LEH), a HYBRID-E LEH-radius history, the 2DConA in-flight
     shell P2, the HYDRA multipliers behind Fig. 10, N221204's shell thickness at 5–7 ns and
-    per-cone backscatter history.
+    per-cone backscatter history; a tip position during the trough.
 11. **Shot-data calibration (CBET and effective parameters).** *State:* `n221204_cbet()`,
-    `hybride_cbet()` and `hybride_cbet_iraum()` ("Joint multi-shot CBET calibration").
-    *Remains:* fit effective parameters (cone multipliers, CBET multiplier and clamp, bubble
-    transparency, wall speed, albedo) to measured in-flight and hot-spot P2/P4 and keyhole
-    symmetry, with uncertainty; reproduce the P2-vs-Δλ sequence N210808 → N230729 and Ruof
-    2026's rise cone-fraction response (the calibrated models' dCF/dΔλ is 2–3× steeper
-    than HYDRA's flat cross-shot response); the fitted Te's dip at 5.5 ns and the peak
-    clamp below HYDRA's, Te at the 5.5 keV fit bound at 8 ns (try a drive-following Te(t)
-    prior); plasma-state tables as inputs, outer-cone depletion, an inner-quad SBS proxy,
-    the 23.5°/30° split; the two HYBRID-E models share most code and a hard-coded
-    `leh_z`. *Data:* N230729 transfer curves; per-shot plasma states.
+    `hybride_cbet()` and `hybride_cbet_iraum()`, on one builder since d72ed90 ("Joint
+    multi-shot CBET calibration"; "CBET without new data: the Δλ slope and the Te
+    history"). The models' dCF/dΔλ, 2–3× steeper than HYDRA's cross-shot response, is
+    not shown to be a model defect: on the one step with the pulse held (N220919 →
+    N221204) the models give a hot-spot P2 step of +10.7 to +13.6 µm, the measurement
+    +11.1 µm and HYDRA's runs +3.8 µm, and no model term (the clamp, a local depletion,
+    the plasma state, the outside zone) reaches HYDRA's slope. A Te(t) that follows the
+    Dante drive removes the fitted Te's dip at 5.5 ns and lifts the peak clamp into
+    HYDRA's range, but doubles the loss and worsens the blind Fig. 10 check on three
+    shots: not adopted. *Remains:* fit effective parameters (cone multipliers, CBET
+    multiplier and clamp, bubble transparency, wall speed, albedo) to measured in-flight
+    and hot-spot P2/P4 and keyhole symmetry, with uncertainty, through a flux-P2 to
+    hot-spot-P2 transfer (HYDRA's flat cross-shot dCF/dΔλ is no longer a target: user,
+    2026-11-18); Ruof 2026's asymmetric rise
+    cone-fraction response (the reduced CBET amplifies cuts and raises alike, 1.2–1.5×);
+    Te at the 5.5 keV fit bound at 8 ns; a laser-power Te prior (not run); plasma-state
+    tables as inputs, an inner-quad SBS proxy, the 23.5°/30° split. *Data:* N230729
+    transfer curves; per-shot plasma states.
 12. **Absolute energetics on N221204** (`reference/litreview/energetics.md`,
-    `late_time_drive.md`). *State:* capsule share 13.8 % and LEH 24.7 % (HYDRA 16.2 /
-    25.2); Dante 1 at 8 ns 290.9 / 314.2 eV over the initial / open area (measured 310.1),
-    computed through the hole before Dante 1 became the whole-field view (7e-5 apart on
-    the GUI default; not rerun on N221204). *Remains:*
-    - The drive after the laser falls: 37–54 eV low at bang on three shots; the missing
-      ~250–450 kJ is in the plasma, with an unpublished return rate. *Data:* HYDRA's energy
-      inventory through the coast, a post-shot synthetic Dante, Dante spectra between
-      laser-off and bang, gated LEH images after laser-off.
-    - The capsule share (2.4–4.2 points below HYDRA). *Data:* the blow-off opacity or
-      HYDRA's absorbing radius; the shell thickness at 5–7 ns; the radius histories.
-    - The early peak: 13–20 eV above Dante at 5.0–5.5 ns over the open area.
-    - Other sinks: the He gas (4.5 % in HYDRA), LEH windows; laser light reflected from a
-      surface is a loss, not re-deposited (no specular or diffuse laser reflection).
+    `late_time_drive.md`; "Absolute energetics without new data: the early peak and the
+    missing sinks"). *State* (coarse mesh, 90e28c4): capsule share 13.9 % and LEH 24.2 %
+    (HYDRA 16.2 / 25.2); Dante 1 at 8 ns 289.7 / 312.9 eV over the initial / open area
+    (measured 310.1); the whole-field view equals the view through the hole on N221204
+    within 0.1 eV. *Remains:*
+    - The rise through the peak: Dante rises 72 eV from 5 to 8 ns, the model 47 eV over
+      the initial area and 57 eV over the open area. The "early peak" (13–20 eV above
+      Dante at 5.0–5.5 ns) is the open-area face of this one error; on Dante's own
+      convention the model is within 6 eV there and 0.07 ns early. No existing input
+      within its documented range adds more than 4 eV to the rise. *Data:* a
+      thermal-band LEH radius, or HYDRA's loss history through the peak.
+    - The drive after the laser falls: 30 / 38 / 47 eV low at 8.5 / 9.0 / 9.35 ns (37–54
+      eV at bang on three shots); the missing ~250–450 kJ is in the plasma, with an
+      unpublished return rate. *Data:* HYDRA's energy inventory through the coast, a
+      post-shot synthetic Dante, Dante spectra between laser-off and bang, gated LEH
+      images after laser-off.
+    - The capsule share (2.3–4.2 points below HYDRA): it and the LEH share move against
+      each other under every input except a lower wall loss, which the DU calibration
+      rules out. *Data:* the blow-off opacity or HYDRA's absorbing radius; the shell
+      thickness at 5–7 ns; the radius histories.
+    - Sinks, sized from published numbers and not modeled: the He gas (4.5 % in HYDRA:
+      80 kJ, 3–4 eV of drive at every time); LEH windows, diffusely scattered laser
+      light (5–9 % of the light not absorbed at the first hit; one bounce sends 72 % of
+      it back to the wall) and specular glint, each under 2 eV.
     - The Zylstra pair's LEH difference is 2–4 eV too large (N191118's pointing and cone
       fraction are unpublished); the hot-spot velocity needs per-quad delivered powers.
-    - The research notes' "N221204 late-time drive ▸ What remains" predates the later
-      sections (its capsule share 11.6/12.3 % is superseded by 13.8 %): mark it.
 13. **Spectral radiosity and diagnostics** (`reference/diagnostics-design.md`).
     - Dante: measured Ni XRD and thin-filter transmissions; the SiO₂ mirror's angle scale,
       roughness and surface layer (assumed or fitted; extrapolated below 2.2 keV); the
@@ -187,10 +233,15 @@ Items 10–15 follow the 2026-10-22 literature review against Kritcher et al. 20
     - data on the conversion of overlapping colors (each color at its own flux is an
       engineering default) and on whether the 3ω intensity table applies to 1ω and 2ω
       (Mead's Iλ² scaling would shift it);
-    - a library of material defaults (albedo, conversion vs. intensity and wavelength,
-      absorption, cold reflectance), each with its data source and uncertainty, in
-      place of the per-part constants (the GUI's hohlraum 0.85/0.8, capsule 0.3/0.3, foil
-      conversion 0.02, free parts 0/0 carry no source).
+    - materials: `material_library()` holds the defaults that have a source, each
+      quantity with its source and uncertainty (154a4c5; "Material defaults and their
+      sources"). Left: the defaults without one (user): the GUI's hohlraum 0.85/0.8
+      (15 eV above the core's `gold()` on the default hohlraum; Young 2020's static
+      NIF setting is 0.8/0.9); `gold()`'s conversion 0.75, a 1 ns value below every
+      published NIF value (0.85–0.95); the foil conversion 0.05 (core) and 0.02 (GUI),
+      10–48× below the published values for gold; the capsule conversion 0.3. No
+      public 3ω broadband conversion was found for the ablators (CH, HDC, Be) or the
+      mid-Z foils (Ti–Ge, Ag), nor albedos specific to CH and Be.
 
 ## Re-pointing studies
 
@@ -200,93 +251,117 @@ analog is the dropped-bundle tutorial, `docs/literate/dropped_bundle.jl`).
 
 34. **Re-pointing studies on the public API.** *State:* `subset`, `GroupPointing`
     (`relative = true` for a rigid shift per quad), `asymmetry_objective(; reference)`,
-    `ApertureKeepOut`, `mode_uncertainty`. A study that goes beyond the tutorial still
-    calls unexported names and carries helpers of its own. *Remains:*
-    - Parameterizations: the aims of some groups free and of others held, and a power
-      scale per cone beside the aims. One `GroupPointing` takes one `by` and one set of
-      `fields`, and a parameter is held only by `lower == upper`; a composition of
-      parameterizations would replace a hand-written `apply` method.
-    - Objectives: the largest drive subject to a gate per degree on the departure from a
-      reference shape (`asymmetry_objective` weights the departures and has no gate), the
-      gate taken from `mode_uncertainty` (the rms that random pointing error gives each
-      degree), and the departure per degree as a reported quantity.
-    - Penalty terms for a custom objective: the keep-out penalty (`_keepout_penalty`),
-      the clipped, missed and direct fractions (`_penalties`), and a ceiling on the laser
-      power on named parts (a window, a shield).
-    - `Scenario`: a keyword `remake`, so that an LPI model or the deposition keywords
-      change without the positional constructor.
-    - Beams: NIF beams on VisRad's phase plates, turned to the quad frame (`_vr_turn`,
-      `_vr_reference_angle`), as a public constructor. A spot that matches no measured
-      table falls back to the analytic profile without a warning (`_vr_measured` is the
-      only check).
-    - Quads and beams: a quad's mean aim, and a per-beam pointing table applied to a
-      quad model and back.
-    - Geometry queries for overlap and reach estimates: `BeamFrame`, `port_basis`,
-      `visible`, `closest_hit`, the beam's section at a plane (`_beam_at_plane`) and the
-      profile's intensity and envelope fields (`_vr_intensity`, `_vr_envelope`) are
-      unexported or internal; settle which become public.
-    - A summary of the result: aim shifts (mean and maximum), cone fraction, keep-out
-      margin and clipped fraction.
-    - Staged runs: the latest study re-points quads in stages on progressively tighter
-      tolerances, then switches to per-beam pointing for a final polish. Each stage is
-      a parameterization and an objective rebuilt by hand on the previous stage's beams
-      (`subset(scenario, keep; parameterization)` on `result.beams`, `relative = true`).
-      A schedule of stages (parameterization, gates, iteration budget), each started
-      from the last one's beams and each result kept, would replace the chain; the step
-      from quads to beams is the general case of a change of parameterization.
+    `ApertureKeepOut`, `mode_uncertainty`; since 0594191 also held parameters and power
+    scales per group (`HeldParameters`, `PowerScales`), `remake(::Scenario)`, NIF beams on
+    VisRad's plates in the quad frame (`visrad_nif_spot`, `spot_frame = :quad`), quads to
+    beams and back (`nif_beams(quads)`, `nif_quads(beams)`, an SST table through
+    `read_visrad_sst(; template)`) and `pointing_summary` ("Re-pointing studies on the
+    public API"); the gated objective and the penalty terms are items 36 and 35's
+    (`drive_objective` with `mode_gate`; `keepout_penalty`, `light_ceiling`). *Remains:*
+    - Geometry queries for overlap and reach estimates, to settle (user): `port_basis`
+      and `visible` are documented and stable (export them); `closest_hit` takes the
+      internal `BVH` (a method on the target instead); the beam's section at a plane
+      (`_beam_at_plane`) is shaped for CBET (a `beam_section(beam, point, normal)`);
+      `BeamFrame`, `_vr_intensity` and `_vr_envelope` stay internal (`intensity` is the
+      public path; an envelope method on the profile would cover the last).
+    - `GroupPointing`'s default `unit = :beam` against the quads-as-units rule (item 23);
+      a default `subset` and `parameters(...)` named values for the composed
+      parameterizations (`subset`'s default regroups by `:group`, which renames
+      parameters).
 
-    *Check:* the tutorial extended to these cases on exported names only.
+    The tutorial's section "A re-pointing study, end to end" walks these on exported
+    names only (a96792f): quads held, a power scale per cone, the gates, the ceiling, a
+    hardware keep-out and the light on a part as constraints, and a per-beam polish as a
+    second call on the first result's beams (`remake(scenario; parameterization)`; a
+    schedule type saved no line over the two calls and hid the check between them).
 35. **Capture and clearance rules in the optimization.** *State:* `clearance` and
     `talis_check` judge a finished design on the worst case over pointing, positioning
     and focus errors (reports, not differentiable), and `placement_sweep` runs the
-    capture and clearance checks at each step. The optimizer has `ApertureKeepOut` and
-    `SphereKeepOut` (entrance-hole rims, the capsule) and the squared clipped, missed and
-    direct fractions, so a re-pointed design is reviewed afterwards and what it breaks is
-    repaired by hand. *Remains:*
-    - a keep-out for named hardware: the envelope's worst-case distance to a part,
-      smooth in aim and defocus, as the aperture keep-out is for a rim;
-    - a floor on the fraction captured by named parts (3ω capture) and a ceiling on the
-      power on others;
-    - the TaLIS rules that carry a margin in mm or degrees (incidence, 3ω and 1ω
-      clearance) as penalties built from the quantities `talis_check` reports;
+    capture and clearance checks at each step. For the optimizer, since 2c1825c ("Capture
+    and clearance rules as optimization quantities"): the keep-out terms as public
+    quantities (`keepout_clearance`, `keepout_penalty`, `direct_fraction`); the light on
+    named parts for floors and ceilings (`power_fraction` with `clipped_fraction(ev,
+    names...)`); `HardwareKeepOut`, the exact worst-case distance from a beam's envelope
+    to named hardware, smooth in the beams and within 1e-6 mm of `clearance` (lower by up
+    to 0.4 mm where `clearance` skips points hidden from the beam, as `talis_check` does
+    not); and the TaLIS rules that carry a margin, each within 1e-7 mm of `talis_check`
+    on a mock-up (6e-6 mm on deep violations, below): the 3ω clearance (`HardwareKeepOut`
+    with `tolerance`, the 0.5° term inside the minimization), 3ω capture
+    (`CaptureKeepIn`), incidence (`IncidenceRule`) and the 1ω clearance
+    (`Omega1KeepOut`). Each has a `keepout_clearance` method, so each serves as a penalty
+    or as a constraint (item 36). *Remains:*
     - a loop that runs `clearance` and `talis_check` on the result and tightens the
-      keep-outs' minimums until the review passes, since a penalty is not a constraint
-      (item 21).
+      minimums until the review passes (item 21);
+    - capture fractions per beam (today's are totals over the beams);
+    - the 1ω clearance by an exact search (branch and bound now: ~3.5 ms per beam, three
+      depositions' worth for 48 quads); an incidence with a gradient on curved parts
+      (the angle is constant per facet, so the gradient is zero away from facet edges);
+    - 1ω management, the diagnostics-to-1ω rule, the TAS stay-in rule and the LEH review
+      tier have no quantity;
+    - `keepout_penalty` skips every non-finite clearance, so a −Inf (a beam that misses
+      every capture part with no free edge) is dropped silently: skip +Inf only (user);
+    - `_ellipse_distance` (`clearance.jl`, also behind `talis_check`) loses digits for
+      points inside the ellipse within ~1e-9 mm of its major axis: deep violations
+      (below about −0.75 mm) read up to 6e-5 mm too low. Treating points within 1e-6 of
+      the semi-minor axis as on the axis changes the distance at second order only; it
+      changes report values (user).
 
     *Check:* each surrogate against `clearance` or `talis_check` on the worst case, as
-    the tutorial does for the aperture keep-out (agreement to a few micrometers).
+    the tutorial does for the aperture keep-out (agreement to a few micrometers); a
+    re-pointed design that passes `talis_check` without repair by hand.
 36. **Constrained re-pointing stalls at its bounds.** The study's objective matches the
     capsule modes of a reference drive while holding the peak laser irradiance over the
     wall's elements at or below the reference pointing's (high irradiance drives the
-    gold bubble, item 10).
-    Started on the final tolerances, the optimization ends with parameters at their
-    bounds and the objective unmet; the staged runs of item 34 are the way around it.
-    *State:* no irradiance ceiling in the core (`irradiance_objective` is a foil's
-    uniformity and mean; `laser_flux` gives the wall's values, with no smooth maximum).
-    Constraints are penalties on a local L-BFGS-B (item 21), and the result names the
-    parameters at a bound (`at_bounds`) but not the constraints that are active or
-    unmet. Leads, not yet reproduced: the ceiling is active at the start (the reference
-    is its own limit), so a tight mode gate and the ceiling pull against each other from
-    the first step; a stiff penalty is ill-conditioned, which staged tightening eases;
-    the maximum over elements has a kink wherever the peak moves to another element or
-    spot, and its gradient sees one element only.
+    gold bubble, item 10); started on the final tolerances, its penalty runs ended with
+    parameters at their bounds and the objective unmet, and stages set by hand were the
+    way around it. *State* (7045105, "Constrained re-pointing: an irradiance ceiling and
+    mode gates"): `optimize_pointing(...; constraints)` solves inequality `Constraint`s
+    by an augmented Lagrangian around the same L-BFGS-B, and the result reports each
+    constraint against its limit and what stopped the run (`PointingResult.constraints`,
+    `outcome`); `irradiance_ceiling` (an area-weighted 64-norm as the smooth stand-in,
+    `peak_irradiance` as the reported quantity, a `weight` per beam for outer-cone or
+    picket-fluence variants), `mode_gate` and `mode_departure`, `drive_objective`. On the
+    dropped-bundle tutorial's case one call meets the four gates under the ceiling from
+    three starts (488–765 evaluations before 320335b, which made constrained runs
+    converge at the final inner tolerance only: 1.5–6 times the evaluations since), at
+    0.4 % more drive than the penalty form reaches, staged by hand or not. On the study
+    itself (scratch runs, 2026-11-18) one call from the as-shot start meets every gate
+    and the ceiling inside the box, every constraint active, at the drive of the earlier
+    design without a ceiling; the study's penalty form, run the same way, stalls with
+    the peak 7 % over the limit and a parameter at its bound (the reward for symmetry
+    inside the gates balances the ceiling's penalty), so the stall was the penalty form,
+    not infeasibility. A per-beam polish (`parameters(p, beams)` hands a quad result to
+    per-beam shifts) moves beams by micrometers and the drive not at all. Since bf79dc2
+    a run continues from a result with its multipliers (`from`), stops at a `time_limit`
+    with its best design, reports the drive ratio and departures in `pointing_summary`,
+    and a ceiling refuses a reference evaluated with another laser–plasma model.
     *Remains:*
-    - a wall-irradiance ceiling for objectives: the peak over the wall's elements as the
-      reported quantity, and a smooth stand-in for the optimizer (a high norm over area,
-      or a hinge summed over the elements above the limit) checked against it across
-      mesh sizes, with the limit taken from a reference design's evaluation;
-    - constraints handled as constraints: an augmented Lagrangian or a built-in
-      continuation in the penalty weights and gates, around the same L-BFGS-B;
-    - a result that reports each constraint's value against its limit, and whether the
-      limit or the box stopped the run (a box hit with the objective unmet reads today
-      as an ordinary `:converged`);
-    - a public case of the same kind: the dropped-bundle tutorial's with a ceiling at
-      the reference's irradiance, started on the final tolerances.
+    - the study's CBET and window variants, its other remedies, and a ray-traced
+      check of the designs;
+    - `irradiance_ceiling`'s default `exact = false` (the 64-norm alone left the peak
+      0.4–0.5 % over the limit on the study and up to 3 % on a 0.45 mm mesh, depending on
+      the path the run takes; `exact = true` holds the peak itself, at 0.9997 of the
+      reference's on the study in one call, and lands a little below the limit with one
+      or two gates up to 3 % inside theirs) (user);
+    - `mode_gate` takes coefficient vectors and cannot check that its reference was
+      evaluated with the scenario's laser–plasma model, as `irradiance_ceiling` now does:
+      a method on an `Evaluation` that records it;
+    - bound sensitivities (`PointingResult.bound_sensitivity`) match the re-optimized
+      objective on a closed-form problem but overstate the box's cost about fiftyfold
+      on the study, where the gates leave a flat family of designs and the multipliers
+      are not unique: a direct estimate (a restart with the bound moved, through
+      `from`) could be built in;
+    - which quantity the ceiling should hold: the published bubble scalings use the
+      outer cones' picket fluence on the wall, not the peak irradiance, and on N221204
+      a z re-pointing of the outer cones changes that fluence by ≤ 1 % while spot
+      overlap changes it by up to 19 % (item 10; `picket_fluence`; the peak ceiling is
+      an engineering limit) (user);
+    - the engineering defaults `feasibility = 1e-3`, `p = 64`, `outer = 30` (user review);
+    - the scales of the ready-made constraints (`clearance_floor`: 1 mm; `light_ceiling`
+      and `light_floor`: the limit, at least 1e-3 of the delivered power) are engineering
+      defaults (user review).
 
-    The goal is that objectives of this kind optimize in one call, without stages set
-    by hand; reproducing the study's stall exactly is not needed. *Check:* the public
-    case reaches its gates under the ceiling in one call, to the design a hand-staged
-    run reaches.
+    *Check:* the study's objective reaches its gates under the exact peak in one call.
 
 ## Coupling and new modes
 
