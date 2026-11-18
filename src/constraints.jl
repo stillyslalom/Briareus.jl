@@ -78,14 +78,16 @@ function _constraint_rows(ev::Evaluation, cs::Tuple, multipliers, feasibility::F
     rows = ConstraintRow[]
     k = 0
     for c in cs
-        v = c.f(ev)
+        # the reported value: the exact quantity where the constraint's function is a
+        # smooth stand-in for one (`_exact_value`), else the function's own
+        v = something(_exact_value(c.f, ev), c.f(ev))
         vals = v isa Number ? [Float64(ForwardDiff.value(v))] : Float64.(ForwardDiff.value.(v))
-        g = _violations(c, ev)
+        sg = c.upper ? 1 : -1
         n = length(vals)
         for i in 1:n
             k += 1
             lim = c.limit[length(c.limit) == 1 ? 1 : i]
-            gi = Float64(ForwardDiff.value(g[i]))
+            gi = sg * (vals[i] - lim) / c.scale[length(c.scale) == 1 ? 1 : i]
             label = n == 1 && isempty(c.labels) ? string(c.name) :
                     string(c.name, "[", isempty(c.labels) ? string(i) : c.labels[i], "]")
             status = gi > feasibility ? :violated : gi >= -feasibility ? :active : :satisfied
@@ -95,6 +97,11 @@ function _constraint_rows(ev::Evaluation, cs::Tuple, multipliers, feasibility::F
     end
     return rows
 end
+
+# The exact quantity that a constraint's function stands in for smoothly (a scalar, at a
+# Float64 evaluation), or `nothing` where the function is itself the quantity: the
+# irradiance ceiling's peak when it holds the peak (`exact = true`).
+_exact_value(f, ev) = nothing
 
 # All constraints' normalized violations at `ev`, concatenated (Float64).
 _all_violations(cs::Tuple, ev) =
@@ -161,10 +168,14 @@ Base.@nospecializeinfer function _constrained_pointing(
     Vold = Inf
     last = nothing
     reason = :converged
+    # the constraints as the inner problems see them: an exact ceiling's stand-in at a
+    # working limit, lowered while the exact value ends above the limit
+    work = cs
+    evx = ev
     while true
         k += 1
         λs = _split_multipliers(λ, lens)
-        aug = _Augmented(objective, cs, λs, μ)
+        aug = _Augmented(objective, work, λs, μ)
         cb = callback === nothing ? nothing : let ne = ne, ni = ni, k = k
             st -> callback(merge(st, (; evaluations = st.evaluations + ne,
                                       iteration = st.iteration + ni, outer = k)))
@@ -173,7 +184,8 @@ Base.@nospecializeinfer function _constrained_pointing(
                     evaluations = evaluations - ne, show_trace, g_tol = tol, callback = cb,
                     f_reltol = _AL_F_RELTOL[])
         x, ne, ni, last = copy(r.x), ne + r.evaluations, ni + r.iterations, r
-        g = _all_violations(cs, evaluate(s, x))
+        evx = evaluate(s, x)
+        g = _all_violations(work, evx)
         V = maximum(abs, max.(g, -λ ./ μ); init = 0.0)
         λ = max.(0.0, λ .+ μ .* g)
         if r.stopped
@@ -185,22 +197,47 @@ Base.@nospecializeinfer function _constrained_pointing(
         # tolerance (a start already feasible and active, as on a restart, would otherwise
         # pass on the first, loose inner run with zero multipliers wherever the objective's
         # gradient is below 1e-3)
-        feasible && V <= feasibility && r.reason === :converged && tol <= g_tol && break
+        if feasible && V <= feasibility && r.reason === :converged && tol <= g_tol
+            # an exact ceiling above its limit: its stand-in's working limit scaled by
+            # limit/exact, and the run continued from here with the same multipliers
+            lowered = _lower_exact_limits(cs, work, evx, feasibility)
+            lowered === nothing && break
+            work = lowered
+            # the new limit's violation is not a stall: the penalty stays
+            V = Inf
+        end
         if k >= outer
             reason = :iterations
             break
         end
-        V > Vold / 2 && (μ *= 10)
+        V > Vold / 2 && V < Inf && (μ *= 10)
         !feasible && μ > μmax && break                    # infeasible at the largest penalty
         Vold = V
         tol = max(Float64(g_tol), tol / 10)
     end
-    evx = evaluate(s, x)
     rows = _constraint_rows(evx, cs, λ, feasibility)
     stopped = last.stopped
     return _pointing_result(s, x, Float64(ForwardDiff.value(objective(evx))), f0, ni, ne,
                             stopped, reason, last.result, lower, upper; constraints = rows,
                             outer = k)
+end
+
+# The working constraints with each exact ceiling whose exact value at `ev` exceeds its
+# limit by more than `feasibility` (normalized) given its stand-in's working limit times
+# limit/exact, or `nothing` when every exact value is within it. The stand-in tracks the
+# exact value nearly in proportion near the limit (a p-norm against the peak), so the
+# scaled limit lands the exact value near the limit; a few rounds settle the remainder.
+function _lower_exact_limits(cs::Tuple, work::Tuple, ev::Evaluation, feasibility::Float64)
+    lowered = false
+    new = map(cs, work) do c, w
+        e = _exact_value(c.f, ev)
+        (e === nothing || !c.upper) && return w
+        L, S = c.limit[1], c.scale[1]
+        (e - L) / S > feasibility || return w
+        lowered = true
+        return Constraint(w.name, w.f, w.limit .* (L / e), w.scale, w.upper, w.labels)
+    end
+    return lowered ? new : nothing
 end
 
 _split_multipliers(λ::Vector{Float64}, lens::Tuple) =
@@ -292,7 +329,7 @@ end
 
 """
     irradiance_ceiling(reference, names...; limit = peak_irradiance(reference, names...),
-                       p = 64, weight = nothing, scale = limit) -> Constraint
+                       p = 64, weight = nothing, scale = limit, exact = false) -> Constraint
 
 A ceiling on the absorbed laser irradiance over the elements of the named parts or
 components: a [`Constraint`](@ref) named `:irradiance` whose value is the smooth
@@ -313,17 +350,31 @@ expresses on the same machinery.
 
 The constraint bounds the norm, not the peak itself: at the limit the field's hot spots
 are as hot, in the `p`-norm mean, as the reference's, while the peak over the elements
-may exceed the limit: by up to 1 % at `p = 64` in the dropped-bundle case, 3 % at
-`p = 16` (research notes, "Constrained re-pointing"). Compare
-[`peak_irradiance`](@ref) on the result, and lower the limit by that margin where it
-must hold strictly. Across meshes the ceiling is a ratio to the reference on the same
+may exceed the limit, by a margin that depends on where the run ends: on the tutorial's
+mesh 0.1 % at `p = 64` and 3 % at `p = 16`, and on the dropped-bundle test case (0.45 mm
+wall elements) 3 % at `p = 64` for one of two designs that meet the same gates, under
+another floating-point rounding of the same run (research notes, "Constrained
+re-pointing").
+
+`exact = true` holds the peak itself. The optimizer still works on the norm, but once
+the constrained run has converged it compares the [`peak_irradiance`](@ref) with the
+limit; while the peak exceeds it by more than the run's `feasibility` (in units of
+`scale`), the norm's working limit is scaled by limit/peak and the run continues from
+the same design, multipliers and penalty. The reported value
+([`check_constraints`](@ref), `PointingResult.constraints`) is then the peak against
+the limit, and a converged run ends with the peak at or below the limit within
+`feasibility`. The cost is the further outer iterations (research notes, "Constrained
+re-pointing").
+
+Across meshes the ceiling is a ratio to the reference on the same
 mesh, which changes less with the element size than the peak's ratio does (rms
 difference 1.0 % against 1.3 % between 0.2 and 0.45 mm elements near the limit), while
 the peak itself falls on a coarser mesh.
 """
 function irradiance_ceiling(reference::Evaluation, names::Symbol...;
                             limit::Union{Nothing,Real} = nothing, p::Real = 64,
-                            weight = nothing, scale::Union{Nothing,Real} = nothing)
+                            weight = nothing, scale::Union{Nothing,Real} = nothing,
+                            exact::Bool = false)
     t = reference.scenario.target
     es = _named_elements(t, names)
     P = Float64.(ForwardDiff.value.(_counted_power(reference, weight)))
@@ -331,23 +382,37 @@ function irradiance_ceiling(reference::Evaluation, names::Symbol...;
     pk > 0 || throw(ArgumentError("the reference deposits no laser power on $(join(names, ", "))"))
     n_ref = _irradiance_norm(P, t, es, Float64(p))
     lim = limit === nothing ? pk : Float64(limit)
-    return Constraint(:irradiance, _CeilingValue(t, es, Float64(p), pk / n_ref, weight);
+    lim > 0 || throw(ArgumentError("the irradiance limit must be positive"))
+    return Constraint(:irradiance, _CeilingValue(t, es, Float64(p), pk / n_ref, weight, exact);
                       upper = lim, scale = something(scale, lim))
 end
 
-# The ceiling's value: the irradiance norm on the reference's peak scale.
+# The ceiling's value: the irradiance norm on the reference's peak scale; with `exact`,
+# the reported value is the peak itself.
 struct _CeilingValue{W}
     target::Target
     elements::Vector{Int}
     p::Float64
     factor::Float64
     weight::W
+    exact::Bool
 end
 
 function (c::_CeilingValue)(ev::Evaluation)
+    _check_ceiling(c, ev)
+    return c.factor * _irradiance_norm(_counted_power(ev, c.weight), c.target, c.elements, c.p)
+end
+
+function _check_ceiling(c::_CeilingValue, ev::Evaluation)
     ev.scenario.target === c.target ||
         throw(ArgumentError("irradiance_ceiling: the evaluation is on another target than the reference"))
-    return c.factor * _irradiance_norm(_counted_power(ev, c.weight), c.target, c.elements, c.p)
+    return nothing
+end
+
+function _exact_value(c::_CeilingValue, ev::Evaluation)
+    c.exact || return nothing
+    _check_ceiling(c, ev)
+    return _peak(Float64.(ForwardDiff.value.(_counted_power(ev, c.weight))), c.target, c.elements)
 end
 
 # ---------------------------------------------------------------------------------------
