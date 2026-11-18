@@ -5,16 +5,14 @@ it. What has been done is in the git history and in `reference/research-notes.md
 the sections named here. Items marked *(survey)* come from the code survey of 2026-11-02;
 those under "Correctness" were read in the code, the rest are leads to confirm first.
 
+**Priorities** (user review, 2026-11-18). First, the hohlraum physics against shot data:
+the gold bubble (item 10), CBET (item 11), then the energetics and the wall and spectral
+closures (items 12, 4, 13, 17). Second, re-pointing studies: the public API they need
+(item 34), capture and clearance rules inside the optimization (item 35) and the
+constrained runs that stall at their bounds and force staged tolerances (item 36).
+
 ## Release
 
-1. **Releases 0.2.** Briareus 0.1.0 and BriareusGUI 0.1.0 are in General, both at the
-   commit of tag `v0.1.0` (6d032b1; General PR 174205 for the GUI). Main has moved on:
-   the GUI on main calls core API added since 0.1.0 (`FaceFlux`, `wall_temperature`,
-   `HohlraumProfile`, `port_frame(facility, port)`, `drive_history`'s `per_component`,
-   among others) while its `Project.toml` still allows `Briareus = "0.1"`. The next
-   release registers core 0.2 (APIs broke since 0.1) and the GUI 0.2 with its compat
-   raised to `Briareus = "0.2"`, core first. Check `pkg> app add BriareusGUI` and
-   `briareus --shortcut` from the registry once the 0.1 GUI is installable.
 2. **Desktop launch.**
    - The macOS app bundle and splash are untested (the macOS `qml` tool needs each Qt
      framework folder on dyld's fallback path).
@@ -35,6 +33,12 @@ those under "Correctness" were read in the code, the rest are leads to confirm f
 
 ## VisRad parity and facility practice
 
+*Data on hand (2026-11-18):* many VisRad runs are saved outside the repository: hohlraum
+workspaces with VisRad's computed results at several mesh sizes, the probe kits, SST
+pointing exports and a TaLIS report. They are non-public. Models may be tuned to and
+checked against them; the files and their contents stay out of the repository, and the
+notes describe them generically. Check them before listing a run as missing.
+
 6. **VisRad deposition: shadowing and beam totals.** *State:* `VisRadProfile` is VisRad's
    own profile law: 0.1–0.3 % rms per element on plates, 0.45–0.7 % on hohlraum walls
    ("VisRad probe kits (2026-10-27): results"). *Remains:*
@@ -49,9 +53,10 @@ those under "Correctness" were read in the code, the rest are leads to confirm f
 
    *Data:* occluders ~2 and 10 mm upstream and a foil off focus; the Laser Beam Summary
    export of the spot-rotation workspace (`read_visrad_summary` end to end).
-7. **Benchmark against VisRad.** Run `write_visrad_kit` cases at work and compare with
-   `compare_visrad`: VisRad's radiosity, absolute drive levels and mode amplitudes
-   (deposition alone is compared so far).
+7. **Benchmark against VisRad.** Compare VisRad's radiosity, absolute drive levels and
+   mode amplitudes with `compare_visrad` (deposition alone is compared in the repository
+   so far). The saved hohlraum runs hold VisRad's results: start with them, and build
+   `write_visrad_kit` cases only for what they lack.
 8. **VisRad import and export: what is skipped.** Each case is warned about or refused;
    most need a sample workspace that uses the feature.
    - Beams: unconverted light (read VisRad's green/red powers into the ratios of
@@ -186,6 +191,102 @@ Items 10–15 follow the 2026-10-22 literature review against Kritcher et al. 20
       absorption, cold reflectance), each with its data source and uncertainty, in
       place of the per-part constants (the GUI's hohlraum 0.85/0.8, capsule 0.3/0.3, foil
       conversion 0.02, free parts 0/0 carry no source).
+
+## Re-pointing studies
+
+Items 34–36 come from the user's review of 2026-11-18, after a study that drops a
+bundle and re-points the remaining quads to hold a reference drive shape (the public
+analog is the dropped-bundle tutorial, `docs/literate/dropped_bundle.jl`).
+
+34. **Re-pointing studies on the public API.** *State:* `subset`, `GroupPointing`
+    (`relative = true` for a rigid shift per quad), `asymmetry_objective(; reference)`,
+    `ApertureKeepOut`, `mode_uncertainty`. A study that goes beyond the tutorial still
+    calls unexported names and carries helpers of its own. *Remains:*
+    - Parameterizations: the aims of some groups free and of others held, and a power
+      scale per cone beside the aims. One `GroupPointing` takes one `by` and one set of
+      `fields`, and a parameter is held only by `lower == upper`; a composition of
+      parameterizations would replace a hand-written `apply` method.
+    - Objectives: the largest drive subject to a gate per degree on the departure from a
+      reference shape (`asymmetry_objective` weights the departures and has no gate), the
+      gate taken from `mode_uncertainty` (the rms that random pointing error gives each
+      degree), and the departure per degree as a reported quantity.
+    - Penalty terms for a custom objective: the keep-out penalty (`_keepout_penalty`),
+      the clipped, missed and direct fractions (`_penalties`), and a ceiling on the laser
+      power on named parts (a window, a shield).
+    - `Scenario`: a keyword `remake`, so that an LPI model or the deposition keywords
+      change without the positional constructor.
+    - Beams: NIF beams on VisRad's phase plates, turned to the quad frame (`_vr_turn`,
+      `_vr_reference_angle`), as a public constructor. A spot that matches no measured
+      table falls back to the analytic profile without a warning (`_vr_measured` is the
+      only check).
+    - Quads and beams: a quad's mean aim, and a per-beam pointing table applied to a
+      quad model and back.
+    - Geometry queries for overlap and reach estimates: `BeamFrame`, `port_basis`,
+      `visible`, `closest_hit`, the beam's section at a plane (`_beam_at_plane`) and the
+      profile's intensity and envelope fields (`_vr_intensity`, `_vr_envelope`) are
+      unexported or internal; settle which become public.
+    - A summary of the result: aim shifts (mean and maximum), cone fraction, keep-out
+      margin and clipped fraction.
+    - Staged runs: the latest study re-points quads in stages on progressively tighter
+      tolerances, then switches to per-beam pointing for a final polish. Each stage is
+      a parameterization and an objective rebuilt by hand on the previous stage's beams
+      (`subset(scenario, keep; parameterization)` on `result.beams`, `relative = true`).
+      A schedule of stages (parameterization, gates, iteration budget), each started
+      from the last one's beams and each result kept, would replace the chain; the step
+      from quads to beams is the general case of a change of parameterization.
+
+    *Check:* the tutorial extended to these cases on exported names only.
+35. **Capture and clearance rules in the optimization.** *State:* `clearance` and
+    `talis_check` judge a finished design on the worst case over pointing, positioning
+    and focus errors (reports, not differentiable), and `placement_sweep` runs the
+    capture and clearance checks at each step. The optimizer has `ApertureKeepOut` and
+    `SphereKeepOut` (entrance-hole rims, the capsule) and the squared clipped, missed and
+    direct fractions, so a re-pointed design is reviewed afterwards and what it breaks is
+    repaired by hand. *Remains:*
+    - a keep-out for named hardware: the envelope's worst-case distance to a part,
+      smooth in aim and defocus, as the aperture keep-out is for a rim;
+    - a floor on the fraction captured by named parts (3ω capture) and a ceiling on the
+      power on others;
+    - the TaLIS rules that carry a margin in mm or degrees (incidence, 3ω and 1ω
+      clearance) as penalties built from the quantities `talis_check` reports;
+    - a loop that runs `clearance` and `talis_check` on the result and tightens the
+      keep-outs' minimums until the review passes, since a penalty is not a constraint
+      (item 21).
+
+    *Check:* each surrogate against `clearance` or `talis_check` on the worst case, as
+    the tutorial does for the aperture keep-out (agreement to a few micrometers).
+36. **Constrained re-pointing stalls at its bounds.** The study's objective matches the
+    capsule modes of a reference drive while holding the peak laser irradiance over the
+    wall's elements at or below the reference pointing's (high irradiance drives the
+    gold bubble, item 10).
+    Started on the final tolerances, the optimization ends with parameters at their
+    bounds and the objective unmet; the staged runs of item 34 are the way around it.
+    *State:* no irradiance ceiling in the core (`irradiance_objective` is a foil's
+    uniformity and mean; `laser_flux` gives the wall's values, with no smooth maximum).
+    Constraints are penalties on a local L-BFGS-B (item 21), and the result names the
+    parameters at a bound (`at_bounds`) but not the constraints that are active or
+    unmet. Leads, not yet reproduced: the ceiling is active at the start (the reference
+    is its own limit), so a tight mode gate and the ceiling pull against each other from
+    the first step; a stiff penalty is ill-conditioned, which staged tightening eases;
+    the maximum over elements has a kink wherever the peak moves to another element or
+    spot, and its gradient sees one element only.
+    *Remains:*
+    - a wall-irradiance ceiling for objectives: the peak over the wall's elements as the
+      reported quantity, and a smooth stand-in for the optimizer (a high norm over area,
+      or a hinge summed over the elements above the limit) checked against it across
+      mesh sizes, with the limit taken from a reference design's evaluation;
+    - constraints handled as constraints: an augmented Lagrangian or a built-in
+      continuation in the penalty weights and gates, around the same L-BFGS-B;
+    - a result that reports each constraint's value against its limit, and whether the
+      limit or the box stopped the run (a box hit with the objective unmet reads today
+      as an ordinary `:converged`);
+    - a public case of the same kind: the dropped-bundle tutorial's with a ceiling at
+      the reference's irradiance, started on the final tolerances.
+
+    The goal is that objectives of this kind optimize in one call, without stages set
+    by hand; reproducing the study's stall exactly is not needed. *Check:* the public
+    case reaches its gates under the ceiling in one call, to the design a hand-staged
+    run reaches.
 
 ## Coupling and new modes
 
