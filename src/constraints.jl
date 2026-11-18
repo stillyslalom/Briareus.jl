@@ -433,7 +433,7 @@ function drive_objective(; drive::Real, clip = 10.0, missed = 10.0, direct = 10.
     return function (ev::Evaluation)
         J = -mean_flux(ev) / drive
         J += _penalties(ev; clip, missed, direct, direct_names)
-        J += _keepout_penalty(keepout, ev.beams)
+        J += keepout_penalty(keepout, ev.beams)
         return J
     end
 end

@@ -797,7 +797,7 @@ function symmetry_objective(; modes = (2 => 1.0, 4 => 1.0), odd = 1.0, lmax::Int
             odd > 0 && (J += odd * sum(v[l+1] for l in 1:2:lmax))
         end
         J += _penalties(ev; clip, missed, direct, direct_names)
-        J += _keepout_penalty(keepout, ev.beams)
+        J += keepout_penalty(keepout, ev.beams)
         drive === nothing || (J += drive_weight * (a[1] / drive - 1)^2)
         return J
     end
@@ -909,7 +909,7 @@ function asymmetry_objective(; modes = (1 => 1.0, 2 => 1.0, 3 => 1.0, 4 => 1.0),
             end
         end
         J += _penalties(ev; clip, missed, direct, direct_names)
-        J += _keepout_penalty(keepout, ev.beams)
+        J += keepout_penalty(keepout, ev.beams)
         drive === nothing || (J += drive_weight * (c[1] / sqrt(4π) / drive - 1)^2)
         return J
     end
@@ -1051,7 +1051,7 @@ function face_flux_objective(; uniformity = 1.0, rms_scale = nothing, flux = not
         H̄, σ = _face_terms(ev)
         J = w * σ^2
         J += _penalties(ev; clip, missed, direct, direct_names)
-        J += _keepout_penalty(keepout, ev.beams)
+        J += keepout_penalty(keepout, ev.beams)
         flux === nothing || (J += flux_weight * (H̄ / flux - 1)^2)
         return J
     end

@@ -49,7 +49,7 @@
     # the penalty: weight × Σ max(0, minimum − c)²
     kp = SphereKeepOut(ts; minimum = 0.5, weight = 3.0)
     c = sphere_clearance(kp, sbeam.(h))
-    @test Briareus._keepout_penalty(kp, sbeam.(h)) ≈ 3 * sum(max(0, 0.5 - x)^2 for x in c) rtol = 1e-12
+    @test keepout_penalty(kp, sbeam.(h)) ≈ 3 * sum(max(0, 0.5 - x)^2 for x in c) rtol = 1e-12
 end
 
 # The aperture keep-out on holes of any shape, against direct geometric computations:

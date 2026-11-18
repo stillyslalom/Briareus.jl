@@ -747,8 +747,8 @@ end
     p = GroupPointing(qs; by = :beam, fields = (:z, :phi))
     g = ForwardDiff.gradient(x -> sum(aperture_clearance(ko, apply(p, x))), initial_parameters(p))
     @test all(isfinite, g) && norm(g) > 0
-    @test Briareus._keepout_penalty(ApertureKeepOut(th; minimum = -1.0), qs) == 0
-    @test Briareus._keepout_penalty(ApertureKeepOut(th; minimum = 1.0, weight = 2.0), qs) ≈
+    @test keepout_penalty(ApertureKeepOut(th; minimum = -1.0), qs) == 0
+    @test keepout_penalty(ApertureKeepOut(th; minimum = 1.0, weight = 2.0), qs) ≈
           2 * sum((1 .- aperture_clearance(ApertureKeepOut(th), qs)) .^ 2)
     # every piece of one part (as a GUI hohlraum part's): one hole per plane, the same
     # rims and clearances as the hohlraum whose holes are parts of their own
@@ -779,8 +779,8 @@ end
     g = ForwardDiff.gradient(x -> sum(sphere_clearance(kc, apply(p, x))), initial_parameters(p))
     @test all(isfinite, g) && norm(g) > 0
     both = (ApertureKeepOut(tc; minimum = 0.2), SphereKeepOut(tc; minimum = 0.2))
-    @test Briareus._keepout_penalty(both, close) ≈
-          sum(Briareus._keepout_penalty(k, close) for k in both)
+    @test keepout_penalty(both, close) ≈
+          sum(keepout_penalty(k, close) for k in both)
 end
 
 @testset "I/O" begin

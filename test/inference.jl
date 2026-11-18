@@ -263,7 +263,7 @@ end
                     @test _inf_jet_clean(JET.report_opt, deposit, s.deposition, beams)
                     @test _inf_jet_clean(JET.report_opt, (o, b, η) -> deposit(o, b; absorption = η),
                                          s.deposition, beams, eltype(x)(0.9))
-                    @test _inf_jet_clean(JET.report_opt, Briareus._keepout_penalty, keepout, beams)
+                    @test _inf_jet_clean(JET.report_opt, keepout_penalty, keepout, beams)
                     @test _inf_jet_clean(JET.report_call, aperture_clearance, keepout[1], beams)
                     @test _inf_jet_clean(JET.report_opt, hardware_clearance, hardware, beams)
                     @test _inf_jet_clean(JET.report_call, hardware_clearance, hardware, beams)

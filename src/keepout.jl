@@ -460,6 +460,3 @@ function keepout_penalty(k, beams::AbstractVector{<:Beam})
     J = k.weight * sum(max(zero(ci), k.minimum - ci)^2 for ci in c if isfinite(ci); init = 0.0)
     return convert(eltype(c), J)
 end
-
-# The name the objectives call (their constructors are edited separately).
-const _keepout_penalty = keepout_penalty
