@@ -648,7 +648,10 @@ end
 
 # Axial position (relative to best focus) where the beam axis first meets a target
 # component; the aim plane if it never does (or `miss`, when given).
-function _landing(t::Target, env::BeamEnvelope, tgt_idx; miss = nothing)
+_landing(t::Target, env::BeamEnvelope, tgt_idx; miss = nothing) = first(_landing_hit(t, env, tgt_idx; miss))
+
+# `_landing` and the component met (0 if none).
+function _landing_hit(t::Target, env::BeamEnvelope, tgt_idx; miss = nothing)
     far = 4 * (t.scale + norm(env.aim)) + 1
     o = env.aim - far * env.k
     traveled = 0.0
@@ -656,12 +659,12 @@ function _landing(t::Target, env::BeamEnvelope, tgt_idx; miss = nothing)
         τ, tri = closest_hit(t.bvh, o, env.k)
         tri == 0 && break
         x = o + τ * env.k
-        t.tri_comp[tri] in tgt_idx && return dot(x - env.focus, env.k)
+        t.tri_comp[tri] in tgt_idx && return Float64(dot(x - env.focus, env.k)), Int(t.tri_comp[tri])
         o = x + _ray_eps(t) * env.k
         traveled += τ
         traveled > 2far && break
     end
-    return miss === nothing ? dot(env.aim - env.focus, env.k) : miss
+    return Float64(miss === nothing ? dot(env.aim - env.focus, env.k) : miss), 0
 end
 
 function _subtri_vertices!(pts, a, b, c, level)

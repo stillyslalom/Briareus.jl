@@ -10749,6 +10749,43 @@ facing away from the beams that pass it, and a closed 0.3 mm radius, 4 mm long s
   tolerance jumps where the closest point does (by tan 0.5° times the change in r); the
   exact rule needs the tolerance term inside the minimization (a concave term, so the
   per-segment convexity and the medial-strip argument hold only approximately).
+- **TaLIS 3ω clearance as a keep-out** (`HardwareKeepOut(...; tolerance, pivot, miss)`).
+  The rule tolerance −r tan α (r from the pivot: TCC, the aim point, the larger of the
+  two, or a point) is subtracted inside the minimization. It is concave, and off the
+  medial strip the envelope distance's Hessian has rank one, so in every plane the sum
+  curves down along some direction: the minimum stays on the segments (edges, strip
+  crossings, landing cuts). Along a segment the sum is not convex; each segment is
+  minimized with the term replaced by its chord (a lower bound, exact at the ends: the
+  convex search of the keep-out applies), and split at the chord's minimizer while the
+  term there lies more than 1e-14 mm above the chord; cluster and segment bounds
+  subtract tan α (r + radius). `miss = :all` judges a beam whose axis meets no target
+  along its whole length (TaLIS: "everything along the beam is checked"), and a beam
+  landing on one of the keep-out's own parts gets `Inf` (`talis_check` skips the landed
+  component). With `targets = capture`, `tolerance = 0.5`, `miss = :all` and the
+  defaults otherwise, on the mock-up's 48 quads against `talis_check(...; capture =
+  (:wall, :capsule), hardware = (:shield, :stalk), omega1 = false, resolution = 1e-7,
+  rtol = 0)`, every `:clearance_3w` row (24 shield and 25 stalk rows finite, the rest
+  `Inf` in both): the keep-out is 6e-8 to 1.1e-7 mm above the report's lower bound on
+  the 43 rows whose worst point lies off the major axis. On the 6 rows whose worst point
+  lies within 3e-10 mm of the major axis inside the medial segment (−0.82 to −1.11 mm,
+  deep violations), it is 1.7e-7 to 6.4e-6 mm above: there `_ellipse_distance` reads
+  low (`clearance.jl`, a known loss of digits left to the user), and the closed form on
+  the axis, −B √(1 − u²/(A² − B²)), at the report's own worst point lies 7e-9 to 2.2e-7
+  mm above the keep-out's minimum (the keep-out misses no lower point). Continuity
+  (closed form, two plates beside a beam down −z, their closest points at r = √10 and
+  √82 mm from TCC): the
+  keep-out equals the closed form min over the plates of (far edge distance − cone ·
+  axial − tan α r) to 1e-12 relative on an aim scan of ±0.1 mm through the switch of
+  the closest point, with no step larger than the aim step (1e-3 mm); the tolerance
+  taken a posteriori at the tolerance-free closest point steps by 0.050 mm there.
+  Derivatives in aim, defocus and spot axes against central differences (h = 1e-6):
+  within 9.4e-8 on the beams below 3 mm for pivots TCC, aim, max and a point (1e-8
+  without the tolerance; the chord split's 1e-14 mm stop sets the FD noise). Cost (48
+  quads, one thread): 0.64 ms for the shield and 0.83 ms for the stalk (0.42 and 0.74 ms
+  without the tolerance), 3.2 ms for a 3840-triangle stalk; the same with 8-partial
+  duals. `talis_check` on the same mock-up and settings: 27 s on one thread. With
+  `tolerance = 0` (the default) every existing result is unchanged bit for bit
+  (keep-out values and gradients, `clearance` and `talis_check` reports on the mock-up).
 
 ## VisRad benchmark beyond deposition: the saved runs (2026-11-18) *measured*
 

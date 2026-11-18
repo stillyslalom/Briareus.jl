@@ -74,6 +74,9 @@ end
     objectives = (symmetry_objective(; drive = 1.0, keepout), asymmetry_objective(; keepout),
                   face_flux_objective(; flux = 1.0, rms_scale = 0.1, keepout))   # the capsule's elements as a "face"
     hardware = HardwareKeepOut(t, (:cap_top, :cap_bottom); targets = (:wall, :capsule))   # named parts
+    # TaLIS rules: 3ω clearance with the rule tolerance (about the aim: in the beams' type)
+    talis_rules = (HardwareKeepOut(t, (:cap_top, :cap_bottom); targets = (:wall, :capsule), tolerance = 0.5,
+                                   pivot = :aim, miss = :all),)
     tw =hohlraum(; geometry..., wall = Material(:Au; albedo = WallLossAlbedo(), conversion = 0.8))
     mw = RadiationModel(tw; F = s.model.F, closed = true)
     pulse = PulseShape([0.0, 1.0, 2.0], [0.0, 4.0, 4.0])
@@ -197,6 +200,8 @@ end
             @test (@inferred sphere_clearance(keepout[2], beams)) isa Vector{T}
             @test (@inferred hardware_clearance(hardware, beams)) isa Vector{T}
             @test (@inferred keepout_penalty((keepout..., hardware), beams)) isa T
+            @test all(r -> (@inferred keepout_clearance(r, beams)) isa Vector{T}, talis_rules)
+            @test (@inferred keepout_penalty(talis_rules, beams)) isa T
             dc = _inf_positive(@inferred deposit(coronas, beams))
             @test dc.shell_ylm isa Matrix{T}
             @test (@inferred ablation_pressure_proxy(coronas, dc)) isa Vector{T}
@@ -267,6 +272,8 @@ end
                     @test _inf_jet_clean(JET.report_call, aperture_clearance, keepout[1], beams)
                     @test _inf_jet_clean(JET.report_opt, hardware_clearance, hardware, beams)
                     @test _inf_jet_clean(JET.report_call, hardware_clearance, hardware, beams)
+                    @test all(r -> _inf_jet_clean(JET.report_opt, keepout_clearance, r, beams) &&
+                                   _inf_jet_clean(JET.report_call, keepout_clearance, r, beams), talis_rules)
                     @test _inf_jet_clean(JET.report_opt, deposit, corona, beams)
                     @test _inf_jet_clean(JET.report_opt, deposit, coronas, beams)
                 end

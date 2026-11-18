@@ -56,7 +56,8 @@ end
     HardwareKeepOut(target, parts; targets = every other opaque surface,
                     peak_fraction = 0.01, intensity = nothing, pointing = 0.05,
                     target_offset = 0.025, hardware_tolerance = 0.0, focus = 1.0,
-                    margin = 0.0, minimum = 0.0, weight = 100.0)
+                    margin = 0.0, tolerance = 0.0, pivot = :tcc, miss = :aim,
+                    minimum = 0.0, weight = 100.0)
 
 Keep-out constraint for named hardware (a shield, a stalk, a diagnostic snout, a closed
 window): [`hardware_clearance`](@ref)`(keepout, beams)` gives each beam's worst-case
@@ -69,8 +70,29 @@ beam, negative inside it), less the transverse error radius `pointing + target_o
 hardware_tolerance` and `focus/(2F)` for the focus error. Only the surface upstream of
 the beam's landing counts: the plane normal to the beam where its nominal axis first
 meets one of `targets` (by default every opaque surface not among `parts`), as in
-`clearance`. The defaults are those of [`ApertureKeepOut`](@ref): engineering defaults
-(the 1 % contour is the level of the TaLIS 3ω clearance rule), not facility criteria.
+`clearance`; a beam whose axis meets none of them is judged up to its aim plane, or
+along its whole length with `miss = :all`, and a beam that lands on one of `parts`
+itself (when `targets` names it) gets `Inf`. The defaults are those of
+[`ApertureKeepOut`](@ref): engineering defaults (the 1 % contour is the level of the
+TaLIS 3ω clearance rule), not facility criteria.
+
+`tolerance` (degrees) is the rule tolerance of [`talis_check`](@ref): the parts may sit
+rotated off nominal by up to that angle about `pivot` (`:tcc`, `:aim` the beam's aim
+point, `:max` the farther of the two, or a point), which costs each point `r·tan α`, `r`
+its distance from the pivot, subtracted point by point inside the minimization (so the
+clearance stays continuous where the closest point jumps). With `targets` the capture
+components, `miss = :all`, `tolerance = 0.5` and `minimum = 0.5` (all other defaults
+equal) the keep-out is the TaLIS 3ω clearance rule of `talis_check` for each beam:
+
+    HardwareKeepOut(t, hardware; targets = capture, tolerance = 0.5, miss = :all,
+                    minimum = 0.5)
+
+a surrogate checked against the package's own `talis_check` (its `:clearance_3w` worst
+values; see the research notes), not against the facility's tool. `talis_check` reports
+each hardware part on its own row, where the keep-out takes the minimum over its parts
+(one keep-out per part gives the rows), and it passes a clearance strictly above
+0.5 mm; on an `leh` component its failure is a review, which a keep-out does not
+distinguish.
 
 The distance to the envelope ellipse is exact (the point–ellipse distance `clearance`
 uses), and the minimum over the parts is found, not sampled. On a triangle not crossing
@@ -87,6 +109,13 @@ or a segment's midpoint, less the Lipschitz constant `√(1 + 1/(2F)²)` times i
 or half length), and each segment is minimized by a safeguarded root search on the
 derivative, until the bound reaches the smallest value found. The result is the exact
 minimum to about 1e-12 mm.
+
+The tolerance term `−r·tan α` is concave in the point. It keeps the minimum off the
+triangles' interiors (off the medial strip the distance's Hessian has rank one, so in
+every plane the sum curves down along some direction), but it spoils the convexity along
+a segment: each segment is minimized with the term replaced by its chord, a lower bound
+equal to it at the ends, and split at the chord's minimizer until the two agree to
+1e-14 mm; the bounds of clusters and segments subtract `tan α (r + radius)`.
 
 The clearance is continuous in the beams' aim, defocus and spot size (a minimum over a
 fixed surface), and its derivatives are the distance's at the closest point (Danskin's
@@ -108,6 +137,7 @@ the objectives (alone, or in a tuple with other keep-outs), which then add
 struct HardwareKeepOut
     names::Vector{Symbol}
     target::Target
+    parts::Set{Int}                      # the parts' components
     others::Set{Int}                     # components a beam lands on
     clusters::Vector{_TriangleCluster}   # the parts' triangles
     peak_fraction::Union{Nothing,Float64}
@@ -115,31 +145,45 @@ struct HardwareKeepOut
     transverse::Float64
     focus::Float64
     margin::Float64
+    tolerance::_TaLISTol                 # the rule tolerance r·tan α
+    through::Bool                        # an unlanded beam judged along its whole length
     minimum::Float64
     weight::Float64
 end
 
 function HardwareKeepOut(t::Target, parts; targets = nothing, peak_fraction = nothing,
                          intensity = nothing, pointing = 0.05, target_offset = 0.025,
-                         hardware_tolerance = 0.0, focus = 1.0, margin = 0.0, minimum = 0.0,
-                         weight = 100.0)
+                         hardware_tolerance = 0.0, focus = 1.0, margin = 0.0, tolerance = 0.0,
+                         pivot = :tcc, miss::Symbol = :aim, minimum = 0.0, weight = 100.0)
     intensity === nothing && peak_fraction === nothing && (peak_fraction = 0.01)
-    names = parts isa Union{Symbol,AbstractString} ? [Symbol(parts)] : Symbol[Symbol(p) for p in parts]
-    isempty(names) && throw(ArgumentError("name at least one part"))
+    miss in (:aim, :all) || throw(ArgumentError("miss must be :aim or :all"))
+    names = _part_names(parts)
     idx = Set(ci for n in names for ci in part_pieces(t, n))
     others = targets === nothing ?
              Set(i for (i, c) in enumerate(t.components) if c.kind === :surface && !(i in idx)) :
              Set(ci for n in targets for ci in part_pieces(t, Symbol(n)))
+    tris = _part_triangles(t, idx)
+    isempty(tris) && throw(ArgumentError("parts $(join(repr.(names), ", ")) have no triangles"))
+    return HardwareKeepOut(names, t, idx, others, _triangle_clusters(tris), peak_fraction, intensity,
+                           pointing + target_offset + hardware_tolerance, focus, margin,
+                           _talis_tol(tolerance, pivot), miss === :all, minimum, weight)
+end
+
+function _part_names(parts)
+    names = parts isa Union{Symbol,AbstractString} ? [Symbol(parts)] : Symbol[Symbol(p) for p in parts]
+    isempty(names) && throw(ArgumentError("name at least one part"))
+    return names
+end
+
+# The triangles of the components `idx`, as vertex triples.
+function _part_triangles(t::Target, idx)
     tris = NTuple{3,Vec3}[]
     for k in eachindex(t.tri_area)
         t.tri_comp[k] in idx || continue
         v0 = t.tri_v0[k]
         push!(tris, (v0, v0 + t.tri_e1[k], v0 + t.tri_e2[k]))
     end
-    isempty(tris) && throw(ArgumentError("parts $(join(repr.(names), ", ")) have no triangles"))
-    return HardwareKeepOut(names, t, others, _triangle_clusters(tris), peak_fraction, intensity,
-                           pointing + target_offset + hardware_tolerance, focus, margin,
-                           minimum, weight)
+    return tris
 end
 
 # Triangles in spatially compact groups of at most `leaf` (halved at the median centroid
@@ -169,9 +213,10 @@ end
 """
     hardware_clearance(keepout, beams) -> Vector
 
-Worst-case clearance (mm) of each beam from the parts of a [`HardwareKeepOut`](@ref);
-`Inf` for a beam whose landing lies upstream of all of them. Differentiable in the
-beams' aim, defocus and spot size; in their number type.
+Worst-case clearance (mm) of each beam from the parts of a [`HardwareKeepOut`](@ref),
+the rule tolerance included; `Inf` for a beam whose landing lies upstream of all of them
+or on one of them. Differentiable in the beams' aim, defocus and spot size; in their
+number type.
 """
 hardware_clearance(k::HardwareKeepOut, beams::AbstractVector{<:Beam}) =
     [_hardware_clearance(k, b) for b in beams]
@@ -197,11 +242,15 @@ function _hardware_clearance(k::HardwareKeepOut, b::Beam)
     e1, e2 = spot_axes(b)
     f0 = Vec3(bv.aim) + bv.defocus * kv
     ef = _EnvelopeFrame(f0, kv, e1, e2, ρ * bv.spot.a, ρ * bv.spot.b, 1 / (2b.fnumber), k.margin)
-    # (only the envelope's axis matters to `_landing`)
-    s_stop = _landing(k.target, BeamEnvelope(f0, Vec3(bv.aim), kv, e1, e2, ef.A, ef.B, ef.cone, 0.0),
-                      k.others)
-    found, x, w = _hardware_closest(k, ef, s_stop)
+    # (only the envelope's axis matters to `_landing_hit`)
+    s_stop, hit = _landing_hit(k.target, BeamEnvelope(f0, Vec3(bv.aim), kv, e1, e2, ef.A, ef.B, ef.cone, 0.0),
+                               k.others; miss = k.through ? Inf : nothing)
+    hit in k.parts && return _no_clearance(b)
+    found, x, w = _hardware_closest(k, ef, s_stop, Vec3(bv.aim))
     found || return _no_clearance(b)
+    τ = k.tolerance
+    # the tolerance's slope along `w` (it enters the balance on the medial strip)
+    gw = iszero(τ.tanα) ? 0.0 : -dot(_tol_gradient(τ, x, Vec3(bv.aim)), w)
     # the distance at the closest point, in the beams' number type
     δ = x - (b.aim + b.defocus * kv)
     δ0 = x - f0
@@ -217,27 +266,49 @@ function _hardware_clearance(k::HardwareKeepOut, b::Beam)
         # minimax's saddle
         Y0, Y1 = ef.A >= ef.B ? (X0, -X1) : (-X0, X1)
         m1, m2 = _ellipse_unit_normal(u0, v0, ef.A, ef.B, Y0, Y1)
-        h⁺ = dot(_envelope_gradient(ef, n1, n2, σ), w)
-        h⁻ = dot(_envelope_gradient(ef, m1, m2, σ), w)
+        h⁺ = dot(_envelope_gradient(ef, n1, n2, σ), w) + gw
+        h⁻ = dot(_envelope_gradient(ef, m1, m2, σ), w) + gw
         λ = h⁺ == h⁻ ? 0.5 : clamp(h⁻ / (h⁻ - h⁺), 0.0, 1.0)
         E = λ * E + (1 - λ) * _ellipse_signed(u, v, A, B, ef.A, ef.B, Y0, Y1, m1, m2)
     end
     s = dot(δ, kv)
-    return E - ef.cone * σ * s - k.margin - k.transverse - k.focus * ef.cone
+    c = E - ef.cone * σ * s - k.margin - k.transverse - k.focus * ef.cone
+    return iszero(τ.tanα) ? c : c - _tol_value(τ, x, b.aim)
 end
 
-# The point of the keep-out's parts upstream of `s_stop` closest to the envelope `ef`:
-# whether there is one, the point, and the direction along which the distance is
-# stationary there (the segment's, or across the medial strip in a triangle's plane);
-# see `HardwareKeepOut`.
-function _hardware_closest(k::HardwareKeepOut, ef::_EnvelopeFrame, s_stop::Float64)
+# The rule tolerance's allowance r·tan α at `x`, in the number type of `aim` (the pivot
+# `:aim` and `:max` move with it).
+function _tol_value(τ::_TaLISTol, x::Vec3, aim::SVector{3,T}) where {T}
+    p = τ.pivot === :tcc ? zero(aim) : τ.pivot === :aim ? aim :
+        τ.pivot === :point ? SVector{3,T}(τ.point) :
+        norm(x) >= norm(x - ForwardDiff.value.(aim)) ? zero(aim) : aim
+    return τ.tanα * norm(x - p)
+end
+
+# The allowance's gradient in `x`, and an upper bound of it on the ball of radius `ρ`
+# about `x` (r is 1-Lipschitz in the point).
+function _tol_gradient(τ::_TaLISTol, x::Vec3, aim::Vec3)
+    d = τ.pivot === :tcc ? x : τ.pivot === :aim ? x - aim : τ.pivot === :point ? x - τ.point :
+        norm(x) >= norm(x - aim) ? x : x - aim
+    r = norm(d)
+    return r > 0 ? (τ.tanα / r) * d : zero(Vec3)
+end
+_tol_bound(τ::_TaLISTol, x::Vec3, aim::Vec3, ρ) = τ(x, aim) + τ.tanα * ρ
+
+# The point of the keep-out's parts upstream of `s_stop` closest to the envelope `ef`
+# (less the rule tolerance, its pivot `aim` the beam's): whether there is one, the point,
+# and the direction along which the distance is stationary there (the segment's, or
+# across the medial strip in a triangle's plane); see `HardwareKeepOut`.
+function _hardware_closest(k::HardwareKeepOut, ef::_EnvelopeFrame, s_stop::Float64, aim::Vec3)
     L = sqrt(1 + ef.cone^2)
+    τ = k.tolerance
     # best first over the clusters (bounded by their spheres) and the segments of those
     # opened: (bound, ends, balancing direction, whether a medial-strip crossing, cluster)
     heap = Tuple{Float64,Vec3,Vec3,Vec3,Bool,Int}[]
     for (i, c) in enumerate(k.clusters)
         _axial(ef, c.center) - c.radius > s_stop && continue
-        _heap_push!(heap, (_point_bound(ef, c.center) - L * c.radius, c.center, c.center, c.center, false, i))
+        _heap_push!(heap, (_point_bound(ef, c.center) - L * c.radius - _tol_bound(τ, c.center, aim, c.radius),
+                           c.center, c.center, c.center, false, i))
     end
     segs = Tuple{Float64,Vec3,Vec3,Vec3,Bool}[]
     best, xbest, wbest = Inf, zero(Vec3), zero(Vec3)
@@ -248,13 +319,38 @@ function _hardware_closest(k::HardwareKeepOut, ef::_EnvelopeFrame, s_stop::Float
             empty!(segs)
             _cluster_segments!(segs, k.clusters[i], ef, s_stop)
             for (sl, sp, sq, sw, ss) in segs
+                sl -= _tol_bound(τ, (sp + sq) / 2, aim, norm(sq - sp) / 2)
                 sl < best && _heap_push!(heap, (sl, sp, sq, sw, ss, 0))
             end
-        else
+        elseif iszero(τ.tanα)
             # a crossing's ends lie on edges or cuts, whose own search finds them with
             # the direction a minimum there is stationary along
             v, x = _segment_min(ef, p, q, best, !strip)
             v < best && ((best, xbest, wbest) = (v, x, w))
+        else
+            # less the tolerance −r·tan α, concave: the distance less its chord, convex,
+            # bounds it from below and equals it at the ends; where the chord's minimum
+            # lies inside and below the best by more than the gap there, the segment is
+            # split at that point (whose value is then known) and both halves requeued
+            gp, gq = -τ(p, aim), -τ(q, aim)
+            v, x = _segment_min(ef, p, q, best, !strip, gp, gq)
+            isfinite(v) || continue
+            Δ = q - p
+            θ = clamp(dot(x - p, Δ) / dot(Δ, Δ), 0.0, 1.0)
+            gap = -τ(x, aim) - (gp + θ * (gq - gp))          # the term less its chord, ≥ 0
+            fx = v + gap
+            fx < best && ((best, xbest, wbest) = (fx, x, w))
+            if v < best - 1e-14 && gap > 1e-14 && norm(Δ) > 1e-9
+                θ = clamp(θ, 0.1, 0.9)                       # each half at most 0.9 of it
+                m = p + θ * Δ
+                if θ != dot(x - p, Δ) / dot(Δ, Δ)
+                    σ = _axial(ef, (p + q) / 2) < 0 ? -1 : 1
+                    fm = first(_envelope_value_gradient(ef, m, σ)) - τ(m, aim)
+                    fm < best && ((best, xbest, wbest) = (fm, m, w))
+                end
+                _heap_push!(heap, (v, p, m, w, strip, 0))
+                _heap_push!(heap, (v, m, q, w, strip, 0))
+            end
         end
     end
     return isfinite(best), xbest, wbest
@@ -364,14 +460,16 @@ end
 
 # The smallest envelope distance on segment `p`–`q` (on one side of best focus, so
 # convex along it) and its point, or with `ends = false` the smallest inside it (`Inf`
-# if that is at an end); a bound at or above `best` ends the search early.
-function _segment_min(ef::_EnvelopeFrame, p, q, best, ends::Bool = true)
+# if that is at an end); a bound at or above `best` ends the search early. With `gp`,
+# `gq`, of the distance plus the linear function taking those values at `p` and `q`.
+function _segment_min(ef::_EnvelopeFrame, p, q, best, ends::Bool = true, gp = 0.0, gq = 0.0)
     Δ = q - p
     σ = _axial(ef, (p + q) / 2) < 0 ? -1 : 1
     fa, ga = _envelope_value_gradient(ef, p, σ)
     fb, gb = _envelope_value_gradient(ef, q, σ)
+    fa, fb = fa + gp, fb + gq
     va, xa = !ends ? (Inf, p) : fa <= fb ? (fa, p) : (fb, q)
-    ha, hb = dot(ga, Δ), dot(gb, Δ)
+    ha, hb = dot(ga, Δ) + (gq - gp), dot(gb, Δ) + (gq - gp)
     (ha >= 0 || hb <= 0) && return va, xa                  # the minimum at an end
     # the tangents at the ends bound the convex function from below
     fa + ha * (fb - hb - fa) / (ha - hb) >= min(best, va) && return va, xa
@@ -383,8 +481,9 @@ function _segment_min(ef::_EnvelopeFrame, p, q, best, ends::Bool = true)
         (a < τ < b) || (τ = (a + b) / 2)
         x = p + τ * Δ
         f, g = _envelope_value_gradient(ef, x, σ)
+        f += gp + τ * (gq - gp)
         f < va && ((va, xa) = (f, x))
-        h = dot(g, Δ)
+        h = dot(g, Δ) + (gq - gp)
         if h < 0
             a, ha = τ, h
             side == -1 && (hb /= 2)

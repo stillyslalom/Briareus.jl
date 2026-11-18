@@ -136,3 +136,94 @@ end
     ev = evaluate(Scenario(t, GroupPointing(nif_quads(); fields = (:z, :r))), DR_X)
     @test keepout_clearance(kp, ev) == cp
 end
+
+@testset "design rules: TaLIS 3ω clearance as a keep-out" begin
+    # closed form: two square plates along a beam down −z, one near TCC and one far from
+    # it; each plate's minimum lies at the middle of its far edge (the f-cone and the
+    # tolerance both grow upstream), and the closest point jumps from the far plate to
+    # the near one as the aim crosses x = 3·cone
+    near = foil(:near, (1.0, 0.0, 2.0), (-1.0, 0.0, 0.0); width = 2.0, n = 2)
+    far = foil(:far, (-1.0, 0.0, 8.0), (1.0, 0.0, 0.0); width = 2.0, n = 2)
+    tp = Target([near, far])
+    kt = HardwareKeepOut(tp, (:near, :far); targets = (), tolerance = 0.5, miss = :all)
+    b0 = Beam("b"; theta = 0, phi = 0, spot = SuperGaussianSpot(0.2), aim = (0.0, 0.0, 0.0))
+    R = envelope_radius(b0.spot, b0.power; peak_fraction = 0.01) * b0.spot.a
+    cone, tα = 1 / (2b0.fnumber), tand(0.5)
+    xs = -0.1:0.001:0.1
+    c = hardware_clearance(kt, [remake(b0; aim = (x, 0.0, 0.0)) for x in xs])
+    exact = [min(1 - x - 3cone - tα * sqrt(10), 1 + x - 9cone - tα * sqrt(82)) - R - 0.075 - cone for x in xs]
+    @test c ≈ exact rtol = 1e-12
+    # the tolerance at the closest point without it, taken after the search: a step
+    post = [(x < 3cone ? 1 + x - 9cone - tα * sqrt(82) : 1 - x - 3cone - tα * sqrt(10)) - R - 0.075 - cone for x in xs]
+    @test maximum(abs, diff(post)) > 0.04
+    @test maximum(abs, diff(c)) <= 1.001e-3          # 1-Lipschitz in the aim
+    # the landing: a beam along −x through the near plate, aimed at TCC's plane x = 0
+    side = Beam("side"; theta = 90, phi = 0, spot = SuperGaussianSpot(0.2), aim = (0.0, 0.0, 2.0))
+    hc(part; kw...) = only(hardware_clearance(HardwareKeepOut(tp, part; kw...), [side]))
+    @test hc(:near; targets = (:near,)) == Inf                 # lands on the part itself
+    @test hc(:far; targets = (:near,), miss = :all) == Inf      # downstream of the landing
+    @test hc(:near; targets = (:far,)) < 0                     # crosses it before the aim plane
+    @test hc(:far; targets = ()) == Inf && isfinite(hc(:far; targets = (), miss = :all))
+
+    # against talis_check's :clearance_3w worst values on the mock-up, every row
+    t = DR_TARGET
+    beams = apply(GroupPointing(nif_quads(); fields = (:z, :r)), DR_X)
+    rep = talis_check(t, beams; capture = (:wall, :capsule), hardware = (:shield, :stalk), omega1 = false,
+                      resolution = 1e-7, rtol = 0)
+    ks = [HardwareKeepOut(t, part; targets = (:wall, :capsule), tolerance = 0.5, miss = :all, minimum = 0.5)
+          for part in (:shield, :stalk)]
+    rows = [[only(r for r in rep.rows if r.beam == b.name && r.rule === :clearance_3w && r.component === part)
+             for b in beams] for part in (:shield, :stalk)]
+    c = [hardware_clearance(k, beams) for k in ks]
+    w = [[r.worst for r in rs] for rs in rows]
+    @test all(all(isfinite.(c[j]) .== isfinite.(w[j])) for j in 1:2)
+    @test sum(j -> count(<(0.5), c[j]), 1:2) >= 20 && sum(j -> count(x -> 0.5 < x < Inf, c[j]), 1:2) >= 10
+    # talis_check's worst points inside the envelope next to the major axis, where its
+    # point–ellipse distance loses digits: there the keep-out is checked against the
+    # closed form on the axis, d = −B √(1 − u²/(A² − B²)), at talis_check's point
+    medial = [falses(length(beams)) for _ in 1:2]
+    onaxis = [fill(Inf, length(beams)) for _ in 1:2]
+    for j in 1:2, (i, b) in enumerate(beams)
+        isfinite(w[j][i]) || continue
+        env = BeamEnvelope(b; peak_fraction = 0.01)
+        x = rows[j][i].point
+        d = x - env.focus
+        u, v, s = dot(d, env.e1), dot(d, env.e2), dot(d, env.k)
+        A, B = max(env.a, env.b), min(env.a, env.b)
+        u, v = env.a >= env.b ? (u, v) : (v, u)
+        if abs(v) < 1e-9 && abs(u) < (A^2 - B^2) / A
+            medial[j][i] = true
+            onaxis[j][i] = -B * sqrt(1 - u^2 / (A^2 - B^2)) - env.cone * abs(s) - 0.075 - env.cone - tα * norm(x)
+        end
+    end
+    # elsewhere within twice the 1e-7 mm resolution, and never below its lower bound
+    rest = [isfinite.(w[j]) .& .!medial[j] for j in 1:2]
+    @test sum(sum, rest) >= 40
+    @test all(all(0 .<= c[j][rest[j]] .- w[j][rest[j]] .<= 2e-7) for j in 1:2)
+    @test sum(sum, medial) >= 2
+    @test all(all(c[j][medial[j]] .<= onaxis[j][medial[j]] .+ 1e-9) for j in 1:2)
+    @test all(all(0 .<= c[j][medial[j]] .- w[j][medial[j]] .<= 1e-5) for j in 1:2)
+
+    # derivatives in each beam's aim, defocus and spot axes against central differences,
+    # the tolerance about TCC and about the beam's own aim point
+    err = 0.0
+    for pivot in (:tcc, :aim), part in (:shield, :stalk)
+        k = HardwareKeepOut(t, part; targets = (:wall, :capsule), tolerance = 0.5, pivot, miss = :all)
+        for b in beams
+            only(hardware_clearance(k, [b])) < 3 || continue
+            mk(y) = remake(b; aim = (y[1], y[2], y[3]), defocus = y[4], spot = with_axes(b.spot, y[5], y[6]))
+            y0 = [b.aim..., b.defocus, b.spot.a, b.spot.b]
+            f(y) = only(hardware_clearance(k, [mk(y)]))
+            g = ForwardDiff.gradient(f, y0)
+            fd = [(f(y0 + 1e-6 * (1:6 .== j)) - f(y0 - 1e-6 * (1:6 .== j))) / 2e-6 for j in 1:6]
+            err = max(err, maximum(abs.(g .- fd)))
+        end
+    end
+    @test err < 1e-6
+    # the rule's penalty
+    kp = HardwareKeepOut(t, (:shield, :stalk); targets = (:wall, :capsule), tolerance = 0.5, miss = :all,
+                         minimum = 0.5, weight = 2.0)
+    cp = hardware_clearance(kp, beams)
+    @test all(isapprox.(cp, min.(c[1], c[2]); atol = 1e-12))
+    @test keepout_penalty(kp, beams) ≈ 2 * sum(max(0, 0.5 - x)^2 for x in cp if isfinite(x)) rtol = 1e-12
+end
