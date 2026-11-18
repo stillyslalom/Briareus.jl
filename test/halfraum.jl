@@ -118,6 +118,11 @@ end
     res = optimize_pointing(s, obj; x0, lower = lo, upper = hi, iterations = 30)
     eo = evaluate(s, res.x)
     Ho = solve(s.model, eo.deposition).H[s.observed]
-    @test res.value ≈ obj(eo) rtol = 1e-12
+    # `res.value` is the value part of the optimizer's dual pass and `obj(eo)` a Float64
+    # pass; the two round differently. The objective is a variance (σ² ≈ 2.1e-7 at the
+    # optimum, σ ≈ 4.6e-4), so a relative rounding difference ε in the flux becomes 2ε/σ ≈
+    # 4.3e3 ε in the objective: 1e-12 on the flux is 4e-9 here (measured 1.3e-12 on a
+    # windows CI runner, one ulp of flux).
+    @test res.value ≈ obj(eo) rtol = 1e-8
     @test rms_nonuniformity(Ho, A) < 0.5σ
 end
