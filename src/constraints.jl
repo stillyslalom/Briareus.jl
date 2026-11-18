@@ -401,7 +401,14 @@ components: a [`Constraint`](@ref) named `:irradiance` whose value is the smooth
 (the reference's peak) the ceiling holds the irradiance at the reference design's, the
 reference being, for example, the pointing before a bundle was dropped; a number in
 TW/mm² sets another, measured on the same scale. The reference evaluation must be on
-the same target as the optimized scenario (a `subset` of it shares the target).
+the same target as the optimized scenario (a `subset` of it shares the target), with
+the same laser–plasma model (`lpi`, compared field by field, so that a model built
+alike passes) at the same time; otherwise evaluating the ceiling throws an
+`ArgumentError`. A reference evaluated without the scenario's CBET model gives the peak
+and the stand-in's scale of another quantity, and the ceiling would hold the design to
+a limit it does not share, so the mismatch is an error rather than a warning:
+evaluate the reference in a scenario with the same model, e.g.
+`evaluate(remake(reference_scenario; lpi = scenario.lpi), beams)`.
 `weight` selects and weighs the beams that count, as in [`peak_irradiance`](@ref) (the
 outer cones only, or picket energies for a fluence ceiling), for the reference and the
 design alike.
@@ -446,12 +453,16 @@ function irradiance_ceiling(reference::Evaluation, names::Symbol...;
     n_ref = _irradiance_norm(P, t, es, Float64(p))
     lim = limit === nothing ? pk : Float64(limit)
     lim > 0 || throw(ArgumentError("the irradiance limit must be positive"))
-    return Constraint(:irradiance, _CeilingValue(t, es, Float64(p), pk / n_ref, weight, exact);
-                      upper = lim, scale = something(scale, lim))
+    rs = reference.scenario
+    value = _CeilingValue(t, es, Float64(p), pk / n_ref, weight, exact, rs.lpi, rs.time,
+                          Ref{Any}(rs.lpi))
+    return Constraint(:irradiance, value; upper = lim, scale = something(scale, lim))
 end
 
 # The ceiling's value: the irradiance norm on the reference's peak scale; with `exact`,
-# the reported value is the peak itself.
+# the reported value is the peak itself. `lpi` and `time` are the reference scenario's
+# laser–plasma model and time, which every evaluation must share; `checked` holds the
+# last model found equal to it (an identity check from then on).
 struct _CeilingValue{W}
     target::Target
     elements::Vector{Int}
@@ -459,6 +470,9 @@ struct _CeilingValue{W}
     factor::Float64
     weight::W
     exact::Bool
+    lpi::Any
+    time::Float64
+    checked::Base.RefValue{Any}
 end
 
 function (c::_CeilingValue)(ev::Evaluation)
@@ -467,9 +481,41 @@ function (c::_CeilingValue)(ev::Evaluation)
 end
 
 function _check_ceiling(c::_CeilingValue, ev::Evaluation)
-    ev.scenario.target === c.target ||
+    s = ev.scenario
+    s.target === c.target ||
         throw(ArgumentError("irradiance_ceiling: the evaluation is on another target than the reference"))
+    lpi = s.lpi
+    if lpi !== c.checked[]
+        _same_model(lpi, c.lpi) ||
+            throw(ArgumentError("irradiance_ceiling: the reference was evaluated with another laser–plasma " *
+                                "model than the scenario's ($(_model_name(c.lpi)) against " *
+                                "$(_model_name(lpi))), so its limit bounds another quantity: evaluate the " *
+                                "reference in a scenario with the same `lpi`, e.g. " *
+                                "`evaluate(remake(reference_scenario; lpi = scenario.lpi), beams)`"))
+        c.checked[] = lpi
+    end
+    lpi === nothing || s.time == c.time ||
+        throw(ArgumentError("irradiance_ceiling: the reference was evaluated at time $(c.time) ns and the " *
+                            "scenario's laser–plasma model at $(s.time) ns: evaluate the reference at the " *
+                            "scenario's time (`remake(reference_scenario; time)`)"))
     return nothing
+end
+
+_model_name(::Nothing) = "none"
+_model_name(m) = string(nameof(typeof(m)))
+_model_name(m::Union{Tuple,AbstractVector}) = "(" * join(map(_model_name, m), ", ") * ")"
+
+# Structural equality of two laser–plasma models (two built alike are the same model):
+# identical, or of one type with equal fields, arrays and dictionaries by their entries.
+function _same_model(a, b)
+    a === b && return true
+    typeof(a) === typeof(b) || return false
+    a isa Union{AbstractArray,Tuple} &&
+        return length(a) == length(b) && all(i -> _same_model(a[i], b[i]), eachindex(a, b))
+    a isa Union{AbstractDict,AbstractString,Number,Symbol} && return isequal(a, b)
+    n = nfields(a)
+    n == 0 && return isequal(a, b)
+    return all(i -> _same_model(getfield(a, i), getfield(b, i)), 1:n)
 end
 
 function _exact_value(c::_CeilingValue, ev::Evaluation)

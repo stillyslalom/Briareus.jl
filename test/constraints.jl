@@ -149,6 +149,20 @@
                   abs(r0.bound_gradient[j] - r0.bound_sensitivity[j]) > 1e-3 * abs(fd)
             @test occursin("d objective/d bound", sprint(show, MIME"text/plain"(), r0))
         end
+
+        # a ceiling's reference and the optimized scenario share the laser–plasma model
+        # and its time: another model, or none against one, is an error; a model built
+        # alike is the same model
+        bs(f) = Backscatter(:inner23 => f, :inner30 => ([0.0, 5.0], [0.0, 0.1]))
+        ceil0 = irradiance_ceiling(evaluate(s, P0), :wall)
+        sb = remake(s; lpi = bs(0.1))
+        @test_throws ArgumentError ceil0.f(evaluate(sb, P0))
+        @test_throws ArgumentError check_constraints(evaluate(sb, P0), ceil0)
+        ceilb = irradiance_ceiling(evaluate(sb, P0), :wall)
+        @test_throws ArgumentError ceilb.f(evaluate(s, P0))
+        @test_throws ArgumentError ceilb.f(evaluate(remake(s; lpi = bs(0.2)), P0))
+        @test ceilb.f(evaluate(remake(s; lpi = bs(0.1)), P0)) == ceilb.f(evaluate(sb, P0))
+        @test_throws ArgumentError ceilb.f(evaluate(remake(sb; time = 2.0), P0))
     end
 
     # The dropped-bundle tutorial's design on a coarser wall mesh: bundle 11 freed, the
