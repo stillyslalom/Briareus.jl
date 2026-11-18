@@ -126,6 +126,8 @@ Items 10–15 follow the 2026-10-22 literature review against Kritcher et al. 20
     of 1.147 against the calibration platform (hand-set: 1.1), on a proxy pointing and a
     picket energy read by eye; ratios between pointings converge to < 1 %. A published
     bubble speed at fixed picket energy and a different spot overlap would test it.
+    `bubble_prediction` (74e7ae3) reproduces that table; the picket's peak does not
+    bound its mean (outer cones +0.5 mm in z: peak ×1.000, mean ×1.010).
     Validation left: Young's dynamic albedo (needs N170827's delivered per-beam powers);
     Ralph 2018's 18.5 % cone fraction (needs the high-foot pointing and wall radius); the
     N210808 proxy; Callahan 2018's 39-shot curve. *Data:* bubble-tip or inner-spot
@@ -235,13 +237,16 @@ Items 10–15 follow the 2026-10-22 literature review against Kritcher et al. 20
       (Mead's Iλ² scaling would shift it);
     - materials: `material_library()` holds the defaults that have a source, each
       quantity with its source and uncertainty (154a4c5; "Material defaults and their
-      sources"). Left: the defaults without one (user): the GUI's hohlraum 0.85/0.8
-      (15 eV above the core's `gold()` on the default hohlraum; Young 2020's static
-      NIF setting is 0.8/0.9); `gold()`'s conversion 0.75, a 1 ns value below every
-      published NIF value (0.85–0.95); the foil conversion 0.05 (core) and 0.02 (GUI),
-      10–48× below the published values for gold; the capsule conversion 0.3. No
-      public 3ω broadband conversion was found for the ablators (CH, HDC, Be) or the
-      mid-Z foils (Ti–Ge, Ag), nor albedos specific to CH and Be.
+      sources"). Since aa7135f (user decisions, 2026-11-18) `gold()` and `uranium()`
+      convert at 0.9 (Young 2020's static NIF setting; the default hohlraum's capsule Tr
+      rose 4.66 %, P2 unchanged), the GUI's hohlraum is `gold()`, and foils take
+      `foil_material()`: gold at 0.8/0.8 (Dewald 2008 at 10¹⁵ W/cm², Lindl's wall loss),
+      the mid-Z backlighter foils on a suggested range (conversion 0.1–0.6, albedo
+      0.3–0.8; not measurements). Left: a measured 3ω broadband conversion for the mid-Z
+      foils and the ablators (CH, HDC, Be), and albedos specific to CH and Be (none
+      found public); the capsule conversion 0.3 and `Conversion()`'s own default
+      efficiency 0.75 (user); a Help entry for the foil ranges if the GUI lists foil
+      materials.
 
 ## Re-pointing studies
 
@@ -258,16 +263,15 @@ analog is the dropped-bundle tutorial, `docs/literate/dropped_bundle.jl`).
     `read_visrad_sst(; template)`) and `pointing_summary` ("Re-pointing studies on the
     public API"); the gated objective and the penalty terms are items 36 and 35's
     (`drive_objective` with `mode_gate`; `keepout_penalty`, `light_ceiling`). *Remains:*
-    - Geometry queries for overlap and reach estimates, to settle (user): `port_basis`
-      and `visible` are documented and stable (export them); `closest_hit` takes the
-      internal `BVH` (a method on the target instead); the beam's section at a plane
-      (`_beam_at_plane`) is shaped for CBET (a `beam_section(beam, point, normal)`);
-      `BeamFrame`, `_vr_intensity` and `_vr_envelope` stay internal (`intensity` is the
-      public path; an envelope method on the profile would cover the last).
-    - `GroupPointing`'s default `unit = :beam` against the quads-as-units rule (item 23);
-      a default `subset` and `parameters(...)` named values for the composed
+    - Geometry queries for overlap and reach estimates: `port_basis` and `visible` are
+      exported (2acd1e9); left: `closest_hit` as a method on the target (it takes the
+      internal `BVH`), the beam's section at a plane (`_beam_at_plane` is shaped for
+      CBET: a `beam_section(beam, point, normal)`).
+    - A default `subset` and `parameters(...)` named values for the composed
       parameterizations (`subset`'s default regroups by `:group`, which renames
-      parameters).
+      parameters). `GroupPointing` points by quad by default since 33cf879, with a
+      quad's split as a parameter (`:split`) and `unit = :beam` or `by = :beam` for
+      beams pointed apart.
 
     The tutorial's section "A re-pointing study, end to end" walks these on exported
     names only (a96792f): quads held, a power scale per cone, the gates, the ceiling, a
@@ -285,7 +289,8 @@ analog is the dropped-bundle tutorial, `docs/literate/dropped_bundle.jl`).
     to named hardware, smooth in the beams and within 1e-6 mm of `clearance` (lower by up
     to 0.4 mm where `clearance` skips points hidden from the beam, as `talis_check` does
     not); and the TaLIS rules that carry a margin, each within 1e-7 mm of `talis_check`
-    on a mock-up (6e-6 mm on deep violations, below): the 3ω clearance (`HardwareKeepOut`
+    on a mock-up (every row, since `_ellipse_distance` became exact next to the major
+    axis, 98efc9a): the 3ω clearance (`HardwareKeepOut`
     with `tolerance`, the 0.5° term inside the minimization), 3ω capture
     (`CaptureKeepIn`), incidence (`IncidenceRule`) and the 1ω clearance
     (`Omega1KeepOut`). Each has a `keepout_clearance` method, so each serves as a penalty
@@ -298,13 +303,14 @@ analog is the dropped-bundle tutorial, `docs/literate/dropped_bundle.jl`).
       (the angle is constant per facet, so the gradient is zero away from facet edges);
     - 1ω management, the diagnostics-to-1ω rule, the TAS stay-in rule and the LEH review
       tier have no quantity;
-    - `keepout_penalty` skips every non-finite clearance, so a −Inf (a beam that misses
-      every capture part with no free edge) is dropped silently: skip +Inf only (user);
-    - `_ellipse_distance` (`clearance.jl`, also behind `talis_check`) loses digits for
-      points inside the ellipse within ~1e-9 mm of its major axis: deep violations
-      (below about −0.75 mm) read up to 6e-5 mm too low. Treating points within 1e-6 of
-      the semi-minor axis as on the axis changes the distance at second order only; it
-      changes report values (user).
+    - `ApertureKeepOut`'s clearance has genuine kinks in the aim where the worst rim
+      point switches between two local minima (a slope jump from −0.079 to −0.309 in
+      one of 144 scans) and narrow regions of high curvature where two merge; with
+      the squared hinge they make the penalty's derivative unreliable at a design on
+      the keep-out. A soft minimum over the rim's local minima, on a length below the
+      keep-out's accuracy, would remove both; it changes the keep-out's definition
+      (user). `HardwareKeepOut`'s snap next to a center of curvature costs up to 1e-8
+      of a semi-axis on near-circular spots (mark medial minima another way).
 
     *Check:* each surrogate against `clearance` or `talis_check` on the worst case, as
     the tutorial does for the aperture keep-out (agreement to a few micrometers); a
@@ -336,26 +342,63 @@ analog is the dropped-bundle tutorial, `docs/literate/dropped_bundle.jl`).
     with its best design, reports the drive ratio and departures in `pointing_summary`,
     and a ceiling refuses a reference evaluated with another laser–plasma model.
     *Remains:*
-    - the study's CBET and window variants, its other remedies, and a ray-traced
-      check of the designs;
-    - `irradiance_ceiling`'s default `exact = false` (the 64-norm alone left the peak
-      0.4–0.5 % over the limit on the study and up to 3 % on a 0.45 mm mesh, depending on
-      the path the run takes; `exact = true` holds the peak itself, at 0.9997 of the
-      reference's on the study in one call, and lands a little below the limit with one
-      or two gates up to 3 % inside theirs) (user);
-    - `mode_gate` takes coefficient vectors and cannot check that its reference was
-      evaluated with the scenario's laser–plasma model, as `irradiance_ceiling` now does:
-      a method on an `Evaluation` that records it;
+    - On the study's variants (scratch runs, 2026-11-18) one call converges where the
+      constraints are compatible (the base case, one CBET variant) and runs to its
+      time limit where they are not: with the other CBET variant and with windows the
+      gates conflict with the entrance-hole keep-out at the reference's clearance, not
+      with the ceiling, and with outer quads alone the gates conflict with the ceiling.
+      Left by those runs:
+      - `VisRadProfile`'s hard cut (the profile dropped below 1e-3 of its peak) makes
+        every deposition-derived quantity jump as a sample point crosses it, and the
+        line search parks on a jump. `VisRadProfile(; taper = 1)` (e77cb5c, opt-in)
+        tapers the last e-fold smoothly on the same support: no jumps, derivatives
+        of the mode gates right to 1e-6 where they were off by 1e-3–1e-2, at a cost
+        of at most 0.011 points of rms against VisRad's plates and 7e-5 of a wall
+        peak; the stalled case then runs 8 outer iterations instead of 1. Whether
+        `optimize_pointing` switches it on for `VisRadProfile` scenarios (user);
+      - the entrance-hole keep-out's penalty is not smooth at such a design (the
+        objective's derivative is off by 2–5 % against differences while the drive,
+        ceiling and gates agree to 1e-6): being diagnosed;
+      - a verdict on conflicting constraints: since 83c1f55 `phase1 = true` ends an
+        infeasible run with `:infeasible` from a first phase that minimizes the
+        violations alone (on the study's two infeasible cases in 15–34 s instead of
+        a run to its limit), and `relaxation = true` names how far each conflicting
+        constraint must be relaxed alone for the rest to hold (`Relaxation`; on the
+        study within 2 % of the gate multiples found by hand). Left: `phase1`'s
+        default (off: a feasible run seeded by phase 1 can end at another design of
+        a flat family; at most 29 % more evaluations measured) (user); relaxations
+        cost one solve per constraint and can outlast the time limit; the stall
+        rule's defaults (1 % over 100 evaluations);
+      - a keep-out given as a penalty gives way silently (by 0.07–0.37 mm there) once
+        the multipliers grow: `clearance_floor` as a constraint held;
+      - an absolute irradiance ceiling with `PowerScales` is met by cutting power:
+        `drive_floor` (83c1f55) holds the drive beside it;
+      - a design on its gates exceeds them under another beam model (by 7–12 % of a
+        gate with the f-cone model against the VisRad profile; within 0.5 % across
+        mesh and operator resolution): a margin on the gates is the designer's choice.
+    - a constrained run stopped by its budget reports the exact peak as it stands
+      (`exact = true` is the default since cd6f084, and its rounds run after
+      convergence): a capped polish needs convergence or `from` to meet the ceiling;
     - bound sensitivities (`PointingResult.bound_sensitivity`) match the re-optimized
       objective on a closed-form problem but overstate the box's cost about fiftyfold
       on the study, where the gates leave a flat family of designs and the multipliers
       are not unique: a direct estimate (a restart with the bound moved, through
       `from`) could be built in;
-    - which quantity the ceiling should hold: the published bubble scalings use the
-      outer cones' picket fluence on the wall, not the peak irradiance, and on N221204
-      a z re-pointing of the outer cones changes that fluence by ≤ 1 % while spot
-      overlap changes it by up to 19 % (item 10; `picket_fluence`; the peak ceiling is
-      an engineering limit) (user);
+    - The ceiling the study means is the maximum irradiance at the picket, and the aim
+      is prediction of the bubble, not a limit standing in for it (user, 2026-11-18).
+      Since 74e7ae3: `picket_ceiling` (the outer cones' peak picket irradiance on the
+      wall, held exactly, or its energy-weighted mean), `PicketLinkedBubble` (the
+      bubble's speed follows the pointing inside an evaluation) and
+      `bubble_prediction` (picket ratios, tip speed, collision and the P2 swing of a
+      design against its reference). On the study, with picket powers assumed from a
+      public pulse, the peak-power and picket-peak ceilings conflict by 1–4 % (each is
+      exceeded by the design that holds the other), neither bounds the mean fluence,
+      and the predicted bubble change of either design is under 0.2 % in tip speed;
+      on a proxy model the re-pointed deposition itself moves the swing's crossing
+      by +0.2 ns, ten times the bubble's part. Left: the study's own pulse for the
+      picket powers; which measure to hold, or the time-dependent swing itself in
+      the objective (user); the prediction on the study's own geometry in a
+      time-dependent model.
     - the engineering defaults `feasibility = 1e-3`, `p = 64`, `outer = 30` (user review);
     - the scales of the ready-made constraints (`clearance_floor`: 1 mm; `light_ceiling`
       and `light_floor`: the limit, at least 1e-3 of the delivered power) are engineering
