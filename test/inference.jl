@@ -117,6 +117,7 @@ end
     # a keep-out's clearance per beam and the light on named parts as constraints
     clf, lightc = clearance_floor(hardware), light_ceiling(ev_ref, :cap_top, :cap_bottom)
     aug2 = Briareus._Augmented(dobj, (clf, lightc), (fill(0.1, length(quads)), [0.2]), 3.0)
+    lag = Briareus._Lagrangian(objectives[2], (ceilc, gatec), ([0.5], [0.1, 0.0, 0.2, 0.0]))
 
     @testset "closures compile once" begin
         history(τ -> with_pulses(quads, pulse, τ), [0.5, 1.0]; record = sol -> sol)
@@ -180,6 +181,12 @@ end
         @test _inf_body_instances(Briareus._constrained_pointing) == nc
         @test _inf_body_instances(Briareus._lbfgsb) == nl
         @test _inf_body_instances(Briareus._pointing_result) == npr
+        # the bound sensitivities' gradient: new objective types reuse the compiled body
+        Briareus._scenario_gradient(s, objectives[1], x0)
+        ng = _inf_instances(Briareus._scenario_gradient)
+        Briareus._scenario_gradient(s, dobj, x0)
+        Briareus._scenario_gradient(s, lag, x0)
+        @test _inf_instances(Briareus._scenario_gradient) == ng
 
         # a placement sweep: new design and callback types reuse the compiled sweep
         foilt = Target([backlighter_foil((90.0, 0.0); standoff = 5.0, n = 2)])
@@ -240,6 +247,7 @@ end
             @test (@inferred clf.f(ev)) isa Vector{T}
             @test (@inferred lightc.f(ev)) isa T
             @test (@inferred aug2(ev)) isa T
+            @test (@inferred lag(ev)) isa T
         end
         # the outer picket fluence and the bubble's picket ratio from it (outer quads aimed
         # into the entrance holes)
@@ -330,6 +338,7 @@ end
                 @test _inf_jet_clean(JET.report_call, lightc.f, ev)
                 @test _inf_jet_clean(JET.report_opt, lightc.f, ev)
                 @test _inf_jet_clean(JET.report_call, aug2, ev)
+                @test _inf_jet_clean(JET.report_call, lag, ev)
             end
             # the outer picket fluence: no dispatch (from 1.11, as the deposition), no errors
             for x in (xo, _inf_duals(xo))

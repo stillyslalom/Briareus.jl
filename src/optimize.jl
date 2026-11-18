@@ -1190,8 +1190,9 @@ Compared with penalty terms at fixed weights, the multipliers carry the constrai
 weights from one inner run to the next: the limits are met without stiff weights
 (which stall the line search), without stages of loosened limits set by hand, and the
 design ends at its limits rather than where the penalty terms balance the objective
-(on the dropped-bundle case, 0.35 % more drive in half the evaluations: research
-notes, "Constrained re-pointing").
+(on the dropped-bundle tutorial, 0.35 % more drive in a comparable number of
+evaluations, 997 against the penalty form's 1,072: research notes, "Constrained
+re-pointing").
 """
 Base.@nospecializeinfer function optimize_pointing(
                            s::Scenario, @nospecialize(objective);

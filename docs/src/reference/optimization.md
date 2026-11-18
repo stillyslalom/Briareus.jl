@@ -17,9 +17,12 @@ parameters; both compose with `GroupPointing`, `FramePointing` and each other.
 Limits that a design must meet go to [`optimize_pointing`](@ref) as
 [`Constraint`](@ref)s, which an augmented Lagrangian around the same L-BFGS-B handles;
 [`check_constraints`](@ref) reports them on any evaluation, and the
-[`PointingResult`](@ref) records each one's value against its limit and what ended the
-run. Ready-made ones: [`irradiance_ceiling`](@ref), a ceiling on the laser irradiance
-over named parts (its exact value [`peak_irradiance`](@ref), its smooth stand-in
+[`PointingResult`](@ref) records each one's value against its limit, what ended the
+run and, for each parameter held by the box, the optimum's derivative with respect to
+that bound. `from = result` continues a run with its multipliers and penalty, and
+`time_limit` bounds its wall time. Ready-made constraints: [`irradiance_ceiling`](@ref), a
+ceiling on the laser irradiance over named parts (its exact value
+[`peak_irradiance`](@ref), held itself with `exact = true`, its smooth stand-in
 [`irradiance_norm`](@ref)), and [`mode_gate`](@ref), a gate per degree on the
 [`mode_departure`](@ref) from a reference drive shape, which goes with
 [`drive_objective`](@ref) for the largest drive within the gates;
@@ -41,8 +44,9 @@ Private = false
 ```
 
 [`pointing_summary`](@ref) reports a pointing against reference beams (a re-pointing
-result against its start): aim shifts, power and cone fraction, keep-out clearances and
-the clipped and missed fractions.
+result against its start): aim shifts, power and cone fraction, keep-out clearances,
+the clipped and missed fractions and, against a reference design's drive, the drive
+ratio and the departure per degree.
 
 ```@autodocs
 Modules = [Briareus]

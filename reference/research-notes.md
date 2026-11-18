@@ -11188,7 +11188,9 @@ shifted ±0.15–0.3 mm, peak ratios to 1.66) every quantity differs between 0.2
 measured on this hohlraum and these spots only.
 
 **Method comparison** (p = 64 ceiling, three starts: the tutorial's and two random in
-the box; budget 2,000 evaluations for the penalty methods):
+the box; budget 2,000 evaluations for the penalty methods; the augmented Lagrangian's
+counts are from before the convergence rule of § Constrained re-pointing: convergence
+on a feasible, active start, kept as dated history):
 
 | method | drive (× 48-quad) | departure / gate, l = 1–4 | peak / limit | evaluations |
 |---|---|---|---|---|
@@ -11203,8 +11205,11 @@ All methods reach the gates here: the public case does not reproduce the study's
 at the bounds. What it shows is the cost of penalties: with the symmetry reward the
 optimum sits deep inside the gates at 0.35 % less drive, staging changes nothing but
 the evaluations, and without the reward the stiff hinges stall the line search. The
-augmented Lagrangian reaches the constrained optimum (every gate active) in half the
-penalty runs' evaluations, from every start, and reports it with its multipliers.
+augmented Lagrangian reaches the constrained optimum (every gate active) from every
+start and reports it with its multipliers; under the later convergence rule (which
+declares convergence only at the final inner tolerance) it takes 997 evaluations on
+the tutorial's start against the penalty form's 1,072, a comparable count (the half
+measured before that rule no longer holds), for the same 0.35 % more drive.
 Continuation in the weights, given the same inner tolerance, reaches the same design
 in 1.0–1.7 times the augmented Lagrangian's evaluations on the same start (838, 725,
 1,262 against 765, 698, 488), with no multiplier estimates and a schedule to choose;
@@ -11313,6 +11318,108 @@ tried here first) the polish converged in 97 evaluations to the same drive (0.95
 and the section's earlier run kept its 765 evaluations bit for bit. The tutorial as a
 script on 8 threads: 249 s, of which the study adds about 100 s (141 s before the
 convergence fix and the study).
+
+### The exact peak, restarts and the box (2026-11-18, item 36 continued) *measured*
+
+What a trial on a staged re-pointing study kept outside the repository still lacked
+after the constrained run had met every gate and the ceiling in one call: the exact
+peak (the ceiling bounds the 64-norm, so the peak ended a fraction of a percent over),
+a restart that keeps the multipliers, a wall-clock budget with its own outcome, the
+cost of the box, the drive and departures in the summary line, and a check that the
+ceiling's reference shares the scenario's laser–plasma model. Public measurements on
+the dropped-bundle test case of `test/constraints.jl` (bundle 11 freed, 46 quads in
+`:phi` and `:z` within ±0.3 mm, 0.45 mm wall elements, coarse deposition operator, 8
+threads) and its closed-form quadratic program.
+
+**Correction: the stand-in's margin.** "Up to 1 % at p = 64" above holds on the
+tutorial's mesh (0.9991–1.0025 of the limit). On the test case the same run from the
+same start ends at different designs that meet the same four gates, depending on the
+floating-point rounding: plain (`julia`), the 64-norm at 0.974 of its limit and the
+peak at 0.9974 (drive 0.96259136, 1,044 evaluations, `:interior`); under `Pkg.test`'s
+`--check-bounds=yes`, the norm at its limit and the peak at 1.030 (the full suite's
+failure of `peak ≤ 1.02 × limit`, 8.3958 against 8.1523 TW/mm², 12 threads). A plain
+driver with `--check-bounds=yes` on 8 threads reaches a third (peak 0.9909, norm 0.976,
+drive 0.96251211, 742 evaluations, `:interior`; `exact = true` there changes nothing).
+The drives differ by 8e-5 relative, more than rounding: the gates leave a flat family of
+designs, and which one a run ends at depends on rounding and thread layout. The stand-in
+alone bounds the peak to no fixed margin; the test now holds the peak with
+`exact = true`.
+
+**Exact peak** (`irradiance_ceiling(...; exact = true)`). After the run has converged
+(feasible, complementary, inner run at `g_tol`), the peak over the elements is compared
+with the limit; while it exceeds the limit by more than `feasibility`, the norm's
+working limit is multiplied by limit/peak and the run continues from the same design,
+multipliers and penalty (the penalty is not raised for the new limit's violation: the
+stall measure restarts). The norm-to-peak ratio changes little near the limit, so one
+or two rounds land the peak within `feasibility`. Only a peak above the limit lowers
+the working limit; a peak below it is left (conservative; raising the working limit to
+make the peak active would buy the drive that the margin holds, and risks cycling where
+the peak moves between elements). On the test case with the ceiling active (peak over
+its limit after the plain run):
+
+| start, limit | plain: peak / limit, outer, evaluations, drive | `exact = true` |
+|---|---|---|
+| tutorial's, 0.98 × the 48-quad peak | 1.0139, 7, 771, 0.96224 | 0.9961, 8, 842, 0.96224 |
+| random in the box, the 48-quad peak | 1.0288, 7, 1,306, 0.96260 | 0.9872, 8, 1,363, 0.96259 |
+
+One lowering round each, 4–9 % more evaluations, the drive the same to 1e-5. The peak
+lands below the limit rather than on it (the norm-to-peak ratio moved with the design),
+and one or two gates leave their limits by up to 3 % of the gate. Default kept at
+`exact = false` (today's behavior), as a decision for the user; recommended: `true`,
+where the literal criterion is the peak over the elements.
+
+**Warm restarts** (`from = result`). The result's `state` carries the multipliers, the
+penalty parameter and its ceiling, the inner tolerance, the last infeasibility–
+complementarity measure and the working limits. On the quadratic program (58
+evaluations, 8 outer iterations uninterrupted): split by `outer = 2`, the continued run
+is the uninterrupted one bit for bit (each inner run restarts its L-BFGS-B anyway); split
+inside an inner run by the evaluation budget, the continued run loses that inner run's
+L-BFGS-B memory and reaches the same optimum to 0.6–1.6e-7 relative (multiplier to
+2e-5–3.5e-4), in 55, 24 and 20 evaluations after splits at 10, 20 and 40, against 49, 28
+and 28 from `x` alone with the multipliers relearned. On the dropped-bundle test case
+(uninterrupted: 1,044 evaluations, 7 outer iterations, drive 0.96259), split at 400
+evaluations (3 outer iterations): the restart with `from` converges in 311 more (5
+outer iterations), from `x` alone in 394 (7); both end at the same design (drive
+0.96247, the ceiling's peak at 1.0215 of its limit, every gate within 0.6 %), 1.6 %
+in `x` from the uninterrupted run's: the flat family of designs above, so a split
+run reaches the same design as the uninterrupted one only where the optimum is unique
+(the quadratic program).
+
+**Time limit** (`time_limit`, seconds). Checked after each evaluation, after the
+evaluation budget; `reason` and `outcome` `:time_limit`, the best design kept, the state
+kept for `from`.
+
+**Bound sensitivities** (`bound_gradient`, `bound_sensitivity`). For a parameter at a
+bound, the optimum's derivative with respect to the bound is the Lagrangian's partial
+derivative there (envelope theorem, active set held), `∂L/∂xᵢ` with the multipliers of
+the normalized violations; `∂f/∂xᵢ` is the objective's own. Check: on the quadratic
+program, one power's upper bound 0.5 below its optimum, against central differences
+of the re-optimized objective in the bound (δ = 0.05 and 0.01): 1.2e-5 relative without
+constraints (limited by the runs' convergence: the same at both δ), 2e-6–4e-5 with the
+total-power ceiling active (the objective's own derivative there 1.76 times the
+optimum's). One gradient each after the run, only when a parameter is at a bound.
+
+**Summary line.** `pointing_summary(...; drive_reference)` (an evaluation or its
+`flux_ylm` coefficients) adds the drive ratio (c₀₀ over the reference's; equal to the
+ratio of `mean_flux` to 1e-10) and the departure per degree.
+
+**Laser–plasma model of the reference.** A ceiling whose reference was evaluated
+without the scenario's CBET model bounds another quantity (its peak and the norm's scale
+come from the reference); on the study it read far above its limit at the start, with no
+warning. The ceiling now records the reference scenario's `lpi` and time and throws an
+`ArgumentError` on an evaluation with another model (compared field by field, so a model
+built alike passes) or the same model at another time. An error, not a warning: the
+mismatch has no use, and a warning inside an optimization repeats per evaluation or is
+lost after the first. `mode_gate` takes coefficient vectors, which record no model: the
+same trap there is open.
+
+**On the study** (scratch scripts, numbers not recorded here): one call with
+`exact = true` from the as-shot start, under a time limit, converged with every gate
+active and the exact peak at (just below) the reference's, two parameters held by the
+box, within the wall time its earlier norm-only run had been cut at plus 40 %; the
+bound sensitivities there remain to be checked against
+a run in a wider box (a degenerate case: five active constraints on a flat family of
+designs, where the multipliers are least determined).
 
 ## Constrained re-pointing: convergence on a feasible, active start (2026-11-18) *measured*
 
