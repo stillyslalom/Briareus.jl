@@ -26,3 +26,13 @@ Modules = [Briareus]
 Pages = ["src/optimize.jl", "src/uncertainty.jl", "src/parameterizations.jl"]
 Private = false
 ```
+
+[`pointing_summary`](@ref) reports a pointing against reference beams (a re-pointing
+result against its start): aim shifts, power and cone fraction, keep-out clearances and
+the clipped and missed fractions.
+
+```@autodocs
+Modules = [Briareus]
+Pages = ["src/pointing_summary.jl"]
+Private = false
+```
