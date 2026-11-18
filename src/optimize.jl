@@ -1158,10 +1158,13 @@ the multipliers `λ` and the penalty `μ` updated between them (ALGENCAN's rules
 Andreani et al., SIAM J. Optim. 18, 1286, 2008). The run converges when every
 violation is at most `feasibility` (in the constraints' scaled units: 1e-3 is 0.1 % of
 a limit by default), the multipliers are complementary to the same tolerance, and the
-last inner run has converged: its projected gradient below a tolerance that tightens
-tenfold per outer iteration from 1e-3 to `g_tol`, or its value changing by less than
-1e-10 relative per iteration (a drive objective is flat along the limits). A constraint that cannot be met ends the run
-once the penalty has grown by 10⁸ without progress. `outer` caps the outer
+last inner run has converged at the final tolerance: the inner runs' tolerance on the
+projected gradient tightens tenfold per outer iteration from 1e-3 to `g_tol`, and the
+run ends only once an inner run at `g_tol` has converged (its projected gradient below
+it, or its value changing by less than 1e-10 relative per iteration: a drive objective
+is flat along the limits), so a start that already meets the limits, as on a restart
+or a hand-off to a finer parameterization, is still optimized. A constraint that cannot
+be met ends the run once the penalty has grown by 10⁸ without progress. `outer` caps the outer
 iterations, `iterations` caps each inner run and `evaluations` is the budget of the
 whole run (the result counts both over all inner runs). The result's
 `constraints` and `outcome` report each constraint against its limit and whether the

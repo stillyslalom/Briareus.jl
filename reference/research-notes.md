@@ -11225,3 +11225,32 @@ outer cones' picket fluence on the wall: § The swing and the bubble without new
 part 4, and `reference/litreview/bubble_drivers.md`): `weight` (a function of the
 beam multiplying its deposited power; 0 leaves it out) gives the outer cones' or a
 picket's fluence map on the same machinery, at one more deposit per evaluation.
+
+## Constrained re-pointing: convergence on a feasible, active start (2026-11-18) *measured*
+
+The augmented Lagrangian of `optimize_pointing(...; constraints)` (§ Constrained
+re-pointing) was declared converged as soon as an inner run had converged at its
+current tolerance with every constraint met and complementary. The first inner
+tolerance is 1e-3 on the projected gradient and the first multipliers are zero, so a
+start that already meets the limits (a restart from a previous result, or a quad
+result handed to per-beam shifts by `parameters(p, beams)`) passed at once wherever the
+objective's gradient is below 1e-3, as a drive objective's is per beam. Found on a
+staged re-pointing study kept outside the repository, whose per-beam polish from a
+converged quad result ended after a few evaluations. Fixed by declaring convergence
+only once the inner tolerance has reached `g_tol`. Measured on the public cases (the
+distance is relative, to the closed-form KKT solution):
+
+| case | before: outcome, outer, evaluations, result | after |
+|---|---|---|
+| closed-form QP (`test/constraints.jl`), start violated | interior, 3, 35, 1.1e-4 from the KKT point | interior, 7, 54, 1.2e-8 |
+| the same, start on the cap | interior, 3, 31, 6.9e-6 | interior, 7, 49, 3.5e-9 |
+| objective × 1e-4, start violated | interior, 3, 12, 7.5e-2 | interior, 7, 83, 3.0e-4 |
+| objective × 1e-4, start on the cap | interior, 1, 1, 7.0e-2 (the start) | interior, 7, 26, 7.0e-5 |
+| dropped bundle of `test/constraints.jl` (0.45 mm wall) | interior, 2, 186; drive 0.96168, δ₁ at 0.41 of its gate | interior, 7, 1,044; drive 0.96259, every gate active |
+
+On the dropped-bundle test case the old rule stopped short of the constrained optimum
+(convergence reported with mode 1 far inside its gate and 0.09 % of the drive left);
+with the new rule every gate ends active, as on the tutorial's mesh before (§
+Constrained re-pointing, 0.96259–0.96261). The cost is more outer iterations, about 1.5
+to 6 times the evaluations here; where the old rule had already reached the optimum the
+design does not change.

@@ -181,8 +181,11 @@ Base.@nospecializeinfer function _constrained_pointing(
             break
         end
         feasible = maximum(g; init = -Inf) <= feasibility
-        # converged: feasible and complementary, with the inner problem solved
-        feasible && V <= feasibility && r.reason === :converged && break
+        # converged: feasible and complementary, with the inner problem solved at the final
+        # tolerance (a start already feasible and active, as on a restart, would otherwise
+        # pass on the first, loose inner run with zero multipliers wherever the objective's
+        # gradient is below 1e-3)
+        feasible && V <= feasibility && r.reason === :converged && tol <= g_tol && break
         if k >= outer
             reason = :iterations
             break

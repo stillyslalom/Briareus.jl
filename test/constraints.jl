@@ -72,6 +72,14 @@
         @test res.value ≈ f(evaluate(s, res.x)) && res.initial_value ≈ f(evaluate(s, P0))
         @test occursin("constraints met inside the box", sprint(show, MIME"text/plain"(), res))
         @test check_constraints(evaluate(s, P0), (total, drive))[1].status === :violated
+        # a start already feasible and on the cap, the objective scaled so that its gradient
+        # lies below the first inner tolerance (1e-3): the run still reaches the solution
+        # rather than ending at the start on the first inner run, with zero multipliers
+        small(ev) = 1e-4 * f(ev)
+        Pa = P0 .* (cap / sum(P0))
+        on_cap = optimize_pointing(s, small; x0 = Pa, lower = lo, upper = hi, constraints = (total,))
+        @test on_cap.outcome === :interior && norm(on_cap.x - Pstar) / norm(Pstar) < 1e-3
+        @test norm(Pa - Pstar) / norm(Pstar) > 0.05
 
         # the box keeps every power above the cap's share: infeasible at the bounds
         boxed = optimize_pointing(s, f; x0 = P0, lower = 0.99 .* P0, upper = hi, constraints = (total,))
