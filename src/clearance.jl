@@ -97,13 +97,12 @@ end
 
 # Signed distance from (u, v) to the ellipse with semi-axes (a, b): negative inside.
 # The projection of (u, v) minus the closest point on the outward normal there
-# (`_ellipse_closest` without the snap onto the major axis), valid inside and outside, to
-# a few units in the last place next to the major axis too (against a BigFloat minimum:
-# research notes, "Optimization defaults decided"). A degenerate ellipse (a = 0 or b = 0)
-# is the point at the origin.
+# (`_ellipse_closest`), valid inside and outside, to a few units in the last place next
+# to the major axis too (against a BigFloat minimum: research notes, "Optimization
+# defaults decided"). A degenerate ellipse (a = 0 or b = 0) is the point at the origin.
 function _ellipse_distance(u::Float64, v::Float64, a::Float64, b::Float64)
     (a == 0 || b == 0) && return hypot(u, v)
-    X0, X1, _ = _ellipse_closest(u, v, a, b; snap = 0.0)
+    X0, X1, _ = _ellipse_closest(u, v, a, b)
     n1, n2 = _ellipse_unit_normal(u, v, a, b, X0, X1)
     return n1 * (u - X0) + n2 * (v - X1)
 end
@@ -112,21 +111,16 @@ end
 # (u, v) lies on the medial axis (inside, on the major axis between its centers of
 # curvature: two closest points, the other its mirror image across the major axis).
 # Eberly's robust point–ellipse method, the Lagrange multiplier found by Newton's method;
-# the center for a degenerate ellipse.
-#
-# A point within `snap × e1` of the major axis is taken on it (the on-axis branch, the
-# limit), so that a minimum on the medial axis, where a search leaves it within ~1e-9, is
-# known as one (`HardwareKeepOut`'s derivatives there). The snap moves the closest point
-# by up to `snap × e1` and the distance by its second order, except next to a center of
-# curvature, where the closest point moves fast along the ellipse: there the distance
-# moves up to ~1e-8 e1 at the default (measured against a BigFloat minimum, near-circular
-# spots). `snap = 0` takes only points on the axis onto it.
-function _ellipse_closest(u::Float64, v::Float64, a::Float64, b::Float64; snap::Float64 = 1e-6)
+# the center for a degenerate ellipse. Only a point on the major axis takes the on-axis
+# branch: a point next to it keeps its own closest point, which moves fast along the
+# ellipse next to a center of curvature (`HardwareKeepOut` marks the minima next to the
+# medial axis by their mirror point, `_medial_tie`).
+function _ellipse_closest(u::Float64, v::Float64, a::Float64, b::Float64)
     (a == 0 || b == 0) && return 0.0, 0.0, false
     swap = a < b
     e0, e1, y0, y1 = swap ? (b, a, abs(v), abs(u)) : (a, b, abs(u), abs(v))
     medial = false
-    if y1 > snap * e1 && y1 / e1 > 0                          # (z1 = 0 only by underflow)
+    if y1 > 0 && y1 / e1 > 0                                  # (z1 = 0 only by underflow)
         if y0 > 0
             z0, z1 = y0 / e0, y1 / e1
             if z0^2 + z1^2 == 1

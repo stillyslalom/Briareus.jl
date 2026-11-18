@@ -141,6 +141,18 @@ end
     @test keepout_penalty((kp, ka), beams) ≈ keepout_penalty(kp, beams) + keepout_penalty(ka, beams) rtol = 1e-12
     ev = evaluate(Scenario(t, GroupPointing(nif_quads(); fields = (:z, :r))), DR_X)
     @test keepout_clearance(kp, ev) == cp
+
+    # next to a center of curvature of a near-circular spot, where the closest point moves
+    # fast along the ellipse: a triangle whose nearest point is its vertex 9.99e-7 B off
+    # the major axis at the center of curvature, against the exact distance there
+    # (`envelope_distance`; with points within 1e-6 B snapped onto the axis, as before
+    # 2026-11-18, the keep-out read 1.0e-7 mm low)
+    bc = Beam("c"; theta = 30, phi = 20, spot = SuperGaussianSpot(0.4, 0.3999), aim = (0.0, 0.0, 0.0))
+    env = BeamEnvelope(bc; peak_fraction = 0.01)
+    p1 = env.focus + (env.a^2 - env.b^2) / env.a * env.e1 + (9.99e-7 * env.b) * env.e2 - env.k
+    tri = Briareus.Mesh([p1, p1 + 0.3 * env.e1, p1 + 0.3 * env.e2], [(1, 2, 3)], [1:1])
+    kc = HardwareKeepOut(Target([Component(:tri, tri, gold())]), :tri; targets = (), miss = :all)
+    @test only(hardware_clearance(kc, [bc])) ≈ first(envelope_distance(env, p1)) - 0.075 - env.cone atol = 1e-12
 end
 
 @testset "design rules: TaLIS 3ω clearance as a keep-out" begin

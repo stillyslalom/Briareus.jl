@@ -11143,6 +11143,28 @@ facing away from the beams that pass it, and a closed 0.3 mm radius, 4 mm long s
   diagnostics-to-1ω rule, the TAS stay-in zone (not a function of the pointing) and the
   LEH-edge review tier. The loop that reruns `talis_check` and tightens minimums is out
   of scope.
+- **The snap removed** (2026-11-18, later; *measured*). The keep-outs took points within
+  1e-6 B of the major axis onto it (the snap of § Optimization defaults decided), so that
+  their medial-strip minima were known as such; next to a center of curvature the
+  closest point moves fast along the ellipse, and the snapped distance read up to 1e-8
+  of a semi-axis low on a 0.40/0.39 spot and 5.1e-7 on 0.4/0.399999 (against the
+  BigFloat minimum on 7,020 points, seven ellipses; the exact path: 6.6e-16). On a
+  `HardwareKeepOut` whose nearest point is a triangle's vertex 9.99e-7 B off the axis at
+  the center of curvature of a 0.4/0.3999 spot, the keep-out read 1.02e-7 mm low. Now
+  `_ellipse_closest` has no snap (`clearance`'s exact path unchanged, bit for bit) and a
+  keep-out's minimum takes the medial derivative where the closest point's mirror image
+  across the major axis is as near to within 1e-10 of the semi-major axis, inside the
+  medial segment (`_medial_tie`): the minima the search finds on the strip lie within
+  3.1e-14 mm of the axis (all 716 such evaluations of `test/design_rules.jl`, none
+  between that and 1e-3 B). The mixture of the two points' derivatives, stationary along
+  the segment, keeps its value (the value at the kink). Measured against the base commit
+  on the mock-up (48 quads; `HardwareKeepOut` plain and with the TaLIS tolerance about
+  TCC and the aim, `CaptureKeepIn`, `IncidenceRule`, `Omega1KeepOut`): values within
+  2.2e-16 mm (233 of 243 finite values identical), derivatives in aim, defocus and spot
+  axes within 5.5e-11; their agreement with central differences unchanged (7.5e-10 to
+  9.4e-8), and with `clearance` and `talis_check` unchanged to the printed digits
+  (keep-out − report 5.8e-8 to 1.06e-7 mm off the hidden shield points). The vertex case
+  now agrees with `envelope_distance` exactly (0 mm; `test/design_rules.jl` checks 1e-12).
 
 ## VisRad benchmark beyond deposition: the saved runs (2026-11-18) *measured*
 
@@ -12472,7 +12494,9 @@ closest point moves fast along the ellipse, and the snap's error there is first 
 with `snap = 0` and projects on the normal; `HardwareKeepOut` and the TaLIS rules keep
 the snap (`snap = 1e-6`, the default), which marks the medial-axis minima their
 derivatives need. Tested (`test/basics.jl`) against the BigFloat minimum on 59 points
-next to the axis, to 1e-13 (4.4e-16 measured).
+next to the axis, to 1e-13 (4.4e-16 measured). *Since 2026-11-18 (later)* the snap is
+gone: the keep-outs mark medial minima by a mirror point (§ Capture and clearance rules
+as optimization quantities, "The snap removed").
 
 Report movement, new against old, on the test cases (`ellipse_reports`, scratch): the
 mock-up of `test/design_rules.jl` (`clearance`, resolution 1e-7: off the deep

@@ -278,15 +278,17 @@ function _envelope_clearance(k, b::Beam, ef::_EnvelopeFrame, ρ, aim::Vec3, cls,
     δ0 = x - ef.focus
     u0, v0, σ = dot(δ0, e1), dot(δ0, e2), dot(δ0, kv) < 0 ? -1 : 1
     u, v, A, B = dot(δ, e1), dot(δ, e2), ρ * b.spot.a, ρ * b.spot.b
-    X0, X1, medial = _ellipse_closest(u0, v0, ef.A, ef.B)
+    X0, X1, onaxis = _ellipse_closest(u0, v0, ef.A, ef.B)
     n1, n2 = _ellipse_unit_normal(u0, v0, ef.A, ef.B, X0, X1)
     E = _ellipse_signed(u, v, A, B, ef.A, ef.B, X0, X1, n1, n2)
-    if medial
+    # the closest point's mirror image across the major axis
+    Y0, Y1 = ef.A >= ef.B ? (X0, -X1) : (-X0, X1)
+    if onaxis || _medial_tie(u0, v0, ef.A, ef.B, X0, X1, Y0, Y1)
         # on the medial axis two closest points are equally near: the derivative is the
         # mixture of theirs that leaves the distance stationary along `w` (the segment's
         # direction, or across the medial strip in the triangle's plane), as at a
-        # minimax's saddle
-        Y0, Y1 = ef.A >= ef.B ? (X0, -X1) : (-X0, X1)
+        # minimax's saddle (stationary along `w`, the mixture's value at a point found
+        # next to the kink is the value at the kink)
         m1, m2 = _ellipse_unit_normal(u0, v0, ef.A, ef.B, Y0, Y1)
         h⁺ = dot(_envelope_gradient(ef, n1, n2, σ), w) + gw
         h⁻ = dot(_envelope_gradient(ef, m1, m2, σ), w) + gw
@@ -524,6 +526,19 @@ end
 
 # (`_ellipse_closest` and `_ellipse_unit_normal`, the closest point of an ellipse and the
 # normal there: `clearance.jl`, beside `_ellipse_distance`, which shares them.)
+
+# Whether (u, v) lies on the medial axis of the ellipse with semi-axes (A, B) to within
+# a distance of 1e-10 of the semi-major axis: inside the major axis's segment between the
+# centers of curvature, with the mirror image (Y0, Y1) of its closest point (X0, X1)
+# across the major axis as near as that point to within the tolerance. A minimum the
+# search finds on the medial strip lies within ~1e-13 mm of the axis (3e-14 measured on
+# the test mock-up), its mirror point within 1e-13 mm as near. Next to a center of
+# curvature the two points nearly coincide, and so do their distances and derivatives.
+function _medial_tie(u, v, A, B, X0, X1, Y0, Y1)
+    e0, e1, t = A >= B ? (A, B, u) : (B, A, v)
+    abs(t) * e0 < (e0 - e1) * (e0 + e1) || return false
+    return hypot(u - Y0, v - Y1) - hypot(u - X0, v - X1) <= 1e-10 * e0
+end
 
 # The signed distance (negative inside) from (u, v) to the ellipse with semi-axes
 # (A, B), in their number type: the projection on the unit normal (n1, n2) at the
