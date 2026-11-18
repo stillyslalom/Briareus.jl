@@ -164,7 +164,7 @@ function HardwareKeepOut(t::Target, parts; targets = nothing, peak_fraction = no
              Set(ci for n in targets for ci in part_pieces(t, Symbol(n)))
     tris = _part_triangles(t, idx)
     isempty(tris) && throw(ArgumentError("parts $(join(repr.(names), ", ")) have no triangles"))
-    return HardwareKeepOut(names, t, idx, others, _triangle_clusters(tris), peak_fraction, intensity,
+    return HardwareKeepOut(names, t, idx, others, _clusters(tris), peak_fraction, intensity,
                            pointing + target_offset + hardware_tolerance, focus, margin,
                            _talis_tol(tolerance, pivot), miss === :all, minimum, weight)
 end
@@ -186,10 +186,12 @@ function _part_triangles(t::Target, idx)
     return tris
 end
 
-# Triangles in spatially compact groups of at most `leaf` (halved at the median centroid
-# along the longest extent), each with its edges (once each) and a bounding sphere.
-function _triangle_clusters(tris::Vector{NTuple{3,Vec3}}; leaf::Int = 16)
+# Triangles (or segments) in spatially compact groups of at most `leaf` (halved at the
+# median centroid along the longest extent), each with a bounding sphere and its edges
+# (once each; the segments themselves).
+function _clusters(tris::Vector{NTuple{N,Vec3}}; leaf::Int = 16) where {N}
     out = _TriangleCluster[]
+    isempty(tris) && return out
     key(a, b) = Tuple(a) < Tuple(b) ? (a, b) : (b, a)
     stack = [tris]
     while !isempty(stack)
@@ -198,12 +200,14 @@ function _triangle_clusters(tris::Vector{NTuple{3,Vec3}}; leaf::Int = 16)
         hi = reduce((x, y) -> max.(x, y), (v for tri in ts for v in tri))
         if length(ts) <= leaf
             c = (lo + hi) / 2
-            push!(out, _TriangleCluster(c, maximum(norm(v - c) for tri in ts for v in tri), ts,
-                                        unique!([key(x, y) for (a, b, d) in ts for (x, y) in ((a, b), (b, d), (d, a))])))
+            r = maximum(norm(v - c) for tri in ts for v in tri)
+            push!(out, N == 2 ? _TriangleCluster(c, r, NTuple{3,Vec3}[], ts) :
+                       _TriangleCluster(c, r, ts, unique!([key(x, y) for (a, b, d) in ts
+                                                           for (x, y) in ((a, b), (b, d), (d, a))])))
             continue
         end
         ax = argmax(hi - lo)
-        ts = sort(ts; by = tri -> tri[1][ax] + tri[2][ax] + tri[3][ax])
+        ts = sort(ts; by = tri -> sum(v[ax] for v in tri))
         h = length(ts) ÷ 2
         push!(stack, ts[1:h], ts[h+1:end])
     end
@@ -235,25 +239,43 @@ struct _EnvelopeFrame
     margin::Float64
 end
 
-function _hardware_clearance(k::HardwareKeepOut, b::Beam)
+# A beam's envelope on values at the contour of rule `k` (its `intensity` or
+# `peak_fraction`, and `margin`), the contour's radius in units of the spot's semi-axes,
+# and the aim point on values.
+function _envelope_frame(k, b::Beam)
     bv = _value_beam(b)
     ρ = envelope_radius(bv.spot, bv.power; intensity = k.intensity, peak_fraction = k.peak_fraction)
     kv = direction(b)
     e1, e2 = spot_axes(b)
     f0 = Vec3(bv.aim) + bv.defocus * kv
-    ef = _EnvelopeFrame(f0, kv, e1, e2, ρ * bv.spot.a, ρ * bv.spot.b, 1 / (2b.fnumber), k.margin)
-    # (only the envelope's axis matters to `_landing_hit`)
-    s_stop, hit = _landing_hit(k.target, BeamEnvelope(f0, Vec3(bv.aim), kv, e1, e2, ef.A, ef.B, ef.cone, 0.0),
-                               k.others; miss = k.through ? Inf : nothing)
+    return _EnvelopeFrame(f0, kv, e1, e2, ρ * bv.spot.a, ρ * bv.spot.b, 1 / (2b.fnumber), k.margin), ρ,
+           Vec3(bv.aim)
+end
+
+# The axis of an envelope frame as a `BeamEnvelope` (all `_landing_hit` uses).
+_axis_envelope(ef::_EnvelopeFrame, aim::Vec3) = BeamEnvelope(ef.focus, aim, ef.k, ef.e1, ef.e2, ef.A, ef.B, ef.cone, 0.0)
+
+function _hardware_clearance(k::HardwareKeepOut, b::Beam)
+    ef, ρ, aim = _envelope_frame(k, b)
+    s_stop, hit = _landing_hit(k.target, _axis_envelope(ef, aim), k.others; miss = k.through ? Inf : nothing)
     hit in k.parts && return _no_clearance(b)
-    found, x, w = _hardware_closest(k, ef, s_stop, Vec3(bv.aim))
+    return _envelope_clearance(k, b, ef, ρ, aim, k.clusters, s_stop)
+end
+
+# The worst-case clearance of beam `b` (its envelope `ef` at the contour radius `ρ`, its
+# aim on values `aim`) from the triangles and segments of the clusters `cls` upstream of
+# `s_stop`, less the error set and rule tolerance of rule `k`: the distance at the point
+# found on values, in the beam's number type; `Inf` if no point counts.
+function _envelope_clearance(k, b::Beam, ef::_EnvelopeFrame, ρ, aim::Vec3, cls, s_stop)
+    found, x, w = _hardware_closest(cls, k.tolerance, ef, s_stop, aim)
     found || return _no_clearance(b)
     τ = k.tolerance
+    kv, e1, e2 = ef.k, ef.e1, ef.e2
     # the tolerance's slope along `w` (it enters the balance on the medial strip)
-    gw = iszero(τ.tanα) ? 0.0 : -dot(_tol_gradient(τ, x, Vec3(bv.aim)), w)
+    gw = iszero(τ.tanα) ? 0.0 : -dot(_tol_gradient(τ, x, aim), w)
     # the distance at the closest point, in the beams' number type
     δ = x - (b.aim + b.defocus * kv)
-    δ0 = x - f0
+    δ0 = x - ef.focus
     u0, v0, σ = dot(δ0, e1), dot(δ0, e2), dot(δ0, kv) < 0 ? -1 : 1
     u, v, A, B = dot(δ, e1), dot(δ, e2), ρ * b.spot.a, ρ * b.spot.b
     X0, X1, medial = _ellipse_closest(u0, v0, ef.A, ef.B)
@@ -295,17 +317,17 @@ function _tol_gradient(τ::_TaLISTol, x::Vec3, aim::Vec3)
 end
 _tol_bound(τ::_TaLISTol, x::Vec3, aim::Vec3, ρ) = τ(x, aim) + τ.tanα * ρ
 
-# The point of the keep-out's parts upstream of `s_stop` closest to the envelope `ef`
-# (less the rule tolerance, its pivot `aim` the beam's): whether there is one, the point,
-# and the direction along which the distance is stationary there (the segment's, or
-# across the medial strip in a triangle's plane); see `HardwareKeepOut`.
-function _hardware_closest(k::HardwareKeepOut, ef::_EnvelopeFrame, s_stop::Float64, aim::Vec3)
+# The point of the clusters' triangles and segments upstream of `s_stop` closest to the
+# envelope `ef`, less the rule tolerance `τ` (its pivot `aim` the beam's): whether there
+# is one, the point, and the direction along which the distance is stationary there (the
+# segment's, or across the medial strip in a triangle's plane); see `HardwareKeepOut`.
+function _hardware_closest(clusters::Vector{_TriangleCluster}, τ::_TaLISTol, ef::_EnvelopeFrame,
+                           s_stop::Float64, aim::Vec3)
     L = sqrt(1 + ef.cone^2)
-    τ = k.tolerance
     # best first over the clusters (bounded by their spheres) and the segments of those
     # opened: (bound, ends, balancing direction, whether a medial-strip crossing, cluster)
     heap = Tuple{Float64,Vec3,Vec3,Vec3,Bool,Int}[]
-    for (i, c) in enumerate(k.clusters)
+    for (i, c) in enumerate(clusters)
         _axial(ef, c.center) - c.radius > s_stop && continue
         _heap_push!(heap, (_point_bound(ef, c.center) - L * c.radius - _tol_bound(τ, c.center, aim, c.radius),
                            c.center, c.center, c.center, false, i))
@@ -317,7 +339,7 @@ function _hardware_closest(k::HardwareKeepOut, ef::_EnvelopeFrame, s_stop::Float
         lb >= best && break
         if i > 0
             empty!(segs)
-            _cluster_segments!(segs, k.clusters[i], ef, s_stop)
+            _cluster_segments!(segs, clusters[i], ef, s_stop)
             for (sl, sp, sq, sw, ss) in segs
                 sl -= _tol_bound(τ, (sp + sq) / 2, aim, norm(sq - sp) / 2)
                 sl < best && _heap_push!(heap, (sl, sp, sq, sw, ss, 0))
@@ -573,3 +595,108 @@ end
 # closest point is stationary: Danskin's theorem).
 _ellipse_signed(u, v, A, B, A0::Float64, B0::Float64, X0, X1, n1, n2) =
     n1 * (u - A * (A0 > 0 ? X0 / A0 : 0.0)) + n2 * (v - B * (B0 > 0 ? X1 / B0 : 0.0))
+
+# ---------------------------------------------------------------------------------------
+# Capture by the part a beam lands on
+# ---------------------------------------------------------------------------------------
+
+"""
+    CaptureKeepIn(target, parts; peak_fraction = 0.1, intensity = nothing, pointing = 0.05,
+                  target_offset = 0.025, hardware_tolerance = 0.0, focus = 1.0,
+                  margin = 0.0, tolerance = 0.5, pivot = :tcc, minimum = 0.5,
+                  weight = 100.0)
+
+Capture constraint for the parts beams are meant to land on (backlighter foils, capture
+plates): [`capture_margin`](@ref)`(keepin, beams)` gives each beam's worst-case margin
+(mm) by which its envelope stays inside the substrate edge of the part it lands on, the
+TaLIS 3ω capture rule of [`talis_check`](@ref) (`:capture_3w`, its `capture` the
+`parts` here) as a quantity. The part landed on is the first of `parts` (a name or a
+collection of part or component names) the beam's nominal axis meets; its substrate
+edge is its free edges (edges of a single opaque triangle, as `talis_check` takes them).
+The margin is the smallest signed distance from that edge to the beam envelope (the
+best-focus contour at `peak_fraction` of the peak, or at `intensity` W/cm², grown by the
+f-cone and `margin`; negative inside it), less the transverse error radius `pointing +
+target_offset + hardware_tolerance`, `focus/(2F)` for the focus error and the rule
+tolerance `r·tan(tolerance)` (`r` the distance from `pivot`, as in
+[`HardwareKeepOut`](@ref)), point by point. It is minimized over the edge as
+`HardwareKeepOut` minimizes over its parts' segments: exactly, continuous in the beams'
+aim, defocus and spot size, with the derivatives of the distance at the closest point.
+A part without a free edge (a closed surface) gives `Inf`, as `talis_check` passes it.
+
+A beam whose axis meets none of `parts` fails the rule (`talis_check` reports `-Inf`).
+The quantity continues the margin there, to keep a stray beam's penalty finite and its
+gradient pointing back: the margin from the outline of the part nearest the axis, less
+twice the axis's transverse distance `d` from that outline. Where the axis crosses the
+outline `d` vanishes, so the margin is continuous there (on a straight edge it continues
+linearly), and it falls at least as fast as the axis moves away. `-Inf` when no part has
+a free edge. The margin jumps where the landing moves from one part to another.
+
+The defaults are the TaLIS values (the 10 % contour at least 0.5 mm inside the edge
+with a 0.5° tolerance about TCC; `talis_check` passes a margin at or above 0.5 mm). The
+quantity is a surrogate checked against the package's own `talis_check` (see the
+research notes), not against the facility's tool. Pass it as `keepout` to the objectives,
+which add `weight × Σᵢ max(0, minimum − mᵢ)²` ([`keepout_penalty`](@ref)).
+"""
+struct CaptureKeepIn
+    names::Vector{Symbol}
+    target::Target
+    comps::Set{Int}                              # the parts' components
+    part_of::Dict{Int,Int}                       # component → part (index into `names`)
+    clusters::Vector{Vector{_TriangleCluster}}   # each part's free edges
+    peak_fraction::Union{Nothing,Float64}
+    intensity::Union{Nothing,Float64}
+    transverse::Float64
+    focus::Float64
+    margin::Float64
+    tolerance::_TaLISTol
+    minimum::Float64
+    weight::Float64
+end
+
+function CaptureKeepIn(t::Target, parts; peak_fraction = nothing, intensity = nothing,
+                       pointing = 0.05, target_offset = 0.025, hardware_tolerance = 0.0,
+                       focus = 1.0, margin = 0.0, tolerance = 0.5, pivot = :tcc, minimum = 0.5,
+                       weight = 100.0)
+    intensity === nothing && peak_fraction === nothing && (peak_fraction = 0.1)
+    names = _part_names(parts)
+    pieces = [part_pieces(t, n) for n in names]
+    part_of = Dict(ci => j for (j, ps) in enumerate(pieces) for ci in ps)
+    fe = _free_edges(t, collect(keys(part_of)))
+    clusters = [_clusters(reduce(vcat, (fe[ci] for ci in ps); init = NTuple{2,Vec3}[])) for ps in pieces]
+    return CaptureKeepIn(names, t, Set(keys(part_of)), part_of, clusters, peak_fraction, intensity,
+                         pointing + target_offset + hardware_tolerance, focus, margin,
+                         _talis_tol(tolerance, pivot), minimum, weight)
+end
+
+"""
+    capture_margin(keepin, beams) -> Vector
+
+Worst-case capture margin (mm) of each beam on the part of a [`CaptureKeepIn`](@ref) it
+lands on, the rule tolerance included; continued past the part's outline for a beam
+whose axis misses every part, `Inf` on a part without a free edge. Differentiable in the
+beams' aim, defocus and spot size; in their number type.
+"""
+capture_margin(k::CaptureKeepIn, beams::AbstractVector{<:Beam}) = [_capture_margin(k, b) for b in beams]
+
+keepout_clearance(k::CaptureKeepIn, beams::AbstractVector{<:Beam}) = capture_margin(k, beams)
+
+const _NO_TOLERANCE = _TaLISTol(0.0, :tcc, zero(Vec3))
+
+function _capture_margin(k::CaptureKeepIn, b::Beam)
+    ef, ρ, aim = _envelope_frame(k, b)
+    _, hit = _landing_hit(k.target, _axis_envelope(ef, aim), k.comps; miss = Inf)
+    hit > 0 && return _envelope_clearance(k, b, ef, ρ, aim, k.clusters[k.part_of[hit]], Inf)
+    # the axis misses: the part whose outline lies nearest it (the envelope of a
+    # point-like spot along the axis, without the f-cone)
+    ax = _EnvelopeFrame(aim, ef.k, ef.e1, ef.e2, 0.0, 0.0, 0.0, 0.0)
+    j, d, xa = 0, Inf, aim
+    for (i, cl) in enumerate(k.clusters)
+        isempty(cl) && continue
+        _, x, _ = _hardware_closest(cl, _NO_TOLERANCE, ax, Inf, aim)
+        dx = hypot(dot(x - aim, ef.e1), dot(x - aim, ef.e2))
+        dx < d && ((j, d, xa) = (i, dx, x))
+    end
+    j == 0 && return -_no_clearance(b)
+    δ = xa - b.aim
+    return _envelope_clearance(k, b, ef, ρ, aim, k.clusters[j], Inf) - 2 * hypot(dot(δ, ef.e1), dot(δ, ef.e2))
+end

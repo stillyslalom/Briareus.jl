@@ -75,8 +75,10 @@ end
                   face_flux_objective(; flux = 1.0, rms_scale = 0.1, keepout))   # the capsule's elements as a "face"
     hardware = HardwareKeepOut(t, (:cap_top, :cap_bottom); targets = (:wall, :capsule))   # named parts
     # TaLIS rules: 3ω clearance with the rule tolerance (about the aim: in the beams' type)
+    # and 3ω capture, landed (on the wall) and continued past the outline (the caps)
     talis_rules = (HardwareKeepOut(t, (:cap_top, :cap_bottom); targets = (:wall, :capsule), tolerance = 0.5,
-                                   pivot = :aim, miss = :all),)
+                                   pivot = :aim, miss = :all),
+                   CaptureKeepIn(t, (:wall, :cap_top, :cap_bottom)), CaptureKeepIn(t, (:cap_top, :cap_bottom); pivot = :aim))
     tw =hohlraum(; geometry..., wall = Material(:Au; albedo = WallLossAlbedo(), conversion = 0.8))
     mw = RadiationModel(tw; F = s.model.F, closed = true)
     pulse = PulseShape([0.0, 1.0, 2.0], [0.0, 4.0, 4.0])

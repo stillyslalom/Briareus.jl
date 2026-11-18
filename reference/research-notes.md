@@ -10786,6 +10786,32 @@ facing away from the beams that pass it, and a closed 0.3 mm radius, 4 mm long s
   duals. `talis_check` on the same mock-up and settings: 27 s on one thread. With
   `tolerance = 0` (the default) every existing result is unchanged bit for bit
   (keep-out values and gradients, `clearance` and `talis_check` reports on the mock-up).
+- **TaLIS 3ω capture as a quantity** (`CaptureKeepIn`, `capture_margin`). The part
+  landed on is the first of the capture parts the nominal axis meets; the margin is the
+  envelope distance at the 10 % contour minimized over that part's free edges (as
+  `talis_check` takes them), less the error set and the rule tolerance, by the keep-out's
+  search (edges only, no landing cut). Defaults: the TaLIS values (10 %, 0.5 mm, 0.5°
+  about TCC). Where the axis misses every part `talis_check` reports −Inf; the quantity
+  continues the margin there as the margin from the outline nearest the axis less twice
+  the axis's transverse distance d from it: continuous where the axis crosses the
+  outline (d = 0), falling at least as fast as the axis moves away (the margin is
+  1-Lipschitz, −2d falls at rate 2), and on a straight edge the linear continuation of
+  the landed margin. Design choice: −Inf would make a penalty infinite (and
+  `keepout_penalty` skips non-finite values), and no gradient would bring the beam back.
+  `-Inf` remains only when no capture part has a free edge. Checks: closed form (square
+  foil normal to a round beam, aim across its edge, landed and missed): 2e-15 relative.
+  Mock-up (a 5 × 4 mm one-sided foil at TCC tilted 20°, the 24 upper NIF quads aimed on
+  a grid across and past its edges) against `talis_check` (resolution 1e-7, `rtol = 0`):
+  the 13 landed rows 4.7e-8 to 1.0e-7 mm above the report's lower bound; the 11 missed
+  rows (report −Inf) finite, −0.79 to −1.44 mm. An aim scan through the foil's end: slope
+  −0.40 to 0.00 inside, −1.83 to −0.96 outside, no step at the crossing. Derivatives
+  against central differences, landed and missed: 4.2e-8. Cost: 0.37 ms for 24 beams on
+  the 50-triangle foil (one thread).
+- **Refactor.** The keep-out's evaluation at the closest point is shared with the
+  capture margin (`_envelope_clearance`). It changes `hardware_clearance` by at most
+  4.4e-16 mm (on 2 to 12 of 48 beams per mock-up keep-out) and the penalty gradients by
+  at most 2.3e-13 absolute (1e-16 relative): rounding of the same arithmetic compiled in
+  another function, measured against the commit before.
 
 ## VisRad benchmark beyond deposition: the saved runs (2026-11-18) *measured*
 

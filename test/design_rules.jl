@@ -227,3 +227,63 @@ end
     @test all(isapprox.(cp, min.(c[1], c[2]); atol = 1e-12))
     @test keepout_penalty(kp, beams) ≈ 2 * sum(max(0, 0.5 - x)^2 for x in cp if isfinite(x)) rtol = 1e-12
 end
+
+@testset "design rules: TaLIS 3ω capture as a quantity" begin
+    # closed form: a square foil (half side h) at TCC normal to a round beam down −z, the
+    # aim moved across its edge x = h. The margin lies at the middle of that edge (the
+    # tolerance about TCC there h·tan α); past the edge the continuation less twice the
+    # axis's distance from it is the same line
+    h = 1.0
+    sq = Target([foil(:sq, (0.0, 0.0, 0.0), (0.0, 0.0, 1.0); width = 2h, n = 4)])
+    k = CaptureKeepIn(sq, :sq)
+    b0 = Beam("b"; theta = 0, phi = 0, spot = SuperGaussianSpot(0.2), aim = (0.0, 0.0, 0.0))
+    R = envelope_radius(b0.spot, b0.power; peak_fraction = 0.1) * b0.spot.a
+    cone, tα = 1 / (2b0.fnumber), tand(0.5)
+    xs = h-0.2:0.01:h+0.2
+    c = capture_margin(k, [remake(b0; aim = (x, 0.0, 0.0)) for x in xs])
+    @test c ≈ [h - x - R - tα * h - 0.075 - cone for x in xs] rtol = 1e-12
+    @test keepout_penalty(k, [b0]) == 0 && keepout_clearance(k, [b0]) == capture_margin(k, [b0])
+    # a closed part has no substrate edge
+    @test only(capture_margin(CaptureKeepIn(Target([Component(:ball, icosphere_mesh(1.0; n = 4), gold())]), :ball), [b0])) == Inf
+
+    # against talis_check's :capture_3w rows: a 5 × 4 mm one-sided foil at TCC tilted 20°,
+    # the 24 upper NIF quads aimed on a grid across and past its edges
+    n = Vec3(0.0, sind(20), cosd(20))
+    t = Target([foil(:foil, (0.0, 0.0, 0.0), n; width = 5.0, height = 4.0, n = 5, two_sided = false)])
+    beams = [remake(b; aim = (-2.6 + 5.2 * ((i - 1) % 6) / 5, -2.1 + 4.2 * ((i - 1) ÷ 6) / 3, 0.0))
+             for (i, b) in enumerate(b for b in nif_quads() if b.port[3] > 0)]
+    # (the aims on the foil's plane)
+    beams = [remake(b; aim = Tuple(b.aim - (dot(b.aim, n) / dot(direction(b), n)) * direction(b))) for b in beams]
+    rep = talis_check(t, beams; capture = (:foil,), hardware = (), omega1 = false, resolution = 1e-7, rtol = 0)
+    w = [only(r.worst for r in rep.rows if r.beam == b.name && r.rule === :capture_3w) for b in beams]
+    kc = CaptureKeepIn(t, :foil; minimum = 0.5, weight = 2.0)
+    c = capture_margin(kc, beams)
+    landed = isfinite.(w)
+    @test count(landed) >= 10 && count(!, landed) >= 8 && count(>(0.5), c) >= 1
+    # where the axis lands, within the report's 1e-7 mm resolution (its lower bound)
+    @test all(0 .<= c[landed] .- w[landed] .<= 2e-7)
+    # where it misses (the report's −Inf), finite and negative
+    @test all(isfinite, c) && all(<(0), c[.!landed])
+    @test keepout_penalty(kc, beams) ≈ 2 * sum(max(0, 0.5 - x)^2 for x in c) rtol = 1e-12
+    # continuity across the edge: a beam's aim moved along the foil's long axis through
+    # its end: no step where the axis leaves the foil (3-Lipschitz in the aim), and falling
+    # beyond it
+    b = beams[findmax(c)[2]]
+    e = Vec3(-1.0, 0.0, 0.0)                 # in the foil's plane, along its long side
+    ys = -0.3:0.005:0.6
+    m = capture_margin(kc, [remake(b; aim = Tuple(b.aim + (2.5 - dot(b.aim, e) + y) * e)) for y in ys])
+    @test maximum(abs, diff(m)) <= 3 * 0.005 * 1.0001
+    @test all(diff(m[ys .>= 0.05]) .< 0)
+    # derivatives in each beam's aim, defocus and spot axes against central differences,
+    # landed or not
+    err = 0.0
+    for b in beams
+        mk(y) = remake(b; aim = (y[1], y[2], y[3]), defocus = y[4], spot = with_axes(b.spot, y[5], y[6]))
+        y0 = [b.aim..., b.defocus, b.spot.a, b.spot.b]
+        f(y) = only(capture_margin(kc, [mk(y)]))
+        g = ForwardDiff.gradient(f, y0)
+        fd = [(f(y0 + 1e-6 * (1:6 .== j)) - f(y0 - 1e-6 * (1:6 .== j))) / 2e-6 for j in 1:6]
+        err = max(err, maximum(abs.(g .- fd)))
+    end
+    @test err < 1e-6
+end
