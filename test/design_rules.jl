@@ -59,6 +59,13 @@ end
 # (z, r) per cone: the NIF quads through the entrance holes onto the wall
 const DR_X = [3.09, -1.09, 3.63, -0.6, 5.2, 0.0, 5.01, 0.0]
 
+# A keep-out whose clearance is NaN for every beam (a broken quantity, refused).
+struct _NaNKeepOut
+    weight::Float64
+    minimum::Float64
+end
+Briareus.keepout_clearance(::_NaNKeepOut, beams::AbstractVector{<:Beam}) = fill(NaN, length(beams))
+
 @testset "design rules: power on named parts" begin
     t = DR_TARGET
     sc = Scenario(t, GroupPointing(nif_quads(); fields = (:z, :r)))
@@ -244,7 +251,22 @@ end
     @test c ≈ [h - x - R - tα * h - 0.075 - cone for x in xs] rtol = 1e-12
     @test keepout_penalty(k, [b0]) == 0 && keepout_clearance(k, [b0]) == capture_margin(k, [b0])
     # a closed part has no substrate edge
-    @test only(capture_margin(CaptureKeepIn(Target([Component(:ball, icosphere_mesh(1.0; n = 4), gold())]), :ball), [b0])) == Inf
+    tball = Target([Component(:ball, icosphere_mesh(1.0; n = 4), gold())])
+    kball = CaptureKeepIn(tball, :ball)
+    @test only(capture_margin(kball, [b0])) == Inf
+    # and a beam whose axis misses it has no margin to continue: -Inf, which the penalty
+    # and the constraint refuse with the keep-out and the beam named (+Inf adds nothing)
+    miss = remake(b0; name = "stray", aim = (5.0, 0.0, 0.0))
+    @test only(capture_margin(kball, [miss])) == -Inf
+    @test keepout_penalty(kball, [b0]) == 0
+    err = try keepout_penalty(kball, [b0, miss]); nothing; catch e; e; end
+    @test err isa ArgumentError && occursin("stray", err.msg) && occursin("CaptureKeepIn (ball)", err.msg)
+    evm = evaluate(Scenario(tball, [b0, miss]; deposition_kw = (; resolution = 0.6)), [b0, miss])
+    @test_throws ArgumentError clearance_floor(kball).f(evm)
+    @test_throws ArgumentError check_constraints(evm, clearance_floor(kball))
+    @test clearance_floor(kball).f(evaluate(Scenario(tball, [b0]), [b0])) == [Inf]
+    # NaN is refused alike
+    @test_throws ArgumentError keepout_penalty(_NaNKeepOut(1.0, 0.0), [b0])
 
     # against talis_check's :capture_3w rows: a 5 × 4 mm one-sided foil at TCC tilted 20°,
     # the 24 upper NIF quads aimed on a grid across and past its edges

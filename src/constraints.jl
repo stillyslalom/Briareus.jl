@@ -538,7 +538,9 @@ A floor on each beam's worst-case clearance (mm) from a keep-out: the
 of the evaluation, labeled by the beam's name. The keep-out is any with a
 [`keepout_clearance`](@ref) method and a `minimum` field: an [`ApertureKeepOut`](@ref),
 a [`SphereKeepOut`](@ref), a [`HardwareKeepOut`](@ref). A beam the keep-out does not
-apply to (clearance `Inf`) gives a component that always holds. The keep-out's `weight`
+apply to (clearance `Inf`) gives a component that always holds; a clearance of `-Inf` or
+`NaN` throws an `ArgumentError` naming the keep-out and the beam, as in
+[`keepout_penalty`](@ref). The keep-out's `weight`
 is not used: the constraint replaces its penalty ([`keepout_penalty`](@ref)), so pass
 the keep-out to the objective's `keepout` keyword or as a constraint, not both.
 
@@ -563,11 +565,17 @@ function clearance_floor(keepout; minimum::Union{Nothing,Real} = nothing, scale:
     return Constraint(name, _ClearanceValue(keepout); lower = lim, scale, labels = _beam_names)
 end
 
-# The constraint's value: the keep-out's clearance per beam of the evaluation.
+# The constraint's value: the keep-out's clearance per beam of the evaluation, `-Inf` and
+# `NaN` refused as by `keepout_penalty` (a violation of +Inf would make the augmented
+# Lagrangian infinite without a message).
 struct _ClearanceValue{K}
     keepout::K
 end
-(c::_ClearanceValue)(ev::Evaluation) = keepout_clearance(c.keepout, ev.beams)
+function (c::_ClearanceValue)(ev::Evaluation)
+    v = keepout_clearance(c.keepout, ev.beams)
+    _check_clearances(c.keepout, ev.beams, v)
+    return v
+end
 
 _beam_names(ev::Evaluation) = [b.name for b in ev.beams]
 

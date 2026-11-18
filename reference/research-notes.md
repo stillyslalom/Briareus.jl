@@ -12261,3 +12261,17 @@ keep-out 18 µm, gates l = 2 and 4 active, no aim at the box); the 120-evaluatio
 peak 0.44 % over the ceiling, mode 2 0.12 % over its gate and the keep-out active on six
 beams (the clearance check: 9.5 µm, no beam failing). The tutorial asserts a normalized
 violation of at most 0.01 for the capped polish.
+
+**`keepout_penalty` and `clearance_floor` on a clearance of −Inf** (item 35). The
+penalty skipped every non-finite clearance, so a −Inf (a `CaptureKeepIn` beam whose
+axis misses every capture part when no part has a free edge to continue the margin
+from) was dropped silently, and the constraint form turned it into a violation of +Inf,
+an infinite augmented Lagrangian without a message. Options: (a) a large finite penalty
+(the objective stays finite, but the cause is hidden and the gradient is zero); (b) an
+`ArgumentError` naming the keep-out and the beam; (c) skip it (the old behavior).
+Chosen: (b), for −Inf and NaN alike, in both `keepout_penalty` and `clearance_floor`
+(the check is shared); +Inf, a beam the keep-out does not apply to, still adds nothing
+and holds as a constraint. A −Inf arises only where the rule has no finite margin to
+offer, so no step of the optimizer can recover from it; the run stops at the first
+evaluation with the beam named. Existing results do not move (the sum runs over the
+same terms in the same order).

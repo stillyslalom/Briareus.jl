@@ -429,13 +429,20 @@ keepout_clearance(k, ev::Evaluation) = keepout_clearance(k, ev.beams)
     keepout_penalty(keepout, ev::Evaluation) -> Real
 
 The penalty a keep-out adds to an objective: `weight × Σᵢ max(0, minimum − cᵢ)²` over
-the finite clearances `cᵢ = keepout_clearance(keepout, beams)`, with the keep-out's own
+the clearances `cᵢ = keepout_clearance(keepout, beams)`, with the keep-out's own
 `weight` and `minimum`; for a tuple or vector of keep-outs the sum of theirs, and 0 for
 `nothing`. It is what the `keepout` keyword of [`symmetry_objective`](@ref),
 [`asymmetry_objective`](@ref) and [`face_flux_objective`](@ref) adds, so a hand-written
 objective adds `keepout_penalty(keepout, ev)` to the same effect. In the beams' number
 type (ForwardDiff duals) and thread-safe. A keep-out of another type takes part through
 a `keepout_clearance` method and `weight` and `minimum` fields.
+
+A clearance of `+Inf` (a beam the keep-out does not apply to) adds nothing. A clearance
+of `-Inf` (a beam that fails a rule with no finite margin to continue, as a
+[`CaptureKeepIn`](@ref) beam whose axis misses every part when no part has a free edge)
+or `NaN` throws an `ArgumentError` naming the keep-out and the beam: either would hand
+the optimizer a non-finite objective, and a large finite penalty in its place would
+hide the cause.
 """
 keepout_penalty(::Nothing, beams::AbstractVector{<:Beam}) = 0.0
 keepout_penalty(k, ev::Evaluation) = keepout_penalty(k, ev.beams)
@@ -455,8 +462,30 @@ end
 
 function keepout_penalty(k, beams::AbstractVector{<:Beam})
     c = keepout_clearance(k, beams)
+    _check_clearances(k, beams, c)
     # in the beams' number type also when no clearance is finite (a Float64 0.0 beside
     # dual penalties made the sum over keep-outs a runtime dispatch)
-    J = k.weight * sum(max(zero(ci), k.minimum - ci)^2 for ci in c if isfinite(ci); init = 0.0)
+    J = k.weight * sum(max(zero(ci), k.minimum - ci)^2 for ci in c if ci != Inf; init = 0.0)
     return convert(eltype(c), J)
+end
+
+# A keep-out's clearances `c` of `beams`, checked for what neither a penalty nor a
+# constraint can take: `-Inf` and `NaN` are an `ArgumentError` naming the keep-out and the
+# first such beam (`+Inf`, a beam the keep-out does not apply to, passes).
+function _check_clearances(k, beams, c)
+    for i in eachindex(c, beams)
+        ci = ForwardDiff.value(c[i])
+        (isnan(ci) || ci == -Inf) && _clearance_error(k, beams[i], ci)
+    end
+    return nothing
+end
+
+@noinline function _clearance_error(k, b::Beam, ci)
+    names = hasfield(typeof(k), :names) ? getfield(k, :names) : nothing
+    what = names isa AbstractVector ? string(nameof(typeof(k)), " (", join(names, ", "), ")") :
+           string(nameof(typeof(k)))
+    why = isnan(ci) ? "NaN" :
+          "-Inf (the beam fails the rule with no finite margin: for a CaptureKeepIn, its axis misses " *
+          "every part and no part has a free edge to continue the margin from)"
+    throw(ArgumentError("keep-out $what: the clearance of beam $(b.name) is $why"))
 end
