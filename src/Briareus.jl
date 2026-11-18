@@ -35,6 +35,7 @@ export AlbedoModel, ConstantAlbedo, TabulatedAlbedo, WallLossAlbedo, Burnthrough
        Conversion, conversion_efficiency, nif_conversion,
        Component, aperture, Target, nelements, elements, component_index, parts, part_pieces,
        element_quadrature
+export SourcedValue, MaterialDefault, MATERIAL_BASES, material_library, material_default
 export hohlraum, hohlraum_counts, capsule_counts, foil, HohlraumProfile, frustraum_profile
 export WallWindow, Sombrero, conforming_grid, equal_area_radius
 export SuperGaussianSpot, Beam, port_vector, port_angles, direction, spot_axes, remake, intensity, wavelength,
@@ -121,6 +122,7 @@ include("meshops.jl")
 include("bvh.jl")
 include("target.jl")
 include("targets.jl")
+include("material_library.jl")
 include("cadfit.jl")
 include("beams.jl")
 include("facilities.jl")

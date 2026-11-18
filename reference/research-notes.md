@@ -11342,3 +11342,111 @@ with the new rule every gate ends active, as on the tutorial's mesh before (§
 Constrained re-pointing, 0.96259–0.96261). The cost is more outer iterations, about 1.5
 to 6 times the evaluations here; where the old rule had already reached the optimum the
 design does not change.
+
+## Material defaults and their sources (2026-11-18)
+
+ROADMAP 17, third bullet: a library of material defaults, each quantity with its data
+source and uncertainty. `material_library()`, `material_default(name)`,
+`MaterialDefault`, `SourcedValue`, `MATERIAL_BASES` (`src/material_library.jl`,
+`test/material_library.jl`, reference page "Material defaults"). Nothing in the package
+or the GUI changes: no default, constant or constructor is touched. Confidence as at the
+top of this file (**H** primary text, **M** abstract or secondary, **L** inference);
+sections cited by title hold the earlier provenance and are not repeated. Literature
+searched this session: the Z dependence of laser → x-ray conversion (Nakano & Kuroda,
+PRA 27, 2168 (1983), abstract: periodic in Z, no numbers; the 0.53 µm and 0.26 µm
+Z scans of PRA 33, 525 (1986) and PRA 34, 4184 (1986), abstracts only: undulatory in Z,
+no numbers read) and low-Z (CH) conversion at 351 nm (no number found).
+
+### Survey
+
+"Today" is the value the package uses and where it is set; "inside" says whether it lies
+within the published spread.
+
+| Material | Quantity | Today (where) | Published (source, conf.) | Uncertainty / spread | Inside? |
+|---|---|---|---|---|---|
+| Au wall, static | x-ray albedo | 0.8 (`gold()`, `src/target.jl`; `hohlraum()` wall) | 0.8, the static VisRad model of N170827 (Young et al., PoP 27, 082702 (2020); "Young 2020 validation (2026-10-24)") **H** | 0.77 (Swadling et al., PoP 32, 052707 (2025), VisRad fitted to Dante at 400 TW, **H**) to 0.84 (same paper's 0-D model at 288 eV, **H-img**); Lindl's loss at a NIF peak's effective wall age 0.88–0.94 ("Energetics defaults and the capsule share (2026-10-25)", *derived*) | yes (equal to Young's) |
+| Au wall, static | conversion | 0.75 (`gold()`, `uranium()`) | ≈0.7 at 1 ns on Nova, up to 0.85 for shaped pulses (Lindl et al., PoP 11, 339 (2004) §IV); 0.68 at 1 ns, Omega (Rosen, OSTI 885380 (2005)); "Energetics (`energetics.md`)" **H** | 1 ns hohlraums 0.68–0.85; NIF: 0.85–0.90 (Olson et al., PoP 19, 053301 (2012), **M**), 0.9 (Young 2020 static model, **H**), 0.95 (Swadling 2025, **H**) | yes for 1 ns pulses; below every NIF value |
+| Au wall, drive history | albedo model | `WallLossAlbedo()` (`nif_gold()`) | Lindl 2004 eq. 4-31 ("Gold wall loss and thin-foil burnthrough (2026-10-16)") **H-img** | Hammer & Rosen and Shussman & Heizler losses within ~10 % over 1–3 heV, 1–10 ns (*derived*); `release` 1.0, range 0.84–1.07 (*calibrated*) | yes |
+| Au wall, drive history | conversion | `nif_conversion()`, 0.7 t^0.12 ≤ 0.95 | "Wall material, conversion and capsule energetics (2026-10-24)" §2 (*derived*) | 0.80 / 0.85 / 0.90 at 3 / 5 / 8 ns against Olson's 0.85–0.90 (**M**); exponents 0.12–0.2 published | yes at NIF peak |
+| Au-lined DU wall | albedo model | `du_wall_loss()` (`uranium()`, `nif_uranium()`) | factor 0.836 at 300 eV *calibrated* to Döppner et al., PRL 115, 055001 (2015) ("Energetics defaults and the capsule share (2026-10-25)") | 0.827–0.838 over effective ages 2–4 ns; Rosen's 0.83 and Schein's 0.825 (**H**) | yes |
+| Au-lined DU wall | conversion | 0.75 / `nif_conversion()` | as the Au wall (the liner converts) | as the Au wall | as the Au wall |
+| Au, GUI hohlraum part | albedo / conversion | 0.85 / 0.8 (`BriareusGUI` `HOHLRAUM_VALUES`; "as the former hohlraum template had") | no source of its own | albedo inside 0.77–0.94, conversion inside 0.68–0.95 | yes, but unsourced |
+| Au, directly irradiated (foil, disk) | conversion | 0.05 (`foil`, `backlighter_foil`: `gold(conversion = 0.05)`); GUI foil starter 0.02 | 0.95 at 10¹⁴, 0.80 at 10¹⁵ W/cm², backscatter-corrected plateau after ~0.5 ns on Au, U and cocktail spheres (Dewald et al., PoP 15, 072706 (2008), abstract) **M** | open 3ω disks 0.57 / 0.59 / 0.51 of the absorbed energy at 2e13 / 1e14 / 4e14 W/cm² (Mead et al., LA-UR-86-300 (1985) Fig. 16, **H**; "Unconverted light: absorption and conversion vs. wavelength (2026-10-28)") | **no**: 10–19× below the published 0.51–0.95 (25–48× for 0.02) |
+| Au | 3ω laser absorption | 1 (every surface; backscatter booked separately) | ≈0.93 / 0.95 / 0.91 at 3e13 / 1.5e14 / 3e14 W/cm², disks (Ze et al., UCRL-86414 (1981) Fig. 4) **H** | read from a figure (two of three marked approximate) | not a material input (CE data are per absorbed or per incident energy as their sources state) |
+| Au | 1ω and 2ω, relative to 3ω | absorption 0.88 / 1.0, conversion 0.88 / 0.9 (`nif_unconverted`) | the rule of "Unconverted light: absorption and conversion vs. wavelength (2026-10-28)" (*engineering*, **L**) | 1ω absorption 0.6–1.0, conversion 0.65–1.0; 2ω 0.8–1.0, 0.72–1.16 | yes, by construction |
+| Au | 1ω cold reflectance | not used (`specular_check` uses only a 10⁸ W/cm² threshold) | ≈0.98 at normal incidence (Johnson & Christy / Palik) **M** | approximate | — |
+| Capsule ablator (HDC) | x-ray albedo | 0.3 (`ablator()`, GUI capsule); `CapsuleAlbedo()` 0.2 | 0.3, Young 2020's static model (**H**); f_cap ≈ 0.8, α ≈ 0.2 (Swadling 2025 0-D, **H**); quasi-1D HYDRA α_c(t) for HDC, 0.16 at 6 ns, 0.3–0.4 later (Young 2020 Fig. 3a, `young2020_albedos()`, **H-img**) | reading error 0.03–0.05; 0 with the fuel-layer area (Lindl 2004) | yes |
+| Capsule ablator (HDC, CH, Be) | conversion | 0.3 (`ablator()`, GUI capsule) | **no public source found** | — | unsourced; the benchmark capsule receives no laser light (below) |
+| CH, Be | x-ray albedo | as the ablator | no CH- or Be-specific value found beyond the generic ablator values above | — | — |
+| Be, Ti | 1ω laser absorption | not used | 0.68 (Be), ≈0.76 (Ti) against 0.82 (Au) at 2.7e13 W/cm² (Ze 1981 Fig. 7) **H** | 1ω only | — |
+| Al, Cu | 1ω cold reflectance | not used | ≈0.94 (Al), ≈0.97 (Cu), normal incidence (Johnson & Christy / Palik) **M** | approximate | — |
+| Al, Cu, mid-Z foils (Ti, Fe, Zn, Ge, Ag) | broadband conversion (the `Material` input) | 0.05 (gold foil default; no material of their own) | **no public source found** at 3ω (the Z scans above are abstracts without numbers) | — | unsourced |
+| Ti, Fe, Zn, Ge, Ag foils | He-α conversion (signal, not radiosity) | `kshell_ce` ("He-α CE: saturating peak (2026-10-26)") | fit to 68 published points (Workman 2001, Barrios 2013/2014, Coppari 2019) *engineering* | ×/÷ 1.43–1.50 inside the data; Ti held out 1.58 ± 0.66 % against the fit's 2.97 % (−1.1σ); Ag outside the fitted lines (flagged `extrapolated`) | yes inside the data |
+| Si | 1ω | not used | nearly transparent before plasma forms **M** | — | — |
+| SiO₂ | x-ray mirror reflectivity | `mirror_reflectivity` (Dante channels) | Henke optical constants ("Dante channel responses and the unfold (2026-10-24)") | — | not a laser material |
+| black (`BLACK`, apertures, GUI free parts) | albedo / conversion | 0 / 0 (`BLACK`; `Material(name)` keywords; GUI part fields) | a definition (a perfect absorber that emits nothing) | — | by construction |
+
+### The library
+
+`material_library()` holds only entries whose every quantity has a source or a
+derivation above. Each quantity is a `SourcedValue` (value, basis, source, uncertainty);
+the bases are `:published`, `:range` (a round value inside a published range, not
+itself printed anywhere: `gold()`'s conversion 0.75), `:calibrated`, `:derived` and
+`:definition`. Entries: `:gold`, `:uranium`, `:nif_gold`, `:nif_uranium`, `:black`
+(each equal field for field to the constructor's material today, tested), and the
+published alternatives `:gold_young2020` (0.8 / 0.9), `:gold_swadling2025` (0.77 /
+0.95) and `:gold_disk` (Lindl's loss; Dewald's 0.95 / 0.80 intensity table; with the 3ω
+absorption and 1ω cold reflectance recorded but not used).
+
+*Decision*: unsourced values are left out rather than included flagged as engineering
+defaults. A library entry is a claim that the numbers have a source; a flagged entry
+would put unsourced numbers behind the same call and invite their use. The cost is that
+`ablator()` has no entry: its albedo 0.3 is Young 2020's, but its conversion 0.3 has no
+source, and a `Material` needs both.
+
+### What switching would change (measured)
+
+Static solve on the default-size hohlraum (`hohlraum(length = 10.1, radius = 2.875,
+leh_radius = 1.55, capsule_radius = 0.9)`, h 0.8 / capsule_h 0.3, 824 elements; 48 NIF
+quads at 8 TW on the GUI's NIF cone pointing, an engineering default), capsule Tr from
+a₀ and P2/P0, P4/P0 by `legendre_moments`. Same view factors and deposition for every
+row; the capsule receives 0 of the 384 TW. *derived*
+
+| wall / capsule | capsule Tr (eV) | P2/P0 | ΔTr vs core | ΔP2/P0 |
+|---|---|---|---|---|
+| core `gold()` 0.8 / 0.75, `ablator()` 0.3 / 0.3 | 262.60 | −0.1556 | — | — |
+| GUI hohlraum 0.85 / 0.8, capsule 0.3 / 0.3 | 277.77 | −0.1437 | +15.17 (+5.78 %) | +0.0119 |
+| `:gold_young2020` 0.8 / 0.9, capsule 0.3 / 0.3 | 274.84 | −0.1556 | +12.25 (+4.66 %) | 0.0000 |
+| `:gold_swadling2025` 0.77 / 0.95, capsule 0.3 / 0.3 | 272.85 | −0.1621 | +10.25 (+3.90 %) | −0.0065 |
+| core wall, capsule `CapsuleAlbedo()` 0.2 | 261.70 | −0.1542 | −0.89 | +0.0014 |
+| core wall, capsule conversion 0 | 262.60 | −0.1556 | 0.00 | 0.0000 |
+
+- Checks: a conversion change alone scales every source by the same factor, so Tr
+  scales as its fourth root and P2/P0 is unchanged: (0.9/0.75)^¼ × 262.60 = 274.84
+  (row 3, exact). On h 0.5 / 0.2 (1900 elements) every ΔTr agrees within 0.01 eV and
+  every ΔP2/P0 within 2e-4.
+- The albedo sets P2: 0.85 smooths the drive (+0.012 in P2/P0), 0.77 sharpens it.
+- The foil's x-ray source is its conversion times its absorbed laser power, its only
+  source, so a foil conversion change scales its emission exactly: 0.05 → 0.80
+  (Dewald at 10¹⁵) is ×16 in power and ×2.0 in the Tr it drives on any surface; 0.02 →
+  0.80 is ×40 and ×2.5.
+
+Not changed; for the user (recommendations):
+1. **GUI hohlraum 0.85 / 0.8**: switch to `:gold_young2020` (the published NIF static
+   setting: Tr −2.9 eV, P2/P0 −0.012 from today's GUI) or to `:gold` to match the core
+   (−15.2 eV). Recommended: `:gold_young2020`.
+2. **`gold()` conversion 0.75** (sourced as a 1 ns range value, low for NIF): moving it
+   to Young's 0.9 raises every static capsule Tr by 4.66 % and leaves P2 unchanged; it
+   moves every static baseline in the tests and tutorials. Recommended: adopt 0.9 for
+   static NIF solves in a deliberate baseline change, or keep 0.75 and point static NIF
+   users to `:gold_young2020`.
+3. **Capsule conversion 0.3** (`ablator()`, GUI capsule): no source and no effect while
+   the capsule is unlit. Recommended: keep, and say in `ablator`'s docstring that it is
+   an engineering default (or 0 by convention); keep the albedo 0.3 (Young's static
+   value; `CapsuleAlbedo()`'s 0.2 moves Tr −0.9 eV).
+4. **Foil conversion 0.05 (core) and 0.02 (GUI)**: both 10–48× below every published
+   value for gold. Recommended: `:gold_disk` for gold foils; for mid-Z foils, require
+   the conversion from the user (no public total-conversion data were found). The `foil`
+   docstring says `material = gold()` while the code uses `gold(conversion = 0.05)`.
+5. **GUI free parts 0 / 0**: a black body by definition (`:black`). Recommended: keep,
+   with the material picked from the library named in the part's properties.

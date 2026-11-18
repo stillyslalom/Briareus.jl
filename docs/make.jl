@@ -97,6 +97,7 @@ tutorial_page(file) = joinpath("tutorials", splitext(file)[1] * ".md")
         ],
         "Reference" => [
             "Geometry and targets" => "reference/geometry.md",
+            "Material defaults" => "reference/materials.md",
             "Beams and facilities" => "reference/beams.md",
             "Laser deposition" => "reference/deposition.md",
             "Radiation" => "reference/radiation.md",

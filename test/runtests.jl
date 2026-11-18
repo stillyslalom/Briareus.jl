@@ -50,6 +50,7 @@ shard_include("scenario_remake.jl")
 shard_include("line_of_sight.jl")
 shard_include("nested_gradient.jl")
 shard_include("target_caches.jl")
+shard_include("material_library.jl")
 
 shard_include("talis.jl")
 shard_include("vrw_fixture.jl")
