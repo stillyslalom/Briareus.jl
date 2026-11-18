@@ -10701,3 +10701,51 @@ facing away from the beams that pass it, and a closed 0.3 mm radius, 4 mm long s
   −2.0e-3 on the shield (4.4 % of the delivered power), −7.7e-4 on the stalk (4.7 %),
   the operator's sampling of the spot edge. Gradient in (z, r) per cone against central
   differences (h = 1e-5 mm): 9.5e-10 and 4.1e-10 relative.
+- **Keep-out for named hardware** (`HardwareKeepOut`, `hardware_clearance`). Each
+  beam's worst-case clearance from named parts, as `clearance` judges it with
+  `wings = []`: the exact point–ellipse distance to the best-focus contour (1 % of
+  peak by default, the `ApertureKeepOut` default) grown by the f-cone, minimized over
+  the parts upstream of the nominal axis's landing, less `pointing + target_offset +
+  hardware_tolerance + focus/(2F)`. On a triangle on one side of best focus the
+  distance is convex and has no interior stationary point off the medial strip (the
+  major axis's segment ±(A² − B²)/A swept along the beam, at least B²/A inside the
+  envelope), so the minimum lies on segments: edges, crossings with the strip, cuts by
+  the landing plane, split at best focus. Best-first search over clusters of 16
+  triangles and their segments by a lower bound (circumscribed circle and homothetic
+  ellipse, Lipschitz √(1 + (1/2F)²)), each segment by Illinois regula falsi on the
+  derivative: the exact minimum, not a sample. Derivatives by Danskin's theorem at the
+  closest point; on the medial strip the mixture of the two closest points' that
+  leaves the minimum stationary (minimax saddle).
+- **Validation** (`test/keepout.jl`, `test/design_rules.jl`). Closed forms (plates
+  normal to and along a beam, a plate cut by the landing plane, the center of an
+  elliptical spot on a plate through the axis with its gradient [0, 0, 1/2F, 0, −ρ]):
+  1e-12 relative. An oblique (35°), defocused f/8 beam beside a tilted plate: within
+  1e-8 mm of 1.6e5 points on its rim. Against `clearance` (`rtol = 0`, resolution
+  1e-7 mm) on the mock-up's 48 quads: within 1e-6 mm (7.6e-7 measured) wherever
+  −0.5 < clearance < 1 mm; the keep-out is lower (conservative) on 5 of 24 shield
+  beams by 3e-4 to 0.40 mm, all above 1.2 mm, where `clearance` skips shield points
+  the cap hides from the beam (the keep-out, as `talis_check`'s 3ω clearance, counts
+  them). In deep violations (clearance < −0.75 mm) the report reads up to 6e-5 mm lower:
+  its point–ellipse distance (`_ellipse_distance`, Eberly's bisection) loses digits
+  within ~1e-9 mm of the major axis inside the medial segment (2.4e-5 mm at a point
+  3e-13 mm off the axis, against the keep-out's value, which a 1e6-point grid about the
+  point confirms to 1e-10). Derivatives in aim, defocus and spot axes against central
+  differences: within 1e-8 on every beam below 3 mm, medial-strip minima included; not
+  where the minimum lies on the landing plane's cut (the cut does not move in the
+  derivatives: one bottom beam at 10 mm from the stalk hidden behind the hohlraum).
+- **Cost** (48 quads, one thread): 0.43 ms for the 48-triangle shield, 0.78 ms for the
+  96-triangle stalk, 3.3 ms for a 3840-triangle stalk (the same with 12-partial duals:
+  the search runs on values, the duals enter at the closest point only); the aperture
+  keep-out 0.5 ms and one deposition of the coarse mock-up 48 ms.
+- **Discontinuities.** The clearance is a minimum over a fixed surface, continuous in
+  the beams; it jumps only where the nominal axis's landing moves from one component to
+  another while the parts reach past the landing plane.
+- **Toward the TaLIS 3ω clearance** (measured, not implemented). On the mock-up,
+  `talis_check(...; capture = (:wall, :capsule), hardware = (:shield, :stalk))`'s
+  `:clearance_3w` worst values (resolution 1e-7, `rtol = 0`) equal the hardware
+  keep-out's clearance less the rule tolerance r tan 0.5° (r from TCC) taken at the
+  keep-out's closest point to within 9.6e-5 mm (shield) and 7.2e-4 mm (stalk), on all
+  48 rows: the two judge the same points (no reachability). Taken a posteriori the
+  tolerance jumps where the closest point does (by tan 0.5° times the change in r); the
+  exact rule needs the tolerance term inside the minimization (a concave term, so the
+  per-segment convexity and the medial-strip argument hold only approximately).

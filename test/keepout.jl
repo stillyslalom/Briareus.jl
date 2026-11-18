@@ -123,3 +123,62 @@ end
     @test cw ≈ direct(tilt, circle) atol = 1e-9
     @test only(aperture_clearance(kc, [tilt])) ≈ cw atol = 1e-9
 end
+
+# The hardware keep-out against direct geometry: plates normal and parallel to a beam
+# down −z, a plate cut by the landing plane, the medial strip of an elliptical spot, and
+# an oblique defocused beam beside a tilted plate against dense sampling of its rim.
+
+@testset "hardware keep-out against direct geometry" begin
+    sp = SuperGaussianSpot(0.3; order = 4.0)
+    ρ = log(100)^(1 / 4)                          # 1 % contour, 1/e radii
+    F = 8.0
+    cone = 1 / (2F)
+    tr = 0.05 + 0.025                             # pointing + target offset (defaults)
+    beam(; aim = (0.0, 0.0, 0.0), spot = sp, kw...) =
+        Beam("b"; theta = 0, phi = 0, power = 1.0, spot, fnumber = F, aim, kw...)
+    floor(z) = foil(:floor, (0, 0, z), (0, 0, 1); width = 20.0, n = 2)
+    # a plate normal to the beam 2 mm upstream of focus, its near edge h from the axis
+    h = 0.9
+    tn = Target(floor(-3.0), foil(:plate, (h + 1.0, 0, 2.0), (0, 0, 1); width = 2.0, n = 3))
+    kn = HardwareKeepOut(tn, :plate)
+    @test only(hardware_clearance(kn, [beam()])) ≈ h - ρ * 0.3 - 2cone - tr - cone rtol = 1e-12
+    # a plate along the beam: the envelope is widest at its far upstream end (s = −2.5),
+    # and with the floor at z = −1 its part beyond the landing (s > 1) does not count:
+    # the cut at the landing plane is then its farthest point
+    along(z0, z1) = foil(:plate, (h, 0, (z0 + z1) / 2), (1, 0, 0); width = z1 - z0, height = 2.0, n = 4)
+    kp = HardwareKeepOut(Target(floor(-3.0), along(-1.0, 2.5)), :plate)
+    @test only(hardware_clearance(kp, [beam()])) ≈ h - ρ * 0.3 - 2.5cone - tr - cone rtol = 1e-12
+    kc = HardwareKeepOut(Target(floor(-1.0), along(-3.0, 0.5)), :plate)
+    @test only(hardware_clearance(kc, [beam()])) ≈ h - ρ * 0.3 - 1.0cone - tr - cone rtol = 1e-12
+    # a plate through the axis of an elliptical spot (semi-axes 0.4, 0.25): the deepest
+    # point is the center, −B from the contour; moving the beam across leaves it there,
+    # along the beam it brings focus nearer the plate, and only B matters
+    ell = SuperGaussianSpot(0.4, 0.25; order = 4.0)
+    tm = Target(floor(-3.0), foil(:plate, (0.1, -0.2, 2.0), (0, 0, 1); width = 3.0, n = 5))
+    km = HardwareKeepOut(tm, :plate)
+    @test only(hardware_clearance(km, [beam(; spot = ell)])) ≈ -ρ * 0.25 - 2cone - tr - cone rtol = 1e-12
+    g = ForwardDiff.gradient(y -> only(hardware_clearance(km, [beam(; spot = with_axes(ell, y[4], y[5]),
+                                                                    aim = (y[1], y[2], y[3]))])),
+                             [0.0, 0.0, 0.0, 0.4, 0.25])
+    @test g ≈ [0, 0, cone, 0, -ρ] atol = 1e-9
+    # beyond the landing altogether: no clearance to keep
+    @test hardware_clearance(HardwareKeepOut(Target(floor(3.0), along(-1.0, 2.5)), :plate), [beam()]) == [Inf]
+
+    # an oblique, defocused round beam beside a tilted plate: the minimum over the plate
+    # lies on its rim (a round envelope has no stationary point inside), against 40 000
+    # points per side
+    tilt = Beam("tilt"; theta = 35, phi = 20, spot = SuperGaussianSpot(0.2), aim = (0.2, -0.15, 0.3),
+                defocus = 0.8, fnumber = 8.0, power = 1.0)
+    center, normal, θ = Vec3(2.3, -0.6, 1.5), (0.3, -0.2, 1.0), 0.4
+    plate = foil(:plate, center, normal; width = 1.5, height = 1.0, n = 3, rotation = θ)
+    kt = HardwareKeepOut(Target(floor(-3.0), plate), :plate; pointing = 0.0, target_offset = 0.0, focus = 0.0)
+    # the corners as `foil` places them: turned by θ about the normal, then onto it
+    R = Briareus.rotation_to(normal) * [cos(θ) -sin(θ) 0; sin(θ) cos(θ) 0; 0 0 1]
+    corners = [center + R * Vec3(x, y, 0) for (x, y) in ((-0.75, -0.5), (0.75, -0.5), (0.75, 0.5), (-0.75, 0.5))]
+    k = direction(tilt)
+    f = tilt.aim + tilt.defocus * k
+    r = Briareus.envelope_radius(tilt.spot, 1.0; peak_fraction = 0.01) * 0.2
+    rim = [corners[i] + τ * (corners[mod1(i + 1, 4)] - corners[i]) for i in 1:4 for τ in range(0, 1; length = 40_000)]
+    direct = minimum(norm((x - f) - dot(x - f, k) * k) - r - abs(dot(x - f, k)) * cone for x in rim)
+    @test only(hardware_clearance(kt, [tilt])) ≈ direct atol = 1e-8
+end

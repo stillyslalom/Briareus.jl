@@ -414,8 +414,9 @@ end
 
 Each beam's worst-case clearance (mm) from a keep-out, the quantity its penalty holds
 at or above the keep-out's `minimum`: [`aperture_clearance`](@ref) for an
-[`ApertureKeepOut`](@ref), [`sphere_clearance`](@ref) for a [`SphereKeepOut`](@ref);
-`Inf` for a beam the keep-out does not apply to. A pure function of the beams (of the
+[`ApertureKeepOut`](@ref), [`sphere_clearance`](@ref) for a [`SphereKeepOut`](@ref),
+[`hardware_clearance`](@ref) for a [`HardwareKeepOut`](@ref); `Inf` for a beam the
+keep-out does not apply to. A pure function of the beams (of the
 evaluation's setup `beams` for an `Evaluation`), in their number type, so a constraint
 `keepout_clearance(keepout, ev) .≥ minimum` can be handed to an optimizer as it stands.
 """

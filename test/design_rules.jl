@@ -88,3 +88,51 @@ const DR_X = [3.09, -1.09, 3.63, -0.6, 5.2, 0.0, 5.01, 0.0]
         @test g ≈ fd rtol = 1e-6
     end
 end
+
+@testset "design rules: hardware keep-out against clearance" begin
+    t = DR_TARGET
+    beams = apply(GroupPointing(nif_quads(); fields = (:z, :r)), DR_X)
+    rep = clearance(t, beams; targets = (:wall, :capsule), hardware = (:shield, :stalk),
+                    peak_fraction = 0.01, wings = [], nangles = 4, rtol = 0, resolution = 1e-7, nspot = 5)
+    worst(part) = [only(r.clearance for r in rep.rows if r.beam == b.name && r.component === part) for b in beams]
+    ks = [HardwareKeepOut(t, part; targets = (:wall, :capsule)) for part in (:shield, :stalk)]
+    c = [hardware_clearance(k, beams) for k in ks]
+    w = [worst(:shield), worst(:stalk)]
+    @test any(<(0), c[1]) && any(>(0), c[1]) && any(<(0), c[2]) && any(>(0), c[2])
+    # where both judge the same points (clearance skips those hidden from the beam, so
+    # it reads higher above 1.2 mm on the shield, and deep inside the envelope its
+    # point–ellipse distance loses digits next to the major axis): within its 1e-7 mm
+    # resolution. Everywhere the keep-out is the lower: conservative
+    near = [findall(x -> -0.5 < x < 1.0, wi) for wi in w]
+    @test sum(length, near) >= 12
+    @test maximum(maximum(abs.(c[j][near[j]] .- w[j][near[j]])) for j in 1:2) < 1e-6
+    @test all(all(isfinite.(c[j]) .>= isfinite.(w[j])) for j in 1:2)
+    @test all(all(c[j][i] <= w[j][i] + 1e-4 for i in eachindex(beams) if isfinite(w[j][i])) for j in 1:2)
+
+    # derivatives in each beam's aim, defocus and spot axes against central differences,
+    # deep inside the envelope (the medial strip) included; not where the closest point
+    # lies on the landing plane's cut (one bottom beam, 10 mm from the stalk behind the
+    # hohlraum), whose motion the derivatives leave out
+    err = 0.0
+    for k in ks, b in beams
+        only(hardware_clearance(k, [b])) < 3 || continue
+        mk(y) = remake(b; aim = (y[1], y[2], y[3]), defocus = y[4], spot = with_axes(b.spot, y[5], y[6]))
+        y0 = [b.aim..., b.defocus, b.spot.a, b.spot.b]
+        f(y) = only(hardware_clearance(k, [mk(y)]))
+        g = ForwardDiff.gradient(f, y0)
+        fd = [(f(y0 + 1e-6 * (1:6 .== j)) - f(y0 - 1e-6 * (1:6 .== j))) / 2e-6 for j in 1:6]
+        err = max(err, maximum(abs.(g .- fd)))
+    end
+    @test err < 1e-6
+
+    # the keep-out's penalty, alone and beside another keep-out, and its quantity on an
+    # evaluation
+    kp = HardwareKeepOut(t, (:shield, :stalk); targets = (:wall, :capsule), minimum = 0.2, weight = 3.0)
+    cp = hardware_clearance(kp, beams)
+    @test all(isapprox.(cp, min.(c[1], c[2]); atol = 1e-12))
+    @test keepout_penalty(kp, beams) ≈ 3 * sum(max(0, 0.2 - x)^2 for x in cp if isfinite(x)) rtol = 1e-12
+    ka = ApertureKeepOut(t)
+    @test keepout_penalty((kp, ka), beams) ≈ keepout_penalty(kp, beams) + keepout_penalty(ka, beams) rtol = 1e-12
+    ev = evaluate(Scenario(t, GroupPointing(nif_quads(); fields = (:z, :r))), DR_X)
+    @test keepout_clearance(kp, ev) == cp
+end

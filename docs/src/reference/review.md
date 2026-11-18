@@ -16,7 +16,11 @@ a prepulse that may vary in time, and [`irradiance_history`](@ref) the 3ω light
 [`specular_check`](@ref) and [`preplasma_check`](@ref) compare them with the NIF User
 Guide's 10⁸ W/cm² plasma-onset guideline for metals.
 [`ApertureKeepOut`](@ref) puts each beam's worst-case clearance from its entrance hole
-into an optimization objective. [`backlighter_foil`](@ref) and [`line_of_sight`](@ref)
+into an optimization objective, [`SphereKeepOut`](@ref) its clearance from the capsule
+and [`HardwareKeepOut`](@ref) its clearance from named hardware; each clearance is also a
+quantity of its own ([`keepout_clearance`](@ref)) for a hand-written objective or
+constraint, as are the fractions of the laser power on named parts
+([`clipped_fraction`](@ref) beside [`power_fraction`](@ref)). [`backlighter_foil`](@ref) and [`line_of_sight`](@ref)
 place a foil on a diagnostic line of sight and check it against shields and beams, and
 [`backlighter_signal`](@ref) follows the deposition through a He-α conversion efficiency
 fitted to published foil data ([`kshell_ce`](@ref)) to the photons at the detector.

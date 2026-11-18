@@ -73,6 +73,7 @@ end
     keepout = (ApertureKeepOut(t), SphereKeepOut(t))
     objectives = (symmetry_objective(; drive = 1.0, keepout), asymmetry_objective(; keepout),
                   face_flux_objective(; flux = 1.0, rms_scale = 0.1, keepout))   # the capsule's elements as a "face"
+    hardware = HardwareKeepOut(t, (:cap_top, :cap_bottom); targets = (:wall, :capsule))   # named parts
     tw =hohlraum(; geometry..., wall = Material(:Au; albedo = WallLossAlbedo(), conversion = 0.8))
     mw = RadiationModel(tw; F = s.model.F, closed = true)
     pulse = PulseShape([0.0, 1.0, 2.0], [0.0, 4.0, 4.0])
@@ -177,6 +178,8 @@ end
             @test (@inferred deposit(corona, beams)).ylm isa Vector{T}
             @test (@inferred aperture_clearance(keepout[1], beams)) isa Vector{T}
             @test (@inferred sphere_clearance(keepout[2], beams)) isa Vector{T}
+            @test (@inferred hardware_clearance(hardware, beams)) isa Vector{T}
+            @test (@inferred keepout_penalty((keepout..., hardware), beams)) isa T
             dc = _inf_positive(@inferred deposit(coronas, beams))
             @test dc.shell_ylm isa Matrix{T}
             @test (@inferred ablation_pressure_proxy(coronas, dc)) isa Vector{T}
@@ -237,6 +240,8 @@ end
                                          s.deposition, beams, eltype(x)(0.9))
                     @test _inf_jet_clean(JET.report_opt, Briareus._keepout_penalty, keepout, beams)
                     @test _inf_jet_clean(JET.report_call, aperture_clearance, keepout[1], beams)
+                    @test _inf_jet_clean(JET.report_opt, hardware_clearance, hardware, beams)
+                    @test _inf_jet_clean(JET.report_call, hardware_clearance, hardware, beams)
                     @test _inf_jet_clean(JET.report_opt, deposit, corona, beams)
                     @test _inf_jet_clean(JET.report_opt, deposit, coronas, beams)
                 end

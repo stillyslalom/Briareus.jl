@@ -39,3 +39,438 @@ passes through it, so it receives none.
 clipped_fraction(ev::Evaluation, names::Symbol...) =
     sum(ev.deposition.backside[ci] for n in names for ci in part_pieces(ev.scenario.target, n);
         init = zero(ev.deposition.delivered)) / ev.deposition.delivered
+
+# ---------------------------------------------------------------------------------------
+# Keep-out for named hardware
+# ---------------------------------------------------------------------------------------
+
+# A group of a keep-out's triangles: a bounding sphere, the triangles and their edges.
+struct _TriangleCluster
+    center::Vec3
+    radius::Float64
+    tris::Vector{NTuple{3,Vec3}}
+    edges::Vector{NTuple{2,Vec3}}
+end
+
+"""
+    HardwareKeepOut(target, parts; targets = every other opaque surface,
+                    peak_fraction = 0.01, intensity = nothing, pointing = 0.05,
+                    target_offset = 0.025, hardware_tolerance = 0.0, focus = 1.0,
+                    margin = 0.0, minimum = 0.0, weight = 100.0)
+
+Keep-out constraint for named hardware (a shield, a stalk, a diagnostic snout, a closed
+window): [`hardware_clearance`](@ref)`(keepout, beams)` gives each beam's worst-case
+clearance (mm) from `parts` (a name or a collection of part or component names; a part
+stands for all its pieces), judged as [`clearance`](@ref) judges it with `wings = []`.
+The beam envelope is the best-focus contour at `peak_fraction` of the peak (or at
+`intensity`, W/cm²) grown by the f-cone radius `|s|/(2F)` and `margin`; the clearance is
+the smallest signed distance from the parts' surface to the envelope (transverse to the
+beam, negative inside it), less the transverse error radius `pointing + target_offset +
+hardware_tolerance` and `focus/(2F)` for the focus error. Only the surface upstream of
+the beam's landing counts: the plane normal to the beam where its nominal axis first
+meets one of `targets` (by default every opaque surface not among `parts`), as in
+`clearance`. The defaults are those of [`ApertureKeepOut`](@ref): engineering defaults
+(the 1 % contour is the level of the TaLIS 3ω clearance rule), not facility criteria.
+
+The distance to the envelope ellipse is exact (the point–ellipse distance `clearance`
+uses), and the minimum over the parts is found, not sampled. On a triangle not crossing
+best focus the distance is convex (a convex function of the transverse position less a
+linear one of the axial), and it has no stationary point inside the triangle except on
+the medial strip, where it is not differentiable: the major axis's segment between
+`±(A² − B²)/A` (the axis itself for a round spot) swept along the beam, at least
+`B²/A` inside the envelope. So the minimum lies on the triangles' edges, their crossings
+with the medial strip, or their cuts by the landing plane, each split at best focus:
+line segments on which the distance is convex. The triangles are grouped in spatially
+compact clusters of up to 16; clusters and segments are taken best first by a lower
+bound (the circumscribed circle and the homothetic ellipse through a cluster's center
+or a segment's midpoint, less the Lipschitz constant `√(1 + 1/(2F)²)` times its radius
+or half length), and each segment is minimized by a safeguarded root search on the
+derivative, until the bound reaches the smallest value found. The result is the exact
+minimum to about 1e-12 mm.
+
+The clearance is continuous in the beams' aim, defocus and spot size (a minimum over a
+fixed surface), and its derivatives are the distance's at the closest point (Danskin's
+theorem); on the medial strip, where two points of the ellipse are equally near, they
+are the mixture of theirs that leaves the distance stationary at the minimum, as at a
+minimax's saddle. They are one-sided only where two separate points of the parts are
+equally close (a kink of the minimum itself). The landing is found on the nominal
+beam: the clearance jumps where the axis's landing moves from one component to another
+while the parts reach past the landing plane, and the cut by the landing plane does
+not move with the beam in the derivatives.
+
+Two departures from `clearance`, both conservative: every point of the parts upstream
+of the landing counts, also where opaque surfaces hide it from the beam (`clearance`
+skips points the beam cannot reach; `talis_check` judges 3ω clearance as this keep-out
+does), and the clearance-only far-field wings are not modeled. Pass it as `keepout` to
+the objectives (alone, or in a tuple with other keep-outs), which then add
+`weight × Σᵢ max(0, minimum − cᵢ)²` ([`keepout_penalty`](@ref)).
+"""
+struct HardwareKeepOut
+    names::Vector{Symbol}
+    target::Target
+    others::Set{Int}                     # components a beam lands on
+    clusters::Vector{_TriangleCluster}   # the parts' triangles
+    peak_fraction::Union{Nothing,Float64}
+    intensity::Union{Nothing,Float64}
+    transverse::Float64
+    focus::Float64
+    margin::Float64
+    minimum::Float64
+    weight::Float64
+end
+
+function HardwareKeepOut(t::Target, parts; targets = nothing, peak_fraction = nothing,
+                         intensity = nothing, pointing = 0.05, target_offset = 0.025,
+                         hardware_tolerance = 0.0, focus = 1.0, margin = 0.0, minimum = 0.0,
+                         weight = 100.0)
+    intensity === nothing && peak_fraction === nothing && (peak_fraction = 0.01)
+    names = parts isa Union{Symbol,AbstractString} ? [Symbol(parts)] : Symbol[Symbol(p) for p in parts]
+    isempty(names) && throw(ArgumentError("name at least one part"))
+    idx = Set(ci for n in names for ci in part_pieces(t, n))
+    others = targets === nothing ?
+             Set(i for (i, c) in enumerate(t.components) if c.kind === :surface && !(i in idx)) :
+             Set(ci for n in targets for ci in part_pieces(t, Symbol(n)))
+    tris = NTuple{3,Vec3}[]
+    for k in eachindex(t.tri_area)
+        t.tri_comp[k] in idx || continue
+        v0 = t.tri_v0[k]
+        push!(tris, (v0, v0 + t.tri_e1[k], v0 + t.tri_e2[k]))
+    end
+    isempty(tris) && throw(ArgumentError("parts $(join(repr.(names), ", ")) have no triangles"))
+    return HardwareKeepOut(names, t, others, _triangle_clusters(tris), peak_fraction, intensity,
+                           pointing + target_offset + hardware_tolerance, focus, margin,
+                           minimum, weight)
+end
+
+# Triangles in spatially compact groups of at most `leaf` (halved at the median centroid
+# along the longest extent), each with its edges (once each) and a bounding sphere.
+function _triangle_clusters(tris::Vector{NTuple{3,Vec3}}; leaf::Int = 16)
+    out = _TriangleCluster[]
+    key(a, b) = Tuple(a) < Tuple(b) ? (a, b) : (b, a)
+    stack = [tris]
+    while !isempty(stack)
+        ts = pop!(stack)
+        lo = reduce((x, y) -> min.(x, y), (v for tri in ts for v in tri))
+        hi = reduce((x, y) -> max.(x, y), (v for tri in ts for v in tri))
+        if length(ts) <= leaf
+            c = (lo + hi) / 2
+            push!(out, _TriangleCluster(c, maximum(norm(v - c) for tri in ts for v in tri), ts,
+                                        unique!([key(x, y) for (a, b, d) in ts for (x, y) in ((a, b), (b, d), (d, a))])))
+            continue
+        end
+        ax = argmax(hi - lo)
+        ts = sort(ts; by = tri -> tri[1][ax] + tri[2][ax] + tri[3][ax])
+        h = length(ts) ÷ 2
+        push!(stack, ts[1:h], ts[h+1:end])
+    end
+    return out
+end
+
+"""
+    hardware_clearance(keepout, beams) -> Vector
+
+Worst-case clearance (mm) of each beam from the parts of a [`HardwareKeepOut`](@ref);
+`Inf` for a beam whose landing lies upstream of all of them. Differentiable in the
+beams' aim, defocus and spot size; in their number type.
+"""
+hardware_clearance(k::HardwareKeepOut, beams::AbstractVector{<:Beam}) =
+    [_hardware_clearance(k, b) for b in beams]
+
+keepout_clearance(k::HardwareKeepOut, beams::AbstractVector{<:Beam}) = hardware_clearance(k, beams)
+
+# A beam's envelope on values: best focus, axes, semi-axes, cone slope and margin.
+struct _EnvelopeFrame
+    focus::Vec3
+    k::Vec3
+    e1::Vec3
+    e2::Vec3
+    A::Float64
+    B::Float64
+    cone::Float64
+    margin::Float64
+end
+
+function _hardware_clearance(k::HardwareKeepOut, b::Beam)
+    bv = _value_beam(b)
+    ρ = envelope_radius(bv.spot, bv.power; intensity = k.intensity, peak_fraction = k.peak_fraction)
+    kv = direction(b)
+    e1, e2 = spot_axes(b)
+    f0 = Vec3(bv.aim) + bv.defocus * kv
+    ef = _EnvelopeFrame(f0, kv, e1, e2, ρ * bv.spot.a, ρ * bv.spot.b, 1 / (2b.fnumber), k.margin)
+    # (only the envelope's axis matters to `_landing`)
+    s_stop = _landing(k.target, BeamEnvelope(f0, Vec3(bv.aim), kv, e1, e2, ef.A, ef.B, ef.cone, 0.0),
+                      k.others)
+    found, x, w = _hardware_closest(k, ef, s_stop)
+    found || return _no_clearance(b)
+    # the distance at the closest point, in the beams' number type
+    δ = x - (b.aim + b.defocus * kv)
+    δ0 = x - f0
+    u0, v0, σ = dot(δ0, e1), dot(δ0, e2), dot(δ0, kv) < 0 ? -1 : 1
+    u, v, A, B = dot(δ, e1), dot(δ, e2), ρ * b.spot.a, ρ * b.spot.b
+    X0, X1, medial = _ellipse_closest(u0, v0, ef.A, ef.B)
+    n1, n2 = _ellipse_unit_normal(u0, v0, ef.A, ef.B, X0, X1)
+    E = _ellipse_signed(u, v, A, B, ef.A, ef.B, X0, X1, n1, n2)
+    if medial
+        # on the medial axis two closest points are equally near: the derivative is the
+        # mixture of theirs that leaves the distance stationary along `w` (the segment's
+        # direction, or across the medial strip in the triangle's plane), as at a
+        # minimax's saddle
+        Y0, Y1 = ef.A >= ef.B ? (X0, -X1) : (-X0, X1)
+        m1, m2 = _ellipse_unit_normal(u0, v0, ef.A, ef.B, Y0, Y1)
+        h⁺ = dot(_envelope_gradient(ef, n1, n2, σ), w)
+        h⁻ = dot(_envelope_gradient(ef, m1, m2, σ), w)
+        λ = h⁺ == h⁻ ? 0.5 : clamp(h⁻ / (h⁻ - h⁺), 0.0, 1.0)
+        E = λ * E + (1 - λ) * _ellipse_signed(u, v, A, B, ef.A, ef.B, Y0, Y1, m1, m2)
+    end
+    s = dot(δ, kv)
+    return E - ef.cone * σ * s - k.margin - k.transverse - k.focus * ef.cone
+end
+
+# The point of the keep-out's parts upstream of `s_stop` closest to the envelope `ef`:
+# whether there is one, the point, and the direction along which the distance is
+# stationary there (the segment's, or across the medial strip in a triangle's plane);
+# see `HardwareKeepOut`.
+function _hardware_closest(k::HardwareKeepOut, ef::_EnvelopeFrame, s_stop::Float64)
+    L = sqrt(1 + ef.cone^2)
+    # best first over the clusters (bounded by their spheres) and the segments of those
+    # opened: (bound, ends, balancing direction, whether a medial-strip crossing, cluster)
+    heap = Tuple{Float64,Vec3,Vec3,Vec3,Bool,Int}[]
+    for (i, c) in enumerate(k.clusters)
+        _axial(ef, c.center) - c.radius > s_stop && continue
+        _heap_push!(heap, (_point_bound(ef, c.center) - L * c.radius, c.center, c.center, c.center, false, i))
+    end
+    segs = Tuple{Float64,Vec3,Vec3,Vec3,Bool}[]
+    best, xbest, wbest = Inf, zero(Vec3), zero(Vec3)
+    while !isempty(heap)
+        lb, p, q, w, strip, i = _heap_pop!(heap)
+        lb >= best && break
+        if i > 0
+            empty!(segs)
+            _cluster_segments!(segs, k.clusters[i], ef, s_stop)
+            for (sl, sp, sq, sw, ss) in segs
+                sl < best && _heap_push!(heap, (sl, sp, sq, sw, ss, 0))
+            end
+        else
+            # a crossing's ends lie on edges or cuts, whose own search finds them with
+            # the direction a minimum there is stationary along
+            v, x = _segment_min(ef, p, q, best, !strip)
+            v < best && ((best, xbest, wbest) = (v, x, w))
+        end
+    end
+    return isfinite(best), xbest, wbest
+end
+
+# The segments of cluster `c` on which the envelope distance's minimum over its
+# triangles upstream of `s_stop` lies (see `HardwareKeepOut`), pushed onto `segs` as
+# (bound, ends, balancing direction, whether a medial-strip crossing).
+function _cluster_segments!(segs, cl::_TriangleCluster, ef::_EnvelopeFrame, s_stop)
+    for (p, q) in cl.edges
+        _segment_pieces!(segs, ef, s_stop, p, q, q - p, false)
+    end
+    # the medial strip: the plane through the axis and the major axis, within ±tmax of it
+    amaj, tmax = ef.A >= ef.B ? (ef.e1, (ef.A^2 - ef.B^2) / ef.A) : (ef.e2, (ef.B^2 - ef.A^2) / ef.B)
+    nm = cross(ef.k, amaj)
+    for (a, b, c) in cl.tris
+        sa, sb, sc = _axial(ef, a), _axial(ef, b), _axial(ef, c)
+        # the cut by the landing plane
+        if max(sa, sb, sc) > s_stop && min(sa, sb, sc) < s_stop
+            p, q, n = _plane_cut((a, b, c), (sa - s_stop, sb - s_stop, sc - s_stop))
+            n == 2 && _segment_pieces!(segs, ef, s_stop, p, q, q - p, false)
+        end
+        # the crossing with the medial strip, clipped to its width
+        h = (dot(nm, a - ef.focus), dot(nm, b - ef.focus), dot(nm, c - ef.focus))
+        (minimum(h) > 0 || maximum(h) < 0) && continue
+        p, q, n = _plane_cut((a, b, c), h)
+        n == 0 && continue
+        tp, tq = dot(amaj, p - ef.focus), dot(amaj, q - ef.focus)
+        tp > tq && ((p, q, tp, tq) = (q, p, tq, tp))
+        (tq < -tmax || tp > tmax) && continue
+        if tq > tp
+            p, q = p + (max(tp, -tmax) - tp) / (tq - tp) * (q - p), p + (min(tq, tmax) - tp) / (tq - tp) * (q - p)
+        end
+        N = cross(b - a, c - a)
+        _segment_pieces!(segs, ef, s_stop, p, q, cross(N, cross(N, nm)), true)
+    end
+    return segs
+end
+
+_axial(ef::_EnvelopeFrame, x) = dot(x - ef.focus, ef.k)
+
+# The crossing of triangle `tri` with the plane on which the signed heights `h` of its
+# vertices vanish: its two end points and how many there are (0, 1 or 2; a vertex on
+# the plane counts once, an edge in it by its ends).
+function _plane_cut(tri, h)
+    p = q = tri[1]
+    n = 0
+    for (i, j) in ((1, 2), (2, 3), (3, 1))
+        x = h[i] == 0 ? tri[i] : h[i] * h[j] < 0 ? tri[i] + h[i] / (h[i] - h[j]) * (tri[j] - tri[i]) :
+            continue
+        n == 0 ? (p = q = x) : (q = x)
+        n += 1
+    end
+    return p, q, min(n, 2)
+end
+
+# Push the pieces of segment `p`–`q` upstream of `s_stop`, split at best focus, each with
+# a lower bound of the envelope distance on it, the balancing direction `w` and `strip`.
+function _segment_pieces!(segs, ef::_EnvelopeFrame, s_stop, p, q, w, strip::Bool)
+    sp, sq = _axial(ef, p), _axial(ef, q)
+    (sp > s_stop && sq > s_stop) && return segs
+    if sp > s_stop || sq > s_stop
+        x = p + (s_stop - sp) / (sq - sp) * (q - p)
+        sp > s_stop ? ((p, sp) = (x, s_stop)) : ((q, sq) = (x, s_stop))
+    end
+    if (sp < 0 && sq > 0) || (sp > 0 && sq < 0)
+        x = p + sp / (sp - sq) * (q - p)
+        push!(segs, (_segment_bound(ef, p, x), p, x, w, strip), (_segment_bound(ef, x, q), x, q, w, strip))
+    else
+        push!(segs, (_segment_bound(ef, p, q), p, q, w, strip))
+    end
+    return segs
+end
+
+# A lower bound of the envelope distance at `x`: the distance to the circumscribed
+# circle, and outside the gap (g − 1) min(A, B) to the homothetic ellipse through it
+# (both at most the distance to the ellipse, and both 1-Lipschitz across the beam).
+function _point_bound(ef::_EnvelopeFrame, x)
+    d = x - ef.focus
+    u, v, s = dot(d, ef.e1), dot(d, ef.e2), dot(d, ef.k)
+    lo = hypot(u, v) - max(ef.A, ef.B)
+    if ef.A > 0 && ef.B > 0
+        g = hypot(u / ef.A, v / ef.B)
+        lo = max(lo, g >= 1 ? (g - 1) * min(ef.A, ef.B) : -min(ef.A, ef.B))
+    end
+    return lo - ef.cone * abs(s) - ef.margin
+end
+
+# A lower bound of the envelope distance on segment `p`–`q`: the midpoint's, less the
+# Lipschitz constant √(1 + cone²) times the half length.
+_segment_bound(ef::_EnvelopeFrame, p, q) =
+    _point_bound(ef, (p + q) / 2) - sqrt(1 + ef.cone^2) * norm(q - p) / 2
+
+# The gradient of the envelope distance where the ellipse's unit normal is (n1, n2), on
+# the side `σ` (±1) of best focus.
+_envelope_gradient(ef::_EnvelopeFrame, n1, n2, σ) = n1 * ef.e1 + n2 * ef.e2 - (σ * ef.cone) * ef.k
+
+# The envelope distance at `x` and its gradient (on the side `σ` of best focus).
+function _envelope_value_gradient(ef::_EnvelopeFrame, x, σ)
+    d = x - ef.focus
+    u, v = dot(d, ef.e1), dot(d, ef.e2)
+    X0, X1, _ = _ellipse_closest(u, v, ef.A, ef.B)
+    n1, n2 = _ellipse_unit_normal(u, v, ef.A, ef.B, X0, X1)
+    return n1 * (u - X0) + n2 * (v - X1) - ef.cone * abs(dot(d, ef.k)) - ef.margin,
+           _envelope_gradient(ef, n1, n2, σ)
+end
+
+# The smallest envelope distance on segment `p`–`q` (on one side of best focus, so
+# convex along it) and its point, or with `ends = false` the smallest inside it (`Inf`
+# if that is at an end); a bound at or above `best` ends the search early.
+function _segment_min(ef::_EnvelopeFrame, p, q, best, ends::Bool = true)
+    Δ = q - p
+    σ = _axial(ef, (p + q) / 2) < 0 ? -1 : 1
+    fa, ga = _envelope_value_gradient(ef, p, σ)
+    fb, gb = _envelope_value_gradient(ef, q, σ)
+    va, xa = !ends ? (Inf, p) : fa <= fb ? (fa, p) : (fb, q)
+    ha, hb = dot(ga, Δ), dot(gb, Δ)
+    (ha >= 0 || hb <= 0) && return va, xa                  # the minimum at an end
+    # the tangents at the ends bound the convex function from below
+    fa + ha * (fb - hb - fa) / (ha - hb) >= min(best, va) && return va, xa
+    # Illinois regula falsi on the derivative, bisection when it stalls
+    a, b = 0.0, 1.0
+    side = 0
+    for _ in 1:100
+        τ = (a * hb - b * ha) / (hb - ha)
+        (a < τ < b) || (τ = (a + b) / 2)
+        x = p + τ * Δ
+        f, g = _envelope_value_gradient(ef, x, σ)
+        f < va && ((va, xa) = (f, x))
+        h = dot(g, Δ)
+        if h < 0
+            a, ha = τ, h
+            side == -1 && (hb /= 2)
+            side = -1
+        elseif h > 0
+            b, hb = τ, h
+            side == 1 && (ha /= 2)
+            side = 1
+        else
+            break
+        end
+        b - a <= 1e-13 && break
+    end
+    return va, xa
+end
+
+# The point (X0, X1) of the ellipse (u/a)² + (v/b)² = 1 closest to (u, v), and whether
+# (u, v) lies on the medial axis (inside, on the major axis between its centers of
+# curvature: two closest points, the other its mirror image across the major axis). The
+# robust method of `_ellipse_distance` (Eberly), the multiplier found by Newton's method;
+# the center for a degenerate ellipse.
+function _ellipse_closest(u::Float64, v::Float64, a::Float64, b::Float64)
+    (a == 0 || b == 0) && return 0.0, 0.0, false
+    swap = a < b
+    e0, e1, y0, y1 = swap ? (b, a, abs(v), abs(u)) : (a, b, abs(u), abs(v))
+    medial = false
+    # within 1e-6 e1 of the major axis, on it: inside the ellipse the multiplier below
+    # puts s + 1 ~ y1, to an absolute 1e-16, so x1 = y1/(s + 1) loses its digits as
+    # y1 → 0. The on-axis branch is the limit; the snap moves the closest point by
+    # ~1e-6 e1 and the distance (the projection on the normal there) to second order,
+    # ~1e-12 e1. A minimum on the medial axis, where the search leaves it within ~1e-9,
+    # is then known as one.
+    if y1 > 1e-6 * e1
+        if y0 > 0
+            z0, z1 = y0 / e0, y1 / e1
+            if z0^2 + z1^2 == 1
+                x0, x1 = y0, y1
+            else
+                r0 = (e0 / e1)^2
+                n0 = r0 * z0
+                # the root of F(s) = (n0/(s + r0))² + (z1/(s + 1))² − 1, decreasing and
+                # convex for s > −1: Newton's method from F(z1 − 1) ≥ 0 climbs to it
+                s = z1 - 1
+                for _ in 1:200
+                    α, β = n0 / (s + r0), z1 / (s + 1)
+                    F = α^2 + β^2 - 1
+                    F <= 0 && break
+                    sn = s + F / (2 * (α^2 / (s + r0) + β^2 / (s + 1)))
+                    sn <= s && break
+                    s = sn
+                end
+                x0, x1 = r0 * y0 / (s + r0), y1 / (s + 1)
+            end
+        else
+            x0, x1 = 0.0, e1
+        end
+    else
+        numer, denom = e0 * y0, e0^2 - e1^2
+        if numer < denom
+            ξ = numer / denom
+            x0, x1 = e0 * ξ, e1 * sqrt(1 - ξ^2)
+            medial = true
+        else
+            x0, x1 = e0, 0.0
+        end
+    end
+    X0, X1 = swap ? (x1, x0) : (x0, x1)
+    return copysign(X0, u), copysign(X1, v), medial
+end
+
+# The outward unit normal of the ellipse at its point (X0, X1) closest to (u, v); for a
+# degenerate ellipse (its center) the direction of (u, v).
+function _ellipse_unit_normal(u::Float64, v::Float64, a::Float64, b::Float64, X0, X1)
+    if a == 0 || b == 0
+        r = hypot(u, v)
+        return r > 0 ? (u / r, v / r) : (1.0, 0.0)
+    end
+    n1, n2 = X0 / a^2, X1 / b^2
+    m = hypot(n1, n2)
+    return n1 / m, n2 / m
+end
+
+# The signed distance (negative inside) from (u, v) to the ellipse with semi-axes
+# (A, B), in their number type: the projection on the unit normal (n1, n2) at the
+# closest point (X0, X1), found on the values (semi-axes `A0`, `B0`) and held by its
+# parameter. The value is the distance, and the first derivatives are its own (the
+# closest point is stationary: Danskin's theorem).
+_ellipse_signed(u, v, A, B, A0::Float64, B0::Float64, X0, X1, n1, n2) =
+    n1 * (u - A * (A0 > 0 ? X0 / A0 : 0.0)) + n2 * (v - B * (B0 > 0 ? X1 / B0 : 0.0))
