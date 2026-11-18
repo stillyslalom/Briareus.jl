@@ -43,3 +43,48 @@
     h = ForwardDiff.gradient(y -> direct_fraction(evaluate(sc, y)), x)
     @test all(isfinite, g) && norm(g) > 0 && all(isfinite, h) && norm(h) > 0
 end
+
+# A mock-up hohlraum with hardware beside the top entrance hole: a one-sided shield plate
+# facing away from the beams that pass it (its back side catches their light) and a
+# two-sided stalk (a closed cylinder) across the hole. Shared by the testsets below.
+const DR_TARGET = let
+    th = hohlraum(length = 10.1, radius = 2.875, leh_radius = 1.55, capsule_radius = 0.9,
+                  nz = 8, nphi = 16, capsule_ntheta = 8, capsule_nphi = 12)
+    shield = foil(:shield, (2.4, 0.0, 7.0), (-1.0, 0.0, 0.0); width = 3.0, height = 2.0, n = 6,
+                  two_sided = false)
+    stalk = Component(:stalk, transform(cylinder_mesh(0.3, 0.0, 4.0; nz = 4, nphi = 12, inward = false),
+                                        Briareus.rotation_to(Vec3(0, 1, 0)), Vec3(0.0, -4.5, 6.2)), gold())
+    Target([th.components..., shield, stalk]; closed = th.closed)
+end
+# (z, r) per cone: the NIF quads through the entrance holes onto the wall
+const DR_X = [3.09, -1.09, 3.63, -0.6, 5.2, 0.0, 5.01, 0.0]
+
+@testset "design rules: power on named parts" begin
+    t = DR_TARGET
+    sc = Scenario(t, GroupPointing(nif_quads(); fields = (:z, :r)))
+    ev = evaluate(sc, DR_X)
+    P = ev.deposition.delivered
+    on(e, n) = power_fraction(e, n) + clipped_fraction(e, n)
+    @test clipped_fraction(ev, :shield) > 0.01 && power_fraction(ev, :shield) == 0
+    @test power_fraction(ev, :stalk) > 0.01
+    # the totals component_power reports, and every part's with the missed light closes
+    cp = component_power(ev.deposition, t)
+    @test clipped_fraction(ev, :shield) * P ≈ cp[:shield_outside] rtol = 1e-12
+    @test [power_fraction(ev, :stalk), clipped_fraction(ev, :stalk)] .* P ≈ [cp[:stalk], cp[:stalk_outside]] rtol = 1e-12
+    @test clipped_fraction(ev, (c.name for c in t.components)...) ≈ clipped_fraction(ev) rtol = 1e-12
+    @test sum(n -> on(ev, n), parts(t)) + missed_fraction(ev) ≈ 1 rtol = 1e-12
+    # against the reference ray trace (both sides of each component; the operator's
+    # sampling of the spot edge at the hardware: 2e-3 and 8e-4 measured)
+    rt = raytrace_component_power(t, ev.beams; nspot = 121)
+    @test [on(ev, n) for n in (:shield, :stalk)] ≈
+          [sum(rt[:, part_pieces(t, n)]) / P for n in (:shield, :stalk)] rtol = 5e-3
+    # gradients against central differences (1e-9 relative measured)
+    for n in (:shield, :stalk)
+        f(y) = on(evaluate(sc, y), n)
+        g = ForwardDiff.gradient(f, DR_X)
+        h = 1e-5
+        fd = [(f(DR_X + h * (eachindex(DR_X) .== i)) - f(DR_X - h * (eachindex(DR_X) .== i))) / 2h
+              for i in eachindex(DR_X)]
+        @test g ≈ fd rtol = 1e-6
+    end
+end

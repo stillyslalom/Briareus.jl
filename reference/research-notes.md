@@ -10682,3 +10682,22 @@ Izumi 2023, Ralph 2021; **H** unless noted):
 - **Measured-table fallback.** The tabulated VisRad profiles (`_VR_MEASURED`) were
   replaced by VisRad's closed-form law (§ VisRad's beam profile law), which serves every
   spot, so no spot falls back to another profile and no warning applies.
+
+## Capture and clearance rules as optimization quantities (2026-11-18) *derived*
+
+Roadmap item 35. Each rule is a quantity of an evaluation (or of its beams) with a
+natural limit, generic in the number type and thread-safe; the penalties are wrappers.
+Validation in `test/design_rules.jl` on a mock-up: a coarse NIF-scale hohlraum (10.1 ×
+2.875 mm, 1.55 mm holes) with a one-sided 3 × 2 mm shield plate beside the top hole,
+facing away from the beams that pass it, and a closed 0.3 mm radius, 4 mm long stalk
+(12 facets) across the hole; the 48 NIF quads at the cone aims of the basics test.
+
+- **Penalty terms.** `keepout_penalty`, `keepout_clearance` and `direct_fraction` are
+  the objectives' own terms (`_penalties` equals the public fractions bit for bit).
+- **Power on named parts.** `power_fraction(ev, names...)` (absorbed on the parts'
+  elements) plus `clipped_fraction(ev, names...)` (their back sides) is all the light the
+  parts receive. Against `component_power`: 1e-12 relative; with the missed light, the
+  parts' sum closes to 9e-16. Against the reference ray trace (nspot = 121, both sides):
+  −2.0e-3 on the shield (4.4 % of the delivered power), −7.7e-4 on the stalk (4.7 %),
+  the operator's sampling of the spot edge. Gradient in (z, r) per cone against central
+  differences (h = 1e-5 mm): 9.5e-10 and 4.1e-10 relative.
