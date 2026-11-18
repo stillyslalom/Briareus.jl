@@ -267,11 +267,12 @@ analog is the dropped-bundle tutorial, `docs/literate/dropped_bundle.jl`).
       exported (2acd1e9); left: `closest_hit` as a method on the target (it takes the
       internal `BVH`), the beam's section at a plane (`_beam_at_plane` is shaped for
       CBET: a `beam_section(beam, point, normal)`).
-    - A default `subset` and `parameters(...)` named values for the composed
-      parameterizations (`subset`'s default regroups by `:group`, which renames
-      parameters). `GroupPointing` points by quad by default since 33cf879, with a
-      quad's split as a parameter (`:split`) and `unit = :beam` or `by = :beam` for
-      beams pointed apart.
+    - `subset` keeps a composed parameterization's parameter names, values and holds,
+      and the wrappers take named values (59b366d). Left: whether `GroupPointing`'s own
+      `subset` default keeps its groups instead of regrouping by `:group` (a one-line
+      change of a documented default: user); reading a wrapper's values off beams.
+      `GroupPointing` points by quad by default since 33cf879, with a quad's split as
+      a parameter (`:split`) and `unit = :beam` or `by = :beam` for beams pointed apart.
 
     The tutorial's section "A re-pointing study, end to end" walks these on exported
     names only (a96792f): quads held, a power scale per cone, the gates, the ceiling, a
@@ -309,8 +310,7 @@ analog is the dropped-bundle tutorial, `docs/literate/dropped_bundle.jl`).
       the squared hinge they make the penalty's derivative unreliable at a design on
       the keep-out. A soft minimum over the rim's local minima, on a length below the
       keep-out's accuracy, would remove both; it changes the keep-out's definition
-      (user). `HardwareKeepOut`'s snap next to a center of curvature costs up to 1e-8
-      of a semi-axis on near-circular spots (mark medial minima another way).
+      (user).
 
     *Check:* each surrogate against `clearance` or `talis_check` on the worst case, as
     the tutorial does for the aperture keep-out (agreement to a few micrometers); a
