@@ -10661,3 +10661,24 @@ Izumi 2023, Ralph 2021; **H** unless noted):
 - A published thermal-band (~0.9 keV) LEH radius, or the warm lip's opacity, to replace
   the 0–0.13 mm bracket of §2.
 - The foot's +0.03–0.05 over 3–4 ns (mock pointing, DN24's foot cone fraction).
+
+## Re-pointing studies on the public API (2026-11-18)
+
+- **VisRad's NIF plates by cone** (`VISRAD_NIF_PLATES`, `visrad_nif_spot`). Rev3 Inner
+  on 23.5°, 1.0 Rev1a Inner on 30°, Rev3 Outer on 44.5°, Rev1 Outer on 50°: the plates
+  behind the measured CPP profiles of `nif_spot` (LMF phase-plate table, 2020-10-15).
+  VisRad names the four among its NIF CPPs
+  (VR/power_sources/import_nif_cmt_data_file.html: "Rev3 Inner Cone 2W CPP", "1.0 Rev1a
+  Inner Cone 2W CPP", "Rev3 Outer Cone 2W CPP", "1.0 Rev1 Outer Cone 2W CPP"), but that
+  page does not tie them to cones; the cone assignment is the LMF table's, and VisRad
+  workspaces built from its NIF template carry the same four (§ VisRad deposition
+  parity: hohlraum runs, "Spots"). A campaign default for VisRad parity, not a record of
+  any shot's plates. **H** names and radii, **M** the cone assignment as VisRad's
+  default.
+- **Quad frame** (`nif_beams(; spot_frame = :quad)`): the turn of each beam's spot to its
+  quad port's φ̂ (`_vr_reference_angle`), the rotation VisRad applies (§ VisRad
+  beam-profile probe, within 0.02° on 48 plates). Whether the facility's spots follow it is not
+  established. **H** for VisRad, **L** for the facility.
+- **Measured-table fallback.** The tabulated VisRad profiles (`_VR_MEASURED`) were
+  replaced by VisRad's closed-form law (§ VisRad's beam profile law), which serves every
+  spot, so no spot falls back to another profile and no warning applies.

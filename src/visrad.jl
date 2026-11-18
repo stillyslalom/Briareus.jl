@@ -315,6 +315,32 @@ function visrad_spot(plate::AbstractString; rotation = 0.0, rotation_sense::Symb
     return _vr_make_spot(p.major, p.minor, rotation, p.order, p.level, rotation_sense)
 end
 
+"""
+    VISRAD_NIF_PLATES
+
+VisRad's phase plate (a `VISRAD_PHASE_PLATES` name) for each NIF cone: Rev3 Inner on
+the 23.5° cone, 1.0 Rev1a Inner on the 30° cone, Rev3 Outer on the 44.5° cone and Rev1
+Outer on the 50° cone. The assignment is that of the measured CPP profiles behind
+[`nif_spot`](@ref) (LMF phase-plate table, 2020-10-15); VisRad lists the four plates
+among its NIF CPPs (`VR/power_sources/import_nif_cmt_data_file.html`) and tabulates
+their radii and exponents (`VR/power_sources/phase_plate_params.html`). Other campaigns
+field other plates: this is a default for VisRad parity, not a facility record.
+"""
+const VISRAD_NIF_PLATES = Dict(:inner23 => "Rev3-Inner-2w", :inner30 => "1.0 Rev1a-Inner-2w",
+                               :outer44 => "Rev3-Outer-2w", :outer50 => "Rev1-Outer-2w")
+
+"""
+    visrad_nif_spot(cone) -> SuperGaussianSpot
+
+The best-focus spot of VisRad's phase plate for a NIF cone (`VISRAD_NIF_PLATES`,
+[`visrad_spot`](@ref) at rotation 0), major axis along the port's φ̂ as for
+[`nif_spot`](@ref). VisRad measures the rotation of a NIF beam's spot from its quad's
+horizontal, so the spots of VisRad's beams are `nif_beams(; spot = visrad_nif_spot,
+spot_frame = :quad)`; with `deposition_kw = (; profile = VisRadProfile())` the
+deposition is VisRad's beam model (research notes, "VisRad deposition parity").
+"""
+visrad_nif_spot(cone::Symbol) = visrad_spot(VISRAD_NIF_PLATES[cone])
+
 # ---------------------------------------------------------------------------------------
 # Applying per-beam records to a template beam set
 # ---------------------------------------------------------------------------------------

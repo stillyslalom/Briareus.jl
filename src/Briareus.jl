@@ -69,6 +69,7 @@ export VISRAD_SST_COLUMNS, VISRAD_PHASE_PLATES, visrad_spot, write_visrad_sst, r
 export VisRadObject, VisRadWorkspace, read_visrad_workspace, visrad_component, visrad_target,
        write_visrad_workspace, VisRadProfile, visrad_profile, visrad_envelope,
        visrad_power_sources, visrad_deposition
+export VISRAD_NIF_PLATES, visrad_nif_spot
 export legendre, legendre_moments, legendre_weights, solid_angle, ylm_moments, ylm_weights, mode_center,
        ylm_matrix, ylm_frame, mode_index, relative_mode_power, mode_amplitude, mode_power, mode_rms, rms_nonuniformity
 export OrthoCamera, render, radiance, line_of_sight_power

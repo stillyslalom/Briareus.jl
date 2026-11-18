@@ -213,7 +213,7 @@ function nif_quads(; power = 8.0, fnumber = 7.9, spot = nif_spot)
 end
 
 """
-    nif_beams(; power = 2.0, fnumber = 20.7, spot = nif_spot)
+    nif_beams(; power = 2.0, fnumber = 20.7, spot = nif_spot, spot_frame = :beam)
 
 All 192 indirect-drive NIF beams with their individual directions from the LMF beam
 table (`data/nif_beams.csv`, transcribed from beam-port-locations-updated-10-15-2020.xlsx
@@ -221,15 +221,26 @@ of the LMF Shot RI Resources). Names are the facility beam names (`"B111"`–`"B
 bundle `xy`, beam `z`; beams 1–4 form quad QxyT, 5–8 QxyB); `quad` is the quad name and
 `group` the cone. The mean direction of each quad's four beams is its port direction to
 within 0.004°.
+
+`spot` maps a cone to its spot, whose `angle` is measured in the frame `spot_frame`:
+`:beam`, the beam's own port θ̂ and φ̂; or `:quad`, its quad port's, the spot turned
+about the beam's axis by the angle between the quad port's φ̂ and the beam's (1.6–5.3°,
+its sign varying by beam), as VisRad orients a NIF beam's phase-plate spot. VisRad's
+beams are `nif_beams(; spot = visrad_nif_spot, spot_frame = :quad)`
+([`visrad_nif_spot`](@ref)). Whether the facility's spots follow the quad frame is not
+established.
 """
-function nif_beams(; power = 2.0, fnumber = 20.7, spot = nif_spot)
+function nif_beams(; power = 2.0, fnumber = 20.7, spot = nif_spot, spot_frame::Symbol = :beam)
+    spot_frame in (:beam, :quad) || throw(ArgumentError("spot_frame is :beam or :quad, got :$spot_frame"))
     rows = NamedTuple[]
     for r in _nif_beam_table()
         cone = _nif_cone(r.theta)
         push!(rows, (name = r.beam, theta = r.theta, phi = r.phi, group = cone,
                      quad = "Q" * r.bundle * r.hemisphere, spot = spot(cone)))
     end
-    return beams_from_table(rows; fnumber, power)
+    beams = beams_from_table(rows; fnumber, power)
+    spot_frame === :beam && return beams
+    return [remake(b; spot = _vr_turn(b.spot, _vr_reference_angle(b))) for b in beams]
 end
 
 function _nif_beam_table()
