@@ -29,7 +29,9 @@ ceiling on the laser irradiance over named parts (its exact value
 [`drive_objective`](@ref) for the largest drive within the gates;
 [`clearance_floor`](@ref), each beam's worst-case clearance from a keep-out at or above
 its minimum; [`light_ceiling`](@ref) and [`light_floor`](@ref), the laser light on
-named parts ([`light_fraction`](@ref)) at most or at least a limit.
+named parts ([`light_fraction`](@ref)) at most or at least a limit. The laser
+irradiance during the picket, the quantity of the gold bubble's published scalings, has
+its own ceiling, [`picket_ceiling`](@ref) (Laser–plasma models).
 
 [`mode_sensitivity`](@ref) gives the exact sensitivity of the drive shape to each beam's
 pointing and power errors, and [`mode_uncertainty`](@ref) the asymmetry independent

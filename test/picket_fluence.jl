@@ -88,3 +88,125 @@
     @test bc.energy ≈ 26.0 rtol = 1e-3
     @test picket_ratio(bc, bc) == 1
 end
+
+# The picket irradiance as a constraint, the bubble that follows it, and the prediction
+# for a re-pointed design. References: `picket_fluence` (the map, checked against closed
+# forms above) for the values; central differences for the gradients; bisection on the
+# constrained quantity for the solution of a one-parameter run; `remake(bubble;
+# picket_ratio)` by hand for the linked bubble; a synthetic history with a known swing.
+@testset "picket ceiling and the linked bubble" begin
+    geom = (; length = 10.1, radius = 2.875, leh_radius = 1.55, capsule_radius = 0.9)
+    t = hohlraum(; geom..., h = 0.45)
+    aims = Dict(:outer50 => (0.0, 5.01), :outer44 => (0.0, 5.20), :inner30 => (0.60, 3.63),
+                :inner23 => (1.09, 3.09))
+    quads = map(nif_quads(power = 8.0)) do q
+        r, z = aims[q.group]
+        φ = port_angles(q)[2]
+        remake(q; aim = (-r * cosd(φ), -r * sind(φ), sign(q.port[3]) * z))
+    end
+    p = GroupPointing(quads; fields = (:z, :phi))
+    s = Scenario(t, p)
+    x0 = initial_parameters(p)
+    ref = evaluate(s, x0)
+    # a picket of 2 TW per quad in 0.3–1.3 ns on every cone, then a trough and a rise
+    pulse = PulseShape([0.0, 0.3, 1.3, 2.0, 3.0, 8.0], [0.0, 2.0, 2.0, 0.5, 6.0, 6.0])
+    pulses = Dict(g => pulse for g in (:outer44, :outer50, :inner23, :inner30))
+    w = (0.3, 1.3)
+    kw = (; pulses, window = w)
+
+    @testset "values against the picket fluence" begin
+        x = x0 .+ 0.05 .* sin.(1:length(x0))
+        ev = evaluate(s, x)
+        fl = picket_fluence(s.deposition, ev.beams, pulses, w)        # kJ/mm² over 1 ns
+        @test picket_irradiance(ev, :wall; kw...) ≈ fl.peak rtol = 1e-12
+        @test picket_irradiance(ev, :wall; kw..., measure = :mean) ≈ fl.mean rtol = 1e-12
+        # a picket power per beam, or the beams' own powers (the outer cones' deposition)
+        f3 = picket_fluence(s.deposition, [remake(b; power = 3.0) for b in ev.beams])
+        @test picket_irradiance(ev, :wall; power = b -> 3.0, measure = :mean) ≈ f3.mean rtol = 1e-12
+        outer = b -> b.group in (:outer44, :outer50) ? 1.0 : 0.0
+        @test picket_irradiance(ev, :wall) == peak_irradiance(ev, :wall; weight = outer)
+        # other groups count when named
+        fi = picket_fluence(s.deposition, ev.beams, pulses, w; groups = (:inner23, :inner30))
+        @test picket_irradiance(ev, :wall; kw..., groups = (:inner23, :inner30)) ≈ fi.peak rtol = 1e-12
+        # the ceilings: the stand-in at the reference's peak, the reported value the peak
+        c, cm = picket_ceiling(ref, :wall; kw...), picket_ceiling(ref, :wall; kw..., measure = :mean)
+        @test c.name === :picket_peak && cm.name === :picket_mean && c.upper
+        @test only(c.limit) == picket_irradiance(ref, :wall; kw...)
+        @test only(cm.limit) == picket_irradiance(ref, :wall; kw..., measure = :mean)
+        @test c.f(ref) ≈ only(c.limit) rtol = 1e-12
+        @test check_constraints(ev, c)[1].value == picket_irradiance(ev, :wall; kw...)
+        @test check_constraints(ev, picket_ceiling(ref, :wall; kw..., exact = false))[1].value == c.f(ev)
+        @test cm.f(ev) == check_constraints(ev, cm)[1].value
+        @test cm.f(ev) ≈ fl.mean rtol = 1e-12
+        @test only(picket_ceiling(ref, :wall; kw..., limit = 1.5).limit) == 1.5
+        # the picket does not see the scenario's laser–plasma model
+        sb = remake(s; lpi = Backscatter(:outer50 => 0.5))
+        @test c.f(evaluate(sb, x)) == c.f(ev)
+        @test_throws ArgumentError picket_irradiance(ev, :wall; pulses)              # no window
+        @test_throws ArgumentError picket_irradiance(ev, :wall; window = w)          # no pulses
+        @test_throws ArgumentError picket_irradiance(ev, :wall; kw..., power = b -> 1.0)
+        @test_throws ArgumentError picket_irradiance(ev, :wall; kw..., measure = :max)
+        @test_throws ArgumentError picket_ceiling(ref, :wall; kw..., measure = :max)
+        @test_throws ArgumentError picket_ceiling(ref, :no_such_part; kw...)
+        other = Scenario(hohlraum(; geom..., h = 0.8), quads)
+        @test_throws ArgumentError c.f(evaluate(other, quads))
+        @test_throws ArgumentError check_constraints(evaluate(other, quads), c)
+
+        # gradients through the optimizer's duals against central differences
+        d = sin.(1:length(x0))
+        along(f) = τ -> f(evaluate(s, x .+ τ .* d))
+        @test all(f -> begin
+                      ad = ForwardDiff.derivative(along(f), 0.0)
+                      fd = (along(f)(1e-6) - along(f)(-1e-6)) / 2e-6
+                      isapprox(ad, fd; rtol = 1e-5) && ad != 0
+                  end, (c.f, cm.f))
+    end
+
+    # One free parameter, the 50° cone's z, pulled toward the waist by the objective: the
+    # picket ceiling stops it where the constrained quantity reaches the limit (a root
+    # found by bisection on the quantity itself; each is monotone over the bracket)
+    @testset "constrained runs end on the picket ceiling" begin
+        h = HeldParameters(p, n -> n != "outer50.z")
+        sh = remake(s; parameterization = h)
+        pull(ev) = sum(b.aim[3]^2 for b in ev.beams if b.group === :outer50) / 25
+        at(z) = evaluate(sh, [z])
+        function root(g, a, b)              # bisection for g = 0 with g(a) > 0 > g(b)
+            @assert g(a) > 0 > g(b)
+            for _ in 1:40
+                m = (a + b) / 2
+                g(m) > 0 ? (a = m) : (b = m)
+            end
+            return (a + b) / 2
+        end
+        # the energy-weighted mean rises as the 50° spots move onto the 44° ones (over
+        # 4.75–5.1 mm; the box keeps the run there)
+        mean_at(z) = picket_irradiance(at(z), :wall; kw..., measure = :mean)
+        cm = picket_ceiling(ref, :wall; kw..., measure = :mean, limit = mean_at(4.9))
+        zm = root(z -> mean_at(z) - only(cm.limit), 4.8, 5.01)
+        rm = optimize_pointing(sh, pull; x0 = [5.01], lower = [4.76], upper = [5.1], constraints = (cm,),
+                               feasibility = 1e-6)
+        @test rm.outcome === :interior && abs(only(rm.x) - zm) < 1e-5
+        @test only(rm.constraints).status === :active && only(rm.constraints).multiplier > 0
+        # the peak: its hottest element rises over 4.8–4.6 mm as the 50° spots cross the
+        # 44° ones. Its stand-in (exact = false) ends active at its own root; the exact
+        # peak ends at or below the limit (here 0.4 % below: the stand-in runs above the
+        # peak near this limit, and the working limit is only lowered), no lower than
+        # the peak's root
+        peak_at(z) = picket_irradiance(at(z), :wall; kw...)
+        lim = (peak_at(4.65) + peak_at(4.75)) / 2
+        cs = picket_ceiling(ref, :wall; kw..., limit = lim, exact = false)
+        zs = root(z -> cs.f(at(z)) - lim, 4.6, 4.8)
+        rs = optimize_pointing(sh, pull; x0 = [4.85], lower = [4.6], upper = [5.1], constraints = (cs,),
+                               feasibility = 1e-6)
+        @test rs.outcome === :interior && abs(only(rs.x) - zs) < 1e-5
+        @test only(rs.constraints).status === :active && only(rs.constraints).multiplier > 0
+        cp = picket_ceiling(ref, :wall; kw..., limit = lim)
+        zp = root(z -> peak_at(z) - lim, 4.6, 4.8)
+        rp = optimize_pointing(sh, pull; x0 = [4.85], lower = [4.6], upper = [5.1], constraints = (cp,),
+                               feasibility = 1e-6)
+        row = only(rp.constraints)
+        @test rp.outcome === :interior && row.status !== :violated && row.multiplier > 0
+        @test row.value == peak_at(only(rp.x)) && 0.99 * lim <= row.value <= lim * (1 + 1e-6)
+        @test zp - 1e-6 <= only(rp.x) < zp + 0.01
+    end
+end

@@ -10,7 +10,9 @@ multiplier, flow and clamp [`calibrate_cbet`](@ref) fits to transfer data;
 stagnant one inside, with calibrations to published HYDRA transfer for HYBRID-E shots;
 and inner-beam absorption in the gold bubble ([`BubbleAbsorption`](@ref)), whose picket
 fluence ratio [`picket_ratio`](@ref) can take from a pointing's own outer picket fluence
-on the wall ([`picket_fluence`](@ref)). [`lpi_deposit`](@ref) applies them together. The CBET model assumes uniform LEH plasma
+on the wall ([`picket_fluence`](@ref)); [`picket_irradiance`](@ref) and [`picket_ceiling`](@ref) give the
+irradiance during the picket and hold it in a constrained optimization.
+[`lpi_deposit`](@ref) applies them together. The CBET model assumes uniform LEH plasma
 and full pairwise overlap, and its unsaturated coupling overpredicts transfer: its
 magnitudes hold only after calibration against shot data or reference transfer points.
 
