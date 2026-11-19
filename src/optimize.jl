@@ -1255,7 +1255,7 @@ end
                       iterations = 200, evaluations = 20 * iterations, show_trace = false,
                       g_tol = 1e-8, callback = nothing, constraints = (),
                       feasibility = 1e-3, outer = 30, time_limit = Inf, phase1 = false,
-                      relaxation = false) -> PointingResult
+                      relaxation = false, inner_reltol = 1e-10) -> PointingResult
 
 Minimize `objective(evaluate(scenario, x))` within the box `lower ≤ x ≤ upper` by
 L-BFGS-B with forward-mode automatic-differentiation gradients, from `x0` (clamped to
@@ -1305,9 +1305,9 @@ a limit by default), the multipliers are complementary to the same tolerance, an
 last inner run has converged at the final tolerance: the inner runs' tolerance on the
 projected gradient tightens tenfold per outer iteration from 1e-3 to `g_tol`, and the
 run ends only once an inner run at `g_tol` has converged (its projected gradient below
-it, or its value changing by less than 1e-10 relative per iteration: a drive objective
-is flat along the limits), so a start that already meets the limits, as on a restart
-or a hand-off to a finer parameterization, is still optimized. A constraint that cannot
+it, or its value changing by less than `inner_reltol` relative per iteration: a drive
+objective is flat along the limits), so a start that already meets the limits, as on a
+restart or a hand-off to a finer parameterization, is still optimized. A constraint that cannot
 be met ends the run once the penalty has grown by 10⁸ without progress (see `phase1`
 below for a faster verdict). `outer` caps the outer
 iterations, `iterations` caps each inner run and `evaluations` is the budget of the
@@ -1319,7 +1319,16 @@ caps, measured as an alternative, saved evaluations on some of them and cost dri
 others. On a problem with hundreds of parameters, whose evaluations take seconds and
 whose start is far from the limits, a cap of about 100 updates the multipliers sooner
 (a 276-parameter study with `iterations = 1000` completed one outer iteration in an
-hour, with 100 six in 40 minutes; research notes, "The inner budget"). The result's
+hour, with 100 six in 40 minutes; research notes, "The inner budget").
+`inner_reltol` (default 1e-10; 0 turns it off) is the inner runs' relative value
+tolerance above, also phase 1's. The default ends a drive objective's inner runs where
+the objective is flat along the limits, short of stationarity (the result's
+`stationarity` shows how far); a tighter one costs evaluations: on the dropped-bundle
+tutorial's run within limits, 1e-12 reaches a stationarity of 1.9e-5 against 1.2e-3 for
+2.1 times the evaluations, the drive the same within the flat family's 1e-4 (research
+notes, "Multipliers from the converged active set"). A result whose multipliers or
+bound sensitivities matter continues tighter through `from` with a smaller
+`inner_reltol`. The result's
 `constraints` and `outcome` report each constraint against its limit, with the
 multipliers that best satisfy stationarity at the final design, and whether the box,
 the constraints or the budget ended the run ([`PointingResult`](@ref)). The
@@ -1378,7 +1387,7 @@ Base.@nospecializeinfer function optimize_pointing(
                            show_trace::Bool = false, g_tol = 1e-8, @nospecialize(callback = nothing),
                            @nospecialize(constraints = ()), feasibility::Real = 1e-3,
                            outer::Integer = 30, time_limit::Real = Inf, phase1::Bool = false,
-                           relaxation::Bool = false)
+                           relaxation::Bool = false, inner_reltol::Real = 1e-10)
     # Inferred and compiled once for every objective and callback (each objective
     # closure type used to recompile this body and Optim's L-BFGS-B, ~1 s); the objective
     # is reached by dynamic dispatch once per evaluation.
@@ -1392,7 +1401,7 @@ Base.@nospecializeinfer function optimize_pointing(
                                      iterations, evaluations, show_trace, g_tol, callback,
                                      feasibility = Float64(feasibility), outer = Int(outer),
                                      state = from === nothing ? nothing : from.state, deadline,
-                                     phase1, relaxation)
+                                     phase1, relaxation, inner_reltol = Float64(inner_reltol))
     r = _lbfgsb(s, objective, x0, xs, lower, upper; iterations, evaluations, show_trace, g_tol,
                 callback, deadline)
     return _pointing_result(s, r.x, r.value, r.initial_value, r.iterations, r.evaluations,

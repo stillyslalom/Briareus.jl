@@ -337,6 +337,26 @@
         @test only(rbnd.bound_sensitivity) ≈ (rp.value - rm.value) / 2δ rtol = 1e-2
         @test only(rbnd.bound_gradient) ≈ -c[i] + ε * (rbnd.x[i] - 8.0) rtol = 1e-6
         @test only(rbnd.bound_sensitivity) < 0
+
+        # The inner value tolerance (`inner_reltol`): its default given explicitly is the
+        # default run bit for bit. With the plain `c` the inner cones' cap of 130 TW binds
+        # with a small multiplier; at the default the run ends 0.8 % from the KKT point
+        # (research notes), and continued through `from` with the value tolerance off
+        # (inner runs to `g_tol`) it reaches the KKT point and multipliers. Any converged
+        # run of this strictly convex problem does, so no rounding-dependent path is tested.
+        @test optimize_pointing(s, f; x0 = P0, lower = lo, upper = hi, constraints = cs,
+                                inner_reltol = 1e-10).x == r.x
+        c0 = (1 .+ 0.3 .* sin.(1:n)) ./ 384
+        f0(ev) = -sum(c0[i] * q.power for (i, q) in enumerate(ev.beams)) +
+                 ε / 2 * sum(abs2, q.power - 8.0 for q in ev.beams)
+        ν0 = (A * A') \ (A * c0 .+ ε .* (A * P0 .- [cap, capI]))
+        P0k, λ0 = P0 .+ (c0 .- A' * ν0) ./ ε, ν0 .* [cap, capI]
+        @test all(lo .< P0k .< hi) && all(>(0), ν0)
+        r0 = optimize_pointing(s, f0; x0 = P0, lower = lo, upper = hi, constraints = cs)
+        rt = optimize_pointing(s, f0; from = r0, constraints = cs, inner_reltol = 0)
+        @test rt.outcome === :interior && norm(rt.x - P0k) / norm(P0k) < 1e-5
+        @test all(isapprox.(mults(rt)[1:2], λ0; rtol = 1e-3)) && mults(rt)[3] == 0
+        @test_throws ArgumentError optimize_pointing(s, f0; from = r0, constraints = cs, inner_reltol = -1.0)
     end
 
     # The dropped-bundle tutorial's design on a coarser wall mesh: bundle 11 freed, the

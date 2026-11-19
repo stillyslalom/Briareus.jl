@@ -487,10 +487,11 @@ analog is the dropped-bundle tutorial, `docs/literate/dropped_bundle.jl`).
         `bound_sensitivity` follows from them and `PointingResult.stationarity`
         shows what they leave; designs are bit for bit. On the tutorial's run they
         name the ceiling and l = 2 but leave a third of the drive's gradient: the
-        design ends short of stationarity. *Remains:* the inner value tolerance
-        (1e-10; at 1e-12 the run reaches a stationarity of 1.9e-5 for 2.1 times the
-        evaluations and the same drive within the flat family's 1e-4), possibly as a
-        keyword (user).
+        design ends short of stationarity. The inner value tolerance is a keyword,
+        `inner_reltol` (default 1e-10; at 1e-12 the run reaches a stationarity of
+        1.9e-5 for 2.1 times the evaluations and the same drive within the flat
+        family's 1e-4), and a result continues tighter through `from` ("Inner-run
+        options, a wall-loss scenario warning and laser delivery figures").
     - a constrained run stopped by its budget reports the exact peak as it stands
       (`exact = true` is the default since cd6f084, and its rounds run after
       convergence): a capped polish needs convergence or `from` to meet the ceiling;

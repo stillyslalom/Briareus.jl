@@ -13756,3 +13756,43 @@ logged departures, multiples of the floor and of the gate in every phase.
 
 Confidence: the API's arithmetic is exact or checked against closed forms in
 `test/phased_study.jl`; the study comparison is one start per variant.
+
+## Inner-run options, a wall-loss scenario warning and laser delivery figures (2026-11-19) *measured*
+
+Seven changes the user approved on 2026-11-19 from the recommendations of the sections
+above, each opt-in, a warning, a check on misuse or a display: no default and no
+existing result changes.
+
+### 1. The inner value tolerance as a keyword
+
+`optimize_pointing(...; inner_reltol = 1e-10)` exposes the relative value tolerance
+that ends a constrained run's inner runs (formerly the internal `_AL_F_RELTOL`; phase 1
+uses it too; 0 turns it off). Default runs are bit for bit: the closed forms of
+`test/constraints.jl`, "multipliers from the converged active set", give the same
+design with the keyword given as 1e-10 (tested). The measurement behind it is
+§ "Multipliers from the converged active set": on the dropped-bundle tutorial's run
+within limits 1e-12 reaches a stationarity of 1.9e-5 (1.2e-3 at the default) for 2.1
+times the evaluations, the drive the same within the flat family's 1e-4.
+
+A converged result continues tighter through `from` (scratch script, `-t 1`; the same
+closed form, 48 quad powers under a total and an inner-cone cap; design error relative
+to the KKT point):
+
+| case | run | evaluations | design error | `stationarity` | reported inner-cap λ (KKT) |
+|---|---|---|---|---|---|
+| inner cones' `c` +50 % | default | 162 | 7.0e-5 | 2.1e-7 | 0.173637 (0.173643) |
+| | `from` it, default | 6 | 6.8e-5 | 2.1e-7 | 0.173643 |
+| | `from` it, `inner_reltol = 0` | 19 | 3.5e-8 | 5.4e-12 | 0.173643 |
+| plain `c`, cap 130 TW | default | 219 | 7.9e-3 | 3.5e-5 | 0 (1.95409e-3) |
+| | fresh, 1e-12 | 204 | 2.3e-4 | 5.7e-7 | 1.95903e-3 |
+| | `from` it, default | 121 | 3.1e-3 | 7.6e-6 | 1.95390e-3 |
+| | `from` it, 1e-12 | 121 | 3.1e-3 | 7.6e-6 | 1.95390e-3 |
+| | `from` it, 1e-14 or 0 | 189 | 6.2e-7 | 1.6e-11 | 1.95388e-3 |
+
+A continuation runs one more inner run at the final tolerance from the result's
+multipliers and penalty, so even the default tolerance moves a result that ended short
+of stationarity (the plain case's error falls from 7.9e-3 to 3.1e-3); with the value
+tolerance off it reaches the KKT point in 189 evaluations, fewer than a fresh run takes.
+`test/constraints.jl` checks the continuation with the tolerance off against the closed
+form (design within 1e-5, multipliers within 1e-3), which any converged run of that
+strictly convex problem meets. Confidence: exact closed forms; one start.

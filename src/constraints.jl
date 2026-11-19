@@ -158,20 +158,20 @@ end
 # complementarity measure V = maxᵢ |max(gᵢ, -λᵢ/μ)| has not halved; the first μ balances
 # the objective against the initial violations; the inner tolerance on the projected
 # gradient tightens tenfold per outer iteration down to `g_tol`, and an inner run also
-# ends when an iteration changes its value by less than `_AL_F_RELTOL` relative (the
-# drive objectives are flat along the constraints: without it an inner run creeps for
-# hundreds of iterations at a 1e-6 gain).
-const _AL_F_RELTOL = Ref(1e-10)
-
+# ends when an iteration changes its value by less than `inner_reltol` relative (1e-10 by
+# default: the drive objectives are flat along the constraints, and without it an inner
+# run creeps for hundreds of iterations at a 1e-6 gain).
 Base.@nospecializeinfer function _constrained_pointing(
         s::_AbstractScenario, @nospecialize(objective), @nospecialize(cs::Tuple), x0, xs, lower, upper;
         iterations::Integer, evaluations::Integer, show_trace::Bool, g_tol,
         @nospecialize(callback), feasibility::Float64, outer::Int, @nospecialize(state = nothing),
-        deadline::Float64 = Inf, phase1::Bool = false, relaxation::Bool = false)
+        deadline::Float64 = Inf, phase1::Bool = false, relaxation::Bool = false,
+        inner_reltol::Float64 = 1e-10)
     for c in cs
         c isa Constraint || throw(ArgumentError("constraints must be `Constraint`s, got $(typeof(c))"))
     end
     feasibility > 0 || throw(ArgumentError("feasibility must be positive"))
+    inner_reltol >= 0 || throw(ArgumentError("inner_reltol must be nonnegative"))
     phase1 |= relaxation
     ev = evaluate(s, xs)
     f0 = Float64(ForwardDiff.value(objective(ev)))
@@ -184,7 +184,7 @@ Base.@nospecializeinfer function _constrained_pointing(
     # else the main run starts from its first design within the limits
     if phase1 && state === nothing && maximum(g; init = -Inf) > feasibility
         r1 = _phase1(s, cs, x0, xs, lower, upper; iterations, evaluations, show_trace, g_tol,
-                     callback, feasibility, deadline)
+                     callback, feasibility, deadline, inner_reltol)
         ne, ni = r1.evaluations, r1.iterations
         p1 = (; evaluations = r1.evaluations, iterations = r1.iterations, feasible = r1.feasible,
               x = copy(r1.x), verdict = r1.verdict)
@@ -198,7 +198,7 @@ Base.@nospecializeinfer function _constrained_pointing(
                 rel = _relaxations(s, cs, rows, lens, collect(Float64, x0), collect(Float64, r1.x),
                                    lower, upper; iterations,
                                    evaluations = evaluations - ne, show_trace, g_tol,
-                                   feasibility, outer, deadline)
+                                   feasibility, outer, deadline, inner_reltol)
                 ne += sum(r -> r.evaluations, rel; init = 0)
             end
             return _pointing_result(s, r1.x, Float64(ForwardDiff.value(objective(ev1))), f0, ni, ne,
@@ -248,7 +248,7 @@ Base.@nospecializeinfer function _constrained_pointing(
         end
         r = _lbfgsb(s, aug, x0, x, lower, upper; iterations,
                     evaluations = evaluations - ne, show_trace, g_tol = tol, callback = cb,
-                    f_reltol = _AL_F_RELTOL[], deadline)
+                    f_reltol = inner_reltol, deadline)
         x, ne, ni, last = copy(r.x), ne + r.evaluations, ni + r.iterations, r
         evx = evaluate(s, x)
         g = _all_violations(work, evx)
@@ -429,7 +429,7 @@ end
 Base.@nospecializeinfer function _phase1(s::_AbstractScenario, @nospecialize(cs::Tuple), x0, xs, lower, upper;
                                          iterations::Integer, evaluations::Integer, show_trace::Bool,
                                          g_tol, @nospecialize(callback), feasibility::Float64,
-                                         deadline::Float64)
+                                         deadline::Float64, inner_reltol::Float64)
     thr = feasibility^2 / 2
     found, stalled = Ref(false), Ref(false)
     best = Float64[]                       # the least ψ after each evaluation
@@ -443,7 +443,7 @@ Base.@nospecializeinfer function _phase1(s::_AbstractScenario, @nospecialize(cs:
         return callback === nothing ? false : callback(merge(st, (; outer = 0))) === true
     end
     r = _lbfgsb(s, _Infeasibility(cs), x0, xs, lower, upper; iterations, evaluations, show_trace,
-                g_tol, callback = stop, f_reltol = _AL_F_RELTOL[], deadline)
+                g_tol, callback = stop, f_reltol = inner_reltol, deadline)
     # converged, or stalled: a local minimum of ψ, or as near one as the stall rule tells
     ended = !r.stopped && r.reason === :converged || r.stopped && r.reason === :callback && stalled[]
     feasible = found[] || r.value <= thr
@@ -497,7 +497,8 @@ Base.@nospecializeinfer function _relaxations(s::_AbstractScenario, @nospecializ
                                               @nospecialize(lens::Tuple), x0::Vector{Float64},
                                               x1::Vector{Float64}, lower, upper; iterations::Integer,
                                               evaluations::Integer, show_trace::Bool, g_tol,
-                                              feasibility::Float64, outer::Int, deadline::Float64)
+                                              feasibility::Float64, outer::Int, deadline::Float64,
+                                              inner_reltol::Float64)
     offs = cumsum((0, lens...))
     out = Relaxation[]
     used = 0
@@ -521,7 +522,7 @@ Base.@nospecializeinfer function _relaxations(s::_AbstractScenario, @nospecializ
         else
             _constrained_pointing(s, obj, Tuple(others), x0, x1, lower, upper; iterations,
                                   evaluations = budget, show_trace, g_tol, callback = nothing,
-                                  feasibility, outer, deadline, phase1 = true)
+                                  feasibility, outer, deadline, phase1 = true, inner_reltol)
         end
         used += r.evaluations
         evr = evaluate(s, r.x)
