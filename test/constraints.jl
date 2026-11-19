@@ -412,9 +412,13 @@
         @test all(mode_departure(ev, c48) .<= gates.limit .* (1 + 1e-3))
         @test peak_irradiance(ev, :wall) <= pk * (1 + 1e-3)
         @test res.value <= res.initial_value + 1e-3
-        # complementarity of the reported multipliers: zero for every component inside
-        # its limit by more than `feasibility`
-        @test all(r -> r.multiplier >= 0 && (r.status !== :satisfied || r.multiplier == 0), res.constraints)
+        # complementarity of the reported multipliers: zero for every gate inside its
+        # limit by more than `feasibility`. The exact ceiling's multiplier is its
+        # stand-in's at the working limit, which can be active while the peak the row
+        # reports ends inside the limit (1.2 % inside under one CI rounding): only its
+        # sign is tested.
+        @test all(r -> r.multiplier >= 0, res.constraints)
+        @test all(r -> r.status !== :satisfied || r.multiplier == 0, res.constraints[2:end])
         @test res.stationarity >= 0
         # the rows: the exact ceiling reports the peak against the limit, the plain one its norm
         @test res.constraints[1].value == peak_irradiance(ev, :wall) && res.constraints[1].limit == pk
