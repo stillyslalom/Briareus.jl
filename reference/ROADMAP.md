@@ -688,14 +688,17 @@ analog is the dropped-bundle tutorial, `docs/literate/dropped_bundle.jl`).
       Lester's eq. 2 at a constant opacity): 0.17–0.175 for 2.5 µm against the
       Letter's extracted 0.18 (a blind check) and the default's 0.235; on a public
       mock-up the windows' peak loss falls from 10.4 to 7.0 TW and their peak δ₂ from
-      2.17 to 1.45 %. The default is unchanged (user, 2026-11-18). *Remains:* the
+      2.17 to 1.45 %. The default is unchanged (user, 2026-11-18). Now an
+      intact foil whose `before` is a `WallLossAlbedo` follows its element's own wall
+      history under `wall_history` (user, 2026-11-19: an intact window has no reason
+      to be brighter than the wall): it equals the wall around it before burnthrough
+      (the windows' δ₂ there was up to 0.96 % on a mock-up, now zero), the transition
+      blends from the history's albedo, and the stored energy a burned-through foil
+      re-emits is scaled as its albedo is (a choice: user). *Remains:* the
       onset under an ignition-scale drive (the 1-D foil lags the front by 0.6 ns and
       passes 0.49–0.54 of the default's energy over 4–9 ns, 0.76–0.79 of the
       option's; but an onset that follows the 1-D foil is 0.1–0.3 ns late on Nova's
-      measured times, so the Nova-calibrated `width` stays); an intact foil's
-      `before` albedo is outside `wall_history` (it is evaluated at the time since
-      the pulse start, which makes an intact window brighter than the wall early in
-      the peak: δ₂ 0.44 % before burnthrough on a coarse check); what the backing
+      measured times, so the Nova-calibrated `width` stays); what the backing
       absorbs against what leaves, in `drive_history`'s accounts. *Data:* emergence
       through the same gold with another backing (Be emerges 0.9–1.0 ns after epoxy),
       then another gold thickness; the Letter's window flux with its solid angle

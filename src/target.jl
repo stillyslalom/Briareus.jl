@@ -471,6 +471,13 @@ The burnthrough time `t_b` is, in order:
 - otherwise the foil is intact (`t_b = ∞`): a single solve has no history to estimate
   it from. `burnthrough_time` gives the estimate for a temperature history.
 
+`before` is evaluated at `t` (a standalone `solve` or `albedos`: the time since the
+pulse start, as a wall without history). In a [`drive_history`](@ref) with
+`wall_history` on, a `WallLossAlbedo` `before` instead follows the element's own
+temperature history, as the wall's elements do: an intact foil equals the wall around
+it, and across and after the transition `α_before` is the history's (with the wall's
+re-emission of stored energy scaled by `α/α_before`).
+
 Before `t_b` the foil loses exactly what a thick wall loses and transmits nothing: in
 the diffusion picture the cold material ahead of a nonlinear heat front does not
 change the flux into it, so no early loss is modeled. Measured burnthrough of 0.8–3 µm
@@ -1035,6 +1042,33 @@ end
 
 _albedo_split(m::WallLossAlbedo, t, T, h::_WallHistory) =
     (α = first(_wall_split(m, h, T)); (α, α, zero(α)))
+
+# A thin-foil element's state in a `drive_history` whose `before` is a `WallLossAlbedo`
+# following the element's own temperature history: its burnthrough time (NaN: none
+# known) and that wall history.
+struct _FoilHistory
+    tb::Float64
+    wall::_WallHistory
+end
+
+# The albedo, intact albedo, transmitted fraction and emission of such a foil, and the
+# factor on the wall's emission: intact, exactly the wall's (`_wall_split` of `before`);
+# across the transition the blend of `_burnthrough_split` with that `before`, and the
+# re-emitted stored energy scaled with the albedo, by α/α_before (1 - s f, or the
+# explicit `after`'s blend).
+function _foil_history_split(m::BurnthroughAlbedo, t, T, st::_FoilHistory)
+    αb, E, _ = _wall_split(m.before::WallLossAlbedo, st.wall, T)
+    tb = !isnan(st.tb) ? st.tb : m.burnthrough !== nothing ? m.burnthrough : Inf
+    s = _burnthrough_step(m, t, tb)
+    s == 0 && return αb, αb, zero(αb), E, one(αb)
+    if m.after === nothing
+        τ = s * _transmission(m.transmission, optical_depth(m), T)
+        return αb * (1 - τ), αb, τ + zero(αb), E * (1 - τ), 1 - τ
+    end
+    α = αb + s * (albedo(m.after, t, T) - αb)
+    k = αb > 0 ? α / αb : 1 - s
+    return α, αb, αb - α, E * k, k
+end
 # Whether a model lets part of the flux on it leave the enclosure.
 _transmits(::AlbedoModel) = false
 _transmits(::Union{BurnthroughAlbedo,GapClosure,LipClosure}) = true

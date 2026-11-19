@@ -674,7 +674,8 @@ albedos(t::Target, time = 0.0, H = nothing; burnthrough = nothing) =
 #
 # The fourth output is the emission per element (TW/mm²) that a model's state adds to
 # the x-ray source: a wall-loss element of a `drive_history` re-emitting stored energy
-# (`_WallHistory`), zero elsewhere (and `nothing` when no element has one).
+# (`_WallHistory`), or a thin foil whose `before` follows such a history (`_FoilHistory`),
+# zero elsewhere (and `nothing` when no element has one).
 function _albedos(t::Target, time, H, burnthrough)
     n = nelements(t)
     α, intact, transmission = zeros(n), zeros(n), zeros(n)
@@ -687,6 +688,13 @@ function _albedos(t::Target, time, H, burnthrough)
         if a isa WallLossAlbedo && state isa _WallHistory
             α[e], E, _ = _wall_split(a, state, T)
             intact[e] = α[e]
+            if E != 0
+                emission === nothing && (emission = zeros(n))
+                emission[e] = E
+            end
+        elseif a isa BurnthroughAlbedo && state isa _FoilHistory
+            # a thin foil whose `before` follows the element's wall history
+            α[e], intact[e], transmission[e], E, _ = _foil_history_split(a, time, T, state)
             if E != 0
                 emission === nothing && (emission = zeros(n))
                 emission[e] = E

@@ -507,3 +507,79 @@ end
     hd = drive_history(md, op, f, sort([h.time; goal]); record = minα, mband = nothing)
     @test hd.record[findfirst(==(goal), hd.time)] < -10
 end
+
+@testset "intact foil follows the wall's history" begin
+    # With `wall_history` on, a thin foil whose `before` is a `WallLossAlbedo` loses energy
+    # as a wall element with its own temperature history does. Intact it is the wall: a
+    # hohlraum with the window is the same hohlraum with wall in its place (one mesh, one
+    # set of view factors) at every step before any of its elements burns through.
+    kw = (; nz = 12, nphi = 16, capsule_ntheta = 8, capsule_nphi = 12)
+    wall = Material(:Au; albedo = WallLossAlbedo(), conversion = 0.8)
+    x = 2.0                                  # burns through in the peak, after the trough
+    foil = Material(:Au; albedo = BurnthroughAlbedo(; thickness = x), conversion = 0.8)
+    build(m) = hohlraum(; kw..., wall, windows = [WallWindow(phi = 0, diameter = 2.0, material = m)])
+    tw, t0 = build(foil), build(wall)
+    m0 = RadiationModel(t0; closed = true)
+    mw = RadiationModel(tw; F = m0.F)
+    q = [remake(b; aim = (0.0, 0.0, sign(b.port[3]) * 4.0)) for b in nif_quads()]
+    op = DepositionOperator(t0, q)
+    # a picket, a trough (the wall cools and re-emits) and a peak
+    f = τ -> with_pulses(q, PulseShape([0.0, 0.2, 0.6, 0.8, 1.6, 2.0, 3.0], [0.0, 3.0, 3.0, 0.5, 0.5, 8.0, 8.0]), τ)
+    times = collect(0.25:0.25:3.0)
+    ew = elements(tw, :window_1)
+    rec = sol -> (; α = copy(sol.albedo[ew]), intact = copy(sol.intact[ew]), tr = copy(sol.transmission[ew]),
+                  T = radiation_temperature.(sol.H[ew]), E = sol.source[ew] .- sol.converted[ew])
+    hw = drive_history(mw, op, f, times; lmax = 4, ylm = true, keep_albedo = true, record = rec)
+    h0 = drive_history(m0, op, f, times; lmax = 4, ylm = true, keep_albedo = true)
+    tb = hw.burnthrough[:window_1]
+    @test all(isfinite, tb) && times[1] < minimum(tb) < maximum(tb) < times[end] - 0.4
+    pre = findall(<(minimum(tb)), hw.time)
+    @test length(pre) >= 4 && any(k -> any(!iszero, hw.record[k].E), pre)   # the trough re-emits
+    @test hw.time[pre] == h0.time[pre]
+    @test all(isapprox(hw.ylm[:, k], h0.ylm[:, k]; rtol = 1e-12) for k in pre)   # equal capsule modes
+    @test all(isapprox(hw.albedo[k][ew], h0.albedo[k][ew]; rtol = 1e-12) for k in pre)
+
+    # Through the transition and after it, `BurnthroughAlbedo`'s formulas with the history's
+    # `before`: albedo (1 - s f) α_before, transmitted s f, the re-emitted stored energy
+    # scaled by 1 - s f (here f the constant gray fraction, s the smooth step from each
+    # element's burnthrough time). Reference: the wall's albedo on its own history, rebuilt
+    # from the recorded temperatures with `drive_history`'s documented effective time
+    # (no release: `wall_release = false`, so the albedo is Lindl's at t_eff).
+    hn = drive_history(mw, op, f, times; record = rec, wall_release = false, tol = 1e-10)
+    bt = BurnthroughAlbedo(thickness = x)
+    wm = WallLossAlbedo()
+    r(T) = (T / 100)^((4 + wm.temperature_exponent) / (1 + wm.time_exponent))
+    Iw = zeros(length(ew))
+    ok = Bool[]
+    for (k, τ) in enumerate(hn.time)
+        x = hn.record[k]
+        if k == 1
+            teff = fill(τ, length(ew))
+            Iw .= τ .* r.(x.T)
+        else
+            Δ = τ - hn.time[k-1]
+            rp = r.(hn.record[k-1].T)
+            teff = (Iw .+ Δ .* rp ./ 2) ./ r.(x.T) .+ Δ / 2
+            Iw .+= Δ .* (rp .+ r.(x.T)) ./ 2
+        end
+        αb = [albedo(wm, te, T) for (te, T) in zip(teff, x.T)]
+        s = [Briareus._burnthrough_step(bt, τ, b) for b in hn.burnthrough[:window_1]]
+        push!(ok, isapprox(x.intact, αb; rtol = 1e-6) && isapprox(x.tr, s .* bt.transmission; rtol = 1e-9) &&
+                  isapprox(x.α, αb .* (1 .- s .* bt.transmission); rtol = 1e-6))
+    end
+    @test all(ok)
+    @test any(x -> any(t -> 0 < t < bt.transmission, x.tr), hn.record)   # a step inside a transition
+    # the re-emitted stored energy of a cooling foil: the wall's, times 1 - s f
+    wh = Briareus._WallHistory(0.5, 0.05, 250.0, 0.0, 0.3, 0.1)
+    αw, Ew, _ = Briareus._wall_split(wm, wh, 200.0)
+    for (τ, sx) in ((0.5, 0.0), (1.2, 0.5), (3.0, 1.0))       # burnthrough at 1.0, width 0.4
+        α, αi, tr, E, k = Briareus._foil_history_split(bt, τ, 200.0, Briareus._FoilHistory(1.0, wh))
+        sτ = Briareus._burnthrough_step(bt, τ, 1.0)
+        @test sτ ≈ sx && αi == αw && tr ≈ sτ * bt.transmission
+        @test α ≈ αw * (1 - tr) && E ≈ Ew * (1 - tr) && k ≈ 1 - tr
+    end
+    @test Ew != 0
+    # a standalone `solve` has no history: the foil's `before` is Lindl's loss at `time`
+    s1 = solve(mw, deposit(op, f(2.0)); time = 2.0, tol = 1e-10)
+    @test s1.albedo[ew] ≈ [albedo(wm, 2.0, T) for T in radiation_temperature.(s1.H[ew])] rtol = 1e-8
+end

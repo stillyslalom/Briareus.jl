@@ -13480,3 +13480,74 @@ ForwardDiff Jacobian (ceiling 5.7e-3, l = 2 2.4e-3, l = 4 1.2e-3, the others und
 tutorial's, but the multiplier column of a drive run does not show which limit costs
 drive, and `bound_sensitivity` of such a run is close to `bound_gradient`. Not changed
 here (a change to the multiplier estimate the augmented Lagrangian reports).
+
+## Intact windows follow the wall's history (2026-11-19) *derived*
+
+ROADMAP item 28, the intact foil (user decision: "Can't think of a physical reason why an
+intact window would be brighter than the wall"). With `wall_history` on (the default),
+`drive_history` now routes a thin-foil element whose `BurnthroughAlbedo` `before` is a
+`WallLossAlbedo` through the same per-element wall history as a wall element of that
+loss (`src/history.jl`, `_FoilHistory` and `_foil_history_split` in `src/target.jl`, a
+branch in `_albedos`). Intact it is that wall element; across the transition and after
+it `α_before` is the history's, so the documented blend α = (1 − s f) α_before holds with
+it; the stored energy it re-emits under a falling drive (`wall_release`) is the wall
+element's scaled by α/α_before (1 − s f; with an explicit `after`, its blend). The heat
+front, the transmission, a standalone `solve` (no history: `before` at the time since
+the pulse start, as documented) and `wall_history = false` are unchanged; `history_state`
+reads the history's recorded albedos and transmissions and needs no change.
+
+Decision (the release scaling): (a) the wall's emission × α/α_before, chosen: the foil's
+radiosity is then (1 − s f) of the wall element's, the same factor as its albedo, and an
+intact foil is the wall exactly; (b) unscaled (a burned-through foil would re-emit all
+of its stored energy inward while transmitting s f of its flux); (c) no release once the
+transition starts (a step in the foil's emission at burnthrough). The choice matters only
+where a burned-through window sees a falling drive (after the laser turns off): on the
+mock-up below, the rows at 8.6–9.0 ns, where it acts together with the change of
+`before` itself (the two were not separated).
+
+Tests (`test/burnthrough.jl`, "intact foil follows the wall's history"): a small
+hohlraum with a 2 µm window against the same mesh with wall in its place, through a
+picket, a trough in which the wall re-emits, and a peak: capsule modes and the window
+elements' albedos equal to 1e-12 at every step before the front arrives; with
+`wall_release = false`, at every step, the intact albedo equals Lindl's loss at the
+effective time rebuilt from the recorded temperatures (1e-6), the transmitted fraction
+s f and the albedo (1 − s f) α_before; the release scaling of a cooling state; the
+standalone `solve` at `time`.
+
+Measured on the HYBRID-E-scale mock-up of "A diffusion transmission for burned-through
+windows (2026-11-18)" (h = 0.3, N221204 pulse, two 2.5 µm windows at the waist,
+`transition = 0.05`), now with `wall_history = true`, base (main before the change) and
+new. δ₂, δ₄ and a₂/a₀ (hohlraum axis) are the capsule's change against the same
+hohlraum with wall in place of the windows (%), default transmission / `DiffusionTransmission`:
+
+| t (ns) | P (TW) | δ₂ base | δ₂ new | δ₄ base | δ₄ new | a₂/a₀ base | a₂/a₀ new |
+|---|---|---|---|---|---|---|---|
+| 3.0 | 58 | 0.871 / 0.871 | 0 / 0 | 0.239 / 0.239 | 0 / 0 | −0.437 / −0.437 | 0 / 0 |
+| 4.0 | 92 | 0.628 / 0.628 | 0 / 0 | 0.173 / 0.173 | 0 / 0 | −0.311 / −0.311 | 0 / 0 |
+| 4.6 | 227 | 0.961 / 0.961 | 0 / 0 | 0.264 / 0.264 | 0 / 0 | −0.476 / −0.476 | 0 / 0 |
+| 5.0 | 353 | 0.330 / 0.307 | 1.132 / 0.581 | 0.090 / 0.085 | 0.310 / 0.159 | +0.168 / −0.151 | +0.568 / +0.292 |
+| 5.4 | 434 | 1.262 / 0.341 | 1.920 / 1.084 | 0.345 / 0.092 | 0.526 / 0.297 | +0.637 / +0.174 | +0.964 / +0.544 |
+| 6.2 | 433 | 1.564 / 0.693 | 2.002 / 1.183 | 0.429 / 0.189 | 0.550 / 0.325 | +0.794 / +0.353 | +1.013 / +0.598 |
+| 7.0 | 444 | 1.708 / 0.877 | 2.046 / 1.252 | 0.469 / 0.240 | 0.562 / 0.344 | +0.870 / +0.448 | +1.039 / +0.636 |
+| 7.6 | 444 | 1.785 / 0.971 | 2.070 / 1.287 | 0.490 / 0.266 | 0.569 / 0.353 | +0.910 / +0.497 | +1.054 / +0.657 |
+| 8.2 | 405 | 1.956 / 1.128 | 2.116 / 1.307 | 0.536 / 0.309 | 0.581 / 0.359 | +1.004 / +0.580 | +1.085 / +0.670 |
+| 8.6 | 269 | 2.433 / 1.504 | 2.237 / 1.288 | 0.663 / 0.409 | 0.612 / 0.353 | +1.276 / +0.790 | +1.171 / +0.675 |
+| 9.0 | 173 | 2.797 / 1.752 | 2.330 / 1.231 | 0.758 / 0.474 | 0.634 / 0.336 | +1.494 / +0.937 | +1.242 / +0.656 |
+
+- Before burnthrough the windows' signature vanishes: base δ₂ 0.25–0.96 % (a₂/a₀ to
+  −0.48 %: the intact foils, evaluated at the time since the pulse start, re-emitted more
+  than the wall around them); new 0.000 at every step.
+- After it the windows' own effect stands alone, flat through the peak: δ₂ 2.0–2.1 %
+  (default) and 1.2–1.3 % (`DiffusionTransmission`), δ₄ 0.55–0.58 and 0.32–0.36 %; the base
+  rows were that effect less the intact foils' opposite one, still decaying through the
+  peak (it is why the base rose from 1.3 to 1.8 % over 5.4–7.6 ns).
+- Window loss over the pulse 30.45 → 30.31 kJ (default), 18.32 → 18.21 kJ (diffusion);
+  the windows' incident flux history changes a little, and the burnthrough times move by
+  +0.005 ns (mean 4.7670 → 4.7724 ns, range 4.762–4.774 → 4.767–4.779 ns).
+- With `wall_history = false` (the earlier section's table, and every history in the
+  diagnostic-windows tutorial) nothing changes.
+
+Unchanged elsewhere: histories without thin-foil windows are bit for bit (`examples/n221204.jl`,
+which has no `BurnthroughAlbedo`, at 0.8/0.4, `full`, `table`: CSV identical to main's,
+`cmp`); the diagnostic-windows tutorial runs its histories with `wall_history = false`,
+so its numbers and assertions are unchanged (run as a script against this change).

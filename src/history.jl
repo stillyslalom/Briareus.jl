@@ -206,8 +206,15 @@ temperature (constant T from `t = 0` to `times[1]`; none before a first step at 
 before `t = 0`, such as a prepulse's). A wall heated in a low foot holds little
 energy at the peak temperature, so its loss early in the peak is several times the
 constant-T value at `t` (`t_eff` ≈ the time since the rise), and the drive rises
-through a flat peak. `wall_history = false` evaluates the albedo at `t` (the behavior
-before 2026-10-24). Research notes, "N221204 late-time drive (2026-10-24)".
+through a flat peak. A thin-foil element ([`BurnthroughAlbedo`](@ref)) whose `before` is
+a `WallLossAlbedo` follows the same history for as long as `before` enters its albedo:
+intact it is a wall element of that loss (an intact window equals the wall around it),
+across its transition and after it `α_before` is the history's, and the stored energy it
+re-emits (below) is the wall element's scaled by `α/α_before` (`1 − s f`). Its heat front
+does not depend on this. `wall_history = false` evaluates the albedo at `t`, for walls
+and foils alike (the behavior before 2026-10-24, and for foils before 2026-11-19).
+Research notes, "N221204 late-time drive (2026-10-24)" and "Intact windows follow the
+wall's history (2026-11-19)".
 
 **Wall re-emission.** The self-similar loss never gives energy back: when `T` falls,
 `t_eff` grows and the loss only shrinks. With `wall_release = true` (the default, with
@@ -362,9 +369,11 @@ Base.@nospecializeinfer function _drive_history(
     end
     I = zeros(N)                   # drive integral of each thin-foil element
     rate = zeros(N)                # its integrand at the previous time
-    # wall-loss elements whose loss follows their own temperature history
+    # wall-loss elements whose loss follows their own temperature history: walls, and
+    # thin foils whose `before` is a wall loss (`wl`: the `WallLossAlbedo` followed)
+    wl(e) = (m = model(e); m isa BurnthroughAlbedo ? m.before : m)
     lossy = wall_history ?
-            [e for e in 1:N if !is_aperture(t, e) && model(e) isa WallLossAlbedo] : Int[]
+            [e for e in 1:N if !is_aperture(t, e) && wl(e) isa WallLossAlbedo] : Int[]
     Iw, ratew = zeros(N), zeros(N) # their wall-energy integral and integrand
     # re-emission (`wall_release`): each element's highest temperature, the deficit
     # φ(T_max) − φ(T) at every step taken, and the times of those steps
@@ -423,7 +432,7 @@ Base.@nospecializeinfer function _drive_history(
         hist = Dict(e => (τ0 === nothing ? _WallHistory(0.0, max(τ, 0.0)) :
                           !wall_release ? _WallHistory(Iw[e] + Δ * ratew[e] / 2, Δ / 2) :
                           _WallHistory(Iw[e] + Δ * ratew[e] / 2, Δ / 2, Tmax[e],
-                                       cooled[e] ? _deficit_sum(model(e), deficits, dtimes, e, τ) : 0.0,
+                                       cooled[e] ? _deficit_sum(wl(e), deficits, dtimes, e, τ) : 0.0,
                                        Dw[e], Δ)) for e in lossy)
         # the lips' closure depths at τ, from the lip temperatures `T1` at τ
         depths(T1) = [τ0 === nothing ? 0.0 :
@@ -436,7 +445,7 @@ Base.@nospecializeinfer function _drive_history(
             isempty(lossy) && isempty(lips) && return bt
             s = Vector{Any}(bt)
             for e in lossy
-                s[e] = hist[e]
+                s[e] = model(e) isa BurnthroughAlbedo ? _FoilHistory(bt[e], hist[e]) : hist[e]
             end
             for (k, L) in enumerate(lips), (j, e) in enumerate(L.elems)
                 s[e] = _ring_closed(L.ra[j], L.rb[j], L.r0 - ds[k])
@@ -490,7 +499,7 @@ Base.@nospecializeinfer function _drive_history(
         for e in lossy
             T = radiation_temperature(ForwardDiff.value(sol.H[e]))
             wall_release && (T = max(T, Tmax[e]))
-            rwk[e] = _loss_rate(model(e), T)
+            rwk[e] = _loss_rate(wl(e), T)
             Iwk[e] = τ0 === nothing ? max(τ, 0.0) * rwk[e] : hist[e].A + Δ * rwk[e] / 2
         end
         return sol, Ik, tk, rk, Iwk, rwk, hist, ds, uc
@@ -565,9 +574,12 @@ Base.@nospecializeinfer function _drive_history(
             if wall_release
                 for e in lossy
                     T = radiation_temperature(ForwardDiff.value(sol.H[e]))
-                    rel[e] = _wall_split(model(e), hist[e], T)[3] * sol.model.target.elem_area[e]
+                    rel[e] = _wall_split(wl(e), hist[e], T)[3] * sol.model.target.elem_area[e]
+                    # a thin foil re-emits the wall's stored energy scaled with its albedo
+                    model(e) isa BurnthroughAlbedo &&
+                        (rel[e] *= _foil_history_split(model(e), τ, T, _FoilHistory(tb[e], hist[e]))[5])
                     Th = max(T, Tmax[e])
-                    Dw[e] = _wall_potential(model(e), Th) - _wall_potential(model(e), T)
+                    Dw[e] = _wall_potential(wl(e), Th) - _wall_potential(wl(e), T)
                     Tmax[e] = Th
                     Dw[e] != 0 && (cooled[e] = true)
                 end
