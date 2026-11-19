@@ -1288,7 +1288,7 @@ end
                       lower = bounds(scenario.param, x0)[1], upper = bounds(scenario.param, x0)[2],
                       iterations = 200, evaluations = 20 * iterations, show_trace = false,
                       g_tol = 1e-8, callback = nothing, constraints = (),
-                      feasibility = 1e-3, outer = 30, time_limit = Inf, phase1 = false,
+                      feasibility = 1e-3, outer = 30, time_limit = Inf, phase1 = true,
                       relaxation = false, inner_reltol = 1e-10,
                       inner_evaluations = nothing, smooth_cut = true) -> PointingResult
 
@@ -1343,8 +1343,8 @@ run ends only once an inner run at `g_tol` has converged (its projected gradient
 it, or its value changing by less than `inner_reltol` relative per iteration: a drive
 objective is flat along the limits), so a start that already meets the limits, as on a
 restart or a hand-off to a finer parameterization, is still optimized. A constraint that cannot
-be met ends the run once the penalty has grown by 10⁸ without progress (see `phase1`
-below for a faster verdict). `outer` caps the outer
+be met ends the run at phase 1's verdict (below), or with `phase1 = false` once the
+penalty has grown by 10⁸ without progress. `outer` caps the outer
 iterations, `iterations` caps each inner run and `evaluations` is the budget of the
 whole run (the result counts both over all inner runs). The multipliers change only
 between inner runs, so the cap sets how long the run works with each set of them. The
@@ -1384,7 +1384,7 @@ callback's named tuple then also carries `outer`, and its `value` is the inner
 problem's (the objective with the constraint terms). Without constraints the run is
 the plain L-BFGS-B above.
 
-**Infeasible constraints.** `phase1 = true` first minimizes, from a start that violates
+**Infeasible constraints.** `phase1 = true` (the default) first minimizes, from a start that violates
 a constraint, the infeasibility `½ Σ max(0, gᵢ)²` over every component's normalized
 violation (the augmented Lagrangian's limit as its penalty grows), ignoring the
 objective, by the same L-BFGS-B. It stops at the first design where every violation is
@@ -1399,13 +1399,17 @@ implies `phase1`) adds, after such a verdict, one constrained run per constraint
 violated or active there: the smallest largest violation of its components with every
 other constraint met, which is how far that constraint alone must be relaxed
 ([`Relaxation`](@ref), in `PointingResult.relaxations`); these runs share the budget
-and the time limit. Both are off by default: with `phase1`, a feasible run starts its
-main run from another design and can end at another design of a flat family. A start
-that already meets every constraint, and a restart with `from`, skip phase 1. The
+and the time limit. `phase1` is on by default and `relaxation` off: a run whose start
+violates a constraint starts its main run from phase 1's design and can end at another
+design of a flat family than one started at `x0`; `phase1 = false` starts the main run
+at `x0`. A start that already meets every constraint, and a restart with `from`, skip
+phase 1. The
 callback's `outer` is 0 during phase 1. On the dropped-bundle test case made
 infeasible, phase 1 reached the verdict in 577 evaluations where the augmented
 Lagrangian had none after 2,195, and on feasible starts it cost 8 % fewer to 29 % more
-evaluations (research notes, "A verdict on conflicting constraints").
+evaluations (research notes, "A verdict on conflicting constraints"); on the test
+suite's constrained cases that start outside their limits, −23 % to +54 %, with drive
+designs 3e-4 apart on a flat family (research notes, "Defaults changed (2026-11-19)").
 
 **VisRad's hard cut.** On a scenario whose deposition uses [`VisRadProfile`](@ref)
 with its hard cut (`taper = 0`, its default), every deposition-derived quantity jumps
@@ -1452,7 +1456,7 @@ Base.@nospecializeinfer function optimize_pointing(
                            iterations::Integer = 200, evaluations::Integer = 20 * iterations,
                            show_trace::Bool = false, g_tol = 1e-8, @nospecialize(callback = nothing),
                            @nospecialize(constraints = ()), feasibility::Real = 1e-3,
-                           outer::Integer = 30, time_limit::Real = Inf, phase1::Bool = false,
+                           outer::Integer = 30, time_limit::Real = Inf, phase1::Bool = true,
                            relaxation::Bool = false, inner_reltol::Real = 1e-10,
                            @nospecialize(inner_evaluations = nothing), smooth_cut::Bool = true)
     # Inferred and compiled once for every objective and callback (each objective

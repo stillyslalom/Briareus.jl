@@ -107,6 +107,7 @@ callout in the section says which).
 | `Conversion()` `efficiency` | 0.9 (0.75 until 2026-11-19) | Defaults changed (2026-11-19) §1 |
 | `ApertureKeepOut` `softness` | 1e-4 mm (the exact minimum until 2026-11-19) | Defaults changed (2026-11-19) §3 |
 | `optimize_pointing` `smooth_cut` | on: a hard-cut `VisRadProfile` scenario optimized at `taper = 1`, reported under the hard cut (since 2026-11-19) | Defaults changed (2026-11-19) §4 |
+| `optimize_pointing` `phase1` | on (off until 2026-11-19); `relaxation` off | Defaults changed (2026-11-19) §5 |
 | `foil_material()` (`foil`, `backlighter_foil`; GUI foil starter) | Au 0.8 / 0.8; mid-Z suggested 0.55 / 0.35 | Material defaults and their sources, "Decisions of 2026-11-18" |
 | GUI hohlraum part, closed windows | 0.8 / 0.9 (`gold()`) | Material defaults and their sources, "Decisions of 2026-11-18" |
 | `nif_conversion()` (`nif_gold`, `nif_uranium`) | 0.7 t^0.12 ≤ 0.95 | Wall material, conversion and capsule energetics §2 |
@@ -11711,7 +11712,8 @@ they are an option.
 Chosen: (a) with relaxations as an option, default off for both (a feasible run with
 phase 1 starts its main run elsewhere and ends at another design of a flat family;
 whether to switch it on by default is the user's decision; recommended, as it cost at
-most 29 % on the drive problems and turns a run to the time limit into a verdict). Today's run is
+most 29 % on the drive problems and turns a run to the time limit into a verdict;
+**Superseded**: phase 1 on by default since "Defaults changed (2026-11-19)" §5). Today's run is
 unchanged without the keywords: unconstrained runs and default constrained runs are
 bit for bit those of the base commit. Confidence: two public infeasible cases and the
 closed form; the stall rule's 1 % per 100 evaluations is an engineering default
@@ -14148,3 +14150,52 @@ moves when its VisRad beam model is chosen. `test/constraints.jl` checks the def
 run against the same run on a scenario built with `taper = 1` (bit for bit: design,
 beams, evaluations, multipliers), the value and rows against the hard-cut evaluation,
 and a `PhasedScenario`.
+
+### 5. Phase 1 on by default
+
+`optimize_pointing(...; phase1 = true)` is the default (`relaxation` stays off): a
+constrained run whose start violates a constraint first minimizes the infeasibility
+alone and starts its main run from the first design within the limits, or ends with a
+verdict ("Constrained re-pointing", "A verdict on conflicting constraints"). A start
+that meets every constraint, a restart with `from` and an unconstrained run are
+unchanged, bit for bit; `phase1 = false` is the former path.
+
+Measured on every constrained run of `test/constraints.jl` and `test/phased.jl`
+(*measured*; each run logged at the step-4 tree, where phase 1 was off, and with the
+default on; 8 threads). Runs whose start meets the constraints, runs that set `phase1`
+or `relaxation` themselves, and runs stopped at their first evaluation are the same,
+bit for bit (22 of 39 runs). The others:
+
+| case | evaluations, off → on | objective, off → on | outcome, off → on |
+|---|---|---|---|
+| closed form, cap and floor (feasibility 1e-8) | 58 → 56 | 3.335025864e-4 → 3.335025436e-4 | interior |
+| the same, restarted at an outer iteration (`from`) | 47 → 36 | as above | interior |
+| the same, two outer iterations | 11 → 20 | 3.697e-4 → 4.016e-4 | iterations |
+| the same, a 20-evaluation budget, then restarted | 20 → 20, 24 → 37 | 3.3360e-4 → 4.0162e-4, then 3.335025689e-4 → 3.335025436e-4 | evaluations, interior |
+| the same, a 10-evaluation budget | 10 → 10 | 7.18e-4 → 1.81e-2 | evaluations |
+| a power above the box's cap share (verdict) | 23 → 6 | 1.0007e-2 (same) | infeasible_box |
+| bound sensitivities, three runs | 69 → 101, 93 → 113, 80 → 93 | equal within 5e-7 relative | box |
+| dropped bundle: ceiling and four gates (drive) | 1,044 → 1,037 | −0.962591 → −0.962284 | interior |
+| keep-out, light and power on held power scales (infeasible) | 204 → 1 | −1.04574 → −1.00000 (the start) | infeasible_box → infeasible |
+| hard-cut VisRad case (§4), default and taper 1 | 88 → 106 (each) | 8.527433 → 8.527574 | interior |
+| the same, `smooth_cut = false` (300-evaluation budget) | 300 → 125 | 8.527446 → 8.527786 | evaluations → interior |
+| phased: three phases, gates and a ceiling | 474 → 470 | −1.0000071 → −0.9997388 | interior |
+| the same, 10 evaluations | 10 → 10 | −1.0000073 → −0.9997394 | evaluations |
+
+- Closed forms: the KKT point is reached either way (the designs agree within the
+  runs' 1e-8 feasibility); phase 1 costs −23 % to +54 % of the evaluations. Runs cut short
+  by an iteration or evaluation budget end elsewhere, as any change of path does.
+- Drive objectives on a flat family of designs end at another member: the dropped-bundle
+  case at 3.2e-4 less drive in 7 fewer evaluations, the phased case at 2.7e-4 less, both
+  within every limit.
+- Verdicts: the conflicting cap is found in 6 evaluations instead of 23. The keep-out case
+  of held power scales starts with a clearance violation (5.5e-3 of its scale) that no
+  parameter of that parameterization moves (the aims are held): phase 1 stops at the
+  start, a local minimum of the infeasibility, with the verdict `:infeasible` after one
+  evaluation, where the augmented Lagrangian spent 204 to end at `:infeasible_box` with
+  the same violation.
+
+Tests re-derived: `test/constraints.jl`'s augmented-Lagrangian-only comparison passes
+`phase1 = false` (it is the reference for phase 1's evaluation count), and its checks of
+`res.phase1 === nothing` now read phase 1 from the result; every other assertion holds
+on both paths. The tutorials' constrained runs are in "6." below.

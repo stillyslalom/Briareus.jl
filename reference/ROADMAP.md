@@ -460,11 +460,10 @@ analog is the dropped-bundle tutorial, `docs/literate/dropped_bundle.jl`).
         violations alone (on the study's two infeasible cases in 15–34 s instead of
         a run to its limit), and `relaxation = true` names how far each conflicting
         constraint must be relaxed alone for the rest to hold (`Relaxation`; on the
-        study within 2 % of the gate multiples found by hand). Left: `phase1`'s
-        default (off: a feasible run seeded by phase 1 can end at another design of
-        a flat family; at most 29 % more evaluations measured) (user); relaxations
-        cost one solve per constraint and can outlast the time limit; the stall
-        rule's defaults (1 % over 100 evaluations);
+        study within 2 % of the gate multiples found by hand). `phase1` is on by
+        default since 2026-11-19 ("Defaults changed (2026-11-19)"; `relaxation`
+        stays off). Left: relaxations cost one solve per constraint and can outlast
+        the time limit; the stall rule's defaults (1 % over 100 evaluations);
       - a keep-out given as a penalty gives way silently (by 0.07–0.37 mm there) once
         the multipliers grow: `clearance_floor` as a constraint held;
       - an absolute irradiance ceiling with `PowerScales` is met by cutting power:

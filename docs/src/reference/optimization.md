@@ -23,8 +23,8 @@ run and, for each parameter held by the box, the optimum's derivative with respe
 that bound. `from = result` continues a run with its multipliers and penalty, and
 `time_limit` bounds its wall time. On [`VisRadProfile`](@ref) with its hard cut a run
 optimizes the profile tapered below the cut and reports the design under the hard cut
-(`smooth_cut`). `phase1 = true` first looks for a design within the
-limits and ends with `:infeasible` when the search finds none, and `relaxation = true`
+(`smooth_cut`). Phase 1 (`phase1`, on by default) first looks for a design within
+the limits and ends with `:infeasible` when the search finds none, and `relaxation = true`
 then reports how far each conflicting constraint must be relaxed alone
 ([`Relaxation`](@ref)). Ready-made constraints: [`irradiance_ceiling`](@ref), a
 ceiling on the laser irradiance over named parts (its exact value

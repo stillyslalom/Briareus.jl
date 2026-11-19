@@ -157,8 +157,9 @@
         Dfl = 1.05 * drive_at(120.0)
         above = Constraint(:drive, mean_flux; lower = Dfl)
         @test power_for(Dfl) < 20 * count(>(0), m)       # the floor alone is feasible
+        # (the augmented Lagrangian alone, without phase 1: the comparison)
         today = optimize_pointing(s, f; x0 = P0, lower = lo, upper = hi, constraints = (cap120, above),
-                                  feasibility = 1e-8)
+                                  feasibility = 1e-8, phase1 = false)
         v = optimize_pointing(s, f; x0 = P0, lower = lo, upper = hi, constraints = (cap120, above),
                               feasibility = 1e-8, relaxation = true)
         @test today.outcome in (:infeasible, :infeasible_box) && today.phase1 === nothing && isempty(today.relaxations)
@@ -179,10 +180,12 @@
         # no verdict on a feasible run from far outside the cap: the KKT point as without
         # phase 1, its main run started from phase 1's first design within the limits
         far = optimize_pointing(s, f; x0 = clamp.(2.5 .* P0, lo, hi), lower = lo, upper = hi,
-                                constraints = cs2, feasibility = 1e-8, phase1 = true)
+                                constraints = cs2, feasibility = 1e-8)
         @test far.outcome === :interior && far.phase1.feasible && !far.phase1.verdict
         @test norm(far.x - Pstar) / norm(Pstar) < 1e-4
-        @test res.phase1 === nothing && isempty(res.relaxations)
+        # phase 1 is the default (`res` started over the cap); `phase1 = false` skips it
+        @test res.phase1.feasible && !res.phase1.verdict && isempty(res.relaxations)
+        @test today.phase1 === nothing
 
         # a drive floor active at the solution: the least total power that keeps 0.9 of the
         # start's drive, a fill of the quads in decreasing `m`
