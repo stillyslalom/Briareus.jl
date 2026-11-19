@@ -104,6 +104,7 @@ callout in the section says which).
 | `drive_history` `wall_history`, `wall_release` | on | N221204 late-time drive; Wall re-emission and the capsule radius |
 | `DU_LOSS_FACTOR` (`du_wall_loss`, `uranium`, `nif_uranium`) | 0.836 at 300 eV, T^-0.2, 0.7 µm Au liner | Energetics defaults and the capsule share (factor); Wall material, conversion and capsule energetics §1 (model) |
 | `gold()`, `uranium()` conversion | 0.9 (0.75 until 2026-11-18) | Material defaults and their sources, "Decisions of 2026-11-18" (before: Capsule absorption, conversion and the ablating-wall release, "What changed") |
+| `Conversion()` `efficiency` | 0.9 (0.75 until 2026-11-19) | Defaults changed (2026-11-19) §1 |
 | `foil_material()` (`foil`, `backlighter_foil`; GUI foil starter) | Au 0.8 / 0.8; mid-Z suggested 0.55 / 0.35 | Material defaults and their sources, "Decisions of 2026-11-18" |
 | GUI hohlraum part, closed windows | 0.8 / 0.9 (`gold()`) | Material defaults and their sources, "Decisions of 2026-11-18" |
 | `nif_conversion()` (`nif_gold`, `nif_uranium`) | 0.7 t^0.12 ≤ 0.95 | Wall material, conversion and capsule energetics §2 |
@@ -11904,7 +11905,8 @@ change from this commit on (version 0.2.1 unchanged).
    the gold liner's (0.7 µm Au, Döppner 2015), and the DU factor 0.836 was itself
    calibrated with conversion 0.9 ("Energetics defaults and the capsule share",
    *calibrated*), so the same source applies. `Conversion()`'s own default `efficiency`
-   0.75 is not changed (a separate default; for the user). 0.75 remains available as
+   0.75 is not changed (a separate default; for the user; **Superseded**: 0.9 since
+   "Defaults changed (2026-11-19)" §1). 0.75 remains available as
    `gold(conversion = 0.75)` for 1 ns Nova/Omega hohlraums.
 2. **GUI hohlraum part 0.8 / 0.9** (was 0.85 / 0.8): `HOHLRAUM_VALUES` reads `gold()`,
    so the GUI follows the core. Closed diagnostic windows (`WindowSpec`) default to the
@@ -13965,3 +13967,34 @@ floor stays pointing alone, and the `mode_gate` docstring, where it presents the
 as a lower bound, points here for what the delivery figure adds (`power` in
 `mode_uncertainty`). Confidence: the propagation is linear and exact for the model's
 sensitivities (`mode_uncertainty`); the balance figure's statistic is not stated.
+
+## Defaults changed (2026-11-19) *measured*
+
+The user's decisions of 2026-11-19 on defaults listed as open in roadmap items 17, 34, 35
+and 36 ("Agreed with all recs"), one change each, in the order made. Each subsection
+gives the before and after numbers on the cases that move and says which do not.
+
+### 1. `Conversion()`'s default efficiency 0.9
+
+`Conversion(; efficiency)` defaulted to 0.75 after `gold()` and `uranium()` had moved to
+0.9 ("Material defaults and their sources", "Decisions of 2026-11-18"). It now defaults
+to 0.9, `gold()`'s conversion and the input of Young 2020's static VisRad model of a NIF
+hohlraum (**H**); 0.75 stays available as `Conversion(efficiency = 0.75)` for 1 ns Nova
+and Omega hohlraums. `nif_conversion()` sets its own efficiency (0.7 t^0.12) and an
+intensity table replaces the constant, so neither moves.
+
+No call site in `src/`, `test/`, `docs/literate/`, `examples/` or `BriareusGUI/` built a
+`Conversion` on the default efficiency: every one passes `efficiency` or an intensity
+table, so no existing result moves and no call site is pinned. Check by the closed
+form (*derived*): the default-size hohlraum (`hohlraum(length = 10.1, radius = 2.875,
+leh_radius = 1.55, capsule_radius = 0.9)`, h 0.8 / capsule_h 0.3) with a wall of albedo
+0.8 and 384 TW absorbed uniformly over the wall, the wall's conversion a constant
+`Conversion` at the old and the new default:
+
+| quantity | `Conversion(efficiency = 0.75)` (old default) | `Conversion()` | check |
+|---|---|---|---|
+| capsule mean flux (TW/mm²) | 4.581977 | 5.498372 | ratio 1.200000000000000 = 0.9/0.75 |
+| capsule Tr (eV) | 258.3648 | 270.4136 | (0.9/0.75)^¼ × 258.3648, difference 0 eV in Float64 |
+
+`test/energetics.jl` checks that the default equals `gold()`'s conversion and that a wall
+on `Conversion()` solves bit for bit as one on the number 0.9.

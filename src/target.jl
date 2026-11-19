@@ -1127,7 +1127,7 @@ function _interp(ts, vs, t)
 end
 
 """
-    Conversion(; efficiency = 0.75, time_exponent = 0.0, reference_time = 1.0, start = 0.0,
+    Conversion(; efficiency = 0.9, time_exponent = 0.0, reference_time = 1.0, start = 0.0,
                t0 = 0.1, intensities = nothing, efficiencies = nothing, range = (0.0, 1.0))
 
 Laser → x-ray conversion efficiency that varies in time and with the absorbed laser
@@ -1137,7 +1137,10 @@ intensity, for `Material(...; conversion = Conversion(...))`:
 
 with `s` = `time_exponent`, `t - start` clamped below at `t0` (ns), and `η₀(I)` either
 the constant `efficiency` or, with `intensities` (W/cm²) and `efficiencies`, the table
-interpolated linearly in log₁₀ I and held at its ends. `I` is each element's absorbed
+interpolated linearly in log₁₀ I and held at its ends. The default `efficiency` 0.9 is
+the conversion of [`gold`](@ref), the input of a published static VisRad model of a NIF
+hohlraum (Young et al., PoP 27, 082702 (2020)); 0.75 suits 1 ns Nova and Omega
+hohlraums. Research notes, "Material defaults and their sources (2026-11-18)". `I` is each element's absorbed
 laser flux `P/A` (×1e14 W/cm²): a property of the element mesh too (coarse elements
 average a spot over more area). Evaluate with `conversion_efficiency`.
 
@@ -1164,7 +1167,7 @@ struct Conversion
     range::Tuple{Float64,Float64}
 end
 
-function Conversion(; efficiency::Real = 0.75, time_exponent::Real = 0.0, reference_time::Real = 1.0,
+function Conversion(; efficiency::Real = 0.9, time_exponent::Real = 0.0, reference_time::Real = 1.0,
                     start::Real = 0.0, t0::Real = 0.1, intensities = nothing, efficiencies = nothing,
                     range = (0.0, 1.0))
     (intensities === nothing) == (efficiencies === nothing) ||

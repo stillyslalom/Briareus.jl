@@ -285,9 +285,9 @@ Items 10–15 follow the 2026-10-22 literature review against Kritcher et al. 20
       the mid-Z backlighter foils on a suggested range (conversion 0.1–0.6, albedo
       0.3–0.8; not measurements). Left: a measured 3ω broadband conversion for the mid-Z
       foils and the ablators (CH, HDC, Be), and albedos specific to CH and Be (none
-      found public); the capsule conversion 0.3 and `Conversion()`'s own default
-      efficiency 0.75 (user); a Help entry for the foil ranges if the GUI lists foil
-      materials.
+      found public); the capsule conversion 0.3 (user); a Help entry for the foil
+      ranges if the GUI lists foil materials. `Conversion()`'s own default efficiency
+      is 0.9 as `gold()`'s since 2026-11-19 ("Defaults changed (2026-11-19)").
 
 ## Re-pointing studies
 

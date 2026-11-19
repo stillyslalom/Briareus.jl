@@ -124,6 +124,10 @@ end
     s2 = solve(m2, P; time = 3.0)
     @test s1.source == s2.source && s1.H == s2.H
     @test conversions(m2.target, 3.0) == conversions(s1.model.target)
+    # the default efficiency is gold()'s, bit for bit
+    @test conversion_efficiency(Conversion()) === gold().conversion === 0.9
+    s3 = solve(RadiationModel(mats(Conversion()); F = s1.model.F), P; time = 3.0)
+    @test s3.source == solve(RadiationModel(mats(0.9); F = s1.model.F), P; time = 3.0).source
 
     # time dependence in solve and flux_response
     mt = RadiationModel(mats(c); F = s1.model.F)
