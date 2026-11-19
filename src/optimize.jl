@@ -1297,7 +1297,15 @@ or a hand-off to a finer parameterization, is still optimized. A constraint that
 be met ends the run once the penalty has grown by 10⁸ without progress (see `phase1`
 below for a faster verdict). `outer` caps the outer
 iterations, `iterations` caps each inner run and `evaluations` is the budget of the
-whole run (the result counts both over all inner runs). The result's
+whole run (the result counts both over all inner runs). The multipliers change only
+between inner runs, so the cap sets how long the run works with each set of them. The
+public cases of up to about a hundred parameters converge with a large cap (the
+dropped-bundle tutorial passes 1,000) in about a thousand evaluations; small early
+caps, measured as an alternative, saved evaluations on some of them and cost drive on
+others. On a problem with hundreds of parameters, whose evaluations take seconds and
+whose start is far from the limits, a cap of about 100 updates the multipliers sooner
+(a 276-parameter study with `iterations = 1000` completed one outer iteration in an
+hour, with 100 six in 40 minutes; research notes, "The inner budget"). The result's
 `constraints` and `outcome` report each constraint against its limit and whether the
 box, the constraints or the budget ended the run ([`PointingResult`](@ref)). The
 callback's named tuple then also carries `outer`, and its `value` is the inner

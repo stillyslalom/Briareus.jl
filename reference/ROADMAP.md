@@ -507,8 +507,14 @@ analog is the dropped-bundle tutorial, `docs/literate/dropped_bundle.jl`).
       multipliers unchanged for most of a run. On a 276-parameter multi-phase study,
       `iterations = 1000` completed one outer iteration in an hour (the peak 18 % over
       its ceiling at the time limit); `iterations = 100` completed six in 40 min and met
-      every limit but one, within 1 %. A default tied to the outer loop, an inner budget
-      that scales with the parameters, or a documented rule (user review);
+      every limit but one, within 1 %. Measured ("Re-pointing tools: the inner
+      budget, the smallest shift, a pulse-shape budget"): a cap that starts at 10 and doubles per outer iteration saves
+      18–56 % of the evaluations on three public cases but costs 0.16 % of drive and
+      20 % more evaluations on the tutorial's first stage and breaks its capped
+      polish; a cap proportional to the parameters and a stop on a stalled violation
+      are worse. The default stays, and the docstring gives the rule (about 100 for
+      hundreds of slow parameters started far from the limits). *Left:* a converged
+      run of the study under the doubling schedule before any default changes (user);
     - the engineering defaults `feasibility = 1e-3`, `p = 64`, `outer = 30` (user review);
     - the scales of the ready-made constraints (`clearance_floor`: 1 mm; `light_ceiling`
       and `light_floor`: the limit, at least 1e-3 of the delivered power) are engineering

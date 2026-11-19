@@ -13148,3 +13148,144 @@ objective down by 0.12 %, the limits' rows reported per phase.
 
 Existing paths: unchanged bit for bit (the optimizer's internal functions take the
 abstract scenario type and an untyped evaluation; no arithmetic moved).
+
+## Re-pointing tools: the inner budget, the smallest shift, a pulse-shape budget (2026-11-18) *measured*
+
+From the multi-phase re-pointing study of 2026-11-18 (items 34 and 36).
+
+**The inner budget** (item 36). In `optimize_pointing(...; constraints)` each inner
+L-BFGS-B run is capped at `iterations` (default 200), and the multipliers change only
+between inner runs. On the multi-phase study (276 parameters, six phases, about forty
+constraint rows; scratch runs) a cap of 1,000 completed one outer iteration in an hour
+and a cap of 100 six in 40 minutes. Since 320335b a run converges only after an inner
+run at the final tolerance `g_tol` has converged, so a cap cannot simply stay small.
+Candidates, for constrained runs only (measured with an internal switch, not kept):
+
+- *fixed*: every inner run capped at `iterations` (the rule kept);
+- *grow10*: the first inner run capped at 10 iterations, doubled after each outer
+  iteration that ends with the infeasibility–complementarity measure V above
+  `feasibility`, `iterations` once one ends within it (with the cap in the restart
+  state, so that a run continued with `from` is the uninterrupted run);
+- *grow10, μ held*: the same, with the penalty not raised after an outer iteration
+  whose inner run stopped at a cap below `iterations` (ALGENCAN's tenfold rise assumes
+  an inner problem solved to its tolerance);
+- *np3*: a cap of max(20, n/3) for n parameters (the study's 100 at n = 276);
+- *vs20*, *vs50*: an inner run also ends once V at its evaluations has fallen by less
+  than 10 % over the last 20 (50) evaluations while above `feasibility` (the inexact
+  augmented-Lagrangian practice of stopping an inner run when the violation stalls; V
+  recorded from the augmented Lagrangian's own constraint values, no extra evaluation);
+- *ls100*: phase 1's stall rule on the inner value (a fall of less than 1 % of
+  max(1, |value|) over 100 evaluations).
+
+Public cases (evaluations to convergence; drive relative to the 48-quad design; every
+limit met within `feasibility`; all ended `:interior` or `:box`; the tutorial's stages
+with the tutorial's 8-thread script, the others from a scratch harness on the same
+problems):
+
+| case (parameters, constraint rows) | fixed | grow10 | grow10, μ held | np3 | vs20 | vs50 | ls100 |
+|---|---|---|---|---|---|---|---|
+| dropped bundle of `test/constraints.jl` (92, 5) | 1,044; 0.962592 | 856; 0.962583 | — | 798; 0.961874 | 1,503; 0.962581 | 1,044 (identical) | 1,108; 0.962045 |
+| the tutorial, within limits (92, 5) | 1,079; 0.962575 | 843; 0.962503 | — | 706; 0.961429 | 1,115; 0.962041 | — | — |
+| the tutorial, stage 1 (64, 52: gates, ceiling, cap keep-out per quad, light) | 1,092; 0.95733 | 1,315; 0.9558 | 417; 0.95370 | — | — | — | — |
+| the tutorial, stage 2 (per-beam polish, 120 evaluations) | peak 1.0082 × ceiling | peak 1.0153 × (the tutorial's 1 % assertion fails) | peak 1.0091 × | — | — | — | — |
+| mock-up: per-quad aims and power scales (138, 52: gates, exact ceiling, total power, an entrance-hole keep-out per quad) | 1,629; 0.960880 | 718; 0.961427 | — | — | 1,341; 0.962665 | — | — |
+
+On the small cases of `test/constraints.jl` (the closed-form QP, the QP started on its
+cap, the boxed and drive-floor cases, the one-parameter keep-out and light runs) every
+inner run converges within 20 iterations, and grow10 is identical to fixed; the composed
+run capped at 40 iterations ends with the same value in 218 evaluations instead of 204.
+grow10 saved 18–56 % of the evaluations on three cases, at drives within −0.007 % to
++0.057 % of fixed's (other designs of the flat family that meets the gates, §
+Constrained re-pointing), but on the tutorial's stage 1 it took 20 % more evaluations
+and ended 0.16 % lower in drive, and its budget-capped polish ends 1.5 % over the
+ceiling. Holding the penalty on capped inner runs ends stage 1 in 417 evaluations but
+0.38 % lower. np3 caps the final inner runs too and loses 0.07–0.12 %; vs20 cuts the
+first inner runs short but then creeps for hundreds of iterations once feasible (the
+multipliers are then right and V does not stall); ls100 ends at the feasibility edge
+with less drive.
+
+The study's quad stage as posed in its script (276 parameters), three runs in parallel
+at 8 threads under one 15-minute acquisition, each with the same remaining time after
+its setup: about 550 s and 45–47 evaluations each (about 12 s per evaluation with three
+runs sharing the machine). A cap of 1,000 takes the same path as a cap of 100 until the
+hundredth inner iteration, which none reached, so the two are one row: fixed completed
+no outer iteration (one under way), grow10 two (a third under way), vs20 one; the worst
+normalized violation at the time limit was within 3 % of the same value for all three,
+every run far from its limits. The comparison the study needs (its hour-long run under
+a rule) did not fit an acquisition.
+
+*Decision:* the default stays (every inner run capped at `iterations`; constrained and
+unconstrained results unchanged, bit for bit). No candidate was better on every case:
+grow10, the best on evaluations, cost drive on the stage with power scales and broke a
+budget-capped polish. Documented instead (`optimize_pointing`): the cap sets how long a
+run works with each set of multipliers; on problems with hundreds of parameters, slow
+evaluations and a start far from the limits, a cap of about 100 serves better (the
+study's finding).
+A rule that scales the first caps with progress and keeps the penalty schedule sound
+on capped runs, measured on the study converged, is left open.
+
+**The smallest re-pointing** (item 34). `shift_objective` is the weighted mean squared
+aim shift from reference beams matched by name, `Σ w_b |Δaim_b|² / Σ w_b` (mm²), by
+default from the scenario's start; with gates as constraints, `optimize_pointing` then
+finds the least re-pointing that meets them (the per-entrance-hole study of a
+multi-phase re-pointing study used `mean(sum(abs2, b.aim - ref.aim))`, the unit-weight
+case). The weights are read once from the reference beams (a per-beam or per-cone
+`weight` function), so the objective holds no callable on the hot path; it is generic
+in the number type and inferred and JET-clean on Float64 and the optimizer's duals. Its
+rms (the square root at unit weights) is `PointingSummary.shift_rms`. Checked
+(`test/pointing_summary.jl`): the value against `Σ w x² / Σ w` for shifts `x` set by
+hand, its ForwardDiff gradient against `2 w x / Σ w`, both to 1e-12; and the least
+weighted re-pointing for one linear constraint, the mean axial aim of the 16 upper
+outer quads raised by δ = 0.1 mm with the 44.5° quads three times dearer, whose
+solution is `Δ_b = δ |S| (1/w_b) / Σ_S (1/w)` on the quads of S and zero elsewhere
+(0.15 and 0.05 mm): the constrained run ends `:interior` within 1e-5 mm of it, the
+objective within 1e-4 relative of the closed form.
+
+**A pulse-shape budget** (item 34). Each distinct pulse shape needs facility
+validation, so per-quad, per-phase power multipliers are grouped into a few shapes.
+`pulse_shape_groups` does it as the multi-phase study did by hand: k-means on the
+natural log of the multipliers (a key is a point with one coordinate per phase), so a
+shape's multiplier per phase is the geometric mean of its members' and the fit is least
+squares in the relative error; per class (the inner and the outer cones follow
+different base pulses, so they never share a shape), with the number of shapes split
+between the classes by the smallest total squared error over every admissible split.
+The reported rms is `√(SSE / (n_keys · n_phases))` in log multiplier, the study's
+measure. Method, chosen for determinism and exactness where the sizes allow:
+
+- exhaustive enumeration of the partitions of a class into k groups when there are at
+  most `exact_limit` = 10⁶ of them (the Stirling number S(n, k): S(10, 3) = 9,330,
+  S(14, 3) = 788,970, S(15, 3) ≈ 2.4e6: a cone of up to 14 quads into three shapes, or 12 into
+  four);
+- with one phase, dynamic programming over the sorted values (an optimal
+  one-dimensional grouping is contiguous; O(k n²)), exact at any size;
+- otherwise the best of `restarts` = 100 k-means++ seedings (Arthur and Vassilvitskii,
+  SODA 2007), each refined by Hartigan's single-key transfers (a key moves from group a
+  to b when n_b/(n_b+1)|x−c_b|² < n_a/(n_a−1)|x−c_a|², until none does: a local optimum
+  at least as good as Lloyd's). The seedings draw from SplitMix64 (Steele, Lea and
+  Flood, OOPSLA 2014) started at `seed`, a stream fixed on every Julia version
+  (`Random`'s default generators may change between versions). Exact k-means in several
+  dimensions is NP-hard, and the study's sizes (about two dozen quads per cone, four
+  phases, three shapes per cone) are beyond enumeration (S(24, 3) ≈ 4.7e10), so this is
+  the path the study takes; `exact` in the result says which held.
+
+Checked (`test/pulse_shapes.jl`) against an independent exhaustive search over all kⁿ
+assignments (7 keys into 3 groups in 4 phases, 8 into 2 in 2, 9 into 3 in 3, 8 into 4 in
+1): the enumeration and the restarts (forced by `exact_limit = 0`) reach the exhaustive
+minimum to 1e-12; the split against the exhaustive search over the three splits of four
+shapes between classes of 4 and 6 keys; the shapes' multipliers against the geometric
+means in closed form. `shape_pulses` writes the shapes out: each class's base pulse
+times the shape's multiplier, interpolated linearly between the phase times and held
+outside them, tabulated at the base pulse's points and the phase times (the table is the
+multiplier applied at those points; the exact product of two linear pieces is
+quadratic). A peak run at the laser's limit carries no multiplier: `peak = t` ramps the
+multiplier linearly from the last phase's value to 1 between the last phase time and
+`t` and leaves the pulse unscaled after it, an assumption of the tool (the phases
+sample the pulse at their times only), not a fitted quantity. The result goes to
+`write_pulse_table` (ten significant digits) and, through `assignment`, to
+`PowerScales(p; by = b -> g.assignment[b.quad])` for the tied re-optimization.
+
+On the multi-phase study's per-quad multipliers (46 quads, four phases; scratch runs,
+2026-11-18), six shapes come out as the study's own k-means had them (200 Lloyd
+restarts, written by hand): the same split between the cones, the same members and the
+same multipliers to the digits it printed, for seeds 1 to 4 alike, in 4 s with
+compilation.
