@@ -489,7 +489,11 @@ analog is the dropped-bundle tutorial, `docs/literate/dropped_bundle.jl`).
         floor to 0.967 at 0.5 % and 0.975 at five times the floor, with l = 2
         active throughout and no end to the returns in that range. *Remains:* the
         tolerance per degree (0.5 % in P2/P0 is the modelers' repeat uncertainty;
-        l = 1, 3 and 4 have no published number) is the user's;
+        l = 1, 3 and 4 have no published number) is the user's. NIF's public
+        beam-to-beam balance (better than 5 %) sizes laser delivery's share through
+        `mode_uncertainty(...; power)`: 3 % per quad raises the tutorial's floor by
+        40 % at l = 1 and 21 % at l = 2 ("Inner-run options, a wall-loss scenario
+        warning and laser delivery figures");
       - a drive run under gates reported zero gate multipliers at convergence: the
         first-order update after inner runs that ended on their value tolerance, at
         penalty weights of 1e2–1e6. Now the reported multipliers are fitted

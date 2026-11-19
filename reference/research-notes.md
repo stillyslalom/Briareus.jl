@@ -13933,3 +13933,35 @@ span those figures: shapes whose multipliers differ by less than the laser deliv
 distinctly need not be separate pulses. The tolerance is the study's choice.
 Confidence: the figures are the facility's own public statement, **M**; how they map
 onto a per-shape rms is an engineering reading.
+
+### 7. Laser delivery in the noise floor
+
+`mode_gate`'s floor from `mode_uncertainty` counts pointing errors alone by default (50
+µm rms per pointing unit, NIF's specification); `mode_uncertainty` also takes `power`,
+an independent relative rms per pointing unit. The public balance figure of § 6
+("better than 5 percent" beam to beam) puts a number on what the floor leaves out, the
+variation in laser delivery that the user's review of 2026-11-18 named as moving the
+shape more than pointing does. On the dropped-bundle tutorial's case (48 quads at
+8 TW, its coarse deposition operator; the floor per degree √(2l+1) × `rms_mode`, as
+`mode_gate` takes it; a scratch run of the coordinator's script, rerun here to the
+digits shown; 8 threads):
+
+| errors per quad | floor l = 1 | l = 2 | l = 3 | l = 4 (%) |
+|---|---|---|---|---|
+| pointing 50 µm (the tutorial's floor) | 0.346 | 0.395 | 0.313 | 0.095 |
+| power 2 % alone | 0.227 | 0.179 | 0.107 | 0.024 |
+| power 3 % alone | 0.340 | 0.268 | 0.161 | 0.036 |
+| power 5 % alone | 0.567 | 0.447 | 0.268 | 0.060 |
+| pointing 50 µm + power 2 % | 0.413 | 0.434 | 0.330 | 0.098 |
+| pointing 50 µm + power 3 % | 0.485 | 0.477 | 0.351 | 0.102 |
+| pointing 50 µm + power 5 % | 0.664 | 0.596 | 0.412 | 0.112 |
+
+The pointing unit here is a quad: 5 % rms per beam over four independent beams is 2.5 %
+per quad (the sum's relative rms falls as 1/√4), between the 2 % and 3 % rows; 5 % per
+quad is the figure read as a quad's own balance. The power term adds in quadrature,
+mostly at l = 1 and 2: at 3 % per quad the floor rises by 40 % at l = 1 and 21 % at
+l = 2, at 5 % by 92 % and 51 %; l = 4 moves by at most 18 %. No default changes: the
+floor stays pointing alone, and the `mode_gate` docstring, where it presents the floor
+as a lower bound, points here for what the delivery figure adds (`power` in
+`mode_uncertainty`). Confidence: the propagation is linear and exact for the model's
+sensitivities (`mode_uncertainty`); the balance figure's statistic is not stated.

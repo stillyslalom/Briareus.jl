@@ -1008,6 +1008,11 @@ shape from shot to shot by more, in ways a view-factor model does not carry, so 
 tolerance per degree in physical units, a choice of the design, is the usual gate. At
 the pointing floor the gates can cost re-pointing and drive that a tolerance within
 that shot-to-shot spread does not (research notes, "Mode gates in physical units").
+Laser delivery's share can enter the floor through `mode_uncertainty`'s `power` (an
+rms fraction per pointing unit): on the dropped-bundle tutorial's case 3 % per quad
+raises the floor by 40 % at `l = 1` and 21 % at `l = 2`, 5 % by 92 % and 51 % (NIF's
+published beam-to-beam balance is better than 5 %; research notes, "Inner-run options,
+a wall-loss scenario warning and laser delivery figures", § 7).
 With [`drive_objective`](@ref), the largest drive within the gates; with
 [`shift_objective`](@ref), the least re-pointing that meets them.
 
