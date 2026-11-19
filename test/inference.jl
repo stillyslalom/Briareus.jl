@@ -265,6 +265,13 @@ end
         n, ns = _inf_body_instances(bubble_prediction), _inf_instances(Briareus._swing_history)
         bp((bs, m) -> history(τ -> with_pulses(bs, pulse, 0.9τ), [0.5, 1.0]; lpi = (m,)))
         @test _inf_body_instances(bubble_prediction) == n && _inf_instances(Briareus._swing_history) == ns
+
+        # pulse-shape groups: new class functions reuse the compiled grouping
+        mg = [1.0 + 0.1i + 0.01j for i in 1:6, j in 1:2]
+        pulse_shape_groups(mg, 1:6; shapes = 2, class = i -> i <= 3)
+        n = _inf_instances(Briareus._pulse_shape_groups)
+        pulse_shape_groups(mg, 1:6; shapes = 2, class = i -> isodd(i))
+        @test _inf_instances(Briareus._pulse_shape_groups) == n
     end
 
     @testset "optimization path infers" begin

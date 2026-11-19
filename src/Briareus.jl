@@ -118,6 +118,7 @@ export HOTSPOT_VELOCITY_PER_PERCENT, mode1_vector, hotspot_velocity, ResponseKer
 export CapsuleDrive, capsule_drive
 export PointingSummary, pointing_summary, shift_objective
 export PhasedScenario, Phase, PhasedPointing, PerPhase, in_phase, phase_beams
+export PulseShapeGroups, pulse_shape_groups, scaled_pulse, shape_pulses
 export port_basis, visible
 export DIAGNOSTIC_SCHEMA, TabulatedCurve, DiagnosticField, DiagnosticIssue, DiagnosticDefinition,
        register_diagnostic_kind, diagnostic_config_path, diagnostic_paths, add_diagnostic_path,
@@ -157,6 +158,7 @@ include("dante_response.jl")
 include("imager.jl")
 include("dynamics.jl")
 include("retune.jl")
+include("pulse_shapes.jl")
 include("clearance.jl")
 include("backlighter.jl")
 include("sweep.jl")

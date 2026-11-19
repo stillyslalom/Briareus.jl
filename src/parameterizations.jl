@@ -136,7 +136,10 @@ with each beam's power multiplied by the scale `s` of its group. Groups are keye
 cones = PowerScales(pointing; by = b -> b.group in (:inner23, :inner30) ? :inner : :outer)
 ```
 
-which varies the cone fraction (and the total power) beside the pointing. The scales
+which varies the cone fraction (and the total power) beside the pointing. Beams that
+share a key share a scale, so a grouping ties them: with the shapes of
+[`pulse_shape_groups`](@ref) (keyed by quad), `PowerScales(pointing; by = b -> g.assignment[b.quad])`
+gives one scale per pulse shape for a re-optimization. The scales
 start at 1 and are named `"<key>.power_scale"`. They multiply whatever power `p` gives,
 a `:power` field of `p` included, so the two are redundant together; holding one of
 them ([`HeldParameters`](@ref)) removes the redundancy.

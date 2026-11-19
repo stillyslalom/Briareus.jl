@@ -84,3 +84,19 @@ Modules = [Briareus]
 Pages = ["src/phased.jl"]
 Private = false
 ```
+
+## Pulse shapes
+
+Each distinct pulse shape needs facility validation. [`pulse_shape_groups`](@ref) groups
+per-key power multipliers over a pulse's phases (one per quad and phase, from power
+scales) into a given number of shapes, by k-means on the log multipliers per class (e.g.
+the inner and the outer cones), the shapes split between the classes by fit;
+[`shape_pulses`](@ref) and [`scaled_pulse`](@ref) write the shapes out as pulses for
+[`write_pulse_table`](@ref), and the grouping's `assignment` ties the power scales of a
+re-optimization per shape ([`PowerScales`](@ref)).
+
+```@autodocs
+Modules = [Briareus]
+Pages = ["src/pulse_shapes.jl"]
+Private = false
+```

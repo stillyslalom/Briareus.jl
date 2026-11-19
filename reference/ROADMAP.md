@@ -326,11 +326,15 @@ analog is the dropped-bundle tutorial, `docs/literate/dropped_bundle.jl`).
       to rounding at its saved parameters (552 of them) and takes 0.45 of its time
       per gradient. *Left:* a scale shared across phases; a runnable example in a
       tutorial (over a minute of build time); the study's stages rerun on it.
-    - A pulse-shape budget (same study): each distinct pulse shape needs facility
-      validation, so the per-quad multipliers were grouped afterwards into a few shapes
-      (k-means on the log multipliers, the split between the inner and outer cones
-      chosen by fit) and re-optimized with tied `PowerScales`. A helper for the grouping,
-      and for writing the shapes out as `PulseShape` tables.
+    - A pulse-shape budget: `pulse_shape_groups` groups per-key multipliers
+      over the phases into a given number of shapes by k-means on the log multipliers
+      per class, the split between the classes by fit (exact by enumeration or 1-D
+      dynamic programming where the size allows, seeded restarts otherwise; it
+      reproduces the study's grouping); `shape_pulses` and `scaled_pulse` write the
+      shapes out as `PulseShape`s for `write_pulse_table` (a peak at the laser's limit
+      left unscaled with `peak`), and the grouping's `assignment` is `PowerScales`'
+      `by`. *Left:* the tied re-optimization with per-phase keys on a
+      `PhasedScenario` as one call; phase weights in the grouping (user).
     - The smallest re-pointing that meets given gates: `shift_objective`,
       the weighted mean squared aim shift from reference beams, and
       `PointingSummary.shift_rms`.
