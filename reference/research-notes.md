@@ -12569,3 +12569,59 @@ component when the beam sits on the switch. The penalty's fixed large weight mak
 kink and the curvature jump part of the objective itself. A smooth minimum over the rim's local minima (a soft-min
 with a length scale below the keep-out's accuracy) would remove both (a design change,
 not made: user decision).
+
+## Drive asymmetry inferred from post-shot capsule simulations: Haines 2026 (2026-11-18) *published; figure values read by eye*
+
+Haines et al., "Relating metrology to performance in recent high-yield implosions on the
+National Ignition Facility," Phys. Plasmas 33, 112712 (2026) (CC BY), post-shot
+simulations of 24 layered implosions with xRAGE in 2-D, driven by frequency-dependent
+sources from HYDRA runs calibrated to bang time. The paper concerns capsule metrology;
+what bears on a view-factor drive model:
+
+- **A transfer curve for one design** (their Fig. 9; a 2.05 MJ HybridE capsule, 85 µm
+  ablator, the design of N230729). A flux asymmetry P2/P0 fixed in time is applied to
+  the source; the synthetic neutron-image P2/P0 changes little for applied values of
+  −0.03 to +0.035 (the hot spot is exploding at bang time on the ignition cliff) and
+  steeply outside; the yield is unaffected for −0.01 to +0.015 and, read from the
+  figure, falls to half near −0.021 and +0.028 and to under 5 % beyond about −0.035 and
+  +0.045. A negative applied P2 gives a prolate image. The neutron-image P2 of an
+  igniting shot is therefore not a linear measure of the drive's P2: a linear
+  flux-to-hot-spot transfer (roadmap item 11) holds for in-flight shapes or below the
+  cliff only. *Confidence:* the ranges in the text are the paper's; the half-yield
+  points are read from the figure (±0.003).
+- **Three nominal repeats** of that design and drive (same figure, vertical lines; read
+  ±0.003): the fixed applied P2/P0 that reproduces each shot's observed shape is about
+  −0.024 (N230729, 9 % prolate, 52 % of yield lost to shape in their Table II), +0.003
+  (N250622, the shot with two wall windows; no shape loss) and +0.022 (N250930; 30 %).
+  The spread between nominal repeats, 0.046, is about ten times the capsule P2 that
+  50 µm of pointing error per quad produces in a view-factor model (0.4 % in the same
+  Legendre units on the dropped-bundle tutorial's case), and exceeds the windows' own m = 0 signal: shot-to-shot shape at this scale is
+  set by what a view-factor model does not carry (energy transfer and plasma
+  conditions), and a difference between a windowed and an unwindowed shot cannot be
+  read as the windows' effect. The paper's own pre-shot uncertainty in the applied P2/P0
+  is 0.005 for an exact repeat plus 0.005 for a change of pulse shape or wavelength
+  detuning, calibrated on earlier shots, and its authors note that these repeats
+  suggest more; an earlier ±3 % assumption on the flux asymmetry "proved inadequate".
+- **Scales for gates.** Mode gates set at a fraction of the pointing-noise floor
+  (tenths of a percent of the drive per degree) are several times inside both the band
+  with no yield effect and the repeatability above. They state "no change from the
+  reference" rather than a physical tolerance; where such a gate costs drive, a gate in
+  physical units (0.5 % in P2/P0, the modelers' repeat uncertainty) is defensible. A
+  reference shot's drive is not thereby a good target: N230729's inferred drive is 2.4 %
+  waist-heavy in the fixed-in-time equivalent.
+- **The windowed shot** (their Sec. VII): two 2-mm-diameter windows of "≈ 3 µm" of gold
+  (the Letter of Lester et al. gives 2.5 µm); a gap between window and wall, not
+  measurable before the shot, estimated at no more than 400 µm as built and 200 µm
+  after closure, treated as a lost-drive asymmetry in the pre-shot uncertainty; the shot
+  matched the nominal prediction, which the authors read as the gap having closed.
+- **Published histories** (their Fig. 1(a)): total laser power and Dante radiation
+  temperature for N230729 through the reheating peak after the laser turns off (about
+  55 TW in the picket, about 465 TW at peak; Dante near 150 eV at 3 ns, 275 eV at 6 ns,
+  310 eV at 8.3 ns, 360 eV at the reheat peak near 10 ns; read by eye, ±10 eV): a second
+  public drive history for the rise-through-the-peak error of item 12, as a check.
+- Mode 1 from a diagnostic window is compensated by the same window opposite (their
+  reference to Young et al. 2020), as the default hohlraum models it.
+- Not used: the capsule-quality fit and the fill-tube results (outside the scope). The
+  paper states that integrated simulations predict neither the coupling nor the shape,
+  and that the flux asymmetry is inferred from in-flight and stagnation images, not
+  measured: none of its drive numbers is a measurement of the drive.

@@ -165,7 +165,15 @@ Items 10–15 follow the 2026-10-22 literature review against Kritcher et al. 20
     cone-fraction response (the reduced CBET amplifies cuts and raises alike, 1.2–1.5×);
     Te at the 5.5 keV fit bound at 8 ns; a laser-power Te prior (not run); plasma-state
     tables as inputs, an inner-quad SBS proxy, the 23.5°/30° split. *Data:* N230729
-    transfer curves; per-shot plasma states.
+    transfer curves; per-shot plasma states. Haines et al., Phys. Plasmas 33, 112712
+    (2026), Fig. 9, is such a curve for the neutron image against a flux P2 fixed in
+    time: flat for applied P2/P0 of −0.03 to +0.035 on the ignition cliff, so a linear
+    transfer needs in-flight shapes; and three nominal repeats of one design span 0.046
+    in the inferred applied P2/P0, which bounds what a same-pulse P2 step can calibrate
+    ("Drive asymmetry inferred from post-shot capsule simulations: Haines 2026").
+    *Remains from it:* a fixed-in-time equivalent of a drive history's P2 (a weighted
+    time average of `drive_history`'s capsule modes; the weight to be chosen), to set
+    beside the three inferred values as a check.
 12. **Absolute energetics on N221204** (`reference/litreview/energetics.md`,
     `late_time_drive.md`; "Absolute energetics without new data: the early peak and the
     missing sinks"). *State* (coarse mesh, 90e28c4): capsule share 13.9 % and LEH 24.2 %
@@ -177,7 +185,10 @@ Items 10–15 follow the 2026-10-22 literature review against Kritcher et al. 20
       Dante at 5.0–5.5 ns) is the open-area face of this one error; on Dante's own
       convention the model is within 6 eV there and 0.07 ns early. No existing input
       within its documented range adds more than 4 eV to the rise. *Data:* a
-      thermal-band LEH radius, or HYDRA's loss history through the peak.
+      thermal-band LEH radius, or HYDRA's loss history through the peak. A second
+      public history to check the rise on: N230729's laser power and Dante temperature
+      (Haines et al. 2026, Fig. 1(a)); its pointing is not public, so a mock-up
+      pointing would carry the check.
     - The drive after the laser falls: 30 / 38 / 47 eV low at 8.5 / 9.0 / 9.35 ns (37–54
       eV at bang on three shots); the missing ~250–450 kJ is in the plasma, with an
       unpublished return rate. *Data:* HYDRA's energy inventory through the coast, a
@@ -409,6 +420,11 @@ analog is the dropped-bundle tutorial, `docs/literate/dropped_bundle.jl`).
       - a design on its gates exceeds them under another beam model (by 7–12 % of a
         gate with the f-cone model against the VisRad profile; within 0.5 % across
         mesh and operator resolution): a margin on the gates is the designer's choice.
+        For scale (Haines et al. 2026, read from their Fig. 9): a flux P2/P0 fixed in
+        time costs no yield within −0.01 to +0.015 on one ignition design, and nominal
+        repeats of it span 0.046, against gates of tenths of a percent from the
+        pointing-noise floor: a gate in physical units where the floor's gate costs
+        drive (user).
     - a constrained run stopped by its budget reports the exact peak as it stands
       (`exact = true` is the default since cd6f084, and its rounds run after
       convergence): a capped polish needs convergence or `from` to meet the ceiling;
@@ -583,7 +599,12 @@ analog is the dropped-bundle tutorial, `docs/literate/dropped_bundle.jl`).
     (both expressible with `backlighter_foil(los)` and `FramePointing`; neither explored).
     *Data:* a shot's real backlighter dimensions.
 28. **Diagnostic windows.** The expanded foil's density (held at 1 g/cm³), a backing that
-    absorbs and re-emits part of what the gold transmits, a computed gap-closure time, and
+    absorbs and re-emits part of what the gold transmits, a computed gap-closure time
+    (the one public datum: a gap between window and wall of at most 400 µm as built,
+    expected to close to 200 µm, on a shot that matched its nominal prediction; Haines
+    et al., Phys. Plasmas 33, 112712 (2026), which also gives the windows as "≈ 3 µm"
+    of gold against the Letter's 2.5 µm), the capsule asymmetry of an open gap of given
+    width as an uncertainty term, and
     the windows' l = 4, which neither quad powers nor pointing removed. From a scratch
     study (2026-11-18):
     - The burnthrough time of a backed foil. The bare heat front (`HeatFront`, Hammer &
