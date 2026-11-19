@@ -447,12 +447,24 @@ analog is the dropped-bundle tutorial, `docs/literate/dropped_bundle.jl`).
         pointing-noise floor. The floor is an aggressive gate (user, 2026-11-18):
         variation in laser delivery moves the shape considerably more but cannot be
         readily quantified, and the tolerances of a re-pointing study can be relaxed
-        without a loss of performance within that uncertainty. *Remains:* the
-        tutorial and the `mode_gate` docstring present the floor as a lower bound
-        and a tolerance in physical units as the usual gate; the tolerance per
-        degree (0.5 % in P2/P0 is the modelers' repeat uncertainty; l = 1, 3 and 4
-        have no published number) is the user's; what a relaxed gate buys in aim
-        shift and drive on the tutorial's case.
+        without a loss of performance within that uncertainty. Now the
+        `mode_gate` docstring and the tutorial present the floor as a lower bound
+        and a tolerance per degree in physical units as the usual gate (the
+        tutorial adds a least-re-pointing run at 0.5 % per degree), and what a
+        relaxed gate buys is measured on the tutorial's case ("Mode gates in
+        physical units"): the least re-pointing falls from 93 µm rms at the floor
+        to 63 µm at 0.5 % and to nothing once the gates reach the start's
+        departures; the largest drive rises from 0.962 of the reference at the
+        floor to 0.967 at 0.5 % and 0.975 at five times the floor, with l = 2
+        active throughout and no end to the returns in that range. *Remains:* the
+        tolerance per degree (0.5 % in P2/P0 is the modelers' repeat uncertainty;
+        l = 1, 3 and 4 have no published number) is the user's;
+      - a drive run under gates reports zero gate multipliers at convergence (the
+        penalty weight at 1e2–1e4; least-squares multipliers at the same design are
+        nonzero and cut the stationarity residual twentyfold), so its multiplier
+        column and `bound_sensitivity` do not show which limit costs drive: the
+        design is unaffected. *Remains:* multipliers reported from the converged
+        active set.
     - a constrained run stopped by its budget reports the exact peak as it stands
       (`exact = true` is the default since cd6f084, and its rounds run after
       convergence): a capped polish needs convergence or `from` to meet the ceiling;

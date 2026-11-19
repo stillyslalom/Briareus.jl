@@ -13396,3 +13396,87 @@ Works unchanged: it reads each step's `transmission`, which `solve` computes fro
 model. Tested: a drive history with a `DiffusionTransmission` window, `keep_albedo`, and
 `history_state` at the last step gives each window element the option's fraction at the
 step's own flux temperature (to the solve's tolerance), below the gray value there.
+
+## Mode gates in physical units (2026-11-19) *measured*
+
+Roadmap item 36 (the gates sub-bullet). Mode gates set from the pointing-noise floor
+(`√(2l+1) × rms_mode` of `mode_uncertainty` at 50 µm rms per quad) state what pointing
+error alone produces: a lower bound for a gate. Laser delivery and the hohlraum plasma
+move the shape from shot to shot by more (§ Drive asymmetry inferred from post-shot
+capsule simulations: Haines 2026: no yield effect for a fixed P2/P0 of −0.01 to +0.015
+on one design, nominal repeats spanning 0.046, the modelers' repeat uncertainty 0.005),
+and the user's judgment (2026-11-18) is that a study's tolerances can be relaxed within
+that uncertainty without a loss of performance. Measured here: what a relaxed gate buys.
+
+**Unit.** A gate bounds `mode_departure`, `δₗ = √((2l+1) Σₘ (c_lm/c_00 − r_lm/r_00)²)`
+against the 48-quad shape; for an axisymmetric difference it is `|Δ(aₗ/a₀)|` in the
+Legendre expansion of the capsule flux, so a gate of 0.5 % at l = 2 is ±0.005 in P2/P0.
+"0.5 %" below means 0.005 in every degree l = 1–4.
+
+**Case.** The dropped-bundle tutorial's (bundle 11 freed; the 46 other quads re-aimed in
+`:phi` and `:z` within ±0.3 mm; its mesh and coarse deposition operator; scratch
+scripts reusing its setup verbatim), with the tutorial's limits as constraints: the
+wall-irradiance ceiling at the 48-quad peak (`irradiance_ceiling`, exact) and the
+end-cap keep-out (`clearance_floor` of the `HardwareKeepOut` at 10 µm, one row per
+quad). Gates at k × the floor (floor 0.346, 0.395, 0.313, 0.095 % for l = 1–4) and at
+0.25, 0.5 and 1 % in every degree. Per gate set: (a) `shift_objective` (the least
+re-pointing), (b) `drive_objective` (the largest drive), one call each from the
+unshifted start, `iterations = 1000`, `evaluations = 3000`, a time limit of 60–110 s
+and `from` to continue a run that reached it (three runs, marked ²). Every run
+converged (`:interior`, or `:box` where marked ᵇ) with every constraint within
+`feasibility`. The start (the 46 quads at the 48-quad aims) keeps 0.96247 of the
+48-quad drive, departs 1.091, 1.075, 0.769, 0.121 % in l = 1–4, has its peak at the
+ceiling and clears the caps by 66 µm. 8 threads, 40 ms per evaluation (another run may
+have shared the machine).
+
+| gates | start δ/gate, l = 1–4 | (a) rms / max shift (mm) | (a) drive | (a) evals | (b) drive | (b) δ/gate, l = 1–4 | (b) rms / max shift (mm) | (b) evals | (b) active besides gates |
+|---|---|---|---|---|---|---|---|---|---|
+| 0.8 × floor | 3.95 3.40 3.08 1.59 | 0.108 / 0.201 | 0.9586 | 1,924 | 0.9614 | 0.98 1.00 0.95 0.85 | 0.181 / 0.319 | 694 | ceiling |
+| 1 × floor | 3.16 2.72 2.46 1.27 | 0.093 / 0.178 | 0.9591 | 712 | 0.9624ᵇ² | 1.00 1.00 1.00 0.88 | 0.204 / 0.331 | 1,558 | ceiling, 1 keep-out |
+| 2 × floor | 1.58 1.36 1.23 0.64 | 0.036 / 0.060 | 0.9612 | 642 | 0.9660ᵇ | 0.82 1.00 0.89 1.00 | 0.169 / 0.308 | 1,495 | 6 keep-out |
+| 3 × floor | 1.05 0.91 0.82 0.42 | 0.0024 / 0.0036 | 0.9625 | 91 | 0.9694 | 0.67 1.00 0.64 1.00 | 0.175 / 0.319 | 1,102 | 4 keep-out |
+| 5 × floor | 0.63 0.54 0.49 0.25 | 0 / 0 | 0.9625 | 7 | 0.9749² | 0.77 1.00 0.22 0.83 | 0.200 / 0.337 | 1,645 | ceiling, 10 keep-out |
+| 0.25 % | 4.36 4.30 3.08 0.48 | 0.104 / 0.172 | 0.9575 | 705 | 0.9632ᵇ | 1.00 1.00 1.00 0.89 | 0.217 / 0.326 | 1,721 | 6 keep-out |
+| 0.5 % | 2.18 2.15 1.54 0.24 | 0.063 / 0.105 | 0.9594 | 636 | 0.9674ᵇ² | 1.00 1.00 1.00 0.97 | 0.217 / 0.334 | 1,496 | 9 keep-out |
+| 1 % | 1.09 1.08 0.77 0.12 | 0.0058 / 0.010 | 0.9622 | 287 | 0.9709 | 0.84 1.00 0.71 0.59 | 0.218 / 0.345 | 882 | 9 keep-out |
+
+Drives are relative to the 48 quads; δ/gate is the departure over the gate (1.00:
+active); "evals" are totals over the segments of a continued run. The least re-pointing
+ends with every violated degree at its gate (and the ceiling active within
+`feasibility` in most rows); at the floor it also holds l = 4 there.
+
+**What it shows.** The least re-pointing falls fast with the gate: 93 µm rms at the
+floor, 63 µm at 0.5 %, 36 µm at twice the floor, and a few micrometers once the gates
+reach the start's own departures (1 %, three times the floor), none at five times; the
+gates a start already meets need no re-pointing, and at 1 % only l = 1 and 2 are
+violated, by under 10 %. That design does not seek drive and loses up to 0.5 % of the
+start's. The largest drive keeps rising across the whole range, from 0.9614 at 0.8 ×
+the floor to 0.9749 at five times, with the l = 2 gate active in every run (and l = 4
+at two and three times the floor): the drive is bought with P2, about 0.8–1 % of the
+48-quad drive per percent of l = 2 departure on this untuned pointing. No return stops
+within the range measured: besides l = 2 the drive runs press against the cap keep-out
+(4–10 quads at 10 µm from twice the floor and 0.25 % on) and the ±0.3 mm box, and move
+the quads 0.17–0.22 mm rms whatever the gate. A tolerance of 0.5 % per
+degree, the modelers' P2 repeat uncertainty, buys 0.5 % of drive over the floor gates
+and needs a third less re-pointing to meet. Gate sets that are not nested (0.25 %
+against 0.8 × the floor, whose l = 4 gate is a third as wide) are not ordered in drive.
+Confidence: one public case and one start per run; the drive runs are local optima of a
+landscape where the active gates leave a flat family (differences of a few 1e-4 between
+neighboring designs are not significant).
+
+**The reported multipliers of the drive runs.** Every largest-drive run ends with all
+gate multipliers zero (`PointingResult.constraints`, `state.λ`), the gates active at
+normalized violations of −1e-5 to −6e-4 and the penalty parameter at 1e3–1e4; the
+least-shift runs end with positive gate multipliers (2e-4 to 6e-3) at μ of 7–1e3. With
+μ that large, the last update `λ ← max(0, λ + μg)` at a design a few 1e-4 inside a gate
+sets its multiplier to zero, and a drive objective's last inner run, flat along the
+limits, converges on the relative value change. The tutorial's own run within limits
+(ceiling and floor gates, no keep-out) shows it: it reports multipliers 0, 0, 0, 1.1e-3,
+0 (ceiling, l = 1–4) at μ = 204; at its design the drive objective's gradient over the
+90 free parameters has norm 1.75e-2, the reported multipliers leave a stationarity
+residual `|∇f + Jᵀλ|` of 1.80e-2, and least-squares multipliers from the same
+ForwardDiff Jacobian (ceiling 5.7e-3, l = 2 2.4e-3, l = 4 1.2e-3, the others under
+1e-4) leave 8.8e-4. The design is near a KKT point and the run's drive is the
+tutorial's, but the multiplier column of a drive run does not show which limit costs
+drive, and `bound_sensitivity` of such a run is close to `bound_gradient`. Not changed
+here (a change to the multiplier estimate the augmented Lagrangian reports).

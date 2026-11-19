@@ -901,12 +901,18 @@ shape: the [`Constraint`](@ref) `mode_departure(ev, reference; lmax) ≤ gates`,
 `:mode_gate`, one component per degree `l = 1:lmax` (labeled `l = 1`, …), each in units
 of its own gate.
 
-`gates` is a vector of departures (`gates[l]` for degree `l`), or the result of
-[`mode_uncertainty`](@ref), whose `rms_mode` gives the gate `√(2l+1) × rms_mode[l]`:
-the departure that random errors of that size (e.g. NIF's 50 µm rms pointing) give
-each degree, so that a design within the gates differs from the reference by no more
-than the shot-to-shot spread. With [`drive_objective`](@ref), the largest drive within
-the gates.
+`gates` is a vector of departures (`gates[l]` for degree `l`, in the units of
+[`mode_departure`](@ref): for an axisymmetric difference `|Δaₗ/a₀|`, so `0.005` at
+`l = 2` is 0.5 % in P2/P0), or the result of [`mode_uncertainty`](@ref), whose
+`rms_mode` gives the gate `√(2l+1) × rms_mode[l]`: the departure that random errors of
+that size (e.g. NIF's 50 µm rms pointing) give each degree. That gate is a lower bound,
+what pointing error alone produces: laser delivery and the hohlraum plasma move the
+shape from shot to shot by more, in ways a view-factor model does not carry, so a
+tolerance per degree in physical units, a choice of the design, is the usual gate. At
+the pointing floor the gates can cost re-pointing and drive that a tolerance within
+that shot-to-shot spread does not (research notes, "Mode gates in physical units").
+With [`drive_objective`](@ref), the largest drive within the gates; with
+[`shift_objective`](@ref), the least re-pointing that meets them.
 
 With a reference [`Evaluation`](@ref) (e.g. the pointing before a bundle was dropped,
 in a scenario that observes the capsule), the shape is its [`flux_ylm`](@ref)

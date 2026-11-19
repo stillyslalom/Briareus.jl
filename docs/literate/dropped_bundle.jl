@@ -674,15 +674,22 @@ show_modes("re-pointed, ray-traced", ylm_weights(target, capsule; lmax = 4) * H)
 # ## Re-pointing within limits
 #
 # The objective above weighs mode 1 against the other modes and the drive by hand-set
-# weights. A design review states limits instead: every mode as close to the 48-quad
-# shape as the shot-to-shot spread allows, the wall's laser irradiance no higher than
-# the 48-quad pointing's, and within those limits as much drive as possible.
+# weights. A design review states limits instead: every mode within a tolerance of the
+# 48-quad shape, the wall's laser irradiance no higher than the 48-quad pointing's, and
+# within those limits as much drive as possible.
 #
 # The first limit is a gate per degree on the departure from the 48-quad shape,
 # ``\delta_l = \sqrt{(2l+1)\sum_m (c_{lm}/c_{00} - c'_{lm}/c'_{00})^2}``
-# ([`mode_departure`](@ref)). [`mode_uncertainty`](@ref) gives the rms amplitude that
-# random pointing errors of 50 µm per quad leave in each degree, and
-# [`mode_gate`](@ref) turns it into the gate ``\sqrt{2l+1}`` times that rms. The second
+# ([`mode_departure`](@ref)), for an axisymmetric difference the change in the Legendre
+# ratio ``a_l/a_0`` (``P_2/P_0`` at ``l = 2``). [`mode_uncertainty`](@ref) gives the rms
+# amplitude that random pointing errors of 50 µm per quad leave in each degree, and
+# [`mode_gate`](@ref) turns it into the gate ``\sqrt{2l+1}`` times that rms. That gate
+# is a lower bound: it is what pointing error alone produces, while the delivery of the
+# laser and the hohlraum plasma move the shape from shot to shot by more, in ways a
+# view-factor model does not quantify. The usual gate is a tolerance per degree in
+# physical units, a choice of the design; the floor serves here as the strictest case,
+# and the research notes ("Mode gates in physical units") measure what relaxed gates buy
+# on this case in aim shift and drive. The second
 # is a ceiling on the laser irradiance over the wall's elements
 # ([`irradiance_ceiling`](@ref)): a hot spot on the gold drives the wall plasma inward,
 # and the 48-quad pointing's peak serves as the limit, an engineering choice rather
@@ -892,6 +899,37 @@ review_line("polished", polished_review)
 # `remake` on the first stage's beams. Both results stay at hand for a report or a
 # further stage.
 
+# ## A tolerance in physical units
+#
+# The gates above sit at the pointing-noise floor, the strictest case. A study states a
+# tolerance per degree instead, and the choice is the design's: 0.5 % in ``P_2/P_0`` is
+# the modelers' repeat uncertainty for one ignition design (research notes, "Drive
+# asymmetry inferred from post-shot capsule simulations"), and degrees 1, 3 and 4 have no
+# published number. Here, as an example, every degree is held within 0.5 % of the
+# 48-quad shape. [`shift_objective`](@ref), the mean squared aim shift from the start,
+# with the ceiling and the keep-out from the end caps as further constraints, gives the
+# least re-pointing that meets the tolerance, in one call:
+
+tolerance = mode_gate(full, fill(0.005, 4))
+smallest = optimize_pointing(repoint, shift_objective(repoint); x0, lower, upper,
+                             constraints = (ceiling, tolerance, clearance_floor(cap_keepout)),
+                             iterations = 1000, evaluations = 3000)
+smallest_summary = pointing_summary(repoint, smallest; keepout = cap_keepout, drive_reference = full)
+
+#-
+
+@assert smallest.outcome in (:interior, :box) && all(r -> r.status !== :violated, smallest.constraints)
+@assert sqrt(smallest.value) ≈ smallest_summary.shift_rms
+
+# Degrees 1–3 end at the tolerance and l = 4 well inside it; the quads move by 63 µm rms
+# and 0.10 mm at most, and the drive ends 0.3 % below the start's (the objective does
+# not seek drive). The same call with the gates at the noise floor moves the quads
+# by 93 µm rms and up to 0.18 mm; with 1 % per degree, which the start's departures in
+# l = 1 and 2 barely exceed, by 6 µm. The largest drive within each tolerance, from
+# [`drive_objective`](@ref) under the same constraints, rises from 0.962 of the 48-quad
+# drive at the floor to 0.967 at 0.5 % and 0.971 at 1 % (research notes, "Mode gates in
+# physical units").
+
 # ## What this checks
 #
 # - The NIF ports have the symmetry ``D_2`` and no more, and every harmonic that
@@ -949,3 +987,9 @@ review_line("polished", polished_review)
 #   bisection, to 1e-5 mm; the constraints' values against the quantities that define
 #   them (the light on the caps against `component_power` to 1e-12) and their
 #   gradients against central differences to 1e-6.
+# - The least re-pointing within a tolerance of 0.5 % per degree meets the tolerance,
+#   the ceiling and the keep-out, and converges (asserted: no constraint violated), and
+#   the square root of its objective equals the summary's rms aim shift, computed from
+#   the aims directly (asserted). The objective's closed-form test
+#   (`test/pointing_summary.jl`): the least weighted re-pointing for one linear
+#   constraint, against its solution in closed form to 1e-5 mm.
