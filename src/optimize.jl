@@ -1255,7 +1255,8 @@ end
                       iterations = 200, evaluations = 20 * iterations, show_trace = false,
                       g_tol = 1e-8, callback = nothing, constraints = (),
                       feasibility = 1e-3, outer = 30, time_limit = Inf, phase1 = false,
-                      relaxation = false, inner_reltol = 1e-10) -> PointingResult
+                      relaxation = false, inner_reltol = 1e-10,
+                      inner_evaluations = nothing) -> PointingResult
 
 Minimize `objective(evaluate(scenario, x))` within the box `lower ≤ x ≤ upper` by
 L-BFGS-B with forward-mode automatic-differentiation gradients, from `x0` (clamped to
@@ -1319,7 +1320,20 @@ caps, measured as an alternative, saved evaluations on some of them and cost dri
 others. On a problem with hundreds of parameters, whose evaluations take seconds and
 whose start is far from the limits, a cap of about 100 updates the multipliers sooner
 (a 276-parameter study with `iterations = 1000` completed one outer iteration in an
-hour, with 100 six in 40 minutes; research notes, "The inner budget").
+hour, with 100 six in 40 minutes; research notes, "The inner budget"). The cap on
+iterations does not bound an inner run's evaluations (line searches); an inner run can
+spend hundreds of them on 1e-4 of the objective while limits stay violated.
+`inner_evaluations` (default none) caps the evaluations of each inner run: one that
+reaches it ends as one ended by `iterations` does, at its best design, and the outer
+loop updates the multipliers and the penalty from there (phase 1 is not capped; the
+relaxations' runs are). A capped inner run never counts as converged, so the run
+still ends only after an inner run converges within the cap at the final tolerance,
+and a small cap needs a larger `outer`: on a coarse version of the dropped-bundle
+tutorial's run within limits (92 parameters), whose default run spent 795 of its 1,044
+evaluations in one inner run, a cap of 100 converged in 10 outer iterations and 766
+evaluations at 0.06 % less drive, and a cap of 30
+ended at `outer = 30` unconverged (research notes, "Inner-run options, a wall-loss
+scenario warning and laser delivery figures").
 `inner_reltol` (default 1e-10; 0 turns it off) is the inner runs' relative value
 tolerance above, also phase 1's. The default ends a drive objective's inner runs where
 the objective is flat along the limits, short of stationarity (the result's
@@ -1387,7 +1401,8 @@ Base.@nospecializeinfer function optimize_pointing(
                            show_trace::Bool = false, g_tol = 1e-8, @nospecialize(callback = nothing),
                            @nospecialize(constraints = ()), feasibility::Real = 1e-3,
                            outer::Integer = 30, time_limit::Real = Inf, phase1::Bool = false,
-                           relaxation::Bool = false, inner_reltol::Real = 1e-10)
+                           relaxation::Bool = false, inner_reltol::Real = 1e-10,
+                           @nospecialize(inner_evaluations = nothing))
     # Inferred and compiled once for every objective and callback (each objective
     # closure type used to recompile this body and Optim's L-BFGS-B, ~1 s); the objective
     # is reached by dynamic dispatch once per evaluation.
@@ -1396,12 +1411,19 @@ Base.@nospecializeinfer function optimize_pointing(
     from === nothing || from isa PointingResult ||
         throw(ArgumentError("`from` takes a PointingResult, got $(typeof(from))"))
     xs = clamp.(x0, lower, upper)
+    inner_evaluations === nothing || inner_evaluations isa Integer ||
+        throw(ArgumentError("inner_evaluations takes an integer or `nothing`"))
+    inner_evaluations === nothing || !isempty(constraints) ||
+        throw(ArgumentError("inner_evaluations caps the inner runs of a constrained run; without " *
+                            "constraints `evaluations` is the run's budget"))
     isempty(constraints) ||
         return _constrained_pointing(s, objective, Tuple(constraints), x0, xs, lower, upper;
                                      iterations, evaluations, show_trace, g_tol, callback,
                                      feasibility = Float64(feasibility), outer = Int(outer),
                                      state = from === nothing ? nothing : from.state, deadline,
-                                     phase1, relaxation, inner_reltol = Float64(inner_reltol))
+                                     phase1, relaxation, inner_reltol = Float64(inner_reltol),
+                                     inner_evaluations = inner_evaluations === nothing ? typemax(Int) :
+                                                         Int(inner_evaluations))
     r = _lbfgsb(s, objective, x0, xs, lower, upper; iterations, evaluations, show_trace, g_tol,
                 callback, deadline)
     return _pointing_result(s, r.x, r.value, r.initial_value, r.iterations, r.evaluations,
@@ -1466,7 +1488,8 @@ end
 Base.@nospecializeinfer function _lbfgsb(s::_AbstractScenario, @nospecialize(objective), x0, xs, lower,
                                          upper; iterations::Integer, evaluations::Integer,
                                          show_trace::Bool, g_tol, @nospecialize(callback),
-                                         f_reltol::Float64 = 0.0, deadline::Float64 = Inf)
+                                         f_reltol::Float64 = 0.0, deadline::Float64 = Inf,
+                                         cap::Int = typemax(Int))
     best_x, best_value, count, iter = copy(xs), Inf, Ref(0), Ref(0)
     J(x) = objective(evaluate(s, x))
     # every objective value the optimizer sees (bookkeeping, callback, budget)
@@ -1478,6 +1501,7 @@ Base.@nospecializeinfer function _lbfgsb(s::_AbstractScenario, @nospecialize(obj
                       best_x)) === true && throw(_OptimizationStop(:callback))
         count[] >= evaluations && throw(_OptimizationStop(:evaluations))
         time() > deadline && throw(_OptimizationStop(:time_limit))
+        count[] >= cap && throw(_OptimizationStop(:cap))
         return v
     end
     f(x) = seen(x, J(x))
@@ -1512,8 +1536,12 @@ Base.@nospecializeinfer function _lbfgsb(s::_AbstractScenario, @nospecialize(obj
         err
     end
     if res isa _OptimizationStop
+        # the cap on one run's evaluations ends it as the iteration limit does: not a stop
+        # of the whole optimization
+        capped = res.reason === :cap
         return (; x = best_x, value = best_value, initial_value, iterations = iter[],
-                evaluations = count[], stopped = true, reason = res.reason, result = nothing)
+                evaluations = count[], stopped = !capped, reason = capped ? :iterations : res.reason,
+                result = nothing)
     end
     n = Optim.iterations(res)
     return (; x = Optim.minimizer(res), value = Optim.minimum(res), initial_value,

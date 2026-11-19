@@ -166,12 +166,13 @@ Base.@nospecializeinfer function _constrained_pointing(
         iterations::Integer, evaluations::Integer, show_trace::Bool, g_tol,
         @nospecialize(callback), feasibility::Float64, outer::Int, @nospecialize(state = nothing),
         deadline::Float64 = Inf, phase1::Bool = false, relaxation::Bool = false,
-        inner_reltol::Float64 = 1e-10)
+        inner_reltol::Float64 = 1e-10, inner_evaluations::Int = typemax(Int))
     for c in cs
         c isa Constraint || throw(ArgumentError("constraints must be `Constraint`s, got $(typeof(c))"))
     end
     feasibility > 0 || throw(ArgumentError("feasibility must be positive"))
     inner_reltol >= 0 || throw(ArgumentError("inner_reltol must be nonnegative"))
+    inner_evaluations >= 1 || throw(ArgumentError("inner_evaluations must be at least 1"))
     phase1 |= relaxation
     ev = evaluate(s, xs)
     f0 = Float64(ForwardDiff.value(objective(ev)))
@@ -198,7 +199,7 @@ Base.@nospecializeinfer function _constrained_pointing(
                 rel = _relaxations(s, cs, rows, lens, collect(Float64, x0), collect(Float64, r1.x),
                                    lower, upper; iterations,
                                    evaluations = evaluations - ne, show_trace, g_tol,
-                                   feasibility, outer, deadline, inner_reltol)
+                                   feasibility, outer, deadline, inner_reltol, inner_evaluations)
                 ne += sum(r -> r.evaluations, rel; init = 0)
             end
             return _pointing_result(s, r1.x, Float64(ForwardDiff.value(objective(ev1))), f0, ni, ne,
@@ -248,7 +249,7 @@ Base.@nospecializeinfer function _constrained_pointing(
         end
         r = _lbfgsb(s, aug, x0, x, lower, upper; iterations,
                     evaluations = evaluations - ne, show_trace, g_tol = tol, callback = cb,
-                    f_reltol = inner_reltol, deadline)
+                    f_reltol = inner_reltol, deadline, cap = inner_evaluations)
         x, ne, ni, last = copy(r.x), ne + r.evaluations, ni + r.iterations, r
         evx = evaluate(s, x)
         g = _all_violations(work, evx)
@@ -498,7 +499,7 @@ Base.@nospecializeinfer function _relaxations(s::_AbstractScenario, @nospecializ
                                               x1::Vector{Float64}, lower, upper; iterations::Integer,
                                               evaluations::Integer, show_trace::Bool, g_tol,
                                               feasibility::Float64, outer::Int, deadline::Float64,
-                                              inner_reltol::Float64)
+                                              inner_reltol::Float64, inner_evaluations::Int)
     offs = cumsum((0, lens...))
     out = Relaxation[]
     used = 0
@@ -522,7 +523,8 @@ Base.@nospecializeinfer function _relaxations(s::_AbstractScenario, @nospecializ
         else
             _constrained_pointing(s, obj, Tuple(others), x0, x1, lower, upper; iterations,
                                   evaluations = budget, show_trace, g_tol, callback = nothing,
-                                  feasibility, outer, deadline, phase1 = true, inner_reltol)
+                                  feasibility, outer, deadline, phase1 = true, inner_reltol,
+                                  inner_evaluations)
         end
         used += r.evaluations
         evr = evaluate(s, r.x)

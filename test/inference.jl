@@ -218,8 +218,9 @@ end
         cr = optimize_pointing(s, dobj; x0, iterations = 1, evaluations = 3, callback = st -> false,
                                constraints = [Constraint(:power, ev -> sum(b.power for b in ev.beams); upper = 400.0), clf])
         # a warm restart from a result, under a time limit, at a tighter inner tolerance
+        # with an inner evaluation cap
         optimize_pointing(s, objectives[2]; from = cr, iterations = 1, evaluations = 3, time_limit = 1e3,
-                          inner_reltol = 1e-12,
+                          inner_reltol = 1e-12, inner_evaluations = 2,
                           constraints = [Constraint(:power, ev -> sum(b.power for b in ev.beams); upper = 390.0), clf])
         @test _inf_body_instances(optimize_pointing) == n
         @test _inf_body_instances(Briareus._constrained_pointing) == nc
@@ -590,7 +591,7 @@ end
             # a warm restart from a constrained result
             r1 = optimize_pointing(s, objectives[1]; x0, iterations = 1, evaluations = 2, constraints = (ceilc, gatec))
             @test _inf_jet_clean(JET.report_call, (s, o, r, c) -> optimize_pointing(s, o; from = r, constraints = c,
-                                                                                     inner_reltol = 1e-12),
+                                                                                     inner_reltol = 1e-12, inner_evaluations = 2),
                                  s, objectives[1], r1, (ceilc, gatec))
         end
     else

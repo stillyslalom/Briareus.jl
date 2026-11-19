@@ -346,7 +346,10 @@ analog is the dropped-bundle tutorial, `docs/literate/dropped_bundle.jl`).
       check makes some existing calls throw: user); `shift_objective` on a
       `PerPhase`. No run of the study or its variants converged within 40 minutes
       each: an inner run can spend hundreds of evaluations on 1e-4 of the objective
-      while limits stay violated (the iteration cap does not bound evaluations).
+      while limits stay violated (the iteration cap does not bound evaluations). An
+      opt-in cap on one inner run's evaluations, `inner_evaluations`, now ends such a
+      run and updates the multipliers ("Inner-run options, a wall-loss scenario warning
+      and laser delivery figures"). *Left:* the study rerun under it.
     - A pulse-shape budget: `pulse_shape_groups` groups per-key multipliers
       over the phases into a given number of shapes by k-means on the log multipliers
       per class, the split between the classes by fit (exact by enumeration or 1-D
@@ -554,8 +557,13 @@ analog is the dropped-bundle tutorial, `docs/literate/dropped_bundle.jl`).
       20 % more evaluations on the tutorial's first stage and breaks its capped
       polish; a cap proportional to the parameters and a stop on a stalled violation
       are worse. The default stays, and the docstring gives the rule (about 100 for
-      hundreds of slow parameters started far from the limits). *Left:* a converged
-      run of the study under the doubling schedule before any default changes (user);
+      hundreds of slow parameters started far from the limits). Since then an opt-in
+      cap on each inner run's evaluations, `inner_evaluations` (default none): on the
+      coarse dropped-bundle test case 100 converged in 766 evaluations against 1,044
+      (one default inner run took 795) at 6e-4 less drive, and 30 needed more than 30
+      outer iterations ("Inner-run options, a wall-loss scenario warning and laser
+      delivery figures"). *Left:* a converged run of the study under the doubling
+      schedule or a cap before any default changes (user);
     - the engineering defaults `feasibility = 1e-3`, `p = 64`, `outer = 30` (user review);
     - the scales of the ready-made constraints (`clearance_floor`: 1 mm; `light_ceiling`
       and `light_floor`: the limit, at least 1e-3 of the delivered power) are engineering

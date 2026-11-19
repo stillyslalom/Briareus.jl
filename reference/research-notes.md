@@ -13796,3 +13796,57 @@ tolerance off it reaches the KKT point in 189 evaluations, fewer than a fresh ru
 `test/constraints.jl` checks the continuation with the tolerance off against the closed
 form (design within 1e-5, multipliers within 1e-3), which any converged run of that
 strictly convex problem meets. Confidence: exact closed forms; one start.
+
+### 2. The inner budget: an evaluation cap per inner run
+
+`iterations` caps an inner run's L-BFGS-B iterations, not its evaluations: a line
+search can take dozens, and an inner run of the multi-phase study spent hundreds of
+evaluations on 1e-4 of the objective while limits stayed violated (§ "Re-pointing
+tools: the inner budget, the smallest shift, a pulse-shape budget"). The opt-in
+keyword `inner_evaluations` (default `nothing`: no cap, results bit for bit) ends an
+inner run at that many evaluations, at its best design, as the iteration cap ends one:
+the outer loop updates the multipliers and the penalty, and a capped run never counts
+as converged. Phase 1 is not capped (it has no multipliers to update); the
+relaxations' constrained runs are.
+
+**Coarse dropped-bundle case** (`test/constraints.jl`, "dropped bundle: gates under a
+ceiling in one call": 46 quads, 92 parameters, the exact wall-irradiance ceiling and
+four pointing-floor gates, largest drive, `iterations = 1000`, `evaluations = 3000`;
+8 threads, another run may have shared the machine):
+
+| cap | evaluations | outer | end | drive / 48 quads | `stationarity` | peak / limit | evaluations per inner run |
+|---|---|---|---|---|---|---|---|
+| none (default) | 1,044 | 7 | converged, interior | 0.962592 | 3.3e-5 | 0.99735 | 132, 54, **795**, 52, 4, 3, 4 |
+| 100 | 766 | 10 | converged, interior | 0.961987 | 8.2e-4 | 0.99922 | 100, 82, 100, 100, 43, 65, 72, 51, 100, 53 |
+| 30 | 895 | 30 | `outer` reached | 0.960894 | 1.5e-3 | 1.00141 | 30 (27–30) each |
+
+The default run's third inner run took 795 evaluations; a cap of 100 converged with
+27 % fewer evaluations at 6e-4 less drive (more than the 1e-4 spread of the flat family
+measured in § "Multipliers from the converged active set", so the cap moved the design,
+not only the path), and a cap of 30 ran out of outer iterations with the ceiling 0.14 %
+over. A small cap therefore needs a larger `outer`; the cap's effect is case-dependent,
+and the default stays none.
+
+**Closed form** (the multipliers testset's 48 quad powers; `-t 1`; `outer = 100`):
+
+| case | cap | evaluations | outer | end | design error | longest inner run |
+|---|---|---|---|---|---|---|
+| inner cones' `c` +50 % | none | 162 | 7 | converged | 7.0e-5 | 43 |
+| | 50 | 162 | 7 | converged (bit for bit: no run reaches it) | 7.0e-5 | 43 |
+| | 20 | 97 | 7 | converged | 7.0e-5 | 20 |
+| | 10 | 75 | 8 | converged | 4.8e-4 | 10 |
+| | 5 | 500 | 100 | `outer` reached | 0.34 | 5 |
+| | 3 | 300 | 100 | `outer` reached | 0.37 | 3 |
+| plain `c`, cap 130 TW | none | 219 | 7 | converged | 7.9e-3 | 43 |
+| | 20 | 202 | 12 | converged | 7.8e-3 | 20 |
+| | 10 | 164 | 17 | converged | 5.9e-3 | 10 |
+| | 5 | 500 | 100 | `outer` reached | 0.27 | 5 |
+
+A cap of 3 or 5 evaluations never lets an inner run reach the final tolerance (the first
+L-BFGS-B iterations take that many), so the run cannot converge whatever `outer`; from
+10 up the capped runs converge, here with fewer evaluations than the default.
+
+`test/constraints.jl` checks on the closed form that each inner run stays within the
+cap (the callback's evaluations per outer iteration), that the capped run converges to
+the KKT point, and that a cap above every inner run of the default run leaves it bit for
+bit. Not run: the multi-phase study itself under a cap (its runs take hours; scratch).

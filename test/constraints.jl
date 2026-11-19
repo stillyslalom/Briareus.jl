@@ -357,6 +357,23 @@
         @test rt.outcome === :interior && norm(rt.x - P0k) / norm(P0k) < 1e-5
         @test all(isapprox.(mults(rt)[1:2], λ0; rtol = 1e-3)) && mults(rt)[3] == 0
         @test_throws ArgumentError optimize_pointing(s, f0; from = r0, constraints = cs, inner_reltol = -1.0)
+
+        # An inner evaluation cap (`inner_evaluations`). Above every inner run (more than
+        # the whole run's evaluations) it leaves the run bit for bit; at 20, below the
+        # default run's longest inner runs (about 40), every inner run stays within it
+        # (the callback's evaluations per outer iteration) and the run still converges to
+        # the KKT point.
+        big_cap = optimize_pointing(s, f; x0 = P0, lower = lo, upper = hi, constraints = cs,
+                                    inner_evaluations = r.evaluations + 1)
+        @test big_cap.x == r.x && big_cap.evaluations == r.evaluations && big_cap.outer == r.outer
+        per = Dict{Int,Int}()
+        count_inner = st -> (per[st.outer] = get(per, st.outer, 0) + 1; false)
+        rcap = optimize_pointing(s, f; x0 = P0, lower = lo, upper = hi, constraints = cs, inner_evaluations = 20,
+                                 outer = 100, callback = count_inner)
+        @test !isempty(per) && all(<=(20), values(per)) && sum(values(per)) == rcap.evaluations
+        @test rcap.outcome === :interior && norm(rcap.x - Pk) / norm(Pk) < 1e-3
+        @test_throws ArgumentError optimize_pointing(s, f; x0 = P0, constraints = cs, inner_evaluations = 0)
+        @test_throws ArgumentError optimize_pointing(s, f; x0 = P0, inner_evaluations = 20)   # no constraints
     end
 
     # The dropped-bundle tutorial's design on a coarser wall mesh: bundle 11 freed, the
