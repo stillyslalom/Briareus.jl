@@ -181,6 +181,21 @@ end
         @test picket_irradiance(evaluate(sb, x), :wall; lpi = true, measure = :average) ≈ sum(Pb[es]) / 53 rtol = 1e-12
         @test picket_irradiance(ev, :wall; lpi = true, measure = :weighted) == picket_irradiance(ev, :wall; measure = :weighted)
         @test_throws ArgumentError picket_irradiance(ev, :wall; kw..., lpi = true)
+        # with lpi = true a ceiling on the reference's own target checks the reference's
+        # model and time, as on another target: another model, none against one, or a model
+        # at another time is an error; a model built alike is the same model
+        refb = evaluate(sb, x0)
+        cl = picket_ceiling(refb, :wall; measure = :average, lpi = true)
+        evb = evaluate(sb, x)
+        @test cl.f(evb) == picket_irradiance(evb, :wall; lpi = true, measure = :average)
+        @test cl.f(evaluate(remake(s; lpi = Backscatter(:outer50 => 0.5)), x)) == cl.f(evb)
+        @test_throws ArgumentError cl.f(ev)
+        @test_throws ArgumentError cl.f(evaluate(remake(s; lpi = Backscatter(:outer50 => 0.4)), x))
+        @test_throws ArgumentError cl.f(evaluate(remake(sb; time = 2.0), x))
+        @test_throws ArgumentError check_constraints(ev, cl)
+        @test_throws ArgumentError picket_ceiling(ref, :wall; measure = :average, lpi = true).f(evb)
+        # without lpi the model does not enter, and none is checked
+        @test picket_ceiling(refb, :wall; kw..., measure = :average).f(ev) == picket_irradiance(ev, :wall; kw..., measure = :average)
         @test_throws ArgumentError picket_irradiance(ev, :wall; kw..., measure = :average, area = 0.0)
         @test_throws ArgumentError picket_irradiance(ev, :wall; kw..., measure = :corridor, edge = 3.0)
         @test_throws ArgumentError picket_irradiance(ev, :wall; kw..., measure = :corridor, inner = (:none,))

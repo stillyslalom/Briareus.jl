@@ -13883,3 +13883,18 @@ and now pass `albedo = :reference`; the diagnostic-windows tutorial's scenarios 
 pass a solution's albedos; the GUI builds its materials from constant albedos and the
 precompile workload builds no scenario on its wall-loss target. A full run of the
 dropped-bundle tutorial as a script shows no warning.
+
+### 4. The laser–plasma model check of `picket_ceiling` on the reference's own target
+
+`picket_ceiling(...; lpi = true)` deposits the evaluation's effective beams, so its
+limit depends on the laser–plasma model and the time at which the reference was
+evaluated. Until now the model was checked only on an evaluation of another target
+(§ "The multi-phase study's hand-written pieces as API"); on the reference's own target
+a design evaluated with another model was measured against the reference's limit
+silently. The check now runs on either target, as for `irradiance_ceiling` and
+`mode_gate`: another model, none against one, or a model at another time throws an
+`ArgumentError`; a model built alike is the same model. `lpi = false` (the default)
+deposits the setup beams and checks nothing. Every existing call in the tests, the
+tutorials and the examples evaluates the ceiling with the reference's own model and
+passes; a call that mixed models now throws (the user's decision of 2026-11-19).
+`test/picket_fluence.jl` covers each case on the reference's target.

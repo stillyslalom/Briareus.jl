@@ -344,10 +344,10 @@ analog is the dropped-bundle tutorial, `docs/literate/dropped_bundle.jl`).
       with a reference on another target for the integral measures (`:peak` and
       `irradiance_ceiling` still refuse one: they follow one element). The study's
       start rewritten on these reproduces the hand-built objective and its 212
-      constraint rows to 1e-16. *Left:* `picket_ceiling` with `lpi = true` on the
-      reference's own target has never checked the laser–plasma model (adding the
-      check makes some existing calls throw: user); `shift_objective` on a
-      `PerPhase`. No run of the study or its variants converged within 40 minutes
+      constraint rows to 1e-16. `picket_ceiling` with `lpi = true` now checks the
+      reference's laser–plasma model and time on the reference's own target too
+      ("Inner-run options, a wall-loss scenario warning and laser delivery figures").
+      *Left:* `shift_objective` on a `PerPhase`. No run of the study or its variants converged within 40 minutes
       each: an inner run can spend hundreds of evaluations on 1e-4 of the objective
       while limits stay violated (the iteration cap does not bound evaluations). An
       opt-in cap on one inner run's evaluations, `inner_evaluations`, now ends such a

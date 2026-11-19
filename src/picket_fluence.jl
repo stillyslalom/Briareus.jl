@@ -515,9 +515,10 @@ same `h`, where the bias of about 1 % at 0.2 mm cancels in the ratio) and `:corr
 default `names`), so that a design with windows in its mesh holds the light on its wall
 and windows at the reference's light on its wall, `picket_ceiling(reference, :wall,
 :window; reference_names = (:wall,), measure = :average)`. The
-laser–plasma model enters only with `lpi = true`; then a reference on another target
-must share the scenario's model and time, checked as for [`mode_gate`](@ref) (on the
-reference's own target the model is not checked). One deposition per evaluation, in the
+laser–plasma model enters only with `lpi = true`; then the reference, on its own target
+or another, must share the scenario's model and time, as for [`irradiance_ceiling`](@ref)
+and [`mode_gate`](@ref): evaluating the constraint with another model, or at another time
+with a model, throws an `ArgumentError`. One deposition per evaluation, in the
 evaluation's number type. For a phase other than the
 optimized scenario's (a trough, a foot), give the phase's powers by `pulses` and
 `window` or `power`, or build the constraint on an evaluation of that phase.
@@ -582,23 +583,24 @@ end
 
 # The target and elements the ceiling measures at `ev`: the reference's target and its
 # elements, or, for a measure that holds across meshes, the evaluation's target and the
-# named parts' elements on it.
+# named parts' elements on it. With `lpi`, the evaluation's laser–plasma model and time
+# are the reference's on either target.
 function _picket_parts(c::_PicketValue, ev::Evaluation)
     t = ev.scenario.target
-    t === c.target && return t, isempty(c.elements) ? _part_elements(t, c.names) : c.elements
-    c.options.measure === :peak &&
+    t === c.target || c.options.measure !== :peak ||
         throw(ArgumentError("picket_ceiling: the evaluation is on another target than the reference: a ceiling " *
                             "on the peak holds on the reference's mesh only (the measures :average, :weighted " *
                             "and :corridor take a reference on another target)"))
-    _check_other_model(c.model, ev)
+    _check_picket_model(c.model, ev)
+    t === c.target && return t, isempty(c.elements) ? _part_elements(t, c.names) : c.elements
     return t, _part_elements(t, c.names)
 end
 
 # The reference's model against the evaluation's (with `lpi`): a comparison of untyped
 # models, called through `invokelatest` so that the inferred value carries no dynamic
 # dispatch (the check runs once per new model, `_check_reference_model`).
-_check_other_model(::Nothing, ev::Evaluation) = nothing
-_check_other_model(m::_ReferenceModel, ev::Evaluation) =
+_check_picket_model(::Nothing, ev::Evaluation) = nothing
+_check_picket_model(m::_ReferenceModel, ev::Evaluation) =
     (Base.invokelatest(_check_model, m, "picket_ceiling", ev); nothing)
 
 # `_named_elements` for a vector of names (`elements(t, names...)`, in its order, without
