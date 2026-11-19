@@ -19,8 +19,10 @@ Fields:
 - `rms`: the fit's root-mean-square residual in the natural log of the multipliers, over
   every key and phase;
 - `split`: the number of shapes per class, as `class => n` pairs in order of first
-  appearance; `splits`: every admissible split (counts per class in that order) and its
-  rms;
+  appearance; `splits`: every admissible split of the chosen number of shapes (counts
+  per class in that order) and its rms;
+- `counts`: each number of shapes tried and the rms of its best split, in increasing
+  order (`shapes` alone without a `tolerance`);
 - `exact`: `true` when every class's grouping is the exact least-squares optimum (by
   enumeration or, with one phase, by dynamic programming), `false` where seeded restarts
   found it.
@@ -35,12 +37,14 @@ struct PulseShapeGroups{K,C}
     rms::Float64
     split::Vector{Pair{C,Int}}
     splits::Vector{Pair{Vector{Int},Float64}}
+    counts::Vector{Pair{Int,Float64}}
     exact::Bool
 end
 
 """
-    pulse_shape_groups(multipliers::AbstractMatrix, keys; shapes, class = nothing,
-                       seed = 1, restarts = 100, exact_limit = 10^6) -> PulseShapeGroups
+    pulse_shape_groups(multipliers::AbstractMatrix, keys; shapes, tolerance = nothing,
+                       class = nothing, seed = 1, restarts = 100,
+                       exact_limit = 10^6) -> PulseShapeGroups
     pulse_shape_groups(multipliers::AbstractDict; phases = nothing, kwargs...)
 
 Group per-key power multipliers over a pulse's phases into `shapes` distinct pulse shapes:
@@ -57,6 +61,18 @@ one class) separates keys that never share a shape, such as the inner and the ou
 quads, which follow different base pulses. Each class is grouped on its own, with at least
 one shape and at most one per key, and the `shapes` are split between the classes by the
 smallest total squared error over every admissible split (ties to the first in order).
+
+`tolerance` (an rms in the natural log of the multipliers; `nothing`, the default, for a
+fixed count) makes `shapes` an upper bound: the result is the smallest number of shapes,
+from one per class up to `shapes`, whose best split fits with an rms at or below
+`tolerance`, or `shapes` when none does (`counts` lists the rms of each number tried).
+Shapes that differ by less than the laser delivers distinctly need not be separate
+pulses. For scale, not a default: NIF's laser performance model predicts total energies
+"within 2–3 percent" and gives "beam-to-beam energy balance better than 5 percent for
+full system shots" (NIF User Guide, section 4.8, Laser Performance Operations Model,
+<https://nifuserguide.llnl.gov/home/4-laser-system/48-laser-performance-operations-model>;
+the page states no statistic for the balance); a relative error ε is about ε in the log,
+so 0.02–0.05 spans those figures. The choice of tolerance is the study's.
 
 Method, per class of `n` keys into `k` groups: exact where the size allows, by
 enumerating every partition into `k` groups when there are at most `exact_limit` of them
@@ -77,12 +93,17 @@ power scales of a re-optimization per shape ([`PowerScales`](@ref) with
 inner = Set(b.quad for b in beams if b.group in (:inner23, :inner30))
 g = pulse_shape_groups(m, quad_names; shapes = 6, class = q -> q in inner ? :inner : :outer)
 g.split, g.rms, g.assignment["Q15T"]
+# the fewest shapes, up to 8, that fit within 3 % rms
+g3 = pulse_shape_groups(m, quad_names; shapes = 8, tolerance = 0.03,
+                        class = q -> q in inner ? :inner : :outer)
+length(g3.names), g3.counts
 ```
 """
 function pulse_shape_groups(M::AbstractMatrix{<:Real}, keys::AbstractVector; shapes::Integer,
                             class = nothing, seed::Integer = 1, restarts::Integer = 100,
-                            exact_limit::Real = 10^6)
+                            exact_limit::Real = 10^6, tolerance::Union{Nothing,Real} = nothing)
     n, d = size(M)
+    tolerance === nothing || tolerance >= 0 || throw(ArgumentError("tolerance must not be negative"))
     length(keys) == n || throw(DimensionMismatch("$(length(keys)) keys for $n rows of multipliers"))
     allunique(keys) || throw(ArgumentError("the keys must be distinct"))
     n > 0 && d > 0 || throw(ArgumentError("no multipliers"))
@@ -94,11 +115,13 @@ function pulse_shape_groups(M::AbstractMatrix{<:Real}, keys::AbstractVector; sha
          class isa AbstractDict ? [class[k] for k in keys] : [class(k) for k in keys]
     length(cl) == n || throw(DimensionMismatch("$(length(cl)) classes for $n keys"))
     return _pulse_shape_groups(log.(Float64.(M)), collect(keys), cl, Int(shapes), UInt64(seed),
-                               Int(restarts), Float64(exact_limit))
+                               Int(restarts), Float64(exact_limit),
+                               tolerance === nothing ? nothing : Float64(tolerance))
 end
 
 function _pulse_shape_groups(X::Matrix{Float64}, keys::Vector{K}, cl::Vector{C}, shapes::Int,
-                             seed::UInt64, restarts::Int, exact_limit::Float64) where {K,C}
+                             seed::UInt64, restarts::Int, exact_limit::Float64,
+                             tolerance::Union{Nothing,Float64}) where {K,C}
     n, d = size(X)
     classes = unique(cl)
     rows = [findall(isequal(c), cl) for c in classes]
@@ -109,13 +132,20 @@ function _pulse_shape_groups(X::Matrix{Float64}, keys::Vector{K}, cl::Vector{C},
     # each class's best grouping into every number of groups it can take
     kmax = [min(sizes[j], shapes - nc + 1) for j in 1:nc]
     fits = [[_kmeans_log(X[rows[j], :], k, seed, restarts, exact_limit) for k in 1:kmax[j]] for j in 1:nc]
-    # every split of the shapes between the classes, and its rms
-    splits = Pair{Vector{Int},Float64}[]
-    best, bestsse = Int[], Inf
-    for s in _compositions(shapes, kmax)
-        sse = sum(fits[j][s[j]].sse for j in 1:nc)
-        push!(splits, s => sqrt(sse / (n * d)))
-        sse < bestsse && ((best, bestsse) = (s, sse))
+    # every split of a count of shapes between the classes, and its rms: the count
+    # `shapes`, or with a tolerance the smallest count up to it whose best split meets it
+    local splits, best, bestsse
+    counts = Pair{Int,Float64}[]
+    for m in (tolerance === nothing ? shapes : nc):shapes
+        splits = Pair{Vector{Int},Float64}[]
+        best, bestsse = Int[], Inf
+        for s in _compositions(m, [min(sizes[j], m - nc + 1) for j in 1:nc])
+            sse = sum(fits[j][s[j]].sse for j in 1:nc)
+            push!(splits, s => sqrt(sse / (n * d)))
+            sse < bestsse && ((best, bestsse) = (s, sse))
+        end
+        push!(counts, m => sqrt(bestsse / (n * d)))
+        tolerance === nothing || last(counts[end]) <= tolerance && break
     end
     names, shclass, mult, members = Symbol[], C[], Vector{Float64}[], Vector{K}[]
     assignment = Dict{K,Symbol}()
@@ -138,7 +168,7 @@ function _pulse_shape_groups(X::Matrix{Float64}, keys::Vector{K}, cl::Vector{C},
     allunique(names) || throw(ArgumentError("class names give clashing shape names: $(names)"))
     return PulseShapeGroups{K,C}(keys, names, shclass, permutedims(reduce(hcat, mult)),
                                  members, assignment, sqrt(bestsse / (n * d)),
-                                 [classes[j] => best[j] for j in 1:nc], splits, exact)
+                                 [classes[j] => best[j] for j in 1:nc], splits, counts, exact)
 end
 
 function pulse_shape_groups(d::AbstractDict; phases = nothing, kwargs...)

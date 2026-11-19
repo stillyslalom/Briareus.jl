@@ -13909,3 +13909,27 @@ the case of `test/constraints.jl`'s dropped-bundle testset). The `PointingResult
 display now adds one line naming such constraints and saying that the multiplier is
 the stand-in's at its working limit; `ConstraintRow`'s fields and the result are
 unchanged. Display only.
+
+### 6. A tolerance for the number of pulse shapes
+
+`pulse_shape_groups(...; shapes, tolerance)` returns the smallest number of shapes,
+from one per class up to `shapes`, whose best split between the classes fits the
+per-key multipliers with an rms in log multiplier at or below `tolerance` (`shapes`
+when none does); `counts` lists the best rms at each number tried. Without `tolerance`
+the grouping is the fixed count as before (bit for bit: the same groupings per class,
+the same splits). Each class's best grouping per count is computed once for the
+largest count already, so the search adds only the splits of the smaller counts.
+Checked in `test/pulse_shapes.jl` against exhaustive enumeration of every assignment
+and split at each count.
+
+**Scale, not a default** (public facility figures; the model's parameters are not
+public): the NIF User Guide, section 4.8, "Laser Performance Operations Model"
+(https://nifuserguide.llnl.gov/home/4-laser-system/48-laser-performance-operations-model,
+read 2026-11-19), states that the laser performance model predicts total energies
+"within 2–3 percent" and provides "beam-to-beam energy balance better than 5 percent
+for full system shots" (the page names no statistic for the balance: rms or extreme).
+A relative error ε is ε in the natural log to first order, so tolerances of 0.02–0.05
+span those figures: shapes whose multipliers differ by less than the laser delivers
+distinctly need not be separate pulses. The tolerance is the study's choice.
+Confidence: the figures are the facility's own public statement, **M**; how they map
+onto a per-shape rms is an engineering reading.

@@ -104,6 +104,20 @@ end
         @test_throws ArgumentError pulse_shape_groups(-M, keys; shapes = 2)
         @test_throws DimensionMismatch pulse_shape_groups(M, keys[1:9]; shapes = 2)
         @test occursin("rms", sprint(show, MIME"text/plain"(), g)) && occursin("inner1", sprint(show, MIME"text/plain"(), g))
+
+        # a tolerance: the fewest shapes up to `shapes` whose best split fits within it,
+        # against the best split per count by exhaustive search
+        best(m) = sqrt(minimum(_brute_sse(inn, ki) + _brute_sse(out, m - ki) for ki in 1:min(4, m - 1) if m - ki <= 6) / 30)
+        r2, r3, r4 = best(2), best(3), best(4)
+        @test r2 > r3 > r4 > 0 && g.counts == [4 => g.rms]
+        g3 = pulse_shape_groups(M, keys; shapes = 4, class = cls, tolerance = (r2 + r3) / 2)
+        @test length(g3.names) == 3 && first.(g3.counts) == [2, 3]
+        @test all(isapprox.(last.(g3.counts), [r2, r3]; rtol = 1e-12)) && isapprox(g3.rms, r3; rtol = 1e-12)
+        @test length(pulse_shape_groups(M, keys; shapes = 4, class = cls, tolerance = r2 * (1 + 1e-9)).names) == 2
+        # none within it: `shapes`, the same grouping as without a tolerance
+        g0 = pulse_shape_groups(M, keys; shapes = 4, class = cls, tolerance = 0)
+        @test g0.assignment == g.assignment && g0.rms == g.rms && first.(g0.counts) == [2, 3, 4]
+        @test_throws ArgumentError pulse_shape_groups(M, keys; shapes = 4, tolerance = -0.01)
     end
 
     @testset "shapes as pulses" begin

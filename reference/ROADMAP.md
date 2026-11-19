@@ -360,8 +360,12 @@ analog is the dropped-bundle tutorial, `docs/literate/dropped_bundle.jl`).
       reproduces the study's grouping); `shape_pulses` and `scaled_pulse` write the
       shapes out as `PulseShape`s for `write_pulse_table` (a peak at the laser's limit
       left unscaled with `peak`), and the grouping's `assignment` is `PowerScales`'
-      `by`. *Left:* the tied re-optimization with per-phase keys on a
-      `PhasedScenario` as one call; phase weights in the grouping (user).
+      `by`. `tolerance` makes the count an upper bound: the fewest shapes whose fit
+      is within an rms in log multiplier (NIF's public figures, energies within 2–3 %
+      and beam-to-beam balance better than 5 %, give the scale, not a default;
+      "Inner-run options, a wall-loss scenario warning and laser delivery figures").
+      *Left:* the tied re-optimization with per-phase keys on a `PhasedScenario` as
+      one call; phase weights in the grouping (user).
     - The smallest re-pointing that meets given gates: `shift_objective`,
       the weighted mean squared aim shift from reference beams, and
       `PointingSummary.shift_rms`.
