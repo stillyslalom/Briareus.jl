@@ -105,6 +105,7 @@ callout in the section says which).
 | `DU_LOSS_FACTOR` (`du_wall_loss`, `uranium`, `nif_uranium`) | 0.836 at 300 eV, T^-0.2, 0.7 µm Au liner | Energetics defaults and the capsule share (factor); Wall material, conversion and capsule energetics §1 (model) |
 | `gold()`, `uranium()` conversion | 0.9 (0.75 until 2026-11-18) | Material defaults and their sources, "Decisions of 2026-11-18" (before: Capsule absorption, conversion and the ablating-wall release, "What changed") |
 | `Conversion()` `efficiency` | 0.9 (0.75 until 2026-11-19) | Defaults changed (2026-11-19) §1 |
+| `ApertureKeepOut` `softness` | 1e-4 mm (the exact minimum until 2026-11-19) | Defaults changed (2026-11-19) §3 |
 | `foil_material()` (`foil`, `backlighter_foil`; GUI foil starter) | Au 0.8 / 0.8; mid-Z suggested 0.55 / 0.35 | Material defaults and their sources, "Decisions of 2026-11-18" |
 | GUI hohlraum part, closed windows | 0.8 / 0.9 (`gold()`) | Material defaults and their sources, "Decisions of 2026-11-18" |
 | `nif_conversion()` (`nif_gold`, `nif_uranium`) | 0.7 t^0.12 ≤ 0.95 | Wall material, conversion and capsule energetics §2 |
@@ -12570,7 +12571,7 @@ constrained optimum is well posed, though the inner problems still see one nonsm
 component when the beam sits on the switch. The penalty's fixed large weight makes the
 kink and the curvature jump part of the objective itself. A smooth minimum over the rim's local minima (a soft-min
 with a length scale below the keep-out's accuracy) would remove both (a design change,
-not made: user decision).
+not made: user decision). **Superseded**: made, "Defaults changed (2026-11-19)" §3.
 
 ## Drive asymmetry inferred from post-shot capsule simulations: Haines 2026 (2026-11-18) *published; figure values read by eye*
 
@@ -14021,3 +14022,71 @@ parameterization does not enter. The tutorials pass a parameterization to every
 `subset` they optimize on, and `examples/n221204.jl` builds no subset: neither can move.
 `test/parameterizations.jl` checks the default against a `GroupPointing` built by hand
 on the kept beams by quad (names and beams equal).
+
+### 3. A smooth minimum over the rim in `ApertureKeepOut` (*engineering*)
+
+The aperture keep-out's clearance was the exact minimum over the rim (the samples and
+the four sample intervals beside the closest ones, refined by golden section), with
+genuine kinks where the worst rim point jumps between separate local minima of the
+distance ("Optimization defaults decided", "The aperture keep-out's slope along the
+aim"). It is now a smooth minimum, `ApertureKeepOut(...; softness = 1e-4)` (mm):
+
+- every sample interval whose nearer end lies within W = max(3 µm, 30 softness) of the
+  closest sample is refined by golden section; its value is the least of the golden
+  result and its two ends (on an interval where the distance is not unimodal, golden
+  section can end at the higher end and switch ends as the beam moves: a jump, seen
+  at 4 nm before the ends were included);
+- the clearance is −λ log Σₖ σₖ exp(−gₖ/λ) (λ = `softness`), the interval's weight σₖ 1
+  inside W and falling C¹ (smoothstep) to 0 at 2W, so intervals enter and leave the sum
+  continuously;
+- it never exceeds the exact minimum (the sum holds the interval of the exact minimum at
+  weight 1), lies below it by at most λ log(number of intervals counted), and is the
+  exact minimum for `softness = 0`, which reproduces the former clearance bit for bit
+  on the tutorial's 48 quads and the 480 random ones below.
+
+W: the distance dips between two samples by at most 0.51 µm below the nearer one on
+the cases below (96 rim samples), so 3 µm keeps every interval that can hold the
+minimum; in the taper band the weights are below e⁻²⁵.
+
+Measured on the dropped-bundle tutorial's hohlraum and keep-out (1 % contour, minimum
+10 µm, as "Optimization defaults decided"): its 48 quads as pointed there, the same
+quads moved to within ±20 µm of the minimum along random directions, and 480 quads with
+random aim shifts up to ±0.3 mm; exact minus smooth clearance, in µm (*measured*):
+
+| softness (mm) | 48 quads | 48 near the minimum | 480 random |
+|---|---|---|---|
+| 3e-5 | 0.003–0.041 | 0.000–0.040 | 0.000–0.027 |
+| **1e-4** (default) | 0.059–0.171 | 0.003–0.176 | 0.001–0.131 |
+| 3e-4 | 0.29–0.62 | 0.11–0.63 | 0.08–0.52 |
+| 1e-3 | 1.37–2.57 | 0.67–2.46 | 0.78–2.23 |
+
+The departure is largest on broad minima, where many intervals lie within λ of the
+minimum (up to about 8 at the default: the rim nearly concentric with the envelope over
+half a millimeter). The 144 scans of "Optimization defaults decided" (48 quads near the
+minimum, 3 random directions each, ±20 µm at 1e-5 mm steps, then ±1e-6 mm at 1e-9 mm
+steps around each scan's largest slope change):
+
+| | largest slope change per 1e-5 mm step (median) | per 1e-9 mm step at it |
+|---|---|---|
+| exact (`softness = 0`) | 0.21 (4.5e-6) | 0.22: the kink |
+| smooth, 1e-4 | 0.0043 (7.0e-6) | 0.0018 |
+
+The kink of the exact clearance is rounded off over about a micrometer of aim; what
+remains, a slope change of 0.002 on the same scan, is an interval that holds two local
+minima of the distance (its value, the least of the golden result and its ends, is a
+minimum of two branches, weighted by its share of the sum). Elsewhere every scan is
+smooth to the rounding of the steps. The forward-mode derivative against central
+differences at h = 1e-6 mm along 240 random aim directions (5 per quad): largest
+difference 3.6e-8, median 3.4e-9. At the former kink the smooth slope is −0.202
+(ForwardDiff) against −0.204 (central differences at 1e-4 to 1e-6 mm), the residual
+kink; on the other two scans examined there they agree to 1e-6.
+
+The tutorial's comparison of the keep-out with `clearance` ("a few micrometers") is
+untouched by 0.17 µm. Cost: about 2.4 times the exact clearance's (28 against 12 µs per
+beam, one thread, while other runs shared the machine): more intervals are refined.
+The other keep-outs (`SphereKeepOut`, `HardwareKeepOut`, the TaLIS rules) are
+unchanged, and so is `keepout_clearance`'s meaning for them. Tests: `test/keepout.jl`
+checks the geometry on `softness = 0` (as before, to 1e-9 mm and 1e-12 relative) and the
+default against it: within the bound on three holes and three beams, and across the
+switch between two edges of a rectangular hole (slopes 0 and −1 on either side, between
+them at the switch, ForwardDiff against central differences to 1e-6).

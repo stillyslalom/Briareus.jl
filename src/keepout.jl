@@ -25,7 +25,7 @@ _rim_point(r::_RimPiece, τ) =
     ApertureKeepOut(target; apertures = planar aperture components, peak_fraction = 0.01,
                     intensity = nothing, pointing = 0.05, target_offset = 0.025,
                     hardware_tolerance = 0.0, focus = 1.0, margin = 0.0,
-                    minimum = 0.0, weight = 100.0, nrim = 96)
+                    minimum = 0.0, weight = 100.0, nrim = 96, softness = 1e-4)
 
 Keep-out constraint for beams entering through planar apertures of any shape (laser
 entrance holes, slots). `aperture_clearance(keepout, beams)` gives each beam's
@@ -42,9 +42,23 @@ continues across. On a `DiskSurface` aperture an edge whose ends lie at one radi
 the surface's center is the circular arc between them (the element's exact shape), so
 a circular hole meshed as a polygon keeps its circle; every other edge is straight
 (rectangular, slotted or elliptical openings, CAD apertures: the mesh is the geometry).
-The rim is sampled at about `nrim` points, every straight edge at both ends, and the
-smallest distance is refined by golden section on the sample intervals beside the
-closest samples, to about 1e-9 mm along the rim.
+The rim is sampled at about `nrim` points, every straight edge at both ends, and each
+sample interval whose nearer end lies within 3 µm of the closest sample (or 30
+`softness`, if larger) is refined by golden section, to about 1e-9 mm along the rim.
+
+The clearance is a smooth minimum of these refined minima (each interval's the least of
+its golden-section minimum and its ends), `−softness · log Σ σₖ exp(−dₖ/softness)`
+(`softness` in mm), each interval's weight σₖ 1 within that window and falling smoothly
+to 0 at twice it. The exact minimum over the rim has kinks where the worst rim point
+jumps between separate local minima of the distance, which the smooth minimum rounds
+off. It never exceeds the exact minimum, lies below it by at most `softness` times the
+log of the number of intervals counted, and is the exact minimum for `softness = 0`.
+The default, 1e-4 mm, is an engineering default well below the keep-out's agreement
+with `clearance` (a few micrometers): on NIF quads through a hohlraum's entrance holes
+the smooth minimum lies 0 to 0.18 µm below the exact one, and over 144 scans of the aim
+the largest change of slope in a step falls from 0.21 (a kink) to 0.002 (what remains
+where one interval holds two local minima; research notes, "Defaults changed
+(2026-11-19)").
 
 The distance to the envelope ellipse is first order (Sampson): exact on the envelope
 and for round spots, and smooth in aim, defocus and spot size. Confirm a design with
@@ -63,14 +77,16 @@ struct ApertureKeepOut
     margin::Float64
     minimum::Float64
     weight::Float64
+    softness::Float64      # length (mm) of the smooth minimum over the rim (0: the exact one)
 end
 
 function ApertureKeepOut(t::Target; apertures = nothing, peak_fraction = nothing,
                          intensity = nothing, pointing = 0.05, target_offset = 0.025,
                          hardware_tolerance = 0.0, focus = 1.0, margin = 0.0,
-                         minimum = 0.0, weight = 100.0, nrim::Integer = 96)
+                         minimum = 0.0, weight = 100.0, nrim::Integer = 96, softness::Real = 1e-4)
     intensity === nothing && peak_fraction === nothing && (peak_fraction = 0.01)
     nrim >= 3 || throw(ArgumentError("nrim must be at least 3"))
+    softness >= 0 || throw(ArgumentError("softness must be non-negative"))
     # by default every planar aperture; open windows in a hohlraum wall (apertures on a
     # `CylinderSurface`) are not entrance holes, and a closing lip (an aperture with a
     # `GapClosure`) widens the hole whose plane and center it shares
@@ -101,7 +117,7 @@ function ApertureKeepOut(t::Target; apertures = nothing, peak_fraction = nothing
     end
     return ApertureKeepOut(names, centers, rims, peak_fraction, intensity,
                            pointing + target_offset + hardware_tolerance, focus, margin,
-                           minimum, weight)
+                           minimum, weight, Float64(softness))
 end
 
 # The rim of the hole made of the coplanar components `comps` (normal `n`): the edges of
@@ -239,29 +255,43 @@ function _aperture_clearance(k::ApertureKeepOut, b::Beam)
         s, u, v = dot(d, kv), dot(d, e1), dot(d, e2)
         return _sampson_distance(u, v, A, B) - cone * abs(s) - k.margin
     end
-    # the samples, and the intervals beside the closest ones (four: both sides of the
-    # closest sample, on two pieces where it is a vertex), refined by golden section
-    best = dist(rim[1], 0.0)
-    far = (oftype(best, Inf), 1, 1)         # (interval's smaller end, piece, interval)
-    near = (far, far, far, far)
-    for (i, r) in enumerate(rim)
-        prev = dist(r, r.taus[1])
-        best = min(best, prev)
-        for m in 1:length(r.taus)-1
-            next = dist(r, r.taus[m+1])
-            best = min(best, next)
-            lo = min(prev, next)
-            w = argmax(map(first, near))
-            lo < near[w][1] && (near = Base.setindex(near, (lo, i, m), w))
-            prev = next
+    # the samples, piece after piece
+    vals = [dist(r, τ) for r in rim for τ in r.taus]
+    best = minimum(vals)
+    # the intervals whose nearer end lies within `W` of the closest sample, refined by
+    # golden section, weighted 1 there and falling (C¹) to 0 at 2W; their smooth minimum
+    # summed on the fly (lo: the least refined minimum, sw: Σ σ exp(−(g − lo)/λ))
+    λ = k.softness
+    W = max(_RIM_WINDOW, 30λ)
+    lo, sw = oftype(best, Inf), zero(best)
+    j0 = 0
+    for r in rim
+        for i in 1:length(r.taus)-1
+            x = (min(vals[j0+i], vals[j0+i+1]) - best - W) / W
+            x >= 1 && continue
+            σ = x <= 0 ? one(x) : 1 - x^2 * (3 - 2x)
+            # (with its ends: on an interval where the distance is not unimodal, golden
+            # section can end at the higher end, and switch ends as the beam moves)
+            g = min(_golden_min(τ -> dist(r, τ), r.taus[i], r.taus[i+1]), vals[j0+i], vals[j0+i+1])
+            if λ == 0
+                lo = min(lo, g)
+            elseif g < lo
+                sw = sw * exp((g - lo) / λ) + σ
+                lo = g
+            else
+                sw += σ * exp((lo - g) / λ)
+            end
         end
+        j0 += length(r.taus)
     end
-    for (_, i, m) in near
-        r = rim[i]
-        best = min(best, _golden_min(τ -> dist(r, τ), r.taus[m], r.taus[m+1]))
-    end
-    return best - k.transverse - k.focus * cone
+    soft = λ == 0 ? lo : lo - λ * log(sw)
+    return soft - k.transverse - k.focus * cone
 end
+
+# The window (mm) above the closest rim sample within which `ApertureKeepOut` refines the
+# sample intervals: wider than the distance can dip between two samples below the nearer
+# one (0.5 µm at most on NIF quads through a hohlraum's entrance holes at 96 samples).
+const _RIM_WINDOW = 0.003
 
 # The smallest value of `g` on [a, b] found by golden-section search (the abscissae stay
 # Float64; only `g`'s values carry its number type).

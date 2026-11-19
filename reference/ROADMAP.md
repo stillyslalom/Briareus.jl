@@ -400,13 +400,11 @@ analog is the dropped-bundle tutorial, `docs/literate/dropped_bundle.jl`).
       (the angle is constant per facet, so the gradient is zero away from facet edges);
     - 1ω management, the diagnostics-to-1ω rule, the TAS stay-in rule and the LEH review
       tier have no quantity;
-    - `ApertureKeepOut`'s clearance has genuine kinks in the aim where the worst rim
-      point switches between two local minima (a slope jump from −0.079 to −0.309 in
-      one of 144 scans) and narrow regions of high curvature where two merge; with
-      the squared hinge they make the penalty's derivative unreliable at a design on
-      the keep-out. A soft minimum over the rim's local minima, on a length below the
-      keep-out's accuracy, would remove both; it changes the keep-out's definition
-      (user).
+    - `ApertureKeepOut`'s clearance is a smooth minimum over the rim since 2026-11-19
+      (`softness`, 1e-4 mm: at most 0.18 µm below the exact minimum on NIF quads; the
+      largest slope change over 144 scans 0.002 instead of a kink of 0.21; "Defaults
+      changed (2026-11-19)"). Left: the residual slope change where one rim interval
+      holds two local minima of the distance.
 
     *Check:* each surrogate against `clearance` or `talis_check` on the worst case, as
     the tutorial does for the aperture keep-out (agreement to a few micrometers); a

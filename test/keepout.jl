@@ -55,13 +55,14 @@ end
 # The aperture keep-out on holes of any shape, against direct geometric computations:
 # closed-form distances from a beam axis to a hole's edges at normal incidence, and the
 # minimum over densely sampled analytic rims (round spots, so the envelope distance is
-# exact) for oblique, defocused beams.
+# exact) for oblique, defocused beams. The geometry is checked on the exact minimum
+# (`softness = 0`); the smooth minimum of the default against it at the end.
 
 @testset "aperture keep-out: hole shapes" begin
     z0 = 1.0
     floor = Component(:floor, transform(rectangle_mesh(8.0, 8.0; nu = 2, nv = 2), Matrix(1.0I, 3, 3), Vec3(0, 0, -2)), BLACK)
     hole(m; surface = nothing) = Target(floor, aperture(:hole, transform(m, Matrix(1.0I, 3, 3), Vec3(0, 0, z0)); surface))
-    ko(t) = ApertureKeepOut(t; pointing = 0.0, target_offset = 0.0, focus = 0.0)
+    ko(t; softness = 0.0) = ApertureKeepOut(t; pointing = 0.0, target_offset = 0.0, focus = 0.0, softness)
     ρ(b) = Briareus.envelope_radius(b.spot, b.power; peak_fraction = 0.01)
     # the clearance from rim points `xs` of a round-spot beam, computed directly
     function direct(b, xs)
@@ -122,6 +123,26 @@ end
     cw = only(aperture_clearance(whole, [tilt]))
     @test cw ≈ direct(tilt, circle) atol = 1e-9
     @test only(aperture_clearance(kc, [tilt])) ≈ cw atol = 1e-9
+
+    # the smooth minimum (the default softness λ): at or below the exact minimum, by at
+    # most λ log(the number of sample intervals), on every hole above
+    λ = ApertureKeepOut(tr).softness
+    nint(k) = sum(r -> length(r.taus) - 1, k.rims[1])
+    gap(t, b) = only(aperture_clearance(ko(t), [b])) - only(aperture_clearance(ko(t; softness = λ), [b]))
+    gaps = [(gap(t, b), nint(ko(t))) for t in (tr, te, cut) for b in (down, de, tilt)]
+    @test λ == 1e-4 && all(((g, n),) -> 0 <= g <= λ * log(n), gaps)
+    # where the worst rim point jumps between edges, a round beam as far from the
+    # rectangle's top edge as from its right one (0.4 mm): the exact clearance has slopes 0
+    # and −1 along x on either side, the smooth one passes from one to the other within a
+    # few λ, differentiably
+    ks = ko(tr; softness = λ)
+    sw(x) = remake(down; aim = (0.6 + x, 0.1, z0))
+    c(k, x) = only(aperture_clearance(k, [sw(x)]))
+    @test c(kr, 0.0) ≈ 0.4 - ρ(down) * 0.15 rtol = 1e-12
+    @test 0 <= c(kr, 0.0) - c(ks, 0.0) <= λ * log(nint(ks))
+    slope(x) = ForwardDiff.derivative(y -> c(ks, y), x)
+    @test abs(slope(-30λ)) < 1e-3 && abs(slope(30λ) + 1) < 1e-3 && -0.9 < slope(0.0) < -0.1
+    @test slope(0.0) ≈ (c(ks, 1e-7) - c(ks, -1e-7)) / 2e-7 atol = 1e-6
 end
 
 # The hardware keep-out against direct geometry: plates normal and parallel to a beam
