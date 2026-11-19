@@ -141,6 +141,12 @@ end
     infeas = Briareus._Infeasibility((ceilc, gatec, clf))
     relaxg = Briareus._Relaxed(gatec, 64.0)
     gatee, dfl = mode_gate(ev_ref, fill(0.05, 4)), drive_floor(ev_ref; fraction = 0.9)
+    # one pointing over two phases (the second at fixed powers), and the augmented
+    # Lagrangian of phase-bound objective and constraints
+    pph = PhasedScenario(p, Phase(:a, s), Phase(:b, s; power = 6.0, scaled = false))
+    xph = initial_parameters(pph.param)
+    augph = Briareus._Augmented(in_phase(:a, objectives[2]), (in_phase(:a, ceilc), in_phase(:b, gatec)),
+                                ([0.5], [0.1, 0.0, 0.2, 0.0]), 3.0)
 
     @testset "closures compile once" begin
         history(τ -> with_pulses(quads, pulse, τ), [0.5, 1.0]; record = sol -> sol)
@@ -221,6 +227,17 @@ end
         Briareus._scenario_gradient(s, dobj, x0)
         Briareus._scenario_gradient(s, lag, x0)
         @test _inf_instances(Briareus._scenario_gradient) == ng
+        # a phased scenario: new objective, constraint and callback types reuse the bodies
+        optimize_pointing(pph, in_phase(:a, objectives[1]); x0 = xph, iterations = 1, evaluations = 2)
+        n = _inf_body_instances(optimize_pointing)
+        optimize_pointing(pph, in_phase(:b, dobj); x0 = xph, iterations = 1, evaluations = 2, callback = st -> false)
+        @test _inf_body_instances(optimize_pointing) == n
+        optimize_pointing(pph, in_phase(:a, objectives[1]); x0 = xph, iterations = 1, evaluations = 3,
+                          constraints = (in_phase(:a, ceilc), in_phase(:b, gatec)))
+        nc = _inf_body_instances(Briareus._constrained_pointing)
+        optimize_pointing(pph, ev -> dobj(ev[:b]); x0 = xph, iterations = 1, evaluations = 3, callback = st -> false,
+                          constraints = [in_phase(:a, clf), in_phase(:b, dfl)])
+        @test _inf_body_instances(Briareus._constrained_pointing) == nc
 
         # a placement sweep: new design and callback types reuse the compiled sweep
         foilt = Target([backlighter_foil((90.0, 0.0); standoff = 5.0, n = 2)])
@@ -293,6 +310,16 @@ end
             @test (@inferred relaxg(ev)) isa T
             @test (@inferred gatee.f(ev)) isa Vector{T}
             @test (@inferred dfl.f(ev)) isa T
+        end
+        # the phased path: the beams per phase, a phase's constraint and objective, the
+        # augmented Lagrangian over the phases
+        for x in (xph, _inf_duals(xph))
+            T = eltype(x)
+            @test (@inferred apply(pph.param, x)) isa PerPhase{Vector{Beam{T}}}
+            ev = evaluate(pph, x)
+            @test (@inferred in_phase(:a, gatec).f(ev)) isa Vector{T}
+            @test (@inferred in_phase(:b, dobj)(ev)) isa T
+            @test (@inferred augph(ev)) isa T
         end
         # the outer picket fluence and the bubble's picket ratio from it (outer quads aimed
         # into the entrance holes)
@@ -496,6 +523,16 @@ end
             @test _inf_jet_clean(JET.report_call,
                                  (s, o, x, c) -> optimize_pointing(s, o; x0 = x, constraints = c, relaxation = true),
                                  s, objectives[1], x0, (ceilc, gatec))
+            # the phased path: no dispatch in the beams per phase, no possible errors in
+            # them, the evaluations, the augmented Lagrangian and a constrained run
+            for x in (xph, _inf_duals(xph))
+                @test _inf_jet_clean(JET.report_opt, apply, pph.param, x)
+                @test _inf_jet_clean(JET.report_call, apply, pph.param, x)
+                @test _inf_jet_clean(JET.report_call, evaluate, pph, x)
+                @test _inf_jet_clean(JET.report_call, augph, evaluate(pph, x))
+            end
+            @test _inf_jet_clean(JET.report_call, (s, o, x, c) -> optimize_pointing(s, o; x0 = x, constraints = c),
+                                 pph, in_phase(:a, objectives[1]), xph, (in_phase(:a, ceilc), in_phase(:b, gatec)))
             # a warm restart from a constrained result
             r1 = optimize_pointing(s, objectives[1]; x0, iterations = 1, evaluations = 2, constraints = (ceilc, gatec))
             @test _inf_jet_clean(JET.report_call, (s, o, r, c) -> optimize_pointing(s, o; from = r, constraints = c),

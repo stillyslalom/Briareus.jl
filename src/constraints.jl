@@ -88,7 +88,7 @@ check_constraints(ev::Evaluation, c::Constraint; kwargs...) = check_constraints(
 check_constraints(ev::Evaluation, cs; feasibility::Real = 1e-3) =
     _constraint_rows(ev, Tuple(cs), nothing, Float64(feasibility))
 
-function _constraint_rows(ev::Evaluation, cs::Tuple, multipliers, feasibility::Float64)
+function _constraint_rows(ev, cs::Tuple, multipliers, feasibility::Float64)
     rows = ConstraintRow[]
     k = 0
     for c in cs
@@ -133,7 +133,7 @@ struct _Augmented{O,C<:Tuple,L<:Tuple}
     μ::Float64
 end
 
-function (a::_Augmented)(ev::Evaluation)
+function (a::_Augmented)(ev)
     J = a.objective(ev)
     terms = map((c, λ) -> _al_term(_violations(c, ev), λ, a.μ), a.constraints, a.λ)
     return J + sum(terms)
@@ -164,7 +164,7 @@ end
 const _AL_F_RELTOL = Ref(1e-10)
 
 Base.@nospecializeinfer function _constrained_pointing(
-        s::Scenario, @nospecialize(objective), @nospecialize(cs::Tuple), x0, xs, lower, upper;
+        s::_AbstractScenario, @nospecialize(objective), @nospecialize(cs::Tuple), x0, xs, lower, upper;
         iterations::Integer, evaluations::Integer, show_trace::Bool, g_tol,
         @nospecialize(callback), feasibility::Float64, outer::Int, @nospecialize(state = nothing),
         deadline::Float64 = Inf, phase1::Bool = false, relaxation::Bool = false)
@@ -310,7 +310,7 @@ end
 struct _Infeasibility{C<:Tuple}
     constraints::C
 end
-(a::_Infeasibility)(ev::Evaluation) = sum(map(c -> _hinge2(_violations(c, ev)), a.constraints))
+(a::_Infeasibility)(ev) = sum(map(c -> _hinge2(_violations(c, ev)), a.constraints))
 
 function _hinge2(g::AbstractVector{T}) where {T}
     s = zero(T)
@@ -320,7 +320,7 @@ function _hinge2(g::AbstractVector{T}) where {T}
     return s / 2
 end
 
-Base.@nospecializeinfer function _phase1(s::Scenario, @nospecialize(cs::Tuple), x0, xs, lower, upper;
+Base.@nospecializeinfer function _phase1(s::_AbstractScenario, @nospecialize(cs::Tuple), x0, xs, lower, upper;
                                          iterations::Integer, evaluations::Integer, show_trace::Bool,
                                          g_tol, @nospecialize(callback), feasibility::Float64,
                                          deadline::Float64)
@@ -366,7 +366,7 @@ struct _Relaxed{C}
     constraint::C
     p::Float64
 end
-(r::_Relaxed)(ev::Evaluation) = _positive_norm(_violations(r.constraint, ev), r.p)
+(r::_Relaxed)(ev) = _positive_norm(_violations(r.constraint, ev), r.p)
 
 function _positive_norm(g::AbstractVector{T}, p::Float64) where {T}
     m = maximum(x -> Float64(ForwardDiff.value(x)), g; init = 0.0)
@@ -387,7 +387,7 @@ const _RELAX_P = 64.0
 # carried by the others): the smallest largest violation of its components with the
 # others as constraints, each a constrained run (phase 1 on the others first) from `x1`,
 # within the remaining budget and time.
-Base.@nospecializeinfer function _relaxations(s::Scenario, @nospecialize(cs::Tuple), rows,
+Base.@nospecializeinfer function _relaxations(s::_AbstractScenario, @nospecialize(cs::Tuple), rows,
                                               @nospecialize(lens::Tuple), x0::Vector{Float64},
                                               x1::Vector{Float64}, lower, upper; iterations::Integer,
                                               evaluations::Integer, show_trace::Bool, g_tol,
@@ -442,7 +442,7 @@ struct _Lagrangian{O,C<:Tuple,L<:Tuple}
     λ::L
 end
 
-function (a::_Lagrangian)(ev::Evaluation)
+function (a::_Lagrangian)(ev)
     J = a.objective(ev)
     terms = map((c, λ) -> _lagrangian_term(_violations(c, ev), λ), a.constraints, a.λ)
     return J + sum(terms)
@@ -461,7 +461,7 @@ end
 # limit/exact, or `nothing` when every exact value is within it. The stand-in tracks the
 # exact value nearly in proportion near the limit (a p-norm against the peak), so the
 # scaled limit lands the exact value near the limit; a few rounds settle the remainder.
-function _lower_exact_limits(cs::Tuple, work::Tuple, ev::Evaluation, feasibility::Float64)
+function _lower_exact_limits(cs::Tuple, work::Tuple, ev, feasibility::Float64)
     lowered = false
     new = map(cs, work) do c, w
         e = _exact_value(c.f, ev)

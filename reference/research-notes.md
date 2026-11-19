@@ -13060,3 +13060,91 @@ table: unsplit 6.19 ns against the linked 6.00, s 0.225 6.19 against 6.15.
   its 1.3 mm and 0.3 mm are engineering defaults.
 - `picket_irradiance`'s `:mean` and `:average` read alike: the energy-weighted measure
   is `:weighted` since 2026-11-18 (user), and its constraint `:picket_weighted`.
+
+## One pointing over several phases of a pulse (2026-11-18) *measured*
+
+**What the workarounds were.** A multi-phase re-pointing study (kept outside the
+repository) held the capsule's drive shape at several times of one pulse (picket,
+trough, second step, rise, and the peak before and after the wall's windows burn
+through) with one set of aims and a power scale per quad and phase. On the API of the
+day it needed four constructions by hand: (1) a copy of every beam per scaled phase
+under the same name, so that a per-beam `GroupPointing` gives the copies one aim; (2) a
+`PowerScales` whose `by` counted its calls (it receives no index) to key a scale on
+(quad, phase); (3) a main `Scenario` without radiation that only carried the
+parameters (its coarse deposition of every copy computed and discarded at each
+evaluation), with the real per-phase scenarios (their own wall albedos and windows,
+so their own deposition operators and radiation models) evaluated inside the
+objective; and (4) a `WeakKeyDict` keyed on the evaluation's internal flux slot behind
+a lock, so that the objective and every constraint shared one evaluation per phase
+while gradient chunks ran concurrently. The box on the scales (each beam at or below
+the laser's limit in every phase), the per-phase reports and the staging between
+parameterizations were by hand too.
+
+**Design.** A `PhasedScenario` holds a `Scenario` per `Phase` (its own target or a
+ready scenario, its own Scenario options) and the phases' beam powers (a number, one
+per beam, a function of the beam, or pulses at the phase's time), all on one pointing
+parameterization (any of `GroupPointing`, `FramePointing`, `HeldParameters`, relative
+or not), whose parameters set the aims of every phase. Its parameterization
+(`PhasedPointing`) appends a power scale per (group key, phase) for the phases not
+fixed; `by` keys the groups as `PowerScales` does, so one key for several quads ties
+their scales (a pulse shape: one multiplier per phase). `evaluate` returns a `PerPhase`
+of evaluations (indexed by phase name), computed once per parameter vector, which
+`optimize_pointing` passes to the objective and to every constraint: the shared
+evaluation needs no cache and no lock, and each gradient chunk evaluates its own.
+`in_phase(phase, c)` binds any constraint or objective of one evaluation to a phase,
+its name prefixed by the phase in the reports (`picket.mode_gate[l = 2]`), an exact
+ceiling keeping its exact value. `bounds(param; power_max)` caps each scale at the
+least `power_max / P` over its group's beams in its phase (`power_max` a number or a
+function of the beam) and refuses a fixed phase above the limit. `remake(scenario;
+pointing, by, scaled)` stages (per quad, then per beam, then tied scales) on the same
+operators, and `parameters(param, beams)` reads a result's per-phase beams into the
+next parameterization (scales as the mean of each group's power ratios).
+
+Options considered. (a) A wrapper parameterization alone (copies hidden inside an
+`apply`) keeps `Scenario` unchanged but leaves the main scenario's discarded
+deposition and the cache; (b) a lazily evaluated `PerPhase` (each phase deposited on
+first use) saves a phase that no term reads, at the cost of a lock per phase and
+mutable shared state under concurrent chunks; (c) the eager collection chosen here,
+every phase evaluated once per parameter vector, a pure function of the parameters.
+`PerPhase` is one container for beams, evaluations and summaries, so `r.beams[:picket]`
+and `ev[:picket]` read alike. The phase's `time` is also the built scenario's time
+(materials' albedos and the laser–plasma model at that time); a ready scenario keeps
+its own. A phase can also be a `remake` of one shared scenario with the phase's
+albedos and time (`history_state` gives them from a drive history), so one target,
+view-factor matrix and deposition operator serve every phase.
+
+**Checks** (`test/phased.jl`, public mock-up: the 48 NIF quads in a 10.1 mm hohlraum
+at h = 1.2 mm, a picket at albedo 0.6 (0.1/0.4 TW per inner/outer quad), a step from
+pulses at 2.5 ns at 0.8, and a peak at 2 TW fixed at 0.85).
+- One phase at the pointing's own powers, unscaled, is the plain `Scenario` bit for
+  bit: the evaluation, and a constrained run of the same objective (identical `x`,
+  value, evaluation count and constraint values).
+- Against the duplicate-beam construction at the same parameters (aims per quad,
+  scales per quad and phase): deposition and flux coefficients of every phase equal
+  bit for bit (relative difference 0.0, here a sum of two equal ports for each quad's
+  azimuth is exact; the test allows 1e-12), and the gradient of a mode departure equal
+  to 1e-10 relative.
+- The gradient of an objective over all three phases against central differences
+  (h = 1e-6) at aims and both phases' scales: agreement to 1e-6 of the largest.
+- A constrained run by cone (16 parameters: gates on every phase, drive floors on
+  two, an LEH clearance) from a start that violates the gates: `:interior` in 474
+  evaluations, every row met; the box at the laser's limit puts every scaled beam at
+  2 TW at its upper corner and none above it.
+
+**Cost per evaluation** against the duplicate-beam construction on the mock-up (192
+parameters, one thread, the same per-phase scenarios): an evaluation 0.054 s against
+0.067 s (median of 20; the main scenario's deposition of the copies, 0.011 s, is the
+difference), a gradient 1.47 s against 1.82 s (−19 %). On a scratch rebuild of the
+study (about 550 parameters, six phases, its per-phase scenarios shared by both
+constructions, at its saved per-beam stage): every phase's flux coefficients equal to
+1.4e-16 and its deposition to 6.2e-16 relative (the copies' quad azimuths sum each port
+four times, a different rounding), the objective equal to all printed digits, the gradient to
+6e-14, and the box on the scales identical; an evaluation 0.055 s against 0.089 s and a
+gradient 2.8 s against 6.2 s at 16 threads (−54 %: the copies' coarse deposition in
+dual numbers and the cache's lock are gone; another run may have shared the
+machine). A constrained run on the phased API from that stage, the study's limits
+written as `in_phase` constraints, ran under a 180 s limit: 51 evaluations, the
+objective down by 0.12 %, the limits' rows reported per phase.
+
+Existing paths: unchanged bit for bit (the optimizer's internal functions take the
+abstract scenario type and an untyped evaluation; no arithmetic moved).

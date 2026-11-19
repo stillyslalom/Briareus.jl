@@ -117,6 +117,7 @@ export HOTSPOT_VELOCITY_PER_PERCENT, mode1_vector, hotspot_velocity, ResponseKer
        velocity_uncertainty, ntof_covariance, infer_velocity_errors, VelocityPenalty
 export CapsuleDrive, capsule_drive
 export PointingSummary, pointing_summary
+export PhasedScenario, Phase, PhasedPointing, PerPhase, in_phase, phase_beams
 export port_basis, visible
 export DIAGNOSTIC_SCHEMA, TabulatedCurve, DiagnosticField, DiagnosticIssue, DiagnosticDefinition,
        register_diagnostic_kind, diagnostic_config_path, diagnostic_paths, add_diagnostic_path,
@@ -163,6 +164,7 @@ include("backlighter_signal.jl")
 include("radiography.jl")
 include("keepout.jl")
 include("pointing_summary.jl")
+include("phased.jl")
 include("uncertainty.jl")
 include("implosion.jl")
 include("capsule_drive.jl")

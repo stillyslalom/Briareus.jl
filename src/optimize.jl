@@ -545,6 +545,9 @@ mutable struct _LazyResponse
 end
 _LazyResponse() = _LazyResponse(ReentrantLock(), nothing)
 
+# What `optimize_pointing` runs on: a `Scenario`, or a `PhasedScenario` (phased.jl).
+abstract type _AbstractScenario end
+
 """
     Scenario(target, pointing::GroupPointing; observe = nothing,
              radiation = observe !== nothing, time = 0.0, albedo = nothing, lpi = nothing,
@@ -604,7 +607,7 @@ The operators' own options pass through two named tuples:
 the deposition options or the response's observed elements, time and albedos, and
 rebuilds only what depends on them.
 """
-struct Scenario{P}
+struct Scenario{P} <: _AbstractScenario
     target::Target
     param::P
     deposition::DepositionOperator
@@ -1254,6 +1257,12 @@ power_max = 12.0)`, or pass any `lower` and `upper` vectors. A parameterization 
 than `GroupPointing` and [`FramePointing`](@ref) has no `bounds` method and needs
 `lower` and `upper`.
 
+`scenario` may be a [`PhasedScenario`](@ref): one pointing over several phases of a
+pulse, with power scales per (group, phase). The objective and every constraint then
+receive the [`PerPhase`](@ref) of the phases' evaluations at each parameter vector,
+evaluated once, and the result's `beams` are a `PerPhase` of beam vectors; everything
+else (constraints, `from`, `phase1`, `relaxation`, the time limit) is the same.
+
 The run ends after `iterations` L-BFGS-B iterations or `evaluations` objective
 evaluations (each gradient counts one), whichever comes first: a line search may take
 many evaluations in one iteration, on a kinked objective (keep-out hinges, a coarse
@@ -1337,7 +1346,7 @@ evaluations, 997 against the penalty form's 1,072: research notes, "Constrained
 re-pointing").
 """
 Base.@nospecializeinfer function optimize_pointing(
-                           s::Scenario, @nospecialize(objective);
+                           s::_AbstractScenario, @nospecialize(objective);
                            @nospecialize(from = nothing),
                            x0 = from === nothing ? initial_parameters(s.param) : from.x,
                            lower = from === nothing ? bounds(s.param, x0)[1] : from.lower,
@@ -1369,7 +1378,7 @@ end
 
 # The gradient of `F(evaluate(s, x))` at `x`, through the optimizer's dual tag and chunks
 # (bitwise ForwardDiff's chunk-mode gradient; see `_pointing_gradient!`).
-Base.@nospecializeinfer function _scenario_gradient(s::Scenario, @nospecialize(F), x::Vector{Float64})
+Base.@nospecializeinfer function _scenario_gradient(s::_AbstractScenario, @nospecialize(F), x::Vector{Float64})
     J(x) = F(evaluate(s, x))
     cfg = ForwardDiff.GradientConfig(J, x, ForwardDiff.Chunk(min(length(x), 12)),
                                      ForwardDiff.Tag(_PointingTag(), Float64))
@@ -1382,7 +1391,7 @@ end
 # and stop of `optimize_pointing`, and Optim's result (`nothing` when stopped).
 # `f_reltol` (Optim's; 0, its default, off) ends the run on a small relative change of
 # the value, for the inner runs of the constrained path.
-Base.@nospecializeinfer function _lbfgsb(s::Scenario, @nospecialize(objective), x0, xs, lower,
+Base.@nospecializeinfer function _lbfgsb(s::_AbstractScenario, @nospecialize(objective), x0, xs, lower,
                                          upper; iterations::Integer, evaluations::Integer,
                                          show_trace::Bool, g_tol, @nospecialize(callback),
                                          f_reltol::Float64 = 0.0, deadline::Float64 = Inf)
@@ -1502,7 +1511,8 @@ end
     PointingResult
 
 Result of [`optimize_pointing`](@ref). Fields: `x` (the best parameters), `beams`
-(`apply(scenario.param, x)`), `value` and `initial_value` (the objective at `x` and at
+(`apply(scenario.param, x)`; a [`PerPhase`](@ref) of beam vectors for a phased
+scenario), `value` and `initial_value` (the objective at `x` and at
 the clamped `x0`), `iterations` (L-BFGS-B iterations completed), `evaluations`
 (objective evaluations, each gradient counting one), `reason` (`:converged`,
 `:iterations`, `:evaluations`, `:time_limit` or `:callback`), `stopped` (`true` for the
@@ -1605,7 +1615,7 @@ function _bound_side(x, lo, hi)
 end
 
 Base.@nospecializeinfer function _pointing_result(
-        s::Scenario, x, value, initial_value, iterations, evaluations, stopped, reason, result,
+        s::_AbstractScenario, x, value, initial_value, iterations, evaluations, stopped, reason, result,
         lower, upper; constraints::Vector{ConstraintRow} = ConstraintRow[], outer::Int = 0,
         @nospecialize(state = nothing), @nospecialize(objective = nothing), @nospecialize(lagrangian = nothing),
         @nospecialize(phase1 = nothing), relaxations::Vector{Relaxation} = Relaxation[])

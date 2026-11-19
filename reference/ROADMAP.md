@@ -311,18 +311,21 @@ analog is the dropped-bundle tutorial, `docs/literate/dropped_bundle.jl`).
       change of a documented default: user); reading a wrapper's values off beams.
       `GroupPointing` points by quad by default since 33cf879, with a quad's split as
       a parameter (`:split`) and `unit = :beam` or `by = :beam` for beams pointed apart.
-    - One pointing over several phases (scratch study, 2026-11-18). A study holding the
-      drive shape at six times (picket, trough, second step, rise, and the peak before
-      and after its windows burn through) with one set of aims and a power scale per
-      quad and phase was built from workarounds: a copy of each beam per phase under the
-      same name (so `GroupPointing(by = :beam)` gives the copies one aim); a
-      `PowerScales` `by` closure that counts its calls (`by` receives no index); a main
-      scenario without radiation that only carries the parameters; and a cache keyed on
-      the `Evaluation`'s internal flux slot, so that the objective and each constraint
-      share one evaluation per phase (thread-safe, as gradient chunks run
-      concurrently). A phased scenario would replace them: shared aims, per-phase powers
-      and radiation models, an evaluation per phase, and per-phase constraints and boxes
-      (a laser-limit cap on each beam in each phase).
+    - One pointing over several phases: `PhasedScenario` ("One pointing over
+      several phases of a pulse"). Each `Phase` has its own target or scenario (a `remake` of one
+      shared scenario with `history_state`'s albedos among them) and its own beam
+      powers, per beam or from pulses at a time; the parameters are the shared
+      pointing's followed by a power scale per (key, phase) for the phases not fixed;
+      `evaluate` gives one evaluation per phase (`PerPhase`), which the objective and
+      every constraint receive, and `in_phase` binds any constraint or objective of
+      one evaluation to a phase; `bounds(...; power_max)` caps every beam in every
+      phase at the laser's limit; `optimize_pointing` runs on it with constraints,
+      `from`, `time_limit`, `phase1` and `relaxation`. It replaces the four
+      workarounds of a multi-phase study (beam copies under one name, a call-counting
+      `by`, a carrier scenario, a cache behind a lock), reproduces that construction
+      to rounding at its saved parameters (552 of them) and takes 0.45 of its time
+      per gradient. *Left:* a scale shared across phases; a runnable example in a
+      tutorial (over a minute of build time); the study's stages rerun on it.
     - A pulse-shape budget (same study): each distinct pulse shape needs facility
       validation, so the per-quad multipliers were grouped afterwards into a few shapes
       (k-means on the log multipliers, the split between the inner and outer cones

@@ -61,3 +61,24 @@ Modules = [Briareus]
 Pages = ["src/pointing_summary.jl"]
 Private = false
 ```
+
+## Several phases under one pointing
+
+A [`PhasedScenario`](@ref) holds one pointing over several phases of a pulse (a
+picket, a foot, the peak before and after windows burn through): each [`Phase`](@ref)
+has its own target, radiation model and options and its own beam powers, given per
+beam or from pulses at a time, and the parameter vector ([`PhasedPointing`](@ref)) is
+the shared pointing's, which sets the aims of every phase, followed by a power scale per
+(group, phase) for the phases not fixed. [`evaluate`](@ref) gives one evaluation per
+phase in a [`PerPhase`](@ref), which [`optimize_pointing`](@ref) passes to the
+objective and to every constraint; [`in_phase`](@ref) applies any constraint or
+objective of one evaluation to one phase, the phase in its reported name.
+`bounds(scenario.param; power_max)` caps every beam in every phase at the laser's
+limit, [`phase_beams`](@ref) puts reference beams at each phase's powers, and
+[`pointing_summary`](@ref) reports each phase.
+
+```@autodocs
+Modules = [Briareus]
+Pages = ["src/phased.jl"]
+Private = false
+```
