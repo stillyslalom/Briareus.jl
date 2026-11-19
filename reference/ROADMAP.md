@@ -423,8 +423,15 @@ analog is the dropped-bundle tutorial, `docs/literate/dropped_bundle.jl`).
         For scale (Haines et al. 2026, read from their Fig. 9): a flux P2/P0 fixed in
         time costs no yield within −0.01 to +0.015 on one ignition design, and nominal
         repeats of it span 0.046, against gates of tenths of a percent from the
-        pointing-noise floor: a gate in physical units where the floor's gate costs
-        drive (user).
+        pointing-noise floor. The floor is an aggressive gate (user, 2026-11-18):
+        variation in laser delivery moves the shape considerably more but cannot be
+        readily quantified, and the tolerances of a re-pointing study can be relaxed
+        without a loss of performance within that uncertainty. *Remains:* the
+        tutorial and the `mode_gate` docstring present the floor as a lower bound
+        and a tolerance in physical units as the usual gate; the tolerance per
+        degree (0.5 % in P2/P0 is the modelers' repeat uncertainty; l = 1, 3 and 4
+        have no published number) is the user's; what a relaxed gate buys in aim
+        shift and drive on the tutorial's case.
     - a constrained run stopped by its budget reports the exact peak as it stands
       (`exact = true` is the default since cd6f084, and its rounds run after
       convergence): a capped polish needs convergence or `from` to meet the ceiling;
