@@ -301,6 +301,17 @@
         # the result's stationarity is that residual (every parameter inside the box)
         @test r.stationarity ≈ resid(r.x, mults(r)) rtol = 1e-6
         @test occursin("stationarity", sprint(show, MIME"text/plain"(), r))
+        # the display notes a row `:satisfied` with a positive multiplier (an exact
+        # ceiling's, whose multiplier is its stand-in's at the working limit), here
+        # written into a copy of the result; the rows themselves are unchanged
+        @test !occursin("stand-in", sprint(show, MIME"text/plain"(), r))
+        x1 = r.constraints[1]
+        odd = ConstraintRow(x1.name, x1.value, x1.limit, x1.upper, -0.01, 0.5, :satisfied)
+        ro = PointingResult((k === :constraints ? [odd; r.constraints[2:end]] : getfield(r, k)
+                             for k in fieldnames(PointingResult))...)
+        shown = sprint(show, MIME"text/plain"(), ro)
+        note = filter(l -> occursin("stand-in", l), split(shown, '\n'))
+        @test length(note) == 1 && occursin("total", only(note)) && ro.constraints[1] === odd
 
         # The old failure: from that design at a large penalty (μ = 10⁶, the order a drive
         # run under gates reaches), the inner run ends on its value tolerance a few 1e-6

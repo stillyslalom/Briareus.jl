@@ -13898,3 +13898,14 @@ deposits the setup beams and checks nothing. Every existing call in the tests, t
 tutorials and the examples evaluates the ceiling with the reference's own model and
 passes; a call that mixed models now throws (the user's decision of 2026-11-19).
 `test/picket_fluence.jl` covers each case on the reference's target.
+
+### 5. A note in the result display for an exact ceiling's multiplier
+
+An exact ceiling (`irradiance_ceiling`, `picket_ceiling` with `exact = true`) reports
+the exact peak in its row while the multiplier fit sees its smooth stand-in at the
+working limit (§ "Multipliers from the converged active set"): the row can read
+`:satisfied` with a positive multiplier (1.2 % inside the limit under one CI rounding,
+the case of `test/constraints.jl`'s dropped-bundle testset). The `PointingResult`
+display now adds one line naming such constraints and saying that the multiplier is
+the stand-in's at its working limit; `ConstraintRow`'s fields and the result are
+unchanged. Display only.

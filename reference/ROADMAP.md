@@ -491,7 +491,9 @@ analog is the dropped-bundle tutorial, `docs/literate/dropped_bundle.jl`).
         penalty weights of 1e2–1e6. Now the reported multipliers are fitted
         to stationarity over the near-active set (non-negative least squares),
         `bound_sensitivity` follows from them and `PointingResult.stationarity`
-        shows what they leave; designs are bit for bit. On the tutorial's run they
+        shows what they leave; designs are bit for bit. The display notes an exact
+        ceiling whose row reads `:satisfied` with a positive multiplier (its
+        stand-in's, at the working limit). On the tutorial's run they
         name the ceiling and l = 2 but leave a third of the drive's gradient: the
         design ends short of stationarity. The inner value tolerance is a keyword,
         `inner_reltol` (default 1e-10; at 1e-12 the run reaches a stationarity of

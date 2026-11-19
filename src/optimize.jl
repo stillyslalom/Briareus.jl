@@ -1714,6 +1714,11 @@ drive run whose inner runs ended on their value tolerance can end with it a siza
 fraction of the objective's gradient, and the multipliers and bound sensitivities are
 then estimates at a design short of stationarity (on the dropped-bundle tutorial's
 case, 1.2e-3 against the drive objective's largest derivative of 3.0e-3 per mm).
+An exact ceiling ([`irradiance_ceiling`](@ref), [`picket_ceiling`](@ref) with `exact =
+true`) reports the exact value in its row but takes part in the fit through its smooth
+stand-in at the working limit: its row can read `:satisfied` (the exact value inside
+the limit by more than `feasibility`) with a positive multiplier (the stand-in active).
+The display notes such rows; the multiplier is the stand-in's.
 
 **Bound sensitivities.** For each parameter in `at_bounds` (same order),
 `bound_gradient` holds the objective's derivative `∂f/∂xᵢ` at `x` and
@@ -1867,6 +1872,12 @@ function Base.show(io::IO, ::MIME"text/plain", r::PointingResult)
                     r.stationarity)
     end
     _show_constraint_rows(io, r.constraints)
+    # an exact ceiling's row reads the exact value (inside its limit) while its multiplier
+    # is the stand-in's, active at its working limit
+    stand = unique(first(split(x.name, '[')) for x in r.constraints if x.status === :satisfied && x.multiplier > 0)
+    isempty(stand) ||
+        print(io, "\n  ", join(stand, ", "), ": :satisfied with a positive multiplier, the smooth stand-in's at its ",
+              "working limit, not the reported value's (an exact ceiling; PointingResult, \"Multipliers\")")
     isempty(r.relaxations) && return nothing
     print(io, "\n  each violated constraint relaxed alone, the others met:")
     for x in r.relaxations
