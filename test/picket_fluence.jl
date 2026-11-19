@@ -162,6 +162,72 @@ end
                   end, (c.f, cm.f))
     end
 
+    # The published quantity (absorbed outer power on the parts over a fixed area) and the
+    # corridor near the inner centerlines, against sums and distances by hand
+    @testset "the spatially averaged fluence and the inner-beam corridor" begin
+        x = x0 .+ 0.05 .* sin.(1:length(x0))
+        ev = evaluate(s, x)
+        es = elements(t, :wall)
+        outer2 = [remake(b; power = b.group in (:outer44, :outer50) ? 2.0 : 0.0) for b in ev.beams]  # the window's mean
+        P = deposit(s.deposition, outer2).element
+        @test picket_irradiance(ev, :wall; kw..., measure = :average) ≈ sum(P[es]) / 53 rtol = 1e-12
+        @test picket_irradiance(ev, :wall; kw..., measure = :average, area = 10.0) ≈ sum(P[es]) / 10 rtol = 1e-12
+        @test picket_irradiance(ev, :wall; kw..., measure = :average) ≈
+              picket_fluence(s.deposition, ev.beams, pulses, w).energy / 53 rtol = 1e-12
+        # net of backscatter: the effective beams at their own powers
+        sb = remake(s; lpi = Backscatter(:outer50 => 0.5))
+        Pb = deposit(s.deposition, [remake(b; power = b.group === :outer50 ? 4.0 : b.group === :outer44 ? 8.0 : 0.0)
+                                    for b in ev.beams]).element
+        @test picket_irradiance(evaluate(sb, x), :wall; lpi = true, measure = :average) ≈ sum(Pb[es]) / 53 rtol = 1e-12
+        @test picket_irradiance(ev, :wall; lpi = true, measure = :mean) == picket_irradiance(ev, :wall; measure = :mean)
+        @test_throws ArgumentError picket_irradiance(ev, :wall; kw..., lpi = true)
+        @test_throws ArgumentError picket_irradiance(ev, :wall; kw..., measure = :average, area = 0.0)
+        @test_throws ArgumentError picket_irradiance(ev, :wall; kw..., measure = :corridor, edge = 3.0)
+        @test_throws ArgumentError picket_irradiance(ev, :wall; kw..., measure = :corridor, inner = (:none,))
+        # the corridor: with no centroid on the soft edge, the hard mean within the
+        # distance; the distance to each inner centerline by hand
+        lines = [(b.aim, -b.port / norm(b.port)) for b in ev.beams if b.group in (:inner23, :inner30)]
+        dist = [minimum(norm(cross(t.elem_centroid[e] - a, k)) for (a, k) in lines) for e in es]
+        ds = sort(filter(d -> 1.0 < d < 1.6, dist))      # the widest gap between centroid distances
+        g = argmax(diff(ds))
+        r, e0 = (ds[g] + ds[g+1]) / 2, (ds[g+1] - ds[g]) / 2
+        @test e0 > 1e-3 && !any(d -> r - e0 / 2 <= d <= r + e0 / 2, dist)
+        m = dist .< r
+        @test picket_irradiance(ev, :wall; kw..., measure = :corridor, corridor = r, edge = e0) ≈
+              sum(P[es][m]) / sum(t.elem_area[es][m]) rtol = 1e-12
+        # the soft edge: a quintic smoothstep per centerline, joined as a union
+        sstep(u) = clamp(u, 0, 1)^3 * (6clamp(u, 0, 1)^2 - 15clamp(u, 0, 1) + 10)
+        wt(d1, d2) = 1 - (1 - sstep((1.45 - d1) / 0.3)) * (1 - sstep((1.45 - d2) / 0.3))
+        two = [(Briareus.SVector(0.0, 0.0, 0.0), Vec3(0, 0, 1)), (Briareus.SVector(3.0, 0.0, 0.0), Vec3(0, 0, 1))]
+        pts = [Vec3(dx, 0.0, 0.7) for dx in (0.2, 1.2, 1.3, 1.4, 1.5, 1.7, 2.0)]
+        @test all(p -> isapprox(Briareus._corridor_weight(p, two, 1.15, 1.45, 0.3), wt(p[1], 3 - p[1]); atol = 1e-14), pts)
+        # the hottest elements: the peak first, sorted, with their distances
+        hot = picket_hot_elements(ev, :wall; kw..., n = 5)
+        @test length(hot) == 5 && hot[1].irradiance == picket_irradiance(ev, :wall; kw...)
+        @test issorted([h.irradiance for h in hot]; rev = true)
+        @test all(h -> isapprox(h.distance, dist[findfirst(==(h.element), es)]; rtol = 1e-12), hot)
+        @test all(h -> h.z == t.elem_centroid[h.element][3] && 0 <= h.phi < 360, hot)
+        # the ceilings: at the reference's value, the value the measure
+        ca = picket_ceiling(ref, :wall; kw..., measure = :average)
+        cc = picket_ceiling(ref, :wall; kw..., measure = :corridor)
+        @test ca.name === :picket_average && cc.name === :picket_corridor
+        @test only(ca.limit) == picket_irradiance(ref, :wall; kw..., measure = :average)
+        @test only(cc.limit) == picket_irradiance(ref, :wall; kw..., measure = :corridor)
+        @test ca.f(ev) == check_constraints(ev, ca)[1].value == picket_irradiance(ev, :wall; kw..., measure = :average)
+        @test cc.f(ev) == check_constraints(ev, cc)[1].value == picket_irradiance(ev, :wall; kw..., measure = :corridor)
+        # gradients against central differences (the 50° quads up toward the holes, where
+        # the light starts to clip, for the average; the corridor moves with the inner aims)
+        xc = copy(x)
+        xc[findall(n -> n == "outer50.z", parameter_names(p))] .= 6.0
+        d = sin.(1:length(x0))
+        at(f, x1) = τ -> f(evaluate(s, x1 .+ τ .* d))
+        @test all(((f, x1),) -> begin
+                      ad = ForwardDiff.derivative(at(f, x1), 0.0)
+                      fd = (at(f, x1)(1e-6) - at(f, x1)(-1e-6)) / 2e-6
+                      isapprox(ad, fd; rtol = 1e-5) && ad != 0
+                  end, ((ca.f, xc), (cc.f, x)))
+    end
+
     # One free parameter, the 50° cone's z, pulled toward the waist by the objective: the
     # picket ceiling stops it where the constrained quantity reaches the limit (a root
     # found by bisection on the quantity itself; each is monotone over the bracket)
@@ -208,6 +274,17 @@ end
         @test rp.outcome === :interior && row.status !== :violated && row.multiplier > 0
         @test row.value == peak_at(only(rp.x)) && 0.99 * lim <= row.value <= lim * (1 + 1e-6)
         @test zp - 1e-6 <= only(rp.x) < zp + 0.01
+        # the spatially averaged fluence falls as the 50° spots clip on the holes (above
+        # ~5.6 mm); the corridor's mean falls as they move away from the inner beams' paths
+        for (meas, zl, zbox, z0) in ((:average, 6.0, (5.7, 6.4), 6.3), (:corridor, 5.2, (4.9, 6.0), 5.8))
+            val(z) = picket_irradiance(at(z), :wall; kw..., measure = meas)
+            cv = picket_ceiling(ref, :wall; kw..., measure = meas, limit = val(zl))
+            zr = root(z -> val(z) - only(cv.limit), zl - 0.2, zl + 0.2)
+            rv = optimize_pointing(sh, pull; x0 = [z0], lower = [zbox[1]], upper = [zbox[2]], constraints = (cv,),
+                                   feasibility = 1e-6)
+            @test rv.outcome === :interior && abs(only(rv.x) - zr) < 1e-5
+            @test only(rv.constraints).status === :active && only(rv.constraints).multiplier > 0
+        end
     end
 
     @testset "the linked bubble" begin

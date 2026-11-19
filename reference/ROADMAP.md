@@ -477,15 +477,25 @@ analog is the dropped-bundle tutorial, `docs/literate/dropped_bundle.jl`).
       "spatially averaged outer picket fluence over the first 1 ns"). The two part on
       uneven power scales: on a dropped-bundle study, holding ∫F²dA/∫FdA at the
       reference's cost 16 % of the picket drive, while a design at the reference's
-      published quantity reads 1.10× on it (scratch runs, 2026-11-18). *Remains:* the
-      published quantity as a quantity and a constraint, with the trough and foot as
-      well as the picket (Izumi et al., Phys. Plasmas 30, 032706 (2023): a low trough
-      stalls the bubble); the outer fluence near the inner beams' centerlines (the same
-      paper: bubble spikes in line with the 23.5° beams cost P2), which the study checks
-      as the mean fluence on wall elements within 1.3 mm of an inner centerline; the
-      scalings' exponents in the research notes (core P2 ∝ fluence^0.5, bubble position
-      ∝ fluence^0.2), with the −4 to −7 µm of P2 per +10 % of fluence marked as read
-      from their figures;
+      published quantity reads 1.10× on it (scratch runs, 2026-11-18). Now
+      ("The published picket fluence, the trough and the inner-beam corridor"):
+      `picket_irradiance` and `picket_ceiling` take `measure = :average`, the outer
+      power absorbed on the named parts over a fixed area (any phase: picket, trough,
+      foot; `lpi = true` for net of backscatter; Callahan's 53 mm² as the default
+      area), and `measure = :corridor`, the outer fluence under a smooth weight around
+      the inner beams' centerlines (1.3 mm with a 0.3 mm edge: engineering defaults);
+      `picket_hot_elements` lists the hottest outer-cone elements with their distance
+      to the nearest inner centerline. On public cases uneven per-quad picket powers
+      of 0.2 rms raise ∫F²dA/∫FdA by 5–7 % at the published quantity unchanged, quad
+      crowding by 19 %, and z shifts move the corridor by 20 % per 0.5 mm. The
+      exponents are in the notes (core P2 as fluence^0.5, bubble position as
+      fluence^0.2; +10 % of fluence costs 5–7 µm of core P2). *Remains:* which
+      quantity `PicketLinkedBubble` reads: the energy-weighted one reproduces Izumi
+      2021's split-quad shot, which the fixed-area one cannot see, so the link stays
+      on it (user); a published bubble trajectory at fixed energy with uneven quad
+      powers or a re-pointing would decide; whether the corridor's mean or its peak
+      stands for Izumi 2023's spikes; `:mean` and `:average` read alike (`:mean` to
+      `:weighted`, an API break: user);
     - the inner budget: `iterations` caps each inner run, and set high it leaves the
       multipliers unchanged for most of a run. On a 276-parameter multi-phase study,
       `iterations = 1000` completed one outer iteration in an hour (the peak 18 % over

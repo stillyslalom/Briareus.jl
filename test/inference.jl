@@ -131,6 +131,9 @@ end
     pkw = (; pulses = pulse, window = (0.5, 1.5))
     pceil = picket_ceiling(evaluate(s, xo), :wall; pkw...)
     pmean = picket_ceiling(evaluate(s, xo), :wall; pkw..., measure = :mean)
+    # the published average (own powers, net of the scenario's model) and the corridor
+    pavg = picket_ceiling(evaluate(s, xo), :wall; measure = :average, lpi = true)
+    pcor = picket_ceiling(evaluate(s, xo), :wall; pkw..., measure = :corridor)
     bubble = BubbleAbsorption(radius = 2.875)
     linked = PicketLinkedBubble(bubble, t, apply(p, xo); pkw...)
     # phase 1's infeasibility and a relaxation's objective; the mode gate and the drive
@@ -303,6 +306,7 @@ end
             ev, bs = evaluate(s, x), apply(p, x)
             @test (@inferred picket_irradiance(ev, :wall; pkw...)) isa T
             @test (@inferred pceil.f(ev)) isa T && (@inferred pmean.f(ev)) isa T
+            @test (@inferred pavg.f(ev)) isa T && (@inferred pcor.f(ev)) isa T
             @test (@inferred linked_bubble(linked, bs)) isa BubbleAbsorption{T}
             # the bubble and the linked bubble on the beams (6 ns: clipping and the ridge stop)
             @test all(m -> (@inferred apply_lpi(m, bs, 6.0)) isa Vector{Beam{T}}, (bubble, linked))
@@ -420,6 +424,7 @@ end
                 ev, bs = evaluate(s, x), apply(p, x)
                 if VERSION >= v"1.11"
                     @test _inf_jet_clean(JET.report_opt, pceil.f, ev) && _inf_jet_clean(JET.report_opt, pmean.f, ev)
+                    @test _inf_jet_clean(JET.report_opt, pavg.f, ev) && _inf_jet_clean(JET.report_opt, pcor.f, ev)
                     @test _inf_jet_clean(JET.report_opt, linked_bubble, linked, bs)
                     @test _inf_jet_clean(JET.report_opt, (m, b) -> apply_lpi(m, b, 6.0), linked, bs)
                     @test all(m -> _inf_jet_clean(JET.report_opt, (q, o, b) -> lpi_deposit(q, o, b, 6.0), m, s.deposition, bs),
@@ -428,6 +433,7 @@ end
                 # the bubble's own clipping: no dispatch on either version
                 @test _inf_jet_clean(JET.report_opt, (m, b) -> apply_lpi(m, b, 6.0), bubble, bs)
                 @test _inf_jet_clean(JET.report_call, pceil.f, ev) && _inf_jet_clean(JET.report_call, pmean.f, ev)
+                @test _inf_jet_clean(JET.report_call, pavg.f, ev) && _inf_jet_clean(JET.report_call, pcor.f, ev)
                 @test all(m -> _inf_jet_clean(JET.report_call, (q, b) -> apply_lpi(q, b, 6.0), m, bs) &&
                                _inf_jet_clean(JET.report_call, (q, o, b) -> lpi_deposit(q, o, b, 6.0), m, s.deposition, bs),
                           (bubble, linked))

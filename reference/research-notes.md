@@ -12860,3 +12860,203 @@ With the 1-D foil's slower transmission (item 4 of the account above: 0.62 of th
 transition's transmitted energy over 4–9 ns) the time-averaged window signal would be
 about 0.6 of the static numbers here; that is a statement about the transition, not
 about eq. 3.
+
+## The published picket fluence, the trough and the inner-beam corridor (2026-11-18) *derived*
+
+ROADMAP items 36 (constrained re-pointing) and 10 (the bubble). A multi-phase re-pointing
+study (scratch runs) held the outer cones' picket fluence as the published bubble
+scalings define it, an energy over a fixed spot area, after finding that holding the
+energy-weighted F̄ = ∫F² dA/∫F dA of "The swing and the bubble without new data" §5
+penalized uneven per-quad picket powers and cost picket drive. This
+section records the definitions from the papers, the quantities added for them, what
+the two summaries do on public cases, and what the bubble link would give if it read the
+published one. No default, exponent or calibrated constant changed; nothing was fitted;
+PRE 109 Fig. 10 is a blind check only. Confidence: **H** primary text read (Izumi 2021
+and 2023 reread today from OSTI 1773252 and 1971298), **L** ours.
+
+### 1. The published quantity
+
+| Source | What is divided by what | Where |
+|---|---|---|
+| Callahan et al., PoP 25, 056305 (2018) | outer picket energy over the one-side outer spot area, 53 mm² (Table I's 60 kJ design: √(60/(53 × 0.45)) = 1.586, the outer energy of both sides over one side's area, **L** on "both sides") | Eqs. 2–4, Table I (`hohlraum_dynamics.md` §1), **H** |
+| Ralph et al., PoP 25, 082701 (2018) | outer picket energy over its FWHM, net of backscatter, over the outer phase-plate spot area | absorption metric, **H** |
+| Izumi et al., PoP 28, 022706 (2021) | the outer picket fluence averaged over the wall, over the first ns (Sec. III, defining the FoM); the picket as the initial ~1 ns (Sec. II) | **H** |
+
+- **Fixed area, with one exception.** Callahan's and Ralph's areas are the phase plates'
+  nominal spots, fixed for a pointing family; their ratio between two designs is the
+  ratio of the outer picket energies. Izumi 2021 counts its cone- and quad-split shots
+  as a 27 % lower overlapped outer-cone fluence on the wall at the same energy (Sec. III B, Fig. 8a: tip −120 ± 30 µm), i.e. a larger
+  footprint, and reduces it to 20 ± 3 % for the best P2 fit (Sec. III A, Fig. 5b). The
+  same paper argues for an average over the azimuthal structure: the 50° spots are 24 %
+  more intense (smaller spots), but by the time the bubble clips the inner beams it has
+  converged 2–3× and the inner quads overlap around the azimuth, so an average
+  intensity is the appropriate measure (Sec. III B, **H**). So the published quantity holds the energy over a
+  fixed area and treats a split of the quads as a change of area; it does not resolve
+  spikes.
+- **In Briareus terms** (`picket_irradiance(...; measure = :average)`, **L** for each
+  choice): the outer beams' power *absorbed on the named parts* (the wall), over a fixed
+  `area`. Light clipped on the entrance holes' outside, landing on the capsule or the LEH
+  hardware, or leaving the target does not ablate the wall under the outer spots, so it
+  is not counted; the papers count delivered energy, and on their shots clipping in the
+  picket is small, so they do not separate the two. *Net of backscatter*: the powers as
+  given are taken as net (`pulses`/`power` net of the measured picket backscatter), or
+  `lpi = true` deposits the evaluation's effective beams, after the scenario's
+  laser–plasma model at its own time (a `Backscatter`, a transfer). The default `area`
+  is Callahan's 53 mm², so that the irradiance × the picket's length (ns) is his E/A in
+  kJ/mm²; a ratio to a reference does not depend on it. On the N221204 mock pointing (h
+  0.1 map) the 43.04 kJ of outer picket absorbed on the wall give 0.812 kJ/mm² over 53 mm²
+  (Callahan's Table I design: 60 kJ, 1.13 kJ/mm²), against F̄ 0.602 kJ/mm².
+- `picket_ceiling(...; measure = :average)` holds it against a reference (`:picket_average`),
+  in any phase whose powers the evaluation or the keywords give (picket, trough,
+  second step). It is linear in the powers and moves with the pointing only through
+  clipping and what lands off the wall: at fixed powers it is flat until the outer spots
+  reach the entrance holes (the 1-parameter test: flat over the 50° cone's z 4.6–5.4 mm,
+  −1 % at 5.8, −7 % at 6.0, −18 % at 6.2 on the 0.45 mm test hohlraum).
+
+### 2. The exponents and the size of a 10 % change
+
+- **Core P2 against fluence: P2 shift ∝ F^0.5.** Callahan 2018: R_bub ∝ √(E/(A ρ_fill)) τ/R
+  (Eq. 2), P2 ∝ −R_bub r_cap/R (Eq. 3), zero at the metric 1.2 for CF 33 % (Eq. 4); 39
+  shots, σ 8 µm, the stated goal ±5 µm (**H**). Izumi 2021 restates it as
+  P2 − 270(CF − 0.333) = 85(1.2 − FoM) µm (Eq. 1) and keeps the square root by building
+  its new FoM as x_bub^2.5 with x_bub ∝ E^0.2, FoM ∝ E^0.5 (Eq. 5, Sec. III B), slope
+  −115 µm per unit FoM over its seven shots (Fig. 5b; −100 in Fig. 5a, **H**).
+- **Bubble position ∝ F^0.2.** Izumi 2021 Fig. 8a (Sec. III B): 1.5× picket +160 µm
+  (+9 ± 1.5 % at x̄ ≈ 1.8 mm) gives E^0.2±0.03; the split shots' −27 % fluence −120 ± 30 µm
+  (−6 ± 1.5 %) E^0.2±0.05; fill ρ₀^−0.2±0.03 (**H**). Ralph 2018's speed ∝ I^0.36 (data
+  fit I^1/3–I^2/3) and Izumi 2023's ablation rate ∝ I^1/3 are the alternatives (§4 of the
+  bubble section).
+- **Per +10 % of fluence** (**L**, from the published slopes at the P2 = 0 point,
+  FoM ≈ 1.2): 85 × 1.2 × (√1.1 − 1) = −5.0 µm (Eq. 1); −6.7 µm with Fig. 5b's −115 (its
+  redefined FoM's value at P2 = 0 is not given); Izumi 2018's measured 1.5× picket (−21 to
+  −24 µm core P2, "Callahan 2018 and Izumi 2018" above) scaled as √: −4.6 to −5.2 µm. The
+  study read −4 to −7 µm per +10 % from the papers' figures (user, 2026-11-18; read from
+  figures, not tabulated): consistent. Against tolerances: Callahan's ±5 µm goal
+  (attributed to Izumi in the study; Izumi 2021's text states none, **H** for the
+  search), and Kritcher 2024's −5 µm of P2 ≈ 1.9× yield on N230729 (`asymmetry_transfer.md`).
+  So +10 % of outer picket fluence is about one tolerance of core P2.
+
+### 3. The trough and the corridor (Izumi et al., PoP 30, 032706 (2023), **H**)
+
+- **The trough counts.** A sufficiently low trough lessens bubble growth by starving the
+  bubble of ablated mass (Sec. II); on the 4-shock CH design the picket-launched bubble
+  stalls in a 1 TW trough and is relaunched near 6 ns (Sec. III B, Fig. 9b); ballistic
+  growth from the picket holds for < 15× foot-to-peak contrast. So the drive that grows
+  the bubble includes the trough and the next step when they differ between designs;
+  the study holds the published quantity in the picket, the trough and the second step
+  (user's decision). `picket_irradiance`/`picket_ceiling` take any phase's powers.
+- **Spikes in line with the 23.5° beams.** With azimuthal beam phasing (half the 50°
+  quads on early, at 4× power) the 50° bubble's 8-fold pattern became 4-fold, its tips
+  within 5.6° of the 23.5° beams (Sec. III C, Fig. 10c); the spike regions advanced 300 µm
+  and the troughs fell 500 µm behind (Fig. 9b); the 23.5° beams' thin-wall signal fell
+  and the core went from a2 −17 ± 3 µm to −28 ± 3 µm (Sec. III D, Fig. 11), which the paper
+  attributes to the 23.5° beams absorbed at the bubble tips. The same section's
+  ablation argument (mass ∝ I^1/3, so concentrating the 50° power on half the quads
+  lowers the foot's ablated mass by 2^(−2/3) at fixed energy, Sec. II) shows that
+  concentration does not grow the bubble as a whole; it grows it *where* the power is.
+- **Consequence for the two summaries** (**L**). F̄ rises with concentration (overlap or
+  uneven powers) everywhere on the wall; the fixed-area energy ignores it; neither
+  locates it. A spike matters where an inner beam passes. Hence the corridor: the outer
+  irradiance near the inner centerlines, `measure = :corridor`, and the hottest
+  elements with their distance from the nearest inner centerline,
+  `picket_hot_elements`.
+- **The corridor's form.** Mean outer irradiance ∫w I dA/∫w dA over the named parts, w the
+  union over inner beams (with power) of a quintic smoothstep in the 3-D distance from
+  the element centroid to the beam's centerline (aim, direction): 1 within
+  `corridor − edge/2`, 0 beyond `corridor + edge/2`. Chosen over membership fixed at the
+  reference because the inner beams move with the design (by a sizable fraction of the
+  radius in a re-pointing) and the quantity is meant to follow them; the smooth edge
+  keeps it C² in their aims (a hard 1.3 mm membership jumps as centroids cross it).
+  Elements beyond every edge are skipped exactly (the step is flat there). Defaults:
+  `corridor = 1.3` mm, the study's choice (an engineering default, not published: Izumi
+  2021's 1.3 mm is the distance from the wall to the inner beams' outer edge at the
+  bubble's z, Sec. III B, a different quantity), `edge = 0.3` mm (wider than an element of
+  a 0.2 mm map; on the 0.45 mm test hohlraum the 0.3 mm edge reads 0.7 % below
+  the hard 1.3 mm mean, 0.1 mm 0.13 %). Checks (`test/picket_fluence.jl`): against the
+  hard mean by hand where no centroid lies on the edge (1e-12), the weight against the
+  smoothstep union by hand, gradients against central differences, a one-parameter run
+  ending at the bisection root.
+
+### 4. Published against energy-weighted on public cases
+
+Ratios to the reference pointing on the same map; outer cones only; `measure_a.jl`
+(scratch). N221204: the mock HYBRID-E pointing, 43.04 kJ of outer picket equally per
+beam, h 0.1 map. Tutorial: the dropped-bundle tutorial's 48 quads in the 5.75 mm
+hohlraum, Young 2020's requested picket (0.25–1.25 ns, 1.318 TW per outer quad), h 0.2
+map. "Uneven": per-quad log-normal picket scales of the outer quads (seed 1), mean 1.
+
+| Case | published (`:average`) | energy-weighted F̄ | peak | corridor (1.3 mm) |
+|---|---|---|---|---|
+| N221204, outer cones z −0.5 / −0.3 mm | 0.9998 / 1.0000 | 0.9998 / 1.0000 | 0.9999 / 0.9999 | 1.2045 / 1.1340 |
+| N221204, z +0.3 / +0.5 mm | 0.9972 / 0.9724 | 1.0015 / 1.0097 | 1.0000 / 1.0000 | 0.8598 / 0.7612 |
+| N221204, unsplit quads (s 0) | 1.0000 | 1.1922 | 1.3913 | 1.0213 |
+| N221204, s 0.225 / 0.75 | 1.0000 / 0.9941 | 1.0587 / 1.0869 | 1.1879 / 1.1952 | 1.0140 / 0.9745 |
+| N221204, uneven rms 0.1 / 0.2 / 0.3 / 0.5 | 1.0000 | 1.0115 / 1.0499 / 1.1186 / 1.3634 | 1.27 / 1.58 / 1.93 / 2.76 | 1.004 / 1.007 / 1.010 / 1.014 |
+| N221204, bundle 11's outer quads off, the rest ×1.067 | 1.0000 | 1.0368 | 1.0667 | 1.0143 |
+| tutorial, bundle 11 freed, as is | 0.9375 | 0.9873 | 1.0000 | 0.9623 |
+| tutorial, freed, the rest ×1.0667 (outer energy kept) | 1.0000 | 1.0532 | 1.0667 | 1.0265 |
+| tutorial, its `limited` re-pointed design | 0.9375 | 0.9933 | 1.0026 | 0.9816 |
+| tutorial, outer cones z −0.3 / +0.3 mm | 1.0000 / 1.0000 | 1.0000 / 1.0000 | 0.979 / 0.982 | 1.1893 / 0.7982 |
+| tutorial, 50° quads at the 44° quads' z (5.20 mm) | 1.0000 | 0.9454 | 0.9841 | 0.9235 |
+| tutorial, uneven rms 0.2 / 0.5 | 1.0000 | 1.0660 / 1.4610 | 1.69 / 3.29 | 0.997 / 0.992 |
+
+- **Uneven powers part the two most.** At the same outer energy, per-quad scales of rms
+  0.1/0.2/0.3/0.5 (log) raise F̄ by 1.2/5.0/11.9/36 % on N221204 and 6.6/46 % (rms
+  0.2/0.5) on the tutorial: holding F̄ at the reference with uniform outer powers would
+  cost 1.1/4.8/10.6/27 % of the outer picket energy (tutorial: 6.2/32 %). The scratch
+  study's finding (picket drive lost under an F̄ ceiling with per-bundle picket scales)
+  is of this kind. Dropping a bundle and restoring its outer energy on the
+  others raises F̄ 3.7 % (N221204) and 5.3 % (tutorial) at the same published value.
+- **Spot crowding** (splits, unsplit quads, one cone on the other's ring) moves F̄ by
+  −5 to +19 % and the published quantity by < 0.6 %: only F̄ sees overlap, which is the
+  one effect Izumi 2021 measured on the bubble (the split shot).
+- **z shifts** move neither (≤ 0.2 %) until the spots clip on the holes (z +0.5: the
+  published quantity −2.8 %, the energy that leaves the wall; F̄ +1 %). They move the
+  corridor most (±20 % per ∓0.5 mm on N221204, ±19 % per ∓0.3 mm on the tutorial): the
+  outer spots slide along the wall toward or away from the inner paths.
+- The peak follows neither: it moves 2–3× F̄ with overlap and 5–23× it with uneven powers.
+
+### 5. The bubble link reading the published quantity (item 10; a measurement)
+
+`PicketLinkedBubble` reads F̄. Read instead E = 1.1 × (published ratio), on §5 of the
+bubble section's benchmark variants (`bench_pub.jl`, scratch: the coarse full model,
+measured backscatter, the h 0.1 map; the reference is the mock pointing at E = 1.1,
+minimum −0.181 at 5.25 ns, upward zero 6.194 ns). Variants whose published ratio is 1
+to < 1e-3 (z −0.5, −0.3, unsplit, s 0.225) give E = 1.1, i.e. the "E 1.1" column of that
+table: unsplit 6.19 ns against the linked 6.00, s 0.225 6.19 against 6.15.
+
+| Outer cones | published / mock | E published | upward zero, E published (shift) | E 1.1 | E linked to F̄ | minimum, E published (at) | 8 ns |
+|---|---|---|---|---|---|---|---|
+| z +0.3 mm | 0.9972 | 1.0969 (speed ×0.9994, t_c 6.089 ns) | 6.250 (+0.057) | 6.25 | 6.248 | −0.205 (5.25) | +0.076 |
+| z +0.5 mm | 0.9724 | 1.0697 (×0.9944, 6.112) | 6.455 (+0.262) | 6.42 | 6.406 | −0.228 (5.25) | +0.067 |
+| s 0.75 | 0.9941 | 1.0935 (×0.9988, 6.092) | 6.210 (+0.016) | 6.21 | 6.149 | −0.187 (5.25) | +0.080 |
+| unsplit, s 0.225, z −0.5, z −0.3 | 1.0000 | 1.1 | as E 1.1 | 6.19, 6.19, 6.14, 6.15 | 6.00, 6.15, 6.14, 6.15 | | |
+| PRE 109 Fig. 10 | | | 6.67 | | | −0.170 (5.60) | +0.095 |
+
+- **The swing moves by less than the deposition's own change.** Through the published
+  quantity the bubble responds only where light leaves the wall: z +0.5 (2.8 % clipped)
+  puts the crossing 0.035 ns later than E 1.1 (6.455 against 6.42) and 0.049 ns later
+  than the F̄ link (6.406), the minimum 0.001–0.002 deeper; z +0.3 and s 0.75 are within
+  0.01 ns of E 1.1. The F̄ link instead moves the crossing −0.19 ns for unsplit quads
+  and −0.04 to −0.06 ns for the splits, which the published link does not see.
+
+- Read through the published quantity, the link does not respond to the one measured
+  re-pointing-like change (Izumi 2021's split quads: −27 % in the overlapped fluence,
+  −120 µm of tip), and it moves the bubble the other way from F̄ when the spots clip
+  (E down where F̄ rises). Fig. 10's crossing (6.67 ns) stays 0.2–0.7 ns later under either link.
+- **Recommendation (user decision; no default changed):** keep `PicketLinkedBubble` on
+  F̄ (its only published re-pointing-like test is the split shot, which F̄ reproduces
+  and the fixed area cannot), and use the published `:average` as the study's ceiling
+  in each early phase, as decided, with the `:corridor` reported or held where the
+  outer light approaches the inner paths. A link on a different summary would be a new
+  model choice to test against a bubble-tip datum at fixed energy, which no paper gives
+  ("The swing and the bubble without new data" §5, What remains).
+
+### What remains
+
+- A published bubble trajectory for a re-pointing at fixed energy (unchanged), and one
+  with uneven quad powers, to choose between F̄ and the fixed-area energy for the link.
+- Whether the corridor's mean, or its peak, is the better proxy for Izumi 2023's spikes;
+  its 1.3 mm and 0.3 mm are engineering defaults.
+- `picket_irradiance`'s `:mean` and `:average` read alike; renaming `:mean` to
+  `:weighted` is a break of the public API (user decision, recommended).

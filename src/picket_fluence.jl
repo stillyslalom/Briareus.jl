@@ -11,7 +11,9 @@
 The picket fluence of a set of beams on a target's wall, from [`picket_fluence`](@ref):
 - `fluence`: per element of the target (kJ/mm²; ×1e5 → J/cm²), zero outside `elements`;
 - `elements`: the elements counted (those of the named components);
-- `energy`: the picket energy deposited on them, ∫F dA (kJ);
+- `energy`: the picket energy deposited on them, ∫F dA (kJ); over a fixed spot area it
+  is the spatially averaged fluence of the published bubble scalings (its ratio
+  between designs is the energy's: [`picket_irradiance`](@ref)'s `:average`);
 - `mean`: the energy-weighted mean fluence ∫F² dA / ∫F dA (kJ/mm²), the summary that
   [`picket_ratio`](@ref) reads;
 - `peak`: the largest element fluence (kJ/mm²), for information;
@@ -53,22 +55,24 @@ fluence on the wall, with the incidence and the overlap of the spots. Backscatte
 transfer in the picket can be taken off the beams first (Ralph et al. 2018 use the
 picket energy net of outer backscatter).
 
-**The summary.** Every published bubble scaling is written in the outer cones' picket
+**The summaries.** Every published bubble scaling is written in the outer cones' picket
 fluence as a nominal energy over a nominal area: Ralph et al., PoP 25, 082701 (2018),
-the outer picket energy over the outer phase-plate spot area (speed ∝ I^0.36); Callahan
-et al., PoP 25, 056305 (2018), the outer picket energy over the one-side outer spot area,
-53 mm², the footprint of one side's outer beams together (size ∝ (E/A)^0.5); Izumi et
-al., PoP 28, 022706 (2021), the picket fluence relative to the basecamp's (speed
-∝ E^0.2), 27 % lower when the quads and cones are split at the same energy, i.e. with
-the overlap of the spots on the wall counted. `mean` = ∫F² dA / ∫F dA is that quantity
-for a computed map: the fluence averaged over the deposited energy, the energy over the
-effective area (∫F dA)²/∫F² dA. One isolated spot gives its energy over its effective
-area (a flat top's E/A exactly; for a super-Gaussian of order n, 2^(-2/n) of its peak
-fluence, half for a Gaussian); k coincident spots give k times one, separated spots the
-same as one; and as an integral it is smooth in the pointing and nearly independent of
-the mesh. `peak` follows one element and the mesh, and a mean over the area above half
-the peak inherits the peak's threshold; neither is what the papers' energy over area
-measures.
+the outer picket energy net of backscatter over the outer phase-plate spot area (speed
+∝ I^0.36); Callahan et al., PoP 25, 056305 (2018), the outer picket energy over the
+one-side outer spot area, 53 mm² (size ∝ (E/A)^0.5); Izumi et al., PoP 28, 022706
+(2021), the spatially averaged outer picket fluence over the first ns (tip position
+∝ E^0.2), 27 % lower when the quads and cones are split at the same energy. Over a fixed
+area that quantity is `energy` (its ratios between designs are the energy's;
+[`picket_irradiance`](@ref)'s `:average`). `mean` = ∫F² dA / ∫F dA, the energy over the
+effective area (∫F dA)²/∫F² dA, counts the overlap of the spots as well: one isolated
+spot gives its energy over its effective area (a flat top's E/A exactly; for a
+super-Gaussian of order n, 2^(-2/n) of its peak fluence, half for a Gaussian), k
+coincident spots k times one, separated spots the same as one, so it carries Izumi
+2021's split-quad change, which a fixed area does not; as an integral it is smooth in
+the pointing and nearly independent of the mesh. The two part when the beams' picket
+energies are uneven or their spots move onto one another (research notes, "The
+published picket fluence, the trough and the inner-beam corridor (2026-11-18)").
+`peak` follows one element and the mesh; it measures neither.
 
 **Mesh.** An element average lowers ∫F² dA by about h²/(6a²) for a Gaussian spot of 1/e
 radius a on elements of size h, so `mean` converges as O(h²) and is low on a coarse
@@ -261,121 +265,291 @@ end
 # The picket irradiance on named parts, and a ceiling on it
 # ---------------------------------------------------------------------------------------
 
-"""
-    picket_irradiance(ev, names...; pulses = nothing, window = nothing, by = :group,
-                      power = nothing, groups = (:outer44, :outer50), measure = :peak) -> Real
-
-The laser irradiance (TW/mm²) during the picket on the elements of the named parts or
-components, from the beams of an [`Evaluation`](@ref) at their picket powers: the
-largest over the elements (`measure = :peak`, the maximum irradiance at the picket), or
-the energy-weighted mean ∫I² dA / ∫I dA (`measure = :mean`, the summary that
-[`picket_ratio`](@ref) and the gold bubble's published scalings read; see
-[`picket_fluence`](@ref)). The picket fluence is this irradiance times the picket's
-length, so its ratios between designs are the fluence's.
-
-**The picket powers.** With `pulses` (keyed as for [`with_pulses`](@ref), with `by`)
-and `window = (t0, t1)` (ns), each beam's mean power over the window; with `power`, a
-function of the beam that returns its picket power (TW), e.g. by cone from a picket
-table; with neither, each beam's own power (the scenario's beams carry their picket
-powers, or `power = b -> r * b.power` scales them by a picket-to-peak ratio `r`). The
-beams counted are those in `groups`, the outer cones by default: every published
-bubble scaling is written in the outer cones' picket fluence (Ralph et al., PoP 25,
-082701 (2018); Callahan et al., PoP 25, 056305 (2018); Izumi et al., PoP 28, 022706
-(2021); research notes, "The swing and the bubble without new data (2026-11-18)" §4);
-the other beams are deposited at zero power.
-
-The picket is deposited by the scenario's deposition operator with the evaluation's
-setup beams (`ev.beams`: their pointing, spots and focus), without the scenario's
-laser–plasma model, which is set for its own `time`: take backscatter or transfer in
-the picket off the picket powers. One deposition per call. Generic in the number type
-(ForwardDiff duals through the pointing). The peak follows one element and the mesh
-(on a coarser mesh the hottest spot is averaged over more area); the mean is an
-integral, nearly independent of the mesh ([`picket_fluence`](@ref)).
-"""
-function picket_irradiance(ev::Evaluation, names::Symbol...; pulses = nothing, window = nothing,
-                           by = :group, power = nothing, groups = (:outer44, :outer50),
-                           measure::Symbol = :peak)
-    t = ev.scenario.target
-    es = _named_elements(t, names)
-    P = _picket_map(ev, _picket_power(pulses, window, by, power, true), _symbols(groups))
-    return _picket_measure(P, t, es, measure)
+# The measures of a picket map and their options (`picket_irradiance`'s keywords).
+struct _PicketMeasure
+    measure::Symbol
+    area::Float64           # `:average`: the fixed spot area (mm²)
+    corridor::Float64       # `:corridor`: the distance from an inner centerline (mm) …
+    edge::Float64           # … and the width of the weight's soft edge (mm)
+    inner::Vector{Symbol}   # the groups whose centerlines the corridor follows
 end
 
-# The element powers (TW) of the evaluation's setup beams at their picket powers.
-_picket_map(ev::Evaluation, power, gs) = deposit(ev.scenario.deposition, _picket_beams(power, gs, ev.beams)).element
+function _picket_measure_options(measure::Symbol, area::Real, corridor::Real, edge::Real, inner)
+    measure in (:peak, :mean, :average, :corridor) ||
+        throw(ArgumentError("measure is :peak, :mean, :average or :corridor, got $(repr(measure))"))
+    area > 0 || throw(ArgumentError("the spot area must be positive, got $area"))
+    0 < edge < 2corridor ||
+        throw(ArgumentError("the corridor's edge must be positive and less than twice its distance, got $edge and $corridor"))
+    return _PicketMeasure(measure, Float64(area), Float64(corridor), Float64(edge), collect(Symbol, _symbols(inner)))
+end
 
-function _picket_measure(P, t::Target, es, measure::Symbol)
-    measure === :peak && return _peak(P, t, es)
-    measure === :mean && return _energy_weighted(P, t, es)
-    throw(ArgumentError("measure is :peak or :mean, got $(repr(measure))"))
+# `lpi = true` reads the evaluation's effective beams, at their own powers.
+_check_lpi(lpi::Bool, pulses, power) =
+    lpi && (pulses !== nothing || power !== nothing) &&
+    throw(ArgumentError("lpi = true deposits the evaluation's effective beams at their own powers: " *
+                        "give no `pulses` or `power`"))
+
+"""
+    picket_irradiance(ev, names...; pulses = nothing, window = nothing, by = :group,
+                      power = nothing, groups = (:outer44, :outer50), lpi = false,
+                      measure = :peak, area = 53.0, corridor = 1.3, edge = 0.3,
+                      inner = (:inner23, :inner30)) -> Real
+
+The laser irradiance (TW/mm²) of the beams of an [`Evaluation`](@ref) in `groups` (the
+outer cones by default) on the elements of the named parts or components, summarized by
+`measure`:
+
+- `:peak`: the largest over the elements;
+- `:mean`: the energy-weighted mean ∫I² dA / ∫I dA, the summary that
+  [`picket_ratio`](@ref) and [`PicketLinkedBubble`](@ref) read ([`picket_fluence`](@ref));
+- `:average`: the spatially averaged irradiance over a fixed spot area, the power
+  absorbed on the elements over `area` (mm²): the quantity of the published bubble
+  scalings (below);
+- `:corridor`: the mean irradiance on the elements near the centerlines of the beams in
+  `inner`, ∫w I dA / ∫w dA with a weight w that is 1 within `corridor − edge/2` of a
+  centerline and 0 beyond `corridor + edge/2` (below).
+
+The irradiance times the phase's length is its fluence, so the ratios between designs
+are the fluence's. The powers are those of whatever phase the evaluation stands for:
+the picket, the trough or the foot.
+
+**The powers.** With `pulses` (keyed as for [`with_pulses`](@ref), with `by`) and
+`window = (t0, t1)` (ns), each beam's mean power over the window; with `power`, a
+function of the beam that returns its power (TW), e.g. by cone from a picket table; with
+neither, each beam's own power (an evaluation run at a phase's powers, or `power = b ->
+r * b.power` to scale them). The other beams are deposited at zero power, by the
+scenario's deposition operator with the evaluation's setup beams (`ev.beams`: their
+pointing, spots and focus). With `lpi = true` the beams are instead the evaluation's
+effective beams (`ev.effective`, after the scenario's laser–plasma model at its own
+`time`, e.g. net of a [`Backscatter`](@ref) and after a transfer), at their own powers
+(`pulses` and `power` are then an error); otherwise the laser–plasma model does not
+enter, and backscatter or transfer is taken off the powers given. One deposition per
+call. Generic in the number type (ForwardDiff duals through the pointing and powers).
+
+**The published quantity** (`:average`). Callahan et al., PoP 25, 056305 (2018) divide
+the outer cones' picket energy by the one-side outer spot area of NIF's phase plates,
+53 mm² (the default `area`, so that the irradiance times the picket's length in ns is
+his E/A in kJ/mm²); Ralph et al., PoP 25, 082701 (2018) take the outer picket energy net
+of backscatter over the outer spot area; Izumi et al., PoP 28, 022706 (2021) the
+spatially averaged outer picket fluence over the first ns. In Briareus terms: the power
+*absorbed on the named parts* (the wall: light clipped on the entrance holes' outside,
+landing on the capsule or leaving the target does not grow the wall's bubble, *L*),
+*net of backscatter* when the powers are (`lpi = true` with a backscatter model, or
+powers net of it), over a fixed area. A ratio to a reference does not depend on the
+area; an absolute value takes Callahan's convention. A fixed area does not count the
+overlap of the spots, which `:mean` does: the two part on uneven powers between beams
+and on spots moved onto one another (research notes, "The published picket fluence,
+the trough and the inner-beam corridor (2026-11-18)").
+
+**The inner-beam corridor** (`:corridor`). Izumi et al., PoP 30, 032706 (2023) found
+outer bubble spikes in line with the 23.5° beams to clip them and turn the core more
+oblate; the corridor measures the outer light where the inner beams pass. A centerline
+is the line through a beam's aim along its direction, for each beam of `inner` with
+nonzero power in the evaluation; the distance is the element centroid's, in 3-D, to
+the nearest one. The weight is one minus the product over the centerlines of
+(1 − s), s rising from 0 to 1 across the edge as a quintic smoothstep: smooth (C²) in
+the inner beams' aims as they move, exactly 0 or 1 away from the edge (elements beyond
+every edge are skipped). `corridor = 1.3` mm and `edge = 0.3` mm are engineering
+defaults: 1.3 mm is a re-pointing study's choice (user, 2026-11-18), and the edge is
+wider than an element of a 0.2 mm deposition map, so that the mean moves smoothly as
+centroids cross it; neither is a published criterion.
+
+The peak follows one element and the mesh (on a coarser mesh the hottest spot is
+averaged over more area); the other three are integrals, nearly independent of the mesh
+([`picket_fluence`](@ref)). [`picket_hot_elements`](@ref) lists the hottest elements
+with their distance to the nearest inner centerline.
+"""
+function picket_irradiance(ev::Evaluation, names::Symbol...; pulses = nothing, window = nothing,
+                           by = :group, power = nothing, groups = (:outer44, :outer50), lpi::Bool = false,
+                           measure::Symbol = :peak, area::Real = 53.0, corridor::Real = 1.3, edge::Real = 0.3,
+                           inner = (:inner23, :inner30))
+    t = ev.scenario.target
+    es = _named_elements(t, names)
+    mo = _picket_measure_options(measure, area, corridor, edge, inner)
+    _check_lpi(lpi, pulses, power)
+    P = _picket_map(ev, _picket_power(pulses, window, by, power, true), _symbols(groups), lpi)
+    return _picket_measure(P, t, es, mo, ev.beams)
+end
+
+# The element powers (TW) of the evaluation's setup beams (or with `lpi` its effective
+# beams) at their picket powers.
+_picket_map(ev::Evaluation, power, gs, lpi::Bool) =
+    lpi ? _picket_map(ev.scenario.deposition, power, gs, ev.effective) :
+          _picket_map(ev.scenario.deposition, power, gs, ev.beams)
+_picket_map(op::DepositionOperator, power, gs, beams) = deposit(op, _picket_beams(power, gs, beams)).element
+
+function _picket_measure(P, t::Target, es, m::_PicketMeasure, beams)
+    m.measure === :peak && return _peak(P, t, es)
+    m.measure === :mean && return _energy_weighted(P, t, es)
+    m.measure === :average && return _absorbed(P, es) / m.area
+    return _corridor_mean(P, t, es, _centerlines(beams, m.inner), m)
+end
+
+function _absorbed(P::AbstractVector{T}, es) where {T}
+    s = zero(T)
+    for e in es
+        s += P[e]
+    end
+    s > 0 || throw(ArgumentError("the picket deposits no power on the parts"))
+    return s
+end
+
+# The centerlines (aim, unit direction) of the beams in `inner` with nonzero power.
+function _centerlines(beams::AbstractVector{Beam{S}}, inner) where {S<:Real}
+    lines = Tuple{SVector{3,S},Vec3}[]
+    for b in beams
+        (b.group in inner && ForwardDiff.value(b.power) != 0) || continue
+        push!(lines, (b.aim, normalize(direction(b))))
+    end
+    return lines
+end
+_centerlines(beams::AbstractVector{<:Beam}, inner) = _centerlines(_common_type(beams), inner)
+
+# The corridor's weight at x: 1 − Π (1 − s(u)) over the centerlines, s the quintic
+# smoothstep of u = (hi − d)/edge for a distance d between lo = hi − edge and hi. Each
+# distance is classified on its value first: beyond hi a factor 1, within lo the weight 1
+# (both exact: s is flat there), so only the edge carries duals.
+function _corridor_weight(x::Vec3, lines::Vector{Tuple{SVector{3,S},Vec3}}, lo::Float64, hi::Float64,
+                          edge::Float64) where {S<:Real}
+    q = one(S)
+    for (a, k) in lines
+        v = x - ForwardDiff.value.(a)
+        d2 = dot(v, v) - dot(v, k)^2
+        d2 >= hi^2 && continue
+        d2 <= lo^2 && return one(S)
+        w = x - a
+        d = sqrt(max(dot(w, w) - dot(w, k)^2, zero(S)))
+        u = (hi - d) / edge
+        q *= 1 - u^3 * (10 - u * (15 - 6u))
+    end
+    return 1 - q
+end
+
+function _corridor_mean(P::AbstractVector{T}, t::Target, es, lines::Vector{Tuple{SVector{3,S},Vec3}},
+                        m::_PicketMeasure) where {T,S<:Real}
+    isempty(lines) && throw(ArgumentError("no beams with power in the inner groups $(Tuple(m.inner)) to center the corridor on"))
+    lo, hi = m.corridor - m.edge / 2, m.corridor + m.edge / 2
+    R = promote_type(T, S)
+    num, den = zero(R), zero(R)
+    for e in es
+        w = _corridor_weight(t.elem_centroid[e], lines, lo, hi, m.edge)
+        iszero(w) && continue      # a zero value has zero partials (s is flat at the edge)
+        num += w * P[e]
+        den += w * t.elem_area[e]
+    end
+    den > 0 || throw(ArgumentError("no element of the parts lies within $(m.corridor) mm of an inner centerline"))
+    return num / den
+end
+
+"""
+    picket_hot_elements(ev, names...; n = 8, pulses = nothing, window = nothing, by = :group,
+                        power = nothing, groups = (:outer44, :outer50), lpi = false,
+                        inner = (:inner23, :inner30)) -> Vector{NamedTuple}
+
+The `n` elements of the named parts or components with the largest irradiance from the
+beams in `groups` (the powers and beams as in [`picket_irradiance`](@ref)), hottest
+first: per element its index (`element`), `irradiance` (TW/mm²), centroid `z` (mm) and
+azimuth `phi` (degrees, 0–360), and `distance` (mm), from its centroid to the nearest
+centerline of a beam in `inner` with power (`Inf` without one), the distance that
+[`picket_irradiance`](@ref)'s `:corridor` weighs. A report in Float64 (the values of
+duals).
+"""
+function picket_hot_elements(ev::Evaluation, names::Symbol...; n::Integer = 8, pulses = nothing,
+                             window = nothing, by = :group, power = nothing, groups = (:outer44, :outer50),
+                             lpi::Bool = false, inner = (:inner23, :inner30))
+    n >= 1 || throw(ArgumentError("n must be at least 1, got $n"))
+    t = ev.scenario.target
+    es = _named_elements(t, names)
+    _check_lpi(lpi, pulses, power)
+    P = Float64.(ForwardDiff.value.(_picket_map(ev, _picket_power(pulses, window, by, power, true), _symbols(groups), lpi)))
+    lines = [(Vec3(ForwardDiff.value.(a)), k) for (a, k) in _centerlines(ev.beams, collect(Symbol, _symbols(inner)))]
+    I = [P[e] / t.elem_area[e] for e in es]
+    hot = partialsortperm(I, 1:min(n, length(es)); rev = true)
+    return map(hot) do i
+        c = t.elem_centroid[es[i]]
+        d = minimum((v = c - a; sqrt(max(dot(v, v) - dot(v, k)^2, 0.0))) for (a, k) in lines; init = Inf)
+        (element = es[i], irradiance = I[i], z = c[3], phi = mod(atand(c[2], c[1]), 360.0), distance = d)
+    end
 end
 
 """
     picket_ceiling(reference, names...; pulses = nothing, window = nothing, by = :group,
-                   power = nothing, groups = (:outer44, :outer50), measure = :peak,
+                   power = nothing, groups = (:outer44, :outer50), lpi = false,
+                   measure = :peak, area = 53.0, corridor = 1.3, edge = 0.3,
+                   inner = (:inner23, :inner30),
                    limit = picket_irradiance(reference, names...; ...), p = 64,
                    scale = limit, exact = true) -> Constraint
 
-A ceiling on the laser irradiance during the picket over the elements of the named
-parts or components ([`picket_irradiance`](@ref)), at or below the `reference`
-evaluation's by default (a number in TW/mm² sets another limit): a [`Constraint`](@ref)
-for [`optimize_pointing`](@ref). The picket powers (`pulses` and `window`, or `power`)
-and the beams that count (`groups`) are those of [`picket_irradiance`](@ref), the same
-for the reference and the design.
+A ceiling on the laser irradiance of the beams in `groups` over the elements of the
+named parts or components ([`picket_irradiance`](@ref), whose keywords set the powers,
+the beams and the measure, the same for the reference and the design), at or below the
+`reference` evaluation's by default (a number in TW/mm² sets another limit): a
+[`Constraint`](@ref) for [`optimize_pointing`](@ref), named `:picket_<measure>`.
 
-- `measure = :peak` (named `:picket_peak`): the maximum irradiance over the elements
-  during the picket. The optimizer works on the smooth area-weighted `p`-norm of the
-  picket irradiance scaled to the reference's peak (as [`irradiance_ceiling`](@ref)
-  does at the scenario's time); with `exact = true` (the default) the run holds the
-  peak itself, lowering the stand-in's working limit while the peak exceeds the limit,
-  and reports the peak against the limit ([`check_constraints`](@ref),
-  `PointingResult.constraints`).
-- `measure = :mean` (named `:picket_mean`): the energy-weighted mean irradiance, the
-  quantity that [`picket_ratio`](@ref) carries into [`BubbleAbsorption`](@ref)'s tip
-  speed (∝ ratio^0.2): smooth, held directly.
+- `measure = :peak`: the maximum irradiance over the elements. The optimizer works on
+  the smooth area-weighted `p`-norm of the irradiance scaled to the reference's peak
+  (as [`irradiance_ceiling`](@ref) does at the scenario's time); with `exact = true`
+  (the default) the run holds the peak itself, lowering the stand-in's working limit
+  while the peak exceeds the limit, and reports the peak against the limit
+  ([`check_constraints`](@ref), `PointingResult.constraints`).
+- `measure = :mean`: the energy-weighted mean irradiance, the quantity that
+  [`picket_ratio`](@ref) carries into [`BubbleAbsorption`](@ref)'s tip speed
+  (∝ ratio^0.2): smooth, held directly.
+- `measure = :average`: the spatially averaged irradiance over a fixed area, the
+  quantity of the published bubble scalings (against the reference: the absorbed power
+  on the parts over the reference's); linear in the powers, held directly.
+- `measure = :corridor`: the mean irradiance near the inner beams' centerlines, the
+  design's own (they move with its aims): smooth, held directly.
 
 The reference evaluation must be on the same target as the optimized scenario (a
 [`subset`](@ref) of it shares the target), or evaluating the constraint throws an
-`ArgumentError`; its laser–plasma model and time do not enter (the picket is deposited
-without them). One deposition per evaluation, in the evaluation's number type.
+`ArgumentError`; its laser–plasma model and time enter only with `lpi = true`. One
+deposition per evaluation, in the evaluation's number type. For a phase other than the
+optimized scenario's (a trough, a foot), give the phase's powers by `pulses` and
+`window` or `power`, or build the constraint on an evaluation of that phase.
 
 *Derived*, not a facility criterion: the picket fluence is the measure of the published
-bubble scalings, and holding its peak at the reference's is the re-pointing study's
-choice (user, 2026-11-18), an engineering limit on the picket's hottest element; the
-model's prediction of the bubble a design grows is the mean's ratio to the 0.2 power
-([`PicketLinkedBubble`](@ref), [`bubble_prediction`](@ref)), confidence low (research
-notes, "The swing and the bubble without new data (2026-11-18)" §5).
+bubble scalings, and holding it at a reference's is a re-pointing study's choice (user,
+2026-11-18): first its peak, as an engineering limit on the picket's hottest element,
+then the published `:average` in the picket, the trough and the second step, with the
+`:corridor` reported. The model's prediction of the bubble a design grows is the mean's
+ratio to the 0.2 power ([`PicketLinkedBubble`](@ref), [`bubble_prediction`](@ref)),
+confidence low (research notes, "The swing and the bubble without new data
+(2026-11-18)" §5, and "The published picket fluence, the trough and the inner-beam
+corridor (2026-11-18)").
 """
 function picket_ceiling(reference::Evaluation, names::Symbol...; pulses = nothing, window = nothing,
-                        by = :group, power = nothing, groups = (:outer44, :outer50),
-                        measure::Symbol = :peak, limit::Union{Nothing,Real} = nothing, p::Real = 64,
+                        by = :group, power = nothing, groups = (:outer44, :outer50), lpi::Bool = false,
+                        measure::Symbol = :peak, area::Real = 53.0, corridor::Real = 1.3, edge::Real = 0.3,
+                        inner = (:inner23, :inner30), limit::Union{Nothing,Real} = nothing, p::Real = 64,
                         scale::Union{Nothing,Real} = nothing, exact::Bool = true)
-    measure in (:peak, :mean) || throw(ArgumentError("measure is :peak or :mean, got $(repr(measure))"))
+    mo = _picket_measure_options(measure, area, corridor, edge, inner)
+    _check_lpi(lpi, pulses, power)
     t = reference.scenario.target
     es = _named_elements(t, names)
     pw = _picket_power(pulses, window, by, power, true)
     gs = collect(Symbol, _symbols(groups))
-    P = Float64.(ForwardDiff.value.(_picket_map(reference, pw, gs)))
+    P = Float64.(ForwardDiff.value.(_picket_map(reference, pw, gs, lpi)))
     sum(P[e] for e in es) > 0 ||
         throw(ArgumentError("the reference's picket deposits no power on $(join(names, ", "))"))
-    ref = _picket_measure(P, t, es, measure)
+    ref = Float64(ForwardDiff.value(_picket_measure(P, t, es, mo, reference.beams)))
     factor = measure === :peak ? ref / _irradiance_norm(P, t, es, Float64(p)) : 1.0
     lim = limit === nothing ? ref : Float64(limit)
     lim > 0 || throw(ArgumentError("the picket irradiance limit must be positive"))
-    value = _PicketValue(t, es, gs, pw, measure, Float64(p), factor, exact)
-    return Constraint(measure === :peak ? :picket_peak : :picket_mean, value; upper = lim,
-                      scale = something(scale, lim))
+    value = _PicketValue(t, es, gs, pw, lpi, mo, Float64(p), factor, exact)
+    return Constraint(Symbol(:picket_, measure), value; upper = lim, scale = something(scale, lim))
 end
 
 # The picket ceiling's value: the picket irradiance's p-norm on the reference's peak
-# scale (`:peak`), or its energy-weighted mean (`:mean`); with `exact`, the reported
-# value of `:peak` is the peak itself (`_exact_value`).
+# scale (`:peak`), or the measure itself; with `exact`, the reported value of `:peak` is
+# the peak itself (`_exact_value`).
 struct _PicketValue{F}
     target::Target
     elements::Vector{Int}
     groups::Vector{Symbol}
     power::F
-    measure::Symbol
+    lpi::Bool
+    options::_PicketMeasure
     p::Float64
     factor::Float64
     exact::Bool
@@ -389,15 +563,15 @@ end
 
 function (c::_PicketValue)(ev::Evaluation)
     _check_picket(c, ev)
-    P = _picket_map(ev, c.power, c.groups)
-    return c.measure === :mean ? _energy_weighted(P, c.target, c.elements) :
-           c.factor * _irradiance_norm(P, c.target, c.elements, c.p)
+    P = _picket_map(ev, c.power, c.groups, c.lpi)
+    return c.options.measure === :peak ? c.factor * _irradiance_norm(P, c.target, c.elements, c.p) :
+           _picket_measure(P, c.target, c.elements, c.options, ev.beams)
 end
 
 function _exact_value(c::_PicketValue, ev::Evaluation)
-    c.exact && c.measure === :peak || return nothing
+    c.exact && c.options.measure === :peak || return nothing
     _check_picket(c, ev)
-    return _peak(Float64.(ForwardDiff.value.(_picket_map(ev, c.power, c.groups))), c.target, c.elements)
+    return _peak(Float64.(ForwardDiff.value.(_picket_map(ev, c.power, c.groups, c.lpi))), c.target, c.elements)
 end
 
 # ---------------------------------------------------------------------------------------
@@ -448,10 +622,13 @@ one and cannot resolve E: they throw an `ArgumentError`; pass them the resolved 
 *Derived* (confidence low): the exponents (E^0.2, Izumi et al., PoP 28, 022706 (2021),
 seven shots; E^-0.16, Izumi et al., RSI 89, 10K111 (2018)) are published for picket
 energy and quad splitting on one platform; their use for a fluence changed by
-re-pointing at fixed energy has no published test, and the fluence's definition is
-the computed counterpart of the papers' energy over area (research notes, "The swing
-and the bubble without new data (2026-11-18)" §5). Not a facility criterion; no default
-reads it.
+re-pointing at fixed energy has no published test. F̄ counts the overlap of the spots,
+as Izumi 2021's split-quad shot does; the papers' energy over a fixed area
+([`picket_irradiance`](@ref)'s `:average`) does not, and parts from F̄ on uneven powers
+(research notes, "The swing and the bubble without new data (2026-11-18)" §5, and "The
+published picket fluence, the trough and the inner-beam corridor (2026-11-18)" §5,
+which measures the link read through the fixed area instead). Not a facility
+criterion; no default reads it.
 """
 struct PicketLinkedBubble{S<:Real,F} <: LaserPlasmaModel
     bubble::BubbleAbsorption{S}

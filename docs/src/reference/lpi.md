@@ -14,7 +14,10 @@ on the wall ([`picket_fluence`](@ref)). [`PicketLinkedBubble`](@ref) takes it fr
 beams inside every evaluation, so that a re-pointed design grows its own bubble, and
 [`bubble_prediction`](@ref) reports what a re-pointing does to the picket, the bubble
 and the P2 swing; [`picket_irradiance`](@ref) and [`picket_ceiling`](@ref) give the
-irradiance during the picket and hold it in a constrained optimization.
+outer cones' irradiance in a phase (its peak, its energy-weighted mean, the spatially
+averaged value of the published scalings, or its mean near the inner beams'
+centerlines) and hold it in a constrained optimization, and
+[`picket_hot_elements`](@ref) lists the hottest elements.
 [`lpi_deposit`](@ref) applies them together. The CBET model assumes uniform LEH plasma
 and full pairwise overlap, and its unsaturated coupling overpredicts transfer: its
 magnitudes hold only after calibration against shot data or reference transfer points.
