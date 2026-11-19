@@ -571,6 +571,11 @@ The flux response is linear in the laser source at fixed albedos: the materials'
 `time` (temperature-dependent ones at their reference temperatures, thin foils
 intact), or an explicit per-element `albedo`, such as the converged `sol.albedo` of a
 solution at the design point (e.g. a drive history's peak, windows burned through).
+For a time partway through a shaped pulse (a phase), the materials' albedos at `time`
+are not the wall's: a `WallLossAlbedo`'s follows each element's temperature history,
+which neither the reference temperature nor a standalone `solve` at `time` knows. Pass
+the history's own, `st = history_state(target, history, τ)` as `st.time, st.albedo`
+([`history_state`](@ref)).
 
 Objectives need only the moments of the observed flux, so the scenario keeps the
 response contracted with the Legendre (`lmax = 12`) and real-harmonic (`lmax = 6`)

@@ -12656,3 +12656,46 @@ albedo is −33, and on a direct (LU) model the gray solve then succeeds but the
 thermalized group solve (an unpreconditioned GMRES as well) does not converge. Histories
 without `transition` are unchanged (the N221204 example's CSV byte-identical), and with
 it, only where a planned step ended within `min_step` of a goal.
+
+**The wall albedo of a phase.** A linear scenario at one time of a pulse (a "phase":
+the picket, the trough, the peak) needs albedos. Three sources disagree: a standalone
+`solve(model, deposition; time)` iterates `WallLossAlbedo` to the element's present
+temperature at the time since the pulse start, i.e. as if the wall had been at that
+temperature since t = 0, without re-emission; a `Scenario` without `albedo` evaluates it
+at the material's `reference_temperature` (250 eV) at `time`; `drive_history` follows
+each element's own temperature history (`wall_history`) and its re-emission
+(`wall_release`), and is the model's own answer. Public mock-up: the diagnostic-windows
+tutorial's NIF-like hohlraum without windows (10.1 × 5.75 mm, 3.1 mm entrance holes,
+1,908 elements), 48 quads pointed as there, its pulse (picket 1.2 TW per quad to 1.0
+ns, trough 0.3 TW to 4.5 ns, second step 1.0 TW 5.0–6.0 ns, peak 9.5 TW 7.5–9.5 ns),
+history at 0.1 ns steps. Capsule drive relative to the history, and P2/P0, P4/P0 (%):
+
+| time | wall albedo: history / standalone / scenario default | drive: standalone, default, wall mean | P2/P0: history, standalone, default, wall mean |
+|---|---|---|---|
+| picket 0.8 ns | 0.671 / 0.741 / 0.817 | 1.161, 1.425, 0.993 | −18.70, −17.07, −15.27, −18.18 |
+| trough 3.0 ns | 0.858 / 0.807 / 0.889 | 0.846, 1.129, 0.998 | −14.54, −15.61, −13.45, −14.31 |
+| second step 5.5 ns | 0.769 / 0.882 / 0.912 | 1.440, 1.642, 0.999 | −16.45, −13.69, −12.80, −16.30 |
+| peak 8.5 ns | 0.872 / 0.936 / 0.925 | 1.338, 1.267, 0.999 | −14.02, −12.11, −12.41, −13.92 |
+
+P4/P0 (%) at the four times: history 0.044, 0.155, 0.103, 0.164; standalone 0.084,
+0.124, 0.170, 0.206; wall mean 0.047, 0.156, 0.103, 0.165. The history's albedos per
+element, frozen, reproduce the history at its own beams (drive 1.0000, P2/P0 and P4/P0
+to the digits shown). In the trough the standalone albedo is the lower one (the
+history's wall re-emits what it stored in the picket); everywhere else it is higher
+(a wall heated in a low foot holds less energy than one at today's temperature since
+t = 0, so it loses more). For the change a pointing perturbation makes (the inner cones
+0.2 mm farther from the waist, the perturbed history the truth), the frozen per-element
+albedos give ΔP2/P0 −1.086, −0.693, −0.891, −0.661 against the history's −1.099,
+−0.699, −0.896, −0.664 percentage points (within 1.2 %: the albedos' own response to
+the new drive is what a frozen state leaves out), the wall mean within 0.6 %, the
+standalone solve 13–29 % off (low but in the trough, 16 % high there) and the scenario
+default 11–37 % low. Choice: a phase
+scenario takes the history's per-element albedos at the phase time (`history_state`),
+interpolated between steps; the wall mean as one constant (`mean = :wall`) is within
+0.5 percentage points of P2/P0 (largest at the picket, where the wall albedo varies
+most, 0.647–0.682 over the wall) and 0.7 % of the drive. Thin-foil windows need no
+separate treatment: their albedo in the history carries the transition, and
+`history_state` reports each window's transition and transmitted fraction. Confidence:
+the comparison is the model against itself (which albedo the same physics gives a
+fixed-time scenario); the wall-loss model's own accuracy is in "N221204 late-time drive
+(2026-10-24)".

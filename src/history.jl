@@ -105,7 +105,9 @@ radiosity at that time (time- and temperature-dependent albedos included), and r
 - `albedo` — with `keep_albedo = true`, each step's converged albedo per element (the
   state a flux response linearizes about, e.g. for `retune_drive`; where a wall re-emits
   stored energy, the effective albedo that carries its emission, so that `B = ηP/A + αH`),
-  otherwise `nothing`
+  otherwise `nothing`; `transmission`, alongside it, each step's fraction of the incident
+  flux per element transmitted out of the enclosure (`RadiationSolution`'s), otherwise
+  `nothing`. [`history_state`](@ref) reads both at a time of the pulse.
 - `setup` — the power of `beams_at(t)` (TW, before `lpi`); `laser` — absorbed laser
   power per component (TW, back side included); `source` — x-ray source power per
   component (Σ ηP); `absorbed` — x-ray power absorbed per surface component (and per
@@ -387,6 +389,7 @@ Base.@nospecializeinfer function _drive_history(
     front = Dict(t.components[ci].name => Float64[] for ci in foils)
     window_loss = Float64[]
     albedo_steps = Vector{Float64}[]
+    transmission_steps = Vector{Float64}[]
     recorded = Any[]
     names = [c.name for c in t.components]
     setup, lost = Float64[], Float64[]
@@ -604,6 +607,7 @@ Base.@nospecializeinfer function _drive_history(
             push!(wall_albedo, sum(αw .* Aw) / sum(Aw))
             keep_albedo && push!(albedo_steps, xe === nothing || all(iszero, xe) ? copy(sol.albedo) :
                                    sol.albedo .+ xe ./ max.(ForwardDiff.value.(sol.H), eps()))
+            keep_albedo && push!(transmission_steps, copy(sol.transmission))
             record === nothing || push!(recorded, record(sol))
             if emission !== nothing
                 # the step's own effective beams, each cone's share of the deposition
@@ -667,12 +671,85 @@ Base.@nospecializeinfer function _drive_history(
             ylm = ylm ? _columns(clm, (lmax + 1)^2) : nothing,
             observed_flux = observed_flux ? _columns(Hobs, length(obs)) : nothing, wall_Tr,
             wall_albedo, cavity_Tr, escaped, transmitted, window_loss, front, burnthrough,
-            albedo = keep_albedo ? albedo_steps : nothing, setup, laser, source, absorbed, lost,
+            albedo = keep_albedo ? albedo_steps : nothing,
+            transmission = keep_albedo ? transmission_steps : nothing, setup, laser, source, absorbed, lost,
             released, lip_radius, record = record === nothing ? nothing : [r for r in recorded],
             mband_moments = emission === nothing ? nothing : _columns(mband_moments, lmax + 1),
             mband = emission === nothing ? nothing : mband_laser,
             unconverted = ulight === nothing ? nothing :
                           (; delivered = uc_delivered, skipped = copy(ulight.skipped)))
+end
+
+"""
+    history_state(target, history, time; mean = ()) -> NamedTuple
+
+The radiation state of a [`drive_history`](@ref) of `target`, run with `keep_albedo =
+true`, at `time` (ns): what a linear scenario at that time of the pulse (a phase of a
+shaped pulse) needs in place of the materials' albedos.
+
+- `time` — the time;
+- `albedo` — each element's albedo, the history's converged one (`history.albedo`),
+  interpolated linearly in time between the two steps around `time` (a step's own at its
+  time). It follows each wall element's own temperature history, carries a re-emitting
+  wall's emission (the effective albedo `B = ηP/A + αH`) and a thin foil's state (`(1 −
+  s𝒯) α_before` while it burns through);
+- `transmission` — each element's fraction of the incident flux transmitted out of the
+  enclosure (`RadiationSolution`'s `transmission`: burned-through foils, open gaps),
+  interpolated the same way;
+- `windows` — per thin-foil (`BurnthroughAlbedo`) component, `(; transition,
+  transmission, burned)`: the area mean of its elements' transition `s` at `time` (0
+  intact, 1 burned through; from the history's `burnthrough` times and the foil's
+  `width`), the area mean of their transmitted fraction, and whether every element has
+  finished its transition.
+
+`mean` (a component or part name, or a collection of them) replaces the albedo of their
+elements by its area mean, one constant over all of them (`mean = :wall` gives the
+history's `wall_albedo` on the wall).
+
+`time` and `albedo` are the keywords of [`Scenario`](@ref) and `remake(::Scenario)`:
+with `st = history_state(target, h, τ)`, `Scenario(target, beams; observe = :capsule,
+st.time, st.albedo)` or `remake(scenario; st.time, st.albedo)` is the flux response about
+the history's state at `τ`, linear in the laser source as the optimizer requires. At a
+step's time and the history's own beams it gives the history's observed flux. A standalone
+`solve` at a time partway through a pulse, or a scenario's default albedos, evaluate a
+[`WallLossAlbedo`](@ref) as if the wall had been at its present (or reference)
+temperature since `t = 0`, without the history or the re-emission: on a NIF-like
+mock-up the capsule drive then differs from the history's by −15 to +64 % and P2/P0 by
+up to 3.6 percentage points (research notes, "Drive histories: sliver steps and the
+albedo of a phase (2026-11-18)").
+"""
+function history_state(t::Target, h, τ::Real; mean = ())
+    alb = get(h, :albedo, nothing)
+    alb === nothing && throw(ArgumentError("the history needs keep_albedo = true"))
+    ts = h.time
+    isempty(ts) && throw(ArgumentError("the history has no steps"))
+    ts[1] <= τ <= ts[end] ||
+        throw(ArgumentError("time $τ ns lies outside the history's steps, $(ts[1])–$(ts[end]) ns"))
+    N = nelements(t)
+    length(alb[1]) == N ||
+        throw(DimensionMismatch("the history has $(length(alb[1])) elements, the target $N"))
+    # the steps around τ and the weight of the later one (0 at a step's own time)
+    k = searchsortedlast(ts, τ)
+    w = k == length(ts) ? 0.0 : (τ - ts[k]) / (ts[k+1] - ts[k])
+    at(v) = w == 0 ? copy(v[k]) : (1 - w) .* v[k] .+ w .* v[k+1]
+    α, tr = at(alb), at(h.transmission)
+    names = mean isa Symbol ? (mean,) : Tuple(mean)
+    if !isempty(names)
+        es = elements(t, names...)
+        A = t.elem_area[es]
+        α[es] .= sum(α[es] .* A) / sum(A)
+    end
+    windows = Dict{Symbol,NamedTuple{(:transition, :transmission, :burned),Tuple{Float64,Float64,Bool}}}()
+    for (ci, c) in enumerate(t.components)
+        c.kind === :surface && c.material.albedo isa BurnthroughAlbedo || continue
+        es = t.comp_elems[ci]
+        A = t.elem_area[es]
+        tb = h.burnthrough[c.name]
+        s = [_burnthrough_step(c.material.albedo, τ, x) for x in tb]
+        windows[c.name] = (; transition = sum(s .* A) / sum(A), transmission = sum(tr[es] .* A) / sum(A),
+                           burned = all(==(1), s))
+    end
+    return (; time = Float64(τ), albedo = α, transmission = tr, windows)
 end
 
 # The computed entrance-hole lips of a target (`LipClosure` apertures): per lip its name,

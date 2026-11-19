@@ -814,6 +814,15 @@ element, `NaN` where not given) sets the burnthrough times of `BurnthroughAlbedo
 elements; without it a thin-foil element uses its model's explicit `burnthrough`, or
 is intact (`drive_history` tracks it from the flux history instead).
 
+A single solve has no history: it iterates a `WallLossAlbedo` to each element's present
+temperature at `time`, as if the wall had been at that temperature since `t = 0`, and
+with no re-emission of stored energy. Partway through a shaped pulse that is not the
+wall a [`drive_history`](@ref) of the pulse finds (on a NIF-like mock-up, wall albedo
+0.74 against 0.67 at the picket, 0.81 against 0.86 in the trough, 0.94 against 0.87 at
+the peak, and capsule drive 15–44 % off). A fixed-time scenario of such a phase takes
+its albedos from the history ([`history_state`](@ref); research notes, "Drive
+histories: sliver steps and the albedo of a phase (2026-11-18)").
+
 `unconverted` adds the x-ray source of unconverted (1ω, 2ω) light absorbed by the
 target: the result of [`unconverted_deposition`](@ref), which carries the
 [`UnconvertedColor`](@ref)s it was deposited with (its `colors`), or any collection (a
