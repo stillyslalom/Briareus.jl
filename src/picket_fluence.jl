@@ -275,8 +275,8 @@ struct _PicketMeasure
 end
 
 function _picket_measure_options(measure::Symbol, area::Real, corridor::Real, edge::Real, inner)
-    measure in (:peak, :mean, :average, :corridor) ||
-        throw(ArgumentError("measure is :peak, :mean, :average or :corridor, got $(repr(measure))"))
+    measure in (:peak, :weighted, :average, :corridor) ||
+        throw(ArgumentError("measure is :peak, :weighted, :average or :corridor, got $(repr(measure))"))
     area > 0 || throw(ArgumentError("the spot area must be positive, got $area"))
     0 < edge < 2corridor ||
         throw(ArgumentError("the corridor's edge must be positive and less than twice its distance, got $edge and $corridor"))
@@ -300,7 +300,7 @@ outer cones by default) on the elements of the named parts or components, summar
 `measure`:
 
 - `:peak`: the largest over the elements;
-- `:mean`: the energy-weighted mean ∫I² dA / ∫I dA, the summary that
+- `:weighted`: the energy-weighted mean ∫I² dA / ∫I dA, the summary that
   [`picket_ratio`](@ref) and [`PicketLinkedBubble`](@ref) read ([`picket_fluence`](@ref));
 - `:average`: the spatially averaged irradiance over a fixed spot area, the power
   absorbed on the elements over `area` (mm²): the quantity of the published bubble
@@ -337,7 +337,7 @@ landing on the capsule or leaving the target does not grow the wall's bubble, *L
 *net of backscatter* when the powers are (`lpi = true` with a backscatter model, or
 powers net of it), over a fixed area. A ratio to a reference does not depend on the
 area; an absolute value takes Callahan's convention. A fixed area does not count the
-overlap of the spots, which `:mean` does: the two part on uneven powers between beams
+overlap of the spots, which `:weighted` does: the two part on uneven powers between beams
 and on spots moved onto one another (research notes, "The published picket fluence,
 the trough and the inner-beam corridor (2026-11-18)").
 
@@ -380,7 +380,7 @@ _picket_map(op::DepositionOperator, power, gs, beams) = deposit(op, _picket_beam
 
 function _picket_measure(P, t::Target, es, m::_PicketMeasure, beams)
     m.measure === :peak && return _peak(P, t, es)
-    m.measure === :mean && return _energy_weighted(P, t, es)
+    m.measure === :weighted && return _energy_weighted(P, t, es)
     m.measure === :average && return _absorbed(P, es) / m.area
     return _corridor_mean(P, t, es, _centerlines(beams, m.inner), m)
 end
@@ -492,7 +492,7 @@ the beams and the measure, the same for the reference and the design), at or bel
   (the default) the run holds the peak itself, lowering the stand-in's working limit
   while the peak exceeds the limit, and reports the peak against the limit
   ([`check_constraints`](@ref), `PointingResult.constraints`).
-- `measure = :mean`: the energy-weighted mean irradiance, the quantity that
+- `measure = :weighted`: the energy-weighted mean irradiance, the quantity that
   [`picket_ratio`](@ref) carries into [`BubbleAbsorption`](@ref)'s tip speed
   (∝ ratio^0.2): smooth, held directly.
 - `measure = :average`: the spatially averaged irradiance over a fixed area, the

@@ -490,12 +490,12 @@ analog is the dropped-bundle tutorial, `docs/literate/dropped_bundle.jl`).
       crowding by 19 %, and z shifts move the corridor by 20 % per 0.5 mm. The
       exponents are in the notes (core P2 as fluence^0.5, bubble position as
       fluence^0.2; +10 % of fluence costs 5–7 µm of core P2). *Remains:* which
-      quantity `PicketLinkedBubble` reads: the energy-weighted one reproduces Izumi
-      2021's split-quad shot, which the fixed-area one cannot see, so the link stays
-      on it (user); a published bubble trajectory at fixed energy with uneven quad
-      powers or a re-pointing would decide; whether the corridor's mean or its peak
-      stands for Izumi 2023's spikes; `:mean` and `:average` read alike (`:mean` to
-      `:weighted`, an API break: user);
+      quantity `PicketLinkedBubble` reads is settled for now (user, 2026-11-18): the
+      energy-weighted one, which reproduces Izumi 2021's split-quad shot where the
+      fixed-area one cannot see it (the measure is `:weighted`, renamed from `:mean`);
+      a published bubble trajectory at fixed energy with uneven quad powers or a
+      re-pointing would test the choice; whether the corridor's mean or its peak
+      stands for Izumi 2023's spikes;
     - the inner budget: `iterations` caps each inner run, and set high it leaves the
       multipliers unchanged for most of a run. On a 276-parameter multi-phase study,
       `iterations = 1000` completed one outer iteration in an hour (the peak 18 % over

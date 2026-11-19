@@ -119,20 +119,20 @@ end
         ev = evaluate(s, x)
         fl = picket_fluence(s.deposition, ev.beams, pulses, w)        # kJ/mm² over 1 ns
         @test picket_irradiance(ev, :wall; kw...) ≈ fl.peak rtol = 1e-12
-        @test picket_irradiance(ev, :wall; kw..., measure = :mean) ≈ fl.mean rtol = 1e-12
+        @test picket_irradiance(ev, :wall; kw..., measure = :weighted) ≈ fl.mean rtol = 1e-12
         # a picket power per beam, or the beams' own powers (the outer cones' deposition)
         f3 = picket_fluence(s.deposition, [remake(b; power = 3.0) for b in ev.beams])
-        @test picket_irradiance(ev, :wall; power = b -> 3.0, measure = :mean) ≈ f3.mean rtol = 1e-12
+        @test picket_irradiance(ev, :wall; power = b -> 3.0, measure = :weighted) ≈ f3.mean rtol = 1e-12
         outer = b -> b.group in (:outer44, :outer50) ? 1.0 : 0.0
         @test picket_irradiance(ev, :wall) == peak_irradiance(ev, :wall; weight = outer)
         # other groups count when named
         fi = picket_fluence(s.deposition, ev.beams, pulses, w; groups = (:inner23, :inner30))
         @test picket_irradiance(ev, :wall; kw..., groups = (:inner23, :inner30)) ≈ fi.peak rtol = 1e-12
         # the ceilings: the stand-in at the reference's peak, the reported value the peak
-        c, cm = picket_ceiling(ref, :wall; kw...), picket_ceiling(ref, :wall; kw..., measure = :mean)
-        @test c.name === :picket_peak && cm.name === :picket_mean && c.upper
+        c, cm = picket_ceiling(ref, :wall; kw...), picket_ceiling(ref, :wall; kw..., measure = :weighted)
+        @test c.name === :picket_peak && cm.name === :picket_weighted && c.upper
         @test only(c.limit) == picket_irradiance(ref, :wall; kw...)
-        @test only(cm.limit) == picket_irradiance(ref, :wall; kw..., measure = :mean)
+        @test only(cm.limit) == picket_irradiance(ref, :wall; kw..., measure = :weighted)
         @test c.f(ref) ≈ only(c.limit) rtol = 1e-12
         @test check_constraints(ev, c)[1].value == picket_irradiance(ev, :wall; kw...)
         @test check_constraints(ev, picket_ceiling(ref, :wall; kw..., exact = false))[1].value == c.f(ev)
@@ -179,7 +179,7 @@ end
         Pb = deposit(s.deposition, [remake(b; power = b.group === :outer50 ? 4.0 : b.group === :outer44 ? 8.0 : 0.0)
                                     for b in ev.beams]).element
         @test picket_irradiance(evaluate(sb, x), :wall; lpi = true, measure = :average) ≈ sum(Pb[es]) / 53 rtol = 1e-12
-        @test picket_irradiance(ev, :wall; lpi = true, measure = :mean) == picket_irradiance(ev, :wall; measure = :mean)
+        @test picket_irradiance(ev, :wall; lpi = true, measure = :weighted) == picket_irradiance(ev, :wall; measure = :weighted)
         @test_throws ArgumentError picket_irradiance(ev, :wall; kw..., lpi = true)
         @test_throws ArgumentError picket_irradiance(ev, :wall; kw..., measure = :average, area = 0.0)
         @test_throws ArgumentError picket_irradiance(ev, :wall; kw..., measure = :corridor, edge = 3.0)
@@ -246,8 +246,8 @@ end
         end
         # the energy-weighted mean rises as the 50° spots move onto the 44° ones (over
         # 4.75–5.1 mm; the box keeps the run there)
-        mean_at(z) = picket_irradiance(at(z), :wall; kw..., measure = :mean)
-        cm = picket_ceiling(ref, :wall; kw..., measure = :mean, limit = mean_at(4.9))
+        mean_at(z) = picket_irradiance(at(z), :wall; kw..., measure = :weighted)
+        cm = picket_ceiling(ref, :wall; kw..., measure = :weighted, limit = mean_at(4.9))
         zm = root(z -> mean_at(z) - only(cm.limit), 4.8, 5.01)
         rm = optimize_pointing(sh, pull; x0 = [5.01], lower = [4.76], upper = [5.1], constraints = (cm,),
                                feasibility = 1e-6)

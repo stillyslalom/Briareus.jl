@@ -130,7 +130,7 @@ end
     # the picket ceilings and the bubble linked to the picket (outer quads into the holes)
     pkw = (; pulses = pulse, window = (0.5, 1.5))
     pceil = picket_ceiling(evaluate(s, xo), :wall; pkw...)
-    pmean = picket_ceiling(evaluate(s, xo), :wall; pkw..., measure = :mean)
+    pmean = picket_ceiling(evaluate(s, xo), :wall; pkw..., measure = :weighted)
     # the published average (own powers, net of the scenario's model) and the corridor
     pavg = picket_ceiling(evaluate(s, xo), :wall; measure = :average, lpi = true)
     pcor = picket_ceiling(evaluate(s, xo), :wall; pkw..., measure = :corridor)

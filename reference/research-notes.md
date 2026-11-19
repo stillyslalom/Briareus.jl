@@ -10853,7 +10853,7 @@ pieces, *derived* (no default, exponent or calibrated constant changed; nothing 
   cones by default, deposited by the scenario's operator with the setup beams and
   without the scenario's laser–plasma model (set for its own time). Its ratios are the
   picket fluence's. `measure = :peak` (the user's quantity; the 64-norm stand-in with
-  the exact peak held, `exact = true` by default) or `:mean` (F̄, what the bubble reads).
+  the exact peak held, `exact = true` by default) or `:weighted` (F̄, what the bubble reads; named `:mean` until 2026-11-18).
 - `PicketLinkedBubble(bubble, target, reference; pulses, window)`: `BubbleAbsorption`
   with E = `bubble.picket_ratio` × F̄(beams)/F̄(reference) recomputed from the beams of
   every evaluation (two picket depositions per evaluation), so that `evaluate`, mode
@@ -10871,7 +10871,7 @@ pieces, *derived* (no default, exponent or calibrated constant changed; nothing 
 Checks: the values against `picket_fluence` to 1e-12; gradients of both ceilings and of
 an evaluation through the linked bubble against central differences to 1e-5; one-
 parameter constrained runs (the 50° cone's z pulled toward the waist on a 0.45 mm
-hohlraum) end at the bisection root of the held quantity to 1e-5 mm with `:mean` and with
+hohlraum) end at the bisection root of the held quantity to 1e-5 mm with `:weighted` and with
 the peak's stand-in (`exact = false`); with the exact peak the run ends 0.4 % below the
 limit, the stand-in running above the peak near that limit and the working limit only
 being lowered (the same machinery as `irradiance_ceiling(...; exact = true)`). The linked
@@ -13058,5 +13058,5 @@ table: unsplit 6.19 ns against the linked 6.00, s 0.225 6.19 against 6.15.
   with uneven quad powers, to choose between F̄ and the fixed-area energy for the link.
 - Whether the corridor's mean, or its peak, is the better proxy for Izumi 2023's spikes;
   its 1.3 mm and 0.3 mm are engineering defaults.
-- `picket_irradiance`'s `:mean` and `:average` read alike; renaming `:mean` to
-  `:weighted` is a break of the public API (user decision, recommended).
+- `picket_irradiance`'s `:mean` and `:average` read alike: the energy-weighted measure
+  is `:weighted` since 2026-11-18 (user), and its constraint `:picket_weighted`.
