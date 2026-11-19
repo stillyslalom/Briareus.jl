@@ -376,3 +376,77 @@ end
     Hw = sum(sol.H[ew] .* tg.elem_area[ew]) / sum(tg.elem_area[ew])
     @test bal.escaped[:window_1_gap] / (Hw * π * ((d / 2 + g)^2 - (d / 2)^2)) ≈ 1 atol = 0.05
 end
+
+@testset "window modes against the closed form" begin
+    # Two transmitting windows on the waist of a spherical enclosure with a uniform source
+    # and a concentric absorbing capsule. Every element of a sphere sees the others in
+    # proportion to their area, so the incident flux H is uniform (to the capsule's
+    # shadow) and closed: H = (1-φ) η q / (1 - (1-φ) α (1 - f A_x/A_s)), φ = A_c/A_s.
+    # The windows emit f α H less than the wall. The capsule's flux moments are those of
+    # the wall's radiance, b_lm/b_00 = -(f α H/B̄) Σ Ω_k Y_lm(u_k)/√(4π) (window facets k
+    # of solid angle Ω_k from the center), times the smoothing S_l(x) of a capsule of
+    # radius x R: S_l = ∫ K P_l dμ / ∫ K dμ, K = (μ-x)(1-xμ)/(1+x²-2xμ)² for μ > x
+    # (the capsule point's and the wall's cosines over the squared distance). For l = 2
+    # about the axis this is Lester et al.'s eq. 3 (Phys. Rev. E 114, L023201 (2026)),
+    # a₂/a₀ = √5 c₂₀/c₀₀ = 2.5 (n Ω/4π) S₂ f w for windows at 90° (w = αH/B̄), with the
+    # sign of P₂(0) < 0 restored: a deficit on the waist is a positive P₂ about the axis.
+    R, a = 3.0, 0.6
+    α, η, f, q = 0.85, 0.8, 0.3, 1.0
+    dirs = [Vec3(cosd(φ), sind(φ), 0) for φ in (150.0, 330.0)]
+    s = sphere_mesh(R; ntheta = 30, nphi = 60, outward = false)
+    win, rest = split_mesh(s, c -> any(d -> dot(normalize(c), d) > cosd(20), dirs))
+    au = Material(:Au; albedo = α, conversion = η)
+    t = Target(Component(:wall, rest, au), Component(:window, win, au),
+               Component(:capsule, sphere_mesh(a; ntheta = 12, nphi = 24), Material(:abl)))
+    ew, ex, ec = elements(t, :wall), elements(t, :window), elements(t, :capsule)
+    A = t.elem_area
+    m = RadiationModel(t)
+    P = zeros(nelements(t))
+    P[[ew; ex]] .= q .* A[[ew; ex]]
+    alb(fx) = (v = zeros(nelements(t)); v[ew] .= α; v[ex] .= α * (1 - fx); v)
+    W = ylm_weights(t, ec; lmax = 2)
+    c0 = W * solve(m, P; albedo = alb(0.0)).H[ec]
+    sol = solve(m, P; albedo = alb(f))
+    c = W * sol.H[ec]
+    Δ(l, mm) = c[mode_index(l, mm)] / c[1] - c0[mode_index(l, mm)] / c0[1]
+    # the closed form
+    As, Ax, Ac = sum(A[[ew; ex]]), sum(A[ex]), sum(A[ec])
+    φ = Ac / As
+    H = (1 - φ) * η * q / (1 - (1 - φ) * α * (1 - f * Ax / As))
+    @test sum(sol.H[ew] .* A[ew]) / sum(A[ew]) ≈ H rtol = 0.01
+    B̄ = H / (1 - φ)
+    function tri_solid_angle(p, r, u)              # Van Oosterom & Strackee, from the origin
+        num = abs(dot(p, cross(r, u)))
+        den = norm(p) * norm(r) * norm(u) + dot(p, r) * norm(u) + dot(p, u) * norm(r) + dot(r, u) * norm(p)
+        return 2atan(num, den)
+    end
+    Y2(v) = (u = normalize(v); k = sqrt(15 / 4π);
+             (; m2 = k * u[1] * u[2], m1 = k * u[2] * u[3], m0 = sqrt(5 / 16π) * (3u[3]^2 - 1),
+              p1 = k * u[1] * u[3], p2 = k / 2 * (u[1]^2 - u[2]^2)))
+    b = Dict(k => 0.0 for k in (:m2, :m1, :m0, :p1, :p2))
+    for r in win.patches, k in r
+        v = (win.vertices[i] for i in win.triangles[k])
+        Ω = tri_solid_angle(v...)
+        y = Y2(sum(v))
+        for key in keys(b)
+            b[key] += Ω * y[key]
+        end
+    end
+    x = a / R
+    K(μ) = μ > x ? (μ - x) * (1 - x * μ) / (1 + x^2 - 2x * μ)^2 : 0.0
+    μs = range(-1, 1; length = 400001)
+    S2 = sum(μ -> K(μ) * (3μ^2 - 1) / 2, μs) / sum(K, μs)
+    exact(key) = -S2 * (f * α * H / B̄) * b[key] / sqrt(4π)
+    # The closed form is first order: it leaves out the capsule's shadow in the wall-to-wall
+    # exchange (each element sends x² = 4 % of its view to the capsule, and the opposed
+    # windows sit in each other's shadow), which moves the m = ±2 part by 3–4 % on meshes
+    # from 30 × 60 to 60 × 120 (m = 0 by 1 %).
+    @test Δ(2, 0) ≈ exact(:m0) rtol = 0.03
+    @test Δ(2, 2) ≈ exact(:p2) rtol = 0.05
+    @test Δ(2, -2) ≈ exact(:m2) rtol = 0.05
+    @test abs(Δ(2, 1)) + abs(Δ(2, -1)) < 0.01 * abs(Δ(2, 0))
+    # windows centered at 90°: a₂/a₀ > 0 about the axis, and the m = ±2 part carries three
+    # quarters of the l = 2 power (|Y₂₀|² is 1/4 of Σₘ|Y₂ₘ|² at 90°, for any cap size)
+    @test Δ(2, 0) > 0
+    @test (Δ(2, 2)^2 + Δ(2, -2)^2) / (Δ(2, 0)^2 + Δ(2, 2)^2 + Δ(2, -2)^2) ≈ 0.75 rtol = 0.03
+end

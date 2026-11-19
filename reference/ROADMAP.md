@@ -635,14 +635,36 @@ analog is the dropped-bundle tutorial, `docs/literate/dropped_bundle.jl`).
       tamper holding the gold dense is the likely cause; no term models it. Calibrated to
       that edge, a fitted heat-front coefficient (×0.43) and a constant offset (+2.7 ns)
       put 2 µm of gold through 0.45 ns apart (6.6 and 7.05 ns), mid-peak either way.
-      *Remains:* a tamped-foil burnthrough model, with the backing's areal mass and
-      material (epoxy, Be). *Data:* Lester et al.'s leading edge is the one point; a
-      window of another thickness or backing would separate the two calibrations.
+      By "Backed windows" (`examples/tamped_foil.jl`,
+      `litreview/window_burnthrough.md`) the 2.7 ns has an account with nothing fitted
+      to that edge: the backing does not hold the gold back (a backed foil starts
+      transmitting 0.03–0.07 ns earlier than a bare one in a 1-D model that reproduces
+      Nova's bare foils to 0.04–0.23 ns); the measured edge is the flux emerging
+      through gold and backing, and the backing burns through 1.8–2.4 ns (35 µm of
+      epoxy, at the measured ablation rate of polyimide) or 2.7–3.3 ns (50 µm of Be)
+      after the gold: 7.0 ns predicted on a public drive (6.7–7.5 over the rate's
+      uncertainty; 7.4 ns for ≈ 3 µm of gold). For the hohlraum the window's loss
+      starts when the gold burns through, about 2 ns before the flux emerges: both
+      calibrations to the edge start the loss that much too late. No backing option
+      was added (the albedo does not depend on the backing). *Remains:*
+      `BurnthroughAlbedo`'s onset and rise under an ignition-scale drive (in 1-D the
+      gold starts transmitting 0.6 ns after the front and passes about 0.62 of the
+      energy the 0.4 ns transition gives it; the width is calibrated on bare Nova
+      foils at 260 eV: user); what the backing absorbs against what leaves, in
+      `drive_history`'s accounts. *Data:* emergence through the same gold with another
+      backing (Be emerges 0.9–1.0 ns after epoxy), then another gold thickness; the
+      Letter's window flux as a check of the transmitted fraction.
     - The burned-through windows' symmetry against Lester et al.'s estimate. On the
       study's pointing, two 2 mm windows of 2 µm gold burned through change the capsule
       drive by δ2 = 2.5 % (c₂₀/c₀₀ +0.58 %, c₂,±₂/c₀₀ +0.84 and −0.49 %) and δ4 = 0.7 %,
-      against their eq. 3 estimate of a −0.9 % drive P2 for 2.5 µm. *Remains:* reconcile
-      the m = 0 part with eq. 3 (sign convention and amplitude). *Data:* their N250622
+      against their eq. 3 estimate of a −0.9 % drive P2 for 2.5 µm. Reconciled
+      ("Backed windows"): eq. 3 is the magnitude of the axial P2 of the windows' flux deficit;
+      about the hohlraum axis the drive's P2 is positive, and a public mock-up of that
+      scale gives √5 c₂₀/c₀₀ of +0.92 to +1.04 % for wall albedos of 0.80–0.88 against
+      the 0.9 %, with a closed form on a sphere held in `test/windows.jl` (c₂₀ to 1 %).
+      The m = ±2 part carries three quarters of the l = 2 power. *Remains:* the
+      smoothing factor of a cylinder in eq. 3's form (a sphere's overstates it by 13 %);
+      the windows' l = 4. *Data:* their N250622
       against N230729 (core P2 −1 % against 9 % prolate; M2/M0 12 % along the window
       axis) as a check, not a fit target.
 29. **CAD.**

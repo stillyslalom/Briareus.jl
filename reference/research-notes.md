@@ -12699,3 +12699,164 @@ separate treatment: their albedo in the history carries the transition, and
 the comparison is the model against itself (which albedo the same physics gives a
 fixed-time scenario); the wall-loss model's own accuracy is in "N221204 late-time drive
 (2026-10-24)".
+
+## Backed windows: what delays the emergent flux, and eq. 3 (2026-11-18) *derived*
+
+ROADMAP item 28. `HeatFront` puts a 2.5 µm gold window through at 4.6–4.9 ns on an
+ignition-scale drive; the window-emergent flux that Lester et al. (Phys. Rev. E 114,
+L023201 (2026)) extracted from Dante 2 has its leading edge at 7.5 ns. Sources, what was
+read and at what confidence: `reference/litreview/window_burnthrough.md`. Calculations:
+`examples/tamped_foil.jl` (`nova`, `table [scale]`) and the closed-form testset "window
+modes against the closed form" in `test/windows.jl`. Nothing below is fitted to the
+7.5 ns edge except the two calibrations labeled as such; the backing's burn rates are
+fitted to Olson et al.'s burnthrough measurements (SAND2007-7414C), an independent data
+set. Confidence: **H** primary text, **H-img** read from a figure, **L** derived here.
+
+### What the 7.5 ns measures **H**
+- The windows: 2.5–3.6 µm of gold (2.5 µm on the two-window ignition shot in the
+  Letter; Haines et al., Phys. Plasmas 33, 112712 (2026), Sec. VII, give "≈ 3 µm" for
+  the same shot) backed by 35 µm of EPON at 1.185 g/cm³ (4.15 mg/cm², about the gold's
+  4.83 mg/cm² at 2.5 µm). The backing was chosen to hold the membrane in place.
+- The leading edge is the first emergence, seen from outside through gold and backing,
+  of a background-subtracted difference signal; it is near zero to about 7 ns.
+
+### The account
+1. **Holding the gold dense does not delay its front.** In mass coordinates the
+   diffusion flux depends on density only through κ(ρ)e(ρ) ∝ ρ^0.06 (Hammer & Rosen's
+   fits), so a static front heats m ∝ ρ^−0.03 (*L*). The 1-D foil of
+   `examples/tamped_foil.jl` (Hammer & Rosen gold, flux-limited diffusion, the backing as
+   a radiatively inert ideal gas of its areal mass) on Nova's drive: transmission onset
+   (1 %) of the backed foil 0.03–0.07 ns *earlier* than the bare one, its rear gold at
+   0.8–1.1 g/cm³ against 0.30–0.35 bare (the backing holds it near the 1 g/cm³ the Letter
+   assumes). Against Nova's measured half-signal times the 1-D onset is 0.04–0.23 ns late
+   (bare), `HeatFront` 0.09–0.23 ns early. Converged: doubling the zones or halving the
+   step moves the onset and the emergence by ≤ 0.01 ns; the backing's γ (1.4–3) by
+   ≤ 0.005 ns.
+2. **The leading edge is the backing's burnthrough.** Cold epoxy of 4.15 mg/cm² is opaque
+   below ~2 keV (τ ≈ 10 at 1 keV). The flux the gold transmits burns it through at the
+   measured low-Z rate ṁ = A (F/σ(200 eV)⁴)^(3/4); A = 4.8 mg/cm²/ns for an epoxy
+   (Olson's polyimide, the closest CHNO polymer measured), 5.9 for Be, ×0.7–1.3 for the
+   scatter and the material (**H-img**, fits **L**). After the gold's 1-D onset the burn
+   takes 1.8–2.4 ns for 35 µm of epoxy and 2.7–3.3 ns for 50 µm of Be (1.5–3 µm of gold,
+   table below): it is most of the delay.
+3. **Prediction for the published case** (1-D gold plus the backing at Olson's rate, no
+   parameter set from the 7.5 ns): on the public drive below, 2.5 µm with 35 µm of epoxy
+   emerges at 7.00 ns (6.68–7.51 for A ×1.3–×0.7); with the drive ×0.95 (the waist
+   wall's incident temperature a few percent below Dante's, the scale at which the bare
+   front lands at the 4.8 ns the roadmap quotes) at 7.41 ns (7.06–7.97). For ≈ 3 µm
+   (Haines 2026) 7.41 and 7.86 ns. Measured 7.5: the account reproduces the edge within
+   its uncertainty, which is dominated by A (±0.4 ns), the drive (±0.4 ns) and the
+   thickness (2.5 or 3 µm, +0.4 ns).
+4. **The front-plus-backing estimate from `BurnthroughAlbedo` is about 1 ns early**
+   (6.24 and 6.60 ns): its transition gives the gold its full gray transmission 0.4 ns
+   after the front. In 1-D the transmission starts 0.6 ns after `HeatFront`'s arrival on
+   this drive (0.2–0.45 ns on Nova's) and rises slowly: for 2.5 µm 0.04 at +0.65 ns,
+   0.08 at +0.9, 0.11 at +1.4, 0.12–0.16 to the end of the peak, against 0.17–0.22 for
+   `RosselandTransmission`; the energy transmitted 4–9 ns is 0.62 of the transition's
+   (2.0 and 2.5 µm). The Letter's extracted window flux, about 1.3 TW/sr near 8.5–9 ns
+   (**H-img**), is 0.18 of a 2 mm Lambertian disk at Dante's ~305 eV seen from Dante 2's
+   angle (*L*; the Letter notes its solid-angle calibration is pending), between the two.
+5. **For the hohlraum the backing changes nothing to first order.** Until the backing
+   burns through, it absorbs what the gold transmits; that flux is lost to the hohlraum
+   either way (what the hot backing returns through the gold is of order f² α_b ≲ 1 % of
+   the incident flux, *L*). The window's loss starts at the *gold's* burnthrough, not at
+   the emergence. Both calibrations of the heat front to the 7.5 ns edge therefore start
+   the loss too late: for 2 µm at 6.6–6.9 ns, 2.4–2.9 ns after `HeatFront`'s arrival
+   (3.9–4.2 ns) and 1.6–2.1 ns after the 1-D onset (4.7–5.0 ns).
+6. A tamped-foil term in `BurnthroughAlbedo` is not supported: the gold's front is not
+   delayed by the backing, and the albedo does not depend on the backing. What the
+   backing delays is the outside signal. The open question for the albedo is the
+   transition's onset and rise under a NIF drive (item 4), whose `width` (0.4 ns) is
+   calibrated on bare Nova foils at 260 eV; not changed here.
+
+### Table: public ignition-scale drive
+N221204's Dante 1 from 3.3 ns (Pak 2024 Fig. 1), before that N210601's (Zylstra 2022
+Fig. 2) ×0.958 to join it, a linear rise over 0.2–0.8 ns (143, 203, 263, 283, 302,
+311 eV at 2.5, 4.5, 5.5, 6.5, 7.5, 8.5 ns). Times in ns. Calibrations fitted on this
+drive to 2.5 µm through at 7.5 ns: coefficient ×0.393, offset +2.89 ns (×0.434, +2.62 ns
+on the drive ×0.95). "Front + backing": `HeatFront`, `BurnthroughAlbedo`'s transition and
+`RosselandTransmission` drive the backing. "> 9": not through by the end of the run.
+
+| Au (µm) | backing | `HeatFront` | coefficient cal. | offset cal. | 1-D onset | front + backing | 1-D emergence (A ×1.3–×0.7) |
+|---|---|---|---|---|---|---|---|
+| 1.5 | epoxy 35 µm | 2.84 | 5.67 | 5.73 | 3.71 | 5.52 | 6.14 (5.87–6.61) |
+| 1.5 | Be 50 µm | 2.84 | 5.67 | 5.73 | 3.69 | 6.22 | 7.00 (6.58–7.67) |
+| 2.0 | epoxy 35 µm | 3.87 | 6.57 | 6.76 | 4.67 | 5.87 | 6.57 (6.28–7.07) |
+| 2.0 | Be 50 µm | 3.87 | 6.57 | 6.76 | 4.64 | 6.64 | 7.48 (7.05–8.18) |
+| 2.5 | epoxy 35 µm | 4.61 | 7.50 | 7.50 | 5.21 | 6.24 | 7.00 (6.68–7.51) |
+| 2.5 | Be 50 µm | 4.61 | 7.50 | 7.50 | 5.19 | 7.05 | 7.93 (7.48–8.66) |
+| 3.0 | epoxy 35 µm | 5.08 | 8.42 | 7.97 | 5.60 | 6.62 | 7.41 (7.09–7.93) |
+| 3.0 | Be 50 µm | 5.08 | 8.42 | 7.97 | 5.58 | 7.46 | 8.36 (7.90–> 9) |
+
+Drive ×0.95: `HeatFront` 3.19, 4.22, 4.88, 5.32 ns; 1-D emergence with epoxy 6.46, 6.94,
+7.41, 7.86 ns and with Be 7.41, 7.94, 8.43, 8.95 ns (1.5–3.0 µm); the calibrations' times
+are those above to 0.1 ns (the coefficient calibration's exactly: a scaled drive scales
+the drive integral, which the fitted coefficient absorbs).
+
+**What separates the calibrations.** Neither depends on the backing; the 1-D emergence
+does (50 µm of Be through 0.9–1.0 ns later than 35 µm of epoxy). Across thickness the
+coefficient calibration spreads 2–3 µm by 1.85 ns, the offset by 1.2 ns, the 1-D
+emergence by 0.85 ns. The decisive measurement is the emergence through windows of the
+same gold with another backing (or none), then another gold thickness with the same
+backing; a window shot's Dante with the backing's areal mass varied separates the
+backing's burn from the gold's front directly.
+
+### Eq. 3 in its own convention
+Eq. 3 of the Letter, ΔP₂/P₀ ≈ (2.5 n A S₂/4πr²)(Δα/α)(F/(F + 1)), is the axial Legendre
+moment of n small windows at 90° from the hohlraum axis: a_l/a₀ = −(2l + 1) P_l(cos θ_w)
+(nΩ/4π) S_l f w, with Ω = A/r² the window's solid angle from the capsule, Δα/α = −f, S_l
+the hohlraum's smoothing of mode l at the capsule and w = F/(F + 1) the re-emitted share
+of the wall's radiance (*L*, derivation in the litreview §5). The 2.5 is 5 |P₂(0)|: as
+printed the formula carries the sign of Δα/α, so its "−0.9 %" is a magnitude. The
+deficit on the waist is a **positive** P₂ of the drive about the hohlraum axis (more flux
+at the poles), which pushes a prolate core rounder, as the Letter observed. In Briareus
+terms the quantity is a₂/a₀ = √5 c₂₀/c₀₀ (real orthonormal Y_lm, `ylm_weights`). Two
+windows at 90° are not axisymmetric about the hohlraum axis: c₂,±₂ carries three
+quarters of the l = 2 power, and about the window axis the same pattern is a₂/a₀ =
+−2 × (eq. 3's), the drive deficit along the window axis that the neutron image's
+elongation along it reflects.
+
+Closed-form check (`test/windows.jl`, "window modes against the closed form"): a sphere
+of radius 3 mm with a uniform source, two windows of transmission 0.3 and 20° half-angle
+at (90°, 150°) and (90°, 330°), a 0.6 mm absorbing capsule. Briareus's c₂₀/c₀₀ is within
+1 % and c₂,±₂/c₀₀ within 3–4.5 % of the first-order closed form (window facets' exact
+solid angles, S₂(x) from the capsule's cosine kernel, w from the sphere's energy
+balance), converged over meshes 30 × 60 to 60 × 120; the residual in m = ±2 is the
+capsule's shadow in the wall-to-wall exchange (order x² = 4 %), which the closed form
+leaves out. The m = ±2 share of the l = 2 power matches the closed form's 0.75 to 3 %.
+
+Public mock-up (scratch run): the HYBRID-E-scale hohlraum of `examples/n221204.jl`
+(11.24 × 6.4 mm, 3.1 mm LEHs, 1.135 mm capsule, h = 0.25, capsule_h = 0.12),
+`hybride_mock_pointing(nif_beams())`, a constant wall albedo α and conversion 0.8, two
+2 mm windows at (90°, 150°) and (90°, 330°) burned through with eq. 1–2's transmission
+for 2.5 µm (f = 0.235, albedo α(1 − f)), against the same hohlraum without windows:
+
+| α | drive | c₂₀/c₀₀ | c₂,₂/c₀₀, c₂,−₂/c₀₀ | a₂/a₀ hohlraum axis | a₂/a₀ window axis | δ₂, δ₄ | w | eq. 3 with S₂(sphere), w | eq. 3's S₂ w |
+|---|---|---|---|---|---|---|---|---|---|
+| 0.88 | 0.976 | +0.467 % | −0.397, +0.683 % | +1.04 % | −2.05 % | 2.05, 0.56 % | 0.754 | +1.20 % | 0.363 |
+| 0.80 | 0.983 | +0.413 % | −0.361, +0.622 % | +0.92 % | −1.86 % | 1.86, 0.51 % | 0.674 | +1.07 % | 0.322 |
+
+(w: one minus the capsule flux with every albedo zero, i.e. the spots' direct share, over
+the full flux. S₂ = 0.555 for a sphere at the capsule-to-wall ratio 0.355. "eq. 3's
+S₂ w": the product that reproduces Briareus's a₂.) The Letter's −0.9 % implies S₂ w =
+0.313. **Once the sign and the axis are matched, Briareus and eq. 3 agree: +0.92 to
++1.04 % against 0.9 % (2–16 % apart, α 0.80–0.88).** A sphere's S₂ overstates the
+cylinder's by 13–14 % (eq. 3 with the sphere's S₂ and Briareus's w is 1.07–1.20 %); an
+open hole (f = 1) gives the same ratios (the response is linear in f: a₂ 3.99–4.52 %).
+Scaled to 2 µm (f = 0.286) the mock-up's δ₂ is 2.5 %, the roadmap's figure on the
+study's pointing.
+
+The core-shape comparison is no check of this size. Haines et al. (Phys. Plasmas 33,
+112712 (2026), Fig. 9; section "Drive asymmetry inferred from post-shot capsule
+simulations: Haines 2026" above) put the applied flux P₂/P₀ that
+reproduces each shot's neutron image at −0.024 for the reference shot, +0.003 for the
+window shot and +0.022 for a nominal no-window repeat (negative: prolate in their
+convention; assumed a Legendre ratio, √5 c₂₀/c₀₀): the scatter between nominal repeats
+(0.046) exceeds the windows' +0.01, though the window shot's offset from the reference
+has the sign above. The Letter's neutron M2/M0 along the window axis is likewise a check
+only; nothing here is fitted to it.
+
+With the 1-D foil's slower transmission (item 4 of the account above: 0.62 of the
+transition's transmitted energy over 4–9 ns) the time-averaged window signal would be
+about 0.6 of the static numbers here; that is a statement about the transition, not
+about eq. 3.
