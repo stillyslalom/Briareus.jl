@@ -131,8 +131,8 @@ end
     h = drive_history(m, op, τ -> q, times)
     h32 = drive_history(m32, op, τ -> q, times)
     @test rel(h32.moments, h.moments) <= 1e-7 && rel(h32.Tr, h.Tr) <= 1e-8
-    sc = Scenario(t, q; observe = :capsule, model = m)
-    sc32 = Scenario(t, q; observe = :capsule, model = m32)
+    sc = Scenario(t, q; observe = :capsule, model = m, albedo = :reference)
+    sc32 = Scenario(t, q; observe = :capsule, model = m32, albedo = :reference)
     @test sc32.model === m32
     @test_throws ArgumentError Scenario(hohlraum(nz = 6, nphi = 8), q; observe = :capsule, model = m)
     x0 = initial_parameters(sc.param)

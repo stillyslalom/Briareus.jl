@@ -189,7 +189,7 @@
                           keep_albedo = true, lmax = 4)
         gh = GroupPointing(qh; by = :group, fields = (:z,), mirror = false)
         lpi = Backscatter(:outer50 => 0.1)        # a model, so that the reference checks compare times
-        shared = Scenario(th, gh; observe = :capsule, model = m, lpi)
+        shared = Scenario(th, gh; observe = :capsule, model = m, lpi, albedo = :reference)   # the phases' from the history
         τ = 1.3
         st = history_state(th, h, τ)
         ph = Phase(:trough, shared; history = h, time = τ, pulses = pulse)

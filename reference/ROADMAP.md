@@ -40,9 +40,12 @@ constrained runs that stall at their bounds and force staged tolerances (item 36
    On a public mock-up the standalone solve's drive is 0.85–1.44 of the history's at
    four times of a pulse and its P2/P0 off by 1.1–2.8 points; the history's wall mean
    as one constant is within 0.7 % and 0.5 points ("Drive histories: sliver steps and
-   the albedo of a phase"). *Left:* a `Scenario` on a `WallLossAlbedo` target without
-   `albedo` still takes the 250 eV reference temperature (documented; drive up to
-   1.64 of the history's mid-pulse): whether it should refuse or warn (user).
+   the albedo of a phase"). A `Scenario` with a response on a `WallLossAlbedo` target
+   (or a `BurnthroughAlbedo` over one) without `albedo` takes the 250 eV reference
+   temperature (drive up to 1.64 of the history's mid-pulse) and now warns at
+   construction, naming `history_state`; `albedo = :reference` marks the reference
+   temperature as intended ("Inner-run options, a wall-loss scenario warning and laser
+   delivery figures").
 37. **`drive_history` radiosity convergence** (scratch study, 2026-11-18). A quasi-static
     history of a hohlraum with two thin-foil windows (`BurnthroughAlbedo`, a
     `WallLossAlbedo` wall, `wall_history` on, `transition = 0.05`) stopped at 0.1 ns steps

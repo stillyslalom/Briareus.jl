@@ -43,10 +43,27 @@ using Briareus, Test
     rest = setdiff(1:nelements(t), we)
     @test sm.albedo[rest] == h.albedo[k][rest]
     # `remake` takes the state as a new scenario does
-    s0 = Scenario(t, q; observe = :capsule, model = m)
+    s0 = @test_logs Scenario(t, q; observe = :capsule, model = m, albedo = :reference)
     s1 = remake(s0; sm.time, sm.albedo)
     @test s1.albedo == sm.albedo && s1.time == 2.5
     @test s1.moment_response == Scenario(t, q; observe = :capsule, model = m, sm.time, sm.albedo).moment_response
+
+    # A radiative scenario on a wall-loss wall without albedos takes the reference
+    # temperature: one warning at construction, naming `history_state`; `albedo =
+    # :reference` states that it is meant and changes nothing else. A thin foil over a
+    # wall-loss albedo (the default `before`) on a constant wall warns too; a scenario
+    # without a response, or on constant materials, does not.
+    sw = @test_logs (:warn, r"history_state") Scenario(t, q; observe = :capsule, model = m)
+    @test sw.albedo === s0.albedo === nothing && sw.moment_response == s0.moment_response
+    @test (@test_logs remake(s1; albedo = :reference, time = 0.0)).moment_response == s0.moment_response
+    @test_logs Scenario(t, q)
+    @test_logs Scenario(t, q; observe = :capsule, model = m, albedo = sm.albedo)
+    tf = hohlraum(; kw..., windows = [WallWindow(phi = 0, diameter = 2.0, material = foil)])
+    mf = RadiationModel(tf; F = m.F)
+    @test_logs (:warn, r"reference temperature") Scenario(tf, q; observe = :capsule, model = mf)
+    tc = hohlraum(; kw..., windows = [WallWindow(phi = 0, diameter = 2.0)])
+    @test_logs Scenario(tc, q; observe = :capsule, model = RadiationModel(tc; F = m.F))
+    @test_throws ArgumentError Scenario(t, q; observe = :capsule, model = m, albedo = :history)
 
     # the window: intact before its burnthrough, burned through after its transition,
     # where it transmits the foil's fraction 𝒯 of the flux on it

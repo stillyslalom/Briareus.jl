@@ -13850,3 +13850,36 @@ L-BFGS-B iterations take that many), so the run cannot converge whatever `outer`
 cap (the callback's evaluations per outer iteration), that the capped run converges to
 the KKT point, and that a cap above every inner run of the default run leaves it bit for
 bit. Not run: the multi-phase study itself under a cap (its runs take hours; scratch).
+
+### 3. A warning for a scenario on a history-dependent wall without albedos
+
+A `Scenario` with a response (observed elements and a model) built without `albedo` on
+a target whose materials include a `WallLossAlbedo`, or a `BurnthroughAlbedo` whose
+`before` is one (the elements whose loss `drive_history` follows through their own
+temperature history), takes the loss at the model's reference temperature (250 eV by
+default) at `time`, as a wall held at it since the pulse start. On the public mock-up
+of § "Drive histories: sliver steps and the albedo of a phase" that overstates the
+capsule drive against the history by up to 1.64 times mid-pulse (the second step) and
+understates P2/P0's change under a pointing perturbation by 11–37 %. The construction
+now warns once (one `@warn` per scenario built, naming the component, the reference
+temperature and `time`, and pointing to `history_state` and `remake(scenario; history,
+time)`). `albedo = :reference` marks the reference temperature as intended: the same
+scenario (moment responses bit for bit, tested), no warning; `remake` takes it too.
+Chosen over a refusal (the user's option of 2026-11-18): the reference temperature is
+a legitimate fixed-time model (a peak scenario, a test), and a warning keeps existing
+scripts running. Not warned: a scenario without a response (deposition only), one
+with explicit albedos, a `remake` (the scenario it copies warned at construction), and
+`GapClosure`/`LipClosure` closed albedos (`drive_history` does not follow those
+through a wall history either).
+
+Reach: the scenarios in `src/`, `test/`, `docs/literate/`, `examples/` and
+`BriareusGUI/` that the warning would hit were found by searching for every file that
+both builds a `Scenario` (or a `Phase` from a target) and uses a wall-loss albedo, a
+`BurnthroughAlbedo` or a preset built on one (`nif_gold`, `uranium`, `nif_uranium`,
+`du_wall_loss`): `test/history_state.jl` (a scenario before `remake` with a state),
+`test/large_models.jl` (a scenario on the large path) and `test/phased_study.jl` (the
+shared scenario whose phases take the history's albedos) mean the reference temperature
+and now pass `albedo = :reference`; the diagnostic-windows tutorial's scenarios already
+pass a solution's albedos; the GUI builds its materials from constant albedos and the
+precompile workload builds no scenario on its wall-loss target. A full run of the
+dropped-bundle tutorial as a script shows no warning.

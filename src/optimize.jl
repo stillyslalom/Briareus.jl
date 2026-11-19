@@ -578,7 +578,13 @@ For a time partway through a shaped pulse (a phase), the materials' albedos at `
 are not the wall's: a `WallLossAlbedo`'s follows each element's temperature history,
 which neither the reference temperature nor a standalone `solve` at `time` knows. Pass
 the history's own, `st = history_state(target, history, τ)` as `st.time, st.albedo`
-([`history_state`](@ref)).
+([`history_state`](@ref)). A scenario with a response (`observe` and a model) built
+without `albedo` on a target whose materials include a [`WallLossAlbedo`](@ref) (or a
+[`BurnthroughAlbedo`](@ref) whose `before` is one) warns at construction: its loss is
+taken at the reference temperature (250 eV by default), which mid-pulse overstated the
+drive against a drive history by up to 1.64 times on a public mock-up (research notes,
+"Drive histories: sliver steps and the albedo of a phase"). `albedo = :reference`
+marks the reference temperature as intended: the same scenario, without the warning.
 
 Objectives need only the moments of the observed flux, so the scenario keeps the
 response contracted with the Legendre (`lmax = 12`) and real-harmonic (`lmax = 6`)
@@ -656,12 +662,40 @@ function _scenario(t::Target, beams::AbstractVector{<:Beam}, parameterization;
         throw(ArgumentError("model is a radiation model of another target"))
     model === nothing || isempty(viewfactor_kw) ||
         throw(ArgumentError("give a model or viewfactor_kw, not both (the model's view factors are fixed)"))
+    # `:reference`: the materials' own albedos at `time`, stated as intended
+    meant = albedo === :reference
+    albedo isa Symbol && !meant &&
+        throw(ArgumentError("albedo takes albedos per element, `nothing` or `:reference`, got :$albedo"))
+    meant && (albedo = nothing)
     op = DepositionOperator(t, beams; deposition_kw...)
     obs = _observed(t, observe)
     model = !radiation ? nothing : model === nothing ? RadiationModel(t; viewfactor_kw...) : model
+    meant || albedo !== nothing || model === nothing || isempty(obs) || _warn_reference_albedo(t, time)
     W, Y, WR, YR = _moment_responses(t, model, obs, time, albedo)
     return Scenario(t, parameterization, op, model, obs, W, Y, WR, YR, lpi, Float64(time),
                     _LazyResponse(), albedo === nothing ? nothing : collect(Float64, albedo))
+end
+
+# A scenario's response without albedos on a target whose wall loss follows a
+# temperature history in a drive history (a `WallLossAlbedo`, or a thin foil's
+# `BurnthroughAlbedo` over one): the loss is taken at the model's reference temperature,
+# which mid-pulse overstates the drive against the history (research notes, "Drive
+# histories: sliver steps and the albedo of a phase"). One warning per construction.
+_history_albedo(a) = a isa WallLossAlbedo || a isa BurnthroughAlbedo && a.before isa WallLossAlbedo
+
+function _warn_reference_albedo(t::Target, time)
+    i = findfirst(c -> c.kind === :surface && _history_albedo(c.material.albedo), t.components)
+    i === nothing && return nothing
+    c = t.components[i]
+    w = c.material.albedo isa BurnthroughAlbedo ? c.material.albedo.before : c.material.albedo
+    @warn "Scenario: $(c.part)'s WallLossAlbedo is evaluated at its reference temperature " *
+          "($(w.reference_temperature) eV) at time = $(Float64(time)) ns, as a wall held at it since the " *
+          "pulse start; mid-pulse that can overstate the drive against a drive_history (by up to 1.64 times " *
+          "on a public mock-up). For a phase of a pulse pass the history's albedos, " *
+          "`st = history_state(target, history, time)` with `time = st.time, albedo = st.albedo` " *
+          "(or `remake(scenario; history, time)`); `albedo = :reference` marks the reference " *
+          "temperature is intended."
+    return nothing
 end
 
 # The observed elements of `observe` (component or part names; `nothing`: none).
@@ -710,7 +744,9 @@ rebuilt and everything else is shared:
   `profile`, `reach`, `resolution`).
 - `observe`, `time`, `albedo` and `model` (a `RadiationModel` of the same target, or
   `nothing` for none): the mode weights and moment responses are recomputed (one
-  flux-response solve), and the full `response` is computed again when read.
+  flux-response solve), and the full `response` is computed again when read. `albedo =
+  nothing` or `:reference` takes the materials' own albedos at `time` (no warning:
+  the warning, if any, came at the scenario's construction).
 
 The target, `radiation` and `viewfactor_kw` do not change through `remake` (an
 `ArgumentError`): they need a new `Scenario`, or a `model` built for the purpose.
@@ -755,7 +791,8 @@ function remake(s::Scenario; parameterization = _UNCHANGED, lpi = _UNCHANGED,
         throw(ArgumentError("model is a radiation model of another target"))
     obs = observe === _UNCHANGED ? s.observed : _observed(t, observe)
     tm = time === _UNCHANGED ? s.time : Float64(time)
-    alb = albedo === _UNCHANGED ? s.albedo : albedo === nothing ? nothing : collect(Float64, albedo)
+    alb = albedo === _UNCHANGED ? s.albedo : albedo === nothing || albedo === :reference ? nothing :
+          collect(Float64, albedo)
     W, Y, WR, YR = _moment_responses(t, m, obs, tm, alb)
     return Scenario(t, param, op, m, obs, W, Y, WR, YR, lp, tm, _LazyResponse(), alb)
 end
