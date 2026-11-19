@@ -14199,3 +14199,29 @@ Tests re-derived: `test/constraints.jl`'s augmented-Lagrangian-only comparison p
 `phase1 = false` (it is the reference for phase 1's evaluation count), and its checks of
 `res.phase1 === nothing` now read phase 1 from the result; every other assertion holds
 on both paths. The tutorials' constrained runs are in "6." below.
+
+### 6. The tutorials on the new defaults; the capped polish stays
+
+The user's decision: the dropped-bundle tutorial's per-beam polish stays capped at 120
+evaluations (a converged one costs minutes of the docs build); its text says what the
+cap leaves and that a design to hand off runs to convergence. No code change.
+
+Both tutorials run as scripts at the step-4 tree (phase 1 off) and at the final tree (8
+threads; another run may have shared the machine), every assertion holding. The
+dropped-bundle tutorial's constrained runs (drive as a fraction of the 48 quads'):
+
+| run | step-4 tree (phase 1 off) | final (phase 1 on) |
+|---|---|---|
+| within limits | 1,079 evaluations, drive 0.9626, gates 1.000 1.000 1.000 0.995, peak 1.0000 of the ceiling, `:box`; cap review 2 beams failing, worst −60 µm | 978 (phase 1: 15), drive 0.9620, gates 1.000 0.998 0.997 0.954, peak 0.9986, `:interior`; no beam failing, worst +2 µm |
+| stage 1 (quads, four limits) | 1,526, drive 0.9574, gates 0.976 1.000 0.998 1.000 | 1,591 (12), drive 0.9550, gates 0.973 0.999 1.000 1.000; cones 1.000 / 0.981 / 1.000 / 0.994 |
+| stage 2 (per-beam polish, 120 evaluations) | drive 0.9593; l = 2 0.1 % over its gate, peak 0.44 % over; review worst 10 µm | drive 0.9567; l = 2 0.19 % over, peak 0.28 % over, keep-out 1.3 µm short on one beam; review worst 9 µm |
+| least re-pointing at 0.5 % per degree | 636, 63 µm rms | 508 (12), 63 µm rms, 0.105 mm at most, drive 0.9594 of the 48 quads' |
+
+Phase 1 moves the first run to another member of the flat family at 0.06 % less drive,
+one that happens to clear the end caps by 2 µm (the text no longer says the run reaches
+into them; it says the margin is unheld and gives the phase-1-off result). With step
+3's smooth keep-out the penalty re-pointing's cap review reads 8 µm where the text had
+9 µm. The diagnostic-windows tutorial has no constrained run; its pair re-pointing
+under the aperture keep-out's penalty reads 0.105–0.142 mm rms, largest 0.26 mm, where
+the text had 0.11–0.15 mm and 0.29 mm, with l = 1–3 still restored to 0.02 %; the other
+numbers its text quotes are unchanged.

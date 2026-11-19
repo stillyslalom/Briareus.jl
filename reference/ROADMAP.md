@@ -509,7 +509,10 @@ analog is the dropped-bundle tutorial, `docs/literate/dropped_bundle.jl`).
         options, a wall-loss scenario warning and laser delivery figures").
     - a constrained run stopped by its budget reports the exact peak as it stands
       (`exact = true` is the default since cd6f084, and its rounds run after
-      convergence): a capped polish needs convergence or `from` to meet the ceiling;
+      convergence): a capped polish needs convergence or `from` to meet the ceiling.
+      The tutorial's per-beam polish stays capped at 120 evaluations (user,
+      2026-11-19; "Defaults changed (2026-11-19)"), and its text says what the cap
+      leaves and that a design to hand off runs to convergence;
     - bound sensitivities overstated a wider box's gain on the study (about fiftyfold):
       the same cause, a design short of stationarity on a flat family of designs,
       which `stationarity` now shows. They match the closed form and restarts with a

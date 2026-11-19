@@ -697,8 +697,8 @@ ev = evaluate(S_pairs, repoint.x)
 @printf("  re-pointed    departure from the reference shape, l = 1–4: %s %%; mean flux %+.1f%%\n",
         join((@sprintf("%.3f", d) for d in departure(ev)), ", "), 100 * (flux_ylm(ev)[1] / ref[1] - 1))
 
-# Moves of 0.11–0.15 mm rms (two to three times NIF's 50 µm rms pointing
-# specification, the largest 0.29 mm) restore ``l = 1``–``3`` to 0.02%, better
+# Moves of 0.11–0.14 mm rms (two to three times NIF's 50 µm rms pointing
+# specification, the largest 0.26 mm) restore ``l = 1``–``3`` to 0.02%, better
 # than the powers, and leave the same ``l = 4``; pointing alone cannot give back the
 # 3.4% of drive the windows take.
 #

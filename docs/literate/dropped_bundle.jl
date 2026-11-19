@@ -636,7 +636,7 @@ review_line("re-pointed, keep-out", cap_review(second_try.beams))
 
 # Re-pointing within the clearance still removes nearly all of mode 1, to a few
 # kilometers per second of hot-spot velocity, and the drive stays within 0.3% of its
-# value after the bundle is freed. The worst-case clearance comes out at 9 µm rather
+# value after the bundle is freed. The worst-case clearance comes out at 8 µm rather
 # than exactly the 10 µm asked for: the penalty is soft, and the keep-out's distance
 # differs from the clearance check's by a few micrometers. The flux on the capsule
 # before and after re-pointing, on the same maps and color scales as above:
@@ -720,9 +720,11 @@ most_drive = drive_objective(; drive = mean_flux(ref48))
 limited = optimize_pointing(repoint, most_drive; x0, lower, upper, constraints = (ceiling, gates),
                             iterations = 1000, evaluations = 3000)
 
-# One call from the start meets every gate and the ceiling. The table lists each limit's
-# value, its normalized excess and its multiplier; the outcome records that the run
-# converged with every constraint met and some aims at the ±0.3 mm box. The
+# One call from the start meets every gate and the ceiling. The start violates the
+# gates, so the run first looks for a design within the limits by minimizing the
+# violations alone (phase 1, `phase1` on by default) and starts its main run there. The
+# table lists each limit's value, its normalized excess and its multiplier; the outcome
+# records that the run converged with every constraint met inside the box. The
 # multipliers are those that best satisfy stationarity at the design, and the
 # stationarity line gives what they leave: here not small against the drive's own
 # gradient, since the drive is flat along the limits and the run ends on its value
@@ -753,16 +755,20 @@ end
 
 # Both designs meet the gates. The penalty terms keep rewarding symmetry inside the
 # gates, beyond what the limits require, and pay for it with drive: modes 1 and 3 end
-# far inside their gates and a third of a percent of the drive is gone, in as many
-# evaluations. With the limits as constraints three of the gates end active, at their limits,
-# and the drive left over is the largest the limits allow from this start. Staging
-# the penalties by hand (gates loosened four-, two- and 1.4-fold, then the final ones)
-# reaches the penalty design again, in more evaluations (research notes,
-# "Constrained re-pointing").
+# far inside their gates and three tenths of a percent of the drive is gone, in about
+# as many evaluations. With the limits as constraints the gates end at or near their
+# limits (l = 1 at it, l = 2 and 3 within 0.3 %, l = 4 5 % inside), with more drive
+# left over. The
+# drive is nearly flat along the limits, so where the run ends in that family of
+# designs depends on its path: started at the freed pointing itself (`phase1 = false`),
+# the same call ends with three gates and the ceiling active at 0.06 % more drive
+# (research notes, "Defaults changed (2026-11-19)"). Staging the penalties by hand
+# (gates loosened four-, two- and 1.4-fold, then the final ones) reaches the penalty
+# design again, in more evaluations (research notes, "Constrained re-pointing").
 #
-# The constrained run ends with the peak over the elements at the ceiling; the penalty
-# form, which bounds the 64-norm, the hot spots' mean, leaves the hottest element a
-# percent over it. Without the ceiling the same gates are met with the wall's peak
+# The constrained run ends with the peak over the elements just under the ceiling
+# (0.14 % below); the penalty form, which bounds the 64-norm, the hot spots' mean,
+# leaves the hottest element a percent over it. Without the ceiling the same gates are met with the wall's peak
 # 27–38 % above the 48-quad pointing's (research notes), the re-aimed quads stacking
 # their spots.
 
@@ -774,7 +780,9 @@ end
 
 review_line("within limits", cap_review(limited.beams))
 
-# In the worst case the quads' 1% contours reach 60 µm into the caps. A study repeats
+# In the worst case the quads' 1% contours come within 2 µm of the caps: no beam
+# fails, by a margin nothing held (started at the freed pointing, the same call ends
+# with the contours 60 µm into the caps). A study repeats
 # the run with every limit a design review checks, on the parameters the design may
 # change, in two stages: the quads first, then each of their beams.
 #
@@ -818,8 +826,9 @@ limits = (ceiling, gates, clearance_floor(cap_keepout), light_ceiling(1e-5, :cap
 stage1 = optimize_pointing(study, most_drive; lower = lower_s, upper = upper_s, constraints = limits,
                            iterations = 1000, evaluations = 3000)
 
-# The run ends with every limit met and the box active: three of the four cones at full
-# power. Two of the four gates are active.
+# The run ends with every limit met and the box active: two of the four cones at full
+# power (the 30° and 50° cones at 0.981 and 0.994), and two outer quads at their ±0.3 mm
+# bounds. Two of the four gates are active.
 # The keep-out holds every quad at least 18 µm from the caps, above its 10 µm minimum
 # (the display shows the worst of the 46 rows, one per quad, each with its own
 # multiplier, and counts the active ones), and the light ceiling is met with room to
@@ -886,17 +895,18 @@ review_line("polished", polished_review)
 @assert peak_irradiance(ev2, :wall) <= only(ceiling.limit) * 1.01
 @assert polished_review.fail == 0 && polished_review.worst > 0
 
-# The polish brings l = 3 back within its gate and raises the drive from 0.9564 (the
-# first stage's aims on beams) to 0.9593 of the 48 quads', above the first stage's
-# 0.9574 on quads. It stops at its budget with the keep-out active on six beams, mode 2
-# 0.1 % over its gate and the wall's peak 0.4 % over the ceiling: a run stopped by its
-# budget reports its limits as they stand, and the ceiling holds the peak itself only
-# once a run has converged on its smooth stand-in. Run to convergence (861 evaluations,
-# five and a half minutes on 8 threads, measured with each beam's shifts in its own
-# azimuth), the polish meets every limit, the peak at 0.997 of the ceiling, at the same
-# drive (research notes, "Optimization defaults decided"). The
+# The polish brings l = 3 back within its gate and raises the drive from 0.9541 (the
+# first stage's aims on beams) to 0.9567 of the 48 quads', above the first stage's
+# 0.9550 on quads. It stops at its budget with mode 2 0.2 % over its gate, the wall's
+# peak 0.3 % over the ceiling and the keep-out 1.3 µm short of its minimum on one beam
+# (active on four more): a run stopped by its budget reports its limits as they stand,
+# and the ceiling holds the peak itself only once a run has converged on its smooth
+# stand-in. The budget is kept small here to keep the tutorial short; a design to hand
+# off runs to convergence, which on an earlier first stage took 861 evaluations (five
+# and a half minutes on 8 threads) and met every limit, the peak at 0.997 of the
+# ceiling, at the same drive (research notes, "Optimization defaults decided"). The
 # clearance check confirms the keep-out on the worst case: no beam fails, and the
-# closest stays 10 µm from a cap.
+# closest stays 9 µm from a cap.
 #
 # Each stage was one call of [`optimize_pointing`](@ref) on exported names: a
 # parameterization, its box and the limits, the second stage's scenario built with
@@ -926,13 +936,13 @@ smallest_summary = pointing_summary(repoint, smallest; keepout = cap_keepout, dr
 @assert sqrt(smallest.value) ≈ smallest_summary.shift_rms
 
 # Degrees 1–3 end at the tolerance and l = 4 well inside it; the quads move by 63 µm rms
-# and 0.10 mm at most, and the drive ends 0.3 % below the start's (the objective does
+# and 0.105 mm at most, and the drive ends 0.3 % below the start's (the objective does
 # not seek drive). The same call with the gates at the noise floor moves the quads
 # by 93 µm rms and up to 0.18 mm; with 1 % per degree, which the start's departures in
 # l = 1 and 2 barely exceed, by 6 µm. The largest drive within each tolerance, from
 # [`drive_objective`](@ref) under the same constraints, rises from 0.962 of the 48-quad
 # drive at the floor to 0.967 at 0.5 % and 0.971 at 1 % (research notes, "Mode gates in
-# physical units").
+# physical units", measured before phase 1 was the default).
 
 # ## What this checks
 #
