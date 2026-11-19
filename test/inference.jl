@@ -126,7 +126,7 @@ end
     # a keep-out's clearance per beam and the light on named parts as constraints
     clf, lightc = clearance_floor(hardware), light_ceiling(ev_ref, :cap_top, :cap_bottom)
     aug2 = Briareus._Augmented(dobj, (clf, lightc), (fill(0.1, length(quads)), [0.2]), 3.0)
-    lag = Briareus._Lagrangian(objectives[2], (ceilc, gatec), ([0.5], [0.1, 0.0, 0.2, 0.0]))
+    kktv = Briareus._KKTValues(objectives[2], (ceilc, gatec))   # objective and violations, stacked
     # the picket ceilings and the bubble linked to the picket (outer quads into the holes)
     pkw = (; pulses = pulse, window = (0.5, 1.5))
     pceil = picket_ceiling(evaluate(s, xo), :wall; pkw...)
@@ -203,6 +203,7 @@ end
         nc = _inf_body_instances(Briareus._constrained_pointing)
         nl = _inf_body_instances(Briareus._lbfgsb)
         npr = _inf_body_instances(Briareus._pointing_result)
+        nam = _inf_instances(Briareus._active_set_multipliers)
         cr = optimize_pointing(s, dobj; x0, iterations = 1, evaluations = 3, callback = st -> false,
                                constraints = [Constraint(:power, ev -> sum(b.power for b in ev.beams); upper = 400.0), clf])
         # a warm restart from a result, under a time limit
@@ -212,6 +213,7 @@ end
         @test _inf_body_instances(Briareus._constrained_pointing) == nc
         @test _inf_body_instances(Briareus._lbfgsb) == nl
         @test _inf_body_instances(Briareus._pointing_result) == npr
+        @test _inf_instances(Briareus._active_set_multipliers) == nam
         # phase 1 and the relaxations (a power cap below the box: a verdict, then each
         # violated constraint relaxed until the budget ends): new objective, constraint and
         # callback types reuse the bodies
@@ -223,12 +225,16 @@ end
                                          gatee, dfl])
         @test _inf_body_instances(Briareus._phase1) == n1 && _inf_body_instances(Briareus._relaxations) == nr
         @test _inf_body_instances(Briareus._constrained_pointing) == nc
-        # the bound sensitivities' gradient: new objective types reuse the compiled body
+        # the bound sensitivities' gradient and the multipliers' Jacobian: new objective
+        # and constraint types reuse the compiled bodies
         Briareus._scenario_gradient(s, objectives[1], x0)
         ng = _inf_instances(Briareus._scenario_gradient)
         Briareus._scenario_gradient(s, dobj, x0)
-        Briareus._scenario_gradient(s, lag, x0)
         @test _inf_instances(Briareus._scenario_gradient) == ng
+        Briareus._scenario_jacobian(s, kktv, x0)
+        nj, npj = _inf_instances(Briareus._scenario_jacobian), _inf_instances(Briareus._pointing_jacobian)
+        Briareus._scenario_jacobian(s, Briareus._KKTValues(dobj, (clf, lightc)), x0)
+        @test _inf_instances(Briareus._scenario_jacobian) == nj && _inf_instances(Briareus._pointing_jacobian) == npj
         # a phased scenario: new objective, constraint and callback types reuse the bodies
         optimize_pointing(pph, in_phase(:a, objectives[1]); x0 = xph, iterations = 1, evaluations = 2)
         n = _inf_body_instances(optimize_pointing)
@@ -314,7 +320,7 @@ end
             @test (@inferred clf.f(ev)) isa Vector{T}
             @test (@inferred lightc.f(ev)) isa T
             @test (@inferred aug2(ev)) isa T
-            @test (@inferred lag(ev)) isa T
+            @test (@inferred kktv(ev)) isa Vector{T}
             @test (@inferred infeas(ev)) isa T
             @test (@inferred relaxg(ev)) isa T
             @test (@inferred gatee.f(ev)) isa Vector{T}
@@ -443,7 +449,7 @@ end
                 @test _inf_jet_clean(JET.report_call, lightc.f, ev)
                 @test _inf_jet_clean(JET.report_opt, lightc.f, ev)
                 @test _inf_jet_clean(JET.report_call, aug2, ev)
-                @test _inf_jet_clean(JET.report_call, lag, ev)
+                @test _inf_jet_clean(JET.report_call, kktv, ev)
                 # phase 1 and the relaxations: no dispatch in their kernels, no possible
                 # errors in their objectives; the gate and the floor from an evaluation
                 @test _inf_jet_clean(JET.report_opt, Briareus._hinge2, flux_ylm(ev)[1:4])

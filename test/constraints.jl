@@ -3,6 +3,9 @@
 #
 # References: the closed-form solution and multiplier of an equality-active quadratic
 # program (the drive's coefficients are linear in the quad powers, `influence_matrix`);
+# for the reported multipliers and bound sensitivities, the Karush–Kuhn–Tucker solution
+# of a drive-like objective linear in the powers under two active linear ceilings, and
+# restarts with a bound moved;
 # for phase 1's relaxations and the drive floor, fills of the quads in decreasing drive
 # per power (the largest drive at a total power, the least power for a drive);
 # central finite differences for the gradients; the power-mean inequality and its limit
@@ -92,7 +95,7 @@
         cs2 = (total, drive)
         a = optimize_pointing(s, f; x0 = P0, lower = lo, upper = hi, constraints = cs2,
                               feasibility = 1e-8, outer = 2)
-        @test a.outcome === :iterations && a.outer == 2 && a.state.λ == [r.multiplier for r in a.constraints]
+        @test a.outcome === :iterations && a.outer == 2 && length(a.state.λ) == length(a.constraints)
         ab = optimize_pointing(s, f; from = a, constraints = cs2, feasibility = 1e-8)
         @test ab.x == res.x && ab.outer == res.outer - 2 && a.evaluations + ab.evaluations == res.evaluations
         @test ab.lower == lo && ab.upper == hi
@@ -199,7 +202,7 @@
         plain = optimize_pointing(s, f; x0 = P0, lower = lo, upper = hi)
         @test plain.outcome === :interior && isempty(plain.constraints) && plain.outer == 0
         @test sum(plain.x) > cap
-        @test isempty(plain.bound_sensitivity) && isempty(plain.bound_gradient)
+        @test isempty(plain.bound_sensitivity) && isempty(plain.bound_gradient) && isnan(plain.stationarity)
 
         # bound sensitivities against central differences of the optimum in the bound (the
         # optimal value of a quadratic program with a fixed active set is quadratic in the
@@ -252,6 +255,88 @@
         dfb = drive_floor(evaluate(sb, P0); fraction = 0.9)
         @test dfb.f(evaluate(sb, xb)) == mean_flux(evaluate(sb, xb))
         @test_throws ArgumentError dfb.f(evaluate(s, xb))
+    end
+
+    # Multipliers from the converged active set (`PointingResult.constraints`), against the
+    # Karush–Kuhn–Tucker multipliers of a closed form: a drive-like objective, linear in the
+    # quad powers with a small regularization toward the start, under ceilings on the total
+    # power and on the inner cones' (both active at the optimum) and a floor on the 50°
+    # cone's power (inactive). KKT: ε (P - P₀) = c - Aᵀν with A P = b on the active rows;
+    # the normalized constraint (aᵀP - b)/b has the multiplier ν b. The stationarity
+    # residual is computed from the closed-form gradients, not from the optimizer's.
+    @testset "multipliers from the converged active set" begin
+        t = hohlraum(; geom..., nz = 8, nphi = 16, capsule_ntheta = 6, capsule_nphi = 8)
+        quads = nif_quads(power = 8.0)
+        s = Scenario(t, GroupPointing(quads; by = :quad, fields = (:power,)))
+        P0 = initial_parameters(s.param)
+        n = length(P0)
+        inner = [q.group in (:inner23, :inner30) for q in quads]
+        o50 = [q.group === :outer50 for q in quads]
+        c = (1 .+ 0.3 .* sin.(1:n)) .* (1 .+ 0.5 .* inner) ./ 384
+        ε = 2e-4
+        f(ev) = -sum(c[i] * q.power for (i, q) in enumerate(ev.beams)) +
+                ε / 2 * sum(abs2, q.power - 8.0 for q in ev.beams)
+        cap, capI = 1.01 * 384, 130.0
+        cs = (Constraint(:total, ev -> sum(q.power for q in ev.beams); upper = cap),
+              Constraint(:inner, ev -> sum(q.power for (i, q) in enumerate(ev.beams) if inner[i]); upper = capI),
+              Constraint(:outer50, ev -> sum(q.power for (i, q) in enumerate(ev.beams) if o50[i]); lower = 50.0))
+        function kkt(A, b)
+            ν = (A * A') \ (A * c .+ ε .* (A * P0 .- b))
+            return P0 .+ (c .- A' * ν) ./ ε, ν
+        end
+        A = [ones(n)'; Float64.(inner)']
+        Pk, ν = kkt(A, [cap, capI])
+        λk = [ν .* [cap, capI]; 0.0]
+        lo, hi = zeros(n), fill(100.0, n)
+        @test all(lo .< Pk .< hi) && sum(Pk[o50]) > 60 && all(>(0), ν)
+        # |∇f + Σ λⱼ ∇gⱼ|∞ at P, in closed form
+        resid(P, λ) = norm(-c .+ ε .* (P .- 8.0) .+ λ[1] / cap .+ λ[2] .* inner ./ capI .- λ[3] .* o50 ./ 50, Inf)
+        mults(r) = [x.multiplier for x in r.constraints]
+        r = optimize_pointing(s, f; x0 = P0, lower = lo, upper = hi, constraints = cs)
+        @test r.outcome === :interior && norm(r.x - Pk) / norm(Pk) < 1e-3
+        @test all(isapprox.(mults(r)[1:2], λk[1:2]; rtol = 1e-3))
+        # complementarity: the floor inactive, its multiplier zero
+        @test r.constraints[3].status === :satisfied && r.constraints[3].multiplier == 0
+        @test resid(r.x, mults(r)) <= resid(r.x, r.state.λ)
+        # the result's stationarity is that residual (every parameter inside the box)
+        @test r.stationarity ≈ resid(r.x, mults(r)) rtol = 1e-6
+        @test occursin("stationarity", sprint(show, MIME"text/plain"(), r))
+
+        # The old failure: from that design at a large penalty (μ = 10⁶, the order a drive
+        # run under gates reaches), the inner run ends on its value tolerance a few 1e-6
+        # inside the inner cones' limit, and the first-order update λ + μ g zeroes that
+        # limit's multiplier (`state.λ`, what a further restart continues from): its
+        # stationarity residual is thousands of times the reported multipliers', which
+        # still match the closed form. The penalty is set by copying the result with
+        # another `state`.
+        big = PointingResult((k === :state ? merge(r.state, (; μ = 1e6, μmax = 1e14)) : getfield(r, k)
+                              for k in fieldnames(PointingResult))...)
+        rb = optimize_pointing(s, f; from = big, constraints = cs)
+        @test rb.outcome === :interior && norm(rb.x - Pk) / norm(Pk) < 1e-3
+        @test all(isapprox.(mults(rb)[1:2], λk[1:2]; rtol = 1e-3)) && mults(rb)[3] == 0
+        @test abs(rb.state.λ[2] - λk[2]) > 0.5 * λk[2]
+        @test resid(rb.x, mults(rb)) < 1e-2 * resid(rb.x, rb.state.λ)
+
+        # Bound sensitivities, from the reported multipliers: one quad's upper bound 1 TW
+        # below its optimum. Closed form: the bound as a third active row, ∂f*/∂u = -ν_u.
+        # Direct: restarts from the result with the bound moved by ±δ (`from`), a central
+        # difference, exact for a quadratic program whose active set stays.
+        i = argmax(Pk)
+        u = Pk[i] - 1.0
+        hiu = [k == i ? u : 100.0 for k in 1:n]
+        Pu, νu = kkt([A; (1:n .== i)'], [cap, capI, u])
+        rbnd = optimize_pointing(s, f; x0 = P0, lower = lo, upper = hiu, constraints = cs)
+        @test rbnd.outcome === :box && rbnd.at_bounds == [rbnd.names[i]] && norm(rbnd.x - Pu) / norm(Pu) < 1e-3
+        @test all(isapprox.(mults(rbnd)[1:2], νu[1:2] .* [cap, capI]; rtol = 1e-3))
+        @test only(rbnd.bound_sensitivity) ≈ -νu[3] rtol = 1e-3
+        δ = 0.2
+        moved(d) = optimize_pointing(s, f; from = rbnd, upper = [k == i ? u + d : 100.0 for k in 1:n],
+                                     constraints = cs)
+        rp, rm = moved(δ), moved(-δ)
+        @test rp.at_bounds == rm.at_bounds == [rbnd.names[i]]
+        @test only(rbnd.bound_sensitivity) ≈ (rp.value - rm.value) / 2δ rtol = 1e-2
+        @test only(rbnd.bound_gradient) ≈ -c[i] + ε * (rbnd.x[i] - 8.0) rtol = 1e-6
+        @test only(rbnd.bound_sensitivity) < 0
     end
 
     # The dropped-bundle tutorial's design on a coarser wall mesh: bundle 11 freed, the
@@ -327,6 +412,10 @@
         @test all(mode_departure(ev, c48) .<= gates.limit .* (1 + 1e-3))
         @test peak_irradiance(ev, :wall) <= pk * (1 + 1e-3)
         @test res.value <= res.initial_value + 1e-3
+        # complementarity of the reported multipliers: zero for every component inside
+        # its limit by more than `feasibility`
+        @test all(r -> r.multiplier >= 0 && (r.status !== :satisfied || r.multiplier == 0), res.constraints)
+        @test res.stationarity >= 0
         # the rows: the exact ceiling reports the peak against the limit, the plain one its norm
         @test res.constraints[1].value == peak_irradiance(ev, :wall) && res.constraints[1].limit == pk
         @test check_constraints(ev, ceiling)[1].value == peak_irradiance(ev, :wall)

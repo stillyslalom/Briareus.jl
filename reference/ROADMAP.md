@@ -459,20 +459,27 @@ analog is the dropped-bundle tutorial, `docs/literate/dropped_bundle.jl`).
         active throughout and no end to the returns in that range. *Remains:* the
         tolerance per degree (0.5 % in P2/P0 is the modelers' repeat uncertainty;
         l = 1, 3 and 4 have no published number) is the user's;
-      - a drive run under gates reports zero gate multipliers at convergence (the
-        penalty weight at 1e2–1e4; least-squares multipliers at the same design are
-        nonzero and cut the stationarity residual twentyfold), so its multiplier
-        column and `bound_sensitivity` do not show which limit costs drive: the
-        design is unaffected. *Remains:* multipliers reported from the converged
-        active set.
+      - a drive run under gates reported zero gate multipliers at convergence: the
+        first-order update after inner runs that ended on their value tolerance, at
+        penalty weights of 1e2–1e6. Now the reported multipliers are fitted
+        to stationarity over the near-active set (non-negative least squares),
+        `bound_sensitivity` follows from them and `PointingResult.stationarity`
+        shows what they leave; designs are bit for bit. On the tutorial's run they
+        name the ceiling and l = 2 but leave a third of the drive's gradient: the
+        design ends short of stationarity. *Remains:* the inner value tolerance
+        (1e-10; at 1e-12 the run reaches a stationarity of 1.9e-5 for 2.1 times the
+        evaluations and the same drive within the flat family's 1e-4), possibly as a
+        keyword (user).
     - a constrained run stopped by its budget reports the exact peak as it stands
       (`exact = true` is the default since cd6f084, and its rounds run after
       convergence): a capped polish needs convergence or `from` to meet the ceiling;
-    - bound sensitivities (`PointingResult.bound_sensitivity`) match the re-optimized
-      objective on a closed-form problem but overstate the box's cost about fiftyfold
-      on the study, where the gates leave a flat family of designs and the multipliers
-      are not unique: a direct estimate (a restart with the bound moved, through
-      `from`) could be built in;
+    - bound sensitivities overstated a wider box's gain on the study (about fiftyfold):
+      the same cause, a design short of stationarity on a flat family of designs,
+      which `stationarity` now shows. They match the closed form and restarts with a
+      bound moved on a closed-form problem; on the tutorial, restarts with a bound
+      widened gain nothing, while narrowing costs 1.4–6.4e-4 per mm against a
+      reported 1.1–1.9e-4 (at an inner tolerance of 1e-12). *Remains:* a direct
+      estimate (a restart with the bound moved, through `from`) built in, if wanted;
     - The ceiling the study means is the maximum irradiance at the picket, and the aim
       is prediction of the bubble, not a limit standing in for it (user, 2026-11-18).
       Since 74e7ae3: `picket_ceiling` (the outer cones' peak picket irradiance on the

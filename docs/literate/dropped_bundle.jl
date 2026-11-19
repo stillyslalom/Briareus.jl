@@ -722,7 +722,11 @@ limited = optimize_pointing(repoint, most_drive; x0, lower, upper, constraints =
 
 # One call from the start meets every gate and the ceiling. The table lists each limit's
 # value, its normalized excess and its multiplier; the outcome records that the run
-# converged with every constraint met and some aims at the ±0.3 mm box.
+# converged with every constraint met and some aims at the ±0.3 mm box. The
+# multipliers are those that best satisfy stationarity at the design, and the
+# stationarity line gives what they leave: here not small against the drive's own
+# gradient, since the drive is flat along the limits and the run ends on its value
+# tolerance, so the multipliers rank the limits' cost only roughly.
 #
 # The same limits as penalty terms are what a hand-written objective would add: 100
 # times the squared excess of each degree over its gate and of the irradiance over the
@@ -973,7 +977,11 @@ smallest_summary = pointing_summary(repoint, smallest; keepout = cap_keepout, dr
 #   0.1 % of the ceiling or below it). Its closed-form test
 #   (`test/constraints.jl`): with the drive's coefficients linear in the quad powers,
 #   a fit under a ceiling on the total power matches the solution of the
-#   Karush–Kuhn–Tucker equations to 1e-4 and its multiplier to 1e-3; the irradiance
+#   Karush–Kuhn–Tucker equations to 1e-4 and its multiplier to 1e-3; on a drive-like
+#   objective linear in the powers under two active ceilings, the reported multipliers
+#   match the closed form's to 1e-3, also where the iteration's own estimate has zeroed
+#   one, and a bound sensitivity matches the closed form and restarts with the bound
+#   moved; the irradiance
 #   norm's power-mean ordering, its area-mean limit at p = 1 and the constraint values'
 #   gradients against central differences.
 # - The study's keep-out from the end caps agrees with the clearance check's worst case

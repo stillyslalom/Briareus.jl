@@ -1306,8 +1306,9 @@ others. On a problem with hundreds of parameters, whose evaluations take seconds
 whose start is far from the limits, a cap of about 100 updates the multipliers sooner
 (a 276-parameter study with `iterations = 1000` completed one outer iteration in an
 hour, with 100 six in 40 minutes; research notes, "The inner budget"). The result's
-`constraints` and `outcome` report each constraint against its limit and whether the
-box, the constraints or the budget ended the run ([`PointingResult`](@ref)). The
+`constraints` and `outcome` report each constraint against its limit, with the
+multipliers that best satisfy stationarity at the final design, and whether the box,
+the constraints or the budget ended the run ([`PointingResult`](@ref)). The
 callback's named tuple then also carries `outer`, and its `value` is the inner
 problem's (the objective with the constraint terms). Without constraints the run is
 the plain L-BFGS-B above.
@@ -1394,6 +1395,46 @@ Base.@nospecializeinfer function _scenario_gradient(s::_AbstractScenario, @nospe
     return copy(ForwardDiff.DiffResults.gradient(_pointing_gradient!(out, J, x, cfg)))
 end
 
+# The Jacobian of the vector `F(evaluate(s, x))` at `x` (one row per entry), through the
+# optimizer's dual tag and chunks: each chunk's dual pass carries every entry, so the
+# Jacobian costs one gradient whatever its number of rows. The passes run concurrently
+# as in `_pointing_gradient!`; each row is bitwise ForwardDiff's chunk-mode gradient of
+# that entry.
+Base.@nospecializeinfer function _scenario_jacobian(s::_AbstractScenario, @nospecialize(F), x::Vector{Float64})
+    J(x) = F(evaluate(s, x))
+    cfg = ForwardDiff.GradientConfig(J, x, ForwardDiff.Chunk(min(length(x), 12)),
+                                     ForwardDiff.Tag(_PointingTag(), Float64))
+    return _pointing_jacobian(J, x, cfg)
+end
+
+function _pointing_jacobian(f, x::Vector{Float64}, cfg::ForwardDiff.GradientConfig{T,Float64,N}) where {T,N}
+    nc = cld(length(x), N)
+    blocks = if nc <= 1 || Threads.nthreads() == 1 || !_PARALLEL_CHUNKS[]
+        [_jacobian_chunk(f, x, cfg.seeds, T, c) for c in 1:nc]
+    else
+        tasks = [Threads.@spawn _jacobian_chunk(f, x, cfg.seeds, T, c) for c in 1:nc]
+        map(tasks) do t
+            try
+                fetch(t)
+            catch err
+                err isa TaskFailedException ? throw(err.task.exception) : rethrow()
+            end
+        end
+    end
+    return reduce(hcat, blocks)
+end
+
+# Dual pass `c` of `_pointing_jacobian`: the columns of its own parameters.
+function _jacobian_chunk(f, x, seeds::NTuple{N,ForwardDiff.Partials{N,Float64}}, ::Type{T}, c) where {N,T}
+    lo = (c - 1) * N
+    zp = zero(ForwardDiff.Partials{N,Float64})
+    xd = [ForwardDiff.Dual{T}(x[i], lo < i <= lo + N ? seeds[i-lo] : zp) for i in eachindex(x)]
+    y = f(xd)
+    k = min(N, length(x) - lo)
+    return Float64[y[r] isa ForwardDiff.Dual ? ForwardDiff.partials(y[r], j) : 0.0
+                   for r in eachindex(y), j in 1:k]
+end
+
 # One L-BFGS-B run of `objective(evaluate(s, x))` in the box from `xs` (`x0` sizes the
 # gradient's configuration): the parameters, objective value, iterations, evaluations
 # and stop of `optimize_pointing`, and Optim's result (`nothing` when stopped).
@@ -1466,8 +1507,12 @@ in `PointingResult.constraints`. Fields: `name` (the constraint's name, with the
 component's label for a vector constraint, e.g. `"mode_gate[l = 2]"`), `value` and
 `limit` (in the constraint's units), `upper` (`true` for a ceiling `value ≤ limit`,
 `false` for a floor), `violation` (`±(value - limit)/scale`, the normalized excess:
-positive when violated, negative inside), `multiplier` (the augmented Lagrangian's
-multiplier estimate in the normalized units, 0 when not computed) and `status`:
+positive when violated, negative inside), `multiplier` (the component's Lagrange
+multiplier at the design, in the normalized units: in a constrained run's result, the
+nonnegative least-squares solution of the stationarity condition on the parameters
+inside the box, over the components within `feasibility` of their limits or beyond
+them, zero for the other components ([`PointingResult`](@ref)); 0 when not computed,
+as in [`check_constraints`](@ref)) and `status`:
 `:violated` (`violation > feasibility`), `:active` (within `feasibility` of the limit)
 or `:satisfied`.
 """
@@ -1559,23 +1604,48 @@ limit; see [`irradiance_ceiling`](@ref)); `nothing` without constraints. A run e
 its budget, time limit or callback keeps the state of the interrupted inner problem,
 so that the restart resumes it.
 
+**Multipliers.** The multipliers in `constraints` are not the iteration's `state.λ`
+but those that best satisfy stationarity at `x`: the nonnegative least-squares
+solution of `∂f/∂xᵢ + Σⱼ λⱼ ∂gⱼ/∂xᵢ = 0` over the parameters inside the box (`gⱼ` the
+normalized violations, with an exact ceiling's stand-in at its working limit) and the
+components within `feasibility` of their limits or beyond them, zero for the other
+components (complementary). The iteration's own estimate, `λ ← max(0, λ + μ g)`
+after each inner run, is exact only when the inner run ended at a stationary point; a
+drive objective's inner runs end on their value tolerance instead, and at a large
+penalty `μ` the update then zeroes the multipliers of active limits at which the design
+ends a few 1e-5 inside (research notes, "Multipliers from the converged active set").
+The fit costs one Jacobian of the objective and the constraints after the run (a
+gradient's cost, not counted in `evaluations`). Where several sets of multipliers fit
+equally (components with the same gradient, such as the clearances of beams related
+by the ports' symmetry) the fit returns the one of least norm. `stationarity` is what
+the fit leaves: the largest `|∂L/∂xᵢ|` over the parameters inside the box with
+`L = f + Σⱼ λⱼ gⱼ` (objective units per parameter unit, the measure the inner runs
+compare with `g_tol`; `NaN` without constraints or when phase 1 ended the run). Near
+zero, the design is a Karush–Kuhn–Tucker point and the multipliers are its own; a
+drive run whose inner runs ended on their value tolerance can end with it a sizable
+fraction of the objective's gradient, and the multipliers and bound sensitivities are
+then estimates at a design short of stationarity (on the dropped-bundle tutorial's
+case, 1.2e-3 against the drive objective's largest derivative of 3.0e-3 per mm).
+
 **Bound sensitivities.** For each parameter in `at_bounds` (same order),
 `bound_gradient` holds the objective's derivative `∂f/∂xᵢ` at `x` and
 `bound_sensitivity` the Lagrangian's, `∂L/∂xᵢ` with `L = f + Σⱼ λⱼ gⱼ` (the
-multipliers of `constraints` on the normalized violations; without constraints the
-two are equal). By the envelope theorem `bound_sensitivity` is the derivative of the
-optimal objective with respect to the bound's value, the active set held: positive at
-a lower bound and negative at an upper bound when the run has converged, so widening
-the box by δ in that parameter (lowering a lower bound, raising an upper one) lowers
-the optimum by about `|bound_sensitivity| δ` (to first order, in the objective's units
-per parameter unit). `bound_gradient` is what the objective alone would gain, before
-the constraints take their share. Both cost one gradient each after the run (not
-counted in `evaluations`), only when a parameter is at a bound; they are meaningful at
-convergence. Where the active constraints and bounds leave a flat family of designs
-(a drive objective under several active gates), the multipliers are not unique and the
-derivative can overstate what a wider box gains by an order of magnitude or more
-(research notes, "Constrained re-pointing"); a restart with `from` in the wider box
-measures it.
+multipliers of `constraints`, above; without constraints the two are equal). By the
+envelope theorem `bound_sensitivity` is the derivative of the optimal objective with
+respect to the bound's value, the active set held: positive at a lower bound and
+negative at an upper bound when the run has converged, so widening the box by δ in
+that parameter (lowering a lower bound, raising an upper one) lowers the optimum by
+about `|bound_sensitivity| δ` (to first order, in the objective's units per parameter
+unit). `bound_gradient` is what the objective alone would gain, before the constraints
+take their share. Without constraints they cost one gradient after the run; with
+constraints they come from the multipliers' Jacobian (neither counted in
+`evaluations`); they are meaningful at convergence. Where the active constraints and
+bounds leave a flat family of designs (a drive objective under several active gates),
+and where the run ended short of stationarity (its inner runs on their value
+tolerance), the derivative can differ from what a wider box gains by its whole size: a
+sign that would move the parameter inward shows a bound that does not hold it
+(research notes, "Multipliers from the converged active set"). A restart with `from`
+in the wider box measures it.
 
 **Phase 1 and relaxations** (`phase1 = true`, `relaxation = true`). `phase1` is
 `nothing` when phase 1 did not run, else a named tuple of its `evaluations` and
@@ -1608,6 +1678,7 @@ struct PointingResult{B}
     bound_sensitivity::Vector{Float64}
     phase1::Union{Nothing,NamedTuple}
     relaxations::Vector{Relaxation}
+    stationarity::Float64
 end
 
 _names(p::GroupPointing, n) = parameter_names(p)
@@ -1625,7 +1696,8 @@ end
 Base.@nospecializeinfer function _pointing_result(
         s::_AbstractScenario, x, value, initial_value, iterations, evaluations, stopped, reason, result,
         lower, upper; constraints::Vector{ConstraintRow} = ConstraintRow[], outer::Int = 0,
-        @nospecialize(state = nothing), @nospecialize(objective = nothing), @nospecialize(lagrangian = nothing),
+        @nospecialize(state = nothing), @nospecialize(objective = nothing),
+        gradients::Union{Nothing,NTuple{2,Vector{Float64}}} = nothing, stationarity::Float64 = NaN,
         @nospecialize(phase1 = nothing), relaxations::Vector{Relaxation} = Relaxation[])
     x = collect(Float64, x)
     names = _names(s.param, length(x))
@@ -1635,17 +1707,21 @@ Base.@nospecializeinfer function _pointing_result(
     outcome = reason !== :converged ? reason :
               met ? (isempty(atb) ? :interior : :box) :
               (isempty(atb) ? :infeasible : :infeasible_box)
-    # the derivatives at the bound parameters (one gradient each, only when there are any)
+    # the derivatives at the bound parameters: from the constrained run's gradients of the
+    # objective and the Lagrangian at `x`, else one gradient of the objective, only when
+    # a parameter is at a bound
     gf, gL = Float64[], Float64[]
-    if !isempty(atb) && objective !== nothing
-        at = findall(!=(0), side)
+    at = findall(!=(0), side)
+    if gradients !== nothing
+        gf, gL = gradients[1][at], gradients[2][at]
+    elseif !isempty(atb) && objective !== nothing
         gf = _scenario_gradient(s, objective, x)[at]
-        gL = lagrangian === nothing ? copy(gf) : _scenario_gradient(s, lagrangian, x)[at]
+        gL = copy(gf)
     end
     return PointingResult(x, apply(s.param, x), Float64(value), Float64(initial_value),
                           Int(iterations), Int(evaluations), stopped, reason, result, names,
                           collect(Float64, lower), collect(Float64, upper), atb,
-                          constraints, outcome, outer, state, gf, gL, phase1, relaxations)
+                          constraints, outcome, outer, state, gf, gL, phase1, relaxations, stationarity)
 end
 
 function Base.show(io::IO, r::PointingResult)
@@ -1698,6 +1774,9 @@ function Base.show(io::IO, ::MIME"text/plain", r::PointingResult)
             @printf(io, "\n  phase 1: %s in %d evaluations", p1.feasible ? "a design within the limits" :
                     "no design within the limits", p1.evaluations)
         @printf(io, "\n  %d outer iterations: %s", r.outer, what)
+        isnan(r.stationarity) ||
+            @printf(io, "\n  stationarity: largest |∂L/∂x| inside the box %.2e (objective units per parameter unit)",
+                    r.stationarity)
     end
     _show_constraint_rows(io, r.constraints)
     isempty(r.relaxations) && return nothing

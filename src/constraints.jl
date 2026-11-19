@@ -291,12 +291,118 @@ Base.@nospecializeinfer function _constrained_pointing(
         Vold = V
         tol = tolnext
     end
-    rows = _constraint_rows(evx, cs, λ, feasibility)
+    # the reported multipliers: those that best satisfy stationarity at the design (the
+    # iteration's own, in `state`, are what a restart continues from)
+    kkt = _active_set_multipliers(s, objective, work, x, lower, upper,
+                                  _all_violations(work, evx), feasibility)
+    rows = _constraint_rows(evx, cs, kkt.λ, feasibility)
     stopped = last.stopped
     return _pointing_result(s, x, Float64(ForwardDiff.value(objective(evx))), f0, ni, ne,
                             stopped, reason, last.result, lower, upper; constraints = rows,
-                            outer = k, state, objective, phase1 = p1,
-                            lagrangian = _Lagrangian(objective, work, _split_multipliers(λ, lens)))
+                            outer = k, state, objective, phase1 = p1, gradients = kkt.gradients,
+                            stationarity = kkt.stationarity)
+end
+
+# The multipliers reported at the end of a constrained run: the nonnegative least-squares
+# solution of the stationarity condition ∂f/∂xᵢ + Σⱼ λⱼ ∂gⱼ/∂xᵢ = 0 on the parameters free
+# to move (inside the box), over the components within `feasibility` of their (working)
+# limits or beyond them (`gⱼ ≥ -feasibility`; zero for the others: complementary), the
+# least-norm one where several fit equally. A parameter at a bound is left out of the
+# fit: its row is the bound's multiplier, ∂L/∂xᵢ, of either sign (a sign that would move
+# the parameter inward shows that the bound does not hold it). The first-order update
+# λ ← max(0, λ + μ g) is exact only after an inner run solved to stationarity; an inner
+# run ended by its value tolerance leaves an error of μ times its constraint error, which
+# zeroes the multipliers of limits a few 1e-5 inside at a large μ (research notes,
+# "Multipliers from the converged active set"). Also the gradients of the objective and
+# of the Lagrangian f + Σⱼ λⱼ gⱼ at `x`, for the bound sensitivities, and the largest
+# |∂L/∂xᵢ| over the free parameters (the stationarity left with these multipliers, on
+# the scale of the inner runs' `g_tol`). One Jacobian (a gradient's cost).
+Base.@nospecializeinfer function _active_set_multipliers(s::_AbstractScenario, @nospecialize(objective),
+                                                         @nospecialize(work::Tuple), x::Vector{Float64},
+                                                         lower, upper, g::Vector{Float64},
+                                                         feasibility::Float64)
+    λ = zeros(length(g))
+    side = map(_bound_side, x, lower, upper)
+    act = findall(>=(-feasibility), g)
+    Jm = _scenario_jacobian(s, _KKTValues(objective, work), x)     # rows: f, then each gᵢ
+    gf = Jm[1, :]
+    # the stationarity rows: the parameters free to move (inside the box, not fixed)
+    free = findall(i -> side[i] == 0 && lower[i] < upper[i], eachindex(x))
+    if !isempty(act)
+        A = Jm[1 .+ act, free]'
+        # where the multipliers are not unique (components with the same gradient) the
+        # least-norm solution: a weight 1e-6 × the largest column norm on ‖λ‖, which moves
+        # the multipliers of well-conditioned columns by about 1e-12 relative
+        m = length(act)
+        ρ = 1e-6 * maximum(norm, eachcol(A); init = 0.0)
+        λ[act] .= _nnls([A; ρ * Matrix(1.0I, m, m)], [-gf[free]; zeros(m)])
+    end
+    gL = gf .+ view(Jm, 2:size(Jm, 1), :)' * λ
+    return (; λ, gradients = (gf, gL), stationarity = maximum(i -> abs(gL[i]), free; init = 0.0))
+end
+
+# The objective and the constraints' normalized violations at `ev`, stacked (the rows of
+# the Jacobian of `_active_set_multipliers`).
+struct _KKTValues{O,C<:Tuple}
+    objective::O
+    constraints::C
+end
+
+function (a::_KKTValues)(ev)
+    J = a.objective(ev)
+    gs = map(c -> _violations(c, ev), a.constraints)
+    out = promote_type(typeof(J), map(eltype, gs)...)[J]
+    return _append_all!(out, gs)
+end
+
+_append_all!(out, ::Tuple{}) = out
+_append_all!(out, gs::Tuple) = _append_all!(append!(out, first(gs)), Base.tail(gs))
+
+# Nonnegative least squares, argmin ‖A z - b‖ over z ≥ 0, by the active-set method of
+# Lawson and Hanson ("Solving Least Squares Problems", Prentice-Hall 1974, ch. 23).
+# Rank-deficient passive sets are solved by pivoted QR (a basic solution).
+function _nnls(A::Matrix{Float64}, b::Vector{Float64})
+    m, n = size(A)
+    z = zeros(n)
+    n == 0 && return z
+    P = falses(n)
+    tol = 10 * eps() * max(m, n) * max(opnorm(A, 1), 1e-300) * max(norm(b, Inf), 1e-300)
+    w = A' * b
+    # columns whose entry left the solution unchanged (its least-squares entry came out
+    # nonpositive at once, a rounding-level gain): skipped until the solution moves
+    blocked = falses(n)
+    for _ in 1:3n
+        j = 0
+        for i in 1:n
+            !P[i] && !blocked[i] && w[i] > tol && (j == 0 || w[i] > w[j]) && (j = i)
+        end
+        j == 0 && break
+        P[j] = true
+        entered = true
+        while true
+            idx = findall(P)
+            t = zeros(n)
+            t[idx] .= A[:, idx] \ b
+            if all(>(0), view(t, idx))
+                z = t
+                break
+            end
+            if entered && t[j] <= 0
+                P[j] = false
+                blocked[j] = true
+                break
+            end
+            entered = false
+            α = minimum(z[i] / (z[i] - t[i]) for i in idx if t[i] <= 0)
+            z .+= α .* (t .- z)
+            for i in idx
+                z[i] <= tol && (P[i] = false; z[i] = 0.0)
+            end
+        end
+        blocked[j] || (blocked .= false)
+        w = A' * (b - A * z)
+    end
+    return z
 end
 
 # Phase 1 of a constrained run: the box-constrained minimization of the infeasibility
@@ -432,28 +538,6 @@ Base.@nospecializeinfer function _relaxations(s::_AbstractScenario, @nospecializ
                               copy(r.x), allrows, r.evaluations))
     end
     return out
-end
-
-# The Lagrangian f + Σᵢ λᵢ gᵢ of an objective and the constraints' normalized violations,
-# for the bound sensitivities of a result.
-struct _Lagrangian{O,C<:Tuple,L<:Tuple}
-    objective::O
-    constraints::C
-    λ::L
-end
-
-function (a::_Lagrangian)(ev)
-    J = a.objective(ev)
-    terms = map((c, λ) -> _lagrangian_term(_violations(c, ev), λ), a.constraints, a.λ)
-    return J + sum(terms)
-end
-
-function _lagrangian_term(g::AbstractVector{T}, λ::Vector{Float64}) where {T}
-    s = zero(T)
-    for i in eachindex(g, λ)
-        s += λ[i] * g[i]
-    end
-    return s
 end
 
 # The working constraints with each exact ceiling whose exact value at `ev` exceeds its

@@ -13551,3 +13551,131 @@ Unchanged elsewhere: histories without thin-foil windows are bit for bit (`examp
 which has no `BurnthroughAlbedo`, at 0.8/0.4, `full`, `table`: CSV identical to main's,
 `cmp`); the diagnostic-windows tutorial runs its histories with `wall_history = false`,
 so its numbers and assertions are unchanged (run as a script against this change).
+
+## Multipliers from the converged active set (2026-11-19) *measured*
+
+Roadmap item 36 (a drive run under gates reports zero gate multipliers). The augmented
+Lagrangian of `optimize_pointing` updates its multipliers after each inner run by
+`λ ← max(0, λ + μ g)`. That update is the inner problem's own multiplier when the
+inner run ends at a stationary point of the augmented Lagrangian; an inner run that ends
+elsewhere leaves an error of μ times its error in each `g`. The inner runs end on a
+projected gradient below the tolerance or on a relative value change below
+`_AL_F_RELTOL` = 1e-10 per iteration (§ "Constrained re-pointing": without it a drive
+objective's inner run creeps for hundreds of iterations), and the outer loop counts
+either as converged. At the penalties a drive run reaches (μ of 1e2 to 1e6, grown
+because the infeasibility–complementarity measure stalls with the inner runs), a limit
+the design ends a few 1e-5 inside gets the multiplier max(0, λ − μ · 1e-5) = 0.
+
+**Closed form** (scratch scripts; `test/constraints.jl`, "multipliers from the
+converged active set", runs the first two rows below): 48 quad powers, objective
+`-c·P + ε/2 |P − 8|²` with `cᵢ = (1 + 0.3 sin i)/384` (the inner cones' raised by 50 %
+where stated) and ε = 2e-4, under ceilings on the total power
+(1.01 × 384 TW) and on the inner cones' (130 TW) and an inactive floor on the 50° cone's;
+the Karush–Kuhn–Tucker point and multipliers in closed form. Inner runs from the third
+outer iteration on ended on the value change after 1–3 L-BFGS-B iterations at
+projected gradients of 3e-5 to 6e-5, against tolerances of 1e-5 to 1e-8.
+
+| case | design error | f − f* | iteration's λ (total, inner) | reported λ | KKT λ |
+|---|---|---|---|---|---|
+| inner cones' `c` +50 %, from the start | 7.0e-5 | 1.0e-5 | 1.00893, 0.17363 | 1.00892, 0.17364 | 1.00890, 0.17364 |
+| same, restarted at μ = 10⁶ | 6.8e-5 | 3.1e-7 | 1.22289, **0** | 1.00890, 0.17364 | 1.00890, 0.17364 |
+| plain `c`, inner cap 129.2 TW | 1.3e-3 | 1.6e-6 | 1.01011, **0** | 1.00696, 0.00389 | 1.00696, 0.00388 |
+| plain `c`, inner cap 129.1 TW | 1.8e-3 | −2.8e-6 | 1.01661, **0** | 1.00665, 0.00419 | 1.00672, 0.00412 |
+| plain `c`, inner cap 130 TW | 7.9e-3 | 3.4e-5 | 1.01352, 0 | 1.01085, 0 | 1.00890, 0.00195 |
+
+With the inner cap at 129.1, 129.2 and 129.5 TW the run ends 2e-5 to 2e-4 inside the
+inner limit, and the iteration's multiplier for it is zero where the closed form's is
+3–4e-3 (at 129.3 TW it ends 4e-6 outside, with a multiplier 8 % high).
+At 130 TW the run ends 0.66 % inside that limit (outside the `feasibility` band) with
+the objective 3.4e-5 above the optimum: the design itself, not only the multiplier,
+is short of the optimum, which no multiplier estimate at that design repairs.
+
+**Fix: the report** (`_active_set_multipliers`). At the end of a constrained run the
+reported multipliers (`PointingResult.constraints`) are the nonnegative least-squares
+solution of `∂f/∂xᵢ + Σⱼ λⱼ ∂gⱼ/∂xᵢ = 0` over the parameters inside the box, on the
+components within `feasibility` of their (working) limits or beyond them, zero for the
+others (Lawson–Hanson; a weight 1e-6 × the largest column norm on |λ| picks the
+least-norm solution where several fit equally: the twelve symmetric beams of the
+keep-out test, whose plain NNLS solution put 7.49 on one beam, each get a positive
+multiplier, as the iteration's twelve of 0.624).
+One Jacobian of the objective and the constraints, a gradient's cost, after the run.
+`bound_sensitivity` is `∂L/∂xᵢ` with these multipliers, and the new field
+`PointingResult.stationarity` is the largest `|∂L/∂xᵢ|` over the parameters inside the
+box. The iteration's own multipliers stay in `state.λ` for `from`. Chosen over a change
+to the iteration because the iteration is ALGENCAN's and its update is exact for inner
+runs that end stationary; what departs is the inner value tolerance, a default (below).
+Designs, values, evaluation counts and constraint values are bit for bit: all 27 runs of
+`test/constraints.jl` (its version before this change, every call logged) and the
+tutorial's run within limits (`x` compared bitwise).
+
+**The tutorial's run within limits** (ceiling and pointing-floor gates; 1,079
+evaluations, drive 0.962575 of the 48 quads, both before and after). Normalized
+violations at the end: ceiling (stand-in at its working limit) −1.3e-4, l = 1–4
+−4.3e-4, −3.2e-5, +5.3e-6, −5.4e-3; μ = 204.
+
+| multipliers | ceiling | l = 1 | l = 2 | l = 3 | l = 4 | residual ‖·‖₂ (free) | ‖·‖∞ |
+|---|---|---|---|---|---|---|---|
+| none (the drive's gradient) | | | | | | 1.75e-2 | 3.05e-3 |
+| iteration's (reported before) | 0 | 0 | 0 | 1.08e-3 | 0 | 1.80e-2 | 3.44e-3 |
+| reported now (band-active NNLS) | 3.13e-2 | 8.3e-5 | 2.68e-3 | 1.89e-4 | 0 | 5.65e-3 | 1.21e-3 |
+| least squares, all five, signs free | 5.7e-3 | 1.6e-5 | 2.38e-3 | 6.5e-5 | 1.22e-3 | 8.8e-4 | 2.1e-4 |
+
+The reported multipliers name the limits that cost drive (the ceiling and l = 2) where
+the iteration's named none, but they leave a third of the drive's gradient: the design
+is short of stationarity, and the five-constraint fit does better only by giving l = 4,
+0.54 % inside its gate, a multiplier. The bound sensitivities move from 2.0e-6 and
+−3.6e-5 (Q12T.phi at its upper and Q14B.phi at its lower bound; both of the wrong sign)
+to −1.5e-3 and +1.4e-3. Restarts through `from` (scratch script): in the same box the
+run leaves both bounds in 46 evaluations for a gain of 1.6e-7; with either bound
+widened by 0.01 or 0.02 mm it gains under 6e-9 (the same design); with a bound
+narrowed, the drive falls by amounts that are not monotonic in the step (Q12T.phi:
+1.4e-4 at 0.01 mm, 1.1e-5 at 0.02 mm), the differences between neighboring designs of
+the flat family. The bounds do not hold these parameters, and no first-order
+derivative at this design predicts that: the overstatement of a wider box's gain
+recorded on a re-pointing study (§ "Constrained re-pointing", "On the study") has the
+same cause, a design that ends short of stationarity, and the corrected multipliers do
+not remove it. `stationarity` now shows it on every result.
+
+**User decision: the inner value tolerance.** On the closed form (plain `c`, inner cap
+130 TW, default options otherwise):
+
+| `_AL_F_RELTOL` | evaluations | outer | design error | f − f* | inner limit (normalized) | `stationarity` | iteration's inner-cap λ |
+|---|---|---|---|---|---|---|---|
+| 1e-10 (default) | 219 | 7 | 7.9e-3 | 3.4e-5 | −6.6e-3 | 3.5e-5 | 0 |
+| 1e-12 | 204 | 7 | 2.3e-4 | 5.5e-7 | −1.6e-5 | 5.7e-7 | 0 |
+| 1e-14 | 206 | 7 | 3.5e-6 | −2.5e-8 | −4.4e-9 | 8.5e-9 | 1.95391e-3 |
+| 0 (off) | 206 | 7 | 3.5e-6 | −2.5e-8 | −4.4e-9 | 8.5e-9 | 1.95391e-3 |
+
+(KKT: 1.95409e-3.) The negative f − f* is the run ending 2.5e-8 outside the total-power
+cap, within `feasibility`.
+
+On the tutorial's run within limits (8 threads, budget 3,000 evaluations; another run
+shared the machine, so evaluation counts rather than times):
+
+| `_AL_F_RELTOL` | evaluations | end | drive / 48 quads | `stationarity` | reported λ (ceiling, l = 1–4) | iteration's λ |
+|---|---|---|---|---|---|---|
+| 1e-10 (default) | 1,079 | converged (box) | 0.962575 | 1.2e-3 | 3.1e-2, 8e-5, 2.68e-3, 1.9e-4, 0 | 0, 0, 0, 1.08e-3, 0 |
+| 1e-12 | 2,308 | converged (box) | 0.962609 | 1.9e-5 | 2.58e-3, 1e-5, 2.38e-3, 4.0e-5, 1.27e-3 | 2.63e-3, 0, 2.27e-3, 8.2e-5, 1.28e-3 |
+| 1e-14 | 3,000 | evaluation budget | 0.962611 | – | 2.40e-3, 1e-5, 2.38e-3, 3.9e-5, 1.27e-3 | 2.53e-3, 0, 2.40e-3, 3.9e-5, 1.27e-3 |
+
+At 1e-12 every gate ends active (the l = 4 gate, 0.54 % inside at the default, at its
+limit), the exact peak at 1.0010 of the ceiling (within `feasibility`), the fit leaves
+0.3 % of the drive's gradient (2-norm over the free parameters) and the iteration's own
+multipliers come within 5 % of the fit's on the three limits that bind (ceiling, l = 2,
+l = 4), at 2.1 times the evaluations for 3.5e-5 more drive (inside the 1e-4
+differences of the flat family). Five parameters end at a bound; for four of them
+restarts with the bound narrowed by 0.01 and 0.02 mm cost 1.4e-4 to 6.4e-4 of the
+objective per mm, not monotonic in the step, against reported sensitivities of 1.1e-4
+to 1.9e-4 (the fifth's restarts reached the budget); with a bound widened the restart
+(38–60 evaluations, on the same value tolerance) leaves the parameter at the old bound
+and gains under 6e-7 per mm. A
+first-order sensitivity on this flat family is an order-of-magnitude estimate of the
+cost of narrowing, and a restart is the measure of what widening gains.
+
+Recommendation: keep 1e-10. The designs agree within the flat family's spread at half
+the evaluations, and the reported multipliers with `stationarity` now state how far a
+result is from a Karush–Kuhn–Tucker point. A run whose multipliers or bound
+sensitivities matter can be continued with `from` at a tighter inner tolerance if the
+tolerance becomes a keyword (not one now; the user's decision).
+
+Confidence: the closed forms are exact; the tutorial's case is one start and one mesh.
