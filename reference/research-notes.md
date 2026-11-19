@@ -12625,3 +12625,34 @@ what bears on a view-factor drive model:
   paper states that integrated simulations predict neither the coupling nor the shape,
   and that the flux asymmetry is inferred from in-flight and stagnation images, not
   measured: none of its drive numbers is a measurement of the drive.
+
+## Drive histories: sliver steps and the albedo of a phase (2026-11-18) *measured*
+
+**Sliver steps through a burnthrough.** A quasi-static `drive_history` of a hohlraum
+with two thin gold windows (`BurnthroughAlbedo`, `WallLossAlbedo` wall, `wall_history`
+and `wall_release` on, `transition = 0.05`, 11k elements: a Float32, iterative model)
+stopped in a scratch study with "iterative radiosity solve (radiosity) did not converge
+in 400 iterations" at 0.1 ns steps; the same run at 0.2 ns steps, or with two more
+beams, converged. Cause: `transition` planned a step ending 7.8e-6 ns short of one of
+`times`, and that remainder was taken as a step of its own. The wall cooled slightly as
+the windows began to burn through, so the wall elements were in `wall_release`'s
+re-emitting branch, whose implicit part puts `C Δ^(b−1) φ(T)/H` (b − 1 = −0.38) into the
+albedo: at Δ = 7.8e-6 ns the factor `Δ^(b−1)` is 87 and the wall albedo was −27 on 7,310
+elements. The unpreconditioned restarted GMRES of a large model does not solve that
+system: on the failing step's albedos and source it did not converge in 3,000
+iterations either, while the same albedo pattern scaled to Δ = 1e-4, 1e-3, 1e-2 and
+0.1 ns (albedo minima −9.6, −3.4, −0.85, 0) converged in 80, 22, 11 and 9 iterations.
+Raising the cap would not help. The fix is in the planner: a planned step that would
+leave less than `min_step` (1e-3 ns) before the next of `times` runs to it instead (the
+transition then advances by at most a `min_step`'s worth beyond the tolerance, inside
+the 1.5× check). With it the study's run completes (108 steps, shortest 4.7e-3 ns,
+lowest albedo of any converged step −0.057). Public mock-up (`test/burnthrough.jl`,
+"burnthrough steps leave no sliver"): a 760-element hohlraum with a 1 µm gold window
+2 mm across, NIF quads, a pulse falling from 6 to 2 TW per quad between 0.6 and 0.8 ns
+while the window burns through (0.44 ns onward), an iterative model, and a goal 5e-6 ns
+past an inserted step: before the fix every such goal on a cooling step failed (13 of
+13), after it all complete, with the lowest albedo −1.4. Given as times, the sliver's
+albedo is −33, and on a direct (LU) model the gray solve then succeeds but the M-band's
+thermalized group solve (an unpreconditioned GMRES as well) does not converge. Histories
+without `transition` are unchanged (the N221204 example's CSV byte-identical), and with
+it, only where a planned step ended within `min_step` of a goal.

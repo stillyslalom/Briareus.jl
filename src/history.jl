@@ -264,8 +264,13 @@ much longer than that jumps across it. Two optional criteria insert steps betwee
   `observe`, changes by no more than this in one step; a step that exceeds it is
   halved and solved again.
 
-Neither shortens a step below `min_step` (ns). Without them (the default) the steps
-are exactly `times`.
+Neither shortens a step below `min_step` (ns), and a planned step that would leave
+less than `min_step` before the next of `times` runs to it instead. Without them (the
+default) the steps are exactly `times`. With `wall_release`, a cooling wall element's
+albedo in a step of length Δ falls as `1 − c Δ^(b−1)` (the release kernel's implicit
+part): a step of 1e-5 ns gave albedos near −27, which the unpreconditioned GMRES of a
+large model does not solve, so steps much shorter than `min_step` are best left out of
+`times` too.
 """
 drive_history(m::RadiationModel, op::DepositionOperator, beams_at, times; kwargs...) =
     _drive_history(m.target, τ -> m, τ -> op, beams_at, times; kwargs...)
@@ -514,6 +519,10 @@ Base.@nospecializeinfer function _drive_history(
                         end
                     end
                     τ = min(lo, τgoal)
+                    # a remainder shorter than `min_step` joins this step: a sliver left
+                    # before the goal is pure discretization, and the wall release's
+                    # short-time kernel (Δ^(b-1)) makes its albedo strongly negative
+                    τgoal - τ < min_step && (τ = τgoal)
                 end
             end
             local sol, Ik, tk, rk, Iwk, rwk, hist, ds, Il, a, dep, P0, bl, msplit, uc

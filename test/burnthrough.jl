@@ -423,3 +423,36 @@ end
     s1 = solve(mc, deposit(op, f(1.0)); time = 1.0)
     @test h.window_loss[findfirst(==(1.0), h.time)] ≈ energy_balance(s1).transmitted[:window_1_gap] rtol = 1e-6
 end
+
+@testset "burnthrough steps leave no sliver" begin
+    # A thin gold window burns through while the drive falls, so the wall cools and
+    # re-emits (`wall_release`) during the transition. A planned step that ended a few
+    # 1e-6 ns short of one of `times` left that sliver as a step of its own; the release
+    # kernel's Δ^(b-1) made the cooling wall's albedo about -30 there, and the
+    # unpreconditioned GMRES of a large (iterative) model did not converge (a
+    # multi-phase re-pointing study, 2026-11-18). The remainder now joins the step.
+    kw = (; nz = 12, nphi = 16, capsule_ntheta = 8, capsule_nphi = 12)
+    wall = Material(:Au; albedo = WallLossAlbedo(), conversion = 0.8)
+    foil = Material(:Au; albedo = BurnthroughAlbedo(; thickness = 1.0), conversion = 0.8)
+    tw = hohlraum(; kw..., wall, windows = [WallWindow(phi = 0, diameter = 2.0, material = foil)])
+    mi = RadiationModel(tw; closed = true, solver = :iterative)
+    q = [remake(b; aim = (0.0, 0.0, sign(b.port[3]) * 4.0)) for b in nif_quads()]
+    op = DepositionOperator(tw, q)
+    f = τ -> with_pulses(q, PulseShape([0.0, 0.3, 0.6, 0.8, 5.0], [0.0, 6.0, 6.0, 2.0, 2.0]), τ)
+    coarse = collect(0.25:0.25:1.0)
+    h = drive_history(mi, op, f, coarse; transition = 0.05)
+    # a step inserted while the wall cools (its temperature below its running maximum)
+    k = findfirst(k -> !(h.time[k] in coarse) && h.wall_Tr[k] < maximum(h.wall_Tr[1:k-1]), 2:length(h.time)) + 1
+    goal = h.time[k] + 5e-6
+    times = sort([coarse; goal])
+    minα(sol) = minimum(sol.albedo)
+    hs = drive_history(mi, op, f, times; transition = 0.05, record = minα)
+    @test issubset(times, hs.time) && minimum(diff(hs.time)) >= 1e-3
+    @test minimum(hs.record) > -5          # a step of min_step (1e-3 ns) gives about -3
+    # the sliver itself, the first history's steps and the goal given as times: the
+    # albedo it makes (solved directly, and gray: the M-band's thermalized group solve,
+    # an unpreconditioned GMRES, does not converge at these albedos either)
+    md = RadiationModel(tw; F = mi.F, solver = :direct)
+    hd = drive_history(md, op, f, sort([h.time; goal]); record = minα, mband = nothing)
+    @test hd.record[findfirst(==(goal), hd.time)] < -10
+end

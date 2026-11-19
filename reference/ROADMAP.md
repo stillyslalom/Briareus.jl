@@ -41,8 +41,15 @@ constrained runs that stall at their bounds and force staged tolerances (item 36
     `WallLossAlbedo` wall, `wall_history` on, `transition = 0.05`) stopped at 0.1 ns steps
     with "iterative radiosity solve (radiosity) did not converge in 400 iterations" for
     190 beams; the same run at 0.2 ns steps, and at 0.1 ns with all 192 beams, converged.
-    *Remains:* a reproduction on a public mock-up; then the iteration cap, or a fallback
-    to the direct solve.
+    The cause: the `transition` planner ended a step 8e-6 ns short of a goal
+    time and took the remainder as a step of its own; on a cooling wall the release's
+    implicit part scales as Δ^(b−1), which put the albedo of the wall's elements near
+    −27, a system GMRES does not solve at any iteration cap. The planner now runs a
+    step to the goal when less than `min_step` would be left; a public mock-up test
+    holds it, and the study's run completes. *Remains:* steps much shorter than
+    `min_step` given by the caller on a cooling wall still stiffen the release
+    (documented); a bound on the short-step factor in the wall-release kernel would be
+    a physics change (user).
 
 ## VisRad parity and facility practice
 
