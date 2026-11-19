@@ -147,6 +147,8 @@ end
     xph = initial_parameters(pph.param)
     augph = Briareus._Augmented(in_phase(:a, objectives[2]), (in_phase(:a, ceilc), in_phase(:b, gatec)),
                                 ([0.5], [0.1, 0.0, 0.2, 0.0]), 3.0)
+    # the least re-pointing's objective (weights per cone)
+    shobj = shift_objective(quads; weight = b -> b.group === :outer44 ? 2.0 : 1.0)
 
     @testset "closures compile once" begin
         history(τ -> with_pulses(quads, pulse, τ), [0.5, 1.0]; record = sol -> sol)
@@ -310,6 +312,7 @@ end
             @test (@inferred relaxg(ev)) isa T
             @test (@inferred gatee.f(ev)) isa Vector{T}
             @test (@inferred dfl.f(ev)) isa T
+            @test (@inferred shobj(ev)) isa T
         end
         # the phased path: the beams per phase, a phase's constraint and objective, the
         # augmented Lagrangian over the phases
@@ -442,6 +445,8 @@ end
                 @test _inf_jet_clean(JET.report_call, relaxg, ev)
                 @test _inf_jet_clean(JET.report_call, gatee.f, ev)
                 @test _inf_jet_clean(JET.report_call, dfl.f, ev)
+                @test _inf_jet_clean(JET.report_opt, Briareus._mean_shift2, shobj, ev.beams)
+                @test _inf_jet_clean(JET.report_call, shobj, ev)
             end
             # the outer picket fluence: no dispatch (from 1.11, as the deposition), no errors
             for x in (xo, _inf_duals(xo))

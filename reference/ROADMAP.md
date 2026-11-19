@@ -331,9 +331,9 @@ analog is the dropped-bundle tutorial, `docs/literate/dropped_bundle.jl`).
       (k-means on the log multipliers, the split between the inner and outer cones
       chosen by fit) and re-optimized with tied `PowerScales`. A helper for the grouping,
       and for writing the shapes out as `PulseShape` tables.
-    - A ready-made smallest-shift objective (mean squared aim shift from the starting
-      beams), for the minimum re-pointing that meets given gates: a per-LEH study used
-      it to cost each entrance-hole size against a fixed reference drive.
+    - The smallest re-pointing that meets given gates: `shift_objective`,
+      the weighted mean squared aim shift from reference beams, and
+      `PointingSummary.shift_rms`.
 
     The tutorial's section "A re-pointing study, end to end" walks these on exported
     names only (a96792f): quads held, a power scale per cone, the gates, the ceiling, a

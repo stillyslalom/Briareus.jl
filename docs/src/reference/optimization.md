@@ -54,7 +54,9 @@ Private = false
 [`pointing_summary`](@ref) reports a pointing against reference beams (a re-pointing
 result against its start): aim shifts, power and cone fraction, keep-out clearances,
 the clipped and missed fractions and, against a reference design's drive, the drive
-ratio and the departure per degree.
+ratio and the departure per degree. [`shift_objective`](@ref), the mean squared aim shift
+from reference beams, gives with gates as constraints the least re-pointing that meets
+them.
 
 ```@autodocs
 Modules = [Briareus]

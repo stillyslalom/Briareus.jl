@@ -1,8 +1,9 @@
 # `pointing_summary`: aim shifts against closed forms (rigid shifts per quad), power and
 # cone fraction, keep-out clearances and the clipped fraction as the functions that
-# define them give them, and the summary of an optimizer's result and of a subset.
+# define them give them, and the summary of an optimizer's result and of a subset; the
+# smallest-shift objective against closed forms (below).
 
-using Briareus, LinearAlgebra, Test
+using Briareus, LinearAlgebra, ForwardDiff, Test
 
 # A keep-out whose rule cannot place the first beam (-Inf), does not apply to the second
 # (+Inf) and clears the others by 0.2 mm, or with `fail = false` the first by 0.2 mm too.
@@ -79,4 +80,48 @@ Briareus.keepout_clearance(k::_SummaryKeepOut, beams::AbstractVector{<:Beam}) =
     @test all(same.departure .< 1e-12)
     ds = sprint(show, d)
     @test !occursin('\n', ds) && occursin("of the reference, departure (l = 1–4)", ds)
+    @test isapprox(sm.shift_rms, sqrt((47 * 0.3^2 + 0.5^2) / 48); rtol = 1e-12) && occursin("rms 0.30", shown)
+end
+
+# `shift_objective`: the weighted mean squared aim shift against closed forms, its
+# gradient against the closed form 2 w Δ / Σw, and the least re-pointing that meets one
+# linear constraint on the aims, whose solution has a closed form: with the mean axial aim
+# of a set S of quads raised by δ, each quad of S shifts by δ |S| (1/w) / Σ_S (1/w) and
+# every other quad stays.
+@testset "shift objective" begin
+    t = hohlraum(nz = 8, nphi = 16, capsule_ntheta = 6, capsule_nphi = 8)
+    quads = hybride_mock_pointing(nif_quads(power = 8.0))
+    p = GroupPointing(quads; by = :quad, fields = (:z,), mirror = false, relative = true)
+    s = Scenario(t, p)
+    names = parameter_names(p)
+    x = [0.01 * i * (-1)^i for i in eachindex(names)]
+    ev = evaluate(s, x)
+    o = shift_objective(s)
+    @test o(ev) ≈ sum(abs2, x) / 48 rtol = 1e-12
+    @test o(ev) ≈ pointing_summary(s, ev.beams).shift_rms^2 rtol = 1e-12
+    dearer = b -> b.group === :outer44 ? 3.0 : 1.0
+    w = [dearer(q) for q in quads]
+    ow = shift_objective(quads; weight = dearer)
+    @test ow(ev) ≈ sum(w .* x .^ 2) / sum(w) rtol = 1e-12
+    gw = ForwardDiff.gradient(y -> ow(evaluate(s, y)), x)
+    @test gw ≈ 2 .* w .* x ./ sum(w) rtol = 1e-12
+    # matched by name: a subset against the full set; a beam without a reference beam
+    keep = findall(b -> b.group !== :inner23, quads)
+    @test o(evaluate(subset(s, keep), ev.beams[keep])) ≈ sum(abs2, x[keep]) / length(keep) rtol = 1e-12
+    @test_throws ArgumentError shift_objective(quads[1:4])(ev)
+    @test_throws ArgumentError shift_objective(quads; weight = b -> -1.0)
+    @test_throws ArgumentError shift_objective([quads; quads[1]])
+    @test_throws ArgumentError shift_objective(quads; weight = b -> 0.0)(ev)
+
+    # the least re-pointing for a mean axial lift δ of the upper outer quads
+    top(b) = b.port[3] > 0 && b.group in (:outer44, :outer50)
+    S = findall(top, quads)
+    δ = 0.1
+    zbar(ev) = sum(b.aim[3] for b in ev.beams if top(b)) / length(S)
+    lift = Constraint(:lift, zbar; lower = zbar(evaluate(s, zeros(48))) + δ)
+    r = optimize_pointing(s, ow; constraints = (lift,), feasibility = 1e-8)
+    expect = [i in S ? δ * length(S) / w[i] / sum(1 ./ w[S]) : 0.0 for i in 1:48]
+    @test r.outcome === :interior && maximum(abs, r.x - expect) < 1e-5
+    @test r.value ≈ sum(w .* expect .^ 2) / sum(w) rtol = 1e-4
+    @test only(r.constraints).status === :active
 end

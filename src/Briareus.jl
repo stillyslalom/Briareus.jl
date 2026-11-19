@@ -116,7 +116,7 @@ export HOTSPOT_VELOCITY_PER_PERCENT, mode1_vector, hotspot_velocity, ResponseKer
        implosion_metrics, mode1_tolerance, swing_metrics,
        velocity_uncertainty, ntof_covariance, infer_velocity_errors, VelocityPenalty
 export CapsuleDrive, capsule_drive
-export PointingSummary, pointing_summary
+export PointingSummary, pointing_summary, shift_objective
 export PhasedScenario, Phase, PhasedPointing, PerPhase, in_phase, phase_beams
 export port_basis, visible
 export DIAGNOSTIC_SCHEMA, TabulatedCurve, DiagnosticField, DiagnosticIssue, DiagnosticDefinition,
