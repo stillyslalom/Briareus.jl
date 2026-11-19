@@ -723,7 +723,7 @@ grouping kept. The default pointing keeps the groups (and so the parameter names
 the scenario's.
 """
 function subset(ps::PhasedScenario, keep::AbstractVector{<:Integer}; pointing = nothing)
-    p = pointing === nothing ? _subset_kept(ps.param.pointing, keep) : pointing
+    p = pointing === nothing ? _subset_param(ps.param.pointing, keep) : pointing
     beams = apply(ps.param.pointing, initial_parameters(ps.param.pointing))
     phases = map(ps.phases) do ph
         P = _phase_power(ph, beams)

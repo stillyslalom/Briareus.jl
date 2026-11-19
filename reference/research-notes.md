@@ -13998,3 +13998,26 @@ leh_radius = 1.55, capsule_radius = 0.9)`, h 0.8 / capsule_h 0.3) with a wall of
 
 `test/energetics.jl` checks that the default equals `gold()`'s conversion and that a wall
 on `Conversion()` solves bit for bit as one on the number 0.9.
+
+### 2. `subset` keeps a `GroupPointing`'s groups
+
+`subset(scenario, keep)` without a parameterization rebuilt a `GroupPointing` scenario's
+parameterization on the kept beams grouped by `:group` (the cone), whatever the
+pointing's own grouping; the composed parameterizations (`HeldParameters`,
+`PowerScales`, a `PhasedScenario`'s pointing) already kept theirs ("Re-pointing studies
+on the public API"). Now every default subset keeps the groups: a group that keeps a
+beam keeps its key, so the subset's parameter names are those of the full pointing, with
+its fields, mirroring, `relative`, `unit` and sphere (one function, `_subset_param`,
+where there were two). A pointing grouped by `:group` gets the same groups in the same
+order as before, bit for bit.
+
+What moves (every case found): a pointing grouped otherwise and subset without a
+parameterization. In `test/pointing_summary.jl` the per-quad pointing (`by = :quad`,
+`:z` and `:phi`, unmirrored, relative) of 44 kept quads runs one iteration on 88
+parameters instead of 8 (one pair per quad, not per cone); the test compares two
+summaries of the same result and passes. In `test/basics.jl` (`by = :quad`, `:power`)
+and `BriareusGUI/test/test_halfraum.jl` the subset is evaluated on given beams, so its
+parameterization does not enter. The tutorials pass a parameterization to every
+`subset` they optimize on, and `examples/n221204.jl` builds no subset: neither can move.
+`test/parameterizations.jl` checks the default against a `GroupPointing` built by hand
+on the kept beams by quad (names and beams equal).

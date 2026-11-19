@@ -812,20 +812,21 @@ function _check_operator(op::DepositionOperator, beams)
 end
 
 """
-    subset(scenario, keep; parameterization = GroupPointing(kept beams; same fields))
+    subset(scenario, keep; parameterization = the scenario's, restricted to the kept beams)
 
 Scenario for the beams `keep` (indices into the scenario's beams) — e.g. after
 dropping a bundle — reusing the view factors, flux response and mode weights; only the
 deposition operator is restricted. The kept beams' template values (pointing, power)
-come from the scenario's parameterization; the default new parameterization keeps its
-fields, mirroring, `relative`, `unit` and sphere and groups by `group` (pass one to group
-by quad or beam; with `unit = :quad`, the default, a quad's azimuth and split are then
-those of its kept beams). For a [`FramePointing`](@ref) scenario, the default keeps the kept beams'
-frames, groups, fields and `relative`.
+come from the scenario's parameterization. The default new parameterization keeps the
+groups of the scenario's: a [`GroupPointing`](@ref)'s groups that keep a beam keep their
+keys, so the parameter names of the subset are those of the full pointing, with its
+fields, mirroring, `relative`, `unit` and sphere (with `unit = :quad`, the default, a
+quad's azimuth and split are those of its kept beams); pass a parameterization to group
+the kept beams otherwise. For a [`FramePointing`](@ref) scenario, the default keeps the
+kept beams' frames, groups, fields and `relative`.
 
 For a [`HeldParameters`](@ref) or [`PowerScales`](@ref) scenario the default wraps the
-subset of the inner parameterization that keeps its groups (a `GroupPointing`'s keys,
-unlike its own default above), so the kept parameters keep their names, and is what
+inner parameterization's subset, so the kept parameters keep their names, and is what
 the wrappers built by hand on the kept beams give: a parameter whose group keeps some of
 its beams keeps its value and stays held or free (the value applies to the kept beams as
 it applied to all, an absolute aim or a shift); one whose group keeps none is dropped,
@@ -839,14 +840,10 @@ function subset(s::Scenario, keep::AbstractVector{<:Integer}; parameterization =
                     s.lpi, s.time, getfield(s, :_response), s.albedo)
 end
 
-_subset_param(p::GroupPointing, keep) =
-    GroupPointing(p.template[keep]; fields = Tuple(p.fields), mirror = p.mirror,
-                  relative = p.relative, unit = p.unit, radius = _spherical(p) ? p.radius : nothing,
-                  center = p.center)
-
 # The beams `keep` of `p` in their own groups (the groups that keep a beam keep their
-# keys, so their parameter names), the other options as `_subset_param`'s.
-function _subset_kept(p::GroupPointing, keep)
+# keys, so their parameter names), with its fields, mirroring, `relative`, `unit` and
+# sphere.
+function _subset_param(p::GroupPointing, keep)
     key = similar(p.keys, length(p.template))
     for (g, mem) in enumerate(p.members), bi in mem
         key[bi] = p.keys[g]

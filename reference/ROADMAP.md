@@ -308,10 +308,10 @@ analog is the dropped-bundle tutorial, `docs/literate/dropped_bundle.jl`).
       exported (2acd1e9); left: `closest_hit` as a method on the target (it takes the
       internal `BVH`), the beam's section at a plane (`_beam_at_plane` is shaped for
       CBET: a `beam_section(beam, point, normal)`).
-    - `subset` keeps a composed parameterization's parameter names, values and holds,
-      and the wrappers take named values (59b366d). Left: whether `GroupPointing`'s own
-      `subset` default keeps its groups instead of regrouping by `:group` (a one-line
-      change of a documented default: user); reading a wrapper's values off beams.
+    - `subset` keeps a parameterization's parameter names, values and holds, a
+      `GroupPointing`'s own groups included since 2026-11-19 ("Defaults changed
+      (2026-11-19)"), and the wrappers take named values (59b366d). Left: reading a
+      wrapper's values off beams.
       `GroupPointing` points by quad by default since 33cf879, with a quad's split as
       a parameter (`:split`) and `unit = :beam` or `by = :beam` for beams pointed apart.
     - One pointing over several phases: `PhasedScenario` ("One pointing over

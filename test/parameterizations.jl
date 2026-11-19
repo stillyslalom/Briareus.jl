@@ -174,6 +174,12 @@ using Briareus, ForwardDiff, LinearAlgebra, Test
         # a group (cone) that loses every beam loses its scale
         ss = Briareus._subset_param(PowerScales(gq), findall(b -> b.group !== :outer44, beams))
         @test ss.keys == [g for g in unique(b.group for b in beams) if g !== :outer44]
+        # a GroupPointing's own subset keeps its groups too: the full pointing's names, as
+        # built by hand on the kept beams by quad
+        sg = subset(Scenario(t, gq), keep).param
+        hg = GroupPointing(beams[keep]; by = :quad, fields = (:z, :phi), mirror = false, relative = true)
+        @test parameter_names(sg) == parameter_names(hg) && all(in(parameter_names(gq)), parameter_names(sg))
+        @test apply(sg, initial_parameters(hg) .+ 0.04) == apply(hg, initial_parameters(hg) .+ 0.04)
 
         # named values: a quad's fields and its scale by the quad's name, passed through
         # to the inner parameterization; a held parameter is refused

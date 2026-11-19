@@ -315,15 +315,10 @@ _named_values(p, kv) = isempty(kv) ? Pair{Int,Any}[] :
     throw(ArgumentError("named values need a GroupPointing or FramePointing inside, not a $(typeof(p))"))
 
 # `subset`'s default for the wrappers (`subset` in optimize.jl): the inner
-# parameterization's subset that keeps its groups, wrapped again.
-_subset_param(h::HeldParameters, keep) = _subset_kept(h, keep)
-_subset_param(ps::PowerScales, keep) = _subset_kept(ps, keep)
-
-_subset_kept(p, keep) = _subset_param(p, keep)    # a `FramePointing` keeps its groups
-
-# The kept parameters (by name) at their values, held or free as they were.
-function _subset_kept(h::HeldParameters, keep)
-    inner = _subset_kept(h.inner, keep)
+# parameterization's subset, which keeps its groups, wrapped again. The kept parameters
+# (by name) at their values, held or free as they were.
+function _subset_param(h::HeldParameters, keep)
+    inner = _subset_param(h.inner, keep)
     old = _inner_names(h.inner, length(h.values))
     new = _inner_names(inner, length(initial_parameters(inner)))
     idx = [something(findfirst(==(n), old), 0) for n in new]
@@ -335,8 +330,8 @@ end
 
 # The kept groups' scales, in order of first appearance among the kept beams (as the
 # constructor orders them).
-function _subset_kept(ps::PowerScales, keep)
-    inner = _subset_kept(ps.inner, keep)
+function _subset_param(ps::PowerScales, keep)
+    inner = _subset_param(ps.inner, keep)
     g = ps.group[keep]
     used = unique(g)
     return PowerScales(inner, length(initial_parameters(inner)), ps.keys[used], [findfirst(==(i), used) for i in g])
