@@ -186,6 +186,12 @@ end
 # arrives, and the default transition width puts half transmission there. A
 # constant-temperature estimate would burn the foils through three times too early.
 #
+# That timing is calibrated on bare foils under Nova's slowly rising drive. Under an
+# ignition-scale drive a 1-D gold foil (`examples/tamped_foil.jl`) starts transmitting
+# about 0.6 ns after the front arrives and passes about half the energy the default
+# transition and transmission give it; [`BurnthroughAlbedo`](@ref) lists the numbers, and
+# a study of such a drive should bracket a window's start time and transmission.
+#
 # Before the front arrives, the foil absorbs exactly what a thick wall does: in the
 # diffusion picture the cold gold ahead of a nonlinear front does not change the flux
 # into it, and the measurements show no early transmission. So the thin-foil albedo

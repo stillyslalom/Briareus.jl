@@ -61,4 +61,18 @@ using Briareus, Test
     @test_throws ArgumentError history_state(t, drive_history(m, op, beams_at, times[1:2]), 0.25)
     @test_throws ArgumentError history_state(t, h, 0.1)
     @test_throws ArgumentError history_state(t, h, 3.5)
+
+    # a window whose transmission follows its temperature profile (`DiffusionTransmission`):
+    # once burned through, each element transmits the fraction for the flux on it at that step
+    fd = Material(:Au; albedo = BurnthroughAlbedo(; thickness = 1.0, transmission = DiffusionTransmission()),
+                  conversion = 0.8)
+    td = hohlraum(; kw..., wall, windows = [WallWindow(phi = 0, diameter = 2.0, material = fd)])
+    hd = drive_history(RadiationModel(td; F = m.F), op, beams_at, times; keep_albedo = true, lmax = 4,
+                       record = sol -> radiation_temperature.(sol.H[ew]))
+    ld = history_state(td, hd, times[end])
+    @test ld.windows[:window_1].burned
+    @test ld.transmission[ew] ≈ foil_transmission.(Ref(fd.albedo), hd.record[end]) rtol = 1e-3
+    # below the gray estimate at the same temperature (`RosselandTransmission`)
+    gray = BurnthroughAlbedo(; thickness = 1.0, transmission = RosselandTransmission())
+    @test all(ld.transmission[ew] .< foil_transmission.(Ref(gray), hd.record[end]))
 end

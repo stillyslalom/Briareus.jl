@@ -27,7 +27,7 @@ export Vec3, Mesh, npatches, add_polygon!, merge_meshes, split_mesh, connected_p
        cylinder_mesh, annulus_mesh, disk_mesh, sphere_mesh, cubed_sphere_mesh, icosphere_mesh,
        icosphere_frequency, rectangle_mesh, frustum_mesh
 export AlbedoModel, ConstantAlbedo, TabulatedAlbedo, WallLossAlbedo, BurnthroughAlbedo, HeatFront,
-       RosselandTransmission, foil_transmission, GapClosure, LipClosure, lip_depth,
+       RosselandTransmission, DiffusionTransmission, diffusion_transmission, foil_transmission, GapClosure, LipClosure, lip_depth,
        heat_front, burnthrough_time, areal_mass, optical_depth, eddington_transmission, albedo, Material, gold, ablator, BLACK,
        TemperatureAlbedo, CapsuleAlbedo, RadiusSchedule, TabulatedRadius,
        ScaledRadius, TrajectoryRadius, radius_fraction, du_wall_loss, wall_loss_factor, uranium,

@@ -669,14 +669,25 @@ analog is the dropped-bundle tutorial, `docs/literate/dropped_bundle.jl`).
       uncertainty; 7.4 ns for ≈ 3 µm of gold). For the hohlraum the window's loss
       starts when the gold burns through, about 2 ns before the flux emerges: both
       calibrations to the edge start the loss that much too late. No backing option
-      was added (the albedo does not depend on the backing). *Remains:*
-      `BurnthroughAlbedo`'s onset and rise under an ignition-scale drive (in 1-D the
-      gold starts transmitting 0.6 ns after the front and passes about 0.62 of the
-      energy the 0.4 ns transition gives it; the width is calibrated on bare Nova
-      foils at 260 eV: user); what the backing absorbs against what leaves, in
-      `drive_history`'s accounts. *Data:* emergence through the same gold with another
-      backing (Be emerges 0.9–1.0 ns after epoxy), then another gold thickness; the
-      Letter's window flux as a check of the transmitted fraction.
+      was added (the albedo does not depend on the backing). Now the
+      docstring carries the caution for ignition-scale drives, and
+      `DiffusionTransmission` is an opt-in transmitted fraction (steady diffusion
+      through a foil whose opacity falls as T^−1.5 across it; no fitted parameter;
+      Lester's eq. 2 at a constant opacity): 0.17–0.175 for 2.5 µm against the
+      Letter's extracted 0.18 (a blind check) and the default's 0.235; on a public
+      mock-up the windows' peak loss falls from 10.4 to 7.0 TW and their peak δ₂ from
+      2.17 to 1.45 %. The default is unchanged (user, 2026-11-18). *Remains:* the
+      onset under an ignition-scale drive (the 1-D foil lags the front by 0.6 ns and
+      passes 0.49–0.54 of the default's energy over 4–9 ns, 0.76–0.79 of the
+      option's; but an onset that follows the 1-D foil is 0.1–0.3 ns late on Nova's
+      measured times, so the Nova-calibrated `width` stays); an intact foil's
+      `before` albedo is outside `wall_history` (it is evaluated at the time since
+      the pulse start, which makes an intact window brighter than the wall early in
+      the peak: δ₂ 0.44 % before burnthrough on a coarse check); what the backing
+      absorbs against what leaves, in `drive_history`'s accounts. *Data:* emergence
+      through the same gold with another backing (Be emerges 0.9–1.0 ns after epoxy),
+      then another gold thickness; the Letter's window flux with its solid angle
+      calibrated.
     - The burned-through windows' symmetry against Lester et al.'s estimate. On the
       study's pointing, two 2 mm windows of 2 µm gold burned through change the capsule
       drive by δ2 = 2.5 % (c₂₀/c₀₀ +0.58 %, c₂,±₂/c₀₀ +0.84 and −0.49 %) and δ4 = 0.7 %,

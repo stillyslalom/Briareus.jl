@@ -344,6 +344,70 @@ function _transmission(m::RosselandTransmission, τref, Tr)
 end
 
 """
+    DiffusionTransmission(; reference_temperature = 325.0, exponent = 1.5)
+
+Post-burnthrough transmission of a gold foil whose Rosseland opacity follows its own
+temperature through its thickness, for `BurnthroughAlbedo(; transmission =
+DiffusionTransmission())` (opt-in; the default is the constant gray estimate). The
+optical depth at the temperature `T` (eV) of the flux on the foil is that of
+[`RosselandTransmission`](@ref), `τ = τ_ref (T / reference_temperature)^(-exponent)`;
+the transmitted fraction `t` is the steady planar diffusion flux through a foil whose
+opacity varies as `T^(-α)` (`α = exponent`) across it, its front at `T` and its rear
+radiating into vacuum (`T_rear⁴ = t T⁴/2`, the boundaries of Lester et al.'s eq. 2):
+
+    (3τ/4) t = (4/(4 + α)) [1 - (t/2)^((4 + α)/4)].
+
+At `α = 0` this is [`eddington_transmission`](@ref) exactly; for `τ ≫ 1` it tends to
+`4/(4 + α)` of it, 8/11 for Hammer & Rosen's `α = 1.5` (Phys. Plasmas 10, 1829 (2003),
+eq. 31): the rear of the foil, colder than its front, is more opaque. It is *derived*,
+with no parameter fitted to a measurement, and capped at 1 like the gray estimate.
+
+The front's arrival and the transition's `width` are unchanged by this choice. Against
+the 1-D gold foils of `examples/tamped_foil.jl` (Hammer & Rosen's power laws,
+flux-limited diffusion, hydrodynamics) on a public ignition-scale drive (N221204's Dante
+temperature, ×1 and ×0.95), 1.5–3 µm of gold transmit 0.76–0.79 of the energy this model
+gives over 4–9 ns (0.49–0.54 of the constant default's, 0.59–0.62 of
+`RosselandTransmission`'s); the remainder is the 1-D foil's later onset (research notes,
+"A diffusion transmission for burned-through windows (2026-11-18)"). Generic in the number
+type.
+"""
+Base.@kwdef struct DiffusionTransmission
+    reference_temperature::Float64 = 325.0
+    exponent::Float64 = 1.5
+end
+
+function _transmission(m::DiffusionTransmission, τref, Tr)
+    Te = (Tr === nothing || Tr <= 0) ? m.reference_temperature : Tr
+    return diffusion_transmission(τref * (Te / m.reference_temperature)^(-m.exponent), m.exponent)
+end
+
+"""
+    diffusion_transmission(τ, α = 1.5)
+
+Steady transmitted fraction of a planar foil of optical depth `τ` at its front, whose
+opacity varies as `T^(-α)` through it (front at the drive temperature, rear radiating
+into vacuum; see [`DiffusionTransmission`](@ref)): the root of
+`(3τ/4) t = (4/(4 + α)) [1 - (t/2)^((4 + α)/4)]`, capped at 1. `α = 0` gives
+`eddington_transmission(τ)`. Newton's method from the gray value, which bounds the root
+from above (the root is at most the gray value for `α ≥ 0`); generic in the number type.
+"""
+function diffusion_transmission(τ, α = 1.5)
+    τ >= 0 || throw(DomainError(τ, "the optical depth must not be negative"))
+    α >= 0 || throw(DomainError(α, "the opacity's temperature exponent must not be negative"))
+    k, p = 4 / (4 + α), (4 + α) / 4
+    t = 4 / (3τ + 2)                          # the gray root: g(t) ≥ 0 there, g convex
+    for _ in 1:100
+        u = t / 2
+        g = 0.75τ * t - k * (1 - u^p)
+        tn = t - g / (0.75τ + k * p * u^(p - 1) / 2)
+        done = abs(tn - t) <= 4eps(Float64) * abs(t)
+        t = tn
+        done && break
+    end
+    return min(one(t), t)
+end
+
+"""
     BurnthroughAlbedo(; thickness, density = 19.3, before = WallLossAlbedo(),
                       transmission = eddington_transmission(τ), after = nothing,
                       width = 0.4, burnthrough = nothing, front = HeatFront())
@@ -354,8 +418,9 @@ Marshak heat front (`front`, a `HeatFront`) has heated its whole areal mass
 `ρ × thickness`, and then lets part of the flux that reaches it through.
 
 Once burned through, a fraction `f = transmission` of the incident flux passes through
-the foil and leaves the hohlraum (a number, or `RosselandTransmission()` for a fraction
-that follows the radiation temperature). The rest meets the foil as before and is re-emitted
+the foil and leaves the hohlraum (a number, `RosselandTransmission()` for a fraction
+that follows the radiation temperature, or `DiffusionTransmission()` for one that also
+follows the foil's temperature profile). The rest meets the foil as before and is re-emitted
 with the albedo of `before`. Across the transition
 
     α(t) = α_before (1 - s f),    transmitted fraction s f,
@@ -413,13 +478,28 @@ gold foils on a 260 eV hohlraum wall (Nova; Lindl et al., Phys. Plasmas 11, 339
 (2004), Fig. 4-6) reaches half signal 0.1–0.25 ns after the computed front arrival,
 0.19 ns on average, which sets the default `width` (half transmission at
 `t_b + width/2`; see the diagnostic-windows tutorial).
+
+**Caution on an ignition-scale drive.** The onset, the `width` and the constant gray `f`
+come from bare Nova foils and the Letter's estimate. A 1-D gold foil (Hammer & Rosen's
+power laws, flux-limited diffusion, hydrodynamics: `examples/tamped_foil.jl`) on an
+ignition-scale drive (N221204's Dante temperature) starts transmitting about 0.6 ns after
+the front's arrival (0.2–0.45 ns on Nova's drive, where the measured half signal comes
+0.09–0.23 ns after it), rises slowly, and passes 0.49–0.54 of the energy this default
+gives it over 4–9 ns (1.5–3 µm). The one ignition-scale measurement, the window flux
+Lester et al. extracted from Dante (its solid-angle calibration pending), corresponds to
+about 0.18 of the flux on a 2.5 µm window near 8.5 ns, between the 1-D foil's 0.16 and
+this default's 0.235. A study should bracket a window's transmission and start time
+accordingly: `transmission = DiffusionTransmission()` (lower, temperature-following)
+against the default, and the front's arrival against a start up to 0.6 ns later.
+Research notes, "Backed windows: what delays the emergent flux, and eq. 3 (2026-11-18)"
+and "A diffusion transmission for burned-through windows (2026-11-18)".
 """
 struct BurnthroughAlbedo <: AlbedoModel
     thickness::Float64
     density::Float64
     before::AlbedoModel
     after::Union{Nothing,AlbedoModel}       # an explicit burned-through albedo, or
-    transmission::Union{Nothing,Float64,RosselandTransmission}  # the transmitted fraction (exactly one is set)
+    transmission::Union{Nothing,Float64,RosselandTransmission,DiffusionTransmission}  # the transmitted fraction (exactly one is set)
     width::Float64
     burnthrough::Union{Nothing,Float64}
     front::HeatFront
@@ -432,7 +512,7 @@ struct BurnthroughAlbedo <: AlbedoModel
         if after === nothing
             transmission === nothing &&
                 (transmission = eddington_transmission(_foil_optical_depth(density * thickness * 1e-4)))
-            transmission isa RosselandTransmission || 0 <= transmission <= 1 ||
+            transmission isa Union{RosselandTransmission,DiffusionTransmission} || 0 <= transmission <= 1 ||
                 throw(ArgumentError("transmission must lie in [0, 1]"))
         end
         new(thickness, density, _albedo_model(before),
@@ -467,7 +547,8 @@ optical_depth(m::BurnthroughAlbedo) = _foil_optical_depth(areal_mass(m))
 
 Fraction of the incident flux that a burned-through foil transmits when the flux on it has
 radiation temperature `T` (eV): the model's `transmission`, evaluated at `T` for a
-`RosselandTransmission` (at its reference temperature when `T` is `nothing`). `NaN`
+`RosselandTransmission` or `DiffusionTransmission` (at its reference temperature when
+`T` is `nothing`). `NaN`
 for a model with an explicit `after`.
 """
 foil_transmission(m::BurnthroughAlbedo, T = nothing) =

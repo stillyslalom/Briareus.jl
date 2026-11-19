@@ -738,7 +738,7 @@ _temperature_dependent(::WallLossAlbedo) = true
 _temperature_dependent(::TemperatureAlbedo) = true
 _temperature_dependent(m::CapsuleAlbedo) = _temperature_dependent(m.albedo)
 _temperature_dependent(m::BurnthroughAlbedo) =
-    _temperature_dependent(m.before) || m.transmission isa RosselandTransmission ||
+    _temperature_dependent(m.before) || m.transmission isa Union{RosselandTransmission,DiffusionTransmission} ||
     (m.after !== nothing && _temperature_dependent(m.after))
 _temperature_dependent(m::GapClosure) = _temperature_dependent(m.after)
 _temperature_dependent(m::LipClosure) = _temperature_dependent(m.after)

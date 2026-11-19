@@ -358,6 +358,57 @@ end
     end
 end
 
+@testset "diffusion foil transmission" begin
+    # the gray limit (α = 0) is Lester et al.'s eq. 2
+    τs = (0.0, 0.3, 2 / 3, 1.0, 3.4, 5.0, 7.2, 20.0, 300.0)
+    @test all(diffusion_transmission(τ, 0.0) ≈ eddington_transmission(τ) for τ in τs)
+    # Reference: the steady diffusion ODE integrated by RK4 from the rear (x = T⁴/T_D⁴,
+    # s the optical depth at the front's temperature): dx/ds = (3/4) t x^(-α/4), x(0) = t/2
+    # (vacuum rear), shot on t until x(τ) = 1 (front at the drive temperature). It shares
+    # only the boundary conditions with the closed-form integral.
+    function shoot(τ, α; n = 4000)
+        front(t) = (x = t / 2; h = τ / n; f(x) = 0.75t * max(x, 0.0)^(-α / 4);
+                    for _ in 1:n
+                        k1 = f(x); k2 = f(x + h * k1 / 2); k3 = f(x + h * k2 / 2); k4 = f(x + h * k3)
+                        x += h * (k1 + 2k2 + 2k3 + k4) / 6
+                    end; x - 1)
+        lo, hi = 0.0, 2.0
+        for _ in 1:80
+            mid = (lo + hi) / 2
+            front(mid) > 0 ? (hi = mid) : (lo = mid)
+        end
+        return (lo + hi) / 2
+    end
+    @test all(diffusion_transmission(τ, 1.5) ≈ shoot(τ, 1.5) for τ in (1.0, 5.0, 12.0))
+    @test diffusion_transmission(5.0, 3.0) ≈ shoot(5.0, 3.0) rtol = 1e-9
+    # optically thick: 4/(4 + α) of the gray value, 8/11 for Hammer & Rosen's α = 1.5
+    @test diffusion_transmission(1e4) / eddington_transmission(1e4) ≈ 8 / 11 rtol = 1e-4
+    # never above the gray value; falls with τ; capped at 1
+    @test all(diffusion_transmission(τ) <= eddington_transmission(τ) for τ in τs)
+    @test issorted([diffusion_transmission(τ) for τ in 0.5:0.5:20]; rev = true)
+    @test diffusion_transmission(0.0) == 1
+    @test_throws DomainError diffusion_transmission(-1.0)
+    @test_throws DomainError diffusion_transmission(1.0, -0.5)
+    # implicit derivative dt/dτ = -(3t/4) / (3τ/4 + (t/2)^(α/4) / 2) through the duals
+    let τ = 5.0, t = diffusion_transmission(5.0)
+        @test ForwardDiff.derivative(diffusion_transmission, τ) ≈ -(0.75t) / (0.75τ + (t / 2)^(1.5 / 4) / 2) rtol = 1e-10
+    end
+    # in the albedo model: the Rosseland scaling of τ with the flux temperature
+    dt = DiffusionTransmission()
+    bd = BurnthroughAlbedo(thickness = 2.5, transmission = dt, burnthrough = 1.0)
+    @test foil_transmission(bd) == foil_transmission(bd, 325.0) == diffusion_transmission(5.0)
+    @test all(foil_transmission(BurnthroughAlbedo(thickness = x, transmission = dt), T) ≈
+              diffusion_transmission(5x / 2.5 * (T / 325)^-1.5) for T in (150.0, 300.0), x in (1.7, 3.6))
+    α, αb, τ = Briareus._burnthrough_split(bd, 3.0, 280.0, NaN)
+    @test τ == foil_transmission(bd, 280.0)
+    @test α ≈ (1 - τ) * αb rtol = 1e-15
+    @test (@inferred Briareus._transmission(dt, 5.0, 280.0)) isa Float64
+    @test (@inferred diffusion_transmission(5.0)) isa Float64
+    @test Briareus._temperature_dependent(BurnthroughAlbedo(thickness = 2.5, transmission = dt, before = 0.8))
+    # opt-in: the default and the existing choices are unchanged
+    @test BurnthroughAlbedo(thickness = 2.5).transmission == 4 / 17
+end
+
 @testset "closing gap" begin
     @test_throws ArgumentError GapClosure(closure = 1.0, width = -0.1)
     @test GapClosure(closure = 1.0).after isa WallLossAlbedo

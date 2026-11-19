@@ -17,7 +17,8 @@ windows re-emit with their own material; open ones are apertures. A thin-foil wi
 burns through when the Marshak heat front reaches its back ([`BurnthroughAlbedo`](@ref))
 and then transmits the gray Eddington fraction ``4/(3\tau + 2)`` of the flux on it
 (Lester et al., Phys. Rev. E 114, L023201 (2026)), optionally with the optical depth
-following the radiation temperature ([`RosselandTransmission`](@ref)). Gaps can close
+following the radiation temperature ([`RosselandTransmission`](@ref)), or also the
+foil's own temperature profile ([`DiffusionTransmission`](@ref)). Gaps can close
 during the pulse ([`GapClosure`](@ref)). [`Sombrero`](@ref) adds LEH shields.
 
 CAD parts (for example the solids of a multi-solid STL file) become a radiation-ready

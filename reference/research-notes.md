@@ -12753,7 +12753,8 @@ set. Confidence: **H** primary text, **H-img** read from a figure, **L** derived
    this drive (0.2–0.45 ns on Nova's) and rises slowly: for 2.5 µm 0.04 at +0.65 ns,
    0.08 at +0.9, 0.11 at +1.4, 0.12–0.16 to the end of the peak, against 0.17–0.22 for
    `RosselandTransmission`; the energy transmitted 4–9 ns is 0.62 of the transition's
-   (2.0 and 2.5 µm). The Letter's extracted window flux, about 1.3 TW/sr near 8.5–9 ns
+   with `RosselandTransmission` (2.0 and 2.5 µm; 0.49–0.54 of the constant default's,
+   1.5–3 µm: "A diffusion transmission for burned-through windows (2026-11-18)"). The Letter's extracted window flux, about 1.3 TW/sr near 8.5–9 ns
    (**H-img**), is 0.18 of a 2 mm Lambertian disk at Dante's ~305 eV seen from Dante 2's
    angle (*L*; the Letter notes its solid-angle calibration is pending), between the two.
 5. **For the hohlraum the backing changes nothing to first order.** Until the backing
@@ -12857,8 +12858,9 @@ has the sign above. The Letter's neutron M2/M0 along the window axis is likewise
 only; nothing here is fitted to it.
 
 With the 1-D foil's slower transmission (item 4 of the account above: 0.62 of the
-transition's transmitted energy over 4–9 ns) the time-averaged window signal would be
-about 0.6 of the static numbers here; that is a statement about the transition, not
+transition's transmitted energy over 4–9 ns with `RosselandTransmission`, about half the
+constant default's) the time-averaged window signal would be
+about half of the static numbers here (which use the constant 0.235); that is a statement about the transition, not
 about eq. 3.
 
 ## The published picket fluence, the trough and the inner-beam corridor (2026-11-18) *derived*
@@ -13289,3 +13291,108 @@ On the multi-phase study's per-quad multipliers (46 quads, four phases; scratch 
 restarts, written by hand): the same split between the cones, the same members and the
 same multipliers to the digits it printed, for seeds 1 to 4 alike, in 4 s with
 compilation.
+
+- `picket_irradiance`'s `:mean` and `:average` read alike; renaming `:mean` to
+  `:weighted` is a break of the public API (user decision, recommended).
+
+## A diffusion transmission for burned-through windows (2026-11-18) *derived*
+
+ROADMAP item 28, the user's decision on the previous section's item 4: the default
+transition of `BurnthroughAlbedo` stays (Nova's `width`, the constant gray `f`), its
+docstring carries a caution, and a 1-D-informed transition is opt-in. Implemented:
+`DiffusionTransmission` and `diffusion_transmission` (`src/target.jl`), tests in
+`test/burnthrough.jl` ("diffusion foil transmission") and `test/history_state.jl`.
+Existing results are bit for bit (a new transmission type; the default is untouched).
+
+### The law (*derived*, no fitted parameter)
+- Steady planar diffusion through a foil whose Rosseland opacity varies as T^(−α) across
+  it, the front at the drive temperature T_D and the rear radiating into vacuum
+  (T_rear⁴ = t T_D⁴/2, the boundaries that give Lester et al.'s eq. 2): with x = T⁴/T_D⁴
+  and s the optical depth at T_D, dx/ds = (3/4) t x^(−α/4), so
+  (3τ/4) t = (4/(4 + α)) [1 − (t/2)^((4 + α)/4)]. α = 0 is eq. 2; for τ ≫ 1,
+  t → 4/(4 + α) of eq. 2, 8/11 for Hammer & Rosen's α = 1.5 (their eq. 31). The rear,
+  colder than the front, is more opaque. τ at T_D scales as `RosselandTransmission`'s
+  (τ = 5 at 325 eV for 2.5 µm, Lester's point). The root is never above the gray value
+  (h(u) = 1 − k − u + k u^p has h′ ≤ 0 on [0, 1] because k p = 1), so Newton's method
+  from the gray value converges monotonically.
+- Tests: α = 0 against `eddington_transmission`; α = 1.5 and 3 against an RK4 shooting
+  solution of the ODE (to 1e-9); the 8/11 limit; the implicit derivative through dual
+  numbers.
+
+### What it replaces, and what it does not
+- **Magnitude and its time dependence: replaced.** The fraction follows the flux
+  temperature on each element and the foil's profile.
+- **Onset: not replaced.** The 1-D foil's onset lag behind `HeatFront` grows with
+  thickness on Nova's drive (1 % transmission 0.20–0.45 ns after the front for
+  0.77–3 µm), while Nova's measured half signal is 0.09–0.23 ns after it with no trend.
+  A law that followed the 1-D onset would be 0.1–0.3 ns late on the data the default was
+  calibrated on; an onset at a fixed ratio of the front's mass to the foil's
+  (m_F/M ≈ 1.24, the measured mean) fitted to Nova scatters 0.09 ns rms against the
+  default's 0.06. Nova's measurement outranks the 1-D model, so the option keeps the
+  front's arrival and the 0.4 ns `width`: check (a) below is therefore met with the
+  default's own residuals. (The Nova times are measured from 10 % of the drive flux to
+  50 % of the rear flux's peak in two narrow bands, 210–240 and 430–570 eV; BUCKY
+  report, fti.neep.wisc.edu fdm1017, **H**.)
+
+### Checks
+(a) Nova's half-signal times (0.77–3 µm): option and default identical, residuals
+−0.11 to +0.03 ns (rms 0.06).
+
+(b) The 1-D foil (`examples/tamped_foil.jl`, backed by 35 µm of epoxy), transmitted
+energy over 4–9 ns, 1-D over each law (onset and `width` the default's):
+
+| drive | Au (µm) | / constant default | / `RosselandTransmission` | / `DiffusionTransmission` |
+|---|---|---|---|---|
+| public ×1 | 1.5 / 2.0 / 2.5 / 3.0 | 0.533 / 0.536 / 0.538 / 0.532 | 0.617 / 0.624 / 0.619 / 0.606 | 0.760 / 0.784 / 0.789 / 0.779 |
+| public ×0.95 | 1.5 / 2.0 / 2.5 / 3.0 | 0.501 / 0.501 / 0.499 / 0.487 | 0.620 / 0.621 / 0.611 / 0.591 | 0.768 / 0.784 / 0.781 / 0.763 |
+
+Transmission history, 2.5 µm on the public drive ×1 (front 4.61 ns, 1-D 1 % at 5.21 ns),
+1-D / default / Rosseland / diffusion: 5.01 ns 0.000 / 0.235 / 0.155 / 0.119; 5.41 ns
+0.069 / 0.235 / 0.174 / 0.135; 6.0 ns 0.108 / 0.235 / 0.189 / 0.147; 7.0 ns 0.129 /
+0.235 / 0.203 / 0.159; 8.0 ns 0.147 / 0.235 / 0.221 / 0.174; 8.5 ns 0.157 / 0.235 /
+0.222 / 0.175. From 0.8 ns after the 1-D onset the 1-D foil is 0.73–0.90 of the option
+(0.90 late in the peak); the rest of the energy difference is the onset. On Nova's drive the 1-D foil
+transmits less than all three laws (to 2 ns, 0.21–0.57 of the option's energy for
+0.77–3 µm; at 2 ns 0.27 against 0.46 for 0.77 µm, 0.07 against 0.13 for 3 µm): no
+measurement constrains the transmitted magnitude there.
+
+(c) Blind: the Letter's extracted window flux, about 0.18 of the flux on the window near
+8.5–9 ns (previous section, item 4; its solid-angle calibration pending). The option
+gives 0.17–0.175 for 2.5 µm at the public drive's 305–311 eV, the 1-D foil 0.16, the
+default 0.235. Nothing is fitted to it.
+
+### What it changes for a hohlraum
+Scratch run (`drive_history`, 8 threads, 35–38 s per run): the HYBRID-E-scale mock-up of
+the previous section (h = 0.3, capsule_h = 0.15, `hybride_mock_pointing`, N221204's
+delivered pulse shared equally by the 192 beams, gold `WallLossAlbedo` wall, conversion
+0.8, `transition = 0.05`, `wall_history = false`), two 2 mm windows of 2.5 µm gold at
+(90°, 150°) and (90°, 330°), against the same hohlraum with wall in place of the windows.
+The windows burn through at 4.49–4.50 ns in all three. Window loss (TW) and the
+capsule's change δ₂, δ₄ and a₂/a₀ about the hohlraum axis (%), default / Rosseland /
+diffusion:
+
+| t (ns) | P (TW) | Tr (eV) | window loss | δ₂ | δ₄ | a₂/a₀ |
+|---|---|---|---|---|---|---|
+| 4.6 | 227 | 243 | 0.76 / 0.50 / 0.38 | 0.34 / 0.22 / 0.17 | 0.09 / 0.06 / 0.05 | +0.17 / +0.11 / +0.09 |
+| 5.0 | 353 | 276 | 7.63 / 5.88 / 4.60 | 2.12 / 1.62 / 1.27 | 0.58 / 0.45 / 0.35 | +1.08 / +0.83 / +0.65 |
+| 5.8 | 443 | 295 | 9.99 / 8.41 / 6.63 | 2.15 / 1.80 / 1.41 | 0.59 / 0.49 / 0.39 | +1.10 / +0.92 / +0.72 |
+| 7.0 | 444 | 297 | 10.31 / 8.78 / 6.93 | 2.16 / 1.83 / 1.44 | 0.59 / 0.50 / 0.39 | +1.11 / +0.94 / +0.73 |
+| 7.6 | 444 | 298 | 10.44 / 8.92 / 7.04 | 2.17 / 1.84 / 1.45 | 0.60 / 0.51 / 0.40 | +1.11 / +0.94 / +0.74 |
+| 8.6 | 269 | 262 | 6.23 / 4.49 / 3.50 | 2.16 / 1.54 / 1.20 | 0.59 / 0.42 / 0.33 | +1.10 / +0.79 / +0.61 |
+| 9.0 | 173 | 233 | 3.90 / 2.40 / 1.86 | 2.15 / 1.30 / 1.00 | 0.59 / 0.36 / 0.28 | +1.10 / +0.67 / +0.51 |
+
+Window loss over the pulse: 39.0 / 32.1 / 25.3 kJ. The option takes the windows' peak
+δ₂ from 2.2 to 1.4 % and δ₄ from 0.6 to 0.4 %; the eq. 3 estimate (0.9 %) lies between
+the default's a₂ (+1.1 %) and the option's (+0.73 %). Before the windows burn through,
+the three runs are the hohlraum without windows to 0.00 %. With `wall_history = true`
+(the default) the intact windows differ from the wall before burnthrough (δ₂ 0.44 % at
+4.6 ns in a coarse check): `drive_history` follows the wall's own temperature history
+only for `WallLossAlbedo` elements, so a foil's `before` loss is evaluated at the time
+since the pulse start (a brighter foil early in the peak). Not changed here (history
+code); noted for the roadmap.
+
+### history_state
+Works unchanged: it reads each step's `transmission`, which `solve` computes from the
+model. Tested: a drive history with a `DiffusionTransmission` window, `keep_albedo`, and
+`history_state` at the last step gives each window element the option's fraction at the
+step's own flux temperature (to the solve's tolerance), below the gray value there.
