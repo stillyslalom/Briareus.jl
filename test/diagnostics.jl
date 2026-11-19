@@ -350,7 +350,8 @@ csv(dir, name, E, v) = (open(joinpath(dir, name), "w") do io
     @testset "configuration file and search path" begin
         mktempdir() do dir
             cfg = joinpath(dir, "cfg", "config.toml")
-            g1, g2, g3 = (mkpath(joinpath(dir, s)) for s in ("g1", "g2", "g3"))
+            # names that a random temporary directory name (`jl_` and six characters) cannot contain
+            g1, g2, g3 = (mkpath(joinpath(dir, s)) for s in ("saved_path", "session_only", "env_path"))
             withenv("BRIAREUS_CONFIG" => cfg, "BRIAREUS_DIAGNOSTICS" => g3) do
                 @test diagnostic_config_path() == cfg
                 p = add_diagnostic_path(g1)
@@ -360,7 +361,7 @@ csv(dir, name, E, v) = (open(joinpath(dir, name), "w") do io
                 @test count(==(normpath(g1)), diagnostic_paths()) == 1
                 add_diagnostic_path(g2; save = false)
                 @test diagnostic_paths()[end] == normpath(g2)
-                @test !occursin("g2", read(cfg, String))
+                @test !occursin("session_only", read(cfg, String)) && occursin("saved_path", read(cfg, String))
                 remove_diagnostic_path(g2; save = false)
                 remove_diagnostic_path(g1)
                 @test diagnostic_paths() == [diagnostic_paths()[1], normpath(g3)]
