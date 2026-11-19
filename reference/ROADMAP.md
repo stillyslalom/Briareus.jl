@@ -30,6 +30,19 @@ constrained runs that stall at their bounds and force staged tolerances (item 36
    albedo 0, no emission; `history.jl`, eae01d4); the conversion of overlapping colors at
    each color's own flux; the liner blend in `WallLossAlbedo`. *Data:* a radiation-
    hydrodynamics run of a wall heated, cooled and heated again (a prepulse and gap).
+   Also the wall albedo of a fixed-time scenario (scratch study, 2026-11-18): a standalone
+   `solve` evaluates `WallLossAlbedo` at the time since the pulse start (0.754 mean over
+   the wall at 1 ns in an ignition-scale picket), while `drive_history` follows each
+   element's own temperature history (0.607 at the same time). Linearized phase scenarios
+   need one of the two, chosen and documented, and a helper that takes a scenario's
+   albedos from a history at a given time.
+37. **`drive_history` radiosity convergence** (scratch study, 2026-11-18). A quasi-static
+    history of a hohlraum with two thin-foil windows (`BurnthroughAlbedo`, a
+    `WallLossAlbedo` wall, `wall_history` on, `transition = 0.05`) stopped at 0.1 ns steps
+    with "iterative radiosity solve (radiosity) did not converge in 400 iterations" for
+    190 beams; the same run at 0.2 ns steps, and at 0.1 ns with all 192 beams, converged.
+    *Remains:* a reproduction on a public mock-up; then the iteration cap, or a fallback
+    to the direct solve.
 
 ## VisRad parity and facility practice
 
@@ -273,6 +286,26 @@ analog is the dropped-bundle tutorial, `docs/literate/dropped_bundle.jl`).
       change of a documented default: user); reading a wrapper's values off beams.
       `GroupPointing` points by quad by default since 33cf879, with a quad's split as
       a parameter (`:split`) and `unit = :beam` or `by = :beam` for beams pointed apart.
+    - One pointing over several phases (scratch study, 2026-11-18). A study holding the
+      drive shape at six times (picket, trough, second step, rise, and the peak before
+      and after its windows burn through) with one set of aims and a power scale per
+      quad and phase was built from workarounds: a copy of each beam per phase under the
+      same name (so `GroupPointing(by = :beam)` gives the copies one aim); a
+      `PowerScales` `by` closure that counts its calls (`by` receives no index); a main
+      scenario without radiation that only carries the parameters; and a cache keyed on
+      the `Evaluation`'s internal flux slot, so that the objective and each constraint
+      share one evaluation per phase (thread-safe, as gradient chunks run
+      concurrently). A phased scenario would replace them: shared aims, per-phase powers
+      and radiation models, an evaluation per phase, and per-phase constraints and boxes
+      (a laser-limit cap on each beam in each phase).
+    - A pulse-shape budget (same study): each distinct pulse shape needs facility
+      validation, so the per-quad multipliers were grouped afterwards into a few shapes
+      (k-means on the log multipliers, the split between the inner and outer cones
+      chosen by fit) and re-optimized with tied `PowerScales`. A helper for the grouping,
+      and for writing the shapes out as `PulseShape` tables.
+    - A ready-made smallest-shift objective (mean squared aim shift from the starting
+      beams), for the minimum re-pointing that meets given gates: a per-LEH study used
+      it to cost each entrance-hole size against a fixed reference drive.
 
     The tutorial's section "A re-pointing study, end to end" walks these on exported
     names only (a96792f): quads held, a power scale per cone, the gates, the ceiling, a
@@ -399,6 +432,29 @@ analog is the dropped-bundle tutorial, `docs/literate/dropped_bundle.jl`).
       picket powers; which measure to hold, or the time-dependent swing itself in
       the objective (user); the prediction on the study's own geometry in a
       time-dependent model.
+    - The published bubble scalings use the outer cones' picket fluence on the wall
+      (item 10). The scalings' quantity is not `picket_fluence`'s
+      energy-weighted ∫F²dA/∫FdA but the outer picket energy, net of backscatter, over a
+      fixed spot area (Callahan et al., Phys. Plasmas 25, 056305 (2018); Ralph et al.,
+      Phys. Plasmas 25, 082701 (2018); Izumi et al., Phys. Plasmas 28, 022706 (2021):
+      "spatially averaged outer picket fluence over the first 1 ns"). The two part on
+      uneven power scales: on a dropped-bundle study, holding ∫F²dA/∫FdA at the
+      reference's cost 16 % of the picket drive, while a design at the reference's
+      published quantity reads 1.10× on it (scratch runs, 2026-11-18). *Remains:* the
+      published quantity as a quantity and a constraint, with the trough and foot as
+      well as the picket (Izumi et al., Phys. Plasmas 30, 032706 (2023): a low trough
+      stalls the bubble); the outer fluence near the inner beams' centerlines (the same
+      paper: bubble spikes in line with the 23.5° beams cost P2), which the study checks
+      as the mean fluence on wall elements within 1.3 mm of an inner centerline; the
+      scalings' exponents in the research notes (core P2 ∝ fluence^0.5, bubble position
+      ∝ fluence^0.2), with the −4 to −7 µm of P2 per +10 % of fluence marked as read
+      from their figures;
+    - the inner budget: `iterations` caps each inner run, and set high it leaves the
+      multipliers unchanged for most of a run. On a 276-parameter multi-phase study,
+      `iterations = 1000` completed one outer iteration in an hour (the peak 18 % over
+      its ceiling at the time limit); `iterations = 100` completed six in 40 min and met
+      every limit but one, within 1 %. A default tied to the outer loop, an inner budget
+      that scales with the parameters, or a documented rule (user review);
     - the engineering defaults `feasibility = 1e-3`, `p = 64`, `outer = 30` (user review);
     - the scales of the ready-made constraints (`clearance_floor`: 1 mm; `light_ceiling`
       and `light_floor`: the limit, at least 1e-3 of the delivered power) are engineering
@@ -528,7 +584,25 @@ analog is the dropped-bundle tutorial, `docs/literate/dropped_bundle.jl`).
     *Data:* a shot's real backlighter dimensions.
 28. **Diagnostic windows.** The expanded foil's density (held at 1 g/cm³), a backing that
     absorbs and re-emits part of what the gold transmits, a computed gap-closure time, and
-    the windows' l = 4, which neither quad powers nor pointing removed.
+    the windows' l = 4, which neither quad powers nor pointing removed. From a scratch
+    study (2026-11-18):
+    - The burnthrough time of a backed foil. The bare heat front (`HeatFront`, Hammer &
+      Rosen) puts a 2.5 µm gold window backed by 35 µm of epoxy through at 4.8 ns on the
+      ignition-scale pulse whose window-emergent flux Lester et al. (Phys. Rev. E 114,
+      L023201 (2026)) measured leading at 7.5 ns (8 ns predicted): 2.7 ns early. The
+      tamper holding the gold dense is the likely cause; no term models it. Calibrated to
+      that edge, a fitted heat-front coefficient (×0.43) and a constant offset (+2.7 ns)
+      put 2 µm of gold through 0.45 ns apart (6.6 and 7.05 ns), mid-peak either way.
+      *Remains:* a tamped-foil burnthrough model, with the backing's areal mass and
+      material (epoxy, Be). *Data:* Lester et al.'s leading edge is the one point; a
+      window of another thickness or backing would separate the two calibrations.
+    - The burned-through windows' symmetry against Lester et al.'s estimate. On the
+      study's pointing, two 2 mm windows of 2 µm gold burned through change the capsule
+      drive by δ2 = 2.5 % (c₂₀/c₀₀ +0.58 %, c₂,±₂/c₀₀ +0.84 and −0.49 %) and δ4 = 0.7 %,
+      against their eq. 3 estimate of a −0.9 % drive P2 for 2.5 µm. *Remains:* reconcile
+      the m = 0 part with eq. 3 (sign convention and amplitude). *Data:* their N250622
+      against N230729 (core P2 −1 % against 9 % prolate; M2/M0 12 % along the window
+      axis) as a check, not a fit target.
 29. **CAD.**
     - A transmitting thin-film option for CAD tents and LEH windows, so the cavity can
       include the tent region.
