@@ -840,6 +840,14 @@ as smooth as that beam's clearance, while the smallest clearance over the beams 
 kink wherever the closest beam changes (research notes, "Constrained re-pointing").
 The components follow the evaluation's beams, so the same constraint serves a stage on
 quads and a stage on their beams.
+
+On a [`PhasedScenario`](@ref) the constraint takes the [`PerPhase`](@ref) evaluation
+directly, without [`in_phase`](@ref): each beam's component is its least clearance over
+the phases, and its rows carry no phase in their names (`leh[B211]`). The phases share
+the aims, so a keep-out that does not read the beams' power (an `ApertureKeepOut` at a
+`peak_fraction`) gives every phase the same clearance, and the value is any one phase's
+bit for bit; a keep-out at an absolute `intensity` widens with the power, and the
+brightest phase sets the clearance.
 """
 function clearance_floor(keepout; minimum::Union{Nothing,Real} = nothing, scale::Real = 1.0,
                          name = :clearance)
@@ -977,8 +985,10 @@ function _departure(c, r, l, z)
 end
 
 """
-    mode_gate(reference::Evaluation, gates) -> Constraint
-    mode_gate(reference::AbstractVector, gates) -> Constraint
+    mode_gate(reference::Evaluation, gates; fraction = 1, floor = nothing, shift = nothing)
+        -> Constraint
+    mode_gate(reference::AbstractVector, gates; fraction = 1, floor = nothing, shift = nothing)
+        -> Constraint
 
 A gate per degree on the departure of the capsule's drive shape from a `reference`
 shape: the [`Constraint`](@ref) `mode_departure(ev, reference; lmax) ≤ gates`, named
@@ -1007,15 +1017,91 @@ of a drive without the scenario's CBET model is another shape, and the gates wou
 the design to it). The reference may be on another target (a hohlraum without the
 design's windows). A coefficient vector records no model, so that method cannot check
 it: the vector must come from an evaluation with the scenario's `lpi` and time.
+
+**Keywords.**
+
+- `fraction` (positive, default 1) scales a pointing floor: with `gates` a
+  [`mode_uncertainty`](@ref) result the gate is `fraction × √(2l+1) × rms_mode[l]`
+  (`fraction = 0.8`: 0.8 of the floor).
+- `floor` (a [`mode_uncertainty`](@ref) result, or a vector of departures per degree)
+  makes the floor a lower bound of physical gates: the gate per degree is the larger of
+  `gates[l]` and `fraction × floor[l]`, so that a tolerance in physical units is never
+  tighter than the departure pointing error alone produces (research notes, "Mode
+  gates in physical units"). `gates` and `floor` cover the same degrees.
+- `shift` moves the target shape away from the reference's: the departure is measured
+  from the reference's coefficients with each listed mode shifted, the reference's
+  laser–plasma model and time still checked. A shift is a pair `l => Δ` (the axisymmetric
+  mode `(l, 0)`) or `(l, m) => Δ`, or a collection of them, with `Δ` in the units of
+  [`mode_departure`](@ref): for `m = 0`, `Δ` is the change of `aₗ/a₀` in the Legendre
+  expansion of the capsule flux `Σ aₗ Pₗ(cos θ)` (`2 => 0.024` sets the target's P2/P0
+  0.024 above the reference's; with the orthonormal coefficients of [`flux_ylm`](@ref),
+  `c_l0 → c_l0 + Δ c_00/√(2l+1)`), and for `m ≠ 0` the same change of the real
+  coefficient `c_lm`, so that the shifted shape departs from the reference's by `|Δ|` in
+  degree `l` ([`shift_modes`](@ref)). The drive `c_00` is unchanged.
 """
-mode_gate(reference::Evaluation, gates) =
-    _mode_gate(flux_ylm(reference; lmax = _gate_lmax(gates)), _gate_values(gates),
-               _ReferenceModel(reference.scenario))
-mode_gate(reference::AbstractVector, gates) = _mode_gate(reference, _gate_values(gates), nothing)
+mode_gate(reference::Evaluation, gates; fraction::Real = 1, floor = nothing, shift = nothing) =
+    _mode_gate_of(reference, _gate_vector(gates, fraction, floor), shift)
+mode_gate(reference::AbstractVector, gates; fraction::Real = 1, floor = nothing, shift = nothing) =
+    _mode_gate_of(reference, _gate_vector(gates, fraction, floor), shift)
+
+function _mode_gate_of(reference::Evaluation, g, shift)
+    c = flux_ylm(reference; lmax = max(length(g), 1))
+    return _mode_gate(shift === nothing ? c : shift_modes(c, shift), g, _ReferenceModel(reference.scenario))
+end
+_mode_gate_of(reference::AbstractVector, g, shift) =
+    _mode_gate(shift === nothing ? reference : shift_modes(reference, shift), g, nothing)
 
 _gate_values(gates::AbstractVector{<:Real}) = gates
 _gate_values(u::NamedTuple) = [sqrt(2l + 1) * r for (l, r) in enumerate(u.rms_mode)]
 _gate_lmax(gates) = max(length(_gate_values(gates)), 1)
+
+# The gates per degree from `mode_gate`'s arguments: the gates themselves, `fraction` of
+# a floor, or the larger of physical gates and `fraction` of a floor.
+function _gate_vector(gates, fraction::Real, floor)
+    isfinite(fraction) && fraction > 0 || throw(ArgumentError("the fraction must be positive and finite, got $fraction"))
+    if floor === nothing
+        gates isa NamedTuple && return fraction == 1 ? _gate_values(gates) : fraction .* _gate_values(gates)
+        fraction == 1 ||
+            throw(ArgumentError("`fraction` scales a pointing floor: give the gates as a mode_uncertainty " *
+                                "result, or the floor as `floor`"))
+        return _gate_values(gates)
+    end
+    gates isa NamedTuple &&
+        throw(ArgumentError("give the floor once: physical gates (a vector) with `floor`, or the floor as the gates"))
+    g, f = _gate_values(gates), _gate_values(floor)
+    length(g) == length(f) ||
+        throw(DimensionMismatch("$(length(g)) gates for a floor of $(length(f)) degrees"))
+    return max.(collect(Float64, g), fraction .* f)
+end
+
+"""
+    shift_modes(c, shift) -> Vector{Float64}
+
+The coefficient vector `c` ([`flux_ylm`](@ref): orthonormal real harmonics in
+[`mode_index`](@ref) order) with each mode of `shift` moved, the target shape of
+[`mode_gate`](@ref)`(...; shift)`: a pair `l => Δ` (the mode `(l, 0)`) or `(l, m) => Δ`,
+or a collection of them, with `Δ` in the units of [`mode_departure`](@ref):
+`c_lm → c_lm + Δ c_00/√(2l+1)`. For `m = 0`, `Δ` is the change of `aₗ/a₀` in the Legendre expansion
+`Σ aₗ Pₗ(cos θ)` (since `aₗ/a₀ = √(2l+1) c_l0/c_00`); a single shift departs from `c` by
+`|Δ|` in its degree. `c_00` (the drive) is unchanged, and the vector records no
+laser–plasma model: `mode_gate(reference::Evaluation, gates; shift)` keeps the
+reference's check.
+"""
+function shift_modes(c::AbstractVector{<:Real}, shift)
+    out = collect(Float64, c)
+    for (lm, Δ) in _shift_pairs(shift)
+        l, m = lm isa Integer ? (Int(lm), 0) : (Int(lm[1]), Int(lm[2]))
+        l >= 1 && -l <= m <= l || throw(ArgumentError("a shift needs a mode with l ≥ 1 and |m| ≤ l, got ($l, $m)"))
+        isfinite(Δ) || throw(ArgumentError("the shift of mode ($l, $m) must be finite, got $Δ"))
+        i = mode_index(l, m)
+        i <= length(out) || throw(ArgumentError("the coefficients stop before mode ($l, $m)"))
+        out[i] += Δ * out[1] / sqrt(2l + 1)
+    end
+    return out
+end
+
+_shift_pairs(p::Pair) = (p,)
+_shift_pairs(ps) = ps
 
 function _mode_gate(reference::AbstractVector, gates::AbstractVector{<:Real}, model)
     lmax = length(gates)
@@ -1079,23 +1165,49 @@ power, and the drive falls with it. The default `scale` is the limit, so the def
 `feasibility = 1e-3` meets the floor to 0.1 % of the limit. As for
 [`mode_gate`](@ref), the floor records the reference scenario's laser–plasma model and
 time, and evaluating it with another throws an `ArgumentError`; the reference may be on
-another target.
+another target. [`drive_ceiling`](@ref) is the upper side, for a band.
 """
 function drive_floor(reference::Evaluation; fraction::Real, scale::Union{Nothing,Real} = nothing,
                      name = :drive)
-    isfinite(fraction) && fraction > 0 || throw(ArgumentError("the fraction must be positive and finite"))
-    a0 = Float64(ForwardDiff.value(mean_flux(reference)))
-    a0 > 0 || throw(ArgumentError("the reference has no drive on the capsule"))
-    lim = fraction * a0
-    return Constraint(name, _DriveValue(_ReferenceModel(reference.scenario)); lower = lim,
+    lim = _drive_limit(reference, fraction)
+    return Constraint(name, _DriveValue(_ReferenceModel(reference.scenario), false); lower = lim,
                       scale = something(scale, lim))
 end
 
-# The floor's value: the capsule's mean flux, on the reference's laser–plasma model.
+"""
+    drive_ceiling(reference; fraction, scale = limit, name = :drive_ceiling) -> Constraint
+
+A ceiling on the capsule's drive: the [`Constraint`](@ref) `mean_flux(ev) ≤ fraction ×
+mean_flux(reference)`, the upper side of [`drive_floor`](@ref), with the same reference,
+`scale` and check of the reference's laser–plasma model and time (an `ArgumentError` on
+an evaluation with another; the reference may be on another target). With a floor it
+holds the drive in a band about the reference's: `drive_floor(reference; fraction =
+1.0)` and `drive_ceiling(reference; fraction = 1.02)` keep it within 0–2 % above, so
+that power scales among the parameters cannot buy shape with drive beyond the band.
+`fraction` (positive, no default) is a choice of the study, not a facility limit.
+"""
+function drive_ceiling(reference::Evaluation; fraction::Real, scale::Union{Nothing,Real} = nothing,
+                       name = :drive_ceiling)
+    lim = _drive_limit(reference, fraction)
+    return Constraint(name, _DriveValue(_ReferenceModel(reference.scenario), true); upper = lim,
+                      scale = something(scale, lim))
+end
+
+# The limit `fraction × mean_flux(reference)` of a drive floor or ceiling.
+function _drive_limit(reference::Evaluation, fraction::Real)
+    isfinite(fraction) && fraction > 0 || throw(ArgumentError("the fraction must be positive and finite"))
+    a0 = Float64(ForwardDiff.value(mean_flux(reference)))
+    a0 > 0 || throw(ArgumentError("the reference has no drive on the capsule"))
+    return fraction * a0
+end
+
+# The floor's or ceiling's value: the capsule's mean flux, on the reference's laser–plasma
+# model.
 struct _DriveValue
     model::_ReferenceModel
+    ceiling::Bool
 end
 function (d::_DriveValue)(ev::Evaluation)
-    _check_model(d.model, "drive_floor", ev)
+    _check_model(d.model, d.ceiling ? "drive_ceiling" : "drive_floor", ev)
     return mean_flux(ev)
 end

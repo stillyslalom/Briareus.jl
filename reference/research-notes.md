@@ -13679,3 +13679,80 @@ sensitivities matter can be continued with `from` at a tighter inner tolerance i
 tolerance becomes a keyword (not one now; the user's decision).
 
 Confidence: the closed forms are exact; the tutorial's case is one start and one mesh.
+
+## The multi-phase study's hand-written pieces as API (2026-11-19) *derived*
+
+Roadmap item 34 (the bullet on the quad stage rerun on `PhasedScenario`). A multi-phase
+re-pointing study (six phases, 184 beams in 46 quads, 276 parameters) still wrote eight
+pieces by hand on the phased scenario; each is now public, and the study's start
+rewritten on them (scratch runs, one evaluation, no optimization) reproduces the
+hand-built quantities.
+
+**Choices.**
+
+- *Drive band*: `drive_ceiling(reference; fraction)`, the upper side of `drive_floor`
+  with the same reference, scale and laser–plasma-model and time check. Chosen over an
+  upper limit inside `drive_floor` because a `Constraint` has one side: a band is two
+  constraints, and two builders compose with `in_phase` and the reports without a
+  vector-of-constraints return type.
+- *Gates*: `mode_gate(...; fraction)` scales a `mode_uncertainty` floor; with `floor`,
+  the gate per degree is `max(gates[l], fraction × floor[l])` (the floor as a lower bound
+  of physical gates, § Mode gates in physical units). `fraction` without a floor is an
+  error rather than a scale of physical gates, so that it means one thing.
+- *Shifted target*: `mode_gate(...; shift = l => Δ)` (or `(l, m) => Δ`) measures the
+  departure from the reference's coefficients with `c_lm → c_lm + Δ c_00/√(2l+1)`, the
+  reference's model and time still checked; `shift_modes` gives the coefficients for an
+  objective. For m = 0, Δ is the change of aₗ/a₀ in the Legendre expansion: with
+  orthonormal harmonics aₗ/a₀ = √(2l+1) c_l0/c_00, checked to 1e-10 against the Legendre
+  moments integrated on the same sub-triangles (the cached `flux_moments` and `flux_ylm`
+  integrate at different subdivision levels and differ by 0.2 % in P2/P0 on a capsule
+  of 0.9 mm facets; the relation itself is exact). `drive_objective` has no reference
+  shape, so the shift has no place there.
+- *Keep-outs over phases*: `clearance_floor` evaluated on a `PerPhase` returns per beam
+  the least clearance over the phases. The phases share the aims; a keep-out at a
+  `peak_fraction` gives each phase the same clearance (the value is bit for bit one
+  phase's), one at an absolute `intensity` widens with the power, and the brightest
+  phase then binds.
+- *Power scales*: `power_scales(ps, ev | beams | x)` reads each (key, phase) scale as a
+  beam's power over its phase's power (the first beam of the key with positive phase
+  power; 1 for a key dark in its phase, as `parameters` reads it), differentiable;
+  `phase_powers` and `power_scale_table` for reports. A scaled phase on the pointing's
+  own powers has nothing to divide by: an error, the scales then come from `x`.
+- *History phases*: `remake(scenario; history, time)` and `Phase(...; history, time)`
+  are `history_state` followed by `remake(...; time, albedo)`, bit for bit, for a phase
+  and its reference alike.
+- *Summary*: `pointing_summary(...; gates, floor)`; a `mode_gate` passed as the gate
+  reports its own value (the departure from a shifted target where it has one), and the
+  run's constraints passed as `gates` select each phase's `in_phase` gate.
+- *Ceiling on another target*: `picket_ceiling(...; reference_names)` accepts a
+  reference on another target for the three integral measures. `:average` is absorbed
+  power over a fixed area, independent of the mesh up to the deposition operator's
+  sampling; `:weighted` (∫I² dA/∫I dA) converges as O(h²), about 1 % low at h = 0.2 mm
+  (§ The published picket fluence), a bias that cancels between targets meshed at the
+  same h; `:corridor` is an area mean over a band. `:peak` stays refused: it follows one
+  element (8 % between 0.2 and 0.45 mm elements, § Constrained re-pointing) and its
+  smooth stand-in is scaled by the reference mesh's peak-to-norm ratio.
+  `irradiance_ceiling` holds the peak alone and keeps its refusal. With `lpi = true`
+  the reference's model and time are checked on another target (the same target's path
+  is unchanged: it has never checked the model; extending the check there would make
+  existing calls throw and is left to the user).
+
+**The study's start on the API** (scratch, coarse deposition operator, 8 threads).
+Variant with windows from a drive history: the phase and reference scenarios from
+`remake(...; history, time)` have the hand construction's albedos, times and moment
+responses exactly; the floors from `mode_uncertainty` equal the study's cache; the
+objective with `power_scales` and the floor vectors is 378.899827494, the study's
+construction's value exactly; the 212 constraint rows (184 of them the keep-out's,
+now without a phase in their names) agree with the hand-built constraints' within
+1.2e-16 relative in value and limit, with equal statuses (`drive_ceiling` reads the
+drive itself where the study's cap read its ratio: the ratio of value to limit is
+compared), and match the study's logged start to every printed digit; the picket
+ceilings with `reference_names` on the design's windowed target reproduce the study's
+`limit = picket_irradiance(reference, ...)` route. Variant without windows (one target
+per phase, no history): objective 330.041515363 in both constructions, the same 212
+rows within 1.2e-16 and equal statuses; the phased summary with the run's constraints
+as `gates` and the `mode_uncertainty` results as `floor` reproduces the study's
+logged departures, multiples of the floor and of the gate in every phase.
+
+Confidence: the API's arithmetic is exact or checked against closed forms in
+`test/phased_study.jl`; the study comparison is one start per variant.

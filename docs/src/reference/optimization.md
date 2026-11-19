@@ -30,7 +30,10 @@ ceiling on the laser irradiance over named parts (its exact value
 [`irradiance_norm`](@ref), held alone with `exact = false`), and [`mode_gate`](@ref), a gate per degree on the
 [`mode_departure`](@ref) from a reference drive shape, which goes with
 [`drive_objective`](@ref) for the largest drive within the gates, and
-[`drive_floor`](@ref), the capsule's drive at least a fraction of a reference's;
+[`drive_floor`](@ref), the capsule's drive at least a fraction of a reference's
+([`drive_ceiling`](@ref) at most, for a band; the gates at a fraction of the pointing
+floor, physical gates with the floor as their lower bound, or a target shape shifted
+from the reference's by [`shift_modes`](@ref) are keywords of `mode_gate`);
 [`clearance_floor`](@ref), each beam's worst-case clearance from a keep-out at or above
 its minimum; [`light_ceiling`](@ref) and [`light_floor`](@ref), the laser light on
 named parts ([`light_fraction`](@ref)) at most or at least a limit. The outer cones'
@@ -74,10 +77,15 @@ the shared pointing's, which sets the aims of every phase, followed by a power s
 (group, phase) for the phases not fixed. [`evaluate`](@ref) gives one evaluation per
 phase in a [`PerPhase`](@ref), which [`optimize_pointing`](@ref) passes to the
 objective and to every constraint; [`in_phase`](@ref) applies any constraint or
-objective of one evaluation to one phase, the phase in its reported name.
+objective of one evaluation to one phase, the phase in its reported name, while a
+keep-out's [`clearance_floor`](@ref) takes every phase at once. A phase's albedos and
+time come from a drive history with `Phase(name, scenario; history, time)`, and a
+reference at the same time from `remake(scenario; history, time)`.
 `bounds(scenario.param; power_max)` caps every beam in every phase at the laser's
-limit, [`phase_beams`](@ref) puts reference beams at each phase's powers, and
-[`pointing_summary`](@ref) reports each phase.
+limit, [`phase_beams`](@ref) puts reference beams at each phase's powers,
+[`power_scales`](@ref) reads the scales inside an objective (differentiable) and
+[`power_scale_table`](@ref) tabulates them per key and phase, and
+[`pointing_summary`](@ref) reports each phase, against its gates and pointing floor.
 
 ```@autodocs
 Modules = [Briareus]

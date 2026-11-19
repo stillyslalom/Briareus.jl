@@ -149,6 +149,17 @@ end
                                 ([0.5], [0.1, 0.0, 0.2, 0.0]), 3.0)
     # the least re-pointing's objective (weights per cone)
     shobj = shift_objective(quads; weight = b -> b.group === :outer44 ? 2.0 : 1.0)
+    # a multi-phase study's pieces: the drive's ceiling, a shifted gate, phases with their
+    # own powers (power scales read inside an objective), a keep-out over every phase,
+    # and a picket ceiling measured on another target than its reference's
+    dcl = drive_ceiling(ev_ref; fraction = 1.1)
+    gsh = mode_gate(ev_ref, fill(0.05, 4); shift = (2 => 0.01, (3, 1) => -0.005))
+    pph2 = PhasedScenario(p, Phase(:a, s; power = 4.0), Phase(:b, s; power = 6.0, scaled = false))
+    xph2 = initial_parameters(pph2.param) .+ 0.01
+    regph = ev -> sum(abs2, power_scales(pph2, ev) .- 1)
+    augph2 = Briareus._Augmented(regph, (clf, in_phase(:a, dcl)), (fill(0.1, length(quads)), [0.2]), 3.0)
+    sw = Scenario(tw, p)
+    pcross = picket_ceiling(evaluate(s, xo), :wall; measure = :average, lpi = true)
 
     @testset "closures compile once" begin
         history(τ -> with_pulses(quads, pulse, τ), [0.5, 1.0]; record = sol -> sol)
@@ -337,6 +348,18 @@ end
             @test (@inferred in_phase(:b, dobj)(ev)) isa T
             @test (@inferred augph(ev)) isa T
         end
+        # a multi-phase study's pieces: the drive's ceiling, a shifted gate, the power
+        # scales in an objective, a keep-out over every phase, a picket ceiling on another
+        # target than its reference's
+        for x in (xph2, _inf_duals(xph2))
+            T = eltype(x)
+            ev = evaluate(pph2, x)
+            @test (@inferred power_scales(pph2, ev)) isa Vector{T}
+            @test (@inferred power_scales(pph2, apply(pph2.param, x))) isa Vector{T}
+            @test (@inferred clf.f(ev)) isa Vector{T}
+            @test (@inferred augph2(ev)) isa T
+            @test (@inferred dcl.f(ev[:a])) isa T && (@inferred gsh.f(ev[:a])) isa Vector{T}
+        end
         # the outer picket fluence and the bubble's picket ratio from it (outer quads aimed
         # into the entrance holes)
         for x in (xo, _inf_duals(xo))
@@ -350,6 +373,7 @@ end
             @test (@inferred picket_irradiance(ev, :wall; pkw...)) isa T
             @test (@inferred pceil.f(ev)) isa T && (@inferred pmean.f(ev)) isa T
             @test (@inferred pavg.f(ev)) isa T && (@inferred pcor.f(ev)) isa T
+            @test (@inferred pcross.f(evaluate(sw, x))) isa T        # on another target
             @test (@inferred linked_bubble(linked, bs)) isa BubbleAbsorption{T}
             # the bubble and the linked bubble on the beams (6 ns: clipping and the ridge stop)
             @test all(m -> (@inferred apply_lpi(m, bs, 6.0)) isa Vector{Beam{T}}, (bubble, linked))
@@ -470,6 +494,7 @@ end
                 if VERSION >= v"1.11"
                     @test _inf_jet_clean(JET.report_opt, pceil.f, ev) && _inf_jet_clean(JET.report_opt, pmean.f, ev)
                     @test _inf_jet_clean(JET.report_opt, pavg.f, ev) && _inf_jet_clean(JET.report_opt, pcor.f, ev)
+                    @test _inf_jet_clean(JET.report_opt, pcross.f, evaluate(sw, x))      # on another target
                     @test _inf_jet_clean(JET.report_opt, linked_bubble, linked, bs)
                     @test _inf_jet_clean(JET.report_opt, (m, b) -> apply_lpi(m, b, 6.0), linked, bs)
                     @test all(m -> _inf_jet_clean(JET.report_opt, (q, o, b) -> lpi_deposit(q, o, b, 6.0), m, s.deposition, bs),
@@ -479,6 +504,7 @@ end
                 @test _inf_jet_clean(JET.report_opt, (m, b) -> apply_lpi(m, b, 6.0), bubble, bs)
                 @test _inf_jet_clean(JET.report_call, pceil.f, ev) && _inf_jet_clean(JET.report_call, pmean.f, ev)
                 @test _inf_jet_clean(JET.report_call, pavg.f, ev) && _inf_jet_clean(JET.report_call, pcor.f, ev)
+                @test _inf_jet_clean(JET.report_call, pcross.f, evaluate(sw, x))
                 @test all(m -> _inf_jet_clean(JET.report_call, (q, b) -> apply_lpi(q, b, 6.0), m, bs) &&
                                _inf_jet_clean(JET.report_call, (q, o, b) -> lpi_deposit(q, o, b, 6.0), m, s.deposition, bs),
                           (bubble, linked))
@@ -551,6 +577,15 @@ end
             end
             @test _inf_jet_clean(JET.report_call, (s, o, x, c) -> optimize_pointing(s, o; x0 = x, constraints = c),
                                  pph, in_phase(:a, objectives[1]), xph, (in_phase(:a, ceilc), in_phase(:b, gatec)))
+            # a multi-phase study's pieces: no possible errors; no dispatch in reading the
+            # scales
+            for x in (xph2, _inf_duals(xph2))
+                ev = evaluate(pph2, x)
+                @test _inf_jet_clean(JET.report_opt, Briareus._read_scales, pph2.param, apply(pph2.param, x).values)
+                @test _inf_jet_clean(JET.report_call, power_scales, pph2, ev)
+                @test _inf_jet_clean(JET.report_call, clf.f, ev) && _inf_jet_clean(JET.report_call, augph2, ev)
+                @test _inf_jet_clean(JET.report_call, dcl.f, ev[:a]) && _inf_jet_clean(JET.report_call, gsh.f, ev[:a])
+            end
             # a warm restart from a constrained result
             r1 = optimize_pointing(s, objectives[1]; x0, iterations = 1, evaluations = 2, constraints = (ceilc, gatec))
             @test _inf_jet_clean(JET.report_call, (s, o, r, c) -> optimize_pointing(s, o; from = r, constraints = c),

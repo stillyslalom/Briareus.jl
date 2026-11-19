@@ -690,8 +690,8 @@ struct _Unchanged end
 const _UNCHANGED = _Unchanged()
 
 """
-    remake(scenario; parameterization, lpi, deposition_kw, observe, time, albedo, model)
-        -> Scenario
+    remake(scenario; parameterization, lpi, deposition_kw, observe, time, albedo, model,
+           history) -> Scenario
 
 Copy of `scenario` with the given parts replaced. What depends on a replaced part is
 rebuilt and everything else is shared:
@@ -714,14 +714,28 @@ rebuilt and everything else is shared:
 
 The target, `radiation` and `viewfactor_kw` do not change through `remake` (an
 `ArgumentError`): they need a new `Scenario`, or a `model` built for the purpose.
+
+`history` (a [`drive_history`](@ref) of the scenario's target run with `keep_albedo =
+true`) with `time` sets the albedos and time of the history's state at `time`:
+`remake(scenario; history = h, time = τ)` is `st = `[`history_state`](@ref)`(scenario.target,
+h, τ)` and `remake(scenario; st.time, st.albedo)`, bit for bit. Remade so, a design's
+phase and its reference at the same time carry the same `time`, which the reference
+checks of [`mode_gate`](@ref) and [`drive_floor`](@ref) compare.
 """
 function remake(s::Scenario; parameterization = _UNCHANGED, lpi = _UNCHANGED,
                 deposition_kw = _UNCHANGED, observe = _UNCHANGED, time = _UNCHANGED,
-                albedo = _UNCHANGED, model = _UNCHANGED, kwargs...)
+                albedo = _UNCHANGED, model = _UNCHANGED, history = nothing, kwargs...)
     isempty(kwargs) ||
         throw(ArgumentError("remake(::Scenario) cannot change $(join(keys(kwargs), ", ")): build a new Scenario " *
                             "(or pass a `model`); it changes parameterization, lpi, deposition_kw, observe, " *
                             "time, albedo and model"))
+    if history !== nothing
+        time === _UNCHANGED && throw(ArgumentError("a `history` needs the `time` (ns) of its state"))
+        albedo === _UNCHANGED ||
+            throw(ArgumentError("give the albedos by `history` or by `albedo`, not both"))
+        st = history_state(s.target, history, time)
+        time, albedo = st.time, st.albedo
+    end
     t = s.target
     param = parameterization === _UNCHANGED ? s.param : parameterization
     op = s.deposition

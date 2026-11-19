@@ -70,9 +70,9 @@ end
 
 """
     Phase(name, target; power = nothing, pulses = nothing, time = nothing, pulse_by = :group,
-          scaled = true, kwargs...)
+          scaled = true, history = nothing, kwargs...)
     Phase(name, scenario::Scenario; power = nothing, pulses = nothing, time = scenario.time,
-          pulse_by = :group, scaled = true)
+          pulse_by = :group, scaled = true, history = nothing)
 
 One phase of a [`PhasedScenario`](@ref): its name, what its beams deposit in and radiate
 from, and the beams' powers in it. With a `target`, the phased scenario builds the
@@ -85,9 +85,14 @@ used with its operators, radiation model and options, its parameterization repla
 the shared pointing (its deposition operator must serve the pointing's beams, as for
 `remake(scenario; parameterization)`). One target, view-factor matrix and deposition
 operator can serve every phase, windows intact or burned through, as `remake`s of a
-shared scenario with each phase's albedos and time: [`history_state`](@ref) gives them
-from a drive history, `st = history_state(target, h, τ)` and `Phase(:rise,
-remake(shared; st.time, st.albedo); pulses, time = τ)`.
+shared scenario with each phase's albedos and time. `history`, a [`drive_history`](@ref)
+of the phase's target run with `keep_albedo = true`, gives them at the phase's `time`:
+`Phase(:rise, shared; history = h, time = τ, pulses)` is `Phase(:rise, remake(shared;
+history = h, time = τ); pulses)`, the albedos of [`history_state`](@ref)`(target, h, τ)`
+(with a `target`, they are the built scenario's `albedo`). A reference scenario at the
+same time is `remake(reference_scenario; history = reference_history, time = τ)`, so
+that the reference checks of [`mode_gate`](@ref) and [`drive_floor`](@ref) find the
+phase's time.
 
 The phase's beam powers (TW per beam) replace the pointing's:
 
@@ -114,12 +119,23 @@ struct Phase
 end
 
 function Phase(name, source::Union{Target,Scenario}; power = nothing, pulses = nothing,
-               time::Union{Nothing,Real} = nothing, pulse_by = :group, scaled::Bool = true, kwargs...)
+               time::Union{Nothing,Real} = nothing, pulse_by = :group, scaled::Bool = true,
+               history = nothing, kwargs...)
     power === nothing || pulses === nothing ||
         throw(ArgumentError("phase $name: give `power` or `pulses`, not both"))
     source isa Scenario && !isempty(kwargs) &&
         throw(ArgumentError("phase $name: a ready scenario takes no Scenario keywords ($(join(keys(kwargs), ", "))); " *
                             "remake the scenario instead"))
+    if history !== nothing
+        time === nothing && throw(ArgumentError("phase $name: a `history` needs the phase's `time`"))
+        haskey(kwargs, :albedo) && throw(ArgumentError("phase $name: give the albedos by `history` or by `albedo`, not both"))
+        if source isa Scenario
+            source = remake(source; history, time)
+        else
+            st = history_state(source, history, time)
+            kwargs = pairs(merge(values(kwargs), (; st.albedo)))
+        end
+    end
     tm = time === nothing ? (source isa Scenario ? source.time : nothing) : Float64(time)
     pulses === nothing || tm !== nothing ||
         throw(ArgumentError("phase $name: pulses need the phase's `time`"))
@@ -285,6 +301,141 @@ function phase_beams(p::PhasedPointing, beams::AbstractVector{<:Beam}; scale = 1
 end
 
 """
+    power_scales(p, ev::PerPhase) -> Vector
+    power_scales(p, beams::PerPhase) -> Vector
+    power_scales(p, x::AbstractVector) -> Vector
+
+The power scales of a phased design, one per `(key, phase)` of `p.param.keys` in that
+order (`p` a [`PhasedScenario`](@ref) or its [`PhasedPointing`](@ref)), the parameters
+`x[n+1:end]` that `apply` multiplies the phases' powers by. From a [`PerPhase`](@ref) of
+evaluations (their setup beams, `ev[phase].beams`) or of beam vectors (in the pointing's
+order, as `apply` and `evaluate` give them), each scale is a beam's power over its
+phase's power ([`phase_powers`](@ref)), for the first beam of the key with positive
+phase power; a key whose beams are all at zero power in the phase has no scale to read
+and gives 1, as [`parameters`](@ref) does. A scaled phase whose powers are the
+pointing's own (no `power` or `pulses` in its [`Phase`](@ref)) has no phase power to
+divide by: an `ArgumentError` (read the scales from `x`).
+
+Generic in the number type and thread-safe: inside an objective of the `PerPhase`
+evaluation the scales carry the optimizer's duals, e.g. a regularization of the scales
+toward `s0` (a vector in the order of the keys),
+`ev -> J(ev) + w * sum(abs2, power_scales(ps, ev) ./ s0 .- 1) / length(s0)`.
+[`power_scale_table`](@ref) gives them per key and phase for a report.
+"""
+function power_scales(p::PhasedPointing, x::AbstractVector{<:Real})
+    length(x) == nparams(p) || throw(DimensionMismatch("expected $(nparams(p)) parameters"))
+    return x[p.n+1:end]
+end
+power_scales(p::PhasedPointing, ev::PerPhase{<:Evaluation}) =
+    _power_scales(p, ev.names, map(e -> e.beams, ev.values))
+power_scales(p::PhasedPointing, beams::PerPhase{<:AbstractVector{<:Beam}}) =
+    _power_scales(p, beams.names, beams.values)
+
+function _power_scales(p::PhasedPointing, names::Vector{Symbol}, bs::AbstractVector{<:AbstractVector{<:Beam}})
+    names == p.phases ||
+        throw(ArgumentError("the phases ($(join(names, ", "))) are not the scenario's ($(join(p.phases, ", ")))"))
+    return _read_scales(p, bs)
+end
+
+# A function barrier: the beams' number type is known here.
+function _read_scales(p::PhasedPointing, bs::AbstractVector{<:AbstractVector{Beam{T}}}) where {T}
+    s = ones(T, length(p.keys))
+    done = falses(length(p.keys))
+    for k in eachindex(p.phases)
+        g = p.group[k]
+        isempty(g) && continue
+        P = p.power[k]
+        P === nothing &&
+            throw(ArgumentError("phase $(repr(p.phases[k])) is scaled on the pointing's own powers: " *
+                                "its scales are read from the parameters, `power_scales(scenario, x)`"))
+        b = bs[k]
+        length(b) == length(g) ||
+            throw(DimensionMismatch("phase $(repr(p.phases[k])): $(length(b)) beams for the pointing's $(length(g))"))
+        for i in eachindex(g)
+            j = g[i]
+            (done[j] || !(P[i] > 0)) && continue
+            s[j] = b[i].power / P[i]
+            done[j] = true
+        end
+    end
+    return s
+end
+
+"""
+    phase_powers(p, phase) -> Union{Vector{Float64},Nothing}
+
+The powers (TW per beam of the pointing, in its order) of the phase named `phase` of `p`
+(a [`PhasedScenario`](@ref) or its [`PhasedPointing`](@ref)) before its power scales:
+the [`Phase`](@ref)'s `power`, or its `pulses` at its time; `nothing` for a phase whose
+powers are the pointing's own. A copy.
+"""
+function phase_powers(p::PhasedPointing, phase::Symbol)
+    k = findfirst(==(phase), p.phases)
+    k === nothing && throw(KeyError(phase))
+    P = p.power[k]
+    return P === nothing ? nothing : copy(P)
+end
+
+"""
+    PowerScaleTable{K}
+
+The power scales of a phased design per key and phase, from
+[`power_scale_table`](@ref): a row per key (`keys`, the scales' group keys in order of
+first appearance) and a column per scaled phase (`phases`), with `scales[i, j]` the
+scale of `keys[i]` in `phases[j]` (`NaN` where that key has no scale in the phase). The
+text display prints the table and each phase's least, mean and largest scale, for a
+study's log; the fields serve other reports.
+"""
+struct PowerScaleTable{K}
+    keys::Vector{K}
+    phases::Vector{Symbol}
+    scales::Matrix{Float64}
+end
+
+"""
+    power_scale_table(p, result::PointingResult) -> PowerScaleTable
+    power_scale_table(p, x::AbstractVector) / power_scale_table(p, beams_or_ev::PerPhase)
+
+The power scales of a phased design (`p` a [`PhasedScenario`](@ref) or its
+[`PhasedPointing`](@ref); the design a result, a parameter vector, or the evaluations
+or beams that [`power_scales`](@ref) reads) as a [`PowerScaleTable`](@ref), in Float64
+(the values of duals).
+"""
+power_scale_table(p::PhasedPointing, r::PointingResult) = power_scale_table(p, r.x)
+function power_scale_table(p::PhasedPointing{<:Any,K}, v) where {K}
+    s = Float64.(ForwardDiff.value.(power_scales(p, v)))
+    keys = unique(first.(p.keys))
+    phases = unique(last.(p.keys))
+    S = fill(NaN, length(keys), length(phases))
+    for (g, (k, ph)) in enumerate(p.keys)
+        S[findfirst(isequal(k), keys), findfirst(==(ph), phases)] = s[g]
+    end
+    return PowerScaleTable{K}(keys, phases, S)
+end
+
+Base.show(io::IO, t::PowerScaleTable) =
+    print(io, "PowerScaleTable(", length(t.keys), " keys × ", length(t.phases), " phases (", join(t.phases, ", "), "))")
+
+function Base.show(io::IO, ::MIME"text/plain", t::PowerScaleTable)
+    print(io, "Power scales of ", length(t.keys), " keys in ", length(t.phases), length(t.phases) == 1 ? " phase:" : " phases:")
+    w = max(maximum(k -> length(string(k)), t.keys; init = 0), 4)
+    cw = [max(length(string(ph)), 7) for ph in t.phases]
+    print(io, "\n  ", rpad("", w))
+    for (j, ph) in enumerate(t.phases)
+        print(io, "  ", lpad(string(ph), cw[j]))
+    end
+    row(label, vals) = (print(io, "\n  ", rpad(label, w));
+                        foreach(j -> print(io, "  ", lpad(isnan(vals[j]) ? "–" : @sprintf("%.4f", vals[j]), cw[j])), eachindex(vals)))
+    for (i, k) in enumerate(t.keys)
+        row(string(k), t.scales[i, :])
+    end
+    col(f) = [(c = filter(!isnan, t.scales[:, j]); isempty(c) ? NaN : f(c)) for j in eachindex(t.phases)]
+    row("min", col(minimum))
+    row("mean", col(c -> sum(c) / length(c)))
+    row("max", col(maximum))
+end
+
+"""
     parameters(p::PhasedPointing, beams::PerPhase) -> Vector{Float64}
     parameters(p::PhasedPointing, values::Pair...; group = (field = value, ...), ...)
         -> Vector{Float64}
@@ -428,11 +579,14 @@ target (`observe`, `deposition_kw`, `viewfactor_kw`, …; a phase's own override
 each computed once per parameter vector: [`optimize_pointing`](@ref) passes it to the
 objective and every constraint. A builder of an evaluation's objective or constraint
 ([`mode_gate`](@ref), [`drive_floor`](@ref), [`irradiance_ceiling`](@ref),
-[`picket_ceiling`](@ref), [`clearance_floor`](@ref), [`light_ceiling`](@ref),
+[`picket_ceiling`](@ref), [`light_ceiling`](@ref), [`drive_ceiling`](@ref),
 [`drive_objective`](@ref), a user [`Constraint`](@ref)) applies to one phase through
 [`in_phase`](@ref); a function of the whole `PerPhase` combines phases
-(`ev -> w1 * f1(ev[:intact]) + w2 * f2(ev[:burned])`). The result's `beams` are a
-`PerPhase` of beam vectors, and [`pointing_summary`](@ref) reports every phase.
+(`ev -> w1 * f1(ev[:intact]) + w2 * f2(ev[:burned])`), and a keep-out's
+[`clearance_floor`](@ref), which reads the beams alone, takes every phase at once.
+[`power_scales`](@ref) reads the power scales inside such a function. The result's
+`beams` are a `PerPhase` of beam vectors, and [`pointing_summary`](@ref) reports every
+phase.
 
 `scenario[:picket]` is a phase's `Scenario` and `keys(scenario)` the phases' names.
 [`remake`](@ref)`(scenario; pointing, by, scaled)` replaces the pointing (staging per
@@ -530,6 +684,9 @@ _phase_evaluations(scen::Vector{<:Scenario}, beams::AbstractVector) =
     [evaluate(scen[k], beams[k]) for k in eachindex(scen, beams)]
 
 phase_beams(ps::PhasedScenario, beams::AbstractVector{<:Beam}; kwargs...) = phase_beams(ps.param, beams; kwargs...)
+power_scales(ps::PhasedScenario, v) = power_scales(ps.param, v)
+phase_powers(ps::PhasedScenario, phase::Symbol) = phase_powers(ps.param, phase)
+power_scale_table(ps::PhasedScenario, v) = power_scale_table(ps.param, v)
 
 """
     remake(scenario::PhasedScenario; pointing, by, scaled) -> PhasedScenario
@@ -605,6 +762,19 @@ end
 (p::_InPhase)(ev::PerPhase) = p.f(ev[p.phase])
 _exact_value(p::_InPhase, ev::PerPhase) = _exact_value(p.f, ev[p.phase])
 
+# A keep-out's clearance over every phase (`clearance_floor` on a `PerPhase` of
+# evaluations): per beam the least over the phases. The phases share the aims, so a
+# keep-out that does not read the beams' power gives every phase the first's values.
+function (c::_ClearanceValue)(ev::PerPhase)
+    v = c(ev.values[1])
+    for k in 2:length(ev.values)
+        v = min.(v, c(ev.values[k]))
+    end
+    return v
+end
+
+_beam_names(ev::PerPhase) = _beam_names(ev.values[1])
+
 check_constraints(ev::PerPhase, c::Constraint; kwargs...) = check_constraints(ev, (c,); kwargs...)
 check_constraints(ev::PerPhase, cs; feasibility::Real = 1e-3) =
     _constraint_rows(ev, Tuple(cs), nothing, Float64(feasibility))
@@ -621,20 +791,49 @@ A [`PointingSummary`](@ref) per phase: each phase's beams in its scenario agains
 every phase), with the drive against `drive_reference[phase]` where given (a
 `PerPhase`, a named tuple or a dictionary by phase of evaluations or coefficient
 vectors; a phase without one has no drive ratio). The display is one line per phase.
+
+`gates` and `floor` show each phase's departure against its gates and its pointing
+floor, as for one [`Scenario`](@ref): per phase (a `PerPhase`, a named tuple or a
+dictionary by phase; a phase without an entry shows none), or one value for every
+phase (a vector, a [`mode_uncertainty`](@ref) result, a [`mode_gate`](@ref)). `gates`
+may also be the run's constraints (a vector or tuple, e.g. the `constraints` passed to
+[`optimize_pointing`](@ref)): each phase then shows its `in_phase(phase, mode_gate(...))`,
+from that gate's own reference shape.
+
+```julia
+pointing_summary(ps, r; drive_reference = refs, gates = constraints, floor = floors)
+```
 """
 function pointing_summary(ps::PhasedScenario, beams::PerPhase;
                           reference = apply(ps.param, initial_parameters(ps.param)),
                           keepout = nothing, inner = (:inner23, :inner30),
-                          drive_reference = nothing, lmax::Integer = 4)
+                          drive_reference = nothing, lmax::Integer = 4, gates = nothing,
+                          floor = nothing)
     beams.names == ps.param.phases ||
         throw(ArgumentError("the beams' phases are not the scenario's ($(join(ps.param.phases, ", ")))"))
     out = map(eachindex(ps.scenarios)) do k
         ph = ps.param.phases[k]
         ref = reference isa PerPhase ? reference[ph] : reference
         dr = drive_reference === nothing ? nothing : haskey(drive_reference, ph) ? drive_reference[ph] : nothing
-        pointing_summary(ps.scenarios[k], beams[ph]; reference = ref, keepout, inner, drive_reference = dr, lmax)
+        pointing_summary(ps.scenarios[k], beams[ph]; reference = ref, keepout, inner, drive_reference = dr, lmax,
+                         gates = _phase_gate(gates, ph), floor = _phase_entry(floor, ph))
     end
     return PerPhase(ps.param.phases, out)
 end
+
+# One phase's entry of a summary's per-phase option: a value for every phase as it is,
+# else the phase's entry (`nothing` without one).
+_phase_entry(::Nothing, ph) = nothing
+_phase_entry(x::Union{AbstractVector{<:Real},Constraint}, ph) = x
+_phase_entry(x, ph) = x isa NamedTuple && haskey(x, :rms_mode) ? x : haskey(x, ph) ? x[ph] : nothing
+
+# The gates of a phase: from a run's constraints, the phase's `in_phase` mode gate.
+_phase_gate(x, ph) = _phase_entry(x, ph)
+function _phase_gate(cs::Union{Tuple{Vararg{Constraint}},AbstractVector{<:Constraint}}, ph)
+    i = findfirst(c -> c.f isa _InPhase && c.f.phase === ph && c.f.f isa _GateValue, cs)
+    return i === nothing ? nothing : cs[i]
+end
+
+_gate_value(f::_InPhase, ev::Evaluation) = _gate_value(f.f, ev)
 
 pointing_summary(ps::PhasedScenario, r::PointingResult; kwargs...) = pointing_summary(ps, r.beams; kwargs...)

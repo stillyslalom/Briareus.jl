@@ -477,8 +477,8 @@ end
                    power = nothing, groups = (:outer44, :outer50), lpi = false,
                    measure = :peak, area = 53.0, corridor = 1.3, edge = 0.3,
                    inner = (:inner23, :inner30),
-                   limit = picket_irradiance(reference, names...; ...), p = 64,
-                   scale = limit, exact = true) -> Constraint
+                   limit = picket_irradiance(reference, reference_names...; ...), p = 64,
+                   scale = limit, exact = true, reference_names = names) -> Constraint
 
 A ceiling on the laser irradiance of the beams in `groups` over the elements of the
 named parts or components ([`picket_irradiance`](@ref), whose keywords set the powers,
@@ -501,10 +501,24 @@ the beams and the measure, the same for the reference and the design), at or bel
 - `measure = :corridor`: the mean irradiance near the inner beams' centerlines, the
   design's own (they move with its aims): smooth, held directly.
 
-The reference evaluation must be on the same target as the optimized scenario (a
-[`subset`](@ref) of it shares the target), or evaluating the constraint throws an
-`ArgumentError`; its laser–plasma model and time enter only with `lpi = true`. One
-deposition per evaluation, in the evaluation's number type. For a phase other than the
+**A reference on another target.** For `:peak` the reference evaluation must be on the
+same target as the optimized scenario (a [`subset`](@ref) of it shares the target), or
+evaluating the constraint throws an `ArgumentError`: the peak follows one element and
+the mesh, and the stand-in's scale is the reference mesh's ratio of peak to norm. The
+three integral measures hold across meshes and take a reference on another target (a
+hohlraum without the design's windows, a reference's own mesh): `:average` (absorbed
+power over a fixed area, a quantity of the field, not the mesh), `:weighted` (an
+integral that converges as O(h²) with the element size h: compare targets meshed at the
+same `h`, where the bias of about 1 % at 0.2 mm cancels in the ratio) and `:corridor`
+(an area mean). On an evaluation of another target the constraint measures the parts
+`names` of that target, and the limit is the reference's over `reference_names` (by
+default `names`), so that a design with windows in its mesh holds the light on its wall
+and windows at the reference's light on its wall, `picket_ceiling(reference, :wall,
+:window; reference_names = (:wall,), measure = :average)`. The
+laser–plasma model enters only with `lpi = true`; then a reference on another target
+must share the scenario's model and time, checked as for [`mode_gate`](@ref) (on the
+reference's own target the model is not checked). One deposition per evaluation, in the
+evaluation's number type. For a phase other than the
 optimized scenario's (a trough, a foot), give the phase's powers by `pulses` and
 `window` or `power`, or build the constraint on an evaluation of that phase.
 
@@ -522,30 +536,40 @@ function picket_ceiling(reference::Evaluation, names::Symbol...; pulses = nothin
                         by = :group, power = nothing, groups = (:outer44, :outer50), lpi::Bool = false,
                         measure::Symbol = :peak, area::Real = 53.0, corridor::Real = 1.3, edge::Real = 0.3,
                         inner = (:inner23, :inner30), limit::Union{Nothing,Real} = nothing, p::Real = 64,
-                        scale::Union{Nothing,Real} = nothing, exact::Bool = true)
+                        scale::Union{Nothing,Real} = nothing, exact::Bool = true,
+                        reference_names = names)
     mo = _picket_measure_options(measure, area, corridor, edge, inner)
     _check_lpi(lpi, pulses, power)
     t = reference.scenario.target
-    es = _named_elements(t, names)
+    rn = Tuple(Symbol.(collect(reference_names)))
+    same = rn == names
+    isempty(names) && throw(ArgumentError("name the parts (e.g. :wall)"))
+    res = _named_elements(t, rn)
     pw = _picket_power(pulses, window, by, power, true)
     gs = collect(Symbol, _symbols(groups))
     P = Float64.(ForwardDiff.value.(_picket_map(reference, pw, gs, lpi)))
-    sum(P[e] for e in es) > 0 ||
-        throw(ArgumentError("the reference's picket deposits no power on $(join(names, ", "))"))
-    ref = Float64(ForwardDiff.value(_picket_measure(P, t, es, mo, reference.beams)))
-    factor = measure === :peak ? ref / _irradiance_norm(P, t, es, Float64(p)) : 1.0
+    sum(P[e] for e in res) > 0 ||
+        throw(ArgumentError("the reference's picket deposits no power on $(join(rn, ", "))"))
+    ref = Float64(ForwardDiff.value(_picket_measure(P, t, res, mo, reference.beams)))
+    factor = measure === :peak ? ref / _irradiance_norm(P, t, res, Float64(p)) : 1.0
     lim = limit === nothing ? ref : Float64(limit)
     lim > 0 || throw(ArgumentError("the picket irradiance limit must be positive"))
-    value = _PicketValue(t, es, gs, pw, lpi, mo, Float64(p), factor, exact)
+    # the design's parts on the reference's target: resolved at evaluation when they differ
+    es = same ? res : Int[]
+    value = _PicketValue(t, es, collect(Symbol, names), gs, pw, lpi, mo, Float64(p), factor, exact,
+                         lpi ? _ReferenceModel(reference.scenario) : nothing)
     return Constraint(Symbol(:picket_, measure), value; upper = lim, scale = something(scale, lim))
 end
 
 # The picket ceiling's value: the picket irradiance's p-norm on the reference's peak
 # scale (`:peak`), or the measure itself; with `exact`, the reported value of `:peak` is
-# the peak itself (`_exact_value`).
-struct _PicketValue{F}
+# the peak itself (`_exact_value`). `elements` are those of `names` on the reference's
+# target (empty: resolved at evaluation); `model` the reference's laser–plasma model and
+# time with `lpi` (else `nothing`), checked on an evaluation of another target.
+struct _PicketValue{F,M<:Union{Nothing,_ReferenceModel}}
     target::Target
     elements::Vector{Int}
+    names::Vector{Symbol}
     groups::Vector{Symbol}
     power::F
     lpi::Bool
@@ -553,25 +577,48 @@ struct _PicketValue{F}
     p::Float64
     factor::Float64
     exact::Bool
+    model::M
 end
 
-function _check_picket(c::_PicketValue, ev::Evaluation)
-    ev.scenario.target === c.target ||
-        throw(ArgumentError("picket_ceiling: the evaluation is on another target than the reference"))
-    return nothing
+# The target and elements the ceiling measures at `ev`: the reference's target and its
+# elements, or, for a measure that holds across meshes, the evaluation's target and the
+# named parts' elements on it.
+function _picket_parts(c::_PicketValue, ev::Evaluation)
+    t = ev.scenario.target
+    t === c.target && return t, isempty(c.elements) ? _part_elements(t, c.names) : c.elements
+    c.options.measure === :peak &&
+        throw(ArgumentError("picket_ceiling: the evaluation is on another target than the reference: a ceiling " *
+                            "on the peak holds on the reference's mesh only (the measures :average, :weighted " *
+                            "and :corridor take a reference on another target)"))
+    _check_other_model(c.model, ev)
+    return t, _part_elements(t, c.names)
+end
+
+# The reference's model against the evaluation's (with `lpi`): a comparison of untyped
+# models, called through `invokelatest` so that the inferred value carries no dynamic
+# dispatch (the check runs once per new model, `_check_reference_model`).
+_check_other_model(::Nothing, ev::Evaluation) = nothing
+_check_other_model(m::_ReferenceModel, ev::Evaluation) =
+    (Base.invokelatest(_check_model, m, "picket_ceiling", ev); nothing)
+
+# `_named_elements` for a vector of names (`elements(t, names...)`, in its order, without
+# the splat).
+function _part_elements(t::Target, names::Vector{Symbol})
+    _check_names(t, names)
+    return reduce(vcat, (t.comp_elems[ci] for n in names for ci in part_pieces(t, n)); init = Int[])
 end
 
 function (c::_PicketValue)(ev::Evaluation)
-    _check_picket(c, ev)
+    t, es = _picket_parts(c, ev)
     P = _picket_map(ev, c.power, c.groups, c.lpi)
-    return c.options.measure === :peak ? c.factor * _irradiance_norm(P, c.target, c.elements, c.p) :
-           _picket_measure(P, c.target, c.elements, c.options, ev.beams)
+    return c.options.measure === :peak ? c.factor * _irradiance_norm(P, t, es, c.p) :
+           _picket_measure(P, t, es, c.options, ev.beams)
 end
 
 function _exact_value(c::_PicketValue, ev::Evaluation)
     c.exact && c.options.measure === :peak || return nothing
-    _check_picket(c, ev)
-    return _peak(Float64.(ForwardDiff.value.(_picket_map(ev, c.power, c.groups, c.lpi))), c.target, c.elements)
+    t, es = _picket_parts(c, ev)
+    return _peak(Float64.(ForwardDiff.value.(_picket_map(ev, c.power, c.groups, c.lpi))), t, es)
 end
 
 # ---------------------------------------------------------------------------------------

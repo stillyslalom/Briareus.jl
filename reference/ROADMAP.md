@@ -326,6 +326,27 @@ analog is the dropped-bundle tutorial, `docs/literate/dropped_bundle.jl`).
       to rounding at its saved parameters (552 of them) and takes 0.45 of its time
       per gradient. *Left:* a scale shared across phases; a runnable example in a
       tutorial (over a minute of build time); the study's stages rerun on it.
+    - The multi-phase study's quad stage rerun on `PhasedScenario` (scratch runs,
+      2026-11-19): the start reproduces the study's to every printed digit and the
+      run reaches the same design region in 64 % of its evaluations. What it still
+      wrote by hand is API now ("The multi-phase study's hand-written
+      pieces as API"): `drive_ceiling` beside `drive_floor` for a band;
+      `mode_gate(...; fraction, floor, shift)` (a gate at a fraction of the noise
+      floor, the floor as a lower bound under gates in physical units, a target
+      shape shifted in a_l/a₀ with the model and time check kept) and `shift_modes`;
+      `clearance_floor` over every phase without naming one; `power_scales`,
+      `phase_powers` and `power_scale_table`; `remake(scenario; history, time)` and
+      `Phase(...; history, time)` for a phase straight from a drive history;
+      `pointing_summary(...; gates, floor)`; `picket_ceiling(...; reference_names)`
+      with a reference on another target for the integral measures (`:peak` and
+      `irradiance_ceiling` still refuse one: they follow one element). The study's
+      start rewritten on these reproduces the hand-built objective and its 212
+      constraint rows to 1e-16. *Left:* `picket_ceiling` with `lpi = true` on the
+      reference's own target has never checked the laser–plasma model (adding the
+      check makes some existing calls throw: user); `shift_objective` on a
+      `PerPhase`. No run of the study or its variants converged within 40 minutes
+      each: an inner run can spend hundreds of evaluations on 1e-4 of the objective
+      while limits stay violated (the iteration cap does not bound evaluations).
     - A pulse-shape budget: `pulse_shape_groups` groups per-key multipliers
       over the phases into a given number of shapes by k-means on the log multipliers
       per class, the split between the classes by fit (exact by enumeration or 1-D

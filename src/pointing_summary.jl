@@ -22,9 +22,14 @@ A pointing (e.g. the beams of a re-pointing result) against reference beams, fro
 - with a `drive_reference`: `drive_ratio`, the capsule drive's mean over the
   reference's (`c₀₀/r₀₀` of the [`flux_ylm`](@ref) coefficients), and `departure`, the
   [`mode_departure`](@ref) per degree `l = 1:lmax` from the reference's shape; `NaN`
-  and empty without one.
+  and empty without one;
+- with `gates`: `gate`, the gate per degree, and `gate_departure`, the departure it
+  bounds (a [`mode_gate`](@ref)'s own value, from its reference's shape, shifted if so;
+  otherwise `departure`); with `floor`: `floor`, the pointing floor per degree, against
+  which `departure` is shown. Empty without them.
 
-Its display is one line, suited to a log of a study's runs.
+Its display is one line, suited to a log of a study's runs, with the departure over
+the gate and over the floor per degree where given (1.00: at the gate).
 """
 struct PointingSummary
     nbeams::Int
@@ -40,7 +45,16 @@ struct PointingSummary
     missed::Float64
     drive_ratio::Float64
     departure::Vector{Float64}
+    gate::Vector{Float64}
+    gate_departure::Vector{Float64}
+    floor::Vector{Float64}
 end
+
+PointingSummary(nbeams, shift_mean, shift_rms, shift_max, power, cone_fraction, clearance,
+                reference_clearance, margin, clipped, missed, drive_ratio, departure) =
+    PointingSummary(nbeams, shift_mean, shift_rms, shift_max, power, cone_fraction, clearance,
+                    reference_clearance, margin, clipped, missed, drive_ratio, departure,
+                    Float64[], Float64[], Float64[])
 
 """
     pointing_summary(scenario, beams; reference = beams of the scenario's start,
@@ -64,6 +78,14 @@ coefficients through `l = lmax`, adds the capsule drive against it: the drive ra
 and the departure per degree, the quantities of [`drive_objective`](@ref) and
 [`mode_gate`](@ref). It needs a scenario that observes the capsule.
 
+`gates` adds the departure against gates per degree: a vector of gates (in the units of
+[`mode_departure`](@ref), against the departure from `drive_reference`), a
+[`mode_uncertainty`](@ref) result (its floor, `√(2l+1) × rms_mode`), or a
+[`mode_gate`](@ref) constraint, whose own value (the departure from its reference's
+shape, shifted if so, with its check of the laser–plasma model and time) and limits are
+shown. `floor` (a vector, or a `mode_uncertainty` result) adds the departure from
+`drive_reference` against the pointing floor. Both need degrees `1:lmax`.
+
 ```julia
 r = optimize_pointing(scenario, objective)
 pointing_summary(scenario, r; keepout = ApertureKeepOut(target), drive_reference = ref)
@@ -72,7 +94,8 @@ pointing_summary(scenario, r; keepout = ApertureKeepOut(target), drive_reference
 function pointing_summary(s::Scenario, beams::AbstractVector{<:Beam};
                           reference = apply(s.param, initial_parameters(s.param)),
                           keepout = nothing, inner = (:inner23, :inner30),
-                          drive_reference = nothing, lmax::Integer = 4)
+                          drive_reference = nothing, lmax::Integer = 4, gates = nothing,
+                          floor = nothing)
     ref = Dict(b.name => b for b in reference)
     for b in beams
         haskey(ref, b.name) || throw(ArgumentError("beam $(b.name) has no reference beam"))
@@ -98,10 +121,41 @@ function pointing_summary(s::Scenario, beams::AbstractVector{<:Beam};
         ratio = cd[1] / cr[1]
         dep = mode_departure(cd, cr; lmax)
     end
+    gate, gdep = _summary_gate(gates, ev, dep, lmax)
+    fl = floor === nothing ? Float64[] : _summary_floor(floor, dep, lmax)
     return PointingSummary(length(bs), isempty(shifts) ? 0.0 : sum(shifts) / length(shifts),
                            isempty(shifts) ? 0.0 : sqrt(sum(abs2, shifts) / length(shifts)),
                            maximum(shifts; init = 0.0), P, P > 0 ? Pin / P : NaN, c, cref, margin,
-                           Float64(clipped_fraction(ev)), Float64(missed_fraction(ev)), ratio, dep)
+                           Float64(clipped_fraction(ev)), Float64(missed_fraction(ev)), ratio, dep,
+                           gate, gdep, fl)
+end
+
+# The summary's gates per degree and the departure they bound: a mode gate's own value
+# and limits, or gates (a vector, a `mode_uncertainty` floor) against `dep`.
+_summary_gate(::Nothing, ev, dep, lmax) = (Float64[], Float64[])
+function _summary_gate(c::Constraint, ev::Evaluation, dep, lmax)
+    v = _gate_value(c.f, ev)
+    v === nothing && throw(ArgumentError("gates: constraint $(c.name) is not a mode_gate"))
+    g = Float64.(ForwardDiff.value.(v))
+    lim = length(c.limit) == length(g) ? copy(c.limit) : fill(c.limit[1], length(g))
+    return lim, g
+end
+function _summary_gate(gates, ev, dep, lmax)
+    isempty(dep) && throw(ArgumentError("gates as departures need a `drive_reference` (or give a mode_gate)"))
+    g = collect(Float64, _gate_values(gates))
+    length(g) == lmax || throw(DimensionMismatch("$(length(g)) gates for degrees 1:$lmax"))
+    return g, dep
+end
+
+# A mode gate's value at `ev` (`nothing` for another constraint's function).
+_gate_value(f, ev) = nothing
+_gate_value(g::_GateValue, ev::Evaluation) = g(ev)
+
+function _summary_floor(floor, dep, lmax)
+    isempty(dep) && throw(ArgumentError("a floor needs a `drive_reference`"))
+    f = collect(Float64, _gate_values(floor))
+    length(f) == lmax || throw(DimensionMismatch("a floor of $(length(f)) degrees for 1:$lmax"))
+    return f
 end
 
 pointing_summary(s::Scenario, r::PointingResult; kwargs...) = pointing_summary(s, r.beams; kwargs...)
@@ -178,5 +232,7 @@ function Base.show(io::IO, p::PointingSummary)
         print(io, @sprintf("; drive %.5f of the reference, departure (l = 1–%d) ", p.drive_ratio,
                            length(p.departure)),
               join((@sprintf("%.4f", 100d) for d in p.departure), " "), " %")
+    isempty(p.gate) || print(io, "; over the gates ", join((@sprintf("%.2f", d / g) for (d, g) in zip(p.gate_departure, p.gate)), " "))
+    isempty(p.floor) || print(io, "; over the floor ", join((@sprintf("%.2f", d / f) for (d, f) in zip(p.departure, p.floor)), " "))
     print(io, ")")
 end

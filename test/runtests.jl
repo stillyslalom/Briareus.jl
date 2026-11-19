@@ -106,6 +106,7 @@ shard_include("parameters.jl")
 shard_include("parameterizations.jl")
 shard_include("constraints.jl")
 shard_include("phased.jl")
+shard_include("phased_study.jl")
 shard_include("inference.jl")
 shard_include("aqua.jl")
 end
