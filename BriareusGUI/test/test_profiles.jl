@@ -157,11 +157,14 @@ end
     # the inner cones land farther past the waist than on the cylinder (the hole limits them)
     @test isapprox(ff[:inner23][1], -0.3715; atol = 2e-3) && isapprox(ff[:inner30][1], -0.1542; atol = 2e-3)
     # clearance from the entrance holes: every quad and every beam of the presets positive,
-    # the clamped cones at the cylinder pointing's smallest (its 23.5° cone's, 0.0656 mm)
-    kc, kf = ApertureKeepOut(cyl), ApertureKeepOut(fr)
+    # the clamped cones at the cylinder pointing's smallest (its 23.5° cone's, 0.0656 mm).
+    # The presets were clamped on the exact minimum over the rim (`softness = 0`); the
+    # keep-out's default smooth minimum reads up to 0.2 µm below it (0.13 µm here).
+    kc, kf = ApertureKeepOut(cyl; softness = 0), ApertureKeepOut(fr; softness = 0)
     m = minimum(aperture_clearance(kc, cone))
     cf = aperture_clearance(kf, fz)
     @test isapprox(m, 0.0656; atol = 1e-4) && minimum(cf) ≥ m - 1e-6
+    @test m - 2e-4 ≤ minimum(aperture_clearance(ApertureKeepOut(cyl), cone)) ≤ m
     @test all(abs(minimum(cf[[b.group === c for b in fz]]) - m) < 5e-3 for c in (:inner23, :inner30, :outer44))
     @test minimum(aperture_clearance(kf, preset_beams(:nif_beams; target = s2.target))) > 0
 end
