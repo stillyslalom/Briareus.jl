@@ -1290,7 +1290,7 @@ end
                       g_tol = 1e-8, callback = nothing, constraints = (),
                       feasibility = 1e-3, outer = 30, time_limit = Inf, phase1 = false,
                       relaxation = false, inner_reltol = 1e-10,
-                      inner_evaluations = nothing) -> PointingResult
+                      inner_evaluations = nothing, smooth_cut = true) -> PointingResult
 
 Minimize `objective(evaluate(scenario, x))` within the box `lower ≤ x ≤ upper` by
 L-BFGS-B with forward-mode automatic-differentiation gradients, from `x0` (clamped to
@@ -1407,6 +1407,24 @@ infeasible, phase 1 reached the verdict in 577 evaluations where the augmented
 Lagrangian had none after 2,195, and on feasible starts it cost 8 % fewer to 29 % more
 evaluations (research notes, "A verdict on conflicting constraints").
 
+**VisRad's hard cut.** On a scenario whose deposition uses [`VisRadProfile`](@ref)
+with its hard cut (`taper = 0`, its default), every deposition-derived quantity jumps
+where an operator point crosses the cut, and line searches park on the jumps. With
+`smooth_cut = true` (the default) the run optimizes the same scenario with the profile
+tapered over one e-fold below the cut (`taper = 1`: the operator's points and screens
+and the scenario's responses are shared, nothing is rebuilt) and reports the design
+under the scenario's own cut: the result's `value`, `initial_value`, `constraints` and
+`outcome` are the hard cut's at the run's design and start, and `tapered_value` holds
+the objective the tapered run reached. The taper moves wall elements by at most 7e-5 of
+the wall's peak on NIF hohlraums, well inside `feasibility`'s default 1e-3, so a
+design within its limits under the taper is normally within them under the cut; where
+it is not, its row reads `:violated` and `outcome` `:infeasible`. The multipliers
+(fitted under the taper), stationarity, bound sensitivities, phase 1, relaxations and
+`state` are the tapered run's; a restart with `from` continues it. `smooth_cut = false`
+optimizes the scenario's own profile; other scenarios (the f-cone model, a profile
+already tapered) are optimized as they are. A [`PhasedScenario`](@ref) is tapered
+phase by phase.
+
 **Restarts.** `from`, a previous run's [`PointingResult`](@ref), continues that run:
 `x0`, `lower` and `upper` default to its `x` and box, and a constrained run starts from
 its multipliers, penalty parameter, inner tolerance and working limits (`result.state`)
@@ -1436,12 +1454,23 @@ Base.@nospecializeinfer function optimize_pointing(
                            @nospecialize(constraints = ()), feasibility::Real = 1e-3,
                            outer::Integer = 30, time_limit::Real = Inf, phase1::Bool = false,
                            relaxation::Bool = false, inner_reltol::Real = 1e-10,
-                           @nospecialize(inner_evaluations = nothing))
+                           @nospecialize(inner_evaluations = nothing), smooth_cut::Bool = true)
     # Inferred and compiled once for every objective and callback (each objective
     # closure type used to recompile this body and Optim's L-BFGS-B, ~1 s); the objective
     # is reached by dynamic dispatch once per evaluation.
     deadline = time() + Float64(time_limit)
     time_limit > 0 || throw(ArgumentError("time_limit must be positive (seconds)"))
+    # VisRad's hard cut: the run on the profile tapered below the cut, reported under the
+    # scenario's own cut
+    st = smooth_cut ? _tapered(s) : nothing
+    if st !== nothing
+        r = optimize_pointing(st, objective; from, x0, lower, upper, iterations, evaluations,
+                              show_trace, g_tol, callback, constraints, feasibility, outer,
+                              time_limit, phase1, relaxation, inner_reltol, inner_evaluations,
+                              smooth_cut = false)
+        return _hard_cut_result(s, r, objective, constraints, clamp.(x0, lower, upper),
+                                Float64(feasibility))
+    end
     from === nothing || from isa PointingResult ||
         throw(ArgumentError("`from` takes a PointingResult, got $(typeof(from))"))
     xs = clamp.(x0, lower, upper)
@@ -1737,6 +1766,12 @@ sign that would move the parameter inward shows a bound that does not hold it
 (research notes, "Multipliers from the converged active set"). A restart with `from`
 in the wider box measures it.
 
+**VisRad's hard cut.** `tapered_value` is the objective that a run on VisRad's
+profile tapered below its cut reached, when `optimize_pointing` optimized a scenario
+with the hard cut that way (`smooth_cut`, its default); `value`, `initial_value`,
+`constraints` and `outcome` are then the scenario's own, under its hard cut. `NaN`
+otherwise.
+
 **Phase 1 and relaxations** (`phase1 = true`, `relaxation = true`). `phase1` is
 `nothing` when phase 1 did not run, else a named tuple of its `evaluations` and
 `iterations` (included in the totals), `feasible` (it reached a design within the
@@ -1769,6 +1804,7 @@ struct PointingResult{B}
     phase1::Union{Nothing,NamedTuple}
     relaxations::Vector{Relaxation}
     stationarity::Float64
+    tapered_value::Float64
 end
 
 _names(p::GroupPointing, n) = parameter_names(p)
@@ -1793,10 +1829,7 @@ Base.@nospecializeinfer function _pointing_result(
     names = _names(s.param, length(x))
     side = map(_bound_side, x, lower, upper)
     atb = names[side .!= 0]
-    met = all(r -> r.status !== :violated, constraints)
-    outcome = reason !== :converged ? reason :
-              met ? (isempty(atb) ? :interior : :box) :
-              (isempty(atb) ? :infeasible : :infeasible_box)
+    outcome = _outcome(reason, constraints, atb)
     # the derivatives at the bound parameters: from the constrained run's gradients of the
     # objective and the Lagrangian at `x`, else one gradient of the objective, only when
     # a parameter is at a bound
@@ -1811,7 +1844,57 @@ Base.@nospecializeinfer function _pointing_result(
     return PointingResult(x, apply(s.param, x), Float64(value), Float64(initial_value),
                           Int(iterations), Int(evaluations), stopped, reason, result, names,
                           collect(Float64, lower), collect(Float64, upper), atb,
-                          constraints, outcome, outer, state, gf, gL, phase1, relaxations, stationarity)
+                          constraints, outcome, outer, state, gf, gL, phase1, relaxations, stationarity,
+                          NaN)
+end
+
+# What ended a run: the stop's reason, or at convergence whether the constraints are met
+# and parameters at a bound (`atb`, their names).
+function _outcome(reason::Symbol, rows::Vector{ConstraintRow}, atb)
+    reason !== :converged && return reason
+    met = all(r -> r.status !== :violated, rows)
+    return met ? (isempty(atb) ? :interior : :box) : (isempty(atb) ? :infeasible : :infeasible_box)
+end
+
+# The optimizer's view of a scenario on VisRad's profile with its hard cut: the same
+# operator (points, normals, visibility, work plan, envelope ratios) with the cut
+# tapered over `_OPT_TAPER` e-folds, the responses and caches shared; `nothing` for any
+# other scenario. The taper keeps the profile's support, so the operator's points and
+# the screens that skip points outside it serve both.
+const _OPT_TAPER = 1.0
+
+function _tapered(op::DepositionOperator)
+    prof = op.profile
+    (prof === nothing || prof.taper > 0) && return nothing
+    return DepositionOperator(op.target, op.ports, op.dirs, op.pts, op.w, op.normal, op.mask, op.dest,
+                              op.plan, VisRadProfile(prof.envelope, _OPT_TAPER), op.envelope)
+end
+
+_tapered(::_AbstractScenario) = nothing
+
+function _tapered(s::Scenario)
+    op = _tapered(s.deposition)
+    op === nothing && return nothing
+    return Scenario(s.target, s.param, op, s.model, s.observed, s.moment_weights, s.ylm_weights,
+                    s.moment_response, s.ylm_response, s.lpi, s.time, getfield(s, :_response), s.albedo)
+end
+
+# A run on the tapered profile (`_tapered`) reported under the scenario `s`'s hard cut:
+# the objective at the run's design and at its start `xs`, the constraint rows there
+# (with the run's multipliers) and the outcome, the tapered run's value kept as
+# `tapered_value`; everything else is the run's.
+Base.@nospecializeinfer function _hard_cut_result(s::_AbstractScenario, r::PointingResult,
+                                                  @nospecialize(objective), @nospecialize(constraints),
+                                                  xs::AbstractVector, feasibility::Float64)
+    ev = evaluate(s, r.x)
+    value = Float64(ForwardDiff.value(objective(ev)))
+    initial = Float64(ForwardDiff.value(objective(evaluate(s, collect(Float64, xs)))))
+    rows = isempty(r.constraints) ? r.constraints :
+           _constraint_rows(ev, Tuple(constraints), [c.multiplier for c in r.constraints], feasibility)
+    return PointingResult(r.x, r.beams, value, initial, r.iterations, r.evaluations, r.stopped,
+                          r.reason, r.result, r.names, r.lower, r.upper, r.at_bounds, rows,
+                          _outcome(r.reason, rows, r.at_bounds), r.outer, r.state, r.bound_gradient,
+                          r.bound_sensitivity, r.phase1, r.relaxations, r.stationarity, r.value)
 end
 
 function Base.show(io::IO, r::PointingResult)
@@ -1833,6 +1916,9 @@ function Base.show(io::IO, ::MIME"text/plain", r::PointingResult)
           "stopped by the callback (best design kept)"
     @printf(io, "Pointing optimization %s: objective %.4g → %.4g\n", how, r.initial_value,
             r.value)
+    isnan(r.tapered_value) ||
+        @printf(io, "  optimized on VisRad's profile tapered below its cut (objective %.4g there); reported under the scenario's hard cut\n",
+                r.tapered_value)
     @printf(io, "  %d iterations, %d evaluations, %d parameters", r.iterations,
             r.evaluations, length(r.x))
     if isempty(r.at_bounds)

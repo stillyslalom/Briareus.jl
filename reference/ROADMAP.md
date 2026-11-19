@@ -448,8 +448,10 @@ analog is the dropped-bundle tutorial, `docs/literate/dropped_bundle.jl`).
         tapers the last e-fold smoothly on the same support: no jumps, derivatives
         of the mode gates right to 1e-6 where they were off by 1e-3–1e-2, at a cost
         of at most 0.011 points of rms against VisRad's plates and 7e-5 of a wall
-        peak; the stalled case then runs 8 outer iterations instead of 1. Whether
-        `optimize_pointing` switches it on for `VisRadProfile` scenarios (user);
+        peak; the stalled case then runs 8 outer iterations instead of 1. Since
+        2026-11-19 `optimize_pointing` optimizes a hard-cut `VisRadProfile` scenario
+        on the tapered profile and reports under the hard cut (`smooth_cut`;
+        `tapered_value`; "Defaults changed (2026-11-19)");
       - the entrance-hole keep-out's penalty is not smooth at such a design (the
         objective's derivative is off by 2–5 % against differences while the drive,
         ceiling and gates agree to 1e-6): being diagnosed;

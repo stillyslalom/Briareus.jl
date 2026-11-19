@@ -21,7 +21,9 @@ Limits that a design must meet go to [`optimize_pointing`](@ref) as
 [`PointingResult`](@ref) records each one's value against its limit, what ended the
 run and, for each parameter held by the box, the optimum's derivative with respect to
 that bound. `from = result` continues a run with its multipliers and penalty, and
-`time_limit` bounds its wall time. `phase1 = true` first looks for a design within the
+`time_limit` bounds its wall time. On [`VisRadProfile`](@ref) with its hard cut a run
+optimizes the profile tapered below the cut and reports the design under the hard cut
+(`smooth_cut`). `phase1 = true` first looks for a design within the
 limits and ends with `:infeasible` when the search finds none, and `relaxation = true`
 then reports how far each conflicting constraint must be relaxed alone
 ([`Relaxation`](@ref)). Ready-made constraints: [`irradiance_ceiling`](@ref), a

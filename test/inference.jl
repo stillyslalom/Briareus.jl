@@ -259,6 +259,15 @@ end
         optimize_pointing(pph, ev -> dobj(ev[:b]); x0 = xph, iterations = 1, evaluations = 3, callback = st -> false,
                           constraints = [in_phase(:a, clf), in_phase(:b, dfl)])
         @test _inf_body_instances(Briareus._constrained_pointing) == nc
+        # VisRad's hard cut (`smooth_cut`): the tapered run and its report under the cut,
+        # new objective, constraint and callback types reuse the bodies
+        sv = remake(s; deposition_kw = (; profile = VisRadProfile()))
+        rv = optimize_pointing(sv, objectives[1]; x0, iterations = 1, evaluations = 2)
+        @test isfinite(rv.tapered_value)
+        n, nh = _inf_body_instances(optimize_pointing), _inf_instances(Briareus._hard_cut_result)
+        optimize_pointing(sv, dobj; x0, iterations = 1, evaluations = 3, callback = st -> false,
+                          constraints = (ceilc, gatec))
+        @test _inf_body_instances(optimize_pointing) == n && _inf_instances(Briareus._hard_cut_result) == nh
 
         # a placement sweep: new design and callback types reuse the compiled sweep
         foilt = Target([backlighter_foil((90.0, 0.0); standoff = 5.0, n = 2)])

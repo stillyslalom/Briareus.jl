@@ -606,4 +606,41 @@
         @test sm.reference_clearance == [minimum(filter(isfinite, hardware_clearance(hw, start)))]
         @test sm.shift_max ≈ maximum(norm(b.aim - a.aim) for (b, a) in zip(rc.beams, start)) rtol = 1e-14
     end
+
+    # VisRad's hard cut (`smooth_cut`, the default): the run on the profile tapered below
+    # the cut, on the same operator's points, reported under the scenario's own cut. The
+    # reference: the same run on a scenario built with the tapered profile (its operator
+    # built afresh), bit for bit.
+    @testset "VisRad's hard cut optimized tapered" begin
+        t = hohlraum(; geom..., nz = 8, nphi = 16, capsule_ntheta = 6, capsule_nphi = 8)
+        quads = nif_quads(power = 8.0)
+        p = GroupPointing(quads; fields = (:z,))
+        dk(taper) = (; profile = VisRadProfile(; taper), resolution = 0.6, reach = 0.5, level = 0)
+        hard = Scenario(t, p; observe = :capsule, deposition_kw = dk(0.0))
+        soft = remake(hard; deposition_kw = dk(1.0))
+        @test soft.deposition.pts == hard.deposition.pts          # the taper keeps the support
+        ref = evaluate(hard, quads)
+        obj = drive_objective(; drive = mean_flux(ref))
+        cs = (irradiance_ceiling(ref, :wall),)
+        x0 = initial_parameters(p) .+ 0.1
+        kw = (; x0, constraints = cs, iterations = 30, evaluations = 300)
+        r = optimize_pointing(hard, obj; kw...)
+        rs = optimize_pointing(soft, obj; kw...)
+        r0 = optimize_pointing(hard, obj; kw..., smooth_cut = false)
+        @test r.x == rs.x && r.beams == rs.beams && r.evaluations == rs.evaluations
+        @test r.tapered_value == rs.value && isnan(rs.tapered_value) && isnan(r0.tapered_value)
+        ev = evaluate(hard, r.x)
+        @test r.value == obj(ev) && r.initial_value == obj(evaluate(hard, x0))
+        @test [c.value for c in r.constraints] == [peak_irradiance(ev, :wall)]
+        @test [c.multiplier for c in r.constraints] == [c.multiplier for c in rs.constraints]
+        @test r.outcome === Briareus._outcome(r.reason, r.constraints, r.at_bounds)
+        @test occursin("tapered", sprint(show, MIME"text/plain"(), r)) &&
+              !occursin("tapered", sprint(show, MIME"text/plain"(), r0))
+        # a phased scenario: each phase tapered, the report under the hard cut
+        ps = PhasedScenario(p, Phase(:a, hard; power = 8.0), Phase(:b, hard; power = 4.0, scaled = false))
+        @test all(sc -> sc.deposition.profile.taper == 1, Briareus._tapered(ps).scenarios)
+        pobj = ev -> obj(ev[:a])
+        rp = optimize_pointing(ps, pobj; iterations = 3, evaluations = 30)
+        @test rp.value == pobj(evaluate(ps, rp.x)) && isfinite(rp.tapered_value)
+    end
 end

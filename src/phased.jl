@@ -713,6 +713,14 @@ function remake(ps::PhasedScenario; pointing = _UNCHANGED, by = _UNCHANGED, scal
     return _phased(p, phases, scen, b)
 end
 
+# The optimizer's view of a phased scenario on VisRad's profile with its hard cut: each
+# phase's scenario tapered (`_tapered(::Scenario)`); `nothing` when no phase has one.
+function _tapered(ps::PhasedScenario)
+    ts = map(_tapered, ps.scenarios)
+    all(isnothing, ts) && return nothing
+    return PhasedScenario(ps.phases, [something(t, sc) for (t, sc) in zip(ts, ps.scenarios)], ps.param)
+end
+
 """
     subset(scenario::PhasedScenario, keep; pointing = the pointing's subset that keeps its groups)
 

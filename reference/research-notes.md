@@ -106,6 +106,7 @@ callout in the section says which).
 | `gold()`, `uranium()` conversion | 0.9 (0.75 until 2026-11-18) | Material defaults and their sources, "Decisions of 2026-11-18" (before: Capsule absorption, conversion and the ablating-wall release, "What changed") |
 | `Conversion()` `efficiency` | 0.9 (0.75 until 2026-11-19) | Defaults changed (2026-11-19) §1 |
 | `ApertureKeepOut` `softness` | 1e-4 mm (the exact minimum until 2026-11-19) | Defaults changed (2026-11-19) §3 |
+| `optimize_pointing` `smooth_cut` | on: a hard-cut `VisRadProfile` scenario optimized at `taper = 1`, reported under the hard cut (since 2026-11-19) | Defaults changed (2026-11-19) §4 |
 | `foil_material()` (`foil`, `backlighter_foil`; GUI foil starter) | Au 0.8 / 0.8; mid-Z suggested 0.55 / 0.35 | Material defaults and their sources, "Decisions of 2026-11-18" |
 | GUI hohlraum part, closed windows | 0.8 / 0.9 (`gold()`) | Material defaults and their sources, "Decisions of 2026-11-18" |
 | `nif_conversion()` (`nif_gold`, `nif_uranium`) | 0.7 t^0.12 ≤ 0.95 | Wall material, conversion and capsule energetics §2 |
@@ -2223,7 +2224,9 @@ spatial profile parameters" on.
     10⁻⁴, 10⁻⁵ mm), not in the deposition. **H**
   - The default stays VisRad's hard cut (the law reproduces VisRad); the taper is an
     engineering option for optimization. **M** for the choice of width (one e-fold,
-    not tuned).
+    not tuned). Since 2026-11-19 `optimize_pointing` uses it on a hard-cut
+    scenario by default and reports under the hard cut ("Defaults changed (2026-11-19)"
+    §4); the profile's own default is unchanged.
 
 #### Tilted plates and per-beam totals
 
@@ -14090,3 +14093,58 @@ checks the geometry on `softness = 0` (as before, to 1e-9 mm and 1e-12 relative)
 default against it: within the bound on three holes and three beams, and across the
 switch between two edges of a rectangular hole (slopes 0 and −1 on either side, between
 them at the switch, ForwardDiff against central differences to 1e-6).
+
+### 4. The tapered cut by default inside `optimize_pointing`
+
+On a scenario whose deposition uses `VisRadProfile` with its hard cut (`taper = 0`,
+the profile's own default, unchanged), `optimize_pointing` now runs on the same profile
+tapered over one e-fold below the cut (`taper = 1`; "VisRad's beam profile law", "A
+tapered cut for optimization") and reports the design under the scenario's own cut.
+`smooth_cut = false` optimizes the scenario's own profile as before.
+
+- *Reuse.* The taper keeps the profile's support, so the operator's footprint, its
+  points, normals, visibility masks, work plan and envelope ratios serve both
+  (`_operator_beam` sizes the footprint from the envelope, not the taper; the screens
+  `_vr_beyond` test the support): the tapered operator is the scenario's with only its
+  profile replaced, and the tapered scenario shares the view factors, the responses
+  (`moment_response`, `ylm_response`, the lazy full response) and the albedos. Nothing
+  is rebuilt; the per-spot normalization tables of the tapered profile are built once and
+  cached, as for any taper. A `PhasedScenario` is tapered phase by phase.
+- *Report.* `value`, `initial_value`, `constraints` (with the tapered run's
+  multipliers) and `outcome` are the scenario's under its hard cut at the run's design
+  and start; `PointingResult.tapered_value` holds the tapered run's objective (`NaN` for
+  a run on the scenario's own profile); everything else (parameters, beams, counts,
+  `state`, stationarity, bound sensitivities, phase 1, relaxations) is the tapered run's.
+- *Exact ceilings.* Decided: report, do not force. The tapered run ends with an exact
+  ceiling within `feasibility` (1e-3 of the limit) of its limit; the taper moves wall
+  elements by at most 7e-5 of the wall's peak, so under the hard cut the same design is
+  within 1.07e-3 of the limit at worst. Rather than continuing the run under the hard cut
+  (where the jumps the taper removes return), the rows are computed under the hard cut,
+  and a row over its limit by more than `feasibility` reads `:violated` with the outcome
+  `:infeasible`: the report says so plainly. On the case below the hard cut's peak came
+  out 6e-5 of the limit *below* the tapered one.
+
+Measured (*measured*; 8 threads, another run may have shared the machine): the
+dropped-bundle case of `test/constraints.jl` (h 0.45, its coarse operator, bundle 11
+dropped, 44 quads in `:phi` and `:z`, the exact wall ceiling at the 48 quads' peak and
+the four mode gates at the pointing-noise floor, drive objective, 1,000 iterations,
+3,000 evaluations) with the deposition on `VisRadProfile()`:
+
+| run | evaluations (outer) | outcome | drive objective, hard cut (tapered) | peak / limit, hard cut | gates / limit, l = 1…4 |
+|---|---|---|---|---|---|
+| `smooth_cut = true` (default) | 1,010 (14) | `:interior` | −0.961760 (−0.961772) | 1.00091 (tapered 1.00097) | 0.9994, 1.0005, 0.9998, 0.9996 |
+| `smooth_cut = false` | 1,177 (8) | `:box` | −0.961765 | 0.99155 | 0.9642, 0.9991, 0.9940, 0.9970 |
+
+Both end feasible within `feasibility`, at the same drive within 5e-6 (a flat family of
+designs); the tapered run took 14 % fewer evaluations and ends with every limit active
+and no parameter at a bound. The tapered and hard-cut objectives at the tapered run's
+design differ by 1.2e-5.
+
+Existing results: no test, tutorial, example or GUI default optimizes a scenario on
+`VisRadProfile` with its hard cut (the tutorials and the GUI use the f-cone model by
+default; `examples/n221204.jl` optimizes nothing), so none moves; every other scenario
+takes the code path it took, bit for bit (`tapered_value` `NaN`). The GUI's optimizer
+moves when its VisRad beam model is chosen. `test/constraints.jl` checks the default
+run against the same run on a scenario built with `taper = 1` (bit for bit: design,
+beams, evaluations, multipliers), the value and rows against the hard-cut evaluation,
+and a `PhasedScenario`.
