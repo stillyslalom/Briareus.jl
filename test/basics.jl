@@ -431,6 +431,21 @@ end
     @test ForwardDiff.derivative(gd, 0.37) ≈ (gd(0.37 + 1e-5) - gd(0.37 - 1e-5)) / 2e-5 rtol = 1e-4
     @test op[[1]].profile === prof && op[[1]].envelope == [ρd]
     @test Scenario(tf, [b]; deposition_kw = (; profile = prof)).deposition.profile === prof
+    # the deposition's bound without powers (`_vr_far`) passes only points where the law
+    # is cut off, and over half of those on a grid out to 3 mm across and 10 mm along the
+    # beam (on the order 4.5 spot 94 %): beams of order 4.5, 2 and 1.5 (its Gaussian
+    # term's bound q ≥ (ln 1000)^(2/n) above 1), one with a halo, one with its b axis the
+    # major one, the hard cut and a taper
+    xs = [at(s, u, v) for s in (-10.0, -2.0, 0.0, 0.5, 5.0, 8.0), u in -3:0.05:3, v in -3:0.05:3]
+    spots = (spot, SuperGaussianSpot(a0, b0; order = 2.0), SuperGaussianSpot(b0, a0; order = 1.5, angle = 0.4),
+             SuperGaussianSpot(a0, b0; order = n, halo = 0.2, halo_scale = 2.0))
+    function sound(bx, pr)
+        fx = Briareus._VRFrame(Briareus.BeamFrame(bx), Briareus._vr_envelope(pr, bx), pr.taper)
+        far = [Briareus._vr_far(fx, x) for x in xs]
+        return all(i -> !far[i] || (Briareus._vr_beyond(fx, xs[i]) && intensity(pr, bx, xs[i]) == 0), eachindex(xs)) &&
+               count(far) > count(x -> Briareus._vr_beyond(fx, x), xs) ÷ 2
+    end
+    @test all(((sp, pr),) -> sound(remake(b; spot = sp), pr), [(sp, pr) for sp in spots for pr in (prof, VisRadProfile(; taper = 1.0))])
     @test_throws ArgumentError VisRadProfile(; envelope = 0)
     @test_throws ArgumentError VisRadProfile(; envelope = Dict("b" => -1.0))
     # the same spot with its axes swapped (a < b, turned 90°) is the same beam

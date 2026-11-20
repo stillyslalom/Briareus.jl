@@ -14225,3 +14225,123 @@ into them; it says the margin is unheld and gives the phase-1-off result). With 
 under the aperture keep-out's penalty reads 0.105–0.142 mm rms, largest 0.26 mm, where
 the text had 0.11–0.15 mm and 0.29 mm, with l = 1–3 still restored to 0.02 %; the other
 numbers its text quotes are unchanged.
+
+## Evaluation cost, measured (2026-11-19) *measured*
+
+Whether the cost of one objective-plus-gradient evaluation inside `optimize_pointing`
+rose across versions, on a public workload, and what made it rise. Every timing is the
+best of several runs on one machine (8 fast cores; no other job; the thread count
+given), with `BRIAREUS_NO_WORKLOAD=true`, from `git archive` exports of each version
+with the same package environment.
+
+**The workload.** The dropped-bundle tutorial's re-pointing: 46 quads (bundle 11
+freed), φ and z per quad (92 parameters), `asymmetry_objective` with the tutorial's
+goals and an `ApertureKeepOut` penalty (1 % contour, minimum 10 µm, weight 1e3).
+Case A: the tutorial's default mesh and its coarse f-cone operator (resolution 0.6,
+reach 0.5, level 0). Case B: a study's size, the hohlraum at h = 0.2 and VisRad's
+profile (resolution 0.6, reach 1.0, level 0). Steps: the deposition operator, the
+radiation model, one `evaluate`, the objective's value, its gradient by ForwardDiff
+(chunk 12, the chunks serial), the wall time per evaluation of a six-iteration
+`optimize_pointing` run (its chunks threaded), and the keep-out's clearance and its
+gradient. Versions: the development tree of 2026-10-22 (0faede7), v0.1.0, v0.2.0,
+v0.2.1, faa37b8 (2026-11-18), 69761ff (0.3.0) and 0.3.0 with the fixes below.
+
+The same physics in every version: the operator's points agree from v0.1.0 on (328,791
+in A, 644,585 in B; 652,649 in B on 2026-10-22, before VisRad's own profile law); the
+hohlraum's default mesh gained elements at v0.2.0 (4,116 to 4,308 in A, 8,628 to 9,396
+in B: a model change, not bisected), and the objective's value agrees to 3e-5 across
+versions (VisRad's law changes it by 1.5e-3 in B).
+
+Case B, per evaluation (ms):
+
+| step, threads | 10-22 | 0.1.0 | 0.2.0 | 0.2.1 | faa37b8 | 0.3.0 | fixed |
+|---|---|---|---|---|---|---|---|
+| `evaluate`, 1 | 4.0 | 22.3 | 22.3 | 22.2 | 22.1 | 22.3 | 12.3 |
+| gradient (serial chunks), 1 | 53 | 223 | 229 | 230 | 235 | 264 | 162 |
+| optimizer, per evaluation, 1 | 54 | 234 | 244 | 240 | 237 | 273 | 168 |
+| optimizer, per evaluation, 8 | 17.7 | 31.7, 36.0 | 34.5, 42.3 | 34.8, 39.8 | 53.5, 39.9 | 50.6, 47.6 | 24.6, 25.6 |
+| keep-out gradient (92 parameters), 1 | 2.8 | 2.9 | 11.8 | 11.6 | 11.9 | 30.3 | 17.4 |
+| gradient's allocations (MB) | 17.3 | 17.2 | 18.4 | 18.4 | 18.4 | 45.9 | 31.1 |
+
+At 8 threads a short run's time per evaluation varies by about 20 % between runs: the
+row gives a single run and the best of three where both were taken.
+
+Case A, per evaluation (ms): `evaluate` 9.0–9.4 on one thread in every version; the
+serial-chunk gradient 152, 149, 157, 158, 162, 181 and 165 (fixed); the optimizer per
+evaluation on one thread 163, 163, 171, 172, 173, 194 and 178; the keep-out's gradient
+2.7, 2.7, 10.0, 9.7, 9.7, 28.2 and 14.1. Building the operator takes 2.1–2.4 s and the
+radiation model 5.7 s (10-22), 7.2 s (0.1.0) and 7.7–8.1 s since (one thread; build
+time, not per evaluation; the step at 0.1.0 not bisected: the near-field view-factor
+quadrature changed in those days).
+
+**What moved, by commit** (bisected on exports):
+
+- b5173bc (2026-10-27, "VisRadProfile: VisRad's own profile law replaces the tabulated
+  fit"): a VisRad-profile deposition costs 5.6 times as much (case B's 46 quads, one
+  thread: 3.8 to 22.5 ms on Float64, 5.4 to 27.0 ms on Dual{12}). By design: the law
+  takes three non-integer powers per point, and every point of the operator was
+  evaluated on Float64 and screened by the full law on duals.
+- ed46747 (2026-11-03, the hole's own rim, refined): the aperture keep-out 3.6 times
+  (0.1 to 0.6 ms for 46 quads; gradient 2.7 to 10 ms). By design: the exact rim and a
+  golden-section search instead of 96 samples.
+- 29bb958 (2026-11-19, a smooth minimum over the rim): the keep-out a further 2.4–2.9
+  times (gradient 10 to 28 ms, allocations 0.4 to 28 MB): every interval within 3 µm
+  of the closest sample is refined, not the four beside the closest. `softness = 0`
+  costs the same (the window, not the smooth minimum, sets the cost).
+- e8e3887 (2026-11-18, bound sensitivities): one gradient at the end of an
+  unconstrained run with a parameter at a bound; a constrained run takes its gradients
+  from the reported multipliers' Jacobian (one gradient's cost per run). Per run, not
+  per evaluation (in the six-iteration runs above, one evaluation in nine).
+
+**The fixes** (2026-11-19, each measured on one thread unless stated):
+
+1. `clearance_floor` over a `PhasedScenario`'s phases computes the keep-out once for
+   phases whose beams it sees alike (same aims and spots; for an `ApertureKeepOut` the
+   same envelope radius), not once per phase: bit for bit.
+2. `ApertureKeepOut` on a dual beam runs its samples and golden sections on the
+   beam's values and evaluates in duals only the points that enter the result:
+   66.5 to 38.8 µs per beam (Float64: 23.4 to 21.2), bit for bit in values and partials
+   on 5,760 beam cases (quads and beams in two hohlraums, aims moved up to 0.4 mm,
+   some defocused, softness 1e-4 and 0).
+3. `deposit` skips beams at exactly zero power (value and partials; a picket measure's
+   other cones): bit for bit (48 quads with the inner cones at zero, f-cone profile:
+   9.6 to 4.4 ms on Float64, 19.1 to 8.5 ms on Dual{12}).
+4. VisRad's deposition skips the points that a bound without powers puts beyond the
+   cut-off (`_vr_far`: α ≥ min(sq, gauss), sq ≥ (max(|u|, |v|)/ΔL)^10 and gauss ≥ q^(n₀/2)
+   for q ≥ 1): on 12 cases (48 quads and 192 beams at h = 0.2, hard cut and taper,
+   moved and defocused aims) 714 to 370 ms on Float64 and 863 to 495 ms on Dual{12},
+   bit for bit (elements and per-beam totals, values and partials, against 0.3.0 on
+   those cases). No skipped point has a nonzero intensity (every point of the 48
+   quads' operator checked, and a grid across and along four spots in
+   `test/basics.jl`). The screen sits behind a `@noinline` barrier: inlined, it changes
+   how the compiler inlines the law's `exp` and `log` in the deposition loop, and the
+   depositions change at the rounding level, up to 1.2e-13 relative per element.
+
+   *An option for the user, not built:* the inlined screen, about twice as fast again
+   on those cases (180 ms on Float64, 299 ms on Dual{12}; case B's optimizer 116 ms per
+   evaluation on one thread, 18.7–23.6 ms at 8; the multi-phase study's gradient 2.5 s
+   at 8 threads), at that rounding-level change of every VisRad deposition (it can
+   move an optimizer run onto another path, and the evaluation counts and digits that
+   tutorials and notes quote with it).
+
+Together, on case B the optimizer's evaluation costs 0.52–0.62 of 0.3.0's (168 against
+273 ms on one thread, 24.6–25.6 against 47.6–50.6 ms at 8 threads), 0.7–0.8 of
+v0.1.0's, and 1.4 (8 threads) to 3.1 (one thread) times the 2026-10-22 tree's, every
+result bit for bit 0.3.0's. The keep-out's gradient stays 6 times v0.1.0's (the refined
+rim and the window by design). On a multi-phase study's evaluation (scratch runs: six
+phases, 552 parameters, 17 constraints, 8 threads) the augmented Lagrangian's gradient
+fell from 7.9 to 3.6 s (0.45), and the constraints from 0.98 to 0.40 of the objective's
+gradient: before the fixes the keep-out over the six phases and the three picket
+ceilings' depositions each cost about a quarter of the gradient. The gradient's chunks
+run threaded on the phased path (0.3.0: 6.3 times faster at 8 threads than on one, 7.2
+at 16, fast and slow cores).
+
+**By design, not changed.** Phase 1 (on by default in constrained runs since 2026-11-19)
+adds its own evaluations before the main run, not cost per evaluation; each lowering of
+an exact ceiling's working limit continues the run; the reported multipliers cost one
+Jacobian at the end of a constrained run (as much as one gradient, whatever the number
+of constraints); the optimizer's tapered VisRad cut (`smooth_cut`) costs as much as the
+hard cut per deposition (within 15 %). A picket ceiling on `measure = :average` deposits
+the outer cones once per phase it holds: a hand-written sum of `ev.deposition.per_beam`
+over the outer beams costs nothing but measures another quantity (it counts the light on
+the capsule and the entrance holes' outside).

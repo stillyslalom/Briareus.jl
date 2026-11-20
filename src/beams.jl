@@ -419,6 +419,7 @@ struct _VRComponent{T}
     ntab::Vector{Float64}
     h::Float64
     taper::Float64            # width in α of the taper below the cut (0: the hard cut)
+    qfar::Float64             # `_vr_far`'s bound on the Gaussian term's q
 end
 
 function _VRComponent(c::_SGComponent, F, env, taper, active::Bool)
@@ -431,7 +432,8 @@ function _VRComponent(c::_SGComponent, F, env, taper, active::Bool)
     ntab = active ? _vr_ntab(ForwardDiff.value(a), ForwardDiff.value(b), n, Float64(F), Float64(env),
                              Float64(taper)) : _VR_NONE
     return _VRComponent(c.a2, c.b2, 1 / (2F^2), c.halfn, 1 / za, za * zb, dl0, dls,
-                        c.power_norm * _sg_norm(n), ntab, _VR_NTAB_H, Float64(taper))
+                        c.power_norm * _sg_norm(n), ntab, _VR_NTAB_H, Float64(taper),
+                        max(1.0, _VR_FAR_CUT^(1 / c.halfn)))
 end
 
 const _VR_NONE = Float64[]           # no table (an inactive halo; shared, never mutated)
@@ -478,6 +480,20 @@ end
 @inline _vr_smoothstep(t) = t >= 1 ? one(t) : t^3 * (10 - t * (15 - 6t))
 
 @inline _vr_outside(c::_VRComponent, u, v, s) = _vr_alpha(c, u, v, s)[1] > _VR_CUT * (1 + 1e-9)
+
+# Whether (u, v, s) lies beyond the cut-off by a bound that takes no powers: α = f sq +
+# (1 − f) gauss with 0 ≤ f < 1 is at least the smaller of the two terms; sq ≥ (m/ΔL)^M
+# with m = max(|u|, |v|) and M ≥ M₀ = 10, so m ≥ ΔL c^(1/10) gives sq ≥ c; gauss = q^hn
+# with hn ≥ n₀/2, so q ≥ max(1, c^(2/n₀)) gives gauss ≥ c; c = ln 1000 (1 + 1e-6), far
+# above the screens' allowance of 1e-9 and the rounding of α. A point it passes lies
+# beyond `_vr_outside`'s cut (and `_vr_eval` would give an exact zero there).
+const _VR_FAR_CUT = _VR_CUT * (1 + 1e-6)
+const _VR_FAR_T = _VR_FAR_CUT^(1 / _VR_M0)
+@inline function _vr_far(c::_VRComponent, u, v, s)
+    z = abs(s)
+    max(abs(u), abs(v)) >= _VR_FAR_T * (c.dl0 + c.dls * z) || return false
+    return u^2 / (c.a2 + z^2 * c.g2) + v^2 / (c.b2 + z^2 * c.g2) >= c.qfar
+end
 
 # The normalization table of a component with focal semi-axes a, b (along its axes),
 # exponent n, f-number F, envelope env and taper, on |z| = 0:h:zmax. Each node integrates
@@ -601,6 +617,15 @@ end
 @inline function _vr_beyond(f::_VRFrame, x)
     u, v, s = _vr_coords(f, x)
     return _vr_outside(f.core, u, v, s) && (!f.has_halo || _vr_outside(f.halo, u, v, s))
+end
+
+# `_vr_beyond` by `_vr_far`'s bound: true only where `_vr_beyond` is (a Float64 frame).
+# Not inlined: inlined, the screen changes how the deposition loop inlines the law's `exp`
+# and `log` and the depositions at the rounding level (up to 1.2e-13 relative); behind the
+# barrier they are bit for bit those without the screen.
+@noinline function _vr_far(f::_VRFrame{Float64}, x)
+    u, v, s = _vr_coords(f, x)
+    return _vr_far(f.core, u, v, s) && (!f.has_halo || _vr_far(f.halo, u, v, s))
 end
 
 """

@@ -369,6 +369,21 @@ analog is the dropped-bundle tutorial, `docs/literate/dropped_bundle.jl`).
     - The smallest re-pointing that meets given gates: `shift_objective`,
       the weighted mean squared aim shift from reference beams, and
       `PointingSummary.shift_rms`.
+    - Evaluation cost across versions ("Evaluation cost, measured (2026-11-19)"):
+      VisRad's profile law (5.6× per deposition) and the refined, then smoothed,
+      aperture keep-out (about 10× v0.1.0's gradient) had made an evaluation of a
+      study-sized scenario 5× the 2026-10-22 tree's on one thread (2.7–2.9× at 8
+      threads) and 1.2× v0.1.0's (1.3–1.6×); a multi-phase study's constraints cost as
+      much as its objective. Fixed: the
+      keep-out once for phases it sees alike, its dual search on values, zero-power
+      beams and points beyond VisRad's cut skipped in `deposit`, bit for bit (an
+      evaluation at 0.52–0.62 of 0.3.0's, 0.7–0.8 of v0.1.0's). *Left (user's choice):*
+      the far screen inlined, about twice as fast again per deposition at a 1.2e-13
+      relative change of every VisRad deposition. *Left:* the picket ceilings' deposition
+      of the outer cones per phase (a deposition split by group inside `evaluate` would
+      serve them); the keep-out's window of refined intervals (by design, 6× v0.1.0's
+      gradient); the envelope-radius test behind fix 1 (about 3 ms a dual pass on 184
+      beams over five phases).
 
     The tutorial's section "A re-pointing study, end to end" walks these on exported
     names only (a96792f): quads held, a power scale per cone, the gates, the ceiling, a

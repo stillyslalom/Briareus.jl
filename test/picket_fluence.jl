@@ -174,6 +174,12 @@ end
         @test picket_irradiance(ev, :wall; kw..., measure = :average, area = 10.0) ≈ sum(P[es]) / 10 rtol = 1e-12
         @test picket_irradiance(ev, :wall; kw..., measure = :average) ≈
               picket_fluence(s.deposition, ev.beams, pulses, w).energy / 53 rtol = 1e-12
+        # `deposit` skips the beams at exactly zero power (their light is exact zeros): the
+        # outer beams alone through the operator on their ports, and the others' totals 0
+        live = findall(b -> b.group in (:outer44, :outer50), ev.beams)
+        d2 = deposit(s.deposition, outer2)
+        @test isapprox(d2.element, deposit(s.deposition[live], outer2[live]).element; rtol = 1e-13) &&
+              all(iszero, d2.per_beam[setdiff(eachindex(outer2), live)])
         # net of backscatter: the effective beams at their own powers
         sb = remake(s; lpi = Backscatter(:outer50 => 0.5))
         Pb = deposit(s.deposition, [remake(b; power = b.group === :outer50 ? 4.0 : b.group === :outer44 ? 8.0 : 0.0)

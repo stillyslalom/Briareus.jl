@@ -551,7 +551,10 @@ function _deposit(op::DepositionOperator, beams::AbstractVector{<:Beam}, split,
     PB = zeros(T, nb, nblock)     # per-beam power by element block
     LB = zeros(T, nc, nback)      # back-side power by piece
     SB = zeros(T, nback)          # piece totals
-    _deposit_units!(E, PB, LB, SB, op, frames, screens, slopes, absorption, split)
+    # a beam at exactly zero power (value and partials: a picket measure's other cone)
+    # deposits exact zeros, and is skipped
+    live = Bool[b.power !== zero(b.power) for b in beams]
+    _deposit_units!(E, PB, LB, SB, op, frames, screens, slopes, absorption, split, live)
     # partial sums reduced in a fixed order
     per_beam = T[sum(@view PB[bi, :]; init = zero(T)) for bi in 1:nb]   # typed: 1.10 infers Any here
     L = zeros(T, nc)
@@ -574,7 +577,7 @@ _absorbed(η, c) = (1 - (1 - η)^(c^3)) * c
 
 # Function barrier for the threaded loop over `op.plan`'s work units.
 function _deposit_units!(E, PB, LB, SB, op::DepositionOperator, frames, screens, slopes,
-                         η = nothing, split = nothing)
+                         η = nothing, split = nothing, live = nothing)
     plan = op.plan
     nblock = size(plan.boff, 1) - 1
     _tforeach(length(plan.order)) do k
@@ -583,7 +586,7 @@ function _deposit_units!(E, PB, LB, SB, op::DepositionOperator, frames, screens,
             # an element block: every point lands on an element (E is never indexed < 0)
             for bi in axes(plan.boff, 2)
                 r = plan.boff[u, bi]:plan.boff[u+1, bi]-1
-                isempty(r) && continue
+                (isempty(r) || live !== nothing && !live[bi]) && continue
                 PB[bi, u] = split === nothing ?
                             _deposit_points!(E, E, op, bi, frames[bi], screens[bi], slopes[bi], r, η) :
                             _deposit_points_split!(E, split, op, bi, frames[bi], screens[bi], slopes[bi], r, η)
@@ -591,6 +594,7 @@ function _deposit_units!(E, PB, LB, SB, op::DepositionOperator, frames, screens,
         else
             v = u - nblock
             bi, r = plan.back[v]
+            live === nothing || live[bi] || return
             SB[v] = _deposit_points!(E, view(LB, :, v), op, bi, frames[bi], screens[bi],
                                      slopes[bi], r, η)
         end
@@ -689,15 +693,17 @@ end
 
 # VisRad's profile: each stored point sees the beam axis (the operator's one direction)
 # and absorbs the profile at its own distance from focus times |n·k|. Points outside
-# the envelope (on values) contribute exact zeros: a dual beam skips them on values;
-# a Float64 one evaluates them (the profile is exactly zero there, and screening first
-# would compute the semi-axes twice).
+# the envelope (on values) contribute exact zeros: every beam skips those that a bound
+# without powers puts beyond the cut-off (`_vr_far`: most of a beam's points); a dual
+# beam then skips the others outside on values; a Float64 one evaluates them (the
+# profile is exactly zero there, and screening first would compute the semi-axes twice).
 function _sum_points_visrad(sink::F, op::DepositionOperator, bi, f::_VRFrame, fv::_VRFrame{Float64},
                             r, ::Type{T}, η = nothing) where {F,T}
     P, W, Nr, D = op.pts[bi], op.w[bi], op.normal[bi], op.dest[bi]
     k = f.k
     acc = zero(T)
     @inbounds for q in r
+        _vr_far(fv, P[q]) && continue
         T === Float64 || !_vr_beyond(fv, P[q]) || continue
         val = W[q] * _vr_intensity(f, P[q]) * _absorbed(η, abs(dot(Nr[q], k)))
         sink(D[q], val)
